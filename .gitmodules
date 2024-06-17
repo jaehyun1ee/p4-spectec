@@ -1,3 +1,6 @@
 [submodule "document/core/util/katex"]
 	path = document/core/util/katex
 	url = https://github.com/KaTeX/KaTeX.git
+[submodule "spectec/p4cherry"]
+	path = spectec/p4cherry
+	url = https://github.com/kaist-plrg/p4cherry.git
