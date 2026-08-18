@@ -1,4 +1,8 @@
-use std::rc::Rc;
+use std::{
+    cmp::Ordering,
+    hash::{Hash, Hasher},
+    rc::Rc,
+};
 
 use thiserror::Error;
 
@@ -68,6 +72,243 @@ impl ValueKind {
             Self::ListV(_) => ValueTag::List,
             Self::FuncV(_) => ValueTag::Func,
             Self::ExternV(_) => ValueTag::Extern,
+        }
+    }
+}
+
+// Comparison
+
+fn kind_rank(kind: &ValueKind) -> u8 {
+    match kind {
+        ValueKind::BoolV(_) => 0,
+        ValueKind::NumV(_) => 1,
+        ValueKind::TextV(_) => 2,
+        ValueKind::StructV(_) => 3,
+        ValueKind::CaseV(_) => 4,
+        ValueKind::TupleV(_) => 5,
+        ValueKind::OptV(None) => 6,
+        ValueKind::OptV(Some(_)) => 7,
+        ValueKind::ListV(_) => 8,
+        ValueKind::FuncV(_) => 9,
+        ValueKind::ExternV(_) => 10,
+    }
+}
+
+fn compare_num(num_l: &num::T, num_r: &num::T) -> Ordering {
+    match (num_l, num_r) {
+        (num::T::Nat(num_l), num::T::Nat(num_r)) => num_l.cmp(num_r),
+        (num::T::Int(num_l), num::T::Int(num_r)) => num_l.cmp(num_r),
+        (num::T::Nat(_), num::T::Int(_)) => Ordering::Less,
+        (num::T::Int(_), num::T::Nat(_)) => Ordering::Greater,
+    }
+}
+
+fn compare_fields(fields_l: &[ValueField], fields_r: &[ValueField]) -> Ordering {
+    for ((atom_l, value_l), (atom_r, value_r)) in fields_l.iter().zip(fields_r) {
+        let ordering = atom_l.node.cmp(&atom_r.node);
+        if ordering != Ordering::Equal {
+            return ordering;
+        }
+        let ordering = value_l.cmp(value_r);
+        if ordering != Ordering::Equal {
+            return ordering;
+        }
+    }
+    fields_l.len().cmp(&fields_r.len())
+}
+
+fn compare_float(float_l: f64, float_r: f64) -> Ordering {
+    match (float_l.is_nan(), float_r.is_nan()) {
+        (true, true) => Ordering::Equal,
+        (true, false) => Ordering::Less,
+        (false, true) => Ordering::Greater,
+        (false, false) if float_l == float_r => Ordering::Equal,
+        (false, false) => float_l
+            .partial_cmp(&float_r)
+            .expect("non-NaN floats are comparable"),
+    }
+}
+
+fn external_rank(value: &ExternalData) -> u8 {
+    match value {
+        ExternalData::Null => 0,
+        ExternalData::String(_) => 1,
+        ExternalData::Intlit(_) => 2,
+        ExternalData::Int(_) => 3,
+        ExternalData::Float(_) => 4,
+        ExternalData::Variant(_, _) => 5,
+        ExternalData::Tuple(_) => 6,
+        ExternalData::Bool(_) => 7,
+        ExternalData::List(_) => 8,
+        ExternalData::Assoc(_) => 9,
+    }
+}
+
+fn compare_external_slices(values_l: &[ExternalData], values_r: &[ExternalData]) -> Ordering {
+    for (value_l, value_r) in values_l.iter().zip(values_r) {
+        let ordering = compare_external(value_l, value_r);
+        if ordering != Ordering::Equal {
+            return ordering;
+        }
+    }
+    values_l.len().cmp(&values_r.len())
+}
+
+fn compare_external_fields(
+    fields_l: &[(String, ExternalData)],
+    fields_r: &[(String, ExternalData)],
+) -> Ordering {
+    for ((name_l, value_l), (name_r, value_r)) in fields_l.iter().zip(fields_r) {
+        let ordering = name_l.cmp(name_r);
+        if ordering != Ordering::Equal {
+            return ordering;
+        }
+        let ordering = compare_external(value_l, value_r);
+        if ordering != Ordering::Equal {
+            return ordering;
+        }
+    }
+    fields_l.len().cmp(&fields_r.len())
+}
+
+fn compare_external(value_l: &ExternalData, value_r: &ExternalData) -> Ordering {
+    match (value_l, value_r) {
+        (ExternalData::Null, ExternalData::Null) => Ordering::Equal,
+        (ExternalData::String(value_l), ExternalData::String(value_r))
+        | (ExternalData::Intlit(value_l), ExternalData::Intlit(value_r)) => value_l.cmp(value_r),
+        (ExternalData::Int(value_l), ExternalData::Int(value_r)) => value_l.cmp(value_r),
+        (ExternalData::Float(value_l), ExternalData::Float(value_r)) => {
+            compare_float(*value_l, *value_r)
+        }
+        (ExternalData::Variant(name_l, value_l), ExternalData::Variant(name_r, value_r)) => {
+            name_l.cmp(name_r).then_with(|| match (value_l, value_r) {
+                (None, None) => Ordering::Equal,
+                (None, Some(_)) => Ordering::Less,
+                (Some(_), None) => Ordering::Greater,
+                (Some(value_l), Some(value_r)) => compare_external(value_l, value_r),
+            })
+        }
+        (ExternalData::Tuple(values_l), ExternalData::Tuple(values_r))
+        | (ExternalData::List(values_l), ExternalData::List(values_r)) => {
+            compare_external_slices(values_l, values_r)
+        }
+        (ExternalData::Bool(value_l), ExternalData::Bool(value_r)) => value_l.cmp(value_r),
+        (ExternalData::Assoc(fields_l), ExternalData::Assoc(fields_r)) => {
+            compare_external_fields(fields_l, fields_r)
+        }
+        _ => external_rank(value_l).cmp(&external_rank(value_r)),
+    }
+}
+
+impl Ord for Value {
+    fn cmp(&self, other: &Self) -> Ordering {
+        if std::ptr::eq(self, other) {
+            return Ordering::Equal;
+        }
+        match (&self.kind, &other.kind) {
+            (ValueKind::BoolV(value_l), ValueKind::BoolV(value_r)) => value_l.cmp(value_r),
+            (ValueKind::NumV(value_l), ValueKind::NumV(value_r)) => compare_num(value_l, value_r),
+            (ValueKind::TextV(value_l), ValueKind::TextV(value_r)) => value_l.cmp(value_r),
+            (ValueKind::StructV(fields_l), ValueKind::StructV(fields_r)) => {
+                compare_fields(fields_l, fields_r)
+            }
+            (ValueKind::CaseV(case_l), ValueKind::CaseV(case_r)) => case_l.cmp(case_r),
+            (ValueKind::TupleV(values_l), ValueKind::TupleV(values_r))
+            | (ValueKind::ListV(values_l), ValueKind::ListV(values_r)) => values_l.cmp(values_r),
+            (ValueKind::OptV(value_l), ValueKind::OptV(value_r)) => value_l.cmp(value_r),
+            (ValueKind::FuncV(id_l), ValueKind::FuncV(id_r)) => id_l.node.cmp(&id_r.node),
+            (ValueKind::ExternV(value_l), ValueKind::ExternV(value_r)) => {
+                compare_external(value_l, value_r)
+            }
+            _ => kind_rank(&self.kind).cmp(&kind_rank(&other.kind)),
+        }
+    }
+}
+
+impl PartialOrd for Value {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+// Equality
+
+impl PartialEq for Value {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other) == Ordering::Equal
+    }
+}
+
+impl Eq for Value {}
+
+// Hash computation
+
+fn hash_external<H: Hasher>(value: &ExternalData, state: &mut H) {
+    external_rank(value).hash(state);
+    match value {
+        ExternalData::Null => {}
+        ExternalData::Bool(value) => value.hash(state),
+        ExternalData::Int(value) => value.hash(state),
+        ExternalData::Intlit(value) | ExternalData::String(value) => value.hash(state),
+        ExternalData::Float(value) => {
+            let bits = if value.is_nan() {
+                f64::NAN.to_bits()
+            } else if *value == 0.0 {
+                0.0f64.to_bits()
+            } else {
+                value.to_bits()
+            };
+            bits.hash(state);
+        }
+        ExternalData::Assoc(fields) => {
+            fields.len().hash(state);
+            for (name, value) in fields {
+                name.hash(state);
+                hash_external(value, state);
+            }
+        }
+        ExternalData::List(values) | ExternalData::Tuple(values) => {
+            values.len().hash(state);
+            for value in values {
+                hash_external(value, state);
+            }
+        }
+        ExternalData::Variant(name, value) => {
+            name.hash(state);
+            value.is_some().hash(state);
+            if let Some(value) = value {
+                hash_external(value, state);
+            }
+        }
+    }
+}
+
+impl Hash for Value {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        kind_rank(&self.kind).hash(state);
+        match &self.kind {
+            ValueKind::BoolV(value) => value.hash(state),
+            ValueKind::NumV(num::T::Nat(value)) => {
+                0_u8.hash(state);
+                value.hash(state);
+            }
+            ValueKind::NumV(num::T::Int(value)) => {
+                1_u8.hash(state);
+                value.hash(state);
+            }
+            ValueKind::TextV(value) => value.hash(state),
+            ValueKind::StructV(fields) => {
+                fields.len().hash(state);
+                for (atom, value) in fields {
+                    atom.node.hash(state);
+                    value.hash(state);
+                }
+            }
+            ValueKind::CaseV(value_case) => value_case.hash(state),
+            ValueKind::TupleV(values) | ValueKind::ListV(values) => values.hash(state),
+            ValueKind::OptV(value) => value.hash(state),
+            ValueKind::FuncV(id) => id.node.hash(state),
+            ValueKind::ExternV(value) => hash_external(value, state),
         }
     }
 }

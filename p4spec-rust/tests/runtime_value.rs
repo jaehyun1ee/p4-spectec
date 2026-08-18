@@ -1,4 +1,9 @@
-use std::rc::Rc;
+use std::{
+    cmp::Ordering,
+    collections::{BTreeSet, HashSet},
+    hash::{DefaultHasher, Hash, Hasher},
+    rc::Rc,
+};
 
 use num_bigint::BigInt;
 use p4spec_rust::{
@@ -189,4 +194,141 @@ fn every_runtime_value_constructor_uses_the_runtime_value_kind() {
     assert!(matches!(values[7].kind, ValueKind::ListV(_)));
     assert!(matches!(values[8].kind, ValueKind::FuncV(_)));
     assert!(matches!(values[9].kind, ValueKind::ExternV(_)));
+}
+
+fn semantic_hash(value: &impl Hash) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    value.hash(&mut hasher);
+    hasher.finish()
+}
+
+#[test]
+fn semantic_equality_and_hash_ignore_runtime_type_and_source_region() {
+    let value_a = make::bool(true, span("left"));
+    let value_b = make::new(ValueKind::BoolV(true), TypKind::TextT, span("right"));
+
+    assert_eq!(value_a, value_b);
+    assert_eq!(value_a.cmp(&value_b), Ordering::Equal);
+    assert_eq!(semantic_hash(&value_a), semantic_hash(&value_b));
+
+    let mut values = HashSet::new();
+    values.insert(value_a);
+    values.insert(value_b);
+    assert_eq!(values.len(), 1);
+}
+
+#[test]
+fn comparison_preserves_ocaml_constructor_and_payload_order() {
+    let typ = make_type::bool_type();
+    let none = make::opt(&typ, None, Region::none());
+    let some = make::opt(
+        &typ,
+        Some(make::bool(false, Region::none())),
+        Region::none(),
+    );
+    let list = make::list(&typ, Vec::new(), Region::none());
+    assert!(none < some);
+    assert!(some < list);
+
+    let nat = make::nat(BigInt::from(100), Region::none());
+    let int = make::int(BigInt::from(-100), Region::none());
+    assert!(nat < int);
+
+    let function_a = make::func(
+        id("a", "left"),
+        Vec::new(),
+        Vec::new(),
+        make_type::bool_type(),
+        Region::none(),
+    );
+    let function_b = make::func(
+        id("b", "right"),
+        Vec::new(),
+        Vec::new(),
+        make_type::bool_type(),
+        Region::none(),
+    );
+    assert!(function_a < function_b);
+
+    let mut values = BTreeSet::new();
+    values.insert(list);
+    values.insert(none);
+    values.insert(some);
+    assert_eq!(values.len(), 3);
+}
+
+#[test]
+fn recursive_equality_ignores_atom_and_child_metadata() {
+    let typ = make_type::bool_type();
+    let child_a = make::bool(true, span("child-a"));
+    let child_b = make::new(ValueKind::BoolV(true), TypKind::TextT, span("child-b"));
+    let struct_a = make::structure(
+        &typ,
+        vec![(
+            atom(Atom::Keyword("field".to_owned()), "atom-a"),
+            Rc::clone(&child_a),
+        )],
+        span("struct-a"),
+    );
+    let struct_b = make::structure(
+        &typ,
+        vec![(
+            atom(Atom::Keyword("field".to_owned()), "atom-b"),
+            Rc::clone(&child_b),
+        )],
+        span("struct-b"),
+    );
+    let case_a = make::case(
+        &typ,
+        Mixfix::Brack(
+            atom(Atom::LParen, "case-left-a"),
+            Box::new(Mixfix::Arg(child_a)),
+            atom(Atom::RParen, "case-right-a"),
+        ),
+        span("case-a"),
+    );
+    let case_b = make::case(
+        &typ,
+        Mixfix::Brack(
+            atom(Atom::LParen, "case-left-b"),
+            Box::new(Mixfix::Arg(child_b)),
+            atom(Atom::RParen, "case-right-b"),
+        ),
+        span("case-b"),
+    );
+
+    assert_eq!(struct_a, struct_b);
+    assert_eq!(case_a, case_b);
+    assert_eq!(semantic_hash(&struct_a), semantic_hash(&struct_b));
+    assert_eq!(semantic_hash(&case_a), semantic_hash(&case_b));
+}
+
+#[test]
+fn external_comparison_matches_ocaml_float_and_yojson_ordering() {
+    let typ = make_type::bool_type();
+    let external = |value| make::external(&typ, value, Region::none());
+    let nan_a = external(ExternalData::Float(f64::NAN));
+    let nan_b = external(ExternalData::Float(-f64::NAN));
+    let zero = external(ExternalData::Float(0.0));
+    let negative_zero = external(ExternalData::Float(-0.0));
+
+    assert_eq!(nan_a, nan_b);
+    assert!(nan_a < zero);
+    assert_eq!(zero, negative_zero);
+    assert_eq!(semantic_hash(&nan_a), semantic_hash(&nan_b));
+    assert_eq!(semantic_hash(&zero), semantic_hash(&negative_zero));
+
+    let ordered = [
+        external(ExternalData::Null),
+        external(ExternalData::String(String::new())),
+        external(ExternalData::Intlit("0".to_owned())),
+        external(ExternalData::Int(0)),
+        external(ExternalData::Float(0.0)),
+        external(ExternalData::Variant(String::new(), None)),
+        external(ExternalData::Tuple(Vec::new())),
+        external(ExternalData::Bool(false)),
+        external(ExternalData::List(Vec::new())),
+        external(ExternalData::Assoc(Vec::new())),
+    ];
+    assert!(ordered.windows(2).all(|pair| pair[0] < pair[1]));
 }
