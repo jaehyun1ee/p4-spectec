@@ -16,6 +16,15 @@ pub enum Mixfix<T> {
     Seq(Vec<Self>),
 }
 
+#[derive(Clone, Copy, Debug, Error, PartialEq, Eq)]
+pub enum ArityMismatch {
+    #[error("too few mixfix arguments")]
+    TooFew,
+
+    #[error("too many mixfix arguments")]
+    TooMany,
+}
+
 // Equality and comparison
 
 impl<T: PartialEq> PartialEq for Mixfix<T> {
@@ -95,7 +104,46 @@ impl<T> Mixfix<T> {
         }
     }
 
-    // Fold, map, and iter
+    pub fn cmp_shape<U>(&self, other: &Mixfix<U>) -> Ordering {
+        fn compare_slices<T, U>(left: &[Mixfix<T>], right: &[Mixfix<U>]) -> Ordering {
+            for (item_l, item_r) in left.iter().zip(right) {
+                let ordering = item_l.cmp_shape(item_r);
+                if ordering != Ordering::Equal {
+                    return ordering;
+                }
+            }
+            left.len().cmp(&right.len())
+        }
+
+        match (self, other) {
+            (Self::Arg(_), Mixfix::Arg(_)) => Ordering::Equal,
+            (Self::Atom(left), Mixfix::Atom(right)) => left.it.cmp(&right.it),
+            (Self::Brack(left_l, body_l, right_l), Mixfix::Brack(left_r, body_r, right_r)) => {
+                left_l
+                    .it
+                    .cmp(&left_r.it)
+                    .then_with(|| body_l.cmp_shape(body_r))
+                    .then_with(|| right_l.it.cmp(&right_r.it))
+            }
+            (Self::Infix(left_l, atom_l, right_l), Mixfix::Infix(left_r, atom_r, right_r)) => {
+                left_l
+                    .cmp_shape(left_r)
+                    .then_with(|| atom_l.it.cmp(&atom_r.it))
+                    .then_with(|| right_l.cmp_shape(right_r))
+            }
+            (Self::Seq(items_l), Mixfix::Seq(items_r)) => compare_slices(items_l, items_r),
+            _ => self.tag().cmp(&other.tag()),
+        }
+    }
+
+    pub fn same_shape<U>(&self, other: &Mixfix<U>) -> bool {
+        self.cmp_shape(other) == Ordering::Equal
+    }
+}
+
+// Fold, map, and iter
+
+impl<T> Mixfix<T> {
     pub fn fold<A>(&self, initial: A, mut fold_arg: impl FnMut(A, &T) -> A) -> A {
         self.fold_with(initial, &mut fold_arg)
     }
@@ -138,13 +186,84 @@ impl<T> Mixfix<T> {
             }
         }
     }
+}
 
-    // Conversion
+impl<T: Clone> Mixfix<T> {
+    pub fn map_atoms(&self, mut map_atom: impl FnMut(&AtomPhrase) -> AtomPhrase) -> Self {
+        fn go<T: Clone>(
+            mixfix: &Mixfix<T>,
+            map_atom: &mut impl FnMut(&AtomPhrase) -> AtomPhrase,
+        ) -> Mixfix<T> {
+            match mixfix {
+                Mixfix::Arg(arg) => Mixfix::Arg(arg.clone()),
+                Mixfix::Atom(atom) => Mixfix::Atom(map_atom(atom)),
+                Mixfix::Brack(left, body, right) => Mixfix::Brack(
+                    map_atom(left),
+                    Box::new(go(body, map_atom)),
+                    map_atom(right),
+                ),
+                Mixfix::Infix(left, atom, right) => Mixfix::Infix(
+                    Box::new(go(left, map_atom)),
+                    map_atom(atom),
+                    Box::new(go(right, map_atom)),
+                ),
+                Mixfix::Seq(items) => {
+                    Mixfix::Seq(items.iter().map(|item| go(item, map_atom)).collect())
+                }
+            }
+        }
+
+        go(self, &mut map_atom)
+    }
+}
+
+impl<T> Mixfix<T> {
+    pub fn iter(&self, mut visit_arg: impl FnMut(&T)) {
+        self.fold((), |(), arg| visit_arg(arg));
+    }
+
+    pub fn iter_atoms(&self, mut visit_atom: impl FnMut(&AtomPhrase)) {
+        for atom in self.atoms() {
+            visit_atom(atom);
+        }
+    }
+}
+
+// Conversion
+
+impl<T> Mixfix<T> {
+    fn display_string(&self) -> String {
+        fn inner<T>(mixfix: &Mixfix<T>) -> String {
+            match mixfix {
+                Mixfix::Arg(_) => "%".into(),
+                Mixfix::Atom(atom) => atom.it.render(),
+                Mixfix::Brack(left, body, right) => {
+                    format!("{}{}{}", left.it.render(), inner(body), right.it.render())
+                }
+                Mixfix::Infix(left, atom, right) => {
+                    format!("{}{}{}", inner(left), atom.it.render(), inner(right))
+                }
+                Mixfix::Seq(items) => items.iter().map(inner).collect::<Vec<_>>().join(" "),
+            }
+        }
+
+        format!("`{}`", inner(self))
+    }
+
     pub fn to_mixop(&self) -> Mixop {
         self.map(|_| ())
     }
+}
 
-    // Arity
+impl<T> fmt::Display for Mixfix<T> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(&self.display_string())
+    }
+}
+
+// Arity
+
+impl<T> Mixfix<T> {
     pub fn arity(&self) -> usize {
         match self {
             Self::Arg(_) => 1,
@@ -154,44 +273,11 @@ impl<T> Mixfix<T> {
             Self::Seq(items) => items.iter().map(Self::arity).sum(),
         }
     }
+}
 
-    pub fn cmp_shape<U>(&self, other: &Mixfix<U>) -> Ordering {
-        fn compare_slices<T, U>(left: &[Mixfix<T>], right: &[Mixfix<U>]) -> Ordering {
-            for (item_l, item_r) in left.iter().zip(right) {
-                let ordering = item_l.cmp_shape(item_r);
-                if ordering != Ordering::Equal {
-                    return ordering;
-                }
-            }
-            left.len().cmp(&right.len())
-        }
+// Atoms and args
 
-        match (self, other) {
-            (Self::Arg(_), Mixfix::Arg(_)) => Ordering::Equal,
-            (Self::Atom(left), Mixfix::Atom(right)) => left.it.cmp(&right.it),
-            (Self::Brack(left_l, body_l, right_l), Mixfix::Brack(left_r, body_r, right_r)) => {
-                left_l
-                    .it
-                    .cmp(&left_r.it)
-                    .then_with(|| body_l.cmp_shape(body_r))
-                    .then_with(|| right_l.it.cmp(&right_r.it))
-            }
-            (Self::Infix(left_l, atom_l, right_l), Mixfix::Infix(left_r, atom_r, right_r)) => {
-                left_l
-                    .cmp_shape(left_r)
-                    .then_with(|| atom_l.it.cmp(&atom_r.it))
-                    .then_with(|| right_l.cmp_shape(right_r))
-            }
-            (Self::Seq(items_l), Mixfix::Seq(items_r)) => compare_slices(items_l, items_r),
-            _ => self.tag().cmp(&other.tag()),
-        }
-    }
-
-    pub fn same_shape<U>(&self, other: &Mixfix<U>) -> bool {
-        self.cmp_shape(other) == Ordering::Equal
-    }
-
-    // Atoms and args
+impl<T> Mixfix<T> {
     pub fn atoms(&self) -> Vec<&AtomPhrase> {
         let mut atoms = Vec::new();
         self.collect_atoms(&mut atoms);
@@ -282,91 +368,60 @@ impl<T> Mixfix<T> {
             }
         }
     }
+}
 
-    fn display_string(&self) -> String {
-        fn inner<T>(mixfix: &Mixfix<T>) -> String {
-            match mixfix {
-                Mixfix::Arg(_) => "%".into(),
-                Mixfix::Atom(atom) => atom.it.render(),
-                Mixfix::Brack(left, body, right) => {
-                    format!("{}{}{}", left.it.render(), inner(body), right.it.render())
-                }
-                Mixfix::Infix(left, atom, right) => {
-                    format!("{}{}{}", inner(left), atom.it.render(), inner(right))
-                }
-                Mixfix::Seq(items) => items.iter().map(inner).collect::<Vec<_>>().join(" "),
+// Filling and splitting
+
+impl Mixop {
+    pub fn fill<T>(
+        mixop: &Self,
+        args: impl IntoIterator<Item = T>,
+    ) -> Result<Mixfix<T>, ArityMismatch> {
+        fn fill_next<T>(
+            mixop: &Mixop,
+            args: &mut impl Iterator<Item = T>,
+        ) -> Result<Mixfix<T>, ArityMismatch> {
+            match mixop {
+                Mixfix::Arg(()) => args.next().map(Mixfix::Arg).ok_or(ArityMismatch::TooFew),
+                Mixfix::Atom(atom) => Ok(Mixfix::Atom(atom.clone())),
+                Mixfix::Brack(left, body, right) => Ok(Mixfix::Brack(
+                    left.clone(),
+                    Box::new(fill_next(body, args)?),
+                    right.clone(),
+                )),
+                Mixfix::Infix(left, atom, right) => Ok(Mixfix::Infix(
+                    Box::new(fill_next(left, args)?),
+                    atom.clone(),
+                    Box::new(fill_next(right, args)?),
+                )),
+                Mixfix::Seq(items) => Ok(Mixfix::Seq(
+                    items
+                        .iter()
+                        .map(|item| fill_next(item, args))
+                        .collect::<Result<_, _>>()?,
+                )),
             }
         }
 
-        format!("`{}`", inner(self))
-    }
-
-    pub fn iter(&self, mut visit_arg: impl FnMut(&T)) {
-        self.fold((), |(), arg| visit_arg(arg));
-    }
-
-    pub fn iter_atoms(&self, mut visit_atom: impl FnMut(&AtomPhrase)) {
-        for atom in self.atoms() {
-            visit_atom(atom);
+        let mut args = args.into_iter();
+        let mixfix = fill_next(mixop, &mut args)?;
+        if args.next().is_some() {
+            Err(ArityMismatch::TooMany)
+        } else {
+            Ok(mixfix)
         }
     }
+}
 
+impl<T> Mixfix<T> {
     pub fn split(&self) -> (Mixop, Vec<&T>) {
         (self.to_mixop(), self.args())
     }
-
-    // Rendering
-    pub fn render(
-        &self,
-        mut string_of_atom: impl FnMut(&AtomPhrase) -> String,
-        mut string_of_arg: impl FnMut(&T) -> String,
-    ) -> String {
-        self.map(|arg| string_of_arg(arg)).assemble(
-            String::new(),
-            " ".to_owned(),
-            |atom| {
-                let rendered = string_of_atom(atom);
-                (!rendered.is_empty()).then_some(rendered)
-            },
-            |left, right| left + &right,
-        )
-    }
 }
 
-impl<T> fmt::Display for Mixfix<T> {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(&self.display_string())
-    }
-}
+// Rendering
 
 impl<T: Clone> Mixfix<T> {
-    pub fn map_atoms(&self, mut map_atom: impl FnMut(&AtomPhrase) -> AtomPhrase) -> Self {
-        fn go<T: Clone>(
-            mixfix: &Mixfix<T>,
-            map_atom: &mut impl FnMut(&AtomPhrase) -> AtomPhrase,
-        ) -> Mixfix<T> {
-            match mixfix {
-                Mixfix::Arg(arg) => Mixfix::Arg(arg.clone()),
-                Mixfix::Atom(atom) => Mixfix::Atom(map_atom(atom)),
-                Mixfix::Brack(left, body, right) => Mixfix::Brack(
-                    map_atom(left),
-                    Box::new(go(body, map_atom)),
-                    map_atom(right),
-                ),
-                Mixfix::Infix(left, atom, right) => Mixfix::Infix(
-                    Box::new(go(left, map_atom)),
-                    map_atom(atom),
-                    Box::new(go(right, map_atom)),
-                ),
-                Mixfix::Seq(items) => {
-                    Mixfix::Seq(items.iter().map(|item| go(item, map_atom)).collect())
-                }
-            }
-        }
-
-        go(self, &mut map_atom)
-    }
-
     pub fn assemble(
         &self,
         empty: T,
@@ -424,54 +479,20 @@ impl<T: Clone> Mixfix<T> {
     }
 }
 
-// Filling and splitting
-
-impl Mixop {
-    pub fn fill<T>(
-        mixop: &Self,
-        args: impl IntoIterator<Item = T>,
-    ) -> Result<Mixfix<T>, ArityMismatch> {
-        fn fill_next<T>(
-            mixop: &Mixop,
-            args: &mut impl Iterator<Item = T>,
-        ) -> Result<Mixfix<T>, ArityMismatch> {
-            match mixop {
-                Mixfix::Arg(()) => args.next().map(Mixfix::Arg).ok_or(ArityMismatch::TooFew),
-                Mixfix::Atom(atom) => Ok(Mixfix::Atom(atom.clone())),
-                Mixfix::Brack(left, body, right) => Ok(Mixfix::Brack(
-                    left.clone(),
-                    Box::new(fill_next(body, args)?),
-                    right.clone(),
-                )),
-                Mixfix::Infix(left, atom, right) => Ok(Mixfix::Infix(
-                    Box::new(fill_next(left, args)?),
-                    atom.clone(),
-                    Box::new(fill_next(right, args)?),
-                )),
-                Mixfix::Seq(items) => Ok(Mixfix::Seq(
-                    items
-                        .iter()
-                        .map(|item| fill_next(item, args))
-                        .collect::<Result<_, _>>()?,
-                )),
-            }
-        }
-
-        let mut args = args.into_iter();
-        let mixfix = fill_next(mixop, &mut args)?;
-        if args.next().is_some() {
-            Err(ArityMismatch::TooMany)
-        } else {
-            Ok(mixfix)
-        }
+impl<T> Mixfix<T> {
+    pub fn render(
+        &self,
+        mut string_of_atom: impl FnMut(&AtomPhrase) -> String,
+        mut string_of_arg: impl FnMut(&T) -> String,
+    ) -> String {
+        self.map(|arg| string_of_arg(arg)).assemble(
+            String::new(),
+            " ".to_owned(),
+            |atom| {
+                let rendered = string_of_atom(atom);
+                (!rendered.is_empty()).then_some(rendered)
+            },
+            |left, right| left + &right,
+        )
     }
-}
-
-#[derive(Clone, Copy, Debug, Error, PartialEq, Eq)]
-pub enum ArityMismatch {
-    #[error("too few mixfix arguments")]
-    TooFew,
-
-    #[error("too many mixfix arguments")]
-    TooMany,
 }

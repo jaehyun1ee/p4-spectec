@@ -9,6 +9,12 @@ pub struct Position {
     pub column: i64,
 }
 
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Region {
+    pub left: Position,
+    pub right: Position,
+}
+
 impl Position {
     pub fn new(file: impl Into<String>, line: i64, column: i64) -> Self {
         Self {
@@ -17,26 +23,6 @@ impl Position {
             column,
         }
     }
-
-    pub fn for_file(file: impl Into<String>) -> Self {
-        Self::new(file, 0, 0)
-    }
-}
-
-impl fmt::Display for Position {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.line == -1 {
-            write!(formatter, "0x{:x}", self.column)
-        } else {
-            write!(formatter, "{}.{}", self.line, self.column + 1)
-        }
-    }
-}
-
-#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Region {
-    pub left: Position,
-    pub right: Position,
 }
 
 impl Region {
@@ -47,7 +33,15 @@ impl Region {
     pub fn none() -> Self {
         Self::default()
     }
+}
 
+impl Position {
+    pub fn for_file(file: impl Into<String>) -> Self {
+        Self::new(file, 0, 0)
+    }
+}
+
+impl Region {
     pub fn for_file(file: impl Into<String>) -> Self {
         let position = Position::for_file(file);
         Self::new(position.clone(), position)
@@ -71,6 +65,16 @@ impl Region {
                 region_over.right.max(region.right.clone()),
             )
         })
+    }
+}
+
+impl fmt::Display for Position {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.line == -1 {
+            write!(formatter, "0x{:x}", self.column)
+        } else {
+            write!(formatter, "{}.{}", self.line, self.column + 1)
+        }
     }
 }
 
