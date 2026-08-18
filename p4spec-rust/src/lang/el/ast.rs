@@ -2,7 +2,7 @@
 // recursive edges
 #![allow(clippy::large_enum_variant)]
 
-use crate::domain::{atom::Atom as DomainAtom, source::Phrase};
+use crate::domain::{atom::Atom as DomainAtom, source::Spanned};
 use crate::lang::xl::num;
 
 // Numbers
@@ -15,12 +15,12 @@ pub type Text = String;
 
 // Identifiers
 
-pub type Id = Phrase<IdKind>;
+pub type Id = Spanned<IdKind>;
 pub type IdKind = String;
 
 // Atoms
 
-pub type Atom = Phrase<DomainAtom>;
+pub type Atom = Spanned<DomainAtom>;
 
 // Iterators
 
@@ -34,7 +34,7 @@ pub enum Iter {
 
 // Types
 
-pub type PlainTyp = Phrase<PlainTypKind>;
+pub type PlainTyp = Spanned<PlainTypKind>;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PlainTypKind {
@@ -95,7 +95,7 @@ pub enum CmpOp {
 
 // Expressions
 
-pub type Exp = Phrase<ExpKind>;
+pub type Exp = Spanned<ExpKind>;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ExpKind {
@@ -179,7 +179,7 @@ pub enum Hole {
 
 // Paths
 
-pub type Path = Phrase<PathKind>;
+pub type Path = Spanned<PathKind>;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PathKind {
@@ -194,7 +194,7 @@ pub enum PathKind {
 
 // Arguments
 
-pub type Arg = Phrase<ArgKind>;
+pub type Arg = Spanned<ArgKind>;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ArgKind {
@@ -206,7 +206,7 @@ pub enum ArgKind {
 
 // Type arguments
 
-pub type Targ = Phrase<TargKind>;
+pub type Targ = Spanned<TargKind>;
 pub type TargKind = PlainTypKind;
 
 // Hints

@@ -27,7 +27,7 @@ fn atom_phrase_uses_ppx_deriving_yojson_shape() {
     let json = atom_phrase(json!(["Keyword", "IF"]));
     let atom = AtomPhraseCodec::decode(&json).expect("decode atom phrase");
 
-    assert_eq!(atom.it, Atom::Keyword("IF".into()));
+    assert_eq!(atom.node, Atom::Keyword("IF".into()));
     assert_eq!(AtomPhraseCodec::encode(&atom), json);
 }
 

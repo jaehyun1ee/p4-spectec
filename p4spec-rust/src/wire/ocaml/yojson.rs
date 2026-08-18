@@ -49,6 +49,12 @@ pub enum ParseError {
 
 #[derive(Debug, Error)]
 pub enum WriteError {
+    #[error("Yojson Int `{0}` is outside the OCaml machine-integer range")]
+    IntOutsideRange(i64),
+
+    #[error("Yojson Intlit `{0}` is inside the OCaml machine-integer range")]
+    IntlitInsideRange(String),
+
     #[error("invalid Yojson integer literal `{0}`")]
     InvalidIntlit(String),
 
@@ -418,7 +424,13 @@ fn write_value(output: &mut Vec<u8>, value: &Value) -> Result<(), WriteError> {
     match value {
         Value::Null => output.extend(b"null"),
         Value::Bool(value) => output.extend_from_slice(if *value { b"true" } else { b"false" }),
-        Value::Int(value) => output.extend(value.to_string().bytes()),
+        Value::Int(value) if ocaml_int_contains(*value) => output.extend(value.to_string().bytes()),
+        Value::Int(value) => return Err(WriteError::IntOutsideRange(*value)),
+        Value::Intlit(value)
+            if valid_intlit(value) && value.parse::<i64>().is_ok_and(ocaml_int_contains) =>
+        {
+            return Err(WriteError::IntlitInsideRange(value.clone()));
+        }
         Value::Intlit(value) if valid_intlit(value) => output.extend(value.bytes()),
         Value::Intlit(value) => return Err(WriteError::InvalidIntlit(value.clone())),
         Value::Float(value) if value.is_nan() => output.extend(b"NaN"),
@@ -518,5 +530,51 @@ pub(crate) fn to_serde_json(value: &Value) -> Result<serde_json::Value, &'static
             .map(serde_json::Value::Array),
         Value::Tuple(_) => Err("standard JSON value without tuples"),
         Value::Variant(_, _) => Err("standard JSON value without variants"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Value, WriteError};
+
+    #[test]
+    fn writer_preserves_ocaml_int_constructor_boundaries() {
+        let payload_bits = usize::BITS - 1;
+        let minimum = -(1_i64 << (payload_bits - 1));
+        let maximum = (1_i64 << (payload_bits - 1)) - 1;
+
+        for value in [minimum, maximum] {
+            let bytes = Value::Int(value).to_vec().expect("encode OCaml Int");
+            assert_eq!(
+                Value::from_slice(&bytes).expect("reparse Int"),
+                Value::Int(value)
+            );
+        }
+
+        for value in [minimum - 1, maximum + 1] {
+            let error = Value::Int(value)
+                .to_vec()
+                .expect_err("reject out-of-range Int");
+            assert!(matches!(error, WriteError::IntOutsideRange(actual) if actual == value));
+
+            let literal = value.to_string();
+            let bytes = Value::Intlit(literal.clone())
+                .to_vec()
+                .expect("encode out-of-range Intlit");
+            assert_eq!(
+                Value::from_slice(&bytes).expect("reparse Intlit"),
+                Value::Intlit(literal),
+            );
+        }
+    }
+
+    #[test]
+    fn writer_rejects_intlit_inside_ocaml_int_range() {
+        for literal in ["-1", "0", "1"] {
+            let error = Value::Intlit(literal.to_owned())
+                .to_vec()
+                .expect_err("reject in-range Intlit");
+            assert!(matches!(error, WriteError::IntlitInsideRange(actual) if actual == literal));
+        }
     }
 }

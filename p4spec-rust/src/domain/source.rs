@@ -79,38 +79,36 @@ impl fmt::Display for Region {
     }
 }
 
-// Phrases
+// Spans and spanned nodes
+
+pub type Span = Region;
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Info<I, N, A> {
-    pub it: I,
-    pub note: N,
-    pub at: A,
+pub struct Spanned<T> {
+    pub node: T,
+    pub span: Span,
 }
 
-pub type NotePhrase<I, N> = Info<I, N, Region>;
-pub type Note<I, N> = Info<I, N, ()>;
-pub type Phrase<I> = Info<I, (), Region>;
+pub trait HasSpan {
+    fn span(&self) -> &Span;
+}
 
-impl<I> Info<I, (), Region> {
-    pub fn new(it: I, at: Region) -> Self {
-        Self { it, note: (), at }
+impl<T> Spanned<T> {
+    pub fn new(node: T, span: Span) -> Self {
+        Self { node, span }
     }
-}
 
-impl<I, N> Info<I, N, Region> {
-    pub fn with_note(it: I, at: Region, note: N) -> Self {
-        Self { it, note, at }
-    }
-}
-
-impl<I, N, A> Info<I, N, A> {
-    pub fn map<J>(self, map: impl FnOnce(I) -> J) -> Info<J, N, A> {
-        Info {
-            it: map(self.it),
-            note: self.note,
-            at: self.at,
+    pub fn map<U>(self, map: impl FnOnce(T) -> U) -> Spanned<U> {
+        Spanned {
+            node: map(self.node),
+            span: self.span,
         }
+    }
+}
+
+impl<T> HasSpan for Spanned<T> {
+    fn span(&self) -> &Span {
+        &self.span
     }
 }
 
@@ -128,10 +126,10 @@ impl Region {
     }
 }
 
-pub fn phrase_list_region<I, N>(phrases: &[Info<I, N, Region>]) -> Region {
-    match phrases {
+pub fn phrase_list_region<T: HasSpan>(nodes: &[T]) -> Region {
+    match nodes {
         [] => Region::none(),
-        [phrase] => phrase.at.clone(),
-        [first, .., last] => Region::new(first.at.left.clone(), last.at.right.clone()),
+        [node] => node.span().clone(),
+        [first, .., last] => Region::new(first.span().left.clone(), last.span().right.clone()),
     }
 }

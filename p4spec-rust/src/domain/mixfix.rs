@@ -2,9 +2,9 @@ use std::{cmp::Ordering, fmt, hash::Hash};
 
 use thiserror::Error;
 
-use super::{atom::Atom, source::Phrase};
+use super::{atom::Atom, source::Spanned};
 
-pub type AtomPhrase = Phrase<Atom>;
+pub type AtomPhrase = Spanned<Atom>;
 pub type Mixop = Mixfix<()>;
 
 #[derive(Clone, Debug)]
@@ -31,12 +31,12 @@ impl<T: PartialEq> PartialEq for Mixfix<T> {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Arg(left), Self::Arg(right)) => left == right,
-            (Self::Atom(left), Self::Atom(right)) => left.it == right.it,
+            (Self::Atom(left), Self::Atom(right)) => left.node == right.node,
             (Self::Brack(left_l, body_l, right_l), Self::Brack(left_r, body_r, right_r)) => {
-                left_l.it == left_r.it && body_l == body_r && right_l.it == right_r.it
+                left_l.node == left_r.node && body_l == body_r && right_l.node == right_r.node
             }
             (Self::Infix(left_l, atom_l, right_l), Self::Infix(left_r, atom_r, right_r)) => {
-                left_l == left_r && atom_l.it == atom_r.it && right_l == right_r
+                left_l == left_r && atom_l.node == atom_r.node && right_l == right_r
             }
             (Self::Seq(items_l), Self::Seq(items_r)) => items_l == items_r,
             _ => false,
@@ -50,15 +50,15 @@ impl<T: Ord> Ord for Mixfix<T> {
     fn cmp(&self, other: &Self) -> Ordering {
         match (self, other) {
             (Self::Arg(left), Self::Arg(right)) => left.cmp(right),
-            (Self::Atom(left), Self::Atom(right)) => left.it.cmp(&right.it),
+            (Self::Atom(left), Self::Atom(right)) => left.node.cmp(&right.node),
             (Self::Brack(left_l, body_l, right_l), Self::Brack(left_r, body_r, right_r)) => left_l
-                .it
-                .cmp(&left_r.it)
+                .node
+                .cmp(&left_r.node)
                 .then_with(|| body_l.cmp(body_r))
-                .then_with(|| right_l.it.cmp(&right_r.it)),
+                .then_with(|| right_l.node.cmp(&right_r.node)),
             (Self::Infix(left_l, atom_l, right_l), Self::Infix(left_r, atom_r, right_r)) => left_l
                 .cmp(left_r)
-                .then_with(|| atom_l.it.cmp(&atom_r.it))
+                .then_with(|| atom_l.node.cmp(&atom_r.node))
                 .then_with(|| right_l.cmp(right_r)),
             (Self::Seq(items_l), Self::Seq(items_r)) => items_l.cmp(items_r),
             _ => self.tag().cmp(&other.tag()),
@@ -77,15 +77,15 @@ impl<T: Hash> Hash for Mixfix<T> {
         self.tag().hash(state);
         match self {
             Self::Arg(arg) => arg.hash(state),
-            Self::Atom(atom) => atom.it.hash(state),
+            Self::Atom(atom) => atom.node.hash(state),
             Self::Brack(left, body, right) => {
-                left.it.hash(state);
+                left.node.hash(state);
                 body.hash(state);
-                right.it.hash(state);
+                right.node.hash(state);
             }
             Self::Infix(left, atom, right) => {
                 left.hash(state);
-                atom.it.hash(state);
+                atom.node.hash(state);
                 right.hash(state);
             }
             Self::Seq(items) => items.hash(state),
@@ -117,18 +117,18 @@ impl<T> Mixfix<T> {
 
         match (self, other) {
             (Self::Arg(_), Mixfix::Arg(_)) => Ordering::Equal,
-            (Self::Atom(left), Mixfix::Atom(right)) => left.it.cmp(&right.it),
+            (Self::Atom(left), Mixfix::Atom(right)) => left.node.cmp(&right.node),
             (Self::Brack(left_l, body_l, right_l), Mixfix::Brack(left_r, body_r, right_r)) => {
                 left_l
-                    .it
-                    .cmp(&left_r.it)
+                    .node
+                    .cmp(&left_r.node)
                     .then_with(|| body_l.cmp_shape(body_r))
-                    .then_with(|| right_l.it.cmp(&right_r.it))
+                    .then_with(|| right_l.node.cmp(&right_r.node))
             }
             (Self::Infix(left_l, atom_l, right_l), Mixfix::Infix(left_r, atom_r, right_r)) => {
                 left_l
                     .cmp_shape(left_r)
-                    .then_with(|| atom_l.it.cmp(&atom_r.it))
+                    .then_with(|| atom_l.node.cmp(&atom_r.node))
                     .then_with(|| right_l.cmp_shape(right_r))
             }
             (Self::Seq(items_l), Mixfix::Seq(items_r)) => compare_slices(items_l, items_r),
@@ -236,12 +236,17 @@ impl<T> Mixfix<T> {
         fn inner<T>(mixfix: &Mixfix<T>) -> String {
             match mixfix {
                 Mixfix::Arg(_) => "%".into(),
-                Mixfix::Atom(atom) => atom.it.render(),
+                Mixfix::Atom(atom) => atom.node.render(),
                 Mixfix::Brack(left, body, right) => {
-                    format!("{}{}{}", left.it.render(), inner(body), right.it.render())
+                    format!(
+                        "{}{}{}",
+                        left.node.render(),
+                        inner(body),
+                        right.node.render()
+                    )
                 }
                 Mixfix::Infix(left, atom, right) => {
-                    format!("{}{}{}", inner(left), atom.it.render(), inner(right))
+                    format!("{}{}{}", inner(left), atom.node.render(), inner(right))
                 }
                 Mixfix::Seq(items) => items.iter().map(inner).collect::<Vec<_>>().join(" "),
             }

@@ -2,11 +2,11 @@ use p4spec_rust::domain::{
     atom::Atom,
     mixfix::{ArityMismatch, Mixfix},
     mixop,
-    source::{Phrase, Position, Region, phrase_list_region},
+    source::{Position, Region, Spanned, phrase_list_region},
 };
 
-fn phrase(atom: Atom) -> Phrase<Atom> {
-    Phrase::new(atom, Region::none())
+fn phrase(atom: Atom) -> Spanned<Atom> {
+    Spanned::new(atom, Region::none())
 }
 
 #[test]
@@ -36,17 +36,17 @@ fn region_over_uses_the_outermost_positions() {
 
 #[test]
 fn phrase_list_region_spans_first_to_last_phrase() {
-    let first = Phrase::new(
+    let first = Spanned::new(
         "first",
         Region::new(Position::new("a", 2, 3), Position::new("a", 2, 8)),
     );
-    let last = Phrase::new(
+    let last = Spanned::new(
         "last",
         Region::new(Position::new("a", 5, 1), Position::new("a", 5, 4)),
     );
 
-    assert_eq!(phrase_list_region::<&str, ()>(&[]), Region::none());
-    assert_eq!(phrase_list_region(std::slice::from_ref(&first)), first.at);
+    assert_eq!(phrase_list_region::<Spanned<&str>>(&[]), Region::none());
+    assert_eq!(phrase_list_region(std::slice::from_ref(&first)), first.span);
     assert_eq!(
         phrase_list_region(&[first, last]),
         Region::new(Position::new("a", 2, 3), Position::new("a", 5, 4))
@@ -95,7 +95,7 @@ fn mixfix_fill_split_and_render_match_ocaml_order() {
     let filled = Mixfix::fill(&mixop, ["condition", "body"]).unwrap();
     assert_eq!(filled.args(), vec![&"condition", &"body"]);
     assert_eq!(
-        filled.render(|atom| atom.it.render(), |arg| (*arg).to_owned()),
+        filled.render(|atom| atom.node.render(), |arg| (*arg).to_owned()),
         "IF condition THEN ( body )"
     );
 
@@ -121,8 +121,8 @@ fn mixfix_reports_both_arity_mismatches() {
 #[test]
 fn mixfix_equality_ignores_atom_source_regions() {
     let atom = Atom::Keyword("SAME".into());
-    let left = Mixfix::<()>::Atom(Phrase::new(atom.clone(), Region::for_file("left.watsup")));
-    let right = Mixfix::<()>::Atom(Phrase::new(atom, Region::for_file("right.watsup")));
+    let left = Mixfix::<()>::Atom(Spanned::new(atom.clone(), Region::for_file("left.watsup")));
+    let right = Mixfix::<()>::Atom(Spanned::new(atom, Region::for_file("right.watsup")));
 
     assert_eq!(left, right);
 }
@@ -163,7 +163,7 @@ fn mixfix_fold_map_atoms_and_assemble_follow_source_order() {
     );
 
     let renamed = mixfix.map_atoms(|atom| {
-        if atom.it == Atom::Keyword("DROP".into()) {
+        if atom.node == Atom::Keyword("DROP".into()) {
             phrase(Atom::Keyword("KEEP".into()))
         } else {
             atom.clone()
@@ -176,7 +176,7 @@ fn mixfix_fold_map_atoms_and_assemble_follow_source_order() {
     assert_eq!(visited_args, vec!["left", "right"]);
 
     let mut visited_atoms = Vec::new();
-    renamed.iter_atoms(|atom| visited_atoms.push(atom.it.clone()));
+    renamed.iter_atoms(|atom| visited_atoms.push(atom.node.clone()));
     assert_eq!(
         visited_atoms,
         vec![Atom::Keyword("KEEP".into()), Atom::LParen, Atom::RParen]
@@ -186,9 +186,9 @@ fn mixfix_fold_map_atoms_and_assemble_follow_source_order() {
     let assembled = pieces.assemble(
         String::new(),
         " ".to_owned(),
-        |atom| match atom.it {
+        |atom| match atom.node {
             Atom::Keyword(_) => None,
-            _ => Some(atom.it.render()),
+            _ => Some(atom.node.render()),
         },
         |left, right| left + &right,
     );
@@ -205,9 +205,9 @@ fn mixfix_render_preserves_empty_arguments_but_omits_empty_atoms() {
 
     assert_eq!(
         mixfix.render(
-            |atom| match atom.it {
+            |atom| match atom.node {
                 Atom::Tag(_) => String::new(),
-                _ => atom.it.render(),
+                _ => atom.node.render(),
             },
             |arg| (*arg).to_owned(),
         ),
@@ -225,7 +225,10 @@ fn mixop_facade_fills_and_renders_arguments() {
     assert_eq!(mixop::arity(&operator), 1);
     assert_eq!(mixop::string_of_mixop(&operator), "`CALL %`");
     assert_eq!(
-        mixop::assemble(&operator, ["argument".to_owned()], |atom| atom.it.render()).unwrap(),
+        mixop::assemble(&operator, ["argument".to_owned()], |atom| atom
+            .node
+            .render())
+        .unwrap(),
         "CALL argument"
     );
 }
@@ -242,7 +245,7 @@ fn atom_matrix_splits_at_each_argument() {
     let matrix: Vec<Vec<&Atom>> = mixfix
         .atoms_matrix()
         .into_iter()
-        .map(|row| row.into_iter().map(|atom| &atom.it).collect())
+        .map(|row| row.into_iter().map(|atom| &atom.node).collect())
         .collect();
     assert_eq!(
         matrix,

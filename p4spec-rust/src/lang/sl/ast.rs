@@ -3,7 +3,7 @@
 #![allow(clippy::large_enum_variant)]
 
 use crate::{
-    domain::source::{NotePhrase, Phrase},
+    domain::source::{HasSpan, Span, Spanned},
     lang::{el, hints::input::T as InputHint, il},
 };
 
@@ -53,9 +53,6 @@ pub type TypCase = il::ast::TypCase;
 
 // Values
 
-pub type Vid = il::ast::Vid;
-pub type VNote = il::ast::VNote;
-
 pub type Value = il::ast::Value;
 pub type ValueKind = il::ast::ValueKind;
 
@@ -94,7 +91,7 @@ pub type TParamKind = il::ast::TParamKind;
 
 // Parameters
 
-pub type Param = Phrase<ParamKind>;
+pub type Param = Spanned<ParamKind>;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ParamKind {
@@ -143,11 +140,23 @@ pub enum Guard {
 pub type Iid = i64;
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct INote {
+pub struct Instr {
+    pub kind: InstrKind,
     pub iid: Iid,
+    pub span: Span,
 }
 
-pub type Instr = NotePhrase<InstrKind, INote>;
+impl Instr {
+    pub fn new(kind: InstrKind, iid: Iid, span: Span) -> Self {
+        Self { kind, iid, span }
+    }
+}
+
+impl HasSpan for Instr {
+    fn span(&self) -> &Span {
+        &self.span
+    }
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum InstrKind {
@@ -220,7 +229,7 @@ pub type DefinedFunc = (
 
 // Definitions
 
-pub type Def = Phrase<DefKind>;
+pub type Def = Spanned<DefKind>;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum DefKind {

@@ -6,7 +6,7 @@ use p4spec_rust::{
         atom::Atom as DomainAtom,
         external_data::ExternalData,
         mixfix::{Mixfix, Mixop},
-        source::{Info, Phrase, Region},
+        source::{Region, Spanned},
     },
     lang::{
         el,
@@ -16,8 +16,8 @@ use p4spec_rust::{
     },
 };
 
-fn phrase<T>(it: T) -> Phrase<T> {
-    Phrase::new(it, Region::for_file("spec/test.watsup"))
+fn phrase<T>(node: T) -> Spanned<T> {
+    Spanned::new(node, Region::for_file("spec/test.watsup"))
 }
 
 fn domain_atom() -> DomainAtom {
@@ -28,7 +28,7 @@ fn domain_atom() -> DomainAtom {
 fn il_and_sl_expose_the_canonical_atom_kind_alias() {
     let atom_kind_il: il::ast::AtomKind = domain_atom();
     let atom_il: il::ast::Atom = phrase(atom_kind_il);
-    let atom_kind_sl: sl::ast::AtomKind = atom_il.it.clone();
+    let atom_kind_sl: sl::ast::AtomKind = atom_il.node.clone();
     let atom_sl: sl::ast::Atom = phrase(atom_kind_sl);
 
     assert_eq!(atom_il, atom_sl);
@@ -442,8 +442,11 @@ fn el_hint_closure_represents_every_required_variant() {
             Box::new(el_exp(el::ast::ExpKind::HoleE(el::ast::Hole::Rest))),
         )),
     };
-    assert_eq!(hint.hintid.it, "format");
-    assert!(matches!(hint.hintexp.it, el::ast::ExpKind::InfixE(_, _, _)));
+    assert_eq!(hint.hintid.node, "format");
+    assert!(matches!(
+        hint.hintexp.node,
+        el::ast::ExpKind::InfixE(_, _, _)
+    ));
 }
 
 fn il_id(name: &str) -> il::ast::Id {
@@ -459,18 +462,18 @@ fn il_typ(kind: il::ast::TypKind) -> il::ast::Typ {
 }
 
 fn il_exp(kind: il::ast::ExpKind) -> il::ast::Exp {
-    Info::with_note(
+    il::ast::Exp::new(
         kind,
-        Region::for_file("spec/test.watsup"),
         il::ast::TypKind::BoolT,
+        Region::for_file("spec/test.watsup"),
     )
 }
 
 fn il_path(kind: il::ast::PathKind) -> il::ast::Path {
-    Info::with_note(
+    il::ast::Path::new(
         kind,
-        Region::for_file("spec/test.watsup"),
         il::ast::TypKind::BoolT,
+        Region::for_file("spec/test.watsup"),
     )
 }
 
@@ -487,14 +490,10 @@ fn il_prem(kind: il::ast::PremKind) -> il::ast::Prem {
 }
 
 fn il_value(kind: il::ast::ValueKind) -> il::ast::Value {
-    Info::with_note(
+    il::ast::Value::new(
         kind,
+        il::ast::TypKind::BoolT,
         Region::for_file("spec/test.watsup"),
-        il::ast::VNote {
-            vid: 17,
-            typ: il::ast::TypKind::BoolT,
-            vhash: 23,
-        },
     )
 }
 
@@ -606,9 +605,7 @@ fn il_types_values_and_operators_represent_every_variant() {
         ]
     );
     let noted = il_value(il::ast::ValueKind::NumV(num::T::Nat(BigInt::from(5))));
-    assert_eq!(noted.note.vid, 17);
-    assert_eq!(noted.note.vhash, 23);
-    assert!(matches!(noted.note.typ, il::ast::TypKind::BoolT));
+    assert!(matches!(noted.ty, il::ast::TypKind::BoolT));
 
     assert_eq!(
         [il::ast::NumOp::DecOp, il::ast::NumOp::HexOp].map(|op| match op {
@@ -960,11 +957,11 @@ fn il_rules_clauses_rows_and_definitions_preserve_phrase_structure() {
     let clause: il::ast::Clause = phrase((vec![arg()], exp(), vec![prem()]));
     let elseclause: il::ast::ElseClause = clause.clone();
     let row: il::ast::TableRow = phrase((vec![arg()], exp()));
-    assert_eq!(rulegroup.it.1.len(), 1);
-    assert_eq!(elsegroup.it.0.it, "else");
-    assert_eq!(clause.it.0.len(), 1);
-    assert_eq!(elseclause.it.2.len(), 1);
-    assert_eq!(row.it.0.len(), 1);
+    assert_eq!(rulegroup.node.1.len(), 1);
+    assert_eq!(elsegroup.node.0.node, "else");
+    assert_eq!(clause.node.0.len(), 1);
+    assert_eq!(elseclause.node.2.len(), 1);
+    assert_eq!(row.node.0.len(), 1);
 
     let deftyp = || phrase(il::ast::DefTypKind::PlainT(il_typ(il::ast::TypKind::BoolT)));
     let input_hint = vec![0];
@@ -1038,7 +1035,7 @@ fn il_rules_clauses_rows_and_definitions_preserve_phrase_structure() {
 
     let spec: il::ast::Spec = definitions.into_iter().map(phrase).collect();
     assert_eq!(spec.len(), 9);
-    assert_eq!(spec[0].at, Region::for_file("spec/test.watsup"));
+    assert_eq!(spec[0].span, Region::for_file("spec/test.watsup"));
 }
 
 fn sl_param(kind: sl::ast::ParamKind) -> sl::ast::Param {
@@ -1046,11 +1043,7 @@ fn sl_param(kind: sl::ast::ParamKind) -> sl::ast::Param {
 }
 
 fn sl_instr(kind: sl::ast::InstrKind) -> sl::ast::Instr {
-    Info::with_note(
-        kind,
-        Region::for_file("spec/test.watsup"),
-        sl::ast::INote { iid: 29 },
-    )
+    sl::ast::Instr::new(kind, 29, Region::for_file("spec/test.watsup"))
 }
 
 fn sl_def_tag(definition: &sl::ast::DefKind) -> &'static str {
@@ -1150,8 +1143,8 @@ fn sl_ast_represent_every_sl_only_variant_and_tuple_alias() {
                 sl::ast::InstrKind::ResultI(_, _) => "ResultI",
                 sl::ast::InstrKind::ReturnI(_) => "ReturnI",
                 sl::ast::InstrKind::DebugI(_, nested) => {
-                    assert_eq!(nested.note.iid, 29);
-                    assert!(matches!(nested.it, sl::ast::InstrKind::ReturnI(_)));
+                    assert_eq!(nested.iid, 29);
+                    assert!(matches!(nested.kind, sl::ast::InstrKind::ReturnI(_)));
                     "DebugI"
                 }
             })
@@ -1247,5 +1240,5 @@ fn sl_ast_represent_every_sl_only_variant_and_tuple_alias() {
 
     let spec: sl::ast::Spec = definitions.into_iter().map(phrase).collect();
     assert_eq!(spec.len(), 9);
-    assert_eq!(spec[0].at, Region::for_file("spec/test.watsup"));
+    assert_eq!(spec[0].span, Region::for_file("spec/test.watsup"));
 }

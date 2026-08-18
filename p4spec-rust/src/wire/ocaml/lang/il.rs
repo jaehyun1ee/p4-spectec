@@ -1,4 +1,7 @@
-use std::collections::HashSet;
+use std::{
+    collections::HashSet,
+    sync::atomic::{AtomicI64, Ordering},
+};
 
 use serde_json::{Map, Number, Value, json};
 use thiserror::Error;
@@ -324,20 +327,23 @@ pub(super) fn encode_def_typ(typ: &ast::DefTyp) -> Value {
     })
 }
 
-fn decode_vnote(value: &Value) -> Result<ast::VNote, DecodeError> {
+fn decode_vnote(value: &Value) -> Result<TypKind, DecodeError> {
     let object = object(value)?;
-    Ok(ast::VNote {
-        vid: integer(field(object, "vid")?)?,
-        typ: decode_typ_kind(field(object, "typ")?)?,
-        vhash: integer(field(object, "vhash")?)?,
-    })
+    integer(field(object, "vid")?)?;
+    let typ = decode_typ_kind(field(object, "typ")?)?;
+    integer(field(object, "vhash")?)?;
+    Ok(typ)
 }
 
-fn encode_vnote(note: &ast::VNote) -> Value {
+fn encode_vnote(typ: &TypKind) -> Value {
+    // Duplicate vids let OCaml equality silently alias distinct values
+    static NEXT_VID: AtomicI64 = AtomicI64::new(0);
+
     json!({
-        "vid": note.vid,
-        "typ": encode_typ_kind(&note.typ),
-        "vhash": note.vhash,
+        "vid": NEXT_VID.fetch_add(1, Ordering::Relaxed),
+        "typ": encode_typ_kind(typ),
+        // A constant hash preserves equality correctness but disables fast rejection
+        "vhash": 0,
     })
 }
 
@@ -586,23 +592,23 @@ fn encode_yojson_mixfix(value: &ast::ValueCase) -> yojson::Value {
 
 fn decode_yojson_value(value: &yojson::Value) -> Result<ast::Value, DecodeError> {
     let fields = yojson_assoc(value)?;
-    Ok(ast::Value {
-        it: decode_yojson_value_kind(yojson_field(fields, "it")?)?,
-        note: decode_vnote(&standard_json(yojson_field(fields, "note")?)?)?,
-        at: source::decode_region(&standard_json(yojson_field(fields, "at")?)?)?,
-    })
+    Ok(ast::Value::new(
+        decode_yojson_value_kind(yojson_field(fields, "it")?)?,
+        decode_vnote(&standard_json(yojson_field(fields, "note")?)?)?,
+        source::decode_region(&standard_json(yojson_field(fields, "at")?)?)?,
+    ))
 }
 
 fn encode_yojson_value(value: &ast::Value) -> yojson::Value {
     yojson::Value::Assoc(vec![
-        ("it".to_owned(), encode_yojson_value_kind(&value.it)),
+        ("it".to_owned(), encode_yojson_value_kind(&value.kind)),
         (
             "note".to_owned(),
-            yojson::from_serde_json(&encode_vnote(&value.note)),
+            yojson::from_serde_json(&encode_vnote(&value.ty)),
         ),
         (
             "at".to_owned(),
-            yojson::from_serde_json(&source::encode_region(&value.at)),
+            yojson::from_serde_json(&source::encode_region(&value.span)),
         ),
     ])
 }
@@ -711,14 +717,15 @@ fn encode_yojson_value_kind(value: &ValueKind) -> yojson::Value {
 }
 
 fn decode_value(value: &Value) -> Result<ast::Value, DecodeError> {
-    source::decode_note_phrase(value, decode_value_kind, decode_vnote)
+    let (kind, typ, span) = source::decode_annotated(value, decode_value_kind, decode_vnote)?;
+    Ok(ast::Value::new(kind, typ, span))
 }
 
 fn encode_value(value: &ast::Value) -> Result<Value, EncodeError> {
     Ok(json!({
-        "it": encode_value_kind(&value.it)?,
-        "note": encode_vnote(&value.note),
-        "at": source::encode_region(&value.at),
+        "it": encode_value_kind(&value.kind)?,
+        "note": encode_vnote(&value.ty),
+        "at": source::encode_region(&value.span),
     }))
 }
 
@@ -904,11 +911,18 @@ pub(super) fn encode_op_typ(typ: OpTyp) -> Value {
 }
 
 pub(super) fn decode_exp(value: &Value) -> Result<ast::Exp, DecodeError> {
-    source::decode_note_phrase(value, decode_exp_kind, decode_typ_kind)
+    let (kind, typ, span) = source::decode_annotated(value, decode_exp_kind, decode_typ_kind)?;
+    Ok(ast::Exp::new(kind, typ, span))
 }
 
 pub(super) fn encode_exp(exp: &ast::Exp) -> Value {
-    source::encode_note_phrase(exp, encode_exp_kind, encode_typ_kind)
+    source::encode_annotated(
+        &exp.kind,
+        &exp.ty,
+        &exp.span,
+        encode_exp_kind,
+        encode_typ_kind,
+    )
 }
 
 fn decode_exp_kind(value: &Value) -> Result<ExpKind, DecodeError> {
@@ -1169,11 +1183,18 @@ fn encode_opt_pattern(pattern: OptPattern) -> Value {
 }
 
 fn decode_path(value: &Value) -> Result<ast::Path, DecodeError> {
-    source::decode_note_phrase(value, decode_path_kind, decode_typ_kind)
+    let (kind, typ, span) = source::decode_annotated(value, decode_path_kind, decode_typ_kind)?;
+    Ok(ast::Path::new(kind, typ, span))
 }
 
 fn encode_path(path: &ast::Path) -> Value {
-    source::encode_note_phrase(path, encode_path_kind, encode_typ_kind)
+    source::encode_annotated(
+        &path.kind,
+        &path.ty,
+        &path.span,
+        encode_path_kind,
+        encode_typ_kind,
+    )
 }
 
 fn decode_path_kind(value: &Value) -> Result<PathKind, DecodeError> {

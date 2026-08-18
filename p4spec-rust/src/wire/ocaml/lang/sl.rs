@@ -143,23 +143,28 @@ fn encode_guard(guard: &Guard) -> Value {
     }
 }
 
-fn decode_inote(value: &Value) -> Result<ast::INote, DecodeError> {
+fn decode_iid(value: &Value) -> Result<ast::Iid, DecodeError> {
     let object = object(value)?;
-    Ok(ast::INote {
-        iid: integer(field(object, "iid")?)?,
-    })
+    integer(field(object, "iid")?)
 }
 
-fn encode_inote(note: &ast::INote) -> Value {
-    json!({"iid": note.iid})
+fn encode_iid(iid: &ast::Iid) -> Value {
+    json!({"iid": iid})
 }
 
 fn decode_instr(value: &Value) -> Result<ast::Instr, DecodeError> {
-    source::decode_note_phrase(value, decode_instr_kind, decode_inote)
+    let (kind, iid, span) = source::decode_annotated(value, decode_instr_kind, decode_iid)?;
+    Ok(ast::Instr::new(kind, iid, span))
 }
 
 fn encode_instr(instr: &ast::Instr) -> Value {
-    source::encode_note_phrase(instr, encode_instr_kind, encode_inote)
+    source::encode_annotated(
+        &instr.kind,
+        &instr.iid,
+        &instr.span,
+        encode_instr_kind,
+        encode_iid,
+    )
 }
 
 fn decode_instr_kind(value: &Value) -> Result<InstrKind, DecodeError> {

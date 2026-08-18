@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use p4spec_rust::{
     domain::external_data::ExternalData,
     wire::ocaml::{
@@ -106,10 +108,64 @@ fn il_value_codec_round_trips_ppx_shapes_and_large_numbers() {
     );
 
     let value = il::ValueCodec::decode(&json).expect("decode IL value");
+    let encoded = il::ValueCodec::encode(&value).expect("encode IL value");
     assert_eq!(
-        il::ValueCodec::encode(&value).expect("encode IL value"),
-        json
+        il::ValueCodec::decode(&encoded).expect("redecode IL value"),
+        value,
     );
+}
+
+fn collect_runtime_metadata(value: &Value, vids: &mut Vec<i64>) {
+    match value {
+        Value::Array(values) => {
+            for value in values {
+                collect_runtime_metadata(value, vids);
+            }
+        }
+        Value::Object(fields) => {
+            if let Some(note) = fields.get("note").and_then(Value::as_object)
+                && let (Some(vid), Some(vhash)) = (
+                    note.get("vid").and_then(Value::as_i64),
+                    note.get("vhash").and_then(Value::as_i64),
+                )
+            {
+                vids.push(vid);
+                assert_eq!(vhash, 0);
+            }
+            for value in fields.values() {
+                collect_runtime_metadata(value, vids);
+            }
+        }
+        _ => {}
+    }
+}
+
+#[test]
+fn value_encoders_issue_unique_ids_and_disable_hash_optimization() {
+    let json = value_json(
+        json!([
+            "TupleV",
+            [
+                value_json(json!(["BoolV", true]), json!(["BoolT"])),
+                value_json(json!(["BoolV", false]), json!(["BoolT"])),
+            ],
+        ]),
+        json!(["TupleT", []]),
+    );
+    let value = il::ValueCodec::decode(&json).expect("decode nested value");
+    let mut vids = Vec::new();
+
+    for _ in 0..2 {
+        let encoded = il::ValueCodec::encode(&value).expect("encode standard value");
+        collect_runtime_metadata(&encoded, &mut vids);
+
+        let encoded = ValueEnvelopeCodec::encode(&value).expect("encode value envelope");
+        let envelope: Value = serde_json::from_slice(&encoded).expect("parse value envelope");
+        collect_runtime_metadata(&envelope, &mut vids);
+    }
+
+    assert_eq!(vids.len(), 12);
+    assert_eq!(vids.iter().copied().collect::<HashSet<_>>().len(), 12);
 }
 
 #[test]
@@ -121,9 +177,27 @@ fn bigint_decoder_accepts_integer_but_encoder_canonicalizes_to_string() {
     let from_string = il::ValueCodec::decode(&string_json).expect("decode string bigint");
 
     assert_eq!(from_integer, from_string);
+    let encoded = il::ValueCodec::encode(&from_integer).expect("encode bigint");
     assert_eq!(
-        il::ValueCodec::encode(&from_integer).expect("encode bigint"),
-        string_json
+        il::ValueCodec::decode(&encoded).expect("redecode bigint"),
+        il::ValueCodec::decode(&string_json).expect("decode canonical bigint"),
+    );
+}
+
+#[test]
+fn value_decoder_discards_ocaml_runtime_identity_metadata() {
+    let left = noted_phrase(
+        json!(["BoolV", true]),
+        json!({"vid": 7, "typ": ["BoolT"], "vhash": 11}),
+    );
+    let right = noted_phrase(
+        json!(["BoolV", true]),
+        json!({"vid": 700, "typ": ["BoolT"], "vhash": 1100}),
+    );
+
+    assert_eq!(
+        il::ValueCodec::decode(&left).expect("decode left value"),
+        il::ValueCodec::decode(&right).expect("decode right value"),
     );
 }
 
@@ -365,9 +439,10 @@ fn external_json_round_trips_or_returns_an_explicit_encode_error() {
         json!(["BoolT"]),
     );
     let mut value = il::ValueCodec::decode(&json).expect("decode external JSON");
+    let encoded = il::ValueCodec::encode(&value).expect("encode external JSON");
     assert_eq!(
-        il::ValueCodec::encode(&value).expect("encode external JSON"),
-        json
+        il::ValueCodec::decode(&encoded).expect("redecode external JSON"),
+        value,
     );
 
     let unsupported = [
@@ -382,7 +457,7 @@ fn external_json_round_trips_or_returns_an_explicit_encode_error() {
     ];
 
     for external in unsupported {
-        value.it = p4spec_rust::lang::il::ast::ValueKind::ExternV(external);
+        value.kind = p4spec_rust::lang::il::ast::ValueKind::ExternV(external);
         let error = il::ValueCodec::encode(&value).expect_err("reject non-standard JSON");
         assert!(matches!(error, EncodeError::UnsupportedExternalData(_)));
     }
@@ -422,8 +497,8 @@ fn assert_external_data_eq(actual: &ExternalData, expected: &ExternalData) {
 }
 
 fn assert_external_value(value: &p4spec_rust::lang::il::ast::Value) {
-    let p4spec_rust::lang::il::ast::ValueKind::ExternV(actual) = &value.it else {
-        panic!("expected external value, got {:?}", value.it);
+    let p4spec_rust::lang::il::ast::ValueKind::ExternV(actual) = &value.kind else {
+        panic!("expected external value, got {:?}", value.kind);
     };
     let expected = ExternalData::Assoc(vec![
         ("null".into(), ExternalData::Null),
