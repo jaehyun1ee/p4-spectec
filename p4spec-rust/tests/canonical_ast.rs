@@ -24,6 +24,16 @@ fn domain_atom() -> DomainAtom {
     DomainAtom::Keyword("ATOM".into())
 }
 
+#[test]
+fn il_and_sl_expose_the_canonical_atom_kind_alias() {
+    let atom_kind_il: il::ast::AtomKind = domain_atom();
+    let atom_il: il::ast::Atom = phrase(atom_kind_il);
+    let atom_kind_sl: sl::ast::AtomKind = atom_il.it.clone();
+    let atom_sl: sl::ast::Atom = phrase(atom_kind_sl);
+
+    assert_eq!(atom_il, atom_sl);
+}
+
 fn mixop() -> Mixop {
     Mixfix::Seq(vec![Mixfix::Atom(phrase(domain_atom())), Mixfix::Arg(())])
 }

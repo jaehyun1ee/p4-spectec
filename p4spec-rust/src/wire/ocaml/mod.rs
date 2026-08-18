@@ -4,6 +4,7 @@ pub mod atom;
 pub mod lang;
 pub mod mixfix;
 pub mod source;
+pub mod yojson;
 
 use serde_json::{Map, Value};
 use thiserror::Error;

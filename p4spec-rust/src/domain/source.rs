@@ -54,18 +54,6 @@ impl Region {
     pub fn after(&self) -> Self {
         Self::new(self.right.clone(), self.right.clone())
     }
-
-    pub fn over(regions: &[Self]) -> Self {
-        let Some((first, rest)) = regions.split_first() else {
-            return Self::none();
-        };
-        rest.iter().fold(first.clone(), |region_over, region| {
-            Self::new(
-                region_over.left.min(region.left.clone()),
-                region_over.right.max(region.right.clone()),
-            )
-        })
-    }
 }
 
 impl fmt::Display for Position {
@@ -123,6 +111,20 @@ impl<I, N, A> Info<I, N, A> {
             note: self.note,
             at: self.at,
         }
+    }
+}
+
+impl Region {
+    pub fn over(regions: &[Self]) -> Self {
+        let Some((first, rest)) = regions.split_first() else {
+            return Self::none();
+        };
+        rest.iter().fold(first.clone(), |region_over, region| {
+            Self::new(
+                region_over.left.min(region.left.clone()),
+                region_over.right.max(region.right.clone()),
+            )
+        })
     }
 }
 

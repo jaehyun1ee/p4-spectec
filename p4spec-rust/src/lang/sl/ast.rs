@@ -3,10 +3,7 @@
 #![allow(clippy::large_enum_variant)]
 
 use crate::{
-    domain::{
-        atom::Atom as DomainAtom,
-        source::{NotePhrase, Phrase},
-    },
+    domain::source::{NotePhrase, Phrase},
     lang::{el, hints::input::T as InputHint, il},
 };
 
@@ -26,7 +23,7 @@ pub type IdKind = il::ast::IdKind;
 // Atoms
 
 pub type Atom = il::ast::Atom;
-pub type AtomKind = DomainAtom;
+pub type AtomKind = il::ast::AtomKind;
 
 // Mixfix operators
 

@@ -1,9 +1,10 @@
 use std::collections::HashSet;
 
 use serde_json::{Map, Number, Value, json};
+use thiserror::Error;
 
 use crate::{
-    domain::external_data::ExternalData,
+    domain::{external_data::ExternalData, mixfix::Mixfix},
     lang::il::ast::{
         self, ArgKind, BinOp, CmpOp, DefKind, DefTypKind, ExpKind, Iter, ListPattern, OpTyp,
         OptPattern, ParamKind, PathKind, Pattern, PremKind, TypKind, UnOp, ValueKind,
@@ -17,7 +18,8 @@ use super::{
     },
     el, xl,
 };
-use crate::wire::ocaml::{atom::AtomPhraseCodec, mixfix, source};
+use crate::wire::VALUE_SCHEMA;
+use crate::wire::ocaml::{atom::AtomPhraseCodec, mixfix, source, yojson};
 
 pub struct SpecCodec;
 
@@ -33,6 +35,9 @@ impl SpecCodec {
 
 pub struct ValueCodec;
 
+/// Standard-JSON convenience codec for IL values
+///
+/// Use [`ValueEnvelopeCodec`] for the lossless OCaml `Yojson.Safe` transport.
 impl ValueCodec {
     pub fn decode(value: &Value) -> Result<ast::Value, DecodeError> {
         on_codec_stack(|| decode_value(value))
@@ -41,6 +46,66 @@ impl ValueCodec {
     pub fn encode(value: &ast::Value) -> Result<Value, EncodeError> {
         on_codec_stack(|| encode_value(value))
     }
+}
+
+/// Lossless codec for the versioned OCaml IL value envelope
+pub struct ValueEnvelopeCodec;
+
+impl ValueEnvelopeCodec {
+    pub fn decode(input: &[u8]) -> Result<ast::Value, ValueEnvelopeDecodeError> {
+        on_codec_stack(|| {
+            let envelope = yojson::Value::from_slice(input)?;
+            let fields = yojson_assoc(&envelope)?;
+            let schema = yojson_string(yojson_field(fields, "schema")?)?;
+            let kind = yojson_string(yojson_field(fields, "kind")?)?;
+
+            if schema != VALUE_SCHEMA {
+                return Err(ValueEnvelopeDecodeError::UnknownSchema(schema.to_owned()));
+            }
+            if kind != "value" {
+                return Err(ValueEnvelopeDecodeError::SchemaKindMismatch(
+                    kind.to_owned(),
+                ));
+            }
+
+            decode_yojson_value(yojson_field(fields, "payload")?).map_err(Into::into)
+        })
+    }
+
+    pub fn encode(value: &ast::Value) -> Result<Vec<u8>, ValueEnvelopeEncodeError> {
+        on_codec_stack(|| {
+            let envelope = yojson::Value::Assoc(vec![
+                (
+                    "schema".to_owned(),
+                    yojson::Value::String(VALUE_SCHEMA.to_owned()),
+                ),
+                ("kind".to_owned(), yojson::Value::String("value".to_owned())),
+                ("payload".to_owned(), encode_yojson_value(value)),
+            ]);
+            envelope.to_vec().map_err(Into::into)
+        })
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum ValueEnvelopeDecodeError {
+    #[error("invalid Yojson value envelope: {0}")]
+    Parse(#[from] yojson::ParseError),
+
+    #[error("invalid OCaml IL value: {0}")]
+    Decode(#[from] DecodeError),
+
+    #[error("unknown wire schema `{0}`")]
+    UnknownSchema(String),
+
+    #[error("schema `p4spectec.value.v1` requires kind `value`, but found `{0}`")]
+    SchemaKindMismatch(String),
+}
+
+#[derive(Debug, Error)]
+pub enum ValueEnvelopeEncodeError {
+    #[error("cannot write Yojson value envelope: {0}")]
+    Write(#[from] yojson::WriteError),
 }
 
 pub(super) fn decode_list<T>(
@@ -347,6 +412,302 @@ fn encode_external(value: &ExternalData) -> Result<Value, EncodeError> {
         ExternalData::Tuple(_) => Err(unsupported_external("non-standard JSON tuple")),
         ExternalData::Variant(_, _) => Err(unsupported_external("non-standard JSON variant")),
     }
+}
+
+fn yojson_assoc(value: &yojson::Value) -> Result<&[(String, yojson::Value)], DecodeError> {
+    match value {
+        yojson::Value::Assoc(fields) => Ok(fields),
+        _ => Err(DecodeError::Expected("Yojson association")),
+    }
+}
+
+fn yojson_list(value: &yojson::Value) -> Result<&[yojson::Value], DecodeError> {
+    match value {
+        yojson::Value::List(values) => Ok(values),
+        _ => Err(DecodeError::Expected("Yojson list")),
+    }
+}
+
+fn yojson_string(value: &yojson::Value) -> Result<&str, DecodeError> {
+    match value {
+        yojson::Value::String(value) => Ok(value),
+        _ => Err(DecodeError::Expected("Yojson string")),
+    }
+}
+
+fn yojson_boolean(value: &yojson::Value) -> Result<bool, DecodeError> {
+    match value {
+        yojson::Value::Bool(value) => Ok(*value),
+        _ => Err(DecodeError::Expected("Yojson boolean")),
+    }
+}
+
+fn yojson_field<'a>(
+    fields: &'a [(String, yojson::Value)],
+    name: &'static str,
+) -> Result<&'a yojson::Value, DecodeError> {
+    let mut matches = fields.iter().filter(|(field, _)| field == name);
+    let value = matches
+        .next()
+        .map(|(_, value)| value)
+        .ok_or(DecodeError::MissingField(name))?;
+    if matches.next().is_some() {
+        return Err(DecodeError::Expected(
+            "OCaml record without duplicate fields",
+        ));
+    }
+    Ok(value)
+}
+
+fn yojson_variant(value: &yojson::Value) -> Result<(&str, &[yojson::Value]), DecodeError> {
+    let values = yojson_list(value)?;
+    let (tag, fields) = values
+        .split_first()
+        .ok_or(DecodeError::Expected("non-empty Yojson variant list"))?;
+    Ok((yojson_string(tag)?, fields))
+}
+
+fn standard_json(value: &yojson::Value) -> Result<Value, DecodeError> {
+    yojson::to_serde_json(value).map_err(DecodeError::Expected)
+}
+
+fn decode_yojson_external(value: &yojson::Value) -> ExternalData {
+    match value {
+        yojson::Value::Null => ExternalData::Null,
+        yojson::Value::Bool(value) => ExternalData::Bool(*value),
+        yojson::Value::Int(value) => ExternalData::Int(*value),
+        yojson::Value::Intlit(value) => ExternalData::Intlit(value.clone()),
+        yojson::Value::Float(value) => ExternalData::Float(*value),
+        yojson::Value::String(value) => ExternalData::String(value.clone()),
+        yojson::Value::Assoc(fields) => ExternalData::Assoc(
+            fields
+                .iter()
+                .map(|(name, value)| (name.clone(), decode_yojson_external(value)))
+                .collect(),
+        ),
+        yojson::Value::List(values) => {
+            ExternalData::List(values.iter().map(decode_yojson_external).collect())
+        }
+        yojson::Value::Tuple(values) => {
+            ExternalData::Tuple(values.iter().map(decode_yojson_external).collect())
+        }
+        yojson::Value::Variant(name, value) => ExternalData::Variant(
+            name.clone(),
+            value.as_deref().map(decode_yojson_external).map(Box::new),
+        ),
+    }
+}
+
+fn encode_yojson_external(value: &ExternalData) -> yojson::Value {
+    match value {
+        ExternalData::Null => yojson::Value::Null,
+        ExternalData::Bool(value) => yojson::Value::Bool(*value),
+        ExternalData::Int(value) => yojson::Value::Int(*value),
+        ExternalData::Intlit(value) => yojson::Value::Intlit(value.clone()),
+        ExternalData::Float(value) => yojson::Value::Float(*value),
+        ExternalData::String(value) => yojson::Value::String(value.clone()),
+        ExternalData::Assoc(fields) => yojson::Value::Assoc(
+            fields
+                .iter()
+                .map(|(name, value)| (name.clone(), encode_yojson_external(value)))
+                .collect(),
+        ),
+        ExternalData::List(values) => {
+            yojson::Value::List(values.iter().map(encode_yojson_external).collect())
+        }
+        ExternalData::Tuple(values) => {
+            yojson::Value::Tuple(values.iter().map(encode_yojson_external).collect())
+        }
+        ExternalData::Variant(name, value) => yojson::Value::Variant(
+            name.clone(),
+            value.as_deref().map(encode_yojson_external).map(Box::new),
+        ),
+    }
+}
+
+fn decode_yojson_mixfix(value: &yojson::Value) -> Result<ast::ValueCase, DecodeError> {
+    let (tag, fields) = yojson_variant(value)?;
+    match (tag, fields) {
+        ("Arg", [arg]) => Ok(Mixfix::Arg(decode_yojson_value(arg)?)),
+        ("Atom", [atom]) => Ok(Mixfix::Atom(AtomPhraseCodec::decode(&standard_json(
+            atom,
+        )?)?)),
+        ("Brack", [left, body, right]) => Ok(Mixfix::Brack(
+            AtomPhraseCodec::decode(&standard_json(left)?)?,
+            Box::new(decode_yojson_mixfix(body)?),
+            AtomPhraseCodec::decode(&standard_json(right)?)?,
+        )),
+        ("Infix", [left, atom, right]) => Ok(Mixfix::Infix(
+            Box::new(decode_yojson_mixfix(left)?),
+            AtomPhraseCodec::decode(&standard_json(atom)?)?,
+            Box::new(decode_yojson_mixfix(right)?),
+        )),
+        ("Seq", [items]) => Ok(Mixfix::Seq(
+            yojson_list(items)?
+                .iter()
+                .map(decode_yojson_mixfix)
+                .collect::<Result<_, _>>()?,
+        )),
+        ("Arg" | "Atom" | "Brack" | "Infix" | "Seq", _) => {
+            Err(DecodeError::Expected("valid Yojson mixfix arity"))
+        }
+        (unknown, _) => Err(DecodeError::UnknownVariant(unknown.to_owned())),
+    }
+}
+
+fn encode_yojson_mixfix(value: &ast::ValueCase) -> yojson::Value {
+    match value {
+        Mixfix::Arg(value) => yojson::Value::List(vec![
+            yojson::Value::String("Arg".to_owned()),
+            encode_yojson_value(value),
+        ]),
+        Mixfix::Atom(atom) => yojson::Value::List(vec![
+            yojson::Value::String("Atom".to_owned()),
+            yojson::from_serde_json(&AtomPhraseCodec::encode(atom)),
+        ]),
+        Mixfix::Brack(left, body, right) => yojson::Value::List(vec![
+            yojson::Value::String("Brack".to_owned()),
+            yojson::from_serde_json(&AtomPhraseCodec::encode(left)),
+            encode_yojson_mixfix(body),
+            yojson::from_serde_json(&AtomPhraseCodec::encode(right)),
+        ]),
+        Mixfix::Infix(left, atom, right) => yojson::Value::List(vec![
+            yojson::Value::String("Infix".to_owned()),
+            encode_yojson_mixfix(left),
+            yojson::from_serde_json(&AtomPhraseCodec::encode(atom)),
+            encode_yojson_mixfix(right),
+        ]),
+        Mixfix::Seq(items) => yojson::Value::List(vec![
+            yojson::Value::String("Seq".to_owned()),
+            yojson::Value::List(items.iter().map(encode_yojson_mixfix).collect()),
+        ]),
+    }
+}
+
+fn decode_yojson_value(value: &yojson::Value) -> Result<ast::Value, DecodeError> {
+    let fields = yojson_assoc(value)?;
+    Ok(ast::Value {
+        it: decode_yojson_value_kind(yojson_field(fields, "it")?)?,
+        note: decode_vnote(&standard_json(yojson_field(fields, "note")?)?)?,
+        at: source::decode_region(&standard_json(yojson_field(fields, "at")?)?)?,
+    })
+}
+
+fn encode_yojson_value(value: &ast::Value) -> yojson::Value {
+    yojson::Value::Assoc(vec![
+        ("it".to_owned(), encode_yojson_value_kind(&value.it)),
+        (
+            "note".to_owned(),
+            yojson::from_serde_json(&encode_vnote(&value.note)),
+        ),
+        (
+            "at".to_owned(),
+            yojson::from_serde_json(&source::encode_region(&value.at)),
+        ),
+    ])
+}
+
+fn decode_yojson_value_kind(value: &yojson::Value) -> Result<ValueKind, DecodeError> {
+    let (tag, fields) = yojson_variant(value)?;
+    match (tag, fields) {
+        ("BoolV", [value]) => Ok(ValueKind::BoolV(yojson_boolean(value)?)),
+        ("NumV", [num]) => Ok(ValueKind::NumV(xl::decode_num(&standard_json(num)?)?)),
+        ("TextV", [text]) => Ok(ValueKind::TextV(yojson_string(text)?.to_owned())),
+        ("StructV", [fields]) => Ok(ValueKind::StructV(
+            yojson_list(fields)?
+                .iter()
+                .map(|field| match yojson_list(field)? {
+                    [atom, value] => Ok((
+                        AtomPhraseCodec::decode(&standard_json(atom)?)?,
+                        decode_yojson_value(value)?,
+                    )),
+                    _ => Err(DecodeError::Expected("IL value field pair")),
+                })
+                .collect::<Result<_, _>>()?,
+        )),
+        ("CaseV", [case]) => Ok(ValueKind::CaseV(Box::new(decode_yojson_mixfix(case)?))),
+        ("TupleV", [values]) => Ok(ValueKind::TupleV(
+            yojson_list(values)?
+                .iter()
+                .map(decode_yojson_value)
+                .collect::<Result<_, _>>()?,
+        )),
+        ("OptV", [yojson::Value::Null]) => Ok(ValueKind::OptV(None)),
+        ("OptV", [value]) => Ok(ValueKind::OptV(Some(Box::new(decode_yojson_value(value)?)))),
+        ("ListV", [values]) => Ok(ValueKind::ListV(
+            yojson_list(values)?
+                .iter()
+                .map(decode_yojson_value)
+                .collect::<Result<_, _>>()?,
+        )),
+        ("FuncV", [id]) => Ok(ValueKind::FuncV(decode_id(&standard_json(id)?)?)),
+        ("ExternV", [value]) => Ok(ValueKind::ExternV(decode_yojson_external(value))),
+        (
+            "BoolV" | "NumV" | "TextV" | "StructV" | "CaseV" | "TupleV" | "OptV" | "ListV"
+            | "FuncV" | "ExternV",
+            _,
+        ) => Err(DecodeError::Expected("valid IL value arity")),
+        (unknown, _) => Err(DecodeError::UnknownVariant(unknown.to_owned())),
+    }
+}
+
+fn encode_yojson_value_kind(value: &ValueKind) -> yojson::Value {
+    let fields = match value {
+        ValueKind::BoolV(value) => vec![
+            yojson::Value::String("BoolV".to_owned()),
+            yojson::Value::Bool(*value),
+        ],
+        ValueKind::NumV(num) => vec![
+            yojson::Value::String("NumV".to_owned()),
+            yojson::from_serde_json(&xl::encode_num(num)),
+        ],
+        ValueKind::TextV(text) => vec![
+            yojson::Value::String("TextV".to_owned()),
+            yojson::Value::String(text.clone()),
+        ],
+        ValueKind::StructV(fields) => vec![
+            yojson::Value::String("StructV".to_owned()),
+            yojson::Value::List(
+                fields
+                    .iter()
+                    .map(|(atom, value)| {
+                        yojson::Value::List(vec![
+                            yojson::from_serde_json(&AtomPhraseCodec::encode(atom)),
+                            encode_yojson_value(value),
+                        ])
+                    })
+                    .collect(),
+            ),
+        ],
+        ValueKind::CaseV(case) => vec![
+            yojson::Value::String("CaseV".to_owned()),
+            encode_yojson_mixfix(case),
+        ],
+        ValueKind::TupleV(values) => vec![
+            yojson::Value::String("TupleV".to_owned()),
+            yojson::Value::List(values.iter().map(encode_yojson_value).collect()),
+        ],
+        ValueKind::OptV(value) => vec![
+            yojson::Value::String("OptV".to_owned()),
+            value
+                .as_deref()
+                .map(encode_yojson_value)
+                .unwrap_or(yojson::Value::Null),
+        ],
+        ValueKind::ListV(values) => vec![
+            yojson::Value::String("ListV".to_owned()),
+            yojson::Value::List(values.iter().map(encode_yojson_value).collect()),
+        ],
+        ValueKind::FuncV(id) => vec![
+            yojson::Value::String("FuncV".to_owned()),
+            yojson::from_serde_json(&encode_id(id)),
+        ],
+        ValueKind::ExternV(value) => vec![
+            yojson::Value::String("ExternV".to_owned()),
+            encode_yojson_external(value),
+        ],
+    };
+    yojson::Value::List(fields)
 }
 
 fn decode_value(value: &Value) -> Result<ast::Value, DecodeError> {

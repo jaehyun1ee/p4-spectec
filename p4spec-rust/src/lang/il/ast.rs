@@ -25,7 +25,8 @@ pub type IdKind = String;
 
 // Atoms
 
-pub type Atom = Phrase<DomainAtom>;
+pub type Atom = Phrase<AtomKind>;
+pub type AtomKind = DomainAtom;
 
 // Mixfix operators
 

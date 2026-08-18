@@ -1,6 +1,6 @@
 use std::{env, fs};
 
-use p4spec_rust::wire::{Envelope, ocaml::lang::sl::SpecCodec};
+use p4spec_rust::wire::{Envelope, SL_SCHEMA, ocaml::lang::sl::SpecCodec};
 use serde_json::Value;
 
 const FIXTURE_ENV: &str = "P4SPEC_FULL_SL_JSON";
@@ -12,9 +12,11 @@ fn full_ocaml_sl_export_round_trips_through_canonical_ast() {
         .unwrap_or_else(|| panic!("set {FIXTURE_ENV} to the OCaml full-spec export"));
     let bytes = fs::read(&path).expect("read full SL export");
     let envelope = Envelope::<Value>::from_slice(&bytes).expect("decode versioned SL envelope");
+    assert_eq!(envelope.schema(), SL_SCHEMA);
     let original = envelope.into_payload();
 
     let spec = SpecCodec::decode(&original).expect("decode canonical SL spec");
+    assert_eq!(spec.len(), 1_689);
     let encoded = SpecCodec::encode(&spec).expect("encode canonical SL spec");
 
     assert_eq!(encoded, original);

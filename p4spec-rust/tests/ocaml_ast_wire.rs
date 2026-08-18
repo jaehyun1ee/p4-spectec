@@ -2,7 +2,10 @@ use p4spec_rust::{
     domain::external_data::ExternalData,
     wire::ocaml::{
         DecodeError, EncodeError,
-        lang::{il, sl},
+        lang::{
+            il::{self, ValueEnvelopeCodec, ValueEnvelopeDecodeError},
+            sl,
+        },
     },
 };
 use serde_json::{Value, json};
@@ -383,4 +386,122 @@ fn external_json_round_trips_or_returns_an_explicit_encode_error() {
         let error = il::ValueCodec::encode(&value).expect_err("reject non-standard JSON");
         assert!(matches!(error, EncodeError::UnsupportedExternalData(_)));
     }
+}
+
+fn assert_external_data_eq(actual: &ExternalData, expected: &ExternalData) {
+    match (actual, expected) {
+        (ExternalData::Float(actual), ExternalData::Float(expected))
+            if actual.is_nan() && expected.is_nan() => {}
+        (ExternalData::Assoc(actual), ExternalData::Assoc(expected)) => {
+            assert_eq!(actual.len(), expected.len());
+            for ((actual_name, actual), (expected_name, expected)) in actual.iter().zip(expected) {
+                assert_eq!(actual_name, expected_name);
+                assert_external_data_eq(actual, expected);
+            }
+        }
+        (ExternalData::List(actual), ExternalData::List(expected))
+        | (ExternalData::Tuple(actual), ExternalData::Tuple(expected)) => {
+            assert_eq!(actual.len(), expected.len());
+            for (actual, expected) in actual.iter().zip(expected) {
+                assert_external_data_eq(actual, expected);
+            }
+        }
+        (
+            ExternalData::Variant(actual_name, actual),
+            ExternalData::Variant(expected_name, expected),
+        ) => {
+            assert_eq!(actual_name, expected_name);
+            match (actual, expected) {
+                (Some(actual), Some(expected)) => assert_external_data_eq(actual, expected),
+                (None, None) => {}
+                _ => panic!("different variant payloads: {actual:?} != {expected:?}"),
+            }
+        }
+        _ => assert_eq!(actual, expected),
+    }
+}
+
+fn assert_external_value(value: &p4spec_rust::lang::il::ast::Value) {
+    let p4spec_rust::lang::il::ast::ValueKind::ExternV(actual) = &value.it else {
+        panic!("expected external value, got {:?}", value.it);
+    };
+    let expected = ExternalData::Assoc(vec![
+        ("null".into(), ExternalData::Null),
+        ("bool".into(), ExternalData::Bool(true)),
+        ("int".into(), ExternalData::Int(-7)),
+        (
+            "intlit".into(),
+            ExternalData::Intlit("123456789012345678901234567890".into()),
+        ),
+        ("float".into(), ExternalData::Float(1.5)),
+        (
+            "string".into(),
+            ExternalData::String("line\n\"quoted\"".into()),
+        ),
+        (
+            "assoc".into(),
+            ExternalData::Assoc(vec![
+                ("duplicate".into(), ExternalData::Int(1)),
+                ("duplicate".into(), ExternalData::Int(2)),
+            ]),
+        ),
+        (
+            "list".into(),
+            ExternalData::List(vec![ExternalData::Null, ExternalData::Bool(false)]),
+        ),
+        (
+            "tuple".into(),
+            ExternalData::Tuple(vec![ExternalData::Int(1), ExternalData::String("x".into())]),
+        ),
+        (
+            "variant-none".into(),
+            ExternalData::Variant("A".into(), None),
+        ),
+        (
+            "variant-some".into(),
+            ExternalData::Variant("B".into(), Some(Box::new(ExternalData::Int(3)))),
+        ),
+        ("nan".into(), ExternalData::Float(f64::NAN)),
+        ("infinity".into(), ExternalData::Float(f64::INFINITY)),
+        (
+            "negative-infinity".into(),
+            ExternalData::Float(f64::NEG_INFINITY),
+        ),
+    ]);
+
+    assert_external_data_eq(actual, &expected);
+}
+
+#[test]
+fn ocaml_yojson_value_envelope_round_trips_losslessly() {
+    let fixture = include_bytes!("../../p4spec/test/wire/yojson-value.expected.json");
+
+    let value = ValueEnvelopeCodec::decode(fixture).expect("decode OCaml Yojson value envelope");
+    assert_external_value(&value);
+
+    let encoded = ValueEnvelopeCodec::encode(&value).expect("encode Yojson value envelope");
+    let reparsed =
+        ValueEnvelopeCodec::decode(&encoded).expect("reparse encoded Yojson value envelope");
+    assert_external_value(&reparsed);
+}
+
+#[test]
+fn yojson_value_envelope_codec_retains_standard_nested_values() {
+    let fixture = include_bytes!("../../p4spec/test/wire/minimal-value.expected.json");
+
+    let value = ValueEnvelopeCodec::decode(fixture).expect("decode standard OCaml value envelope");
+    let encoded = ValueEnvelopeCodec::encode(&value).expect("encode standard value envelope");
+    let reparsed = ValueEnvelopeCodec::decode(&encoded).expect("reparse standard value envelope");
+
+    assert_eq!(reparsed, value);
+}
+
+#[test]
+fn malformed_yojson_value_envelope_returns_a_typed_error() {
+    let error = ValueEnvelopeCodec::decode(
+        br#"{"schema":"p4spectec.value.v1","kind":"value","payload":<"open">"#,
+    )
+    .expect_err("reject malformed Yojson envelope");
+
+    assert!(matches!(error, ValueEnvelopeDecodeError::Parse(_)));
 }

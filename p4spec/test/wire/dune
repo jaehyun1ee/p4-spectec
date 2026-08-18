@@ -1,5 +1,17 @@
 ;; OCaml-to-Rust JSON wire golden tests
 
+(executable
+ (name generate_yojson_value)
+ (modules generate_yojson_value)
+ (libraries wire yojson))
+
+(rule
+ (target yojson-value.actual.json)
+ (action
+  (with-stdout-to
+   %{target}
+   (run %{exe:generate_yojson_value.exe}))))
+
 (rule
  (target minimal-sl.actual.json)
  (deps minimal.watsup)
@@ -28,7 +40,8 @@
  (action
   (progn
    (diff minimal-sl.expected.json minimal-sl.actual.json)
-   (diff minimal-value.expected.json minimal-value.actual.json))))
+   (diff minimal-value.expected.json minimal-value.actual.json)
+   (diff yojson-value.expected.json yojson-value.actual.json))))
 
 (rule
  (alias wire)
