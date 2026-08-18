@@ -5,6 +5,30 @@ module Error = P4spectec.Error
 let version = "0.1"
 let ( let* ) = Result.bind
 
+let write_json (path_output : string option) (json : Yojson.Safe.t) : unit =
+  let write channel =
+    Yojson.Safe.to_channel channel json;
+    output_char channel '\n'
+  in
+  match path_output with
+  | None -> write stdout
+  | Some path ->
+      let channel = open_out_bin path in
+      Fun.protect
+        ~finally:(fun () -> close_out channel)
+        (fun () -> write channel)
+
+let export_json path_output result =
+  match result with
+  | Error error ->
+      Format.eprintf "%s\n" (Error.to_string error);
+      exit 1
+  | Ok json -> (
+      try write_json path_output json
+      with Sys_error msg ->
+        Format.eprintf "File error: %s\n" msg;
+        exit 1)
+
 (* Operations *)
 
 let run_with_instr (module Simulator : SIM) spec_sim relname includes_p4 path_p4
@@ -174,6 +198,26 @@ let cover_sim_dangling ?(arch : string option) mode paths_spec includes_p4
   Ok ()
 
 (* Commands *)
+
+let export_sl_json_command =
+  Core.Command.basic ~summary:"export a structured SL specification as JSON"
+    (let open Core.Command.Let_syntax in
+     let open Core.Command.Param in
+     let%map paths_spec =
+       anon (non_empty_sequence_as_list ("SPEC_PATH" %: string))
+     and path_output = flag "-o" (optional string) ~doc:"FILE output file" in
+     fun () -> P4spectec.export_sl_json paths_spec |> export_json path_output)
+
+let export_p4_json_command =
+  Core.Command.basic ~summary:"export a parsed P4 runtime value as JSON"
+    (let open Core.Command.Let_syntax in
+     let open Core.Command.Param in
+     let%map includes_p4 =
+       flag "-i" (listed string) ~doc:"INCLUDE P4 include path"
+     and path_p4 = flag "-p" (required string) ~doc:"PROGRAM P4 program"
+     and path_output = flag "-o" (optional string) ~doc:"FILE output file" in
+     fun () ->
+       P4spectec.export_p4_json includes_p4 path_p4 |> export_json path_output)
 
 let elab_command =
   Core.Command.basic ~summary:"parse and elaborate a P4 spec"
@@ -707,6 +751,8 @@ let command =
       ("splice", splice_command);
       (* Interfacing with P4 *)
       ("parse", parse_command);
+      ("export-sl-json", export_sl_json_command);
+      ("export-p4-json", export_p4_json_command);
     ]
 
 let () = Command_unix.run ~version command

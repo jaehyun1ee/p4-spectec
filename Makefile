@@ -3,7 +3,7 @@ BOOT = spectec-boot
 
 # Compile
 
-.PHONY: build stat perf spec-test
+.PHONY: build stat perf spec-test rust-build rust-test rust-parity rust-bench
 
 EXESPEC = _build/default/p4spec/bin/main.exe
 EXEBOOT = _build/default/p4spec/bin/boot.exe
@@ -27,6 +27,23 @@ release:
 	ln -f $(EXESPEC) ./$(SPEC)
 	cd p4spec && opam exec --switch=5.1.0 -- dune build --profile=release bin/boot.exe && echo
 	ln -f $(EXEBOOT) ./$(BOOT)
+
+# Rust SL interpreter
+
+rust-build:
+	cd p4spec-rust && cargo build --locked
+
+rust-test:
+	cd p4spec-rust && cargo fmt --check
+	cd p4spec-rust && cargo clippy --locked --all-targets -- -D warnings
+	cd p4spec-rust && cargo test --locked
+
+rust-parity: test-wire
+	cd p4spec-rust && cargo test --locked --test wire
+
+# Stage 8 replaces this release-profile smoke gate with the timing runner.
+rust-bench: rust-parity
+	cd p4spec-rust && cargo test --locked --release
 
 # Spec
 
@@ -84,6 +101,7 @@ TEST_ALIASES := \
   sim-ebpf-p4testgen-al sim-ebpf-p4testgen-sl sim-ebpf-p4testgen-pl \
   sim-psa-p4c-al sim-psa-p4c-sl sim-psa-p4c-pl \
   p4parse \
+	wire \
 	boot
 
 $(foreach a,$(TEST_ALIASES),$(eval $(call dune-alias-test,$(a))))

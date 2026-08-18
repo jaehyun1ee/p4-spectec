@@ -1,0 +1,15 @@
+[package]
+name = "p4spec-rust"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97.1"
+publish = false
+
+[dependencies]
+clap = { version = "4.5.17", features = ["derive"] }
+num-bigint = { version = "0.4.6", features = ["serde"] }
+num-traits = "0.2.19"
+serde = { version = "1.0.210", features = ["derive"] }
+serde_json = { version = "1.0.128", features = ["unbounded_depth"] }
+serde_stacker = "0.1.11"
+thiserror = "1.0.63"

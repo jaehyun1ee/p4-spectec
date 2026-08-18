@@ -12,6 +12,11 @@ val algo : string list -> Lang.Al.spec result
 val structure : final:bool -> string list -> Lang.Sl.spec result
 val annotate : string list -> Lang.Pl.spec result
 
+(* Rust interpreter wire boundary *)
+
+val export_sl_json : string list -> Yojson.Safe.t result
+val export_p4_json : string list -> string -> Yojson.Safe.t result
+
 (* Document generation *)
 
 val splice : string list -> (string * string) list -> unit result

@@ -9,5 +9,7 @@ let preprocess includes path =
   in
   let in_chan = Core_unix.open_process_in cmd in
   let program = In_channel.input_all in_chan in
-  let _ = Core_unix.close_process_in in_chan in
-  program
+  let status = Core_unix.close_process_in in_chan in
+  match status with
+  | Ok () -> program
+  | Error _ -> failwith (Core_unix.Exit_or_signal.to_string_hum status)

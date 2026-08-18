@@ -9,6 +9,7 @@
   (re_export runtime)
   (re_export interp)
   (re_export interface)
+  (re_export wire)
   (re_export runner)
   (re_export stf)
   (re_export backend_testgen_neg)

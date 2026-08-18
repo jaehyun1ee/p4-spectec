@@ -26,6 +26,22 @@ let structure ~(final : bool) (paths_spec : string list) : Lang.Sl.spec result =
 let annotate (paths_spec : string list) : Lang.Pl.spec result =
   Pass.annotate paths_spec |> Result.map_error (fun e -> Error.PassError e)
 
+(* Rust interpreter wire boundary *)
+
+let export_sl_json (paths_spec : string list) : Yojson.Safe.t result =
+  let* spec_sl = structure ~final:true paths_spec in
+  Ok (Wire.sl (Lang.Sl.spec_to_yojson spec_sl))
+
+let export_p4_json (includes_p4 : string list) (path_p4 : string) :
+    Yojson.Safe.t result =
+  match Interface.P4.parse_program includes_p4 [ path_p4 ] with
+  | Run.Pass value -> Ok (Wire.value (Runtime.Value.to_yojson value))
+  | Run.Fail (`Syntax (at, msg)) ->
+      Error
+        (Error.CommandError
+           (Format.asprintf "Parse error: %s"
+              (Util.Error.string_of_error at msg)))
+
 (* Document generation *)
 
 let splice (paths_spec : string list) (path_pairs : (string * string) list) :

@@ -1,0 +1,41 @@
+;; OCaml-to-Rust JSON wire golden tests
+
+(rule
+ (target minimal-sl.actual.json)
+ (deps minimal.watsup)
+ (action
+  (run
+   %{exe:../../bin/main.exe}
+   export-sl-json
+   -o
+   %{target}
+   %{dep:minimal.watsup})))
+
+(rule
+ (target minimal-value.actual.json)
+ (deps minimal.p4)
+ (action
+  (run
+   %{exe:../../bin/main.exe}
+   export-p4-json
+   -p
+   %{dep:minimal.p4}
+   -o
+   %{target})))
+
+(rule
+ (alias wire)
+ (action
+  (progn
+   (diff minimal-sl.expected.json minimal-sl.actual.json)
+   (diff minimal-value.expected.json minimal-value.actual.json))))
+
+(rule
+ (alias wire)
+ (target missing-input.err)
+ (action
+  (with-stderr-to
+   %{target}
+   (with-accepted-exit-codes
+    1
+    (run %{exe:../../bin/main.exe} export-p4-json -p missing-input.p4)))))
