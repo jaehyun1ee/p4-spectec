@@ -11,7 +11,10 @@ use crate::{
 };
 
 use super::{
-    super::{DecodeError, EncodeError, array, boolean, field, integer, object, string, variant},
+    super::{
+        DecodeError, EncodeError, array, boolean, field, integer, object, on_codec_stack, string,
+        variant,
+    },
     el, xl,
 };
 use crate::wire::ocaml::{atom::AtomPhraseCodec, mixfix, source};
@@ -20,11 +23,11 @@ pub struct SpecCodec;
 
 impl SpecCodec {
     pub fn decode(value: &Value) -> Result<ast::Spec, DecodeError> {
-        super::on_codec_stack(|| decode_list(value, decode_def))
+        on_codec_stack(|| decode_list(value, decode_def))
     }
 
     pub fn encode(spec: &ast::Spec) -> Result<Value, EncodeError> {
-        super::on_codec_stack(|| Ok(encode_list(spec, encode_def)))
+        on_codec_stack(|| Ok(encode_list(spec, encode_def)))
     }
 }
 
@@ -32,11 +35,11 @@ pub struct ValueCodec;
 
 impl ValueCodec {
     pub fn decode(value: &Value) -> Result<ast::Value, DecodeError> {
-        super::on_codec_stack(|| decode_value(value))
+        on_codec_stack(|| decode_value(value))
     }
 
     pub fn encode(value: &ast::Value) -> Result<Value, EncodeError> {
-        super::on_codec_stack(|| encode_value(value))
+        on_codec_stack(|| encode_value(value))
     }
 }
 

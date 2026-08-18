@@ -26,6 +26,12 @@ pub enum EncodeError {
     UnsupportedExternalData(String),
 }
 
+const CODEC_STACK_SIZE: usize = 32 * 1024 * 1024;
+
+pub(crate) fn on_codec_stack<T>(codec: impl FnOnce() -> T) -> T {
+    stacker::grow(CODEC_STACK_SIZE, codec)
+}
+
 pub(crate) fn array(value: &Value) -> Result<&[Value], DecodeError> {
     value
         .as_array()

@@ -3,7 +3,9 @@ use serde_json::{Value, json};
 use crate::lang::sl::ast::{self, DefKind, Guard, HoldCase, InstrKind, ParamKind};
 
 use super::{
-    super::{DecodeError, EncodeError, array, boolean, field, integer, object, variant},
+    super::{
+        DecodeError, EncodeError, array, boolean, field, integer, object, on_codec_stack, variant,
+    },
     el, il,
 };
 use crate::wire::ocaml::source;
@@ -12,11 +14,11 @@ pub struct SpecCodec;
 
 impl SpecCodec {
     pub fn decode(value: &Value) -> Result<ast::Spec, DecodeError> {
-        super::on_codec_stack(|| il::decode_list(value, decode_def))
+        on_codec_stack(|| il::decode_list(value, decode_def))
     }
 
     pub fn encode(spec: &ast::Spec) -> Result<Value, EncodeError> {
-        super::on_codec_stack(|| Ok(il::encode_list(spec, encode_def)))
+        on_codec_stack(|| Ok(il::encode_list(spec, encode_def)))
     }
 }
 

@@ -2,7 +2,7 @@ use serde_json::{Value, json};
 
 use crate::domain::mixfix::{Mixfix, Mixop};
 
-use super::{DecodeError, array, atom::AtomPhraseCodec, variant};
+use super::{DecodeError, array, atom::AtomPhraseCodec, on_codec_stack, variant};
 
 // Json serialization and deserialization
 
@@ -10,17 +10,19 @@ pub struct MixopCodec;
 
 impl MixopCodec {
     pub fn decode(value: &Value) -> Result<Mixop, DecodeError> {
-        decode(value, |unit| {
-            if unit.is_null() {
-                Ok(())
-            } else {
-                Err(DecodeError::Expected("null unit argument"))
-            }
+        on_codec_stack(|| {
+            decode(value, |unit| {
+                if unit.is_null() {
+                    Ok(())
+                } else {
+                    Err(DecodeError::Expected("null unit argument"))
+                }
+            })
         })
     }
 
     pub fn encode(mixop: &Mixop) -> Value {
-        encode(mixop, |()| Value::Null)
+        on_codec_stack(|| encode(mixop, |()| Value::Null))
     }
 }
 

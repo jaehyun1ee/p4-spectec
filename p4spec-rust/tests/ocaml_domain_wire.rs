@@ -93,6 +93,59 @@ fn mixop_codec_matches_ocaml_custom_encoding() {
 }
 
 #[test]
+fn deep_public_mixop_codec_uses_grown_stack() {
+    const DEPTH: usize = 1_024;
+
+    let mut json = Value::Array(vec![Value::String("Arg".into()), Value::Null]);
+    for _ in 0..DEPTH {
+        json = Value::Array(vec![Value::String("Seq".into()), Value::Array(vec![json])]);
+    }
+    let mixop = match MixopCodec::decode(&json) {
+        Ok(mixop) => mixop,
+        Err(error) => {
+            std::mem::forget(json);
+            panic!("decode deep mixop: {error}");
+        }
+    };
+    let mut decoded = &mixop;
+    let mut decoded_depth = 0;
+    while let Mixfix::Seq(items) = decoded {
+        let [item] = items.as_slice() else {
+            break;
+        };
+        decoded = item;
+        decoded_depth += 1;
+    }
+    let decoded_arg = matches!(decoded, Mixfix::Arg(()));
+
+    let encoded = MixopCodec::encode(&mixop);
+    let mut encoded_item = &encoded;
+    let mut encoded_depth = 0;
+    while let Some([Value::String(tag), Value::Array(items)]) =
+        encoded_item.as_array().map(Vec::as_slice)
+    {
+        if tag != "Seq" {
+            break;
+        }
+        let [item] = items.as_slice() else {
+            break;
+        };
+        encoded_item = item;
+        encoded_depth += 1;
+    }
+    let encoded_arg = encoded_item == &json!(["Arg", null]);
+
+    std::mem::forget(json);
+    std::mem::forget(mixop);
+    std::mem::forget(encoded);
+
+    assert_eq!(decoded_depth, DEPTH);
+    assert!(decoded_arg);
+    assert_eq!(encoded_depth, DEPTH);
+    assert!(encoded_arg);
+}
+
+#[test]
 fn unknown_ocaml_variant_is_rejected() {
     let error = AtomPhraseCodec::decode(&atom_phrase(json!(["UnknownAtom"])))
         .expect_err("reject unknown atom");
