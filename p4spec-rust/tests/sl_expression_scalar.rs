@@ -210,9 +210,12 @@ fn invalid_scalar_operations_return_typed_errors() {
     assert!(error.message.contains("division by zero"));
 
     let unsupported = il::Exp::new(
-        il::ExpKind::TupleE(Vec::new()),
-        il::TypKind::TupleT(Vec::new()),
-        span("tuple"),
+        il::ExpKind::UpCastE(
+            Spanned::new(il::TypKind::BoolT, span("cast-type")),
+            Box::new(bool_exp(true, "cast-value")),
+        ),
+        il::TypKind::BoolT,
+        span("cast"),
     );
     let error = expression::eval(&context, &unsupported).unwrap_err();
     assert!(error.message.contains("not implemented"));

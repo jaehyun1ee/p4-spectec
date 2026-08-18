@@ -1,13 +1,13 @@
 use std::rc::Rc;
 
 use num_bigint::BigInt;
-use num_traits::Zero;
+use num_traits::{ToPrimitive, Zero};
 
 use crate::{
     domain::source::Region,
     interp::common::InterpError,
     lang::{
-        il::ast::{BinOp, CmpOp, Exp, ExpKind, UnOp},
+        il::ast::{BinOp, CmpOp, Exp, ExpKind, ListPattern, OptPattern, Pattern, Typ, UnOp},
         xl::num,
     },
     runtime::{
@@ -49,8 +49,29 @@ pub fn eval(context: &Context, exp: &Exp) -> Result<ValueRef, InterpError> {
         ExpKind::CmpE(operator, _operator_type, left, right) => {
             eval_comparison(context, exp, *operator, left, right)
         }
+        ExpKind::MatchE(value, pattern) => eval_match(context, exp, value, pattern),
+        ExpKind::TupleE(exps) => eval_tuple(context, exp, exps),
+        ExpKind::CaseE(not_exp) => eval_case(context, exp, not_exp),
+        ExpKind::StrE(fields) => eval_structure(context, exp, fields),
+        ExpKind::OptE(value) => eval_option(context, exp, value.as_deref()),
+        ExpKind::ListE(exps) => eval_list(context, exp, exps),
+        ExpKind::ConsE(head, tail) => eval_cons(context, exp, head, tail),
+        ExpKind::CatE(left, right) => eval_concatenation(context, exp, left, right),
+        ExpKind::MemE(element, collection) => eval_membership(context, exp, element, collection),
+        ExpKind::LenE(value) => eval_length(context, exp, value),
+        ExpKind::DotE(base, atom) => eval_dot(context, exp, base, atom),
+        ExpKind::IdxE(base, index) => eval_index(context, exp, base, index),
+        ExpKind::SliceE(base, index, count) => eval_slice(context, exp, base, index, count),
         _ => Err(value_error(exp, "expression evaluation is not implemented")),
     }
+}
+
+fn type_note(exp: &Exp) -> Typ {
+    crate::domain::source::Spanned::new(exp.ty.clone(), exp.span.clone())
+}
+
+fn eval_all(context: &Context, exps: &[Exp]) -> Result<Vec<ValueRef>, InterpError> {
+    exps.iter().map(|exp| eval(context, exp)).collect()
 }
 
 // Unary expression evaluation
@@ -199,4 +220,299 @@ fn eval_comparison(
         }
     };
     Ok(make::bool(result, Region::none()))
+}
+
+// Pattern match check expression evaluation
+
+fn eval_match(
+    context: &Context,
+    _outer: &Exp,
+    exp: &Exp,
+    pattern: &Pattern,
+) -> Result<ValueRef, InterpError> {
+    let value = eval(context, exp)?;
+    let matches = match pattern {
+        Pattern::CaseP(mixop) => get::case(&value)
+            .map(|value_case| value_case.split().0 == *mixop)
+            .unwrap_or(false),
+        Pattern::ListP(pattern) => get::list(&value)
+            .map(|values| match pattern {
+                ListPattern::Cons => !values.is_empty(),
+                ListPattern::Fixed(len) => usize::try_from(*len) == Ok(values.len()),
+                ListPattern::Nil => values.is_empty(),
+            })
+            .unwrap_or(false),
+        Pattern::OptP(pattern) => get::opt(&value)
+            .map(|value| match pattern {
+                OptPattern::Some => value.is_some(),
+                OptPattern::None => value.is_none(),
+            })
+            .unwrap_or(false),
+    };
+    Ok(make::bool(matches, Region::none()))
+}
+
+// Tuple expression evaluation
+
+fn eval_tuple(context: &Context, outer: &Exp, exps: &[Exp]) -> Result<ValueRef, InterpError> {
+    let values = eval_all(context, exps)?;
+    Ok(make::tuple(&type_note(outer), values, Region::none()))
+}
+
+// Case expression evaluation
+
+fn eval_case(
+    context: &Context,
+    outer: &Exp,
+    not_exp: &crate::lang::il::ast::NotExp,
+) -> Result<ValueRef, InterpError> {
+    let (mixop, exps) = not_exp.split();
+    let values = exps
+        .into_iter()
+        .map(|exp| eval(context, exp))
+        .collect::<Result<Vec<_>, _>>()?;
+    let value_case = crate::domain::mixfix::Mixop::fill(&mixop, values)
+        .expect("the mixop came from the same case expression");
+    Ok(make::case(&type_note(outer), value_case, Region::none()))
+}
+
+// Struct expression evaluation
+
+fn eval_structure(
+    context: &Context,
+    outer: &Exp,
+    fields: &[(crate::lang::il::ast::Atom, Exp)],
+) -> Result<ValueRef, InterpError> {
+    let value_fields = fields
+        .iter()
+        .map(|(atom, exp)| eval(context, exp).map(|value| (atom.clone(), value)))
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(make::structure(
+        &type_note(outer),
+        value_fields,
+        Region::none(),
+    ))
+}
+
+// Option expression evaluation
+
+fn eval_option(context: &Context, outer: &Exp, exp: Option<&Exp>) -> Result<ValueRef, InterpError> {
+    let value = exp.map(|exp| eval(context, exp)).transpose()?;
+    Ok(make::opt(&type_note(outer), value, Region::none()))
+}
+
+// List expression evaluation
+
+fn eval_list(context: &Context, outer: &Exp, exps: &[Exp]) -> Result<ValueRef, InterpError> {
+    let values = eval_all(context, exps)?;
+    Ok(make::list(&type_note(outer), values, Region::none()))
+}
+
+// Cons expression evaluation
+
+fn eval_cons(
+    context: &Context,
+    outer: &Exp,
+    head: &Exp,
+    tail: &Exp,
+) -> Result<ValueRef, InterpError> {
+    let value_head = eval(context, head)?;
+    let value_tail = eval(context, tail)?;
+    let mut values = Vec::with_capacity(
+        get::list(&value_tail)
+            .map_err(|error| value_error(outer, error.to_string()))?
+            .len()
+            + 1,
+    );
+    values.push(value_head);
+    values.extend(
+        get::list(&value_tail)
+            .expect("the tail was checked")
+            .iter()
+            .cloned(),
+    );
+    Ok(make::list(&type_note(outer), values, Region::none()))
+}
+
+// Concatenation expression evaluation
+
+fn eval_concatenation(
+    context: &Context,
+    outer: &Exp,
+    left: &Exp,
+    right: &Exp,
+) -> Result<ValueRef, InterpError> {
+    let value_left = eval(context, left)?;
+    let value_right = eval(context, right)?;
+    match (&value_left.kind, &value_right.kind) {
+        (
+            crate::runtime::value::ValueKind::TextV(left),
+            crate::runtime::value::ValueKind::TextV(right),
+        ) => Ok(make::text(format!("{left}{right}"), Region::none())),
+        (
+            crate::runtime::value::ValueKind::ListV(left),
+            crate::runtime::value::ValueKind::ListV(right),
+        ) => Ok(make::list(
+            &type_note(outer),
+            left.iter().chain(right).cloned().collect(),
+            Region::none(),
+        )),
+        _ => Err(value_error(
+            outer,
+            "concatenation expects either two texts or two lists",
+        )),
+    }
+}
+
+// Membership expression evaluation
+
+fn eval_membership(
+    context: &Context,
+    outer: &Exp,
+    element: &Exp,
+    collection: &Exp,
+) -> Result<ValueRef, InterpError> {
+    let value_element = eval(context, element)?;
+    let value_collection = eval(context, collection)?;
+    let values =
+        get::list(&value_collection).map_err(|error| value_error(outer, error.to_string()))?;
+    Ok(make::bool(values.contains(&value_element), Region::none()))
+}
+
+// Length expression evaluation
+
+fn eval_length(context: &Context, outer: &Exp, exp: &Exp) -> Result<ValueRef, InterpError> {
+    let value = eval(context, exp)?;
+    let len = match &value.kind {
+        crate::runtime::value::ValueKind::TextV(value) => value.len(),
+        crate::runtime::value::ValueKind::ListV(values) => values.len(),
+        _ => {
+            return Err(value_error(
+                outer,
+                "length operation expects either a text or a list",
+            ));
+        }
+    };
+    Ok(make::nat(BigInt::from(len), Region::none()))
+}
+
+// Dot expression evaluation
+
+fn eval_dot(
+    context: &Context,
+    outer: &Exp,
+    base: &Exp,
+    atom: &crate::lang::il::ast::Atom,
+) -> Result<ValueRef, InterpError> {
+    let value_base = eval(context, base)?;
+    let fields =
+        get::structure(&value_base).map_err(|error| value_error(outer, error.to_string()))?;
+    fields
+        .iter()
+        .find(|(field, _)| field.node == atom.node)
+        .map(|(_, value)| Rc::clone(value))
+        .ok_or_else(|| value_error(outer, "structure field is undefined"))
+}
+
+fn index_of_value(outer: &Exp, value: &Value) -> Result<isize, InterpError> {
+    let index = match num_of_value(outer, value)? {
+        num::T::Nat(value) | num::T::Int(value) => value,
+    };
+    index
+        .to_isize()
+        .ok_or_else(|| value_error(outer, "index is too large"))
+}
+
+// Index expression evaluation
+
+fn eval_index(
+    context: &Context,
+    outer: &Exp,
+    base: &Exp,
+    index: &Exp,
+) -> Result<ValueRef, InterpError> {
+    let value_base = eval(context, base)?;
+    let value_index = eval(context, index)?;
+    let index = index_of_value(outer, &value_index)?;
+    match &value_base.kind {
+        crate::runtime::value::ValueKind::TextV(value) => {
+            let index = bounded_index(outer, index, value.len())?;
+            let byte = value
+                .as_bytes()
+                .get(index)
+                .copied()
+                .expect("the index was checked");
+            let text = str::from_utf8(std::slice::from_ref(&byte))
+                .map_err(|_| value_error(outer, "indexed byte is not valid UTF-8"))?;
+            Ok(make::text(text.to_owned(), Region::none()))
+        }
+        crate::runtime::value::ValueKind::ListV(values) => {
+            let index = bounded_index(outer, index, values.len())?;
+            Ok(Rc::clone(&values[index]))
+        }
+        _ => Err(value_error(
+            outer,
+            "indexing expects either a text or a list",
+        )),
+    }
+}
+
+fn bounded_index(outer: &Exp, index: isize, len: usize) -> Result<usize, InterpError> {
+    let Ok(index) = usize::try_from(index) else {
+        return Err(value_error(outer, "index out of bounds"));
+    };
+    if index >= len {
+        Err(value_error(outer, "index out of bounds"))
+    } else {
+        Ok(index)
+    }
+}
+
+// Slice expression evaluation
+
+fn eval_slice(
+    context: &Context,
+    outer: &Exp,
+    base: &Exp,
+    index: &Exp,
+    count: &Exp,
+) -> Result<ValueRef, InterpError> {
+    let value_base = eval(context, base)?;
+    let value_index = eval(context, index)?;
+    let index = index_of_value(outer, &value_index)?;
+    let value_count = eval(context, count)?;
+    let count = index_of_value(outer, &value_count)?;
+    if index < 0 || count < 0 {
+        return Err(value_error(outer, "slice out of bounds"));
+    }
+    let start = usize::try_from(index).expect("non-negative index");
+    let count = usize::try_from(count).expect("non-negative count");
+    let end = start
+        .checked_add(count)
+        .ok_or_else(|| value_error(outer, "slice out of bounds"))?;
+    match &value_base.kind {
+        crate::runtime::value::ValueKind::TextV(value) => {
+            if end > value.len() {
+                return Err(value_error(outer, "slice out of bounds"));
+            }
+            let text = value
+                .get(start..end)
+                .ok_or_else(|| value_error(outer, "slice is not valid UTF-8"))?;
+            Ok(make::text(text.to_owned(), Region::none()))
+        }
+        crate::runtime::value::ValueKind::ListV(values) => {
+            if end > values.len() {
+                return Err(value_error(outer, "slice out of bounds"));
+            }
+            Ok(make::list(
+                &type_note(outer),
+                values[start..end].to_vec(),
+                Region::none(),
+            ))
+        }
+        _ => Err(value_error(
+            outer,
+            "slicing expects either a text or a list",
+        )),
+    }
 }
