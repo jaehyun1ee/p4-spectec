@@ -2,5 +2,6 @@
 
 mod envelope;
 pub mod ocaml;
+pub mod runtime_value;
 
 pub use envelope::{Envelope, SL_SCHEMA, VALUE_SCHEMA, WireError};
