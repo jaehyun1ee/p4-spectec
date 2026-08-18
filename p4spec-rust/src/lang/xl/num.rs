@@ -39,3 +39,9 @@ pub enum CmpOp {
     LeOp,
     GeOp,
 }
+
+// Subtyping
+
+pub fn equiv(type_a: Typ, type_b: Typ) -> bool {
+    type_a == type_b
+}

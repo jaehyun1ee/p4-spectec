@@ -23,9 +23,12 @@ pub enum ExpandError {
     Substitution(#[from] SubstError),
 }
 
-pub fn expand_type(type_defs: &TypeDefMap, typ: &Typ) -> Result<Typ, ExpandError> {
+pub(crate) fn expand_type_with<'a>(
+    find_type_def: &impl Fn(&str) -> Option<&'a TypeDef>,
+    typ: &Typ,
+) -> Result<Typ, ExpandError> {
     match &typ.node {
-        TypKind::VarT(type_id, type_args) => match type_defs.get(&type_id.node) {
+        TypKind::VarT(type_id, type_args) => match find_type_def(&type_id.node) {
             Some(TypeDef::Defined(type_params, def_type)) => match &def_type.node {
                 DefTypKind::PlainT(_) if type_args.len() != type_params.len() => {
                     Err(ExpandError::TypeArgumentMismatch {
@@ -39,7 +42,7 @@ pub fn expand_type(type_defs: &TypeDefMap, typ: &Typ) -> Result<Typ, ExpandError
                         .map(|(type_param, type_arg)| (type_param.node.clone(), type_arg.clone()))
                         .collect();
                     let typ = subst::subst_type(&theta, typ)?;
-                    expand_type(type_defs, &typ)
+                    expand_type_with(find_type_def, &typ)
                 }
                 _ => Ok(typ.clone()),
             },
@@ -51,4 +54,8 @@ pub fn expand_type(type_defs: &TypeDefMap, typ: &Typ) -> Result<Typ, ExpandError
         },
         _ => Ok(typ.clone()),
     }
+}
+
+pub fn expand_type(type_defs: &TypeDefMap, typ: &Typ) -> Result<Typ, ExpandError> {
+    expand_type_with(&|type_id| type_defs.get(type_id), typ)
 }

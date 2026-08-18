@@ -44,6 +44,54 @@ impl<T: PartialEq> PartialEq for Mixfix<T> {
     }
 }
 
+impl<T> Mixfix<T> {
+    pub(crate) fn try_eq_by<U, E>(
+        &self,
+        other: &Mixfix<U>,
+        mut eq_arg: impl FnMut(&T, &U) -> Result<bool, E>,
+    ) -> Result<bool, E> {
+        self.try_eq_by_with(other, &mut eq_arg)
+    }
+
+    fn try_eq_by_with<U, E>(
+        &self,
+        other: &Mixfix<U>,
+        eq_arg: &mut impl FnMut(&T, &U) -> Result<bool, E>,
+    ) -> Result<bool, E> {
+        match (self, other) {
+            (Self::Arg(arg_a), Mixfix::Arg(arg_b)) => eq_arg(arg_a, arg_b),
+            (Self::Atom(atom_a), Mixfix::Atom(atom_b)) => Ok(atom_a.node == atom_b.node),
+            (
+                Self::Brack(atom_a_l, mixfix_a, atom_a_r),
+                Mixfix::Brack(atom_b_l, mixfix_b, atom_b_r),
+            ) => {
+                if atom_a_l.node != atom_b_l.node || !mixfix_a.try_eq_by_with(mixfix_b, eq_arg)? {
+                    return Ok(false);
+                }
+                Ok(atom_a_r.node == atom_b_r.node)
+            }
+            (
+                Self::Infix(mixfix_a_l, atom_a, mixfix_a_r),
+                Mixfix::Infix(mixfix_b_l, atom_b, mixfix_b_r),
+            ) => {
+                if atom_a.node != atom_b.node || !mixfix_a_l.try_eq_by_with(mixfix_b_l, eq_arg)? {
+                    return Ok(false);
+                }
+                mixfix_a_r.try_eq_by_with(mixfix_b_r, eq_arg)
+            }
+            (Self::Seq(mixfixes_a), Mixfix::Seq(mixfixes_b)) => {
+                for (mixfix_a, mixfix_b) in mixfixes_a.iter().zip(mixfixes_b) {
+                    if !mixfix_a.try_eq_by_with(mixfix_b, eq_arg)? {
+                        return Ok(false);
+                    }
+                }
+                Ok(mixfixes_a.len() == mixfixes_b.len())
+            }
+            _ => Ok(false),
+        }
+    }
+}
+
 impl<T: Eq> Eq for Mixfix<T> {}
 
 impl<T: Ord> Ord for Mixfix<T> {

@@ -1,5 +1,6 @@
 use p4spec_rust::{
     domain::{
+        atom::Atom,
         mixfix::Mixfix,
         source::{Region, Spanned},
     },
@@ -9,6 +10,7 @@ use p4spec_rust::{
     },
     runtime::r#type::{
         envs::TypeDefMap,
+        equiv::{self, EquivError},
         expand::{self, ExpandError},
         fresh,
         subst::{self, SubstError, TypeSubstitution},
@@ -23,6 +25,10 @@ fn span(file: &str) -> Region {
 
 fn id(name: &str, file: &str) -> il::Id {
     Spanned::new(name.to_owned(), span(file))
+}
+
+fn atom(node: Atom, file: &str) -> il::Atom {
+    Spanned::new(node, span(file))
 }
 
 fn var(name: &str, file: &str) -> il::Typ {
@@ -278,4 +284,182 @@ fn expansion_leaves_non_plain_type_definitions_unexpanded() {
             typ
         );
     }
+}
+
+#[test]
+fn equivalence_expands_aliases_and_compares_each_type_shape() {
+    let mut type_defs = TypeDefMap::new();
+    type_defs.insert(
+        "Alias".to_owned(),
+        defined_plain(Vec::new(), make::int_type(), "alias"),
+    );
+    type_defs.insert("Box".to_owned(), TypeDef::Param);
+
+    let cases = [
+        (make::bool_type(), make::bool_type(), true),
+        (make::int_type(), make::int_type(), true),
+        (make::text_type(), make::text_type(), true),
+        (
+            var_with_args("Box", vec![var("Alias", "alias-use")], "box"),
+            var_with_args("Box", vec![make::int_type()], "box"),
+            true,
+        ),
+        (
+            make::tuple_type(vec![make::bool_type(), make::text_type()]),
+            make::tuple_type(vec![make::bool_type(), make::text_type()]),
+            true,
+        ),
+        (
+            make::iter_type(make::bool_type(), Iter::Opt),
+            make::iter_type(make::bool_type(), Iter::Opt),
+            true,
+        ),
+        (make::bool_type(), make::text_type(), false),
+        (make::nat_type(), make::int_type(), false),
+        (
+            var_with_args("Box", Vec::new(), "box"),
+            var_with_args("Box", vec![make::int_type()], "box"),
+            false,
+        ),
+        (
+            make::tuple_type(vec![make::bool_type()]),
+            make::tuple_type(vec![make::bool_type(), make::text_type()]),
+            false,
+        ),
+        (
+            make::iter_type(make::bool_type(), Iter::Opt),
+            make::iter_type(make::bool_type(), Iter::List),
+            false,
+        ),
+        (
+            make::func_type(Vec::new(), Vec::new(), make::bool_type()),
+            make::func_type(Vec::new(), Vec::new(), make::bool_type()),
+            false,
+        ),
+    ];
+
+    for (typ_a, typ_b, expected) in cases {
+        assert_eq!(
+            equiv::equiv_type(&type_defs, &typ_a, &typ_b).expect("compare types"),
+            expected
+        );
+    }
+}
+
+#[test]
+fn equivalence_propagates_type_expansion_errors() {
+    let typ = var_with_args("Missing", Vec::new(), "missing-use");
+    assert_eq!(
+        equiv::equiv_type(&TypeDefMap::new(), &typ, &make::bool_type()),
+        Err(EquivError::Expansion(ExpandError::UndefinedType {
+            name: "Missing".to_owned(),
+            span: span("missing-use"),
+        }))
+    );
+}
+
+#[test]
+fn notation_equivalence_ignores_source_regions_but_compares_atoms_and_arguments() {
+    let mut type_defs = TypeDefMap::new();
+    type_defs.insert(
+        "Alias".to_owned(),
+        defined_plain(Vec::new(), make::bool_type(), "alias"),
+    );
+    let notation_a = Spanned::new(
+        Mixfix::Brack(
+            atom(Atom::LParen, "left-a"),
+            Box::new(Mixfix::Arg(var("Alias", "arg-a"))),
+            atom(Atom::RParen, "right-a"),
+        ),
+        span("notation-a"),
+    );
+    let notation_b = Spanned::new(
+        Mixfix::Brack(
+            atom(Atom::LParen, "left-b"),
+            Box::new(Mixfix::Arg(make::bool_type())),
+            atom(Atom::RParen, "right-b"),
+        ),
+        span("notation-b"),
+    );
+    let notation_different = Spanned::new(
+        Mixfix::Brack(
+            atom(Atom::LBrack, "left-c"),
+            Box::new(Mixfix::Arg(make::bool_type())),
+            atom(Atom::RBrack, "right-c"),
+        ),
+        span("notation-c"),
+    );
+
+    assert!(
+        equiv::equiv_not_type(&type_defs, &notation_a, &notation_b)
+            .expect("compare equivalent notations")
+    );
+    assert!(
+        !equiv::equiv_not_type(&type_defs, &notation_a, &notation_different)
+            .expect("compare different notations")
+    );
+}
+
+#[test]
+fn function_equivalence_alpha_renames_type_parameters_through_aliases() {
+    fresh::refresh();
+    let mut type_defs = TypeDefMap::new();
+    type_defs.insert(
+        "Wrap".to_owned(),
+        defined_plain(vec![id("X", "wrap")], var("X", "wrap-body"), "wrap"),
+    );
+
+    assert!(
+        equiv::equiv_func_type(
+            &type_defs,
+            &span("function"),
+            &[id("T", "left")],
+            &[var_with_args(
+                "Wrap",
+                vec![var("T", "left-param")],
+                "left-param",
+            )],
+            &var("T", "left-return"),
+            &[id("U", "right")],
+            &[var("U", "right-param")],
+            &var("U", "right-return"),
+        )
+        .expect("compare alpha-equivalent functions")
+    );
+}
+
+#[test]
+fn function_equivalence_reports_type_and_value_parameter_count_mismatches() {
+    assert_eq!(
+        equiv::equiv_func_type(
+            &TypeDefMap::new(),
+            &span("type-parameter-error"),
+            &[id("T", "left")],
+            &[],
+            &make::bool_type(),
+            &[],
+            &[],
+            &make::bool_type(),
+        ),
+        Err(EquivError::TypeParametersMismatch {
+            span: span("type-parameter-error"),
+        })
+    );
+
+    fresh::refresh();
+    assert_eq!(
+        equiv::equiv_func_type(
+            &TypeDefMap::new(),
+            &span("parameter-error"),
+            &[id("T", "left")],
+            &[var("T", "left-param")],
+            &var("T", "left-return"),
+            &[id("U", "right")],
+            &[],
+            &var("U", "right-return"),
+        ),
+        Err(EquivError::ParametersMismatch {
+            span: span("parameter-error"),
+        })
+    );
 }
