@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 
 use thiserror::Error;
 
@@ -14,26 +14,7 @@ use super::fresh;
 
 // Substitution of type variables
 
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct TypeSubstitution(BTreeMap<String, Typ>);
-
-impl TypeSubstitution {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn insert(&mut self, id: il::Id, typ: Typ) -> Option<Typ> {
-        self.0.insert(id.node, typ)
-    }
-
-    pub fn get(&self, id: &il::Id) -> Option<&Typ> {
-        self.0.get(&id.node)
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
-    }
-}
+pub type TypeSubstitution = HashMap<String, Typ>;
 
 #[derive(Clone, Debug, Error, PartialEq)]
 pub enum SubstError {
@@ -48,7 +29,7 @@ pub fn freshen_tparams(type_params: &[TParam]) -> (TypeSubstitution, Vec<TParam>
             let fresh_id = Spanned::new(format!("__FRESH{}", fresh::fresh()), Region::none());
             let fresh_type =
                 Spanned::new(TypKind::VarT(fresh_id.clone(), Vec::new()), Region::none());
-            theta.insert(type_param.clone(), fresh_type);
+            theta.insert(type_param.node.clone(), fresh_type);
             fresh_params.push(fresh_id);
             (theta, fresh_params)
         },
@@ -60,7 +41,7 @@ pub fn freshen_tparams(type_params: &[TParam]) -> (TypeSubstitution, Vec<TParam>
 fn subst_type_inner(theta: &TypeSubstitution, typ: &Typ) -> Result<Typ, SubstError> {
     match &typ.node {
         TypKind::BoolT | TypKind::NumT(_) | TypKind::TextT => Ok(typ.clone()),
-        TypKind::VarT(id, type_args) => match theta.get(id) {
+        TypKind::VarT(id, type_args) => match theta.get(&id.node) {
             Some(_) if !type_args.is_empty() => Err(SubstError::HigherOrder {
                 span: typ.span.clone(),
             }),

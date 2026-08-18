@@ -8,7 +8,7 @@ use p4spec_rust::{
         sl::ast::{self as sl},
     },
     runtime::r#type::{
-        envs::{TypeDefEnv, TypeDefTable},
+        envs::TypeDefMap,
         fresh,
         subst::{self, SubstError, TypeSubstitution},
         typ::make,
@@ -53,7 +53,7 @@ fn type_constructors_and_parameter_conversion_follow_ocaml_order() {
 }
 
 #[test]
-fn type_definition_collections_key_identifiers_by_spelling() {
+fn type_definitions_use_one_string_keyed_hash_map() {
     let tparam = id("T", "definition");
     let defined = TypeDef::Defined(
         vec![tparam.clone()],
@@ -64,22 +64,13 @@ fn type_definition_collections_key_identifiers_by_spelling() {
     );
     assert_eq!(defined.type_params(), std::slice::from_ref(&tparam));
 
-    let mut env = TypeDefEnv::new();
-    env.insert(tparam.clone(), defined.clone());
-    assert_eq!(env.get(&id("T", "use-site")), Some(&defined));
-    let (stored_id, _) = env.iter().next().expect("stored type definition");
-    assert_eq!(stored_id.span, span("definition"));
+    let mut type_defs = TypeDefMap::with_capacity(4);
+    type_defs.insert(tparam.node.clone(), defined.clone());
+    assert_eq!(type_defs.get("T"), Some(&defined));
 
-    env.insert(id("T", "redefinition"), TypeDef::Extern);
-    assert_eq!(env.get(&id("T", "use-site")), Some(&TypeDef::Extern));
-    let (stored_id, _) = env.iter().next().expect("redefined type definition");
-    assert_eq!(stored_id.span, span("redefinition"));
-
-    let mut table = TypeDefTable::with_capacity(4);
-    table.add(tparam, TypeDef::Param);
-    table.add(id("T", "table-redefinition"), TypeDef::Extern);
-    assert_eq!(table.get(&id("T", "another-use")), Some(&TypeDef::Extern));
-    assert_eq!(table.len(), 2);
+    type_defs.insert("T".to_owned(), TypeDef::Extern);
+    assert_eq!(type_defs.get("T"), Some(&TypeDef::Extern));
+    assert_eq!(type_defs.len(), 1);
 }
 
 #[test]
@@ -91,7 +82,7 @@ fn freshening_is_deterministic_after_refresh() {
     assert_eq!(fresh_params[0].node, "__FRESH0");
     assert_eq!(fresh_params[1].node, "__FRESH1");
     assert!(matches!(
-        theta.get(&id("T", "other-region")).map(|typ| &typ.node),
+        theta.get("T").map(|typ| &typ.node),
         Some(TypKind::VarT(id, args)) if id.node == "__FRESH0" && args.is_empty()
     ));
 }
@@ -100,8 +91,8 @@ fn freshening_is_deterministic_after_refresh() {
 fn substitution_replaces_free_variables_and_freshens_binders() {
     fresh::refresh();
     let mut theta = TypeSubstitution::new();
-    theta.insert(id("T", "theta"), make::int_type());
-    theta.insert(id("U", "theta"), make::text_type());
+    theta.insert("T".to_owned(), make::int_type());
+    theta.insert("U".to_owned(), make::text_type());
 
     let function = make::func_type(
         vec![id("T", "binder")],
@@ -128,7 +119,7 @@ fn substitution_replaces_free_variables_and_freshens_binders() {
 #[test]
 fn substitution_covers_variant_shapes_and_rejects_higher_order_use() {
     let mut theta = TypeSubstitution::new();
-    theta.insert(id("T", "theta"), make::bool_type());
+    theta.insert("T".to_owned(), make::bool_type());
 
     let not_type = Spanned::new(Mixfix::Arg(var("T", "notation")), span("notation"));
     let substituted = subst::subst_not_type(&theta, &not_type).expect("substitute notation");
@@ -165,7 +156,7 @@ fn substitution_covers_variant_shapes_and_rejects_higher_order_use() {
 fn iterator_substitution_uses_the_substituted_child_region_like_ocaml() {
     let mut theta = TypeSubstitution::new();
     theta.insert(
-        id("T", "theta"),
+        "T".to_owned(),
         Spanned::new(TypKind::BoolT, span("replacement")),
     );
     let iterated = Spanned::new(
