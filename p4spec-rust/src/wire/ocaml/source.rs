@@ -1,21 +1,11 @@
-use serde_json::{Map, Value, json};
+use serde_json::{Value, json};
 
 use crate::domain::source::{Info, Phrase, Position, Region};
 
-use super::DecodeError;
-
-fn field<'a>(object: &'a Map<String, Value>, name: &'static str) -> Result<&'a Value, DecodeError> {
-    object.get(name).ok_or(DecodeError::MissingField(name))
-}
-
-fn integer(value: &Value) -> Result<i64, DecodeError> {
-    value.as_i64().ok_or(DecodeError::Expected("integer"))
-}
+use super::{DecodeError, field, integer, object};
 
 pub fn decode_position(value: &Value) -> Result<Position, DecodeError> {
-    let object = value
-        .as_object()
-        .ok_or(DecodeError::Expected("position object"))?;
+    let object = object(value)?;
     Ok(Position::new(
         field(object, "file")?
             .as_str()
@@ -34,9 +24,7 @@ pub fn encode_position(position: &Position) -> Value {
 }
 
 pub fn decode_region(value: &Value) -> Result<Region, DecodeError> {
-    let object = value
-        .as_object()
-        .ok_or(DecodeError::Expected("region object"))?;
+    let object = object(value)?;
     Ok(Region::new(
         decode_position(field(object, "left")?)?,
         decode_position(field(object, "right")?)?,
@@ -54,9 +42,7 @@ pub fn decode_phrase<T>(
     value: &Value,
     decode_it: impl FnOnce(&Value) -> Result<T, DecodeError>,
 ) -> Result<Phrase<T>, DecodeError> {
-    let object = value
-        .as_object()
-        .ok_or(DecodeError::Expected("phrase object"))?;
+    let object = object(value)?;
     if !field(object, "note")?.is_null() {
         return Err(DecodeError::Expected("null unit note"));
     }
@@ -64,6 +50,31 @@ pub fn decode_phrase<T>(
         decode_it(field(object, "it")?)?,
         decode_region(field(object, "at")?)?,
     ))
+}
+
+pub(crate) fn decode_note_phrase<T, N>(
+    value: &Value,
+    decode_it: impl FnOnce(&Value) -> Result<T, DecodeError>,
+    decode_note: impl FnOnce(&Value) -> Result<N, DecodeError>,
+) -> Result<Info<T, N, Region>, DecodeError> {
+    let object = object(value)?;
+    Ok(Info::with_note(
+        decode_it(field(object, "it")?)?,
+        decode_region(field(object, "at")?)?,
+        decode_note(field(object, "note")?)?,
+    ))
+}
+
+pub(crate) fn encode_note_phrase<T, N>(
+    phrase: &Info<T, N, Region>,
+    encode_it: impl FnOnce(&T) -> Value,
+    encode_note: impl FnOnce(&N) -> Value,
+) -> Value {
+    json!({
+        "it": encode_it(&phrase.it),
+        "note": encode_note(&phrase.note),
+        "at": encode_region(&phrase.at),
+    })
 }
 
 pub fn encode_phrase<T>(phrase: &Phrase<T>, encode_it: impl FnOnce(&T) -> Value) -> Value {
