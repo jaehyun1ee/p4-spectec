@@ -9,6 +9,7 @@ use p4spec_rust::{
     },
     runtime::r#type::{
         envs::TypeDefMap,
+        expand::{self, ExpandError},
         fresh,
         subst::{self, SubstError, TypeSubstitution},
         typ::make,
@@ -26,6 +27,17 @@ fn id(name: &str, file: &str) -> il::Id {
 
 fn var(name: &str, file: &str) -> il::Typ {
     make::var_type(id(name, file), Vec::new())
+}
+
+fn var_with_args(name: &str, args: Vec<il::Typ>, file: &str) -> il::Typ {
+    Spanned::new(TypKind::VarT(id(name, file), args), span(file))
+}
+
+fn defined_plain(type_params: Vec<il::TParam>, typ: il::Typ, file: &str) -> TypeDef {
+    TypeDef::Defined(
+        type_params,
+        Box::new(Spanned::new(il::DefTypKind::PlainT(typ), span(file))),
+    )
 }
 
 #[test]
@@ -166,4 +178,104 @@ fn iterator_substitution_uses_the_substituted_child_region_like_ocaml() {
 
     let substituted = subst::subst_type(&theta, &iterated).expect("substitute iterator");
     assert_eq!(substituted.span, span("replacement"));
+}
+
+#[test]
+fn expansion_substitutes_arguments_and_recursively_resolves_plain_aliases() {
+    let mut type_defs = TypeDefMap::new();
+    type_defs.insert(
+        "Pair".to_owned(),
+        defined_plain(
+            vec![id("A", "pair"), id("B", "pair")],
+            make::tuple_type(vec![var("A", "pair-body"), var("B", "pair-body")]),
+            "pair",
+        ),
+    );
+    type_defs.insert(
+        "Alias".to_owned(),
+        defined_plain(
+            vec![id("T", "alias")],
+            var_with_args(
+                "Pair",
+                vec![var("T", "alias-body"), make::bool_type()],
+                "alias-body",
+            ),
+            "alias",
+        ),
+    );
+
+    let typ = var_with_args("Alias", vec![make::int_type()], "use-site");
+    let expanded = expand::expand_type(&type_defs, &typ).expect("expand type alias");
+    let TypKind::TupleT(types) = expanded.node else {
+        panic!("expected expanded tuple type");
+    };
+    assert!(matches!(types[0].node, TypKind::NumT(_)));
+    assert!(matches!(types[1].node, TypKind::BoolT));
+}
+
+#[test]
+fn expansion_reports_undefined_types_and_plain_alias_arity_mismatches() {
+    let undefined = var_with_args("Missing", Vec::new(), "undefined-use");
+    assert_eq!(
+        expand::expand_type(&TypeDefMap::new(), &undefined),
+        Err(ExpandError::UndefinedType {
+            name: "Missing".to_owned(),
+            span: span("undefined-use"),
+        })
+    );
+
+    let mut type_defs = TypeDefMap::new();
+    type_defs.insert(
+        "Alias".to_owned(),
+        defined_plain(vec![id("T", "alias")], var("T", "alias-body"), "alias"),
+    );
+    let mismatch = var_with_args("Alias", Vec::new(), "arity-use");
+    assert_eq!(
+        expand::expand_type(&type_defs, &mismatch),
+        Err(ExpandError::TypeArgumentMismatch {
+            span: span("arity-use"),
+        })
+    );
+}
+
+#[test]
+fn expansion_leaves_non_plain_type_definitions_unexpanded() {
+    let cases = [
+        ("Param", TypeDef::Param),
+        ("Extern", TypeDef::Extern),
+        ("Defining", TypeDef::Defining(vec![id("T", "defining")])),
+        (
+            "Struct",
+            TypeDef::Defined(
+                vec![id("T", "struct")],
+                Box::new(Spanned::new(
+                    il::DefTypKind::StructT(Vec::new()),
+                    span("struct"),
+                )),
+            ),
+        ),
+        (
+            "Variant",
+            TypeDef::Defined(
+                vec![id("T", "variant")],
+                Box::new(Spanned::new(
+                    il::DefTypKind::VariantT(Vec::new()),
+                    span("variant"),
+                )),
+            ),
+        ),
+    ];
+    let type_defs = cases
+        .iter()
+        .cloned()
+        .map(|(name, type_def)| (name.to_owned(), type_def))
+        .collect();
+
+    for (name, _) in cases {
+        let typ = var_with_args(name, Vec::new(), "use-site");
+        assert_eq!(
+            expand::expand_type(&type_defs, &typ).expect("retain non-plain type"),
+            typ
+        );
+    }
 }
