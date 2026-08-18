@@ -4,6 +4,8 @@ use crate::domain::mixfix::{Mixfix, Mixop};
 
 use super::{DecodeError, array, atom::AtomPhraseCodec, variant};
 
+// Json serialization and deserialization
+
 pub struct MixopCodec;
 
 impl MixopCodec {

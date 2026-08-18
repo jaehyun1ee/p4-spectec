@@ -16,6 +16,8 @@ pub enum Mixfix<T> {
     Seq(Vec<Self>),
 }
 
+// Equality and comparison
+
 impl<T: PartialEq> PartialEq for Mixfix<T> {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
@@ -93,16 +95,7 @@ impl<T> Mixfix<T> {
         }
     }
 
-    pub fn arity(&self) -> usize {
-        match self {
-            Self::Arg(_) => 1,
-            Self::Atom(_) => 0,
-            Self::Brack(_, body, _) => body.arity(),
-            Self::Infix(left, _, right) => left.arity() + right.arity(),
-            Self::Seq(items) => items.iter().map(Self::arity).sum(),
-        }
-    }
-
+    // Fold, map, and iter
     pub fn fold<A>(&self, initial: A, mut fold_arg: impl FnMut(A, &T) -> A) -> A {
         self.fold_with(initial, &mut fold_arg)
     }
@@ -146,8 +139,20 @@ impl<T> Mixfix<T> {
         }
     }
 
+    // Conversion
     pub fn to_mixop(&self) -> Mixop {
         self.map(|_| ())
+    }
+
+    // Arity
+    pub fn arity(&self) -> usize {
+        match self {
+            Self::Arg(_) => 1,
+            Self::Atom(_) => 0,
+            Self::Brack(_, body, _) => body.arity(),
+            Self::Infix(left, _, right) => left.arity() + right.arity(),
+            Self::Seq(items) => items.iter().map(Self::arity).sum(),
+        }
     }
 
     pub fn cmp_shape<U>(&self, other: &Mixfix<U>) -> Ordering {
@@ -186,29 +191,7 @@ impl<T> Mixfix<T> {
         self.cmp_shape(other) == Ordering::Equal
     }
 
-    pub fn args(&self) -> Vec<&T> {
-        let mut args = Vec::with_capacity(self.arity());
-        self.collect_args(&mut args);
-        args
-    }
-
-    fn collect_args<'a>(&'a self, args: &mut Vec<&'a T>) {
-        match self {
-            Self::Arg(arg) => args.push(arg),
-            Self::Atom(_) => {}
-            Self::Brack(_, body, _) => body.collect_args(args),
-            Self::Infix(left, _, right) => {
-                left.collect_args(args);
-                right.collect_args(args);
-            }
-            Self::Seq(items) => {
-                for item in items {
-                    item.collect_args(args);
-                }
-            }
-        }
-    }
-
+    // Atoms and args
     pub fn atoms(&self) -> Vec<&AtomPhrase> {
         let mut atoms = Vec::new();
         self.collect_atoms(&mut atoms);
@@ -277,6 +260,29 @@ impl<T> Mixfix<T> {
         matrix
     }
 
+    pub fn args(&self) -> Vec<&T> {
+        let mut args = Vec::with_capacity(self.arity());
+        self.collect_args(&mut args);
+        args
+    }
+
+    fn collect_args<'a>(&'a self, args: &mut Vec<&'a T>) {
+        match self {
+            Self::Arg(arg) => args.push(arg),
+            Self::Atom(_) => {}
+            Self::Brack(_, body, _) => body.collect_args(args),
+            Self::Infix(left, _, right) => {
+                left.collect_args(args);
+                right.collect_args(args);
+            }
+            Self::Seq(items) => {
+                for item in items {
+                    item.collect_args(args);
+                }
+            }
+        }
+    }
+
     fn display_string(&self) -> String {
         fn inner<T>(mixfix: &Mixfix<T>) -> String {
             match mixfix {
@@ -309,6 +315,7 @@ impl<T> Mixfix<T> {
         (self.to_mixop(), self.args())
     }
 
+    // Rendering
     pub fn render(
         &self,
         mut string_of_atom: impl FnMut(&AtomPhrase) -> String,
@@ -416,6 +423,8 @@ impl<T: Clone> Mixfix<T> {
         go(self, &space, &mut atom, &mut concat).unwrap_or(empty)
     }
 }
+
+// Filling and splitting
 
 impl Mixop {
     pub fn fill<T>(
