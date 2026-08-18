@@ -8,6 +8,7 @@ pub mod extract;
 pub mod ints;
 pub mod lists;
 pub mod nats;
+pub mod sets;
 pub mod texts;
 
 // Error
