@@ -9,6 +9,7 @@ pub mod ints;
 pub mod lists;
 pub mod maps;
 pub mod nats;
+pub mod numerics;
 pub mod sets;
 pub mod texts;
 
