@@ -206,3 +206,99 @@ fn defined_relation_payload_survives_loading() {
         matches!(context.find_relation(&id("R", "lookup")), Ok(Relation::Defined(_, matches, _, Some(_))) if matches.len() == 1)
     );
 }
+
+#[test]
+fn optional_bindings_require_all_variables_to_agree() {
+    let mut context = Context::from_spec(false, &[]).unwrap();
+    context.enter_relation(id("R", "relation"), Vec::new());
+    let vars = vec![
+        (id("x", "x"), make_type::bool_type(), Vec::new()),
+        (id("y", "y"), make_type::bool_type(), Vec::new()),
+    ];
+    let x = make::bool(true, span("x-value"));
+    let y = make::bool(false, span("y-value"));
+    context
+        .bind_value(
+            Variable::new(id("x", "x-bound"), vec![il::Iter::Opt]),
+            make::opt(
+                &make_type::opt_type(make_type::bool_type()),
+                Some(x.clone()),
+                span("x-opt"),
+            ),
+        )
+        .unwrap();
+    context
+        .bind_value(
+            Variable::new(id("y", "y-bound"), vec![il::Iter::Opt]),
+            make::opt(
+                &make_type::opt_type(make_type::bool_type()),
+                Some(y.clone()),
+                span("y-opt"),
+            ),
+        )
+        .unwrap();
+    let bindings = context.optional_bindings(&vars).unwrap().unwrap();
+    assert_eq!(bindings.len(), 2);
+    assert_eq!(bindings[0].0, Variable::new(id("x", "other"), Vec::new()));
+    assert_eq!(bindings[0].1, x);
+    assert_eq!(bindings[1].1, y);
+
+    context
+        .bind_value(
+            Variable::new(id("y", "y-bound"), vec![il::Iter::Opt]),
+            make::opt(
+                &make_type::opt_type(make_type::bool_type()),
+                None,
+                span("y-none"),
+            ),
+        )
+        .unwrap();
+    let error = context.optional_bindings(&vars).unwrap_err();
+    assert!(error.message.contains("mismatch in optionality"));
+}
+
+#[test]
+fn list_binding_batches_transpose_rows_and_reject_ragged_values() {
+    let mut context = Context::from_spec(false, &[]).unwrap();
+    context.enter_relation(id("R", "relation"), Vec::new());
+    let vars = vec![
+        (id("x", "x"), make_type::bool_type(), Vec::new()),
+        (id("y", "y"), make_type::bool_type(), Vec::new()),
+    ];
+    let x0 = make::bool(false, span("x0"));
+    let x1 = make::bool(true, span("x1"));
+    let y0 = make::bool(true, span("y0"));
+    let y1 = make::bool(false, span("y1"));
+    let list_type = make_type::list_type(make_type::bool_type());
+    context
+        .bind_value(
+            Variable::new(id("x", "x-bound"), vec![il::Iter::List]),
+            make::list(&list_type, vec![x0.clone(), x1.clone()], span("xs")),
+        )
+        .unwrap();
+    context
+        .bind_value(
+            Variable::new(id("y", "y-bound"), vec![il::Iter::List]),
+            make::list(&list_type, vec![y0.clone(), y1.clone()], span("ys")),
+        )
+        .unwrap();
+    let batches = context.list_binding_batches(&vars).unwrap();
+    assert_eq!(batches.len(), 2);
+    assert_eq!(batches[0][0].1, x0);
+    assert_eq!(batches[0][1].1, y0);
+    assert_eq!(batches[1][0].1, x1);
+    assert_eq!(batches[1][1].1, y1);
+
+    context
+        .bind_value(
+            Variable::new(id("y", "y-bound"), vec![il::Iter::List]),
+            make::list(
+                &list_type,
+                vec![make::bool(true, span("only"))],
+                span("ragged"),
+            ),
+        )
+        .unwrap();
+    let error = context.list_binding_batches(&vars).unwrap_err();
+    assert!(error.message.contains("cannot transpose"));
+}

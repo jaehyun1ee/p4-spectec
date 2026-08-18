@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use crate::{
     interp::common::InterpError,
     lang::{
-        il::ast::Id,
+        il::ast::{Id, Iter, Var},
         sl::ast::{Def, DefKind},
     },
     runtime::{
@@ -14,7 +14,7 @@ use crate::{
             rel::Relation,
         },
         r#type::typdef::TypeDef,
-        value::ValueRef,
+        value::{ValueRef, get},
     },
 };
 
@@ -353,6 +353,82 @@ impl Context {
             functions: HashMap::new(),
             values: HashMap::new(),
         });
+    }
+
+    // Constructing sub-context bindings
+
+    pub fn optional_bindings(
+        &self,
+        vars: &[Var],
+    ) -> Result<Option<Vec<(Variable, ValueRef)>>, InterpError> {
+        // First collect the values that are to be iterated over.
+        let values = vars
+            .iter()
+            .map(|(id, _typ, iters)| {
+                let mut outer_iters = iters.clone();
+                outer_iters.push(Iter::Opt);
+                let value = self.find_value(&Variable::new(id.clone(), outer_iters))?;
+                get::opt(value)
+                    .map(|value| value.cloned())
+                    .map_err(|error| InterpError::new(value.span.clone(), error.to_string()))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        // Iteration is valid when all variables agree on their optionality.
+        if values.iter().all(Option::is_some) {
+            Ok(Some(
+                vars.iter()
+                    .zip(values)
+                    .map(|((id, _typ, iters), value)| {
+                        (
+                            Variable::new(id.clone(), iters.clone()),
+                            value.expect("all optional values were checked"),
+                        )
+                    })
+                    .collect(),
+            ))
+        } else if values.iter().all(Option::is_none) {
+            Ok(None)
+        } else {
+            Err(InterpError::new(
+                crate::domain::source::Region::none(),
+                "mismatch in optionality of iterated variables",
+            ))
+        }
+    }
+
+    pub fn list_binding_batches(
+        &self,
+        vars: &[Var],
+    ) -> Result<Vec<Vec<(Variable, ValueRef)>>, InterpError> {
+        // First break the values that are to be iterated over into batches.
+        let rows = vars
+            .iter()
+            .map(|(id, _typ, iters)| {
+                let mut outer_iters = iters.clone();
+                outer_iters.push(Iter::List);
+                let value = self.find_value(&Variable::new(id.clone(), outer_iters))?;
+                get::list(value)
+                    .map(<[ValueRef]>::to_vec)
+                    .map_err(|error| InterpError::new(value.span.clone(), error.to_string()))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let Some(first) = rows.first() else {
+            return Ok(Vec::new());
+        };
+        let width = first.len();
+        if rows.iter().any(|row| row.len() != width) {
+            return Err(InterpError::new(
+                crate::domain::source::Region::none(),
+                "cannot transpose a matrix of value batches",
+            ));
+        }
+        let mut batches = vec![Vec::with_capacity(vars.len()); width];
+        for ((id, _typ, iters), row) in vars.iter().zip(rows) {
+            for (batch, value) in batches.iter_mut().zip(row) {
+                batch.push((Variable::new(id.clone(), iters.clone()), value));
+            }
+        }
+        Ok(batches)
     }
 
     // Scope and backtracking
