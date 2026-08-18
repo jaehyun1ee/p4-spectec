@@ -11,7 +11,7 @@ use p4spec_rust::{
     lang::{
         el,
         hints::input::T as InputHint,
-        il,
+        il, sl,
         xl::{r#bool as xl_bool, num},
     },
 };
@@ -1027,6 +1027,215 @@ fn il_rules_clauses_rows_and_definitions_preserve_phrase_structure() {
     );
 
     let spec: il::ast::Spec = definitions.into_iter().map(phrase).collect();
+    assert_eq!(spec.len(), 9);
+    assert_eq!(spec[0].at, Region::for_file("spec/test.watsup"));
+}
+
+fn sl_param(kind: sl::ast::ParamKind) -> sl::ast::Param {
+    phrase(kind)
+}
+
+fn sl_instr(kind: sl::ast::InstrKind) -> sl::ast::Instr {
+    Info::with_note(
+        kind,
+        Region::for_file("spec/test.watsup"),
+        sl::ast::INote { iid: 29 },
+    )
+}
+
+fn sl_def_tag(definition: &sl::ast::DefKind) -> &'static str {
+    match definition {
+        sl::ast::DefKind::ExternTypD(_, _) => "ExternTypD",
+        sl::ast::DefKind::TypD(_, _, _, _) => "TypD",
+        sl::ast::DefKind::VarD(_, _, _) => "VarD",
+        sl::ast::DefKind::ExternRelD(_) => "ExternRelD",
+        sl::ast::DefKind::RelD(_) => "RelD",
+        sl::ast::DefKind::ExternDecD(_) => "ExternDecD",
+        sl::ast::DefKind::BuiltinDecD(_) => "BuiltinDecD",
+        sl::ast::DefKind::TableDecD(_) => "TableDecD",
+        sl::ast::DefKind::FuncDecD(_) => "FuncDecD",
+    }
+}
+
+#[test]
+fn sl_ast_represent_every_sl_only_variant_and_tuple_alias() {
+    let exp = || il_exp(il::ast::ExpKind::BoolE(true));
+    let typ = || il_typ(il::ast::TypKind::BoolT);
+    let notexp = || il_not_exp(exp());
+    let nottyp = || phrase(Mixfix::Arg(typ()));
+    let param = || sl_param(sl::ast::ParamKind::ExpP(typ(), exp()));
+    let signature = || (nottyp(), vec![0, 2]);
+    let iterinstr = || (il::ast::Iter::List, vec![], vec![]);
+
+    let params = [
+        sl::ast::ParamKind::ExpP(typ(), exp()),
+        sl::ast::ParamKind::DefP(il_id("def"), vec![phrase("T".into())], vec![param()], typ()),
+    ];
+    assert_eq!(
+        params.map(|param| match param {
+            sl::ast::ParamKind::ExpP(_, _) => "ExpP",
+            sl::ast::ParamKind::DefP(_, _, _, _) => "DefP",
+        }),
+        ["ExpP", "DefP"]
+    );
+
+    let hold_cases = [
+        sl::ast::HoldCase::BothH(vec![], vec![]),
+        sl::ast::HoldCase::HoldH(vec![], false),
+        sl::ast::HoldCase::NotHoldH(vec![], true),
+    ];
+    assert_eq!(
+        hold_cases.map(|hold_case| match hold_case {
+            sl::ast::HoldCase::BothH(_, _) => "BothH",
+            sl::ast::HoldCase::HoldH(_, _) => "HoldH",
+            sl::ast::HoldCase::NotHoldH(_, _) => "NotHoldH",
+        }),
+        ["BothH", "HoldH", "NotHoldH"]
+    );
+
+    let guards = [
+        sl::ast::Guard::BoolG(true),
+        sl::ast::Guard::CmpG(il::ast::CmpOp::EqOp, il::ast::OpTyp::BoolT, exp()),
+        sl::ast::Guard::SubG(typ()),
+        sl::ast::Guard::MatchG(il::ast::Pattern::CaseP(mixop())),
+        sl::ast::Guard::MemG(exp()),
+    ];
+    assert_eq!(
+        guards.map(|guard| match guard {
+            sl::ast::Guard::BoolG(_) => "BoolG",
+            sl::ast::Guard::CmpG(_, _, _) => "CmpG",
+            sl::ast::Guard::SubG(_) => "SubG",
+            sl::ast::Guard::MatchG(_) => "MatchG",
+            sl::ast::Guard::MemG(_) => "MemG",
+        }),
+        ["BoolG", "CmpG", "SubG", "MatchG", "MemG"]
+    );
+
+    let case: sl::ast::Case = (sl::ast::Guard::BoolG(true), vec![]);
+    let hold_case = || sl::ast::HoldCase::BothH(vec![], vec![]);
+    let instructions = vec![
+        sl::ast::InstrKind::IfI(exp(), vec![], vec![], false),
+        sl::ast::InstrKind::HoldI(il_id("hold"), notexp(), vec![], hold_case()),
+        sl::ast::InstrKind::CaseI(exp(), vec![case.clone()], false),
+        sl::ast::InstrKind::GroupI(il_id("group"), signature(), vec![exp()], vec![]),
+        sl::ast::InstrKind::LetI(exp(), exp(), vec![iterinstr()], vec![]),
+        sl::ast::InstrKind::RuleI(il_id("rule"), notexp(), vec![1], vec![iterinstr()], vec![]),
+        sl::ast::InstrKind::ResultI(signature(), vec![exp()]),
+        sl::ast::InstrKind::ReturnI(exp()),
+        sl::ast::InstrKind::DebugI(
+            exp(),
+            Box::new(sl_instr(sl::ast::InstrKind::ReturnI(exp()))),
+        ),
+    ];
+    assert_eq!(
+        instructions
+            .iter()
+            .map(|instruction| match instruction {
+                sl::ast::InstrKind::IfI(_, _, _, _) => "IfI",
+                sl::ast::InstrKind::HoldI(_, _, _, _) => "HoldI",
+                sl::ast::InstrKind::CaseI(_, _, _) => "CaseI",
+                sl::ast::InstrKind::GroupI(_, _, _, _) => "GroupI",
+                sl::ast::InstrKind::LetI(_, _, _, _) => "LetI",
+                sl::ast::InstrKind::RuleI(_, _, _, _, _) => "RuleI",
+                sl::ast::InstrKind::ResultI(_, _) => "ResultI",
+                sl::ast::InstrKind::ReturnI(_) => "ReturnI",
+                sl::ast::InstrKind::DebugI(_, nested) => {
+                    assert_eq!(nested.note.iid, 29);
+                    assert!(matches!(nested.it, sl::ast::InstrKind::ReturnI(_)));
+                    "DebugI"
+                }
+            })
+            .collect::<Vec<_>>(),
+        [
+            "IfI", "HoldI", "CaseI", "GroupI", "LetI", "RuleI", "ResultI", "ReturnI", "DebugI",
+        ]
+    );
+
+    let relation_signature: sl::ast::RelSignature = signature();
+    let extern_relation: sl::ast::ExternRel = (
+        il_id("extern-rel"),
+        relation_signature.clone(),
+        vec![exp()],
+        vec![il_hint()],
+    );
+    let relation: sl::ast::Rel = (
+        il_id("rel"),
+        relation_signature,
+        vec![exp()],
+        vec![sl_instr(sl::ast::InstrKind::ReturnI(exp()))],
+        Some(vec![]),
+        vec![il_hint()],
+    );
+    let table_row: sl::ast::TableRow = (vec![exp()], exp(), vec![]);
+    let extern_function: sl::ast::ExternFunc = (
+        il_id("extern-func"),
+        vec![],
+        vec![param()],
+        typ(),
+        vec![il_hint()],
+    );
+    let builtin_function: sl::ast::BuiltinFunc = (
+        il_id("builtin-func"),
+        vec![],
+        vec![param()],
+        typ(),
+        vec![il_hint()],
+    );
+    let table_function: sl::ast::TableFunc = (
+        il_id("table-func"),
+        vec![param()],
+        typ(),
+        vec![table_row],
+        vec![il_hint()],
+    );
+    let defined_function: sl::ast::DefinedFunc = (
+        il_id("defined-func"),
+        vec![],
+        vec![param()],
+        typ(),
+        vec![],
+        Some(vec![]),
+        vec![il_hint()],
+    );
+    assert_eq!(extern_relation.2.len(), 1);
+    assert_eq!(relation.3.len(), 1);
+    assert_eq!(extern_function.2.len(), 1);
+    assert_eq!(builtin_function.2.len(), 1);
+    assert_eq!(table_function.3.len(), 1);
+    assert!(defined_function.5.is_some());
+
+    let definitions = vec![
+        sl::ast::DefKind::ExternTypD(il_id("extern-typ"), vec![il_hint()]),
+        sl::ast::DefKind::TypD(
+            il_id("typ"),
+            vec![phrase("T".into())],
+            phrase(il::ast::DefTypKind::PlainT(typ())),
+            vec![il_hint()],
+        ),
+        sl::ast::DefKind::VarD(il_id("var"), typ(), vec![il_hint()]),
+        sl::ast::DefKind::ExternRelD(extern_relation),
+        sl::ast::DefKind::RelD(relation),
+        sl::ast::DefKind::ExternDecD(extern_function),
+        sl::ast::DefKind::BuiltinDecD(builtin_function),
+        sl::ast::DefKind::TableDecD(table_function),
+        sl::ast::DefKind::FuncDecD(defined_function),
+    ];
+    assert_eq!(
+        definitions.iter().map(sl_def_tag).collect::<Vec<_>>(),
+        [
+            "ExternTypD",
+            "TypD",
+            "VarD",
+            "ExternRelD",
+            "RelD",
+            "ExternDecD",
+            "BuiltinDecD",
+            "TableDecD",
+            "FuncDecD",
+        ]
+    );
+
+    let spec: sl::ast::Spec = definitions.into_iter().map(phrase).collect();
     assert_eq!(spec.len(), 9);
     assert_eq!(spec[0].at, Region::for_file("spec/test.watsup"));
 }
