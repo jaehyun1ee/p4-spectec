@@ -1,0 +1,427 @@
+use std::collections::HashMap;
+
+use crate::{
+    interp::common::InterpError,
+    lang::{
+        il::ast::Id,
+        sl::ast::{Def, DefKind},
+    },
+    runtime::{
+        dynamic::{envs::ValueEnv, var::Variable},
+        dynamic_sl::{
+            envs::{FunctionEnv, RelationEnv, TypeDefEnv},
+            func::Function,
+            rel::Relation,
+        },
+        r#type::typdef::TypeDef,
+        value::ValueRef,
+    },
+};
+
+// Cursor
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Cursor {
+    Global,
+    Local,
+}
+
+// Context
+
+// Global layer
+
+#[derive(Debug, Default)]
+struct Global {
+    // Map from syntax ids to type definitions
+    type_defs: TypeDefEnv,
+    // Map from relation ids to relations
+    relations: RelationEnv,
+    // Map from function ids to functions
+    functions: FunctionEnv,
+}
+
+// Local layer
+
+#[derive(Debug)]
+enum Local {
+    Empty,
+    Relation {
+        // Relation name
+        id: Id,
+        // Input values
+        input_values: Vec<ValueRef>,
+        // Map from variables to values
+        values: ValueEnv,
+    },
+    Function {
+        // Function name
+        id: Id,
+        // Input values
+        input_values: Vec<ValueRef>,
+        // Map from syntax ids to type definitions
+        type_defs: TypeDefEnv,
+        // Map from function ids to functions
+        functions: FunctionEnv,
+        // Map from variables to values
+        values: ValueEnv,
+    },
+}
+
+#[derive(Debug)]
+enum Undo {
+    Value(Variable, Option<ValueRef>),
+    TypeDef(String, Option<TypeDef>),
+    Function(String, Option<Function>),
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ScopeMark {
+    generation: u64,
+    undo_len: usize,
+}
+
+#[derive(Debug)]
+pub struct Context {
+    deterministic: bool,
+    global: Global,
+    local: Local,
+    generation: u64,
+    undo: Vec<Undo>,
+}
+
+impl Context {
+    // Global initializer
+
+    pub fn from_spec(deterministic: bool, spec: &[Def]) -> Result<Self, InterpError> {
+        let mut context = Self {
+            deterministic,
+            global: Global::default(),
+            local: Local::Empty,
+            generation: 0,
+            undo: Vec::new(),
+        };
+        for definition in spec {
+            context.load_definition(&definition.node)?;
+        }
+        Ok(context)
+    }
+
+    fn duplicate(id: &Id, kind: &str) -> InterpError {
+        InterpError::new(
+            id.span.clone(),
+            format!("{kind} `{}` was already defined", id.node),
+        )
+    }
+
+    fn undefined(id: &Id, kind: &str) -> InterpError {
+        InterpError::new(
+            id.span.clone(),
+            format!("{kind} `{}` is undefined", id.node),
+        )
+    }
+
+    fn add_type_def_global(&mut self, id: &Id, type_def: TypeDef) -> Result<(), InterpError> {
+        if self.global.type_defs.contains_key(&id.node) {
+            return Err(Self::duplicate(id, "type"));
+        }
+        self.global.type_defs.insert(id.node.clone(), type_def);
+        Ok(())
+    }
+
+    fn add_relation_global(&mut self, id: &Id, relation: Relation) -> Result<(), InterpError> {
+        if self.global.relations.contains_key(&id.node) {
+            return Err(Self::duplicate(id, "relation"));
+        }
+        self.global.relations.insert(id.node.clone(), relation);
+        Ok(())
+    }
+
+    fn add_function_global(&mut self, id: &Id, function: Function) -> Result<(), InterpError> {
+        if self.global.functions.contains_key(&id.node) {
+            return Err(Self::duplicate(id, "function"));
+        }
+        self.global.functions.insert(id.node.clone(), function);
+        Ok(())
+    }
+
+    fn load_definition(&mut self, definition: &DefKind) -> Result<(), InterpError> {
+        match definition {
+            DefKind::ExternTypD(id, _) => self.add_type_def_global(id, TypeDef::Extern),
+            DefKind::TypD(id, type_params, def_type, _) => self.add_type_def_global(
+                id,
+                TypeDef::Defined(type_params.clone(), Box::new(def_type.clone())),
+            ),
+            DefKind::VarD(..) => Ok(()),
+            DefKind::ExternRelD((id, signature, _, _)) => {
+                self.add_relation_global(id, Relation::Extern(signature.clone()))
+            }
+            DefKind::RelD((id, signature, matches, block, else_block, _)) => self
+                .add_relation_global(
+                    id,
+                    Relation::Defined(
+                        signature.clone(),
+                        matches.clone(),
+                        block.clone(),
+                        else_block.clone(),
+                    ),
+                ),
+            DefKind::ExternDecD((id, type_params, params, typ, _)) => self.add_function_global(
+                id,
+                Function::Extern(type_params.clone(), params.clone(), typ.clone()),
+            ),
+            DefKind::BuiltinDecD((id, type_params, params, typ, _)) => self.add_function_global(
+                id,
+                Function::Builtin(type_params.clone(), params.clone(), typ.clone()),
+            ),
+            DefKind::TableDecD((id, params, typ, rows, _)) => self.add_function_global(
+                id,
+                Function::Table(params.clone(), typ.clone(), rows.clone()),
+            ),
+            DefKind::FuncDecD((id, type_params, params, typ, block, else_block, _)) => self
+                .add_function_global(
+                    id,
+                    Function::Defined(
+                        type_params.clone(),
+                        params.clone(),
+                        typ.clone(),
+                        block.clone(),
+                        else_block.clone(),
+                    ),
+                ),
+        }
+    }
+
+    pub fn deterministic(&self) -> bool {
+        self.deterministic
+    }
+
+    pub fn current_id(&self) -> Option<&Id> {
+        match &self.local {
+            Local::Empty => None,
+            Local::Relation { id, .. } | Local::Function { id, .. } => Some(id),
+        }
+    }
+
+    // Finders for input values
+
+    pub fn input_values(&self) -> Result<&[ValueRef], InterpError> {
+        match &self.local {
+            Local::Empty => Err(InterpError::new(
+                crate::domain::source::Region::none(),
+                "cannot find input values in empty local context",
+            )),
+            Local::Relation { input_values, .. } | Local::Function { input_values, .. } => {
+                Ok(input_values)
+            }
+        }
+    }
+
+    // Finders for values
+
+    pub fn find_value(&self, variable: &Variable) -> Result<&ValueRef, InterpError> {
+        let value = match &self.local {
+            Local::Empty => None,
+            Local::Relation { values, .. } | Local::Function { values, .. } => values.get(variable),
+        };
+        value.ok_or_else(|| Self::undefined(&variable.id, "value"))
+    }
+
+    pub fn is_value_bound(&self, variable: &Variable) -> bool {
+        self.find_value(variable).is_ok()
+    }
+
+    // Finders for type definitions
+
+    pub fn find_type_def(&self, id: &Id) -> Result<&TypeDef, InterpError> {
+        let local = match &self.local {
+            Local::Function { type_defs, .. } => type_defs.get(&id.node),
+            Local::Empty | Local::Relation { .. } => None,
+        };
+        local
+            .or_else(|| self.global.type_defs.get(&id.node))
+            .ok_or_else(|| Self::undefined(id, "type"))
+    }
+
+    pub fn is_type_def_bound(&self, id: &Id) -> bool {
+        self.find_type_def(id).is_ok()
+    }
+
+    // Finders for relations
+
+    pub fn find_relation(&self, id: &Id) -> Result<&Relation, InterpError> {
+        self.global
+            .relations
+            .get(&id.node)
+            .ok_or_else(|| Self::undefined(id, "relation"))
+    }
+
+    // Finders for functions
+
+    pub fn find_function(&self, id: &Id) -> Result<(Cursor, &Function), InterpError> {
+        if let Local::Function { functions, .. } = &self.local
+            && let Some(function) = functions.get(&id.node)
+        {
+            return Ok((Cursor::Local, function));
+        }
+        self.global
+            .functions
+            .get(&id.node)
+            .map(|function| (Cursor::Global, function))
+            .ok_or_else(|| Self::undefined(id, "function"))
+    }
+
+    pub fn is_function_bound(&self, id: &Id) -> bool {
+        self.find_function(id).is_ok()
+    }
+
+    // Adders
+
+    pub fn bind_value(&mut self, variable: Variable, value: ValueRef) -> Result<(), InterpError> {
+        let values = match &mut self.local {
+            Local::Empty => {
+                return Err(InterpError::new(
+                    variable.id.span.clone(),
+                    "cannot add value to empty local context",
+                ));
+            }
+            Local::Relation { values, .. } | Local::Function { values, .. } => values,
+        };
+        let previous = values.insert(variable.clone(), value);
+        self.undo.push(Undo::Value(variable, previous));
+        Ok(())
+    }
+
+    pub fn bind_type(&mut self, id: Id, type_def: TypeDef) -> Result<(), InterpError> {
+        if self.is_type_def_bound(&id) {
+            return Err(Self::duplicate(&id, "type"));
+        }
+        let Local::Function { type_defs, .. } = &mut self.local else {
+            let message = match self.local {
+                Local::Empty => "cannot add type to empty local context",
+                Local::Relation { .. } => "cannot add type to relation context",
+                Local::Function { .. } => unreachable!(),
+            };
+            return Err(InterpError::new(id.span, message));
+        };
+        let previous = type_defs.insert(id.node.clone(), type_def);
+        self.undo.push(Undo::TypeDef(id.node, previous));
+        Ok(())
+    }
+
+    pub fn bind_function(&mut self, id: Id, function: Function) -> Result<(), InterpError> {
+        if self.is_function_bound(&id) {
+            return Err(Self::duplicate(&id, "function"));
+        }
+        let Local::Function { functions, .. } = &mut self.local else {
+            let message = match self.local {
+                Local::Empty => "cannot add function to empty local context",
+                Local::Relation { .. } => "cannot add function to relation context",
+                Local::Function { .. } => unreachable!(),
+            };
+            return Err(InterpError::new(id.span, message));
+        };
+        let previous = functions.insert(id.node.clone(), function);
+        self.undo.push(Undo::Function(id.node, previous));
+        Ok(())
+    }
+
+    // Constructing a local context
+
+    fn replace_local(&mut self, local: Local) {
+        self.local = local;
+        self.generation = self.generation.wrapping_add(1);
+        self.undo.clear();
+    }
+
+    pub fn clear_local(&mut self) {
+        self.replace_local(Local::Empty);
+    }
+
+    pub fn enter_relation(&mut self, id: Id, input_values: Vec<ValueRef>) {
+        self.replace_local(Local::Relation {
+            id,
+            input_values,
+            values: HashMap::new(),
+        });
+    }
+
+    pub fn enter_function(&mut self, id: Id, input_values: Vec<ValueRef>, type_defs: TypeDefEnv) {
+        self.replace_local(Local::Function {
+            id,
+            input_values,
+            type_defs,
+            functions: HashMap::new(),
+            values: HashMap::new(),
+        });
+    }
+
+    // Scope and backtracking
+
+    pub fn mark(&self) -> ScopeMark {
+        ScopeMark {
+            generation: self.generation,
+            undo_len: self.undo.len(),
+        }
+    }
+
+    pub fn reset(&mut self, mark: ScopeMark) -> Result<(), InterpError> {
+        if mark.generation != self.generation {
+            return Err(InterpError::new(
+                crate::domain::source::Region::none(),
+                "scope mark belongs to a different local frame",
+            ));
+        }
+        if mark.undo_len > self.undo.len() {
+            return Err(InterpError::new(
+                crate::domain::source::Region::none(),
+                "scope mark is no longer valid",
+            ));
+        }
+        while self.undo.len() > mark.undo_len {
+            let undo = self.undo.pop().expect("undo length was checked");
+            match undo {
+                Undo::Value(variable, previous) => {
+                    let values = match &mut self.local {
+                        Local::Relation { values, .. } | Local::Function { values, .. } => values,
+                        Local::Empty => unreachable!("a valid mark has a local frame"),
+                    };
+                    match previous {
+                        Some(value) => {
+                            values.insert(variable, value);
+                        }
+                        None => {
+                            values.remove(&variable);
+                        }
+                    }
+                }
+                Undo::TypeDef(id, previous) => {
+                    let Local::Function { type_defs, .. } = &mut self.local else {
+                        unreachable!("type definitions only exist in function frames")
+                    };
+                    match previous {
+                        Some(type_def) => {
+                            type_defs.insert(id, type_def);
+                        }
+                        None => {
+                            type_defs.remove(&id);
+                        }
+                    }
+                }
+                Undo::Function(id, previous) => {
+                    let Local::Function { functions, .. } = &mut self.local else {
+                        unreachable!("local functions only exist in function frames")
+                    };
+                    match previous {
+                        Some(function) => {
+                            functions.insert(id, function);
+                        }
+                        None => {
+                            functions.remove(&id);
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+}
