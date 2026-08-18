@@ -208,15 +208,4 @@ fn invalid_scalar_operations_return_typed_errors() {
     let error = expression::eval(&context, &division).unwrap_err();
     assert_eq!(error.span, span("division"));
     assert!(error.message.contains("division by zero"));
-
-    let unsupported = il::Exp::new(
-        il::ExpKind::UpCastE(
-            Spanned::new(il::TypKind::BoolT, span("cast-type")),
-            Box::new(bool_exp(true, "cast-value")),
-        ),
-        il::TypKind::BoolT,
-        span("cast"),
-    );
-    let error = expression::eval(&context, &unsupported).unwrap_err();
-    assert!(error.message.contains("not implemented"));
 }

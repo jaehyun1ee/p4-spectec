@@ -7,12 +7,19 @@ use crate::{
     domain::source::Region,
     interp::common::InterpError,
     lang::{
-        il::ast::{BinOp, CmpOp, Exp, ExpKind, ListPattern, OptPattern, Pattern, Typ, UnOp},
+        il::ast::{
+            BinOp, CmpOp, DefTypKind, Exp, ExpKind, Iter, ListPattern, OptPattern, Pattern, Typ,
+            TypKind, UnOp,
+        },
         xl::num,
     },
     runtime::{
         dynamic::var::Variable,
-        value::{Value, ValueRef, get, make},
+        r#type::{
+            subst::{self, TypeSubstitution},
+            typdef::TypeDef,
+        },
+        value::{Value, ValueKind, ValueRef, get, make},
     },
 };
 
@@ -48,6 +55,21 @@ pub fn eval(context: &Context, exp: &Exp) -> Result<ValueRef, InterpError> {
         }
         ExpKind::CmpE(operator, _operator_type, left, right) => {
             eval_comparison(context, exp, *operator, left, right)
+        }
+        ExpKind::UpCastE(typ, value) => {
+            let value = eval(context, value)?;
+            cast_up(context, typ, value)
+        }
+        ExpKind::DownCastE(typ, value) => {
+            let value = eval(context, value)?;
+            cast_down(context, typ, value)
+        }
+        ExpKind::SubE(value, typ) => {
+            let value = eval(context, value)?;
+            Ok(make::bool(
+                value_is_subtype(context, typ, &value)?,
+                Region::none(),
+            ))
         }
         ExpKind::MatchE(value, pattern) => eval_match(context, exp, value, pattern),
         ExpKind::TupleE(exps) => eval_tuple(context, exp, exps),
@@ -220,6 +242,249 @@ fn eval_comparison(
         }
     };
     Ok(make::bool(result, Region::none()))
+}
+
+// Upcast expression evaluation
+
+fn cast_error(typ: &Typ, direction: &str) -> InterpError {
+    InterpError::new(
+        typ.span.clone(),
+        format!("cannot {direction} value to the requested type"),
+    )
+}
+
+fn alias_target(context: &Context, typ: &Typ) -> Result<Option<Typ>, InterpError> {
+    let TypKind::VarT(type_id, type_args) = &typ.node else {
+        return Ok(None);
+    };
+    let type_def = context.find_type_def(type_id)?;
+    let TypeDef::Defined(type_params, def_type) = type_def else {
+        return Ok(None);
+    };
+    let DefTypKind::PlainT(inner) = &def_type.node else {
+        return Ok(None);
+    };
+    if type_params.len() != type_args.len() {
+        return Err(InterpError::new(
+            typ.span.clone(),
+            "type argument arity mismatch",
+        ));
+    }
+    let substitution: TypeSubstitution = type_params
+        .iter()
+        .zip(type_args)
+        .map(|(param, arg)| (param.node.clone(), arg.clone()))
+        .collect();
+    subst::subst_type(&substitution, inner)
+        .map(Some)
+        .map_err(|error| InterpError::new(typ.span.clone(), error.to_string()))
+}
+
+fn cast_up(context: &Context, typ: &Typ, value: ValueRef) -> Result<ValueRef, InterpError> {
+    match &typ.node {
+        TypKind::NumT(num::Typ::IntT) => match &value.kind {
+            ValueKind::NumV(num::T::Nat(value)) => Ok(make::int(value.clone(), Region::none())),
+            ValueKind::NumV(num::T::Int(_)) => Ok(value),
+            _ => Err(cast_error(typ, "upcast")),
+        },
+        TypKind::VarT(..) => match alias_target(context, typ)? {
+            Some(inner) => cast_up(context, &inner, value),
+            None => Ok(value),
+        },
+        TypKind::TupleT(types) => {
+            let values = get::tuple(&value).map_err(|_| cast_error(typ, "upcast"))?;
+            if types.len() != values.len() {
+                return Err(cast_error(typ, "upcast"));
+            }
+            let values = types
+                .iter()
+                .zip(values)
+                .map(|(typ, value)| cast_up(context, typ, Rc::clone(value)))
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(make::tuple(typ, values, Region::none()))
+        }
+        TypKind::IterT(inner, Iter::Opt) => {
+            let value = get::opt(&value).map_err(|_| cast_error(typ, "upcast"))?;
+            let value = value
+                .map(|value| cast_up(context, inner, Rc::clone(value)))
+                .transpose()?;
+            Ok(make::opt(inner, value, Region::none()))
+        }
+        TypKind::IterT(inner, Iter::List) => {
+            let values = get::list(&value).map_err(|_| cast_error(typ, "upcast"))?;
+            let values = values
+                .iter()
+                .map(|value| cast_up(context, inner, Rc::clone(value)))
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(make::list(inner, values, Region::none()))
+        }
+        _ => Ok(value),
+    }
+}
+
+// Downcast expression evaluation
+
+fn cast_down(context: &Context, typ: &Typ, value: ValueRef) -> Result<ValueRef, InterpError> {
+    match &typ.node {
+        TypKind::NumT(num::Typ::NatT) => match &value.kind {
+            ValueKind::NumV(num::T::Nat(_)) => Ok(value),
+            ValueKind::NumV(num::T::Int(value)) if value >= &BigInt::zero() => {
+                Ok(make::nat(value.clone(), Region::none()))
+            }
+            _ => Err(cast_error(typ, "downcast")),
+        },
+        TypKind::VarT(..) => match alias_target(context, typ)? {
+            Some(inner) => cast_down(context, &inner, value),
+            None => Ok(value),
+        },
+        TypKind::TupleT(types) => {
+            let values = get::tuple(&value).map_err(|_| cast_error(typ, "downcast"))?;
+            if types.len() != values.len() {
+                return Err(cast_error(typ, "downcast"));
+            }
+            let values = types
+                .iter()
+                .zip(values)
+                .map(|(typ, value)| cast_down(context, typ, Rc::clone(value)))
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(make::tuple(typ, values, Region::none()))
+        }
+        TypKind::IterT(inner, Iter::Opt) => {
+            let value = get::opt(&value).map_err(|_| cast_error(typ, "downcast"))?;
+            let value = value
+                .map(|value| cast_down(context, inner, Rc::clone(value)))
+                .transpose()?;
+            Ok(make::opt(inner, value, Region::none()))
+        }
+        TypKind::IterT(inner, Iter::List) => {
+            let values = get::list(&value).map_err(|_| cast_error(typ, "downcast"))?;
+            let values = values
+                .iter()
+                .map(|value| cast_down(context, inner, Rc::clone(value)))
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(make::list(inner, values, Region::none()))
+        }
+        _ => Ok(value),
+    }
+}
+
+// Subtype check expression evaluation
+
+fn value_is_subtype(context: &Context, typ: &Typ, value: &Value) -> Result<bool, InterpError> {
+    match &typ.node {
+        TypKind::BoolT => Ok(matches!(value.kind, ValueKind::BoolV(_))),
+        TypKind::NumT(num::Typ::NatT) => Ok(match &value.kind {
+            ValueKind::NumV(num::T::Nat(_)) => true,
+            ValueKind::NumV(num::T::Int(value)) => value >= &BigInt::zero(),
+            _ => false,
+        }),
+        TypKind::NumT(num::Typ::IntT) => Ok(matches!(value.kind, ValueKind::NumV(_))),
+        TypKind::TextT => Ok(matches!(value.kind, ValueKind::TextV(_))),
+        TypKind::VarT(type_id, type_args) => match context.find_type_def(type_id)? {
+            TypeDef::Param | TypeDef::Defining(_) => Err(InterpError::new(
+                typ.span.clone(),
+                "unexpected type variable",
+            )),
+            TypeDef::Extern => Ok(matches!(value.kind, ValueKind::ExternV(_))),
+            TypeDef::Defined(type_params, def_type) => {
+                if type_params.len() != type_args.len() {
+                    return Err(InterpError::new(
+                        typ.span.clone(),
+                        "type argument arity mismatch",
+                    ));
+                }
+                let substitution: TypeSubstitution = type_params
+                    .iter()
+                    .zip(type_args)
+                    .map(|(param, arg)| (param.node.clone(), arg.clone()))
+                    .collect();
+                match (&def_type.node, &value.kind) {
+                    (DefTypKind::PlainT(inner), _) => {
+                        let inner = subst::subst_type(&substitution, inner).map_err(|error| {
+                            InterpError::new(typ.span.clone(), error.to_string())
+                        })?;
+                        value_is_subtype(context, &inner, value)
+                    }
+                    (DefTypKind::StructT(type_fields), ValueKind::StructV(value_fields)) => {
+                        if type_fields.len() != value_fields.len() {
+                            return Ok(false);
+                        }
+                        for ((type_atom, field_type), (value_atom, field_value)) in
+                            type_fields.iter().zip(value_fields)
+                        {
+                            if type_atom.node != value_atom.node {
+                                return Ok(false);
+                            }
+                            let field_type =
+                                subst::subst_type(&substitution, field_type).map_err(|error| {
+                                    InterpError::new(typ.span.clone(), error.to_string())
+                                })?;
+                            if !value_is_subtype(context, &field_type, field_value)? {
+                                return Ok(false);
+                            }
+                        }
+                        Ok(true)
+                    }
+                    (DefTypKind::VariantT(type_cases), ValueKind::CaseV(value_case)) => {
+                        for (not_type, _, _) in type_cases {
+                            if !not_type.node.same_shape(value_case) {
+                                continue;
+                            }
+                            let not_type = subst::subst_not_type(&substitution, not_type).map_err(
+                                |error| InterpError::new(typ.span.clone(), error.to_string()),
+                            )?;
+                            let types = not_type.node.args();
+                            let values = value_case.args();
+                            if types.len() != values.len() {
+                                continue;
+                            }
+                            let mut matches = true;
+                            for (typ, value) in types.into_iter().zip(values) {
+                                if !value_is_subtype(context, typ, value)? {
+                                    matches = false;
+                                    break;
+                                }
+                            }
+                            if matches {
+                                return Ok(true);
+                            }
+                        }
+                        Ok(false)
+                    }
+                    _ => Ok(false),
+                }
+            }
+        },
+        TypKind::TupleT(types) => match &value.kind {
+            ValueKind::TupleV(values) if types.len() == values.len() => {
+                for (typ, value) in types.iter().zip(values) {
+                    if !value_is_subtype(context, typ, value)? {
+                        return Ok(false);
+                    }
+                }
+                Ok(true)
+            }
+            _ => Ok(false),
+        },
+        TypKind::IterT(inner, Iter::Opt) => match &value.kind {
+            ValueKind::OptV(Some(value)) => value_is_subtype(context, inner, value),
+            ValueKind::OptV(None) => Ok(true),
+            // Preserve the authoritative OCaml behavior.
+            _ => Ok(true),
+        },
+        TypKind::IterT(inner, Iter::List) => match &value.kind {
+            ValueKind::ListV(values) => {
+                for value in values {
+                    if !value_is_subtype(context, inner, value)? {
+                        return Ok(false);
+                    }
+                }
+                Ok(true)
+            }
+            _ => Ok(false),
+        },
+        TypKind::FuncT(..) => Ok(false),
+    }
 }
 
 // Pattern match check expression evaluation
