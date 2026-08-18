@@ -13,6 +13,7 @@ use p4spec_rust::{
         equiv::{self, EquivError},
         expand::{self, ExpandError},
         fresh,
+        sub::{self, SubError},
         subst::{self, SubstError, TypeSubstitution},
         typ::make,
         typdef::TypeDef,
@@ -43,6 +44,34 @@ fn defined_plain(type_params: Vec<il::TParam>, typ: il::Typ, file: &str) -> Type
     TypeDef::Defined(
         type_params,
         Box::new(Spanned::new(il::DefTypKind::PlainT(typ), span(file))),
+    )
+}
+
+fn type_case(name: &str, typ: il::Typ, file: &str) -> il::TypCase {
+    (
+        Spanned::new(
+            Mixfix::Seq(vec![
+                Mixfix::Atom(atom(Atom::Keyword(name.to_owned()), file)),
+                Mixfix::Arg(typ),
+            ]),
+            span(file),
+        ),
+        Spanned::new((id(name, file), Vec::new()), span(file)),
+        Vec::new(),
+    )
+}
+
+fn defined_variant(
+    type_params: Vec<il::TParam>,
+    type_cases: Vec<il::TypCase>,
+    file: &str,
+) -> TypeDef {
+    TypeDef::Defined(
+        type_params,
+        Box::new(Spanned::new(
+            il::DefTypKind::VariantT(type_cases),
+            span(file),
+        )),
     )
 }
 
@@ -460,6 +489,123 @@ fn function_equivalence_reports_type_and_value_parameter_count_mismatches() {
         ),
         Err(EquivError::ParametersMismatch {
             span: span("parameter-error"),
+        })
+    );
+}
+
+#[test]
+fn subtyping_uses_equivalence_then_numeric_widening() {
+    let type_defs = TypeDefMap::new();
+    let cases = [
+        (make::bool_type(), make::bool_type(), true),
+        (make::nat_type(), make::int_type(), true),
+        (make::int_type(), make::nat_type(), false),
+        (make::bool_type(), make::int_type(), false),
+    ];
+
+    for (typ_a, typ_b, expected) in cases {
+        assert_eq!(
+            sub::sub_type(&type_defs, &typ_a, &typ_b).expect("compare subtype"),
+            expected
+        );
+    }
+}
+
+#[test]
+fn tuple_subtyping_is_covariant_and_requires_equal_arity() {
+    let type_defs = TypeDefMap::new();
+    let tuple_a = make::tuple_type(vec![make::nat_type(), make::bool_type()]);
+    let tuple_b = make::tuple_type(vec![make::int_type(), make::bool_type()]);
+    let tuple_short = make::tuple_type(vec![make::int_type()]);
+
+    assert!(sub::sub_type(&type_defs, &tuple_a, &tuple_b).expect("widen tuple elements"));
+    assert!(!sub::sub_type(&type_defs, &tuple_b, &tuple_a).expect("reject narrowing tuple"));
+    assert!(!sub::sub_type(&type_defs, &tuple_a, &tuple_short).expect("reject tuple arity"));
+}
+
+#[test]
+fn iteration_subtyping_follows_optional_and_list_lifting_rules() {
+    let type_defs = TypeDefMap::new();
+    let cases = [
+        (
+            make::list_type(make::nat_type()),
+            make::list_type(make::int_type()),
+            true,
+        ),
+        (
+            make::opt_type(make::nat_type()),
+            make::list_type(make::int_type()),
+            true,
+        ),
+        (make::nat_type(), make::opt_type(make::int_type()), true),
+        (make::nat_type(), make::list_type(make::int_type()), true),
+        (
+            make::list_type(make::nat_type()),
+            make::opt_type(make::int_type()),
+            false,
+        ),
+        (make::opt_type(make::int_type()), make::int_type(), false),
+    ];
+
+    for (typ_a, typ_b, expected) in cases {
+        assert_eq!(
+            sub::sub_type(&type_defs, &typ_a, &typ_b).expect("compare iteration subtype"),
+            expected
+        );
+    }
+}
+
+#[test]
+fn variant_subtyping_uses_instantiated_notation_case_inclusion() {
+    let mut type_defs = TypeDefMap::new();
+    type_defs.insert(
+        "Small".to_owned(),
+        defined_variant(
+            vec![id("T", "small")],
+            vec![type_case("Case", var("T", "small-case"), "small-case")],
+            "small",
+        ),
+    );
+    type_defs.insert(
+        "Large".to_owned(),
+        defined_variant(
+            vec![id("U", "large")],
+            vec![
+                type_case("Case", var("U", "large-case"), "large-case"),
+                type_case("Other", make::bool_type(), "large-other"),
+            ],
+            "large",
+        ),
+    );
+    let small = var_with_args("Small", vec![make::int_type()], "small-use");
+    let large = var_with_args("Large", vec![make::int_type()], "large-use");
+
+    assert!(sub::sub_type(&type_defs, &small, &large).expect("small variant is included"));
+    assert!(!sub::sub_type(&type_defs, &large, &small).expect("large variant is not included"));
+}
+
+#[test]
+fn variant_subtyping_reports_type_argument_count_mismatches() {
+    let mut type_defs = TypeDefMap::new();
+    type_defs.insert(
+        "Bad".to_owned(),
+        defined_variant(
+            vec![id("T", "bad")],
+            vec![type_case("Case", var("T", "bad-case"), "bad-case")],
+            "bad",
+        ),
+    );
+    type_defs.insert(
+        "Good".to_owned(),
+        defined_variant(Vec::new(), Vec::new(), "good"),
+    );
+    let bad = var_with_args("Bad", Vec::new(), "bad-use");
+    let good = var_with_args("Good", Vec::new(), "good-use");
+
+    assert_eq!(
+        sub::sub_type(&type_defs, &bad, &good),
+        Err(SubError::TypeArgumentMismatch {
+            span: span("bad-use"),
         })
     );
 }

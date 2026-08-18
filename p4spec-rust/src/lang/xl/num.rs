@@ -45,3 +45,7 @@ pub enum CmpOp {
 pub fn equiv(type_a: Typ, type_b: Typ) -> bool {
     type_a == type_b
 }
+
+pub fn sub(type_a: Typ, type_b: Typ) -> bool {
+    matches!((type_a, type_b), (Typ::NatT, Typ::IntT)) || equiv(type_a, type_b)
+}
