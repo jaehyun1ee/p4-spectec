@@ -6,6 +6,7 @@ use crate::{domain::source::Region, runtime::value::ValueRef};
 
 pub mod extract;
 pub mod ints;
+pub mod lists;
 pub mod nats;
 pub mod texts;
 
