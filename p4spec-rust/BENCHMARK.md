@@ -3,21 +3,21 @@
 ## Result
 
 The Rust SL interpreter is faster on the complete positive `Program_inst`
-corpus. The geometric-mean speedup is **1.711x**, with a paired bootstrap 95%
-confidence interval of **[1.630x, 1.795x]**. The entire interval is above 1,
+corpus. The geometric-mean speedup is **1.733x**, with a paired bootstrap 95%
+confidence interval of **[1.650x, 1.820x]**. The entire interval is above 1,
 so the predeclared conclusion is **Rust improvement**.
 
 | Metric | OCaml | Rust | OCaml / Rust |
 | --- | ---: | ---: | ---: |
 | Programs | 1,267 | 1,267 | - |
 | Passing measured evaluations | 3,801 | 3,801 | - |
-| Sum of per-program medians | 93.646 s | 62.333 s | 1.502x |
-| Median per-program time | 68.243 ms | 44.885 ms | - |
-| Maximum per-program median | 8.452 s | 5.417 s | - |
-| Paired median speedup | - | - | 1.596x |
-| Paired geometric-mean speedup | - | - | 1.711x |
+| Sum of per-program medians | 93.646 s | 61.156 s | 1.531x |
+| Median per-program time | 68.243 ms | 44.654 ms | - |
+| Maximum per-program median | 8.452 s | 5.088 s | - |
+| Paired median speedup | - | - | 1.624x |
+| Paired geometric-mean speedup | - | - | 1.733x |
 
-Rust was faster on 1,219 programs and OCaml was faster on 48. There were no
+Rust was faster on 1,213 programs and OCaml was faster on 54. There were no
 status mismatches.
 
 ## Boundary and method
@@ -39,7 +39,7 @@ status mismatches.
 The raw, untracked measurement files are:
 
 - `target/corpus/ocaml-interpreter-only-1267-3x.jsonl`
-- `target/corpus/rust-interpreter-only-fat-lto-1267-3x.jsonl`
+- `target/corpus/rust-interpreter-only-final-1267-3x.jsonl`
 
 ## Environment
 
@@ -81,7 +81,7 @@ The Rust command used the corresponding versioned value envelopes exported by
 cd p4spec-rust
 target/release/p4spec-rust-corpus \
   --spec target/corpus/spec.json --expect pass --warmup 1 --repeat 3 \
-  -o target/corpus/rust-interpreter-only-fat-lto-1267-3x.jsonl \
+  -o target/corpus/rust-interpreter-only-final-1267-3x.jsonl \
   "${json_programs[@]}"
 ```
 
@@ -91,7 +91,8 @@ Before the final two accepted hot-path changes, the same one-pass Rust corpus
 took 86.207 seconds. In-place variant-argument traversal reduced it to 72.740
 seconds, and indexing global variant cases by notation shape reduced it to
 69.267 seconds. Fat LTO with one codegen unit then reduced the one-pass sum to
-61.521 seconds. The final three-run median sum is 62.333 seconds.
+61.521 seconds. Sharing hashbrown's fast shape hasher reduced it again to
+60.092 seconds. The final three-run median sum is 61.156 seconds.
 
 Rejected experiments were restored completely when the full-corpus sum
 regressed, even if a representative program improved. These included a custom
