@@ -1,4 +1,4 @@
-use std::hash::Hash;
+use std::{hash::Hash, rc::Rc};
 
 use hashbrown::{Equivalent, HashMap};
 
@@ -140,13 +140,16 @@ pub type ValueCache<V> = ClockCache<ValueRef, V>;
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct CallKey {
-    id: String,
-    values: Vec<ValueRef>,
+    id: Rc<str>,
+    values: Rc<[ValueRef]>,
 }
 
 impl CallKey {
-    pub fn new(id: String, values: Vec<ValueRef>) -> Self {
-        Self { id, values }
+    pub fn new(id: impl Into<Rc<str>>, values: impl Into<Rc<[ValueRef]>>) -> Self {
+        Self {
+            id: id.into(),
+            values: values.into(),
+        }
     }
 }
 
@@ -164,8 +167,28 @@ impl<'a> CallKeyRef<'a> {
 
 impl Equivalent<CallKey> for CallKeyRef<'_> {
     fn equivalent(&self, key: &CallKey) -> bool {
-        self.id == key.id && self.values == key.values
+        self.id == key.id.as_ref() && self.values == key.values.as_ref()
     }
 }
 
 pub type CallCache<V> = ClockCache<CallKey, V>;
+
+#[cfg(test)]
+mod tests {
+    use std::rc::Rc;
+
+    use super::*;
+    use crate::{domain::source::Region, runtime::value::make};
+
+    #[test]
+    fn call_key_clones_share_name_and_value_storage() {
+        let key = CallKey::new(
+            "function".to_owned(),
+            vec![make::bool(true, Region::none())],
+        );
+        let cloned = key.clone();
+
+        assert!(Rc::ptr_eq(&key.id, &cloned.id));
+        assert!(Rc::ptr_eq(&key.values, &cloned.values));
+    }
+}

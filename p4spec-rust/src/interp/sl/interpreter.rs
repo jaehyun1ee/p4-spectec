@@ -434,7 +434,7 @@ where
                         .side_effected(extern_before, self.externs.checkpoint())
                 {
                     self.function_cache.insert(
-                        CallKey::new(id.node.clone(), values_input.to_vec()),
+                        CallKey::new(id.node.clone(), Rc::clone(&values_input)),
                         Rc::clone(value),
                     );
                 }
@@ -669,7 +669,7 @@ where
                         .side_effected(extern_before, self.externs.checkpoint())
                 {
                     self.relation_cache.insert(
-                        CallKey::new(id.node.clone(), values_input.to_vec()),
+                        CallKey::new(id.node.clone(), Rc::clone(&values_input)),
                         values.clone(),
                     );
                 }
