@@ -4,19 +4,19 @@ use crate::{
     domain::source::{Region, Spanned},
     interp::common::InterpError,
     lang::{
-        il::ast::{Exp, ExpKind, Id, OpTyp, TypKind, UnOp},
+        il::ast::{Exp, ExpKind, Id, OpTyp, Typ, TypKind, UnOp},
         sl::ast::{Block, Guard, HoldCase, Instr, InstrKind, IterExp, IterInstr, NotExp, TableRow},
     },
     runtime::{
         dynamic::var::Variable,
         r#type::typ::make as make_type,
-        value::{ValueRef, get, make},
+        value::{ValueKind, ValueRef, get, make},
     },
 };
 
 use super::{
     assignment,
-    context::Context,
+    context::{Context, Cursor},
     expression::{self, Calls},
 };
 
@@ -25,6 +25,7 @@ pub(crate) enum Flow {
     Continue,
     Result(Vec<ValueRef>),
     Return(ValueRef),
+    TailCallFunc(Id, Vec<Typ>, Vec<ValueRef>),
 }
 
 pub(crate) fn eval_instr(
@@ -87,9 +88,24 @@ pub(crate) fn eval_instr(
                 .collect::<Result<Vec<_>, _>>()?;
             Ok(Flow::Result(values))
         }
-        InstrKind::ReturnI(exp) => {
-            expression::eval_with_calls(context, calls, exp).map(Flow::Return)
-        }
+        InstrKind::ReturnI(exp) => match &exp.kind {
+            ExpKind::CallE(id, type_args, args) => {
+                let (type_args, values) =
+                    expression::eval_call_inputs(context, calls, type_args, args)?;
+                let (cursor, _function) = context.find_function(id)?;
+                let high_order = values
+                    .iter()
+                    .any(|value| matches!(value.kind, ValueKind::FuncV(_)));
+                if cursor == Cursor::Local || high_order {
+                    calls
+                        .invoke_func(context, id, &type_args, &values)
+                        .map(Flow::Return)
+                } else {
+                    Ok(Flow::TailCallFunc(id.clone(), type_args, values))
+                }
+            }
+            _ => expression::eval_with_calls(context, calls, exp).map(Flow::Return),
+        },
         InstrKind::DebugI(exp, nested) => {
             let result = (|| {
                 let value = expression::eval_with_calls(context, calls, exp)?;
@@ -544,7 +560,9 @@ pub(crate) fn eval_block_sequential(
     for instr in block {
         match eval_instr(context, calls, instr)? {
             Flow::Continue => {}
-            flow @ (Flow::Result(_) | Flow::Return(_)) => return Ok(flow),
+            flow @ (Flow::Result(_) | Flow::Return(_) | Flow::TailCallFunc(..)) => {
+                return Ok(flow);
+            }
         }
     }
     Ok(Flow::Continue)
@@ -558,7 +576,9 @@ pub(crate) fn eval_table_rows(
     for (_inputs, _output, block) in rows {
         match eval_block_sequential(context, calls, block)? {
             Flow::Continue => {}
-            flow @ (Flow::Result(_) | Flow::Return(_)) => return Ok(flow),
+            flow @ (Flow::Result(_) | Flow::Return(_) | Flow::TailCallFunc(..)) => {
+                return Ok(flow);
+            }
         }
     }
     Ok(Flow::Continue)
@@ -578,13 +598,18 @@ fn eval_block_deterministic(
         };
         selected = match (selected, flow) {
             (Flow::Continue, flow) | (flow, Flow::Continue) => flow,
-            (Flow::Result(_), Flow::Return(_)) | (Flow::Return(_), Flow::Result(_)) => {
+            (Flow::Result(_), Flow::Return(_) | Flow::TailCallFunc(..))
+            | (Flow::Return(_) | Flow::TailCallFunc(..), Flow::Result(_)) => {
                 return Err(InterpError::new(
                     instr.span.clone(),
                     "cannot have both result and return",
                 ));
             }
-            (Flow::Result(_), Flow::Result(_)) | (Flow::Return(_), Flow::Return(_)) => {
+            (Flow::Result(_), Flow::Result(_))
+            | (
+                Flow::Return(_) | Flow::TailCallFunc(..),
+                Flow::Return(_) | Flow::TailCallFunc(..),
+            ) => {
                 return Err(InterpError::new(
                     instr.span.clone(),
                     "nondeterministic instruction evaluation",
@@ -612,6 +637,10 @@ pub(crate) fn return_value(
                 "function cannot produce a relation result",
             ))
         }
+        Flow::TailCallFunc(..) => Err(InterpError::new(
+            span.clone(),
+            "function tail call escaped its dispatcher",
+        )),
     }
 }
 
@@ -632,5 +661,9 @@ pub(crate) fn result_values(
                 "relation cannot return a value",
             ))
         }
+        Flow::TailCallFunc(..) => Err(InterpError::new(
+            span.clone(),
+            "relation cannot produce a function tail call",
+        )),
     }
 }

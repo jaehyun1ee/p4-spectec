@@ -134,6 +134,11 @@ struct Dispatcher<'a, I, E> {
     relation_cache: &'a mut CallCache<Vec<ValueRef>>,
 }
 
+enum FunctionResult {
+    Return(ValueRef),
+    TailCall(crate::lang::il::ast::Id, Vec<Typ>, Vec<ValueRef>),
+}
+
 impl<I, E> Dispatcher<'_, I, E>
 where
     I: Interface,
@@ -146,33 +151,48 @@ where
         type_args: &[Typ],
         values_input: &[ValueRef],
     ) -> Result<ValueRef, InterpError> {
-        let (cursor, function) = context.find_function(id)?;
-        let function = function.clone();
-        let cacheable = self.options.cache
-            && cursor != Cursor::Local
-            && !matches!(function, Function::Extern(..))
-            && !values_input
-                .iter()
-                .any(|value| matches!(value.kind, ValueKind::FuncV(_)));
-        let key: CallKey = (id.node.clone(), values_input.to_vec());
-        if cacheable && let Some(value) = self.function_cache.find(&key) {
-            return Ok(Rc::clone(value));
+        let mut id = id.clone();
+        let mut type_args = type_args.to_vec();
+        let mut values_input = values_input.to_vec();
+        loop {
+            let (cursor, function) = context.find_function(&id)?;
+            let function = function.clone();
+            let cacheable = self.options.cache
+                && cursor != Cursor::Local
+                && !matches!(function, Function::Extern(..))
+                && !values_input
+                    .iter()
+                    .any(|value| matches!(value.kind, ValueKind::FuncV(_)));
+            let key: CallKey = (id.node.clone(), values_input.clone());
+            let result = if cacheable && let Some(value) = self.function_cache.find(&key) {
+                FunctionResult::Return(Rc::clone(value))
+            } else {
+                let interface_before = self.interface.checkpoint();
+                let extern_before = self.externs.checkpoint();
+                let result =
+                    self.invoke_func_body(context, &id, &function, &type_args, &values_input)?;
+                if cacheable
+                    && let FunctionResult::Return(value) = &result
+                    && !self
+                        .interface
+                        .side_effected(interface_before, self.interface.checkpoint())
+                    && !self
+                        .externs
+                        .side_effected(extern_before, self.externs.checkpoint())
+                {
+                    self.function_cache.insert(key, Rc::clone(value));
+                }
+                result
+            };
+            match result {
+                FunctionResult::Return(value) => return Ok(value),
+                FunctionResult::TailCall(id_tail, type_args_tail, values_tail) => {
+                    id = id_tail;
+                    type_args = type_args_tail;
+                    values_input = values_tail;
+                }
+            }
         }
-
-        let interface_before = self.interface.checkpoint();
-        let extern_before = self.externs.checkpoint();
-        let value = self.invoke_func_body(context, id, &function, type_args, values_input)?;
-        if cacheable
-            && !self
-                .interface
-                .side_effected(interface_before, self.interface.checkpoint())
-            && !self
-                .externs
-                .side_effected(extern_before, self.externs.checkpoint())
-        {
-            self.function_cache.insert(key, Rc::clone(&value));
-        }
-        Ok(value)
     }
 
     fn invoke_func_body(
@@ -182,15 +202,17 @@ where
         function: &Function,
         type_args: &[Typ],
         values_input: &[ValueRef],
-    ) -> Result<ValueRef, InterpError> {
+    ) -> Result<FunctionResult, InterpError> {
         match function {
             Function::Extern(..) => self
                 .externs
                 .eval_func(&id.node, type_args, values_input)
+                .map(FunctionResult::Return)
                 .map_err(|error| InterpError::new(error.span, error.message)),
             Function::Builtin(..) => self
                 .interface
                 .call_builtin(&mut |_| {}, id, type_args, values_input)
+                .map(FunctionResult::Return)
                 .map_err(|error| InterpError::new(error.span, error.message)),
             Function::Table(params, _return_type, rows) => {
                 if !type_args.is_empty() {
@@ -199,16 +221,18 @@ where
                         "arity mismatch in type arguments",
                     ));
                 }
-                context.with_function_frame(
-                    id.clone(),
-                    values_input.to_vec(),
-                    TypeDefEnv::new(),
-                    |context| {
-                        Self::assign_params(context, id, params, values_input)?;
-                        let flow = instruction::eval_table_rows(context, self, rows)?;
-                        instruction::return_value(flow, &id.span)
-                    },
-                )
+                context
+                    .with_function_frame(
+                        id.clone(),
+                        values_input.to_vec(),
+                        TypeDefEnv::new(),
+                        |context| {
+                            Self::assign_params(context, id, params, values_input)?;
+                            let flow = instruction::eval_table_rows(context, self, rows)?;
+                            instruction::return_value(flow, &id.span)
+                        },
+                    )
+                    .map(FunctionResult::Return)
             }
             Function::Defined(type_params, params, _return_type, block, else_block) => self
                 .invoke_defined_func(
@@ -292,7 +316,7 @@ where
         else_block: Option<&ElseBlock>,
         type_args: &[Typ],
         values_input: &[ValueRef],
-    ) -> Result<ValueRef, InterpError> {
+    ) -> Result<FunctionResult, InterpError> {
         let type_defs = Self::local_type_defs(id, type_params, type_args)?;
         context.with_function_frame(id.clone(), values_input.to_vec(), type_defs, |context| {
             Self::assign_params(context, id, params, values_input)?;
@@ -303,7 +327,12 @@ where
                 }
                 (flow, _) => flow,
             };
-            instruction::return_value(flow, &id.span)
+            match flow {
+                Flow::TailCallFunc(id, type_args, values) => {
+                    Ok(FunctionResult::TailCall(id, type_args, values))
+                }
+                flow => instruction::return_value(flow, &id.span).map(FunctionResult::Return),
+            }
         })
     }
 

@@ -1155,9 +1155,19 @@ fn eval_call(
     type_args: &[Typ],
     args: &[Arg],
 ) -> Result<ValueRef, InterpError> {
+    let (type_args, values) = eval_call_inputs(context, calls, type_args, args)?;
+    calls.invoke_func(context, id, &type_args, &values)
+}
+
+pub(crate) fn eval_call_inputs(
+    context: &mut Context,
+    calls: &mut dyn Calls,
+    type_args: &[Typ],
+    args: &[Arg],
+) -> Result<(Vec<Typ>, Vec<ValueRef>), InterpError> {
     let type_args = resolve_type_args(context, type_args)?;
     let values = eval_args(context, calls, args)?;
-    calls.invoke_func(context, id, &type_args, &values)
+    Ok((type_args, values))
 }
 
 // Iterated expression evaluation
