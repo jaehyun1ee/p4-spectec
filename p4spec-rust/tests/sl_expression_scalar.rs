@@ -37,7 +37,7 @@ fn int_exp(value: i64, file: &str) -> il::Exp {
     )
 }
 
-fn eval(context: &Context, exp: &il::Exp) -> p4spec_rust::runtime::value::ValueRef {
+fn eval(context: &mut Context, exp: &il::Exp) -> p4spec_rust::runtime::value::ValueRef {
     expression::eval(context, exp).unwrap()
 }
 
@@ -45,17 +45,17 @@ fn eval(context: &Context, exp: &il::Exp) -> p4spec_rust::runtime::value::ValueR
 fn literals_and_variables_produce_runtime_values() {
     let mut context = Context::from_spec(false, &[]).unwrap();
     context.enter_relation(id("R", "relation"), Vec::new());
-    let boolean = eval(&context, &bool_exp(true, "bool-exp"));
+    let boolean = eval(&mut context, &bool_exp(true, "bool-exp"));
     assert_eq!(get::bool(&boolean), Ok(true));
     assert_eq!(boolean.span, Region::none());
-    let number = eval(&context, &nat_exp(7, "num-exp"));
+    let number = eval(&mut context, &nat_exp(7, "num-exp"));
     assert!(matches!(get::num(&number), Ok(num::T::Nat(value)) if value == &BigInt::from(7)));
     let text_exp = il::Exp::new(
         il::ExpKind::TextE("hello".to_owned()),
         il::TypKind::TextT,
         span("text-exp"),
     );
-    assert_eq!(get::text(&eval(&context, &text_exp)), Ok("hello"));
+    assert_eq!(get::text(&eval(&mut context, &text_exp)), Ok("hello"));
 
     let bound = make::bool(false, span("bound"));
     context
@@ -66,12 +66,12 @@ fn literals_and_variables_produce_runtime_values() {
         il::TypKind::BoolT,
         span("variable-exp"),
     );
-    assert!(std::rc::Rc::ptr_eq(&eval(&context, &variable), &bound));
+    assert!(std::rc::Rc::ptr_eq(&eval(&mut context, &variable), &bound));
 }
 
 #[test]
 fn unary_and_boolean_binary_operations_match_ocaml() {
-    let context = Context::from_spec(false, &[]).unwrap();
+    let mut context = Context::from_spec(false, &[]).unwrap();
     let not = il::Exp::new(
         il::ExpKind::UnE(
             il::UnOp::NotOp,
@@ -81,7 +81,7 @@ fn unary_and_boolean_binary_operations_match_ocaml() {
         il::TypKind::BoolT,
         span("not"),
     );
-    assert_eq!(get::bool(&eval(&context, &not)), Ok(false));
+    assert_eq!(get::bool(&eval(&mut context, &not)), Ok(false));
     let minus = il::Exp::new(
         il::ExpKind::UnE(
             il::UnOp::MinusOp,
@@ -92,7 +92,7 @@ fn unary_and_boolean_binary_operations_match_ocaml() {
         span("minus"),
     );
     assert!(
-        matches!(get::num(&eval(&context, &minus)), Ok(num::T::Int(value)) if value == &BigInt::from(-3))
+        matches!(get::num(&eval(&mut context, &minus)), Ok(num::T::Int(value)) if value == &BigInt::from(-3))
     );
 
     for (operator, expected) in [
@@ -111,13 +111,13 @@ fn unary_and_boolean_binary_operations_match_ocaml() {
             il::TypKind::BoolT,
             span("binary"),
         );
-        assert_eq!(get::bool(&eval(&context, &exp)), Ok(expected));
+        assert_eq!(get::bool(&eval(&mut context, &exp)), Ok(expected));
     }
 }
 
 #[test]
 fn numeric_binary_and_comparison_operations_preserve_number_kinds() {
-    let context = Context::from_spec(false, &[]).unwrap();
+    let mut context = Context::from_spec(false, &[]).unwrap();
     let subtraction = il::Exp::new(
         il::ExpKind::BinE(
             il::BinOp::SubOp,
@@ -129,7 +129,7 @@ fn numeric_binary_and_comparison_operations_preserve_number_kinds() {
         span("sub"),
     );
     assert!(
-        matches!(get::num(&eval(&context, &subtraction)), Ok(num::T::Int(value)) if value == &BigInt::from(-3))
+        matches!(get::num(&eval(&mut context, &subtraction)), Ok(num::T::Int(value)) if value == &BigInt::from(-3))
     );
     let division = il::Exp::new(
         il::ExpKind::BinE(
@@ -142,7 +142,7 @@ fn numeric_binary_and_comparison_operations_preserve_number_kinds() {
         span("div"),
     );
     assert!(
-        matches!(get::num(&eval(&context, &division)), Ok(num::T::Int(value)) if value == &BigInt::from(-3))
+        matches!(get::num(&eval(&mut context, &division)), Ok(num::T::Int(value)) if value == &BigInt::from(-3))
     );
 
     let comparison = il::Exp::new(
@@ -155,12 +155,12 @@ fn numeric_binary_and_comparison_operations_preserve_number_kinds() {
         il::TypKind::BoolT,
         span("comparison"),
     );
-    assert_eq!(get::bool(&eval(&context, &comparison)), Ok(true));
+    assert_eq!(get::bool(&eval(&mut context, &comparison)), Ok(true));
 }
 
 #[test]
 fn equality_is_semantic_and_boolean_binary_evaluation_is_eager() {
-    let context = Context::from_spec(false, &[]).unwrap();
+    let mut context = Context::from_spec(false, &[]).unwrap();
     let equality = il::Exp::new(
         il::ExpKind::CmpE(
             il::CmpOp::EqOp,
@@ -171,7 +171,7 @@ fn equality_is_semantic_and_boolean_binary_evaluation_is_eager() {
         il::TypKind::BoolT,
         span("equality"),
     );
-    assert_eq!(get::bool(&eval(&context, &equality)), Ok(true));
+    assert_eq!(get::bool(&eval(&mut context, &equality)), Ok(true));
 
     let missing = il::Exp::new(
         il::ExpKind::VarE(id("missing", "missing")),
@@ -188,13 +188,13 @@ fn equality_is_semantic_and_boolean_binary_evaluation_is_eager() {
         il::TypKind::BoolT,
         span("eager"),
     );
-    let error = expression::eval(&context, &eager).unwrap_err();
+    let error = expression::eval(&mut context, &eager).unwrap_err();
     assert!(error.message.contains("value `missing` is undefined"));
 }
 
 #[test]
 fn invalid_scalar_operations_return_typed_errors() {
-    let context = Context::from_spec(false, &[]).unwrap();
+    let mut context = Context::from_spec(false, &[]).unwrap();
     let division = il::Exp::new(
         il::ExpKind::BinE(
             il::BinOp::DivOp,
@@ -205,7 +205,7 @@ fn invalid_scalar_operations_return_typed_errors() {
         il::TypKind::NumT(num::Typ::NatT),
         span("division"),
     );
-    let error = expression::eval(&context, &division).unwrap_err();
+    let error = expression::eval(&mut context, &division).unwrap_err();
     assert_eq!(error.span, span("division"));
     assert!(error.message.contains("division by zero"));
 }

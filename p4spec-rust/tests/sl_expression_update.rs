@@ -113,7 +113,7 @@ fn nested_update_rebuilds_the_path_and_shares_unaffected_values() {
         span("update"),
     );
 
-    let result = expression::eval(&context, &update).unwrap();
+    let result = expression::eval(&mut context, &update).unwrap();
     let result_fields = get::structure(&result).unwrap();
     let result_items = get::list(&result_fields[0].1).unwrap();
     assert!(!Rc::ptr_eq(&result, &base));
@@ -128,7 +128,7 @@ fn nested_update_rebuilds_the_path_and_shares_unaffected_values() {
 
 #[test]
 fn text_index_and_slice_updates_match_ocaml_fixed_width_replacement() {
-    let context = context();
+    let mut context = context();
     let text_type = il::TypKind::TextT;
     let indexed = il::Exp::new(
         il::ExpKind::UpdE(
@@ -147,7 +147,7 @@ fn text_index_and_slice_updates_match_ocaml_fixed_width_replacement() {
         span("index-update"),
     );
     assert_eq!(
-        get::text(&expression::eval(&context, &indexed).unwrap()),
+        get::text(&expression::eval(&mut context, &indexed).unwrap()),
         Ok("aZc")
     );
 
@@ -169,7 +169,7 @@ fn text_index_and_slice_updates_match_ocaml_fixed_width_replacement() {
         span("slice-update"),
     );
     assert_eq!(
-        get::text(&expression::eval(&context, &sliced).unwrap()),
+        get::text(&expression::eval(&mut context, &sliced).unwrap()),
         Ok("abXYZf")
     );
 }
@@ -219,7 +219,7 @@ fn list_slice_update_shares_values_outside_the_replaced_range() {
         span("update"),
     );
 
-    let result = expression::eval(&context, &update).unwrap();
+    let result = expression::eval(&mut context, &update).unwrap();
     let values = get::list(&result).unwrap();
     assert!(Rc::ptr_eq(&values[0], &first));
     assert!(Rc::ptr_eq(&values[1], &replacement_a));
@@ -229,7 +229,7 @@ fn list_slice_update_shares_values_outside_the_replaced_range() {
 
 #[test]
 fn update_reports_bounds_and_replacement_width_errors_at_the_path_operand() {
-    let context = context();
+    let mut context = context();
     let out_of_bounds = il::Exp::new(
         il::ExpKind::UpdE(
             Box::new(text_exp("a", "base")),
@@ -246,7 +246,7 @@ fn update_reports_bounds_and_replacement_width_errors_at_the_path_operand() {
         il::TypKind::TextT,
         span("update"),
     );
-    let error = expression::eval(&context, &out_of_bounds).unwrap_err();
+    let error = expression::eval(&mut context, &out_of_bounds).unwrap_err();
     assert!(error.message.contains("out of bounds"));
     assert_eq!(error.span, span("bad-index"));
 
@@ -267,7 +267,7 @@ fn update_reports_bounds_and_replacement_width_errors_at_the_path_operand() {
         il::TypKind::TextT,
         span("update"),
     );
-    let error = expression::eval(&context, &wrong_width).unwrap_err();
+    let error = expression::eval(&mut context, &wrong_width).unwrap_err();
     assert!(
         error
             .message

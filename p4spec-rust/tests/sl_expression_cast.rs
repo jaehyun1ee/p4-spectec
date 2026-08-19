@@ -24,7 +24,7 @@ fn typ(kind: il::TypKind, file: &str) -> il::Typ {
 
 #[test]
 fn numeric_upcast_and_downcast_follow_nat_int_subtyping() {
-    let context = Context::from_spec(false, &[]).unwrap();
+    let mut context = Context::from_spec(false, &[]).unwrap();
     let upcast = il::Exp::new(
         il::ExpKind::UpCastE(
             typ(il::TypKind::NumT(num::Typ::IntT), "int-type"),
@@ -34,7 +34,7 @@ fn numeric_upcast_and_downcast_follow_nat_int_subtyping() {
         span("upcast"),
     );
     assert!(
-        matches!(expression::eval(&context, &upcast).map(|v| v.kind.clone()), Ok(p4spec_rust::runtime::value::ValueKind::NumV(num::T::Int(value))) if value == BigInt::from(3))
+        matches!(expression::eval(&mut context, &upcast).map(|v| v.kind.clone()), Ok(p4spec_rust::runtime::value::ValueKind::NumV(num::T::Int(value))) if value == BigInt::from(3))
     );
 
     let downcast = il::Exp::new(
@@ -46,7 +46,7 @@ fn numeric_upcast_and_downcast_follow_nat_int_subtyping() {
         span("downcast"),
     );
     assert!(
-        matches!(expression::eval(&context, &downcast).map(|v| v.kind.clone()), Ok(p4spec_rust::runtime::value::ValueKind::NumV(num::T::Nat(value))) if value == BigInt::from(3))
+        matches!(expression::eval(&mut context, &downcast).map(|v| v.kind.clone()), Ok(p4spec_rust::runtime::value::ValueKind::NumV(num::T::Nat(value))) if value == BigInt::from(3))
     );
 
     let negative = il::Exp::new(
@@ -57,14 +57,14 @@ fn numeric_upcast_and_downcast_follow_nat_int_subtyping() {
         il::TypKind::NumT(num::Typ::NatT),
         span("negative-downcast"),
     );
-    let error = expression::eval(&context, &negative).unwrap_err();
+    let error = expression::eval(&mut context, &negative).unwrap_err();
     assert_eq!(error.span, span("nat-type"));
     assert!(error.message.contains("cannot downcast"));
 }
 
 #[test]
 fn tuple_option_and_list_casts_recurse_into_children() {
-    let context = Context::from_spec(false, &[]).unwrap();
+    let mut context = Context::from_spec(false, &[]).unwrap();
     let int_type = typ(il::TypKind::NumT(num::Typ::IntT), "int-type");
     let target = typ(
         il::TypKind::TupleT(vec![
@@ -94,7 +94,7 @@ fn tuple_option_and_list_casts_recurse_into_children() {
         target.node.clone(),
         span("cast"),
     );
-    let value = expression::eval(&context, &cast).unwrap();
+    let value = expression::eval(&mut context, &cast).unwrap();
     let values = get::tuple(&value).unwrap();
     assert!(matches!(get::num(&values[0]), Ok(num::T::Int(value)) if value == &BigInt::from(2)));
     assert!(
@@ -104,7 +104,7 @@ fn tuple_option_and_list_casts_recurse_into_children() {
 
 #[test]
 fn subtype_expression_checks_numeric_and_iterated_values() {
-    let context = Context::from_spec(false, &[]).unwrap();
+    let mut context = Context::from_spec(false, &[]).unwrap();
     let positive = il::Exp::new(
         il::ExpKind::SubE(
             Box::new(numeric(num::T::Int(2.into()), "positive")),
@@ -114,7 +114,7 @@ fn subtype_expression_checks_numeric_and_iterated_values() {
         span("positive-sub"),
     );
     assert_eq!(
-        get::bool(&expression::eval(&context, &positive).unwrap()),
+        get::bool(&expression::eval(&mut context, &positive).unwrap()),
         Ok(true)
     );
     let negative = il::Exp::new(
@@ -126,7 +126,7 @@ fn subtype_expression_checks_numeric_and_iterated_values() {
         span("negative-sub"),
     );
     assert_eq!(
-        get::bool(&expression::eval(&context, &negative).unwrap()),
+        get::bool(&expression::eval(&mut context, &negative).unwrap()),
         Ok(false)
     );
 }

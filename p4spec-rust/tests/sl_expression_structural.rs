@@ -49,7 +49,7 @@ fn list_exp(values: Vec<il::Exp>) -> il::Exp {
 }
 
 fn eval(exp: &il::Exp) -> ValueRef {
-    expression::eval(&Context::from_spec(false, &[]).unwrap(), exp).unwrap()
+    expression::eval(&mut Context::from_spec(false, &[]).unwrap(), exp).unwrap()
 }
 
 fn int_value(value: &ValueRef) -> BigInt {
@@ -267,7 +267,8 @@ fn structural_type_and_bounds_failures_are_typed_errors() {
         il::TypKind::TextT,
         span("bad-index"),
     );
-    let error = expression::eval(&Context::from_spec(false, &[]).unwrap(), &bad_index).unwrap_err();
+    let error =
+        expression::eval(&mut Context::from_spec(false, &[]).unwrap(), &bad_index).unwrap_err();
     assert!(error.message.contains("out of bounds"));
 
     let bad_cat = il::Exp::new(
@@ -275,6 +276,7 @@ fn structural_type_and_bounds_failures_are_typed_errors() {
         il::TypKind::TextT,
         span("bad-cat"),
     );
-    let error = expression::eval(&Context::from_spec(false, &[]).unwrap(), &bad_cat).unwrap_err();
+    let error =
+        expression::eval(&mut Context::from_spec(false, &[]).unwrap(), &bad_cat).unwrap_err();
     assert!(error.message.contains("concatenation expects"));
 }

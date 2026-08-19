@@ -431,6 +431,22 @@ impl Context {
         Ok(batches)
     }
 
+    pub fn with_value_bindings<T>(
+        &mut self,
+        bindings: Vec<(Variable, ValueRef)>,
+        evaluate: impl FnOnce(&mut Self) -> Result<T, InterpError>,
+    ) -> Result<T, InterpError> {
+        let mark = self.mark();
+        let result = (|| {
+            for (variable, value) in bindings {
+                self.bind_value(variable, value)?;
+            }
+            evaluate(self)
+        })();
+        self.reset(mark)?;
+        result
+    }
+
     // Scope and backtracking
 
     pub fn mark(&self) -> ScopeMark {

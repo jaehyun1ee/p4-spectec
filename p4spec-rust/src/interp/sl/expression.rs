@@ -41,9 +41,29 @@ fn num_of_value<'a>(exp: &Exp, value: &'a Value) -> Result<&'a num::T, InterpErr
     get::num(value).map_err(|error| value_error(exp, error.to_string()))
 }
 
+// Helper for checking if an expression is a simple iteration of a variable
+
+fn iterated_variable(exp: &Exp) -> Option<Variable> {
+    match &exp.kind {
+        ExpKind::VarE(id) => Some(Variable::new(id.clone(), Vec::new())),
+        ExpKind::IterE(inner, (iter, vars)) => {
+            let mut variable = iterated_variable(inner)?;
+            let [(id, _typ, iters)] = vars.as_slice() else {
+                return None;
+            };
+            if variable.id.node != id.node || variable.iters != *iters {
+                return None;
+            }
+            variable.iters.push(*iter);
+            Some(variable)
+        }
+        _ => None,
+    }
+}
+
 // Expression evaluation
 
-pub fn eval(context: &Context, exp: &Exp) -> Result<ValueRef, InterpError> {
+pub fn eval(context: &mut Context, exp: &Exp) -> Result<ValueRef, InterpError> {
     match &exp.kind {
         ExpKind::BoolE(value) => Ok(make::bool(*value, Region::none())),
         ExpKind::NumE(value) => Ok(make::num(value.clone(), Region::none())),
@@ -89,6 +109,7 @@ pub fn eval(context: &Context, exp: &Exp) -> Result<ValueRef, InterpError> {
         ExpKind::IdxE(base, index) => eval_index(context, exp, base, index),
         ExpKind::SliceE(base, index, count) => eval_slice(context, exp, base, index, count),
         ExpKind::UpdE(base, path, replacement) => eval_update(context, base, path, replacement),
+        ExpKind::IterE(inner, iter_exp) => eval_iteration(context, exp, inner, iter_exp),
         _ => Err(value_error(exp, "expression evaluation is not implemented")),
     }
 }
@@ -101,14 +122,14 @@ fn path_type_note(path: &Path) -> Typ {
     crate::domain::source::Spanned::new(path.ty.clone(), path.span.clone())
 }
 
-fn eval_all(context: &Context, exps: &[Exp]) -> Result<Vec<ValueRef>, InterpError> {
+fn eval_all(context: &mut Context, exps: &[Exp]) -> Result<Vec<ValueRef>, InterpError> {
     exps.iter().map(|exp| eval(context, exp)).collect()
 }
 
 // Unary expression evaluation
 
 fn eval_unary(
-    context: &Context,
+    context: &mut Context,
     outer: &Exp,
     operator: UnOp,
     operand: &Exp,
@@ -132,7 +153,7 @@ fn eval_unary(
 // Binary expression evaluation
 
 fn eval_binary(
-    context: &Context,
+    context: &mut Context,
     outer: &Exp,
     operator: BinOp,
     left: &Exp,
@@ -218,7 +239,7 @@ fn eval_binary_bigint(
 // Comparison expression evaluation
 
 fn eval_comparison(
-    context: &Context,
+    context: &mut Context,
     outer: &Exp,
     operator: CmpOp,
     left: &Exp,
@@ -499,7 +520,7 @@ fn value_is_subtype(context: &Context, typ: &Typ, value: &Value) -> Result<bool,
 // Pattern match check expression evaluation
 
 fn eval_match(
-    context: &Context,
+    context: &mut Context,
     _outer: &Exp,
     exp: &Exp,
     pattern: &Pattern,
@@ -528,7 +549,7 @@ fn eval_match(
 
 // Tuple expression evaluation
 
-fn eval_tuple(context: &Context, outer: &Exp, exps: &[Exp]) -> Result<ValueRef, InterpError> {
+fn eval_tuple(context: &mut Context, outer: &Exp, exps: &[Exp]) -> Result<ValueRef, InterpError> {
     let values = eval_all(context, exps)?;
     Ok(make::tuple(&type_note(outer), values, Region::none()))
 }
@@ -536,7 +557,7 @@ fn eval_tuple(context: &Context, outer: &Exp, exps: &[Exp]) -> Result<ValueRef, 
 // Case expression evaluation
 
 fn eval_case(
-    context: &Context,
+    context: &mut Context,
     outer: &Exp,
     not_exp: &crate::lang::il::ast::NotExp,
 ) -> Result<ValueRef, InterpError> {
@@ -553,7 +574,7 @@ fn eval_case(
 // Struct expression evaluation
 
 fn eval_structure(
-    context: &Context,
+    context: &mut Context,
     outer: &Exp,
     fields: &[(crate::lang::il::ast::Atom, Exp)],
 ) -> Result<ValueRef, InterpError> {
@@ -570,14 +591,18 @@ fn eval_structure(
 
 // Option expression evaluation
 
-fn eval_option(context: &Context, outer: &Exp, exp: Option<&Exp>) -> Result<ValueRef, InterpError> {
+fn eval_option(
+    context: &mut Context,
+    outer: &Exp,
+    exp: Option<&Exp>,
+) -> Result<ValueRef, InterpError> {
     let value = exp.map(|exp| eval(context, exp)).transpose()?;
     Ok(make::opt(&type_note(outer), value, Region::none()))
 }
 
 // List expression evaluation
 
-fn eval_list(context: &Context, outer: &Exp, exps: &[Exp]) -> Result<ValueRef, InterpError> {
+fn eval_list(context: &mut Context, outer: &Exp, exps: &[Exp]) -> Result<ValueRef, InterpError> {
     let values = eval_all(context, exps)?;
     Ok(make::list(&type_note(outer), values, Region::none()))
 }
@@ -585,7 +610,7 @@ fn eval_list(context: &Context, outer: &Exp, exps: &[Exp]) -> Result<ValueRef, I
 // Cons expression evaluation
 
 fn eval_cons(
-    context: &Context,
+    context: &mut Context,
     outer: &Exp,
     head: &Exp,
     tail: &Exp,
@@ -611,7 +636,7 @@ fn eval_cons(
 // Concatenation expression evaluation
 
 fn eval_concatenation(
-    context: &Context,
+    context: &mut Context,
     outer: &Exp,
     left: &Exp,
     right: &Exp,
@@ -641,7 +666,7 @@ fn eval_concatenation(
 // Membership expression evaluation
 
 fn eval_membership(
-    context: &Context,
+    context: &mut Context,
     outer: &Exp,
     element: &Exp,
     collection: &Exp,
@@ -655,7 +680,7 @@ fn eval_membership(
 
 // Length expression evaluation
 
-fn eval_length(context: &Context, outer: &Exp, exp: &Exp) -> Result<ValueRef, InterpError> {
+fn eval_length(context: &mut Context, outer: &Exp, exp: &Exp) -> Result<ValueRef, InterpError> {
     let value = eval(context, exp)?;
     let len = match &value.kind {
         crate::runtime::value::ValueKind::TextV(value) => value.len(),
@@ -673,7 +698,7 @@ fn eval_length(context: &Context, outer: &Exp, exp: &Exp) -> Result<ValueRef, In
 // Dot expression evaluation
 
 fn eval_dot(
-    context: &Context,
+    context: &mut Context,
     outer: &Exp,
     base: &Exp,
     atom: &crate::lang::il::ast::Atom,
@@ -700,7 +725,7 @@ fn index_of_value(outer: &Exp, value: &Value) -> Result<isize, InterpError> {
 // Index expression evaluation
 
 fn eval_index(
-    context: &Context,
+    context: &mut Context,
     outer: &Exp,
     base: &Exp,
     index: &Exp,
@@ -745,7 +770,7 @@ fn bounded_index(outer: &Exp, index: isize, len: usize) -> Result<usize, InterpE
 // Slice expression evaluation
 
 fn eval_slice(
-    context: &Context,
+    context: &mut Context,
     outer: &Exp,
     base: &Exp,
     index: &Exp,
@@ -794,7 +819,7 @@ fn eval_slice(
 // Update expression evaluation
 
 fn eval_access_path(
-    context: &Context,
+    context: &mut Context,
     value_base: &ValueRef,
     path: &Path,
 ) -> Result<ValueRef, InterpError> {
@@ -869,7 +894,7 @@ fn eval_access_path(
 }
 
 fn eval_path_slice_bounds(
-    context: &Context,
+    context: &mut Context,
     index: &Exp,
     count: &Exp,
 ) -> Result<(usize, usize), InterpError> {
@@ -889,7 +914,7 @@ fn eval_path_slice_bounds(
 }
 
 fn eval_update_path(
-    context: &Context,
+    context: &mut Context,
     value_base: &ValueRef,
     path: &Path,
     value_update: ValueRef,
@@ -1007,7 +1032,7 @@ fn eval_update_path(
 }
 
 fn eval_update(
-    context: &Context,
+    context: &mut Context,
     base: &Exp,
     path: &Path,
     replacement: &Exp,
@@ -1015,4 +1040,50 @@ fn eval_update(
     let value_base = eval(context, base)?;
     let value_replacement = eval(context, replacement)?;
     eval_update_path(context, &value_base, path, value_replacement)
+}
+
+// Iterated expression evaluation
+
+fn eval_optional_iteration(
+    context: &mut Context,
+    outer: &Exp,
+    exp: &Exp,
+    vars: &[crate::lang::il::ast::Var],
+) -> Result<ValueRef, InterpError> {
+    let value = match context.optional_bindings(vars)? {
+        Some(bindings) => {
+            Some(context.with_value_bindings(bindings, |context| eval(context, exp))?)
+        }
+        None => None,
+    };
+    Ok(make::opt(&type_note(outer), value, Region::none()))
+}
+
+fn eval_list_iteration(
+    context: &mut Context,
+    outer: &Exp,
+    exp: &Exp,
+    vars: &[crate::lang::il::ast::Var],
+) -> Result<ValueRef, InterpError> {
+    let batches = context.list_binding_batches(vars)?;
+    let mut values = Vec::with_capacity(batches.len());
+    for bindings in batches {
+        values.push(context.with_value_bindings(bindings, |context| eval(context, exp))?);
+    }
+    Ok(make::list(&type_note(outer), values, Region::none()))
+}
+
+fn eval_iteration(
+    context: &mut Context,
+    outer: &Exp,
+    exp: &Exp,
+    (iter, vars): &crate::lang::il::ast::IterExp,
+) -> Result<ValueRef, InterpError> {
+    if let Some(variable) = iterated_variable(outer) {
+        return context.find_value(&variable).map(Rc::clone);
+    }
+    match iter {
+        Iter::Opt => eval_optional_iteration(context, outer, exp, vars),
+        Iter::List => eval_list_iteration(context, outer, exp, vars),
+    }
 }
