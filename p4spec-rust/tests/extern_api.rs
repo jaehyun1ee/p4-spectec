@@ -47,12 +47,26 @@ impl SpecCall for Lookup {
         assert_eq!(values.len(), 3);
         assert!(std::rc::Rc::ptr_eq(&values[2], &self.context));
         let prefixed_name = get::case(&values[0]).unwrap();
+        assert_eq!(
+            prefixed_name.split().0,
+            Mixfix::Seq(vec![
+                Mixfix::Atom(Spanned::new(Atom::Tag("BARE".to_owned()), Region::none())),
+                Mixfix::Arg(()),
+            ])
+        );
         assert_eq!(prefixed_name.args().len(), 1);
         assert_eq!(
             get::text(prefixed_name.args()[0]),
             Ok(self.names.pop_front().unwrap().as_str())
         );
         let cursor = get::case(&values[1]).unwrap();
+        assert_eq!(
+            cursor.split().0,
+            Mixfix::Atom(Spanned::new(
+                Atom::Keyword("LOCAL".to_owned()),
+                Region::none()
+            ))
+        );
         assert!(cursor.args().is_empty());
         self.calls += 1;
         self.values

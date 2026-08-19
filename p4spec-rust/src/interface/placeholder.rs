@@ -130,7 +130,7 @@ impl PlaceholderExtern {
                 Vec::new(),
             ),
             Mixfix::Seq(vec![
-                Mixfix::Atom(Spanned::new(Atom::Tag("_BARE".to_owned()), span.clone())),
+                Mixfix::Atom(Spanned::new(Atom::Tag("BARE".to_owned()), span.clone())),
                 Mixfix::Arg(make::text(name.to_owned(), span.clone())),
             ]),
             span.clone(),
@@ -140,7 +140,10 @@ impl PlaceholderExtern {
                 Spanned::new("cursor".to_owned(), span.clone()),
                 Vec::new(),
             ),
-            Mixfix::Atom(Spanned::new(Atom::Tag("LOCAL".to_owned()), span.clone())),
+            Mixfix::Atom(Spanned::new(
+                Atom::Keyword("LOCAL".to_owned()),
+                span.clone(),
+            )),
             span,
         );
         spec.eval_func(

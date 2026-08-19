@@ -679,7 +679,7 @@ pub(crate) fn return_value(
 ) -> Result<ValueRef, InterpError> {
     match flow {
         Flow::Return(value) => Ok(value),
-        Flow::Continue => Err(InterpError::new(
+        Flow::Continue => Err(InterpError::unmatch(
             span.clone(),
             "function did not return a value",
         )),

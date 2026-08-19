@@ -351,6 +351,56 @@ fn missing_and_not_yet_executable_function_kinds_return_typed_errors() {
     assert!(error.message.contains("function `missing` is undefined"));
     let error = interpreter.eval_func("pending", &[], &[]).unwrap_err();
     assert!(error.message.contains("did not return a value"));
+    assert!(error.is_unmatch());
+}
+
+#[test]
+fn unmatched_function_call_backtracks_to_the_next_instruction() {
+    let pending_call = il::Exp::new(
+        il::ExpKind::CallE(id("pending"), Vec::new(), Vec::new()),
+        il::TypKind::TextT,
+        span("pending-call"),
+    );
+    let fallback = il::Exp::new(
+        il::ExpKind::TextE("fallback".to_owned()),
+        il::TypKind::TextT,
+        span("fallback"),
+    );
+    let caller = Spanned::new(
+        sl::DefKind::FuncDecD((
+            id("caller"),
+            Vec::new(),
+            Vec::new(),
+            make_type::text_type(),
+            vec![
+                sl::Instr::new(
+                    sl::InstrKind::ReturnI(pending_call),
+                    1,
+                    span("first-return"),
+                ),
+                sl::Instr::new(sl::InstrKind::ReturnI(fallback), 2, span("second-return")),
+            ],
+            None,
+            Vec::new(),
+        )),
+        span("caller"),
+    );
+    let mut interpreter = Interpreter::new(
+        &[defined("pending"), caller],
+        Options::default(),
+        RecordingInterface {
+            calls: Rc::new(Cell::new(0)),
+        },
+        RecordingExtern {
+            calls: Rc::new(Cell::new(0)),
+        },
+    )
+    .unwrap();
+
+    assert_eq!(
+        get::text(&interpreter.eval_func("caller", &[], &[]).unwrap()),
+        Ok("fallback")
+    );
 }
 
 #[test]
