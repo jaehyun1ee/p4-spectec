@@ -7,7 +7,10 @@ use crate::{
         sl::ast::{Def, DefKind},
     },
     runtime::{
-        dynamic::{envs::ValueEnv, var::Variable},
+        dynamic::{
+            envs::ValueEnv,
+            var::{Variable, VariableRef},
+        },
         dynamic_sl::{
             envs::{FunctionEnv, RelationEnv, TypeDefEnv},
             func::Function,
@@ -223,11 +226,17 @@ impl Context {
     // Finders for values
 
     pub fn find_value(&self, variable: &Variable) -> Result<&ValueRef, InterpError> {
+        self.find_value_by(&variable.id, &variable.iters)
+    }
+
+    pub(crate) fn find_value_by(&self, id: &Id, iters: &[Iter]) -> Result<&ValueRef, InterpError> {
         let value = match &self.local {
             Local::Empty => None,
-            Local::Relation { values, .. } | Local::Function { values, .. } => values.get(variable),
+            Local::Relation { values, .. } | Local::Function { values, .. } => {
+                values.get(&VariableRef::new(&id.node, iters))
+            }
         };
-        value.ok_or_else(|| Self::undefined(&variable.id, "value"))
+        value.ok_or_else(|| Self::undefined(id, "value"))
     }
 
     pub fn is_value_bound(&self, variable: &Variable) -> bool {
@@ -374,7 +383,7 @@ impl Context {
         self.replace_local(Local::Relation {
             id,
             input_values,
-            values: HashMap::new(),
+            values: ValueEnv::new(),
         });
     }
 
@@ -384,7 +393,7 @@ impl Context {
             input_values,
             type_defs,
             functions: HashMap::new(),
-            values: HashMap::new(),
+            values: ValueEnv::new(),
         });
     }
 
@@ -402,7 +411,7 @@ impl Context {
                 input_values,
                 type_defs,
                 functions: HashMap::new(),
-                values: HashMap::new(),
+                values: ValueEnv::new(),
             },
         );
         let generation_previous = self.generation;
@@ -426,7 +435,7 @@ impl Context {
             Local::Relation {
                 id,
                 input_values,
-                values: HashMap::new(),
+                values: ValueEnv::new(),
             },
         );
         let generation_previous = self.generation;
@@ -451,7 +460,7 @@ impl Context {
             .map(|(id, _typ, iters)| {
                 let mut outer_iters = iters.clone();
                 outer_iters.push(Iter::Opt);
-                let value = self.find_value(&Variable::new(id.clone(), outer_iters))?;
+                let value = self.find_value_by(id, &outer_iters)?;
                 get::opt(value)
                     .map(|value| value.cloned())
                     .map_err(|error| InterpError::new(value.span.clone(), error.to_string()))
@@ -490,7 +499,7 @@ impl Context {
             .map(|(id, _typ, iters)| {
                 let mut outer_iters = iters.clone();
                 outer_iters.push(Iter::List);
-                let value = self.find_value(&Variable::new(id.clone(), outer_iters))?;
+                let value = self.find_value_by(id, &outer_iters)?;
                 get::list(value)
                     .map(<[ValueRef]>::to_vec)
                     .map_err(|error| InterpError::new(value.span.clone(), error.to_string()))

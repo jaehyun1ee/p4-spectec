@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use hashbrown::HashMap;
 
 use crate::runtime::{r#type::envs::TypeDefMap, value::ValueRef};
 

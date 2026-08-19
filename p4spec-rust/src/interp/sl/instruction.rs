@@ -206,7 +206,7 @@ fn eval_let_opt(
                 .iter()
                 .map(|(id, _typ, iters)| {
                     context
-                        .find_value(&Variable::new(id.clone(), iters.clone()))
+                        .find_value_by(id, iters)
                         .map(|value| Some(Rc::clone(value)))
                 })
                 .collect::<Result<Vec<_>, _>>()
@@ -243,11 +243,7 @@ fn eval_let_list(
             eval_let_iter_inner(context, calls, left, right, iter_instrs)?;
             vars_bind
                 .iter()
-                .map(|(id, _typ, iters)| {
-                    context
-                        .find_value(&Variable::new(id.clone(), iters.clone()))
-                        .map(Rc::clone)
-                })
+                .map(|(id, _typ, iters)| context.find_value_by(id, iters).map(Rc::clone))
                 .collect::<Result<Vec<_>, _>>()
         })?;
         values_binding_batches.push(values);
@@ -360,7 +356,7 @@ fn eval_rule_opt(
                 .iter()
                 .map(|(id, _typ, iters)| {
                     context
-                        .find_value(&Variable::new(id.clone(), iters.clone()))
+                        .find_value_by(id, iters)
                         .map(|value| Some(Rc::clone(value)))
                 })
                 .collect::<Result<Vec<_>, _>>()
@@ -399,11 +395,7 @@ fn eval_rule_list(
             eval_rule_iter_inner(context, calls, id, notation, inputs, iter_instrs)?;
             vars_bind
                 .iter()
-                .map(|(id, _typ, iters)| {
-                    context
-                        .find_value(&Variable::new(id.clone(), iters.clone()))
-                        .map(Rc::clone)
-                })
+                .map(|(id, _typ, iters)| context.find_value_by(id, iters).map(Rc::clone))
                 .collect::<Result<Vec<_>, _>>()
         })?;
         values_binding_batches.push(values);

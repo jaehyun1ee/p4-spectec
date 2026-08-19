@@ -127,9 +127,7 @@ pub(crate) fn eval_with_calls(
         ExpKind::BoolE(value) => Ok(make::bool(*value, Region::none())),
         ExpKind::NumE(value) => Ok(make::num(value.clone(), Region::none())),
         ExpKind::TextE(value) => Ok(make::text(value.clone(), Region::none())),
-        ExpKind::VarE(id) => context
-            .find_value(&Variable::new(id.clone(), Vec::new()))
-            .map(Rc::clone),
+        ExpKind::VarE(id) => context.find_value_by(id, &[]).map(Rc::clone),
         ExpKind::UnE(operator, _operator_type, operand) => {
             eval_unary(context, calls, exp, *operator, operand)
         }

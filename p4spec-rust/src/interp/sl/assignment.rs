@@ -116,11 +116,7 @@ fn assign_expression_refs(
 
 fn collect_iterated_values(context: &Context, vars: &[Var]) -> Result<Vec<ValueRef>, InterpError> {
     vars.iter()
-        .map(|(id, _typ, iters)| {
-            context
-                .find_value(&Variable::new(id.clone(), iters.clone()))
-                .map(Rc::clone)
-        })
+        .map(|(id, _typ, iters)| context.find_value_by(id, iters).map(Rc::clone))
         .collect()
 }
 

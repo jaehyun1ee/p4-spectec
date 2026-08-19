@@ -10,7 +10,10 @@ use p4spec_rust::{
     },
     lang::{il::ast as il, sl::ast as sl},
     runtime::{
-        dynamic::{envs::ValueEnv, var::Variable},
+        dynamic::{
+            envs::ValueEnv,
+            var::{Variable, VariableRef},
+        },
         dynamic_sl::{
             envs::{FunctionEnv, RelationEnv},
             func::Function,
@@ -84,6 +87,10 @@ fn value_environment_is_one_hash_map_keyed_by_semantic_variables() {
 
     assert_eq!(values.len(), 1);
     assert_eq!(values.get(&variable_b), Some(&value_b));
+    assert_eq!(
+        values.get(&VariableRef::new("x", &[il::Iter::Opt])),
+        Some(&value_b)
+    );
 }
 
 #[test]

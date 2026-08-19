@@ -4,6 +4,8 @@ use std::{
     hash::{Hash, Hasher},
 };
 
+use hashbrown::Equivalent;
+
 use crate::lang::il::ast::{Id, Iter};
 
 #[derive(Clone, Debug)]
@@ -15,6 +17,24 @@ pub struct Variable {
 impl Variable {
     pub fn new(id: Id, iters: Vec<Iter>) -> Self {
         Self { id, iters }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Hash)]
+pub struct VariableRef<'a> {
+    id: &'a str,
+    iters: &'a [Iter],
+}
+
+impl<'a> VariableRef<'a> {
+    pub fn new(id: &'a str, iters: &'a [Iter]) -> Self {
+        Self { id, iters }
+    }
+}
+
+impl Equivalent<Variable> for VariableRef<'_> {
+    fn equivalent(&self, variable: &Variable) -> bool {
+        self.id == variable.id.node && self.iters == variable.iters
     }
 }
 
