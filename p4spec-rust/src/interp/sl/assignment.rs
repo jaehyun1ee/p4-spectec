@@ -2,10 +2,11 @@ use std::rc::Rc;
 
 use crate::{
     interp::common::InterpError,
-    lang::il::ast::{Exp, ExpKind, Typ},
+    lang::il::ast::{Exp, ExpKind, Iter, Typ, Var},
     runtime::{
         dynamic::var::Variable,
-        value::{ValueKind, ValueRef, make},
+        r#type::typ::make as make_type,
+        value::{ValueKind, ValueRef, get, make},
     },
 };
 
@@ -64,12 +65,9 @@ fn assign_inner(context: &mut Context, exp: &Exp, value: ValueRef) -> Result<(),
             let value_tail = make::list(&tail_type, values_tail.to_vec(), tail.span.clone());
             assign_inner(context, tail, value_tail)
         }
-        (ExpKind::IterE(..), _) => match iterated_variable(exp) {
+        (ExpKind::IterE(exp_inner, (iter, vars)), _) => match iterated_variable(exp) {
             Some(variable) => context.bind_value(variable, value),
-            None => Err(InterpError::new(
-                exp.span.clone(),
-                "complex iterated assignment is not implemented",
-            )),
+            None => assign_iterated_expression(context, exp_inner, *iter, vars, value),
         },
         _ => Err(match_error(exp)),
     }
@@ -114,4 +112,89 @@ fn assign_expression_refs(
         assign_inner(context, exp, Rc::clone(value))?;
     }
     Ok(())
+}
+
+fn collect_iterated_values(context: &Context, vars: &[Var]) -> Result<Vec<ValueRef>, InterpError> {
+    vars.iter()
+        .map(|(id, _typ, iters)| {
+            context
+                .find_value(&Variable::new(id.clone(), iters.clone()))
+                .map(Rc::clone)
+        })
+        .collect()
+}
+
+fn assign_optional_iteration(
+    context: &mut Context,
+    exp: &Exp,
+    vars: &[Var],
+    value: ValueRef,
+) -> Result<(), InterpError> {
+    let value_opt = get::opt(&value)
+        .map_err(|error| InterpError::new(value.span.clone(), error.to_string()))?;
+    let values_inner = match value_opt {
+        // Assign the value to the iterated expression.
+        Some(value_inner) => Some(context.with_scope(|context| {
+            assign_inner(context, exp, Rc::clone(value_inner))?;
+            collect_iterated_values(context, vars)
+        })?),
+        None => None,
+    };
+    // Per iterated variable, make an option out of the value.
+    for (index, (id, typ, iters)) in vars.iter().enumerate() {
+        let mut outer_iters = iters.clone();
+        outer_iters.push(Iter::Opt);
+        let typ = make_type::iterate(typ.clone(), &outer_iters);
+        let value_inner = values_inner
+            .as_ref()
+            .map(|values| Rc::clone(&values[index]));
+        let value_outer = make::opt(&typ, value_inner, crate::domain::source::Region::none());
+        context.bind_value(Variable::new(id.clone(), outer_iters), value_outer)?;
+    }
+    Ok(())
+}
+
+fn assign_list_iteration(
+    context: &mut Context,
+    exp: &Exp,
+    vars: &[Var],
+    value: ValueRef,
+) -> Result<(), InterpError> {
+    let values = get::list(&value)
+        .map_err(|error| InterpError::new(value.span.clone(), error.to_string()))?;
+    // Map over the value list elements, and assign each value to the
+    // iterated expression in a cleared local context.
+    let rows = values
+        .iter()
+        .map(|value_inner| {
+            context.with_cleared_values(|context| {
+                assign_inner(context, exp, Rc::clone(value_inner))?;
+                collect_iterated_values(context, vars)
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    // Per iterated variable, collect its elementwise values, then make a
+    // sequence out of them.
+    for (index, (id, typ, iters)) in vars.iter().enumerate() {
+        let mut outer_iters = iters.clone();
+        outer_iters.push(Iter::List);
+        let typ = make_type::iterate(typ.clone(), &outer_iters);
+        let values_inner = rows.iter().map(|row| Rc::clone(&row[index])).collect();
+        let value_outer = make::list(&typ, values_inner, crate::domain::source::Region::none());
+        context.bind_value(Variable::new(id.clone(), outer_iters), value_outer)?;
+    }
+    Ok(())
+}
+
+fn assign_iterated_expression(
+    context: &mut Context,
+    exp: &Exp,
+    iter: Iter,
+    vars: &[Var],
+    value: ValueRef,
+) -> Result<(), InterpError> {
+    match iter {
+        Iter::Opt => assign_optional_iteration(context, exp, vars, value),
+        Iter::List => assign_list_iteration(context, exp, vars, value),
+    }
 }

@@ -174,3 +174,136 @@ fn fixed_list_arity_mismatch_is_an_error_without_bindings() {
     assert!(assignment::assign(&mut context, &pattern, value).is_err());
     assert!(!context.is_value_bound(&Variable::new(id("only"), Vec::new())));
 }
+
+fn iterated_tuple(iter: il::Iter) -> il::Exp {
+    let bool_type = make_type::bool_type();
+    let text_type = make_type::text_type();
+    let tuple = il::Exp::new(
+        il::ExpKind::TupleE(vec![
+            variable("x", il::TypKind::BoolT),
+            variable("y", il::TypKind::TextT),
+        ]),
+        make_type::tuple_kind(vec![bool_type.clone(), text_type.clone()]),
+        span("tuple"),
+    );
+    il::Exp::new(
+        il::ExpKind::IterE(
+            Box::new(tuple),
+            (
+                iter,
+                vec![
+                    (id("x"), bool_type, Vec::new()),
+                    (id("y"), text_type, Vec::new()),
+                ],
+            ),
+        ),
+        il::TypKind::IterT(
+            Box::new(make_type::tuple_type(vec![
+                make_type::bool_type(),
+                make_type::text_type(),
+            ])),
+            iter,
+        ),
+        span("iteration"),
+    )
+}
+
+fn tuple_value(value_bool: bool, value_text: &str) -> p4spec_rust::runtime::value::ValueRef {
+    make::tuple(
+        &make_type::tuple_type(vec![make_type::bool_type(), make_type::text_type()]),
+        vec![
+            make::bool(value_bool, span("bool")),
+            make::text(value_text.to_owned(), span("text")),
+        ],
+        span("tuple-value"),
+    )
+}
+
+#[test]
+fn complex_list_iteration_transposes_assigned_variables() {
+    let mut context = context();
+    let first = tuple_value(true, "first");
+    let second = tuple_value(false, "second");
+    let value = make::list(
+        &make_type::list_type(make_type::tuple_type(vec![
+            make_type::bool_type(),
+            make_type::text_type(),
+        ])),
+        vec![first, second],
+        span("list"),
+    );
+
+    assignment::assign(&mut context, &iterated_tuple(il::Iter::List), value).unwrap();
+
+    let values_x = context
+        .find_value(&Variable::new(id("x"), vec![il::Iter::List]))
+        .unwrap();
+    let values_x = get::list(values_x).unwrap();
+    assert_eq!(get::bool(&values_x[0]), Ok(true));
+    assert_eq!(get::bool(&values_x[1]), Ok(false));
+    let values_y = context
+        .find_value(&Variable::new(id("y"), vec![il::Iter::List]))
+        .unwrap();
+    let values_y = get::list(values_y).unwrap();
+    assert_eq!(get::text(&values_y[0]), Ok("first"));
+    assert_eq!(get::text(&values_y[1]), Ok("second"));
+    assert!(!context.is_value_bound(&Variable::new(id("x"), Vec::new())));
+    assert!(!context.is_value_bound(&Variable::new(id("y"), Vec::new())));
+}
+
+#[test]
+fn complex_optional_iteration_wraps_some_and_none_per_variable() {
+    let mut context = context();
+    let tuple_type = make_type::tuple_type(vec![make_type::bool_type(), make_type::text_type()]);
+    let value = make::opt(
+        &make_type::opt_type(tuple_type.clone()),
+        Some(tuple_value(true, "inside")),
+        span("some"),
+    );
+    assignment::assign(&mut context, &iterated_tuple(il::Iter::Opt), value).unwrap();
+    assert_eq!(
+        get::bool(
+            get::opt(
+                context
+                    .find_value(&Variable::new(id("x"), vec![il::Iter::Opt]))
+                    .unwrap()
+            )
+            .unwrap()
+            .unwrap()
+        ),
+        Ok(true)
+    );
+    assert_eq!(
+        get::text(
+            get::opt(
+                context
+                    .find_value(&Variable::new(id("y"), vec![il::Iter::Opt]))
+                    .unwrap()
+            )
+            .unwrap()
+            .unwrap()
+        ),
+        Ok("inside")
+    );
+
+    let value = make::opt(&make_type::opt_type(tuple_type), None, span("none"));
+    assignment::assign(&mut context, &iterated_tuple(il::Iter::Opt), value).unwrap();
+    assert!(
+        get::opt(
+            context
+                .find_value(&Variable::new(id("x"), vec![il::Iter::Opt]))
+                .unwrap()
+        )
+        .unwrap()
+        .is_none()
+    );
+    assert!(
+        get::opt(
+            context
+                .find_value(&Variable::new(id("y"), vec![il::Iter::Opt]))
+                .unwrap()
+        )
+        .unwrap()
+        .is_none()
+    );
+}

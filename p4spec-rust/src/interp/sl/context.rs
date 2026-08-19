@@ -527,6 +527,36 @@ impl Context {
         result
     }
 
+    pub(crate) fn with_cleared_values<T>(
+        &mut self,
+        evaluate: impl FnOnce(&mut Self) -> Result<T, InterpError>,
+    ) -> Result<T, InterpError> {
+        let values_previous = match &mut self.local {
+            Local::Empty => {
+                return Err(InterpError::new(
+                    crate::domain::source::Region::none(),
+                    "cannot clear empty local context",
+                ));
+            }
+            Local::Relation { values, .. } | Local::Function { values, .. } => {
+                std::mem::take(values)
+            }
+        };
+        let generation_previous = self.generation;
+        let undo_previous = std::mem::take(&mut self.undo);
+        self.generation = self.generation.wrapping_add(1);
+        let result = evaluate(self);
+        match &mut self.local {
+            Local::Empty => unreachable!("cleared local context changed kind"),
+            Local::Relation { values, .. } | Local::Function { values, .. } => {
+                *values = values_previous;
+            }
+        }
+        self.generation = generation_previous;
+        self.undo = undo_previous;
+        result
+    }
+
     pub(crate) fn with_scope<T>(
         &mut self,
         evaluate: impl FnOnce(&mut Self) -> Result<T, InterpError>,
