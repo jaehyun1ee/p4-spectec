@@ -140,6 +140,14 @@ where
             values_input,
         )
     }
+
+    pub fn eval_program(
+        &mut self,
+        relation: &str,
+        program: &ValueRef,
+    ) -> Result<Vec<ValueRef>, InterpError> {
+        self.eval_rel(relation, std::slice::from_ref(program))
+    }
 }
 
 struct Dispatcher<'a, I, E> {

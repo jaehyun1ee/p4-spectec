@@ -135,3 +135,23 @@ fn relation_arity_and_missing_result_are_typed_failures() {
     let error = interpreter.eval_rel("no_result", &[]).unwrap_err();
     assert!(error.is_unmatch());
 }
+
+#[test]
+fn eval_program_invokes_a_relation_with_the_program_as_its_only_input() {
+    let mut interpreter = Interpreter::new(
+        &[defined_identity()],
+        Options {
+            cache: false,
+            deterministic: false,
+            guard: false,
+        },
+        NullInterface,
+        EchoExtern,
+    )
+    .unwrap();
+    let program = make::text("program".to_owned(), span("program"));
+
+    let result = interpreter.eval_program("identity", &program).unwrap();
+    assert_eq!(result.len(), 1);
+    assert!(Rc::ptr_eq(&result[0], &program));
+}
