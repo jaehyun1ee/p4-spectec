@@ -34,7 +34,7 @@ fn var(name: &str, type_args: Vec<il::Typ>, file: &str) -> il::Typ {
     Spanned::new(TypKind::VarT(id(name, file), type_args), span(file))
 }
 
-fn no_func(_: &str) -> Option<FuncSignature<'static>> {
+fn no_func(_: &str) -> Option<FuncSignature> {
     None
 }
 
@@ -261,14 +261,11 @@ fn function_membership_uses_the_declared_function_signature() {
         make_type::text_type(),
         span("value"),
     );
-    let actual_type_params = vec![id("U", "actual")];
-    let actual_param_types = vec![var("U", Vec::new(), "actual-param")];
-    let actual_return_type = var("U", Vec::new(), "actual-return");
     let find_func = |name: &str| {
         (name == "identity").then_some(FuncSignature {
-            type_params: &actual_type_params,
-            param_types: &actual_param_types,
-            return_type: &actual_return_type,
+            type_params: vec![id("U", "actual")],
+            param_types: vec![var("U", Vec::new(), "actual-param")],
+            return_type: var("U", Vec::new(), "actual-return"),
         })
     };
 

@@ -13,8 +13,8 @@ use crate::{
         dynamic_sl::envs::TypeDefEnv,
         dynamic_sl::func::Function,
         dynamic_sl::rel::Relation,
-        r#type::typdef::TypeDef,
-        value::{ValueKind, ValueRef, get},
+        r#type::{subst, typdef::TypeDef},
+        value::{ValueKind, ValueRef, get, r#match as value_match},
     },
 };
 
@@ -51,6 +51,7 @@ pub struct Interpreter<I, E> {
     externs: E,
     function_cache: CallCache<ValueRef>,
     relation_cache: CallCache<Vec<ValueRef>>,
+    sub_cache: value_match::SubCache,
 }
 
 impl<I, E> Interpreter<I, E>
@@ -71,6 +72,7 @@ where
             externs,
             function_cache: CallCache::new(CALL_CACHE_SIZE),
             relation_cache: CallCache::new(CALL_CACHE_SIZE),
+            sub_cache: value_match::SubCache::new(),
         })
     }
 
@@ -81,6 +83,7 @@ where
     fn clear_call_caches(&mut self) {
         self.function_cache.clear();
         self.relation_cache.clear();
+        self.sub_cache.clear();
     }
 
     pub fn eval_func(
@@ -96,7 +99,14 @@ where
             externs: &mut self.externs,
             function_cache: &mut self.function_cache,
             relation_cache: &mut self.relation_cache,
+            sub_cache: &mut self.sub_cache,
         };
+        dispatcher.check_func_inputs(
+            &self.context,
+            &Spanned::new(name.to_owned(), Region::none()),
+            type_args,
+            values_input,
+        )?;
         dispatcher.invoke_func(
             &mut self.context,
             &Spanned::new(name.to_owned(), Region::none()),
@@ -117,7 +127,13 @@ where
             externs: &mut self.externs,
             function_cache: &mut self.function_cache,
             relation_cache: &mut self.relation_cache,
+            sub_cache: &mut self.sub_cache,
         };
+        dispatcher.check_rel_inputs(
+            &self.context,
+            &Spanned::new(name.to_owned(), Region::none()),
+            values_input,
+        )?;
         dispatcher.invoke_rel(
             &mut self.context,
             &Spanned::new(name.to_owned(), Region::none()),
@@ -132,6 +148,7 @@ struct Dispatcher<'a, I, E> {
     externs: &'a mut E,
     function_cache: &'a mut CallCache<ValueRef>,
     relation_cache: &'a mut CallCache<Vec<ValueRef>>,
+    sub_cache: &'a mut value_match::SubCache,
 }
 
 enum FunctionResult {
@@ -149,6 +166,188 @@ where
     I: Interface,
     E: Extern,
 {
+    // Checkers
+
+    fn find_func_signature(context: &Context, name: &str) -> Option<value_match::FuncSignature> {
+        let id = Spanned::new(name.to_owned(), Region::none());
+        context.find_function(&id).ok().map(|(_cursor, function)| {
+            let signature = function.get_signature();
+            value_match::FuncSignature {
+                type_params: signature.type_params,
+                param_types: signature.param_types,
+                return_type: signature.return_type,
+            }
+        })
+    }
+
+    fn values_match(
+        context: &Context,
+        types: &[Typ],
+        values: &[ValueRef],
+    ) -> Result<bool, InterpError> {
+        value_match::subs(
+            &context.type_defs(),
+            &|name| Self::find_func_signature(context, name),
+            types,
+            values,
+        )
+        .map_err(|error| InterpError::new(Region::none(), error.to_string()))
+    }
+
+    fn check_rel_inputs(
+        &self,
+        context: &Context,
+        id: &crate::lang::il::ast::Id,
+        values_input: &[ValueRef],
+    ) -> Result<(), InterpError> {
+        if !self.options.guard {
+            return Ok(());
+        }
+        let relation = context.find_relation(id)?;
+        let (not_type, inputs) = relation.get_signature();
+        let types = not_type.node.args();
+        let types_input = inputs
+            .iter()
+            .map(|index| {
+                usize::try_from(*index)
+                    .ok()
+                    .and_then(|index| types.get(index).copied())
+                    .cloned()
+                    .ok_or_else(|| {
+                        InterpError::new(id.span.clone(), "relation input hint is out of bounds")
+                    })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        if Self::values_match(context, &types_input, values_input)? {
+            Ok(())
+        } else {
+            Err(InterpError::new(
+                id.span.clone(),
+                format!(
+                    "relation input of {} does not match the expected type",
+                    id.node
+                ),
+            ))
+        }
+    }
+
+    fn check_rel_outputs(
+        &self,
+        context: &Context,
+        id: &crate::lang::il::ast::Id,
+        relation: &Relation,
+        values_output: &[ValueRef],
+    ) -> Result<(), InterpError> {
+        if !self.options.guard {
+            return Ok(());
+        }
+        let (not_type, inputs) = relation.get_signature();
+        let types_output = not_type
+            .node
+            .args()
+            .into_iter()
+            .enumerate()
+            .filter(|(index, _typ)| !inputs.contains(&(*index as i64)))
+            .map(|(_index, typ)| typ.clone())
+            .collect::<Vec<_>>();
+        if Self::values_match(context, &types_output, values_output)? {
+            Ok(())
+        } else {
+            Err(InterpError::new(
+                id.span.clone(),
+                format!(
+                    "relation output of {} does not match the expected type",
+                    id.node
+                ),
+            ))
+        }
+    }
+
+    fn check_func_inputs(
+        &self,
+        context: &Context,
+        id: &crate::lang::il::ast::Id,
+        type_args: &[Typ],
+        values_input: &[ValueRef],
+    ) -> Result<(), InterpError> {
+        if !self.options.guard {
+            return Ok(());
+        }
+        let function = context.find_function(id)?.1;
+        let signature = function.get_signature();
+        if signature.type_params.len() != type_args.len() {
+            return Err(InterpError::new(
+                id.span.clone(),
+                format!("arity mismatch in type arguments of {}", id.node),
+            ));
+        }
+        let substitution = signature
+            .type_params
+            .iter()
+            .zip(type_args)
+            .map(|(type_param, type_arg)| (type_param.node.clone(), type_arg.clone()))
+            .collect();
+        let param_types = subst::subst_types(&substitution, &signature.param_types)
+            .map_err(|error| InterpError::new(id.span.clone(), error.to_string()))?;
+        if Self::values_match(context, &param_types, values_input)? {
+            Ok(())
+        } else {
+            Err(InterpError::new(
+                id.span.clone(),
+                format!(
+                    "function argument of {} does not match the parameter type",
+                    id.node
+                ),
+            ))
+        }
+    }
+
+    fn check_func_output(
+        &mut self,
+        context: &Context,
+        id: &crate::lang::il::ast::Id,
+        type_params: &[TParam],
+        return_type: &Typ,
+        type_args: &[Typ],
+        value_output: &ValueRef,
+    ) -> Result<(), InterpError> {
+        if !self.options.guard {
+            return Ok(());
+        }
+        if type_params.len() != type_args.len() {
+            return Err(InterpError::new(
+                id.span.clone(),
+                format!("arity mismatch in type arguments of {}", id.node),
+            ));
+        }
+        let substitution = type_params
+            .iter()
+            .zip(type_args)
+            .map(|(type_param, type_arg)| (type_param.node.clone(), type_arg.clone()))
+            .collect();
+        let return_type = subst::subst_type(&substitution, return_type)
+            .map_err(|error| InterpError::new(id.span.clone(), error.to_string()))?;
+        let matches = value_match::sub(
+            self.sub_cache,
+            &context.type_defs(),
+            &|name| Self::find_func_signature(context, name),
+            &return_type,
+            value_output,
+        )
+        .map_err(|error| InterpError::new(id.span.clone(), error.to_string()))?;
+        if matches {
+            Ok(())
+        } else {
+            Err(InterpError::new(
+                id.span.clone(),
+                format!(
+                    "return value of function {} does not match the expected type",
+                    id.node
+                ),
+            ))
+        }
+    }
+
     fn invoke_func(
         &mut self,
         context: &mut Context,
@@ -209,16 +408,22 @@ where
         values_input: &[ValueRef],
     ) -> Result<FunctionResult, InterpError> {
         match function {
-            Function::Extern(..) => self
-                .externs
-                .eval_func(&id.node, type_args, values_input)
-                .map(FunctionResult::Return)
-                .map_err(|error| InterpError::new(error.span, error.message)),
-            Function::Builtin(..) => self
-                .interface
-                .call_builtin(&mut |_| {}, id, type_args, values_input)
-                .map(FunctionResult::Return)
-                .map_err(|error| InterpError::new(error.span, error.message)),
+            Function::Extern(type_params, _params, return_type) => {
+                let value = self
+                    .externs
+                    .eval_func(&id.node, type_args, values_input)
+                    .map_err(|error| InterpError::new(error.span, error.message))?;
+                self.check_func_output(context, id, type_params, return_type, type_args, &value)?;
+                Ok(FunctionResult::Return(value))
+            }
+            Function::Builtin(type_params, _params, return_type) => {
+                let value = self
+                    .interface
+                    .call_builtin(&mut |_| {}, id, type_args, values_input)
+                    .map_err(|error| InterpError::new(error.span, error.message))?;
+                self.check_func_output(context, id, type_params, return_type, type_args, &value)?;
+                Ok(FunctionResult::Return(value))
+            }
             Function::Table(params, _return_type, rows) => {
                 if !type_args.is_empty() {
                     return Err(InterpError::new(
@@ -390,11 +595,14 @@ where
         values_input: &[ValueRef],
     ) -> Result<RelationResult, InterpError> {
         match relation {
-            Relation::Extern(_) => self
-                .externs
-                .eval_rel(&id.node, values_input)
-                .map(RelationResult::Result)
-                .map_err(|error| InterpError::new(error.span, error.message)),
+            Relation::Extern(_) => {
+                let values = self
+                    .externs
+                    .eval_rel(&id.node, values_input)
+                    .map_err(|error| InterpError::new(error.span, error.message))?;
+                self.check_rel_outputs(context, id, relation, &values)?;
+                Ok(RelationResult::Result(values))
+            }
             Relation::Defined(_signature, exps_input, block, else_block) => context
                 .with_relation_frame(id.clone(), values_input.to_vec(), |context| {
                     if exps_input.len() != values_input.len() {

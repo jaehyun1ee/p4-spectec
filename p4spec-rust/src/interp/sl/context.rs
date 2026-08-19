@@ -13,7 +13,7 @@ use crate::{
             func::Function,
             rel::Relation,
         },
-        r#type::{subst::TypeSubstitution, typdef::TypeDef},
+        r#type::{envs::TypeDefMap, subst::TypeSubstitution, typdef::TypeDef},
         value::{ValueRef, get},
     },
 };
@@ -290,6 +290,17 @@ impl Context {
                 _ => None,
             })
             .collect()
+    }
+
+    pub(crate) fn type_defs(&self) -> TypeDefMap {
+        let mut type_defs = self.global.type_defs.clone();
+        if let Local::Function {
+            type_defs: local, ..
+        } = &self.local
+        {
+            type_defs.extend(local.clone());
+        }
+        type_defs
     }
 
     // Adders

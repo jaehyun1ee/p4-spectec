@@ -19,11 +19,11 @@ use crate::{
 
 use super::{Value, ValueKind, ValueRef};
 
-#[derive(Clone, Copy, Debug)]
-pub struct FuncSignature<'a> {
-    pub type_params: &'a [TParam],
-    pub param_types: &'a [Typ],
-    pub return_type: &'a Typ,
+#[derive(Clone, Debug)]
+pub struct FuncSignature {
+    pub type_params: Vec<TParam>,
+    pub param_types: Vec<Typ>,
+    pub return_type: Typ,
 }
 
 #[derive(Clone, Debug, Error, PartialEq)]
@@ -48,14 +48,14 @@ pub enum MatchError {
 
 // Whether a value belongs to a type (including subtyping)
 
-fn sub_inner<'a, F>(
+fn sub_inner<F>(
     type_defs: &TypeDefMap,
     find_func: &F,
     typ: &Typ,
     value: &Value,
 ) -> Result<bool, MatchError>
 where
-    F: Fn(&str) -> Option<FuncSignature<'a>>,
+    F: Fn(&str) -> Option<FuncSignature>,
 {
     match &typ.node {
         TypKind::BoolT => Ok(matches!(value.kind, ValueKind::BoolV(_))),
@@ -178,9 +178,9 @@ where
                     type_params,
                     param_types,
                     return_type,
-                    signature.type_params,
-                    signature.param_types,
-                    signature.return_type,
+                    &signature.type_params,
+                    &signature.param_types,
+                    &signature.return_type,
                 )?)
             }
             _ => Ok(false),
@@ -188,14 +188,14 @@ where
     }
 }
 
-fn subs_inner<'a, 'typ, 'value, F, T, V>(
+fn subs_inner<'typ, 'value, F, T, V>(
     type_defs: &TypeDefMap,
     find_func: &F,
     types: T,
     values: V,
 ) -> Result<bool, MatchError>
 where
-    F: Fn(&str) -> Option<FuncSignature<'a>>,
+    F: Fn(&str) -> Option<FuncSignature>,
     T: ExactSizeIterator<Item = &'typ Typ>,
     V: ExactSizeIterator<Item = &'value Value>,
 {
@@ -219,7 +219,7 @@ pub type SubCache = HashMap<(String, ValueRef), bool>;
 
 // Entry point
 
-pub fn sub<'a, F>(
+pub fn sub<F>(
     cache: &mut SubCache,
     type_defs: &TypeDefMap,
     find_func: &F,
@@ -227,7 +227,7 @@ pub fn sub<'a, F>(
     value: &ValueRef,
 ) -> Result<bool, MatchError>
 where
-    F: Fn(&str) -> Option<FuncSignature<'a>>,
+    F: Fn(&str) -> Option<FuncSignature>,
 {
     match &typ.node {
         TypKind::VarT(type_id, type_args) if type_args.is_empty() => {
@@ -243,14 +243,14 @@ where
     }
 }
 
-pub fn subs<'a, F>(
+pub fn subs<F>(
     type_defs: &TypeDefMap,
     find_func: &F,
     types: &[Typ],
     values: &[ValueRef],
 ) -> Result<bool, MatchError>
 where
-    F: Fn(&str) -> Option<FuncSignature<'a>>,
+    F: Fn(&str) -> Option<FuncSignature>,
 {
     subs_inner(
         type_defs,
