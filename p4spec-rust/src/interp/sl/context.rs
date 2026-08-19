@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, rc::Rc};
 
 use crate::{
     interp::common::InterpError,
@@ -71,7 +71,7 @@ enum Local {
 enum Undo {
     Value(Variable, Option<ValueRef>),
     TypeDef(String, Option<TypeDef>),
-    Function(String, Option<Function>),
+    Function(String, Option<Rc<Function>>),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -132,7 +132,9 @@ impl Context {
         if self.global.relations.contains_key(&id.node) {
             return Err(Self::duplicate(id, "relation"));
         }
-        self.global.relations.insert(id.node.clone(), relation);
+        self.global
+            .relations
+            .insert(id.node.clone(), Rc::new(relation));
         Ok(())
     }
 
@@ -140,7 +142,9 @@ impl Context {
         if self.global.functions.contains_key(&id.node) {
             return Err(Self::duplicate(id, "function"));
         }
-        self.global.functions.insert(id.node.clone(), function);
+        self.global
+            .functions
+            .insert(id.node.clone(), Rc::new(function));
         Ok(())
     }
 
@@ -248,7 +252,7 @@ impl Context {
 
     // Finders for relations
 
-    pub fn find_relation(&self, id: &Id) -> Result<&Relation, InterpError> {
+    pub fn find_relation(&self, id: &Id) -> Result<&Rc<Relation>, InterpError> {
         self.global
             .relations
             .get(&id.node)
@@ -257,7 +261,7 @@ impl Context {
 
     // Finders for functions
 
-    pub fn find_function(&self, id: &Id) -> Result<(Cursor, &Function), InterpError> {
+    pub fn find_function(&self, id: &Id) -> Result<(Cursor, &Rc<Function>), InterpError> {
         if let Local::Function { functions, .. } = &self.local
             && let Some(function) = functions.get(&id.node)
         {
@@ -337,7 +341,7 @@ impl Context {
         Ok(())
     }
 
-    pub fn bind_function(&mut self, id: Id, function: Function) -> Result<(), InterpError> {
+    pub fn bind_function(&mut self, id: Id, function: Rc<Function>) -> Result<(), InterpError> {
         if self.is_function_bound(&id) {
             return Err(Self::duplicate(&id, "function"));
         }

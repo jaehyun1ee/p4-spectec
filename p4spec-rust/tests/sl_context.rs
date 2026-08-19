@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use p4spec_rust::{
     domain::{
         mixfix::Mixfix,
@@ -74,11 +76,11 @@ fn loading_a_spec_builds_global_tables_and_rejects_duplicates() {
     );
     assert!(matches!(
         context.find_relation(&id("R", "lookup")),
-        Ok(Relation::Extern(_))
+        Ok(relation) if matches!(relation.as_ref(), Relation::Extern(_))
     ));
     assert!(matches!(
         context.find_function(&id("f", "lookup")),
-        Ok((Cursor::Global, Function::Builtin(..)))
+        Ok((Cursor::Global, function)) if matches!(function.as_ref(), Function::Builtin(..))
     ));
     assert!(!context.deterministic());
 
@@ -92,6 +94,44 @@ fn loading_a_spec_builds_global_tables_and_rejects_duplicates() {
     let error = Context::from_spec(true, &duplicate).unwrap_err();
     assert_eq!(error.span, span("duplicate"));
     assert!(error.message.contains("type `T` was already defined"));
+}
+
+#[test]
+fn loaded_relations_and_functions_are_shared_across_lookups_and_local_bindings() {
+    let spec = vec![
+        Spanned::new(
+            sl::DefKind::ExternRelD((
+                id("R", "relation"),
+                signature("signature"),
+                Vec::new(),
+                Vec::new(),
+            )),
+            span("relation-def"),
+        ),
+        Spanned::new(
+            sl::DefKind::BuiltinDecD((
+                id("f", "function"),
+                Vec::new(),
+                Vec::new(),
+                make_type::bool_type(),
+                Vec::new(),
+            )),
+            span("function-def"),
+        ),
+    ];
+    let mut context = Context::from_spec(false, &spec).unwrap();
+
+    let relation = Rc::clone(context.find_relation(&id("R", "first")).unwrap());
+    let relation_again = context.find_relation(&id("R", "second")).unwrap();
+    assert!(Rc::ptr_eq(&relation, relation_again));
+
+    let function = Rc::clone(context.find_function(&id("f", "first")).unwrap().1);
+    context.enter_function(id("caller", "caller"), Vec::new(), Default::default());
+    context
+        .bind_function(id("local", "local"), Rc::clone(&function))
+        .unwrap();
+    let local = context.find_function(&id("local", "lookup")).unwrap().1;
+    assert!(Rc::ptr_eq(&function, local));
 }
 
 #[test]
@@ -129,7 +169,11 @@ fn relation_and_function_frames_expose_inputs_and_expected_local_capabilities() 
     context
         .bind_function(
             id("local", "local-function"),
-            Function::Builtin(Vec::new(), Vec::new(), make_type::bool_type()),
+            Rc::new(Function::Builtin(
+                Vec::new(),
+                Vec::new(),
+                make_type::bool_type(),
+            )),
         )
         .unwrap();
     assert!(matches!(
@@ -203,7 +247,7 @@ fn defined_relation_payload_survives_loading() {
     )];
     let context = Context::from_spec(false, &spec).unwrap();
     assert!(
-        matches!(context.find_relation(&id("R", "lookup")), Ok(Relation::Defined(_, matches, _, Some(_))) if matches.len() == 1)
+        matches!(context.find_relation(&id("R", "lookup")), Ok(relation) if matches!(relation.as_ref(), Relation::Defined(_, matches, _, Some(_)) if matches.len() == 1))
     );
 }
 

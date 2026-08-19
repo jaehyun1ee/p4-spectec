@@ -1,4 +1,7 @@
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::{
+    collections::{BTreeSet, HashMap, HashSet},
+    rc::Rc,
+};
 
 use p4spec_rust::{
     domain::{
@@ -107,8 +110,11 @@ fn relations_retain_defined_payloads_and_expose_signatures() {
     assert_eq!(defined_relation.get_signature(), &signature);
 
     let mut relations = RelationEnv::new();
-    relations.insert("R".to_owned(), defined_relation);
-    assert!(matches!(relations.get("R"), Some(Relation::Defined(..))));
+    relations.insert("R".to_owned(), Rc::new(defined_relation));
+    assert!(matches!(
+        relations.get("R").map(Rc::as_ref),
+        Some(Relation::Defined(..))
+    ));
 }
 
 #[test]
@@ -169,9 +175,9 @@ fn every_function_kind_computes_the_ocaml_signature() {
     assert_eq!(functions[3].to_string(), "defined function");
 
     let mut functions_by_name: FunctionEnv = HashMap::new();
-    functions_by_name.insert("f".to_owned(), functions[0].clone());
+    functions_by_name.insert("f".to_owned(), Rc::new(functions[0].clone()));
     assert!(matches!(
-        functions_by_name.get("f"),
+        functions_by_name.get("f").map(Rc::as_ref),
         Some(Function::Extern(..))
     ));
 }

@@ -404,10 +404,10 @@ where
         let mut values_input = values_input.to_vec();
         loop {
             let (cursor, function) = context.find_function(&id)?;
-            let function = function.clone();
+            let function = Rc::clone(function);
             let cacheable = self.options.cache
                 && cursor != Cursor::Local
-                && !matches!(function, Function::Extern(..))
+                && !matches!(function.as_ref(), Function::Extern(..))
                 && !values_input
                     .iter()
                     .any(|value| matches!(value.kind, ValueKind::FuncV(_)));
@@ -417,8 +417,13 @@ where
             } else {
                 let interface_before = self.interface.checkpoint();
                 let extern_before = self.externs.checkpoint();
-                let result =
-                    self.invoke_func_body(context, &id, &function, &type_args, &values_input)?;
+                let result = self.invoke_func_body(
+                    context,
+                    &id,
+                    function.as_ref(),
+                    &type_args,
+                    &values_input,
+                )?;
                 if cacheable
                     && let FunctionResult::Return(value) = &result
                     && !self
@@ -547,7 +552,7 @@ where
         id: &crate::lang::il::ast::Id,
         params: &[Param],
         values: &[ValueRef],
-    ) -> Result<Vec<Option<Function>>, InterpError> {
+    ) -> Result<Vec<Option<Rc<Function>>>, InterpError> {
         if params.len() != values.len() {
             return Err(InterpError::new(
                 id.span.clone(),
@@ -564,7 +569,7 @@ where
                         .map_err(|error| InterpError::new(param.span.clone(), error.to_string()))?;
                     context
                         .find_function(function_id)
-                        .map(|(_cursor, function)| Some(function.clone()))
+                        .map(|(_cursor, function)| Some(Rc::clone(function)))
                 }
             })
             .collect()
@@ -574,7 +579,7 @@ where
         context: &mut Context,
         params: &[Param],
         values: &[ValueRef],
-        param_functions: &[Option<Function>],
+        param_functions: &[Option<Rc<Function>>],
     ) -> Result<(), InterpError> {
         debug_assert_eq!(params.len(), values.len());
         debug_assert_eq!(params.len(), param_functions.len());
@@ -637,15 +642,16 @@ where
         let mut id = id.clone();
         let mut values_input = values_input.to_vec();
         loop {
-            let relation = context.find_relation(&id)?.clone();
-            let cacheable = self.options.cache && !matches!(relation, Relation::Extern(_));
+            let relation = Rc::clone(context.find_relation(&id)?);
+            let cacheable = self.options.cache && !matches!(relation.as_ref(), Relation::Extern(_));
             let key: CallKey = (id.node.clone(), values_input.clone());
             let result = if cacheable && let Some(values) = self.relation_cache.find(&key) {
                 RelationResult::Result(values.clone())
             } else {
                 let interface_before = self.interface.checkpoint();
                 let extern_before = self.externs.checkpoint();
-                let result = self.invoke_rel_body(context, &id, &relation, &values_input)?;
+                let result =
+                    self.invoke_rel_body(context, &id, relation.as_ref(), &values_input)?;
                 if cacheable
                     && let RelationResult::Result(values) = &result
                     && !self
