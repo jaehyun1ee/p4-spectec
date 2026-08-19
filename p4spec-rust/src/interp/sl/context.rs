@@ -52,7 +52,7 @@ enum Local {
         // Relation name
         id: Id,
         // Input values
-        input_values: Vec<ValueRef>,
+        input_values: Rc<[ValueRef]>,
         // Map from variables to values
         values: ValueEnv,
     },
@@ -60,7 +60,7 @@ enum Local {
         // Function name
         id: Id,
         // Input values
-        input_values: Vec<ValueRef>,
+        input_values: Rc<[ValueRef]>,
         // Map from syntax ids to type definitions
         type_defs: TypeDefEnv,
         // Map from function ids to functions
@@ -422,7 +422,7 @@ impl Context {
         let values = self.take_value_env();
         self.replace_local(Local::Relation {
             id,
-            input_values,
+            input_values: input_values.into(),
             values,
         });
     }
@@ -431,7 +431,7 @@ impl Context {
         let values = self.take_value_env();
         self.replace_local(Local::Function {
             id,
-            input_values,
+            input_values: input_values.into(),
             type_defs,
             functions: HashMap::new(),
             values,
@@ -441,7 +441,7 @@ impl Context {
     pub(crate) fn with_function_frame<T>(
         &mut self,
         id: Id,
-        input_values: Vec<ValueRef>,
+        input_values: Rc<[ValueRef]>,
         type_defs: TypeDefEnv,
         evaluate: impl FnOnce(&mut Self) -> Result<T, InterpError>,
     ) -> Result<T, InterpError> {
@@ -472,7 +472,7 @@ impl Context {
     pub(crate) fn with_relation_frame<T>(
         &mut self,
         id: Id,
-        input_values: Vec<ValueRef>,
+        input_values: Rc<[ValueRef]>,
         evaluate: impl FnOnce(&mut Self) -> Result<T, InterpError>,
     ) -> Result<T, InterpError> {
         let values = self.take_value_env();
@@ -716,7 +716,7 @@ mod tests {
     fn completed_frames_reuse_value_environment_capacity() {
         let mut context = Context::from_spec(false, &[]).expect("valid empty spec");
         context
-            .with_relation_frame(id("first"), Vec::new(), |context| {
+            .with_relation_frame(id("first"), Vec::new().into(), |context| {
                 for index in 0..64 {
                     context.bind_value(
                         Variable::new(id(format!("value-{index}")), Vec::new()),
@@ -730,7 +730,7 @@ mod tests {
         assert!(capacity >= 64);
 
         context
-            .with_relation_frame(id("second"), Vec::new(), |context| {
+            .with_relation_frame(id("second"), Vec::new().into(), |context| {
                 let Local::Relation { values, .. } = &context.local else {
                     panic!("expected relation frame")
                 };
@@ -745,7 +745,7 @@ mod tests {
     fn completed_frames_reuse_undo_log_capacity() {
         let mut context = Context::from_spec(false, &[]).expect("valid empty spec");
         context
-            .with_relation_frame(id("first"), Vec::new(), |context| {
+            .with_relation_frame(id("first"), Vec::new().into(), |context| {
                 for index in 0..64 {
                     context.bind_value(
                         Variable::new(id(format!("value-{index}")), Vec::new()),
@@ -759,11 +759,40 @@ mod tests {
         assert!(capacity >= 64);
 
         context
-            .with_relation_frame(id("second"), Vec::new(), |context| {
+            .with_relation_frame(id("second"), Vec::new().into(), |context| {
                 assert!(context.undo.capacity() >= capacity);
                 Ok(())
             })
             .unwrap();
         assert_eq!(context.undo_pool.len(), 1);
+    }
+
+    #[test]
+    fn local_frames_share_the_input_container() {
+        let inputs: Rc<[ValueRef]> = vec![make::bool(true, Region::none())].into();
+        let mut context = Context::from_spec(false, &[]).expect("valid empty spec");
+        context
+            .with_relation_frame(id("relation"), Rc::clone(&inputs), |context| {
+                let Local::Relation { input_values, .. } = &context.local else {
+                    panic!("expected relation frame")
+                };
+                assert!(Rc::ptr_eq(&inputs, input_values));
+                Ok(())
+            })
+            .unwrap();
+        context
+            .with_function_frame(
+                id("function"),
+                Rc::clone(&inputs),
+                TypeDefEnv::new(),
+                |context| {
+                    let Local::Function { input_values, .. } = &context.local else {
+                        panic!("expected function frame")
+                    };
+                    assert!(Rc::ptr_eq(&inputs, input_values));
+                    Ok(())
+                },
+            )
+            .unwrap();
     }
 }

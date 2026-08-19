@@ -401,7 +401,7 @@ where
     ) -> Result<ValueRef, InterpError> {
         let mut id = id.clone();
         let mut type_args = type_args.to_vec();
-        let mut values_input = values_input.to_vec();
+        let mut values_input: Rc<[ValueRef]> = values_input.to_vec().into();
         loop {
             let (cursor, function) = context.find_function(&id)?;
             let function = Rc::clone(function);
@@ -422,7 +422,7 @@ where
                     &id,
                     function.as_ref(),
                     &type_args,
-                    &values_input,
+                    Rc::clone(&values_input),
                 )?;
                 if cacheable
                     && let FunctionResult::Return(value) = &result
@@ -434,7 +434,7 @@ where
                         .side_effected(extern_before, self.externs.checkpoint())
                 {
                     self.function_cache.insert(
-                        CallKey::new(id.node.clone(), values_input.clone()),
+                        CallKey::new(id.node.clone(), values_input.to_vec()),
                         Rc::clone(value),
                     );
                 }
@@ -445,7 +445,7 @@ where
                 FunctionResult::TailCall(id_tail, type_args_tail, values_tail) => {
                     id = id_tail;
                     type_args = type_args_tail;
-                    values_input = values_tail;
+                    values_input = values_tail.into();
                 }
             }
         }
@@ -457,7 +457,7 @@ where
         id: &crate::lang::il::ast::Id,
         function: &Function,
         type_args: &[Typ],
-        values_input: &[ValueRef],
+        values_input: Rc<[ValueRef]>,
     ) -> Result<FunctionResult, InterpError> {
         match function {
             Function::Extern(type_params, _params, return_type) => {
@@ -471,7 +471,7 @@ where
                         sub_cache: &mut *self.sub_cache,
                     };
                     self.externs
-                        .eval_func(&mut spec, &id.node, type_args, values_input)
+                        .eval_func(&mut spec, &id.node, type_args, &values_input)
                         .map_err(|error| InterpError::new(error.span, error.message))?
                 };
                 self.check_func_output(context, id, type_params, return_type, type_args, &value)?;
@@ -480,7 +480,7 @@ where
             Function::Builtin(type_params, _params, return_type) => {
                 let value = self
                     .interface
-                    .call_builtin(&mut |_| {}, id, type_args, values_input)
+                    .call_builtin(&mut |_| {}, id, type_args, &values_input)
                     .map_err(|error| InterpError::new(error.span, error.message))?;
                 self.check_func_output(context, id, type_params, return_type, type_args, &value)?;
                 Ok(FunctionResult::Return(value))
@@ -493,14 +493,14 @@ where
                     ));
                 }
                 let param_functions =
-                    Self::prepare_param_functions(context, id, params, values_input)?;
+                    Self::prepare_param_functions(context, id, params, &values_input)?;
                 context
                     .with_function_frame(
                         id.clone(),
-                        values_input.to_vec(),
+                        Rc::clone(&values_input),
                         TypeDefEnv::new(),
                         |context| {
-                            Self::assign_params(context, params, values_input, &param_functions)?;
+                            Self::assign_params(context, params, &values_input, &param_functions)?;
                             let flow = instruction::eval_table_rows(context, self, rows)?;
                             instruction::return_value(flow, &id.span)
                         },
@@ -614,12 +614,12 @@ where
         block: &Block,
         else_block: Option<&ElseBlock>,
         type_args: &[Typ],
-        values_input: &[ValueRef],
+        values_input: Rc<[ValueRef]>,
     ) -> Result<FunctionResult, InterpError> {
         let type_defs = Self::local_type_defs(id, type_params, type_args)?;
-        let param_functions = Self::prepare_param_functions(context, id, params, values_input)?;
-        context.with_function_frame(id.clone(), values_input.to_vec(), type_defs, |context| {
-            Self::assign_params(context, params, values_input, &param_functions)?;
+        let param_functions = Self::prepare_param_functions(context, id, params, &values_input)?;
+        context.with_function_frame(id.clone(), Rc::clone(&values_input), type_defs, |context| {
+            Self::assign_params(context, params, &values_input, &param_functions)?;
             let flow = instruction::eval_block(context, self, block, else_block.is_none())?;
             let flow = match (flow, else_block) {
                 (Flow::Continue, Some(else_block)) => {
@@ -643,7 +643,7 @@ where
         values_input: &[ValueRef],
     ) -> Result<Vec<ValueRef>, InterpError> {
         let mut id = id.clone();
-        let mut values_input = values_input.to_vec();
+        let mut values_input: Rc<[ValueRef]> = values_input.to_vec().into();
         loop {
             let relation = Rc::clone(context.find_relation(&id)?);
             let cacheable = self.options.cache && !matches!(relation.as_ref(), Relation::Extern(_));
@@ -653,8 +653,12 @@ where
             } else {
                 let interface_before = self.interface.checkpoint();
                 let extern_before = self.externs.checkpoint();
-                let result =
-                    self.invoke_rel_body(context, &id, relation.as_ref(), &values_input)?;
+                let result = self.invoke_rel_body(
+                    context,
+                    &id,
+                    relation.as_ref(),
+                    Rc::clone(&values_input),
+                )?;
                 if cacheable
                     && let RelationResult::Result(values) = &result
                     && !self
@@ -665,7 +669,7 @@ where
                         .side_effected(extern_before, self.externs.checkpoint())
                 {
                     self.relation_cache.insert(
-                        CallKey::new(id.node.clone(), values_input.clone()),
+                        CallKey::new(id.node.clone(), values_input.to_vec()),
                         values.clone(),
                     );
                 }
@@ -675,7 +679,7 @@ where
                 RelationResult::Result(values) => return Ok(values),
                 RelationResult::TailCall(id_tail, values_tail) => {
                     id = id_tail;
-                    values_input = values_tail;
+                    values_input = values_tail.into();
                 }
             }
         }
@@ -686,7 +690,7 @@ where
         context: &mut Context,
         id: &crate::lang::il::ast::Id,
         relation: &Relation,
-        values_input: &[ValueRef],
+        values_input: Rc<[ValueRef]>,
     ) -> Result<RelationResult, InterpError> {
         match relation {
             Relation::Extern(_) => {
@@ -700,21 +704,21 @@ where
                         sub_cache: &mut *self.sub_cache,
                     };
                     self.externs
-                        .eval_rel(&mut spec, &id.node, values_input)
+                        .eval_rel(&mut spec, &id.node, &values_input)
                         .map_err(|error| InterpError::new(error.span, error.message))?
                 };
                 self.check_rel_outputs(context, id, relation, &values)?;
                 Ok(RelationResult::Result(values))
             }
             Relation::Defined(_signature, exps_input, block, else_block) => context
-                .with_relation_frame(id.clone(), values_input.to_vec(), |context| {
+                .with_relation_frame(id.clone(), Rc::clone(&values_input), |context| {
                     if exps_input.len() != values_input.len() {
                         return Err(InterpError::unmatch(
                             id.span.clone(),
                             "arity mismatch in relation arguments",
                         ));
                     }
-                    for (exp, value) in exps_input.iter().zip(values_input) {
+                    for (exp, value) in exps_input.iter().zip(values_input.iter()) {
                         assignment::assign(context, exp, Rc::clone(value))?;
                     }
                     let flow = instruction::eval_block(context, self, block, else_block.is_none())?;
