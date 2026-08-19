@@ -1,8 +1,7 @@
 use std::{
     cmp::Ordering,
-    collections::hash_map::DefaultHasher,
     fmt,
-    hash::{Hash, Hasher},
+    hash::{BuildHasher, Hash, Hasher},
 };
 
 use thiserror::Error;
@@ -231,7 +230,7 @@ impl<T> Mixfix<T> {
         self.cmp_shape(other) == Ordering::Equal
     }
 
-    pub(crate) fn shape_fingerprint(&self) -> u64 {
+    pub(crate) fn shape_fingerprint(&self, build_hasher: &impl BuildHasher) -> u64 {
         fn hash_shape<T>(mixfix: &Mixfix<T>, state: &mut impl Hasher) {
             mixfix.tag().hash(state);
             match mixfix {
@@ -256,7 +255,7 @@ impl<T> Mixfix<T> {
             }
         }
 
-        let mut state = DefaultHasher::new();
+        let mut state = build_hasher.build_hasher();
         hash_shape(self, &mut state);
         state.finish()
     }
@@ -646,6 +645,7 @@ mod tests {
 
     #[test]
     fn shape_fingerprint_ignores_arguments_but_preserves_structure() {
+        let build_hasher = hashbrown::DefaultHashBuilder::default();
         let left = Mixfix::Seq(vec![Mixfix::Arg(1), Mixfix::Arg(2)]);
         let same_shape = Mixfix::Seq(vec![Mixfix::Arg("left"), Mixfix::Arg("right")]);
         let different_shape = Mixfix::Seq(vec![Mixfix::Seq(vec![
@@ -653,10 +653,13 @@ mod tests {
             Mixfix::Arg("right"),
         ])]);
 
-        assert_eq!(left.shape_fingerprint(), same_shape.shape_fingerprint());
+        assert_eq!(
+            left.shape_fingerprint(&build_hasher),
+            same_shape.shape_fingerprint(&build_hasher)
+        );
         assert_ne!(
-            left.shape_fingerprint(),
-            different_shape.shape_fingerprint()
+            left.shape_fingerprint(&build_hasher),
+            different_shape.shape_fingerprint(&build_hasher)
         );
     }
 }

@@ -42,6 +42,8 @@ struct Global {
     type_defs: TypeDefEnv,
     // Map from global variant type ids and notation shapes to source case indices
     variant_case_indices: HashMap<String, HashMap<u64, Vec<usize>>>,
+    // Shared builder for fingerprints stored in the variant case index
+    variant_shape_hasher: hashbrown::DefaultHashBuilder,
     // Map from relation ids to relations
     relations: RelationEnv,
     // Map from function ids to functions
@@ -142,7 +144,11 @@ impl Context {
             let mut case_indices = HashMap::<u64, Vec<usize>>::with_capacity(type_cases.len());
             for (case_index, (not_type, _, _)) in type_cases.iter().enumerate() {
                 case_indices
-                    .entry(not_type.node.shape_fingerprint())
+                    .entry(
+                        not_type
+                            .node
+                            .shape_fingerprint(&self.global.variant_shape_hasher),
+                    )
                     .or_default()
                     .push(case_index);
             }
@@ -301,7 +307,7 @@ impl Context {
         self.global
             .variant_case_indices
             .get(&id.node)?
-            .get(&value_case.shape_fingerprint())
+            .get(&value_case.shape_fingerprint(&self.global.variant_shape_hasher))
             .map(Vec::as_slice)
     }
 
