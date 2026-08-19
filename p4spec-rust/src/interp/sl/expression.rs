@@ -587,19 +587,12 @@ fn value_is_subtype_inner(
                                     |error| InterpError::new(typ.span.clone(), error.to_string()),
                                 )?)
                             };
-                            let types = not_type.node.args();
-                            let values = value_case.args();
-                            if types.len() != values.len() {
-                                continue;
-                            }
-                            let mut matches = true;
-                            for (typ, value) in types.into_iter().zip(values) {
-                                if !value_is_subtype_inner(cache, context, typ, value, false)? {
-                                    matches = false;
-                                    break;
-                                }
-                            }
-                            if matches {
+                            if not_type.node.try_eq_args_by_same_shape(
+                                value_case,
+                                |typ, value| {
+                                    value_is_subtype_inner(cache, context, typ, value, false)
+                                },
+                            )? {
                                 return Ok(true);
                             }
                         }

@@ -53,6 +53,44 @@ impl<T> Mixfix<T> {
         self.try_eq_by_with(other, &mut eq_arg)
     }
 
+    pub(crate) fn try_eq_args_by_same_shape<U, E>(
+        &self,
+        other: &Mixfix<U>,
+        mut eq_arg: impl FnMut(&T, &U) -> Result<bool, E>,
+    ) -> Result<bool, E> {
+        debug_assert!(self.same_shape(other));
+        self.try_eq_args_by_with(other, &mut eq_arg)
+    }
+
+    fn try_eq_args_by_with<U, E>(
+        &self,
+        other: &Mixfix<U>,
+        eq_arg: &mut impl FnMut(&T, &U) -> Result<bool, E>,
+    ) -> Result<bool, E> {
+        match (self, other) {
+            (Self::Arg(arg_a), Mixfix::Arg(arg_b)) => eq_arg(arg_a, arg_b),
+            (Self::Atom(_), Mixfix::Atom(_)) => Ok(true),
+            (Self::Brack(_, mixfix_a, _), Mixfix::Brack(_, mixfix_b, _)) => {
+                mixfix_a.try_eq_args_by_with(mixfix_b, eq_arg)
+            }
+            (Self::Infix(mixfix_a_l, _, mixfix_a_r), Mixfix::Infix(mixfix_b_l, _, mixfix_b_r)) => {
+                if !mixfix_a_l.try_eq_args_by_with(mixfix_b_l, eq_arg)? {
+                    return Ok(false);
+                }
+                mixfix_a_r.try_eq_args_by_with(mixfix_b_r, eq_arg)
+            }
+            (Self::Seq(mixfixes_a), Mixfix::Seq(mixfixes_b)) => {
+                for (mixfix_a, mixfix_b) in mixfixes_a.iter().zip(mixfixes_b) {
+                    if !mixfix_a.try_eq_args_by_with(mixfix_b, eq_arg)? {
+                        return Ok(false);
+                    }
+                }
+                Ok(true)
+            }
+            _ => unreachable!("mixfix shapes were checked before visiting arguments"),
+        }
+    }
+
     fn try_eq_by_with<U, E>(
         &self,
         other: &Mixfix<U>,
@@ -547,5 +585,27 @@ impl<T> Mixfix<T> {
             },
             |left, right| left + &right,
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Mixfix;
+
+    #[test]
+    fn paired_argument_traversal_visits_arguments_left_to_right() {
+        let left = Mixfix::Seq(vec![Mixfix::Arg(1), Mixfix::Arg(2)]);
+        let right = Mixfix::Seq(vec![Mixfix::Arg(10), Mixfix::Arg(20)]);
+        let mut visited = Vec::new();
+
+        let matches = left
+            .try_eq_args_by_same_shape(&right, |left, right| {
+                visited.push((*left, *right));
+                Ok::<_, ()>(true)
+            })
+            .expect("argument comparison succeeds");
+
+        assert!(matches);
+        assert_eq!(visited, [(1, 10), (2, 20)]);
     }
 }
