@@ -431,13 +431,15 @@ where
                         "arity mismatch in type arguments",
                     ));
                 }
+                let param_functions =
+                    Self::prepare_param_functions(context, id, params, values_input)?;
                 context
                     .with_function_frame(
                         id.clone(),
                         values_input.to_vec(),
                         TypeDefEnv::new(),
                         |context| {
-                            Self::assign_params(context, id, params, values_input)?;
+                            Self::assign_params(context, params, values_input, &param_functions)?;
                             let flow = instruction::eval_table_rows(context, self, rows)?;
                             instruction::return_value(flow, &id.span)
                         },
@@ -487,28 +489,54 @@ where
             .collect())
     }
 
-    fn assign_params(
-        context: &mut Context,
+    fn prepare_param_functions(
+        context: &Context,
         id: &crate::lang::il::ast::Id,
         params: &[Param],
         values: &[ValueRef],
-    ) -> Result<(), InterpError> {
+    ) -> Result<Vec<Option<Function>>, InterpError> {
         if params.len() != values.len() {
             return Err(InterpError::new(
                 id.span.clone(),
                 "arity mismatch in function arguments",
             ));
         }
-        for (param, value) in params.iter().zip(values) {
+        params
+            .iter()
+            .zip(values)
+            .map(|(param, value)| match &param.node {
+                ParamKind::ExpP(..) => Ok(None),
+                ParamKind::DefP(..) => {
+                    let function_id = get::func(value)
+                        .map_err(|error| InterpError::new(param.span.clone(), error.to_string()))?;
+                    context
+                        .find_function(function_id)
+                        .map(|(_cursor, function)| Some(function.clone()))
+                }
+            })
+            .collect()
+    }
+
+    fn assign_params(
+        context: &mut Context,
+        params: &[Param],
+        values: &[ValueRef],
+        param_functions: &[Option<Function>],
+    ) -> Result<(), InterpError> {
+        debug_assert_eq!(params.len(), values.len());
+        debug_assert_eq!(params.len(), param_functions.len());
+        for ((param, value), function) in params.iter().zip(values).zip(param_functions) {
             match &param.node {
                 ParamKind::ExpP(_typ, exp) => {
                     assignment::assign(context, exp, Rc::clone(value))?;
                 }
                 ParamKind::DefP(id, _type_params, _params, _return_type) => {
-                    let function_id = get::func(value)
-                        .map_err(|error| InterpError::new(param.span.clone(), error.to_string()))?;
-                    let function = context.find_function(function_id)?.1.clone();
-                    context.bind_function(id.clone(), function)?;
+                    context.bind_function(
+                        id.clone(),
+                        function
+                            .clone()
+                            .expect("definition parameters were resolved in the caller"),
+                    )?;
                 }
             }
         }
@@ -528,8 +556,9 @@ where
         values_input: &[ValueRef],
     ) -> Result<FunctionResult, InterpError> {
         let type_defs = Self::local_type_defs(id, type_params, type_args)?;
+        let param_functions = Self::prepare_param_functions(context, id, params, values_input)?;
         context.with_function_frame(id.clone(), values_input.to_vec(), type_defs, |context| {
-            Self::assign_params(context, id, params, values_input)?;
+            Self::assign_params(context, params, values_input, &param_functions)?;
             let flow = instruction::eval_block(context, self, block, else_block.is_none())?;
             let flow = match (flow, else_block) {
                 (Flow::Continue, Some(else_block)) => {

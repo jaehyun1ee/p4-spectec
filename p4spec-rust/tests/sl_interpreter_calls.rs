@@ -119,6 +119,101 @@ fn forwarding_function(name: &str, target: &str) -> sl::Def {
     )
 }
 
+fn definition_parameter(name: &str) -> sl::Param {
+    Spanned::new(
+        sl::ParamKind::DefP(
+            id(name),
+            Vec::new(),
+            vec![Spanned::new(
+                sl::ParamKind::ExpP(
+                    make_type::text_type(),
+                    il::Exp::new(
+                        il::ExpKind::VarE(id("argument")),
+                        il::TypKind::TextT,
+                        span("signature-argument"),
+                    ),
+                ),
+                span("signature-parameter"),
+            )],
+            make_type::text_type(),
+        ),
+        span("definition-parameter"),
+    )
+}
+
+fn higher_order_forwarders() -> [sl::Def; 2] {
+    let value = il::Exp::new(
+        il::ExpKind::VarE(id("value")),
+        il::TypKind::TextT,
+        span("value"),
+    );
+    let value_parameter = || {
+        Spanned::new(
+            sl::ParamKind::ExpP(make_type::text_type(), value.clone()),
+            span("value-parameter"),
+        )
+    };
+    let call = |target: &str, function: &str| {
+        il::Exp::new(
+            il::ExpKind::CallE(
+                id(target),
+                Vec::new(),
+                vec![
+                    Spanned::new(il::ArgKind::DefA(id(function)), span("function-argument")),
+                    Spanned::new(il::ArgKind::ExpA(value.clone()), span("value-argument")),
+                ],
+            ),
+            il::TypKind::TextT,
+            span("higher-order-call"),
+        )
+    };
+    let apply_call = il::Exp::new(
+        il::ExpKind::CallE(
+            id("function"),
+            Vec::new(),
+            vec![Spanned::new(
+                il::ArgKind::ExpA(value.clone()),
+                span("apply-argument"),
+            )],
+        ),
+        il::TypKind::TextT,
+        span("apply-call"),
+    );
+    let apply = Spanned::new(
+        sl::DefKind::FuncDecD((
+            id("apply"),
+            Vec::new(),
+            vec![definition_parameter("function"), value_parameter()],
+            make_type::text_type(),
+            vec![sl::Instr::new(
+                sl::InstrKind::ReturnI(apply_call),
+                2,
+                span("apply-return"),
+            )],
+            None,
+            Vec::new(),
+        )),
+        span("apply"),
+    );
+    let forward = Spanned::new(
+        sl::DefKind::FuncDecD((
+            id("forward_higher_order"),
+            Vec::new(),
+            vec![definition_parameter("forwarded"), value_parameter()],
+            make_type::text_type(),
+            vec![sl::Instr::new(
+                sl::InstrKind::ReturnI(call("apply", "forwarded")),
+                3,
+                span("forward-return"),
+            )],
+            None,
+            Vec::new(),
+        )),
+        span("forward"),
+    );
+    [apply, forward]
+}
+
 struct RecordingExtern {
     calls: Rc<Cell<usize>>,
 }
@@ -254,4 +349,39 @@ fn missing_and_not_yet_executable_function_kinds_return_typed_errors() {
     assert!(error.message.contains("function `missing` is undefined"));
     let error = interpreter.eval_func("pending", &[], &[]).unwrap_err();
     assert!(error.message.contains("did not return a value"));
+}
+
+#[test]
+fn definition_parameter_is_resolved_in_the_callers_local_frame() {
+    let interface_calls = Rc::new(Cell::new(0));
+    let [apply, forward] = higher_order_forwarders();
+    let mut interpreter = Interpreter::new(
+        &[builtin("target"), apply, forward],
+        Options {
+            cache: false,
+            deterministic: false,
+            guard: false,
+        },
+        RecordingInterface {
+            calls: interface_calls.clone(),
+        },
+        RecordingExtern {
+            calls: Rc::new(Cell::new(0)),
+        },
+    )
+    .unwrap();
+    let function = make::func(
+        id("target"),
+        Vec::new(),
+        vec![make_type::text_type()],
+        make_type::text_type(),
+        span("function-value"),
+    );
+    let value = make::text("forwarded".to_owned(), span("value"));
+
+    let result = interpreter
+        .eval_func("forward_higher_order", &[], &[function, value.clone()])
+        .unwrap();
+    assert!(Rc::ptr_eq(&result, &value));
+    assert_eq!(interface_calls.get(), 1);
 }
