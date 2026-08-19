@@ -46,7 +46,7 @@ fn num_of_value<'a>(exp: &Exp, value: &'a Value) -> Result<&'a num::T, InterpErr
 
 // Helper for checking if an expression is a simple iteration of a variable
 
-fn iterated_variable(exp: &Exp) -> Option<Variable> {
+pub(crate) fn iterated_variable(exp: &Exp) -> Option<Variable> {
     match &exp.kind {
         ExpKind::VarE(id) => Some(Variable::new(id.clone(), Vec::new())),
         ExpKind::IterE(inner, (iter, vars)) => {

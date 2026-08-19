@@ -9,7 +9,7 @@ use crate::{
     },
 };
 
-use super::context::Context;
+use super::{context::Context, expression::iterated_variable};
 
 fn match_error(exp: &Exp) -> InterpError {
     InterpError::unmatch(exp.span.clone(), "match failed while assigning value")
@@ -64,10 +64,13 @@ fn assign_inner(context: &mut Context, exp: &Exp, value: ValueRef) -> Result<(),
             let value_tail = make::list(&tail_type, values_tail.to_vec(), tail.span.clone());
             assign_inner(context, tail, value_tail)
         }
-        (ExpKind::IterE(..), _) => Err(InterpError::new(
-            exp.span.clone(),
-            "iterated assignment is not implemented",
-        )),
+        (ExpKind::IterE(..), _) => match iterated_variable(exp) {
+            Some(variable) => context.bind_value(variable, value),
+            None => Err(InterpError::new(
+                exp.span.clone(),
+                "complex iterated assignment is not implemented",
+            )),
+        },
         _ => Err(match_error(exp)),
     }
 }

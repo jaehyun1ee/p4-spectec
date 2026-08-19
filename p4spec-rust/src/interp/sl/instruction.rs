@@ -3,7 +3,7 @@ use crate::{
     interp::common::InterpError,
     lang::{
         il::ast::{Exp, ExpKind, OpTyp, TypKind, UnOp},
-        sl::ast::{Block, Guard, HoldCase, Instr, InstrKind, TableRow},
+        sl::ast::{Block, Guard, HoldCase, Instr, InstrKind, IterExp, TableRow},
     },
     runtime::{
         dynamic::var::Variable,
@@ -31,15 +31,7 @@ pub(crate) fn eval_instr(
 ) -> Result<Flow, InterpError> {
     match &instr.kind {
         InstrKind::IfI(condition, iter_exps, block, _dangle) => {
-            if !iter_exps.is_empty() {
-                return Err(InterpError::new(
-                    instr.span.clone(),
-                    "iterated if condition is not implemented",
-                ));
-            }
-            let value = expression::eval_with_calls(context, calls, condition)?;
-            let condition_holds = get::bool(&value)
-                .map_err(|error| InterpError::new(condition.span.clone(), error.to_string()))?;
+            let condition_holds = eval_if_condition(context, calls, condition, iter_exps)?;
             if condition_holds {
                 eval_block(context, calls, block)
             } else {
@@ -152,6 +144,39 @@ pub(crate) fn eval_instr(
             instr.span.clone(),
             "instruction evaluation is not implemented",
         )),
+    }
+}
+
+fn eval_if_condition(
+    context: &mut Context,
+    calls: &mut dyn Calls,
+    condition: &Exp,
+    iter_exps: &[IterExp],
+) -> Result<bool, InterpError> {
+    let Some(((iter, vars), rest)) = iter_exps.split_last() else {
+        let value = expression::eval_with_calls(context, calls, condition)?;
+        return get::bool(&value)
+            .map_err(|error| InterpError::new(condition.span.clone(), error.to_string()));
+    };
+    match iter {
+        crate::lang::il::ast::Iter::Opt => match context.optional_bindings(vars)? {
+            Some(bindings) => context.with_value_bindings(bindings, |context| {
+                eval_if_condition(context, calls, condition, rest)
+            }),
+            None => Ok(false),
+        },
+        crate::lang::il::ast::Iter::List => {
+            let batches = context.list_binding_batches(vars)?;
+            for bindings in batches {
+                let holds = context.with_value_bindings(bindings, |context| {
+                    eval_if_condition(context, calls, condition, rest)
+                })?;
+                if !holds {
+                    return Ok(false);
+                }
+            }
+            Ok(true)
+        }
     }
 }
 
