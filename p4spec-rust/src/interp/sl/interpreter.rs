@@ -192,10 +192,24 @@ where
                 .interface
                 .call_builtin(&mut |_| {}, id, type_args, values_input)
                 .map_err(|error| InterpError::new(error.span, error.message)),
-            Function::Table(..) => Err(InterpError::new(
-                id.span.clone(),
-                "table function execution is not implemented",
-            )),
+            Function::Table(params, _return_type, rows) => {
+                if !type_args.is_empty() {
+                    return Err(InterpError::new(
+                        id.span.clone(),
+                        "arity mismatch in type arguments",
+                    ));
+                }
+                context.with_function_frame(
+                    id.clone(),
+                    values_input.to_vec(),
+                    TypeDefEnv::new(),
+                    |context| {
+                        Self::assign_params(context, id, params, values_input)?;
+                        let flow = instruction::eval_table_rows(context, self, rows)?;
+                        instruction::return_value(flow, &id.span)
+                    },
+                )
+            }
             Function::Defined(type_params, params, _return_type, block, else_block) => self
                 .invoke_defined_func(
                     context,

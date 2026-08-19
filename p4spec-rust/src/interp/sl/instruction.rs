@@ -3,7 +3,7 @@ use crate::{
     interp::common::InterpError,
     lang::{
         il::ast::{Exp, ExpKind, OpTyp, TypKind, UnOp},
-        sl::ast::{Block, Guard, HoldCase, Instr, InstrKind},
+        sl::ast::{Block, Guard, HoldCase, Instr, InstrKind, TableRow},
     },
     runtime::{
         dynamic::var::Variable,
@@ -211,13 +211,27 @@ pub(crate) fn eval_block(
     }
 }
 
-fn eval_block_sequential(
+pub(crate) fn eval_block_sequential(
     context: &mut Context,
     calls: &mut dyn Calls,
     block: &Block,
 ) -> Result<Flow, InterpError> {
     for instr in block {
         match eval_instr(context, calls, instr)? {
+            Flow::Continue => {}
+            flow @ (Flow::Result(_) | Flow::Return(_)) => return Ok(flow),
+        }
+    }
+    Ok(Flow::Continue)
+}
+
+pub(crate) fn eval_table_rows(
+    context: &mut Context,
+    calls: &mut dyn Calls,
+    rows: &[TableRow],
+) -> Result<Flow, InterpError> {
+    for (_inputs, _output, block) in rows {
+        match eval_block_sequential(context, calls, block)? {
             Flow::Continue => {}
             flow @ (Flow::Result(_) | Flow::Return(_)) => return Ok(flow),
         }
