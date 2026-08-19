@@ -88,6 +88,7 @@ pub struct Context {
     deterministic: bool,
     global: Global,
     local: Local,
+    value_env_pool: Vec<ValueEnv>,
     generation: u64,
     undo: Vec<Undo>,
 }
@@ -100,6 +101,7 @@ impl Context {
             deterministic,
             global: Global::default(),
             local: Local::Empty,
+            value_env_pool: Vec::new(),
             generation: 0,
             undo: Vec::new(),
         };
@@ -369,8 +371,23 @@ impl Context {
 
     // Constructing a local context
 
+    fn take_value_env(&mut self) -> ValueEnv {
+        self.value_env_pool.pop().unwrap_or_default()
+    }
+
+    fn recycle_local(&mut self, local: Local) {
+        match local {
+            Local::Relation { mut values, .. } | Local::Function { mut values, .. } => {
+                values.clear();
+                self.value_env_pool.push(values);
+            }
+            Local::Empty => {}
+        }
+    }
+
     fn replace_local(&mut self, local: Local) {
-        self.local = local;
+        let previous = std::mem::replace(&mut self.local, local);
+        self.recycle_local(previous);
         self.generation = self.generation.wrapping_add(1);
         self.undo.clear();
     }
@@ -380,20 +397,22 @@ impl Context {
     }
 
     pub fn enter_relation(&mut self, id: Id, input_values: Vec<ValueRef>) {
+        let values = self.take_value_env();
         self.replace_local(Local::Relation {
             id,
             input_values,
-            values: ValueEnv::new(),
+            values,
         });
     }
 
     pub fn enter_function(&mut self, id: Id, input_values: Vec<ValueRef>, type_defs: TypeDefEnv) {
+        let values = self.take_value_env();
         self.replace_local(Local::Function {
             id,
             input_values,
             type_defs,
             functions: HashMap::new(),
-            values: ValueEnv::new(),
+            values,
         });
     }
 
@@ -404,6 +423,7 @@ impl Context {
         type_defs: TypeDefEnv,
         evaluate: impl FnOnce(&mut Self) -> Result<T, InterpError>,
     ) -> Result<T, InterpError> {
+        let values = self.take_value_env();
         let local_previous = std::mem::replace(
             &mut self.local,
             Local::Function {
@@ -411,14 +431,15 @@ impl Context {
                 input_values,
                 type_defs,
                 functions: HashMap::new(),
-                values: ValueEnv::new(),
+                values,
             },
         );
         let generation_previous = self.generation;
         let undo_previous = std::mem::take(&mut self.undo);
         self.generation = self.generation.wrapping_add(1);
         let result = evaluate(self);
-        self.local = local_previous;
+        let local_finished = std::mem::replace(&mut self.local, local_previous);
+        self.recycle_local(local_finished);
         self.generation = generation_previous;
         self.undo = undo_previous;
         result
@@ -430,19 +451,21 @@ impl Context {
         input_values: Vec<ValueRef>,
         evaluate: impl FnOnce(&mut Self) -> Result<T, InterpError>,
     ) -> Result<T, InterpError> {
+        let values = self.take_value_env();
         let local_previous = std::mem::replace(
             &mut self.local,
             Local::Relation {
                 id,
                 input_values,
-                values: ValueEnv::new(),
+                values,
             },
         );
         let generation_previous = self.generation;
         let undo_previous = std::mem::take(&mut self.undo);
         self.generation = self.generation.wrapping_add(1);
         let result = evaluate(self);
-        self.local = local_previous;
+        let local_finished = std::mem::replace(&mut self.local, local_previous);
+        self.recycle_local(local_finished);
         self.generation = generation_previous;
         self.undo = undo_previous;
         result
@@ -648,5 +671,47 @@ impl Context {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        domain::source::{Region, Spanned},
+        runtime::value::make,
+    };
+
+    fn id(name: impl Into<String>) -> Id {
+        Spanned::new(name.into(), Region::none())
+    }
+
+    #[test]
+    fn completed_frames_reuse_value_environment_capacity() {
+        let mut context = Context::from_spec(false, &[]).expect("valid empty spec");
+        context
+            .with_relation_frame(id("first"), Vec::new(), |context| {
+                for index in 0..64 {
+                    context.bind_value(
+                        Variable::new(id(format!("value-{index}")), Vec::new()),
+                        make::bool(true, Region::none()),
+                    )?;
+                }
+                Ok(())
+            })
+            .unwrap();
+        let capacity = context.value_env_pool[0].capacity();
+        assert!(capacity >= 64);
+
+        context
+            .with_relation_frame(id("second"), Vec::new(), |context| {
+                let Local::Relation { values, .. } = &context.local else {
+                    panic!("expected relation frame")
+                };
+                assert!(values.capacity() >= capacity);
+                Ok(())
+            })
+            .unwrap();
+        assert_eq!(context.value_env_pool.len(), 1);
     }
 }
