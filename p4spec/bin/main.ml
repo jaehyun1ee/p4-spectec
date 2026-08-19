@@ -338,6 +338,71 @@ let run_command =
            | Fail (`Runtime (_, msg)) -> Format.printf "runtime error: %s\n" msg
            ))
 
+let benchmark_sl_command =
+  Core.Command.basic
+    ~summary:"benchmark only the SL interpreter against parsed P4 programs"
+    (let open Core.Command.Let_syntax in
+     let open Core.Command.Param in
+     let%map paths_spec = anon (non_empty_sequence_as_list ("path" %: string))
+     and relname = flag "-rel" (required string) ~doc:"relation to run"
+     and includes_p4 = flag "-i" (listed string) ~doc:"P4 include paths"
+     and paths_p4 = flag "-p" (listed string) ~doc:"P4 program"
+     and warmup =
+       flag "-warmup"
+         (optional_with_default 1 int)
+         ~doc:"N warm-up evaluations per program"
+     and repeats =
+       flag "-repeat"
+         (optional_with_default 3 int)
+         ~doc:"N measured evaluations per program"
+     in
+     fun () ->
+       if paths_p4 = [] then failwith "at least one -p program is required";
+       if warmup < 0 then failwith "-warmup must be non-negative";
+       if repeats < 1 then failwith "-repeat must be positive";
+       match
+         let* spec_sim = P4spectec.spec_of_mode SL_mode paths_spec in
+         let* simulator = P4spectec.build_sim spec_sim in
+         Ok simulator
+       with
+       | Error e ->
+           Format.eprintf "%s\n" (Error.to_string e);
+           exit 1
+       | Ok simulator ->
+           let (module Simulator : SIM) = simulator in
+           List.iter
+             (fun path_p4 ->
+               match Interface.P4.parse_program includes_p4 [ path_p4 ] with
+               | Fail (`Syntax (_, msg)) ->
+                   Format.eprintf "syntax error in %s: %s\n" path_p4 msg;
+                   exit 1
+               | Pass value_program ->
+                   for _ = 1 to warmup do
+                     ignore
+                       (Simulator.Interp.eval_rel relname [ value_program ])
+                   done;
+                   for iteration = 1 to repeats do
+                     let time_start = Util.Time.now () in
+                     let result =
+                       Simulator.Interp.eval_rel relname [ value_program ]
+                     in
+                     let time_elapsed = Util.Time.now () -. time_start in
+                     let status =
+                       match result with Pass _ -> "pass" | Fail _ -> "fail"
+                     in
+                     `Assoc
+                       [
+                         ("program", `String path_p4);
+                         ("iteration", `Int iteration);
+                         ("elapsed_sec", `Float time_elapsed);
+                         ("status", `String status);
+                       ]
+                     |> Yojson.Safe.to_channel stdout;
+                     output_char stdout '\n';
+                     flush stdout
+                   done)
+             paths_p4)
+
 let sim_command =
   Core.Command.basic
     ~summary:"simulate a target architecture with a P4 program and P4 spec"
@@ -739,6 +804,7 @@ let command =
       ("prose", prose_command);
       (* Execution *)
       ("run", run_command);
+      ("benchmark-sl", benchmark_sl_command);
       ("sim", sim_command);
       (* Coverage *)
       ("cover-run", cover_run_command);
