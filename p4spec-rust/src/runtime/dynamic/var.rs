@@ -2,6 +2,7 @@ use std::{
     cmp::Ordering,
     fmt,
     hash::{Hash, Hasher},
+    rc::Rc,
 };
 
 use hashbrown::Equivalent;
@@ -10,13 +11,16 @@ use crate::lang::il::ast::{Id, Iter};
 
 #[derive(Clone, Debug)]
 pub struct Variable {
-    pub id: Id,
+    pub id: Rc<Id>,
     pub iters: Vec<Iter>,
 }
 
 impl Variable {
     pub fn new(id: Id, iters: Vec<Iter>) -> Self {
-        Self { id, iters }
+        Self {
+            id: Rc::new(id),
+            iters,
+        }
     }
 }
 

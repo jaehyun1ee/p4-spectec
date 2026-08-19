@@ -75,6 +75,14 @@ fn variables_ignore_id_regions_and_order_by_name_then_iterators() {
 }
 
 #[test]
+fn cloned_variables_share_their_canonical_id() {
+    let variable = Variable::new(id("value", "source"), vec![il::Iter::Opt]);
+    let cloned = variable.clone();
+
+    assert!(Rc::ptr_eq(&variable.id, &cloned.id));
+}
+
+#[test]
 fn value_environment_is_one_hash_map_keyed_by_semantic_variables() {
     let mut values = ValueEnv::new();
     let variable_a = Variable::new(id("x", "first"), vec![il::Iter::Opt]);
