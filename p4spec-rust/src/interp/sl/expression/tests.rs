@@ -1,14 +1,14 @@
 use crate::{
     domain::source::{Region, Spanned},
     interp::{common::InterpError, sl::context::Context},
-    lang::il::ast as il,
+    lang::{il::ast as il, sl::ast as sl},
     runtime::{
         r#type::{envs::TypeDefMap, typ::make as make_type, typdef::TypeDef},
-        value::{ValueRef, get, make},
+        value::{ValueRef, get, make, r#match::SubCache},
     },
 };
 
-use super::{Calls, eval_with_calls};
+use super::{Calls, eval_with_calls, value_is_subtype};
 
 fn id(name: &str) -> il::Id {
     Spanned::new(name.to_owned(), Region::for_file(name))
@@ -18,9 +18,20 @@ struct RecordingCalls {
     id: Option<il::Id>,
     type_args: Vec<il::Typ>,
     values: Vec<ValueRef>,
+    subtype_checks: usize,
 }
 
 impl Calls for RecordingCalls {
+    fn value_is_subtype(
+        &mut self,
+        _context: &Context,
+        _typ: &il::Typ,
+        _value: &ValueRef,
+    ) -> Result<bool, InterpError> {
+        self.subtype_checks += 1;
+        Ok(false)
+    }
+
     fn invoke_func(
         &mut self,
         _context: &mut Context,
@@ -89,6 +100,7 @@ fn call_expression_resolves_type_args_and_evaluates_both_argument_kinds() {
         id: None,
         type_args: Vec::new(),
         values: Vec::new(),
+        subtype_checks: 0,
     };
 
     let result = eval_with_calls(&mut context, &mut calls, &call).expect("call succeeds");
@@ -97,4 +109,55 @@ fn call_expression_resolves_type_args_and_evaluates_both_argument_kinds() {
     assert_eq!(calls.type_args, vec![make_type::text_type()]);
     assert_eq!(get::text(&calls.values[0]), Ok("input"));
     assert_eq!(get::func(&calls.values[1]).unwrap().node, "higher");
+}
+
+#[test]
+fn subtype_expressions_use_the_callers_cache() {
+    let mut context = Context::from_spec(false, &[]).expect("valid empty spec");
+    let value = il::Exp::new(
+        il::ExpKind::BoolE(true),
+        il::TypKind::BoolT,
+        Region::for_file("value"),
+    );
+    let subtype = il::Exp::new(
+        il::ExpKind::SubE(Box::new(value), make_type::bool_type()),
+        il::TypKind::BoolT,
+        Region::for_file("subtype"),
+    );
+    let mut calls = RecordingCalls {
+        id: None,
+        type_args: Vec::new(),
+        values: Vec::new(),
+        subtype_checks: 0,
+    };
+
+    let result = eval_with_calls(&mut context, &mut calls, &subtype).expect("subtype succeeds");
+
+    assert_eq!(get::bool(&result), Ok(false));
+    assert_eq!(calls.subtype_checks, 1);
+}
+
+#[test]
+fn named_subtype_results_are_cached_by_type_and_value() {
+    let type_def = Spanned::new(
+        sl::DefKind::TypD(
+            id("T"),
+            Vec::new(),
+            Spanned::new(
+                il::DefTypKind::PlainT(make_type::bool_type()),
+                Region::for_file("plain"),
+            ),
+            Vec::new(),
+        ),
+        Region::for_file("type-def"),
+    );
+    let context = Context::from_spec(false, &[type_def]).expect("valid spec");
+    let typ = make_type::var_type(id("T"), Vec::new());
+    let value = make::bool(true, Region::for_file("value"));
+    let mut cache = SubCache::new();
+
+    assert!(value_is_subtype(&mut cache, &context, &typ, &value).unwrap());
+    assert_eq!(cache.len(), 1);
+    assert!(value_is_subtype(&mut cache, &context, &typ, &value).unwrap());
+    assert_eq!(cache.len(), 1);
 }

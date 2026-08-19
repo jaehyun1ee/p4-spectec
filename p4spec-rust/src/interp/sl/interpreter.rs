@@ -21,7 +21,7 @@ use crate::{
 use super::{
     assignment,
     context::{Context, Cursor},
-    expression::Calls,
+    expression::{self, Calls},
     instruction::{self, Flow},
 };
 
@@ -734,6 +734,15 @@ where
     I: Interface,
     E: Extern,
 {
+    fn value_is_subtype(
+        &mut self,
+        context: &Context,
+        typ: &Typ,
+        value: &ValueRef,
+    ) -> Result<bool, InterpError> {
+        expression::value_is_subtype(self.sub_cache, context, typ, value)
+    }
+
     fn invoke_func(
         &mut self,
         context: &mut Context,
