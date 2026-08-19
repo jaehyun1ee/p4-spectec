@@ -26,11 +26,11 @@ fn text(value: &str) -> ValueRef {
 }
 
 fn pair_mixop() -> Mixop {
-    Mixfix::Infix(
-        Box::new(Mixfix::Arg(())),
-        Spanned::new(Atom::Colon, Region::none()),
-        Box::new(Mixfix::Arg(())),
-    )
+    Mixfix::Seq(vec![
+        Mixfix::Arg(()),
+        Mixfix::Atom(Spanned::new(Atom::Operator(":".to_owned()), Region::none())),
+        Mixfix::Arg(()),
+    ])
 }
 
 fn map_mixop() -> Mixop {
@@ -70,6 +70,23 @@ fn map(pairs: Vec<ValueRef>) -> ValueRef {
     )
 }
 
+fn canonical_pair(key: ValueRef, value: ValueRef) -> ValueRef {
+    let pair_type = make_type::var_type(
+        Spanned::new("pair".to_owned(), Region::none()),
+        vec![make_type::int_type(), make_type::text_type()],
+    );
+    let pair_mixop = Mixfix::Seq(vec![
+        Mixfix::Arg(()),
+        Mixfix::Atom(Spanned::new(Atom::Operator(":".to_owned()), Region::none())),
+        Mixfix::Arg(()),
+    ]);
+    make::case(
+        &pair_type,
+        Mixop::fill(&pair_mixop, [key, value]).expect("two pair arguments"),
+        span("pair"),
+    )
+}
+
 fn entries(value: &ValueRef) -> Vec<(BigInt, String)> {
     let map_case = get::case(value).expect("map case");
     let map_args = map_case.args();
@@ -91,6 +108,23 @@ fn entries(value: &ValueRef) -> Vec<(BigInt, String)> {
 
 fn type_args() -> Vec<p4spec_rust::lang::il::ast::Typ> {
     vec![make_type::int_type(), make_type::text_type()]
+}
+
+#[test]
+fn find_map_accepts_the_canonical_pair_mixop() {
+    let value_map = map(vec![canonical_pair(integer(1, "key"), text("value"))]);
+    let found = maps::find_map(
+        &mut |_| {},
+        &span("map-call"),
+        &type_args(),
+        &[value_map, integer(1, "lookup-key")],
+    )
+    .unwrap();
+
+    assert_eq!(
+        get::text(get::opt(&found).unwrap().expect("found value")).unwrap(),
+        "value",
+    );
 }
 
 #[test]

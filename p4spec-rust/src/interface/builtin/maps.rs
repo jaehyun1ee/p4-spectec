@@ -20,11 +20,11 @@ use super::{BuiltinError, BuiltinResult, extract, return_value};
 type ValueMap = Vec<ValueRef>;
 
 fn pair_mixop() -> Mixop {
-    Mixfix::Infix(
-        Box::new(Mixfix::Arg(())),
-        Spanned::new(Atom::Colon, Region::none()),
-        Box::new(Mixfix::Arg(())),
-    )
+    Mixfix::Seq(vec![
+        Mixfix::Arg(()),
+        Mixfix::Atom(Spanned::new(Atom::Operator(":".to_owned()), Region::none())),
+        Mixfix::Arg(()),
+    ])
 }
 
 fn map_mixop() -> Mixop {
