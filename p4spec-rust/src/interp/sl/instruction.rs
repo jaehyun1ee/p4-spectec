@@ -5,7 +5,7 @@ use crate::{
     interp::common::InterpError,
     lang::{
         il::{
-            ast::{Exp, ExpKind, Id, OpTyp, Typ, TypKind, UnOp},
+            ast::{Exp, ExpKind, Id, Typ},
             eq,
         },
         sl::ast::{Block, Guard, HoldCase, Instr, InstrKind, IterExp, IterInstr, NotExp, TableRow},
@@ -544,26 +544,30 @@ fn eval_hold_condition(
     eval_hold_condition_inner(context, calls, id, notation, &iter_exps)
 }
 
-fn guard_exp(exp: &Exp, guard: &Guard) -> Exp {
-    let temporary = Exp::new(
-        ExpKind::VarE(Spanned::new("~case".to_owned(), Region::none())),
-        exp.ty.clone(),
-        exp.span.clone(),
-    );
-    let kind = match guard {
-        Guard::BoolG(true) => temporary.kind,
-        Guard::BoolG(false) => ExpKind::UnE(UnOp::NotOp, OpTyp::BoolT, Box::new(temporary)),
-        Guard::CmpG(operator, operator_type, right) => ExpKind::CmpE(
-            *operator,
-            *operator_type,
-            Box::new(temporary),
-            Box::new(right.clone()),
-        ),
-        Guard::SubG(typ) => ExpKind::SubE(Box::new(temporary), typ.clone()),
-        Guard::MatchG(pattern) => ExpKind::MatchE(Box::new(temporary), pattern.clone()),
-        Guard::MemG(collection) => ExpKind::MemE(Box::new(temporary), Box::new(collection.clone())),
-    };
-    Exp::new(kind, TypKind::BoolT, exp.span.clone())
+fn eval_guard(
+    context: &mut Context,
+    calls: &mut dyn Calls,
+    exp: &Exp,
+    value: &ValueRef,
+    guard: &Guard,
+) -> Result<bool, InterpError> {
+    match guard {
+        Guard::BoolG(expected) => get::bool(value)
+            .map(|actual| actual == *expected)
+            .map_err(|error| InterpError::new(exp.span.clone(), error.to_string())),
+        Guard::CmpG(operator, _operator_type, right) => {
+            let value_right = expression::eval_with_calls(context, calls, right)?;
+            expression::compare_values(exp, *operator, value, &value_right)
+        }
+        Guard::SubG(typ) => calls.value_is_subtype(context, typ, value),
+        Guard::MatchG(pattern) => Ok(expression::matches_pattern(value, pattern)),
+        Guard::MemG(collection) => {
+            let collection = expression::eval_with_calls(context, calls, collection)?;
+            let values = get::list(&collection)
+                .map_err(|error| InterpError::new(exp.span.clone(), error.to_string()))?;
+            Ok(values.contains(value))
+        }
+    }
 }
 
 fn eval_case(
@@ -575,13 +579,9 @@ fn eval_case(
 ) -> Result<Flow, InterpError> {
     let value = expression::eval_with_calls(context, calls, exp)?;
     let temporary = Variable::new(Spanned::new("~case".to_owned(), Region::none()), Vec::new());
-    context.with_value_bindings(vec![(temporary, value)], |context| {
+    context.with_value_bindings(vec![(temporary, Rc::clone(&value))], |context| {
         for (guard, block) in cases {
-            let condition = guard_exp(exp, guard);
-            let value = expression::eval_with_calls(context, calls, &condition)?;
-            let matches = get::bool(&value)
-                .map_err(|error| InterpError::new(condition.span.clone(), error.to_string()))?;
-            if matches {
+            if eval_guard(context, calls, exp, &value, guard)? {
                 return eval_block(context, calls, block, tail);
             }
         }

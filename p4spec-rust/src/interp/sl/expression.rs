@@ -319,12 +319,22 @@ fn eval_comparison(
 ) -> Result<ValueRef, InterpError> {
     let value_left = eval_with_calls(context, calls, left)?;
     let value_right = eval_with_calls(context, calls, right)?;
+    let result = compare_values(outer, operator, &value_left, &value_right)?;
+    Ok(make::bool(result, Region::none()))
+}
+
+pub(crate) fn compare_values(
+    outer: &Exp,
+    operator: CmpOp,
+    value_left: &Value,
+    value_right: &Value,
+) -> Result<bool, InterpError> {
     let result = match operator {
         CmpOp::EqOp => value_left == value_right,
         CmpOp::NeOp => value_left != value_right,
         CmpOp::LtOp | CmpOp::GtOp | CmpOp::LeOp | CmpOp::GeOp => {
-            let left = num_of_value(outer, &value_left)?;
-            let right = num_of_value(outer, &value_right)?;
+            let left = num_of_value(outer, value_left)?;
+            let right = num_of_value(outer, value_right)?;
             match (left, right) {
                 (num::T::Nat(left), num::T::Nat(right))
                 | (num::T::Int(left), num::T::Int(right)) => match operator {
@@ -343,7 +353,7 @@ fn eval_comparison(
             }
         }
     };
-    Ok(make::bool(result, Region::none()))
+    Ok(result)
 }
 
 // Upcast expression evaluation
@@ -625,25 +635,28 @@ fn eval_match(
     pattern: &Pattern,
 ) -> Result<ValueRef, InterpError> {
     let value = eval_with_calls(context, calls, exp)?;
-    let matches = match pattern {
-        Pattern::CaseP(mixop) => get::case(&value)
+    Ok(make::bool(matches_pattern(&value, pattern), Region::none()))
+}
+
+pub(crate) fn matches_pattern(value: &Value, pattern: &Pattern) -> bool {
+    match pattern {
+        Pattern::CaseP(mixop) => get::case(value)
             .map(|value_case| value_case.split().0 == *mixop)
             .unwrap_or(false),
-        Pattern::ListP(pattern) => get::list(&value)
+        Pattern::ListP(pattern) => get::list(value)
             .map(|values| match pattern {
                 ListPattern::Cons => !values.is_empty(),
                 ListPattern::Fixed(len) => usize::try_from(*len) == Ok(values.len()),
                 ListPattern::Nil => values.is_empty(),
             })
             .unwrap_or(false),
-        Pattern::OptP(pattern) => get::opt(&value)
+        Pattern::OptP(pattern) => get::opt(value)
             .map(|value| match pattern {
                 OptPattern::Some => value.is_some(),
                 OptPattern::None => value.is_none(),
             })
             .unwrap_or(false),
-    };
-    Ok(make::bool(matches, Region::none()))
+    }
 }
 
 // Tuple expression evaluation

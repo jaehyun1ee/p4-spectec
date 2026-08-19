@@ -48,6 +48,31 @@ fn function(name: &str, params: Vec<sl::Param>, block: sl::Block) -> sl::Def {
     )
 }
 
+fn guarded_function(name: &str, typ: il::Typ, guard: sl::Guard) -> sl::Def {
+    let parameter_exp = il::Exp::new(
+        il::ExpKind::VarE(id("value")),
+        typ.node.clone(),
+        span("value"),
+    );
+    let parameter = Spanned::new(
+        sl::ParamKind::ExpP(typ, parameter_exp.clone()),
+        span("parameter"),
+    );
+    function(
+        name,
+        vec![parameter],
+        vec![sl::Instr::new(
+            sl::InstrKind::CaseI(
+                parameter_exp,
+                vec![(guard, vec![return_text(name, 2)])],
+                false,
+            ),
+            1,
+            span("case"),
+        )],
+    )
+}
+
 fn interpreter(spec: &[sl::Def]) -> Interpreter<BuiltinInterface, NullExtern> {
     Interpreter::new(
         spec,
@@ -151,5 +176,60 @@ fn case_instruction_evaluates_guards_in_order_and_selects_one_block() {
                 .unwrap()
         ),
         Ok("false")
+    );
+}
+
+#[test]
+fn case_instruction_preserves_every_guard_kind() {
+    let bool_type = make_type::bool_type();
+    let list_type = make_type::list_type(bool_type.clone());
+    let bool_list = il::Exp::new(
+        il::ExpKind::ListE(vec![bool_exp(true)]),
+        list_type.node.clone(),
+        span("list"),
+    );
+    let spec = [
+        guarded_function(
+            "comparison",
+            bool_type.clone(),
+            sl::Guard::CmpG(il::CmpOp::EqOp, il::OpTyp::BoolT, bool_exp(true)),
+        ),
+        guarded_function(
+            "subtype",
+            bool_type.clone(),
+            sl::Guard::SubG(bool_type.clone()),
+        ),
+        guarded_function(
+            "pattern",
+            list_type.clone(),
+            sl::Guard::MatchG(il::Pattern::ListP(il::ListPattern::Fixed(1))),
+        ),
+        guarded_function("membership", bool_type, sl::Guard::MemG(bool_list)),
+    ];
+    let mut interpreter = interpreter(&spec);
+    let bool_value = make::bool(true, span("bool-value"));
+    let list_value = make::list(
+        &list_type,
+        vec![make::bool(true, span("list-value"))],
+        span("list-value"),
+    );
+
+    for name in ["comparison", "subtype", "membership"] {
+        assert_eq!(
+            get::text(
+                &interpreter
+                    .eval_func(name, &[], std::slice::from_ref(&bool_value))
+                    .unwrap()
+            ),
+            Ok(name)
+        );
+    }
+    assert_eq!(
+        get::text(
+            &interpreter
+                .eval_func("pattern", &[], &[list_value])
+                .unwrap()
+        ),
+        Ok("pattern")
     );
 }
