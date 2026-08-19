@@ -90,10 +90,22 @@ pub(crate) fn eval_instr(
         InstrKind::ReturnI(exp) => {
             expression::eval_with_calls(context, calls, exp).map(Flow::Return)
         }
-        _ => Err(InterpError::new(
-            instr.span.clone(),
-            "instruction evaluation is not implemented",
-        )),
+        InstrKind::DebugI(exp, nested) => {
+            let result = (|| {
+                let value = expression::eval_with_calls(context, calls, exp)?;
+                println!("{}: {:?}", exp.span, exp.kind);
+                if value.span == Region::none() {
+                    println!("{:?}", value.kind);
+                } else {
+                    println!("{}: {:?}", value.span, value.kind);
+                }
+                eval_instr(context, calls, nested)
+            })();
+            match result {
+                Err(error) if error.is_unmatch() => Ok(Flow::Continue),
+                result => result,
+            }
+        }
     }
 }
 
