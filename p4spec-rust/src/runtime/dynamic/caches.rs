@@ -1,4 +1,6 @@
-use std::{collections::HashMap, hash::Hash};
+use std::hash::Hash;
+
+use hashbrown::{Equivalent, HashMap};
 
 use crate::runtime::value::ValueRef;
 
@@ -78,7 +80,10 @@ where
         self.touched = 0;
     }
 
-    pub fn find(&mut self, key: &K) -> Option<&V> {
+    pub fn find<Q>(&mut self, key: &Q) -> Option<&V>
+    where
+        Q: Equivalent<K> + Hash + ?Sized,
+    {
         let index = self.table.get(key).map(|(_, index)| *index)?;
         self.clock[index].referenced = true;
         self.table.get(key).map(|(value, _)| value)
@@ -133,5 +138,34 @@ pub type ValueCache<V> = ClockCache<ValueRef, V>;
 
 // Cache entry using id and values
 
-pub type CallKey = (String, Vec<ValueRef>);
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct CallKey {
+    id: String,
+    values: Vec<ValueRef>,
+}
+
+impl CallKey {
+    pub fn new(id: String, values: Vec<ValueRef>) -> Self {
+        Self { id, values }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Hash)]
+pub struct CallKeyRef<'a> {
+    id: &'a str,
+    values: &'a [ValueRef],
+}
+
+impl<'a> CallKeyRef<'a> {
+    pub fn new(id: &'a str, values: &'a [ValueRef]) -> Self {
+        Self { id, values }
+    }
+}
+
+impl Equivalent<CallKey> for CallKeyRef<'_> {
+    fn equivalent(&self, key: &CallKey) -> bool {
+        self.id == key.id && self.values == key.values
+    }
+}
+
 pub type CallCache<V> = ClockCache<CallKey, V>;

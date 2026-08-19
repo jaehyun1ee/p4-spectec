@@ -1,7 +1,7 @@
 use p4spec_rust::{
     domain::source::Region,
     runtime::{
-        dynamic::caches::{CallCache, CallKey, ClockCache},
+        dynamic::caches::{CallCache, CallKey, CallKeyRef, ClockCache},
         value::{ValueKind, make},
     },
 };
@@ -67,8 +67,8 @@ fn call_cache_uses_semantic_runtime_values_without_vid_or_vhash() {
         p4spec_rust::lang::il::ast::TypKind::TextT,
         span("right"),
     );
-    let key_a: CallKey = ("function".to_owned(), vec![value_a]);
-    let key_b: CallKey = ("function".to_owned(), vec![value_b]);
+    let key_a = CallKey::new("function".to_owned(), vec![value_a]);
+    let key_b = CallKey::new("function".to_owned(), vec![value_b]);
     let mut cache: CallCache<&str> = CallCache::new(8);
 
     cache.insert(key_a, "first");
@@ -76,4 +76,17 @@ fn call_cache_uses_semantic_runtime_values_without_vid_or_vhash() {
 
     assert_eq!(cache.len(), 1);
     assert_eq!(cache.find(&key_b), Some(&"second"));
+}
+
+#[test]
+fn call_cache_lookup_borrows_the_name_and_argument_slice() {
+    let value = make::bool(true, span("value"));
+    let key = CallKey::new("function".to_owned(), vec![value.clone()]);
+    let mut cache: CallCache<&str> = CallCache::new(8);
+    cache.insert(key, "result");
+
+    let values = [value];
+    let borrowed = CallKeyRef::new("function", &values);
+
+    assert_eq!(cache.find(&borrowed), Some(&"result"));
 }

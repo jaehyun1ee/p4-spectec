@@ -9,7 +9,7 @@ use crate::{
         sl::ast::{Block, Def, ElseBlock, Param, ParamKind},
     },
     runtime::{
-        dynamic::caches::{CallCache, CallKey},
+        dynamic::caches::{CallCache, CallKey, CallKeyRef},
         dynamic_sl::envs::TypeDefEnv,
         dynamic_sl::func::Function,
         dynamic_sl::rel::Relation,
@@ -411,7 +411,7 @@ where
                 && !values_input
                     .iter()
                     .any(|value| matches!(value.kind, ValueKind::FuncV(_)));
-            let key: CallKey = (id.node.clone(), values_input.clone());
+            let key = CallKeyRef::new(&id.node, &values_input);
             let result = if cacheable && let Some(value) = self.function_cache.find(&key) {
                 FunctionResult::Return(Rc::clone(value))
             } else {
@@ -433,7 +433,10 @@ where
                         .externs
                         .side_effected(extern_before, self.externs.checkpoint())
                 {
-                    self.function_cache.insert(key, Rc::clone(value));
+                    self.function_cache.insert(
+                        CallKey::new(id.node.clone(), values_input.clone()),
+                        Rc::clone(value),
+                    );
                 }
                 result
             };
@@ -644,7 +647,7 @@ where
         loop {
             let relation = Rc::clone(context.find_relation(&id)?);
             let cacheable = self.options.cache && !matches!(relation.as_ref(), Relation::Extern(_));
-            let key: CallKey = (id.node.clone(), values_input.clone());
+            let key = CallKeyRef::new(&id.node, &values_input);
             let result = if cacheable && let Some(values) = self.relation_cache.find(&key) {
                 RelationResult::Result(values.clone())
             } else {
@@ -661,7 +664,10 @@ where
                         .externs
                         .side_effected(extern_before, self.externs.checkpoint())
                 {
-                    self.relation_cache.insert(key, values.clone());
+                    self.relation_cache.insert(
+                        CallKey::new(id.node.clone(), values_input.clone()),
+                        values.clone(),
+                    );
                 }
                 result
             };
