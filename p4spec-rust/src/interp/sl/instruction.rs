@@ -3,7 +3,7 @@ use crate::{
     interp::common::InterpError,
     lang::{
         il::ast::{Exp, ExpKind, OpTyp, TypKind, UnOp},
-        sl::ast::{Block, Guard, Instr, InstrKind},
+        sl::ast::{Block, Guard, HoldCase, Instr, InstrKind},
     },
     runtime::{
         dynamic::var::Variable,
@@ -47,6 +47,36 @@ pub(crate) fn eval_instr(
             }
         }
         InstrKind::CaseI(exp, cases, _dangle) => eval_case(context, calls, exp, cases),
+        InstrKind::HoldI(id, notation, iter_exps, hold_case) => {
+            if !iter_exps.is_empty() {
+                return Err(InterpError::new(
+                    instr.span.clone(),
+                    "iterated hold condition is not implemented",
+                ));
+            }
+            let values_input = notation
+                .args()
+                .into_iter()
+                .map(|exp| expression::eval_with_calls(context, calls, exp))
+                .collect::<Result<Vec<_>, _>>()?;
+            let holds = match calls.invoke_rel(context, id, &values_input) {
+                Ok(_values) => true,
+                Err(error) if error.is_unmatch() => false,
+                Err(error) => return Err(error),
+            };
+            match hold_case {
+                HoldCase::BothH(block_hold, block_not_hold) => {
+                    if holds {
+                        eval_block(context, calls, block_hold)
+                    } else {
+                        eval_block(context, calls, block_not_hold)
+                    }
+                }
+                HoldCase::HoldH(block, _dangle) if holds => eval_block(context, calls, block),
+                HoldCase::NotHoldH(block, _dangle) if !holds => eval_block(context, calls, block),
+                HoldCase::HoldH(..) | HoldCase::NotHoldH(..) => Ok(Flow::Continue),
+            }
+        }
         InstrKind::GroupI(_id, _signature, _exps, block) => eval_block(context, calls, block),
         InstrKind::LetI(left, right, iter_instrs, block) => {
             if !iter_instrs.is_empty() {
