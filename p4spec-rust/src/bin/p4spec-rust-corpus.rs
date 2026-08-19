@@ -28,6 +28,9 @@ use serde::Serialize;
 use serde_json::Value;
 use thiserror::Error;
 
+#[global_allocator]
+static GLOBAL_ALLOCATOR: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 const RELATION: &str = "Program_inst";
 
 #[derive(Debug, Error)]

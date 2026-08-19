@@ -26,6 +26,9 @@ use p4spec_rust::{
 use serde_json::Value;
 use thiserror::Error;
 
+#[global_allocator]
+static GLOBAL_ALLOCATOR: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 #[derive(Debug, Error)]
 enum CliError {
     #[error(transparent)]
