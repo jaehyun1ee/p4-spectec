@@ -8,8 +8,8 @@ use crate::{
     interp::common::InterpError,
     lang::{
         il::ast::{
-            BinOp, CmpOp, DefTypKind, Exp, ExpKind, Iter, ListPattern, OptPattern, Pattern, Typ,
-            TypKind, UnOp,
+            BinOp, CmpOp, DefTypKind, Exp, ExpKind, Iter, ListPattern, OptPattern, Path, PathKind,
+            Pattern, Typ, TypKind, UnOp,
         },
         xl::num,
     },
@@ -27,6 +27,10 @@ use super::context::Context;
 
 fn value_error(exp: &Exp, message: impl Into<String>) -> InterpError {
     InterpError::new(exp.span.clone(), message)
+}
+
+fn path_error(path: &Path, message: impl Into<String>) -> InterpError {
+    InterpError::new(path.span.clone(), message)
 }
 
 fn bool_of_value(exp: &Exp, value: &Value) -> Result<bool, InterpError> {
@@ -84,12 +88,17 @@ pub fn eval(context: &Context, exp: &Exp) -> Result<ValueRef, InterpError> {
         ExpKind::DotE(base, atom) => eval_dot(context, exp, base, atom),
         ExpKind::IdxE(base, index) => eval_index(context, exp, base, index),
         ExpKind::SliceE(base, index, count) => eval_slice(context, exp, base, index, count),
+        ExpKind::UpdE(base, path, replacement) => eval_update(context, base, path, replacement),
         _ => Err(value_error(exp, "expression evaluation is not implemented")),
     }
 }
 
 fn type_note(exp: &Exp) -> Typ {
     crate::domain::source::Spanned::new(exp.ty.clone(), exp.span.clone())
+}
+
+fn path_type_note(path: &Path) -> Typ {
+    crate::domain::source::Spanned::new(path.ty.clone(), path.span.clone())
 }
 
 fn eval_all(context: &Context, exps: &[Exp]) -> Result<Vec<ValueRef>, InterpError> {
@@ -780,4 +789,230 @@ fn eval_slice(
             "slicing expects either a text or a list",
         )),
     }
+}
+
+// Update expression evaluation
+
+fn eval_access_path(
+    context: &Context,
+    value_base: &ValueRef,
+    path: &Path,
+) -> Result<ValueRef, InterpError> {
+    match &path.kind {
+        PathKind::RootP => Ok(Rc::clone(value_base)),
+        PathKind::IdxP(inner, index) => {
+            let value = eval_access_path(context, value_base, inner)?;
+            let value_index = eval(context, index)?;
+            let index_value = index_of_value(index, &value_index)?;
+            match &value.kind {
+                crate::runtime::value::ValueKind::TextV(text) => {
+                    let index_value = bounded_index(index, index_value, text.len())?;
+                    let byte = text
+                        .as_bytes()
+                        .get(index_value)
+                        .copied()
+                        .expect("the index was checked");
+                    let text = str::from_utf8(std::slice::from_ref(&byte))
+                        .map_err(|_| path_error(path, "indexed byte is not valid UTF-8"))?;
+                    Ok(make::text(text.to_owned(), Region::none()))
+                }
+                crate::runtime::value::ValueKind::ListV(values) => {
+                    let index_value = bounded_index(index, index_value, values.len())?;
+                    Ok(Rc::clone(&values[index_value]))
+                }
+                _ => Err(InterpError::new(
+                    path.span.clone(),
+                    "indexing expects either a text or a list",
+                )),
+            }
+        }
+        PathKind::SliceP(inner, index, count) => {
+            let value = eval_access_path(context, value_base, inner)?;
+            let (start, end) = eval_path_slice_bounds(context, index, count)?;
+            match &value.kind {
+                crate::runtime::value::ValueKind::TextV(text) => {
+                    if end > text.len() {
+                        return Err(value_error(count, "slice out of bounds"));
+                    }
+                    let text = text
+                        .get(start..end)
+                        .ok_or_else(|| path_error(path, "slice is not valid UTF-8"))?;
+                    Ok(make::text(text.to_owned(), Region::none()))
+                }
+                crate::runtime::value::ValueKind::ListV(values) => {
+                    if end > values.len() {
+                        return Err(value_error(count, "slice out of bounds"));
+                    }
+                    Ok(make::list(
+                        &path_type_note(inner),
+                        values[start..end].to_vec(),
+                        Region::none(),
+                    ))
+                }
+                _ => Err(InterpError::new(
+                    path.span.clone(),
+                    "slicing expects either a text or a list",
+                )),
+            }
+        }
+        PathKind::DotP(inner, atom) => {
+            let value = eval_access_path(context, value_base, inner)?;
+            let fields = get::structure(&value)
+                .map_err(|error| InterpError::new(path.span.clone(), error.to_string()))?;
+            fields
+                .iter()
+                .find(|(field, _)| field.node == atom.node)
+                .map(|(_, value)| Rc::clone(value))
+                .ok_or_else(|| InterpError::new(path.span.clone(), "structure field is undefined"))
+        }
+    }
+}
+
+fn eval_path_slice_bounds(
+    context: &Context,
+    index: &Exp,
+    count: &Exp,
+) -> Result<(usize, usize), InterpError> {
+    let value_index = eval(context, index)?;
+    let index_value = index_of_value(index, &value_index)?;
+    let value_count = eval(context, count)?;
+    let count_value = index_of_value(count, &value_count)?;
+    if index_value < 0 || count_value < 0 {
+        return Err(value_error(count, "slice out of bounds"));
+    }
+    let start = usize::try_from(index_value).expect("non-negative index");
+    let count_value = usize::try_from(count_value).expect("non-negative count");
+    let end = start
+        .checked_add(count_value)
+        .ok_or_else(|| value_error(count, "slice out of bounds"))?;
+    Ok((start, end))
+}
+
+fn eval_update_path(
+    context: &Context,
+    value_base: &ValueRef,
+    path: &Path,
+    value_update: ValueRef,
+) -> Result<ValueRef, InterpError> {
+    match &path.kind {
+        PathKind::RootP => Ok(value_update),
+        PathKind::IdxP(inner, index) => {
+            let value = eval_access_path(context, value_base, inner)?;
+            let value_index = eval(context, index)?;
+            let index_value = index_of_value(index, &value_index)?;
+            let value = match &value.kind {
+                crate::runtime::value::ValueKind::TextV(text) => {
+                    let index_value = bounded_index(index, index_value, text.len())?;
+                    let replacement = get::text(&value_update)
+                        .map_err(|error| value_error(index, error.to_string()))?;
+                    if replacement.len() != 1 {
+                        return Err(value_error(
+                            index,
+                            "updating a character requires a single-character text",
+                        ));
+                    }
+                    let mut bytes = text.as_bytes().to_vec();
+                    bytes[index_value] = replacement.as_bytes()[0];
+                    let text = String::from_utf8(bytes)
+                        .map_err(|_| path_error(path, "updated text is not valid UTF-8"))?;
+                    make::text(text, Region::none())
+                }
+                crate::runtime::value::ValueKind::ListV(values) => {
+                    let index_value = bounded_index(index, index_value, values.len())?;
+                    let mut values = values.clone();
+                    values[index_value] = value_update;
+                    make::list(&path_type_note(inner), values, Region::none())
+                }
+                _ => {
+                    return Err(InterpError::new(
+                        path.span.clone(),
+                        "indexing expects either a text or a list",
+                    ));
+                }
+            };
+            eval_update_path(context, value_base, inner, value)
+        }
+        PathKind::SliceP(inner, index, count) => {
+            let value = eval_access_path(context, value_base, inner)?;
+            let (start, end) = eval_path_slice_bounds(context, index, count)?;
+            let update_len = end - start;
+            let value = match &value.kind {
+                crate::runtime::value::ValueKind::TextV(text) => {
+                    if end > text.len() {
+                        return Err(value_error(count, "slice out of bounds"));
+                    }
+                    let replacement = get::text(&value_update)
+                        .map_err(|error| value_error(count, error.to_string()))?;
+                    if replacement.len() != update_len {
+                        return Err(value_error(
+                            count,
+                            format!(
+                                "updating a slice of length {update_len} requires a text of length {}",
+                                replacement.len()
+                            ),
+                        ));
+                    }
+                    let mut bytes = text.as_bytes().to_vec();
+                    bytes[start..end].copy_from_slice(replacement.as_bytes());
+                    let text = String::from_utf8(bytes)
+                        .map_err(|_| path_error(path, "updated text is not valid UTF-8"))?;
+                    make::text(text, Region::none())
+                }
+                crate::runtime::value::ValueKind::ListV(values) => {
+                    if end > values.len() {
+                        return Err(value_error(count, "slice out of bounds"));
+                    }
+                    let replacements = get::list(&value_update)
+                        .map_err(|error| value_error(count, error.to_string()))?;
+                    if replacements.len() != update_len {
+                        return Err(value_error(
+                            count,
+                            format!(
+                                "updating a slice of length {update_len} requires a list of length {}",
+                                replacements.len()
+                            ),
+                        ));
+                    }
+                    let mut values = values.clone();
+                    values[start..end].clone_from_slice(replacements);
+                    make::list(&path_type_note(inner), values, Region::none())
+                }
+                _ => {
+                    return Err(InterpError::new(
+                        path.span.clone(),
+                        "slicing expects either a text or a list",
+                    ));
+                }
+            };
+            eval_update_path(context, value_base, inner, value)
+        }
+        PathKind::DotP(inner, atom) => {
+            let value = eval_access_path(context, value_base, inner)?;
+            let fields = get::structure(&value)
+                .map_err(|error| InterpError::new(path.span.clone(), error.to_string()))?;
+            let fields = fields
+                .iter()
+                .map(|(field, value)| {
+                    if field.node == atom.node {
+                        (field.clone(), Rc::clone(&value_update))
+                    } else {
+                        (field.clone(), Rc::clone(value))
+                    }
+                })
+                .collect();
+            let value = make::structure(&path_type_note(inner), fields, Region::none());
+            eval_update_path(context, value_base, inner, value)
+        }
+    }
+}
+
+fn eval_update(
+    context: &Context,
+    base: &Exp,
+    path: &Path,
+    replacement: &Exp,
+) -> Result<ValueRef, InterpError> {
+    let value_base = eval(context, base)?;
+    let value_replacement = eval(context, replacement)?;
+    eval_update_path(context, &value_base, path, value_replacement)
 }
