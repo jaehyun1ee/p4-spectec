@@ -1,4 +1,6 @@
-use std::{collections::HashMap, rc::Rc};
+use std::rc::Rc;
+
+use hashbrown::HashMap;
 
 use crate::{
     interp::common::InterpError,

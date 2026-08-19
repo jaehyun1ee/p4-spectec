@@ -1,4 +1,6 @@
-use std::{collections::HashMap, rc::Rc};
+use std::rc::Rc;
+
+use hashbrown::HashMap;
 
 pub use crate::runtime::dynamic::envs::ValueEnv;
 use crate::runtime::r#type::envs::TypeDefMap;

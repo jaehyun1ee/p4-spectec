@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeSet, HashMap, HashSet},
+    collections::{BTreeSet, HashSet},
     rc::Rc,
 };
 
@@ -189,7 +189,7 @@ fn every_function_kind_computes_the_ocaml_signature() {
     assert_eq!(functions[2].to_string(), "table function");
     assert_eq!(functions[3].to_string(), "defined function");
 
-    let mut functions_by_name: FunctionEnv = HashMap::new();
+    let mut functions_by_name = FunctionEnv::new();
     functions_by_name.insert("f".to_owned(), Rc::new(functions[0].clone()));
     assert!(matches!(
         functions_by_name.get("f").map(Rc::as_ref),
