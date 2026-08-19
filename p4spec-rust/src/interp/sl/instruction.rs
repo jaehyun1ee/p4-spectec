@@ -1,7 +1,14 @@
 use crate::{
+    domain::source::{Region, Spanned},
     interp::common::InterpError,
-    lang::sl::ast::{Block, Instr, InstrKind},
-    runtime::value::ValueRef,
+    lang::{
+        il::ast::{Exp, ExpKind, OpTyp, TypKind, UnOp},
+        sl::ast::{Block, Guard, Instr, InstrKind},
+    },
+    runtime::{
+        dynamic::var::Variable,
+        value::{ValueRef, get},
+    },
 };
 
 use super::{
@@ -22,6 +29,24 @@ pub(crate) fn eval_instr(
     instr: &Instr,
 ) -> Result<Flow, InterpError> {
     match &instr.kind {
+        InstrKind::IfI(condition, iter_exps, block, _dangle) => {
+            if !iter_exps.is_empty() {
+                return Err(InterpError::new(
+                    instr.span.clone(),
+                    "iterated if condition is not implemented",
+                ));
+            }
+            let value = expression::eval_with_calls(context, calls, condition)?;
+            let condition_holds = get::bool(&value)
+                .map_err(|error| InterpError::new(condition.span.clone(), error.to_string()))?;
+            if condition_holds {
+                eval_block(context, calls, block)
+            } else {
+                Ok(Flow::Continue)
+            }
+        }
+        InstrKind::CaseI(exp, cases, _dangle) => eval_case(context, calls, exp, cases),
+        InstrKind::GroupI(_id, _signature, _exps, block) => eval_block(context, calls, block),
         InstrKind::ResultI(_signature, exps) => {
             let values = exps
                 .iter()
@@ -37,6 +62,50 @@ pub(crate) fn eval_instr(
             "instruction evaluation is not implemented",
         )),
     }
+}
+
+fn guard_exp(exp: &Exp, guard: &Guard) -> Exp {
+    let temporary = Exp::new(
+        ExpKind::VarE(Spanned::new("~case".to_owned(), Region::none())),
+        exp.ty.clone(),
+        exp.span.clone(),
+    );
+    let kind = match guard {
+        Guard::BoolG(true) => temporary.kind,
+        Guard::BoolG(false) => ExpKind::UnE(UnOp::NotOp, OpTyp::BoolT, Box::new(temporary)),
+        Guard::CmpG(operator, operator_type, right) => ExpKind::CmpE(
+            *operator,
+            *operator_type,
+            Box::new(temporary),
+            Box::new(right.clone()),
+        ),
+        Guard::SubG(typ) => ExpKind::SubE(Box::new(temporary), typ.clone()),
+        Guard::MatchG(pattern) => ExpKind::MatchE(Box::new(temporary), pattern.clone()),
+        Guard::MemG(collection) => ExpKind::MemE(Box::new(temporary), Box::new(collection.clone())),
+    };
+    Exp::new(kind, TypKind::BoolT, exp.span.clone())
+}
+
+fn eval_case(
+    context: &mut Context,
+    calls: &mut dyn FunctionCalls,
+    exp: &Exp,
+    cases: &[(Guard, Block)],
+) -> Result<Flow, InterpError> {
+    let value = expression::eval_with_calls(context, calls, exp)?;
+    let temporary = Variable::new(Spanned::new("~case".to_owned(), Region::none()), Vec::new());
+    context.with_value_bindings(vec![(temporary, value)], |context| {
+        for (guard, block) in cases {
+            let condition = guard_exp(exp, guard);
+            let value = expression::eval_with_calls(context, calls, &condition)?;
+            let matches = get::bool(&value)
+                .map_err(|error| InterpError::new(condition.span.clone(), error.to_string()))?;
+            if matches {
+                return eval_block(context, calls, block);
+            }
+        }
+        Ok(Flow::Continue)
+    })
 }
 
 pub(crate) fn eval_block(
