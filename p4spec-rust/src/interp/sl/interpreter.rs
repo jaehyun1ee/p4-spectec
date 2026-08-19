@@ -12,6 +12,7 @@ use crate::{
         dynamic::caches::{CallCache, CallKey},
         dynamic_sl::envs::TypeDefEnv,
         dynamic_sl::func::Function,
+        dynamic_sl::rel::Relation,
         r#type::typdef::TypeDef,
         value::{ValueKind, ValueRef, get},
     },
@@ -20,7 +21,7 @@ use crate::{
 use super::{
     assignment,
     context::{Context, Cursor},
-    expression::FunctionCalls,
+    expression::Calls,
     instruction::{self, Flow},
 };
 
@@ -49,6 +50,7 @@ pub struct Interpreter<I, E> {
     interface: I,
     externs: E,
     function_cache: CallCache<ValueRef>,
+    relation_cache: CallCache<Vec<ValueRef>>,
 }
 
 impl<I, E> Interpreter<I, E>
@@ -68,6 +70,7 @@ where
             interface,
             externs,
             function_cache: CallCache::new(CALL_CACHE_SIZE),
+            relation_cache: CallCache::new(CALL_CACHE_SIZE),
         })
     }
 
@@ -77,6 +80,7 @@ where
 
     fn clear_call_caches(&mut self) {
         self.function_cache.clear();
+        self.relation_cache.clear();
     }
 
     pub fn eval_func(
@@ -86,11 +90,12 @@ where
         values_input: &[ValueRef],
     ) -> Result<ValueRef, InterpError> {
         self.clear_call_caches();
-        let mut dispatcher = FunctionDispatcher {
+        let mut dispatcher = Dispatcher {
             options: self.options,
             interface: &mut self.interface,
             externs: &mut self.externs,
             function_cache: &mut self.function_cache,
+            relation_cache: &mut self.relation_cache,
         };
         dispatcher.invoke_func(
             &mut self.context,
@@ -99,16 +104,37 @@ where
             values_input,
         )
     }
+
+    pub fn eval_rel(
+        &mut self,
+        name: &str,
+        values_input: &[ValueRef],
+    ) -> Result<Vec<ValueRef>, InterpError> {
+        self.clear_call_caches();
+        let mut dispatcher = Dispatcher {
+            options: self.options,
+            interface: &mut self.interface,
+            externs: &mut self.externs,
+            function_cache: &mut self.function_cache,
+            relation_cache: &mut self.relation_cache,
+        };
+        dispatcher.invoke_rel(
+            &mut self.context,
+            &Spanned::new(name.to_owned(), Region::none()),
+            values_input,
+        )
+    }
 }
 
-struct FunctionDispatcher<'a, I, E> {
+struct Dispatcher<'a, I, E> {
     options: Options,
     interface: &'a mut I,
     externs: &'a mut E,
     function_cache: &'a mut CallCache<ValueRef>,
+    relation_cache: &'a mut CallCache<Vec<ValueRef>>,
 }
 
-impl<I, E> FunctionDispatcher<'_, I, E>
+impl<I, E> Dispatcher<'_, I, E>
 where
     I: Interface,
     E: Extern,
@@ -266,9 +292,73 @@ where
             instruction::return_value(flow, &id.span)
         })
     }
+
+    fn invoke_rel(
+        &mut self,
+        context: &mut Context,
+        id: &crate::lang::il::ast::Id,
+        values_input: &[ValueRef],
+    ) -> Result<Vec<ValueRef>, InterpError> {
+        let relation = context.find_relation(id)?.clone();
+        let cacheable = self.options.cache && !matches!(relation, Relation::Extern(_));
+        let key: CallKey = (id.node.clone(), values_input.to_vec());
+        if cacheable && let Some(values) = self.relation_cache.find(&key) {
+            return Ok(values.clone());
+        }
+
+        let interface_before = self.interface.checkpoint();
+        let extern_before = self.externs.checkpoint();
+        let values = self.invoke_rel_body(context, id, &relation, values_input)?;
+        if cacheable
+            && !self
+                .interface
+                .side_effected(interface_before, self.interface.checkpoint())
+            && !self
+                .externs
+                .side_effected(extern_before, self.externs.checkpoint())
+        {
+            self.relation_cache.insert(key, values.clone());
+        }
+        Ok(values)
+    }
+
+    fn invoke_rel_body(
+        &mut self,
+        context: &mut Context,
+        id: &crate::lang::il::ast::Id,
+        relation: &Relation,
+        values_input: &[ValueRef],
+    ) -> Result<Vec<ValueRef>, InterpError> {
+        match relation {
+            Relation::Extern(_) => self
+                .externs
+                .eval_rel(&id.node, values_input)
+                .map_err(|error| InterpError::new(error.span, error.message)),
+            Relation::Defined(_signature, exps_input, block, else_block) => context
+                .with_relation_frame(id.clone(), values_input.to_vec(), |context| {
+                    if exps_input.len() != values_input.len() {
+                        return Err(InterpError::unmatch(
+                            id.span.clone(),
+                            "arity mismatch in relation arguments",
+                        ));
+                    }
+                    for (exp, value) in exps_input.iter().zip(values_input) {
+                        assignment::assign(context, exp, Rc::clone(value))?;
+                    }
+                    let flow = instruction::eval_block(context, self, block)?;
+                    let flow = match (flow, else_block) {
+                        (Flow::Continue, Some(else_block)) => {
+                            instruction::eval_block(context, self, else_block)?
+                        }
+                        (flow, _) => flow,
+                    };
+                    instruction::result_values(flow, &id.span)
+                }),
+        }
+    }
 }
 
-impl<I, E> FunctionCalls for FunctionDispatcher<'_, I, E>
+impl<I, E> Calls for Dispatcher<'_, I, E>
 where
     I: Interface,
     E: Extern,

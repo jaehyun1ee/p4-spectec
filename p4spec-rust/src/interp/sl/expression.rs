@@ -64,7 +64,7 @@ fn iterated_variable(exp: &Exp) -> Option<Variable> {
     }
 }
 
-pub(crate) trait FunctionCalls {
+pub(crate) trait Calls {
     fn invoke_func(
         &mut self,
         context: &mut Context,
@@ -74,9 +74,9 @@ pub(crate) trait FunctionCalls {
     ) -> Result<ValueRef, InterpError>;
 }
 
-struct RejectFunctionCalls;
+struct RejectCalls;
 
-impl FunctionCalls for RejectFunctionCalls {
+impl Calls for RejectCalls {
     fn invoke_func(
         &mut self,
         _context: &mut Context,
@@ -94,12 +94,12 @@ impl FunctionCalls for RejectFunctionCalls {
 // Expression evaluation
 
 pub fn eval(context: &mut Context, exp: &Exp) -> Result<ValueRef, InterpError> {
-    eval_with_calls(context, &mut RejectFunctionCalls, exp)
+    eval_with_calls(context, &mut RejectCalls, exp)
 }
 
 pub(crate) fn eval_with_calls(
     context: &mut Context,
-    calls: &mut dyn FunctionCalls,
+    calls: &mut dyn Calls,
     exp: &Exp,
 ) -> Result<ValueRef, InterpError> {
     match &exp.kind {
@@ -166,7 +166,7 @@ fn path_type_note(path: &Path) -> Typ {
 
 fn eval_all(
     context: &mut Context,
-    calls: &mut dyn FunctionCalls,
+    calls: &mut dyn Calls,
     exps: &[Exp],
 ) -> Result<Vec<ValueRef>, InterpError> {
     exps.iter()
@@ -178,7 +178,7 @@ fn eval_all(
 
 fn eval_unary(
     context: &mut Context,
-    calls: &mut dyn FunctionCalls,
+    calls: &mut dyn Calls,
     outer: &Exp,
     operator: UnOp,
     operand: &Exp,
@@ -203,7 +203,7 @@ fn eval_unary(
 
 fn eval_binary(
     context: &mut Context,
-    calls: &mut dyn FunctionCalls,
+    calls: &mut dyn Calls,
     outer: &Exp,
     operator: BinOp,
     left: &Exp,
@@ -290,7 +290,7 @@ fn eval_binary_bigint(
 
 fn eval_comparison(
     context: &mut Context,
-    calls: &mut dyn FunctionCalls,
+    calls: &mut dyn Calls,
     outer: &Exp,
     operator: CmpOp,
     left: &Exp,
@@ -572,7 +572,7 @@ fn value_is_subtype(context: &Context, typ: &Typ, value: &Value) -> Result<bool,
 
 fn eval_match(
     context: &mut Context,
-    calls: &mut dyn FunctionCalls,
+    calls: &mut dyn Calls,
     _outer: &Exp,
     exp: &Exp,
     pattern: &Pattern,
@@ -603,7 +603,7 @@ fn eval_match(
 
 fn eval_tuple(
     context: &mut Context,
-    calls: &mut dyn FunctionCalls,
+    calls: &mut dyn Calls,
     outer: &Exp,
     exps: &[Exp],
 ) -> Result<ValueRef, InterpError> {
@@ -615,7 +615,7 @@ fn eval_tuple(
 
 fn eval_case(
     context: &mut Context,
-    calls: &mut dyn FunctionCalls,
+    calls: &mut dyn Calls,
     outer: &Exp,
     not_exp: &crate::lang::il::ast::NotExp,
 ) -> Result<ValueRef, InterpError> {
@@ -633,7 +633,7 @@ fn eval_case(
 
 fn eval_structure(
     context: &mut Context,
-    calls: &mut dyn FunctionCalls,
+    calls: &mut dyn Calls,
     outer: &Exp,
     fields: &[(crate::lang::il::ast::Atom, Exp)],
 ) -> Result<ValueRef, InterpError> {
@@ -652,7 +652,7 @@ fn eval_structure(
 
 fn eval_option(
     context: &mut Context,
-    calls: &mut dyn FunctionCalls,
+    calls: &mut dyn Calls,
     outer: &Exp,
     exp: Option<&Exp>,
 ) -> Result<ValueRef, InterpError> {
@@ -666,7 +666,7 @@ fn eval_option(
 
 fn eval_list(
     context: &mut Context,
-    calls: &mut dyn FunctionCalls,
+    calls: &mut dyn Calls,
     outer: &Exp,
     exps: &[Exp],
 ) -> Result<ValueRef, InterpError> {
@@ -678,7 +678,7 @@ fn eval_list(
 
 fn eval_cons(
     context: &mut Context,
-    calls: &mut dyn FunctionCalls,
+    calls: &mut dyn Calls,
     outer: &Exp,
     head: &Exp,
     tail: &Exp,
@@ -705,7 +705,7 @@ fn eval_cons(
 
 fn eval_concatenation(
     context: &mut Context,
-    calls: &mut dyn FunctionCalls,
+    calls: &mut dyn Calls,
     outer: &Exp,
     left: &Exp,
     right: &Exp,
@@ -736,7 +736,7 @@ fn eval_concatenation(
 
 fn eval_membership(
     context: &mut Context,
-    calls: &mut dyn FunctionCalls,
+    calls: &mut dyn Calls,
     outer: &Exp,
     element: &Exp,
     collection: &Exp,
@@ -752,7 +752,7 @@ fn eval_membership(
 
 fn eval_length(
     context: &mut Context,
-    calls: &mut dyn FunctionCalls,
+    calls: &mut dyn Calls,
     outer: &Exp,
     exp: &Exp,
 ) -> Result<ValueRef, InterpError> {
@@ -774,7 +774,7 @@ fn eval_length(
 
 fn eval_dot(
     context: &mut Context,
-    calls: &mut dyn FunctionCalls,
+    calls: &mut dyn Calls,
     outer: &Exp,
     base: &Exp,
     atom: &crate::lang::il::ast::Atom,
@@ -802,7 +802,7 @@ fn index_of_value(outer: &Exp, value: &Value) -> Result<isize, InterpError> {
 
 fn eval_index(
     context: &mut Context,
-    calls: &mut dyn FunctionCalls,
+    calls: &mut dyn Calls,
     outer: &Exp,
     base: &Exp,
     index: &Exp,
@@ -848,7 +848,7 @@ fn bounded_index(outer: &Exp, index: isize, len: usize) -> Result<usize, InterpE
 
 fn eval_slice(
     context: &mut Context,
-    calls: &mut dyn FunctionCalls,
+    calls: &mut dyn Calls,
     outer: &Exp,
     base: &Exp,
     index: &Exp,
@@ -898,7 +898,7 @@ fn eval_slice(
 
 fn eval_access_path(
     context: &mut Context,
-    calls: &mut dyn FunctionCalls,
+    calls: &mut dyn Calls,
     value_base: &ValueRef,
     path: &Path,
 ) -> Result<ValueRef, InterpError> {
@@ -974,7 +974,7 @@ fn eval_access_path(
 
 fn eval_path_slice_bounds(
     context: &mut Context,
-    calls: &mut dyn FunctionCalls,
+    calls: &mut dyn Calls,
     index: &Exp,
     count: &Exp,
 ) -> Result<(usize, usize), InterpError> {
@@ -995,7 +995,7 @@ fn eval_path_slice_bounds(
 
 fn eval_update_path(
     context: &mut Context,
-    calls: &mut dyn FunctionCalls,
+    calls: &mut dyn Calls,
     value_base: &ValueRef,
     path: &Path,
     value_update: ValueRef,
@@ -1114,7 +1114,7 @@ fn eval_update_path(
 
 fn eval_update(
     context: &mut Context,
-    calls: &mut dyn FunctionCalls,
+    calls: &mut dyn Calls,
     base: &Exp,
     path: &Path,
     replacement: &Exp,
@@ -1138,7 +1138,7 @@ fn resolve_type_args(context: &Context, type_args: &[Typ]) -> Result<Vec<Typ>, I
 
 fn eval_call(
     context: &mut Context,
-    calls: &mut dyn FunctionCalls,
+    calls: &mut dyn Calls,
     id: &crate::lang::il::ast::Id,
     type_args: &[Typ],
     args: &[Arg],
@@ -1152,7 +1152,7 @@ fn eval_call(
 
 fn eval_optional_iteration(
     context: &mut Context,
-    calls: &mut dyn FunctionCalls,
+    calls: &mut dyn Calls,
     outer: &Exp,
     exp: &Exp,
     vars: &[crate::lang::il::ast::Var],
@@ -1169,7 +1169,7 @@ fn eval_optional_iteration(
 
 fn eval_list_iteration(
     context: &mut Context,
-    calls: &mut dyn FunctionCalls,
+    calls: &mut dyn Calls,
     outer: &Exp,
     exp: &Exp,
     vars: &[crate::lang::il::ast::Var],
@@ -1187,7 +1187,7 @@ fn eval_list_iteration(
 
 fn eval_iteration(
     context: &mut Context,
-    calls: &mut dyn FunctionCalls,
+    calls: &mut dyn Calls,
     outer: &Exp,
     exp: &Exp,
     (iter, vars): &crate::lang::il::ast::IterExp,
@@ -1205,7 +1205,7 @@ fn eval_iteration(
 
 fn eval_arg(
     context: &mut Context,
-    calls: &mut dyn FunctionCalls,
+    calls: &mut dyn Calls,
     arg: &Arg,
 ) -> Result<ValueRef, InterpError> {
     match &arg.node {
@@ -1225,7 +1225,7 @@ fn eval_arg(
 
 fn eval_args(
     context: &mut Context,
-    calls: &mut dyn FunctionCalls,
+    calls: &mut dyn Calls,
     args: &[Arg],
 ) -> Result<Vec<ValueRef>, InterpError> {
     args.iter()

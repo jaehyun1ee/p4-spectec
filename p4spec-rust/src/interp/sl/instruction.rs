@@ -14,7 +14,7 @@ use crate::{
 use super::{
     assignment,
     context::Context,
-    expression::{self, FunctionCalls},
+    expression::{self, Calls},
 };
 
 #[derive(Clone, Debug)]
@@ -26,7 +26,7 @@ pub(crate) enum Flow {
 
 pub(crate) fn eval_instr(
     context: &mut Context,
-    calls: &mut dyn FunctionCalls,
+    calls: &mut dyn Calls,
     instr: &Instr,
 ) -> Result<Flow, InterpError> {
     match &instr.kind {
@@ -108,7 +108,7 @@ fn guard_exp(exp: &Exp, guard: &Guard) -> Exp {
 
 fn eval_case(
     context: &mut Context,
-    calls: &mut dyn FunctionCalls,
+    calls: &mut dyn Calls,
     exp: &Exp,
     cases: &[(Guard, Block)],
 ) -> Result<Flow, InterpError> {
@@ -130,7 +130,7 @@ fn eval_case(
 
 pub(crate) fn eval_block(
     context: &mut Context,
-    calls: &mut dyn FunctionCalls,
+    calls: &mut dyn Calls,
     block: &Block,
 ) -> Result<Flow, InterpError> {
     for instr in block {
@@ -157,6 +157,26 @@ pub(crate) fn return_value(
             Err(InterpError::new(
                 span.clone(),
                 "function cannot produce a relation result",
+            ))
+        }
+    }
+}
+
+pub(crate) fn result_values(
+    flow: Flow,
+    span: &crate::domain::source::Region,
+) -> Result<Vec<ValueRef>, InterpError> {
+    match flow {
+        Flow::Result(values) => Ok(values),
+        Flow::Continue => Err(InterpError::unmatch(
+            span.clone(),
+            "relation did not produce a result",
+        )),
+        Flow::Return(value) => {
+            drop(value);
+            Err(InterpError::new(
+                span.clone(),
+                "relation cannot return a value",
             ))
         }
     }

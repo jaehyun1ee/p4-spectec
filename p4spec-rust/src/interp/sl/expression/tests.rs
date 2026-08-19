@@ -8,7 +8,7 @@ use crate::{
     },
 };
 
-use super::{FunctionCalls, eval_with_calls};
+use super::{Calls, eval_with_calls};
 
 fn id(name: &str) -> il::Id {
     Spanned::new(name.to_owned(), Region::for_file(name))
@@ -20,7 +20,7 @@ struct RecordingCalls {
     values: Vec<ValueRef>,
 }
 
-impl FunctionCalls for RecordingCalls {
+impl Calls for RecordingCalls {
     fn invoke_func(
         &mut self,
         _context: &mut Context,

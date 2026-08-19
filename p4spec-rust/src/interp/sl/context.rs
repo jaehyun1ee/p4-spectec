@@ -400,6 +400,30 @@ impl Context {
         result
     }
 
+    pub(crate) fn with_relation_frame<T>(
+        &mut self,
+        id: Id,
+        input_values: Vec<ValueRef>,
+        evaluate: impl FnOnce(&mut Self) -> Result<T, InterpError>,
+    ) -> Result<T, InterpError> {
+        let local_previous = std::mem::replace(
+            &mut self.local,
+            Local::Relation {
+                id,
+                input_values,
+                values: HashMap::new(),
+            },
+        );
+        let generation_previous = self.generation;
+        let undo_previous = std::mem::take(&mut self.undo);
+        self.generation = self.generation.wrapping_add(1);
+        let result = evaluate(self);
+        self.local = local_previous;
+        self.generation = generation_previous;
+        self.undo = undo_previous;
+        result
+    }
+
     // Constructing sub-context bindings
 
     pub fn optional_bindings(
