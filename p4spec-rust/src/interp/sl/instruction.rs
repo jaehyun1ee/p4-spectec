@@ -1,13 +1,16 @@
+use std::rc::Rc;
+
 use crate::{
     domain::source::{Region, Spanned},
     interp::common::InterpError,
     lang::{
         il::ast::{Exp, ExpKind, OpTyp, TypKind, UnOp},
-        sl::ast::{Block, Guard, HoldCase, Instr, InstrKind, IterExp, TableRow},
+        sl::ast::{Block, Guard, HoldCase, Instr, InstrKind, IterExp, IterInstr, TableRow},
     },
     runtime::{
         dynamic::var::Variable,
-        value::{ValueRef, get},
+        r#type::typ::make as make_type,
+        value::{ValueRef, get, make},
     },
 };
 
@@ -70,25 +73,16 @@ pub(crate) fn eval_instr(
             }
         }
         InstrKind::GroupI(_id, _signature, _exps, block) => eval_block(context, calls, block),
-        InstrKind::LetI(left, right, iter_instrs, block) => {
-            if !iter_instrs.is_empty() {
-                return Err(InterpError::new(
-                    instr.span.clone(),
-                    "iterated let instruction is not implemented",
-                ));
-            }
-            context.with_scope(|context| {
-                let value = expression::eval_with_calls(context, calls, right)?;
-                if let Err(error) = assignment::assign(context, left, value) {
-                    return if error.is_unmatch() {
-                        Ok(Flow::Continue)
-                    } else {
-                        Err(error)
-                    };
-                }
+        InstrKind::LetI(left, right, iter_instrs, block) => context.with_scope(|context| {
+            let result = (|| {
+                eval_let_iter(context, calls, left, right, iter_instrs)?;
                 eval_block(context, calls, block)
-            })
-        }
+            })();
+            match result {
+                Err(error) if error.is_unmatch() => Ok(Flow::Continue),
+                result => result,
+            }
+        }),
         InstrKind::RuleI(id, notation, inputs, iter_instrs, block) => {
             if !iter_instrs.is_empty() {
                 return Err(InterpError::new(
@@ -145,6 +139,132 @@ pub(crate) fn eval_instr(
             "instruction evaluation is not implemented",
         )),
     }
+}
+
+// Let instruction evaluation
+
+fn eval_let(
+    context: &mut Context,
+    calls: &mut dyn Calls,
+    left: &Exp,
+    right: &Exp,
+) -> Result<(), InterpError> {
+    let value = expression::eval_with_calls(context, calls, right)?;
+    assignment::assign(context, left, value)
+}
+
+fn eval_let_opt(
+    context: &mut Context,
+    calls: &mut dyn Calls,
+    left: &Exp,
+    right: &Exp,
+    vars_bound: &[crate::lang::il::ast::Var],
+    vars_bind: &[crate::lang::il::ast::Var],
+    iter_instrs: &[IterInstr],
+) -> Result<(), InterpError> {
+    let bindings = context.optional_bindings(vars_bound)?;
+    let values_binding = match bindings {
+        // If the bound variable supposed to guide the iteration is already empty,
+        // then the binding variables are also empty.
+        None => vec![None; vars_bind.len()],
+        // Otherwise, evaluate the premise for the subcontext.
+        Some(bindings) => context.with_value_bindings(bindings, |context| {
+            eval_let_iter_inner(context, calls, left, right, iter_instrs)?;
+            vars_bind
+                .iter()
+                .map(|(id, _typ, iters)| {
+                    context
+                        .find_value(&Variable::new(id.clone(), iters.clone()))
+                        .map(|value| Some(Rc::clone(value)))
+                })
+                .collect::<Result<Vec<_>, _>>()
+        })?,
+    };
+
+    // Finally, bind the resulting values.
+    for ((id, typ, iters), value) in vars_bind.iter().zip(values_binding) {
+        let mut outer_iters = iters.clone();
+        outer_iters.push(crate::lang::il::ast::Iter::Opt);
+        let outer_type = make_type::iterate(typ.clone(), &outer_iters);
+        let value = make::opt(&outer_type, value, Region::none());
+        context.bind_value(Variable::new(id.clone(), outer_iters), value)?;
+    }
+    Ok(())
+}
+
+fn eval_let_list(
+    context: &mut Context,
+    calls: &mut dyn Calls,
+    left: &Exp,
+    right: &Exp,
+    vars_bound: &[crate::lang::il::ast::Var],
+    vars_bind: &[crate::lang::il::ast::Var],
+    iter_instrs: &[IterInstr],
+) -> Result<(), InterpError> {
+    // Create a subcontext for each batch of bound values.
+    let bindings_batches = context.list_binding_batches(vars_bound)?;
+    let mut values_binding_batches = Vec::with_capacity(bindings_batches.len());
+    for bindings in bindings_batches {
+        // Evaluate the premise for each batch of bound values, and collect the
+        // resulting binding batches.
+        let values = context.with_value_bindings(bindings, |context| {
+            eval_let_iter_inner(context, calls, left, right, iter_instrs)?;
+            vars_bind
+                .iter()
+                .map(|(id, _typ, iters)| {
+                    context
+                        .find_value(&Variable::new(id.clone(), iters.clone()))
+                        .map(Rc::clone)
+                })
+                .collect::<Result<Vec<_>, _>>()
+        })?;
+        values_binding_batches.push(values);
+    }
+
+    // Finally, bind the resulting binding batches.
+    for (index, (id, typ, iters)) in vars_bind.iter().enumerate() {
+        let values = values_binding_batches
+            .iter()
+            .map(|values| Rc::clone(&values[index]))
+            .collect();
+        let mut outer_iters = iters.clone();
+        outer_iters.push(crate::lang::il::ast::Iter::List);
+        let outer_type = make_type::iterate(typ.clone(), &outer_iters);
+        let value = make::list(&outer_type, values, Region::none());
+        context.bind_value(Variable::new(id.clone(), outer_iters), value)?;
+    }
+    Ok(())
+}
+
+fn eval_let_iter_inner(
+    context: &mut Context,
+    calls: &mut dyn Calls,
+    left: &Exp,
+    right: &Exp,
+    iter_instrs: &[IterInstr],
+) -> Result<(), InterpError> {
+    let Some(((iter, vars_bound, vars_bind), rest)) = iter_instrs.split_first() else {
+        return eval_let(context, calls, left, right);
+    };
+    match iter {
+        crate::lang::il::ast::Iter::Opt => {
+            eval_let_opt(context, calls, left, right, vars_bound, vars_bind, rest)
+        }
+        crate::lang::il::ast::Iter::List => {
+            eval_let_list(context, calls, left, right, vars_bound, vars_bind, rest)
+        }
+    }
+}
+
+fn eval_let_iter(
+    context: &mut Context,
+    calls: &mut dyn Calls,
+    left: &Exp,
+    right: &Exp,
+    iter_instrs: &[IterInstr],
+) -> Result<(), InterpError> {
+    let iter_instrs = iter_instrs.iter().cloned().rev().collect::<Vec<_>>();
+    eval_let_iter_inner(context, calls, left, right, &iter_instrs)
 }
 
 fn eval_if_condition(

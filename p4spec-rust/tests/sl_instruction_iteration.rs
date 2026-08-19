@@ -5,7 +5,7 @@ use p4spec_rust::{
     lang::{il::ast as il, sl::ast as sl},
     runtime::{
         r#type::typ::make as make_type,
-        value::{get, make},
+        value::{ValueRef, get, make},
     },
 };
 
@@ -78,6 +78,50 @@ fn all_true() -> sl::Def {
     )
 }
 
+fn copy_all() -> sl::Def {
+    let bool_type = make_type::bool_type();
+    let list_type = make_type::list_type(bool_type.clone());
+    let item = iter_var("item", bool_type.node.clone());
+    let copy = iter_var("copy", bool_type.node.clone());
+    let iterated = |name: &str, var: il::Var| {
+        il::Exp::new(
+            il::ExpKind::IterE(Box::new(variable(name)), (il::Iter::List, vec![var])),
+            list_type.node.clone(),
+            span("iterated"),
+        )
+    };
+    let parameter = Spanned::new(
+        sl::ParamKind::ExpP(list_type.clone(), iterated("item", item.clone())),
+        span("parameter"),
+    );
+    let let_instr = sl::Instr::new(
+        sl::InstrKind::LetI(
+            variable("copy"),
+            variable("item"),
+            vec![(il::Iter::List, vec![item], vec![copy.clone()])],
+            vec![sl::Instr::new(
+                sl::InstrKind::ReturnI(iterated("copy", copy)),
+                5,
+                span("return"),
+            )],
+        ),
+        4,
+        span("let"),
+    );
+    Spanned::new(
+        sl::DefKind::FuncDecD((
+            id("copy_all"),
+            Vec::new(),
+            vec![parameter],
+            list_type,
+            vec![let_instr],
+            None,
+            Vec::new(),
+        )),
+        span("copy-all"),
+    )
+}
+
 #[test]
 fn list_iterated_if_requires_every_element_and_accepts_empty_list() {
     let mut interpreter = Interpreter::new(
@@ -118,4 +162,33 @@ fn list_iterated_if_requires_every_element_and_accepts_empty_list() {
             Ok(expected)
         );
     }
+}
+
+#[test]
+fn iterated_let_collects_element_bindings_into_a_shared_list() {
+    let mut interpreter = Interpreter::new(
+        &[copy_all()],
+        Options {
+            cache: false,
+            deterministic: false,
+            guard: false,
+        },
+        NullInterface,
+        NullExtern,
+    )
+    .unwrap();
+    let first = make::bool(true, span("first"));
+    let second = make::bool(false, span("second"));
+    let input = make::list(
+        &make_type::list_type(make_type::bool_type()),
+        vec![first.clone(), second.clone()],
+        span("input"),
+    );
+
+    let result = interpreter
+        .eval_func("copy_all", &[], std::slice::from_ref(&input))
+        .unwrap();
+    let values: &[ValueRef] = get::list(&result).unwrap();
+    assert!(std::rc::Rc::ptr_eq(&values[0], &first));
+    assert!(std::rc::Rc::ptr_eq(&values[1], &second));
 }
