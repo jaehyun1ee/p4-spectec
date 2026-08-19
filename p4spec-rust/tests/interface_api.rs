@@ -1,7 +1,12 @@
 use num_bigint::BigInt;
 use p4spec_rust::{
-    domain::source::{Region, Spanned},
+    domain::{
+        atom::Atom,
+        mixfix::Mixfix,
+        source::{Region, Spanned},
+    },
     interface::{BuiltinInterface, Interface, NullInterface, P4Interface},
+    lang::{el::ast as el, il::ast as il, sl::ast as sl},
     runtime::{
         r#type::typ::make as make_type,
         value::{ValueRef, get, make},
@@ -85,6 +90,61 @@ fn p4_print_checks_arity_before_calling_the_unparser() {
         .unwrap_err();
     assert_eq!(error.span, span("bad-print"));
     assert!(error.message.contains("arity mismatch"));
+}
+
+#[test]
+fn p4_print_builds_the_alter_hint_unparser_from_an_sl_spec() {
+    let keyword = Spanned::new(Atom::Keyword("WRAPPED".to_owned()), span("keyword"));
+    let mixop = Mixfix::Seq(vec![Mixfix::Atom(keyword), Mixfix::Arg(())]);
+    let text_hint =
+        |text: &str| Spanned::new(el::ExpKind::TextE(text.to_owned()), span("hint-text"));
+    let hole = Spanned::new(el::ExpKind::HoleE(el::Hole::Next), span("hint-hole"));
+    let hint_exp = Spanned::new(
+        el::ExpKind::FuseE(
+            Box::new(text_hint("<")),
+            Box::new(Spanned::new(
+                el::ExpKind::FuseE(Box::new(hole), Box::new(text_hint(">"))),
+                span("hint-fuse-right"),
+            )),
+        ),
+        span("hint-fuse"),
+    );
+    let literal_id = id("literal", "literal");
+    let type_case = (
+        Spanned::new(
+            Mixfix::fill(&mixop, [make_type::text_type()]).unwrap(),
+            span("notation"),
+        ),
+        Spanned::new((literal_id.clone(), Vec::new()), span("origin")),
+        vec![el::Hint {
+            hintid: id("print", "print-hint"),
+            hintexp: hint_exp,
+        }],
+    );
+    let spec = vec![Spanned::new(
+        sl::DefKind::TypD(
+            literal_id.clone(),
+            Vec::new(),
+            Spanned::new(il::DefTypKind::VariantT(vec![type_case]), span("variant")),
+            Vec::new(),
+        ),
+        span("type-definition"),
+    )];
+    let literal_type = make_type::var_type(literal_id, Vec::new());
+    let value_case =
+        Mixfix::fill(&mixop, [make::text("inside".to_owned(), span("inside"))]).unwrap();
+    let value = make::case(&literal_type, value_case, span("value"));
+    let mut interface = P4Interface::from_sl_spec(&spec);
+
+    let printed = interface
+        .call_builtin(
+            &mut |_| {},
+            &id("print_", "print-call"),
+            std::slice::from_ref(&literal_type),
+            &[value],
+        )
+        .unwrap();
+    assert_eq!(get::text(&printed), Ok("<inside>"));
 }
 
 #[test]

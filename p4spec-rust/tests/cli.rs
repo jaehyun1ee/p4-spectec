@@ -32,13 +32,39 @@ fn identity_spec() -> sl::Spec {
             Vec::new(),
         )
     };
-    vec![Spanned::new(
+    let text_type = Spanned::new(il::TypKind::TextT, span("text-type"));
+    let print = Spanned::new(
+        sl::DefKind::BuiltinDecD((
+            id("print_"),
+            vec![id("X")],
+            vec![Spanned::new(
+                sl::ParamKind::ExpP(text_type.clone(), value.clone()),
+                span("print-parameter"),
+            )],
+            text_type.clone(),
+            Vec::new(),
+        )),
+        span("print"),
+    );
+    let print_call = il::Exp::new(
+        il::ExpKind::CallE(
+            id("print_"),
+            vec![text_type],
+            vec![Spanned::new(
+                il::ArgKind::ExpA(value.clone()),
+                span("print-argument"),
+            )],
+        ),
+        il::TypKind::TextT,
+        span("print-call"),
+    );
+    let relation = Spanned::new(
         sl::DefKind::RelD((
             id("identity"),
             signature(),
-            vec![value.clone()],
+            vec![value],
             vec![sl::Instr::new(
-                sl::InstrKind::ResultI(signature(), vec![value]),
+                sl::InstrKind::ResultI(signature(), vec![print_call]),
                 1,
                 span("result"),
             )],
@@ -46,7 +72,8 @@ fn identity_spec() -> sl::Spec {
             Vec::new(),
         )),
         span("identity"),
-    )]
+    );
+    vec![print, relation]
 }
 
 #[test]
@@ -92,5 +119,6 @@ fn run_command_decodes_ocaml_envelopes_and_emits_value_envelopes() {
         String::from_utf8_lossy(&output.stderr)
     );
     let decoded = ValueEnvelopeCodec::decode(&output.stdout).unwrap();
-    assert_eq!(decoded, value);
+    assert_eq!(decoded.kind, il::ValueKind::TextV("program".to_owned()));
+    assert_eq!(decoded.ty, il::TypKind::TextT);
 }

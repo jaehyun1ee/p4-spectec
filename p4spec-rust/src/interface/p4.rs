@@ -1,5 +1,6 @@
 use crate::{
     lang::il::ast::{Id, Typ},
+    lang::sl::ast::Def,
     runtime::value::{Value, ValueRef, make},
 };
 
@@ -10,15 +11,27 @@ use super::{
 
 // P4
 
+type Unparser = dyn Fn(&Value) -> Result<String, String>;
+
 pub struct P4Interface {
-    unparser: Box<dyn Fn(&Value) -> String>,
+    unparser: Box<Unparser>,
     builtins: Builtins,
 }
 
 impl P4Interface {
     pub fn new(unparser: impl Fn(&Value) -> String + 'static) -> Self {
         Self {
-            unparser: Box::new(unparser),
+            unparser: Box::new(move |value| Ok(unparser(value))),
+            builtins: Builtins::new(),
+        }
+    }
+
+    pub fn from_sl_spec(spec: &[Def]) -> Self {
+        let unparser = super::P4Unparser::from_sl_spec(spec);
+        Self {
+            unparser: Box::new(move |value| {
+                unparser.render(value).map_err(|error| error.to_string())
+            }),
             builtins: Builtins::new(),
         }
     }
@@ -34,7 +47,8 @@ impl P4Interface {
     ) -> Result<ValueRef, InterfaceError> {
         let _typ = extract::one(&id.span, type_args)?;
         let value = extract::one(&id.span, values)?;
-        let text = (self.unparser)(value);
+        let text = (self.unparser)(value)
+            .map_err(|message| InterfaceError::new(id.span.clone(), message))?;
         return_value(add, make::text(text, crate::domain::source::Region::none()))
             .map_err(Into::into)
     }

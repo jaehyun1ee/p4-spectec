@@ -6,7 +6,7 @@ use std::{
 
 use clap::{Args, Parser, Subcommand};
 use p4spec_rust::{
-    interface::{BuiltinInterface, NullExtern},
+    interface::{NullExtern, P4Interface},
     interp::{
         common::InterpError,
         sl::{Interpreter, Options},
@@ -97,7 +97,7 @@ fn run(args: RunArgs) -> Result<(), CliError> {
             deterministic: args.deterministic,
             guard: args.guard,
         },
-        BuiltinInterface::new(),
+        P4Interface::from_sl_spec(&spec),
         NullExtern,
     )?;
     let stdout = io::stdout();
