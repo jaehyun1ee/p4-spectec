@@ -43,22 +43,7 @@ pub(crate) fn eval_instr(
         }
         InstrKind::CaseI(exp, cases, _dangle) => eval_case(context, calls, exp, cases),
         InstrKind::HoldI(id, notation, iter_exps, hold_case) => {
-            if !iter_exps.is_empty() {
-                return Err(InterpError::new(
-                    instr.span.clone(),
-                    "iterated hold condition is not implemented",
-                ));
-            }
-            let values_input = notation
-                .args()
-                .into_iter()
-                .map(|exp| expression::eval_with_calls(context, calls, exp))
-                .collect::<Result<Vec<_>, _>>()?;
-            let holds = match calls.invoke_rel(context, id, &values_input) {
-                Ok(_values) => true,
-                Err(error) if error.is_unmatch() => false,
-                Err(error) => return Err(error),
-            };
+            let holds = eval_hold_condition(context, calls, id, notation, iter_exps)?;
             match hold_case {
                 HoldCase::BothH(block_hold, block_not_hold) => {
                     if holds {
@@ -427,6 +412,60 @@ fn eval_if_condition(
             Ok(true)
         }
     }
+}
+
+// Hold instruction evaluation
+
+fn eval_hold_condition_inner(
+    context: &mut Context,
+    calls: &mut dyn Calls,
+    id: &Id,
+    notation: &NotExp,
+    iter_exps: &[IterExp],
+) -> Result<bool, InterpError> {
+    let Some(((iter, vars), rest)) = iter_exps.split_first() else {
+        let values_input = notation
+            .args()
+            .into_iter()
+            .map(|exp| expression::eval_with_calls(context, calls, exp))
+            .collect::<Result<Vec<_>, _>>()?;
+        return match calls.invoke_rel(context, id, &values_input) {
+            Ok(_values) => Ok(true),
+            Err(error) if error.is_unmatch() => Ok(false),
+            Err(error) => Err(error),
+        };
+    };
+    match iter {
+        crate::lang::il::ast::Iter::Opt => match context.optional_bindings(vars)? {
+            Some(bindings) => context.with_value_bindings(bindings, |context| {
+                eval_hold_condition_inner(context, calls, id, notation, rest)
+            }),
+            None => Ok(false),
+        },
+        crate::lang::il::ast::Iter::List => {
+            let batches = context.list_binding_batches(vars)?;
+            for bindings in batches {
+                let holds = context.with_value_bindings(bindings, |context| {
+                    eval_hold_condition_inner(context, calls, id, notation, rest)
+                })?;
+                if !holds {
+                    return Ok(false);
+                }
+            }
+            Ok(true)
+        }
+    }
+}
+
+fn eval_hold_condition(
+    context: &mut Context,
+    calls: &mut dyn Calls,
+    id: &Id,
+    notation: &NotExp,
+    iter_exps: &[IterExp],
+) -> Result<bool, InterpError> {
+    let iter_exps = iter_exps.iter().cloned().rev().collect::<Vec<_>>();
+    eval_hold_condition_inner(context, calls, id, notation, &iter_exps)
 }
 
 fn guard_exp(exp: &Exp, guard: &Guard) -> Exp {
