@@ -67,6 +67,47 @@ pub(crate) fn eval_instr(
                 eval_block(context, calls, block)
             })
         }
+        InstrKind::RuleI(id, notation, inputs, iter_instrs, block) => {
+            if !iter_instrs.is_empty() {
+                return Err(InterpError::new(
+                    instr.span.clone(),
+                    "iterated rule instruction is not implemented",
+                ));
+            }
+            context.with_scope(|context| {
+                let exps = notation.args();
+                let mut exps_input = Vec::new();
+                let mut exps_output = Vec::new();
+                for (index, exp) in exps.into_iter().enumerate() {
+                    if inputs.contains(&(index as i64)) {
+                        exps_input.push(exp);
+                    } else {
+                        exps_output.push(exp);
+                    }
+                }
+                let values_input = exps_input
+                    .into_iter()
+                    .map(|exp| expression::eval_with_calls(context, calls, exp))
+                    .collect::<Result<Vec<_>, _>>()?;
+                let values_output = match calls.invoke_rel(context, id, &values_input) {
+                    Ok(values) => values,
+                    Err(error) if error.is_unmatch() => return Ok(Flow::Continue),
+                    Err(error) => return Err(error),
+                };
+                if exps_output.len() != values_output.len() {
+                    return Ok(Flow::Continue);
+                }
+                for (exp, value) in exps_output.into_iter().zip(values_output) {
+                    if let Err(error) = assignment::assign(context, exp, value) {
+                        if error.is_unmatch() {
+                            return Ok(Flow::Continue);
+                        }
+                        return Err(error);
+                    }
+                }
+                eval_block(context, calls, block)
+            })
+        }
         InstrKind::ResultI(_signature, exps) => {
             let values = exps
                 .iter()

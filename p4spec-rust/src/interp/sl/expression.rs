@@ -72,6 +72,18 @@ pub(crate) trait Calls {
         type_args: &[Typ],
         values: &[ValueRef],
     ) -> Result<ValueRef, InterpError>;
+
+    fn invoke_rel(
+        &mut self,
+        _context: &mut Context,
+        id: &crate::lang::il::ast::Id,
+        _values: &[ValueRef],
+    ) -> Result<Vec<ValueRef>, InterpError> {
+        Err(InterpError::new(
+            id.span.clone(),
+            "relation calls require an SL interpreter",
+        ))
+    }
 }
 
 struct RejectCalls;

@@ -372,4 +372,13 @@ where
     ) -> Result<ValueRef, InterpError> {
         Self::invoke_func(self, context, id, type_args, values)
     }
+
+    fn invoke_rel(
+        &mut self,
+        context: &mut Context,
+        id: &crate::lang::il::ast::Id,
+        values: &[ValueRef],
+    ) -> Result<Vec<ValueRef>, InterpError> {
+        Self::invoke_rel(self, context, id, values)
+    }
 }
