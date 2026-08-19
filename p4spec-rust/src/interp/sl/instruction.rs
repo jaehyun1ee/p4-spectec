@@ -12,6 +12,7 @@ use crate::{
 };
 
 use super::{
+    assignment,
     context::Context,
     expression::{self, FunctionCalls},
 };
@@ -47,6 +48,25 @@ pub(crate) fn eval_instr(
         }
         InstrKind::CaseI(exp, cases, _dangle) => eval_case(context, calls, exp, cases),
         InstrKind::GroupI(_id, _signature, _exps, block) => eval_block(context, calls, block),
+        InstrKind::LetI(left, right, iter_instrs, block) => {
+            if !iter_instrs.is_empty() {
+                return Err(InterpError::new(
+                    instr.span.clone(),
+                    "iterated let instruction is not implemented",
+                ));
+            }
+            context.with_scope(|context| {
+                let value = expression::eval_with_calls(context, calls, right)?;
+                if let Err(error) = assignment::assign(context, left, value) {
+                    return if error.is_unmatch() {
+                        Ok(Flow::Continue)
+                    } else {
+                        Err(error)
+                    };
+                }
+                eval_block(context, calls, block)
+            })
+        }
         InstrKind::ResultI(_signature, exps) => {
             let values = exps
                 .iter()

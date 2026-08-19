@@ -492,6 +492,16 @@ impl Context {
         result
     }
 
+    pub(crate) fn with_scope<T>(
+        &mut self,
+        evaluate: impl FnOnce(&mut Self) -> Result<T, InterpError>,
+    ) -> Result<T, InterpError> {
+        let mark = self.mark();
+        let result = evaluate(self);
+        self.reset(mark)?;
+        result
+    }
+
     // Scope and backtracking
 
     pub fn mark(&self) -> ScopeMark {

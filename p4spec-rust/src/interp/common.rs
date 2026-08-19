@@ -7,6 +7,7 @@ use crate::domain::source::Region;
 pub struct InterpError {
     pub span: Region,
     pub message: String,
+    unmatched: bool,
 }
 
 impl InterpError {
@@ -14,6 +15,19 @@ impl InterpError {
         Self {
             span,
             message: message.into(),
+            unmatched: false,
         }
+    }
+
+    pub fn unmatch(span: Region, message: impl Into<String>) -> Self {
+        Self {
+            span,
+            message: message.into(),
+            unmatched: true,
+        }
+    }
+
+    pub fn is_unmatch(&self) -> bool {
+        self.unmatched
     }
 }

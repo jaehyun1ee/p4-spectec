@@ -12,7 +12,7 @@ use crate::{
 use super::context::Context;
 
 fn match_error(exp: &Exp) -> InterpError {
-    InterpError::new(exp.span.clone(), "match failed while assigning value")
+    InterpError::unmatch(exp.span.clone(), "match failed while assigning value")
 }
 
 // Assigning a value to an expression
@@ -81,7 +81,7 @@ fn assign_expressions(
         let span = exps
             .first()
             .map_or_else(crate::domain::source::Region::none, |exp| exp.span.clone());
-        return Err(InterpError::new(
+        return Err(InterpError::unmatch(
             span,
             format!(
                 "mismatch in number of expressions and values while assigning, expected {} value(s) but got {}",
@@ -102,7 +102,7 @@ fn assign_expression_refs(
     values: &[&ValueRef],
 ) -> Result<(), InterpError> {
     if exps.len() != values.len() {
-        return Err(InterpError::new(
+        return Err(InterpError::unmatch(
             crate::domain::source::Region::none(),
             "mismatch in number of expressions and values while assigning",
         ));
