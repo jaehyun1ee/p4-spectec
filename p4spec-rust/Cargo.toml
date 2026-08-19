@@ -16,3 +16,7 @@ serde_json = { version = "1.0.128", features = ["unbounded_depth"] }
 serde_stacker = "0.1.11"
 stacker = "0.1.25"
 thiserror = "1.0.63"
+
+[profile.release]
+codegen-units = 1
+lto = "fat"
