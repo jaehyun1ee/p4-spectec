@@ -89,6 +89,7 @@ pub struct Context {
     global: Global,
     local: Local,
     value_env_pool: Vec<ValueEnv>,
+    undo_pool: Vec<Vec<Undo>>,
     generation: u64,
     undo: Vec<Undo>,
 }
@@ -102,6 +103,7 @@ impl Context {
             global: Global::default(),
             local: Local::Empty,
             value_env_pool: Vec::new(),
+            undo_pool: Vec::new(),
             generation: 0,
             undo: Vec::new(),
         };
@@ -385,6 +387,15 @@ impl Context {
         }
     }
 
+    fn take_undo(&mut self) -> Vec<Undo> {
+        self.undo_pool.pop().unwrap_or_default()
+    }
+
+    fn recycle_undo(&mut self, mut undo: Vec<Undo>) {
+        undo.clear();
+        self.undo_pool.push(undo);
+    }
+
     fn replace_local(&mut self, local: Local) {
         let previous = std::mem::replace(&mut self.local, local);
         self.recycle_local(previous);
@@ -435,13 +446,15 @@ impl Context {
             },
         );
         let generation_previous = self.generation;
-        let undo_previous = std::mem::take(&mut self.undo);
+        let undo = self.take_undo();
+        let undo_previous = std::mem::replace(&mut self.undo, undo);
         self.generation = self.generation.wrapping_add(1);
         let result = evaluate(self);
         let local_finished = std::mem::replace(&mut self.local, local_previous);
         self.recycle_local(local_finished);
         self.generation = generation_previous;
-        self.undo = undo_previous;
+        let undo_finished = std::mem::replace(&mut self.undo, undo_previous);
+        self.recycle_undo(undo_finished);
         result
     }
 
@@ -461,13 +474,15 @@ impl Context {
             },
         );
         let generation_previous = self.generation;
-        let undo_previous = std::mem::take(&mut self.undo);
+        let undo = self.take_undo();
+        let undo_previous = std::mem::replace(&mut self.undo, undo);
         self.generation = self.generation.wrapping_add(1);
         let result = evaluate(self);
         let local_finished = std::mem::replace(&mut self.local, local_previous);
         self.recycle_local(local_finished);
         self.generation = generation_previous;
-        self.undo = undo_previous;
+        let undo_finished = std::mem::replace(&mut self.undo, undo_previous);
+        self.recycle_undo(undo_finished);
         result
     }
 
@@ -713,5 +728,31 @@ mod tests {
             })
             .unwrap();
         assert_eq!(context.value_env_pool.len(), 1);
+    }
+
+    #[test]
+    fn completed_frames_reuse_undo_log_capacity() {
+        let mut context = Context::from_spec(false, &[]).expect("valid empty spec");
+        context
+            .with_relation_frame(id("first"), Vec::new(), |context| {
+                for index in 0..64 {
+                    context.bind_value(
+                        Variable::new(id(format!("value-{index}")), Vec::new()),
+                        make::bool(true, Region::none()),
+                    )?;
+                }
+                Ok(())
+            })
+            .unwrap();
+        let capacity = context.undo_pool[0].capacity();
+        assert!(capacity >= 64);
+
+        context
+            .with_relation_frame(id("second"), Vec::new(), |context| {
+                assert!(context.undo.capacity() >= capacity);
+                Ok(())
+            })
+            .unwrap();
+        assert_eq!(context.undo_pool.len(), 1);
     }
 }
