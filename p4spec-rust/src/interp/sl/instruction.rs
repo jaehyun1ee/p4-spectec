@@ -204,6 +204,18 @@ pub(crate) fn eval_block(
     calls: &mut dyn Calls,
     block: &Block,
 ) -> Result<Flow, InterpError> {
+    if context.deterministic() {
+        eval_block_deterministic(context, calls, block)
+    } else {
+        eval_block_sequential(context, calls, block)
+    }
+}
+
+fn eval_block_sequential(
+    context: &mut Context,
+    calls: &mut dyn Calls,
+    block: &Block,
+) -> Result<Flow, InterpError> {
     for instr in block {
         match eval_instr(context, calls, instr)? {
             Flow::Continue => {}
@@ -211,6 +223,37 @@ pub(crate) fn eval_block(
         }
     }
     Ok(Flow::Continue)
+}
+
+fn eval_block_deterministic(
+    context: &mut Context,
+    calls: &mut dyn Calls,
+    block: &Block,
+) -> Result<Flow, InterpError> {
+    let mut selected = Flow::Continue;
+    for instr in block {
+        let flow = match context.with_scope(|context| eval_instr(context, calls, instr)) {
+            Ok(flow) => flow,
+            Err(error) if error.is_unmatch() => Flow::Continue,
+            Err(error) => return Err(error),
+        };
+        selected = match (selected, flow) {
+            (Flow::Continue, flow) | (flow, Flow::Continue) => flow,
+            (Flow::Result(_), Flow::Return(_)) | (Flow::Return(_), Flow::Result(_)) => {
+                return Err(InterpError::new(
+                    instr.span.clone(),
+                    "cannot have both result and return",
+                ));
+            }
+            (Flow::Result(_), Flow::Result(_)) | (Flow::Return(_), Flow::Return(_)) => {
+                return Err(InterpError::new(
+                    instr.span.clone(),
+                    "nondeterministic instruction evaluation",
+                ));
+            }
+        };
+    }
+    Ok(selected)
 }
 
 pub(crate) fn return_value(
