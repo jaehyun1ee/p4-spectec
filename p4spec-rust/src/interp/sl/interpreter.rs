@@ -139,6 +139,11 @@ enum FunctionResult {
     TailCall(crate::lang::il::ast::Id, Vec<Typ>, Vec<ValueRef>),
 }
 
+enum RelationResult {
+    Result(Vec<ValueRef>),
+    TailCall(crate::lang::il::ast::Id, Vec<ValueRef>),
+}
+
 impl<I, E> Dispatcher<'_, I, E>
 where
     I: Interface,
@@ -320,10 +325,10 @@ where
         let type_defs = Self::local_type_defs(id, type_params, type_args)?;
         context.with_function_frame(id.clone(), values_input.to_vec(), type_defs, |context| {
             Self::assign_params(context, id, params, values_input)?;
-            let flow = instruction::eval_block(context, self, block)?;
+            let flow = instruction::eval_block(context, self, block, else_block.is_none())?;
             let flow = match (flow, else_block) {
                 (Flow::Continue, Some(else_block)) => {
-                    instruction::eval_block(context, self, else_block)?
+                    instruction::eval_block(context, self, else_block, true)?
                 }
                 (flow, _) => flow,
             };
@@ -342,27 +347,39 @@ where
         id: &crate::lang::il::ast::Id,
         values_input: &[ValueRef],
     ) -> Result<Vec<ValueRef>, InterpError> {
-        let relation = context.find_relation(id)?.clone();
-        let cacheable = self.options.cache && !matches!(relation, Relation::Extern(_));
-        let key: CallKey = (id.node.clone(), values_input.to_vec());
-        if cacheable && let Some(values) = self.relation_cache.find(&key) {
-            return Ok(values.clone());
+        let mut id = id.clone();
+        let mut values_input = values_input.to_vec();
+        loop {
+            let relation = context.find_relation(&id)?.clone();
+            let cacheable = self.options.cache && !matches!(relation, Relation::Extern(_));
+            let key: CallKey = (id.node.clone(), values_input.clone());
+            let result = if cacheable && let Some(values) = self.relation_cache.find(&key) {
+                RelationResult::Result(values.clone())
+            } else {
+                let interface_before = self.interface.checkpoint();
+                let extern_before = self.externs.checkpoint();
+                let result = self.invoke_rel_body(context, &id, &relation, &values_input)?;
+                if cacheable
+                    && let RelationResult::Result(values) = &result
+                    && !self
+                        .interface
+                        .side_effected(interface_before, self.interface.checkpoint())
+                    && !self
+                        .externs
+                        .side_effected(extern_before, self.externs.checkpoint())
+                {
+                    self.relation_cache.insert(key, values.clone());
+                }
+                result
+            };
+            match result {
+                RelationResult::Result(values) => return Ok(values),
+                RelationResult::TailCall(id_tail, values_tail) => {
+                    id = id_tail;
+                    values_input = values_tail;
+                }
+            }
         }
-
-        let interface_before = self.interface.checkpoint();
-        let extern_before = self.externs.checkpoint();
-        let values = self.invoke_rel_body(context, id, &relation, values_input)?;
-        if cacheable
-            && !self
-                .interface
-                .side_effected(interface_before, self.interface.checkpoint())
-            && !self
-                .externs
-                .side_effected(extern_before, self.externs.checkpoint())
-        {
-            self.relation_cache.insert(key, values.clone());
-        }
-        Ok(values)
     }
 
     fn invoke_rel_body(
@@ -371,11 +388,12 @@ where
         id: &crate::lang::il::ast::Id,
         relation: &Relation,
         values_input: &[ValueRef],
-    ) -> Result<Vec<ValueRef>, InterpError> {
+    ) -> Result<RelationResult, InterpError> {
         match relation {
             Relation::Extern(_) => self
                 .externs
                 .eval_rel(&id.node, values_input)
+                .map(RelationResult::Result)
                 .map_err(|error| InterpError::new(error.span, error.message)),
             Relation::Defined(_signature, exps_input, block, else_block) => context
                 .with_relation_frame(id.clone(), values_input.to_vec(), |context| {
@@ -388,14 +406,19 @@ where
                     for (exp, value) in exps_input.iter().zip(values_input) {
                         assignment::assign(context, exp, Rc::clone(value))?;
                     }
-                    let flow = instruction::eval_block(context, self, block)?;
+                    let flow = instruction::eval_block(context, self, block, else_block.is_none())?;
                     let flow = match (flow, else_block) {
                         (Flow::Continue, Some(else_block)) => {
-                            instruction::eval_block(context, self, else_block)?
+                            instruction::eval_block(context, self, else_block, true)?
                         }
                         (flow, _) => flow,
                     };
-                    instruction::result_values(flow, &id.span)
+                    match flow {
+                        Flow::TailCallRel(id, values) => Ok(RelationResult::TailCall(id, values)),
+                        flow => {
+                            instruction::result_values(flow, &id.span).map(RelationResult::Result)
+                        }
+                    }
                 }),
         }
     }

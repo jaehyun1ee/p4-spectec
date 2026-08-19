@@ -4,7 +4,10 @@ use crate::{
     domain::source::{Region, Spanned},
     interp::common::InterpError,
     lang::{
-        il::ast::{Exp, ExpKind, Id, OpTyp, Typ, TypKind, UnOp},
+        il::{
+            ast::{Exp, ExpKind, Id, OpTyp, Typ, TypKind, UnOp},
+            eq,
+        },
         sl::ast::{Block, Guard, HoldCase, Instr, InstrKind, IterExp, IterInstr, NotExp, TableRow},
     },
     runtime::{
@@ -26,43 +29,47 @@ pub(crate) enum Flow {
     Result(Vec<ValueRef>),
     Return(ValueRef),
     TailCallFunc(Id, Vec<Typ>, Vec<ValueRef>),
+    TailCallRel(Id, Vec<ValueRef>),
 }
 
 pub(crate) fn eval_instr(
     context: &mut Context,
     calls: &mut dyn Calls,
     instr: &Instr,
+    tail: bool,
 ) -> Result<Flow, InterpError> {
     match &instr.kind {
         InstrKind::IfI(condition, iter_exps, block, _dangle) => {
             let condition_holds = eval_if_condition(context, calls, condition, iter_exps)?;
             if condition_holds {
-                eval_block(context, calls, block)
+                eval_block(context, calls, block, tail)
             } else {
                 Ok(Flow::Continue)
             }
         }
-        InstrKind::CaseI(exp, cases, _dangle) => eval_case(context, calls, exp, cases),
+        InstrKind::CaseI(exp, cases, _dangle) => eval_case(context, calls, exp, cases, tail),
         InstrKind::HoldI(id, notation, iter_exps, hold_case) => {
             let holds = eval_hold_condition(context, calls, id, notation, iter_exps)?;
             match hold_case {
                 HoldCase::BothH(block_hold, block_not_hold) => {
                     if holds {
-                        eval_block(context, calls, block_hold)
+                        eval_block(context, calls, block_hold, tail)
                     } else {
-                        eval_block(context, calls, block_not_hold)
+                        eval_block(context, calls, block_not_hold, tail)
                     }
                 }
-                HoldCase::HoldH(block, _dangle) if holds => eval_block(context, calls, block),
-                HoldCase::NotHoldH(block, _dangle) if !holds => eval_block(context, calls, block),
+                HoldCase::HoldH(block, _dangle) if holds => eval_block(context, calls, block, tail),
+                HoldCase::NotHoldH(block, _dangle) if !holds => {
+                    eval_block(context, calls, block, tail)
+                }
                 HoldCase::HoldH(..) | HoldCase::NotHoldH(..) => Ok(Flow::Continue),
             }
         }
-        InstrKind::GroupI(_id, _signature, _exps, block) => eval_block(context, calls, block),
+        InstrKind::GroupI(_id, _signature, _exps, block) => eval_block(context, calls, block, tail),
         InstrKind::LetI(left, right, iter_instrs, block) => context.with_scope(|context| {
             let result = (|| {
                 eval_let_iter(context, calls, left, right, iter_instrs)?;
-                eval_block(context, calls, block)
+                eval_block(context, calls, block, tail)
             })();
             match result {
                 Err(error) if error.is_unmatch() => Ok(Flow::Continue),
@@ -70,10 +77,42 @@ pub(crate) fn eval_instr(
             }
         }),
         InstrKind::RuleI(id, notation, inputs, iter_instrs, block) => {
+            if tail
+                && iter_instrs.is_empty()
+                && let [result] = block.as_slice()
+                && let InstrKind::ResultI(_signature, exps_result) = &result.kind
+            {
+                let exps = notation.args();
+                let mut exps_input = Vec::new();
+                let mut exps_output = Vec::new();
+                for (index, exp) in exps.into_iter().enumerate() {
+                    if inputs.contains(&(index as i64)) {
+                        exps_input.push(exp);
+                    } else {
+                        exps_output.push(exp);
+                    }
+                }
+                if exps_output.len() == exps_result.len()
+                    && exps_output
+                        .iter()
+                        .zip(exps_result)
+                        .all(|(left, right)| eq::eq_exp(left, right))
+                {
+                    let values_input = exps_input
+                        .into_iter()
+                        .map(|exp| expression::eval_with_calls(context, calls, exp))
+                        .collect::<Result<Vec<_>, _>>();
+                    return match values_input {
+                        Ok(values_input) => Ok(Flow::TailCallRel(id.clone(), values_input)),
+                        Err(error) if error.is_unmatch() => Ok(Flow::Continue),
+                        Err(error) => Err(error),
+                    };
+                }
+            }
             context.with_scope(|context| {
                 let result = (|| {
                     eval_rule_iter(context, calls, id, notation, inputs, iter_instrs)?;
-                    eval_block(context, calls, block)
+                    eval_block(context, calls, block, tail)
                 })();
                 match result {
                     Err(error) if error.is_unmatch() => Ok(Flow::Continue),
@@ -81,31 +120,40 @@ pub(crate) fn eval_instr(
                 }
             })
         }
-        InstrKind::ResultI(_signature, exps) => {
-            let values = exps
-                .iter()
-                .map(|exp| expression::eval_with_calls(context, calls, exp))
-                .collect::<Result<Vec<_>, _>>()?;
-            Ok(Flow::Result(values))
-        }
-        InstrKind::ReturnI(exp) => match &exp.kind {
-            ExpKind::CallE(id, type_args, args) => {
-                let (type_args, values) =
-                    expression::eval_call_inputs(context, calls, type_args, args)?;
-                let (cursor, _function) = context.find_function(id)?;
-                let high_order = values
-                    .iter()
-                    .any(|value| matches!(value.kind, ValueKind::FuncV(_)));
-                if cursor == Cursor::Local || high_order {
-                    calls
-                        .invoke_func(context, id, &type_args, &values)
-                        .map(Flow::Return)
-                } else {
-                    Ok(Flow::TailCallFunc(id.clone(), type_args, values))
-                }
-            }
-            _ => expression::eval_with_calls(context, calls, exp).map(Flow::Return),
+        InstrKind::ResultI(_signature, exps) => match exps
+            .iter()
+            .map(|exp| expression::eval_with_calls(context, calls, exp))
+            .collect::<Result<Vec<_>, _>>()
+            .map(Flow::Result)
+        {
+            Err(error) if error.is_unmatch() => Ok(Flow::Continue),
+            result => result,
         },
+        InstrKind::ReturnI(exp) => {
+            let result = (|| {
+                if tail && let ExpKind::CallE(id, type_args, args) = &exp.kind {
+                    let (type_args, values) =
+                        expression::eval_call_inputs(context, calls, type_args, args)?;
+                    let (cursor, _function) = context.find_function(id)?;
+                    let high_order = values
+                        .iter()
+                        .any(|value| matches!(value.kind, ValueKind::FuncV(_)));
+                    if cursor == Cursor::Local || high_order {
+                        calls
+                            .invoke_func(context, id, &type_args, &values)
+                            .map(Flow::Return)
+                    } else {
+                        Ok(Flow::TailCallFunc(id.clone(), type_args, values))
+                    }
+                } else {
+                    expression::eval_with_calls(context, calls, exp).map(Flow::Return)
+                }
+            })();
+            match result {
+                Err(error) if error.is_unmatch() => Ok(Flow::Continue),
+                result => result,
+            }
+        }
         InstrKind::DebugI(exp, nested) => {
             let result = (|| {
                 let value = expression::eval_with_calls(context, calls, exp)?;
@@ -115,7 +163,7 @@ pub(crate) fn eval_instr(
                 } else {
                     println!("{}: {:?}", value.span, value.kind);
                 }
-                eval_instr(context, calls, nested)
+                eval_instr(context, calls, nested, tail)
             })();
             match result {
                 Err(error) if error.is_unmatch() => Ok(Flow::Continue),
@@ -523,6 +571,7 @@ fn eval_case(
     calls: &mut dyn Calls,
     exp: &Exp,
     cases: &[(Guard, Block)],
+    tail: bool,
 ) -> Result<Flow, InterpError> {
     let value = expression::eval_with_calls(context, calls, exp)?;
     let temporary = Variable::new(Spanned::new("~case".to_owned(), Region::none()), Vec::new());
@@ -533,7 +582,7 @@ fn eval_case(
             let matches = get::bool(&value)
                 .map_err(|error| InterpError::new(condition.span.clone(), error.to_string()))?;
             if matches {
-                return eval_block(context, calls, block);
+                return eval_block(context, calls, block, tail);
             }
         }
         Ok(Flow::Continue)
@@ -544,11 +593,12 @@ pub(crate) fn eval_block(
     context: &mut Context,
     calls: &mut dyn Calls,
     block: &Block,
+    tail: bool,
 ) -> Result<Flow, InterpError> {
     if context.deterministic() {
-        eval_block_deterministic(context, calls, block)
+        eval_block_deterministic(context, calls, block, tail)
     } else {
-        eval_block_sequential(context, calls, block)
+        eval_block_sequential(context, calls, block, tail)
     }
 }
 
@@ -556,11 +606,16 @@ pub(crate) fn eval_block_sequential(
     context: &mut Context,
     calls: &mut dyn Calls,
     block: &Block,
+    tail: bool,
 ) -> Result<Flow, InterpError> {
-    for instr in block {
-        match eval_instr(context, calls, instr)? {
+    let last = block.len().saturating_sub(1);
+    for (index, instr) in block.iter().enumerate() {
+        match eval_instr(context, calls, instr, tail && index == last)? {
             Flow::Continue => {}
-            flow @ (Flow::Result(_) | Flow::Return(_) | Flow::TailCallFunc(..)) => {
+            flow @ (Flow::Result(_)
+            | Flow::Return(_)
+            | Flow::TailCallFunc(..)
+            | Flow::TailCallRel(..)) => {
                 return Ok(flow);
             }
         }
@@ -573,10 +628,14 @@ pub(crate) fn eval_table_rows(
     calls: &mut dyn Calls,
     rows: &[TableRow],
 ) -> Result<Flow, InterpError> {
-    for (_inputs, _output, block) in rows {
-        match eval_block_sequential(context, calls, block)? {
+    let last = rows.len().saturating_sub(1);
+    for (index, (_inputs, _output, block)) in rows.iter().enumerate() {
+        match eval_block_sequential(context, calls, block, index == last)? {
             Flow::Continue => {}
-            flow @ (Flow::Result(_) | Flow::Return(_) | Flow::TailCallFunc(..)) => {
+            flow @ (Flow::Result(_)
+            | Flow::Return(_)
+            | Flow::TailCallFunc(..)
+            | Flow::TailCallRel(..)) => {
                 return Ok(flow);
             }
         }
@@ -588,18 +647,20 @@ fn eval_block_deterministic(
     context: &mut Context,
     calls: &mut dyn Calls,
     block: &Block,
+    tail: bool,
 ) -> Result<Flow, InterpError> {
     let mut selected = Flow::Continue;
     for instr in block {
-        let flow = match context.with_scope(|context| eval_instr(context, calls, instr)) {
+        let flow = match context.with_scope(|context| eval_instr(context, calls, instr, tail)) {
             Ok(flow) => flow,
             Err(error) if error.is_unmatch() => Flow::Continue,
             Err(error) => return Err(error),
         };
         selected = match (selected, flow) {
             (Flow::Continue, flow) | (flow, Flow::Continue) => flow,
-            (Flow::Result(_), Flow::Return(_) | Flow::TailCallFunc(..))
-            | (Flow::Return(_) | Flow::TailCallFunc(..), Flow::Result(_)) => {
+            (Flow::Result(_), Flow::Return(_) | Flow::TailCallFunc(..) | Flow::TailCallRel(..))
+            | (Flow::Return(_) | Flow::TailCallFunc(..) | Flow::TailCallRel(..), Flow::Result(_)) =>
+            {
                 return Err(InterpError::new(
                     instr.span.clone(),
                     "cannot have both result and return",
@@ -607,8 +668,8 @@ fn eval_block_deterministic(
             }
             (Flow::Result(_), Flow::Result(_))
             | (
-                Flow::Return(_) | Flow::TailCallFunc(..),
-                Flow::Return(_) | Flow::TailCallFunc(..),
+                Flow::Return(_) | Flow::TailCallFunc(..) | Flow::TailCallRel(..),
+                Flow::Return(_) | Flow::TailCallFunc(..) | Flow::TailCallRel(..),
             ) => {
                 return Err(InterpError::new(
                     instr.span.clone(),
@@ -641,6 +702,10 @@ pub(crate) fn return_value(
             span.clone(),
             "function tail call escaped its dispatcher",
         )),
+        Flow::TailCallRel(..) => Err(InterpError::new(
+            span.clone(),
+            "function cannot produce a relation tail call",
+        )),
     }
 }
 
@@ -664,6 +729,10 @@ pub(crate) fn result_values(
         Flow::TailCallFunc(..) => Err(InterpError::new(
             span.clone(),
             "relation cannot produce a function tail call",
+        )),
+        Flow::TailCallRel(..) => Err(InterpError::new(
+            span.clone(),
+            "relation tail call escaped its dispatcher",
         )),
     }
 }
