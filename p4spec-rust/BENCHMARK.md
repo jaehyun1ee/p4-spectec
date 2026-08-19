@@ -51,7 +51,7 @@ The raw, untracked measurement files are:
 - Dune: `3.16.1`
 - Rust allocator: `mimalloc 0.1.52`
 - Rust release profile: fat LTO, one codegen unit
-- Source checkpoint before the benchmark-driver change: `b1634674`
+- Measured Rust interpreter checkpoint: `a5a907a9`
 
 Both binaries were native optimized builds:
 
