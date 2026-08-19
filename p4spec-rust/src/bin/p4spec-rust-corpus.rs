@@ -79,6 +79,8 @@ enum Status {
 struct Record<'a> {
     program: &'a Path,
     relation: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    iteration: Option<usize>,
     status: Status,
     decode_ns: u128,
     eval_ns: u128,
@@ -108,6 +110,12 @@ struct Args {
     /// Check public inputs and external outputs against SL types.
     #[arg(long)]
     guard: bool,
+    /// Warm-up evaluations per decoded program.
+    #[arg(long, default_value_t = 0)]
+    warmup: usize,
+    /// Measured evaluations per decoded program.
+    #[arg(long = "repeat", default_value = "1")]
+    repeats: std::num::NonZeroUsize,
     /// Versioned value JSON envelopes exported by p4spectec.
     #[arg(required = true)]
     programs: Vec<PathBuf>,
@@ -155,52 +163,61 @@ fn run(args: Args) -> Result<ExitCode, CorpusError> {
     let mut failures = 0usize;
     let mut mismatches = 0usize;
     let mut eval_ns = 0u128;
+    let repeats = args.repeats.get();
 
     for program_path in &args.programs {
         let decode_start = Instant::now();
         let program = decode_program(program_path)?;
         let decode_ns = decode_start.elapsed().as_nanos();
-        let eval_start = Instant::now();
-        let result = interpreter.eval_program(RELATION, &program);
-        let elapsed_ns = eval_start.elapsed().as_nanos();
-        eval_ns += elapsed_ns;
-        let record = match result {
-            Ok(values) => {
-                passes += 1;
-                Record {
-                    program: program_path,
-                    relation: RELATION,
-                    status: Status::Pass,
-                    decode_ns,
-                    eval_ns: elapsed_ns,
-                    output_count: Some(values.len()),
-                    error: None,
-                }
-            }
-            Err(error) => {
-                failures += 1;
-                Record {
-                    program: program_path,
-                    relation: RELATION,
-                    status: Status::Fail,
-                    decode_ns,
-                    eval_ns: elapsed_ns,
-                    output_count: None,
-                    error: Some(error.to_string()),
-                }
-            }
-        };
-        if !args.expect.accepts(record.status) {
-            mismatches += 1;
+        for _ in 0..args.warmup {
+            let _result = interpreter.eval_program(RELATION, &program);
         }
-        serde_json::to_writer(&mut output, &record)?;
-        output.write_all(b"\n")?;
+        for iteration in 1..=repeats {
+            let eval_start = Instant::now();
+            let result = interpreter.eval_program(RELATION, &program);
+            let elapsed_ns = eval_start.elapsed().as_nanos();
+            eval_ns += elapsed_ns;
+            let record = match result {
+                Ok(values) => {
+                    passes += 1;
+                    Record {
+                        program: program_path,
+                        relation: RELATION,
+                        iteration: (repeats > 1).then_some(iteration),
+                        status: Status::Pass,
+                        decode_ns,
+                        eval_ns: elapsed_ns,
+                        output_count: Some(values.len()),
+                        error: None,
+                    }
+                }
+                Err(error) => {
+                    failures += 1;
+                    Record {
+                        program: program_path,
+                        relation: RELATION,
+                        iteration: (repeats > 1).then_some(iteration),
+                        status: Status::Fail,
+                        decode_ns,
+                        eval_ns: elapsed_ns,
+                        output_count: None,
+                        error: Some(error.to_string()),
+                    }
+                }
+            };
+            if !args.expect.accepts(record.status) {
+                mismatches += 1;
+            }
+            serde_json::to_writer(&mut output, &record)?;
+            output.write_all(b"\n")?;
+        }
     }
 
     eprintln!(
-        "programs={} pass={} fail={} mismatches={} spec_decode_ns={} \
+        "programs={} evaluations={} pass={} fail={} mismatches={} spec_decode_ns={} \
          interpreter_init_ns={} eval_ns={}",
         args.programs.len(),
+        args.programs.len() * repeats,
         passes,
         failures,
         mismatches,

@@ -106,6 +106,10 @@ fn corpus_driver_reports_every_program_and_times_only_program_inst() {
             spec_path.to_str().unwrap(),
             "--expect",
             "any",
+            "--warmup",
+            "1",
+            "--repeat",
+            "2",
             "--output",
             records_path.to_str().unwrap(),
             rejected_path.to_str().unwrap(),
@@ -124,23 +128,29 @@ fn corpus_driver_reports_every_program_and_times_only_program_inst() {
         .lines()
         .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
         .collect::<Vec<_>>();
-    assert_eq!(records.len(), 2);
+    assert_eq!(records.len(), 4);
     assert_eq!(records[0]["program"], rejected_path.to_str().unwrap());
+    assert_eq!(records[0]["iteration"], 1);
     assert_eq!(records[0]["relation"], "Program_inst");
     assert_eq!(records[0]["status"], "fail");
     assert!(records[0]["decode_ns"].is_u64());
     assert!(records[0]["eval_ns"].is_u64());
     assert!(records[0]["output_count"].is_null());
-    assert_eq!(records[1]["program"], accepted_path.to_str().unwrap());
-    assert_eq!(records[1]["relation"], "Program_inst");
-    assert_eq!(records[1]["status"], "pass");
-    assert!(records[1]["decode_ns"].is_u64());
-    assert!(records[1]["eval_ns"].is_u64());
-    assert_eq!(records[1]["output_count"], 1);
+    assert_eq!(records[1]["program"], rejected_path.to_str().unwrap());
+    assert_eq!(records[1]["iteration"], 2);
+    assert_eq!(records[2]["program"], accepted_path.to_str().unwrap());
+    assert_eq!(records[2]["iteration"], 1);
+    assert_eq!(records[2]["relation"], "Program_inst");
+    assert_eq!(records[2]["status"], "pass");
+    assert!(records[2]["decode_ns"].is_u64());
+    assert!(records[2]["eval_ns"].is_u64());
+    assert_eq!(records[2]["output_count"], 1);
+    assert_eq!(records[3]["program"], accepted_path.to_str().unwrap());
+    assert_eq!(records[3]["iteration"], 2);
     assert!(
         String::from_utf8(output.stderr)
             .unwrap()
-            .contains("eval_ns=")
+            .contains("evaluations=4")
     );
 
     let mismatch = Command::new(binary)
