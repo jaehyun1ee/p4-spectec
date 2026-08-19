@@ -1,6 +1,6 @@
 use std::{
     cmp::Ordering,
-    hash::{Hash, Hasher},
+    hash::{DefaultHasher, Hash, Hasher},
     rc::Rc,
 };
 
@@ -29,6 +29,7 @@ pub struct Value {
     pub kind: ValueKind,
     pub ty: TypKind,
     pub span: Span,
+    semantic_hash: u64,
 }
 
 #[derive(Clone, Debug)]
@@ -283,33 +284,43 @@ fn hash_external<H: Hasher>(value: &ExternalData, state: &mut H) {
     }
 }
 
+fn hash_kind<H: Hasher>(kind: &ValueKind, state: &mut H) {
+    kind_rank(kind).hash(state);
+    match kind {
+        ValueKind::BoolV(value) => value.hash(state),
+        ValueKind::NumV(num::T::Nat(value)) => {
+            0_u8.hash(state);
+            value.hash(state);
+        }
+        ValueKind::NumV(num::T::Int(value)) => {
+            1_u8.hash(state);
+            value.hash(state);
+        }
+        ValueKind::TextV(value) => value.hash(state),
+        ValueKind::StructV(fields) => {
+            fields.len().hash(state);
+            for (atom, value) in fields {
+                atom.node.hash(state);
+                value.hash(state);
+            }
+        }
+        ValueKind::CaseV(value_case) => value_case.hash(state),
+        ValueKind::TupleV(values) | ValueKind::ListV(values) => values.hash(state),
+        ValueKind::OptV(value) => value.hash(state),
+        ValueKind::FuncV(id) => id.node.hash(state),
+        ValueKind::ExternV(value) => hash_external(value, state),
+    }
+}
+
+fn semantic_hash(kind: &ValueKind) -> u64 {
+    let mut state = DefaultHasher::new();
+    hash_kind(kind, &mut state);
+    state.finish()
+}
+
 impl Hash for Value {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        kind_rank(&self.kind).hash(state);
-        match &self.kind {
-            ValueKind::BoolV(value) => value.hash(state),
-            ValueKind::NumV(num::T::Nat(value)) => {
-                0_u8.hash(state);
-                value.hash(state);
-            }
-            ValueKind::NumV(num::T::Int(value)) => {
-                1_u8.hash(state);
-                value.hash(state);
-            }
-            ValueKind::TextV(value) => value.hash(state),
-            ValueKind::StructV(fields) => {
-                fields.len().hash(state);
-                for (atom, value) in fields {
-                    atom.node.hash(state);
-                    value.hash(state);
-                }
-            }
-            ValueKind::CaseV(value_case) => value_case.hash(state),
-            ValueKind::TupleV(values) | ValueKind::ListV(values) => values.hash(state),
-            ValueKind::OptV(value) => value.hash(state),
-            ValueKind::FuncV(id) => id.node.hash(state),
-            ValueKind::ExternV(value) => hash_external(value, state),
-        }
+        state.write_u64(self.semantic_hash);
     }
 }
 
@@ -339,7 +350,13 @@ pub mod make {
     use crate::runtime::r#type::typ::make as make_type;
 
     pub fn new(kind: ValueKind, ty: TypKind, span: Span) -> ValueRef {
-        Rc::new(Value { kind, ty, span })
+        let semantic_hash = semantic_hash(&kind);
+        Rc::new(Value {
+            kind,
+            ty,
+            span,
+            semantic_hash,
+        })
     }
 
     pub fn bool(value: bool, span: Span) -> ValueRef {

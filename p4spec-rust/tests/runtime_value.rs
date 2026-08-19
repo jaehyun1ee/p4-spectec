@@ -202,6 +202,35 @@ fn semantic_hash(value: &impl Hash) -> u64 {
     hasher.finish()
 }
 
+#[derive(Default)]
+struct CountingHasher {
+    writes: usize,
+}
+
+impl Hasher for CountingHasher {
+    fn finish(&self) -> u64 {
+        0
+    }
+
+    fn write(&mut self, _bytes: &[u8]) {
+        self.writes += 1;
+    }
+}
+
+#[test]
+fn semantic_hashing_is_constant_work_after_value_construction() {
+    let typ = make_type::bool_type();
+    let mut value = make::bool(true, Region::none());
+    for _ in 0..1_000 {
+        value = make::list(&typ, vec![value], Region::none());
+    }
+
+    let mut hasher = CountingHasher::default();
+    value.hash(&mut hasher);
+
+    assert_eq!(hasher.writes, 1);
+}
+
 #[test]
 fn semantic_equality_and_hash_ignore_runtime_type_and_source_region() {
     let value_a = make::bool(true, span("left"));
