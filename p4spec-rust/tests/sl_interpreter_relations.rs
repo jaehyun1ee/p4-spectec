@@ -59,12 +59,18 @@ fn extern_relation() -> sl::Def {
 struct EchoExtern;
 
 impl Extern for EchoExtern {
-    fn eval_rel(&mut self, _name: &str, values: &[ValueRef]) -> Result<Vec<ValueRef>, ExternError> {
+    fn eval_rel(
+        &mut self,
+        _spec: &mut dyn p4spec_rust::interface::SpecCall,
+        _name: &str,
+        values: &[ValueRef],
+    ) -> Result<Vec<ValueRef>, ExternError> {
         Ok(values.to_vec())
     }
 
     fn eval_func(
         &mut self,
+        _spec: &mut dyn p4spec_rust::interface::SpecCall,
         _name: &str,
         _type_args: &[il::Typ],
         _values: &[ValueRef],

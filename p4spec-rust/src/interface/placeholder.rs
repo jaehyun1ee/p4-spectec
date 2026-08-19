@@ -12,21 +12,13 @@ use crate::{
     },
 };
 
-use super::{Extern, ExternError};
+use super::{Extern, ExternError, SpecCall};
 
-type LocalLookup = dyn FnMut(&ValueRef, &str) -> Result<ValueRef, ExternError> + 'static;
-
-pub struct PlaceholderExtern {
-    find_local: Box<LocalLookup>,
-}
+pub struct PlaceholderExtern;
 
 impl PlaceholderExtern {
-    pub fn new(
-        find_local: impl FnMut(&ValueRef, &str) -> Result<ValueRef, ExternError> + 'static,
-    ) -> Self {
-        Self {
-            find_local: Box::new(find_local),
-        }
+    pub fn new() -> Self {
+        Self
     }
 
     fn bool_mixop() -> Mixop {
@@ -75,8 +67,12 @@ impl PlaceholderExtern {
 
     fn eval_extern_func_lctk_call(
         &mut self,
+        spec: &mut dyn SpecCall,
         values: &[ValueRef],
     ) -> Result<Vec<ValueRef>, ExternError> {
+        // Static assert evaluates a boolean expression at compilation time. If
+        // the expression evaluates to false, compilation is stopped and the
+        // corresponding message is printed. Like P4, the message is optional.
         let [value_ctx, value_name_func, value_names_param] = values else {
             return Err(ExternError::new(
                 Region::none(),
@@ -109,17 +105,49 @@ impl PlaceholderExtern {
                 ));
             }
         };
-        let value_check = (self.find_local)(value_ctx, "check")?;
+        let value_check = Self::find_var_value_t_local(spec, value_ctx, "check")?;
         if Self::unpack_p4_bool(&value_check)? {
             return Ok(vec![value_check]);
         }
         let message = if has_message {
-            let value_message = (self.find_local)(value_ctx, "message")?;
+            let value_message = Self::find_var_value_t_local(spec, value_ctx, "message")?;
             Self::unpack_p4_string(&value_message)?
         } else {
             "static_assert failed".to_owned()
         };
         Err(ExternError::new(Region::none(), message))
+    }
+
+    fn find_var_value_t_local(
+        spec: &mut dyn SpecCall,
+        value_ctx: &ValueRef,
+        name: &str,
+    ) -> Result<ValueRef, ExternError> {
+        let span = Region::none();
+        let prefixed_name = make::case(
+            &crate::runtime::r#type::typ::make::var_type(
+                Spanned::new("prefixedNameIR".to_owned(), span.clone()),
+                Vec::new(),
+            ),
+            Mixfix::Seq(vec![
+                Mixfix::Atom(Spanned::new(Atom::Tag("_BARE".to_owned()), span.clone())),
+                Mixfix::Arg(make::text(name.to_owned(), span.clone())),
+            ]),
+            span.clone(),
+        );
+        let cursor = make::case(
+            &crate::runtime::r#type::typ::make::var_type(
+                Spanned::new("cursor".to_owned(), span.clone()),
+                Vec::new(),
+            ),
+            Mixfix::Atom(Spanned::new(Atom::Tag("LOCAL".to_owned()), span.clone())),
+            span,
+        );
+        spec.eval_func(
+            "find_var_value_t",
+            &[],
+            &[prefixed_name, cursor, value_ctx.clone()],
+        )
     }
 
     fn external_state(name: &str) -> ValueRef {
@@ -131,18 +159,21 @@ impl PlaceholderExtern {
     }
 }
 
+impl Default for PlaceholderExtern {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Extern for PlaceholderExtern {
-    fn eval_rel(&mut self, name: &str, values: &[ValueRef]) -> Result<Vec<ValueRef>, ExternError> {
+    fn eval_rel(
+        &mut self,
+        spec: &mut dyn SpecCall,
+        name: &str,
+        values: &[ValueRef],
+    ) -> Result<Vec<ValueRef>, ExternError> {
         match name {
-            "ExternFunctionCall_eval_lctk" => self.eval_extern_func_lctk_call(values),
-            "ExternFunctionCall_eval" => Err(ExternError::new(
-                Region::none(),
-                "eval_extern_func_call not implemented for the placeholder simulator",
-            )),
-            "ExternMethodCall_eval" => Err(ExternError::new(
-                Region::none(),
-                "eval_extern_method_call not implemented for the placeholder simulator",
-            )),
+            "ExternFunctionCall_eval_lctk" => self.eval_extern_func_lctk_call(spec, values),
             _ => Err(ExternError::new(
                 Region::none(),
                 format!("unimplemented extern relation: {name}"),
@@ -152,6 +183,7 @@ impl Extern for PlaceholderExtern {
 
     fn eval_func(
         &mut self,
+        _spec: &mut dyn SpecCall,
         name: &str,
         _type_args: &[Typ],
         _values: &[ValueRef],

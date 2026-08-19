@@ -5,12 +5,61 @@ use p4spec_rust::{
         mixfix::{Mixfix, Mixop},
         source::{Region, Spanned},
     },
-    interface::{Extern, ExternError, NullExtern, PlaceholderExtern},
+    interface::{Extern, ExternError, NullExtern, PlaceholderExtern, SpecCall},
+    lang::il::ast::Typ,
     runtime::{
         r#type::typ::make as make_type,
         value::{ValueRef, get, make},
     },
 };
+
+struct Lookup {
+    context: ValueRef,
+    names: std::collections::VecDeque<String>,
+    values: std::collections::VecDeque<ValueRef>,
+    calls: usize,
+}
+
+impl Lookup {
+    fn new(
+        context: ValueRef,
+        names: impl IntoIterator<Item = &'static str>,
+        values: impl IntoIterator<Item = ValueRef>,
+    ) -> Self {
+        Self {
+            context,
+            names: names.into_iter().map(str::to_owned).collect(),
+            values: values.into_iter().collect(),
+            calls: 0,
+        }
+    }
+}
+
+impl SpecCall for Lookup {
+    fn eval_func(
+        &mut self,
+        name: &str,
+        type_args: &[Typ],
+        values: &[ValueRef],
+    ) -> Result<ValueRef, ExternError> {
+        assert_eq!(name, "find_var_value_t");
+        assert!(type_args.is_empty());
+        assert_eq!(values.len(), 3);
+        assert!(std::rc::Rc::ptr_eq(&values[2], &self.context));
+        let prefixed_name = get::case(&values[0]).unwrap();
+        assert_eq!(prefixed_name.args().len(), 1);
+        assert_eq!(
+            get::text(prefixed_name.args()[0]),
+            Ok(self.names.pop_front().unwrap().as_str())
+        );
+        let cursor = get::case(&values[1]).unwrap();
+        assert!(cursor.args().is_empty());
+        self.calls += 1;
+        self.values
+            .pop_front()
+            .ok_or_else(|| ExternError::new(Region::none(), "unexpected lookup"))
+    }
+}
 
 fn span(file: &str) -> Region {
     Region::for_file(file)
@@ -62,7 +111,9 @@ fn names(values: &[&str]) -> ValueRef {
 #[test]
 fn null_extern_fails_through_the_object_safe_trait() {
     let mut externs: Box<dyn Extern> = Box::new(NullExtern);
-    let error = externs.eval_rel("missing", &[]).unwrap_err();
+    let context = make::text("unused".to_owned(), span("unused"));
+    let mut lookup = Lookup::new(context, [], []);
+    let error = externs.eval_rel(&mut lookup, "missing", &[]).unwrap_err();
     assert_eq!(error.span, Region::none());
     assert!(error.message.contains("extern is not configured"));
     assert!(!externs.side_effected(externs.checkpoint(), externs.checkpoint()));
@@ -70,11 +121,15 @@ fn null_extern_fails_through_the_object_safe_trait() {
 
 #[test]
 fn placeholder_initializers_return_null_external_state_values() {
-    let mut externs = PlaceholderExtern::new(|_, _| {
-        Err(ExternError::new(Region::none(), "lookup should not run"))
-    });
-    let object = externs.eval_func("init_objectState", &[], &[]).unwrap();
-    let arch = externs.eval_func("init_archState", &[], &[]).unwrap();
+    let mut externs = PlaceholderExtern::new();
+    let context = make::text("unused".to_owned(), span("unused"));
+    let mut lookup = Lookup::new(context, [], []);
+    let object = externs
+        .eval_func(&mut lookup, "init_objectState", &[], &[])
+        .unwrap();
+    let arch = externs
+        .eval_func(&mut lookup, "init_archState", &[], &[])
+        .unwrap();
     assert_eq!(get::external(&object), Ok(&ExternalData::Null));
     assert_eq!(get::external(&arch), Ok(&ExternalData::Null));
     assert_eq!(externs.checkpoint(), 0);
@@ -85,19 +140,15 @@ fn static_assert_returns_true_and_uses_the_optional_message_on_failure() {
     let context = make::text("context".to_owned(), span("context"));
     let check_true = p4_bool(true);
     let message = p4_string("compile-time failure");
-    let context_for_lookup = context.clone();
-    let check_true_for_lookup = check_true.clone();
-    let message_for_lookup = message.clone();
-    let mut externs = PlaceholderExtern::new(move |received: &ValueRef, name: &str| {
-        assert!(std::rc::Rc::ptr_eq(received, &context_for_lookup));
-        match name {
-            "check" => Ok(check_true_for_lookup.clone()),
-            "message" => Ok(message_for_lookup.clone()),
-            _ => Err(ExternError::new(Region::none(), "unknown local")),
-        }
-    });
+    let mut lookup = Lookup::new(
+        context.clone(),
+        ["check"],
+        [check_true.clone(), message.clone()],
+    );
+    let mut externs = PlaceholderExtern::new();
     let passed = externs
         .eval_rel(
+            &mut lookup,
             "ExternFunctionCall_eval_lctk",
             &[
                 context,
@@ -108,22 +159,19 @@ fn static_assert_returns_true_and_uses_the_optional_message_on_failure() {
         .unwrap();
     assert_eq!(passed.len(), 1);
     assert_eq!(passed[0], check_true);
+    assert_eq!(lookup.calls, 1);
 
     let check_false = p4_bool(false);
-    let false_for_lookup = check_false.clone();
-    let message_for_lookup = message.clone();
     let context = make::text("false-context".to_owned(), span("context"));
-    let context_for_lookup = context.clone();
-    let mut externs = PlaceholderExtern::new(move |received: &ValueRef, name: &str| {
-        assert!(std::rc::Rc::ptr_eq(received, &context_for_lookup));
-        Ok(match name {
-            "check" => false_for_lookup.clone(),
-            "message" => message_for_lookup.clone(),
-            _ => unreachable!(),
-        })
-    });
+    let mut lookup = Lookup::new(
+        context.clone(),
+        ["check", "message"],
+        [check_false, message],
+    );
+    let mut externs = PlaceholderExtern::new();
     let error = externs
         .eval_rel(
+            &mut lookup,
             "ExternFunctionCall_eval_lctk",
             &[
                 context,
@@ -134,15 +182,17 @@ fn static_assert_returns_true_and_uses_the_optional_message_on_failure() {
         .unwrap_err();
     assert_eq!(error.span, Region::none());
     assert_eq!(error.message, "compile-time failure");
+    assert_eq!(lookup.calls, 2);
 }
 
 #[test]
 fn placeholder_rejects_unsupported_compile_time_externs() {
-    let mut externs = PlaceholderExtern::new(|_, _| {
-        Err(ExternError::new(Region::none(), "lookup should not run"))
-    });
+    let mut externs = PlaceholderExtern::new();
+    let context = make::text("unused".to_owned(), span("unused"));
+    let mut lookup = Lookup::new(context, [], []);
     let error = externs
         .eval_rel(
+            &mut lookup,
             "ExternFunctionCall_eval_lctk",
             &[
                 make::text("context".to_owned(), span("context")),
@@ -157,6 +207,13 @@ fn placeholder_rejects_unsupported_compile_time_externs() {
             .contains("unsupported local compile-time known extern function call")
     );
 
-    let error = externs.eval_rel("ExternMethodCall_eval", &[]).unwrap_err();
-    assert!(error.message.contains("not implemented"));
+    let error = externs
+        .eval_rel(&mut lookup, "ExternMethodCall_eval", &[])
+        .unwrap_err();
+    assert!(error.message.contains("unimplemented extern relation"));
+
+    let error = externs
+        .eval_func(&mut lookup, "other", &[], &[])
+        .unwrap_err();
+    assert!(error.message.contains("unimplemented extern function"));
 }

@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use crate::{
     domain::source::{Region, Spanned},
-    interface::{Extern, Interface},
+    interface::{Extern, ExternError, Interface, NullExtern, SpecCall},
     interp::common::InterpError,
     lang::{
         il::ast::{DefTypKind, TParam, Typ},
@@ -157,6 +157,42 @@ struct Dispatcher<'a, I, E> {
     function_cache: &'a mut CallCache<ValueRef>,
     relation_cache: &'a mut CallCache<Vec<ValueRef>>,
     sub_cache: &'a mut value_match::SubCache,
+}
+
+struct SpecDispatcher<'a, I> {
+    options: Options,
+    context: &'a mut Context,
+    interface: &'a mut I,
+    function_cache: &'a mut CallCache<ValueRef>,
+    relation_cache: &'a mut CallCache<Vec<ValueRef>>,
+    sub_cache: &'a mut value_match::SubCache,
+}
+
+impl<I> SpecCall for SpecDispatcher<'_, I>
+where
+    I: Interface,
+{
+    fn eval_func(
+        &mut self,
+        name: &str,
+        type_args: &[Typ],
+        values_input: &[ValueRef],
+    ) -> Result<ValueRef, ExternError> {
+        let id = Spanned::new(name.to_owned(), Region::none());
+        let mut externs = NullExtern;
+        let mut dispatcher = Dispatcher {
+            options: self.options,
+            interface: &mut *self.interface,
+            externs: &mut externs,
+            function_cache: &mut *self.function_cache,
+            relation_cache: &mut *self.relation_cache,
+            sub_cache: &mut *self.sub_cache,
+        };
+        dispatcher
+            .check_func_inputs(self.context, &id, type_args, values_input)
+            .and_then(|()| dispatcher.invoke_func(self.context, &id, type_args, values_input))
+            .map_err(|error| ExternError::new(error.span, error.message))
+    }
 }
 
 enum FunctionResult {
@@ -417,10 +453,19 @@ where
     ) -> Result<FunctionResult, InterpError> {
         match function {
             Function::Extern(type_params, _params, return_type) => {
-                let value = self
-                    .externs
-                    .eval_func(&id.node, type_args, values_input)
-                    .map_err(|error| InterpError::new(error.span, error.message))?;
+                let value = {
+                    let mut spec = SpecDispatcher {
+                        options: self.options,
+                        context,
+                        interface: &mut *self.interface,
+                        function_cache: &mut *self.function_cache,
+                        relation_cache: &mut *self.relation_cache,
+                        sub_cache: &mut *self.sub_cache,
+                    };
+                    self.externs
+                        .eval_func(&mut spec, &id.node, type_args, values_input)
+                        .map_err(|error| InterpError::new(error.span, error.message))?
+                };
                 self.check_func_output(context, id, type_params, return_type, type_args, &value)?;
                 Ok(FunctionResult::Return(value))
             }
@@ -633,10 +678,19 @@ where
     ) -> Result<RelationResult, InterpError> {
         match relation {
             Relation::Extern(_) => {
-                let values = self
-                    .externs
-                    .eval_rel(&id.node, values_input)
-                    .map_err(|error| InterpError::new(error.span, error.message))?;
+                let values = {
+                    let mut spec = SpecDispatcher {
+                        options: self.options,
+                        context,
+                        interface: &mut *self.interface,
+                        function_cache: &mut *self.function_cache,
+                        relation_cache: &mut *self.relation_cache,
+                        sub_cache: &mut *self.sub_cache,
+                    };
+                    self.externs
+                        .eval_rel(&mut spec, &id.node, values_input)
+                        .map_err(|error| InterpError::new(error.span, error.message))?
+                };
                 self.check_rel_outputs(context, id, relation, &values)?;
                 Ok(RelationResult::Result(values))
             }

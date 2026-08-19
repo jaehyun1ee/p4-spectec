@@ -6,7 +6,7 @@ use std::{
 
 use clap::{Args, Parser, Subcommand};
 use p4spec_rust::{
-    interface::{NullExtern, P4Interface},
+    interface::{P4Interface, PlaceholderExtern},
     interp::{
         common::InterpError,
         sl::{Interpreter, Options},
@@ -98,7 +98,7 @@ fn run(args: RunArgs) -> Result<(), CliError> {
             guard: args.guard,
         },
         P4Interface::from_sl_spec(&spec),
-        NullExtern,
+        PlaceholderExtern::new(),
     )?;
     let stdout = io::stdout();
     let mut output = stdout.lock();

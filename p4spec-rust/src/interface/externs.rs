@@ -20,13 +20,28 @@ impl ExternError {
 
 // Interface for the interaction between SpecTec and external code
 
+pub trait SpecCall {
+    fn eval_func(
+        &mut self,
+        name: &str,
+        type_args: &[Typ],
+        values: &[ValueRef],
+    ) -> Result<ValueRef, ExternError>;
+}
+
 pub trait Extern {
     // Extern relation and meta-function evaluation
 
-    fn eval_rel(&mut self, name: &str, values: &[ValueRef]) -> Result<Vec<ValueRef>, ExternError>;
+    fn eval_rel(
+        &mut self,
+        spec: &mut dyn SpecCall,
+        name: &str,
+        values: &[ValueRef],
+    ) -> Result<Vec<ValueRef>, ExternError>;
 
     fn eval_func(
         &mut self,
+        spec: &mut dyn SpecCall,
         name: &str,
         type_args: &[Typ],
         values: &[ValueRef],
@@ -48,6 +63,7 @@ pub struct NullExtern;
 impl Extern for NullExtern {
     fn eval_rel(
         &mut self,
+        _spec: &mut dyn SpecCall,
         _name: &str,
         _values: &[ValueRef],
     ) -> Result<Vec<ValueRef>, ExternError> {
@@ -56,6 +72,7 @@ impl Extern for NullExtern {
 
     fn eval_func(
         &mut self,
+        _spec: &mut dyn SpecCall,
         _name: &str,
         _type_args: &[Typ],
         _values: &[ValueRef],

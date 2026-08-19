@@ -221,6 +221,7 @@ struct RecordingExtern {
 impl Extern for RecordingExtern {
     fn eval_rel(
         &mut self,
+        _spec: &mut dyn p4spec_rust::interface::SpecCall,
         _name: &str,
         _values: &[ValueRef],
     ) -> Result<Vec<ValueRef>, ExternError> {
@@ -232,6 +233,7 @@ impl Extern for RecordingExtern {
 
     fn eval_func(
         &mut self,
+        _spec: &mut dyn p4spec_rust::interface::SpecCall,
         name: &str,
         _type_args: &[il::Typ],
         _values: &[ValueRef],
