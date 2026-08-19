@@ -8,8 +8,8 @@ use crate::{
     interp::common::InterpError,
     lang::{
         il::ast::{
-            BinOp, CmpOp, DefTypKind, Exp, ExpKind, Iter, ListPattern, OptPattern, Path, PathKind,
-            Pattern, Typ, TypKind, UnOp,
+            Arg, ArgKind, BinOp, CmpOp, DefTypKind, Exp, ExpKind, Iter, ListPattern, OptPattern,
+            Path, PathKind, Pattern, Typ, TypKind, UnOp,
         },
         xl::num,
     },
@@ -24,6 +24,9 @@ use crate::{
 };
 
 use super::context::Context;
+
+#[cfg(test)]
+mod tests;
 
 fn value_error(exp: &Exp, message: impl Into<String>) -> InterpError {
     InterpError::new(exp.span.clone(), message)
@@ -61,9 +64,44 @@ fn iterated_variable(exp: &Exp) -> Option<Variable> {
     }
 }
 
+pub(crate) trait FunctionCalls {
+    fn invoke_func(
+        &mut self,
+        context: &mut Context,
+        id: &crate::lang::il::ast::Id,
+        type_args: &[Typ],
+        values: &[ValueRef],
+    ) -> Result<ValueRef, InterpError>;
+}
+
+struct RejectFunctionCalls;
+
+impl FunctionCalls for RejectFunctionCalls {
+    fn invoke_func(
+        &mut self,
+        _context: &mut Context,
+        id: &crate::lang::il::ast::Id,
+        _type_args: &[Typ],
+        _values: &[ValueRef],
+    ) -> Result<ValueRef, InterpError> {
+        Err(InterpError::new(
+            id.span.clone(),
+            "function calls require an SL interpreter",
+        ))
+    }
+}
+
 // Expression evaluation
 
 pub fn eval(context: &mut Context, exp: &Exp) -> Result<ValueRef, InterpError> {
+    eval_with_calls(context, &mut RejectFunctionCalls, exp)
+}
+
+pub(crate) fn eval_with_calls(
+    context: &mut Context,
+    calls: &mut dyn FunctionCalls,
+    exp: &Exp,
+) -> Result<ValueRef, InterpError> {
     match &exp.kind {
         ExpKind::BoolE(value) => Ok(make::bool(*value, Region::none())),
         ExpKind::NumE(value) => Ok(make::num(value.clone(), Region::none())),
@@ -72,45 +110,49 @@ pub fn eval(context: &mut Context, exp: &Exp) -> Result<ValueRef, InterpError> {
             .find_value(&Variable::new(id.clone(), Vec::new()))
             .map(Rc::clone),
         ExpKind::UnE(operator, _operator_type, operand) => {
-            eval_unary(context, exp, *operator, operand)
+            eval_unary(context, calls, exp, *operator, operand)
         }
         ExpKind::BinE(operator, _operator_type, left, right) => {
-            eval_binary(context, exp, *operator, left, right)
+            eval_binary(context, calls, exp, *operator, left, right)
         }
         ExpKind::CmpE(operator, _operator_type, left, right) => {
-            eval_comparison(context, exp, *operator, left, right)
+            eval_comparison(context, calls, exp, *operator, left, right)
         }
         ExpKind::UpCastE(typ, value) => {
-            let value = eval(context, value)?;
+            let value = eval_with_calls(context, calls, value)?;
             cast_up(context, typ, value)
         }
         ExpKind::DownCastE(typ, value) => {
-            let value = eval(context, value)?;
+            let value = eval_with_calls(context, calls, value)?;
             cast_down(context, typ, value)
         }
         ExpKind::SubE(value, typ) => {
-            let value = eval(context, value)?;
+            let value = eval_with_calls(context, calls, value)?;
             Ok(make::bool(
                 value_is_subtype(context, typ, &value)?,
                 Region::none(),
             ))
         }
-        ExpKind::MatchE(value, pattern) => eval_match(context, exp, value, pattern),
-        ExpKind::TupleE(exps) => eval_tuple(context, exp, exps),
-        ExpKind::CaseE(not_exp) => eval_case(context, exp, not_exp),
-        ExpKind::StrE(fields) => eval_structure(context, exp, fields),
-        ExpKind::OptE(value) => eval_option(context, exp, value.as_deref()),
-        ExpKind::ListE(exps) => eval_list(context, exp, exps),
-        ExpKind::ConsE(head, tail) => eval_cons(context, exp, head, tail),
-        ExpKind::CatE(left, right) => eval_concatenation(context, exp, left, right),
-        ExpKind::MemE(element, collection) => eval_membership(context, exp, element, collection),
-        ExpKind::LenE(value) => eval_length(context, exp, value),
-        ExpKind::DotE(base, atom) => eval_dot(context, exp, base, atom),
-        ExpKind::IdxE(base, index) => eval_index(context, exp, base, index),
-        ExpKind::SliceE(base, index, count) => eval_slice(context, exp, base, index, count),
-        ExpKind::UpdE(base, path, replacement) => eval_update(context, base, path, replacement),
-        ExpKind::IterE(inner, iter_exp) => eval_iteration(context, exp, inner, iter_exp),
-        _ => Err(value_error(exp, "expression evaluation is not implemented")),
+        ExpKind::MatchE(value, pattern) => eval_match(context, calls, exp, value, pattern),
+        ExpKind::TupleE(exps) => eval_tuple(context, calls, exp, exps),
+        ExpKind::CaseE(not_exp) => eval_case(context, calls, exp, not_exp),
+        ExpKind::StrE(fields) => eval_structure(context, calls, exp, fields),
+        ExpKind::OptE(value) => eval_option(context, calls, exp, value.as_deref()),
+        ExpKind::ListE(exps) => eval_list(context, calls, exp, exps),
+        ExpKind::ConsE(head, tail) => eval_cons(context, calls, exp, head, tail),
+        ExpKind::CatE(left, right) => eval_concatenation(context, calls, exp, left, right),
+        ExpKind::MemE(element, collection) => {
+            eval_membership(context, calls, exp, element, collection)
+        }
+        ExpKind::LenE(value) => eval_length(context, calls, exp, value),
+        ExpKind::DotE(base, atom) => eval_dot(context, calls, exp, base, atom),
+        ExpKind::IdxE(base, index) => eval_index(context, calls, exp, base, index),
+        ExpKind::SliceE(base, index, count) => eval_slice(context, calls, exp, base, index, count),
+        ExpKind::UpdE(base, path, replacement) => {
+            eval_update(context, calls, base, path, replacement)
+        }
+        ExpKind::CallE(id, type_args, args) => eval_call(context, calls, id, type_args, args),
+        ExpKind::IterE(inner, iter_exp) => eval_iteration(context, calls, exp, inner, iter_exp),
     }
 }
 
@@ -122,19 +164,26 @@ fn path_type_note(path: &Path) -> Typ {
     crate::domain::source::Spanned::new(path.ty.clone(), path.span.clone())
 }
 
-fn eval_all(context: &mut Context, exps: &[Exp]) -> Result<Vec<ValueRef>, InterpError> {
-    exps.iter().map(|exp| eval(context, exp)).collect()
+fn eval_all(
+    context: &mut Context,
+    calls: &mut dyn FunctionCalls,
+    exps: &[Exp],
+) -> Result<Vec<ValueRef>, InterpError> {
+    exps.iter()
+        .map(|exp| eval_with_calls(context, calls, exp))
+        .collect()
 }
 
 // Unary expression evaluation
 
 fn eval_unary(
     context: &mut Context,
+    calls: &mut dyn FunctionCalls,
     outer: &Exp,
     operator: UnOp,
     operand: &Exp,
 ) -> Result<ValueRef, InterpError> {
-    let value = eval(context, operand)?;
+    let value = eval_with_calls(context, calls, operand)?;
     match operator {
         UnOp::NotOp => Ok(make::bool(!bool_of_value(outer, &value)?, Region::none())),
         UnOp::PlusOp => Ok(make::num(
@@ -154,14 +203,15 @@ fn eval_unary(
 
 fn eval_binary(
     context: &mut Context,
+    calls: &mut dyn FunctionCalls,
     outer: &Exp,
     operator: BinOp,
     left: &Exp,
     right: &Exp,
 ) -> Result<ValueRef, InterpError> {
     // OCaml evaluates both operands before dispatching the operator.
-    let value_left = eval(context, left)?;
-    let value_right = eval(context, right)?;
+    let value_left = eval_with_calls(context, calls, left)?;
+    let value_right = eval_with_calls(context, calls, right)?;
     match operator {
         BinOp::AndOp | BinOp::OrOp | BinOp::ImplOp | BinOp::EquivOp => {
             let left = bool_of_value(outer, &value_left)?;
@@ -240,13 +290,14 @@ fn eval_binary_bigint(
 
 fn eval_comparison(
     context: &mut Context,
+    calls: &mut dyn FunctionCalls,
     outer: &Exp,
     operator: CmpOp,
     left: &Exp,
     right: &Exp,
 ) -> Result<ValueRef, InterpError> {
-    let value_left = eval(context, left)?;
-    let value_right = eval(context, right)?;
+    let value_left = eval_with_calls(context, calls, left)?;
+    let value_right = eval_with_calls(context, calls, right)?;
     let result = match operator {
         CmpOp::EqOp => value_left == value_right,
         CmpOp::NeOp => value_left != value_right,
@@ -521,11 +572,12 @@ fn value_is_subtype(context: &Context, typ: &Typ, value: &Value) -> Result<bool,
 
 fn eval_match(
     context: &mut Context,
+    calls: &mut dyn FunctionCalls,
     _outer: &Exp,
     exp: &Exp,
     pattern: &Pattern,
 ) -> Result<ValueRef, InterpError> {
-    let value = eval(context, exp)?;
+    let value = eval_with_calls(context, calls, exp)?;
     let matches = match pattern {
         Pattern::CaseP(mixop) => get::case(&value)
             .map(|value_case| value_case.split().0 == *mixop)
@@ -549,8 +601,13 @@ fn eval_match(
 
 // Tuple expression evaluation
 
-fn eval_tuple(context: &mut Context, outer: &Exp, exps: &[Exp]) -> Result<ValueRef, InterpError> {
-    let values = eval_all(context, exps)?;
+fn eval_tuple(
+    context: &mut Context,
+    calls: &mut dyn FunctionCalls,
+    outer: &Exp,
+    exps: &[Exp],
+) -> Result<ValueRef, InterpError> {
+    let values = eval_all(context, calls, exps)?;
     Ok(make::tuple(&type_note(outer), values, Region::none()))
 }
 
@@ -558,13 +615,14 @@ fn eval_tuple(context: &mut Context, outer: &Exp, exps: &[Exp]) -> Result<ValueR
 
 fn eval_case(
     context: &mut Context,
+    calls: &mut dyn FunctionCalls,
     outer: &Exp,
     not_exp: &crate::lang::il::ast::NotExp,
 ) -> Result<ValueRef, InterpError> {
     let (mixop, exps) = not_exp.split();
     let values = exps
         .into_iter()
-        .map(|exp| eval(context, exp))
+        .map(|exp| eval_with_calls(context, calls, exp))
         .collect::<Result<Vec<_>, _>>()?;
     let value_case = crate::domain::mixfix::Mixop::fill(&mixop, values)
         .expect("the mixop came from the same case expression");
@@ -575,12 +633,13 @@ fn eval_case(
 
 fn eval_structure(
     context: &mut Context,
+    calls: &mut dyn FunctionCalls,
     outer: &Exp,
     fields: &[(crate::lang::il::ast::Atom, Exp)],
 ) -> Result<ValueRef, InterpError> {
     let value_fields = fields
         .iter()
-        .map(|(atom, exp)| eval(context, exp).map(|value| (atom.clone(), value)))
+        .map(|(atom, exp)| eval_with_calls(context, calls, exp).map(|value| (atom.clone(), value)))
         .collect::<Result<Vec<_>, _>>()?;
     Ok(make::structure(
         &type_note(outer),
@@ -593,17 +652,25 @@ fn eval_structure(
 
 fn eval_option(
     context: &mut Context,
+    calls: &mut dyn FunctionCalls,
     outer: &Exp,
     exp: Option<&Exp>,
 ) -> Result<ValueRef, InterpError> {
-    let value = exp.map(|exp| eval(context, exp)).transpose()?;
+    let value = exp
+        .map(|exp| eval_with_calls(context, calls, exp))
+        .transpose()?;
     Ok(make::opt(&type_note(outer), value, Region::none()))
 }
 
 // List expression evaluation
 
-fn eval_list(context: &mut Context, outer: &Exp, exps: &[Exp]) -> Result<ValueRef, InterpError> {
-    let values = eval_all(context, exps)?;
+fn eval_list(
+    context: &mut Context,
+    calls: &mut dyn FunctionCalls,
+    outer: &Exp,
+    exps: &[Exp],
+) -> Result<ValueRef, InterpError> {
+    let values = eval_all(context, calls, exps)?;
     Ok(make::list(&type_note(outer), values, Region::none()))
 }
 
@@ -611,12 +678,13 @@ fn eval_list(context: &mut Context, outer: &Exp, exps: &[Exp]) -> Result<ValueRe
 
 fn eval_cons(
     context: &mut Context,
+    calls: &mut dyn FunctionCalls,
     outer: &Exp,
     head: &Exp,
     tail: &Exp,
 ) -> Result<ValueRef, InterpError> {
-    let value_head = eval(context, head)?;
-    let value_tail = eval(context, tail)?;
+    let value_head = eval_with_calls(context, calls, head)?;
+    let value_tail = eval_with_calls(context, calls, tail)?;
     let mut values = Vec::with_capacity(
         get::list(&value_tail)
             .map_err(|error| value_error(outer, error.to_string()))?
@@ -637,12 +705,13 @@ fn eval_cons(
 
 fn eval_concatenation(
     context: &mut Context,
+    calls: &mut dyn FunctionCalls,
     outer: &Exp,
     left: &Exp,
     right: &Exp,
 ) -> Result<ValueRef, InterpError> {
-    let value_left = eval(context, left)?;
-    let value_right = eval(context, right)?;
+    let value_left = eval_with_calls(context, calls, left)?;
+    let value_right = eval_with_calls(context, calls, right)?;
     match (&value_left.kind, &value_right.kind) {
         (
             crate::runtime::value::ValueKind::TextV(left),
@@ -667,12 +736,13 @@ fn eval_concatenation(
 
 fn eval_membership(
     context: &mut Context,
+    calls: &mut dyn FunctionCalls,
     outer: &Exp,
     element: &Exp,
     collection: &Exp,
 ) -> Result<ValueRef, InterpError> {
-    let value_element = eval(context, element)?;
-    let value_collection = eval(context, collection)?;
+    let value_element = eval_with_calls(context, calls, element)?;
+    let value_collection = eval_with_calls(context, calls, collection)?;
     let values =
         get::list(&value_collection).map_err(|error| value_error(outer, error.to_string()))?;
     Ok(make::bool(values.contains(&value_element), Region::none()))
@@ -680,8 +750,13 @@ fn eval_membership(
 
 // Length expression evaluation
 
-fn eval_length(context: &mut Context, outer: &Exp, exp: &Exp) -> Result<ValueRef, InterpError> {
-    let value = eval(context, exp)?;
+fn eval_length(
+    context: &mut Context,
+    calls: &mut dyn FunctionCalls,
+    outer: &Exp,
+    exp: &Exp,
+) -> Result<ValueRef, InterpError> {
+    let value = eval_with_calls(context, calls, exp)?;
     let len = match &value.kind {
         crate::runtime::value::ValueKind::TextV(value) => value.len(),
         crate::runtime::value::ValueKind::ListV(values) => values.len(),
@@ -699,11 +774,12 @@ fn eval_length(context: &mut Context, outer: &Exp, exp: &Exp) -> Result<ValueRef
 
 fn eval_dot(
     context: &mut Context,
+    calls: &mut dyn FunctionCalls,
     outer: &Exp,
     base: &Exp,
     atom: &crate::lang::il::ast::Atom,
 ) -> Result<ValueRef, InterpError> {
-    let value_base = eval(context, base)?;
+    let value_base = eval_with_calls(context, calls, base)?;
     let fields =
         get::structure(&value_base).map_err(|error| value_error(outer, error.to_string()))?;
     fields
@@ -726,12 +802,13 @@ fn index_of_value(outer: &Exp, value: &Value) -> Result<isize, InterpError> {
 
 fn eval_index(
     context: &mut Context,
+    calls: &mut dyn FunctionCalls,
     outer: &Exp,
     base: &Exp,
     index: &Exp,
 ) -> Result<ValueRef, InterpError> {
-    let value_base = eval(context, base)?;
-    let value_index = eval(context, index)?;
+    let value_base = eval_with_calls(context, calls, base)?;
+    let value_index = eval_with_calls(context, calls, index)?;
     let index = index_of_value(outer, &value_index)?;
     match &value_base.kind {
         crate::runtime::value::ValueKind::TextV(value) => {
@@ -771,15 +848,16 @@ fn bounded_index(outer: &Exp, index: isize, len: usize) -> Result<usize, InterpE
 
 fn eval_slice(
     context: &mut Context,
+    calls: &mut dyn FunctionCalls,
     outer: &Exp,
     base: &Exp,
     index: &Exp,
     count: &Exp,
 ) -> Result<ValueRef, InterpError> {
-    let value_base = eval(context, base)?;
-    let value_index = eval(context, index)?;
+    let value_base = eval_with_calls(context, calls, base)?;
+    let value_index = eval_with_calls(context, calls, index)?;
     let index = index_of_value(outer, &value_index)?;
-    let value_count = eval(context, count)?;
+    let value_count = eval_with_calls(context, calls, count)?;
     let count = index_of_value(outer, &value_count)?;
     if index < 0 || count < 0 {
         return Err(value_error(outer, "slice out of bounds"));
@@ -820,14 +898,15 @@ fn eval_slice(
 
 fn eval_access_path(
     context: &mut Context,
+    calls: &mut dyn FunctionCalls,
     value_base: &ValueRef,
     path: &Path,
 ) -> Result<ValueRef, InterpError> {
     match &path.kind {
         PathKind::RootP => Ok(Rc::clone(value_base)),
         PathKind::IdxP(inner, index) => {
-            let value = eval_access_path(context, value_base, inner)?;
-            let value_index = eval(context, index)?;
+            let value = eval_access_path(context, calls, value_base, inner)?;
+            let value_index = eval_with_calls(context, calls, index)?;
             let index_value = index_of_value(index, &value_index)?;
             match &value.kind {
                 crate::runtime::value::ValueKind::TextV(text) => {
@@ -852,8 +931,8 @@ fn eval_access_path(
             }
         }
         PathKind::SliceP(inner, index, count) => {
-            let value = eval_access_path(context, value_base, inner)?;
-            let (start, end) = eval_path_slice_bounds(context, index, count)?;
+            let value = eval_access_path(context, calls, value_base, inner)?;
+            let (start, end) = eval_path_slice_bounds(context, calls, index, count)?;
             match &value.kind {
                 crate::runtime::value::ValueKind::TextV(text) => {
                     if end > text.len() {
@@ -881,7 +960,7 @@ fn eval_access_path(
             }
         }
         PathKind::DotP(inner, atom) => {
-            let value = eval_access_path(context, value_base, inner)?;
+            let value = eval_access_path(context, calls, value_base, inner)?;
             let fields = get::structure(&value)
                 .map_err(|error| InterpError::new(path.span.clone(), error.to_string()))?;
             fields
@@ -895,12 +974,13 @@ fn eval_access_path(
 
 fn eval_path_slice_bounds(
     context: &mut Context,
+    calls: &mut dyn FunctionCalls,
     index: &Exp,
     count: &Exp,
 ) -> Result<(usize, usize), InterpError> {
-    let value_index = eval(context, index)?;
+    let value_index = eval_with_calls(context, calls, index)?;
     let index_value = index_of_value(index, &value_index)?;
-    let value_count = eval(context, count)?;
+    let value_count = eval_with_calls(context, calls, count)?;
     let count_value = index_of_value(count, &value_count)?;
     if index_value < 0 || count_value < 0 {
         return Err(value_error(count, "slice out of bounds"));
@@ -915,6 +995,7 @@ fn eval_path_slice_bounds(
 
 fn eval_update_path(
     context: &mut Context,
+    calls: &mut dyn FunctionCalls,
     value_base: &ValueRef,
     path: &Path,
     value_update: ValueRef,
@@ -922,8 +1003,8 @@ fn eval_update_path(
     match &path.kind {
         PathKind::RootP => Ok(value_update),
         PathKind::IdxP(inner, index) => {
-            let value = eval_access_path(context, value_base, inner)?;
-            let value_index = eval(context, index)?;
+            let value = eval_access_path(context, calls, value_base, inner)?;
+            let value_index = eval_with_calls(context, calls, index)?;
             let index_value = index_of_value(index, &value_index)?;
             let value = match &value.kind {
                 crate::runtime::value::ValueKind::TextV(text) => {
@@ -955,11 +1036,11 @@ fn eval_update_path(
                     ));
                 }
             };
-            eval_update_path(context, value_base, inner, value)
+            eval_update_path(context, calls, value_base, inner, value)
         }
         PathKind::SliceP(inner, index, count) => {
-            let value = eval_access_path(context, value_base, inner)?;
-            let (start, end) = eval_path_slice_bounds(context, index, count)?;
+            let value = eval_access_path(context, calls, value_base, inner)?;
+            let (start, end) = eval_path_slice_bounds(context, calls, index, count)?;
             let update_len = end - start;
             let value = match &value.kind {
                 crate::runtime::value::ValueKind::TextV(text) => {
@@ -1009,10 +1090,10 @@ fn eval_update_path(
                     ));
                 }
             };
-            eval_update_path(context, value_base, inner, value)
+            eval_update_path(context, calls, value_base, inner, value)
         }
         PathKind::DotP(inner, atom) => {
-            let value = eval_access_path(context, value_base, inner)?;
+            let value = eval_access_path(context, calls, value_base, inner)?;
             let fields = get::structure(&value)
                 .map_err(|error| InterpError::new(path.span.clone(), error.to_string()))?;
             let fields = fields
@@ -1026,34 +1107,61 @@ fn eval_update_path(
                 })
                 .collect();
             let value = make::structure(&path_type_note(inner), fields, Region::none());
-            eval_update_path(context, value_base, inner, value)
+            eval_update_path(context, calls, value_base, inner, value)
         }
     }
 }
 
 fn eval_update(
     context: &mut Context,
+    calls: &mut dyn FunctionCalls,
     base: &Exp,
     path: &Path,
     replacement: &Exp,
 ) -> Result<ValueRef, InterpError> {
-    let value_base = eval(context, base)?;
-    let value_replacement = eval(context, replacement)?;
-    eval_update_path(context, &value_base, path, value_replacement)
+    let value_base = eval_with_calls(context, calls, base)?;
+    let value_replacement = eval_with_calls(context, calls, replacement)?;
+    eval_update_path(context, calls, &value_base, path, value_replacement)
+}
+
+// Function call expression evaluation
+
+fn resolve_type_args(context: &Context, type_args: &[Typ]) -> Result<Vec<Typ>, InterpError> {
+    subst::subst_types(&context.local_type_substitution(), type_args).map_err(
+        |error| match &error {
+            subst::SubstError::HigherOrder { span } => {
+                InterpError::new(span.clone(), error.to_string())
+            }
+        },
+    )
+}
+
+fn eval_call(
+    context: &mut Context,
+    calls: &mut dyn FunctionCalls,
+    id: &crate::lang::il::ast::Id,
+    type_args: &[Typ],
+    args: &[Arg],
+) -> Result<ValueRef, InterpError> {
+    let type_args = resolve_type_args(context, type_args)?;
+    let values = eval_args(context, calls, args)?;
+    calls.invoke_func(context, id, &type_args, &values)
 }
 
 // Iterated expression evaluation
 
 fn eval_optional_iteration(
     context: &mut Context,
+    calls: &mut dyn FunctionCalls,
     outer: &Exp,
     exp: &Exp,
     vars: &[crate::lang::il::ast::Var],
 ) -> Result<ValueRef, InterpError> {
     let value = match context.optional_bindings(vars)? {
-        Some(bindings) => {
-            Some(context.with_value_bindings(bindings, |context| eval(context, exp))?)
-        }
+        Some(bindings) => Some(
+            context
+                .with_value_bindings(bindings, |context| eval_with_calls(context, calls, exp))?,
+        ),
         None => None,
     };
     Ok(make::opt(&type_note(outer), value, Region::none()))
@@ -1061,6 +1169,7 @@ fn eval_optional_iteration(
 
 fn eval_list_iteration(
     context: &mut Context,
+    calls: &mut dyn FunctionCalls,
     outer: &Exp,
     exp: &Exp,
     vars: &[crate::lang::il::ast::Var],
@@ -1068,13 +1177,17 @@ fn eval_list_iteration(
     let batches = context.list_binding_batches(vars)?;
     let mut values = Vec::with_capacity(batches.len());
     for bindings in batches {
-        values.push(context.with_value_bindings(bindings, |context| eval(context, exp))?);
+        values.push(
+            context
+                .with_value_bindings(bindings, |context| eval_with_calls(context, calls, exp))?,
+        );
     }
     Ok(make::list(&type_note(outer), values, Region::none()))
 }
 
 fn eval_iteration(
     context: &mut Context,
+    calls: &mut dyn FunctionCalls,
     outer: &Exp,
     exp: &Exp,
     (iter, vars): &crate::lang::il::ast::IterExp,
@@ -1083,7 +1196,39 @@ fn eval_iteration(
         return context.find_value(&variable).map(Rc::clone);
     }
     match iter {
-        Iter::Opt => eval_optional_iteration(context, outer, exp, vars),
-        Iter::List => eval_list_iteration(context, outer, exp, vars),
+        Iter::Opt => eval_optional_iteration(context, calls, outer, exp, vars),
+        Iter::List => eval_list_iteration(context, calls, outer, exp, vars),
     }
+}
+
+// Argument evaluation
+
+fn eval_arg(
+    context: &mut Context,
+    calls: &mut dyn FunctionCalls,
+    arg: &Arg,
+) -> Result<ValueRef, InterpError> {
+    match &arg.node {
+        ArgKind::ExpA(exp) => eval_with_calls(context, calls, exp),
+        ArgKind::DefA(id) => {
+            let signature = context.find_function(id)?.1.get_signature();
+            Ok(make::func(
+                id.clone(),
+                signature.type_params,
+                signature.param_types,
+                signature.return_type,
+                Region::none(),
+            ))
+        }
+    }
+}
+
+fn eval_args(
+    context: &mut Context,
+    calls: &mut dyn FunctionCalls,
+    args: &[Arg],
+) -> Result<Vec<ValueRef>, InterpError> {
+    args.iter()
+        .map(|arg| eval_arg(context, calls, arg))
+        .collect()
 }

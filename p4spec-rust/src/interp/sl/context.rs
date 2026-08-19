@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use crate::{
     interp::common::InterpError,
     lang::{
-        il::ast::{Id, Iter, Var},
+        il::ast::{DefTypKind, Id, Iter, Var},
         sl::ast::{Def, DefKind},
     },
     runtime::{
@@ -13,7 +13,7 @@ use crate::{
             func::Function,
             rel::Relation,
         },
-        r#type::typdef::TypeDef,
+        r#type::{subst::TypeSubstitution, typdef::TypeDef},
         value::{ValueRef, get},
     },
 };
@@ -272,6 +272,24 @@ impl Context {
 
     pub fn is_function_bound(&self, id: &Id) -> bool {
         self.find_function(id).is_ok()
+    }
+
+    pub(crate) fn local_type_substitution(&self) -> TypeSubstitution {
+        let Local::Function { type_defs, .. } = &self.local else {
+            return TypeSubstitution::new();
+        };
+        type_defs
+            .iter()
+            .filter_map(|(id, type_def)| match type_def {
+                TypeDef::Defined(type_params, def_type) if type_params.is_empty() => {
+                    let DefTypKind::PlainT(typ) = &def_type.node else {
+                        return None;
+                    };
+                    Some((id.clone(), typ.clone()))
+                }
+                _ => None,
+            })
+            .collect()
     }
 
     // Adders

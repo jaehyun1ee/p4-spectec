@@ -12,7 +12,10 @@ use crate::{
     },
 };
 
-use super::context::{Context, Cursor};
+use super::{
+    context::{Context, Cursor},
+    expression::FunctionCalls,
+};
 
 const CALL_CACHE_SIZE: usize = 256 * 1024;
 
@@ -76,20 +79,41 @@ where
         values_input: &[ValueRef],
     ) -> Result<ValueRef, InterpError> {
         self.clear_call_caches();
-        self.invoke_func(
+        let mut dispatcher = FunctionDispatcher {
+            options: self.options,
+            interface: &mut self.interface,
+            externs: &mut self.externs,
+            function_cache: &mut self.function_cache,
+        };
+        dispatcher.invoke_func(
+            &mut self.context,
             &Spanned::new(name.to_owned(), Region::none()),
             type_args,
             values_input,
         )
     }
+}
 
+struct FunctionDispatcher<'a, I, E> {
+    options: Options,
+    interface: &'a mut I,
+    externs: &'a mut E,
+    function_cache: &'a mut CallCache<ValueRef>,
+}
+
+impl<I, E> FunctionDispatcher<'_, I, E>
+where
+    I: Interface,
+    E: Extern,
+{
     fn invoke_func(
         &mut self,
+        context: &mut Context,
         id: &crate::lang::il::ast::Id,
         type_args: &[Typ],
         values_input: &[ValueRef],
     ) -> Result<ValueRef, InterpError> {
-        let (cursor, function) = self.context.find_function(id)?;
+        let (cursor, function) = context.find_function(id)?;
         let function = function.clone();
         let cacheable = self.options.cache
             && cursor != Cursor::Local
@@ -143,5 +167,21 @@ where
                 "defined function execution is not implemented",
             )),
         }
+    }
+}
+
+impl<I, E> FunctionCalls for FunctionDispatcher<'_, I, E>
+where
+    I: Interface,
+    E: Extern,
+{
+    fn invoke_func(
+        &mut self,
+        context: &mut Context,
+        id: &crate::lang::il::ast::Id,
+        type_args: &[Typ],
+        values: &[ValueRef],
+    ) -> Result<ValueRef, InterpError> {
+        Self::invoke_func(self, context, id, type_args, values)
     }
 }
