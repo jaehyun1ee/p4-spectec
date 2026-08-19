@@ -23,7 +23,7 @@ use crate::{
     },
 };
 
-use super::context::Context;
+use super::context::{Context, Cursor};
 
 #[cfg(test)]
 mod tests;
@@ -480,12 +480,32 @@ fn cast_down(context: &Context, typ: &Typ, value: ValueRef) -> Result<ValueRef, 
 
 // Subtype check expression evaluation
 
-fn value_is_subtype_uncached(
+fn value_is_subtype_inner(
+    cache: &mut value_match::SubCache,
     context: &Context,
     typ: &Typ,
-    value: &Value,
+    value: &ValueRef,
+    cache_local: bool,
 ) -> Result<bool, InterpError> {
-    match &typ.node {
+    let resolved_type_def = match &typ.node {
+        TypKind::VarT(type_id, _) => Some(context.find_type_def_with_cursor(type_id)?),
+        _ => None,
+    };
+    let cache_recursive = matches!(resolved_type_def, Some((Cursor::Global, _)));
+    let cache_id = match &typ.node {
+        TypKind::VarT(type_id, type_args)
+            if type_args.is_empty() && (cache_local || cache_recursive) =>
+        {
+            Some(type_id.node.as_str())
+        }
+        _ => None,
+    };
+    if let Some(id) = cache_id
+        && let Some(result) = cache.get(&value_match::SubKeyRef::new(id, value))
+    {
+        return Ok(*result);
+    }
+    let result = match &typ.node {
         TypKind::BoolT => Ok(matches!(value.kind, ValueKind::BoolV(_))),
         TypKind::NumT(num::Typ::NatT) => Ok(match &value.kind {
             ValueKind::NumV(num::T::Nat(_)) => true,
@@ -494,7 +514,10 @@ fn value_is_subtype_uncached(
         }),
         TypKind::NumT(num::Typ::IntT) => Ok(matches!(value.kind, ValueKind::NumV(_))),
         TypKind::TextT => Ok(matches!(value.kind, ValueKind::TextV(_))),
-        TypKind::VarT(type_id, type_args) => match context.find_type_def(type_id)? {
+        TypKind::VarT(_, type_args) => match resolved_type_def
+            .expect("variable type was resolved")
+            .1
+        {
             TypeDef::Param | TypeDef::Defining(_) => Err(InterpError::new(
                 typ.span.clone(),
                 "unexpected type variable",
@@ -517,7 +540,7 @@ fn value_is_subtype_uncached(
                         let inner = subst::subst_type(&substitution, inner).map_err(|error| {
                             InterpError::new(typ.span.clone(), error.to_string())
                         })?;
-                        value_is_subtype_uncached(context, &inner, value)
+                        value_is_subtype_inner(cache, context, &inner, value, false)
                     }
                     (DefTypKind::StructT(type_fields), ValueKind::StructV(value_fields)) => {
                         if type_fields.len() != value_fields.len() {
@@ -533,7 +556,13 @@ fn value_is_subtype_uncached(
                                 subst::subst_type(&substitution, field_type).map_err(|error| {
                                     InterpError::new(typ.span.clone(), error.to_string())
                                 })?;
-                            if !value_is_subtype_uncached(context, &field_type, field_value)? {
+                            if !value_is_subtype_inner(
+                                cache,
+                                context,
+                                &field_type,
+                                field_value,
+                                false,
+                            )? {
                                 return Ok(false);
                             }
                         }
@@ -554,7 +583,7 @@ fn value_is_subtype_uncached(
                             }
                             let mut matches = true;
                             for (typ, value) in types.into_iter().zip(values) {
-                                if !value_is_subtype_uncached(context, typ, value)? {
+                                if !value_is_subtype_inner(cache, context, typ, value, false)? {
                                     matches = false;
                                     break;
                                 }
@@ -572,7 +601,7 @@ fn value_is_subtype_uncached(
         TypKind::TupleT(types) => match &value.kind {
             ValueKind::TupleV(values) if types.len() == values.len() => {
                 for (typ, value) in types.iter().zip(values) {
-                    if !value_is_subtype_uncached(context, typ, value)? {
+                    if !value_is_subtype_inner(cache, context, typ, value, false)? {
                         return Ok(false);
                     }
                 }
@@ -581,7 +610,9 @@ fn value_is_subtype_uncached(
             _ => Ok(false),
         },
         TypKind::IterT(inner, Iter::Opt) => match &value.kind {
-            ValueKind::OptV(Some(value)) => value_is_subtype_uncached(context, inner, value),
+            ValueKind::OptV(Some(value)) => {
+                value_is_subtype_inner(cache, context, inner, value, false)
+            }
             ValueKind::OptV(None) => Ok(true),
             // Preserve the authoritative OCaml behavior.
             _ => Ok(true),
@@ -589,7 +620,7 @@ fn value_is_subtype_uncached(
         TypKind::IterT(inner, Iter::List) => match &value.kind {
             ValueKind::ListV(values) => {
                 for value in values {
-                    if !value_is_subtype_uncached(context, inner, value)? {
+                    if !value_is_subtype_inner(cache, context, inner, value, false)? {
                         return Ok(false);
                     }
                 }
@@ -598,7 +629,22 @@ fn value_is_subtype_uncached(
             _ => Ok(false),
         },
         TypKind::FuncT(..) => Ok(false),
+    }?;
+    if let Some(id) = cache_id {
+        cache.insert(
+            value_match::SubKey::new(id.to_owned(), Rc::clone(value)),
+            result,
+        );
     }
+    Ok(result)
+}
+
+fn value_is_subtype_uncached(
+    context: &Context,
+    typ: &Typ,
+    value: &ValueRef,
+) -> Result<bool, InterpError> {
+    value_is_subtype_inner(&mut value_match::SubCache::new(), context, typ, value, true)
 }
 
 // Caching subtyping of type variables to values,
@@ -609,18 +655,7 @@ pub(super) fn value_is_subtype(
     typ: &Typ,
     value: &ValueRef,
 ) -> Result<bool, InterpError> {
-    match &typ.node {
-        TypKind::VarT(type_id, type_args) if type_args.is_empty() => {
-            let key = (type_id.node.clone(), Rc::clone(value));
-            if let Some(result) = cache.get(&key) {
-                return Ok(*result);
-            }
-            let result = value_is_subtype_uncached(context, typ, value)?;
-            cache.insert(key, result);
-            Ok(result)
-        }
-        _ => value_is_subtype_uncached(context, typ, value),
-    }
+    value_is_subtype_inner(cache, context, typ, value, true)
 }
 
 // Pattern match check expression evaluation

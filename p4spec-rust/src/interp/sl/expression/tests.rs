@@ -161,3 +161,92 @@ fn named_subtype_results_are_cached_by_type_and_value() {
     assert!(value_is_subtype(&mut cache, &context, &typ, &value).unwrap());
     assert_eq!(cache.len(), 1);
 }
+
+#[test]
+fn nested_named_subtype_results_use_the_same_cache() {
+    let type_t = Spanned::new(
+        sl::DefKind::TypD(
+            id("T"),
+            Vec::new(),
+            Spanned::new(
+                il::DefTypKind::StructT(Vec::new()),
+                Region::for_file("struct-t"),
+            ),
+            Vec::new(),
+        ),
+        Region::for_file("type-t"),
+    );
+    let type_pair = Spanned::new(
+        sl::DefKind::TypD(
+            id("Pair"),
+            Vec::new(),
+            Spanned::new(
+                il::DefTypKind::PlainT(make_type::tuple_type(vec![
+                    make_type::var_type(id("T"), Vec::new()),
+                    make_type::var_type(id("T"), Vec::new()),
+                ])),
+                Region::for_file("plain-pair"),
+            ),
+            Vec::new(),
+        ),
+        Region::for_file("type-pair"),
+    );
+    let context = Context::from_spec(false, &[type_t, type_pair]).expect("valid spec");
+    let typ = make_type::var_type(id("Pair"), Vec::new());
+    let type_t = make_type::var_type(id("T"), Vec::new());
+    let value = make::tuple(
+        &make_type::tuple_type(vec![type_t.clone(), type_t.clone()]),
+        vec![
+            make::structure(&type_t, Vec::new(), Region::for_file("left")),
+            make::structure(&type_t, Vec::new(), Region::for_file("right")),
+        ],
+        Region::for_file("pair"),
+    );
+    let mut cache = SubCache::new();
+
+    assert!(value_is_subtype(&mut cache, &context, &typ, &value).unwrap());
+    assert!(cache.keys().any(|key| key.id() == "Pair"));
+    assert!(cache.keys().any(|key| key.id() == "T"));
+    assert_eq!(cache.len(), 2);
+}
+
+#[test]
+fn nested_local_type_definitions_do_not_share_cache_entries() {
+    let mut context = Context::from_spec(false, &[]).expect("valid spec");
+    let typ = make_type::tuple_type(vec![make_type::var_type(id("T"), Vec::new())]);
+    let value = make::tuple(
+        &make_type::tuple_type(vec![make_type::bool_type()]),
+        vec![make::bool(true, Region::for_file("value"))],
+        Region::for_file("tuple"),
+    );
+    let local_bool: TypeDefMap = [(
+        "T".to_owned(),
+        TypeDef::Defined(
+            Vec::new(),
+            Box::new(Spanned::new(
+                il::DefTypKind::PlainT(make_type::bool_type()),
+                Region::for_file("local-bool"),
+            )),
+        ),
+    )]
+    .into_iter()
+    .collect();
+    let local_text: TypeDefMap = [(
+        "T".to_owned(),
+        TypeDef::Defined(
+            Vec::new(),
+            Box::new(Spanned::new(
+                il::DefTypKind::PlainT(make_type::text_type()),
+                Region::for_file("local-text"),
+            )),
+        ),
+    )]
+    .into_iter()
+    .collect();
+    let mut cache = SubCache::new();
+
+    context.enter_function(id("first"), Vec::new(), local_bool);
+    assert!(value_is_subtype(&mut cache, &context, &typ, &value).unwrap());
+    context.enter_function(id("second"), Vec::new(), local_text);
+    assert!(!value_is_subtype(&mut cache, &context, &typ, &value).unwrap());
+}

@@ -250,12 +250,23 @@ impl Context {
     // Finders for type definitions
 
     pub fn find_type_def(&self, id: &Id) -> Result<&TypeDef, InterpError> {
-        let local = match &self.local {
-            Local::Function { type_defs, .. } => type_defs.get(&id.node),
-            Local::Empty | Local::Relation { .. } => None,
-        };
-        local
-            .or_else(|| self.global.type_defs.get(&id.node))
+        self.find_type_def_with_cursor(id)
+            .map(|(_cursor, type_def)| type_def)
+    }
+
+    pub(crate) fn find_type_def_with_cursor(
+        &self,
+        id: &Id,
+    ) -> Result<(Cursor, &TypeDef), InterpError> {
+        if let Local::Function { type_defs, .. } = &self.local
+            && let Some(type_def) = type_defs.get(&id.node)
+        {
+            return Ok((Cursor::Local, type_def));
+        }
+        self.global
+            .type_defs
+            .get(&id.node)
+            .map(|type_def| (Cursor::Global, type_def))
             .ok_or_else(|| Self::undefined(id, "type"))
     }
 

@@ -1,5 +1,6 @@
-use std::{collections::HashMap, rc::Rc};
+use std::rc::Rc;
 
+use hashbrown::{Equivalent, HashMap};
 use num_bigint::Sign;
 use thiserror::Error;
 
@@ -215,7 +216,41 @@ where
 // Caching subtyping of type variables to values,
 // using semantic values because runtime values have no generated ids
 
-pub type SubCache = HashMap<(String, ValueRef), bool>;
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct SubKey {
+    id: String,
+    value: ValueRef,
+}
+
+impl SubKey {
+    pub fn new(id: String, value: ValueRef) -> Self {
+        Self { id, value }
+    }
+
+    pub fn id(&self) -> &str {
+        &self.id
+    }
+}
+
+#[derive(Clone, Copy, Debug, Hash)]
+pub struct SubKeyRef<'a> {
+    id: &'a str,
+    value: &'a ValueRef,
+}
+
+impl<'a> SubKeyRef<'a> {
+    pub fn new(id: &'a str, value: &'a ValueRef) -> Self {
+        Self { id, value }
+    }
+}
+
+impl Equivalent<SubKey> for SubKeyRef<'_> {
+    fn equivalent(&self, key: &SubKey) -> bool {
+        self.id == key.id && self.value == &key.value
+    }
+}
+
+pub type SubCache = HashMap<SubKey, bool>;
 
 // Entry point
 
@@ -231,12 +266,12 @@ where
 {
     match &typ.node {
         TypKind::VarT(type_id, type_args) if type_args.is_empty() => {
-            let key = (type_id.node.clone(), Rc::clone(value));
+            let key = SubKeyRef::new(&type_id.node, value);
             if let Some(result) = cache.get(&key) {
                 return Ok(*result);
             }
             let result = sub_inner(type_defs, find_func, typ, value)?;
-            cache.insert(key, result);
+            cache.insert(SubKey::new(type_id.node.clone(), Rc::clone(value)), result);
             Ok(result)
         }
         _ => sub_inner(type_defs, find_func, typ, value),

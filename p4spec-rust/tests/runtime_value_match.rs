@@ -13,7 +13,7 @@ use p4spec_rust::{
         r#type::{envs::TypeDefMap, typ::make as make_type, typdef::TypeDef},
         value::{
             ValueKind, ValueRef, make,
-            r#match::{self as value_match, FuncSignature, MatchError, SubCache},
+            r#match::{self as value_match, FuncSignature, MatchError, SubCache, SubKeyRef},
         },
     },
 };
@@ -358,6 +358,7 @@ fn simple_type_variable_cache_uses_semantic_value_keys_without_vid() {
     assert!(value_match::sub(&mut cache, &type_defs, &no_func, &alias, &value_a).unwrap());
     assert!(value_match::sub(&mut cache, &type_defs, &no_func, &alias, &value_b).unwrap());
     assert_eq!(cache.len(), 1);
+    assert_eq!(cache.get(&SubKeyRef::new("Alias", &value_b)), Some(&true));
 
     let alias_with_arg = var("Alias", vec![make_type::bool_type()], "alias-arg-use");
     assert_eq!(
