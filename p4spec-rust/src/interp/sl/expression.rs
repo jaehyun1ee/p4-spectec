@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::{borrow::Cow, rc::Rc};
 
 use num_bigint::BigInt;
 use num_traits::{ToPrimitive, Zero};
@@ -537,9 +537,13 @@ fn value_is_subtype_inner(
                     .collect();
                 match (&def_type.node, &value.kind) {
                     (DefTypKind::PlainT(inner), _) => {
-                        let inner = subst::subst_type(&substitution, inner).map_err(|error| {
-                            InterpError::new(typ.span.clone(), error.to_string())
-                        })?;
+                        let inner = if substitution.is_empty() {
+                            Cow::Borrowed(inner)
+                        } else {
+                            Cow::Owned(subst::subst_type(&substitution, inner).map_err(
+                                |error| InterpError::new(typ.span.clone(), error.to_string()),
+                            )?)
+                        };
                         value_is_subtype_inner(cache, context, &inner, value, false)
                     }
                     (DefTypKind::StructT(type_fields), ValueKind::StructV(value_fields)) => {
@@ -552,10 +556,13 @@ fn value_is_subtype_inner(
                             if type_atom.node != value_atom.node {
                                 return Ok(false);
                             }
-                            let field_type =
-                                subst::subst_type(&substitution, field_type).map_err(|error| {
-                                    InterpError::new(typ.span.clone(), error.to_string())
-                                })?;
+                            let field_type = if substitution.is_empty() {
+                                Cow::Borrowed(field_type)
+                            } else {
+                                Cow::Owned(subst::subst_type(&substitution, field_type).map_err(
+                                    |error| InterpError::new(typ.span.clone(), error.to_string()),
+                                )?)
+                            };
                             if !value_is_subtype_inner(
                                 cache,
                                 context,
@@ -573,9 +580,13 @@ fn value_is_subtype_inner(
                             if !not_type.node.same_shape(value_case) {
                                 continue;
                             }
-                            let not_type = subst::subst_not_type(&substitution, not_type).map_err(
-                                |error| InterpError::new(typ.span.clone(), error.to_string()),
-                            )?;
+                            let not_type = if substitution.is_empty() {
+                                Cow::Borrowed(not_type)
+                            } else {
+                                Cow::Owned(subst::subst_not_type(&substitution, not_type).map_err(
+                                    |error| InterpError::new(typ.span.clone(), error.to_string()),
+                                )?)
+                            };
                             let types = not_type.node.args();
                             let values = value_case.args();
                             if types.len() != values.len() {
