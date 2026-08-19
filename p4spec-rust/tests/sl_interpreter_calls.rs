@@ -70,10 +70,13 @@ impl Interface for RecordingInterface {
         add: &mut dyn FnMut(ValueRef),
         id: &il::Id,
         _type_args: &[il::Typ],
-        _values: &[ValueRef],
+        values: &[ValueRef],
     ) -> Result<ValueRef, InterfaceError> {
         self.calls.set(self.calls.get() + 1);
-        let value = make::text(format!("builtin:{}", id.node), span("builtin-result"));
+        let value = values
+            .first()
+            .cloned()
+            .unwrap_or_else(|| make::text(format!("builtin:{}", id.node), span("builtin-result")));
         add(value.clone());
         Ok(value)
     }
@@ -83,6 +86,37 @@ impl Interface for RecordingInterface {
     }
 
     fn clear(&mut self) {}
+}
+
+fn forwarding_function(name: &str, target: &str) -> sl::Def {
+    let parameter_exp = il::Exp::new(
+        il::ExpKind::VarE(id("value")),
+        il::TypKind::TextT,
+        span("parameter-exp"),
+    );
+    let parameter = Spanned::new(
+        sl::ParamKind::ExpP(make_type::text_type(), parameter_exp.clone()),
+        span("parameter"),
+    );
+    let argument = Spanned::new(il::ArgKind::ExpA(parameter_exp), span("argument"));
+    let call = il::Exp::new(
+        il::ExpKind::CallE(id(target), Vec::new(), vec![argument]),
+        il::TypKind::TextT,
+        span("call"),
+    );
+    let return_instr = sl::Instr::new(sl::InstrKind::ReturnI(call), 1, span("return"));
+    Spanned::new(
+        sl::DefKind::FuncDecD((
+            id(name),
+            Vec::new(),
+            vec![parameter],
+            make_type::text_type(),
+            vec![return_instr],
+            None,
+            Vec::new(),
+        )),
+        span("forwarding-function"),
+    )
 }
 
 struct RecordingExtern {
@@ -172,6 +206,38 @@ fn each_public_call_clears_the_call_cache() {
 }
 
 #[test]
+fn defined_function_frame_assigns_parameters_and_runs_nested_call_expression() {
+    let interface_calls = Rc::new(Cell::new(0));
+    let mut interpreter = Interpreter::new(
+        &[builtin("target"), forwarding_function("forward", "target")],
+        Options {
+            cache: false,
+            deterministic: false,
+            guard: false,
+        },
+        RecordingInterface {
+            calls: interface_calls.clone(),
+        },
+        RecordingExtern {
+            calls: Rc::new(Cell::new(0)),
+        },
+    )
+    .unwrap();
+    let first = make::text("first".to_owned(), span("first"));
+    let second = make::text("second".to_owned(), span("second"));
+
+    let result = interpreter
+        .eval_func("forward", &[], std::slice::from_ref(&first))
+        .unwrap();
+    assert!(Rc::ptr_eq(&result, &first));
+    let result = interpreter
+        .eval_func("forward", &[], std::slice::from_ref(&second))
+        .unwrap();
+    assert!(Rc::ptr_eq(&result, &second));
+    assert_eq!(interface_calls.get(), 2);
+}
+
+#[test]
 fn missing_and_not_yet_executable_function_kinds_return_typed_errors() {
     let mut interpreter = Interpreter::new(
         &[defined("pending")],
@@ -187,5 +253,5 @@ fn missing_and_not_yet_executable_function_kinds_return_typed_errors() {
     let error = interpreter.eval_func("missing", &[], &[]).unwrap_err();
     assert!(error.message.contains("function `missing` is undefined"));
     let error = interpreter.eval_func("pending", &[], &[]).unwrap_err();
-    assert!(error.message.contains("execution is not implemented"));
+    assert!(error.message.contains("did not return a value"));
 }
