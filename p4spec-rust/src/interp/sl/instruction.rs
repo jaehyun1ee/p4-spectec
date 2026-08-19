@@ -4,8 +4,8 @@ use crate::{
     domain::source::{Region, Spanned},
     interp::common::InterpError,
     lang::{
-        il::ast::{Exp, ExpKind, OpTyp, TypKind, UnOp},
-        sl::ast::{Block, Guard, HoldCase, Instr, InstrKind, IterExp, IterInstr, TableRow},
+        il::ast::{Exp, ExpKind, Id, OpTyp, TypKind, UnOp},
+        sl::ast::{Block, Guard, HoldCase, Instr, InstrKind, IterExp, IterInstr, NotExp, TableRow},
     },
     runtime::{
         dynamic::var::Variable,
@@ -84,44 +84,15 @@ pub(crate) fn eval_instr(
             }
         }),
         InstrKind::RuleI(id, notation, inputs, iter_instrs, block) => {
-            if !iter_instrs.is_empty() {
-                return Err(InterpError::new(
-                    instr.span.clone(),
-                    "iterated rule instruction is not implemented",
-                ));
-            }
             context.with_scope(|context| {
-                let exps = notation.args();
-                let mut exps_input = Vec::new();
-                let mut exps_output = Vec::new();
-                for (index, exp) in exps.into_iter().enumerate() {
-                    if inputs.contains(&(index as i64)) {
-                        exps_input.push(exp);
-                    } else {
-                        exps_output.push(exp);
-                    }
+                let result = (|| {
+                    eval_rule_iter(context, calls, id, notation, inputs, iter_instrs)?;
+                    eval_block(context, calls, block)
+                })();
+                match result {
+                    Err(error) if error.is_unmatch() => Ok(Flow::Continue),
+                    result => result,
                 }
-                let values_input = exps_input
-                    .into_iter()
-                    .map(|exp| expression::eval_with_calls(context, calls, exp))
-                    .collect::<Result<Vec<_>, _>>()?;
-                let values_output = match calls.invoke_rel(context, id, &values_input) {
-                    Ok(values) => values,
-                    Err(error) if error.is_unmatch() => return Ok(Flow::Continue),
-                    Err(error) => return Err(error),
-                };
-                if exps_output.len() != values_output.len() {
-                    return Ok(Flow::Continue);
-                }
-                for (exp, value) in exps_output.into_iter().zip(values_output) {
-                    if let Err(error) = assignment::assign(context, exp, value) {
-                        if error.is_unmatch() {
-                            return Ok(Flow::Continue);
-                        }
-                        return Err(error);
-                    }
-                }
-                eval_block(context, calls, block)
             })
         }
         InstrKind::ResultI(_signature, exps) => {
@@ -265,6 +236,164 @@ fn eval_let_iter(
 ) -> Result<(), InterpError> {
     let iter_instrs = iter_instrs.iter().cloned().rev().collect::<Vec<_>>();
     eval_let_iter_inner(context, calls, left, right, &iter_instrs)
+}
+
+// Rule instruction evaluation
+
+fn eval_rule(
+    context: &mut Context,
+    calls: &mut dyn Calls,
+    id: &Id,
+    notation: &NotExp,
+    inputs: &[i64],
+) -> Result<(), InterpError> {
+    let exps = notation.args();
+    let mut exps_input = Vec::new();
+    let mut exps_output = Vec::new();
+    for (index, exp) in exps.into_iter().enumerate() {
+        if inputs.contains(&(index as i64)) {
+            exps_input.push(exp);
+        } else {
+            exps_output.push(exp);
+        }
+    }
+    let values_input = exps_input
+        .into_iter()
+        .map(|exp| expression::eval_with_calls(context, calls, exp))
+        .collect::<Result<Vec<_>, _>>()?;
+    let values_output = calls.invoke_rel(context, id, &values_input)?;
+    if exps_output.len() != values_output.len() {
+        return Err(InterpError::unmatch(
+            id.span.clone(),
+            "relation output arity does not match rule outputs",
+        ));
+    }
+    for (exp, value) in exps_output.into_iter().zip(values_output) {
+        assignment::assign(context, exp, value)?;
+    }
+    Ok(())
+}
+
+// Keep the OCaml premise components explicit so the port remains auditable.
+#[allow(clippy::too_many_arguments)]
+fn eval_rule_opt(
+    context: &mut Context,
+    calls: &mut dyn Calls,
+    id: &Id,
+    notation: &NotExp,
+    inputs: &[i64],
+    vars_bound: &[crate::lang::il::ast::Var],
+    vars_bind: &[crate::lang::il::ast::Var],
+    iter_instrs: &[IterInstr],
+) -> Result<(), InterpError> {
+    // Create a subcontext for the bound values.
+    let bindings = context.optional_bindings(vars_bound)?;
+    let values_binding = match bindings {
+        // If the bound variable supposed to guide the iteration is already empty,
+        // then the binding variables are also empty.
+        None => vec![None; vars_bind.len()],
+        // Otherwise, evaluate the rule for the subcontext.
+        Some(bindings) => context.with_value_bindings(bindings, |context| {
+            eval_rule_iter_inner(context, calls, id, notation, inputs, iter_instrs)?;
+            vars_bind
+                .iter()
+                .map(|(id, _typ, iters)| {
+                    context
+                        .find_value(&Variable::new(id.clone(), iters.clone()))
+                        .map(|value| Some(Rc::clone(value)))
+                })
+                .collect::<Result<Vec<_>, _>>()
+        })?,
+    };
+
+    for ((id, typ, iters), value) in vars_bind.iter().zip(values_binding) {
+        let mut outer_iters = iters.clone();
+        outer_iters.push(crate::lang::il::ast::Iter::Opt);
+        let outer_type = make_type::iterate(typ.clone(), &outer_iters);
+        let value = make::opt(&outer_type, value, Region::none());
+        context.bind_value(Variable::new(id.clone(), outer_iters), value)?;
+    }
+    Ok(())
+}
+
+// Keep the OCaml premise components explicit so the port remains auditable.
+#[allow(clippy::too_many_arguments)]
+fn eval_rule_list(
+    context: &mut Context,
+    calls: &mut dyn Calls,
+    id: &Id,
+    notation: &NotExp,
+    inputs: &[i64],
+    vars_bound: &[crate::lang::il::ast::Var],
+    vars_bind: &[crate::lang::il::ast::Var],
+    iter_instrs: &[IterInstr],
+) -> Result<(), InterpError> {
+    // Create a subcontext for each batch of bound values.
+    let bindings_batches = context.list_binding_batches(vars_bound)?;
+    let mut values_binding_batches = Vec::with_capacity(bindings_batches.len());
+    for bindings in bindings_batches {
+        // Evaluate the premise for each batch of bound values, and collect the
+        // resulting binding batches.
+        let values = context.with_value_bindings(bindings, |context| {
+            eval_rule_iter_inner(context, calls, id, notation, inputs, iter_instrs)?;
+            vars_bind
+                .iter()
+                .map(|(id, _typ, iters)| {
+                    context
+                        .find_value(&Variable::new(id.clone(), iters.clone()))
+                        .map(Rc::clone)
+                })
+                .collect::<Result<Vec<_>, _>>()
+        })?;
+        values_binding_batches.push(values);
+    }
+
+    // Finally, bind the resulting binding batches.
+    for (index, (id, typ, iters)) in vars_bind.iter().enumerate() {
+        let values = values_binding_batches
+            .iter()
+            .map(|values| Rc::clone(&values[index]))
+            .collect();
+        let mut outer_iters = iters.clone();
+        outer_iters.push(crate::lang::il::ast::Iter::List);
+        let outer_type = make_type::iterate(typ.clone(), &outer_iters);
+        let value = make::list(&outer_type, values, Region::none());
+        context.bind_value(Variable::new(id.clone(), outer_iters), value)?;
+    }
+    Ok(())
+}
+
+fn eval_rule_iter_inner(
+    context: &mut Context,
+    calls: &mut dyn Calls,
+    id: &Id,
+    notation: &NotExp,
+    inputs: &[i64],
+    iter_instrs: &[IterInstr],
+) -> Result<(), InterpError> {
+    let Some(((iter, vars_bound, vars_bind), rest)) = iter_instrs.split_first() else {
+        return eval_rule(context, calls, id, notation, inputs);
+    };
+    match iter {
+        crate::lang::il::ast::Iter::Opt => eval_rule_opt(
+            context, calls, id, notation, inputs, vars_bound, vars_bind, rest,
+        ),
+        crate::lang::il::ast::Iter::List => eval_rule_list(
+            context, calls, id, notation, inputs, vars_bound, vars_bind, rest,
+        ),
+    }
+}
+
+fn eval_rule_iter(
+    context: &mut Context,
+    calls: &mut dyn Calls,
+    id: &Id,
+    notation: &NotExp,
+    inputs: &[i64],
+    iter_instrs: &[IterInstr],
+) -> Result<(), InterpError> {
+    let iter_instrs = iter_instrs.iter().cloned().rev().collect::<Vec<_>>();
+    eval_rule_iter_inner(context, calls, id, notation, inputs, &iter_instrs)
 }
 
 fn eval_if_condition(

@@ -6,7 +6,10 @@ use p4spec_rust::{
     interface::{NullExtern, NullInterface},
     interp::sl::{Interpreter, Options},
     lang::{il::ast as il, sl::ast as sl},
-    runtime::{r#type::typ::make as make_type, value::get},
+    runtime::{
+        r#type::typ::make as make_type,
+        value::{ValueRef, get, make},
+    },
 };
 
 fn span(file: &str) -> Region {
@@ -82,6 +85,51 @@ fn return_exp(exp: il::Exp, iid: i64) -> sl::Instr {
     sl::Instr::new(sl::InstrKind::ReturnI(exp), iid, span("return"))
 }
 
+fn map_identity() -> sl::Def {
+    let text_type = make_type::text_type();
+    let list_type = make_type::list_type(text_type.clone());
+    let item = (id("item"), text_type.clone(), Vec::new());
+    let output = (id("output"), text_type.clone(), Vec::new());
+    let iterated = |name: &str, var: il::Var| {
+        il::Exp::new(
+            il::ExpKind::IterE(Box::new(variable(name)), (il::Iter::List, vec![var])),
+            list_type.node.clone(),
+            span("iterated"),
+        )
+    };
+    let parameter = Spanned::new(
+        sl::ParamKind::ExpP(list_type.clone(), iterated("item", item.clone())),
+        span("parameter"),
+    );
+    let notation = Mixfix::Seq(vec![
+        Mixfix::Arg(variable("item")),
+        Mixfix::Arg(variable("output")),
+    ]);
+    let rule = sl::Instr::new(
+        sl::InstrKind::RuleI(
+            id("identity"),
+            notation,
+            vec![0],
+            vec![(il::Iter::List, vec![item], vec![output.clone()])],
+            vec![return_exp(iterated("output", output), 9)],
+        ),
+        8,
+        span("rule"),
+    );
+    Spanned::new(
+        sl::DefKind::FuncDecD((
+            id("map_identity"),
+            Vec::new(),
+            vec![parameter],
+            list_type,
+            vec![rule],
+            None,
+            Vec::new(),
+        )),
+        span("map-identity"),
+    )
+}
+
 fn interpreter(spec: &[sl::Def]) -> Interpreter<NullInterface, NullExtern> {
     Interpreter::new(
         spec,
@@ -144,4 +192,34 @@ fn rule_unmatch_continues_to_the_next_instruction() {
         get::text(&interpreter.eval_func("fallback", &[], &[]).unwrap()),
         Ok("fallback")
     );
+}
+
+#[test]
+fn iterated_rule_collects_relation_outputs_into_a_shared_list() {
+    let identity = relation("identity", variable("input"), variable("input"));
+    let mut interpreter = interpreter(&[identity, map_identity()]);
+    let first = make::text("first".to_owned(), span("first"));
+    let second = make::text("second".to_owned(), span("second"));
+    let input = make::list(
+        &make_type::list_type(make_type::text_type()),
+        vec![first.clone(), second.clone()],
+        span("input"),
+    );
+
+    let result = interpreter
+        .eval_func("map_identity", &[], std::slice::from_ref(&input))
+        .unwrap();
+    let values: &[ValueRef] = get::list(&result).unwrap();
+    assert!(std::rc::Rc::ptr_eq(&values[0], &first));
+    assert!(std::rc::Rc::ptr_eq(&values[1], &second));
+
+    let empty = make::list(
+        &make_type::list_type(make_type::text_type()),
+        Vec::new(),
+        span("empty"),
+    );
+    let result = interpreter
+        .eval_func("map_identity", &[], std::slice::from_ref(&empty))
+        .unwrap();
+    assert!(get::list(&result).unwrap().is_empty());
 }

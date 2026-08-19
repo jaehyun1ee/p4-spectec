@@ -191,4 +191,14 @@ fn iterated_let_collects_element_bindings_into_a_shared_list() {
     let values: &[ValueRef] = get::list(&result).unwrap();
     assert!(std::rc::Rc::ptr_eq(&values[0], &first));
     assert!(std::rc::Rc::ptr_eq(&values[1], &second));
+
+    let empty = make::list(
+        &make_type::list_type(make_type::bool_type()),
+        Vec::new(),
+        span("empty"),
+    );
+    let result = interpreter
+        .eval_func("copy_all", &[], std::slice::from_ref(&empty))
+        .unwrap();
+    assert!(get::list(&result).unwrap().is_empty());
 }
