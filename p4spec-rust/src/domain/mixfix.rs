@@ -1,4 +1,9 @@
-use std::{cmp::Ordering, fmt, hash::Hash};
+use std::{
+    cmp::Ordering,
+    collections::hash_map::DefaultHasher,
+    fmt,
+    hash::{Hash, Hasher},
+};
 
 use thiserror::Error;
 
@@ -224,6 +229,36 @@ impl<T> Mixfix<T> {
 
     pub fn same_shape<U>(&self, other: &Mixfix<U>) -> bool {
         self.cmp_shape(other) == Ordering::Equal
+    }
+
+    pub(crate) fn shape_fingerprint(&self) -> u64 {
+        fn hash_shape<T>(mixfix: &Mixfix<T>, state: &mut impl Hasher) {
+            mixfix.tag().hash(state);
+            match mixfix {
+                Mixfix::Arg(_) => {}
+                Mixfix::Atom(atom) => atom.node.hash(state),
+                Mixfix::Brack(left, body, right) => {
+                    left.node.hash(state);
+                    hash_shape(body, state);
+                    right.node.hash(state);
+                }
+                Mixfix::Infix(left, atom, right) => {
+                    hash_shape(left, state);
+                    atom.node.hash(state);
+                    hash_shape(right, state);
+                }
+                Mixfix::Seq(items) => {
+                    items.len().hash(state);
+                    for item in items {
+                        hash_shape(item, state);
+                    }
+                }
+            }
+        }
+
+        let mut state = DefaultHasher::new();
+        hash_shape(self, &mut state);
+        state.finish()
     }
 }
 
@@ -607,5 +642,21 @@ mod tests {
 
         assert!(matches);
         assert_eq!(visited, [(1, 10), (2, 20)]);
+    }
+
+    #[test]
+    fn shape_fingerprint_ignores_arguments_but_preserves_structure() {
+        let left = Mixfix::Seq(vec![Mixfix::Arg(1), Mixfix::Arg(2)]);
+        let same_shape = Mixfix::Seq(vec![Mixfix::Arg("left"), Mixfix::Arg("right")]);
+        let different_shape = Mixfix::Seq(vec![Mixfix::Seq(vec![
+            Mixfix::Arg("left"),
+            Mixfix::Arg("right"),
+        ])]);
+
+        assert_eq!(left.shape_fingerprint(), same_shape.shape_fingerprint());
+        assert_ne!(
+            left.shape_fingerprint(),
+            different_shape.shape_fingerprint()
+        );
     }
 }

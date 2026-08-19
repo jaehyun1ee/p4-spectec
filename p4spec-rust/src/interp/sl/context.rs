@@ -3,6 +3,7 @@ use std::rc::Rc;
 use hashbrown::HashMap;
 
 use crate::{
+    domain::mixfix::Mixfix,
     interp::common::InterpError,
     lang::{
         il::ast::{DefTypKind, Id, Iter, Var},
@@ -39,6 +40,8 @@ pub enum Cursor {
 struct Global {
     // Map from syntax ids to type definitions
     type_defs: TypeDefEnv,
+    // Map from global variant type ids and notation shapes to source case indices
+    variant_case_indices: HashMap<String, HashMap<u64, Vec<usize>>>,
     // Map from relation ids to relations
     relations: RelationEnv,
     // Map from function ids to functions
@@ -132,6 +135,20 @@ impl Context {
     fn add_type_def_global(&mut self, id: &Id, type_def: TypeDef) -> Result<(), InterpError> {
         if self.global.type_defs.contains_key(&id.node) {
             return Err(Self::duplicate(id, "type"));
+        }
+        if let TypeDef::Defined(_, def_type) = &type_def
+            && let DefTypKind::VariantT(type_cases) = &def_type.node
+        {
+            let mut case_indices = HashMap::<u64, Vec<usize>>::with_capacity(type_cases.len());
+            for (case_index, (not_type, _, _)) in type_cases.iter().enumerate() {
+                case_indices
+                    .entry(not_type.node.shape_fingerprint())
+                    .or_default()
+                    .push(case_index);
+            }
+            self.global
+                .variant_case_indices
+                .insert(id.node.clone(), case_indices);
         }
         self.global.type_defs.insert(id.node.clone(), type_def);
         Ok(())
@@ -274,6 +291,18 @@ impl Context {
 
     pub fn is_type_def_bound(&self, id: &Id) -> bool {
         self.find_type_def(id).is_ok()
+    }
+
+    pub(crate) fn find_global_variant_case_indices<T>(
+        &self,
+        id: &Id,
+        value_case: &Mixfix<T>,
+    ) -> Option<&[usize]> {
+        self.global
+            .variant_case_indices
+            .get(&id.node)?
+            .get(&value_case.shape_fingerprint())
+            .map(Vec::as_slice)
     }
 
     // Finders for relations
@@ -706,12 +735,44 @@ impl Context {
 mod tests {
     use super::*;
     use crate::{
-        domain::source::{Region, Spanned},
+        domain::{
+            mixfix::Mixfix,
+            source::{Region, Spanned},
+        },
+        lang::{il::ast::DefTypKind, sl::ast::DefKind},
         runtime::value::make,
     };
 
     fn id(name: impl Into<String>) -> Id {
         Spanned::new(name.into(), Region::none())
+    }
+
+    #[test]
+    fn global_variant_index_preserves_source_order_for_equal_shapes() {
+        let typ = || Spanned::new(crate::lang::il::ast::TypKind::BoolT, Region::none());
+        let origin = || Spanned::new((id("Origin"), Vec::new()), Region::none());
+        let case = |notation| (Spanned::new(notation, Region::none()), origin(), Vec::new());
+        let cases = vec![
+            case(Mixfix::Seq(vec![Mixfix::Arg(typ())])),
+            case(Mixfix::Seq(vec![Mixfix::Seq(vec![Mixfix::Arg(typ())])])),
+            case(Mixfix::Seq(vec![Mixfix::Arg(typ())])),
+        ];
+        let spec = vec![Spanned::new(
+            DefKind::TypD(
+                id("Choice"),
+                Vec::new(),
+                Spanned::new(DefTypKind::VariantT(cases), Region::none()),
+                Vec::new(),
+            ),
+            Region::none(),
+        )];
+        let context = Context::from_spec(false, &spec).expect("valid variant definition");
+        let value_case = Mixfix::Seq(vec![Mixfix::Arg(make::bool(true, Region::none()))]);
+
+        assert_eq!(
+            context.find_global_variant_case_indices(&id("Choice"), &value_case),
+            Some(&[0, 2][..])
+        );
     }
 
     #[test]

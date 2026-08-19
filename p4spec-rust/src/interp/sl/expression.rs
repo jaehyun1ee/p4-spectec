@@ -514,94 +514,122 @@ fn value_is_subtype_inner(
         }),
         TypKind::NumT(num::Typ::IntT) => Ok(matches!(value.kind, ValueKind::NumV(_))),
         TypKind::TextT => Ok(matches!(value.kind, ValueKind::TextV(_))),
-        TypKind::VarT(_, type_args) => match resolved_type_def
-            .expect("variable type was resolved")
-            .1
-        {
-            TypeDef::Param | TypeDef::Defining(_) => Err(InterpError::new(
-                typ.span.clone(),
-                "unexpected type variable",
-            )),
-            TypeDef::Extern => Ok(matches!(value.kind, ValueKind::ExternV(_))),
-            TypeDef::Defined(type_params, def_type) => {
-                if type_params.len() != type_args.len() {
-                    return Err(InterpError::new(
-                        typ.span.clone(),
-                        "type argument arity mismatch",
-                    ));
-                }
-                let substitution: TypeSubstitution = type_params
-                    .iter()
-                    .zip(type_args)
-                    .map(|(param, arg)| (param.node.clone(), arg.clone()))
-                    .collect();
-                match (&def_type.node, &value.kind) {
-                    (DefTypKind::PlainT(inner), _) => {
-                        let inner = if substitution.is_empty() {
-                            Cow::Borrowed(inner)
-                        } else {
-                            Cow::Owned(subst::subst_type(&substitution, inner).map_err(
-                                |error| InterpError::new(typ.span.clone(), error.to_string()),
-                            )?)
-                        };
-                        value_is_subtype_inner(cache, context, &inner, value, false)
+        TypKind::VarT(type_id, type_args) => {
+            let (type_cursor, type_def) = resolved_type_def.expect("variable type was resolved");
+            match type_def {
+                TypeDef::Param | TypeDef::Defining(_) => Err(InterpError::new(
+                    typ.span.clone(),
+                    "unexpected type variable",
+                )),
+                TypeDef::Extern => Ok(matches!(value.kind, ValueKind::ExternV(_))),
+                TypeDef::Defined(type_params, def_type) => {
+                    if type_params.len() != type_args.len() {
+                        return Err(InterpError::new(
+                            typ.span.clone(),
+                            "type argument arity mismatch",
+                        ));
                     }
-                    (DefTypKind::StructT(type_fields), ValueKind::StructV(value_fields)) => {
-                        if type_fields.len() != value_fields.len() {
-                            return Ok(false);
-                        }
-                        for ((type_atom, field_type), (value_atom, field_value)) in
-                            type_fields.iter().zip(value_fields)
-                        {
-                            if type_atom.node != value_atom.node {
-                                return Ok(false);
-                            }
-                            let field_type = if substitution.is_empty() {
-                                Cow::Borrowed(field_type)
+                    let substitution: TypeSubstitution = type_params
+                        .iter()
+                        .zip(type_args)
+                        .map(|(param, arg)| (param.node.clone(), arg.clone()))
+                        .collect();
+                    match (&def_type.node, &value.kind) {
+                        (DefTypKind::PlainT(inner), _) => {
+                            let inner = if substitution.is_empty() {
+                                Cow::Borrowed(inner)
                             } else {
-                                Cow::Owned(subst::subst_type(&substitution, field_type).map_err(
+                                Cow::Owned(subst::subst_type(&substitution, inner).map_err(
                                     |error| InterpError::new(typ.span.clone(), error.to_string()),
                                 )?)
                             };
-                            if !value_is_subtype_inner(
-                                cache,
-                                context,
-                                &field_type,
-                                field_value,
-                                false,
-                            )? {
+                            value_is_subtype_inner(cache, context, &inner, value, false)
+                        }
+                        (DefTypKind::StructT(type_fields), ValueKind::StructV(value_fields)) => {
+                            if type_fields.len() != value_fields.len() {
                                 return Ok(false);
                             }
-                        }
-                        Ok(true)
-                    }
-                    (DefTypKind::VariantT(type_cases), ValueKind::CaseV(value_case)) => {
-                        for (not_type, _, _) in type_cases {
-                            if !not_type.node.same_shape(value_case) {
-                                continue;
+                            for ((type_atom, field_type), (value_atom, field_value)) in
+                                type_fields.iter().zip(value_fields)
+                            {
+                                if type_atom.node != value_atom.node {
+                                    return Ok(false);
+                                }
+                                let field_type = if substitution.is_empty() {
+                                    Cow::Borrowed(field_type)
+                                } else {
+                                    Cow::Owned(
+                                        subst::subst_type(&substitution, field_type).map_err(
+                                            |error| {
+                                                InterpError::new(
+                                                    typ.span.clone(),
+                                                    error.to_string(),
+                                                )
+                                            },
+                                        )?,
+                                    )
+                                };
+                                if !value_is_subtype_inner(
+                                    cache,
+                                    context,
+                                    &field_type,
+                                    field_value,
+                                    false,
+                                )? {
+                                    return Ok(false);
+                                }
                             }
-                            let not_type = if substitution.is_empty() {
-                                Cow::Borrowed(not_type)
-                            } else {
-                                Cow::Owned(subst::subst_not_type(&substitution, not_type).map_err(
-                                    |error| InterpError::new(typ.span.clone(), error.to_string()),
-                                )?)
+                            Ok(true)
+                        }
+                        (DefTypKind::VariantT(type_cases), ValueKind::CaseV(value_case)) => {
+                            let mut case_matches = |not_type: &crate::lang::il::ast::NotTyp| {
+                                if !not_type.node.same_shape(value_case) {
+                                    return Ok(false);
+                                }
+                                let not_type = if substitution.is_empty() {
+                                    Cow::Borrowed(not_type)
+                                } else {
+                                    Cow::Owned(
+                                        subst::subst_not_type(&substitution, not_type).map_err(
+                                            |error| {
+                                                InterpError::new(
+                                                    typ.span.clone(),
+                                                    error.to_string(),
+                                                )
+                                            },
+                                        )?,
+                                    )
+                                };
+                                not_type
+                                    .node
+                                    .try_eq_args_by_same_shape(value_case, |typ, value| {
+                                        value_is_subtype_inner(cache, context, typ, value, false)
+                                    })
                             };
-                            if not_type.node.try_eq_args_by_same_shape(
-                                value_case,
-                                |typ, value| {
-                                    value_is_subtype_inner(cache, context, typ, value, false)
-                                },
-                            )? {
-                                return Ok(true);
+                            if type_cursor == Cursor::Global {
+                                if let Some(case_indices) =
+                                    context.find_global_variant_case_indices(type_id, value_case)
+                                {
+                                    for case_index in case_indices {
+                                        if case_matches(&type_cases[*case_index].0)? {
+                                            return Ok(true);
+                                        }
+                                    }
+                                }
+                            } else {
+                                for (not_type, _, _) in type_cases {
+                                    if case_matches(not_type)? {
+                                        return Ok(true);
+                                    }
+                                }
                             }
+                            Ok(false)
                         }
-                        Ok(false)
+                        _ => Ok(false),
                     }
-                    _ => Ok(false),
                 }
             }
-        },
+        }
         TypKind::TupleT(types) => match &value.kind {
             ValueKind::TupleV(values) if types.len() == values.len() => {
                 for (typ, value) in types.iter().zip(values) {
