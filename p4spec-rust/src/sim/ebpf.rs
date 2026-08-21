@@ -647,11 +647,11 @@ fn return_result(value: Option<ValueRef>) -> Result<ValueRef, SimError> {
 fn reject_error(name: &str) -> Result<ValueRef, ExternError> {
     let error_value = case_value(
         "errorValue",
-        Mixfix::Infix(
-            Box::new(keyword("ERROR")),
-            Spanned::new(Atom::Dot, Region::none()),
-            Box::new(Mixfix::Arg(())),
-        ),
+        Mixfix::Seq(vec![
+            keyword("ERROR"),
+            Mixfix::Atom(Spanned::new(Atom::Operator(".".to_owned()), Region::none())),
+            Mixfix::Arg(()),
+        ]),
         [make::text(name.to_owned(), Region::none())],
     )
     .map_err(sim_extern_error)?;
@@ -733,4 +733,29 @@ fn value_extern_error(error: impl ToString) -> ExternError {
 
 fn value_error(error: impl ToString) -> SimError {
     SimError::message(error.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parser_error_uses_the_spec_error_value_mixop() {
+        let reject = reject_error("PacketTooShort").unwrap();
+        let reject_case = get::case(&reject).unwrap();
+        let arguments = reject_case.args();
+        let [error] = arguments.as_slice() else {
+            panic!("reject result must contain one error value");
+        };
+        let error_case = get::case(error).unwrap();
+
+        assert_eq!(
+            error_case.split().0,
+            Mixfix::Seq(vec![
+                keyword("ERROR"),
+                Mixfix::Atom(Spanned::new(Atom::Operator(".".to_owned()), Region::none(),)),
+                Mixfix::Arg(()),
+            ])
+        );
+    }
 }
