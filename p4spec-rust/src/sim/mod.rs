@@ -1,6 +1,8 @@
 pub mod architecture;
+pub mod core;
 pub mod io;
 pub mod runner;
+pub mod spec;
 pub mod stf;
 
 use thiserror::Error;
