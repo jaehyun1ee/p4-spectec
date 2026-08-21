@@ -1,0 +1,88 @@
+{
+  "schema": "p4spectec.sim-suite.v1",
+  "kind": "sim-suite",
+  "payload": {
+    "arch": "ebpf",
+    "entries": [
+      {
+        "kind": "run",
+        "p4_path": "minimal.p4",
+        "stf_path": "minimal.stf",
+        "patched": false,
+        "program": {
+          "schema": "p4spectec.value.v1",
+          "kind": "value",
+          "payload": {
+            "it": [ "BoolV", true ],
+            "note": { "vid": 0, "typ": [ "BoolT" ], "vhash": 0 },
+            "at": {
+              "left": { "file": "", "line": 0, "column": 0 },
+              "right": { "file": "", "line": 0, "column": 0 }
+            }
+          }
+        },
+        "stf": [
+          { "kind": "wait" },
+          { "kind": "remove-all" },
+          { "kind": "packet", "port": "0", "packet": "00" },
+          { "kind": "expect", "port": "1", "packet": "00", "exact": true },
+          { "kind": "no-packet" },
+          {
+            "kind": "add",
+            "name": "pipe.table",
+            "priority": 1,
+            "matches": [
+              {
+                "name": "hdr.key",
+                "value": { "kind": "num", "value": "0x01" }
+              },
+              {
+                "name": "hdr.prefix",
+                "value": { "kind": "slash", "prefix": "0x10", "mask": "8" }
+              }
+            ],
+            "action": {
+              "name": "send",
+              "args": [ { "id": "port", "number": "1" } ]
+            },
+            "id": null
+          },
+          {
+            "kind": "set-default",
+            "name": "pipe.table",
+            "action": { "name": "drop", "args": [] }
+          },
+          {
+            "kind": "check-counter",
+            "id": "counter",
+            "id_or_index": { "kind": "index", "value": "0" },
+            "counter": "packets",
+            "condition": "ge",
+            "number": "1"
+          },
+          { "kind": "mirroring-add", "session": "1", "port": "2" },
+          { "kind": "mirroring-add-mc", "session": "1", "id": "3" },
+          { "kind": "mirroring-get", "session": "1" },
+          { "kind": "mc-group-create", "id": "4" },
+          { "kind": "mc-node-create", "id": "5", "ports": [ "1", "2" ] },
+          { "kind": "mc-node-associate", "id": "4", "handle": "5" },
+          { "kind": "register-read", "name": "reg", "index": "0" },
+          {
+            "kind": "register-write",
+            "name": "reg",
+            "index": "0",
+            "value": "7"
+          },
+          { "kind": "register-reset", "name": "reg" }
+        ]
+      },
+      {
+        "kind": "exclude",
+        "p4_path": "excluded.p4",
+        "stf_path": "excluded.stf",
+        "patched": true,
+        "group": "dynamic/p4c-specific"
+      }
+    ]
+  }
+}

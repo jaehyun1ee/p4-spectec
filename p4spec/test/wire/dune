@@ -5,12 +5,24 @@
  (modules generate_yojson_value)
  (libraries wire yojson))
 
+(executable
+ (name generate_sim_suite)
+ (modules generate_sim_suite)
+ (libraries wire stf yojson))
+
 (rule
  (target yojson-value.actual.json)
  (action
   (with-stdout-to
    %{target}
    (run %{exe:generate_yojson_value.exe}))))
+
+(rule
+ (target minimal-sim-suite.actual.json)
+ (action
+  (with-stdout-to
+   %{target}
+   (run %{exe:generate_sim_suite.exe}))))
 
 (rule
  (target minimal-sl.actual.json)
@@ -41,6 +53,9 @@
   (progn
    (diff minimal-sl.expected.json minimal-sl.actual.json)
    (diff minimal-value.expected.json minimal-value.actual.json)
+   (diff
+    minimal-sim-suite.expected.json
+    minimal-sim-suite.actual.json)
    (diff yojson-value.expected.json yojson-value.actual.json))))
 
 (rule

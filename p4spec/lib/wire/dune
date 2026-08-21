@@ -1,4 +1,4 @@
 (library
  (name wire)
  (public_name p4spectec.wire)
- (libraries yojson))
+ (libraries stf yojson))

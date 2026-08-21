@@ -3,9 +3,11 @@ use thiserror::Error;
 
 pub const SL_SCHEMA: &str = "p4spectec.sl.v1";
 pub const VALUE_SCHEMA: &str = "p4spectec.value.v1";
+pub const SIM_SUITE_SCHEMA: &str = "p4spectec.sim-suite.v1";
 
 const SL_KIND: &str = "sl";
 const VALUE_KIND: &str = "value";
+const SIM_SUITE_KIND: &str = "sim-suite";
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct Envelope<T> {
@@ -21,6 +23,10 @@ impl<T> Envelope<T> {
 
     pub fn value(payload: T) -> Self {
         Self::new(VALUE_SCHEMA, VALUE_KIND, payload)
+    }
+
+    pub fn sim_suite(payload: T) -> Self {
+        Self::new(SIM_SUITE_SCHEMA, SIM_SUITE_KIND, payload)
     }
 
     pub fn schema(&self) -> &str {
@@ -51,6 +57,7 @@ impl<T> Envelope<T> {
         let expected_kind = match self.schema.as_str() {
             SL_SCHEMA => SL_KIND,
             VALUE_SCHEMA => VALUE_KIND,
+            SIM_SUITE_SCHEMA => SIM_SUITE_KIND,
             schema => return Err(WireError::UnknownSchema(schema.to_owned())),
         };
 
