@@ -158,7 +158,7 @@ fn update_table(
     spec.update_object_unqualified(architecture, &unqualified, table)
 }
 
-fn encode_object_id(names: &[&str]) -> ValueRef {
+pub(crate) fn encode_object_id(names: &[&str]) -> ValueRef {
     let name_type = named_type("nameIR");
     let object_id_type = make_type::list_type(name_type);
     let names = names

@@ -6,12 +6,12 @@ use std::{
 
 use clap::{Args, Parser, Subcommand};
 use p4spec_rust::{
-    interface::{P4Interface, PlaceholderExtern},
+    interface::{Extern, P4Interface, PlaceholderExtern},
     interp::{
         common::InterpError,
         sl::{Interpreter, Options},
     },
-    sim::{ebpf::Ebpf, runner::SuiteRunner},
+    sim::{architecture::Architecture, ebpf::Ebpf, psa::Psa, runner::SuiteRunner},
     wire::{
         Envelope, SL_SCHEMA, WireError,
         ocaml::{
@@ -22,7 +22,7 @@ use p4spec_rust::{
             },
         },
         runtime_value,
-        sim_suite::{SimEntry, SimSuiteCodec, SimSuiteDecodeError},
+        sim_suite::{SimEntry, SimSuite, SimSuiteCodec, SimSuiteDecodeError},
     },
 };
 use serde_json::Value;
@@ -49,7 +49,7 @@ enum CliError {
     SimSuite(#[from] SimSuiteDecodeError),
     #[error("expected schema `{SL_SCHEMA}`, got `{0}`")]
     ExpectedSlSchema(String),
-    #[error("only eBPF simulation suites are supported, got `{0}`")]
+    #[error("unsupported simulation architecture `{0}`")]
     UnsupportedArchitecture(String),
 }
 
@@ -145,19 +145,33 @@ fn run(args: RunArgs) -> Result<(), CliError> {
 fn run_sim(args: SimArgs) -> Result<(), CliError> {
     let spec = decode_spec(&args.spec)?;
     let suite = SimSuiteCodec::decode(&fs::read(&args.suite)?)?;
-    if suite.arch != "ebpf" {
-        return Err(CliError::UnsupportedArchitecture(suite.arch));
+    match suite.arch.as_str() {
+        "ebpf" => run_sim_arch::<Ebpf>(&spec, suite, args.cache, args.guard),
+        "psa" => run_sim_arch::<Psa>(&spec, suite, args.cache, args.guard),
+        _ => Err(CliError::UnsupportedArchitecture(suite.arch)),
     }
+}
+
+fn run_sim_arch<A>(
+    spec: &[p4spec_rust::lang::sl::ast::Def],
+    suite: SimSuite,
+    cache: bool,
+    guard: bool,
+) -> Result<(), CliError>
+where
+    A: Architecture + Extern + Default,
+{
     let mut interpreter = Interpreter::new(
-        &spec,
+        spec,
         Options {
-            cache: args.cache,
+            cache,
             deterministic: false,
-            guard: args.guard,
+            guard,
         },
-        P4Interface::from_sl_spec(&spec),
-        Ebpf::new(),
+        P4Interface::from_sl_spec(spec),
+        A::default(),
     )?;
+    let architecture = A::name();
     let total = suite.entries.len();
     let mut excluded = 0;
     let mut failed = 0;
@@ -165,7 +179,7 @@ fn run_sim(args: SimArgs) -> Result<(), CliError> {
     let mut patched_excluded = 0;
     let mut patched_failed = 0;
     let mut excluded_by_group = std::collections::BTreeMap::<String, usize>::new();
-    println!("Running simulation test (ebpf) on {total} files\n");
+    println!("Running simulation test ({architecture}) on {total} files\n");
     for entry in suite.entries {
         match entry {
             SimEntry::Exclude {
@@ -175,7 +189,7 @@ fn run_sim(args: SimArgs) -> Result<(), CliError> {
                 group,
             } => {
                 println!(
-                    "\n>>> Running simulation test (ebpf) on {p4_path} with packet input {stf_path}"
+                    "\n>>> Running simulation test ({architecture}) on {p4_path} with packet input {stf_path}"
                 );
                 println!("Excluding file: {stf_path}");
                 excluded += 1;
@@ -195,13 +209,13 @@ fn run_sim(args: SimArgs) -> Result<(), CliError> {
                 stf,
             } => {
                 println!(
-                    "\n>>> Running simulation test (ebpf) on {p4_path} with packet input {stf_path}"
+                    "\n>>> Running simulation test ({architecture}) on {p4_path} with packet input {stf_path}"
                 );
                 if is_patched {
                     patched += 1;
                 }
                 interpreter.clear();
-                match SuiteRunner::<Ebpf>::run_case(&mut interpreter, &program, &stf) {
+                match SuiteRunner::<A>::run_case(&mut interpreter, &program, &stf) {
                     Ok(transmitted) => {
                         for packet in transmitted {
                             println!("[PASS] Transmitted {packet}");
@@ -228,6 +242,7 @@ fn run_sim(args: SimArgs) -> Result<(), CliError> {
         patched_excluded,
         patched_failed,
         &excluded_by_group,
+        architecture,
     );
     Ok(())
 }
@@ -240,8 +255,9 @@ fn print_stats(
     patched_excluded: usize,
     patched_failed: usize,
     excluded_by_group: &std::collections::BTreeMap<String, usize>,
+    architecture: &str,
 ) {
-    let name = "Running simulation test (ebpf)";
+    let name = format!("Running simulation test ({architecture})");
     let passed = total - excluded - failed;
     let rate = |count, denominator| {
         if denominator == 0 {

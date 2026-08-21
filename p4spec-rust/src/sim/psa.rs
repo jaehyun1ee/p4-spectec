@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
 
 use num_bigint::BigInt;
 use num_traits::{One, ToPrimitive, Zero};
@@ -13,14 +13,17 @@ use crate::{
 
 use super::{
     SimError,
+    architecture::Architecture,
     core::{
-        PacketIn, PacketOut, extern_error, external_value, pack_p4_arbitrary_int, pack_p4_enum,
-        pack_p4_fixed_bit, packet_advance, packet_extract, packet_lookahead, reject_result,
-        return_result, sim_extern_error, text_list, unpack_p4_bool, unpack_p4_enum,
-        unpack_p4_fixed_bit, unpack_p4_tuple, unsupported_method, value_extern_error,
+        PacketIn, PacketOut, encode_object_id, extern_error, external_value, is_reject,
+        pack_p4_arbitrary_int, pack_p4_enum, pack_p4_fixed_bit, packet_advance, packet_extract,
+        packet_lookahead, reject_result, return_result, sim_extern_error, text_list,
+        unpack_p4_bool, unpack_p4_enum, unpack_p4_fixed_bit, unpack_p4_tuple, unsupported_method,
+        value_extern_error,
     },
     hash::{bitwise_neg, compute_checksum},
-    spec::{Spec, local_cursor},
+    io::{Rx, Tx},
+    spec::{Spec, global_cursor, local_cursor, storage_reference},
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -674,6 +677,10 @@ impl Psa {
                 let typ = spec
                     .find_type(&cursor, context, "O")
                     .map_err(sim_extern_error)?;
+                let typ = get::opt(&typ)
+                    .map_err(value_extern_error)?
+                    .cloned()
+                    .ok_or_else(|| extern_error("find_type_e returned none for O"))?;
                 let value = pack_p4_arbitrary_int(result).map_err(sim_extern_error)?;
                 let value = spec.cast(&typ, &value).map_err(sim_extern_error)?;
                 Ok((
@@ -800,6 +807,601 @@ impl Extern for Psa {
     }
 
     fn clear(&mut self) {}
+}
+
+#[derive(Clone)]
+struct ScheduledPacket {
+    context: ValueRef,
+    packet: PacketIn,
+    ingress: bool,
+}
+
+struct PipelineState {
+    context: ValueRef,
+    architecture: ValueRef,
+    queue: VecDeque<ScheduledPacket>,
+    transmitted: Vec<Tx>,
+}
+
+impl PipelineState {
+    fn drive(
+        spec: &mut Spec<'_>,
+        context: ValueRef,
+        architecture: ValueRef,
+        rx: Rx,
+    ) -> Result<(ValueRef, ValueRef, Vec<Tx>), SimError> {
+        let packet = PacketIn::new(&rx.packet)?;
+        let packet_state = object_state_value(PsaObject::PacketIn(packet.clone()))?;
+        let (context, architecture) =
+            spec.psa_init_packet(true, false, &context, &architecture, &packet_state)?;
+        let (context, architecture) =
+            spec.psa_init_packet(false, false, &context, &architecture, &packet_state)?;
+        let output_state = object_state_value(PsaObject::PacketOut(PacketOut::new()))?;
+        let (context, architecture) =
+            spec.psa_init_packet(true, true, &context, &architecture, &output_state)?;
+        let (context, architecture) =
+            spec.psa_init_packet(false, true, &context, &architecture, &output_state)?;
+        let context = spec.psa_init_globals(true, &context, &architecture, i64::from(rx.port))?;
+        let context = spec.psa_init_globals(false, &context, &architecture, i64::from(rx.port))?;
+        let mut state = Self {
+            context: context.clone(),
+            architecture,
+            queue: VecDeque::from([ScheduledPacket {
+                context,
+                packet,
+                ingress: true,
+            }]),
+            transmitted: Vec::new(),
+        };
+        while let Some(packet) = state.queue.pop_front() {
+            state.process(spec, packet)?;
+        }
+        Ok((state.context, state.architecture, state.transmitted))
+    }
+
+    fn process(&mut self, spec: &mut Spec<'_>, packet: ScheduledPacket) -> Result<(), SimError> {
+        self.context = packet.context;
+        let packet_name = if packet.ingress {
+            "ingress_packet_in"
+        } else {
+            "egress_packet_in"
+        };
+        self.architecture = put_object(
+            spec,
+            &self.architecture,
+            &[packet_name],
+            PsaObject::PacketIn(packet.packet),
+        )?;
+        if packet.ingress {
+            self.process_ingress(spec)
+        } else {
+            self.process_egress(spec)
+        }
+    }
+
+    fn process_ingress(&mut self, spec: &mut Spec<'_>) -> Result<(), SimError> {
+        let (context, architecture, parser_result) =
+            spec.psa_stage(true, "parser", &self.context, &self.architecture)?;
+        self.context = context;
+        self.architecture = architecture;
+        self.record_parser_error(spec, true, &parser_result)?;
+        let (context, architecture, _) =
+            spec.psa_stage(true, "", &self.context, &self.architecture)?;
+        self.context = context;
+        self.architecture = architecture;
+        self.clear_packet_out(spec, true)?;
+        let (context, architecture, _) =
+            spec.psa_stage(true, "deparser", &self.context, &self.architecture)?;
+        self.context = context;
+        self.architecture = architecture;
+
+        if self.read_bool(spec, "ingress_output_metadata", "clone")? {
+            let session = self.read_i32(spec, "ingress_output_metadata", "clone_session_id")?;
+            self.schedule_clone(spec, session, true)?;
+        }
+        if self.read_bool(spec, "ingress_output_metadata", "drop")? {
+            return Ok(());
+        }
+        if self.read_bool(spec, "ingress_output_metadata", "resubmit")? {
+            return self.schedule_resubmit(spec);
+        }
+        let group = self.read_i32(spec, "ingress_output_metadata", "multicast_group")?;
+        if group == 0 {
+            self.schedule_unicast(spec)
+        } else {
+            self.schedule_multicast(spec, group, "NORMAL_MULTICAST")
+        }
+    }
+
+    fn process_egress(&mut self, spec: &mut Spec<'_>) -> Result<(), SimError> {
+        let (context, architecture, parser_result) =
+            spec.psa_stage(false, "parser", &self.context, &self.architecture)?;
+        self.context = context;
+        self.architecture = architecture;
+        self.record_parser_error(spec, false, &parser_result)?;
+        let (context, architecture, _) =
+            spec.psa_stage(false, "", &self.context, &self.architecture)?;
+        self.context = context;
+        self.architecture = architecture;
+        self.clear_packet_out(spec, false)?;
+        let (context, architecture, _) =
+            spec.psa_stage(false, "deparser", &self.context, &self.architecture)?;
+        self.context = context;
+        self.architecture = architecture;
+
+        if self.read_bool(spec, "egress_output_metadata", "clone")? {
+            let session = self.read_i32(spec, "egress_output_metadata", "clone_session_id")?;
+            self.schedule_clone(spec, session, false)?;
+        }
+        if self.read_bool(spec, "egress_output_metadata", "drop")? {
+            return Ok(());
+        }
+        let egress_port = self.read_fixed(spec, "egress_input_metadata", "egress_port")?;
+        if egress_port == BigInt::from(0xffff_fffa_u32) {
+            self.schedule_recirculate(spec)
+        } else {
+            let port = egress_port
+                .to_i32()
+                .ok_or_else(|| SimError::message("egress port does not fit i32"))?;
+            let packet = compose_packet(spec, &self.architecture, false)?;
+            self.transmitted.push(Tx::new(port, packet));
+            Ok(())
+        }
+    }
+
+    fn record_parser_error(
+        &mut self,
+        spec: &mut Spec<'_>,
+        ingress: bool,
+        result: &ValueRef,
+    ) -> Result<(), SimError> {
+        if !is_reject(result)? {
+            return Ok(());
+        }
+        let values = get::case(result).map_err(value_error)?.args();
+        let [error] = values.as_slice() else {
+            return Err(SimError::message("parser reject result has invalid shape"));
+        };
+        let metadata = if ingress {
+            "ingress_input_metadata"
+        } else {
+            "egress_input_metadata"
+        };
+        let reference = storage_reference(&[metadata, "parser_error"])?;
+        self.context = spec.lvalue_write(
+            &global_cursor()?,
+            &self.context,
+            &self.architecture,
+            &reference,
+            error,
+        )?;
+        Ok(())
+    }
+
+    fn clear_packet_out(&mut self, spec: &mut Spec<'_>, ingress: bool) -> Result<(), SimError> {
+        let name = if ingress {
+            "ingress_packet_out"
+        } else {
+            "egress_packet_out"
+        };
+        self.architecture = put_object(
+            spec,
+            &self.architecture,
+            &[name],
+            PsaObject::PacketOut(PacketOut::new()),
+        )?;
+        Ok(())
+    }
+
+    fn read_value(
+        &mut self,
+        spec: &mut Spec<'_>,
+        base: &str,
+        member: &str,
+    ) -> Result<ValueRef, SimError> {
+        spec.lvalue_read(
+            &global_cursor()?,
+            &self.context,
+            &self.architecture,
+            &storage_reference(&[base, member])?,
+        )
+    }
+
+    fn read_bool(
+        &mut self,
+        spec: &mut Spec<'_>,
+        base: &str,
+        member: &str,
+    ) -> Result<bool, SimError> {
+        unpack_p4_bool(&self.read_value(spec, base, member)?)
+    }
+
+    fn read_fixed(
+        &mut self,
+        spec: &mut Spec<'_>,
+        base: &str,
+        member: &str,
+    ) -> Result<BigInt, SimError> {
+        unpack_p4_fixed_bit(&self.read_value(spec, base, member)?).map(|(_, value)| value)
+    }
+
+    fn read_i32(&mut self, spec: &mut Spec<'_>, base: &str, member: &str) -> Result<i32, SimError> {
+        self.read_fixed(spec, base, member)?
+            .to_i32()
+            .ok_or_else(|| SimError::message(format!("{base}.{member} does not fit i32")))
+    }
+
+    fn read_i64(&mut self, spec: &mut Spec<'_>, base: &str, member: &str) -> Result<i64, SimError> {
+        self.read_fixed(spec, base, member)?
+            .to_i64()
+            .ok_or_else(|| SimError::message(format!("{base}.{member} does not fit i64")))
+    }
+
+    fn schedule_unicast(&mut self, spec: &mut Spec<'_>) -> Result<(), SimError> {
+        let packet = PacketIn::new(&compose_packet(spec, &self.architecture, true)?)?;
+        let port = self.read_i64(spec, "ingress_output_metadata", "egress_port")?;
+        let class_of_service =
+            self.read_i32(spec, "ingress_output_metadata", "class_of_service")?;
+        let context = spec.psa_init_metadata(
+            false,
+            &self.context,
+            &self.architecture,
+            port,
+            "NORMAL_UNICAST",
+            class_of_service,
+            0,
+        )?;
+        self.queue.push_back(ScheduledPacket {
+            context,
+            packet,
+            ingress: false,
+        });
+        Ok(())
+    }
+
+    fn schedule_multicast(
+        &mut self,
+        spec: &mut Spec<'_>,
+        group: i32,
+        path: &str,
+    ) -> Result<(), SimError> {
+        let packet = PacketIn::new(&compose_packet(spec, &self.architecture, true)?)?;
+        let class_of_service =
+            self.read_i32(spec, "ingress_output_metadata", "class_of_service")?;
+        for (port, instance) in get_architecture_state(spec, &self.architecture)?
+            .multicast
+            .replicas(group)
+        {
+            let context = spec.psa_init_metadata(
+                false,
+                &self.context,
+                &self.architecture,
+                i64::from(port),
+                path,
+                class_of_service,
+                instance,
+            )?;
+            self.queue.push_back(ScheduledPacket {
+                context,
+                packet: packet.clone(),
+                ingress: false,
+            });
+        }
+        Ok(())
+    }
+
+    fn schedule_clone(
+        &mut self,
+        spec: &mut Spec<'_>,
+        session: i32,
+        ingress: bool,
+    ) -> Result<(), SimError> {
+        let state = get_architecture_state(spec, &self.architecture)?;
+        let Some(group) = state.mirrors.get(&session).copied() else {
+            return Ok(());
+        };
+        if ingress {
+            let mut packet = get_packet_in(spec, &self.architecture, true)?;
+            packet.reset();
+            let class_of_service =
+                self.read_i32(spec, "ingress_output_metadata", "class_of_service")?;
+            for (port, instance) in state.multicast.replicas(group) {
+                let context = spec.psa_init_metadata(
+                    false,
+                    &self.context,
+                    &self.architecture,
+                    i64::from(port),
+                    "CLONE_I2E",
+                    class_of_service,
+                    instance,
+                )?;
+                self.queue.push_back(ScheduledPacket {
+                    context,
+                    packet: packet.clone(),
+                    ingress: false,
+                });
+            }
+        } else {
+            let packet = PacketIn::new(&compose_packet(spec, &self.architecture, false)?)?;
+            let class_of_service =
+                self.read_i32(spec, "egress_input_metadata", "class_of_service")?;
+            for (port, instance) in state.multicast.replicas(group) {
+                let context = spec.psa_init_metadata(
+                    false,
+                    &self.context,
+                    &self.architecture,
+                    i64::from(port),
+                    "CLONE_E2E",
+                    class_of_service,
+                    instance,
+                )?;
+                self.queue.push_back(ScheduledPacket {
+                    context,
+                    packet: packet.clone(),
+                    ingress: false,
+                });
+            }
+        }
+        Ok(())
+    }
+
+    fn schedule_resubmit(&mut self, spec: &mut Spec<'_>) -> Result<(), SimError> {
+        let mut packet = get_packet_in(spec, &self.architecture, true)?;
+        packet.reset();
+        let port = self.read_i32(spec, "ingress_input_metadata", "ingress_port")?;
+        let context = spec.psa_init_metadata(
+            true,
+            &self.context,
+            &self.architecture,
+            i64::from(port),
+            "RESUBMIT",
+            0,
+            0,
+        )?;
+        self.queue.push_back(ScheduledPacket {
+            context,
+            packet,
+            ingress: true,
+        });
+        Ok(())
+    }
+
+    fn schedule_recirculate(&mut self, spec: &mut Spec<'_>) -> Result<(), SimError> {
+        let packet = PacketIn::new(&compose_packet(spec, &self.architecture, false)?)?;
+        let context = spec.psa_init_metadata(
+            true,
+            &self.context,
+            &self.architecture,
+            i64::from(0xffff_fffa_u32),
+            "RECIRCULATE",
+            0,
+            0,
+        )?;
+        self.queue.push_back(ScheduledPacket {
+            context,
+            packet,
+            ingress: true,
+        });
+        Ok(())
+    }
+}
+
+impl Architecture for Psa {
+    fn name() -> &'static str {
+        "psa"
+    }
+
+    fn init(spec: &mut dyn SpecCall, program: &ValueRef) -> Result<(ValueRef, ValueRef), SimError> {
+        Spec::new(spec).psa_init(program)
+    }
+
+    fn drive(
+        spec: &mut dyn SpecCall,
+        context: ValueRef,
+        architecture: ValueRef,
+        rx: Rx,
+    ) -> Result<(ValueRef, ValueRef, Vec<Tx>), SimError> {
+        PipelineState::drive(&mut Spec::new(spec), context, architecture, rx)
+    }
+
+    fn transform_stf(statement: StfStmt) -> StfStmt {
+        transform_stf(statement)
+    }
+
+    fn add_mirror_session_mc(
+        spec: &mut dyn SpecCall,
+        architecture: ValueRef,
+        session: i32,
+        multicast_group: i32,
+    ) -> Result<ValueRef, SimError> {
+        update_architecture_state(spec, architecture, |state| {
+            state.mirrors.insert(session, multicast_group);
+        })
+    }
+
+    fn mc_group_create(
+        spec: &mut dyn SpecCall,
+        architecture: ValueRef,
+        group: i32,
+    ) -> Result<ValueRef, SimError> {
+        update_architecture_state(spec, architecture, |state| {
+            state.multicast.create_group(group);
+        })
+    }
+
+    fn mc_node_create(
+        spec: &mut dyn SpecCall,
+        architecture: ValueRef,
+        instance: i32,
+        ports: Vec<i32>,
+    ) -> Result<ValueRef, SimError> {
+        update_architecture_state(spec, architecture, |state| {
+            state.multicast.create_node(instance, ports);
+        })
+    }
+
+    fn mc_node_associate(
+        spec: &mut dyn SpecCall,
+        architecture: ValueRef,
+        group: i32,
+        handle: i32,
+    ) -> Result<ValueRef, SimError> {
+        update_architecture_state(spec, architecture, |state| {
+            state.multicast.associate(group, handle);
+        })
+    }
+
+    fn register_read(
+        spec: &mut dyn SpecCall,
+        architecture: ValueRef,
+        name: &str,
+        index: i32,
+    ) -> Result<ValueRef, SimError> {
+        let mut bridge = Spec::new(spec);
+        let register = get_register(&mut bridge, &architecture, name)?;
+        let _ = usize::try_from(index)
+            .ok()
+            .and_then(|index| register.read(index));
+        Ok(architecture)
+    }
+
+    fn register_write(
+        spec: &mut dyn SpecCall,
+        architecture: ValueRef,
+        name: &str,
+        index: i32,
+        value: i32,
+    ) -> Result<ValueRef, SimError> {
+        let mut bridge = Spec::new(spec);
+        let mut register = get_register(&mut bridge, &architecture, name)?;
+        let value = pack_p4_arbitrary_int(BigInt::from(value))?;
+        let value = bridge.cast(register.typ(), &value)?;
+        if let Ok(index) = usize::try_from(index) {
+            register.write(index, value);
+        }
+        put_register(&mut bridge, &architecture, name, register)
+    }
+
+    fn register_reset(
+        spec: &mut dyn SpecCall,
+        architecture: ValueRef,
+        name: &str,
+    ) -> Result<ValueRef, SimError> {
+        let mut bridge = Spec::new(spec);
+        let mut register = get_register(&mut bridge, &architecture, name)?;
+        let value = bridge.default_value(register.typ())?;
+        register.reset(value);
+        put_register(&mut bridge, &architecture, name, register)
+    }
+}
+
+fn object_state_value(object: PsaObject) -> Result<ValueRef, SimError> {
+    Ok(external_value("objectState", object.to_external()?))
+}
+
+fn get_object(
+    spec: &mut Spec<'_>,
+    architecture: &ValueRef,
+    names: &[&str],
+) -> Result<PsaObject, SimError> {
+    let state = spec.find_object_state(architecture, &encode_object_id(names))?;
+    PsaObject::from_external(get::external(&state).map_err(value_error)?)
+}
+
+fn put_object(
+    spec: &mut Spec<'_>,
+    architecture: &ValueRef,
+    names: &[&str],
+    object: PsaObject,
+) -> Result<ValueRef, SimError> {
+    spec.update_object_state(
+        architecture,
+        &encode_object_id(names),
+        &object_state_value(object)?,
+    )
+}
+
+fn get_packet_in(
+    spec: &mut Spec<'_>,
+    architecture: &ValueRef,
+    ingress: bool,
+) -> Result<PacketIn, SimError> {
+    let name = if ingress {
+        "ingress_packet_in"
+    } else {
+        "egress_packet_in"
+    };
+    match get_object(spec, architecture, &[name])? {
+        PsaObject::PacketIn(packet) => Ok(packet),
+        _ => Err(SimError::message(format!("{name} is not packet_in"))),
+    }
+}
+
+fn compose_packet(
+    spec: &mut Spec<'_>,
+    architecture: &ValueRef,
+    ingress: bool,
+) -> Result<String, SimError> {
+    let prefix = if ingress { "ingress" } else { "egress" };
+    let input = get_packet_in(spec, architecture, ingress)?;
+    match get_object(spec, architecture, &[&format!("{prefix}_packet_out")])? {
+        PsaObject::PacketOut(output) => Ok(output.packet_hex(&input)),
+        _ => Err(SimError::message(format!(
+            "{prefix}_packet_out is not packet_out"
+        ))),
+    }
+}
+
+fn get_register(
+    spec: &mut Spec<'_>,
+    architecture: &ValueRef,
+    name: &str,
+) -> Result<Register, SimError> {
+    let names = name.split('.').collect::<Vec<_>>();
+    match get_object(spec, architecture, &names)? {
+        PsaObject::Register(register) => Ok(register),
+        _ => Err(SimError::message(format!("{name} is not a Register"))),
+    }
+}
+
+fn put_register(
+    spec: &mut Spec<'_>,
+    architecture: &ValueRef,
+    name: &str,
+    register: Register,
+) -> Result<ValueRef, SimError> {
+    put_object(
+        spec,
+        architecture,
+        &name.split('.').collect::<Vec<_>>(),
+        PsaObject::Register(register),
+    )
+}
+
+fn get_architecture_state(
+    spec: &mut Spec<'_>,
+    architecture: &ValueRef,
+) -> Result<ArchitectureState, SimError> {
+    let state = spec.find_arch_state(architecture)?;
+    architecture_from_external(get::external(&state).map_err(value_error)?)
+}
+
+fn update_architecture_state(
+    spec: &mut dyn SpecCall,
+    architecture: ValueRef,
+    update: impl FnOnce(&mut ArchitectureState),
+) -> Result<ValueRef, SimError> {
+    let mut bridge = Spec::new(spec);
+    let mut state = get_architecture_state(&mut bridge, &architecture)?;
+    update(&mut state);
+    bridge.update_arch_state(
+        &architecture,
+        &external_value("archState", architecture_to_external(&state)),
+    )
+}
+
+fn value_error(error: impl ToString) -> SimError {
+    SimError::message(error.to_string())
 }
 
 pub fn transform_stf(statement: StfStmt) -> StfStmt {

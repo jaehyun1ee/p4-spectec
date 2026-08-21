@@ -426,7 +426,7 @@ impl<'a> Spec<'a> {
         ingress: bool,
         context: &ValueRef,
         architecture: &ValueRef,
-        port: i32,
+        port: i64,
         path: &str,
         class_of_service: i32,
         instance: i32,
@@ -453,7 +453,7 @@ impl<'a> Spec<'a> {
         ingress: bool,
         context: &ValueRef,
         architecture: &ValueRef,
-        port: i32,
+        port: i64,
     ) -> Result<ValueRef, SimError> {
         let direction = if ingress { "ingress" } else { "egress" };
         let [context] = self.rel::<1>(
@@ -475,10 +475,13 @@ impl<'a> Spec<'a> {
         architecture: &ValueRef,
     ) -> Result<(ValueRef, ValueRef, ValueRef), SimError> {
         let direction = if ingress { "ingress" } else { "egress" };
-        let [context, architecture, result] = self.rel::<3>(
-            &format!("PSA_{direction}_{stage}"),
-            &[context.clone(), architecture.clone()],
-        )?;
+        let name = if stage.is_empty() {
+            format!("PSA_{direction}")
+        } else {
+            format!("PSA_{direction}_{stage}")
+        };
+        let [context, architecture, result] =
+            self.rel::<3>(&name, &[context.clone(), architecture.clone()])?;
         Ok((context, architecture, result))
     }
 }
