@@ -80,6 +80,12 @@ where
         &self.options
     }
 
+    pub fn clear(&mut self) {
+        self.interface.clear();
+        self.externs.clear();
+        self.clear_call_caches();
+    }
+
     fn clear_call_caches(&mut self) {
         self.function_cache.clear();
         self.relation_cache.clear();
@@ -191,6 +197,52 @@ where
         dispatcher
             .check_func_inputs(self.context, &id, type_args, values_input)
             .and_then(|()| dispatcher.invoke_func(self.context, &id, type_args, values_input))
+            .map_err(|error| ExternError::new(error.span, error.message))
+    }
+
+    fn eval_rel(
+        &mut self,
+        name: &str,
+        values_input: &[ValueRef],
+    ) -> Result<Vec<ValueRef>, ExternError> {
+        let id = Spanned::new(name.to_owned(), Region::none());
+        let mut externs = NullExtern;
+        let mut dispatcher = Dispatcher {
+            options: self.options,
+            interface: &mut *self.interface,
+            externs: &mut externs,
+            function_cache: &mut *self.function_cache,
+            relation_cache: &mut *self.relation_cache,
+            sub_cache: &mut *self.sub_cache,
+        };
+        dispatcher
+            .check_rel_inputs(self.context, &id, values_input)
+            .and_then(|()| dispatcher.invoke_rel(self.context, &id, values_input))
+            .map_err(|error| ExternError::new(error.span, error.message))
+    }
+}
+
+impl<I, E> SpecCall for Interpreter<I, E>
+where
+    I: Interface,
+    E: Extern,
+{
+    fn eval_func(
+        &mut self,
+        name: &str,
+        type_args: &[Typ],
+        values_input: &[ValueRef],
+    ) -> Result<ValueRef, ExternError> {
+        Interpreter::eval_func(self, name, type_args, values_input)
+            .map_err(|error| ExternError::new(error.span, error.message))
+    }
+
+    fn eval_rel(
+        &mut self,
+        name: &str,
+        values_input: &[ValueRef],
+    ) -> Result<Vec<ValueRef>, ExternError> {
+        Interpreter::eval_rel(self, name, values_input)
             .map_err(|error| ExternError::new(error.span, error.message))
     }
 }

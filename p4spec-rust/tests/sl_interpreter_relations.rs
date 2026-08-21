@@ -1,11 +1,11 @@
-use std::rc::Rc;
+use std::{cell::Cell, rc::Rc};
 
 use p4spec_rust::{
     domain::{
         mixfix::Mixfix,
         source::{Region, Spanned},
     },
-    interface::{Extern, ExternError, NullInterface},
+    interface::{Extern, ExternError, Interface, InterfaceError, NullInterface},
     interp::sl::{Interpreter, Options},
     lang::{il::ast as il, sl::ast as sl},
     runtime::value::{ValueRef, make},
@@ -61,11 +61,11 @@ struct EchoExtern;
 impl Extern for EchoExtern {
     fn eval_rel(
         &mut self,
-        _spec: &mut dyn p4spec_rust::interface::SpecCall,
+        spec: &mut dyn p4spec_rust::interface::SpecCall,
         _name: &str,
         values: &[ValueRef],
     ) -> Result<Vec<ValueRef>, ExternError> {
-        Ok(values.to_vec())
+        spec.eval_rel("identity", values)
     }
 
     fn eval_func(
@@ -86,6 +86,72 @@ impl Extern for EchoExtern {
     }
 
     fn clear(&mut self) {}
+}
+
+struct StatefulInterface {
+    checkpoint: Rc<Cell<u64>>,
+}
+
+impl Interface for StatefulInterface {
+    fn call_builtin(
+        &mut self,
+        _add: &mut dyn FnMut(ValueRef),
+        _id: &il::Id,
+        _type_args: &[il::Typ],
+        _values: &[ValueRef],
+    ) -> Result<ValueRef, InterfaceError> {
+        Err(InterfaceError::new(
+            span("builtin"),
+            "unexpected builtin call",
+        ))
+    }
+
+    fn checkpoint(&self) -> u64 {
+        self.checkpoint.get()
+    }
+
+    fn clear(&mut self) {
+        self.checkpoint.set(0);
+    }
+}
+
+struct StatefulExtern {
+    checkpoint: Rc<Cell<u64>>,
+}
+
+impl Extern for StatefulExtern {
+    fn eval_rel(
+        &mut self,
+        _spec: &mut dyn p4spec_rust::interface::SpecCall,
+        _name: &str,
+        _values: &[ValueRef],
+    ) -> Result<Vec<ValueRef>, ExternError> {
+        Err(ExternError::new(
+            span("relation"),
+            "unexpected relation call",
+        ))
+    }
+
+    fn eval_func(
+        &mut self,
+        _spec: &mut dyn p4spec_rust::interface::SpecCall,
+        _name: &str,
+        _type_args: &[il::Typ],
+        _values: &[ValueRef],
+    ) -> Result<ValueRef, ExternError> {
+        Err(ExternError::new(
+            span("function"),
+            "unexpected function call",
+        ))
+    }
+
+    fn checkpoint(&self) -> u64 {
+        self.checkpoint.get()
+    }
+
+    fn clear(&mut self) {
+        self.checkpoint.set(0);
+    }
 }
 
 #[test]
@@ -160,4 +226,26 @@ fn eval_program_invokes_a_relation_with_the_program_as_its_only_input() {
     let result = interpreter.eval_program("identity", &program).unwrap();
     assert_eq!(result.len(), 1);
     assert!(Rc::ptr_eq(&result[0], &program));
+}
+
+#[test]
+fn clear_resets_interface_and_extern_state() {
+    let interface_checkpoint = Rc::new(Cell::new(3));
+    let extern_checkpoint = Rc::new(Cell::new(5));
+    let mut interpreter = Interpreter::new(
+        &[],
+        Options::default(),
+        StatefulInterface {
+            checkpoint: Rc::clone(&interface_checkpoint),
+        },
+        StatefulExtern {
+            checkpoint: Rc::clone(&extern_checkpoint),
+        },
+    )
+    .unwrap();
+
+    interpreter.clear();
+
+    assert_eq!(interface_checkpoint.get(), 0);
+    assert_eq!(extern_checkpoint.get(), 0);
 }

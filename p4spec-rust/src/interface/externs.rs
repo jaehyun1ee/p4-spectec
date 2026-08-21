@@ -27,6 +27,8 @@ pub trait SpecCall {
         type_args: &[Typ],
         values: &[ValueRef],
     ) -> Result<ValueRef, ExternError>;
+
+    fn eval_rel(&mut self, name: &str, values: &[ValueRef]) -> Result<Vec<ValueRef>, ExternError>;
 }
 
 pub trait Extern {

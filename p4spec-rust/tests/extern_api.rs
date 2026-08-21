@@ -73,6 +73,17 @@ impl SpecCall for Lookup {
             .pop_front()
             .ok_or_else(|| ExternError::new(Region::none(), "unexpected lookup"))
     }
+
+    fn eval_rel(
+        &mut self,
+        _name: &str,
+        _values: &[ValueRef],
+    ) -> Result<Vec<ValueRef>, ExternError> {
+        Err(ExternError::new(
+            Region::none(),
+            "unexpected relation lookup",
+        ))
+    }
 }
 
 fn span(file: &str) -> Region {
