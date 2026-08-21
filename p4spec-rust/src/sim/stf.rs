@@ -5,7 +5,9 @@ use crate::{interface::SpecCall, runtime::value::ValueRef, wire::sim_suite::StfS
 use super::{
     SimError,
     architecture::Architecture,
+    core::{add_table_entry, set_table_default},
     io::{Expectation, PacketIo, Rx, Tx},
+    spec::Spec,
 };
 
 pub struct StfRunner<A> {
@@ -68,6 +70,36 @@ where
                 "expected no packet but got {}",
                 self.io.outputs()[0]
             ))),
+            StfStmt::Add {
+                name,
+                priority,
+                matches,
+                action,
+                ..
+            } => {
+                let mut bridge = Spec::new(spec);
+                self.architecture = add_table_entry(
+                    &mut bridge,
+                    &self.context,
+                    &self.architecture,
+                    &name,
+                    priority,
+                    &matches,
+                    &action,
+                )?;
+                Ok(())
+            }
+            StfStmt::SetDefault { name, action } => {
+                let mut bridge = Spec::new(spec);
+                self.architecture = set_table_default(
+                    &mut bridge,
+                    &self.context,
+                    &self.architecture,
+                    &name,
+                    &action,
+                )?;
+                Ok(())
+            }
             statement => Err(SimError::message(format!(
                 "not yet supported: {statement:?}"
             ))),

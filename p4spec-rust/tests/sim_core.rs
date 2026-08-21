@@ -7,7 +7,8 @@ use p4spec_rust::{
     sim::{
         core::{
             PacketIn, PacketOut, bits_to_hex, bits_to_signed, bits_to_unsigned, hex_to_bits,
-            signed_to_bits, unsigned_to_bits,
+            normalize_key_name, pack_p4_bool, pack_p4_fixed_bit, signed_to_bits, unpack_p4_bool,
+            unpack_p4_fixed_bit, unsigned_to_bits,
         },
         spec::Spec,
     },
@@ -99,5 +100,24 @@ fn spec_wrappers_reject_wrong_value_kinds_and_relation_arities() {
         error
             .to_string()
             .contains("EBPF_parse returned 0 values; expected 3")
+    );
+}
+
+#[test]
+fn p4_primitive_packers_round_trip() {
+    let fixed = pack_p4_fixed_bit(BigInt::from(32), BigInt::from(42)).unwrap();
+    assert_eq!(
+        unpack_p4_fixed_bit(&fixed).unwrap(),
+        (BigInt::from(32), BigInt::from(42))
+    );
+    let boolean = pack_p4_bool(true).unwrap();
+    assert!(unpack_p4_bool(&boolean).unwrap());
+}
+
+#[test]
+fn stf_stack_indices_use_p4_bracket_syntax() {
+    assert_eq!(
+        normalize_key_name("headers.stack$12.field$3"),
+        "headers.stack[12].field[3]"
     );
 }
