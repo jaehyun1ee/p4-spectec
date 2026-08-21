@@ -1,5 +1,5 @@
 use num_bigint::BigInt;
-use num_traits::{One, Zero};
+use num_traits::{One, ToPrimitive, Zero};
 
 use crate::domain::external_data::ExternalData;
 use crate::{
@@ -8,6 +8,7 @@ use crate::{
         mixfix::{Mixfix, Mixop},
         source::{Region, Spanned},
     },
+    interface::ExternError,
     lang::{il::ast::Typ, xl::num},
     runtime::{
         r#type::typ::make as make_type,
@@ -16,7 +17,10 @@ use crate::{
     wire::sim_suite::{StfAction, StfMatch, StfMatchValue},
 };
 
-use super::{SimError, spec::Spec};
+use super::{
+    SimError,
+    spec::{Spec, local_cursor, prefixed_name},
+};
 
 pub type Bits = Vec<bool>;
 
@@ -473,6 +477,213 @@ fn tag(value: &str) -> Mixop {
 
 fn value_error(error: impl ToString) -> SimError {
     SimError::message(error.to_string())
+}
+
+pub(crate) fn packet_extract(
+    spec: &mut Spec<'_>,
+    packet: &mut PacketIn,
+    context: &ValueRef,
+    architecture: &ValueRef,
+    variable: bool,
+) -> Result<(ValueRef, ValueRef), ExternError> {
+    let cursor = local_cursor().map_err(sim_extern_error)?;
+    let typ = required_optional(
+        spec.find_type(&cursor, context, "T")
+            .map_err(sim_extern_error)?,
+        "find_type_e",
+    )?;
+    let typ = spec
+        .substitute_type(&cursor, context, &typ)
+        .map_err(sim_extern_error)?;
+    let (target_name, variable_size, size) = if variable {
+        let minimum = spec
+            .sizeof_min_bits(&typ)
+            .map_err(sim_extern_error)?
+            .to_usize()
+            .ok_or_else(|| extern_error("minimum header size does not fit usize"))?;
+        let maximum = spec
+            .sizeof_max_bits(&typ)
+            .map_err(sim_extern_error)?
+            .to_usize()
+            .ok_or_else(|| extern_error("maximum header size does not fit usize"))?;
+        let size_value = spec
+            .find_var(&cursor, context, "variableFieldSizeInBits")
+            .map_err(sim_extern_error)?;
+        let high = pack_p4_arbitrary_int(BigInt::from(2)).map_err(sim_extern_error)?;
+        let low = pack_p4_arbitrary_int(BigInt::from(0)).map_err(sim_extern_error)?;
+        let alignment = spec
+            .bitacc_range(&size_value, &high, &low)
+            .and_then(|value| unpack_p4_fixed_bit(&value).map(|(_, value)| value))
+            .map_err(sim_extern_error)?;
+        let (_, variable_size) = unpack_p4_fixed_bit(&size_value).map_err(sim_extern_error)?;
+        let variable_size = variable_size
+            .to_usize()
+            .ok_or_else(|| extern_error("variable header size does not fit usize"))?;
+        let size = minimum
+            .checked_add(variable_size)
+            .ok_or_else(|| extern_error("variable header size overflow"))?;
+        if alignment != BigInt::from(0) {
+            return Ok((context.clone(), reject_error("ParserInvalidArgument")?));
+        }
+        if size > maximum {
+            return Ok((context.clone(), reject_error("HeaderTooShort")?));
+        }
+        ("variableSizeHeader", variable_size, size)
+    } else {
+        let size = spec
+            .sizeof_max_bits(&typ)
+            .map_err(sim_extern_error)?
+            .to_usize()
+            .ok_or_else(|| extern_error("header size does not fit usize"))?;
+        ("hdr", 0, size)
+    };
+    let bits = match packet.take(size) {
+        Ok(bits) => bits,
+        Err(_) => return Ok((context.clone(), reject_error("PacketTooShort")?)),
+    };
+    let target = spec
+        .find_var(&cursor, context, target_name)
+        .map_err(sim_extern_error)?;
+    let target = spec
+        .write_value_from_bits(&target, variable_size, &bits)
+        .map_err(sim_extern_error)?;
+    let reference = prefixed_name(target_name).map_err(sim_extern_error)?;
+    let context = spec
+        .lvalue_write(&cursor, context, architecture, &reference, &target)
+        .map_err(sim_extern_error)?;
+    Ok((context, return_result(None).map_err(sim_extern_error)?))
+}
+
+pub(crate) fn packet_lookahead(
+    spec: &mut Spec<'_>,
+    packet: &PacketIn,
+    context: &ValueRef,
+) -> Result<(ValueRef, ValueRef), ExternError> {
+    let cursor = local_cursor().map_err(sim_extern_error)?;
+    let typ = required_optional(
+        spec.find_type(&cursor, context, "T")
+            .map_err(sim_extern_error)?,
+        "find_type_e",
+    )?;
+    let substituted = spec
+        .substitute_type(&cursor, context, &typ)
+        .map_err(sim_extern_error)?;
+    let size = spec
+        .sizeof_max_bits(&substituted)
+        .map_err(sim_extern_error)?
+        .to_usize()
+        .ok_or_else(|| extern_error("lookahead size does not fit usize"))?;
+    let mut preview = packet.clone();
+    let bits = match preview.take(size) {
+        Ok(bits) => bits,
+        Err(_) => return Ok((context.clone(), reject_error("PacketTooShort")?)),
+    };
+    let value = spec.default_value(&typ).map_err(sim_extern_error)?;
+    let value = spec
+        .write_value_from_bits(&value, 0, &bits)
+        .map_err(sim_extern_error)?;
+    Ok((
+        context.clone(),
+        return_result(Some(value)).map_err(sim_extern_error)?,
+    ))
+}
+
+pub(crate) fn packet_advance(
+    spec: &mut Spec<'_>,
+    packet: &mut PacketIn,
+    context: &ValueRef,
+) -> Result<(ValueRef, ValueRef), ExternError> {
+    let cursor = local_cursor().map_err(sim_extern_error)?;
+    let size = spec
+        .find_var(&cursor, context, "sizeInBits")
+        .map_err(sim_extern_error)?;
+    let (_, size) = unpack_p4_fixed_bit(&size).map_err(sim_extern_error)?;
+    let size = size
+        .to_usize()
+        .ok_or_else(|| extern_error("packet advance does not fit usize"))?;
+    if packet.advance(size).is_err() {
+        return Ok((context.clone(), reject_error("PacketTooShort")?));
+    }
+    Ok((
+        context.clone(),
+        return_result(None).map_err(sim_extern_error)?,
+    ))
+}
+
+fn required_optional(value: ValueRef, name: &str) -> Result<ValueRef, ExternError> {
+    get::opt(&value)
+        .map_err(value_extern_error)?
+        .cloned()
+        .ok_or_else(|| extern_error(format!("{name} returned none")))
+}
+
+pub(crate) fn return_result(value: Option<ValueRef>) -> Result<ValueRef, SimError> {
+    let value_type = named_type("value");
+    let optional_type = make_type::opt_type(value_type);
+    let value = make::opt(&optional_type, value, Region::none());
+    case_value(
+        "returnResult",
+        Mixfix::Seq(vec![keyword("RETURN"), Mixfix::Arg(())]),
+        [value],
+    )
+}
+
+pub(crate) fn reject_error(name: &str) -> Result<ValueRef, ExternError> {
+    let error_value = case_value(
+        "errorValue",
+        Mixfix::Seq(vec![keyword("ERROR"), operator("."), Mixfix::Arg(())]),
+        [make::text(name.to_owned(), Region::none())],
+    )
+    .map_err(sim_extern_error)?;
+    reject_result(error_value, "rejectTransitionResult").map_err(sim_extern_error)
+}
+
+pub(crate) fn reject_result(value: ValueRef, type_name: &str) -> Result<ValueRef, SimError> {
+    case_value(
+        type_name,
+        Mixfix::Seq(vec![keyword("REJECT"), Mixfix::Arg(())]),
+        [value],
+    )
+}
+
+pub(crate) fn is_reject(value: &ValueRef) -> Result<bool, SimError> {
+    let value_case = get::case(value).map_err(value_error)?;
+    Ok(value_case.split().0 == Mixfix::Seq(vec![keyword("REJECT"), Mixfix::Arg(())]))
+}
+
+pub(crate) fn external_value(type_name: &str, value: ExternalData) -> ValueRef {
+    make::external(&named_type(type_name), value, Region::none())
+}
+
+pub(crate) fn text_list(value: &ValueRef) -> Result<Vec<String>, ExternError> {
+    get::list(value)
+        .map_err(value_extern_error)?
+        .iter()
+        .map(|value| {
+            get::text(value)
+                .map(str::to_owned)
+                .map_err(value_extern_error)
+        })
+        .collect()
+}
+
+pub(crate) fn unsupported_method(object: &str, name: &str, parameters: &[String]) -> ExternError {
+    extern_error(format!(
+        "unsupported extern method call: {object}.{name}({})",
+        parameters.join(", ")
+    ))
+}
+
+pub(crate) fn extern_error(message: impl Into<String>) -> ExternError {
+    ExternError::new(Region::none(), message)
+}
+
+pub(crate) fn sim_extern_error(error: SimError) -> ExternError {
+    ExternError::new(Region::none(), error.to_string())
+}
+
+pub(crate) fn value_extern_error(error: impl ToString) -> ExternError {
+    ExternError::new(Region::none(), error.to_string())
 }
 
 pub fn hex_to_bits(packet: &str) -> Result<Bits, SimError> {

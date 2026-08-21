@@ -3,6 +3,7 @@ pub mod core;
 pub mod ebpf;
 pub mod hash;
 pub mod io;
+pub mod psa;
 pub mod runner;
 pub mod spec;
 pub mod stf;

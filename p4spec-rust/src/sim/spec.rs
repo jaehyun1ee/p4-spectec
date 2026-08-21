@@ -88,6 +88,10 @@ impl<'a> Spec<'a> {
         self.func("default", std::slice::from_ref(typ))
     }
 
+    pub fn cast(&mut self, typ: &ValueRef, value: &ValueRef) -> Result<ValueRef, SimError> {
+        self.func("cast_op", &[typ.clone(), value.clone()])
+    }
+
     pub fn sizeof_min_bits(&mut self, typ: &ValueRef) -> Result<BigInt, SimError> {
         self.numeric_func("sizeof_minSizeInBits'", typ)
     }
@@ -223,6 +227,18 @@ impl<'a> Spec<'a> {
             "update_objectState_e",
             &[architecture.clone(), object_id.clone(), state.clone()],
         )
+    }
+
+    pub fn find_arch_state(&mut self, architecture: &ValueRef) -> Result<ValueRef, SimError> {
+        self.func("find_archState_e", std::slice::from_ref(architecture))
+    }
+
+    pub fn update_arch_state(
+        &mut self,
+        architecture: &ValueRef,
+        state: &ValueRef,
+    ) -> Result<ValueRef, SimError> {
+        self.func("update_archState_e", &[architecture.clone(), state.clone()])
     }
 
     fn required_optional(&mut self, name: &str, values: &[ValueRef]) -> Result<ValueRef, SimError> {
@@ -381,6 +397,90 @@ impl<'a> Spec<'a> {
             self.rel::<3>(name, &[context.clone(), architecture.clone()])?;
         Ok((context, architecture, result))
     }
+
+    pub fn psa_init(&mut self, program: &ValueRef) -> Result<(ValueRef, ValueRef), SimError> {
+        let [context, architecture] = self.rel::<2>("PSA_init", std::slice::from_ref(program))?;
+        Ok((context, architecture))
+    }
+
+    pub fn psa_init_packet(
+        &mut self,
+        ingress: bool,
+        output: bool,
+        context: &ValueRef,
+        architecture: &ValueRef,
+        packet_state: &ValueRef,
+    ) -> Result<(ValueRef, ValueRef), SimError> {
+        let direction = if ingress { "ingress" } else { "egress" };
+        let kind = if output { "out" } else { "in" };
+        let name = format!("PSA_{direction}_init_packet_{kind}");
+        let [context, architecture] = self.rel::<2>(
+            &name,
+            &[context.clone(), architecture.clone(), packet_state.clone()],
+        )?;
+        Ok((context, architecture))
+    }
+
+    pub fn psa_init_metadata(
+        &mut self,
+        ingress: bool,
+        context: &ValueRef,
+        architecture: &ValueRef,
+        port: i32,
+        path: &str,
+        class_of_service: i32,
+        instance: i32,
+    ) -> Result<ValueRef, SimError> {
+        let direction = if ingress { "ingress" } else { "egress" };
+        let mut values = vec![
+            context.clone(),
+            architecture.clone(),
+            make::int(BigInt::from(port), Region::none()),
+            make::text(path.to_owned(), Region::none()),
+        ];
+        if !ingress {
+            values.extend([
+                make::int(BigInt::from(class_of_service), Region::none()),
+                make::int(BigInt::from(instance), Region::none()),
+            ]);
+        }
+        let [context] = self.rel::<1>(&format!("PSA_{direction}_init_metadata"), &values)?;
+        Ok(context)
+    }
+
+    pub fn psa_init_globals(
+        &mut self,
+        ingress: bool,
+        context: &ValueRef,
+        architecture: &ValueRef,
+        port: i32,
+    ) -> Result<ValueRef, SimError> {
+        let direction = if ingress { "ingress" } else { "egress" };
+        let [context] = self.rel::<1>(
+            &format!("PSA_{direction}_init_globals"),
+            &[
+                context.clone(),
+                architecture.clone(),
+                make::int(BigInt::from(port), Region::none()),
+            ],
+        )?;
+        Ok(context)
+    }
+
+    pub fn psa_stage(
+        &mut self,
+        ingress: bool,
+        stage: &str,
+        context: &ValueRef,
+        architecture: &ValueRef,
+    ) -> Result<(ValueRef, ValueRef, ValueRef), SimError> {
+        let direction = if ingress { "ingress" } else { "egress" };
+        let [context, architecture, result] = self.rel::<3>(
+            &format!("PSA_{direction}_{stage}"),
+            &[context.clone(), architecture.clone()],
+        )?;
+        Ok((context, architecture, result))
+    }
 }
 
 pub fn local_cursor() -> Result<ValueRef, SimError> {
@@ -401,6 +501,25 @@ pub fn prefixed_name(name: &str) -> Result<ValueRef, SimError> {
         mixop,
         [make::text(name.to_owned(), Region::none())],
     )
+}
+
+pub fn storage_reference(parts: &[&str]) -> Result<ValueRef, SimError> {
+    let Some((first, rest)) = parts.split_first() else {
+        return Err(SimError::message("empty storage reference"));
+    };
+    let mut reference = prefixed_name(first)?;
+    for part in rest {
+        reference = case_value(
+            "storageReference",
+            Mixfix::Seq(vec![
+                Mixfix::Arg(()),
+                Mixfix::Atom(Spanned::new(Atom::Operator(".".to_owned()), Region::none())),
+                Mixfix::Arg(()),
+            ]),
+            [reference, make::text((*part).to_owned(), Region::none())],
+        )?;
+    }
+    Ok(reference)
 }
 
 fn atom_case(type_name: &str, atom: Atom) -> Result<ValueRef, SimError> {

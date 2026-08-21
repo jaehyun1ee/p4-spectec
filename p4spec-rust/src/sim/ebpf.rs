@@ -2,25 +2,22 @@ use num_bigint::BigInt;
 use num_traits::ToPrimitive;
 
 use crate::{
-    domain::{
-        atom::Atom,
-        external_data::ExternalData,
-        mixfix::{Mixfix, Mixop},
-        source::{Region, Spanned},
-    },
+    domain::external_data::ExternalData,
     interface::{Extern, ExternError, SpecCall},
     lang::il::ast::Typ,
-    runtime::{
-        r#type::typ::make as make_type,
-        value::{ValueRef, get, make},
-    },
+    runtime::value::{ValueRef, get},
     wire::sim_suite::{StfAction, StfStmt},
 };
 
 use super::{
     SimError,
     architecture::Architecture,
-    core::{PacketIn, pack_p4_fixed_bit, unpack_p4_bool, unpack_p4_fixed_bit},
+    core::{
+        PacketIn, extern_error as error, external_value, is_reject, pack_p4_fixed_bit,
+        packet_advance, packet_extract, packet_lookahead, reject_result, return_result,
+        sim_extern_error, text_list, unpack_p4_bool, unpack_p4_fixed_bit, unsupported_method,
+        value_extern_error,
+    },
     io::{Rx, Tx},
     spec::{Spec, global_cursor, local_cursor, prefixed_name},
 };
@@ -290,7 +287,7 @@ impl Ebpf {
             {
                 packet_extract(spec, &mut packet, context, architecture, true)?
             }
-            ("lookahead", []) => packet_lookahead(spec, &packet, context, architecture)?,
+            ("lookahead", []) => packet_lookahead(spec, &packet, context)?,
             ("advance", [size]) if size == "sizeInBits" => {
                 packet_advance(spec, &mut packet, context)?
             }
@@ -494,250 +491,15 @@ fn field<'a>(
         .ok_or_else(|| SimError::message(format!("missing counter-array field `{name}`")))
 }
 
-fn packet_extract(
-    spec: &mut Spec<'_>,
-    packet: &mut PacketIn,
-    context: &ValueRef,
-    architecture: &ValueRef,
-    variable: bool,
-) -> Result<(ValueRef, ValueRef), ExternError> {
-    let cursor = local_cursor().map_err(sim_extern_error)?;
-    let typ = required_optional(
-        spec.find_type(&cursor, context, "T")
-            .map_err(sim_extern_error)?,
-        "find_type_e",
-    )?;
-    let typ = spec
-        .substitute_type(&cursor, context, &typ)
-        .map_err(sim_extern_error)?;
-    let (target_name, variable_size, size) = if variable {
-        let minimum = spec
-            .sizeof_min_bits(&typ)
-            .map_err(sim_extern_error)?
-            .to_usize()
-            .ok_or_else(|| error("minimum header size does not fit usize"))?;
-        let maximum = spec
-            .sizeof_max_bits(&typ)
-            .map_err(sim_extern_error)?
-            .to_usize()
-            .ok_or_else(|| error("maximum header size does not fit usize"))?;
-        let size_value = spec
-            .find_var(&cursor, context, "variableFieldSizeInBits")
-            .map_err(sim_extern_error)?;
-        let high = super::core::pack_p4_arbitrary_int(BigInt::from(2)).map_err(sim_extern_error)?;
-        let low = super::core::pack_p4_arbitrary_int(BigInt::from(0)).map_err(sim_extern_error)?;
-        let alignment = spec
-            .bitacc_range(&size_value, &high, &low)
-            .and_then(|value| unpack_p4_fixed_bit(&value).map(|(_, value)| value))
-            .map_err(sim_extern_error)?;
-        let (_, variable_size) = unpack_p4_fixed_bit(&size_value).map_err(sim_extern_error)?;
-        let variable_size = variable_size
-            .to_usize()
-            .ok_or_else(|| error("variable header size does not fit usize"))?;
-        let size = minimum
-            .checked_add(variable_size)
-            .ok_or_else(|| error("variable header size overflow"))?;
-        if alignment != BigInt::from(0) {
-            return Ok((context.clone(), reject_error("ParserInvalidArgument")?));
-        }
-        if size > maximum {
-            return Ok((context.clone(), reject_error("HeaderTooShort")?));
-        }
-        ("variableSizeHeader", variable_size, size)
-    } else {
-        let size = spec
-            .sizeof_max_bits(&typ)
-            .map_err(sim_extern_error)?
-            .to_usize()
-            .ok_or_else(|| error("header size does not fit usize"))?;
-        ("hdr", 0, size)
-    };
-    let bits = match packet.take(size) {
-        Ok(bits) => bits,
-        Err(_) => return Ok((context.clone(), reject_error("PacketTooShort")?)),
-    };
-    let target = spec
-        .find_var(&cursor, context, target_name)
-        .map_err(sim_extern_error)?;
-    let target = spec
-        .write_value_from_bits(&target, variable_size, &bits)
-        .map_err(sim_extern_error)?;
-    let reference = prefixed_name(target_name).map_err(sim_extern_error)?;
-    let context = spec
-        .lvalue_write(&cursor, context, architecture, &reference, &target)
-        .map_err(sim_extern_error)?;
-    Ok((context, return_result(None).map_err(sim_extern_error)?))
-}
-
-fn packet_lookahead(
-    spec: &mut Spec<'_>,
-    packet: &PacketIn,
-    context: &ValueRef,
-    _architecture: &ValueRef,
-) -> Result<(ValueRef, ValueRef), ExternError> {
-    let cursor = local_cursor().map_err(sim_extern_error)?;
-    let typ = required_optional(
-        spec.find_type(&cursor, context, "T")
-            .map_err(sim_extern_error)?,
-        "find_type_e",
-    )?;
-    let substituted = spec
-        .substitute_type(&cursor, context, &typ)
-        .map_err(sim_extern_error)?;
-    let size = spec
-        .sizeof_max_bits(&substituted)
-        .map_err(sim_extern_error)?
-        .to_usize()
-        .ok_or_else(|| error("lookahead size does not fit usize"))?;
-    let mut preview = packet.clone();
-    let bits = match preview.take(size) {
-        Ok(bits) => bits,
-        Err(_) => return Ok((context.clone(), reject_error("PacketTooShort")?)),
-    };
-    let value = spec.default_value(&typ).map_err(sim_extern_error)?;
-    let value = spec
-        .write_value_from_bits(&value, 0, &bits)
-        .map_err(sim_extern_error)?;
-    Ok((
-        context.clone(),
-        return_result(Some(value)).map_err(sim_extern_error)?,
-    ))
-}
-
-fn packet_advance(
-    spec: &mut Spec<'_>,
-    packet: &mut PacketIn,
-    context: &ValueRef,
-) -> Result<(ValueRef, ValueRef), ExternError> {
-    let cursor = local_cursor().map_err(sim_extern_error)?;
-    let size = spec
-        .find_var(&cursor, context, "sizeInBits")
-        .map_err(sim_extern_error)?;
-    let (_, size) = unpack_p4_fixed_bit(&size).map_err(sim_extern_error)?;
-    let size = size
-        .to_usize()
-        .ok_or_else(|| error("packet advance does not fit usize"))?;
-    if packet.advance(size).is_err() {
-        return Ok((context.clone(), reject_error("PacketTooShort")?));
-    }
-    Ok((
-        context.clone(),
-        return_result(None).map_err(sim_extern_error)?,
-    ))
-}
-
-fn required_optional(value: ValueRef, name: &str) -> Result<ValueRef, ExternError> {
-    get::opt(&value)
-        .map_err(value_extern_error)?
-        .cloned()
-        .ok_or_else(|| error(format!("{name} returned none")))
-}
-
-fn return_result(value: Option<ValueRef>) -> Result<ValueRef, SimError> {
-    let value_type = named_type("value");
-    let optional_type = make_type::opt_type(value_type);
-    let value = make::opt(&optional_type, value, Region::none());
-    case_value(
-        "returnResult",
-        Mixfix::Seq(vec![keyword("RETURN"), Mixfix::Arg(())]),
-        [value],
-    )
-}
-
-fn reject_error(name: &str) -> Result<ValueRef, ExternError> {
-    let error_value = case_value(
-        "errorValue",
-        Mixfix::Seq(vec![
-            keyword("ERROR"),
-            Mixfix::Atom(Spanned::new(Atom::Operator(".".to_owned()), Region::none())),
-            Mixfix::Arg(()),
-        ]),
-        [make::text(name.to_owned(), Region::none())],
-    )
-    .map_err(sim_extern_error)?;
-    reject_result(error_value, "rejectTransitionResult").map_err(sim_extern_error)
-}
-
-fn reject_result(value: ValueRef, type_name: &str) -> Result<ValueRef, SimError> {
-    case_value(
-        type_name,
-        Mixfix::Seq(vec![keyword("REJECT"), Mixfix::Arg(())]),
-        [value],
-    )
-}
-
-fn is_reject(value: &ValueRef) -> Result<bool, SimError> {
-    let value_case = get::case(value).map_err(value_error)?;
-    Ok(value_case.split().0 == Mixfix::Seq(vec![keyword("REJECT"), Mixfix::Arg(())]))
-}
-
-fn external_value(type_name: &str, value: ExternalData) -> ValueRef {
-    make::external(&named_type(type_name), value, Region::none())
-}
-
-fn case_value(
-    type_name: &str,
-    mixop: Mixop,
-    arguments: impl IntoIterator<Item = ValueRef>,
-) -> Result<ValueRef, SimError> {
-    let value_case =
-        Mixop::fill(&mixop, arguments).map_err(|error| SimError::message(error.to_string()))?;
-    Ok(make::case(
-        &named_type(type_name),
-        value_case,
-        Region::none(),
-    ))
-}
-
-fn named_type(name: &str) -> Typ {
-    make_type::var_type(Spanned::new(name.to_owned(), Region::none()), Vec::new())
-}
-
-fn keyword(value: &str) -> Mixop {
-    Mixfix::Atom(Spanned::new(
-        Atom::Keyword(value.to_owned()),
-        Region::none(),
-    ))
-}
-
-fn text_list(value: &ValueRef) -> Result<Vec<String>, ExternError> {
-    get::list(value)
-        .map_err(value_extern_error)?
-        .iter()
-        .map(|value| {
-            get::text(value)
-                .map(str::to_owned)
-                .map_err(value_extern_error)
-        })
-        .collect()
-}
-
-fn unsupported_method(object: &str, name: &str, parameters: &[String]) -> ExternError {
-    error(format!(
-        "unsupported extern method call: {object}.{name}({})",
-        parameters.join(", ")
-    ))
-}
-
-fn error(message: impl Into<String>) -> ExternError {
-    ExternError::new(Region::none(), message)
-}
-
-fn sim_extern_error(error: SimError) -> ExternError {
-    ExternError::new(Region::none(), error.to_string())
-}
-
-fn value_extern_error(error: impl ToString) -> ExternError {
-    ExternError::new(Region::none(), error.to_string())
-}
-
-fn value_error(error: impl ToString) -> SimError {
-    SimError::message(error.to_string())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::{
+        atom::Atom,
+        mixfix::Mixfix,
+        source::{Region, Spanned},
+    };
+    use crate::sim::core::reject_error;
 
     #[test]
     fn parser_error_uses_the_spec_error_value_mixop() {
@@ -752,7 +514,10 @@ mod tests {
         assert_eq!(
             error_case.split().0,
             Mixfix::Seq(vec![
-                keyword("ERROR"),
+                Mixfix::Atom(Spanned::new(
+                    Atom::Keyword("ERROR".to_owned()),
+                    Region::none(),
+                )),
                 Mixfix::Atom(Spanned::new(Atom::Operator(".".to_owned()), Region::none(),)),
                 Mixfix::Arg(()),
             ])
