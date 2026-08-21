@@ -100,6 +100,78 @@ where
                 )?;
                 Ok(())
             }
+            StfStmt::MirroringAdd { session, port } => {
+                self.architecture = A::add_mirror_session(
+                    spec,
+                    self.architecture.clone(),
+                    parse_i32("mirror session", &session)?,
+                    parse_i32("port", &port)?,
+                )?;
+                Ok(())
+            }
+            StfStmt::MirroringAddMc { session, id } => {
+                self.architecture = A::add_mirror_session_mc(
+                    spec,
+                    self.architecture.clone(),
+                    parse_i32("mirror session", &session)?,
+                    parse_i32("multicast group", &id)?,
+                )?;
+                Ok(())
+            }
+            StfStmt::MirroringGet { .. } => Ok(()),
+            StfStmt::McGroupCreate { id } => {
+                self.architecture = A::mc_group_create(
+                    spec,
+                    self.architecture.clone(),
+                    parse_i32("multicast group", &id)?,
+                )?;
+                Ok(())
+            }
+            StfStmt::McNodeCreate { id, ports } => {
+                let ports = ports
+                    .iter()
+                    .map(|port| parse_i32("port", port))
+                    .collect::<Result<Vec<_>, _>>()?;
+                self.architecture = A::mc_node_create(
+                    spec,
+                    self.architecture.clone(),
+                    parse_i32("multicast instance", &id)?,
+                    ports,
+                )?;
+                Ok(())
+            }
+            StfStmt::McNodeAssociate { id, handle } => {
+                self.architecture = A::mc_node_associate(
+                    spec,
+                    self.architecture.clone(),
+                    parse_i32("multicast group", &id)?,
+                    parse_i32("multicast handle", &handle)?,
+                )?;
+                Ok(())
+            }
+            StfStmt::RegisterRead { name, index } => {
+                self.architecture = A::register_read(
+                    spec,
+                    self.architecture.clone(),
+                    &name,
+                    parse_i32("register index", &index)?,
+                )?;
+                Ok(())
+            }
+            StfStmt::RegisterWrite { name, index, value } => {
+                self.architecture = A::register_write(
+                    spec,
+                    self.architecture.clone(),
+                    &name,
+                    parse_i32("register index", &index)?,
+                    parse_i32("register value", &value)?,
+                )?;
+                Ok(())
+            }
+            StfStmt::RegisterReset { name } => {
+                self.architecture = A::register_reset(spec, self.architecture.clone(), &name)?;
+                Ok(())
+            }
             statement => Err(SimError::message(format!(
                 "not yet supported: {statement:?}"
             ))),
@@ -113,6 +185,11 @@ where
 }
 
 fn parse_port(port: &str) -> Result<i32, SimError> {
-    port.parse()
-        .map_err(|_| SimError::message(format!("invalid port `{port}`")))
+    parse_i32("port", port)
+}
+
+fn parse_i32(kind: &str, value: &str) -> Result<i32, SimError> {
+    value
+        .parse()
+        .map_err(|_| SimError::message(format!("invalid {kind} `{value}`")))
 }
