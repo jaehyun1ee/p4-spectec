@@ -124,6 +124,22 @@ fn text_builtins_preserve_ocaml_string_operations() {
     )
     .unwrap();
     assert_eq!(bigint(&integer), &BigInt::from(-42));
+    let hexadecimal = text_to_int(
+        &mut add,
+        &callsite,
+        &[],
+        &[make::text("0xFF".to_owned(), span("hexadecimal"))],
+    )
+    .unwrap();
+    assert_eq!(bigint(&hexadecimal), &BigInt::from(255));
+    let binary = text_to_int(
+        &mut add,
+        &callsite,
+        &[],
+        &[make::text("-0b1010".to_owned(), span("binary"))],
+    )
+    .unwrap();
+    assert_eq!(bigint(&binary), &BigInt::from(-10));
     let text = int_to_text(&mut add, &callsite, &[], &[integer]).unwrap();
     assert_eq!(get::text(&text).unwrap(), "-42");
 
@@ -177,5 +193,5 @@ fn text_builtins_preserve_ocaml_string_operations() {
     .unwrap();
     assert_eq!(get::text(&compact).unwrap(), "a\tbc");
 
-    assert_eq!(recorded.len(), 6);
+    assert_eq!(recorded.len(), 8);
 }

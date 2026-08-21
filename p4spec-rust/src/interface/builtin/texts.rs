@@ -1,5 +1,3 @@
-use std::str::FromStr;
-
 use num_bigint::BigInt;
 
 use crate::{
@@ -33,8 +31,31 @@ pub fn text_to_int(
 ) -> BuiltinResult {
     extract::zero(span, type_args)?;
     let text = text_of_value(span, extract::one(span, values)?)?;
-    let integer = BigInt::from_str(text)
-        .map_err(|error| BuiltinError::new(span.clone(), error.to_string()))?;
+    let (negative, unsigned) = match text.as_bytes().first() {
+        Some(b'-') => (true, &text[1..]),
+        Some(b'+') => (false, &text[1..]),
+        _ => (false, text),
+    };
+    let (radix, digits) = if let Some(digits) = unsigned.strip_prefix("0x") {
+        (16, digits)
+    } else if let Some(digits) = unsigned.strip_prefix("0X") {
+        (16, digits)
+    } else if let Some(digits) = unsigned.strip_prefix("0o") {
+        (8, digits)
+    } else if let Some(digits) = unsigned.strip_prefix("0O") {
+        (8, digits)
+    } else if let Some(digits) = unsigned.strip_prefix("0b") {
+        (2, digits)
+    } else if let Some(digits) = unsigned.strip_prefix("0B") {
+        (2, digits)
+    } else {
+        (10, unsigned)
+    };
+    let mut integer = BigInt::parse_bytes(digits.as_bytes(), radix)
+        .ok_or_else(|| BuiltinError::new(span.clone(), "invalid digit found in string"))?;
+    if negative {
+        integer = -integer;
+    }
     return_value(add, make::int(integer, Region::none()))
 }
 
