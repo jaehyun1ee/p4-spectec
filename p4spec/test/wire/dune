@@ -25,6 +25,17 @@
    (run %{exe:generate_sim_suite.exe}))))
 
 (rule
+ (target empty-sim-suite.actual.json)
+ (action
+  (run
+   %{exe:../../bin/main.exe}
+   export-sim-suite-json
+   -arch
+   ebpf
+   -o
+   %{target})))
+
+(rule
  (target minimal-sl.actual.json)
  (deps minimal.watsup)
  (action
@@ -53,6 +64,7 @@
   (progn
    (diff minimal-sl.expected.json minimal-sl.actual.json)
    (diff minimal-value.expected.json minimal-value.actual.json)
+   (diff empty-sim-suite.expected.json empty-sim-suite.actual.json)
    (diff
     minimal-sim-suite.expected.json
     minimal-sim-suite.actual.json)

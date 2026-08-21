@@ -219,6 +219,25 @@ let export_p4_json_command =
      fun () ->
        P4spectec.export_p4_json includes_p4 path_p4 |> export_json path_output)
 
+let export_sim_suite_json_command =
+  Core.Command.basic ~summary:"export parsed P4/STF simulation tests as JSON"
+    (let open Core.Command.Let_syntax in
+     let open Core.Command.Param in
+     let%map arch = flag "-arch" (required string) ~doc:"ARCH architecture name"
+     and includes_p4 = flag "-i" (listed string) ~doc:"INCLUDE P4 include path"
+     and excludes_p4 =
+       flag "-e" (listed string) ~doc:"EXCLUDE P4 test exclude path"
+     and testdirs_p4 =
+       flag "-p4-dir" (listed string) ~doc:"DIR P4 test directory"
+     and testdirs_stf =
+       flag "-stf-dir" (listed string) ~doc:"DIR STF test directory"
+     and patchdirs = flag "-p" (listed string) ~doc:"DIR P4/STF patch directory"
+     and path_output = flag "-o" (optional string) ~doc:"FILE output file" in
+     fun () ->
+       P4spectec.export_sim_suite_json ~arch ~includes_p4 ~excludes_p4
+         ~testdirs_p4 ~testdirs_stf ~patchdirs
+       |> export_json path_output)
+
 let elab_command =
   Core.Command.basic ~summary:"parse and elaborate a P4 spec"
     (let open Core.Command.Let_syntax in
@@ -819,6 +838,7 @@ let command =
       ("parse", parse_command);
       ("export-sl-json", export_sl_json_command);
       ("export-p4-json", export_p4_json_command);
+      ("export-sim-suite-json", export_sim_suite_json_command);
     ]
 
 let () = Command_unix.run ~version command

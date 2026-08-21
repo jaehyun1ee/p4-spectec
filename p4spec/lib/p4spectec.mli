@@ -17,6 +17,15 @@ val annotate : string list -> Lang.Pl.spec result
 val export_sl_json : string list -> Yojson.Safe.t result
 val export_p4_json : string list -> string -> Yojson.Safe.t result
 
+val export_sim_suite_json :
+  arch:string ->
+  includes_p4:string list ->
+  excludes_p4:string list ->
+  testdirs_p4:string list ->
+  testdirs_stf:string list ->
+  patchdirs:string list ->
+  Yojson.Safe.t result
+
 (* Document generation *)
 
 val splice : string list -> (string * string) list -> unit result

@@ -42,6 +42,66 @@ let export_p4_json (includes_p4 : string list) (path_p4 : string) :
            (Format.asprintf "Parse error: %s"
               (Util.Error.string_of_error at msg)))
 
+let find_exclude_group path_p4 path_stf excludes_by_group =
+  List.find_map
+    (fun (group, entries) ->
+      if
+        List.exists
+          (fun entry ->
+            String.equal path_p4 entry || String.equal path_stf entry)
+          entries
+      then Some group
+      else None)
+    excludes_by_group
+
+let export_sim_suite_json ~arch ~(includes_p4 : string list)
+    ~(excludes_p4 : string list) ~(testdirs_p4 : string list)
+    ~(testdirs_stf : string list) ~(patchdirs : string list) :
+    Yojson.Safe.t result =
+  let path_prefix = "../../../" in
+  let excludes_by_group =
+    Util.Test.collect_excludes_by_subdir excludes_p4
+    |> List.map (fun (group, entries) ->
+           (group, List.map (fun entry -> path_prefix ^ entry) entries))
+  in
+  let excludes =
+    Util.Test.collect_excludes excludes_p4
+    |> List.map (fun entry -> path_prefix ^ entry)
+  in
+  let path_pairs =
+    Util.Test.collect_test_pairs arch testdirs_p4 testdirs_stf patchdirs
+  in
+  let add_entry entries_result (path_p4, path_stf, patched) =
+    let* entries = entries_result in
+    if Util.Test.should_exclude_pair path_p4 path_stf excludes then
+      let group = find_exclude_group path_p4 path_stf excludes_by_group in
+      Ok
+        (Wire.Sim_suite.Exclude { path_p4; path_stf; patched; group } :: entries)
+    else
+      match Interface.P4.parse_program includes_p4 [ path_p4 ] with
+      | Run.Fail (`Syntax (at, msg)) ->
+          Error
+            (Error.CommandError
+               (Format.asprintf "Parse error in %s: %s" path_p4
+                  (Util.Error.string_of_error at msg)))
+      | Run.Pass value_program -> (
+          try
+            let stf = Stf.Parse.parse_file path_stf in
+            let program = Wire.value (Runtime.Value.to_yojson value_program) in
+            Ok
+              (Wire.Sim_suite.Run { path_p4; path_stf; patched; program; stf }
+              :: entries)
+          with Stf.Error.StfError msg | Sys_error msg ->
+            Error
+              (Error.CommandError
+                 (Format.asprintf "STF parse error in %s: %s" path_stf msg)))
+  in
+  let* entries = List.fold_left add_entry (Ok []) path_pairs in
+  Ok
+    (entries |> List.rev
+    |> Wire.Sim_suite.payload_to_yojson arch
+    |> Wire.sim_suite)
+
 (* Document generation *)
 
 let splice (paths_spec : string list) (path_pairs : (string * string) list) :
