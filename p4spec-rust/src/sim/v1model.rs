@@ -1,17 +1,18 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
 
 use num_bigint::BigInt;
-use num_traits::{One, ToPrimitive, Zero};
+use num_traits::{One, Signed, ToPrimitive, Zero};
 
 use crate::{
     domain::external_data::ExternalData,
     interface::{Extern, ExternError, SpecCall},
     lang::il::ast::Typ,
-    runtime::value::{ValueRef, get},
+    runtime::value::{ValueKind, ValueRef, get},
 };
 
 use super::{
     SimError,
+    architecture::Architecture,
     core::{
         PacketIn, PacketOut, extern_error, external_value, pack_p4_arbitrary_int,
         pack_p4_fixed_bit, packet_advance, packet_extract, packet_lookahead, reject_result,
@@ -20,9 +21,11 @@ use super::{
         value_extern_error,
     },
     hash::compute_checksum,
+    io::{Rx, Tx},
     psa::{Counter, Register, decode_bigint, decode_value, encode_bigint, encode_value},
     spec::{Spec, global_cursor, local_cursor, prefixed_name, storage_reference},
 };
+use crate::wire::sim_suite::{StfAction, StfMatch, StfStmt};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum CloneKind {
@@ -476,7 +479,7 @@ impl V1Model {
                     && checksum == "checksum"
                     && algo == "algo" =>
             {
-                let packet = get_packet_in(&mut bridge, architecture)?;
+                let packet = get_packet_in_extern(&mut bridge, architecture)?;
                 let context =
                     eval_verify_checksum(&mut bridge, context, architecture, Some(&packet))?;
                 (
@@ -504,7 +507,7 @@ impl V1Model {
                     && checksum == "checksum"
                     && algo == "algo" =>
             {
-                let packet = get_packet_in(&mut bridge, architecture)?;
+                let packet = get_packet_in_extern(&mut bridge, architecture)?;
                 let context =
                     eval_update_checksum(&mut bridge, context, architecture, Some(&packet))?;
                 (
@@ -573,6 +576,25 @@ impl V1Model {
                     .find_var(&cursor, context, "msg")
                     .map_err(sim_extern_error)?;
                 println!("{}", unpack_p4_string(&message).map_err(sim_extern_error)?);
+                (
+                    context.clone(),
+                    architecture.clone(),
+                    return_result(None).map_err(sim_extern_error)?,
+                )
+            }
+            ("log_msg", [message, data]) if message == "msg" && data == "data" => {
+                let message = bridge
+                    .find_var(&cursor, context, "msg")
+                    .map_err(sim_extern_error)?;
+                let data = bridge
+                    .find_var(&cursor, context, "data")
+                    .map_err(sim_extern_error)?;
+                let message = unpack_p4_string(&message).map_err(sim_extern_error)?;
+                let data = unpack_p4_tuple(&data).map_err(sim_extern_error)?;
+                println!(
+                    "{}",
+                    format_log_message(&message, &data).map_err(sim_extern_error)?
+                );
                 (
                     context.clone(),
                     architecture.clone(),
@@ -829,6 +851,525 @@ impl Extern for V1Model {
     fn clear(&mut self) {}
 }
 
+#[derive(Clone)]
+struct ScheduledPacket {
+    context: ValueRef,
+    packet: PacketIn,
+    ingress: bool,
+}
+
+struct PipelineState {
+    context: ValueRef,
+    architecture: ValueRef,
+    queue: VecDeque<ScheduledPacket>,
+    transmitted: Vec<Tx>,
+}
+
+impl PipelineState {
+    fn drive(
+        spec: &mut Spec<'_>,
+        context: ValueRef,
+        architecture: ValueRef,
+        rx: Rx,
+    ) -> Result<(ValueRef, ValueRef, Vec<Tx>), SimError> {
+        let packet = PacketIn::new(&rx.packet)?;
+        let packet_state = object_state_value(V1Object::PacketIn(packet))?;
+        let (context, architecture) =
+            spec.v1model_init_packet(false, &context, &architecture, &packet_state)?;
+        let output_state = object_state_value(V1Object::PacketOut(PacketOut::new()))?;
+        let (context, architecture) =
+            spec.v1model_init_packet(true, &context, &architecture, &output_state)?;
+        let context = spec.v1model_init_globals(&context, &architecture, rx.port)?;
+        let mut state = Self {
+            context,
+            architecture,
+            queue: VecDeque::new(),
+            transmitted: Vec::new(),
+        };
+        state.run_pre(spec)?;
+        state.schedule_current(spec, true, true)?;
+        while let Some(packet) = state.queue.pop_front() {
+            state.reset_actions(spec)?;
+            state.context = packet.context;
+            state.architecture = put_object(
+                spec,
+                &state.architecture,
+                &["packet_in"],
+                V1Object::PacketIn(packet.packet),
+            )?;
+            if packet.ingress {
+                state.process_ingress(spec)?;
+            } else {
+                state.process_egress(spec)?;
+            }
+        }
+        Ok((state.context, state.architecture, state.transmitted))
+    }
+
+    fn reset_actions(&mut self, spec: &mut Spec<'_>) -> Result<(), SimError> {
+        self.architecture = update_architecture_state(
+            spec,
+            self.architecture.clone(),
+            ArchitectureState::reset_actions,
+        )?;
+        Ok(())
+    }
+
+    fn run_pre(&mut self, spec: &mut Spec<'_>) -> Result<(), SimError> {
+        self.reset_actions(spec)?;
+        let mut packet = get_packet_in_sim(spec, &self.architecture)?;
+        packet.reset();
+        self.architecture = put_object(
+            spec,
+            &self.architecture,
+            &["packet_in"],
+            V1Object::PacketIn(packet),
+        )?;
+        let (context, architecture, parser_result) =
+            spec.v1model_stage("parser", &self.context, &self.architecture)?;
+        self.context = context;
+        self.architecture = architecture;
+        self.record_parser_error(spec, &parser_result)?;
+        let (context, architecture, _) =
+            spec.v1model_stage("verify", &self.context, &self.architecture)?;
+        self.context = context;
+        self.architecture = architecture;
+        Ok(())
+    }
+
+    fn process_ingress(&mut self, spec: &mut Spec<'_>) -> Result<(), SimError> {
+        let (context, architecture, _) =
+            spec.v1model_stage("ingress", &self.context, &self.architecture)?;
+        self.context = context;
+        self.architecture = architecture;
+        let actions = get_architecture_state(spec, &self.architecture)?;
+        self.schedule_clone(spec, &actions)?;
+        if self.schedule_resubmit(spec, &actions)? {
+            return Ok(());
+        }
+        let group = self.read_fixed(spec, "standard_metadata", "mcast_grp")?;
+        let group = group
+            .to_i32()
+            .ok_or_else(|| SimError::message("multicast group does not fit i32"))?;
+        if group != 0 {
+            self.schedule_multicast(spec, &actions, group)?;
+        } else if !self.is_dropped(spec)? {
+            self.schedule_current(spec, false, false)?;
+        }
+        Ok(())
+    }
+
+    fn process_egress(&mut self, spec: &mut Spec<'_>) -> Result<(), SimError> {
+        let egress_spec = self.read_value(spec, "standard_metadata", "egress_spec")?;
+        self.context = self.write_value(spec, "standard_metadata", "egress_port", &egress_spec)?;
+        let (context, architecture, _) =
+            spec.v1model_stage("egress", &self.context, &self.architecture)?;
+        self.context = context;
+        self.architecture = architecture;
+        let actions = get_architecture_state(spec, &self.architecture)?;
+        self.schedule_clone(spec, &actions)?;
+        if self.is_dropped(spec)? {
+            return Ok(());
+        }
+        if self.schedule_recirculate(spec, &actions)? {
+            return Ok(());
+        }
+        self.run_post(spec)
+    }
+
+    fn run_post(&mut self, spec: &mut Spec<'_>) -> Result<(), SimError> {
+        let (context, architecture, _) =
+            spec.v1model_stage("check", &self.context, &self.architecture)?;
+        self.context = context;
+        self.architecture = architecture;
+        self.architecture = put_object(
+            spec,
+            &self.architecture,
+            &["packet_out"],
+            V1Object::PacketOut(PacketOut::new()),
+        )?;
+        let (context, architecture, _) =
+            spec.v1model_stage("deparse", &self.context, &self.architecture)?;
+        self.context = context;
+        self.architecture = architecture;
+        let port = self
+            .read_fixed(spec, "standard_metadata", "egress_spec")?
+            .to_i32()
+            .ok_or_else(|| SimError::message("egress_spec does not fit i32"))?;
+        self.transmitted
+            .push(Tx::new(port, compose_packet(spec, &self.architecture)?));
+        Ok(())
+    }
+
+    fn record_parser_error(
+        &mut self,
+        spec: &mut Spec<'_>,
+        result: &ValueRef,
+    ) -> Result<(), SimError> {
+        if !super::core::is_reject(result)? {
+            return Ok(());
+        }
+        let values = get::case(result).map_err(value_error)?.args();
+        let [error] = values.as_slice() else {
+            return Err(SimError::message("parser reject result has invalid shape"));
+        };
+        self.context = self.write_value(spec, "standard_metadata", "parser_error", error)?;
+        Ok(())
+    }
+
+    fn read_value(
+        &mut self,
+        spec: &mut Spec<'_>,
+        base: &str,
+        member: &str,
+    ) -> Result<ValueRef, SimError> {
+        spec.lvalue_read(
+            &global_cursor()?,
+            &self.context,
+            &self.architecture,
+            &storage_reference(&[base, member])?,
+        )
+    }
+
+    fn read_fixed(
+        &mut self,
+        spec: &mut Spec<'_>,
+        base: &str,
+        member: &str,
+    ) -> Result<BigInt, SimError> {
+        unpack_p4_fixed_bit(&self.read_value(spec, base, member)?).map(|(_, value)| value)
+    }
+
+    fn write_value(
+        &mut self,
+        spec: &mut Spec<'_>,
+        base: &str,
+        member: &str,
+        value: &ValueRef,
+    ) -> Result<ValueRef, SimError> {
+        spec.lvalue_write(
+            &global_cursor()?,
+            &self.context,
+            &self.architecture,
+            &storage_reference(&[base, member])?,
+            value,
+        )
+    }
+
+    fn is_dropped(&mut self, spec: &mut Spec<'_>) -> Result<bool, SimError> {
+        let value = self.read_value(spec, "standard_metadata", "egress_spec")?;
+        let (width, value) = unpack_p4_fixed_bit(&value)?;
+        Ok(width == BigInt::from(9) && value == BigInt::from(511))
+    }
+
+    fn schedule_current(
+        &mut self,
+        spec: &mut Spec<'_>,
+        ingress: bool,
+        front: bool,
+    ) -> Result<(), SimError> {
+        let packet = ScheduledPacket {
+            context: self.context.clone(),
+            packet: get_packet_in_sim(spec, &self.architecture)?,
+            ingress,
+        };
+        if front {
+            self.queue.push_front(packet);
+        } else {
+            self.queue.push_back(packet);
+        }
+        Ok(())
+    }
+
+    fn prepare_preserved(&mut self, spec: &mut Spec<'_>, index: i32) -> Result<(), SimError> {
+        let index = pack_p4_fixed_bit(BigInt::from(8), BigInt::from(index))?;
+        self.context =
+            spec.v1model_setup_preserved_metadata(&self.context, &self.architecture, &index)?;
+        Ok(())
+    }
+
+    fn set_metadata_fixed(
+        &mut self,
+        spec: &mut Spec<'_>,
+        member: &str,
+        width: i32,
+        value: i32,
+    ) -> Result<(), SimError> {
+        let value = pack_p4_fixed_bit(BigInt::from(width), BigInt::from(value))?;
+        self.context = self.write_value(spec, "standard_metadata", member, &value)?;
+        Ok(())
+    }
+
+    fn schedule_clone(
+        &mut self,
+        spec: &mut Spec<'_>,
+        actions: &ArchitectureState,
+    ) -> Result<bool, SimError> {
+        let Some(action) = actions.clone_action else {
+            return Ok(false);
+        };
+        let Some(port) = actions.mirrors.get(&action.session).copied() else {
+            return Ok(false);
+        };
+        let original_context = self.context.clone();
+        self.prepare_preserved(spec, action.index)?;
+        self.set_metadata_fixed(
+            spec,
+            "instance_type",
+            32,
+            match action.kind {
+                CloneKind::I2E => 1,
+                CloneKind::E2E => 2,
+            },
+        )?;
+        self.set_metadata_fixed(spec, "egress_spec", 9, port)?;
+        if action.kind == CloneKind::I2E {
+            self.run_pre(spec)?;
+        }
+        self.schedule_current(spec, false, false)?;
+        self.context = original_context;
+        Ok(true)
+    }
+
+    fn schedule_resubmit(
+        &mut self,
+        spec: &mut Spec<'_>,
+        actions: &ArchitectureState,
+    ) -> Result<bool, SimError> {
+        let Some(index) = actions.resubmit else {
+            return Ok(false);
+        };
+        let original_context = self.context.clone();
+        self.prepare_preserved(spec, index)?;
+        self.set_metadata_fixed(spec, "instance_type", 32, 6)?;
+        self.run_pre(spec)?;
+        self.schedule_current(spec, true, true)?;
+        self.context = original_context;
+        Ok(true)
+    }
+
+    fn schedule_recirculate(
+        &mut self,
+        spec: &mut Spec<'_>,
+        actions: &ArchitectureState,
+    ) -> Result<bool, SimError> {
+        let Some(index) = actions.recirculate else {
+            return Ok(false);
+        };
+        let original_context = self.context.clone();
+        self.prepare_preserved(spec, index)?;
+        self.set_metadata_fixed(spec, "instance_type", 32, 4)?;
+        let (context, architecture, _) =
+            spec.v1model_stage("check", &self.context, &self.architecture)?;
+        self.context = context;
+        self.architecture = architecture;
+        self.architecture = put_object(
+            spec,
+            &self.architecture,
+            &["packet_out"],
+            V1Object::PacketOut(PacketOut::new()),
+        )?;
+        let (context, architecture, _) =
+            spec.v1model_stage("deparse", &self.context, &self.architecture)?;
+        self.context = context;
+        self.architecture = architecture;
+        let packet = PacketIn::new(&compose_packet(spec, &self.architecture)?)?;
+        self.architecture = put_object(
+            spec,
+            &self.architecture,
+            &["packet_in"],
+            V1Object::PacketIn(packet),
+        )?;
+        self.run_pre(spec)?;
+        self.schedule_current(spec, true, true)?;
+        self.context = original_context;
+        Ok(true)
+    }
+
+    fn schedule_multicast(
+        &mut self,
+        spec: &mut Spec<'_>,
+        actions: &ArchitectureState,
+        group: i32,
+    ) -> Result<bool, SimError> {
+        let replicas = actions.multicast.replicas(group);
+        for (port, rid) in replicas.iter().copied() {
+            self.set_metadata_fixed(spec, "egress_rid", 16, rid)?;
+            self.set_metadata_fixed(spec, "egress_spec", 9, port)?;
+            self.set_metadata_fixed(spec, "instance_type", 32, 5)?;
+            self.schedule_current(spec, false, false)?;
+        }
+        Ok(!replicas.is_empty())
+    }
+}
+
+impl Architecture for V1Model {
+    fn name() -> &'static str {
+        "v1model"
+    }
+
+    fn init(spec: &mut dyn SpecCall, program: &ValueRef) -> Result<(ValueRef, ValueRef), SimError> {
+        Spec::new(spec).v1model_init(program)
+    }
+
+    fn drive(
+        spec: &mut dyn SpecCall,
+        context: ValueRef,
+        architecture: ValueRef,
+        rx: Rx,
+    ) -> Result<(ValueRef, ValueRef, Vec<Tx>), SimError> {
+        PipelineState::drive(&mut Spec::new(spec), context, architecture, rx)
+    }
+
+    fn transform_stf(statement: StfStmt) -> StfStmt {
+        transform_stf(statement)
+    }
+
+    fn add_mirror_session(
+        spec: &mut dyn SpecCall,
+        architecture: ValueRef,
+        session: i32,
+        port: i32,
+    ) -> Result<ValueRef, SimError> {
+        let mut bridge = Spec::new(spec);
+        update_architecture_state(&mut bridge, architecture, |state| {
+            state.mirrors.insert(session, port);
+        })
+    }
+
+    fn mc_group_create(
+        spec: &mut dyn SpecCall,
+        architecture: ValueRef,
+        group: i32,
+    ) -> Result<ValueRef, SimError> {
+        let mut bridge = Spec::new(spec);
+        update_architecture_state(&mut bridge, architecture, |state| {
+            state.multicast.create_group(group);
+        })
+    }
+
+    fn mc_node_create(
+        spec: &mut dyn SpecCall,
+        architecture: ValueRef,
+        rid: i32,
+        ports: Vec<i32>,
+    ) -> Result<ValueRef, SimError> {
+        let mut bridge = Spec::new(spec);
+        update_architecture_state(&mut bridge, architecture, |state| {
+            state.multicast.create_node(rid, ports);
+        })
+    }
+
+    fn mc_node_associate(
+        spec: &mut dyn SpecCall,
+        architecture: ValueRef,
+        group: i32,
+        handle: i32,
+    ) -> Result<ValueRef, SimError> {
+        let mut bridge = Spec::new(spec);
+        update_architecture_state(&mut bridge, architecture, |state| {
+            state.multicast.associate(group, handle);
+        })
+    }
+}
+
+pub fn transform_stf(statement: StfStmt) -> StfStmt {
+    match statement {
+        StfStmt::Add {
+            name,
+            priority,
+            matches,
+            action,
+            id,
+        } => StfStmt::Add {
+            name: transform_name(name),
+            priority,
+            matches: matches.into_iter().map(transform_match).collect(),
+            action: transform_action(action),
+            id,
+        },
+        StfStmt::SetDefault { name, action } => StfStmt::SetDefault {
+            name: transform_name(name),
+            action: transform_action(action),
+        },
+        statement => statement,
+    }
+}
+
+fn transform_name(name: String) -> String {
+    let name = rewrite_first_component(name, &["ingress", "preqos"], "main.ig");
+    rewrite_first_component(name, &["egress", "postqos", "c3"], "main.eg")
+}
+
+fn rewrite_first_component(name: String, patterns: &[&str], replacement: &str) -> String {
+    let mut parts = name.split('.');
+    let Some(first) = parts.next() else {
+        return name;
+    };
+    let lowercase = first.to_ascii_lowercase();
+    if !patterns
+        .iter()
+        .any(|pattern| lowercase.contains(&pattern.to_ascii_lowercase()))
+    {
+        return name;
+    }
+    std::iter::once(replacement)
+        .chain(parts)
+        .collect::<Vec<_>>()
+        .join(".")
+}
+
+fn transform_match(mut entry: StfMatch) -> StfMatch {
+    entry.name = entry.name.replace("$valid$", "isValid()");
+    entry
+}
+
+fn transform_action(mut action: StfAction) -> StfAction {
+    action.name = transform_name(action.name);
+    action
+}
+
+fn object_state_value(object: V1Object) -> Result<ValueRef, SimError> {
+    Ok(external_value("objectState", object.to_external()?))
+}
+
+fn get_object(
+    spec: &mut Spec<'_>,
+    architecture: &ValueRef,
+    names: &[&str],
+) -> Result<V1Object, SimError> {
+    let state = spec.find_object_state(architecture, &super::core::encode_object_id(names))?;
+    V1Object::from_external(get::external(&state).map_err(value_error)?)
+}
+
+fn put_object(
+    spec: &mut Spec<'_>,
+    architecture: &ValueRef,
+    names: &[&str],
+    object: V1Object,
+) -> Result<ValueRef, SimError> {
+    spec.update_object_state(
+        architecture,
+        &super::core::encode_object_id(names),
+        &object_state_value(object)?,
+    )
+}
+
+fn get_packet_in_sim(spec: &mut Spec<'_>, architecture: &ValueRef) -> Result<PacketIn, SimError> {
+    match get_object(spec, architecture, &["packet_in"])? {
+        V1Object::PacketIn(packet) => Ok(packet),
+        _ => Err(SimError::message("packet_in object not found")),
+    }
+}
+
+fn compose_packet(spec: &mut Spec<'_>, architecture: &ValueRef) -> Result<String, SimError> {
+    let input = get_packet_in_sim(spec, architecture)?;
+    match get_object(spec, architecture, &["packet_out"])? {
+        V1Object::PacketOut(output) => Ok(output.packet_hex(&input)),
+        _ => Err(SimError::message("packet_out object not found")),
+    }
+}
+
 fn count_counter(counter: &mut Counter, index: usize, bytes: usize) -> Result<(), ExternError> {
     match counter {
         Counter::Packets(values) => {
@@ -874,7 +1415,10 @@ fn packet_len(spec: &mut Spec<'_>, architecture: &ValueRef) -> Result<usize, Ext
     }
 }
 
-fn get_packet_in(spec: &mut Spec<'_>, architecture: &ValueRef) -> Result<PacketIn, ExternError> {
+fn get_packet_in_extern(
+    spec: &mut Spec<'_>,
+    architecture: &ValueRef,
+) -> Result<PacketIn, ExternError> {
     let state = spec
         .find_object_state(architecture, &super::core::encode_object_id(&["packet_in"]))
         .map_err(sim_extern_error)?;
@@ -1319,6 +1863,96 @@ fn value_error(error: impl ToString) -> SimError {
     SimError::message(error.to_string())
 }
 
+fn format_log_message(message: &str, arguments: &[ValueRef]) -> Result<String, SimError> {
+    let mut output = String::with_capacity(message.len() + 64);
+    let mut characters = message.chars().peekable();
+    let mut arguments = arguments.iter();
+
+    while let Some(character) = characters.next() {
+        match (character, characters.peek()) {
+            ('{', Some('{')) => {
+                characters.next();
+                output.push('{');
+            }
+            ('}', Some('}')) => {
+                characters.next();
+                output.push('}');
+            }
+            ('{', Some('}')) => {
+                characters.next();
+                let argument = arguments.next().ok_or_else(|| {
+                    SimError::message("not enough arguments for format string in log_msg")
+                })?;
+                output.push_str(&format_runtime_value(argument, 0));
+            }
+            _ => output.push(character),
+        }
+    }
+
+    if arguments.next().is_some() {
+        return Err(SimError::message(
+            "too many arguments for format string in log_msg",
+        ));
+    }
+    Ok(output)
+}
+
+fn format_runtime_value(value: &ValueRef, level: usize) -> String {
+    match &value.kind {
+        ValueKind::BoolV(value) => value.to_string(),
+        ValueKind::NumV(crate::lang::xl::num::T::Nat(value)) => value.to_string(),
+        ValueKind::NumV(crate::lang::xl::num::T::Int(value)) => {
+            let sign = if value.is_negative() { '-' } else { '+' };
+            format!("{sign}{}", value.abs())
+        }
+        ValueKind::TextV(value) => value.chars().flat_map(char::escape_default).collect(),
+        ValueKind::StructV(fields) if fields.is_empty() => "{}".to_owned(),
+        ValueKind::StructV(fields) => {
+            let field_indent = "  ".repeat(level + 1);
+            let fields = fields
+                .iter()
+                .map(|(atom, value)| {
+                    format!(
+                        "{field_indent}{} {}",
+                        atom.node.source_string(),
+                        format_runtime_value(value, level + 1)
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(";\n");
+            format!("{{\n{fields}\n{}}}", "  ".repeat(level))
+        }
+        ValueKind::CaseV(value_case) => value_case.render(
+            |atom| atom.node.source_string(),
+            |value| format_runtime_value(value, level + 1),
+        ),
+        ValueKind::TupleV(values) => format!(
+            "({})",
+            values
+                .iter()
+                .map(|value| format_runtime_value(value, level + 1))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+        ValueKind::OptV(Some(value)) => {
+            format!("Some({})", format_runtime_value(value, level + 1))
+        }
+        ValueKind::OptV(None) => "None".to_owned(),
+        ValueKind::ListV(values) if values.is_empty() => "[]".to_owned(),
+        ValueKind::ListV(values) => {
+            let value_indent = "  ".repeat(level + 1);
+            let values = values
+                .iter()
+                .map(|value| format!("{value_indent}{}", format_runtime_value(value, level + 1)))
+                .collect::<Vec<_>>()
+                .join(",\n");
+            format!("[\n{values}\n{}]", "  ".repeat(level))
+        }
+        ValueKind::FuncV(id) => format!("${}", id.node),
+        ValueKind::ExternV(_) => "extern".to_owned(),
+    }
+}
+
 fn required_type(
     spec: &mut Spec<'_>,
     cursor: &ValueRef,
@@ -1442,5 +2076,21 @@ mod tests {
         assert_eq!(decoded.mirrors.get(&4), Some(&7));
         assert_eq!(decoded.multicast.replicas(100), vec![(2, 9), (3, 9)]);
         assert_eq!(decoded.clone_action, None);
+    }
+
+    #[test]
+    fn v1model_stf_names_match_the_ocaml_transform() {
+        let transformed = transform_stf(StfStmt::SetDefault {
+            name: "ingress.tbl".to_owned(),
+            action: StfAction {
+                name: "egress.act".to_owned(),
+                args: Vec::new(),
+            },
+        });
+        let StfStmt::SetDefault { name, action } = transformed else {
+            panic!("expected set-default statement");
+        };
+        assert_eq!(name, "main.ig.tbl");
+        assert_eq!(action.name, "main.eg.act");
     }
 }

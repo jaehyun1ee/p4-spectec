@@ -104,8 +104,9 @@ impl PacketIo {
         if !compare_packet(expectation.exact, &output.packet, &expectation.tx.packet) {
             return Err(mismatch(&expectation.tx, &output));
         }
+        let matched = expectation.tx.clone();
         self.expectations.remove(index);
-        Ok(Some(output))
+        Ok(Some(matched))
     }
 
     pub fn push_outputs(

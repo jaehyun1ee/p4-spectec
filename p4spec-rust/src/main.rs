@@ -11,7 +11,9 @@ use p4spec_rust::{
         common::InterpError,
         sl::{Interpreter, Options},
     },
-    sim::{architecture::Architecture, ebpf::Ebpf, psa::Psa, runner::SuiteRunner},
+    sim::{
+        architecture::Architecture, ebpf::Ebpf, psa::Psa, runner::SuiteRunner, v1model::V1Model,
+    },
     wire::{
         Envelope, SL_SCHEMA, WireError,
         ocaml::{
@@ -148,6 +150,7 @@ fn run_sim(args: SimArgs) -> Result<(), CliError> {
     match suite.arch.as_str() {
         "ebpf" => run_sim_arch::<Ebpf>(&spec, suite, args.cache, args.guard),
         "psa" => run_sim_arch::<Psa>(&spec, suite, args.cache, args.guard),
+        "v1model" => run_sim_arch::<V1Model>(&spec, suite, args.cache, args.guard),
         _ => Err(CliError::UnsupportedArchitecture(suite.arch)),
     }
 }

@@ -68,6 +68,15 @@
     (diff sim_v1model_p4c_sl.expected sim_v1model_p4c_sl.actual)))))
 
 (rule
+ (alias sim-v1model-p4c-sl-rust)
+ (action
+  (progn
+   (ignore-outputs
+    (diff
+     sim_v1model_p4c_sl.expected
+     sim_v1model_p4c_sl_rust.actual)))))
+
+(rule
  (alias sim-v1model-p4testgen-al)
  (action
   (progn
@@ -80,6 +89,15 @@
   (progn
    (ignore-outputs
     (diff sim_v1model_p4testgen_sl.expected sim_v1model_p4testgen_sl.actual)))))
+
+(rule
+ (alias sim-v1model-p4testgen-sl-rust)
+ (action
+  (progn
+   (ignore-outputs
+    (diff
+     sim_v1model_p4testgen_sl.expected
+     sim_v1model_p4testgen_sl_rust.actual)))))
 
 (rule
  (alias sim-v1model-custom-al)
@@ -124,6 +142,14 @@
     (diff sim_ebpf_p4c_sl.expected sim_ebpf_p4c_sl_rust.actual))
    (ignore-outputs
     (diff sim_psa_p4c_sl.expected sim_psa_p4c_sl_rust.actual))
+   (ignore-outputs
+    (diff
+     sim_v1model_p4c_sl.expected
+     sim_v1model_p4c_sl_rust.actual))
+   (ignore-outputs
+    (diff
+     sim_v1model_p4testgen_sl.expected
+     sim_v1model_p4testgen_sl_rust.actual))
    (ignore-outputs
     (diff
      sim_ebpf_p4testgen_sl.expected
@@ -450,6 +476,127 @@
      ../../../testdata/p4testgen
      -p
      ../../../patches/v1model)))))
+
+(rule
+ (target sim_v1model_p4c_sl_rust.suite.json)
+ (deps
+  (source_tree ../../../p4c/p4include)
+  (source_tree ../../../p4c/testdata/p4_16_samples)
+  (source_tree ../../../excludes)
+  (source_tree ../../../patches/v1model))
+ (action
+  (run
+   ../../bin/main.exe
+   export-sim-suite-json
+   -arch
+   v1model
+   -i
+   ../../../p4c/p4include
+   -e
+   ../../../excludes/static
+   -e
+   ../../../excludes/dynamic
+   -p4-dir
+   ../../../p4c/testdata/p4_16_samples
+   -stf-dir
+   ../../../p4c/testdata/p4_16_samples
+   -p
+   ../../../patches/v1model
+   -o
+   %{target})))
+
+(rule
+ (target sim_v1model_p4c_sl_rust.actual)
+ (deps
+  sim_ebpf_sl_rust.spec.json
+  sim_v1model_p4c_sl_rust.suite.json
+  (universe))
+ (action
+  (with-stdout-to
+   %{target}
+   (with-stderr-to
+    sim_v1model_p4c_sl_rust.err
+    (run
+     rustup
+     run
+     1.97.1
+     cargo
+     run
+     --quiet
+     --locked
+     --manifest-path
+     ../../../../../p4spec-rust/Cargo.toml
+     --release
+     --bin
+     p4spec-rust
+     --
+     sim
+     --spec
+     sim_ebpf_sl_rust.spec.json
+     --suite
+     sim_v1model_p4c_sl_rust.suite.json
+     --cache)))))
+
+(rule
+ (target sim_v1model_p4testgen_sl_rust.suite.json)
+ (deps
+  (source_tree ../../../p4c/p4include)
+  (source_tree ../../../p4c/testdata/p4_16_samples)
+  (source_tree ../../../excludes)
+  (source_tree ../../../patches/v1model)
+  (source_tree ../../../testdata/p4testgen))
+ (action
+  (run
+   ../../bin/main.exe
+   export-sim-suite-json
+   -arch
+   v1model
+   -i
+   ../../../p4c/p4include
+   -e
+   ../../../excludes/static
+   -e
+   ../../../excludes/dynamic
+   -p4-dir
+   ../../../p4c/testdata/p4_16_samples
+   -stf-dir
+   ../../../testdata/p4testgen
+   -p
+   ../../../patches/v1model
+   -o
+   %{target})))
+
+(rule
+ (target sim_v1model_p4testgen_sl_rust.actual)
+ (deps
+  sim_ebpf_sl_rust.spec.json
+  sim_v1model_p4testgen_sl_rust.suite.json
+  (universe))
+ (action
+  (with-stdout-to
+   %{target}
+   (with-stderr-to
+    sim_v1model_p4testgen_sl_rust.err
+    (run
+     rustup
+     run
+     1.97.1
+     cargo
+     run
+     --quiet
+     --locked
+     --manifest-path
+     ../../../../../p4spec-rust/Cargo.toml
+     --release
+     --bin
+     p4spec-rust
+     --
+     sim
+     --spec
+     sim_ebpf_sl_rust.spec.json
+     --suite
+     sim_v1model_p4testgen_sl_rust.suite.json
+     --cache)))))
 
 (rule
  (target sim_v1model_custom_al.actual)

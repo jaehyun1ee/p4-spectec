@@ -6,6 +6,22 @@ fn wildcard_and_prefix_expectations_match_ocaml() {
     assert!(compare_packet(true, "A1B2", "A1**"));
     assert!(!compare_packet(true, "A1B2C3", "A1**"));
     assert!(!compare_packet(false, "A1", "A1**"));
+
+    let mut io = PacketIo::default();
+    io.push_expectation(Expectation::new(1, "A1**", true))
+        .unwrap();
+    assert_eq!(
+        io.push_output(Tx::new(1, "A1B2")).unwrap(),
+        Some(Tx::new(1, "A1**"))
+    );
+
+    let mut io = PacketIo::default();
+    io.push_output(Tx::new(1, "A1B2")).unwrap();
+    assert_eq!(
+        io.push_expectation(Expectation::new(1, "A1**", true))
+            .unwrap(),
+        Some(Tx::new(1, "A1B2"))
+    );
 }
 
 #[test]
