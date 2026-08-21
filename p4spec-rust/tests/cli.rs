@@ -122,3 +122,14 @@ fn run_command_decodes_ocaml_envelopes_and_emits_value_envelopes() {
     assert_eq!(decoded.kind, il::ValueKind::TextV("program".to_owned()));
     assert_eq!(decoded.ty, il::TypKind::TextT);
 }
+
+#[test]
+fn sim_command_is_registered() {
+    let output = Command::new(std::env::var("CARGO_BIN_EXE_p4spec-rust").unwrap())
+        .arg("--help")
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    assert!(String::from_utf8_lossy(&output.stdout).contains("sim"));
+}

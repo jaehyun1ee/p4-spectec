@@ -1,5 +1,6 @@
 pub mod architecture;
 pub mod core;
+pub mod ebpf;
 pub mod io;
 pub mod runner;
 pub mod spec;

@@ -338,6 +338,11 @@ impl<'a> Spec<'a> {
         Ok((context, architecture))
     }
 
+    pub fn ebpf_init(&mut self, program: &ValueRef) -> Result<(ValueRef, ValueRef), SimError> {
+        let [context, architecture] = self.rel::<2>("EBPF_init", std::slice::from_ref(program))?;
+        Ok((context, architecture))
+    }
+
     pub fn ebpf_init_globals(
         &mut self,
         context: &ValueRef,
