@@ -7,6 +7,7 @@ pub mod psa;
 pub mod runner;
 pub mod spec;
 pub mod stf;
+pub mod v1model;
 
 use thiserror::Error;
 

@@ -78,6 +78,10 @@ impl Register {
         }
     }
 
+    pub(crate) fn from_values(typ: ValueRef, values: Vec<ValueRef>) -> Self {
+        Self { typ, values }
+    }
+
     pub fn typ(&self) -> &ValueRef {
         &self.typ
     }
@@ -1567,7 +1571,7 @@ fn architecture_from_external(value: &ExternalData) -> Result<ArchitectureState,
     })
 }
 
-fn encode_value(value: &ValueRef) -> Result<ExternalData, SimError> {
+pub(crate) fn encode_value(value: &ValueRef) -> Result<ExternalData, SimError> {
     let canonical = runtime_value::to_canonical(value);
     let json =
         ValueCodec::encode(&canonical).map_err(|error| SimError::message(error.to_string()))?;
@@ -1576,7 +1580,7 @@ fn encode_value(value: &ValueRef) -> Result<ExternalData, SimError> {
         .map_err(|error| SimError::message(error.to_string()))
 }
 
-fn decode_value(value: &ExternalData) -> Result<ValueRef, SimError> {
+pub(crate) fn decode_value(value: &ExternalData) -> Result<ValueRef, SimError> {
     let ExternalData::String(json) = value else {
         return Err(SimError::message("encoded runtime value must be a string"));
     };
@@ -1593,7 +1597,7 @@ fn fixed_usize(value: &ValueRef) -> Result<usize, ExternError> {
         .ok_or_else(|| extern_error("fixed-width number does not fit usize"))
 }
 
-fn encode_bigint(value: &BigInt) -> ExternalData {
+pub(crate) fn encode_bigint(value: &BigInt) -> ExternalData {
     ExternalData::Intlit(value.to_string())
 }
 
@@ -1601,7 +1605,7 @@ fn encode_bigints(values: &[BigInt]) -> ExternalData {
     ExternalData::List(values.iter().map(encode_bigint).collect())
 }
 
-fn decode_bigint(value: &ExternalData) -> Result<BigInt, SimError> {
+pub(crate) fn decode_bigint(value: &ExternalData) -> Result<BigInt, SimError> {
     match value {
         ExternalData::Int(value) => Ok(BigInt::from(*value)),
         ExternalData::Intlit(value) => BigInt::parse_bytes(value.as_bytes(), 10)

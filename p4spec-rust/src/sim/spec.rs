@@ -484,6 +484,70 @@ impl<'a> Spec<'a> {
             self.rel::<3>(&name, &[context.clone(), architecture.clone()])?;
         Ok((context, architecture, result))
     }
+
+    pub fn v1model_init(&mut self, program: &ValueRef) -> Result<(ValueRef, ValueRef), SimError> {
+        let [context, architecture] =
+            self.rel::<2>("V1Model_init", std::slice::from_ref(program))?;
+        Ok((context, architecture))
+    }
+
+    pub fn v1model_init_packet(
+        &mut self,
+        output: bool,
+        context: &ValueRef,
+        architecture: &ValueRef,
+        packet_state: &ValueRef,
+    ) -> Result<(ValueRef, ValueRef), SimError> {
+        let kind = if output { "out" } else { "in" };
+        let [context, architecture] = self.rel::<2>(
+            &format!("V1Model_init_packet_{kind}"),
+            &[context.clone(), architecture.clone(), packet_state.clone()],
+        )?;
+        Ok((context, architecture))
+    }
+
+    pub fn v1model_init_globals(
+        &mut self,
+        context: &ValueRef,
+        architecture: &ValueRef,
+        port: i32,
+    ) -> Result<ValueRef, SimError> {
+        let [context] = self.rel::<1>(
+            "V1Model_init_globals",
+            &[
+                context.clone(),
+                architecture.clone(),
+                make::int(BigInt::from(port), Region::none()),
+            ],
+        )?;
+        Ok(context)
+    }
+
+    pub fn v1model_stage(
+        &mut self,
+        stage: &str,
+        context: &ValueRef,
+        architecture: &ValueRef,
+    ) -> Result<(ValueRef, ValueRef, ValueRef), SimError> {
+        let [context, architecture, result] = self.rel::<3>(
+            &format!("V1Model_{stage}"),
+            &[context.clone(), architecture.clone()],
+        )?;
+        Ok((context, architecture, result))
+    }
+
+    pub fn v1model_setup_preserved_metadata(
+        &mut self,
+        context: &ValueRef,
+        architecture: &ValueRef,
+        index: &ValueRef,
+    ) -> Result<ValueRef, SimError> {
+        let [context] = self.rel::<1>(
+            "V1Model_setup_preserved_meta_fields",
+            &[context.clone(), architecture.clone(), index.clone()],
+        )?;
+        Ok(context)
+    }
 }
 
 pub fn local_cursor() -> Result<ValueRef, SimError> {
