@@ -192,9 +192,26 @@ Port architectures in this order:
    recirculate behavior, counters, meters, registers, mirroring, multicast, and
    the full pipeline; pass regression first, then custom, P4C, and P4Testgen.
 
-Each port is a structural translation of the corresponding OCaml modules.
-Semantic cleanup and performance optimization are deferred until all expected
-outputs match.
+Each port preserves the observable behavior and state transitions of the
+corresponding OCaml modules, but does not preserve OCaml-specific control-flow
+abstractions. In particular, the PSA and v1model state monad is not ported as a
+generic Rust monad. Semantic cleanup and performance optimization are deferred
+until all expected outputs match.
+
+### Pipeline state
+
+Represent the pipeline state directly as an ordinary Rust structure containing
+the current context value, architecture value, and pending transmissions.
+Pipeline operations take `&mut PipelineState` and return `Result<T, SimError>`.
+Operations that may intentionally stop one pipeline branch use a local
+`Option<T>` or a small purpose-specific control enum rather than a generic
+state-transformer abstraction.
+
+This keeps mutation and ownership visible at each call site while preserving
+the OCaml behavior that matters: the order of context and architecture updates,
+which updates survive a stopped branch, scheduler ordering, and accumulated
+transmissions. Sequential actions use ordinary loops and function calls;
+conditional pipeline stages use normal `match`, `if`, and early returns.
 
 ## State and Reentrancy
 
