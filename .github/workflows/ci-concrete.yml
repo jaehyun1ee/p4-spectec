@@ -23,6 +23,9 @@ jobs:
         ocaml-compiler: 5.1.0
         dune-cache: true
 
+    - name: Set up Rust
+      run: rustup toolchain install 1.97.1 --profile minimal
+
     - name: Cache opam switch
       uses: actions/cache@v4
       with:
@@ -42,3 +45,6 @@ jobs:
 
     - name: Run fast tests
       run: cd p4spec && opam exec -- dune build @speclang @p4parse @run-sl @sim-sl --profile=release
+
+    - name: Compare Rust and OCaml eBPF simulation
+      run: cd p4spec && opam exec -- dune build @sim-sl-rust --profile=release

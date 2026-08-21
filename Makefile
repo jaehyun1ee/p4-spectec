@@ -99,6 +99,7 @@ TEST_ALIASES := \
   sim-v1model-custom-al sim-v1model-custom-sl sim-v1model-custom-pl \
   sim-ebpf-p4c-al sim-ebpf-p4c-sl sim-ebpf-p4c-pl \
   sim-ebpf-p4testgen-al sim-ebpf-p4testgen-sl sim-ebpf-p4testgen-pl \
+  sim-ebpf-p4c-sl-rust sim-ebpf-p4testgen-sl-rust sim-sl-rust \
   sim-psa-p4c-al sim-psa-p4c-sl sim-psa-p4c-pl \
   p4parse \
 	wire \

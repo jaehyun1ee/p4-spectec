@@ -110,6 +110,24 @@
     (diff sim_ebpf_p4c_sl.expected sim_ebpf_p4c_sl.actual)))))
 
 (rule
+ (alias sim-ebpf-p4c-sl-rust)
+ (action
+  (progn
+   (ignore-outputs
+    (diff sim_ebpf_p4c_sl.expected sim_ebpf_p4c_sl_rust.actual)))))
+
+(rule
+ (alias sim-sl-rust)
+ (action
+  (progn
+   (ignore-outputs
+    (diff sim_ebpf_p4c_sl.expected sim_ebpf_p4c_sl_rust.actual))
+   (ignore-outputs
+    (diff
+     sim_ebpf_p4testgen_sl.expected
+     sim_ebpf_p4testgen_sl_rust.actual)))))
+
+(rule
  (alias sim-ebpf-p4testgen-al)
  (action
   (progn
@@ -122,6 +140,15 @@
   (progn
    (ignore-outputs
     (diff sim_ebpf_p4testgen_sl.expected sim_ebpf_p4testgen_sl.actual)))))
+
+(rule
+ (alias sim-ebpf-p4testgen-sl-rust)
+ (action
+  (progn
+   (ignore-outputs
+    (diff
+     sim_ebpf_p4testgen_sl.expected
+     sim_ebpf_p4testgen_sl_rust.actual)))))
 
 (rule
  (alias sim-psa-p4c-al)
@@ -587,6 +614,74 @@
      ../../../p4c/testdata/p4_16_samples)))))
 
 (rule
+ (target sim_ebpf_sl_rust.spec.json)
+ (deps (source_tree ../../../spec))
+ (action
+  (run
+   ../../bin/main.exe
+   export-sl-json
+   -o
+   %{target}
+   ../../../spec)))
+
+(rule
+ (target sim_ebpf_p4c_sl_rust.suite.json)
+ (deps
+  (source_tree ../../../p4c/p4include)
+  (source_tree ../../../p4c/testdata/p4_16_samples)
+  (source_tree ../../../excludes))
+ (action
+  (run
+   ../../bin/main.exe
+   export-sim-suite-json
+   -arch
+   ebpf
+   -i
+   ../../../p4c/p4include
+   -e
+   ../../../excludes/static
+   -e
+   ../../../excludes/dynamic
+   -p4-dir
+   ../../../p4c/testdata/p4_16_samples
+   -stf-dir
+   ../../../p4c/testdata/p4_16_samples
+   -o
+   %{target})))
+
+(rule
+ (target sim_ebpf_p4c_sl_rust.actual)
+ (deps
+  sim_ebpf_sl_rust.spec.json
+  sim_ebpf_p4c_sl_rust.suite.json
+  (universe))
+ (action
+  (with-stdout-to
+   %{target}
+   (with-stderr-to
+    sim_ebpf_p4c_sl_rust.err
+    (run
+     rustup
+     run
+     1.97.1
+     cargo
+     run
+     --quiet
+     --locked
+     --manifest-path
+     ../../../../../p4spec-rust/Cargo.toml
+     --release
+     --bin
+     p4spec-rust
+     --
+     sim
+     --spec
+     sim_ebpf_sl_rust.spec.json
+     --suite
+     sim_ebpf_p4c_sl_rust.suite.json
+     --cache)))))
+
+(rule
  (target sim_ebpf_p4testgen_al.actual)
  (deps
   (source_tree ../../../spec)
@@ -653,6 +748,64 @@
      ../../../p4c/testdata/p4_16_samples
      -stf-dir
      ../../../testdata/p4testgen)))))
+
+(rule
+ (target sim_ebpf_p4testgen_sl_rust.suite.json)
+ (deps
+  (source_tree ../../../p4c/p4include)
+  (source_tree ../../../p4c/testdata/p4_16_samples)
+  (source_tree ../../../excludes)
+  (source_tree ../../../testdata/p4testgen))
+ (action
+  (run
+   ../../bin/main.exe
+   export-sim-suite-json
+   -arch
+   ebpf
+   -i
+   ../../../p4c/p4include
+   -e
+   ../../../excludes/static
+   -e
+   ../../../excludes/dynamic
+   -p4-dir
+   ../../../p4c/testdata/p4_16_samples
+   -stf-dir
+   ../../../testdata/p4testgen
+   -o
+   %{target})))
+
+(rule
+ (target sim_ebpf_p4testgen_sl_rust.actual)
+ (deps
+  sim_ebpf_sl_rust.spec.json
+  sim_ebpf_p4testgen_sl_rust.suite.json
+  (universe))
+ (action
+  (with-stdout-to
+   %{target}
+   (with-stderr-to
+    sim_ebpf_p4testgen_sl_rust.err
+    (run
+     rustup
+     run
+     1.97.1
+     cargo
+     run
+     --quiet
+     --locked
+     --manifest-path
+     ../../../../../p4spec-rust/Cargo.toml
+     --release
+     --bin
+     p4spec-rust
+     --
+     sim
+     --spec
+     sim_ebpf_sl_rust.spec.json
+     --suite
+     sim_ebpf_p4testgen_sl_rust.suite.json
+     --cache)))))
 
 (rule
  (target sim_psa_p4c_al.actual)
