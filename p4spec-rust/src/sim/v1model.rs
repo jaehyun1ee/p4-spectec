@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use num_bigint::BigInt;
 use num_traits::{One, ToPrimitive, Zero};
 
@@ -11,14 +13,83 @@ use crate::{
 use super::{
     SimError,
     core::{
-        PacketIn, PacketOut, extern_error, external_value, pack_p4_fixed_bit, packet_advance,
-        packet_extract, packet_lookahead, reject_result, return_result, sim_extern_error,
-        text_list, unpack_p4_bool, unpack_p4_enum, unpack_p4_fixed_bit, unsupported_method,
+        PacketIn, PacketOut, extern_error, external_value, pack_p4_arbitrary_int,
+        pack_p4_fixed_bit, packet_advance, packet_extract, packet_lookahead, reject_result,
+        return_result, sim_extern_error, text_list, unpack_p4_bool, unpack_p4_enum,
+        unpack_p4_fixed_bit, unpack_p4_string, unpack_p4_tuple, unsupported_method,
         value_extern_error,
     },
+    hash::compute_checksum,
     psa::{Counter, Register, decode_bigint, decode_value, encode_bigint, encode_value},
-    spec::{Spec, local_cursor, prefixed_name},
+    spec::{Spec, global_cursor, local_cursor, prefixed_name, storage_reference},
 };
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum CloneKind {
+    I2E,
+    E2E,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct CloneAction {
+    kind: CloneKind,
+    session: i32,
+    index: i32,
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+struct V1Multicast {
+    next_handle: i32,
+    groups: BTreeMap<i32, Vec<i32>>,
+    nodes: BTreeMap<i32, Vec<(i32, i32)>>,
+}
+
+impl V1Multicast {
+    fn create_group(&mut self, group: i32) {
+        self.groups.insert(group, Vec::new());
+    }
+
+    fn create_node(&mut self, rid: i32, ports: Vec<i32>) {
+        let handle = self.next_handle;
+        self.next_handle += 1;
+        self.nodes
+            .insert(handle, ports.into_iter().map(|port| (port, rid)).collect());
+    }
+
+    fn associate(&mut self, group: i32, handle: i32) {
+        if let Some(handles) = self.groups.get_mut(&group) {
+            handles.insert(0, handle);
+        }
+    }
+
+    fn replicas(&self, group: i32) -> Vec<(i32, i32)> {
+        self.groups
+            .get(&group)
+            .into_iter()
+            .flatten()
+            .filter_map(|handle| self.nodes.get(handle))
+            .flatten()
+            .copied()
+            .collect()
+    }
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+struct ArchitectureState {
+    mirrors: BTreeMap<i32, i32>,
+    multicast: V1Multicast,
+    clone_action: Option<CloneAction>,
+    resubmit: Option<i32>,
+    recirculate: Option<i32>,
+}
+
+impl ArchitectureState {
+    fn reset_actions(&mut self) {
+        self.clone_action = None;
+        self.resubmit = None;
+        self.recirculate = None;
+    }
+}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum DirectCounter {
@@ -325,26 +396,197 @@ impl V1Model {
         };
         let name = get::text(name).map_err(value_extern_error)?;
         let parameters = text_list(parameters)?;
-        if name != "verify" || parameters.as_slice() != ["check", "toSignal"] {
-            return Err(extern_error(format!(
-                "unsupported extern function call: {name}({})",
-                parameters.join(", ")
-            )));
-        }
         let mut bridge = Spec::new(spec);
         let cursor = local_cursor().map_err(sim_extern_error)?;
-        let check = bridge
-            .find_var(&cursor, context, "check")
-            .map_err(sim_extern_error)?;
-        let signal = bridge
-            .find_var(&cursor, context, "toSignal")
-            .map_err(sim_extern_error)?;
-        let result = if unpack_p4_bool(&check).map_err(sim_extern_error)? {
-            return_result(None).map_err(sim_extern_error)?
-        } else {
-            reject_result(signal, "rejectResult").map_err(sim_extern_error)?
+        let (context, architecture, result) = match (name, parameters.as_slice()) {
+            ("verify", [check, signal]) if check == "check" && signal == "toSignal" => {
+                let check = bridge
+                    .find_var(&cursor, context, "check")
+                    .map_err(sim_extern_error)?;
+                let signal = bridge
+                    .find_var(&cursor, context, "toSignal")
+                    .map_err(sim_extern_error)?;
+                let result = if unpack_p4_bool(&check).map_err(sim_extern_error)? {
+                    return_result(None).map_err(sim_extern_error)?
+                } else {
+                    reject_result(signal, "rejectResult").map_err(sim_extern_error)?
+                };
+                (context.clone(), architecture.clone(), result)
+            }
+            ("digest", [receiver, data]) if receiver == "receiver" && data == "data" => (
+                context.clone(),
+                architecture.clone(),
+                return_result(None).map_err(sim_extern_error)?,
+            ),
+            ("mark_to_drop", [metadata]) if metadata == "standard_metadata" => {
+                let context = write_local_member(
+                    &mut bridge,
+                    context,
+                    architecture,
+                    "standard_metadata",
+                    "egress_spec",
+                    &pack_p4_fixed_bit(BigInt::from(9), BigInt::from(511))
+                        .map_err(sim_extern_error)?,
+                )?;
+                let context = write_local_member(
+                    &mut bridge,
+                    &context,
+                    architecture,
+                    "standard_metadata",
+                    "mcast_grp",
+                    &pack_p4_fixed_bit(BigInt::from(16), BigInt::zero())
+                        .map_err(sim_extern_error)?,
+                )?;
+                (
+                    context,
+                    architecture.clone(),
+                    return_result(None).map_err(sim_extern_error)?,
+                )
+            }
+            ("hash", [result, algo, base, data, maximum])
+                if result == "result"
+                    && algo == "algo"
+                    && base == "base"
+                    && data == "data"
+                    && maximum == "max" =>
+            {
+                let context = eval_hash(&mut bridge, context, architecture)?;
+                (
+                    context,
+                    architecture.clone(),
+                    return_result(None).map_err(sim_extern_error)?,
+                )
+            }
+            ("verify_checksum", [condition, data, checksum, algo])
+                if condition == "condition"
+                    && data == "data"
+                    && checksum == "checksum"
+                    && algo == "algo" =>
+            {
+                let context = eval_verify_checksum(&mut bridge, context, architecture, None)?;
+                (
+                    context,
+                    architecture.clone(),
+                    return_result(None).map_err(sim_extern_error)?,
+                )
+            }
+            ("verify_checksum_with_payload", [condition, data, checksum, algo])
+                if condition == "condition"
+                    && data == "data"
+                    && checksum == "checksum"
+                    && algo == "algo" =>
+            {
+                let packet = get_packet_in(&mut bridge, architecture)?;
+                let context =
+                    eval_verify_checksum(&mut bridge, context, architecture, Some(&packet))?;
+                (
+                    context,
+                    architecture.clone(),
+                    return_result(None).map_err(sim_extern_error)?,
+                )
+            }
+            ("update_checksum", [condition, data, checksum, algo])
+                if condition == "condition"
+                    && data == "data"
+                    && checksum == "checksum"
+                    && algo == "algo" =>
+            {
+                let context = eval_update_checksum(&mut bridge, context, architecture, None)?;
+                (
+                    context,
+                    architecture.clone(),
+                    return_result(None).map_err(sim_extern_error)?,
+                )
+            }
+            ("update_checksum_with_payload", [condition, data, checksum, algo])
+                if condition == "condition"
+                    && data == "data"
+                    && checksum == "checksum"
+                    && algo == "algo" =>
+            {
+                let packet = get_packet_in(&mut bridge, architecture)?;
+                let context =
+                    eval_update_checksum(&mut bridge, context, architecture, Some(&packet))?;
+                (
+                    context,
+                    architecture.clone(),
+                    return_result(None).map_err(sim_extern_error)?,
+                )
+            }
+            ("clone_preserving_field_list", [kind, session, index])
+                if kind == "type" && session == "session" && index == "index" =>
+            {
+                let kind = bridge
+                    .find_var(&cursor, context, "type")
+                    .map_err(sim_extern_error)?;
+                let (_, kind) = unpack_p4_enum(&kind).map_err(sim_extern_error)?;
+                let kind = match kind.as_str() {
+                    "I2E" => CloneKind::I2E,
+                    "E2E" => CloneKind::E2E,
+                    _ => return Err(extern_error("invalid CloneType")),
+                };
+                let session = local_fixed_i32(&mut bridge, context, "session")?;
+                let index = local_fixed_i32(&mut bridge, context, "index")?;
+                let architecture =
+                    update_architecture_state(&mut bridge, architecture.clone(), |state| {
+                        state.clone_action = Some(CloneAction {
+                            kind,
+                            session,
+                            index,
+                        });
+                    })
+                    .map_err(sim_extern_error)?;
+                (
+                    context.clone(),
+                    architecture,
+                    return_result(None).map_err(sim_extern_error)?,
+                )
+            }
+            ("resubmit_preserving_field_list", [index]) if index == "index" => {
+                let index = local_fixed_i32(&mut bridge, context, "index")?;
+                let architecture =
+                    update_architecture_state(&mut bridge, architecture.clone(), |state| {
+                        state.resubmit = Some(index)
+                    })
+                    .map_err(sim_extern_error)?;
+                (
+                    context.clone(),
+                    architecture,
+                    return_result(None).map_err(sim_extern_error)?,
+                )
+            }
+            ("recirculate_preserving_field_list", [index]) if index == "index" => {
+                let index = local_fixed_i32(&mut bridge, context, "index")?;
+                let architecture =
+                    update_architecture_state(&mut bridge, architecture.clone(), |state| {
+                        state.recirculate = Some(index)
+                    })
+                    .map_err(sim_extern_error)?;
+                (
+                    context.clone(),
+                    architecture,
+                    return_result(None).map_err(sim_extern_error)?,
+                )
+            }
+            ("log_msg", [message]) if message == "msg" => {
+                let message = bridge
+                    .find_var(&cursor, context, "msg")
+                    .map_err(sim_extern_error)?;
+                println!("{}", unpack_p4_string(&message).map_err(sim_extern_error)?);
+                (
+                    context.clone(),
+                    architecture.clone(),
+                    return_result(None).map_err(sim_extern_error)?,
+                )
+            }
+            _ => {
+                return Err(extern_error(format!(
+                    "unsupported extern function call: {name}({})",
+                    parameters.join(", ")
+                )));
+            }
         };
-        Ok(vec![context.clone(), architecture.clone(), result])
+        Ok(vec![context, architecture, result])
     }
 
     fn eval_extern_method(
@@ -570,7 +812,10 @@ impl Extern for V1Model {
     ) -> Result<ValueRef, ExternError> {
         match name {
             "init_objectState" => self.eval_extern_init(spec, values),
-            "init_archState" => Ok(external_value("archState", ExternalData::Null)),
+            "init_archState" => Ok(external_value(
+                "archState",
+                architecture_to_external(&ArchitectureState::default()),
+            )),
             _ => Err(extern_error(format!(
                 "unimplemented extern function: {name}"
             ))),
@@ -627,6 +872,451 @@ fn packet_len(spec: &mut Spec<'_>, architecture: &ValueRef) -> Result<usize, Ext
         V1Object::PacketIn(packet) => Ok(packet.len_bytes()),
         _ => Err(extern_error("packet_in object not found")),
     }
+}
+
+fn get_packet_in(spec: &mut Spec<'_>, architecture: &ValueRef) -> Result<PacketIn, ExternError> {
+    let state = spec
+        .find_object_state(architecture, &super::core::encode_object_id(&["packet_in"]))
+        .map_err(sim_extern_error)?;
+    match V1Object::from_external(get::external(&state).map_err(value_extern_error)?)
+        .map_err(sim_extern_error)?
+    {
+        V1Object::PacketIn(packet) => Ok(packet),
+        _ => Err(extern_error("packet_in object not found")),
+    }
+}
+
+fn local_var(spec: &mut Spec<'_>, context: &ValueRef, name: &str) -> Result<ValueRef, ExternError> {
+    spec.find_var(&local_cursor().map_err(sim_extern_error)?, context, name)
+        .map_err(sim_extern_error)
+}
+
+fn local_fixed_i32(
+    spec: &mut Spec<'_>,
+    context: &ValueRef,
+    name: &str,
+) -> Result<i32, ExternError> {
+    unpack_p4_fixed_bit(&local_var(spec, context, name)?)
+        .map_err(sim_extern_error)?
+        .1
+        .to_i32()
+        .ok_or_else(|| extern_error(format!("{name} does not fit i32")))
+}
+
+fn write_local_member(
+    spec: &mut Spec<'_>,
+    context: &ValueRef,
+    architecture: &ValueRef,
+    base: &str,
+    member: &str,
+    value: &ValueRef,
+) -> Result<ValueRef, ExternError> {
+    spec.lvalue_write(
+        &local_cursor().map_err(sim_extern_error)?,
+        context,
+        architecture,
+        &storage_reference(&[base, member]).map_err(sim_extern_error)?,
+        value,
+    )
+    .map_err(sim_extern_error)
+}
+
+fn write_global_member(
+    spec: &mut Spec<'_>,
+    context: &ValueRef,
+    architecture: &ValueRef,
+    base: &str,
+    member: &str,
+    value: &ValueRef,
+) -> Result<ValueRef, ExternError> {
+    spec.lvalue_write(
+        &global_cursor().map_err(sim_extern_error)?,
+        context,
+        architecture,
+        &storage_reference(&[base, member]).map_err(sim_extern_error)?,
+        value,
+    )
+    .map_err(sim_extern_error)
+}
+
+fn write_local_var(
+    spec: &mut Spec<'_>,
+    context: &ValueRef,
+    architecture: &ValueRef,
+    name: &str,
+    value: &ValueRef,
+) -> Result<ValueRef, ExternError> {
+    spec.lvalue_write(
+        &local_cursor().map_err(sim_extern_error)?,
+        context,
+        architecture,
+        &prefixed_name(name).map_err(sim_extern_error)?,
+        value,
+    )
+    .map_err(sim_extern_error)
+}
+
+fn checksum_inputs(
+    spec: &mut Spec<'_>,
+    context: &ValueRef,
+    payload: Option<&PacketIn>,
+) -> Result<(String, Vec<ValueRef>), ExternError> {
+    let data = local_var(spec, context, "data")?;
+    let mut values = unpack_p4_tuple(&data).map_err(sim_extern_error)?;
+    if let Some(packet) = payload {
+        for byte in packet.payload_bytes() {
+            values.push(pack_p4_fixed_bit(BigInt::from(8), byte).map_err(sim_extern_error)?);
+        }
+    }
+    let algorithm = local_var(spec, context, "algo")?;
+    let (enum_name, algorithm) = unpack_p4_enum(&algorithm).map_err(sim_extern_error)?;
+    if enum_name != "HashAlgorithm" {
+        return Err(extern_error("invalid HashAlgorithm"));
+    }
+    Ok((algorithm, values))
+}
+
+fn eval_hash(
+    spec: &mut Spec<'_>,
+    context: &ValueRef,
+    architecture: &ValueRef,
+) -> Result<ValueRef, ExternError> {
+    let base = unpack_p4_fixed_bit(&local_var(spec, context, "base")?)
+        .map_err(sim_extern_error)?
+        .1;
+    let maximum = unpack_p4_fixed_bit(&local_var(spec, context, "max")?)
+        .map_err(sim_extern_error)?
+        .1;
+    let (algorithm, values) = checksum_inputs(spec, context, None)?;
+    let checksum =
+        compute_checksum(&algorithm, &values, &BigInt::zero()).map_err(sim_extern_error)?;
+    let result = if maximum.is_zero() {
+        base
+    } else {
+        &base + checksum % (&maximum - &base)
+    };
+    let typ = required_type(
+        spec,
+        &local_cursor().map_err(sim_extern_error)?,
+        context,
+        "O",
+    )?;
+    let result = pack_p4_arbitrary_int(result).map_err(sim_extern_error)?;
+    let result = spec.cast(&typ, &result).map_err(sim_extern_error)?;
+    write_local_var(spec, context, architecture, "result", &result)
+}
+
+fn eval_verify_checksum(
+    spec: &mut Spec<'_>,
+    context: &ValueRef,
+    architecture: &ValueRef,
+    payload: Option<&PacketIn>,
+) -> Result<ValueRef, ExternError> {
+    if !unpack_p4_bool(&local_var(spec, context, "condition")?).map_err(sim_extern_error)? {
+        return Ok(context.clone());
+    }
+    let expected = unpack_p4_fixed_bit(&local_var(spec, context, "checksum")?)
+        .map_err(sim_extern_error)?
+        .1;
+    let (algorithm, values) = checksum_inputs(spec, context, payload)?;
+    let actual =
+        compute_checksum(&algorithm, &values, &BigInt::zero()).map_err(sim_extern_error)?;
+    if expected == actual {
+        Ok(context.clone())
+    } else {
+        write_global_member(
+            spec,
+            context,
+            architecture,
+            "standard_metadata",
+            "checksum_error",
+            &pack_p4_fixed_bit(BigInt::one(), BigInt::one()).map_err(sim_extern_error)?,
+        )
+    }
+}
+
+fn eval_update_checksum(
+    spec: &mut Spec<'_>,
+    context: &ValueRef,
+    architecture: &ValueRef,
+    payload: Option<&PacketIn>,
+) -> Result<ValueRef, ExternError> {
+    if !unpack_p4_bool(&local_var(spec, context, "condition")?).map_err(sim_extern_error)? {
+        return Ok(context.clone());
+    }
+    let (algorithm, values) = checksum_inputs(spec, context, payload)?;
+    let checksum =
+        compute_checksum(&algorithm, &values, &BigInt::zero()).map_err(sim_extern_error)?;
+    let typ = required_type(
+        spec,
+        &local_cursor().map_err(sim_extern_error)?,
+        context,
+        "O",
+    )?;
+    let checksum = pack_p4_arbitrary_int(checksum).map_err(sim_extern_error)?;
+    let checksum = spec.cast(&typ, &checksum).map_err(sim_extern_error)?;
+    write_local_var(spec, context, architecture, "checksum", &checksum)
+}
+
+fn architecture_to_external(state: &ArchitectureState) -> ExternalData {
+    let pairs = |values: &BTreeMap<i32, i32>| {
+        ExternalData::List(
+            values
+                .iter()
+                .map(|(first, second)| {
+                    ExternalData::Tuple(vec![
+                        ExternalData::Int(i64::from(*first)),
+                        ExternalData::Int(i64::from(*second)),
+                    ])
+                })
+                .collect(),
+        )
+    };
+    let groups = ExternalData::List(
+        state
+            .multicast
+            .groups
+            .iter()
+            .map(|(group, handles)| {
+                ExternalData::Tuple(vec![
+                    ExternalData::Int(i64::from(*group)),
+                    ExternalData::List(
+                        handles
+                            .iter()
+                            .map(|handle| ExternalData::Int(i64::from(*handle)))
+                            .collect(),
+                    ),
+                ])
+            })
+            .collect(),
+    );
+    let nodes = ExternalData::List(
+        state
+            .multicast
+            .nodes
+            .iter()
+            .map(|(handle, replicas)| {
+                ExternalData::Tuple(vec![
+                    ExternalData::Int(i64::from(*handle)),
+                    ExternalData::List(
+                        replicas
+                            .iter()
+                            .map(|(port, rid)| {
+                                ExternalData::Tuple(vec![
+                                    ExternalData::Int(i64::from(*port)),
+                                    ExternalData::Int(i64::from(*rid)),
+                                ])
+                            })
+                            .collect(),
+                    ),
+                ])
+            })
+            .collect(),
+    );
+    let clone_action = match state.clone_action {
+        Some(action) => ExternalData::Tuple(vec![
+            ExternalData::String(
+                match action.kind {
+                    CloneKind::I2E => "i2e",
+                    CloneKind::E2E => "e2e",
+                }
+                .to_owned(),
+            ),
+            ExternalData::Int(i64::from(action.session)),
+            ExternalData::Int(i64::from(action.index)),
+        ]),
+        None => ExternalData::Null,
+    };
+    ExternalData::Assoc(vec![
+        (
+            "kind".to_owned(),
+            ExternalData::String("v1model-architecture".to_owned()),
+        ),
+        ("mirrors".to_owned(), pairs(&state.mirrors)),
+        (
+            "multicast-next-handle".to_owned(),
+            ExternalData::Int(i64::from(state.multicast.next_handle)),
+        ),
+        ("multicast-groups".to_owned(), groups),
+        ("multicast-nodes".to_owned(), nodes),
+        ("clone".to_owned(), clone_action),
+        ("resubmit".to_owned(), encode_optional_i32(state.resubmit)),
+        (
+            "recirculate".to_owned(),
+            encode_optional_i32(state.recirculate),
+        ),
+    ])
+}
+
+fn architecture_from_external(value: &ExternalData) -> Result<ArchitectureState, SimError> {
+    let ExternalData::Assoc(fields) = value else {
+        return Err(SimError::message("expected v1model architecture state"));
+    };
+    if string_field(fields, "kind")? != "v1model-architecture" {
+        return Err(SimError::message("expected v1model architecture state"));
+    }
+    let mirrors = decode_map(field(fields, "mirrors")?)?;
+    let next_handle = decode_i32(field(fields, "multicast-next-handle")?)?;
+    let groups = decode_map_lists(field(fields, "multicast-groups")?)?;
+    let nodes = decode_map_pairs(field(fields, "multicast-nodes")?)?;
+    let clone_action = match field(fields, "clone")? {
+        ExternalData::Null => None,
+        ExternalData::Tuple(values) => {
+            let [kind, session, index] = values.as_slice() else {
+                return Err(SimError::message("clone action must have three fields"));
+            };
+            let ExternalData::String(kind) = kind else {
+                return Err(SimError::message("clone kind must be a string"));
+            };
+            Some(CloneAction {
+                kind: match kind.as_str() {
+                    "i2e" => CloneKind::I2E,
+                    "e2e" => CloneKind::E2E,
+                    _ => return Err(SimError::message("invalid clone kind")),
+                },
+                session: decode_i32(session)?,
+                index: decode_i32(index)?,
+            })
+        }
+        _ => return Err(SimError::message("invalid clone action")),
+    };
+    Ok(ArchitectureState {
+        mirrors,
+        multicast: V1Multicast {
+            next_handle,
+            groups,
+            nodes,
+        },
+        clone_action,
+        resubmit: decode_optional_i32(field(fields, "resubmit")?)?,
+        recirculate: decode_optional_i32(field(fields, "recirculate")?)?,
+    })
+}
+
+fn get_architecture_state(
+    spec: &mut Spec<'_>,
+    architecture: &ValueRef,
+) -> Result<ArchitectureState, SimError> {
+    let state = spec.find_arch_state(architecture)?;
+    architecture_from_external(get::external(&state).map_err(value_error)?)
+}
+
+fn update_architecture_state(
+    spec: &mut Spec<'_>,
+    architecture: ValueRef,
+    update: impl FnOnce(&mut ArchitectureState),
+) -> Result<ValueRef, SimError> {
+    let mut state = get_architecture_state(spec, &architecture)?;
+    update(&mut state);
+    spec.update_arch_state(
+        &architecture,
+        &external_value("archState", architecture_to_external(&state)),
+    )
+}
+
+fn encode_optional_i32(value: Option<i32>) -> ExternalData {
+    value
+        .map(|value| ExternalData::Int(i64::from(value)))
+        .unwrap_or(ExternalData::Null)
+}
+
+fn decode_optional_i32(value: &ExternalData) -> Result<Option<i32>, SimError> {
+    match value {
+        ExternalData::Null => Ok(None),
+        value => decode_i32(value).map(Some),
+    }
+}
+
+fn decode_i32(value: &ExternalData) -> Result<i32, SimError> {
+    let ExternalData::Int(value) = value else {
+        return Err(SimError::message("architecture value must be an integer"));
+    };
+    i32::try_from(*value).map_err(|_| SimError::message("architecture value does not fit i32"))
+}
+
+fn decode_map(value: &ExternalData) -> Result<BTreeMap<i32, i32>, SimError> {
+    let ExternalData::List(values) = value else {
+        return Err(SimError::message("architecture map must be a list"));
+    };
+    values
+        .iter()
+        .map(|value| {
+            let ExternalData::Tuple(values) = value else {
+                return Err(SimError::message("architecture map entry must be a tuple"));
+            };
+            let [key, value] = values.as_slice() else {
+                return Err(SimError::message(
+                    "architecture map entry must have two values",
+                ));
+            };
+            Ok((decode_i32(key)?, decode_i32(value)?))
+        })
+        .collect()
+}
+
+fn decode_map_lists(value: &ExternalData) -> Result<BTreeMap<i32, Vec<i32>>, SimError> {
+    let ExternalData::List(values) = value else {
+        return Err(SimError::message("architecture map must be a list"));
+    };
+    values
+        .iter()
+        .map(|value| {
+            let ExternalData::Tuple(values) = value else {
+                return Err(SimError::message("architecture map entry must be a tuple"));
+            };
+            let [key, values] = values.as_slice() else {
+                return Err(SimError::message(
+                    "architecture map entry must have two values",
+                ));
+            };
+            let ExternalData::List(values) = values else {
+                return Err(SimError::message("architecture map value must be a list"));
+            };
+            Ok((
+                decode_i32(key)?,
+                values.iter().map(decode_i32).collect::<Result<_, _>>()?,
+            ))
+        })
+        .collect()
+}
+
+fn decode_map_pairs(value: &ExternalData) -> Result<BTreeMap<i32, Vec<(i32, i32)>>, SimError> {
+    let ExternalData::List(values) = value else {
+        return Err(SimError::message("architecture map must be a list"));
+    };
+    values
+        .iter()
+        .map(|value| {
+            let ExternalData::Tuple(values) = value else {
+                return Err(SimError::message("architecture map entry must be a tuple"));
+            };
+            let [key, pairs] = values.as_slice() else {
+                return Err(SimError::message(
+                    "architecture map entry must have two values",
+                ));
+            };
+            let ExternalData::List(pairs) = pairs else {
+                return Err(SimError::message("architecture map value must be a list"));
+            };
+            let pairs = pairs
+                .iter()
+                .map(|pair| {
+                    let ExternalData::Tuple(pair) = pair else {
+                        return Err(SimError::message("architecture pair must be a tuple"));
+                    };
+                    let [first, second] = pair.as_slice() else {
+                        return Err(SimError::message("architecture pair must have two values"));
+                    };
+                    Ok((decode_i32(first)?, decode_i32(second)?))
+                })
+                .collect::<Result<_, SimError>>()?;
+            Ok((decode_i32(key)?, pairs))
+        })
+        .collect()
+}
+
+fn value_error(error: impl ToString) -> SimError {
+    SimError::message(error.to_string())
 }
 
 fn required_type(
@@ -729,5 +1419,28 @@ mod tests {
             counter,
             Counter::PacketsAndBytes(vec![(BigInt::one(), BigInt::from(12))])
         );
+    }
+
+    #[test]
+    fn v1model_architecture_actions_round_trip_and_reset() {
+        let mut state = ArchitectureState::default();
+        state.mirrors.insert(4, 7);
+        state.multicast.create_group(100);
+        state.multicast.create_node(9, vec![2, 3]);
+        state.multicast.associate(100, 0);
+        state.clone_action = Some(CloneAction {
+            kind: CloneKind::I2E,
+            session: 4,
+            index: 8,
+        });
+
+        let external = architecture_to_external(&state);
+        let mut decoded = architecture_from_external(&external).unwrap();
+
+        assert_eq!(decoded, state);
+        decoded.reset_actions();
+        assert_eq!(decoded.mirrors.get(&4), Some(&7));
+        assert_eq!(decoded.multicast.replicas(100), vec![(2, 9), (3, 9)]);
+        assert_eq!(decoded.clone_action, None);
     }
 }
