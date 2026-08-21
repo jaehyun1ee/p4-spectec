@@ -7,9 +7,11 @@ use p4spec_rust::{
     sim::{
         core::{
             PacketIn, PacketOut, bits_to_hex, bits_to_signed, bits_to_unsigned, hex_to_bits,
-            normalize_key_name, pack_p4_bool, pack_p4_fixed_bit, signed_to_bits, unpack_p4_bool,
-            unpack_p4_fixed_bit, unsigned_to_bits,
+            normalize_key_name, pack_p4_bool, pack_p4_enum, pack_p4_fixed_bit, pack_p4_tuple,
+            signed_to_bits, unpack_p4_bool, unpack_p4_enum, unpack_p4_fixed_bit, unpack_p4_tuple,
+            unsigned_to_bits,
         },
+        hash::{compute_checksum, compute_hash},
         spec::Spec,
     },
 };
@@ -119,5 +121,36 @@ fn stf_stack_indices_use_p4_bracket_syntax() {
     assert_eq!(
         normalize_key_name("headers.stack$12.field$3"),
         "headers.stack[12].field[3]"
+    );
+}
+
+#[test]
+fn p4_enums_and_tuples_round_trip() {
+    let enumeration = pack_p4_enum("PSA_HashAlgorithm_t", "CRC32").unwrap();
+    assert_eq!(
+        unpack_p4_enum(&enumeration).unwrap(),
+        ("PSA_HashAlgorithm_t".to_owned(), "CRC32".to_owned())
+    );
+
+    let tuple = pack_p4_tuple(vec![enumeration.clone()]).unwrap();
+    assert_eq!(unpack_p4_tuple(&tuple).unwrap(), vec![enumeration]);
+}
+
+#[test]
+fn checksum_algorithms_match_the_psa_reference() {
+    let message = BigInt::from_bytes_be(num_bigint::Sign::Plus, b"123456789");
+    assert_eq!(
+        compute_hash("crc16", &BigInt::from(72), &message, &BigInt::from(0)).unwrap(),
+        BigInt::from(0xBB3D_u32)
+    );
+    assert_eq!(
+        compute_hash("crc32", &BigInt::from(72), &message, &BigInt::from(0)).unwrap(),
+        BigInt::from(0xCBF4_3926_u32)
+    );
+
+    let values = vec![pack_p4_fixed_bit(BigInt::from(16), BigInt::from(0x1234)).unwrap()];
+    assert_eq!(
+        compute_checksum("identity", &values, &BigInt::from(0)).unwrap(),
+        BigInt::from(0x1234)
     );
 }

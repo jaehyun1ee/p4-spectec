@@ -295,6 +295,87 @@ pub fn pack_p4_fixed_int(width: BigInt, value: BigInt) -> Result<ValueRef, SimEr
     )
 }
 
+pub fn pack_p4_enum(type_id: &str, name: &str) -> Result<ValueRef, SimError> {
+    case_value(
+        "value",
+        Mixfix::Seq(vec![Mixfix::Arg(()), operator("."), Mixfix::Arg(())]),
+        [
+            make::text(type_id.to_owned(), Region::none()),
+            make::text(name.to_owned(), Region::none()),
+        ],
+    )
+}
+
+pub fn unpack_p4_enum(value: &ValueRef) -> Result<(String, String), SimError> {
+    let arguments = case_arguments(
+        value,
+        Mixfix::Seq(vec![Mixfix::Arg(()), operator("."), Mixfix::Arg(())]),
+    )?;
+    let [type_id, name] = arguments.as_slice() else {
+        return Err(SimError::message("expected a P4 enum"));
+    };
+    Ok((
+        get::text(type_id).map(str::to_owned).map_err(value_error)?,
+        get::text(name).map(str::to_owned).map_err(value_error)?,
+    ))
+}
+
+pub fn pack_p4_tuple(values: Vec<ValueRef>) -> Result<ValueRef, SimError> {
+    let value_type = named_type("value");
+    let values = make::list(&make_type::list_type(value_type), values, Region::none());
+    case_value(
+        "value",
+        Mixfix::Seq(vec![
+            keyword("TUPLE"),
+            Mixfix::Brack(
+                Spanned::new(Atom::LParen, Region::none()),
+                Box::new(Mixfix::Arg(())),
+                Spanned::new(Atom::RParen, Region::none()),
+            ),
+        ]),
+        [values],
+    )
+}
+
+pub fn unpack_p4_tuple(value: &ValueRef) -> Result<Vec<ValueRef>, SimError> {
+    let arguments = case_arguments(
+        value,
+        Mixfix::Seq(vec![
+            keyword("TUPLE"),
+            Mixfix::Brack(
+                Spanned::new(Atom::LParen, Region::none()),
+                Box::new(Mixfix::Arg(())),
+                Spanned::new(Atom::RParen, Region::none()),
+            ),
+        ]),
+    )?;
+    let [values] = arguments.as_slice() else {
+        return Err(SimError::message("expected a P4 tuple"));
+    };
+    get::list(values).map(<[_]>::to_vec).map_err(value_error)
+}
+
+pub fn unpack_p4_precision_number(value: &ValueRef) -> Result<(BigInt, BigInt), SimError> {
+    unpack_p4_fixed_bit(value)
+        .or_else(|_| unpack_p4_fixed_int(value))
+        .or_else(|_| {
+            let arguments = case_arguments(
+                value,
+                Mixfix::Seq(vec![
+                    Mixfix::Arg(()),
+                    operator("."),
+                    Mixfix::Arg(()),
+                    keyword("V"),
+                    Mixfix::Arg(()),
+                ]),
+            )?;
+            let [_maximum, width, value] = arguments.as_slice() else {
+                return Err(SimError::message("expected a P4 precision number"));
+            };
+            Ok((integer(width)?, integer(value)?))
+        })
+}
+
 pub fn unpack_p4_fixed_int(value: &ValueRef) -> Result<(BigInt, BigInt), SimError> {
     unpack_p4_fixed_number(value, "S")
 }
@@ -375,6 +456,13 @@ fn named_type(name: &str) -> Typ {
 fn keyword(value: &str) -> Mixop {
     Mixfix::Atom(Spanned::new(
         Atom::Keyword(value.to_owned()),
+        Region::none(),
+    ))
+}
+
+fn operator(value: &str) -> Mixop {
+    Mixfix::Atom(Spanned::new(
+        Atom::Operator(value.to_owned()),
         Region::none(),
     ))
 }
