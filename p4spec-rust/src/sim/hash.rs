@@ -57,7 +57,7 @@ fn package(values: &[ValueRef]) -> Result<(BigInt, BigInt), SimError> {
             Ok::<_, SimError>((packed_width + width, (packed_value << width) + value))
         },
     )?;
-    if !width.is_multiple_of(16) {
+    if width % 16 != 0 {
         width += 16 - width % 16;
     }
     Ok((BigInt::from(width), value))
