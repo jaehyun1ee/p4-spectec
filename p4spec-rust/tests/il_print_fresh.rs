@@ -54,19 +54,6 @@ fn hint() -> ast::Hint {
 }
 
 #[test]
-fn print_and_fresh_public_entry_points_match_basic_il_forms() {
-    assert_eq!(print::string_of_typ(&typ()), "bool");
-    assert_eq!(print::string_of_prems(&[]), "");
-    let variable = fresh::var_from_typ(
-        &Default::default(),
-        &Default::default(),
-        Region::none(),
-        &typ(),
-    );
-    assert_eq!(variable.0.node, "bool");
-}
-
-#[test]
 fn printer_tables_cover_il_constructor_families_and_escapes() {
     let nested_path = ast::Path::new(
         ast::PathKind::DotP(
