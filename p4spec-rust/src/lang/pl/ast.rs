@@ -114,3 +114,183 @@ pub enum ArgKind {
     ExpA(Exp),
     DefA(Id),
 }
+
+// Dangling
+
+pub type Dangle = sl::ast::Dangle;
+
+// Holding conditions
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum HoldCase<Tier> {
+    BothH(Block<Tier>, Block<Tier>),
+    HoldH(Block<Tier>, Dangle),
+    NotHoldH(Block<Tier>, Dangle),
+}
+
+// Case analysis
+
+pub type Case<Tier> = (Guard, Block<Tier>);
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Guard {
+    BoolG(bool),
+    CmpG(CmpOp, OpTyp, Exp),
+    SubG(Typ, Box<Subcheck>),
+    MatchG(Pattern),
+    MemG(Exp),
+    CheckLetSubG(Typ, Box<Subcheck>, Exp),
+    CheckLetMatchG(Pattern, Exp),
+}
+
+// Instructions
+
+pub type Iid = sl::ast::Iid;
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Fallthrough {
+    FallGroup(Id),
+    FallNext,
+    FallElse,
+    FallFail,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct InstrNode<Tier> {
+    pub kind: InstrKind<Tier>,
+    pub iid: Iid,
+    pub fallthrough: Option<Fallthrough>,
+    pub span: Span,
+}
+
+pub type Instr<Tier> = annot::T<InstrNode<Tier>>;
+
+impl<Tier> InstrNode<Tier> {
+    pub fn new(
+        kind: InstrKind<Tier>,
+        iid: Iid,
+        fallthrough: Option<Fallthrough>,
+        span: Span,
+    ) -> Instr<Tier> {
+        annot::no_hints(Self {
+            kind,
+            iid,
+            fallthrough,
+            span,
+        })
+    }
+}
+
+impl<Tier> HasSpan for InstrNode<Tier> {
+    fn span(&self) -> &Span {
+        &self.span
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum InstrKind<Tier> {
+    IfI(Exp, Vec<IterExp>, Block<Tier>, Dangle),
+    HoldI(Id, NotExp, Vec<IterExp>, HoldCase<Tier>),
+    CaseI(Exp, Vec<Case<Tier>>, Dangle),
+    LetI(Exp, Exp, Vec<IterInstr>),
+    DebugI(Exp),
+    DestructI(Vec<(Option<String>, Exp)>, Exp),
+    CheckLetSubI(Typ, Box<Subcheck>, Exp, Exp, Block<Tier>),
+    CheckLetMatchI(Pattern, Exp, Exp, Block<Tier>),
+    OptionGetI(Exp, Exp, Block<Tier>),
+    TierI(Tier),
+}
+
+pub type Block<Tier> = Vec<Instr<Tier>>;
+pub type IterInstr = sl::ast::IterInstr;
+
+// Relations
+
+pub type RelSignature = sl::ast::RelSignature;
+
+// Group-body tier
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum InstrGroup {
+    ResultI(RelSignature, Vec<Exp>),
+    ReturnI(Exp),
+    RuleI(Id, NotExp, crate::lang::hints::input::T, Vec<IterInstr>),
+    BacktrackI(Vec<BlockGroup>),
+}
+
+pub type BlockGroup = Block<InstrGroup>;
+
+// Dispatch tier
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum InstrDispatch {
+    GroupI(Id, Id, RelSignature, Vec<Exp>, BlockGroup),
+    RouteI(Vec<BlockDispatch>),
+}
+
+pub type BlockDispatch = Block<InstrDispatch>;
+
+// Relations
+
+pub type ExternRel = (Id, RelSignature, Vec<Exp>);
+pub type Rel = (
+    Id,
+    RelSignature,
+    Vec<Exp>,
+    BlockDispatch,
+    Option<BlockDispatch>,
+);
+
+// Functions
+
+pub type ExternFunc = (Id, Vec<TParam>, Vec<Param>, Typ);
+pub type BuiltinFunc = (Id, Vec<TParam>, Vec<Param>, Typ);
+pub type TableRow = (Vec<Exp>, Exp, BlockGroup);
+pub type TableFunc = (Id, Vec<Param>, Typ, Vec<TableRow>);
+pub type DefinedFunc = (
+    Id,
+    Vec<TParam>,
+    Vec<Param>,
+    Typ,
+    BlockGroup,
+    Option<BlockGroup>,
+);
+
+// Definitions
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct DefNode {
+    pub kind: DefKind,
+    pub span: Span,
+}
+
+pub type Def = annot::T<DefNode>;
+
+impl DefNode {
+    pub fn new(kind: DefKind, span: Span) -> Def {
+        annot::no_hints(Self { kind, span })
+    }
+}
+
+impl HasSpan for DefNode {
+    fn span(&self) -> &Span {
+        &self.span
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum DefKind {
+    ExternTypD(Id),
+    TypD(Id, Vec<TParam>, DefTyp),
+    VarD(Id, Typ),
+    ExternRelD(ExternRel),
+    RelD(Rel),
+    ExternDecD(ExternFunc),
+    BuiltinDecD(BuiltinFunc),
+    TableDecD(TableFunc),
+    FuncDecD(DefinedFunc),
+}
+
+// Spec
+
+pub type Spec = Vec<Def>;

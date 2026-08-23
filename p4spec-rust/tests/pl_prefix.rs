@@ -367,3 +367,227 @@ fn dotted_path() -> pl::ast::Path {
         "path_span",
     )
 }
+
+#[test]
+fn pl_control_and_definition_tiers_construct_every_variant() {
+    let group_block: pl::ast::BlockGroup = vec![];
+    let dispatch_block: pl::ast::BlockDispatch = vec![];
+    let hold_cases = [
+        pl::ast::HoldCase::BothH(group_block.clone(), group_block.clone()),
+        pl::ast::HoldCase::HoldH(group_block.clone(), true),
+        pl::ast::HoldCase::NotHoldH(group_block.clone(), false),
+    ];
+    let guards = [
+        pl::ast::Guard::BoolG(true),
+        pl::ast::Guard::CmpG(sl::ast::CmpOp::EqOp, sl::ast::OpTyp::BoolT, variable("cmp")),
+        pl::ast::Guard::SubG(typ(), Box::new(il::ast::Subcheck::SkipSC)),
+        pl::ast::Guard::MatchG(sl::ast::Pattern::OptP(il::ast::OptPattern::Some)),
+        pl::ast::Guard::MemG(variable("member")),
+        pl::ast::Guard::CheckLetSubG(typ(), Box::new(il::ast::Subcheck::SkipSC), variable("sub")),
+        pl::ast::Guard::CheckLetMatchG(
+            sl::ast::Pattern::OptP(il::ast::OptPattern::None),
+            variable("matched"),
+        ),
+    ];
+    let control = vec![
+        pl::ast::InstrKind::IfI(variable("if"), vec![], group_block.clone(), false),
+        pl::ast::InstrKind::HoldI(
+            id("rel"),
+            Mixfix::Arg(variable("hold")),
+            vec![],
+            hold_cases[0].clone(),
+        ),
+        pl::ast::InstrKind::CaseI(
+            variable("case"),
+            vec![(guards[0].clone(), group_block.clone())],
+            false,
+        ),
+        pl::ast::InstrKind::LetI(variable("left"), variable("right"), vec![]),
+        pl::ast::InstrKind::DebugI(variable("debug")),
+        pl::ast::InstrKind::DestructI(
+            vec![
+                (Some("name".into()), variable("value")),
+                (None, variable("discard")),
+            ],
+            variable("source"),
+        ),
+        pl::ast::InstrKind::CheckLetSubI(
+            typ(),
+            Box::new(il::ast::Subcheck::SkipSC),
+            variable("left"),
+            variable("right"),
+            group_block.clone(),
+        ),
+        pl::ast::InstrKind::CheckLetMatchI(
+            sl::ast::Pattern::ListP(il::ast::ListPattern::Nil),
+            variable("left"),
+            variable("right"),
+            group_block.clone(),
+        ),
+        pl::ast::InstrKind::OptionGetI(variable("option"), variable("value"), group_block.clone()),
+        pl::ast::InstrKind::TierI(pl::ast::InstrGroup::ReturnI(variable("tier"))),
+    ];
+    let instruction = pl::ast::InstrNode::new(
+        control[0].clone(),
+        7,
+        Some(pl::ast::Fallthrough::FallNext),
+        span("instruction"),
+    );
+    assert_eq!(instruction.span(), &span("instruction"));
+    assert!(matches!(
+        instruction.node.fallthrough,
+        Some(pl::ast::Fallthrough::FallNext)
+    ));
+    let pl::ast::InstrKind::IfI(condition, iterexps, block, dangle) = &instruction.node.kind else {
+        panic!("if instruction")
+    };
+    assert_eq!(condition.node.span, span("if"));
+    assert!(iterexps.is_empty());
+    assert!(block.is_empty());
+    assert!(!dangle);
+    let nested_dispatch = pl::ast::InstrNode::new(
+        pl::ast::InstrKind::TierI(pl::ast::InstrGroup::BacktrackI(vec![group_block.clone()])),
+        8,
+        Some(pl::ast::Fallthrough::FallGroup(id("next_group"))),
+        span("nested_dispatch"),
+    );
+    let pl::ast::InstrKind::TierI(pl::ast::InstrGroup::BacktrackI(blocks)) =
+        &nested_dispatch.node.kind
+    else {
+        panic!("tier backtrack")
+    };
+    let [only_block] = blocks.as_slice() else {
+        panic!("backtrack blocks")
+    };
+    assert!(only_block.is_empty());
+    assert!(
+        matches!(&nested_dispatch.node.fallthrough, Some(pl::ast::Fallthrough::FallGroup(id)) if id.node == "next_group")
+    );
+    let groups = vec![
+        pl::ast::InstrGroup::ResultI(
+            (Spanned::new(Mixfix::Arg(typ()), span("signature")), vec![0]),
+            vec![variable("result")],
+        ),
+        pl::ast::InstrGroup::ReturnI(variable("return")),
+        pl::ast::InstrGroup::RuleI(id("rule"), Mixfix::Arg(variable("input")), vec![0], vec![]),
+        pl::ast::InstrGroup::BacktrackI(vec![group_block.clone()]),
+    ];
+    let dispatch = vec![
+        pl::ast::InstrDispatch::GroupI(
+            id("group"),
+            id("relation"),
+            (Spanned::new(Mixfix::Arg(typ()), span("signature")), vec![0]),
+            vec![variable("argument")],
+            group_block.clone(),
+        ),
+        pl::ast::InstrDispatch::RouteI(vec![dispatch_block.clone()]),
+    ];
+    let [_, _, group_rule, _] = groups.as_slice() else {
+        panic!("group tiers")
+    };
+    let pl::ast::InstrGroup::RuleI(rule_id, rule_notation, inputs, iterinstrs) = group_rule else {
+        panic!("group rule")
+    };
+    assert_eq!(rule_id.node, "rule");
+    assert!(matches!(rule_notation, Mixfix::Arg(exp) if exp.node.span == span("input")));
+    assert_eq!(inputs, &vec![0]);
+    assert!(iterinstrs.is_empty());
+    let [dispatch_group, _] = dispatch.as_slice() else {
+        panic!("dispatch tiers")
+    };
+    let pl::ast::InstrDispatch::GroupI(group_id, rel_id, signature, arguments, body) =
+        dispatch_group
+    else {
+        panic!("dispatch group")
+    };
+    assert_eq!(group_id.node, "group");
+    assert_eq!(rel_id.node, "relation");
+    assert!(matches!(signature.0.node, Mixfix::Arg(_)));
+    assert_eq!(arguments[0].node.span, span("argument"));
+    assert!(body.is_empty());
+    let definitions = vec![
+        pl::ast::DefNode::new(
+            pl::ast::DefKind::ExternTypD(id("Syntax")),
+            span("extern_type"),
+        ),
+        pl::ast::DefNode::new(
+            pl::ast::DefKind::TypD(
+                id("Alias"),
+                vec![],
+                Spanned::new(sl::ast::DefTypKind::PlainT(typ()), span("deftyp")),
+            ),
+            span("type"),
+        ),
+        pl::ast::DefNode::new(pl::ast::DefKind::VarD(id("value"), typ()), span("var")),
+        pl::ast::DefNode::new(
+            pl::ast::DefKind::ExternRelD((
+                id("external"),
+                (Spanned::new(Mixfix::Arg(typ()), span("signature")), vec![]),
+                vec![variable("argument")],
+            )),
+            span("extern_rel"),
+        ),
+        pl::ast::DefNode::new(
+            pl::ast::DefKind::RelD((
+                id("relation"),
+                (Spanned::new(Mixfix::Arg(typ()), span("signature")), vec![]),
+                vec![variable("argument")],
+                dispatch_block.clone(),
+                Some(dispatch_block.clone()),
+            )),
+            span("rel"),
+        ),
+        pl::ast::DefNode::new(
+            pl::ast::DefKind::ExternDecD((id("extern"), vec![], vec![], typ())),
+            span("extern_dec"),
+        ),
+        pl::ast::DefNode::new(
+            pl::ast::DefKind::BuiltinDecD((id("builtin"), vec![], vec![], typ())),
+            span("builtin_dec"),
+        ),
+        pl::ast::DefNode::new(
+            pl::ast::DefKind::TableDecD((
+                id("table"),
+                vec![],
+                typ(),
+                vec![(
+                    vec![variable("key")],
+                    variable("result"),
+                    group_block.clone(),
+                )],
+            )),
+            span("table_dec"),
+        ),
+        pl::ast::DefNode::new(
+            pl::ast::DefKind::FuncDecD((id("function"), vec![], vec![], typ(), group_block, None)),
+            span("function_dec"),
+        ),
+    ];
+    let spec: pl::ast::Spec = definitions;
+    let [extern_typ, _, _, _, relation, _, _, table, _] = spec.as_slice() else {
+        panic!("definition surface")
+    };
+    assert_eq!(extern_typ.span(), &span("extern_type"));
+    let pl::ast::DefKind::RelD((rel_id, signature, arguments, dispatch, otherwise)) =
+        &relation.node.kind
+    else {
+        panic!("relation definition")
+    };
+    assert_eq!(rel_id.node, "relation");
+    assert!(matches!(signature.0.node, Mixfix::Arg(_)));
+    assert_eq!(arguments[0].node.span, span("argument"));
+    assert!(dispatch.is_empty());
+    assert!(otherwise.as_ref().is_some_and(Vec::is_empty));
+    let pl::ast::DefKind::TableDecD((table_id, params, result, rows)) = &table.node.kind else {
+        panic!("table definition")
+    };
+    let [(keys, table_result, table_body)] = rows.as_slice() else {
+        panic!("table row")
+    };
+    assert_eq!(table_id.node, "table");
+    assert!(params.is_empty());
+    assert_eq!(result.node, sl::ast::TypKind::BoolT);
+    assert_eq!(keys[0].node.span, span("key"));
+    assert_eq!(table_result.node.span, span("result"));
+    assert!(table_body.is_empty());
+}
