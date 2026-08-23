@@ -175,14 +175,15 @@ where
         A::default(),
     )?;
     let architecture = A::name();
-    let total = suite.entries.len();
-    let mut excluded = 0;
-    let mut failed = 0;
-    let mut patched = 0;
-    let mut patched_excluded = 0;
-    let mut patched_failed = 0;
-    let mut excluded_by_group = std::collections::BTreeMap::<String, usize>::new();
-    println!("Running simulation test ({architecture}) on {total} files\n");
+    let mut stats = SimulationStats {
+        total: suite.entries.len(),
+        architecture,
+        ..SimulationStats::default()
+    };
+    println!(
+        "Running simulation test ({architecture}) on {} files\n",
+        stats.total
+    );
     for entry in suite.entries {
         match entry {
             SimEntry::Exclude {
@@ -195,13 +196,13 @@ where
                     "\n>>> Running simulation test ({architecture}) on {p4_path} with packet input {stf_path}"
                 );
                 println!("Excluding file: {stf_path}");
-                excluded += 1;
+                stats.excluded += 1;
                 if is_patched {
-                    patched += 1;
-                    patched_excluded += 1;
+                    stats.patched += 1;
+                    stats.patched_excluded += 1;
                 }
                 if let Some(group) = group {
-                    *excluded_by_group.entry(group).or_default() += 1;
+                    *stats.excluded_by_group.entry(group).or_default() += 1;
                 }
             }
             SimEntry::Run {
@@ -215,7 +216,7 @@ where
                     "\n>>> Running simulation test ({architecture}) on {p4_path} with packet input {stf_path}"
                 );
                 if is_patched {
-                    patched += 1;
+                    stats.patched += 1;
                 }
                 interpreter.clear();
                 match SuiteRunner::<A>::run_case(&mut interpreter, &program, &stf) {
@@ -228,40 +229,34 @@ where
                     Err(error) => {
                         println!("Error on run: {stf_path}");
                         eprintln!("Error on run: {stf_path}\n{error}");
-                        failed += 1;
+                        stats.failed += 1;
                         if is_patched {
-                            patched_failed += 1;
+                            stats.patched_failed += 1;
                         }
                     }
                 }
             }
         }
     }
-    print_stats(
-        total,
-        excluded,
-        failed,
-        patched,
-        patched_excluded,
-        patched_failed,
-        &excluded_by_group,
-        architecture,
-    );
+    print_stats(&stats);
     Ok(())
 }
 
-fn print_stats(
+#[derive(Default)]
+struct SimulationStats {
     total: usize,
     excluded: usize,
     failed: usize,
     patched: usize,
     patched_excluded: usize,
     patched_failed: usize,
-    excluded_by_group: &std::collections::BTreeMap<String, usize>,
-    architecture: &str,
-) {
-    let name = format!("Running simulation test ({architecture})");
-    let passed = total - excluded - failed;
+    excluded_by_group: std::collections::BTreeMap<String, usize>,
+    architecture: &'static str,
+}
+
+fn print_stats(stats: &SimulationStats) {
+    let name = format!("Running simulation test ({})", stats.architecture);
+    let passed = stats.total - stats.excluded - stats.failed;
     let rate = |count, denominator| {
         if denominator == 0 {
             0.0
@@ -270,22 +265,31 @@ fn print_stats(
         }
     };
     println!(
-        "\n{name}: [EXCLUDE] {excluded}/{total} ({:.2}%) [PASS] {passed}/{total} ({:.2}%) [FAIL] {failed}/{total} ({:.2}%) [PATCH] {patched}/{total} ({:.2}%)",
-        rate(excluded, total),
-        rate(passed, total),
-        rate(failed, total),
-        rate(patched, total),
+        "\n{name}: [EXCLUDE] {excluded}/{total} ({excluded_rate:.2}%) [PASS] {passed}/{total} ({passed_rate:.2}%) [FAIL] {failed}/{total} ({failed_rate:.2}%) [PATCH] {patched}/{total} ({patched_rate:.2}%)",
+        excluded = stats.excluded,
+        total = stats.total,
+        passed = passed,
+        failed = stats.failed,
+        patched = stats.patched,
+        excluded_rate = rate(stats.excluded, stats.total),
+        passed_rate = rate(passed, stats.total),
+        failed_rate = rate(stats.failed, stats.total),
+        patched_rate = rate(stats.patched, stats.total),
     );
-    let patched_passed = patched - patched_excluded - patched_failed;
+    let patched_passed = stats.patched - stats.patched_excluded - stats.patched_failed;
     println!(
-        "\n{name}: [PATCH]: [EXCLUDE] {patched_excluded}/{patched} ({:.2}%) [PASS] {patched_passed}/{patched} ({:.2}%) [FAIL] {patched_failed}/{patched} ({:.2}%)",
-        rate(patched_excluded, patched),
-        rate(patched_passed, patched),
-        rate(patched_failed, patched),
+        "\n{name}: [PATCH]: [EXCLUDE] {patched_excluded}/{patched} ({patched_excluded_rate:.2}%) [PASS] {patched_passed}/{patched} ({patched_passed_rate:.2}%) [FAIL] {patched_failed}/{patched} ({patched_failed_rate:.2}%)",
+        patched_excluded = stats.patched_excluded,
+        patched = stats.patched,
+        patched_passed = patched_passed,
+        patched_failed = stats.patched_failed,
+        patched_excluded_rate = rate(stats.patched_excluded, stats.patched),
+        patched_passed_rate = rate(patched_passed, stats.patched),
+        patched_failed_rate = rate(stats.patched_failed, stats.patched),
     );
-    if !excluded_by_group.is_empty() {
+    if !stats.excluded_by_group.is_empty() {
         println!("\n{name} [EXCLUDE by subdir]:");
-        for (group, count) in excluded_by_group {
+        for (group, count) in &stats.excluded_by_group {
             println!("  {group}: {count}");
         }
     }
