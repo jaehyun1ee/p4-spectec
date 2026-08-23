@@ -1,4 +1,6 @@
-use p4spec_rust::wire::{Envelope, SL_SCHEMA, VALUE_SCHEMA, WireError};
+use p4spec_rust::wire::{
+    AL_SCHEMA, EL_SCHEMA, Envelope, IL_SCHEMA, PL_SCHEMA, SL_SCHEMA, VALUE_SCHEMA, WireError,
+};
 use serde_json::{Value, json};
 
 #[test]
@@ -22,6 +24,37 @@ fn value_envelope_round_trips() {
     assert_eq!(decoded.schema(), VALUE_SCHEMA);
     assert_eq!(decoded.kind(), "value");
     assert_eq!(decoded.payload(), &json!(["BoolV", true]));
+}
+
+#[test]
+fn stage_envelopes_round_trip_with_their_schema_and_kind() {
+    let cases = [
+        (Envelope::el(json!({"node": "el"})), EL_SCHEMA, "el"),
+        (Envelope::il(json!({"node": "il"})), IL_SCHEMA, "il"),
+        (Envelope::al(json!({"node": "al"})), AL_SCHEMA, "al"),
+        (Envelope::pl(json!({"node": "pl"})), PL_SCHEMA, "pl"),
+    ];
+
+    for (envelope, schema, kind) in cases {
+        let bytes = serde_json::to_vec(&envelope).expect("serialize stage envelope");
+        let decoded: Envelope<Value> =
+            Envelope::from_slice(&bytes).expect("deserialize stage envelope");
+
+        assert_eq!(decoded.schema(), schema);
+        assert_eq!(decoded.kind(), kind);
+    }
+}
+
+#[test]
+fn stage_schema_rejects_another_stage_kind() {
+    let input = br#"{
+        "schema":"p4spectec.el.v1",
+        "kind":"il",
+        "payload":{"node":"el"}
+    }"#;
+
+    let error = Envelope::<Value>::from_slice(input).expect_err("reject mismatched stage kind");
+    assert!(matches!(error, WireError::SchemaKindMismatch { .. }));
 }
 
 #[test]

@@ -1,10 +1,18 @@
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use thiserror::Error;
 
+pub const EL_SCHEMA: &str = "p4spectec.el.v1";
+pub const IL_SCHEMA: &str = "p4spectec.il.v1";
+pub const AL_SCHEMA: &str = "p4spectec.al.v1";
+pub const PL_SCHEMA: &str = "p4spectec.pl.v1";
 pub const SL_SCHEMA: &str = "p4spectec.sl.v1";
 pub const VALUE_SCHEMA: &str = "p4spectec.value.v1";
 pub const SIM_SUITE_SCHEMA: &str = "p4spectec.sim-suite.v1";
 
+const EL_KIND: &str = "el";
+const IL_KIND: &str = "il";
+const AL_KIND: &str = "al";
+const PL_KIND: &str = "pl";
 const SL_KIND: &str = "sl";
 const VALUE_KIND: &str = "value";
 const SIM_SUITE_KIND: &str = "sim-suite";
@@ -17,6 +25,22 @@ pub struct Envelope<T> {
 }
 
 impl<T> Envelope<T> {
+    pub fn el(payload: T) -> Self {
+        Self::new(EL_SCHEMA, EL_KIND, payload)
+    }
+
+    pub fn il(payload: T) -> Self {
+        Self::new(IL_SCHEMA, IL_KIND, payload)
+    }
+
+    pub fn al(payload: T) -> Self {
+        Self::new(AL_SCHEMA, AL_KIND, payload)
+    }
+
+    pub fn pl(payload: T) -> Self {
+        Self::new(PL_SCHEMA, PL_KIND, payload)
+    }
+
     pub fn sl(payload: T) -> Self {
         Self::new(SL_SCHEMA, SL_KIND, payload)
     }
@@ -55,6 +79,10 @@ impl<T> Envelope<T> {
 
     fn validate(&self) -> Result<(), WireError> {
         let expected_kind = match self.schema.as_str() {
+            EL_SCHEMA => EL_KIND,
+            IL_SCHEMA => IL_KIND,
+            AL_SCHEMA => AL_KIND,
+            PL_SCHEMA => PL_KIND,
             SL_SCHEMA => SL_KIND,
             VALUE_SCHEMA => VALUE_KIND,
             SIM_SUITE_SCHEMA => SIM_SUITE_KIND,
