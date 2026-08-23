@@ -6,17 +6,37 @@ use super::ast::*;
 
 // Identifiers
 
-fn eq_id(id_a: &Id, id_b: &Id) -> bool {
+pub fn eq_id(id_a: &Id, id_b: &Id) -> bool {
     id_a.node == id_b.node
 }
 
 // Atoms
 
-fn eq_atom(atom_a: &Atom, atom_b: &Atom) -> bool {
+pub fn eq_atom(atom_a: &Atom, atom_b: &Atom) -> bool {
     atom_a.node == atom_b.node
 }
 
 // Variables
+
+pub fn eq_atoms(atoms_a: &[Atom], atoms_b: &[Atom]) -> bool {
+    atoms_a.len() == atoms_b.len()
+        && atoms_a
+            .iter()
+            .zip(atoms_b)
+            .all(|(atom_a, atom_b)| eq_atom(atom_a, atom_b))
+}
+
+pub fn eq_mixop(mixop_a: &Mixop, mixop_b: &Mixop) -> bool {
+    mixop_a == mixop_b
+}
+
+pub fn eq_iter(iter_a: Iter, iter_b: Iter) -> bool {
+    iter_a == iter_b
+}
+
+pub fn eq_iters(iters_a: &[Iter], iters_b: &[Iter]) -> bool {
+    iters_a == iters_b
+}
 
 fn compare_iters(iters_a: &[Iter], iters_b: &[Iter]) -> Ordering {
     let rank = |iter: &Iter| match iter {
@@ -26,13 +46,13 @@ fn compare_iters(iters_a: &[Iter], iters_b: &[Iter]) -> Ordering {
     iters_a.iter().map(rank).cmp(iters_b.iter().map(rank))
 }
 
-fn eq_var(var_a: &Var, var_b: &Var) -> bool {
+pub fn eq_var(var_a: &Var, var_b: &Var) -> bool {
     let (id_a, _typ_a, iters_a) = var_a;
     let (id_b, _typ_b, iters_b) = var_b;
     eq_id(id_a, id_b) && iters_a == iters_b
 }
 
-fn eq_vars(vars_a: &[Var], vars_b: &[Var]) -> bool {
+pub fn eq_vars(vars_a: &[Var], vars_b: &[Var]) -> bool {
     let mut vars_a = vars_a.iter().collect::<Vec<_>>();
     let mut vars_b = vars_b.iter().collect::<Vec<_>>();
     let compare = |var_a: &&Var, var_b: &&Var| {
@@ -53,7 +73,7 @@ fn eq_vars(vars_a: &[Var], vars_b: &[Var]) -> bool {
 
 // Types
 
-fn eq_typ(typ_a: &Typ, typ_b: &Typ) -> bool {
+pub fn eq_typ(typ_a: &Typ, typ_b: &Typ) -> bool {
     match (&typ_a.node, &typ_b.node) {
         (TypKind::BoolT, TypKind::BoolT) | (TypKind::TextT, TypKind::TextT) => true,
         (TypKind::NumT(numtyp_a), TypKind::NumT(numtyp_b)) => numtyp_a == numtyp_b,
@@ -71,7 +91,7 @@ fn eq_typ(typ_a: &Typ, typ_b: &Typ) -> bool {
     }
 }
 
-fn eq_typs(typs_a: &[Typ], typs_b: &[Typ]) -> bool {
+pub fn eq_typs(typs_a: &[Typ], typs_b: &[Typ]) -> bool {
     typs_a.len() == typs_b.len()
         && typs_a
             .iter()
@@ -79,7 +99,7 @@ fn eq_typs(typs_a: &[Typ], typs_b: &[Typ]) -> bool {
             .all(|(typ_a, typ_b)| eq_typ(typ_a, typ_b))
 }
 
-fn eq_mixfix<T, U>(
+fn eq_mixfix_by<T, U>(
     mixfix_a: &Mixfix<T>,
     mixfix_b: &Mixfix<U>,
     mut eq_arg: impl FnMut(&T, &U) -> bool,
@@ -89,6 +109,47 @@ fn eq_mixfix<T, U>(
             Ok::<_, Infallible>(eq_arg(arg_a, arg_b))
         })
         .expect("infallible mixfix equality")
+}
+
+pub fn eq_nottyp(nottyp_a: &NotTyp, nottyp_b: &NotTyp) -> bool {
+    eq_mixfix_by(&nottyp_a.node, &nottyp_b.node, eq_typ)
+}
+
+pub fn eq_value(value_a: &Value, value_b: &Value) -> bool {
+    match (&value_a.kind, &value_b.kind) {
+        (ValueKind::BoolV(value_a), ValueKind::BoolV(value_b)) => value_a == value_b,
+        (ValueKind::NumV(value_a), ValueKind::NumV(value_b)) => value_a == value_b,
+        (ValueKind::TextV(value_a), ValueKind::TextV(value_b)) => value_a == value_b,
+        (ValueKind::StructV(fields_a), ValueKind::StructV(fields_b)) => {
+            fields_a.len() == fields_b.len()
+                && fields_a
+                    .iter()
+                    .zip(fields_b)
+                    .all(|((atom_a, value_a), (atom_b, value_b))| {
+                        eq_atom(atom_a, atom_b) && eq_value(value_a, value_b)
+                    })
+        }
+        (ValueKind::CaseV(value_a), ValueKind::CaseV(value_b)) => {
+            eq_mixfix_by(value_a, value_b, eq_value)
+        }
+        (ValueKind::TupleV(values_a), ValueKind::TupleV(values_b))
+        | (ValueKind::ListV(values_a), ValueKind::ListV(values_b)) => eq_values(values_a, values_b),
+        (ValueKind::OptV(Some(value_a)), ValueKind::OptV(Some(value_b))) => {
+            eq_value(value_a, value_b)
+        }
+        (ValueKind::OptV(None), ValueKind::OptV(None)) => true,
+        (ValueKind::FuncV(id_a), ValueKind::FuncV(id_b)) => id_a == id_b,
+        (ValueKind::ExternV(value_a), ValueKind::ExternV(value_b)) => value_a == value_b,
+        _ => false,
+    }
+}
+
+pub fn eq_values(values_a: &[Value], values_b: &[Value]) -> bool {
+    values_a.len() == values_b.len()
+        && values_a
+            .iter()
+            .zip(values_b)
+            .all(|(value_a, value_b)| eq_value(value_a, value_b))
 }
 
 // Expressions
@@ -123,7 +184,7 @@ pub fn eq_exp(exp_a: &Exp, exp_b: &Exp) -> bool {
         (ExpKind::TupleE(exps_a), ExpKind::TupleE(exps_b))
         | (ExpKind::ListE(exps_a), ExpKind::ListE(exps_b)) => eq_exps(exps_a, exps_b),
         (ExpKind::CaseE(notexp_a), ExpKind::CaseE(notexp_b)) => {
-            eq_mixfix(notexp_a, notexp_b, eq_exp)
+            eq_mixfix_by(notexp_a, notexp_b, eq_exp)
         }
         (ExpKind::StrE(fields_a), ExpKind::StrE(fields_b)) => {
             fields_a.len() == fields_b.len()
@@ -172,13 +233,21 @@ pub fn eq_exps(exps_a: &[Exp], exps_b: &[Exp]) -> bool {
             .all(|(exp_a, exp_b)| eq_exp(exp_a, exp_b))
 }
 
-fn eq_iterexp(iterexp_a: &IterExp, iterexp_b: &IterExp) -> bool {
+pub fn eq_iterexp(iterexp_a: &IterExp, iterexp_b: &IterExp) -> bool {
     iterexp_a.0 == iterexp_b.0 && eq_vars(&iterexp_a.1, &iterexp_b.1)
+}
+
+pub fn eq_iterexps(iterexps_a: &[IterExp], iterexps_b: &[IterExp]) -> bool {
+    iterexps_a.len() == iterexps_b.len()
+        && iterexps_a
+            .iter()
+            .zip(iterexps_b)
+            .all(|(iterexp_a, iterexp_b)| eq_iterexp(iterexp_a, iterexp_b))
 }
 
 // Patterns
 
-fn eq_pattern(pattern_a: &Pattern, pattern_b: &Pattern) -> bool {
+pub fn eq_pattern(pattern_a: &Pattern, pattern_b: &Pattern) -> bool {
     match (pattern_a, pattern_b) {
         (Pattern::CaseP(mixop_a), Pattern::CaseP(mixop_b)) => mixop_a == mixop_b,
         (Pattern::ListP(pattern_a), Pattern::ListP(pattern_b)) => pattern_a == pattern_b,
@@ -189,7 +258,7 @@ fn eq_pattern(pattern_a: &Pattern, pattern_b: &Pattern) -> bool {
 
 // Paths
 
-fn eq_path(path_a: &Path, path_b: &Path) -> bool {
+pub fn eq_path(path_a: &Path, path_b: &Path) -> bool {
     match (&path_a.kind, &path_b.kind) {
         (PathKind::RootP, PathKind::RootP) => true,
         (PathKind::IdxP(path_a, exp_a), PathKind::IdxP(path_b, exp_b)) => {
@@ -207,7 +276,11 @@ fn eq_path(path_a: &Path, path_b: &Path) -> bool {
 
 // Type parameters
 
-fn eq_tparams(tparams_a: &[TParam], tparams_b: &[TParam]) -> bool {
+pub fn eq_tparam(tparam_a: &TParam, tparam_b: &TParam) -> bool {
+    eq_id(tparam_a, tparam_b)
+}
+
+pub fn eq_tparams(tparams_a: &[TParam], tparams_b: &[TParam]) -> bool {
     tparams_a.len() == tparams_b.len()
         && tparams_a
             .iter()
@@ -217,7 +290,7 @@ fn eq_tparams(tparams_a: &[TParam], tparams_b: &[TParam]) -> bool {
 
 // Arguments
 
-fn eq_arg(arg_a: &Arg, arg_b: &Arg) -> bool {
+pub fn eq_arg(arg_a: &Arg, arg_b: &Arg) -> bool {
     match (&arg_a.node, &arg_b.node) {
         (ArgKind::ExpA(exp_a), ArgKind::ExpA(exp_b)) => eq_exp(exp_a, exp_b),
         (ArgKind::DefA(id_a), ArgKind::DefA(id_b)) => eq_id(id_a, id_b),
@@ -225,10 +298,57 @@ fn eq_arg(arg_a: &Arg, arg_b: &Arg) -> bool {
     }
 }
 
-fn eq_args(args_a: &[Arg], args_b: &[Arg]) -> bool {
+pub fn eq_args(args_a: &[Arg], args_b: &[Arg]) -> bool {
     args_a.len() == args_b.len()
         && args_a
             .iter()
             .zip(args_b)
             .all(|(arg_a, arg_b)| eq_arg(arg_a, arg_b))
+}
+
+pub fn eq_targ(targ_a: &Targ, targ_b: &Targ) -> bool {
+    eq_typ(targ_a, targ_b)
+}
+
+pub fn eq_targs(targs_a: &[Targ], targs_b: &[Targ]) -> bool {
+    targs_a.len() == targs_b.len()
+        && targs_a
+            .iter()
+            .zip(targs_b)
+            .all(|(targ_a, targ_b)| eq_targ(targ_a, targ_b))
+}
+
+pub fn eq_prem(prem_a: &Prem, prem_b: &Prem) -> bool {
+    match (&prem_a.node, &prem_b.node) {
+        (PremKind::RulePr(id_a, exp_a, input_a), PremKind::RulePr(id_b, exp_b, input_b)) => {
+            eq_id(id_a, id_b) && eq_mixfix_by(exp_a, exp_b, eq_exp) && input_a == input_b
+        }
+        (PremKind::IfPr(exp_a), PremKind::IfPr(exp_b))
+        | (PremKind::DebugPr(exp_a), PremKind::DebugPr(exp_b)) => eq_exp(exp_a, exp_b),
+        (PremKind::IfHoldPr(id_a, exp_a), PremKind::IfHoldPr(id_b, exp_b))
+        | (PremKind::IfNotHoldPr(id_a, exp_a), PremKind::IfNotHoldPr(id_b, exp_b)) => {
+            eq_id(id_a, id_b) && eq_mixfix_by(exp_a, exp_b, eq_exp)
+        }
+        (PremKind::LetPr(left_a, right_a), PremKind::LetPr(left_b, right_b)) => {
+            eq_exp(left_a, left_b) && eq_exp(right_a, right_b)
+        }
+        (PremKind::IterPr(prem_a, iter_a), PremKind::IterPr(prem_b, iter_b)) => {
+            eq_prem(prem_a, prem_b) && eq_iterprem(iter_a, iter_b)
+        }
+        _ => false,
+    }
+}
+
+pub fn eq_iterprem(iterprem_a: &IterPrem, iterprem_b: &IterPrem) -> bool {
+    eq_iter(iterprem_a.0, iterprem_b.0)
+        && eq_vars(&iterprem_a.1, &iterprem_b.1)
+        && eq_vars(&iterprem_a.2, &iterprem_b.2)
+}
+
+pub fn eq_iterprems(iterprems_a: &[IterPrem], iterprems_b: &[IterPrem]) -> bool {
+    iterprems_a.len() == iterprems_b.len()
+        && iterprems_a
+            .iter()
+            .zip(iterprems_b)
+            .all(|(iterprem_a, iterprem_b)| eq_iterprem(iterprem_a, iterprem_b))
 }
