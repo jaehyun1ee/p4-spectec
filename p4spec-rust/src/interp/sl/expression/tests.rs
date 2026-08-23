@@ -1,5 +1,9 @@
 use crate::{
-    domain::source::{Region, Spanned},
+    domain::{
+        atom::Atom,
+        mixfix::Mixfix,
+        source::{Region, Spanned},
+    },
     interp::{common::InterpError, sl::context::Context},
     lang::{il::ast as il, sl::ast as sl},
     runtime::{
@@ -8,7 +12,7 @@ use crate::{
     },
 };
 
-use super::{Calls, eval_with_calls, value_is_subtype};
+use super::{Calls, eval_with_calls, value_is_subtype, value_matches_subcheck};
 
 fn id(name: &str) -> il::Id {
     Spanned::new(name.to_owned(), Region::for_file(name))
@@ -36,12 +40,12 @@ impl Calls for RecordingCalls {
         &mut self,
         _context: &mut Context,
         id: &il::Id,
-        type_args: &[il::Typ],
-        values: &[ValueRef],
+        type_args: Vec<il::Typ>,
+        values: Vec<ValueRef>,
     ) -> Result<ValueRef, InterpError> {
         self.id = Some(id.clone());
-        self.type_args = type_args.to_vec();
-        self.values = values.to_vec();
+        self.type_args = type_args;
+        self.values = values;
         Ok(make::bool(true, Region::for_file("result")))
     }
 }
@@ -120,7 +124,11 @@ fn subtype_expressions_use_the_callers_cache() {
         Region::for_file("value"),
     );
     let subtype = il::Exp::new(
-        il::ExpKind::SubE(Box::new(value), make_type::bool_type()),
+        il::ExpKind::SubE(
+            Box::new(value),
+            make_type::bool_type(),
+            Box::new(il::Subcheck::RecurseSC(make_type::bool_type())),
+        ),
         il::TypKind::BoolT,
         Region::for_file("subtype"),
     );
@@ -135,6 +143,107 @@ fn subtype_expressions_use_the_callers_cache() {
 
     assert_eq!(get::bool(&result), Ok(false));
     assert_eq!(calls.subtype_checks, 1);
+}
+
+#[test]
+fn skipped_subtype_expressions_do_not_call_the_generic_matcher() {
+    let mut context = Context::from_spec(false, &[]).expect("valid empty spec");
+    let value = il::Exp::new(
+        il::ExpKind::BoolE(true),
+        il::TypKind::BoolT,
+        Region::for_file("value"),
+    );
+    let subtype = il::Exp::new(
+        il::ExpKind::SubE(
+            Box::new(value),
+            make_type::bool_type(),
+            Box::new(il::Subcheck::SkipSC),
+        ),
+        il::TypKind::BoolT,
+        Region::for_file("subtype"),
+    );
+    let mut calls = RecordingCalls {
+        id: None,
+        type_args: Vec::new(),
+        values: Vec::new(),
+        subtype_checks: 0,
+    };
+
+    let result = eval_with_calls(&mut context, &mut calls, &subtype).expect("subtype succeeds");
+
+    assert_eq!(get::bool(&result), Ok(true));
+    assert_eq!(calls.subtype_checks, 0);
+}
+
+#[test]
+fn recursive_subtype_expressions_call_the_generic_matcher() {
+    let mut context = Context::from_spec(false, &[]).expect("valid empty spec");
+    let value = il::Exp::new(
+        il::ExpKind::BoolE(true),
+        il::TypKind::BoolT,
+        Region::for_file("value"),
+    );
+    let typ = make_type::bool_type();
+    let subtype = il::Exp::new(
+        il::ExpKind::SubE(
+            Box::new(value),
+            typ.clone(),
+            Box::new(il::Subcheck::RecurseSC(typ)),
+        ),
+        il::TypKind::BoolT,
+        Region::for_file("subtype"),
+    );
+    let mut calls = RecordingCalls {
+        id: None,
+        type_args: Vec::new(),
+        values: Vec::new(),
+        subtype_checks: 0,
+    };
+
+    let result = eval_with_calls(&mut context, &mut calls, &subtype).expect("subtype succeeds");
+
+    assert_eq!(get::bool(&result), Ok(false));
+    assert_eq!(calls.subtype_checks, 1);
+}
+
+#[test]
+fn structural_subtype_operations_check_only_value_shapes() {
+    let context = Context::from_spec(false, &[]).expect("valid empty spec");
+    let atom = Spanned::new(Atom::Tag("SOME".to_owned()), Region::for_file("some"));
+    let mixop: il::Mixop = Mixfix::Atom(atom.clone());
+    let value_case = make::case_kind(
+        &il::TypKind::BoolT,
+        Mixfix::Atom(atom),
+        Region::for_file("case"),
+    );
+    let value_opt = make::opt_kind(&il::TypKind::BoolT, None, Region::for_file("opt"));
+    let value_list = make::list_kind(
+        &il::TypKind::BoolT,
+        vec![make::bool(true, Region::for_file("element"))],
+        Region::for_file("list"),
+    );
+    let value = make::tuple_kind(
+        &il::TypKind::BoolT,
+        vec![value_case, value_opt, value_list],
+        Region::for_file("tuple"),
+    );
+    let subcheck = il::Subcheck::TupleSC(vec![
+        il::Subcheck::MixopSC(vec![mixop]),
+        il::Subcheck::IterSC(il::Iter::Opt, Box::new(il::Subcheck::SkipSC)),
+        il::Subcheck::IterSC(il::Iter::List, Box::new(il::Subcheck::SkipSC)),
+    ]);
+    let mut calls = RecordingCalls {
+        id: None,
+        type_args: Vec::new(),
+        values: Vec::new(),
+        subtype_checks: 0,
+    };
+
+    let result = value_matches_subcheck(&context, &mut calls, &subcheck, &value)
+        .expect("subtype check succeeds");
+
+    assert!(result);
+    assert_eq!(calls.subtype_checks, 0);
 }
 
 #[test]
@@ -194,11 +303,12 @@ fn nested_named_subtype_results_use_the_same_cache() {
     let context = Context::from_spec(false, &[type_t, type_pair]).expect("valid spec");
     let typ = make_type::var_type(id("Pair"), Vec::new());
     let type_t = make_type::var_type(id("T"), Vec::new());
-    let value = make::tuple(
-        &make_type::tuple_type(vec![type_t.clone(), type_t.clone()]),
+    let tuple_type = make_type::tuple_type(vec![type_t.clone(), type_t.clone()]);
+    let value = make::tuple_kind(
+        &tuple_type.node,
         vec![
-            make::structure(&type_t, Vec::new(), Region::for_file("left")),
-            make::structure(&type_t, Vec::new(), Region::for_file("right")),
+            make::structure_kind(&type_t.node, Vec::new(), Region::for_file("left")),
+            make::structure_kind(&type_t.node, Vec::new(), Region::for_file("right")),
         ],
         Region::for_file("pair"),
     );
@@ -214,8 +324,9 @@ fn nested_named_subtype_results_use_the_same_cache() {
 fn nested_local_type_definitions_do_not_share_cache_entries() {
     let mut context = Context::from_spec(false, &[]).expect("valid spec");
     let typ = make_type::tuple_type(vec![make_type::var_type(id("T"), Vec::new())]);
-    let value = make::tuple(
-        &make_type::tuple_type(vec![make_type::bool_type()]),
+    let value_type = make_type::tuple_type(vec![make_type::bool_type()]);
+    let value = make::tuple_kind(
+        &value_type.node,
         vec![make::bool(true, Region::for_file("value"))],
         Region::for_file("tuple"),
     );

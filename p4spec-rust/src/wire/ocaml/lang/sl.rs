@@ -118,7 +118,10 @@ fn decode_guard(value: &Value) -> Result<Guard, DecodeError> {
             il::decode_op_typ(typ)?,
             il::decode_exp(exp)?,
         )),
-        ("SubG", [typ]) => Ok(Guard::SubG(il::decode_typ(typ)?)),
+        ("SubG", [typ, subcheck]) => Ok(Guard::SubG(
+            il::decode_typ(typ)?,
+            Box::new(il::decode_subcheck(subcheck)?),
+        )),
         ("MatchG", [pattern]) => Ok(Guard::MatchG(il::decode_pattern(pattern)?)),
         ("MemG", [exp]) => Ok(Guard::MemG(il::decode_exp(exp)?)),
         ("BoolG" | "CmpG" | "SubG" | "MatchG" | "MemG", _) => {
@@ -137,7 +140,9 @@ fn encode_guard(guard: &Guard) -> Value {
             il::encode_op_typ(*typ),
             il::encode_exp(exp)
         ]),
-        Guard::SubG(typ) => json!(["SubG", il::encode_typ(typ)]),
+        Guard::SubG(typ, subcheck) => {
+            json!(["SubG", il::encode_typ(typ), il::encode_subcheck(subcheck)])
+        }
         Guard::MatchG(pattern) => json!(["MatchG", il::encode_pattern(pattern)]),
         Guard::MemG(exp) => json!(["MemG", il::encode_exp(exp)]),
     }

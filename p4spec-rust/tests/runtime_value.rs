@@ -57,6 +57,16 @@ fn primitive_constructors_preserve_value_type_and_source_region() {
 }
 
 #[test]
+fn runtime_value_spans_use_pointer_sized_storage() {
+    let value = make::bool(true, Region::none());
+
+    assert_eq!(
+        std::mem::size_of_val(&value.span),
+        std::mem::size_of::<usize>()
+    );
+}
+
+#[test]
 fn composite_constructors_keep_children_shared_by_rc() {
     let typ = make_type::var_type(id("Container", "type"), Vec::new());
     let child = make::bool(true, span("child"));

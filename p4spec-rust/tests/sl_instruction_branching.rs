@@ -197,7 +197,10 @@ fn case_instruction_preserves_every_guard_kind() {
         guarded_function(
             "subtype",
             bool_type.clone(),
-            sl::Guard::SubG(bool_type.clone()),
+            sl::Guard::SubG(
+                bool_type.clone(),
+                Box::new(il::Subcheck::RecurseSC(bool_type.clone())),
+            ),
         ),
         guarded_function(
             "pattern",

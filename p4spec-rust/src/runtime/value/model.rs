@@ -1,7 +1,10 @@
 use std::{
     cmp::Ordering,
+    fmt,
     hash::{DefaultHasher, Hash, Hasher},
+    ops::Deref,
     rc::Rc,
+    sync::OnceLock,
 };
 
 use thiserror::Error;
@@ -24,11 +27,57 @@ pub type ValueRef = Rc<Value>;
 pub type ValueField = (Atom, ValueRef);
 pub type ValueCase = Mixfix<ValueRef>;
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ValueSpan(Option<Rc<Span>>);
+
+impl ValueSpan {
+    fn new(span: Span) -> Self {
+        if span == Span::default() {
+            Self(None)
+        } else {
+            Self(Some(Rc::new(span)))
+        }
+    }
+
+    pub fn region(&self) -> &Span {
+        static NONE: OnceLock<Span> = OnceLock::new();
+        self.0
+            .as_deref()
+            .unwrap_or_else(|| NONE.get_or_init(Span::default))
+    }
+}
+
+impl Deref for ValueSpan {
+    type Target = Span;
+
+    fn deref(&self) -> &Self::Target {
+        self.region()
+    }
+}
+
+impl PartialEq<Span> for ValueSpan {
+    fn eq(&self, other: &Span) -> bool {
+        self.region() == other
+    }
+}
+
+impl PartialEq<ValueSpan> for Span {
+    fn eq(&self, other: &ValueSpan) -> bool {
+        self == other.region()
+    }
+}
+
+impl fmt::Display for ValueSpan {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.region().fmt(formatter)
+    }
+}
+
 #[derive(Debug)]
 pub struct Value {
     pub kind: ValueKind,
     pub ty: TypKind,
-    pub span: Span,
+    pub span: ValueSpan,
     semantic_hash: u64,
 }
 
@@ -326,7 +375,7 @@ impl Hash for Value {
 
 impl HasSpan for Value {
     fn span(&self) -> &Span {
-        &self.span
+        self.span.region()
     }
 }
 
@@ -354,7 +403,7 @@ pub mod make {
         Rc::new(Value {
             kind,
             ty,
-            span,
+            span: ValueSpan::new(span),
             semantic_hash,
         })
     }
@@ -391,23 +440,43 @@ pub mod make {
     }
 
     pub fn structure(typ: &Typ, fields: Vec<ValueField>, span: Span) -> ValueRef {
-        new(ValueKind::StructV(fields), typ.node.clone(), span)
+        structure_kind(&typ.node, fields, span)
+    }
+
+    pub fn structure_kind(typ: &TypKind, fields: Vec<ValueField>, span: Span) -> ValueRef {
+        new(ValueKind::StructV(fields), typ.clone(), span)
     }
 
     pub fn case(typ: &Typ, value_case: ValueCase, span: Span) -> ValueRef {
-        new(ValueKind::CaseV(value_case), typ.node.clone(), span)
+        case_kind(&typ.node, value_case, span)
+    }
+
+    pub fn case_kind(typ: &TypKind, value_case: ValueCase, span: Span) -> ValueRef {
+        new(ValueKind::CaseV(value_case), typ.clone(), span)
     }
 
     pub fn tuple(typ: &Typ, values: Vec<ValueRef>, span: Span) -> ValueRef {
-        new(ValueKind::TupleV(values), typ.node.clone(), span)
+        tuple_kind(&typ.node, values, span)
+    }
+
+    pub fn tuple_kind(typ: &TypKind, values: Vec<ValueRef>, span: Span) -> ValueRef {
+        new(ValueKind::TupleV(values), typ.clone(), span)
     }
 
     pub fn opt(typ: &Typ, value: Option<ValueRef>, span: Span) -> ValueRef {
-        new(ValueKind::OptV(value), typ.node.clone(), span)
+        opt_kind(&typ.node, value, span)
+    }
+
+    pub fn opt_kind(typ: &TypKind, value: Option<ValueRef>, span: Span) -> ValueRef {
+        new(ValueKind::OptV(value), typ.clone(), span)
     }
 
     pub fn list(typ: &Typ, values: Vec<ValueRef>, span: Span) -> ValueRef {
-        new(ValueKind::ListV(values), typ.node.clone(), span)
+        list_kind(&typ.node, values, span)
+    }
+
+    pub fn list_kind(typ: &TypKind, values: Vec<ValueRef>, span: Span) -> ValueRef {
+        new(ValueKind::ListV(values), typ.clone(), span)
     }
 
     pub fn func(

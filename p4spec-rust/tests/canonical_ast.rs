@@ -702,7 +702,7 @@ fn il_exp_tag(exp: &il::ast::ExpKind) -> &'static str {
         il::ast::ExpKind::CmpE(_, _, _, _) => "CmpE",
         il::ast::ExpKind::UpCastE(_, _) => "UpCastE",
         il::ast::ExpKind::DownCastE(_, _) => "DownCastE",
-        il::ast::ExpKind::SubE(_, _) => "SubE",
+        il::ast::ExpKind::SubE(_, _, _) => "SubE",
         il::ast::ExpKind::MatchE(_, _) => "MatchE",
         il::ast::ExpKind::TupleE(_) => "TupleE",
         il::ast::ExpKind::CaseE(_) => "CaseE",
@@ -747,7 +747,11 @@ fn il_expressions_paths_parameters_and_premises_represent_every_variant() {
         ),
         il::ast::ExpKind::UpCastE(il_typ(il::ast::TypKind::BoolT), Box::new(exp())),
         il::ast::ExpKind::DownCastE(il_typ(il::ast::TypKind::BoolT), Box::new(exp())),
-        il::ast::ExpKind::SubE(Box::new(exp()), il_typ(il::ast::TypKind::BoolT)),
+        il::ast::ExpKind::SubE(
+            Box::new(exp()),
+            il_typ(il::ast::TypKind::BoolT),
+            Box::new(il::ast::Subcheck::SkipSC),
+        ),
         il::ast::ExpKind::MatchE(Box::new(exp()), pattern),
         il::ast::ExpKind::TupleE(vec![exp()]),
         il::ast::ExpKind::CaseE(Box::new(il_not_exp(exp()))),
@@ -930,6 +934,16 @@ fn il_expressions_paths_parameters_and_premises_represent_every_variant() {
     );
 }
 
+#[test]
+fn subtype_operations_do_not_inflate_every_expression_node() {
+    assert!(
+        std::mem::size_of::<il::ast::ExpKind>()
+            < std::mem::size_of::<il::ast::Typ>()
+                + std::mem::size_of::<il::ast::Subcheck>()
+                + std::mem::size_of::<Box<il::ast::Exp>>()
+    );
+}
+
 fn il_def_tag(definition: &il::ast::DefKind) -> &'static str {
     match definition {
         il::ast::DefKind::ExternTypD(_, _) => "ExternTypD",
@@ -1099,7 +1113,7 @@ fn sl_ast_represent_every_sl_only_variant_and_tuple_alias() {
     let guards = [
         sl::ast::Guard::BoolG(true),
         sl::ast::Guard::CmpG(il::ast::CmpOp::EqOp, il::ast::OpTyp::BoolT, exp()),
-        sl::ast::Guard::SubG(typ()),
+        sl::ast::Guard::SubG(typ(), Box::new(il::ast::Subcheck::SkipSC)),
         sl::ast::Guard::MatchG(il::ast::Pattern::CaseP(mixop())),
         sl::ast::Guard::MemG(exp()),
     ];
@@ -1107,7 +1121,7 @@ fn sl_ast_represent_every_sl_only_variant_and_tuple_alias() {
         guards.map(|guard| match guard {
             sl::ast::Guard::BoolG(_) => "BoolG",
             sl::ast::Guard::CmpG(_, _, _) => "CmpG",
-            sl::ast::Guard::SubG(_) => "SubG",
+            sl::ast::Guard::SubG(_, _) => "SubG",
             sl::ast::Guard::MatchG(_) => "MatchG",
             sl::ast::Guard::MemG(_) => "MemG",
         }),

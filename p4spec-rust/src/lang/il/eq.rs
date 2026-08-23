@@ -114,7 +114,7 @@ pub fn eq_exp(exp_a: &Exp, exp_b: &Exp) -> bool {
         | (ExpKind::DownCastE(typ_a, exp_a), ExpKind::DownCastE(typ_b, exp_b)) => {
             eq_typ(typ_a, typ_b) && eq_exp(exp_a, exp_b)
         }
-        (ExpKind::SubE(exp_a, typ_a), ExpKind::SubE(exp_b, typ_b)) => {
+        (ExpKind::SubE(exp_a, typ_a, _), ExpKind::SubE(exp_b, typ_b, _)) => {
             eq_exp(exp_a, exp_b) && eq_typ(typ_a, typ_b)
         }
         (ExpKind::MatchE(exp_a, pattern_a), ExpKind::MatchE(exp_b, pattern_b)) => {

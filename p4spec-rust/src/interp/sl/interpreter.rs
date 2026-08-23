@@ -116,8 +116,8 @@ where
         dispatcher.invoke_func(
             &mut self.context,
             &Spanned::new(name.to_owned(), Region::none()),
-            type_args,
-            values_input,
+            type_args.to_vec(),
+            values_input.to_vec(),
         )
     }
 
@@ -143,7 +143,7 @@ where
         dispatcher.invoke_rel(
             &mut self.context,
             &Spanned::new(name.to_owned(), Region::none()),
-            values_input,
+            values_input.to_vec(),
         )
     }
 
@@ -196,7 +196,9 @@ where
         };
         dispatcher
             .check_func_inputs(self.context, &id, type_args, values_input)
-            .and_then(|()| dispatcher.invoke_func(self.context, &id, type_args, values_input))
+            .and_then(|()| {
+                dispatcher.invoke_func(self.context, &id, type_args.to_vec(), values_input.to_vec())
+            })
             .map_err(|error| ExternError::new(error.span, error.message))
     }
 
@@ -217,7 +219,7 @@ where
         };
         dispatcher
             .check_rel_inputs(self.context, &id, values_input)
-            .and_then(|()| dispatcher.invoke_rel(self.context, &id, values_input))
+            .and_then(|()| dispatcher.invoke_rel(self.context, &id, values_input.to_vec()))
             .map_err(|error| ExternError::new(error.span, error.message))
     }
 }
@@ -448,12 +450,12 @@ where
         &mut self,
         context: &mut Context,
         id: &crate::lang::il::ast::Id,
-        type_args: &[Typ],
-        values_input: &[ValueRef],
+        type_args: Vec<Typ>,
+        values_input: Vec<ValueRef>,
     ) -> Result<ValueRef, InterpError> {
         let mut id = id.clone();
-        let mut type_args = type_args.to_vec();
-        let mut values_input: Rc<[ValueRef]> = values_input.to_vec().into();
+        let mut type_args = type_args;
+        let mut values_input: Rc<[ValueRef]> = values_input.into();
         loop {
             let (cursor, function) = context.find_function(&id)?;
             let function = Rc::clone(function);
@@ -692,10 +694,10 @@ where
         &mut self,
         context: &mut Context,
         id: &crate::lang::il::ast::Id,
-        values_input: &[ValueRef],
+        values_input: Vec<ValueRef>,
     ) -> Result<Vec<ValueRef>, InterpError> {
         let mut id = id.clone();
-        let mut values_input: Rc<[ValueRef]> = values_input.to_vec().into();
+        let mut values_input: Rc<[ValueRef]> = values_input.into();
         loop {
             let relation = Rc::clone(context.find_relation(&id)?);
             let cacheable = self.options.cache && !matches!(relation.as_ref(), Relation::Extern(_));
@@ -809,8 +811,8 @@ where
         &mut self,
         context: &mut Context,
         id: &crate::lang::il::ast::Id,
-        type_args: &[Typ],
-        values: &[ValueRef],
+        type_args: Vec<Typ>,
+        values: Vec<ValueRef>,
     ) -> Result<ValueRef, InterpError> {
         Self::invoke_func(self, context, id, type_args, values)
     }
@@ -819,7 +821,7 @@ where
         &mut self,
         context: &mut Context,
         id: &crate::lang::il::ast::Id,
-        values: &[ValueRef],
+        values: Vec<ValueRef>,
     ) -> Result<Vec<ValueRef>, InterpError> {
         Self::invoke_rel(self, context, id, values)
     }

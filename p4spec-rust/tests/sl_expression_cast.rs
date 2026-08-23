@@ -109,6 +109,10 @@ fn subtype_expression_checks_numeric_and_iterated_values() {
         il::ExpKind::SubE(
             Box::new(numeric(num::T::Int(2.into()), "positive")),
             typ(il::TypKind::NumT(num::Typ::NatT), "nat-type"),
+            Box::new(il::Subcheck::RecurseSC(typ(
+                il::TypKind::NumT(num::Typ::NatT),
+                "nat-type",
+            ))),
         ),
         il::TypKind::BoolT,
         span("positive-sub"),
@@ -121,6 +125,10 @@ fn subtype_expression_checks_numeric_and_iterated_values() {
         il::ExpKind::SubE(
             Box::new(numeric(num::T::Int((-2).into()), "negative")),
             typ(il::TypKind::NumT(num::Typ::NatT), "nat-type"),
+            Box::new(il::Subcheck::RecurseSC(typ(
+                il::TypKind::NumT(num::Typ::NatT),
+                "nat-type",
+            ))),
         ),
         il::TypKind::BoolT,
         span("negative-sub"),

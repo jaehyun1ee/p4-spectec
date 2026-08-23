@@ -140,7 +140,7 @@ pub(crate) fn eval_instr(
                         .any(|value| matches!(value.kind, ValueKind::FuncV(_)));
                     if cursor == Cursor::Local || high_order {
                         calls
-                            .invoke_func(context, id, &type_args, &values)
+                            .invoke_func(context, id, type_args, values)
                             .map(Flow::Return)
                     } else {
                         Ok(Flow::TailCallFunc(id.clone(), type_args, values))
@@ -318,7 +318,7 @@ fn eval_rule(
         .into_iter()
         .map(|exp| expression::eval_with_calls(context, calls, exp))
         .collect::<Result<Vec<_>, _>>()?;
-    let values_output = calls.invoke_rel(context, id, &values_input)?;
+    let values_output = calls.invoke_rel(context, id, values_input)?;
     if exps_output.len() != values_output.len() {
         return Err(InterpError::unmatch(
             id.span.clone(),
@@ -491,13 +491,13 @@ fn eval_hold_condition_inner(
     notation: &NotExp,
     iter_exps: &[IterExp],
 ) -> Result<bool, InterpError> {
-    let Some(((iter, vars), rest)) = iter_exps.split_first() else {
+    let Some(((iter, vars), rest)) = iter_exps.split_last() else {
         let values_input = notation
             .args()
             .into_iter()
             .map(|exp| expression::eval_with_calls(context, calls, exp))
             .collect::<Result<Vec<_>, _>>()?;
-        return match calls.invoke_rel(context, id, &values_input) {
+        return match calls.invoke_rel(context, id, values_input) {
             Ok(_values) => Ok(true),
             Err(error) if error.is_unmatch() => Ok(false),
             Err(error) => Err(error),
@@ -532,8 +532,7 @@ fn eval_hold_condition(
     notation: &NotExp,
     iter_exps: &[IterExp],
 ) -> Result<bool, InterpError> {
-    let iter_exps = iter_exps.iter().cloned().rev().collect::<Vec<_>>();
-    eval_hold_condition_inner(context, calls, id, notation, &iter_exps)
+    eval_hold_condition_inner(context, calls, id, notation, iter_exps)
 }
 
 fn eval_guard(
@@ -551,7 +550,9 @@ fn eval_guard(
             let value_right = expression::eval_with_calls(context, calls, right)?;
             expression::compare_values(exp, *operator, value, &value_right)
         }
-        Guard::SubG(typ) => calls.value_is_subtype(context, typ, value),
+        Guard::SubG(_typ, subcheck) => {
+            expression::value_matches_subcheck(context, calls, subcheck, value)
+        }
         Guard::MatchG(pattern) => Ok(expression::matches_pattern(value, pattern)),
         Guard::MemG(collection) => {
             let collection = expression::eval_with_calls(context, calls, collection)?;

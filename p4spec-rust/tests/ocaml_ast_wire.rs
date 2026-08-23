@@ -250,6 +250,57 @@ fn il_spec_codec_handles_nested_definitions_and_el_hint_closure() {
 }
 
 #[test]
+fn il_spec_codec_round_trips_subtype_expression_check_shape() {
+    let subtype_expression = noted_phrase(
+        json!(["SubE", bool_exp(true), bool_typ(), ["SkipSC"]]),
+        json!(["BoolT"]),
+    );
+    let json = json!([phrase(json!([
+        "TableDecD",
+        id("subcheck"),
+        [],
+        bool_typ(),
+        [phrase(json!([[], subtype_expression]))],
+        [],
+    ]))]);
+
+    let spec = il::SpecCodec::decode(&json).expect("decode subtype expression check");
+    assert_eq!(
+        il::SpecCodec::encode(&spec).expect("encode subtype expression check"),
+        json
+    );
+}
+
+#[test]
+fn il_spec_codec_rejects_malformed_subtype_expression_check_shapes() {
+    let malformed_subtype_checks = [
+        noted_phrase(
+            json!(["SubE", bool_exp(true), bool_typ()]),
+            json!(["BoolT"]),
+        ),
+        noted_phrase(
+            json!(["SubE", bool_exp(true), bool_typ(), ["TupleSC", ["SkipSC"]],]),
+            json!(["BoolT"]),
+        ),
+    ];
+
+    for subtype_check in malformed_subtype_checks {
+        let json = json!([phrase(json!([
+            "TableDecD",
+            id("subcheck"),
+            [],
+            bool_typ(),
+            [phrase(json!([[], subtype_check]))],
+            [],
+        ]))]);
+        assert!(
+            il::SpecCodec::decode(&json).is_err(),
+            "accepted malformed subtype check {json}"
+        );
+    }
+}
+
+#[test]
 fn sl_spec_codec_covers_all_sl_only_variant_families() {
     let rel_signature = json!([input_notation(), [0, 1]]);
     let iterexp = json!([["List"], [[id("xs"), bool_typ(), [["Opt"]]]]]);
@@ -282,7 +333,7 @@ fn sl_spec_codec_covers_all_sl_only_variant_families() {
                 [
                     [["BoolG", true], []],
                     [["CmpG", ["EqOp"], ["BoolT"], bool_exp(false)], []],
-                    [["SubG", bool_typ()], []],
+                    [["SubG", bool_typ(), ["SkipSC"]], []],
                     [["MatchG", ["ListP", ["Fixed", 3]]], []],
                     [["MemG", bool_exp(true)], []],
                 ],

@@ -68,6 +68,17 @@ pub enum TypKind {
     FuncT(Vec<TParam>, Vec<Typ>, Box<Typ>),
 }
 
+// Subtype checks
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Subcheck {
+    SkipSC,
+    MixopSC(Vec<Mixop>),
+    TupleSC(Vec<Subcheck>),
+    IterSC(Iter, Box<Subcheck>),
+    RecurseSC(Typ),
+}
+
 // Defined types
 
 pub type NotTyp = Spanned<NotTypKind>;
@@ -213,7 +224,7 @@ pub enum ExpKind {
     /// `exp as typ`
     DownCastE(Typ, Box<Exp>),
     /// `exp <: typ`
-    SubE(Box<Exp>, Typ),
+    SubE(Box<Exp>, Typ, Box<Subcheck>),
     /// `exp matches pattern`
     MatchE(Box<Exp>, Pattern),
     /// `(` exp* `)`

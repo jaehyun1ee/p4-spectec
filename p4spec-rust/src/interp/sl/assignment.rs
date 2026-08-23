@@ -127,7 +127,7 @@ fn assign_optional_iteration(
     value: ValueRef,
 ) -> Result<(), InterpError> {
     let value_opt = get::opt(&value)
-        .map_err(|error| InterpError::new(value.span.clone(), error.to_string()))?;
+        .map_err(|error| InterpError::new(value.span.region().clone(), error.to_string()))?;
     let values_inner = match value_opt {
         // Assign the value to the iterated expression.
         Some(value_inner) => Some(context.with_scope(|context| {
@@ -157,7 +157,7 @@ fn assign_list_iteration(
     value: ValueRef,
 ) -> Result<(), InterpError> {
     let values = get::list(&value)
-        .map_err(|error| InterpError::new(value.span.clone(), error.to_string()))?;
+        .map_err(|error| InterpError::new(value.span.region().clone(), error.to_string()))?;
     // Map over the value list elements, and assign each value to the
     // iterated expression in a cleared local context.
     let rows = values

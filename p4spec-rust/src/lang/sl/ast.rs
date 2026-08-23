@@ -130,7 +130,7 @@ pub type Case = (Guard, Block);
 pub enum Guard {
     BoolG(bool),
     CmpG(CmpOp, OpTyp, Exp),
-    SubG(Typ),
+    SubG(Typ, Box<il::ast::Subcheck>),
     MatchG(Pattern),
     MemG(Exp),
 }

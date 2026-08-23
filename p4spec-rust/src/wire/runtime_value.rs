@@ -72,7 +72,7 @@ fn to_canonical_inner(value: &runtime::Value) -> il::Value {
         runtime::ValueKind::FuncV(id) => il::ValueKind::FuncV(id.clone()),
         runtime::ValueKind::ExternV(value) => il::ValueKind::ExternV(value.clone()),
     };
-    il::Value::new(kind, value.ty.clone(), value.span.clone())
+    il::Value::new(kind, value.ty.clone(), value.span.region().clone())
 }
 
 pub fn to_canonical(value: &runtime::Value) -> il::Value {

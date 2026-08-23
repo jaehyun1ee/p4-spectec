@@ -910,6 +910,47 @@ pub(super) fn encode_op_typ(typ: OpTyp) -> Value {
     }
 }
 
+pub(super) fn decode_subcheck(value: &Value) -> Result<ast::Subcheck, DecodeError> {
+    let (tag, fields) = variant(value)?;
+    match (tag, fields) {
+        ("SkipSC", []) => Ok(ast::Subcheck::SkipSC),
+        ("MixopSC", [mixops]) => Ok(ast::Subcheck::MixopSC(decode_list(
+            mixops,
+            crate::wire::ocaml::mixfix::MixopCodec::decode,
+        )?)),
+        ("TupleSC", [subchecks]) => Ok(ast::Subcheck::TupleSC(decode_list(
+            subchecks,
+            decode_subcheck,
+        )?)),
+        ("IterSC", [iter, subcheck]) => Ok(ast::Subcheck::IterSC(
+            decode_iter(iter)?,
+            Box::new(decode_subcheck(subcheck)?),
+        )),
+        ("RecurseSC", [typ]) => Ok(ast::Subcheck::RecurseSC(decode_typ(typ)?)),
+        ("SkipSC" | "MixopSC" | "TupleSC" | "IterSC" | "RecurseSC", _) => {
+            Err(DecodeError::Expected("valid IL subtype check arity"))
+        }
+        (unknown, _) => Err(DecodeError::UnknownVariant(unknown.to_owned())),
+    }
+}
+
+pub(super) fn encode_subcheck(subcheck: &ast::Subcheck) -> Value {
+    match subcheck {
+        ast::Subcheck::SkipSC => json!(["SkipSC"]),
+        ast::Subcheck::MixopSC(mixops) => json!([
+            "MixopSC",
+            encode_list(mixops, crate::wire::ocaml::mixfix::MixopCodec::encode)
+        ]),
+        ast::Subcheck::TupleSC(subchecks) => {
+            json!(["TupleSC", encode_list(subchecks, encode_subcheck)])
+        }
+        ast::Subcheck::IterSC(iter, subcheck) => {
+            json!(["IterSC", encode_iter(*iter), encode_subcheck(subcheck)])
+        }
+        ast::Subcheck::RecurseSC(typ) => json!(["RecurseSC", encode_typ(typ)]),
+    }
+}
+
 pub(super) fn decode_exp(value: &Value) -> Result<ast::Exp, DecodeError> {
     let (kind, typ, span) = source::decode_annotated(value, decode_exp_kind, decode_typ_kind)?;
     Ok(ast::Exp::new(kind, typ, span))
@@ -957,7 +998,11 @@ fn decode_exp_kind(value: &Value) -> Result<ExpKind, DecodeError> {
             decode_typ(typ)?,
             Box::new(decode_exp(exp)?),
         )),
-        ("SubE", [exp, typ]) => Ok(ExpKind::SubE(Box::new(decode_exp(exp)?), decode_typ(typ)?)),
+        ("SubE", [exp, typ, subcheck]) => Ok(ExpKind::SubE(
+            Box::new(decode_exp(exp)?),
+            decode_typ(typ)?,
+            Box::new(decode_subcheck(subcheck)?),
+        )),
         ("MatchE", [exp, pattern]) => Ok(ExpKind::MatchE(
             Box::new(decode_exp(exp)?),
             decode_pattern(pattern)?,
@@ -1054,7 +1099,12 @@ fn encode_exp_kind(exp: &ExpKind) -> Value {
         ExpKind::DownCastE(typ, exp) => {
             json!(["DownCastE", encode_typ(typ), encode_exp(exp)])
         }
-        ExpKind::SubE(exp, typ) => json!(["SubE", encode_exp(exp), encode_typ(typ)]),
+        ExpKind::SubE(exp, typ, subcheck) => json!([
+            "SubE",
+            encode_exp(exp),
+            encode_typ(typ),
+            encode_subcheck(subcheck)
+        ]),
         ExpKind::MatchE(exp, pattern) => {
             json!(["MatchE", encode_exp(exp), encode_pattern(pattern)])
         }
@@ -1594,4 +1644,41 @@ fn encode_def(def: &ast::Def) -> Value {
             encode_list(hints, el::encode_hint)
         ]),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::{decode_subcheck, encode_subcheck};
+
+    #[test]
+    fn subtype_check_operations_round_trip_ocaml_yojson_shapes() {
+        let typ = json!({
+            "it": ["BoolT"],
+            "note": null,
+            "at": {
+                "left": {"file": "", "line": 0, "column": 0},
+                "right": {"file": "", "line": 0, "column": 0}
+            }
+        });
+        let operations = [
+            json!(["SkipSC"]),
+            json!(["MixopSC", [["Atom", {
+                "it": ["Keyword", "NUM"],
+                "note": null,
+                "at": {
+                    "left": {"file": "", "line": 0, "column": 0},
+                    "right": {"file": "", "line": 0, "column": 0}
+                }
+            }]]]),
+            json!(["TupleSC", [["SkipSC"], ["RecurseSC", typ]]]),
+            json!(["IterSC", ["List"], ["SkipSC"]]),
+        ];
+
+        for operation in operations {
+            let decoded = decode_subcheck(&operation).expect("decode subtype check");
+            assert_eq!(encode_subcheck(&decoded), operation);
+        }
+    }
 }

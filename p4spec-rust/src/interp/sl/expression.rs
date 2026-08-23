@@ -78,15 +78,15 @@ pub(crate) trait Calls {
         &mut self,
         context: &mut Context,
         id: &crate::lang::il::ast::Id,
-        type_args: &[Typ],
-        values: &[ValueRef],
+        type_args: Vec<Typ>,
+        values: Vec<ValueRef>,
     ) -> Result<ValueRef, InterpError>;
 
     fn invoke_rel(
         &mut self,
         _context: &mut Context,
         id: &crate::lang::il::ast::Id,
-        _values: &[ValueRef],
+        _values: Vec<ValueRef>,
     ) -> Result<Vec<ValueRef>, InterpError> {
         Err(InterpError::new(
             id.span.clone(),
@@ -102,8 +102,8 @@ impl Calls for RejectCalls {
         &mut self,
         _context: &mut Context,
         id: &crate::lang::il::ast::Id,
-        _type_args: &[Typ],
-        _values: &[ValueRef],
+        _type_args: Vec<Typ>,
+        _values: Vec<ValueRef>,
     ) -> Result<ValueRef, InterpError> {
         Err(InterpError::new(
             id.span.clone(),
@@ -145,10 +145,10 @@ pub(crate) fn eval_with_calls(
             let value = eval_with_calls(context, calls, value)?;
             cast_down(context, typ, value)
         }
-        ExpKind::SubE(value, typ) => {
+        ExpKind::SubE(value, _typ, subcheck) => {
             let value = eval_with_calls(context, calls, value)?;
             Ok(make::bool(
-                calls.value_is_subtype(context, typ, &value)?,
+                value_matches_subcheck(context, calls, subcheck, &value)?,
                 Region::none(),
             ))
         }
@@ -173,14 +173,6 @@ pub(crate) fn eval_with_calls(
         ExpKind::CallE(id, type_args, args) => eval_call(context, calls, id, type_args, args),
         ExpKind::IterE(inner, iter_exp) => eval_iteration(context, calls, exp, inner, iter_exp),
     }
-}
-
-fn type_note(exp: &Exp) -> Typ {
-    crate::domain::source::Spanned::new(exp.ty.clone(), exp.span.clone())
-}
-
-fn path_type_note(path: &Path) -> Typ {
-    crate::domain::source::Spanned::new(path.ty.clone(), path.span.clone())
 }
 
 fn eval_all(
@@ -411,14 +403,14 @@ fn cast_up(context: &Context, typ: &Typ, value: ValueRef) -> Result<ValueRef, In
                 .zip(values)
                 .map(|(typ, value)| cast_up(context, typ, Rc::clone(value)))
                 .collect::<Result<Vec<_>, _>>()?;
-            Ok(make::tuple(typ, values, Region::none()))
+            Ok(make::tuple_kind(&typ.node, values, Region::none()))
         }
         TypKind::IterT(inner, Iter::Opt) => {
             let value = get::opt(&value).map_err(|_| cast_error(typ, "upcast"))?;
             let value = value
                 .map(|value| cast_up(context, inner, Rc::clone(value)))
                 .transpose()?;
-            Ok(make::opt(inner, value, Region::none()))
+            Ok(make::opt_kind(&inner.node, value, Region::none()))
         }
         TypKind::IterT(inner, Iter::List) => {
             let values = get::list(&value).map_err(|_| cast_error(typ, "upcast"))?;
@@ -426,7 +418,7 @@ fn cast_up(context: &Context, typ: &Typ, value: ValueRef) -> Result<ValueRef, In
                 .iter()
                 .map(|value| cast_up(context, inner, Rc::clone(value)))
                 .collect::<Result<Vec<_>, _>>()?;
-            Ok(make::list(inner, values, Region::none()))
+            Ok(make::list_kind(&inner.node, values, Region::none()))
         }
         _ => Ok(value),
     }
@@ -457,14 +449,14 @@ fn cast_down(context: &Context, typ: &Typ, value: ValueRef) -> Result<ValueRef, 
                 .zip(values)
                 .map(|(typ, value)| cast_down(context, typ, Rc::clone(value)))
                 .collect::<Result<Vec<_>, _>>()?;
-            Ok(make::tuple(typ, values, Region::none()))
+            Ok(make::tuple_kind(&typ.node, values, Region::none()))
         }
         TypKind::IterT(inner, Iter::Opt) => {
             let value = get::opt(&value).map_err(|_| cast_error(typ, "downcast"))?;
             let value = value
                 .map(|value| cast_down(context, inner, Rc::clone(value)))
                 .transpose()?;
-            Ok(make::opt(inner, value, Region::none()))
+            Ok(make::opt_kind(&inner.node, value, Region::none()))
         }
         TypKind::IterT(inner, Iter::List) => {
             let values = get::list(&value).map_err(|_| cast_error(typ, "downcast"))?;
@@ -472,13 +464,54 @@ fn cast_down(context: &Context, typ: &Typ, value: ValueRef) -> Result<ValueRef, 
                 .iter()
                 .map(|value| cast_down(context, inner, Rc::clone(value)))
                 .collect::<Result<Vec<_>, _>>()?;
-            Ok(make::list(inner, values, Region::none()))
+            Ok(make::list_kind(&inner.node, values, Region::none()))
         }
         _ => Ok(value),
     }
 }
 
 // Subtype check expression evaluation
+
+pub(super) fn value_matches_subcheck(
+    context: &Context,
+    calls: &mut dyn Calls,
+    subcheck: &crate::lang::il::ast::Subcheck,
+    value: &ValueRef,
+) -> Result<bool, InterpError> {
+    use crate::lang::il::ast::Subcheck;
+
+    match (subcheck, &value.kind) {
+        (Subcheck::SkipSC, _) => Ok(true),
+        (Subcheck::MixopSC(mixops), ValueKind::CaseV(value_case)) => {
+            Ok(mixops.iter().any(|mixop| mixop.same_shape(value_case)))
+        }
+        (Subcheck::TupleSC(subchecks), ValueKind::TupleV(values)) => {
+            if subchecks.len() != values.len() {
+                return Ok(false);
+            }
+            for (subcheck, value) in subchecks.iter().zip(values) {
+                if !value_matches_subcheck(context, calls, subcheck, value)? {
+                    return Ok(false);
+                }
+            }
+            Ok(true)
+        }
+        (Subcheck::IterSC(Iter::Opt, _), ValueKind::OptV(None)) => Ok(true),
+        (Subcheck::IterSC(Iter::Opt, subcheck), ValueKind::OptV(Some(value))) => {
+            value_matches_subcheck(context, calls, subcheck, value)
+        }
+        (Subcheck::IterSC(Iter::List, subcheck), ValueKind::ListV(values)) => {
+            for value in values {
+                if !value_matches_subcheck(context, calls, subcheck, value)? {
+                    return Ok(false);
+                }
+            }
+            Ok(true)
+        }
+        (Subcheck::RecurseSC(typ), _) => calls.value_is_subtype(context, typ, value),
+        _ => Ok(false),
+    }
+}
 
 fn value_is_subtype_inner(
     cache: &mut value_match::SubCache,
@@ -733,7 +766,7 @@ fn eval_tuple(
     exps: &[Exp],
 ) -> Result<ValueRef, InterpError> {
     let values = eval_all(context, calls, exps)?;
-    Ok(make::tuple(&type_note(outer), values, Region::none()))
+    Ok(make::tuple_kind(&outer.ty, values, Region::none()))
 }
 
 // Case expression evaluation
@@ -751,7 +784,7 @@ fn eval_case(
         .collect::<Result<Vec<_>, _>>()?;
     let value_case = crate::domain::mixfix::Mixop::fill(&mixop, values)
         .expect("the mixop came from the same case expression");
-    Ok(make::case(&type_note(outer), value_case, Region::none()))
+    Ok(make::case_kind(&outer.ty, value_case, Region::none()))
 }
 
 // Struct expression evaluation
@@ -766,8 +799,8 @@ fn eval_structure(
         .iter()
         .map(|(atom, exp)| eval_with_calls(context, calls, exp).map(|value| (atom.clone(), value)))
         .collect::<Result<Vec<_>, _>>()?;
-    Ok(make::structure(
-        &type_note(outer),
+    Ok(make::structure_kind(
+        &outer.ty,
         value_fields,
         Region::none(),
     ))
@@ -784,7 +817,7 @@ fn eval_option(
     let value = exp
         .map(|exp| eval_with_calls(context, calls, exp))
         .transpose()?;
-    Ok(make::opt(&type_note(outer), value, Region::none()))
+    Ok(make::opt_kind(&outer.ty, value, Region::none()))
 }
 
 // List expression evaluation
@@ -796,7 +829,7 @@ fn eval_list(
     exps: &[Exp],
 ) -> Result<ValueRef, InterpError> {
     let values = eval_all(context, calls, exps)?;
-    Ok(make::list(&type_note(outer), values, Region::none()))
+    Ok(make::list_kind(&outer.ty, values, Region::none()))
 }
 
 // Cons expression evaluation
@@ -823,7 +856,7 @@ fn eval_cons(
             .iter()
             .cloned(),
     );
-    Ok(make::list(&type_note(outer), values, Region::none()))
+    Ok(make::list_kind(&outer.ty, values, Region::none()))
 }
 
 // Concatenation expression evaluation
@@ -845,8 +878,8 @@ fn eval_concatenation(
         (
             crate::runtime::value::ValueKind::ListV(left),
             crate::runtime::value::ValueKind::ListV(right),
-        ) => Ok(make::list(
-            &type_note(outer),
+        ) => Ok(make::list_kind(
+            &outer.ty,
             left.iter().chain(right).cloned().collect(),
             Region::none(),
         )),
@@ -1006,8 +1039,8 @@ fn eval_slice(
             if end > values.len() {
                 return Err(value_error(outer, "slice out of bounds"));
             }
-            Ok(make::list(
-                &type_note(outer),
+            Ok(make::list_kind(
+                &outer.ty,
                 values[start..end].to_vec(),
                 Region::none(),
             ))
@@ -1072,8 +1105,8 @@ fn eval_access_path(
                     if end > values.len() {
                         return Err(value_error(count, "slice out of bounds"));
                     }
-                    Ok(make::list(
-                        &path_type_note(inner),
+                    Ok(make::list_kind(
+                        &inner.ty,
                         values[start..end].to_vec(),
                         Region::none(),
                     ))
@@ -1152,7 +1185,7 @@ fn eval_update_path(
                     let index_value = bounded_index(index, index_value, values.len())?;
                     let mut values = values.clone();
                     values[index_value] = value_update;
-                    make::list(&path_type_note(inner), values, Region::none())
+                    make::list_kind(&inner.ty, values, Region::none())
                 }
                 _ => {
                     return Err(InterpError::new(
@@ -1206,7 +1239,7 @@ fn eval_update_path(
                     }
                     let mut values = values.clone();
                     values[start..end].clone_from_slice(replacements);
-                    make::list(&path_type_note(inner), values, Region::none())
+                    make::list_kind(&inner.ty, values, Region::none())
                 }
                 _ => {
                     return Err(InterpError::new(
@@ -1231,7 +1264,7 @@ fn eval_update_path(
                     }
                 })
                 .collect();
-            let value = make::structure(&path_type_note(inner), fields, Region::none());
+            let value = make::structure_kind(&inner.ty, fields, Region::none());
             eval_update_path(context, calls, value_base, inner, value)
         }
     }
@@ -1269,7 +1302,7 @@ fn eval_call(
     args: &[Arg],
 ) -> Result<ValueRef, InterpError> {
     let (type_args, values) = eval_call_inputs(context, calls, type_args, args)?;
-    calls.invoke_func(context, id, &type_args, &values)
+    calls.invoke_func(context, id, type_args, values)
 }
 
 pub(crate) fn eval_call_inputs(
@@ -1299,7 +1332,7 @@ fn eval_optional_iteration(
         ),
         None => None,
     };
-    Ok(make::opt(&type_note(outer), value, Region::none()))
+    Ok(make::opt_kind(&outer.ty, value, Region::none()))
 }
 
 fn eval_list_iteration(
@@ -1317,7 +1350,7 @@ fn eval_list_iteration(
                 .with_value_bindings(bindings, |context| eval_with_calls(context, calls, exp))?,
         );
     }
-    Ok(make::list(&type_note(outer), values, Region::none()))
+    Ok(make::list_kind(&outer.ty, values, Region::none()))
 }
 
 fn eval_iteration(

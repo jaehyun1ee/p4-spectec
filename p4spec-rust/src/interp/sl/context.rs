@@ -549,7 +549,9 @@ impl Context {
                 let value = self.find_value_by(id, &outer_iters)?;
                 get::opt(value)
                     .map(|value| value.cloned())
-                    .map_err(|error| InterpError::new(value.span.clone(), error.to_string()))
+                    .map_err(|error| {
+                        InterpError::new(value.span.region().clone(), error.to_string())
+                    })
             })
             .collect::<Result<Vec<_>, _>>()?;
         // Iteration is valid when all variables agree on their optionality.
@@ -586,9 +588,9 @@ impl Context {
                 let mut outer_iters = iters.clone();
                 outer_iters.push(Iter::List);
                 let value = self.find_value_by(id, &outer_iters)?;
-                get::list(value)
-                    .map(<[ValueRef]>::to_vec)
-                    .map_err(|error| InterpError::new(value.span.clone(), error.to_string()))
+                get::list(value).map(<[ValueRef]>::to_vec).map_err(|error| {
+                    InterpError::new(value.span.region().clone(), error.to_string())
+                })
             })
             .collect::<Result<Vec<_>, _>>()?;
         let Some(first) = rows.first() else {
