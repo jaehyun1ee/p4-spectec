@@ -421,6 +421,7 @@ impl<'a> Spec<'a> {
         Ok((context, architecture))
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn psa_init_metadata(
         &mut self,
         ingress: bool,

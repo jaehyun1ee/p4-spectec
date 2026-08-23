@@ -57,7 +57,7 @@ fn package(values: &[ValueRef]) -> Result<(BigInt, BigInt), SimError> {
             Ok::<_, SimError>((packed_width + width, (packed_value << width) + value))
         },
     )?;
-    if width % 16 != 0 {
+    if !width.is_multiple_of(16) {
         width += 16 - width % 16;
     }
     Ok((BigInt::from(width), value))
@@ -70,7 +70,7 @@ fn crc(
     polynomial: u32,
     output_width: usize,
 ) -> Result<BigInt, SimError> {
-    if width % 8 != 0 {
+    if !width.is_multiple_of(8) {
         return Err(SimError::message("CRC input width must be byte aligned"));
     }
     let mut hash = initial;
@@ -101,7 +101,7 @@ fn checksum16(
     initial: &BigInt,
     subtract: bool,
 ) -> Result<BigInt, SimError> {
-    if width % 16 != 0 {
+    if !width.is_multiple_of(16) {
         return Err(SimError::message(
             "Internet checksum input width must be 16-bit aligned",
         ));
