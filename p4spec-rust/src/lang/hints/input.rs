@@ -4,6 +4,19 @@ use crate::lang::el::ast::{Exp, ExpKind, Hole};
 
 pub type T = Vec<i64>;
 
+pub fn to_string(hint: &[i64]) -> String {
+    format!(
+        "hint(input {})",
+        hint.iter()
+            .map(|index| format!("%{index}"))
+            .collect::<Vec<_>>()
+            .join(" ")
+    )
+}
+pub fn eq(left: &[i64], right: &[i64]) -> bool {
+    left == right
+}
+
 pub fn init(hint_exp: &Exp) -> Option<T> {
     match &hint_exp.node {
         ExpKind::SeqE(hint_exps) => hint_exps

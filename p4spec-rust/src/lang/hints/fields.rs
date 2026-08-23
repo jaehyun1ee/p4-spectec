@@ -4,6 +4,16 @@ use crate::lang::el::ast::{Exp, ExpKind, Text};
 
 pub type T = Vec<Text>;
 
+pub fn to_string(hint: &[Text]) -> String {
+    format!(
+        "hint(fields {})",
+        hint.iter()
+            .map(|text| crate::lang::el::print::string_of_text(text))
+            .collect::<Vec<_>>()
+            .join(" ")
+    )
+}
+
 pub fn init(hint_exp: &Exp) -> Option<T> {
     match &hint_exp.node {
         ExpKind::TextE(text) => Some(vec![text.clone()]),
