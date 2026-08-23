@@ -216,3 +216,91 @@ pub struct Hint {
     pub hintid: Id,
     pub hintexp: Exp,
 }
+
+// Notation types
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Typ {
+    PlainT(PlainTyp),
+    NotationT(NotTyp),
+}
+
+pub type NotTyp = Spanned<NotTypKind>;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum NotTypKind {
+    AtomT(Atom),
+    SeqT(Vec<Typ>),
+    InfixT(Box<Typ>, Atom, Box<Typ>),
+    BrackT(Atom, Box<Typ>, Atom),
+}
+
+pub type DefTyp = Spanned<DefTypKind>;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum DefTypKind {
+    PlainTD(PlainTyp),
+    StructTD(Vec<TypField>),
+    VariantTD(Vec<TypCase>),
+}
+
+pub type TypField = (Atom, PlainTyp, Vec<Hint>);
+pub type TypCase = (Typ, Vec<Hint>);
+
+// Parameters and premises
+
+pub type Param = Spanned<ParamKind>;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ParamKind {
+    ExpP(PlainTyp),
+    DefP(Id, Vec<TParam>, Vec<Param>, PlainTyp),
+}
+
+pub type TParam = Spanned<TParamKind>;
+pub type TParamKind = IdKind;
+
+pub type Prem = Spanned<PremKind>;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PremKind {
+    VarPr(Id, PlainTyp),
+    RulePr(Id, Exp),
+    RuleNotPr(Id, Exp),
+    IfPr(Exp),
+    ElsePr,
+    IterPr(Box<Prem>, Iter),
+    DebugPr(Exp),
+}
+
+// Rules and tables
+
+pub type Rule = Spanned<RuleKind>;
+pub type RuleKind = (Id, Id, Exp, Vec<Prem>);
+
+pub type TableRow = Spanned<TableRowKind>;
+pub type TableRowKind = (Exp, Exp);
+
+// Definitions
+
+pub type Def = Spanned<DefKind>;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum DefKind {
+    ExternSynD(Id, Vec<Hint>),
+    SynD(Vec<(Id, Vec<TParam>)>),
+    TypD(Id, Vec<TParam>, DefTyp, Vec<Hint>),
+    VarD(Id, PlainTyp, Vec<Hint>),
+    ExternRelD(Id, NotTyp, Vec<Hint>),
+    RelD(Id, NotTyp, Vec<Hint>),
+    RuleGroupD(Id, Id, Vec<Rule>),
+    ExternDecD(Id, Vec<TParam>, Vec<Param>, PlainTyp, Vec<Hint>),
+    BuiltinDecD(Id, Vec<TParam>, Vec<Param>, PlainTyp, Vec<Hint>),
+    TableDecD(Id, Vec<Param>, PlainTyp, Vec<Hint>),
+    FuncDecD(Id, Vec<TParam>, Vec<Param>, PlainTyp, Vec<Hint>),
+    TableDefD(Id, Vec<TableRow>),
+    FuncDefD(Id, Vec<TParam>, Vec<Arg>, Exp, Vec<Prem>),
+    SepD,
+}
+
+pub type Spec = Vec<Def>;
