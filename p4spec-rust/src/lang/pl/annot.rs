@@ -26,17 +26,17 @@ pub fn empty() -> Hints {
 // Wrap a node with no prose hints
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct T<N> {
+pub struct Annotated<N> {
     pub node: N,
     pub hints: Hints,
 }
-pub fn no_hints<N>(node: N) -> T<N> {
-    T {
+pub fn no_hints<N>(node: N) -> Annotated<N> {
+    Annotated {
         node,
         hints: empty(),
     }
 }
-impl<N: HasSpan> HasSpan for T<N> {
+impl<N: HasSpan> HasSpan for Annotated<N> {
     fn span(&self) -> &Span {
         self.node.span()
     }

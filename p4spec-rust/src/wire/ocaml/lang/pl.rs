@@ -160,7 +160,7 @@ fn encode_hints(hints: &annot::Hints) -> Value {
 
 fn decode_exp(value: &Value) -> Result<ast::Exp, DecodeError> {
     let value = object(value)?;
-    Ok(annot::T {
+    Ok(annot::Annotated {
         node: decode_exp_node(field(value, "node")?)?,
         hints: decode_hints(field(value, "hints")?)?,
     })
@@ -570,7 +570,7 @@ fn decode_instr<T>(
         |value| decode_instr_kind(value, decode_tier),
         decode_inote,
     )?;
-    Ok(annot::T {
+    Ok(annot::Annotated {
         node: ast::InstrNode {
             kind,
             iid,
@@ -1035,7 +1035,7 @@ fn decode_def(value: &Value) -> Result<ast::Def, DecodeError> {
             (unknown, _) => Err(DecodeError::UnknownVariant(unknown.to_owned())),
         }
     })?;
-    Ok(annot::T {
+    Ok(annot::Annotated {
         node: ast::DefNode {
             kind: def.node,
             span: def.span,

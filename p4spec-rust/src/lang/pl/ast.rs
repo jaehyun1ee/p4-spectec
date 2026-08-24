@@ -70,7 +70,7 @@ pub struct ExpNode {
     pub ty: TypKind,
     pub span: Span,
 }
-pub type Exp = annot::T<ExpNode>;
+pub type Exp = annot::Annotated<ExpNode>;
 impl ExpNode {
     pub fn new(kind: ExpKind, ty: TypKind, span: Span) -> Exp {
         annot::no_hints(Self { kind, ty, span })
@@ -218,7 +218,7 @@ pub struct InstrNode<Tier> {
     pub span: Span,
 }
 
-pub type Instr<Tier> = annot::T<InstrNode<Tier>>;
+pub type Instr<Tier> = annot::Annotated<InstrNode<Tier>>;
 
 impl<Tier> InstrNode<Tier> {
     pub fn new(
@@ -322,7 +322,7 @@ pub struct DefNode {
     pub span: Span,
 }
 
-pub type Def = annot::T<DefNode>;
+pub type Def = annot::Annotated<DefNode>;
 
 impl DefNode {
     pub fn new(kind: DefKind, span: Span) -> Def {

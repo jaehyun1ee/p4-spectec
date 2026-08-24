@@ -13,7 +13,7 @@ fn id(name: &str) -> il::ast::Id {
 
 #[test]
 fn annotation_wrappers_forward_source_and_keep_nested_hints() {
-    let nested = pl::annot::T {
+    let nested = pl::annot::Annotated {
         node: pl::ast::ExpNode {
             kind: pl::ast::ExpKind::VarE(id("nested")),
             ty: il::ast::TypKind::BoolT,
