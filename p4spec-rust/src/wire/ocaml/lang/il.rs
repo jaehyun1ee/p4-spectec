@@ -122,7 +122,7 @@ pub(super) fn encode_list<T>(values: &[T], encode: impl Fn(&T) -> Value) -> Valu
     Value::Array(values.iter().map(encode).collect())
 }
 
-fn decode_option<T>(
+pub(super) fn decode_option<T>(
     value: &Value,
     decode: impl FnOnce(&Value) -> Result<T, DecodeError>,
 ) -> Result<Option<T>, DecodeError> {
@@ -133,7 +133,7 @@ fn decode_option<T>(
     }
 }
 
-fn encode_option<T>(value: Option<&T>, encode: impl FnOnce(&T) -> Value) -> Value {
+pub(super) fn encode_option<T>(value: Option<&T>, encode: impl FnOnce(&T) -> Value) -> Value {
     value.map_or(Value::Null, encode)
 }
 
@@ -1287,7 +1287,7 @@ fn encode_path_kind(path: &PathKind) -> Value {
     }
 }
 
-fn decode_param(value: &Value) -> Result<ast::Param, DecodeError> {
+pub(super) fn decode_param(value: &Value) -> Result<ast::Param, DecodeError> {
     source::decode_phrase(value, |value| {
         let (tag, fields) = variant(value)?;
         match (tag, fields) {
@@ -1304,7 +1304,7 @@ fn decode_param(value: &Value) -> Result<ast::Param, DecodeError> {
     })
 }
 
-fn encode_param(param: &ast::Param) -> Value {
+pub(super) fn encode_param(param: &ast::Param) -> Value {
     source::encode_phrase(param, |param| match param {
         ParamKind::ExpP(typ) => json!(["ExpP", encode_typ(typ)]),
         ParamKind::DefP(id, tparams, params, typ) => json!([
@@ -1317,7 +1317,7 @@ fn encode_param(param: &ast::Param) -> Value {
     })
 }
 
-fn decode_arg(value: &Value) -> Result<ast::Arg, DecodeError> {
+pub(super) fn decode_arg(value: &Value) -> Result<ast::Arg, DecodeError> {
     source::decode_phrase(value, |value| {
         let (tag, fields) = variant(value)?;
         match (tag, fields) {
@@ -1329,7 +1329,7 @@ fn decode_arg(value: &Value) -> Result<ast::Arg, DecodeError> {
     })
 }
 
-fn encode_arg(arg: &ast::Arg) -> Value {
+pub(super) fn encode_arg(arg: &ast::Arg) -> Value {
     source::encode_phrase(arg, |arg| match arg {
         ArgKind::ExpA(exp) => json!(["ExpA", encode_exp(exp)]),
         ArgKind::DefA(id) => json!(["DefA", encode_id(id)]),
@@ -1346,7 +1346,7 @@ pub(super) fn encode_input_hint(hint: &crate::lang::hints::input::T) -> Value {
     encode_list(hint, |index| json!(index))
 }
 
-fn decode_prem(value: &Value) -> Result<ast::Prem, DecodeError> {
+pub(super) fn decode_prem(value: &Value) -> Result<ast::Prem, DecodeError> {
     source::decode_phrase(value, |value| {
         let (tag, fields) = variant(value)?;
         match (tag, fields) {
@@ -1375,7 +1375,7 @@ fn decode_prem(value: &Value) -> Result<ast::Prem, DecodeError> {
     })
 }
 
-fn encode_prem(prem: &ast::Prem) -> Value {
+pub(super) fn encode_prem(prem: &ast::Prem) -> Value {
     source::encode_phrase(prem, |prem| match prem {
         PremKind::RulePr(id, exp, hint) => json!([
             "RulePr",
@@ -1464,7 +1464,7 @@ fn encode_else_group(group: &ast::ElseGroup) -> Value {
     })
 }
 
-fn decode_clause(value: &Value) -> Result<ast::Clause, DecodeError> {
+pub(super) fn decode_clause(value: &Value) -> Result<ast::Clause, DecodeError> {
     source::decode_phrase(value, |value| match array(value)? {
         [args, exp, prems] => Ok((
             decode_list(args, decode_arg)?,
@@ -1475,7 +1475,7 @@ fn decode_clause(value: &Value) -> Result<ast::Clause, DecodeError> {
     })
 }
 
-fn encode_clause(clause: &ast::Clause) -> Value {
+pub(super) fn encode_clause(clause: &ast::Clause) -> Value {
     source::encode_phrase(clause, |(args, exp, prems)| {
         json!([
             encode_list(args, encode_arg),
