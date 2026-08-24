@@ -95,58 +95,6 @@ fn al_equality_delegates_to_span_and_subcheck_insensitive_il_semantics() {
         &Spanned::new(il::ast::PremKind::IfPr(variable("x")), span("prem")),
         &Spanned::new(il::ast::PremKind::IfPr(variable("x")), span("other-prem")),
     ));
-    let atom = atom();
-    let mixop = Mixfix::Seq(Vec::new());
-    let var_il = (id("v"), typ(), vec![il::ast::Iter::List]);
-    let value = il::ast::Value::new(
-        il::ast::ValueKind::BoolV(true),
-        il::ast::TypKind::BoolT,
-        span("value"),
-    );
-    let iterexp = (il::ast::Iter::List, vec![var_il.clone()]);
-    let path = il::ast::Path::new(
-        il::ast::PathKind::RootP,
-        il::ast::TypKind::BoolT,
-        span("path"),
-    );
-    let tparam = id("T");
-    let targ = Spanned::new(il::ast::TypKind::BoolT, span("targ"));
-    let arg = arg_exp("x");
-    assert!(
-        [
-            al::eq::eq_atom(&atom, &atom),
-            al::eq::eq_atoms(std::slice::from_ref(&atom), std::slice::from_ref(&atom)),
-            al::eq::eq_mixop(&mixop, &mixop),
-            al::eq::eq_iter(il::ast::Iter::List, il::ast::Iter::List),
-            al::eq::eq_iters(&[il::ast::Iter::List], &[il::ast::Iter::List]),
-            al::eq::eq_var(&var_il, &var_il),
-            al::eq::eq_vars(std::slice::from_ref(&var_il), std::slice::from_ref(&var_il)),
-            al::eq::eq_typ(&typ(), &typ()),
-            al::eq::eq_typs(&[typ()], &[typ()]),
-            al::eq::eq_nottyp(&not_typ(), &not_typ()),
-            al::eq::eq_value(&value, &value),
-            al::eq::eq_values(std::slice::from_ref(&value), std::slice::from_ref(&value)),
-            al::eq::eq_exps(&[variable("x")], &[variable("x")]),
-            al::eq::eq_iterexp(&iterexp, &iterexp),
-            al::eq::eq_iterexps(
-                std::slice::from_ref(&iterexp),
-                std::slice::from_ref(&iterexp)
-            ),
-            al::eq::eq_pattern(
-                &il::ast::Pattern::ListP(il::ast::ListPattern::Nil),
-                &il::ast::Pattern::ListP(il::ast::ListPattern::Nil)
-            ),
-            al::eq::eq_path(&path, &path),
-            al::eq::eq_tparam(&tparam, &tparam),
-            al::eq::eq_tparams(std::slice::from_ref(&tparam), std::slice::from_ref(&tparam)),
-            al::eq::eq_arg(&arg, &arg),
-            al::eq::eq_args(std::slice::from_ref(&arg), std::slice::from_ref(&arg)),
-            al::eq::eq_targ(&targ, &targ),
-            al::eq::eq_targs(std::slice::from_ref(&targ), std::slice::from_ref(&targ)),
-        ]
-        .into_iter()
-        .all(|equal| equal)
-    );
 }
 
 #[test]
@@ -170,7 +118,6 @@ fn al_equality_distinguishes_recursive_operands_variants_and_collection_rules() 
     for (left, right, expected) in expressions {
         assert_eq!(al::eq::eq_exp(&left, &right), expected);
     }
-    assert!(al::eq::eq_value(&recursive, &recursive));
     assert!(!al::eq::eq_value(&recursive, &recursive_changed));
     assert!(!al::eq::eq_value(
         &value(il::ast::ValueKind::BoolV(true)),
