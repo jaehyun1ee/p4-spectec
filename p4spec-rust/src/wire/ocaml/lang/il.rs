@@ -804,7 +804,7 @@ fn encode_value_kind(value: &ValueKind) -> Result<Value, EncodeError> {
     })
 }
 
-fn decode_un_op(value: &Value) -> Result<UnOp, DecodeError> {
+pub(super) fn decode_un_op(value: &Value) -> Result<UnOp, DecodeError> {
     let (tag, fields) = variant(value)?;
     match (tag, fields) {
         ("NotOp", []) => Ok(UnOp::NotOp),
@@ -817,7 +817,7 @@ fn decode_un_op(value: &Value) -> Result<UnOp, DecodeError> {
     }
 }
 
-fn encode_un_op(op: UnOp) -> Value {
+pub(super) fn encode_un_op(op: UnOp) -> Value {
     match op {
         UnOp::NotOp => json!(["NotOp"]),
         UnOp::PlusOp => json!(["PlusOp"]),

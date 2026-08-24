@@ -308,11 +308,11 @@ fn encode_hole(hole: &Hole) -> Value {
     }
 }
 
-fn decode_exp(value: &Value) -> Result<ast::Exp, DecodeError> {
+pub(super) fn decode_exp(value: &Value) -> Result<ast::Exp, DecodeError> {
     source::decode_phrase(value, decode_exp_kind)
 }
 
-fn encode_exp(exp: &ast::Exp) -> Value {
+pub(super) fn encode_exp(exp: &ast::Exp) -> Value {
     source::encode_phrase(exp, encode_exp_kind)
 }
 
