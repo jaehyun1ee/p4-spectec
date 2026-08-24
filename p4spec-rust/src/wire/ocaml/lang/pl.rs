@@ -432,7 +432,7 @@ fn decode_arg(value: &Value) -> Result<ast::Arg, DecodeError> {
     source::decode_phrase(value, |value| {
         let (tag, fields) = variant(value)?;
         match (tag, fields) {
-            ("ExpA", [exp]) => Ok(ArgKind::ExpA(decode_exp(exp)?)),
+            ("ExpA", [exp]) => Ok(ArgKind::ExpA(Box::new(decode_exp(exp)?))),
             ("DefA", [id]) => Ok(ArgKind::DefA(il::decode_id(id)?)),
             ("ExpA" | "DefA", _) => Err(DecodeError::Expected("valid PL argument arity")),
             (unknown, _) => Err(DecodeError::UnknownVariant(unknown.to_owned())),
@@ -451,7 +451,10 @@ fn decode_param(value: &Value) -> Result<ast::Param, DecodeError> {
     source::decode_phrase(value, |value| {
         let (tag, fields) = variant(value)?;
         match (tag, fields) {
-            ("ExpP", [typ, exp]) => Ok(ParamKind::ExpP(il::decode_typ(typ)?, decode_exp(exp)?)),
+            ("ExpP", [typ, exp]) => Ok(ParamKind::ExpP(
+                il::decode_typ(typ)?,
+                Box::new(decode_exp(exp)?),
+            )),
             ("DefP", [id, tparams, params, typ]) => Ok(ParamKind::DefP(
                 il::decode_id(id)?,
                 il::decode_list(tparams, il::decode_tparam)?,

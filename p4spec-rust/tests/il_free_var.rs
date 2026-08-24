@@ -62,7 +62,7 @@ fn rule(head: &str, prems: Vec<ast::Prem>) -> ast::Rule {
 fn clause(arg_name: &str, body: &str, prem_name: &str) -> ast::Clause {
     Spanned::new(
         ast::ClauseKind {
-            args: vec![arg(ast::ArgKind::ExpA(variable(arg_name)))],
+            args: vec![arg(ast::ArgKind::ExpA(Box::new(variable(arg_name))))],
             expression: variable(body),
             premises: vec![prem(ast::PremKind::DebugPr(variable(prem_name)))],
         },
@@ -265,7 +265,7 @@ fn free_expression_variants_follow_the_oracle() {
                 )],
                 vec![
                     arg(ast::ArgKind::DefA(id("definition_argument"))),
-                    arg(ast::ArgKind::ExpA(variable("argument"))),
+                    arg(ast::ArgKind::ExpA(Box::new(variable("argument")))),
                 ],
             )),
             names(&["argument"]),
@@ -345,7 +345,7 @@ fn free_path_argument_and_premise_variants_follow_the_oracle() {
     let args = vec![
         (
             "expression",
-            arg(ast::ArgKind::ExpA(variable("arg"))),
+            arg(ast::ArgKind::ExpA(Box::new(variable("arg")))),
             names(&["arg"]),
         ),
         (
@@ -493,7 +493,7 @@ fn free_aggregates_and_definition_omissions_follow_the_oracle() {
     );
     let row = Spanned::new(
         (
-            vec![arg(ast::ArgKind::ExpA(variable("key")))],
+            vec![arg(ast::ArgKind::ExpA(Box::new(variable("key"))))],
             variable("value"),
         ),
         span(),

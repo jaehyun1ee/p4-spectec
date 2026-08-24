@@ -37,7 +37,7 @@ fn names(items: &[&str]) -> sl::free::FreeVars {
 #[test]
 fn parameters_collect_only_expression_defaults() {
     let expression = Spanned::new(
-        sl::ast::ParamKind::ExpP(typ(), variable("default")),
+        sl::ast::ParamKind::ExpP(typ(), Box::new(variable("default"))),
         span("expression-parameter"),
     );
     let definition = Spanned::new(

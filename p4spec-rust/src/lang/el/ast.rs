@@ -1,6 +1,5 @@
 // Keep non-recursive OCaml payloads inline; reserve indirection for
 // recursive edges
-#![allow(clippy::large_enum_variant)]
 
 use crate::domain::{atom::Atom as DomainAtom, source::Spanned};
 use crate::lang::xl::num;
@@ -199,7 +198,7 @@ pub type Arg = Spanned<ArgKind>;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ArgKind {
     /// `exp`
-    ExpA(Exp),
+    ExpA(Box<Exp>),
     /// `$id`
     DefA(Id),
 }

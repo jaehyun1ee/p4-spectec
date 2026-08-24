@@ -99,7 +99,10 @@ fn free_collection_covers_paths_calls_premises_and_definition_bodies() {
                     ast::ArgKind::DefA(id("not_free", "arg.watsup")),
                     span("arg.watsup"),
                 ),
-                Spanned::new(ast::ArgKind::ExpA(variable("argument")), span("arg.watsup")),
+                Spanned::new(
+                    ast::ArgKind::ExpA(Box::new(variable("argument"))),
+                    span("arg.watsup"),
+                ),
             ],
         ),
         "call.watsup",
@@ -128,7 +131,7 @@ fn free_collection_covers_paths_calls_premises_and_definition_bodies() {
         id("function", "def.watsup"),
         vec![Spanned::new("T".to_owned(), span("def.watsup"))],
         vec![Spanned::new(
-            ast::ArgKind::ExpA(variable("argument")),
+            ast::ArgKind::ExpA(Box::new(variable("argument"))),
             span("def.watsup"),
         )],
         variable("body"),

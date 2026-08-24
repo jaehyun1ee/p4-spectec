@@ -68,7 +68,7 @@ fn composite_spec(metadata: &str) -> sl::ast::Spec {
         input_hint: InputHint::new(vec![0]),
     };
     let parameter = Spanned::new(
-        sl::ast::ParamKind::ExpP(typ(il::ast::TypKind::BoolT), variable("default")),
+        sl::ast::ParamKind::ExpP(typ(il::ast::TypKind::BoolT), Box::new(variable("default"))),
         span("parameter"),
     );
     let hints = vec![hint(metadata)];

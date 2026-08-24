@@ -1,6 +1,5 @@
 // Keep non-recursive OCaml payloads inline; reserve indirection for
 // recursive edges
-#![allow(clippy::large_enum_variant)]
 
 use crate::{
     domain::source::{HasSpan, Span, Spanned},
@@ -99,7 +98,7 @@ pub type Param = Spanned<ParamKind>;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ParamKind {
-    ExpP(Typ, Exp),
+    ExpP(Typ, Box<Exp>),
     DefP(Id, Vec<TParam>, Vec<Param>, Typ),
 }
 
@@ -167,6 +166,7 @@ impl HasSpan for Instr {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+#[allow(clippy::large_enum_variant)] // Control-flow operands stay inline
 pub enum InstrKind {
     // Branching instructions
     IfI(Exp, Vec<IterExp>, Block, Dangle),

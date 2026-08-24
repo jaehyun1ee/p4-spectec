@@ -213,7 +213,7 @@ fn printer_tables_cover_il_constructor_families_and_escapes() {
                 vec![typ()],
                 vec![
                     arg(ast::ArgKind::DefA(id("g"))),
-                    arg(ast::ArgKind::ExpA(var("x"))),
+                    arg(ast::ArgKind::ExpA(Box::new(var("x")))),
                 ],
             )),
             "$f<bool>($g, x)",
@@ -320,14 +320,17 @@ fn printer_renders_nested_premises_and_definition_spec_goldens() {
     let else_group = Spanned::new((id("fallback"), rule.clone()), Region::none());
     let clause = Spanned::new(
         ast::ClauseKind {
-            args: vec![arg(ast::ArgKind::ExpA(var("argument")))],
+            args: vec![arg(ast::ArgKind::ExpA(Box::new(var("argument"))))],
             expression: var("result"),
             premises: vec![prem(ast::PremKind::DebugPr(var("debug")))],
         },
         Region::none(),
     );
     let row = Spanned::new(
-        (vec![arg(ast::ArgKind::ExpA(var("key")))], var("value")),
+        (
+            vec![arg(ast::ArgKind::ExpA(Box::new(var("key"))))],
+            var("value"),
+        ),
         Region::none(),
     );
     let definitions = vec![
@@ -726,7 +729,10 @@ fn printer_tables_cover_remaining_public_arms() {
         assert_eq!(print::string_of_cmpop(operator), expected);
     }
     let patterns = vec![
-        (ast::Pattern::CaseP(Mixfix::Atom(atom("TAG"))), "`TAG`"),
+        (
+            ast::Pattern::CaseP(Box::new(Mixfix::Atom(atom("TAG")))),
+            "`TAG`",
+        ),
         (ast::Pattern::ListP(ast::ListPattern::Cons), "_ :: _"),
         (ast::Pattern::ListP(ast::ListPattern::Fixed(3)), "[ _/3 ]"),
         (ast::Pattern::ListP(ast::ListPattern::Nil), "[]"),

@@ -1,6 +1,5 @@
 // Keep non-recursive OCaml payloads inline; reserve indirection for
 // recursive edges
-#![allow(clippy::large_enum_variant)]
 
 use crate::domain::{
     atom::Atom as DomainAtom,
@@ -276,7 +275,7 @@ pub type IterExp = (Iter, Vec<Var>);
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Pattern {
-    CaseP(Mixop),
+    CaseP(Box<Mixop>),
     ListP(ListPattern),
     OptP(OptPattern),
 }
@@ -350,7 +349,7 @@ pub type Arg = Spanned<ArgKind>;
 #[derive(Clone, Debug, PartialEq)]
 pub enum ArgKind {
     /// `exp`
-    ExpA(Exp),
+    ExpA(Box<Exp>),
     /// `$id`
     DefA(Id),
 }
@@ -365,6 +364,7 @@ pub type TargKind = TypKind;
 pub type Prem = Spanned<PremKind>;
 
 #[derive(Clone, Debug, PartialEq)]
+#[allow(clippy::large_enum_variant)] // Rule notation and bindings stay inline
 pub enum PremKind {
     /// `id : notexp`
     RulePr(Id, NotExp, InputHint),
@@ -434,6 +434,7 @@ pub type Hint = el::ast::Hint;
 pub type Def = Spanned<DefKind>;
 
 #[derive(Clone, Debug, PartialEq)]
+#[allow(clippy::large_enum_variant)] // Definition fields stay inline in OCaml order
 pub enum DefKind {
     /// `extern syntax id hint*`
     ExternTypD(Id, Vec<Hint>),

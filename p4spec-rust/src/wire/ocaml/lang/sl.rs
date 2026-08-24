@@ -41,7 +41,10 @@ fn decode_param(value: &Value) -> Result<ast::Param, DecodeError> {
     source::decode_phrase(value, |value| {
         let (tag, fields) = variant(value)?;
         match (tag, fields) {
-            ("ExpP", [typ, exp]) => Ok(ParamKind::ExpP(il::decode_typ(typ)?, il::decode_exp(exp)?)),
+            ("ExpP", [typ, exp]) => Ok(ParamKind::ExpP(
+                il::decode_typ(typ)?,
+                Box::new(il::decode_exp(exp)?),
+            )),
             ("DefP", [id, tparams, params, typ]) => Ok(ParamKind::DefP(
                 il::decode_id(id)?,
                 il::decode_list(tparams, il::decode_tparam)?,

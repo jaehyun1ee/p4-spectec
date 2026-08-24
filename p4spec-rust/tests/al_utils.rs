@@ -46,7 +46,10 @@ fn not_exp(name: &str) -> il::ast::NotExp {
 }
 
 fn arg_exp(name: &str) -> il::ast::Arg {
-    Spanned::new(il::ast::ArgKind::ExpA(variable(name)), span("arg"))
+    Spanned::new(
+        il::ast::ArgKind::ExpA(Box::new(variable(name))),
+        span("arg"),
+    )
 }
 
 fn path_with(name: &str) -> il::ast::Path {

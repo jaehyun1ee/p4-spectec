@@ -1,5 +1,3 @@
-#![allow(clippy::large_enum_variant)]
-
 use crate::{
     domain::{
         mixfix::Mixfix,
@@ -152,7 +150,7 @@ pub type TParam = sl::ast::TParam;
 pub type Param = Spanned<ParamKind>;
 #[derive(Clone, Debug, PartialEq)]
 pub enum ParamKind {
-    ExpP(Typ, Exp),
+    ExpP(Typ, Box<Exp>),
     DefP(Id, Vec<TParam>, Vec<Param>, Typ),
 }
 
@@ -165,7 +163,7 @@ pub type Targ = sl::ast::Targ;
 pub type Arg = Spanned<ArgKind>;
 #[derive(Clone, Debug, PartialEq)]
 pub enum ArgKind {
-    ExpA(Exp),
+    ExpA(Box<Exp>),
     DefA(Id),
 }
 
@@ -293,6 +291,7 @@ pub type BlockGroup = Block<InstrGroup>;
 // Dispatch tier
 
 #[derive(Clone, Debug, PartialEq)]
+#[allow(clippy::large_enum_variant)] // Dispatch groups retain their flat payload shape
 pub enum InstrDispatch {
     GroupI {
         group_id: Id,

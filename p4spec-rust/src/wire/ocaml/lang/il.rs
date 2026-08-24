@@ -1204,9 +1204,9 @@ pub(super) fn encode_iter_exp((iter, vars): &ast::IterExp) -> Value {
 pub(super) fn decode_pattern(value: &Value) -> Result<Pattern, DecodeError> {
     let (tag, fields) = variant(value)?;
     match (tag, fields) {
-        ("CaseP", [mixop]) => Ok(Pattern::CaseP(
+        ("CaseP", [mixop]) => Ok(Pattern::CaseP(Box::new(
             crate::wire::ocaml::mixfix::MixopCodec::decode(mixop)?,
-        )),
+        ))),
         ("ListP", [pattern]) => Ok(Pattern::ListP(decode_list_pattern(pattern)?)),
         ("OptP", [pattern]) => Ok(Pattern::OptP(decode_opt_pattern(pattern)?)),
         ("CaseP" | "ListP" | "OptP", _) => Err(DecodeError::Expected("valid IL pattern arity")),
@@ -1350,7 +1350,7 @@ pub(super) fn decode_arg(value: &Value) -> Result<ast::Arg, DecodeError> {
     source::decode_phrase(value, |value| {
         let (tag, fields) = variant(value)?;
         match (tag, fields) {
-            ("ExpA", [exp]) => Ok(ArgKind::ExpA(decode_exp(exp)?)),
+            ("ExpA", [exp]) => Ok(ArgKind::ExpA(Box::new(decode_exp(exp)?))),
             ("DefA", [id]) => Ok(ArgKind::DefA(decode_id(id)?)),
             ("ExpA" | "DefA", _) => Err(DecodeError::Expected("valid IL argument arity")),
             (unknown, _) => Err(DecodeError::UnknownVariant(unknown.to_owned())),
