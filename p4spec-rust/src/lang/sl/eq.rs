@@ -123,7 +123,7 @@ pub fn eq_holdcase(holdcase_a: &HoldCase, holdcase_b: &HoldCase) -> bool {
 // Case analysis
 
 pub fn eq_case(case_a: &Case, case_b: &Case) -> bool {
-    eq_guard(&case_a.0, &case_b.0) && eq_block(&case_a.1, &case_b.1)
+    eq_guard(&case_a.guard, &case_b.guard) && eq_block(&case_a.block, &case_b.block)
 }
 
 pub fn eq_cases(cases_a: &[Case], cases_b: &[Case]) -> bool {
@@ -247,5 +247,6 @@ pub fn eq_iterinstrs(iterinstrs_a: &[IterInstr], iterinstrs_b: &[IterInstr]) -> 
 // Relations
 
 pub fn eq_rel_signature(signature_a: &RelSignature, signature_b: &RelSignature) -> bool {
-    il::eq::eq_nottyp(&signature_a.0, &signature_b.0) && input::eq(&signature_a.1, &signature_b.1)
+    il::eq::eq_nottyp(&signature_a.notation, &signature_b.notation)
+        && input::eq(&signature_a.input_hint, &signature_b.input_hint)
 }

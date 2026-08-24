@@ -85,10 +85,10 @@ fn instructions_collect_nested_expressions_and_omit_binding_metadata() {
         typ: typ(),
         iters: Vec::new(),
     };
-    let signature = (
-        Spanned::new(Mixfix::Seq(Vec::new()), span("notation")),
-        InputHint::new(vec![0]),
-    );
+    let signature = sl::ast::RelSignature {
+        notation: Spanned::new(Mixfix::Seq(Vec::new()), span("notation")),
+        input_hint: InputHint::new(vec![0]),
+    };
     let instructions = vec![
         (
             instr(sl::ast::InstrKind::IfI(
@@ -111,10 +111,10 @@ fn instructions_collect_nested_expressions_and_omit_binding_metadata() {
         (
             instr(sl::ast::InstrKind::CaseI(
                 variable("scrutinee"),
-                vec![(
-                    sl::ast::Guard::MemG(variable("guard")),
-                    vec![instr(sl::ast::InstrKind::ReturnI(variable("arm")))],
-                )],
+                vec![sl::ast::Case {
+                    guard: sl::ast::Guard::MemG(variable("guard")),
+                    block: vec![instr(sl::ast::InstrKind::ReturnI(variable("arm")))],
+                }],
                 false,
             )),
             names(&["scrutinee", "guard", "arm"]),

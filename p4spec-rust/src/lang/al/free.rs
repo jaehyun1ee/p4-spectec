@@ -118,13 +118,16 @@ pub fn free_prems(prems: &[Prem]) -> FreeVars {
 
 pub fn free_rulematch(rulematch: &RuleMatch) -> FreeVars {
     union(
-        union(free_exps(&rulematch.0), free_exps(&rulematch.1)),
-        free_prems(&rulematch.2),
+        union(
+            free_exps(&rulematch.signature),
+            free_exps(&rulematch.inputs),
+        ),
+        free_prems(&rulematch.premises),
     )
 }
 
 pub fn free_rulepath(rulepath: &RulePath) -> FreeVars {
-    union(free_prems(&rulepath.1), free_exps(&rulepath.2))
+    union(free_prems(&rulepath.premises), free_exps(&rulepath.outputs))
 }
 
 pub fn free_rulepaths(rulepaths: &[RulePath]) -> FreeVars {
@@ -135,8 +138,8 @@ pub fn free_rulepaths(rulepaths: &[RulePath]) -> FreeVars {
 
 pub fn free_rulegroup(rulegroup: &RuleGroup) -> FreeVars {
     union(
-        free_rulematch(&rulegroup.node.1),
-        free_rulepaths(&rulegroup.node.2),
+        free_rulematch(&rulegroup.node.rule_match),
+        free_rulepaths(&rulegroup.node.paths),
     )
 }
 
@@ -148,8 +151,8 @@ pub fn free_rulegroups(rulegroups: &[RuleGroup]) -> FreeVars {
 
 pub fn free_elsegroup(elsegroup: &ElseGroup) -> FreeVars {
     union(
-        free_rulematch(&elsegroup.node.1),
-        free_rulepath(&elsegroup.node.2),
+        free_rulematch(&elsegroup.node.rule_match),
+        free_rulepath(&elsegroup.node.path),
     )
 }
 
@@ -187,8 +190,11 @@ pub fn free_elseclause_opt(elseclause: Option<&ElseClause>) -> FreeVars {
 
 pub fn free_tablerow(tablerow: &TableRow) -> FreeVars {
     union(
-        union(free_args(&tablerow.node.1), free_exp(&tablerow.node.2)),
-        free_prems(&tablerow.node.3),
+        union(
+            free_args(&tablerow.node.args),
+            free_exp(&tablerow.node.expression),
+        ),
+        free_prems(&tablerow.node.premises),
     )
 }
 

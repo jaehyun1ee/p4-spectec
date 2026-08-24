@@ -24,7 +24,7 @@ pub fn collect_groups(block: &BlockDispatch) -> Vec<RuleGroup> {
             },
             InstrKind::CaseI(_, cases, _) => cases
                 .iter()
-                .flat_map(|(_, block)| collect_block(block))
+                .flat_map(|case| collect_block(&case.block))
                 .collect(),
             InstrKind::LetI(..) | InstrKind::DebugI(_) | InstrKind::DestructI(..) => Vec::new(),
             InstrKind::CheckLetSubI(_, _, _, _, block)
@@ -33,19 +33,19 @@ pub fn collect_groups(block: &BlockDispatch) -> Vec<RuleGroup> {
             InstrKind::TierI(InstrDispatch::RouteI(arms)) => {
                 arms.iter().flat_map(collect_block).collect()
             }
-            InstrKind::TierI(InstrDispatch::GroupI(
-                id_rulegroup,
-                id_rel,
-                rel_signature,
-                exps,
-                body,
-            )) => vec![RuleGroup {
+            InstrKind::TierI(InstrDispatch::GroupI {
+                group_id,
+                relation_id,
+                signature,
+                inputs,
+                block,
+            }) => vec![RuleGroup {
                 hints: instr.hints.clone(),
-                id_rulegroup: id_rulegroup.clone(),
-                id_rel: id_rel.clone(),
-                rel_signature: rel_signature.clone(),
-                exps: exps.clone(),
-                body: body.clone(),
+                id_rulegroup: group_id.clone(),
+                id_rel: relation_id.clone(),
+                rel_signature: signature.clone(),
+                exps: inputs.clone(),
+                body: block.clone(),
             }],
         }
     }

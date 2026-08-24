@@ -109,14 +109,35 @@ pub type IterPrem = il::ast::IterPrem;
 
 // Rules
 
-pub type RuleMatch = (Vec<Exp>, Vec<Exp>, Vec<Prem>);
-pub type RulePath = (Id, Vec<Prem>, Vec<Exp>);
+#[derive(Clone, Debug, PartialEq)]
+pub struct RuleMatch {
+    pub signature: Vec<Exp>,
+    pub inputs: Vec<Exp>,
+    pub premises: Vec<Prem>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct RulePath {
+    pub rule_id: Id,
+    pub premises: Vec<Prem>,
+    pub outputs: Vec<Exp>,
+}
 
 pub type RuleGroup = Spanned<RuleGroupKind>;
-pub type RuleGroupKind = (Id, RuleMatch, Vec<RulePath>);
+#[derive(Clone, Debug, PartialEq)]
+pub struct RuleGroupKind {
+    pub id: Id,
+    pub rule_match: RuleMatch,
+    pub paths: Vec<RulePath>,
+}
 
 pub type ElseGroup = Spanned<ElseGroupKind>;
-pub type ElseGroupKind = (Id, RuleMatch, RulePath);
+#[derive(Clone, Debug, PartialEq)]
+pub struct ElseGroupKind {
+    pub id: Id,
+    pub rule_match: RuleMatch,
+    pub path: RulePath,
+}
 
 // Clauses
 
@@ -128,7 +149,13 @@ pub type ElseClauseKind = il::ast::ElseClauseKind;
 // Table rows
 
 pub type TableRow = Spanned<TableRowKind>;
-pub type TableRowKind = (Vec<Exp>, Vec<Arg>, Exp, Vec<Prem>);
+#[derive(Clone, Debug, PartialEq)]
+pub struct TableRowKind {
+    pub signature: Vec<Exp>,
+    pub args: Vec<Arg>,
+    pub expression: Exp,
+    pub premises: Vec<Prem>,
+}
 
 // Hints
 

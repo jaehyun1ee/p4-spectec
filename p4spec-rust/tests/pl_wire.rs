@@ -126,3 +126,60 @@ fn whole_spec_roundtrip_preserves_dispatch_and_groups() {
         spec
     );
 }
+
+#[test]
+fn decoded_relation_exposes_named_model_fields() {
+    let signature = json!([phrase(json!(["Seq", [["Arg", typ()]]])), [0]]);
+    let relation = def(json!(["RelD", [id("step"), signature, [], [], null]]));
+
+    let spec = SpecCodec::decode(&json!([relation])).expect("decode PL relation");
+    let p4spec_rust::lang::pl::ast::DefKind::RelD(relation) = &spec[0].node.kind else {
+        panic!("expected a relation declaration");
+    };
+
+    assert_eq!(relation.id.node, "step");
+    assert!(relation.inputs.is_empty());
+    assert!(relation.block.is_empty());
+    assert!(relation.else_block.is_none());
+}
+
+#[test]
+fn decoded_group_exposes_named_dispatch_fields() {
+    let signature = json!([phrase(json!(["Seq", [["Arg", typ()]]])), [0]]);
+    let group = instr(
+        json!([
+            "TierI",
+            ["GroupI", id("group"), id("step"), signature, [], []]
+        ]),
+        1,
+        Value::Null,
+    );
+    let relation = def(json!([
+        "RelD",
+        [
+            id("step"),
+            json!([phrase(json!(["Seq", [["Arg", typ()]]])), [0]]),
+            [],
+            [group],
+            null
+        ]
+    ]));
+
+    let spec = SpecCodec::decode(&json!([relation])).expect("decode PL group");
+    let p4spec_rust::lang::pl::ast::DefKind::RelD(relation) = &spec[0].node.kind else {
+        panic!("expected a relation declaration");
+    };
+    let p4spec_rust::lang::pl::ast::InstrKind::TierI(
+        p4spec_rust::lang::pl::ast::InstrDispatch::GroupI {
+            group_id,
+            relation_id,
+            ..
+        },
+    ) = &relation.block[0].node.kind
+    else {
+        panic!("expected a dispatch group");
+    };
+
+    assert_eq!(group_id.node, "group");
+    assert_eq!(relation_id.node, "step");
+}

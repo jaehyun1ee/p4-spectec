@@ -38,10 +38,10 @@ fn text(value: &str) -> pl::ast::Exp {
 }
 
 fn signature() -> pl::ast::RelSignature {
-    (
-        Spanned::new(Mixfix::Arg(typ()), span("signature")),
-        InputHint::new(vec![0]),
-    )
+    pl::ast::RelSignature {
+        notation: Spanned::new(Mixfix::Arg(typ()), span("signature")),
+        input_hint: InputHint::new(vec![0]),
+    }
 }
 
 fn group_instr(
@@ -126,15 +126,18 @@ fn group_and_dispatch_backtracking_preserve_arm_order() {
 
     let group = |name: &str| {
         vec![dispatch_instr(pl::ast::InstrKind::TierI(
-            pl::ast::InstrDispatch::GroupI(
-                id(name),
-                id("relation"),
-                signature(),
-                vec![variable(name)],
-                vec![group_instr(pl::ast::InstrKind::TierI(
-                    pl::ast::InstrGroup::ResultI(signature(), Vec::new()),
+            pl::ast::InstrDispatch::GroupI {
+                group_id: id(name),
+                relation_id: id("relation"),
+                signature: signature(),
+                inputs: vec![variable(name)],
+                block: vec![group_instr(pl::ast::InstrKind::TierI(
+                    pl::ast::InstrGroup::ResultI {
+                        signature: signature(),
+                        outputs: Vec::new(),
+                    },
                 ))],
-            ),
+            },
         ))]
     };
     let route = dispatch_instr(pl::ast::InstrKind::TierI(pl::ast::InstrDispatch::RouteI(

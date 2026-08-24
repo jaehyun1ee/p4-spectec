@@ -109,21 +109,21 @@ fn shared_instruction_classification_ignores_nested_block_execution() {
 #[test]
 fn tier_classification_handles_rules_results_backtracking_and_dispatch() {
     assert!(pl::partial::is_partial_instr_group(
-        &pl::ast::InstrGroup::RuleI(
-            id("rule"),
-            Mixfix::Arg(call("argument")),
-            InputHint::new(vec![0]),
-            Vec::new(),
-        )
+        &pl::ast::InstrGroup::RuleI {
+            rule_id: id("rule"),
+            notation: Mixfix::Arg(call("argument")),
+            input_hint: InputHint::new(vec![0]),
+            iterations: Vec::new(),
+        }
     ));
     assert!(pl::partial::is_partial_instr_group(
-        &pl::ast::InstrGroup::ResultI(
-            (
-                Spanned::new(Mixfix::Arg(typ()), span("signature")),
-                InputHint::new(Vec::new())
-            ),
-            vec![call("result")],
-        )
+        &pl::ast::InstrGroup::ResultI {
+            signature: pl::ast::RelSignature {
+                notation: Spanned::new(Mixfix::Arg(typ()), span("signature")),
+                input_hint: InputHint::new(Vec::new()),
+            },
+            outputs: vec![call("result")],
+        }
     ));
     assert!(!pl::partial::is_partial_instr_group(
         &pl::ast::InstrGroup::BacktrackI(vec![vec![group_instr(pl::ast::InstrKind::TierI(

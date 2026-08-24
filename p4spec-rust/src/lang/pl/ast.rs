@@ -184,7 +184,11 @@ pub enum HoldCase<Tier> {
 
 // Case analysis
 
-pub type Case<Tier> = (Guard, Block<Tier>);
+#[derive(Clone, Debug, PartialEq)]
+pub struct Case<Tier> {
+    pub guard: Guard,
+    pub block: Block<Tier>,
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Guard {
@@ -270,14 +274,17 @@ pub type RelSignature = sl::ast::RelSignature;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum InstrGroup {
-    ResultI(RelSignature, Vec<Exp>),
+    ResultI {
+        signature: RelSignature,
+        outputs: Vec<Exp>,
+    },
     ReturnI(Exp),
-    RuleI(
-        Id,
-        NotExp,
-        crate::lang::hints::input::InputHint,
-        Vec<IterInstr>,
-    ),
+    RuleI {
+        rule_id: Id,
+        notation: NotExp,
+        input_hint: crate::lang::hints::input::InputHint,
+        iterations: Vec<IterInstr>,
+    },
     BacktrackI(Vec<BlockGroup>),
 }
 
@@ -287,7 +294,13 @@ pub type BlockGroup = Block<InstrGroup>;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum InstrDispatch {
-    GroupI(Id, Id, RelSignature, Vec<Exp>, BlockGroup),
+    GroupI {
+        group_id: Id,
+        relation_id: Id,
+        signature: RelSignature,
+        inputs: Vec<Exp>,
+        block: BlockGroup,
+    },
     RouteI(Vec<BlockDispatch>),
 }
 
@@ -295,29 +308,64 @@ pub type BlockDispatch = Block<InstrDispatch>;
 
 // Relations
 
-pub type ExternRel = (Id, RelSignature, Vec<Exp>);
-pub type Rel = (
-    Id,
-    RelSignature,
-    Vec<Exp>,
-    BlockDispatch,
-    Option<BlockDispatch>,
-);
+#[derive(Clone, Debug, PartialEq)]
+pub struct ExternRel {
+    pub id: Id,
+    pub signature: RelSignature,
+    pub inputs: Vec<Exp>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Rel {
+    pub id: Id,
+    pub signature: RelSignature,
+    pub inputs: Vec<Exp>,
+    pub block: BlockDispatch,
+    pub else_block: Option<BlockDispatch>,
+}
 
 // Functions
 
-pub type ExternFunc = (Id, Vec<TParam>, Vec<Param>, Typ);
-pub type BuiltinFunc = (Id, Vec<TParam>, Vec<Param>, Typ);
-pub type TableRow = (Vec<Exp>, Exp, BlockGroup);
-pub type TableFunc = (Id, Vec<Param>, Typ, Vec<TableRow>);
-pub type DefinedFunc = (
-    Id,
-    Vec<TParam>,
-    Vec<Param>,
-    Typ,
-    BlockGroup,
-    Option<BlockGroup>,
-);
+#[derive(Clone, Debug, PartialEq)]
+pub struct ExternFunc {
+    pub id: Id,
+    pub tparams: Vec<TParam>,
+    pub params: Vec<Param>,
+    pub typ: Typ,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct BuiltinFunc {
+    pub id: Id,
+    pub tparams: Vec<TParam>,
+    pub params: Vec<Param>,
+    pub typ: Typ,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct TableRow {
+    pub inputs: Vec<Exp>,
+    pub expression: Exp,
+    pub block: BlockGroup,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct TableFunc {
+    pub id: Id,
+    pub params: Vec<Param>,
+    pub typ: Typ,
+    pub rows: Vec<TableRow>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct DefinedFunc {
+    pub id: Id,
+    pub tparams: Vec<TParam>,
+    pub params: Vec<Param>,
+    pub typ: Typ,
+    pub block: BlockGroup,
+    pub else_block: Option<BlockGroup>,
+}
 
 // Definitions
 

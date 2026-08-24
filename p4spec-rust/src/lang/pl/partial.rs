@@ -45,7 +45,7 @@ pub fn is_partial_path(path: &Path) -> bool {
 }
 
 pub fn is_partial_case<Tier>(case: &Case<Tier>) -> bool {
-    is_partial_guard(&case.0)
+    is_partial_guard(&case.guard)
 }
 
 pub fn is_partial_guard(guard: &Guard) -> bool {
@@ -59,8 +59,8 @@ pub fn is_partial_guard(guard: &Guard) -> bool {
 
 pub fn is_partial_instr_group(instr: &InstrGroup) -> bool {
     match instr {
-        InstrGroup::RuleI(_, notexp, _, _) => notexp.args().into_iter().any(is_partial_exp),
-        InstrGroup::ResultI(_, exps) => exps.iter().any(is_partial_exp),
+        InstrGroup::RuleI { notation, .. } => notation.args().into_iter().any(is_partial_exp),
+        InstrGroup::ResultI { outputs, .. } => outputs.iter().any(is_partial_exp),
         InstrGroup::ReturnI(exp) => is_partial_exp(exp),
         InstrGroup::BacktrackI(_) => false,
     }
@@ -68,7 +68,7 @@ pub fn is_partial_instr_group(instr: &InstrGroup) -> bool {
 
 pub fn is_partial_instr_dispatch(instr: &InstrDispatch) -> bool {
     match instr {
-        InstrDispatch::GroupI(..) | InstrDispatch::RouteI(_) => false,
+        InstrDispatch::GroupI { .. } | InstrDispatch::RouteI(_) => false,
     }
 }
 

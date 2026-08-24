@@ -63,7 +63,10 @@ fn hint(source: &str) -> el::ast::Hint {
 }
 
 fn composite_spec(metadata: &str) -> sl::ast::Spec {
-    let signature = (notation(), InputHint::new(vec![0]));
+    let signature = sl::ast::RelSignature {
+        notation: notation(),
+        input_hint: InputHint::new(vec![0]),
+    };
     let parameter = Spanned::new(
         sl::ast::ParamKind::ExpP(typ(il::ast::TypKind::BoolT), variable("default")),
         span("parameter"),
@@ -80,59 +83,59 @@ fn composite_spec(metadata: &str) -> sl::ast::Spec {
             span(metadata),
         ),
         Spanned::new(
-            sl::ast::DefKind::RelD((
-                id("Evaluate"),
-                signature.clone(),
-                vec![variable("input")],
-                vec![instr(
+            sl::ast::DefKind::RelD(sl::ast::Rel {
+                id: id("Evaluate"),
+                signature: signature.clone(),
+                inputs: vec![variable("input")],
+                block: vec![instr(
                     sl::ast::InstrKind::ResultI(signature.clone(), vec![text("line\n\"\\")]),
                     7,
                 )],
-                Some(vec![instr(
+                else_block: Some(vec![instr(
                     sl::ast::InstrKind::ReturnI(variable("fallback")),
                     8,
                 )]),
-                hints.clone(),
-            )),
+                hints: hints.clone(),
+            }),
             span(metadata),
         ),
         Spanned::new(
-            sl::ast::DefKind::ExternDecD((
-                id("external"),
-                Vec::new(),
-                vec![parameter.clone()],
-                typ(il::ast::TypKind::BoolT),
-                hints.clone(),
-            )),
+            sl::ast::DefKind::ExternDecD(sl::ast::ExternFunc {
+                id: id("external"),
+                tparams: Vec::new(),
+                params: vec![parameter.clone()],
+                typ: typ(il::ast::TypKind::BoolT),
+                hints: hints.clone(),
+            }),
             span(metadata),
         ),
         Spanned::new(
-            sl::ast::DefKind::TableDecD((
-                id("lookup"),
-                vec![parameter.clone()],
-                typ(il::ast::TypKind::BoolT),
-                vec![(
-                    vec![variable("key")],
-                    text("row\tvalue"),
-                    vec![instr(
+            sl::ast::DefKind::TableDecD(sl::ast::TableFunc {
+                id: id("lookup"),
+                params: vec![parameter.clone()],
+                typ: typ(il::ast::TypKind::BoolT),
+                rows: vec![sl::ast::TableRow {
+                    inputs: vec![variable("key")],
+                    expression: text("row\tvalue"),
+                    block: vec![instr(
                         sl::ast::InstrKind::ReturnI(variable("row-result")),
                         9,
                     )],
-                )],
-                hints.clone(),
-            )),
+                }],
+                hints: hints.clone(),
+            }),
             span(metadata),
         ),
         Spanned::new(
-            sl::ast::DefKind::FuncDecD((
-                id("run"),
-                Vec::new(),
-                vec![parameter],
-                typ(il::ast::TypKind::BoolT),
-                vec![instr(sl::ast::InstrKind::ReturnI(text("done")), 10)],
-                None,
+            sl::ast::DefKind::FuncDecD(sl::ast::DefinedFunc {
+                id: id("run"),
+                tparams: Vec::new(),
+                params: vec![parameter],
+                typ: typ(il::ast::TypKind::BoolT),
+                block: vec![instr(sl::ast::InstrKind::ReturnI(text("done")), 10)],
+                else_block: None,
                 hints,
-            )),
+            }),
             span(metadata),
         ),
     ]

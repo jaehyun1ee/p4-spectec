@@ -31,16 +31,16 @@ fn variable(name: &str) -> pl::ast::Exp {
 
 fn group(name: &str) -> pl::ast::Instr<pl::ast::InstrDispatch> {
     let mut instruction = pl::ast::InstrNode::new(
-        pl::ast::InstrKind::TierI(pl::ast::InstrDispatch::GroupI(
-            id(name),
-            id("relation"),
-            (
-                Spanned::new(Mixfix::Arg(typ()), span("signature")),
-                InputHint::new(vec![0]),
-            ),
-            vec![variable(name)],
-            Vec::new(),
-        )),
+        pl::ast::InstrKind::TierI(pl::ast::InstrDispatch::GroupI {
+            group_id: id(name),
+            relation_id: id("relation"),
+            signature: pl::ast::RelSignature {
+                notation: Spanned::new(Mixfix::Arg(typ()), span("signature")),
+                input_hint: InputHint::new(vec![0]),
+            },
+            inputs: vec![variable(name)],
+            block: Vec::new(),
+        }),
         0,
         None,
         span(name),
@@ -74,8 +74,14 @@ fn group_collection_preserves_depth_first_branch_order_and_hints() {
         control(pl::ast::InstrKind::CaseI(
             variable("case"),
             vec![
-                (pl::ast::Guard::BoolG(true), vec![group("e")]),
-                (pl::ast::Guard::BoolG(false), vec![group("f")]),
+                pl::ast::Case {
+                    guard: pl::ast::Guard::BoolG(true),
+                    block: vec![group("e")],
+                },
+                pl::ast::Case {
+                    guard: pl::ast::Guard::BoolG(false),
+                    block: vec![group("f")],
+                },
             ],
             false,
         )),

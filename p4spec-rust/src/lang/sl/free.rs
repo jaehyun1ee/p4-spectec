@@ -66,8 +66,8 @@ pub fn free_args(args: &[Arg]) -> FreeVars {
 }
 
 pub fn free_cases(cases: &[Case]) -> FreeVars {
-    many(cases, |(guard, block)| {
-        add(free_guard(guard), free_block(block))
+    many(cases, |case| {
+        add(free_guard(&case.guard), free_block(&case.block))
     })
 }
 

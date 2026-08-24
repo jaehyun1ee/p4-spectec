@@ -351,8 +351,8 @@ pub fn string_of_case_with(case: &Case, level: usize, index: usize) -> String {
     format!(
         "{}Case {}\n\n{}",
         order,
-        string_of_guard(&case.0),
-        string_of_block_with(&case.1, level + 1, 0)
+        string_of_guard(&case.guard),
+        string_of_block_with(&case.block, level + 1, 0)
     )
 }
 
@@ -592,8 +592,8 @@ pub fn string_of_iterinstrs(iterinstrs: &[IterInstr]) -> String {
 // Relations
 
 pub fn string_of_relinput(signature: &RelSignature, exps_input: &[Exp]) -> String {
-    let (nottyp, inputs) = signature;
-    let inputs = inputs.indices();
+    let nottyp = &signature.notation;
+    let inputs = signature.input_hint.indices();
     assert_eq!(inputs.len(), exps_input.len());
     let args = (0..nottyp.node.arity()).map(|index| {
         inputs
@@ -609,8 +609,8 @@ pub fn string_of_relinput(signature: &RelSignature, exps_input: &[Exp]) -> Strin
 }
 
 pub fn string_of_reloutput(signature: &RelSignature, exps_output: &[Exp]) -> String {
-    let (nottyp, inputs) = signature;
-    let inputs = inputs.indices();
+    let nottyp = &signature.notation;
+    let inputs = signature.input_hint.indices();
     let outputs = (0..nottyp.node.arity())
         .filter(|index| !inputs.contains(&(*index as i64)))
         .collect::<Vec<_>>();
@@ -629,48 +629,49 @@ pub fn string_of_reloutput(signature: &RelSignature, exps_output: &[Exp]) -> Str
 }
 
 pub fn string_of_extern_rel(relation: &ExternRel) -> String {
-    let (id, signature, exps, _) = relation;
     format!(
         "{}: {}",
-        string_of_relid(id),
-        string_of_relinput(signature, exps)
+        string_of_relid(&relation.id),
+        string_of_relinput(&relation.signature, &relation.inputs)
     )
 }
 
 pub fn string_of_defined_rel(relation: &Rel) -> String {
-    let (id, signature, exps, block, elseblock, _) = relation;
     format!(
         "{}: {}\n\n{}{}",
-        string_of_relid(id),
-        string_of_relinput(signature, exps),
-        string_of_block(block),
-        string_of_elseblock_opt_with(elseblock, 0, block.len())
+        string_of_relid(&relation.id),
+        string_of_relinput(&relation.signature, &relation.inputs),
+        string_of_block(&relation.block),
+        string_of_elseblock_opt_with(&relation.else_block, 0, relation.block.len())
     )
 }
 
 // Functions
 
 pub fn string_of_extern_func(function: &ExternFunc) -> String {
-    let (id, tparams, params, _, _) = function;
     format!(
         "{}{}{}",
-        string_of_defid(id),
-        string_of_tparams(tparams),
-        string_of_params(params)
+        string_of_defid(&function.id),
+        string_of_tparams(&function.tparams),
+        string_of_params(&function.params)
     )
 }
 
 pub fn string_of_builtin_func(function: &BuiltinFunc) -> String {
-    string_of_extern_func(function)
+    format!(
+        "{}{}{}",
+        string_of_defid(&function.id),
+        string_of_tparams(&function.tparams),
+        string_of_params(&function.params)
+    )
 }
 
 pub fn string_of_tablerow(row: &TableRow) -> String {
-    let (exps, result, instrs) = row;
     format!(
         "\n  Row : {} -> {}:\n\n{}",
-        string_of_exps(", ", exps),
-        string_of_exp(result),
-        string_of_block_with(instrs, 2, 0)
+        string_of_exps(", ", &row.inputs),
+        string_of_exp(&row.expression),
+        string_of_block_with(&row.block, 2, 0)
     )
 }
 
@@ -679,24 +680,22 @@ pub fn string_of_tablerows(rows: &[TableRow]) -> String {
 }
 
 pub fn string_of_table_func(function: &TableFunc) -> String {
-    let (id, params, _, rows, _) = function;
     format!(
         "{}{}\n=\n{}",
-        string_of_defid(id),
-        string_of_params(params),
-        string_of_tablerows(rows)
+        string_of_defid(&function.id),
+        string_of_params(&function.params),
+        string_of_tablerows(&function.rows)
     )
 }
 
 pub fn string_of_defined_func(function: &DefinedFunc) -> String {
-    let (id, tparams, params, _, block, elseblock, _) = function;
     format!(
         "{}{}{}\n\n{}{}",
-        string_of_defid(id),
-        string_of_tparams(tparams),
-        string_of_params(params),
-        string_of_block(block),
-        string_of_elseblock_opt_with(elseblock, 0, block.len())
+        string_of_defid(&function.id),
+        string_of_tparams(&function.tparams),
+        string_of_params(&function.params),
+        string_of_block(&function.block),
+        string_of_elseblock_opt_with(&function.else_block, 0, function.block.len())
     )
 }
 

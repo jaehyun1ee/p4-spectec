@@ -396,15 +396,30 @@ fn free_expression_path_argument_and_premise_variants_collect_identifier_text() 
 #[test]
 fn free_al_shapes_and_definition_arms_are_exhaustive() {
     let premise = || Spanned::new(il::ast::PremKind::IfPr(variable("p")), span("premise"));
-    let rule_match: al::ast::RuleMatch =
-        (vec![variable("s")], vec![variable("i")], vec![premise()]);
-    let rule_path: al::ast::RulePath = (id("rule"), vec![premise()], vec![variable("o")]);
+    let rule_match = al::ast::RuleMatch {
+        signature: vec![variable("s")],
+        inputs: vec![variable("i")],
+        premises: vec![premise()],
+    };
+    let rule_path = al::ast::RulePath {
+        rule_id: id("rule"),
+        premises: vec![premise()],
+        outputs: vec![variable("o")],
+    };
     let group: al::ast::RuleGroup = Spanned::new(
-        (id("group"), rule_match.clone(), vec![rule_path.clone()]),
+        al::ast::RuleGroupKind {
+            id: id("group"),
+            rule_match: rule_match.clone(),
+            paths: vec![rule_path.clone()],
+        },
         span("group"),
     );
     let else_group: al::ast::ElseGroup = Spanned::new(
-        (id("else"), rule_match.clone(), rule_path.clone()),
+        al::ast::ElseGroupKind {
+            id: id("else"),
+            rule_match: rule_match.clone(),
+            path: rule_path.clone(),
+        },
         span("else"),
     );
     let clause: al::ast::Clause = Spanned::new(
@@ -416,12 +431,12 @@ fn free_al_shapes_and_definition_arms_are_exhaustive() {
         span("clause"),
     );
     let table: al::ast::TableRow = Spanned::new(
-        (
-            vec![variable("signature")],
-            vec![arg_exp("a")],
-            variable("t"),
-            vec![premise()],
-        ),
+        al::ast::TableRowKind {
+            signature: vec![variable("signature")],
+            args: vec![arg_exp("a")],
+            expression: variable("t"),
+            premises: vec![premise()],
+        },
         span("table"),
     );
 
@@ -565,54 +580,66 @@ fn composite_spec(metadata: &str, extern_inputs: Vec<i64>) -> al::ast::Spec {
         Mixfix::Atom(keyword("=>")),
         Mixfix::Arg(text_typ()),
     ]);
-    let evaluate_match = (
-        vec![variable("signature")],
-        vec![text_expression("line\n\"\\")],
-        vec![premise(il::ast::PremKind::IfPr(variable("ready")))],
-    );
-    let evaluate_path = (
-        id("success"),
-        vec![premise(il::ast::PremKind::DebugPr(variable("trace")))],
-        vec![text_expression("done")],
-    );
+    let evaluate_match = al::ast::RuleMatch {
+        signature: vec![variable("signature")],
+        inputs: vec![text_expression("line\n\"\\")],
+        premises: vec![premise(il::ast::PremKind::IfPr(variable("ready")))],
+    };
+    let evaluate_path = al::ast::RulePath {
+        rule_id: id("success"),
+        premises: vec![premise(il::ast::PremKind::DebugPr(variable("trace")))],
+        outputs: vec![text_expression("done")],
+    };
     let evaluate_group = Spanned::new(
-        (id("main"), evaluate_match, vec![evaluate_path]),
+        al::ast::RuleGroupKind {
+            id: id("main"),
+            rule_match: evaluate_match,
+            paths: vec![evaluate_path],
+        },
         span(metadata),
     );
-    let fallback_match = (
-        vec![variable("fallback_signature")],
-        vec![variable("fallback_input")],
-        Vec::new(),
-    );
-    let fallback_path = (
-        id("fallback"),
-        Vec::new(),
-        vec![text_expression("fallback")],
-    );
+    let fallback_match = al::ast::RuleMatch {
+        signature: vec![variable("fallback_signature")],
+        inputs: vec![variable("fallback_input")],
+        premises: Vec::new(),
+    };
+    let fallback_path = al::ast::RulePath {
+        rule_id: id("fallback"),
+        premises: Vec::new(),
+        outputs: vec![text_expression("fallback")],
+    };
     let else_group = Spanned::new(
-        (id("fallback_group"), fallback_match, fallback_path),
+        al::ast::ElseGroupKind {
+            id: id("fallback_group"),
+            rule_match: fallback_match,
+            path: fallback_path,
+        },
         span(metadata),
     );
     let ready_notation = notation(vec![Mixfix::Atom(keyword("ready")), Mixfix::Arg(typ())]);
     let ready_group = Spanned::new(
-        (
-            id("ready_group"),
-            (
-                vec![variable("ready_signature")],
-                vec![variable("ready_input")],
-                Vec::new(),
-            ),
-            vec![(id("holds"), Vec::new(), Vec::new())],
-        ),
+        al::ast::RuleGroupKind {
+            id: id("ready_group"),
+            rule_match: al::ast::RuleMatch {
+                signature: vec![variable("ready_signature")],
+                inputs: vec![variable("ready_input")],
+                premises: Vec::new(),
+            },
+            paths: vec![al::ast::RulePath {
+                rule_id: id("holds"),
+                premises: Vec::new(),
+                outputs: Vec::new(),
+            }],
+        },
         span(metadata),
     );
     let table_row = Spanned::new(
-        (
-            vec![variable("table_signature")],
-            vec![arg_exp("key")],
-            text_expression("row\tvalue"),
-            vec![premise(il::ast::PremKind::IfPr(variable("ready")))],
-        ),
+        al::ast::TableRowKind {
+            signature: vec![variable("table_signature")],
+            args: vec![arg_exp("key")],
+            expression: text_expression("row\tvalue"),
+            premises: vec![premise(il::ast::PremKind::IfPr(variable("ready")))],
+        },
         span(metadata),
     );
     let function_clause = Spanned::new(

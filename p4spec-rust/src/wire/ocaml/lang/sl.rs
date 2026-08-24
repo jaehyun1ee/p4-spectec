@@ -100,13 +100,16 @@ fn encode_hold_case(case: &HoldCase) -> Value {
 
 fn decode_case(value: &Value) -> Result<ast::Case, DecodeError> {
     match array(value)? {
-        [guard, block] => Ok((decode_guard(guard)?, decode_block(block)?)),
+        [guard, block] => Ok(ast::Case {
+            guard: decode_guard(guard)?,
+            block: decode_block(block)?,
+        }),
         _ => Err(DecodeError::Expected("SL case pair")),
     }
 }
 
-fn encode_case((guard, block): &ast::Case) -> Value {
-    json!([encode_guard(guard), encode_block(block)])
+fn encode_case(case: &ast::Case) -> Value {
+    json!([encode_guard(&case.guard), encode_block(&case.block)])
 }
 
 fn decode_guard(value: &Value) -> Result<Guard, DecodeError> {
@@ -295,152 +298,166 @@ fn encode_block(block: &ast::Block) -> Value {
 
 fn decode_rel_signature(value: &Value) -> Result<ast::RelSignature, DecodeError> {
     match array(value)? {
-        [typ, input] => Ok((il::decode_not_typ(typ)?, il::decode_input_hint(input)?)),
+        [typ, input] => Ok(ast::RelSignature {
+            notation: il::decode_not_typ(typ)?,
+            input_hint: il::decode_input_hint(input)?,
+        }),
         _ => Err(DecodeError::Expected("SL relation signature pair")),
     }
 }
 
-fn encode_rel_signature((typ, input): &ast::RelSignature) -> Value {
-    json!([il::encode_not_typ(typ), il::encode_input_hint(input)])
+fn encode_rel_signature(signature: &ast::RelSignature) -> Value {
+    json!([
+        il::encode_not_typ(&signature.notation),
+        il::encode_input_hint(&signature.input_hint)
+    ])
 }
 
 fn decode_extern_rel(value: &Value) -> Result<ast::ExternRel, DecodeError> {
     match array(value)? {
-        [id, signature, exps, hints] => Ok((
-            il::decode_id(id)?,
-            decode_rel_signature(signature)?,
-            il::decode_list(exps, il::decode_exp)?,
-            il::decode_list(hints, el::decode_hint)?,
-        )),
+        [id, signature, inputs, hints] => Ok(ast::ExternRel {
+            id: il::decode_id(id)?,
+            signature: decode_rel_signature(signature)?,
+            inputs: il::decode_list(inputs, il::decode_exp)?,
+            hints: il::decode_list(hints, el::decode_hint)?,
+        }),
         _ => Err(DecodeError::Expected("SL external relation tuple")),
     }
 }
 
-fn encode_extern_rel((id, signature, exps, hints): &ast::ExternRel) -> Value {
+fn encode_extern_rel(relation: &ast::ExternRel) -> Value {
     json!([
-        il::encode_id(id),
-        encode_rel_signature(signature),
-        il::encode_list(exps, il::encode_exp),
-        il::encode_list(hints, el::encode_hint)
+        il::encode_id(&relation.id),
+        encode_rel_signature(&relation.signature),
+        il::encode_list(&relation.inputs, il::encode_exp),
+        il::encode_list(&relation.hints, el::encode_hint)
     ])
 }
 
 fn decode_rel(value: &Value) -> Result<ast::Rel, DecodeError> {
     match array(value)? {
-        [id, signature, exps, block, else_block, hints] => Ok((
-            il::decode_id(id)?,
-            decode_rel_signature(signature)?,
-            il::decode_list(exps, il::decode_exp)?,
-            decode_block(block)?,
-            decode_option(else_block, decode_block)?,
-            il::decode_list(hints, el::decode_hint)?,
-        )),
+        [id, signature, inputs, block, else_block, hints] => Ok(ast::Rel {
+            id: il::decode_id(id)?,
+            signature: decode_rel_signature(signature)?,
+            inputs: il::decode_list(inputs, il::decode_exp)?,
+            block: decode_block(block)?,
+            else_block: decode_option(else_block, decode_block)?,
+            hints: il::decode_list(hints, el::decode_hint)?,
+        }),
         _ => Err(DecodeError::Expected("SL relation tuple")),
     }
 }
 
-fn encode_rel((id, signature, exps, block, else_block, hints): &ast::Rel) -> Value {
+fn encode_rel(relation: &ast::Rel) -> Value {
     json!([
-        il::encode_id(id),
-        encode_rel_signature(signature),
-        il::encode_list(exps, il::encode_exp),
-        encode_block(block),
-        encode_option(else_block.as_ref(), encode_block),
-        il::encode_list(hints, el::encode_hint)
+        il::encode_id(&relation.id),
+        encode_rel_signature(&relation.signature),
+        il::encode_list(&relation.inputs, il::encode_exp),
+        encode_block(&relation.block),
+        encode_option(relation.else_block.as_ref(), encode_block),
+        il::encode_list(&relation.hints, el::encode_hint)
     ])
 }
 
 fn decode_extern_func(value: &Value) -> Result<ast::ExternFunc, DecodeError> {
     match array(value)? {
-        [id, tparams, params, typ, hints] => Ok((
-            il::decode_id(id)?,
-            il::decode_list(tparams, il::decode_tparam)?,
-            il::decode_list(params, decode_param)?,
-            il::decode_typ(typ)?,
-            il::decode_list(hints, el::decode_hint)?,
-        )),
+        [id, tparams, params, typ, hints] => Ok(ast::ExternFunc {
+            id: il::decode_id(id)?,
+            tparams: il::decode_list(tparams, il::decode_tparam)?,
+            params: il::decode_list(params, decode_param)?,
+            typ: il::decode_typ(typ)?,
+            hints: il::decode_list(hints, el::decode_hint)?,
+        }),
         _ => Err(DecodeError::Expected("SL external function tuple")),
     }
 }
 
-fn encode_extern_func((id, tparams, params, typ, hints): &ast::ExternFunc) -> Value {
+fn encode_extern_func(function: &ast::ExternFunc) -> Value {
     json!([
-        il::encode_id(id),
-        il::encode_list(tparams, il::encode_tparam),
-        il::encode_list(params, encode_param),
-        il::encode_typ(typ),
-        il::encode_list(hints, el::encode_hint)
+        il::encode_id(&function.id),
+        il::encode_list(&function.tparams, il::encode_tparam),
+        il::encode_list(&function.params, encode_param),
+        il::encode_typ(&function.typ),
+        il::encode_list(&function.hints, el::encode_hint)
+    ])
+}
+
+fn encode_builtin_func(function: &ast::BuiltinFunc) -> Value {
+    json!([
+        il::encode_id(&function.id),
+        il::encode_list(&function.tparams, il::encode_tparam),
+        il::encode_list(&function.params, encode_param),
+        il::encode_typ(&function.typ),
+        il::encode_list(&function.hints, el::encode_hint)
     ])
 }
 
 fn decode_table_row(value: &Value) -> Result<ast::TableRow, DecodeError> {
     match array(value)? {
-        [args, exp, block] => Ok((
-            il::decode_list(args, il::decode_exp)?,
-            il::decode_exp(exp)?,
-            decode_block(block)?,
-        )),
+        [inputs, exp, block] => Ok(ast::TableRow {
+            inputs: il::decode_list(inputs, il::decode_exp)?,
+            expression: il::decode_exp(exp)?,
+            block: decode_block(block)?,
+        }),
         _ => Err(DecodeError::Expected("SL table row triple")),
     }
 }
 
-fn encode_table_row((args, exp, block): &ast::TableRow) -> Value {
+fn encode_table_row(row: &ast::TableRow) -> Value {
     json!([
-        il::encode_list(args, il::encode_exp),
-        il::encode_exp(exp),
-        encode_block(block)
+        il::encode_list(&row.inputs, il::encode_exp),
+        il::encode_exp(&row.expression),
+        encode_block(&row.block)
     ])
 }
 
 fn decode_table_func(value: &Value) -> Result<ast::TableFunc, DecodeError> {
     match array(value)? {
-        [id, params, typ, rows, hints] => Ok((
-            il::decode_id(id)?,
-            il::decode_list(params, decode_param)?,
-            il::decode_typ(typ)?,
-            il::decode_list(rows, decode_table_row)?,
-            il::decode_list(hints, el::decode_hint)?,
-        )),
+        [id, params, typ, rows, hints] => Ok(ast::TableFunc {
+            id: il::decode_id(id)?,
+            params: il::decode_list(params, decode_param)?,
+            typ: il::decode_typ(typ)?,
+            rows: il::decode_list(rows, decode_table_row)?,
+            hints: il::decode_list(hints, el::decode_hint)?,
+        }),
         _ => Err(DecodeError::Expected("SL table function tuple")),
     }
 }
 
-fn encode_table_func((id, params, typ, rows, hints): &ast::TableFunc) -> Value {
+fn encode_table_func(function: &ast::TableFunc) -> Value {
     json!([
-        il::encode_id(id),
-        il::encode_list(params, encode_param),
-        il::encode_typ(typ),
-        il::encode_list(rows, encode_table_row),
-        il::encode_list(hints, el::encode_hint)
+        il::encode_id(&function.id),
+        il::encode_list(&function.params, encode_param),
+        il::encode_typ(&function.typ),
+        il::encode_list(&function.rows, encode_table_row),
+        il::encode_list(&function.hints, el::encode_hint)
     ])
 }
 
 fn decode_defined_func(value: &Value) -> Result<ast::DefinedFunc, DecodeError> {
     match array(value)? {
-        [id, tparams, params, typ, block, else_block, hints] => Ok((
-            il::decode_id(id)?,
-            il::decode_list(tparams, il::decode_tparam)?,
-            il::decode_list(params, decode_param)?,
-            il::decode_typ(typ)?,
-            decode_block(block)?,
-            decode_option(else_block, decode_block)?,
-            il::decode_list(hints, el::decode_hint)?,
-        )),
+        [id, tparams, params, typ, block, else_block, hints] => Ok(ast::DefinedFunc {
+            id: il::decode_id(id)?,
+            tparams: il::decode_list(tparams, il::decode_tparam)?,
+            params: il::decode_list(params, decode_param)?,
+            typ: il::decode_typ(typ)?,
+            block: decode_block(block)?,
+            else_block: decode_option(else_block, decode_block)?,
+            hints: il::decode_list(hints, el::decode_hint)?,
+        }),
         _ => Err(DecodeError::Expected("SL defined function tuple")),
     }
 }
 
-fn encode_defined_func(
-    (id, tparams, params, typ, block, else_block, hints): &ast::DefinedFunc,
-) -> Value {
+fn encode_defined_func(function: &ast::DefinedFunc) -> Value {
     json!([
-        il::encode_id(id),
-        il::encode_list(tparams, il::encode_tparam),
-        il::encode_list(params, encode_param),
-        il::encode_typ(typ),
-        encode_block(block),
-        encode_option(else_block.as_ref(), encode_block),
-        il::encode_list(hints, el::encode_hint)
+        il::encode_id(&function.id),
+        il::encode_list(&function.tparams, il::encode_tparam),
+        il::encode_list(&function.params, encode_param),
+        il::encode_typ(&function.typ),
+        encode_block(&function.block),
+        encode_option(function.else_block.as_ref(), encode_block),
+        il::encode_list(&function.hints, el::encode_hint)
     ])
 }
 
@@ -466,7 +483,16 @@ fn decode_def(value: &Value) -> Result<ast::Def, DecodeError> {
             ("ExternRelD", [rel]) => Ok(DefKind::ExternRelD(decode_extern_rel(rel)?)),
             ("RelD", [rel]) => Ok(DefKind::RelD(decode_rel(rel)?)),
             ("ExternDecD", [func]) => Ok(DefKind::ExternDecD(decode_extern_func(func)?)),
-            ("BuiltinDecD", [func]) => Ok(DefKind::BuiltinDecD(decode_extern_func(func)?)),
+            ("BuiltinDecD", [func]) => Ok(DefKind::BuiltinDecD({
+                let function = decode_extern_func(func)?;
+                ast::BuiltinFunc {
+                    id: function.id,
+                    tparams: function.tparams,
+                    params: function.params,
+                    typ: function.typ,
+                    hints: function.hints,
+                }
+            })),
             ("TableDecD", [func]) => Ok(DefKind::TableDecD(decode_table_func(func)?)),
             ("FuncDecD", [func]) => Ok(DefKind::FuncDecD(decode_defined_func(func)?)),
             (
@@ -502,7 +528,7 @@ fn encode_def(def: &ast::Def) -> Value {
         DefKind::ExternRelD(rel) => json!(["ExternRelD", encode_extern_rel(rel)]),
         DefKind::RelD(rel) => json!(["RelD", encode_rel(rel)]),
         DefKind::ExternDecD(func) => json!(["ExternDecD", encode_extern_func(func)]),
-        DefKind::BuiltinDecD(func) => json!(["BuiltinDecD", encode_extern_func(func)]),
+        DefKind::BuiltinDecD(func) => json!(["BuiltinDecD", encode_builtin_func(func)]),
         DefKind::TableDecD(func) => json!(["TableDecD", encode_table_func(func)]),
         DefKind::FuncDecD(func) => json!(["FuncDecD", encode_defined_func(func)]),
     })

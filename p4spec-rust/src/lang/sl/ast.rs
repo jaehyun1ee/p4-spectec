@@ -128,7 +128,11 @@ pub enum HoldCase {
 
 // Case analysis
 
-pub type Case = (Guard, Block);
+#[derive(Clone, Debug, PartialEq)]
+pub struct Case {
+    pub guard: Guard,
+    pub block: Block,
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Guard {
@@ -191,45 +195,83 @@ pub type Hint = el::ast::Hint;
 // Relations
 
 // nottyp `hint(input` `%`int* `)`
-pub type RelSignature = (NotTyp, InputHint);
+#[derive(Clone, Debug, PartialEq)]
+pub struct RelSignature {
+    pub notation: NotTyp,
+    pub input_hint: InputHint,
+}
 
 // id `:` rel_signature exp* hint*
-pub type ExternRel = (Id, RelSignature, Vec<Exp>, Vec<Hint>);
+#[derive(Clone, Debug, PartialEq)]
+pub struct ExternRel {
+    pub id: Id,
+    pub signature: RelSignature,
+    pub inputs: Vec<Exp>,
+    pub hints: Vec<Hint>,
+}
 
 // id `:` mixop `hint(input` `%`int* `)` exp* block elseblock? hint*
-pub type Rel = (
-    Id,
-    RelSignature,
-    Vec<Exp>,
-    Block,
-    Option<ElseBlock>,
-    Vec<Hint>,
-);
+#[derive(Clone, Debug, PartialEq)]
+pub struct Rel {
+    pub id: Id,
+    pub signature: RelSignature,
+    pub inputs: Vec<Exp>,
+    pub block: Block,
+    pub else_block: Option<ElseBlock>,
+    pub hints: Vec<Hint>,
+}
 
 // Functions
 
 // id `<` list(tparam, `,`) `>` list(param, `,`) `:` hint*
-pub type ExternFunc = (Id, Vec<TParam>, Vec<Param>, Typ, Vec<Hint>);
+#[derive(Clone, Debug, PartialEq)]
+pub struct ExternFunc {
+    pub id: Id,
+    pub tparams: Vec<TParam>,
+    pub params: Vec<Param>,
+    pub typ: Typ,
+    pub hints: Vec<Hint>,
+}
 
 // id `<` list(tparam, `,`) `>` list(param, `,`) `:` hint*
-pub type BuiltinFunc = (Id, Vec<TParam>, Vec<Param>, Typ, Vec<Hint>);
+#[derive(Clone, Debug, PartialEq)]
+pub struct BuiltinFunc {
+    pub id: Id,
+    pub tparams: Vec<TParam>,
+    pub params: Vec<Param>,
+    pub typ: Typ,
+    pub hints: Vec<Hint>,
+}
 
 // `(` list(exp, `,`)* `)` `->` exp block
-pub type TableRow = (Vec<Exp>, Exp, Block);
+#[derive(Clone, Debug, PartialEq)]
+pub struct TableRow {
+    pub inputs: Vec<Exp>,
+    pub expression: Exp,
+    pub block: Block,
+}
 
 // id `(` list(param, `,`) `)` `:` typ tablerow* hint*
-pub type TableFunc = (Id, Vec<Param>, Typ, Vec<TableRow>, Vec<Hint>);
+#[derive(Clone, Debug, PartialEq)]
+pub struct TableFunc {
+    pub id: Id,
+    pub params: Vec<Param>,
+    pub typ: Typ,
+    pub rows: Vec<TableRow>,
+    pub hints: Vec<Hint>,
+}
 
 // id `<` list(tparam, `,`) `>` list(arg, `,`) `:` typ block elseblock? hint*
-pub type DefinedFunc = (
-    Id,
-    Vec<TParam>,
-    Vec<Param>,
-    Typ,
-    Block,
-    Option<ElseBlock>,
-    Vec<Hint>,
-);
+#[derive(Clone, Debug, PartialEq)]
+pub struct DefinedFunc {
+    pub id: Id,
+    pub tparams: Vec<TParam>,
+    pub params: Vec<Param>,
+    pub typ: Typ,
+    pub block: Block,
+    pub else_block: Option<ElseBlock>,
+    pub hints: Vec<Hint>,
+}
 
 // Definitions
 

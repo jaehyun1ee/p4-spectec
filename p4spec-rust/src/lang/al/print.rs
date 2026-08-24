@@ -146,26 +146,24 @@ pub fn string_of_ruleoutput(nottyp: &NotTyp, inputs: &InputHint, exps_output: &[
 }
 
 pub fn string_of_rulematch(nottyp: &NotTyp, inputs: &InputHint, rulematch: &RuleMatch) -> String {
-    let (exps_signature, exps_input, prems) = rulematch;
     format!(
         "{}(signature) {}\n{}{}{}",
         indent(2),
-        string_of_ruleinput(nottyp, inputs, exps_signature),
+        string_of_ruleinput(nottyp, inputs, &rulematch.signature),
         indent(2),
-        string_of_ruleinput(nottyp, inputs, exps_input),
-        il_print::string_of_prems_with(2, prems)
+        string_of_ruleinput(nottyp, inputs, &rulematch.inputs),
+        il_print::string_of_prems_with(2, &rulematch.premises)
     )
 }
 
 pub fn string_of_rulepath(nottyp: &NotTyp, inputs: &InputHint, rulepath: &RulePath) -> String {
-    let (id, prems, exps_output) = rulepath;
     format!(
         "{}rulepath {}{}\n{}{}",
         indent(2),
-        string_of_rulepathid(id),
-        il_print::string_of_prems_with(2, prems),
+        string_of_rulepathid(&rulepath.rule_id),
+        il_print::string_of_prems_with(2, &rulepath.premises),
         indent(2),
-        string_of_ruleoutput(nottyp, inputs, exps_output)
+        string_of_ruleoutput(nottyp, inputs, &rulepath.outputs)
     )
 }
 
@@ -178,15 +176,14 @@ pub fn string_of_rulepaths(nottyp: &NotTyp, inputs: &InputHint, rulepaths: &[Rul
 }
 
 pub fn string_of_rulegroup(nottyp: &NotTyp, inputs: &InputHint, rulegroup: &RuleGroup) -> String {
-    let (id, rulematch, rulepaths) = &rulegroup.node;
     format!(
         "{}rulegroup {}\n\n {}match\n\n{}\n\n {}paths\n\n{}",
         indent(1),
-        string_of_rulegroupid(id),
+        string_of_rulegroupid(&rulegroup.node.id),
         indent(1),
-        string_of_rulematch(nottyp, inputs, rulematch),
+        string_of_rulematch(nottyp, inputs, &rulegroup.node.rule_match),
         indent(1),
-        string_of_rulepaths(nottyp, inputs, rulepaths)
+        string_of_rulepaths(nottyp, inputs, &rulegroup.node.paths)
     )
 }
 
@@ -203,15 +200,14 @@ pub fn string_of_rulegroups(
 }
 
 pub fn string_of_elsegroup(nottyp: &NotTyp, inputs: &InputHint, elsegroup: &ElseGroup) -> String {
-    let (id, rulematch, rulepath) = &elsegroup.node;
     format!(
         "{}rulegroup {}\n\n {}match\n\n{}\n\n {}paths\n\n{}",
         indent(1),
-        string_of_rulegroupid(id),
+        string_of_rulegroupid(&elsegroup.node.id),
         indent(1),
-        string_of_rulematch(nottyp, inputs, rulematch),
+        string_of_rulematch(nottyp, inputs, &elsegroup.node.rule_match),
         indent(1),
-        string_of_rulepaths(nottyp, inputs, std::slice::from_ref(rulepath))
+        string_of_rulepaths(nottyp, inputs, std::slice::from_ref(&elsegroup.node.path))
     )
 }
 
@@ -238,15 +234,14 @@ pub use crate::lang::il::print::{
 // Table rows
 
 pub fn string_of_tablerow(tablerow: &TableRow) -> String {
-    let (exps_signature, args, exp, prems) = &tablerow.node;
     format!(
         "\n{}(signature) {}\n{}{} -> {}{}",
         indent(2),
-        string_of_exps(", ", exps_signature),
+        string_of_exps(", ", &tablerow.node.signature),
         indent(2),
-        string_of_args(args),
-        string_of_exp(exp),
-        il_print::string_of_prems_with(2, prems)
+        string_of_args(&tablerow.node.args),
+        string_of_exp(&tablerow.node.expression),
+        il_print::string_of_prems_with(2, &tablerow.node.premises)
     )
 }
 

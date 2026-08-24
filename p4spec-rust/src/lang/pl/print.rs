@@ -352,8 +352,8 @@ fn string_of_case_with<Tier>(
     format!(
         "{}{index}. Case {}\n\n{}",
         "  ".repeat(level),
-        string_of_guard(&case.0),
-        string_of_block_with(&case.1, tier_printer, level + 1, 0)
+        string_of_guard(&case.guard),
+        string_of_block_with(&case.block, tier_printer, level + 1, 0)
     )
 }
 
@@ -603,8 +603,8 @@ pub fn string_of_iterinstrs(iterinstrs: &[IterInstr]) -> String {
 // Relations
 
 pub fn string_of_relinput(signature: &RelSignature, exps_input: &[Exp]) -> String {
-    let (nottyp, inputs) = signature;
-    let inputs = inputs.indices();
+    let nottyp = &signature.notation;
+    let inputs = signature.input_hint.indices();
     assert_eq!(inputs.len(), exps_input.len());
     let args = (0..nottyp.node.arity()).map(|index| {
         inputs
@@ -620,8 +620,8 @@ pub fn string_of_relinput(signature: &RelSignature, exps_input: &[Exp]) -> Strin
 }
 
 pub fn string_of_reloutput(signature: &RelSignature, exps_output: &[Exp]) -> String {
-    let (nottyp, inputs) = signature;
-    let inputs = inputs.indices();
+    let nottyp = &signature.notation;
+    let inputs = signature.input_hint.indices();
     let outputs = (0..nottyp.node.arity())
         .filter(|index| !inputs.contains(&(*index as i64)))
         .collect::<Vec<_>>();
@@ -640,11 +640,10 @@ pub fn string_of_reloutput(signature: &RelSignature, exps_output: &[Exp]) -> Str
 }
 
 pub fn string_of_extern_rel(relation: &ExternRel) -> String {
-    let (id, signature, exps) = relation;
     format!(
         "{}: {}",
-        string_of_relid(id),
-        string_of_relinput(signature, exps)
+        string_of_relid(&relation.id),
+        string_of_relinput(&relation.signature, &relation.inputs)
     )
 }
 
@@ -658,25 +657,30 @@ fn string_of_instr_group_tier_with(
 ) -> String {
     let order = format!("{}{index}. ", "  ".repeat(level));
     match tier {
-        InstrGroup::ResultI(_, exps) if exps.is_empty() => {
+        InstrGroup::ResultI { outputs, .. } if outputs.is_empty() => {
             render_leaf(short, &order, "The relation holds".into())
         }
-        InstrGroup::ResultI(signature, exps) => render_leaf(
+        InstrGroup::ResultI { signature, outputs } => render_leaf(
             short,
             &order,
-            format!("Result in: {}", string_of_reloutput(signature, exps)),
+            format!("Result in: {}", string_of_reloutput(signature, outputs)),
         ),
         InstrGroup::ReturnI(exp) => {
             render_leaf(short, &order, format!("Return {}", string_of_exp(exp)))
         }
-        InstrGroup::RuleI(id, notexp, _, iterinstrs) => render_leaf(
+        InstrGroup::RuleI {
+            rule_id,
+            notation,
+            iterations,
+            ..
+        } => render_leaf(
             short,
             &order,
             format!(
                 "({}: {}){}",
-                string_of_relid(id),
-                string_of_notexp(notexp),
-                string_of_iterinstrs(iterinstrs)
+                string_of_relid(rule_id),
+                string_of_notexp(notation),
+                string_of_iterinstrs(iterations)
             ),
         ),
         InstrGroup::BacktrackI(arms) => {
@@ -725,11 +729,17 @@ fn string_of_instr_dispatch_tier_with(
 ) -> String {
     let order = format!("{}{index}. ", "  ".repeat(level));
     match tier {
-        InstrDispatch::GroupI(id, _, signature, exps, block) => {
+        InstrDispatch::GroupI {
+            group_id,
+            signature,
+            inputs,
+            block,
+            ..
+        } => {
             let summary = format!(
                 "Group {}: {}",
-                string_of_relid(id),
-                string_of_relinput(signature, exps)
+                string_of_relid(group_id),
+                string_of_relinput(signature, inputs)
             );
             if short {
                 summary
@@ -777,17 +787,16 @@ pub fn string_of_block_dispatch_with(block: &BlockDispatch, level: usize, index:
 }
 
 pub fn string_of_defined_rel(relation: &Rel) -> String {
-    let (id, signature, exps, block, elseblock) = relation;
     format!(
         "{}: {}\n\n{}{}",
-        string_of_relid(id),
-        string_of_relinput(signature, exps),
-        string_of_block_dispatch(block),
+        string_of_relid(&relation.id),
+        string_of_relinput(&relation.signature, &relation.inputs),
+        string_of_block_dispatch(&relation.block),
         string_of_elseblock_opt_with(
-            elseblock,
+            &relation.else_block,
             string_of_instr_dispatch_tier_with,
             0,
-            block.len()
+            relation.block.len()
         )
     )
 }
@@ -795,26 +804,29 @@ pub fn string_of_defined_rel(relation: &Rel) -> String {
 // Functions
 
 pub fn string_of_extern_func(function: &ExternFunc) -> String {
-    let (id, tparams, params, _) = function;
     format!(
         "{}{}{}",
-        string_of_defid(id),
-        string_of_tparams(tparams),
-        string_of_params(params)
+        string_of_defid(&function.id),
+        string_of_tparams(&function.tparams),
+        string_of_params(&function.params)
     )
 }
 
 pub fn string_of_builtin_func(function: &BuiltinFunc) -> String {
-    string_of_extern_func(function)
+    format!(
+        "{}{}{}",
+        string_of_defid(&function.id),
+        string_of_tparams(&function.tparams),
+        string_of_params(&function.params)
+    )
 }
 
 pub fn string_of_tablerow(row: &TableRow) -> String {
-    let (exps, result, instrs) = row;
     format!(
         "\n  Row : {} -> {}:\n\n{}",
-        string_of_exps(", ", exps),
-        string_of_exp(result),
-        string_of_block_group_with(instrs, 2, 0)
+        string_of_exps(", ", &row.inputs),
+        string_of_exp(&row.expression),
+        string_of_block_group_with(&row.block, 2, 0)
     )
 }
 
@@ -823,24 +835,27 @@ pub fn string_of_tablerows(rows: &[TableRow]) -> String {
 }
 
 pub fn string_of_table_func(function: &TableFunc) -> String {
-    let (id, params, _, rows) = function;
     format!(
         "{}{}\n=\n{}",
-        string_of_defid(id),
-        string_of_params(params),
-        string_of_tablerows(rows)
+        string_of_defid(&function.id),
+        string_of_params(&function.params),
+        string_of_tablerows(&function.rows)
     )
 }
 
 pub fn string_of_defined_func(function: &DefinedFunc) -> String {
-    let (id, tparams, params, _, block, elseblock) = function;
     format!(
         "{}{}{}\n\n{}{}",
-        string_of_defid(id),
-        string_of_tparams(tparams),
-        string_of_params(params),
-        string_of_block_group(block),
-        string_of_elseblock_opt_with(elseblock, string_of_instr_group_tier_with, 0, block.len())
+        string_of_defid(&function.id),
+        string_of_tparams(&function.tparams),
+        string_of_params(&function.params),
+        string_of_block_group(&function.block),
+        string_of_elseblock_opt_with(
+            &function.else_block,
+            string_of_instr_group_tier_with,
+            0,
+            function.block.len()
+        )
     )
 }
 

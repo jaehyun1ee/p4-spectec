@@ -22,103 +22,103 @@ impl SpecCodec {
 
 fn decode_rule_match(value: &Value) -> Result<ast::RuleMatch, DecodeError> {
     match array(value)? {
-        [inputs, outputs, prems] => Ok((
-            il::decode_list(inputs, il::decode_exp)?,
-            il::decode_list(outputs, il::decode_exp)?,
-            il::decode_list(prems, il::decode_prem)?,
-        )),
+        [signature, inputs, prems] => Ok(ast::RuleMatch {
+            signature: il::decode_list(signature, il::decode_exp)?,
+            inputs: il::decode_list(inputs, il::decode_exp)?,
+            premises: il::decode_list(prems, il::decode_prem)?,
+        }),
         _ => Err(DecodeError::Expected("AL rule match triple")),
     }
 }
 
-fn encode_rule_match((inputs, outputs, prems): &ast::RuleMatch) -> Value {
+fn encode_rule_match(rule_match: &ast::RuleMatch) -> Value {
     json!([
-        il::encode_list(inputs, il::encode_exp),
-        il::encode_list(outputs, il::encode_exp),
-        il::encode_list(prems, il::encode_prem)
+        il::encode_list(&rule_match.signature, il::encode_exp),
+        il::encode_list(&rule_match.inputs, il::encode_exp),
+        il::encode_list(&rule_match.premises, il::encode_prem)
     ])
 }
 
 fn decode_rule_path(value: &Value) -> Result<ast::RulePath, DecodeError> {
     match array(value)? {
-        [id, prems, exps] => Ok((
-            il::decode_id(id)?,
-            il::decode_list(prems, il::decode_prem)?,
-            il::decode_list(exps, il::decode_exp)?,
-        )),
+        [id, prems, outputs] => Ok(ast::RulePath {
+            rule_id: il::decode_id(id)?,
+            premises: il::decode_list(prems, il::decode_prem)?,
+            outputs: il::decode_list(outputs, il::decode_exp)?,
+        }),
         _ => Err(DecodeError::Expected("AL rule path triple")),
     }
 }
 
-fn encode_rule_path((id, prems, exps): &ast::RulePath) -> Value {
+fn encode_rule_path(rule_path: &ast::RulePath) -> Value {
     json!([
-        il::encode_id(id),
-        il::encode_list(prems, il::encode_prem),
-        il::encode_list(exps, il::encode_exp)
+        il::encode_id(&rule_path.rule_id),
+        il::encode_list(&rule_path.premises, il::encode_prem),
+        il::encode_list(&rule_path.outputs, il::encode_exp)
     ])
 }
 
 fn decode_rule_group(value: &Value) -> Result<ast::RuleGroup, DecodeError> {
     source::decode_phrase(value, |value| match array(value)? {
-        [id, rule_match, paths] => Ok((
-            il::decode_id(id)?,
-            decode_rule_match(rule_match)?,
-            il::decode_list(paths, decode_rule_path)?,
-        )),
+        [id, rule_match, paths] => Ok(ast::RuleGroupKind {
+            id: il::decode_id(id)?,
+            rule_match: decode_rule_match(rule_match)?,
+            paths: il::decode_list(paths, decode_rule_path)?,
+        }),
         _ => Err(DecodeError::Expected("AL rule group triple")),
     })
 }
 
 fn encode_rule_group(group: &ast::RuleGroup) -> Value {
-    source::encode_phrase(group, |(id, rule_match, paths)| {
+    source::encode_phrase(group, |group| {
         json!([
-            il::encode_id(id),
-            encode_rule_match(rule_match),
-            il::encode_list(paths, encode_rule_path)
+            il::encode_id(&group.id),
+            encode_rule_match(&group.rule_match),
+            il::encode_list(&group.paths, encode_rule_path)
         ])
     })
 }
 
 fn decode_else_group(value: &Value) -> Result<ast::ElseGroup, DecodeError> {
     source::decode_phrase(value, |value| match array(value)? {
-        [id, rule_match, path] => Ok((
-            il::decode_id(id)?,
-            decode_rule_match(rule_match)?,
-            decode_rule_path(path)?,
-        )),
+        [id, rule_match, path] => Ok(ast::ElseGroupKind {
+            id: il::decode_id(id)?,
+            rule_match: decode_rule_match(rule_match)?,
+            path: decode_rule_path(path)?,
+        }),
         _ => Err(DecodeError::Expected("AL else group triple")),
     })
 }
 
 fn encode_else_group(group: &ast::ElseGroup) -> Value {
-    source::encode_phrase(group, |(id, rule_match, path)| {
+    source::encode_phrase(group, |group| {
         json!([
-            il::encode_id(id),
-            encode_rule_match(rule_match),
-            encode_rule_path(path)
+            il::encode_id(&group.id),
+            encode_rule_match(&group.rule_match),
+            encode_rule_path(&group.path)
         ])
     })
 }
 
 fn decode_table_row(value: &Value) -> Result<ast::TableRow, DecodeError> {
     source::decode_phrase(value, |value| match array(value)? {
-        [inputs, args, exp, prems] => Ok((
-            il::decode_list(inputs, il::decode_exp)?,
-            il::decode_list(args, il::decode_arg)?,
-            il::decode_exp(exp)?,
-            il::decode_list(prems, il::decode_prem)?,
-        )),
+        [signature, args, exp, prems] => Ok(ast::TableRowKind {
+            signature: il::decode_list(signature, il::decode_exp)?,
+            args: il::decode_list(args, il::decode_arg)?,
+            expression: il::decode_exp(exp)?,
+            premises: il::decode_list(prems, il::decode_prem)?,
+        }),
         _ => Err(DecodeError::Expected("AL table row quadruple")),
     })
 }
 
 fn encode_table_row(row: &ast::TableRow) -> Value {
-    source::encode_phrase(row, |(inputs, args, exp, prems)| {
+    source::encode_phrase(row, |row| {
         json!([
-            il::encode_list(inputs, il::encode_exp),
-            il::encode_list(args, il::encode_arg),
-            il::encode_exp(exp),
-            il::encode_list(prems, il::encode_prem)
+            il::encode_list(&row.signature, il::encode_exp),
+            il::encode_list(&row.args, il::encode_arg),
+            il::encode_exp(&row.expression),
+            il::encode_list(&row.premises, il::encode_prem)
         ])
     })
 }
