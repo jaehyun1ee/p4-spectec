@@ -2,18 +2,88 @@ use crate::{domain::mixfix::Mixop, lang::il::print as il_print};
 
 use super::ast::*;
 
+// Numbers
+
+pub use crate::lang::il::print::string_of_num;
+
+// Texts
+
+pub use crate::lang::il::print::string_of_text;
+
+// Identifiers
+
 pub use crate::lang::il::print::{
-    string_of_arg, string_of_args, string_of_atom, string_of_atoms, string_of_binop,
-    string_of_clause, string_of_clauses, string_of_cmpop, string_of_defid, string_of_deftyp,
-    string_of_elseclause, string_of_elseclause_opt, string_of_exp, string_of_exps, string_of_hint,
-    string_of_hints, string_of_iter, string_of_iterexp, string_of_iterexps, string_of_mixop,
-    string_of_notexp, string_of_nottyp, string_of_num, string_of_param, string_of_params,
-    string_of_path, string_of_pattern, string_of_prem, string_of_prems, string_of_prems_with,
-    string_of_relid, string_of_rulegroupid, string_of_short_value, string_of_targ, string_of_targs,
-    string_of_text, string_of_tparam, string_of_tparams, string_of_typ, string_of_typcase,
-    string_of_typcases, string_of_typfield, string_of_typfields, string_of_typid, string_of_typs,
-    string_of_unop, string_of_value, string_of_value_with, string_of_var, string_of_varid,
+    string_of_defid, string_of_relid, string_of_rulegroupid, string_of_typid, string_of_varid,
 };
+
+pub fn string_of_rulepathid(id: &Id) -> String {
+    id.node.clone()
+}
+
+// Atoms
+
+pub use crate::lang::il::print::{string_of_atom, string_of_atoms};
+
+// Mixfix operators
+
+pub use crate::lang::il::print::string_of_mixop;
+
+// Iterators
+
+pub use crate::lang::il::print::string_of_iter;
+
+// Variables
+
+pub use crate::lang::il::print::string_of_var;
+
+// Types
+
+pub use crate::lang::il::print::{
+    string_of_deftyp, string_of_nottyp, string_of_typ, string_of_typcase, string_of_typcases,
+    string_of_typfield, string_of_typfields, string_of_typs,
+};
+
+// Values
+
+pub use crate::lang::il::print::{string_of_short_value, string_of_value, string_of_value_with};
+
+// Operators
+
+pub use crate::lang::il::print::{string_of_binop, string_of_cmpop, string_of_unop};
+
+// Expressions
+
+pub use crate::lang::il::print::{
+    string_of_exp, string_of_exps, string_of_iterexp, string_of_iterexps, string_of_notexp,
+};
+
+// Patterns
+
+pub use crate::lang::il::print::string_of_pattern;
+
+// Paths
+
+pub use crate::lang::il::print::string_of_path;
+
+// Parameters
+
+pub use crate::lang::il::print::{string_of_param, string_of_params};
+
+// Type parameters
+
+pub use crate::lang::il::print::{string_of_tparam, string_of_tparams};
+
+// Arguments
+
+pub use crate::lang::il::print::{string_of_arg, string_of_args};
+
+// Type arguments
+
+pub use crate::lang::il::print::{string_of_targ, string_of_targs};
+
+// Premises
+
+pub use crate::lang::il::print::{string_of_prem, string_of_prems, string_of_prems_with};
 
 fn indent(level: usize) -> String {
     "  ".repeat(level)
@@ -27,9 +97,7 @@ fn fill_notation(nottyp: &NotTyp, exps: Vec<String>) -> String {
         .render(string_of_atom, Clone::clone)
 }
 
-pub fn string_of_rulepathid(id: &Id) -> String {
-    id.node.clone()
-}
+// Rules
 
 pub fn string_of_ruleinput(nottyp: &NotTyp, inputs: &[i64], exps_input: &[Exp]) -> String {
     assert_eq!(inputs.len(), exps_input.len());
@@ -152,6 +220,14 @@ pub fn string_of_elsegroup_opt(
     })
 }
 
+// Clause
+
+pub use crate::lang::il::print::{
+    string_of_clause, string_of_clauses, string_of_elseclause, string_of_elseclause_opt,
+};
+
+// Table rows
+
 pub fn string_of_tablerow(tablerow: &TableRow) -> String {
     let (exps_signature, args, exp, prems) = &tablerow.node;
     format!(
@@ -178,6 +254,12 @@ pub fn string_of_tablerows(tablerows: &[TableRow]) -> String {
         })
         .collect()
 }
+
+// Hints
+
+pub use crate::lang::il::print::{string_of_hint, string_of_hints};
+
+// Definitions
 
 pub fn string_of_def(definition: &Def) -> String {
     match &definition.node {
@@ -243,6 +325,8 @@ pub fn string_of_defs(definitions: &[Def]) -> String {
         .collect::<Vec<_>>()
         .join("\n\n")
 }
+
+// Spec
 
 pub fn string_of_spec(spec: &Spec) -> String {
     string_of_defs(spec)

@@ -10,6 +10,8 @@ fn join<T>(items: &[T], separator: &str, string_of: impl Fn(&T) -> String) -> St
         .join(separator)
 }
 
+// Numbers
+
 pub fn string_of_num(number: &Num) -> String {
     match number {
         num::T::Nat(number) => number.to_string(),
@@ -20,9 +22,13 @@ pub fn string_of_num(number: &Num) -> String {
     }
 }
 
+// Texts
+
 pub fn string_of_text(text: &str) -> String {
     text.to_owned()
 }
+
+// Identifiers
 
 pub fn string_of_varid(id: &Id) -> String {
     id.node.clone()
@@ -48,9 +54,13 @@ pub fn string_of_defid(id: &Id) -> String {
     format!("${}", id.node)
 }
 
+// Atoms
+
 pub fn string_of_atom(atom: &Atom) -> String {
     atom.node.source_string()
 }
+
+// Iterators
 
 pub fn string_of_iter(iter: Iter) -> String {
     match iter {
@@ -58,6 +68,8 @@ pub fn string_of_iter(iter: Iter) -> String {
         Iter::List => "*".into(),
     }
 }
+
+// Types
 
 pub fn string_of_typ(typ: &Typ) -> String {
     match typ {
@@ -142,6 +154,8 @@ pub fn string_of_typcases(separator: &str, cases: &[TypCase]) -> String {
     join(cases, separator, string_of_typcase)
 }
 
+// Operators
+
 pub fn string_of_unop(operator: UnOp) -> &'static str {
     match operator {
         UnOp::NotOp => "~",
@@ -190,6 +204,8 @@ fn escaped(text: &str) -> String {
         })
         .collect()
 }
+
+// Expressions
 
 pub fn string_of_exp(exp: &Exp) -> String {
     match &exp.node {
@@ -293,6 +309,8 @@ pub fn string_of_exps(separator: &str, exps: &[Exp]) -> String {
     join(exps, separator, string_of_exp)
 }
 
+// Paths
+
 pub fn string_of_path(path: &Path) -> String {
     match &path.node {
         PathKind::RootP => String::new(),
@@ -307,6 +325,8 @@ pub fn string_of_path(path: &Path) -> String {
         PathKind::DotP(path, atom) => format!("{}.{}", string_of_path(path), string_of_atom(atom)),
     }
 }
+
+// Parameters
 
 pub fn string_of_param(param: &Param) -> String {
     match &param.node {
@@ -329,6 +349,8 @@ pub fn string_of_params(params: &[Param]) -> String {
     }
 }
 
+// Type parameters
+
 pub fn string_of_tparam(tparam: &TParam) -> String {
     tparam.node.clone()
 }
@@ -340,6 +362,8 @@ pub fn string_of_tparams(tparams: &[TParam]) -> String {
         format!("<{}>", join(tparams, ", ", string_of_tparam))
     }
 }
+
+// Arguments
 
 pub fn string_of_arg(arg: &Arg) -> String {
     match &arg.node {
@@ -356,6 +380,8 @@ pub fn string_of_args(args: &[Arg]) -> String {
     }
 }
 
+// Type arguments
+
 pub fn string_of_targ(targ: &Targ) -> String {
     string_of_plaintyp(targ)
 }
@@ -367,6 +393,8 @@ pub fn string_of_targs(targs: &[Targ]) -> String {
         format!("<{}>", join(targs, ", ", string_of_targ))
     }
 }
+
+// Premises
 
 pub fn string_of_prem(prem: &Prem) -> String {
     match &prem.node {
@@ -396,6 +424,8 @@ pub fn string_of_prems(prems: &[Prem]) -> String {
         .collect()
 }
 
+// Rules
+
 pub fn string_of_rule(rule: &Rule) -> String {
     let (relid, ruleid, exp, prems) = &rule.node;
     format!(
@@ -411,6 +441,8 @@ pub fn string_of_rules(rules: &[Rule]) -> String {
     join(rules, "\n", string_of_rule)
 }
 
+// Tables
+
 pub fn string_of_tablerow(table_row: &TableRow) -> String {
     format!(
         "{} => {}",
@@ -422,6 +454,8 @@ pub fn string_of_tablerow(table_row: &TableRow) -> String {
 pub fn string_of_tablerows(table_rows: &[TableRow]) -> String {
     join(table_rows, "\n  | ", string_of_tablerow)
 }
+
+// Definitions
 
 pub fn string_of_def(definition: &Def) -> String {
     match &definition.node {
@@ -504,6 +538,8 @@ pub fn string_of_def(definition: &Def) -> String {
         DefKind::SepD => "\n\n".into(),
     }
 }
+
+// Spec
 
 pub fn string_of_spec(spec: &Spec) -> String {
     spec.iter()

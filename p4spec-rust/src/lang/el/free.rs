@@ -15,6 +15,8 @@ fn ids<T>(items: &[T], free: impl Fn(&T) -> IdSet) -> IdSet {
         .fold(IdSet::new(), |set, item| union(set, free(item)))
 }
 
+// Collect free type identifiers
+
 pub fn free_tid_plaintyp(plain_typ: &PlainTyp) -> TIdSet {
     match &plain_typ.node {
         PlainTypKind::BoolT | PlainTypKind::NumT(_) | PlainTypKind::TextT => TIdSet::new(),
@@ -45,6 +47,10 @@ pub fn free_tid_param(param: &Param) -> TIdSet {
 pub fn free_tid_params(params: &[Param]) -> TIdSet {
     ids(params, free_tid_param)
 }
+
+// Collect free identifiers
+
+// Expressions
 
 pub fn free_id_exp(exp: &Exp) -> IdSet {
     match &exp.node {
@@ -91,6 +97,8 @@ pub fn free_id_exps(exps: &[Exp]) -> IdSet {
     ids(exps, free_id_exp)
 }
 
+// Paths
+
 pub fn free_id_path(path: &Path) -> IdSet {
     match &path.node {
         PathKind::RootP => IdSet::new(),
@@ -103,6 +111,8 @@ pub fn free_id_path(path: &Path) -> IdSet {
     }
 }
 
+// Arguments
+
 pub fn free_id_arg(arg: &Arg) -> IdSet {
     match &arg.node {
         ArgKind::ExpA(exp) => free_id_exp(exp),
@@ -113,6 +123,8 @@ pub fn free_id_arg(arg: &Arg) -> IdSet {
 pub fn free_id_args(args: &[Arg]) -> IdSet {
     ids(args, free_id_arg)
 }
+
+// Premises
 
 pub fn free_id_prem(prem: &Prem) -> IdSet {
     match &prem.node {
@@ -130,6 +142,8 @@ pub fn free_id_prems(prems: &[Prem]) -> IdSet {
     ids(prems, free_id_prem)
 }
 
+// Rules
+
 pub fn free_rule(rule: &Rule) -> IdSet {
     let (_, _, exp, prems) = &rule.node;
     union(free_id_exp(exp), free_id_prems(prems))
@@ -139,6 +153,8 @@ pub fn free_rules(rules: &[Rule]) -> IdSet {
     ids(rules, free_rule)
 }
 
+// Tables
+
 pub fn free_tablerow(table_row: &TableRow) -> IdSet {
     let (pattern, body) = &table_row.node;
     union(free_id_exp(pattern), free_id_exp(body))
@@ -147,6 +163,8 @@ pub fn free_tablerow(table_row: &TableRow) -> IdSet {
 pub fn free_tablerows(table_rows: &[TableRow]) -> IdSet {
     ids(table_rows, free_tablerow)
 }
+
+// Definitions
 
 pub fn free_id_def(definition: &Def) -> IdSet {
     match &definition.node {

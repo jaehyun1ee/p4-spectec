@@ -16,8 +16,6 @@ pub fn eq_atom(atom_a: &Atom, atom_b: &Atom) -> bool {
     atom_a.node == atom_b.node
 }
 
-// Variables
-
 pub fn eq_atoms(atoms_a: &[Atom], atoms_b: &[Atom]) -> bool {
     atoms_a.len() == atoms_b.len()
         && atoms_a
@@ -26,9 +24,13 @@ pub fn eq_atoms(atoms_a: &[Atom], atoms_b: &[Atom]) -> bool {
             .all(|(atom_a, atom_b)| eq_atom(atom_a, atom_b))
 }
 
+// Mixfix operators
+
 pub fn eq_mixop(mixop_a: &Mixop, mixop_b: &Mixop) -> bool {
     mixop_a == mixop_b
 }
+
+// Iterators
 
 pub fn eq_iter(iter_a: Iter, iter_b: Iter) -> bool {
     iter_a == iter_b
@@ -45,6 +47,8 @@ fn compare_iters(iters_a: &[Iter], iters_b: &[Iter]) -> Ordering {
     };
     iters_a.iter().map(rank).cmp(iters_b.iter().map(rank))
 }
+
+// Variables
 
 pub fn eq_var(var_a: &Var, var_b: &Var) -> bool {
     let (id_a, _typ_a, iters_a) = var_a;
@@ -110,6 +114,8 @@ fn eq_mixfix_by<T, U>(
 pub fn eq_nottyp(nottyp_a: &NotTyp, nottyp_b: &NotTyp) -> bool {
     eq_mixfix_by(&nottyp_a.node, &nottyp_b.node, eq_typ)
 }
+
+// Values
 
 pub fn eq_value(value_a: &Value, value_b: &Value) -> bool {
     match (&value_a.kind, &value_b.kind) {
@@ -302,6 +308,8 @@ pub fn eq_args(args_a: &[Arg], args_b: &[Arg]) -> bool {
             .all(|(arg_a, arg_b)| eq_arg(arg_a, arg_b))
 }
 
+// Type arguments
+
 pub fn eq_targ(targ_a: &Targ, targ_b: &Targ) -> bool {
     eq_typ(targ_a, targ_b)
 }
@@ -313,6 +321,8 @@ pub fn eq_targs(targs_a: &[Targ], targs_b: &[Targ]) -> bool {
             .zip(targs_b)
             .all(|(targ_a, targ_b)| eq_targ(targ_a, targ_b))
 }
+
+// Premises
 
 pub fn eq_prem(prem_a: &Prem, prem_b: &Prem) -> bool {
     match (&prem_a.node, &prem_b.node) {

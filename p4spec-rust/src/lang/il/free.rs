@@ -2,6 +2,8 @@ use std::collections::BTreeSet;
 
 use super::ast::*;
 
+// Identifier set
+
 pub type T = BTreeSet<IdKind>;
 pub fn empty() -> T {
     T::new()
@@ -15,6 +17,10 @@ fn add(a: T, b: T) -> T {
 fn many<TItem>(xs: &[TItem], f: impl Fn(&TItem) -> T) -> T {
     xs.iter().fold(T::new(), |a, x| add(a, f(x)))
 }
+
+// Collect free identifiers
+
+// Expressions
 
 pub fn free_exp(exp: &Exp) -> T {
     match &exp.kind {
@@ -50,6 +56,9 @@ pub fn free_exp(exp: &Exp) -> T {
 pub fn free_exps(xs: &[Exp]) -> T {
     many(xs, free_exp)
 }
+
+// Paths
+
 pub fn free_path(p: &Path) -> T {
     match &p.kind {
         PathKind::RootP => empty(),
@@ -58,6 +67,9 @@ pub fn free_path(p: &Path) -> T {
         PathKind::DotP(p, _) => free_path(p),
     }
 }
+
+// Arguments
+
 pub fn free_arg(a: &Arg) -> T {
     match &a.node {
         ArgKind::ExpA(x) => free_exp(x),
@@ -67,6 +79,9 @@ pub fn free_arg(a: &Arg) -> T {
 pub fn free_args(xs: &[Arg]) -> T {
     many(xs, free_arg)
 }
+
+// Premises
+
 pub fn free_prem(p: &Prem) -> T {
     match &p.node {
         PremKind::RulePr(_, m, _) | PremKind::IfHoldPr(_, m) | PremKind::IfNotHoldPr(_, m) => m
@@ -81,6 +96,9 @@ pub fn free_prem(p: &Prem) -> T {
 pub fn free_prems(xs: &[Prem]) -> T {
     many(xs, free_prem)
 }
+
+// Rules
+
 pub fn free_rule(r: &Rule) -> T {
     let (_, m, p) = &r.node;
     add(
@@ -105,6 +123,9 @@ pub fn free_elsegroup(g: &ElseGroup) -> T {
 pub fn free_elsegroup_opt(g: &Option<ElseGroup>) -> T {
     g.as_ref().map_or_else(T::new, free_elsegroup)
 }
+
+// Clauses
+
 pub fn free_clause(c: &Clause) -> T {
     let (a, x, p) = &c.node;
     add(free_args(a), add(free_exp(x), free_prems(p)))
@@ -118,12 +139,18 @@ pub fn free_elseclause(c: &ElseClause) -> T {
 pub fn free_elseclause_opt(c: &Option<ElseClause>) -> T {
     c.as_ref().map_or_else(T::new, free_clause)
 }
+
+// Table rows
+
 pub fn free_tablerow(r: &TableRow) -> T {
     add(free_args(&r.node.0), free_exp(&r.node.1))
 }
 pub fn free_tablerows(xs: &[TableRow]) -> T {
     many(xs, free_tablerow)
 }
+
+// Definitions
+
 pub fn free_def(d: &Def) -> T {
     match &d.node {
         DefKind::RelD(_, _, _, gs, e, _) => add(free_rulegroups(gs), free_elsegroup_opt(e)),

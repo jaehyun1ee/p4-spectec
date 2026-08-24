@@ -13,9 +13,13 @@ pub fn to_string(hint: &[i64]) -> String {
             .join(" ")
     )
 }
+// Equivalence of hints
+
 pub fn eq(left: &[i64], right: &[i64]) -> bool {
     left == right
 }
+
+// Creating hints
 
 pub fn init(hint_exp: &Exp) -> Option<T> {
     match &hint_exp.node {
@@ -30,6 +34,8 @@ pub fn init(hint_exp: &Exp) -> Option<T> {
         _ => None,
     }
 }
+
+// Validating hints
 
 pub fn validate(hint: &[i64], arity: i64) -> Result<(), String> {
     if hint.is_empty() {
@@ -47,6 +53,8 @@ pub fn validate(hint: &[i64], arity: i64) -> Result<(), String> {
     }
     Ok(())
 }
+
+// Splitting and combining expressions based on input hints
 
 pub fn split<Item: Clone>(hint: &[i64], items: &[Item]) -> (Vec<Item>, Vec<Item>) {
     let mut items_input = Vec::new();
@@ -82,6 +90,8 @@ pub fn combine<Item>(hint: &[i64], items_input: Vec<Item>, items_output: Vec<Ite
     assert!(items_output.next().is_none());
     items
 }
+
+// Checking if a hint is conditional
 
 pub fn is_conditional<Item>(hint: &[i64], items: &[Item]) -> bool {
     items

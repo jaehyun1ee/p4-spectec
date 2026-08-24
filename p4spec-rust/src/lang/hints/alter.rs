@@ -6,6 +6,8 @@ use crate::lang::{
     hints::input,
 };
 
+// Alternation hints
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Hole {
     Next,
@@ -43,6 +45,8 @@ fn string(hint: &T) -> String {
         T::OtherH(exp) => print::string_of_exp(exp),
     }
 }
+// Creating hints
+
 pub fn init(exp: &Exp) -> Option<T> {
     Some(match &exp.node {
         ExpKind::TextE(text) => T::TextH(text.clone()),
@@ -57,6 +61,8 @@ pub fn init(exp: &Exp) -> Option<T> {
         _ => T::OtherH(exp.clone()),
     })
 }
+// Validating hints
+
 pub fn validate<Item>(hint: &T, items: &[Item]) -> Result<(), String> {
     validate_at(hint, items, 0).map(|_| ())
 }
@@ -73,6 +79,8 @@ fn validate_at<Item>(hint: &T, items: &[Item], cursor: usize) -> Result<usize, S
         T::FuseH(left, right) => validate_at(right, items, validate_at(left, items, cursor)?),
     }
 }
+// Re-alignment of alternation indices
+
 pub fn collect(hint: &T) -> Vec<i64> {
     fn go(h: &T, out: &mut Vec<i64>) {
         match h {
@@ -121,6 +129,8 @@ pub fn realign(hint: &T, inputs: &input::T) -> Result<T, String> {
     }
     go(hint, &pairs)
 }
+// Alternation
+
 #[allow(clippy::too_many_arguments)]
 pub fn alternate<Item, D>(
     hint: &T,

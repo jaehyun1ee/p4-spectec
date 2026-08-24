@@ -6,6 +6,8 @@ use thiserror::Error;
 #[error("invalid UTF-8")]
 pub struct Utf8Error;
 
+// Encoder
+
 pub fn encode(codepoints: &[i64]) -> Result<Vec<u8>, Utf8Error> {
     let mut bytes = Vec::new();
     for &codepoint in codepoints {
@@ -31,6 +33,8 @@ pub fn encode(codepoints: &[i64]) -> Result<Vec<u8>, Utf8Error> {
     }
     Ok(bytes)
 }
+
+// Decoder
 
 pub fn decode(bytes: &[u8]) -> Result<Vec<i64>, Utf8Error> {
     let mut codepoints = Vec::new();

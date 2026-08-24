@@ -14,6 +14,8 @@ pub fn to_string(hint: &[Text]) -> String {
     )
 }
 
+// Creating hints
+
 pub fn init(hint_exp: &Exp) -> Option<T> {
     match &hint_exp.node {
         ExpKind::TextE(text) => Some(vec![text.clone()]),
@@ -27,6 +29,8 @@ pub fn init(hint_exp: &Exp) -> Option<T> {
         _ => None,
     }
 }
+
+// Validating hints
 
 pub fn validate(hint: &[Text], arity: usize) -> Result<(), String> {
     if hint.len() == arity {

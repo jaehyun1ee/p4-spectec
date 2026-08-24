@@ -4,6 +4,8 @@ use std::collections::BTreeSet;
 
 use super::ast::*;
 
+// Identifier set
+
 pub type T = BTreeSet<String>;
 
 pub fn empty() -> T {
@@ -22,6 +24,10 @@ fn union(mut left: T, right: T) -> T {
 fn free_notexp(notexp: &NotExp) -> T {
     notexp.fold(empty(), |free, exp| union(free, free_exp(exp)))
 }
+
+// Collect free identifiers
+
+// Expressions
 
 pub fn free_exp(exp: &Exp) -> T {
     match &exp.kind {
@@ -62,6 +68,8 @@ pub fn free_exps(exps: &[Exp]) -> T {
         .fold(empty(), |free, exp| union(free, free_exp(exp)))
 }
 
+// Paths
+
 pub fn free_path(path: &Path) -> T {
     match &path.kind {
         PathKind::RootP => empty(),
@@ -72,6 +80,8 @@ pub fn free_path(path: &Path) -> T {
         PathKind::DotP(path, _) => free_path(path),
     }
 }
+
+// Arguments
 
 pub fn free_arg(arg: &Arg) -> T {
     match &arg.node {
@@ -84,6 +94,8 @@ pub fn free_args(args: &[Arg]) -> T {
     args.iter()
         .fold(empty(), |free, arg| union(free, free_arg(arg)))
 }
+
+// Premises
 
 pub fn free_prem(prem: &Prem) -> T {
     match &prem.node {
@@ -101,6 +113,8 @@ pub fn free_prems(prems: &[Prem]) -> T {
         .iter()
         .fold(empty(), |free, prem| union(free, free_prem(prem)))
 }
+
+// Rules
 
 pub fn free_rulematch(rulematch: &RuleMatch) -> T {
     union(
@@ -143,6 +157,8 @@ pub fn free_elsegroup_opt(elsegroup: Option<&ElseGroup>) -> T {
     elsegroup.map_or_else(empty, free_elsegroup)
 }
 
+// Clauses
+
 pub fn free_clause(clause: &Clause) -> T {
     union(
         union(free_args(&clause.node.0), free_exp(&clause.node.1)),
@@ -164,6 +180,8 @@ pub fn free_elseclause_opt(elseclause: Option<&ElseClause>) -> T {
     elseclause.map_or_else(empty, free_elseclause)
 }
 
+// Table rows
+
 pub fn free_tablerow(tablerow: &TableRow) -> T {
     union(
         union(free_args(&tablerow.node.1), free_exp(&tablerow.node.2)),
@@ -176,6 +194,8 @@ pub fn free_tablerows(tablerows: &[TableRow]) -> T {
         .iter()
         .fold(empty(), |free, row| union(free, free_tablerow(row)))
 }
+
+// Definitions
 
 pub fn free_def(def: &Def) -> T {
     match &def.node {

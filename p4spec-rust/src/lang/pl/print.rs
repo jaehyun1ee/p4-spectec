@@ -21,15 +21,19 @@ fn escaped(text: &str) -> String {
         .collect()
 }
 
-// Shared scalar and type printers
+// Numbers
 
 pub fn string_of_num(number: &Num) -> String {
     sl::print::string_of_num(number)
 }
 
+// Texts
+
 pub fn string_of_text(text: &str) -> String {
     sl::print::string_of_text(text)
 }
+
+// Identifiers
 
 pub fn string_of_varid(id: &Id) -> String {
     sl::print::string_of_varid(id)
@@ -51,6 +55,8 @@ pub fn string_of_defid(id: &Id) -> String {
     sl::print::string_of_defid(id)
 }
 
+// Atoms
+
 pub fn string_of_atom(atom: &Atom) -> String {
     sl::print::string_of_atom(atom)
 }
@@ -59,9 +65,13 @@ pub fn string_of_atoms(atoms: &[Atom]) -> String {
     join(atoms, "", string_of_atom)
 }
 
+// Mixfix operators
+
 pub fn string_of_mixop(operator: &Mixop) -> String {
     sl::print::string_of_mixop(operator)
 }
+
+// Iterators
 
 pub fn string_of_iter(iter: Iter) -> &'static str {
     sl::print::string_of_iter(iter)
@@ -75,9 +85,13 @@ pub fn string_of_iterexps(iterexps: &[IterExp]) -> String {
     sl::print::string_of_iterexps(iterexps)
 }
 
+// Variables
+
 pub fn string_of_var(variable: &Var) -> String {
     sl::print::string_of_var(variable)
 }
+
+// Types
 
 pub fn string_of_typ(typ: &Typ) -> String {
     sl::print::string_of_typ(typ)
@@ -111,6 +125,8 @@ pub fn string_of_typcases(separator: &str, cases: &[TypCase]) -> String {
     sl::print::string_of_typcases(separator, cases)
 }
 
+// Values
+
 pub fn string_of_vid(vid: i64) -> String {
     sl::print::string_of_vid(vid)
 }
@@ -122,6 +138,8 @@ pub fn string_of_value(value: &Value) -> String {
 pub fn string_of_value_with(value: &Value, short: bool, level: usize) -> String {
     sl::print::string_of_value_with(value, short, level)
 }
+
+// Operators
 
 pub fn string_of_unop(operation: UnOp) -> &'static str {
     sl::print::string_of_unop(operation)
@@ -230,9 +248,13 @@ pub fn string_of_notexp(notexp: &NotExp) -> String {
     notexp.render(string_of_atom, string_of_exp)
 }
 
+// Patterns
+
 pub fn string_of_pattern(pattern: &Pattern) -> String {
     sl::print::string_of_pattern(pattern)
 }
+
+// Paths
 
 pub fn string_of_path(path: &Path) -> String {
     match &path.kind {
@@ -250,6 +272,8 @@ pub fn string_of_path(path: &Path) -> String {
         }
     }
 }
+
+// Parameters
 
 pub fn string_of_param(param: &Param) -> String {
     match &param.node {
@@ -272,6 +296,8 @@ pub fn string_of_params(params: &[Param]) -> String {
     }
 }
 
+// Type parameters
+
 pub fn string_of_tparam(tparam: &TParam) -> String {
     sl::print::string_of_tparam(tparam)
 }
@@ -279,6 +305,8 @@ pub fn string_of_tparam(tparam: &TParam) -> String {
 pub fn string_of_tparams(tparams: &[TParam]) -> String {
     sl::print::string_of_tparams(tparams)
 }
+
+// Arguments
 
 pub fn string_of_arg(arg: &Arg) -> String {
     match &arg.node {
@@ -295,6 +323,8 @@ pub fn string_of_args(args: &[Arg]) -> String {
     }
 }
 
+// Type arguments
+
 pub fn string_of_targ(targ: &Targ) -> String {
     sl::print::string_of_targ(targ)
 }
@@ -303,11 +333,13 @@ pub fn string_of_targs(targs: &[Targ]) -> String {
     sl::print::string_of_targs(targs)
 }
 
+// Danglings
+
 pub fn string_of_dangle(iid: Iid) -> String {
     format!("Dangling#{iid}")
 }
 
-// Shared control flow
+// Case analysis
 
 type TierPrinter<Tier> = fn(&Tier, bool, usize, usize) -> String;
 
@@ -361,6 +393,8 @@ pub fn string_of_guard(guard: &Guard) -> String {
         ),
     }
 }
+
+// Instructions: shared control flow, parametric over the tier
 
 fn string_of_instr_with<Tier>(
     instr: &Instr<Tier>,
@@ -842,6 +876,8 @@ pub fn string_of_def(definition: &Def) -> String {
 pub fn string_of_defs(definitions: &[Def]) -> String {
     join(definitions, "\n\n", string_of_def)
 }
+
+// Spec
 
 pub fn string_of_spec(spec: &Spec) -> String {
     string_of_defs(spec)

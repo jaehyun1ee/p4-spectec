@@ -23,12 +23,18 @@ fn escaped(text: &str) -> String {
         .collect()
 }
 
+// Numbers
+
 pub fn string_of_num(number: &Num) -> String {
     el::print::string_of_num(number)
 }
+// Texts
+
 pub fn string_of_text(text: &str) -> String {
     text.into()
 }
+// Identifiers
+
 pub fn string_of_varid(id: &Id) -> String {
     id.node.clone()
 }
@@ -47,21 +53,29 @@ pub fn string_of_rulegroupid(id: &Id) -> String {
 pub fn string_of_defid(id: &Id) -> String {
     format!("${}", id.node)
 }
+// Atoms
+
 pub fn string_of_atom(atom: &Atom) -> String {
     atom.node.source_string()
 }
 pub fn string_of_atoms(atoms: &[Atom]) -> String {
     join(atoms, "", string_of_atom)
 }
+// Mixfix operators
+
 pub fn string_of_mixop(mixop: &Mixop) -> String {
     mixop.to_string()
 }
+// Iterators
+
 pub fn string_of_iter(iter: Iter) -> &'static str {
     match iter {
         Iter::Opt => "?",
         Iter::List => "*",
     }
 }
+// Variables
+
 pub fn string_of_var(variable: &Var) -> String {
     format!(
         "{}{}",
@@ -69,6 +83,8 @@ pub fn string_of_var(variable: &Var) -> String {
         join(&variable.2, "", |iter| string_of_iter(*iter).into())
     )
 }
+
+// Types
 
 pub fn string_of_typ(typ: &Typ) -> String {
     match &typ.node {
@@ -124,6 +140,8 @@ pub fn string_of_typcase(case: &TypCase) -> String {
 pub fn string_of_typcases(separator: &str, cases: &[TypCase]) -> String {
     join(cases, separator, string_of_typcase)
 }
+
+// Values
 
 pub fn string_of_value(value: &Value) -> String {
     string_of_value_with(value, false, 0)
@@ -186,6 +204,8 @@ pub fn string_of_notval_with(notval: &ValueCase, level: usize) -> String {
     })
 }
 
+// Operators
+
 pub fn string_of_unop(operator: UnOp) -> &'static str {
     match operator {
         UnOp::NotOp => "~",
@@ -217,6 +237,8 @@ pub fn string_of_cmpop(operator: CmpOp) -> &'static str {
         CmpOp::GeOp => ">=",
     }
 }
+// Expressions
+
 pub fn string_of_exp(exp: &Exp) -> String {
     match &exp.kind {
         ExpKind::BoolE(value) => value.to_string(),
@@ -317,6 +339,8 @@ pub fn string_of_iterexp(iterexp: &IterExp) -> String {
 pub fn string_of_iterexps(iterexps: &[IterExp]) -> String {
     join(iterexps, "", string_of_iterexp)
 }
+// Patterns
+
 pub fn string_of_pattern(pattern: &Pattern) -> String {
     match pattern {
         Pattern::CaseP(mixop) => string_of_mixop(mixop),
@@ -327,6 +351,8 @@ pub fn string_of_pattern(pattern: &Pattern) -> String {
         Pattern::OptP(OptPattern::None) => "()".into(),
     }
 }
+// Paths
+
 pub fn string_of_path(path: &Path) -> String {
     match &path.kind {
         PathKind::RootP => String::new(),
@@ -341,6 +367,8 @@ pub fn string_of_path(path: &Path) -> String {
         PathKind::DotP(path, atom) => format!("{}.{}", string_of_path(path), string_of_atom(atom)),
     }
 }
+// Parameters
+
 pub fn string_of_param(param: &Param) -> String {
     match &param.node {
         ParamKind::ExpP(typ) => string_of_typ(typ),
@@ -360,6 +388,8 @@ pub fn string_of_params(params: &[Param]) -> String {
         format!("({})", join(params, ", ", string_of_param))
     }
 }
+// Type parameters
+
 pub fn string_of_tparam(tparam: &TParam) -> String {
     tparam.node.clone()
 }
@@ -370,6 +400,8 @@ pub fn string_of_tparams(tparams: &[TParam]) -> String {
         format!("<{}>", join(tparams, ", ", string_of_tparam))
     }
 }
+// Arguments
+
 pub fn string_of_arg(arg: &Arg) -> String {
     match &arg.node {
         ArgKind::ExpA(exp) => string_of_exp(exp),
@@ -383,6 +415,8 @@ pub fn string_of_args(args: &[Arg]) -> String {
         format!("({})", join(args, ", ", string_of_arg))
     }
 }
+// Type arguments
+
 pub fn string_of_targ(targ: &Targ) -> String {
     string_of_typ(targ)
 }
@@ -393,6 +427,8 @@ pub fn string_of_targs(targs: &[Targ]) -> String {
         format!("<{}>", join(targs, ", ", string_of_targ))
     }
 }
+// Premises
+
 pub fn string_of_prem(prem: &Prem) -> String {
     match &prem.node {
         PremKind::RulePr(id, notexp, _) => {
@@ -460,6 +496,8 @@ pub fn string_of_iterprem(iterprem: &IterPrem) -> String {
 pub fn string_of_iterprems(iterprems: &[IterPrem]) -> String {
     join(iterprems, "", string_of_iterprem)
 }
+// Rules
+
 pub fn string_of_rule(rule: &Rule) -> String {
     format!(
         "rule {}: {}{}",
@@ -501,6 +539,8 @@ pub fn string_of_elsegroup_opt(group: &Option<ElseGroup>) -> String {
         )
     })
 }
+// Clause
+
 pub fn string_of_clause(index: i64, clause: &Clause) -> String {
     format!(
         "clause {index} : {} = {}{}",
@@ -530,6 +570,8 @@ pub fn string_of_elseclause_opt(clause: &Option<ElseClause>) -> String {
         format!("\n\n{}{}", indent(1), string_of_elseclause(clause))
     })
 }
+// Table rows
+
 pub fn string_of_tablerow(row: &TableRow) -> String {
     format!(
         "\n{}{} -> {}",
@@ -544,6 +586,8 @@ pub fn string_of_tablerows(rows: &[TableRow]) -> String {
         .map(|(index, row)| format!("\n{}row {index} :{}", indent(1), string_of_tablerow(row)))
         .collect()
 }
+// Hints
+
 pub fn string_of_hint(hint: &Hint) -> String {
     format!(
         " hint({} {})",
@@ -554,6 +598,8 @@ pub fn string_of_hint(hint: &Hint) -> String {
 pub fn string_of_hints(hints: &[Hint]) -> String {
     join(hints, "", string_of_hint)
 }
+// Definitions
+
 pub fn string_of_def(definition: &Def) -> String {
     match &definition.node {
         DefKind::ExternTypD(id, _) => format!("extern syntax {}", string_of_typid(id)),
@@ -613,6 +659,8 @@ pub fn string_of_def(definition: &Def) -> String {
 pub fn string_of_defs(definitions: &[Def]) -> String {
     join(definitions, "\n\n", string_of_def)
 }
+// Spec
+
 pub fn string_of_spec(spec: &Spec) -> String {
     string_of_defs(spec)
 }

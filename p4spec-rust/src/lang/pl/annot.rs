@@ -23,6 +23,8 @@ pub fn empty() -> Hints {
     Hints::default()
 }
 
+// Wrap a node with no prose hints
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct T<N> {
     pub node: N,
