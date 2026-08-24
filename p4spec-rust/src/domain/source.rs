@@ -1,5 +1,7 @@
 use std::fmt;
 
+// Positions and regions
+
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Position {
     pub file: String,
@@ -86,6 +88,8 @@ impl fmt::Display for Region {
         Ok(())
     }
 }
+
+// Phrases
 
 pub type Span = Region;
 

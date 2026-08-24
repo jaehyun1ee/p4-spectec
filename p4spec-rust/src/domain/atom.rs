@@ -2,38 +2,68 @@ use std::{error::Error, fmt};
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Atom {
+    /// Concrete object word such as `INT`
     Keyword(String),
+    /// Silent meta case label such as `_NUM`
     Tag(String),
+    /// Concrete operator such as `'+'`, `'->'`, or `'#'`
     Operator(String),
+    /// `<:`
     Sub,
+    /// `:>`
     Sup,
+    /// `|-`
     Turnstile,
+    /// `-|`
     Tilesturn,
+    /// `->`
     Arrow,
+    /// `->_`
     ArrowSub,
+    /// `=>_`
     DoubleArrowSub,
+    /// `==>`
     DoubleArrowLong,
+    /// `~>`
     SqArrow,
+    /// `~>*`
     SqArrowStar,
+    /// `.`
     Dot,
+    /// `..`
     Dot2,
+    /// `...`
     Dot3,
+    /// `;`
     Semicolon,
+    /// `:`
     Colon,
+    /// `:=`
     ColonEq,
+    /// `~~`
     Tilde2,
+    /// `\`
     Backslash,
+    /// `` `< ``
     LAngle,
+    /// `` `> ``
     RAngle,
+    /// `` `( ``
     LParen,
+    /// `` `) ``
     RParen,
+    /// `` `[ ``
     LBrack,
+    /// `` `] ``
     RBrack,
+    /// `` `{ ``
     LBrace,
+    /// `` `} ``
     RBrace,
 }
 
 impl Atom {
+    // Parse-faithful: round-trips through `from_source`
     pub fn source_string(&self) -> String {
         match self {
             Self::Keyword(identifier) => identifier.clone(),
@@ -104,6 +134,7 @@ impl Atom {
         }
     }
 
+    // Lossy display glyph
     pub fn render(&self) -> String {
         match self {
             Self::Tag(identifier) if identifier == "EMPTY" => "/* empty */".into(),
@@ -123,6 +154,8 @@ impl Atom {
     pub fn is_operator(&self, operator: &str) -> bool {
         matches!(self, Self::Operator(current) if current == operator)
     }
+
+    // Constructors
 
     pub fn keyword(identifier: impl Into<String>) -> Self {
         Self::Keyword(identifier.into())

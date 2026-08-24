@@ -36,6 +36,8 @@ impl fmt::Display for ArityMismatch {
 
 impl Error for ArityMismatch {}
 
+// Equality and comparison
+
 impl<T> Mixfix<T> {
     fn tag(&self) -> u8 {
         match self {
@@ -179,6 +181,8 @@ impl<T: Hash> Hash for Mixfix<T> {
     }
 }
 
+// Fold, map, and iter
+
 impl<T> Mixfix<T> {
     pub fn fold<A>(&self, initial: A, mut fold_arg: impl FnMut(A, &T) -> A) -> A {
         fn fold<T, A>(mixfix: &Mixfix<T>, initial: A, fold_arg: &mut impl FnMut(A, &T) -> A) -> A {
@@ -231,13 +235,19 @@ impl<T> Mixfix<T> {
         }
     }
 
+    // Conversion
+
     pub fn to_mixop(&self) -> Mixop {
         self.map(|_| ())
     }
 
+    // Arity
+
     pub fn arity(&self) -> usize {
         self.fold(0, |arity, _| arity + 1)
     }
+
+    // Atoms and args
 
     pub fn atoms(&self) -> Vec<&AtomPhrase> {
         fn collect<'a, T>(mixfix: &'a Mixfix<T>, atoms: &mut Vec<&'a AtomPhrase>) {
@@ -331,6 +341,8 @@ impl<T> Mixfix<T> {
         args
     }
 
+    // Filling and splitting
+
     pub fn split(&self) -> (Mixop, Vec<&T>) {
         (self.to_mixop(), self.args())
     }
@@ -357,6 +369,8 @@ impl<T> Mixfix<T> {
 
         format!("`{}`", inner(self))
     }
+
+    // Rendering
 
     pub fn render(
         &self,
