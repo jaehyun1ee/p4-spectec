@@ -6,6 +6,7 @@ pub const IL_SCHEMA: &str = "p4spectec.il.v1";
 pub const AL_SCHEMA: &str = "p4spectec.al.v1";
 pub const SL_SCHEMA: &str = "p4spectec.sl.v1";
 pub const PL_SCHEMA: &str = "p4spectec.pl.v1";
+pub const VALUE_SCHEMA: &str = "p4spectec.value.v1";
 
 const EL_KIND: &str = "el";
 const IL_KIND: &str = "il";

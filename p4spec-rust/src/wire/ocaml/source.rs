@@ -59,3 +59,26 @@ pub fn encode_phrase<T>(phrase: &Spanned<T>, encode_it: impl FnOnce(&T) -> Value
         "at": encode_region(&phrase.span),
     })
 }
+
+pub(crate) fn decode_annotated<T, N>(
+    value: &Value,
+    decode_it: impl FnOnce(&Value) -> Result<T, DecodeError>,
+    decode_note: impl FnOnce(&Value) -> Result<N, DecodeError>,
+) -> Result<(T, N, Region), DecodeError> {
+    let object = object(value)?;
+    Ok((
+        decode_it(field(object, "it")?)?,
+        decode_note(field(object, "note")?)?,
+        decode_region(field(object, "at")?)?,
+    ))
+}
+
+pub(crate) fn encode_annotated<T, N>(
+    node: &T,
+    note: &N,
+    span: &Region,
+    encode_it: impl FnOnce(&T) -> Value,
+    encode_note: impl FnOnce(&N) -> Value,
+) -> Value {
+    json!({"it": encode_it(node), "note": encode_note(note), "at": encode_region(span)})
+}
