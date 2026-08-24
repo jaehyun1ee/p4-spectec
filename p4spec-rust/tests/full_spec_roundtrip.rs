@@ -39,7 +39,7 @@ impl Stage {
     }
 }
 
-fn export_stage(repo: &Path, stage: Stage) -> Value {
+fn export_stage(repo: &Path, stage: Stage) -> Vec<u8> {
     let output = Command::new("opam")
         .args([
             "exec",
@@ -64,7 +64,7 @@ fn export_stage(repo: &Path, stage: Stage) -> Value {
         stage.name(),
         String::from_utf8_lossy(&output.stderr)
     );
-    serde_json::from_slice(&output.stdout).expect("parse OCaml stage envelope")
+    output.stdout
 }
 
 fn round_trip(stage: Stage, payload: &Value) -> Value {
@@ -106,8 +106,7 @@ fn ocaml_full_corpus_roundtrips_all_stage_asts() {
 
     for stage in Stage::ALL {
         let document = export_stage(repo, stage);
-        let bytes = serde_json::to_vec(&document).expect("serialize stage envelope");
-        let envelope = Envelope::<Value>::from_slice(&bytes).expect("decode stage envelope");
+        let envelope = Envelope::<Value>::from_slice(&document).expect("decode stage envelope");
         assert_eq!(envelope.schema(), stage.schema());
         assert_eq!(envelope.kind(), stage.name());
 
