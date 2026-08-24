@@ -12,6 +12,10 @@ val algo : string list -> Lang.Al.spec result
 val structure : final:bool -> string list -> Lang.Sl.spec result
 val annotate : string list -> Lang.Pl.spec result
 
+type stage = EL | IL | AL | SL | PL
+
+val export_json : stage -> string list -> Yojson.Safe.t result
+
 (* Document generation *)
 
 val splice : string list -> (string * string) list -> unit result
