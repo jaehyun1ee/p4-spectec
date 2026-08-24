@@ -4,7 +4,7 @@ use p4spec_rust::{
         mixfix::Mixfix,
         source::{Region, Spanned},
     },
-    lang::{el, il, sl},
+    lang::{el, hints::input::InputHint, il, sl},
 };
 
 fn span(name: &str) -> Region {
@@ -63,7 +63,7 @@ fn hint(source: &str) -> el::ast::Hint {
 }
 
 fn composite_spec(metadata: &str) -> sl::ast::Spec {
-    let signature = (notation(), vec![0]);
+    let signature = (notation(), InputHint::new(vec![0]));
     let parameter = Spanned::new(
         sl::ast::ParamKind::ExpP(typ(il::ast::TypKind::BoolT), variable("default")),
         span("parameter"),

@@ -8,7 +8,7 @@ use crate::domain::{
     mixfix::{Mixfix, Mixop as DomainMixop},
     source::{HasSpan, Span, Spanned},
 };
-use crate::lang::{el, hints::input::T as InputHint, xl::num};
+use crate::lang::{el, hints::input::InputHint, xl::num};
 
 // Numbers
 

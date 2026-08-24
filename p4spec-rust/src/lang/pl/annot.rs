@@ -10,12 +10,12 @@ use crate::{
 
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct Hints {
-    pub prose: Option<alter::T>,
-    pub prose_in: Option<alter::T>,
-    pub prose_out: Option<alter::T>,
-    pub prose_true: Option<alter::T>,
-    pub prose_false: Option<alter::T>,
-    pub prose_fields: Option<fields::T>,
+    pub prose: Option<alter::AlterationHint>,
+    pub prose_in: Option<alter::AlterationHint>,
+    pub prose_out: Option<alter::AlterationHint>,
+    pub prose_true: Option<alter::AlterationHint>,
+    pub prose_false: Option<alter::AlterationHint>,
+    pub prose_fields: Option<fields::FieldHint>,
     pub prose_input_exps: Option<Vec<sl::ast::Exp>>,
     pub prose_output_exps: Option<Vec<sl::ast::Exp>>,
 }

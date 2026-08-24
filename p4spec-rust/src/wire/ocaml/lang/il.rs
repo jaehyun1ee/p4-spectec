@@ -1367,12 +1367,14 @@ pub(super) fn encode_arg(arg: &ast::Arg) -> Value {
 
 pub(super) fn decode_input_hint(
     value: &Value,
-) -> Result<crate::lang::hints::input::T, DecodeError> {
-    decode_list(value, integer)
+) -> Result<crate::lang::hints::input::InputHint, DecodeError> {
+    Ok(crate::lang::hints::input::InputHint::new(decode_list(
+        value, integer,
+    )?))
 }
 
-pub(super) fn encode_input_hint(hint: &crate::lang::hints::input::T) -> Value {
-    encode_list(hint, |index| json!(index))
+pub(super) fn encode_input_hint(hint: &crate::lang::hints::input::InputHint) -> Value {
+    encode_list(hint.indices(), |index| json!(index))
 }
 
 pub(super) fn decode_prem(value: &Value) -> Result<ast::Prem, DecodeError> {

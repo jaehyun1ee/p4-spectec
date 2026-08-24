@@ -272,7 +272,12 @@ pub type RelSignature = sl::ast::RelSignature;
 pub enum InstrGroup {
     ResultI(RelSignature, Vec<Exp>),
     ReturnI(Exp),
-    RuleI(Id, NotExp, crate::lang::hints::input::T, Vec<IterInstr>),
+    RuleI(
+        Id,
+        NotExp,
+        crate::lang::hints::input::InputHint,
+        Vec<IterInstr>,
+    ),
     BacktrackI(Vec<BlockGroup>),
 }
 

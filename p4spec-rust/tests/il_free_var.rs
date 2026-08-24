@@ -6,7 +6,10 @@ use p4spec_rust::{
         mixfix::Mixfix,
         source::{Region, Spanned},
     },
-    lang::il::{ast, free, var},
+    lang::{
+        hints::input::InputHint,
+        il::{ast, free, var},
+    },
 };
 
 fn span() -> Region {
@@ -358,7 +361,7 @@ fn free_path_argument_and_premise_variants_follow_the_oracle() {
             prem(ast::PremKind::RulePr(
                 id("relation"),
                 notexp("rule"),
-                vec![0],
+                InputHint::new(vec![0]),
             )),
             names(&["rule"]),
         ),
@@ -487,7 +490,7 @@ fn free_aggregates_and_definition_omissions_follow_the_oracle() {
                 ast::DefKind::RelD(
                     id("relation"),
                     Spanned::new(Mixfix::Arg(typ()), span()),
-                    vec![],
+                    InputHint::new(vec![]),
                     vec![group],
                     Some(else_group),
                     vec![],
@@ -549,7 +552,7 @@ fn free_aggregates_and_definition_omissions_follow_the_oracle() {
                 ast::DefKind::ExternRelD(
                     id("ignored"),
                     Spanned::new(Mixfix::Arg(typ()), span()),
-                    vec![],
+                    InputHint::new(vec![]),
                     vec![],
                 ),
                 span(),

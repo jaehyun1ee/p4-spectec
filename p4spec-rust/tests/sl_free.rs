@@ -5,7 +5,7 @@ use p4spec_rust::{
         mixfix::Mixfix,
         source::{Region, Spanned},
     },
-    lang::{il, sl},
+    lang::{hints::input::InputHint, il, sl},
 };
 
 fn span(name: &str) -> Region {
@@ -85,7 +85,7 @@ fn instructions_collect_nested_expressions_and_omit_binding_metadata() {
     let binder = (id("binder"), typ(), Vec::new());
     let signature = (
         Spanned::new(Mixfix::Seq(Vec::new()), span("notation")),
-        vec![0],
+        InputHint::new(vec![0]),
     );
     let instructions = vec![
         (
@@ -143,7 +143,7 @@ fn instructions_collect_nested_expressions_and_omit_binding_metadata() {
             instr(sl::ast::InstrKind::RuleI(
                 id("rule"),
                 Mixfix::Arg(variable("rule-input")),
-                vec![0],
+                InputHint::new(vec![0]),
                 vec![(il::ast::Iter::List, vec![binder.clone()], vec![binder])],
                 vec![instr(sl::ast::InstrKind::ReturnI(variable("rule-body")))],
             )),

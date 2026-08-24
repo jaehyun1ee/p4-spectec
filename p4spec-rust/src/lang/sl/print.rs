@@ -593,6 +593,7 @@ pub fn string_of_iterinstrs(iterinstrs: &[IterInstr]) -> String {
 
 pub fn string_of_relinput(signature: &RelSignature, exps_input: &[Exp]) -> String {
     let (nottyp, inputs) = signature;
+    let inputs = inputs.indices();
     assert_eq!(inputs.len(), exps_input.len());
     let args = (0..nottyp.node.arity()).map(|index| {
         inputs
@@ -609,6 +610,7 @@ pub fn string_of_relinput(signature: &RelSignature, exps_input: &[Exp]) -> Strin
 
 pub fn string_of_reloutput(signature: &RelSignature, exps_output: &[Exp]) -> String {
     let (nottyp, inputs) = signature;
+    let inputs = inputs.indices();
     let outputs = (0..nottyp.node.arity())
         .filter(|index| !inputs.contains(&(*index as i64)))
         .collect::<Vec<_>>();

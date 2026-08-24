@@ -4,7 +4,7 @@
 
 use crate::{
     domain::source::{HasSpan, Span, Spanned},
-    lang::{el, hints::input::T as InputHint, il},
+    lang::{el, hints::input::InputHint, il},
 };
 
 // Numbers

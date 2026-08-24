@@ -3,7 +3,7 @@ use p4spec_rust::{
         mixfix::Mixfix,
         source::{Region, Spanned},
     },
-    lang::{il, pl},
+    lang::{hints::input::InputHint, il, pl},
 };
 
 fn span(name: &str) -> Region {
@@ -112,7 +112,7 @@ fn tier_classification_handles_rules_results_backtracking_and_dispatch() {
         &pl::ast::InstrGroup::RuleI(
             id("rule"),
             Mixfix::Arg(call("argument")),
-            vec![0],
+            InputHint::new(vec![0]),
             Vec::new(),
         )
     ));
@@ -120,7 +120,7 @@ fn tier_classification_handles_rules_results_backtracking_and_dispatch() {
         &pl::ast::InstrGroup::ResultI(
             (
                 Spanned::new(Mixfix::Arg(typ()), span("signature")),
-                Vec::new()
+                InputHint::new(Vec::new())
             ),
             vec![call("result")],
         )

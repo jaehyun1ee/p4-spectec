@@ -2,7 +2,7 @@
 
 use crate::{
     domain::source::Spanned,
-    lang::{el, hints::input::T as InputHint, il},
+    lang::{el, hints::input::InputHint, il},
 };
 
 // Numbers

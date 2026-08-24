@@ -3,7 +3,10 @@ use p4spec_rust::{
         mixfix::Mixfix,
         source::{Region, Spanned},
     },
-    lang::{hints::alter, il, pl},
+    lang::{
+        hints::{alter, input::InputHint},
+        il, pl,
+    },
 };
 
 fn span(name: &str) -> Region {
@@ -31,7 +34,10 @@ fn group(name: &str) -> pl::ast::Instr<pl::ast::InstrDispatch> {
         pl::ast::InstrKind::TierI(pl::ast::InstrDispatch::GroupI(
             id(name),
             id("relation"),
-            (Spanned::new(Mixfix::Arg(typ()), span("signature")), vec![0]),
+            (
+                Spanned::new(Mixfix::Arg(typ()), span("signature")),
+                InputHint::new(vec![0]),
+            ),
             vec![variable(name)],
             Vec::new(),
         )),
@@ -39,7 +45,7 @@ fn group(name: &str) -> pl::ast::Instr<pl::ast::InstrDispatch> {
         None,
         span(name),
     );
-    instruction.hints.prose = Some(alter::T::TextH(format!("hint-{name}")));
+    instruction.hints.prose = Some(alter::AlterationHint::TextH(format!("hint-{name}")));
     instruction
 }
 
@@ -95,7 +101,7 @@ fn group_collection_preserves_depth_first_branch_order_and_hints() {
     );
     assert_eq!(
         groups[0].hints.prose,
-        Some(alter::T::TextH("hint-a".to_owned()))
+        Some(alter::AlterationHint::TextH("hint-a".to_owned()))
     );
     assert_eq!(groups[0].id_rel.node, "relation");
     assert_eq!(groups[0].exps[0].node.span, span("a"));

@@ -6,7 +6,7 @@ use p4spec_rust::{
         mixfix::Mixfix,
         source::{Region, Spanned},
     },
-    lang::{al, el, il, xl::num},
+    lang::{al, el, hints::input::InputHint, il, xl::num},
 };
 
 fn span(name: &str) -> Region {
@@ -154,8 +154,14 @@ fn al_equality_distinguishes_recursive_operands_variants_and_collection_rules() 
             span("rule"),
         )
     };
-    assert!(al::eq::eq_prem(&rule(vec![0]), &rule(vec![0])));
-    assert!(!al::eq::eq_prem(&rule(vec![0]), &rule(vec![1])));
+    assert!(al::eq::eq_prem(
+        &rule(InputHint::new(vec![0])),
+        &rule(InputHint::new(vec![0]))
+    ));
+    assert!(!al::eq::eq_prem(
+        &rule(InputHint::new(vec![0])),
+        &rule(InputHint::new(vec![1]))
+    ));
     assert!(!al::eq::eq_prem(
         &Spanned::new(il::ast::PremKind::IfPr(variable("x")), span("if")),
         &Spanned::new(il::ast::PremKind::DebugPr(variable("x")), span("debug")),
@@ -335,7 +341,7 @@ fn free_expression_path_argument_and_premise_variants_collect_identifier_text() 
     );
     let premises = vec![
         (
-            il::ast::PremKind::RulePr(id("r"), not_exp("x"), Vec::new()),
+            il::ast::PremKind::RulePr(id("r"), not_exp("x"), InputHint::new(Vec::new())),
             ids(&["x"]),
         ),
         (il::ast::PremKind::IfPr(variable("x")), ids(&["x"])),
@@ -434,7 +440,12 @@ fn free_al_shapes_and_definition_arms_are_exhaustive() {
         ),
         (
             Spanned::new(
-                al::ast::DefKind::ExternRelD(id("er"), not_typ(), Vec::new(), Vec::new()),
+                al::ast::DefKind::ExternRelD(
+                    id("er"),
+                    not_typ(),
+                    InputHint::new(Vec::new()),
+                    Vec::new(),
+                ),
                 span("def"),
             ),
             ids(&[]),
@@ -444,7 +455,7 @@ fn free_al_shapes_and_definition_arms_are_exhaustive() {
                 al::ast::DefKind::RelD(
                     id("r"),
                     not_typ(),
-                    Vec::new(),
+                    InputHint::new(Vec::new()),
                     vec![group],
                     Some(else_group),
                     Vec::new(),
@@ -620,7 +631,7 @@ fn composite_spec(metadata: &str, extern_inputs: Vec<i64>) -> al::ast::Spec {
             al::ast::DefKind::ExternRelD(
                 id("Check"),
                 notation(vec![Mixfix::Atom(keyword("check")), Mixfix::Arg(typ())]),
-                extern_inputs,
+                InputHint::new(extern_inputs),
                 hints.clone(),
             ),
             span(metadata),
@@ -629,7 +640,7 @@ fn composite_spec(metadata: &str, extern_inputs: Vec<i64>) -> al::ast::Spec {
             al::ast::DefKind::RelD(
                 id("Evaluate"),
                 evaluate_notation,
-                vec![0],
+                InputHint::new(vec![0]),
                 vec![evaluate_group],
                 Some(else_group),
                 hints.clone(),
@@ -640,7 +651,7 @@ fn composite_spec(metadata: &str, extern_inputs: Vec<i64>) -> al::ast::Spec {
             al::ast::DefKind::RelD(
                 id("Ready"),
                 ready_notation,
-                vec![0],
+                InputHint::new(vec![0]),
                 vec![ready_group],
                 None,
                 hints.clone(),

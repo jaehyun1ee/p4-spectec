@@ -20,7 +20,7 @@ fn annotation_wrappers_forward_source_and_keep_nested_hints() {
             span: span("nested-source"),
         },
         hints: pl::annot::Hints {
-            prose: Some(alter::T::TextH("nested prose".to_owned())),
+            prose: Some(alter::AlterationHint::TextH("nested prose".to_owned())),
             ..pl::annot::empty()
         },
     };

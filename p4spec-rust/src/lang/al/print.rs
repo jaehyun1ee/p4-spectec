@@ -1,4 +1,7 @@
-use crate::{domain::mixfix::Mixop, lang::il::print as il_print};
+use crate::{
+    domain::mixfix::Mixop,
+    lang::{hints::input::InputHint, il::print as il_print},
+};
 
 use super::ast::*;
 
@@ -99,7 +102,8 @@ fn fill_notation(nottyp: &NotTyp, exps: Vec<String>) -> String {
 
 // Rules
 
-pub fn string_of_ruleinput(nottyp: &NotTyp, inputs: &[i64], exps_input: &[Exp]) -> String {
+pub fn string_of_ruleinput(nottyp: &NotTyp, inputs: &InputHint, exps_input: &[Exp]) -> String {
+    let inputs = inputs.indices();
     assert_eq!(inputs.len(), exps_input.len());
     let (_, typs) = nottyp.node.split();
     let exps = (0..typs.len())
@@ -116,7 +120,8 @@ pub fn string_of_ruleinput(nottyp: &NotTyp, inputs: &[i64], exps_input: &[Exp]) 
     fill_notation(nottyp, exps)
 }
 
-pub fn string_of_ruleoutput(nottyp: &NotTyp, inputs: &[i64], exps_output: &[Exp]) -> String {
+pub fn string_of_ruleoutput(nottyp: &NotTyp, inputs: &InputHint, exps_output: &[Exp]) -> String {
+    let inputs = inputs.indices();
     let (_, typs) = nottyp.node.split();
     let outputs = (0..typs.len())
         .filter(|index| !inputs.contains(&(*index as i64)))
@@ -140,7 +145,7 @@ pub fn string_of_ruleoutput(nottyp: &NotTyp, inputs: &[i64], exps_output: &[Exp]
     }
 }
 
-pub fn string_of_rulematch(nottyp: &NotTyp, inputs: &[i64], rulematch: &RuleMatch) -> String {
+pub fn string_of_rulematch(nottyp: &NotTyp, inputs: &InputHint, rulematch: &RuleMatch) -> String {
     let (exps_signature, exps_input, prems) = rulematch;
     format!(
         "{}(signature) {}\n{}{}{}",
@@ -152,7 +157,7 @@ pub fn string_of_rulematch(nottyp: &NotTyp, inputs: &[i64], rulematch: &RuleMatc
     )
 }
 
-pub fn string_of_rulepath(nottyp: &NotTyp, inputs: &[i64], rulepath: &RulePath) -> String {
+pub fn string_of_rulepath(nottyp: &NotTyp, inputs: &InputHint, rulepath: &RulePath) -> String {
     let (id, prems, exps_output) = rulepath;
     format!(
         "{}rulepath {}{}\n{}{}",
@@ -164,7 +169,7 @@ pub fn string_of_rulepath(nottyp: &NotTyp, inputs: &[i64], rulepath: &RulePath) 
     )
 }
 
-pub fn string_of_rulepaths(nottyp: &NotTyp, inputs: &[i64], rulepaths: &[RulePath]) -> String {
+pub fn string_of_rulepaths(nottyp: &NotTyp, inputs: &InputHint, rulepaths: &[RulePath]) -> String {
     rulepaths
         .iter()
         .map(|rulepath| string_of_rulepath(nottyp, inputs, rulepath))
@@ -172,7 +177,7 @@ pub fn string_of_rulepaths(nottyp: &NotTyp, inputs: &[i64], rulepaths: &[RulePat
         .join("\n\n")
 }
 
-pub fn string_of_rulegroup(nottyp: &NotTyp, inputs: &[i64], rulegroup: &RuleGroup) -> String {
+pub fn string_of_rulegroup(nottyp: &NotTyp, inputs: &InputHint, rulegroup: &RuleGroup) -> String {
     let (id, rulematch, rulepaths) = &rulegroup.node;
     format!(
         "{}rulegroup {}\n\n {}match\n\n{}\n\n {}paths\n\n{}",
@@ -185,7 +190,11 @@ pub fn string_of_rulegroup(nottyp: &NotTyp, inputs: &[i64], rulegroup: &RuleGrou
     )
 }
 
-pub fn string_of_rulegroups(nottyp: &NotTyp, inputs: &[i64], rulegroups: &[RuleGroup]) -> String {
+pub fn string_of_rulegroups(
+    nottyp: &NotTyp,
+    inputs: &InputHint,
+    rulegroups: &[RuleGroup],
+) -> String {
     rulegroups
         .iter()
         .map(|rulegroup| string_of_rulegroup(nottyp, inputs, rulegroup))
@@ -193,7 +202,7 @@ pub fn string_of_rulegroups(nottyp: &NotTyp, inputs: &[i64], rulegroups: &[RuleG
         .join("\n\n")
 }
 
-pub fn string_of_elsegroup(nottyp: &NotTyp, inputs: &[i64], elsegroup: &ElseGroup) -> String {
+pub fn string_of_elsegroup(nottyp: &NotTyp, inputs: &InputHint, elsegroup: &ElseGroup) -> String {
     let (id, rulematch, rulepath) = &elsegroup.node;
     format!(
         "{}rulegroup {}\n\n {}match\n\n{}\n\n {}paths\n\n{}",
@@ -208,7 +217,7 @@ pub fn string_of_elsegroup(nottyp: &NotTyp, inputs: &[i64], elsegroup: &ElseGrou
 
 pub fn string_of_elsegroup_opt(
     nottyp: &NotTyp,
-    inputs: &[i64],
+    inputs: &InputHint,
     elsegroup: &Option<ElseGroup>,
 ) -> String {
     elsegroup.as_ref().map_or_else(String::new, |elsegroup| {

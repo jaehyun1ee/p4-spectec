@@ -7,7 +7,10 @@ use p4spec_rust::{
         mixfix::Mixfix,
         source::{Region, Spanned},
     },
-    lang::il::{ast, fresh, print},
+    lang::{
+        hints::input::InputHint,
+        il::{ast, fresh, print},
+    },
 };
 
 fn typ() -> ast::Typ {
@@ -293,7 +296,7 @@ fn printer_renders_nested_premises_and_definition_spec_goldens() {
                 prem(ast::PremKind::RulePr(
                     id("relation"),
                     notexp("input"),
-                    vec![0],
+                    InputHint::new(vec![0]),
                 )),
                 prem(ast::PremKind::LetPr(var("left"), var("right"))),
                 nested,
@@ -341,14 +344,14 @@ fn printer_renders_nested_premises_and_definition_spec_goldens() {
             Region::none(),
         ),
         Spanned::new(
-            ast::DefKind::ExternRelD(id("external"), nottyp(), vec![], vec![]),
+            ast::DefKind::ExternRelD(id("external"), nottyp(), InputHint::new(vec![]), vec![]),
             Region::none(),
         ),
         Spanned::new(
             ast::DefKind::RelD(
                 id("relation"),
                 nottyp(),
-                vec![],
+                InputHint::new(vec![]),
                 vec![group],
                 Some(else_group),
                 vec![],

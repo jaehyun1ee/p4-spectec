@@ -3,7 +3,7 @@ use p4spec_rust::{
         mixfix::Mixfix,
         source::{Region, Spanned},
     },
-    lang::{il, sl},
+    lang::{hints::input::InputHint, il, sl},
 };
 
 fn span(name: &str) -> Region {
@@ -71,8 +71,14 @@ fn rule_instructions_compare_inputs_iterations_and_nested_blocks() {
         )
     };
 
-    assert!(sl::eq::eq_instr(&rule(vec![0]), &rule(vec![0])));
-    assert!(!sl::eq::eq_instr(&rule(vec![0]), &rule(vec![1])));
+    assert!(sl::eq::eq_instr(
+        &rule(InputHint::new(vec![0])),
+        &rule(InputHint::new(vec![0]))
+    ));
+    assert!(!sl::eq::eq_instr(
+        &rule(InputHint::new(vec![0])),
+        &rule(InputHint::new(vec![1]))
+    ));
 }
 
 #[test]

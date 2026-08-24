@@ -3,7 +3,10 @@ use p4spec_rust::{
         mixfix::Mixfix,
         source::{Region, Spanned},
     },
-    lang::{hints::alter, il, pl},
+    lang::{
+        hints::{alter, input::InputHint},
+        il, pl,
+    },
 };
 
 fn span(name: &str) -> Region {
@@ -35,7 +38,10 @@ fn text(value: &str) -> pl::ast::Exp {
 }
 
 fn signature() -> pl::ast::RelSignature {
-    (Spanned::new(Mixfix::Arg(typ()), span("signature")), vec![0])
+    (
+        Spanned::new(Mixfix::Arg(typ()), span("signature")),
+        InputHint::new(vec![0]),
+    )
 }
 
 fn group_instr(
@@ -56,13 +62,13 @@ fn group_printer_escapes_text_and_omits_annotations_and_fallthrough() {
         text("line\n\"\\"),
     )));
     first.node.fallthrough = Some(pl::ast::Fallthrough::FallNext);
-    first.hints.prose = Some(alter::T::TextH("first prose".to_owned()));
+    first.hints.prose = Some(alter::AlterationHint::TextH("first prose".to_owned()));
 
     let mut second = first.clone();
     second.node.iid = 99;
     second.node.fallthrough = Some(pl::ast::Fallthrough::FallFail);
     second.node.span = span("other-source");
-    second.hints.prose = Some(alter::T::TextH("other prose".to_owned()));
+    second.hints.prose = Some(alter::AlterationHint::TextH("other prose".to_owned()));
 
     assert_eq!(
         pl::print::string_of_block_group(&vec![first]),

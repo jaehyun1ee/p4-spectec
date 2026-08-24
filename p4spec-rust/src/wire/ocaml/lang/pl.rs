@@ -2,7 +2,7 @@ use serde_json::{Value, json};
 
 use crate::{
     lang::{
-        hints::alter,
+        hints::{alter, fields},
         pl::{
             annot,
             ast::{
@@ -73,13 +73,16 @@ fn encode_option<T>(value: Option<&T>, encode: impl FnOnce(&T) -> Value) -> Valu
     value.map_or(Value::Null, encode)
 }
 
-fn decode_alter(value: &Value) -> Result<alter::T, DecodeError> {
+fn decode_alter(value: &Value) -> Result<alter::AlterationHint, DecodeError> {
     let (tag, fields) = variant(value)?;
     match (tag, fields) {
-        ("TextH", [text]) => Ok(alter::T::TextH(string(text)?.to_owned())),
-        ("AtomH", [atom]) => Ok(alter::T::AtomH(AtomPhraseCodec::decode(atom)?)),
-        ("SeqH", [hints]) => Ok(alter::T::SeqH(il::decode_list(hints, decode_alter)?)),
-        ("BrackH", [left, hint, right]) => Ok(alter::T::BrackH(
+        ("TextH", [text]) => Ok(alter::AlterationHint::TextH(string(text)?.to_owned())),
+        ("AtomH", [atom]) => Ok(alter::AlterationHint::AtomH(AtomPhraseCodec::decode(atom)?)),
+        ("SeqH", [hints]) => Ok(alter::AlterationHint::SeqH(il::decode_list(
+            hints,
+            decode_alter,
+        )?)),
+        ("BrackH", [left, hint, right]) => Ok(alter::AlterationHint::BrackH(
             AtomPhraseCodec::decode(left)?,
             Box::new(decode_alter(hint)?),
             AtomPhraseCodec::decode(right)?,
@@ -87,19 +90,19 @@ fn decode_alter(value: &Value) -> Result<alter::T, DecodeError> {
         ("HoleH", [hole]) => {
             let (tag, fields) = variant(hole)?;
             match (tag, fields) {
-                ("Next", []) => Ok(alter::T::HoleH(alter::Hole::Next)),
-                ("Num", [index]) => Ok(alter::T::HoleH(alter::Hole::Num(super::super::integer(
-                    index,
-                )?))),
+                ("Next", []) => Ok(alter::AlterationHint::HoleH(alter::Hole::Next)),
+                ("Num", [index]) => Ok(alter::AlterationHint::HoleH(alter::Hole::Num(
+                    super::super::integer(index)?,
+                ))),
                 ("Next" | "Num", _) => Err(DecodeError::Expected("valid PL alter hole arity")),
                 (unknown, _) => Err(DecodeError::UnknownVariant(unknown.to_owned())),
             }
         }
-        ("FuseH", [left, right]) => Ok(alter::T::FuseH(
+        ("FuseH", [left, right]) => Ok(alter::AlterationHint::FuseH(
             Box::new(decode_alter(left)?),
             Box::new(decode_alter(right)?),
         )),
-        ("OtherH", [exp]) => Ok(alter::T::OtherH(el::decode_exp(exp)?)),
+        ("OtherH", [exp]) => Ok(alter::AlterationHint::OtherH(el::decode_exp(exp)?)),
         ("TextH" | "AtomH" | "SeqH" | "BrackH" | "HoleH" | "FuseH" | "OtherH", _) => {
             Err(DecodeError::Expected("valid PL alter hint arity"))
         }
@@ -107,21 +110,27 @@ fn decode_alter(value: &Value) -> Result<alter::T, DecodeError> {
     }
 }
 
-fn encode_alter(hint: &alter::T) -> Value {
+fn encode_alter(hint: &alter::AlterationHint) -> Value {
     match hint {
-        alter::T::TextH(text) => json!(["TextH", text]),
-        alter::T::AtomH(atom) => json!(["AtomH", AtomPhraseCodec::encode(atom)]),
-        alter::T::SeqH(hints) => json!(["SeqH", il::encode_list(hints, encode_alter)]),
-        alter::T::BrackH(left, hint, right) => json!([
+        alter::AlterationHint::TextH(text) => json!(["TextH", text]),
+        alter::AlterationHint::AtomH(atom) => json!(["AtomH", AtomPhraseCodec::encode(atom)]),
+        alter::AlterationHint::SeqH(hints) => {
+            json!(["SeqH", il::encode_list(hints, encode_alter)])
+        }
+        alter::AlterationHint::BrackH(left, hint, right) => json!([
             "BrackH",
             AtomPhraseCodec::encode(left),
             encode_alter(hint),
             AtomPhraseCodec::encode(right)
         ]),
-        alter::T::HoleH(alter::Hole::Next) => json!(["HoleH", ["Next"]]),
-        alter::T::HoleH(alter::Hole::Num(index)) => json!(["HoleH", ["Num", index]]),
-        alter::T::FuseH(left, right) => json!(["FuseH", encode_alter(left), encode_alter(right)]),
-        alter::T::OtherH(exp) => json!(["OtherH", el::encode_exp(exp)]),
+        alter::AlterationHint::HoleH(alter::Hole::Next) => json!(["HoleH", ["Next"]]),
+        alter::AlterationHint::HoleH(alter::Hole::Num(index)) => {
+            json!(["HoleH", ["Num", index]])
+        }
+        alter::AlterationHint::FuseH(left, right) => {
+            json!(["FuseH", encode_alter(left), encode_alter(right)])
+        }
+        alter::AlterationHint::OtherH(exp) => json!(["OtherH", el::encode_exp(exp)]),
     }
 }
 
@@ -134,7 +143,9 @@ fn decode_hints(value: &Value) -> Result<annot::Hints, DecodeError> {
         prose_true: decode_option(field(value, "prose_true")?, decode_alter)?,
         prose_false: decode_option(field(value, "prose_false")?, decode_alter)?,
         prose_fields: decode_option(field(value, "prose_fields")?, |value| {
-            il::decode_list(value, |value| Ok(string(value)?.to_owned()))
+            Ok(fields::FieldHint::new(il::decode_list(value, |value| {
+                Ok(string(value)?.to_owned())
+            })?))
         })?,
         prose_input_exps: decode_option(field(value, "prose_input_exps")?, |value| {
             il::decode_list(value, il::decode_exp)
@@ -152,7 +163,7 @@ fn encode_hints(hints: &annot::Hints) -> Value {
         "prose_out": encode_option(hints.prose_out.as_ref(), encode_alter),
         "prose_true": encode_option(hints.prose_true.as_ref(), encode_alter),
         "prose_false": encode_option(hints.prose_false.as_ref(), encode_alter),
-        "prose_fields": encode_option(hints.prose_fields.as_ref(), |fields| json!(fields)),
+        "prose_fields": encode_option(hints.prose_fields.as_ref(), |fields| json!(fields.fields())),
         "prose_input_exps": encode_option(hints.prose_input_exps.as_ref(), |exps| il::encode_list(exps, il::encode_exp)),
         "prose_output_exps": encode_option(hints.prose_output_exps.as_ref(), |exps| il::encode_list(exps, il::encode_exp)),
     })
