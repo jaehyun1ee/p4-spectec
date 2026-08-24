@@ -1,4 +1,4 @@
-use p4spec_rust::wire::ocaml::lang::pl::{ExpCodec, PathCodec};
+use p4spec_rust::wire::ocaml::lang::pl::{ExpCodec, PathCodec, SpecCodec};
 use serde_json::{Value, json};
 
 fn region() -> Value {
@@ -13,6 +13,9 @@ fn phrase(it: Value) -> Value {
 }
 fn id(name: &str) -> Value {
     phrase(json!(name))
+}
+fn typ() -> Value {
+    phrase(json!(["BoolT"]))
 }
 fn il_exp(value: bool) -> Value {
     json!({"it": ["BoolE", value], "note": ["BoolT"], "at": region()})
@@ -33,6 +36,17 @@ fn hints() -> Value {
 
 fn exp(kind: Value) -> Value {
     json!({"node": {"it": kind, "note": ["BoolT"], "at": region()}, "hints": hints()})
+}
+
+fn instr(kind: Value, iid: i64, fallthrough: Value) -> Value {
+    json!({
+        "node": {"it": kind, "note": {"iid": iid, "fallthrough": fallthrough}, "at": region()},
+        "hints": hints()
+    })
+}
+
+fn def(kind: Value) -> Value {
+    json!({"node": phrase(kind), "hints": hints()})
 }
 
 #[test]
@@ -57,4 +71,58 @@ fn annotation_expression_and_path_roundtrip() {
     let path = update["node"]["it"][2].clone();
     let decoded = PathCodec::decode(&path).expect("decode recursive PL path");
     assert_eq!(PathCodec::encode(&decoded), path);
+}
+
+#[test]
+fn whole_spec_roundtrip_preserves_dispatch_and_groups() {
+    let signature = json!([phrase(json!(["Seq", [["Arg", typ()]]])), [0]]);
+    let returned = instr(
+        json!(["TierI", ["ReturnI", exp(json!(["BoolE", true]))]]),
+        2,
+        json!(["FallNext"]),
+    );
+    let group = instr(
+        json!([
+            "TierI",
+            ["GroupI", id("group"), id("step"), signature, [], [returned]]
+        ]),
+        1,
+        json!(["FallGroup", id("next")]),
+    );
+    let row = json!([
+        [],
+        exp(json!(["BoolE", false])),
+        [instr(
+            json!(["TierI", ["BacktrackI", [[]]]]),
+            3,
+            Value::Null
+        )]
+    ]);
+    let param = phrase(json!(["ExpP", typ(), exp(json!(["BoolE", true]))]));
+    let spec = json!([
+        def(json!(["ExternTypD", id("T")])),
+        def(json!(["RelD", [id("step"), signature, [], [group], null]])),
+        def(json!(["TableDecD", [id("table"), [param], typ(), [row]]])),
+        def(json!([
+            "FuncDecD",
+            [
+                id("f"),
+                [],
+                [],
+                typ(),
+                [instr(
+                    json!(["TierI", ["ReturnI", exp(json!(["BoolE", true]))]]),
+                    4,
+                    json!(["FallFail"])
+                )],
+                []
+            ]
+        ]))
+    ]);
+
+    let decoded = SpecCodec::decode(&spec).expect("decode complete PL spec");
+    assert_eq!(
+        SpecCodec::encode(&decoded).expect("encode complete PL spec"),
+        spec
+    );
 }
