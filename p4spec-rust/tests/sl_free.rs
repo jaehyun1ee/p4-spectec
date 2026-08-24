@@ -1,5 +1,3 @@
-use std::collections::BTreeSet;
-
 use p4spec_rust::{
     domain::{
         mixfix::Mixfix,
@@ -32,7 +30,7 @@ fn instr(kind: sl::ast::InstrKind) -> sl::ast::Instr {
     sl::ast::Instr::new(kind, 0, span("instruction"))
 }
 
-fn names(items: &[&str]) -> BTreeSet<String> {
+fn names(items: &[&str]) -> sl::free::FreeVars {
     items.iter().map(|item| (*item).to_owned()).collect()
 }
 

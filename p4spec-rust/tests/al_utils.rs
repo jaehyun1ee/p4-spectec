@@ -64,7 +64,7 @@ fn path_with(name: &str) -> il::ast::Path {
     )
 }
 
-fn ids(names: &[&str]) -> BTreeSet<String> {
+fn ids(names: &[&str]) -> al::free::FreeVars {
     names.iter().map(|name| (*name).to_owned()).collect()
 }
 #[test]

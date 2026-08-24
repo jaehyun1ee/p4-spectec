@@ -1,11 +1,6 @@
 //! Booleans
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum T {
-    BoolT,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Typ {
     BoolT,
 }

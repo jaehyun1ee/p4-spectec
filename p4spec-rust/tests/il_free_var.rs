@@ -1,5 +1,3 @@
-use std::collections::BTreeSet;
-
 use p4spec_rust::{
     domain::{
         atom::Atom,
@@ -42,7 +40,7 @@ fn atom(name: &str) -> ast::Atom {
 fn notexp(name: &str) -> ast::NotExp {
     Mixfix::Seq(vec![Mixfix::Arg(variable(name))])
 }
-fn names(names: &[&str]) -> BTreeSet<ast::IdKind> {
+fn names(names: &[&str]) -> free::FreeVars {
     names.iter().map(|name| (*name).into()).collect()
 }
 fn prem(kind: ast::PremKind) -> ast::Prem {

@@ -4,21 +4,21 @@ use super::ast::*;
 
 // Identifier set
 
-pub type T = il::free::T;
+pub type FreeVars = il::free::FreeVars;
 
-pub fn empty() -> T {
+pub fn empty() -> FreeVars {
     il::free::empty()
 }
 
-pub fn singleton(id: &Id) -> T {
+pub fn singleton(id: &Id) -> FreeVars {
     il::free::singleton(id)
 }
 
-fn add(set_a: T, set_b: T) -> T {
+fn add(set_a: FreeVars, set_b: FreeVars) -> FreeVars {
     set_a.into_iter().chain(set_b).collect()
 }
 
-fn many<Item>(items: &[Item], collect: impl Fn(&Item) -> T) -> T {
+fn many<Item>(items: &[Item], collect: impl Fn(&Item) -> FreeVars) -> FreeVars {
     items
         .iter()
         .fold(empty(), |set, item| add(set, collect(item)))
@@ -28,57 +28,57 @@ fn many<Item>(items: &[Item], collect: impl Fn(&Item) -> T) -> T {
 
 // Expressions
 
-pub fn free_exp(exp: &Exp) -> T {
+pub fn free_exp(exp: &Exp) -> FreeVars {
     il::free::free_exp(exp)
 }
 
-pub fn free_exps(exps: &[Exp]) -> T {
+pub fn free_exps(exps: &[Exp]) -> FreeVars {
     il::free::free_exps(exps)
 }
 
 // Paths
 
-pub fn free_path(path: &Path) -> T {
+pub fn free_path(path: &Path) -> FreeVars {
     il::free::free_path(path)
 }
 
 // Parameters
 
-pub fn free_param(param: &Param) -> T {
+pub fn free_param(param: &Param) -> FreeVars {
     match &param.node {
         ParamKind::ExpP(_, exp) => free_exp(exp),
         ParamKind::DefP(..) => empty(),
     }
 }
 
-pub fn free_params(params: &[Param]) -> T {
+pub fn free_params(params: &[Param]) -> FreeVars {
     many(params, free_param)
 }
 
 // Arguments
 
-pub fn free_arg(arg: &Arg) -> T {
+pub fn free_arg(arg: &Arg) -> FreeVars {
     il::free::free_arg(arg)
 }
 
-pub fn free_args(args: &[Arg]) -> T {
+pub fn free_args(args: &[Arg]) -> FreeVars {
     il::free::free_args(args)
 }
 
-pub fn free_cases(cases: &[Case]) -> T {
+pub fn free_cases(cases: &[Case]) -> FreeVars {
     many(cases, |(guard, block)| {
         add(free_guard(guard), free_block(block))
     })
 }
 
-pub fn free_guard(guard: &Guard) -> T {
+pub fn free_guard(guard: &Guard) -> FreeVars {
     match guard {
         Guard::BoolG(_) | Guard::SubG(..) | Guard::MatchG(_) => empty(),
         Guard::CmpG(_, _, exp) | Guard::MemG(exp) => free_exp(exp),
     }
 }
 
-pub fn free_instr(instr: &Instr) -> T {
+pub fn free_instr(instr: &Instr) -> FreeVars {
     match &instr.kind {
         InstrKind::IfI(exp, _, block, _) => add(free_exp(exp), free_block(block)),
         InstrKind::HoldI(_, notexp, _, _) => many(&notexp.args(), |exp| free_exp(exp)),
@@ -96,10 +96,10 @@ pub fn free_instr(instr: &Instr) -> T {
     }
 }
 
-pub fn free_instrs(instrs: &[Instr]) -> T {
+pub fn free_instrs(instrs: &[Instr]) -> FreeVars {
     many(instrs, free_instr)
 }
 
-pub fn free_block(block: &Block) -> T {
+pub fn free_block(block: &Block) -> FreeVars {
     free_instrs(block)
 }

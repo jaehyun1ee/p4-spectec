@@ -2,7 +2,7 @@ use super::{annot, ast::*};
 
 /// A rule group extracted from a dispatch block
 #[derive(Clone, Debug, PartialEq)]
-pub struct T {
+pub struct RuleGroup {
     pub hints: annot::Hints,
     pub id_rulegroup: Id,
     pub id_rel: Id,
@@ -11,8 +11,8 @@ pub struct T {
     pub body: BlockGroup,
 }
 
-pub fn collect_groups(block: &BlockDispatch) -> Vec<T> {
-    fn collect_instr(instr: &Instr<InstrDispatch>) -> Vec<T> {
+pub fn collect_groups(block: &BlockDispatch) -> Vec<RuleGroup> {
+    fn collect_instr(instr: &Instr<InstrDispatch>) -> Vec<RuleGroup> {
         match &instr.node.kind {
             InstrKind::IfI(_, _, block, _) => collect_block(block),
             InstrKind::HoldI(_, _, _, holdcase) => match holdcase {
@@ -39,7 +39,7 @@ pub fn collect_groups(block: &BlockDispatch) -> Vec<T> {
                 rel_signature,
                 exps,
                 body,
-            )) => vec![T {
+            )) => vec![RuleGroup {
                 hints: instr.hints.clone(),
                 id_rulegroup: id_rulegroup.clone(),
                 id_rel: id_rel.clone(),
@@ -50,7 +50,7 @@ pub fn collect_groups(block: &BlockDispatch) -> Vec<T> {
         }
     }
 
-    fn collect_block(block: &BlockDispatch) -> Vec<T> {
+    fn collect_block(block: &BlockDispatch) -> Vec<RuleGroup> {
         block.iter().flat_map(collect_instr).collect()
     }
 

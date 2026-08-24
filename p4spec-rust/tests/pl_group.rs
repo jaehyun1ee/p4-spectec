@@ -91,7 +91,7 @@ fn group_collection_preserves_depth_first_branch_order_and_hints() {
         ))),
     ];
 
-    let groups = pl::group::collect_groups(&block);
+    let groups: Vec<pl::group::RuleGroup> = pl::group::collect_groups(&block);
     assert_eq!(
         groups
             .iter()
