@@ -6,7 +6,7 @@ use p4spec_rust::{
         mixfix::Mixfix,
         source::{Region, Spanned},
     },
-    lang::{al, il, xl::num},
+    lang::{al, el, il, xl::num},
 };
 
 fn span(name: &str) -> Region {
@@ -547,4 +547,264 @@ fn free_al_shapes_and_definition_arms_are_exhaustive() {
     for (definition, expected) in definitions {
         assert_eq!(al::free::free_def(&definition), expected);
     }
+}
+
+fn text_typ() -> il::ast::Typ {
+    Spanned::new(il::ast::TypKind::TextT, span("text-type"))
+}
+
+fn text_expression(text: &str) -> il::ast::Exp {
+    il::ast::Exp::new(
+        il::ast::ExpKind::TextE(text.to_owned()),
+        il::ast::TypKind::TextT,
+        span("text-expression"),
+    )
+}
+
+fn keyword(name: &str) -> il::ast::Atom {
+    Spanned::new(Atom::Keyword(name.to_owned()), span(name))
+}
+
+fn notation(parts: Vec<Mixfix<il::ast::Typ>>) -> il::ast::NotTyp {
+    Spanned::new(Mixfix::Seq(parts), span("notation"))
+}
+
+fn premise(kind: il::ast::PremKind) -> il::ast::Prem {
+    Spanned::new(kind, span("premise"))
+}
+
+fn metadata_hint(metadata: &str) -> al::ast::Hint {
+    al::ast::Hint {
+        hintid: id(&format!("ignored-{metadata}")),
+        hintexp: Spanned::new(el::ast::ExpKind::TextE(metadata.to_owned()), span(metadata)),
+    }
+}
+
+fn composite_spec(metadata: &str, extern_inputs: Vec<i64>) -> al::ast::Spec {
+    let hints = vec![metadata_hint(metadata)];
+    let evaluate_notation = notation(vec![
+        Mixfix::Atom(keyword("eval")),
+        Mixfix::Arg(typ()),
+        Mixfix::Atom(keyword("=>")),
+        Mixfix::Arg(text_typ()),
+    ]);
+    let evaluate_match = (
+        vec![variable("signature")],
+        vec![text_expression("line\n\"\\")],
+        vec![premise(il::ast::PremKind::IfPr(variable("ready")))],
+    );
+    let evaluate_path = (
+        id("success"),
+        vec![premise(il::ast::PremKind::DebugPr(variable("trace")))],
+        vec![text_expression("done")],
+    );
+    let evaluate_group = Spanned::new(
+        (id("main"), evaluate_match, vec![evaluate_path]),
+        span(metadata),
+    );
+    let fallback_match = (
+        vec![variable("fallback_signature")],
+        vec![variable("fallback_input")],
+        Vec::new(),
+    );
+    let fallback_path = (
+        id("fallback"),
+        Vec::new(),
+        vec![text_expression("fallback")],
+    );
+    let else_group = Spanned::new(
+        (id("fallback_group"), fallback_match, fallback_path),
+        span(metadata),
+    );
+    let ready_notation = notation(vec![Mixfix::Atom(keyword("ready")), Mixfix::Arg(typ())]);
+    let ready_group = Spanned::new(
+        (
+            id("ready_group"),
+            (
+                vec![variable("ready_signature")],
+                vec![variable("ready_input")],
+                Vec::new(),
+            ),
+            vec![(id("holds"), Vec::new(), Vec::new())],
+        ),
+        span(metadata),
+    );
+    let table_row = Spanned::new(
+        (
+            vec![variable("table_signature")],
+            vec![arg_exp("key")],
+            text_expression("row\tvalue"),
+            vec![premise(il::ast::PremKind::IfPr(variable("ready")))],
+        ),
+        span(metadata),
+    );
+    let function_clause = Spanned::new(
+        (
+            vec![arg_exp("argument")],
+            text_expression("quoted\"\\"),
+            vec![premise(il::ast::PremKind::IfPr(variable("ready")))],
+        ),
+        span(metadata),
+    );
+    let else_clause = Spanned::new(
+        (
+            vec![arg_exp("fallback")],
+            expr(il::ast::ExpKind::BoolE(false)),
+            Vec::new(),
+        ),
+        span(metadata),
+    );
+    let def_type = Spanned::new(il::ast::DefTypKind::PlainT(typ()), span("defined-type"));
+    let parameter = Spanned::new(il::ast::ParamKind::ExpP(typ()), span("parameter"));
+
+    vec![
+        Spanned::new(
+            al::ast::DefKind::ExternTypD(id("External"), hints.clone()),
+            span(metadata),
+        ),
+        Spanned::new(
+            al::ast::DefKind::TypD(id("Box"), vec![id("T")], def_type, hints.clone()),
+            span(metadata),
+        ),
+        Spanned::new(
+            al::ast::DefKind::VarD(id("state"), typ(), hints.clone()),
+            span(metadata),
+        ),
+        Spanned::new(
+            al::ast::DefKind::ExternRelD(
+                id("Check"),
+                notation(vec![Mixfix::Atom(keyword("check")), Mixfix::Arg(typ())]),
+                extern_inputs,
+                hints.clone(),
+            ),
+            span(metadata),
+        ),
+        Spanned::new(
+            al::ast::DefKind::RelD(
+                id("Evaluate"),
+                evaluate_notation,
+                vec![0],
+                vec![evaluate_group],
+                Some(else_group),
+                hints.clone(),
+            ),
+            span(metadata),
+        ),
+        Spanned::new(
+            al::ast::DefKind::RelD(
+                id("Ready"),
+                ready_notation,
+                vec![0],
+                vec![ready_group],
+                None,
+                hints.clone(),
+            ),
+            span(metadata),
+        ),
+        Spanned::new(
+            al::ast::DefKind::ExternDecD(
+                id("external"),
+                Vec::new(),
+                vec![parameter.clone()],
+                typ(),
+                hints.clone(),
+            ),
+            span(metadata),
+        ),
+        Spanned::new(
+            al::ast::DefKind::BuiltinDecD(
+                id("builtin"),
+                Vec::new(),
+                vec![parameter.clone()],
+                typ(),
+                hints.clone(),
+            ),
+            span(metadata),
+        ),
+        Spanned::new(
+            al::ast::DefKind::TableDecD(
+                id("lookup"),
+                vec![parameter.clone()],
+                typ(),
+                vec![table_row],
+                hints.clone(),
+            ),
+            span(metadata),
+        ),
+        Spanned::new(
+            al::ast::DefKind::FuncDecD(
+                id("run"),
+                vec![id("T")],
+                vec![parameter],
+                typ(),
+                vec![function_clause],
+                Some(else_clause),
+                hints,
+            ),
+            span(metadata),
+        ),
+    ]
+}
+
+#[test]
+fn composite_al_spec_prints_in_ocaml_order_with_exact_spacing_and_escaping() {
+    let spec = composite_spec("source-a", vec![0]);
+
+    assert_eq!(
+        al::print::string_of_spec(&spec),
+        concat!(
+            "extern syntax External\n\n",
+            "syntax Box<T> = bool\n\n",
+            "var state : bool\n\n",
+            "extern relation Check: check bool\n\n",
+            "relation Evaluate: eval bool => text\n\n",
+            "  rulegroup main\n\n",
+            "   match\n\n",
+            "    (signature) eval signature => %\n",
+            "    eval \"line\\n\\\"\\\\\" => %\n",
+            "    -- if ready\n\n",
+            "   paths\n\n",
+            "    rulepath success\n",
+            "    -- debug trace\n",
+            "    -- output: eval % => \"done\"\n\n",
+            "  elsegroup\n\n",
+            "  rulegroup fallback_group\n\n",
+            "   match\n\n",
+            "    (signature) eval fallback_signature => %\n",
+            "    eval fallback_input => %\n\n",
+            "   paths\n\n",
+            "    rulepath fallback\n",
+            "    -- output: eval % => \"fallback\"\n\n",
+            "relation Ready: ready bool\n\n",
+            "  rulegroup ready_group\n\n",
+            "   match\n\n",
+            "    (signature) ready ready_signature\n",
+            "    ready ready_input\n\n",
+            "   paths\n\n",
+            "    rulepath holds\n",
+            "    -- the relation holds\n\n",
+            "extern def $external(bool) : bool\n\n",
+            "builtin def $builtin(bool) : bool\n\n",
+            "tbl def $lookup(bool) : bool =\n",
+            "  row 0 :\n",
+            "    (signature) table_signature\n",
+            "    (key) -> \"row\\tvalue\"\n",
+            "    -- if ready\n\n",
+            "def $run<T>(bool) : bool =\n\n",
+            "  clause 0 : (argument) = \"quoted\\\"\\\\\"\n",
+            "  -- if ready\n\n",
+            "  clause -1 : (fallback) = false",
+        )
+    );
+}
+
+#[test]
+fn composite_al_spec_omits_source_hints_and_extern_relation_inputs() {
+    let first = composite_spec("source-a", vec![0]);
+    let changed_metadata = composite_spec("source-b", vec![7, 9]);
+
+    assert_eq!(
+        al::print::string_of_spec(&first),
+        al::print::string_of_spec(&changed_metadata)
+    );
 }
