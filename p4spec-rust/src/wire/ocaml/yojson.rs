@@ -1,7 +1,7 @@
-//! Serialization-independent representation of external JSON-compatible data.
+//! Compatibility representation of `Yojson.Safe.t`.
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum ExternalData {
+pub enum Value {
     /// JSON null
     Null,
     /// JSON boolean
