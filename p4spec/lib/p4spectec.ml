@@ -7,6 +7,7 @@ module Boot_build = Backend_boot.Build
 type 'a result = ('a, Error.t) Stdlib.result
 
 let ( let* ) = Result.bind
+let ( let+ ) result f = Result.map f result
 
 (* Spec transformations *)
 
@@ -25,6 +26,33 @@ let structure ~(final : bool) (paths_spec : string list) : Lang.Sl.spec result =
 
 let annotate (paths_spec : string list) : Lang.Pl.spec result =
   Pass.annotate paths_spec |> Result.map_error (fun e -> Error.PassError e)
+
+type stage = EL | IL | AL | SL | PL
+
+let export_json (stage : stage) (paths_spec : string list) :
+    Yojson.Safe.t result =
+  let envelope schema kind payload =
+    `Assoc
+      [
+        ("schema", `String schema); ("kind", `String kind); ("payload", payload);
+      ]
+  in
+  match stage with
+  | EL ->
+      let+ spec = parse paths_spec in
+      envelope "p4spectec.el.v1" "el" (Lang.El.spec_to_yojson spec)
+  | IL ->
+      let+ spec = elab paths_spec in
+      envelope "p4spectec.il.v1" "il" (Lang.Il.spec_to_yojson spec)
+  | AL ->
+      let+ spec = algo paths_spec in
+      envelope "p4spectec.al.v1" "al" (Lang.Al.spec_to_yojson spec)
+  | SL ->
+      let+ spec = structure ~final:true paths_spec in
+      envelope "p4spectec.sl.v1" "sl" (Lang.Sl.spec_to_yojson spec)
+  | PL ->
+      let+ spec = annotate paths_spec in
+      envelope "p4spectec.pl.v1" "pl" (Lang.Pl.spec_to_yojson spec)
 
 (* Document generation *)
 

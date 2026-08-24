@@ -10,6 +10,7 @@ type hints = {
   prose_input_exps : Sl.exp list option;
   prose_output_exps : Sl.exp list option;
 }
+[@@deriving yojson]
 
 let empty : hints =
   {
@@ -23,7 +24,7 @@ let empty : hints =
     prose_output_exps = None;
   }
 
-type 'a t = { node : 'a; hints : hints }
+type 'a t = { node : 'a; hints : hints } [@@deriving yojson]
 
 (* Wrap a node with no prose hints. *)
 

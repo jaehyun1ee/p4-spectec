@@ -11,6 +11,7 @@ type t =
   | HoleH of [ `Next | `Num of int ]
   | FuseH of t * t
   | OtherH of exp
+[@@deriving yojson]
 
 let rec to_string (hint : t) =
   Format.asprintf "hint(alter %s)" (to_string' hint)

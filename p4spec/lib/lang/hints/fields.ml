@@ -3,7 +3,7 @@ open Util.Source
 
 (* Field hints *)
 
-type t = text list
+type t = text list [@@deriving yojson]
 
 let to_string (hint : t) : string =
   Format.asprintf "hint(fields %s)"

@@ -223,6 +223,34 @@ let prose_command =
        | Ok spec_pl -> Format.printf "%s\n" (Pl.Print.string_of_spec spec_pl)
        | Error e -> Format.printf "%s\n" (Error.to_string e))
 
+let export_json_command =
+  Core.Command.basic ~summary:"export a structured stage AST"
+    (let open Core.Command.Let_syntax in
+     let open Core.Command.Param in
+     let%map paths_spec = anon (non_empty_sequence_as_list ("path" %: string))
+     and stage =
+       flag "-stage" (required string) ~doc:"STAGE el, il, al, sl, or pl"
+     in
+     fun () ->
+       let stage =
+         match String.lowercase_ascii stage with
+         | "el" -> Ok P4spectec.EL
+         | "il" -> Ok P4spectec.IL
+         | "al" -> Ok P4spectec.AL
+         | "sl" -> Ok P4spectec.SL
+         | "pl" -> Ok P4spectec.PL
+         | stage -> Error (Error.CommandError ("unknown stage: " ^ stage))
+       in
+       match
+         Result.bind stage (fun stage -> P4spectec.export_json stage paths_spec)
+       with
+       | Ok json ->
+           Yojson.Safe.pretty_to_channel stdout json;
+           print_newline ()
+       | Error error ->
+           Format.eprintf "%s\n" (Error.to_string error);
+           exit 1)
+
 let run_command =
   Core.Command.basic ~summary:"execute the P4 spec against a P4 program"
     (let open Core.Command.Let_syntax in
@@ -693,6 +721,7 @@ let command =
       ("algo", algo_command);
       ("struct", struct_command);
       ("prose", prose_command);
+      ("export-json", export_json_command);
       (* Execution *)
       ("run", run_command);
       ("sim", sim_command);

@@ -4,60 +4,60 @@ open Util.Source
 
 (* Numbers *)
 
-type num = Sl.num
+type num = Sl.num [@@deriving yojson]
 
 (* Texts *)
 
-type text = Sl.text
+type text = Sl.text [@@deriving yojson]
 
 (* Identifiers *)
 
-type id = Sl.id
+type id = Sl.id [@@deriving yojson]
 
 (* Atoms *)
 
-type atom = Sl.atom
+type atom = Sl.atom [@@deriving yojson]
 
 (* Mixfix operators *)
 
-type mixop = Sl.mixop
+type mixop = Sl.mixop [@@deriving yojson]
 
 (* Iterators *)
 
-type iter = Sl.iter
+type iter = Sl.iter [@@deriving yojson]
 
 (* Variables *)
 
-type var = Sl.var
+type var = Sl.var [@@deriving yojson]
 
 (* Types *)
 
-type typ = Sl.typ
-type typ' = Sl.typ'
+type typ = Sl.typ [@@deriving yojson]
+type typ' = Sl.typ' [@@deriving yojson]
 
-type nottyp = Sl.nottyp
-type nottyp' = Sl.nottyp'
+type nottyp = Sl.nottyp [@@deriving yojson]
+type nottyp' = Sl.nottyp' [@@deriving yojson]
 
-type deftyp = Sl.deftyp
-type deftyp' = Sl.deftyp'
+type deftyp = Sl.deftyp [@@deriving yojson]
+type deftyp' = Sl.deftyp' [@@deriving yojson]
 
-type typfield = Sl.typfield
-type typcase = Sl.typcase
+type typfield = Sl.typfield [@@deriving yojson]
+type typcase = Sl.typcase [@@deriving yojson]
 
 (* Values *)
 
-type value = Sl.value
+type value = Sl.value [@@deriving yojson]
 
 (* Operators *)
 
-type unop = Sl.unop
-type binop = Sl.binop
-type cmpop = Sl.cmpop
-type optyp = Sl.optyp
+type unop = Sl.unop [@@deriving yojson]
+type binop = Sl.binop [@@deriving yojson]
+type cmpop = Sl.cmpop [@@deriving yojson]
+type optyp = Sl.optyp [@@deriving yojson]
 
 (* Subtype checks *)
 
-type subcheck = Sl.subcheck
+type subcheck = Sl.subcheck [@@deriving yojson]
 
 (* Expressions *)
 
@@ -127,6 +127,7 @@ and arg = arg' phrase
 and arg' =
   | ExpA of exp
   | DefA of id
+[@@deriving yojson]
 
 (* Dangling *)
 
@@ -184,6 +185,7 @@ and 'instr_tier instr' =
 and 'instr_tier block = 'instr_tier instr list
 
 and iterinstr = Sl.iterinstr
+[@@deriving yojson]
 
 (* Relations *)
 
@@ -198,6 +200,7 @@ type instr_group =
   | BacktrackI of block_group list
 
 and block_group = instr_group block
+[@@deriving yojson]
 
 (* Dispatch tier *)
 
@@ -206,25 +209,28 @@ type instr_dispatch =
   | RouteI of block_dispatch list
 
 and block_dispatch = instr_dispatch block
+[@@deriving yojson]
 
 (* Relations *)
 
-type externrel = id * rel_signature * exp list
+type externrel = id * rel_signature * exp list [@@deriving yojson]
 
 type rel = id * rel_signature * exp list * block_dispatch * block_dispatch option
+[@@deriving yojson]
 
 (* Functions *)
 
-type externfunc = id * tparam list * param list * typ
+type externfunc = id * tparam list * param list * typ [@@deriving yojson]
 
-type builtinfunc = id * tparam list * param list * typ
+type builtinfunc = id * tparam list * param list * typ [@@deriving yojson]
 
-type tablerow = exp list * exp * block_group
+type tablerow = exp list * exp * block_group [@@deriving yojson]
 
-type tablefunc = id * param list * typ * tablerow list
+type tablefunc = id * param list * typ * tablerow list [@@deriving yojson]
 
 type definedfunc =
   id * tparam list * param list * typ * block_group * block_group option
+[@@deriving yojson]
 
 (* Definitions *)
 
@@ -239,7 +245,8 @@ and def' =
   | BuiltinDecD of builtinfunc
   | TableDecD of tablefunc
   | FuncDecD of definedfunc
+[@@deriving yojson]
 
 (* Spec *)
 
-type spec = def list
+type spec = def list [@@deriving yojson]

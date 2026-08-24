@@ -205,7 +205,8 @@ and def' =
   (* `def` id `<` list(tparam, `,`) `>` list(arg, `,`) `=` exp list(`--` prem, nl) *)
   | FuncDefD of id * tparam list * arg list * exp * prem list
   | SepD
+[@@deriving yojson]
 
 (* Spec *)
 
-type spec = def list
+type spec = def list [@@deriving yojson]
