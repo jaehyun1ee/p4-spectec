@@ -7,7 +7,7 @@ use crate::lang::xl::num;
 
 // Numbers
 
-pub type Num = num::T;
+pub type Num = num::Number;
 
 // Texts
 

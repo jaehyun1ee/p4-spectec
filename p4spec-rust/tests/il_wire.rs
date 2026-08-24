@@ -1,6 +1,9 @@
 use std::collections::HashSet;
 
-use p4spec_rust::wire::ocaml::lang::il::{SpecCodec, ValueCodec, ValueEnvelopeCodec};
+use p4spec_rust::wire::ocaml::{
+    DecodeError,
+    lang::il::{SpecCodec, ValueCodec, ValueEnvelopeCodec},
+};
 use serde_json::{Value, json};
 
 fn position(line: i64, column: i64) -> Value {
@@ -39,6 +42,13 @@ fn bool_value(value: bool, vid: i64) -> Value {
     noted_phrase(
         json!(["BoolV", value]),
         json!({"vid": vid, "typ": ["BoolT"], "vhash": 0}),
+    )
+}
+
+fn natural_value(value: &str, vid: i64) -> Value {
+    noted_phrase(
+        json!(["NumV", ["Nat", value]]),
+        json!({"vid": vid, "typ": ["NumT", ["NatT"]], "vhash": 0}),
     )
 }
 
@@ -146,4 +156,23 @@ fn nested_value_encode_assigns_unique_identifiers() {
     assert_eq!(encoded["note"]["vhash"], 0);
     assert_eq!(vids.len(), 3);
     assert_eq!(vids.iter().copied().collect::<HashSet<_>>().len(), 3);
+}
+
+#[test]
+fn natural_value_wire_preserves_ocaml_json_spelling() {
+    let wire = natural_value("123456789012345678901234567890", 77);
+    let value = ValueCodec::decode(&wire).expect("decode natural IL value");
+
+    assert_eq!(
+        ValueCodec::encode(&value).expect("encode natural IL value"),
+        natural_value("123456789012345678901234567890", 0)
+    );
+}
+
+#[test]
+fn natural_value_wire_rejects_negative_payloads() {
+    let error =
+        ValueCodec::decode(&natural_value("-1", 9)).expect_err("reject negative natural IL value");
+
+    assert_eq!(error, DecodeError::Expected("non-negative natural number"));
 }

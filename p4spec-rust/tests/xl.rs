@@ -4,10 +4,14 @@ use num_bigint::BigInt;
 use p4spec_rust::{
     domain::source::{Region, Spanned},
     lang::xl::{
-        num::{self, BinOp, CmpOp, T, Typ, UnOp},
+        num::{self, BinOp, CmpOp, Natural, Number, NumericError, Typ, UnOp},
         utf8, var,
     },
 };
+
+fn natural(value: u64) -> Number {
+    Number::Nat(value.into())
+}
 
 #[test]
 fn utf8_round_trips_valid_codepoints() {
@@ -61,8 +65,8 @@ fn strip_var_suffix_preserves_source_and_all_underscore_suffixes() {
 
 #[test]
 fn numbers_preserve_ocaml_variant_order_and_subtyping() {
-    let large_nat = T::Nat(BigInt::from(100));
-    let small_int = T::Int(BigInt::from(-100));
+    let large_nat = natural(100);
+    let small_int = Number::Int(BigInt::from(-100));
 
     assert_eq!(num::compare(&large_nat, &small_int), Ordering::Less);
     assert_eq!(num::compare_typ(Typ::NatT, Typ::IntT), Ordering::Less);
@@ -72,24 +76,66 @@ fn numbers_preserve_ocaml_variant_order_and_subtyping() {
 
 #[test]
 fn numeric_operations_preserve_kinds_and_signed_rendering() {
-    let two = T::Nat(BigInt::from(2));
-    let three = T::Nat(BigInt::from(3));
-    let negative_three = T::Int(BigInt::from(-3));
+    let two = natural(2);
+    let three = natural(3);
+    let negative_three = Number::Int(BigInt::from(-3));
 
-    assert_eq!(num::bin(BinOp::AddOp, &two, &three), T::Nat(5.into()));
-    assert_eq!(num::bin(BinOp::SubOp, &two, &three), T::Int((-1).into()));
-    assert_eq!(num::un(UnOp::MinusOp, &two), T::Int((-2).into()));
-    assert!(num::cmp(CmpOp::LtOp, &two, &three));
-    assert_eq!(num::string_of_num(&T::Int(3.into())), "+3");
+    assert_eq!(num::bin(BinOp::AddOp, &two, &three), Ok(natural(5)));
+    assert_eq!(
+        num::bin(BinOp::SubOp, &two, &three),
+        Ok(Number::Int((-1).into()))
+    );
+    assert_eq!(num::un(UnOp::MinusOp, &two), Number::Int((-2).into()));
+    assert_eq!(num::cmp(CmpOp::LtOp, &two, &three), Ok(true));
+    assert_eq!(num::string_of_num(&Number::Int(3.into())), "+3");
     assert_eq!(num::string_of_num(&negative_three), "-3");
 }
 
 #[test]
-#[should_panic(expected = "invalid numeric binary operation")]
-fn numeric_operations_reject_mixed_kinds() {
-    num::bin(
-        BinOp::AddOp,
-        &T::Nat(BigInt::from(1)),
-        &T::Int(BigInt::from(1)),
+fn natural_numbers_reject_negative_payloads() {
+    assert_eq!(
+        Natural::try_from(BigInt::from(-1)),
+        Err(NumericError::NegativeNatural(BigInt::from(-1)))
+    );
+}
+
+#[test]
+fn binary_operations_report_zero_divisors() {
+    let operands = [
+        (natural(5), natural(0)),
+        (Number::Int(5.into()), Number::Int(0.into())),
+    ];
+
+    for (number_l, number_r) in operands {
+        for operation in [BinOp::DivOp, BinOp::ModOp] {
+            assert_eq!(
+                num::bin(operation, &number_l, &number_r),
+                Err(NumericError::ZeroDivisor(operation))
+            );
+        }
+    }
+}
+
+#[test]
+fn numeric_operations_report_mismatched_kinds() {
+    let natural = natural(1);
+    let integer = Number::Int(1.into());
+    let error = NumericError::MismatchedKinds {
+        left: Typ::NatT,
+        right: Typ::IntT,
+    };
+
+    assert_eq!(
+        num::bin(BinOp::AddOp, &natural, &integer),
+        Err(error.clone())
+    );
+    assert_eq!(num::cmp(CmpOp::LtOp, &natural, &integer), Err(error));
+}
+
+#[test]
+fn unsupported_binary_operations_return_errors() {
+    assert_eq!(
+        num::bin(BinOp::PowOp, &natural(2), &natural(3)),
+        Err(NumericError::UnsupportedBinaryOperation(BinOp::PowOp))
     );
 }

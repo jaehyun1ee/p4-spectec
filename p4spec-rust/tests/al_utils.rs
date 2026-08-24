@@ -196,7 +196,7 @@ fn free_expression_path_argument_and_premise_variants_collect_identifier_text() 
     let expressions = vec![
         (expr(il::ast::ExpKind::BoolE(true)), ids(&[])),
         (
-            expr(il::ast::ExpKind::NumE(num::T::Nat(0.into()))),
+            expr(il::ast::ExpKind::NumE(num::Number::Nat(0.into()))),
             ids(&[]),
         ),
         (expr(il::ast::ExpKind::TextE("text".to_owned())), ids(&[])),

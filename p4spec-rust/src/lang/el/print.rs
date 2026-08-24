@@ -14,11 +14,11 @@ fn join<T>(items: &[T], separator: &str, string_of: impl Fn(&T) -> String) -> St
 
 pub fn string_of_num(number: &Num) -> String {
     match number {
-        num::T::Nat(number) => number.to_string(),
-        num::T::Int(number) if number.sign() == num_bigint::Sign::Minus => {
+        num::Number::Nat(number) => number.to_string(),
+        num::Number::Int(number) if number.sign() == num_bigint::Sign::Minus => {
             format!("-{}", -number)
         }
-        num::T::Int(number) => format!("+{number}"),
+        num::Number::Int(number) => format!("+{number}"),
     }
 }
 
@@ -210,9 +210,9 @@ fn escaped(text: &str) -> String {
 pub fn string_of_exp(exp: &Exp) -> String {
     match &exp.node {
         ExpKind::BoolE(value) => value.to_string(),
-        ExpKind::NumE(NumOp::DecOp, num::T::Nat(number)) => number.to_string(),
-        ExpKind::NumE(NumOp::HexOp, num::T::Nat(number)) => {
-            format!("0x{}", number.to_str_radix(16).to_uppercase())
+        ExpKind::NumE(NumOp::DecOp, num::Number::Nat(number)) => number.to_string(),
+        ExpKind::NumE(NumOp::HexOp, num::Number::Nat(number)) => {
+            format!("0x{}", number.as_bigint().to_str_radix(16).to_uppercase())
         }
         ExpKind::NumE(_, number) => string_of_num(number),
         ExpKind::TextE(text) => format!("\"{}\"", escaped(text)),

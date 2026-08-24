@@ -12,7 +12,7 @@ use crate::lang::{el, hints::input::T as InputHint, xl::num};
 
 // Numbers
 
-pub type Num = num::T;
+pub type Num = num::Number;
 
 // Texts
 
