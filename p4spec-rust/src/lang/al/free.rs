@@ -161,8 +161,11 @@ pub fn free_elsegroup_opt(elsegroup: Option<&ElseGroup>) -> FreeVars {
 
 pub fn free_clause(clause: &Clause) -> FreeVars {
     union(
-        union(free_args(&clause.node.0), free_exp(&clause.node.1)),
-        free_prems(&clause.node.2),
+        union(
+            free_args(&clause.node.args),
+            free_exp(&clause.node.expression),
+        ),
+        free_prems(&clause.node.premises),
     )
 }
 

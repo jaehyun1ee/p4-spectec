@@ -137,8 +137,8 @@ pub fn string_of_deftyp(def_typ: &DefTyp) -> String {
 pub fn string_of_typfield(field: &TypField) -> String {
     format!(
         "{} {}",
-        string_of_atom(&field.0),
-        string_of_plaintyp(&field.1)
+        string_of_atom(&field.atom),
+        string_of_plaintyp(&field.typ)
     )
 }
 
@@ -427,13 +427,12 @@ pub fn string_of_prems(prems: &[Prem]) -> String {
 // Rules
 
 pub fn string_of_rule(rule: &Rule) -> String {
-    let (relid, ruleid, exp, prems) = &rule.node;
     format!(
         "rule {}{}:\n  {}{}",
-        string_of_relid(relid),
-        string_of_ruleid(ruleid),
-        string_of_exp(exp),
-        string_of_prems(prems)
+        string_of_relid(&rule.node.relation_id),
+        string_of_ruleid(&rule.node.rule_id),
+        string_of_exp(&rule.node.expression),
+        string_of_prems(&rule.node.premises)
     )
 }
 

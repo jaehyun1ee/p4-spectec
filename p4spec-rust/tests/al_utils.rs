@@ -166,9 +166,21 @@ fn al_equality_distinguishes_recursive_operands_variants_and_collection_rules() 
         &Spanned::new(il::ast::PremKind::IfPr(variable("x")), span("if")),
         &Spanned::new(il::ast::PremKind::DebugPr(variable("x")), span("debug")),
     ));
-    let iterprem = |bound, bind| (il::ast::Iter::List, bound, bind);
-    let x_var = (id("x"), typ(), Vec::new());
-    let y_var = (id("y"), typ(), Vec::new());
+    let iterprem = |bound, bind| il::ast::IterPrem {
+        iter: il::ast::Iter::List,
+        vars_bound: bound,
+        vars_bind: bind,
+    };
+    let x_var = il::ast::Var {
+        id: id("x"),
+        typ: typ(),
+        iters: Vec::new(),
+    };
+    let y_var = il::ast::Var {
+        id: id("y"),
+        typ: typ(),
+        iters: Vec::new(),
+    };
     assert!(al::eq::eq_iterprem(
         &iterprem(vec![x_var.clone(), y_var.clone()], vec![x_var.clone()]),
         &iterprem(vec![y_var.clone(), x_var.clone()], vec![x_var.clone()]),
@@ -363,7 +375,11 @@ fn free_expression_path_argument_and_premise_variants_collect_identifier_text() 
                     il::ast::PremKind::IfPr(variable("x")),
                     span("nested"),
                 )),
-                (il::ast::Iter::List, Vec::new(), Vec::new()),
+                il::ast::IterPrem {
+                    iter: il::ast::Iter::List,
+                    vars_bound: Vec::new(),
+                    vars_bind: Vec::new(),
+                },
             ),
             ids(&["x"]),
         ),
@@ -392,7 +408,11 @@ fn free_al_shapes_and_definition_arms_are_exhaustive() {
         span("else"),
     );
     let clause: al::ast::Clause = Spanned::new(
-        (vec![arg_exp("a")], variable("c"), vec![premise()]),
+        il::ast::ClauseKind {
+            args: vec![arg_exp("a")],
+            expression: variable("c"),
+            premises: vec![premise()],
+        },
         span("clause"),
     );
     let table: al::ast::TableRow = Spanned::new(
@@ -596,19 +616,19 @@ fn composite_spec(metadata: &str, extern_inputs: Vec<i64>) -> al::ast::Spec {
         span(metadata),
     );
     let function_clause = Spanned::new(
-        (
-            vec![arg_exp("argument")],
-            text_expression("quoted\"\\"),
-            vec![premise(il::ast::PremKind::IfPr(variable("ready")))],
-        ),
+        il::ast::ClauseKind {
+            args: vec![arg_exp("argument")],
+            expression: text_expression("quoted\"\\"),
+            premises: vec![premise(il::ast::PremKind::IfPr(variable("ready")))],
+        },
         span(metadata),
     );
     let else_clause = Spanned::new(
-        (
-            vec![arg_exp("fallback")],
-            expr(il::ast::ExpKind::BoolE(false)),
-            Vec::new(),
-        ),
+        il::ast::ClauseKind {
+            args: vec![arg_exp("fallback")],
+            expression: expr(il::ast::ExpKind::BoolE(false)),
+            premises: Vec::new(),
+        },
         span(metadata),
     );
     let def_type = Spanned::new(il::ast::DefTypKind::PlainT(typ()), span("defined-type"));
@@ -793,10 +813,13 @@ fn fresh_names_combine_alias_regions_collisions_wildcards_and_nested_dimensions(
         requested.clone(),
         &nested,
     );
-    assert_eq!(variable.0.node, "Alias''");
-    assert_eq!(variable.0.span, alias_region);
-    assert_eq!(variable.1, alias_typ);
-    assert_eq!(variable.2, vec![il::ast::Iter::Opt, il::ast::Iter::List]);
+    assert_eq!(variable.id.node, "Alias''");
+    assert_eq!(variable.id.span, alias_region);
+    assert_eq!(variable.typ, alias_typ);
+    assert_eq!(
+        variable.iters,
+        vec![il::ast::Iter::Opt, il::ast::Iter::List]
+    );
 
     aliases.insert(
         "Other".to_owned(),
@@ -811,10 +834,13 @@ fn fresh_names_combine_alias_regions_collisions_wildcards_and_nested_dimensions(
         requested.clone(),
         &nested,
     );
-    assert_eq!(wildcard.0.node, "_bool''");
-    assert_eq!(wildcard.0.span, requested);
-    assert_eq!(wildcard.1.node, il::ast::TypKind::BoolT);
-    assert_eq!(wildcard.2, vec![il::ast::Iter::Opt, il::ast::Iter::List]);
+    assert_eq!(wildcard.id.node, "_bool''");
+    assert_eq!(wildcard.id.span, requested);
+    assert_eq!(wildcard.typ.node, il::ast::TypKind::BoolT);
+    assert_eq!(
+        wildcard.iters,
+        vec![il::ast::Iter::Opt, il::ast::Iter::List]
+    );
 
     let (generated_ids, generated) =
         al::fresh::exp_from_typ(true, &aliases, &ids(&["bool"]), &nested);
@@ -828,6 +854,6 @@ fn fresh_names_combine_alias_regions_collisions_wildcards_and_nested_dimensions(
     };
     assert_eq!(inner_binders.len(), 1);
     assert_eq!(outer_binders.len(), 1);
-    assert!(inner_binders[0].2.is_empty());
-    assert_eq!(outer_binders[0].2, vec![il::ast::Iter::Opt]);
+    assert!(inner_binders[0].iters.is_empty());
+    assert_eq!(outer_binders[0].iters, vec![il::ast::Iter::Opt]);
 }

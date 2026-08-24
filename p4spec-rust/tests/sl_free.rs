@@ -80,7 +80,11 @@ fn guards_collect_only_embedded_expressions() {
 #[test]
 fn instructions_collect_nested_expressions_and_omit_binding_metadata() {
     let hidden = instr(sl::ast::InstrKind::ReturnI(variable("hidden")));
-    let binder = (id("binder"), typ(), Vec::new());
+    let binder = il::ast::Var {
+        id: id("binder"),
+        typ: typ(),
+        iters: Vec::new(),
+    };
     let signature = (
         Spanned::new(Mixfix::Seq(Vec::new()), span("notation")),
         InputHint::new(vec![0]),
@@ -128,11 +132,11 @@ fn instructions_collect_nested_expressions_and_omit_binding_metadata() {
             instr(sl::ast::InstrKind::LetI(
                 variable("left"),
                 variable("right"),
-                vec![(
-                    il::ast::Iter::List,
-                    vec![binder.clone()],
-                    vec![binder.clone()],
-                )],
+                vec![il::ast::IterPrem {
+                    iter: il::ast::Iter::List,
+                    vars_bound: vec![binder.clone()],
+                    vars_bind: vec![binder.clone()],
+                }],
                 vec![instr(sl::ast::InstrKind::ReturnI(variable("let-body")))],
             )),
             names(&["left", "right", "let-body"]),
@@ -142,7 +146,11 @@ fn instructions_collect_nested_expressions_and_omit_binding_metadata() {
                 id("rule"),
                 Mixfix::Arg(variable("rule-input")),
                 InputHint::new(vec![0]),
-                vec![(il::ast::Iter::List, vec![binder.clone()], vec![binder])],
+                vec![il::ast::IterPrem {
+                    iter: il::ast::Iter::List,
+                    vars_bound: vec![binder.clone()],
+                    vars_bind: vec![binder],
+                }],
                 vec![instr(sl::ast::InstrKind::ReturnI(variable("rule-body")))],
             )),
             names(&["rule-input", "rule-body"]),

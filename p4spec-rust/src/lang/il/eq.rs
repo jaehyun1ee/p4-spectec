@@ -51,9 +51,7 @@ fn compare_iters(iters_a: &[Iter], iters_b: &[Iter]) -> Ordering {
 // Variables
 
 pub fn eq_var(var_a: &Var, var_b: &Var) -> bool {
-    let (id_a, _typ_a, iters_a) = var_a;
-    let (id_b, _typ_b, iters_b) = var_b;
-    eq_id(id_a, id_b) && iters_a == iters_b
+    eq_id(&var_a.id, &var_b.id) && var_a.iters == var_b.iters
 }
 
 pub fn eq_vars(vars_a: &[Var], vars_b: &[Var]) -> bool {
@@ -61,10 +59,10 @@ pub fn eq_vars(vars_a: &[Var], vars_b: &[Var]) -> bool {
     let mut vars_b = vars_b.iter().collect::<Vec<_>>();
     let compare = |var_a: &&Var, var_b: &&Var| {
         var_a
-            .0
+            .id
             .node
-            .cmp(&var_b.0.node)
-            .then_with(|| compare_iters(&var_a.2, &var_b.2))
+            .cmp(&var_b.id.node)
+            .then_with(|| compare_iters(&var_a.iters, &var_b.iters))
     };
     vars_a.sort_by(compare);
     vars_b.sort_by(compare);
@@ -346,9 +344,9 @@ pub fn eq_prem(prem_a: &Prem, prem_b: &Prem) -> bool {
 }
 
 pub fn eq_iterprem(iterprem_a: &IterPrem, iterprem_b: &IterPrem) -> bool {
-    eq_iter(iterprem_a.0, iterprem_b.0)
-        && eq_vars(&iterprem_a.1, &iterprem_b.1)
-        && eq_vars(&iterprem_a.2, &iterprem_b.2)
+    eq_iter(iterprem_a.iter, iterprem_b.iter)
+        && eq_vars(&iterprem_a.vars_bound, &iterprem_b.vars_bound)
+        && eq_vars(&iterprem_a.vars_bind, &iterprem_b.vars_bind)
 }
 
 pub fn eq_iterprems(iterprems_a: &[IterPrem], iterprems_b: &[IterPrem]) -> bool {

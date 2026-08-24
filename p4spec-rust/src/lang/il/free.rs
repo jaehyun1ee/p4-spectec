@@ -100,12 +100,13 @@ pub fn free_prems(xs: &[Prem]) -> FreeVars {
 // Rules
 
 pub fn free_rule(r: &Rule) -> FreeVars {
-    let (_, m, p) = &r.node;
     add(
-        m.args()
+        r.node
+            .notation
+            .args()
             .into_iter()
             .fold(FreeVars::new(), |a, x| add(a, free_exp(x))),
-        free_prems(p),
+        free_prems(&r.node.premises),
     )
 }
 pub fn free_rules(xs: &[Rule]) -> FreeVars {
@@ -127,8 +128,10 @@ pub fn free_elsegroup_opt(g: &Option<ElseGroup>) -> FreeVars {
 // Clauses
 
 pub fn free_clause(c: &Clause) -> FreeVars {
-    let (a, x, p) = &c.node;
-    add(free_args(a), add(free_exp(x), free_prems(p)))
+    add(
+        free_args(&c.node.args),
+        add(free_exp(&c.node.expression), free_prems(&c.node.premises)),
+    )
 }
 pub fn free_clauses(xs: &[Clause]) -> FreeVars {
     many(xs, free_clause)

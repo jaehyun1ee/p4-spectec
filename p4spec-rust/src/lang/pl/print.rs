@@ -591,7 +591,7 @@ fn string_of_elseblock_opt_with<Tier>(
 }
 
 pub fn string_of_iterinstr(iterinstr: &IterInstr) -> &'static str {
-    string_of_iter(iterinstr.0)
+    string_of_iter(iterinstr.iter)
 }
 
 pub fn string_of_iterinstrs(iterinstrs: &[IterInstr]) -> String {

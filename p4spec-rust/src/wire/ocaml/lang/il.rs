@@ -162,20 +162,20 @@ pub(super) fn encode_iter(iter: Iter) -> Value {
 
 pub(super) fn decode_var(value: &Value) -> Result<ast::Var, DecodeError> {
     match array(value)? {
-        [id, typ, iters] => Ok((
-            decode_id(id)?,
-            decode_typ(typ)?,
-            decode_list(iters, decode_iter)?,
-        )),
+        [id, typ, iters] => Ok(ast::Var {
+            id: decode_id(id)?,
+            typ: decode_typ(typ)?,
+            iters: decode_list(iters, decode_iter)?,
+        }),
         _ => Err(DecodeError::Expected("IL variable triple")),
     }
 }
 
-pub(super) fn encode_var((id, typ, iters): &ast::Var) -> Value {
+pub(super) fn encode_var(variable: &ast::Var) -> Value {
     json!([
-        encode_id(id),
-        encode_typ(typ),
-        encode_list(iters, |iter| encode_iter(*iter))
+        encode_id(&variable.id),
+        encode_typ(&variable.typ),
+        encode_list(&variable.iters, |iter| encode_iter(*iter))
     ])
 }
 
@@ -285,11 +285,11 @@ pub(super) fn decode_def_typ(value: &Value) -> Result<ast::DefTyp, DecodeError> 
             ("VariantT", [cases]) => Ok(DefTypKind::VariantT(decode_list(
                 cases,
                 |case| match array(case)? {
-                    [not_typ, origin, hints] => Ok((
-                        decode_not_typ(not_typ)?,
-                        decode_typ_origin(origin)?,
-                        decode_list(hints, el::decode_hint)?,
-                    )),
+                    [not_typ, origin, hints] => Ok(ast::TypCase {
+                        notation: decode_not_typ(not_typ)?,
+                        origin: decode_typ_origin(origin)?,
+                        hints: decode_list(hints, el::decode_hint)?,
+                    }),
                     _ => Err(DecodeError::Expected("IL type case triple")),
                 },
             )?)),
@@ -315,10 +315,10 @@ pub(super) fn encode_def_typ(typ: &ast::DefTyp) -> Value {
             "VariantT",
             cases
                 .iter()
-                .map(|(not_typ, origin, hints)| json!([
-                    encode_not_typ(not_typ),
-                    encode_typ_origin(origin),
-                    encode_list(hints, el::encode_hint)
+                .map(|case| json!([
+                    encode_not_typ(&case.notation),
+                    encode_typ_origin(&case.origin),
+                    encode_list(&case.hints, el::encode_hint)
                 ]))
                 .collect::<Vec<_>>()
         ]),
@@ -1431,40 +1431,40 @@ pub(super) fn encode_prem(prem: &ast::Prem) -> Value {
 
 pub(super) fn decode_iter_prem(value: &Value) -> Result<ast::IterPrem, DecodeError> {
     match array(value)? {
-        [iter, left, right] => Ok((
-            decode_iter(iter)?,
-            decode_list(left, decode_var)?,
-            decode_list(right, decode_var)?,
-        )),
+        [iter, left, right] => Ok(ast::IterPrem {
+            iter: decode_iter(iter)?,
+            vars_bound: decode_list(left, decode_var)?,
+            vars_bind: decode_list(right, decode_var)?,
+        }),
         _ => Err(DecodeError::Expected("IL premise iterator triple")),
     }
 }
 
-pub(super) fn encode_iter_prem((iter, left, right): &ast::IterPrem) -> Value {
+pub(super) fn encode_iter_prem(iterprem: &ast::IterPrem) -> Value {
     json!([
-        encode_iter(*iter),
-        encode_list(left, encode_var),
-        encode_list(right, encode_var)
+        encode_iter(iterprem.iter),
+        encode_list(&iterprem.vars_bound, encode_var),
+        encode_list(&iterprem.vars_bind, encode_var)
     ])
 }
 
 fn decode_rule(value: &Value) -> Result<ast::Rule, DecodeError> {
     source::decode_phrase(value, |value| match array(value)? {
-        [id, exp, prems] => Ok((
-            decode_id(id)?,
-            decode_not_exp(exp)?,
-            decode_list(prems, decode_prem)?,
-        )),
+        [id, exp, prems] => Ok(ast::RuleKind {
+            id: decode_id(id)?,
+            notation: decode_not_exp(exp)?,
+            premises: decode_list(prems, decode_prem)?,
+        }),
         _ => Err(DecodeError::Expected("IL rule triple")),
     })
 }
 
 fn encode_rule(rule: &ast::Rule) -> Value {
-    source::encode_phrase(rule, |(id, exp, prems)| {
+    source::encode_phrase(rule, |rule| {
         json!([
-            encode_id(id),
-            encode_not_exp(exp),
-            encode_list(prems, encode_prem)
+            encode_id(&rule.id),
+            encode_not_exp(&rule.notation),
+            encode_list(&rule.premises, encode_prem)
         ])
     })
 }
@@ -1497,21 +1497,21 @@ fn encode_else_group(group: &ast::ElseGroup) -> Value {
 
 pub(super) fn decode_clause(value: &Value) -> Result<ast::Clause, DecodeError> {
     source::decode_phrase(value, |value| match array(value)? {
-        [args, exp, prems] => Ok((
-            decode_list(args, decode_arg)?,
-            decode_exp(exp)?,
-            decode_list(prems, decode_prem)?,
-        )),
+        [args, exp, prems] => Ok(ast::ClauseKind {
+            args: decode_list(args, decode_arg)?,
+            expression: decode_exp(exp)?,
+            premises: decode_list(prems, decode_prem)?,
+        }),
         _ => Err(DecodeError::Expected("IL clause triple")),
     })
 }
 
 pub(super) fn encode_clause(clause: &ast::Clause) -> Value {
-    source::encode_phrase(clause, |(args, exp, prems)| {
+    source::encode_phrase(clause, |clause| {
         json!([
-            encode_list(args, encode_arg),
-            encode_exp(exp),
-            encode_list(prems, encode_prem)
+            encode_list(&clause.args, encode_arg),
+            encode_exp(&clause.expression),
+            encode_list(&clause.premises, encode_prem)
         ])
     })
 }

@@ -145,8 +145,10 @@ pub fn free_id_prems(prems: &[Prem]) -> IdSet {
 // Rules
 
 pub fn free_rule(rule: &Rule) -> IdSet {
-    let (_, _, exp, prems) = &rule.node;
-    union(free_id_exp(exp), free_id_prems(prems))
+    union(
+        free_id_exp(&rule.node.expression),
+        free_id_prems(&rule.node.premises),
+    )
 }
 
 pub fn free_rules(rules: &[Rule]) -> IdSet {

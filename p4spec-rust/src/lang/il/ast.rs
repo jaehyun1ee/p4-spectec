@@ -44,7 +44,12 @@ pub enum Iter {
 
 // Variables
 
-pub type Var = (Id, Typ, Vec<Iter>);
+#[derive(Clone, Debug, PartialEq)]
+pub struct Var {
+    pub id: Id,
+    pub typ: Typ,
+    pub iters: Vec<Iter>,
+}
 
 // Types
 
@@ -96,7 +101,12 @@ pub enum DefTypKind {
 pub type TypField = (Atom, Typ);
 pub type TypOrigin = Spanned<TypOriginKind>;
 pub type TypOriginKind = (Id, Vec<Targ>);
-pub type TypCase = (NotTyp, TypOrigin, Vec<Hint>);
+#[derive(Clone, Debug, PartialEq)]
+pub struct TypCase {
+    pub notation: NotTyp,
+    pub origin: TypOrigin,
+    pub hints: Vec<Hint>,
+}
 
 // Values
 
@@ -372,12 +382,23 @@ pub enum PremKind {
     DebugPr(Exp),
 }
 
-pub type IterPrem = (Iter, Vec<Var>, Vec<Var>);
+#[derive(Clone, Debug, PartialEq)]
+pub struct IterPrem {
+    pub iter: Iter,
+    pub vars_bound: Vec<Var>,
+    pub vars_bind: Vec<Var>,
+}
 
 // Rules
 
 pub type Rule = Spanned<RuleKind>;
-pub type RuleKind = (Id, NotExp, Vec<Prem>);
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct RuleKind {
+    pub id: Id,
+    pub notation: NotExp,
+    pub premises: Vec<Prem>,
+}
 
 pub type RuleGroup = Spanned<RuleGroupKind>;
 pub type RuleGroupKind = (Id, Vec<Rule>);
@@ -388,7 +409,13 @@ pub type ElseGroupKind = (Id, Rule);
 // Clauses
 
 pub type Clause = Spanned<ClauseKind>;
-pub type ClauseKind = (Vec<Arg>, Exp, Vec<Prem>);
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ClauseKind {
+    pub args: Vec<Arg>,
+    pub expression: Exp,
+    pub premises: Vec<Prem>,
+}
 
 pub type ElseClause = Clause;
 pub type ElseClauseKind = ClauseKind;

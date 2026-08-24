@@ -609,20 +609,20 @@ fn encode_def_typ(typ: &ast::DefTyp) -> Value {
 
 fn decode_typ_field(value: &Value) -> Result<ast::TypField, DecodeError> {
     match array(value)? {
-        [atom, typ, hints] => Ok((
-            AtomPhraseCodec::decode(atom)?,
-            decode_plain_typ(typ)?,
-            decode_list(hints, decode_hint)?,
-        )),
+        [atom, typ, hints] => Ok(ast::TypField {
+            atom: AtomPhraseCodec::decode(atom)?,
+            typ: decode_plain_typ(typ)?,
+            hints: decode_list(hints, decode_hint)?,
+        }),
         _ => Err(DecodeError::Expected("EL type field triple")),
     }
 }
 
-fn encode_typ_field((atom, typ, hints): &ast::TypField) -> Value {
+fn encode_typ_field(field: &ast::TypField) -> Value {
     json!([
-        AtomPhraseCodec::encode(atom),
-        encode_plain_typ(typ),
-        encode_list(hints, encode_hint)
+        AtomPhraseCodec::encode(&field.atom),
+        encode_plain_typ(&field.typ),
+        encode_list(&field.hints, encode_hint)
     ])
 }
 
@@ -711,23 +711,23 @@ fn encode_prem(prem: &ast::Prem) -> Value {
 
 fn decode_rule(value: &Value) -> Result<ast::Rule, DecodeError> {
     source::decode_phrase(value, |value| match array(value)? {
-        [rel, id, exp, prems] => Ok((
-            decode_id(rel)?,
-            decode_id(id)?,
-            decode_exp(exp)?,
-            decode_list(prems, decode_prem)?,
-        )),
+        [rel, id, exp, prems] => Ok(ast::RuleKind {
+            relation_id: decode_id(rel)?,
+            rule_id: decode_id(id)?,
+            expression: decode_exp(exp)?,
+            premises: decode_list(prems, decode_prem)?,
+        }),
         _ => Err(DecodeError::Expected("EL rule quadruple")),
     })
 }
 
 fn encode_rule(rule: &ast::Rule) -> Value {
-    source::encode_phrase(rule, |(rel, id, exp, prems)| {
+    source::encode_phrase(rule, |rule| {
         json!([
-            encode_id(rel),
-            encode_id(id),
-            encode_exp(exp),
-            encode_list(prems, encode_prem)
+            encode_id(&rule.relation_id),
+            encode_id(&rule.rule_id),
+            encode_exp(&rule.expression),
+            encode_list(&rule.premises, encode_prem)
         ])
     })
 }

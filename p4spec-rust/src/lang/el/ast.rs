@@ -244,7 +244,13 @@ pub enum DefTypKind {
     VariantTD(Vec<TypCase>),
 }
 
-pub type TypField = (Atom, PlainTyp, Vec<Hint>);
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TypField {
+    pub atom: Atom,
+    pub typ: PlainTyp,
+    pub hints: Vec<Hint>,
+}
+
 pub type TypCase = (Typ, Vec<Hint>);
 
 // Parameters and premises
@@ -276,7 +282,14 @@ pub enum PremKind {
 // Rules and tables
 
 pub type Rule = Spanned<RuleKind>;
-pub type RuleKind = (Id, Id, Exp, Vec<Prem>);
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RuleKind {
+    pub relation_id: Id,
+    pub rule_id: Id,
+    pub expression: Exp,
+    pub premises: Vec<Prem>,
+}
 
 pub type TableRow = Spanned<TableRowKind>;
 pub type TableRowKind = (Exp, Exp);

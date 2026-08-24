@@ -79,8 +79,8 @@ pub fn string_of_iter(iter: Iter) -> &'static str {
 pub fn string_of_var(variable: &Var) -> String {
     format!(
         "{}{}",
-        string_of_varid(&variable.0),
-        join(&variable.2, "", |iter| string_of_iter(*iter).into())
+        string_of_varid(&variable.id),
+        join(&variable.iters, "", |iter| string_of_iter(*iter).into())
     )
 }
 
@@ -132,9 +132,9 @@ pub fn string_of_typorigin(origin: &TypOrigin) -> String {
 pub fn string_of_typcase(case: &TypCase) -> String {
     format!(
         "{} {} {}",
-        string_of_nottyp(&case.0),
-        string_of_typorigin(&case.1),
-        string_of_hints(&case.2)
+        string_of_nottyp(&case.notation),
+        string_of_typorigin(&case.origin),
+        string_of_hints(&case.hints)
     )
 }
 pub fn string_of_typcases(separator: &str, cases: &[TypCase]) -> String {
@@ -327,7 +327,7 @@ pub fn string_of_iterexp(iterexp: &IterExp) -> String {
         string_of_iter(iterexp.0),
         join(&iterexp.1, ", ", |variable| {
             let mut iterated = variable.clone();
-            iterated.2.push(iterexp.0);
+            iterated.iters.push(iterexp.0);
             format!(
                 "{} <- {}",
                 string_of_var(variable),
@@ -470,7 +470,7 @@ pub fn string_of_prems_with(level: usize, prems: &[Prem]) -> String {
 pub fn string_of_iterprem(iterprem: &IterPrem) -> String {
     let render = |variable: &Var, arrow: &str| {
         let mut iterated = variable.clone();
-        iterated.2.push(iterprem.0);
+        iterated.iters.push(iterprem.iter);
         format!(
             "{} {} {}",
             string_of_var(variable),
@@ -480,13 +480,13 @@ pub fn string_of_iterprem(iterprem: &IterPrem) -> String {
     };
     format!(
         "{}{{{}}}",
-        string_of_iter(iterprem.0),
+        string_of_iter(iterprem.iter),
         join(
             &iterprem
-                .1
+                .vars_bound
                 .iter()
                 .map(|var| render(var, "<-"))
-                .chain(iterprem.2.iter().map(|var| render(var, "->")))
+                .chain(iterprem.vars_bind.iter().map(|var| render(var, "->")))
                 .collect::<Vec<_>>(),
             ", ",
             Clone::clone
@@ -501,9 +501,9 @@ pub fn string_of_iterprems(iterprems: &[IterPrem]) -> String {
 pub fn string_of_rule(rule: &Rule) -> String {
     format!(
         "rule {}: {}{}",
-        string_of_ruleid(&rule.node.0),
-        string_of_notexp(&rule.node.1),
-        string_of_prems_with(2, &rule.node.2)
+        string_of_ruleid(&rule.node.id),
+        string_of_notexp(&rule.node.notation),
+        string_of_prems_with(2, &rule.node.premises)
     )
 }
 pub fn string_of_rules(rules: &[Rule]) -> String {
@@ -544,9 +544,9 @@ pub fn string_of_elsegroup_opt(group: &Option<ElseGroup>) -> String {
 pub fn string_of_clause(index: i64, clause: &Clause) -> String {
     format!(
         "clause {index} : {} = {}{}",
-        string_of_args(&clause.node.0),
-        string_of_exp(&clause.node.1),
-        string_of_prems_with(1, &clause.node.2)
+        string_of_args(&clause.node.args),
+        string_of_exp(&clause.node.expression),
+        string_of_prems_with(1, &clause.node.premises)
     )
 }
 pub fn string_of_clauses(clauses: &[Clause]) -> String {

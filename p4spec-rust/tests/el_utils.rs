@@ -116,12 +116,12 @@ fn free_collection_covers_paths_calls_premises_and_definition_bodies() {
         ast::Iter::List,
     ));
     let rule = Spanned::new(
-        (
-            id("relation", "rule.watsup"),
-            id("", "rule.watsup"),
-            expression.clone(),
-            vec![iteration, prem(ast::PremKind::IfPr(variable("guard")))],
-        ),
+        ast::RuleKind {
+            relation_id: id("relation", "rule.watsup"),
+            rule_id: id("", "rule.watsup"),
+            expression: expression.clone(),
+            premises: vec![iteration, prem(ast::PremKind::IfPr(variable("guard")))],
+        },
         span("rule.watsup"),
     );
     let function = definition(ast::DefKind::FuncDefD(
@@ -242,7 +242,11 @@ fn printer_preserves_el_delimiters_precedence_hints_and_definition_separators() 
             id("Record", "def"),
             vec![],
             Spanned::new(
-                ast::DefTypKind::StructTD(vec![(atom("field"), bool_typ(), vec![hint.clone()])]),
+                ast::DefTypKind::StructTD(vec![ast::TypField {
+                    atom: atom("field"),
+                    typ: bool_typ(),
+                    hints: vec![hint.clone()],
+                }]),
                 span("def"),
             ),
             vec![hint.clone()],
@@ -342,12 +346,12 @@ fn printer_matches_ocaml_byte_escaping_and_public_collection_helpers() {
         "eps => eps\n  | eps => eps"
     );
     let rule = Spanned::new(
-        (
-            id("r", "rule"),
-            id("", "rule"),
-            exp(ExpKind::EpsE, "rule"),
-            vec![],
-        ),
+        ast::RuleKind {
+            relation_id: id("r", "rule"),
+            rule_id: id("", "rule"),
+            expression: exp(ExpKind::EpsE, "rule"),
+            premises: vec![],
+        },
         span("rule"),
     );
     assert_eq!(
@@ -555,7 +559,12 @@ fn printer_tables_cover_remaining_el_constructor_families() {
         assert_eq!(print::string_of_prem(&premise), expected);
     }
     let rule = Spanned::new(
-        (id("r", "rule"), id("g", "rule"), var("x"), vec![]),
+        ast::RuleKind {
+            relation_id: id("r", "rule"),
+            rule_id: id("g", "rule"),
+            expression: var("x"),
+            premises: vec![],
+        },
         span("rule"),
     );
     assert_eq!(

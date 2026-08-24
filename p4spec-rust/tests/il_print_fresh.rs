@@ -224,7 +224,11 @@ fn printer_tables_cover_il_constructor_families_and_escapes() {
                 Box::new(var("x")),
                 (
                     ast::Iter::Opt,
-                    vec![(id("z"), typ(), vec![ast::Iter::List])],
+                    vec![ast::Var {
+                        id: id("z"),
+                        typ: typ(),
+                        iters: vec![ast::Iter::List],
+                    }],
                 ),
             )),
             "x?{z* <- z*?}",
@@ -272,11 +276,19 @@ fn printer_tables_cover_il_constructor_families_and_escapes() {
 
 #[test]
 fn printer_renders_nested_premises_and_definition_spec_goldens() {
-    let iteration = (
-        ast::Iter::List,
-        vec![(id("bound"), typ(), vec![])],
-        vec![(id("output"), typ(), vec![ast::Iter::Opt])],
-    );
+    let iteration = ast::IterPrem {
+        iter: ast::Iter::List,
+        vars_bound: vec![ast::Var {
+            id: id("bound"),
+            typ: typ(),
+            iters: vec![],
+        }],
+        vars_bind: vec![ast::Var {
+            id: id("output"),
+            typ: typ(),
+            iters: vec![ast::Iter::Opt],
+        }],
+    };
     let nested = prem(ast::PremKind::IterPr(
         Box::new(prem(ast::PremKind::IterPr(
             Box::new(prem(ast::PremKind::IfPr(var("ready")))),
@@ -289,10 +301,10 @@ fn printer_renders_nested_premises_and_definition_spec_goldens() {
         "(if ready)*{bound <- bound*, output? -> output?*}*{bound <- bound*, output? -> output?*}"
     );
     let rule = Spanned::new(
-        (
-            id("r"),
-            notexp("head"),
-            vec![
+        ast::RuleKind {
+            id: id("r"),
+            notation: notexp("head"),
+            premises: vec![
                 prem(ast::PremKind::RulePr(
                     id("relation"),
                     notexp("input"),
@@ -301,17 +313,17 @@ fn printer_renders_nested_premises_and_definition_spec_goldens() {
                 prem(ast::PremKind::LetPr(var("left"), var("right"))),
                 nested,
             ],
-        ),
+        },
         Region::none(),
     );
     let group = Spanned::new((id("main"), vec![rule.clone()]), Region::none());
     let else_group = Spanned::new((id("fallback"), rule.clone()), Region::none());
     let clause = Spanned::new(
-        (
-            vec![arg(ast::ArgKind::ExpA(var("argument")))],
-            var("result"),
-            vec![prem(ast::PremKind::DebugPr(var("debug")))],
-        ),
+        ast::ClauseKind {
+            args: vec![arg(ast::ArgKind::ExpA(var("argument")))],
+            expression: var("result"),
+            premises: vec![prem(ast::PremKind::DebugPr(var("debug")))],
+        },
         Region::none(),
     );
     let row = Spanned::new(
@@ -328,11 +340,11 @@ fn printer_renders_nested_premises_and_definition_spec_goldens() {
                 id("Alias"),
                 vec![Spanned::new("T".into(), Region::none())],
                 Spanned::new(
-                    ast::DefTypKind::VariantT(vec![(
-                        nottyp(),
-                        Spanned::new((id("Origin"), vec![]), Region::none()),
-                        vec![],
-                    )]),
+                    ast::DefTypKind::VariantT(vec![ast::TypCase {
+                        notation: nottyp(),
+                        origin: Spanned::new((id("Origin"), vec![]), Region::none()),
+                        hints: vec![],
+                    }]),
                     Region::none(),
                 ),
                 vec![],
@@ -437,22 +449,22 @@ fn fresh_uses_aliases_collisions_wildcards_and_dimensions_deterministically() {
     let alias = fresh::var_from_typ(&aliases, &BTreeSet::new(), at.clone(), &typ());
     assert_eq!(
         (
-            alias.0.node.as_str(),
-            alias.1.node.clone(),
-            alias.2.as_slice()
+            alias.id.node.as_str(),
+            alias.typ.node.clone(),
+            alias.iters.as_slice()
         ),
         ("B", ast::TypKind::BoolT, &[] as &[ast::Iter])
     );
     aliases.insert("C".into(), typ());
     assert_eq!(
         fresh::var_from_typ(&aliases, &BTreeSet::new(), at.clone(), &typ())
-            .0
+            .id
             .node,
         "bool"
     );
     assert_eq!(
         fresh::var_from_typ_wildcard(&BTreeMap::new(), &BTreeSet::new(), at.clone(), &typ())
-            .0
+            .id
             .node,
         "_bool"
     );
@@ -467,16 +479,16 @@ fn fresh_uses_aliases_collisions_wildcards_and_dimensions_deterministically() {
         at.clone(),
     );
     let nested_var = fresh::var_from_typ(&BTreeMap::new(), &BTreeSet::new(), at.clone(), &nested);
-    assert_eq!(nested_var.0.node, "bool");
-    assert_eq!(nested_var.1.node, ast::TypKind::BoolT);
-    assert_eq!(nested_var.2, vec![ast::Iter::Opt, ast::Iter::List]);
+    assert_eq!(nested_var.id.node, "bool");
+    assert_eq!(nested_var.typ.node, ast::TypKind::BoolT);
+    assert_eq!(nested_var.iters, vec![ast::Iter::Opt, ast::Iter::List]);
     let from_exp = fresh::var_from_exp(
         &BTreeMap::new(),
         &BTreeSet::new(),
         &ast::Exp::new(ast::ExpKind::BoolE(true), ast::TypKind::TextT, at.clone()),
     );
-    assert_eq!(from_exp.0.span, at);
-    assert_eq!(from_exp.0.node, "text");
+    assert_eq!(from_exp.id.span, at);
+    assert_eq!(from_exp.id.node, "text");
 }
 
 #[test]
@@ -552,7 +564,11 @@ fn printer_tables_cover_remaining_public_arms() {
         ),
         (
             Spanned::new(
-                ast::DefTypKind::VariantT(vec![(nottyp.clone(), origin, vec![hint()])]),
+                ast::DefTypKind::VariantT(vec![ast::TypCase {
+                    notation: nottyp.clone(),
+                    origin,
+                    hints: vec![hint()],
+                }]),
                 Region::none(),
             ),
             "\n   | bool or bool (from Origin<bool>)  hint(meta payload)",
@@ -803,20 +819,20 @@ fn assert_iterated_exp(exp: &ast::Exp, dim: bool, id_span: &Region, typ_span: &R
     assert_eq!(base.ty, ast::TypKind::BoolT);
     match (dim, inner_binders.as_slice(), outer_binders.as_slice()) {
         (false, [], []) => {}
-        (true, [(inner_id, inner_typ, inner_prior)], [(outer_id, outer_typ, outer_prior)]) => {
-            assert_eq!(&inner_id.span, id_span);
-            assert_eq!(inner_id.node, "bool");
-            assert_eq!(&inner_typ.span, typ_span);
-            assert!(inner_prior.is_empty());
+        (true, [inner], [outer]) => {
+            assert_eq!(&inner.id.span, id_span);
+            assert_eq!(inner.id.node, "bool");
+            assert_eq!(&inner.typ.span, typ_span);
+            assert!(inner.iters.is_empty());
             assert!(
-                matches!(inner_typ.node, ast::TypKind::IterT(ref typ, ast::Iter::Opt) if typ.node == ast::TypKind::BoolT && typ.span == *id_span)
+                matches!(inner.typ.node, ast::TypKind::IterT(ref typ, ast::Iter::Opt) if typ.node == ast::TypKind::BoolT && typ.span == *id_span)
             );
-            assert_eq!(&outer_id.span, id_span);
-            assert_eq!(outer_id.node, "bool");
-            assert_eq!(&outer_typ.span, typ_span);
-            assert_eq!(outer_prior, &vec![ast::Iter::Opt]);
+            assert_eq!(&outer.id.span, id_span);
+            assert_eq!(outer.id.node, "bool");
+            assert_eq!(&outer.typ.span, typ_span);
+            assert_eq!(outer.iters, vec![ast::Iter::Opt]);
             assert!(
-                matches!(outer_typ.node, ast::TypKind::IterT(ref typ, ast::Iter::List) if matches!(typ.node, ast::TypKind::IterT(ref base, ast::Iter::Opt) if base.node == ast::TypKind::BoolT && base.span == *id_span) && typ.span == *id_span)
+                matches!(outer.typ.node, ast::TypKind::IterT(ref typ, ast::Iter::List) if matches!(typ.node, ast::TypKind::IterT(ref base, ast::Iter::Opt) if base.node == ast::TypKind::BoolT && base.span == *id_span) && typ.span == *id_span)
             );
         }
         _ => panic!("binder shape"),
@@ -830,9 +846,9 @@ fn fresh_exact_edges_preserve_aliases_regions_and_full_dimension_shapes() {
     let mut aliases = BTreeMap::new();
     aliases.insert("bool".into(), alias_typ.clone());
     let rejected = fresh::var_from_typ(&aliases, &BTreeSet::new(), at.clone(), &typ());
-    assert_eq!(rejected.0.node, "bool");
-    assert_eq!(rejected.0.span, at);
-    assert_eq!(rejected.1.span, Region::none());
+    assert_eq!(rejected.id.node, "bool");
+    assert_eq!(rejected.id.span, at);
+    assert_eq!(rejected.typ.span, Region::none());
     aliases.clear();
     aliases.insert("Alias".into(), alias_typ.clone());
     let selected = fresh::var_from_typ(
@@ -841,10 +857,10 @@ fn fresh_exact_edges_preserve_aliases_regions_and_full_dimension_shapes() {
         Region::for_file("requested_alias"),
         &typ(),
     );
-    assert_eq!(selected.0.node, "Alias");
-    assert_eq!(selected.0.span, Region::for_file("requested_alias"));
-    assert_eq!(selected.1, alias_typ);
-    assert!(selected.2.is_empty());
+    assert_eq!(selected.id.node, "Alias");
+    assert_eq!(selected.id.span, Region::for_file("requested_alias"));
+    assert_eq!(selected.typ, alias_typ);
+    assert!(selected.iters.is_empty());
     let collision_ids = names(&["_bool", "_bool'"]);
     let wildcard = fresh::var_from_typ_wildcard(
         &BTreeMap::new(),
@@ -852,8 +868,8 @@ fn fresh_exact_edges_preserve_aliases_regions_and_full_dimension_shapes() {
         Region::for_file("wildcard"),
         &typ(),
     );
-    assert_eq!(wildcard.0.node, "_bool''");
-    assert_eq!(wildcard.0.span, Region::for_file("wildcard"));
+    assert_eq!(wildcard.id.node, "_bool''");
+    assert_eq!(wildcard.id.span, Region::for_file("wildcard"));
     let iter_bool = Spanned::new(
         ast::TypKind::IterT(Box::new(typ()), ast::Iter::List),
         Region::for_file("iter_type"),
@@ -864,13 +880,13 @@ fn fresh_exact_edges_preserve_aliases_regions_and_full_dimension_shapes() {
         Region::for_file("inside_iter"),
         &iter_bool,
     );
-    assert_eq!(inside_iter.0.node, "Alias");
-    assert_eq!(inside_iter.0.span, Region::for_file("inside_iter"));
+    assert_eq!(inside_iter.id.node, "Alias");
+    assert_eq!(inside_iter.id.span, Region::for_file("inside_iter"));
     assert_eq!(
-        inside_iter.1,
+        inside_iter.typ,
         Spanned::new(ast::TypKind::BoolT, Region::for_file("alias_type"))
     );
-    assert_eq!(inside_iter.2, vec![ast::Iter::List]);
+    assert_eq!(inside_iter.iters, vec![ast::Iter::List]);
     let from_exp = fresh::var_from_exp(
         &BTreeMap::new(),
         &BTreeSet::new(),
@@ -880,10 +896,10 @@ fn fresh_exact_edges_preserve_aliases_regions_and_full_dimension_shapes() {
             Region::for_file("expression"),
         ),
     );
-    assert_eq!(from_exp.0.node, "bool");
-    assert_eq!(from_exp.0.span, Region::for_file("expression"));
-    assert_eq!(from_exp.1.node, ast::TypKind::BoolT);
-    assert_eq!(from_exp.2, vec![ast::Iter::List]);
+    assert_eq!(from_exp.id.node, "bool");
+    assert_eq!(from_exp.id.span, Region::for_file("expression"));
+    assert_eq!(from_exp.typ.node, ast::TypKind::BoolT);
+    assert_eq!(from_exp.iters, vec![ast::Iter::List]);
     let base_typ = Spanned::new(ast::TypKind::BoolT, Region::for_file("base_type"));
     let nested = Spanned::new(
         ast::TypKind::IterT(

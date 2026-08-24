@@ -50,15 +50,22 @@ fn arg(kind: ast::ArgKind) -> ast::Arg {
     Spanned::new(kind, span())
 }
 fn rule(head: &str, prems: Vec<ast::Prem>) -> ast::Rule {
-    Spanned::new((id("rule"), notexp(head), prems), span())
+    Spanned::new(
+        ast::RuleKind {
+            id: id("rule"),
+            notation: notexp(head),
+            premises: prems,
+        },
+        span(),
+    )
 }
 fn clause(arg_name: &str, body: &str, prem_name: &str) -> ast::Clause {
     Spanned::new(
-        (
-            vec![arg(ast::ArgKind::ExpA(variable(arg_name)))],
-            variable(body),
-            vec![prem(ast::PremKind::DebugPr(variable(prem_name)))],
-        ),
+        ast::ClauseKind {
+            args: vec![arg(ast::ArgKind::ExpA(variable(arg_name)))],
+            expression: variable(body),
+            premises: vec![prem(ast::PremKind::DebugPr(variable(prem_name)))],
+        },
         span(),
     )
 }
@@ -267,7 +274,14 @@ fn free_expression_variants_follow_the_oracle() {
             "iteration_omits_binders",
             exp(ast::ExpKind::IterE(
                 Box::new(variable("iterated")),
-                (ast::Iter::List, vec![(id("binder"), typ(), vec![])]),
+                (
+                    ast::Iter::List,
+                    vec![ast::Var {
+                        id: id("binder"),
+                        typ: typ(),
+                        iters: vec![],
+                    }],
+                ),
             )),
             names(&["iterated"]),
         ),
@@ -390,11 +404,19 @@ fn free_path_argument_and_premise_variants_follow_the_oracle() {
             "iteration_omits_binder_variables",
             prem(ast::PremKind::IterPr(
                 Box::new(nested),
-                (
-                    ast::Iter::List,
-                    vec![(id("input"), typ(), vec![])],
-                    vec![(id("output"), typ(), vec![])],
-                ),
+                ast::IterPrem {
+                    iter: ast::Iter::List,
+                    vars_bound: vec![ast::Var {
+                        id: id("input"),
+                        typ: typ(),
+                        iters: vec![],
+                    }],
+                    vars_bind: vec![ast::Var {
+                        id: id("output"),
+                        typ: typ(),
+                        iters: vec![],
+                    }],
+                },
             )),
             names(&["nested"]),
         ),
@@ -601,10 +623,24 @@ fn as_exp_preserves_empty_one_and_two_level_shapes_and_spans() {
     let id = id_at("x", "identifier");
     let typ = typ_at("type");
     for dim in [false, true] {
-        let empty = var::as_exp(&(id.clone(), typ.clone(), vec![]), dim);
+        let empty = var::as_exp(
+            &ast::Var {
+                id: id.clone(),
+                typ: typ.clone(),
+                iters: vec![],
+            },
+            dim,
+        );
         assert_var(&empty, &id, ast::TypKind::BoolT);
     }
-    let one_false = var::as_exp(&(id.clone(), typ.clone(), vec![ast::Iter::Opt]), false);
+    let one_false = var::as_exp(
+        &ast::Var {
+            id: id.clone(),
+            typ: typ.clone(),
+            iters: vec![ast::Iter::Opt],
+        },
+        false,
+    );
     let ast::Exp {
         kind: ast::ExpKind::IterE(inner, (ast::Iter::Opt, binders)),
         ty,
@@ -622,7 +658,14 @@ fn as_exp_preserves_empty_one_and_two_level_shapes_and_spans() {
         &id.span,
     );
     assert_var(inner, &id, ast::TypKind::BoolT);
-    let one_true = var::as_exp(&(id.clone(), typ.clone(), vec![ast::Iter::Opt]), true);
+    let one_true = var::as_exp(
+        &ast::Var {
+            id: id.clone(),
+            typ: typ.clone(),
+            iters: vec![ast::Iter::Opt],
+        },
+        true,
+    );
     let ast::Exp {
         kind: ast::ExpKind::IterE(inner, (ast::Iter::Opt, binders)),
         ty,
@@ -631,13 +674,13 @@ fn as_exp_preserves_empty_one_and_two_level_shapes_and_spans() {
     else {
         panic!("expected one true iteration")
     };
-    let [(binder_id, binder_typ, prior)] = binders.as_slice() else {
+    let [binder] = binders.as_slice() else {
         panic!("expected one binder")
     };
-    assert_eq!(binder_id, &id);
-    assert_eq!(binder_typ.span, typ.span);
-    assert!(prior.is_empty());
-    assert_iter_type(binder_typ, ast::Iter::Opt, ast::TypKind::BoolT, &id.span);
+    assert_eq!(&binder.id, &id);
+    assert_eq!(binder.typ.span, typ.span);
+    assert!(binder.iters.is_empty());
+    assert_iter_type(&binder.typ, ast::Iter::Opt, ast::TypKind::BoolT, &id.span);
     assert_eq!(span, &id.span);
     assert_iter_type(
         &Spanned::new(ty.clone(), typ.span.clone()),
@@ -648,11 +691,11 @@ fn as_exp_preserves_empty_one_and_two_level_shapes_and_spans() {
     assert_var(inner, &id, ast::TypKind::BoolT);
     for dim in [false, true] {
         let two = var::as_exp(
-            &(
-                id.clone(),
-                typ.clone(),
-                vec![ast::Iter::Opt, ast::Iter::List],
-            ),
+            &ast::Var {
+                id: id.clone(),
+                typ: typ.clone(),
+                iters: vec![ast::Iter::Opt, ast::Iter::List],
+            },
             dim,
         );
         let ast::Exp {
@@ -691,15 +734,15 @@ fn as_exp_preserves_empty_one_and_two_level_shapes_and_spans() {
         assert_var(base, &id, ast::TypKind::BoolT);
         match (dim, inner_binders.as_slice(), outer_binders.as_slice()) {
             (false, [], []) => {}
-            (true, [(inner_id, inner_typ, inner_prior)], [(outer_id, outer_typ, outer_prior)]) => {
-                assert_eq!(inner_id, &id);
-                assert_eq!(inner_typ.span, typ.span);
-                assert!(inner_prior.is_empty());
-                assert_iter_type(inner_typ, ast::Iter::Opt, ast::TypKind::BoolT, &id.span);
-                assert_eq!(outer_id, &id);
-                assert_eq!(outer_typ.span, typ.span);
-                assert_eq!(outer_prior, &vec![ast::Iter::Opt]);
-                let ast::TypKind::IterT(outer_inner, ast::Iter::List) = &outer_typ.node else {
+            (true, [inner], [outer]) => {
+                assert_eq!(&inner.id, &id);
+                assert_eq!(inner.typ.span, typ.span);
+                assert!(inner.iters.is_empty());
+                assert_iter_type(&inner.typ, ast::Iter::Opt, ast::TypKind::BoolT, &id.span);
+                assert_eq!(&outer.id, &id);
+                assert_eq!(outer.typ.span, typ.span);
+                assert_eq!(outer.iters, vec![ast::Iter::Opt]);
+                let ast::TypKind::IterT(outer_inner, ast::Iter::List) = &outer.typ.node else {
                     panic!("expected outer binder type")
                 };
                 assert_eq!(outer_inner.span, id.span);

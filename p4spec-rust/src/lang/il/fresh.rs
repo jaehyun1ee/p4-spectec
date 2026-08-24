@@ -39,32 +39,37 @@ pub(crate) fn var_from_typ_with_aliases(
             .filter(|(name, alias)| {
                 eq::eq_typ(typ, alias) && print::string_of_typ(typ) != name.node
             })
-            .map(|(name, alias)| (name.clone(), alias.clone(), vec![]))
+            .map(|(name, alias)| Var {
+                id: name.clone(),
+                typ: alias.clone(),
+                iters: vec![],
+            })
             .collect::<Vec<_>>();
         if let [alias] = matching.as_slice() {
             return alias.clone();
         }
         match &typ.node {
             TypKind::IterT(inner, iter) => {
-                let (id, typ, mut iters) = derive(aliases, at, inner);
-                iters.push(*iter);
-                (id, typ, iters)
+                let mut variable = derive(aliases, at, inner);
+                variable.iters.push(*iter);
+                variable
             }
-            _ => (
-                Spanned::new(print::string_of_typ(typ), at.clone()),
-                typ.clone(),
-                vec![],
-            ),
+            _ => Var {
+                id: Spanned::new(print::string_of_typ(typ), at.clone()),
+                typ: typ.clone(),
+                iters: vec![],
+            },
         }
     }
 
-    let (var_id, typ, iters) = derive(aliases, &at, typ);
-    let var_id = if wildcard {
-        Spanned::new(format!("_{}", var_id.node), var_id.span)
+    let mut variable = derive(aliases, &at, typ);
+    variable.id = if wildcard {
+        Spanned::new(format!("_{}", variable.id.node), variable.id.span)
     } else {
-        var_id
+        variable.id
     };
-    (id(ids, &var_id), typ, iters)
+    variable.id = id(ids, &variable.id);
+    variable
 }
 
 fn aliases_at(metavars: &Metavars, at: &Region) -> Vec<(Id, Typ)> {
@@ -115,6 +120,6 @@ pub(crate) fn exp_from_typ_with_aliases(
 ) -> (Ids, Exp) {
     let variable = var_from_typ_with_aliases(aliases, ids, typ.span.clone(), typ, false);
     let mut ids = ids.clone();
-    ids.insert(variable.0.node.clone());
+    ids.insert(variable.id.node.clone());
     (ids, var::as_exp(&variable, dim))
 }
