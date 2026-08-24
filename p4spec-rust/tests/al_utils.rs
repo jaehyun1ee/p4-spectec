@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use p4spec_rust::{
     domain::{
@@ -807,4 +807,70 @@ fn composite_al_spec_omits_source_hints_and_extern_relation_inputs() {
         al::print::string_of_spec(&first),
         al::print::string_of_spec(&changed_metadata)
     );
+}
+
+#[test]
+fn fresh_names_combine_alias_regions_collisions_wildcards_and_nested_dimensions() {
+    let requested = span("requested");
+    let alias_region = span("alias");
+    let alias_typ = Spanned::new(il::ast::TypKind::BoolT, span("alias-type"));
+    let nested = Spanned::new(
+        il::ast::TypKind::IterT(
+            Box::new(Spanned::new(
+                il::ast::TypKind::IterT(Box::new(typ()), il::ast::Iter::Opt),
+                span("inner-iteration"),
+            )),
+            il::ast::Iter::List,
+        ),
+        span("outer-iteration"),
+    );
+    let mut aliases = BTreeMap::new();
+    aliases.insert(
+        "Alias".to_owned(),
+        (alias_region.clone(), alias_typ.clone()),
+    );
+
+    let variable = al::fresh::var_from_typ(
+        &aliases,
+        &ids(&["Alias", "Alias'", "Alias_1"]),
+        requested.clone(),
+        &nested,
+    );
+    assert_eq!(variable.0.node, "Alias''");
+    assert_eq!(variable.0.span, alias_region);
+    assert_eq!(variable.1, alias_typ);
+    assert_eq!(variable.2, vec![il::ast::Iter::Opt, il::ast::Iter::List]);
+
+    aliases.insert(
+        "Other".to_owned(),
+        (
+            span("other-alias"),
+            Spanned::new(il::ast::TypKind::BoolT, span("other-type")),
+        ),
+    );
+    let wildcard = al::fresh::var_from_typ_wildcard(
+        &aliases,
+        &ids(&["_bool", "_bool'", "_bool_1"]),
+        requested.clone(),
+        &nested,
+    );
+    assert_eq!(wildcard.0.node, "_bool''");
+    assert_eq!(wildcard.0.span, requested);
+    assert_eq!(wildcard.1.node, il::ast::TypKind::BoolT);
+    assert_eq!(wildcard.2, vec![il::ast::Iter::Opt, il::ast::Iter::List]);
+
+    let (generated_ids, generated) =
+        al::fresh::exp_from_typ(true, &aliases, &ids(&["bool"]), &nested);
+    assert_eq!(generated_ids, ids(&["bool", "bool'"]));
+    let il::ast::ExpKind::IterE(inner, (il::ast::Iter::List, outer_binders)) = generated.kind
+    else {
+        panic!("outer iteration")
+    };
+    let il::ast::ExpKind::IterE(_, (il::ast::Iter::Opt, inner_binders)) = inner.kind else {
+        panic!("inner iteration")
+    };
+    assert_eq!(inner_binders.len(), 1);
+    assert_eq!(outer_binders.len(), 1);
+    assert!(inner_binders[0].2.is_empty());
+    assert_eq!(outer_binders[0].2, vec![il::ast::Iter::Opt]);
 }

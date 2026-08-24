@@ -26,25 +26,27 @@ pub fn id(ids: &Ids, id: &Id) -> Id {
     fresh
 }
 
-pub fn var_from_typ(metavars: &Metavars, ids: &Ids, at: Region, typ: &Typ) -> Var {
-    fn derive(metavars: &Metavars, at: &Region, typ: &Typ) -> Var {
-        let aliases = metavars
+pub(crate) fn var_from_typ_with_aliases(
+    aliases: &[(Id, Typ)],
+    ids: &Ids,
+    at: Region,
+    typ: &Typ,
+    wildcard: bool,
+) -> Var {
+    fn derive(aliases: &[(Id, Typ)], at: &Region, typ: &Typ) -> Var {
+        let matching = aliases
             .iter()
-            .filter(|(name, alias)| eq::eq_typ(typ, alias) && print::string_of_typ(typ) != **name)
-            .map(|(name, alias)| {
-                (
-                    Spanned::new(name.clone(), at.clone()),
-                    alias.clone(),
-                    vec![],
-                )
+            .filter(|(name, alias)| {
+                eq::eq_typ(typ, alias) && print::string_of_typ(typ) != name.node
             })
+            .map(|(name, alias)| (name.clone(), alias.clone(), vec![]))
             .collect::<Vec<_>>();
-        if let [alias] = aliases.as_slice() {
+        if let [alias] = matching.as_slice() {
             return alias.clone();
         }
         match &typ.node {
             TypKind::IterT(inner, iter) => {
-                let (id, typ, mut iters) = derive(metavars, at, inner);
+                let (id, typ, mut iters) = derive(aliases, at, inner);
                 iters.push(*iter);
                 (id, typ, iters)
             }
@@ -56,14 +58,30 @@ pub fn var_from_typ(metavars: &Metavars, ids: &Ids, at: Region, typ: &Typ) -> Va
         }
     }
 
-    let (var_id, typ, iters) = derive(metavars, &at, typ);
+    let (var_id, typ, iters) = derive(aliases, &at, typ);
+    let var_id = if wildcard {
+        Spanned::new(format!("_{}", var_id.node), var_id.span)
+    } else {
+        var_id
+    };
     (id(ids, &var_id), typ, iters)
 }
 
+fn aliases_at(metavars: &Metavars, at: &Region) -> Vec<(Id, Typ)> {
+    metavars
+        .iter()
+        .map(|(name, typ)| (Spanned::new(name.clone(), at.clone()), typ.clone()))
+        .collect()
+}
+
+pub fn var_from_typ(metavars: &Metavars, ids: &Ids, at: Region, typ: &Typ) -> Var {
+    let aliases = aliases_at(metavars, &at);
+    var_from_typ_with_aliases(&aliases, ids, at, typ, false)
+}
+
 pub fn var_from_typ_wildcard(metavars: &Metavars, ids: &Ids, at: Region, typ: &Typ) -> Var {
-    let (var_id, typ, iters) = var_from_typ(metavars, &Ids::new(), at, typ);
-    let var_id = Spanned::new(format!("_{}", var_id.node), var_id.span);
-    (id(ids, &var_id), typ, iters)
+    let aliases = aliases_at(metavars, &at);
+    var_from_typ_with_aliases(&aliases, ids, at, typ, true)
 }
 
 pub fn var_from_exp(metavars: &Metavars, ids: &Ids, exp: &Exp) -> Var {
@@ -85,7 +103,17 @@ pub fn var_from_exp_wildcard(metavars: &Metavars, ids: &Ids, exp: &Exp) -> Var {
 }
 
 pub fn exp_from_typ(dim: bool, metavars: &Metavars, ids: &Ids, typ: &Typ) -> (Ids, Exp) {
-    let variable = var_from_typ(metavars, ids, typ.span.clone(), typ);
+    let aliases = aliases_at(metavars, &typ.span);
+    exp_from_typ_with_aliases(dim, &aliases, ids, typ)
+}
+
+pub(crate) fn exp_from_typ_with_aliases(
+    dim: bool,
+    aliases: &[(Id, Typ)],
+    ids: &Ids,
+    typ: &Typ,
+) -> (Ids, Exp) {
+    let variable = var_from_typ_with_aliases(aliases, ids, typ.span.clone(), typ, false);
     let mut ids = ids.clone();
     ids.insert(variable.0.node.clone());
     (ids, var::as_exp(&variable, dim))
