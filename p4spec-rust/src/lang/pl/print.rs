@@ -1,3 +1,5 @@
+use std::fmt;
+
 use crate::{domain::mixop, lang::sl};
 
 use super::ast::*;
@@ -156,92 +158,149 @@ pub fn string_of_cmpop(operation: CmpOp) -> &'static str {
 // Expressions
 
 pub fn string_of_exp(exp: &Exp) -> String {
+    let mut output = String::new();
+    write_exp(&mut output, exp).expect("writing to a String cannot fail");
+    output
+}
+fn write_exp(output: &mut dyn fmt::Write, exp: &Exp) -> fmt::Result {
     match &exp.node.kind {
-        ExpKind::BoolE(value) => value.to_string(),
-        ExpKind::NumE(value) => string_of_num(value),
-        ExpKind::TextE(text) => format!("\"{}\"", escaped(text)),
-        ExpKind::VarE(id) => string_of_varid(id),
-        ExpKind::UnE(operation, _, exp) => {
-            format!("{}{}", string_of_unop(*operation), string_of_exp(exp))
+        ExpKind::BoolE(value) => write!(output, "{value}"),
+        ExpKind::NumE(value) => output.write_str(&string_of_num(value)),
+        ExpKind::TextE(text) => write!(output, "\"{}\"", escaped(text)),
+        ExpKind::VarE(id) => output.write_str(&id.node),
+        ExpKind::UnE(op, _, exp) => {
+            output.write_str(string_of_unop(*op))?;
+            write_exp(output, exp)
         }
-        ExpKind::BinE(operation, _, exp_l, exp_r) => format!(
-            "({} {} {})",
-            string_of_exp(exp_l),
-            string_of_binop(*operation),
-            string_of_exp(exp_r)
-        ),
-        ExpKind::CmpE(operation, _, exp_l, exp_r) => format!(
-            "({} {} {})",
-            string_of_exp(exp_l),
-            string_of_cmpop(*operation),
-            string_of_exp(exp_r)
-        ),
+        ExpKind::BinE(op, _, l, r) => {
+            output.write_char('(')?;
+            write_exp(output, l)?;
+            write!(output, " {} ", string_of_binop(*op))?;
+            write_exp(output, r)?;
+            output.write_char(')')
+        }
+        ExpKind::CmpE(op, _, l, r) => {
+            output.write_char('(')?;
+            write_exp(output, l)?;
+            write!(output, " {} ", string_of_cmpop(*op))?;
+            write_exp(output, r)?;
+            output.write_char(')')
+        }
         ExpKind::UpCastE(typ, exp) | ExpKind::DownCastE(typ, exp) => {
-            format!("({} as {})", string_of_exp(exp), string_of_typ(typ))
+            output.write_char('(')?;
+            write_exp(output, exp)?;
+            write!(output, " as {})", string_of_typ(typ))
         }
         ExpKind::SubE(exp, typ, _) => {
-            format!("({} has type {})", string_of_exp(exp), string_of_typ(typ))
+            output.write_char('(')?;
+            write_exp(output, exp)?;
+            write!(output, " has type {})", string_of_typ(typ))
         }
-        ExpKind::MatchE(exp, pattern) => format!(
-            "({} matches pattern {})",
-            string_of_exp(exp),
-            string_of_pattern(pattern)
-        ),
-        ExpKind::TupleE(exps) => format!("({})", string_of_exps(", ", exps)),
-        ExpKind::CaseE(notexp) => format!("({})", string_of_notexp(notexp)),
-        ExpKind::StrE(fields) => format!(
-            "{{{}}}",
-            join(fields, ", ", |(atom, exp)| format!(
-                "{} {}",
-                string_of_atom(atom),
-                string_of_exp(exp)
-            ))
-        ),
-        ExpKind::OptE(Some(exp)) => format!("?({})", string_of_exp(exp)),
-        ExpKind::OptE(None) => "?()".into(),
-        ExpKind::ListE(exps) => format!("[{}]", string_of_exps(", ", exps)),
-        ExpKind::ConsE(exp_h, exp_t) => {
-            format!("{} :: {}", string_of_exp(exp_h), string_of_exp(exp_t))
+        ExpKind::MatchE(exp, pat) => {
+            output.write_char('(')?;
+            write_exp(output, exp)?;
+            write!(output, " matches pattern {})", string_of_pattern(pat))
         }
-        ExpKind::CatE(exp_l, exp_r) => {
-            format!("{} ++ {}", string_of_exp(exp_l), string_of_exp(exp_r))
+        ExpKind::TupleE(exps) => {
+            output.write_char('(')?;
+            write_exps(output, ", ", exps)?;
+            output.write_char(')')
         }
-        ExpKind::MemE(exp_e, exp_s) => {
-            format!("{} is in {}", string_of_exp(exp_e), string_of_exp(exp_s))
+        ExpKind::CaseE(n) => write!(output, "({})", string_of_notexp(n)),
+        ExpKind::StrE(fields) => {
+            output.write_char('{')?;
+            for (i, (a, e)) in fields.iter().enumerate() {
+                if i > 0 {
+                    output.write_str(", ")?;
+                }
+                write!(output, "{} ", string_of_atom(a))?;
+                write_exp(output, e)?;
+            }
+            output.write_char('}')
         }
-        ExpKind::LenE(exp) => format!("|{}|", string_of_exp(exp)),
-        ExpKind::DotE(exp, atom) => format!("{}.{}", string_of_exp(exp), string_of_atom(atom)),
-        ExpKind::IdxE(exp_b, exp_i) => {
-            format!("{}[{}]", string_of_exp(exp_b), string_of_exp(exp_i))
+        ExpKind::OptE(Some(exp)) => {
+            output.write_str("?(")?;
+            write_exp(output, exp)?;
+            output.write_char(')')
         }
-        ExpKind::SliceE(exp_b, exp_l, exp_h) => format!(
-            "{}[{} : {}]",
-            string_of_exp(exp_b),
-            string_of_exp(exp_l),
-            string_of_exp(exp_h)
-        ),
-        ExpKind::UpdE(exp_b, path, exp_f) => format!(
-            "{}[{} = {}]",
-            string_of_exp(exp_b),
-            string_of_path(path),
-            string_of_exp(exp_f)
-        ),
-        ExpKind::CallE(id, targs, args) => format!(
+        ExpKind::OptE(None) => output.write_str("?()"),
+        ExpKind::ListE(es) => {
+            output.write_char('[')?;
+            write_exps(output, ", ", es)?;
+            output.write_char(']')
+        }
+        ExpKind::ConsE(h, t) => {
+            write_exp(output, h)?;
+            output.write_str(" :: ")?;
+            write_exp(output, t)
+        }
+        ExpKind::CatE(l, r) => {
+            write_exp(output, l)?;
+            output.write_str(" ++ ")?;
+            write_exp(output, r)
+        }
+        ExpKind::MemE(e, s) => {
+            write_exp(output, e)?;
+            output.write_str(" is in ")?;
+            write_exp(output, s)
+        }
+        ExpKind::LenE(e) => {
+            output.write_char('|')?;
+            write_exp(output, e)?;
+            output.write_char('|')
+        }
+        ExpKind::DotE(e, a) => {
+            write_exp(output, e)?;
+            write!(output, ".{}", string_of_atom(a))
+        }
+        ExpKind::IdxE(b, i) => {
+            write_exp(output, b)?;
+            output.write_char('[')?;
+            write_exp(output, i)?;
+            output.write_char(']')
+        }
+        ExpKind::SliceE(b, l, h) => {
+            write_exp(output, b)?;
+            output.write_char('[')?;
+            write_exp(output, l)?;
+            output.write_str(" : ")?;
+            write_exp(output, h)?;
+            output.write_char(']')
+        }
+        ExpKind::UpdE(b, p, f) => {
+            write_exp(output, b)?;
+            write!(output, "[{} = ", string_of_path(p))?;
+            write_exp(output, f)?;
+            output.write_char(']')
+        }
+        ExpKind::CallE(id, ts, as_) => write!(
+            output,
             "{}{}{}",
             string_of_defid(id),
-            string_of_targs(targs),
-            string_of_args(args)
+            string_of_targs(ts),
+            string_of_args(as_)
         ),
-        ExpKind::IterE(exp, iterexp) => format!(
-            "({}){}",
-            string_of_exp(exp),
-            string_of_iterexps(std::slice::from_ref(iterexp))
-        ),
+        ExpKind::IterE(e, i) => {
+            output.write_char('(')?;
+            write_exp(output, e)?;
+            write!(output, "){}", string_of_iterexps(std::slice::from_ref(i)))
+        }
     }
 }
 
 pub fn string_of_exps(separator: &str, exps: &[Exp]) -> String {
-    join(exps, separator, string_of_exp)
+    let mut output = String::new();
+    write_exps(&mut output, separator, exps).expect("writing to a String cannot fail");
+    output
+}
+fn write_exps(output: &mut dyn fmt::Write, separator: &str, exps: &[Exp]) -> fmt::Result {
+    for (index, exp) in exps.iter().enumerate() {
+        if index > 0 {
+            output.write_str(separator)?;
+        }
+        write_exp(output, exp)?;
+    }
+    Ok(())
 }
 
 pub fn string_of_notexp(notexp: &NotExp) -> String {
@@ -862,31 +921,41 @@ pub fn string_of_defined_func(function: &DefinedFunc) -> String {
 // Definitions
 
 pub fn string_of_def(definition: &Def) -> String {
+    let mut output = String::new();
+    write_def(&mut output, definition).expect("writing to a String cannot fail");
+    output
+}
+
+fn write_def(output: &mut dyn fmt::Write, definition: &Def) -> fmt::Result {
     match &definition.node.kind {
-        DefKind::ExternTypD(id) => format!("extern syntax {}", string_of_typid(id)),
-        DefKind::TypD(id, tparams, deftyp) => format!(
+        DefKind::ExternTypD(id) => write!(output, "extern syntax {}", string_of_typid(id)),
+        DefKind::TypD(id, tparams, deftyp) => write!(
+            output,
             "syntax {}{} = {}",
             string_of_typid(id),
             string_of_tparams(tparams),
             string_of_deftyp(deftyp)
         ),
-        DefKind::VarD(id, typ) => {
-            format!("var {} : {}", string_of_varid(id), string_of_typ(typ))
-        }
+        DefKind::VarD(id, typ) => write!(
+            output,
+            "var {} : {}",
+            string_of_varid(id),
+            string_of_typ(typ)
+        ),
         DefKind::ExternRelD(relation) => {
-            format!("extern relation {}", string_of_extern_rel(relation))
+            write!(output, "extern relation {}", string_of_extern_rel(relation))
         }
-        DefKind::RelD(relation) => format!("relation {}", string_of_defined_rel(relation)),
+        DefKind::RelD(relation) => write!(output, "relation {}", string_of_defined_rel(relation)),
         DefKind::ExternDecD(function) => {
-            format!("extern def {}", string_of_extern_func(function))
+            write!(output, "extern def {}", string_of_extern_func(function))
         }
         DefKind::BuiltinDecD(function) => {
-            format!("builtin def {}", string_of_builtin_func(function))
+            write!(output, "builtin def {}", string_of_builtin_func(function))
         }
         DefKind::TableDecD(function) => {
-            format!("tbl def {}", string_of_table_func(function))
+            write!(output, "tbl def {}", string_of_table_func(function))
         }
-        DefKind::FuncDecD(function) => format!("def {}", string_of_defined_func(function)),
+        DefKind::FuncDecD(function) => write!(output, "def {}", string_of_defined_func(function)),
     }
 }
 
@@ -897,5 +966,17 @@ pub fn string_of_defs(definitions: &[Def]) -> String {
 // Spec
 
 pub fn string_of_spec(spec: &Spec) -> String {
-    string_of_defs(spec)
+    let mut output = String::new();
+    write_spec(&mut output, spec).expect("writing to a String cannot fail");
+    output
+}
+
+fn write_spec(output: &mut dyn fmt::Write, spec: &Spec) -> fmt::Result {
+    for (index, definition) in spec.iter().enumerate() {
+        if index != 0 {
+            output.write_str("\n\n")?;
+        }
+        write_def(output, definition)?;
+    }
+    Ok(())
 }

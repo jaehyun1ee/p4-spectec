@@ -1,3 +1,5 @@
+use std::fmt;
+
 use crate::{
     domain::mixfix::Mixop,
     lang::{hints::input::InputHint, il::print as il_print},
@@ -266,51 +268,67 @@ pub use crate::lang::il::print::{string_of_hint, string_of_hints};
 // Definitions
 
 pub fn string_of_def(definition: &Def) -> String {
+    let mut output = String::new();
+    write_def(&mut output, definition).expect("writing to a String cannot fail");
+    output
+}
+
+fn write_def(output: &mut dyn fmt::Write, definition: &Def) -> fmt::Result {
     match &definition.node {
-        DefKind::ExternTypD(id, _) => format!("extern syntax {}", string_of_typid(id)),
-        DefKind::TypD(id, tparams, deftyp, _) => format!(
+        DefKind::ExternTypD(id, _) => write!(output, "extern syntax {}", string_of_typid(id)),
+        DefKind::TypD(id, tparams, deftyp, _) => write!(
+            output,
             "syntax {}{} = {}",
             string_of_typid(id),
             string_of_tparams(tparams),
             string_of_deftyp(deftyp)
         ),
-        DefKind::VarD(id, typ, _) => {
-            format!("var {} : {}", string_of_varid(id), string_of_typ(typ))
-        }
-        DefKind::ExternRelD(id, nottyp, _, _) => format!(
+        DefKind::VarD(id, typ, _) => write!(
+            output,
+            "var {} : {}",
+            string_of_varid(id),
+            string_of_typ(typ)
+        ),
+        DefKind::ExternRelD(id, nottyp, _, _) => write!(
+            output,
             "extern relation {}: {}",
             string_of_relid(id),
             string_of_nottyp(nottyp)
         ),
-        DefKind::RelD(id, nottyp, inputs, rulegroups, elsegroup, _) => format!(
+        DefKind::RelD(id, nottyp, inputs, groups, elsegroup, _) => write!(
+            output,
             "relation {}: {}\n\n{}{}",
             string_of_relid(id),
             string_of_nottyp(nottyp),
-            string_of_rulegroups(nottyp, inputs, rulegroups),
+            string_of_rulegroups(nottyp, inputs, groups),
             string_of_elsegroup_opt(nottyp, inputs, elsegroup)
         ),
-        DefKind::ExternDecD(id, tparams, params, typ, _) => format!(
+        DefKind::ExternDecD(id, tparams, params, typ, _) => write!(
+            output,
             "extern def {}{}{} : {}",
             string_of_defid(id),
             string_of_tparams(tparams),
             string_of_params(params),
             string_of_typ(typ)
         ),
-        DefKind::BuiltinDecD(id, tparams, params, typ, _) => format!(
+        DefKind::BuiltinDecD(id, tparams, params, typ, _) => write!(
+            output,
             "builtin def {}{}{} : {}",
             string_of_defid(id),
             string_of_tparams(tparams),
             string_of_params(params),
             string_of_typ(typ)
         ),
-        DefKind::TableDecD(id, params, typ, tablerows, _) => format!(
+        DefKind::TableDecD(id, params, typ, rows, _) => write!(
+            output,
             "tbl def {}{} : {} ={}",
             string_of_defid(id),
             string_of_params(params),
             string_of_typ(typ),
-            string_of_tablerows(tablerows)
+            string_of_tablerows(rows)
         ),
-        DefKind::FuncDecD(id, tparams, params, typ, clauses, elseclause, _) => format!(
+        DefKind::FuncDecD(id, tparams, params, typ, clauses, elseclause, _) => write!(
+            output,
             "def {}{}{} : {} ={}{}",
             string_of_defid(id),
             string_of_tparams(tparams),
@@ -333,5 +351,17 @@ pub fn string_of_defs(definitions: &[Def]) -> String {
 // Spec
 
 pub fn string_of_spec(spec: &Spec) -> String {
-    string_of_defs(spec)
+    let mut output = String::new();
+    write_spec(&mut output, spec).expect("writing to a String cannot fail");
+    output
+}
+
+fn write_spec(output: &mut dyn fmt::Write, spec: &Spec) -> fmt::Result {
+    for (index, definition) in spec.iter().enumerate() {
+        if index != 0 {
+            output.write_str("\n\n")?;
+        }
+        write_def(output, definition)?;
+    }
+    Ok(())
 }
