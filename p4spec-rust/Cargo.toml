@@ -5,6 +5,9 @@ edition = "2024"
 rust-version = "1.97.1"
 
 [dependencies]
+num-bigint = "0.4.6"
+num-traits = "0.2.19"
+thiserror = "1.0.63"
 
 [lints.rust]
 unsafe_code = "forbid"
