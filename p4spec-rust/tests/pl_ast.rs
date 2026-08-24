@@ -21,10 +21,10 @@ fn annotation_wrappers_forward_source_and_keep_nested_hints() {
         },
         hints: pl::annot::Hints {
             prose: Some(alter::AlterationHint::TextH("nested prose".to_owned())),
-            ..pl::annot::empty()
+            ..pl::annot::Hints::default()
         },
     };
-    let outer = pl::annot::no_hints(pl::ast::ExpNode {
+    let outer = pl::annot::Annotated::new(pl::ast::ExpNode {
         kind: pl::ast::ExpKind::UnE(
             il::ast::UnOp::NotOp,
             il::ast::OpTyp::BoolT,

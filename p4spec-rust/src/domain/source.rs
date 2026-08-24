@@ -103,6 +103,18 @@ impl<T> Spanned<T> {
     pub fn new(node: T, span: Span) -> Self {
         Self { node, span }
     }
+
+    pub fn map<U>(self, map: impl FnOnce(T) -> U) -> Spanned<U> {
+        Spanned::new(map(self.node), self.span)
+    }
+
+    pub fn as_ref(&self) -> Spanned<&T> {
+        Spanned::new(&self.node, self.span.clone())
+    }
+
+    pub fn into_parts(self) -> (T, Span) {
+        (self.node, self.span)
+    }
 }
 
 pub trait HasSpan {
@@ -157,5 +169,17 @@ mod tests {
             phrase_list_region(&phrases),
             Region::new(position(4, 2), position(7, 3))
         );
+    }
+
+    #[test]
+    fn spanned_wrapper_operations_preserve_the_source_span() {
+        let phrase = Spanned::new("source".to_owned(), Region::for_file("spec.watsup"));
+        let borrowed = phrase.as_ref();
+        assert_eq!(borrowed.node, "source");
+        assert_eq!(borrowed.span, Region::for_file("spec.watsup"));
+
+        let (node, span) = phrase.map(|node| node.len()).into_parts();
+        assert_eq!(node, 6);
+        assert_eq!(span, Region::for_file("spec.watsup"));
     }
 }

@@ -73,7 +73,7 @@ pub struct ExpNode {
 pub type Exp = annot::Annotated<ExpNode>;
 impl ExpNode {
     pub fn new(kind: ExpKind, ty: TypKind, span: Span) -> Exp {
-        annot::no_hints(Self { kind, ty, span })
+        annot::Annotated::new(Self { kind, ty, span })
     }
 }
 impl HasSpan for ExpNode {
@@ -231,7 +231,7 @@ impl<Tier> InstrNode<Tier> {
         fallthrough: Option<Fallthrough>,
         span: Span,
     ) -> Instr<Tier> {
-        annot::no_hints(Self {
+        annot::Annotated::new(Self {
             kind,
             iid,
             fallthrough,
@@ -379,7 +379,7 @@ pub type Def = annot::Annotated<DefNode>;
 
 impl DefNode {
     pub fn new(kind: DefKind, span: Span) -> Def {
-        annot::no_hints(Self { kind, span })
+        annot::Annotated::new(Self { kind, span })
     }
 }
 
