@@ -172,67 +172,56 @@ pub fn realign(
 }
 // Alternation
 
-#[allow(clippy::too_many_arguments)]
-pub fn alternate<Item, D>(
+pub trait Renderer<Item> {
+    type Output: Clone;
+    fn empty(&self) -> Self::Output;
+    fn text(&self, text: &str) -> Option<Self::Output>;
+    fn atom(&self, atom: &Atom) -> Self::Output;
+    fn join(&self, items: Vec<Self::Output>) -> Self::Output;
+    fn fuse(&self, left: Self::Output, right: Self::Output) -> Self::Output;
+    fn other(&self, exp: &Exp) -> Self::Output;
+    fn item(&self, item: &Item) -> Self::Output;
+}
+
+pub fn alternate<Item, R: Renderer<Item>>(
     hint: &AlterationHint,
     items: &[Item],
-    empty: D,
-    text: impl Fn(&str) -> Option<D>,
-    atom: impl Fn(&Atom) -> D,
-    join: impl Fn(Vec<D>) -> D,
-    fuse: impl Fn(D, D) -> D,
-    other: impl Fn(&Exp) -> D,
-    render: impl Fn(&Item) -> D,
-) -> Result<D, AlterationError>
-where
-    D: Clone,
-{
-    #[allow(clippy::too_many_arguments)]
-    fn go<Item, D>(
+    renderer: &R,
+) -> Result<R::Output, AlterationError> {
+    fn go<Item, R: Renderer<Item>>(
         h: &AlterationHint,
         items: &[Item],
         cursor: usize,
-        empty: &D,
-        text: &impl Fn(&str) -> Option<D>,
-        atom: &impl Fn(&Atom) -> D,
-        join: &impl Fn(Vec<D>) -> D,
-        fuse: &impl Fn(D, D) -> D,
-        other: &impl Fn(&Exp) -> D,
-        render: &impl Fn(&Item) -> D,
-    ) -> Result<(usize, Option<D>), AlterationError>
-    where
-        D: Clone,
-    {
+        renderer: &R,
+    ) -> Result<(usize, Option<R::Output>), AlterationError> {
         Ok(match h {
-            AlterationHint::TextH(s) => (cursor, text(s)),
-            AlterationHint::AtomH(a) => (cursor, Some(atom(a))),
+            AlterationHint::TextH(s) => (cursor, renderer.text(s)),
+            AlterationHint::AtomH(a) => (cursor, Some(renderer.atom(a))),
             AlterationHint::SeqH(xs) => {
                 let mut c = cursor;
                 let mut ds = Vec::new();
                 for x in xs {
-                    let (n, d) = go(x, items, c, empty, text, atom, join, fuse, other, render)?;
+                    let (n, d) = go(x, items, c, renderer)?;
                     c = n;
-                    ds.push(d.unwrap_or_else(|| empty.clone()));
+                    ds.push(d.unwrap_or_else(|| renderer.empty()));
                 }
-                (c, Some(join(ds)))
+                (c, Some(renderer.join(ds)))
             }
             AlterationHint::BrackH(l, x, r) => {
-                let (c, d) = go(
-                    x, items, cursor, empty, text, atom, join, fuse, other, render,
-                )?;
-                let mut ds = vec![atom(l)];
+                let (c, d) = go(x, items, cursor, renderer)?;
+                let mut ds = vec![renderer.atom(l)];
                 if let Some(d) = d {
                     ds.push(d);
                 }
-                ds.push(atom(r));
-                (c, Some(join(ds)))
+                ds.push(renderer.atom(r));
+                (c, Some(renderer.join(ds)))
             }
             AlterationHint::HoleH(Hole::Next) => {
                 let item = items.get(cursor).ok_or(AlterationError::IndexOutOfBounds {
                     index: i64::try_from(cursor).unwrap_or(i64::MAX),
                     item_count: items.len(),
                 })?;
-                (cursor + 1, Some(render(item)))
+                (cursor + 1, Some(renderer.item(item)))
             }
             AlterationHint::HoleH(Hole::Num(i)) => {
                 let item = usize::try_from(*i)
@@ -242,27 +231,23 @@ where
                         index: *i,
                         item_count: items.len(),
                     })?;
-                (cursor, Some(render(item)))
+                (cursor, Some(renderer.item(item)))
             }
             AlterationHint::FuseH(l, r) => {
-                let (c, a) = go(
-                    l, items, cursor, empty, text, atom, join, fuse, other, render,
-                )?;
-                let (c, b) = go(r, items, c, empty, text, atom, join, fuse, other, render)?;
+                let (c, a) = go(l, items, cursor, renderer)?;
+                let (c, b) = go(r, items, c, renderer)?;
                 (
                     c,
-                    Some(fuse(
-                        a.unwrap_or_else(|| empty.clone()),
-                        b.unwrap_or_else(|| empty.clone()),
+                    Some(renderer.fuse(
+                        a.unwrap_or_else(|| renderer.empty()),
+                        b.unwrap_or_else(|| renderer.empty()),
                     )),
                 )
             }
-            AlterationHint::OtherH(e) => (cursor, Some(other(e))),
+            AlterationHint::OtherH(e) => (cursor, Some(renderer.other(e))),
         })
     }
-    Ok(go(
-        hint, items, 0, &empty, &text, &atom, &join, &fuse, &other, &render,
-    )?
-    .1
-    .unwrap_or(empty))
+    Ok(go(hint, items, 0, renderer)?
+        .1
+        .unwrap_or_else(|| renderer.empty()))
 }

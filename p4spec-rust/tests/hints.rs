@@ -6,7 +6,7 @@ use p4spec_rust::{
     lang::{
         el::ast::{self, ExpKind, Hole},
         hints::{
-            alter::{self, AlterationError, AlterationHint, Hole as AlterHole},
+            alter::{self, AlterationError, AlterationHint, Hole as AlterHole, Renderer},
             fields::{self, FieldError, FieldHint},
             flag, hint,
             input::{self, InputError, InputHint},
@@ -25,6 +25,37 @@ fn exp(node: ExpKind) -> ast::Exp {
 }
 fn id(name: &str, source: &str) -> ast::Id {
     Spanned::new(name.to_owned(), span(source))
+}
+
+struct StringRenderer {
+    empty: &'static str,
+    separator: &'static str,
+    fuse: &'static str,
+}
+
+impl Renderer<&str> for StringRenderer {
+    type Output = String;
+    fn empty(&self) -> String {
+        self.empty.into()
+    }
+    fn text(&self, text: &str) -> Option<String> {
+        (text != "omit").then(|| text.into())
+    }
+    fn atom(&self, atom: &ast::Atom) -> String {
+        atom.node.render()
+    }
+    fn join(&self, items: Vec<String>) -> String {
+        items.join(self.separator)
+    }
+    fn fuse(&self, left: String, right: String) -> String {
+        format!("{left}{}{right}", self.fuse)
+    }
+    fn other(&self, exp: &ast::Exp) -> String {
+        hint::to_string(exp)
+    }
+    fn item(&self, item: &&str) -> String {
+        (*item).into()
+    }
 }
 
 #[test]
@@ -194,13 +225,11 @@ fn alter_alternates_with_omission_defaults_fuse_brackets_and_other() {
     let result = alter::alternate(
         &hint,
         &["zero", "one"],
-        "_".to_owned(),
-        |text| (text != "omit").then(|| text.to_owned()),
-        |atom| atom.node.render(),
-        |items| items.join(" "),
-        |left, right| format!("{left}#{right}"),
-        hint::to_string,
-        |item| item.to_string(),
+        &StringRenderer {
+            empty: "_",
+            separator: " ",
+            fuse: "#",
+        },
     )
     .unwrap();
     assert_eq!(result, "_ L zero R one#\"other\"");
@@ -208,13 +237,11 @@ fn alter_alternates_with_omission_defaults_fuse_brackets_and_other() {
         alter::alternate(
             &AlterationHint::HoleH(AlterHole::Num(2)),
             &["zero"],
-            String::new(),
-            |_| None,
-            |_| String::new(),
-            |_| String::new(),
-            |_, _| String::new(),
-            |_| String::new(),
-            |item| item.to_string()
+            &StringRenderer {
+                empty: "",
+                separator: "",
+                fuse: ""
+            }
         )
         .unwrap_err(),
         AlterationError::IndexOutOfBounds {
@@ -264,13 +291,11 @@ fn alter_edge_cases_cover_init_omission_duplicates_and_next_cursor() {
     let rendered = alter::alternate(
         &omitted,
         &[] as &[&str],
-        "EMPTY".into(),
-        |_| None,
-        |a| a.node.render(),
-        |parts| parts.join("|"),
-        |a, b| format!("{a}{b}"),
-        |_| String::new(),
-        |_| String::new(),
+        &StringRenderer {
+            empty: "EMPTY",
+            separator: "|",
+            fuse: "",
+        },
     )
     .unwrap();
     assert_eq!(rendered, "L|R");
@@ -289,13 +314,11 @@ fn alter_edge_cases_cover_init_omission_duplicates_and_next_cursor() {
         alter::alternate(
             &nexts,
             &["a"],
-            String::new(),
-            |_| None,
-            |_| String::new(),
-            |x| x.join(""),
-            |a, b| format!("{a}{b}"),
-            |_| String::new(),
-            |x| x.to_string()
+            &StringRenderer {
+                empty: "",
+                separator: "",
+                fuse: ""
+            }
         )
         .unwrap_err(),
         AlterationError::IndexOutOfBounds {
