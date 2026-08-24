@@ -1,0 +1,1 @@
+//! Shared source and domain model for the P4 `SpecTec` Rust port.
