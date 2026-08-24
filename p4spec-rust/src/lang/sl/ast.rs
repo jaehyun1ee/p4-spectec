@@ -67,6 +67,10 @@ pub type BinOp = il::ast::BinOp;
 pub type CmpOp = il::ast::CmpOp;
 pub type OpTyp = il::ast::OpTyp;
 
+// Subtype checks
+
+pub type Subcheck = il::ast::Subcheck;
+
 // Expressions
 
 pub type Exp = il::ast::Exp;

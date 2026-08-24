@@ -5,6 +5,9 @@ use crate::{
         sl,
     },
 };
+
+// Hints
+
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct Hints {
     pub prose: Option<alter::T>,
@@ -19,6 +22,7 @@ pub struct Hints {
 pub fn empty() -> Hints {
     Hints::default()
 }
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct T<N> {
     pub node: N,

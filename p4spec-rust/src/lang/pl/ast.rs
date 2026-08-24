@@ -5,15 +5,39 @@ use crate::{
         mixfix::Mixfix,
         source::{HasSpan, Span, Spanned},
     },
-    lang::{il, pl::annot, sl},
+    lang::{pl::annot, sl},
 };
+
+// Numbers
+
 pub type Num = sl::ast::Num;
+
+// Texts
+
 pub type Text = sl::ast::Text;
+
+// Identifiers
+
 pub type Id = sl::ast::Id;
+
+// Atoms
+
 pub type Atom = sl::ast::Atom;
+
+// Mixfix operators
+
 pub type Mixop = sl::ast::Mixop;
+
+// Iterators
+
 pub type Iter = sl::ast::Iter;
+
+// Variables
+
 pub type Var = sl::ast::Var;
+
+// Types
+
 pub type Typ = sl::ast::Typ;
 pub type TypKind = sl::ast::TypKind;
 pub type NotTyp = sl::ast::NotTyp;
@@ -22,16 +46,24 @@ pub type DefTyp = sl::ast::DefTyp;
 pub type DefTypKind = sl::ast::DefTypKind;
 pub type TypField = sl::ast::TypField;
 pub type TypCase = sl::ast::TypCase;
+
+// Values
+
 pub type Value = sl::ast::Value;
-pub type Pattern = sl::ast::Pattern;
+
+// Operators
+
 pub type UnOp = sl::ast::UnOp;
 pub type BinOp = sl::ast::BinOp;
 pub type CmpOp = sl::ast::CmpOp;
 pub type OpTyp = sl::ast::OpTyp;
-pub type Subcheck = il::ast::Subcheck;
-pub type TParam = sl::ast::TParam;
-pub type Targ = sl::ast::Targ;
-pub type IterExp = sl::ast::IterExp;
+
+// Subtype checks
+
+pub type Subcheck = sl::ast::Subcheck;
+
+// Expressions
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct ExpNode {
     pub kind: ExpKind,
@@ -79,6 +111,14 @@ pub enum ExpKind {
     IterE(Box<Exp>, IterExp),
 }
 pub type NotExp = Mixfix<Exp>;
+pub type IterExp = sl::ast::IterExp;
+
+// Patterns
+
+pub type Pattern = sl::ast::Pattern;
+
+// Path
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct Path {
     pub kind: PathKind,
@@ -102,12 +142,26 @@ pub enum PathKind {
     SliceP(Box<Path>, Box<Exp>, Box<Exp>),
     DotP(Box<Path>, Atom),
 }
+
+// Type parameters
+
+pub type TParam = sl::ast::TParam;
+
+// Parameters
+
 pub type Param = Spanned<ParamKind>;
 #[derive(Clone, Debug, PartialEq)]
 pub enum ParamKind {
     ExpP(Typ, Exp),
     DefP(Id, Vec<TParam>, Vec<Param>, Typ),
 }
+
+// Type arguments
+
+pub type Targ = sl::ast::Targ;
+
+// Arguments
+
 pub type Arg = Spanned<ArgKind>;
 #[derive(Clone, Debug, PartialEq)]
 pub enum ArgKind {
@@ -139,6 +193,7 @@ pub enum Guard {
     SubG(Typ, Box<Subcheck>),
     MatchG(Pattern),
     MemG(Exp),
+    // Shorthands
     CheckLetSubG(Typ, Box<Subcheck>, Exp),
     CheckLetMatchG(Pattern, Exp),
 }
@@ -189,15 +244,18 @@ impl<Tier> HasSpan for InstrNode<Tier> {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum InstrKind<Tier> {
+    // Shared control flow for both tiers
     IfI(Exp, Vec<IterExp>, Block<Tier>, Dangle),
     HoldI(Id, NotExp, Vec<IterExp>, HoldCase<Tier>),
     CaseI(Exp, Vec<Case<Tier>>, Dangle),
     LetI(Exp, Exp, Vec<IterInstr>),
     DebugI(Exp),
+    // Shorthands
     DestructI(Vec<(Option<String>, Exp)>, Exp),
     CheckLetSubI(Typ, Box<Subcheck>, Exp, Exp, Block<Tier>),
     CheckLetMatchI(Pattern, Exp, Exp, Block<Tier>),
     OptionGetI(Exp, Exp, Block<Tier>),
+    // Tier-specific instruction
     TierI(Tier),
 }
 
