@@ -155,6 +155,17 @@ impl Atom {
         matches!(self, Self::Operator(current) if current == operator)
     }
 
+    fn is_upid(identifier: &str) -> bool {
+        let Some((first, rest)) = identifier.as_bytes().split_first() else {
+            return false;
+        };
+
+        first.is_ascii_uppercase()
+            && rest
+                .iter()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'\''))
+    }
+
     // Constructors
 
     pub fn keyword(identifier: impl Into<String>) -> Self {
@@ -163,7 +174,7 @@ impl Atom {
 
     pub fn tag(identifier: impl Into<String>) -> Result<Self, AtomError> {
         let identifier = identifier.into();
-        if is_upid(&identifier) {
+        if Self::is_upid(&identifier) {
             Ok(Self::Tag(identifier))
         } else {
             Err(AtomError::InvalidTag(identifier))
@@ -178,17 +189,6 @@ impl Atom {
             Ok(Self::Operator(operator))
         }
     }
-}
-
-pub fn is_upid(identifier: &str) -> bool {
-    let Some((first, rest)) = identifier.as_bytes().split_first() else {
-        return false;
-    };
-
-    first.is_ascii_uppercase()
-        && rest
-            .iter()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'\''))
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
