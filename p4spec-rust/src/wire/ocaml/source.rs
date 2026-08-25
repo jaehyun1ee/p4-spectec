@@ -1,6 +1,6 @@
 use serde_json::{Value, json};
 
-use crate::domain::source::{Position, Region, Spanned};
+use crate::domain::source::{Position, Span, Spanned};
 
 use super::{DecodeError, field, integer, object};
 
@@ -23,15 +23,15 @@ pub fn encode_position(position: &Position) -> Value {
     })
 }
 
-pub fn decode_region(value: &Value) -> Result<Region, DecodeError> {
+pub fn decode_region(value: &Value) -> Result<Span, DecodeError> {
     let object = object(value)?;
-    Ok(Region::new(
+    Ok(Span::new(
         decode_position(field(object, "left")?)?,
         decode_position(field(object, "right")?)?,
     ))
 }
 
-pub fn encode_region(region: &Region) -> Value {
+pub fn encode_region(region: &Span) -> Value {
     json!({
         "left": encode_position(&region.left),
         "right": encode_position(&region.right),
@@ -64,7 +64,7 @@ pub(crate) fn decode_annotated<T, N>(
     value: &Value,
     decode_it: impl FnOnce(&Value) -> Result<T, DecodeError>,
     decode_note: impl FnOnce(&Value) -> Result<N, DecodeError>,
-) -> Result<(T, N, Region), DecodeError> {
+) -> Result<(T, N, Span), DecodeError> {
     let object = object(value)?;
     Ok((
         decode_it(field(object, "it")?)?,
@@ -76,7 +76,7 @@ pub(crate) fn decode_annotated<T, N>(
 pub(crate) fn encode_annotated<T, N>(
     node: &T,
     note: &N,
-    span: &Region,
+    span: &Span,
     encode_it: impl FnOnce(&T) -> Value,
     encode_note: impl FnOnce(&N) -> Value,
 ) -> Value {

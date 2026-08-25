@@ -3,11 +3,12 @@
 
 use crate::domain::{
     atom::Atom as DomainAtom,
-    external_data::ExternalData,
-    mixfix::{Mixfix, Mixop as DomainMixop},
-    source::{HasSpan, Span, Spanned},
+    mixfix::Mixfix,
+    mixop::Mixop as DomainMixop,
+    source::{Span, Spanned},
 };
 use crate::lang::{el, hints::input::InputHint, xl::num};
+use crate::yojson::ExternalData;
 
 // Numbers
 
@@ -122,12 +123,6 @@ impl Value {
     }
 }
 
-impl HasSpan for Value {
-    fn span(&self) -> &Span {
-        &self.span
-    }
-}
-
 #[derive(Clone, Debug, PartialEq)]
 pub enum ValueKind {
     BoolV(bool),
@@ -203,12 +198,6 @@ pub struct Exp {
 impl Exp {
     pub fn new(kind: ExpKind, ty: TypKind, span: Span) -> Self {
         Self { kind, ty, span }
-    }
-}
-
-impl HasSpan for Exp {
-    fn span(&self) -> &Span {
-        &self.span
     }
 }
 
@@ -305,12 +294,6 @@ pub struct Path {
 impl Path {
     pub fn new(kind: PathKind, ty: TypKind, span: Span) -> Self {
         Self { kind, ty, span }
-    }
-}
-
-impl HasSpan for Path {
-    fn span(&self) -> &Span {
-        &self.span
     }
 }
 

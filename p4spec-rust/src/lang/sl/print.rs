@@ -1,9 +1,6 @@
 use std::fmt;
 
-use crate::{
-    domain::mixop,
-    lang::{il, sl::ast::*},
-};
+use crate::lang::{il, sl::ast::*};
 
 fn join<Item>(items: &[Item], separator: &str, render: impl Fn(&Item) -> String) -> String {
     items.iter().map(render).collect::<Vec<_>>().join(separator)
@@ -877,7 +874,10 @@ pub fn string_of_relinput(signature: &RelSignature, exps_input: &[Exp]) -> Strin
                 |position| string_of_exp(&exps_input[position]),
             )
     });
-    mixop::assemble(&nottyp.node.to_mixop(), args, string_of_atom)
+    nottyp
+        .node
+        .to_mixop()
+        .to_string(args, string_of_atom)
         .expect("relation input arity matches notation")
 }
 
@@ -901,7 +901,10 @@ pub fn string_of_reloutput(signature: &RelSignature, exps_output: &[Exp]) -> Str
                 |position| string_of_exp(&exps_output[position]),
             )
     });
-    mixop::assemble(&nottyp.node.to_mixop(), args, string_of_atom)
+    nottyp
+        .node
+        .to_mixop()
+        .to_string(args, string_of_atom)
         .expect("relation output arity matches notation")
 }
 

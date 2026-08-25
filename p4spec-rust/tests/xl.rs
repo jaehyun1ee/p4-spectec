@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 
 use num_bigint::BigInt;
 use p4spec_rust::{
-    domain::source::{Region, Spanned},
+    domain::source::{Position, Span, Spanned},
     lang::xl::{
         num::{self, BinOp, CmpOp, Natural, Number, NumericError, Typ, UnOp},
         utf8, var,
@@ -51,10 +51,13 @@ fn utf8_rejects_invalid_codepoints_and_byte_sequences() {
 
 #[test]
 fn strip_var_suffix_preserves_source_and_all_underscore_suffixes() {
-    let source = Region::for_file("suffix-source");
+    let source = Span::new(
+        Position::new("suffix-source", 0, 0),
+        Position::new("suffix-source", 0, 0),
+    );
     let suffixed = Spanned::new("value_suffix".to_owned(), source.clone());
-    let apostrophe = Spanned::new("value'".to_owned(), Region::none());
-    let all_underscores = Spanned::new("value___".to_owned(), Region::none());
+    let apostrophe = Spanned::new("value'".to_owned(), Span::default());
+    let all_underscores = Spanned::new("value___".to_owned(), Span::default());
 
     let stripped = var::strip_var_suffix(&suffixed);
     assert_eq!(stripped.node, "value");

@@ -2,7 +2,7 @@ use p4spec_rust::{
     domain::{
         atom::Atom,
         mixfix::Mixfix,
-        source::{Region, Spanned},
+        source::{Position, Span, Spanned},
     },
     lang::{
         hints::input::InputHint,
@@ -10,11 +10,11 @@ use p4spec_rust::{
     },
 };
 
-fn span() -> Region {
-    Region::none()
+fn span() -> Span {
+    Span::default()
 }
-fn named_span(name: &str) -> Region {
-    Region::for_file(name)
+fn named_span(name: &str) -> Span {
+    Span::new(Position::new(name, 0, 0), Position::new(name, 0, 0))
 }
 fn id(name: &str) -> ast::Id {
     Spanned::new(name.into(), span())
@@ -609,7 +609,7 @@ fn assert_var(exp: &ast::Exp, expected_id: &ast::Id, expected_ty: ast::TypKind) 
     assert_eq!(exp.ty, expected_ty);
     assert_eq!(exp.span, expected_id.span);
 }
-fn assert_iter_type(typ: &ast::Typ, iter: ast::Iter, inner: ast::TypKind, inner_span: &Region) {
+fn assert_iter_type(typ: &ast::Typ, iter: ast::Iter, inner: ast::TypKind, inner_span: &Span) {
     let ast::TypKind::IterT(inner_typ, actual_iter) = &typ.node else {
         panic!("expected iteration type")
     };

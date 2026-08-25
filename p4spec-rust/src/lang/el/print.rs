@@ -59,7 +59,7 @@ pub fn string_of_defid(id: &Id) -> String {
 // Atoms
 
 pub fn string_of_atom(atom: &Atom) -> String {
-    atom.node.source_string()
+    atom.node.to_string()
 }
 
 // Iterators
@@ -789,14 +789,14 @@ fn write_spec(output: &mut dyn fmt::Write, spec: &Spec) -> fmt::Result {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::source::{Region, Spanned};
+    use crate::domain::source::{Span, Spanned};
 
     fn id(name: &str) -> Id {
-        Spanned::new(name.to_owned(), Region::none())
+        Spanned::new(name.to_owned(), Span::default())
     }
 
     fn exp(kind: ExpKind) -> Exp {
-        Spanned::new(kind, Region::none())
+        Spanned::new(kind, Span::default())
     }
 
     #[test]

@@ -3,7 +3,7 @@ use std::collections::BTreeSet;
 use p4spec_rust::{
     domain::{
         atom::Atom as DomainAtom,
-        source::{Region, Spanned},
+        source::{Position, Span, Spanned},
     },
     lang::el::{
         ast::{self, BinOp, ExpKind},
@@ -11,8 +11,8 @@ use p4spec_rust::{
     },
 };
 
-fn span(file: &str) -> Region {
-    Region::for_file(file)
+fn span(file: &str) -> Span {
+    Span::new(Position::new(file, 0, 0), Position::new(file, 0, 0))
 }
 
 fn id(name: &str, file: &str) -> ast::Id {
@@ -24,7 +24,7 @@ fn exp(kind: ExpKind, file: &str) -> ast::Exp {
 }
 
 fn atom(source: &str) -> ast::Atom {
-    Spanned::new(DomainAtom::from_source(source), span("atom.watsup"))
+    Spanned::new(DomainAtom::of_string(source), span("atom.watsup"))
 }
 
 fn plain(kind: ast::PlainTypKind) -> ast::PlainTyp {

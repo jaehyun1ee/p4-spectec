@@ -1,7 +1,7 @@
 use std::fmt;
 
 use crate::{
-    domain::mixfix::Mixop,
+    domain::mixop::Mixop,
     lang::{hints::input::InputHint, il::print as il_print},
 };
 

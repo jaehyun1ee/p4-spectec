@@ -2,7 +2,7 @@
 // recursive edges
 
 use crate::{
-    domain::source::{HasSpan, Span, Spanned},
+    domain::source::{Span, Spanned},
     lang::{el, hints::input::InputHint, il},
 };
 
@@ -156,12 +156,6 @@ pub struct Instr {
 impl Instr {
     pub fn new(kind: InstrKind, iid: Iid, span: Span) -> Self {
         Self { kind, iid, span }
-    }
-}
-
-impl HasSpan for Instr {
-    fn span(&self) -> &Span {
-        &self.span
     }
 }
 

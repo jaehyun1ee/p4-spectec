@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
-    domain::source::{Region, Spanned},
+    domain::source::{Span, Spanned},
     lang::xl,
 };
 
@@ -29,11 +29,11 @@ pub fn id(ids: &Ids, id: &Id) -> Id {
 pub(crate) fn var_from_typ_with_aliases(
     aliases: &[(Id, Typ)],
     ids: &Ids,
-    at: Region,
+    at: Span,
     typ: &Typ,
     wildcard: bool,
 ) -> Var {
-    fn derive(aliases: &[(Id, Typ)], at: &Region, typ: &Typ) -> Var {
+    fn derive(aliases: &[(Id, Typ)], at: &Span, typ: &Typ) -> Var {
         let matching = aliases
             .iter()
             .filter(|(name, alias)| {
@@ -72,19 +72,19 @@ pub(crate) fn var_from_typ_with_aliases(
     variable
 }
 
-fn aliases_at(metavars: &Metavars, at: &Region) -> Vec<(Id, Typ)> {
+fn aliases_at(metavars: &Metavars, at: &Span) -> Vec<(Id, Typ)> {
     metavars
         .iter()
         .map(|(name, typ)| (Spanned::new(name.clone(), at.clone()), typ.clone()))
         .collect()
 }
 
-pub fn var_from_typ(metavars: &Metavars, ids: &Ids, at: Region, typ: &Typ) -> Var {
+pub fn var_from_typ(metavars: &Metavars, ids: &Ids, at: Span, typ: &Typ) -> Var {
     let aliases = aliases_at(metavars, &at);
     var_from_typ_with_aliases(&aliases, ids, at, typ, false)
 }
 
-pub fn var_from_typ_wildcard(metavars: &Metavars, ids: &Ids, at: Region, typ: &Typ) -> Var {
+pub fn var_from_typ_wildcard(metavars: &Metavars, ids: &Ids, at: Span, typ: &Typ) -> Var {
     let aliases = aliases_at(metavars, &at);
     var_from_typ_with_aliases(&aliases, ids, at, typ, true)
 }

@@ -1,13 +1,13 @@
 use p4spec_rust::{
     domain::{
         mixfix::Mixfix,
-        source::{Region, Spanned},
+        source::{Position, Span, Spanned},
     },
     lang::{hints::input::InputHint, il, sl},
 };
 
-fn span(name: &str) -> Region {
-    Region::for_file(name)
+fn span(name: &str) -> Span {
+    Span::new(Position::new(name, 0, 0), Position::new(name, 0, 0))
 }
 
 fn id(name: &str) -> il::ast::Id {

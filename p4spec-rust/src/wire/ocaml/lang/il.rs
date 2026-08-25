@@ -4,8 +4,9 @@ use std::{cell::Cell, collections::HashSet};
 use serde_json::{Map, Number, Value, json};
 use thiserror::Error;
 
+use crate::yojson::ExternalData;
 use crate::{
-    domain::{external_data::ExternalData, mixfix::Mixfix},
+    domain::mixfix::Mixfix,
     lang::il::ast::{
         self, ArgKind, BinOp, CmpOp, DefKind, DefTypKind, ExpKind, Iter, ListPattern, OpTyp,
         OptPattern, ParamKind, PathKind, Pattern, PremKind, TypKind, UnOp, ValueKind,

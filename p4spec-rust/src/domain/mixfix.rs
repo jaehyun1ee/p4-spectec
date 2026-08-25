@@ -1,44 +1,34 @@
 use std::{
     cmp::Ordering,
-    error::Error,
     fmt,
     hash::{Hash, Hasher},
 };
 
 use super::{atom::Atom, source::Spanned};
 
+/// An atom paired with its source span
 pub type AtomPhrase = Spanned<Atom>;
-pub type Mixop = Mixfix<()>;
 
+/// A mixfix expression with arguments of type `T`
 #[derive(Clone, Debug)]
 pub enum Mixfix<T> {
+    /// Argument position
     Arg(T),
+    /// Literal atom
     Atom(AtomPhrase),
+    /// Bracketed expression
     Brack(AtomPhrase, Box<Self>, AtomPhrase),
+    /// Infix expression
     Infix(Box<Self>, AtomPhrase, Box<Self>),
+    /// Sequence of expressions
     Seq(Vec<Self>),
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ArityMismatch {
-    TooFew,
-    TooMany,
-}
-
-impl fmt::Display for ArityMismatch {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::TooFew => formatter.write_str("Mixfix.fill: too few arguments"),
-            Self::TooMany => formatter.write_str("Mixfix.fill: too many arguments"),
-        }
-    }
-}
-
-impl Error for ArityMismatch {}
-
-// Equality and comparison
+// == Equality and comparison
 
 impl<T> Mixfix<T> {
+    // - Tagging for comparison
+
     fn tag(&self) -> u8 {
         match self {
             Self::Arg(_) => 0,
@@ -49,329 +39,365 @@ impl<T> Mixfix<T> {
         }
     }
 
+    // - Comparison
+
+    /// Compares structure and atoms lexicographically, using `compare_arg` for arguments
     pub fn cmp_by<U>(
         &self,
-        other: &Mixfix<U>,
+        mixfix_other: &Mixfix<U>,
         mut compare_arg: impl FnMut(&T, &U) -> Ordering,
     ) -> Ordering {
-        fn compare<T, U>(
-            left: &Mixfix<T>,
-            right: &Mixfix<U>,
-            compare_arg: &mut impl FnMut(&T, &U) -> Ordering,
-        ) -> Ordering {
-            match (left, right) {
-                (Mixfix::Arg(arg_l), Mixfix::Arg(arg_r)) => compare_arg(arg_l, arg_r),
-                (Mixfix::Atom(atom_l), Mixfix::Atom(atom_r)) => atom_l.node.cmp(&atom_r.node),
-                (
-                    Mixfix::Brack(atom_l_l, body_l, atom_l_r),
-                    Mixfix::Brack(atom_r_l, body_r, atom_r_r),
-                ) => atom_l_l
-                    .node
-                    .cmp(&atom_r_l.node)
-                    .then_with(|| compare(body_l, body_r, compare_arg))
-                    .then_with(|| atom_l_r.node.cmp(&atom_r_r.node)),
-                (
-                    Mixfix::Infix(left_l, atom_l, right_l),
-                    Mixfix::Infix(left_r, atom_r, right_r),
-                ) => compare(left_l, left_r, compare_arg)
-                    .then_with(|| atom_l.node.cmp(&atom_r.node))
-                    .then_with(|| compare(right_l, right_r, compare_arg)),
-                (Mixfix::Seq(items_l), Mixfix::Seq(items_r)) => {
-                    for (item_l, item_r) in items_l.iter().zip(items_r) {
-                        let ordering = compare(item_l, item_r, compare_arg);
-                        if ordering != Ordering::Equal {
-                            return ordering;
-                        }
+        self.cmp_by_inner(mixfix_other, &mut compare_arg)
+    }
+
+    fn cmp_by_inner<U>(
+        &self,
+        mixfix_other: &Mixfix<U>,
+        compare_arg: &mut impl FnMut(&T, &U) -> Ordering,
+    ) -> Ordering {
+        match (self, mixfix_other) {
+            (Self::Arg(arg_l), Mixfix::Arg(arg_r)) => compare_arg(arg_l, arg_r),
+            (Self::Atom(atom_l), Mixfix::Atom(atom_r)) => atom_l.node.cmp(&atom_r.node),
+            (
+                Self::Brack(atom_l_l, mixfix_l, atom_l_r),
+                Mixfix::Brack(atom_r_l, mixfix_r, atom_r_r),
+            ) => atom_l_l
+                .node
+                .cmp(&atom_r_l.node)
+                .then_with(|| mixfix_l.cmp_by_inner(mixfix_r, compare_arg))
+                .then_with(|| atom_l_r.node.cmp(&atom_r_r.node)),
+            (
+                Self::Infix(mixfix_l_l, atom_l, mixfix_l_r),
+                Mixfix::Infix(mixfix_r_l, atom_r, mixfix_r_r),
+            ) => mixfix_l_l
+                .cmp_by_inner(mixfix_r_l, compare_arg)
+                .then_with(|| atom_l.node.cmp(&atom_r.node))
+                .then_with(|| mixfix_l_r.cmp_by_inner(mixfix_r_r, compare_arg)),
+            (Self::Seq(mixfixes_l), Mixfix::Seq(mixfixes_r)) => {
+                for (mixfix_l, mixfix_r) in mixfixes_l.iter().zip(mixfixes_r) {
+                    let ord = mixfix_l.cmp_by_inner(mixfix_r, compare_arg);
+                    if ord != Ordering::Equal {
+                        return ord;
                     }
-                    items_l.len().cmp(&items_r.len())
                 }
-                _ => left.tag().cmp(&right.tag()),
+                mixfixes_l.len().cmp(&mixfixes_r.len())
             }
+            _ => self.tag().cmp(&mixfix_other.tag()),
         }
-
-        compare(self, other, &mut compare_arg)
     }
 
-    pub fn eq_by<U>(&self, other: &Mixfix<U>, mut eq_arg: impl FnMut(&T, &U) -> bool) -> bool {
-        fn equal<T, U>(
-            left: &Mixfix<T>,
-            right: &Mixfix<U>,
-            eq_arg: &mut impl FnMut(&T, &U) -> bool,
-        ) -> bool {
-            match (left, right) {
-                (Mixfix::Arg(arg_l), Mixfix::Arg(arg_r)) => eq_arg(arg_l, arg_r),
-                (Mixfix::Atom(atom_l), Mixfix::Atom(atom_r)) => atom_l.node == atom_r.node,
-                (
-                    Mixfix::Brack(atom_l_l, body_l, atom_l_r),
-                    Mixfix::Brack(atom_r_l, body_r, atom_r_r),
-                ) => {
-                    atom_l_l.node == atom_r_l.node
-                        && equal(body_l, body_r, eq_arg)
-                        && atom_l_r.node == atom_r_r.node
-                }
-                (
-                    Mixfix::Infix(left_l, atom_l, right_l),
-                    Mixfix::Infix(left_r, atom_r, right_r),
-                ) => {
-                    atom_l.node == atom_r.node
-                        && equal(left_l, left_r, eq_arg)
-                        && equal(right_l, right_r, eq_arg)
-                }
-                (Mixfix::Seq(items_l), Mixfix::Seq(items_r)) => {
-                    items_l.len() == items_r.len()
-                        && items_l
-                            .iter()
-                            .zip(items_r)
-                            .all(|(item_l, item_r)| equal(item_l, item_r, eq_arg))
-                }
-                _ => false,
+    /// Compares structure and atoms, using `eq_arg` for arguments
+    pub fn eq_by<U>(
+        &self,
+        mixfix_other: &Mixfix<U>,
+        mut eq_arg: impl FnMut(&T, &U) -> bool,
+    ) -> bool {
+        self.eq_by_inner(mixfix_other, &mut eq_arg)
+    }
+
+    fn eq_by_inner<U>(
+        &self,
+        mixfix_other: &Mixfix<U>,
+        eq_arg: &mut impl FnMut(&T, &U) -> bool,
+    ) -> bool {
+        match (self, mixfix_other) {
+            (Self::Arg(arg_l), Mixfix::Arg(arg_r)) => eq_arg(arg_l, arg_r),
+            (Self::Atom(atom_l), Mixfix::Atom(atom_r)) => atom_l.node == atom_r.node,
+            (
+                Self::Brack(atom_l_l, mixfix_l, atom_l_r),
+                Mixfix::Brack(atom_r_l, mixfix_r, atom_r_r),
+            ) => {
+                atom_l_l.node == atom_r_l.node
+                    && mixfix_l.eq_by_inner(mixfix_r, eq_arg)
+                    && atom_l_r.node == atom_r_r.node
             }
+            (
+                Self::Infix(mixfix_l_l, atom_l, mixfix_l_r),
+                Mixfix::Infix(mixfix_r_l, atom_r, mixfix_r_r),
+            ) => {
+                mixfix_l_l.eq_by_inner(mixfix_r_l, eq_arg)
+                    && atom_l.node == atom_r.node
+                    && mixfix_l_r.eq_by_inner(mixfix_r_r, eq_arg)
+            }
+            (Self::Seq(mixfixes_l), Mixfix::Seq(mixfixes_r)) => {
+                mixfixes_l.len() == mixfixes_r.len()
+                    && mixfixes_l
+                        .iter()
+                        .zip(mixfixes_r)
+                        .all(|(mixfix_l, mixfix_r)| mixfix_l.eq_by_inner(mixfix_r, eq_arg))
+            }
+            _ => false,
         }
-
-        equal(self, other, &mut eq_arg)
-    }
-
-    pub fn cmp_mixop<U>(&self, other: &Mixfix<U>) -> Ordering {
-        self.cmp_by(other, |_, _| Ordering::Equal)
-    }
-
-    pub fn eq_mixop<U>(&self, other: &Mixfix<U>) -> bool {
-        self.eq_by(other, |_, _| true)
     }
 }
 
 impl<T: PartialEq> PartialEq for Mixfix<T> {
-    fn eq(&self, other: &Self) -> bool {
-        self.eq_by(other, PartialEq::eq)
+    fn eq(&self, mixfix_other: &Self) -> bool {
+        self.eq_by(mixfix_other, PartialEq::eq)
     }
 }
 
 impl<T: Eq> Eq for Mixfix<T> {}
 
+// == Ordering
+
 impl<T: Ord> Ord for Mixfix<T> {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.cmp_by(other, Ord::cmp)
+    fn cmp(&self, mixfix_other: &Self) -> Ordering {
+        self.cmp_by(mixfix_other, Ord::cmp)
     }
 }
 
 impl<T: Ord> PartialOrd for Mixfix<T> {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
+    fn partial_cmp(&self, mixfix_other: &Self) -> Option<Ordering> {
+        Some(self.cmp(mixfix_other))
     }
 }
+
+// == Hashing
 
 impl<T: Hash> Hash for Mixfix<T> {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.tag().hash(state);
+    fn hash<H: Hasher>(&self, hasher: &mut H) {
+        self.tag().hash(hasher);
         match self {
-            Self::Arg(arg) => arg.hash(state),
-            Self::Atom(atom) => atom.node.hash(state),
-            Self::Brack(left, body, right) => {
-                left.node.hash(state);
-                body.hash(state);
-                right.node.hash(state);
+            Self::Arg(arg) => arg.hash(hasher),
+            Self::Atom(atom) => atom.node.hash(hasher),
+            Self::Brack(atom_l, mixfix, atom_r) => {
+                atom_l.node.hash(hasher);
+                mixfix.hash(hasher);
+                atom_r.node.hash(hasher);
             }
-            Self::Infix(left, atom, right) => {
-                left.hash(state);
-                atom.node.hash(state);
-                right.hash(state);
+            Self::Infix(mixfix_l, atom, mixfix_r) => {
+                mixfix_l.hash(hasher);
+                atom.node.hash(hasher);
+                mixfix_r.hash(hasher);
             }
-            Self::Seq(items) => items.hash(state),
+            Self::Seq(mixfixes) => mixfixes.hash(hasher),
         }
     }
 }
 
-// Fold, map, and iter
+// == Fold, map, and iter
 
 impl<T> Mixfix<T> {
-    pub fn fold<A>(&self, initial: A, mut fold_arg: impl FnMut(A, &T) -> A) -> A {
-        fn fold<T, A>(mixfix: &Mixfix<T>, initial: A, fold_arg: &mut impl FnMut(A, &T) -> A) -> A {
-            match mixfix {
-                Mixfix::Arg(arg) => fold_arg(initial, arg),
-                Mixfix::Atom(_) => initial,
-                Mixfix::Brack(_, body, _) => fold(body, initial, fold_arg),
-                Mixfix::Infix(left, _, right) => {
-                    let initial = fold(left, initial, fold_arg);
-                    fold(right, initial, fold_arg)
-                }
-                Mixfix::Seq(items) => items
-                    .iter()
-                    .fold(initial, |acc, item| fold(item, acc, fold_arg)),
-            }
-        }
-
-        fold(self, initial, &mut fold_arg)
+    /// Folds arguments from left to right
+    pub fn fold<A>(&self, acc: A, mut fold_arg: impl FnMut(A, &T) -> A) -> A {
+        self.fold_inner(acc, &mut fold_arg)
     }
 
+    fn fold_inner<A>(&self, acc: A, fold_arg: &mut impl FnMut(A, &T) -> A) -> A {
+        match self {
+            Self::Arg(arg) => fold_arg(acc, arg),
+            Self::Atom(_) => acc,
+            Self::Brack(_, mixfix, _) => mixfix.fold_inner(acc, fold_arg),
+            Self::Infix(mixfix_l, _, mixfix_r) => {
+                let acc = mixfix_l.fold_inner(acc, fold_arg);
+                mixfix_r.fold_inner(acc, fold_arg)
+            }
+            Self::Seq(mixfixes) => mixfixes
+                .iter()
+                .fold(acc, |acc, mixfix| mixfix.fold_inner(acc, fold_arg)),
+        }
+    }
+
+    /// Maps arguments while preserving mixfix structure and atoms
     pub fn map<U>(&self, mut map_arg: impl FnMut(&T) -> U) -> Mixfix<U> {
-        fn map<T, U>(mixfix: &Mixfix<T>, map_arg: &mut impl FnMut(&T) -> U) -> Mixfix<U> {
-            match mixfix {
-                Mixfix::Arg(arg) => Mixfix::Arg(map_arg(arg)),
-                Mixfix::Atom(atom) => Mixfix::Atom(atom.clone()),
-                Mixfix::Brack(left, body, right) => {
-                    Mixfix::Brack(left.clone(), Box::new(map(body, map_arg)), right.clone())
-                }
-                Mixfix::Infix(left, atom, right) => Mixfix::Infix(
-                    Box::new(map(left, map_arg)),
-                    atom.clone(),
-                    Box::new(map(right, map_arg)),
-                ),
-                Mixfix::Seq(items) => {
-                    Mixfix::Seq(items.iter().map(|item| map(item, map_arg)).collect())
-                }
-            }
-        }
-
-        map(self, &mut map_arg)
+        self.map_inner(&mut map_arg)
     }
 
+    fn map_inner<U>(&self, map_arg: &mut impl FnMut(&T) -> U) -> Mixfix<U> {
+        match self {
+            Self::Arg(arg) => Mixfix::Arg(map_arg(arg)),
+            Self::Atom(atom) => Mixfix::Atom(atom.clone()),
+            Self::Brack(atom_l, mixfix, atom_r) => Mixfix::Brack(
+                atom_l.clone(),
+                Box::new(mixfix.map_inner(map_arg)),
+                atom_r.clone(),
+            ),
+            Self::Infix(mixfix_l, atom, mixfix_r) => Mixfix::Infix(
+                Box::new(mixfix_l.map_inner(map_arg)),
+                atom.clone(),
+                Box::new(mixfix_r.map_inner(map_arg)),
+            ),
+            Self::Seq(mixfixes) => Mixfix::Seq(
+                mixfixes
+                    .iter()
+                    .map(|mixfix| mixfix.map_inner(map_arg))
+                    .collect(),
+            ),
+        }
+    }
+
+    /// Visits arguments from left to right
     pub fn iter(&self, mut visit_arg: impl FnMut(&T)) {
         self.fold((), |(), arg| visit_arg(arg));
     }
+}
 
-    pub fn iter_atoms(&self, mut visit_atom: impl FnMut(&AtomPhrase)) {
-        for atom in self.atoms() {
-            visit_atom(atom);
-        }
-    }
+// == Utilities using fold, map, and iter
 
-    // Conversion
+impl<T> Mixfix<T> {
+    // - Arity
 
-    pub fn to_mixop(&self) -> Mixop {
-        self.map(|_| ())
-    }
-
-    // Arity
-
+    /// Returns the number of argument positions
     pub fn arity(&self) -> usize {
         self.fold(0, |arity, _| arity + 1)
     }
 
-    // Atoms and args
+    // - Atoms and args
 
+    /// Collects atoms in left-to-right tree order
     pub fn atoms(&self) -> Vec<&AtomPhrase> {
-        fn collect<'a, T>(mixfix: &'a Mixfix<T>, atoms: &mut Vec<&'a AtomPhrase>) {
-            match mixfix {
-                Mixfix::Arg(_) => {}
-                Mixfix::Atom(atom) => atoms.push(atom),
-                Mixfix::Brack(left, body, right) => {
-                    atoms.push(left);
-                    collect(body, atoms);
-                    atoms.push(right);
-                }
-                Mixfix::Infix(left, atom, right) => {
-                    collect(left, atoms);
-                    atoms.push(atom);
-                    collect(right, atoms);
-                }
-                Mixfix::Seq(items) => {
-                    for item in items {
-                        collect(item, atoms);
-                    }
-                }
-            }
-        }
-
         let mut atoms = Vec::new();
-        collect(self, &mut atoms);
+        self.collect_atoms(&mut atoms);
         atoms
     }
 
+    fn collect_atoms<'a>(&'a self, atoms: &mut Vec<&'a AtomPhrase>) {
+        match self {
+            Self::Arg(_) => {}
+            Self::Atom(atom) => atoms.push(atom),
+            Self::Brack(atom_l, mixfix, atom_r) => {
+                atoms.push(atom_l);
+                mixfix.collect_atoms(atoms);
+                atoms.push(atom_r);
+            }
+            Self::Infix(mixfix_l, atom, mixfix_r) => {
+                mixfix_l.collect_atoms(atoms);
+                atoms.push(atom);
+                mixfix_r.collect_atoms(atoms);
+            }
+            Self::Seq(mixfixes) => {
+                for mixfix in mixfixes {
+                    mixfix.collect_atoms(atoms);
+                }
+            }
+        }
+    }
+
+    /// Groups consecutive atoms, splitting the groups at argument positions
     pub fn atoms_matrix(&self) -> Vec<Vec<&AtomPhrase>> {
-        enum Part<'a> {
-            Atom(&'a AtomPhrase),
-            Arg,
-        }
-
-        fn collect<'a, T>(mixfix: &'a Mixfix<T>, parts: &mut Vec<Part<'a>>) {
-            match mixfix {
-                Mixfix::Arg(_) => parts.push(Part::Arg),
-                Mixfix::Atom(atom) => parts.push(Part::Atom(atom)),
-                Mixfix::Brack(left, body, right) => {
-                    parts.push(Part::Atom(left));
-                    collect(body, parts);
-                    parts.push(Part::Atom(right));
-                }
-                Mixfix::Infix(left, atom, right) => {
-                    collect(left, parts);
-                    parts.push(Part::Atom(atom));
-                    collect(right, parts);
-                }
-                Mixfix::Seq(items) => {
-                    for item in items {
-                        collect(item, parts);
-                    }
-                }
-            }
-        }
-
-        let mut parts = Vec::new();
-        collect(self, &mut parts);
-
         let mut matrix = vec![Vec::new()];
-        for part in parts {
-            match part {
-                Part::Atom(atom) => matrix.last_mut().expect("matrix is non-empty").push(atom),
-                Part::Arg => matrix.push(Vec::new()),
-            }
-        }
+        self.collect_atoms_matrix(&mut matrix);
         matrix
     }
 
-    pub fn args(&self) -> Vec<&T> {
-        fn collect<'a, T>(mixfix: &'a Mixfix<T>, args: &mut Vec<&'a T>) {
-            match mixfix {
-                Mixfix::Arg(arg) => args.push(arg),
-                Mixfix::Atom(_) => {}
-                Mixfix::Brack(_, body, _) => collect(body, args),
-                Mixfix::Infix(left, _, right) => {
-                    collect(left, args);
-                    collect(right, args);
-                }
-                Mixfix::Seq(items) => {
-                    for item in items {
-                        collect(item, args);
-                    }
+    fn collect_atoms_matrix<'a>(&'a self, matrix: &mut Vec<Vec<&'a AtomPhrase>>) {
+        match self {
+            Self::Arg(_) => matrix.push(Vec::new()),
+            Self::Atom(atom) => matrix.last_mut().expect("matrix is non-empty").push(atom),
+            Self::Brack(atom_l, mixfix, atom_r) => {
+                matrix.last_mut().expect("matrix is non-empty").push(atom_l);
+                mixfix.collect_atoms_matrix(matrix);
+                matrix.last_mut().expect("matrix is non-empty").push(atom_r);
+            }
+            Self::Infix(mixfix_l, atom, mixfix_r) => {
+                mixfix_l.collect_atoms_matrix(matrix);
+                matrix.last_mut().expect("matrix is non-empty").push(atom);
+                mixfix_r.collect_atoms_matrix(matrix);
+            }
+            Self::Seq(mixfixes) => {
+                for mixfix in mixfixes {
+                    mixfix.collect_atoms_matrix(matrix);
                 }
             }
         }
+    }
 
+    /// Collects arguments in left-to-right tree order
+    pub fn args(&self) -> Vec<&T> {
         let mut args = Vec::with_capacity(self.arity());
-        collect(self, &mut args);
+        self.collect_args(&mut args);
         args
     }
 
-    // Filling and splitting
-
-    pub fn split(&self) -> (Mixop, Vec<&T>) {
-        (self.to_mixop(), self.args())
-    }
-
-    fn display_string(&self) -> String {
-        fn inner<T>(mixfix: &Mixfix<T>) -> String {
-            match mixfix {
-                Mixfix::Arg(_) => "%".into(),
-                Mixfix::Atom(atom) => atom.node.render(),
-                Mixfix::Brack(left, body, right) => {
-                    format!(
-                        "{}{}{}",
-                        left.node.render(),
-                        inner(body),
-                        right.node.render()
-                    )
+    fn collect_args<'a>(&'a self, args: &mut Vec<&'a T>) {
+        match self {
+            Self::Arg(arg) => args.push(arg),
+            Self::Atom(_) => {}
+            Self::Brack(_, mixfix, _) => mixfix.collect_args(args),
+            Self::Infix(mixfix_l, _, mixfix_r) => {
+                mixfix_l.collect_args(args);
+                mixfix_r.collect_args(args);
+            }
+            Self::Seq(mixfixes) => {
+                for mixfix in mixfixes {
+                    mixfix.collect_args(args);
                 }
-                Mixfix::Infix(left, atom, right) => {
-                    format!("{}{}{}", inner(left), atom.node.render(), inner(right))
-                }
-                Mixfix::Seq(items) => items.iter().map(inner).collect::<Vec<_>>().join(" "),
             }
         }
+    }
+}
 
-        format!("`{}`", inner(self))
+// == Assembly
+
+impl<T: Clone> Mixfix<T> {
+    /// Combines arguments and selected atoms, inserting `space` between adjacent pieces
+    pub fn assemble(
+        &self,
+        empty: T,
+        space: T,
+        mut atom: impl FnMut(&AtomPhrase) -> Option<T>,
+        mut concat: impl FnMut(T, T) -> T,
+    ) -> T {
+        self.assemble_inner(&space, &mut atom, &mut concat)
+            .unwrap_or(empty)
     }
 
-    // Rendering
+    fn assemble_join(
+        options: impl IntoIterator<Item = Option<T>>,
+        space: &T,
+        concat: &mut impl FnMut(T, T) -> T,
+    ) -> Option<T> {
+        let mut values = options.into_iter().flatten();
+        let value = values.next()?;
+        Some(values.fold(value, |value_l, value_r| {
+            let value_l = concat(value_l, space.clone());
+            concat(value_l, value_r)
+        }))
+    }
 
+    fn assemble_inner(
+        &self,
+        space: &T,
+        atom: &mut impl FnMut(&AtomPhrase) -> Option<T>,
+        concat: &mut impl FnMut(T, T) -> T,
+    ) -> Option<T> {
+        match self {
+            Self::Arg(arg) => Some(arg.clone()),
+            Self::Atom(atom_phrase) => atom(atom_phrase),
+            Self::Brack(atom_l, mixfix, atom_r) => Self::assemble_join(
+                [
+                    atom(atom_l),
+                    mixfix.assemble_inner(space, atom, concat),
+                    atom(atom_r),
+                ],
+                space,
+                concat,
+            ),
+            Self::Infix(mixfix_l, atom_phrase, mixfix_r) => Self::assemble_join(
+                [
+                    mixfix_l.assemble_inner(space, atom, concat),
+                    atom(atom_phrase),
+                    mixfix_r.assemble_inner(space, atom, concat),
+                ],
+                space,
+                concat,
+            ),
+            Self::Seq(mixfixes) => {
+                let options = mixfixes
+                    .iter()
+                    .map(|mixfix| mixfix.assemble_inner(space, atom, concat))
+                    .collect::<Vec<_>>();
+                Self::assemble_join(options, space, concat)
+            }
+        }
+    }
+}
+
+// == Rendering
+
+impl<T> Mixfix<T> {
+    /// Renders atoms and arguments, separating non-empty pieces with spaces
     pub fn render(
         &self,
         mut string_of_atom: impl FnMut(&AtomPhrase) -> String,
@@ -381,115 +407,63 @@ impl<T> Mixfix<T> {
             String::new(),
             " ".to_owned(),
             |atom| {
-                let rendered = string_of_atom(atom);
-                (!rendered.is_empty()).then_some(rendered)
+                let string = string_of_atom(atom);
+                (!string.is_empty()).then_some(string)
             },
-            |left, right| left + &right,
+            |string_l, string_r| string_l + &string_r,
         )
     }
 }
 
-impl<T: Clone> Mixfix<T> {
-    pub fn map_atoms(&self, mut map_atom: impl FnMut(&AtomPhrase) -> AtomPhrase) -> Self {
-        fn map<T: Clone>(
-            mixfix: &Mixfix<T>,
-            map_atom: &mut impl FnMut(&AtomPhrase) -> AtomPhrase,
-        ) -> Mixfix<T> {
-            match mixfix {
-                Mixfix::Arg(arg) => Mixfix::Arg(arg.clone()),
-                Mixfix::Atom(atom) => Mixfix::Atom(map_atom(atom)),
-                Mixfix::Brack(left, body, right) => Mixfix::Brack(
-                    map_atom(left),
-                    Box::new(map(body, map_atom)),
-                    map_atom(right),
-                ),
-                Mixfix::Infix(left, atom, right) => Mixfix::Infix(
-                    Box::new(map(left, map_atom)),
-                    map_atom(atom),
-                    Box::new(map(right, map_atom)),
-                ),
-                Mixfix::Seq(items) => {
-                    Mixfix::Seq(items.iter().map(|item| map(item, map_atom)).collect())
-                }
-            }
-        }
+// == Display
 
-        map(self, &mut map_atom)
+impl<T> Mixfix<T> {
+    fn display(&self) -> String {
+        format!("`{}`", self.display_inner())
     }
 
-    pub fn assemble(
-        &self,
-        empty: T,
-        space: T,
-        mut atom: impl FnMut(&AtomPhrase) -> Option<T>,
-        mut concat: impl FnMut(T, T) -> T,
-    ) -> T {
-        fn join<T: Clone>(
-            pieces: impl IntoIterator<Item = Option<T>>,
-            space: &T,
-            concat: &mut impl FnMut(T, T) -> T,
-        ) -> Option<T> {
-            let mut pieces = pieces.into_iter().flatten();
-            let first = pieces.next()?;
-            Some(pieces.fold(first, |acc, piece| {
-                let acc = concat(acc, space.clone());
-                concat(acc, piece)
-            }))
+    fn display_inner(&self) -> String {
+        match self {
+            Self::Arg(_) => "%".into(),
+            Self::Atom(atom) => atom.node.to_string(),
+            Self::Brack(atom_l, mixfix, atom_r) => format!(
+                "{}{}{}",
+                atom_l.node.to_string(),
+                mixfix.display_inner(),
+                atom_r.node.to_string()
+            ),
+            Self::Infix(mixfix_l, atom, mixfix_r) => format!(
+                "{}{}{}",
+                mixfix_l.display_inner(),
+                atom.node.to_string(),
+                mixfix_r.display_inner()
+            ),
+            Self::Seq(mixfixes) => mixfixes
+                .iter()
+                .map(Self::display_inner)
+                .collect::<Vec<_>>()
+                .join(" "),
         }
-
-        fn assemble<T: Clone>(
-            mixfix: &Mixfix<T>,
-            space: &T,
-            atom: &mut impl FnMut(&AtomPhrase) -> Option<T>,
-            concat: &mut impl FnMut(T, T) -> T,
-        ) -> Option<T> {
-            match mixfix {
-                Mixfix::Arg(arg) => Some(arg.clone()),
-                Mixfix::Atom(atom_value) => atom(atom_value),
-                Mixfix::Brack(left, body, right) => join(
-                    [atom(left), assemble(body, space, atom, concat), atom(right)],
-                    space,
-                    concat,
-                ),
-                Mixfix::Infix(left, atom_value, right) => join(
-                    [
-                        assemble(left, space, atom, concat),
-                        atom(atom_value),
-                        assemble(right, space, atom, concat),
-                    ],
-                    space,
-                    concat,
-                ),
-                Mixfix::Seq(items) => {
-                    let pieces = items
-                        .iter()
-                        .map(|item| assemble(item, space, atom, concat))
-                        .collect::<Vec<_>>();
-                    join(pieces, space, concat)
-                }
-            }
-        }
-
-        assemble(self, &space, &mut atom, &mut concat).unwrap_or(empty)
     }
 }
 
 impl<T> fmt::Display for Mixfix<T> {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(&self.display_string())
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt.write_str(&self.display())
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{AtomPhrase, Mixfix, Mixop};
+    use super::{AtomPhrase, Mixfix};
     use crate::domain::{
         atom::Atom,
-        source::{Region, Spanned},
+        mixop::Mixop,
+        source::{Span, Spanned},
     };
 
     fn atom(value: Atom) -> AtomPhrase {
-        Spanned::new(value, Region::none())
+        Spanned::new(value, Span::default())
     }
 
     fn nested_mixop() -> Mixop {
@@ -515,7 +489,7 @@ mod tests {
             .map(|group| {
                 group
                     .into_iter()
-                    .map(|atom| atom.node.render())
+                    .map(|atom| atom.node.to_string())
                     .collect::<Vec<_>>()
             })
             .collect::<Vec<_>>();
@@ -523,9 +497,9 @@ mod tests {
         assert_eq!(
             matrix,
             [
-                vec!["(".to_owned()],
+                vec!["`(".to_owned()],
                 vec![":".to_owned(), "_MID".to_owned()],
-                vec![")".to_owned()],
+                vec!["`)".to_owned()],
             ]
         );
     }

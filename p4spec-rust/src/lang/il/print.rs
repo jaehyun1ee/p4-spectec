@@ -58,7 +58,7 @@ pub fn string_of_defid(id: &Id) -> String {
 // Atoms
 
 pub fn string_of_atom(atom: &Atom) -> String {
-    atom.node.source_string()
+    atom.node.to_string()
 }
 pub fn string_of_atoms(atoms: &[Atom]) -> String {
     join(atoms, "", string_of_atom)
@@ -66,7 +66,9 @@ pub fn string_of_atoms(atoms: &[Atom]) -> String {
 // Mixfix operators
 
 pub fn string_of_mixop(mixop: &Mixop) -> String {
-    mixop.to_string()
+    mixop
+        .to_string((0..mixop.arity()).map(|_| "%".to_owned()), string_of_atom)
+        .expect("mixop arguments match its arity")
 }
 // Iterators
 
@@ -942,14 +944,14 @@ fn write_spec(output: &mut dyn fmt::Write, spec: &Spec) -> fmt::Result {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::source::{Region, Spanned};
+    use crate::domain::source::{Span, Spanned};
 
     fn id(name: &str) -> Id {
-        Spanned::new(name.to_owned(), Region::none())
+        Spanned::new(name.to_owned(), Span::default())
     }
 
     fn exp(kind: ExpKind) -> Exp {
-        Exp::new(kind, TypKind::BoolT, Region::none())
+        Exp::new(kind, TypKind::BoolT, Span::default())
     }
 
     #[test]

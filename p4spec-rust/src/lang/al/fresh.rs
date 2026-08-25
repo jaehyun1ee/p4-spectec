@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use crate::{
-    domain::source::{Region, Spanned},
+    domain::source::{Span, Spanned},
     lang::il,
 };
 
@@ -9,7 +9,7 @@ use super::ast::*;
 
 pub use il::fresh::Ids;
 
-pub type Metavars = BTreeMap<IdKind, (Region, Typ)>;
+pub type Metavars = BTreeMap<IdKind, (Span, Typ)>;
 
 fn aliases(metavars: &Metavars) -> Vec<(Id, Typ)> {
     metavars
@@ -22,11 +22,11 @@ pub fn id(ids: &Ids, id: &Id) -> Id {
     il::fresh::id(ids, id)
 }
 
-pub fn var_from_typ(metavars: &Metavars, ids: &Ids, at: Region, typ: &Typ) -> Var {
+pub fn var_from_typ(metavars: &Metavars, ids: &Ids, at: Span, typ: &Typ) -> Var {
     il::fresh::var_from_typ_with_aliases(&aliases(metavars), ids, at, typ, false)
 }
 
-pub fn var_from_typ_wildcard(metavars: &Metavars, ids: &Ids, at: Region, typ: &Typ) -> Var {
+pub fn var_from_typ_wildcard(metavars: &Metavars, ids: &Ids, at: Span, typ: &Typ) -> Var {
     il::fresh::var_from_typ_with_aliases(&aliases(metavars), ids, at, typ, true)
 }
 

@@ -1,7 +1,5 @@
 use std::fmt;
 
-// Positions and regions
-
 /// A source position
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Position {
@@ -18,82 +16,59 @@ impl Position {
             column,
         }
     }
-
-    pub fn for_file(file: impl Into<String>) -> Self {
-        Self::new(file, 0, 0)
-    }
 }
 
 impl fmt::Display for Position {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.line == -1 {
-            write!(formatter, "0x{:x}", self.column)
+            write!(fmt, "0x{:x}", self.column)
         } else {
-            write!(formatter, "{}.{}", self.line, self.column + 1)
+            write!(fmt, "{}.{}", self.line, self.column + 1)
         }
     }
 }
 
-/// A source region between two positions
+/// A source span between two positions
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Region {
+pub struct Span {
     pub left: Position,
     pub right: Position,
 }
 
-impl Region {
+impl Span {
     pub fn new(left: Position, right: Position) -> Self {
         Self { left, right }
     }
 
-    pub fn none() -> Self {
-        Self::default()
-    }
-
-    pub fn for_file(file: impl Into<String>) -> Self {
-        let position = Position::for_file(file);
-        Self::new(position.clone(), position)
-    }
-
-    pub fn before(&self) -> Self {
-        Self::new(self.left.clone(), self.left.clone())
-    }
-
-    pub fn after(&self) -> Self {
-        Self::new(self.right.clone(), self.right.clone())
-    }
-
     pub fn over(regions: &[Self]) -> Self {
-        let Some((first, rest)) = regions.split_first() else {
-            return Self::none();
+        let Some((region_h, regions_t)) = regions.split_first() else {
+            return Self::default();
         };
 
-        rest.iter().fold(first.clone(), |region_over, region| {
-            Self::new(
-                region_over.left.min(region.left.clone()),
-                region_over.right.max(region.right.clone()),
-            )
-        })
+        regions_t
+            .iter()
+            .fold(region_h.clone(), |region_over, region| {
+                Self::new(
+                    region_over.left.min(region.left.clone()),
+                    region_over.right.max(region.right.clone()),
+                )
+            })
     }
 }
 
-impl fmt::Display for Region {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self == &Self::for_file(&self.left.file) {
-            return formatter.write_str(&self.left.file);
+impl fmt::Display for Span {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.left.line == 0 && self.left.column == 0 && self.left == self.right {
+            return fmt.write_str(&self.left.file);
         }
 
-        write!(formatter, "{}:{}", self.left.file, self.left)?;
+        write!(fmt, "{}:{}", self.left.file, self.left)?;
         if self.left != self.right {
-            write!(formatter, "-{}", self.right)?;
+            write!(fmt, "-{}", self.right)?;
         }
         Ok(())
     }
 }
-
-// Phrases
-
-pub type Span = Region;
 
 /// A syntax node paired with its source span
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -106,89 +81,5 @@ impl<T> Spanned<T> {
     /// Builds a node with an explicit source span
     pub fn new(node: T, span: Span) -> Self {
         Self { node, span }
-    }
-
-    /// Maps the node;
-    /// preserves the source span
-    pub fn map<U>(self, map: impl FnOnce(T) -> U) -> Spanned<U> {
-        Spanned::new(map(self.node), self.span)
-    }
-
-    /// Borrows the node;
-    /// clones the source span
-    pub fn as_ref(&self) -> Spanned<&T> {
-        Spanned::new(&self.node, self.span.clone())
-    }
-
-    /// Splits node ownership from span ownership
-    pub fn into_parts(self) -> (T, Span) {
-        (self.node, self.span)
-    }
-}
-
-pub trait HasSpan {
-    fn span(&self) -> &Span;
-}
-
-impl<T> HasSpan for Spanned<T> {
-    fn span(&self) -> &Span {
-        &self.span
-    }
-}
-
-pub fn phrase_list_region<T: HasSpan>(phrases: &[T]) -> Region {
-    match phrases {
-        [] => Region::none(),
-        [phrase] => phrase.span().clone(),
-        [first, .., last] => Region::new(first.span().left.clone(), last.span().right.clone()),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{Position, Region, Spanned, phrase_list_region};
-
-    fn position(line: i64, column: i64) -> Position {
-        Position::new("spec.watsup", line, column)
-    }
-
-    #[test]
-    fn over_region_spans_outermost_positions() {
-        let regions = [
-            Region::new(position(4, 2), position(4, 8)),
-            Region::new(position(2, 5), position(3, 1)),
-            Region::new(position(5, 0), position(7, 3)),
-        ];
-
-        assert_eq!(
-            Region::over(&regions),
-            Region::new(position(2, 5), position(7, 3))
-        );
-    }
-
-    #[test]
-    fn phrase_list_region_uses_first_and_last_phrase_boundaries() {
-        let phrases = [
-            Spanned::new("first", Region::new(position(4, 2), position(4, 8))),
-            Spanned::new("middle", Region::new(position(1, 0), position(9, 0))),
-            Spanned::new("last", Region::new(position(5, 0), position(7, 3))),
-        ];
-
-        assert_eq!(
-            phrase_list_region(&phrases),
-            Region::new(position(4, 2), position(7, 3))
-        );
-    }
-
-    #[test]
-    fn spanned_wrapper_operations_preserve_the_source_span() {
-        let phrase = Spanned::new("source".to_owned(), Region::for_file("spec.watsup"));
-        let borrowed = phrase.as_ref();
-        assert_eq!(borrowed.node, "source");
-        assert_eq!(borrowed.span, Region::for_file("spec.watsup"));
-
-        let (node, span) = phrase.map(|node| node.len()).into_parts();
-        assert_eq!(node, 6);
-        assert_eq!(span, Region::for_file("spec.watsup"));
     }
 }

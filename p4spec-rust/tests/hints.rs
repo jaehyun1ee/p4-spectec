@@ -1,7 +1,7 @@
 use p4spec_rust::{
     domain::{
         atom::Atom,
-        source::{Region, Spanned},
+        source::{Position, Span, Spanned},
     },
     lang::{
         el::ast::{self, ExpKind, Hole},
@@ -14,8 +14,8 @@ use p4spec_rust::{
     },
 };
 
-fn span(s: &str) -> Region {
-    Region::for_file(s)
+fn span(s: &str) -> Span {
+    Span::new(Position::new(s, 0, 0), Position::new(s, 0, 0))
 }
 fn atom(s: &str) -> ast::Atom {
     Spanned::new(Atom::Keyword(s.into()), span(s))

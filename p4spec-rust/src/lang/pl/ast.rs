@@ -1,7 +1,7 @@
 use crate::{
     domain::{
         mixfix::Mixfix,
-        source::{HasSpan, Span, Spanned},
+        source::{Span, Spanned},
     },
     lang::{pl::annot, sl},
 };
@@ -74,11 +74,6 @@ impl ExpNode {
         annot::Annotated::new(Self { kind, ty, span })
     }
 }
-impl HasSpan for ExpNode {
-    fn span(&self) -> &Span {
-        &self.span
-    }
-}
 #[derive(Clone, Debug, PartialEq)]
 pub enum ExpKind {
     BoolE(bool),
@@ -126,11 +121,6 @@ pub struct Path {
 impl Path {
     pub fn new(kind: PathKind, ty: TypKind, span: Span) -> Self {
         Self { kind, ty, span }
-    }
-}
-impl HasSpan for Path {
-    fn span(&self) -> &Span {
-        &self.span
     }
 }
 #[derive(Clone, Debug, PartialEq)]
@@ -235,12 +225,6 @@ impl<Tier> InstrNode<Tier> {
             fallthrough,
             span,
         })
-    }
-}
-
-impl<Tier> HasSpan for InstrNode<Tier> {
-    fn span(&self) -> &Span {
-        &self.span
     }
 }
 
@@ -379,12 +363,6 @@ pub type Def = annot::Annotated<DefNode>;
 impl DefNode {
     pub fn new(kind: DefKind, span: Span) -> Def {
         annot::Annotated::new(Self { kind, span })
-    }
-}
-
-impl HasSpan for DefNode {
-    fn span(&self) -> &Span {
-        &self.span
     }
 }
 
