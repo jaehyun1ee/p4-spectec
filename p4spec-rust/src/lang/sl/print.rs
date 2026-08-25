@@ -457,7 +457,184 @@ fn write_guard(output: &mut dyn fmt::Write, guard: &Guard) -> fmt::Result {
 // Instructions
 
 pub fn string_of_instr(instr: &Instr) -> String {
-    string_of_instr_with(instr, false, 0, 0)
+    let mut output = String::new();
+    write_instr_with(&mut output, instr, false, 0, 0).expect("writing to a String cannot fail");
+    output
+}
+
+fn write_instr_with(
+    output: &mut dyn fmt::Write,
+    instr: &Instr,
+    short: bool,
+    level: usize,
+    index: usize,
+) -> fmt::Result {
+    let order = format!("{}{index}. ", "  ".repeat(level));
+    let mut write_order = || {
+        if short {
+            Ok(())
+        } else {
+            output.write_str(&order)
+        }
+    };
+    match &instr.kind {
+        InstrKind::IfI(exp, iterexps, block, dangle) => {
+            write_order()?;
+            output.write_str("If (")?;
+            write_exp(output, exp)?;
+            write!(output, "){}, then", string_of_iterexps(iterexps))?;
+            if !short {
+                output.write_str("\n\n")?;
+                write_block_with(output, block, level + 1, 0)?;
+                if *dangle {
+                    write!(output, "\n\n{order}Else {}", string_of_dangle(instr.iid))?;
+                }
+            }
+            Ok(())
+        }
+        InstrKind::HoldI(id, notation, iterexps, holdcase) => match holdcase {
+            HoldCase::BothH(block_hold, block_not_hold) => {
+                write_order()?;
+                write!(
+                    output,
+                    "If ({}: {}){} holds, then",
+                    string_of_relid(id),
+                    string_of_notexp(notation),
+                    string_of_iterexps(iterexps)
+                )?;
+                if !short {
+                    output.write_str("\n\n")?;
+                    write_block_with(output, block_hold, level + 1, 0)?;
+                    write!(output, "\n\n{order}Else,\n\n")?;
+                    write_block_with(output, block_not_hold, level + 1, 0)?;
+                }
+                Ok(())
+            }
+            HoldCase::HoldH(block, dangle) | HoldCase::NotHoldH(block, dangle) => {
+                write_order()?;
+                write!(
+                    output,
+                    "If ({}: {}){} {}, then",
+                    string_of_relid(id),
+                    string_of_notexp(notation),
+                    string_of_iterexps(iterexps),
+                    if matches!(holdcase, HoldCase::NotHoldH(..)) {
+                        "does not hold"
+                    } else {
+                        "holds"
+                    }
+                )?;
+                if !short {
+                    output.write_str("\n\n")?;
+                    write_block_with(output, block, level + 1, 0)?;
+                    if *dangle {
+                        write!(output, "\n\n{order}Else {}", string_of_dangle(instr.iid))?;
+                    }
+                }
+                Ok(())
+            }
+        },
+        InstrKind::CaseI(exp, cases, dangle) => {
+            write_order()?;
+            output.write_str("Case analysis on ")?;
+            write_exp(output, exp)?;
+            if !short {
+                output.write_str("\n\n")?;
+                write_cases_with(output, cases, level + 1)?;
+                if *dangle {
+                    write!(output, "\n\n{order}Else {}", string_of_dangle(instr.iid))?;
+                }
+            }
+            Ok(())
+        }
+        InstrKind::GroupI(id, signature, exps, block) => {
+            write_order()?;
+            write!(
+                output,
+                "Group {}: {}",
+                string_of_relid(id),
+                string_of_relinput(signature, exps)
+            )?;
+            if !short {
+                output.write_str("\n\n")?;
+                write_block_with(output, block, level + 1, 0)?;
+            }
+            Ok(())
+        }
+        InstrKind::LetI(left, right, iterinstrs, block) => {
+            write_order()?;
+            output.write_str("(Let ")?;
+            write_exp(output, left)?;
+            output.write_str(" be ")?;
+            write_exp(output, right)?;
+            write!(output, "){}", string_of_iterinstrs(iterinstrs))?;
+            if !short {
+                output.write_str("\n\n")?;
+                write_block_with(output, block, level + 1, 0)?;
+            }
+            Ok(())
+        }
+        InstrKind::RuleI(id, notation, _, iterinstrs, block) => {
+            write_order()?;
+            write!(
+                output,
+                "({}: {}){}",
+                string_of_relid(id),
+                string_of_notexp(notation),
+                string_of_iterinstrs(iterinstrs)
+            )?;
+            if !short {
+                output.write_str("\n\n")?;
+                write_block_with(output, block, level + 1, 0)?;
+            }
+            Ok(())
+        }
+        InstrKind::ResultI(_, exps) if exps.is_empty() => {
+            write_order()?;
+            output.write_str("The relation holds")
+        }
+        InstrKind::ResultI(signature, exps) => {
+            write_order()?;
+            write!(
+                output,
+                "Result in: {}",
+                string_of_reloutput(signature, exps)
+            )
+        }
+        InstrKind::ReturnI(exp) => {
+            write_order()?;
+            output.write_str("Return ")?;
+            write_exp(output, exp)
+        }
+        InstrKind::DebugI(exp, nested) => {
+            write_order()?;
+            output.write_str("Debug: ")?;
+            write_exp(output, exp)?;
+            if !short {
+                output.write_str("\n\n")?;
+                write_instr_with(output, nested, false, level, index + 1)?;
+            }
+            Ok(())
+        }
+    }
+}
+
+fn write_cases_with(output: &mut dyn fmt::Write, cases: &[Case], level: usize) -> fmt::Result {
+    for (index, case) in cases.iter().enumerate() {
+        if index != 0 {
+            output.write_str("\n\n")?;
+        }
+        write!(
+            output,
+            "{}{next}. Case ",
+            "  ".repeat(level),
+            next = index + 1
+        )?;
+        write_guard(output, &case.guard)?;
+        output.write_str("\n\n")?;
+        write_block_with(output, &case.block, level + 1, 0)?;
+    }
+    Ok(())
 }
 
 pub fn string_of_instr_with(instr: &Instr, short: bool, level: usize, index: usize) -> String {
@@ -625,7 +802,24 @@ pub fn string_of_instr_with(instr: &Instr, short: bool, level: usize, index: usi
 }
 
 pub fn string_of_block(block: &Block) -> String {
-    string_of_block_with(block, 0, 0)
+    let mut output = String::new();
+    write_block_with(&mut output, block, 0, 0).expect("writing to a String cannot fail");
+    output
+}
+
+fn write_block_with(
+    output: &mut dyn fmt::Write,
+    block: &Block,
+    level: usize,
+    index: usize,
+) -> fmt::Result {
+    for (offset, instr) in block.iter().enumerate() {
+        if offset != 0 {
+            output.write_str("\n\n")?;
+        }
+        write_instr_with(output, instr, false, level, index + offset + 1)?;
+    }
+    Ok(())
 }
 
 pub fn string_of_block_with(block: &Block, level: usize, index: usize) -> String {
@@ -774,6 +968,103 @@ pub fn string_of_defined_func(function: &DefinedFunc) -> String {
     )
 }
 
+fn write_elseblock_opt_with(
+    output: &mut dyn fmt::Write,
+    block: &Option<ElseBlock>,
+    level: usize,
+    index: usize,
+) -> fmt::Result {
+    if let Some(block) = block {
+        write!(
+            output,
+            "\n\n{}{next}. Otherwise,\n\n",
+            "  ".repeat(level),
+            next = index + 1
+        )?;
+        write_block_with(output, block, level + 1, 0)?;
+    }
+    Ok(())
+}
+
+fn write_extern_rel(output: &mut dyn fmt::Write, relation: &ExternRel) -> fmt::Result {
+    write!(
+        output,
+        "{}: {}",
+        string_of_relid(&relation.id),
+        string_of_relinput(&relation.signature, &relation.inputs)
+    )
+}
+
+fn write_defined_rel(output: &mut dyn fmt::Write, relation: &Rel) -> fmt::Result {
+    write!(
+        output,
+        "{}: {}\n\n",
+        string_of_relid(&relation.id),
+        string_of_relinput(&relation.signature, &relation.inputs)
+    )?;
+    write_block_with(output, &relation.block, 0, 0)?;
+    write_elseblock_opt_with(output, &relation.else_block, 0, relation.block.len())
+}
+
+fn write_extern_func(output: &mut dyn fmt::Write, function: &ExternFunc) -> fmt::Result {
+    write!(
+        output,
+        "{}{}{}",
+        string_of_defid(&function.id),
+        string_of_tparams(&function.tparams),
+        string_of_params(&function.params)
+    )
+}
+
+fn write_builtin_func(output: &mut dyn fmt::Write, function: &BuiltinFunc) -> fmt::Result {
+    write!(
+        output,
+        "{}{}{}",
+        string_of_defid(&function.id),
+        string_of_tparams(&function.tparams),
+        string_of_params(&function.params)
+    )
+}
+
+fn write_tablerow(output: &mut dyn fmt::Write, row: &TableRow) -> fmt::Result {
+    write!(
+        output,
+        "\n  Row : {} -> ",
+        string_of_exps(", ", &row.inputs)
+    )?;
+    write_exp(output, &row.expression)?;
+    output.write_str(":\n\n")?;
+    write_block_with(output, &row.block, 2, 0)
+}
+
+fn write_table_func(output: &mut dyn fmt::Write, function: &TableFunc) -> fmt::Result {
+    write!(
+        output,
+        "{}{}\n=\n",
+        string_of_defid(&function.id),
+        string_of_params(&function.params)
+    )?;
+    for (index, row) in function.rows.iter().enumerate() {
+        if index != 0 {
+            output.write_char('\n')?;
+        }
+        write_tablerow(output, row)?;
+    }
+    Ok(())
+}
+
+fn write_defined_func(output: &mut dyn fmt::Write, function: &DefinedFunc) -> fmt::Result {
+    write!(
+        output,
+        "{}{}{}\n\n",
+        string_of_defid(&function.id),
+        string_of_tparams(&function.tparams),
+        string_of_params(&function.params)
+    )?;
+    write_block_with(output, &function.block, 0, 0)?;
+    write_elseblock_opt_with(output, &function.else_block, 0, function.block.len())
+}
+
 // Definitions
 
 pub fn string_of_def(definition: &Def) -> String {
@@ -799,19 +1090,29 @@ fn write_def(output: &mut dyn fmt::Write, definition: &Def) -> fmt::Result {
             string_of_typ(typ)
         ),
         DefKind::ExternRelD(relation) => {
-            write!(output, "extern relation {}", string_of_extern_rel(relation))
+            output.write_str("extern relation ")?;
+            write_extern_rel(output, relation)
         }
-        DefKind::RelD(relation) => write!(output, "relation {}", string_of_defined_rel(relation)),
+        DefKind::RelD(relation) => {
+            output.write_str("relation ")?;
+            write_defined_rel(output, relation)
+        }
         DefKind::ExternDecD(function) => {
-            write!(output, "extern def {}", string_of_extern_func(function))
+            output.write_str("extern def ")?;
+            write_extern_func(output, function)
         }
         DefKind::BuiltinDecD(function) => {
-            write!(output, "builtin def {}", string_of_builtin_func(function))
+            output.write_str("builtin def ")?;
+            write_builtin_func(output, function)
         }
         DefKind::TableDecD(function) => {
-            write!(output, "tbl def {}", string_of_table_func(function))
+            output.write_str("tbl def ")?;
+            write_table_func(output, function)
         }
-        DefKind::FuncDecD(function) => write!(output, "def {}", string_of_defined_func(function)),
+        DefKind::FuncDecD(function) => {
+            output.write_str("def ")?;
+            write_defined_func(output, function)
+        }
     }
 }
 
