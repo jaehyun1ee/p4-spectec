@@ -104,6 +104,10 @@ fn fill_notation(nottyp: &NotTyp, exps: Vec<String>) -> String {
 
 // Rules
 
+/// Renders relation input expressions
+///
+/// `exps_input` must match `inputs.indices()`;
+/// notation arity must be internally valid
 pub fn string_of_ruleinput(nottyp: &NotTyp, inputs: &InputHint, exps_input: &[Exp]) -> String {
     let inputs = inputs.indices();
     assert_eq!(inputs.len(), exps_input.len());
@@ -122,6 +126,10 @@ pub fn string_of_ruleinput(nottyp: &NotTyp, inputs: &InputHint, exps_input: &[Ex
     fill_notation(nottyp, exps)
 }
 
+/// Renders relation output expressions
+///
+/// `exps_output` must cover every non-input notation position;
+/// notation arity must be internally valid
 pub fn string_of_ruleoutput(nottyp: &NotTyp, inputs: &InputHint, exps_output: &[Exp]) -> String {
     let inputs = inputs.indices();
     let (_, typs) = nottyp.node.split();
@@ -350,6 +358,7 @@ pub fn string_of_defs(definitions: &[Def]) -> String {
 
 // Spec
 
+/// Renders a specification without source or hint metadata
 pub fn string_of_spec(spec: &Spec) -> String {
     let mut output = String::new();
     write_spec(&mut output, spec).expect("writing to a String cannot fail");

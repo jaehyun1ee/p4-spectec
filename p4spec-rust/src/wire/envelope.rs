@@ -14,6 +14,7 @@ const AL_KIND: &str = "al";
 const SL_KIND: &str = "sl";
 const PL_KIND: &str = "pl";
 
+/// A versioned JSON payload for one language stage
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct Envelope<T> {
     schema: String,
@@ -22,38 +23,47 @@ pub struct Envelope<T> {
 }
 
 impl<T> Envelope<T> {
+    /// Builds an EL envelope
     pub fn el(payload: T) -> Self {
         Self::new(EL_SCHEMA, EL_KIND, payload)
     }
 
+    /// Builds an IL envelope
     pub fn il(payload: T) -> Self {
         Self::new(IL_SCHEMA, IL_KIND, payload)
     }
 
+    /// Builds an AL envelope
     pub fn al(payload: T) -> Self {
         Self::new(AL_SCHEMA, AL_KIND, payload)
     }
 
+    /// Builds an SL envelope
     pub fn sl(payload: T) -> Self {
         Self::new(SL_SCHEMA, SL_KIND, payload)
     }
 
+    /// Builds a PL envelope
     pub fn pl(payload: T) -> Self {
         Self::new(PL_SCHEMA, PL_KIND, payload)
     }
 
+    /// Borrows the versioned schema name
     pub fn schema(&self) -> &str {
         &self.schema
     }
 
+    /// Borrows the stage kind name
     pub fn kind(&self) -> &str {
         &self.kind
     }
 
+    /// Borrows the typed payload
     pub fn payload(&self) -> &T {
         &self.payload
     }
 
+    /// Returns the typed payload
     pub fn into_payload(self) -> T {
         self.payload
     }
@@ -92,6 +102,10 @@ impl<T> Envelope<T>
 where
     T: DeserializeOwned,
 {
+    /// Decodes one complete JSON envelope
+    ///
+    /// Rejects unknown schemas;
+    /// rejects schema-kind mismatches and trailing JSON
     pub fn from_slice(input: &[u8]) -> Result<Self, WireError> {
         let mut deserializer = serde_json::Deserializer::from_slice(input);
         deserializer.disable_recursion_limit();

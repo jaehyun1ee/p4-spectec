@@ -2,6 +2,7 @@ use std::fmt;
 
 // Positions and regions
 
+/// A source position
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Position {
     pub file: String,
@@ -33,6 +34,7 @@ impl fmt::Display for Position {
     }
 }
 
+/// A source region between two positions
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Region {
     pub left: Position,
@@ -93,6 +95,7 @@ impl fmt::Display for Region {
 
 pub type Span = Region;
 
+/// A syntax node paired with its source span
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Spanned<T> {
     pub node: T,
@@ -100,18 +103,24 @@ pub struct Spanned<T> {
 }
 
 impl<T> Spanned<T> {
+    /// Builds a node with an explicit source span
     pub fn new(node: T, span: Span) -> Self {
         Self { node, span }
     }
 
+    /// Maps the node;
+    /// preserves the source span
     pub fn map<U>(self, map: impl FnOnce(T) -> U) -> Spanned<U> {
         Spanned::new(map(self.node), self.span)
     }
 
+    /// Borrows the node;
+    /// clones the source span
     pub fn as_ref(&self) -> Spanned<&T> {
         Spanned::new(&self.node, self.span.clone())
     }
 
+    /// Splits node ownership from span ownership
     pub fn into_parts(self) -> (T, Span) {
         (self.node, self.span)
     }

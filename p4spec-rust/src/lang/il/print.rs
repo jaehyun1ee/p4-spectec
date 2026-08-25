@@ -923,6 +923,7 @@ pub fn string_of_defs(definitions: &[Def]) -> String {
 }
 // Spec
 
+/// Renders a specification without source or hint metadata
 pub fn string_of_spec(spec: &Spec) -> String {
     let mut output = String::new();
     write_spec(&mut output, spec).expect("writing to a String cannot fail");

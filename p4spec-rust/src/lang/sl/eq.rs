@@ -1,3 +1,8 @@
+//! Semantic equality for structured-language data
+//!
+//! Ignores source regions;
+//! compares relation hints and instruction identifiers
+
 use crate::lang::{hints::input, il};
 
 use super::ast::*;

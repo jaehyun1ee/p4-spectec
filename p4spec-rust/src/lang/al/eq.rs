@@ -1,4 +1,7 @@
-//! Equality for algorithmic language data
+//! Semantic equality for algorithmic-language data
+//!
+//! Ignores source regions;
+//! delegates shared syntax to IL equality
 
 // Identifiers
 

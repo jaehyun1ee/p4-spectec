@@ -3,6 +3,11 @@
 use crate::lang::el::ast::{Exp, ExpKind, Hole};
 use thiserror::Error;
 
+/// Relation input positions in source order
+///
+/// `new` does not validate indices;
+/// call `validate` when the relation arity is known;
+/// operations such as `split` validate before consuming items
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct InputHint {
     indices: Vec<i64>,
@@ -27,14 +32,17 @@ pub enum InputError {
 }
 
 impl InputHint {
+    /// Preserves indices without validation
     pub fn new(indices: Vec<i64>) -> Self {
         Self { indices }
     }
 
+    /// Borrows positions in source order
     pub fn indices(&self) -> &[i64] {
         &self.indices
     }
 
+    /// Returns positions in source order
     pub fn into_indices(self) -> Vec<i64> {
         self.indices
     }
@@ -75,6 +83,7 @@ pub fn init(hint_exp: &Exp) -> Option<InputHint> {
 
 // Validating hints
 
+/// Validates non-empty, unique positions within `arity`
 pub fn validate(hint: &InputHint, arity: usize) -> Result<(), InputError> {
     if hint.indices.is_empty() {
         return Err(InputError::Empty);
@@ -99,6 +108,9 @@ pub fn validate(hint: &InputHint, arity: usize) -> Result<(), InputError> {
 
 // Splitting and combining expressions based on input hints
 
+/// Splits items into input and output positions
+///
+/// Validates the hint against `items.len()`
 pub fn split<Item: Clone>(
     hint: &InputHint,
     items: &[Item],
@@ -116,6 +128,9 @@ pub fn split<Item: Clone>(
     Ok((items_input, items_output))
 }
 
+/// Reconstructs source-order items from input and output positions
+///
+/// Validates the hint and both item counts
 pub fn combine<Item>(
     hint: &InputHint,
     items_input: Vec<Item>,
@@ -162,6 +177,9 @@ pub fn combine<Item>(
 
 // Checking if a hint is conditional
 
+/// Reports whether every item is an input
+///
+/// Validates the hint against `items.len()`
 pub fn is_conditional<Item>(hint: &InputHint, items: &[Item]) -> Result<bool, InputError> {
     validate(hint, items.len())?;
     Ok(items

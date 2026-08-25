@@ -3,6 +3,10 @@
 use crate::lang::el::ast::{Exp, ExpKind, Text};
 use thiserror::Error;
 
+/// Field labels for prose rendering
+///
+/// `new` does not validate field count;
+/// call `validate` when the target arity is known
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FieldHint {
     fields: Vec<Text>,
@@ -15,6 +19,7 @@ pub enum FieldError {
 }
 
 impl FieldHint {
+    /// Preserves fields without validation
     pub fn new(fields: Vec<Text>) -> Self {
         Self { fields }
     }
@@ -58,6 +63,7 @@ pub fn init(hint_exp: &Exp) -> Option<FieldHint> {
 
 // Validating hints
 
+/// Validates that field count matches `arity`
 pub fn validate(hint: &FieldHint, arity: usize) -> Result<(), FieldError> {
     if hint.fields.len() == arity {
         Ok(())

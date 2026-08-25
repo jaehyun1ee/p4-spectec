@@ -1,3 +1,8 @@
+//! Semantic equality for intermediate-language data
+//!
+//! Ignores source regions;
+//! compares syntax represented by spanned nodes
+
 use std::cmp::Ordering;
 
 use crate::domain::mixfix::Mixfix;

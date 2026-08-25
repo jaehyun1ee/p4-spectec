@@ -860,6 +860,10 @@ pub fn string_of_iterinstrs(iterinstrs: &[IterInstr]) -> String {
 
 // Relations
 
+/// Renders relation input expressions
+///
+/// `exps_input` must match `signature.input_hint.indices()`;
+/// notation arity must be internally valid
 pub fn string_of_relinput(signature: &RelSignature, exps_input: &[Exp]) -> String {
     let nottyp = &signature.notation;
     let inputs = signature.input_hint.indices();
@@ -877,6 +881,10 @@ pub fn string_of_relinput(signature: &RelSignature, exps_input: &[Exp]) -> Strin
         .expect("relation input arity matches notation")
 }
 
+/// Renders relation output expressions
+///
+/// `exps_output` must cover every non-input notation position;
+/// notation arity must be internally valid
 pub fn string_of_reloutput(signature: &RelSignature, exps_output: &[Exp]) -> String {
     let nottyp = &signature.notation;
     let inputs = signature.input_hint.indices();
@@ -1122,6 +1130,7 @@ pub fn string_of_defs(definitions: &[Def]) -> String {
 
 // Spec
 
+/// Renders a specification without source or hint metadata
 pub fn string_of_spec(spec: &Spec) -> String {
     let mut output = String::new();
     write_spec(&mut output, spec).expect("writing to a String cannot fail");

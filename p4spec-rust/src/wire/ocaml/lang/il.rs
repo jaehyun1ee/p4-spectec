@@ -1,3 +1,4 @@
+/// OCaml-compatible JSON codecs for IL data
 use std::{cell::Cell, collections::HashSet};
 
 use serde_json::{Map, Number, Value, json};
@@ -21,6 +22,7 @@ use super::{
 use crate::wire::VALUE_SCHEMA;
 use crate::wire::ocaml::{atom::AtomPhraseCodec, mixfix, source, yojson};
 
+/// Codec for complete IL specifications
 pub struct SpecCodec;
 
 impl SpecCodec {
@@ -37,7 +39,7 @@ pub struct ValueCodec;
 
 /// Standard-JSON convenience codec for IL values
 ///
-/// Use [`ValueEnvelopeCodec`] for the lossless OCaml `Yojson.Safe` transport.
+/// Use [`ValueEnvelopeCodec`] for lossless OCaml `Yojson.Safe` transport
 impl ValueCodec {
     pub fn decode(value: &Value) -> Result<ast::Value, DecodeError> {
         on_codec_stack(|| decode_value(value))

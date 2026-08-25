@@ -9,12 +9,17 @@ use thiserror::Error;
 
 // Alternation hints
 
+/// A positional hole in an alteration hint
 #[derive(Clone, Debug, PartialEq)]
 pub enum Hole {
     Next,
     Num(i64),
 }
 
+/// A prose rendering template
+///
+/// `Hole::Next` consumes items in cursor order;
+/// `Hole::Num` selects an explicit item index
 #[derive(Clone, Debug, PartialEq)]
 pub enum AlterationHint {
     TextH(Text),
@@ -75,6 +80,7 @@ pub fn init(exp: &Exp) -> Option<AlterationHint> {
 }
 // Validating hints
 
+/// Validates every hole against `items`
 pub fn validate<Item>(hint: &AlterationHint, items: &[Item]) -> Result<(), AlterationError> {
     validate_at(hint, items, 0).map(|_| ())
 }
@@ -133,6 +139,9 @@ pub fn collect(hint: &AlterationHint) -> Vec<i64> {
     go(hint, &mut out);
     out
 }
+/// Renumbers output holes after relation input positions
+///
+/// Returns an error when a referenced output position is absent
 pub fn realign(
     hint: &AlterationHint,
     inputs: &input::InputHint,
@@ -172,6 +181,7 @@ pub fn realign(
 }
 // Alternation
 
+/// Renders alteration pieces into a caller-defined output
 pub trait Renderer<Item> {
     type Output: Clone;
     fn empty(&self) -> Self::Output;
@@ -183,6 +193,9 @@ pub trait Renderer<Item> {
     fn item(&self, item: &Item) -> Self::Output;
 }
 
+/// Renders a validated alteration hint
+///
+/// Returns an error when a hole cannot select an item
 pub fn alternate<Item, R: Renderer<Item>>(
     hint: &AlterationHint,
     items: &[Item],

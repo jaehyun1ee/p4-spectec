@@ -8,6 +8,7 @@ use crate::{
 
 // Hints
 
+/// Optional prose metadata for a PL node
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct Hints {
     pub prose: Option<alter::AlterationHint>,
@@ -20,8 +21,10 @@ pub struct Hints {
     pub prose_output_exps: Option<Vec<sl::ast::Exp>>,
 }
 
-// Wrap a node with no prose hints
-
+/// A PL node paired with prose metadata
+///
+/// Does not implement `Deref`;
+/// access node and hints explicitly
 #[derive(Clone, Debug, PartialEq)]
 pub struct Annotated<N> {
     pub node: N,
@@ -29,6 +32,7 @@ pub struct Annotated<N> {
 }
 
 impl<N> Annotated<N> {
+    /// Builds a node with no prose hints
     pub fn new(node: N) -> Self {
         Self {
             node,
@@ -36,6 +40,8 @@ impl<N> Annotated<N> {
         }
     }
 
+    /// Maps the node;
+    /// preserves prose hints
     pub fn map<M>(self, map: impl FnOnce(N) -> M) -> Annotated<M> {
         Annotated {
             node: map(self.node),
@@ -43,6 +49,8 @@ impl<N> Annotated<N> {
         }
     }
 
+    /// Borrows the node;
+    /// clones prose hints
     pub fn as_ref(&self) -> Annotated<&N> {
         Annotated {
             node: &self.node,
@@ -50,6 +58,7 @@ impl<N> Annotated<N> {
         }
     }
 
+    /// Splits node ownership from hint ownership
     pub fn into_parts(self) -> (N, Hints) {
         (self.node, self.hints)
     }
