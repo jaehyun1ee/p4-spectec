@@ -7,7 +7,7 @@ use crate::domain::{
     noted::Noted,
     source::{Span, Spanned},
 };
-use crate::lang::{el, hints::input::InputHint, xl::num};
+use crate::lang::{common, el, hints::input::InputHint, xl::num};
 use crate::yojson::ExternalData;
 
 // Numbers
@@ -20,8 +20,8 @@ pub type Text = String;
 
 // Identifiers
 
-pub type Id = Spanned<IdKind>;
-pub type IdKind = String;
+pub type Id = common::Id;
+pub type IdKind = common::IdKind;
 
 // Atoms
 

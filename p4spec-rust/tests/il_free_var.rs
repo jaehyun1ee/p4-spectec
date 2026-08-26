@@ -2,10 +2,10 @@ use p4spec_rust::{
     domain::{
         atom::Atom,
         mixfix::Mixfix,
-        sets::{self, IdSet},
         source::{Position, Span, Spanned},
     },
     lang::{
+        common::ds::set::IdSet,
         hints::input::InputHint,
         il::{ast, free, var},
     },
@@ -42,7 +42,7 @@ fn notexp(name: &str) -> ast::NotExp {
     Mixfix::Seq(vec![Mixfix::Arg(variable(name))])
 }
 fn names(names: &[&str]) -> IdSet {
-    names.iter().map(|name| (*name).into()).collect()
+    names.iter().map(|name| id(name)).collect()
 }
 fn prem(kind: ast::PremKind) -> ast::Prem {
     Spanned::new(kind, span())
@@ -75,9 +75,9 @@ fn clause(arg_name: &str, body: &str, prem_name: &str) -> ast::Clause {
 
 #[test]
 fn free_helpers_are_public_and_source_insensitive() {
-    assert_eq!(sets::empty(), names(&[]));
-    assert_eq!(sets::singleton(id_at("x", "left").node), names(&["x"]));
-    assert_eq!(sets::singleton(id_at("x", "right").node), names(&["x"]));
+    assert_eq!(IdSet::new(), names(&[]));
+    assert_eq!(IdSet::from([id_at("x", "left")]), names(&["x"]));
+    assert_eq!(IdSet::from([id_at("x", "right")]), names(&["x"]));
 }
 
 #[test]

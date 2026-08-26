@@ -1,5 +1,3 @@
-use std::collections::{BTreeMap, BTreeSet};
-
 use p4spec_rust::{
     domain::{
         atom::Atom,
@@ -7,6 +5,7 @@ use p4spec_rust::{
         source::{Position, Span, Spanned},
     },
     lang::{
+        common::ds::{map::IdMap, set::IdSet},
         hints::input::InputHint,
         il::{ast, fresh, print},
     },
@@ -40,8 +39,8 @@ fn notexp(name: &str) -> ast::NotExp {
 fn not_typ() -> ast::NotTyp {
     Spanned::new(Mixfix::Arg(typ()), Span::default())
 }
-fn names(names: &[&str]) -> BTreeSet<ast::IdKind> {
-    names.iter().map(|name| (*name).into()).collect()
+fn names(names: &[&str]) -> IdSet {
+    names.iter().map(|name| id(name)).collect()
 }
 fn hint() -> ast::Hint {
     (
@@ -483,14 +482,14 @@ fn fresh_uses_aliases_collisions_wildcards_and_dimensions_deterministically() {
     let at = Span::new(Position::new("fresh", 0, 0), Position::new("fresh", 0, 0));
     let ids = names(&["bool", "bool'", "bool_1"]);
     assert_eq!(
-        fresh::var_from_typ(&BTreeMap::new(), &ids, at.clone(), &typ())
+        fresh::var_from_typ(&IdMap::new(), &ids, at.clone(), &typ())
             .id
             .node,
         "bool''"
     );
-    let mut aliases = BTreeMap::new();
-    aliases.insert("B".into(), typ());
-    let alias = fresh::var_from_typ(&aliases, &BTreeSet::new(), at.clone(), &typ());
+    let mut aliases = IdMap::new();
+    aliases.insert(id("B"), typ());
+    let alias = fresh::var_from_typ(&aliases, &IdSet::new(), at.clone(), &typ());
     assert_eq!(
         (
             alias.id.node.as_str(),
@@ -499,15 +498,15 @@ fn fresh_uses_aliases_collisions_wildcards_and_dimensions_deterministically() {
         ),
         ("B", ast::TypKind::Bool, &[] as &[ast::Iter])
     );
-    aliases.insert("C".into(), typ());
+    aliases.insert(id("C"), typ());
     assert_eq!(
-        fresh::var_from_typ(&aliases, &BTreeSet::new(), at.clone(), &typ())
+        fresh::var_from_typ(&aliases, &IdSet::new(), at.clone(), &typ())
             .id
             .node,
         "bool"
     );
     assert_eq!(
-        fresh::var_from_typ_wildcard(&BTreeMap::new(), &BTreeSet::new(), at.clone(), &typ())
+        fresh::var_from_typ_wildcard(&IdMap::new(), &IdSet::new(), at.clone(), &typ())
             .id
             .node,
         "_bool"
@@ -522,7 +521,7 @@ fn fresh_uses_aliases_collisions_wildcards_and_dimensions_deterministically() {
         ),
         at.clone(),
     );
-    let nested_var = fresh::var_from_typ(&BTreeMap::new(), &BTreeSet::new(), at.clone(), &nested);
+    let nested_var = fresh::var_from_typ(&IdMap::new(), &IdSet::new(), at.clone(), &nested);
     assert_eq!(nested_var.id.node, "bool");
     assert_eq!(nested_var.typ.node, ast::TypKind::Bool);
     assert_eq!(nested_var.iters, vec![ast::Iter::Opt, ast::Iter::List]);
@@ -917,17 +916,17 @@ fn fresh_exact_edges_preserve_aliases_regions_and_full_dimension_shapes() {
             Position::new("alias_type", 0, 0),
         ),
     );
-    let mut aliases = BTreeMap::new();
-    aliases.insert("bool".into(), alias_typ.clone());
-    let rejected = fresh::var_from_typ(&aliases, &BTreeSet::new(), at.clone(), &typ());
+    let mut aliases = IdMap::new();
+    aliases.insert(id("bool"), alias_typ.clone());
+    let rejected = fresh::var_from_typ(&aliases, &IdSet::new(), at.clone(), &typ());
     assert_eq!(rejected.id.node, "bool");
     assert_eq!(rejected.id.span, at);
     assert_eq!(rejected.typ.span, Span::default());
     aliases.clear();
-    aliases.insert("Alias".into(), alias_typ.clone());
+    aliases.insert(id("Alias"), alias_typ.clone());
     let selected = fresh::var_from_typ(
         &aliases,
-        &BTreeSet::new(),
+        &IdSet::new(),
         Span::new(
             Position::new("requested_alias", 0, 0),
             Position::new("requested_alias", 0, 0),
@@ -946,7 +945,7 @@ fn fresh_exact_edges_preserve_aliases_regions_and_full_dimension_shapes() {
     assert!(selected.iters.is_empty());
     let collision_ids = names(&["_bool", "_bool'"]);
     let wildcard = fresh::var_from_typ_wildcard(
-        &BTreeMap::new(),
+        &IdMap::new(),
         &collision_ids,
         Span::new(
             Position::new("wildcard", 0, 0),
@@ -971,7 +970,7 @@ fn fresh_exact_edges_preserve_aliases_regions_and_full_dimension_shapes() {
     );
     let inside_iter = fresh::var_from_typ(
         &aliases,
-        &BTreeSet::new(),
+        &IdSet::new(),
         Span::new(
             Position::new("inside_iter", 0, 0),
             Position::new("inside_iter", 0, 0),
@@ -1021,8 +1020,7 @@ fn fresh_exact_edges_preserve_aliases_regions_and_full_dimension_shapes() {
         ),
     );
     for dim in [false, true] {
-        let (ids, expression) =
-            fresh::exp_from_typ(dim, &BTreeMap::new(), &BTreeSet::new(), &nested);
+        let (ids, expression) = fresh::exp_from_typ(dim, &IdMap::new(), &IdSet::new(), &nested);
         assert_eq!(ids, names(&["bool"]));
         assert_iterated_exp(&expression, dim, &nested.span, &base_typ.span);
     }

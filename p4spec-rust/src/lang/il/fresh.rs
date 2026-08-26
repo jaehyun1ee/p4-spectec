@@ -1,34 +1,27 @@
 //! Fresh intermediate-language variables and expressions
 
-use std::collections::BTreeMap;
-
 use crate::{
-    domain::{
-        sets::IdSet,
-        source::{Span, Spanned},
+    domain::source::{Span, Spanned},
+    lang::{
+        common::ds::{map::IdMap, set::IdSet},
+        eq::SyntaxEq,
+        xl,
     },
-    lang::{eq::SyntaxEq, xl},
 };
 
 use super::{ast::*, print, var};
 
-type Metavars = BTreeMap<IdKind, Typ>;
+type Metavars = IdMap<Typ>;
 
 fn id(ids: &IdSet, id: &Id) -> Id {
     let base = xl::var::strip_var_suffix(id).node;
     let ids = ids
         .iter()
-        .filter(|name| {
-            let id_candidate = crate::spanned! {
-                node: (*name).clone(),
-                span: id,
-            };
-            xl::var::strip_var_suffix(&id_candidate).node == base
-        })
+        .filter(|id_other| xl::var::strip_var_suffix(id_other).node == base)
         .cloned()
         .collect::<IdSet>();
     let mut fresh = id.clone();
-    while ids.contains(&fresh.node) {
+    while ids.contains(&fresh) {
         fresh.node.push('\'');
     }
     fresh
@@ -36,16 +29,16 @@ fn id(ids: &IdSet, id: &Id) -> Id {
 
 fn find_alias(metavars: &Metavars, span: &Span, typ: &Typ) -> Option<Var> {
     let typ_name = print::string_of_typ(typ);
-    let mut matching = metavars
-        .iter()
-        .filter(|(name, alias)| typ.syntax_eq(alias) && typ_name.as_str() != name.as_str());
-    let (name, alias) = matching.next()?;
+    let mut matching = metavars.iter().filter(|(id_alias, typ_alias)| {
+        typ.syntax_eq(typ_alias) && typ_name.as_str() != id_alias.node.as_str()
+    });
+    let (id_alias, typ_alias) = matching.next()?;
     if matching.next().is_some() {
         return None;
     }
     Some(Var {
-        id: Spanned::new(name.clone(), span.clone()),
-        typ: alias.clone(),
+        id: Spanned::new(id_alias.node.clone(), span.clone()),
+        typ: typ_alias.clone(),
         iters: vec![],
     })
 }
@@ -87,6 +80,6 @@ pub fn var_from_typ_wildcard(metavars: &Metavars, ids: &IdSet, span: Span, typ: 
 pub fn exp_from_typ(is_dim: bool, metavars: &Metavars, ids: &IdSet, typ: &Typ) -> (IdSet, Exp) {
     let var = var_from_typ(metavars, ids, typ.span.clone(), typ);
     let mut ids = ids.clone();
-    ids.insert(var.id.node.clone());
+    ids.insert(var.id.clone());
     (ids, var::as_exp(is_dim, &var))
 }

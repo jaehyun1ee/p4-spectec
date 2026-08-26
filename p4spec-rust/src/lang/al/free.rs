@@ -1,14 +1,13 @@
 //! Free identifiers in algorithmic language data
 
-use crate::domain::sets::{self, IdSet};
-use crate::lang::il;
+use crate::lang::{common::ds::set::IdSet, il};
 
 use super::ast::*;
 
 // == Free identifiers
 
 fn frees<T>(items: &[T], free: impl Fn(&T) -> IdSet) -> IdSet {
-    sets::unions(items.iter().map(free))
+    items.iter().map(free).fold(IdSet::new(), IdSet::union)
 }
 
 // - Expressions
@@ -58,21 +57,14 @@ pub fn free_prems(prems: &[Prem]) -> IdSet {
 
 /// Collects free identifiers from rulematch
 pub fn free_rulematch(rule_match: &RuleMatch) -> IdSet {
-    sets::union(
-        free_exps(&rule_match.exps_signature),
-        sets::union(
-            free_exps(&rule_match.exps_input),
-            free_prems(&rule_match.prems),
-        ),
-    )
+    free_exps(&rule_match.exps_signature)
+        .union(free_exps(&rule_match.exps_input))
+        .union(free_prems(&rule_match.prems))
 }
 
 /// Collects free identifiers from rulepath
 pub fn free_rulepath(rule_path: &RulePath) -> IdSet {
-    sets::union(
-        free_prems(&rule_path.prems),
-        free_exps(&rule_path.exps_output),
-    )
+    free_prems(&rule_path.prems).union(free_exps(&rule_path.exps_output))
 }
 
 /// Collects free identifiers from rulepaths
@@ -82,10 +74,7 @@ pub fn free_rulepaths(rule_paths: &[RulePath]) -> IdSet {
 
 /// Collects free identifiers from rulegroup
 pub fn free_rulegroup(rule_group: &RuleGroup) -> IdSet {
-    sets::union(
-        free_rulematch(&rule_group.node.rule_match),
-        free_rulepaths(&rule_group.node.rule_paths),
-    )
+    free_rulematch(&rule_group.node.rule_match).union(free_rulepaths(&rule_group.node.rule_paths))
 }
 
 /// Collects free identifiers from rulegroups
@@ -95,15 +84,12 @@ pub fn free_rulegroups(rule_groups: &[RuleGroup]) -> IdSet {
 
 /// Collects free identifiers from elsegroup
 pub fn free_elsegroup(else_group: &ElseGroup) -> IdSet {
-    sets::union(
-        free_rulematch(&else_group.node.rule_match),
-        free_rulepath(&else_group.node.rule_path),
-    )
+    free_rulematch(&else_group.node.rule_match).union(free_rulepath(&else_group.node.rule_path))
 }
 
 /// Collects free identifiers from elsegroup opt
 pub fn free_elsegroup_opt(else_group: Option<&ElseGroup>) -> IdSet {
-    else_group.map_or_else(sets::empty, free_elsegroup)
+    else_group.map_or_else(IdSet::new, free_elsegroup)
 }
 
 // - Clauses
@@ -125,20 +111,16 @@ pub fn free_elseclause(else_clause: &ElseClause) -> IdSet {
 
 /// Collects free identifiers from elseclause opt
 pub fn free_elseclause_opt(else_clause: Option<&ElseClause>) -> IdSet {
-    else_clause.map_or_else(sets::empty, free_elseclause)
+    else_clause.map_or_else(IdSet::new, free_elseclause)
 }
 
 // - Table rows
 
 /// Collects free identifiers from tablerow
 pub fn free_tablerow(table_row: &TableRow) -> IdSet {
-    sets::union(
-        free_args(&table_row.node.args),
-        sets::union(
-            free_exp(&table_row.node.exp),
-            free_prems(&table_row.node.prems),
-        ),
-    )
+    free_args(&table_row.node.args)
+        .union(free_exp(&table_row.node.exp))
+        .union(free_prems(&table_row.node.prems))
 }
 
 /// Collects free identifiers from tablerows
@@ -155,19 +137,13 @@ pub fn free_def(definition: &Def) -> IdSet {
             rule_groups,
             else_group,
             ..
-        }) => sets::union(
-            free_rulegroups(rule_groups),
-            free_elsegroup_opt(else_group.as_ref()),
-        ),
+        }) => free_rulegroups(rule_groups).union(free_elsegroup_opt(else_group.as_ref())),
         DefKind::TableDec(TableDecDef { table_rows, .. }) => free_tablerows(table_rows),
         DefKind::FuncDec(FuncDecDef {
             clauses,
             else_clause,
             ..
-        }) => sets::union(
-            free_clauses(clauses),
-            free_elseclause_opt(else_clause.as_ref()),
-        ),
-        _ => sets::empty(),
+        }) => free_clauses(clauses).union(free_elseclause_opt(else_clause.as_ref())),
+        _ => IdSet::new(),
     }
 }

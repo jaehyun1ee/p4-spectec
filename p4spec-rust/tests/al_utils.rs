@@ -1,13 +1,18 @@
-use std::collections::{BTreeMap, BTreeSet};
-
 use p4spec_rust::{
     domain::{
         atom::Atom,
         mixfix::Mixfix,
-        sets::IdSet,
         source::{Position, Span, Spanned},
     },
-    lang::{al, el, eq::SyntaxEq, hints::input::InputHint, il, xl::num},
+    lang::{
+        al,
+        common::ds::{map::IdMap, set::IdSet},
+        el,
+        eq::SyntaxEq,
+        hints::input::InputHint,
+        il,
+        xl::num,
+    },
 };
 
 fn span(name: &str) -> Span {
@@ -66,7 +71,7 @@ fn path_with(name: &str) -> il::ast::Path {
 }
 
 fn ids(names: &[&str]) -> IdSet {
-    names.iter().map(|name| (*name).to_owned()).collect()
+    names.iter().map(|name| id(name)).collect()
 }
 #[test]
 fn syntax_equality_ignores_spans_and_subcheck_strategy() {
@@ -479,7 +484,7 @@ fn free_al_shapes_and_definition_arms_are_exhaustive() {
     assert_eq!(al::free::free_tablerow(&table), ids(&["a", "t", "p"]));
 
     let def_type = Spanned::new(il::ast::DefTypKind::Plain(typ()), span("def-type"));
-    let definitions: Vec<(al::ast::Def, BTreeSet<String>)> = vec![
+    let definitions: Vec<(al::ast::Def, IdSet)> = vec![
         (
             Spanned::new(
                 al::ast::DefKind::ExternTyp(al::ast::ExternTypDef {
@@ -905,8 +910,8 @@ fn fresh_names_combine_aliases_collisions_wildcards_and_nested_dimensions() {
         ),
         span("outer-iteration"),
     );
-    let mut aliases = BTreeMap::new();
-    aliases.insert("Alias".to_owned(), alias_typ.clone());
+    let mut aliases = IdMap::new();
+    aliases.insert(id("Alias"), alias_typ.clone());
 
     let variable = il::fresh::var_from_typ(
         &aliases,
@@ -923,7 +928,7 @@ fn fresh_names_combine_aliases_collisions_wildcards_and_nested_dimensions() {
     );
 
     aliases.insert(
-        "Other".to_owned(),
+        id("Other"),
         Spanned::new(il::ast::TypKind::Bool, span("other-type")),
     );
     let wildcard = il::fresh::var_from_typ_wildcard(

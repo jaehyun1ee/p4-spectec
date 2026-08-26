@@ -1,13 +1,11 @@
 //! Free identifiers in elaboration-language data
 
-use crate::domain::sets::{self, IdSet};
+use crate::lang::common::ds::set::IdSet;
 
 use super::ast::*;
 
 fn frees<T>(items: &[T], free: impl Fn(&T) -> IdSet) -> IdSet {
-    items
-        .iter()
-        .fold(IdSet::new(), |set, item| sets::union(set, free(item)))
+    items.iter().map(free).fold(IdSet::new(), IdSet::union)
 }
 
 // == Collect free identifiers
@@ -24,7 +22,7 @@ pub fn free_id_exp(exp: &Exp) -> IdSet {
         | ExpKind::Atom(_)
         | ExpKind::Hole(_)
         | ExpKind::Latex(_) => IdSet::new(),
-        ExpKind::Var(id) => IdSet::from([id.node.clone()]),
+        ExpKind::Var(id) => IdSet::from([id.clone()]),
         ExpKind::Un(_, exp)
         | ExpKind::Arith(exp)
         | ExpKind::Len(exp)
@@ -41,17 +39,15 @@ pub fn free_id_exp(exp: &Exp) -> IdSet {
         | ExpKind::Idx(exp_l, exp_r)
         | ExpKind::Mem(exp_l, exp_r)
         | ExpKind::Infix(exp_l, _, exp_r)
-        | ExpKind::Fuse(exp_l, exp_r) => sets::union(free_id_exp(exp_l), free_id_exp(exp_r)),
+        | ExpKind::Fuse(exp_l, exp_r) => free_id_exp(exp_l).union(free_id_exp(exp_r)),
         ExpKind::List(exps) | ExpKind::Tuple(exps) | ExpKind::Seq(exps) => free_id_exps(exps),
-        ExpKind::Slice(exp_b, exp_i, exp_n) => sets::union(
-            free_id_exp(exp_b),
-            sets::union(free_id_exp(exp_i), free_id_exp(exp_n)),
-        ),
+        ExpKind::Slice(exp_b, exp_i, exp_n) => free_id_exp(exp_b)
+            .union(free_id_exp(exp_i))
+            .union(free_id_exp(exp_n)),
         ExpKind::Str(expfields) => frees(expfields, |(_, exp)| free_id_exp(exp)),
-        ExpKind::Upd(exp_b, path, exp_f) => sets::union(
-            free_id_exp(exp_b),
-            sets::union(free_id_path(path), free_id_exp(exp_f)),
-        ),
+        ExpKind::Upd(exp_b, path, exp_f) => free_id_exp(exp_b)
+            .union(free_id_path(path))
+            .union(free_id_exp(exp_f)),
         ExpKind::Call(_, _, args) => free_id_args(args),
     }
 }
@@ -67,11 +63,10 @@ pub fn free_id_exps(exps: &[Exp]) -> IdSet {
 pub fn free_id_path(path: &Path) -> IdSet {
     match &path.node {
         PathKind::Root => IdSet::new(),
-        PathKind::Idx(path, exp) => sets::union(free_id_path(path), free_id_exp(exp)),
-        PathKind::Slice(path, exp_i, exp_n) => sets::union(
-            free_id_path(path),
-            sets::union(free_id_exp(exp_i), free_id_exp(exp_n)),
-        ),
+        PathKind::Idx(path, exp) => free_id_path(path).union(free_id_exp(exp)),
+        PathKind::Slice(path, exp_i, exp_n) => free_id_path(path)
+            .union(free_id_exp(exp_i))
+            .union(free_id_exp(exp_n)),
         PathKind::Dot(path, _) => free_id_path(path),
     }
 }
@@ -96,7 +91,7 @@ pub fn free_id_args(args: &[Arg]) -> IdSet {
 /// Collects free identifiers from id prem
 pub fn free_id_prem(prem: &Prem) -> IdSet {
     match &prem.node {
-        PremKind::Var(VarPrem { id, .. }) => IdSet::from([id.node.clone()]),
+        PremKind::Var(VarPrem { id, .. }) => IdSet::from([id.clone()]),
         PremKind::Rule(RulePrem { exp, .. })
         | PremKind::RuleNot(RuleNotPrem { exp, .. })
         | PremKind::If(IfPrem { exp })
@@ -115,7 +110,7 @@ pub fn free_id_prems(prems: &[Prem]) -> IdSet {
 
 /// Collects free identifiers from id rule
 pub fn free_id_rule(rule: &Rule) -> IdSet {
-    sets::union(free_id_exp(&rule.node.2), free_id_prems(&rule.node.3))
+    free_id_exp(&rule.node.2).union(free_id_prems(&rule.node.3))
 }
 
 /// Collects free identifiers from id rules
@@ -128,7 +123,7 @@ pub fn free_id_rules(rules: &[Rule]) -> IdSet {
 /// Collects free identifiers from id tablerow
 pub fn free_id_tablerow(table_row: &TableRow) -> IdSet {
     let (pattern, exp) = &table_row.node;
-    sets::union(free_id_exp(pattern), free_id_exp(exp))
+    free_id_exp(pattern).union(free_id_exp(exp))
 }
 
 /// Collects free identifiers from id tablerows
@@ -145,10 +140,9 @@ pub fn free_id_def(definition: &Def) -> IdSet {
         DefKind::TableDef(TableDef { rows, .. }) => free_id_tablerows(rows),
         DefKind::FuncDef(FuncDef {
             args, exp, prems, ..
-        }) => sets::union(
-            free_id_args(args),
-            sets::union(free_id_exp(exp), free_id_prems(prems)),
-        ),
+        }) => free_id_args(args)
+            .union(free_id_exp(exp))
+            .union(free_id_prems(prems)),
         _ => IdSet::new(),
     }
 }

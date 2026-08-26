@@ -1,7 +1,7 @@
 //! Elaboration language model
 
 use crate::domain::{atom, source::Spanned};
-use crate::lang::xl::num;
+use crate::lang::{common, xl::num};
 
 // Numbers
 
@@ -13,8 +13,8 @@ pub type Text = String;
 
 // Identifiers
 
-pub type Id = Spanned<IdKind>;
-pub type IdKind = String;
+pub type Id = common::Id;
+pub type IdKind = common::IdKind;
 
 // Atoms
 

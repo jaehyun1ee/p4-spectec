@@ -1,13 +1,14 @@
-use std::collections::BTreeSet;
-
 use p4spec_rust::{
     domain::{
         atom::Atom as DomainAtom,
         source::{Position, Span, Spanned},
     },
-    lang::el::{
-        ast::{self, BinOp, ExpKind},
-        free, print,
+    lang::{
+        common::ds::set::IdSet,
+        el::{
+            ast::{self, BinOp, ExpKind},
+            free, print,
+        },
     },
 };
 
@@ -17,6 +18,13 @@ fn span(file: &str) -> Span {
 
 fn id(name: &str, file: &str) -> ast::Id {
     Spanned::new(name.to_owned(), span(file))
+}
+
+fn ids(names: &[&str]) -> IdSet {
+    names
+        .iter()
+        .map(|name| id(name, "expected.watsup"))
+        .collect()
 }
 
 fn exp(kind: ExpKind, file: &str) -> ast::Exp {
@@ -61,10 +69,7 @@ fn free_expression_ids_ignore_source_spans_and_render_in_source_order() {
         "root.watsup",
     );
 
-    assert_eq!(
-        free::free_id_exp(&expression),
-        BTreeSet::from(["left".to_owned(), "right".to_owned()])
-    );
+    assert_eq!(free::free_id_exp(&expression), ids(&["left", "right"]));
     assert_eq!(print::string_of_exp(&expression), "left + right");
 }
 
@@ -151,19 +156,13 @@ fn free_collection_covers_paths_calls_premises_and_definition_bodies() {
             groupid: id("group", "def.watsup"),
             rules: vec![rule],
         }))),
-        BTreeSet::from([
-            "argument".to_owned(),
-            "bound".to_owned(),
-            "field".to_owned(),
-            "guard".to_owned(),
-            "high".to_owned(),
-            "index".to_owned(),
-            "low".to_owned(),
+        ids(&[
+            "argument", "bound", "field", "guard", "high", "index", "low"
         ])
     );
     assert_eq!(
         free::free_id_def(&function),
-        BTreeSet::from(["argument".to_owned(), "body".to_owned(), "debug".to_owned()])
+        ids(&["argument", "body", "debug"])
     );
 }
 

@@ -1,10 +1,9 @@
 use p4spec_rust::{
     domain::{
         mixfix::Mixfix,
-        sets::IdSet,
         source::{Position, Span, Spanned},
     },
-    lang::{hints::input::InputHint, il, sl},
+    lang::{common::ds::set::IdSet, hints::input::InputHint, il, sl},
 };
 
 fn span(name: &str) -> Span {
@@ -32,7 +31,7 @@ fn instr(kind: sl::ast::InstrKind) -> sl::ast::Instr {
 }
 
 fn names(items: &[&str]) -> IdSet {
-    items.iter().map(|item| (*item).to_owned()).collect()
+    items.iter().map(|item| id(item)).collect()
 }
 
 #[test]

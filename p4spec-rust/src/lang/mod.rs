@@ -1,6 +1,7 @@
 //! Language representations and shared utilities
 
 pub mod al;
+pub mod common;
 pub mod el;
 pub mod eq;
 pub mod hints;

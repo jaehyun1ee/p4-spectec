@@ -1,16 +1,13 @@
 //! Free identifiers in structured-language data
 
-use crate::{
-    domain::sets::{self, IdSet},
-    lang::il,
-};
+use crate::lang::{common::ds::set::IdSet, il};
 
 use super::ast::*;
 
 // == Free identifiers
 
 fn frees<T>(items: &[T], free: impl Fn(&T) -> IdSet) -> IdSet {
-    sets::unions(items.iter().map(free))
+    items.iter().map(free).fold(IdSet::new(), IdSet::union)
 }
 
 // - Expressions
@@ -38,7 +35,7 @@ pub fn free_path(path: &Path) -> IdSet {
 pub fn free_param(param: &Param) -> IdSet {
     match &param.node {
         ParamKind::Exp(_, exp) => free_exp(exp),
-        ParamKind::Def(..) => sets::empty(),
+        ParamKind::Def(..) => IdSet::new(),
     }
 }
 
@@ -64,7 +61,7 @@ pub fn free_args(args: &[Arg]) -> IdSet {
 /// Collects free identifiers from cases
 pub fn free_cases(cases: &[Case]) -> IdSet {
     frees(cases, |case| {
-        sets::union(free_guard(&case.guard), free_block(&case.block))
+        free_guard(&case.guard).union(free_block(&case.block))
     })
 }
 
@@ -73,7 +70,7 @@ pub fn free_cases(cases: &[Case]) -> IdSet {
 /// Collects free identifiers from guard
 pub fn free_guard(guard: &Guard) -> IdSet {
     match guard {
-        Guard::Bool(_) | Guard::Sub(..) | Guard::Match(_) => sets::empty(),
+        Guard::Bool(_) | Guard::Sub(..) | Guard::Match(_) => IdSet::new(),
         Guard::Cmp(_, _, exp) | Guard::Mem(exp) => free_exp(exp),
     }
 }
@@ -83,32 +80,26 @@ pub fn free_guard(guard: &Guard) -> IdSet {
 /// Collects free identifiers from instr
 pub fn free_instr(instr: &Instr) -> IdSet {
     match &instr.node.kind {
-        InstrKind::If(IfInstr { exp, block, .. }) => sets::union(free_exp(exp), free_block(block)),
+        InstrKind::If(IfInstr { exp, block, .. }) => free_exp(exp).union(free_block(block)),
         InstrKind::Hold(HoldInstr { not_exp, .. }) => frees(&not_exp.args(), |exp| free_exp(exp)),
-        InstrKind::Case(CaseInstr { exp, cases, .. }) => {
-            sets::union(free_exp(exp), free_cases(cases))
-        }
+        InstrKind::Case(CaseInstr { exp, cases, .. }) => free_exp(exp).union(free_cases(cases)),
         InstrKind::Group(GroupInstr { exps, block, .. }) => {
-            sets::union(free_exps(exps), free_block(block))
+            free_exps(exps).union(free_block(block))
         }
         InstrKind::Let(LetInstr {
             exp_l,
             exp_r,
             block,
             ..
-        }) => sets::union(
-            free_exp(exp_l),
-            sets::union(free_exp(exp_r), free_block(block)),
-        ),
-        InstrKind::Rule(RuleInstr { not_exp, block, .. }) => sets::union(
-            frees(&not_exp.args(), |exp| free_exp(exp)),
-            free_block(block),
-        ),
+        }) => free_exp(exp_l)
+            .union(free_exp(exp_r))
+            .union(free_block(block)),
+        InstrKind::Rule(RuleInstr { not_exp, block, .. }) => {
+            frees(&not_exp.args(), |exp| free_exp(exp)).union(free_block(block))
+        }
         InstrKind::Result(ResultInstr { exps, .. }) => free_exps(exps),
         InstrKind::Return(ReturnInstr { exp }) => free_exp(exp),
-        InstrKind::Debug(DebugInstr { exp, instr }) => {
-            sets::union(free_exp(exp), free_instr(instr))
-        }
+        InstrKind::Debug(DebugInstr { exp, instr }) => free_exp(exp).union(free_instr(instr)),
     }
 }
 
