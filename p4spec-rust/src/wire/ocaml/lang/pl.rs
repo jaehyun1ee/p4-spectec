@@ -1,8 +1,8 @@
 use serde_json::{Value, json};
 
 use crate::{
-    domain::{noted::Noted, source::Spanned},
     lang::{
+        common::{noted::Noted, source::Spanned},
         hints::{alter, fields},
         pl::{
             annot,

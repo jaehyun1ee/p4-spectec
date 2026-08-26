@@ -1,12 +1,12 @@
 //! Fresh intermediate-language variables and expressions
 
-use crate::{
-    domain::source::{Span, Spanned},
-    lang::{
-        common::ds::{map::IdMap, set::IdSet},
-        eq::SyntaxEq,
-        xl,
+use crate::lang::{
+    common::{
+        ds::{map::IdMap, set::IdSet},
+        source::{Span, Spanned},
     },
+    eq::SyntaxEq,
+    xl,
 };
 
 use super::{ast::*, print, var};

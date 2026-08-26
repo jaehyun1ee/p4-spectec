@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 
-use crate::{domain::source::Spanned, lang::common::Id};
+use crate::lang::common::{Id, source::Spanned};
 
 use super::{
     collections::{ByKey, CollectionKey},

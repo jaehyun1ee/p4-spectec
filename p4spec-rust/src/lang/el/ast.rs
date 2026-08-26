@@ -1,7 +1,9 @@
 //! Elaboration language model
 
-use crate::domain::{atom, source::Spanned};
-use crate::lang::{common, xl::num};
+use crate::lang::{
+    common::{self, notation::atom, source::Spanned},
+    xl::num,
+};
 
 // Numbers
 

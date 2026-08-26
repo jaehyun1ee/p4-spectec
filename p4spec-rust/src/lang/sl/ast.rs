@@ -1,11 +1,13 @@
 //! Structured language model
 
-use crate::{
-    domain::{
+use crate::lang::{
+    common::{
         noted::Noted,
         source::{Span, Spanned},
     },
-    lang::{el, hints::input::InputHint, il},
+    el,
+    hints::input::InputHint,
+    il,
 };
 
 // Numbers

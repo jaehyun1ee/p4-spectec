@@ -1,5 +1,5 @@
 use p4spec_rust::{
-    domain::source::{Position, Span, Spanned},
+    lang::common::source::{Position, Span, Spanned},
     lang::common::{
         Id,
         ds::{map::IdMap, set::IdSet},

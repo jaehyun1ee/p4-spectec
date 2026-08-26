@@ -1,5 +1,5 @@
 use p4spec_rust::{
-    domain::source::{Position, Span, Spanned},
+    lang::common::source::{Position, Span, Spanned},
     lang::{hints::alter, il, pl},
 };
 

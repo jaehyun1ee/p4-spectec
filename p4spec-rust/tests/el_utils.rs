@@ -1,10 +1,7 @@
 use p4spec_rust::{
-    domain::{
-        atom::Atom as DomainAtom,
-        source::{Position, Span, Spanned},
-    },
+    lang::common::source::{Position, Span, Spanned},
     lang::{
-        common::ds::set::IdSet,
+        common::{ds::set::IdSet, notation::atom::Atom as DomainAtom},
         el::{
             ast::{self, BinOp, ExpKind},
             free, print,

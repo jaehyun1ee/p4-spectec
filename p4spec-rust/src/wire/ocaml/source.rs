@@ -1,6 +1,6 @@
 use serde_json::{Value, json};
 
-use crate::domain::source::{Position, Span, Spanned};
+use crate::lang::common::source::{Position, Span, Spanned};
 
 use super::{DecodeError, field, integer, object};
 

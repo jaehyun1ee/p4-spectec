@@ -1,9 +1,7 @@
 use p4spec_rust::{
-    domain::{
-        atom::Atom,
-        source::{Position, Span, Spanned},
-    },
+    lang::common::source::{Position, Span, Spanned},
     lang::{
+        common::notation::atom::Atom,
         el::ast::{self, ExpKind, Hole},
         hints::{
             alter::{self, AlterationError, AlterationHint, Hole as AlterHole, Renderer},

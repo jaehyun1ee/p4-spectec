@@ -2,7 +2,7 @@
 
 use std::{borrow::Borrow, cmp::Ordering};
 
-use crate::domain::source::Spanned;
+use super::super::source::Spanned;
 
 /// Selects the representation used to compare collection keys
 pub trait CollectionKey {

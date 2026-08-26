@@ -1,8 +1,7 @@
 //! Syntax equality shared across language stages
 
 use crate::{
-    domain::atom::Atom,
-    lang::{hints::input::InputHint, xl::num},
+    lang::{common::notation::atom::Atom, hints::input::InputHint, xl::num},
     yojson::ExternalData,
 };
 

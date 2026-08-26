@@ -1,9 +1,7 @@
 use p4spec_rust::{
-    domain::{
-        mixfix::Mixfix,
-        source::{Position, Span, Spanned},
-    },
+    lang::common::source::{Position, Span, Spanned},
     lang::{
+        common::notation::mixfix::Mixfix,
         hints::{alter, input::InputHint},
         il, pl,
     },

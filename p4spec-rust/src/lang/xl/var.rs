@@ -1,6 +1,6 @@
 //! XL variable identifiers
 
-use crate::domain::source::Spanned;
+use crate::lang::common::source::Spanned;
 
 /// Applies strip var suffix
 pub fn strip_var_suffix(id: &Spanned<String>) -> Spanned<String> {

@@ -1,11 +1,10 @@
 use p4spec_rust::{
-    domain::{
-        atom::Atom,
-        mixfix::Mixfix,
-        source::{Position, Span, Spanned},
-    },
+    lang::common::source::{Position, Span, Spanned},
     lang::{
-        common::ds::set::IdSet,
+        common::{
+            ds::set::IdSet,
+            notation::{atom::Atom, mixfix::Mixfix},
+        },
         hints::input::InputHint,
         il::{ast, free, var},
     },

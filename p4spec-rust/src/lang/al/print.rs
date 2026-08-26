@@ -2,16 +2,14 @@
 
 use std::fmt;
 
-use crate::{
-    domain::mixop::Mixop,
-    lang::{
-        hints::input::InputHint,
-        il::print::{
-            self as il_print, string_of_args, string_of_atom, string_of_clauses, string_of_def_typ,
-            string_of_defid, string_of_elseclause_opt, string_of_exp, string_of_exps,
-            string_of_not_typ, string_of_params, string_of_relid, string_of_rulegroupid,
-            string_of_tparams, string_of_typ, string_of_typid, string_of_varid,
-        },
+use crate::lang::{
+    common::notation::mixop::Mixop,
+    hints::input::InputHint,
+    il::print::{
+        self as il_print, string_of_args, string_of_atom, string_of_clauses, string_of_def_typ,
+        string_of_defid, string_of_elseclause_opt, string_of_exp, string_of_exps,
+        string_of_not_typ, string_of_params, string_of_relid, string_of_rulegroupid,
+        string_of_tparams, string_of_typ, string_of_typid, string_of_varid,
     },
 };
 

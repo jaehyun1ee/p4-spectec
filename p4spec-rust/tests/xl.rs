@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 
 use num_bigint::BigInt;
 use p4spec_rust::{
-    domain::source::{Position, Span, Spanned},
+    lang::common::source::{Position, Span, Spanned},
     lang::xl::{
         num::{self, BinOp, CmpOp, Natural, Number, NumericError, Typ, UnOp},
         utf8, var,

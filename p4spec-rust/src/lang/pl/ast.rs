@@ -1,12 +1,13 @@
 //! Prose language model
 
-use crate::{
-    domain::{
-        mixfix::Mixfix,
+use crate::lang::{
+    common::{
+        notation::mixfix::Mixfix,
         noted::Noted,
         source::{Span, Spanned},
     },
-    lang::{pl::annot, sl},
+    pl::annot,
+    sl,
 };
 
 // Numbers

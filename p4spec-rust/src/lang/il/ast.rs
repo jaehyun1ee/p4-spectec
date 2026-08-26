@@ -1,13 +1,16 @@
 //! Intermediate language model
 
-use crate::domain::{
-    atom,
-    mixfix::Mixfix,
-    mixop,
-    noted::Noted,
-    source::{Span, Spanned},
+use crate::lang::{
+    common::{
+        self,
+        notation::{atom, mixfix::Mixfix, mixop},
+        noted::Noted,
+        source::{Span, Spanned},
+    },
+    el,
+    hints::input::InputHint,
+    xl::num,
 };
-use crate::lang::{common, el, hints::input::InputHint, xl::num};
 use crate::yojson::ExternalData;
 
 // Numbers

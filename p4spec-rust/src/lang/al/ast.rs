@@ -1,9 +1,6 @@
 //! Algorithmic language model
 
-use crate::{
-    domain::source::Spanned,
-    lang::{el, hints::input::InputHint, il},
-};
+use crate::lang::{common::source::Spanned, el, hints::input::InputHint, il};
 
 // Numbers
 

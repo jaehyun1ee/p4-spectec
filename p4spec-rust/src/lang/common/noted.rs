@@ -17,7 +17,7 @@ impl<T, S> Noted<T, S> {
 macro_rules! noted {
     (kind: $kind:expr, note: $note:expr, span: $span:expr $(,)?) => {
         $crate::spanned! {
-            node: $crate::domain::noted::Noted::new($kind, $note),
+            node: $crate::lang::common::noted::Noted::new($kind, $note),
             span: $span,
         }
     };
@@ -25,7 +25,7 @@ macro_rules! noted {
 
 #[cfg(test)]
 mod tests {
-    use crate::domain::source::{Position, Span, Spanned};
+    use super::super::source::{Position, Span, Spanned};
 
     #[test]
     fn noted_macro_builds_a_noted_node_with_the_supplied_nodes_span() {

@@ -98,12 +98,12 @@ impl Mixop {
 
 #[cfg(test)]
 mod tests {
-    use super::{ArityMismatch, Mixfix, Mixop};
-    use crate::domain::{
+    use super::super::{
+        super::source::{Span, Spanned},
         atom::Atom,
         mixfix::AtomPhrase,
-        source::{Span, Spanned},
     };
+    use super::{ArityMismatch, Mixfix, Mixop};
 
     fn atom(value: Atom) -> AtomPhrase {
         Spanned::new(value, Span::default())

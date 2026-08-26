@@ -1,10 +1,11 @@
-use p4spec_rust::{
-    domain::{
-        atom::Atom,
-        mixfix::Mixfix,
+use p4spec_rust::lang::{
+    common::{
+        notation::{atom::Atom, mixfix::Mixfix},
         source::{Position, Span, Spanned},
     },
-    lang::{el, hints::input::InputHint, il, sl},
+    el,
+    hints::input::InputHint,
+    il, sl,
 };
 
 fn span(name: &str) -> Span {

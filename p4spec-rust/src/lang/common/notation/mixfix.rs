@@ -4,7 +4,7 @@ use std::{
     hash::{Hash, Hasher},
 };
 
-use super::{atom::Atom, source::Spanned};
+use super::{super::source::Spanned, atom::Atom};
 
 /// An atom paired with its source span
 pub type AtomPhrase = Spanned<Atom>;
@@ -455,12 +455,12 @@ impl<T> fmt::Display for Mixfix<T> {
 
 #[cfg(test)]
 mod tests {
-    use super::{AtomPhrase, Mixfix};
-    use crate::domain::{
+    use super::super::{
+        super::source::{Span, Spanned},
         atom::Atom,
         mixop::Mixop,
-        source::{Span, Spanned},
     };
+    use super::{AtomPhrase, Mixfix};
 
     fn atom(value: Atom) -> AtomPhrase {
         Spanned::new(value, Span::default())

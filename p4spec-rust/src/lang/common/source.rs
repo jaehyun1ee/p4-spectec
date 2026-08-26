@@ -92,7 +92,7 @@ impl<T> Spanned<T> {
 macro_rules! spanned {
     (node: $node:expr, span: $span:expr $(,)?) => {{
         let span = $span.span.clone();
-        $crate::domain::source::Spanned::new($node, span)
+        $crate::lang::common::source::Spanned::new($node, span)
     }};
 }
 

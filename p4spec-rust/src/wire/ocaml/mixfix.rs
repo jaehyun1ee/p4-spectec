@@ -1,6 +1,6 @@
 use serde_json::{Value, json};
 
-use crate::domain::{mixfix::Mixfix, mixop::Mixop};
+use crate::lang::common::notation::{mixfix::Mixfix, mixop::Mixop};
 
 use super::{DecodeError, array, atom::AtomPhraseCodec, on_codec_stack, variant};
 
