@@ -9,6 +9,7 @@ pub struct Position {
 }
 
 impl Position {
+    /// Constructs a source position
     pub fn new(file: impl Into<String>, line: i64, column: i64) -> Self {
         Self {
             file: file.into(),
@@ -36,10 +37,12 @@ pub struct Span {
 }
 
 impl Span {
+    /// Constructs a span from its endpoints
     pub fn new(left: Position, right: Position) -> Self {
         Self { left, right }
     }
 
+    /// Covers all supplied spans
     pub fn over(regions: &[Self]) -> Self {
         let Some((region_h, regions_t)) = regions.split_first() else {
             return Self::default();
@@ -81,5 +84,35 @@ impl<T> Spanned<T> {
     /// Builds a node with an explicit source span
     pub fn new(node: T, span: Span) -> Self {
         Self { node, span }
+    }
+}
+
+/// Builds a syntax node with the span of another syntax node
+#[macro_export]
+macro_rules! spanned {
+    (node: $node:expr, span: $span:expr $(,)?) => {{
+        let span = $span.span.clone();
+        $crate::domain::source::Spanned::new($node, span)
+    }};
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Position, Span, Spanned};
+
+    #[test]
+    fn spanned_macro_copies_the_supplied_nodes_span() {
+        let source = Spanned::new(
+            "source",
+            Span::new(Position::new("test", 1, 2), Position::new("test", 3, 4)),
+        );
+
+        let result = crate::spanned! {
+            node: "result",
+            span: source,
+        };
+
+        assert_eq!(result.node, "result");
+        assert_eq!(result.span, source.span);
     }
 }

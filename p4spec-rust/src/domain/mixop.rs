@@ -42,6 +42,7 @@ impl fmt::Display for ArityMismatch {
 impl Error for ArityMismatch {}
 
 impl Mixop {
+    /// Fills a mixfix operator with arguments
     pub fn fill<T>(
         mixop: &Self,
         args: impl IntoIterator<Item = T>,
@@ -85,6 +86,7 @@ impl Mixop {
 // == Rendering a filled mixfix
 
 impl Mixop {
+    /// Renders a mixfix operator with string arguments
     pub fn to_string(
         &self,
         args: impl IntoIterator<Item = String>,

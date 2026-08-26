@@ -1,3 +1,5 @@
+//! Numeric values and operations
+
 use std::{cmp::Ordering, fmt};
 
 use num_bigint::BigInt;
@@ -22,17 +24,19 @@ pub enum Number {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Typ {
-    NatT,
-    IntT,
+    Nat,
+    Int,
 }
 
+/// Converts to typ
 pub fn to_typ(number: &Number) -> Typ {
     match number {
-        Number::Nat(_) => Typ::NatT,
-        Number::Int(_) => Typ::IntT,
+        Number::Nat(_) => Typ::Nat,
+        Number::Int(_) => Typ::Int,
     }
 }
 
+/// Converts to int
 pub fn to_int(number: &Number) -> &BigInt {
     match number {
         Number::Nat(natural) => natural.as_bigint(),
@@ -44,26 +48,26 @@ pub fn to_int(number: &Number) -> &BigInt {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum UnOp {
-    PlusOp,
-    MinusOp,
+    Plus,
+    Minus,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum BinOp {
-    AddOp,
-    SubOp,
-    MulOp,
-    DivOp,
-    ModOp,
-    PowOp,
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Mod,
+    Pow,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum CmpOp {
-    LtOp,
-    GtOp,
-    LeOp,
-    GeOp,
+    Lt,
+    Gt,
+    Le,
+    Ge,
 }
 
 /// Errors from checked numeric construction and operations
@@ -72,8 +76,8 @@ pub enum NumericError {
     #[error("natural number cannot be negative: {0}")]
     NegativeNatural(BigInt),
 
-    #[error("numeric operands have mismatched kinds: {left:?} and {right:?}")]
-    MismatchedKinds { left: Typ, right: Typ },
+    #[error("numeric operands have mismatched kinds: {typ_l:?} and {typ_r:?}")]
+    MismatchedKinds { typ_l: Typ, typ_r: Typ },
 
     #[error("numeric operation {0:?} has a zero divisor")]
     ZeroDivisor(BinOp),
@@ -126,11 +130,12 @@ pub fn compare(number_a: &Number, number_b: &Number) -> Ordering {
     }
 }
 
+/// Compares typ
 pub fn compare_typ(type_a: Typ, type_b: Typ) -> Ordering {
     match (type_a, type_b) {
-        (Typ::NatT, Typ::NatT) | (Typ::IntT, Typ::IntT) => Ordering::Equal,
-        (Typ::NatT, Typ::IntT) => Ordering::Less,
-        (Typ::IntT, Typ::NatT) => Ordering::Greater,
+        (Typ::Nat, Typ::Nat) | (Typ::Int, Typ::Int) => Ordering::Equal,
+        (Typ::Nat, Typ::Int) => Ordering::Less,
+        (Typ::Int, Typ::Nat) => Ordering::Greater,
     }
 }
 
@@ -143,16 +148,19 @@ pub fn eq(number_a: &Number, number_b: &Number) -> bool {
 
 // Subtyping
 
+/// Checks equality of uiv
 pub fn equiv(type_a: Typ, type_b: Typ) -> bool {
     type_a == type_b
 }
 
+/// Applies sub
 pub fn sub(type_a: Typ, type_b: Typ) -> bool {
-    matches!((type_a, type_b), (Typ::NatT, Typ::IntT)) || equiv(type_a, type_b)
+    matches!((type_a, type_b), (Typ::Nat, Typ::Int)) || equiv(type_a, type_b)
 }
 
 // Stringifiers
 
+/// Renders num
 pub fn string_of_num(number: &Number) -> String {
     match number {
         Number::Nat(natural) => natural.to_string(),
@@ -163,46 +171,51 @@ pub fn string_of_num(number: &Number) -> String {
     }
 }
 
+/// Renders typ
 pub fn string_of_typ(number_type: Typ) -> &'static str {
     match number_type {
-        Typ::NatT => "nat",
-        Typ::IntT => "int",
+        Typ::Nat => "nat",
+        Typ::Int => "int",
     }
 }
 
-pub fn string_of_unop(operation: UnOp) -> &'static str {
-    match operation {
-        UnOp::PlusOp => "+",
-        UnOp::MinusOp => "-",
+/// Renders unop
+pub fn string_of_unop(unop: UnOp) -> &'static str {
+    match unop {
+        UnOp::Plus => "+",
+        UnOp::Minus => "-",
     }
 }
 
-pub fn string_of_binop(operation: BinOp) -> &'static str {
-    match operation {
-        BinOp::AddOp => "+",
-        BinOp::SubOp => "-",
-        BinOp::MulOp => "*",
-        BinOp::DivOp => "/",
-        BinOp::ModOp => "\\",
-        BinOp::PowOp => "^",
+/// Renders binop
+pub fn string_of_binop(binop: BinOp) -> &'static str {
+    match binop {
+        BinOp::Add => "+",
+        BinOp::Sub => "-",
+        BinOp::Mul => "*",
+        BinOp::Div => "/",
+        BinOp::Mod => "\\",
+        BinOp::Pow => "^",
     }
 }
 
-pub fn string_of_cmpop(operation: CmpOp) -> &'static str {
-    match operation {
-        CmpOp::LtOp => "<",
-        CmpOp::GtOp => ">",
-        CmpOp::LeOp => "<=",
-        CmpOp::GeOp => ">=",
+/// Renders cmpop
+pub fn string_of_cmpop(cmpop: CmpOp) -> &'static str {
+    match cmpop {
+        CmpOp::Lt => "<",
+        CmpOp::Gt => ">",
+        CmpOp::Le => "<=",
+        CmpOp::Ge => ">=",
     }
 }
 
 // Unary
 
-pub fn un(operation: UnOp, number: &Number) -> Number {
-    match operation {
-        UnOp::PlusOp => number.clone(),
-        UnOp::MinusOp => Number::Int(-to_int(number)),
+/// Applies un
+pub fn un(unop: UnOp, number: &Number) -> Number {
+    match unop {
+        UnOp::Plus => number.clone(),
+        UnOp::Minus => Number::Int(-to_int(number)),
     }
 }
 
@@ -212,55 +225,55 @@ pub fn un(operation: UnOp, number: &Number) -> Number {
 ///
 /// Returns an error for mismatched kinds;
 /// returns an error for zero division or modulo
-pub fn bin(operation: BinOp, number_l: &Number, number_r: &Number) -> Result<Number, NumericError> {
-    match (operation, number_l, number_r) {
-        (BinOp::AddOp, Number::Nat(natural_l), Number::Nat(natural_r)) => {
+pub fn bin(binop: BinOp, number_l: &Number, number_r: &Number) -> Result<Number, NumericError> {
+    match (binop, number_l, number_r) {
+        (BinOp::Add, Number::Nat(natural_l), Number::Nat(natural_r)) => {
             Ok(Number::Nat(Natural(&natural_l.0 + &natural_r.0)))
         }
-        (BinOp::AddOp, Number::Int(integer_l), Number::Int(integer_r)) => {
+        (BinOp::Add, Number::Int(integer_l), Number::Int(integer_r)) => {
             Ok(Number::Int(integer_l + integer_r))
         }
-        (BinOp::SubOp, Number::Nat(natural_l), Number::Nat(natural_r)) => {
+        (BinOp::Sub, Number::Nat(natural_l), Number::Nat(natural_r)) => {
             Ok(Number::Int(&natural_l.0 - &natural_r.0))
         }
-        (BinOp::SubOp, Number::Int(integer_l), Number::Int(integer_r)) => {
+        (BinOp::Sub, Number::Int(integer_l), Number::Int(integer_r)) => {
             Ok(Number::Int(integer_l - integer_r))
         }
-        (BinOp::MulOp, Number::Nat(natural_l), Number::Nat(natural_r)) => {
+        (BinOp::Mul, Number::Nat(natural_l), Number::Nat(natural_r)) => {
             Ok(Number::Nat(Natural(&natural_l.0 * &natural_r.0)))
         }
-        (BinOp::MulOp, Number::Int(integer_l), Number::Int(integer_r)) => {
+        (BinOp::Mul, Number::Int(integer_l), Number::Int(integer_r)) => {
             Ok(Number::Int(integer_l * integer_r))
         }
-        (operation @ (BinOp::DivOp | BinOp::ModOp), Number::Nat(_), Number::Nat(natural_r))
+        (binop @ (BinOp::Div | BinOp::Mod), Number::Nat(_), Number::Nat(natural_r))
             if natural_r.0.is_zero() =>
         {
-            Err(NumericError::ZeroDivisor(operation))
+            Err(NumericError::ZeroDivisor(binop))
         }
-        (operation @ (BinOp::DivOp | BinOp::ModOp), Number::Int(_), Number::Int(integer_r))
+        (binop @ (BinOp::Div | BinOp::Mod), Number::Int(_), Number::Int(integer_r))
             if integer_r.is_zero() =>
         {
-            Err(NumericError::ZeroDivisor(operation))
+            Err(NumericError::ZeroDivisor(binop))
         }
-        (BinOp::DivOp, Number::Nat(natural_l), Number::Nat(natural_r)) => {
+        (BinOp::Div, Number::Nat(natural_l), Number::Nat(natural_r)) => {
             Ok(Number::Nat(Natural(&natural_l.0 / &natural_r.0)))
         }
-        (BinOp::DivOp, Number::Int(integer_l), Number::Int(integer_r)) => {
+        (BinOp::Div, Number::Int(integer_l), Number::Int(integer_r)) => {
             Ok(Number::Int(integer_l / integer_r))
         }
-        (BinOp::ModOp, Number::Nat(natural_l), Number::Nat(natural_r)) => {
+        (BinOp::Mod, Number::Nat(natural_l), Number::Nat(natural_r)) => {
             Ok(Number::Nat(Natural(&natural_l.0 % &natural_r.0)))
         }
-        (BinOp::ModOp, Number::Int(integer_l), Number::Int(integer_r)) => {
+        (BinOp::Mod, Number::Int(integer_l), Number::Int(integer_r)) => {
             Ok(Number::Int(integer_l % integer_r))
         }
-        (BinOp::PowOp, Number::Nat(_), Number::Nat(_))
-        | (BinOp::PowOp, Number::Int(_), Number::Int(_)) => {
-            Err(NumericError::UnsupportedBinaryOperation(operation))
+        (BinOp::Pow, Number::Nat(_), Number::Nat(_))
+        | (BinOp::Pow, Number::Int(_), Number::Int(_)) => {
+            Err(NumericError::UnsupportedBinaryOperation(binop))
         }
         (_, number_l, number_r) => Err(NumericError::MismatchedKinds {
-            left: to_typ(number_l),
-            right: to_typ(number_r),
+            typ_l: to_typ(number_l),
+            typ_r: to_typ(number_r),
         }),
     }
 }
@@ -270,27 +283,27 @@ pub fn bin(operation: BinOp, number_l: &Number, number_r: &Number) -> Result<Num
 /// Applies a checked comparison
 ///
 /// Returns an error for mismatched number kinds
-pub fn cmp(operation: CmpOp, number_l: &Number, number_r: &Number) -> Result<bool, NumericError> {
-    match (operation, number_l, number_r) {
-        (CmpOp::LtOp, Number::Nat(natural_l), Number::Nat(natural_r)) => {
+pub fn cmp(cmpop: CmpOp, number_l: &Number, number_r: &Number) -> Result<bool, NumericError> {
+    match (cmpop, number_l, number_r) {
+        (CmpOp::Lt, Number::Nat(natural_l), Number::Nat(natural_r)) => {
             Ok(natural_l.0 < natural_r.0)
         }
-        (CmpOp::LtOp, Number::Int(integer_l), Number::Int(integer_r)) => Ok(integer_l < integer_r),
-        (CmpOp::GtOp, Number::Nat(natural_l), Number::Nat(natural_r)) => {
+        (CmpOp::Lt, Number::Int(integer_l), Number::Int(integer_r)) => Ok(integer_l < integer_r),
+        (CmpOp::Gt, Number::Nat(natural_l), Number::Nat(natural_r)) => {
             Ok(natural_l.0 > natural_r.0)
         }
-        (CmpOp::GtOp, Number::Int(integer_l), Number::Int(integer_r)) => Ok(integer_l > integer_r),
-        (CmpOp::LeOp, Number::Nat(natural_l), Number::Nat(natural_r)) => {
+        (CmpOp::Gt, Number::Int(integer_l), Number::Int(integer_r)) => Ok(integer_l > integer_r),
+        (CmpOp::Le, Number::Nat(natural_l), Number::Nat(natural_r)) => {
             Ok(natural_l.0 <= natural_r.0)
         }
-        (CmpOp::LeOp, Number::Int(integer_l), Number::Int(integer_r)) => Ok(integer_l <= integer_r),
-        (CmpOp::GeOp, Number::Nat(natural_l), Number::Nat(natural_r)) => {
+        (CmpOp::Le, Number::Int(integer_l), Number::Int(integer_r)) => Ok(integer_l <= integer_r),
+        (CmpOp::Ge, Number::Nat(natural_l), Number::Nat(natural_r)) => {
             Ok(natural_l.0 >= natural_r.0)
         }
-        (CmpOp::GeOp, Number::Int(integer_l), Number::Int(integer_r)) => Ok(integer_l >= integer_r),
+        (CmpOp::Ge, Number::Int(integer_l), Number::Int(integer_r)) => Ok(integer_l >= integer_r),
         (_, number_l, number_r) => Err(NumericError::MismatchedKinds {
-            left: to_typ(number_l),
-            right: to_typ(number_r),
+            typ_l: to_typ(number_l),
+            typ_r: to_typ(number_r),
         }),
     }
 }

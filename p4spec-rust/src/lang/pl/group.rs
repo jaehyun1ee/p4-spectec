@@ -1,3 +1,5 @@
+//! Rule-group extraction from prose dispatch blocks
+
 use super::{annot, ast::*};
 
 /// A rule group extracted from a dispatch block
@@ -11,40 +13,44 @@ pub struct RuleGroup {
     pub body: BlockGroup,
 }
 
+/// Collects rule groups from a dispatch block
 pub fn collect_groups(block: &BlockDispatch) -> Vec<RuleGroup> {
     fn collect_instr(instr: &Instr<InstrDispatch>) -> Vec<RuleGroup> {
-        match &instr.node.kind {
-            InstrKind::IfI(_, _, block, _) => collect_block(block),
-            InstrKind::HoldI(_, _, _, holdcase) => match holdcase {
-                HoldCase::BothH(block_hold, block_not_hold) => collect_block(block_hold)
+        match &instr.node.node.kind {
+            InstrKind::If(IfInstr { block, .. }) => collect_block(block),
+            InstrKind::Hold(HoldInstr { hold_case, .. }) => match hold_case {
+                HoldCase::Both(block_hold, block_not_hold) => collect_block(block_hold)
                     .into_iter()
                     .chain(collect_block(block_not_hold))
                     .collect(),
-                HoldCase::HoldH(block, _) | HoldCase::NotHoldH(block, _) => collect_block(block),
+                HoldCase::Hold(block, _) | HoldCase::NotHold(block, _) => collect_block(block),
             },
-            InstrKind::CaseI(_, cases, _) => cases
+            InstrKind::Case(CaseInstr { cases, .. }) => cases
                 .iter()
                 .flat_map(|case| collect_block(&case.block))
                 .collect(),
-            InstrKind::LetI(..) | InstrKind::DebugI(_) | InstrKind::DestructI(..) => Vec::new(),
-            InstrKind::CheckLetSubI(_, _, _, _, block)
-            | InstrKind::CheckLetMatchI(_, _, _, block)
-            | InstrKind::OptionGetI(_, _, block) => collect_block(block),
-            InstrKind::TierI(InstrDispatch::RouteI(arms)) => {
-                arms.iter().flat_map(collect_block).collect()
-            }
-            InstrKind::TierI(InstrDispatch::GroupI {
-                group_id,
-                relation_id,
-                signature,
-                inputs,
-                block,
+            InstrKind::Let(..) | InstrKind::Debug(_) | InstrKind::Destruct(..) => Vec::new(),
+            InstrKind::CheckLetSub(CheckLetSubInstr { block, .. })
+            | InstrKind::CheckLetMatch(CheckLetMatchInstr { block, .. })
+            | InstrKind::OptionGet(OptionGetInstr { block, .. }) => collect_block(block),
+            InstrKind::Tier(TierInstr {
+                tier: InstrDispatch::Route(RouteDispatchInstr { blocks }),
+            }) => blocks.iter().flat_map(collect_block).collect(),
+            InstrKind::Tier(TierInstr {
+                tier:
+                    InstrDispatch::Group(GroupDispatchInstr {
+                        id_rel,
+                        id_group,
+                        rel_signature,
+                        exps_input,
+                        block,
+                    }),
             }) => vec![RuleGroup {
                 hints: instr.hints.clone(),
-                id_rulegroup: group_id.clone(),
-                id_rel: relation_id.clone(),
-                rel_signature: signature.clone(),
-                exps: inputs.clone(),
+                id_rulegroup: id_group.clone(),
+                id_rel: id_rel.clone(),
+                rel_signature: rel_signature.clone(),
+                exps: exps_input.clone(),
                 body: block.clone(),
             }],
         }

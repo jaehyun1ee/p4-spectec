@@ -1,11 +1,16 @@
+//! Text rendering for intermediate-language data
+
 use std::fmt;
 
-use crate::lang::{el, xl::num};
+use crate::lang::{
+    el::{self, print::string_of_binop, print::string_of_cmpop, print::string_of_unop},
+    xl::num::{self, string_of_num},
+};
 
 use super::ast::*;
 
-fn join<T>(items: &[T], separator: &str, render: impl Fn(&T) -> String) -> String {
-    items.iter().map(render).collect::<Vec<_>>().join(separator)
+fn join<T>(items: &[T], sep: &str, render: impl Fn(&T) -> String) -> String {
+    items.iter().map(render).collect::<Vec<_>>().join(sep)
 }
 fn indent(level: usize) -> String {
     "  ".repeat(level)
@@ -25,224 +30,373 @@ fn escaped(text: &str) -> String {
         .collect()
 }
 
-// Numbers
+// - Texts
 
-pub fn string_of_num(number: &Num) -> String {
-    el::print::string_of_num(number)
-}
-// Texts
-
+/// Renders text
 pub fn string_of_text(text: &str) -> String {
     text.into()
 }
-// Identifiers
+// - Identifiers
 
+/// Renders varid
 pub fn string_of_varid(id: &Id) -> String {
     id.node.clone()
 }
+/// Renders typid
 pub fn string_of_typid(id: &Id) -> String {
     id.node.clone()
 }
+/// Renders relid
 pub fn string_of_relid(id: &Id) -> String {
     id.node.clone()
 }
+/// Renders ruleid
 pub fn string_of_ruleid(id: &Id) -> String {
     id.node.clone()
 }
+/// Renders rulegroupid
 pub fn string_of_rulegroupid(id: &Id) -> String {
     id.node.clone()
 }
+/// Renders defid
 pub fn string_of_defid(id: &Id) -> String {
     format!("${}", id.node)
 }
-// Atoms
+// - Atoms
 
+/// Renders atom
 pub fn string_of_atom(atom: &Atom) -> String {
     atom.node.to_string()
 }
+/// Renders atoms
 pub fn string_of_atoms(atoms: &[Atom]) -> String {
-    join(atoms, "", string_of_atom)
+    let mut output = String::new();
+    write_atoms(&mut output, atoms).expect("writing to a String cannot fail");
+    output
 }
-// Mixfix operators
 
+fn write_atoms(output: &mut dyn fmt::Write, atoms: &[Atom]) -> fmt::Result {
+    for atom in atoms {
+        output.write_str(&string_of_atom(atom))?;
+    }
+    Ok(())
+}
+// - Mixfix operators
+
+/// Renders mixop
 pub fn string_of_mixop(mixop: &Mixop) -> String {
-    mixop
-        .to_string((0..mixop.arity()).map(|_| "%".to_owned()), string_of_atom)
-        .expect("mixop arguments match its arity")
+    let mut output = String::new();
+    write_mixop(&mut output, mixop).expect("writing to a String cannot fail");
+    output
 }
-// Iterators
 
+fn write_mixop(output: &mut dyn fmt::Write, mixop: &Mixop) -> fmt::Result {
+    let rendered = mixop
+        .to_string((0..mixop.arity()).map(|_| "%".to_owned()), string_of_atom)
+        .expect("mixop arguments match its arity");
+    output.write_str(&rendered)
+}
+// - Iterators
+
+/// Renders iter
 pub fn string_of_iter(iter: Iter) -> &'static str {
     match iter {
         Iter::Opt => "?",
         Iter::List => "*",
     }
 }
-// Variables
+// - Variables
 
-pub fn string_of_var(variable: &Var) -> String {
-    format!(
-        "{}{}",
-        string_of_varid(&variable.id),
-        join(&variable.iters, "", |iter| string_of_iter(*iter).into())
-    )
+/// Renders var
+pub fn string_of_var(var: &Var) -> String {
+    let mut output = String::new();
+    write_var(&mut output, var).expect("writing to a String cannot fail");
+    output
 }
 
-// Types
+fn write_var(output: &mut dyn fmt::Write, var: &Var) -> fmt::Result {
+    output.write_str(&string_of_varid(&var.id))?;
+    for iter in &var.iters {
+        output.write_str(string_of_iter(*iter))?;
+    }
+    Ok(())
+}
 
+// - Types
+
+/// Renders typ
 pub fn string_of_typ(typ: &Typ) -> String {
+    let mut output = String::new();
+    write_typ(&mut output, typ).expect("writing to a String cannot fail");
+    output
+}
+
+fn write_typ(output: &mut dyn fmt::Write, typ: &Typ) -> fmt::Result {
     match &typ.node {
-        TypKind::BoolT => "bool".into(),
-        TypKind::NumT(num::Typ::NatT) => "nat".into(),
-        TypKind::NumT(num::Typ::IntT) => "int".into(),
-        TypKind::TextT => "text".into(),
-        TypKind::VarT(id, targs) => format!("{}{}", string_of_typid(id), string_of_targs(targs)),
-        TypKind::TupleT(typs) => format!("({})", string_of_typs(", ", typs)),
-        TypKind::IterT(typ, iter) => format!("{}{}", string_of_typ(typ), string_of_iter(*iter)),
-        TypKind::FuncT(tparams, typs, typ) => format!(
-            "{}({}) : {}",
-            string_of_tparams(tparams),
-            string_of_typs(", ", typs),
-            string_of_typ(typ)
-        ),
+        TypKind::Bool => output.write_str("bool"),
+        TypKind::Num(num::Typ::Nat) => output.write_str("nat"),
+        TypKind::Num(num::Typ::Int) => output.write_str("int"),
+        TypKind::Text => output.write_str("text"),
+        TypKind::Var(id, targs) => {
+            output.write_str(&string_of_typid(id))?;
+            write_targs(output, targs)
+        }
+        TypKind::Tuple(typs) => {
+            output.write_char('(')?;
+            write_typs(output, ", ", typs)?;
+            output.write_char(')')
+        }
+        TypKind::Iter(typ, iter) => {
+            write_typ(output, typ)?;
+            output.write_str(string_of_iter(*iter))
+        }
+        TypKind::Func(tparams, typs, typ) => {
+            write_tparams(output, tparams)?;
+            output.write_char('(')?;
+            write_typs(output, ", ", typs)?;
+            output.write_str(") : ")?;
+            write_typ(output, typ)
+        }
     }
 }
-pub fn string_of_typs(separator: &str, typs: &[Typ]) -> String {
-    join(typs, separator, string_of_typ)
+/// Renders typs
+pub fn string_of_typs(sep: &str, typs: &[Typ]) -> String {
+    let mut output = String::new();
+    write_typs(&mut output, sep, typs).expect("writing to a String cannot fail");
+    output
 }
-pub fn string_of_nottyp(nottyp: &NotTyp) -> String {
-    nottyp.node.render(string_of_atom, string_of_typ)
+fn write_typs(output: &mut dyn fmt::Write, sep: &str, typs: &[Typ]) -> fmt::Result {
+    for (index, typ) in typs.iter().enumerate() {
+        if index != 0 {
+            output.write_str(sep)?;
+        }
+        write_typ(output, typ)?;
+    }
+    Ok(())
 }
-pub fn string_of_deftyp(deftyp: &DefTyp) -> String {
-    match &deftyp.node {
-        DefTypKind::PlainT(typ) => string_of_typ(typ),
-        DefTypKind::StructT(fields) => format!("{{{}}}", string_of_typfields(", ", fields)),
-        DefTypKind::VariantT(cases) => format!("\n   | {}", string_of_typcases("\n   | ", cases)),
+/// Renders not typ
+pub fn string_of_not_typ(not_typ: &NotTyp) -> String {
+    let mut output = String::new();
+    write_not_typ(&mut output, not_typ).expect("writing to a String cannot fail");
+    output
+}
+fn write_not_typ(output: &mut dyn fmt::Write, not_typ: &NotTyp) -> fmt::Result {
+    output.write_str(&not_typ.node.render(string_of_atom, string_of_typ))
+}
+/// Renders def typ
+pub fn string_of_def_typ(def_typ: &DefTyp) -> String {
+    let mut output = String::new();
+    write_def_typ(&mut output, def_typ).expect("writing to a String cannot fail");
+    output
+}
+fn write_def_typ(output: &mut dyn fmt::Write, def_typ: &DefTyp) -> fmt::Result {
+    match &def_typ.node {
+        DefTypKind::Plain(typ) => write_typ(output, typ),
+        DefTypKind::Struct(typ_fields) => {
+            output.write_char('{')?;
+            write_typ_fields(output, ", ", typ_fields)?;
+            output.write_char('}')
+        }
+        DefTypKind::Variant(typ_cases) => {
+            output.write_str("\n   | ")?;
+            write_typ_cases(output, "\n   | ", typ_cases)
+        }
     }
 }
-pub fn string_of_typfield(field: &TypField) -> String {
-    format!("{} {}", string_of_atom(&field.0), string_of_typ(&field.1))
+/// Renders typ field
+pub fn string_of_typ_field(typ_field: &TypField) -> String {
+    let mut output = String::new();
+    write_typ_field(&mut output, typ_field).expect("writing to a String cannot fail");
+    output
 }
-pub fn string_of_typfields(separator: &str, fields: &[TypField]) -> String {
-    join(fields, separator, string_of_typfield)
+fn write_typ_field(output: &mut dyn fmt::Write, typ_field: &TypField) -> fmt::Result {
+    write!(output, "{} ", string_of_atom(&typ_field.0))?;
+    write_typ(output, &typ_field.1)
 }
-pub fn string_of_typorigin(origin: &TypOrigin) -> String {
-    format!(
-        "(from {}{})",
-        string_of_typid(&origin.node.0),
-        string_of_targs(&origin.node.1)
-    )
+/// Renders typ fields
+pub fn string_of_typ_fields(sep: &str, typ_fields: &[TypField]) -> String {
+    let mut output = String::new();
+    write_typ_fields(&mut output, sep, typ_fields).expect("writing to a String cannot fail");
+    output
 }
-pub fn string_of_typcase(case: &TypCase) -> String {
-    format!(
-        "{} {} {}",
-        string_of_nottyp(&case.notation),
-        string_of_typorigin(&case.origin),
-        string_of_hints(&case.hints)
-    )
+fn write_typ_fields(
+    output: &mut dyn fmt::Write,
+    sep: &str,
+    typ_fields: &[TypField],
+) -> fmt::Result {
+    for (index, typ_field) in typ_fields.iter().enumerate() {
+        if index != 0 {
+            output.write_str(sep)?;
+        }
+        write_typ_field(output, typ_field)?;
+    }
+    Ok(())
 }
-pub fn string_of_typcases(separator: &str, cases: &[TypCase]) -> String {
-    join(cases, separator, string_of_typcase)
+/// Renders typ origin
+pub fn string_of_typ_origin(typ_origin: &TypOrigin) -> String {
+    let mut output = String::new();
+    write_typ_origin(&mut output, typ_origin).expect("writing to a String cannot fail");
+    output
 }
 
-// Values
+fn write_typ_origin(output: &mut dyn fmt::Write, typ_origin: &TypOrigin) -> fmt::Result {
+    write!(output, "(from {}", string_of_typid(&typ_origin.node.0))?;
+    write_targs(output, &typ_origin.node.1)?;
+    output.write_char(')')
+}
 
+/// Renders typ case
+pub fn string_of_typ_case(typ_case: &TypCase) -> String {
+    let mut output = String::new();
+    write_typ_case(&mut output, typ_case).expect("writing to a String cannot fail");
+    output
+}
+
+fn write_typ_case(output: &mut dyn fmt::Write, typ_case: &TypCase) -> fmt::Result {
+    let (not_typ, typ_origin, hints) = typ_case;
+    write_not_typ(output, not_typ)?;
+    output.write_char(' ')?;
+    write_typ_origin(output, typ_origin)?;
+    output.write_char(' ')?;
+    output.write_str(&string_of_hints(hints))
+}
+/// Renders typ cases
+pub fn string_of_typ_cases(sep: &str, typ_cases: &[TypCase]) -> String {
+    let mut output = String::new();
+    write_typ_cases(&mut output, sep, typ_cases).expect("writing to a String cannot fail");
+    output
+}
+fn write_typ_cases(output: &mut dyn fmt::Write, sep: &str, typ_cases: &[TypCase]) -> fmt::Result {
+    for (index, typ_case) in typ_cases.iter().enumerate() {
+        if index != 0 {
+            output.write_str(sep)?;
+        }
+        write_typ_case(output, typ_case)?;
+    }
+    Ok(())
+}
+
+// - Values
+
+/// Renders value
 pub fn string_of_value(value: &Value) -> String {
-    string_of_value_with(value, false, 0)
+    let mut output = String::new();
+    write_value(&mut output, value).expect("writing to a String cannot fail");
+    output
 }
+
+fn write_value(output: &mut dyn fmt::Write, value: &Value) -> fmt::Result {
+    write_value_with(output, value, false, 0)
+}
+
+/// Renders short value
 pub fn string_of_short_value(value: &Value) -> String {
-    string_of_value_with(value, true, 0)
+    let mut output = String::new();
+    write_short_value(&mut output, value).expect("writing to a String cannot fail");
+    output
 }
+
+fn write_short_value(output: &mut dyn fmt::Write, value: &Value) -> fmt::Result {
+    write_value_with(output, value, true, 0)
+}
+
+/// Renders value with
 pub fn string_of_value_with(value: &Value, short: bool, level: usize) -> String {
-    match &value.kind {
-        ValueKind::BoolV(value) => value.to_string(),
-        ValueKind::NumV(value) => string_of_num(value),
-        ValueKind::TextV(text) => escaped(text),
-        ValueKind::StructV(fields) if fields.is_empty() => "{}".into(),
-        ValueKind::StructV(fields) if short => format!("{{ .../{} }}", fields.len()),
-        ValueKind::StructV(fields) => format!(
+    let mut output = String::new();
+    write_value_with(&mut output, value, short, level).expect("writing to a String cannot fail");
+    output
+}
+
+fn write_value_with(
+    output: &mut dyn fmt::Write,
+    value: &Value,
+    short: bool,
+    level: usize,
+) -> fmt::Result {
+    output.write_str(&render_value_with(value, short, level))
+}
+
+fn render_value_with(value: &Value, short: bool, level: usize) -> String {
+    match &value.node.kind {
+        ValueKind::Bool(value) => value.to_string(),
+        ValueKind::Num(value) => string_of_num(value),
+        ValueKind::Text(text) => escaped(text),
+        ValueKind::Struct(fields) if fields.is_empty() => "{}".into(),
+        ValueKind::Struct(fields) if short => format!("{{ .../{} }}", fields.len()),
+        ValueKind::Struct(fields) => format!(
             "{{\n{}\n{}}}",
             join(fields, ";\n", |(atom, value)| format!(
                 "{}{} {}",
                 indent(level + 1),
                 string_of_atom(atom),
-                string_of_value_with(value, short, level + 1)
+                render_value_with(value, short, level + 1)
             )),
             indent(level)
         ),
-        ValueKind::CaseV(case) if short => string_of_mixop(&case.to_mixop()),
-        ValueKind::CaseV(case) => string_of_notval_with(case, level),
-        ValueKind::TupleV(values) => format!(
+        ValueKind::Case(case) if short => string_of_mixop(&case.to_mixop()),
+        ValueKind::Case(case) => render_notval_with(case, level),
+        ValueKind::Tuple(values) => format!(
             "({})",
-            join(values, ", ", |value| string_of_value_with(
+            join(values, ", ", |value| render_value_with(
                 value,
                 short,
                 level + 1
             ))
         ),
-        ValueKind::OptV(Some(value)) => {
-            format!("Some({})", string_of_value_with(value, short, level + 1))
+        ValueKind::Opt(Some(value)) => {
+            format!("Some({})", render_value_with(value, short, level + 1))
         }
-        ValueKind::OptV(None) => "None".into(),
-        ValueKind::ListV(values) if values.is_empty() => "[]".into(),
-        ValueKind::ListV(values) if short => format!("[ .../{} ]", values.len()),
-        ValueKind::ListV(values) => format!(
+        ValueKind::Opt(None) => "None".into(),
+        ValueKind::List(values) if values.is_empty() => "[]".into(),
+        ValueKind::List(values) if short => format!("[ .../{} ]", values.len()),
+        ValueKind::List(values) => format!(
             "[\n{}\n{}]",
             join(values, ",\n", |value| format!(
                 "{}{}",
                 indent(level + 1),
-                string_of_value_with(value, short, level + 1)
+                render_value_with(value, short, level + 1)
             )),
             indent(level)
         ),
-        ValueKind::FuncV(id) => string_of_defid(id),
-        ValueKind::ExternV(_) => "extern".into(),
+        ValueKind::Func(id) => string_of_defid(id),
+        ValueKind::Extern(_) => "extern".into(),
     }
 }
-pub fn string_of_notval(notval: &ValueCase) -> String {
-    string_of_notval_with(notval, 0)
+/// Renders notval
+pub fn string_of_notval(not_val: &ValueCase) -> String {
+    let mut output = String::new();
+    write_notval(&mut output, not_val).expect("writing to a String cannot fail");
+    output
 }
-pub fn string_of_notval_with(notval: &ValueCase, level: usize) -> String {
-    notval.render(string_of_atom, |value| {
-        string_of_value_with(value, false, level + 1)
+
+fn write_notval(output: &mut dyn fmt::Write, not_val: &ValueCase) -> fmt::Result {
+    write_notval_with(output, not_val, 0)
+}
+
+/// Renders notval with
+pub fn string_of_notval_with(not_val: &ValueCase, level: usize) -> String {
+    let mut output = String::new();
+    write_notval_with(&mut output, not_val, level).expect("writing to a String cannot fail");
+    output
+}
+
+fn write_notval_with(
+    output: &mut dyn fmt::Write,
+    not_val: &ValueCase,
+    level: usize,
+) -> fmt::Result {
+    output.write_str(&render_notval_with(not_val, level))
+}
+
+fn render_notval_with(not_val: &ValueCase, level: usize) -> String {
+    not_val.render(string_of_atom, |value| {
+        render_value_with(value, false, level + 1)
     })
 }
 
-// Operators
+// - Expressions
 
-pub fn string_of_unop(operator: UnOp) -> &'static str {
-    match operator {
-        UnOp::NotOp => "~",
-        UnOp::PlusOp => "+",
-        UnOp::MinusOp => "-",
-    }
-}
-pub fn string_of_binop(operator: BinOp) -> &'static str {
-    match operator {
-        BinOp::AndOp => "/\\",
-        BinOp::OrOp => "\\/",
-        BinOp::ImplOp => "=>",
-        BinOp::EquivOp => "<=>",
-        BinOp::AddOp => "+",
-        BinOp::SubOp => "-",
-        BinOp::MulOp => "*",
-        BinOp::DivOp => "/",
-        BinOp::ModOp => "\\",
-        BinOp::PowOp => "^",
-    }
-}
-pub fn string_of_cmpop(operator: CmpOp) -> &'static str {
-    match operator {
-        CmpOp::EqOp => "=",
-        CmpOp::NeOp => "=/=",
-        CmpOp::LtOp => "<",
-        CmpOp::GtOp => ">",
-        CmpOp::LeOp => "<=",
-        CmpOp::GeOp => ">=",
-    }
-}
-// Expressions
-
+/// Renders exp
 pub fn string_of_exp(exp: &Exp) -> String {
     let mut output = String::new();
     write_exp(&mut output, exp).expect("writing to a String cannot fail");
@@ -250,48 +404,48 @@ pub fn string_of_exp(exp: &Exp) -> String {
 }
 
 fn write_exp(output: &mut dyn fmt::Write, exp: &Exp) -> fmt::Result {
-    match &exp.kind {
-        ExpKind::BoolE(value) => write!(output, "{value}"),
-        ExpKind::NumE(value) => output.write_str(&string_of_num(value)),
-        ExpKind::TextE(text) => write!(output, "\"{}\"", escaped(text)),
-        ExpKind::VarE(id) => output.write_str(&id.node),
-        ExpKind::UnE(op, _, exp) => {
+    match &exp.node.kind {
+        ExpKind::Bool(value) => write!(output, "{value}"),
+        ExpKind::Num(value) => output.write_str(&string_of_num(value)),
+        ExpKind::Text(text) => write!(output, "\"{}\"", escaped(text)),
+        ExpKind::Var(id) => output.write_str(&id.node),
+        ExpKind::Un(op, _, exp) => {
             output.write_str(string_of_unop(*op))?;
             write_exp(output, exp)
         }
-        ExpKind::BinE(op, _, left, right) => {
+        ExpKind::Bin(op, _, exp_l, exp_r) => {
             output.write_char('(')?;
-            write_exp(output, left)?;
+            write_exp(output, exp_l)?;
             write!(output, " {} ", string_of_binop(*op))?;
-            write_exp(output, right)?;
+            write_exp(output, exp_r)?;
             output.write_char(')')
         }
-        ExpKind::CmpE(op, _, left, right) => {
+        ExpKind::Cmp(op, _, exp_l, exp_r) => {
             output.write_char('(')?;
-            write_exp(output, left)?;
+            write_exp(output, exp_l)?;
             write!(output, " {} ", string_of_cmpop(*op))?;
-            write_exp(output, right)?;
+            write_exp(output, exp_r)?;
             output.write_char(')')
         }
-        ExpKind::UpCastE(typ, exp) | ExpKind::DownCastE(typ, exp) => {
+        ExpKind::UpCast(typ, exp) | ExpKind::DownCast(typ, exp) => {
             write_exp(output, exp)?;
             write!(output, " as {}", string_of_typ(typ))
         }
-        ExpKind::SubE(exp, typ, _) => {
+        ExpKind::Sub(exp, typ, _) => {
             write_exp(output, exp)?;
             write!(output, " <: {}", string_of_typ(typ))
         }
-        ExpKind::MatchE(exp, pattern) => {
+        ExpKind::Match(exp, pattern) => {
             write_exp(output, exp)?;
             write!(output, " matches {}", string_of_pattern(pattern))
         }
-        ExpKind::TupleE(exps) => {
+        ExpKind::Tuple(exps) => {
             output.write_char('(')?;
             write_exps(output, ", ", exps)?;
             output.write_char(')')
         }
-        ExpKind::CaseE(notexp) => output.write_str(&string_of_notexp(notexp)),
-        ExpKind::StrE(fields) => {
+        ExpKind::Case(not_exp) => write_notexp(output, not_exp),
+        ExpKind::Str(fields) => {
             output.write_char('{')?;
             for (index, (atom, exp)) in fields.iter().enumerate() {
                 if index != 0 {
@@ -302,190 +456,266 @@ fn write_exp(output: &mut dyn fmt::Write, exp: &Exp) -> fmt::Result {
             }
             output.write_char('}')
         }
-        ExpKind::OptE(exp) => {
+        ExpKind::Opt(exp) => {
             output.write_str("?(")?;
             if let Some(exp) = exp {
                 write_exp(output, exp)?;
             }
             output.write_char(')')
         }
-        ExpKind::ListE(exps) => {
+        ExpKind::List(exps) => {
             output.write_char('[')?;
             write_exps(output, ", ", exps)?;
             output.write_char(']')
         }
-        ExpKind::ConsE(head, tail) => {
+        ExpKind::Cons(head, tail) => {
             write_exp(output, head)?;
             output.write_str(" :: ")?;
             write_exp(output, tail)
         }
-        ExpKind::CatE(left, right) => {
-            write_exp(output, left)?;
+        ExpKind::Cat(exp_l, exp_r) => {
+            write_exp(output, exp_l)?;
             output.write_str(" ++ ")?;
-            write_exp(output, right)
+            write_exp(output, exp_r)
         }
-        ExpKind::MemE(element, set) => {
-            write_exp(output, element)?;
+        ExpKind::Mem(exp_e, exp_s) => {
+            write_exp(output, exp_e)?;
             output.write_str(" <- ")?;
-            write_exp(output, set)
+            write_exp(output, exp_s)
         }
-        ExpKind::LenE(exp) => {
+        ExpKind::Len(exp) => {
             output.write_char('|')?;
             write_exp(output, exp)?;
             output.write_char('|')
         }
-        ExpKind::DotE(exp, atom) => {
+        ExpKind::Dot(exp, atom) => {
             write_exp(output, exp)?;
             write!(output, ".{}", string_of_atom(atom))
         }
-        ExpKind::IdxE(base, index) => {
-            write_exp(output, base)?;
+        ExpKind::Idx(exp_b, exp_i) => {
+            write_exp(output, exp_b)?;
             output.write_char('[')?;
-            write_exp(output, index)?;
+            write_exp(output, exp_i)?;
             output.write_char(']')
         }
-        ExpKind::SliceE(base, low, high) => {
-            write_exp(output, base)?;
+        ExpKind::Slice(exp_b, exp_i, exp_n) => {
+            write_exp(output, exp_b)?;
             output.write_char('[')?;
-            write_exp(output, low)?;
+            write_exp(output, exp_i)?;
             output.write_str(" : ")?;
-            write_exp(output, high)?;
+            write_exp(output, exp_n)?;
             output.write_char(']')
         }
-        ExpKind::UpdE(base, path, field) => {
-            write_exp(output, base)?;
+        ExpKind::Upd(exp_b, path, exp_f) => {
+            write_exp(output, exp_b)?;
             output.write_char('[')?;
             write_path(output, path)?;
             output.write_str(" = ")?;
-            write_exp(output, field)?;
+            write_exp(output, exp_f)?;
             output.write_char(']')
         }
-        ExpKind::CallE(id, targs, args) => {
+        ExpKind::Call(id, targs, args) => {
             output.write_str(&string_of_defid(id))?;
             write_targs(output, targs)?;
             write_args(output, args)
         }
-        ExpKind::IterE(exp, iterexp) => {
+        ExpKind::Iter(exp, iter_exp) => {
             write_exp(output, exp)?;
-            output.write_str(&string_of_iterexp(iterexp))
+            write_iterexp(output, iter_exp)
         }
     }
 }
-pub fn string_of_exps(separator: &str, exps: &[Exp]) -> String {
+/// Renders exps
+pub fn string_of_exps(sep: &str, exps: &[Exp]) -> String {
     let mut output = String::new();
-    write_exps(&mut output, separator, exps).expect("writing to a String cannot fail");
+    write_exps(&mut output, sep, exps).expect("writing to a String cannot fail");
     output
 }
-fn write_exps(output: &mut dyn fmt::Write, separator: &str, exps: &[Exp]) -> fmt::Result {
+fn write_exps(output: &mut dyn fmt::Write, sep: &str, exps: &[Exp]) -> fmt::Result {
     for (index, exp) in exps.iter().enumerate() {
         if index != 0 {
-            output.write_str(separator)?;
+            output.write_str(sep)?;
         }
         write_exp(output, exp)?;
     }
     Ok(())
 }
-pub fn string_of_notexp(notexp: &NotExp) -> String {
-    notexp.render(string_of_atom, string_of_exp)
+/// Renders notexp
+pub fn string_of_notexp(not_exp: &NotExp) -> String {
+    let mut output = String::new();
+    write_notexp(&mut output, not_exp).expect("writing to a String cannot fail");
+    output
 }
-pub fn string_of_iterexp(iterexp: &IterExp) -> String {
-    format!(
-        "{}{{{}}}",
-        string_of_iter(iterexp.0),
-        join(&iterexp.1, ", ", |variable| {
-            let mut iterated = variable.clone();
-            iterated.iters.push(iterexp.0);
-            format!(
-                "{} <- {}",
-                string_of_var(variable),
-                string_of_var(&iterated)
-            )
-        })
-    )
-}
-pub fn string_of_iterexps(iterexps: &[IterExp]) -> String {
-    join(iterexps, "", string_of_iterexp)
-}
-// Patterns
 
-pub fn string_of_pattern(pattern: &Pattern) -> String {
-    match pattern {
-        Pattern::CaseP(mixop) => string_of_mixop(mixop),
-        Pattern::ListP(ListPattern::Cons) => "_ :: _".into(),
-        Pattern::ListP(ListPattern::Fixed(length)) => format!("[ _/{length} ]"),
-        Pattern::ListP(ListPattern::Nil) => "[]".into(),
-        Pattern::OptP(OptPattern::Some) => "(_)".into(),
-        Pattern::OptP(OptPattern::None) => "()".into(),
+fn write_notexp(output: &mut dyn fmt::Write, not_exp: &NotExp) -> fmt::Result {
+    output.write_str(&not_exp.render(string_of_atom, string_of_exp))
+}
+
+/// Renders iterexp
+pub fn string_of_iterexp(iter_exp: &IterExp) -> String {
+    let mut output = String::new();
+    write_iterexp(&mut output, iter_exp).expect("writing to a String cannot fail");
+    output
+}
+
+fn write_iterexp(output: &mut dyn fmt::Write, iter_exp: &IterExp) -> fmt::Result {
+    write!(output, "{}{{", string_of_iter(iter_exp.0))?;
+    for (index, var) in iter_exp.1.iter().enumerate() {
+        if index != 0 {
+            output.write_str(", ")?;
+        }
+        let mut var_iter = var.clone();
+        var_iter.iters.push(iter_exp.0);
+        write!(
+            output,
+            "{} <- {}",
+            string_of_var(var),
+            string_of_var(&var_iter)
+        )?;
     }
+    output.write_char('}')
 }
-// Paths
 
+/// Renders iterexps
+pub fn string_of_iterexps(iter_exps: &[IterExp]) -> String {
+    let mut output = String::new();
+    write_iterexps(&mut output, iter_exps).expect("writing to a String cannot fail");
+    output
+}
+
+fn write_iterexps(output: &mut dyn fmt::Write, iter_exps: &[IterExp]) -> fmt::Result {
+    for iter_exp in iter_exps {
+        write_iterexp(output, iter_exp)?;
+    }
+    Ok(())
+}
+// - Patterns
+
+/// Renders pattern
+pub fn string_of_pattern(pattern: &Pattern) -> String {
+    let mut output = String::new();
+    write_pattern(&mut output, pattern).expect("writing to a String cannot fail");
+    output
+}
+
+fn write_pattern(output: &mut dyn fmt::Write, pattern: &Pattern) -> fmt::Result {
+    let rendered = match pattern {
+        Pattern::Case(mixop) => string_of_mixop(mixop),
+        Pattern::List(ListPattern::Cons) => "_ :: _".into(),
+        Pattern::List(ListPattern::Fixed(length)) => format!("[ _/{length} ]"),
+        Pattern::List(ListPattern::Nil) => "[]".into(),
+        Pattern::Opt(OptPattern::Some) => "(_)".into(),
+        Pattern::Opt(OptPattern::None) => "()".into(),
+    };
+    output.write_str(&rendered)
+}
+// - Paths
+
+/// Renders path
 pub fn string_of_path(path: &Path) -> String {
     let mut output = String::new();
     write_path(&mut output, path).expect("writing to a String cannot fail");
     output
 }
 fn write_path(output: &mut dyn fmt::Write, path: &Path) -> fmt::Result {
-    match &path.kind {
-        PathKind::RootP => Ok(()),
-        PathKind::IdxP(path, exp) => {
+    match &path.node.kind {
+        PathKind::Root => Ok(()),
+        PathKind::Idx(path, exp_i) => {
             write_path(output, path)?;
             output.write_char('[')?;
-            write_exp(output, exp)?;
+            write_exp(output, exp_i)?;
             output.write_char(']')
         }
-        PathKind::SliceP(path, low, high) => {
+        PathKind::Slice(path, exp_i, exp_n) => {
             write_path(output, path)?;
             output.write_char('[')?;
-            write_exp(output, low)?;
+            write_exp(output, exp_i)?;
             output.write_str(" : ")?;
-            write_exp(output, high)?;
+            write_exp(output, exp_n)?;
             output.write_char(']')
         }
-        PathKind::DotP(path, atom) if matches!(path.kind, PathKind::RootP) => {
+        PathKind::Dot(path, atom) if matches!(path.node.kind, PathKind::Root) => {
             output.write_str(&string_of_atom(atom))
         }
-        PathKind::DotP(path, atom) => {
+        PathKind::Dot(path, atom) => {
             write_path(output, path)?;
             write!(output, ".{}", string_of_atom(atom))
         }
     }
 }
-// Parameters
+// - Parameters
 
+/// Renders param
 pub fn string_of_param(param: &Param) -> String {
+    let mut output = String::new();
+    write_param(&mut output, param).expect("writing to a String cannot fail");
+    output
+}
+fn write_param(output: &mut dyn fmt::Write, param: &Param) -> fmt::Result {
     match &param.node {
-        ParamKind::ExpP(typ) => string_of_typ(typ),
-        ParamKind::DefP(id, tparams, params, typ) => format!(
-            "{}{}{} : {}",
-            string_of_defid(id),
-            string_of_tparams(tparams),
-            string_of_params(params),
-            string_of_typ(typ)
-        ),
+        ParamKind::Exp(typ) => write_typ(output, typ),
+        ParamKind::Def(id, tparams, params, typ) => {
+            output.write_str(&string_of_defid(id))?;
+            write_tparams(output, tparams)?;
+            write_params(output, params)?;
+            output.write_str(" : ")?;
+            write_typ(output, typ)
+        }
     }
 }
+/// Renders params
 pub fn string_of_params(params: &[Param]) -> String {
+    let mut output = String::new();
+    write_params(&mut output, params).expect("writing to a String cannot fail");
+    output
+}
+fn write_params(output: &mut dyn fmt::Write, params: &[Param]) -> fmt::Result {
     if params.is_empty() {
-        String::new()
-    } else {
-        format!("({})", join(params, ", ", string_of_param))
+        return Ok(());
     }
+    output.write_char('(')?;
+    for (index, param) in params.iter().enumerate() {
+        if index != 0 {
+            output.write_str(", ")?;
+        }
+        write_param(output, param)?;
+    }
+    output.write_char(')')
 }
-// Type parameters
+// - Type parameters
 
+/// Renders tparam
 pub fn string_of_tparam(tparam: &TParam) -> String {
-    tparam.node.clone()
+    let mut output = String::new();
+    write_tparam(&mut output, tparam).expect("writing to a String cannot fail");
+    output
 }
-pub fn string_of_tparams(tparams: &[TParam]) -> String {
-    if tparams.is_empty() {
-        String::new()
-    } else {
-        format!("<{}>", join(tparams, ", ", string_of_tparam))
-    }
-}
-// Arguments
 
+fn write_tparam(output: &mut dyn fmt::Write, tparam: &TParam) -> fmt::Result {
+    output.write_str(&tparam.node)
+}
+/// Renders tparams
+pub fn string_of_tparams(tparams: &[TParam]) -> String {
+    let mut output = String::new();
+    write_tparams(&mut output, tparams).expect("writing to a String cannot fail");
+    output
+}
+fn write_tparams(output: &mut dyn fmt::Write, tparams: &[TParam]) -> fmt::Result {
+    if tparams.is_empty() {
+        return Ok(());
+    }
+    output.write_char('<')?;
+    for (index, tparam) in tparams.iter().enumerate() {
+        if index != 0 {
+            output.write_str(", ")?;
+        }
+        write_tparam(output, tparam)?;
+    }
+    output.write_char('>')
+}
+// - Arguments
+
+/// Renders arg
 pub fn string_of_arg(arg: &Arg) -> String {
     let mut output = String::new();
     write_arg(&mut output, arg).expect("writing to a String cannot fail");
@@ -493,10 +723,11 @@ pub fn string_of_arg(arg: &Arg) -> String {
 }
 fn write_arg(output: &mut dyn fmt::Write, arg: &Arg) -> fmt::Result {
     match &arg.node {
-        ArgKind::ExpA(exp) => write_exp(output, exp),
-        ArgKind::DefA(id) => output.write_str(&string_of_defid(id)),
+        ArgKind::Exp(exp) => write_exp(output, exp),
+        ArgKind::Def(id) => output.write_str(&string_of_defid(id)),
     }
 }
+/// Renders args
 pub fn string_of_args(args: &[Arg]) -> String {
     let mut output = String::new();
     write_args(&mut output, args).expect("writing to a String cannot fail");
@@ -515,11 +746,18 @@ fn write_args(output: &mut dyn fmt::Write, args: &[Arg]) -> fmt::Result {
     }
     output.write_char(')')
 }
-// Type arguments
+// - Type arguments
 
+/// Renders targ
 pub fn string_of_targ(targ: &Targ) -> String {
-    string_of_typ(targ)
+    let mut output = String::new();
+    write_targ(&mut output, targ).expect("writing to a String cannot fail");
+    output
 }
+fn write_targ(output: &mut dyn fmt::Write, targ: &Targ) -> fmt::Result {
+    write_typ(output, targ)
+}
+/// Renders targs
 pub fn string_of_targs(targs: &[Targ]) -> String {
     let mut output = String::new();
     write_targs(&mut output, targs).expect("writing to a String cannot fail");
@@ -534,227 +772,89 @@ fn write_targs(output: &mut dyn fmt::Write, targs: &[Targ]) -> fmt::Result {
             if index != 0 {
                 output.write_str(", ")?;
             }
-            output.write_str(&string_of_targ(targ))?;
+            write_targ(output, targ)?;
         }
         output.write_char('>')
     }
 }
-// Premises
+// - Premises
 
+/// Renders prem
 pub fn string_of_prem(prem: &Prem) -> String {
-    match &prem.node {
-        PremKind::RulePr(id, notexp, _) => {
-            format!("{}: {}", string_of_relid(id), string_of_notexp(notexp))
-        }
-        PremKind::IfPr(exp) => format!("if {}", string_of_exp(exp)),
-        PremKind::IfHoldPr(id, notexp) => format!(
-            "if {}: {} holds",
-            string_of_relid(id),
-            string_of_notexp(notexp)
-        ),
-        PremKind::IfNotHoldPr(id, notexp) => format!(
-            "if {}: {} does not hold",
-            string_of_relid(id),
-            string_of_notexp(notexp)
-        ),
-        PremKind::LetPr(left, right) => {
-            format!("let {} = {}", string_of_exp(left), string_of_exp(right))
-        }
-        PremKind::IterPr(inner, iterprem) if matches!(inner.node, PremKind::IterPr(_, _)) => {
-            format!("{}{}", string_of_prem(inner), string_of_iterprem(iterprem))
-        }
-        PremKind::IterPr(inner, iterprem) => format!(
-            "({}){}",
-            string_of_prem(inner),
-            string_of_iterprem(iterprem)
-        ),
-        PremKind::DebugPr(exp) => format!("debug {}", string_of_exp(exp)),
-    }
-}
-pub fn string_of_prems(prems: &[Prem]) -> String {
-    string_of_prems_with(0, prems)
-}
-pub fn string_of_prems_with(level: usize, prems: &[Prem]) -> String {
-    join(prems, "", |prem| {
-        format!("\n{}-- {}", indent(level), string_of_prem(prem))
-    })
-}
-pub fn string_of_iterprem(iterprem: &IterPrem) -> String {
-    let render = |variable: &Var, arrow: &str| {
-        let mut iterated = variable.clone();
-        iterated.iters.push(iterprem.iter);
-        format!(
-            "{} {} {}",
-            string_of_var(variable),
-            arrow,
-            string_of_var(&iterated)
-        )
-    };
-    format!(
-        "{}{{{}}}",
-        string_of_iter(iterprem.iter),
-        join(
-            &iterprem
-                .vars_bound
-                .iter()
-                .map(|var| render(var, "<-"))
-                .chain(iterprem.vars_bind.iter().map(|var| render(var, "->")))
-                .collect::<Vec<_>>(),
-            ", ",
-            Clone::clone
-        )
-    )
-}
-pub fn string_of_iterprems(iterprems: &[IterPrem]) -> String {
-    join(iterprems, "", string_of_iterprem)
-}
-// Rules
-
-pub fn string_of_rule(rule: &Rule) -> String {
-    format!(
-        "rule {}: {}{}",
-        string_of_ruleid(&rule.node.id),
-        string_of_notexp(&rule.node.notation),
-        string_of_prems_with(2, &rule.node.premises)
-    )
-}
-pub fn string_of_rules(rules: &[Rule]) -> String {
-    join(rules, "", |rule| {
-        format!("\n\n{}{}", indent(2), string_of_rule(rule))
-    })
-}
-pub fn string_of_rulegroup(group: &RuleGroup) -> String {
-    format!(
-        "{}rulegroup {}{}",
-        indent(1),
-        string_of_rulegroupid(&group.node.0),
-        string_of_rules(&group.node.1)
-    )
-}
-pub fn string_of_rulegroups(groups: &[RuleGroup]) -> String {
-    join(groups, "\n\n", string_of_rulegroup)
-}
-pub fn string_of_elsegroup(group: &ElseGroup) -> String {
-    format!(
-        "{}rulegroup {}{}",
-        indent(1),
-        string_of_rulegroupid(&group.node.0),
-        string_of_rules(std::slice::from_ref(&group.node.1))
-    )
-}
-pub fn string_of_elsegroup_opt(group: &Option<ElseGroup>) -> String {
-    group.as_ref().map_or_else(String::new, |group| {
-        format!(
-            "\n\n{}elsegroup\n\n{}",
-            indent(1),
-            string_of_elsegroup(group)
-        )
-    })
-}
-// Clause
-
-pub fn string_of_clause(index: i64, clause: &Clause) -> String {
-    format!(
-        "clause {index} : {} = {}{}",
-        string_of_args(&clause.node.args),
-        string_of_exp(&clause.node.expression),
-        string_of_prems_with(1, &clause.node.premises)
-    )
-}
-pub fn string_of_clauses(clauses: &[Clause]) -> String {
-    clauses
-        .iter()
-        .enumerate()
-        .map(|(index, clause)| {
-            format!(
-                "\n\n{}{}",
-                indent(1),
-                string_of_clause(index as i64, clause)
-            )
-        })
-        .collect()
-}
-pub fn string_of_elseclause(clause: &ElseClause) -> String {
-    string_of_clause(-1, clause)
-}
-pub fn string_of_elseclause_opt(clause: &Option<ElseClause>) -> String {
-    clause.as_ref().map_or_else(String::new, |clause| {
-        format!("\n\n{}{}", indent(1), string_of_elseclause(clause))
-    })
-}
-// Table rows
-
-pub fn string_of_tablerow(row: &TableRow) -> String {
-    format!(
-        "\n{}{} -> {}",
-        indent(2),
-        string_of_args(&row.node.0),
-        string_of_exp(&row.node.1)
-    )
-}
-pub fn string_of_tablerows(rows: &[TableRow]) -> String {
-    rows.iter()
-        .enumerate()
-        .map(|(index, row)| format!("\n{}row {index} :{}", indent(1), string_of_tablerow(row)))
-        .collect()
-}
-// Hints
-
-pub fn string_of_hint(hint: &Hint) -> String {
-    format!(
-        " hint({} {})",
-        hint.hintid.node,
-        el::print::string_of_exp(&hint.hintexp)
-    )
-}
-pub fn string_of_hints(hints: &[Hint]) -> String {
-    join(hints, "", string_of_hint)
+    let mut output = String::new();
+    write_prem(&mut output, prem).expect("writing to a String cannot fail");
+    output
 }
 
 fn write_prem(output: &mut dyn fmt::Write, prem: &Prem) -> fmt::Result {
     match &prem.node {
-        PremKind::RulePr(id, notation, _) => write!(
+        PremKind::Rule(RulePrem { id, not_exp, .. }) => write!(
             output,
             "{}: {}",
             string_of_relid(id),
-            string_of_notexp(notation)
+            string_of_notexp(not_exp)
         ),
-        PremKind::IfPr(exp) => {
+        PremKind::If(IfPrem { exp }) => {
             output.write_str("if ")?;
             write_exp(output, exp)
         }
-        PremKind::IfHoldPr(id, notation) => write!(
+        PremKind::IfHold(IfHoldPrem { id, not_exp }) => write!(
             output,
             "if {}: {} holds",
             string_of_relid(id),
-            string_of_notexp(notation)
+            string_of_notexp(not_exp)
         ),
-        PremKind::IfNotHoldPr(id, notation) => write!(
+        PremKind::IfNotHold(IfNotHoldPrem { id, not_exp }) => write!(
             output,
             "if {}: {} does not hold",
             string_of_relid(id),
-            string_of_notexp(notation)
+            string_of_notexp(not_exp)
         ),
-        PremKind::LetPr(left, right) => {
+        PremKind::Let(LetPrem { exp_l, exp_r }) => {
             output.write_str("let ")?;
-            write_exp(output, left)?;
+            write_exp(output, exp_l)?;
             output.write_str(" = ")?;
-            write_exp(output, right)
+            write_exp(output, exp_r)
         }
-        PremKind::IterPr(inner, iterprem) if matches!(inner.node, PremKind::IterPr(_, _)) => {
+        PremKind::Iter(IteratedPrem {
+            prem: inner,
+            iter_prem,
+        }) if matches!(inner.node, PremKind::Iter(_)) => {
             write_prem(output, inner)?;
-            output.write_str(&string_of_iterprem(iterprem))
+            write_iterprem(output, iter_prem)
         }
-        PremKind::IterPr(inner, iterprem) => {
+        PremKind::Iter(IteratedPrem {
+            prem: inner,
+            iter_prem,
+        }) => {
             output.write_char('(')?;
             write_prem(output, inner)?;
-            write!(output, "){}", string_of_iterprem(iterprem))
+            output.write_char(')')?;
+            write_iterprem(output, iter_prem)
         }
-        PremKind::DebugPr(exp) => {
+        PremKind::Debug(DebugPrem { exp }) => {
             output.write_str("debug ")?;
             write_exp(output, exp)
         }
     }
+}
+
+/// Renders prems
+pub fn string_of_prems(prems: &[Prem]) -> String {
+    let mut output = String::new();
+    write_prems(&mut output, prems).expect("writing to a String cannot fail");
+    output
+}
+
+fn write_prems(output: &mut dyn fmt::Write, prems: &[Prem]) -> fmt::Result {
+    write_prems_with(output, 0, prems)
+}
+
+/// Renders prems with
+pub fn string_of_prems_with(level: usize, prems: &[Prem]) -> String {
+    let mut output = String::new();
+    write_prems_with(&mut output, level, prems).expect("writing to a String cannot fail");
+    output
 }
 
 fn write_prems_with(output: &mut dyn fmt::Write, level: usize, prems: &[Prem]) -> fmt::Result {
@@ -765,36 +865,160 @@ fn write_prems_with(output: &mut dyn fmt::Write, level: usize, prems: &[Prem]) -
     Ok(())
 }
 
+/// Renders iterprem
+pub fn string_of_iterprem(iter_prem: &IterPrem) -> String {
+    let mut output = String::new();
+    write_iterprem(&mut output, iter_prem).expect("writing to a String cannot fail");
+    output
+}
+
+fn write_iterprem(output: &mut dyn fmt::Write, iter_prem: &IterPrem) -> fmt::Result {
+    write!(output, "{}{{", string_of_iter(iter_prem.iter))?;
+    let vars = iter_prem
+        .vars_bound
+        .iter()
+        .map(|var| (var, "<-"))
+        .chain(iter_prem.vars_bind.iter().map(|var| (var, "->")));
+    for (index, (var, arrow)) in vars.enumerate() {
+        if index != 0 {
+            output.write_str(", ")?;
+        }
+        let mut var_iter = var.clone();
+        var_iter.iters.push(iter_prem.iter);
+        write!(
+            output,
+            "{} {} {}",
+            string_of_var(var),
+            arrow,
+            string_of_var(&var_iter)
+        )?;
+    }
+    output.write_char('}')
+}
+
+/// Renders iterprems
+pub fn string_of_iterprems(iter_prems: &[IterPrem]) -> String {
+    let mut output = String::new();
+    write_iterprems(&mut output, iter_prems).expect("writing to a String cannot fail");
+    output
+}
+
+fn write_iterprems(output: &mut dyn fmt::Write, iter_prems: &[IterPrem]) -> fmt::Result {
+    for iter_prem in iter_prems {
+        write_iterprem(output, iter_prem)?;
+    }
+    Ok(())
+}
+
+// - Rules
+
+/// Renders rule
+pub fn string_of_rule(rule: &Rule) -> String {
+    let mut output = String::new();
+    write_rule(&mut output, rule).expect("writing to a String cannot fail");
+    output
+}
+
 fn write_rule(output: &mut dyn fmt::Write, rule: &Rule) -> fmt::Result {
     write!(
         output,
         "rule {}: {}",
         string_of_ruleid(&rule.node.id),
-        string_of_notexp(&rule.node.notation)
+        string_of_notexp(&rule.node.not_exp)
     )?;
-    write_prems_with(output, 2, &rule.node.premises)
+    write_prems_with(output, 2, &rule.node.prems)
 }
 
-fn write_rulegroup(output: &mut dyn fmt::Write, group: &RuleGroup) -> fmt::Result {
+/// Renders rules
+pub fn string_of_rules(rules: &[Rule]) -> String {
+    let mut output = String::new();
+    write_rules(&mut output, rules).expect("writing to a String cannot fail");
+    output
+}
+
+fn write_rules(output: &mut dyn fmt::Write, rules: &[Rule]) -> fmt::Result {
+    for rule in rules {
+        output.write_str("\n\n  ")?;
+        write_rule(output, rule)?;
+    }
+    Ok(())
+}
+
+/// Renders rulegroup
+pub fn string_of_rulegroup(rule_group: &RuleGroup) -> String {
+    let mut output = String::new();
+    write_rulegroup(&mut output, rule_group).expect("writing to a String cannot fail");
+    output
+}
+
+fn write_rulegroup(output: &mut dyn fmt::Write, rule_group: &RuleGroup) -> fmt::Result {
     write!(
         output,
         "  rulegroup {}",
-        string_of_rulegroupid(&group.node.0)
+        string_of_rulegroupid(&rule_group.node.0)
     )?;
-    for rule in &group.node.1 {
+    for rule in &rule_group.node.1 {
         output.write_str("\n\n    ")?;
         write_rule(output, rule)?;
     }
     Ok(())
 }
 
-fn write_elsegroup(output: &mut dyn fmt::Write, group: &ElseGroup) -> fmt::Result {
+/// Renders rulegroups
+pub fn string_of_rulegroups(rule_groups: &[RuleGroup]) -> String {
+    let mut output = String::new();
+    write_rulegroups(&mut output, rule_groups).expect("writing to a String cannot fail");
+    output
+}
+
+fn write_rulegroups(output: &mut dyn fmt::Write, rule_groups: &[RuleGroup]) -> fmt::Result {
+    for (index, rule_group) in rule_groups.iter().enumerate() {
+        if index != 0 {
+            output.write_str("\n\n")?;
+        }
+        write_rulegroup(output, rule_group)?;
+    }
+    Ok(())
+}
+
+/// Renders elsegroup
+pub fn string_of_elsegroup(else_group: &ElseGroup) -> String {
+    let mut output = String::new();
+    write_elsegroup(&mut output, else_group).expect("writing to a String cannot fail");
+    output
+}
+
+fn write_elsegroup(output: &mut dyn fmt::Write, else_group: &ElseGroup) -> fmt::Result {
     write!(
         output,
         "  rulegroup {}\n\n    ",
-        string_of_rulegroupid(&group.node.0)
+        string_of_rulegroupid(&else_group.node.0)
     )?;
-    write_rule(output, &group.node.1)
+    write_rule(output, &else_group.node.1)
+}
+
+/// Renders elsegroup opt
+pub fn string_of_elsegroup_opt(else_group: &Option<ElseGroup>) -> String {
+    let mut output = String::new();
+    write_elsegroup_opt(&mut output, else_group).expect("writing to a String cannot fail");
+    output
+}
+
+fn write_elsegroup_opt(output: &mut dyn fmt::Write, else_group: &Option<ElseGroup>) -> fmt::Result {
+    if let Some(else_group) = else_group {
+        output.write_str("\n\n  elsegroup\n\n")?;
+        write_elsegroup(output, else_group)?;
+    }
+    Ok(())
+}
+
+// - Clauses
+
+/// Renders clause
+pub fn string_of_clause(index: i64, clause: &Clause) -> String {
+    let mut output = String::new();
+    write_clause(&mut output, index, clause).expect("writing to a String cannot fail");
+    output
 }
 
 fn write_clause(output: &mut dyn fmt::Write, index: i64, clause: &Clause) -> fmt::Result {
@@ -807,6 +1031,13 @@ fn write_clause(output: &mut dyn fmt::Write, index: i64, clause: &Clause) -> fmt
     write_prems_with(output, 1, &clause.node.premises)
 }
 
+/// Renders clauses
+pub fn string_of_clauses(clauses: &[Clause]) -> String {
+    let mut output = String::new();
+    write_clauses(&mut output, clauses).expect("writing to a String cannot fail");
+    output
+}
+
 fn write_clauses(output: &mut dyn fmt::Write, clauses: &[Clause]) -> fmt::Result {
     for (index, clause) in clauses.iter().enumerate() {
         output.write_str("\n\n  ")?;
@@ -815,20 +1046,99 @@ fn write_clauses(output: &mut dyn fmt::Write, clauses: &[Clause]) -> fmt::Result
     Ok(())
 }
 
-fn write_tablerow(output: &mut dyn fmt::Write, row: &TableRow) -> fmt::Result {
-    write!(output, "\n    {} -> ", string_of_args(&row.node.0))?;
-    write_exp(output, &row.node.1)
+/// Renders elseclause
+pub fn string_of_elseclause(else_clause: &ElseClause) -> String {
+    let mut output = String::new();
+    write_elseclause(&mut output, else_clause).expect("writing to a String cannot fail");
+    output
 }
 
-fn write_tablerows(output: &mut dyn fmt::Write, rows: &[TableRow]) -> fmt::Result {
-    for (index, row) in rows.iter().enumerate() {
-        write!(output, "\n  row {index} :")?;
-        write_tablerow(output, row)?;
+fn write_elseclause(output: &mut dyn fmt::Write, else_clause: &ElseClause) -> fmt::Result {
+    write_clause(output, -1, else_clause)
+}
+
+/// Renders elseclause opt
+pub fn string_of_elseclause_opt(else_clause: &Option<ElseClause>) -> String {
+    let mut output = String::new();
+    write_elseclause_opt(&mut output, else_clause).expect("writing to a String cannot fail");
+    output
+}
+
+fn write_elseclause_opt(
+    output: &mut dyn fmt::Write,
+    else_clause: &Option<ElseClause>,
+) -> fmt::Result {
+    if let Some(else_clause) = else_clause {
+        output.write_str("\n\n  ")?;
+        write_elseclause(output, else_clause)?;
     }
     Ok(())
 }
-// Definitions
 
+// - Table rows
+
+/// Renders tablerow
+pub fn string_of_tablerow(table_row: &TableRow) -> String {
+    let mut output = String::new();
+    write_tablerow(&mut output, table_row).expect("writing to a String cannot fail");
+    output
+}
+
+fn write_tablerow(output: &mut dyn fmt::Write, table_row: &TableRow) -> fmt::Result {
+    write!(output, "\n    {} -> ", string_of_args(&table_row.node.0))?;
+    write_exp(output, &table_row.node.1)
+}
+
+/// Renders tablerows
+pub fn string_of_tablerows(table_rows: &[TableRow]) -> String {
+    let mut output = String::new();
+    write_tablerows(&mut output, table_rows).expect("writing to a String cannot fail");
+    output
+}
+
+fn write_tablerows(output: &mut dyn fmt::Write, table_rows: &[TableRow]) -> fmt::Result {
+    for (index, table_row) in table_rows.iter().enumerate() {
+        write!(output, "\n  row {index} :")?;
+        write_tablerow(output, table_row)?;
+    }
+    Ok(())
+}
+
+// - Hints
+
+/// Renders hint
+pub fn string_of_hint(hint: &Hint) -> String {
+    let mut output = String::new();
+    write_hint(&mut output, hint).expect("writing to a String cannot fail");
+    output
+}
+
+fn write_hint(output: &mut dyn fmt::Write, hint: &Hint) -> fmt::Result {
+    write!(
+        output,
+        " hint({} {})",
+        hint.0.node,
+        el::print::string_of_exp(&hint.1)
+    )
+}
+
+/// Renders hints
+pub fn string_of_hints(hints: &[Hint]) -> String {
+    let mut output = String::new();
+    write_hints(&mut output, hints).expect("writing to a String cannot fail");
+    output
+}
+
+fn write_hints(output: &mut dyn fmt::Write, hints: &[Hint]) -> fmt::Result {
+    for hint in hints {
+        write_hint(output, hint)?;
+    }
+    Ok(())
+}
+
+// - Definitions
+
+/// Renders def
 pub fn string_of_def(definition: &Def) -> String {
     let mut output = String::new();
     write_def(&mut output, definition).expect("writing to a String cannot fail");
@@ -837,46 +1147,56 @@ pub fn string_of_def(definition: &Def) -> String {
 
 fn write_def(output: &mut dyn fmt::Write, definition: &Def) -> fmt::Result {
     match &definition.node {
-        DefKind::ExternTypD(id, _) => write!(output, "extern syntax {}", string_of_typid(id)),
-        DefKind::TypD(id, tparams, deftyp, _) => write!(
+        DefKind::ExternTyp(ExternTyp { id, .. }) => {
+            write!(output, "extern syntax {}", string_of_typid(id))
+        }
+        DefKind::Typ(TypDef {
+            id,
+            tparams,
+            def_typ,
+            ..
+        }) => write!(
             output,
             "syntax {}{} = {}",
             string_of_typid(id),
             string_of_tparams(tparams),
-            string_of_deftyp(deftyp)
+            string_of_def_typ(def_typ)
         ),
-        DefKind::VarD(id, typ, _) => write!(
+        DefKind::Var(VarDef { id, typ, .. }) => write!(
             output,
             "var {} : {}",
             string_of_varid(id),
             string_of_typ(typ)
         ),
-        DefKind::ExternRelD(id, nottyp, _, _) => write!(
+        DefKind::ExternRel(ExternRel { id, not_typ, .. }) => write!(
             output,
             "extern relation {}: {}",
             string_of_relid(id),
-            string_of_nottyp(nottyp)
+            string_of_not_typ(not_typ)
         ),
-        DefKind::RelD(id, nottyp, _, groups, elsegroup, _) => {
+        DefKind::Rel(Rel {
+            id,
+            not_typ,
+            rule_groups,
+            else_group,
+            ..
+        }) => {
             write!(
                 output,
                 "relation {}: {}\n\n",
                 string_of_relid(id),
-                string_of_nottyp(nottyp)
+                string_of_not_typ(not_typ)
             )?;
-            for (index, group) in groups.iter().enumerate() {
-                if index != 0 {
-                    output.write_str("\n\n")?;
-                }
-                write_rulegroup(output, group)?;
-            }
-            if let Some(group) = elsegroup {
-                output.write_str("\n\n  elsegroup\n\n")?;
-                write_elsegroup(output, group)?;
-            }
-            Ok(())
+            write_rulegroups(output, rule_groups)?;
+            write_elsegroup_opt(output, else_group)
         }
-        DefKind::ExternDecD(id, tparams, params, typ, _) => write!(
+        DefKind::ExternDec(ExternDec {
+            id,
+            tparams,
+            params,
+            typ,
+            ..
+        }) => write!(
             output,
             "extern def {}{}{} : {}",
             string_of_defid(id),
@@ -884,7 +1204,13 @@ fn write_def(output: &mut dyn fmt::Write, definition: &Def) -> fmt::Result {
             string_of_params(params),
             string_of_typ(typ)
         ),
-        DefKind::BuiltinDecD(id, tparams, params, typ, _) => write!(
+        DefKind::BuiltinDec(BuiltinDec {
+            id,
+            tparams,
+            params,
+            typ,
+            ..
+        }) => write!(
             output,
             "builtin def {}{}{} : {}",
             string_of_defid(id),
@@ -892,7 +1218,13 @@ fn write_def(output: &mut dyn fmt::Write, definition: &Def) -> fmt::Result {
             string_of_params(params),
             string_of_typ(typ)
         ),
-        DefKind::TableDecD(id, params, typ, rows, _) => {
+        DefKind::TableDec(TableDec {
+            id,
+            params,
+            typ,
+            rows,
+            ..
+        }) => {
             write!(
                 output,
                 "tbl def {}{} : {} =",
@@ -902,7 +1234,15 @@ fn write_def(output: &mut dyn fmt::Write, definition: &Def) -> fmt::Result {
             )?;
             write_tablerows(output, rows)
         }
-        DefKind::FuncDecD(id, tparams, params, typ, clauses, elseclause, _) => {
+        DefKind::FuncDec(FuncDec {
+            id,
+            tparams,
+            params,
+            typ,
+            clauses,
+            else_clause,
+            ..
+        }) => {
             write!(
                 output,
                 "def {}{}{} : {} =",
@@ -912,27 +1252,20 @@ fn write_def(output: &mut dyn fmt::Write, definition: &Def) -> fmt::Result {
                 string_of_typ(typ)
             )?;
             write_clauses(output, clauses)?;
-            if let Some(clause) = elseclause {
-                output.write_str("\n\n  ")?;
-                write_clause(output, -1, clause)?;
-            }
-            Ok(())
+            write_elseclause_opt(output, else_clause)
         }
     }
 }
-pub fn string_of_defs(definitions: &[Def]) -> String {
-    join(definitions, "\n\n", string_of_def)
-}
-// Spec
 
-/// Renders a specification without source or hint metadata
-pub fn string_of_spec(spec: &Spec) -> String {
+/// Renders defs
+pub fn string_of_defs(definitions: &[Def]) -> String {
     let mut output = String::new();
-    write_spec(&mut output, spec).expect("writing to a String cannot fail");
+    write_defs(&mut output, definitions).expect("writing to a String cannot fail");
     output
 }
-fn write_spec(output: &mut dyn fmt::Write, spec: &Spec) -> fmt::Result {
-    for (index, definition) in spec.iter().enumerate() {
+
+fn write_defs(output: &mut dyn fmt::Write, definitions: &[Def]) -> fmt::Result {
+    for (index, definition) in definitions.iter().enumerate() {
         if index != 0 {
             output.write_str("\n\n")?;
         }
@@ -941,31 +1274,15 @@ fn write_spec(output: &mut dyn fmt::Write, spec: &Spec) -> fmt::Result {
     Ok(())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::domain::source::{Span, Spanned};
+// - Specifications
 
-    fn id(name: &str) -> Id {
-        Spanned::new(name.to_owned(), Span::default())
-    }
+/// Renders a specification without source or hint metadata
+pub fn string_of_spec(spec: &Spec) -> String {
+    let mut output = String::new();
+    write_spec(&mut output, spec).expect("writing to a String cannot fail");
+    output
+}
 
-    fn exp(kind: ExpKind) -> Exp {
-        Exp::new(kind, TypKind::BoolT, Span::default())
-    }
-
-    #[test]
-    fn expression_sink_preserves_escaping_and_recursive_precedence() {
-        let expression = exp(ExpKind::BinE(
-            BinOp::AddOp,
-            OpTyp::NatT,
-            Box::new(exp(ExpKind::TextE("a\n\\\"".to_owned()))),
-            Box::new(exp(ExpKind::VarE(id("right")))),
-        ));
-        let mut output = String::new();
-
-        write_exp(&mut output, &expression).unwrap();
-
-        assert_eq!(output, "(\"a\\n\\\\\\\"\" + right)");
-    }
+fn write_spec(output: &mut dyn fmt::Write, spec: &Spec) -> fmt::Result {
+    write_defs(output, spec)
 }

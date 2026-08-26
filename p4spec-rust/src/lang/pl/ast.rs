@@ -1,6 +1,9 @@
+//! Prose language model
+
 use crate::{
     domain::{
         mixfix::Mixfix,
+        noted::Noted,
         source::{Span, Spanned},
     },
     lang::{pl::annot, sl},
@@ -62,46 +65,41 @@ pub type Subcheck = sl::ast::Subcheck;
 
 // Expressions
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct ExpNode {
-    pub kind: ExpKind,
-    pub ty: TypKind,
-    pub span: Span,
-}
+pub type ExpNode = Spanned<Noted<ExpKind, TypKind>>;
 pub type Exp = annot::Annotated<ExpNode>;
-impl ExpNode {
-    pub fn new(kind: ExpKind, ty: TypKind, span: Span) -> Exp {
-        annot::Annotated::new(Self { kind, ty, span })
-    }
+
+/// Constructs a typed expression
+pub fn exp(kind: ExpKind, typ: TypKind, span: Span) -> Exp {
+    annot::Annotated::new(Spanned::new(Noted::new(kind, typ), span))
 }
 #[derive(Clone, Debug, PartialEq)]
 pub enum ExpKind {
-    BoolE(bool),
-    NumE(Num),
-    TextE(Text),
-    VarE(Id),
-    UnE(UnOp, OpTyp, Box<Exp>),
-    BinE(BinOp, OpTyp, Box<Exp>, Box<Exp>),
-    CmpE(CmpOp, OpTyp, Box<Exp>, Box<Exp>),
-    UpCastE(Typ, Box<Exp>),
-    DownCastE(Typ, Box<Exp>),
-    SubE(Box<Exp>, Typ, Box<Subcheck>),
-    MatchE(Box<Exp>, Pattern),
-    TupleE(Vec<Exp>),
-    CaseE(Box<NotExp>),
-    StrE(Vec<(Atom, Exp)>),
-    OptE(Option<Box<Exp>>),
-    ListE(Vec<Exp>),
-    ConsE(Box<Exp>, Box<Exp>),
-    CatE(Box<Exp>, Box<Exp>),
-    MemE(Box<Exp>, Box<Exp>),
-    LenE(Box<Exp>),
-    DotE(Box<Exp>, Atom),
-    IdxE(Box<Exp>, Box<Exp>),
-    SliceE(Box<Exp>, Box<Exp>, Box<Exp>),
-    UpdE(Box<Exp>, Box<Path>, Box<Exp>),
-    CallE(Id, Vec<Targ>, Vec<Arg>),
-    IterE(Box<Exp>, IterExp),
+    Bool(bool),
+    Num(Num),
+    Text(Text),
+    Var(Id),
+    Un(UnOp, OpTyp, Box<Exp>),
+    Bin(BinOp, OpTyp, Box<Exp>, Box<Exp>),
+    Cmp(CmpOp, OpTyp, Box<Exp>, Box<Exp>),
+    UpCast(Typ, Box<Exp>),
+    DownCast(Typ, Box<Exp>),
+    Sub(Box<Exp>, Typ, Box<Subcheck>),
+    Match(Box<Exp>, Pattern),
+    Tuple(Vec<Exp>),
+    Case(Box<NotExp>),
+    Str(Vec<(Atom, Exp)>),
+    Opt(Option<Box<Exp>>),
+    List(Vec<Exp>),
+    Cons(Box<Exp>, Box<Exp>),
+    Cat(Box<Exp>, Box<Exp>),
+    Mem(Box<Exp>, Box<Exp>),
+    Len(Box<Exp>),
+    Dot(Box<Exp>, Atom),
+    Idx(Box<Exp>, Box<Exp>),
+    Slice(Box<Exp>, Box<Exp>, Box<Exp>),
+    Upd(Box<Exp>, Box<Path>, Box<Exp>),
+    Call(Id, Vec<Targ>, Vec<Arg>),
+    Iter(Box<Exp>, IterExp),
 }
 pub type NotExp = Mixfix<Exp>;
 pub type IterExp = sl::ast::IterExp;
@@ -112,23 +110,18 @@ pub type Pattern = sl::ast::Pattern;
 
 // Path
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct Path {
-    pub kind: PathKind,
-    pub ty: TypKind,
-    pub span: Span,
-}
-impl Path {
-    pub fn new(kind: PathKind, ty: TypKind, span: Span) -> Self {
-        Self { kind, ty, span }
-    }
+pub type Path = Spanned<Noted<PathKind, TypKind>>;
+
+/// Constructs a typed path
+pub fn path(kind: PathKind, typ: TypKind, span: Span) -> Path {
+    Spanned::new(Noted::new(kind, typ), span)
 }
 #[derive(Clone, Debug, PartialEq)]
 pub enum PathKind {
-    RootP,
-    IdxP(Box<Path>, Box<Exp>),
-    SliceP(Box<Path>, Box<Exp>, Box<Exp>),
-    DotP(Box<Path>, Atom),
+    Root,
+    Idx(Box<Path>, Box<Exp>),
+    Slice(Box<Path>, Box<Exp>, Box<Exp>),
+    Dot(Box<Path>, Atom),
 }
 
 // Type parameters
@@ -140,8 +133,8 @@ pub type TParam = sl::ast::TParam;
 pub type Param = Spanned<ParamKind>;
 #[derive(Clone, Debug, PartialEq)]
 pub enum ParamKind {
-    ExpP(Typ, Box<Exp>),
-    DefP(Id, Vec<TParam>, Vec<Param>, Typ),
+    Exp(Typ, Box<Exp>),
+    Def(Id, Vec<TParam>, Vec<Param>, Typ),
 }
 
 // Type arguments
@@ -153,8 +146,8 @@ pub type Targ = sl::ast::Targ;
 pub type Arg = Spanned<ArgKind>;
 #[derive(Clone, Debug, PartialEq)]
 pub enum ArgKind {
-    ExpA(Box<Exp>),
-    DefA(Id),
+    Exp(Box<Exp>),
+    Def(Id),
 }
 
 // Dangling
@@ -165,9 +158,9 @@ pub type Dangle = sl::ast::Dangle;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum HoldCase<Tier> {
-    BothH(Block<Tier>, Block<Tier>),
-    HoldH(Block<Tier>, Dangle),
-    NotHoldH(Block<Tier>, Dangle),
+    Both(Block<Tier>, Block<Tier>),
+    Hold(Block<Tier>, Dangle),
+    NotHold(Block<Tier>, Dangle),
 }
 
 // Case analysis
@@ -180,14 +173,14 @@ pub struct Case<Tier> {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Guard {
-    BoolG(bool),
-    CmpG(CmpOp, OpTyp, Exp),
-    SubG(Typ, Box<Subcheck>),
-    MatchG(Pattern),
-    MemG(Exp),
+    Bool(bool),
+    Cmp(CmpOp, OpTyp, Exp),
+    Sub(Typ, Box<Subcheck>),
+    Match(Pattern),
+    Mem(Exp),
     // Shorthands
-    CheckLetSubG(Typ, Box<Subcheck>, Exp),
-    CheckLetMatchG(Pattern, Exp),
+    CheckLetSub(Typ, Box<Subcheck>, Exp),
+    CheckLetMatch(Pattern, Exp),
 }
 
 // Instructions
@@ -203,46 +196,100 @@ pub enum Fallthrough {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct InstrNode<Tier> {
-    pub kind: InstrKind<Tier>,
+pub struct InstrNote {
     pub iid: Iid,
     pub fallthrough: Option<Fallthrough>,
-    pub span: Span,
 }
 
+pub type InstrNode<Tier> = Spanned<Noted<InstrKind<Tier>, InstrNote>>;
 pub type Instr<Tier> = annot::Annotated<InstrNode<Tier>>;
 
-impl<Tier> InstrNode<Tier> {
-    pub fn new(
-        kind: InstrKind<Tier>,
-        iid: Iid,
-        fallthrough: Option<Fallthrough>,
-        span: Span,
-    ) -> Instr<Tier> {
-        annot::Annotated::new(Self {
-            kind,
-            iid,
-            fallthrough,
-            span,
-        })
-    }
+/// Constructs an instruction
+pub fn instr<Tier>(
+    kind: InstrKind<Tier>,
+    iid: Iid,
+    fallthrough: Option<Fallthrough>,
+    span: Span,
+) -> Instr<Tier> {
+    annot::Annotated::new(Spanned::new(
+        Noted::new(kind, InstrNote { iid, fallthrough }),
+        span,
+    ))
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum InstrKind<Tier> {
-    // Shared control flow for both tiers
-    IfI(Exp, Vec<IterExp>, Block<Tier>, Dangle),
-    HoldI(Id, NotExp, Vec<IterExp>, HoldCase<Tier>),
-    CaseI(Exp, Vec<Case<Tier>>, Dangle),
-    LetI(Exp, Exp, Vec<IterInstr>),
-    DebugI(Exp),
-    // Shorthands
-    DestructI(Vec<(Option<String>, Exp)>, Exp),
-    CheckLetSubI(Typ, Box<Subcheck>, Exp, Exp, Block<Tier>),
-    CheckLetMatchI(Pattern, Exp, Exp, Block<Tier>),
-    OptionGetI(Exp, Exp, Block<Tier>),
-    // Tier-specific instruction
-    TierI(Tier),
+    If(IfInstr<Tier>),
+    Hold(HoldInstr<Tier>),
+    Case(CaseInstr<Tier>),
+    Let(LetInstr),
+    Debug(DebugInstr),
+    Destruct(DestructInstr),
+    CheckLetSub(CheckLetSubInstr<Tier>),
+    CheckLetMatch(CheckLetMatchInstr<Tier>),
+    OptionGet(OptionGetInstr<Tier>),
+    Tier(TierInstr<Tier>),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct IfInstr<Tier> {
+    pub exp: Exp,
+    pub iter_exps: Vec<IterExp>,
+    pub block: Block<Tier>,
+    pub dangle: Dangle,
+}
+#[derive(Clone, Debug, PartialEq)]
+pub struct HoldInstr<Tier> {
+    pub id: Id,
+    pub not_exp: NotExp,
+    pub iter_exps: Vec<IterExp>,
+    pub hold_case: HoldCase<Tier>,
+}
+#[derive(Clone, Debug, PartialEq)]
+pub struct CaseInstr<Tier> {
+    pub exp: Exp,
+    pub cases: Vec<Case<Tier>>,
+    pub dangle: Dangle,
+}
+#[derive(Clone, Debug, PartialEq)]
+pub struct LetInstr {
+    pub exp_l: Exp,
+    pub exp_r: Exp,
+    pub iter_instrs: Vec<IterInstr>,
+}
+#[derive(Clone, Debug, PartialEq)]
+pub struct DebugInstr {
+    pub exp: Exp,
+}
+#[derive(Clone, Debug, PartialEq)]
+pub struct DestructInstr {
+    pub bindings: Vec<(Option<String>, Exp)>,
+    pub exp: Exp,
+}
+#[derive(Clone, Debug, PartialEq)]
+pub struct CheckLetSubInstr<Tier> {
+    pub typ: Typ,
+    pub subcheck: Box<Subcheck>,
+    pub exp_l: Exp,
+    pub exp_r: Exp,
+    pub block: Block<Tier>,
+}
+#[derive(Clone, Debug, PartialEq)]
+pub struct CheckLetMatchInstr<Tier> {
+    pub pattern: Pattern,
+    pub exp_l: Exp,
+    pub exp_r: Exp,
+    pub block: Block<Tier>,
+}
+#[derive(Clone, Debug, PartialEq)]
+pub struct OptionGetInstr<Tier> {
+    pub exp_l: Exp,
+    pub exp_r: Exp,
+    pub block: Block<Tier>,
+}
+#[derive(Clone, Debug, PartialEq)]
+pub struct TierInstr<Tier> {
+    pub tier: Tier,
 }
 
 pub type Block<Tier> = Vec<Instr<Tier>>;
@@ -256,18 +303,31 @@ pub type RelSignature = sl::ast::RelSignature;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum InstrGroup {
-    ResultI {
-        signature: RelSignature,
-        outputs: Vec<Exp>,
-    },
-    ReturnI(Exp),
-    RuleI {
-        rule_id: Id,
-        notation: NotExp,
-        input_hint: crate::lang::hints::input::InputHint,
-        iterations: Vec<IterInstr>,
-    },
-    BacktrackI(Vec<BlockGroup>),
+    Result(ResultGroupInstr),
+    Return(ReturnGroupInstr),
+    Rule(RuleGroupInstr),
+    Backtrack(BacktrackGroupInstr),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ResultGroupInstr {
+    pub rel_signature: RelSignature,
+    pub exps_output: Vec<Exp>,
+}
+#[derive(Clone, Debug, PartialEq)]
+pub struct ReturnGroupInstr {
+    pub exp: Exp,
+}
+#[derive(Clone, Debug, PartialEq)]
+pub struct RuleGroupInstr {
+    pub id: Id,
+    pub not_exp: NotExp,
+    pub input_hint: crate::lang::hints::input::InputHint,
+    pub iter_instrs: Vec<IterInstr>,
+}
+#[derive(Clone, Debug, PartialEq)]
+pub struct BacktrackGroupInstr {
+    pub blocks: Vec<BlockGroup>,
 }
 
 pub type BlockGroup = Block<InstrGroup>;
@@ -275,16 +335,22 @@ pub type BlockGroup = Block<InstrGroup>;
 // Dispatch tier
 
 #[derive(Clone, Debug, PartialEq)]
-#[allow(clippy::large_enum_variant)] // Dispatch groups retain their flat payload shape
 pub enum InstrDispatch {
-    GroupI {
-        group_id: Id,
-        relation_id: Id,
-        signature: RelSignature,
-        inputs: Vec<Exp>,
-        block: BlockGroup,
-    },
-    RouteI(Vec<BlockDispatch>),
+    Group(GroupDispatchInstr),
+    Route(RouteDispatchInstr),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct GroupDispatchInstr {
+    pub id_rel: Id,
+    pub id_group: Id,
+    pub rel_signature: RelSignature,
+    pub exps_input: Vec<Exp>,
+    pub block: BlockGroup,
+}
+#[derive(Clone, Debug, PartialEq)]
+pub struct RouteDispatchInstr {
+    pub blocks: Vec<BlockDispatch>,
 }
 
 pub type BlockDispatch = Block<InstrDispatch>;
@@ -294,17 +360,17 @@ pub type BlockDispatch = Block<InstrDispatch>;
 #[derive(Clone, Debug, PartialEq)]
 pub struct ExternRel {
     pub id: Id,
-    pub signature: RelSignature,
-    pub inputs: Vec<Exp>,
+    pub rel_signature: RelSignature,
+    pub exps_input: Vec<Exp>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Rel {
     pub id: Id,
-    pub signature: RelSignature,
-    pub inputs: Vec<Exp>,
+    pub rel_signature: RelSignature,
+    pub exps_input: Vec<Exp>,
     pub block: BlockDispatch,
-    pub else_block: Option<BlockDispatch>,
+    pub block_else_opt: Option<BlockDispatch>,
 }
 
 // Functions
@@ -327,8 +393,8 @@ pub struct BuiltinFunc {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct TableRow {
-    pub inputs: Vec<Exp>,
-    pub expression: Exp,
+    pub exps_input: Vec<Exp>,
+    pub exp: Exp,
     pub block: BlockGroup,
 }
 
@@ -347,36 +413,43 @@ pub struct DefinedFunc {
     pub params: Vec<Param>,
     pub typ: Typ,
     pub block: BlockGroup,
-    pub else_block: Option<BlockGroup>,
+    pub block_else_opt: Option<BlockGroup>,
 }
 
 // Definitions
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct DefNode {
-    pub kind: DefKind,
-    pub span: Span,
-}
-
+pub type DefNode = Spanned<DefKind>;
 pub type Def = annot::Annotated<DefNode>;
 
-impl DefNode {
-    pub fn new(kind: DefKind, span: Span) -> Def {
-        annot::Annotated::new(Self { kind, span })
-    }
+#[derive(Clone, Debug, PartialEq)]
+pub struct ExternTypDef {
+    pub id: Id,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct TypDef {
+    pub id: Id,
+    pub tparams: Vec<TParam>,
+    pub def_typ: DefTyp,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct VarDef {
+    pub id: Id,
+    pub typ: Typ,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum DefKind {
-    ExternTypD(Id),
-    TypD(Id, Vec<TParam>, DefTyp),
-    VarD(Id, Typ),
-    ExternRelD(ExternRel),
-    RelD(Rel),
-    ExternDecD(ExternFunc),
-    BuiltinDecD(BuiltinFunc),
-    TableDecD(TableFunc),
-    FuncDecD(DefinedFunc),
+    ExternTyp(ExternTypDef),
+    Typ(TypDef),
+    Var(VarDef),
+    ExternRel(ExternRel),
+    Rel(Rel),
+    ExternDec(ExternFunc),
+    BuiltinDec(BuiltinFunc),
+    TableDec(TableFunc),
+    FuncDec(DefinedFunc),
 }
 
 // Spec

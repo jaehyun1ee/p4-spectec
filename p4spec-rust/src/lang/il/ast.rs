@@ -1,10 +1,10 @@
-// Keep non-recursive OCaml payloads inline; reserve indirection for
-// recursive edges
+//! Intermediate language model
 
 use crate::domain::{
-    atom::Atom as DomainAtom,
+    atom,
     mixfix::Mixfix,
-    mixop::Mixop as DomainMixop,
+    mixop,
+    noted::Noted,
     source::{Span, Spanned},
 };
 use crate::lang::{el, hints::input::InputHint, xl::num};
@@ -25,12 +25,11 @@ pub type IdKind = String;
 
 // Atoms
 
-pub type Atom = Spanned<AtomKind>;
-pub type AtomKind = DomainAtom;
+pub type Atom = Spanned<atom::Atom>;
 
 // Mixfix operators
 
-pub type Mixop = DomainMixop;
+pub type Mixop = mixop::Mixop;
 
 // Iterators
 
@@ -58,30 +57,30 @@ pub type Typ = Spanned<TypKind>;
 #[derive(Clone, Debug, PartialEq)]
 pub enum TypKind {
     /// `bool`
-    BoolT,
+    Bool,
     /// `numtyp`
-    NumT(num::Typ),
+    Num(num::Typ),
     /// `text`
-    TextT,
+    Text,
     /// `id (`<` list(targ, `,`) `>`)?`
-    VarT(Id, Vec<Targ>),
+    Var(Id, Vec<Targ>),
     /// `(` list(typ, `,`) `)`
-    TupleT(Vec<Typ>),
+    Tuple(Vec<Typ>),
     /// `typ iter`
-    IterT(Box<Typ>, Iter),
+    Iter(Box<Typ>, Iter),
     /// `<` list(tparam, `,`) `>` `(` list(typ, `,`) `)` `:` typ
-    FuncT(Vec<TParam>, Vec<Typ>, Box<Typ>),
+    Func(Vec<TParam>, Vec<Typ>, Box<Typ>),
 }
 
 // Subtype checks
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Subcheck {
-    SkipSC,
-    MixopSC(Vec<Mixop>),
-    TupleSC(Vec<Subcheck>),
-    IterSC(Iter, Box<Subcheck>),
-    RecurseSC(Typ),
+    Skip,
+    Mixop(Vec<Mixop>),
+    Tuple(Vec<Subcheck>),
+    Iter(Iter, Box<Subcheck>),
+    Recurse(Typ),
 }
 
 // Defined types
@@ -93,48 +92,37 @@ pub type DefTyp = Spanned<DefTypKind>;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum DefTypKind {
-    PlainT(Typ),
-    StructT(Vec<TypField>),
-    VariantT(Vec<TypCase>),
+    Plain(Typ),
+    Struct(Vec<TypField>),
+    Variant(Vec<TypCase>),
 }
 
 pub type TypField = (Atom, Typ);
 pub type TypOrigin = Spanned<TypOriginKind>;
 pub type TypOriginKind = (Id, Vec<Targ>);
-#[derive(Clone, Debug, PartialEq)]
-pub struct TypCase {
-    pub notation: NotTyp,
-    pub origin: TypOrigin,
-    pub hints: Vec<Hint>,
-}
+pub type TypCase = (NotTyp, TypOrigin, Vec<Hint>);
 
 // Values
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct Value {
-    pub kind: ValueKind,
-    pub ty: TypKind,
-    pub span: Span,
-}
+pub type Value = Spanned<Noted<ValueKind, TypKind>>;
 
-impl Value {
-    pub fn new(kind: ValueKind, ty: TypKind, span: Span) -> Self {
-        Self { kind, ty, span }
-    }
+/// Constructs a typed value.
+pub fn value(kind: ValueKind, typ: TypKind, span: Span) -> Value {
+    Spanned::new(Noted::new(kind, typ), span)
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ValueKind {
-    BoolV(bool),
-    NumV(Num),
-    TextV(Text),
-    StructV(Vec<ValueField>),
-    CaseV(Box<ValueCase>),
-    TupleV(Vec<Value>),
-    OptV(Option<Box<Value>>),
-    ListV(Vec<Value>),
-    FuncV(Id),
-    ExternV(ExternalData),
+    Bool(bool),
+    Num(Num),
+    Text(Text),
+    Struct(Vec<ValueField>),
+    Case(Box<ValueCase>),
+    Tuple(Vec<Value>),
+    Opt(Option<Box<Value>>),
+    List(Vec<Value>),
+    Func(Id),
+    Extern(ExternalData),
 }
 
 pub type ValueField = (Atom, Value);
@@ -142,119 +130,81 @@ pub type ValueCase = Mixfix<Value>;
 
 // Operators
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum NumOp {
-    DecOp,
-    HexOp,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum UnOp {
-    NotOp,
-    PlusOp,
-    MinusOp,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum BinOp {
-    AndOp,
-    OrOp,
-    ImplOp,
-    EquivOp,
-    AddOp,
-    SubOp,
-    MulOp,
-    DivOp,
-    ModOp,
-    PowOp,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum CmpOp {
-    EqOp,
-    NeOp,
-    LtOp,
-    GtOp,
-    LeOp,
-    GeOp,
-}
+pub type NumOp = el::ast::NumOp;
+pub type UnOp = el::ast::UnOp;
+pub type BinOp = el::ast::BinOp;
+pub type CmpOp = el::ast::CmpOp;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum OpTyp {
-    BoolT,
-    NatT,
-    IntT,
+    Bool,
+    Nat,
+    Int,
 }
 
 // Expressions
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct Exp {
-    pub kind: ExpKind,
-    pub ty: TypKind,
-    pub span: Span,
-}
+pub type Exp = Spanned<Noted<ExpKind, TypKind>>;
 
-impl Exp {
-    pub fn new(kind: ExpKind, ty: TypKind, span: Span) -> Self {
-        Self { kind, ty, span }
-    }
+/// Constructs a typed expression.
+pub fn exp(kind: ExpKind, typ: TypKind, span: Span) -> Exp {
+    Spanned::new(Noted::new(kind, typ), span)
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ExpKind {
     /// `bool`
-    BoolE(bool),
+    Bool(bool),
     /// `num`
-    NumE(Num),
+    Num(Num),
     /// `text`
-    TextE(Text),
+    Text(Text),
     /// `varid`
-    VarE(Id),
+    Var(Id),
     /// `unop exp`
-    UnE(UnOp, OpTyp, Box<Exp>),
+    Un(UnOp, OpTyp, Box<Exp>),
     /// `exp binop exp`
-    BinE(BinOp, OpTyp, Box<Exp>, Box<Exp>),
+    Bin(BinOp, OpTyp, Box<Exp>, Box<Exp>),
     /// `exp cmpop exp`
-    CmpE(CmpOp, OpTyp, Box<Exp>, Box<Exp>),
+    Cmp(CmpOp, OpTyp, Box<Exp>, Box<Exp>),
     /// `exp as typ`
-    UpCastE(Typ, Box<Exp>),
+    UpCast(Typ, Box<Exp>),
     /// `exp as typ`
-    DownCastE(Typ, Box<Exp>),
+    DownCast(Typ, Box<Exp>),
     /// `exp <: typ`
-    SubE(Box<Exp>, Typ, Box<Subcheck>),
+    Sub(Box<Exp>, Typ, Box<Subcheck>),
     /// `exp matches pattern`
-    MatchE(Box<Exp>, Pattern),
+    Match(Box<Exp>, Pattern),
     /// `(` exp* `)`
-    TupleE(Vec<Exp>),
+    Tuple(Vec<Exp>),
     /// `notexp`
-    CaseE(Box<NotExp>),
+    Case(Box<NotExp>),
     /// `{` expfield* `}`
-    StrE(Vec<(Atom, Exp)>),
+    Str(Vec<(Atom, Exp)>),
     /// `exp?`
-    OptE(Option<Box<Exp>>),
+    Opt(Option<Box<Exp>>),
     /// `[` exp* `]`
-    ListE(Vec<Exp>),
+    List(Vec<Exp>),
     /// `exp :: exp`
-    ConsE(Box<Exp>, Box<Exp>),
+    Cons(Box<Exp>, Box<Exp>),
     /// `exp ++ exp`
-    CatE(Box<Exp>, Box<Exp>),
+    Cat(Box<Exp>, Box<Exp>),
     /// `exp <- exp`
-    MemE(Box<Exp>, Box<Exp>),
+    Mem(Box<Exp>, Box<Exp>),
     /// `|` exp `|`
-    LenE(Box<Exp>),
+    Len(Box<Exp>),
     /// `exp.atom`
-    DotE(Box<Exp>, Atom),
+    Dot(Box<Exp>, Atom),
     /// `exp [` exp `]`
-    IdxE(Box<Exp>, Box<Exp>),
+    Idx(Box<Exp>, Box<Exp>),
     /// `exp [` exp `:` exp `]`
-    SliceE(Box<Exp>, Box<Exp>, Box<Exp>),
+    Slice(Box<Exp>, Box<Exp>, Box<Exp>),
     /// `exp [` path `=` exp `]`
-    UpdE(Box<Exp>, Path, Box<Exp>),
+    Upd(Box<Exp>, Path, Box<Exp>),
     /// `$id<` targ* `>(` arg* `)`
-    CallE(Id, Vec<Targ>, Vec<Arg>),
+    Call(Id, Vec<Targ>, Vec<Arg>),
     /// `exp iterexp`
-    IterE(Box<Exp>, IterExp),
+    Iter(Box<Exp>, IterExp),
 }
 
 pub type NotExp = Mixfix<Exp>;
@@ -264,9 +214,9 @@ pub type IterExp = (Iter, Vec<Var>);
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Pattern {
-    CaseP(Box<Mixop>),
-    ListP(ListPattern),
-    OptP(OptPattern),
+    Case(Box<Mixop>),
+    List(ListPattern),
+    Opt(OptPattern),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -284,28 +234,22 @@ pub enum OptPattern {
 
 // Paths
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct Path {
-    pub kind: PathKind,
-    pub ty: TypKind,
-    pub span: Span,
-}
+pub type Path = Spanned<Noted<PathKind, TypKind>>;
 
-impl Path {
-    pub fn new(kind: PathKind, ty: TypKind, span: Span) -> Self {
-        Self { kind, ty, span }
-    }
+/// Constructs a typed path.
+pub fn path(kind: PathKind, typ: TypKind, span: Span) -> Path {
+    Spanned::new(Noted::new(kind, typ), span)
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum PathKind {
-    RootP,
+    Root,
     /// `path [` exp `]`
-    IdxP(Box<Path>, Box<Exp>),
+    Idx(Box<Path>, Box<Exp>),
     /// `path [` exp `:` exp `]`
-    SliceP(Box<Path>, Box<Exp>, Box<Exp>),
+    Slice(Box<Path>, Box<Exp>, Box<Exp>),
     /// `path . atom`
-    DotP(Box<Path>, Atom),
+    Dot(Box<Path>, Atom),
 }
 
 // Parameters
@@ -315,9 +259,9 @@ pub type Param = Spanned<ParamKind>;
 #[derive(Clone, Debug, PartialEq)]
 pub enum ParamKind {
     /// `typ`
-    ExpP(Typ),
+    Exp(Typ),
     /// `def $id (<` list(tparam, `,`) `>)? (` list(param, `,`) `)? : typ`
-    DefP(Id, Vec<TParam>, Vec<Param>, Typ),
+    Def(Id, Vec<TParam>, Vec<Param>, Typ),
 }
 
 // Type parameters
@@ -332,9 +276,9 @@ pub type Arg = Spanned<ArgKind>;
 #[derive(Clone, Debug, PartialEq)]
 pub enum ArgKind {
     /// `exp`
-    ExpA(Box<Exp>),
+    Exp(Box<Exp>),
     /// `$id`
-    DefA(Id),
+    Def(Id),
 }
 
 // Type arguments
@@ -347,22 +291,63 @@ pub type TargKind = TypKind;
 pub type Prem = Spanned<PremKind>;
 
 #[derive(Clone, Debug, PartialEq)]
-#[allow(clippy::large_enum_variant)] // Rule notation and bindings stay inline
+pub struct RulePrem {
+    pub id: Id,
+    pub not_exp: NotExp,
+    pub input_hint: InputHint,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct IfPrem {
+    pub exp: Exp,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct IfHoldPrem {
+    pub id: Id,
+    pub not_exp: NotExp,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct IfNotHoldPrem {
+    pub id: Id,
+    pub not_exp: NotExp,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct LetPrem {
+    pub exp_l: Exp,
+    pub exp_r: Exp,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct IteratedPrem {
+    pub prem: Box<Prem>,
+    pub iter_prem: IterPrem,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct DebugPrem {
+    pub exp: Exp,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+#[allow(clippy::large_enum_variant)]
 pub enum PremKind {
     /// `id : notexp`
-    RulePr(Id, NotExp, InputHint),
+    Rule(RulePrem),
     /// `if exp`
-    IfPr(Exp),
+    If(IfPrem),
     /// `if id : notexp holds`
-    IfHoldPr(Id, NotExp),
+    IfHold(IfHoldPrem),
     /// `if id : notexp does not hold`
-    IfNotHoldPr(Id, NotExp),
+    IfNotHold(IfNotHoldPrem),
     /// `let exp = exp`
-    LetPr(Exp, Exp),
+    Let(LetPrem),
     /// `prem iterprem`
-    IterPr(Box<Prem>, IterPrem),
+    Iter(IteratedPrem),
     /// `debug exp`
-    DebugPr(Exp),
+    Debug(DebugPrem),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -379,8 +364,8 @@ pub type Rule = Spanned<RuleKind>;
 #[derive(Clone, Debug, PartialEq)]
 pub struct RuleKind {
     pub id: Id,
-    pub notation: NotExp,
-    pub premises: Vec<Prem>,
+    pub not_exp: NotExp,
+    pub prems: Vec<Prem>,
 }
 
 pub type RuleGroup = Spanned<RuleGroupKind>;
@@ -417,41 +402,103 @@ pub type Hint = el::ast::Hint;
 pub type Def = Spanned<DefKind>;
 
 #[derive(Clone, Debug, PartialEq)]
-#[allow(clippy::large_enum_variant)] // Definition fields stay inline in OCaml order
+pub struct ExternTyp {
+    pub id: Id,
+    pub hints: Vec<Hint>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct TypDef {
+    pub id: Id,
+    pub tparams: Vec<TParam>,
+    pub def_typ: DefTyp,
+    pub hints: Vec<Hint>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct VarDef {
+    pub id: Id,
+    pub typ: Typ,
+    pub hints: Vec<Hint>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ExternRel {
+    pub id: Id,
+    pub not_typ: NotTyp,
+    pub input_hint: InputHint,
+    pub hints: Vec<Hint>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Rel {
+    pub id: Id,
+    pub not_typ: NotTyp,
+    pub input_hint: InputHint,
+    pub rule_groups: Vec<RuleGroup>,
+    pub else_group: Option<ElseGroup>,
+    pub hints: Vec<Hint>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ExternDec {
+    pub id: Id,
+    pub tparams: Vec<TParam>,
+    pub params: Vec<Param>,
+    pub typ: Typ,
+    pub hints: Vec<Hint>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct BuiltinDec {
+    pub id: Id,
+    pub tparams: Vec<TParam>,
+    pub params: Vec<Param>,
+    pub typ: Typ,
+    pub hints: Vec<Hint>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct TableDec {
+    pub id: Id,
+    pub params: Vec<Param>,
+    pub typ: Typ,
+    pub rows: Vec<TableRow>,
+    pub hints: Vec<Hint>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct FuncDec {
+    pub id: Id,
+    pub tparams: Vec<TParam>,
+    pub params: Vec<Param>,
+    pub typ: Typ,
+    pub clauses: Vec<Clause>,
+    pub else_clause: Option<ElseClause>,
+    pub hints: Vec<Hint>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+#[allow(clippy::large_enum_variant)]
 pub enum DefKind {
     /// `extern syntax id hint*`
-    ExternTypD(Id, Vec<Hint>),
-    /// `syntax id <` list(tparam, `,`) `> hint* = deftyp`
-    TypD(Id, Vec<TParam>, DefTyp, Vec<Hint>),
+    ExternTyp(ExternTyp),
+    /// `syntax id <` list(tparam, `,`) `> hint* = def_typ`
+    Typ(TypDef),
     /// `var id : typ hint*`
-    VarD(Id, Typ, Vec<Hint>),
-    /// `extern relation id : nottyp hint(input %int*) hint*`
-    ExternRelD(Id, NotTyp, InputHint, Vec<Hint>),
-    /// `relation id : nottyp hint(input %int*) rulegroup* hint*`
-    RelD(
-        Id,
-        NotTyp,
-        InputHint,
-        Vec<RuleGroup>,
-        Option<ElseGroup>,
-        Vec<Hint>,
-    ),
+    Var(VarDef),
+    /// `extern relation id : not_typ hint(input %int*) hint*`
+    ExternRel(ExternRel),
+    /// `relation id : not_typ hint(input %int*) rulegroup* hint*`
+    Rel(Rel),
     /// `extern dec id <` list(tparam, `,`) `> list(param, `,`) : typ hint*`
-    ExternDecD(Id, Vec<TParam>, Vec<Param>, Typ, Vec<Hint>),
+    ExternDec(ExternDec),
     /// `builtin dec id <` list(tparam, `,`) `> list(param, `,`) : typ hint*`
-    BuiltinDecD(Id, Vec<TParam>, Vec<Param>, Typ, Vec<Hint>),
+    BuiltinDec(BuiltinDec),
     /// `table dec id list(param, `,`) : typ hint*`
-    TableDecD(Id, Vec<Param>, Typ, Vec<TableRow>, Vec<Hint>),
+    TableDec(TableDec),
     /// `dec id <` list(tparam, `,`) `> list(param, `,`) : typ clause* hint*`
-    FuncDecD(
-        Id,
-        Vec<TParam>,
-        Vec<Param>,
-        Typ,
-        Vec<Clause>,
-        Option<ElseClause>,
-        Vec<Hint>,
-    ),
+    FuncDec(FuncDec),
 }
 
 // Spec

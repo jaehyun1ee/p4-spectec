@@ -72,9 +72,9 @@ fn numbers_preserve_ocaml_variant_order_and_subtyping() {
     let small_int = Number::Int(BigInt::from(-100));
 
     assert_eq!(num::compare(&large_nat, &small_int), Ordering::Less);
-    assert_eq!(num::compare_typ(Typ::NatT, Typ::IntT), Ordering::Less);
-    assert!(num::sub(Typ::NatT, Typ::IntT));
-    assert!(!num::sub(Typ::IntT, Typ::NatT));
+    assert_eq!(num::compare_typ(Typ::Nat, Typ::Int), Ordering::Less);
+    assert!(num::sub(Typ::Nat, Typ::Int));
+    assert!(!num::sub(Typ::Int, Typ::Nat));
 }
 
 #[test]
@@ -83,13 +83,13 @@ fn numeric_operations_preserve_kinds_and_signed_rendering() {
     let three = natural(3);
     let negative_three = Number::Int(BigInt::from(-3));
 
-    assert_eq!(num::bin(BinOp::AddOp, &two, &three), Ok(natural(5)));
+    assert_eq!(num::bin(BinOp::Add, &two, &three), Ok(natural(5)));
     assert_eq!(
-        num::bin(BinOp::SubOp, &two, &three),
+        num::bin(BinOp::Sub, &two, &three),
         Ok(Number::Int((-1).into()))
     );
-    assert_eq!(num::un(UnOp::MinusOp, &two), Number::Int((-2).into()));
-    assert_eq!(num::cmp(CmpOp::LtOp, &two, &three), Ok(true));
+    assert_eq!(num::un(UnOp::Minus, &two), Number::Int((-2).into()));
+    assert_eq!(num::cmp(CmpOp::Lt, &two, &three), Ok(true));
     assert_eq!(num::string_of_num(&Number::Int(3.into())), "+3");
     assert_eq!(num::string_of_num(&negative_three), "-3");
 }
@@ -110,7 +110,7 @@ fn binary_operations_report_zero_divisors() {
     ];
 
     for (number_l, number_r) in operands {
-        for operation in [BinOp::DivOp, BinOp::ModOp] {
+        for operation in [BinOp::Div, BinOp::Mod] {
             assert_eq!(
                 num::bin(operation, &number_l, &number_r),
                 Err(NumericError::ZeroDivisor(operation))
@@ -124,21 +124,18 @@ fn numeric_operations_report_mismatched_kinds() {
     let natural = natural(1);
     let integer = Number::Int(1.into());
     let error = NumericError::MismatchedKinds {
-        left: Typ::NatT,
-        right: Typ::IntT,
+        typ_l: Typ::Nat,
+        typ_r: Typ::Int,
     };
 
-    assert_eq!(
-        num::bin(BinOp::AddOp, &natural, &integer),
-        Err(error.clone())
-    );
-    assert_eq!(num::cmp(CmpOp::LtOp, &natural, &integer), Err(error));
+    assert_eq!(num::bin(BinOp::Add, &natural, &integer), Err(error.clone()));
+    assert_eq!(num::cmp(CmpOp::Lt, &natural, &integer), Err(error));
 }
 
 #[test]
 fn unsupported_binary_operations_return_errors() {
     assert_eq!(
-        num::bin(BinOp::PowOp, &natural(2), &natural(3)),
-        Err(NumericError::UnsupportedBinaryOperation(BinOp::PowOp))
+        num::bin(BinOp::Pow, &natural(2), &natural(3)),
+        Err(NumericError::UnsupportedBinaryOperation(BinOp::Pow))
     );
 }

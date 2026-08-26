@@ -2,6 +2,7 @@ use p4spec_rust::{
     domain::{
         atom::Atom,
         mixfix::Mixfix,
+        sets::{self, IdSet},
         source::{Position, Span, Spanned},
     },
     lang::{
@@ -23,16 +24,16 @@ fn id_at(name: &str, at: &str) -> ast::Id {
     Spanned::new(name.into(), named_span(at))
 }
 fn typ() -> ast::Typ {
-    Spanned::new(ast::TypKind::BoolT, span())
+    Spanned::new(ast::TypKind::Bool, span())
 }
 fn typ_at(at: &str) -> ast::Typ {
-    Spanned::new(ast::TypKind::BoolT, named_span(at))
+    Spanned::new(ast::TypKind::Bool, named_span(at))
 }
 fn exp(kind: ast::ExpKind) -> ast::Exp {
-    ast::Exp::new(kind, ast::TypKind::BoolT, span())
+    ast::exp(kind, ast::TypKind::Bool, span())
 }
 fn variable(name: &str) -> ast::Exp {
-    exp(ast::ExpKind::VarE(id(name)))
+    exp(ast::ExpKind::Var(id(name)))
 }
 fn atom(name: &str) -> ast::Atom {
     Spanned::new(Atom::Keyword(name.into()), span())
@@ -40,7 +41,7 @@ fn atom(name: &str) -> ast::Atom {
 fn notexp(name: &str) -> ast::NotExp {
     Mixfix::Seq(vec![Mixfix::Arg(variable(name))])
 }
-fn names(names: &[&str]) -> free::FreeVars {
+fn names(names: &[&str]) -> IdSet {
     names.iter().map(|name| (*name).into()).collect()
 }
 fn prem(kind: ast::PremKind) -> ast::Prem {
@@ -53,8 +54,8 @@ fn rule(head: &str, prems: Vec<ast::Prem>) -> ast::Rule {
     Spanned::new(
         ast::RuleKind {
             id: id("rule"),
-            notation: notexp(head),
-            premises: prems,
+            not_exp: notexp(head),
+            prems,
         },
         span(),
     )
@@ -62,9 +63,11 @@ fn rule(head: &str, prems: Vec<ast::Prem>) -> ast::Rule {
 fn clause(arg_name: &str, body: &str, prem_name: &str) -> ast::Clause {
     Spanned::new(
         ast::ClauseKind {
-            args: vec![arg(ast::ArgKind::ExpA(Box::new(variable(arg_name))))],
+            args: vec![arg(ast::ArgKind::Exp(Box::new(variable(arg_name))))],
             expression: variable(body),
-            premises: vec![prem(ast::PremKind::DebugPr(variable(prem_name)))],
+            premises: vec![prem(ast::PremKind::Debug(ast::DebugPrem {
+                exp: variable(prem_name),
+            }))],
         },
         span(),
     )
@@ -72,49 +75,45 @@ fn clause(arg_name: &str, body: &str, prem_name: &str) -> ast::Clause {
 
 #[test]
 fn free_helpers_are_public_and_source_insensitive() {
-    assert_eq!(free::empty(), names(&[]));
-    assert_eq!(free::singleton(&id_at("x", "left")), names(&["x"]));
-    assert_eq!(free::singleton(&id_at("x", "right")), names(&["x"]));
+    assert_eq!(sets::empty(), names(&[]));
+    assert_eq!(sets::singleton(id_at("x", "left").node), names(&["x"]));
+    assert_eq!(sets::singleton(id_at("x", "right").node), names(&["x"]));
 }
 
 #[test]
 fn free_expression_variants_follow_the_oracle() {
-    let path = ast::Path::new(
-        ast::PathKind::SliceP(
-            Box::new(ast::Path::new(
-                ast::PathKind::RootP,
-                ast::TypKind::BoolT,
-                span(),
-            )),
+    let path = ast::path(
+        ast::PathKind::Slice(
+            Box::new(ast::path(ast::PathKind::Root, ast::TypKind::Bool, span())),
             Box::new(variable("path_low")),
             Box::new(variable("path_high")),
         ),
-        ast::TypKind::BoolT,
+        ast::TypKind::Bool,
         span(),
     );
     let cases = vec![
-        ("bool", exp(ast::ExpKind::BoolE(true)), names(&[])),
+        ("bool", exp(ast::ExpKind::Bool(true)), names(&[])),
         (
             "num",
-            exp(ast::ExpKind::NumE(ast::Num::Nat(1.into()))),
+            exp(ast::ExpKind::Num(ast::Num::Nat(1.into()))),
             names(&[]),
         ),
-        ("text", exp(ast::ExpKind::TextE("text".into())), names(&[])),
+        ("text", exp(ast::ExpKind::Text("text".into())), names(&[])),
         ("var", variable("var"), names(&["var"])),
         (
             "unary",
-            exp(ast::ExpKind::UnE(
-                ast::UnOp::NotOp,
-                ast::OpTyp::BoolT,
+            exp(ast::ExpKind::Un(
+                ast::UnOp::Bool(p4spec_rust::lang::xl::bool::UnOp::Not),
+                ast::OpTyp::Bool,
                 Box::new(variable("unary")),
             )),
             names(&["unary"]),
         ),
         (
             "binary",
-            exp(ast::ExpKind::BinE(
-                ast::BinOp::AddOp,
-                ast::OpTyp::NatT,
+            exp(ast::ExpKind::Bin(
+                ast::BinOp::Num(p4spec_rust::lang::xl::num::BinOp::Add),
+                ast::OpTyp::Nat,
                 Box::new(variable("left")),
                 Box::new(variable("right")),
             )),
@@ -122,9 +121,9 @@ fn free_expression_variants_follow_the_oracle() {
         ),
         (
             "comparison",
-            exp(ast::ExpKind::CmpE(
-                ast::CmpOp::EqOp,
-                ast::OpTyp::BoolT,
+            exp(ast::ExpKind::Cmp(
+                ast::CmpOp::Bool(p4spec_rust::lang::xl::bool::CmpOp::Eq),
+                ast::OpTyp::Bool,
                 Box::new(variable("left")),
                 Box::new(variable("right")),
             )),
@@ -132,34 +131,34 @@ fn free_expression_variants_follow_the_oracle() {
         ),
         (
             "upcast",
-            exp(ast::ExpKind::UpCastE(typ(), Box::new(variable("cast")))),
+            exp(ast::ExpKind::UpCast(typ(), Box::new(variable("cast")))),
             names(&["cast"]),
         ),
         (
             "downcast",
-            exp(ast::ExpKind::DownCastE(typ(), Box::new(variable("cast")))),
+            exp(ast::ExpKind::DownCast(typ(), Box::new(variable("cast")))),
             names(&["cast"]),
         ),
         (
             "subtype",
-            exp(ast::ExpKind::SubE(
+            exp(ast::ExpKind::Sub(
                 Box::new(variable("sub")),
                 typ(),
-                Box::new(ast::Subcheck::SkipSC),
+                Box::new(ast::Subcheck::Skip),
             )),
             names(&["sub"]),
         ),
         (
             "match",
-            exp(ast::ExpKind::MatchE(
+            exp(ast::ExpKind::Match(
                 Box::new(variable("match")),
-                ast::Pattern::OptP(ast::OptPattern::Some),
+                ast::Pattern::Opt(ast::OptPattern::Some),
             )),
             names(&["match"]),
         ),
         (
             "tuple",
-            exp(ast::ExpKind::TupleE(vec![
+            exp(ast::ExpKind::Tuple(vec![
                 variable("tuple_a"),
                 variable("tuple_b"),
             ])),
@@ -167,12 +166,12 @@ fn free_expression_variants_follow_the_oracle() {
         ),
         (
             "case",
-            exp(ast::ExpKind::CaseE(Box::new(notexp("case")))),
+            exp(ast::ExpKind::Case(Box::new(notexp("case")))),
             names(&["case"]),
         ),
         (
             "struct",
-            exp(ast::ExpKind::StrE(vec![(
+            exp(ast::ExpKind::Str(vec![(
                 atom("field"),
                 variable("field_value"),
             )])),
@@ -180,13 +179,13 @@ fn free_expression_variants_follow_the_oracle() {
         ),
         (
             "option_some",
-            exp(ast::ExpKind::OptE(Some(Box::new(variable("some"))))),
+            exp(ast::ExpKind::Opt(Some(Box::new(variable("some"))))),
             names(&["some"]),
         ),
-        ("option_none", exp(ast::ExpKind::OptE(None)), names(&[])),
+        ("option_none", exp(ast::ExpKind::Opt(None)), names(&[])),
         (
             "list",
-            exp(ast::ExpKind::ListE(vec![
+            exp(ast::ExpKind::List(vec![
                 variable("list_a"),
                 variable("list_b"),
             ])),
@@ -194,7 +193,7 @@ fn free_expression_variants_follow_the_oracle() {
         ),
         (
             "cons",
-            exp(ast::ExpKind::ConsE(
+            exp(ast::ExpKind::Cons(
                 Box::new(variable("head")),
                 Box::new(variable("tail")),
             )),
@@ -202,7 +201,7 @@ fn free_expression_variants_follow_the_oracle() {
         ),
         (
             "concatenate",
-            exp(ast::ExpKind::CatE(
+            exp(ast::ExpKind::Cat(
                 Box::new(variable("left")),
                 Box::new(variable("right")),
             )),
@@ -210,7 +209,7 @@ fn free_expression_variants_follow_the_oracle() {
         ),
         (
             "membership",
-            exp(ast::ExpKind::MemE(
+            exp(ast::ExpKind::Mem(
                 Box::new(variable("element")),
                 Box::new(variable("set")),
             )),
@@ -218,12 +217,12 @@ fn free_expression_variants_follow_the_oracle() {
         ),
         (
             "length",
-            exp(ast::ExpKind::LenE(Box::new(variable("length")))),
+            exp(ast::ExpKind::Len(Box::new(variable("length")))),
             names(&["length"]),
         ),
         (
             "dot",
-            exp(ast::ExpKind::DotE(
+            exp(ast::ExpKind::Dot(
                 Box::new(variable("record")),
                 atom("field"),
             )),
@@ -231,7 +230,7 @@ fn free_expression_variants_follow_the_oracle() {
         ),
         (
             "index",
-            exp(ast::ExpKind::IdxE(
+            exp(ast::ExpKind::Idx(
                 Box::new(variable("base")),
                 Box::new(variable("index")),
             )),
@@ -239,7 +238,7 @@ fn free_expression_variants_follow_the_oracle() {
         ),
         (
             "slice",
-            exp(ast::ExpKind::SliceE(
+            exp(ast::ExpKind::Slice(
                 Box::new(variable("base")),
                 Box::new(variable("low")),
                 Box::new(variable("high")),
@@ -248,7 +247,7 @@ fn free_expression_variants_follow_the_oracle() {
         ),
         (
             "update",
-            exp(ast::ExpKind::UpdE(
+            exp(ast::ExpKind::Upd(
                 Box::new(variable("base")),
                 path,
                 Box::new(variable("replacement")),
@@ -257,22 +256,22 @@ fn free_expression_variants_follow_the_oracle() {
         ),
         (
             "call_omits_definition_and_type_arguments",
-            exp(ast::ExpKind::CallE(
+            exp(ast::ExpKind::Call(
                 id("definition"),
                 vec![Spanned::new(
-                    ast::TypKind::VarT(id("type_arg"), vec![]),
+                    ast::TypKind::Var(id("type_arg"), vec![]),
                     span(),
                 )],
                 vec![
-                    arg(ast::ArgKind::DefA(id("definition_argument"))),
-                    arg(ast::ArgKind::ExpA(Box::new(variable("argument")))),
+                    arg(ast::ArgKind::Def(id("definition_argument"))),
+                    arg(ast::ArgKind::Exp(Box::new(variable("argument")))),
                 ],
             )),
             names(&["argument"]),
         ),
         (
             "iteration_omits_binders",
-            exp(ast::ExpKind::IterE(
+            exp(ast::ExpKind::Iter(
                 Box::new(variable("iterated")),
                 (
                     ast::Iter::List,
@@ -297,43 +296,43 @@ fn free_expression_variants_follow_the_oracle() {
 
 #[test]
 fn free_path_argument_and_premise_variants_follow_the_oracle() {
-    let root = ast::Path::new(ast::PathKind::RootP, ast::TypKind::BoolT, span());
+    let root = ast::path(ast::PathKind::Root, ast::TypKind::Bool, span());
     let paths = vec![
         ("root", root.clone(), names(&[])),
         (
             "index",
-            ast::Path::new(
-                ast::PathKind::IdxP(Box::new(root.clone()), Box::new(variable("index"))),
-                ast::TypKind::BoolT,
+            ast::path(
+                ast::PathKind::Idx(Box::new(root.clone()), Box::new(variable("index"))),
+                ast::TypKind::Bool,
                 span(),
             ),
             names(&["index"]),
         ),
         (
             "slice",
-            ast::Path::new(
-                ast::PathKind::SliceP(
+            ast::path(
+                ast::PathKind::Slice(
                     Box::new(root.clone()),
                     Box::new(variable("low")),
                     Box::new(variable("high")),
                 ),
-                ast::TypKind::BoolT,
+                ast::TypKind::Bool,
                 span(),
             ),
             names(&["low", "high"]),
         ),
         (
             "dot",
-            ast::Path::new(
-                ast::PathKind::DotP(
-                    Box::new(ast::Path::new(
-                        ast::PathKind::IdxP(Box::new(root), Box::new(variable("nested"))),
-                        ast::TypKind::BoolT,
+            ast::path(
+                ast::PathKind::Dot(
+                    Box::new(ast::path(
+                        ast::PathKind::Idx(Box::new(root), Box::new(variable("nested"))),
+                        ast::TypKind::Bool,
                         span(),
                     )),
                     atom("field"),
                 ),
-                ast::TypKind::BoolT,
+                ast::TypKind::Bool,
                 span(),
             ),
             names(&["nested"]),
@@ -345,12 +344,12 @@ fn free_path_argument_and_premise_variants_follow_the_oracle() {
     let args = vec![
         (
             "expression",
-            arg(ast::ArgKind::ExpA(Box::new(variable("arg")))),
+            arg(ast::ArgKind::Exp(Box::new(variable("arg")))),
             names(&["arg"]),
         ),
         (
             "definition",
-            arg(ast::ArgKind::DefA(id("definition"))),
+            arg(ast::ArgKind::Def(id("definition"))),
             names(&[]),
         ),
     ];
@@ -366,45 +365,55 @@ fn free_path_argument_and_premise_variants_follow_the_oracle() {
     for (case, argument, expected) in args {
         assert_eq!(free::free_arg(&argument), expected, "argument {case}");
     }
-    let nested = prem(ast::PremKind::IfPr(variable("nested")));
+    let nested = prem(ast::PremKind::If(ast::IfPrem {
+        exp: variable("nested"),
+    }));
     let prems = vec![
         (
             "rule",
-            prem(ast::PremKind::RulePr(
-                id("relation"),
-                notexp("rule"),
-                InputHint::new(vec![0]),
-            )),
+            prem(ast::PremKind::Rule(ast::RulePrem {
+                id: id("relation"),
+                not_exp: notexp("rule"),
+                input_hint: InputHint::new(vec![0]),
+            })),
             names(&["rule"]),
         ),
         (
             "if",
-            prem(ast::PremKind::IfPr(variable("if"))),
+            prem(ast::PremKind::If(ast::IfPrem {
+                exp: variable("if"),
+            })),
             names(&["if"]),
         ),
         (
             "if_holds",
-            prem(ast::PremKind::IfHoldPr(id("relation"), notexp("holds"))),
+            prem(ast::PremKind::IfHold(ast::IfHoldPrem {
+                id: id("relation"),
+                not_exp: notexp("holds"),
+            })),
             names(&["holds"]),
         ),
         (
             "if_not_holds",
-            prem(ast::PremKind::IfNotHoldPr(
-                id("relation"),
-                notexp("not_holds"),
-            )),
+            prem(ast::PremKind::IfNotHold(ast::IfNotHoldPrem {
+                id: id("relation"),
+                not_exp: notexp("not_holds"),
+            })),
             names(&["not_holds"]),
         ),
         (
             "let",
-            prem(ast::PremKind::LetPr(variable("left"), variable("right"))),
+            prem(ast::PremKind::Let(ast::LetPrem {
+                exp_l: variable("left"),
+                exp_r: variable("right"),
+            })),
             names(&["left", "right"]),
         ),
         (
             "iteration_omits_binder_variables",
-            prem(ast::PremKind::IterPr(
-                Box::new(nested),
-                ast::IterPrem {
+            prem(ast::PremKind::Iter(ast::IteratedPrem {
+                prem: Box::new(nested),
+                iter_prem: ast::IterPrem {
                     iter: ast::Iter::List,
                     vars_bound: vec![ast::Var {
                         id: id("input"),
@@ -417,12 +426,14 @@ fn free_path_argument_and_premise_variants_follow_the_oracle() {
                         iters: vec![],
                     }],
                 },
-            )),
+            })),
             names(&["nested"]),
         ),
         (
             "debug",
-            prem(ast::PremKind::DebugPr(variable("debug"))),
+            prem(ast::PremKind::Debug(ast::DebugPrem {
+                exp: variable("debug"),
+            })),
             names(&["debug"]),
         ),
     ];
@@ -451,7 +462,12 @@ fn free_path_argument_and_premise_variants_follow_the_oracle() {
 
 #[test]
 fn free_aggregates_and_definition_omissions_follow_the_oracle() {
-    let rule = rule("head", vec![prem(ast::PremKind::IfPr(variable("premise")))]);
+    let rule = rule(
+        "head",
+        vec![prem(ast::PremKind::If(ast::IfPrem {
+            exp: variable("premise"),
+        }))],
+    );
     assert_eq!(free::free_rule(&rule), names(&["head", "premise"]));
     assert_eq!(
         free::free_rules(std::slice::from_ref(&rule)),
@@ -493,7 +509,7 @@ fn free_aggregates_and_definition_omissions_follow_the_oracle() {
     );
     let row = Spanned::new(
         (
-            vec![arg(ast::ArgKind::ExpA(Box::new(variable("key"))))],
+            vec![arg(ast::ArgKind::Exp(Box::new(variable("key"))))],
             variable("value"),
         ),
         span(),
@@ -507,14 +523,14 @@ fn free_aggregates_and_definition_omissions_follow_the_oracle() {
         (
             "relation",
             Spanned::new(
-                ast::DefKind::RelD(
-                    id("relation"),
-                    Spanned::new(Mixfix::Arg(typ()), span()),
-                    InputHint::new(vec![]),
-                    vec![group],
-                    Some(else_group),
-                    vec![],
-                ),
+                ast::DefKind::Rel(ast::Rel {
+                    id: id("relation"),
+                    not_typ: Spanned::new(Mixfix::Arg(typ()), span()),
+                    input_hint: InputHint::new(vec![]),
+                    rule_groups: vec![group],
+                    else_group: Some(else_group),
+                    hints: vec![],
+                }),
                 span(),
             ),
             names(&["head", "premise"]),
@@ -522,7 +538,13 @@ fn free_aggregates_and_definition_omissions_follow_the_oracle() {
         (
             "table",
             Spanned::new(
-                ast::DefKind::TableDecD(id("table"), vec![], typ(), vec![row], vec![]),
+                ast::DefKind::TableDec(ast::TableDec {
+                    id: id("table"),
+                    params: vec![],
+                    typ: typ(),
+                    rows: vec![row],
+                    hints: vec![],
+                }),
                 span(),
             ),
             names(&["key", "value"]),
@@ -530,51 +552,64 @@ fn free_aggregates_and_definition_omissions_follow_the_oracle() {
         (
             "function",
             Spanned::new(
-                ast::DefKind::FuncDecD(
-                    id("function"),
-                    vec![],
-                    vec![],
-                    typ(),
-                    vec![clause.clone()],
-                    Some(clause),
-                    vec![],
-                ),
+                ast::DefKind::FuncDec(ast::FuncDec {
+                    id: id("function"),
+                    tparams: vec![],
+                    params: vec![],
+                    typ: typ(),
+                    clauses: vec![clause.clone()],
+                    else_clause: Some(clause),
+                    hints: vec![],
+                }),
                 span(),
             ),
             names(&["argument", "body", "premise"]),
         ),
         (
             "extern_type",
-            Spanned::new(ast::DefKind::ExternTypD(id("ignored"), vec![]), span()),
+            Spanned::new(
+                ast::DefKind::ExternTyp(ast::ExternTyp {
+                    id: id("ignored"),
+                    hints: vec![],
+                }),
+                span(),
+            ),
             names(&[]),
         ),
         (
             "type",
             Spanned::new(
-                ast::DefKind::TypD(
-                    id("ignored"),
-                    vec![],
-                    Spanned::new(ast::DefTypKind::PlainT(typ()), span()),
-                    vec![],
-                ),
+                ast::DefKind::Typ(ast::TypDef {
+                    id: id("ignored"),
+                    tparams: vec![],
+                    def_typ: Spanned::new(ast::DefTypKind::Plain(typ()), span()),
+                    hints: vec![],
+                }),
                 span(),
             ),
             names(&[]),
         ),
         (
             "variable",
-            Spanned::new(ast::DefKind::VarD(id("ignored"), typ(), vec![]), span()),
+            Spanned::new(
+                ast::DefKind::Var(ast::VarDef {
+                    id: id("ignored"),
+                    typ: typ(),
+                    hints: vec![],
+                }),
+                span(),
+            ),
             names(&[]),
         ),
         (
             "extern_relation",
             Spanned::new(
-                ast::DefKind::ExternRelD(
-                    id("ignored"),
-                    Spanned::new(Mixfix::Arg(typ()), span()),
-                    InputHint::new(vec![]),
-                    vec![],
-                ),
+                ast::DefKind::ExternRel(ast::ExternRel {
+                    id: id("ignored"),
+                    not_typ: Spanned::new(Mixfix::Arg(typ()), span()),
+                    input_hint: InputHint::new(vec![]),
+                    hints: vec![],
+                }),
                 span(),
             ),
             names(&[]),
@@ -582,7 +617,13 @@ fn free_aggregates_and_definition_omissions_follow_the_oracle() {
         (
             "extern_declaration",
             Spanned::new(
-                ast::DefKind::ExternDecD(id("ignored"), vec![], vec![], typ(), vec![]),
+                ast::DefKind::ExternDec(ast::ExternDec {
+                    id: id("ignored"),
+                    tparams: vec![],
+                    params: vec![],
+                    typ: typ(),
+                    hints: vec![],
+                }),
                 span(),
             ),
             names(&[]),
@@ -590,7 +631,13 @@ fn free_aggregates_and_definition_omissions_follow_the_oracle() {
         (
             "builtin_declaration",
             Spanned::new(
-                ast::DefKind::BuiltinDecD(id("ignored"), vec![], vec![], typ(), vec![]),
+                ast::DefKind::BuiltinDec(ast::BuiltinDec {
+                    id: id("ignored"),
+                    tparams: vec![],
+                    params: vec![],
+                    typ: typ(),
+                    hints: vec![],
+                }),
                 span(),
             ),
             names(&[]),
@@ -602,15 +649,15 @@ fn free_aggregates_and_definition_omissions_follow_the_oracle() {
 }
 
 fn assert_var(exp: &ast::Exp, expected_id: &ast::Id, expected_ty: ast::TypKind) {
-    let ast::ExpKind::VarE(id) = &exp.kind else {
+    let ast::ExpKind::Var(id) = &exp.node.kind else {
         panic!("expected variable expression")
     };
     assert_eq!(id, expected_id);
-    assert_eq!(exp.ty, expected_ty);
+    assert_eq!(exp.node.note, expected_ty);
     assert_eq!(exp.span, expected_id.span);
 }
 fn assert_iter_type(typ: &ast::Typ, iter: ast::Iter, inner: ast::TypKind, inner_span: &Span) {
-    let ast::TypKind::IterT(inner_typ, actual_iter) = &typ.node else {
+    let ast::TypKind::Iter(inner_typ, actual_iter) = &typ.node else {
         panic!("expected iteration type")
     };
     assert_eq!(*actual_iter, iter);
@@ -624,54 +671,44 @@ fn as_exp_preserves_empty_one_and_two_level_shapes_and_spans() {
     let typ = typ_at("type");
     for dim in [false, true] {
         let empty = var::as_exp(
+            dim,
             &ast::Var {
                 id: id.clone(),
                 typ: typ.clone(),
                 iters: vec![],
             },
-            dim,
         );
-        assert_var(&empty, &id, ast::TypKind::BoolT);
+        assert_var(&empty, &id, ast::TypKind::Bool);
     }
     let one_false = var::as_exp(
+        false,
         &ast::Var {
             id: id.clone(),
             typ: typ.clone(),
             iters: vec![ast::Iter::Opt],
         },
-        false,
     );
-    let ast::Exp {
-        kind: ast::ExpKind::IterE(inner, (ast::Iter::Opt, binders)),
-        ty,
-        span,
-    } = &one_false
-    else {
+    let ast::ExpKind::Iter(inner, (ast::Iter::Opt, binders)) = &one_false.node.kind else {
         panic!("expected one false iteration")
     };
     assert!(binders.is_empty());
-    assert_eq!(span, &id.span);
+    assert_eq!(&one_false.span, &id.span);
     assert_iter_type(
-        &Spanned::new(ty.clone(), typ.span.clone()),
+        &Spanned::new(one_false.node.note.clone(), typ.span.clone()),
         ast::Iter::Opt,
-        ast::TypKind::BoolT,
+        ast::TypKind::Bool,
         &id.span,
     );
-    assert_var(inner, &id, ast::TypKind::BoolT);
+    assert_var(inner, &id, ast::TypKind::Bool);
     let one_true = var::as_exp(
+        true,
         &ast::Var {
             id: id.clone(),
             typ: typ.clone(),
             iters: vec![ast::Iter::Opt],
         },
-        true,
     );
-    let ast::Exp {
-        kind: ast::ExpKind::IterE(inner, (ast::Iter::Opt, binders)),
-        ty,
-        span,
-    } = &one_true
-    else {
+    let ast::ExpKind::Iter(inner, (ast::Iter::Opt, binders)) = &one_true.node.kind else {
         panic!("expected one true iteration")
     };
     let [binder] = binders.as_slice() else {
@@ -680,76 +717,66 @@ fn as_exp_preserves_empty_one_and_two_level_shapes_and_spans() {
     assert_eq!(&binder.id, &id);
     assert_eq!(binder.typ.span, typ.span);
     assert!(binder.iters.is_empty());
-    assert_iter_type(&binder.typ, ast::Iter::Opt, ast::TypKind::BoolT, &id.span);
-    assert_eq!(span, &id.span);
+    assert_iter_type(&binder.typ, ast::Iter::Opt, ast::TypKind::Bool, &id.span);
+    assert_eq!(&one_true.span, &id.span);
     assert_iter_type(
-        &Spanned::new(ty.clone(), typ.span.clone()),
+        &Spanned::new(one_true.node.note.clone(), typ.span.clone()),
         ast::Iter::Opt,
-        ast::TypKind::BoolT,
+        ast::TypKind::Bool,
         &id.span,
     );
-    assert_var(inner, &id, ast::TypKind::BoolT);
+    assert_var(inner, &id, ast::TypKind::Bool);
     for dim in [false, true] {
         let two = var::as_exp(
+            dim,
             &ast::Var {
                 id: id.clone(),
                 typ: typ.clone(),
                 iters: vec![ast::Iter::Opt, ast::Iter::List],
             },
-            dim,
         );
-        let ast::Exp {
-            kind: ast::ExpKind::IterE(inner, (ast::Iter::List, outer_binders)),
-            ty,
-            span,
-        } = &two
-        else {
+        let ast::ExpKind::Iter(inner, (ast::Iter::List, outer_binders)) = &two.node.kind else {
             panic!("expected outer iteration")
         };
-        assert_eq!(span, &id.span);
-        let ast::TypKind::IterT(outer_inner_typ, ast::Iter::List) = ty else {
+        assert_eq!(&two.span, &id.span);
+        let ast::TypKind::Iter(outer_inner_typ, ast::Iter::List) = &two.node.note else {
             panic!("expected outer iteration type")
         };
         assert_eq!(outer_inner_typ.span, id.span);
-        let ast::TypKind::IterT(first_inner_typ, ast::Iter::Opt) = &outer_inner_typ.node else {
+        let ast::TypKind::Iter(first_inner_typ, ast::Iter::Opt) = &outer_inner_typ.node else {
             panic!("expected nested iteration type")
         };
-        assert_eq!(first_inner_typ.node, ast::TypKind::BoolT);
+        assert_eq!(first_inner_typ.node, ast::TypKind::Bool);
         assert_eq!(first_inner_typ.span, id.span);
-        let ast::Exp {
-            kind: ast::ExpKind::IterE(base, (ast::Iter::Opt, inner_binders)),
-            ty: inner_ty,
-            span: inner_span,
-        } = inner.as_ref()
-        else {
+        let ast::ExpKind::Iter(base, (ast::Iter::Opt, inner_binders)) = &inner.node.kind else {
             panic!("expected inner iteration")
         };
-        assert_eq!(inner_span, &id.span);
+        assert_eq!(&inner.span, &id.span);
         assert_iter_type(
-            &Spanned::new(inner_ty.clone(), typ.span.clone()),
+            &Spanned::new(inner.node.note.clone(), typ.span.clone()),
             ast::Iter::Opt,
-            ast::TypKind::BoolT,
+            ast::TypKind::Bool,
             &id.span,
         );
-        assert_var(base, &id, ast::TypKind::BoolT);
+        assert_var(base, &id, ast::TypKind::Bool);
         match (dim, inner_binders.as_slice(), outer_binders.as_slice()) {
             (false, [], []) => {}
             (true, [inner], [outer]) => {
                 assert_eq!(&inner.id, &id);
                 assert_eq!(inner.typ.span, typ.span);
                 assert!(inner.iters.is_empty());
-                assert_iter_type(&inner.typ, ast::Iter::Opt, ast::TypKind::BoolT, &id.span);
+                assert_iter_type(&inner.typ, ast::Iter::Opt, ast::TypKind::Bool, &id.span);
                 assert_eq!(&outer.id, &id);
                 assert_eq!(outer.typ.span, typ.span);
                 assert_eq!(outer.iters, vec![ast::Iter::Opt]);
-                let ast::TypKind::IterT(outer_inner, ast::Iter::List) = &outer.typ.node else {
+                let ast::TypKind::Iter(outer_inner, ast::Iter::List) = &outer.typ.node else {
                     panic!("expected outer binder type")
                 };
                 assert_eq!(outer_inner.span, id.span);
-                let ast::TypKind::IterT(first_inner, ast::Iter::Opt) = &outer_inner.node else {
+                let ast::TypKind::Iter(first_inner, ast::Iter::Opt) = &outer_inner.node else {
                     panic!("expected nested outer binder type")
                 };
-                assert_eq!(first_inner.node, ast::TypKind::BoolT);
+                assert_eq!(first_inner.node, ast::TypKind::Bool);
                 assert_eq!(first_inner.span, id.span);
             }
             _ => panic!("unexpected binders for dim={dim}"),

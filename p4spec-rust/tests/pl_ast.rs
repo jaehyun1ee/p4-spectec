@@ -13,28 +13,23 @@ fn id(name: &str) -> il::ast::Id {
 
 #[test]
 fn annotation_wrappers_forward_source_and_keep_nested_hints() {
-    let nested = pl::annot::Annotated {
-        node: pl::ast::ExpNode {
-            kind: pl::ast::ExpKind::VarE(id("nested")),
-            ty: il::ast::TypKind::BoolT,
-            span: span("nested-source"),
-        },
-        hints: pl::annot::Hints {
-            prose: Some(alter::AlterationHint::TextH("nested prose".to_owned())),
-            ..pl::annot::Hints::default()
-        },
-    };
-    let outer = pl::annot::Annotated::new(pl::ast::ExpNode {
-        kind: pl::ast::ExpKind::UnE(
-            il::ast::UnOp::NotOp,
-            il::ast::OpTyp::BoolT,
+    let mut nested = pl::ast::exp(
+        pl::ast::ExpKind::Var(id("nested")),
+        il::ast::TypKind::Bool,
+        span("nested-source"),
+    );
+    nested.hints.prose = Some(alter::AlterationHint::Text("nested prose".to_owned()));
+    let outer = pl::ast::exp(
+        pl::ast::ExpKind::Un(
+            il::ast::UnOp::Bool(p4spec_rust::lang::xl::bool::UnOp::Not),
+            il::ast::OpTyp::Bool,
             Box::new(nested),
         ),
-        ty: il::ast::TypKind::BoolT,
-        span: span("outer-source"),
-    });
+        il::ast::TypKind::Bool,
+        span("outer-source"),
+    );
 
-    let pl::ast::ExpKind::UnE(_, _, inner) = &outer.node.kind else {
+    let pl::ast::ExpKind::Un(_, _, inner) = &outer.node.node.kind else {
         panic!("expected nested unary expression")
     };
     assert_eq!(outer.node.span, span("outer-source"));

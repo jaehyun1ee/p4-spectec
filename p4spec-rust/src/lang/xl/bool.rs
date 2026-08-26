@@ -2,54 +2,58 @@
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Typ {
-    BoolT,
+    Bool,
 }
 
 // Operations
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum UnOp {
-    NotOp,
+    Not,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum BinOp {
-    AndOp,
-    OrOp,
-    ImplOp,
-    EquivOp,
+    And,
+    Or,
+    Impl,
+    Equiv,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum CmpOp {
-    EqOp,
-    NeOp,
+    Eq,
+    Ne,
 }
 
 // Stringifiers
 
+/// Renders bool
 pub fn string_of_bool(value: bool) -> &'static str {
     if value { "true" } else { "false" }
 }
 
-pub fn string_of_unop(operation: UnOp) -> &'static str {
-    match operation {
-        UnOp::NotOp => "~",
+/// Renders unop
+pub fn string_of_unop(unop: UnOp) -> &'static str {
+    match unop {
+        UnOp::Not => "~",
     }
 }
 
-pub fn string_of_binop(operation: BinOp) -> &'static str {
-    match operation {
-        BinOp::AndOp => "/\\",
-        BinOp::OrOp => "\\/",
-        BinOp::ImplOp => "=>",
-        BinOp::EquivOp => "<=>",
+/// Renders binop
+pub fn string_of_binop(binop: BinOp) -> &'static str {
+    match binop {
+        BinOp::And => "/\\",
+        BinOp::Or => "\\/",
+        BinOp::Impl => "=>",
+        BinOp::Equiv => "<=>",
     }
 }
 
-pub fn string_of_cmpop(operation: CmpOp) -> &'static str {
-    match operation {
-        CmpOp::EqOp => "=",
-        CmpOp::NeOp => "=/=",
+/// Renders cmpop
+pub fn string_of_cmpop(cmpop: CmpOp) -> &'static str {
+    match cmpop {
+        CmpOp::Eq => "=",
+        CmpOp::Ne => "=/=",
     }
 }

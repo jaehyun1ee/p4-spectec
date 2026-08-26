@@ -48,6 +48,7 @@ impl InputHint {
     }
 }
 
+/// Converts to string
 pub fn to_string(hint: &InputHint) -> String {
     format!(
         "hint(input {})",
@@ -60,22 +61,24 @@ pub fn to_string(hint: &InputHint) -> String {
 }
 // Equivalence of hints
 
-pub fn eq(left: &InputHint, right: &InputHint) -> bool {
-    left == right
+/// Checks equality of
+pub fn eq(input_hint_l: &InputHint, input_hint_r: &InputHint) -> bool {
+    input_hint_l == input_hint_r
 }
 
 // Creating hints
 
+/// Initializes the value
 pub fn init(hint_exp: &Exp) -> Option<InputHint> {
     let indices = match &hint_exp.node {
-        ExpKind::SeqE(hint_exps) => hint_exps
+        ExpKind::Seq(hint_exps) => hint_exps
             .iter()
             .map(|hint_exp| match hint_exp.node {
-                ExpKind::HoleE(Hole::Num(index)) => Some(index),
+                ExpKind::Hole(Hole::Num(index)) => Some(index),
                 _ => None,
             })
             .collect(),
-        ExpKind::HoleE(Hole::Num(index)) => Some(vec![*index]),
+        ExpKind::Hole(Hole::Num(index)) => Some(vec![*index]),
         _ => None,
     }?;
     Some(InputHint::new(indices))

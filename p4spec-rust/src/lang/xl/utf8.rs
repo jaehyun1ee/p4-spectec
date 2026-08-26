@@ -8,6 +8,7 @@ pub struct Utf8Error;
 
 // Encoder
 
+/// Applies encode
 pub fn encode(codepoints: &[i64]) -> Result<Vec<u8>, Utf8Error> {
     let mut bytes = Vec::new();
     for &codepoint in codepoints {
@@ -36,6 +37,7 @@ pub fn encode(codepoints: &[i64]) -> Result<Vec<u8>, Utf8Error> {
 
 // Decoder
 
+/// Applies decode
 pub fn decode(bytes: &[u8]) -> Result<Vec<i64>, Utf8Error> {
     let mut codepoints = Vec::new();
     let mut index = 0;

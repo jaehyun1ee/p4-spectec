@@ -1,7 +1,6 @@
-// Keep non-recursive OCaml payloads inline; reserve indirection for
-// recursive edges
+//! Elaboration language model
 
-use crate::domain::{atom::Atom as DomainAtom, source::Spanned};
+use crate::domain::{atom, source::Spanned};
 use crate::lang::xl::num;
 
 // Numbers
@@ -19,7 +18,7 @@ pub type IdKind = String;
 
 // Atoms
 
-pub type Atom = Spanned<DomainAtom>;
+pub type Atom = Spanned<atom::Atom>;
 
 // Iterators
 
@@ -38,58 +37,45 @@ pub type PlainTyp = Spanned<PlainTypKind>;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PlainTypKind {
     /// `bool`
-    BoolT,
+    Bool,
     /// `numtyp`
-    NumT(num::Typ),
+    Num(num::Typ),
     /// `text`
-    TextT,
+    Text,
     /// `id (`<` list(targ, `,`) `>`)?`
-    VarT(Id, Vec<Targ>),
-    /// `(` plaintyp `)`
-    ParenT(Box<PlainTyp>),
-    /// `(` list(plaintyp, `,`) `)`
-    TupleT(Vec<PlainTyp>),
-    /// `plaintyp iter`
-    IterT(Box<PlainTyp>, Iter),
+    Var(Id, Vec<Targ>),
+    /// `(` plain_typ `)`
+    Paren(Box<PlainTyp>),
+    /// `(` list(plain_typ, `,`) `)`
+    Tuple(Vec<PlainTyp>),
+    /// `plain_typ iter`
+    Iter(Box<PlainTyp>, Iter),
 }
 
 // Operators
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum NumOp {
-    DecOp,
-    HexOp,
+    Dec,
+    Hex,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum UnOp {
-    NotOp,
-    PlusOp,
-    MinusOp,
+    Bool(crate::lang::xl::bool::UnOp),
+    Num(num::UnOp),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum BinOp {
-    AndOp,
-    OrOp,
-    ImplOp,
-    EquivOp,
-    AddOp,
-    SubOp,
-    MulOp,
-    DivOp,
-    ModOp,
-    PowOp,
+    Bool(crate::lang::xl::bool::BinOp),
+    Num(num::BinOp),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum CmpOp {
-    EqOp,
-    NeOp,
-    LtOp,
-    GtOp,
-    LeOp,
-    GeOp,
+    Bool(crate::lang::xl::bool::CmpOp),
+    Num(num::CmpOp),
 }
 
 // Expressions
@@ -99,73 +85,71 @@ pub type Exp = Spanned<ExpKind>;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ExpKind {
     /// `bool`
-    BoolE(bool),
+    Bool(bool),
     /// `num`
-    NumE(NumOp, Num),
+    Num(NumOp, Num),
     /// `text`
-    TextE(Text),
+    Text(Text),
     /// `id`
-    VarE(Id),
+    Var(Id),
     /// `unop exp`
-    UnE(UnOp, Box<Exp>),
+    Un(UnOp, Box<Exp>),
     /// `exp binop exp`
-    BinE(Box<Exp>, BinOp, Box<Exp>),
+    Bin(Box<Exp>, BinOp, Box<Exp>),
     /// `exp cmpop exp`
-    CmpE(Box<Exp>, CmpOp, Box<Exp>),
+    Cmp(Box<Exp>, CmpOp, Box<Exp>),
     /// `$(` exp `)`
-    ArithE(Box<Exp>),
+    Arith(Box<Exp>),
     /// `eps`
-    EpsE,
+    Eps,
     /// `[` list(exp, `,`) `]`
-    ListE(Vec<Exp>),
+    List(Vec<Exp>),
     /// `exp :: exp`
-    ConsE(Box<Exp>, Box<Exp>),
+    Cons(Box<Exp>, Box<Exp>),
     /// `exp ++ exp`
-    CatE(Box<Exp>, Box<Exp>),
+    Cat(Box<Exp>, Box<Exp>),
     /// `exp [` exp `]`
-    IdxE(Box<Exp>, Box<Exp>),
+    Idx(Box<Exp>, Box<Exp>),
     /// `exp [` exp `:` exp `]`
-    SliceE(Box<Exp>, Box<Exp>, Box<Exp>),
+    Slice(Box<Exp>, Box<Exp>, Box<Exp>),
     /// `|` exp `|`
-    LenE(Box<Exp>),
+    Len(Box<Exp>),
     /// `exp <- exp`
-    MemE(Box<Exp>, Box<Exp>),
+    Mem(Box<Exp>, Box<Exp>),
     /// `{` list(atom exp, `,`) `}`
-    StrE(Vec<(Atom, Exp)>),
+    Str(Vec<(Atom, Exp)>),
     /// `exp . atom`
-    DotE(Box<Exp>, Atom),
+    Dot(Box<Exp>, Atom),
     /// `exp [` path `=` exp `]`
-    UpdE(Box<Exp>, Path, Box<Exp>),
+    Upd(Box<Exp>, Path, Box<Exp>),
     /// `(` exp `)`
-    ParenE(Box<Exp>),
+    Paren(Box<Exp>),
     /// `(` list2(exp, `,`) `)`
-    TupleE(Vec<Exp>),
+    Tuple(Vec<Exp>),
     /// `$` defid (`<` list(targ, `,`) `>`)? (`(` list(arg, `,`) `)`)?
-    CallE(Id, Vec<Targ>, Vec<Arg>),
+    Call(Id, Vec<Targ>, Vec<Arg>),
     /// `exp iter`
-    IterE(Box<Exp>, Iter),
+    Iter(Box<Exp>, Iter),
     /// `exp <: typ`
-    SubE(Box<Exp>, PlainTyp),
-
+    Sub(Box<Exp>, PlainTyp),
     // Notation expressions
     /// `atom`
-    AtomE(Atom),
+    Atom(Atom),
     /// `list(exp, ` `)`
-    SeqE(Vec<Exp>),
+    Seq(Vec<Exp>),
     /// `exp atom exp`
-    InfixE(Box<Exp>, Atom, Box<Exp>),
+    Infix(Box<Exp>, Atom, Box<Exp>),
     /// ``[({` exp `})]``
-    BrackE(Atom, Box<Exp>, Atom),
-
+    Brack(Atom, Box<Exp>, Atom),
     // Hint expressions
     /// `%N` or `%` or `%%` or `!%`
-    HoleE(Hole),
+    Hole(Hole),
     /// `exp # exp`
-    FuseE(Box<Exp>, Box<Exp>),
+    Fuse(Box<Exp>, Box<Exp>),
     /// `## exp`
-    UnparenE(Box<Exp>),
+    Unparen(Box<Exp>),
     /// `latex (` `"..."`* `)`
-    LatexE(String),
+    Latex(String),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -182,13 +166,13 @@ pub type Path = Spanned<PathKind>;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PathKind {
-    RootP,
+    Root,
     /// `path [` exp `]`
-    IdxP(Box<Path>, Box<Exp>),
+    Idx(Box<Path>, Box<Exp>),
     /// `path [` exp `:` exp `]`
-    SliceP(Box<Path>, Box<Exp>, Box<Exp>),
+    Slice(Box<Path>, Box<Exp>, Box<Exp>),
     /// `path . atom`
-    DotP(Box<Path>, Atom),
+    Dot(Box<Path>, Atom),
 }
 
 // Arguments
@@ -198,9 +182,9 @@ pub type Arg = Spanned<ArgKind>;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ArgKind {
     /// `exp`
-    ExpA(Box<Exp>),
+    Exp(Box<Exp>),
     /// `$id`
-    DefA(Id),
+    Def(Id),
 }
 
 // Type arguments
@@ -210,46 +194,36 @@ pub type TargKind = PlainTypKind;
 
 // Hints
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Hint {
-    pub hintid: Id,
-    pub hintexp: Exp,
-}
+pub type Hint = (Id, Exp);
 
 // Notation types
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Typ {
-    PlainT(PlainTyp),
-    NotationT(NotTyp),
+    Plain(PlainTyp),
+    Notation(NotTyp),
 }
 
 pub type NotTyp = Spanned<NotTypKind>;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum NotTypKind {
-    AtomT(Atom),
-    SeqT(Vec<Typ>),
-    InfixT(Box<Typ>, Atom, Box<Typ>),
-    BrackT(Atom, Box<Typ>, Atom),
+    Atom(Atom),
+    Seq(Vec<Typ>),
+    Infix(Box<Typ>, Atom, Box<Typ>),
+    Brack(Atom, Box<Typ>, Atom),
 }
 
 pub type DefTyp = Spanned<DefTypKind>;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum DefTypKind {
-    PlainTD(PlainTyp),
-    StructTD(Vec<TypField>),
-    VariantTD(Vec<TypCase>),
+    Plain(PlainTyp),
+    Struct(Vec<TypField>),
+    Variant(Vec<TypCase>),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct TypField {
-    pub atom: Atom,
-    pub typ: PlainTyp,
-    pub hints: Vec<Hint>,
-}
-
+pub type TypField = (Atom, PlainTyp, Vec<Hint>);
 pub type TypCase = (Typ, Vec<Hint>);
 
 // Parameters and premises
@@ -258,8 +232,8 @@ pub type Param = Spanned<ParamKind>;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ParamKind {
-    ExpP(PlainTyp),
-    DefP(Id, Vec<TParam>, Vec<Param>, PlainTyp),
+    Exp(PlainTyp),
+    Def(Id, Vec<TParam>, Vec<Param>, PlainTyp),
 }
 
 pub type TParam = Spanned<TParamKind>;
@@ -268,27 +242,54 @@ pub type TParamKind = IdKind;
 pub type Prem = Spanned<PremKind>;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct VarPrem {
+    pub id: Id,
+    pub plain_typ: PlainTyp,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RulePrem {
+    pub id: Id,
+    pub exp: Exp,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RuleNotPrem {
+    pub id: Id,
+    pub exp: Exp,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct IfPrem {
+    pub exp: Exp,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct IterPrem {
+    pub prem: Box<Prem>,
+    pub iter: Iter,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DebugPrem {
+    pub exp: Exp,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PremKind {
-    VarPr(Id, PlainTyp),
-    RulePr(Id, Exp),
-    RuleNotPr(Id, Exp),
-    IfPr(Exp),
-    ElsePr,
-    IterPr(Box<Prem>, Iter),
-    DebugPr(Exp),
+    Var(VarPrem),
+    Rule(RulePrem),
+    RuleNot(RuleNotPrem),
+    If(IfPrem),
+    Else,
+    Iter(IterPrem),
+    Debug(DebugPrem),
 }
 
 // Rules and tables
 
 pub type Rule = Spanned<RuleKind>;
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RuleKind {
-    pub relation_id: Id,
-    pub rule_id: Id,
-    pub expression: Exp,
-    pub premises: Vec<Prem>,
-}
+pub type RuleKind = (Id, Id, Exp, Vec<Prem>);
 
 pub type TableRow = Spanned<TableRowKind>;
 pub type TableRowKind = (Exp, Exp);
@@ -298,21 +299,124 @@ pub type TableRowKind = (Exp, Exp);
 pub type Def = Spanned<DefKind>;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ExternSyntaxDef {
+    pub id: Id,
+    pub hints: Vec<Hint>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SyntaxDef {
+    pub entries: Vec<SyntaxDefEntry>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SyntaxDefEntry {
+    pub id: Id,
+    pub tparams: Vec<TParam>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TypDef {
+    pub id: Id,
+    pub tparams: Vec<TParam>,
+    pub def_typ: DefTyp,
+    pub hints: Vec<Hint>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct VarDef {
+    pub id: Id,
+    pub plain_typ: PlainTyp,
+    pub hints: Vec<Hint>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ExternRelDef {
+    pub id: Id,
+    pub not_typ: NotTyp,
+    pub hints: Vec<Hint>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RelDef {
+    pub id: Id,
+    pub not_typ: NotTyp,
+    pub hints: Vec<Hint>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RuleGroupDef {
+    pub relid: Id,
+    pub groupid: Id,
+    pub rules: Vec<Rule>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ExternDecDef {
+    pub id: Id,
+    pub tparams: Vec<TParam>,
+    pub params: Vec<Param>,
+    pub plain_typ: PlainTyp,
+    pub hints: Vec<Hint>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BuiltinDecDef {
+    pub id: Id,
+    pub tparams: Vec<TParam>,
+    pub params: Vec<Param>,
+    pub plain_typ: PlainTyp,
+    pub hints: Vec<Hint>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TableDecDef {
+    pub id: Id,
+    pub params: Vec<Param>,
+    pub plain_typ: PlainTyp,
+    pub hints: Vec<Hint>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FuncDecDef {
+    pub id: Id,
+    pub tparams: Vec<TParam>,
+    pub params: Vec<Param>,
+    pub plain_typ: PlainTyp,
+    pub hints: Vec<Hint>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TableDef {
+    pub id: Id,
+    pub rows: Vec<TableRow>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FuncDef {
+    pub id: Id,
+    pub tparams: Vec<TParam>,
+    pub args: Vec<Arg>,
+    pub exp: Exp,
+    pub prems: Vec<Prem>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum DefKind {
-    ExternSynD(Id, Vec<Hint>),
-    SynD(Vec<(Id, Vec<TParam>)>),
-    TypD(Id, Vec<TParam>, DefTyp, Vec<Hint>),
-    VarD(Id, PlainTyp, Vec<Hint>),
-    ExternRelD(Id, NotTyp, Vec<Hint>),
-    RelD(Id, NotTyp, Vec<Hint>),
-    RuleGroupD(Id, Id, Vec<Rule>),
-    ExternDecD(Id, Vec<TParam>, Vec<Param>, PlainTyp, Vec<Hint>),
-    BuiltinDecD(Id, Vec<TParam>, Vec<Param>, PlainTyp, Vec<Hint>),
-    TableDecD(Id, Vec<Param>, PlainTyp, Vec<Hint>),
-    FuncDecD(Id, Vec<TParam>, Vec<Param>, PlainTyp, Vec<Hint>),
-    TableDefD(Id, Vec<TableRow>),
-    FuncDefD(Id, Vec<TParam>, Vec<Arg>, Exp, Vec<Prem>),
-    SepD,
+    ExternSyntax(ExternSyntaxDef),
+    Syntax(SyntaxDef),
+    Typ(TypDef),
+    Var(VarDef),
+    ExternRel(ExternRelDef),
+    Rel(RelDef),
+    RuleGroup(RuleGroupDef),
+    ExternDec(ExternDecDef),
+    BuiltinDec(BuiltinDecDef),
+    TableDec(TableDecDef),
+    FuncDec(FuncDecDef),
+    TableDef(TableDef),
+    FuncDef(FuncDef),
+    Sep,
 }
 
 pub type Spec = Vec<Def>;

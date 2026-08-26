@@ -14,7 +14,7 @@ use p4spec_rust::{
 };
 
 fn typ() -> ast::Typ {
-    Spanned::new(ast::TypKind::BoolT, Span::default())
+    Spanned::new(ast::TypKind::Bool, Span::default())
 }
 fn id(name: &str) -> ast::Id {
     Spanned::new(name.into(), Span::default())
@@ -23,10 +23,10 @@ fn atom(name: &str) -> ast::Atom {
     Spanned::new(Atom::Keyword(name.into()), Span::default())
 }
 fn exp(kind: ast::ExpKind) -> ast::Exp {
-    ast::Exp::new(kind, ast::TypKind::BoolT, Span::default())
+    ast::exp(kind, ast::TypKind::Bool, Span::default())
 }
 fn var(name: &str) -> ast::Exp {
-    exp(ast::ExpKind::VarE(id(name)))
+    exp(ast::ExpKind::Var(id(name)))
 }
 fn arg(kind: ast::ArgKind) -> ast::Arg {
     Spanned::new(kind, Span::default())
@@ -37,72 +37,72 @@ fn prem(kind: ast::PremKind) -> ast::Prem {
 fn notexp(name: &str) -> ast::NotExp {
     Mixfix::Seq(vec![Mixfix::Arg(var(name))])
 }
-fn nottyp() -> ast::NotTyp {
+fn not_typ() -> ast::NotTyp {
     Spanned::new(Mixfix::Arg(typ()), Span::default())
 }
 fn names(names: &[&str]) -> BTreeSet<ast::IdKind> {
     names.iter().map(|name| (*name).into()).collect()
 }
 fn hint() -> ast::Hint {
-    p4spec_rust::lang::el::ast::Hint {
-        hintid: Spanned::new("meta".into(), Span::default()),
-        hintexp: Spanned::new(
-            p4spec_rust::lang::el::ast::ExpKind::VarE(Spanned::new(
+    (
+        Spanned::new("meta".into(), Span::default()),
+        Spanned::new(
+            p4spec_rust::lang::el::ast::ExpKind::Var(Spanned::new(
                 "payload".into(),
                 Span::default(),
             )),
             Span::default(),
         ),
-    }
+    )
 }
 
 #[test]
 fn printer_tables_cover_il_constructor_families_and_escapes() {
-    let nested_path = ast::Path::new(
-        ast::PathKind::DotP(
-            Box::new(ast::Path::new(
-                ast::PathKind::IdxP(
-                    Box::new(ast::Path::new(
-                        ast::PathKind::RootP,
-                        ast::TypKind::BoolT,
+    let nested_path = ast::path(
+        ast::PathKind::Dot(
+            Box::new(ast::path(
+                ast::PathKind::Idx(
+                    Box::new(ast::path(
+                        ast::PathKind::Root,
+                        ast::TypKind::Bool,
                         Span::default(),
                     )),
                     Box::new(var("index")),
                 ),
-                ast::TypKind::BoolT,
+                ast::TypKind::Bool,
                 Span::default(),
             )),
             atom("field"),
         ),
-        ast::TypKind::BoolT,
+        ast::TypKind::Bool,
         Span::default(),
     );
     let expressions = vec![
-        ("bool", exp(ast::ExpKind::BoolE(true)), "true"),
+        ("bool", exp(ast::ExpKind::Bool(true)), "true"),
         (
             "number",
-            exp(ast::ExpKind::NumE(ast::Num::Int((-2).into()))),
+            exp(ast::ExpKind::Num(ast::Num::Int((-2).into()))),
             "-2",
         ),
         (
             "text",
-            exp(ast::ExpKind::TextE("\"\\'\x08\t\n\r\u{00e9}".into())),
+            exp(ast::ExpKind::Text("\"\\'\x08\t\n\r\u{00e9}".into())),
             "\"\\\"\\\\'\\b\\t\\n\\r\\195\\169\"",
         ),
         (
             "unary",
-            exp(ast::ExpKind::UnE(
-                ast::UnOp::NotOp,
-                ast::OpTyp::BoolT,
+            exp(ast::ExpKind::Un(
+                ast::UnOp::Bool(p4spec_rust::lang::xl::bool::UnOp::Not),
+                ast::OpTyp::Bool,
                 Box::new(var("x")),
             )),
             "~x",
         ),
         (
             "binary",
-            exp(ast::ExpKind::BinE(
-                ast::BinOp::AddOp,
-                ast::OpTyp::NatT,
+            exp(ast::ExpKind::Bin(
+                ast::BinOp::Num(p4spec_rust::lang::xl::num::BinOp::Add),
+                ast::OpTyp::Nat,
                 Box::new(var("x")),
                 Box::new(var("y")),
             )),
@@ -110,9 +110,9 @@ fn printer_tables_cover_il_constructor_families_and_escapes() {
         ),
         (
             "comparison",
-            exp(ast::ExpKind::CmpE(
-                ast::CmpOp::LeOp,
-                ast::OpTyp::NatT,
+            exp(ast::ExpKind::Cmp(
+                ast::CmpOp::Num(p4spec_rust::lang::xl::num::CmpOp::Le),
+                ast::OpTyp::Nat,
                 Box::new(var("x")),
                 Box::new(var("y")),
             )),
@@ -120,77 +120,77 @@ fn printer_tables_cover_il_constructor_families_and_escapes() {
         ),
         (
             "cast",
-            exp(ast::ExpKind::UpCastE(typ(), Box::new(var("x")))),
+            exp(ast::ExpKind::UpCast(typ(), Box::new(var("x")))),
             "x as bool",
         ),
         (
             "subtype",
-            exp(ast::ExpKind::SubE(
+            exp(ast::ExpKind::Sub(
                 Box::new(var("x")),
                 typ(),
-                Box::new(ast::Subcheck::SkipSC),
+                Box::new(ast::Subcheck::Skip),
             )),
             "x <: bool",
         ),
         (
             "match",
-            exp(ast::ExpKind::MatchE(
+            exp(ast::ExpKind::Match(
                 Box::new(var("x")),
-                ast::Pattern::ListP(ast::ListPattern::Fixed(2)),
+                ast::Pattern::List(ast::ListPattern::Fixed(2)),
             )),
             "x matches [ _/2 ]",
         ),
         (
             "tuple",
-            exp(ast::ExpKind::TupleE(vec![var("x"), var("y")])),
+            exp(ast::ExpKind::Tuple(vec![var("x"), var("y")])),
             "(x, y)",
         ),
-        ("case", exp(ast::ExpKind::CaseE(Box::new(notexp("x")))), "x"),
+        ("case", exp(ast::ExpKind::Case(Box::new(notexp("x")))), "x"),
         (
             "struct",
-            exp(ast::ExpKind::StrE(vec![(atom("field"), var("x"))])),
+            exp(ast::ExpKind::Str(vec![(atom("field"), var("x"))])),
             "{field x}",
         ),
         (
             "option",
-            exp(ast::ExpKind::OptE(Some(Box::new(var("x"))))),
+            exp(ast::ExpKind::Opt(Some(Box::new(var("x"))))),
             "?(x)",
         ),
-        ("empty_option", exp(ast::ExpKind::OptE(None)), "?()"),
+        ("empty_option", exp(ast::ExpKind::Opt(None)), "?()"),
         (
             "list",
-            exp(ast::ExpKind::ListE(vec![var("x"), var("y")])),
+            exp(ast::ExpKind::List(vec![var("x"), var("y")])),
             "[x, y]",
         ),
         (
             "cons",
-            exp(ast::ExpKind::ConsE(Box::new(var("x")), Box::new(var("y")))),
+            exp(ast::ExpKind::Cons(Box::new(var("x")), Box::new(var("y")))),
             "x :: y",
         ),
         (
             "cat",
-            exp(ast::ExpKind::CatE(Box::new(var("x")), Box::new(var("y")))),
+            exp(ast::ExpKind::Cat(Box::new(var("x")), Box::new(var("y")))),
             "x ++ y",
         ),
         (
             "mem",
-            exp(ast::ExpKind::MemE(Box::new(var("x")), Box::new(var("y")))),
+            exp(ast::ExpKind::Mem(Box::new(var("x")), Box::new(var("y")))),
             "x <- y",
         ),
-        ("len", exp(ast::ExpKind::LenE(Box::new(var("x")))), "|x|"),
+        ("len", exp(ast::ExpKind::Len(Box::new(var("x")))), "|x|"),
         (
             "dot",
-            exp(ast::ExpKind::DotE(Box::new(var("x")), atom("field"))),
+            exp(ast::ExpKind::Dot(Box::new(var("x")), atom("field"))),
             "x.field",
         ),
         (
             "idx",
-            exp(ast::ExpKind::IdxE(Box::new(var("x")), Box::new(var("i")))),
+            exp(ast::ExpKind::Idx(Box::new(var("x")), Box::new(var("i")))),
             "x[i]",
         ),
         (
             "slice",
-            exp(ast::ExpKind::SliceE(
+            exp(ast::ExpKind::Slice(
                 Box::new(var("x")),
                 Box::new(var("l")),
                 Box::new(var("h")),
@@ -199,7 +199,7 @@ fn printer_tables_cover_il_constructor_families_and_escapes() {
         ),
         (
             "update",
-            exp(ast::ExpKind::UpdE(
+            exp(ast::ExpKind::Upd(
                 Box::new(var("x")),
                 nested_path,
                 Box::new(var("value")),
@@ -208,19 +208,19 @@ fn printer_tables_cover_il_constructor_families_and_escapes() {
         ),
         (
             "call",
-            exp(ast::ExpKind::CallE(
+            exp(ast::ExpKind::Call(
                 id("f"),
                 vec![typ()],
                 vec![
-                    arg(ast::ArgKind::DefA(id("g"))),
-                    arg(ast::ArgKind::ExpA(Box::new(var("x")))),
+                    arg(ast::ArgKind::Def(id("g"))),
+                    arg(ast::ArgKind::Exp(Box::new(var("x")))),
                 ],
             )),
             "$f<bool>($g, x)",
         ),
         (
             "iter",
-            exp(ast::ExpKind::IterE(
+            exp(ast::ExpKind::Iter(
                 Box::new(var("x")),
                 (
                     ast::Iter::Opt,
@@ -242,32 +242,32 @@ fn printer_tables_cover_il_constructor_families_and_escapes() {
         "\"\\'\x08\u{00e9}"
     );
     assert_eq!(
-        print::string_of_value(&ast::Value::new(
-            ast::ValueKind::TextV("\"\\'\x08\u{00e9}".into()),
-            ast::TypKind::TextT,
+        print::string_of_value(&ast::value(
+            ast::ValueKind::Text("\"\\'\x08\u{00e9}".into()),
+            ast::TypKind::Text,
             Span::default()
         )),
         "\\\"\\\\'\\b\\195\\169"
     );
     assert_eq!(
-        print::string_of_path(&ast::Path::new(
-            ast::PathKind::RootP,
-            ast::TypKind::BoolT,
+        print::string_of_path(&ast::path(
+            ast::PathKind::Root,
+            ast::TypKind::Bool,
             Span::default()
         )),
         ""
     );
     assert_eq!(
-        print::string_of_path(&ast::Path::new(
-            ast::PathKind::DotP(
-                Box::new(ast::Path::new(
-                    ast::PathKind::RootP,
-                    ast::TypKind::BoolT,
+        print::string_of_path(&ast::path(
+            ast::PathKind::Dot(
+                Box::new(ast::path(
+                    ast::PathKind::Root,
+                    ast::TypKind::Bool,
                     Span::default()
                 )),
                 atom("root")
             ),
-            ast::TypKind::BoolT,
+            ast::TypKind::Bool,
             Span::default()
         )),
         "root"
@@ -289,13 +289,13 @@ fn printer_renders_nested_premises_and_definition_spec_goldens() {
             iters: vec![ast::Iter::Opt],
         }],
     };
-    let nested = prem(ast::PremKind::IterPr(
-        Box::new(prem(ast::PremKind::IterPr(
-            Box::new(prem(ast::PremKind::IfPr(var("ready")))),
-            iteration.clone(),
-        ))),
-        iteration,
-    ));
+    let nested = prem(ast::PremKind::Iter(ast::IteratedPrem {
+        prem: Box::new(prem(ast::PremKind::Iter(ast::IteratedPrem {
+            prem: Box::new(prem(ast::PremKind::If(ast::IfPrem { exp: var("ready") }))),
+            iter_prem: iteration.clone(),
+        }))),
+        iter_prem: iteration,
+    }));
     assert_eq!(
         print::string_of_prem(&nested),
         "(if ready)*{bound <- bound*, output? -> output?*}*{bound <- bound*, output? -> output?*}"
@@ -303,14 +303,17 @@ fn printer_renders_nested_premises_and_definition_spec_goldens() {
     let rule = Spanned::new(
         ast::RuleKind {
             id: id("r"),
-            notation: notexp("head"),
-            premises: vec![
-                prem(ast::PremKind::RulePr(
-                    id("relation"),
-                    notexp("input"),
-                    InputHint::new(vec![0]),
-                )),
-                prem(ast::PremKind::LetPr(var("left"), var("right"))),
+            not_exp: notexp("head"),
+            prems: vec![
+                prem(ast::PremKind::Rule(ast::RulePrem {
+                    id: id("relation"),
+                    not_exp: notexp("input"),
+                    input_hint: InputHint::new(vec![0]),
+                })),
+                prem(ast::PremKind::Let(ast::LetPrem {
+                    exp_l: var("left"),
+                    exp_r: var("right"),
+                })),
                 nested,
             ],
         },
@@ -320,81 +323,113 @@ fn printer_renders_nested_premises_and_definition_spec_goldens() {
     let else_group = Spanned::new((id("fallback"), rule.clone()), Span::default());
     let clause = Spanned::new(
         ast::ClauseKind {
-            args: vec![arg(ast::ArgKind::ExpA(Box::new(var("argument"))))],
+            args: vec![arg(ast::ArgKind::Exp(Box::new(var("argument"))))],
             expression: var("result"),
-            premises: vec![prem(ast::PremKind::DebugPr(var("debug")))],
+            premises: vec![prem(ast::PremKind::Debug(ast::DebugPrem {
+                exp: var("debug"),
+            }))],
         },
         Span::default(),
     );
     let row = Spanned::new(
         (
-            vec![arg(ast::ArgKind::ExpA(Box::new(var("key"))))],
+            vec![arg(ast::ArgKind::Exp(Box::new(var("key"))))],
             var("value"),
         ),
         Span::default(),
     );
     let definitions = vec![
         Spanned::new(
-            ast::DefKind::ExternTypD(id("Syntax"), vec![]),
+            ast::DefKind::ExternTyp(ast::ExternTyp {
+                id: id("Syntax"),
+                hints: vec![],
+            }),
             Span::default(),
         ),
         Spanned::new(
-            ast::DefKind::TypD(
-                id("Alias"),
-                vec![Spanned::new("T".into(), Span::default())],
-                Spanned::new(
-                    ast::DefTypKind::VariantT(vec![ast::TypCase {
-                        notation: nottyp(),
-                        origin: Spanned::new((id("Origin"), vec![]), Span::default()),
-                        hints: vec![],
-                    }]),
+            ast::DefKind::Typ(ast::TypDef {
+                id: id("Alias"),
+                tparams: vec![Spanned::new("T".into(), Span::default())],
+                def_typ: Spanned::new(
+                    ast::DefTypKind::Variant(vec![(
+                        not_typ(),
+                        Spanned::new((id("Origin"), vec![]), Span::default()),
+                        vec![],
+                    )]),
                     Span::default(),
                 ),
-                vec![],
-            ),
+                hints: vec![],
+            }),
             Span::default(),
         ),
         Spanned::new(
-            ast::DefKind::VarD(id("value"), typ(), vec![]),
+            ast::DefKind::Var(ast::VarDef {
+                id: id("value"),
+                typ: typ(),
+                hints: vec![],
+            }),
             Span::default(),
         ),
         Spanned::new(
-            ast::DefKind::ExternRelD(id("external"), nottyp(), InputHint::new(vec![]), vec![]),
+            ast::DefKind::ExternRel(ast::ExternRel {
+                id: id("external"),
+                not_typ: not_typ(),
+                input_hint: InputHint::new(vec![]),
+                hints: vec![],
+            }),
             Span::default(),
         ),
         Spanned::new(
-            ast::DefKind::RelD(
-                id("relation"),
-                nottyp(),
-                InputHint::new(vec![]),
-                vec![group],
-                Some(else_group),
-                vec![],
-            ),
+            ast::DefKind::Rel(ast::Rel {
+                id: id("relation"),
+                not_typ: not_typ(),
+                input_hint: InputHint::new(vec![]),
+                rule_groups: vec![group],
+                else_group: Some(else_group),
+                hints: vec![],
+            }),
             Span::default(),
         ),
         Spanned::new(
-            ast::DefKind::ExternDecD(id("extern"), vec![], vec![], typ(), vec![]),
+            ast::DefKind::ExternDec(ast::ExternDec {
+                id: id("extern"),
+                tparams: vec![],
+                params: vec![],
+                typ: typ(),
+                hints: vec![],
+            }),
             Span::default(),
         ),
         Spanned::new(
-            ast::DefKind::BuiltinDecD(id("builtin"), vec![], vec![], typ(), vec![]),
+            ast::DefKind::BuiltinDec(ast::BuiltinDec {
+                id: id("builtin"),
+                tparams: vec![],
+                params: vec![],
+                typ: typ(),
+                hints: vec![],
+            }),
             Span::default(),
         ),
         Spanned::new(
-            ast::DefKind::TableDecD(id("table"), vec![], typ(), vec![row], vec![]),
+            ast::DefKind::TableDec(ast::TableDec {
+                id: id("table"),
+                params: vec![],
+                typ: typ(),
+                rows: vec![row],
+                hints: vec![],
+            }),
             Span::default(),
         ),
         Spanned::new(
-            ast::DefKind::FuncDecD(
-                id("function"),
-                vec![],
-                vec![],
-                typ(),
-                vec![clause.clone()],
-                Some(clause),
-                vec![],
-            ),
+            ast::DefKind::FuncDec(ast::FuncDec {
+                id: id("function"),
+                tparams: vec![],
+                params: vec![],
+                typ: typ(),
+                clauses: vec![clause.clone()],
+                else_clause: Some(clause),
+                hints: vec![],
+            }),
             Span::default(),
         ),
     ];
@@ -432,7 +467,11 @@ fn printer_renders_nested_premises_and_definition_spec_goldens() {
     assert_eq!(print::string_of_hints(&[hint()]), " hint(meta payload)");
     assert_eq!(
         print::string_of_def(&Spanned::new(
-            ast::DefKind::VarD(id("hidden_metadata"), typ(), vec![hint()]),
+            ast::DefKind::Var(ast::VarDef {
+                id: id("hidden_metadata"),
+                typ: typ(),
+                hints: vec![hint()],
+            }),
             Span::default(),
         )),
         "var hidden_metadata : bool"
@@ -444,7 +483,9 @@ fn fresh_uses_aliases_collisions_wildcards_and_dimensions_deterministically() {
     let at = Span::new(Position::new("fresh", 0, 0), Position::new("fresh", 0, 0));
     let ids = names(&["bool", "bool'", "bool_1"]);
     assert_eq!(
-        fresh::id(&ids, &Spanned::new("bool".into(), at.clone())).node,
+        fresh::var_from_typ(&BTreeMap::new(), &ids, at.clone(), &typ())
+            .id
+            .node,
         "bool''"
     );
     let mut aliases = BTreeMap::new();
@@ -456,7 +497,7 @@ fn fresh_uses_aliases_collisions_wildcards_and_dimensions_deterministically() {
             alias.typ.node.clone(),
             alias.iters.as_slice()
         ),
-        ("B", ast::TypKind::BoolT, &[] as &[ast::Iter])
+        ("B", ast::TypKind::Bool, &[] as &[ast::Iter])
     );
     aliases.insert("C".into(), typ());
     assert_eq!(
@@ -472,9 +513,9 @@ fn fresh_uses_aliases_collisions_wildcards_and_dimensions_deterministically() {
         "_bool"
     );
     let nested = Spanned::new(
-        ast::TypKind::IterT(
+        ast::TypKind::Iter(
             Box::new(Spanned::new(
-                ast::TypKind::IterT(Box::new(typ()), ast::Iter::Opt),
+                ast::TypKind::Iter(Box::new(typ()), ast::Iter::Opt),
                 at.clone(),
             )),
             ast::Iter::List,
@@ -483,54 +524,47 @@ fn fresh_uses_aliases_collisions_wildcards_and_dimensions_deterministically() {
     );
     let nested_var = fresh::var_from_typ(&BTreeMap::new(), &BTreeSet::new(), at.clone(), &nested);
     assert_eq!(nested_var.id.node, "bool");
-    assert_eq!(nested_var.typ.node, ast::TypKind::BoolT);
+    assert_eq!(nested_var.typ.node, ast::TypKind::Bool);
     assert_eq!(nested_var.iters, vec![ast::Iter::Opt, ast::Iter::List]);
-    let from_exp = fresh::var_from_exp(
-        &BTreeMap::new(),
-        &BTreeSet::new(),
-        &ast::Exp::new(ast::ExpKind::BoolE(true), ast::TypKind::TextT, at.clone()),
-    );
-    assert_eq!(from_exp.id.span, at);
-    assert_eq!(from_exp.id.node, "text");
 }
 
 #[test]
 fn printer_tables_cover_remaining_public_arms() {
     let type_cases = vec![
-        (Spanned::new(ast::TypKind::BoolT, Span::default()), "bool"),
+        (Spanned::new(ast::TypKind::Bool, Span::default()), "bool"),
         (
             Spanned::new(
-                ast::TypKind::NumT(p4spec_rust::lang::xl::num::Typ::NatT),
+                ast::TypKind::Num(p4spec_rust::lang::xl::num::Typ::Nat),
                 Span::default(),
             ),
             "nat",
         ),
         (
             Spanned::new(
-                ast::TypKind::NumT(p4spec_rust::lang::xl::num::Typ::IntT),
+                ast::TypKind::Num(p4spec_rust::lang::xl::num::Typ::Int),
                 Span::default(),
             ),
             "int",
         ),
-        (Spanned::new(ast::TypKind::TextT, Span::default()), "text"),
+        (Spanned::new(ast::TypKind::Text, Span::default()), "text"),
         (
-            Spanned::new(ast::TypKind::VarT(id("T"), vec![typ()]), Span::default()),
+            Spanned::new(ast::TypKind::Var(id("T"), vec![typ()]), Span::default()),
             "T<bool>",
         ),
         (
-            Spanned::new(ast::TypKind::TupleT(vec![typ(), typ()]), Span::default()),
+            Spanned::new(ast::TypKind::Tuple(vec![typ(), typ()]), Span::default()),
             "(bool, bool)",
         ),
         (
             Spanned::new(
-                ast::TypKind::IterT(Box::new(typ()), ast::Iter::List),
+                ast::TypKind::Iter(Box::new(typ()), ast::Iter::List),
                 Span::default(),
             ),
             "bool*",
         ),
         (
             Spanned::new(
-                ast::TypKind::FuncT(
+                ast::TypKind::Func(
                     vec![Spanned::new("T".into(), Span::default())],
                     vec![typ()],
                     Box::new(typ()),
@@ -543,7 +577,7 @@ fn printer_tables_cover_remaining_public_arms() {
     for (typ, expected) in type_cases {
         assert_eq!(print::string_of_typ(&typ), expected);
     }
-    let nottyp = Spanned::new(
+    let not_typ = Spanned::new(
         Mixfix::Infix(
             Box::new(Mixfix::Arg(typ())),
             atom("or"),
@@ -551,114 +585,110 @@ fn printer_tables_cover_remaining_public_arms() {
         ),
         Span::default(),
     );
-    assert_eq!(print::string_of_nottyp(&nottyp), "bool or bool");
+    assert_eq!(print::string_of_not_typ(&not_typ), "bool or bool");
     let origin = Spanned::new((id("Origin"), vec![typ()]), Span::default());
     let def_types = vec![
         (
-            Spanned::new(ast::DefTypKind::PlainT(typ()), Span::default()),
+            Spanned::new(ast::DefTypKind::Plain(typ()), Span::default()),
             "bool",
         ),
         (
             Spanned::new(
-                ast::DefTypKind::StructT(vec![(atom("field"), typ())]),
+                ast::DefTypKind::Struct(vec![(atom("field"), typ())]),
                 Span::default(),
             ),
             "{field bool}",
         ),
         (
             Spanned::new(
-                ast::DefTypKind::VariantT(vec![ast::TypCase {
-                    notation: nottyp.clone(),
-                    origin,
-                    hints: vec![hint()],
-                }]),
+                ast::DefTypKind::Variant(vec![(not_typ.clone(), origin, vec![hint()])]),
                 Span::default(),
             ),
             "\n   | bool or bool (from Origin<bool>)  hint(meta payload)",
         ),
     ];
-    for (deftyp, expected) in def_types {
-        assert_eq!(print::string_of_deftyp(&deftyp), expected);
+    for (def_typ, expected) in def_types {
+        assert_eq!(print::string_of_def_typ(&def_typ), expected);
     }
     assert_eq!(print::string_of_typs(",", &[]), "");
-    assert_eq!(print::string_of_typfields(",", &[]), "");
-    assert_eq!(print::string_of_typcases(",", &[]), "");
+    assert_eq!(print::string_of_typ_fields(",", &[]), "");
+    assert_eq!(print::string_of_typ_cases(",", &[]), "");
     let bool_value = |value| {
-        ast::Value::new(
-            ast::ValueKind::BoolV(value),
-            ast::TypKind::BoolT,
+        ast::value(
+            ast::ValueKind::Bool(value),
+            ast::TypKind::Bool,
             Span::default(),
         )
     };
     let values = vec![
         (
-            ast::Value::new(
-                ast::ValueKind::BoolV(true),
-                ast::TypKind::BoolT,
+            ast::value(
+                ast::ValueKind::Bool(true),
+                ast::TypKind::Bool,
                 Span::default(),
             ),
             "true",
         ),
         (
-            ast::Value::new(
-                ast::ValueKind::NumV(ast::Num::Nat(2.into())),
-                ast::TypKind::NumT(p4spec_rust::lang::xl::num::Typ::NatT),
+            ast::value(
+                ast::ValueKind::Num(ast::Num::Nat(2.into())),
+                ast::TypKind::Num(p4spec_rust::lang::xl::num::Typ::Nat),
                 Span::default(),
             ),
             "2",
         ),
         (
-            ast::Value::new(
-                ast::ValueKind::StructV(vec![]),
-                ast::TypKind::BoolT,
+            ast::value(
+                ast::ValueKind::Struct(vec![]),
+                ast::TypKind::Bool,
                 Span::default(),
             ),
             "{}",
         ),
         (
-            ast::Value::new(
-                ast::ValueKind::TupleV(vec![bool_value(true)]),
-                ast::TypKind::BoolT,
+            ast::value(
+                ast::ValueKind::Tuple(vec![bool_value(true)]),
+                ast::TypKind::Bool,
                 Span::default(),
             ),
             "(true)",
         ),
         (
-            ast::Value::new(
-                ast::ValueKind::OptV(Some(Box::new(bool_value(true)))),
-                ast::TypKind::BoolT,
+            ast::value(
+                ast::ValueKind::Opt(Some(Box::new(bool_value(true)))),
+                ast::TypKind::Bool,
                 Span::default(),
             ),
             "Some(true)",
         ),
         (
-            ast::Value::new(
-                ast::ValueKind::OptV(None),
-                ast::TypKind::BoolT,
+            ast::value(
+                ast::ValueKind::Opt(None),
+                ast::TypKind::Bool,
                 Span::default(),
             ),
             "None",
         ),
         (
-            ast::Value::new(
-                ast::ValueKind::ListV(vec![]),
-                ast::TypKind::BoolT,
+            ast::value(
+                ast::ValueKind::List(vec![]),
+                ast::TypKind::Bool,
                 Span::default(),
             ),
             "[]",
         ),
         (
-            ast::Value::new(
-                ast::ValueKind::FuncV(id("f")),
-                ast::TypKind::BoolT,
+            ast::value(
+                ast::ValueKind::Func(id("f")),
+                ast::TypKind::Bool,
                 Span::default(),
             ),
             "$f",
         ),
         (
-            ast::Value::new(
-                ast::ValueKind::ExternV(ExternalData::Null),
-                ast::TypKind::BoolT,
+            ast::value(
+                ast::ValueKind::Extern(ExternalData::Null),
+                ast::TypKind::Bool,
                 Span::default(),
             ),
             "extern",
@@ -667,22 +697,22 @@ fn printer_tables_cover_remaining_public_arms() {
     for (value, expected) in values {
         assert_eq!(print::string_of_value(&value), expected);
     }
-    let structured = ast::Value::new(
-        ast::ValueKind::StructV(vec![(atom("field"), bool_value(true))]),
-        ast::TypKind::BoolT,
+    let structured = ast::value(
+        ast::ValueKind::Struct(vec![(atom("field"), bool_value(true))]),
+        ast::TypKind::Bool,
         Span::default(),
     );
-    let listed = ast::Value::new(
-        ast::ValueKind::ListV(vec![bool_value(true)]),
-        ast::TypKind::BoolT,
+    let listed = ast::value(
+        ast::ValueKind::List(vec![bool_value(true)]),
+        ast::TypKind::Bool,
         Span::default(),
     );
-    let cased = ast::Value::new(
-        ast::ValueKind::CaseV(Box::new(Mixfix::Seq(vec![
+    let cased = ast::value(
+        ast::ValueKind::Case(Box::new(Mixfix::Seq(vec![
             Mixfix::Atom(atom("TAG")),
             Mixfix::Arg(bool_value(true)),
         ]))),
-        ast::TypKind::BoolT,
+        ast::TypKind::Bool,
         Span::default(),
     );
     assert_eq!(
@@ -698,75 +728,111 @@ fn printer_tables_cover_remaining_public_arms() {
     assert_eq!(print::string_of_value(&cased), "TAG true");
     assert_eq!(print::string_of_short_value(&cased), "TAG %");
     for (operator, expected) in [
-        (ast::UnOp::NotOp, "~"),
-        (ast::UnOp::PlusOp, "+"),
-        (ast::UnOp::MinusOp, "-"),
+        (ast::UnOp::Bool(p4spec_rust::lang::xl::bool::UnOp::Not), "~"),
+        (ast::UnOp::Num(p4spec_rust::lang::xl::num::UnOp::Plus), "+"),
+        (ast::UnOp::Num(p4spec_rust::lang::xl::num::UnOp::Minus), "-"),
     ] {
-        assert_eq!(print::string_of_unop(operator), expected);
+        assert_eq!(
+            p4spec_rust::lang::el::print::string_of_unop(operator),
+            expected
+        );
     }
     for (operator, expected) in [
-        (ast::BinOp::AndOp, "/\\"),
-        (ast::BinOp::OrOp, "\\/"),
-        (ast::BinOp::ImplOp, "=>"),
-        (ast::BinOp::EquivOp, "<=>"),
-        (ast::BinOp::AddOp, "+"),
-        (ast::BinOp::SubOp, "-"),
-        (ast::BinOp::MulOp, "*"),
-        (ast::BinOp::DivOp, "/"),
-        (ast::BinOp::ModOp, "\\"),
-        (ast::BinOp::PowOp, "^"),
+        (
+            ast::BinOp::Bool(p4spec_rust::lang::xl::bool::BinOp::And),
+            "/\\",
+        ),
+        (
+            ast::BinOp::Bool(p4spec_rust::lang::xl::bool::BinOp::Or),
+            "\\/",
+        ),
+        (
+            ast::BinOp::Bool(p4spec_rust::lang::xl::bool::BinOp::Impl),
+            "=>",
+        ),
+        (
+            ast::BinOp::Bool(p4spec_rust::lang::xl::bool::BinOp::Equiv),
+            "<=>",
+        ),
+        (ast::BinOp::Num(p4spec_rust::lang::xl::num::BinOp::Add), "+"),
+        (ast::BinOp::Num(p4spec_rust::lang::xl::num::BinOp::Sub), "-"),
+        (ast::BinOp::Num(p4spec_rust::lang::xl::num::BinOp::Mul), "*"),
+        (ast::BinOp::Num(p4spec_rust::lang::xl::num::BinOp::Div), "/"),
+        (
+            ast::BinOp::Num(p4spec_rust::lang::xl::num::BinOp::Mod),
+            "\\",
+        ),
+        (ast::BinOp::Num(p4spec_rust::lang::xl::num::BinOp::Pow), "^"),
     ] {
-        assert_eq!(print::string_of_binop(operator), expected);
+        assert_eq!(
+            p4spec_rust::lang::el::print::string_of_binop(operator),
+            expected
+        );
     }
     for (operator, expected) in [
-        (ast::CmpOp::EqOp, "="),
-        (ast::CmpOp::NeOp, "=/="),
-        (ast::CmpOp::LtOp, "<"),
-        (ast::CmpOp::GtOp, ">"),
-        (ast::CmpOp::LeOp, "<="),
-        (ast::CmpOp::GeOp, ">="),
+        (
+            ast::CmpOp::Bool(p4spec_rust::lang::xl::bool::CmpOp::Eq),
+            "=",
+        ),
+        (
+            ast::CmpOp::Bool(p4spec_rust::lang::xl::bool::CmpOp::Ne),
+            "=/=",
+        ),
+        (ast::CmpOp::Num(p4spec_rust::lang::xl::num::CmpOp::Lt), "<"),
+        (ast::CmpOp::Num(p4spec_rust::lang::xl::num::CmpOp::Gt), ">"),
+        (ast::CmpOp::Num(p4spec_rust::lang::xl::num::CmpOp::Le), "<="),
+        (ast::CmpOp::Num(p4spec_rust::lang::xl::num::CmpOp::Ge), ">="),
     ] {
-        assert_eq!(print::string_of_cmpop(operator), expected);
+        assert_eq!(
+            p4spec_rust::lang::el::print::string_of_cmpop(operator),
+            expected
+        );
     }
     let patterns = vec![
         (
-            ast::Pattern::CaseP(Box::new(Mixfix::Atom(atom("TAG")))),
+            ast::Pattern::Case(Box::new(Mixfix::Atom(atom("TAG")))),
             "TAG",
         ),
-        (ast::Pattern::ListP(ast::ListPattern::Cons), "_ :: _"),
-        (ast::Pattern::ListP(ast::ListPattern::Fixed(3)), "[ _/3 ]"),
-        (ast::Pattern::ListP(ast::ListPattern::Nil), "[]"),
-        (ast::Pattern::OptP(ast::OptPattern::Some), "(_)"),
-        (ast::Pattern::OptP(ast::OptPattern::None), "()"),
+        (ast::Pattern::List(ast::ListPattern::Cons), "_ :: _"),
+        (ast::Pattern::List(ast::ListPattern::Fixed(3)), "[ _/3 ]"),
+        (ast::Pattern::List(ast::ListPattern::Nil), "[]"),
+        (ast::Pattern::Opt(ast::OptPattern::Some), "(_)"),
+        (ast::Pattern::Opt(ast::OptPattern::None), "()"),
     ];
     for (pattern, expected) in patterns {
         assert_eq!(print::string_of_pattern(&pattern), expected);
     }
-    let slice_path = ast::Path::new(
-        ast::PathKind::SliceP(
-            Box::new(ast::Path::new(
-                ast::PathKind::RootP,
-                ast::TypKind::BoolT,
+    let slice_path = ast::path(
+        ast::PathKind::Slice(
+            Box::new(ast::path(
+                ast::PathKind::Root,
+                ast::TypKind::Bool,
                 Span::default(),
             )),
             Box::new(var("low")),
             Box::new(var("high")),
         ),
-        ast::TypKind::BoolT,
+        ast::TypKind::Bool,
         Span::default(),
     );
     assert_eq!(print::string_of_path(&slice_path), "[low : high]");
     assert_eq!(
-        print::string_of_exp(&exp(ast::ExpKind::DownCastE(typ(), Box::new(var("x"))))),
+        print::string_of_exp(&exp(ast::ExpKind::DownCast(typ(), Box::new(var("x"))))),
         "x as bool"
     );
     let premise_cases = vec![
         (
-            prem(ast::PremKind::IfHoldPr(id("r"), notexp("x"))),
+            prem(ast::PremKind::IfHold(ast::IfHoldPrem {
+                id: id("r"),
+                not_exp: notexp("x"),
+            })),
             "if r: x holds",
         ),
         (
-            prem(ast::PremKind::IfNotHoldPr(id("r"), notexp("x"))),
+            prem(ast::PremKind::IfNotHold(ast::IfNotHoldPrem {
+                id: id("r"),
+                not_exp: notexp("x"),
+            })),
             "if r: x does not hold",
         ),
     ];
@@ -774,11 +840,14 @@ fn printer_tables_cover_remaining_public_arms() {
         assert_eq!(print::string_of_prem(&premise), expected);
     }
     assert_eq!(
-        print::string_of_prems(&[prem(ast::PremKind::IfPr(var("ready")))]),
+        print::string_of_prems(&[prem(ast::PremKind::If(ast::IfPrem { exp: var("ready") }))]),
         "\n-- if ready"
     );
     assert_eq!(
-        print::string_of_prems_with(1, &[prem(ast::PremKind::IfPr(var("ready")))]),
+        print::string_of_prems_with(
+            1,
+            &[prem(ast::PremKind::If(ast::IfPrem { exp: var("ready") }))],
+        ),
         "\n  -- if ready"
     );
     assert_eq!(print::string_of_params(&[]), "");
@@ -790,39 +859,29 @@ fn printer_tables_cover_remaining_public_arms() {
 }
 
 fn assert_iterated_exp(exp: &ast::Exp, dim: bool, id_span: &Span, typ_span: &Span) {
-    let ast::Exp {
-        kind: ast::ExpKind::IterE(inner, (ast::Iter::List, outer_binders)),
-        ty,
-        span,
-    } = exp
-    else {
+    let ast::ExpKind::Iter(inner, (ast::Iter::List, outer_binders)) = &exp.node.kind else {
         panic!("outer iteration")
     };
-    assert_eq!(span, id_span);
-    let ast::TypKind::IterT(outer_typ, ast::Iter::List) = ty else {
+    assert_eq!(&exp.span, id_span);
+    let ast::TypKind::Iter(outer_typ, ast::Iter::List) = &exp.node.note else {
         panic!("outer type")
     };
     assert_eq!(&outer_typ.span, id_span);
-    let ast::TypKind::IterT(base_typ, ast::Iter::Opt) = &outer_typ.node else {
+    let ast::TypKind::Iter(base_typ, ast::Iter::Opt) = &outer_typ.node else {
         panic!("inner type")
     };
-    assert_eq!(base_typ.node, ast::TypKind::BoolT);
+    assert_eq!(base_typ.node, ast::TypKind::Bool);
     assert_eq!(&base_typ.span, id_span);
-    let ast::Exp {
-        kind: ast::ExpKind::IterE(base, (ast::Iter::Opt, inner_binders)),
-        ty: inner_ty,
-        span: inner_span,
-    } = inner.as_ref()
-    else {
+    let ast::ExpKind::Iter(base, (ast::Iter::Opt, inner_binders)) = &inner.node.kind else {
         panic!("inner iteration")
     };
-    assert_eq!(inner_span, id_span);
+    assert_eq!(&inner.span, id_span);
     assert!(
-        matches!(inner_ty, ast::TypKind::IterT(typ, ast::Iter::Opt) if typ.node == ast::TypKind::BoolT && typ.span == *id_span)
+        matches!(&inner.node.note, ast::TypKind::Iter(typ, ast::Iter::Opt) if typ.node == ast::TypKind::Bool && typ.span == *id_span)
     );
-    assert!(matches!(base.kind, ast::ExpKind::VarE(_)));
+    assert!(matches!(base.node.kind, ast::ExpKind::Var(_)));
     assert_eq!(base.span, *id_span);
-    assert_eq!(base.ty, ast::TypKind::BoolT);
+    assert_eq!(base.node.note, ast::TypKind::Bool);
     match (dim, inner_binders.as_slice(), outer_binders.as_slice()) {
         (false, [], []) => {}
         (true, [inner], [outer]) => {
@@ -831,14 +890,14 @@ fn assert_iterated_exp(exp: &ast::Exp, dim: bool, id_span: &Span, typ_span: &Spa
             assert_eq!(&inner.typ.span, typ_span);
             assert!(inner.iters.is_empty());
             assert!(
-                matches!(inner.typ.node, ast::TypKind::IterT(ref typ, ast::Iter::Opt) if typ.node == ast::TypKind::BoolT && typ.span == *id_span)
+                matches!(inner.typ.node, ast::TypKind::Iter(ref typ, ast::Iter::Opt) if typ.node == ast::TypKind::Bool && typ.span == *id_span)
             );
             assert_eq!(&outer.id.span, id_span);
             assert_eq!(outer.id.node, "bool");
             assert_eq!(&outer.typ.span, typ_span);
             assert_eq!(outer.iters, vec![ast::Iter::Opt]);
             assert!(
-                matches!(outer.typ.node, ast::TypKind::IterT(ref typ, ast::Iter::List) if matches!(typ.node, ast::TypKind::IterT(ref base, ast::Iter::Opt) if base.node == ast::TypKind::BoolT && base.span == *id_span) && typ.span == *id_span)
+                matches!(outer.typ.node, ast::TypKind::Iter(ref typ, ast::Iter::List) if matches!(typ.node, ast::TypKind::Iter(ref base, ast::Iter::Opt) if base.node == ast::TypKind::Bool && base.span == *id_span) && typ.span == *id_span)
             );
         }
         _ => panic!("binder shape"),
@@ -852,7 +911,7 @@ fn fresh_exact_edges_preserve_aliases_regions_and_full_dimension_shapes() {
         Position::new("requested", 0, 0),
     );
     let alias_typ = Spanned::new(
-        ast::TypKind::BoolT,
+        ast::TypKind::Bool,
         Span::new(
             Position::new("alias_type", 0, 0),
             Position::new("alias_type", 0, 0),
@@ -904,7 +963,7 @@ fn fresh_exact_edges_preserve_aliases_regions_and_full_dimension_shapes() {
         )
     );
     let iter_bool = Spanned::new(
-        ast::TypKind::IterT(Box::new(typ()), ast::Iter::List),
+        ast::TypKind::Iter(Box::new(typ()), ast::Iter::List),
         Span::new(
             Position::new("iter_type", 0, 0),
             Position::new("iter_type", 0, 0),
@@ -930,7 +989,7 @@ fn fresh_exact_edges_preserve_aliases_regions_and_full_dimension_shapes() {
     assert_eq!(
         inside_iter.typ,
         Spanned::new(
-            ast::TypKind::BoolT,
+            ast::TypKind::Bool,
             Span::new(
                 Position::new("alias_type", 0, 0),
                 Position::new("alias_type", 0, 0)
@@ -938,39 +997,17 @@ fn fresh_exact_edges_preserve_aliases_regions_and_full_dimension_shapes() {
         )
     );
     assert_eq!(inside_iter.iters, vec![ast::Iter::List]);
-    let from_exp = fresh::var_from_exp(
-        &BTreeMap::new(),
-        &BTreeSet::new(),
-        &ast::Exp::new(
-            ast::ExpKind::BoolE(true),
-            iter_bool.node.clone(),
-            Span::new(
-                Position::new("expression", 0, 0),
-                Position::new("expression", 0, 0),
-            ),
-        ),
-    );
-    assert_eq!(from_exp.id.node, "bool");
-    assert_eq!(
-        from_exp.id.span,
-        Span::new(
-            Position::new("expression", 0, 0),
-            Position::new("expression", 0, 0)
-        )
-    );
-    assert_eq!(from_exp.typ.node, ast::TypKind::BoolT);
-    assert_eq!(from_exp.iters, vec![ast::Iter::List]);
     let base_typ = Spanned::new(
-        ast::TypKind::BoolT,
+        ast::TypKind::Bool,
         Span::new(
             Position::new("base_type", 0, 0),
             Position::new("base_type", 0, 0),
         ),
     );
     let nested = Spanned::new(
-        ast::TypKind::IterT(
+        ast::TypKind::Iter(
             Box::new(Spanned::new(
-                ast::TypKind::IterT(Box::new(base_typ.clone()), ast::Iter::Opt),
+                ast::TypKind::Iter(Box::new(base_typ.clone()), ast::Iter::Opt),
                 Span::new(
                     Position::new("nested_inner", 0, 0),
                     Position::new("nested_inner", 0, 0),

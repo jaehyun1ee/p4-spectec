@@ -24,15 +24,18 @@ impl FieldHint {
         Self { fields }
     }
 
+    /// Applies fields
     pub fn fields(&self) -> &[Text] {
         &self.fields
     }
 
+    /// Consumes the value into fields
     pub fn into_fields(self) -> Vec<Text> {
         self.fields
     }
 }
 
+/// Converts to string
 pub fn to_string(hint: &FieldHint) -> String {
     format!(
         "hint(fields {})",
@@ -46,13 +49,14 @@ pub fn to_string(hint: &FieldHint) -> String {
 
 // Creating hints
 
+/// Initializes the value
 pub fn init(hint_exp: &Exp) -> Option<FieldHint> {
     let fields = match &hint_exp.node {
-        ExpKind::TextE(text) => Some(vec![text.clone()]),
-        ExpKind::SeqE(hint_exps) => hint_exps
+        ExpKind::Text(text) => Some(vec![text.clone()]),
+        ExpKind::Seq(hint_exps) => hint_exps
             .iter()
             .map(|hint_exp| match &hint_exp.node {
-                ExpKind::TextE(text) => Some(text.clone()),
+                ExpKind::Text(text) => Some(text.clone()),
                 _ => None,
             })
             .collect(),

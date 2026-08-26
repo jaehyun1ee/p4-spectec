@@ -1,3 +1,5 @@
+//! Language representations and shared utilities
+
 pub mod al;
 pub mod el;
 pub mod hints;

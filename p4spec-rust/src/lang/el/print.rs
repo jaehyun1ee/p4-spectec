@@ -1,49 +1,37 @@
+//! Text rendering for elaboration-language data
+
 use std::fmt;
 
-use crate::lang::xl::num;
+use crate::lang::xl::num::string_of_num;
+use crate::lang::xl::{bool, num};
 
 use super::ast::*;
 
-fn join<T>(items: &[T], separator: &str, string_of: impl Fn(&T) -> String) -> String {
-    items
-        .iter()
-        .map(string_of)
-        .collect::<Vec<_>>()
-        .join(separator)
-}
+// - Texts
 
-// Numbers
-
-pub fn string_of_num(number: &Num) -> String {
-    match number {
-        num::Number::Nat(number) => number.to_string(),
-        num::Number::Int(number) if number.sign() == num_bigint::Sign::Minus => {
-            format!("-{}", -number)
-        }
-        num::Number::Int(number) => format!("+{number}"),
-    }
-}
-
-// Texts
-
+/// Renders text
 pub fn string_of_text(text: &str) -> String {
     text.to_owned()
 }
 
-// Identifiers
+// - Identifiers
 
+/// Renders varid
 pub fn string_of_varid(id: &Id) -> String {
     id.node.clone()
 }
 
+/// Renders typid
 pub fn string_of_typid(id: &Id) -> String {
     id.node.clone()
 }
 
+/// Renders relid
 pub fn string_of_relid(id: &Id) -> String {
     id.node.clone()
 }
 
+/// Renders ruleid
 pub fn string_of_ruleid(id: &Id) -> String {
     if id.node.is_empty() {
         String::new()
@@ -52,18 +40,21 @@ pub fn string_of_ruleid(id: &Id) -> String {
     }
 }
 
+/// Renders defid
 pub fn string_of_defid(id: &Id) -> String {
     format!("${}", id.node)
 }
 
-// Atoms
+// - Atoms
 
+/// Renders atom
 pub fn string_of_atom(atom: &Atom) -> String {
     atom.node.to_string()
 }
 
-// Iterators
+// - Iterators
 
+/// Renders iter
 pub fn string_of_iter(iter: Iter) -> String {
     match iter {
         Iter::Opt => "?".into(),
@@ -71,124 +62,247 @@ pub fn string_of_iter(iter: Iter) -> String {
     }
 }
 
-// Types
+// - Types
 
+/// Renders typ
 pub fn string_of_typ(typ: &Typ) -> String {
+    let mut output = String::new();
+    write_typ(&mut output, typ).expect("writing to a String cannot fail");
+    output
+}
+
+fn write_typ(output: &mut dyn fmt::Write, typ: &Typ) -> fmt::Result {
     match typ {
-        Typ::PlainT(plain_typ) => string_of_plaintyp(plain_typ),
-        Typ::NotationT(not_typ) => string_of_nottyp(not_typ),
+        Typ::Plain(plain_typ) => write_plain_typ(output, plain_typ),
+        Typ::Notation(not_typ) => write_not_typ(output, not_typ),
     }
 }
 
-pub fn string_of_typs(separator: &str, typs: &[Typ]) -> String {
-    join(typs, separator, string_of_typ)
+/// Renders typs
+pub fn string_of_typs(sep: &str, typs: &[Typ]) -> String {
+    let mut output = String::new();
+    write_typs(&mut output, sep, typs).expect("writing to a String cannot fail");
+    output
 }
 
-pub fn string_of_plaintyp(plain_typ: &PlainTyp) -> String {
+fn write_typs(output: &mut dyn fmt::Write, sep: &str, typs: &[Typ]) -> fmt::Result {
+    for (index, typ) in typs.iter().enumerate() {
+        if index != 0 {
+            output.write_str(sep)?;
+        }
+        write_typ(output, typ)?;
+    }
+    Ok(())
+}
+
+// - Plain types
+
+/// Renders plain typ
+pub fn string_of_plain_typ(plain_typ: &PlainTyp) -> String {
+    let mut output = String::new();
+    write_plain_typ(&mut output, plain_typ).expect("writing to a String cannot fail");
+    output
+}
+
+fn write_plain_typ(output: &mut dyn fmt::Write, plain_typ: &PlainTyp) -> fmt::Result {
     match &plain_typ.node {
-        PlainTypKind::BoolT => "bool".into(),
-        PlainTypKind::NumT(num::Typ::NatT) => "nat".into(),
-        PlainTypKind::NumT(num::Typ::IntT) => "int".into(),
-        PlainTypKind::TextT => "text".into(),
-        PlainTypKind::VarT(id, targs) => {
-            format!("{}{}", string_of_typid(id), string_of_targs(targs))
+        PlainTypKind::Bool => output.write_str("bool"),
+        PlainTypKind::Num(num::Typ::Nat) => output.write_str("nat"),
+        PlainTypKind::Num(num::Typ::Int) => output.write_str("int"),
+        PlainTypKind::Text => output.write_str("text"),
+        PlainTypKind::Var(id, targs) => {
+            output.write_str(&string_of_typid(id))?;
+            write_targs(output, targs)
         }
-        PlainTypKind::ParenT(plain_typ) => format!("({})", string_of_plaintyp(plain_typ)),
-        PlainTypKind::TupleT(plain_typs) => format!("({})", string_of_plaintyps(", ", plain_typs)),
-        PlainTypKind::IterT(plain_typ, iter) => {
-            format!("{}{}", string_of_plaintyp(plain_typ), string_of_iter(*iter))
+        PlainTypKind::Paren(plain_typ) => {
+            output.write_char('(')?;
+            write_plain_typ(output, plain_typ)?;
+            output.write_char(')')
+        }
+        PlainTypKind::Tuple(plain_typs) => {
+            output.write_char('(')?;
+            write_plain_typs(output, ", ", plain_typs)?;
+            output.write_char(')')
+        }
+        PlainTypKind::Iter(plain_typ, iter) => {
+            write_plain_typ(output, plain_typ)?;
+            output.write_str(&string_of_iter(*iter))
         }
     }
 }
 
-pub fn string_of_plaintyps(separator: &str, plain_typs: &[PlainTyp]) -> String {
-    join(plain_typs, separator, string_of_plaintyp)
+/// Renders plain typs
+pub fn string_of_plain_typs(sep: &str, plain_typs: &[PlainTyp]) -> String {
+    let mut output = String::new();
+    write_plain_typs(&mut output, sep, plain_typs).expect("writing to a String cannot fail");
+    output
 }
 
-pub fn string_of_nottyp(not_typ: &NotTyp) -> String {
+fn write_plain_typs(
+    output: &mut dyn fmt::Write,
+    sep: &str,
+    plain_typs: &[PlainTyp],
+) -> fmt::Result {
+    for (index, plain_typ) in plain_typs.iter().enumerate() {
+        if index != 0 {
+            output.write_str(sep)?;
+        }
+        write_plain_typ(output, plain_typ)?;
+    }
+    Ok(())
+}
+
+// - Notation types
+
+/// Renders not typ
+pub fn string_of_not_typ(not_typ: &NotTyp) -> String {
+    let mut output = String::new();
+    write_not_typ(&mut output, not_typ).expect("writing to a String cannot fail");
+    output
+}
+
+fn write_not_typ(output: &mut dyn fmt::Write, not_typ: &NotTyp) -> fmt::Result {
     match &not_typ.node {
-        NotTypKind::AtomT(atom) => string_of_atom(atom),
-        NotTypKind::SeqT(typs) => string_of_typs(" ", typs),
-        NotTypKind::InfixT(left, atom, right) => format!(
-            "{} {} {}",
-            string_of_typ(left),
-            string_of_atom(atom),
-            string_of_typ(right)
-        ),
-        NotTypKind::BrackT(left, typ, right) => format!(
-            "`{}{}{}",
-            string_of_atom(left),
-            string_of_typ(typ),
-            string_of_atom(right)
-        ),
+        NotTypKind::Atom(atom) => output.write_str(&string_of_atom(atom)),
+        NotTypKind::Seq(typs) => write_typs(output, " ", typs),
+        NotTypKind::Infix(typ_l, atom, typ_r) => {
+            write_typ(output, typ_l)?;
+            write!(output, " {} ", string_of_atom(atom))?;
+            write_typ(output, typ_r)
+        }
+        NotTypKind::Brack(atom_l, typ, atom_r) => {
+            write!(output, "`{}", string_of_atom(atom_l))?;
+            write_typ(output, typ)?;
+            output.write_str(&string_of_atom(atom_r))
+        }
     }
 }
 
-pub fn string_of_nottyps(separator: &str, not_typs: &[NotTyp]) -> String {
-    join(not_typs, separator, string_of_nottyp)
+/// Renders not typs
+pub fn string_of_not_typs(sep: &str, not_typs: &[NotTyp]) -> String {
+    let mut output = String::new();
+    write_not_typs(&mut output, sep, not_typs).expect("writing to a String cannot fail");
+    output
 }
 
-pub fn string_of_deftyp(def_typ: &DefTyp) -> String {
+fn write_not_typs(output: &mut dyn fmt::Write, sep: &str, not_typs: &[NotTyp]) -> fmt::Result {
+    for (index, not_typ) in not_typs.iter().enumerate() {
+        if index != 0 {
+            output.write_str(sep)?;
+        }
+        write_not_typ(output, not_typ)?;
+    }
+    Ok(())
+}
+
+// - Defined types
+
+/// Renders def typ
+pub fn string_of_def_typ(def_typ: &DefTyp) -> String {
+    let mut output = String::new();
+    write_def_typ(&mut output, def_typ).expect("writing to a String cannot fail");
+    output
+}
+
+fn write_def_typ(output: &mut dyn fmt::Write, def_typ: &DefTyp) -> fmt::Result {
     match &def_typ.node {
-        DefTypKind::PlainTD(plain_typ) => string_of_plaintyp(plain_typ),
-        DefTypKind::StructTD(fields) => format!("{{{}}}", string_of_typfields(", ", fields)),
-        DefTypKind::VariantTD(cases) => format!("\n   | {}", string_of_typcases("\n   | ", cases)),
+        DefTypKind::Plain(plain_typ) => write_plain_typ(output, plain_typ),
+        DefTypKind::Struct(typ_fields) => {
+            output.write_char('{')?;
+            write_typ_fields(output, ", ", typ_fields)?;
+            output.write_char('}')
+        }
+        DefTypKind::Variant(typ_cases) => {
+            output.write_str("\n   | ")?;
+            write_typ_cases(output, "\n   | ", typ_cases)
+        }
     }
 }
 
-pub fn string_of_typfield(field: &TypField) -> String {
-    format!(
-        "{} {}",
-        string_of_atom(&field.atom),
-        string_of_plaintyp(&field.typ)
-    )
+/// Renders typ field
+pub fn string_of_typ_field(typ_field: &TypField) -> String {
+    let mut output = String::new();
+    write_typ_field(&mut output, typ_field).expect("writing to a String cannot fail");
+    output
 }
 
-pub fn string_of_typfields(separator: &str, fields: &[TypField]) -> String {
-    join(fields, separator, string_of_typfield)
+fn write_typ_field(output: &mut dyn fmt::Write, typ_field: &TypField) -> fmt::Result {
+    write!(output, "{} ", string_of_atom(&typ_field.0))?;
+    write_plain_typ(output, &typ_field.1)
 }
 
-pub fn string_of_typcase(case: &TypCase) -> String {
-    string_of_typ(&case.0)
+/// Renders typ fields
+pub fn string_of_typ_fields(sep: &str, typ_fields: &[TypField]) -> String {
+    let mut output = String::new();
+    write_typ_fields(&mut output, sep, typ_fields).expect("writing to a String cannot fail");
+    output
 }
 
-pub fn string_of_typcases(separator: &str, cases: &[TypCase]) -> String {
-    join(cases, separator, string_of_typcase)
+fn write_typ_fields(
+    output: &mut dyn fmt::Write,
+    sep: &str,
+    typ_fields: &[TypField],
+) -> fmt::Result {
+    for (index, typ_field) in typ_fields.iter().enumerate() {
+        if index != 0 {
+            output.write_str(sep)?;
+        }
+        write_typ_field(output, typ_field)?;
+    }
+    Ok(())
 }
 
-// Operators
+/// Renders typ case
+pub fn string_of_typ_case(typ_case: &TypCase) -> String {
+    let mut output = String::new();
+    write_typ_case(&mut output, typ_case).expect("writing to a String cannot fail");
+    output
+}
 
+fn write_typ_case(output: &mut dyn fmt::Write, typ_case: &TypCase) -> fmt::Result {
+    write_typ(output, &typ_case.0)
+}
+
+/// Renders typ cases
+pub fn string_of_typ_cases(sep: &str, typ_cases: &[TypCase]) -> String {
+    let mut output = String::new();
+    write_typ_cases(&mut output, sep, typ_cases).expect("writing to a String cannot fail");
+    output
+}
+
+fn write_typ_cases(output: &mut dyn fmt::Write, sep: &str, typ_cases: &[TypCase]) -> fmt::Result {
+    for (index, typ_case) in typ_cases.iter().enumerate() {
+        if index != 0 {
+            output.write_str(sep)?;
+        }
+        write_typ_case(output, typ_case)?;
+    }
+    Ok(())
+}
+
+// - Operators
+
+/// Renders unop
 pub fn string_of_unop(operator: UnOp) -> &'static str {
     match operator {
-        UnOp::NotOp => "~",
-        UnOp::PlusOp => "+",
-        UnOp::MinusOp => "-",
+        UnOp::Bool(operator) => bool::string_of_unop(operator),
+        UnOp::Num(operator) => num::string_of_unop(operator),
     }
 }
 
+/// Renders binop
 pub fn string_of_binop(operator: BinOp) -> &'static str {
     match operator {
-        BinOp::AndOp => "/\\",
-        BinOp::OrOp => "\\/",
-        BinOp::ImplOp => "=>",
-        BinOp::EquivOp => "<=>",
-        BinOp::AddOp => "+",
-        BinOp::SubOp => "-",
-        BinOp::MulOp => "*",
-        BinOp::DivOp => "/",
-        BinOp::ModOp => "\\",
-        BinOp::PowOp => "^",
+        BinOp::Bool(operator) => bool::string_of_binop(operator),
+        BinOp::Num(operator) => num::string_of_binop(operator),
     }
 }
 
+/// Renders cmpop
 pub fn string_of_cmpop(operator: CmpOp) -> &'static str {
     match operator {
-        CmpOp::EqOp => "=",
-        CmpOp::NeOp => "=/=",
-        CmpOp::LtOp => "<",
-        CmpOp::GtOp => ">",
-        CmpOp::LeOp => "<=",
-        CmpOp::GeOp => ">=",
+        CmpOp::Bool(operator) => bool::string_of_cmpop(operator),
+        CmpOp::Num(operator) => num::string_of_cmpop(operator),
     }
 }
 
@@ -207,8 +321,9 @@ fn escaped(text: &str) -> String {
         .collect()
 }
 
-// Expressions
+// - Expressions
 
+/// Renders exp
 pub fn string_of_exp(exp: &Exp) -> String {
     let mut output = String::new();
     write_exp(&mut output, exp).expect("writing to a String cannot fail");
@@ -217,78 +332,78 @@ pub fn string_of_exp(exp: &Exp) -> String {
 
 fn write_exp(output: &mut dyn fmt::Write, exp: &Exp) -> fmt::Result {
     match &exp.node {
-        ExpKind::BoolE(value) => write!(output, "{value}"),
-        ExpKind::NumE(NumOp::DecOp, num::Number::Nat(number)) => write!(output, "{number}"),
-        ExpKind::NumE(NumOp::HexOp, num::Number::Nat(number)) => {
+        ExpKind::Bool(value) => write!(output, "{value}"),
+        ExpKind::Num(NumOp::Dec, num::Number::Nat(number)) => write!(output, "{number}"),
+        ExpKind::Num(NumOp::Hex, num::Number::Nat(number)) => {
             write!(
                 output,
                 "0x{}",
                 number.as_bigint().to_str_radix(16).to_uppercase()
             )
         }
-        ExpKind::NumE(_, number) => output.write_str(&string_of_num(number)),
-        ExpKind::TextE(text) => write!(output, "\"{}\"", escaped(text)),
-        ExpKind::VarE(id) => output.write_str(&id.node),
-        ExpKind::UnE(operator, exp) => {
+        ExpKind::Num(_, number) => output.write_str(&string_of_num(number)),
+        ExpKind::Text(text) => write!(output, "\"{}\"", escaped(text)),
+        ExpKind::Var(id) => output.write_str(&id.node),
+        ExpKind::Un(operator, exp) => {
             output.write_str(string_of_unop(*operator))?;
             write_exp(output, exp)
         }
-        ExpKind::BinE(left, operator, right) => {
-            write_exp(output, left)?;
+        ExpKind::Bin(exp_l, operator, exp_r) => {
+            write_exp(output, exp_l)?;
             write!(output, " {} ", string_of_binop(*operator))?;
-            write_exp(output, right)
+            write_exp(output, exp_r)
         }
-        ExpKind::CmpE(left, operator, right) => {
-            write_exp(output, left)?;
+        ExpKind::Cmp(exp_l, operator, exp_r) => {
+            write_exp(output, exp_l)?;
             write!(output, " {} ", string_of_cmpop(*operator))?;
-            write_exp(output, right)
+            write_exp(output, exp_r)
         }
-        ExpKind::ArithE(exp) => {
+        ExpKind::Arith(exp) => {
             output.write_str("$(")?;
             write_exp(output, exp)?;
             output.write_char(')')
         }
-        ExpKind::EpsE => output.write_str("eps"),
-        ExpKind::ListE(exps) => {
+        ExpKind::Eps => output.write_str("eps"),
+        ExpKind::List(exps) => {
             output.write_char('[')?;
             write_exps(output, ", ", exps)?;
             output.write_char(']')
         }
-        ExpKind::ConsE(left, right) => {
-            write_exp(output, left)?;
+        ExpKind::Cons(exp_l, exp_r) => {
+            write_exp(output, exp_l)?;
             output.write_str(" :: ")?;
-            write_exp(output, right)
+            write_exp(output, exp_r)
         }
-        ExpKind::CatE(left, right) => {
-            write_exp(output, left)?;
+        ExpKind::Cat(exp_l, exp_r) => {
+            write_exp(output, exp_l)?;
             output.write_str(" ++ ")?;
-            write_exp(output, right)
+            write_exp(output, exp_r)
         }
-        ExpKind::IdxE(base, index) => {
-            write_exp(output, base)?;
+        ExpKind::Idx(exp_base, exp_index) => {
+            write_exp(output, exp_base)?;
             output.write_char('[')?;
-            write_exp(output, index)?;
+            write_exp(output, exp_index)?;
             output.write_char(']')
         }
-        ExpKind::SliceE(base, low, high) => {
-            write_exp(output, base)?;
+        ExpKind::Slice(exp_base, exp_l, exp_r) => {
+            write_exp(output, exp_base)?;
             output.write_char('[')?;
-            write_exp(output, low)?;
+            write_exp(output, exp_l)?;
             output.write_str(" : ")?;
-            write_exp(output, high)?;
+            write_exp(output, exp_r)?;
             output.write_char(']')
         }
-        ExpKind::LenE(exp) => {
+        ExpKind::Len(exp) => {
             output.write_char('|')?;
             write_exp(output, exp)?;
             output.write_char('|')
         }
-        ExpKind::MemE(left, right) => {
-            write_exp(output, left)?;
+        ExpKind::Mem(exp_l, exp_r) => {
+            write_exp(output, exp_l)?;
             output.write_str(" <- ")?;
-            write_exp(output, right)
+            write_exp(output, exp_r)
         }
-        ExpKind::StrE(fields) => {
+        ExpKind::Str(fields) => {
             output.write_char('{')?;
             for (index, (atom, exp)) in fields.iter().enumerate() {
                 if index != 0 {
@@ -299,88 +414,92 @@ fn write_exp(output: &mut dyn fmt::Write, exp: &Exp) -> fmt::Result {
             }
             output.write_char('}')
         }
-        ExpKind::DotE(exp, atom) => {
+        ExpKind::Dot(exp, atom) => {
             write_exp(output, exp)?;
             write!(output, ".{}", string_of_atom(atom))
         }
-        ExpKind::UpdE(base, path, field) => {
-            write_exp(output, base)?;
+        ExpKind::Upd(exp_base, path, exp_field) => {
+            write_exp(output, exp_base)?;
             output.write_char('[')?;
             write_path(output, path)?;
             output.write_str(" = ")?;
-            write_exp(output, field)?;
+            write_exp(output, exp_field)?;
             output.write_char(']')
         }
-        ExpKind::ParenE(exp) => {
+        ExpKind::Paren(exp) => {
             output.write_char('(')?;
             write_exp(output, exp)?;
             output.write_char(')')
         }
-        ExpKind::TupleE(exps) => {
+        ExpKind::Tuple(exps) => {
             output.write_char('(')?;
             write_exps(output, ", ", exps)?;
             output.write_char(')')
         }
-        ExpKind::CallE(id, targs, args) => {
+        ExpKind::Call(id, targs, args) => {
             output.write_str(&string_of_defid(id))?;
             write_targs(output, targs)?;
             write_args(output, args)
         }
-        ExpKind::IterE(exp, iter) => {
+        ExpKind::Iter(exp, iter) => {
             write_exp(output, exp)?;
             output.write_str(&string_of_iter(*iter))
         }
-        ExpKind::SubE(exp, plain_typ) => {
+        ExpKind::Sub(exp, plain_typ) => {
             write_exp(output, exp)?;
-            write!(output, " <: {}", string_of_plaintyp(plain_typ))
+            output.write_str(" <:")?;
+            output.write_char(' ')?;
+            write_plain_typ(output, plain_typ)
         }
-        ExpKind::AtomE(atom) => output.write_str(&string_of_atom(atom)),
-        ExpKind::SeqE(exps) => write_exps(output, " ", exps),
-        ExpKind::InfixE(left, atom, right) => {
-            write_exp(output, left)?;
+        ExpKind::Atom(atom) => output.write_str(&string_of_atom(atom)),
+        ExpKind::Seq(exps) => write_exps(output, " ", exps),
+        ExpKind::Infix(exp_l, atom, exp_r) => {
+            write_exp(output, exp_l)?;
             write!(output, " {} ", string_of_atom(atom))?;
-            write_exp(output, right)
+            write_exp(output, exp_r)
         }
-        ExpKind::BrackE(left, exp, right) => {
-            write!(output, "`{}", string_of_atom(left))?;
+        ExpKind::Brack(atom_l, exp, atom_r) => {
+            write!(output, "`{}", string_of_atom(atom_l))?;
             write_exp(output, exp)?;
-            output.write_str(&string_of_atom(right))
+            output.write_str(&string_of_atom(atom_r))
         }
-        ExpKind::HoleE(Hole::Num(number)) => write!(output, "%{number}"),
-        ExpKind::HoleE(Hole::Next) => output.write_char('%'),
-        ExpKind::HoleE(Hole::Rest) => output.write_str("%%"),
-        ExpKind::HoleE(Hole::None) => output.write_str("!%"),
-        ExpKind::FuseE(left, right) => {
-            write_exp(output, left)?;
+        ExpKind::Hole(Hole::Num(number)) => write!(output, "%{number}"),
+        ExpKind::Hole(Hole::Next) => output.write_char('%'),
+        ExpKind::Hole(Hole::Rest) => output.write_str("%%"),
+        ExpKind::Hole(Hole::None) => output.write_str("!%"),
+        ExpKind::Fuse(exp_l, exp_r) => {
+            write_exp(output, exp_l)?;
             output.write_char('#')?;
-            write_exp(output, right)
+            write_exp(output, exp_r)
         }
-        ExpKind::UnparenE(exp) => {
+        ExpKind::Unparen(exp) => {
             output.write_str("##")?;
             write_exp(output, exp)
         }
-        ExpKind::LatexE(text) => write!(output, "latex({})", escaped(text)),
+        ExpKind::Latex(text) => write!(output, "latex({})", escaped(text)),
     }
 }
 
-pub fn string_of_exps(separator: &str, exps: &[Exp]) -> String {
+/// Renders exps
+pub fn string_of_exps(sep: &str, exps: &[Exp]) -> String {
     let mut output = String::new();
-    write_exps(&mut output, separator, exps).expect("writing to a String cannot fail");
+    write_exps(&mut output, sep, exps).expect("writing to a String cannot fail");
     output
 }
 
-fn write_exps(output: &mut dyn fmt::Write, separator: &str, exps: &[Exp]) -> fmt::Result {
+fn write_exps(output: &mut dyn fmt::Write, sep: &str, exps: &[Exp]) -> fmt::Result {
     for (index, exp) in exps.iter().enumerate() {
         if index != 0 {
-            output.write_str(separator)?;
+            output.write_str(sep)?;
         }
         write_exp(output, exp)?;
     }
     Ok(())
 }
 
-// Paths
+// - Paths
 
+/// Renders path
 pub fn string_of_path(path: &Path) -> String {
     let mut output = String::new();
     write_path(&mut output, path).expect("writing to a String cannot fail");
@@ -389,46 +508,54 @@ pub fn string_of_path(path: &Path) -> String {
 
 fn write_path(output: &mut dyn fmt::Write, path: &Path) -> fmt::Result {
     match &path.node {
-        PathKind::RootP => Ok(()),
-        PathKind::IdxP(path, exp) => {
+        PathKind::Root => Ok(()),
+        PathKind::Idx(path, exp_index) => {
             write_path(output, path)?;
             output.write_char('[')?;
-            write_exp(output, exp)?;
+            write_exp(output, exp_index)?;
             output.write_char(']')
         }
-        PathKind::SliceP(path, low, high) => {
+        PathKind::Slice(path, exp_l, exp_r) => {
             write_path(output, path)?;
             output.write_char('[')?;
-            write_exp(output, low)?;
+            write_exp(output, exp_l)?;
             output.write_str(" : ")?;
-            write_exp(output, high)?;
+            write_exp(output, exp_r)?;
             output.write_char(']')
         }
-        PathKind::DotP(path, atom) if matches!(path.node, PathKind::RootP) => {
+        PathKind::Dot(path, atom) if matches!(path.node, PathKind::Root) => {
             output.write_str(&string_of_atom(atom))
         }
-        PathKind::DotP(path, atom) => {
+        PathKind::Dot(path, atom) => {
             write_path(output, path)?;
             write!(output, ".{}", string_of_atom(atom))
         }
     }
 }
 
-// Parameters
+// - Parameters
 
+/// Renders param
 pub fn string_of_param(param: &Param) -> String {
+    let mut output = String::new();
+    write_param(&mut output, param).expect("writing to a String cannot fail");
+    output
+}
+
+fn write_param(output: &mut dyn fmt::Write, param: &Param) -> fmt::Result {
     match &param.node {
-        ParamKind::ExpP(plain_typ) => string_of_plaintyp(plain_typ),
-        ParamKind::DefP(id, tparams, params, plain_typ) => format!(
-            "{}{}{} : {}",
-            string_of_defid(id),
-            string_of_tparams(tparams),
-            string_of_params(params),
-            string_of_plaintyp(plain_typ)
-        ),
+        ParamKind::Exp(plain_typ) => write_plain_typ(output, plain_typ),
+        ParamKind::Def(id, tparams, params, plain_typ) => {
+            output.write_str(&string_of_defid(id))?;
+            write_tparams(output, tparams)?;
+            write_params(output, params)?;
+            output.write_str(" : ")?;
+            write_plain_typ(output, plain_typ)
+        }
     }
 }
 
+/// Renders params
 pub fn string_of_params(params: &[Param]) -> String {
     let mut output = String::new();
     write_params(&mut output, params).expect("writing to a String cannot fail");
@@ -444,18 +571,26 @@ fn write_params(output: &mut dyn fmt::Write, params: &[Param]) -> fmt::Result {
             if index != 0 {
                 output.write_str(", ")?;
             }
-            output.write_str(&string_of_param(param))?;
+            write_param(output, param)?;
         }
         output.write_char(')')
     }
 }
 
-// Type parameters
+// - Type parameters
 
+/// Renders tparam
 pub fn string_of_tparam(tparam: &TParam) -> String {
-    tparam.node.clone()
+    let mut output = String::new();
+    write_tparam(&mut output, tparam).expect("writing to a String cannot fail");
+    output
 }
 
+fn write_tparam(output: &mut dyn fmt::Write, tparam: &TParam) -> fmt::Result {
+    output.write_str(&tparam.node)
+}
+
+/// Renders tparams
 pub fn string_of_tparams(tparams: &[TParam]) -> String {
     let mut output = String::new();
     write_tparams(&mut output, tparams).expect("writing to a String cannot fail");
@@ -471,14 +606,15 @@ fn write_tparams(output: &mut dyn fmt::Write, tparams: &[TParam]) -> fmt::Result
             if index != 0 {
                 output.write_str(", ")?;
             }
-            output.write_str(&string_of_tparam(tparam))?;
+            write_tparam(output, tparam)?;
         }
         output.write_char('>')
     }
 }
 
-// Arguments
+// - Arguments
 
+/// Renders arg
 pub fn string_of_arg(arg: &Arg) -> String {
     let mut output = String::new();
     write_arg(&mut output, arg).expect("writing to a String cannot fail");
@@ -487,11 +623,12 @@ pub fn string_of_arg(arg: &Arg) -> String {
 
 fn write_arg(output: &mut dyn fmt::Write, arg: &Arg) -> fmt::Result {
     match &arg.node {
-        ArgKind::ExpA(exp) => write_exp(output, exp),
-        ArgKind::DefA(id) => output.write_str(&string_of_defid(id)),
+        ArgKind::Exp(exp) => write_exp(output, exp),
+        ArgKind::Def(id) => output.write_str(&string_of_defid(id)),
     }
 }
 
+/// Renders args
 pub fn string_of_args(args: &[Arg]) -> String {
     let mut output = String::new();
     write_args(&mut output, args).expect("writing to a String cannot fail");
@@ -513,12 +650,20 @@ fn write_args(output: &mut dyn fmt::Write, args: &[Arg]) -> fmt::Result {
     }
 }
 
-// Type arguments
+// - Type arguments
 
+/// Renders targ
 pub fn string_of_targ(targ: &Targ) -> String {
-    string_of_plaintyp(targ)
+    let mut output = String::new();
+    write_targ(&mut output, targ).expect("writing to a String cannot fail");
+    output
 }
 
+fn write_targ(output: &mut dyn fmt::Write, targ: &Targ) -> fmt::Result {
+    write_plain_typ(output, targ)
+}
+
+/// Renders targs
 pub fn string_of_targs(targs: &[Targ]) -> String {
     let mut output = String::new();
     write_targs(&mut output, targs).expect("writing to a String cannot fail");
@@ -534,14 +679,15 @@ fn write_targs(output: &mut dyn fmt::Write, targs: &[Targ]) -> fmt::Result {
             if index != 0 {
                 output.write_str(", ")?;
             }
-            output.write_str(&string_of_targ(targ))?;
+            write_targ(output, targ)?;
         }
         output.write_char('>')
     }
 }
 
-// Premises
+// - Premises
 
+/// Renders prem
 pub fn string_of_prem(prem: &Prem) -> String {
     let mut output = String::new();
     write_prem(&mut output, prem).expect("writing to a String cannot fail");
@@ -550,41 +696,42 @@ pub fn string_of_prem(prem: &Prem) -> String {
 
 fn write_prem(output: &mut dyn fmt::Write, prem: &Prem) -> fmt::Result {
     match &prem.node {
-        PremKind::VarPr(id, plain_typ) => write!(
-            output,
-            "{} : {}",
-            string_of_varid(id),
-            string_of_plaintyp(plain_typ)
-        ),
-        PremKind::RulePr(id, exp) => {
+        PremKind::Var(VarPrem { id, plain_typ }) => {
+            write!(output, "{} : ", string_of_varid(id))?;
+            write_plain_typ(output, plain_typ)
+        }
+        PremKind::Rule(RulePrem { id, exp }) => {
             write!(output, "{}: ", string_of_relid(id))?;
             write_exp(output, exp)
         }
-        PremKind::RuleNotPr(id, exp) => {
+        PremKind::RuleNot(RuleNotPrem { id, exp }) => {
             write!(output, "{}:/ ", string_of_relid(id))?;
             write_exp(output, exp)
         }
-        PremKind::IfPr(exp) => {
+        PremKind::If(IfPrem { exp }) => {
             output.write_str("if ")?;
             write_exp(output, exp)
         }
-        PremKind::ElsePr => output.write_str("otherwise"),
-        PremKind::IterPr(inner, iter) if matches!(inner.node, PremKind::IterPr(_, _)) => {
+        PremKind::Else => output.write_str("otherwise"),
+        PremKind::Iter(IterPrem { prem: inner, iter })
+            if matches!(inner.node, PremKind::Iter(_)) =>
+        {
             write_prem(output, inner)?;
             output.write_str(&string_of_iter(*iter))
         }
-        PremKind::IterPr(inner, iter) => {
+        PremKind::Iter(IterPrem { prem: inner, iter }) => {
             output.write_char('(')?;
             write_prem(output, inner)?;
             write!(output, "){}", string_of_iter(*iter))
         }
-        PremKind::DebugPr(exp) => {
+        PremKind::Debug(DebugPrem { exp }) => {
             output.write_str("debug ")?;
             write_exp(output, exp)
         }
     }
 }
 
+/// Renders prems
 pub fn string_of_prems(prems: &[Prem]) -> String {
     let mut output = String::new();
     write_prems(&mut output, prems).expect("writing to a String cannot fail");
@@ -599,8 +746,9 @@ fn write_prems(output: &mut dyn fmt::Write, prems: &[Prem]) -> fmt::Result {
     Ok(())
 }
 
-// Rules
+// - Rules
 
+/// Renders rule
 pub fn string_of_rule(rule: &Rule) -> String {
     let mut output = String::new();
     write_rule(&mut output, rule).expect("writing to a String cannot fail");
@@ -611,26 +759,33 @@ fn write_rule(output: &mut dyn fmt::Write, rule: &Rule) -> fmt::Result {
     write!(
         output,
         "rule {}{}:\n  ",
-        string_of_relid(&rule.node.relation_id),
-        string_of_ruleid(&rule.node.rule_id)
+        string_of_relid(&rule.node.0),
+        string_of_ruleid(&rule.node.1)
     )?;
-    write_exp(output, &rule.node.expression)?;
-    write_prems(output, &rule.node.premises)
+    write_exp(output, &rule.node.2)?;
+    write_prems(output, &rule.node.3)
 }
 
+/// Renders rules
 pub fn string_of_rules(rules: &[Rule]) -> String {
     let mut output = String::new();
-    for (index, rule) in rules.iter().enumerate() {
-        if index != 0 {
-            output.push('\n');
-        }
-        write_rule(&mut output, rule).expect("writing to a String cannot fail");
-    }
+    write_rules(&mut output, rules).expect("writing to a String cannot fail");
     output
 }
 
-// Tables
+fn write_rules(output: &mut dyn fmt::Write, rules: &[Rule]) -> fmt::Result {
+    for (index, rule) in rules.iter().enumerate() {
+        if index != 0 {
+            output.write_char('\n')?;
+        }
+        write_rule(output, rule)?;
+    }
+    Ok(())
+}
 
+// - Tables
+
+/// Renders tablerow
 pub fn string_of_tablerow(table_row: &TableRow) -> String {
     let mut output = String::new();
     write_tablerow(&mut output, table_row).expect("writing to a String cannot fail");
@@ -643,19 +798,26 @@ fn write_tablerow(output: &mut dyn fmt::Write, table_row: &TableRow) -> fmt::Res
     write_exp(output, &table_row.node.1)
 }
 
+/// Renders tablerows
 pub fn string_of_tablerows(table_rows: &[TableRow]) -> String {
     let mut output = String::new();
-    for (index, row) in table_rows.iter().enumerate() {
-        if index != 0 {
-            output.push_str("\n  | ");
-        }
-        write_tablerow(&mut output, row).expect("writing to a String cannot fail");
-    }
+    write_tablerows(&mut output, table_rows).expect("writing to a String cannot fail");
     output
 }
 
-// Definitions
+fn write_tablerows(output: &mut dyn fmt::Write, table_rows: &[TableRow]) -> fmt::Result {
+    for (index, row) in table_rows.iter().enumerate() {
+        if index != 0 {
+            output.write_str("\n  | ")?;
+        }
+        write_tablerow(output, row)?;
+    }
+    Ok(())
+}
 
+// - Definitions
+
+/// Renders def
 pub fn string_of_def(definition: &Def) -> String {
     let mut output = String::new();
     write_def(&mut output, definition).expect("writing to a String cannot fail");
@@ -664,42 +826,48 @@ pub fn string_of_def(definition: &Def) -> String {
 
 fn write_def(output: &mut dyn fmt::Write, definition: &Def) -> fmt::Result {
     match &definition.node {
-        DefKind::ExternSynD(id, _) => write!(output, "extern syntax {}", string_of_typid(id)),
-        DefKind::SynD(syntaxes) => write!(
-            output,
-            "syntax {}",
-            join(syntaxes, ", ", |(id, tparams)| format!(
-                "{}{}",
-                string_of_typid(id),
-                string_of_tparams(tparams)
-            ))
-        ),
-        DefKind::TypD(id, tparams, def_typ, _) => write!(
-            output,
-            "syntax {}{} = {}",
-            string_of_typid(id),
-            string_of_tparams(tparams),
-            string_of_deftyp(def_typ)
-        ),
-        DefKind::VarD(id, plain_typ, _) => write!(
-            output,
-            "var {} : {}",
-            string_of_varid(id),
-            string_of_plaintyp(plain_typ)
-        ),
-        DefKind::ExternRelD(id, not_typ, _) => write!(
-            output,
-            "extern relation {}: {}",
-            string_of_relid(id),
-            string_of_nottyp(not_typ)
-        ),
-        DefKind::RelD(id, not_typ, _) => write!(
-            output,
-            "relation {}: {}",
-            string_of_relid(id),
-            string_of_nottyp(not_typ)
-        ),
-        DefKind::RuleGroupD(relid, groupid, rules) => {
+        DefKind::ExternSyntax(ExternSyntaxDef { id, .. }) => {
+            write!(output, "extern syntax {}", string_of_typid(id))
+        }
+        DefKind::Syntax(SyntaxDef { entries }) => {
+            output.write_str("syntax ")?;
+            for (index, SyntaxDefEntry { id, tparams }) in entries.iter().enumerate() {
+                if index != 0 {
+                    output.write_str(", ")?;
+                }
+                output.write_str(&string_of_typid(id))?;
+                write_tparams(output, tparams)?;
+            }
+            Ok(())
+        }
+        DefKind::Typ(TypDef {
+            id,
+            tparams,
+            def_typ,
+            ..
+        }) => {
+            write!(output, "syntax {}", string_of_typid(id))?;
+            write_tparams(output, tparams)?;
+            output.write_str(" = ")?;
+            write_def_typ(output, def_typ)
+        }
+        DefKind::Var(VarDef { id, plain_typ, .. }) => {
+            write!(output, "var {} : ", string_of_varid(id))?;
+            write_plain_typ(output, plain_typ)
+        }
+        DefKind::ExternRel(ExternRelDef { id, not_typ, .. }) => {
+            write!(output, "extern relation {}: ", string_of_relid(id))?;
+            write_not_typ(output, not_typ)
+        }
+        DefKind::Rel(RelDef { id, not_typ, .. }) => {
+            write!(output, "relation {}: ", string_of_relid(id))?;
+            write_not_typ(output, not_typ)
+        }
+        DefKind::RuleGroup(RuleGroupDef {
+            relid,
+            groupid,
+            rules,
+        }) => {
             write!(
                 output,
                 "rulegroup {}{}:\n  ",
@@ -714,38 +882,57 @@ fn write_def(output: &mut dyn fmt::Write, definition: &Def) -> fmt::Result {
             }
             Ok(())
         }
-        DefKind::ExternDecD(id, tparams, params, plain_typ, _) => write!(
-            output,
-            "extern dec {}{}{} : {}",
-            string_of_defid(id),
-            string_of_tparams(tparams),
-            string_of_params(params),
-            string_of_plaintyp(plain_typ)
-        ),
-        DefKind::BuiltinDecD(id, tparams, params, plain_typ, _) => write!(
-            output,
-            "builtin dec {}{}{} : {}",
-            string_of_defid(id),
-            string_of_tparams(tparams),
-            string_of_params(params),
-            string_of_plaintyp(plain_typ)
-        ),
-        DefKind::TableDecD(id, params, plain_typ, _) => write!(
-            output,
-            "tbl dec {}{} : {}",
-            string_of_defid(id),
-            string_of_params(params),
-            string_of_plaintyp(plain_typ)
-        ),
-        DefKind::FuncDecD(id, tparams, params, plain_typ, _) => write!(
-            output,
-            "dec {}{}{} : {}",
-            string_of_defid(id),
-            string_of_tparams(tparams),
-            string_of_params(params),
-            string_of_plaintyp(plain_typ)
-        ),
-        DefKind::TableDefD(id, rows) => {
+        DefKind::ExternDec(ExternDecDef {
+            id,
+            tparams,
+            params,
+            plain_typ,
+            ..
+        }) => {
+            write!(output, "extern dec {}", string_of_defid(id))?;
+            write_tparams(output, tparams)?;
+            write_params(output, params)?;
+            output.write_str(" : ")?;
+            write_plain_typ(output, plain_typ)
+        }
+        DefKind::BuiltinDec(BuiltinDecDef {
+            id,
+            tparams,
+            params,
+            plain_typ,
+            ..
+        }) => {
+            write!(output, "builtin dec {}", string_of_defid(id))?;
+            write_tparams(output, tparams)?;
+            write_params(output, params)?;
+            output.write_str(" : ")?;
+            write_plain_typ(output, plain_typ)
+        }
+        DefKind::TableDec(TableDecDef {
+            id,
+            params,
+            plain_typ,
+            ..
+        }) => {
+            write!(output, "tbl dec {}", string_of_defid(id))?;
+            write_params(output, params)?;
+            output.write_str(" : ")?;
+            write_plain_typ(output, plain_typ)
+        }
+        DefKind::FuncDec(FuncDecDef {
+            id,
+            tparams,
+            params,
+            plain_typ,
+            ..
+        }) => {
+            write!(output, "dec {}", string_of_defid(id))?;
+            write_tparams(output, tparams)?;
+            write_params(output, params)?;
+            output.write_str(" : ")?;
+            write_plain_typ(output, plain_typ)
+        }
+        DefKind::TableDef(TableDef { id, rows }) => {
             write!(output, "tbl def {} =\n  ", string_of_defid(id))?;
             for (index, row) in rows.iter().enumerate() {
                 if index != 0 {
@@ -757,7 +944,13 @@ fn write_def(output: &mut dyn fmt::Write, definition: &Def) -> fmt::Result {
             }
             Ok(())
         }
-        DefKind::FuncDefD(id, tparams, args, exp, prems) => {
+        DefKind::FuncDef(FuncDef {
+            id,
+            tparams,
+            args,
+            exp,
+            prems,
+        }) => {
             write!(output, "def {}", string_of_defid(id))?;
             write_tparams(output, tparams)?;
             write_args(output, args)?;
@@ -765,13 +958,13 @@ fn write_def(output: &mut dyn fmt::Write, definition: &Def) -> fmt::Result {
             write_exp(output, exp)?;
             write_prems(output, prems)
         }
-        DefKind::SepD => output.write_str("\n\n"),
+        DefKind::Sep => output.write_str("\n\n"),
     }
 }
 
-// Spec
+// - Spec
 
-/// Renders a specification without source or hint metadata
+/// Renders spec
 pub fn string_of_spec(spec: &Spec) -> String {
     let mut output = String::new();
     write_spec(&mut output, spec).expect("writing to a String cannot fail");
@@ -784,32 +977,4 @@ fn write_spec(output: &mut dyn fmt::Write, spec: &Spec) -> fmt::Result {
         output.write_char('\n')?;
     }
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::domain::source::{Span, Spanned};
-
-    fn id(name: &str) -> Id {
-        Spanned::new(name.to_owned(), Span::default())
-    }
-
-    fn exp(kind: ExpKind) -> Exp {
-        Spanned::new(kind, Span::default())
-    }
-
-    #[test]
-    fn expression_sink_preserves_escaping_and_recursive_precedence() {
-        let expression = exp(ExpKind::BinE(
-            Box::new(exp(ExpKind::TextE("a\n\\\"".to_owned()))),
-            BinOp::AddOp,
-            Box::new(exp(ExpKind::VarE(id("right")))),
-        ));
-        let mut output = String::new();
-
-        write_exp(&mut output, &expression).unwrap();
-
-        assert_eq!(output, "\"a\\n\\\\\\\"\" + right");
-    }
 }

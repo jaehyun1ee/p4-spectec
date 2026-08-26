@@ -1,3 +1,5 @@
+//! Prose-language node annotations
+
 use crate::lang::{
     hints::{alter, fields},
     sl,
@@ -61,24 +63,13 @@ impl<N> Annotated<N> {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use crate::domain::source::{Span, Spanned};
-
-    use super::{Annotated, Hints};
-
-    #[test]
-    fn annotated_wrapper_operations_preserve_hints() {
-        let annotated = Annotated::new(Spanned::new("source".to_owned(), Span::default()));
-        let borrowed = annotated.as_ref();
-        assert_eq!(borrowed.node.node, "source");
-        assert_eq!(borrowed.hints, Hints::default());
-
-        let (node, hints) = annotated
-            .map(|node| Spanned::new(node.node.len(), node.span))
-            .into_parts();
-        assert_eq!(node.node, 6);
-        assert_eq!(node.span, Span::default());
-        assert_eq!(hints, Hints::default());
-    }
+/// Builds an annotated syntax node with the span of another syntax node
+#[macro_export]
+macro_rules! annotated {
+    (node: $node:expr, span: $span:expr $(,)?) => {
+        $crate::lang::pl::annot::Annotated::new($crate::spanned! {
+            node: $node,
+            span: $span,
+        })
+    };
 }

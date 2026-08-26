@@ -41,8 +41,8 @@ pub(super) fn encode_num(num: &num::Number) -> Value {
 pub(super) fn decode_num_typ(value: &Value) -> Result<num::Typ, DecodeError> {
     let (tag, fields) = variant(value)?;
     match (tag, fields) {
-        ("NatT", []) => Ok(num::Typ::NatT),
-        ("IntT", []) => Ok(num::Typ::IntT),
+        ("NatT", []) => Ok(num::Typ::Nat),
+        ("IntT", []) => Ok(num::Typ::Int),
         ("NatT" | "IntT", _) => Err(DecodeError::Expected("valid number type arity")),
         (unknown, _) => Err(DecodeError::UnknownVariant(unknown.to_owned())),
     }
@@ -50,7 +50,7 @@ pub(super) fn decode_num_typ(value: &Value) -> Result<num::Typ, DecodeError> {
 
 pub(super) fn encode_num_typ(typ: num::Typ) -> Value {
     match typ {
-        num::Typ::NatT => json!(["NatT"]),
-        num::Typ::IntT => json!(["IntT"]),
+        num::Typ::Nat => json!(["NatT"]),
+        num::Typ::Int => json!(["IntT"]),
     }
 }

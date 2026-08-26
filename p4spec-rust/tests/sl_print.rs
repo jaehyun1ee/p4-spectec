@@ -24,17 +24,17 @@ fn typ(kind: il::ast::TypKind) -> il::ast::Typ {
 }
 
 fn variable(name: &str) -> il::ast::Exp {
-    il::ast::Exp::new(
-        il::ast::ExpKind::VarE(id(name)),
-        il::ast::TypKind::BoolT,
+    il::ast::exp(
+        il::ast::ExpKind::Var(id(name)),
+        il::ast::TypKind::Bool,
         span(name),
     )
 }
 
 fn text(value: &str) -> il::ast::Exp {
-    il::ast::Exp::new(
-        il::ast::ExpKind::TextE(value.to_owned()),
-        il::ast::TypKind::TextT,
+    il::ast::exp(
+        il::ast::ExpKind::Text(value.to_owned()),
+        il::ast::TypKind::Text,
         span("text"),
     )
 }
@@ -43,56 +43,68 @@ fn notation() -> il::ast::NotTyp {
     Spanned::new(
         Mixfix::Seq(vec![
             Mixfix::Atom(atom("eval")),
-            Mixfix::Arg(typ(il::ast::TypKind::BoolT)),
+            Mixfix::Arg(typ(il::ast::TypKind::Bool)),
             Mixfix::Atom(atom("=>")),
-            Mixfix::Arg(typ(il::ast::TypKind::TextT)),
+            Mixfix::Arg(typ(il::ast::TypKind::Text)),
         ]),
         span("notation"),
     )
 }
 
 fn instr(kind: sl::ast::InstrKind, iid: i64) -> sl::ast::Instr {
-    sl::ast::Instr::new(kind, iid, span("instruction"))
+    sl::ast::instr(kind, iid, span("instruction"))
 }
 
 fn hint(source: &str) -> el::ast::Hint {
-    el::ast::Hint {
-        hintid: id("metadata"),
-        hintexp: Spanned::new(el::ast::ExpKind::TextE(source.to_owned()), span(source)),
-    }
+    (
+        id("metadata"),
+        Spanned::new(el::ast::ExpKind::Text(source.to_owned()), span(source)),
+    )
 }
 
 fn composite_spec(metadata: &str) -> sl::ast::Spec {
     let signature = sl::ast::RelSignature {
-        notation: notation(),
+        not_typ: notation(),
         input_hint: InputHint::new(vec![0]),
     };
     let parameter = Spanned::new(
-        sl::ast::ParamKind::ExpP(typ(il::ast::TypKind::BoolT), Box::new(variable("default"))),
+        sl::ast::ParamKind::Exp(typ(il::ast::TypKind::Bool), Box::new(variable("default"))),
         span("parameter"),
     );
     let hints = vec![hint(metadata)];
 
     vec![
         Spanned::new(
-            sl::ast::DefKind::ExternTypD(id("External"), hints.clone()),
+            sl::ast::DefKind::ExternTyp(sl::ast::ExternTypDef {
+                id: id("External"),
+                hints: hints.clone(),
+            }),
             span(metadata),
         ),
         Spanned::new(
-            sl::ast::DefKind::VarD(id("state"), typ(il::ast::TypKind::BoolT), hints.clone()),
+            sl::ast::DefKind::Var(sl::ast::VarDef {
+                id: id("state"),
+                typ: typ(il::ast::TypKind::Bool),
+                hints: hints.clone(),
+            }),
             span(metadata),
         ),
         Spanned::new(
-            sl::ast::DefKind::RelD(sl::ast::Rel {
+            sl::ast::DefKind::Rel(sl::ast::Rel {
                 id: id("Evaluate"),
-                signature: signature.clone(),
-                inputs: vec![variable("input")],
+                rel_signature: signature.clone(),
+                exps_input: vec![variable("input")],
                 block: vec![instr(
-                    sl::ast::InstrKind::ResultI(signature.clone(), vec![text("line\n\"\\")]),
+                    sl::ast::InstrKind::Result(sl::ast::ResultInstr {
+                        rel_signature: signature.clone(),
+                        exps: vec![text("line\n\"\\")],
+                    }),
                     7,
                 )],
                 else_block: Some(vec![instr(
-                    sl::ast::InstrKind::ReturnI(variable("fallback")),
+                    sl::ast::InstrKind::Return(sl::ast::ReturnInstr {
+                        exp: variable("fallback"),
+                    }),
                     8,
                 )]),
                 hints: hints.clone(),
@@ -100,25 +112,27 @@ fn composite_spec(metadata: &str) -> sl::ast::Spec {
             span(metadata),
         ),
         Spanned::new(
-            sl::ast::DefKind::ExternDecD(sl::ast::ExternFunc {
+            sl::ast::DefKind::ExternDec(sl::ast::ExternFunc {
                 id: id("external"),
                 tparams: Vec::new(),
                 params: vec![parameter.clone()],
-                typ: typ(il::ast::TypKind::BoolT),
+                typ: typ(il::ast::TypKind::Bool),
                 hints: hints.clone(),
             }),
             span(metadata),
         ),
         Spanned::new(
-            sl::ast::DefKind::TableDecD(sl::ast::TableFunc {
+            sl::ast::DefKind::TableDec(sl::ast::TableFunc {
                 id: id("lookup"),
                 params: vec![parameter.clone()],
-                typ: typ(il::ast::TypKind::BoolT),
-                rows: vec![sl::ast::TableRow {
-                    inputs: vec![variable("key")],
-                    expression: text("row\tvalue"),
+                typ: typ(il::ast::TypKind::Bool),
+                table_rows: vec![sl::ast::TableRow {
+                    exps_input: vec![variable("key")],
+                    exp: text("row\tvalue"),
                     block: vec![instr(
-                        sl::ast::InstrKind::ReturnI(variable("row-result")),
+                        sl::ast::InstrKind::Return(sl::ast::ReturnInstr {
+                            exp: variable("row-result"),
+                        }),
                         9,
                     )],
                 }],
@@ -127,12 +141,15 @@ fn composite_spec(metadata: &str) -> sl::ast::Spec {
             span(metadata),
         ),
         Spanned::new(
-            sl::ast::DefKind::FuncDecD(sl::ast::DefinedFunc {
+            sl::ast::DefKind::FuncDec(sl::ast::DefinedFunc {
                 id: id("run"),
                 tparams: Vec::new(),
                 params: vec![parameter],
-                typ: typ(il::ast::TypKind::BoolT),
-                block: vec![instr(sl::ast::InstrKind::ReturnI(text("done")), 10)],
+                typ: typ(il::ast::TypKind::Bool),
+                block: vec![instr(
+                    sl::ast::InstrKind::Return(sl::ast::ReturnInstr { exp: text("done") }),
+                    10,
+                )],
                 else_block: None,
                 hints,
             }),
@@ -173,12 +190,17 @@ fn specification_printer_omits_source_and_hint_metadata() {
 #[test]
 fn dangling_branches_render_the_instruction_identifier() {
     let branch = instr(
-        sl::ast::InstrKind::IfI(
-            variable("condition"),
-            Vec::new(),
-            vec![instr(sl::ast::InstrKind::ReturnI(variable("value")), 2)],
-            true,
-        ),
+        sl::ast::InstrKind::If(sl::ast::IfInstr {
+            exp: variable("condition"),
+            iter_exps: Vec::new(),
+            block: vec![instr(
+                sl::ast::InstrKind::Return(sl::ast::ReturnInstr {
+                    exp: variable("value"),
+                }),
+                2,
+            )],
+            dangle: true,
+        }),
         42,
     );
 

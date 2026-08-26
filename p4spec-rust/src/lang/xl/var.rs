@@ -2,6 +2,7 @@
 
 use crate::domain::source::Spanned;
 
+/// Applies strip var suffix
 pub fn strip_var_suffix(id: &Spanned<String>) -> Spanned<String> {
     let underscore = id.node.find('_');
     let apostrophe = id.node.find('\'');
@@ -11,7 +12,10 @@ pub fn strip_var_suffix(id: &Spanned<String>) -> Spanned<String> {
             return id.clone();
         }
         (Some(index), None) | (None, Some(index)) => index,
-        (Some(left), Some(right)) => left.min(right),
+        (Some(index_l), Some(index_r)) => index_l.min(index_r),
     };
-    Spanned::new(id.node[..suffix_index].to_owned(), id.span.clone())
+    crate::spanned! {
+        node: id.node[..suffix_index].to_owned(),
+        span: id,
+    }
 }

@@ -4,6 +4,7 @@ use p4spec_rust::{
     domain::{
         atom::Atom,
         mixfix::Mixfix,
+        sets::IdSet,
         source::{Position, Span, Spanned},
     },
     lang::{al, el, hints::input::InputHint, il, xl::num},
@@ -18,7 +19,7 @@ fn id(name: &str) -> il::ast::Id {
 }
 
 fn typ() -> il::ast::Typ {
-    Spanned::new(il::ast::TypKind::BoolT, span("type"))
+    Spanned::new(il::ast::TypKind::Bool, span("type"))
 }
 
 fn not_typ() -> il::ast::NotTyp {
@@ -30,15 +31,15 @@ fn atom() -> il::ast::Atom {
 }
 
 fn variable(name: &str) -> il::ast::Exp {
-    il::ast::Exp::new(
-        il::ast::ExpKind::VarE(id(name)),
-        il::ast::TypKind::BoolT,
+    il::ast::exp(
+        il::ast::ExpKind::Var(id(name)),
+        il::ast::TypKind::Bool,
         span(name),
     )
 }
 
 fn expr(kind: il::ast::ExpKind) -> il::ast::Exp {
-    il::ast::Exp::new(kind, il::ast::TypKind::BoolT, span("expression"))
+    il::ast::exp(kind, il::ast::TypKind::Bool, span("expression"))
 }
 
 fn not_exp(name: &str) -> il::ast::NotExp {
@@ -46,48 +47,45 @@ fn not_exp(name: &str) -> il::ast::NotExp {
 }
 
 fn arg_exp(name: &str) -> il::ast::Arg {
-    Spanned::new(
-        il::ast::ArgKind::ExpA(Box::new(variable(name))),
-        span("arg"),
-    )
+    Spanned::new(il::ast::ArgKind::Exp(Box::new(variable(name))), span("arg"))
 }
 
 fn path_with(name: &str) -> il::ast::Path {
-    il::ast::Path::new(
-        il::ast::PathKind::IdxP(
-            Box::new(il::ast::Path::new(
-                il::ast::PathKind::RootP,
-                il::ast::TypKind::BoolT,
+    il::ast::path(
+        il::ast::PathKind::Idx(
+            Box::new(il::ast::path(
+                il::ast::PathKind::Root,
+                il::ast::TypKind::Bool,
                 span("root"),
             )),
             Box::new(variable(name)),
         ),
-        il::ast::TypKind::BoolT,
+        il::ast::TypKind::Bool,
         span("path"),
     )
 }
 
-fn ids(names: &[&str]) -> al::free::FreeVars {
+fn ids(names: &[&str]) -> IdSet {
     names.iter().map(|name| (*name).to_owned()).collect()
 }
 #[test]
 fn al_equality_delegates_to_span_and_subcheck_insensitive_il_semantics() {
-    let left = il::ast::Exp::new(
-        il::ast::ExpKind::SubE(
+    let left = il::ast::exp(
+        il::ast::ExpKind::Sub(
             Box::new(variable("x")),
             typ(),
-            Box::new(il::ast::Subcheck::SkipSC),
+            Box::new(il::ast::Subcheck::Skip),
         ),
-        il::ast::TypKind::BoolT,
+        il::ast::TypKind::Bool,
         span("left"),
     );
-    let right = il::ast::Exp::new(
-        il::ast::ExpKind::SubE(
+    let right = il::ast::exp(
+        il::ast::ExpKind::Sub(
             Box::new(variable("x")),
             typ(),
-            Box::new(il::ast::Subcheck::RecurseSC(typ())),
+            Box::new(il::ast::Subcheck::Recurse(typ())),
         ),
-        il::ast::TypKind::TextT,
+        il::ast::TypKind::Text,
         span("right"),
     );
 
@@ -95,26 +93,32 @@ fn al_equality_delegates_to_span_and_subcheck_insensitive_il_semantics() {
     assert!(al::eq::eq_id(&id("name"), &id("name")));
     assert!(al::eq::eq_arg(&arg_exp("x"), &arg_exp("x")));
     assert!(al::eq::eq_prem(
-        &Spanned::new(il::ast::PremKind::IfPr(variable("x")), span("prem")),
-        &Spanned::new(il::ast::PremKind::IfPr(variable("x")), span("other-prem")),
+        &Spanned::new(
+            il::ast::PremKind::If(il::ast::IfPrem { exp: variable("x") }),
+            span("prem"),
+        ),
+        &Spanned::new(
+            il::ast::PremKind::If(il::ast::IfPrem { exp: variable("x") }),
+            span("other-prem"),
+        ),
     ));
 }
 
 #[test]
 fn al_equality_distinguishes_recursive_operands_variants_and_collection_rules() {
-    let value = |kind| il::ast::Value::new(kind, il::ast::TypKind::BoolT, span("value"));
-    let recursive = value(il::ast::ValueKind::ListV(vec![value(
-        il::ast::ValueKind::StructV(vec![(atom(), value(il::ast::ValueKind::BoolV(true)))]),
+    let value = |kind| il::ast::value(kind, il::ast::TypKind::Bool, span("value"));
+    let recursive = value(il::ast::ValueKind::List(vec![value(
+        il::ast::ValueKind::Struct(vec![(atom(), value(il::ast::ValueKind::Bool(true)))]),
     )]));
-    let recursive_changed = value(il::ast::ValueKind::ListV(vec![value(
-        il::ast::ValueKind::StructV(vec![(atom(), value(il::ast::ValueKind::BoolV(false)))]),
+    let recursive_changed = value(il::ast::ValueKind::List(vec![value(
+        il::ast::ValueKind::Struct(vec![(atom(), value(il::ast::ValueKind::Bool(false)))]),
     )]));
     let expressions = [
         (variable("x"), variable("x"), true),
         (variable("x"), variable("y"), false),
         (
-            expr(il::ast::ExpKind::TupleE(vec![variable("x")])),
-            expr(il::ast::ExpKind::TupleE(vec![variable("x"), variable("y")])),
+            expr(il::ast::ExpKind::Tuple(vec![variable("x")])),
+            expr(il::ast::ExpKind::Tuple(vec![variable("x"), variable("y")])),
             false,
         ),
     ];
@@ -123,37 +127,41 @@ fn al_equality_distinguishes_recursive_operands_variants_and_collection_rules() 
     }
     assert!(!al::eq::eq_value(&recursive, &recursive_changed));
     assert!(!al::eq::eq_value(
-        &value(il::ast::ValueKind::BoolV(true)),
-        &value(il::ast::ValueKind::TextV("true".to_owned())),
+        &value(il::ast::ValueKind::Bool(true)),
+        &value(il::ast::ValueKind::Text("true".to_owned())),
     ));
 
     let root = || {
-        il::ast::Path::new(
-            il::ast::PathKind::RootP,
-            il::ast::TypKind::BoolT,
+        il::ast::path(
+            il::ast::PathKind::Root,
+            il::ast::TypKind::Bool,
             span("root"),
         )
     };
-    let path_x = il::ast::Path::new(
-        il::ast::PathKind::IdxP(Box::new(root()), Box::new(variable("x"))),
-        il::ast::TypKind::BoolT,
+    let path_x = il::ast::path(
+        il::ast::PathKind::Idx(Box::new(root()), Box::new(variable("x"))),
+        il::ast::TypKind::Bool,
         span("path-x"),
     );
-    let path_y = il::ast::Path::new(
-        il::ast::PathKind::IdxP(Box::new(root()), Box::new(variable("y"))),
-        il::ast::TypKind::BoolT,
+    let path_y = il::ast::path(
+        il::ast::PathKind::Idx(Box::new(root()), Box::new(variable("y"))),
+        il::ast::TypKind::Bool,
         span("path-y"),
     );
     assert!(al::eq::eq_path(&path_x, &path_x));
     assert!(!al::eq::eq_path(&path_x, &path_y));
     assert!(!al::eq::eq_pattern(
-        &il::ast::Pattern::ListP(il::ast::ListPattern::Nil),
-        &il::ast::Pattern::ListP(il::ast::ListPattern::Cons),
+        &il::ast::Pattern::List(il::ast::ListPattern::Nil),
+        &il::ast::Pattern::List(il::ast::ListPattern::Cons),
     ));
 
     let rule = |input| {
         Spanned::new(
-            il::ast::PremKind::RulePr(id("r"), not_exp("x"), input),
+            il::ast::PremKind::Rule(il::ast::RulePrem {
+                id: id("r"),
+                not_exp: not_exp("x"),
+                input_hint: input,
+            }),
             span("rule"),
         )
     };
@@ -166,8 +174,14 @@ fn al_equality_distinguishes_recursive_operands_variants_and_collection_rules() 
         &rule(InputHint::new(vec![1]))
     ));
     assert!(!al::eq::eq_prem(
-        &Spanned::new(il::ast::PremKind::IfPr(variable("x")), span("if")),
-        &Spanned::new(il::ast::PremKind::DebugPr(variable("x")), span("debug")),
+        &Spanned::new(
+            il::ast::PremKind::If(il::ast::IfPrem { exp: variable("x") }),
+            span("if"),
+        ),
+        &Spanned::new(
+            il::ast::PremKind::Debug(il::ast::DebugPrem { exp: variable("x") }),
+            span("debug"),
+        ),
     ));
     let iterprem = |bound, bind| il::ast::IterPrem {
         iter: il::ast::Iter::List,
@@ -215,87 +229,87 @@ fn al_equality_distinguishes_recursive_operands_variants_and_collection_rules() 
 fn free_expression_path_argument_and_premise_variants_collect_identifier_text() {
     let x = || Box::new(variable("x"));
     let expressions = vec![
-        (expr(il::ast::ExpKind::BoolE(true)), ids(&[])),
+        (expr(il::ast::ExpKind::Bool(true)), ids(&[])),
         (
-            expr(il::ast::ExpKind::NumE(num::Number::Nat(0.into()))),
+            expr(il::ast::ExpKind::Num(num::Number::Nat(0.into()))),
             ids(&[]),
         ),
-        (expr(il::ast::ExpKind::TextE("text".to_owned())), ids(&[])),
+        (expr(il::ast::ExpKind::Text("text".to_owned())), ids(&[])),
         (variable("x"), ids(&["x"])),
         (
-            expr(il::ast::ExpKind::UnE(
-                il::ast::UnOp::NotOp,
-                il::ast::OpTyp::BoolT,
+            expr(il::ast::ExpKind::Un(
+                il::ast::UnOp::Bool(p4spec_rust::lang::xl::bool::UnOp::Not),
+                il::ast::OpTyp::Bool,
                 x(),
             )),
             ids(&["x"]),
         ),
         (
-            expr(il::ast::ExpKind::BinE(
-                il::ast::BinOp::AndOp,
-                il::ast::OpTyp::BoolT,
+            expr(il::ast::ExpKind::Bin(
+                il::ast::BinOp::Bool(p4spec_rust::lang::xl::bool::BinOp::And),
+                il::ast::OpTyp::Bool,
                 x(),
                 x(),
             )),
             ids(&["x"]),
         ),
         (
-            expr(il::ast::ExpKind::CmpE(
-                il::ast::CmpOp::EqOp,
-                il::ast::OpTyp::BoolT,
+            expr(il::ast::ExpKind::Cmp(
+                il::ast::CmpOp::Bool(p4spec_rust::lang::xl::bool::CmpOp::Eq),
+                il::ast::OpTyp::Bool,
                 x(),
                 x(),
             )),
             ids(&["x"]),
         ),
-        (expr(il::ast::ExpKind::UpCastE(typ(), x())), ids(&["x"])),
-        (expr(il::ast::ExpKind::DownCastE(typ(), x())), ids(&["x"])),
+        (expr(il::ast::ExpKind::UpCast(typ(), x())), ids(&["x"])),
+        (expr(il::ast::ExpKind::DownCast(typ(), x())), ids(&["x"])),
         (
-            expr(il::ast::ExpKind::SubE(
+            expr(il::ast::ExpKind::Sub(
                 x(),
                 typ(),
-                Box::new(il::ast::Subcheck::SkipSC),
+                Box::new(il::ast::Subcheck::Skip),
             )),
             ids(&["x"]),
         ),
         (
-            expr(il::ast::ExpKind::MatchE(
+            expr(il::ast::ExpKind::Match(
                 x(),
-                il::ast::Pattern::ListP(il::ast::ListPattern::Nil),
+                il::ast::Pattern::List(il::ast::ListPattern::Nil),
             )),
             ids(&["x"]),
         ),
         (
-            expr(il::ast::ExpKind::TupleE(vec![variable("x")])),
+            expr(il::ast::ExpKind::Tuple(vec![variable("x")])),
             ids(&["x"]),
         ),
         (
-            expr(il::ast::ExpKind::CaseE(Box::new(not_exp("x")))),
+            expr(il::ast::ExpKind::Case(Box::new(not_exp("x")))),
             ids(&["x"]),
         ),
         (
-            expr(il::ast::ExpKind::StrE(vec![(atom(), variable("x"))])),
+            expr(il::ast::ExpKind::Str(vec![(atom(), variable("x"))])),
             ids(&["x"]),
         ),
-        (expr(il::ast::ExpKind::OptE(Some(x()))), ids(&["x"])),
-        (expr(il::ast::ExpKind::OptE(None)), ids(&[])),
+        (expr(il::ast::ExpKind::Opt(Some(x()))), ids(&["x"])),
+        (expr(il::ast::ExpKind::Opt(None)), ids(&[])),
         (
-            expr(il::ast::ExpKind::ListE(vec![variable("x")])),
+            expr(il::ast::ExpKind::List(vec![variable("x")])),
             ids(&["x"]),
         ),
-        (expr(il::ast::ExpKind::ConsE(x(), x())), ids(&["x"])),
-        (expr(il::ast::ExpKind::CatE(x(), x())), ids(&["x"])),
-        (expr(il::ast::ExpKind::MemE(x(), x())), ids(&["x"])),
-        (expr(il::ast::ExpKind::LenE(x())), ids(&["x"])),
-        (expr(il::ast::ExpKind::DotE(x(), atom())), ids(&["x"])),
-        (expr(il::ast::ExpKind::IdxE(x(), x())), ids(&["x"])),
-        (expr(il::ast::ExpKind::SliceE(x(), x(), x())), ids(&["x"])),
+        (expr(il::ast::ExpKind::Cons(x(), x())), ids(&["x"])),
+        (expr(il::ast::ExpKind::Cat(x(), x())), ids(&["x"])),
+        (expr(il::ast::ExpKind::Mem(x(), x())), ids(&["x"])),
+        (expr(il::ast::ExpKind::Len(x())), ids(&["x"])),
+        (expr(il::ast::ExpKind::Dot(x(), atom())), ids(&["x"])),
+        (expr(il::ast::ExpKind::Idx(x(), x())), ids(&["x"])),
+        (expr(il::ast::ExpKind::Slice(x(), x(), x())), ids(&["x"])),
         (
-            expr(il::ast::ExpKind::UpdE(x(), path_with("x"), x())),
+            expr(il::ast::ExpKind::Upd(x(), path_with("x"), x())),
             ids(&["x"]),
         ),
         (
-            expr(il::ast::ExpKind::CallE(
+            expr(il::ast::ExpKind::Call(
                 id("call"),
                 Vec::new(),
                 vec![arg_exp("x")],
@@ -303,7 +317,7 @@ fn free_expression_path_argument_and_premise_variants_collect_identifier_text() 
             ids(&["x"]),
         ),
         (
-            expr(il::ast::ExpKind::IterE(
+            expr(il::ast::ExpKind::Iter(
                 x(),
                 (il::ast::Iter::List, Vec::new()),
             )),
@@ -316,30 +330,30 @@ fn free_expression_path_argument_and_premise_variants_collect_identifier_text() 
 
     let paths = vec![
         (
-            il::ast::Path::new(
-                il::ast::PathKind::RootP,
-                il::ast::TypKind::BoolT,
+            il::ast::path(
+                il::ast::PathKind::Root,
+                il::ast::TypKind::Bool,
                 span("root"),
             ),
             ids(&[]),
         ),
         (path_with("x"), ids(&["x"])),
         (
-            il::ast::Path::new(
-                il::ast::PathKind::SliceP(
+            il::ast::path(
+                il::ast::PathKind::Slice(
                     Box::new(path_with("x")),
                     Box::new(variable("y")),
                     Box::new(variable("z")),
                 ),
-                il::ast::TypKind::BoolT,
+                il::ast::TypKind::Bool,
                 span("slice"),
             ),
             ids(&["x", "y", "z"]),
         ),
         (
-            il::ast::Path::new(
-                il::ast::PathKind::DotP(Box::new(path_with("x")), atom()),
-                il::ast::TypKind::BoolT,
+            il::ast::path(
+                il::ast::PathKind::Dot(Box::new(path_with("x")), atom()),
+                il::ast::TypKind::Bool,
                 span("dot"),
             ),
             ids(&["x"]),
@@ -351,42 +365,61 @@ fn free_expression_path_argument_and_premise_variants_collect_identifier_text() 
 
     assert_eq!(al::free::free_arg(&arg_exp("x")), ids(&["x"]));
     assert_eq!(
-        al::free::free_arg(&Spanned::new(il::ast::ArgKind::DefA(id("x")), span("def"))),
+        al::free::free_arg(&Spanned::new(il::ast::ArgKind::Def(id("x")), span("def"))),
         ids(&[])
     );
     let premises = vec![
         (
-            il::ast::PremKind::RulePr(id("r"), not_exp("x"), InputHint::new(Vec::new())),
-            ids(&["x"]),
-        ),
-        (il::ast::PremKind::IfPr(variable("x")), ids(&["x"])),
-        (
-            il::ast::PremKind::IfHoldPr(id("r"), not_exp("x")),
-            ids(&["x"]),
-        ),
-        (
-            il::ast::PremKind::IfNotHoldPr(id("r"), not_exp("x")),
+            il::ast::PremKind::Rule(il::ast::RulePrem {
+                id: id("r"),
+                not_exp: not_exp("x"),
+                input_hint: InputHint::new(Vec::new()),
+            }),
             ids(&["x"]),
         ),
         (
-            il::ast::PremKind::LetPr(variable("x"), variable("y")),
+            il::ast::PremKind::If(il::ast::IfPrem { exp: variable("x") }),
+            ids(&["x"]),
+        ),
+        (
+            il::ast::PremKind::IfHold(il::ast::IfHoldPrem {
+                id: id("r"),
+                not_exp: not_exp("x"),
+            }),
+            ids(&["x"]),
+        ),
+        (
+            il::ast::PremKind::IfNotHold(il::ast::IfNotHoldPrem {
+                id: id("r"),
+                not_exp: not_exp("x"),
+            }),
+            ids(&["x"]),
+        ),
+        (
+            il::ast::PremKind::Let(il::ast::LetPrem {
+                exp_l: variable("x"),
+                exp_r: variable("y"),
+            }),
             ids(&["x", "y"]),
         ),
         (
-            il::ast::PremKind::IterPr(
-                Box::new(Spanned::new(
-                    il::ast::PremKind::IfPr(variable("x")),
+            il::ast::PremKind::Iter(il::ast::IteratedPrem {
+                prem: Box::new(Spanned::new(
+                    il::ast::PremKind::If(il::ast::IfPrem { exp: variable("x") }),
                     span("nested"),
                 )),
-                il::ast::IterPrem {
+                iter_prem: il::ast::IterPrem {
                     iter: il::ast::Iter::List,
                     vars_bound: Vec::new(),
                     vars_bind: Vec::new(),
                 },
-            ),
+            }),
             ids(&["x"]),
         ),
-        (il::ast::PremKind::DebugPr(variable("x")), ids(&["x"])),
+        (
+            il::ast::PremKind::Debug(il::ast::DebugPrem { exp: variable("x") }),
+            ids(&["x"]),
+        ),
     ];
     for (premise, expected) in premises {
         assert_eq!(
@@ -398,22 +431,27 @@ fn free_expression_path_argument_and_premise_variants_collect_identifier_text() 
 
 #[test]
 fn free_al_shapes_and_definition_arms_are_exhaustive() {
-    let premise = || Spanned::new(il::ast::PremKind::IfPr(variable("p")), span("premise"));
+    let premise = || {
+        Spanned::new(
+            il::ast::PremKind::If(il::ast::IfPrem { exp: variable("p") }),
+            span("premise"),
+        )
+    };
     let rule_match = al::ast::RuleMatch {
-        signature: vec![variable("s")],
-        inputs: vec![variable("i")],
-        premises: vec![premise()],
+        exps_signature: vec![variable("s")],
+        exps_input: vec![variable("i")],
+        prems: vec![premise()],
     };
     let rule_path = al::ast::RulePath {
-        rule_id: id("rule"),
-        premises: vec![premise()],
-        outputs: vec![variable("o")],
+        id: id("rule"),
+        prems: vec![premise()],
+        exps_output: vec![variable("o")],
     };
     let group: al::ast::RuleGroup = Spanned::new(
         al::ast::RuleGroupKind {
             id: id("group"),
             rule_match: rule_match.clone(),
-            paths: vec![rule_path.clone()],
+            rule_paths: vec![rule_path.clone()],
         },
         span("group"),
     );
@@ -421,7 +459,7 @@ fn free_al_shapes_and_definition_arms_are_exhaustive() {
         al::ast::ElseGroupKind {
             id: id("else"),
             rule_match: rule_match.clone(),
-            path: rule_path.clone(),
+            rule_path: rule_path.clone(),
         },
         span("else"),
     );
@@ -435,10 +473,10 @@ fn free_al_shapes_and_definition_arms_are_exhaustive() {
     );
     let table: al::ast::TableRow = Spanned::new(
         al::ast::TableRowKind {
-            signature: vec![variable("signature")],
+            exps_signature: vec![variable("signature")],
             args: vec![arg_exp("a")],
-            expression: variable("t"),
-            premises: vec![premise()],
+            exp: variable("t"),
+            prems: vec![premise()],
         },
         span("table"),
     );
@@ -453,87 +491,117 @@ fn free_al_shapes_and_definition_arms_are_exhaustive() {
     assert_eq!(al::free::free_clause(&clause), ids(&["a", "c", "p"]));
     assert_eq!(al::free::free_tablerow(&table), ids(&["a", "t", "p"]));
 
-    let def_type = Spanned::new(il::ast::DefTypKind::PlainT(typ()), span("def-type"));
+    let def_type = Spanned::new(il::ast::DefTypKind::Plain(typ()), span("def-type"));
     let definitions: Vec<(al::ast::Def, BTreeSet<String>)> = vec![
         (
             Spanned::new(
-                al::ast::DefKind::ExternTypD(id("e"), Vec::new()),
+                al::ast::DefKind::ExternTyp(al::ast::ExternTypDef {
+                    id: id("e"),
+                    hints: Vec::new(),
+                }),
                 span("def"),
             ),
             ids(&[]),
         ),
         (
             Spanned::new(
-                al::ast::DefKind::TypD(id("t"), Vec::new(), def_type, Vec::new()),
+                al::ast::DefKind::Typ(al::ast::TypDef {
+                    id: id("t"),
+                    tparams: Vec::new(),
+                    def_typ: def_type,
+                    hints: Vec::new(),
+                }),
                 span("def"),
             ),
             ids(&[]),
         ),
         (
             Spanned::new(
-                al::ast::DefKind::VarD(id("v"), typ(), Vec::new()),
+                al::ast::DefKind::Var(al::ast::VarDef {
+                    id: id("v"),
+                    typ: typ(),
+                    hints: Vec::new(),
+                }),
                 span("def"),
             ),
             ids(&[]),
         ),
         (
             Spanned::new(
-                al::ast::DefKind::ExternRelD(
-                    id("er"),
-                    not_typ(),
-                    InputHint::new(Vec::new()),
-                    Vec::new(),
-                ),
+                al::ast::DefKind::ExternRel(al::ast::ExternRelDef {
+                    id: id("er"),
+                    not_typ: not_typ(),
+                    input_hint: InputHint::new(Vec::new()),
+                    hints: Vec::new(),
+                }),
                 span("def"),
             ),
             ids(&[]),
         ),
         (
             Spanned::new(
-                al::ast::DefKind::RelD(
-                    id("r"),
-                    not_typ(),
-                    InputHint::new(Vec::new()),
-                    vec![group],
-                    Some(else_group),
-                    Vec::new(),
-                ),
+                al::ast::DefKind::Rel(al::ast::RelDef {
+                    id: id("r"),
+                    not_typ: not_typ(),
+                    input_hint: InputHint::new(Vec::new()),
+                    rule_groups: vec![group],
+                    else_group: Some(else_group),
+                    hints: Vec::new(),
+                }),
                 span("def"),
             ),
             ids(&["s", "i", "p", "o"]),
         ),
         (
             Spanned::new(
-                al::ast::DefKind::ExternDecD(id("ed"), Vec::new(), Vec::new(), typ(), Vec::new()),
+                al::ast::DefKind::ExternDec(al::ast::ExternDecDef {
+                    id: id("ed"),
+                    tparams: Vec::new(),
+                    params: Vec::new(),
+                    typ: typ(),
+                    hints: Vec::new(),
+                }),
                 span("def"),
             ),
             ids(&[]),
         ),
         (
             Spanned::new(
-                al::ast::DefKind::BuiltinDecD(id("bd"), Vec::new(), Vec::new(), typ(), Vec::new()),
+                al::ast::DefKind::BuiltinDec(al::ast::BuiltinDecDef {
+                    id: id("bd"),
+                    tparams: Vec::new(),
+                    params: Vec::new(),
+                    typ: typ(),
+                    hints: Vec::new(),
+                }),
                 span("def"),
             ),
             ids(&[]),
         ),
         (
             Spanned::new(
-                al::ast::DefKind::TableDecD(id("td"), Vec::new(), typ(), vec![table], Vec::new()),
+                al::ast::DefKind::TableDec(al::ast::TableDecDef {
+                    id: id("td"),
+                    params: Vec::new(),
+                    typ: typ(),
+                    table_rows: vec![table],
+                    hints: Vec::new(),
+                }),
                 span("def"),
             ),
             ids(&["a", "t", "p"]),
         ),
         (
             Spanned::new(
-                al::ast::DefKind::FuncDecD(
-                    id("fd"),
-                    Vec::new(),
-                    Vec::new(),
-                    typ(),
-                    vec![clause.clone()],
-                    Some(clause),
-                    Vec::new(),
-                ),
+                al::ast::DefKind::FuncDec(al::ast::FuncDecDef {
+                    id: id("fd"),
+                    tparams: Vec::new(),
+                    params: Vec::new(),
+                    typ: typ(),
+                    clauses: vec![clause.clone()],
+                    else_clause: Some(clause),
+                    hints: Vec::new(),
+                }),
                 span("def"),
             ),
             ids(&["a", "c", "p"]),
@@ -545,13 +613,13 @@ fn free_al_shapes_and_definition_arms_are_exhaustive() {
 }
 
 fn text_typ() -> il::ast::Typ {
-    Spanned::new(il::ast::TypKind::TextT, span("text-type"))
+    Spanned::new(il::ast::TypKind::Text, span("text-type"))
 }
 
 fn text_expression(text: &str) -> il::ast::Exp {
-    il::ast::Exp::new(
-        il::ast::ExpKind::TextE(text.to_owned()),
-        il::ast::TypKind::TextT,
+    il::ast::exp(
+        il::ast::ExpKind::Text(text.to_owned()),
+        il::ast::TypKind::Text,
         span("text-expression"),
     )
 }
@@ -569,10 +637,10 @@ fn premise(kind: il::ast::PremKind) -> il::ast::Prem {
 }
 
 fn metadata_hint(metadata: &str) -> al::ast::Hint {
-    al::ast::Hint {
-        hintid: id(&format!("ignored-{metadata}")),
-        hintexp: Spanned::new(el::ast::ExpKind::TextE(metadata.to_owned()), span(metadata)),
-    }
+    (
+        id(&format!("ignored-{metadata}")),
+        Spanned::new(el::ast::ExpKind::Text(metadata.to_owned()), span(metadata)),
+    )
 }
 
 fn composite_spec(metadata: &str, extern_inputs: Vec<i64>) -> al::ast::Spec {
@@ -584,38 +652,42 @@ fn composite_spec(metadata: &str, extern_inputs: Vec<i64>) -> al::ast::Spec {
         Mixfix::Arg(text_typ()),
     ]);
     let evaluate_match = al::ast::RuleMatch {
-        signature: vec![variable("signature")],
-        inputs: vec![text_expression("line\n\"\\")],
-        premises: vec![premise(il::ast::PremKind::IfPr(variable("ready")))],
+        exps_signature: vec![variable("signature")],
+        exps_input: vec![text_expression("line\n\"\\")],
+        prems: vec![premise(il::ast::PremKind::If(il::ast::IfPrem {
+            exp: variable("ready"),
+        }))],
     };
     let evaluate_path = al::ast::RulePath {
-        rule_id: id("success"),
-        premises: vec![premise(il::ast::PremKind::DebugPr(variable("trace")))],
-        outputs: vec![text_expression("done")],
+        id: id("success"),
+        prems: vec![premise(il::ast::PremKind::Debug(il::ast::DebugPrem {
+            exp: variable("trace"),
+        }))],
+        exps_output: vec![text_expression("done")],
     };
     let evaluate_group = Spanned::new(
         al::ast::RuleGroupKind {
             id: id("main"),
             rule_match: evaluate_match,
-            paths: vec![evaluate_path],
+            rule_paths: vec![evaluate_path],
         },
         span(metadata),
     );
     let fallback_match = al::ast::RuleMatch {
-        signature: vec![variable("fallback_signature")],
-        inputs: vec![variable("fallback_input")],
-        premises: Vec::new(),
+        exps_signature: vec![variable("fallback_signature")],
+        exps_input: vec![variable("fallback_input")],
+        prems: Vec::new(),
     };
     let fallback_path = al::ast::RulePath {
-        rule_id: id("fallback"),
-        premises: Vec::new(),
-        outputs: vec![text_expression("fallback")],
+        id: id("fallback"),
+        prems: Vec::new(),
+        exps_output: vec![text_expression("fallback")],
     };
     let else_group = Spanned::new(
         al::ast::ElseGroupKind {
             id: id("fallback_group"),
             rule_match: fallback_match,
-            path: fallback_path,
+            rule_path: fallback_path,
         },
         span(metadata),
     );
@@ -624,24 +696,26 @@ fn composite_spec(metadata: &str, extern_inputs: Vec<i64>) -> al::ast::Spec {
         al::ast::RuleGroupKind {
             id: id("ready_group"),
             rule_match: al::ast::RuleMatch {
-                signature: vec![variable("ready_signature")],
-                inputs: vec![variable("ready_input")],
-                premises: Vec::new(),
+                exps_signature: vec![variable("ready_signature")],
+                exps_input: vec![variable("ready_input")],
+                prems: Vec::new(),
             },
-            paths: vec![al::ast::RulePath {
-                rule_id: id("holds"),
-                premises: Vec::new(),
-                outputs: Vec::new(),
+            rule_paths: vec![al::ast::RulePath {
+                id: id("holds"),
+                prems: Vec::new(),
+                exps_output: Vec::new(),
             }],
         },
         span(metadata),
     );
     let table_row = Spanned::new(
         al::ast::TableRowKind {
-            signature: vec![variable("table_signature")],
+            exps_signature: vec![variable("table_signature")],
             args: vec![arg_exp("key")],
-            expression: text_expression("row\tvalue"),
-            premises: vec![premise(il::ast::PremKind::IfPr(variable("ready")))],
+            exp: text_expression("row\tvalue"),
+            prems: vec![premise(il::ast::PremKind::If(il::ast::IfPrem {
+                exp: variable("ready"),
+            }))],
         },
         span(metadata),
     );
@@ -649,105 +723,119 @@ fn composite_spec(metadata: &str, extern_inputs: Vec<i64>) -> al::ast::Spec {
         il::ast::ClauseKind {
             args: vec![arg_exp("argument")],
             expression: text_expression("quoted\"\\"),
-            premises: vec![premise(il::ast::PremKind::IfPr(variable("ready")))],
+            premises: vec![premise(il::ast::PremKind::If(il::ast::IfPrem {
+                exp: variable("ready"),
+            }))],
         },
         span(metadata),
     );
     let else_clause = Spanned::new(
         il::ast::ClauseKind {
             args: vec![arg_exp("fallback")],
-            expression: expr(il::ast::ExpKind::BoolE(false)),
+            expression: expr(il::ast::ExpKind::Bool(false)),
             premises: Vec::new(),
         },
         span(metadata),
     );
-    let def_type = Spanned::new(il::ast::DefTypKind::PlainT(typ()), span("defined-type"));
-    let parameter = Spanned::new(il::ast::ParamKind::ExpP(typ()), span("parameter"));
+    let def_type = Spanned::new(il::ast::DefTypKind::Plain(typ()), span("defined-type"));
+    let parameter = Spanned::new(il::ast::ParamKind::Exp(typ()), span("parameter"));
 
     vec![
         Spanned::new(
-            al::ast::DefKind::ExternTypD(id("External"), hints.clone()),
+            al::ast::DefKind::ExternTyp(al::ast::ExternTypDef {
+                id: id("External"),
+                hints: hints.clone(),
+            }),
             span(metadata),
         ),
         Spanned::new(
-            al::ast::DefKind::TypD(id("Box"), vec![id("T")], def_type, hints.clone()),
+            al::ast::DefKind::Typ(al::ast::TypDef {
+                id: id("Box"),
+                tparams: vec![id("T")],
+                def_typ: def_type,
+                hints: hints.clone(),
+            }),
             span(metadata),
         ),
         Spanned::new(
-            al::ast::DefKind::VarD(id("state"), typ(), hints.clone()),
+            al::ast::DefKind::Var(al::ast::VarDef {
+                id: id("state"),
+                typ: typ(),
+                hints: hints.clone(),
+            }),
             span(metadata),
         ),
         Spanned::new(
-            al::ast::DefKind::ExternRelD(
-                id("Check"),
-                notation(vec![Mixfix::Atom(keyword("check")), Mixfix::Arg(typ())]),
-                InputHint::new(extern_inputs),
-                hints.clone(),
-            ),
+            al::ast::DefKind::ExternRel(al::ast::ExternRelDef {
+                id: id("Check"),
+                not_typ: notation(vec![Mixfix::Atom(keyword("check")), Mixfix::Arg(typ())]),
+                input_hint: InputHint::new(extern_inputs),
+                hints: hints.clone(),
+            }),
             span(metadata),
         ),
         Spanned::new(
-            al::ast::DefKind::RelD(
-                id("Evaluate"),
-                evaluate_notation,
-                InputHint::new(vec![0]),
-                vec![evaluate_group],
-                Some(else_group),
-                hints.clone(),
-            ),
+            al::ast::DefKind::Rel(al::ast::RelDef {
+                id: id("Evaluate"),
+                not_typ: evaluate_notation,
+                input_hint: InputHint::new(vec![0]),
+                rule_groups: vec![evaluate_group],
+                else_group: Some(else_group),
+                hints: hints.clone(),
+            }),
             span(metadata),
         ),
         Spanned::new(
-            al::ast::DefKind::RelD(
-                id("Ready"),
-                ready_notation,
-                InputHint::new(vec![0]),
-                vec![ready_group],
-                None,
-                hints.clone(),
-            ),
+            al::ast::DefKind::Rel(al::ast::RelDef {
+                id: id("Ready"),
+                not_typ: ready_notation,
+                input_hint: InputHint::new(vec![0]),
+                rule_groups: vec![ready_group],
+                else_group: None,
+                hints: hints.clone(),
+            }),
             span(metadata),
         ),
         Spanned::new(
-            al::ast::DefKind::ExternDecD(
-                id("external"),
-                Vec::new(),
-                vec![parameter.clone()],
-                typ(),
-                hints.clone(),
-            ),
+            al::ast::DefKind::ExternDec(al::ast::ExternDecDef {
+                id: id("external"),
+                tparams: Vec::new(),
+                params: vec![parameter.clone()],
+                typ: typ(),
+                hints: hints.clone(),
+            }),
             span(metadata),
         ),
         Spanned::new(
-            al::ast::DefKind::BuiltinDecD(
-                id("builtin"),
-                Vec::new(),
-                vec![parameter.clone()],
-                typ(),
-                hints.clone(),
-            ),
+            al::ast::DefKind::BuiltinDec(al::ast::BuiltinDecDef {
+                id: id("builtin"),
+                tparams: Vec::new(),
+                params: vec![parameter.clone()],
+                typ: typ(),
+                hints: hints.clone(),
+            }),
             span(metadata),
         ),
         Spanned::new(
-            al::ast::DefKind::TableDecD(
-                id("lookup"),
-                vec![parameter.clone()],
-                typ(),
-                vec![table_row],
-                hints.clone(),
-            ),
+            al::ast::DefKind::TableDec(al::ast::TableDecDef {
+                id: id("lookup"),
+                params: vec![parameter.clone()],
+                typ: typ(),
+                table_rows: vec![table_row],
+                hints: hints.clone(),
+            }),
             span(metadata),
         ),
         Spanned::new(
-            al::ast::DefKind::FuncDecD(
-                id("run"),
-                vec![id("T")],
-                vec![parameter],
-                typ(),
-                vec![function_clause],
-                Some(else_clause),
+            al::ast::DefKind::FuncDec(al::ast::FuncDecDef {
+                id: id("run"),
+                tparams: vec![id("T")],
+                params: vec![parameter],
+                typ: typ(),
+                clauses: vec![function_clause],
+                else_clause: Some(else_clause),
                 hints,
-            ),
+            }),
             span(metadata),
         ),
     ]
@@ -817,14 +905,13 @@ fn composite_al_spec_omits_source_hints_and_extern_relation_inputs() {
 }
 
 #[test]
-fn fresh_names_combine_alias_regions_collisions_wildcards_and_nested_dimensions() {
+fn fresh_names_combine_aliases_collisions_wildcards_and_nested_dimensions() {
     let requested = span("requested");
-    let alias_region = span("alias");
-    let alias_typ = Spanned::new(il::ast::TypKind::BoolT, span("alias-type"));
+    let alias_typ = Spanned::new(il::ast::TypKind::Bool, span("alias-type"));
     let nested = Spanned::new(
-        il::ast::TypKind::IterT(
+        il::ast::TypKind::Iter(
             Box::new(Spanned::new(
-                il::ast::TypKind::IterT(Box::new(typ()), il::ast::Iter::Opt),
+                il::ast::TypKind::Iter(Box::new(typ()), il::ast::Iter::Opt),
                 span("inner-iteration"),
             )),
             il::ast::Iter::List,
@@ -832,19 +919,16 @@ fn fresh_names_combine_alias_regions_collisions_wildcards_and_nested_dimensions(
         span("outer-iteration"),
     );
     let mut aliases = BTreeMap::new();
-    aliases.insert(
-        "Alias".to_owned(),
-        (alias_region.clone(), alias_typ.clone()),
-    );
+    aliases.insert("Alias".to_owned(), alias_typ.clone());
 
-    let variable = al::fresh::var_from_typ(
+    let variable = il::fresh::var_from_typ(
         &aliases,
         &ids(&["Alias", "Alias'", "Alias_1"]),
         requested.clone(),
         &nested,
     );
     assert_eq!(variable.id.node, "Alias''");
-    assert_eq!(variable.id.span, alias_region);
+    assert_eq!(variable.id.span, requested);
     assert_eq!(variable.typ, alias_typ);
     assert_eq!(
         variable.iters,
@@ -853,12 +937,9 @@ fn fresh_names_combine_alias_regions_collisions_wildcards_and_nested_dimensions(
 
     aliases.insert(
         "Other".to_owned(),
-        (
-            span("other-alias"),
-            Spanned::new(il::ast::TypKind::BoolT, span("other-type")),
-        ),
+        Spanned::new(il::ast::TypKind::Bool, span("other-type")),
     );
-    let wildcard = al::fresh::var_from_typ_wildcard(
+    let wildcard = il::fresh::var_from_typ_wildcard(
         &aliases,
         &ids(&["_bool", "_bool'", "_bool_1"]),
         requested.clone(),
@@ -866,20 +947,20 @@ fn fresh_names_combine_alias_regions_collisions_wildcards_and_nested_dimensions(
     );
     assert_eq!(wildcard.id.node, "_bool''");
     assert_eq!(wildcard.id.span, requested);
-    assert_eq!(wildcard.typ.node, il::ast::TypKind::BoolT);
+    assert_eq!(wildcard.typ.node, il::ast::TypKind::Bool);
     assert_eq!(
         wildcard.iters,
         vec![il::ast::Iter::Opt, il::ast::Iter::List]
     );
 
     let (generated_ids, generated) =
-        al::fresh::exp_from_typ(true, &aliases, &ids(&["bool"]), &nested);
+        il::fresh::exp_from_typ(true, &aliases, &ids(&["bool"]), &nested);
     assert_eq!(generated_ids, ids(&["bool", "bool'"]));
-    let il::ast::ExpKind::IterE(inner, (il::ast::Iter::List, outer_binders)) = generated.kind
+    let il::ast::ExpKind::Iter(inner, (il::ast::Iter::List, outer_binders)) = generated.node.kind
     else {
         panic!("outer iteration")
     };
-    let il::ast::ExpKind::IterE(_, (il::ast::Iter::Opt, inner_binders)) = inner.kind else {
+    let il::ast::ExpKind::Iter(_, (il::ast::Iter::Opt, inner_binders)) = inner.node.kind else {
         panic!("inner iteration")
     };
     assert_eq!(inner_binders.len(), 1);
