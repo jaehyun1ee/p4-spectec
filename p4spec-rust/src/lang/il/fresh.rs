@@ -7,10 +7,10 @@ use crate::{
         sets::IdSet,
         source::{Span, Spanned},
     },
-    lang::xl,
+    lang::{eq::SyntaxEq, xl},
 };
 
-use super::{ast::*, eq, print, var};
+use super::{ast::*, print, var};
 
 type Metavars = BTreeMap<IdKind, Typ>;
 
@@ -38,7 +38,7 @@ fn find_alias(metavars: &Metavars, span: &Span, typ: &Typ) -> Option<Var> {
     let typ_name = print::string_of_typ(typ);
     let mut matching = metavars
         .iter()
-        .filter(|(name, alias)| eq::eq_typ(typ, alias) && typ_name.as_str() != name.as_str());
+        .filter(|(name, alias)| typ.syntax_eq(alias) && typ_name.as_str() != name.as_str());
     let (name, alias) = matching.next()?;
     if matching.next().is_some() {
         return None;

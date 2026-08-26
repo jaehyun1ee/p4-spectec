@@ -3,7 +3,7 @@ use p4spec_rust::{
         mixfix::Mixfix,
         source::{Position, Span, Spanned},
     },
-    lang::{hints::input::InputHint, il, sl},
+    lang::{eq::SyntaxEq, hints::input::InputHint, il, sl},
 };
 
 fn span(name: &str) -> Span {
@@ -32,41 +32,41 @@ fn instruction(kind: sl::ast::InstrKind, iid: i64, source: &str) -> sl::ast::Ins
 
 #[test]
 fn instruction_equality_ignores_iids_and_source_regions() {
-    let left = instruction(
+    let instr_l = instruction(
         sl::ast::InstrKind::Return(sl::ast::ReturnInstr { exp: variable("x") }),
         1,
         "left",
     );
-    let right = instruction(
+    let instr_r = instruction(
         sl::ast::InstrKind::Return(sl::ast::ReturnInstr { exp: variable("x") }),
         99,
         "right",
     );
 
-    assert!(sl::eq::eq_instr(&left, &right));
+    assert!(instr_l.syntax_eq(&instr_r));
 }
 
 #[test]
 fn subtype_guards_ignore_subcheck_strategy_but_compare_type() {
-    let skip = sl::ast::Guard::Sub(typ(), Box::new(il::ast::Subcheck::Skip));
-    let recurse = sl::ast::Guard::Sub(typ(), Box::new(il::ast::Subcheck::Recurse(typ())));
-    let text = sl::ast::Guard::Sub(
+    let guard_skip = sl::ast::Guard::Sub(typ(), Box::new(il::ast::Subcheck::Skip));
+    let guard_recurse = sl::ast::Guard::Sub(typ(), Box::new(il::ast::Subcheck::Recurse(typ())));
+    let guard_text = sl::ast::Guard::Sub(
         Spanned::new(il::ast::TypKind::Text, span("text")),
         Box::new(il::ast::Subcheck::Skip),
     );
 
-    assert!(sl::eq::eq_guard(&skip, &recurse));
-    assert!(!sl::eq::eq_guard(&skip, &text));
+    assert!(guard_skip.syntax_eq(&guard_recurse));
+    assert!(!guard_skip.syntax_eq(&guard_text));
 }
 
 #[test]
 fn rule_instructions_compare_inputs_iterations_and_nested_blocks() {
-    let rule = |inputs| {
+    let instr_rule = |input_hint| {
         instruction(
             sl::ast::InstrKind::Rule(sl::ast::RuleInstr {
                 id: id("relation"),
                 not_exp: Mixfix::Arg(variable("x")),
-                input_hint: inputs,
+                input_hint,
                 iter_instrs: Vec::new(),
                 block: vec![instruction(
                     sl::ast::InstrKind::Return(sl::ast::ReturnInstr { exp: variable("x") }),
@@ -79,14 +79,8 @@ fn rule_instructions_compare_inputs_iterations_and_nested_blocks() {
         )
     };
 
-    assert!(sl::eq::eq_instr(
-        &rule(InputHint::new(vec![0])),
-        &rule(InputHint::new(vec![0]))
-    ));
-    assert!(!sl::eq::eq_instr(
-        &rule(InputHint::new(vec![0])),
-        &rule(InputHint::new(vec![1]))
-    ));
+    assert!(instr_rule(InputHint::new(vec![0])).syntax_eq(&instr_rule(InputHint::new(vec![0]))));
+    assert!(!instr_rule(InputHint::new(vec![0])).syntax_eq(&instr_rule(InputHint::new(vec![1]))));
 }
 
 #[test]
@@ -97,16 +91,16 @@ fn holding_cases_compare_variant_blocks_and_dangling_flags() {
         "block",
     )];
 
-    assert!(sl::eq::eq_holdcase(
-        &sl::ast::HoldCase::Hold(block.clone(), false),
-        &sl::ast::HoldCase::Hold(block.clone(), false),
-    ));
-    assert!(!sl::eq::eq_holdcase(
-        &sl::ast::HoldCase::Hold(block.clone(), false),
-        &sl::ast::HoldCase::Hold(block.clone(), true),
-    ));
-    assert!(!sl::eq::eq_holdcase(
-        &sl::ast::HoldCase::Hold(block.clone(), false),
-        &sl::ast::HoldCase::NotHold(block, false),
-    ));
+    assert!(
+        sl::ast::HoldCase::Hold(block.clone(), false)
+            .syntax_eq(&sl::ast::HoldCase::Hold(block.clone(), false))
+    );
+    assert!(
+        !sl::ast::HoldCase::Hold(block.clone(), false)
+            .syntax_eq(&sl::ast::HoldCase::Hold(block.clone(), true))
+    );
+    assert!(
+        !sl::ast::HoldCase::Hold(block.clone(), false)
+            .syntax_eq(&sl::ast::HoldCase::NotHold(block, false))
+    );
 }

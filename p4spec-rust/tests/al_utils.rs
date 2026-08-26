@@ -7,7 +7,7 @@ use p4spec_rust::{
         sets::IdSet,
         source::{Position, Span, Spanned},
     },
-    lang::{al, el, hints::input::InputHint, il, xl::num},
+    lang::{al, el, eq::SyntaxEq, hints::input::InputHint, il, xl::num},
 };
 
 fn span(name: &str) -> Span {
@@ -69,8 +69,8 @@ fn ids(names: &[&str]) -> IdSet {
     names.iter().map(|name| (*name).to_owned()).collect()
 }
 #[test]
-fn al_equality_delegates_to_span_and_subcheck_insensitive_il_semantics() {
-    let left = il::ast::exp(
+fn syntax_equality_ignores_spans_and_subcheck_strategy() {
+    let exp_l = il::ast::exp(
         il::ast::ExpKind::Sub(
             Box::new(variable("x")),
             typ(),
@@ -79,7 +79,7 @@ fn al_equality_delegates_to_span_and_subcheck_insensitive_il_semantics() {
         il::ast::TypKind::Bool,
         span("left"),
     );
-    let right = il::ast::exp(
+    let exp_r = il::ast::exp(
         il::ast::ExpKind::Sub(
             Box::new(variable("x")),
             typ(),
@@ -89,31 +89,31 @@ fn al_equality_delegates_to_span_and_subcheck_insensitive_il_semantics() {
         span("right"),
     );
 
-    assert!(al::eq::eq_exp(&left, &right));
-    assert!(al::eq::eq_id(&id("name"), &id("name")));
-    assert!(al::eq::eq_arg(&arg_exp("x"), &arg_exp("x")));
-    assert!(al::eq::eq_prem(
-        &Spanned::new(
+    assert!(exp_l.syntax_eq(&exp_r));
+    assert!(id("name").syntax_eq(&id("name")));
+    assert!(arg_exp("x").syntax_eq(&arg_exp("x")));
+    assert!(
+        Spanned::new(
             il::ast::PremKind::If(il::ast::IfPrem { exp: variable("x") }),
             span("prem"),
-        ),
-        &Spanned::new(
+        )
+        .syntax_eq(&Spanned::new(
             il::ast::PremKind::If(il::ast::IfPrem { exp: variable("x") }),
             span("other-prem"),
-        ),
-    ));
+        ))
+    );
 }
 
 #[test]
-fn al_equality_distinguishes_recursive_operands_variants_and_collection_rules() {
+fn syntax_equality_distinguishes_recursive_operands_variants_and_collection_rules() {
     let value = |kind| il::ast::value(kind, il::ast::TypKind::Bool, span("value"));
-    let recursive = value(il::ast::ValueKind::List(vec![value(
+    let value_recursive = value(il::ast::ValueKind::List(vec![value(
         il::ast::ValueKind::Struct(vec![(atom(), value(il::ast::ValueKind::Bool(true)))]),
     )]));
-    let recursive_changed = value(il::ast::ValueKind::List(vec![value(
+    let value_recursive_changed = value(il::ast::ValueKind::List(vec![value(
         il::ast::ValueKind::Struct(vec![(atom(), value(il::ast::ValueKind::Bool(false)))]),
     )]));
-    let expressions = [
+    let exp_cases = [
         (variable("x"), variable("x"), true),
         (variable("x"), variable("y"), false),
         (
@@ -122,16 +122,16 @@ fn al_equality_distinguishes_recursive_operands_variants_and_collection_rules() 
             false,
         ),
     ];
-    for (left, right, expected) in expressions {
-        assert_eq!(al::eq::eq_exp(&left, &right), expected);
+    for (exp_l, exp_r, is_equal) in exp_cases {
+        assert_eq!(exp_l.syntax_eq(&exp_r), is_equal);
     }
-    assert!(!al::eq::eq_value(&recursive, &recursive_changed));
-    assert!(!al::eq::eq_value(
-        &value(il::ast::ValueKind::Bool(true)),
-        &value(il::ast::ValueKind::Text("true".to_owned())),
-    ));
+    assert!(!value_recursive.syntax_eq(&value_recursive_changed));
+    assert!(
+        !value(il::ast::ValueKind::Bool(true))
+            .syntax_eq(&value(il::ast::ValueKind::Text("true".to_owned())))
+    );
 
-    let root = || {
+    let path_root = || {
         il::ast::path(
             il::ast::PathKind::Root,
             il::ast::TypKind::Bool,
@@ -139,90 +139,77 @@ fn al_equality_distinguishes_recursive_operands_variants_and_collection_rules() 
         )
     };
     let path_x = il::ast::path(
-        il::ast::PathKind::Idx(Box::new(root()), Box::new(variable("x"))),
+        il::ast::PathKind::Idx(Box::new(path_root()), Box::new(variable("x"))),
         il::ast::TypKind::Bool,
         span("path-x"),
     );
     let path_y = il::ast::path(
-        il::ast::PathKind::Idx(Box::new(root()), Box::new(variable("y"))),
+        il::ast::PathKind::Idx(Box::new(path_root()), Box::new(variable("y"))),
         il::ast::TypKind::Bool,
         span("path-y"),
     );
-    assert!(al::eq::eq_path(&path_x, &path_x));
-    assert!(!al::eq::eq_path(&path_x, &path_y));
-    assert!(!al::eq::eq_pattern(
-        &il::ast::Pattern::List(il::ast::ListPattern::Nil),
-        &il::ast::Pattern::List(il::ast::ListPattern::Cons),
-    ));
+    assert!(path_x.syntax_eq(&path_x));
+    assert!(!path_x.syntax_eq(&path_y));
+    assert!(
+        !il::ast::Pattern::List(il::ast::ListPattern::Nil)
+            .syntax_eq(&il::ast::Pattern::List(il::ast::ListPattern::Cons))
+    );
 
-    let rule = |input| {
+    let prem_rule = |input_hint| {
         Spanned::new(
             il::ast::PremKind::Rule(il::ast::RulePrem {
                 id: id("r"),
                 not_exp: not_exp("x"),
-                input_hint: input,
+                input_hint,
             }),
             span("rule"),
         )
     };
-    assert!(al::eq::eq_prem(
-        &rule(InputHint::new(vec![0])),
-        &rule(InputHint::new(vec![0]))
-    ));
-    assert!(!al::eq::eq_prem(
-        &rule(InputHint::new(vec![0])),
-        &rule(InputHint::new(vec![1]))
-    ));
-    assert!(!al::eq::eq_prem(
-        &Spanned::new(
+    assert!(prem_rule(InputHint::new(vec![0])).syntax_eq(&prem_rule(InputHint::new(vec![0]))));
+    assert!(!prem_rule(InputHint::new(vec![0])).syntax_eq(&prem_rule(InputHint::new(vec![1]))));
+    assert!(
+        !Spanned::new(
             il::ast::PremKind::If(il::ast::IfPrem { exp: variable("x") }),
             span("if"),
-        ),
-        &Spanned::new(
+        )
+        .syntax_eq(&Spanned::new(
             il::ast::PremKind::Debug(il::ast::DebugPrem { exp: variable("x") }),
             span("debug"),
-        ),
-    ));
-    let iterprem = |bound, bind| il::ast::IterPrem {
+        ))
+    );
+    let iter_prem = |vars_bound, vars_bind| il::ast::IterPrem {
         iter: il::ast::Iter::List,
-        vars_bound: bound,
-        vars_bind: bind,
+        vars_bound,
+        vars_bind,
     };
-    let x_var = il::ast::Var {
+    let var_x = il::ast::Var {
         id: id("x"),
         typ: typ(),
         iters: Vec::new(),
     };
-    let y_var = il::ast::Var {
+    let var_y = il::ast::Var {
         id: id("y"),
         typ: typ(),
         iters: Vec::new(),
     };
-    assert!(al::eq::eq_iterprem(
-        &iterprem(vec![x_var.clone(), y_var.clone()], vec![x_var.clone()]),
-        &iterprem(vec![y_var.clone(), x_var.clone()], vec![x_var.clone()]),
-    ));
-    assert!(!al::eq::eq_iterprem(
-        &iterprem(vec![x_var.clone()], vec![x_var.clone()]),
-        &iterprem(vec![y_var.clone()], vec![x_var.clone()]),
-    ));
-    assert!(!al::eq::eq_iterprem(
-        &iterprem(vec![x_var.clone()], vec![x_var.clone()]),
-        &iterprem(vec![x_var.clone()], vec![y_var.clone()]),
-    ));
-    assert!(!al::eq::eq_exps(
-        &[variable("x"), variable("y")],
-        &[variable("y"), variable("x")]
-    ));
-    assert!(al::eq::eq_vars(
-        &[x_var.clone(), y_var.clone()],
-        &[y_var, x_var],
-    ));
-    assert!(!al::eq::eq_values(
-        std::slice::from_ref(&recursive),
-        &[recursive_changed],
-    ));
-    assert!(!al::eq::eq_args(&[arg_exp("x")], &[arg_exp("y")]));
+    assert!(
+        iter_prem(vec![var_x.clone(), var_y.clone()], vec![var_x.clone()]).syntax_eq(&iter_prem(
+            vec![var_y.clone(), var_x.clone()],
+            vec![var_x.clone()]
+        ))
+    );
+    assert!(
+        !iter_prem(vec![var_x.clone()], vec![var_x.clone()])
+            .syntax_eq(&iter_prem(vec![var_y.clone()], vec![var_x.clone()]))
+    );
+    assert!(
+        !iter_prem(vec![var_x.clone()], vec![var_x.clone()])
+            .syntax_eq(&iter_prem(vec![var_x.clone()], vec![var_y.clone()]))
+    );
+    assert!(![variable("x"), variable("y")].syntax_eq(&[variable("y"), variable("x")]));
+    assert!([var_x.clone(), var_y.clone()].syntax_eq(&[var_y, var_x]));
+    assert!(!std::slice::from_ref(&value_recursive).syntax_eq(&[value_recursive_changed]));
+    assert!(![arg_exp("x")].syntax_eq(&[arg_exp("y")]));
 }
 
 #[test]

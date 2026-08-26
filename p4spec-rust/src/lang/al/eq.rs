@@ -1,177 +1,230 @@
-//! Semantic equality for algorithmic-language data
+//! Syntax equality for algorithmic-language data
 //!
-//! Ignores source regions and delegates shared syntax to IL equality
+//! Reuses IL equality for aliases and compares AL-specific rule structure
 
-use crate::lang::il;
+use crate::lang::eq::SyntaxEq;
 
 use super::ast::*;
 
-// == Semantic equality
+// == Syntax equality
 
-// - Identifiers
-
-/// Checks identifiers for semantic equality
-pub fn eq_id(id_a: &Id, id_b: &Id) -> bool {
-    il::eq::eq_id(id_a, id_b)
+impl SyntaxEq for RuleMatch {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.exps_signature.syntax_eq(&other.exps_signature)
+            && self.exps_input.syntax_eq(&other.exps_input)
+            && self.prems.syntax_eq(&other.prems)
+    }
 }
 
-// - Atoms
-
-/// Checks atoms for semantic equality
-pub fn eq_atom(atom_a: &Atom, atom_b: &Atom) -> bool {
-    il::eq::eq_atom(atom_a, atom_b)
+impl SyntaxEq for RulePath {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.id.syntax_eq(&other.id)
+            && self.prems.syntax_eq(&other.prems)
+            && self.exps_output.syntax_eq(&other.exps_output)
+    }
 }
 
-/// Checks atom sequences for semantic equality
-pub fn eq_atoms(atoms_a: &[Atom], atoms_b: &[Atom]) -> bool {
-    il::eq::eq_atoms(atoms_a, atoms_b)
+impl SyntaxEq for [RulePath] {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.len() == other.len()
+            && self
+                .iter()
+                .zip(other)
+                .all(|(path_l, path_r)| path_l.syntax_eq(path_r))
+    }
 }
 
-// - Mixfix operators
-
-/// Checks mixfix operators for semantic equality
-pub fn eq_mixop(mixop_a: &Mixop, mixop_b: &Mixop) -> bool {
-    il::eq::eq_mixop(mixop_a, mixop_b)
+impl SyntaxEq for RuleGroupKind {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.id.syntax_eq(&other.id)
+            && self.rule_match.syntax_eq(&other.rule_match)
+            && self.rule_paths.syntax_eq(&other.rule_paths)
+    }
 }
 
-// - Iterators
-
-/// Checks iterators for semantic equality
-pub fn eq_iter(iter_a: Iter, iter_b: Iter) -> bool {
-    il::eq::eq_iter(iter_a, iter_b)
+impl SyntaxEq for RuleGroup {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.node.syntax_eq(&other.node)
+    }
 }
 
-/// Checks iterator sequences for semantic equality
-pub fn eq_iters(iters_a: &[Iter], iters_b: &[Iter]) -> bool {
-    il::eq::eq_iters(iters_a, iters_b)
+impl SyntaxEq for [RuleGroup] {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.len() == other.len()
+            && self
+                .iter()
+                .zip(other)
+                .all(|(group_l, group_r)| group_l.syntax_eq(group_r))
+    }
 }
 
-// - Variables
-
-/// Checks variables for semantic equality
-pub fn eq_var(var_a: &Var, var_b: &Var) -> bool {
-    il::eq::eq_var(var_a, var_b)
+impl SyntaxEq for ElseGroupKind {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.id.syntax_eq(&other.id)
+            && self.rule_match.syntax_eq(&other.rule_match)
+            && self.rule_path.syntax_eq(&other.rule_path)
+    }
 }
 
-/// Checks variable sequences for semantic equality
-pub fn eq_vars(vars_a: &[Var], vars_b: &[Var]) -> bool {
-    il::eq::eq_vars(vars_a, vars_b)
+impl SyntaxEq for ElseGroup {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.node.syntax_eq(&other.node)
+    }
 }
 
-// - Types
-
-/// Checks types for semantic equality
-pub fn eq_typ(typ_a: &Typ, typ_b: &Typ) -> bool {
-    il::eq::eq_typ(typ_a, typ_b)
+impl SyntaxEq for TableRowKind {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.exps_signature.syntax_eq(&other.exps_signature)
+            && self.args.syntax_eq(&other.args)
+            && self.exp.syntax_eq(&other.exp)
+            && self.prems.syntax_eq(&other.prems)
+    }
 }
 
-/// Checks type sequences for semantic equality
-pub fn eq_typs(typs_a: &[Typ], typs_b: &[Typ]) -> bool {
-    il::eq::eq_typs(typs_a, typs_b)
+impl SyntaxEq for TableRow {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.node.syntax_eq(&other.node)
+    }
 }
 
-/// Checks notation types for semantic equality
-pub fn eq_not_typ(not_typ_a: &NotTyp, not_typ_b: &NotTyp) -> bool {
-    il::eq::eq_not_typ(not_typ_a, not_typ_b)
+impl SyntaxEq for [TableRow] {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.len() == other.len()
+            && self
+                .iter()
+                .zip(other)
+                .all(|(row_l, row_r)| row_l.syntax_eq(row_r))
+    }
 }
 
-// - Values
-
-/// Checks values for semantic equality
-pub fn eq_value(value_a: &Value, value_b: &Value) -> bool {
-    il::eq::eq_value(value_a, value_b)
+impl SyntaxEq for ExternTypDef {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.id.syntax_eq(&other.id) && self.hints.syntax_eq(&other.hints)
+    }
 }
 
-/// Checks value sequences for semantic equality
-pub fn eq_values(values_a: &[Value], values_b: &[Value]) -> bool {
-    il::eq::eq_values(values_a, values_b)
+impl SyntaxEq for TypDef {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.id.syntax_eq(&other.id)
+            && self.tparams.syntax_eq(&other.tparams)
+            && self.def_typ.syntax_eq(&other.def_typ)
+            && self.hints.syntax_eq(&other.hints)
+    }
 }
 
-// - Expressions
-
-/// Checks expressions for semantic equality
-pub fn eq_exp(exp_a: &Exp, exp_b: &Exp) -> bool {
-    il::eq::eq_exp(exp_a, exp_b)
+impl SyntaxEq for VarDef {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.id.syntax_eq(&other.id)
+            && self.typ.syntax_eq(&other.typ)
+            && self.hints.syntax_eq(&other.hints)
+    }
 }
 
-/// Checks expression sequences for semantic equality
-pub fn eq_exps(exps_a: &[Exp], exps_b: &[Exp]) -> bool {
-    il::eq::eq_exps(exps_a, exps_b)
+impl SyntaxEq for ExternRelDef {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.id.syntax_eq(&other.id)
+            && self.not_typ.syntax_eq(&other.not_typ)
+            && self.input_hint == other.input_hint
+            && self.hints.syntax_eq(&other.hints)
+    }
 }
 
-/// Checks iterated expressions for semantic equality
-pub fn eq_iterexp(iter_exp_a: &IterExp, iter_exp_b: &IterExp) -> bool {
-    il::eq::eq_iterexp(iter_exp_a, iter_exp_b)
+impl SyntaxEq for RelDef {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.id.syntax_eq(&other.id)
+            && self.not_typ.syntax_eq(&other.not_typ)
+            && self.input_hint == other.input_hint
+            && self.rule_groups.syntax_eq(&other.rule_groups)
+            && match (&self.else_group, &other.else_group) {
+                (Some(group_l), Some(group_r)) => group_l.syntax_eq(group_r),
+                (None, None) => true,
+                _ => false,
+            }
+            && self.hints.syntax_eq(&other.hints)
+    }
 }
 
-/// Checks iterated-expression sequences for semantic equality
-pub fn eq_iterexps(iter_exps_a: &[IterExp], iter_exps_b: &[IterExp]) -> bool {
-    il::eq::eq_iterexps(iter_exps_a, iter_exps_b)
+impl SyntaxEq for ExternDecDef {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.id.syntax_eq(&other.id)
+            && self.tparams.syntax_eq(&other.tparams)
+            && self.params.syntax_eq(&other.params)
+            && self.typ.syntax_eq(&other.typ)
+            && self.hints.syntax_eq(&other.hints)
+    }
 }
 
-// - Patterns
-
-/// Checks patterns for semantic equality
-pub fn eq_pattern(pattern_a: &Pattern, pattern_b: &Pattern) -> bool {
-    il::eq::eq_pattern(pattern_a, pattern_b)
+impl SyntaxEq for BuiltinDecDef {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.id.syntax_eq(&other.id)
+            && self.tparams.syntax_eq(&other.tparams)
+            && self.params.syntax_eq(&other.params)
+            && self.typ.syntax_eq(&other.typ)
+            && self.hints.syntax_eq(&other.hints)
+    }
 }
 
-// - Paths
-
-/// Checks paths for semantic equality
-pub fn eq_path(path_a: &Path, path_b: &Path) -> bool {
-    il::eq::eq_path(path_a, path_b)
+impl SyntaxEq for TableDecDef {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.id.syntax_eq(&other.id)
+            && self.params.syntax_eq(&other.params)
+            && self.typ.syntax_eq(&other.typ)
+            && self.table_rows.syntax_eq(&other.table_rows)
+            && self.hints.syntax_eq(&other.hints)
+    }
 }
 
-// - Type parameters
-
-/// Checks type parameters for semantic equality
-pub fn eq_tparam(tparam_a: &TParam, tparam_b: &TParam) -> bool {
-    il::eq::eq_tparam(tparam_a, tparam_b)
+impl SyntaxEq for FuncDecDef {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.id.syntax_eq(&other.id)
+            && self.tparams.syntax_eq(&other.tparams)
+            && self.params.syntax_eq(&other.params)
+            && self.typ.syntax_eq(&other.typ)
+            && self.clauses.syntax_eq(&other.clauses)
+            && match (&self.else_clause, &other.else_clause) {
+                (Some(clause_l), Some(clause_r)) => clause_l.syntax_eq(clause_r),
+                (None, None) => true,
+                _ => false,
+            }
+            && self.hints.syntax_eq(&other.hints)
+    }
 }
 
-/// Checks type-parameter sequences for semantic equality
-pub fn eq_tparams(tparams_a: &[TParam], tparams_b: &[TParam]) -> bool {
-    il::eq::eq_tparams(tparams_a, tparams_b)
+impl SyntaxEq for DefKind {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (DefKind::ExternTyp(def_l), DefKind::ExternTyp(def_r)) => def_l.syntax_eq(def_r),
+            (DefKind::Typ(def_l), DefKind::Typ(def_r)) => def_l.syntax_eq(def_r),
+            (DefKind::Var(def_l), DefKind::Var(def_r)) => def_l.syntax_eq(def_r),
+            (DefKind::ExternRel(def_l), DefKind::ExternRel(def_r)) => def_l.syntax_eq(def_r),
+            (DefKind::Rel(def_l), DefKind::Rel(def_r)) => def_l.syntax_eq(def_r),
+            (DefKind::ExternDec(def_l), DefKind::ExternDec(def_r)) => def_l.syntax_eq(def_r),
+            (DefKind::BuiltinDec(def_l), DefKind::BuiltinDec(def_r)) => def_l.syntax_eq(def_r),
+            (DefKind::TableDec(def_l), DefKind::TableDec(def_r)) => def_l.syntax_eq(def_r),
+            (DefKind::FuncDec(def_l), DefKind::FuncDec(def_r)) => def_l.syntax_eq(def_r),
+            _ => false,
+        }
+    }
 }
 
-// - Arguments
-
-/// Checks arguments for semantic equality
-pub fn eq_arg(arg_a: &Arg, arg_b: &Arg) -> bool {
-    il::eq::eq_arg(arg_a, arg_b)
+impl SyntaxEq for Def {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.node.syntax_eq(&other.node)
+    }
 }
 
-/// Checks argument sequences for semantic equality
-pub fn eq_args(args_a: &[Arg], args_b: &[Arg]) -> bool {
-    il::eq::eq_args(args_a, args_b)
+impl SyntaxEq for [Def] {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.len() == other.len()
+            && self
+                .iter()
+                .zip(other)
+                .all(|(def_l, def_r)| def_l.syntax_eq(def_r))
+    }
 }
 
-// - Type arguments
-
-/// Checks type arguments for semantic equality
-pub fn eq_targ(targ_a: &Targ, targ_b: &Targ) -> bool {
-    il::eq::eq_targ(targ_a, targ_b)
-}
-
-/// Checks type-argument sequences for semantic equality
-pub fn eq_targs(targs_a: &[Targ], targs_b: &[Targ]) -> bool {
-    il::eq::eq_targs(targs_a, targs_b)
-}
-
-// - Premises
-
-/// Checks premises for semantic equality
-pub fn eq_prem(prem_a: &Prem, prem_b: &Prem) -> bool {
-    il::eq::eq_prem(prem_a, prem_b)
-}
-
-/// Checks iterated premises for semantic equality
-pub fn eq_iterprem(iter_prem_a: &IterPrem, iter_prem_b: &IterPrem) -> bool {
-    il::eq::eq_iterprem(iter_prem_a, iter_prem_b)
-}
-
-/// Checks iterated-premise sequences for semantic equality
-pub fn eq_iterprems(iter_prems_a: &[IterPrem], iter_prems_b: &[IterPrem]) -> bool {
-    il::eq::eq_iterprems(iter_prems_a, iter_prems_b)
+impl SyntaxEq for Spec {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.as_slice().syntax_eq(other.as_slice())
+    }
 }

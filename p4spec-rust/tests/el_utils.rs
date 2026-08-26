@@ -165,18 +165,6 @@ fn free_collection_covers_paths_calls_premises_and_definition_bodies() {
         free::free_id_def(&function),
         BTreeSet::from(["argument".to_owned(), "body".to_owned(), "debug".to_owned()])
     );
-    assert_eq!(
-        free::free_tid_param(&param(ast::ParamKind::Def(
-            id("f", "param.watsup"),
-            vec![Spanned::new("T".to_owned(), span("param.watsup"))],
-            vec![param(ast::ParamKind::Exp(plain(ast::PlainTypKind::Var(
-                id("Nested", "type.watsup"),
-                vec![],
-            ))))],
-            plain(ast::PlainTypKind::Var(id("Result", "type.watsup"), vec![])),
-        ))),
-        BTreeSet::from(["Nested".to_owned(), "Result".to_owned(), "T".to_owned()])
-    );
 }
 
 #[test]

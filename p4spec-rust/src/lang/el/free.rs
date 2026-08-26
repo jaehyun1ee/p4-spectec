@@ -1,6 +1,6 @@
 //! Free identifiers in elaboration-language data
 
-use crate::domain::sets::{self, IdSet, TIdSet};
+use crate::domain::sets::{self, IdSet};
 
 use super::ast::*;
 
@@ -8,47 +8,6 @@ fn frees<T>(items: &[T], free: impl Fn(&T) -> IdSet) -> IdSet {
     items
         .iter()
         .fold(IdSet::new(), |set, item| sets::union(set, free(item)))
-}
-
-// == Collect free type identifiers
-
-// - Plain types
-
-/// Collects free identifiers from tid plain typ
-pub fn free_tid_plain_typ(plain_typ: &PlainTyp) -> TIdSet {
-    match &plain_typ.node {
-        PlainTypKind::Bool | PlainTypKind::Num(_) | PlainTypKind::Text => TIdSet::new(),
-        PlainTypKind::Var(id, targs) => {
-            sets::union(TIdSet::from([id.node.clone()]), free_tid_plain_typs(targs))
-        }
-        PlainTypKind::Paren(plain_typ) | PlainTypKind::Iter(plain_typ, _) => {
-            free_tid_plain_typ(plain_typ)
-        }
-        PlainTypKind::Tuple(plain_typs) => free_tid_plain_typs(plain_typs),
-    }
-}
-
-/// Collects free identifiers from tid plain typs
-pub fn free_tid_plain_typs(plain_typs: &[PlainTyp]) -> TIdSet {
-    frees(plain_typs, free_tid_plain_typ)
-}
-
-// - Parameters
-
-/// Collects free identifiers from tid param
-pub fn free_tid_param(param: &Param) -> TIdSet {
-    match &param.node {
-        ParamKind::Exp(plain_typ) => free_tid_plain_typ(plain_typ),
-        ParamKind::Def(_, tparams, params, plain_typ) => sets::union(
-            tparams.iter().map(|tparam| tparam.node.clone()).collect(),
-            sets::union(free_tid_params(params), free_tid_plain_typ(plain_typ)),
-        ),
-    }
-}
-
-/// Collects free identifiers from tid params
-pub fn free_tid_params(params: &[Param]) -> TIdSet {
-    frees(params, free_tid_param)
 }
 
 // == Collect free identifiers
