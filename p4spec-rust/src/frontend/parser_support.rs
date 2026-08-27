@@ -20,6 +20,7 @@ pub(crate) struct ParserContext {
     variables: RefCell<BTreeSet<String>>,
     scopes: RefCell<Vec<BTreeSet<String>>>,
     positions: RefCell<Vec<Position>>,
+    last_def_typ_left: RefCell<Option<Position>>,
     last_hint_right: RefCell<Option<Position>>,
     last_prem_list: RefCell<Option<(Position, bool)>>,
     modes: RefCell<Vec<ParserMode>>,
@@ -70,6 +71,17 @@ impl ParserContext {
 
     pub(crate) fn span(&self, left: ParserLocation, right: ParserLocation) -> Span {
         Span::new(self.position(left), self.position(right))
+    }
+
+    pub(crate) fn record_def_typ_left(&self, left: ParserLocation) {
+        *self.last_def_typ_left.borrow_mut() = Some(self.position(left));
+    }
+
+    pub(crate) fn last_def_typ_left(&self) -> Position {
+        self.last_def_typ_left
+            .borrow()
+            .clone()
+            .expect("a type definition records its opening position")
     }
 
     pub(crate) fn record_hint_right(&self, right: ParserLocation) {

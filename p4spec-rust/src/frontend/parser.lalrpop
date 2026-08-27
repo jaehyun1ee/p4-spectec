@@ -204,19 +204,19 @@ DefKindRule: DefKind = {
     "EXTERN" "SYNTAX" <id:VarId> <hints:Hints> => {
         DefKind::ExternSyntax(ExternSyntaxDef { id, hints })
     },
-    <left:@L> "SYNTAX" <entries:CommaList<SynId>> <right:@R> =>? {
+    <left:@L> "SYNTAX" <syntax_right:@R> <entries:CommaList<SynId>> =>? {
         if entries.is_empty() {
             Err(syntax_error(
                 context,
                 SyntaxErrorKind::EmptySyntaxDeclaration,
                 left,
-                right,
+                syntax_right,
             ))
         } else {
             Ok(DefKind::Syntax(SyntaxDef { entries }))
         }
     },
-    "SYNTAX" <id:VarIdBind> <hints:Hints> "EQ" <def_typ:DefTyp> => {
+    "SYNTAX" <id:VarIdBind> <hints:Hints> <_equal:DefTypEquals> <def_typ:DefTyp> => {
         DefKind::Typ(TypDef {
             id,
             tparams: vec![],
@@ -225,7 +225,8 @@ DefKindRule: DefKind = {
         })
     },
     "SYNTAX" <id:VarIdLAngleBind> <_enter:EnterScope>
-        <tparams:CommaList<TParam>> "RANGLE" <hints:Hints> "EQ" <def_typ:DefTyp>
+        <tparams:CommaList<TParam>> "RANGLE" <hints:Hints> <_equal:DefTypEquals>
+        <def_typ:DefTyp>
         => {
             context.exit_scope();
             DefKind::Typ(TypDef {
@@ -304,6 +305,10 @@ EnterArith: () = {
 
 ExitMode: () = {
     => context.exit_mode(),
+};
+
+DefTypEquals: () = {
+    "EQ" <right:@R> => context.record_def_typ_left(right),
 };
 
 Comma: () = {
@@ -700,8 +705,13 @@ DefTyp: ast::DefTyp = {
                 .last()
                 .map(|_| context.last_hint_right())
                 .unwrap_or_else(|| context.position(*typ_right))))
-            .unwrap_or_else(|| context.position(left));
+            .unwrap_or_else(|| context.last_def_typ_left());
         let actual_right_location = context.intern_position(actual_right.clone());
+        let actual_left = if cases.is_empty() {
+            actual_right_location
+        } else {
+            left
+        };
         let cases = cases
             .into_iter()
             .map(|(typ, hints, _)| (typ, hints))
@@ -709,9 +719,9 @@ DefTyp: ast::DefTyp = {
         def_typ_kind(cases, SyntaxErrorKind::EmptyType)
             .map(|kind| Spanned::new(
                 kind,
-                Span::new(context.position(left), actual_right),
+                Span::new(context.position(actual_left), actual_right),
             ))
-            .map_err(|kind| syntax_error(context, kind, left, actual_right_location))
+            .map_err(|kind| syntax_error(context, kind, actual_left, actual_right_location))
     },
 };
 
