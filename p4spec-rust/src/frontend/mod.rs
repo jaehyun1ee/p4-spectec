@@ -2,9 +2,8 @@
 
 pub mod error;
 pub mod lexer;
+pub mod parse;
 
-// G03-B2 will connect these parser helpers to the public parse entry points.
-#[cfg_attr(not(test), allow(dead_code))]
 mod parser_support;
 
 #[allow(
