@@ -3,6 +3,7 @@
 use crate::lang::{
     hints::{alter, fields},
     sl,
+    traits::eq::SyntaxEq,
 };
 
 // Hints
@@ -28,6 +29,12 @@ pub struct Hints {
 pub struct Annotated<N> {
     pub node: N,
     pub hints: Hints,
+}
+
+impl<N: SyntaxEq> SyntaxEq for Annotated<N> {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.node.syntax_eq(&other.node)
+    }
 }
 
 impl<N> Annotated<N> {
@@ -72,4 +79,28 @@ macro_rules! annotated {
             span: $span,
         })
     };
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::lang::traits::eq::SyntaxEq;
+
+    use super::Annotated;
+
+    struct SyntaxNode(&'static str);
+
+    impl SyntaxEq for SyntaxNode {
+        fn syntax_eq(&self, other: &Self) -> bool {
+            self.0 == other.0
+        }
+    }
+
+    #[test]
+    fn annotated_syntax_equality_delegates_to_the_node() {
+        let node_first = Annotated::new(SyntaxNode("same"));
+        let mut node_second = Annotated::new(SyntaxNode("same"));
+        node_second.hints.prose_input_exps = Some(Vec::new());
+
+        assert!(node_first.syntax_eq(&node_second));
+    }
 }

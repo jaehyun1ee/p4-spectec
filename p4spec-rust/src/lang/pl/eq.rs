@@ -10,18 +10,6 @@ use super::ast::*;
 
 // - Expressions
 
-impl SyntaxEq for ExpNode {
-    fn syntax_eq(&self, other: &Self) -> bool {
-        self.node.kind.syntax_eq(&other.node.kind)
-    }
-}
-
-impl SyntaxEq for Exp {
-    fn syntax_eq(&self, other: &Self) -> bool {
-        self.node.syntax_eq(&other.node)
-    }
-}
-
 impl SyntaxEq for ExpKind {
     fn syntax_eq(&self, other: &Self) -> bool {
         match (self, other) {
@@ -108,23 +96,7 @@ impl SyntaxEq for ExpKind {
     }
 }
 
-impl SyntaxEq for [Exp] {
-    fn syntax_eq(&self, other: &Self) -> bool {
-        self.len() == other.len()
-            && self
-                .iter()
-                .zip(other)
-                .all(|(exp_l, exp_r)| exp_l.syntax_eq(exp_r))
-    }
-}
-
 // - Paths and arguments
-
-impl SyntaxEq for Path {
-    fn syntax_eq(&self, other: &Self) -> bool {
-        self.node.kind.syntax_eq(&other.node.kind)
-    }
-}
 
 impl SyntaxEq for PathKind {
     fn syntax_eq(&self, other: &Self) -> bool {
@@ -144,12 +116,6 @@ impl SyntaxEq for PathKind {
             }
             _ => false,
         }
-    }
-}
-
-impl SyntaxEq for Param {
-    fn syntax_eq(&self, other: &Self) -> bool {
-        self.node.syntax_eq(&other.node)
     }
 }
 
@@ -173,22 +139,6 @@ impl SyntaxEq for ParamKind {
     }
 }
 
-impl SyntaxEq for [Param] {
-    fn syntax_eq(&self, other: &Self) -> bool {
-        self.len() == other.len()
-            && self
-                .iter()
-                .zip(other)
-                .all(|(param_l, param_r)| param_l.syntax_eq(param_r))
-    }
-}
-
-impl SyntaxEq for Arg {
-    fn syntax_eq(&self, other: &Self) -> bool {
-        self.node.syntax_eq(&other.node)
-    }
-}
-
 impl SyntaxEq for ArgKind {
     fn syntax_eq(&self, other: &Self) -> bool {
         match (self, other) {
@@ -196,16 +146,6 @@ impl SyntaxEq for ArgKind {
             (ArgKind::Def(id_l), ArgKind::Def(id_r)) => id_l.syntax_eq(id_r),
             _ => false,
         }
-    }
-}
-
-impl SyntaxEq for [Arg] {
-    fn syntax_eq(&self, other: &Self) -> bool {
-        self.len() == other.len()
-            && self
-                .iter()
-                .zip(other)
-                .all(|(arg_l, arg_r)| arg_l.syntax_eq(arg_r))
     }
 }
 
@@ -238,19 +178,6 @@ where
 {
     fn syntax_eq(&self, other: &Self) -> bool {
         self.guard.syntax_eq(&other.guard) && self.block.syntax_eq(&other.block)
-    }
-}
-
-impl<Tier> SyntaxEq for [Case<Tier>]
-where
-    Tier: SyntaxEq,
-{
-    fn syntax_eq(&self, other: &Self) -> bool {
-        self.len() == other.len()
-            && self
-                .iter()
-                .zip(other)
-                .all(|(case_l, case_r)| case_l.syntax_eq(case_r))
     }
 }
 
@@ -288,37 +215,6 @@ impl SyntaxEq for InstrNote {
 }
 
 // - Instructions
-
-impl<Tier> SyntaxEq for InstrNode<Tier>
-where
-    Tier: SyntaxEq,
-{
-    fn syntax_eq(&self, other: &Self) -> bool {
-        self.node.kind.syntax_eq(&other.node.kind)
-    }
-}
-
-impl<Tier> SyntaxEq for Instr<Tier>
-where
-    Tier: SyntaxEq,
-{
-    fn syntax_eq(&self, other: &Self) -> bool {
-        self.node.syntax_eq(&other.node)
-    }
-}
-
-impl<Tier> SyntaxEq for [Instr<Tier>]
-where
-    Tier: SyntaxEq,
-{
-    fn syntax_eq(&self, other: &Self) -> bool {
-        self.len() == other.len()
-            && self
-                .iter()
-                .zip(other)
-                .all(|(instr_l, instr_r)| instr_l.syntax_eq(instr_r))
-    }
-}
 
 impl<Tier> SyntaxEq for Block<Tier>
 where
@@ -509,16 +405,6 @@ impl SyntaxEq for BacktrackGroupInstr {
     }
 }
 
-impl SyntaxEq for [BlockGroup] {
-    fn syntax_eq(&self, other: &Self) -> bool {
-        self.len() == other.len()
-            && self
-                .iter()
-                .zip(other)
-                .all(|(block_l, block_r)| block_l.syntax_eq(block_r))
-    }
-}
-
 // - Dispatch tier
 
 impl SyntaxEq for InstrDispatch {
@@ -548,16 +434,6 @@ impl SyntaxEq for GroupDispatchInstr {
 impl SyntaxEq for RouteDispatchInstr {
     fn syntax_eq(&self, other: &Self) -> bool {
         self.blocks.syntax_eq(&other.blocks)
-    }
-}
-
-impl SyntaxEq for [BlockDispatch] {
-    fn syntax_eq(&self, other: &Self) -> bool {
-        self.len() == other.len()
-            && self
-                .iter()
-                .zip(other)
-                .all(|(block_l, block_r)| block_l.syntax_eq(block_r))
     }
 }
 
@@ -611,16 +487,6 @@ impl SyntaxEq for TableRow {
     }
 }
 
-impl SyntaxEq for [TableRow] {
-    fn syntax_eq(&self, other: &Self) -> bool {
-        self.len() == other.len()
-            && self
-                .iter()
-                .zip(other)
-                .all(|(row_l, row_r)| row_l.syntax_eq(row_r))
-    }
-}
-
 impl SyntaxEq for TableFunc {
     fn syntax_eq(&self, other: &Self) -> bool {
         self.id.syntax_eq(&other.id)
@@ -646,12 +512,6 @@ impl SyntaxEq for DefinedFunc {
 }
 
 // - Definitions
-
-impl SyntaxEq for DefNode {
-    fn syntax_eq(&self, other: &Self) -> bool {
-        self.node.syntax_eq(&other.node)
-    }
-}
 
 impl SyntaxEq for ExternTypDef {
     fn syntax_eq(&self, other: &Self) -> bool {
@@ -687,22 +547,6 @@ impl SyntaxEq for DefKind {
             (DefKind::FuncDec(def_l), DefKind::FuncDec(def_r)) => def_l.syntax_eq(def_r),
             _ => false,
         }
-    }
-}
-
-impl SyntaxEq for Def {
-    fn syntax_eq(&self, other: &Self) -> bool {
-        self.node.syntax_eq(&other.node)
-    }
-}
-
-impl SyntaxEq for [Def] {
-    fn syntax_eq(&self, other: &Self) -> bool {
-        self.len() == other.len()
-            && self
-                .iter()
-                .zip(other)
-                .all(|(def_l, def_r)| def_l.syntax_eq(def_r))
     }
 }
 

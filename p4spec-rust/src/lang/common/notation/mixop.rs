@@ -34,16 +34,6 @@ impl Free for () {
     }
 }
 
-impl SyntaxEq for [Mixop] {
-    fn syntax_eq(&self, other: &Self) -> bool {
-        self.len() == other.len()
-            && self
-                .iter()
-                .zip(other)
-                .all(|(mixop_l, mixop_r)| mixop_l.syntax_eq(mixop_r))
-    }
-}
-
 // == Converting a mixfix to a mixop
 
 impl<T> Mixfix<T> {

@@ -94,6 +94,10 @@ fn syntax_equality_ignores_spans_and_subcheck_strategy() {
     );
 
     assert!(exp_l.syntax_eq(&exp_r));
+    assert!(
+        std::slice::from_ref(&il::ast::Subcheck::Skip)
+            .syntax_eq(&[il::ast::Subcheck::Recurse(typ()), il::ast::Subcheck::Skip,])
+    );
     assert!(id("name").syntax_eq(&id("name")));
     assert!(arg_exp("x").syntax_eq(&arg_exp("x")));
     assert!(

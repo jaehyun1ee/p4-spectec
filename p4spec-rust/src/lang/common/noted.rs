@@ -1,8 +1,16 @@
+use crate::lang::traits::eq::SyntaxEq;
+
 /// A syntax node paired with a semantic note
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Noted<T, S> {
     pub kind: T,
     pub note: S,
+}
+
+impl<T: SyntaxEq, S> SyntaxEq for Noted<T, S> {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.kind.syntax_eq(&other.kind)
+    }
 }
 
 impl<T, S> Noted<T, S> {
@@ -25,7 +33,26 @@ macro_rules! noted {
 
 #[cfg(test)]
 mod tests {
+    use crate::lang::traits::eq::SyntaxEq;
+
     use super::super::source::{Position, Span, Spanned};
+    use super::Noted;
+
+    struct SyntaxNode(&'static str);
+
+    impl SyntaxEq for SyntaxNode {
+        fn syntax_eq(&self, other: &Self) -> bool {
+            self.0 == other.0
+        }
+    }
+
+    #[test]
+    fn noted_syntax_equality_delegates_to_the_kind() {
+        let node_first = Noted::new(SyntaxNode("same"), "first note");
+        let node_second = Noted::new(SyntaxNode("same"), "second note");
+
+        assert!(node_first.syntax_eq(&node_second));
+    }
 
     #[test]
     fn noted_macro_builds_a_noted_node_with_the_supplied_nodes_span() {

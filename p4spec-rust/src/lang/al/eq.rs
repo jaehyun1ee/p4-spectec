@@ -24,37 +24,11 @@ impl SyntaxEq for RulePath {
     }
 }
 
-impl SyntaxEq for [RulePath] {
-    fn syntax_eq(&self, other: &Self) -> bool {
-        self.len() == other.len()
-            && self
-                .iter()
-                .zip(other)
-                .all(|(path_l, path_r)| path_l.syntax_eq(path_r))
-    }
-}
-
 impl SyntaxEq for RuleGroupKind {
     fn syntax_eq(&self, other: &Self) -> bool {
         self.id.syntax_eq(&other.id)
             && self.rule_match.syntax_eq(&other.rule_match)
             && self.rule_paths.syntax_eq(&other.rule_paths)
-    }
-}
-
-impl SyntaxEq for RuleGroup {
-    fn syntax_eq(&self, other: &Self) -> bool {
-        self.node.syntax_eq(&other.node)
-    }
-}
-
-impl SyntaxEq for [RuleGroup] {
-    fn syntax_eq(&self, other: &Self) -> bool {
-        self.len() == other.len()
-            && self
-                .iter()
-                .zip(other)
-                .all(|(group_l, group_r)| group_l.syntax_eq(group_r))
     }
 }
 
@@ -66,34 +40,12 @@ impl SyntaxEq for ElseGroupKind {
     }
 }
 
-impl SyntaxEq for ElseGroup {
-    fn syntax_eq(&self, other: &Self) -> bool {
-        self.node.syntax_eq(&other.node)
-    }
-}
-
 impl SyntaxEq for TableRowKind {
     fn syntax_eq(&self, other: &Self) -> bool {
         self.exps_signature.syntax_eq(&other.exps_signature)
             && self.args.syntax_eq(&other.args)
             && self.exp.syntax_eq(&other.exp)
             && self.prems.syntax_eq(&other.prems)
-    }
-}
-
-impl SyntaxEq for TableRow {
-    fn syntax_eq(&self, other: &Self) -> bool {
-        self.node.syntax_eq(&other.node)
-    }
-}
-
-impl SyntaxEq for [TableRow] {
-    fn syntax_eq(&self, other: &Self) -> bool {
-        self.len() == other.len()
-            && self
-                .iter()
-                .zip(other)
-                .all(|(row_l, row_r)| row_l.syntax_eq(row_r))
     }
 }
 
@@ -204,22 +156,6 @@ impl SyntaxEq for DefKind {
             (DefKind::FuncDec(def_l), DefKind::FuncDec(def_r)) => def_l.syntax_eq(def_r),
             _ => false,
         }
-    }
-}
-
-impl SyntaxEq for Def {
-    fn syntax_eq(&self, other: &Self) -> bool {
-        self.node.syntax_eq(&other.node)
-    }
-}
-
-impl SyntaxEq for [Def] {
-    fn syntax_eq(&self, other: &Self) -> bool {
-        self.len() == other.len()
-            && self
-                .iter()
-                .zip(other)
-                .all(|(def_l, def_r)| def_l.syntax_eq(def_r))
     }
 }
 

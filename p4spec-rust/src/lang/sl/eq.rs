@@ -37,16 +37,6 @@ impl SyntaxEq for Case {
     }
 }
 
-impl SyntaxEq for [Case] {
-    fn syntax_eq(&self, other: &Self) -> bool {
-        self.len() == other.len()
-            && self
-                .iter()
-                .zip(other)
-                .all(|(case_l, case_r)| case_l.syntax_eq(case_r))
-    }
-}
-
 impl SyntaxEq for Guard {
     fn syntax_eq(&self, other: &Self) -> bool {
         match (self, other) {
@@ -63,21 +53,6 @@ impl SyntaxEq for Guard {
 }
 
 // - Instructions
-
-impl SyntaxEq for Instr {
-    fn syntax_eq(&self, other: &Self) -> bool {
-        self.node.kind.syntax_eq(&other.node.kind)
-    }
-}
-impl SyntaxEq for [Instr] {
-    fn syntax_eq(&self, other: &Self) -> bool {
-        self.len() == other.len()
-            && self
-                .iter()
-                .zip(other)
-                .all(|(instr_l, instr_r)| instr_l.syntax_eq(instr_r))
-    }
-}
 
 impl SyntaxEq for Block {
     fn syntax_eq(&self, other: &Self) -> bool {
@@ -105,12 +80,6 @@ impl SyntaxEq for RelSignature {
 
 // - Parameters
 
-impl SyntaxEq for Param {
-    fn syntax_eq(&self, other: &Self) -> bool {
-        self.node.syntax_eq(&other.node)
-    }
-}
-
 impl SyntaxEq for ParamKind {
     fn syntax_eq(&self, other: &Self) -> bool {
         match (self, other) {
@@ -128,16 +97,6 @@ impl SyntaxEq for ParamKind {
             }
             _ => false,
         }
-    }
-}
-
-impl SyntaxEq for [Param] {
-    fn syntax_eq(&self, other: &Self) -> bool {
-        self.len() == other.len()
-            && self
-                .iter()
-                .zip(other)
-                .all(|(param_l, param_r)| param_l.syntax_eq(param_r))
     }
 }
 
@@ -282,16 +241,6 @@ impl SyntaxEq for TableRow {
     }
 }
 
-impl SyntaxEq for [TableRow] {
-    fn syntax_eq(&self, other: &Self) -> bool {
-        self.len() == other.len()
-            && self
-                .iter()
-                .zip(other)
-                .all(|(row_l, row_r)| row_l.syntax_eq(row_r))
-    }
-}
-
 impl SyntaxEq for TableFunc {
     fn syntax_eq(&self, other: &Self) -> bool {
         self.id.syntax_eq(&other.id)
@@ -353,22 +302,6 @@ impl SyntaxEq for DefKind {
             (DefKind::FuncDec(def_l), DefKind::FuncDec(def_r)) => def_l.syntax_eq(def_r),
             _ => false,
         }
-    }
-}
-
-impl SyntaxEq for Def {
-    fn syntax_eq(&self, other: &Self) -> bool {
-        self.node.syntax_eq(&other.node)
-    }
-}
-
-impl SyntaxEq for [Def] {
-    fn syntax_eq(&self, other: &Self) -> bool {
-        self.len() == other.len()
-            && self
-                .iter()
-                .zip(other)
-                .all(|(def_l, def_r)| def_l.syntax_eq(def_r))
     }
 }
 

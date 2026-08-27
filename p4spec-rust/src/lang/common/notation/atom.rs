@@ -118,22 +118,6 @@ impl SyntaxEq for Atom {
     }
 }
 
-impl SyntaxEq for Spanned<Atom> {
-    fn syntax_eq(&self, other: &Self) -> bool {
-        self.node.syntax_eq(&other.node)
-    }
-}
-
-impl SyntaxEq for [Spanned<Atom>] {
-    fn syntax_eq(&self, other: &Self) -> bool {
-        self.len() == other.len()
-            && self
-                .iter()
-                .zip(other)
-                .all(|(atom_l, atom_r)| atom_l.syntax_eq(atom_r))
-    }
-}
-
 impl Free for Atom {
     fn free(&self) -> IdSet {
         IdSet::new()
