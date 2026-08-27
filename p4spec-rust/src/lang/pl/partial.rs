@@ -1,90 +1,106 @@
+//! Partiality checks for prose-language data
+
 use super::ast::*;
 
 /// A construct is partial when its evaluation can fail because it invokes a
 /// relation or function that may not match
 pub fn is_partial_exp(exp: &Exp) -> bool {
-    match &exp.node.kind {
-        ExpKind::BoolE(_) | ExpKind::NumE(_) | ExpKind::TextE(_) | ExpKind::VarE(_) => false,
-        ExpKind::UnE(_, _, exp)
-        | ExpKind::UpCastE(_, exp)
-        | ExpKind::DownCastE(_, exp)
-        | ExpKind::SubE(exp, _, _)
-        | ExpKind::MatchE(exp, _)
-        | ExpKind::LenE(exp)
-        | ExpKind::DotE(exp, _)
-        | ExpKind::IterE(exp, _) => is_partial_exp(exp),
-        ExpKind::BinE(_, _, exp_l, exp_r)
-        | ExpKind::CmpE(_, _, exp_l, exp_r)
-        | ExpKind::ConsE(exp_l, exp_r)
-        | ExpKind::CatE(exp_l, exp_r)
-        | ExpKind::MemE(exp_l, exp_r)
-        | ExpKind::IdxE(exp_l, exp_r) => is_partial_exp(exp_l) || is_partial_exp(exp_r),
-        ExpKind::TupleE(exps) | ExpKind::ListE(exps) => exps.iter().any(is_partial_exp),
-        ExpKind::CaseE(notexp) => notexp.args().into_iter().any(is_partial_exp),
-        ExpKind::StrE(fields) => fields.iter().any(|(_, exp)| is_partial_exp(exp)),
-        ExpKind::OptE(exp) => exp.as_deref().is_some_and(is_partial_exp),
-        ExpKind::SliceE(exp_b, exp_l, exp_h) => {
-            is_partial_exp(exp_b) || is_partial_exp(exp_l) || is_partial_exp(exp_h)
+    match &exp.node.node.kind {
+        ExpKind::Bool(_) | ExpKind::Num(_) | ExpKind::Text(_) | ExpKind::Var(_) => false,
+        ExpKind::Un(_, _, exp)
+        | ExpKind::UpCast(_, exp)
+        | ExpKind::DownCast(_, exp)
+        | ExpKind::Sub(exp, _, _)
+        | ExpKind::Match(exp, _)
+        | ExpKind::Len(exp)
+        | ExpKind::Dot(exp, _)
+        | ExpKind::Iter(exp, _) => is_partial_exp(exp),
+        ExpKind::Bin(_, _, exp_l, exp_r)
+        | ExpKind::Cmp(_, _, exp_l, exp_r)
+        | ExpKind::Cons(exp_l, exp_r)
+        | ExpKind::Cat(exp_l, exp_r)
+        | ExpKind::Mem(exp_l, exp_r)
+        | ExpKind::Idx(exp_l, exp_r) => is_partial_exp(exp_l) || is_partial_exp(exp_r),
+        ExpKind::Tuple(exps) | ExpKind::List(exps) => exps.iter().any(is_partial_exp),
+        ExpKind::Case(not_exp) => not_exp.args().into_iter().any(is_partial_exp),
+        ExpKind::Str(fields) => fields.iter().any(|(_, exp)| is_partial_exp(exp)),
+        ExpKind::Opt(exp) => exp.as_deref().is_some_and(is_partial_exp),
+        ExpKind::Slice(exp_b, exp_i, exp_n) => {
+            is_partial_exp(exp_b) || is_partial_exp(exp_i) || is_partial_exp(exp_n)
         }
-        ExpKind::UpdE(exp_b, path, exp_f) => {
+        ExpKind::Upd(exp_b, path, exp_f) => {
             is_partial_exp(exp_b) || is_partial_path(path) || is_partial_exp(exp_f)
         }
-        ExpKind::CallE(..) => true,
+        ExpKind::Call(..) => true,
     }
 }
 
+/// Checks whether a path may fail during evaluation
 pub fn is_partial_path(path: &Path) -> bool {
-    match &path.kind {
-        PathKind::RootP => false,
-        PathKind::IdxP(path, exp) => is_partial_path(path) || is_partial_exp(exp),
-        PathKind::SliceP(path, exp_l, exp_h) => {
-            is_partial_path(path) || is_partial_exp(exp_l) || is_partial_exp(exp_h)
+    match &path.node.kind {
+        PathKind::Root => false,
+        PathKind::Idx(path, exp_i) => is_partial_path(path) || is_partial_exp(exp_i),
+        PathKind::Slice(path, exp_i, exp_n) => {
+            is_partial_path(path) || is_partial_exp(exp_i) || is_partial_exp(exp_n)
         }
-        PathKind::DotP(path, _) => is_partial_path(path),
+        PathKind::Dot(path, _) => is_partial_path(path),
     }
 }
 
+/// Checks whether a case may fail during evaluation
 pub fn is_partial_case<Tier>(case: &Case<Tier>) -> bool {
-    is_partial_guard(&case.0)
+    is_partial_guard(&case.guard)
 }
 
+/// Checks whether a guard may fail during evaluation
 pub fn is_partial_guard(guard: &Guard) -> bool {
     match guard {
-        Guard::BoolG(_) | Guard::SubG(..) | Guard::MatchG(_) | Guard::MemG(_) => false,
-        Guard::CmpG(_, _, exp) | Guard::CheckLetSubG(_, _, exp) | Guard::CheckLetMatchG(_, exp) => {
+        Guard::Bool(_) | Guard::Sub(..) | Guard::Match(_) | Guard::Mem(_) => false,
+        Guard::Cmp(_, _, exp) | Guard::CheckLetSub(_, _, exp) | Guard::CheckLetMatch(_, exp) => {
             is_partial_exp(exp)
         }
     }
 }
 
+/// Checks whether a group-tier instruction may fail during evaluation
 pub fn is_partial_instr_group(instr: &InstrGroup) -> bool {
     match instr {
-        InstrGroup::RuleI(_, notexp, _, _) => notexp.args().into_iter().any(is_partial_exp),
-        InstrGroup::ResultI(_, exps) => exps.iter().any(is_partial_exp),
-        InstrGroup::ReturnI(exp) => is_partial_exp(exp),
-        InstrGroup::BacktrackI(_) => false,
+        InstrGroup::Rule(RuleGroupInstr { not_exp, .. }) => {
+            not_exp.args().into_iter().any(is_partial_exp)
+        }
+        InstrGroup::Result(ResultGroupInstr { exps_output, .. }) => {
+            exps_output.iter().any(is_partial_exp)
+        }
+        InstrGroup::Return(ReturnGroupInstr { exp }) => is_partial_exp(exp),
+        InstrGroup::Backtrack(_) => false,
     }
 }
 
+/// Checks whether a dispatch-tier instruction may fail during evaluation
 pub fn is_partial_instr_dispatch(instr: &InstrDispatch) -> bool {
     match instr {
-        InstrDispatch::GroupI(..) | InstrDispatch::RouteI(_) => false,
+        InstrDispatch::Group(_) | InstrDispatch::Route(_) => false,
     }
 }
 
+/// Checks whether an instruction may fail during evaluation
 pub fn is_partial_instr<Tier>(
     is_partial_tier: impl Fn(&Tier) -> bool,
     instr: &Instr<Tier>,
 ) -> bool {
-    match &instr.node.kind {
-        InstrKind::IfI(exp, _, _, _) => is_partial_exp(exp),
-        InstrKind::HoldI(..) => true,
-        InstrKind::CaseI(exp, cases, _) => is_partial_exp(exp) || cases.iter().any(is_partial_case),
-        InstrKind::LetI(_, exp_r, _) => is_partial_exp(exp_r),
-        InstrKind::DebugI(exp) | InstrKind::DestructI(_, exp) => is_partial_exp(exp),
-        InstrKind::CheckLetSubI(..) | InstrKind::CheckLetMatchI(..) | InstrKind::OptionGetI(..) => {
+    match &instr.node.node.kind {
+        InstrKind::If(IfInstr { exp, .. }) => is_partial_exp(exp),
+        InstrKind::Hold(..) => true,
+        InstrKind::Case(CaseInstr { exp, cases, .. }) => {
+            is_partial_exp(exp) || cases.iter().any(is_partial_case)
+        }
+        InstrKind::Let(LetInstr { exp_r, .. }) => is_partial_exp(exp_r),
+        InstrKind::Debug(DebugInstr { exp }) | InstrKind::Destruct(DestructInstr { exp, .. }) => {
+            is_partial_exp(exp)
+        }
+        InstrKind::CheckLetSub(..) | InstrKind::CheckLetMatch(..) | InstrKind::OptionGet(..) => {
             true
         }
-        InstrKind::TierI(tier) => is_partial_tier(tier),
+        InstrKind::Tier(TierInstr { tier }) => is_partial_tier(tier),
     }
 }

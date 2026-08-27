@@ -1,5 +1,6 @@
 use serde_json::{Value, json};
 
+use crate::lang::el::ast::*;
 use crate::lang::el::ast::{
     self, ArgKind, BinOp, CmpOp, DefKind, DefTypKind, ExpKind, Hole, Iter, NotTypKind, NumOp,
     ParamKind, PathKind, PlainTypKind, PremKind, UnOp,
@@ -64,8 +65,8 @@ fn encode_iter(iter: Iter) -> Value {
 fn decode_num_op(value: &Value) -> Result<NumOp, DecodeError> {
     let (tag, fields) = variant(value)?;
     match (tag, fields) {
-        ("DecOp", []) => Ok(NumOp::DecOp),
-        ("HexOp", []) => Ok(NumOp::HexOp),
+        ("DecOp", []) => Ok(NumOp::Dec),
+        ("HexOp", []) => Ok(NumOp::Hex),
         ("DecOp" | "HexOp", _) => Err(DecodeError::Expected("valid EL number operator arity")),
         (unknown, _) => Err(DecodeError::UnknownVariant(unknown.to_owned())),
     }
@@ -73,17 +74,17 @@ fn decode_num_op(value: &Value) -> Result<NumOp, DecodeError> {
 
 fn encode_num_op(op: NumOp) -> Value {
     match op {
-        NumOp::DecOp => json!(["DecOp"]),
-        NumOp::HexOp => json!(["HexOp"]),
+        NumOp::Dec => json!(["DecOp"]),
+        NumOp::Hex => json!(["HexOp"]),
     }
 }
 
 fn decode_un_op(value: &Value) -> Result<UnOp, DecodeError> {
     let (tag, fields) = variant(value)?;
     match (tag, fields) {
-        ("NotOp", []) => Ok(UnOp::NotOp),
-        ("PlusOp", []) => Ok(UnOp::PlusOp),
-        ("MinusOp", []) => Ok(UnOp::MinusOp),
+        ("NotOp", []) => Ok(UnOp::Bool(crate::lang::xl::bool::UnOp::Not)),
+        ("PlusOp", []) => Ok(UnOp::Num(crate::lang::xl::num::UnOp::Plus)),
+        ("MinusOp", []) => Ok(UnOp::Num(crate::lang::xl::num::UnOp::Minus)),
         ("NotOp" | "PlusOp" | "MinusOp", _) => {
             Err(DecodeError::Expected("valid EL unary operator arity"))
         }
@@ -93,25 +94,25 @@ fn decode_un_op(value: &Value) -> Result<UnOp, DecodeError> {
 
 fn encode_un_op(op: UnOp) -> Value {
     match op {
-        UnOp::NotOp => json!(["NotOp"]),
-        UnOp::PlusOp => json!(["PlusOp"]),
-        UnOp::MinusOp => json!(["MinusOp"]),
+        UnOp::Bool(crate::lang::xl::bool::UnOp::Not) => json!(["NotOp"]),
+        UnOp::Num(crate::lang::xl::num::UnOp::Plus) => json!(["PlusOp"]),
+        UnOp::Num(crate::lang::xl::num::UnOp::Minus) => json!(["MinusOp"]),
     }
 }
 
 fn decode_bin_op(value: &Value) -> Result<BinOp, DecodeError> {
     let (tag, fields) = variant(value)?;
     match (tag, fields) {
-        ("AndOp", []) => Ok(BinOp::AndOp),
-        ("OrOp", []) => Ok(BinOp::OrOp),
-        ("ImplOp", []) => Ok(BinOp::ImplOp),
-        ("EquivOp", []) => Ok(BinOp::EquivOp),
-        ("AddOp", []) => Ok(BinOp::AddOp),
-        ("SubOp", []) => Ok(BinOp::SubOp),
-        ("MulOp", []) => Ok(BinOp::MulOp),
-        ("DivOp", []) => Ok(BinOp::DivOp),
-        ("ModOp", []) => Ok(BinOp::ModOp),
-        ("PowOp", []) => Ok(BinOp::PowOp),
+        ("AndOp", []) => Ok(BinOp::Bool(crate::lang::xl::bool::BinOp::And)),
+        ("OrOp", []) => Ok(BinOp::Bool(crate::lang::xl::bool::BinOp::Or)),
+        ("ImplOp", []) => Ok(BinOp::Bool(crate::lang::xl::bool::BinOp::Impl)),
+        ("EquivOp", []) => Ok(BinOp::Bool(crate::lang::xl::bool::BinOp::Equiv)),
+        ("AddOp", []) => Ok(BinOp::Num(crate::lang::xl::num::BinOp::Add)),
+        ("SubOp", []) => Ok(BinOp::Num(crate::lang::xl::num::BinOp::Sub)),
+        ("MulOp", []) => Ok(BinOp::Num(crate::lang::xl::num::BinOp::Mul)),
+        ("DivOp", []) => Ok(BinOp::Num(crate::lang::xl::num::BinOp::Div)),
+        ("ModOp", []) => Ok(BinOp::Num(crate::lang::xl::num::BinOp::Mod)),
+        ("PowOp", []) => Ok(BinOp::Num(crate::lang::xl::num::BinOp::Pow)),
         (
             "AndOp" | "OrOp" | "ImplOp" | "EquivOp" | "AddOp" | "SubOp" | "MulOp" | "DivOp"
             | "ModOp" | "PowOp",
@@ -123,28 +124,28 @@ fn decode_bin_op(value: &Value) -> Result<BinOp, DecodeError> {
 
 fn encode_bin_op(op: BinOp) -> Value {
     match op {
-        BinOp::AndOp => json!(["AndOp"]),
-        BinOp::OrOp => json!(["OrOp"]),
-        BinOp::ImplOp => json!(["ImplOp"]),
-        BinOp::EquivOp => json!(["EquivOp"]),
-        BinOp::AddOp => json!(["AddOp"]),
-        BinOp::SubOp => json!(["SubOp"]),
-        BinOp::MulOp => json!(["MulOp"]),
-        BinOp::DivOp => json!(["DivOp"]),
-        BinOp::ModOp => json!(["ModOp"]),
-        BinOp::PowOp => json!(["PowOp"]),
+        BinOp::Bool(crate::lang::xl::bool::BinOp::And) => json!(["AndOp"]),
+        BinOp::Bool(crate::lang::xl::bool::BinOp::Or) => json!(["OrOp"]),
+        BinOp::Bool(crate::lang::xl::bool::BinOp::Impl) => json!(["ImplOp"]),
+        BinOp::Bool(crate::lang::xl::bool::BinOp::Equiv) => json!(["EquivOp"]),
+        BinOp::Num(crate::lang::xl::num::BinOp::Add) => json!(["AddOp"]),
+        BinOp::Num(crate::lang::xl::num::BinOp::Sub) => json!(["SubOp"]),
+        BinOp::Num(crate::lang::xl::num::BinOp::Mul) => json!(["MulOp"]),
+        BinOp::Num(crate::lang::xl::num::BinOp::Div) => json!(["DivOp"]),
+        BinOp::Num(crate::lang::xl::num::BinOp::Mod) => json!(["ModOp"]),
+        BinOp::Num(crate::lang::xl::num::BinOp::Pow) => json!(["PowOp"]),
     }
 }
 
 fn decode_cmp_op(value: &Value) -> Result<CmpOp, DecodeError> {
     let (tag, fields) = variant(value)?;
     match (tag, fields) {
-        ("EqOp", []) => Ok(CmpOp::EqOp),
-        ("NeOp", []) => Ok(CmpOp::NeOp),
-        ("LtOp", []) => Ok(CmpOp::LtOp),
-        ("GtOp", []) => Ok(CmpOp::GtOp),
-        ("LeOp", []) => Ok(CmpOp::LeOp),
-        ("GeOp", []) => Ok(CmpOp::GeOp),
+        ("EqOp", []) => Ok(CmpOp::Bool(crate::lang::xl::bool::CmpOp::Eq)),
+        ("NeOp", []) => Ok(CmpOp::Bool(crate::lang::xl::bool::CmpOp::Ne)),
+        ("LtOp", []) => Ok(CmpOp::Num(crate::lang::xl::num::CmpOp::Lt)),
+        ("GtOp", []) => Ok(CmpOp::Num(crate::lang::xl::num::CmpOp::Gt)),
+        ("LeOp", []) => Ok(CmpOp::Num(crate::lang::xl::num::CmpOp::Le)),
+        ("GeOp", []) => Ok(CmpOp::Num(crate::lang::xl::num::CmpOp::Ge)),
         ("EqOp" | "NeOp" | "LtOp" | "GtOp" | "LeOp" | "GeOp", _) => {
             Err(DecodeError::Expected("valid EL comparison operator arity"))
         }
@@ -154,12 +155,12 @@ fn decode_cmp_op(value: &Value) -> Result<CmpOp, DecodeError> {
 
 fn encode_cmp_op(op: CmpOp) -> Value {
     match op {
-        CmpOp::EqOp => json!(["EqOp"]),
-        CmpOp::NeOp => json!(["NeOp"]),
-        CmpOp::LtOp => json!(["LtOp"]),
-        CmpOp::GtOp => json!(["GtOp"]),
-        CmpOp::LeOp => json!(["LeOp"]),
-        CmpOp::GeOp => json!(["GeOp"]),
+        CmpOp::Bool(crate::lang::xl::bool::CmpOp::Eq) => json!(["EqOp"]),
+        CmpOp::Bool(crate::lang::xl::bool::CmpOp::Ne) => json!(["NeOp"]),
+        CmpOp::Num(crate::lang::xl::num::CmpOp::Lt) => json!(["LtOp"]),
+        CmpOp::Num(crate::lang::xl::num::CmpOp::Gt) => json!(["GtOp"]),
+        CmpOp::Num(crate::lang::xl::num::CmpOp::Le) => json!(["LeOp"]),
+        CmpOp::Num(crate::lang::xl::num::CmpOp::Ge) => json!(["GeOp"]),
     }
 }
 
@@ -182,16 +183,16 @@ fn encode_targ(targ: &ast::Targ) -> Value {
 fn decode_plain_typ_kind(value: &Value) -> Result<PlainTypKind, DecodeError> {
     let (tag, fields) = variant(value)?;
     match (tag, fields) {
-        ("BoolT", []) => Ok(PlainTypKind::BoolT),
-        ("NumT", [typ]) => Ok(PlainTypKind::NumT(xl::decode_num_typ(typ)?)),
-        ("TextT", []) => Ok(PlainTypKind::TextT),
-        ("VarT", [id, targs]) => Ok(PlainTypKind::VarT(
+        ("BoolT", []) => Ok(PlainTypKind::Bool),
+        ("NumT", [typ]) => Ok(PlainTypKind::Num(xl::decode_num_typ(typ)?)),
+        ("TextT", []) => Ok(PlainTypKind::Text),
+        ("VarT", [id, targs]) => Ok(PlainTypKind::Var(
             decode_id(id)?,
             decode_list(targs, decode_targ)?,
         )),
-        ("ParenT", [typ]) => Ok(PlainTypKind::ParenT(Box::new(decode_plain_typ(typ)?))),
-        ("TupleT", [types]) => Ok(PlainTypKind::TupleT(decode_list(types, decode_plain_typ)?)),
-        ("IterT", [typ, iter]) => Ok(PlainTypKind::IterT(
+        ("ParenT", [typ]) => Ok(PlainTypKind::Paren(Box::new(decode_plain_typ(typ)?))),
+        ("TupleT", [types]) => Ok(PlainTypKind::Tuple(decode_list(types, decode_plain_typ)?)),
+        ("IterT", [typ, iter]) => Ok(PlainTypKind::Iter(
             Box::new(decode_plain_typ(typ)?),
             decode_iter(iter)?,
         )),
@@ -204,17 +205,17 @@ fn decode_plain_typ_kind(value: &Value) -> Result<PlainTypKind, DecodeError> {
 
 fn encode_plain_typ_kind(typ: &PlainTypKind) -> Value {
     match typ {
-        PlainTypKind::BoolT => json!(["BoolT"]),
-        PlainTypKind::NumT(typ) => json!(["NumT", xl::encode_num_typ(*typ)]),
-        PlainTypKind::TextT => json!(["TextT"]),
-        PlainTypKind::VarT(id, targs) => {
+        PlainTypKind::Bool => json!(["BoolT"]),
+        PlainTypKind::Num(typ) => json!(["NumT", xl::encode_num_typ(*typ)]),
+        PlainTypKind::Text => json!(["TextT"]),
+        PlainTypKind::Var(id, targs) => {
             json!(["VarT", encode_id(id), encode_list(targs, encode_targ)])
         }
-        PlainTypKind::ParenT(typ) => json!(["ParenT", encode_plain_typ(typ)]),
-        PlainTypKind::TupleT(types) => {
+        PlainTypKind::Paren(typ) => json!(["ParenT", encode_plain_typ(typ)]),
+        PlainTypKind::Tuple(types) => {
             json!(["TupleT", encode_list(types, encode_plain_typ)])
         }
-        PlainTypKind::IterT(typ, iter) => {
+        PlainTypKind::Iter(typ, iter) => {
             json!(["IterT", encode_plain_typ(typ), encode_iter(*iter)])
         }
     }
@@ -231,17 +232,17 @@ fn encode_path(path: &ast::Path) -> Value {
 fn decode_path_kind(value: &Value) -> Result<PathKind, DecodeError> {
     let (tag, fields) = variant(value)?;
     match (tag, fields) {
-        ("RootP", []) => Ok(PathKind::RootP),
-        ("IdxP", [path, exp]) => Ok(PathKind::IdxP(
+        ("RootP", []) => Ok(PathKind::Root),
+        ("IdxP", [path, exp]) => Ok(PathKind::Idx(
             Box::new(decode_path(path)?),
             Box::new(decode_exp(exp)?),
         )),
-        ("SliceP", [path, left, right]) => Ok(PathKind::SliceP(
+        ("SliceP", [path, left, right]) => Ok(PathKind::Slice(
             Box::new(decode_path(path)?),
             Box::new(decode_exp(left)?),
             Box::new(decode_exp(right)?),
         )),
-        ("DotP", [path, atom]) => Ok(PathKind::DotP(
+        ("DotP", [path, atom]) => Ok(PathKind::Dot(
             Box::new(decode_path(path)?),
             AtomPhraseCodec::decode(atom)?,
         )),
@@ -254,15 +255,15 @@ fn decode_path_kind(value: &Value) -> Result<PathKind, DecodeError> {
 
 fn encode_path_kind(path: &PathKind) -> Value {
     match path {
-        PathKind::RootP => json!(["RootP"]),
-        PathKind::IdxP(path, exp) => json!(["IdxP", encode_path(path), encode_exp(exp)]),
-        PathKind::SliceP(path, left, right) => json!([
+        PathKind::Root => json!(["RootP"]),
+        PathKind::Idx(path, exp) => json!(["IdxP", encode_path(path), encode_exp(exp)]),
+        PathKind::Slice(path, left, right) => json!([
             "SliceP",
             encode_path(path),
             encode_exp(left),
             encode_exp(right)
         ]),
-        PathKind::DotP(path, atom) => {
+        PathKind::Dot(path, atom) => {
             json!(["DotP", encode_path(path), AtomPhraseCodec::encode(atom)])
         }
     }
@@ -272,8 +273,8 @@ fn decode_arg(value: &Value) -> Result<ast::Arg, DecodeError> {
     source::decode_phrase(value, |value| {
         let (tag, fields) = variant(value)?;
         match (tag, fields) {
-            ("ExpA", [exp]) => Ok(ArgKind::ExpA(decode_exp(exp)?)),
-            ("DefA", [id]) => Ok(ArgKind::DefA(decode_id(id)?)),
+            ("ExpA", [exp]) => Ok(ArgKind::Exp(Box::new(decode_exp(exp)?))),
+            ("DefA", [id]) => Ok(ArgKind::Def(decode_id(id)?)),
             ("ExpA" | "DefA", _) => Err(DecodeError::Expected("valid EL argument arity")),
             (unknown, _) => Err(DecodeError::UnknownVariant(unknown.to_owned())),
         }
@@ -282,8 +283,8 @@ fn decode_arg(value: &Value) -> Result<ast::Arg, DecodeError> {
 
 fn encode_arg(arg: &ast::Arg) -> Value {
     source::encode_phrase(arg, |arg| match arg {
-        ArgKind::ExpA(exp) => json!(["ExpA", encode_exp(exp)]),
-        ArgKind::DefA(id) => json!(["DefA", encode_id(id)]),
+        ArgKind::Exp(exp) => json!(["ExpA", encode_exp(exp)]),
+        ArgKind::Def(id) => json!(["DefA", encode_id(id)]),
     })
 }
 
@@ -319,95 +320,95 @@ pub(super) fn encode_exp(exp: &ast::Exp) -> Value {
 fn decode_exp_kind(value: &Value) -> Result<ExpKind, DecodeError> {
     let (tag, fields) = variant(value)?;
     match (tag, fields) {
-        ("BoolE", [value]) => Ok(ExpKind::BoolE(super::super::boolean(value)?)),
-        ("NumE", [op, num]) => Ok(ExpKind::NumE(decode_num_op(op)?, xl::decode_num(num)?)),
-        ("TextE", [text]) => Ok(ExpKind::TextE(string(text)?.to_owned())),
-        ("VarE", [id]) => Ok(ExpKind::VarE(decode_id(id)?)),
-        ("UnE", [op, exp]) => Ok(ExpKind::UnE(decode_un_op(op)?, Box::new(decode_exp(exp)?))),
-        ("BinE", [left, op, right]) => Ok(ExpKind::BinE(
+        ("BoolE", [value]) => Ok(ExpKind::Bool(super::super::boolean(value)?)),
+        ("NumE", [op, num]) => Ok(ExpKind::Num(decode_num_op(op)?, xl::decode_num(num)?)),
+        ("TextE", [text]) => Ok(ExpKind::Text(string(text)?.to_owned())),
+        ("VarE", [id]) => Ok(ExpKind::Var(decode_id(id)?)),
+        ("UnE", [op, exp]) => Ok(ExpKind::Un(decode_un_op(op)?, Box::new(decode_exp(exp)?))),
+        ("BinE", [left, op, right]) => Ok(ExpKind::Bin(
             Box::new(decode_exp(left)?),
             decode_bin_op(op)?,
             Box::new(decode_exp(right)?),
         )),
-        ("CmpE", [left, op, right]) => Ok(ExpKind::CmpE(
+        ("CmpE", [left, op, right]) => Ok(ExpKind::Cmp(
             Box::new(decode_exp(left)?),
             decode_cmp_op(op)?,
             Box::new(decode_exp(right)?),
         )),
-        ("ArithE", [exp]) => Ok(ExpKind::ArithE(Box::new(decode_exp(exp)?))),
-        ("EpsE", []) => Ok(ExpKind::EpsE),
-        ("ListE", [exps]) => Ok(ExpKind::ListE(decode_list(exps, decode_exp)?)),
-        ("ConsE", [head, tail]) => Ok(ExpKind::ConsE(
+        ("ArithE", [exp]) => Ok(ExpKind::Arith(Box::new(decode_exp(exp)?))),
+        ("EpsE", []) => Ok(ExpKind::Eps),
+        ("ListE", [exps]) => Ok(ExpKind::List(decode_list(exps, decode_exp)?)),
+        ("ConsE", [head, tail]) => Ok(ExpKind::Cons(
             Box::new(decode_exp(head)?),
             Box::new(decode_exp(tail)?),
         )),
-        ("CatE", [left, right]) => Ok(ExpKind::CatE(
+        ("CatE", [left, right]) => Ok(ExpKind::Cat(
             Box::new(decode_exp(left)?),
             Box::new(decode_exp(right)?),
         )),
-        ("IdxE", [base, index]) => Ok(ExpKind::IdxE(
+        ("IdxE", [base, index]) => Ok(ExpKind::Idx(
             Box::new(decode_exp(base)?),
             Box::new(decode_exp(index)?),
         )),
-        ("SliceE", [base, left, right]) => Ok(ExpKind::SliceE(
+        ("SliceE", [base, left, right]) => Ok(ExpKind::Slice(
             Box::new(decode_exp(base)?),
             Box::new(decode_exp(left)?),
             Box::new(decode_exp(right)?),
         )),
-        ("LenE", [exp]) => Ok(ExpKind::LenE(Box::new(decode_exp(exp)?))),
-        ("MemE", [left, right]) => Ok(ExpKind::MemE(
+        ("LenE", [exp]) => Ok(ExpKind::Len(Box::new(decode_exp(exp)?))),
+        ("MemE", [left, right]) => Ok(ExpKind::Mem(
             Box::new(decode_exp(left)?),
             Box::new(decode_exp(right)?),
         )),
-        ("StrE", [fields]) => Ok(ExpKind::StrE(decode_list(fields, |field| {
+        ("StrE", [fields]) => Ok(ExpKind::Str(decode_list(fields, |field| {
             match array(field)? {
                 [atom, exp] => Ok((AtomPhraseCodec::decode(atom)?, decode_exp(exp)?)),
                 _ => Err(DecodeError::Expected("EL structure field pair")),
             }
         })?)),
-        ("DotE", [exp, atom]) => Ok(ExpKind::DotE(
+        ("DotE", [exp, atom]) => Ok(ExpKind::Dot(
             Box::new(decode_exp(exp)?),
             AtomPhraseCodec::decode(atom)?,
         )),
-        ("UpdE", [base, path, value]) => Ok(ExpKind::UpdE(
+        ("UpdE", [base, path, value]) => Ok(ExpKind::Upd(
             Box::new(decode_exp(base)?),
             decode_path(path)?,
             Box::new(decode_exp(value)?),
         )),
-        ("ParenE", [exp]) => Ok(ExpKind::ParenE(Box::new(decode_exp(exp)?))),
-        ("TupleE", [exps]) => Ok(ExpKind::TupleE(decode_list(exps, decode_exp)?)),
-        ("CallE", [id, targs, args]) => Ok(ExpKind::CallE(
+        ("ParenE", [exp]) => Ok(ExpKind::Paren(Box::new(decode_exp(exp)?))),
+        ("TupleE", [exps]) => Ok(ExpKind::Tuple(decode_list(exps, decode_exp)?)),
+        ("CallE", [id, targs, args]) => Ok(ExpKind::Call(
             decode_id(id)?,
             decode_list(targs, decode_targ)?,
             decode_list(args, decode_arg)?,
         )),
-        ("IterE", [exp, iter]) => Ok(ExpKind::IterE(
+        ("IterE", [exp, iter]) => Ok(ExpKind::Iter(
             Box::new(decode_exp(exp)?),
             decode_iter(iter)?,
         )),
-        ("SubE", [exp, typ]) => Ok(ExpKind::SubE(
+        ("SubE", [exp, typ]) => Ok(ExpKind::Sub(
             Box::new(decode_exp(exp)?),
             decode_plain_typ(typ)?,
         )),
-        ("AtomE", [atom]) => Ok(ExpKind::AtomE(AtomPhraseCodec::decode(atom)?)),
-        ("SeqE", [exps]) => Ok(ExpKind::SeqE(decode_list(exps, decode_exp)?)),
-        ("InfixE", [left, atom, right]) => Ok(ExpKind::InfixE(
+        ("AtomE", [atom]) => Ok(ExpKind::Atom(AtomPhraseCodec::decode(atom)?)),
+        ("SeqE", [exps]) => Ok(ExpKind::Seq(decode_list(exps, decode_exp)?)),
+        ("InfixE", [left, atom, right]) => Ok(ExpKind::Infix(
             Box::new(decode_exp(left)?),
             AtomPhraseCodec::decode(atom)?,
             Box::new(decode_exp(right)?),
         )),
-        ("BrackE", [left, exp, right]) => Ok(ExpKind::BrackE(
+        ("BrackE", [left, exp, right]) => Ok(ExpKind::Brack(
             AtomPhraseCodec::decode(left)?,
             Box::new(decode_exp(exp)?),
             AtomPhraseCodec::decode(right)?,
         )),
-        ("HoleE", [hole]) => Ok(ExpKind::HoleE(decode_hole(hole)?)),
-        ("FuseE", [left, right]) => Ok(ExpKind::FuseE(
+        ("HoleE", [hole]) => Ok(ExpKind::Hole(decode_hole(hole)?)),
+        ("FuseE", [left, right]) => Ok(ExpKind::Fuse(
             Box::new(decode_exp(left)?),
             Box::new(decode_exp(right)?),
         )),
-        ("UnparenE", [exp]) => Ok(ExpKind::UnparenE(Box::new(decode_exp(exp)?))),
-        ("LatexE", [latex]) => Ok(ExpKind::LatexE(string(latex)?.to_owned())),
+        ("UnparenE", [exp]) => Ok(ExpKind::Unparen(Box::new(decode_exp(exp)?))),
+        ("LatexE", [latex]) => Ok(ExpKind::Latex(string(latex)?.to_owned())),
         (
             "BoolE" | "NumE" | "TextE" | "VarE" | "UnE" | "BinE" | "CmpE" | "ArithE" | "EpsE"
             | "ListE" | "ConsE" | "CatE" | "IdxE" | "SliceE" | "LenE" | "MemE" | "StrE" | "DotE"
@@ -421,12 +422,12 @@ fn decode_exp_kind(value: &Value) -> Result<ExpKind, DecodeError> {
 
 fn encode_exp_kind(exp: &ExpKind) -> Value {
     match exp {
-        ExpKind::BoolE(value) => json!(["BoolE", value]),
-        ExpKind::NumE(op, num) => json!(["NumE", encode_num_op(*op), xl::encode_num(num)]),
-        ExpKind::TextE(text) => json!(["TextE", text]),
-        ExpKind::VarE(id) => json!(["VarE", encode_id(id)]),
-        ExpKind::UnE(op, exp) => json!(["UnE", encode_un_op(*op), encode_exp(exp)]),
-        ExpKind::BinE(left, op, right) => {
+        ExpKind::Bool(value) => json!(["BoolE", value]),
+        ExpKind::Num(op, num) => json!(["NumE", encode_num_op(*op), xl::encode_num(num)]),
+        ExpKind::Text(text) => json!(["TextE", text]),
+        ExpKind::Var(id) => json!(["VarE", encode_id(id)]),
+        ExpKind::Un(op, exp) => json!(["UnE", encode_un_op(*op), encode_exp(exp)]),
+        ExpKind::Bin(left, op, right) => {
             json!([
                 "BinE",
                 encode_exp(left),
@@ -434,7 +435,7 @@ fn encode_exp_kind(exp: &ExpKind) -> Value {
                 encode_exp(right)
             ])
         }
-        ExpKind::CmpE(left, op, right) => {
+        ExpKind::Cmp(left, op, right) => {
             json!([
                 "CmpE",
                 encode_exp(left),
@@ -442,31 +443,31 @@ fn encode_exp_kind(exp: &ExpKind) -> Value {
                 encode_exp(right)
             ])
         }
-        ExpKind::ArithE(exp) => json!(["ArithE", encode_exp(exp)]),
-        ExpKind::EpsE => json!(["EpsE"]),
-        ExpKind::ListE(exps) => json!(["ListE", encode_list(exps, encode_exp)]),
-        ExpKind::ConsE(head, tail) => json!(["ConsE", encode_exp(head), encode_exp(tail)]),
-        ExpKind::CatE(left, right) => json!(["CatE", encode_exp(left), encode_exp(right)]),
-        ExpKind::IdxE(base, index) => json!(["IdxE", encode_exp(base), encode_exp(index)]),
-        ExpKind::SliceE(base, left, right) => json!([
+        ExpKind::Arith(exp) => json!(["ArithE", encode_exp(exp)]),
+        ExpKind::Eps => json!(["EpsE"]),
+        ExpKind::List(exps) => json!(["ListE", encode_list(exps, encode_exp)]),
+        ExpKind::Cons(head, tail) => json!(["ConsE", encode_exp(head), encode_exp(tail)]),
+        ExpKind::Cat(left, right) => json!(["CatE", encode_exp(left), encode_exp(right)]),
+        ExpKind::Idx(base, index) => json!(["IdxE", encode_exp(base), encode_exp(index)]),
+        ExpKind::Slice(base, left, right) => json!([
             "SliceE",
             encode_exp(base),
             encode_exp(left),
             encode_exp(right)
         ]),
-        ExpKind::LenE(exp) => json!(["LenE", encode_exp(exp)]),
-        ExpKind::MemE(left, right) => json!(["MemE", encode_exp(left), encode_exp(right)]),
-        ExpKind::StrE(fields) => json!([
+        ExpKind::Len(exp) => json!(["LenE", encode_exp(exp)]),
+        ExpKind::Mem(left, right) => json!(["MemE", encode_exp(left), encode_exp(right)]),
+        ExpKind::Str(fields) => json!([
             "StrE",
             fields
                 .iter()
                 .map(|(atom, exp)| json!([AtomPhraseCodec::encode(atom), encode_exp(exp)]))
                 .collect::<Vec<_>>()
         ]),
-        ExpKind::DotE(exp, atom) => {
+        ExpKind::Dot(exp, atom) => {
             json!(["DotE", encode_exp(exp), AtomPhraseCodec::encode(atom)])
         }
-        ExpKind::UpdE(base, path, value) => {
+        ExpKind::Upd(base, path, value) => {
             json!([
                 "UpdE",
                 encode_exp(base),
@@ -474,57 +475,57 @@ fn encode_exp_kind(exp: &ExpKind) -> Value {
                 encode_exp(value)
             ])
         }
-        ExpKind::ParenE(exp) => json!(["ParenE", encode_exp(exp)]),
-        ExpKind::TupleE(exps) => json!(["TupleE", encode_list(exps, encode_exp)]),
-        ExpKind::CallE(id, targs, args) => json!([
+        ExpKind::Paren(exp) => json!(["ParenE", encode_exp(exp)]),
+        ExpKind::Tuple(exps) => json!(["TupleE", encode_list(exps, encode_exp)]),
+        ExpKind::Call(id, targs, args) => json!([
             "CallE",
             encode_id(id),
             encode_list(targs, encode_targ),
             encode_list(args, encode_arg)
         ]),
-        ExpKind::IterE(exp, iter) => json!(["IterE", encode_exp(exp), encode_iter(*iter)]),
-        ExpKind::SubE(exp, typ) => json!(["SubE", encode_exp(exp), encode_plain_typ(typ)]),
-        ExpKind::AtomE(atom) => json!(["AtomE", AtomPhraseCodec::encode(atom)]),
-        ExpKind::SeqE(exps) => json!(["SeqE", encode_list(exps, encode_exp)]),
-        ExpKind::InfixE(left, atom, right) => json!([
+        ExpKind::Iter(exp, iter) => json!(["IterE", encode_exp(exp), encode_iter(*iter)]),
+        ExpKind::Sub(exp, typ) => json!(["SubE", encode_exp(exp), encode_plain_typ(typ)]),
+        ExpKind::Atom(atom) => json!(["AtomE", AtomPhraseCodec::encode(atom)]),
+        ExpKind::Seq(exps) => json!(["SeqE", encode_list(exps, encode_exp)]),
+        ExpKind::Infix(left, atom, right) => json!([
             "InfixE",
             encode_exp(left),
             AtomPhraseCodec::encode(atom),
             encode_exp(right)
         ]),
-        ExpKind::BrackE(left, exp, right) => json!([
+        ExpKind::Brack(left, exp, right) => json!([
             "BrackE",
             AtomPhraseCodec::encode(left),
             encode_exp(exp),
             AtomPhraseCodec::encode(right)
         ]),
-        ExpKind::HoleE(hole) => json!(["HoleE", encode_hole(hole)]),
-        ExpKind::FuseE(left, right) => json!(["FuseE", encode_exp(left), encode_exp(right)]),
-        ExpKind::UnparenE(exp) => json!(["UnparenE", encode_exp(exp)]),
-        ExpKind::LatexE(latex) => json!(["LatexE", latex]),
+        ExpKind::Hole(hole) => json!(["HoleE", encode_hole(hole)]),
+        ExpKind::Fuse(left, right) => json!(["FuseE", encode_exp(left), encode_exp(right)]),
+        ExpKind::Unparen(exp) => json!(["UnparenE", encode_exp(exp)]),
+        ExpKind::Latex(latex) => json!(["LatexE", latex]),
     }
 }
 
 pub(super) fn decode_hint(value: &Value) -> Result<ast::Hint, DecodeError> {
     let object = object(value)?;
-    Ok(ast::Hint {
-        hintid: decode_id(field(object, "hintid")?)?,
-        hintexp: decode_exp(field(object, "hintexp")?)?,
-    })
+    Ok((
+        decode_id(field(object, "hintid")?)?,
+        decode_exp(field(object, "hintexp")?)?,
+    ))
 }
 
 pub(super) fn encode_hint(hint: &ast::Hint) -> Value {
     json!({
-        "hintid": encode_id(&hint.hintid),
-        "hintexp": encode_exp(&hint.hintexp),
+        "hintid": encode_id(&hint.0),
+        "hintexp": encode_exp(&hint.1),
     })
 }
 
 fn decode_typ(value: &Value) -> Result<ast::Typ, DecodeError> {
     let (tag, fields) = variant(value)?;
     match (tag, fields) {
-        ("PlainT", [typ]) => Ok(ast::Typ::PlainT(decode_plain_typ(typ)?)),
-        ("NotationT", [typ]) => Ok(ast::Typ::NotationT(decode_not_typ(typ)?)),
+        ("PlainT", [typ]) => Ok(ast::Typ::Plain(decode_plain_typ(typ)?)),
+        ("NotationT", [typ]) => Ok(ast::Typ::Notation(decode_not_typ(typ)?)),
         ("PlainT" | "NotationT", _) => Err(DecodeError::Expected("valid EL type arity")),
         (unknown, _) => Err(DecodeError::UnknownVariant(unknown.to_owned())),
     }
@@ -532,8 +533,8 @@ fn decode_typ(value: &Value) -> Result<ast::Typ, DecodeError> {
 
 fn encode_typ(typ: &ast::Typ) -> Value {
     match typ {
-        ast::Typ::PlainT(typ) => json!(["PlainT", encode_plain_typ(typ)]),
-        ast::Typ::NotationT(typ) => json!(["NotationT", encode_not_typ(typ)]),
+        ast::Typ::Plain(typ) => json!(["PlainT", encode_plain_typ(typ)]),
+        ast::Typ::Notation(typ) => json!(["NotationT", encode_not_typ(typ)]),
     }
 }
 
@@ -541,14 +542,14 @@ fn decode_not_typ(value: &Value) -> Result<ast::NotTyp, DecodeError> {
     source::decode_phrase(value, |value| {
         let (tag, fields) = variant(value)?;
         match (tag, fields) {
-            ("AtomT", [atom]) => Ok(NotTypKind::AtomT(AtomPhraseCodec::decode(atom)?)),
-            ("SeqT", [types]) => Ok(NotTypKind::SeqT(decode_list(types, decode_typ)?)),
-            ("InfixT", [left, atom, right]) => Ok(NotTypKind::InfixT(
+            ("AtomT", [atom]) => Ok(NotTypKind::Atom(AtomPhraseCodec::decode(atom)?)),
+            ("SeqT", [types]) => Ok(NotTypKind::Seq(decode_list(types, decode_typ)?)),
+            ("InfixT", [left, atom, right]) => Ok(NotTypKind::Infix(
                 Box::new(decode_typ(left)?),
                 AtomPhraseCodec::decode(atom)?,
                 Box::new(decode_typ(right)?),
             )),
-            ("BrackT", [left, typ, right]) => Ok(NotTypKind::BrackT(
+            ("BrackT", [left, typ, right]) => Ok(NotTypKind::Brack(
                 AtomPhraseCodec::decode(left)?,
                 Box::new(decode_typ(typ)?),
                 AtomPhraseCodec::decode(right)?,
@@ -563,15 +564,15 @@ fn decode_not_typ(value: &Value) -> Result<ast::NotTyp, DecodeError> {
 
 fn encode_not_typ(typ: &ast::NotTyp) -> Value {
     source::encode_phrase(typ, |typ| match typ {
-        NotTypKind::AtomT(atom) => json!(["AtomT", AtomPhraseCodec::encode(atom)]),
-        NotTypKind::SeqT(types) => json!(["SeqT", encode_list(types, encode_typ)]),
-        NotTypKind::InfixT(left, atom, right) => json!([
+        NotTypKind::Atom(atom) => json!(["AtomT", AtomPhraseCodec::encode(atom)]),
+        NotTypKind::Seq(types) => json!(["SeqT", encode_list(types, encode_typ)]),
+        NotTypKind::Infix(left, atom, right) => json!([
             "InfixT",
             encode_typ(left),
             AtomPhraseCodec::encode(atom),
             encode_typ(right)
         ]),
-        NotTypKind::BrackT(left, typ, right) => json!([
+        NotTypKind::Brack(left, typ, right) => json!([
             "BrackT",
             AtomPhraseCodec::encode(left),
             encode_typ(typ),
@@ -584,13 +585,11 @@ fn decode_def_typ(value: &Value) -> Result<ast::DefTyp, DecodeError> {
     source::decode_phrase(value, |value| {
         let (tag, fields) = variant(value)?;
         match (tag, fields) {
-            ("PlainTD", [typ]) => Ok(DefTypKind::PlainTD(decode_plain_typ(typ)?)),
+            ("PlainTD", [typ]) => Ok(DefTypKind::Plain(decode_plain_typ(typ)?)),
             ("StructTD", [fields]) => {
-                Ok(DefTypKind::StructTD(decode_list(fields, decode_typ_field)?))
+                Ok(DefTypKind::Struct(decode_list(fields, decode_typ_field)?))
             }
-            ("VariantTD", [cases]) => {
-                Ok(DefTypKind::VariantTD(decode_list(cases, decode_typ_case)?))
-            }
+            ("VariantTD", [cases]) => Ok(DefTypKind::Variant(decode_list(cases, decode_typ_case)?)),
             ("PlainTD" | "StructTD" | "VariantTD", _) => {
                 Err(DecodeError::Expected("valid EL defined type arity"))
             }
@@ -601,9 +600,9 @@ fn decode_def_typ(value: &Value) -> Result<ast::DefTyp, DecodeError> {
 
 fn encode_def_typ(typ: &ast::DefTyp) -> Value {
     source::encode_phrase(typ, |typ| match typ {
-        DefTypKind::PlainTD(typ) => json!(["PlainTD", encode_plain_typ(typ)]),
-        DefTypKind::StructTD(fields) => json!(["StructTD", encode_list(fields, encode_typ_field)]),
-        DefTypKind::VariantTD(cases) => json!(["VariantTD", encode_list(cases, encode_typ_case)]),
+        DefTypKind::Plain(typ) => json!(["PlainTD", encode_plain_typ(typ)]),
+        DefTypKind::Struct(fields) => json!(["StructTD", encode_list(fields, encode_typ_field)]),
+        DefTypKind::Variant(cases) => json!(["VariantTD", encode_list(cases, encode_typ_case)]),
     })
 }
 
@@ -618,11 +617,11 @@ fn decode_typ_field(value: &Value) -> Result<ast::TypField, DecodeError> {
     }
 }
 
-fn encode_typ_field((atom, typ, hints): &ast::TypField) -> Value {
+fn encode_typ_field(field: &ast::TypField) -> Value {
     json!([
-        AtomPhraseCodec::encode(atom),
-        encode_plain_typ(typ),
-        encode_list(hints, encode_hint)
+        AtomPhraseCodec::encode(&field.0),
+        encode_plain_typ(&field.1),
+        encode_list(&field.2, encode_hint)
     ])
 }
 
@@ -649,8 +648,8 @@ fn decode_param(value: &Value) -> Result<ast::Param, DecodeError> {
     source::decode_phrase(value, |value| {
         let (tag, fields) = variant(value)?;
         match (tag, fields) {
-            ("ExpP", [typ]) => Ok(ParamKind::ExpP(decode_plain_typ(typ)?)),
-            ("DefP", [id, tparams, params, typ]) => Ok(ParamKind::DefP(
+            ("ExpP", [typ]) => Ok(ParamKind::Exp(decode_plain_typ(typ)?)),
+            ("DefP", [id, tparams, params, typ]) => Ok(ParamKind::Def(
                 decode_id(id)?,
                 decode_list(tparams, decode_tparam)?,
                 decode_list(params, decode_param)?,
@@ -664,8 +663,8 @@ fn decode_param(value: &Value) -> Result<ast::Param, DecodeError> {
 
 fn encode_param(param: &ast::Param) -> Value {
     source::encode_phrase(param, |param| match param {
-        ParamKind::ExpP(typ) => json!(["ExpP", encode_plain_typ(typ)]),
-        ParamKind::DefP(id, tparams, params, typ) => json!([
+        ParamKind::Exp(typ) => json!(["ExpP", encode_plain_typ(typ)]),
+        ParamKind::Def(id, tparams, params, typ) => json!([
             "DefP",
             encode_id(id),
             encode_list(tparams, encode_tparam),
@@ -679,16 +678,29 @@ fn decode_prem(value: &Value) -> Result<ast::Prem, DecodeError> {
     source::decode_phrase(value, |value| {
         let (tag, fields) = variant(value)?;
         match (tag, fields) {
-            ("VarPr", [id, typ]) => Ok(PremKind::VarPr(decode_id(id)?, decode_plain_typ(typ)?)),
-            ("RulePr", [id, exp]) => Ok(PremKind::RulePr(decode_id(id)?, decode_exp(exp)?)),
-            ("RuleNotPr", [id, exp]) => Ok(PremKind::RuleNotPr(decode_id(id)?, decode_exp(exp)?)),
-            ("IfPr", [exp]) => Ok(PremKind::IfPr(decode_exp(exp)?)),
-            ("ElsePr", []) => Ok(PremKind::ElsePr),
-            ("IterPr", [prem, iter]) => Ok(PremKind::IterPr(
-                Box::new(decode_prem(prem)?),
-                decode_iter(iter)?,
-            )),
-            ("DebugPr", [exp]) => Ok(PremKind::DebugPr(decode_exp(exp)?)),
+            ("VarPr", [id, typ]) => Ok(PremKind::Var(VarPrem {
+                id: decode_id(id)?,
+                plain_typ: decode_plain_typ(typ)?,
+            })),
+            ("RulePr", [id, exp]) => Ok(PremKind::Rule(RulePrem {
+                id: decode_id(id)?,
+                exp: decode_exp(exp)?,
+            })),
+            ("RuleNotPr", [id, exp]) => Ok(PremKind::RuleNot(RuleNotPrem {
+                id: decode_id(id)?,
+                exp: decode_exp(exp)?,
+            })),
+            ("IfPr", [exp]) => Ok(PremKind::If(IfPrem {
+                exp: decode_exp(exp)?,
+            })),
+            ("ElsePr", []) => Ok(PremKind::Else),
+            ("IterPr", [prem, iter]) => Ok(PremKind::Iter(IterPrem {
+                prem: Box::new(decode_prem(prem)?),
+                iter: decode_iter(iter)?,
+            })),
+            ("DebugPr", [exp]) => Ok(PremKind::Debug(DebugPrem {
+                exp: decode_exp(exp)?,
+            })),
             ("VarPr" | "RulePr" | "RuleNotPr" | "IfPr" | "ElsePr" | "IterPr" | "DebugPr", _) => {
                 Err(DecodeError::Expected("valid EL premise arity"))
             }
@@ -699,13 +711,19 @@ fn decode_prem(value: &Value) -> Result<ast::Prem, DecodeError> {
 
 fn encode_prem(prem: &ast::Prem) -> Value {
     source::encode_phrase(prem, |prem| match prem {
-        PremKind::VarPr(id, typ) => json!(["VarPr", encode_id(id), encode_plain_typ(typ)]),
-        PremKind::RulePr(id, exp) => json!(["RulePr", encode_id(id), encode_exp(exp)]),
-        PremKind::RuleNotPr(id, exp) => json!(["RuleNotPr", encode_id(id), encode_exp(exp)]),
-        PremKind::IfPr(exp) => json!(["IfPr", encode_exp(exp)]),
-        PremKind::ElsePr => json!(["ElsePr"]),
-        PremKind::IterPr(prem, iter) => json!(["IterPr", encode_prem(prem), encode_iter(*iter)]),
-        PremKind::DebugPr(exp) => json!(["DebugPr", encode_exp(exp)]),
+        PremKind::Var(VarPrem { id, plain_typ }) => {
+            json!(["VarPr", encode_id(id), encode_plain_typ(plain_typ)])
+        }
+        PremKind::Rule(RulePrem { id, exp }) => json!(["RulePr", encode_id(id), encode_exp(exp)]),
+        PremKind::RuleNot(RuleNotPrem { id, exp }) => {
+            json!(["RuleNotPr", encode_id(id), encode_exp(exp)])
+        }
+        PremKind::If(IfPrem { exp }) => json!(["IfPr", encode_exp(exp)]),
+        PremKind::Else => json!(["ElsePr"]),
+        PremKind::Iter(IterPrem { prem, iter }) => {
+            json!(["IterPr", encode_prem(prem), encode_iter(*iter)])
+        }
+        PremKind::Debug(DebugPrem { exp }) => json!(["DebugPr", encode_exp(exp)]),
     })
 }
 
@@ -722,12 +740,12 @@ fn decode_rule(value: &Value) -> Result<ast::Rule, DecodeError> {
 }
 
 fn encode_rule(rule: &ast::Rule) -> Value {
-    source::encode_phrase(rule, |(rel, id, exp, prems)| {
+    source::encode_phrase(rule, |rule| {
         json!([
-            encode_id(rel),
-            encode_id(id),
-            encode_exp(exp),
-            encode_list(prems, encode_prem)
+            encode_id(&rule.0),
+            encode_id(&rule.1),
+            encode_exp(&rule.2),
+            encode_list(&rule.3, encode_prem)
         ])
     })
 }
@@ -752,84 +770,89 @@ fn decode_syn_entry(value: &Value) -> Result<(ast::Id, Vec<ast::TParam>), Decode
     }
 }
 
-fn encode_syn_entry((id, params): &(ast::Id, Vec<ast::TParam>)) -> Value {
-    json!([encode_id(id), encode_list(params, encode_tparam)])
-}
-
 fn decode_def(value: &Value) -> Result<ast::Def, DecodeError> {
     source::decode_phrase(value, |value| {
         let (tag, fields) = variant(value)?;
         match (tag, fields) {
-            ("ExternSynD", [id, hints]) => Ok(DefKind::ExternSynD(
-                decode_id(id)?,
-                decode_list(hints, decode_hint)?,
-            )),
-            ("SynD", [entries]) => Ok(DefKind::SynD(decode_list(entries, decode_syn_entry)?)),
-            ("TypD", [id, params, typ, hints]) => Ok(DefKind::TypD(
-                decode_id(id)?,
-                decode_list(params, decode_tparam)?,
-                decode_def_typ(typ)?,
-                decode_list(hints, decode_hint)?,
-            )),
-            ("VarD", [id, typ, hints]) => Ok(DefKind::VarD(
-                decode_id(id)?,
-                decode_plain_typ(typ)?,
-                decode_list(hints, decode_hint)?,
-            )),
-            ("ExternRelD", [id, typ, hints]) => Ok(DefKind::ExternRelD(
-                decode_id(id)?,
-                decode_not_typ(typ)?,
-                decode_list(hints, decode_hint)?,
-            )),
-            ("RelD", [id, typ, hints]) => Ok(DefKind::RelD(
-                decode_id(id)?,
-                decode_not_typ(typ)?,
-                decode_list(hints, decode_hint)?,
-            )),
-            ("RuleGroupD", [id, anchor, rules]) => Ok(DefKind::RuleGroupD(
-                decode_id(id)?,
-                decode_id(anchor)?,
-                decode_list(rules, decode_rule)?,
-            )),
-            ("ExternDecD", [id, tparams, params, typ, hints]) => Ok(DefKind::ExternDecD(
-                decode_id(id)?,
-                decode_list(tparams, decode_tparam)?,
-                decode_list(params, decode_param)?,
-                decode_plain_typ(typ)?,
-                decode_list(hints, decode_hint)?,
-            )),
-            ("BuiltinDecD", [id, tparams, params, typ, hints]) => Ok(DefKind::BuiltinDecD(
-                decode_id(id)?,
-                decode_list(tparams, decode_tparam)?,
-                decode_list(params, decode_param)?,
-                decode_plain_typ(typ)?,
-                decode_list(hints, decode_hint)?,
-            )),
-            ("TableDecD", [id, params, typ, hints]) => Ok(DefKind::TableDecD(
-                decode_id(id)?,
-                decode_list(params, decode_param)?,
-                decode_plain_typ(typ)?,
-                decode_list(hints, decode_hint)?,
-            )),
-            ("FuncDecD", [id, tparams, params, typ, hints]) => Ok(DefKind::FuncDecD(
-                decode_id(id)?,
-                decode_list(tparams, decode_tparam)?,
-                decode_list(params, decode_param)?,
-                decode_plain_typ(typ)?,
-                decode_list(hints, decode_hint)?,
-            )),
-            ("TableDefD", [id, rows]) => Ok(DefKind::TableDefD(
-                decode_id(id)?,
-                decode_list(rows, decode_table_row)?,
-            )),
-            ("FuncDefD", [id, tparams, args, exp, prems]) => Ok(DefKind::FuncDefD(
-                decode_id(id)?,
-                decode_list(tparams, decode_tparam)?,
-                decode_list(args, decode_arg)?,
-                decode_exp(exp)?,
-                decode_list(prems, decode_prem)?,
-            )),
-            ("SepD", []) => Ok(DefKind::SepD),
+            ("ExternSynD", [id, hints]) => Ok(DefKind::ExternSyntax(ExternSyntaxDef {
+                id: decode_id(id)?,
+                hints: decode_list(hints, decode_hint)?,
+            })),
+            ("SynD", [entries]) => Ok(DefKind::Syntax(SyntaxDef {
+                entries: decode_list(entries, decode_syn_entry)?
+                    .into_iter()
+                    .map(|(id, tparams)| SyntaxDefEntry { id, tparams })
+                    .collect(),
+            })),
+            ("TypD", [id, params, typ, hints]) => Ok(DefKind::Typ(TypDef {
+                id: decode_id(id)?,
+                tparams: decode_list(params, decode_tparam)?,
+                def_typ: decode_def_typ(typ)?,
+                hints: decode_list(hints, decode_hint)?,
+            })),
+            ("VarD", [id, typ, hints]) => Ok(DefKind::Var(VarDef {
+                id: decode_id(id)?,
+                plain_typ: decode_plain_typ(typ)?,
+                hints: decode_list(hints, decode_hint)?,
+            })),
+            ("ExternRelD", [id, typ, hints]) => Ok(DefKind::ExternRel(ExternRelDef {
+                id: decode_id(id)?,
+                not_typ: decode_not_typ(typ)?,
+                hints: decode_list(hints, decode_hint)?,
+            })),
+            ("RelD", [id, typ, hints]) => Ok(DefKind::Rel(RelDef {
+                id: decode_id(id)?,
+                not_typ: decode_not_typ(typ)?,
+                hints: decode_list(hints, decode_hint)?,
+            })),
+            ("RuleGroupD", [id, anchor, rules]) => Ok(DefKind::RuleGroup(RuleGroupDef {
+                relid: decode_id(id)?,
+                groupid: decode_id(anchor)?,
+                rules: decode_list(rules, decode_rule)?,
+            })),
+            ("ExternDecD", [id, tparams, params, typ, hints]) => {
+                Ok(DefKind::ExternDec(ExternDecDef {
+                    id: decode_id(id)?,
+                    tparams: decode_list(tparams, decode_tparam)?,
+                    params: decode_list(params, decode_param)?,
+                    plain_typ: decode_plain_typ(typ)?,
+                    hints: decode_list(hints, decode_hint)?,
+                }))
+            }
+            ("BuiltinDecD", [id, tparams, params, typ, hints]) => {
+                Ok(DefKind::BuiltinDec(BuiltinDecDef {
+                    id: decode_id(id)?,
+                    tparams: decode_list(tparams, decode_tparam)?,
+                    params: decode_list(params, decode_param)?,
+                    plain_typ: decode_plain_typ(typ)?,
+                    hints: decode_list(hints, decode_hint)?,
+                }))
+            }
+            ("TableDecD", [id, params, typ, hints]) => Ok(DefKind::TableDec(TableDecDef {
+                id: decode_id(id)?,
+                params: decode_list(params, decode_param)?,
+                plain_typ: decode_plain_typ(typ)?,
+                hints: decode_list(hints, decode_hint)?,
+            })),
+            ("FuncDecD", [id, tparams, params, typ, hints]) => Ok(DefKind::FuncDec(FuncDecDef {
+                id: decode_id(id)?,
+                tparams: decode_list(tparams, decode_tparam)?,
+                params: decode_list(params, decode_param)?,
+                plain_typ: decode_plain_typ(typ)?,
+                hints: decode_list(hints, decode_hint)?,
+            })),
+            ("TableDefD", [id, rows]) => Ok(DefKind::TableDef(TableDef {
+                id: decode_id(id)?,
+                rows: decode_list(rows, decode_table_row)?,
+            })),
+            ("FuncDefD", [id, tparams, args, exp, prems]) => Ok(DefKind::FuncDef(FuncDef {
+                id: decode_id(id)?,
+                tparams: decode_list(tparams, decode_tparam)?,
+                args: decode_list(args, decode_arg)?,
+                exp: decode_exp(exp)?,
+                prems: decode_list(prems, decode_prem)?,
+            })),
+            ("SepD", []) => Ok(DefKind::Sep),
             (
                 "ExternSynD" | "SynD" | "TypD" | "VarD" | "ExternRelD" | "RelD" | "RuleGroupD"
                 | "ExternDecD" | "BuiltinDecD" | "TableDecD" | "FuncDecD" | "TableDefD"
@@ -843,78 +866,129 @@ fn decode_def(value: &Value) -> Result<ast::Def, DecodeError> {
 
 fn encode_def(def: &ast::Def) -> Value {
     source::encode_phrase(def, |def| match def {
-        DefKind::ExternSynD(id, hints) => {
+        DefKind::ExternSyntax(ExternSyntaxDef { id, hints }) => {
             json!(["ExternSynD", encode_id(id), encode_list(hints, encode_hint)])
         }
-        DefKind::SynD(entries) => json!(["SynD", encode_list(entries, encode_syn_entry)]),
-        DefKind::TypD(id, params, typ, hints) => json!([
+        DefKind::Syntax(SyntaxDef { entries }) => json!([
+            "SynD",
+            entries
+                .iter()
+                .map(|entry| json!([
+                    encode_id(&entry.id),
+                    encode_list(&entry.tparams, encode_tparam)
+                ]))
+                .collect::<Vec<_>>()
+        ]),
+        DefKind::Typ(TypDef {
+            id,
+            tparams,
+            def_typ,
+            hints,
+        }) => json!([
             "TypD",
             encode_id(id),
-            encode_list(params, encode_tparam),
-            encode_def_typ(typ),
+            encode_list(tparams, encode_tparam),
+            encode_def_typ(def_typ),
             encode_list(hints, encode_hint)
         ]),
-        DefKind::VarD(id, typ, hints) => json!([
+        DefKind::Var(VarDef {
+            id,
+            plain_typ,
+            hints,
+        }) => json!([
             "VarD",
             encode_id(id),
-            encode_plain_typ(typ),
+            encode_plain_typ(plain_typ),
             encode_list(hints, encode_hint)
         ]),
-        DefKind::ExternRelD(id, typ, hints) => json!([
+        DefKind::ExternRel(ExternRelDef { id, not_typ, hints }) => json!([
             "ExternRelD",
             encode_id(id),
-            encode_not_typ(typ),
+            encode_not_typ(not_typ),
             encode_list(hints, encode_hint)
         ]),
-        DefKind::RelD(id, typ, hints) => json!([
+        DefKind::Rel(RelDef { id, not_typ, hints }) => json!([
             "RelD",
             encode_id(id),
-            encode_not_typ(typ),
+            encode_not_typ(not_typ),
             encode_list(hints, encode_hint)
         ]),
-        DefKind::RuleGroupD(id, anchor, rules) => json!([
+        DefKind::RuleGroup(RuleGroupDef {
+            relid,
+            groupid,
+            rules,
+        }) => json!([
             "RuleGroupD",
-            encode_id(id),
-            encode_id(anchor),
+            encode_id(relid),
+            encode_id(groupid),
             encode_list(rules, encode_rule)
         ]),
-        DefKind::ExternDecD(id, tparams, params, typ, hints) => json!([
+        DefKind::ExternDec(ExternDecDef {
+            id,
+            tparams,
+            params,
+            plain_typ,
+            hints,
+        }) => json!([
             "ExternDecD",
             encode_id(id),
             encode_list(tparams, encode_tparam),
             encode_list(params, encode_param),
-            encode_plain_typ(typ),
+            encode_plain_typ(plain_typ),
             encode_list(hints, encode_hint)
         ]),
-        DefKind::BuiltinDecD(id, tparams, params, typ, hints) => json!([
+        DefKind::BuiltinDec(BuiltinDecDef {
+            id,
+            tparams,
+            params,
+            plain_typ,
+            hints,
+        }) => json!([
             "BuiltinDecD",
             encode_id(id),
             encode_list(tparams, encode_tparam),
             encode_list(params, encode_param),
-            encode_plain_typ(typ),
+            encode_plain_typ(plain_typ),
             encode_list(hints, encode_hint)
         ]),
-        DefKind::TableDecD(id, params, typ, hints) => json!([
+        DefKind::TableDec(TableDecDef {
+            id,
+            params,
+            plain_typ,
+            hints,
+        }) => json!([
             "TableDecD",
             encode_id(id),
             encode_list(params, encode_param),
-            encode_plain_typ(typ),
+            encode_plain_typ(plain_typ),
             encode_list(hints, encode_hint)
         ]),
-        DefKind::FuncDecD(id, tparams, params, typ, hints) => json!([
+        DefKind::FuncDec(FuncDecDef {
+            id,
+            tparams,
+            params,
+            plain_typ,
+            hints,
+        }) => json!([
             "FuncDecD",
             encode_id(id),
             encode_list(tparams, encode_tparam),
             encode_list(params, encode_param),
-            encode_plain_typ(typ),
+            encode_plain_typ(plain_typ),
             encode_list(hints, encode_hint)
         ]),
-        DefKind::TableDefD(id, rows) => json!([
+        DefKind::TableDef(TableDef { id, rows }) => json!([
             "TableDefD",
             encode_id(id),
             encode_list(rows, encode_table_row)
         ]),
-        DefKind::FuncDefD(id, tparams, args, exp, prems) => json!([
+        DefKind::FuncDef(FuncDef {
+            id,
+            tparams,
+            args,
+            exp,
+            prems,
+        }) => json!([
             "FuncDefD",
             encode_id(id),
             encode_list(tparams, encode_tparam),
@@ -922,6 +996,6 @@ fn encode_def(def: &ast::Def) -> Value {
             encode_exp(exp),
             encode_list(prems, encode_prem)
         ]),
-        DefKind::SepD => json!(["SepD"]),
+        DefKind::Sep => json!(["SepD"]),
     })
 }

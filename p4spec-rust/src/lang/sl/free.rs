@@ -1,105 +1,254 @@
-use crate::lang::il;
+//! Free identifiers in structured-language data
+
+use crate::lang::{common::ds::set::IdSet, traits::free::Free};
 
 use super::ast::*;
 
-// Identifier set
+// == Free identifiers
 
-pub type T = il::free::T;
+// Nodes through type parameters alias IL nodes and use their implementations.
 
-pub fn empty() -> T {
-    il::free::empty()
-}
+// - Parameters
 
-pub fn singleton(id: &Id) -> T {
-    il::free::singleton(id)
-}
-
-fn add(set_a: T, set_b: T) -> T {
-    set_a.into_iter().chain(set_b).collect()
-}
-
-fn many<Item>(items: &[Item], collect: impl Fn(&Item) -> T) -> T {
-    items
-        .iter()
-        .fold(empty(), |set, item| add(set, collect(item)))
-}
-
-// Collect free identifiers
-
-// Expressions
-
-pub fn free_exp(exp: &Exp) -> T {
-    il::free::free_exp(exp)
-}
-
-pub fn free_exps(exps: &[Exp]) -> T {
-    il::free::free_exps(exps)
-}
-
-// Paths
-
-pub fn free_path(path: &Path) -> T {
-    il::free::free_path(path)
-}
-
-// Parameters
-
-pub fn free_param(param: &Param) -> T {
-    match &param.node {
-        ParamKind::ExpP(_, exp) => free_exp(exp),
-        ParamKind::DefP(..) => empty(),
-    }
-}
-
-pub fn free_params(params: &[Param]) -> T {
-    many(params, free_param)
-}
-
-// Arguments
-
-pub fn free_arg(arg: &Arg) -> T {
-    il::free::free_arg(arg)
-}
-
-pub fn free_args(args: &[Arg]) -> T {
-    il::free::free_args(args)
-}
-
-pub fn free_cases(cases: &[Case]) -> T {
-    many(cases, |(guard, block)| {
-        add(free_guard(guard), free_block(block))
-    })
-}
-
-pub fn free_guard(guard: &Guard) -> T {
-    match guard {
-        Guard::BoolG(_) | Guard::SubG(..) | Guard::MatchG(_) => empty(),
-        Guard::CmpG(_, _, exp) | Guard::MemG(exp) => free_exp(exp),
-    }
-}
-
-pub fn free_instr(instr: &Instr) -> T {
-    match &instr.kind {
-        InstrKind::IfI(exp, _, block, _) => add(free_exp(exp), free_block(block)),
-        InstrKind::HoldI(_, notexp, _, _) => many(&notexp.args(), |exp| free_exp(exp)),
-        InstrKind::CaseI(exp, cases, _) => add(free_exp(exp), free_cases(cases)),
-        InstrKind::GroupI(_, _, exps, block) => add(free_exps(exps), free_block(block)),
-        InstrKind::LetI(exp_l, exp_r, _, block) => {
-            add(free_exp(exp_l), add(free_exp(exp_r), free_block(block)))
+impl Free for ParamKind {
+    fn free(&self) -> IdSet {
+        match self {
+            Self::Exp(_, exp) => exp.free(),
+            Self::Def(..) => IdSet::new(),
         }
-        InstrKind::RuleI(_, notexp, _, _, block) => {
-            add(many(&notexp.args(), |exp| free_exp(exp)), free_block(block))
-        }
-        InstrKind::ResultI(_, exps) => free_exps(exps),
-        InstrKind::ReturnI(exp) => free_exp(exp),
-        InstrKind::DebugI(exp, instr) => add(free_exp(exp), free_instr(instr)),
     }
 }
 
-pub fn free_instrs(instrs: &[Instr]) -> T {
-    many(instrs, free_instr)
+// Type arguments and arguments alias IL nodes and use their implementations.
+
+// - Holding conditions
+
+impl Free for HoldCase {
+    fn free(&self) -> IdSet {
+        match self {
+            Self::Both(block_l, block_r) => block_l.free().union(block_r.free()),
+            Self::Hold(block, _) | Self::NotHold(block, _) => block.free(),
+        }
+    }
 }
 
-pub fn free_block(block: &Block) -> T {
-    free_instrs(block)
+// - Case analysis
+
+impl Free for Case {
+    fn free(&self) -> IdSet {
+        self.guard.free().union(self.block.free())
+    }
+}
+
+impl Free for Guard {
+    fn free(&self) -> IdSet {
+        match self {
+            Self::Cmp(_, _, exp) | Self::Mem(exp) => exp.free(),
+            Self::Bool(_) | Self::Sub(..) | Self::Match(_) => IdSet::new(),
+        }
+    }
+}
+
+// - Instructions
+
+impl Free for Iid {
+    fn free(&self) -> IdSet {
+        IdSet::new()
+    }
+}
+
+impl Free for InstrKind {
+    fn free(&self) -> IdSet {
+        match self {
+            Self::If(instr) => instr.free(),
+            Self::Hold(instr) => instr.free(),
+            Self::Case(instr) => instr.free(),
+            Self::Group(instr) => instr.free(),
+            Self::Let(instr) => instr.free(),
+            Self::Rule(instr) => instr.free(),
+            Self::Result(instr) => instr.free(),
+            Self::Return(instr) => instr.free(),
+            Self::Debug(instr) => instr.free(),
+        }
+    }
+}
+
+impl Free for IfInstr {
+    fn free(&self) -> IdSet {
+        self.exp.free().union(self.block.free())
+    }
+}
+
+impl Free for HoldInstr {
+    fn free(&self) -> IdSet {
+        self.not_exp.free()
+    }
+}
+
+impl Free for CaseInstr {
+    fn free(&self) -> IdSet {
+        self.exp.free().union(self.cases.as_slice().free())
+    }
+}
+
+impl Free for GroupInstr {
+    fn free(&self) -> IdSet {
+        self.exps.as_slice().free().union(self.block.free())
+    }
+}
+
+impl Free for LetInstr {
+    fn free(&self) -> IdSet {
+        self.exp_l
+            .free()
+            .union(self.exp_r.free())
+            .union(self.block.free())
+    }
+}
+
+impl Free for RuleInstr {
+    fn free(&self) -> IdSet {
+        self.not_exp.free().union(self.block.free())
+    }
+}
+
+impl Free for ResultInstr {
+    fn free(&self) -> IdSet {
+        self.exps.as_slice().free()
+    }
+}
+
+impl Free for ReturnInstr {
+    fn free(&self) -> IdSet {
+        self.exp.free()
+    }
+}
+
+impl Free for DebugInstr {
+    fn free(&self) -> IdSet {
+        self.exp.free().union(self.instr.free())
+    }
+}
+
+impl Free for Block {
+    fn free(&self) -> IdSet {
+        self.as_slice().free()
+    }
+}
+
+// `ElseBlock` aliases `Block` and uses its implementation above.
+
+// Iterator instructions alias IL iterator premises and use their implementation.
+
+// Hints alias EL hints and use their implementation.
+
+// - Relations
+
+impl Free for RelSignature {
+    fn free(&self) -> IdSet {
+        IdSet::new()
+    }
+}
+
+impl Free for ExternRel {
+    fn free(&self) -> IdSet {
+        self.exps_input.as_slice().free()
+    }
+}
+
+impl Free for Rel {
+    fn free(&self) -> IdSet {
+        self.exps_input
+            .as_slice()
+            .free()
+            .union(self.block.free())
+            .union(self.else_block.free())
+    }
+}
+
+// - Functions
+
+impl Free for ExternFunc {
+    fn free(&self) -> IdSet {
+        self.params.as_slice().free()
+    }
+}
+
+impl Free for BuiltinFunc {
+    fn free(&self) -> IdSet {
+        self.params.as_slice().free()
+    }
+}
+
+impl Free for TableRow {
+    fn free(&self) -> IdSet {
+        self.exps_input
+            .as_slice()
+            .free()
+            .union(self.exp.free())
+            .union(self.block.free())
+    }
+}
+
+impl Free for TableFunc {
+    fn free(&self) -> IdSet {
+        self.params
+            .as_slice()
+            .free()
+            .union(self.table_rows.as_slice().free())
+    }
+}
+
+impl Free for DefinedFunc {
+    fn free(&self) -> IdSet {
+        self.params
+            .as_slice()
+            .free()
+            .union(self.block.free())
+            .union(self.else_block.free())
+    }
+}
+
+// - Definitions
+
+impl Free for ExternTypDef {
+    fn free(&self) -> IdSet {
+        IdSet::new()
+    }
+}
+
+impl Free for TypDef {
+    fn free(&self) -> IdSet {
+        IdSet::new()
+    }
+}
+
+impl Free for VarDef {
+    fn free(&self) -> IdSet {
+        IdSet::new()
+    }
+}
+
+impl Free for DefKind {
+    fn free(&self) -> IdSet {
+        match self {
+            Self::ExternTyp(definition) => definition.free(),
+            Self::Typ(definition) => definition.free(),
+            Self::Var(definition) => definition.free(),
+            Self::ExternRel(definition) => definition.free(),
+            Self::Rel(definition) => definition.free(),
+            Self::ExternDec(definition) => definition.free(),
+            Self::BuiltinDec(definition) => definition.free(),
+            Self::TableDec(definition) => definition.free(),
+            Self::FuncDec(definition) => definition.free(),
+        }
+    }
+}
+
+// - Specifications
+
+impl Free for Spec {
+    fn free(&self) -> IdSet {
+        self.as_slice().free()
+    }
 }

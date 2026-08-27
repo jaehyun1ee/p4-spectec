@@ -1,110 +1,154 @@
+//! Alteration hints for prose rendering
+
 use crate::lang::{
-    el::{
-        ast::{Atom, Exp, ExpKind, Hole as ElHole, Text},
-        print,
-    },
+    el::ast::{Atom, Exp, ExpKind, Hole as ElHole, Text},
     hints::input,
+    traits::print::Print,
 };
+use thiserror::Error;
 
 // Alternation hints
 
+/// A positional hole in an alteration hint
 #[derive(Clone, Debug, PartialEq)]
 pub enum Hole {
     Next,
     Num(i64),
 }
 
+/// A prose rendering template
+///
+/// `Hole::Next` consumes items in cursor order;
+/// `Hole::Num` selects an explicit item index
 #[derive(Clone, Debug, PartialEq)]
-pub enum T {
-    TextH(Text),
-    AtomH(Atom),
-    SeqH(Vec<T>),
-    BrackH(Atom, Box<T>, Atom),
-    HoleH(Hole),
-    FuseH(Box<T>, Box<T>),
-    OtherH(Exp),
+pub enum AlterationHint {
+    Text(Text),
+    Atom(Atom),
+    Seq(Vec<AlterationHint>),
+    Brack(Atom, Box<AlterationHint>, Atom),
+    Hole(Hole),
+    Fuse(Box<AlterationHint>, Box<AlterationHint>),
+    Other(Exp),
 }
 
-pub fn to_string(hint: &T) -> String {
+#[derive(Clone, Debug, Error, PartialEq, Eq)]
+pub enum AlterationError {
+    #[error("alteration hint index {index} is out of bounds for {item_count} items")]
+    IndexOutOfBounds { index: i64, item_count: usize },
+
+    #[error("alteration hint index {0} is missing from the realignment")]
+    MissingIndex(i64),
+}
+
+/// Converts to string
+pub fn to_string(hint: &AlterationHint) -> String {
     format!("hint(alter {})", string(hint))
 }
-fn string(hint: &T) -> String {
+fn string(hint: &AlterationHint) -> String {
     match hint {
-        T::TextH(text) => print::string_of_text(text),
-        T::AtomH(atom) => print::string_of_atom(atom),
-        T::SeqH(hints) => hints.iter().map(string).collect::<Vec<_>>().join(" "),
-        T::BrackH(left, inner, right) => format!(
+        AlterationHint::Text(text) => text.clone(),
+        AlterationHint::Atom(atom) => Print::to_string(atom),
+        AlterationHint::Seq(hints) => hints.iter().map(string).collect::<Vec<_>>().join(" "),
+        AlterationHint::Brack(atom_l, hint, atom_r) => format!(
             "{} {} {}",
-            print::string_of_atom(left),
-            string(inner),
-            print::string_of_atom(right)
+            Print::to_string(atom_l),
+            string(hint),
+            Print::to_string(atom_r)
         ),
-        T::HoleH(Hole::Next) => "%".into(),
-        T::HoleH(Hole::Num(index)) => format!("%{index}"),
-        T::FuseH(left, right) => format!("{}#{}", string(left), string(right)),
-        T::OtherH(exp) => print::string_of_exp(exp),
+        AlterationHint::Hole(Hole::Next) => "%".into(),
+        AlterationHint::Hole(Hole::Num(index)) => format!("%{index}"),
+        AlterationHint::Fuse(hint_l, hint_r) => format!("{}#{}", string(hint_l), string(hint_r)),
+        AlterationHint::Other(exp) => Print::to_string(exp),
     }
 }
 // Creating hints
 
-pub fn init(exp: &Exp) -> Option<T> {
+/// Initializes the value
+pub fn init(exp: &Exp) -> Option<AlterationHint> {
     Some(match &exp.node {
-        ExpKind::TextE(text) => T::TextH(text.clone()),
-        ExpKind::AtomE(atom) => T::AtomH(atom.clone()),
-        ExpKind::SeqE(exps) => T::SeqH(exps.iter().map(init).collect::<Option<_>>()?),
-        ExpKind::BrackE(left, exp, right) => {
-            T::BrackH(left.clone(), Box::new(init(exp)?), right.clone())
+        ExpKind::Text(text) => AlterationHint::Text(text.clone()),
+        ExpKind::Atom(atom) => AlterationHint::Atom(atom.clone()),
+        ExpKind::Seq(exps) => AlterationHint::Seq(exps.iter().map(init).collect::<Option<_>>()?),
+        ExpKind::Brack(atom_l, exp, atom_r) => {
+            AlterationHint::Brack(atom_l.clone(), Box::new(init(exp)?), atom_r.clone())
         }
-        ExpKind::HoleE(ElHole::Next) => T::HoleH(Hole::Next),
-        ExpKind::HoleE(ElHole::Num(index)) => T::HoleH(Hole::Num(*index)),
-        ExpKind::FuseE(left, right) => T::FuseH(Box::new(init(left)?), Box::new(init(right)?)),
-        _ => T::OtherH(exp.clone()),
+        ExpKind::Hole(ElHole::Next) => AlterationHint::Hole(Hole::Next),
+        ExpKind::Hole(ElHole::Num(index)) => AlterationHint::Hole(Hole::Num(*index)),
+        ExpKind::Fuse(exp_l, exp_r) => {
+            AlterationHint::Fuse(Box::new(init(exp_l)?), Box::new(init(exp_r)?))
+        }
+        _ => AlterationHint::Other(exp.clone()),
     })
 }
 // Validating hints
 
-pub fn validate<Item>(hint: &T, items: &[Item]) -> Result<(), String> {
+/// Validates every hole against `items`
+pub fn validate<Item>(hint: &AlterationHint, items: &[Item]) -> Result<(), AlterationError> {
     validate_at(hint, items, 0).map(|_| ())
 }
-fn validate_at<Item>(hint: &T, items: &[Item], cursor: usize) -> Result<usize, String> {
+fn validate_at<Item>(
+    hint: &AlterationHint,
+    items: &[Item],
+    cursor: usize,
+) -> Result<usize, AlterationError> {
     match hint {
-        T::TextH(_) | T::AtomH(_) | T::OtherH(_) => Ok(cursor),
-        T::SeqH(hints) => hints
+        AlterationHint::Text(_) | AlterationHint::Atom(_) | AlterationHint::Other(_) => Ok(cursor),
+        AlterationHint::Seq(hints) => hints
             .iter()
             .try_fold(cursor, |cursor, hint| validate_at(hint, items, cursor)),
-        T::BrackH(_, hint, _) => validate_at(hint, items, cursor),
-        T::HoleH(Hole::Next) => Ok(cursor + 1),
-        T::HoleH(Hole::Num(index)) if *index >= 0 && (*index as usize) < items.len() => Ok(cursor),
-        T::HoleH(Hole::Num(index)) => Err(format!("index {index} out of bounds")),
-        T::FuseH(left, right) => validate_at(right, items, validate_at(left, items, cursor)?),
+        AlterationHint::Brack(_, hint, _) => validate_at(hint, items, cursor),
+        AlterationHint::Hole(Hole::Next) if cursor < items.len() => Ok(cursor + 1),
+        AlterationHint::Hole(Hole::Next) => Err(AlterationError::IndexOutOfBounds {
+            index: i64::try_from(cursor).unwrap_or(i64::MAX),
+            item_count: items.len(),
+        }),
+        AlterationHint::Hole(Hole::Num(index))
+            if *index >= 0 && (*index as usize) < items.len() =>
+        {
+            Ok(cursor)
+        }
+        AlterationHint::Hole(Hole::Num(index)) => Err(AlterationError::IndexOutOfBounds {
+            index: *index,
+            item_count: items.len(),
+        }),
+        AlterationHint::Fuse(hint_l, hint_r) => {
+            validate_at(hint_r, items, validate_at(hint_l, items, cursor)?)
+        }
     }
 }
 // Re-alignment of alternation indices
 
-pub fn collect(hint: &T) -> Vec<i64> {
-    fn go(h: &T, out: &mut Vec<i64>) {
-        match h {
-            T::HoleH(Hole::Num(i)) => out.insert(0, *i),
-            T::SeqH(xs) => {
-                for x in xs {
-                    go(x, out)
+/// Applies collect
+pub fn collect(hint: &AlterationHint) -> Vec<i64> {
+    fn collect_inner(hint: &AlterationHint, indices: &mut Vec<i64>) {
+        match hint {
+            AlterationHint::Hole(Hole::Num(index)) => indices.insert(0, *index),
+            AlterationHint::Seq(hints) => {
+                for hint in hints {
+                    collect_inner(hint, indices)
                 }
             }
-            T::BrackH(_, x, _) => go(x, out),
-            T::FuseH(l, r) => {
-                go(l, out);
-                go(r, out)
+            AlterationHint::Brack(_, hint, _) => collect_inner(hint, indices),
+            AlterationHint::Fuse(hint_l, hint_r) => {
+                collect_inner(hint_l, indices);
+                collect_inner(hint_r, indices)
             }
             _ => {}
         }
     }
-    let mut out = Vec::new();
-    go(hint, &mut out);
-    out
+    let mut indices = Vec::new();
+    collect_inner(hint, &mut indices);
+    indices
 }
-pub fn realign(hint: &T, inputs: &input::T) -> Result<T, String> {
+/// Renumbers output holes after relation input positions
+///
+/// Returns an error when a referenced output position is absent
+pub fn realign(
+    hint: &AlterationHint,
+    inputs: &input::InputHint,
+) -> Result<AlterationHint, AlterationError> {
     let outputs = collect(hint);
-    let mut all = inputs.clone();
+    let mut all = inputs.indices().to_vec();
     all.extend(&outputs);
     all.sort();
     let mut pairs = Vec::new();
@@ -113,110 +157,120 @@ pub fn realign(hint: &T, inputs: &input::T) -> Result<T, String> {
             pairs.push((index, pairs.len() as i64));
         }
     }
-    fn go(h: &T, p: &[(i64, i64)]) -> Result<T, String> {
-        Ok(match h {
-            T::SeqH(xs) => T::SeqH(xs.iter().map(|x| go(x, p)).collect::<Result<_, _>>()?),
-            T::BrackH(l, x, r) => T::BrackH(l.clone(), Box::new(go(x, p)?), r.clone()),
-            T::HoleH(Hole::Num(i)) => T::HoleH(Hole::Num(
-                p.iter()
-                    .find(|(old, _)| old == i)
-                    .ok_or_else(|| format!("index {i} missing"))?
+    fn realign_inner(
+        hint: &AlterationHint,
+        index_pairs: &[(i64, i64)],
+    ) -> Result<AlterationHint, AlterationError> {
+        Ok(match hint {
+            AlterationHint::Seq(hints) => AlterationHint::Seq(
+                hints
+                    .iter()
+                    .map(|hint| realign_inner(hint, index_pairs))
+                    .collect::<Result<_, _>>()?,
+            ),
+            AlterationHint::Brack(atom_l, hint, atom_r) => AlterationHint::Brack(
+                atom_l.clone(),
+                Box::new(realign_inner(hint, index_pairs)?),
+                atom_r.clone(),
+            ),
+            AlterationHint::Hole(Hole::Num(index)) => AlterationHint::Hole(Hole::Num(
+                index_pairs
+                    .iter()
+                    .find(|(index_old, _)| index_old == index)
+                    .ok_or(AlterationError::MissingIndex(*index))?
                     .1,
             )),
-            T::FuseH(l, r) => T::FuseH(Box::new(go(l, p)?), Box::new(go(r, p)?)),
-            _ => h.clone(),
+            AlterationHint::Fuse(hint_l, hint_r) => AlterationHint::Fuse(
+                Box::new(realign_inner(hint_l, index_pairs)?),
+                Box::new(realign_inner(hint_r, index_pairs)?),
+            ),
+            _ => hint.clone(),
         })
     }
-    go(hint, &pairs)
+    realign_inner(hint, &pairs)
 }
 // Alternation
 
-#[allow(clippy::too_many_arguments)]
-pub fn alternate<Item, D>(
-    hint: &T,
+/// Renders alteration pieces into a caller-defined output
+pub trait Renderer<Item> {
+    type Output: Clone;
+    fn empty(&self) -> Self::Output;
+    fn text(&self, text: &str) -> Option<Self::Output>;
+    fn atom(&self, atom: &Atom) -> Self::Output;
+    fn join(&self, items: Vec<Self::Output>) -> Self::Output;
+    fn fuse(&self, output_l: Self::Output, output_r: Self::Output) -> Self::Output;
+    fn other(&self, exp: &Exp) -> Self::Output;
+    fn item(&self, item: &Item) -> Self::Output;
+}
+
+/// Renders a validated alteration hint
+///
+/// Returns an error when a hole cannot select an item
+pub fn alternate<Item, R: Renderer<Item>>(
+    hint: &AlterationHint,
     items: &[Item],
-    empty: D,
-    text: impl Fn(&str) -> Option<D>,
-    atom: impl Fn(&Atom) -> D,
-    join: impl Fn(Vec<D>) -> D,
-    fuse: impl Fn(D, D) -> D,
-    other: impl Fn(&Exp) -> D,
-    render: impl Fn(&Item) -> D,
-) -> Result<D, String>
-where
-    D: Clone,
-{
-    #[allow(clippy::too_many_arguments)]
-    fn go<Item, D>(
-        h: &T,
+    renderer: &R,
+) -> Result<R::Output, AlterationError> {
+    fn go<Item, R: Renderer<Item>>(
+        hint: &AlterationHint,
         items: &[Item],
         cursor: usize,
-        empty: &D,
-        text: &impl Fn(&str) -> Option<D>,
-        atom: &impl Fn(&Atom) -> D,
-        join: &impl Fn(Vec<D>) -> D,
-        fuse: &impl Fn(D, D) -> D,
-        other: &impl Fn(&Exp) -> D,
-        render: &impl Fn(&Item) -> D,
-    ) -> Result<(usize, Option<D>), String>
-    where
-        D: Clone,
-    {
-        Ok(match h {
-            T::TextH(s) => (cursor, text(s)),
-            T::AtomH(a) => (cursor, Some(atom(a))),
-            T::SeqH(xs) => {
-                let mut c = cursor;
-                let mut ds = Vec::new();
-                for x in xs {
-                    let (n, d) = go(x, items, c, empty, text, atom, join, fuse, other, render)?;
-                    c = n;
-                    ds.push(d.unwrap_or_else(|| empty.clone()));
+        renderer: &R,
+    ) -> Result<(usize, Option<R::Output>), AlterationError> {
+        Ok(match hint {
+            AlterationHint::Text(text) => (cursor, renderer.text(text)),
+            AlterationHint::Atom(atom) => (cursor, Some(renderer.atom(atom))),
+            AlterationHint::Seq(hints) => {
+                let mut cursor_next = cursor;
+                let mut outputs = Vec::new();
+                for hint in hints {
+                    let (cursor_after, output) = go(hint, items, cursor_next, renderer)?;
+                    cursor_next = cursor_after;
+                    outputs.push(output.unwrap_or_else(|| renderer.empty()));
                 }
-                (c, Some(join(ds)))
+                (cursor_next, Some(renderer.join(outputs)))
             }
-            T::BrackH(l, x, r) => {
-                let (c, d) = go(
-                    x, items, cursor, empty, text, atom, join, fuse, other, render,
-                )?;
-                let mut ds = vec![atom(l)];
-                if let Some(d) = d {
-                    ds.push(d);
+            AlterationHint::Brack(atom_l, hint, atom_r) => {
+                let (cursor_next, output) = go(hint, items, cursor, renderer)?;
+                let mut outputs = vec![renderer.atom(atom_l)];
+                if let Some(output) = output {
+                    outputs.push(output);
                 }
-                ds.push(atom(r));
-                (c, Some(join(ds)))
+                outputs.push(renderer.atom(atom_r));
+                (cursor_next, Some(renderer.join(outputs)))
             }
-            T::HoleH(Hole::Next) => {
-                let item = items
-                    .get(cursor)
-                    .ok_or_else(|| format!("index {cursor} out of bounds"))?;
-                (cursor + 1, Some(render(item)))
+            AlterationHint::Hole(Hole::Next) => {
+                let item = items.get(cursor).ok_or(AlterationError::IndexOutOfBounds {
+                    index: i64::try_from(cursor).unwrap_or(i64::MAX),
+                    item_count: items.len(),
+                })?;
+                (cursor + 1, Some(renderer.item(item)))
             }
-            T::HoleH(Hole::Num(i)) => {
-                let item = items
-                    .get(*i as usize)
-                    .ok_or_else(|| format!("index {i} out of bounds"))?;
-                (cursor, Some(render(item)))
+            AlterationHint::Hole(Hole::Num(index)) => {
+                let item = usize::try_from(*index)
+                    .ok()
+                    .and_then(|index| items.get(index))
+                    .ok_or(AlterationError::IndexOutOfBounds {
+                        index: *index,
+                        item_count: items.len(),
+                    })?;
+                (cursor, Some(renderer.item(item)))
             }
-            T::FuseH(l, r) => {
-                let (c, a) = go(
-                    l, items, cursor, empty, text, atom, join, fuse, other, render,
-                )?;
-                let (c, b) = go(r, items, c, empty, text, atom, join, fuse, other, render)?;
+            AlterationHint::Fuse(hint_l, hint_r) => {
+                let (cursor_mid, output_l) = go(hint_l, items, cursor, renderer)?;
+                let (cursor_next, output_r) = go(hint_r, items, cursor_mid, renderer)?;
                 (
-                    c,
-                    Some(fuse(
-                        a.unwrap_or_else(|| empty.clone()),
-                        b.unwrap_or_else(|| empty.clone()),
+                    cursor_next,
+                    Some(renderer.fuse(
+                        output_l.unwrap_or_else(|| renderer.empty()),
+                        output_r.unwrap_or_else(|| renderer.empty()),
                     )),
                 )
             }
-            T::OtherH(e) => (cursor, Some(other(e))),
+            AlterationHint::Other(exp) => (cursor, Some(renderer.other(exp))),
         })
     }
-    Ok(go(
-        hint, items, 0, &empty, &text, &atom, &join, &fuse, &other, &render,
-    )?
-    .1
-    .unwrap_or(empty))
+    Ok(go(hint, items, 0, renderer)?
+        .1
+        .unwrap_or_else(|| renderer.empty()))
 }

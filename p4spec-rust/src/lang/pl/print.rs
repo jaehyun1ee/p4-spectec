@@ -1,10 +1,14 @@
-use crate::{domain::mixop, lang::sl};
+//! Text rendering for prose-language data
+
+use std::fmt::{self, Write};
+
+use crate::lang::traits::print::{Print, Printer};
 
 use super::ast::*;
 
-fn join<Item>(items: &[Item], separator: &str, render: impl Fn(&Item) -> String) -> String {
-    items.iter().map(render).collect::<Vec<_>>().join(separator)
-}
+// == Printing
+
+// - Helpers
 
 fn escaped(text: &str) -> String {
     text.bytes()
@@ -21,864 +25,975 @@ fn escaped(text: &str) -> String {
         .collect()
 }
 
-// Numbers
+// - Expressions
 
-pub fn string_of_num(number: &Num) -> String {
-    sl::print::string_of_num(number)
-}
-
-// Texts
-
-pub fn string_of_text(text: &str) -> String {
-    sl::print::string_of_text(text)
-}
-
-// Identifiers
-
-pub fn string_of_varid(id: &Id) -> String {
-    sl::print::string_of_varid(id)
-}
-
-pub fn string_of_typid(id: &Id) -> String {
-    sl::print::string_of_typid(id)
-}
-
-pub fn string_of_relid(id: &Id) -> String {
-    sl::print::string_of_relid(id)
-}
-
-pub fn string_of_relpathid(id: &Id) -> String {
-    sl::print::string_of_relpathid(id)
-}
-
-pub fn string_of_defid(id: &Id) -> String {
-    sl::print::string_of_defid(id)
-}
-
-// Atoms
-
-pub fn string_of_atom(atom: &Atom) -> String {
-    sl::print::string_of_atom(atom)
-}
-
-pub fn string_of_atoms(atoms: &[Atom]) -> String {
-    join(atoms, "", string_of_atom)
-}
-
-// Mixfix operators
-
-pub fn string_of_mixop(operator: &Mixop) -> String {
-    sl::print::string_of_mixop(operator)
-}
-
-// Iterators
-
-pub fn string_of_iter(iter: Iter) -> &'static str {
-    sl::print::string_of_iter(iter)
-}
-
-pub fn string_of_iterexp(iterexp: &IterExp) -> String {
-    sl::print::string_of_iterexp(iterexp)
-}
-
-pub fn string_of_iterexps(iterexps: &[IterExp]) -> String {
-    sl::print::string_of_iterexps(iterexps)
-}
-
-// Variables
-
-pub fn string_of_var(variable: &Var) -> String {
-    sl::print::string_of_var(variable)
-}
-
-// Types
-
-pub fn string_of_typ(typ: &Typ) -> String {
-    sl::print::string_of_typ(typ)
-}
-
-pub fn string_of_typs(separator: &str, typs: &[Typ]) -> String {
-    sl::print::string_of_typs(separator, typs)
-}
-
-pub fn string_of_nottyp(nottyp: &NotTyp) -> String {
-    sl::print::string_of_nottyp(nottyp)
-}
-
-pub fn string_of_deftyp(deftyp: &DefTyp) -> String {
-    sl::print::string_of_deftyp(deftyp)
-}
-
-pub fn string_of_typfield(field: &TypField) -> String {
-    sl::print::string_of_typfield(field)
-}
-
-pub fn string_of_typfields(separator: &str, fields: &[TypField]) -> String {
-    sl::print::string_of_typfields(separator, fields)
-}
-
-pub fn string_of_typcase(case: &TypCase) -> String {
-    sl::print::string_of_typcase(case)
-}
-
-pub fn string_of_typcases(separator: &str, cases: &[TypCase]) -> String {
-    sl::print::string_of_typcases(separator, cases)
-}
-
-// Values
-
-pub fn string_of_vid(vid: i64) -> String {
-    sl::print::string_of_vid(vid)
-}
-
-pub fn string_of_value(value: &Value) -> String {
-    sl::print::string_of_value(value)
-}
-
-pub fn string_of_value_with(value: &Value, short: bool, level: usize) -> String {
-    sl::print::string_of_value_with(value, short, level)
-}
-
-// Operators
-
-pub fn string_of_unop(operation: UnOp) -> &'static str {
-    sl::print::string_of_unop(operation)
-}
-
-pub fn string_of_binop(operation: BinOp) -> &'static str {
-    sl::print::string_of_binop(operation)
-}
-
-pub fn string_of_cmpop(operation: CmpOp) -> &'static str {
-    sl::print::string_of_cmpop(operation)
-}
-
-// Expressions
-
-pub fn string_of_exp(exp: &Exp) -> String {
-    match &exp.node.kind {
-        ExpKind::BoolE(value) => value.to_string(),
-        ExpKind::NumE(value) => string_of_num(value),
-        ExpKind::TextE(text) => format!("\"{}\"", escaped(text)),
-        ExpKind::VarE(id) => string_of_varid(id),
-        ExpKind::UnE(operation, _, exp) => {
-            format!("{}{}", string_of_unop(*operation), string_of_exp(exp))
-        }
-        ExpKind::BinE(operation, _, exp_l, exp_r) => format!(
-            "({} {} {})",
-            string_of_exp(exp_l),
-            string_of_binop(*operation),
-            string_of_exp(exp_r)
-        ),
-        ExpKind::CmpE(operation, _, exp_l, exp_r) => format!(
-            "({} {} {})",
-            string_of_exp(exp_l),
-            string_of_cmpop(*operation),
-            string_of_exp(exp_r)
-        ),
-        ExpKind::UpCastE(typ, exp) | ExpKind::DownCastE(typ, exp) => {
-            format!("({} as {})", string_of_exp(exp), string_of_typ(typ))
-        }
-        ExpKind::SubE(exp, typ, _) => {
-            format!("({} has type {})", string_of_exp(exp), string_of_typ(typ))
-        }
-        ExpKind::MatchE(exp, pattern) => format!(
-            "({} matches pattern {})",
-            string_of_exp(exp),
-            string_of_pattern(pattern)
-        ),
-        ExpKind::TupleE(exps) => format!("({})", string_of_exps(", ", exps)),
-        ExpKind::CaseE(notexp) => format!("({})", string_of_notexp(notexp)),
-        ExpKind::StrE(fields) => format!(
-            "{{{}}}",
-            join(fields, ", ", |(atom, exp)| format!(
-                "{} {}",
-                string_of_atom(atom),
-                string_of_exp(exp)
-            ))
-        ),
-        ExpKind::OptE(Some(exp)) => format!("?({})", string_of_exp(exp)),
-        ExpKind::OptE(None) => "?()".into(),
-        ExpKind::ListE(exps) => format!("[{}]", string_of_exps(", ", exps)),
-        ExpKind::ConsE(exp_h, exp_t) => {
-            format!("{} :: {}", string_of_exp(exp_h), string_of_exp(exp_t))
-        }
-        ExpKind::CatE(exp_l, exp_r) => {
-            format!("{} ++ {}", string_of_exp(exp_l), string_of_exp(exp_r))
-        }
-        ExpKind::MemE(exp_e, exp_s) => {
-            format!("{} is in {}", string_of_exp(exp_e), string_of_exp(exp_s))
-        }
-        ExpKind::LenE(exp) => format!("|{}|", string_of_exp(exp)),
-        ExpKind::DotE(exp, atom) => format!("{}.{}", string_of_exp(exp), string_of_atom(atom)),
-        ExpKind::IdxE(exp_b, exp_i) => {
-            format!("{}[{}]", string_of_exp(exp_b), string_of_exp(exp_i))
-        }
-        ExpKind::SliceE(exp_b, exp_l, exp_h) => format!(
-            "{}[{} : {}]",
-            string_of_exp(exp_b),
-            string_of_exp(exp_l),
-            string_of_exp(exp_h)
-        ),
-        ExpKind::UpdE(exp_b, path, exp_f) => format!(
-            "{}[{} = {}]",
-            string_of_exp(exp_b),
-            string_of_path(path),
-            string_of_exp(exp_f)
-        ),
-        ExpKind::CallE(id, targs, args) => format!(
-            "{}{}{}",
-            string_of_defid(id),
-            string_of_targs(targs),
-            string_of_args(args)
-        ),
-        ExpKind::IterE(exp, iterexp) => format!(
-            "({}){}",
-            string_of_exp(exp),
-            string_of_iterexps(std::slice::from_ref(iterexp))
-        ),
-    }
-}
-
-pub fn string_of_exps(separator: &str, exps: &[Exp]) -> String {
-    join(exps, separator, string_of_exp)
-}
-
-pub fn string_of_notexp(notexp: &NotExp) -> String {
-    notexp.render(string_of_atom, string_of_exp)
-}
-
-// Patterns
-
-pub fn string_of_pattern(pattern: &Pattern) -> String {
-    sl::print::string_of_pattern(pattern)
-}
-
-// Paths
-
-pub fn string_of_path(path: &Path) -> String {
-    match &path.kind {
-        PathKind::RootP => String::new(),
-        PathKind::IdxP(path, exp) => format!("{}[{}]", string_of_path(path), string_of_exp(exp)),
-        PathKind::SliceP(path, exp_l, exp_h) => format!(
-            "{}[{} : {}]",
-            string_of_path(path),
-            string_of_exp(exp_l),
-            string_of_exp(exp_h)
-        ),
-        PathKind::DotP(path, atom) if matches!(path.kind, PathKind::RootP) => string_of_atom(atom),
-        PathKind::DotP(path, atom) => {
-            format!("{}.{}", string_of_path(path), string_of_atom(atom))
+impl Print for Exp {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        match &self.node.node.kind {
+            ExpKind::Bool(value) => write!(printer, "{value}"),
+            ExpKind::Num(value) => value.print(printer),
+            ExpKind::Text(text) => write!(printer, "\"{}\"", escaped(text)),
+            ExpKind::Var(id) => printer.write_str(&id.node),
+            ExpKind::Un(op, _, exp) => {
+                op.print(printer)?;
+                exp.print(printer)
+            }
+            ExpKind::Bin(op, _, exp_l, exp_r) => {
+                printer.write_char('(')?;
+                exp_l.print(printer)?;
+                printer.write_char(' ')?;
+                op.print(printer)?;
+                printer.write_char(' ')?;
+                exp_r.print(printer)?;
+                printer.write_char(')')
+            }
+            ExpKind::Cmp(op, _, exp_l, exp_r) => {
+                printer.write_char('(')?;
+                exp_l.print(printer)?;
+                printer.write_char(' ')?;
+                op.print(printer)?;
+                printer.write_char(' ')?;
+                exp_r.print(printer)?;
+                printer.write_char(')')
+            }
+            ExpKind::UpCast(typ, exp) | ExpKind::DownCast(typ, exp) => {
+                printer.write_char('(')?;
+                exp.print(printer)?;
+                printer.write_str(" as ")?;
+                typ.print(printer)?;
+                printer.write_char(')')
+            }
+            ExpKind::Sub(exp, typ, _) => {
+                printer.write_char('(')?;
+                exp.print(printer)?;
+                printer.write_str(" has type ")?;
+                typ.print(printer)?;
+                printer.write_char(')')
+            }
+            ExpKind::Match(exp, pattern) => {
+                printer.write_char('(')?;
+                exp.print(printer)?;
+                printer.write_str(" matches pattern ")?;
+                pattern.print(printer)?;
+                printer.write_char(')')
+            }
+            ExpKind::Tuple(exps) => {
+                printer.write_char('(')?;
+                printer.separated(exps, ", ")?;
+                printer.write_char(')')
+            }
+            ExpKind::Case(not_exp) => {
+                printer.write_char('(')?;
+                not_exp.print(printer)?;
+                printer.write_char(')')
+            }
+            ExpKind::Str(fields) => {
+                printer.write_char('{')?;
+                for (index, (atom, exp)) in fields.iter().enumerate() {
+                    if index > 0 {
+                        printer.write_str(", ")?;
+                    }
+                    atom.print(printer)?;
+                    printer.write_char(' ')?;
+                    exp.print(printer)?;
+                }
+                printer.write_char('}')
+            }
+            ExpKind::Opt(Some(exp)) => {
+                printer.write_str("?(")?;
+                exp.print(printer)?;
+                printer.write_char(')')
+            }
+            ExpKind::Opt(None) => printer.write_str("?()"),
+            ExpKind::List(exps) => {
+                printer.write_char('[')?;
+                printer.separated(exps, ", ")?;
+                printer.write_char(']')
+            }
+            ExpKind::Cons(exp_head, exp_tail) => {
+                exp_head.print(printer)?;
+                printer.write_str(" :: ")?;
+                exp_tail.print(printer)
+            }
+            ExpKind::Cat(exp_l, exp_r) => {
+                exp_l.print(printer)?;
+                printer.write_str(" ++ ")?;
+                exp_r.print(printer)
+            }
+            ExpKind::Mem(exp_e, exp_s) => {
+                exp_e.print(printer)?;
+                printer.write_str(" is in ")?;
+                exp_s.print(printer)
+            }
+            ExpKind::Len(exp) => {
+                printer.write_char('|')?;
+                exp.print(printer)?;
+                printer.write_char('|')
+            }
+            ExpKind::Dot(exp, atom) => {
+                exp.print(printer)?;
+                printer.write_char('.')?;
+                atom.print(printer)
+            }
+            ExpKind::Idx(exp_b, exp_i) => {
+                exp_b.print(printer)?;
+                printer.write_char('[')?;
+                exp_i.print(printer)?;
+                printer.write_char(']')
+            }
+            ExpKind::Slice(exp_b, exp_i, exp_n) => {
+                exp_b.print(printer)?;
+                printer.write_char('[')?;
+                exp_i.print(printer)?;
+                printer.write_str(" : ")?;
+                exp_n.print(printer)?;
+                printer.write_char(']')
+            }
+            ExpKind::Upd(exp_b, path, exp_f) => {
+                exp_b.print(printer)?;
+                printer.write_char('[')?;
+                path.print(printer)?;
+                printer.write_str(" = ")?;
+                exp_f.print(printer)?;
+                printer.write_char(']')
+            }
+            ExpKind::Call(id, targs, args) => {
+                printer.write_char('$')?;
+                id.print(printer)?;
+                if !targs.is_empty() {
+                    printer.write_char('<')?;
+                    printer.separated(targs, ", ")?;
+                    printer.write_char('>')?;
+                }
+                args.as_slice().print(printer)
+            }
+            ExpKind::Iter(exp, iter_exp) => {
+                printer.write_char('(')?;
+                exp.print(printer)?;
+                printer.write_char(')')?;
+                std::slice::from_ref(iter_exp).print(printer)
+            }
         }
     }
 }
 
-// Parameters
-
-pub fn string_of_param(param: &Param) -> String {
-    match &param.node {
-        ParamKind::ExpP(_, exp) => string_of_exp(exp),
-        ParamKind::DefP(id, tparams, params, typ) => format!(
-            "{}{}{} : {}",
-            string_of_defid(id),
-            string_of_tparams(tparams),
-            string_of_params(params),
-            string_of_typ(typ)
-        ),
+impl Print for NotExp {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        self.print_with(printer, |exp, printer| exp.print(printer))
     }
 }
 
-pub fn string_of_params(params: &[Param]) -> String {
-    if params.is_empty() {
-        String::new()
-    } else {
-        format!("({})", join(params, ", ", string_of_param))
+// - Paths
+
+impl Print for Path {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        match &self.node.kind {
+            PathKind::Root => Ok(()),
+            PathKind::Idx(path, exp_i) => {
+                path.print(printer)?;
+                printer.write_char('[')?;
+                exp_i.print(printer)?;
+                printer.write_char(']')
+            }
+            PathKind::Slice(path, exp_i, exp_n) => {
+                path.print(printer)?;
+                printer.write_char('[')?;
+                exp_i.print(printer)?;
+                printer.write_str(" : ")?;
+                exp_n.print(printer)?;
+                printer.write_char(']')
+            }
+            PathKind::Dot(path, atom) if matches!(path.node.kind, PathKind::Root) => {
+                atom.print(printer)
+            }
+            PathKind::Dot(path, atom) => {
+                path.print(printer)?;
+                printer.write_char('.')?;
+                atom.print(printer)
+            }
+        }
     }
 }
 
-// Type parameters
+// - Parameters
 
-pub fn string_of_tparam(tparam: &TParam) -> String {
-    sl::print::string_of_tparam(tparam)
-}
-
-pub fn string_of_tparams(tparams: &[TParam]) -> String {
-    sl::print::string_of_tparams(tparams)
-}
-
-// Arguments
-
-pub fn string_of_arg(arg: &Arg) -> String {
-    match &arg.node {
-        ArgKind::ExpA(exp) => string_of_exp(exp),
-        ArgKind::DefA(id) => string_of_defid(id),
+impl Print for Param {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        match &self.node {
+            ParamKind::Exp(_, exp) => exp.print(printer),
+            ParamKind::Def(id, tparams, params, typ) => {
+                printer.write_char('$')?;
+                id.print(printer)?;
+                if !tparams.is_empty() {
+                    printer.write_char('<')?;
+                    printer.separated(tparams, ", ")?;
+                    printer.write_char('>')?;
+                }
+                params.as_slice().print(printer)?;
+                printer.write_str(" : ")?;
+                typ.print(printer)
+            }
+        }
     }
 }
 
-pub fn string_of_args(args: &[Arg]) -> String {
-    if args.is_empty() {
-        String::new()
-    } else {
-        format!("({})", join(args, ", ", string_of_arg))
+impl Print for [Param] {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        if self.is_empty() {
+            return Ok(());
+        }
+        printer.write_char('(')?;
+        for (index, param) in self.iter().enumerate() {
+            if index != 0 {
+                printer.write_str(", ")?;
+            }
+            param.print(printer)?;
+        }
+        printer.write_char(')')
     }
 }
 
-// Type arguments
+// - Arguments
 
-pub fn string_of_targ(targ: &Targ) -> String {
-    sl::print::string_of_targ(targ)
+impl Print for Arg {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        match &self.node {
+            ArgKind::Exp(exp) => exp.print(printer),
+            ArgKind::Def(id) => {
+                printer.write_char('$')?;
+                id.print(printer)
+            }
+        }
+    }
 }
 
-pub fn string_of_targs(targs: &[Targ]) -> String {
-    sl::print::string_of_targs(targs)
+impl Print for [Arg] {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        if self.is_empty() {
+            return Ok(());
+        }
+        printer.write_char('(')?;
+        for (index, arg) in self.iter().enumerate() {
+            if index != 0 {
+                printer.write_str(", ")?;
+            }
+            arg.print(printer)?;
+        }
+        printer.write_char(')')
+    }
 }
 
-// Danglings
+// - Case analysis
 
-pub fn string_of_dangle(iid: Iid) -> String {
-    format!("Dangling#{iid}")
-}
+type TierPrinter<Tier> = fn(&mut Printer<'_>, &Tier, bool, usize, usize) -> fmt::Result;
 
-// Case analysis
-
-type TierPrinter<Tier> = fn(&Tier, bool, usize, usize) -> String;
-
-fn string_of_case_with<Tier>(
+fn write_case_with<Tier>(
+    output: &mut Printer<'_>,
     case: &Case<Tier>,
     tier_printer: TierPrinter<Tier>,
     level: usize,
     index: usize,
-) -> String {
-    format!(
-        "{}{index}. Case {}\n\n{}",
-        "  ".repeat(level),
-        string_of_guard(&case.0),
-        string_of_block_with(&case.1, tier_printer, level + 1, 0)
-    )
+) -> fmt::Result {
+    write!(output, "{}{index}. Case ", "  ".repeat(level))?;
+    case.guard.print(output)?;
+    output.write_str("\n\n")?;
+    write_block_with(output, &case.block, tier_printer, level + 1, 0)
 }
 
-fn string_of_cases_with<Tier>(
+fn write_cases_with<Tier>(
+    output: &mut Printer<'_>,
     cases: &[Case<Tier>],
     tier_printer: TierPrinter<Tier>,
     level: usize,
-) -> String {
-    cases
-        .iter()
-        .enumerate()
-        .map(|(index, case)| string_of_case_with(case, tier_printer, level, index + 1))
-        .collect::<Vec<_>>()
-        .join("\n\n")
+) -> fmt::Result {
+    for (index, case) in cases.iter().enumerate() {
+        if index != 0 {
+            output.write_str("\n\n")?;
+        }
+        write_case_with(output, case, tier_printer, level, index + 1)?;
+    }
+    Ok(())
 }
 
-pub fn string_of_guard(guard: &Guard) -> String {
-    match guard {
-        Guard::BoolG(value) => value.to_string(),
-        Guard::CmpG(operation, _, exp) => {
-            format!("(% {} {})", string_of_cmpop(*operation), string_of_exp(exp))
+impl Print for Guard {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        match self {
+            Guard::Bool(value) => write!(printer, "{value}"),
+            Guard::Cmp(op, _, exp) => {
+                printer.write_str("(% ")?;
+                op.print(printer)?;
+                printer.write_char(' ')?;
+                exp.print(printer)?;
+                printer.write_char(')')
+            }
+            Guard::Sub(typ, _) => {
+                printer.write_str("(% has type ")?;
+                typ.print(printer)?;
+                printer.write_char(')')
+            }
+            Guard::Match(pattern) => {
+                printer.write_str("(% matches pattern ")?;
+                pattern.print(printer)?;
+                printer.write_char(')')
+            }
+            Guard::Mem(exp) => {
+                printer.write_str("(% is in ")?;
+                exp.print(printer)?;
+                printer.write_char(')')
+            }
+            Guard::CheckLetSub(typ, _, exp) => {
+                printer.write_str("(let ")?;
+                exp.print(printer)?;
+                printer.write_str(" be %, % has type ")?;
+                typ.print(printer)?;
+                printer.write_char(')')
+            }
+            Guard::CheckLetMatch(pattern, exp) => {
+                printer.write_str("(let ")?;
+                exp.print(printer)?;
+                printer.write_str(" be %, % matches pattern ")?;
+                pattern.print(printer)?;
+                printer.write_char(')')
+            }
         }
-        Guard::SubG(typ, _) => format!("(% has type {})", string_of_typ(typ)),
-        Guard::MatchG(pattern) => {
-            format!("(% matches pattern {})", string_of_pattern(pattern))
-        }
-        Guard::MemG(exp) => format!("(% is in {})", string_of_exp(exp)),
-        Guard::CheckLetSubG(typ, _, exp) => format!(
-            "(let {} be %, % has type {})",
-            string_of_exp(exp),
-            string_of_typ(typ)
-        ),
-        Guard::CheckLetMatchG(pattern, exp) => format!(
-            "(let {} be %, % matches pattern {})",
-            string_of_exp(exp),
-            string_of_pattern(pattern)
-        ),
     }
 }
 
-// Instructions: shared control flow, parametric over the tier
+// - Instructions
+// Shared control flow parameterized by the tier
 
-fn string_of_instr_with<Tier>(
+fn write_instr_with<Tier>(
+    output: &mut Printer<'_>,
     instr: &Instr<Tier>,
     tier_printer: TierPrinter<Tier>,
     short: bool,
     level: usize,
     index: usize,
-) -> String {
+) -> fmt::Result {
     let order = format!("{}{index}. ", "  ".repeat(level));
-    match &instr.node.kind {
-        InstrKind::IfI(exp, iterexps, block, dangle) => {
-            let summary = format!(
-                "If ({}){}, then",
-                string_of_exp(exp),
-                string_of_iterexps(iterexps)
-            );
-            if short {
-                summary
-            } else {
-                format!(
-                    "{order}{summary}\n\n{}{}",
-                    string_of_block_with(block, tier_printer, level + 1, 0),
-                    if *dangle {
-                        format!("\n\n{order}Else {}", string_of_dangle(instr.node.iid))
-                    } else {
-                        String::new()
-                    }
-                )
-            }
+    let write_order = |output: &mut Printer<'_>| {
+        if short {
+            Ok(())
+        } else {
+            output.write_str(&order)
         }
-        InstrKind::HoldI(id, notexp, iterexps, holdcase) => {
-            let holding = |negative: bool| {
-                format!(
-                    "If ({}: {}){} {}, then",
-                    string_of_relid(id),
-                    string_of_notexp(notexp),
-                    string_of_iterexps(iterexps),
-                    if negative { "does not hold" } else { "holds" }
-                )
+    };
+
+    match &instr.node.node.kind {
+        InstrKind::If(IfInstr {
+            exp,
+            iter_exps,
+            block,
+            dangle,
+        }) => {
+            write_order(output)?;
+            output.write_str("If (")?;
+            exp.print(output)?;
+            output.write_char(')')?;
+            iter_exps.as_slice().print(output)?;
+            output.write_str(", then")?;
+            if !short {
+                output.write_str("\n\n")?;
+                write_block_with(output, block, tier_printer, level + 1, 0)?;
+                if *dangle {
+                    write!(
+                        output,
+                        "\n\n{order}Else Dangling#{}",
+                        instr.node.node.note.iid
+                    )?;
+                }
+            }
+            Ok(())
+        }
+        InstrKind::Hold(HoldInstr {
+            id,
+            not_exp,
+            iter_exps,
+            hold_case,
+        }) => {
+            let write_holding = |output: &mut Printer<'_>, negative: bool| {
+                output.write_str("If (")?;
+                id.print(output)?;
+                output.write_str(": ")?;
+                not_exp.print(output)?;
+                output.write_char(')')?;
+                iter_exps.as_slice().print(output)?;
+                output.write_char(' ')?;
+                output.write_str(if negative { "does not hold" } else { "holds" })?;
+                output.write_str(", then")
             };
-            match holdcase {
-                HoldCase::BothH(block_hold, block_not_hold) => {
-                    let summary = holding(false);
-                    if short {
-                        summary
-                    } else {
-                        format!(
-                            "{order}{summary}\n\n{}\n\n{order}Else,\n\n{}",
-                            string_of_block_with(block_hold, tier_printer, level + 1, 0),
-                            string_of_block_with(block_not_hold, tier_printer, level + 1, 0)
-                        )
+            match hold_case {
+                HoldCase::Both(block_hold, block_not_hold) => {
+                    write_order(output)?;
+                    write_holding(output, false)?;
+                    if !short {
+                        output.write_str("\n\n")?;
+                        write_block_with(output, block_hold, tier_printer, level + 1, 0)?;
+                        write!(output, "\n\n{order}Else,\n\n")?;
+                        write_block_with(output, block_not_hold, tier_printer, level + 1, 0)?;
                     }
+                    Ok(())
                 }
-                HoldCase::HoldH(block, dangle) | HoldCase::NotHoldH(block, dangle) => {
-                    let summary = holding(matches!(holdcase, HoldCase::NotHoldH(..)));
-                    if short {
-                        summary
-                    } else {
-                        format!(
-                            "{order}{summary}\n\n{}{}",
-                            string_of_block_with(block, tier_printer, level + 1, 0),
-                            if *dangle {
-                                format!("\n\n{order}Else {}", string_of_dangle(instr.node.iid))
-                            } else {
-                                String::new()
-                            }
-                        )
+                HoldCase::Hold(block, dangle) | HoldCase::NotHold(block, dangle) => {
+                    write_order(output)?;
+                    write_holding(output, matches!(hold_case, HoldCase::NotHold(..)))?;
+                    if !short {
+                        output.write_str("\n\n")?;
+                        write_block_with(output, block, tier_printer, level + 1, 0)?;
+                        if *dangle {
+                            write!(
+                                output,
+                                "\n\n{order}Else Dangling#{}",
+                                instr.node.node.note.iid
+                            )?;
+                        }
                     }
+                    Ok(())
                 }
             }
         }
-        InstrKind::CaseI(exp, cases, dangle) => {
-            let summary = format!("Case analysis on {}", string_of_exp(exp));
-            if short {
-                summary
-            } else {
-                format!(
-                    "{order}{summary}\n\n{}{}",
-                    string_of_cases_with(cases, tier_printer, level + 1),
-                    if *dangle {
-                        format!("\n\n{order}Else {}", string_of_dangle(instr.node.iid))
-                    } else {
-                        String::new()
-                    }
-                )
+        InstrKind::Case(CaseInstr { exp, cases, dangle }) => {
+            write_order(output)?;
+            output.write_str("Case analysis on ")?;
+            exp.print(output)?;
+            if !short {
+                output.write_str("\n\n")?;
+                write_cases_with(output, cases, tier_printer, level + 1)?;
+                if *dangle {
+                    write!(
+                        output,
+                        "\n\n{order}Else Dangling#{}",
+                        instr.node.node.note.iid
+                    )?;
+                }
             }
+            Ok(())
         }
-        InstrKind::LetI(exp_l, exp_r, iterinstrs) => render_leaf(
-            short,
-            &order,
-            format!(
-                "(Let {} be {}){}",
-                string_of_exp(exp_l),
-                string_of_exp(exp_r),
-                string_of_iterinstrs(iterinstrs)
-            ),
-        ),
-        InstrKind::DebugI(exp) => {
-            render_leaf(short, &order, format!("Debug: {}", string_of_exp(exp)))
+        InstrKind::Let(LetInstr {
+            exp_l,
+            exp_r,
+            iter_instrs,
+        }) => {
+            write_order(output)?;
+            output.write_str("(Let ")?;
+            exp_l.print(output)?;
+            output.write_str(" be ")?;
+            exp_r.print(output)?;
+            output.write_char(')')?;
+            iter_instrs.as_slice().print(output)
         }
-        InstrKind::DestructI(fields, exp_r) => render_leaf(
-            short,
-            &order,
-            format!(
-                "(Destruct ({}) = {})",
-                join(fields, ", ", |(_, exp)| string_of_exp(exp)),
-                string_of_exp(exp_r)
-            ),
-        ),
-        InstrKind::CheckLetSubI(typ, _, exp_l, exp_r, block) => render_nested(
-            short,
-            &order,
-            format!(
-                "(Let {} be {}, {} has type {})",
-                string_of_exp(exp_l),
-                string_of_exp(exp_r),
-                string_of_exp(exp_r),
-                string_of_typ(typ)
-            ),
-            string_of_block_with(block, tier_printer, level + 1, 0),
-        ),
-        InstrKind::CheckLetMatchI(pattern, exp_l, exp_r, block) => render_nested(
-            short,
-            &order,
-            format!(
-                "(Let {} be {}, {} matches pattern {})",
-                string_of_exp(exp_l),
-                string_of_exp(exp_r),
-                string_of_exp(exp_r),
-                string_of_pattern(pattern)
-            ),
-            string_of_block_with(block, tier_printer, level + 1, 0),
-        ),
-        InstrKind::OptionGetI(exp_l, exp_r, block) => render_nested(
-            short,
-            &order,
-            format!(
-                "(Let {} be ! {})",
-                string_of_exp(exp_l),
-                string_of_exp(exp_r)
-            ),
-            string_of_block_with(block, tier_printer, level + 1, 0),
-        ),
-        InstrKind::TierI(tier) => tier_printer(tier, short, level, index),
+        InstrKind::Debug(DebugInstr { exp }) => {
+            write_order(output)?;
+            output.write_str("Debug: ")?;
+            exp.print(output)
+        }
+        InstrKind::Destruct(DestructInstr {
+            bindings: fields,
+            exp: exp_r,
+        }) => {
+            write_order(output)?;
+            output.write_str("(Destruct (")?;
+            for (index, (_, exp)) in fields.iter().enumerate() {
+                if index != 0 {
+                    output.write_str(", ")?;
+                }
+                exp.print(output)?;
+            }
+            output.write_str(") = ")?;
+            exp_r.print(output)?;
+            output.write_char(')')
+        }
+        InstrKind::CheckLetSub(CheckLetSubInstr {
+            typ,
+            exp_l,
+            exp_r,
+            block,
+            ..
+        }) => {
+            write_order(output)?;
+            output.write_str("(Let ")?;
+            exp_l.print(output)?;
+            output.write_str(" be ")?;
+            exp_r.print(output)?;
+            output.write_str(", ")?;
+            exp_r.print(output)?;
+            output.write_str(" has type ")?;
+            typ.print(output)?;
+            output.write_char(')')?;
+            if !short {
+                output.write_str("\n\n")?;
+                write_block_with(output, block, tier_printer, level + 1, 0)?;
+            }
+            Ok(())
+        }
+        InstrKind::CheckLetMatch(CheckLetMatchInstr {
+            pattern,
+            exp_l,
+            exp_r,
+            block,
+        }) => {
+            write_order(output)?;
+            output.write_str("(Let ")?;
+            exp_l.print(output)?;
+            output.write_str(" be ")?;
+            exp_r.print(output)?;
+            output.write_str(", ")?;
+            exp_r.print(output)?;
+            output.write_str(" matches pattern ")?;
+            pattern.print(output)?;
+            output.write_char(')')?;
+            if !short {
+                output.write_str("\n\n")?;
+                write_block_with(output, block, tier_printer, level + 1, 0)?;
+            }
+            Ok(())
+        }
+        InstrKind::OptionGet(OptionGetInstr {
+            exp_l,
+            exp_r,
+            block,
+        }) => {
+            write_order(output)?;
+            output.write_str("(Let ")?;
+            exp_l.print(output)?;
+            output.write_str(" be ! ")?;
+            exp_r.print(output)?;
+            output.write_char(')')?;
+            if !short {
+                output.write_str("\n\n")?;
+                write_block_with(output, block, tier_printer, level + 1, 0)?;
+            }
+            Ok(())
+        }
+        InstrKind::Tier(TierInstr { tier }) => tier_printer(output, tier, short, level, index),
     }
 }
 
-fn render_leaf(short: bool, order: &str, summary: String) -> String {
-    if short {
-        summary
-    } else {
-        format!("{order}{summary}")
-    }
-}
-
-fn render_nested(short: bool, order: &str, summary: String, nested: String) -> String {
-    if short {
-        summary
-    } else {
-        format!("{order}{summary}\n\n{nested}")
-    }
-}
-
-fn string_of_block_with<Tier>(
+fn write_block_with<Tier>(
+    output: &mut Printer<'_>,
     block: &Block<Tier>,
     tier_printer: TierPrinter<Tier>,
     level: usize,
     index: usize,
-) -> String {
-    block
-        .iter()
-        .enumerate()
-        .map(|(offset, instr)| {
-            string_of_instr_with(instr, tier_printer, false, level, index + offset + 1)
-        })
-        .collect::<Vec<_>>()
-        .join("\n\n")
+) -> fmt::Result {
+    for (offset, instr) in block.iter().enumerate() {
+        if offset != 0 {
+            output.write_str("\n\n")?;
+        }
+        write_instr_with(
+            output,
+            instr,
+            tier_printer,
+            false,
+            level,
+            index + offset + 1,
+        )?;
+    }
+    Ok(())
 }
 
-fn string_of_elseblock_opt_with<Tier>(
+fn write_elseblock_opt_with<Tier>(
+    output: &mut Printer<'_>,
     block: &Option<Block<Tier>>,
     tier_printer: TierPrinter<Tier>,
     level: usize,
     index: usize,
-) -> String {
-    block.as_ref().map_or_else(String::new, |block| {
-        format!(
-            "\n\n{}{next}. Otherwise,\n\n{}",
+) -> fmt::Result {
+    if let Some(block) = block {
+        write!(
+            output,
+            "\n\n{}{next}. Otherwise,\n\n",
             "  ".repeat(level),
-            string_of_block_with(block, tier_printer, level + 1, 0),
             next = index + 1
-        )
-    })
+        )?;
+        write_block_with(output, block, tier_printer, level + 1, 0)?;
+    }
+    Ok(())
 }
 
-pub fn string_of_iterinstr(iterinstr: &IterInstr) -> &'static str {
-    string_of_iter(iterinstr.0)
-}
+// - Relations
 
-pub fn string_of_iterinstrs(iterinstrs: &[IterInstr]) -> String {
-    join(iterinstrs, "", |iterinstr| {
-        string_of_iterinstr(iterinstr).to_owned()
-    })
-}
-
-// Relations
-
-pub fn string_of_relinput(signature: &RelSignature, exps_input: &[Exp]) -> String {
-    let (nottyp, inputs) = signature;
-    assert_eq!(inputs.len(), exps_input.len());
-    let args = (0..nottyp.node.arity()).map(|index| {
-        inputs
+fn write_relinput(
+    output: &mut Printer<'_>,
+    rel_signature: &RelSignature,
+    exps_input: &[Exp],
+) -> fmt::Result {
+    let not_typ = &rel_signature.not_typ;
+    let input_indices = rel_signature.input_hint.indices();
+    assert_eq!(input_indices.len(), exps_input.len());
+    let args = (0..not_typ.node.arity()).map(|index| {
+        input_indices
             .iter()
             .position(|input| *input == index as i64)
-            .map_or_else(
-                || "%".into(),
-                |position| string_of_exp(&exps_input[position]),
-            )
+            .map(|position| &exps_input[position])
     });
-    mixop::assemble(&nottyp.node.to_mixop(), args, string_of_atom)
-        .expect("relation input arity matches notation")
+    let mixfix =
+        Mixop::fill(&not_typ.node.to_mixop(), args).expect("relation input arity matches notation");
+    mixfix.print_with(output, |exp, output| match exp {
+        Some(exp) => exp.print(output),
+        None => output.write("%"),
+    })
 }
 
-pub fn string_of_reloutput(signature: &RelSignature, exps_output: &[Exp]) -> String {
-    let (nottyp, inputs) = signature;
-    let outputs = (0..nottyp.node.arity())
-        .filter(|index| !inputs.contains(&(*index as i64)))
+fn write_reloutput(
+    output: &mut Printer<'_>,
+    rel_signature: &RelSignature,
+    exps_output: &[Exp],
+) -> fmt::Result {
+    let not_typ = &rel_signature.not_typ;
+    let input_indices = rel_signature.input_hint.indices();
+    let outputs = (0..not_typ.node.arity())
+        .filter(|index| !input_indices.contains(&(*index as i64)))
         .collect::<Vec<_>>();
     assert_eq!(outputs.len(), exps_output.len());
-    let args = (0..nottyp.node.arity()).map(|index| {
+    let args = (0..not_typ.node.arity()).map(|index| {
         outputs
             .iter()
             .position(|output| *output == index)
-            .map_or_else(
-                || "%".into(),
-                |position| string_of_exp(&exps_output[position]),
-            )
+            .map(|position| &exps_output[position])
     });
-    mixop::assemble(&nottyp.node.to_mixop(), args, string_of_atom)
-        .expect("relation output arity matches notation")
+    let mixfix = Mixop::fill(&not_typ.node.to_mixop(), args)
+        .expect("relation output arity matches notation");
+    mixfix.print_with(output, |exp, output| match exp {
+        Some(exp) => exp.print(output),
+        None => output.write("%"),
+    })
 }
 
-pub fn string_of_extern_rel(relation: &ExternRel) -> String {
-    let (id, signature, exps) = relation;
-    format!(
-        "{}: {}",
-        string_of_relid(id),
-        string_of_relinput(signature, exps)
-    )
+impl Print for ExternRel {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        self.id.print(printer)?;
+        printer.write_str(": ")?;
+        write_relinput(printer, &self.rel_signature, &self.exps_input)
+    }
 }
 
-// Group-body tier
+impl Print for Rel {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        self.id.print(printer)?;
+        printer.write_str(": ")?;
+        write_relinput(printer, &self.rel_signature, &self.exps_input)?;
+        printer.write_str("\n\n")?;
+        self.block.print(printer)?;
+        write_elseblock_opt_with(
+            printer,
+            &self.block_else_opt,
+            write_instr_dispatch_tier_with,
+            0,
+            self.block.len(),
+        )
+    }
+}
 
-fn string_of_instr_group_tier_with(
+// - Group-body tier
+
+fn write_instr_group_tier_with(
+    output: &mut Printer<'_>,
     tier: &InstrGroup,
     short: bool,
     level: usize,
     index: usize,
-) -> String {
+) -> fmt::Result {
     let order = format!("{}{index}. ", "  ".repeat(level));
+    if !short {
+        output.write_str(&order)?;
+    }
+
     match tier {
-        InstrGroup::ResultI(_, exps) if exps.is_empty() => {
-            render_leaf(short, &order, "The relation holds".into())
+        InstrGroup::Result(ResultGroupInstr { exps_output, .. }) if exps_output.is_empty() => {
+            output.write_str("The relation holds")
         }
-        InstrGroup::ResultI(signature, exps) => render_leaf(
-            short,
-            &order,
-            format!("Result in: {}", string_of_reloutput(signature, exps)),
-        ),
-        InstrGroup::ReturnI(exp) => {
-            render_leaf(short, &order, format!("Return {}", string_of_exp(exp)))
+        InstrGroup::Result(ResultGroupInstr {
+            rel_signature,
+            exps_output,
+        }) => {
+            output.write_str("Result in: ")?;
+            write_reloutput(output, rel_signature, exps_output)
         }
-        InstrGroup::RuleI(id, notexp, _, iterinstrs) => render_leaf(
-            short,
-            &order,
-            format!(
-                "({}: {}){}",
-                string_of_relid(id),
-                string_of_notexp(notexp),
-                string_of_iterinstrs(iterinstrs)
-            ),
-        ),
-        InstrGroup::BacktrackI(arms) => {
-            let summary = format!("Block ({} arms)", arms.len());
-            if short {
-                summary
-            } else {
+        InstrGroup::Return(ReturnGroupInstr { exp }) => {
+            output.write_str("Return ")?;
+            exp.print(output)
+        }
+        InstrGroup::Rule(RuleGroupInstr {
+            id,
+            not_exp,
+            iter_instrs,
+            ..
+        }) => {
+            output.write_char('(')?;
+            id.print(output)?;
+            output.write_str(": ")?;
+            not_exp.print(output)?;
+            output.write_char(')')?;
+            iter_instrs.as_slice().print(output)
+        }
+        InstrGroup::Backtrack(BacktrackGroupInstr { blocks }) => {
+            write!(output, "Block ({} arms)", blocks.len())?;
+            if !short {
                 let indent = "  ".repeat(level);
-                let arms = arms
-                    .iter()
-                    .enumerate()
-                    .map(|(index, arm)| {
-                        format!(
-                            "{indent}Arm {}:\n\n{}",
-                            index + 1,
-                            string_of_block_group_with(arm, level + 1, 0)
-                        )
-                    })
-                    .collect::<Vec<_>>()
-                    .join("\n\n");
-                format!("{order}{summary}\n\n{arms}")
+                output.write_str("\n\n")?;
+                for (arm_index, arm) in blocks.iter().enumerate() {
+                    if arm_index != 0 {
+                        output.write_str("\n\n")?;
+                    }
+                    write!(output, "{indent}Arm {}:\n\n", arm_index + 1)?;
+                    write_block_group_with(output, arm, level + 1, 0)?;
+                }
             }
+            Ok(())
         }
     }
 }
 
-pub fn string_of_instr_group(instr: &Instr<InstrGroup>) -> String {
-    string_of_instr_with(instr, string_of_instr_group_tier_with, false, 0, 0)
+fn write_block_group_with(
+    output: &mut Printer<'_>,
+    block: &BlockGroup,
+    level: usize,
+    index: usize,
+) -> fmt::Result {
+    write_block_with(output, block, write_instr_group_tier_with, level, index)
 }
 
-pub fn string_of_block_group(block: &BlockGroup) -> String {
-    string_of_block_group_with(block, 0, 0)
+impl Print for Instr<InstrGroup> {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        write_instr_with(printer, self, write_instr_group_tier_with, false, 0, 0)
+    }
 }
 
-pub fn string_of_block_group_with(block: &BlockGroup, level: usize, index: usize) -> String {
-    string_of_block_with(block, string_of_instr_group_tier_with, level, index)
+impl Print for BlockGroup {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        write_block_group_with(printer, self, 0, 0)
+    }
 }
 
-// Dispatch tier
+// - Dispatch tier
 
-fn string_of_instr_dispatch_tier_with(
+fn write_instr_dispatch_tier_with(
+    output: &mut Printer<'_>,
     tier: &InstrDispatch,
     short: bool,
     level: usize,
     index: usize,
-) -> String {
+) -> fmt::Result {
     let order = format!("{}{index}. ", "  ".repeat(level));
+    if !short {
+        output.write_str(&order)?;
+    }
+
     match tier {
-        InstrDispatch::GroupI(id, _, signature, exps, block) => {
-            let summary = format!(
-                "Group {}: {}",
-                string_of_relid(id),
-                string_of_relinput(signature, exps)
-            );
-            if short {
-                summary
-            } else {
-                format!(
-                    "{order}{summary}\n\n{}",
-                    string_of_block_group_with(block, level + 1, 0)
-                )
+        InstrDispatch::Group(GroupDispatchInstr {
+            id_group,
+            rel_signature,
+            exps_input,
+            block,
+            ..
+        }) => {
+            output.write_str("Group ")?;
+            id_group.print(output)?;
+            output.write_str(": ")?;
+            write_relinput(output, rel_signature, exps_input)?;
+            if !short {
+                output.write_str("\n\n")?;
+                write_block_group_with(output, block, level + 1, 0)?;
             }
+            Ok(())
         }
-        InstrDispatch::RouteI(arms) => {
-            let summary = format!("Block ({} arms)", arms.len());
-            if short {
-                summary
-            } else {
+        InstrDispatch::Route(RouteDispatchInstr { blocks }) => {
+            write!(output, "Block ({} arms)", blocks.len())?;
+            if !short {
                 let indent = "  ".repeat(level);
-                let arms = arms
-                    .iter()
-                    .enumerate()
-                    .map(|(index, arm)| {
-                        format!(
-                            "{indent}Arm {}:\n\n{}",
-                            index + 1,
-                            string_of_block_dispatch_with(arm, level + 1, 0)
-                        )
-                    })
-                    .collect::<Vec<_>>()
-                    .join("\n\n");
-                format!("{order}{summary}\n\n{arms}")
+                output.write_str("\n\n")?;
+                for (arm_index, arm) in blocks.iter().enumerate() {
+                    if arm_index != 0 {
+                        output.write_str("\n\n")?;
+                    }
+                    write!(output, "{indent}Arm {}:\n\n", arm_index + 1)?;
+                    write_block_dispatch_with(output, arm, level + 1, 0)?;
+                }
+            }
+            Ok(())
+        }
+    }
+}
+
+fn write_block_dispatch_with(
+    output: &mut Printer<'_>,
+    block: &BlockDispatch,
+    level: usize,
+    index: usize,
+) -> fmt::Result {
+    write_block_with(output, block, write_instr_dispatch_tier_with, level, index)
+}
+
+impl Print for Instr<InstrDispatch> {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        write_instr_with(printer, self, write_instr_dispatch_tier_with, false, 0, 0)
+    }
+}
+
+impl Print for BlockDispatch {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        write_block_dispatch_with(printer, self, 0, 0)
+    }
+}
+
+// - Functions
+
+impl Print for ExternFunc {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        printer.write_char('$')?;
+        self.id.print(printer)?;
+        if !self.tparams.is_empty() {
+            printer.write_char('<')?;
+            printer.separated(&self.tparams, ", ")?;
+            printer.write_char('>')?;
+        }
+        self.params.as_slice().print(printer)
+    }
+}
+
+impl Print for BuiltinFunc {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        printer.write_char('$')?;
+        self.id.print(printer)?;
+        if !self.tparams.is_empty() {
+            printer.write_char('<')?;
+            printer.separated(&self.tparams, ", ")?;
+            printer.write_char('>')?;
+        }
+        self.params.as_slice().print(printer)
+    }
+}
+
+impl Print for TableRow {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        printer.write_str("\n  Row : ")?;
+        printer.separated(&self.exps_input, ", ")?;
+        printer.write_str(" -> ")?;
+        self.exp.print(printer)?;
+        printer.write_str(":\n\n")?;
+        write_block_group_with(printer, &self.block, 2, 0)
+    }
+}
+
+impl Print for [TableRow] {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        for (index, table_row) in self.iter().enumerate() {
+            if index != 0 {
+                printer.write_char('\n')?;
+            }
+            table_row.print(printer)?;
+        }
+        Ok(())
+    }
+}
+
+impl Print for TableFunc {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        printer.write_char('$')?;
+        self.id.print(printer)?;
+        self.params.as_slice().print(printer)?;
+        printer.write_str("\n=\n")?;
+        self.rows.print(printer)
+    }
+}
+
+impl Print for DefinedFunc {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        printer.write_char('$')?;
+        self.id.print(printer)?;
+        if !self.tparams.is_empty() {
+            printer.write_char('<')?;
+            printer.separated(&self.tparams, ", ")?;
+            printer.write_char('>')?;
+        }
+        self.params.as_slice().print(printer)?;
+        printer.write_str("\n\n")?;
+        self.block.print(printer)?;
+        write_elseblock_opt_with(
+            printer,
+            &self.block_else_opt,
+            write_instr_group_tier_with,
+            0,
+            self.block.len(),
+        )
+    }
+}
+
+// - Definitions
+
+impl Print for Def {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        match &self.node.node {
+            DefKind::ExternTyp(ExternTypDef { id }) => {
+                printer.write_str("extern syntax ")?;
+                id.print(printer)
+            }
+            DefKind::Typ(TypDef {
+                id,
+                tparams,
+                def_typ,
+            }) => {
+                printer.write_str("syntax ")?;
+                id.print(printer)?;
+                if !tparams.is_empty() {
+                    printer.write_char('<')?;
+                    printer.separated(tparams, ", ")?;
+                    printer.write_char('>')?;
+                }
+                printer.write_str(" = ")?;
+                def_typ.print(printer)
+            }
+            DefKind::Var(VarDef { id, typ }) => {
+                printer.write_str("var ")?;
+                id.print(printer)?;
+                printer.write_str(" : ")?;
+                typ.print(printer)
+            }
+            DefKind::ExternRel(relation) => {
+                printer.write_str("extern relation ")?;
+                relation.print(printer)
+            }
+            DefKind::Rel(relation) => {
+                printer.write_str("relation ")?;
+                relation.print(printer)
+            }
+            DefKind::ExternDec(function) => {
+                printer.write_str("extern def ")?;
+                function.print(printer)
+            }
+            DefKind::BuiltinDec(function) => {
+                printer.write_str("builtin def ")?;
+                function.print(printer)
+            }
+            DefKind::TableDec(function) => {
+                printer.write_str("tbl def ")?;
+                function.print(printer)
+            }
+            DefKind::FuncDec(function) => {
+                printer.write_str("def ")?;
+                function.print(printer)
             }
         }
     }
 }
 
-pub fn string_of_instr_dispatch(instr: &Instr<InstrDispatch>) -> String {
-    string_of_instr_with(instr, string_of_instr_dispatch_tier_with, false, 0, 0)
-}
-
-pub fn string_of_block_dispatch(block: &BlockDispatch) -> String {
-    string_of_block_dispatch_with(block, 0, 0)
-}
-
-pub fn string_of_block_dispatch_with(block: &BlockDispatch, level: usize, index: usize) -> String {
-    string_of_block_with(block, string_of_instr_dispatch_tier_with, level, index)
-}
-
-pub fn string_of_defined_rel(relation: &Rel) -> String {
-    let (id, signature, exps, block, elseblock) = relation;
-    format!(
-        "{}: {}\n\n{}{}",
-        string_of_relid(id),
-        string_of_relinput(signature, exps),
-        string_of_block_dispatch(block),
-        string_of_elseblock_opt_with(
-            elseblock,
-            string_of_instr_dispatch_tier_with,
-            0,
-            block.len()
-        )
-    )
-}
-
-// Functions
-
-pub fn string_of_extern_func(function: &ExternFunc) -> String {
-    let (id, tparams, params, _) = function;
-    format!(
-        "{}{}{}",
-        string_of_defid(id),
-        string_of_tparams(tparams),
-        string_of_params(params)
-    )
-}
-
-pub fn string_of_builtin_func(function: &BuiltinFunc) -> String {
-    string_of_extern_func(function)
-}
-
-pub fn string_of_tablerow(row: &TableRow) -> String {
-    let (exps, result, instrs) = row;
-    format!(
-        "\n  Row : {} -> {}:\n\n{}",
-        string_of_exps(", ", exps),
-        string_of_exp(result),
-        string_of_block_group_with(instrs, 2, 0)
-    )
-}
-
-pub fn string_of_tablerows(rows: &[TableRow]) -> String {
-    join(rows, "\n", string_of_tablerow)
-}
-
-pub fn string_of_table_func(function: &TableFunc) -> String {
-    let (id, params, _, rows) = function;
-    format!(
-        "{}{}\n=\n{}",
-        string_of_defid(id),
-        string_of_params(params),
-        string_of_tablerows(rows)
-    )
-}
-
-pub fn string_of_defined_func(function: &DefinedFunc) -> String {
-    let (id, tparams, params, _, block, elseblock) = function;
-    format!(
-        "{}{}{}\n\n{}{}",
-        string_of_defid(id),
-        string_of_tparams(tparams),
-        string_of_params(params),
-        string_of_block_group(block),
-        string_of_elseblock_opt_with(elseblock, string_of_instr_group_tier_with, 0, block.len())
-    )
-}
-
-// Definitions
-
-pub fn string_of_def(definition: &Def) -> String {
-    match &definition.node.kind {
-        DefKind::ExternTypD(id) => format!("extern syntax {}", string_of_typid(id)),
-        DefKind::TypD(id, tparams, deftyp) => format!(
-            "syntax {}{} = {}",
-            string_of_typid(id),
-            string_of_tparams(tparams),
-            string_of_deftyp(deftyp)
-        ),
-        DefKind::VarD(id, typ) => {
-            format!("var {} : {}", string_of_varid(id), string_of_typ(typ))
+impl Print for [Def] {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        for (index, definition) in self.iter().enumerate() {
+            if index != 0 {
+                printer.write_str("\n\n")?;
+            }
+            definition.print(printer)?;
         }
-        DefKind::ExternRelD(relation) => {
-            format!("extern relation {}", string_of_extern_rel(relation))
-        }
-        DefKind::RelD(relation) => format!("relation {}", string_of_defined_rel(relation)),
-        DefKind::ExternDecD(function) => {
-            format!("extern def {}", string_of_extern_func(function))
-        }
-        DefKind::BuiltinDecD(function) => {
-            format!("builtin def {}", string_of_builtin_func(function))
-        }
-        DefKind::TableDecD(function) => {
-            format!("tbl def {}", string_of_table_func(function))
-        }
-        DefKind::FuncDecD(function) => format!("def {}", string_of_defined_func(function)),
+        Ok(())
     }
 }
 
-pub fn string_of_defs(definitions: &[Def]) -> String {
-    join(definitions, "\n\n", string_of_def)
-}
+// - Specifications
 
-// Spec
-
-pub fn string_of_spec(spec: &Spec) -> String {
-    string_of_defs(spec)
+impl Print for Spec {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        self.as_slice().print(printer)
+    }
 }

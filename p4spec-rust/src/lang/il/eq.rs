@@ -1,360 +1,562 @@
-use std::cmp::Ordering;
+//! Syntax equality for intermediate-language data
+//!
+//! Ignores source regions;
+//! compares syntax represented by spanned nodes
 
-use crate::domain::mixfix::Mixfix;
+use crate::lang::traits::eq::SyntaxEq;
 
 use super::ast::*;
 
-// Identifiers
+// == Syntax equality
 
-pub fn eq_id(id_a: &Id, id_b: &Id) -> bool {
-    id_a.node == id_b.node
-}
+// - Iterators
 
-// Atoms
-
-pub fn eq_atom(atom_a: &Atom, atom_b: &Atom) -> bool {
-    atom_a.node == atom_b.node
-}
-
-pub fn eq_atoms(atoms_a: &[Atom], atoms_b: &[Atom]) -> bool {
-    atoms_a.len() == atoms_b.len()
-        && atoms_a
-            .iter()
-            .zip(atoms_b)
-            .all(|(atom_a, atom_b)| eq_atom(atom_a, atom_b))
-}
-
-// Mixfix operators
-
-pub fn eq_mixop(mixop_a: &Mixop, mixop_b: &Mixop) -> bool {
-    mixop_a == mixop_b
-}
-
-// Iterators
-
-pub fn eq_iter(iter_a: Iter, iter_b: Iter) -> bool {
-    iter_a == iter_b
-}
-
-pub fn eq_iters(iters_a: &[Iter], iters_b: &[Iter]) -> bool {
-    iters_a == iters_b
-}
-
-fn compare_iters(iters_a: &[Iter], iters_b: &[Iter]) -> Ordering {
-    let rank = |iter: &Iter| match iter {
-        Iter::Opt => 0,
-        Iter::List => 1,
-    };
-    iters_a.iter().map(rank).cmp(iters_b.iter().map(rank))
-}
-
-// Variables
-
-pub fn eq_var(var_a: &Var, var_b: &Var) -> bool {
-    let (id_a, _typ_a, iters_a) = var_a;
-    let (id_b, _typ_b, iters_b) = var_b;
-    eq_id(id_a, id_b) && iters_a == iters_b
-}
-
-pub fn eq_vars(vars_a: &[Var], vars_b: &[Var]) -> bool {
-    let mut vars_a = vars_a.iter().collect::<Vec<_>>();
-    let mut vars_b = vars_b.iter().collect::<Vec<_>>();
-    let compare = |var_a: &&Var, var_b: &&Var| {
-        var_a
-            .0
-            .node
-            .cmp(&var_b.0.node)
-            .then_with(|| compare_iters(&var_a.2, &var_b.2))
-    };
-    vars_a.sort_by(compare);
-    vars_b.sort_by(compare);
-    vars_a.len() == vars_b.len()
-        && vars_a
-            .into_iter()
-            .zip(vars_b)
-            .all(|(var_a, var_b)| eq_var(var_a, var_b))
-}
-
-// Types
-
-pub fn eq_typ(typ_a: &Typ, typ_b: &Typ) -> bool {
-    match (&typ_a.node, &typ_b.node) {
-        (TypKind::BoolT, TypKind::BoolT) | (TypKind::TextT, TypKind::TextT) => true,
-        (TypKind::NumT(numtyp_a), TypKind::NumT(numtyp_b)) => numtyp_a == numtyp_b,
-        (TypKind::VarT(id_a, targs_a), TypKind::VarT(id_b, targs_b)) => {
-            eq_id(id_a, id_b) && eq_typs(targs_a, targs_b)
-        }
-        (TypKind::TupleT(typs_a), TypKind::TupleT(typs_b)) => eq_typs(typs_a, typs_b),
-        (TypKind::IterT(typ_a, iter_a), TypKind::IterT(typ_b, iter_b)) => {
-            eq_typ(typ_a, typ_b) && iter_a == iter_b
-        }
-        (TypKind::FuncT(tparams_a, typs_a, typ_a), TypKind::FuncT(tparams_b, typs_b, typ_b)) => {
-            eq_tparams(tparams_a, tparams_b) && eq_typs(typs_a, typs_b) && eq_typ(typ_a, typ_b)
-        }
-        _ => false,
+impl SyntaxEq for Iter {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self == other
     }
 }
 
-pub fn eq_typs(typs_a: &[Typ], typs_b: &[Typ]) -> bool {
-    typs_a.len() == typs_b.len()
-        && typs_a
-            .iter()
-            .zip(typs_b)
-            .all(|(typ_a, typ_b)| eq_typ(typ_a, typ_b))
-}
+// - Variables
 
-fn eq_mixfix_by<T, U>(
-    mixfix_a: &Mixfix<T>,
-    mixfix_b: &Mixfix<U>,
-    mut eq_arg: impl FnMut(&T, &U) -> bool,
-) -> bool {
-    mixfix_a.eq_by(mixfix_b, |arg_a, arg_b| eq_arg(arg_a, arg_b))
-}
+impl SyntaxEq for Var {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.id.syntax_eq(&other.id) && self.iters == other.iters
+    }
 
-pub fn eq_nottyp(nottyp_a: &NotTyp, nottyp_b: &NotTyp) -> bool {
-    eq_mixfix_by(&nottyp_a.node, &nottyp_b.node, eq_typ)
-}
-
-// Values
-
-pub fn eq_value(value_a: &Value, value_b: &Value) -> bool {
-    match (&value_a.kind, &value_b.kind) {
-        (ValueKind::BoolV(value_a), ValueKind::BoolV(value_b)) => value_a == value_b,
-        (ValueKind::NumV(value_a), ValueKind::NumV(value_b)) => value_a == value_b,
-        (ValueKind::TextV(value_a), ValueKind::TextV(value_b)) => value_a == value_b,
-        (ValueKind::StructV(fields_a), ValueKind::StructV(fields_b)) => {
-            fields_a.len() == fields_b.len()
-                && fields_a
-                    .iter()
-                    .zip(fields_b)
-                    .all(|((atom_a, value_a), (atom_b, value_b))| {
-                        eq_atom(atom_a, atom_b) && eq_value(value_a, value_b)
-                    })
-        }
-        (ValueKind::CaseV(value_a), ValueKind::CaseV(value_b)) => {
-            eq_mixfix_by(value_a, value_b, eq_value)
-        }
-        (ValueKind::TupleV(values_a), ValueKind::TupleV(values_b))
-        | (ValueKind::ListV(values_a), ValueKind::ListV(values_b)) => eq_values(values_a, values_b),
-        (ValueKind::OptV(Some(value_a)), ValueKind::OptV(Some(value_b))) => {
-            eq_value(value_a, value_b)
-        }
-        (ValueKind::OptV(None), ValueKind::OptV(None)) => true,
-        (ValueKind::FuncV(id_a), ValueKind::FuncV(id_b)) => id_a == id_b,
-        (ValueKind::ExternV(value_a), ValueKind::ExternV(value_b)) => value_a == value_b,
-        _ => false,
+    fn slice_syntax_eq(vars_l: &[Self], vars_r: &[Self]) -> bool {
+        let mut vars_l = vars_l.iter().collect::<Vec<_>>();
+        let mut vars_r = vars_r.iter().collect::<Vec<_>>();
+        let cmp_var = |var_l: &&Var, var_r: &&Var| {
+            var_l
+                .id
+                .node
+                .cmp(&var_r.id.node)
+                .then_with(|| var_l.iters.cmp(&var_r.iters))
+        };
+        vars_l.sort_by(cmp_var);
+        vars_r.sort_by(cmp_var);
+        vars_l.len() == vars_r.len()
+            && vars_l
+                .into_iter()
+                .zip(vars_r)
+                .all(|(var_l, var_r)| var_l.syntax_eq(var_r))
     }
 }
 
-pub fn eq_values(values_a: &[Value], values_b: &[Value]) -> bool {
-    values_a.len() == values_b.len()
-        && values_a
-            .iter()
-            .zip(values_b)
-            .all(|(value_a, value_b)| eq_value(value_a, value_b))
-}
+// - Types
 
-// Expressions
-
-pub fn eq_exp(exp_a: &Exp, exp_b: &Exp) -> bool {
-    match (&exp_a.kind, &exp_b.kind) {
-        (ExpKind::BoolE(value_a), ExpKind::BoolE(value_b)) => value_a == value_b,
-        (ExpKind::NumE(value_a), ExpKind::NumE(value_b)) => value_a == value_b,
-        (ExpKind::TextE(value_a), ExpKind::TextE(value_b)) => value_a == value_b,
-        (ExpKind::VarE(id_a), ExpKind::VarE(id_b)) => eq_id(id_a, id_b),
-        (ExpKind::UnE(op_a, typ_a, exp_a), ExpKind::UnE(op_b, typ_b, exp_b)) => {
-            op_a == op_b && typ_a == typ_b && eq_exp(exp_a, exp_b)
+impl SyntaxEq for TypKind {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (TypKind::Bool, TypKind::Bool) | (TypKind::Text, TypKind::Text) => true,
+            (TypKind::Num(num_typ_l), TypKind::Num(num_typ_r)) => num_typ_l == num_typ_r,
+            (TypKind::Var(id_l, targs_l), TypKind::Var(id_r, targs_r)) => {
+                id_l.syntax_eq(id_r) && targs_l.syntax_eq(targs_r)
+            }
+            (TypKind::Tuple(typs_l), TypKind::Tuple(typs_r)) => typs_l.syntax_eq(typs_r),
+            (TypKind::Iter(typ_l, iter_l), TypKind::Iter(typ_r, iter_r)) => {
+                typ_l.syntax_eq(typ_r) && iter_l == iter_r
+            }
+            (TypKind::Func(tparams_l, typs_l, typ_l), TypKind::Func(tparams_r, typs_r, typ_r)) => {
+                tparams_l.syntax_eq(tparams_r) && typs_l.syntax_eq(typs_r) && typ_l.syntax_eq(typ_r)
+            }
+            _ => false,
         }
-        (
-            ExpKind::BinE(op_a, typ_a, left_a, right_a),
-            ExpKind::BinE(op_b, typ_b, left_b, right_b),
-        ) => op_a == op_b && typ_a == typ_b && eq_exp(left_a, left_b) && eq_exp(right_a, right_b),
-        (
-            ExpKind::CmpE(op_a, typ_a, left_a, right_a),
-            ExpKind::CmpE(op_b, typ_b, left_b, right_b),
-        ) => op_a == op_b && typ_a == typ_b && eq_exp(left_a, left_b) && eq_exp(right_a, right_b),
-        (ExpKind::UpCastE(typ_a, exp_a), ExpKind::UpCastE(typ_b, exp_b))
-        | (ExpKind::DownCastE(typ_a, exp_a), ExpKind::DownCastE(typ_b, exp_b)) => {
-            eq_typ(typ_a, typ_b) && eq_exp(exp_a, exp_b)
-        }
-        (ExpKind::SubE(exp_a, typ_a, _), ExpKind::SubE(exp_b, typ_b, _)) => {
-            eq_exp(exp_a, exp_b) && eq_typ(typ_a, typ_b)
-        }
-        (ExpKind::MatchE(exp_a, pattern_a), ExpKind::MatchE(exp_b, pattern_b)) => {
-            eq_exp(exp_a, exp_b) && eq_pattern(pattern_a, pattern_b)
-        }
-        (ExpKind::TupleE(exps_a), ExpKind::TupleE(exps_b))
-        | (ExpKind::ListE(exps_a), ExpKind::ListE(exps_b)) => eq_exps(exps_a, exps_b),
-        (ExpKind::CaseE(notexp_a), ExpKind::CaseE(notexp_b)) => {
-            eq_mixfix_by(notexp_a, notexp_b, eq_exp)
-        }
-        (ExpKind::StrE(fields_a), ExpKind::StrE(fields_b)) => {
-            fields_a.len() == fields_b.len()
-                && fields_a
-                    .iter()
-                    .zip(fields_b)
-                    .all(|((atom_a, exp_a), (atom_b, exp_b))| {
-                        eq_atom(atom_a, atom_b) && eq_exp(exp_a, exp_b)
-                    })
-        }
-        (ExpKind::OptE(Some(exp_a)), ExpKind::OptE(Some(exp_b))) => eq_exp(exp_a, exp_b),
-        (ExpKind::OptE(None), ExpKind::OptE(None)) => true,
-        (ExpKind::ConsE(head_a, tail_a), ExpKind::ConsE(head_b, tail_b))
-        | (ExpKind::CatE(head_a, tail_a), ExpKind::CatE(head_b, tail_b))
-        | (ExpKind::MemE(head_a, tail_a), ExpKind::MemE(head_b, tail_b)) => {
-            eq_exp(head_a, head_b) && eq_exp(tail_a, tail_b)
-        }
-        (ExpKind::LenE(exp_a), ExpKind::LenE(exp_b)) => eq_exp(exp_a, exp_b),
-        (ExpKind::DotE(exp_a, atom_a), ExpKind::DotE(exp_b, atom_b)) => {
-            eq_exp(exp_a, exp_b) && eq_atom(atom_a, atom_b)
-        }
-        (ExpKind::IdxE(base_a, index_a), ExpKind::IdxE(base_b, index_b)) => {
-            eq_exp(base_a, base_b) && eq_exp(index_a, index_b)
-        }
-        (ExpKind::SliceE(base_a, left_a, right_a), ExpKind::SliceE(base_b, left_b, right_b)) => {
-            eq_exp(base_a, base_b) && eq_exp(left_a, left_b) && eq_exp(right_a, right_b)
-        }
-        (ExpKind::UpdE(base_a, path_a, value_a), ExpKind::UpdE(base_b, path_b, value_b)) => {
-            eq_exp(base_a, base_b) && eq_path(path_a, path_b) && eq_exp(value_a, value_b)
-        }
-        (ExpKind::CallE(id_a, targs_a, args_a), ExpKind::CallE(id_b, targs_b, args_b)) => {
-            eq_id(id_a, id_b) && eq_typs(targs_a, targs_b) && eq_args(args_a, args_b)
-        }
-        (ExpKind::IterE(exp_a, iterexp_a), ExpKind::IterE(exp_b, iterexp_b)) => {
-            eq_exp(exp_a, exp_b) && eq_iterexp(iterexp_a, iterexp_b)
-        }
-        _ => false,
     }
 }
 
-pub fn eq_exps(exps_a: &[Exp], exps_b: &[Exp]) -> bool {
-    exps_a.len() == exps_b.len()
-        && exps_a
-            .iter()
-            .zip(exps_b)
-            .all(|(exp_a, exp_b)| eq_exp(exp_a, exp_b))
-}
+// - Values
 
-pub fn eq_iterexp(iterexp_a: &IterExp, iterexp_b: &IterExp) -> bool {
-    iterexp_a.0 == iterexp_b.0 && eq_vars(&iterexp_a.1, &iterexp_b.1)
-}
-
-pub fn eq_iterexps(iterexps_a: &[IterExp], iterexps_b: &[IterExp]) -> bool {
-    iterexps_a.len() == iterexps_b.len()
-        && iterexps_a
-            .iter()
-            .zip(iterexps_b)
-            .all(|(iterexp_a, iterexp_b)| eq_iterexp(iterexp_a, iterexp_b))
-}
-
-// Patterns
-
-pub fn eq_pattern(pattern_a: &Pattern, pattern_b: &Pattern) -> bool {
-    match (pattern_a, pattern_b) {
-        (Pattern::CaseP(mixop_a), Pattern::CaseP(mixop_b)) => mixop_a == mixop_b,
-        (Pattern::ListP(pattern_a), Pattern::ListP(pattern_b)) => pattern_a == pattern_b,
-        (Pattern::OptP(pattern_a), Pattern::OptP(pattern_b)) => pattern_a == pattern_b,
-        _ => false,
+impl SyntaxEq for ValueKind {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (ValueKind::Bool(value_l), ValueKind::Bool(value_r)) => value_l == value_r,
+            (ValueKind::Num(value_l), ValueKind::Num(value_r)) => value_l == value_r,
+            (ValueKind::Text(value_l), ValueKind::Text(value_r)) => value_l == value_r,
+            (ValueKind::Struct(fields_l), ValueKind::Struct(fields_r)) => {
+                fields_l.len() == fields_r.len()
+                    && fields_l.iter().zip(fields_r).all(
+                        |((atom_l, value_l), (atom_r, value_r))| {
+                            atom_l.syntax_eq(atom_r) && value_l.syntax_eq(value_r)
+                        },
+                    )
+            }
+            (ValueKind::Case(value_l), ValueKind::Case(value_r)) => {
+                value_l.eq_by(value_r, SyntaxEq::syntax_eq)
+            }
+            (ValueKind::Tuple(values_l), ValueKind::Tuple(values_r))
+            | (ValueKind::List(values_l), ValueKind::List(values_r)) => {
+                values_l.syntax_eq(values_r)
+            }
+            (ValueKind::Opt(Some(value_l)), ValueKind::Opt(Some(value_r))) => {
+                value_l.syntax_eq(value_r)
+            }
+            (ValueKind::Opt(None), ValueKind::Opt(None)) => true,
+            (ValueKind::Func(id_l), ValueKind::Func(id_r)) => id_l == id_r,
+            (ValueKind::Extern(value_l), ValueKind::Extern(value_r)) => value_l == value_r,
+            _ => false,
+        }
     }
 }
 
-// Paths
-
-pub fn eq_path(path_a: &Path, path_b: &Path) -> bool {
-    match (&path_a.kind, &path_b.kind) {
-        (PathKind::RootP, PathKind::RootP) => true,
-        (PathKind::IdxP(path_a, exp_a), PathKind::IdxP(path_b, exp_b)) => {
-            eq_path(path_a, path_b) && eq_exp(exp_a, exp_b)
-        }
-        (PathKind::SliceP(path_a, left_a, right_a), PathKind::SliceP(path_b, left_b, right_b)) => {
-            eq_path(path_a, path_b) && eq_exp(left_a, left_b) && eq_exp(right_a, right_b)
-        }
-        (PathKind::DotP(path_a, atom_a), PathKind::DotP(path_b, atom_b)) => {
-            eq_path(path_a, path_b) && eq_atom(atom_a, atom_b)
-        }
-        _ => false,
+impl SyntaxEq for ValueField {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.0.syntax_eq(&other.0) && self.1.syntax_eq(&other.1)
     }
 }
 
-// Type parameters
+// - Expressions
 
-pub fn eq_tparam(tparam_a: &TParam, tparam_b: &TParam) -> bool {
-    eq_id(tparam_a, tparam_b)
-}
-
-pub fn eq_tparams(tparams_a: &[TParam], tparams_b: &[TParam]) -> bool {
-    tparams_a.len() == tparams_b.len()
-        && tparams_a
-            .iter()
-            .zip(tparams_b)
-            .all(|(tparam_a, tparam_b)| tparam_a.node == tparam_b.node)
-}
-
-// Arguments
-
-pub fn eq_arg(arg_a: &Arg, arg_b: &Arg) -> bool {
-    match (&arg_a.node, &arg_b.node) {
-        (ArgKind::ExpA(exp_a), ArgKind::ExpA(exp_b)) => eq_exp(exp_a, exp_b),
-        (ArgKind::DefA(id_a), ArgKind::DefA(id_b)) => eq_id(id_a, id_b),
-        _ => false,
+impl SyntaxEq for ExpKind {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (ExpKind::Bool(value_l), ExpKind::Bool(value_r)) => value_l == value_r,
+            (ExpKind::Num(value_l), ExpKind::Num(value_r)) => value_l == value_r,
+            (ExpKind::Text(value_l), ExpKind::Text(value_r)) => value_l == value_r,
+            (ExpKind::Var(id_l), ExpKind::Var(id_r)) => id_l.syntax_eq(id_r),
+            (ExpKind::Un(op_l, typ_l, exp_l), ExpKind::Un(op_r, typ_r, exp_r)) => {
+                op_l == op_r && typ_l == typ_r && exp_l.syntax_eq(exp_r)
+            }
+            (
+                ExpKind::Bin(op_l, typ_l, exp_l_l, exp_r_l),
+                ExpKind::Bin(op_r, typ_r, exp_l_r, exp_r_r),
+            ) => {
+                op_l == op_r
+                    && typ_l == typ_r
+                    && exp_l_l.syntax_eq(exp_l_r)
+                    && exp_r_l.syntax_eq(exp_r_r)
+            }
+            (
+                ExpKind::Cmp(op_l, typ_l, exp_l_l, exp_r_l),
+                ExpKind::Cmp(op_r, typ_r, exp_l_r, exp_r_r),
+            ) => {
+                op_l == op_r
+                    && typ_l == typ_r
+                    && exp_l_l.syntax_eq(exp_l_r)
+                    && exp_r_l.syntax_eq(exp_r_r)
+            }
+            (ExpKind::UpCast(typ_l, exp_l), ExpKind::UpCast(typ_r, exp_r))
+            | (ExpKind::DownCast(typ_l, exp_l), ExpKind::DownCast(typ_r, exp_r)) => {
+                typ_l.syntax_eq(typ_r) && exp_l.syntax_eq(exp_r)
+            }
+            (ExpKind::Sub(exp_l, typ_l, _), ExpKind::Sub(exp_r, typ_r, _)) => {
+                exp_l.syntax_eq(exp_r) && typ_l.syntax_eq(typ_r)
+            }
+            (ExpKind::Match(exp_l, pattern_l), ExpKind::Match(exp_r, pattern_r)) => {
+                exp_l.syntax_eq(exp_r) && pattern_l.syntax_eq(pattern_r)
+            }
+            (ExpKind::Tuple(exps_l), ExpKind::Tuple(exps_r))
+            | (ExpKind::List(exps_l), ExpKind::List(exps_r)) => exps_l.syntax_eq(exps_r),
+            (ExpKind::Case(not_exp_l), ExpKind::Case(not_exp_r)) => {
+                not_exp_l.eq_by(not_exp_r, SyntaxEq::syntax_eq)
+            }
+            (ExpKind::Str(fields_l), ExpKind::Str(fields_r)) => {
+                fields_l.len() == fields_r.len()
+                    && fields_l
+                        .iter()
+                        .zip(fields_r)
+                        .all(|((atom_l, exp_l), (atom_r, exp_r))| {
+                            atom_l.syntax_eq(atom_r) && exp_l.syntax_eq(exp_r)
+                        })
+            }
+            (ExpKind::Opt(Some(exp_l)), ExpKind::Opt(Some(exp_r))) => exp_l.syntax_eq(exp_r),
+            (ExpKind::Opt(None), ExpKind::Opt(None)) => true,
+            (ExpKind::Cons(exp_l_l, exp_r_l), ExpKind::Cons(exp_l_r, exp_r_r))
+            | (ExpKind::Cat(exp_l_l, exp_r_l), ExpKind::Cat(exp_l_r, exp_r_r))
+            | (ExpKind::Mem(exp_l_l, exp_r_l), ExpKind::Mem(exp_l_r, exp_r_r)) => {
+                exp_l_l.syntax_eq(exp_l_r) && exp_r_l.syntax_eq(exp_r_r)
+            }
+            (ExpKind::Len(exp_l), ExpKind::Len(exp_r)) => exp_l.syntax_eq(exp_r),
+            (ExpKind::Dot(exp_l, atom_l), ExpKind::Dot(exp_r, atom_r)) => {
+                exp_l.syntax_eq(exp_r) && atom_l.syntax_eq(atom_r)
+            }
+            (ExpKind::Idx(exp_b_l, exp_i_l), ExpKind::Idx(exp_b_r, exp_i_r)) => {
+                exp_b_l.syntax_eq(exp_b_r) && exp_i_l.syntax_eq(exp_i_r)
+            }
+            (
+                ExpKind::Slice(exp_b_l, exp_i_l, exp_n_l),
+                ExpKind::Slice(exp_b_r, exp_i_r, exp_n_r),
+            ) => {
+                exp_b_l.syntax_eq(exp_b_r)
+                    && exp_i_l.syntax_eq(exp_i_r)
+                    && exp_n_l.syntax_eq(exp_n_r)
+            }
+            (ExpKind::Upd(exp_b_l, path_l, exp_f_l), ExpKind::Upd(exp_b_r, path_r, exp_f_r)) => {
+                exp_b_l.syntax_eq(exp_b_r) && path_l.syntax_eq(path_r) && exp_f_l.syntax_eq(exp_f_r)
+            }
+            (ExpKind::Call(id_l, targs_l, args_l), ExpKind::Call(id_r, targs_r, args_r)) => {
+                id_l.syntax_eq(id_r) && targs_l.syntax_eq(targs_r) && args_l.syntax_eq(args_r)
+            }
+            (ExpKind::Iter(exp_l, iter_exp_l), ExpKind::Iter(exp_r, iter_exp_r)) => {
+                exp_l.syntax_eq(exp_r) && iter_exp_l.syntax_eq(iter_exp_r)
+            }
+            _ => false,
+        }
     }
 }
 
-pub fn eq_args(args_a: &[Arg], args_b: &[Arg]) -> bool {
-    args_a.len() == args_b.len()
-        && args_a
-            .iter()
-            .zip(args_b)
-            .all(|(arg_a, arg_b)| eq_arg(arg_a, arg_b))
-}
-
-// Type arguments
-
-pub fn eq_targ(targ_a: &Targ, targ_b: &Targ) -> bool {
-    eq_typ(targ_a, targ_b)
-}
-
-pub fn eq_targs(targs_a: &[Targ], targs_b: &[Targ]) -> bool {
-    targs_a.len() == targs_b.len()
-        && targs_a
-            .iter()
-            .zip(targs_b)
-            .all(|(targ_a, targ_b)| eq_targ(targ_a, targ_b))
-}
-
-// Premises
-
-pub fn eq_prem(prem_a: &Prem, prem_b: &Prem) -> bool {
-    match (&prem_a.node, &prem_b.node) {
-        (PremKind::RulePr(id_a, exp_a, input_a), PremKind::RulePr(id_b, exp_b, input_b)) => {
-            eq_id(id_a, id_b) && eq_mixfix_by(exp_a, exp_b, eq_exp) && input_a == input_b
-        }
-        (PremKind::IfPr(exp_a), PremKind::IfPr(exp_b))
-        | (PremKind::DebugPr(exp_a), PremKind::DebugPr(exp_b)) => eq_exp(exp_a, exp_b),
-        (PremKind::IfHoldPr(id_a, exp_a), PremKind::IfHoldPr(id_b, exp_b))
-        | (PremKind::IfNotHoldPr(id_a, exp_a), PremKind::IfNotHoldPr(id_b, exp_b)) => {
-            eq_id(id_a, id_b) && eq_mixfix_by(exp_a, exp_b, eq_exp)
-        }
-        (PremKind::LetPr(left_a, right_a), PremKind::LetPr(left_b, right_b)) => {
-            eq_exp(left_a, left_b) && eq_exp(right_a, right_b)
-        }
-        (PremKind::IterPr(prem_a, iter_a), PremKind::IterPr(prem_b, iter_b)) => {
-            eq_prem(prem_a, prem_b) && eq_iterprem(iter_a, iter_b)
-        }
-        _ => false,
+impl SyntaxEq for IterExp {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.0 == other.0 && self.1.syntax_eq(&other.1)
     }
 }
 
-pub fn eq_iterprem(iterprem_a: &IterPrem, iterprem_b: &IterPrem) -> bool {
-    eq_iter(iterprem_a.0, iterprem_b.0)
-        && eq_vars(&iterprem_a.1, &iterprem_b.1)
-        && eq_vars(&iterprem_a.2, &iterprem_b.2)
+// - Patterns
+
+impl SyntaxEq for Pattern {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Pattern::Case(mixop_l), Pattern::Case(mixop_r)) => mixop_l == mixop_r,
+            (Pattern::List(pattern_l), Pattern::List(pattern_r)) => pattern_l == pattern_r,
+            (Pattern::Opt(pattern_l), Pattern::Opt(pattern_r)) => pattern_l == pattern_r,
+            _ => false,
+        }
+    }
 }
 
-pub fn eq_iterprems(iterprems_a: &[IterPrem], iterprems_b: &[IterPrem]) -> bool {
-    iterprems_a.len() == iterprems_b.len()
-        && iterprems_a
-            .iter()
-            .zip(iterprems_b)
-            .all(|(iterprem_a, iterprem_b)| eq_iterprem(iterprem_a, iterprem_b))
+// - Paths
+
+impl SyntaxEq for PathKind {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (PathKind::Root, PathKind::Root) => true,
+            (PathKind::Idx(path_l, exp_l), PathKind::Idx(path_r, exp_r)) => {
+                path_l.syntax_eq(path_r) && exp_l.syntax_eq(exp_r)
+            }
+            (
+                PathKind::Slice(path_l, exp_i_l, exp_n_l),
+                PathKind::Slice(path_r, exp_i_r, exp_n_r),
+            ) => {
+                path_l.syntax_eq(path_r) && exp_i_l.syntax_eq(exp_i_r) && exp_n_l.syntax_eq(exp_n_r)
+            }
+            (PathKind::Dot(path_l, atom_l), PathKind::Dot(path_r, atom_r)) => {
+                path_l.syntax_eq(path_r) && atom_l.syntax_eq(atom_r)
+            }
+            _ => false,
+        }
+    }
+}
+
+// - Arguments
+
+impl SyntaxEq for ArgKind {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (ArgKind::Exp(exp_l), ArgKind::Exp(exp_r)) => exp_l.syntax_eq(exp_r),
+            (ArgKind::Def(id_l), ArgKind::Def(id_r)) => id_l.syntax_eq(id_r),
+            _ => false,
+        }
+    }
+}
+
+// - Premises
+
+impl SyntaxEq for PremKind {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (PremKind::Rule(prem_l), PremKind::Rule(prem_r)) => prem_l.syntax_eq(prem_r),
+            (PremKind::If(prem_l), PremKind::If(prem_r)) => prem_l.syntax_eq(prem_r),
+            (PremKind::IfHold(prem_l), PremKind::IfHold(prem_r)) => prem_l.syntax_eq(prem_r),
+            (PremKind::IfNotHold(prem_l), PremKind::IfNotHold(prem_r)) => prem_l.syntax_eq(prem_r),
+            (PremKind::Let(prem_l), PremKind::Let(prem_r)) => prem_l.syntax_eq(prem_r),
+            (PremKind::Iter(prem_l), PremKind::Iter(prem_r)) => prem_l.syntax_eq(prem_r),
+            (PremKind::Debug(prem_l), PremKind::Debug(prem_r)) => prem_l.syntax_eq(prem_r),
+            _ => false,
+        }
+    }
+}
+impl SyntaxEq for IterPrem {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.iter.syntax_eq(&other.iter)
+            && self.vars_bound.syntax_eq(&other.vars_bound)
+            && self.vars_bind.syntax_eq(&other.vars_bind)
+    }
+}
+
+// - Subtype checks
+
+impl SyntaxEq for Subcheck {
+    fn syntax_eq(&self, _other: &Self) -> bool {
+        true
+    }
+
+    fn slice_syntax_eq(_subchecks_l: &[Self], _subchecks_r: &[Self]) -> bool {
+        true
+    }
+}
+
+// - Defined types
+
+impl SyntaxEq for DefTypKind {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (DefTypKind::Plain(typ_l), DefTypKind::Plain(typ_r)) => typ_l.syntax_eq(typ_r),
+            (DefTypKind::Struct(fields_l), DefTypKind::Struct(fields_r)) => {
+                fields_l.syntax_eq(fields_r)
+            }
+            (DefTypKind::Variant(cases_l), DefTypKind::Variant(cases_r)) => {
+                cases_l.syntax_eq(cases_r)
+            }
+            _ => false,
+        }
+    }
+}
+
+impl SyntaxEq for TypField {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.0.syntax_eq(&other.0) && self.1.syntax_eq(&other.1)
+    }
+}
+
+impl SyntaxEq for TypOriginKind {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.0.syntax_eq(&other.0) && self.1.syntax_eq(&other.1)
+    }
+}
+
+impl SyntaxEq for TypCase {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.0.syntax_eq(&other.0) && self.1.syntax_eq(&other.1) && self.2.syntax_eq(&other.2)
+    }
+}
+
+impl SyntaxEq for OpTyp {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self == other
+    }
+}
+
+impl SyntaxEq for ListPattern {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self == other
+    }
+}
+
+impl SyntaxEq for OptPattern {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self == other
+    }
+}
+
+// - Parameters
+
+impl SyntaxEq for ParamKind {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (ParamKind::Exp(typ_l), ParamKind::Exp(typ_r)) => typ_l.syntax_eq(typ_r),
+            (
+                ParamKind::Def(id_l, tparams_l, params_l, typ_l),
+                ParamKind::Def(id_r, tparams_r, params_r, typ_r),
+            ) => {
+                id_l.syntax_eq(id_r)
+                    && tparams_l.syntax_eq(tparams_r)
+                    && params_l.syntax_eq(params_r)
+                    && typ_l.syntax_eq(typ_r)
+            }
+            _ => false,
+        }
+    }
+}
+
+// - Premise payloads
+
+impl SyntaxEq for RulePrem {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.id.syntax_eq(&other.id)
+            && self.not_exp.syntax_eq(&other.not_exp)
+            && self.input_hint == other.input_hint
+    }
+}
+
+impl SyntaxEq for IfPrem {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.exp.syntax_eq(&other.exp)
+    }
+}
+
+impl SyntaxEq for IfHoldPrem {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.id.syntax_eq(&other.id) && self.not_exp.syntax_eq(&other.not_exp)
+    }
+}
+
+impl SyntaxEq for IfNotHoldPrem {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.id.syntax_eq(&other.id) && self.not_exp.syntax_eq(&other.not_exp)
+    }
+}
+
+impl SyntaxEq for LetPrem {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.exp_l.syntax_eq(&other.exp_l) && self.exp_r.syntax_eq(&other.exp_r)
+    }
+}
+
+impl SyntaxEq for IteratedPrem {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.prem.syntax_eq(&other.prem) && self.iter_prem.syntax_eq(&other.iter_prem)
+    }
+}
+
+impl SyntaxEq for DebugPrem {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.exp.syntax_eq(&other.exp)
+    }
+}
+
+// - Rules and clauses
+
+impl SyntaxEq for RuleKind {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.id.syntax_eq(&other.id)
+            && self.not_exp.syntax_eq(&other.not_exp)
+            && self.prems.syntax_eq(&other.prems)
+    }
+}
+
+impl SyntaxEq for RuleGroupKind {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.0.syntax_eq(&other.0) && self.1.syntax_eq(&other.1)
+    }
+}
+
+impl SyntaxEq for ElseGroupKind {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.0.syntax_eq(&other.0) && self.1.syntax_eq(&other.1)
+    }
+}
+
+impl SyntaxEq for ClauseKind {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.args.syntax_eq(&other.args)
+            && self.expression.syntax_eq(&other.expression)
+            && self.premises.syntax_eq(&other.premises)
+    }
+}
+
+impl SyntaxEq for TableRowKind {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.0.syntax_eq(&other.0) && self.1.syntax_eq(&other.1)
+    }
+}
+
+// - Definitions
+
+impl SyntaxEq for ExternTyp {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.id.syntax_eq(&other.id) && self.hints.syntax_eq(&other.hints)
+    }
+}
+
+impl SyntaxEq for TypDef {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.id.syntax_eq(&other.id)
+            && self.tparams.syntax_eq(&other.tparams)
+            && self.def_typ.syntax_eq(&other.def_typ)
+            && self.hints.syntax_eq(&other.hints)
+    }
+}
+
+impl SyntaxEq for VarDef {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.id.syntax_eq(&other.id)
+            && self.typ.syntax_eq(&other.typ)
+            && self.hints.syntax_eq(&other.hints)
+    }
+}
+
+impl SyntaxEq for ExternRel {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.id.syntax_eq(&other.id)
+            && self.not_typ.syntax_eq(&other.not_typ)
+            && self.input_hint == other.input_hint
+            && self.hints.syntax_eq(&other.hints)
+    }
+}
+
+impl SyntaxEq for Rel {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.id.syntax_eq(&other.id)
+            && self.not_typ.syntax_eq(&other.not_typ)
+            && self.input_hint == other.input_hint
+            && self.rule_groups.syntax_eq(&other.rule_groups)
+            && match (&self.else_group, &other.else_group) {
+                (Some(group_l), Some(group_r)) => group_l.syntax_eq(group_r),
+                (None, None) => true,
+                _ => false,
+            }
+            && self.hints.syntax_eq(&other.hints)
+    }
+}
+
+impl SyntaxEq for ExternDec {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.id.syntax_eq(&other.id)
+            && self.tparams.syntax_eq(&other.tparams)
+            && self.params.syntax_eq(&other.params)
+            && self.typ.syntax_eq(&other.typ)
+            && self.hints.syntax_eq(&other.hints)
+    }
+}
+
+impl SyntaxEq for BuiltinDec {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.id.syntax_eq(&other.id)
+            && self.tparams.syntax_eq(&other.tparams)
+            && self.params.syntax_eq(&other.params)
+            && self.typ.syntax_eq(&other.typ)
+            && self.hints.syntax_eq(&other.hints)
+    }
+}
+
+impl SyntaxEq for TableDec {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.id.syntax_eq(&other.id)
+            && self.params.syntax_eq(&other.params)
+            && self.typ.syntax_eq(&other.typ)
+            && self.rows.syntax_eq(&other.rows)
+            && self.hints.syntax_eq(&other.hints)
+    }
+}
+
+impl SyntaxEq for FuncDec {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.id.syntax_eq(&other.id)
+            && self.tparams.syntax_eq(&other.tparams)
+            && self.params.syntax_eq(&other.params)
+            && self.typ.syntax_eq(&other.typ)
+            && self.clauses.syntax_eq(&other.clauses)
+            && match (&self.else_clause, &other.else_clause) {
+                (Some(clause_l), Some(clause_r)) => clause_l.syntax_eq(clause_r),
+                (None, None) => true,
+                _ => false,
+            }
+            && self.hints.syntax_eq(&other.hints)
+    }
+}
+
+impl SyntaxEq for DefKind {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (DefKind::ExternTyp(def_l), DefKind::ExternTyp(def_r)) => def_l.syntax_eq(def_r),
+            (DefKind::Typ(def_l), DefKind::Typ(def_r)) => def_l.syntax_eq(def_r),
+            (DefKind::Var(def_l), DefKind::Var(def_r)) => def_l.syntax_eq(def_r),
+            (DefKind::ExternRel(def_l), DefKind::ExternRel(def_r)) => def_l.syntax_eq(def_r),
+            (DefKind::Rel(def_l), DefKind::Rel(def_r)) => def_l.syntax_eq(def_r),
+            (DefKind::ExternDec(def_l), DefKind::ExternDec(def_r)) => def_l.syntax_eq(def_r),
+            (DefKind::BuiltinDec(def_l), DefKind::BuiltinDec(def_r)) => def_l.syntax_eq(def_r),
+            (DefKind::TableDec(def_l), DefKind::TableDec(def_r)) => def_l.syntax_eq(def_r),
+            (DefKind::FuncDec(def_l), DefKind::FuncDec(def_r)) => def_l.syntax_eq(def_r),
+            _ => false,
+        }
+    }
+}
+
+// - Specifications
+
+impl SyntaxEq for Spec {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.as_slice().syntax_eq(other.as_slice())
+    }
 }

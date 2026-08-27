@@ -1,9 +1,6 @@
 //! Algorithmic language model
 
-use crate::{
-    domain::source::Spanned,
-    lang::{el, hints::input::T as InputHint, il},
-};
+use crate::lang::{common::source::Spanned, el, hints::input::InputHint, il};
 
 // Numbers
 
@@ -21,7 +18,6 @@ pub type IdKind = il::ast::IdKind;
 // Atoms
 
 pub type Atom = il::ast::Atom;
-pub type AtomKind = il::ast::AtomKind;
 
 // Mixfix operators
 
@@ -109,14 +105,35 @@ pub type IterPrem = il::ast::IterPrem;
 
 // Rules
 
-pub type RuleMatch = (Vec<Exp>, Vec<Exp>, Vec<Prem>);
-pub type RulePath = (Id, Vec<Prem>, Vec<Exp>);
+#[derive(Clone, Debug, PartialEq)]
+pub struct RuleMatch {
+    pub exps_signature: Vec<Exp>,
+    pub exps_input: Vec<Exp>,
+    pub prems: Vec<Prem>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct RulePath {
+    pub id: Id,
+    pub prems: Vec<Prem>,
+    pub exps_output: Vec<Exp>,
+}
 
 pub type RuleGroup = Spanned<RuleGroupKind>;
-pub type RuleGroupKind = (Id, RuleMatch, Vec<RulePath>);
+#[derive(Clone, Debug, PartialEq)]
+pub struct RuleGroupKind {
+    pub id: Id,
+    pub rule_match: RuleMatch,
+    pub rule_paths: Vec<RulePath>,
+}
 
 pub type ElseGroup = Spanned<ElseGroupKind>;
-pub type ElseGroupKind = (Id, RuleMatch, RulePath);
+#[derive(Clone, Debug, PartialEq)]
+pub struct ElseGroupKind {
+    pub id: Id,
+    pub rule_match: RuleMatch,
+    pub rule_path: RulePath,
+}
 
 // Clauses
 
@@ -128,7 +145,13 @@ pub type ElseClauseKind = il::ast::ElseClauseKind;
 // Table rows
 
 pub type TableRow = Spanned<TableRowKind>;
-pub type TableRowKind = (Vec<Exp>, Vec<Arg>, Exp, Vec<Prem>);
+#[derive(Clone, Debug, PartialEq)]
+pub struct TableRowKind {
+    pub exps_signature: Vec<Exp>,
+    pub args: Vec<Arg>,
+    pub exp: Exp,
+    pub prems: Vec<Prem>,
+}
 
 // Hints
 
@@ -139,40 +162,102 @@ pub type Hint = el::ast::Hint;
 pub type Def = Spanned<DefKind>;
 
 #[derive(Clone, Debug, PartialEq)]
+pub struct ExternTypDef {
+    pub id: Id,
+    pub hints: Vec<Hint>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct TypDef {
+    pub id: Id,
+    pub tparams: Vec<TParam>,
+    pub def_typ: DefTyp,
+    pub hints: Vec<Hint>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct VarDef {
+    pub id: Id,
+    pub typ: Typ,
+    pub hints: Vec<Hint>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ExternRelDef {
+    pub id: Id,
+    pub not_typ: NotTyp,
+    pub input_hint: InputHint,
+    pub hints: Vec<Hint>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct RelDef {
+    pub id: Id,
+    pub not_typ: NotTyp,
+    pub input_hint: InputHint,
+    pub rule_groups: Vec<RuleGroup>,
+    pub else_group: Option<ElseGroup>,
+    pub hints: Vec<Hint>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ExternDecDef {
+    pub id: Id,
+    pub tparams: Vec<TParam>,
+    pub params: Vec<Param>,
+    pub typ: Typ,
+    pub hints: Vec<Hint>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct BuiltinDecDef {
+    pub id: Id,
+    pub tparams: Vec<TParam>,
+    pub params: Vec<Param>,
+    pub typ: Typ,
+    pub hints: Vec<Hint>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct TableDecDef {
+    pub id: Id,
+    pub params: Vec<Param>,
+    pub typ: Typ,
+    pub table_rows: Vec<TableRow>,
+    pub hints: Vec<Hint>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct FuncDecDef {
+    pub id: Id,
+    pub tparams: Vec<TParam>,
+    pub params: Vec<Param>,
+    pub typ: Typ,
+    pub clauses: Vec<Clause>,
+    pub else_clause: Option<ElseClause>,
+    pub hints: Vec<Hint>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub enum DefKind {
     /// `extern syntax id hint*`
-    ExternTypD(Id, Vec<Hint>),
-    /// `syntax id <list(tparam, ,)> = deftyp hint*`
-    TypD(Id, Vec<TParam>, DefTyp, Vec<Hint>),
+    ExternTyp(ExternTypDef),
+    /// `syntax id <list(tparam, ,)> = def_typ hint*`
+    Typ(TypDef),
     /// `var id : typ hint*`
-    VarD(Id, Typ, Vec<Hint>),
-    /// `extern relation id : nottyp hint(input %int*) hint*`
-    ExternRelD(Id, NotTyp, InputHint, Vec<Hint>),
-    /// `relation id : nottyp hint(input %int*) rulegroup* hint*`
-    RelD(
-        Id,
-        NotTyp,
-        InputHint,
-        Vec<RuleGroup>,
-        Option<ElseGroup>,
-        Vec<Hint>,
-    ),
+    Var(VarDef),
+    /// `extern relation id : not_typ hint(input %int*) hint*`
+    ExternRel(ExternRelDef),
+    /// `relation id : not_typ hint(input %int*) rulegroup* hint*`
+    Rel(RelDef),
     /// `extern dec id <list(tparam, ,)> list(param, ,) : typ hint*`
-    ExternDecD(Id, Vec<TParam>, Vec<Param>, Typ, Vec<Hint>),
+    ExternDec(ExternDecDef),
     /// `builtin dec id <list(tparam, ,)> list(param, ,) : typ hint*`
-    BuiltinDecD(Id, Vec<TParam>, Vec<Param>, Typ, Vec<Hint>),
+    BuiltinDec(BuiltinDecDef),
     /// `table dec id list(param, ,) : typ tablerow* hint*`
-    TableDecD(Id, Vec<Param>, Typ, Vec<TableRow>, Vec<Hint>),
+    TableDec(TableDecDef),
     /// `dec id <list(tparam, ,)> list(param, ,) : typ clause* hint*`
-    FuncDecD(
-        Id,
-        Vec<TParam>,
-        Vec<Param>,
-        Typ,
-        Vec<Clause>,
-        Option<ElseClause>,
-        Vec<Hint>,
-    ),
+    FuncDec(FuncDecDef),
 }
 
 // Spec

@@ -1,4 +1,9 @@
-use p4spec_rust::wire::ocaml::lang::il::SpecCodec;
+use std::collections::HashSet;
+
+use p4spec_rust::wire::ocaml::{
+    DecodeError,
+    lang::il::{SpecCodec, ValueCodec, ValueEnvelopeCodec},
+};
 use serde_json::{Value, json};
 
 fn position(line: i64, column: i64) -> Value {
@@ -31,6 +36,55 @@ fn bool_typ() -> Value {
 
 fn bool_exp(value: bool) -> Value {
     noted_phrase(json!(["BoolE", value]), json!(["BoolT"]))
+}
+
+fn bool_value(value: bool, vid: i64) -> Value {
+    noted_phrase(
+        json!(["BoolV", value]),
+        json!({"vid": vid, "typ": ["BoolT"], "vhash": 0}),
+    )
+}
+
+fn natural_value(value: &str, vid: i64) -> Value {
+    noted_phrase(
+        json!(["NumV", ["Nat", value]]),
+        json!({"vid": vid, "typ": ["NumT", ["NatT"]], "vhash": 0}),
+    )
+}
+
+fn tuple_value() -> Value {
+    noted_phrase(
+        json!(["TupleV", [bool_value(true, 41), bool_value(false, 42)]]),
+        json!({
+            "vid": 43,
+            "typ": ["TupleT", [bool_typ(), bool_typ()]],
+            "vhash": 0
+        }),
+    )
+}
+
+fn collect_vids(value: &Value, vids: &mut Vec<i64>) {
+    match value {
+        Value::Array(values) => {
+            for value in values {
+                collect_vids(value, vids);
+            }
+        }
+        Value::Object(fields) => {
+            if let Some(vid) = fields
+                .get("note")
+                .and_then(Value::as_object)
+                .and_then(|note| note.get("vid"))
+                .and_then(Value::as_i64)
+            {
+                vids.push(vid);
+            }
+            for value in fields.values() {
+                collect_vids(value, vids);
+            }
+        }
+        _ => {}
+    }
 }
 
 fn hint() -> Value {
@@ -67,4 +121,58 @@ fn whole_spec_roundtrip_preserves_relation_rules() {
         SpecCodec::encode(&decoded).expect("encode complete IL spec"),
         spec
     );
+}
+
+#[test]
+fn repeated_value_encodes_are_deterministic() {
+    let value = ValueCodec::decode(&tuple_value()).expect("decode nested IL value");
+
+    let first = ValueCodec::encode(&value).expect("encode nested IL value");
+    let second = ValueCodec::encode(&value).expect("encode nested IL value again");
+
+    assert_eq!(second, first);
+}
+
+#[test]
+fn separate_value_encode_operations_are_independent() {
+    let value = ValueCodec::decode(&tuple_value()).expect("decode nested IL value");
+    let other = ValueCodec::decode(&bool_value(false, 91)).expect("decode other IL value");
+
+    let first = ValueEnvelopeCodec::encode(&value).expect("encode nested IL value envelope");
+    ValueCodec::encode(&other).expect("encode independent IL value");
+    let second = ValueEnvelopeCodec::encode(&value).expect("encode nested IL value envelope again");
+
+    assert_eq!(second, first);
+}
+
+#[test]
+fn nested_value_encode_assigns_unique_identifiers() {
+    let value = ValueCodec::decode(&tuple_value()).expect("decode nested IL value");
+    let encoded = ValueCodec::encode(&value).expect("encode nested IL value");
+    let mut vids = Vec::new();
+
+    collect_vids(&encoded, &mut vids);
+
+    assert_eq!(encoded["note"]["vhash"], 0);
+    assert_eq!(vids.len(), 3);
+    assert_eq!(vids.iter().copied().collect::<HashSet<_>>().len(), 3);
+}
+
+#[test]
+fn natural_value_wire_preserves_ocaml_json_spelling() {
+    let wire = natural_value("123456789012345678901234567890", 77);
+    let value = ValueCodec::decode(&wire).expect("decode natural IL value");
+
+    assert_eq!(
+        ValueCodec::encode(&value).expect("encode natural IL value"),
+        natural_value("123456789012345678901234567890", 0)
+    );
+}
+
+#[test]
+fn natural_value_wire_rejects_negative_payloads() {
+    let error =
+        ValueCodec::decode(&natural_value("-1", 9)).expect_err("reject negative natural IL value");
+
+    assert_eq!(error, DecodeError::Expected("non-negative natural number"));
 }

@@ -1,5 +1,14 @@
 use std::{error::Error, fmt};
 
+use crate::lang::{
+    common::{ds::set::IdSet, source::Spanned},
+    traits::{
+        eq::SyntaxEq,
+        free::Free,
+        print::{Print, Printer},
+    },
+};
+
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Atom {
     /// Concrete object word such as `INT`
@@ -62,13 +71,68 @@ pub enum Atom {
     RBrace,
 }
 
-impl Atom {
-    // Parse-faithful: round-trips through `from_source`
-    pub fn source_string(&self) -> String {
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum AtomError {
+    InvalidTag(String),
+    InvalidOperator(String),
+}
+
+impl fmt::Display for AtomError {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Keyword(identifier) => identifier.clone(),
-            Self::Tag(identifier) => format!("_{identifier}"),
-            Self::Operator(operator) => format!("'{operator}'"),
+            Self::InvalidTag(id) => {
+                write!(
+                    fmt,
+                    "invalid tag identifier {id:?}: expected an uppercase identifier"
+                )
+            }
+            Self::InvalidOperator(op) => {
+                write!(
+                    fmt,
+                    "invalid operator {op:?}: must not contain a quote or newline"
+                )
+            }
+        }
+    }
+}
+
+impl Error for AtomError {}
+
+impl Print for Atom {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        printer.write(&self.to_string())
+    }
+}
+
+impl Print for Spanned<Atom> {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        self.node.print(printer)
+    }
+}
+
+// == Syntax operations
+
+impl SyntaxEq for Atom {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self == other
+    }
+}
+
+impl Free for Atom {
+    fn free(&self) -> IdSet {
+        IdSet::new()
+    }
+}
+
+// == String conversion and parsing
+
+impl Atom {
+    /// String representation of the atom
+    pub fn to_string(&self) -> String {
+        match self {
+            Self::Keyword(id) => id.clone(),
+            Self::Tag(id) => format!("_{id}"),
+            Self::Operator(op) => format!("'{op}'"),
             Self::Sub => "<:".into(),
             Self::Sup => ":>".into(),
             Self::Turnstile => "|-".into(),
@@ -98,7 +162,8 @@ impl Atom {
         }
     }
 
-    pub fn from_source(source: &str) -> Self {
+    /// Parses a string into an atom
+    pub fn of_string(source: &str) -> Self {
         match source {
             "<:" => Self::Sub,
             ":>" => Self::Sup,
@@ -133,12 +198,16 @@ impl Atom {
             _ => Self::Keyword(source.to_owned()),
         }
     }
+}
 
-    // Lossy display glyph
+// == Rendering
+
+impl Atom {
+    /// Returns the display spelling, omitting source-only quoting where applicable
     pub fn render(&self) -> String {
         match self {
-            Self::Tag(identifier) if identifier == "EMPTY" => "/* empty */".into(),
-            Self::Operator(operator) => operator.clone(),
+            Self::Tag(id) if id == "EMPTY" => "/* empty */".into(),
+            Self::Operator(op) => op.clone(),
             Self::LAngle => "<".into(),
             Self::RAngle => ">".into(),
             Self::LParen => "(".into(),
@@ -147,88 +216,53 @@ impl Atom {
             Self::RBrack => "]".into(),
             Self::LBrace => "{".into(),
             Self::RBrace => "}".into(),
-            _ => self.source_string(),
+            _ => self.to_string(),
         }
     }
+}
 
-    pub fn is_operator(&self, operator: &str) -> bool {
-        matches!(self, Self::Operator(current) if current == operator)
+// == Constructors
+
+impl Atom {
+    // - Keyword
+
+    /// Constructs a keyword atom from an identifier
+    pub fn keyword(id: impl Into<String>) -> Self {
+        Self::Keyword(id.into())
     }
 
-    fn is_upid(identifier: &str) -> bool {
-        let Some((first, rest)) = identifier.as_bytes().split_first() else {
+    // - Tag
+
+    fn is_upid(id: &str) -> bool {
+        let Some((c_first, s_rest)) = id.as_bytes().split_first() else {
             return false;
         };
 
-        first.is_ascii_uppercase()
-            && rest
+        c_first.is_ascii_uppercase()
+            && s_rest
                 .iter()
                 .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'\''))
     }
 
-    // Constructors
-
-    pub fn keyword(identifier: impl Into<String>) -> Self {
-        Self::Keyword(identifier.into())
-    }
-
-    pub fn tag(identifier: impl Into<String>) -> Result<Self, AtomError> {
-        let identifier = identifier.into();
-        if Self::is_upid(&identifier) {
-            Ok(Self::Tag(identifier))
+    /// Constructs a tag atom when the identifier is a valid upper identifier
+    pub fn tag(id: impl Into<String>) -> Result<Self, AtomError> {
+        let id = id.into();
+        if Self::is_upid(&id) {
+            Ok(Self::Tag(id))
         } else {
-            Err(AtomError::InvalidTag(identifier))
+            Err(AtomError::InvalidTag(id))
         }
     }
 
-    pub fn operator(operator: impl Into<String>) -> Result<Self, AtomError> {
-        let operator = operator.into();
-        if operator.contains(['\'', '\n']) {
-            Err(AtomError::UnquotableOperator(operator))
+    // - Operator
+
+    /// Constructs an operator atom when it can be represented in source syntax
+    pub fn operator(op: impl Into<String>) -> Result<Self, AtomError> {
+        let op = op.into();
+        if op.contains(['\'', '\n']) {
+            Err(AtomError::InvalidOperator(op))
         } else {
-            Ok(Self::Operator(operator))
+            Ok(Self::Operator(op))
         }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum AtomError {
-    InvalidTag(String),
-    UnquotableOperator(String),
-}
-
-impl fmt::Display for AtomError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::InvalidTag(identifier) => {
-                write!(formatter, "Atom.tag: expected upid: {identifier}")
-            }
-            Self::UnquotableOperator(operator) => {
-                write!(formatter, "Atom.operator: unquotable operator: {operator}")
-            }
-        }
-    }
-}
-
-impl Error for AtomError {}
-
-#[cfg(test)]
-mod tests {
-    use super::Atom;
-
-    #[test]
-    fn source_round_trip_preserves_distinct_atom_kinds() {
-        let spellings = ["INT", "_NUM", "'->'", "->", "`("];
-
-        for spelling in spellings {
-            assert_eq!(Atom::from_source(spelling).source_string(), spelling);
-        }
-    }
-
-    #[test]
-    fn rendering_uses_display_glyphs_instead_of_source_quotes() {
-        assert_eq!(Atom::from_source("'->'").render(), "->");
-        assert_eq!(Atom::from_source("`<").render(), "<");
-        assert_eq!(Atom::from_source("_EMPTY").render(), "/* empty */");
     }
 }

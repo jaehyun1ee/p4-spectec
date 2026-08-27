@@ -1,10 +1,37 @@
 use p4spec_rust::{
-    domain::source::{HasSpan, Region, Spanned, phrase_list_region},
-    lang::{hints::alter, il, pl},
+    lang::common::{
+        ds::set::IdSet,
+        source::{Position, Span, Spanned},
+    },
+    lang::{hints::alter, il, pl, traits::free::Free},
 };
 
-fn span(name: &str) -> Region {
-    Region::for_file(name)
+fn span(name: &str) -> Span {
+    Span::new(Position::new(name, 0, 0), Position::new(name, 0, 0))
+}
+
+#[test]
+fn prose_nodes_collect_free_identifiers_through_annotations() {
+    let expression = pl::ast::exp(
+        pl::ast::ExpKind::Bin(
+            il::ast::BinOp::Bool(p4spec_rust::lang::xl::bool::BinOp::And),
+            il::ast::OpTyp::Bool,
+            Box::new(pl::ast::exp(
+                pl::ast::ExpKind::Var(id("left")),
+                il::ast::TypKind::Bool,
+                span("left"),
+            )),
+            Box::new(pl::ast::exp(
+                pl::ast::ExpKind::Var(id("right")),
+                il::ast::TypKind::Bool,
+                span("right"),
+            )),
+        ),
+        il::ast::TypKind::Bool,
+        span("binary"),
+    );
+
+    assert_eq!(expression.free(), IdSet::from([id("left"), id("right")]));
 }
 
 fn id(name: &str) -> il::ast::Id {
@@ -13,32 +40,27 @@ fn id(name: &str) -> il::ast::Id {
 
 #[test]
 fn annotation_wrappers_forward_source_and_keep_nested_hints() {
-    let nested = pl::annot::Annotated {
-        node: pl::ast::ExpNode {
-            kind: pl::ast::ExpKind::VarE(id("nested")),
-            ty: il::ast::TypKind::BoolT,
-            span: span("nested-source"),
-        },
-        hints: pl::annot::Hints {
-            prose: Some(alter::T::TextH("nested prose".to_owned())),
-            ..pl::annot::empty()
-        },
-    };
-    let outer = pl::annot::no_hints(pl::ast::ExpNode {
-        kind: pl::ast::ExpKind::UnE(
-            il::ast::UnOp::NotOp,
-            il::ast::OpTyp::BoolT,
+    let mut nested = pl::ast::exp(
+        pl::ast::ExpKind::Var(id("nested")),
+        il::ast::TypKind::Bool,
+        span("nested-source"),
+    );
+    nested.hints.prose = Some(alter::AlterationHint::Text("nested prose".to_owned()));
+    let outer = pl::ast::exp(
+        pl::ast::ExpKind::Un(
+            il::ast::UnOp::Bool(p4spec_rust::lang::xl::bool::UnOp::Not),
+            il::ast::OpTyp::Bool,
             Box::new(nested),
         ),
-        ty: il::ast::TypKind::BoolT,
-        span: span("outer-source"),
-    });
+        il::ast::TypKind::Bool,
+        span("outer-source"),
+    );
 
-    let pl::ast::ExpKind::UnE(_, _, inner) = &outer.node.kind else {
+    let pl::ast::ExpKind::Un(_, _, inner) = &outer.node.node.kind else {
         panic!("expected nested unary expression")
     };
-    assert_eq!(outer.span(), &span("outer-source"));
-    assert_eq!(inner.span(), &span("nested-source"));
+    assert_eq!(outer.node.span, span("outer-source"));
+    assert_eq!(inner.node.span, span("nested-source"));
     assert!(inner.hints.prose.is_some());
-    assert_eq!(phrase_list_region(&[outer]), span("outer-source"));
+    assert_eq!(Span::over(&[outer.node.span]), span("outer-source"));
 }

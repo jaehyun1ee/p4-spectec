@@ -1,161 +1,393 @@
-use std::collections::BTreeSet;
+//! Free identifiers in intermediate-language data
+
+use crate::lang::{common::ds::set::IdSet, traits::free::Free};
 
 use super::ast::*;
 
-// Identifier set
+// == Free identifiers
 
-pub type T = BTreeSet<IdKind>;
-pub fn empty() -> T {
-    T::new()
-}
-pub fn singleton(id: &Id) -> T {
-    T::from([id.node.clone()])
-}
-fn add(a: T, b: T) -> T {
-    a.into_iter().chain(b).collect()
-}
-fn many<TItem>(xs: &[TItem], f: impl Fn(&TItem) -> T) -> T {
-    xs.iter().fold(T::new(), |a, x| add(a, f(x)))
-}
+// Numbers, text, identifiers, atoms, and operators alias EL nodes and use their implementations.
 
-// Collect free identifiers
+// - Mixfix operators
 
-// Expressions
+// `Mixop` uses the common implementation.
 
-pub fn free_exp(exp: &Exp) -> T {
-    match &exp.kind {
-        ExpKind::BoolE(_) | ExpKind::NumE(_) | ExpKind::TextE(_) => empty(),
-        ExpKind::VarE(id) => singleton(id),
-        ExpKind::UnE(_, _, x)
-        | ExpKind::UpCastE(_, x)
-        | ExpKind::DownCastE(_, x)
-        | ExpKind::SubE(x, _, _)
-        | ExpKind::MatchE(x, _)
-        | ExpKind::LenE(x)
-        | ExpKind::DotE(x, _)
-        | ExpKind::IterE(x, _) => free_exp(x),
-        ExpKind::BinE(_, _, a, b)
-        | ExpKind::CmpE(_, _, a, b)
-        | ExpKind::ConsE(a, b)
-        | ExpKind::CatE(a, b)
-        | ExpKind::MemE(a, b)
-        | ExpKind::IdxE(a, b) => add(free_exp(a), free_exp(b)),
-        ExpKind::TupleE(xs) | ExpKind::ListE(xs) => free_exps(xs),
-        ExpKind::CaseE(m) => m
-            .args()
-            .into_iter()
-            .fold(T::new(), |a, x| add(a, free_exp(x))),
-        ExpKind::StrE(xs) => many(xs, |(_, x)| free_exp(x)),
-        ExpKind::OptE(Some(x)) => free_exp(x),
-        ExpKind::OptE(None) => empty(),
-        ExpKind::SliceE(a, b, c) => add(free_exp(a), add(free_exp(b), free_exp(c))),
-        ExpKind::UpdE(a, p, b) => add(free_exp(a), add(free_path(p), free_exp(b))),
-        ExpKind::CallE(_, _, args) => free_args(args),
-    }
-}
-pub fn free_exps(xs: &[Exp]) -> T {
-    many(xs, free_exp)
-}
+// - Iterators
 
-// Paths
-
-pub fn free_path(p: &Path) -> T {
-    match &p.kind {
-        PathKind::RootP => empty(),
-        PathKind::IdxP(p, x) => add(free_path(p), free_exp(x)),
-        PathKind::SliceP(p, a, b) => add(free_path(p), add(free_exp(a), free_exp(b))),
-        PathKind::DotP(p, _) => free_path(p),
+impl Free for Iter {
+    fn free(&self) -> IdSet {
+        IdSet::new()
     }
 }
 
-// Arguments
+// - Variables
 
-pub fn free_arg(a: &Arg) -> T {
-    match &a.node {
-        ArgKind::ExpA(x) => free_exp(x),
-        ArgKind::DefA(_) => empty(),
+impl Free for Var {
+    fn free(&self) -> IdSet {
+        IdSet::new()
     }
 }
-pub fn free_args(xs: &[Arg]) -> T {
-    many(xs, free_arg)
-}
 
-// Premises
+// - Types
 
-pub fn free_prem(p: &Prem) -> T {
-    match &p.node {
-        PremKind::RulePr(_, m, _) | PremKind::IfHoldPr(_, m) | PremKind::IfNotHoldPr(_, m) => m
-            .args()
-            .into_iter()
-            .fold(T::new(), |a, x| add(a, free_exp(x))),
-        PremKind::IfPr(x) | PremKind::DebugPr(x) => free_exp(x),
-        PremKind::LetPr(a, b) => add(free_exp(a), free_exp(b)),
-        PremKind::IterPr(p, _) => free_prem(p),
+impl Free for TypKind {
+    fn free(&self) -> IdSet {
+        IdSet::new()
     }
 }
-pub fn free_prems(xs: &[Prem]) -> T {
-    many(xs, free_prem)
+
+// - Subtype checks
+
+impl Free for Subcheck {
+    fn free(&self) -> IdSet {
+        IdSet::new()
+    }
 }
 
-// Rules
+// - Defined types
 
-pub fn free_rule(r: &Rule) -> T {
-    let (_, m, p) = &r.node;
-    add(
-        m.args()
-            .into_iter()
-            .fold(T::new(), |a, x| add(a, free_exp(x))),
-        free_prems(p),
-    )
-}
-pub fn free_rules(xs: &[Rule]) -> T {
-    many(xs, free_rule)
-}
-pub fn free_rulegroup(g: &RuleGroup) -> T {
-    free_rules(&g.node.1)
-}
-pub fn free_rulegroups(xs: &[RuleGroup]) -> T {
-    many(xs, free_rulegroup)
-}
-pub fn free_elsegroup(g: &ElseGroup) -> T {
-    free_rule(&g.node.1)
-}
-pub fn free_elsegroup_opt(g: &Option<ElseGroup>) -> T {
-    g.as_ref().map_or_else(T::new, free_elsegroup)
+impl Free for DefTypKind {
+    fn free(&self) -> IdSet {
+        IdSet::new()
+    }
 }
 
-// Clauses
-
-pub fn free_clause(c: &Clause) -> T {
-    let (a, x, p) = &c.node;
-    add(free_args(a), add(free_exp(x), free_prems(p)))
-}
-pub fn free_clauses(xs: &[Clause]) -> T {
-    many(xs, free_clause)
-}
-pub fn free_elseclause(c: &ElseClause) -> T {
-    free_clause(c)
-}
-pub fn free_elseclause_opt(c: &Option<ElseClause>) -> T {
-    c.as_ref().map_or_else(T::new, free_clause)
+impl Free for TypField {
+    fn free(&self) -> IdSet {
+        IdSet::new()
+    }
 }
 
-// Table rows
-
-pub fn free_tablerow(r: &TableRow) -> T {
-    add(free_args(&r.node.0), free_exp(&r.node.1))
-}
-pub fn free_tablerows(xs: &[TableRow]) -> T {
-    many(xs, free_tablerow)
+impl Free for TypOriginKind {
+    fn free(&self) -> IdSet {
+        IdSet::new()
+    }
 }
 
-// Definitions
+impl Free for TypCase {
+    fn free(&self) -> IdSet {
+        IdSet::new()
+    }
+}
 
-pub fn free_def(d: &Def) -> T {
-    match &d.node {
-        DefKind::RelD(_, _, _, gs, e, _) => add(free_rulegroups(gs), free_elsegroup_opt(e)),
-        DefKind::TableDecD(_, _, _, rs, _) => free_tablerows(rs),
-        DefKind::FuncDecD(_, _, _, _, cs, e, _) => add(free_clauses(cs), free_elseclause_opt(e)),
-        _ => empty(),
+// - Values
+
+impl Free for ValueKind {
+    fn free(&self) -> IdSet {
+        match self {
+            Self::Struct(fields) => fields.as_slice().free(),
+            Self::Case(value_case) => value_case.free(),
+            Self::Tuple(values) | Self::List(values) => values.as_slice().free(),
+            Self::Opt(value) => value.free(),
+            Self::Bool(_) | Self::Num(_) | Self::Text(_) | Self::Func(_) | Self::Extern(_) => {
+                IdSet::new()
+            }
+        }
+    }
+}
+
+impl Free for ValueField {
+    fn free(&self) -> IdSet {
+        self.1.free()
+    }
+}
+
+// - Operator types
+
+impl Free for OpTyp {
+    fn free(&self) -> IdSet {
+        IdSet::new()
+    }
+}
+
+// - Expressions
+
+impl Free for ExpKind {
+    fn free(&self) -> IdSet {
+        match self {
+            Self::Bool(_) | Self::Num(_) | Self::Text(_) => IdSet::new(),
+            Self::Var(id) => IdSet::from([id.clone()]),
+            Self::Un(_, _, exp)
+            | Self::UpCast(_, exp)
+            | Self::DownCast(_, exp)
+            | Self::Sub(exp, _, _)
+            | Self::Match(exp, _)
+            | Self::Len(exp)
+            | Self::Dot(exp, _)
+            | Self::Iter(exp, _) => exp.free(),
+            Self::Bin(_, _, exp_l, exp_r)
+            | Self::Cmp(_, _, exp_l, exp_r)
+            | Self::Cons(exp_l, exp_r)
+            | Self::Cat(exp_l, exp_r)
+            | Self::Mem(exp_l, exp_r)
+            | Self::Idx(exp_l, exp_r) => exp_l.free().union(exp_r.free()),
+            Self::Tuple(exps) | Self::List(exps) => exps.as_slice().free(),
+            Self::Case(not_exp) => not_exp.free(),
+            Self::Str(fields) => fields
+                .iter()
+                .fold(IdSet::new(), |free, (_, exp)| free.union(exp.free())),
+            Self::Opt(exp) => exp.free(),
+            Self::Slice(exp_b, exp_i, exp_n) => {
+                exp_b.free().union(exp_i.free()).union(exp_n.free())
+            }
+            Self::Upd(exp_b, path, exp_f) => exp_b.free().union(path.free()).union(exp_f.free()),
+            Self::Call(_, _, args) => args.as_slice().free(),
+        }
+    }
+}
+
+impl Free for IterExp {
+    fn free(&self) -> IdSet {
+        IdSet::new()
+    }
+}
+
+// - Patterns
+
+impl Free for Pattern {
+    fn free(&self) -> IdSet {
+        IdSet::new()
+    }
+}
+
+impl Free for ListPattern {
+    fn free(&self) -> IdSet {
+        IdSet::new()
+    }
+}
+
+impl Free for OptPattern {
+    fn free(&self) -> IdSet {
+        IdSet::new()
+    }
+}
+
+// - Paths
+
+impl Free for PathKind {
+    fn free(&self) -> IdSet {
+        match self {
+            Self::Root => IdSet::new(),
+            Self::Idx(path, exp_i) => path.free().union(exp_i.free()),
+            Self::Slice(path, exp_i, exp_n) => path.free().union(exp_i.free()).union(exp_n.free()),
+            Self::Dot(path, _) => path.free(),
+        }
+    }
+}
+
+// - Parameters
+
+impl Free for ParamKind {
+    fn free(&self) -> IdSet {
+        IdSet::new()
+    }
+}
+
+// Type parameters alias identifiers and use the EL identifier implementation.
+
+// - Arguments
+
+impl Free for ArgKind {
+    fn free(&self) -> IdSet {
+        match self {
+            Self::Exp(exp) => exp.free(),
+            Self::Def(_) => IdSet::new(),
+        }
+    }
+}
+
+// Type arguments alias types and use the type implementation above.
+
+// - Premises
+
+impl Free for RulePrem {
+    fn free(&self) -> IdSet {
+        self.not_exp.free()
+    }
+}
+
+impl Free for IfPrem {
+    fn free(&self) -> IdSet {
+        self.exp.free()
+    }
+}
+
+impl Free for IfHoldPrem {
+    fn free(&self) -> IdSet {
+        self.not_exp.free()
+    }
+}
+
+impl Free for IfNotHoldPrem {
+    fn free(&self) -> IdSet {
+        self.not_exp.free()
+    }
+}
+
+impl Free for LetPrem {
+    fn free(&self) -> IdSet {
+        self.exp_l.free().union(self.exp_r.free())
+    }
+}
+
+impl Free for IteratedPrem {
+    fn free(&self) -> IdSet {
+        self.prem.free()
+    }
+}
+
+impl Free for DebugPrem {
+    fn free(&self) -> IdSet {
+        self.exp.free()
+    }
+}
+
+impl Free for PremKind {
+    fn free(&self) -> IdSet {
+        match self {
+            Self::Rule(prem) => prem.free(),
+            Self::If(prem) => prem.free(),
+            Self::IfHold(prem) => prem.free(),
+            Self::IfNotHold(prem) => prem.free(),
+            Self::Let(prem) => prem.free(),
+            Self::Iter(prem) => prem.free(),
+            Self::Debug(prem) => prem.free(),
+        }
+    }
+}
+
+impl Free for IterPrem {
+    fn free(&self) -> IdSet {
+        IdSet::new()
+    }
+}
+
+// - Rules
+
+impl Free for RuleKind {
+    fn free(&self) -> IdSet {
+        self.not_exp.free().union(self.prems.as_slice().free())
+    }
+}
+
+impl Free for RuleGroupKind {
+    fn free(&self) -> IdSet {
+        self.1.as_slice().free()
+    }
+}
+
+impl Free for ElseGroupKind {
+    fn free(&self) -> IdSet {
+        self.1.free()
+    }
+}
+
+// - Clauses
+
+impl Free for ClauseKind {
+    fn free(&self) -> IdSet {
+        self.args
+            .as_slice()
+            .free()
+            .union(self.expression.free())
+            .union(self.premises.as_slice().free())
+    }
+}
+
+// Else clauses alias clauses and use their implementations above.
+
+// - Table rows
+
+impl Free for TableRowKind {
+    fn free(&self) -> IdSet {
+        self.0.as_slice().free().union(self.1.free())
+    }
+}
+
+// Hints alias EL hints and use their implementation.
+
+// - Definitions
+
+impl Free for ExternTyp {
+    fn free(&self) -> IdSet {
+        IdSet::new()
+    }
+}
+
+impl Free for TypDef {
+    fn free(&self) -> IdSet {
+        IdSet::new()
+    }
+}
+
+impl Free for VarDef {
+    fn free(&self) -> IdSet {
+        IdSet::new()
+    }
+}
+
+impl Free for ExternRel {
+    fn free(&self) -> IdSet {
+        IdSet::new()
+    }
+}
+
+impl Free for Rel {
+    fn free(&self) -> IdSet {
+        self.rule_groups
+            .as_slice()
+            .free()
+            .union(self.else_group.free())
+    }
+}
+
+impl Free for ExternDec {
+    fn free(&self) -> IdSet {
+        IdSet::new()
+    }
+}
+
+impl Free for BuiltinDec {
+    fn free(&self) -> IdSet {
+        IdSet::new()
+    }
+}
+
+impl Free for TableDec {
+    fn free(&self) -> IdSet {
+        self.rows.as_slice().free()
+    }
+}
+
+impl Free for FuncDec {
+    fn free(&self) -> IdSet {
+        self.clauses
+            .as_slice()
+            .free()
+            .union(self.else_clause.free())
+    }
+}
+
+impl Free for DefKind {
+    fn free(&self) -> IdSet {
+        match self {
+            Self::ExternTyp(definition) => definition.free(),
+            Self::Typ(definition) => definition.free(),
+            Self::Var(definition) => definition.free(),
+            Self::ExternRel(definition) => definition.free(),
+            Self::Rel(definition) => definition.free(),
+            Self::ExternDec(definition) => definition.free(),
+            Self::BuiltinDec(definition) => definition.free(),
+            Self::TableDec(definition) => definition.free(),
+            Self::FuncDec(definition) => definition.free(),
+        }
+    }
+}
+
+// - Specifications
+
+impl Free for Spec {
+    fn free(&self) -> IdSet {
+        self.as_slice().free()
     }
 }

@@ -1,19 +1,20 @@
 use p4spec_rust::{
-    domain::{
-        atom::Atom,
-        source::{Region, Spanned},
-    },
+    lang::common::source::{Position, Span, Spanned},
     lang::{
+        common::notation::atom::Atom,
         el::ast::{self, ExpKind, Hole},
         hints::{
-            alter::{self, Hole as AlterHole, T},
-            fields, flag, hint, input,
+            alter::{self, AlterationError, AlterationHint, Hole as AlterHole, Renderer},
+            fields::{self, FieldError, FieldHint},
+            flag, hint,
+            input::{self, InputError, InputHint},
         },
+        traits::eq::SyntaxEq,
     },
 };
 
-fn span(s: &str) -> Region {
-    Region::for_file(s)
+fn span(s: &str) -> Span {
+    Span::new(Position::new(s, 0, 0), Position::new(s, 0, 0))
 }
 fn atom(s: &str) -> ast::Atom {
     Spanned::new(Atom::Keyword(s.into()), span(s))
@@ -25,53 +26,126 @@ fn id(name: &str, source: &str) -> ast::Id {
     Spanned::new(name.to_owned(), span(source))
 }
 
+struct StringRenderer {
+    empty: &'static str,
+    separator: &'static str,
+    fuse: &'static str,
+}
+
+impl Renderer<&str> for StringRenderer {
+    type Output = String;
+    fn empty(&self) -> String {
+        self.empty.into()
+    }
+    fn text(&self, text: &str) -> Option<String> {
+        (text != "omit").then(|| text.into())
+    }
+    fn atom(&self, atom: &ast::Atom) -> String {
+        atom.node.render()
+    }
+    fn join(&self, items: Vec<String>) -> String {
+        items.join(self.separator)
+    }
+    fn fuse(&self, left: String, right: String) -> String {
+        format!("{left}{}{right}", self.fuse)
+    }
+    fn other(&self, exp: &ast::Exp) -> String {
+        hint::to_string(exp)
+    }
+    fn item(&self, item: &&str) -> String {
+        (*item).into()
+    }
+}
+
 #[test]
 fn input_hints_validate_and_preserve_split_order() {
-    let sequence = exp(ExpKind::SeqE(vec![
-        exp(ExpKind::HoleE(Hole::Num(2))),
-        exp(ExpKind::HoleE(Hole::Num(0))),
+    let sequence = exp(ExpKind::Seq(vec![
+        exp(ExpKind::Hole(Hole::Num(2))),
+        exp(ExpKind::Hole(Hole::Num(0))),
     ]));
-    assert_eq!(input::init(&sequence), Some(vec![2, 0]));
-    assert!(input::validate(&[], 3).is_err());
-    assert!(input::validate(&[1, 1], 3).is_err());
-    assert!(input::validate(&[-1], 3).is_err());
-    assert!(input::validate(&[3], 3).is_err());
-    assert_eq!(input::validate(&[2, 0], 3), Ok(()));
+    assert_eq!(input::init(&sequence), Some(InputHint::new(vec![2, 0])));
+    assert_eq!(
+        input::validate(&InputHint::new(vec![]), 3),
+        Err(InputError::Empty)
+    );
+    assert_eq!(
+        input::validate(&InputHint::new(vec![1, 1]), 3),
+        Err(InputError::DuplicateIndex(1))
+    );
+    assert_eq!(
+        input::validate(&InputHint::new(vec![-1]), 3),
+        Err(InputError::IndexOutOfBounds {
+            index: -1,
+            arity: 3,
+        })
+    );
+    assert_eq!(
+        input::validate(&InputHint::new(vec![3]), 3),
+        Err(InputError::IndexOutOfBounds { index: 3, arity: 3 })
+    );
+    let hint = InputHint::new(vec![2, 0]);
+    assert_eq!(input::validate(&hint, 3), Ok(()));
 
     let items = ["zero", "one", "two", "three"];
-    let hint = vec![2, 0];
-    let (items_input, items_output) = input::split(&hint, &items);
+    let (items_input, items_output) = input::split(&hint, &items).unwrap();
     assert_eq!(items_input, vec!["zero", "two"]);
     assert_eq!(items_output, vec!["one", "three"]);
-    assert_eq!(input::combine(&hint, items_input, items_output), items);
-    assert!(input::is_conditional(&[0, 1], &["left", "right"]));
-    assert!(!input::is_conditional(&[0], &["left", "right"]));
+    assert_eq!(
+        input::combine(&hint, items_input, items_output),
+        Ok(items.to_vec())
+    );
+    assert_eq!(
+        input::combine(&hint, vec!["zero"], vec!["one", "three"]),
+        Err(InputError::InputCountMismatch {
+            expected: 2,
+            actual: 1,
+        })
+    );
+    assert_eq!(
+        input::split(&InputHint::new(vec![4]), &items),
+        Err(InputError::IndexOutOfBounds { index: 4, arity: 4 })
+    );
+    assert_eq!(
+        input::is_conditional(&InputHint::new(vec![0, 1]), &["left", "right"]),
+        Ok(true)
+    );
+    assert_eq!(
+        input::is_conditional(&InputHint::new(vec![0]), &["left", "right"]),
+        Ok(false)
+    );
 }
 
 #[test]
 fn fields_hints_require_text_and_exact_arity() {
-    let single = exp(ExpKind::TextE("left".to_owned()));
-    let sequence = exp(ExpKind::SeqE(vec![
-        exp(ExpKind::TextE("left".to_owned())),
-        exp(ExpKind::TextE("right".to_owned())),
+    let single = exp(ExpKind::Text("left".to_owned()));
+    let sequence = exp(ExpKind::Seq(vec![
+        exp(ExpKind::Text("left".to_owned())),
+        exp(ExpKind::Text("right".to_owned())),
     ]));
 
-    assert_eq!(fields::init(&single), Some(vec!["left".to_owned()]));
+    assert_eq!(
+        fields::init(&single),
+        Some(FieldHint::new(vec!["left".to_owned()]))
+    );
     assert_eq!(
         fields::init(&sequence),
-        Some(vec!["left".to_owned(), "right".to_owned()])
+        Some(FieldHint::new(vec!["left".to_owned(), "right".to_owned()]))
     );
-    assert_eq!(fields::init(&exp(ExpKind::HoleE(Hole::Next))), None);
-    assert_eq!(fields::validate(&["left".to_owned()], 1), Ok(()));
-    assert!(fields::validate(&["left".to_owned()], 2).is_err());
+    assert_eq!(fields::init(&exp(ExpKind::Hole(Hole::Next))), None);
+    let fields = FieldHint::new(vec!["left".to_owned()]);
+    assert_eq!(fields::validate(&fields, 1), Ok(()));
+    assert_eq!(
+        fields::validate(&fields, 2),
+        Err(FieldError::ArityMismatch {
+            expected: 2,
+            actual: 1,
+        })
+    );
 }
 
 #[test]
 fn flag_hints_match_only_the_requested_identifier() {
-    let hints = vec![ast::Hint {
-        hintid: id("enabled", "enabled-hint"),
-        hintexp: exp(ExpKind::EpsE),
-    }];
+    let hints = vec![(id("enabled", "enabled-hint"), exp(ExpKind::Eps))];
 
     assert!(flag::init(&hints, "enabled"));
     assert!(!flag::init(&hints, "disabled"));
@@ -79,28 +153,31 @@ fn flag_hints_match_only_the_requested_identifier() {
 
 #[test]
 fn hint_modules_format_exactly() {
-    assert_eq!(input::to_string(&[2, 0]), "hint(input %2 %0)");
-    assert!(input::eq(&[2, 0], &[2, 0]));
-    assert!(!input::eq(&[2], &[0]));
     assert_eq!(
-        fields::to_string(&["left".into(), "right".into()]),
+        input::to_string(&InputHint::new(vec![2, 0])),
+        "hint(input %2 %0)"
+    );
+    assert!(InputHint::new(vec![2, 0]).syntax_eq(&InputHint::new(vec![2, 0])));
+    assert!(!InputHint::new(vec![2]).syntax_eq(&InputHint::new(vec![0])));
+    assert_eq!(
+        fields::to_string(&FieldHint::new(vec!["left".into(), "right".into()])),
         "hint(fields left right)"
     );
     assert_eq!(flag::to_string(true), "hint(flag)");
     assert_eq!(flag::to_string(false), "");
-    assert_eq!(hint::to_string(&exp(ExpKind::HoleE(Hole::Next))), "%");
+    assert_eq!(hint::to_string(&exp(ExpKind::Hole(Hole::Next))), "%");
 }
 
 #[test]
 fn alter_models_validates_collects_and_realigns() {
-    let hint = T::SeqH(vec![
-        T::TextH("x".into()),
-        T::HoleH(AlterHole::Next),
-        T::BrackH(
+    let hint = AlterationHint::Seq(vec![
+        AlterationHint::Text("x".into()),
+        AlterationHint::Hole(AlterHole::Next),
+        AlterationHint::Brack(
             atom("L"),
-            Box::new(T::FuseH(
-                Box::new(T::HoleH(AlterHole::Num(3))),
-                Box::new(T::HoleH(AlterHole::Num(1))),
+            Box::new(AlterationHint::Fuse(
+                Box::new(AlterationHint::Hole(AlterHole::Num(3))),
+                Box::new(AlterationHint::Hole(AlterHole::Num(1))),
             )),
             atom("R"),
         ),
@@ -108,114 +185,135 @@ fn alter_models_validates_collects_and_realigns() {
     assert_eq!(alter::to_string(&hint), "hint(alter x % L %3#%1 R)");
     assert_eq!(alter::validate(&hint, &["a", "b", "c", "d"]), Ok(()));
     assert_eq!(
-        alter::validate(&T::HoleH(AlterHole::Num(4)), &["a"]),
-        Err("index 4 out of bounds".into())
+        alter::validate(&AlterationHint::Hole(AlterHole::Num(4)), &["a"]),
+        Err(AlterationError::IndexOutOfBounds {
+            index: 4,
+            item_count: 1,
+        })
     );
     assert_eq!(alter::collect(&hint), vec![1, 3]);
     assert_eq!(
-        alter::to_string(&alter::realign(&hint, &vec![0, 2]).unwrap()),
+        alter::to_string(&alter::realign(&hint, &InputHint::new(vec![0, 2])).unwrap()),
         "hint(alter x % L %1#%0 R)"
     );
 }
 
 #[test]
 fn alter_alternates_with_omission_defaults_fuse_brackets_and_other() {
-    let hint = T::SeqH(vec![
-        T::TextH("omit".into()),
-        T::BrackH(atom("L"), Box::new(T::HoleH(AlterHole::Next)), atom("R")),
-        T::FuseH(
-            Box::new(T::HoleH(AlterHole::Num(1))),
-            Box::new(T::OtherH(exp(ExpKind::TextE("other".into())))),
+    let hint = AlterationHint::Seq(vec![
+        AlterationHint::Text("omit".into()),
+        AlterationHint::Brack(
+            atom("L"),
+            Box::new(AlterationHint::Hole(AlterHole::Next)),
+            atom("R"),
+        ),
+        AlterationHint::Fuse(
+            Box::new(AlterationHint::Hole(AlterHole::Num(1))),
+            Box::new(AlterationHint::Other(exp(ExpKind::Text("other".into())))),
         ),
     ]);
     let result = alter::alternate(
         &hint,
         &["zero", "one"],
-        "_".to_owned(),
-        |text| (text != "omit").then(|| text.to_owned()),
-        |atom| atom.node.render(),
-        |items| items.join(" "),
-        |left, right| format!("{left}#{right}"),
-        hint::to_string,
-        |item| item.to_string(),
+        &StringRenderer {
+            empty: "_",
+            separator: " ",
+            fuse: "#",
+        },
     )
     .unwrap();
     assert_eq!(result, "_ L zero R one#\"other\"");
-    assert!(
+    assert_eq!(
         alter::alternate(
-            &T::HoleH(AlterHole::Num(2)),
+            &AlterationHint::Hole(AlterHole::Num(2)),
             &["zero"],
-            String::new(),
-            |_| None,
-            |_| String::new(),
-            |_| String::new(),
-            |_, _| String::new(),
-            |_| String::new(),
-            |item| item.to_string()
+            &StringRenderer {
+                empty: "",
+                separator: "",
+                fuse: ""
+            }
         )
-        .is_err()
+        .unwrap_err(),
+        AlterationError::IndexOutOfBounds {
+            index: 2,
+            item_count: 1,
+        }
     );
 }
 
 #[test]
 fn alter_edge_cases_cover_init_omission_duplicates_and_next_cursor() {
     assert!(matches!(
-        alter::init(&exp(ExpKind::AtomE(atom("A")))),
-        Some(T::AtomH(_))
+        alter::init(&exp(ExpKind::Atom(atom("A")))),
+        Some(AlterationHint::Atom(_))
     ));
     assert_eq!(
-        alter::init(&exp(ExpKind::SeqE(Vec::new()))),
-        Some(T::SeqH(Vec::new()))
+        alter::init(&exp(ExpKind::Seq(Vec::new()))),
+        Some(AlterationHint::Seq(Vec::new()))
     );
-    let nested = exp(ExpKind::SeqE(vec![exp(ExpKind::BrackE(
+    let nested = exp(ExpKind::Seq(vec![exp(ExpKind::Brack(
         atom("L"),
-        Box::new(exp(ExpKind::HoleE(Hole::Rest))),
+        Box::new(exp(ExpKind::Hole(Hole::Rest))),
         atom("R"),
     ))]));
     assert_eq!(
         alter::init(&nested),
-        Some(T::SeqH(vec![T::BrackH(
+        Some(AlterationHint::Seq(vec![AlterationHint::Brack(
             atom("L"),
-            Box::new(T::OtherH(exp(ExpKind::HoleE(Hole::Rest)))),
+            Box::new(AlterationHint::Other(exp(ExpKind::Hole(Hole::Rest)))),
             atom("R"),
         )]))
     );
-    let duplicate = T::SeqH(vec![
-        T::HoleH(AlterHole::Num(2)),
-        T::HoleH(AlterHole::Num(2)),
+    let duplicate = AlterationHint::Seq(vec![
+        AlterationHint::Hole(AlterHole::Num(2)),
+        AlterationHint::Hole(AlterHole::Num(2)),
     ]);
     assert_eq!(alter::collect(&duplicate), vec![2, 2]);
     assert_eq!(
-        alter::to_string(&alter::realign(&duplicate, &vec![0]).unwrap()),
+        alter::to_string(&alter::realign(&duplicate, &InputHint::new(vec![0])).unwrap()),
         "hint(alter %0 %0)"
     );
-    let omitted = T::BrackH(atom("L"), Box::new(T::TextH("omit".into())), atom("R"));
+    let omitted = AlterationHint::Brack(
+        atom("L"),
+        Box::new(AlterationHint::Text("omit".into())),
+        atom("R"),
+    );
     let rendered = alter::alternate(
         &omitted,
         &[] as &[&str],
-        "EMPTY".into(),
-        |_| None,
-        |a| a.node.render(),
-        |parts| parts.join("|"),
-        |a, b| format!("{a}{b}"),
-        |_| String::new(),
-        |_| String::new(),
+        &StringRenderer {
+            empty: "EMPTY",
+            separator: "|",
+            fuse: "",
+        },
     )
     .unwrap();
     assert_eq!(rendered, "L|R");
-    let nexts = T::SeqH(vec![T::HoleH(AlterHole::Next), T::HoleH(AlterHole::Next)]);
-    assert!(
+    let nexts = AlterationHint::Seq(vec![
+        AlterationHint::Hole(AlterHole::Next),
+        AlterationHint::Hole(AlterHole::Next),
+    ]);
+    assert_eq!(
+        alter::validate(&nexts, &["a"]),
+        Err(AlterationError::IndexOutOfBounds {
+            index: 1,
+            item_count: 1,
+        })
+    );
+    assert_eq!(
         alter::alternate(
             &nexts,
             &["a"],
-            String::new(),
-            |_| None,
-            |_| String::new(),
-            |x| x.join(""),
-            |a, b| format!("{a}{b}"),
-            |_| String::new(),
-            |x| x.to_string()
+            &StringRenderer {
+                empty: "",
+                separator: "",
+                fuse: ""
+            }
         )
-        .is_err()
+        .unwrap_err(),
+        AlterationError::IndexOutOfBounds {
+            index: 1,
+            item_count: 1,
+        }
     );
 }

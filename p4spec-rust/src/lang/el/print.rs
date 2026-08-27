@@ -1,194 +1,156 @@
-use crate::lang::xl::num;
+//! Text rendering for elaboration-language data
+
+use std::fmt::{self, Write};
+
+use crate::lang::{
+    traits::print::{Print, Printer},
+    xl::num,
+};
 
 use super::ast::*;
 
-fn join<T>(items: &[T], separator: &str, string_of: impl Fn(&T) -> String) -> String {
-    items
-        .iter()
-        .map(string_of)
-        .collect::<Vec<_>>()
-        .join(separator)
-}
+// == Printing
 
-// Numbers
+// - Iterators
 
-pub fn string_of_num(number: &Num) -> String {
-    match number {
-        num::T::Nat(number) => number.to_string(),
-        num::T::Int(number) if number.sign() == num_bigint::Sign::Minus => {
-            format!("-{}", -number)
-        }
-        num::T::Int(number) => format!("+{number}"),
+impl Print for Iter {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        printer.write(match self {
+            Self::Opt => "?",
+            Self::List => "*",
+        })
     }
 }
 
-// Texts
+// - Types
 
-pub fn string_of_text(text: &str) -> String {
-    text.to_owned()
-}
-
-// Identifiers
-
-pub fn string_of_varid(id: &Id) -> String {
-    id.node.clone()
-}
-
-pub fn string_of_typid(id: &Id) -> String {
-    id.node.clone()
-}
-
-pub fn string_of_relid(id: &Id) -> String {
-    id.node.clone()
-}
-
-pub fn string_of_ruleid(id: &Id) -> String {
-    if id.node.is_empty() {
-        String::new()
-    } else {
-        format!("/{}", id.node)
-    }
-}
-
-pub fn string_of_defid(id: &Id) -> String {
-    format!("${}", id.node)
-}
-
-// Atoms
-
-pub fn string_of_atom(atom: &Atom) -> String {
-    atom.node.source_string()
-}
-
-// Iterators
-
-pub fn string_of_iter(iter: Iter) -> String {
-    match iter {
-        Iter::Opt => "?".into(),
-        Iter::List => "*".into(),
-    }
-}
-
-// Types
-
-pub fn string_of_typ(typ: &Typ) -> String {
-    match typ {
-        Typ::PlainT(plain_typ) => string_of_plaintyp(plain_typ),
-        Typ::NotationT(not_typ) => string_of_nottyp(not_typ),
-    }
-}
-
-pub fn string_of_typs(separator: &str, typs: &[Typ]) -> String {
-    join(typs, separator, string_of_typ)
-}
-
-pub fn string_of_plaintyp(plain_typ: &PlainTyp) -> String {
-    match &plain_typ.node {
-        PlainTypKind::BoolT => "bool".into(),
-        PlainTypKind::NumT(num::Typ::NatT) => "nat".into(),
-        PlainTypKind::NumT(num::Typ::IntT) => "int".into(),
-        PlainTypKind::TextT => "text".into(),
-        PlainTypKind::VarT(id, targs) => {
-            format!("{}{}", string_of_typid(id), string_of_targs(targs))
-        }
-        PlainTypKind::ParenT(plain_typ) => format!("({})", string_of_plaintyp(plain_typ)),
-        PlainTypKind::TupleT(plain_typs) => format!("({})", string_of_plaintyps(", ", plain_typs)),
-        PlainTypKind::IterT(plain_typ, iter) => {
-            format!("{}{}", string_of_plaintyp(plain_typ), string_of_iter(*iter))
+impl Print for Typ {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        match self {
+            Typ::Plain(plain_typ) => plain_typ.print(printer),
+            Typ::Notation(not_typ) => not_typ.print(printer),
         }
     }
 }
 
-pub fn string_of_plaintyps(separator: &str, plain_typs: &[PlainTyp]) -> String {
-    join(plain_typs, separator, string_of_plaintyp)
-}
-
-pub fn string_of_nottyp(not_typ: &NotTyp) -> String {
-    match &not_typ.node {
-        NotTypKind::AtomT(atom) => string_of_atom(atom),
-        NotTypKind::SeqT(typs) => string_of_typs(" ", typs),
-        NotTypKind::InfixT(left, atom, right) => format!(
-            "{} {} {}",
-            string_of_typ(left),
-            string_of_atom(atom),
-            string_of_typ(right)
-        ),
-        NotTypKind::BrackT(left, typ, right) => format!(
-            "`{}{}{}",
-            string_of_atom(left),
-            string_of_typ(typ),
-            string_of_atom(right)
-        ),
+impl Print for [Typ] {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        printer.separated(self, ", ")
     }
 }
 
-pub fn string_of_nottyps(separator: &str, not_typs: &[NotTyp]) -> String {
-    join(not_typs, separator, string_of_nottyp)
-}
+// - Plain types
 
-pub fn string_of_deftyp(def_typ: &DefTyp) -> String {
-    match &def_typ.node {
-        DefTypKind::PlainTD(plain_typ) => string_of_plaintyp(plain_typ),
-        DefTypKind::StructTD(fields) => format!("{{{}}}", string_of_typfields(", ", fields)),
-        DefTypKind::VariantTD(cases) => format!("\n   | {}", string_of_typcases("\n   | ", cases)),
+impl Print for PlainTyp {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        match &self.node {
+            PlainTypKind::Bool => printer.write_str("bool"),
+            PlainTypKind::Num(num::Typ::Nat) => printer.write_str("nat"),
+            PlainTypKind::Num(num::Typ::Int) => printer.write_str("int"),
+            PlainTypKind::Text => printer.write_str("text"),
+            PlainTypKind::Var(id, targs) => {
+                id.print(printer)?;
+                if !targs.is_empty() {
+                    printer.write_char('<')?;
+                    printer.separated(targs, ", ")?;
+                    printer.write_char('>')?;
+                }
+                Ok(())
+            }
+            PlainTypKind::Paren(plain_typ) => {
+                printer.write_char('(')?;
+                plain_typ.print(printer)?;
+                printer.write_char(')')
+            }
+            PlainTypKind::Tuple(plain_typs) => {
+                printer.write_char('(')?;
+                printer.separated(plain_typs, ", ")?;
+                printer.write_char(')')
+            }
+            PlainTypKind::Iter(plain_typ, iter) => {
+                plain_typ.print(printer)?;
+                iter.print(printer)
+            }
+        }
     }
 }
 
-pub fn string_of_typfield(field: &TypField) -> String {
-    format!(
-        "{} {}",
-        string_of_atom(&field.0),
-        string_of_plaintyp(&field.1)
-    )
-}
+// - Notation types
 
-pub fn string_of_typfields(separator: &str, fields: &[TypField]) -> String {
-    join(fields, separator, string_of_typfield)
-}
-
-pub fn string_of_typcase(case: &TypCase) -> String {
-    string_of_typ(&case.0)
-}
-
-pub fn string_of_typcases(separator: &str, cases: &[TypCase]) -> String {
-    join(cases, separator, string_of_typcase)
-}
-
-// Operators
-
-pub fn string_of_unop(operator: UnOp) -> &'static str {
-    match operator {
-        UnOp::NotOp => "~",
-        UnOp::PlusOp => "+",
-        UnOp::MinusOp => "-",
+impl Print for NotTyp {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        match &self.node {
+            NotTypKind::Atom(atom) => atom.print(printer),
+            NotTypKind::Seq(typs) => printer.separated(typs, " "),
+            NotTypKind::Infix(typ_l, atom, typ_r) => {
+                typ_l.print(printer)?;
+                printer.write_char(' ')?;
+                atom.print(printer)?;
+                printer.write_char(' ')?;
+                typ_r.print(printer)
+            }
+            NotTypKind::Brack(atom_l, typ, atom_r) => {
+                printer.write_char('`')?;
+                atom_l.print(printer)?;
+                typ.print(printer)?;
+                atom_r.print(printer)
+            }
+        }
     }
 }
 
-pub fn string_of_binop(operator: BinOp) -> &'static str {
-    match operator {
-        BinOp::AndOp => "/\\",
-        BinOp::OrOp => "\\/",
-        BinOp::ImplOp => "=>",
-        BinOp::EquivOp => "<=>",
-        BinOp::AddOp => "+",
-        BinOp::SubOp => "-",
-        BinOp::MulOp => "*",
-        BinOp::DivOp => "/",
-        BinOp::ModOp => "\\",
-        BinOp::PowOp => "^",
+impl Print for [NotTyp] {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        printer.separated(self, ", ")
     }
 }
 
-pub fn string_of_cmpop(operator: CmpOp) -> &'static str {
-    match operator {
-        CmpOp::EqOp => "=",
-        CmpOp::NeOp => "=/=",
-        CmpOp::LtOp => "<",
-        CmpOp::GtOp => ">",
-        CmpOp::LeOp => "<=",
-        CmpOp::GeOp => ">=",
+// - Defined types
+
+impl Print for DefTyp {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        match &self.node {
+            DefTypKind::Plain(plain_typ) => plain_typ.print(printer),
+            DefTypKind::Struct(typ_fields) => {
+                printer.write_char('{')?;
+                printer.separated(typ_fields, ", ")?;
+                printer.write_char('}')
+            }
+            DefTypKind::Variant(typ_cases) => {
+                printer.write_str("\n   | ")?;
+                printer.separated(typ_cases, "\n   | ")
+            }
+        }
     }
 }
+
+impl Print for TypField {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        self.0.print(printer)?;
+        printer.write_char(' ')?;
+        self.1.print(printer)
+    }
+}
+
+impl Print for [TypField] {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        printer.separated(self, ", ")
+    }
+}
+
+impl Print for TypCase {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        self.0.print(printer)
+    }
+}
+
+impl Print for [TypCase] {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        printer.separated(self, ", ")
+    }
+}
+
+// - Operators
 
 fn escaped(text: &str) -> String {
     text.bytes()
@@ -205,344 +167,602 @@ fn escaped(text: &str) -> String {
         .collect()
 }
 
-// Expressions
-
-pub fn string_of_exp(exp: &Exp) -> String {
-    match &exp.node {
-        ExpKind::BoolE(value) => value.to_string(),
-        ExpKind::NumE(NumOp::DecOp, num::T::Nat(number)) => number.to_string(),
-        ExpKind::NumE(NumOp::HexOp, num::T::Nat(number)) => {
-            format!("0x{}", number.to_str_radix(16).to_uppercase())
+impl Print for UnOp {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        match self {
+            Self::Bool(operator) => operator.print(printer),
+            Self::Num(operator) => operator.print(printer),
         }
-        ExpKind::NumE(_, number) => string_of_num(number),
-        ExpKind::TextE(text) => format!("\"{}\"", escaped(text)),
-        ExpKind::VarE(id) => string_of_varid(id),
-        ExpKind::UnE(operator, exp) => {
-            format!("{}{}", string_of_unop(*operator), string_of_exp(exp))
+    }
+}
+
+impl Print for BinOp {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        match self {
+            Self::Bool(operator) => operator.print(printer),
+            Self::Num(operator) => operator.print(printer),
         }
-        ExpKind::BinE(left, operator, right) => format!(
-            "{} {} {}",
-            string_of_exp(left),
-            string_of_binop(*operator),
-            string_of_exp(right)
-        ),
-        ExpKind::CmpE(left, operator, right) => format!(
-            "{} {} {}",
-            string_of_exp(left),
-            string_of_cmpop(*operator),
-            string_of_exp(right)
-        ),
-        ExpKind::ArithE(exp) => format!("$({})", string_of_exp(exp)),
-        ExpKind::EpsE => "eps".into(),
-        ExpKind::ListE(exps) => format!("[{}]", string_of_exps(", ", exps)),
-        ExpKind::ConsE(left, right) => {
-            format!("{} :: {}", string_of_exp(left), string_of_exp(right))
+    }
+}
+
+impl Print for CmpOp {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        match self {
+            Self::Bool(operator) => operator.print(printer),
+            Self::Num(operator) => operator.print(printer),
         }
-        ExpKind::CatE(left, right) => {
-            format!("{} ++ {}", string_of_exp(left), string_of_exp(right))
+    }
+}
+
+// - Expressions
+
+impl Print for Exp {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        match &self.node {
+            ExpKind::Bool(value) => write!(printer, "{value}"),
+            ExpKind::Num(NumOp::Dec, num::Number::Nat(number)) => write!(printer, "{number}"),
+            ExpKind::Num(NumOp::Hex, num::Number::Nat(number)) => {
+                write!(
+                    printer,
+                    "0x{}",
+                    number.as_bigint().to_str_radix(16).to_uppercase()
+                )
+            }
+            ExpKind::Num(_, number) => number.print(printer),
+            ExpKind::Text(text) => write!(printer, "\"{}\"", escaped(text)),
+            ExpKind::Var(id) => printer.write_str(&id.node),
+            ExpKind::Un(operator, exp) => {
+                operator.print(printer)?;
+                exp.print(printer)
+            }
+            ExpKind::Bin(exp_l, operator, exp_r) => {
+                exp_l.print(printer)?;
+                printer.write_char(' ')?;
+                operator.print(printer)?;
+                printer.write_char(' ')?;
+                exp_r.print(printer)
+            }
+            ExpKind::Cmp(exp_l, operator, exp_r) => {
+                exp_l.print(printer)?;
+                printer.write_char(' ')?;
+                operator.print(printer)?;
+                printer.write_char(' ')?;
+                exp_r.print(printer)
+            }
+            ExpKind::Arith(exp) => {
+                printer.write_str("$(")?;
+                exp.print(printer)?;
+                printer.write_char(')')
+            }
+            ExpKind::Eps => printer.write_str("eps"),
+            ExpKind::List(exps) => {
+                printer.write_char('[')?;
+                printer.separated(exps, ", ")?;
+                printer.write_char(']')
+            }
+            ExpKind::Cons(exp_l, exp_r) => {
+                exp_l.print(printer)?;
+                printer.write_str(" :: ")?;
+                exp_r.print(printer)
+            }
+            ExpKind::Cat(exp_l, exp_r) => {
+                exp_l.print(printer)?;
+                printer.write_str(" ++ ")?;
+                exp_r.print(printer)
+            }
+            ExpKind::Idx(exp_base, exp_index) => {
+                exp_base.print(printer)?;
+                printer.write_char('[')?;
+                exp_index.print(printer)?;
+                printer.write_char(']')
+            }
+            ExpKind::Slice(exp_base, exp_l, exp_r) => {
+                exp_base.print(printer)?;
+                printer.write_char('[')?;
+                exp_l.print(printer)?;
+                printer.write_str(" : ")?;
+                exp_r.print(printer)?;
+                printer.write_char(']')
+            }
+            ExpKind::Len(exp) => {
+                printer.write_char('|')?;
+                exp.print(printer)?;
+                printer.write_char('|')
+            }
+            ExpKind::Mem(exp_l, exp_r) => {
+                exp_l.print(printer)?;
+                printer.write_str(" <- ")?;
+                exp_r.print(printer)
+            }
+            ExpKind::Str(fields) => {
+                printer.write_char('{')?;
+                for (index, (atom, exp)) in fields.iter().enumerate() {
+                    if index != 0 {
+                        printer.write_str(", ")?;
+                    }
+                    atom.print(printer)?;
+                    printer.write_char(' ')?;
+                    exp.print(printer)?;
+                }
+                printer.write_char('}')
+            }
+            ExpKind::Dot(exp, atom) => {
+                exp.print(printer)?;
+                printer.write_char('.')?;
+                atom.print(printer)
+            }
+            ExpKind::Upd(exp_base, path, exp_field) => {
+                exp_base.print(printer)?;
+                printer.write_char('[')?;
+                path.print(printer)?;
+                printer.write_str(" = ")?;
+                exp_field.print(printer)?;
+                printer.write_char(']')
+            }
+            ExpKind::Paren(exp) => {
+                printer.write_char('(')?;
+                exp.print(printer)?;
+                printer.write_char(')')
+            }
+            ExpKind::Tuple(exps) => {
+                printer.write_char('(')?;
+                printer.separated(exps, ", ")?;
+                printer.write_char(')')
+            }
+            ExpKind::Call(id, targs, args) => {
+                printer.write_char('$')?;
+                id.print(printer)?;
+                if !targs.is_empty() {
+                    printer.write_char('<')?;
+                    printer.separated(targs, ", ")?;
+                    printer.write_char('>')?;
+                }
+                args.print(printer)
+            }
+            ExpKind::Iter(exp, iter) => {
+                exp.print(printer)?;
+                iter.print(printer)
+            }
+            ExpKind::Sub(exp, plain_typ) => {
+                exp.print(printer)?;
+                printer.write_str(" <:")?;
+                printer.write_char(' ')?;
+                plain_typ.print(printer)
+            }
+            ExpKind::Atom(atom) => atom.print(printer),
+            ExpKind::Seq(exps) => printer.separated(exps, " "),
+            ExpKind::Infix(exp_l, atom, exp_r) => {
+                exp_l.print(printer)?;
+                printer.write_char(' ')?;
+                atom.print(printer)?;
+                printer.write_char(' ')?;
+                exp_r.print(printer)
+            }
+            ExpKind::Brack(atom_l, exp, atom_r) => {
+                printer.write_char('`')?;
+                atom_l.print(printer)?;
+                exp.print(printer)?;
+                atom_r.print(printer)
+            }
+            ExpKind::Hole(Hole::Num(number)) => write!(printer, "%{number}"),
+            ExpKind::Hole(Hole::Next) => printer.write_char('%'),
+            ExpKind::Hole(Hole::Rest) => printer.write_str("%%"),
+            ExpKind::Hole(Hole::None) => printer.write_str("!%"),
+            ExpKind::Fuse(exp_l, exp_r) => {
+                exp_l.print(printer)?;
+                printer.write_char('#')?;
+                exp_r.print(printer)
+            }
+            ExpKind::Unparen(exp) => {
+                printer.write_str("##")?;
+                exp.print(printer)
+            }
+            ExpKind::Latex(text) => write!(printer, "latex({})", escaped(text)),
         }
-        ExpKind::IdxE(base, index) => format!("{}[{}]", string_of_exp(base), string_of_exp(index)),
-        ExpKind::SliceE(base, low, high) => format!(
-            "{}[{} : {}]",
-            string_of_exp(base),
-            string_of_exp(low),
-            string_of_exp(high)
-        ),
-        ExpKind::LenE(exp) => format!("|{}|", string_of_exp(exp)),
-        ExpKind::MemE(left, right) => {
-            format!("{} <- {}", string_of_exp(left), string_of_exp(right))
+    }
+}
+
+impl Print for [Exp] {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        printer.separated(self, ", ")
+    }
+}
+
+// - Paths
+
+impl Print for Path {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        match &self.node {
+            PathKind::Root => Ok(()),
+            PathKind::Idx(path, exp_index) => {
+                path.print(printer)?;
+                printer.write_char('[')?;
+                exp_index.print(printer)?;
+                printer.write_char(']')
+            }
+            PathKind::Slice(path, exp_l, exp_r) => {
+                path.print(printer)?;
+                printer.write_char('[')?;
+                exp_l.print(printer)?;
+                printer.write_str(" : ")?;
+                exp_r.print(printer)?;
+                printer.write_char(']')
+            }
+            PathKind::Dot(path, atom) if matches!(path.node, PathKind::Root) => atom.print(printer),
+            PathKind::Dot(path, atom) => {
+                path.print(printer)?;
+                printer.write_char('.')?;
+                atom.print(printer)
+            }
         }
-        ExpKind::StrE(fields) => format!(
-            "{{{}}}",
-            join(fields, ", ", |(atom, exp)| format!(
-                "{} {}",
-                string_of_atom(atom),
-                string_of_exp(exp)
-            ))
-        ),
-        ExpKind::DotE(exp, atom) => format!("{}.{}", string_of_exp(exp), string_of_atom(atom)),
-        ExpKind::UpdE(base, path, field) => format!(
-            "{}[{} = {}]",
-            string_of_exp(base),
-            string_of_path(path),
-            string_of_exp(field)
-        ),
-        ExpKind::ParenE(exp) => format!("({})", string_of_exp(exp)),
-        ExpKind::TupleE(exps) => format!("({})", string_of_exps(", ", exps)),
-        ExpKind::CallE(id, targs, args) => format!(
-            "{}{}{}",
-            string_of_defid(id),
-            string_of_targs(targs),
-            string_of_args(args)
-        ),
-        ExpKind::IterE(exp, iter) => format!("{}{}", string_of_exp(exp), string_of_iter(*iter)),
-        ExpKind::SubE(exp, plain_typ) => format!(
-            "{} <: {}",
-            string_of_exp(exp),
-            string_of_plaintyp(plain_typ)
-        ),
-        ExpKind::AtomE(atom) => string_of_atom(atom),
-        ExpKind::SeqE(exps) => string_of_exps(" ", exps),
-        ExpKind::InfixE(left, atom, right) => format!(
-            "{} {} {}",
-            string_of_exp(left),
-            string_of_atom(atom),
-            string_of_exp(right)
-        ),
-        ExpKind::BrackE(left, exp, right) => format!(
-            "`{}{}{}",
-            string_of_atom(left),
-            string_of_exp(exp),
-            string_of_atom(right)
-        ),
-        ExpKind::HoleE(Hole::Num(number)) => format!("%{number}"),
-        ExpKind::HoleE(Hole::Next) => "%".into(),
-        ExpKind::HoleE(Hole::Rest) => "%%".into(),
-        ExpKind::HoleE(Hole::None) => "!%".into(),
-        ExpKind::FuseE(left, right) => format!("{}#{}", string_of_exp(left), string_of_exp(right)),
-        ExpKind::UnparenE(exp) => format!("##{}", string_of_exp(exp)),
-        ExpKind::LatexE(text) => format!("latex({})", escaped(text)),
     }
 }
 
-pub fn string_of_exps(separator: &str, exps: &[Exp]) -> String {
-    join(exps, separator, string_of_exp)
-}
+// - Parameters
 
-// Paths
-
-pub fn string_of_path(path: &Path) -> String {
-    match &path.node {
-        PathKind::RootP => String::new(),
-        PathKind::IdxP(path, exp) => format!("{}[{}]", string_of_path(path), string_of_exp(exp)),
-        PathKind::SliceP(path, low, high) => format!(
-            "{}[{} : {}]",
-            string_of_path(path),
-            string_of_exp(low),
-            string_of_exp(high)
-        ),
-        PathKind::DotP(path, atom) if matches!(path.node, PathKind::RootP) => string_of_atom(atom),
-        PathKind::DotP(path, atom) => format!("{}.{}", string_of_path(path), string_of_atom(atom)),
-    }
-}
-
-// Parameters
-
-pub fn string_of_param(param: &Param) -> String {
-    match &param.node {
-        ParamKind::ExpP(plain_typ) => string_of_plaintyp(plain_typ),
-        ParamKind::DefP(id, tparams, params, plain_typ) => format!(
-            "{}{}{} : {}",
-            string_of_defid(id),
-            string_of_tparams(tparams),
-            string_of_params(params),
-            string_of_plaintyp(plain_typ)
-        ),
-    }
-}
-
-pub fn string_of_params(params: &[Param]) -> String {
-    if params.is_empty() {
-        String::new()
-    } else {
-        format!("({})", join(params, ", ", string_of_param))
-    }
-}
-
-// Type parameters
-
-pub fn string_of_tparam(tparam: &TParam) -> String {
-    tparam.node.clone()
-}
-
-pub fn string_of_tparams(tparams: &[TParam]) -> String {
-    if tparams.is_empty() {
-        String::new()
-    } else {
-        format!("<{}>", join(tparams, ", ", string_of_tparam))
-    }
-}
-
-// Arguments
-
-pub fn string_of_arg(arg: &Arg) -> String {
-    match &arg.node {
-        ArgKind::ExpA(exp) => string_of_exp(exp),
-        ArgKind::DefA(id) => string_of_defid(id),
-    }
-}
-
-pub fn string_of_args(args: &[Arg]) -> String {
-    if args.is_empty() {
-        String::new()
-    } else {
-        format!("({})", join(args, ", ", string_of_arg))
-    }
-}
-
-// Type arguments
-
-pub fn string_of_targ(targ: &Targ) -> String {
-    string_of_plaintyp(targ)
-}
-
-pub fn string_of_targs(targs: &[Targ]) -> String {
-    if targs.is_empty() {
-        String::new()
-    } else {
-        format!("<{}>", join(targs, ", ", string_of_targ))
-    }
-}
-
-// Premises
-
-pub fn string_of_prem(prem: &Prem) -> String {
-    match &prem.node {
-        PremKind::VarPr(id, plain_typ) => format!(
-            "{} : {}",
-            string_of_varid(id),
-            string_of_plaintyp(plain_typ)
-        ),
-        PremKind::RulePr(id, exp) => format!("{}: {}", string_of_relid(id), string_of_exp(exp)),
-        PremKind::RuleNotPr(id, exp) => format!("{}:/ {}", string_of_relid(id), string_of_exp(exp)),
-        PremKind::IfPr(exp) => format!("if {}", string_of_exp(exp)),
-        PremKind::ElsePr => "otherwise".into(),
-        PremKind::IterPr(inner, iter) if matches!(inner.node, PremKind::IterPr(_, _)) => {
-            format!("{}{}", string_of_prem(inner), string_of_iter(*iter))
+impl Print for Param {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        match &self.node {
+            ParamKind::Exp(plain_typ) => plain_typ.print(printer),
+            ParamKind::Def(id, tparams, params, plain_typ) => {
+                printer.write_char('$')?;
+                id.print(printer)?;
+                if !tparams.is_empty() {
+                    printer.write_char('<')?;
+                    printer.separated(tparams, ", ")?;
+                    printer.write_char('>')?;
+                }
+                params.print(printer)?;
+                printer.write_str(" : ")?;
+                plain_typ.print(printer)
+            }
         }
-        PremKind::IterPr(inner, iter) => {
-            format!("({}){}", string_of_prem(inner), string_of_iter(*iter))
+    }
+}
+
+impl Print for [Param] {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        if self.is_empty() {
+            Ok(())
+        } else {
+            printer.write_char('(')?;
+            for (index, param) in self.iter().enumerate() {
+                if index != 0 {
+                    printer.write_str(", ")?;
+                }
+                param.print(printer)?;
+            }
+            printer.write_char(')')
         }
-        PremKind::DebugPr(exp) => format!("debug {}", string_of_exp(exp)),
     }
 }
 
-pub fn string_of_prems(prems: &[Prem]) -> String {
-    prems
-        .iter()
-        .map(|prem| format!("\n -- {}", string_of_prem(prem)))
-        .collect()
-}
+// - Arguments
 
-// Rules
-
-pub fn string_of_rule(rule: &Rule) -> String {
-    let (relid, ruleid, exp, prems) = &rule.node;
-    format!(
-        "rule {}{}:\n  {}{}",
-        string_of_relid(relid),
-        string_of_ruleid(ruleid),
-        string_of_exp(exp),
-        string_of_prems(prems)
-    )
-}
-
-pub fn string_of_rules(rules: &[Rule]) -> String {
-    join(rules, "\n", string_of_rule)
-}
-
-// Tables
-
-pub fn string_of_tablerow(table_row: &TableRow) -> String {
-    format!(
-        "{} => {}",
-        string_of_exp(&table_row.node.0),
-        string_of_exp(&table_row.node.1)
-    )
-}
-
-pub fn string_of_tablerows(table_rows: &[TableRow]) -> String {
-    join(table_rows, "\n  | ", string_of_tablerow)
-}
-
-// Definitions
-
-pub fn string_of_def(definition: &Def) -> String {
-    match &definition.node {
-        DefKind::ExternSynD(id, _) => format!("extern syntax {}", string_of_typid(id)),
-        DefKind::SynD(syntaxes) => format!(
-            "syntax {}",
-            join(syntaxes, ", ", |(id, tparams)| format!(
-                "{}{}",
-                string_of_typid(id),
-                string_of_tparams(tparams)
-            ))
-        ),
-        DefKind::TypD(id, tparams, def_typ, _) => format!(
-            "syntax {}{} = {}",
-            string_of_typid(id),
-            string_of_tparams(tparams),
-            string_of_deftyp(def_typ)
-        ),
-        DefKind::VarD(id, plain_typ, _) => format!(
-            "var {} : {}",
-            string_of_varid(id),
-            string_of_plaintyp(plain_typ)
-        ),
-        DefKind::ExternRelD(id, not_typ, _) => format!(
-            "extern relation {}: {}",
-            string_of_relid(id),
-            string_of_nottyp(not_typ)
-        ),
-        DefKind::RelD(id, not_typ, _) => format!(
-            "relation {}: {}",
-            string_of_relid(id),
-            string_of_nottyp(not_typ)
-        ),
-        DefKind::RuleGroupD(relid, groupid, rules) => format!(
-            "rulegroup {}{}:\n  {}",
-            string_of_relid(relid),
-            string_of_ruleid(groupid),
-            join(rules, "\n  ", string_of_rule)
-        ),
-        DefKind::ExternDecD(id, tparams, params, plain_typ, _) => format!(
-            "extern dec {}{}{} : {}",
-            string_of_defid(id),
-            string_of_tparams(tparams),
-            string_of_params(params),
-            string_of_plaintyp(plain_typ)
-        ),
-        DefKind::BuiltinDecD(id, tparams, params, plain_typ, _) => format!(
-            "builtin dec {}{}{} : {}",
-            string_of_defid(id),
-            string_of_tparams(tparams),
-            string_of_params(params),
-            string_of_plaintyp(plain_typ)
-        ),
-        DefKind::TableDecD(id, params, plain_typ, _) => format!(
-            "tbl dec {}{} : {}",
-            string_of_defid(id),
-            string_of_params(params),
-            string_of_plaintyp(plain_typ)
-        ),
-        DefKind::FuncDecD(id, tparams, params, plain_typ, _) => format!(
-            "dec {}{}{} : {}",
-            string_of_defid(id),
-            string_of_tparams(tparams),
-            string_of_params(params),
-            string_of_plaintyp(plain_typ)
-        ),
-        DefKind::TableDefD(id, rows) => format!(
-            "tbl def {} =\n  {}",
-            string_of_defid(id),
-            join(rows, "\n  | ", string_of_tablerow)
-        ),
-        DefKind::FuncDefD(id, tparams, args, exp, prems) => format!(
-            "def {}{}{} = {}{}",
-            string_of_defid(id),
-            string_of_tparams(tparams),
-            string_of_args(args),
-            string_of_exp(exp),
-            string_of_prems(prems)
-        ),
-        DefKind::SepD => "\n\n".into(),
+impl Print for Arg {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        match &self.node {
+            ArgKind::Exp(exp) => exp.print(printer),
+            ArgKind::Def(id) => {
+                printer.write_char('$')?;
+                id.print(printer)
+            }
+        }
     }
 }
 
-// Spec
+impl Print for [Arg] {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        if self.is_empty() {
+            Ok(())
+        } else {
+            printer.write_char('(')?;
+            for (index, arg) in self.iter().enumerate() {
+                if index != 0 {
+                    printer.write_str(", ")?;
+                }
+                arg.print(printer)?;
+            }
+            printer.write_char(')')
+        }
+    }
+}
 
-pub fn string_of_spec(spec: &Spec) -> String {
-    spec.iter()
-        .map(|definition| format!("{}\n", string_of_def(definition)))
-        .collect()
+// - Premises
+
+impl Print for Prem {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        match &self.node {
+            PremKind::Var(VarPrem { id, plain_typ }) => {
+                id.print(printer)?;
+                printer.write_str(" : ")?;
+                plain_typ.print(printer)
+            }
+            PremKind::Rule(RulePrem { id, exp }) => {
+                id.print(printer)?;
+                printer.write_str(": ")?;
+                exp.print(printer)
+            }
+            PremKind::RuleNot(RuleNotPrem { id, exp }) => {
+                id.print(printer)?;
+                printer.write_str(":/ ")?;
+                exp.print(printer)
+            }
+            PremKind::If(IfPrem { exp }) => {
+                printer.write_str("if ")?;
+                exp.print(printer)
+            }
+            PremKind::Else => printer.write_str("otherwise"),
+            PremKind::Iter(IterPrem { prem: inner, iter })
+                if matches!(inner.node, PremKind::Iter(_)) =>
+            {
+                inner.print(printer)?;
+                iter.print(printer)
+            }
+            PremKind::Iter(IterPrem { prem: inner, iter }) => {
+                printer.write_char('(')?;
+                inner.print(printer)?;
+                printer.write_char(')')?;
+                iter.print(printer)
+            }
+            PremKind::Debug(DebugPrem { exp }) => {
+                printer.write_str("debug ")?;
+                exp.print(printer)
+            }
+        }
+    }
+}
+
+impl Print for [Prem] {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        for prem in self {
+            printer.write_str("\n -- ")?;
+            prem.print(printer)?;
+        }
+        Ok(())
+    }
+}
+
+// - Rules
+
+impl Print for Rule {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        printer.write_str("rule ")?;
+        self.node.0.print(printer)?;
+        if !self.node.1.node.is_empty() {
+            printer.write_char('/')?;
+            self.node.1.print(printer)?;
+        }
+        printer.write_str(":\n  ")?;
+        self.node.2.print(printer)?;
+        self.node.3.print(printer)
+    }
+}
+
+impl Print for [Rule] {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        for (index, rule) in self.iter().enumerate() {
+            if index != 0 {
+                printer.write_char('\n')?;
+            }
+            rule.print(printer)?;
+        }
+        Ok(())
+    }
+}
+
+// - Tables
+
+impl Print for TableRow {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        self.node.0.print(printer)?;
+        printer.write_str(" => ")?;
+        self.node.1.print(printer)
+    }
+}
+
+impl Print for [TableRow] {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        for (index, row) in self.iter().enumerate() {
+            if index != 0 {
+                printer.write_str("\n  | ")?;
+            }
+            row.print(printer)?;
+        }
+        Ok(())
+    }
+}
+
+// - Definitions
+
+impl Print for Def {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        match &self.node {
+            DefKind::ExternSyntax(ExternSyntaxDef { id, .. }) => {
+                printer.write_str("extern syntax ")?;
+                id.print(printer)
+            }
+            DefKind::Syntax(SyntaxDef { entries }) => {
+                printer.write_str("syntax ")?;
+                for (index, SyntaxDefEntry { id, tparams }) in entries.iter().enumerate() {
+                    if index != 0 {
+                        printer.write_str(", ")?;
+                    }
+                    id.print(printer)?;
+                    if !tparams.is_empty() {
+                        printer.write_char('<')?;
+                        printer.separated(tparams, ", ")?;
+                        printer.write_char('>')?;
+                    }
+                }
+                Ok(())
+            }
+            DefKind::Typ(TypDef {
+                id,
+                tparams,
+                def_typ,
+                ..
+            }) => {
+                printer.write_str("syntax ")?;
+                id.print(printer)?;
+                if !tparams.is_empty() {
+                    printer.write_char('<')?;
+                    printer.separated(tparams, ", ")?;
+                    printer.write_char('>')?;
+                }
+                printer.write_str(" = ")?;
+                def_typ.print(printer)
+            }
+            DefKind::Var(VarDef { id, plain_typ, .. }) => {
+                printer.write_str("var ")?;
+                id.print(printer)?;
+                printer.write_str(" : ")?;
+                plain_typ.print(printer)
+            }
+            DefKind::ExternRel(ExternRelDef { id, not_typ, .. }) => {
+                printer.write_str("extern relation ")?;
+                id.print(printer)?;
+                printer.write_str(": ")?;
+                not_typ.print(printer)
+            }
+            DefKind::Rel(RelDef { id, not_typ, .. }) => {
+                printer.write_str("relation ")?;
+                id.print(printer)?;
+                printer.write_str(": ")?;
+                not_typ.print(printer)
+            }
+            DefKind::RuleGroup(RuleGroupDef {
+                relid,
+                groupid,
+                rules,
+            }) => {
+                printer.write_str("rulegroup ")?;
+                relid.print(printer)?;
+                if !groupid.node.is_empty() {
+                    printer.write_char('/')?;
+                    groupid.print(printer)?;
+                }
+                printer.write_str(":\n  ")?;
+                for (index, rule) in rules.iter().enumerate() {
+                    if index != 0 {
+                        printer.write_str("\n  ")?;
+                    }
+                    rule.print(printer)?;
+                }
+                Ok(())
+            }
+            DefKind::ExternDec(ExternDecDef {
+                id,
+                tparams,
+                params,
+                plain_typ,
+                ..
+            }) => {
+                printer.write_str("extern dec $")?;
+                id.print(printer)?;
+                if !tparams.is_empty() {
+                    printer.write_char('<')?;
+                    printer.separated(tparams, ", ")?;
+                    printer.write_char('>')?;
+                }
+                params.print(printer)?;
+                printer.write_str(" : ")?;
+                plain_typ.print(printer)
+            }
+            DefKind::BuiltinDec(BuiltinDecDef {
+                id,
+                tparams,
+                params,
+                plain_typ,
+                ..
+            }) => {
+                printer.write_str("builtin dec $")?;
+                id.print(printer)?;
+                if !tparams.is_empty() {
+                    printer.write_char('<')?;
+                    printer.separated(tparams, ", ")?;
+                    printer.write_char('>')?;
+                }
+                params.print(printer)?;
+                printer.write_str(" : ")?;
+                plain_typ.print(printer)
+            }
+            DefKind::TableDec(TableDecDef {
+                id,
+                params,
+                plain_typ,
+                ..
+            }) => {
+                printer.write_str("tbl dec $")?;
+                id.print(printer)?;
+                params.print(printer)?;
+                printer.write_str(" : ")?;
+                plain_typ.print(printer)
+            }
+            DefKind::FuncDec(FuncDecDef {
+                id,
+                tparams,
+                params,
+                plain_typ,
+                ..
+            }) => {
+                printer.write_str("dec $")?;
+                id.print(printer)?;
+                if !tparams.is_empty() {
+                    printer.write_char('<')?;
+                    printer.separated(tparams, ", ")?;
+                    printer.write_char('>')?;
+                }
+                params.print(printer)?;
+                printer.write_str(" : ")?;
+                plain_typ.print(printer)
+            }
+            DefKind::TableDef(TableDef { id, rows }) => {
+                printer.write_str("tbl def $")?;
+                id.print(printer)?;
+                printer.write_str(" =\n  ")?;
+                for (index, row) in rows.iter().enumerate() {
+                    if index != 0 {
+                        printer.write_str("\n  | ")?;
+                    }
+                    row.node.0.print(printer)?;
+                    printer.write_str(" => ")?;
+                    row.node.1.print(printer)?;
+                }
+                Ok(())
+            }
+            DefKind::FuncDef(FuncDef {
+                id,
+                tparams,
+                args,
+                exp,
+                prems,
+            }) => {
+                printer.write_str("def $")?;
+                id.print(printer)?;
+                if !tparams.is_empty() {
+                    printer.write_char('<')?;
+                    printer.separated(tparams, ", ")?;
+                    printer.write_char('>')?;
+                }
+                args.print(printer)?;
+                printer.write_str(" = ")?;
+                exp.print(printer)?;
+                prems.print(printer)
+            }
+            DefKind::Sep => printer.write_str("\n\n"),
+        }
+    }
+}
+
+// - Specifications
+
+impl Print for Spec {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        for definition in self {
+            definition.print(printer)?;
+            printer.write_char('\n')?;
+        }
+        Ok(())
+    }
 }

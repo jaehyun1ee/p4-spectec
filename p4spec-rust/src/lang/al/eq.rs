@@ -1,57 +1,174 @@
-//! Equality for algorithmic language data
+//! Syntax equality for algorithmic-language data
+//!
+//! Reuses IL equality for aliases and compares AL-specific rule structure
 
-// Identifiers
+use crate::lang::traits::eq::SyntaxEq;
 
-pub use crate::lang::il::eq::eq_id;
+use super::ast::*;
 
-// Atoms
+// == Syntax equality
 
-pub use crate::lang::il::eq::{eq_atom, eq_atoms};
+// - Rules
 
-// Mixfix operators
+impl SyntaxEq for RuleMatch {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.exps_signature.syntax_eq(&other.exps_signature)
+            && self.exps_input.syntax_eq(&other.exps_input)
+            && self.prems.syntax_eq(&other.prems)
+    }
+}
 
-pub use crate::lang::il::eq::eq_mixop;
+impl SyntaxEq for RulePath {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.id.syntax_eq(&other.id)
+            && self.prems.syntax_eq(&other.prems)
+            && self.exps_output.syntax_eq(&other.exps_output)
+    }
+}
 
-// Iterators
+impl SyntaxEq for RuleGroupKind {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.id.syntax_eq(&other.id)
+            && self.rule_match.syntax_eq(&other.rule_match)
+            && self.rule_paths.syntax_eq(&other.rule_paths)
+    }
+}
 
-pub use crate::lang::il::eq::{eq_iter, eq_iters};
+impl SyntaxEq for ElseGroupKind {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.id.syntax_eq(&other.id)
+            && self.rule_match.syntax_eq(&other.rule_match)
+            && self.rule_path.syntax_eq(&other.rule_path)
+    }
+}
 
-// Variables
+// - Table rows
 
-pub use crate::lang::il::eq::{eq_var, eq_vars};
+impl SyntaxEq for TableRowKind {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.exps_signature.syntax_eq(&other.exps_signature)
+            && self.args.syntax_eq(&other.args)
+            && self.exp.syntax_eq(&other.exp)
+            && self.prems.syntax_eq(&other.prems)
+    }
+}
 
-// Types
+// - Definitions
 
-pub use crate::lang::il::eq::{eq_nottyp, eq_typ, eq_typs};
+impl SyntaxEq for ExternTypDef {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.id.syntax_eq(&other.id) && self.hints.syntax_eq(&other.hints)
+    }
+}
 
-// Values
+impl SyntaxEq for TypDef {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.id.syntax_eq(&other.id)
+            && self.tparams.syntax_eq(&other.tparams)
+            && self.def_typ.syntax_eq(&other.def_typ)
+            && self.hints.syntax_eq(&other.hints)
+    }
+}
 
-pub use crate::lang::il::eq::{eq_value, eq_values};
+impl SyntaxEq for VarDef {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.id.syntax_eq(&other.id)
+            && self.typ.syntax_eq(&other.typ)
+            && self.hints.syntax_eq(&other.hints)
+    }
+}
 
-// Expressions
+impl SyntaxEq for ExternRelDef {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.id.syntax_eq(&other.id)
+            && self.not_typ.syntax_eq(&other.not_typ)
+            && self.input_hint == other.input_hint
+            && self.hints.syntax_eq(&other.hints)
+    }
+}
 
-pub use crate::lang::il::eq::{eq_exp, eq_exps, eq_iterexp, eq_iterexps};
+impl SyntaxEq for RelDef {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.id.syntax_eq(&other.id)
+            && self.not_typ.syntax_eq(&other.not_typ)
+            && self.input_hint == other.input_hint
+            && self.rule_groups.syntax_eq(&other.rule_groups)
+            && match (&self.else_group, &other.else_group) {
+                (Some(group_l), Some(group_r)) => group_l.syntax_eq(group_r),
+                (None, None) => true,
+                _ => false,
+            }
+            && self.hints.syntax_eq(&other.hints)
+    }
+}
 
-// Patterns
+impl SyntaxEq for ExternDecDef {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.id.syntax_eq(&other.id)
+            && self.tparams.syntax_eq(&other.tparams)
+            && self.params.syntax_eq(&other.params)
+            && self.typ.syntax_eq(&other.typ)
+            && self.hints.syntax_eq(&other.hints)
+    }
+}
 
-pub use crate::lang::il::eq::eq_pattern;
+impl SyntaxEq for BuiltinDecDef {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.id.syntax_eq(&other.id)
+            && self.tparams.syntax_eq(&other.tparams)
+            && self.params.syntax_eq(&other.params)
+            && self.typ.syntax_eq(&other.typ)
+            && self.hints.syntax_eq(&other.hints)
+    }
+}
 
-// Paths
+impl SyntaxEq for TableDecDef {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.id.syntax_eq(&other.id)
+            && self.params.syntax_eq(&other.params)
+            && self.typ.syntax_eq(&other.typ)
+            && self.table_rows.syntax_eq(&other.table_rows)
+            && self.hints.syntax_eq(&other.hints)
+    }
+}
 
-pub use crate::lang::il::eq::eq_path;
+impl SyntaxEq for FuncDecDef {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.id.syntax_eq(&other.id)
+            && self.tparams.syntax_eq(&other.tparams)
+            && self.params.syntax_eq(&other.params)
+            && self.typ.syntax_eq(&other.typ)
+            && self.clauses.syntax_eq(&other.clauses)
+            && match (&self.else_clause, &other.else_clause) {
+                (Some(clause_l), Some(clause_r)) => clause_l.syntax_eq(clause_r),
+                (None, None) => true,
+                _ => false,
+            }
+            && self.hints.syntax_eq(&other.hints)
+    }
+}
 
-// Type parameters
+impl SyntaxEq for DefKind {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (DefKind::ExternTyp(def_l), DefKind::ExternTyp(def_r)) => def_l.syntax_eq(def_r),
+            (DefKind::Typ(def_l), DefKind::Typ(def_r)) => def_l.syntax_eq(def_r),
+            (DefKind::Var(def_l), DefKind::Var(def_r)) => def_l.syntax_eq(def_r),
+            (DefKind::ExternRel(def_l), DefKind::ExternRel(def_r)) => def_l.syntax_eq(def_r),
+            (DefKind::Rel(def_l), DefKind::Rel(def_r)) => def_l.syntax_eq(def_r),
+            (DefKind::ExternDec(def_l), DefKind::ExternDec(def_r)) => def_l.syntax_eq(def_r),
+            (DefKind::BuiltinDec(def_l), DefKind::BuiltinDec(def_r)) => def_l.syntax_eq(def_r),
+            (DefKind::TableDec(def_l), DefKind::TableDec(def_r)) => def_l.syntax_eq(def_r),
+            (DefKind::FuncDec(def_l), DefKind::FuncDec(def_r)) => def_l.syntax_eq(def_r),
+            _ => false,
+        }
+    }
+}
 
-pub use crate::lang::il::eq::{eq_tparam, eq_tparams};
+// - Specifications
 
-// Arguments
-
-pub use crate::lang::il::eq::{eq_arg, eq_args};
-
-// Type arguments
-
-pub use crate::lang::il::eq::{eq_targ, eq_targs};
-
-// Premises
-
-pub use crate::lang::il::eq::{eq_iterprem, eq_iterprems, eq_prem};
+impl SyntaxEq for Spec {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.as_slice().syntax_eq(other.as_slice())
+    }
+}

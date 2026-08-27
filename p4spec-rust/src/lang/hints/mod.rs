@@ -1,3 +1,5 @@
+//! Language hints and their utilities
+
 pub mod alter;
 pub mod fields;
 pub mod flag;

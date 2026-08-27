@@ -1,60 +1,67 @@
 //! Booleans
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum T {
-    BoolT,
-}
+use std::fmt;
+
+use crate::lang::traits::print::{Print, Printer};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Typ {
-    BoolT,
+    Bool,
 }
 
 // Operations
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum UnOp {
-    NotOp,
+    Not,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum BinOp {
-    AndOp,
-    OrOp,
-    ImplOp,
-    EquivOp,
+    And,
+    Or,
+    Impl,
+    Equiv,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum CmpOp {
-    EqOp,
-    NeOp,
+    Eq,
+    Ne,
 }
 
 // Stringifiers
 
-pub fn string_of_bool(value: bool) -> &'static str {
-    if value { "true" } else { "false" }
-}
-
-pub fn string_of_unop(operation: UnOp) -> &'static str {
-    match operation {
-        UnOp::NotOp => "~",
+impl Print for Typ {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        printer.write("bool")
     }
 }
 
-pub fn string_of_binop(operation: BinOp) -> &'static str {
-    match operation {
-        BinOp::AndOp => "/\\",
-        BinOp::OrOp => "\\/",
-        BinOp::ImplOp => "=>",
-        BinOp::EquivOp => "<=>",
+impl Print for UnOp {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        printer.write(match self {
+            Self::Not => "~",
+        })
     }
 }
 
-pub fn string_of_cmpop(operation: CmpOp) -> &'static str {
-    match operation {
-        CmpOp::EqOp => "=",
-        CmpOp::NeOp => "=/=",
+impl Print for BinOp {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        printer.write(match self {
+            Self::And => "/\\",
+            Self::Or => "\\/",
+            Self::Impl => "=>",
+            Self::Equiv => "<=>",
+        })
+    }
+}
+
+impl Print for CmpOp {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        printer.write(match self {
+            Self::Eq => "=",
+            Self::Ne => "=/=",
+        })
     }
 }

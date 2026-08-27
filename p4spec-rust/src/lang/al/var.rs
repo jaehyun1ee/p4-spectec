@@ -1,11 +1,14 @@
+//! Algorithmic-language variable expressions
+
 use super::ast::*;
 
-// Variable with type and dimention
+// == Variables
 
-pub type T = Var;
+pub type Variable = Var;
 
-// Conversion to expression
+// - Conversion to expressions
 
-pub fn as_exp(var: &T, dim: bool) -> Exp {
-    crate::lang::il::var::as_exp(var, dim)
+/// Converts a variable to an expression
+pub fn as_exp(is_dim: bool, var: &Variable) -> Exp {
+    crate::lang::il::var::as_exp(is_dim, var)
 }
