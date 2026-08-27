@@ -26,6 +26,10 @@ debug
 .claude/
 CLAUDE.local.md
 
+# Local agent planning artifacts
+/p4spec-rust/docs/superpowers/plans/
+/p4spec-rust/docs/superpowers/specs/
+
 # direnv
 .direnv
 .envrc
