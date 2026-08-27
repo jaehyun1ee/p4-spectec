@@ -50,6 +50,18 @@ pub enum SyntaxErrorKind {
     UnexpectedToken,
     #[error("extra token")]
     ExtraToken,
+    #[error("expected notation type")]
+    ExpectedNotationType,
+    #[error("empty struct type")]
+    EmptyStructType,
+    #[error("empty variant type")]
+    EmptyVariantType,
+    #[error("empty type")]
+    EmptyType,
+    #[error("hints not allowed in plain type definition")]
+    HintsInPlainTypeDefinition,
+    #[error("empty syntax declaration")]
+    EmptySyntaxDeclaration,
 }
 
 /// A syntax failure paired with the source span reported by the parser

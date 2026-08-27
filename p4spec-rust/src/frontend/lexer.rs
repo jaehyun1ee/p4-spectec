@@ -30,6 +30,8 @@ pub enum Token {
     NewlineBar,
     Newline2,
     Newline3,
+    /// Parser-only marker for juxtaposed grammar atoms
+    Sequence,
     Subtype,
     Turnstile,
     Tilesturn,
@@ -76,6 +78,8 @@ pub enum Token {
     Minus,
     Dash,
     Star,
+    /// Parser-only spelling of `*` when it closes an iterated expression
+    IterStar,
     Slash,
     Backslash,
     Hole,
