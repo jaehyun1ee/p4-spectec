@@ -54,6 +54,22 @@ fn free_identifier_sets_preserve_source_spans() {
 }
 
 #[test]
+fn free_identifiers_accumulate_into_the_callers_set() {
+    let id_existing = id("existing", "existing");
+    let id_collected = id("collected", "expression");
+    let exp = il::ast::exp(
+        il::ast::ExpKind::Var(id_collected.clone()),
+        il::ast::TypKind::Bool,
+        Span::default(),
+    );
+    let mut ids = IdSet::from([id_existing.clone()]);
+
+    exp.collect_free(&mut ids);
+
+    assert_eq!(ids, IdSet::from([id_collected, id_existing]));
+}
+
+#[test]
 fn fresh_variables_lookup_aliases_by_identifier_text() {
     let span_requested = Span::new(
         Position::new("requested", 0, 0),

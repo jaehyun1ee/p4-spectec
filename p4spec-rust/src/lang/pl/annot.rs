@@ -39,8 +39,8 @@ impl<N: SyntaxEq> SyntaxEq for Annotated<N> {
 }
 
 impl<N: Free> Free for Annotated<N> {
-    fn free(&self) -> IdSet {
-        self.node.free()
+    fn collect_free(&self, free: &mut IdSet) {
+        self.node.collect_free(free);
     }
 }
 

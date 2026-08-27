@@ -194,15 +194,16 @@ impl<T: Hash> Hash for Mixfix<T> {
 // == Free identifiers
 
 impl<T: Free> Free for Mixfix<T> {
-    fn free(&self) -> IdSet {
+    fn collect_free(&self, free: &mut IdSet) {
         match self {
-            Self::Arg(arg) => arg.free(),
-            Self::Atom(_) => IdSet::new(),
-            Self::Brack(_, mixfix, _) => mixfix.free(),
-            Self::Infix(mixfix_l, _, mixfix_r) => mixfix_l.free().union(mixfix_r.free()),
-            Self::Seq(mixfixes) => mixfixes
-                .iter()
-                .fold(IdSet::new(), |free, mixfix| free.union(mixfix.free())),
+            Self::Arg(arg) => arg.collect_free(free),
+            Self::Atom(_) => {}
+            Self::Brack(_, mixfix, _) => mixfix.collect_free(free),
+            Self::Infix(mixfix_l, _, mixfix_r) => {
+                mixfix_l.collect_free(free);
+                mixfix_r.collect_free(free);
+            }
+            Self::Seq(mixfixes) => mixfixes.as_slice().collect_free(free),
         }
     }
 }

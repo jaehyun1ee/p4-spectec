@@ -29,9 +29,7 @@ impl SyntaxEq for () {
 }
 
 impl Free for () {
-    fn free(&self) -> IdSet {
-        IdSet::new()
-    }
+    fn collect_free(&self, _free: &mut IdSet) {}
 }
 
 // == Converting a mixfix to a mixop

@@ -119,9 +119,7 @@ impl SyntaxEq for Atom {
 }
 
 impl Free for Atom {
-    fn free(&self) -> IdSet {
-        IdSet::new()
-    }
+    fn collect_free(&self, _free: &mut IdSet) {}
 }
 
 // == String conversion and parsing
