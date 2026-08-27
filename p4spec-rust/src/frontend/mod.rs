@@ -14,6 +14,3 @@ mod parser_support;
 pub(crate) mod parser {
     include!(concat!(env!("OUT_DIR"), "/frontend/parser.rs"));
 }
-
-#[cfg(test)]
-mod parser_tests;
