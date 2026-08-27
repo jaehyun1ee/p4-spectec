@@ -66,6 +66,48 @@ impl Renderer<&str> for StringRenderer {
     }
 }
 
+struct NonCloneOutput(String);
+
+struct NonCloneRenderer;
+
+impl Renderer<&str> for NonCloneRenderer {
+    type Output = NonCloneOutput;
+
+    fn empty(&self) -> NonCloneOutput {
+        NonCloneOutput(String::new())
+    }
+    fn text(&self, text: &str) -> Option<NonCloneOutput> {
+        Some(NonCloneOutput(text.to_owned()))
+    }
+    fn atom(&self, atom: &ast::Atom) -> NonCloneOutput {
+        NonCloneOutput(atom.node.to_string())
+    }
+    fn join(&self, items: Vec<NonCloneOutput>) -> NonCloneOutput {
+        NonCloneOutput(items.into_iter().map(|item| item.0).collect())
+    }
+    fn fuse(&self, left: NonCloneOutput, right: NonCloneOutput) -> NonCloneOutput {
+        NonCloneOutput(left.0 + &right.0)
+    }
+    fn other(&self, _exp: &ast::Exp) -> NonCloneOutput {
+        self.empty()
+    }
+    fn item(&self, item: &&str) -> NonCloneOutput {
+        NonCloneOutput((*item).to_owned())
+    }
+}
+
+#[test]
+fn alteration_output_does_not_need_to_be_clone() {
+    let output = alter::alternate(
+        &AlterationHint::Text("text".to_owned()),
+        &[] as &[&str],
+        &NonCloneRenderer,
+    )
+    .unwrap();
+
+    assert_eq!(output.0, "text");
+}
+
 #[test]
 fn input_hints_validate_and_preserve_split_order() {
     let sequence = exp(ExpKind::Seq(vec![

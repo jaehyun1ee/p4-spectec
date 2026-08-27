@@ -193,7 +193,7 @@ pub fn realign(
 
 /// Renders alteration pieces into a caller-defined output
 pub trait Renderer<Item> {
-    type Output: Clone;
+    type Output;
     fn empty(&self) -> Self::Output;
     fn text(&self, text: &str) -> Option<Self::Output>;
     fn atom(&self, atom: &Atom) -> Self::Output;

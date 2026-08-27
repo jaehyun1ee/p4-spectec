@@ -62,15 +62,6 @@ impl<N> Annotated<N> {
         }
     }
 
-    /// Borrows the node;
-    /// clones prose hints
-    pub fn as_ref(&self) -> Annotated<&N> {
-        Annotated {
-            node: &self.node,
-            hints: self.hints.clone(),
-        }
-    }
-
     /// Splits node ownership from hint ownership
     pub fn into_parts(self) -> (N, Hints) {
         (self.node, self.hints)
