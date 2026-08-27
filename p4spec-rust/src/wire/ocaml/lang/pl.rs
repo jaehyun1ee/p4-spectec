@@ -14,8 +14,8 @@ use crate::{
 
 use super::{
     super::{
-        DecodeError, EncodeError, array, boolean, field, integer, object, on_codec_stack, string,
-        variant,
+        DecodeError, EncodeError, array, boolean, decode_list, decode_option, encode_list,
+        encode_option, field, integer, object, on_codec_stack, string, variant,
     },
     el, il, xl,
 };
@@ -48,27 +48,12 @@ pub struct SpecCodec;
 
 impl SpecCodec {
     pub fn decode(value: &Value) -> Result<ast::Spec, DecodeError> {
-        on_codec_stack(|| il::decode_list(value, decode_def))
+        on_codec_stack(|| decode_list(value, decode_def))
     }
 
     pub fn encode(spec: &ast::Spec) -> Result<Value, EncodeError> {
-        on_codec_stack(|| Ok(il::encode_list(spec, encode_def)))
+        on_codec_stack(|| Ok(encode_list(spec, encode_def)))
     }
-}
-
-fn decode_option<T>(
-    value: &Value,
-    decode: impl FnOnce(&Value) -> Result<T, DecodeError>,
-) -> Result<Option<T>, DecodeError> {
-    if value.is_null() {
-        Ok(None)
-    } else {
-        Ok(Some(decode(value)?))
-    }
-}
-
-fn encode_option<T>(value: Option<&T>, encode: impl FnOnce(&T) -> Value) -> Value {
-    value.map_or(Value::Null, encode)
 }
 
 fn decode_alter(value: &Value) -> Result<alter::AlterationHint, DecodeError> {
@@ -76,7 +61,7 @@ fn decode_alter(value: &Value) -> Result<alter::AlterationHint, DecodeError> {
     match (tag, fields) {
         ("TextH", [text]) => Ok(alter::AlterationHint::Text(string(text)?.to_owned())),
         ("AtomH", [atom]) => Ok(alter::AlterationHint::Atom(AtomPhraseCodec::decode(atom)?)),
-        ("SeqH", [hints]) => Ok(alter::AlterationHint::Seq(il::decode_list(
+        ("SeqH", [hints]) => Ok(alter::AlterationHint::Seq(decode_list(
             hints,
             decode_alter,
         )?)),
@@ -113,7 +98,7 @@ fn encode_alter(hint: &alter::AlterationHint) -> Value {
         alter::AlterationHint::Text(text) => json!(["TextH", text]),
         alter::AlterationHint::Atom(atom) => json!(["AtomH", AtomPhraseCodec::encode(atom)]),
         alter::AlterationHint::Seq(hints) => {
-            json!(["SeqH", il::encode_list(hints, encode_alter)])
+            json!(["SeqH", encode_list(hints, encode_alter)])
         }
         alter::AlterationHint::Brack(left, hint, right) => json!([
             "BrackH",
@@ -141,15 +126,15 @@ fn decode_hints(value: &Value) -> Result<annot::Hints, DecodeError> {
         prose_true: decode_option(field(value, "prose_true")?, decode_alter)?,
         prose_false: decode_option(field(value, "prose_false")?, decode_alter)?,
         prose_fields: decode_option(field(value, "prose_fields")?, |value| {
-            Ok(fields::FieldHint::new(il::decode_list(value, |value| {
+            Ok(fields::FieldHint::new(decode_list(value, |value| {
                 Ok(string(value)?.to_owned())
             })?))
         })?,
         prose_input_exps: decode_option(field(value, "prose_input_exps")?, |value| {
-            il::decode_list(value, il::decode_exp)
+            decode_list(value, il::decode_exp)
         })?,
         prose_output_exps: decode_option(field(value, "prose_output_exps")?, |value| {
-            il::decode_list(value, il::decode_exp)
+            decode_list(value, il::decode_exp)
         })?,
     })
 }
@@ -162,8 +147,8 @@ fn encode_hints(hints: &annot::Hints) -> Value {
         "prose_true": encode_option(hints.prose_true.as_ref(), encode_alter),
         "prose_false": encode_option(hints.prose_false.as_ref(), encode_alter),
         "prose_fields": encode_option(hints.prose_fields.as_ref(), |fields| json!(fields.fields())),
-        "prose_input_exps": encode_option(hints.prose_input_exps.as_ref(), |exps| il::encode_list(exps, il::encode_exp)),
-        "prose_output_exps": encode_option(hints.prose_output_exps.as_ref(), |exps| il::encode_list(exps, il::encode_exp)),
+        "prose_input_exps": encode_option(hints.prose_input_exps.as_ref(), |exps| encode_list(exps, il::encode_exp)),
+        "prose_output_exps": encode_option(hints.prose_output_exps.as_ref(), |exps| encode_list(exps, il::encode_exp)),
     })
 }
 
@@ -235,19 +220,18 @@ fn decode_exp_kind(value: &Value) -> Result<ExpKind, DecodeError> {
             Box::new(decode_exp(exp)?),
             il::decode_pattern(pattern)?,
         )),
-        ("TupleE", [exps]) => Ok(ExpKind::Tuple(il::decode_list(exps, decode_exp)?)),
+        ("TupleE", [exps]) => Ok(ExpKind::Tuple(decode_list(exps, decode_exp)?)),
         ("CaseE", [exp]) => Ok(ExpKind::Case(Box::new(mixfix::decode(exp, decode_exp)?))),
-        ("StrE", [fields]) => Ok(ExpKind::Str(il::decode_list(
-            fields,
-            |value| match array(value)? {
+        ("StrE", [fields]) => Ok(ExpKind::Str(decode_list(fields, |value| {
+            match array(value)? {
                 [atom, exp] => Ok((AtomPhraseCodec::decode(atom)?, decode_exp(exp)?)),
                 _ => Err(DecodeError::Expected("PL structure field pair")),
-            },
-        )?)),
+            }
+        })?)),
         ("OptE", [exp]) => Ok(ExpKind::Opt(decode_option(exp, |exp| {
             Ok(Box::new(decode_exp(exp)?))
         })?)),
-        ("ListE", [exps]) => Ok(ExpKind::List(il::decode_list(exps, decode_exp)?)),
+        ("ListE", [exps]) => Ok(ExpKind::List(decode_list(exps, decode_exp)?)),
         ("ConsE", [left, right]) => Ok(ExpKind::Cons(
             Box::new(decode_exp(left)?),
             Box::new(decode_exp(right)?),
@@ -281,8 +265,8 @@ fn decode_exp_kind(value: &Value) -> Result<ExpKind, DecodeError> {
         )),
         ("CallE", [id, targs, args]) => Ok(ExpKind::Call(
             il::decode_id(id)?,
-            il::decode_list(targs, il::decode_targ)?,
-            il::decode_list(args, decode_arg)?,
+            decode_list(targs, il::decode_targ)?,
+            decode_list(args, decode_arg)?,
         )),
         ("IterE", [exp, iter]) => Ok(ExpKind::Iter(
             Box::new(decode_exp(exp)?),
@@ -335,7 +319,7 @@ fn encode_exp_kind(exp: &ExpKind) -> Value {
         ExpKind::Match(exp, pattern) => {
             json!(["MatchE", encode_exp(exp), il::encode_pattern(pattern)])
         }
-        ExpKind::Tuple(exps) => json!(["TupleE", il::encode_list(exps, encode_exp)]),
+        ExpKind::Tuple(exps) => json!(["TupleE", encode_list(exps, encode_exp)]),
         ExpKind::Case(exp) => json!(["CaseE", mixfix::encode(exp, encode_exp)]),
         ExpKind::Str(fields) => json!([
             "StrE",
@@ -345,7 +329,7 @@ fn encode_exp_kind(exp: &ExpKind) -> Value {
                 .collect::<Vec<_>>()
         ]),
         ExpKind::Opt(exp) => json!(["OptE", encode_option(exp.as_deref(), encode_exp)]),
-        ExpKind::List(exps) => json!(["ListE", il::encode_list(exps, encode_exp)]),
+        ExpKind::List(exps) => json!(["ListE", encode_list(exps, encode_exp)]),
         ExpKind::Cons(left, right) => json!(["ConsE", encode_exp(left), encode_exp(right)]),
         ExpKind::Cat(left, right) => json!(["CatE", encode_exp(left), encode_exp(right)]),
         ExpKind::Mem(left, right) => json!(["MemE", encode_exp(left), encode_exp(right)]),
@@ -364,8 +348,8 @@ fn encode_exp_kind(exp: &ExpKind) -> Value {
         ExpKind::Call(id, targs, args) => json!([
             "CallE",
             il::encode_id(id),
-            il::encode_list(targs, il::encode_targ),
-            il::encode_list(args, encode_arg)
+            encode_list(targs, il::encode_targ),
+            encode_list(args, encode_arg)
         ]),
         ExpKind::Iter(exp, iter) => json!(["IterE", encode_exp(exp), il::encode_iter_exp(iter)]),
     }
@@ -455,8 +439,8 @@ fn decode_param(value: &Value) -> Result<ast::Param, DecodeError> {
             )),
             ("DefP", [id, tparams, params, typ]) => Ok(ParamKind::Def(
                 il::decode_id(id)?,
-                il::decode_list(tparams, il::decode_tparam)?,
-                il::decode_list(params, decode_param)?,
+                decode_list(tparams, il::decode_tparam)?,
+                decode_list(params, decode_param)?,
                 il::decode_typ(typ)?,
             )),
             ("ExpP" | "DefP", _) => Err(DecodeError::Expected("valid PL parameter arity")),
@@ -471,8 +455,8 @@ fn encode_param(param: &ast::Param) -> Value {
         ParamKind::Def(id, tparams, params, typ) => json!([
             "DefP",
             il::encode_id(id),
-            il::encode_list(tparams, il::encode_tparam),
-            il::encode_list(params, encode_param),
+            encode_list(tparams, il::encode_tparam),
+            encode_list(params, encode_param),
             il::encode_typ(typ)
         ]),
     })
@@ -598,11 +582,11 @@ fn decode_block<T>(
     value: &Value,
     decode_tier: fn(&Value) -> Result<T, DecodeError>,
 ) -> Result<ast::Block<T>, DecodeError> {
-    il::decode_list(value, |value| decode_instr(value, decode_tier))
+    decode_list(value, |value| decode_instr(value, decode_tier))
 }
 
 fn encode_block<T>(block: &ast::Block<T>, encode_tier: fn(&T) -> Value) -> Value {
-    il::encode_list(block, |instr| encode_instr(instr, encode_tier))
+    encode_list(block, |instr| encode_instr(instr, encode_tier))
 }
 
 fn decode_hold_case<T>(
@@ -654,19 +638,19 @@ fn decode_instr_kind<T>(
     match (tag, fields) {
         ("IfI", [exp, iters, block, dangle]) => Ok(InstrKind::If(IfInstr {
             exp: decode_exp(exp)?,
-            iter_exps: il::decode_list(iters, il::decode_iter_exp)?,
+            iter_exps: decode_list(iters, il::decode_iter_exp)?,
             block: decode_block(block, decode_tier)?,
             dangle: boolean(dangle)?,
         })),
         ("HoldI", [id, exp, iters, case]) => Ok(InstrKind::Hold(HoldInstr {
             id: il::decode_id(id)?,
             not_exp: mixfix::decode(exp, decode_exp)?,
-            iter_exps: il::decode_list(iters, il::decode_iter_exp)?,
+            iter_exps: decode_list(iters, il::decode_iter_exp)?,
             hold_case: decode_hold_case(case, decode_tier)?,
         })),
         ("CaseI", [exp, cases, dangle]) => Ok(InstrKind::Case(CaseInstr {
             exp: decode_exp(exp)?,
-            cases: il::decode_list(cases, |value| match array(value)? {
+            cases: decode_list(cases, |value| match array(value)? {
                 [guard, block] => Ok(ast::Case {
                     guard: decode_guard(guard)?,
                     block: decode_block(block, decode_tier)?,
@@ -678,13 +662,13 @@ fn decode_instr_kind<T>(
         ("LetI", [left, right, iters]) => Ok(InstrKind::Let(LetInstr {
             exp_l: decode_exp(left)?,
             exp_r: decode_exp(right)?,
-            iter_instrs: il::decode_list(iters, il::decode_iter_prem)?,
+            iter_instrs: decode_list(iters, il::decode_iter_prem)?,
         })),
         ("DebugI", [exp]) => Ok(InstrKind::Debug(DebugInstr {
             exp: decode_exp(exp)?,
         })),
         ("DestructI", [bindings, exp]) => Ok(InstrKind::Destruct(DestructInstr {
-            bindings: il::decode_list(bindings, |value| match array(value)? {
+            bindings: decode_list(bindings, |value| match array(value)? {
                 [name, exp] => Ok((
                     decode_option(name, |name| Ok(string(name)?.to_owned()))?,
                     decode_exp(exp)?,
@@ -737,7 +721,7 @@ fn encode_instr_kind<T>(instr: &InstrKind<T>, encode_tier: fn(&T) -> Value) -> V
         }) => json!([
             "IfI",
             encode_exp(exp),
-            il::encode_list(iters, il::encode_iter_exp),
+            encode_list(iters, il::encode_iter_exp),
             encode_block(block, encode_tier),
             dangle
         ]),
@@ -750,7 +734,7 @@ fn encode_instr_kind<T>(instr: &InstrKind<T>, encode_tier: fn(&T) -> Value) -> V
             "HoldI",
             il::encode_id(id),
             mixfix::encode(not_exp, encode_exp),
-            il::encode_list(iters, il::encode_iter_exp),
+            encode_list(iters, il::encode_iter_exp),
             encode_hold_case(case, encode_tier)
         ]),
         InstrKind::Case(CaseInstr { exp, cases, dangle }) => json!([
@@ -773,7 +757,7 @@ fn encode_instr_kind<T>(instr: &InstrKind<T>, encode_tier: fn(&T) -> Value) -> V
             "LetI",
             encode_exp(left),
             encode_exp(right),
-            il::encode_list(iters, il::encode_iter_prem)
+            encode_list(iters, il::encode_iter_prem)
         ]),
         InstrKind::Debug(DebugInstr { exp }) => json!(["DebugI", encode_exp(exp)]),
         InstrKind::Destruct(DestructInstr { bindings, exp }) => json!([
@@ -849,7 +833,7 @@ fn decode_instr_group(value: &Value) -> Result<InstrGroup, DecodeError> {
     match (tag, fields) {
         ("ResultI", [rel_signature, exps_output]) => Ok(InstrGroup::Result(ResultGroupInstr {
             rel_signature: decode_rel_signature(rel_signature)?,
-            exps_output: il::decode_list(exps_output, decode_exp)?,
+            exps_output: decode_list(exps_output, decode_exp)?,
         })),
         ("ReturnI", [exp]) => Ok(InstrGroup::Return(ReturnGroupInstr {
             exp: decode_exp(exp)?,
@@ -858,10 +842,10 @@ fn decode_instr_group(value: &Value) -> Result<InstrGroup, DecodeError> {
             id: il::decode_id(id)?,
             not_exp: mixfix::decode(not_exp, decode_exp)?,
             input_hint: il::decode_input_hint(input_hint)?,
-            iter_instrs: il::decode_list(iter_instrs, il::decode_iter_prem)?,
+            iter_instrs: decode_list(iter_instrs, il::decode_iter_prem)?,
         })),
         ("BacktrackI", [arms]) => Ok(InstrGroup::Backtrack(BacktrackGroupInstr {
-            blocks: il::decode_list(arms, |block| decode_block(block, decode_instr_group))?,
+            blocks: decode_list(arms, |block| decode_block(block, decode_instr_group))?,
         })),
         ("ResultI" | "ReturnI" | "RuleI" | "BacktrackI", _) => {
             Err(DecodeError::Expected("valid PL group instruction arity"))
@@ -878,7 +862,7 @@ fn encode_instr_group(instr: &InstrGroup) -> Value {
         }) => json!([
             "ResultI",
             encode_rel_signature(rel_signature),
-            il::encode_list(exps_output, encode_exp)
+            encode_list(exps_output, encode_exp)
         ]),
         InstrGroup::Return(ReturnGroupInstr { exp }) => json!(["ReturnI", encode_exp(exp)]),
         InstrGroup::Rule(RuleGroupInstr {
@@ -891,7 +875,7 @@ fn encode_instr_group(instr: &InstrGroup) -> Value {
             il::encode_id(id),
             mixfix::encode(not_exp, encode_exp),
             il::encode_input_hint(input_hint),
-            il::encode_list(iter_instrs, il::encode_iter_prem)
+            encode_list(iter_instrs, il::encode_iter_prem)
         ]),
         InstrGroup::Backtrack(BacktrackGroupInstr { blocks }) => json!([
             "BacktrackI",
@@ -911,12 +895,12 @@ fn decode_instr_dispatch(value: &Value) -> Result<InstrDispatch, DecodeError> {
                 id_rel: il::decode_id(id_rel)?,
                 id_group: il::decode_id(id_group)?,
                 rel_signature: decode_rel_signature(rel_signature)?,
-                exps_input: il::decode_list(exps_input, decode_exp)?,
+                exps_input: decode_list(exps_input, decode_exp)?,
                 block: decode_block(block, decode_instr_group)?,
             }))
         }
         ("RouteI", [arms]) => Ok(InstrDispatch::Route(RouteDispatchInstr {
-            blocks: il::decode_list(arms, |block| decode_block(block, decode_instr_dispatch))?,
+            blocks: decode_list(arms, |block| decode_block(block, decode_instr_dispatch))?,
         })),
         ("GroupI" | "RouteI", _) => {
             Err(DecodeError::Expected("valid PL dispatch instruction arity"))
@@ -938,7 +922,7 @@ fn encode_instr_dispatch(instr: &InstrDispatch) -> Value {
             il::encode_id(id_group),
             il::encode_id(id_rel),
             encode_rel_signature(rel_signature),
-            il::encode_list(exps_input, encode_exp),
+            encode_list(exps_input, encode_exp),
             encode_block(block, encode_instr_group)
         ]),
         InstrDispatch::Route(RouteDispatchInstr { blocks }) => json!([
@@ -956,7 +940,7 @@ fn decode_extern_rel(value: &Value) -> Result<ast::ExternRel, DecodeError> {
         [id, rel_signature, exps_input] => Ok(ast::ExternRel {
             id: il::decode_id(id)?,
             rel_signature: decode_rel_signature(rel_signature)?,
-            exps_input: il::decode_list(exps_input, decode_exp)?,
+            exps_input: decode_list(exps_input, decode_exp)?,
         }),
         _ => Err(DecodeError::Expected("PL external relation triple")),
     }
@@ -965,7 +949,7 @@ fn encode_extern_rel(relation: &ast::ExternRel) -> Value {
     json!([
         il::encode_id(&relation.id),
         encode_rel_signature(&relation.rel_signature),
-        il::encode_list(&relation.exps_input, encode_exp)
+        encode_list(&relation.exps_input, encode_exp)
     ])
 }
 
@@ -974,7 +958,7 @@ fn decode_rel(value: &Value) -> Result<ast::Rel, DecodeError> {
         [id, rel_signature, exps_input, block, block_else_opt] => Ok(ast::Rel {
             id: il::decode_id(id)?,
             rel_signature: decode_rel_signature(rel_signature)?,
-            exps_input: il::decode_list(exps_input, decode_exp)?,
+            exps_input: decode_list(exps_input, decode_exp)?,
             block: decode_block(block, decode_instr_dispatch)?,
             block_else_opt: decode_option(block_else_opt, |block| {
                 decode_block(block, decode_instr_dispatch)
@@ -987,7 +971,7 @@ fn encode_rel(relation: &ast::Rel) -> Value {
     json!([
         il::encode_id(&relation.id),
         encode_rel_signature(&relation.rel_signature),
-        il::encode_list(&relation.exps_input, encode_exp),
+        encode_list(&relation.exps_input, encode_exp),
         encode_block(&relation.block, encode_instr_dispatch),
         encode_option(relation.block_else_opt.as_ref(), |block| encode_block(
             block,
@@ -1000,8 +984,8 @@ fn decode_extern_func(value: &Value) -> Result<ast::ExternFunc, DecodeError> {
     match array(value)? {
         [id, tparams, params, typ] => Ok(ast::ExternFunc {
             id: il::decode_id(id)?,
-            tparams: il::decode_list(tparams, il::decode_tparam)?,
-            params: il::decode_list(params, decode_param)?,
+            tparams: decode_list(tparams, il::decode_tparam)?,
+            params: decode_list(params, decode_param)?,
             typ: il::decode_typ(typ)?,
         }),
         _ => Err(DecodeError::Expected("PL function quadruple")),
@@ -1010,8 +994,8 @@ fn decode_extern_func(value: &Value) -> Result<ast::ExternFunc, DecodeError> {
 fn encode_extern_func(function: &ast::ExternFunc) -> Value {
     json!([
         il::encode_id(&function.id),
-        il::encode_list(&function.tparams, il::encode_tparam),
-        il::encode_list(&function.params, encode_param),
+        encode_list(&function.tparams, il::encode_tparam),
+        encode_list(&function.params, encode_param),
         il::encode_typ(&function.typ)
     ])
 }
@@ -1029,8 +1013,8 @@ fn decode_builtin_func(value: &Value) -> Result<ast::BuiltinFunc, DecodeError> {
 fn encode_builtin_func(function: &ast::BuiltinFunc) -> Value {
     json!([
         il::encode_id(&function.id),
-        il::encode_list(&function.tparams, il::encode_tparam),
-        il::encode_list(&function.params, encode_param),
+        encode_list(&function.tparams, il::encode_tparam),
+        encode_list(&function.params, encode_param),
         il::encode_typ(&function.typ)
     ])
 }
@@ -1038,7 +1022,7 @@ fn encode_builtin_func(function: &ast::BuiltinFunc) -> Value {
 fn decode_table_row(value: &Value) -> Result<ast::TableRow, DecodeError> {
     match array(value)? {
         [exps_input, exp, block] => Ok(ast::TableRow {
-            exps_input: il::decode_list(exps_input, decode_exp)?,
+            exps_input: decode_list(exps_input, decode_exp)?,
             exp: decode_exp(exp)?,
             block: decode_block(block, decode_instr_group)?,
         }),
@@ -1047,7 +1031,7 @@ fn decode_table_row(value: &Value) -> Result<ast::TableRow, DecodeError> {
 }
 fn encode_table_row(row: &ast::TableRow) -> Value {
     json!([
-        il::encode_list(&row.exps_input, encode_exp),
+        encode_list(&row.exps_input, encode_exp),
         encode_exp(&row.exp),
         encode_block(&row.block, encode_instr_group)
     ])
@@ -1057,9 +1041,9 @@ fn decode_table_func(value: &Value) -> Result<ast::TableFunc, DecodeError> {
     match array(value)? {
         [id, params, typ, rows] => Ok(ast::TableFunc {
             id: il::decode_id(id)?,
-            params: il::decode_list(params, decode_param)?,
+            params: decode_list(params, decode_param)?,
             typ: il::decode_typ(typ)?,
-            rows: il::decode_list(rows, decode_table_row)?,
+            rows: decode_list(rows, decode_table_row)?,
         }),
         _ => Err(DecodeError::Expected("PL table function quadruple")),
     }
@@ -1067,9 +1051,9 @@ fn decode_table_func(value: &Value) -> Result<ast::TableFunc, DecodeError> {
 fn encode_table_func(function: &ast::TableFunc) -> Value {
     json!([
         il::encode_id(&function.id),
-        il::encode_list(&function.params, encode_param),
+        encode_list(&function.params, encode_param),
         il::encode_typ(&function.typ),
-        il::encode_list(&function.rows, encode_table_row)
+        encode_list(&function.rows, encode_table_row)
     ])
 }
 
@@ -1077,8 +1061,8 @@ fn decode_defined_func(value: &Value) -> Result<ast::DefinedFunc, DecodeError> {
     match array(value)? {
         [id, tparams, params, typ, block, block_else_opt] => Ok(ast::DefinedFunc {
             id: il::decode_id(id)?,
-            tparams: il::decode_list(tparams, il::decode_tparam)?,
-            params: il::decode_list(params, decode_param)?,
+            tparams: decode_list(tparams, il::decode_tparam)?,
+            params: decode_list(params, decode_param)?,
             typ: il::decode_typ(typ)?,
             block: decode_block(block, decode_instr_group)?,
             block_else_opt: decode_option(block_else_opt, |block| {
@@ -1091,8 +1075,8 @@ fn decode_defined_func(value: &Value) -> Result<ast::DefinedFunc, DecodeError> {
 fn encode_defined_func(function: &ast::DefinedFunc) -> Value {
     json!([
         il::encode_id(&function.id),
-        il::encode_list(&function.tparams, il::encode_tparam),
-        il::encode_list(&function.params, encode_param),
+        encode_list(&function.tparams, il::encode_tparam),
+        encode_list(&function.params, encode_param),
         il::encode_typ(&function.typ),
         encode_block(&function.block, encode_instr_group),
         encode_option(function.block_else_opt.as_ref(), |block| encode_block(
@@ -1112,7 +1096,7 @@ fn decode_def(value: &Value) -> Result<ast::Def, DecodeError> {
             })),
             ("TypD", [id, tparams, typ]) => Ok(DefKind::Typ(TypDef {
                 id: il::decode_id(id)?,
-                tparams: il::decode_list(tparams, il::decode_tparam)?,
+                tparams: decode_list(tparams, il::decode_tparam)?,
                 def_typ: il::decode_def_typ(typ)?,
             })),
             ("VarD", [id, typ]) => Ok(DefKind::Var(VarDef {
@@ -1156,7 +1140,7 @@ fn encode_def(def: &ast::Def) -> Value {
             }) => json!([
                 "TypD",
                 il::encode_id(id),
-                il::encode_list(tparams, il::encode_tparam),
+                encode_list(tparams, il::encode_tparam),
                 il::encode_def_typ(typ)
             ]),
             DefKind::Var(VarDef { id, typ }) => {

@@ -8,22 +8,12 @@ use crate::lang::el::ast::{
 
 use super::{
     super::{
-        DecodeError, EncodeError, array, field, integer, object, on_codec_stack, string, variant,
+        DecodeError, EncodeError, array, decode_list, encode_list, field, integer, object,
+        on_codec_stack, string, variant,
     },
     xl,
 };
 use crate::wire::ocaml::{atom::AtomPhraseCodec, source};
-
-fn decode_list<T>(
-    value: &Value,
-    decode: impl Fn(&Value) -> Result<T, DecodeError>,
-) -> Result<Vec<T>, DecodeError> {
-    array(value)?.iter().map(decode).collect()
-}
-
-fn encode_list<T>(values: &[T], encode: impl Fn(&T) -> Value) -> Value {
-    Value::Array(values.iter().map(encode).collect())
-}
 
 pub struct SpecCodec;
 

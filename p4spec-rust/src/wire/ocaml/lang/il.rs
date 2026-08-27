@@ -13,8 +13,8 @@ use crate::yojson::ExternalData;
 
 use super::{
     super::{
-        DecodeError, EncodeError, array, boolean, field, integer, object, on_codec_stack, string,
-        variant,
+        DecodeError, EncodeError, array, boolean, decode_list, decode_option, encode_list,
+        encode_option, field, integer, object, on_codec_stack, string, variant,
     },
     el, xl,
 };
@@ -108,32 +108,6 @@ pub enum ValueEnvelopeDecodeError {
 pub enum ValueEnvelopeEncodeError {
     #[error("cannot write Yojson value envelope: {0}")]
     Write(#[from] yojson::WriteError),
-}
-
-pub(super) fn decode_list<T>(
-    value: &Value,
-    decode: impl Fn(&Value) -> Result<T, DecodeError>,
-) -> Result<Vec<T>, DecodeError> {
-    array(value)?.iter().map(decode).collect()
-}
-
-pub(super) fn encode_list<T>(values: &[T], encode: impl Fn(&T) -> Value) -> Value {
-    Value::Array(values.iter().map(encode).collect())
-}
-
-pub(super) fn decode_option<T>(
-    value: &Value,
-    decode: impl FnOnce(&Value) -> Result<T, DecodeError>,
-) -> Result<Option<T>, DecodeError> {
-    if value.is_null() {
-        Ok(None)
-    } else {
-        Ok(Some(decode(value)?))
-    }
-}
-
-pub(super) fn encode_option<T>(value: Option<&T>, encode: impl FnOnce(&T) -> Value) -> Value {
-    value.map_or(Value::Null, encode)
 }
 
 pub(super) fn decode_id(value: &Value) -> Result<ast::Id, DecodeError> {
