@@ -305,35 +305,6 @@ impl<T> Mixfix<T> {
         }
     }
 
-    /// Groups consecutive atoms, splitting the groups at argument positions
-    pub fn atoms_matrix(&self) -> Vec<Vec<&AtomPhrase>> {
-        let mut matrix = vec![Vec::new()];
-        self.collect_atoms_matrix(&mut matrix);
-        matrix
-    }
-
-    fn collect_atoms_matrix<'a>(&'a self, matrix: &mut Vec<Vec<&'a AtomPhrase>>) {
-        match self {
-            Self::Arg(_) => matrix.push(Vec::new()),
-            Self::Atom(atom) => matrix.last_mut().expect("matrix is non-empty").push(atom),
-            Self::Brack(atom_l, mixfix, atom_r) => {
-                matrix.last_mut().expect("matrix is non-empty").push(atom_l);
-                mixfix.collect_atoms_matrix(matrix);
-                matrix.last_mut().expect("matrix is non-empty").push(atom_r);
-            }
-            Self::Infix(mixfix_l, atom, mixfix_r) => {
-                mixfix_l.collect_atoms_matrix(matrix);
-                matrix.last_mut().expect("matrix is non-empty").push(atom);
-                mixfix_r.collect_atoms_matrix(matrix);
-            }
-            Self::Seq(mixfixes) => {
-                for mixfix in mixfixes {
-                    mixfix.collect_atoms_matrix(matrix);
-                }
-            }
-        }
-    }
-
     /// Collects arguments in left-to-right tree order
     pub fn args(&self) -> Vec<&T> {
         let mut args = Vec::with_capacity(self.arity());
@@ -540,57 +511,5 @@ impl<T> Mixfix<T> {
 impl<T> fmt::Display for Mixfix<T> {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt.write_str(&self.display())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::super::{
-        super::source::{Span, Spanned},
-        atom::Atom,
-        mixop::Mixop,
-    };
-    use super::{AtomPhrase, Mixfix};
-
-    fn atom(value: Atom) -> AtomPhrase {
-        Spanned::new(value, Span::default())
-    }
-
-    fn nested_mixop() -> Mixop {
-        Mixfix::Brack(
-            atom(Atom::LParen),
-            Box::new(Mixfix::Infix(
-                Box::new(Mixfix::Arg(())),
-                atom(Atom::Colon),
-                Box::new(Mixfix::Seq(vec![
-                    Mixfix::Atom(atom(Atom::Tag("MID".into()))),
-                    Mixfix::Arg(()),
-                ])),
-            )),
-            atom(Atom::RParen),
-        )
-    }
-
-    #[test]
-    fn atoms_matrix_preserves_nested_groups_between_arguments() {
-        let matrix = nested_mixop()
-            .atoms_matrix()
-            .into_iter()
-            .map(|group| {
-                group
-                    .into_iter()
-                    .map(|atom| atom.node.to_string())
-                    .collect::<Vec<_>>()
-            })
-            .collect::<Vec<_>>();
-
-        assert_eq!(
-            matrix,
-            [
-                vec!["`(".to_owned()],
-                vec![":".to_owned(), "_MID".to_owned()],
-                vec!["`)".to_owned()],
-            ]
-        );
     }
 }

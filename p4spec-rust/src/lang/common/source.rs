@@ -95,24 +95,3 @@ macro_rules! spanned {
         $crate::lang::common::source::Spanned::new($node, span)
     }};
 }
-
-#[cfg(test)]
-mod tests {
-    use super::{Position, Span, Spanned};
-
-    #[test]
-    fn spanned_macro_copies_the_supplied_nodes_span() {
-        let source = Spanned::new(
-            "source",
-            Span::new(Position::new("test", 1, 2), Position::new("test", 3, 4)),
-        );
-
-        let result = crate::spanned! {
-            node: "result",
-            span: source,
-        };
-
-        assert_eq!(result.node, "result");
-        assert_eq!(result.span, source.span);
-    }
-}

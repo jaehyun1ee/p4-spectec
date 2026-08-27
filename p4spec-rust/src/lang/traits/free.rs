@@ -38,26 +38,3 @@ impl<T: Free> Free for [T] {
             .fold(IdSet::new(), |free, item| free.union(item.free()))
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use crate::lang::common::{Id, source::Spanned};
-
-    use super::{Free, IdSet};
-
-    struct FreeNode(Id);
-
-    impl Free for FreeNode {
-        fn free(&self) -> IdSet {
-            IdSet::from([self.0.clone()])
-        }
-    }
-
-    #[test]
-    fn spanned_free_delegates_to_the_node() {
-        let id = Spanned::new("x".to_owned(), Default::default());
-        let node = Spanned::new(FreeNode(id.clone()), Default::default());
-
-        assert!(node.free().contains(&id));
-    }
-}

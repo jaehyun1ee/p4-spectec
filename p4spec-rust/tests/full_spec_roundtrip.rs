@@ -99,6 +99,7 @@ fn normalize_generated_metadata(value: &mut Value) {
 }
 
 #[test]
+#[ignore = "requires the pinned OCaml toolchain and exports all five stages"]
 fn ocaml_full_corpus_roundtrips_all_stage_asts() {
     let repo = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()

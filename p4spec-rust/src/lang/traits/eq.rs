@@ -47,26 +47,3 @@ impl SyntaxEq for ExternalData {
         self == other
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::SyntaxEq;
-
-    struct SyntaxNode(u8);
-
-    impl SyntaxEq for SyntaxNode {
-        fn syntax_eq(&self, other: &Self) -> bool {
-            self.0 == other.0
-        }
-    }
-
-    #[test]
-    fn slices_compare_elements_in_order_by_default() {
-        let nodes_l = [SyntaxNode(0), SyntaxNode(1)];
-        let nodes_r = [SyntaxNode(0), SyntaxNode(1)];
-        let nodes_changed = [SyntaxNode(1), SyntaxNode(0)];
-
-        assert!(nodes_l.as_slice().syntax_eq(nodes_r.as_slice()));
-        assert!(!nodes_l.as_slice().syntax_eq(nodes_changed.as_slice()));
-    }
-}

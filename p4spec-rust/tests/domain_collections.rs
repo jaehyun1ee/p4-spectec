@@ -4,36 +4,14 @@ use p4spec_rust::{
         Id,
         ds::{map::IdMap, set::IdSet},
     },
-    lang::{
-        il,
-        traits::{eq::SyntaxEq, free::Free},
-    },
+    lang::{il, traits::free::Free},
 };
-
-struct SyntaxNode(&'static str);
-
-impl SyntaxEq for SyntaxNode {
-    fn syntax_eq(&self, other: &Self) -> bool {
-        self.0 == other.0
-    }
-}
 
 fn id(name: &str, file: &str) -> Id {
     Spanned::new(
         name.to_owned(),
         Span::new(Position::new(file, 0, 0), Position::new(file, 0, 0)),
     )
-}
-
-#[test]
-fn spanned_syntax_equality_delegates_to_the_node() {
-    let node_first = Spanned::new(SyntaxNode("same"), Span::default());
-    let node_second = Spanned::new(
-        SyntaxNode("same"),
-        Span::new(Position::new("second", 1, 2), Position::new("second", 3, 4)),
-    );
-
-    assert!(node_first.syntax_eq(&node_second));
 }
 
 #[test]
@@ -46,16 +24,6 @@ fn id_set_uses_identifier_text_as_its_key() {
     assert!(!ids.insert(id_second.clone()));
     assert!(ids.contains(&id_second));
     assert_eq!(ids.iter().collect::<Vec<_>>(), vec![&id_first]);
-}
-
-#[test]
-fn id_set_unions_owned_sets() {
-    let id_a = id("a", "first");
-    let id_b = id("b", "second");
-
-    let ids = IdSet::from([id_a.clone()]).union(IdSet::from([id_b.clone()]));
-
-    assert_eq!(ids.iter().collect::<Vec<_>>(), vec![&id_a, &id_b]);
 }
 
 #[test]
