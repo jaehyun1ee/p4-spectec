@@ -2,6 +2,7 @@ use std::{
     fs,
     path::Path,
     process::{Command, Output},
+    sync::Mutex,
 };
 
 use p4spec_rust::{
@@ -13,6 +14,8 @@ use p4spec_rust::{
     wire::{EL_SCHEMA, Envelope, ocaml::lang::el::SpecCodec},
 };
 use serde_json::Value;
+
+static OCAML_EXPORTER: Mutex<()> = Mutex::new(());
 
 #[derive(Debug, PartialEq, Eq)]
 enum DiagnosticKind {
@@ -51,6 +54,7 @@ fn first_difference(left: &Value, right: &Value, path: &str) -> Option<(String, 
 }
 
 fn run_ocaml_el(repo: &Path, spec_path: &Path) -> Output {
+    let _guard = OCAML_EXPORTER.lock().expect("OCaml exporter lock");
     Command::new("opam")
         .args([
             "exec",
@@ -99,7 +103,7 @@ fn ocaml_diagnostic(path: &Path, stderr: &[u8]) -> Diagnostic {
         .trim()
         .strip_prefix(file)
         .and_then(|diagnostic| diagnostic.strip_prefix(':'))
-        .expect("OCaml diagnostic starts with the fixture path");
+        .unwrap_or_else(|| panic!("OCaml diagnostic starts with the fixture path: {output}"));
     let (range, message) = diagnostic
         .split_once(": ")
         .expect("OCaml diagnostic contains a source range and message");
