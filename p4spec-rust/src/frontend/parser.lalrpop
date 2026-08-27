@@ -126,14 +126,17 @@ extern {
     }
 }
 
+// Spec ::= NL2* Def* EOF
 pub Spec: ast::Spec = {
     "NL2"* <definitions:Def*> "EOF" => definitions,
 };
 
+// Def ::= DefCore NL2*
 Def: ast::Def = {
     <definition:DefCore> "NL2"* => definition,
 };
 
+// DefCore ::= RuleRule | DefKindRule
 DefCore: ast::Def = {
     <left:@L> <rule:RuleRule> => {
         let right = rule.span.right.clone();
@@ -200,6 +203,22 @@ DefCore: ast::Def = {
     },
 };
 
+// DefKindRule ::= EXTERN SYNTAX VarId Hints
+//   | SYNTAX CommaList<SynId>
+//   | SYNTAX VarIdBind Hints DefTypEquals DefTyp
+//   | SYNTAX VarIdLAngleBind EnterScope CommaList<TParam> RANGLE Hints
+//       DefTypEquals DefTyp
+//   | VAR VarIdBind COLON PlainTyp Hints
+//   | EXTERN RELATION RelId COLON NotTyp Hints
+//   | RELATION RelId COLON NotTyp Hints
+//   | RULEGROUP RelId RuleIds SEQ? LBRACE Rules RBRACE
+//   | EXTERN DEC DOLLAR CallableDec
+//   | BUILTIN DEC DOLLAR CallableDec
+//   | TABLE DEC DOLLAR TableDecSignature
+//   | DEC DOLLAR CallableDec
+//   | TABLE DEF DOLLAR DefId EQ TableBody
+//   | DEF DOLLAR FunctionDefSignature
+//   | NL3
 DefKindRule: DefKind = {
     "EXTERN" "SYNTAX" <id:VarId> <hints:Hints> => {
         DefKind::ExternSyntax(ExternSyntaxDef { id, hints })
@@ -287,35 +306,43 @@ DefKindRule: DefKind = {
     "NL3" => DefKind::Sep,
 };
 
+// EnterScope ::= ε
 EnterScope: () = {
     => context.enter_scope(),
 };
 
+// ExitScope ::= ε
 ExitScope: () = {
     => context.exit_scope(),
 };
 
+// EnterExp ::= ε
 EnterExp: () = {
     => context.enter_exp(),
 };
 
+// EnterArith ::= ε
 EnterArith: () = {
     => context.enter_arith(),
 };
 
+// ExitMode ::= ε
 ExitMode: () = {
     => context.exit_mode(),
 };
 
+// DefTypEquals ::= EQ
 DefTypEquals: () = {
     "EQ" <right:@R> => context.record_def_typ_left(right),
 };
 
+// Comma ::= COMMA | COMMA_NL
 Comma: () = {
     "COMMA" => (),
     "COMMA_NL" => (),
 };
 
+// CommaList<T> ::= ε | T | T Comma CommaList<T>
 CommaList<T>: Vec<T> = {
     => vec![],
     <item:T> => vec![item],
@@ -325,25 +352,30 @@ CommaList<T>: Vec<T> = {
     },
 };
 
+// Id ::= UPID | LOID
 Id: ast::Id = {
     <left:@L> <id:"UPID"> <right:@R> => spanned(context, id, left, right),
     <left:@L> <id:"LOID"> <right:@R> => spanned(context, id, left, right),
 };
 
+// IdLParen ::= UPID_LPAREN | LOID_LPAREN
 IdLParen: ast::Id = {
     <left:@L> <id:"UPID_LPAREN"> <right:@R> => spanned(context, id, left, right),
     <left:@L> <id:"LOID_LPAREN"> <right:@R> => spanned(context, id, left, right),
 };
 
+// IdLAngle ::= UPID_LANGLE | LOID_LANGLE
 IdLAngle: ast::Id = {
     <left:@L> <id:"UPID_LANGLE"> <right:@R> => spanned(context, id, left, right),
     <left:@L> <id:"LOID_LANGLE"> <right:@R> => spanned(context, id, left, right),
 };
 
+// VarId ::= LOID
 VarId: ast::Id = {
     <left:@L> <id:"LOID"> <right:@R> => spanned(context, id, left, right),
 };
 
+// VarIdBind ::= VarId | UPID
 VarIdBind: ast::Id = {
     <id:VarId> => {
         context.bind(&id.node);
@@ -355,10 +387,12 @@ VarIdBind: ast::Id = {
     },
 };
 
+// VarIdLAngle ::= LOID_LANGLE
 VarIdLAngle: ast::Id = {
     <left:@L> <id:"LOID_LANGLE"> <right:@R> => spanned(context, id, left, right),
 };
 
+// VarIdLAngleBind ::= VarIdLAngle | UPID_LANGLE
 VarIdLAngleBind: ast::Id = {
     <id:VarIdLAngle> => {
         context.bind(&id.node);
@@ -370,49 +404,63 @@ VarIdLAngleBind: ast::Id = {
     },
 };
 
+// AtomIdRaw ::= UPID
 AtomIdRaw: String = {
     <id:"UPID"> => id,
 };
 
+// AtomIdLParen ::= UPID_LPAREN
 AtomIdLParen: String = {
     <id:"UPID_LPAREN"> => id,
 };
 
+// AtomIdLAngle ::= UPID_LANGLE
 AtomIdLAngle: String = {
     <id:"UPID_LANGLE"> => id,
 };
 
+// DotId ::= DOTID
 DotId: ast::Atom = {
     <left:@L> <id:"DOTID"> <right:@R> => {
         spanned(context, Atom::Keyword(id), left, right)
     },
 };
 
+// FieldId ::= AtomIdRaw
 FieldId: ast::Atom = {
     <left:@L> <id:AtomIdRaw> <right:@R> => {
         spanned(context, Atom::Keyword(id), left, right)
     },
 };
 
+// RelId ::= Id
 RelId: ast::Id = Id;
 
+// DefId ::= Id
 DefId: ast::Id = Id;
 
+// DefIdLParen ::= IdLParen
 DefIdLParen: ast::Id = IdLParen;
 
+// DefIdLAngle ::= IdLAngle
 DefIdLAngle: ast::Id = IdLAngle;
 
+// HintId ::= UPID | LOID
 HintId: String = {
     <id:"UPID"> => id,
     <id:"LOID"> => id,
 };
 
+// SynId ::= VarId | VarIdLAngleBind EnterScope CommaList<TParam> RANGLE
+//   ExitScope
 SynId: SyntaxDefEntry = {
     <id:VarId> => SyntaxDefEntry { id, tparams: vec![] },
     <id:VarIdLAngleBind> <_enter:EnterScope> <tparams:CommaList<TParam>> "RANGLE"
         <_exit:ExitScope> => SyntaxDefEntry { id, tparams },
 };
 
+// RuleId ::= UPID | LOID | TEXT | EXTERN | BUILTIN | NATLIT | BOOLLIT
+//   | RuleId DOTID
 RuleId: String = {
     <id:"UPID"> => id,
     <id:"LOID"> => id,
@@ -424,21 +472,26 @@ RuleId: String = {
     <prefix:RuleId> <suffix:"DOTID"> => format!("{prefix}.{suffix}"),
 };
 
+// RuleIdSegment ::= SLASH RuleId | MINUS RuleId
 RuleIdSegment: String = {
     "SLASH" <id:RuleId> => format!("/{id}"),
     "MINUS" <id:RuleId> => format!("-{id}"),
 };
 
+// RuleIds ::= RuleIdSegment*
 RuleIds: ast::Id = {
     <left:@L> <segments:RuleIdSegment*> <right:@R> => {
         spanned(context, segments.concat(), left, right)
     },
 };
 
+// TParam ::= VarIdBind
 TParam: ast::TParam = VarIdBind;
 
+// Targ ::= PlainTyp
 Targ: ast::Targ = PlainTyp;
 
+// IterRule ::= QUEST | STAR | ITER_STAR
 #[inline]
 IterRule: Iter = {
     "QUEST" => Iter::Opt,
@@ -446,6 +499,7 @@ IterRule: Iter = {
     "ITER_STAR" => Iter::List,
 };
 
+// PlainTyp ::= PlainTypBase | PlainTyp IterRule
 PlainTyp: ast::PlainTyp = {
     #[precedence(level="0")]
     <left:@L> <kind:PlainTypBase> <right:@R> => spanned(context, kind, left, right),
@@ -456,6 +510,8 @@ PlainTyp: ast::PlainTyp = {
     },
 };
 
+// PlainTypBase ::= PlainTypPrimaryKind
+//   | LPAREN CommaList<PlainTyp> RPAREN
 PlainTypBase: PlainTypKind = {
     PlainTypPrimaryKind,
     <left:@L> "LPAREN" <types:CommaList<PlainTyp>> "RPAREN" <right:@R> => {
@@ -472,6 +528,8 @@ PlainTypBase: PlainTypKind = {
     },
 };
 
+// PlainTypPrimaryKind ::= VarId | VarIdLAngle CommaList<Targ> RANGLE
+//   | BOOL | NAT | INT | TEXT
 PlainTypPrimaryKind: PlainTypKind = {
     <id:VarId> => PlainTypKind::Var(id, vec![]),
     <id:VarIdLAngle> <targs:CommaList<Targ>> "RANGLE" => PlainTypKind::Var(id, targs),
@@ -481,16 +539,19 @@ PlainTypPrimaryKind: PlainTypKind = {
     "TEXT" => PlainTypKind::Text,
 };
 
+// AtomRule ::= AtomKind
 AtomRule: ast::Atom = {
     <left:@L> <atom:AtomKind> <right:@R> => spanned(context, atom, left, right),
 };
 
+// AtomKind ::= AtomIdRaw | TAG_UPID | OPERATOR
 AtomKind: Atom = {
     <id:AtomIdRaw> => Atom::Keyword(id),
     <id:"TAG_UPID"> => Atom::Tag(id),
     <operator:"OPERATOR"> => Atom::Operator(operator),
 };
 
+// TypAtom ::= AtomIdRaw DOTID* | TAG_UPID | OPERATOR
 TypAtom: ast::Atom = {
     <left:@L> <id:AtomIdRaw> <suffixes:"DOTID"*> <right:@R> => {
         let id = suffixes.into_iter().fold(id, |prefix, suffix| {
@@ -504,6 +565,11 @@ TypAtom: ast::Atom = {
     },
 };
 
+// TypPrimary ::= PlainTyp | TypAtom
+//   | TickLAngle Typ TickRAngle
+//   | TickLParen Typ TickRParen
+//   | TickLBrack Typ TickRBrack
+//   | TickLBrace Typ TickRBrace
 TypPrimary: Typ = {
     <plain_typ:PlainTyp> => Typ::Plain(plain_typ),
     <atom:TypAtom> => {
@@ -540,11 +606,14 @@ TypPrimary: Typ = {
     },
 };
 
+// Typ ::= RelationOperator Typ | TypDoubleArrow
 Typ: Typ = {
     <operator:RelationOperator> <right:Typ> => prefix_typ(operator, right),
     TypDoubleArrow,
 };
 
+// TypDoubleArrow ::= TypTurnstile DoubleArrowTypOperator TypDoubleArrow
+//   | TypTurnstile
 TypDoubleArrow: Typ = {
     <left:TypTurnstile> <operator:DoubleArrowTypOperator> <right:TypDoubleArrow> => {
         infix_typ(left, operator, right)
@@ -552,6 +621,8 @@ TypDoubleArrow: Typ = {
     TypTurnstile,
 };
 
+// TypTurnstile ::= TypTilesturn TurnstileOperator TypTilesturn
+//   | TypTilesturn
 TypTurnstile: Typ = {
     <left:TypTilesturn> <operator:TurnstileOperator> <right:TypTilesturn> => {
         infix_typ(left, operator, right)
@@ -559,6 +630,8 @@ TypTurnstile: Typ = {
     TypTilesturn,
 };
 
+// TypTilesturn ::= TypSquiggly TilesturnOperator TypSquiggly
+//   | TypSquiggly
 TypTilesturn: Typ = {
     <left:TypSquiggly> <operator:TilesturnOperator> <right:TypSquiggly> => {
         infix_typ(left, operator, right)
@@ -566,6 +639,7 @@ TypTilesturn: Typ = {
     TypSquiggly,
 };
 
+// TypSquiggly ::= TypColon SquigglyOperator TypSquiggly | TypColon
 TypSquiggly: Typ = {
     <left:TypColon> <operator:SquigglyOperator> <right:TypSquiggly> => {
         infix_typ(left, operator, right)
@@ -573,6 +647,7 @@ TypSquiggly: Typ = {
     TypColon,
 };
 
+// TypColon ::= TypColon ColonTypOperator TypArrow | TypArrow
 TypColon: Typ = {
     <left:TypColon> <operator:ColonTypOperator> <right:TypArrow> => {
         infix_typ(left, operator, right)
@@ -580,6 +655,7 @@ TypColon: Typ = {
     TypArrow,
 };
 
+// TypArrow ::= TypSemicolon ArrowTypOperator TypArrow | TypSemicolon
 TypArrow: Typ = {
     <left:TypSemicolon> <operator:ArrowTypOperator> <right:TypArrow> => {
         infix_typ(left, operator, right)
@@ -587,6 +663,7 @@ TypArrow: Typ = {
     TypSemicolon,
 };
 
+// TypSemicolon ::= TypSemicolon SemicolonOperator TypDot | TypDot
 TypSemicolon: Typ = {
     <left:TypSemicolon> <operator:SemicolonOperator> <right:TypDot> => {
         infix_typ(left, operator, right)
@@ -594,6 +671,7 @@ TypSemicolon: Typ = {
     TypDot,
 };
 
+// TypDot ::= TypDot DotOperator TypBackslash | TypBackslash
 TypDot: Typ = {
     <left:TypDot> <operator:DotOperator> <right:TypBackslash> => {
         infix_typ(left, operator, right)
@@ -601,6 +679,7 @@ TypDot: Typ = {
     TypBackslash,
 };
 
+// TypBackslash ::= TypBackslash BackslashOperator TypPrefix | TypPrefix
 TypBackslash: Typ = {
     <left:TypBackslash> <operator:BackslashOperator> <right:TypPrefix> => {
         infix_typ(left, operator, right)
@@ -608,11 +687,13 @@ TypBackslash: Typ = {
     TypPrefix,
 };
 
+// TypPrefix ::= InfixOperator TypPrefix | TypSeq
 TypPrefix: Typ = {
     <operator:InfixOperator> <right:TypPrefix> => prefix_typ(operator, right),
     TypSeq,
 };
 
+// TypSeq ::= TypPrimary (SEQ TypPrimary)*
 TypSeq: Typ = {
     <first:TypPrimary> <first_right:@R> <rest:("SEQ" <TypPrimary>)*> => {
         if rest.is_empty() {
@@ -630,10 +711,12 @@ TypSeq: Typ = {
     },
 };
 
+// CheckTyp ::= Typ EOF
 pub CheckTyp: Typ = {
     <typ:Typ> "EOF" => typ,
 };
 
+// NotTyp ::= Typ
 NotTyp: ast::NotTyp = {
     <left:@L> <typ:Typ> <right:@R> =>? match typ {
         Typ::Notation(not_typ) => Ok(not_typ),
@@ -646,14 +729,17 @@ NotTyp: ast::NotTyp = {
     },
 };
 
+// FieldTyp ::= FieldId SEQ PlainTyp Hints
 FieldTyp: ast::TypField = {
     <field:FieldId> "SEQ" <plain_typ:PlainTyp> <hints:Hints> => (field, plain_typ, hints),
 };
 
+// CaseTyp ::= Typ Hints
 CaseTyp: (Typ, Vec<ast::Hint>, ParserLocation) = {
     <typ:Typ> <typ_right:@R> <hints:Hints> => (typ, hints, typ_right),
 };
 
+// CaseTypList ::= ε | CaseTyp (Bar CaseTyp)* BarAt?
 CaseTypList: (Vec<(Typ, Vec<ast::Hint>, ParserLocation)>, Option<ParserLocation>) = {
     => (vec![], None),
     <head:CaseTyp> <tail:(<Bar> <CaseTyp>)*> <trailing:BarAt?> => {
@@ -664,10 +750,14 @@ CaseTypList: (Vec<(Typ, Vec<ast::Hint>, ParserLocation)>, Option<ParserLocation>
     },
 };
 
+// BarAt ::= Bar
 BarAt: ParserLocation = {
     <_bar:Bar> <right:@R> => right,
 };
 
+// DefTyp ::= LBRACE CommaList<FieldTyp> RBRACE
+//   | Bar CaseTypList
+//   | CaseTypList
 DefTyp: ast::DefTyp = {
     <left:@L> "LBRACE" <fields:CommaList<FieldTyp>> "RBRACE" <right:@R> =>? {
         if fields.is_empty() {
@@ -725,38 +815,48 @@ DefTyp: ast::DefTyp = {
     },
 };
 
+// TickLAngle ::= TICK_LANGLE
 TickLAngle: ast::Atom = {
     <left:@L> "TICK_LANGLE" <right:@R> => spanned(context, Atom::LAngle, left, right),
 };
 
+// TickRAngle ::= TICK_RANGLE
 TickRAngle: ast::Atom = {
     <left:@L> "TICK_RANGLE" <right:@R> => spanned(context, Atom::RAngle, left, right),
 };
 
+// TickLParen ::= TICK_LPAREN
 TickLParen: ast::Atom = {
     <left:@L> "TICK_LPAREN" <right:@R> => spanned(context, Atom::LParen, left, right),
 };
 
+// TickRParen ::= TICK_RPAREN
 TickRParen: ast::Atom = {
     <left:@L> "TICK_RPAREN" <right:@R> => spanned(context, Atom::RParen, left, right),
 };
 
+// TickLBrack ::= TICK_LBRACK
 TickLBrack: ast::Atom = {
     <left:@L> "TICK_LBRACK" <right:@R> => spanned(context, Atom::LBrack, left, right),
 };
 
+// TickRBrack ::= TICK_RBRACK
 TickRBrack: ast::Atom = {
     <left:@L> "TICK_RBRACK" <right:@R> => spanned(context, Atom::RBrack, left, right),
 };
 
+// TickLBrace ::= TICK_LBRACE
 TickLBrace: ast::Atom = {
     <left:@L> "TICK_LBRACE" <right:@R> => spanned(context, Atom::LBrace, left, right),
 };
 
+// TickRBrace ::= TICK_RBRACE
 TickRBrace: ast::Atom = {
     <left:@L> "TICK_RBRACE" <right:@R> => spanned(context, Atom::RBrace, left, right),
 };
 
+// InfixOperator ::= DotOperator | SemicolonOperator
+//   | BackslashOperator | ArrowTypOperator | DoubleArrowTypOperator
 InfixOperator: ast::Atom = {
     DotOperator,
     SemicolonOperator,
@@ -765,6 +865,8 @@ InfixOperator: ast::Atom = {
     DoubleArrowTypOperator,
 };
 
+// RelationOperator ::= ColonTypOperator | SquigglyOperator
+//   | TilesturnOperator | TurnstileOperator
 RelationOperator: ast::Atom = {
     ColonTypOperator,
     SquigglyOperator,
@@ -772,6 +874,7 @@ RelationOperator: ast::Atom = {
     TurnstileOperator,
 };
 
+// DoubleArrowTypOperator ::= DOUBLE_ARROW_SUB | DOUBLE_ARROW_LONG
 DoubleArrowTypOperator: ast::Atom = {
     <left:@L> "DOUBLE_ARROW_SUB" <right:@R> => {
         spanned(context, Atom::DoubleArrowSub, left, right)
@@ -781,14 +884,17 @@ DoubleArrowTypOperator: ast::Atom = {
     },
 };
 
+// TurnstileOperator ::= TURNSTILE
 TurnstileOperator: ast::Atom = {
     <left:@L> "TURNSTILE" <right:@R> => spanned(context, Atom::Turnstile, left, right),
 };
 
+// TilesturnOperator ::= TILESTURN
 TilesturnOperator: ast::Atom = {
     <left:@L> "TILESTURN" <right:@R> => spanned(context, Atom::Tilesturn, left, right),
 };
 
+// SquigglyOperator ::= SQARROW | SQARROW_STAR
 SquigglyOperator: ast::Atom = {
     <left:@L> "SQARROW" <right:@R> => spanned(context, Atom::SqArrow, left, right),
     <left:@L> "SQARROW_STAR" <right:@R> => {
@@ -796,36 +902,43 @@ SquigglyOperator: ast::Atom = {
     },
 };
 
+// ColonTypOperator ::= COLON | COLON_EQ | TILDE2
 ColonTypOperator: ast::Atom = {
     <left:@L> "COLON" <right:@R> => spanned(context, Atom::Colon, left, right),
     <left:@L> "COLON_EQ" <right:@R> => spanned(context, Atom::ColonEq, left, right),
     <left:@L> "TILDE2" <right:@R> => spanned(context, Atom::Tilde2, left, right),
 };
 
+// ArrowTypOperator ::= ARROW | ARROW_SUB
 ArrowTypOperator: ast::Atom = {
     <left:@L> "ARROW" <right:@R> => spanned(context, Atom::Arrow, left, right),
     <left:@L> "ARROW_SUB" <right:@R> => spanned(context, Atom::ArrowSub, left, right),
 };
 
+// SemicolonOperator ::= SEMICOLON
 SemicolonOperator: ast::Atom = {
     <left:@L> "SEMICOLON" <right:@R> => spanned(context, Atom::Semicolon, left, right),
 };
 
+// DotOperator ::= DOT | DOT2 | DOT3
 DotOperator: ast::Atom = {
     <left:@L> "DOT" <right:@R> => spanned(context, Atom::Dot, left, right),
     <left:@L> "DOT2" <right:@R> => spanned(context, Atom::Dot2, left, right),
     <left:@L> "DOT3" <right:@R> => spanned(context, Atom::Dot3, left, right),
 };
 
+// BackslashOperator ::= BACKSLASH
 BackslashOperator: ast::Atom = {
     <left:@L> "BACKSLASH" <right:@R> => spanned(context, Atom::Backslash, left, right),
 };
 
+// Bar ::= BAR | NL_BAR
 Bar: () = {
     "BAR" => (),
     "NL_BAR" => (),
 };
 
+// BarList<T> ::= ε | T | T Bar BarList<T>
 BarList<T>: Vec<T> = {
     => vec![],
     <item:T> => vec![item],
@@ -835,6 +948,19 @@ BarList<T>: Vec<T> = {
     },
 };
 
+// Exp ::= ExpPost | ExpListIter
+//   | Exp SEQ Exp | Exp HASH Exp
+//   | BAR Exp BAR | UnaryOperator Exp | InfixOperator Exp
+//   | Exp StarOperator Exp | Exp SLASH Exp | Exp BACKSLASH Exp
+//   | Exp PLUS Exp | Exp MINUS Exp | Exp PLUS2 Exp
+//   | Exp DotOperator Exp | Exp SemicolonOperator Exp
+//   | Exp ArrowTypOperator Exp | Exp COLON2 Exp
+//   | Exp EQ Exp | Exp NEQ Exp | Exp LANGLE_DASH Exp
+//   | Exp SUB PlainTyp | Exp ColonTypOperator Exp
+//   | Exp SquigglyOperator Exp | Exp TilesturnOperator Exp
+//   | Exp TurnstileOperator Exp | Exp AND Exp | Exp OR Exp
+//   | Exp DOUBLE_ARROW Exp | Exp DOUBLE_ARROW_BOTH Exp
+//   | Exp DoubleArrowTypOperator Exp | RelationOperator Exp
 Exp: ast::Exp = {
     #[precedence(level="0")]
     ExpPost,
@@ -1019,6 +1145,19 @@ Exp: ast::Exp = {
 // argument, and table-body boundaries.  This parallel precedence grammar
 // excludes the relation operators while retaining all ordinary expression
 // operators and the full-expression escape hatches inside postfix forms.
+// ExpBin ::= ExpPost | ExpListIter
+//   | ExpBin SEQ ExpBin | ExpBin HASH ExpBin
+//   | BAR Exp BAR | UnaryOperator ExpBin | InfixOperator ExpBin
+//   | ExpBin StarOperator ExpBin | ExpBin SLASH ExpBin
+//   | ExpBin BACKSLASH ExpBin | ExpBin PLUS ExpBin
+//   | ExpBin MINUS ExpBin | ExpBin PLUS2 ExpBin
+//   | ExpBin DotOperator ExpBin | ExpBin SemicolonOperator ExpBin
+//   | ExpBin ArrowTypOperator ExpBin | ExpBin COLON2 ExpBin
+//   | ExpBin EQ ExpBin | ExpBin NEQ ExpBin
+//   | ExpBin LANGLE_DASH ExpBin | ExpBin SUB PlainTyp
+//   | ExpBin AND ExpBin | ExpBin OR ExpBin
+//   | ExpBin DOUBLE_ARROW ExpBin | ExpBin DOUBLE_ARROW_BOTH ExpBin
+//   | ExpBin DoubleArrowTypOperator ExpBin
 ExpBin: ast::Exp = {
     #[precedence(level="0")]
     ExpPost,
@@ -1188,12 +1327,14 @@ ExpBin: ast::Exp = {
     },
 };
 
+// ExpListBase ::= LBRACK CommaList<ExpBin> RBRACK
 ExpListBase: ast::Exp = {
     <left:@L> "LBRACK" <expressions:CommaList<ExpBin>> "RBRACK" <right:@R> => {
         spanned(context, ExpKind::List(expressions), left, right)
     },
 };
 
+// ExpListIter ::= ExpListBase QuestionIterAt*
 ExpListIter: ast::Exp = {
     <left:@L> <base:ExpListBase> <iterations:QuestionIterAt*> => {
         let postfixes = iterations
@@ -1204,6 +1345,7 @@ ExpListIter: ast::Exp = {
     },
 };
 
+// UnaryOperator ::= TILDE | PLUS | MINUS
 UnaryOperator: UnOp = {
     "TILDE" => UnOp::Bool(xl::bool::UnOp::Not),
     "PLUS" => UnOp::Num(num::UnOp::Plus),
@@ -1213,20 +1355,25 @@ UnaryOperator: UnOp = {
 // `ParserTokens` inserts `SEQ` after a binary `*` when its right operand can
 // also begin a notation sequence. Consuming it here leaves the same token as a
 // real sequence separator after a postfix type iteration.
+// StarOperator ::= STAR SEQ | STAR
 StarOperator: () = {
     "STAR" "SEQ" => (),
     "STAR" => (),
 };
 
+// QuestionIter ::= QUEST | ITER_STAR
 QuestionIter: Iter = {
     "QUEST" => Iter::Opt,
     "ITER_STAR" => Iter::List,
 };
 
+// QuestionIterAt ::= QuestionIter
 QuestionIterAt: (Iter, ParserLocation) = {
     <iter:QuestionIter> <right:@R> => (iter, right),
 };
 
+// ExpAtomBase ::= ExpPrimary | AtomRule
+//   | AtomIdLParen Exp RPAREN
 ExpAtomBase: ast::Exp = {
     ExpPrimary,
     <atom:AtomRule> => {
@@ -1246,12 +1393,18 @@ ExpAtomBase: ast::Exp = {
 // A postfix-only expression is used where whitespace-separated atoms form a
 // record field or table pattern.  Keeping it separate from `Exp` prevents the
 // separator from absorbing binary and relation operators.
+// ExpPost ::= ExpAtomBase ExpPostfixRule*
 ExpPost: ast::Exp = {
     <left:@L> <base:ExpAtomBase> <postfixes:ExpPostfixRule*> => {
         apply_exp_postfixes(context, left, base, postfixes)
     },
 };
 
+// ExpPostfixRule ::= LBRACK Arith RBRACK
+//   | LBRACK Arith COLON Arith RBRACK
+//   | LBracketRight PathSteps EQ Exp RBRACK
+//   | LBracketRight EQ Exp RBRACK
+//   | QuestionIter | DotId
 ExpPostfixRule: ExpPostfix = {
     "LBRACK" <index:Arith> "RBRACK" <right:@R> => ExpPostfix::Idx(index, right),
     "LBRACK" <start:Arith> "COLON" <end:Arith> "RBRACK" <right:@R> => {
@@ -1267,6 +1420,15 @@ ExpPostfixRule: ExpPostfix = {
     <atom:DotId> <right:@R> => ExpPostfix::Dot(atom, right),
 };
 
+// ExpPrimary ::= ExpLiteral | ExpVariable | ExpCall | ExpHole | EPS
+//   | LBRACE CommaList<FieldExp> RBRACE
+//   | LPAREN CommaList<ExpBin> RPAREN
+//   | TickLAngle Exp TickRAngle
+//   | TickLParen Exp TickRParen
+//   | TickLBrack Exp TickRBrack
+//   | TickLBrace Exp TickRBrace
+//   | DOLLAR LPAREN Arith RPAREN
+//   | HASH2 ExpPrimary
 ExpPrimary: ast::Exp = {
     ExpLiteral,
     ExpVariable,
@@ -1313,6 +1475,7 @@ ExpPrimary: ast::Exp = {
     },
 };
 
+// ExpLiteral ::= BOOLLIT | NATLIT | HEXLIT | TEXTLIT
 ExpLiteral: ast::Exp = {
     <left:@L> <value:"BOOLLIT"> <right:@R> => {
         spanned(context, ExpKind::Bool(value), left, right)
@@ -1338,6 +1501,7 @@ ExpLiteral: ast::Exp = {
     },
 };
 
+// ExpVariable ::= VarId | BOOL | NAT | INT | TEXT
 ExpVariable: ast::Exp = {
     <id:VarId> => {
         let span = id.span.clone();
@@ -1377,6 +1541,11 @@ ExpVariable: ast::Exp = {
     },
 };
 
+// ExpCall ::= DOLLAR DefId
+//   | DOLLAR DefIdLParen CommaList<Arg> RPAREN
+//   | DOLLAR DefIdLAngle CommaList<Targ> RANGLE
+//   | DOLLAR DefIdLAngle CommaList<Targ> RANGLE_LPAREN
+//       CommaList<Arg> RPAREN
 ExpCall: ast::Exp = {
     <left:@L> "DOLLAR" <id:DefId> <right:@R> => {
         spanned(context, ExpKind::Call(id, vec![], vec![]), left, right)
@@ -1393,6 +1562,8 @@ ExpCall: ast::Exp = {
         },
 };
 
+// ExpHole ::= HOLE_NUM | HOLE | HOLE_MULTI | HOLE_NIL
+//   | LATEX LPAREN TEXTLIT* RPAREN
 ExpHole: ast::Exp = {
     <left:@L> <number:"HOLE_NUM"> <right:@R> => {
         spanned(context, ExpKind::Hole(Hole::Num(number)), left, right)
@@ -1411,6 +1582,7 @@ ExpHole: ast::Exp = {
     },
 };
 
+// FieldExp ::= FieldId SEQ ExpPost (SEQ ExpPost)*
 FieldExp: (ast::Atom, ast::Exp) = {
     <field:FieldId> "SEQ" <first:ExpPost> <rest:("SEQ" <ExpPost>)*> => {
         let mut expressions = Vec::with_capacity(rest.len() + 1);
@@ -1429,6 +1601,7 @@ FieldExp: (ast::Atom, ast::Exp) = {
     },
 };
 
+// Arg ::= EnterExp ExpBin ExitMode | DEF DOLLAR DefId
 Arg: ast::Arg = {
     <left:@L> <_enter:EnterExp> <exp:ExpBin> <right:@R> <_exit:ExitMode> => {
         spanned(context, ArgKind::Exp(Box::new(exp)), left, right)
@@ -1438,10 +1611,14 @@ Arg: ast::Arg = {
     },
 };
 
+// Arith ::= EnterArith ArithDoubleArrow ExitMode
 Arith: ast::Exp = {
     <_enter:EnterArith> <arith:ArithDoubleArrow> <_exit:ExitMode> => arith,
 };
 
+// ArithDoubleArrow ::= ArithOr DOUBLE_ARROW ArithDoubleArrow
+//   | ArithOr DOUBLE_ARROW_BOTH ArithDoubleArrow
+//   | ArithOr
 ArithDoubleArrow: ast::Exp = {
     <left:ArithOr> "DOUBLE_ARROW" <right:ArithDoubleArrow> => {
         let span = span_between(&left, &right);
@@ -1460,6 +1637,7 @@ ArithDoubleArrow: ast::Exp = {
     ArithOr,
 };
 
+// ArithOr ::= ArithOr OR ArithAnd | ArithAnd
 ArithOr: ast::Exp = {
     <left:ArithOr> "OR" <right:ArithAnd> => {
         let span = span_between(&left, &right);
@@ -1471,6 +1649,7 @@ ArithOr: ast::Exp = {
     ArithAnd,
 };
 
+// ArithAnd ::= ArithAnd AND ArithComparison | ArithComparison
 ArithAnd: ast::Exp = {
     <left:ArithAnd> "AND" <right:ArithComparison> => {
         let span = span_between(&left, &right);
@@ -1482,6 +1661,9 @@ ArithAnd: ast::Exp = {
     ArithComparison,
 };
 
+// ArithComparison ::= ArithAdd ArithCompareOperator ArithComparison
+//   | ArithAdd LANGLE_DASH ArithComparison
+//   | ArithAdd
 ArithComparison: ast::Exp = {
     <left:ArithAdd> <operator:ArithCompareOperator> <right:ArithComparison> => {
         let span = span_between(&left, &right);
@@ -1494,6 +1676,8 @@ ArithComparison: ast::Exp = {
     ArithAdd,
 };
 
+// ArithCompareOperator ::= EQ | NEQ | LANGLE | RANGLE
+//   | LANGLE_EQ | RANGLE_EQ
 ArithCompareOperator: CmpOp = {
     "EQ" => CmpOp::Bool(xl::bool::CmpOp::Eq),
     "NEQ" => CmpOp::Bool(xl::bool::CmpOp::Ne),
@@ -1503,6 +1687,10 @@ ArithCompareOperator: CmpOp = {
     "RANGLE_EQ" => CmpOp::Num(num::CmpOp::Ge),
 };
 
+// ArithAdd ::= ArithAdd PLUS ArithMul
+//   | ArithAdd MINUS ArithMul
+//   | ArithAdd PLUS2 ArithMul
+//   | ArithMul
 ArithAdd: ast::Exp = {
     <left:ArithAdd> "PLUS" <right:ArithMul> => {
         let span = span_between(&left, &right);
@@ -1525,6 +1713,10 @@ ArithAdd: ast::Exp = {
     ArithMul,
 };
 
+// ArithMul ::= ArithMul StarOperator ArithUnary
+//   | ArithMul SLASH ArithUnary
+//   | ArithMul BACKSLASH ArithUnary
+//   | ArithUnary
 ArithMul: ast::Exp = {
     <left:ArithMul> <_operator:StarOperator> <right:ArithUnary> => {
         let span = span_between(&left, &right);
@@ -1550,6 +1742,9 @@ ArithMul: ast::Exp = {
     ArithUnary,
 };
 
+// ArithUnary ::= BAR EnterExp Exp BAR ExitMode
+//   | UnaryOperator ArithUnary
+//   | ArithPost
 ArithUnary: ast::Exp = {
     <left:@L> "BAR" <_enter:EnterExp> <exp:Exp> "BAR" <right:@R> <_exit:ExitMode> => {
         spanned(context, ExpKind::Len(Box::new(exp)), left, right)
@@ -1560,6 +1755,10 @@ ArithUnary: ast::Exp = {
     ArithPost,
 };
 
+// ArithPost ::= ArithAtomBase
+//   | ArithPost UP ArithAtomBase
+//   | ArithPost LBRACK Arith RBRACK
+//   | ArithPost DotId
 ArithPost: ast::Exp = {
     ArithAtomBase,
     <left:@L> <base:ArithPost> "UP" <exponent:ArithAtomBase> <right:@R> => {
@@ -1578,6 +1777,10 @@ ArithPost: ast::Exp = {
     },
 };
 
+// ArithAtomBase ::= ExpLiteral | ExpVariable | ExpCall | ExpHole
+//   | LPAREN Arith RPAREN
+//   | DOLLAR LPAREN EnterExp Exp RPAREN ExitMode
+//   | AtomRule
 ArithAtomBase: ast::Exp = {
     ExpLiteral,
     ExpVariable,
@@ -1596,14 +1799,19 @@ ArithAtomBase: ast::Exp = {
     },
 };
 
+// PathSteps ::= PathStepRule+
 PathSteps: Vec<PathStep> = {
     <steps:PathStepRule+> => steps,
 };
 
+// LBracketRight ::= LBRACK
 LBracketRight: ParserLocation = {
     "LBRACK" <right:@R> => right,
 };
 
+// PathStepRule ::= LBRACK Arith RBRACK
+//   | LBRACK Arith COLON Arith RBRACK
+//   | DotId
 PathStepRule: PathStep = {
     "LBRACK" <index:Arith> "RBRACK" <right:@R> => {
         PathStep::Idx(Box::new(index), right)
@@ -1614,10 +1822,19 @@ PathStepRule: PathStep = {
     <field:DotId> <right:@R> => PathStep::Dot(field, right),
 };
 
+// Param ::= ParamKindRule
 Param: ast::Param = {
     <left:@L> <kind:ParamKindRule> <right:@R> => spanned(context, kind, left, right),
 };
 
+// ParamKindRule ::= PlainTyp
+//   | DEF DOLLAR DefId COLON PlainTyp
+//   | DEF DOLLAR DefIdLParen EnterScope CommaList<Param> RPAREN
+//       COLON PlainTyp ExitScope
+//   | DEF DOLLAR DefIdLAngle EnterScope CommaList<TParam> RANGLE
+//       COLON PlainTyp ExitScope
+//   | DEF DOLLAR DefIdLAngle EnterScope CommaList<TParam>
+//       RANGLE_LPAREN CommaList<Param> RPAREN COLON PlainTyp ExitScope
 ParamKindRule: ParamKind = {
     <plain_typ:PlainTyp> => ParamKind::Exp(plain_typ),
     "DEF" "DOLLAR" <id:DefId> "COLON" <plain_typ:PlainTyp> => {
@@ -1636,6 +1853,7 @@ ParamKindRule: ParamKind = {
         <_exit:ExitScope> => ParamKind::Def(id, tparams, params, plain_typ),
 };
 
+// PremList ::= EnterScope PremEntry* ExitScope
 PremList: Vec<ast::Prem> = {
     <_enter:EnterScope> <entries:PremEntry*> <right:@R> <_exit:ExitScope> => {
         context.record_prem_list(right, !entries.is_empty());
@@ -1643,15 +1861,24 @@ PremList: Vec<ast::Prem> = {
     },
 };
 
+// PremEntry ::= DASH DASH | DASH Prem
 PremEntry: Option<ast::Prem> = {
     "DASH" "DASH" => None,
     "DASH" <premise:Prem> => Some(premise),
 };
 
+// Prem ::= PremKindRule
 Prem: ast::Prem = {
     <left:@L> <kind:PremKindRule> <right:@R> => spanned(context, kind, left, right),
 };
 
+// PremKindRule ::= OTHERWISE
+//   | LPAREN Prem RPAREN IterRule*
+//   | RelId COLON Exp
+//   | RelId COLON_SLASH Exp
+//   | VAR VarIdBind COLON PlainTyp
+//   | IF Exp
+//   | DEBUG Exp
 PremKindRule: PremKind = {
     "OTHERWISE" => PremKind::Else,
     <left:@L> "LPAREN" <premise:Prem> "RPAREN" <iterations:IterRule*> <right:@R> => {
@@ -1694,6 +1921,8 @@ PremKindRule: PremKind = {
     "DEBUG" <exp:Exp> => PremKind::Debug(DebugPrem { exp }),
 };
 
+// Hint ::= HINT_LPAREN HintId SEQ Exp RPAREN
+//   | HINT_LPAREN HintId RPAREN
 Hint: ast::Hint = {
     "HINT_LPAREN" <left:@L> <id:HintId> <right:@R> "SEQ" <exp:Exp> "RPAREN"
         <hint_right:@R> => {
@@ -1708,6 +1937,7 @@ Hint: ast::Hint = {
     },
 };
 
+// Hints ::= ε | Hint Hints
 Hints: Vec<ast::Hint> = {
     => vec![],
     <head:Hint> <mut tail:Hints> => {
@@ -1716,10 +1946,12 @@ Hints: Vec<ast::Hint> = {
     },
 };
 
+// TableBody ::= Bar BarList<TableRow>
 TableBody: Vec<ast::TableRow> = {
     <_bar:Bar> <rows:BarList<TableRow>> => rows,
 };
 
+// TableRow ::= TablePattern DOUBLE_ARROW ExpBin
 TableRow: ast::TableRow = {
     <pattern:TablePattern> "DOUBLE_ARROW" <body:ExpBin> => {
         let span = span_between(&pattern, &body);
@@ -1727,8 +1959,10 @@ TableRow: ast::TableRow = {
     },
 };
 
+// TablePattern ::= ExpSeq
 TablePattern: ast::Exp = ExpSeq;
 
+// ExpSeq ::= ExpSeqStart ExpSeqTail*
 ExpSeq: ast::Exp = {
     <first:ExpSeqStart> <rest:ExpSeqTail*> => {
         rest.into_iter().fold(first, |left, (fuse, right)| {
@@ -1747,16 +1981,19 @@ ExpSeq: ast::Exp = {
     },
 };
 
+// ExpSeqStart ::= ExpPost | ExpListIter
 ExpSeqStart: ast::Exp = {
     ExpPost,
     ExpListIter,
 };
 
+// ExpSeqTail ::= SEQ ExpPost | HASH ExpPost
 ExpSeqTail: (bool, ast::Exp) = {
     "SEQ" <exp:ExpPost> => (false, exp),
     "HASH" <exp:ExpPost> => (true, exp),
 };
 
+// RuleRule ::= RULE RelId RuleIds COLON Exp PremList
 RuleRule: ast::Rule = {
     <left:@L> "RULE" <relid:RelId> <ruleids:RuleIds> "COLON" <exp:Exp>
         <premises:PremList> => {
@@ -1774,16 +2011,25 @@ RuleRule: ast::Rule = {
         },
 };
 
+// RuleItem ::= NL2 | NL3 | RuleRule
 RuleItem: Option<ast::Rule> = {
     "NL2" => None,
     "NL3" => None,
     <rule:RuleRule> => Some(rule),
 };
 
+// Rules ::= RuleItem*
 Rules: Vec<ast::Rule> = {
     <items:RuleItem*> => items.into_iter().flatten().collect(),
 };
 
+// CallableDec ::= DefId COLON PlainTyp Hints
+//   | DefIdLParen EnterScope CommaList<Param> RPAREN COLON PlainTyp
+//       Hints ExitScope
+//   | DefIdLAngle EnterScope CommaList<TParam> RANGLE COLON PlainTyp
+//       Hints ExitScope
+//   | DefIdLAngle EnterScope CommaList<TParam> RANGLE_LPAREN
+//       CommaList<Param> RPAREN COLON PlainTyp Hints ExitScope
 CallableDec: (ast::Id, Vec<ast::TParam>, Vec<ast::Param>, ast::PlainTyp, Vec<ast::Hint>) = {
     <id:DefId> "COLON" <plain_typ:PlainTyp> <hints:Hints> => {
         (id, vec![], vec![], plain_typ, hints)
@@ -1801,6 +2047,9 @@ CallableDec: (ast::Id, Vec<ast::TParam>, Vec<ast::Param>, ast::PlainTyp, Vec<ast
         <_exit:ExitScope> => (id, tparams, params, plain_typ, hints),
 };
 
+// TableDecSignature ::= DefId COLON PlainTyp Hints
+//   | DefIdLParen EnterScope CommaList<Param> RPAREN COLON PlainTyp
+//       Hints ExitScope
 TableDecSignature: (ast::Id, Vec<ast::Param>, ast::PlainTyp, Vec<ast::Hint>) = {
     <id:DefId> "COLON" <plain_typ:PlainTyp> <hints:Hints> => {
         (id, vec![], plain_typ, hints)
@@ -1811,6 +2060,13 @@ TableDecSignature: (ast::Id, Vec<ast::Param>, ast::PlainTyp, Vec<ast::Hint>) = {
         },
 };
 
+// FunctionDefSignature ::= DefId EQ Exp PremList
+//   | DefIdLParen EnterScope CommaList<Arg> RPAREN EQ Exp PremList
+//       ExitScope
+//   | DefIdLAngle EnterScope CommaList<TParam> RANGLE EQ Exp PremList
+//       ExitScope
+//   | DefIdLAngle EnterScope CommaList<TParam> RANGLE_LPAREN
+//       CommaList<Arg> RPAREN EQ Exp PremList ExitScope
 FunctionDefSignature: (ast::Id, Vec<ast::TParam>, Vec<ast::Arg>, ast::Exp, Vec<ast::Prem>) = {
     <id:DefId> "EQ" <exp:Exp> <prems:PremList> => {
         (id, vec![], vec![], exp, prems)
