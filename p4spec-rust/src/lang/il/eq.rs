@@ -3,19 +3,11 @@
 //! Ignores source regions;
 //! compares syntax represented by spanned nodes
 
-use crate::lang::eq::SyntaxEq;
+use crate::lang::traits::eq::SyntaxEq;
 
 use super::ast::*;
 
 // == Syntax equality
-
-// - Mixfix operators
-
-impl SyntaxEq for Mixop {
-    fn syntax_eq(&self, other: &Self) -> bool {
-        self == other
-    }
-}
 
 // - Iterators
 
@@ -101,12 +93,6 @@ impl SyntaxEq for [Typ] {
 impl SyntaxEq for NotTyp {
     fn syntax_eq(&self, other: &Self) -> bool {
         self.node.syntax_eq(&other.node)
-    }
-}
-
-impl SyntaxEq for NotTypKind {
-    fn syntax_eq(&self, other: &Self) -> bool {
-        self.eq_by(other, SyntaxEq::syntax_eq)
     }
 }
 
@@ -432,16 +418,6 @@ impl SyntaxEq for [Subcheck] {
     }
 }
 
-impl SyntaxEq for [Mixop] {
-    fn syntax_eq(&self, other: &Self) -> bool {
-        self.len() == other.len()
-            && self
-                .iter()
-                .zip(other)
-                .all(|(mixop_l, mixop_r)| mixop_l.syntax_eq(mixop_r))
-    }
-}
-
 // - Defined types
 
 impl SyntaxEq for DefTyp {
@@ -509,21 +485,9 @@ impl SyntaxEq for [TypCase] {
     }
 }
 
-impl SyntaxEq for ValueCase {
-    fn syntax_eq(&self, other: &Self) -> bool {
-        self.eq_by(other, SyntaxEq::syntax_eq)
-    }
-}
-
 impl SyntaxEq for OpTyp {
     fn syntax_eq(&self, other: &Self) -> bool {
         self == other
-    }
-}
-
-impl SyntaxEq for NotExp {
-    fn syntax_eq(&self, other: &Self) -> bool {
-        self.eq_by(other, SyntaxEq::syntax_eq)
     }
 }
 

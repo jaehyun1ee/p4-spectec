@@ -7,9 +7,9 @@ use p4spec_rust::{
             notation::{atom::Atom, mixfix::Mixfix},
         },
         el,
-        eq::SyntaxEq,
         hints::input::InputHint,
         il,
+        traits::{eq::SyntaxEq, free::Free},
         xl::num,
     },
 };
@@ -316,7 +316,7 @@ fn free_expression_path_argument_and_premise_variants_collect_identifier_text() 
         ),
     ];
     for (expression, expected) in expressions {
-        assert_eq!(al::free::free_exp(&expression), expected);
+        assert_eq!(expression.free(), expected);
     }
 
     let paths = vec![
@@ -351,12 +351,12 @@ fn free_expression_path_argument_and_premise_variants_collect_identifier_text() 
         ),
     ];
     for (path, expected) in paths {
-        assert_eq!(al::free::free_path(&path), expected);
+        assert_eq!(path.free(), expected);
     }
 
-    assert_eq!(al::free::free_arg(&arg_exp("x")), ids(&["x"]));
+    assert_eq!(arg_exp("x").free(), ids(&["x"]));
     assert_eq!(
-        al::free::free_arg(&Spanned::new(il::ast::ArgKind::Def(id("x")), span("def"))),
+        Spanned::new(il::ast::ArgKind::Def(id("x")), span("def")).free(),
         ids(&[])
     );
     let premises = vec![
@@ -413,10 +413,7 @@ fn free_expression_path_argument_and_premise_variants_collect_identifier_text() 
         ),
     ];
     for (premise, expected) in premises {
-        assert_eq!(
-            al::free::free_prem(&Spanned::new(premise, span("premise"))),
-            expected
-        );
+        assert_eq!(Spanned::new(premise, span("premise")).free(), expected);
     }
 }
 
@@ -472,15 +469,12 @@ fn free_al_shapes_and_definition_arms_are_exhaustive() {
         span("table"),
     );
 
-    assert_eq!(al::free::free_rulematch(&rule_match), ids(&["s", "i", "p"]));
-    assert_eq!(al::free::free_rulepath(&rule_path), ids(&["p", "o"]));
-    assert_eq!(al::free::free_rulegroup(&group), ids(&["s", "i", "p", "o"]));
-    assert_eq!(
-        al::free::free_elsegroup(&else_group),
-        ids(&["s", "i", "p", "o"])
-    );
-    assert_eq!(al::free::free_clause(&clause), ids(&["a", "c", "p"]));
-    assert_eq!(al::free::free_tablerow(&table), ids(&["a", "t", "p"]));
+    assert_eq!(rule_match.free(), ids(&["s", "i", "p"]));
+    assert_eq!(rule_path.free(), ids(&["p", "o"]));
+    assert_eq!(group.free(), ids(&["s", "i", "p", "o"]));
+    assert_eq!(else_group.free(), ids(&["s", "i", "p", "o"]));
+    assert_eq!(clause.free(), ids(&["a", "c", "p"]));
+    assert_eq!(table.free(), ids(&["a", "t", "p"]));
 
     let def_type = Spanned::new(il::ast::DefTypKind::Plain(typ()), span("def-type"));
     let definitions: Vec<(al::ast::Def, IdSet)> = vec![
@@ -599,7 +593,7 @@ fn free_al_shapes_and_definition_arms_are_exhaustive() {
         ),
     ];
     for (definition, expected) in definitions {
-        assert_eq!(al::free::free_def(&definition), expected);
+        assert_eq!(definition.free(), expected);
     }
 }
 

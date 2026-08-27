@@ -2,7 +2,7 @@
 //!
 //! Ignores source regions, inferred notes, and prose annotations
 
-use crate::lang::eq::SyntaxEq;
+use crate::lang::traits::eq::SyntaxEq;
 
 use super::ast::*;
 
@@ -115,12 +115,6 @@ impl SyntaxEq for [Exp] {
                 .iter()
                 .zip(other)
                 .all(|(exp_l, exp_r)| exp_l.syntax_eq(exp_r))
-    }
-}
-
-impl SyntaxEq for NotExp {
-    fn syntax_eq(&self, other: &Self) -> bool {
-        self.eq_by(other, SyntaxEq::syntax_eq)
     }
 }
 

@@ -1,9 +1,38 @@
 use std::{error::Error, fmt};
 
+use crate::lang::{
+    common::ds::set::IdSet,
+    traits::{eq::SyntaxEq, free::Free},
+};
+
 use super::mixfix::{AtomPhrase, Mixfix};
 
 /// A mixfix shape with unfilled argument positions
 pub type Mixop = Mixfix<()>;
+
+// == Syntax operations
+
+impl SyntaxEq for () {
+    fn syntax_eq(&self, _other: &Self) -> bool {
+        true
+    }
+}
+
+impl Free for () {
+    fn free(&self) -> IdSet {
+        IdSet::new()
+    }
+}
+
+impl SyntaxEq for [Mixop] {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.len() == other.len()
+            && self
+                .iter()
+                .zip(other)
+                .all(|(mixop_l, mixop_r)| mixop_l.syntax_eq(mixop_r))
+    }
+}
 
 // == Converting a mixfix to a mixop
 

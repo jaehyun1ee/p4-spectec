@@ -5,7 +5,7 @@ use crate::lang::{
         ds::{map::IdMap, set::IdSet},
         source::{Span, Spanned},
     },
-    eq::SyntaxEq,
+    traits::eq::SyntaxEq,
     xl,
 };
 

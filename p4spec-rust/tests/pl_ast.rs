@@ -1,10 +1,37 @@
 use p4spec_rust::{
-    lang::common::source::{Position, Span, Spanned},
-    lang::{hints::alter, il, pl},
+    lang::common::{
+        ds::set::IdSet,
+        source::{Position, Span, Spanned},
+    },
+    lang::{hints::alter, il, pl, traits::free::Free},
 };
 
 fn span(name: &str) -> Span {
     Span::new(Position::new(name, 0, 0), Position::new(name, 0, 0))
+}
+
+#[test]
+fn prose_nodes_collect_free_identifiers_through_annotations() {
+    let expression = pl::ast::exp(
+        pl::ast::ExpKind::Bin(
+            il::ast::BinOp::Bool(p4spec_rust::lang::xl::bool::BinOp::And),
+            il::ast::OpTyp::Bool,
+            Box::new(pl::ast::exp(
+                pl::ast::ExpKind::Var(id("left")),
+                il::ast::TypKind::Bool,
+                span("left"),
+            )),
+            Box::new(pl::ast::exp(
+                pl::ast::ExpKind::Var(id("right")),
+                il::ast::TypKind::Bool,
+                span("right"),
+            )),
+        ),
+        il::ast::TypKind::Bool,
+        span("binary"),
+    );
+
+    assert_eq!(expression.free(), IdSet::from([id("left"), id("right")]));
 }
 
 fn id(name: &str) -> il::ast::Id {

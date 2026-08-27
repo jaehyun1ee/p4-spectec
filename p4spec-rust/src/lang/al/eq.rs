@@ -2,7 +2,7 @@
 //!
 //! Reuses IL equality for aliases and compares AL-specific rule structure
 
-use crate::lang::eq::SyntaxEq;
+use crate::lang::traits::eq::SyntaxEq;
 
 use super::ast::*;
 

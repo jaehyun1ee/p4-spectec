@@ -6,7 +6,8 @@ use p4spec_rust::{
             notation::{atom::Atom, mixfix::Mixfix},
         },
         hints::input::InputHint,
-        il::{ast, free, var},
+        il::{ast, var},
+        traits::free::Free,
     },
 };
 
@@ -285,10 +286,10 @@ fn free_expression_variants_follow_the_oracle() {
         ),
     ];
     for (case, expression, expected) in cases {
-        assert_eq!(free::free_exp(&expression), expected, "{case}");
+        assert_eq!(expression.free(), expected, "{case}");
     }
     assert_eq!(
-        free::free_exps(&[variable("many_a"), variable("many_b")]),
+        [variable("many_a"), variable("many_b")].free(),
         names(&["many_a", "many_b"])
     );
 }
@@ -338,7 +339,7 @@ fn free_path_argument_and_premise_variants_follow_the_oracle() {
         ),
     ];
     for (case, path, expected) in paths {
-        assert_eq!(free::free_path(&path), expected, "path {case}");
+        assert_eq!(path.free(), expected, "path {case}");
     }
     let args = vec![
         (
@@ -353,16 +354,14 @@ fn free_path_argument_and_premise_variants_follow_the_oracle() {
         ),
     ];
     assert_eq!(
-        free::free_args(
-            &args
-                .iter()
-                .map(|(_, argument, _)| argument.clone())
-                .collect::<Vec<_>>()
-        ),
+        args.iter()
+            .map(|(_, argument, _)| argument.clone())
+            .collect::<Vec<_>>()
+            .free(),
         names(&["arg"])
     );
     for (case, argument, expected) in args {
-        assert_eq!(free::free_arg(&argument), expected, "argument {case}");
+        assert_eq!(argument.free(), expected, "argument {case}");
     }
     let nested = prem(ast::PremKind::If(ast::IfPrem {
         exp: variable("nested"),
@@ -437,12 +436,11 @@ fn free_path_argument_and_premise_variants_follow_the_oracle() {
         ),
     ];
     assert_eq!(
-        free::free_prems(
-            &prems
-                .iter()
-                .map(|(_, premise, _)| premise.clone())
-                .collect::<Vec<_>>()
-        ),
+        prems
+            .iter()
+            .map(|(_, premise, _)| premise.clone())
+            .collect::<Vec<_>>()
+            .free(),
         names(&[
             "debug",
             "holds",
@@ -455,7 +453,7 @@ fn free_path_argument_and_premise_variants_follow_the_oracle() {
         ])
     );
     for (case, premise, expected) in prems {
-        assert_eq!(free::free_prem(&premise), expected, "premise {case}");
+        assert_eq!(premise.free(), expected, "premise {case}");
     }
 }
 
@@ -467,43 +465,31 @@ fn free_aggregates_and_definition_omissions_follow_the_oracle() {
             exp: variable("premise"),
         }))],
     );
-    assert_eq!(free::free_rule(&rule), names(&["head", "premise"]));
+    assert_eq!(rule.free(), names(&["head", "premise"]));
     assert_eq!(
-        free::free_rules(std::slice::from_ref(&rule)),
+        std::slice::from_ref(&rule).free(),
         names(&["head", "premise"])
     );
     let group = Spanned::new((id("group"), vec![rule.clone()]), span());
-    assert_eq!(free::free_rulegroup(&group), names(&["head", "premise"]));
+    assert_eq!(group.free(), names(&["head", "premise"]));
     assert_eq!(
-        free::free_rulegroups(std::slice::from_ref(&group)),
+        std::slice::from_ref(&group).free(),
         names(&["head", "premise"])
     );
     let else_group = Spanned::new((id("else"), rule.clone()), span());
-    assert_eq!(
-        free::free_elsegroup(&else_group),
-        names(&["head", "premise"])
-    );
-    assert_eq!(free::free_elsegroup_opt(&None), names(&[]));
-    assert_eq!(
-        free::free_elsegroup_opt(&Some(else_group.clone())),
-        names(&["head", "premise"])
-    );
+    assert_eq!(else_group.free(), names(&["head", "premise"]));
+    assert_eq!(Option::<ast::ElseGroup>::None.free(), names(&[]));
+    assert_eq!(Some(else_group.clone()).free(), names(&["head", "premise"]));
     let clause = clause("argument", "body", "premise");
+    assert_eq!(clause.free(), names(&["argument", "body", "premise"]));
     assert_eq!(
-        free::free_clause(&clause),
+        std::slice::from_ref(&clause).free(),
         names(&["argument", "body", "premise"])
     );
+    assert_eq!(clause.free(), names(&["argument", "body", "premise"]));
+    assert_eq!(Option::<ast::ElseClause>::None.free(), names(&[]));
     assert_eq!(
-        free::free_clauses(std::slice::from_ref(&clause)),
-        names(&["argument", "body", "premise"])
-    );
-    assert_eq!(
-        free::free_elseclause(&clause),
-        names(&["argument", "body", "premise"])
-    );
-    assert_eq!(free::free_elseclause_opt(&None), names(&[]));
-    assert_eq!(
-        free::free_elseclause_opt(&Some(clause.clone())),
+        Some(clause.clone()).free(),
         names(&["argument", "body", "premise"])
     );
     let row = Spanned::new(
@@ -513,11 +499,8 @@ fn free_aggregates_and_definition_omissions_follow_the_oracle() {
         ),
         span(),
     );
-    assert_eq!(free::free_tablerow(&row), names(&["key", "value"]));
-    assert_eq!(
-        free::free_tablerows(std::slice::from_ref(&row)),
-        names(&["key", "value"])
-    );
+    assert_eq!(row.free(), names(&["key", "value"]));
+    assert_eq!(std::slice::from_ref(&row).free(), names(&["key", "value"]));
     let defs = vec![
         (
             "relation",
@@ -643,7 +626,7 @@ fn free_aggregates_and_definition_omissions_follow_the_oracle() {
         ),
     ];
     for (case, definition, expected) in defs {
-        assert_eq!(free::free_def(&definition), expected, "definition {case}");
+        assert_eq!(definition.free(), expected, "definition {case}");
     }
 }
 

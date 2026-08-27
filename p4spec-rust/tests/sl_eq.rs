@@ -1,6 +1,8 @@
 use p4spec_rust::{
     lang::common::source::{Position, Span, Spanned},
-    lang::{common::notation::mixfix::Mixfix, eq::SyntaxEq, hints::input::InputHint, il, sl},
+    lang::{
+        common::notation::mixfix::Mixfix, hints::input::InputHint, il, sl, traits::eq::SyntaxEq,
+    },
 };
 
 fn span(name: &str) -> Span {

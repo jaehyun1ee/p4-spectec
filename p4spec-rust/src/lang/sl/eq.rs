@@ -3,7 +3,7 @@
 //! Ignores source regions;
 //! compares relation hints and instruction identifiers
 
-use crate::lang::{eq::SyntaxEq, hints::input};
+use crate::lang::traits::eq::SyntaxEq;
 
 use super::ast::*;
 
@@ -99,7 +99,7 @@ impl SyntaxEq for Option<ElseBlock> {
 
 impl SyntaxEq for RelSignature {
     fn syntax_eq(&self, other: &Self) -> bool {
-        self.not_typ.syntax_eq(&other.not_typ) && input::eq(&self.input_hint, &other.input_hint)
+        self.not_typ.syntax_eq(&other.not_typ) && self.input_hint.syntax_eq(&other.input_hint)
     }
 }
 
@@ -191,7 +191,7 @@ impl SyntaxEq for RuleInstr {
     fn syntax_eq(&self, other: &Self) -> bool {
         self.id.syntax_eq(&other.id)
             && self.not_exp.syntax_eq(&other.not_exp)
-            && input::eq(&self.input_hint, &other.input_hint)
+            && self.input_hint.syntax_eq(&other.input_hint)
             && self.iter_instrs.syntax_eq(&other.iter_instrs)
             && self.block.syntax_eq(&other.block)
     }

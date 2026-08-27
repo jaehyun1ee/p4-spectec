@@ -4,6 +4,11 @@ use std::{
     hash::{Hash, Hasher},
 };
 
+use crate::lang::{
+    common::ds::set::IdSet,
+    traits::{eq::SyntaxEq, free::Free},
+};
+
 use super::{super::source::Spanned, atom::Atom};
 
 /// An atom paired with its source span
@@ -139,6 +144,12 @@ impl<T: PartialEq> PartialEq for Mixfix<T> {
 
 impl<T: Eq> Eq for Mixfix<T> {}
 
+impl<T: SyntaxEq> SyntaxEq for Mixfix<T> {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.eq_by(other, SyntaxEq::syntax_eq)
+    }
+}
+
 // == Ordering
 
 impl<T: Ord> Ord for Mixfix<T> {
@@ -172,6 +183,22 @@ impl<T: Hash> Hash for Mixfix<T> {
                 mixfix_r.hash(hasher);
             }
             Self::Seq(mixfixes) => mixfixes.hash(hasher),
+        }
+    }
+}
+
+// == Free identifiers
+
+impl<T: Free> Free for Mixfix<T> {
+    fn free(&self) -> IdSet {
+        match self {
+            Self::Arg(arg) => arg.free(),
+            Self::Atom(_) => IdSet::new(),
+            Self::Brack(_, mixfix, _) => mixfix.free(),
+            Self::Infix(mixfix_l, _, mixfix_r) => mixfix_l.free().union(mixfix_r.free()),
+            Self::Seq(mixfixes) => mixfixes
+                .iter()
+                .fold(IdSet::new(), |free, mixfix| free.union(mixfix.free())),
         }
     }
 }

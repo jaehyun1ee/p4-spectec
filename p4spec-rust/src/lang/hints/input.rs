@@ -1,6 +1,9 @@
 //! Input hints for relations
 
-use crate::lang::el::ast::{Exp, ExpKind, Hole};
+use crate::lang::{
+    el::ast::{Exp, ExpKind, Hole},
+    traits::eq::SyntaxEq,
+};
 use thiserror::Error;
 
 /// Relation input positions in source order
@@ -59,11 +62,12 @@ pub fn to_string(hint: &InputHint) -> String {
             .join(" ")
     )
 }
-// Equivalence of hints
+// Syntax equivalence of hints
 
-/// Checks equality of
-pub fn eq(input_hint_l: &InputHint, input_hint_r: &InputHint) -> bool {
-    input_hint_l == input_hint_r
+impl SyntaxEq for InputHint {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self == other
+    }
 }
 
 // Creating hints

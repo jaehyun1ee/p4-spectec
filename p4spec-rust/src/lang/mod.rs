@@ -3,9 +3,9 @@
 pub mod al;
 pub mod common;
 pub mod el;
-pub mod eq;
 pub mod hints;
 pub mod il;
 pub mod pl;
 pub mod sl;
+pub mod traits;
 pub mod xl;

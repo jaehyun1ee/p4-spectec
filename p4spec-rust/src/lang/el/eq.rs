@@ -2,7 +2,7 @@
 //!
 //! Ignores source regions while comparing parsed syntax and hints
 
-use crate::lang::eq::SyntaxEq;
+use crate::lang::traits::eq::SyntaxEq;
 
 use super::ast::*;
 
@@ -21,22 +21,6 @@ impl SyntaxEq for [Id] {
                 .iter()
                 .zip(other)
                 .all(|(id_l, id_r)| id_l.syntax_eq(id_r))
-    }
-}
-
-impl SyntaxEq for Atom {
-    fn syntax_eq(&self, other: &Self) -> bool {
-        self.node == other.node
-    }
-}
-
-impl SyntaxEq for [Atom] {
-    fn syntax_eq(&self, other: &Self) -> bool {
-        self.len() == other.len()
-            && self
-                .iter()
-                .zip(other)
-                .all(|(atom_l, atom_r)| atom_l.syntax_eq(atom_r))
     }
 }
 

@@ -4,8 +4,9 @@ use p4spec_rust::{
         common::{ds::set::IdSet, notation::atom::Atom as DomainAtom},
         el::{
             ast::{self, BinOp, ExpKind},
-            free, print,
+            print,
         },
+        traits::free::Free,
     },
 };
 
@@ -66,7 +67,7 @@ fn free_expression_ids_ignore_source_spans_and_render_in_source_order() {
         "root.watsup",
     );
 
-    assert_eq!(free::free_id_exp(&expression), ids(&["left", "right"]));
+    assert_eq!(expression.free(), ids(&["left", "right"]));
     assert_eq!(print::string_of_exp(&expression), "left + right");
 }
 
@@ -148,19 +149,17 @@ fn free_collection_covers_paths_calls_premises_and_definition_bodies() {
     }));
 
     assert_eq!(
-        free::free_id_def(&definition(ast::DefKind::RuleGroup(ast::RuleGroupDef {
+        definition(ast::DefKind::RuleGroup(ast::RuleGroupDef {
             relid: id("relation", "def.watsup"),
             groupid: id("group", "def.watsup"),
             rules: vec![rule],
-        }))),
+        }))
+        .free(),
         ids(&[
             "argument", "bound", "field", "guard", "high", "index", "low"
         ])
     );
-    assert_eq!(
-        free::free_id_def(&function),
-        ids(&["argument", "body", "debug"])
-    );
+    assert_eq!(function.free(), ids(&["argument", "body", "debug"]));
 }
 
 #[test]

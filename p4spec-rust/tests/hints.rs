@@ -9,6 +9,7 @@ use p4spec_rust::{
             flag, hint,
             input::{self, InputError, InputHint},
         },
+        traits::eq::SyntaxEq,
     },
 };
 
@@ -156,14 +157,8 @@ fn hint_modules_format_exactly() {
         input::to_string(&InputHint::new(vec![2, 0])),
         "hint(input %2 %0)"
     );
-    assert!(input::eq(
-        &InputHint::new(vec![2, 0]),
-        &InputHint::new(vec![2, 0])
-    ));
-    assert!(!input::eq(
-        &InputHint::new(vec![2]),
-        &InputHint::new(vec![0])
-    ));
+    assert!(InputHint::new(vec![2, 0]).syntax_eq(&InputHint::new(vec![2, 0])));
+    assert!(!InputHint::new(vec![2]).syntax_eq(&InputHint::new(vec![0])));
     assert_eq!(
         fields::to_string(&FieldHint::new(vec!["left".into(), "right".into()])),
         "hint(fields left right)"

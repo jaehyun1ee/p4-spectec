@@ -4,7 +4,7 @@ use p4spec_rust::{
         Id,
         ds::{map::IdMap, set::IdSet},
     },
-    lang::il,
+    lang::{il, traits::free::Free},
 };
 
 fn id(name: &str, file: &str) -> Id {
@@ -58,7 +58,7 @@ fn free_identifier_sets_preserve_source_spans() {
         Span::default(),
     );
 
-    let ids: IdSet = il::free::free_exp(&exp);
+    let ids: IdSet = exp.free();
 
     assert_eq!(ids.get(&id_lookup), Some(&id_stored));
 }
