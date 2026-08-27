@@ -4,6 +4,7 @@ use p4spec_rust::{
         common::notation::mixfix::Mixfix,
         hints::{alter, input::InputHint},
         il, pl,
+        traits::print::Print,
     },
 };
 
@@ -71,11 +72,11 @@ fn group_printer_escapes_text_and_omits_annotations_and_fallthrough() {
     second.hints.prose = Some(alter::AlterationHint::Text("other prose".to_owned()));
 
     assert_eq!(
-        pl::print::string_of_block_group(&vec![first]),
+        Print::to_string(&vec![first]),
         "1. Return \"line\\n\\\"\\\\\""
     );
     assert_eq!(
-        pl::print::string_of_block_group(&vec![second]),
+        Print::to_string(&vec![second]),
         "1. Return \"line\\n\\\"\\\\\""
     );
 }
@@ -96,7 +97,7 @@ fn shared_control_flow_renders_group_tier_at_nested_level() {
     branch.node.node.note.iid = 42;
 
     assert_eq!(
-        pl::print::string_of_block_group(&vec![branch]),
+        Print::to_string(&vec![branch]),
         concat!(
             "1. If (condition), then\n\n",
             "  1. Return value\n\n",
@@ -124,7 +125,7 @@ fn group_and_dispatch_backtracking_preserve_arm_order() {
         }),
     }));
     assert_eq!(
-        pl::print::string_of_block_group(&vec![backtrack]),
+        Print::to_string(&vec![backtrack]),
         concat!(
             "1. Block (2 arms)\n\n",
             "Arm 1:\n\n  1. Return a\n\n",
@@ -156,7 +157,7 @@ fn group_and_dispatch_backtracking_preserve_arm_order() {
         }),
     }));
     assert_eq!(
-        pl::print::string_of_block_dispatch(&vec![route]),
+        Print::to_string(&vec![route]),
         concat!(
             "1. Block (2 arms)\n\n",
             "Arm 1:\n\n  1. Group first: first\n\n",

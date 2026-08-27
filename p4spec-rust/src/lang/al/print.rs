@@ -1,54 +1,41 @@
 //! Text rendering for algorithmic-language data
 
-use std::fmt;
+use std::fmt::{self, Write};
 
 use crate::lang::{
     common::notation::mixop::Mixop,
     hints::input::InputHint,
-    il::print::{
-        self as il_print, string_of_args, string_of_atom, string_of_clauses, string_of_def_typ,
-        string_of_defid, string_of_elseclause_opt, string_of_exp, string_of_exps,
-        string_of_not_typ, string_of_params, string_of_relid, string_of_rulegroupid,
-        string_of_tparams, string_of_typ, string_of_typid, string_of_varid,
-    },
+    il::print::write_prems_with,
+    traits::print::{Print, Printer},
 };
 
 use super::ast::*;
 
-// - Identifiers
-
-/// Renders rulepathid
-pub fn string_of_rulepathid(id: &Id) -> String {
-    id.node.clone()
-}
+// - Helpers
 
 fn indent(level: usize) -> String {
     "  ".repeat(level)
 }
 
-fn fill_notation(not_typ: &NotTyp, exps: Vec<String>) -> String {
+fn write_notation(
+    output: &mut Printer<'_>,
+    not_typ: &NotTyp,
+    exps: Vec<Option<&Exp>>,
+) -> fmt::Result {
     let (mixop, typs) = not_typ.node.split();
     assert_eq!(typs.len(), exps.len());
     Mixop::fill(&mixop, exps)
         .expect("notation arguments came from the same split notation")
-        .render(string_of_atom, Clone::clone)
+        .print_with(output, |exp, output| match exp {
+            Some(exp) => exp.print(output),
+            None => output.write("%"),
+        })
 }
 
 // - Rules
 
-/// Renders relation input expressions
-///
-/// `exps_input` must match `input_hint.indices()`;
-/// notation arity must be internally valid
-pub fn string_of_ruleinput(not_typ: &NotTyp, input_hint: &InputHint, exps_input: &[Exp]) -> String {
-    let mut output = String::new();
-    write_ruleinput(&mut output, not_typ, input_hint, exps_input)
-        .expect("writing to a String cannot fail");
-    output
-}
-
 fn write_ruleinput(
-    output: &mut dyn fmt::Write,
+    output: &mut Printer<'_>,
     not_typ: &NotTyp,
     input_hint: &InputHint,
     exps_input: &[Exp],
@@ -61,32 +48,14 @@ fn write_ruleinput(
             input_indices
                 .iter()
                 .zip(exps_input)
-                .find_map(|(input, exp)| {
-                    (*input == index as i64).then(|| il_print::string_of_exp(exp))
-                })
-                .unwrap_or_else(|| "%".to_owned())
+                .find_map(|(input, exp)| (*input == index as i64).then_some(exp))
         })
         .collect();
-    output.write_str(&fill_notation(not_typ, exps))
-}
-
-/// Renders relation output expressions
-///
-/// `exps_output` must cover every non-input notation position;
-/// notation arity must be internally valid
-pub fn string_of_ruleoutput(
-    not_typ: &NotTyp,
-    input_hint: &InputHint,
-    exps_output: &[Exp],
-) -> String {
-    let mut output = String::new();
-    write_ruleoutput(&mut output, not_typ, input_hint, exps_output)
-        .expect("writing to a String cannot fail");
-    output
+    write_notation(output, not_typ, exps)
 }
 
 fn write_ruleoutput(
-    output: &mut dyn fmt::Write,
+    output: &mut Printer<'_>,
     not_typ: &NotTyp,
     input_hint: &InputHint,
     exps_output: &[Exp],
@@ -105,30 +74,16 @@ fn write_ruleoutput(
                 outputs
                     .iter()
                     .zip(exps_output)
-                    .find_map(|(output, exp)| {
-                        (*output == index).then(|| il_print::string_of_exp(exp))
-                    })
-                    .unwrap_or_else(|| "%".to_owned())
+                    .find_map(|(output, exp)| (*output == index).then_some(exp))
             })
             .collect();
-        write!(output, "-- output: {}", fill_notation(not_typ, exps))
+        output.write_str("-- output: ")?;
+        write_notation(output, not_typ, exps)
     }
 }
 
-/// Renders rulematch
-pub fn string_of_rulematch(
-    not_typ: &NotTyp,
-    input_hint: &InputHint,
-    rule_match: &RuleMatch,
-) -> String {
-    let mut output = String::new();
-    write_rulematch(&mut output, not_typ, input_hint, rule_match)
-        .expect("writing to a String cannot fail");
-    output
-}
-
 fn write_rulematch(
-    output: &mut dyn fmt::Write,
+    output: &mut Printer<'_>,
     not_typ: &NotTyp,
     input_hint: &InputHint,
     rule_match: &RuleMatch,
@@ -138,52 +93,25 @@ fn write_rulematch(
     output.write_char('\n')?;
     output.write_str(&indent(2))?;
     write_ruleinput(output, not_typ, input_hint, &rule_match.exps_input)?;
-    output.write_str(&il_print::string_of_prems_with(2, &rule_match.prems))
-}
-
-/// Renders rulepath
-pub fn string_of_rulepath(
-    not_typ: &NotTyp,
-    input_hint: &InputHint,
-    rule_path: &RulePath,
-) -> String {
-    let mut output = String::new();
-    write_rulepath(&mut output, not_typ, input_hint, rule_path)
-        .expect("writing to a String cannot fail");
-    output
+    write_prems_with(output, 2, &rule_match.prems)
 }
 
 fn write_rulepath(
-    output: &mut dyn fmt::Write,
+    output: &mut Printer<'_>,
     not_typ: &NotTyp,
     input_hint: &InputHint,
     rule_path: &RulePath,
 ) -> fmt::Result {
-    write!(
-        output,
-        "{}rulepath {}{}\n{}",
-        indent(2),
-        string_of_rulepathid(&rule_path.id),
-        il_print::string_of_prems_with(2, &rule_path.prems),
-        indent(2)
-    )?;
+    write!(output, "{}rulepath ", indent(2))?;
+    rule_path.id.print(output)?;
+    write_prems_with(output, 2, &rule_path.prems)?;
+    output.write_char('\n')?;
+    output.write_str(&indent(2))?;
     write_ruleoutput(output, not_typ, input_hint, &rule_path.exps_output)
 }
 
-/// Renders rulepaths
-pub fn string_of_rulepaths(
-    not_typ: &NotTyp,
-    input_hint: &InputHint,
-    rule_paths: &[RulePath],
-) -> String {
-    let mut output = String::new();
-    write_rulepaths(&mut output, not_typ, input_hint, rule_paths)
-        .expect("writing to a String cannot fail");
-    output
-}
-
 fn write_rulepaths(
-    output: &mut dyn fmt::Write,
+    output: &mut Printer<'_>,
     not_typ: &NotTyp,
     input_hint: &InputHint,
     rule_paths: &[RulePath],
@@ -197,50 +125,22 @@ fn write_rulepaths(
     Ok(())
 }
 
-/// Renders rulegroup
-pub fn string_of_rulegroup(
-    not_typ: &NotTyp,
-    input_hint: &InputHint,
-    rule_group: &RuleGroup,
-) -> String {
-    let mut output = String::new();
-    write_rulegroup(&mut output, not_typ, input_hint, rule_group)
-        .expect("writing to a String cannot fail");
-    output
-}
-
 fn write_rulegroup(
-    output: &mut dyn fmt::Write,
+    output: &mut Printer<'_>,
     not_typ: &NotTyp,
     input_hint: &InputHint,
     rule_group: &RuleGroup,
 ) -> fmt::Result {
-    write!(
-        output,
-        "{}rulegroup {}\n\n {}match\n\n",
-        indent(1),
-        string_of_rulegroupid(&rule_group.node.id),
-        indent(1)
-    )?;
+    write!(output, "{}rulegroup ", indent(1))?;
+    rule_group.node.id.print(output)?;
+    write!(output, "\n\n {}match\n\n", indent(1))?;
     write_rulematch(output, not_typ, input_hint, &rule_group.node.rule_match)?;
     write!(output, "\n\n {}paths\n\n", indent(1))?;
     write_rulepaths(output, not_typ, input_hint, &rule_group.node.rule_paths)
 }
 
-/// Renders rulegroups
-pub fn string_of_rulegroups(
-    not_typ: &NotTyp,
-    input_hint: &InputHint,
-    rule_groups: &[RuleGroup],
-) -> String {
-    let mut output = String::new();
-    write_rulegroups(&mut output, not_typ, input_hint, rule_groups)
-        .expect("writing to a String cannot fail");
-    output
-}
-
 fn write_rulegroups(
-    output: &mut dyn fmt::Write,
+    output: &mut Printer<'_>,
     not_typ: &NotTyp,
     input_hint: &InputHint,
     rule_groups: &[RuleGroup],
@@ -254,31 +154,15 @@ fn write_rulegroups(
     Ok(())
 }
 
-/// Renders elsegroup
-pub fn string_of_elsegroup(
-    not_typ: &NotTyp,
-    input_hint: &InputHint,
-    else_group: &ElseGroup,
-) -> String {
-    let mut output = String::new();
-    write_elsegroup(&mut output, not_typ, input_hint, else_group)
-        .expect("writing to a String cannot fail");
-    output
-}
-
 fn write_elsegroup(
-    output: &mut dyn fmt::Write,
+    output: &mut Printer<'_>,
     not_typ: &NotTyp,
     input_hint: &InputHint,
     else_group: &ElseGroup,
 ) -> fmt::Result {
-    write!(
-        output,
-        "{}rulegroup {}\n\n {}match\n\n",
-        indent(1),
-        string_of_rulegroupid(&else_group.node.id),
-        indent(1)
-    )?;
+    write!(output, "{}rulegroup ", indent(1))?;
+    else_group.node.id.print(output)?;
+    write!(output, "\n\n {}match\n\n", indent(1))?;
     write_rulematch(output, not_typ, input_hint, &else_group.node.rule_match)?;
     write!(output, "\n\n {}paths\n\n", indent(1))?;
     write_rulepaths(
@@ -289,20 +173,8 @@ fn write_elsegroup(
     )
 }
 
-/// Renders elsegroup opt
-pub fn string_of_elsegroup_opt(
-    not_typ: &NotTyp,
-    input_hint: &InputHint,
-    else_group: &Option<ElseGroup>,
-) -> String {
-    let mut output = String::new();
-    write_elsegroup_opt(&mut output, not_typ, input_hint, else_group)
-        .expect("writing to a String cannot fail");
-    output
-}
-
 fn write_elsegroup_opt(
-    output: &mut dyn fmt::Write,
+    output: &mut Printer<'_>,
     not_typ: &NotTyp,
     input_hint: &InputHint,
     else_group: &Option<ElseGroup>,
@@ -316,187 +188,181 @@ fn write_elsegroup_opt(
 
 // - Table rows
 
-/// Renders tablerow
-pub fn string_of_tablerow(table_row: &TableRow) -> String {
-    let mut output = String::new();
-    write_tablerow(&mut output, table_row).expect("writing to a String cannot fail");
-    output
-}
-
-fn write_tablerow(output: &mut dyn fmt::Write, table_row: &TableRow) -> fmt::Result {
-    write!(
-        output,
-        "\n{}(signature) {}\n{}{} -> {}{}",
-        indent(2),
-        string_of_exps(", ", &table_row.node.exps_signature),
-        indent(2),
-        string_of_args(&table_row.node.args),
-        string_of_exp(&table_row.node.exp),
-        il_print::string_of_prems_with(2, &table_row.node.prems)
-    )
-}
-
-/// Renders tablerows
-pub fn string_of_tablerows(table_rows: &[TableRow]) -> String {
-    let mut output = String::new();
-    write_tablerows(&mut output, table_rows).expect("writing to a String cannot fail");
-    output
-}
-
-fn write_tablerows(output: &mut dyn fmt::Write, table_rows: &[TableRow]) -> fmt::Result {
-    for (index, table_row) in table_rows.iter().enumerate() {
-        write!(output, "\n{}row {index} :", indent(1))?;
-        write_tablerow(output, table_row)?;
+impl Print for TableRow {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        write!(printer, "\n{}(signature) ", indent(2))?;
+        for (index, exp) in self.node.exps_signature.iter().enumerate() {
+            if index != 0 {
+                printer.write_str(", ")?;
+            }
+            exp.print(printer)?;
+        }
+        printer.write_char('\n')?;
+        printer.write_str(&indent(2))?;
+        self.node.args.as_slice().print(printer)?;
+        printer.write_str(" -> ")?;
+        self.node.exp.print(printer)?;
+        write_prems_with(printer, 2, &self.node.prems)
     }
-    Ok(())
+}
+
+impl Print for [TableRow] {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        for (index, table_row) in self.iter().enumerate() {
+            write!(printer, "\n{}row {index} :", indent(1))?;
+            table_row.print(printer)?;
+        }
+        Ok(())
+    }
 }
 
 // - Definitions
 
-/// Renders def
-pub fn string_of_def(definition: &Def) -> String {
-    let mut output = String::new();
-    write_def(&mut output, definition).expect("writing to a String cannot fail");
-    output
-}
-
-fn write_def(output: &mut dyn fmt::Write, definition: &Def) -> fmt::Result {
-    match &definition.node {
-        DefKind::ExternTyp(ExternTypDef { id, .. }) => {
-            write!(output, "extern syntax {}", string_of_typid(id))
+impl Print for Def {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        match &self.node {
+            DefKind::ExternTyp(ExternTypDef { id, .. }) => {
+                printer.write_str("extern syntax ")?;
+                id.print(printer)
+            }
+            DefKind::Typ(TypDef {
+                id,
+                tparams,
+                def_typ,
+                ..
+            }) => {
+                printer.write_str("syntax ")?;
+                id.print(printer)?;
+                if !tparams.is_empty() {
+                    printer.write_char('<')?;
+                    printer.separated(tparams, ", ")?;
+                    printer.write_char('>')?;
+                }
+                printer.write_str(" = ")?;
+                def_typ.print(printer)
+            }
+            DefKind::Var(VarDef { id, typ, .. }) => {
+                printer.write_str("var ")?;
+                id.print(printer)?;
+                printer.write_str(" : ")?;
+                typ.print(printer)
+            }
+            DefKind::ExternRel(ExternRelDef { id, not_typ, .. }) => {
+                printer.write_str("extern relation ")?;
+                id.print(printer)?;
+                printer.write_str(": ")?;
+                not_typ.print(printer)
+            }
+            DefKind::Rel(RelDef {
+                id,
+                not_typ,
+                input_hint,
+                rule_groups,
+                else_group,
+                ..
+            }) => {
+                printer.write_str("relation ")?;
+                id.print(printer)?;
+                printer.write_str(": ")?;
+                not_typ.print(printer)?;
+                printer.write_str("\n\n")?;
+                write_rulegroups(printer, not_typ, input_hint, rule_groups)?;
+                write_elsegroup_opt(printer, not_typ, input_hint, else_group)
+            }
+            DefKind::ExternDec(ExternDecDef {
+                id,
+                tparams,
+                params,
+                typ,
+                ..
+            }) => {
+                printer.write_str("extern def $")?;
+                id.print(printer)?;
+                if !tparams.is_empty() {
+                    printer.write_char('<')?;
+                    printer.separated(tparams, ", ")?;
+                    printer.write_char('>')?;
+                }
+                params.as_slice().print(printer)?;
+                printer.write_str(" : ")?;
+                typ.print(printer)
+            }
+            DefKind::BuiltinDec(BuiltinDecDef {
+                id,
+                tparams,
+                params,
+                typ,
+                ..
+            }) => {
+                printer.write_str("builtin def $")?;
+                id.print(printer)?;
+                if !tparams.is_empty() {
+                    printer.write_char('<')?;
+                    printer.separated(tparams, ", ")?;
+                    printer.write_char('>')?;
+                }
+                params.as_slice().print(printer)?;
+                printer.write_str(" : ")?;
+                typ.print(printer)
+            }
+            DefKind::TableDec(TableDecDef {
+                id,
+                params,
+                typ,
+                table_rows,
+                ..
+            }) => {
+                printer.write_str("tbl def $")?;
+                id.print(printer)?;
+                params.as_slice().print(printer)?;
+                printer.write_str(" : ")?;
+                typ.print(printer)?;
+                printer.write_str(" =")?;
+                table_rows.print(printer)
+            }
+            DefKind::FuncDec(FuncDecDef {
+                id,
+                tparams,
+                params,
+                typ,
+                clauses,
+                else_clause,
+                ..
+            }) => {
+                printer.write_str("def $")?;
+                id.print(printer)?;
+                if !tparams.is_empty() {
+                    printer.write_char('<')?;
+                    printer.separated(tparams, ", ")?;
+                    printer.write_char('>')?;
+                }
+                params.as_slice().print(printer)?;
+                printer.write_str(" : ")?;
+                typ.print(printer)?;
+                printer.write_str(" =")?;
+                for (index, clause) in clauses.iter().enumerate() {
+                    write!(printer, "\n\n  clause {index} : ")?;
+                    clause.print(printer)?;
+                }
+                if let Some(else_clause) = else_clause {
+                    printer.write_str("\n\n  clause -1 : ")?;
+                    else_clause.print(printer)?;
+                }
+                Ok(())
+            }
         }
-        DefKind::Typ(TypDef {
-            id,
-            tparams,
-            def_typ,
-            ..
-        }) => write!(
-            output,
-            "syntax {}{} = {}",
-            string_of_typid(id),
-            string_of_tparams(tparams),
-            string_of_def_typ(def_typ)
-        ),
-        DefKind::Var(VarDef { id, typ, .. }) => write!(
-            output,
-            "var {} : {}",
-            string_of_varid(id),
-            string_of_typ(typ)
-        ),
-        DefKind::ExternRel(ExternRelDef { id, not_typ, .. }) => write!(
-            output,
-            "extern relation {}: {}",
-            string_of_relid(id),
-            string_of_not_typ(not_typ)
-        ),
-        DefKind::Rel(RelDef {
-            id,
-            not_typ,
-            input_hint,
-            rule_groups,
-            else_group,
-            ..
-        }) => {
-            write!(
-                output,
-                "relation {}: {}\n\n",
-                string_of_relid(id),
-                string_of_not_typ(not_typ)
-            )?;
-            write_rulegroups(output, not_typ, input_hint, rule_groups)?;
-            write_elsegroup_opt(output, not_typ, input_hint, else_group)
-        }
-        DefKind::ExternDec(ExternDecDef {
-            id,
-            tparams,
-            params,
-            typ,
-            ..
-        }) => write!(
-            output,
-            "extern def {}{}{} : {}",
-            string_of_defid(id),
-            string_of_tparams(tparams),
-            string_of_params(params),
-            string_of_typ(typ)
-        ),
-        DefKind::BuiltinDec(BuiltinDecDef {
-            id,
-            tparams,
-            params,
-            typ,
-            ..
-        }) => write!(
-            output,
-            "builtin def {}{}{} : {}",
-            string_of_defid(id),
-            string_of_tparams(tparams),
-            string_of_params(params),
-            string_of_typ(typ)
-        ),
-        DefKind::TableDec(TableDecDef {
-            id,
-            params,
-            typ,
-            table_rows,
-            ..
-        }) => {
-            write!(
-                output,
-                "tbl def {}{} : {} =",
-                string_of_defid(id),
-                string_of_params(params),
-                string_of_typ(typ)
-            )?;
-            write_tablerows(output, table_rows)
-        }
-        DefKind::FuncDec(FuncDecDef {
-            id,
-            tparams,
-            params,
-            typ,
-            clauses,
-            else_clause,
-            ..
-        }) => write!(
-            output,
-            "def {}{}{} : {} ={}{}",
-            string_of_defid(id),
-            string_of_tparams(tparams),
-            string_of_params(params),
-            string_of_typ(typ),
-            string_of_clauses(clauses),
-            string_of_elseclause_opt(else_clause)
-        ),
     }
-}
-
-/// Renders defs
-pub fn string_of_defs(definitions: &[Def]) -> String {
-    let mut output = String::new();
-    write_defs(&mut output, definitions).expect("writing to a String cannot fail");
-    output
-}
-
-fn write_defs(output: &mut dyn fmt::Write, definitions: &[Def]) -> fmt::Result {
-    for (index, definition) in definitions.iter().enumerate() {
-        if index != 0 {
-            output.write_str("\n\n")?;
-        }
-        write_def(output, definition)?;
-    }
-    Ok(())
 }
 
 // - Specifications
-
-/// Renders a specification without source or hint metadata
-pub fn string_of_spec(spec: &Spec) -> String {
-    let mut output = String::new();
-    write_spec(&mut output, spec).expect("writing to a String cannot fail");
-    output
-}
-
-fn write_spec(output: &mut dyn fmt::Write, spec: &Spec) -> fmt::Result {
-    write_defs(output, spec)
+impl Print for Spec {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        for (index, definition) in self.iter().enumerate() {
+            if index != 0 {
+                printer.write_str("\n\n")?;
+            }
+            definition.print(printer)?;
+        }
+        Ok(())
+    }
 }

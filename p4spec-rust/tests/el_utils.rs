@@ -2,11 +2,8 @@ use p4spec_rust::{
     lang::common::source::{Position, Span, Spanned},
     lang::{
         common::{ds::set::IdSet, notation::atom::Atom as DomainAtom},
-        el::{
-            ast::{self, BinOp, ExpKind},
-            print,
-        },
-        traits::free::Free,
+        el::ast::{self, BinOp, ExpKind},
+        traits::{free::Free, print::Print},
     },
 };
 
@@ -68,7 +65,7 @@ fn free_expression_ids_ignore_source_spans_and_render_in_source_order() {
     );
 
     assert_eq!(expression.free(), ids(&["left", "right"]));
-    assert_eq!(print::string_of_exp(&expression), "left + right");
+    assert_eq!(Print::to_string(&expression), "left + right");
 }
 
 #[test]
@@ -195,9 +192,9 @@ fn printer_preserves_el_delimiters_precedence_hints_and_definition_separators() 
         ),
         "outer",
     );
-    assert_eq!(print::string_of_exp(&nested), "(a + b) * c?");
+    assert_eq!(Print::to_string(&nested), "(a + b) * c?");
     assert_eq!(
-        print::string_of_exp(&exp(
+        Print::to_string(&exp(
             ExpKind::Call(
                 id("f", "call"),
                 vec![plain(ast::PlainTypKind::Text)],
@@ -211,7 +208,7 @@ fn printer_preserves_el_delimiters_precedence_hints_and_definition_separators() 
         "$f<text>($g)"
     );
     assert_eq!(
-        print::string_of_prem(&prem(ast::PremKind::Iter(ast::IterPrem {
+        Print::to_string(&prem(ast::PremKind::Iter(ast::IterPrem {
             prem: Box::new(prem(ast::PremKind::If(ast::IfPrem {
                 exp: exp(ExpKind::Var(id("ready", "prem")), "prem"),
             }))),
@@ -303,7 +300,7 @@ fn printer_preserves_el_delimiters_precedence_hints_and_definition_separators() 
         definition(ast::DefKind::Sep),
     ];
     assert_eq!(
-        print::string_of_spec(&definitions),
+        Print::to_string(&definitions),
         "extern syntax Syntax\nsyntax Pair<T>\nsyntax Record = {field bool}\nvar value : bool\nextern relation external: TERM\nrelation internal: TERM\nextern dec $extern(bool) : bool\nbuiltin dec $builtin : bool\ntbl dec $table : bool\ndec $declared : bool\ntbl def $rows =\n  pattern => body\ndef $defined = body\n -- otherwise\n\n\n\n"
     );
 }
@@ -312,28 +309,28 @@ fn printer_preserves_el_delimiters_precedence_hints_and_definition_separators() 
 fn printer_matches_ocaml_byte_escaping_and_public_collection_helpers() {
     let escaped = "\"\\'\n\r\t\x08\x0c\x01é";
     assert_eq!(
-        print::string_of_exp(&exp(ExpKind::Text(escaped.into()), "text")),
+        Print::to_string(&exp(ExpKind::Text(escaped.into()), "text")),
         "\"\\\"\\\\'\\n\\r\\t\\b\\012\\001\\195\\169\""
     );
     assert_eq!(
-        print::string_of_exp(&exp(ExpKind::Latex(escaped.into()), "latex")),
+        Print::to_string(&exp(ExpKind::Latex(escaped.into()), "latex")),
         "latex(\\\"\\\\'\\n\\r\\t\\b\\012\\001\\195\\169)"
     );
     assert_eq!(
-        print::string_of_unop(ast::UnOp::Num(p4spec_rust::lang::xl::num::UnOp::Minus)),
+        Print::to_string(&ast::UnOp::Num(p4spec_rust::lang::xl::num::UnOp::Minus)),
         "-"
     );
     assert_eq!(
-        print::string_of_binop(ast::BinOp::Bool(p4spec_rust::lang::xl::bool::BinOp::Equiv,)),
+        Print::to_string(&ast::BinOp::Bool(p4spec_rust::lang::xl::bool::BinOp::Equiv,)),
         "<=>"
     );
     assert_eq!(
-        print::string_of_cmpop(ast::CmpOp::Bool(p4spec_rust::lang::xl::bool::CmpOp::Ne)),
+        Print::to_string(&ast::CmpOp::Bool(p4spec_rust::lang::xl::bool::CmpOp::Ne)),
         "=/="
     );
     let atom_type = Spanned::new(ast::NotTypKind::Atom(atom("A")), span("type"));
     assert_eq!(
-        print::string_of_not_typs(", ", &[atom_type.clone(), atom_type]),
+        Print::to_string(&[atom_type.clone(), atom_type][..]),
         "A, A"
     );
     let row = Spanned::new(
@@ -341,7 +338,7 @@ fn printer_matches_ocaml_byte_escaping_and_public_collection_helpers() {
         span("row"),
     );
     assert_eq!(
-        print::string_of_tablerows(&[row.clone(), row]),
+        Print::to_string(&[row.clone(), row][..]),
         "eps => eps\n  | eps => eps"
     );
     let rule = Spanned::new(
@@ -354,7 +351,7 @@ fn printer_matches_ocaml_byte_escaping_and_public_collection_helpers() {
         span("rule"),
     );
     assert_eq!(
-        print::string_of_rules(&[rule.clone(), rule]),
+        Print::to_string(&[rule.clone(), rule][..]),
         "rule r:\n  eps\nrule r:\n  eps"
     );
 }
@@ -420,7 +417,7 @@ fn printer_tables_cover_remaining_el_constructor_families() {
         ),
     ];
     for (expression, expected) in expressions {
-        assert_eq!(print::string_of_exp(&expression), expected);
+        assert_eq!(Print::to_string(&expression), expected);
     }
 
     let root = Spanned::new(ast::PathKind::Root, span("path"));
@@ -453,7 +450,7 @@ fn printer_tables_cover_remaining_el_constructor_families() {
         ),
     ];
     for (path, expected) in paths {
-        assert_eq!(print::string_of_path(&path), expected);
+        assert_eq!(Print::to_string(&path), expected);
     }
 
     let types = [
@@ -478,7 +475,7 @@ fn printer_tables_cover_remaining_el_constructor_families() {
         ),
     ];
     for (typ, expected) in types {
-        assert_eq!(print::string_of_plain_typ(&typ), expected);
+        assert_eq!(Print::to_string(&typ), expected);
     }
     let notation = [
         (
@@ -515,7 +512,7 @@ fn printer_tables_cover_remaining_el_constructor_families() {
         ),
     ];
     for (typ, expected) in notation {
-        assert_eq!(print::string_of_not_typ(&typ), expected);
+        assert_eq!(Print::to_string(&typ), expected);
     }
     let def_types = [
         (
@@ -531,7 +528,7 @@ fn printer_tables_cover_remaining_el_constructor_families() {
         ),
     ];
     for (typ, expected) in def_types {
-        assert_eq!(print::string_of_def_typ(&typ), expected);
+        assert_eq!(Print::to_string(&typ), expected);
     }
 
     let premises = [
@@ -562,14 +559,14 @@ fn printer_tables_cover_remaining_el_constructor_families() {
         ),
     ];
     for (premise, expected) in premises {
-        assert_eq!(print::string_of_prem(&premise), expected);
+        assert_eq!(Print::to_string(&premise), expected);
     }
     let rule = Spanned::new(
         (id("r", "rule"), id("g", "rule"), var("x"), vec![]),
         span("rule"),
     );
     assert_eq!(
-        print::string_of_def(&definition(ast::DefKind::RuleGroup(ast::RuleGroupDef {
+        Print::to_string(&definition(ast::DefKind::RuleGroup(ast::RuleGroupDef {
             relid: id("r", "def"),
             groupid: id("g", "def"),
             rules: vec![rule],

@@ -6,6 +6,8 @@ use num_bigint::BigInt;
 use num_traits::{Signed, Zero};
 use thiserror::Error;
 
+use crate::lang::traits::print::{Print, Printer};
+
 // Numbers: natural numbers and integers
 
 /// A non-negative arbitrary-precision integer
@@ -160,52 +162,57 @@ pub fn sub(type_a: Typ, type_b: Typ) -> bool {
 
 // Stringifiers
 
-/// Renders num
-pub fn string_of_num(number: &Number) -> String {
-    match number {
-        Number::Nat(natural) => natural.to_string(),
-        Number::Int(integer) => {
-            let sign = if integer.is_negative() { "-" } else { "+" };
-            format!("{sign}{}", integer.abs())
+impl Print for Number {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        match self {
+            Self::Nat(natural) => printer.write_fmt(format_args!("{natural}")),
+            Self::Int(integer) => {
+                let sign = if integer.is_negative() { "-" } else { "+" };
+                printer.write_fmt(format_args!("{sign}{}", integer.abs()))
+            }
         }
     }
 }
 
-/// Renders typ
-pub fn string_of_typ(number_type: Typ) -> &'static str {
-    match number_type {
-        Typ::Nat => "nat",
-        Typ::Int => "int",
+impl Print for Typ {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        printer.write(match self {
+            Self::Nat => "nat",
+            Self::Int => "int",
+        })
     }
 }
 
-/// Renders unop
-pub fn string_of_unop(unop: UnOp) -> &'static str {
-    match unop {
-        UnOp::Plus => "+",
-        UnOp::Minus => "-",
+impl Print for UnOp {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        printer.write(match self {
+            Self::Plus => "+",
+            Self::Minus => "-",
+        })
     }
 }
 
-/// Renders binop
-pub fn string_of_binop(binop: BinOp) -> &'static str {
-    match binop {
-        BinOp::Add => "+",
-        BinOp::Sub => "-",
-        BinOp::Mul => "*",
-        BinOp::Div => "/",
-        BinOp::Mod => "\\",
-        BinOp::Pow => "^",
+impl Print for BinOp {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        printer.write(match self {
+            Self::Add => "+",
+            Self::Sub => "-",
+            Self::Mul => "*",
+            Self::Div => "/",
+            Self::Mod => "\\",
+            Self::Pow => "^",
+        })
     }
 }
 
-/// Renders cmpop
-pub fn string_of_cmpop(cmpop: CmpOp) -> &'static str {
-    match cmpop {
-        CmpOp::Lt => "<",
-        CmpOp::Gt => ">",
-        CmpOp::Le => "<=",
-        CmpOp::Ge => ">=",
+impl Print for CmpOp {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        printer.write(match self {
+            Self::Lt => "<",
+            Self::Gt => ">",
+            Self::Le => "<=",
+            Self::Ge => ">=",
+        })
     }
 }
 

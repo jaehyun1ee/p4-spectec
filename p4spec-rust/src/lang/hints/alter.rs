@@ -1,11 +1,9 @@
 //! Alteration hints for prose rendering
 
 use crate::lang::{
-    el::{
-        ast::{Atom, Exp, ExpKind, Hole as ElHole, Text},
-        print,
-    },
+    el::ast::{Atom, Exp, ExpKind, Hole as ElHole, Text},
     hints::input,
+    traits::print::Print,
 };
 use thiserror::Error;
 
@@ -48,19 +46,19 @@ pub fn to_string(hint: &AlterationHint) -> String {
 }
 fn string(hint: &AlterationHint) -> String {
     match hint {
-        AlterationHint::Text(text) => print::string_of_text(text),
-        AlterationHint::Atom(atom) => print::string_of_atom(atom),
+        AlterationHint::Text(text) => text.clone(),
+        AlterationHint::Atom(atom) => Print::to_string(atom),
         AlterationHint::Seq(hints) => hints.iter().map(string).collect::<Vec<_>>().join(" "),
         AlterationHint::Brack(atom_l, hint, atom_r) => format!(
             "{} {} {}",
-            print::string_of_atom(atom_l),
+            Print::to_string(atom_l),
             string(hint),
-            print::string_of_atom(atom_r)
+            Print::to_string(atom_r)
         ),
         AlterationHint::Hole(Hole::Next) => "%".into(),
         AlterationHint::Hole(Hole::Num(index)) => format!("%{index}"),
         AlterationHint::Fuse(hint_l, hint_r) => format!("{}#{}", string(hint_l), string(hint_r)),
-        AlterationHint::Other(exp) => print::string_of_exp(exp),
+        AlterationHint::Other(exp) => Print::to_string(exp),
     }
 }
 // Creating hints

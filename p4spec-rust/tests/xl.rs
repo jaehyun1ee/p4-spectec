@@ -3,6 +3,7 @@ use std::cmp::Ordering;
 use num_bigint::BigInt;
 use p4spec_rust::{
     lang::common::source::{Position, Span, Spanned},
+    lang::traits::print::Print,
     lang::xl::{
         num::{self, BinOp, CmpOp, Natural, Number, NumericError, Typ, UnOp},
         utf8, var,
@@ -90,8 +91,8 @@ fn numeric_operations_preserve_kinds_and_signed_rendering() {
     );
     assert_eq!(num::un(UnOp::Minus, &two), Number::Int((-2).into()));
     assert_eq!(num::cmp(CmpOp::Lt, &two, &three), Ok(true));
-    assert_eq!(num::string_of_num(&Number::Int(3.into())), "+3");
-    assert_eq!(num::string_of_num(&negative_three), "-3");
+    assert_eq!(Print::to_string(&Number::Int(3.into())), "+3");
+    assert_eq!(Print::to_string(&negative_three), "-3");
 }
 
 #[test]

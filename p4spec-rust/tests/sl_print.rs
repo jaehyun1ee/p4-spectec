@@ -6,6 +6,7 @@ use p4spec_rust::lang::{
     el,
     hints::input::InputHint,
     il, sl,
+    traits::print::Print,
 };
 
 fn span(name: &str) -> Span {
@@ -162,7 +163,7 @@ fn composite_spec(metadata: &str) -> sl::ast::Spec {
 #[test]
 fn composite_spec_prints_in_order_with_escaping_and_instruction_levels() {
     assert_eq!(
-        sl::print::string_of_spec(&composite_spec("source-a")),
+        Print::to_string(&composite_spec("source-a")),
         concat!(
             "extern syntax External\n\n",
             "var state : bool\n\n",
@@ -183,8 +184,8 @@ fn composite_spec_prints_in_order_with_escaping_and_instruction_levels() {
 #[test]
 fn specification_printer_omits_source_and_hint_metadata() {
     assert_eq!(
-        sl::print::string_of_spec(&composite_spec("source-a")),
-        sl::print::string_of_spec(&composite_spec("source-b"))
+        Print::to_string(&composite_spec("source-a")),
+        Print::to_string(&composite_spec("source-b"))
     );
 }
 
@@ -206,7 +207,7 @@ fn dangling_branches_render_the_instruction_identifier() {
     );
 
     assert_eq!(
-        sl::print::string_of_instr_with(&branch, false, 0, 1),
+        sl::print::render_instr_with(&branch, false, 0, 1),
         "1. If (condition), then\n\n  1. Return value\n\n1. Else Dangling#42"
     );
 }

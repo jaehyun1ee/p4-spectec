@@ -2,3 +2,4 @@
 
 pub mod eq;
 pub mod free;
+pub mod print;

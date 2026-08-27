@@ -2,13 +2,23 @@ use std::{error::Error, fmt};
 
 use crate::lang::{
     common::ds::set::IdSet,
-    traits::{eq::SyntaxEq, free::Free},
+    traits::{
+        eq::SyntaxEq,
+        free::Free,
+        print::{Print, Printer},
+    },
 };
 
 use super::mixfix::{AtomPhrase, Mixfix};
 
 /// A mixfix shape with unfilled argument positions
 pub type Mixop = Mixfix<()>;
+
+impl Print for Mixop {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        self.print_with(printer, |(), printer| printer.write("%"))
+    }
+}
 
 // == Syntax operations
 
@@ -119,9 +129,9 @@ impl Mixop {
     pub fn to_string(
         &self,
         args: impl IntoIterator<Item = String>,
-        string_of_atom: impl FnMut(&AtomPhrase) -> String,
+        render_atom: impl FnMut(&AtomPhrase) -> String,
     ) -> Result<String, ArityMismatch> {
-        Ok(Self::fill(self, args)?.render(string_of_atom, Clone::clone))
+        Ok(Self::fill(self, args)?.render(render_atom, Clone::clone))
     }
 }
 

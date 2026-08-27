@@ -5,11 +5,11 @@ use crate::lang::{
         ds::{map::IdMap, set::IdSet},
         source::{Span, Spanned},
     },
-    traits::eq::SyntaxEq,
+    traits::{eq::SyntaxEq, print::Print},
     xl,
 };
 
-use super::{ast::*, print, var};
+use super::{ast::*, var};
 
 type Metavars = IdMap<Typ>;
 
@@ -28,7 +28,7 @@ fn id(ids: &IdSet, id: &Id) -> Id {
 }
 
 fn find_alias(metavars: &Metavars, span: &Span, typ: &Typ) -> Option<Var> {
-    let typ_name = print::string_of_typ(typ);
+    let typ_name = Print::to_string(typ);
     let mut matching = metavars.iter().filter(|(id_alias, typ_alias)| {
         typ.syntax_eq(typ_alias) && typ_name.as_str() != id_alias.node.as_str()
     });
@@ -54,7 +54,7 @@ fn var_from_typ_inner(metavars: &Metavars, span: &Span, typ: &Typ) -> Var {
             var
         }
         _ => Var {
-            id: Spanned::new(print::string_of_typ(typ), span.clone()),
+            id: Spanned::new(Print::to_string(typ), span.clone()),
             typ: typ.clone(),
             iters: vec![],
         },

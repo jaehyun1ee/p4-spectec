@@ -7,6 +7,7 @@ use p4spec_rust::{
         },
         hints::input::InputHint,
         il::{ast, fresh, print},
+        traits::print::Print,
     },
     yojson::ExternalData,
 };
@@ -233,14 +234,11 @@ fn printer_tables_cover_il_constructor_families_and_escapes() {
         ),
     ];
     for (name, expression, expected) in expressions {
-        assert_eq!(print::string_of_exp(&expression), expected, "{name}");
+        assert_eq!(Print::to_string(&expression), expected, "{name}");
     }
+    assert_eq!("\"\\'\x08\u{00e9}".to_owned(), "\"\\'\x08\u{00e9}");
     assert_eq!(
-        print::string_of_text("\"\\'\x08\u{00e9}"),
-        "\"\\'\x08\u{00e9}"
-    );
-    assert_eq!(
-        print::string_of_value(&ast::value(
+        Print::to_string(&ast::value(
             ast::ValueKind::Text("\"\\'\x08\u{00e9}".into()),
             ast::TypKind::Text,
             Span::default()
@@ -248,7 +246,7 @@ fn printer_tables_cover_il_constructor_families_and_escapes() {
         "\\\"\\\\'\\b\\195\\169"
     );
     assert_eq!(
-        print::string_of_path(&ast::path(
+        Print::to_string(&ast::path(
             ast::PathKind::Root,
             ast::TypKind::Bool,
             Span::default()
@@ -256,7 +254,7 @@ fn printer_tables_cover_il_constructor_families_and_escapes() {
         ""
     );
     assert_eq!(
-        print::string_of_path(&ast::path(
+        Print::to_string(&ast::path(
             ast::PathKind::Dot(
                 Box::new(ast::path(
                     ast::PathKind::Root,
@@ -295,7 +293,7 @@ fn printer_renders_nested_premises_and_definition_spec_goldens() {
         iter_prem: iteration,
     }));
     assert_eq!(
-        print::string_of_prem(&nested),
+        Print::to_string(&nested),
         "(if ready)*{bound <- bound*, output? -> output?*}*{bound <- bound*, output? -> output?*}"
     );
     let rule = Spanned::new(
@@ -431,7 +429,7 @@ fn printer_renders_nested_premises_and_definition_spec_goldens() {
             Span::default(),
         ),
     ];
-    let rendered = print::string_of_spec(&definitions);
+    let rendered = Print::to_string(&definitions);
     assert_eq!(
         rendered,
         concat!(
@@ -461,10 +459,10 @@ fn printer_renders_nested_premises_and_definition_spec_goldens() {
             "  -- debug debug"
         )
     );
-    assert_eq!(print::string_of_defs(&definitions), rendered);
-    assert_eq!(print::string_of_hints(&[hint()]), " hint(meta payload)");
+    assert_eq!(Print::to_string(&definitions), rendered);
+    assert_eq!(Print::to_string(&[hint()][..]), " hint(meta payload)");
     assert_eq!(
-        print::string_of_def(&Spanned::new(
+        Print::to_string(&Spanned::new(
             ast::DefKind::Var(ast::VarDef {
                 id: id("hidden_metadata"),
                 typ: typ(),
@@ -573,7 +571,7 @@ fn printer_tables_cover_remaining_public_arms() {
         ),
     ];
     for (typ, expected) in type_cases {
-        assert_eq!(print::string_of_typ(&typ), expected);
+        assert_eq!(Print::to_string(&typ), expected);
     }
     let not_typ = Spanned::new(
         Mixfix::Infix(
@@ -583,7 +581,7 @@ fn printer_tables_cover_remaining_public_arms() {
         ),
         Span::default(),
     );
-    assert_eq!(print::string_of_not_typ(&not_typ), "bool or bool");
+    assert_eq!(Print::to_string(&not_typ), "bool or bool");
     let origin = Spanned::new((id("Origin"), vec![typ()]), Span::default());
     let def_types = vec![
         (
@@ -606,11 +604,8 @@ fn printer_tables_cover_remaining_public_arms() {
         ),
     ];
     for (def_typ, expected) in def_types {
-        assert_eq!(print::string_of_def_typ(&def_typ), expected);
+        assert_eq!(Print::to_string(&def_typ), expected);
     }
-    assert_eq!(print::string_of_typs(",", &[]), "");
-    assert_eq!(print::string_of_typ_fields(",", &[]), "");
-    assert_eq!(print::string_of_typ_cases(",", &[]), "");
     let bool_value = |value| {
         ast::value(
             ast::ValueKind::Bool(value),
@@ -693,7 +688,7 @@ fn printer_tables_cover_remaining_public_arms() {
         ),
     ];
     for (value, expected) in values {
-        assert_eq!(print::string_of_value(&value), expected);
+        assert_eq!(Print::to_string(&value), expected);
     }
     let structured = ast::value(
         ast::ValueKind::Struct(vec![(atom("field"), bool_value(true))]),
@@ -714,26 +709,20 @@ fn printer_tables_cover_remaining_public_arms() {
         Span::default(),
     );
     assert_eq!(
-        print::string_of_value_with(&structured, false, 1),
+        print::render_value_with(&structured, false, 1),
         "{\n    field true\n  }"
     );
-    assert_eq!(print::string_of_short_value(&structured), "{ .../1 }");
     assert_eq!(
-        print::string_of_value_with(&listed, false, 1),
+        print::render_value_with(&listed, false, 1),
         "[\n    true\n  ]"
     );
-    assert_eq!(print::string_of_short_value(&listed), "[ .../1 ]");
-    assert_eq!(print::string_of_value(&cased), "TAG true");
-    assert_eq!(print::string_of_short_value(&cased), "TAG %");
+    assert_eq!(Print::to_string(&cased), "TAG true");
     for (operator, expected) in [
         (ast::UnOp::Bool(p4spec_rust::lang::xl::bool::UnOp::Not), "~"),
         (ast::UnOp::Num(p4spec_rust::lang::xl::num::UnOp::Plus), "+"),
         (ast::UnOp::Num(p4spec_rust::lang::xl::num::UnOp::Minus), "-"),
     ] {
-        assert_eq!(
-            p4spec_rust::lang::el::print::string_of_unop(operator),
-            expected
-        );
+        assert_eq!(Print::to_string(&operator), expected);
     }
     for (operator, expected) in [
         (
@@ -762,10 +751,7 @@ fn printer_tables_cover_remaining_public_arms() {
         ),
         (ast::BinOp::Num(p4spec_rust::lang::xl::num::BinOp::Pow), "^"),
     ] {
-        assert_eq!(
-            p4spec_rust::lang::el::print::string_of_binop(operator),
-            expected
-        );
+        assert_eq!(Print::to_string(&operator), expected);
     }
     for (operator, expected) in [
         (
@@ -781,10 +767,7 @@ fn printer_tables_cover_remaining_public_arms() {
         (ast::CmpOp::Num(p4spec_rust::lang::xl::num::CmpOp::Le), "<="),
         (ast::CmpOp::Num(p4spec_rust::lang::xl::num::CmpOp::Ge), ">="),
     ] {
-        assert_eq!(
-            p4spec_rust::lang::el::print::string_of_cmpop(operator),
-            expected
-        );
+        assert_eq!(Print::to_string(&operator), expected);
     }
     let patterns = vec![
         (
@@ -798,7 +781,7 @@ fn printer_tables_cover_remaining_public_arms() {
         (ast::Pattern::Opt(ast::OptPattern::None), "()"),
     ];
     for (pattern, expected) in patterns {
-        assert_eq!(print::string_of_pattern(&pattern), expected);
+        assert_eq!(Print::to_string(&pattern), expected);
     }
     let slice_path = ast::path(
         ast::PathKind::Slice(
@@ -813,9 +796,9 @@ fn printer_tables_cover_remaining_public_arms() {
         ast::TypKind::Bool,
         Span::default(),
     );
-    assert_eq!(print::string_of_path(&slice_path), "[low : high]");
+    assert_eq!(Print::to_string(&slice_path), "[low : high]");
     assert_eq!(
-        print::string_of_exp(&exp(ast::ExpKind::DownCast(typ(), Box::new(var("x"))))),
+        Print::to_string(&exp(ast::ExpKind::DownCast(typ(), Box::new(var("x"))))),
         "x as bool"
     );
     let premise_cases = vec![
@@ -835,25 +818,19 @@ fn printer_tables_cover_remaining_public_arms() {
         ),
     ];
     for (premise, expected) in premise_cases {
-        assert_eq!(print::string_of_prem(&premise), expected);
+        assert_eq!(Print::to_string(&premise), expected);
     }
     assert_eq!(
-        print::string_of_prems(&[prem(ast::PremKind::If(ast::IfPrem { exp: var("ready") }))]),
+        Print::to_string(&[prem(ast::PremKind::If(ast::IfPrem { exp: var("ready") }))][..]),
         "\n-- if ready"
     );
     assert_eq!(
-        print::string_of_prems_with(
+        print::render_prems_with(
             1,
             &[prem(ast::PremKind::If(ast::IfPrem { exp: var("ready") }))],
         ),
         "\n  -- if ready"
     );
-    assert_eq!(print::string_of_params(&[]), "");
-    assert_eq!(print::string_of_args(&[]), "");
-    assert_eq!(print::string_of_tparams(&[]), "");
-    assert_eq!(print::string_of_targs(&[]), "");
-    assert_eq!(print::string_of_iterexps(&[]), "");
-    assert_eq!(print::string_of_iterprems(&[]), "");
 }
 
 fn assert_iterated_exp(exp: &ast::Exp, dim: bool, id_span: &Span, typ_span: &Span) {

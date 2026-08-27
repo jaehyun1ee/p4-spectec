@@ -1,5 +1,9 @@
 //! Booleans
 
+use std::fmt;
+
+use crate::lang::traits::print::{Print, Printer};
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Typ {
     Bool,
@@ -28,32 +32,36 @@ pub enum CmpOp {
 
 // Stringifiers
 
-/// Renders bool
-pub fn string_of_bool(value: bool) -> &'static str {
-    if value { "true" } else { "false" }
-}
-
-/// Renders unop
-pub fn string_of_unop(unop: UnOp) -> &'static str {
-    match unop {
-        UnOp::Not => "~",
+impl Print for Typ {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        printer.write("bool")
     }
 }
 
-/// Renders binop
-pub fn string_of_binop(binop: BinOp) -> &'static str {
-    match binop {
-        BinOp::And => "/\\",
-        BinOp::Or => "\\/",
-        BinOp::Impl => "=>",
-        BinOp::Equiv => "<=>",
+impl Print for UnOp {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        printer.write(match self {
+            Self::Not => "~",
+        })
     }
 }
 
-/// Renders cmpop
-pub fn string_of_cmpop(cmpop: CmpOp) -> &'static str {
-    match cmpop {
-        CmpOp::Eq => "=",
-        CmpOp::Ne => "=/=",
+impl Print for BinOp {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        printer.write(match self {
+            Self::And => "/\\",
+            Self::Or => "\\/",
+            Self::Impl => "=>",
+            Self::Equiv => "<=>",
+        })
+    }
+}
+
+impl Print for CmpOp {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        printer.write(match self {
+            Self::Eq => "=",
+            Self::Ne => "=/=",
+        })
     }
 }

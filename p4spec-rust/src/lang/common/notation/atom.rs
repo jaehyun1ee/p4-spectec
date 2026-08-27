@@ -2,7 +2,11 @@ use std::{error::Error, fmt};
 
 use crate::lang::{
     common::{ds::set::IdSet, source::Spanned},
-    traits::{eq::SyntaxEq, free::Free},
+    traits::{
+        eq::SyntaxEq,
+        free::Free,
+        print::{Print, Printer},
+    },
 };
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -93,6 +97,18 @@ impl fmt::Display for AtomError {
 }
 
 impl Error for AtomError {}
+
+impl Print for Atom {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        printer.write(&self.to_string())
+    }
+}
+
+impl Print for Spanned<Atom> {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        self.node.print(printer)
+    }
+}
 
 // == Syntax operations
 

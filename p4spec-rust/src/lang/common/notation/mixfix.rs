@@ -6,7 +6,11 @@ use std::{
 
 use crate::lang::{
     common::ds::set::IdSet,
-    traits::{eq::SyntaxEq, free::Free},
+    traits::{
+        eq::SyntaxEq,
+        free::Free,
+        print::{Print, Printer},
+    },
 };
 
 use super::{super::source::Spanned, atom::Atom};
@@ -424,17 +428,76 @@ impl<T: Clone> Mixfix<T> {
 // == Rendering
 
 impl<T> Mixfix<T> {
+    /// Writes atoms and arguments, separating non-empty pieces with spaces
+    pub fn print_with(
+        &self,
+        printer: &mut Printer<'_>,
+        mut print_arg: impl FnMut(&T, &mut Printer<'_>) -> fmt::Result,
+    ) -> fmt::Result {
+        let mut is_first = true;
+        self.print_with_inner(printer, &mut print_arg, &mut is_first)
+    }
+
+    fn print_with_inner(
+        &self,
+        printer: &mut Printer<'_>,
+        print_arg: &mut impl FnMut(&T, &mut Printer<'_>) -> fmt::Result,
+        is_first: &mut bool,
+    ) -> fmt::Result {
+        let print_sep = |printer: &mut Printer<'_>, is_first: &mut bool| {
+            if *is_first {
+                *is_first = false;
+                Ok(())
+            } else {
+                printer.write(" ")
+            }
+        };
+
+        let print_atom = |atom: &AtomPhrase, printer: &mut Printer<'_>, is_first: &mut bool| {
+            if matches!(&atom.node, Atom::Keyword(keyword) if keyword.is_empty()) {
+                Ok(())
+            } else {
+                print_sep(printer, is_first)?;
+                atom.print(printer)
+            }
+        };
+
+        match self {
+            Self::Arg(arg) => {
+                print_sep(printer, is_first)?;
+                print_arg(arg, printer)
+            }
+            Self::Atom(atom) => print_atom(atom, printer, is_first),
+            Self::Brack(atom_l, mixfix, atom_r) => {
+                print_atom(atom_l, printer, is_first)?;
+                mixfix.print_with_inner(printer, print_arg, is_first)?;
+                print_atom(atom_r, printer, is_first)
+            }
+            Self::Infix(mixfix_l, atom, mixfix_r) => {
+                mixfix_l.print_with_inner(printer, print_arg, is_first)?;
+                print_atom(atom, printer, is_first)?;
+                mixfix_r.print_with_inner(printer, print_arg, is_first)
+            }
+            Self::Seq(mixfixes) => {
+                for mixfix in mixfixes {
+                    mixfix.print_with_inner(printer, print_arg, is_first)?;
+                }
+                Ok(())
+            }
+        }
+    }
+
     /// Renders atoms and arguments, separating non-empty pieces with spaces
     pub fn render(
         &self,
-        mut string_of_atom: impl FnMut(&AtomPhrase) -> String,
-        mut string_of_arg: impl FnMut(&T) -> String,
+        mut render_atom: impl FnMut(&AtomPhrase) -> String,
+        mut render_arg: impl FnMut(&T) -> String,
     ) -> String {
-        self.map(|arg| string_of_arg(arg)).assemble(
+        self.map(|arg| render_arg(arg)).assemble(
             String::new(),
             " ".to_owned(),
             |atom| {
-                let string = string_of_atom(atom);
+                let string = render_atom(atom);
                 (!string.is_empty()).then_some(string)
             },
             |string_l, string_r| string_l + &string_r,

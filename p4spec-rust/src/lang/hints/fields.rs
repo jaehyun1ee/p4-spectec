@@ -37,14 +37,7 @@ impl FieldHint {
 
 /// Converts to string
 pub fn to_string(hint: &FieldHint) -> String {
-    format!(
-        "hint(fields {})",
-        hint.fields
-            .iter()
-            .map(|text| crate::lang::el::print::string_of_text(text))
-            .collect::<Vec<_>>()
-            .join(" ")
-    )
+    format!("hint(fields {})", hint.fields.join(" "))
 }
 
 // Creating hints
