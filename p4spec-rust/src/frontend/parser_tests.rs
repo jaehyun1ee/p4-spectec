@@ -97,9 +97,27 @@ fn type_parameters_classify_uppercase_uses_and_build_spanned_el() {
 }
 
 #[test]
+fn uppercase_variable_suffixes_follow_the_bound_base_name() {
+    let spec = parse_spec("def $choose<X>(true, X_t, X_f) = X_t");
+    let DefKind::FuncDef(function) = &spec[0].node else {
+        panic!("expected function definition")
+    };
+
+    assert!(matches!(
+        &function.args[1].node,
+        ArgKind::Exp(exp) if matches!(&exp.node, ExpKind::Var(id) if id.node == "X_t")
+    ));
+    assert!(matches!(
+        &function.args[2].node,
+        ArgKind::Exp(exp) if matches!(&exp.node, ExpKind::Var(id) if id.node == "X_f")
+    ));
+    assert!(matches!(&function.exp.node, ExpKind::Var(id) if id.node == "X_t"));
+}
+
+#[test]
 fn expressions_preserve_precedence_and_premise_bindings() {
     let source = concat!(
-        "def $calc(x) = 1 + 2 * 3 :: [ 4 ] ++ [ 5 ]\n",
+        "def $calc(x) = $(1 + 2 * 3) :: [ 4 ] ++ [ 5 ]\n",
         "-- var y : nat\n",
         "-- if y = 0",
     );
@@ -152,7 +170,8 @@ fn stars_distinguish_type_and_expression_iteration_from_multiplication() {
     let source = concat!(
         "var xs : nat*\n\n",
         "def $repeat(x) = x*\n\n",
-        "def $multiply() = 2*3",
+        "def $sequence() = 2*3\n\n",
+        "def $multiply() = $(2*3)",
     );
     let spec = parse_spec(source);
 
@@ -171,6 +190,15 @@ fn stars_distinguish_type_and_expression_iteration_from_multiplication() {
     assert!(matches!(
         &spec[2].node,
         DefKind::FuncDef(definition)
+            if matches!(&definition.exp.node, ExpKind::Seq(expressions)
+                if matches!(&expressions[0].node, ExpKind::Iter(_, Iter::List))
+                    && matches!(&expressions[1].node,
+                        ExpKind::Num(_, xl::num::Number::Nat(value))
+                            if value == &Natural::from(3)))
+    ));
+    assert!(matches!(
+        &spec[3].node,
+        DefKind::FuncDef(definition)
             if matches!(&definition.exp.node,
                 ExpKind::Bin(left, BinOp::Num(xl::num::BinOp::Mul), right)
                     if matches!(&left.node, ExpKind::Num(_, xl::num::Number::Nat(value))
@@ -178,6 +206,123 @@ fn stars_distinguish_type_and_expression_iteration_from_multiplication() {
                     && matches!(&right.node, ExpKind::Num(_, xl::num::Number::Nat(value))
                         if value == &Natural::from(3)))
     ));
+}
+
+#[test]
+fn iterated_plain_type_can_precede_a_bracketed_notation_type() {
+    let spec = parse_spec("syntax stack = HEADER_STACK `[ value* `( nat `) `]");
+    let DefKind::Typ(definition) = &spec[0].node else {
+        panic!("expected syntax type definition")
+    };
+    let DefTypKind::Variant(cases) = &definition.def_typ.node else {
+        panic!("expected notation variant")
+    };
+    let Typ::Notation(notation) = &cases[0].0 else {
+        panic!("expected notation type")
+    };
+    let NotTypKind::Seq(types) = &notation.node else {
+        panic!("expected notation sequence")
+    };
+    let Typ::Notation(bracket) = &types[1] else {
+        panic!("expected bracketed notation type")
+    };
+    let NotTypKind::Brack(_, inner, _) = &bracket.node else {
+        panic!("expected bracket")
+    };
+    let Typ::Notation(inner) = inner.as_ref() else {
+        panic!("expected bracketed sequence")
+    };
+    let NotTypKind::Seq(inner_types) = &inner.node else {
+        panic!("expected bracketed sequence")
+    };
+    assert!(matches!(
+        &inner_types[0],
+        Typ::Plain(plain)
+            if matches!(&plain.node, PlainTypKind::Iter(value, Iter::List)
+                if matches!(&value.node, PlainTypKind::Var(id, args)
+                    if id.node == "value" && args.is_empty()))
+    ));
+    assert!(matches!(
+        &inner_types[1],
+        Typ::Notation(bracket)
+            if matches!(&bracket.node, NotTypKind::Brack(_, typ, _)
+                if matches!(typ.as_ref(), Typ::Plain(plain)
+                    if matches!(plain.node, PlainTypKind::Num(xl::num::Typ::Nat))))
+    ));
+}
+
+#[test]
+fn notation_sequence_span_covers_the_first_syntactic_type() {
+    let source = "syntax cast = `( type `) expression";
+    let spec = parse_spec(source);
+    let DefKind::Typ(definition) = &spec[0].node else {
+        panic!("expected syntax type definition")
+    };
+    let DefTypKind::Variant(cases) = &definition.def_typ.node else {
+        panic!("expected notation variant")
+    };
+    let Typ::Notation(notation) = &cases[0].0 else {
+        panic!("expected notation sequence")
+    };
+    assert!(matches!(notation.node, NotTypKind::Seq(_)));
+    assert_eq!(
+        notation.span.right,
+        Position::new(
+            "parser-test.watsup",
+            1,
+            source.find("`)").expect("closing notation bracket") as i64 + 2,
+        )
+    );
+}
+
+#[test]
+fn bars_distinguish_iteration_before_a_close_from_multiplication_by_length() {
+    let spec = parse_spec(concat!(
+        "def $len(xs) = $(|xs*|)\n\n",
+        "def $mul(x, ys) = $(x * |ys|)",
+    ));
+
+    let DefKind::FuncDef(length) = &spec[0].node else {
+        panic!("expected length function")
+    };
+    assert!(matches!(
+        &length.exp.node,
+        ExpKind::Len(inner)
+            if matches!(&inner.node, ExpKind::Iter(value, Iter::List)
+                if matches!(&value.node, ExpKind::Var(id) if id.node == "xs"))
+    ));
+
+    let DefKind::FuncDef(multiply) = &spec[1].node else {
+        panic!("expected multiplication function")
+    };
+    assert!(matches!(
+        &multiply.exp.node,
+        ExpKind::Bin(left, BinOp::Num(xl::num::BinOp::Mul), right)
+            if matches!(&left.node, ExpKind::Var(id) if id.node == "x")
+                && matches!(&right.node, ExpKind::Len(inner)
+                    if matches!(&inner.node, ExpKind::Var(id) if id.node == "ys"))
+    ));
+}
+
+#[test]
+fn update_path_root_starts_immediately_after_the_outer_bracket() {
+    let source = "def $update(t, n, x) = t[ [n] = x ]";
+    let spec = parse_spec(source);
+    let DefKind::FuncDef(function) = &spec[0].node else {
+        panic!("expected function definition")
+    };
+    let ExpKind::Upd(_, path, _) = &function.exp.node else {
+        panic!("expected update expression")
+    };
+    let crate::lang::el::ast::PathKind::Idx(root, _) = &path.node else {
+        panic!("expected indexed update path")
+    };
+    let expected_column = source.find("[ [").expect("update brackets") as i64 + 1;
+    assert_eq!(
+        root.span.left,
+        Position::new("parser-test.watsup", 1, expected_column)
+    );
+    assert_eq!(root.span.right, root.span.left);
 }
 
 #[test]
@@ -260,6 +405,39 @@ fn definitions_build_their_el_payloads() {
 
 #[test]
 fn definition_and_nested_iteration_spans_include_all_consumed_tokens() {
+    let hinted = parse_spec("var x : nat hint(foo)");
+    assert_eq!(
+        hinted[0].span.right,
+        Position::new("parser-test.watsup", 1, 21)
+    );
+
+    let standalone_rule = parse_spec("rule R/one : A\n\nvar x : nat");
+    assert_eq!(
+        standalone_rule[0].span.right,
+        Position::new("parser-test.watsup", 1, 14)
+    );
+
+    let grouped_rule = parse_spec(concat!(
+        "rulegroup R {\n",
+        "  rule R/one : A\n",
+        "  ---- ;; ignored premise\n",
+        "\n",
+        "}",
+    ));
+    let DefKind::RuleGroup(group) = &grouped_rule[0].node else {
+        panic!("expected rule group")
+    };
+    assert_eq!(
+        group.rules[0].span.right,
+        Position::new("parser-test.watsup", 3, 6)
+    );
+
+    let commented_function = parse_spec("def $f() = A\n---- ;; ignored premise");
+    assert_eq!(
+        commented_function[0].span.right,
+        Position::new("parser-test.watsup", 2, 4)
+    );
+
     let syntax = parse_spec("syntax pair<X, Y>");
     assert_eq!(
         syntax[0].span.right,

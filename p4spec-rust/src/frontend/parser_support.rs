@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::BTreeSet, iter::Peekable};
+use std::{cell::RefCell, collections::BTreeSet};
 
 use crate::lang::{
     common::{
@@ -6,6 +6,7 @@ use crate::lang::{
         source::{Position, Span, Spanned},
     },
     el::ast::{DefTypKind, Exp, ExpKind, Hint, Iter, NotTypKind, Path, PathKind, Typ},
+    xl,
 };
 
 use super::{
@@ -19,11 +20,22 @@ pub(crate) struct ParserContext {
     variables: RefCell<BTreeSet<String>>,
     scopes: RefCell<Vec<BTreeSet<String>>>,
     positions: RefCell<Vec<Position>>,
+    last_hint_right: RefCell<Option<Position>>,
+    last_prem_list: RefCell<Option<(Position, bool)>>,
+    modes: RefCell<Vec<ParserMode>>,
+}
+
+#[derive(Clone, Copy)]
+enum ParserMode {
+    Exp,
+    Arith,
 }
 
 impl ParserContext {
     pub(crate) fn is_var(&self, identifier: &str) -> bool {
-        self.variables.borrow().contains(identifier)
+        self.variables
+            .borrow()
+            .contains(xl::var::strip_var_suffix_name(identifier))
     }
 
     pub(crate) fn bind(&self, identifier: &str) {
@@ -58,6 +70,49 @@ impl ParserContext {
 
     pub(crate) fn span(&self, left: ParserLocation, right: ParserLocation) -> Span {
         Span::new(self.position(left), self.position(right))
+    }
+
+    pub(crate) fn record_hint_right(&self, right: ParserLocation) {
+        *self.last_hint_right.borrow_mut() = Some(self.position(right));
+    }
+
+    pub(crate) fn last_hint_right(&self) -> Position {
+        self.last_hint_right
+            .borrow()
+            .clone()
+            .expect("a parsed hint records its closing position")
+    }
+
+    pub(crate) fn record_prem_list(&self, right: ParserLocation, has_entries: bool) {
+        *self.last_prem_list.borrow_mut() = Some((self.position(right), has_entries));
+    }
+
+    pub(crate) fn last_prem_list_right_or(&self, fallback: Position) -> Position {
+        let (right, has_entries) = self
+            .last_prem_list
+            .borrow()
+            .clone()
+            .expect("a parsed premise list records its closing position");
+        if has_entries { right } else { fallback }
+    }
+
+    pub(crate) fn enter_exp(&self) {
+        self.modes.borrow_mut().push(ParserMode::Exp);
+    }
+
+    pub(crate) fn enter_arith(&self) {
+        self.modes.borrow_mut().push(ParserMode::Arith);
+    }
+
+    pub(crate) fn exit_mode(&self) {
+        self.modes
+            .borrow_mut()
+            .pop()
+            .expect("parser mode actions are balanced");
+    }
+
+    pub(crate) fn in_arith(&self) -> bool {
+        matches!(self.modes.borrow().last(), Some(ParserMode::Arith))
     }
 }
 
@@ -268,7 +323,7 @@ where
 {
     ParserTokens {
         context,
-        lexemes: lexemes.peekable(),
+        lexemes,
         previous_right: None,
         previous_token: None,
         pending: None,
@@ -277,56 +332,10 @@ where
 
 pub(crate) struct ParserTokens<'context, I: Iterator> {
     context: &'context ParserContext,
-    lexemes: Peekable<I>,
+    lexemes: I,
     previous_right: Option<Position>,
     previous_token: Option<Token>,
     pending: Option<Spanned<Token>>,
-}
-
-fn starts_expression(token: &Token) -> bool {
-    matches!(
-        token,
-        Token::TagUpperId(_)
-            | Token::Operator(_)
-            | Token::TickLeftParen
-            | Token::TickLeftBracket
-            | Token::TickLeftBrace
-            | Token::TickLeftAngle
-            | Token::Dot
-            | Token::DoubleDot
-            | Token::TripleDot
-            | Token::Semicolon
-            | Token::Backslash
-            | Token::Arrow
-            | Token::ArrowSub
-            | Token::DoubleArrowSub
-            | Token::DoubleArrowLong
-            | Token::Dollar
-            | Token::Tilde
-            | Token::Plus
-            | Token::Minus
-            | Token::Bar
-            | Token::Bool
-            | Token::Nat
-            | Token::Int
-            | Token::Text
-            | Token::Latex
-            | Token::Epsilon
-            | Token::BoolLiteral(_)
-            | Token::NaturalLiteral(_)
-            | Token::HexLiteral(_)
-            | Token::TextLiteral(_)
-            | Token::UpperId(_)
-            | Token::LowerId(_)
-            | Token::UpperIdLeftParen(_)
-            | Token::LowerIdLeftParen(_)
-            | Token::LeftParen
-            | Token::LeftBrace
-            | Token::Hole
-            | Token::NumberedHole(_)
-            | Token::MultipleHole
-            | Token::EmptyHole
-    )
 }
 
 fn starts_sequence(token: &Token) -> bool {
@@ -375,6 +384,7 @@ fn ends_sequence(token: &Token) -> bool {
             | Token::RightBracket
             | Token::RightBrace
             | Token::Question
+            | Token::Star
             | Token::IterStar
             | Token::Epsilon
             | Token::Bool
@@ -410,15 +420,8 @@ where
             },
         };
 
-        if lexeme.node == Token::Star {
-            let next = self
-                .lexemes
-                .peek()
-                .and_then(|result| result.as_ref().ok())
-                .map(|next| &next.node);
-            if !next.is_some_and(starts_expression) {
-                lexeme.node = Token::IterStar;
-            }
+        if lexeme.node == Token::Star && !self.context.in_arith() {
+            lexeme.node = Token::IterStar;
         }
 
         if self.previous_token.as_ref().is_some_and(ends_sequence) && starts_sequence(&lexeme.node)

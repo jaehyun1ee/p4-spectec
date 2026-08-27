@@ -135,57 +135,65 @@ Def: ast::Def = {
 };
 
 DefCore: ast::Def = {
+    <left:@L> <rule:RuleRule> => {
+        let right = rule.span.right.clone();
+        let (relid, groupid, _, _) = rule.node.clone();
+        let kind = DefKind::RuleGroup(RuleGroupDef {
+            relid,
+            groupid,
+            rules: vec![rule],
+        });
+        Spanned::new(kind, Span::new(context.position(left), right))
+    },
     <left:@L> <kind:DefKindRule> <right:@R> => {
         let actual_right = match &kind {
             DefKind::ExternSyntax(definition) => definition
                 .hints
                 .last()
-                .map(|hint| hint.1.span.right.clone())
+                .map(|_| context.last_hint_right())
                 .unwrap_or_else(|| definition.id.span.right.clone()),
             DefKind::Syntax(_) => context.position(right),
             DefKind::Typ(definition) => definition.def_typ.span.right.clone(),
             DefKind::Var(definition) => definition
                 .hints
                 .last()
-                .map(|hint| hint.1.span.right.clone())
+                .map(|_| context.last_hint_right())
                 .unwrap_or_else(|| definition.plain_typ.span.right.clone()),
             DefKind::ExternRel(definition) => definition
                 .hints
                 .last()
-                .map(|hint| hint.1.span.right.clone())
+                .map(|_| context.last_hint_right())
                 .unwrap_or_else(|| definition.not_typ.span.right.clone()),
             DefKind::Rel(definition) => definition
                 .hints
                 .last()
-                .map(|hint| hint.1.span.right.clone())
+                .map(|_| context.last_hint_right())
                 .unwrap_or_else(|| definition.not_typ.span.right.clone()),
             DefKind::RuleGroup(_) => context.position(right),
             DefKind::ExternDec(definition) => definition
                 .hints
                 .last()
-                .map(|hint| hint.1.span.right.clone())
+                .map(|_| context.last_hint_right())
                 .unwrap_or_else(|| definition.plain_typ.span.right.clone()),
             DefKind::BuiltinDec(definition) => definition
                 .hints
                 .last()
-                .map(|hint| hint.1.span.right.clone())
+                .map(|_| context.last_hint_right())
                 .unwrap_or_else(|| definition.plain_typ.span.right.clone()),
             DefKind::TableDec(definition) => definition
                 .hints
                 .last()
-                .map(|hint| hint.1.span.right.clone())
+                .map(|_| context.last_hint_right())
                 .unwrap_or_else(|| definition.plain_typ.span.right.clone()),
             DefKind::FuncDec(definition) => definition
                 .hints
                 .last()
-                .map(|hint| hint.1.span.right.clone())
+                .map(|_| context.last_hint_right())
                 .unwrap_or_else(|| definition.plain_typ.span.right.clone()),
             DefKind::TableDef(_) => context.position(right),
-            DefKind::FuncDef(definition) => definition
-                .prems
-                .last()
-                .map(|premise| premise.span.right.clone())
-                .unwrap_or_else(|| definition.exp.span.right.clone()),
+            DefKind::FuncDef(definition) => {
+                context.last_prem_list_right_or(definition.exp.span.right.clone())
+            },
             DefKind::Sep => context.position(right),
         };
         Spanned::new(kind, Span::new(context.position(left), actual_right))
@@ -252,14 +260,6 @@ DefKindRule: DefKind = {
             rules,
         })
     },
-    <rule:RuleRule> => {
-        let (relid, groupid, _, _) = rule.node.clone();
-        DefKind::RuleGroup(RuleGroupDef {
-            relid,
-            groupid,
-            rules: vec![rule],
-        })
-    },
     "EXTERN" "DEC" "DOLLAR" <signature:CallableDec> => {
         let (id, tparams, params, plain_typ, hints) = signature;
         DefKind::ExternDec(ExternDecDef { id, tparams, params, plain_typ, hints })
@@ -292,6 +292,18 @@ EnterScope: () = {
 
 ExitScope: () = {
     => context.exit_scope(),
+};
+
+EnterExp: () = {
+    => context.enter_exp(),
+};
+
+EnterArith: () = {
+    => context.enter_arith(),
+};
+
+ExitMode: () = {
+    => context.exit_mode(),
 };
 
 Comma: () = {
@@ -597,11 +609,14 @@ TypPrefix: Typ = {
 };
 
 TypSeq: Typ = {
-    <first:TypPrimary> <rest:("SEQ" <TypPrimary>)*> => {
+    <first:TypPrimary> <first_right:@R> <rest:("SEQ" <TypPrimary>)*> => {
         if rest.is_empty() {
             first
         } else {
-            let span = typ_span(&first).clone();
+            let span = Span::new(
+                typ_span(&first).left.clone(),
+                context.position(first_right),
+            );
             let mut types = Vec::with_capacity(rest.len() + 1);
             types.push(first);
             types.extend(rest);
@@ -662,7 +677,7 @@ DefTyp: ast::DefTyp = {
             .map(|location| context.position(location))
             .or_else(|| cases.last().map(|(_typ, hints, typ_right)| hints
                 .last()
-                .map(|hint| hint.1.span.right.clone())
+                .map(|_| context.last_hint_right())
                 .unwrap_or_else(|| context.position(*typ_right))))
             .unwrap_or_else(|| context.position(bar_right));
         let actual_right_location = context.intern_position(actual_right.clone());
@@ -683,7 +698,7 @@ DefTyp: ast::DefTyp = {
             .map(|location| context.position(location))
             .or_else(|| cases.last().map(|(_typ, hints, typ_right)| hints
                 .last()
-                .map(|hint| hint.1.span.right.clone())
+                .map(|_| context.last_hint_right())
                 .unwrap_or_else(|| context.position(*typ_right))))
             .unwrap_or_else(|| context.position(left));
         let actual_right_location = context.intern_position(actual_right.clone());
@@ -842,7 +857,7 @@ Exp: ast::Exp = {
 
     #[precedence(level="4")]
     #[assoc(side="left")]
-    <left:Exp> "STAR" <right:Exp> => {
+    <left:Exp> <_operator:StarOperator> <right:Exp> => {
         let span = span_between(&left, &right);
         Spanned::new(
             ExpKind::Bin(Box::new(left), BinOp::Num(num::BinOp::Mul), Box::new(right)),
@@ -1026,7 +1041,7 @@ ExpBin: ast::Exp = {
 
     #[precedence(level="4")]
     #[assoc(side="left")]
-    <left:ExpBin> "STAR" <right:ExpBin> => {
+    <left:ExpBin> <_operator:StarOperator> <right:ExpBin> => {
         let span = span_between(&left, &right);
         Spanned::new(
             ExpKind::Bin(Box::new(left), BinOp::Num(num::BinOp::Mul), Box::new(right)),
@@ -1185,6 +1200,14 @@ UnaryOperator: UnOp = {
     "MINUS" => UnOp::Num(num::UnOp::Minus),
 };
 
+// `ParserTokens` inserts `SEQ` after a binary `*` when its right operand can
+// also begin a notation sequence. Consuming it here leaves the same token as a
+// real sequence separator after a postfix type iteration.
+StarOperator: () = {
+    "STAR" "SEQ" => (),
+    "STAR" => (),
+};
+
 QuestionIter: Iter = {
     "QUEST" => Iter::Opt,
     "ITER_STAR" => Iter::List,
@@ -1224,10 +1247,10 @@ ExpPostfixRule: ExpPostfix = {
     "LBRACK" <start:Arith> "COLON" <end:Arith> "RBRACK" <right:@R> => {
         ExpPostfix::Slice(start, end, right)
     },
-    "LBRACK" <path:PathRule> "EQ" <value:Exp> "RBRACK" <right:@R> => {
-        ExpPostfix::Upd(path, value, right)
+    <path_left:LBracketRight> <steps:PathSteps> "EQ" <value:Exp> "RBRACK" <right:@R> => {
+        ExpPostfix::Upd(build_path(context, path_left, steps), value, right)
     },
-    "LBRACK" <path_left:@L> "EQ" <value:Exp> "RBRACK" <right:@R> => {
+    <path_left:LBracketRight> "EQ" <value:Exp> "RBRACK" <right:@R> => {
         ExpPostfix::Upd(build_path(context, path_left, vec![]), value, right)
     },
     <iter:QuestionIter> <right:@R> => ExpPostfix::Iter(iter, right),
@@ -1397,7 +1420,7 @@ FieldExp: (ast::Atom, ast::Exp) = {
 };
 
 Arg: ast::Arg = {
-    <left:@L> <exp:ExpBin> <right:@R> => {
+    <left:@L> <_enter:EnterExp> <exp:ExpBin> <right:@R> <_exit:ExitMode> => {
         spanned(context, ArgKind::Exp(Box::new(exp)), left, right)
     },
     <left:@L> "DEF" "DOLLAR" <id:DefId> <right:@R> => {
@@ -1405,7 +1428,9 @@ Arg: ast::Arg = {
     },
 };
 
-Arith: ast::Exp = ArithDoubleArrow;
+Arith: ast::Exp = {
+    <_enter:EnterArith> <arith:ArithDoubleArrow> <_exit:ExitMode> => arith,
+};
 
 ArithDoubleArrow: ast::Exp = {
     <left:ArithOr> "DOUBLE_ARROW" <right:ArithDoubleArrow> => {
@@ -1491,7 +1516,7 @@ ArithAdd: ast::Exp = {
 };
 
 ArithMul: ast::Exp = {
-    <left:ArithMul> "STAR" <right:ArithUnary> => {
+    <left:ArithMul> <_operator:StarOperator> <right:ArithUnary> => {
         let span = span_between(&left, &right);
         Spanned::new(
             ExpKind::Bin(Box::new(left), BinOp::Num(num::BinOp::Mul), Box::new(right)),
@@ -1516,7 +1541,7 @@ ArithMul: ast::Exp = {
 };
 
 ArithUnary: ast::Exp = {
-    <left:@L> "BAR" <exp:Exp> "BAR" <right:@R> => {
+    <left:@L> "BAR" <_enter:EnterExp> <exp:Exp> "BAR" <right:@R> <_exit:ExitMode> => {
         spanned(context, ExpKind::Len(Box::new(exp)), left, right)
     },
     <left:@L> <operator:UnaryOperator> <exp:ArithUnary> <right:@R> => {
@@ -1551,7 +1576,8 @@ ArithAtomBase: ast::Exp = {
     <left:@L> "LPAREN" <arith:Arith> "RPAREN" <right:@R> => {
         spanned(context, ExpKind::Paren(Box::new(arith)), left, right)
     },
-    <left:@L> "DOLLAR" "LPAREN" <exp:Exp> "RPAREN" <right:@R> => {
+    <left:@L> "DOLLAR" "LPAREN" <_enter:EnterExp> <exp:Exp> "RPAREN" <right:@R>
+        <_exit:ExitMode> => {
         spanned(context, exp.node, left, right)
     },
     <atom:AtomRule> => {
@@ -1560,8 +1586,12 @@ ArithAtomBase: ast::Exp = {
     },
 };
 
-PathRule: ast::Path = {
-    <left:@L> <steps:PathStepRule+> => build_path(context, left, steps),
+PathSteps: Vec<PathStep> = {
+    <steps:PathStepRule+> => steps,
+};
+
+LBracketRight: ParserLocation = {
+    "LBRACK" <right:@R> => right,
 };
 
 PathStepRule: PathStep = {
@@ -1597,7 +1627,8 @@ ParamKindRule: ParamKind = {
 };
 
 PremList: Vec<ast::Prem> = {
-    <_enter:EnterScope> <entries:PremEntry*> <_exit:ExitScope> => {
+    <_enter:EnterScope> <entries:PremEntry*> <right:@R> <_exit:ExitScope> => {
+        context.record_prem_list(right, !entries.is_empty());
         entries.into_iter().flatten().collect()
     },
 };
@@ -1654,10 +1685,13 @@ PremKindRule: PremKind = {
 };
 
 Hint: ast::Hint = {
-    "HINT_LPAREN" <left:@L> <id:HintId> <right:@R> "SEQ" <exp:Exp> "RPAREN" => {
+    "HINT_LPAREN" <left:@L> <id:HintId> <right:@R> "SEQ" <exp:Exp> "RPAREN"
+        <hint_right:@R> => {
+        context.record_hint_right(hint_right);
         (spanned(context, id, left, right), exp)
     },
-    "HINT_LPAREN" <left:@L> <id:HintId> <right:@R> "RPAREN" => {
+    "HINT_LPAREN" <left:@L> <id:HintId> <right:@R> "RPAREN" <hint_right:@R> => {
+        context.record_hint_right(hint_right);
         let id = spanned(context, id, left, right);
         let exp = Spanned::new(ExpKind::Seq(vec![]), id.span.clone());
         (id, exp)
@@ -1715,14 +1749,18 @@ ExpSeqTail: (bool, ast::Exp) = {
 
 RuleRule: ast::Rule = {
     <left:@L> "RULE" <relid:RelId> <ruleids:RuleIds> "COLON" <exp:Exp>
-        <premises:PremList> <right:@R> => {
+        <premises:PremList> => {
             let groupid = if ruleids.node.is_empty() {
                 String::new()
             } else {
                 ruleids.node[1..].to_owned()
             };
             let groupid = Spanned::new(groupid, ruleids.span);
-            spanned(context, (relid, groupid, exp, premises), left, right)
+            let right = context.last_prem_list_right_or(exp.span.right.clone());
+            Spanned::new(
+                (relid, groupid, exp, premises),
+                Span::new(context.position(left), right),
+            )
         },
 };
 
