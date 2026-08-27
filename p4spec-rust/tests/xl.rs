@@ -72,8 +72,8 @@ fn numbers_preserve_ocaml_variant_order_and_subtyping() {
     let large_nat = natural(100);
     let small_int = Number::Int(BigInt::from(-100));
 
-    assert_eq!(num::compare(&large_nat, &small_int), Ordering::Less);
-    assert_eq!(num::compare_typ(Typ::Nat, Typ::Int), Ordering::Less);
+    assert_eq!(large_nat.cmp(&small_int), Ordering::Less);
+    assert_eq!(Typ::Nat.cmp(&Typ::Int), Ordering::Less);
     assert!(num::sub(Typ::Nat, Typ::Int));
     assert!(!num::sub(Typ::Int, Typ::Nat));
 }
