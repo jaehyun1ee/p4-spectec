@@ -10,12 +10,6 @@ use super::ast::*;
 
 // - Parameters
 
-impl Free for Param {
-    fn free(&self) -> IdSet {
-        self.node.free()
-    }
-}
-
 impl Free for ParamKind {
     fn free(&self) -> IdSet {
         match self {
@@ -60,12 +54,6 @@ impl Free for Guard {
 impl Free for Iid {
     fn free(&self) -> IdSet {
         IdSet::new()
-    }
-}
-
-impl Free for Instr {
-    fn free(&self) -> IdSet {
-        self.node.kind.free()
     }
 }
 
@@ -222,12 +210,6 @@ impl Free for DefinedFunc {
 }
 
 // - Definitions
-
-impl Free for Def {
-    fn free(&self) -> IdSet {
-        self.node.free()
-    }
-}
 
 impl Free for ExternTypDef {
     fn free(&self) -> IdSet {

@@ -30,12 +30,6 @@ impl Free for Var {
 
 // - Types
 
-impl Free for Typ {
-    fn free(&self) -> IdSet {
-        self.node.free()
-    }
-}
-
 impl Free for TypKind {
     fn free(&self) -> IdSet {
         IdSet::new()
@@ -52,18 +46,6 @@ impl Free for Subcheck {
 
 // - Defined types
 
-impl Free for NotTyp {
-    fn free(&self) -> IdSet {
-        self.node.free()
-    }
-}
-
-impl Free for DefTyp {
-    fn free(&self) -> IdSet {
-        self.node.free()
-    }
-}
-
 impl Free for DefTypKind {
     fn free(&self) -> IdSet {
         IdSet::new()
@@ -73,12 +55,6 @@ impl Free for DefTypKind {
 impl Free for TypField {
     fn free(&self) -> IdSet {
         IdSet::new()
-    }
-}
-
-impl Free for TypOrigin {
-    fn free(&self) -> IdSet {
-        self.node.free()
     }
 }
 
@@ -95,12 +71,6 @@ impl Free for TypCase {
 }
 
 // - Values
-
-impl Free for Value {
-    fn free(&self) -> IdSet {
-        self.node.kind.free()
-    }
-}
 
 impl Free for ValueKind {
     fn free(&self) -> IdSet {
@@ -131,12 +101,6 @@ impl Free for OpTyp {
 }
 
 // - Expressions
-
-impl Free for Exp {
-    fn free(&self) -> IdSet {
-        self.node.kind.free()
-    }
-}
 
 impl Free for ExpKind {
     fn free(&self) -> IdSet {
@@ -200,12 +164,6 @@ impl Free for OptPattern {
 
 // - Paths
 
-impl Free for Path {
-    fn free(&self) -> IdSet {
-        self.node.kind.free()
-    }
-}
-
 impl Free for PathKind {
     fn free(&self) -> IdSet {
         match self {
@@ -219,12 +177,6 @@ impl Free for PathKind {
 
 // - Parameters
 
-impl Free for Param {
-    fn free(&self) -> IdSet {
-        self.node.free()
-    }
-}
-
 impl Free for ParamKind {
     fn free(&self) -> IdSet {
         IdSet::new()
@@ -234,12 +186,6 @@ impl Free for ParamKind {
 // Type parameters alias identifiers and use the EL identifier implementation.
 
 // - Arguments
-
-impl Free for Arg {
-    fn free(&self) -> IdSet {
-        self.node.free()
-    }
-}
 
 impl Free for ArgKind {
     fn free(&self) -> IdSet {
@@ -253,12 +199,6 @@ impl Free for ArgKind {
 // Type arguments alias types and use the type implementation above.
 
 // - Premises
-
-impl Free for Prem {
-    fn free(&self) -> IdSet {
-        self.node.free()
-    }
-}
 
 impl Free for RulePrem {
     fn free(&self) -> IdSet {
@@ -324,33 +264,15 @@ impl Free for IterPrem {
 
 // - Rules
 
-impl Free for Rule {
-    fn free(&self) -> IdSet {
-        self.node.free()
-    }
-}
-
 impl Free for RuleKind {
     fn free(&self) -> IdSet {
         self.not_exp.free().union(self.prems.as_slice().free())
     }
 }
 
-impl Free for RuleGroup {
-    fn free(&self) -> IdSet {
-        self.node.free()
-    }
-}
-
 impl Free for RuleGroupKind {
     fn free(&self) -> IdSet {
         self.1.as_slice().free()
-    }
-}
-
-impl Free for ElseGroup {
-    fn free(&self) -> IdSet {
-        self.node.free()
     }
 }
 
@@ -361,12 +283,6 @@ impl Free for ElseGroupKind {
 }
 
 // - Clauses
-
-impl Free for Clause {
-    fn free(&self) -> IdSet {
-        self.node.free()
-    }
-}
 
 impl Free for ClauseKind {
     fn free(&self) -> IdSet {
@@ -382,12 +298,6 @@ impl Free for ClauseKind {
 
 // - Table rows
 
-impl Free for TableRow {
-    fn free(&self) -> IdSet {
-        self.node.free()
-    }
-}
-
 impl Free for TableRowKind {
     fn free(&self) -> IdSet {
         self.0.as_slice().free().union(self.1.free())
@@ -397,12 +307,6 @@ impl Free for TableRowKind {
 // Hints alias EL hints and use their implementation.
 
 // - Definitions
-
-impl Free for Def {
-    fn free(&self) -> IdSet {
-        self.node.free()
-    }
-}
 
 impl Free for ExternTyp {
     fn free(&self) -> IdSet {

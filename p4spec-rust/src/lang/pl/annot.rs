@@ -1,9 +1,10 @@
 //! Prose-language node annotations
 
 use crate::lang::{
+    common::ds::set::IdSet,
     hints::{alter, fields},
     sl,
-    traits::eq::SyntaxEq,
+    traits::{eq::SyntaxEq, free::Free},
 };
 
 // Hints
@@ -34,6 +35,12 @@ pub struct Annotated<N> {
 impl<N: SyntaxEq> SyntaxEq for Annotated<N> {
     fn syntax_eq(&self, other: &Self) -> bool {
         self.node.syntax_eq(&other.node)
+    }
+}
+
+impl<N: Free> Free for Annotated<N> {
+    fn free(&self) -> IdSet {
+        self.node.free()
     }
 }
 
@@ -83,15 +90,26 @@ macro_rules! annotated {
 
 #[cfg(test)]
 mod tests {
-    use crate::lang::traits::eq::SyntaxEq;
+    use crate::lang::{
+        common::{Id, ds::set::IdSet, source::Spanned},
+        traits::{eq::SyntaxEq, free::Free},
+    };
 
     use super::Annotated;
 
     struct SyntaxNode(&'static str);
 
+    struct FreeNode(Id);
+
     impl SyntaxEq for SyntaxNode {
         fn syntax_eq(&self, other: &Self) -> bool {
             self.0 == other.0
+        }
+    }
+
+    impl Free for FreeNode {
+        fn free(&self) -> IdSet {
+            IdSet::from([self.0.clone()])
         }
     }
 
@@ -102,5 +120,13 @@ mod tests {
         node_second.hints.prose_input_exps = Some(Vec::new());
 
         assert!(node_first.syntax_eq(&node_second));
+    }
+
+    #[test]
+    fn annotated_free_delegates_to_the_node() {
+        let id = Spanned::new("x".to_owned(), Default::default());
+        let node = Annotated::new(FreeNode(id.clone()));
+
+        assert!(node.free().contains(&id));
     }
 }

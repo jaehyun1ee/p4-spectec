@@ -29,23 +29,11 @@ impl Free for RulePath {
     }
 }
 
-impl Free for RuleGroup {
-    fn free(&self) -> IdSet {
-        self.node.free()
-    }
-}
-
 impl Free for RuleGroupKind {
     fn free(&self) -> IdSet {
         self.rule_match
             .free()
             .union(self.rule_paths.as_slice().free())
-    }
-}
-
-impl Free for ElseGroup {
-    fn free(&self) -> IdSet {
-        self.node.free()
     }
 }
 
@@ -58,12 +46,6 @@ impl Free for ElseGroupKind {
 // Clauses alias IL clauses and use their implementations.
 
 // - Table rows
-
-impl Free for TableRow {
-    fn free(&self) -> IdSet {
-        self.node.free()
-    }
-}
 
 impl Free for TableRowKind {
     fn free(&self) -> IdSet {
@@ -78,12 +60,6 @@ impl Free for TableRowKind {
 // Hints alias EL hints and use their implementation.
 
 // - Definitions
-
-impl Free for Def {
-    fn free(&self) -> IdSet {
-        self.node.free()
-    }
-}
 
 impl Free for ExternTypDef {
     fn free(&self) -> IdSet {

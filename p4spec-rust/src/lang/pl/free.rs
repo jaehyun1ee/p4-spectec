@@ -10,18 +10,6 @@ use super::ast::*;
 
 // - Expressions
 
-impl Free for ExpNode {
-    fn free(&self) -> IdSet {
-        self.node.kind.free()
-    }
-}
-
-impl Free for Exp {
-    fn free(&self) -> IdSet {
-        self.node.free()
-    }
-}
-
 impl Free for ExpKind {
     fn free(&self) -> IdSet {
         match self {
@@ -60,12 +48,6 @@ impl Free for ExpKind {
 
 // - Paths
 
-impl Free for Path {
-    fn free(&self) -> IdSet {
-        self.node.kind.free()
-    }
-}
-
 impl Free for PathKind {
     fn free(&self) -> IdSet {
         match self {
@@ -81,12 +63,6 @@ impl Free for PathKind {
 
 // - Parameters
 
-impl Free for Param {
-    fn free(&self) -> IdSet {
-        self.node.free()
-    }
-}
-
 impl Free for ParamKind {
     fn free(&self) -> IdSet {
         match self {
@@ -99,12 +75,6 @@ impl Free for ParamKind {
 // Type arguments alias IL nodes and use their implementations.
 
 // - Arguments
-
-impl Free for Arg {
-    fn free(&self) -> IdSet {
-        self.node.free()
-    }
-}
 
 impl Free for ArgKind {
     fn free(&self) -> IdSet {
@@ -157,18 +127,6 @@ impl Free for Fallthrough {
 impl Free for InstrNote {
     fn free(&self) -> IdSet {
         IdSet::new()
-    }
-}
-
-impl<Tier: Free> Free for InstrNode<Tier> {
-    fn free(&self) -> IdSet {
-        self.node.kind.free()
-    }
-}
-
-impl<Tier: Free> Free for Instr<Tier> {
-    fn free(&self) -> IdSet {
-        self.node.free()
     }
 }
 
@@ -393,18 +351,6 @@ impl Free for DefinedFunc {
 }
 
 // - Definitions
-
-impl Free for DefNode {
-    fn free(&self) -> IdSet {
-        self.node.free()
-    }
-}
-
-impl Free for Def {
-    fn free(&self) -> IdSet {
-        self.node.free()
-    }
-}
 
 impl Free for ExternTypDef {
     fn free(&self) -> IdSet {

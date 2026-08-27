@@ -6,22 +6,6 @@ use super::ast::*;
 
 // == Free identifiers
 
-// - Numbers and text
-
-impl Free for Text {
-    fn free(&self) -> IdSet {
-        IdSet::new()
-    }
-}
-
-// - Identifiers and atoms
-
-impl Free for Id {
-    fn free(&self) -> IdSet {
-        IdSet::new()
-    }
-}
-
 // - Iterators
 
 impl Free for Iter {
@@ -31,12 +15,6 @@ impl Free for Iter {
 }
 
 // - Types
-
-impl Free for PlainTyp {
-    fn free(&self) -> IdSet {
-        self.node.free()
-    }
-}
 
 impl Free for PlainTypKind {
     fn free(&self) -> IdSet {
@@ -71,12 +49,6 @@ impl Free for CmpOp {
 }
 
 // - Expressions
-
-impl Free for Exp {
-    fn free(&self) -> IdSet {
-        self.node.free()
-    }
-}
 
 impl Free for ExpKind {
     fn free(&self) -> IdSet {
@@ -127,12 +99,6 @@ impl Free for Hole {
 
 // - Paths
 
-impl Free for Path {
-    fn free(&self) -> IdSet {
-        self.node.free()
-    }
-}
-
 impl Free for PathKind {
     fn free(&self) -> IdSet {
         match self {
@@ -145,12 +111,6 @@ impl Free for PathKind {
 }
 
 // - Arguments
-
-impl Free for Arg {
-    fn free(&self) -> IdSet {
-        self.node.free()
-    }
-}
 
 impl Free for ArgKind {
     fn free(&self) -> IdSet {
@@ -181,21 +141,9 @@ impl Free for Typ {
     }
 }
 
-impl Free for NotTyp {
-    fn free(&self) -> IdSet {
-        self.node.free()
-    }
-}
-
 impl Free for NotTypKind {
     fn free(&self) -> IdSet {
         IdSet::new()
-    }
-}
-
-impl Free for DefTyp {
-    fn free(&self) -> IdSet {
-        self.node.free()
     }
 }
 
@@ -219,12 +167,6 @@ impl Free for TypCase {
 
 // - Parameters and premises
 
-impl Free for Param {
-    fn free(&self) -> IdSet {
-        self.node.free()
-    }
-}
-
 impl Free for ParamKind {
     fn free(&self) -> IdSet {
         IdSet::new()
@@ -232,12 +174,6 @@ impl Free for ParamKind {
 }
 
 // `TParam` aliases `Id` and uses its implementation above.
-
-impl Free for Prem {
-    fn free(&self) -> IdSet {
-        self.node.free()
-    }
-}
 
 impl Free for VarPrem {
     fn free(&self) -> IdSet {
@@ -291,21 +227,9 @@ impl Free for PremKind {
 
 // - Rules and tables
 
-impl Free for Rule {
-    fn free(&self) -> IdSet {
-        self.node.free()
-    }
-}
-
 impl Free for RuleKind {
     fn free(&self) -> IdSet {
         self.2.free().union(self.3.as_slice().free())
-    }
-}
-
-impl Free for TableRow {
-    fn free(&self) -> IdSet {
-        self.node.free()
     }
 }
 
@@ -316,12 +240,6 @@ impl Free for TableRowKind {
 }
 
 // - Definitions
-
-impl Free for Def {
-    fn free(&self) -> IdSet {
-        self.node.free()
-    }
-}
 
 impl Free for ExternSyntaxDef {
     fn free(&self) -> IdSet {

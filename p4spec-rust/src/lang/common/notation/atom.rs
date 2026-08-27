@@ -124,12 +124,6 @@ impl Free for Atom {
     }
 }
 
-impl Free for Spanned<Atom> {
-    fn free(&self) -> IdSet {
-        IdSet::new()
-    }
-}
-
 // == String conversion and parsing
 
 impl Atom {

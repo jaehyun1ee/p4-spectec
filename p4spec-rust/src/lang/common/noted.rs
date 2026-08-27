@@ -1,4 +1,7 @@
-use crate::lang::traits::eq::SyntaxEq;
+use crate::lang::{
+    common::ds::set::IdSet,
+    traits::{eq::SyntaxEq, free::Free},
+};
 
 /// A syntax node paired with a semantic note
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -10,6 +13,12 @@ pub struct Noted<T, S> {
 impl<T: SyntaxEq, S> SyntaxEq for Noted<T, S> {
     fn syntax_eq(&self, other: &Self) -> bool {
         self.kind.syntax_eq(&other.kind)
+    }
+}
+
+impl<T: Free, S> Free for Noted<T, S> {
+    fn free(&self) -> IdSet {
+        self.kind.free()
     }
 }
 
@@ -33,16 +42,27 @@ macro_rules! noted {
 
 #[cfg(test)]
 mod tests {
-    use crate::lang::traits::eq::SyntaxEq;
+    use crate::lang::{
+        common::Id,
+        traits::{eq::SyntaxEq, free::Free},
+    };
 
     use super::super::source::{Position, Span, Spanned};
-    use super::Noted;
+    use super::{IdSet, Noted};
 
     struct SyntaxNode(&'static str);
+
+    struct FreeNode(Id);
 
     impl SyntaxEq for SyntaxNode {
         fn syntax_eq(&self, other: &Self) -> bool {
             self.0 == other.0
+        }
+    }
+
+    impl Free for FreeNode {
+        fn free(&self) -> IdSet {
+            IdSet::from([self.0.clone()])
         }
     }
 
@@ -52,6 +72,14 @@ mod tests {
         let node_second = Noted::new(SyntaxNode("same"), "second note");
 
         assert!(node_first.syntax_eq(&node_second));
+    }
+
+    #[test]
+    fn noted_free_delegates_to_the_kind() {
+        let id = Spanned::new("x".to_owned(), Span::default());
+        let node = Noted::new(FreeNode(id.clone()), "note");
+
+        assert!(node.free().contains(&id));
     }
 
     #[test]
