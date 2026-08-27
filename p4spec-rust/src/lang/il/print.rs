@@ -9,6 +9,10 @@ use crate::lang::{
 
 use super::ast::*;
 
+// == Printing
+
+// - Helpers
+
 fn indent(level: usize) -> String {
     "  ".repeat(level)
 }
@@ -27,7 +31,7 @@ fn escaped(text: &str) -> String {
         .collect()
 }
 
-// - Iterations
+// - Iterators
 
 impl Print for Iter {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {

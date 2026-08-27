@@ -6,6 +6,10 @@ use crate::lang::traits::print::{Print, Printer};
 
 use super::ast::*;
 
+// == Printing
+
+// - Helpers
+
 fn escaped(text: &str) -> String {
     text.bytes()
         .map(|byte| match byte {

@@ -386,6 +386,8 @@ impl Free for DefKind {
     }
 }
 
+// - Specifications
+
 impl Free for Spec {
     fn free(&self) -> IdSet {
         self.as_slice().free()

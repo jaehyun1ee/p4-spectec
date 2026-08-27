@@ -8,6 +8,8 @@ use super::ast::*;
 
 // == Syntax equality
 
+// - Rules
+
 impl SyntaxEq for RuleMatch {
     fn syntax_eq(&self, other: &Self) -> bool {
         self.exps_signature.syntax_eq(&other.exps_signature)
@@ -40,6 +42,8 @@ impl SyntaxEq for ElseGroupKind {
     }
 }
 
+// - Table rows
+
 impl SyntaxEq for TableRowKind {
     fn syntax_eq(&self, other: &Self) -> bool {
         self.exps_signature.syntax_eq(&other.exps_signature)
@@ -48,6 +52,8 @@ impl SyntaxEq for TableRowKind {
             && self.prems.syntax_eq(&other.prems)
     }
 }
+
+// - Definitions
 
 impl SyntaxEq for ExternTypDef {
     fn syntax_eq(&self, other: &Self) -> bool {
@@ -158,6 +164,8 @@ impl SyntaxEq for DefKind {
         }
     }
 }
+
+// - Specifications
 
 impl SyntaxEq for Spec {
     fn syntax_eq(&self, other: &Self) -> bool {

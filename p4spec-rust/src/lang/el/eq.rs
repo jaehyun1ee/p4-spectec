@@ -8,11 +8,15 @@ use super::ast::*;
 
 // == Syntax equality
 
+// - Iterators
+
 impl SyntaxEq for Iter {
     fn syntax_eq(&self, other: &Self) -> bool {
         self == other
     }
 }
+
+// - Plain types
 
 impl SyntaxEq for PlainTypKind {
     fn syntax_eq(&self, other: &Self) -> bool {
@@ -33,6 +37,8 @@ impl SyntaxEq for PlainTypKind {
         }
     }
 }
+
+// - Operators
 
 impl SyntaxEq for NumOp {
     fn syntax_eq(&self, other: &Self) -> bool {
@@ -57,6 +63,8 @@ impl SyntaxEq for CmpOp {
         self == other
     }
 }
+
+// - Expressions
 
 impl SyntaxEq for ExpKind {
     fn syntax_eq(&self, other: &Self) -> bool {
@@ -147,6 +155,8 @@ impl SyntaxEq for ExpKind {
     }
 }
 
+// - Paths
+
 impl SyntaxEq for Hole {
     fn syntax_eq(&self, other: &Self) -> bool {
         self == other
@@ -174,6 +184,8 @@ impl SyntaxEq for PathKind {
     }
 }
 
+// - Arguments
+
 impl SyntaxEq for ArgKind {
     fn syntax_eq(&self, other: &Self) -> bool {
         match (self, other) {
@@ -184,11 +196,15 @@ impl SyntaxEq for ArgKind {
     }
 }
 
+// - Hints
+
 impl SyntaxEq for Hint {
     fn syntax_eq(&self, other: &Self) -> bool {
         self.0.syntax_eq(&other.0) && self.1.syntax_eq(&other.1)
     }
 }
+
+// - Types
 
 impl SyntaxEq for Typ {
     fn syntax_eq(&self, other: &Self) -> bool {
@@ -199,6 +215,8 @@ impl SyntaxEq for Typ {
         }
     }
 }
+
+// - Notation types
 
 impl SyntaxEq for NotTypKind {
     fn syntax_eq(&self, other: &Self) -> bool {
@@ -223,6 +241,8 @@ impl SyntaxEq for NotTypKind {
         }
     }
 }
+
+// - Defined types
 
 impl SyntaxEq for DefTypKind {
     fn syntax_eq(&self, other: &Self) -> bool {
@@ -251,6 +271,8 @@ impl SyntaxEq for TypCase {
     }
 }
 
+// - Parameters
+
 impl SyntaxEq for ParamKind {
     fn syntax_eq(&self, other: &Self) -> bool {
         match (self, other) {
@@ -268,6 +290,8 @@ impl SyntaxEq for ParamKind {
         }
     }
 }
+
+// - Premises
 
 impl SyntaxEq for VarPrem {
     fn syntax_eq(&self, other: &Self) -> bool {
@@ -320,6 +344,8 @@ impl SyntaxEq for PremKind {
     }
 }
 
+// - Rules
+
 impl SyntaxEq for RuleKind {
     fn syntax_eq(&self, other: &Self) -> bool {
         self.0.syntax_eq(&other.0)
@@ -329,11 +355,15 @@ impl SyntaxEq for RuleKind {
     }
 }
 
+// - Table rows
+
 impl SyntaxEq for TableRowKind {
     fn syntax_eq(&self, other: &Self) -> bool {
         self.0.syntax_eq(&other.0) && self.1.syntax_eq(&other.1)
     }
 }
+
+// - Definitions
 
 impl SyntaxEq for ExternSyntaxDef {
     fn syntax_eq(&self, other: &Self) -> bool {
@@ -470,6 +500,8 @@ impl SyntaxEq for DefKind {
         }
     }
 }
+
+// - Specifications
 
 impl SyntaxEq for Spec {
     fn syntax_eq(&self, other: &Self) -> bool {

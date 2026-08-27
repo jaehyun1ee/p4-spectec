@@ -550,6 +550,8 @@ impl SyntaxEq for DefKind {
     }
 }
 
+// - Specifications
+
 impl SyntaxEq for Spec {
     fn syntax_eq(&self, other: &Self) -> bool {
         self.as_slice().syntax_eq(other.as_slice())

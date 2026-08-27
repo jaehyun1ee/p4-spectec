@@ -11,6 +11,8 @@ use crate::lang::{
 
 use super::ast::*;
 
+// == Printing
+
 // - Helpers
 
 fn indent(level: usize) -> String {

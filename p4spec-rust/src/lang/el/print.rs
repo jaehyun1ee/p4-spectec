@@ -9,7 +9,9 @@ use crate::lang::{
 
 use super::ast::*;
 
-// - Iterations
+// == Printing
+
+// - Iterators
 
 impl Print for Iter {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
@@ -753,7 +755,7 @@ impl Print for Def {
     }
 }
 
-// - Spec
+// - Specifications
 
 impl Print for Spec {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
