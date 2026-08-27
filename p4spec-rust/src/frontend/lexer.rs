@@ -6,12 +6,13 @@
 //! `String` text representation.
 
 use num_bigint::BigInt;
-use thiserror::Error;
 
 use crate::lang::{
     common::source::{Position, Span, Spanned},
     xl::{num::Natural, utf8},
 };
+
+use super::error::{LexError, LexErrorKind};
 
 /// A token consumed by the SpecTec grammar
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -117,39 +118,6 @@ pub enum Token {
     UpperIdLeftAngle(String),
     LowerIdLeftAngle(String),
     Eof,
-}
-
-/// The lexical failure categories produced before parsing begins
-#[derive(Clone, Copy, Debug, Error, PartialEq, Eq)]
-pub enum LexErrorKind {
-    #[error("unclosed text literal")]
-    UnclosedTextLiteral,
-    #[error("illegal control character in text literal")]
-    IllegalControlCharacter,
-    #[error("illegal escape")]
-    IllegalEscape,
-    #[error("text literal is not valid UTF-8")]
-    InvalidTextEncoding,
-    #[error("unicode escape is outside the valid codepoint range")]
-    InvalidUnicodeEscape,
-    #[error("numbered hole is out of range")]
-    HoleNumberOutOfRange,
-    #[error("unclosed comment")]
-    UnclosedComment,
-    #[error("malformed token")]
-    MalformedToken,
-    #[error("misplaced control character")]
-    MisplacedControlCharacter,
-    #[error("misplaced unicode character")]
-    MisplacedUnicodeCharacter,
-}
-
-/// A typed lexical failure paired with the offending source span
-#[derive(Clone, Debug, Error, PartialEq, Eq)]
-#[error("{kind} at {span}")]
-pub struct LexError {
-    pub kind: LexErrorKind,
-    pub span: Span,
 }
 
 #[derive(Clone, Copy)]

@@ -1,7 +1,10 @@
 use std::cell::Cell;
 
 use p4spec_rust::{
-    frontend::lexer::{LexErrorKind, Lexer, Token},
+    frontend::{
+        error::LexErrorKind,
+        lexer::{Lexer, Token},
+    },
     lang::{common::source::Position, xl::num::Natural},
 };
 
