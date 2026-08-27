@@ -49,24 +49,20 @@ impl Print for [Param] {
 
 // - Case analysis
 
-fn write_case_with(
-    output: &mut Printer<'_>,
-    case: &Case,
-    level: usize,
-    index: usize,
-) -> fmt::Result {
-    write!(output, "{}{index}. Case ", "  ".repeat(level))?;
+fn write_case_with(output: &mut Printer<'_>, case: &Case, index: usize) -> fmt::Result {
+    output.write_indent()?;
+    write!(output, "{index}. Case ")?;
     case.guard.print(output)?;
     output.write_str("\n\n")?;
-    write_block_with(output, &case.block, level + 1, 0)
+    output.indented(|output| write_block_with(output, &case.block, 0))
 }
 
-fn write_cases_with(output: &mut Printer<'_>, cases: &[Case], level: usize) -> fmt::Result {
+fn write_cases_with(output: &mut Printer<'_>, cases: &[Case]) -> fmt::Result {
     for (index, case) in cases.iter().enumerate() {
         if index != 0 {
             output.write_str("\n\n")?;
         }
-        write_case_with(output, case, level, index + 1)?;
+        write_case_with(output, case, index + 1)?;
     }
     Ok(())
 }
@@ -106,8 +102,13 @@ impl Print for Guard {
 /// Renders instr with
 pub fn render_instr_with(instr: &Instr, short: bool, level: usize, index: usize) -> String {
     let mut output = String::new();
-    write_instr_with(&mut Printer::new(&mut output), instr, short, level, index)
-        .expect("writing to a String cannot fail");
+    write_instr_with(
+        &mut Printer::with_level(&mut output, level),
+        instr,
+        short,
+        index,
+    )
+    .expect("writing to a String cannot fail");
     output
 }
 
@@ -115,15 +116,14 @@ fn write_instr_with(
     output: &mut Printer<'_>,
     instr: &Instr,
     short: bool,
-    level: usize,
     index: usize,
 ) -> fmt::Result {
-    let order = format!("{}{index}. ", "  ".repeat(level));
-    let mut write_order = || {
+    let write_order = |output: &mut Printer<'_>| {
         if short {
             Ok(())
         } else {
-            output.write_str(&order)
+            output.write_indent()?;
+            write!(output, "{index}. ")
         }
     };
     match &instr.node.kind {
@@ -133,7 +133,7 @@ fn write_instr_with(
             block,
             dangle,
         }) => {
-            write_order()?;
+            write_order(output)?;
             output.write_str("If (")?;
             exp.print(output)?;
             output.write_char(')')?;
@@ -141,9 +141,11 @@ fn write_instr_with(
             output.write_str(", then")?;
             if !short {
                 output.write_str("\n\n")?;
-                write_block_with(output, block, level + 1, 0)?;
+                output.indented(|output| write_block_with(output, block, 0))?;
                 if *dangle {
-                    write!(output, "\n\n{order}Else Dangling#{}", instr.node.note)?;
+                    output.write_str("\n\n")?;
+                    write_order(output)?;
+                    write!(output, "Else Dangling#{}", instr.node.note)?;
                 }
             }
             Ok(())
@@ -155,7 +157,7 @@ fn write_instr_with(
             hold_case,
         }) => match hold_case {
             HoldCase::Both(block_hold, block_not_hold) => {
-                write_order()?;
+                write_order(output)?;
                 output.write_str("If (")?;
                 id.print(output)?;
                 output.write_str(": ")?;
@@ -165,14 +167,16 @@ fn write_instr_with(
                 output.write_str(" holds, then")?;
                 if !short {
                     output.write_str("\n\n")?;
-                    write_block_with(output, block_hold, level + 1, 0)?;
-                    write!(output, "\n\n{order}Else,\n\n")?;
-                    write_block_with(output, block_not_hold, level + 1, 0)?;
+                    output.indented(|output| write_block_with(output, block_hold, 0))?;
+                    output.write_str("\n\n")?;
+                    write_order(output)?;
+                    output.write_str("Else,\n\n")?;
+                    output.indented(|output| write_block_with(output, block_not_hold, 0))?;
                 }
                 Ok(())
             }
             HoldCase::Hold(block, dangle) | HoldCase::NotHold(block, dangle) => {
-                write_order()?;
+                write_order(output)?;
                 output.write_str("If (")?;
                 id.print(output)?;
                 output.write_str(": ")?;
@@ -188,23 +192,27 @@ fn write_instr_with(
                 output.write_str(", then")?;
                 if !short {
                     output.write_str("\n\n")?;
-                    write_block_with(output, block, level + 1, 0)?;
+                    output.indented(|output| write_block_with(output, block, 0))?;
                     if *dangle {
-                        write!(output, "\n\n{order}Else Dangling#{}", instr.node.note)?;
+                        output.write_str("\n\n")?;
+                        write_order(output)?;
+                        write!(output, "Else Dangling#{}", instr.node.note)?;
                     }
                 }
                 Ok(())
             }
         },
         InstrKind::Case(CaseInstr { exp, cases, dangle }) => {
-            write_order()?;
+            write_order(output)?;
             output.write_str("Case analysis on ")?;
             exp.print(output)?;
             if !short {
                 output.write_str("\n\n")?;
-                write_cases_with(output, cases, level + 1)?;
+                output.indented(|output| write_cases_with(output, cases))?;
                 if *dangle {
-                    write!(output, "\n\n{order}Else Dangling#{}", instr.node.note)?;
+                    output.write_str("\n\n")?;
+                    write_order(output)?;
+                    write!(output, "Else Dangling#{}", instr.node.note)?;
                 }
             }
             Ok(())
@@ -215,14 +223,14 @@ fn write_instr_with(
             exps,
             block,
         }) => {
-            write_order()?;
+            write_order(output)?;
             output.write_str("Group ")?;
             id.print(output)?;
             output.write_str(": ")?;
             write_relinput(output, rel_signature, exps)?;
             if !short {
                 output.write_str("\n\n")?;
-                write_block_with(output, block, level + 1, 0)?;
+                output.indented(|output| write_block_with(output, block, 0))?;
             }
             Ok(())
         }
@@ -232,7 +240,7 @@ fn write_instr_with(
             iter_instrs,
             block,
         }) => {
-            write_order()?;
+            write_order(output)?;
             output.write_str("(Let ")?;
             exp_l.print(output)?;
             output.write_str(" be ")?;
@@ -241,7 +249,7 @@ fn write_instr_with(
             iter_instrs.as_slice().print(output)?;
             if !short {
                 output.write_str("\n\n")?;
-                write_block_with(output, block, level + 1, 0)?;
+                output.indented(|output| write_block_with(output, block, 0))?;
             }
             Ok(())
         }
@@ -252,7 +260,7 @@ fn write_instr_with(
             block,
             ..
         }) => {
-            write_order()?;
+            write_order(output)?;
             output.write_char('(')?;
             id.print(output)?;
             output.write_str(": ")?;
@@ -261,92 +269,77 @@ fn write_instr_with(
             iter_instrs.as_slice().print(output)?;
             if !short {
                 output.write_str("\n\n")?;
-                write_block_with(output, block, level + 1, 0)?;
+                output.indented(|output| write_block_with(output, block, 0))?;
             }
             Ok(())
         }
         InstrKind::Result(ResultInstr { exps, .. }) if exps.is_empty() => {
-            write_order()?;
+            write_order(output)?;
             output.write_str("The relation holds")
         }
         InstrKind::Result(ResultInstr {
             rel_signature,
             exps,
         }) => {
-            write_order()?;
+            write_order(output)?;
             output.write_str("Result in: ")?;
             write_reloutput(output, rel_signature, exps)
         }
         InstrKind::Return(ReturnInstr { exp }) => {
-            write_order()?;
+            write_order(output)?;
             output.write_str("Return ")?;
             exp.print(output)
         }
         InstrKind::Debug(DebugInstr { exp, instr: nested }) => {
-            write_order()?;
+            write_order(output)?;
             output.write_str("Debug: ")?;
             exp.print(output)?;
             if !short {
                 output.write_str("\n\n")?;
-                write_instr_with(output, nested, false, level, index + 1)?;
+                write_instr_with(output, nested, false, index + 1)?;
             }
             Ok(())
         }
     }
 }
 
-fn write_block_with(
-    output: &mut Printer<'_>,
-    block: &Block,
-    level: usize,
-    index: usize,
-) -> fmt::Result {
+fn write_block_with(output: &mut Printer<'_>, block: &Block, index: usize) -> fmt::Result {
     for (offset, instr) in block.iter().enumerate() {
         if offset != 0 {
             output.write_str("\n\n")?;
         }
-        write_instr_with(output, instr, false, level, index + offset + 1)?;
+        write_instr_with(output, instr, false, index + offset + 1)?;
     }
     Ok(())
 }
 
-fn write_elseblock_with(
-    output: &mut Printer<'_>,
-    block: &ElseBlock,
-    level: usize,
-    index: usize,
-) -> fmt::Result {
-    write!(
-        output,
-        "{}{next}. Otherwise,\n\n",
-        "  ".repeat(level),
-        next = index + 1
-    )?;
-    write_block_with(output, block, level + 1, 0)
+fn write_elseblock_with(output: &mut Printer<'_>, block: &ElseBlock, index: usize) -> fmt::Result {
+    output.write_indent()?;
+    write!(output, "{next}. Otherwise,\n\n", next = index + 1)?;
+    output.indented(|output| write_block_with(output, block, 0))
 }
 
 fn write_elseblock_opt_with(
     output: &mut Printer<'_>,
     block: &Option<ElseBlock>,
-    level: usize,
     index: usize,
 ) -> fmt::Result {
     if let Some(block) = block {
         output.write_str("\n\n")?;
-        write_elseblock_with(output, block, level, index)?;
+        write_elseblock_with(output, block, index)?;
     }
     Ok(())
 }
 
 impl Print for Instr {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        write_instr_with(printer, self, false, 0, 0)
+        write_instr_with(printer, self, false, 0)
     }
 }
 
 impl Print for Block {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        write_block_with(printer, self, 0, 0)
+        write_block_with(printer, self, 0)
     }
 }
 
@@ -413,8 +406,8 @@ impl Print for Rel {
         printer.write_str(": ")?;
         write_relinput(printer, &self.rel_signature, &self.exps_input)?;
         printer.write_str("\n\n")?;
-        write_block_with(printer, &self.block, 0, 0)?;
-        write_elseblock_opt_with(printer, &self.else_block, 0, self.block.len())
+        write_block_with(printer, &self.block, 0)?;
+        write_elseblock_opt_with(printer, &self.else_block, self.block.len())
     }
 }
 
@@ -453,7 +446,9 @@ impl Print for TableRow {
         printer.write_str(" -> ")?;
         self.exp.print(printer)?;
         printer.write_str(":\n\n")?;
-        write_block_with(printer, &self.block, 2, 0)
+        printer.indented(|printer| {
+            printer.indented(|printer| write_block_with(printer, &self.block, 0))
+        })
     }
 }
 
@@ -496,8 +491,8 @@ impl Print for DefinedFunc {
         }
         self.params.as_slice().print(printer)?;
         printer.write_str("\n\n")?;
-        write_block_with(printer, &self.block, 0, 0)?;
-        write_elseblock_opt_with(printer, &self.else_block, 0, self.block.len())
+        write_block_with(printer, &self.block, 0)?;
+        write_elseblock_opt_with(printer, &self.else_block, self.block.len())
     }
 }
 

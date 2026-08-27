@@ -13,12 +13,6 @@ use super::ast::*;
 
 // == Printing
 
-// - Helpers
-
-fn indent(level: usize) -> String {
-    "  ".repeat(level)
-}
-
 fn write_notation(
     output: &mut Printer<'_>,
     not_typ: &NotTyp,
@@ -90,12 +84,12 @@ fn write_rulematch(
     input_hint: &InputHint,
     rule_match: &RuleMatch,
 ) -> fmt::Result {
-    write!(output, "{}(signature) ", indent(2))?;
+    output.write_indent()?;
+    output.write_str("(signature) ")?;
     write_ruleinput(output, not_typ, input_hint, &rule_match.exps_signature)?;
-    output.write_char('\n')?;
-    output.write_str(&indent(2))?;
+    output.newline()?;
     write_ruleinput(output, not_typ, input_hint, &rule_match.exps_input)?;
-    write_prems_with(output, 2, &rule_match.prems)
+    write_prems_with(output, &rule_match.prems)
 }
 
 fn write_rulepath(
@@ -104,11 +98,11 @@ fn write_rulepath(
     input_hint: &InputHint,
     rule_path: &RulePath,
 ) -> fmt::Result {
-    write!(output, "{}rulepath ", indent(2))?;
+    output.write_indent()?;
+    output.write_str("rulepath ")?;
     rule_path.id.print(output)?;
-    write_prems_with(output, 2, &rule_path.prems)?;
-    output.write_char('\n')?;
-    output.write_str(&indent(2))?;
+    write_prems_with(output, &rule_path.prems)?;
+    output.newline()?;
     write_ruleoutput(output, not_typ, input_hint, &rule_path.exps_output)
 }
 
@@ -133,12 +127,21 @@ fn write_rulegroup(
     input_hint: &InputHint,
     rule_group: &RuleGroup,
 ) -> fmt::Result {
-    write!(output, "{}rulegroup ", indent(1))?;
+    output.write_indent()?;
+    output.write_str("rulegroup ")?;
     rule_group.node.id.print(output)?;
-    write!(output, "\n\n {}match\n\n", indent(1))?;
-    write_rulematch(output, not_typ, input_hint, &rule_group.node.rule_match)?;
-    write!(output, "\n\n {}paths\n\n", indent(1))?;
-    write_rulepaths(output, not_typ, input_hint, &rule_group.node.rule_paths)
+    output.write_str("\n\n ")?;
+    output.write_indent()?;
+    output.write_str("match\n\n")?;
+    output.indented(|output| {
+        write_rulematch(output, not_typ, input_hint, &rule_group.node.rule_match)
+    })?;
+    output.write_str("\n\n ")?;
+    output.write_indent()?;
+    output.write_str("paths\n\n")?;
+    output.indented(|output| {
+        write_rulepaths(output, not_typ, input_hint, &rule_group.node.rule_paths)
+    })
 }
 
 fn write_rulegroups(
@@ -151,7 +154,7 @@ fn write_rulegroups(
         if index != 0 {
             output.write_str("\n\n")?;
         }
-        write_rulegroup(output, not_typ, input_hint, rule_group)?;
+        output.indented(|output| write_rulegroup(output, not_typ, input_hint, rule_group))?;
     }
     Ok(())
 }
@@ -162,17 +165,26 @@ fn write_elsegroup(
     input_hint: &InputHint,
     else_group: &ElseGroup,
 ) -> fmt::Result {
-    write!(output, "{}rulegroup ", indent(1))?;
+    output.write_indent()?;
+    output.write_str("rulegroup ")?;
     else_group.node.id.print(output)?;
-    write!(output, "\n\n {}match\n\n", indent(1))?;
-    write_rulematch(output, not_typ, input_hint, &else_group.node.rule_match)?;
-    write!(output, "\n\n {}paths\n\n", indent(1))?;
-    write_rulepaths(
-        output,
-        not_typ,
-        input_hint,
-        std::slice::from_ref(&else_group.node.rule_path),
-    )
+    output.write_str("\n\n ")?;
+    output.write_indent()?;
+    output.write_str("match\n\n")?;
+    output.indented(|output| {
+        write_rulematch(output, not_typ, input_hint, &else_group.node.rule_match)
+    })?;
+    output.write_str("\n\n ")?;
+    output.write_indent()?;
+    output.write_str("paths\n\n")?;
+    output.indented(|output| {
+        write_rulepaths(
+            output,
+            not_typ,
+            input_hint,
+            std::slice::from_ref(&else_group.node.rule_path),
+        )
+    })
 }
 
 fn write_elsegroup_opt(
@@ -182,8 +194,12 @@ fn write_elsegroup_opt(
     else_group: &Option<ElseGroup>,
 ) -> fmt::Result {
     if let Some(else_group) = else_group {
-        write!(output, "\n\n{}elsegroup\n\n", indent(1))?;
-        write_elsegroup(output, not_typ, input_hint, else_group)?;
+        output.write_str("\n\n")?;
+        output.indented(|output| {
+            output.write_indent()?;
+            output.write_str("elsegroup\n\n")?;
+            write_elsegroup(output, not_typ, input_hint, else_group)
+        })?;
     }
     Ok(())
 }
@@ -192,26 +208,35 @@ fn write_elsegroup_opt(
 
 impl Print for TableRow {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        write!(printer, "\n{}(signature) ", indent(2))?;
-        for (index, exp) in self.node.exps_signature.iter().enumerate() {
-            if index != 0 {
-                printer.write_str(", ")?;
-            }
-            exp.print(printer)?;
-        }
         printer.write_char('\n')?;
-        printer.write_str(&indent(2))?;
-        self.node.args.as_slice().print(printer)?;
-        printer.write_str(" -> ")?;
-        self.node.exp.print(printer)?;
-        write_prems_with(printer, 2, &self.node.prems)
+        printer.indented(|printer| {
+            printer.indented(|printer| {
+                printer.write_indent()?;
+                printer.write_str("(signature) ")?;
+                for (index, exp) in self.node.exps_signature.iter().enumerate() {
+                    if index != 0 {
+                        printer.write_str(", ")?;
+                    }
+                    exp.print(printer)?;
+                }
+                printer.newline()?;
+                self.node.args.as_slice().print(printer)?;
+                printer.write_str(" -> ")?;
+                self.node.exp.print(printer)?;
+                write_prems_with(printer, &self.node.prems)
+            })
+        })
     }
 }
 
 impl Print for [TableRow] {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         for (index, table_row) in self.iter().enumerate() {
-            write!(printer, "\n{}row {index} :", indent(1))?;
+            printer.write_char('\n')?;
+            printer.indented(|printer| {
+                printer.write_indent()?;
+                write!(printer, "row {index} :")
+            })?;
             table_row.print(printer)?;
         }
         Ok(())

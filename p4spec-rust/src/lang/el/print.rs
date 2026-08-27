@@ -151,22 +151,6 @@ impl Print for [TypCase] {
 }
 
 // - Operators
-
-fn escaped(text: &str) -> String {
-    text.bytes()
-        .map(|byte| match byte {
-            b'"' => "\\\"".into(),
-            b'\\' => "\\\\".into(),
-            8 => "\\b".into(),
-            9 => "\\t".into(),
-            10 => "\\n".into(),
-            13 => "\\r".into(),
-            32..=126 => char::from(byte).to_string(),
-            _ => format!("\\{byte:03}"),
-        })
-        .collect()
-}
-
 impl Print for UnOp {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         match self {
@@ -209,7 +193,11 @@ impl Print for Exp {
                 )
             }
             ExpKind::Num(_, number) => number.print(printer),
-            ExpKind::Text(text) => write!(printer, "\"{}\"", escaped(text)),
+            ExpKind::Text(text) => {
+                printer.write_char('"')?;
+                printer.write_escaped(text)?;
+                printer.write_char('"')
+            }
             ExpKind::Var(id) => printer.write_str(&id.node),
             ExpKind::Un(operator, exp) => {
                 operator.print(printer)?;
@@ -357,7 +345,11 @@ impl Print for Exp {
                 printer.write_str("##")?;
                 exp.print(printer)
             }
-            ExpKind::Latex(text) => write!(printer, "latex({})", escaped(text)),
+            ExpKind::Latex(text) => {
+                printer.write_str("latex(")?;
+                printer.write_escaped(text)?;
+                printer.write_char(')')
+            }
         }
     }
 }
