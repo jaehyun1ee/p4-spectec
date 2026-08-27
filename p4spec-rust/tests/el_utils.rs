@@ -27,7 +27,7 @@ fn exp(kind: ExpKind, file: &str) -> ast::Exp {
 }
 
 fn atom(source: &str) -> ast::Atom {
-    Spanned::new(DomainAtom::of_string(source), span("atom.watsup"))
+    Spanned::new(DomainAtom::from_source(source), span("atom.watsup"))
 }
 
 fn plain(kind: ast::PlainTypKind) -> ast::PlainTyp {
@@ -65,7 +65,7 @@ fn free_expression_ids_ignore_source_spans_and_render_in_source_order() {
     );
 
     assert_eq!(expression.free(), ids(&["left", "right"]));
-    assert_eq!(Print::to_string(&expression), "left + right");
+    assert_eq!(Print::render(&expression), "left + right");
 }
 
 #[test]
@@ -192,9 +192,9 @@ fn printer_preserves_el_delimiters_precedence_hints_and_definition_separators() 
         ),
         "outer",
     );
-    assert_eq!(Print::to_string(&nested), "(a + b) * c?");
+    assert_eq!(Print::render(&nested), "(a + b) * c?");
     assert_eq!(
-        Print::to_string(&exp(
+        Print::render(&exp(
             ExpKind::Call(
                 id("f", "call"),
                 vec![plain(ast::PlainTypKind::Text)],
@@ -208,7 +208,7 @@ fn printer_preserves_el_delimiters_precedence_hints_and_definition_separators() 
         "$f<text>($g)"
     );
     assert_eq!(
-        Print::to_string(&prem(ast::PremKind::Iter(ast::IterPrem {
+        Print::render(&prem(ast::PremKind::Iter(ast::IterPrem {
             prem: Box::new(prem(ast::PremKind::If(ast::IfPrem {
                 exp: exp(ExpKind::Var(id("ready", "prem")), "prem"),
             }))),
@@ -300,7 +300,7 @@ fn printer_preserves_el_delimiters_precedence_hints_and_definition_separators() 
         definition(ast::DefKind::Sep),
     ];
     assert_eq!(
-        Print::to_string(&definitions),
+        Print::render(&definitions),
         "extern syntax Syntax\nsyntax Pair<T>\nsyntax Record = {field bool}\nvar value : bool\nextern relation external: TERM\nrelation internal: TERM\nextern dec $extern(bool) : bool\nbuiltin dec $builtin : bool\ntbl dec $table : bool\ndec $declared : bool\ntbl def $rows =\n  pattern => body\ndef $defined = body\n -- otherwise\n\n\n\n"
     );
 }
@@ -309,36 +309,33 @@ fn printer_preserves_el_delimiters_precedence_hints_and_definition_separators() 
 fn printer_matches_ocaml_byte_escaping_and_public_collection_helpers() {
     let escaped = "\"\\'\n\r\t\x08\x0c\x01é";
     assert_eq!(
-        Print::to_string(&exp(ExpKind::Text(escaped.into()), "text")),
+        Print::render(&exp(ExpKind::Text(escaped.into()), "text")),
         "\"\\\"\\\\'\\n\\r\\t\\b\\012\\001\\195\\169\""
     );
     assert_eq!(
-        Print::to_string(&exp(ExpKind::Latex(escaped.into()), "latex")),
+        Print::render(&exp(ExpKind::Latex(escaped.into()), "latex")),
         "latex(\\\"\\\\'\\n\\r\\t\\b\\012\\001\\195\\169)"
     );
     assert_eq!(
-        Print::to_string(&ast::UnOp::Num(p4spec_rust::lang::xl::num::UnOp::Minus)),
+        Print::render(&ast::UnOp::Num(p4spec_rust::lang::xl::num::UnOp::Minus)),
         "-"
     );
     assert_eq!(
-        Print::to_string(&ast::BinOp::Bool(p4spec_rust::lang::xl::bool::BinOp::Equiv,)),
+        Print::render(&ast::BinOp::Bool(p4spec_rust::lang::xl::bool::BinOp::Equiv,)),
         "<=>"
     );
     assert_eq!(
-        Print::to_string(&ast::CmpOp::Bool(p4spec_rust::lang::xl::bool::CmpOp::Ne)),
+        Print::render(&ast::CmpOp::Bool(p4spec_rust::lang::xl::bool::CmpOp::Ne)),
         "=/="
     );
     let atom_type = Spanned::new(ast::NotTypKind::Atom(atom("A")), span("type"));
-    assert_eq!(
-        Print::to_string(&[atom_type.clone(), atom_type][..]),
-        "A, A"
-    );
+    assert_eq!(Print::render(&[atom_type.clone(), atom_type][..]), "A, A");
     let row = Spanned::new(
         (exp(ExpKind::Eps, "row"), exp(ExpKind::Eps, "row")),
         span("row"),
     );
     assert_eq!(
-        Print::to_string(&[row.clone(), row][..]),
+        Print::render(&[row.clone(), row][..]),
         "eps => eps\n  | eps => eps"
     );
     let rule = Spanned::new(
@@ -351,7 +348,7 @@ fn printer_matches_ocaml_byte_escaping_and_public_collection_helpers() {
         span("rule"),
     );
     assert_eq!(
-        Print::to_string(&[rule.clone(), rule][..]),
+        Print::render(&[rule.clone(), rule][..]),
         "rule r:\n  eps\nrule r:\n  eps"
     );
 }

@@ -74,7 +74,7 @@ fn printer_renders_nested_premises_and_definition_spec_goldens() {
         iter_prem: iteration,
     }));
     assert_eq!(
-        Print::to_string(&nested),
+        Print::render(&nested),
         "(if ready)*{bound <- bound*, output? -> output?*}*{bound <- bound*, output? -> output?*}"
     );
     let rule = Spanned::new(
@@ -210,7 +210,7 @@ fn printer_renders_nested_premises_and_definition_spec_goldens() {
             Span::default(),
         ),
     ];
-    let rendered = Print::to_string(&definitions);
+    let rendered = Print::render(&definitions);
     assert_eq!(
         rendered,
         concat!(
@@ -240,10 +240,10 @@ fn printer_renders_nested_premises_and_definition_spec_goldens() {
             "  -- debug debug"
         )
     );
-    assert_eq!(Print::to_string(&definitions), rendered);
-    assert_eq!(Print::to_string(&[hint()][..]), " hint(meta payload)");
+    assert_eq!(Print::render(&definitions), rendered);
+    assert_eq!(Print::render(&[hint()][..]), " hint(meta payload)");
     assert_eq!(
-        Print::to_string(&Spanned::new(
+        Print::render(&Spanned::new(
             ast::DefKind::Var(ast::VarDef {
                 id: id("hidden_metadata"),
                 typ: typ(),

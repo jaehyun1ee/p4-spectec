@@ -28,7 +28,7 @@ fn id(ids: &IdSet, id: &Id) -> Id {
 }
 
 fn find_alias(metavars: &Metavars, span: &Span, typ: &Typ) -> Option<Var> {
-    let typ_name = Print::to_string(typ);
+    let typ_name = Print::render(typ);
     let mut matching = metavars.iter().filter(|(id_alias, typ_alias)| {
         typ.syntax_eq(typ_alias) && typ_name.as_str() != id_alias.node.as_str()
     });
@@ -54,7 +54,7 @@ fn var_from_typ_inner(metavars: &Metavars, span: &Span, typ: &Typ) -> Var {
             var
         }
         _ => Var {
-            id: Spanned::new(Print::to_string(typ), span.clone()),
+            id: Spanned::new(Print::render(typ), span.clone()),
             typ: typ.clone(),
             iters: vec![],
         },

@@ -47,18 +47,18 @@ pub fn to_string(hint: &AlterationHint) -> String {
 fn string(hint: &AlterationHint) -> String {
     match hint {
         AlterationHint::Text(text) => text.clone(),
-        AlterationHint::Atom(atom) => Print::to_string(atom),
+        AlterationHint::Atom(atom) => Print::render(atom),
         AlterationHint::Seq(hints) => hints.iter().map(string).collect::<Vec<_>>().join(" "),
         AlterationHint::Brack(atom_l, hint, atom_r) => format!(
             "{} {} {}",
-            Print::to_string(atom_l),
+            Print::render(atom_l),
             string(hint),
-            Print::to_string(atom_r)
+            Print::render(atom_r)
         ),
         AlterationHint::Hole(Hole::Next) => "%".into(),
         AlterationHint::Hole(Hole::Num(index)) => format!("%{index}"),
         AlterationHint::Fuse(hint_l, hint_r) => format!("{}#{}", string(hint_l), string(hint_r)),
-        AlterationHint::Other(exp) => Print::to_string(exp),
+        AlterationHint::Other(exp) => Print::render(exp),
     }
 }
 // Creating hints

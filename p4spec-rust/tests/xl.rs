@@ -91,8 +91,8 @@ fn numeric_operations_preserve_kinds_and_signed_rendering() {
     );
     assert_eq!(num::un(UnOp::Minus, &two), Number::Int((-2).into()));
     assert_eq!(num::cmp(CmpOp::Lt, &two, &three), Ok(true));
-    assert_eq!(Print::to_string(&Number::Int(3.into())), "+3");
-    assert_eq!(Print::to_string(&negative_three), "-3");
+    assert_eq!(Print::render(&Number::Int(3.into())), "+3");
+    assert_eq!(Print::render(&negative_three), "-3");
 }
 
 #[test]

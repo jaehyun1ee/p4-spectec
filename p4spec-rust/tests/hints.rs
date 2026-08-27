@@ -9,7 +9,7 @@ use p4spec_rust::{
             flag, hint,
             input::{self, InputError, InputHint},
         },
-        traits::eq::SyntaxEq,
+        traits::{eq::SyntaxEq, print::Print},
     },
 };
 
@@ -24,6 +24,15 @@ fn exp(node: ExpKind) -> ast::Exp {
 }
 fn id(name: &str, source: &str) -> ast::Id {
     Spanned::new(name.to_owned(), span(source))
+}
+
+#[test]
+fn atom_source_and_display_spellings_are_explicit() {
+    let atom = Atom::from_source("'<+>'");
+
+    assert_eq!(atom.to_source_string(), "'<+>'");
+    assert_eq!(atom.to_string(), "<+>");
+    assert_eq!(Print::render(&atom), "'<+>'");
 }
 
 struct StringRenderer {
@@ -41,7 +50,7 @@ impl Renderer<&str> for StringRenderer {
         (text != "omit").then(|| text.into())
     }
     fn atom(&self, atom: &ast::Atom) -> String {
-        atom.node.render()
+        atom.node.to_string()
     }
     fn join(&self, items: Vec<String>) -> String {
         items.join(self.separator)

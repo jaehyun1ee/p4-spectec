@@ -163,7 +163,7 @@ fn composite_spec(metadata: &str) -> sl::ast::Spec {
 #[test]
 fn composite_spec_prints_in_order_with_escaping_and_instruction_levels() {
     assert_eq!(
-        Print::to_string(&composite_spec("source-a")),
+        Print::render(&composite_spec("source-a")),
         concat!(
             "extern syntax External\n\n",
             "var state : bool\n\n",
@@ -184,8 +184,8 @@ fn composite_spec_prints_in_order_with_escaping_and_instruction_levels() {
 #[test]
 fn specification_printer_omits_source_and_hint_metadata() {
     assert_eq!(
-        Print::to_string(&composite_spec("source-a")),
-        Print::to_string(&composite_spec("source-b"))
+        Print::render(&composite_spec("source-a")),
+        Print::render(&composite_spec("source-b"))
     );
 }
 

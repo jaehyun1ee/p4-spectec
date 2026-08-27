@@ -8,7 +8,7 @@ pub trait Print {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result;
 
     /// Renders this value using the default printer context
-    fn to_string(&self) -> String {
+    fn render(&self) -> String {
         let mut output = String::new();
         {
             let mut printer = Printer::new(&mut output);

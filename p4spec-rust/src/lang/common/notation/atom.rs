@@ -100,7 +100,7 @@ impl Error for AtomError {}
 
 impl Print for Atom {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        printer.write(&self.to_string())
+        printer.write(&self.to_source_string())
     }
 }
 
@@ -122,11 +122,29 @@ impl Free for Atom {
     fn collect_free(&self, _free: &mut IdSet) {}
 }
 
+impl fmt::Display for Atom {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Tag(id) if id == "EMPTY" => fmt.write_str("/* empty */"),
+            Self::Operator(op) => fmt.write_str(op),
+            Self::LAngle => fmt.write_str("<"),
+            Self::RAngle => fmt.write_str(">"),
+            Self::LParen => fmt.write_str("("),
+            Self::RParen => fmt.write_str(")"),
+            Self::LBrack => fmt.write_str("["),
+            Self::RBrack => fmt.write_str("]"),
+            Self::LBrace => fmt.write_str("{"),
+            Self::RBrace => fmt.write_str("}"),
+            _ => fmt.write_str(&self.to_source_string()),
+        }
+    }
+}
+
 // == String conversion and parsing
 
 impl Atom {
-    /// String representation of the atom
-    pub fn to_string(&self) -> String {
+    /// Source representation of the atom
+    pub fn to_source_string(&self) -> String {
         match self {
             Self::Keyword(id) => id.clone(),
             Self::Tag(id) => format!("_{id}"),
@@ -161,7 +179,7 @@ impl Atom {
     }
 
     /// Parses a string into an atom
-    pub fn of_string(source: &str) -> Self {
+    pub fn from_source(source: &str) -> Self {
         match source {
             "<:" => Self::Sub,
             ":>" => Self::Sup,
@@ -194,27 +212,6 @@ impl Atom {
             }
             _ if source.len() >= 2 && source.starts_with('_') => Self::Tag(source[1..].to_owned()),
             _ => Self::Keyword(source.to_owned()),
-        }
-    }
-}
-
-// == Rendering
-
-impl Atom {
-    /// Returns the display spelling, omitting source-only quoting where applicable
-    pub fn render(&self) -> String {
-        match self {
-            Self::Tag(id) if id == "EMPTY" => "/* empty */".into(),
-            Self::Operator(op) => op.clone(),
-            Self::LAngle => "<".into(),
-            Self::RAngle => ">".into(),
-            Self::LParen => "(".into(),
-            Self::RParen => ")".into(),
-            Self::LBrack => "[".into(),
-            Self::RBrack => "]".into(),
-            Self::LBrace => "{".into(),
-            Self::RBrace => "}".into(),
-            _ => self.to_string(),
         }
     }
 }
