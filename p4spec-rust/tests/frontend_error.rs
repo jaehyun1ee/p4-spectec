@@ -12,7 +12,7 @@ fn span(file: &str, left: i64, right: i64) -> Span {
 
 #[test]
 fn lexical_errors_convert_without_losing_category_or_span() {
-    let lexical = Lexer::new("source.watsup", "@")
+    let lexical = Lexer::new("source.watsup", "@", |_| false)
         .next()
         .unwrap()
         .unwrap_err();

@@ -28,7 +28,7 @@ pub fn parse_string(source: &str) -> Result<Spec, FrontendError> {
 }
 
 fn parse_source(name: &str, source: &str, context: &Context) -> Result<Spec, FrontendError> {
-    let lexer = Lexer::with_uppercase_classifier(name, source, |id| context.find_id(id));
+    let lexer = Lexer::new(name, source, |id| context.find_id(id));
     parser::SpecParser::new()
         .parse(context, parser_tokens(context, lexer))
         .map_err(|error| parse_error(context, error))

@@ -9,7 +9,7 @@ use p4spec_rust::{
 };
 
 fn token_nodes(source: &str) -> Vec<Token> {
-    Lexer::new("lexer-test.watsup", source)
+    Lexer::new("lexer-test.watsup", source, |_| false)
         .map(|result| result.expect("valid lexer fixture").node)
         .collect()
 }
@@ -155,9 +155,17 @@ fn byte_escapes_decode_valid_utf8_sequences() {
 }
 
 #[test]
+fn numbered_holes_accept_the_full_i64_range() {
+    assert_eq!(
+        token_nodes("%4611686018427387904"),
+        vec![Token::NumberedHole(4_611_686_018_427_387_904), Token::Eof]
+    );
+}
+
+#[test]
 fn byte_escapes_reject_non_utf8_text() {
     for source in ["\"\\FF\"", "\"\\u{D800}\""] {
-        let error = Lexer::new("unicode-policy.watsup", source)
+        let error = Lexer::new("unicode-policy.watsup", source, |_| false)
             .next()
             .expect("lexer result")
             .expect_err("byte-only text");
@@ -202,7 +210,8 @@ fn comments_and_newlines_emit_only_significant_layout_tokens() {
 
 #[test]
 fn lexemes_carry_byte_based_source_positions() {
-    let lexemes = Lexer::new("source.watsup", "A\n  | \"é\"").collect::<Result<Vec<_>, _>>();
+    let lexemes =
+        Lexer::new("source.watsup", "A\n  | \"é\"", |_| false).collect::<Result<Vec<_>, _>>();
     let lexemes = lexemes.expect("valid source");
 
     assert_eq!(
@@ -238,7 +247,7 @@ fn lexemes_carry_byte_based_source_positions() {
 #[test]
 fn uppercase_identifier_classification_is_lazy_and_contextual() {
     let classifier_calls = Cell::new(0);
-    let mut lexer = Lexer::with_uppercase_classifier("scope.watsup", "Bound Next", |identifier| {
+    let mut lexer = Lexer::new("scope.watsup", "Bound Next", |identifier| {
         classifier_calls.set(classifier_calls.get() + 1);
         identifier == "Bound"
     });
@@ -290,7 +299,7 @@ fn lexical_failures_report_typed_kinds_and_precise_spans() {
     ];
 
     for (source, kind, left_column, right_column) in fixtures {
-        let error = Lexer::new("error.watsup", source)
+        let error = Lexer::new("error.watsup", source, |_| false)
             .next()
             .expect("lexer result")
             .expect_err("invalid source");
