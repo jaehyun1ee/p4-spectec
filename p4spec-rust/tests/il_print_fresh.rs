@@ -4,6 +4,7 @@ use p4spec_rust::{
         common::{
             ds::{map::IdMap, set::IdSet},
             notation::mixfix::Mixfix,
+            noted::Noted,
         },
         hints::input::InputHint,
         il::{ast, fresh},
@@ -18,7 +19,13 @@ fn id(name: &str) -> ast::Id {
     Spanned::new(name.into(), Span::default())
 }
 fn exp(kind: ast::ExpKind) -> ast::Exp {
-    ast::exp(kind, ast::TypKind::Bool, Span::default())
+    p4spec_rust::spanned! {
+        node: Noted {
+            kind,
+            note: ast::TypKind::Bool,
+        },
+        span: Span::default(),
+    }
 }
 fn var(name: &str) -> ast::Exp {
     exp(ast::ExpKind::Var(id(name)))

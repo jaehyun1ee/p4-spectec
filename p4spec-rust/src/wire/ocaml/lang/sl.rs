@@ -1,6 +1,9 @@
 use serde_json::{Value, json};
 
-use crate::lang::sl::ast::{self, *};
+use crate::lang::{
+    common::noted::Noted,
+    sl::ast::{self, *},
+};
 
 use super::{
     super::{
@@ -165,7 +168,10 @@ fn encode_iid(iid: &ast::Iid) -> Value {
 
 fn decode_instr(value: &Value) -> Result<ast::Instr, DecodeError> {
     let (kind, iid, span) = source::decode_annotated(value, decode_instr_kind, decode_iid)?;
-    Ok(ast::instr(kind, iid, span))
+    Ok(crate::spanned! {
+        node: Noted { kind, note: iid },
+        span: span,
+    })
 }
 
 fn encode_instr(instr: &ast::Instr) -> Value {

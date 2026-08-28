@@ -103,14 +103,6 @@ impl Print for Guard {
 
 // - Instructions
 
-/// Renders instr with
-pub fn render_instr_with(instr: &Instr, short: bool, level: usize, index: usize) -> String {
-    let mut output = String::new();
-    write_instr_with(&mut Printer::new(&mut output), instr, short, level, index)
-        .expect("writing to a String cannot fail");
-    output
-}
-
 fn write_instr_with(
     output: &mut Printer<'_>,
     instr: &Instr,

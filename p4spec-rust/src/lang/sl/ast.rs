@@ -1,10 +1,7 @@
 //! Structured language model
 
 use crate::lang::{
-    common::{
-        noted::Noted,
-        source::{Span, Spanned},
-    },
+    common::{noted::Noted, source::Spanned},
     el,
     hints::input::InputHint,
     il,
@@ -150,11 +147,6 @@ pub enum Guard {
 pub type Iid = i64;
 
 pub type Instr = Spanned<Noted<InstrKind, Iid>>;
-
-/// Constructs an instruction
-pub fn instr(kind: InstrKind, iid: Iid, span: Span) -> Instr {
-    Spanned::new(Noted::new(kind, iid), span)
-}
 
 #[derive(Clone, Debug, PartialEq)]
 #[allow(clippy::large_enum_variant)]

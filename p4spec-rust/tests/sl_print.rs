@@ -1,6 +1,7 @@
 use p4spec_rust::lang::{
     common::{
         notation::{atom::Atom, mixfix::Mixfix},
+        noted::Noted,
         source::{Position, Span, Spanned},
     },
     el,
@@ -26,19 +27,23 @@ fn typ(kind: il::ast::TypKind) -> il::ast::Typ {
 }
 
 fn variable(name: &str) -> il::ast::Exp {
-    il::ast::exp(
-        il::ast::ExpKind::Var(id(name)),
-        il::ast::TypKind::Bool,
-        span(name),
-    )
+    p4spec_rust::spanned! {
+        node: Noted {
+            kind: il::ast::ExpKind::Var(id(name)),
+            note: il::ast::TypKind::Bool,
+        },
+        span: span(name),
+    }
 }
 
 fn text(value: &str) -> il::ast::Exp {
-    il::ast::exp(
-        il::ast::ExpKind::Text(value.to_owned()),
-        il::ast::TypKind::Text,
-        span("text"),
-    )
+    p4spec_rust::spanned! {
+        node: Noted {
+            kind: il::ast::ExpKind::Text(value.to_owned()),
+            note: il::ast::TypKind::Text,
+        },
+        span: span("text"),
+    }
 }
 
 fn notation() -> il::ast::NotTyp {
@@ -54,7 +59,10 @@ fn notation() -> il::ast::NotTyp {
 }
 
 fn instr(kind: sl::ast::InstrKind, iid: i64) -> sl::ast::Instr {
-    sl::ast::instr(kind, iid, span("instruction"))
+    p4spec_rust::spanned! {
+        node: Noted { kind, note: iid },
+        span: span("instruction"),
+    }
 }
 
 fn hint(source: &str) -> el::ast::Hint {
@@ -207,7 +215,7 @@ fn dangling_branches_render_the_instruction_identifier() {
     );
 
     assert_eq!(
-        sl::print::render_instr_with(&branch, false, 0, 1),
+        Print::to_string(&vec![branch]),
         "1. If (condition), then\n\n  1. Return value\n\n1. Else Dangling#42"
     );
 }

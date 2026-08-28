@@ -5,7 +5,7 @@ use crate::lang::{
         self,
         notation::{atom, mixfix::Mixfix, mixop},
         noted::Noted,
-        source::{Span, Spanned},
+        source::Spanned,
     },
     el,
     hints::input::InputHint,
@@ -109,11 +109,6 @@ pub type TypCase = (NotTyp, TypOrigin, Vec<Hint>);
 
 pub type Value = Spanned<Noted<ValueKind, TypKind>>;
 
-/// Constructs a typed value.
-pub fn value(kind: ValueKind, typ: TypKind, span: Span) -> Value {
-    Spanned::new(Noted::new(kind, typ), span)
-}
-
 #[derive(Clone, Debug, PartialEq)]
 pub enum ValueKind {
     Bool(bool),
@@ -148,11 +143,6 @@ pub enum OpTyp {
 // Expressions
 
 pub type Exp = Spanned<Noted<ExpKind, TypKind>>;
-
-/// Constructs a typed expression.
-pub fn exp(kind: ExpKind, typ: TypKind, span: Span) -> Exp {
-    Spanned::new(Noted::new(kind, typ), span)
-}
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ExpKind {
@@ -238,11 +228,6 @@ pub enum OptPattern {
 // Paths
 
 pub type Path = Spanned<Noted<PathKind, TypKind>>;
-
-/// Constructs a typed path.
-pub fn path(kind: PathKind, typ: TypKind, span: Span) -> Path {
-    Spanned::new(Noted::new(kind, typ), span)
-}
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum PathKind {

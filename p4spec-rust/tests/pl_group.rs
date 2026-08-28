@@ -1,5 +1,8 @@
 use p4spec_rust::{
-    lang::common::source::{Position, Span, Spanned},
+    lang::common::{
+        noted::Noted,
+        source::{Position, Span, Spanned},
+    },
     lang::{
         common::notation::mixfix::Mixfix,
         hints::{alter, input::InputHint},
@@ -20,31 +23,44 @@ fn typ() -> il::ast::Typ {
 }
 
 fn variable(name: &str) -> pl::ast::Exp {
-    pl::ast::exp(
-        pl::ast::ExpKind::Var(id(name)),
-        il::ast::TypKind::Bool,
-        span(name),
-    )
+    pl::annot::Annotated {
+        node: p4spec_rust::spanned! {
+            node: Noted {
+                kind: pl::ast::ExpKind::Var(id(name)),
+                note: il::ast::TypKind::Bool,
+            },
+            span: span(name),
+        },
+        hints: pl::annot::Hints::default(),
+    }
 }
 
 fn group(name: &str) -> pl::ast::Instr<pl::ast::InstrDispatch> {
-    let mut instruction = pl::ast::instr(
-        pl::ast::InstrKind::Tier(pl::ast::TierInstr {
-            tier: pl::ast::InstrDispatch::Group(pl::ast::GroupDispatchInstr {
-                id_rel: id("relation"),
-                id_group: id(name),
-                rel_signature: pl::ast::RelSignature {
-                    not_typ: Spanned::new(Mixfix::Arg(typ()), span("signature")),
-                    input_hint: InputHint::new(vec![0]),
-                },
-                exps_input: vec![variable(name)],
-                block: Vec::new(),
-            }),
+    let kind = pl::ast::InstrKind::Tier(pl::ast::TierInstr {
+        tier: pl::ast::InstrDispatch::Group(pl::ast::GroupDispatchInstr {
+            id_rel: id("relation"),
+            id_group: id(name),
+            rel_signature: pl::ast::RelSignature {
+                not_typ: Spanned::new(Mixfix::Arg(typ()), span("signature")),
+                input_hint: InputHint::new(vec![0]),
+            },
+            exps_input: vec![variable(name)],
+            block: Vec::new(),
         }),
-        0,
-        None,
-        span(name),
-    );
+    });
+    let mut instruction = pl::annot::Annotated {
+        node: p4spec_rust::spanned! {
+            node: Noted {
+                kind,
+                note: pl::ast::InstrNote {
+                    iid: 0,
+                    fallthrough: None,
+                },
+            },
+            span: span(name),
+        },
+        hints: pl::annot::Hints::default(),
+    };
     instruction.hints.prose = Some(alter::AlterationHint::Text(format!("hint-{name}")));
     instruction
 }
@@ -52,7 +68,19 @@ fn group(name: &str) -> pl::ast::Instr<pl::ast::InstrDispatch> {
 fn control(
     kind: pl::ast::InstrKind<pl::ast::InstrDispatch>,
 ) -> pl::ast::Instr<pl::ast::InstrDispatch> {
-    pl::ast::instr(kind, 0, None, span("control"))
+    pl::annot::Annotated {
+        node: p4spec_rust::spanned! {
+            node: Noted {
+                kind,
+                note: pl::ast::InstrNote {
+                    iid: 0,
+                    fallthrough: None,
+                },
+            },
+            span: span("control"),
+        },
+        hints: pl::annot::Hints::default(),
+    }
 }
 
 #[test]

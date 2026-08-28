@@ -2,7 +2,7 @@ use serde_json::{Value, json};
 
 use crate::{
     lang::{
-        common::{noted::Noted, source::Spanned},
+        common::noted::Noted,
         hints::{alter, fields},
         pl::{
             annot,
@@ -181,7 +181,10 @@ fn encode_exp(exp: &ast::Exp) -> Value {
 
 fn decode_exp_node(value: &Value) -> Result<ast::ExpNode, DecodeError> {
     let (kind, ty, span) = source::decode_annotated(value, decode_exp_kind, il::decode_typ_kind)?;
-    Ok(Spanned::new(Noted::new(kind, ty), span))
+    Ok(crate::spanned! {
+        node: Noted::new(kind, ty),
+        span: span,
+    })
 }
 
 fn encode_exp_node(exp: &ast::ExpNode) -> Value {
@@ -373,7 +376,10 @@ fn encode_exp_kind(exp: &ExpKind) -> Value {
 
 fn decode_path(value: &Value) -> Result<ast::Path, DecodeError> {
     let (kind, ty, span) = source::decode_annotated(value, decode_path_kind, il::decode_typ_kind)?;
-    Ok(Spanned::new(Noted::new(kind, ty), span))
+    Ok(crate::spanned! {
+        node: Noted::new(kind, ty),
+        span: span,
+    })
 }
 
 fn encode_path(path: &ast::Path) -> Value {
@@ -582,9 +588,17 @@ fn decode_instr<T>(
         |value| decode_instr_kind(value, decode_tier),
         decode_inote,
     )?;
-    let mut instr = ast::instr(kind, iid, fallthrough, span);
-    instr.hints = decode_hints(field(value, "hints")?)?;
-    Ok(instr)
+    let hints = decode_hints(field(value, "hints")?)?;
+    Ok(annot::Annotated {
+        node: crate::spanned! {
+            node: Noted {
+                kind,
+                note: ast::InstrNote { iid, fallthrough },
+            },
+            span: span,
+        },
+        hints,
+    })
 }
 
 fn encode_instr<T>(instr: &ast::Instr<T>, encode_tier: fn(&T) -> Value) -> Value {
@@ -1145,7 +1159,7 @@ fn encode_def(def: &ast::Def) -> Value {
     let node = source::encode_phrase(
         &crate::spanned! {
             node: def.node.node.clone(),
-            span: def.node,
+            span: def.node.span.clone(),
         },
         |def| match def {
             DefKind::ExternTyp(ExternTypDef { id }) => json!(["ExternTypD", il::encode_id(id)]),

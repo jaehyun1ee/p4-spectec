@@ -87,11 +87,19 @@ impl<T> Spanned<T> {
     }
 }
 
-/// Builds a syntax node with the span of another syntax node
+impl<T: fmt::Display> fmt::Display for Spanned<T> {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(fmt, "{} at {}", self.node, self.span)
+    }
+}
+
+impl<T: std::error::Error> std::error::Error for Spanned<T> {}
+
+/// Builds a syntax node with an explicit source span
 #[macro_export]
 macro_rules! spanned {
     (node: $node:expr, span: $span:expr $(,)?) => {{
-        let span = $span.span.clone();
+        let span = $span;
         $crate::lang::common::source::Spanned::new($node, span)
     }};
 }

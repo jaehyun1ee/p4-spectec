@@ -234,14 +234,6 @@ fn write_value_with(
     }
 }
 
-/// Renders a value with explicit abbreviation and indentation settings
-pub fn render_value_with(value: &Value, short: bool, level: usize) -> String {
-    let mut output = String::new();
-    write_value_with(&mut Printer::new(&mut output), value, short, level)
-        .expect("writing to a String cannot fail");
-    output
-}
-
 fn write_notval_with(output: &mut Printer<'_>, not_val: &ValueCase, level: usize) -> fmt::Result {
     not_val.print_with(output, |value, output| {
         write_value_with(output, value, false, level + 1)
@@ -556,14 +548,6 @@ impl Print for [Arg] {
 }
 
 // - Premises
-
-/// Renders prems with
-pub fn render_prems_with(level: usize, prems: &[Prem]) -> String {
-    let mut output = String::new();
-    write_prems_with(&mut Printer::new(&mut output), level, prems)
-        .expect("writing to a String cannot fail");
-    output
-}
 
 pub(crate) fn write_prems_with(
     output: &mut Printer<'_>,

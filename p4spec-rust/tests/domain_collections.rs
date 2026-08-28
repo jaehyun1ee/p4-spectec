@@ -3,6 +3,7 @@ use p4spec_rust::{
     lang::common::{
         Id,
         ds::{map::IdMap, set::IdSet},
+        noted::Noted,
     },
     lang::{il, traits::free::Free},
 };
@@ -42,11 +43,13 @@ fn id_map_uses_identifier_text_as_its_key() {
 fn free_identifier_sets_preserve_source_spans() {
     let id_stored = id("x", "stored");
     let id_lookup = id("x", "lookup");
-    let exp = il::ast::exp(
-        il::ast::ExpKind::Var(id_stored.clone()),
-        il::ast::TypKind::Bool,
-        Span::default(),
-    );
+    let exp = p4spec_rust::spanned! {
+        node: Noted {
+            kind: il::ast::ExpKind::Var(id_stored.clone()),
+            note: il::ast::TypKind::Bool,
+        },
+        span: Span::default(),
+    };
 
     let ids: IdSet = exp.free();
 

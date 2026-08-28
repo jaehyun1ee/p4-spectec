@@ -1,7 +1,7 @@
 use p4spec_rust::{
     lang::common::source::{Position, Span, Spanned},
     lang::{
-        common::{ds::set::IdSet, notation::mixfix::Mixfix},
+        common::{ds::set::IdSet, notation::mixfix::Mixfix, noted::Noted},
         hints::input::InputHint,
         il, sl,
         traits::free::Free,
@@ -21,15 +21,20 @@ fn typ() -> il::ast::Typ {
 }
 
 fn variable(name: &str) -> il::ast::Exp {
-    il::ast::exp(
-        il::ast::ExpKind::Var(id(name)),
-        il::ast::TypKind::Bool,
-        span(name),
-    )
+    p4spec_rust::spanned! {
+        node: Noted {
+            kind: il::ast::ExpKind::Var(id(name)),
+            note: il::ast::TypKind::Bool,
+        },
+        span: span(name),
+    }
 }
 
 fn instr(kind: sl::ast::InstrKind) -> sl::ast::Instr {
-    sl::ast::instr(kind, 0, span("instruction"))
+    p4spec_rust::spanned! {
+        node: Noted { kind, note: 0 },
+        span: span("instruction"),
+    }
 }
 
 fn names(items: &[&str]) -> IdSet {

@@ -3,7 +3,7 @@
 use crate::lang::{
     common::{
         ds::{map::IdMap, set::IdSet},
-        source::{Span, Spanned},
+        source::Span,
     },
     traits::{eq::SyntaxEq, print::Print},
     xl,
@@ -37,7 +37,10 @@ fn find_alias(metavars: &Metavars, span: &Span, typ: &Typ) -> Option<Var> {
         return None;
     }
     Some(Var {
-        id: Spanned::new(id_alias.node.clone(), span.clone()),
+        id: crate::spanned! {
+            node: id_alias.node.clone(),
+            span: span.clone(),
+        },
         typ: typ_alias.clone(),
         iters: vec![],
     })
@@ -54,7 +57,10 @@ fn var_from_typ_inner(metavars: &Metavars, span: &Span, typ: &Typ) -> Var {
             var
         }
         _ => Var {
-            id: Spanned::new(Print::to_string(typ), span.clone()),
+            id: crate::spanned! {
+                node: Print::to_string(typ),
+                span: span.clone(),
+            },
             typ: typ.clone(),
             iters: vec![],
         },

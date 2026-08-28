@@ -1,5 +1,8 @@
 use p4spec_rust::{
-    lang::common::source::{Position, Span, Spanned},
+    lang::common::{
+        noted::Noted,
+        source::{Position, Span, Spanned},
+    },
     lang::{common::notation::mixfix::Mixfix, hints::input::InputHint, il, pl},
 };
 
@@ -16,7 +19,16 @@ fn typ() -> il::ast::Typ {
 }
 
 fn exp(kind: pl::ast::ExpKind) -> pl::ast::Exp {
-    pl::ast::exp(kind, il::ast::TypKind::Bool, span("expression"))
+    pl::annot::Annotated {
+        node: p4spec_rust::spanned! {
+            node: Noted {
+                kind,
+                note: il::ast::TypKind::Bool,
+            },
+            span: span("expression"),
+        },
+        hints: pl::annot::Hints::default(),
+    }
 }
 
 fn variable(name: &str) -> pl::ast::Exp {
@@ -30,25 +42,41 @@ fn call(name: &str) -> pl::ast::Exp {
 fn group_instr(
     kind: pl::ast::InstrKind<pl::ast::InstrGroup>,
 ) -> pl::ast::Instr<pl::ast::InstrGroup> {
-    pl::ast::instr(kind, 0, None, span("instruction"))
+    pl::annot::Annotated {
+        node: p4spec_rust::spanned! {
+            node: Noted {
+                kind,
+                note: pl::ast::InstrNote {
+                    iid: 0,
+                    fallthrough: None,
+                },
+            },
+            span: span("instruction"),
+        },
+        hints: pl::annot::Hints::default(),
+    }
 }
 
 #[test]
 fn expression_and_path_classification_finds_recursive_calls() {
     let nested = exp(pl::ast::ExpKind::Tuple(vec![exp(pl::ast::ExpKind::Upd(
         Box::new(variable("base")),
-        Box::new(pl::ast::path(
-            pl::ast::PathKind::Idx(
-                Box::new(pl::ast::path(
-                    pl::ast::PathKind::Root,
-                    il::ast::TypKind::Bool,
-                    span("root"),
-                )),
+        Box::new(p4spec_rust::spanned! {
+            node: Noted {
+                kind: pl::ast::PathKind::Idx(
+                Box::new(p4spec_rust::spanned! {
+                    node: Noted {
+                        kind: pl::ast::PathKind::Root,
+                        note: il::ast::TypKind::Bool,
+                    },
+                    span: span("root"),
+                }),
                 Box::new(call("index")),
-            ),
-            il::ast::TypKind::Bool,
-            span("path"),
-        )),
+                ),
+                note: il::ast::TypKind::Bool,
+            },
+            span: span("path"),
+        }),
         Box::new(variable("field")),
     ))]));
 
