@@ -2,12 +2,28 @@
 
 use std::collections::BTreeMap;
 
+use thiserror::Error;
+
 use crate::lang::common::{Id, source::Spanned};
 
 use super::{
     collections::{ByKey, CollectionKey},
     set::SpannedSet,
 };
+
+/// A mismatch between the lengths of key and value lists
+#[derive(Clone, Copy, Debug, Error, PartialEq, Eq)]
+#[error("arity mismatch: expected {expected}, got {actual}")]
+pub struct ArityMismatch {
+    pub expected: usize,
+    pub actual: usize,
+}
+
+impl ArityMismatch {
+    pub const fn new(expected: usize, actual: usize) -> Self {
+        Self { expected, actual }
+    }
+}
 
 /// An ordered map that compares keys through `CollectionKey`
 #[repr(transparent)]
@@ -22,6 +38,21 @@ impl<K: CollectionKey, V> SpannedMap<K, V> {
         Self {
             entries: BTreeMap::new(),
         }
+    }
+
+    /// Constructs a map from equally sized key and value lists
+    pub fn from_lists(keys: &[K], values: &[V]) -> Result<Self, ArityMismatch>
+    where
+        K: Clone,
+        V: Clone,
+    {
+        if keys.len() != values.len() {
+            let error = ArityMismatch::new(keys.len(), values.len());
+            return Err(error);
+        }
+
+        let map = keys.iter().cloned().zip(values.iter().cloned()).collect();
+        Ok(map)
     }
 
     /// Returns whether the map contains no bindings

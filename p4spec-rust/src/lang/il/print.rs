@@ -81,16 +81,16 @@ impl Print for Typ {
                 typ.print(printer)?;
                 iter.print(printer)
             }
-            TypKind::Func(tparams, typs, typ) => {
-                if !tparams.is_empty() {
+            TypKind::Func(func_typ) => {
+                if !func_typ.tparams.is_empty() {
                     printer.write_char('<')?;
-                    printer.separated(tparams, ", ")?;
+                    printer.separated(&func_typ.tparams, ", ")?;
                     printer.write_char('>')?;
                 }
                 printer.write_char('(')?;
-                printer.separated(typs, ", ")?;
+                printer.separated(&func_typ.typs_params, ", ")?;
                 printer.write_str(") : ")?;
-                typ.print(printer)
+                func_typ.typ_ret.print(printer)
             }
         }
     }

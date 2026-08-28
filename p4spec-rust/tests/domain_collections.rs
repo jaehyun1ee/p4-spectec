@@ -2,7 +2,10 @@ use p4spec_rust::{
     lang::common::source::{Position, Span, Spanned},
     lang::common::{
         Id,
-        ds::{map::IdMap, set::IdSet},
+        ds::{
+            map::{ArityMismatch, IdMap},
+            set::IdSet,
+        },
         noted::Noted,
     },
     lang::{il, traits::free::Free},
@@ -37,6 +40,16 @@ fn id_map_uses_identifier_text_as_its_key() {
     assert_eq!(ids.insert(id_second.clone(), 2), Some(1));
     assert_eq!(ids.get(&id_second), Some(&2));
     assert_eq!(ids.keys().collect::<Vec<_>>(), vec![&id_first]);
+}
+
+#[test]
+fn id_map_rejects_mismatched_lists() {
+    let keys = [id("x", "first")];
+    let values = [1, 2];
+
+    let error = IdMap::from_lists(&keys, &values).expect_err("mismatched list lengths");
+
+    assert_eq!(error, ArityMismatch::new(1, 2));
 }
 
 #[test]

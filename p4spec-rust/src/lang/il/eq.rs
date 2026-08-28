@@ -58,11 +58,19 @@ impl SyntaxEq for TypKind {
             (TypKind::Iter(typ_l, iter_l), TypKind::Iter(typ_r, iter_r)) => {
                 typ_l.syntax_eq(typ_r) && iter_l == iter_r
             }
-            (TypKind::Func(tparams_l, typs_l, typ_l), TypKind::Func(tparams_r, typs_r, typ_r)) => {
-                tparams_l.syntax_eq(tparams_r) && typs_l.syntax_eq(typs_r) && typ_l.syntax_eq(typ_r)
+            (TypKind::Func(func_typ_l), TypKind::Func(func_typ_r)) => {
+                func_typ_l.syntax_eq(func_typ_r)
             }
             _ => false,
         }
+    }
+}
+
+impl SyntaxEq for FuncTyp {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.tparams.syntax_eq(&other.tparams)
+            && self.typs_params.syntax_eq(&other.typs_params)
+            && self.typ_ret.syntax_eq(&other.typ_ret)
     }
 }
 
