@@ -1,4 +1,16 @@
-//! Lazy tokenization of SpecTec source text
+//! Lazy source-level tokenization for SpecTec
+//!
+//! [`Lexer`] advances through UTF-8 source on demand and emits one spanned
+//! [`Token`] per iterator step. It skips horizontal whitespace and comments,
+//! while preserving grammar-significant layout as newline and separator
+//! tokens. Ordered scanners implement maximal munch for literals,
+//! identifiers, keywords, and fixed punctuation.
+//!
+//! Identifier classification consults parser-owned bindings, so an uppercase
+//! name can become a variable token after a grammar action binds it. The
+//! downstream `tokens` adapter adds implicit sequence tokens, distinguishes
+//! postfix iteration from arithmetic multiplication, and interns source
+//! positions for LALRPOP.
 //!
 //! Source and decoded text literals are UTF-8 strings. Hex byte escapes may
 //! combine into a valid UTF-8 sequence; byte-only results are rejected with

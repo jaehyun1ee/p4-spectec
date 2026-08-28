@@ -1,13 +1,14 @@
 use crate::frontend::{
-    error::{FrontendError, SyntaxErrorKind},
-    lexer::Token,
-    parser_support::{
-        ExpPostfix, Parsed, ParsedList, ParserContext, ParserLocation, PathStep,
-        apply_exp_postfixes, boolean_bin_exp, build_path, cat_exp, compare_exp, cons_exp,
-        dot_exp, fuse_exp, infix_exp, infix_typ, member_exp, numeric_bin_exp,
-        prefix_exp, prefix_typ, sequence_exp, span_between, spanned, subtype_exp,
+    actions::{
+        ExpPostfix, Parsed, ParsedList, PathStep, apply_exp_postfixes,
+        boolean_bin_exp, build_path, cat_exp, compare_exp, cons_exp, dot_exp,
+        fuse_exp, infix_exp, infix_typ, member_exp, numeric_bin_exp, prefix_exp,
+        prefix_typ, sequence_exp, span_between, spanned, subtype_exp,
         syntax_error, try_build_def_typ_kind, typ_span,
     },
+    ctx::{ParserContext, ParserLocation},
+    error::{FrontendError, SyntaxErrorKind},
+    lexer::Token,
 };
 use crate::lang::{
     common::{notation::atom::Atom, source::{Position, Span, Spanned}},

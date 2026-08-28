@@ -15,10 +15,11 @@ use crate::lang::{
 };
 
 use super::{
+    ctx::{ParserBindings, ParserContext, ParserLocation},
     error::{FrontendError, SyntaxError, SyntaxErrorKind},
     lexer::{Lexer, Token},
     parser,
-    parser_support::{ParserBindings, ParserContext, ParserLocation, parser_tokens},
+    tokens::parser_tokens,
 };
 
 /// Parses a SpecTec string with no filesystem source name
