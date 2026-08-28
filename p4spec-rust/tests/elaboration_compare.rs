@@ -133,12 +133,21 @@ fn rejected_elaboration_matches_ocaml_category_and_span() {
         .expect("Rust crate is inside the repository");
     let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/elaboration");
 
-    for name in [
-        "duplicate_metavariable.watsup",
-        "duplicate_type_parameter.watsup",
-        "forward_type_parameter_mismatch.watsup",
-        "undefined_function.watsup",
-        "variable_type_collision.watsup",
+    for (name, ocaml_has_location) in [
+        ("ambiguous_variant.watsup", true),
+        ("dimension_mismatch.watsup", true),
+        ("duplicate_metavariable.watsup", true),
+        ("duplicate_type_parameter.watsup", true),
+        ("forward_type_parameter_mismatch.watsup", true),
+        ("invalid_cast.watsup", false),
+        ("invalid_identifier.watsup", true),
+        ("invalid_input_hint.watsup", true),
+        ("invalid_iteration.watsup", true),
+        ("invalid_rule_identifier.watsup", true),
+        ("invalid_type_extension.watsup", true),
+        ("operator_not_defined.watsup", false),
+        ("undefined_function.watsup", true),
+        ("variable_type_collision.watsup", true),
     ] {
         let fixture = fixtures.join(name);
         let output = run_ocaml_oracle(repo, &fixture);
@@ -159,7 +168,12 @@ fn rejected_elaboration_matches_ocaml_category_and_span() {
         let error = elaborate::elaborate(&spec).expect_err("Rust rejects fixture");
 
         assert_eq!(rust_error_category(&error.kind), category, "{name}");
-        assert_eq!(error.span, span, "{name}");
+        if ocaml_has_location {
+            assert_eq!(error.span, span, "{name}");
+        } else {
+            assert_eq!(span, Default::default(), "{name}");
+            assert_ne!(error.span, Default::default(), "{name}");
+        }
     }
 }
 

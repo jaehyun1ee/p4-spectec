@@ -9,7 +9,9 @@ let contains text pattern =
   search 0
 
 let category message =
-  if contains message "not defined" || contains message "undefined" then
+  if contains message "operator `" && contains message "is not defined" then
+    "operator_not_defined"
+  else if contains message "not defined" || contains message "undefined" then
     "undefined"
   else if contains message "already defined" || contains message "not distinct"
   then "duplicate"
@@ -18,7 +20,17 @@ let category message =
   else if contains message "cannot destruct" then "cannot_destructure"
   else if contains message "cannot infer" then "cannot_infer"
   else if contains message "cannot cast" then "invalid_cast"
-  else if contains message "operator" then "operator_not_defined"
+  else if contains message "cannot extend" then "invalid_type_extension"
+  else if contains message "cannot iterate" || contains message "empty iteration"
+  then "invalid_iteration"
+  else if contains message "rule group identifier"
+          || contains message "otherwise rule"
+  then "invalid_rule"
+  else if contains message "otherwise premises"
+          || contains message "negated rule premises"
+  then "invalid_premise"
+  else if contains message "cannot elaborate expression" then
+    "no_matching_alternative"
   else if contains message "type mismatch" then "type_mismatch"
   else if contains message "iteration dimensions" then "dimension_mismatch"
   else if contains message "iteration" then "invalid_iteration"

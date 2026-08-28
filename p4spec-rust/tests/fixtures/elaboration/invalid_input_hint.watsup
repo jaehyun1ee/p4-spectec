@@ -1,0 +1,2 @@
+relation BadInput: |- bool
+  hint(input %1)
