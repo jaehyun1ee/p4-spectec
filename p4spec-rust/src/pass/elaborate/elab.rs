@@ -1590,7 +1590,7 @@ fn elab_exp_contextual(
         el::ExpKind::Paren(exp_inner) => {
             let (ctx, exp_inner) = attempt!(elab_exp(ctx, typ_expect, exp_inner));
             let exp = Spanned::new(
-                Noted::new(exp_inner.node.kind, typ_expect.node.clone()),
+                Noted::new(exp_inner.node.kind, exp_inner.node.note),
                 exp.span.clone(),
             );
             Attempt::ok((ctx, exp))

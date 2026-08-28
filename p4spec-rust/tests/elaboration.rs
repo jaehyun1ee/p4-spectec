@@ -21,6 +21,31 @@ fn function_clauses_are_populated_after_definition_traversal() {
 }
 
 #[test]
+fn parenthesized_variant_keeps_the_case_origin() {
+    let spec = parse_string(
+        "syntax pair<K, V> = K ':' V\n\
+         syntax map<K, V> = pair<K, V>\n\
+         dec $take<K, V>(map<K, V>) : bool\n\
+         def $take<K, V>((K ':' V)) = true",
+    )
+    .expect("parse variant alias and clause");
+
+    let spec = elaborate::elaborate(&spec).expect("elaborate variant alias and clause");
+
+    let ast::DefKind::FuncDec(function) = &spec[2].node else {
+        panic!("expected function declaration");
+    };
+    let ast::ArgKind::Exp(argument) = &function.clauses[0].node.args[0].node else {
+        panic!("expected expression argument");
+    };
+    let ast::TypKind::Var(id, _) = &argument.node.note else {
+        panic!("expected nominal variant type");
+    };
+    assert_eq!(id.node, "pair");
+    assert_eq!(id.span.left.line, 1);
+}
+
+#[test]
 #[ignore = "runs the full specification corpus"]
 fn full_spec_elaborates() {
     let repo = Path::new(env!("CARGO_MANIFEST_DIR"))
