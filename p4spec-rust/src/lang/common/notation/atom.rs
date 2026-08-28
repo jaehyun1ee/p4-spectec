@@ -161,43 +161,6 @@ impl Atom {
             Self::RBrace => "`}".into(),
         }
     }
-
-    /// Parses a string into an atom
-    pub fn of_string(source: &str) -> Self {
-        match source {
-            "<:" => Self::Sub,
-            ":>" => Self::Sup,
-            "|-" => Self::Turnstile,
-            "-|" => Self::Tilesturn,
-            "->" => Self::Arrow,
-            "->_" => Self::ArrowSub,
-            "=>_" => Self::DoubleArrowSub,
-            "==>" => Self::DoubleArrowLong,
-            "~>" => Self::SqArrow,
-            "~>*" => Self::SqArrowStar,
-            "." => Self::Dot,
-            ".." => Self::Dot2,
-            "..." => Self::Dot3,
-            ";" => Self::Semicolon,
-            ":" => Self::Colon,
-            ":=" => Self::ColonEq,
-            "~~" => Self::Tilde2,
-            "\\" => Self::Backslash,
-            "`<" => Self::LAngle,
-            "`>" => Self::RAngle,
-            "`(" => Self::LParen,
-            "`)" => Self::RParen,
-            "`[" => Self::LBrack,
-            "`]" => Self::RBrack,
-            "`{" => Self::LBrace,
-            "`}" => Self::RBrace,
-            _ if source.len() >= 2 && source.starts_with('\'') && source.ends_with('\'') => {
-                Self::Operator(source[1..source.len() - 1].to_owned())
-            }
-            _ if source.len() >= 2 && source.starts_with('_') => Self::Tag(source[1..].to_owned()),
-            _ => Self::Keyword(source.to_owned()),
-        }
-    }
 }
 
 // == Rendering

@@ -52,29 +52,6 @@ impl<N> Annotated<N> {
             hints: Hints::default(),
         }
     }
-
-    /// Maps the node;
-    /// preserves prose hints
-    pub fn map<M>(self, map: impl FnOnce(N) -> M) -> Annotated<M> {
-        Annotated {
-            node: map(self.node),
-            hints: self.hints,
-        }
-    }
-
-    /// Borrows the node;
-    /// clones prose hints
-    pub fn as_ref(&self) -> Annotated<&N> {
-        Annotated {
-            node: &self.node,
-            hints: self.hints.clone(),
-        }
-    }
-
-    /// Splits node ownership from hint ownership
-    pub fn into_parts(self) -> (N, Hints) {
-        (self.node, self.hints)
-    }
 }
 
 /// Builds an annotated syntax node with the span of another syntax node

@@ -27,7 +27,7 @@ fn exp(kind: ExpKind, file: &str) -> ast::Exp {
 }
 
 fn atom(source: &str) -> ast::Atom {
-    Spanned::new(DomainAtom::of_string(source), span("atom.watsup"))
+    Spanned::new(DomainAtom::Keyword(source.to_owned()), span("atom.watsup"))
 }
 
 fn plain(kind: ast::PlainTypKind) -> ast::PlainTyp {

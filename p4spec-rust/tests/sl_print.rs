@@ -215,7 +215,7 @@ fn dangling_branches_render_the_instruction_identifier() {
     );
 
     assert_eq!(
-        sl::print::render_instr_with(&branch, false, 0, 1),
+        Print::to_string(&vec![branch]),
         "1. If (condition), then\n\n  1. Return value\n\n1. Else Dangling#42"
     );
 }
