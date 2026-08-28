@@ -139,6 +139,7 @@ fn rejected_elaboration_matches_ocaml_category_and_span() {
         ("duplicate_metavariable.watsup", true),
         ("duplicate_type_parameter.watsup", true),
         ("forward_type_parameter_mismatch.watsup", true),
+        ("incomparable_subtype.watsup", false),
         ("invalid_cast.watsup", false),
         ("invalid_identifier.watsup", true),
         ("invalid_input_hint.watsup", true),
@@ -146,6 +147,8 @@ fn rejected_elaboration_matches_ocaml_category_and_span() {
         ("invalid_rule_identifier.watsup", true),
         ("invalid_type_extension.watsup", true),
         ("operator_not_defined.watsup", false),
+        ("non_boolean_table.watsup", true),
+        ("unmatched_variant.watsup", false),
         ("undefined_function.watsup", true),
         ("variable_type_collision.watsup", true),
     ] {

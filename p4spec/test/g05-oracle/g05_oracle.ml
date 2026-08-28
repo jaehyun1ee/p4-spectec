@@ -29,6 +29,13 @@ let category message =
   else if contains message "otherwise premises"
           || contains message "negated rule premises"
   then "invalid_premise"
+  else if contains message "incomparable types"
+          || contains message "table must return a boolean type"
+  then "type_mismatch"
+  else if
+    contains message
+      "cannot elaborate variant case because expression does not match any case"
+  then "no_matching_alternative"
   else if contains message "cannot elaborate expression" then
     "no_matching_alternative"
   else if contains message "type mismatch" then "type_mismatch"
