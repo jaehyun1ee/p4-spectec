@@ -1,0 +1,7 @@
+(executable
+ (name g04_oracle)
+ (libraries
+  p4spectec.lang
+  p4spectec.runtime.type
+  p4spectec.runtime.static
+  yojson))

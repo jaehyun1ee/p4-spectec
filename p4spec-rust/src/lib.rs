@@ -2,5 +2,6 @@
 
 pub mod frontend;
 pub mod lang;
+pub mod runtime;
 pub mod wire;
 pub mod yojson;
