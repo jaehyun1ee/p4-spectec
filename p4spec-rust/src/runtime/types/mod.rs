@@ -7,15 +7,14 @@ mod expand;
 mod fresh;
 mod sub;
 mod subst;
-mod typ;
+pub mod typ;
 mod typdef;
 
 pub use envs::*;
 pub use equiv::*;
 pub use error::*;
 pub use expand::*;
-pub use fresh::*;
+pub(crate) use fresh::Fresh;
 pub use sub::*;
 pub use subst::*;
-pub use typ::*;
 pub use typdef::*;

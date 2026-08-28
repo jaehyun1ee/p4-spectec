@@ -1,111 +1,80 @@
+//! Constructors for intermediate-language types
+
 use crate::lang::{
-    common::source::{Span, Spanned},
-    il, pl, sl,
+    il::ast::{self, TypKind},
     xl::num,
 };
+use crate::{spanned, spanned_default};
 
 /// Wraps a type in each iterator from innermost to outermost
-pub fn iterate_type(mut typ: il::ast::Typ, iters: &[il::ast::Iter]) -> il::ast::Typ {
+pub fn iterate(mut typ: ast::Typ, iters: &[ast::Iter]) -> ast::Typ {
     for iter in iters {
         let span = typ.span.clone();
-        typ = Spanned::new(il::ast::TypKind::Iter(Box::new(typ), *iter), span);
+        let typ_inner = Box::new(typ);
+        let typ_kind = TypKind::Iter(typ_inner, *iter);
+        typ = spanned!(node: typ_kind, span: span);
     }
     typ
 }
 
-pub fn bool_type() -> il::ast::Typ {
-    Spanned::new(il::ast::TypKind::Bool, Span::default())
+pub fn bool() -> ast::Typ {
+    let typ_kind = TypKind::Bool;
+    spanned_default!(node: typ_kind)
 }
 
-pub fn natural_type() -> il::ast::Typ {
-    number_type(num::Typ::Nat)
+pub fn nat() -> ast::Typ {
+    let num_typ = num::Typ::Nat;
+    num(num_typ)
 }
 
-pub fn integer_type() -> il::ast::Typ {
-    number_type(num::Typ::Int)
+pub fn int() -> ast::Typ {
+    let num_typ = num::Typ::Int;
+    num(num_typ)
 }
 
-pub fn number_type(number_type: num::Typ) -> il::ast::Typ {
-    Spanned::new(il::ast::TypKind::Num(number_type), Span::default())
+pub fn num(num_typ: num::Typ) -> ast::Typ {
+    let typ_kind = TypKind::Num(num_typ);
+    spanned_default!(node: typ_kind)
 }
 
-pub fn text_type() -> il::ast::Typ {
-    Spanned::new(il::ast::TypKind::Text, Span::default())
+pub fn text() -> ast::Typ {
+    let typ_kind = TypKind::Text;
+    spanned_default!(node: typ_kind)
 }
 
-pub fn variable_type(id: il::ast::Id, args: Vec<il::ast::Targ>) -> il::ast::Typ {
-    Spanned::new(il::ast::TypKind::Var(id, args), Span::default())
+pub fn var(id: ast::Id, targs: Vec<ast::Targ>) -> ast::Typ {
+    let typ_kind = TypKind::Var(id, targs);
+    spanned_default!(node: typ_kind)
 }
 
-pub fn tuple_type(types: Vec<il::ast::Typ>) -> il::ast::Typ {
-    Spanned::new(il::ast::TypKind::Tuple(types), Span::default())
+pub fn tuple(typs: Vec<ast::Typ>) -> ast::Typ {
+    let typ_kind = TypKind::Tuple(typs);
+    spanned_default!(node: typ_kind)
 }
 
-pub fn iteration_type(typ: il::ast::Typ, iter: il::ast::Iter) -> il::ast::Typ {
-    Spanned::new(il::ast::TypKind::Iter(Box::new(typ), iter), Span::default())
+pub fn iter(typ: ast::Typ, iter: ast::Iter) -> ast::Typ {
+    let typ_inner = Box::new(typ);
+    let typ_kind = TypKind::Iter(typ_inner, iter);
+    spanned_default!(node: typ_kind)
 }
 
-pub fn optional_type(typ: il::ast::Typ) -> il::ast::Typ {
-    iteration_type(typ, il::ast::Iter::Opt)
+pub fn opt(typ: ast::Typ) -> ast::Typ {
+    let iter = ast::Iter::Opt;
+    self::iter(typ, iter)
 }
 
-pub fn list_type(typ: il::ast::Typ) -> il::ast::Typ {
-    iteration_type(typ, il::ast::Iter::List)
+pub fn list(typ: ast::Typ) -> ast::Typ {
+    let iter = ast::Iter::List;
+    self::iter(typ, iter)
 }
 
-pub fn function_type(
-    type_parameters: Vec<il::ast::TParam>,
-    parameter_types: Vec<il::ast::Typ>,
-    result_type: il::ast::Typ,
-) -> il::ast::Typ {
-    Spanned::new(
-        il::ast::TypKind::Func(type_parameters, parameter_types, Box::new(result_type)),
-        Span::default(),
-    )
-}
-
-/// Extracts the callable type represented by a stage parameter
-pub trait ParameterType {
-    fn parameter_type(&self) -> il::ast::Typ;
-}
-
-impl ParameterType for il::ast::Param {
-    fn parameter_type(&self) -> il::ast::Typ {
-        match &self.node {
-            il::ast::ParamKind::Exp(typ) => typ.clone(),
-            il::ast::ParamKind::Def(_, tparams, params, typ) => {
-                function_type(tparams.clone(), parameter_types(params), typ.clone())
-            }
-        }
-    }
-}
-
-impl ParameterType for sl::ast::Param {
-    fn parameter_type(&self) -> il::ast::Typ {
-        match &self.node {
-            sl::ast::ParamKind::Exp(typ, _) => typ.clone(),
-            sl::ast::ParamKind::Def(_, tparams, params, typ) => {
-                function_type(tparams.clone(), parameter_types(params), typ.clone())
-            }
-        }
-    }
-}
-
-impl ParameterType for pl::ast::Param {
-    fn parameter_type(&self) -> il::ast::Typ {
-        match &self.node {
-            pl::ast::ParamKind::Exp(typ, _) => typ.clone(),
-            pl::ast::ParamKind::Def(_, tparams, params, typ) => {
-                function_type(tparams.clone(), parameter_types(params), typ.clone())
-            }
-        }
-    }
-}
-
-/// Extracts callable types from a list of stage parameters
-pub fn parameter_types<P: ParameterType>(parameters: &[P]) -> Vec<il::ast::Typ> {
-    parameters
-        .iter()
-        .map(ParameterType::parameter_type)
-        .collect()
+pub fn func(tparams: Vec<ast::TParam>, typs_params: Vec<ast::Typ>, typ_ret: ast::Typ) -> ast::Typ {
+    let typ_ret = Box::new(typ_ret);
+    let func_typ = ast::FuncTyp {
+        tparams,
+        typs_params,
+        typ_ret,
+    };
+    let typ_kind = TypKind::Func(func_typ);
+    spanned_default!(node: typ_kind)
 }

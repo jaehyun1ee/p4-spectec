@@ -14,7 +14,7 @@ fn type_tag(typ: &ast::Typ) -> u8 {
         TypKind::Var(_, _) => 3,
         TypKind::Tuple(_) => 4,
         TypKind::Iter(_, _) => 5,
-        TypKind::Func(_, _, _) => 6,
+        TypKind::Func(_) => 6,
     }
 }
 

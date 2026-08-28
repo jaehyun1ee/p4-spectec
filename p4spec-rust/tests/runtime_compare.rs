@@ -6,14 +6,13 @@ use p4spec_rust::{
             notation::mixfix::Mixfix,
             source::{Span, Spanned},
         },
-        il::ast::{self, DefTypKind, Iter, Subcheck, TypKind},
+        il::ast::{self, DefTypKind, FuncTyp, Iter, Subcheck, TypKind},
         traits::print::Print,
     },
     runtime::{
         static_env::TypeDimension,
         types::{
-            Substitution, TypeDefinition, TypeEnvironment, equivalent_function_type, expand_type,
-            is_subtype, optimize_subtype, reset_fresh_type_ids, substitute_type,
+            TDEnv, Theta, TypeDef, equiv_func_typ, expand_typ, optimize_sub_typ, sub_typ, subst_typ,
         },
     },
 };
@@ -27,15 +26,22 @@ fn typ(kind: TypKind) -> ast::Typ {
     Spanned::new(kind, Span::default())
 }
 
-fn var(name: &str, arguments: Vec<ast::Targ>) -> ast::Typ {
-    typ(TypKind::Var(id(name), arguments))
+fn var(name: &str, targs: Vec<ast::Targ>) -> ast::Typ {
+    typ(TypKind::Var(id(name), targs))
 }
 
-fn variant(types: Vec<ast::Typ>) -> ast::DefTyp {
+fn func_typ(tparams: Vec<ast::TParam>, typs_params: Vec<ast::Typ>, typ_ret: ast::Typ) -> FuncTyp {
+    FuncTyp {
+        tparams,
+        typs_params,
+        typ_ret: Box::new(typ_ret),
+    }
+}
+
+fn variant(typs: Vec<ast::Typ>) -> ast::DefTyp {
     Spanned::new(
         DefTypKind::Variant(
-            types
-                .into_iter()
+            typs.into_iter()
                 .map(|typ| {
                     (
                         Spanned::new(Mixfix::Arg(typ), Span::default()),
@@ -68,47 +74,42 @@ fn subcheck_name(subcheck: &Subcheck) -> Value {
     }
 }
 
-fn fresh_parameter_name(typ: ast::Typ) -> String {
-    let TypKind::Func(parameters, _, _) = typ.node else {
+fn fresh_tparam_name(typ: ast::Typ) -> String {
+    let TypKind::Func(func_typ) = typ.node else {
         panic!("freshness fixture is a function type")
     };
-    parameters[0].node.clone()
+    func_typ.tparams[0].node.clone()
 }
 
 fn rust_results() -> Value {
-    reset_fresh_type_ids();
     let bool_type = typ(TypKind::Bool);
     let text_type = typ(TypKind::Text);
-    let mut substitution = Substitution::new();
-    substitution.insert(id("T"), text_type.clone());
-    let substituted = substitute_type(
-        &substitution,
+    let mut theta = Theta::new();
+    theta.insert(id("T"), text_type.clone());
+    let substituted = subst_typ(
+        &theta,
         &typ(TypKind::Tuple(vec![var("T", vec![]), bool_type.clone()])),
     )
     .expect("substitute comparison fixture");
-    reset_fresh_type_ids();
-    let mut freshness_substitution = Substitution::new();
-    freshness_substitution.insert(id("X"), bool_type.clone());
-    let freshness_fixture = typ(TypKind::Func(
-        vec![id("T")],
-        vec![var("T", vec![])],
-        Box::new(var("T", vec![])),
-    ));
+    let mut theta_freshness = Theta::new();
+    theta_freshness.insert(id("X"), bool_type.clone());
+    let func_typ_freshness = func_typ(vec![id("T")], vec![var("T", vec![])], var("T", vec![]));
+    let freshness_fixture = typ(TypKind::Func(func_typ_freshness));
     let fresh_sequence = [
-        fresh_parameter_name(
-            substitute_type(&freshness_substitution, &freshness_fixture)
+        fresh_tparam_name(
+            subst_typ(&theta_freshness, &freshness_fixture)
                 .expect("first fresh comparison fixture"),
         ),
-        fresh_parameter_name(
-            substitute_type(&freshness_substitution, &freshness_fixture)
+        fresh_tparam_name(
+            subst_typ(&theta_freshness, &freshness_fixture)
                 .expect("second fresh comparison fixture"),
         ),
     ];
 
-    let mut environment = TypeEnvironment::new();
-    environment.insert(
+    let mut tdenv = TDEnv::new();
+    tdenv.insert(
         id("Pair"),
-        TypeDefinition::Defined(
+        TypeDef::Defined(
             vec![id("T")],
             Box::new(Spanned::new(
                 DefTypKind::Plain(typ(TypKind::Tuple(vec![
@@ -119,34 +120,27 @@ fn rust_results() -> Value {
             )),
         ),
     );
-    environment.insert(
+    tdenv.insert(
         id("Small"),
-        TypeDefinition::Defined(vec![], Box::new(variant(vec![bool_type.clone()]))),
+        TypeDef::Defined(vec![], Box::new(variant(vec![bool_type.clone()]))),
     );
-    environment.insert(
+    tdenv.insert(
         id("Large"),
-        TypeDefinition::Defined(
+        TypeDef::Defined(
             vec![],
             Box::new(variant(vec![bool_type.clone(), text_type.clone()])),
         ),
     );
 
-    let expanded = expand_type(&environment, &var("Pair", vec![bool_type.clone()]))
+    let expanded = expand_typ(&tdenv, &var("Pair", vec![bool_type.clone()]))
         .expect("expand comparison fixture");
-    let function_equivalent = equivalent_function_type(
-        &environment,
-        &Span::default(),
-        &[id("T")],
-        &[var("T", vec![])],
-        &var("T", vec![]),
-        &[id("U")],
-        &[var("U", vec![])],
-        &var("U", vec![]),
-    )
-    .expect("compare function fixture");
+    let func_typ_l = func_typ(vec![id("T")], vec![var("T", vec![])], var("T", vec![]));
+    let func_typ_r = func_typ(vec![id("U")], vec![var("U", vec![])], var("U", vec![]));
+    let function_equivalent = equiv_func_typ(&tdenv, &Span::default(), &func_typ_l, &func_typ_r)
+        .expect("compare function fixture");
     let optional_bool = typ(TypKind::Iter(Box::new(bool_type.clone()), Iter::Opt));
     let list_bool = typ(TypKind::Iter(Box::new(bool_type.clone()), Iter::List));
-    let optimized = optimize_subtype(&environment, &var("Large", vec![]), &var("Small", vec![]))
+    let optimized = optimize_sub_typ(&tdenv, &var("Large", vec![]), &var("Small", vec![]))
         .expect("optimize comparison fixture");
     let dimension_l = TypeDimension::new(bool_type.clone(), vec![Iter::Opt]);
     let dimension_r = TypeDimension::new(bool_type, vec![Iter::Opt, Iter::List]);
@@ -156,12 +150,12 @@ fn rust_results() -> Value {
         "fresh_sequence": fresh_sequence,
         "expansion": Print::to_string(&expanded),
         "function_equivalent": function_equivalent,
-        "variant_subtype": is_subtype(
-            &environment,
+        "variant_subtype": sub_typ(
+            &tdenv,
             &var("Small", vec![]),
             &var("Large", vec![]),
         ).expect("compare variant subtype"),
-        "iteration_subtype": is_subtype(&environment, &optional_bool, &list_bool)
+        "iteration_subtype": sub_typ(&tdenv, &optional_bool, &list_bool)
             .expect("compare iteration subtype"),
         "optimized": subcheck_name(&optimized),
         "dimension_compare": match dimension_l.compare(&dimension_r) {

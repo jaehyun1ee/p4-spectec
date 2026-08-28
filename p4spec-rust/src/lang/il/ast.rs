@@ -57,6 +57,14 @@ pub struct Var {
 
 pub type Typ = Spanned<TypKind>;
 
+/// Function type signature
+#[derive(Clone, Debug, PartialEq)]
+pub struct FuncTyp {
+    pub tparams: Vec<TParam>,
+    pub typs_params: Vec<Typ>,
+    pub typ_ret: Box<Typ>,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum TypKind {
     /// `bool`
@@ -72,7 +80,7 @@ pub enum TypKind {
     /// `typ iter`
     Iter(Box<Typ>, Iter),
     /// `<` list(tparam, `,`) `>` `(` list(typ, `,`) `)` `:` typ
-    Func(Vec<TParam>, Vec<Typ>, Box<Typ>),
+    Func(FuncTyp),
 }
 
 // Subtype checks

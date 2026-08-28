@@ -219,11 +219,18 @@ pub(super) fn decode_typ_kind(value: &Value) -> Result<TypKind, DecodeError> {
             Box::new(decode_typ(typ)?),
             decode_iter(iter)?,
         )),
-        ("FuncT", [tparams, params, result]) => Ok(TypKind::Func(
-            decode_list(tparams, decode_tparam)?,
-            decode_list(params, decode_typ)?,
-            Box::new(decode_typ(result)?),
-        )),
+        ("FuncT", [tparams, params, result]) => {
+            let tparams = decode_list(tparams, decode_tparam)?;
+            let typs_params = decode_list(params, decode_typ)?;
+            let typ_ret = decode_typ(result)?;
+            let typ_ret = Box::new(typ_ret);
+            let func_typ = ast::FuncTyp {
+                tparams,
+                typs_params,
+                typ_ret,
+            };
+            Ok(TypKind::Func(func_typ))
+        }
         ("BoolT" | "NumT" | "TextT" | "VarT" | "TupleT" | "IterT" | "FuncT", _) => {
             Err(DecodeError::Expected("valid IL type arity"))
         }
@@ -241,11 +248,11 @@ pub(super) fn encode_typ_kind(typ: &TypKind) -> Value {
         }
         TypKind::Tuple(types) => json!(["TupleT", encode_list(types, encode_typ)]),
         TypKind::Iter(typ, iter) => json!(["IterT", encode_typ(typ), encode_iter(*iter)]),
-        TypKind::Func(tparams, params, result) => json!([
+        TypKind::Func(func_typ) => json!([
             "FuncT",
-            encode_list(tparams, encode_tparam),
-            encode_list(params, encode_typ),
-            encode_typ(result)
+            encode_list(&func_typ.tparams, encode_tparam),
+            encode_list(&func_typ.typs_params, encode_typ),
+            encode_typ(&func_typ.typ_ret)
         ]),
     }
 }

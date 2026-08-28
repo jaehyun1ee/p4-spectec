@@ -9,9 +9,9 @@ use p4spec_rust::{
     runtime::{
         static_env::{
             Function, FunctionEnvironment, InputHintEnvironment, MetavariableEnvironment, Relation,
-            RelationEnvironment, TypeDimension, TypeEnvironment, VariableEnvironment,
+            RelationEnvironment, TDEnv, TypeDimension, VariableEnvironment,
         },
-        types::TypeDefinition,
+        types::TypeDef,
     },
 };
 
@@ -55,8 +55,8 @@ fn static_environments_share_source_insensitive_identifier_identity() {
     metavariables.insert(id("M", "definition"), typ(TypKind::Text, "type"));
     assert!(metavariables.get(&id("M", "use")).is_some());
 
-    let mut types = TypeEnvironment::new();
-    types.insert(id("T", "definition"), TypeDefinition::Extern);
+    let mut types = TDEnv::new();
+    types.insert(id("T", "definition"), TypeDef::Extern);
     assert!(types.get(&id("T", "use")).is_some());
 
     let relation = Relation::Extern {

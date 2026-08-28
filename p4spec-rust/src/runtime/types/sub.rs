@@ -1,145 +1,189 @@
+//! Subtyping and runtime checks for intermediate-language types
+
 use crate::lang::{
     il::ast::{self, DefTypKind, Iter, Subcheck, TypKind},
     xl::num,
 };
 
 use super::{
-    FreshTypes, TypeDefinition, TypeEnvironment, TypeError, equivalent_notation_type,
-    equivalent_type, expand_type, substitute_notation_type_with, substitution_from,
+    Fresh, TDEnv, Theta, TypeArityMismatch, TypeDef, TypeError, TypeErrorKind, equiv_not_typ,
+    equiv_typ, expand_typ, subst_not_typ_inner,
 };
 
-fn substituted_variant_cases(
-    environment: &TypeEnvironment,
-    typ: &ast::Typ,
-) -> Result<Option<Vec<ast::NotTyp>>, TypeError> {
-    let TypKind::Var(id, arguments) = &typ.node else {
-        return Ok(None);
-    };
-    let Some(TypeDefinition::Defined(parameters, def_type)) = environment.get(id) else {
-        return Ok(None);
-    };
-    let DefTypKind::Variant(cases) = &def_type.node else {
-        return Ok(None);
-    };
-    let substitution = substitution_from(parameters, arguments, &typ.span)?;
-    let mut fresh = FreshTypes;
-    cases
-        .iter()
-        .map(|(notation_type, _, _)| {
-            substitute_notation_type_with(&substitution, notation_type, &mut fresh)
-        })
-        .collect::<Result<Vec<_>, _>>()
-        .map(Some)
-}
+// == Subtyping
 
 /// Tests whether the source type is a subtype of the target type
-pub fn is_subtype(
-    environment: &TypeEnvironment,
-    source: &ast::Typ,
-    target: &ast::Typ,
+pub fn sub_typ(
+    tdenv: &TDEnv,
+    typ_source: &ast::Typ,
+    typ_target: &ast::Typ,
 ) -> Result<bool, TypeError> {
-    if equivalent_type(environment, source, target)? {
+    if equiv_typ(tdenv, typ_source, typ_target)? {
         return Ok(true);
     }
-    let source = expand_type(environment, source)?;
-    let target = expand_type(environment, target)?;
-    match (&source.node, &target.node) {
-        (TypKind::Num(source), TypKind::Num(target)) => Ok(num::sub(*source, *target)),
-        (TypKind::Var(_, _), TypKind::Var(_, _)) => {
-            let Some(source_cases) = substituted_variant_cases(environment, &source)? else {
+    sub_typ_inner(tdenv, typ_source, typ_target)
+}
+
+fn sub_typ_inner(
+    tdenv: &TDEnv,
+    typ_source: &ast::Typ,
+    typ_target: &ast::Typ,
+) -> Result<bool, TypeError> {
+    let typ_source = expand_typ(tdenv, typ_source)?;
+    let typ_target = expand_typ(tdenv, typ_target)?;
+    match (&typ_source.node, &typ_target.node) {
+        (TypKind::Num(num_typ_source), TypKind::Num(num_typ_target)) => {
+            let is_sub = num::sub(*num_typ_source, *num_typ_target);
+            Ok(is_sub)
+        }
+        (TypKind::Var(id_source, targs_source), TypKind::Var(id_target, targs_target)) => {
+            let Some(TypeDef::Defined(tparams_source, deftyp_source)) = tdenv.get(id_source) else {
                 return Ok(false);
             };
-            let Some(target_cases) = substituted_variant_cases(environment, &target)? else {
+            let Some(TypeDef::Defined(tparams_target, deftyp_target)) = tdenv.get(id_target) else {
                 return Ok(false);
             };
-            for source_case in source_cases {
-                let mut found = false;
-                for target_case in &target_cases {
-                    if equivalent_notation_type(environment, &source_case, target_case)? {
-                        found = true;
+            let DefTypKind::Variant(typcases_source) = &deftyp_source.node else {
+                return Ok(false);
+            };
+            let DefTypKind::Variant(typcases_target) = &deftyp_target.node else {
+                return Ok(false);
+            };
+            let theta_source = match Theta::from_lists(tparams_source, targs_source) {
+                Ok(theta) => theta,
+                Err(arity_mismatch) => {
+                    let arity_mismatch = TypeArityMismatch::TypeArgument(arity_mismatch);
+                    let error_kind = TypeErrorKind::ArityMismatch(arity_mismatch);
+                    let error = TypeError::new(error_kind, typ_source.span.clone());
+                    return Err(error);
+                }
+            };
+            let theta_target = match Theta::from_lists(tparams_target, targs_target) {
+                Ok(theta) => theta,
+                Err(arity_mismatch) => {
+                    let arity_mismatch = TypeArityMismatch::TypeArgument(arity_mismatch);
+                    let error_kind = TypeErrorKind::ArityMismatch(arity_mismatch);
+                    let error = TypeError::new(error_kind, typ_target.span.clone());
+                    return Err(error);
+                }
+            };
+
+            let mut fresh = Fresh::default();
+            let mut not_typs_source = Vec::with_capacity(typcases_source.len());
+            for (not_typ, _, _) in typcases_source {
+                let not_typ_subst = subst_not_typ_inner(&mut fresh, &theta_source, not_typ)?;
+                not_typs_source.push(not_typ_subst);
+            }
+            let mut not_typs_target = Vec::with_capacity(typcases_target.len());
+            for (not_typ, _, _) in typcases_target {
+                let not_typ_subst = subst_not_typ_inner(&mut fresh, &theta_target, not_typ)?;
+                not_typs_target.push(not_typ_subst);
+            }
+
+            for not_typ_source in not_typs_source {
+                let mut has_equiv = false;
+                for not_typ_target in &not_typs_target {
+                    if equiv_not_typ(tdenv, &not_typ_source, not_typ_target)? {
+                        has_equiv = true;
                         break;
                     }
                 }
-                if !found {
+                if !has_equiv {
                     return Ok(false);
                 }
             }
             Ok(true)
         }
-        (TypKind::Tuple(source), TypKind::Tuple(target)) => {
-            if source.len() != target.len() {
+        (TypKind::Tuple(typs_source), TypKind::Tuple(typs_target)) => {
+            if typs_source.len() != typs_target.len() {
                 return Ok(false);
             }
-            for (source, target) in source.iter().zip(target) {
-                if !is_subtype(environment, source, target)? {
+            for (typ_source, typ_target) in typs_source.iter().zip(typs_target) {
+                if !sub_typ(tdenv, typ_source, typ_target)? {
                     return Ok(false);
                 }
             }
             Ok(true)
         }
-        (TypKind::Iter(source, source_iter), TypKind::Iter(target, target_iter))
-            if source_iter == target_iter
-                || (*source_iter == Iter::Opt && *target_iter == Iter::List) =>
+        (TypKind::Iter(typ_source, iter_source), TypKind::Iter(typ_target, iter_target))
+            if iter_source == iter_target
+                || (*iter_source == Iter::Opt && *iter_target == Iter::List) =>
         {
-            is_subtype(environment, source, target)
+            sub_typ(tdenv, typ_source, typ_target)
         }
-        (_, TypKind::Iter(target, Iter::Opt | Iter::List)) => {
-            is_subtype(environment, &source, target)
+        (_, TypKind::Iter(typ_target, Iter::Opt | Iter::List)) => {
+            sub_typ(tdenv, &typ_source, typ_target)
         }
         _ => Ok(false),
     }
 }
 
+// == Subtype checks
+
 /// Builds the least runtime subtype check needed after static subtyping
-pub fn optimize_subtype(
-    environment: &TypeEnvironment,
-    source: &ast::Typ,
-    target: &ast::Typ,
+pub fn optimize_sub_typ(
+    tdenv: &TDEnv,
+    typ_source: &ast::Typ,
+    typ_target: &ast::Typ,
 ) -> Result<Subcheck, TypeError> {
-    if is_subtype(environment, source, target)? {
-        return Ok(Subcheck::Skip);
+    if sub_typ(tdenv, typ_source, typ_target)? {
+        let subcheck = Subcheck::Skip;
+        return Ok(subcheck);
     }
-    let source_expanded = expand_type(environment, source)?;
-    let target_expanded = expand_type(environment, target)?;
-    match (&source_expanded.node, &target_expanded.node) {
-        (TypKind::Tuple(source), TypKind::Tuple(target)) if source.len() == target.len() => {
-            Ok(Subcheck::Tuple(
-                source
-                    .iter()
-                    .zip(target)
-                    .map(|(source, target)| optimize_subtype(environment, source, target))
-                    .collect::<Result<_, _>>()?,
-            ))
-        }
-        (TypKind::Iter(source, source_iter), TypKind::Iter(target, target_iter))
-            if source_iter == target_iter =>
+
+    let typ_source_expanded = expand_typ(tdenv, typ_source)?;
+    let typ_target_expanded = expand_typ(tdenv, typ_target)?;
+    match (&typ_source_expanded.node, &typ_target_expanded.node) {
+        (TypKind::Tuple(typs_source), TypKind::Tuple(typs_target))
+            if typs_source.len() == typs_target.len() =>
         {
-            Ok(Subcheck::Iter(
-                *source_iter,
-                Box::new(optimize_subtype(environment, source, target)?),
-            ))
-        }
-        (TypKind::Var(source_id, _), TypKind::Var(target_id, _))
-            if is_subtype(environment, &target_expanded, &source_expanded)? =>
-        {
-            match (environment.get(source_id), environment.get(target_id)) {
-                (
-                    Some(TypeDefinition::Defined(_, source_definition)),
-                    Some(TypeDefinition::Defined(_, target_definition)),
-                ) => match (&source_definition.node, &target_definition.node) {
-                    (DefTypKind::Variant(_), DefTypKind::Variant(target_cases)) => {
-                        Ok(Subcheck::Mixop(
-                            target_cases
-                                .iter()
-                                .map(|(notation_type, _, _)| notation_type.node.to_mixop())
-                                .collect(),
-                        ))
-                    }
-                    _ => Ok(Subcheck::Recurse(target.clone())),
-                },
-                _ => Ok(Subcheck::Recurse(target.clone())),
+            let mut subchecks = Vec::with_capacity(typs_source.len());
+            for (typ_source, typ_target) in typs_source.iter().zip(typs_target) {
+                let subcheck = optimize_sub_typ(tdenv, typ_source, typ_target)?;
+                subchecks.push(subcheck);
             }
+            let subcheck = Subcheck::Tuple(subchecks);
+            Ok(subcheck)
         }
-        _ => Ok(Subcheck::Recurse(target.clone())),
+        (TypKind::Iter(typ_source, iter_source), TypKind::Iter(typ_target, iter_target))
+            if iter_source == iter_target =>
+        {
+            let subcheck = optimize_sub_typ(tdenv, typ_source, typ_target)?;
+            let subcheck = Box::new(subcheck);
+            let subcheck = Subcheck::Iter(*iter_source, subcheck);
+            Ok(subcheck)
+        }
+        (TypKind::Var(id_source, _), TypKind::Var(id_target, _))
+            if sub_typ(tdenv, &typ_target_expanded, &typ_source_expanded)? =>
+        {
+            let Some(TypeDef::Defined(_, deftyp_source)) = tdenv.get(id_source) else {
+                let subcheck = Subcheck::Recurse(typ_target.clone());
+                return Ok(subcheck);
+            };
+            let Some(TypeDef::Defined(_, deftyp_target)) = tdenv.get(id_target) else {
+                let subcheck = Subcheck::Recurse(typ_target.clone());
+                return Ok(subcheck);
+            };
+            let DefTypKind::Variant(_) = &deftyp_source.node else {
+                let subcheck = Subcheck::Recurse(typ_target.clone());
+                return Ok(subcheck);
+            };
+            let DefTypKind::Variant(typcases_target) = &deftyp_target.node else {
+                let subcheck = Subcheck::Recurse(typ_target.clone());
+                return Ok(subcheck);
+            };
+
+            let mut mixops_target = Vec::with_capacity(typcases_target.len());
+            for (not_typ, _, _) in typcases_target {
+                let mixop = not_typ.node.to_mixop();
+                mixops_target.push(mixop);
+            }
+            let subcheck = Subcheck::Mixop(mixops_target);
+            Ok(subcheck)
+        }
+        _ => {
+            let subcheck = Subcheck::Recurse(typ_target.clone());
+            Ok(subcheck)
+        }
     }
 }

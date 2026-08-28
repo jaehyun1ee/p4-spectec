@@ -103,3 +103,14 @@ macro_rules! spanned {
         $crate::lang::common::source::Spanned::new($node, span)
     }};
 }
+
+/// Builds a syntax node with the default source span
+#[macro_export]
+macro_rules! spanned_default {
+    (node: $node:expr $(,)?) => {
+        $crate::spanned! {
+            node: $node,
+            span: $crate::lang::common::source::Span::default(),
+        }
+    };
+}

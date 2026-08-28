@@ -1,6 +1,6 @@
 use crate::lang::common::ds::map::IdMap;
 
-use super::TypeDefinition;
+use super::TypeDef;
 
 /// Type definitions keyed by source-insensitive type identifiers
-pub type TypeEnvironment = IdMap<TypeDefinition>;
+pub type TDEnv = IdMap<TypeDef>;

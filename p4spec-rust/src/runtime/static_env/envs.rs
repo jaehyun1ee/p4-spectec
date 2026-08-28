@@ -1,6 +1,6 @@
 use crate::lang::{common::ds::map::IdMap, hints::input::InputHint, il::ast};
 
-pub use super::super::types::TypeEnvironment;
+pub use super::super::types::TDEnv;
 use super::{Function, Relation, TypeDimension};
 
 pub type VariableEnvironment = IdMap<TypeDimension>;

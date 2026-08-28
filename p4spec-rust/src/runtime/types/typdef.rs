@@ -1,24 +1,24 @@
 use crate::lang::il::ast::{DefTyp, TParam};
 
-/// State of a type identifier in the static type environment
+/// Runtime representation of a type definition
 #[derive(Clone, Debug, PartialEq)]
-pub enum TypeDefinition {
-    /// A locally bound type parameter
+pub enum TypeDef {
+    /// A type parameter
     Parameter,
-    /// An externally supplied type
+    /// An extern type
     Extern,
-    /// A type whose declaration is currently being checked
+    /// A type being defined, but not yet fully checked
     Defining(Vec<TParam>),
-    /// A fully checked type declaration
+    /// A fully checked defined type
     Defined(Vec<TParam>, Box<DefTyp>),
 }
 
-impl TypeDefinition {
-    /// Returns the declaration's type parameters
-    pub fn parameters(&self) -> &[TParam] {
+impl TypeDef {
+    /// Returns the type definition's type parameters
+    pub fn tparams(&self) -> &[TParam] {
         match self {
             Self::Parameter | Self::Extern => &[],
-            Self::Defining(parameters) | Self::Defined(parameters, _) => parameters,
+            Self::Defining(tparams) | Self::Defined(tparams, _) => tparams,
         }
     }
 }

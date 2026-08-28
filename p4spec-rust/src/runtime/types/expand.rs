@@ -1,27 +1,34 @@
+//! Expansion of intermediate-language type aliases
+
 use crate::lang::il::ast::{self, DefTypKind, TypKind};
 
-use super::{TypeDefinition, TypeEnvironment, TypeError, TypeErrorKind, substitution_from};
+use super::{TDEnv, Theta, TypeArityMismatch, TypeDef, TypeError, TypeErrorKind, subst_typ};
 
-/// Expands an outermost plain type alias until a non-alias type is reached
-pub fn expand_type(environment: &TypeEnvironment, typ: &ast::Typ) -> Result<ast::Typ, TypeError> {
-    let TypKind::Var(id, arguments) = &typ.node else {
+/// Expands plain type aliases until a non-alias type is reached
+pub fn expand_typ(tdenv: &TDEnv, typ: &ast::Typ) -> Result<ast::Typ, TypeError> {
+    let TypKind::Var(id, targs) = &typ.node else {
         return Ok(typ.clone());
     };
-    match environment.get(id) {
-        Some(TypeDefinition::Defined(parameters, def_type)) => match &def_type.node {
-            DefTypKind::Plain(alias) => {
-                let substitution = substitution_from(parameters, arguments, &typ.span)?;
-                let expanded = super::substitute_type(&substitution, alias)?;
-                expand_type(environment, &expanded)
-            }
-            DefTypKind::Struct(_) | DefTypKind::Variant(_) => Ok(typ.clone()),
-        },
-        Some(TypeDefinition::Parameter | TypeDefinition::Extern | TypeDefinition::Defining(_)) => {
-            Ok(typ.clone())
+    let Some(typdef) = tdenv.get(id) else {
+        let error_kind = TypeErrorKind::UndefinedType(id.node.clone());
+        let error = TypeError::new(error_kind, typ.span.clone());
+        return Err(error);
+    };
+    let TypeDef::Defined(tparams, deftyp) = typdef else {
+        return Ok(typ.clone());
+    };
+    let DefTypKind::Plain(typ_alias) = &deftyp.node else {
+        return Ok(typ.clone());
+    };
+    let theta = match Theta::from_lists(tparams, targs) {
+        Ok(theta) => theta,
+        Err(arity_mismatch) => {
+            let arity_mismatch = TypeArityMismatch::TypeArgument(arity_mismatch);
+            let error_kind = TypeErrorKind::ArityMismatch(arity_mismatch);
+            let error = TypeError::new(error_kind, typ.span.clone());
+            return Err(error);
         }
-        None => Err(TypeError::new(
-            TypeErrorKind::UndefinedType(id.node.clone()),
-            typ.span.clone(),
-        )),
-    }
+    };
+    let typ_expanded = subst_typ(&theta, typ_alias)?;
+    expand_typ(tdenv, &typ_expanded)
 }

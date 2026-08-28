@@ -54,6 +54,7 @@ let () =
     typ (FuncT ([ id "T" ], [ var "T" [] ], var "T" []))
   in
   let fresh_parameter () =
+    Type.Fresh.refresh ();
     match Type.Subst.subst_typ freshness_substitution freshness_fixture with
     | { it = FuncT (parameter :: _, _, _); _ } -> parameter.it
     | _ -> assert false

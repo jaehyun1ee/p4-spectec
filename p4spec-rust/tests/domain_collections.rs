@@ -2,7 +2,10 @@ use p4spec_rust::{
     lang::common::source::{Position, Span, Spanned},
     lang::common::{
         Id,
-        ds::{map::IdMap, set::IdSet},
+        ds::{
+            map::{ArityMismatch, IdMap},
+            set::IdSet,
+        },
         noted::Noted,
     },
     lang::{il, traits::free::Free},
@@ -13,6 +16,14 @@ fn id(name: &str, file: &str) -> Id {
         name.to_owned(),
         Span::new(Position::new(file, 0, 0), Position::new(file, 0, 0)),
     )
+}
+
+#[test]
+fn spanned_default_uses_the_default_span() {
+    let spanned = p4spec_rust::spanned_default!(node: 42);
+
+    assert_eq!(spanned.node, 42);
+    assert_eq!(spanned.span, Span::default());
 }
 
 #[test]
@@ -37,6 +48,27 @@ fn id_map_uses_identifier_text_as_its_key() {
     assert_eq!(ids.insert(id_second.clone(), 2), Some(1));
     assert_eq!(ids.get(&id_second), Some(&2));
     assert_eq!(ids.keys().collect::<Vec<_>>(), vec![&id_first]);
+}
+
+#[test]
+fn id_map_constructs_from_equally_sized_lists() {
+    let keys = [id("x", "first"), id("y", "second")];
+    let values = [1, 2];
+
+    let ids = IdMap::from_lists(&keys, &values).expect("matching list lengths");
+
+    assert_eq!(ids.get(&id("x", "lookup")), Some(&1));
+    assert_eq!(ids.get(&id("y", "lookup")), Some(&2));
+}
+
+#[test]
+fn id_map_rejects_mismatched_lists() {
+    let keys = [id("x", "first")];
+    let values = [1, 2];
+
+    let error = IdMap::from_lists(&keys, &values).expect_err("mismatched list lengths");
+
+    assert_eq!(error, ArityMismatch::new(1, 2));
 }
 
 #[test]
