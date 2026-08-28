@@ -1,5 +1,7 @@
 //! Persistent elaboration bindings and operation-local fresh state
 
+use std::rc::Rc;
+
 use crate::{
     lang::{
         common::{
@@ -39,11 +41,13 @@ type FuncSignature<'a> = (&'a [ast::TParam], &'a [ast::Param], &'a ast::Typ);
 #[derive(Clone, Debug)]
 pub(super) struct Context {
     pub(super) frees: IdSet,
-    pub(super) venv: VEnv,
-    pub(super) tdenv: TDEnv,
-    pub(super) menv: MEnv,
-    pub(super) renv: REnv,
-    pub(super) fenv: FEnv,
+    #[allow(dead_code)]
+    pub(super) venv: Rc<VEnv>,
+    pub(super) tdenv: Rc<TDEnv>,
+    pub(super) menv: Rc<MEnv>,
+    pub(super) renv: Rc<REnv>,
+    pub(super) fenv: Rc<FEnv>,
+    #[allow(dead_code)]
     next_fresh: u64,
 }
 
@@ -61,15 +65,16 @@ impl Context {
         }
         Self {
             frees: IdSet::new(),
-            venv: VEnv::new(),
-            tdenv: TDEnv::new(),
-            menv,
-            renv: REnv::new(),
-            fenv: FEnv::new(),
+            venv: Rc::new(VEnv::new()),
+            tdenv: Rc::new(TDEnv::new()),
+            menv: Rc::new(menv),
+            renv: Rc::new(REnv::new()),
+            fenv: Rc::new(FEnv::new()),
             next_fresh: 0,
         }
     }
 
+    #[allow(dead_code)]
     pub(super) fn fresh_index(&mut self) -> u64 {
         let fresh = self.next_fresh;
         self.next_fresh += 1;
@@ -93,6 +98,7 @@ impl Context {
         self.menv.get(id)
     }
 
+    #[allow(dead_code)]
     pub(super) fn find_metavar(&self, id: &Id) -> Result<&ast::Typ, ElabError> {
         self.find_metavar_opt(id).ok_or_else(|| {
             ElabError::undefined(EntityKind::MetaVariable, &id.node, id.span.clone())
@@ -121,7 +127,7 @@ impl Context {
                 id.span,
             ));
         }
-        self.menv.insert(id, typ);
+        Rc::make_mut(&mut self.menv).insert(id, typ);
         Ok(self)
     }
 
@@ -129,7 +135,7 @@ impl Context {
         if self.bound_typdef(&id) {
             return Err(ElabError::duplicate(EntityKind::Type, &id.node, id.span));
         }
-        self.tdenv.insert(id, typdef);
+        Rc::make_mut(&mut self.tdenv).insert(id, typdef);
         Ok(self)
     }
 
@@ -154,7 +160,7 @@ impl Context {
                 id.span.clone(),
             ));
         }
-        self.tdenv.insert(id.clone(), typdef);
+        Rc::make_mut(&mut self.tdenv).insert(id.clone(), typdef);
         Ok(self)
     }
 
@@ -220,7 +226,7 @@ impl Context {
                 id.span,
             ));
         }
-        self.renv.insert(
+        Rc::make_mut(&mut self.renv).insert(
             id,
             Rel::Extern {
                 not_typ: Box::new(not_typ),
@@ -243,7 +249,7 @@ impl Context {
                 id.span,
             ));
         }
-        self.renv.insert(
+        Rc::make_mut(&mut self.renv).insert(
             id,
             Rel::Defined {
                 not_typ: Box::new(not_typ),
@@ -275,7 +281,9 @@ impl Context {
                 groupid.span.clone(),
             ));
         }
-        let Rel::Defined { rule_groups, .. } = self.renv.get_mut(relid).expect("defined relation")
+        let Rel::Defined { rule_groups, .. } = Rc::make_mut(&mut self.renv)
+            .get_mut(relid)
+            .expect("defined relation")
         else {
             unreachable!("checked defined relation")
         };
@@ -305,7 +313,9 @@ impl Context {
         }
         let Rel::Defined {
             else_group: stored, ..
-        } = self.renv.get_mut(relid).expect("defined relation")
+        } = Rc::make_mut(&mut self.renv)
+            .get_mut(relid)
+            .expect("defined relation")
         else {
             unreachable!("checked defined relation")
         };
@@ -397,7 +407,7 @@ impl Context {
         typ_ret: ast::Typ,
     ) -> Result<Self, ElabError> {
         self.ensure_func_unbound(&id)?;
-        self.fenv.insert(
+        Rc::make_mut(&mut self.fenv).insert(
             id,
             Func::Extern {
                 tparams,
@@ -416,7 +426,7 @@ impl Context {
         typ_ret: ast::Typ,
     ) -> Result<Self, ElabError> {
         self.ensure_func_unbound(&id)?;
-        self.fenv.insert(
+        Rc::make_mut(&mut self.fenv).insert(
             id,
             Func::Builtin {
                 tparams,
@@ -434,7 +444,7 @@ impl Context {
         typ_ret: ast::Typ,
     ) -> Result<Self, ElabError> {
         self.ensure_func_unbound(&id)?;
-        self.fenv.insert(
+        Rc::make_mut(&mut self.fenv).insert(
             id,
             Func::Table {
                 params,
@@ -453,7 +463,7 @@ impl Context {
         typ_ret: ast::Typ,
     ) -> Result<Self, ElabError> {
         self.ensure_func_unbound(&id)?;
-        self.fenv.insert(
+        Rc::make_mut(&mut self.fenv).insert(
             id,
             Func::Defined {
                 tparams,
@@ -501,7 +511,9 @@ impl Context {
         }
         let Func::Table {
             table_rows: stored, ..
-        } = self.fenv.get_mut(id).expect("table function")
+        } = Rc::make_mut(&mut self.fenv)
+            .get_mut(id)
+            .expect("table function")
         else {
             unreachable!("checked table function")
         };
@@ -521,7 +533,10 @@ impl Context {
                 clause.span,
             ));
         }
-        let Func::Defined { clauses, .. } = self.fenv.get_mut(id).expect("defined function") else {
+        let Func::Defined { clauses, .. } = Rc::make_mut(&mut self.fenv)
+            .get_mut(id)
+            .expect("defined function")
+        else {
             unreachable!("checked defined function")
         };
         clauses.push(clause);
@@ -543,7 +558,9 @@ impl Context {
         let Func::Defined {
             else_clause: stored,
             ..
-        } = self.fenv.get_mut(id).expect("defined function")
+        } = Rc::make_mut(&mut self.fenv)
+            .get_mut(id)
+            .expect("defined function")
         else {
             unreachable!("checked defined function")
         };
@@ -707,6 +724,28 @@ mod tests {
         assert_eq!(ctx_l.fresh_index(), 0);
         assert_eq!(ctx_l.fresh_index(), 1);
         assert_eq!(ctx_r.fresh_index(), 0);
+    }
+
+    #[test]
+    fn cloned_context_mutations_do_not_leak_between_alternatives() {
+        let base = Context::new();
+        let branch = base
+            .clone()
+            .add_metavar(
+                id("branch_only", span("branch")),
+                crate::runtime::types::typ::bool(),
+            )
+            .expect("branch binding");
+
+        assert!(
+            base.find_metavar_opt(&id("branch_only", Span::default()))
+                .is_none()
+        );
+        assert!(
+            branch
+                .find_metavar_opt(&id("branch_only", Span::default()))
+                .is_some()
+        );
     }
 
     #[test]
