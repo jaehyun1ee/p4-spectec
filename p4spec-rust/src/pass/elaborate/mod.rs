@@ -7,3 +7,10 @@ mod elab;
 mod error;
 
 pub use error::*;
+
+use crate::lang::{el, il};
+
+/// Validates and converts an elaboration-language specification to intermediate syntax.
+pub fn elaborate(spec: &el::ast::Spec) -> Result<il::ast::Spec, ElabError> {
+    elab::elaborate(spec)
+}
