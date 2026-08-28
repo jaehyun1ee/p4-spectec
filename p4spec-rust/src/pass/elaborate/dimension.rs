@@ -248,7 +248,7 @@ fn union(mut occurs_l: VEnv, occurs_r: VEnv) -> Result<VEnv, ElabError> {
                     format!("type mismatch for identifier `{}` in union", id.node),
                 ));
             }
-            if dim_r.iters().len() < dim_l.iters().len() {
+            if dim_r.iters().len() <= dim_l.iters().len() {
                 occurs_l.insert(id.clone(), dim_r.clone());
             }
         } else {
@@ -784,7 +784,7 @@ mod tests {
         pass::elaborate::ElabErrorKind,
     };
 
-    use super::{analyze_rule, analyze_spec, infer_rule};
+    use super::{analyze_rule, analyze_spec, infer_rule, singleton, union};
 
     fn span(label: &str) -> Span {
         Span::new(Position::new(label, 1, 0), Position::new(label, 1, 1))
@@ -883,6 +883,20 @@ mod tests {
         assert_eq!(vars_inner.len(), 1);
         assert_eq!(vars_inner[0].id.node, "x");
         assert!(vars_inner[0].iters.is_empty());
+    }
+
+    #[test]
+    fn equal_dimension_occurrences_keep_the_rightmost_type_span() {
+        let id_l = id("x", "left-id");
+        let id_r = id("x", "right-id");
+        let typ_l = Spanned::new(TypKind::Bool, span("left-type"));
+        let typ_r = Spanned::new(TypKind::Bool, span("right-type"));
+
+        let occurs = union(singleton(&id_l, typ_l), singleton(&id_r, typ_r))
+            .expect("compatible occurrence types");
+        let dim = occurs.get(&id("x", "query")).expect("merged occurrence");
+
+        assert_eq!(dim.typ().span, span("right-type"));
     }
 
     #[test]

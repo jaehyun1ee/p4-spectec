@@ -548,8 +548,8 @@ fn infer_exp(ctx: Context, exp: &el::Exp) -> Attempt<(Context, il::Exp, il::Typ)
                     let (ctx, exp_l, typ_l) = attempt!(infer_exp(ctx_list, &exp_l_list));
                     let typ_base = attempt!(as_list_typ(&ctx, &typ_l));
                     let typ_list = Spanned::new(
-                        il::TypKind::Iter(Box::new(typ_base), il::Iter::List),
-                        typ_l.span,
+                        il::TypKind::Iter(Box::new(typ_base.clone()), il::Iter::List),
+                        typ_base.span,
                     );
                     let (ctx, exp_r) = attempt!(elab_exp(ctx, &typ_list, &exp_r_list));
                     Attempt::ok((
@@ -863,13 +863,32 @@ fn cast_exp(
     )
 }
 
+fn respan_parenthesized_exp(exp: &mut il::Exp, span: &Span) {
+    exp.span = span.clone();
+    match &mut exp.node.kind {
+        il::ExpKind::UpCast(_, exp_inner) | il::ExpKind::DownCast(_, exp_inner) => {
+            respan_parenthesized_exp(exp_inner, span);
+        }
+        _ => {}
+    }
+}
+
 fn elab_exp(ctx: Context, typ_expect: &il::Typ, exp: &el::Exp) -> Attempt<(Context, il::Exp)> {
     let error = ElabError::new(
         ElabErrorKind::NoMatchingAlternative,
         exp.span.clone(),
         "expression elaboration failed",
     );
-    elab_exp_inner(ctx, typ_expect, exp).nest(error)
+    let parenthesized = matches!(exp.node, el::ExpKind::Paren(_));
+    let span = exp.span.clone();
+    elab_exp_inner(ctx, typ_expect, exp)
+        .map(move |(ctx, mut exp)| {
+            if parenthesized {
+                respan_parenthesized_exp(&mut exp, &span);
+            }
+            (ctx, exp)
+        })
+        .nest(error)
 }
 
 fn elab_exp_inner(
@@ -878,32 +897,33 @@ fn elab_exp_inner(
     exp: &el::Exp,
 ) -> Attempt<(Context, il::Exp)> {
     if let Attempt::Ok((typ_base, iter)) = as_iter_typ(&ctx, typ_expect) {
-        let can_wrap = !matches!(&exp.node, el::ExpKind::Var(id) if id.node == "_")
-            && !matches!(&exp.node, el::ExpKind::Eps)
-            && !matches!(&exp.node, el::ExpKind::List(exps) if exps.is_empty());
-        if can_wrap {
-            let ctx_wrap = ctx.clone();
-            let typ_expect_wrap = typ_expect.clone();
-            let exp_wrap = exp.clone();
-            let ctx_normal = ctx.clone();
-            let typ_normal = typ_expect.clone();
-            let exp_normal = exp.clone();
-            return Attempt::choose_sequential(vec![
-                Box::new(move || {
-                    let (ctx, exp) = attempt!(elab_exp(ctx_wrap, &typ_base, &exp_wrap));
-                    let kind = match iter {
-                        il::Iter::Opt => il::ExpKind::Opt(Some(Box::new(exp))),
-                        il::Iter::List => il::ExpKind::List(vec![exp]),
-                    };
-                    let exp = Spanned::new(
-                        Noted::new(kind, typ_expect_wrap.node.clone()),
-                        exp_wrap.span,
-                    );
-                    Attempt::ok((ctx, exp))
-                }),
-                Box::new(move || elab_exp_normal(ctx_normal, &typ_normal, &exp_normal)),
-            ]);
-        }
+        let ctx_wrap = ctx.clone();
+        let typ_expect_wrap = typ_expect.clone();
+        let exp_wrap = exp.clone();
+        let ctx_normal = ctx.clone();
+        let typ_normal = typ_expect.clone();
+        let exp_normal = exp.clone();
+        return Attempt::choose_sequential(vec![
+            Box::new(move || {
+                if matches!(&exp_wrap.node, el::ExpKind::Var(id) if id.node == "_")
+                    || matches!(&exp_wrap.node, el::ExpKind::Eps)
+                    || matches!(&exp_wrap.node, el::ExpKind::List(exps) if exps.is_empty())
+                {
+                    return Attempt::fail_silent();
+                }
+                let (ctx, exp) = attempt!(elab_exp(ctx_wrap, &typ_base, &exp_wrap));
+                let kind = match iter {
+                    il::Iter::Opt => il::ExpKind::Opt(Some(Box::new(exp))),
+                    il::Iter::List => il::ExpKind::List(vec![exp]),
+                };
+                let exp = Spanned::new(
+                    Noted::new(kind, typ_expect_wrap.node.clone()),
+                    exp_wrap.span,
+                );
+                Attempt::ok((ctx, exp))
+            }),
+            Box::new(move || elab_exp_normal(ctx_normal, &typ_normal, &exp_normal)),
+        ]);
     }
     elab_exp_normal(ctx, typ_expect, exp)
 }
@@ -1495,6 +1515,23 @@ fn elab_exp_contextual(
         let exp = il_var::as_exp(false, &var);
         return Attempt::ok((ctx.add_free(var.id), exp));
     }
+    if let il::TypKind::Var(id, targs) = &typ_expect.node
+        && let Some(TypeDef::Defined(tparams, def_typ)) = ctx.find_typdef_opt(id)
+        && let il::DefTypKind::Plain(typ) = &def_typ.node
+    {
+        let theta = match Theta::from_lists(tparams, targs) {
+            Ok(theta) => theta,
+            Err(mismatch) => {
+                return Attempt::fail(arity_error(
+                    mismatch.expected,
+                    mismatch.actual,
+                    typ_expect.span.clone(),
+                ));
+            }
+        };
+        let typ = attempt!(type_result(subst_typ(&theta, typ)));
+        return elab_exp_normal(ctx, &typ, exp);
+    }
     match &exp.node {
         el::ExpKind::Eps => {
             let (_, iter) = attempt!(as_iter_typ(&ctx, typ_expect));
@@ -1549,7 +1586,11 @@ fn elab_exp_contextual(
             let exp_r_text = exp_r.clone();
             let (ctx, kind) = attempt!(Attempt::choose_sequential(vec![
                 Box::new(move || {
-                    attempt!(as_iter_typ(&ctx_iter, &typ_iter));
+                    let (typ_base, iter) = attempt!(as_iter_typ(&ctx_iter, &typ_iter));
+                    let typ_iter = Spanned::new(
+                        il::TypKind::Iter(Box::new(typ_base.clone()), iter),
+                        typ_base.span,
+                    );
                     let (ctx, exp_l) = attempt!(elab_exp(ctx_iter, &typ_iter, &exp_l_iter));
                     let (ctx, exp_r) = attempt!(elab_exp(ctx, &typ_iter, &exp_r_iter));
                     Attempt::ok((ctx, il::ExpKind::Cat(Box::new(exp_l), Box::new(exp_r))))
@@ -1623,10 +1664,6 @@ fn elab_exp_contextual(
                             ));
                         }
                     };
-                    if let il::DefTypKind::Plain(typ) = &def_typ.node {
-                        let typ = attempt!(type_result(subst_typ(&theta, typ)));
-                        return elab_exp_normal(ctx, &typ, exp);
-                    }
                     if let il::DefTypKind::Struct(fields) = &def_typ.node {
                         let mut fields_subst = Vec::with_capacity(fields.len());
                         for (atom, typ) in fields {
@@ -2488,6 +2525,57 @@ mod tests {
             output.node.note,
             TypKind::Num(crate::lang::xl::num::Typ::Int)
         );
+    }
+
+    #[test]
+    fn parenthesized_casts_keep_the_parent_span_through_the_operand() {
+        let number = crate::lang::xl::num::Number::Nat(1_u64.into());
+        let inner = exp(el::ExpKind::Num(el::NumOp::Dec, number), "number");
+        let input = exp(el::ExpKind::Paren(Box::new(inner)), "parentheses");
+        let expected = Spanned::new(
+            TypKind::Num(crate::lang::xl::num::Typ::Int),
+            span("expected"),
+        );
+
+        let (_, output) = elab_exp(Context::new(), &expected, &input)
+            .commit()
+            .expect("cast parenthesized number");
+        let il::ExpKind::UpCast(_, operand) = &output.node.kind else {
+            panic!("expected numeric upcast")
+        };
+
+        assert_eq!(output.span, span("parentheses"));
+        assert_eq!(operand.span, span("parentheses"));
+    }
+
+    #[test]
+    fn plain_aliases_are_unwrapped_before_contextual_elaboration() {
+        let alias = id("OptionalText", "alias");
+        let element = Spanned::new(TypKind::Text, span("element"));
+        let optional = Spanned::new(
+            TypKind::Iter(Box::new(element), il::Iter::Opt),
+            span("optional"),
+        );
+        let definition = Spanned::new(DefTypKind::Plain(optional), span("definition"));
+        let ctx = Context::new()
+            .add_typdef(
+                alias.clone(),
+                TypeDef::Defined(vec![], Box::new(definition)),
+            )
+            .expect("alias definition");
+        let expected = Spanned::new(TypKind::Var(alias, vec![]), span("expected"));
+        let input = exp(el::ExpKind::Eps, "epsilon");
+
+        let (_, output) = elab_exp(ctx, &expected, &input)
+            .commit()
+            .expect("elaborate empty optional alias");
+
+        assert!(matches!(output.node.kind, il::ExpKind::Opt(None)));
+        assert!(matches!(
+            output.node.note,
+            TypKind::Iter(typ, il::Iter::Opt)
+                if typ.node == TypKind::Text && typ.span == span("element")
+        ));
     }
 
     #[test]
