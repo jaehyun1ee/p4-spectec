@@ -1905,14 +1905,21 @@ fn elab_syntax_def(mut ctx: Context, def: &el::SyntaxDef) -> Result<Context, Ela
 }
 
 fn elab_typ_def(mut ctx: Context, def: &el::TypDef) -> Result<(Context, il::Def), ElabError> {
-    distinct_tparams(&def.tparams, &def.id.span)?;
     match ctx.find_typdef_opt(&def.id) {
-        Some(TypeDef::Defining(tparams))
-            if tparams.len() == def.tparams.len()
+        Some(TypeDef::Defining(tparams)) => {
+            let matches = tparams.len() == def.tparams.len()
                 && tparams
                     .iter()
                     .zip(&def.tparams)
-                    .all(|(left, right)| left.node == right.node) => {}
+                    .all(|(left, right)| left.node == right.node);
+            if !matches {
+                return Err(ElabError::new(
+                    ElabErrorKind::ArityMismatch,
+                    def.id.span.clone(),
+                    "type parameters do not match",
+                ));
+            }
+        }
         Some(_) => {
             return Err(ElabError::new(
                 ElabErrorKind::Duplicate(EntityKind::Type),
@@ -1954,11 +1961,18 @@ fn elab_typ_def(mut ctx: Context, def: &el::TypDef) -> Result<(Context, il::Def)
 }
 
 fn elab_var_def(mut ctx: Context, def: &el::VarDef) -> Result<(Context, il::Def), ElabError> {
-    if !valid_tid(&def.id) || ctx.bound_typdef(&def.id) {
+    if !valid_tid(&def.id) {
         return Err(ElabError::new(
             ElabErrorKind::InvalidIdentifier,
             def.id.span.clone(),
             "invalid meta-variable identifier",
+        ));
+    }
+    if ctx.bound_typdef(&def.id) {
+        return Err(ElabError::new(
+            ElabErrorKind::Duplicate(EntityKind::Type),
+            def.id.span.clone(),
+            "type already defined",
         ));
     }
     let typ = elab_plain_typ(&ctx, &def.plain_typ)?;

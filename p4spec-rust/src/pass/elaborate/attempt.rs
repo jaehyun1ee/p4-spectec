@@ -19,14 +19,11 @@ impl FailTrace {
     }
 
     fn best_error<'a>(&'a self, depth: usize, best: &mut Option<(usize, bool, &'a ElabError)>) {
-        if self.children.is_empty() {
-            let located = self.error.span != Span::default();
-            if best.is_none_or(|(best_depth, best_located, _)| {
-                depth > best_depth || (depth == best_depth && located && !best_located)
-            }) {
-                *best = Some((depth, located, &self.error));
-            }
-            return;
+        let located = self.error.span != Span::default();
+        if best.is_none_or(|(best_depth, best_located, _)| {
+            (located && !best_located) || (located == best_located && depth > best_depth)
+        }) {
+            *best = Some((depth, located, &self.error));
         }
         for child in &self.children {
             child.best_error(depth + 1, best);
@@ -197,5 +194,25 @@ mod tests {
         assert_eq!(calls.get(), 0);
         assert_eq!(error.kind, ElabErrorKind::InvalidArgument);
         assert_eq!(error.span, failure_span);
+    }
+
+    #[test]
+    fn located_context_wins_over_a_deeper_unlocated_cause() {
+        let context_span = span("context");
+        let attempt = Attempt::<()>::fail(ElabError::new(
+            ElabErrorKind::TypeMismatch,
+            Span::default(),
+            "unlocated cause",
+        ))
+        .nest(ElabError::new(
+            ElabErrorKind::InvalidArgument,
+            context_span.clone(),
+            "located context",
+        ));
+
+        let error = attempt.commit().unwrap_err();
+
+        assert_eq!(error.kind, ElabErrorKind::InvalidArgument);
+        assert_eq!(error.span, context_span);
     }
 }
