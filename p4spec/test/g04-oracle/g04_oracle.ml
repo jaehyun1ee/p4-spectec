@@ -96,8 +96,6 @@ let () =
       ( "iteration_subtype",
         `Bool (Type.Sub.sub_typ find_type optional_bool list_bool) );
       ("optimized", json_of_subcheck optimized);
-      ( "dimension_compare",
-        `Int (Static.Typdim.compare dimension_l dimension_r) );
       ("dimension_sub", `Bool (Static.Typdim.sub dimension_l dimension_r));
     ]
   |> Yojson.Safe.to_string |> print_endline

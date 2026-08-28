@@ -1,14 +1,14 @@
 use crate::lang::{hints::input::InputHint, il::ast};
 
-/// A statically known relation declaration
+/// Static representation of a relation
 #[derive(Clone, Debug, PartialEq)]
-pub enum Relation {
+pub enum Rel {
     Extern {
-        notation_type: Box<ast::NotTyp>,
+        not_typ: Box<ast::NotTyp>,
         input_hint: InputHint,
     },
     Defined {
-        notation_type: Box<ast::NotTyp>,
+        not_typ: Box<ast::NotTyp>,
         input_hint: InputHint,
         rule_groups: Vec<ast::RuleGroup>,
         else_group: Option<Box<ast::ElseGroup>>,

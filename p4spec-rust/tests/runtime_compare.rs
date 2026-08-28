@@ -10,7 +10,7 @@ use p4spec_rust::{
         traits::print::Print,
     },
     runtime::{
-        static_env::TypeDimension,
+        sta::Dim,
         types::{
             TDEnv, Theta, TypeDef, equiv_func_typ, expand_typ, optimize_sub_typ, sub_typ, subst_typ,
         },
@@ -142,8 +142,8 @@ fn rust_results() -> Value {
     let list_bool = typ(TypKind::Iter(Box::new(bool_type.clone()), Iter::List));
     let optimized = optimize_sub_typ(&tdenv, &var("Large", vec![]), &var("Small", vec![]))
         .expect("optimize comparison fixture");
-    let dimension_l = TypeDimension::new(bool_type.clone(), vec![Iter::Opt]);
-    let dimension_r = TypeDimension::new(bool_type, vec![Iter::Opt, Iter::List]);
+    let dimension_l = Dim::new(bool_type.clone(), vec![Iter::Opt]);
+    let dimension_r = Dim::new(bool_type, vec![Iter::Opt, Iter::List]);
 
     json!({
         "substitution": Print::to_string(&substituted),
@@ -158,12 +158,7 @@ fn rust_results() -> Value {
         "iteration_subtype": sub_typ(&tdenv, &optional_bool, &list_bool)
             .expect("compare iteration subtype"),
         "optimized": subcheck_name(&optimized),
-        "dimension_compare": match dimension_l.compare(&dimension_r) {
-            std::cmp::Ordering::Less => -1,
-            std::cmp::Ordering::Equal => 0,
-            std::cmp::Ordering::Greater => 1,
-        },
-        "dimension_sub": dimension_l.is_subdimension_of(&dimension_r),
+        "dimension_sub": dimension_l.sub(&dimension_r),
     })
 }
 
