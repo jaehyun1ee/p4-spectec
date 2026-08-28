@@ -1,5 +1,8 @@
 use p4spec_rust::{
-    lang::common::source::{Position, Span, Spanned},
+    lang::common::{
+        noted::Noted,
+        source::{Position, Span, Spanned},
+    },
     lang::{
         common::notation::mixfix::Mixfix,
         hints::{alter, input::InputHint},
@@ -21,19 +24,29 @@ fn typ() -> il::ast::Typ {
 }
 
 fn variable(name: &str) -> pl::ast::Exp {
-    pl::ast::exp(
-        pl::ast::ExpKind::Var(id(name)),
-        il::ast::TypKind::Bool,
-        span(name),
-    )
+    pl::annot::Annotated {
+        node: p4spec_rust::spanned! {
+            node: Noted {
+                kind: pl::ast::ExpKind::Var(id(name)),
+                note: il::ast::TypKind::Bool,
+            },
+            span: span(name),
+        },
+        hints: pl::annot::Hints::default(),
+    }
 }
 
 fn text(value: &str) -> pl::ast::Exp {
-    pl::ast::exp(
-        pl::ast::ExpKind::Text(value.to_owned()),
-        il::ast::TypKind::Text,
-        span("text"),
-    )
+    pl::annot::Annotated {
+        node: p4spec_rust::spanned! {
+            node: Noted {
+                kind: pl::ast::ExpKind::Text(value.to_owned()),
+                note: il::ast::TypKind::Text,
+            },
+            span: span("text"),
+        },
+        hints: pl::annot::Hints::default(),
+    }
 }
 
 fn signature() -> pl::ast::RelSignature {
@@ -46,13 +59,37 @@ fn signature() -> pl::ast::RelSignature {
 fn group_instr(
     kind: pl::ast::InstrKind<pl::ast::InstrGroup>,
 ) -> pl::ast::Instr<pl::ast::InstrGroup> {
-    pl::ast::instr(kind, 1, None, span("group-instruction"))
+    pl::annot::Annotated {
+        node: p4spec_rust::spanned! {
+            node: Noted {
+                kind,
+                note: pl::ast::InstrNote {
+                    iid: 1,
+                    fallthrough: None,
+                },
+            },
+            span: span("group-instruction"),
+        },
+        hints: pl::annot::Hints::default(),
+    }
 }
 
 fn dispatch_instr(
     kind: pl::ast::InstrKind<pl::ast::InstrDispatch>,
 ) -> pl::ast::Instr<pl::ast::InstrDispatch> {
-    pl::ast::instr(kind, 1, None, span("dispatch-instruction"))
+    pl::annot::Annotated {
+        node: p4spec_rust::spanned! {
+            node: Noted {
+                kind,
+                note: pl::ast::InstrNote {
+                    iid: 1,
+                    fallthrough: None,
+                },
+            },
+            span: span("dispatch-instruction"),
+        },
+        hints: pl::annot::Hints::default(),
+    }
 }
 
 #[test]

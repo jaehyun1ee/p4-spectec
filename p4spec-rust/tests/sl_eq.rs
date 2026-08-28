@@ -1,7 +1,10 @@
 use p4spec_rust::{
     lang::common::source::{Position, Span, Spanned},
     lang::{
-        common::notation::mixfix::Mixfix, hints::input::InputHint, il, sl, traits::eq::SyntaxEq,
+        common::{notation::mixfix::Mixfix, noted::Noted},
+        hints::input::InputHint,
+        il, sl,
+        traits::eq::SyntaxEq,
     },
 };
 
@@ -18,15 +21,20 @@ fn typ() -> il::ast::Typ {
 }
 
 fn variable(name: &str) -> il::ast::Exp {
-    il::ast::exp(
-        il::ast::ExpKind::Var(id(name)),
-        il::ast::TypKind::Bool,
-        span(name),
-    )
+    p4spec_rust::spanned! {
+        node: Noted {
+            kind: il::ast::ExpKind::Var(id(name)),
+            note: il::ast::TypKind::Bool,
+        },
+        span: span(name),
+    }
 }
 
 fn instruction(kind: sl::ast::InstrKind, iid: i64, source: &str) -> sl::ast::Instr {
-    sl::ast::instr(kind, iid, span(source))
+    p4spec_rust::spanned! {
+        node: Noted { kind, note: iid },
+        span: span(source),
+    }
 }
 
 #[test]

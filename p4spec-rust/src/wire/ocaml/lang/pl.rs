@@ -588,9 +588,17 @@ fn decode_instr<T>(
         |value| decode_instr_kind(value, decode_tier),
         decode_inote,
     )?;
-    let mut instr = ast::instr(kind, iid, fallthrough, span);
-    instr.hints = decode_hints(field(value, "hints")?)?;
-    Ok(instr)
+    let hints = decode_hints(field(value, "hints")?)?;
+    Ok(annot::Annotated {
+        node: crate::spanned! {
+            node: Noted {
+                kind,
+                note: ast::InstrNote { iid, fallthrough },
+            },
+            span: span,
+        },
+        hints,
+    })
 }
 
 fn encode_instr<T>(instr: &ast::Instr<T>, encode_tier: fn(&T) -> Value) -> Value {

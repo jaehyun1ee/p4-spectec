@@ -1,11 +1,7 @@
 //! Prose language model
 
 use crate::lang::{
-    common::{
-        notation::mixfix::Mixfix,
-        noted::Noted,
-        source::{Span, Spanned},
-    },
+    common::{notation::mixfix::Mixfix, noted::Noted, source::Spanned},
     pl::annot,
     sl,
 };
@@ -68,14 +64,6 @@ pub type Subcheck = sl::ast::Subcheck;
 
 pub type ExpNode = Spanned<Noted<ExpKind, TypKind>>;
 pub type Exp = annot::Annotated<ExpNode>;
-
-/// Constructs a typed expression
-pub fn exp(kind: ExpKind, typ: TypKind, span: Span) -> Exp {
-    annot::Annotated::new(crate::spanned! {
-        node: Noted::new(kind, typ),
-        span: span,
-    })
-}
 #[derive(Clone, Debug, PartialEq)]
 pub enum ExpKind {
     Bool(bool),
@@ -115,14 +103,6 @@ pub type Pattern = sl::ast::Pattern;
 // Path
 
 pub type Path = Spanned<Noted<PathKind, TypKind>>;
-
-/// Constructs a typed path
-pub fn path(kind: PathKind, typ: TypKind, span: Span) -> Path {
-    crate::spanned! {
-        node: Noted::new(kind, typ),
-        span: span,
-    }
-}
 #[derive(Clone, Debug, PartialEq)]
 pub enum PathKind {
     Root,
@@ -210,19 +190,6 @@ pub struct InstrNote {
 
 pub type InstrNode<Tier> = Spanned<Noted<InstrKind<Tier>, InstrNote>>;
 pub type Instr<Tier> = annot::Annotated<InstrNode<Tier>>;
-
-/// Constructs an instruction
-pub fn instr<Tier>(
-    kind: InstrKind<Tier>,
-    iid: Iid,
-    fallthrough: Option<Fallthrough>,
-    span: Span,
-) -> Instr<Tier> {
-    annot::Annotated::new(crate::spanned! {
-        node: Noted::new(kind, InstrNote { iid, fallthrough }),
-        span: span,
-    })
-}
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum InstrKind<Tier> {

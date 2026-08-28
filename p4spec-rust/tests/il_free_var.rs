@@ -4,6 +4,7 @@ use p4spec_rust::{
         common::{
             ds::set::IdSet,
             notation::{atom::Atom, mixfix::Mixfix},
+            noted::Noted,
         },
         hints::input::InputHint,
         il::{ast, var},
@@ -30,7 +31,13 @@ fn typ_at(at: &str) -> ast::Typ {
     Spanned::new(ast::TypKind::Bool, named_span(at))
 }
 fn exp(kind: ast::ExpKind) -> ast::Exp {
-    ast::exp(kind, ast::TypKind::Bool, span())
+    p4spec_rust::spanned! {
+        node: Noted {
+            kind,
+            note: ast::TypKind::Bool,
+        },
+        span: span(),
+    }
 }
 fn variable(name: &str) -> ast::Exp {
     exp(ast::ExpKind::Var(id(name)))
@@ -82,15 +89,23 @@ fn free_helpers_are_public_and_source_insensitive() {
 
 #[test]
 fn free_expression_variants_follow_the_oracle() {
-    let path = ast::path(
-        ast::PathKind::Slice(
-            Box::new(ast::path(ast::PathKind::Root, ast::TypKind::Bool, span())),
+    let path = p4spec_rust::spanned! {
+        node: Noted {
+            kind: ast::PathKind::Slice(
+            Box::new(p4spec_rust::spanned! {
+                node: Noted {
+                    kind: ast::PathKind::Root,
+                    note: ast::TypKind::Bool,
+                },
+                span: span(),
+            }),
             Box::new(variable("path_low")),
             Box::new(variable("path_high")),
-        ),
-        ast::TypKind::Bool,
-        span(),
-    );
+            ),
+            note: ast::TypKind::Bool,
+        },
+        span: span(),
+    };
     let cases = vec![
         ("bool", exp(ast::ExpKind::Bool(true)), names(&[])),
         (
@@ -296,45 +311,65 @@ fn free_expression_variants_follow_the_oracle() {
 
 #[test]
 fn free_path_argument_and_premise_variants_follow_the_oracle() {
-    let root = ast::path(ast::PathKind::Root, ast::TypKind::Bool, span());
+    let root = p4spec_rust::spanned! {
+        node: Noted {
+            kind: ast::PathKind::Root,
+            note: ast::TypKind::Bool,
+        },
+        span: span(),
+    };
     let paths = vec![
         ("root", root.clone(), names(&[])),
         (
             "index",
-            ast::path(
-                ast::PathKind::Idx(Box::new(root.clone()), Box::new(variable("index"))),
-                ast::TypKind::Bool,
-                span(),
-            ),
+            p4spec_rust::spanned! {
+                node: Noted {
+                    kind: ast::PathKind::Idx(
+                        Box::new(root.clone()),
+                        Box::new(variable("index")),
+                    ),
+                    note: ast::TypKind::Bool,
+                },
+                span: span(),
+            },
             names(&["index"]),
         ),
         (
             "slice",
-            ast::path(
-                ast::PathKind::Slice(
+            p4spec_rust::spanned! {
+                node: Noted {
+                    kind: ast::PathKind::Slice(
                     Box::new(root.clone()),
                     Box::new(variable("low")),
                     Box::new(variable("high")),
-                ),
-                ast::TypKind::Bool,
-                span(),
-            ),
+                    ),
+                    note: ast::TypKind::Bool,
+                },
+                span: span(),
+            },
             names(&["low", "high"]),
         ),
         (
             "dot",
-            ast::path(
-                ast::PathKind::Dot(
-                    Box::new(ast::path(
-                        ast::PathKind::Idx(Box::new(root), Box::new(variable("nested"))),
-                        ast::TypKind::Bool,
-                        span(),
-                    )),
+            p4spec_rust::spanned! {
+                node: Noted {
+                    kind: ast::PathKind::Dot(
+                    Box::new(p4spec_rust::spanned! {
+                        node: Noted {
+                            kind: ast::PathKind::Idx(
+                                Box::new(root),
+                                Box::new(variable("nested")),
+                            ),
+                            note: ast::TypKind::Bool,
+                        },
+                        span: span(),
+                    }),
                     atom("field"),
-                ),
-                ast::TypKind::Bool,
-                span(),
-            ),
+                    ),
+                    note: ast::TypKind::Bool,
+                },
+                span: span(),
+            },
             names(&["nested"]),
         ),
     ];

@@ -5,6 +5,7 @@ use p4spec_rust::{
         common::{
             ds::{map::IdMap, set::IdSet},
             notation::{atom::Atom, mixfix::Mixfix},
+            noted::Noted,
         },
         el,
         hints::input::InputHint,
@@ -35,15 +36,23 @@ fn atom() -> il::ast::Atom {
 }
 
 fn variable(name: &str) -> il::ast::Exp {
-    il::ast::exp(
-        il::ast::ExpKind::Var(id(name)),
-        il::ast::TypKind::Bool,
-        span(name),
-    )
+    p4spec_rust::spanned! {
+        node: Noted {
+            kind: il::ast::ExpKind::Var(id(name)),
+            note: il::ast::TypKind::Bool,
+        },
+        span: span(name),
+    }
 }
 
 fn expr(kind: il::ast::ExpKind) -> il::ast::Exp {
-    il::ast::exp(kind, il::ast::TypKind::Bool, span("expression"))
+    p4spec_rust::spanned! {
+        node: Noted {
+            kind,
+            note: il::ast::TypKind::Bool,
+        },
+        span: span("expression"),
+    }
 }
 
 fn not_exp(name: &str) -> il::ast::NotExp {
@@ -55,18 +64,22 @@ fn arg_exp(name: &str) -> il::ast::Arg {
 }
 
 fn path_with(name: &str) -> il::ast::Path {
-    il::ast::path(
-        il::ast::PathKind::Idx(
-            Box::new(il::ast::path(
-                il::ast::PathKind::Root,
-                il::ast::TypKind::Bool,
-                span("root"),
-            )),
+    p4spec_rust::spanned! {
+        node: Noted {
+            kind: il::ast::PathKind::Idx(
+            Box::new(p4spec_rust::spanned! {
+                node: Noted {
+                    kind: il::ast::PathKind::Root,
+                    note: il::ast::TypKind::Bool,
+                },
+                span: span("root"),
+            }),
             Box::new(variable(name)),
-        ),
-        il::ast::TypKind::Bool,
-        span("path"),
-    )
+            ),
+            note: il::ast::TypKind::Bool,
+        },
+        span: span("path"),
+    }
 }
 
 fn ids(names: &[&str]) -> IdSet {
@@ -74,24 +87,28 @@ fn ids(names: &[&str]) -> IdSet {
 }
 #[test]
 fn syntax_equality_ignores_spans_and_subcheck_strategy() {
-    let exp_l = il::ast::exp(
-        il::ast::ExpKind::Sub(
+    let exp_l = p4spec_rust::spanned! {
+        node: Noted {
+            kind: il::ast::ExpKind::Sub(
             Box::new(variable("x")),
             typ(),
             Box::new(il::ast::Subcheck::Skip),
-        ),
-        il::ast::TypKind::Bool,
-        span("left"),
-    );
-    let exp_r = il::ast::exp(
-        il::ast::ExpKind::Sub(
+            ),
+            note: il::ast::TypKind::Bool,
+        },
+        span: span("left"),
+    };
+    let exp_r = p4spec_rust::spanned! {
+        node: Noted {
+            kind: il::ast::ExpKind::Sub(
             Box::new(variable("x")),
             typ(),
             Box::new(il::ast::Subcheck::Recurse(typ())),
-        ),
-        il::ast::TypKind::Text,
-        span("right"),
-    );
+            ),
+            note: il::ast::TypKind::Text,
+        },
+        span: span("right"),
+    };
 
     assert!(exp_l.syntax_eq(&exp_r));
     assert!(
@@ -114,7 +131,15 @@ fn syntax_equality_ignores_spans_and_subcheck_strategy() {
 
 #[test]
 fn syntax_equality_distinguishes_recursive_operands_variants_and_collection_rules() {
-    let value = |kind| il::ast::value(kind, il::ast::TypKind::Bool, span("value"));
+    let value = |kind| {
+        p4spec_rust::spanned! {
+            node: Noted {
+                kind,
+                note: il::ast::TypKind::Bool,
+            },
+            span: span("value"),
+        }
+    };
     let value_recursive = value(il::ast::ValueKind::List(vec![value(
         il::ast::ValueKind::Struct(vec![(atom(), value(il::ast::ValueKind::Bool(true)))]),
     )]));
@@ -140,22 +165,28 @@ fn syntax_equality_distinguishes_recursive_operands_variants_and_collection_rule
     );
 
     let path_root = || {
-        il::ast::path(
-            il::ast::PathKind::Root,
-            il::ast::TypKind::Bool,
-            span("root"),
-        )
+        p4spec_rust::spanned! {
+            node: Noted {
+                kind: il::ast::PathKind::Root,
+                note: il::ast::TypKind::Bool,
+            },
+            span: span("root"),
+        }
     };
-    let path_x = il::ast::path(
-        il::ast::PathKind::Idx(Box::new(path_root()), Box::new(variable("x"))),
-        il::ast::TypKind::Bool,
-        span("path-x"),
-    );
-    let path_y = il::ast::path(
-        il::ast::PathKind::Idx(Box::new(path_root()), Box::new(variable("y"))),
-        il::ast::TypKind::Bool,
-        span("path-y"),
-    );
+    let path_x = p4spec_rust::spanned! {
+        node: Noted {
+            kind: il::ast::PathKind::Idx(Box::new(path_root()), Box::new(variable("x"))),
+            note: il::ast::TypKind::Bool,
+        },
+        span: span("path-x"),
+    };
+    let path_y = p4spec_rust::spanned! {
+        node: Noted {
+            kind: il::ast::PathKind::Idx(Box::new(path_root()), Box::new(variable("y"))),
+            note: il::ast::TypKind::Bool,
+        },
+        span: span("path-y"),
+    };
     assert!(path_x.syntax_eq(&path_x));
     assert!(!path_x.syntax_eq(&path_y));
     assert!(
@@ -325,32 +356,38 @@ fn free_expression_path_argument_and_premise_variants_collect_identifier_text() 
 
     let paths = vec![
         (
-            il::ast::path(
-                il::ast::PathKind::Root,
-                il::ast::TypKind::Bool,
-                span("root"),
-            ),
+            p4spec_rust::spanned! {
+                node: Noted {
+                    kind: il::ast::PathKind::Root,
+                    note: il::ast::TypKind::Bool,
+                },
+                span: span("root"),
+            },
             ids(&[]),
         ),
         (path_with("x"), ids(&["x"])),
         (
-            il::ast::path(
-                il::ast::PathKind::Slice(
+            p4spec_rust::spanned! {
+                node: Noted {
+                    kind: il::ast::PathKind::Slice(
                     Box::new(path_with("x")),
                     Box::new(variable("y")),
                     Box::new(variable("z")),
-                ),
-                il::ast::TypKind::Bool,
-                span("slice"),
-            ),
+                    ),
+                    note: il::ast::TypKind::Bool,
+                },
+                span: span("slice"),
+            },
             ids(&["x", "y", "z"]),
         ),
         (
-            il::ast::path(
-                il::ast::PathKind::Dot(Box::new(path_with("x")), atom()),
-                il::ast::TypKind::Bool,
-                span("dot"),
-            ),
+            p4spec_rust::spanned! {
+                node: Noted {
+                    kind: il::ast::PathKind::Dot(Box::new(path_with("x")), atom()),
+                    note: il::ast::TypKind::Bool,
+                },
+                span: span("dot"),
+            },
             ids(&["x"]),
         ),
     ];
@@ -606,11 +643,13 @@ fn text_typ() -> il::ast::Typ {
 }
 
 fn text_expression(text: &str) -> il::ast::Exp {
-    il::ast::exp(
-        il::ast::ExpKind::Text(text.to_owned()),
-        il::ast::TypKind::Text,
-        span("text-expression"),
-    )
+    p4spec_rust::spanned! {
+        node: Noted {
+            kind: il::ast::ExpKind::Text(text.to_owned()),
+            note: il::ast::TypKind::Text,
+        },
+        span: span("text-expression"),
+    }
 }
 
 fn keyword(name: &str) -> il::ast::Atom {
