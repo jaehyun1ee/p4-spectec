@@ -1,3 +1,20 @@
+//! AST construction shared by LALRPOP grammar actions
+//!
+//! Grammar productions use `spanned` and `span_between` to attach source
+//! ranges while building EL nodes. Expression builders such as `sequence_exp`,
+//! `numeric_bin_exp`, and `compare_exp` keep repeated grammar actions uniform.
+//! `apply_exp_postfixes` folds parsed postfixes from left to right, while
+//! `try_build_def_typ_kind` performs the semantic checks needed when a type
+//! definition becomes an EL node. `Parsed` and `ParsedList` retain right
+//! boundaries for syntax that EL intentionally drops.
+//!
+//! # Examples
+//!
+//! ```text
+//! sequence_exp(sequence_exp(a, b), c) => Seq([a, b, c])
+//! apply_exp_postfixes(x, [Idx(i), Dot(f)]) => Dot(Idx(x, i), f)
+//! ```
+
 use crate::lang::{
     common::{
         notation::atom::Atom,

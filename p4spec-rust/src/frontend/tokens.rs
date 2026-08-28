@@ -1,4 +1,23 @@
 //! Contextual token adaptation between the lexer and LALRPOP
+//!
+//! `parser_tokens` wraps a lexer iterator in [`ParserTokens`]. Each
+//! `ParserTokens::next` call converts source positions to [`ParserLocation`]
+//! handles and forwards lexical failures as [`FrontendError`]. Outside
+//! arithmetic mode it relabels `Star` as `IterStar` for postfix iteration.
+//!
+//! `ends_sequence` and `starts_sequence` identify adjacent notation atoms. If
+//! both predicates match, `ParserTokens::next` returns a synthetic `Sequence`
+//! and stores the real lookahead in `pending` for the following call.
+//!
+//! # Examples
+//!
+//! ```text
+//! lexer:  UpperId("A"), UpperId("B")
+//! parser: UpperId("A"), Sequence, UpperId("B")
+//!
+//! expression mode: Star -> IterStar
+//! arithmetic mode: Star -> Star
+//! ```
 
 use crate::lang::common::source::{Position, Spanned};
 

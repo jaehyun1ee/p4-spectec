@@ -1,21 +1,43 @@
 //! Lazy source-level tokenization for SpecTec
 //!
-//! [`Lexer`] advances through UTF-8 source on demand and emits one spanned
-//! [`Token`] per iterator step. It skips horizontal whitespace and comments,
-//! while preserving grammar-significant layout as newline and separator
-//! tokens. Ordered scanners implement maximal munch for literals,
-//! identifiers, keywords, and fixed punctuation.
+//! `Iterator::next` requests one lexeme from `Lexer::next_lexeme`, which moves
+//! a byte cursor through UTF-8 source. It attaches the traversed [`Span`] to
+//! each resulting [`Token`]. `next_lexeme` uses `skip_block_comment`,
+//! `consume_line_comment`, and `after_newline` before trying the specialized
+//! `scan_*` functions. This skips ordinary layout while preserving significant
+//! forms such as `Newline2`, `Newline3`, `NewlineBar`, and `CommaNewline`.
 //!
-//! Identifier classification consults parser-owned bindings, so an uppercase
-//! name can become a variable token after a grammar action binds it. The
-//! downstream `tokens` adapter adds implicit sequence tokens, distinguishes
-//! postfix iteration from arithmetic multiplication, and interns source
-//! positions for LALRPOP.
+//! Scanner order implements maximal munch. `scan_fixed` checks longer
+//! punctuation before its prefixes, `scan_identifier` recognizes keywords and
+//! asks the parser-owned classifier whether an uppercase name is a variable,
+//! and `scan_text` delegates escapes to `scan_escape`. A scanner either returns
+//! one complete lexeme or leaves the cursor for the next scanner.
+//!
+//! The downstream `tokens::parser_tokens` adapter inserts implicit `Sequence`
+//! tokens, distinguishes postfix iteration from arithmetic multiplication, and
+//! interns source positions for LALRPOP.
 //!
 //! Source and decoded text literals are UTF-8 strings. Hex byte escapes may
 //! combine into a valid UTF-8 sequence; byte-only results are rejected with
 //! [`LexErrorKind::InvalidTextEncoding`] so tokens fit the language model's
 //! `String` text representation.
+//!
+//! # Examples
+//!
+//! ```text
+//! source: F(x)
+//! lexer:  UpperIdLeftParen("F"), LowerId("x"), RightParen
+//!
+//! source: A B
+//! lexer:  UpperId("A"), UpperId("B")
+//! parser: UpperId("A"), Sequence, UpperId("B")
+//!
+//! source: X                  classifier("X") = variable
+//! lexer:  LowerId("X")
+//!
+//! source: "\48\69"
+//! lexer:  TextLiteral("Hi")
+//! ```
 
 use num_bigint::BigInt;
 

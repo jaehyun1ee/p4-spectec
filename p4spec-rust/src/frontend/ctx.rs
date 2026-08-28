@@ -1,4 +1,20 @@
 //! Parser state shared by grammar actions and contextual tokenization
+//!
+//! `ParserBindings` owns variable names that survive across related source
+//! files. `ParserContext::with_bindings` creates fresh per-source scopes,
+//! parser modes, and interned positions around those bindings. Grammar actions
+//! pair `enter_scope` with `exit_scope` and `enter_exp` or `enter_arith` with
+//! `exit_mode`; the token adapter reads `in_arith` while classifying `*`.
+//! `intern_position` turns a [`Position`] into a compact [`ParserLocation`]
+//! that LALRPOP can copy and later resolve through `position` or `span`.
+//!
+//! # Example
+//!
+//! ```text
+//! ParserBindings
+//! ├── ParserContext(file_a): scopes_a, modes_a, positions_a
+//! └── ParserContext(file_b): scopes_b, modes_b, positions_b
+//! ```
 
 use std::{cell::RefCell, collections::BTreeSet, rc::Rc};
 
