@@ -1,5 +1,3 @@
-use std::cell::Cell;
-
 use crate::lang::{
     common::{
         ds::map::IdMap,
@@ -9,32 +7,10 @@ use crate::lang::{
     il::ast::{self, ParamKind, TypKind},
 };
 
-use super::{TypeError, TypeErrorKind};
+use super::{FreshTypes, TypeError, TypeErrorKind};
 
 /// Type-variable replacements keyed by source-insensitive identifiers
 pub type Substitution = IdMap<ast::Typ>;
-
-thread_local! {
-    static NEXT_FRESH_TYPE_ID: Cell<u64> = const { Cell::new(0) };
-}
-
-#[derive(Default)]
-pub(crate) struct FreshTypes;
-
-impl FreshTypes {
-    pub(crate) fn fresh(&mut self) -> (ast::TParam, ast::Typ) {
-        let next = NEXT_FRESH_TYPE_ID.get();
-        NEXT_FRESH_TYPE_ID.set(next + 1);
-        let id = Spanned::new(format!("__FRESH{next}"), Span::default());
-        let typ = Spanned::new(TypKind::Var(id.clone(), vec![]), Span::default());
-        (id, typ)
-    }
-}
-
-/// Resets fresh type identifiers for a new independent processing session
-pub fn reset_fresh_type_ids() {
-    NEXT_FRESH_TYPE_ID.set(0);
-}
 
 pub(crate) fn substitution_from(
     parameters: &[ast::TParam],

@@ -1,16 +1,10 @@
-//! Static definitions and environments consumed by language passes
-
 use std::cmp::Ordering;
 
 use crate::lang::{
-    common::ds::map::IdMap,
-    hints::input::InputHint,
     il::ast::{self, Iter, TypKind},
     traits::eq::SyntaxEq,
     xl::num,
 };
-
-pub use super::types::TypeEnvironment;
 
 fn type_tag(typ: &ast::Typ) -> u8 {
     match typ.node {
@@ -92,51 +86,3 @@ impl TypeDimension {
         self
     }
 }
-
-/// A statically known relation declaration
-#[derive(Clone, Debug, PartialEq)]
-pub enum Relation {
-    Extern {
-        notation_type: Box<ast::NotTyp>,
-        input_hint: InputHint,
-    },
-    Defined {
-        notation_type: Box<ast::NotTyp>,
-        input_hint: InputHint,
-        rule_groups: Vec<ast::RuleGroup>,
-        else_group: Option<Box<ast::ElseGroup>>,
-    },
-}
-
-/// A statically known function declaration
-#[derive(Clone, Debug, PartialEq)]
-pub enum Function {
-    Extern {
-        type_parameters: Vec<ast::TParam>,
-        parameters: Vec<ast::Param>,
-        result_type: Box<ast::Typ>,
-    },
-    Builtin {
-        type_parameters: Vec<ast::TParam>,
-        parameters: Vec<ast::Param>,
-        result_type: Box<ast::Typ>,
-    },
-    Table {
-        parameters: Vec<ast::Param>,
-        result_type: Box<ast::Typ>,
-        rows: Vec<ast::TableRow>,
-    },
-    Defined {
-        type_parameters: Vec<ast::TParam>,
-        parameters: Vec<ast::Param>,
-        result_type: Box<ast::Typ>,
-        clauses: Vec<ast::Clause>,
-        else_clause: Option<Box<ast::ElseClause>>,
-    },
-}
-
-pub type VariableEnvironment = IdMap<TypeDimension>;
-pub type MetavariableEnvironment = IdMap<ast::Typ>;
-pub type RelationEnvironment = IdMap<Relation>;
-pub type InputHintEnvironment = IdMap<InputHint>;
-pub type FunctionEnvironment = IdMap<Function>;
