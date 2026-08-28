@@ -5,7 +5,7 @@ use crate::lang::common::source::Span;
 use super::{ElabError, ElabErrorKind};
 
 #[derive(Clone, Debug)]
-struct FailTrace {
+pub(super) struct FailTrace {
     error: ElabError,
     children: Vec<FailTrace>,
 }

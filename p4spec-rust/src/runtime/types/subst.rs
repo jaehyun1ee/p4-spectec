@@ -127,6 +127,51 @@ pub fn subst_typ_case(theta: &Theta, typ_case: &ast::TypCase) -> Result<ast::Typ
     Ok((not_typ, origin, hints.clone()))
 }
 
+/// Substitutes type variables in a parameter while freshening nested binders
+pub fn subst_param(theta: &Theta, param: &ast::Param) -> Result<ast::Param, TypeError> {
+    let mut fresh = Fresh::default();
+    subst_param_inner(&mut fresh, theta, param)
+}
+
+fn subst_param_inner(
+    fresh: &mut Fresh,
+    theta: &Theta,
+    param: &ast::Param,
+) -> Result<ast::Param, TypeError> {
+    let kind = match &param.node {
+        ast::ParamKind::Exp(typ) => ast::ParamKind::Exp(subst_typ_inner(fresh, theta, typ)?),
+        ast::ParamKind::Def(id, tparams, params, typ) => {
+            let (theta_fresh, tparams) = freshen_tparams(fresh, tparams);
+            let params = subst_params_inner(fresh, &theta_fresh, params)?;
+            let params = subst_params_inner(fresh, theta, &params)?;
+            let typ = subst_typ_inner(fresh, &theta_fresh, typ)?;
+            let typ = subst_typ_inner(fresh, theta, &typ)?;
+            ast::ParamKind::Def(id.clone(), tparams, params, typ)
+        }
+    };
+    Ok(crate::spanned! {
+        node: kind,
+        span: param.span.clone(),
+    })
+}
+
+/// Substitutes type variables in parameters while sharing fresh state
+pub fn subst_params(theta: &Theta, params: &[ast::Param]) -> Result<Vec<ast::Param>, TypeError> {
+    let mut fresh = Fresh::default();
+    subst_params_inner(&mut fresh, theta, params)
+}
+
+fn subst_params_inner(
+    fresh: &mut Fresh,
+    theta: &Theta,
+    params: &[ast::Param],
+) -> Result<Vec<ast::Param>, TypeError> {
+    params
+        .iter()
+        .map(|param| subst_param_inner(fresh, theta, param))
+        .collect()
+}
+
 pub(crate) fn subst_not_typ_inner(
     fresh: &mut Fresh,
     theta: &Theta,
@@ -146,4 +191,56 @@ pub(crate) fn subst_not_typ_inner(
         not_typ_node.expect("arguments obtained from the same mixfix must match its arity");
     let not_typ_subst = spanned!(node: not_typ_node, span: not_typ.span.clone());
     Ok(not_typ_subst)
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        lang::{
+            common::source::{Span, Spanned},
+            il::ast::{ParamKind, TypKind},
+        },
+        runtime::types::typ,
+    };
+
+    use super::{Theta, subst_params};
+
+    fn id(name: &str) -> Spanned<String> {
+        Spanned::new(name.to_owned(), Span::default())
+    }
+
+    #[test]
+    fn parameter_substitution_respects_nested_function_binders() {
+        let outer = id("T");
+        let inner = id("U");
+        let param = Spanned::new(
+            ParamKind::Def(
+                id("callback"),
+                vec![inner.clone()],
+                vec![Spanned::new(
+                    ParamKind::Exp(typ::var(outer.clone(), vec![])),
+                    Span::default(),
+                )],
+                typ::var(inner, vec![]),
+            ),
+            Span::default(),
+        );
+        let mut theta = Theta::new();
+        theta.insert(outer, typ::text());
+
+        let params = subst_params(&theta, &[param]).expect("parameter substitution");
+
+        let ParamKind::Def(_, tparams, params, typ_ret) = &params[0].node else {
+            panic!("expected function parameter");
+        };
+        assert_eq!(params[0].span, Span::default());
+        assert!(matches!(
+            &params[0].node,
+            ParamKind::Exp(typ) if typ.node == TypKind::Text
+        ));
+        assert!(matches!(
+            &typ_ret.node,
+            TypKind::Var(id, targs) if id.node == tparams[0].node && targs.is_empty()
+        ));
+    }
 }
