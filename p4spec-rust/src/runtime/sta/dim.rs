@@ -15,6 +15,16 @@ impl Dim {
         Self { typ, iters }
     }
 
+    /// Borrows the base type below the iteration dimensions
+    pub fn typ(&self) -> &ast::Typ {
+        &self.typ
+    }
+
+    /// Borrows iteration dimensions from innermost to outermost
+    pub fn iters(&self) -> &[Iter] {
+        &self.iters
+    }
+
     /// Tests type syntax and every dimension for equality
     pub fn equiv(&self, other: &Self) -> bool {
         self.typ.syntax_eq(&other.typ) && self.iters == other.iters

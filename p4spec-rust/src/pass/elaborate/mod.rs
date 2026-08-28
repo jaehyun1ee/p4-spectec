@@ -2,6 +2,7 @@
 
 mod attempt;
 mod context;
+mod dimension;
 mod error;
 
 pub use error::*;
