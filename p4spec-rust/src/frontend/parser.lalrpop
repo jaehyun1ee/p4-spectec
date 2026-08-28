@@ -2,13 +2,15 @@ use crate::frontend::{
     error::{FrontendError, SyntaxErrorKind},
     lexer::Token,
     parser_support::{
-        ExpPostfix, ParserContext, ParserLocation, PathStep, apply_exp_postfixes, build_path,
-        def_typ_kind, dot_exp, infix_exp, infix_typ, prefix_exp, prefix_typ, span_between,
-        spanned, syntax_error, typ_span,
+        ExpPostfix, Parsed, ParsedList, ParserContext, ParserLocation, PathStep,
+        apply_exp_postfixes, boolean_bin_exp, build_path, cat_exp, compare_exp, cons_exp,
+        dot_exp, fuse_exp, infix_exp, infix_typ, member_exp, numeric_bin_exp,
+        prefix_exp, prefix_typ, sequence_exp, span_between, spanned, subtype_exp,
+        syntax_error, try_build_def_typ_kind, typ_span,
     },
 };
 use crate::lang::{
-    common::{notation::atom::Atom, source::{Span, Spanned}},
+    common::{notation::atom::Atom, source::{Position, Span, Spanned}},
     el::ast::{self, *},
     xl::{self, num},
 };
@@ -148,58 +150,11 @@ DefCore: ast::Def = {
         });
         Spanned::new(kind, Span::new(context.position(left), right))
     },
-    <left:@L> <kind:DefKindRule> <right:@R> => {
-        let actual_right = match &kind {
-            DefKind::ExternSyntax(definition) => definition
-                .hints
-                .last()
-                .map(|_| context.last_hint_right())
-                .unwrap_or_else(|| definition.id.span.right.clone()),
-            DefKind::Syntax(_) => context.position(right),
-            DefKind::Typ(definition) => definition.def_typ.span.right.clone(),
-            DefKind::Var(definition) => definition
-                .hints
-                .last()
-                .map(|_| context.last_hint_right())
-                .unwrap_or_else(|| definition.plain_typ.span.right.clone()),
-            DefKind::ExternRel(definition) => definition
-                .hints
-                .last()
-                .map(|_| context.last_hint_right())
-                .unwrap_or_else(|| definition.not_typ.span.right.clone()),
-            DefKind::Rel(definition) => definition
-                .hints
-                .last()
-                .map(|_| context.last_hint_right())
-                .unwrap_or_else(|| definition.not_typ.span.right.clone()),
-            DefKind::RuleGroup(_) => context.position(right),
-            DefKind::ExternDec(definition) => definition
-                .hints
-                .last()
-                .map(|_| context.last_hint_right())
-                .unwrap_or_else(|| definition.plain_typ.span.right.clone()),
-            DefKind::BuiltinDec(definition) => definition
-                .hints
-                .last()
-                .map(|_| context.last_hint_right())
-                .unwrap_or_else(|| definition.plain_typ.span.right.clone()),
-            DefKind::TableDec(definition) => definition
-                .hints
-                .last()
-                .map(|_| context.last_hint_right())
-                .unwrap_or_else(|| definition.plain_typ.span.right.clone()),
-            DefKind::FuncDec(definition) => definition
-                .hints
-                .last()
-                .map(|_| context.last_hint_right())
-                .unwrap_or_else(|| definition.plain_typ.span.right.clone()),
-            DefKind::TableDef(_) => context.position(right),
-            DefKind::FuncDef(definition) => {
-                context.last_prem_list_right_or(definition.exp.span.right.clone())
-            },
-            DefKind::Sep => context.position(right),
-        };
-        Spanned::new(kind, Span::new(context.position(left), actual_right))
+    <left:@L> <definition:DefKindRule> => {
+        Spanned::new(
+            definition.node,
+            Span::new(context.position(left), definition.right),
+        )
     },
 };
 
@@ -219,11 +174,15 @@ DefCore: ast::Def = {
 //   | TABLE DEF DOLLAR DefId EQ TableBody
 //   | DEF DOLLAR FunctionDefSignature
 //   | NL3
-DefKindRule: DefKind = {
+DefKindRule: Parsed<DefKind> = {
     "EXTERN" "SYNTAX" <id:VarId> <hints:Hints> => {
-        DefKind::ExternSyntax(ExternSyntaxDef { id, hints })
+        let right = hints.right.unwrap_or_else(|| id.span.right.clone());
+        Parsed {
+            node: DefKind::ExternSyntax(ExternSyntaxDef { id, hints: hints.nodes }),
+            right,
+        }
     },
-    <left:@L> "SYNTAX" <syntax_right:@R> <entries:CommaList<SynId>> =>? {
+    <left:@L> "SYNTAX" <syntax_right:@R> <entries:CommaList<SynId>> <right:@R> =>? {
         if entries.is_empty() {
             Err(syntax_error(
                 context,
@@ -232,78 +191,134 @@ DefKindRule: DefKind = {
                 syntax_right,
             ))
         } else {
-            Ok(DefKind::Syntax(SyntaxDef { entries }))
+            Ok(Parsed {
+                node: DefKind::Syntax(SyntaxDef { entries }),
+                right: context.position(right),
+            })
         }
     },
-    "SYNTAX" <id:VarIdBind> <hints:Hints> <_equal:DefTypEquals> <def_typ:DefTyp> => {
-        DefKind::Typ(TypDef {
-            id,
-            tparams: vec![],
-            def_typ,
-            hints,
+    "SYNTAX" <id:VarIdBind> <hints:Hints> <equal_right:DefTypEquals>
+        <def_typ:DefTyp?> =>? {
+        let def_typ = def_typ.ok_or_else(|| syntax_error(
+            context,
+            SyntaxErrorKind::EmptyType,
+            equal_right,
+            equal_right,
+        ))?;
+        let right = def_typ.span.right.clone();
+        Ok(Parsed {
+            node: DefKind::Typ(TypDef {
+                id,
+                tparams: vec![],
+                def_typ,
+                hints: hints.nodes,
+            }),
+            right,
         })
     },
     "SYNTAX" <id:VarIdLAngleBind> <_enter:EnterScope>
-        <tparams:CommaList<TParam>> "RANGLE" <hints:Hints> <_equal:DefTypEquals>
-        <def_typ:DefTyp>
-        => {
+        <tparams:CommaList<TParam>> "RANGLE" <hints:Hints> <equal_right:DefTypEquals>
+        <def_typ:DefTyp?> =>? {
             context.exit_scope();
-            DefKind::Typ(TypDef {
-                id,
-                tparams,
-                def_typ,
-                hints,
+            let def_typ = def_typ.ok_or_else(|| syntax_error(
+                context,
+                SyntaxErrorKind::EmptyType,
+                equal_right,
+                equal_right,
+            ))?;
+            let right = def_typ.span.right.clone();
+            Ok(Parsed {
+                node: DefKind::Typ(TypDef {
+                    id,
+                    tparams,
+                    def_typ,
+                    hints: hints.nodes,
+                }),
+                right,
             })
         },
     "VAR" <id:VarIdBind> "COLON" <plain_typ:PlainTyp> <hints:Hints> => {
-        DefKind::Var(VarDef {
-            id,
-            plain_typ,
-            hints,
-        })
+        let right = hints.right.unwrap_or_else(|| plain_typ.span.right.clone());
+        Parsed {
+            node: DefKind::Var(VarDef { id, plain_typ, hints: hints.nodes }),
+            right,
+        }
     },
     "EXTERN" "RELATION" <id:RelId> "COLON" <not_typ:NotTyp> <hints:Hints> => {
-        DefKind::ExternRel(ExternRelDef { id, not_typ, hints })
+        let right = hints.right.unwrap_or_else(|| not_typ.span.right.clone());
+        Parsed {
+            node: DefKind::ExternRel(ExternRelDef { id, not_typ, hints: hints.nodes }),
+            right,
+        }
     },
     "RELATION" <id:RelId> "COLON" <not_typ:NotTyp> <hints:Hints> => {
-        DefKind::Rel(RelDef { id, not_typ, hints })
+        let right = hints.right.unwrap_or_else(|| not_typ.span.right.clone());
+        Parsed {
+            node: DefKind::Rel(RelDef { id, not_typ, hints: hints.nodes }),
+            right,
+        }
     },
-    "RULEGROUP" <relid:RelId> <ruleids:RuleIds> "SEQ"? "LBRACE" <rules:Rules> "RBRACE" => {
+    "RULEGROUP" <relid:RelId> <ruleids:RuleIds> "SEQ"? "LBRACE" <rules:Rules> "RBRACE"
+        <right:@R> => {
         let groupid = if ruleids.node.is_empty() {
             String::new()
         } else {
             ruleids.node[1..].to_owned()
         };
-        DefKind::RuleGroup(RuleGroupDef {
-            relid,
-            groupid: Spanned::new(groupid, ruleids.span),
-            rules,
-        })
+        Parsed {
+            node: DefKind::RuleGroup(RuleGroupDef {
+                relid,
+                groupid: Spanned::new(groupid, ruleids.span),
+                rules,
+            }),
+            right: context.position(right),
+        }
     },
     "EXTERN" "DEC" "DOLLAR" <signature:CallableDec> => {
-        let (id, tparams, params, plain_typ, hints) = signature;
-        DefKind::ExternDec(ExternDecDef { id, tparams, params, plain_typ, hints })
+        let (id, tparams, params, plain_typ, hints) = signature.node;
+        Parsed {
+            node: DefKind::ExternDec(ExternDecDef { id, tparams, params, plain_typ, hints }),
+            right: signature.right,
+        }
     },
     "BUILTIN" "DEC" "DOLLAR" <signature:CallableDec> => {
-        let (id, tparams, params, plain_typ, hints) = signature;
-        DefKind::BuiltinDec(BuiltinDecDef { id, tparams, params, plain_typ, hints })
+        let (id, tparams, params, plain_typ, hints) = signature.node;
+        Parsed {
+            node: DefKind::BuiltinDec(BuiltinDecDef { id, tparams, params, plain_typ, hints }),
+            right: signature.right,
+        }
     },
     "TABLE" "DEC" "DOLLAR" <signature:TableDecSignature> => {
-        let (id, params, plain_typ, hints) = signature;
-        DefKind::TableDec(TableDecDef { id, params, plain_typ, hints })
+        let (id, params, plain_typ, hints) = signature.node;
+        Parsed {
+            node: DefKind::TableDec(TableDecDef { id, params, plain_typ, hints }),
+            right: signature.right,
+        }
     },
     "DEC" "DOLLAR" <signature:CallableDec> => {
-        let (id, tparams, params, plain_typ, hints) = signature;
-        DefKind::FuncDec(FuncDecDef { id, tparams, params, plain_typ, hints })
+        let (id, tparams, params, plain_typ, hints) = signature.node;
+        Parsed {
+            node: DefKind::FuncDec(FuncDecDef { id, tparams, params, plain_typ, hints }),
+            right: signature.right,
+        }
     },
-    "TABLE" "DEF" "DOLLAR" <id:DefId> "EQ" <rows:TableBody> => {
-        DefKind::TableDef(TableDef { id, rows })
+    "TABLE" "DEF" "DOLLAR" <id:DefId> "EQ" <rows:TableBody> <right:@R> => {
+        Parsed {
+            node: DefKind::TableDef(TableDef { id, rows }),
+            right: context.position(right),
+        }
     },
     "DEF" "DOLLAR" <signature:FunctionDefSignature> => {
-        let (id, tparams, args, exp, prems) = signature;
-        DefKind::FuncDef(FuncDef { id, tparams, args, exp, prems })
+        let (id, tparams, args, exp, prems) = signature.node;
+        Parsed {
+            node: DefKind::FuncDef(FuncDef { id, tparams, args, exp, prems }),
+            right: signature.right,
+        }
     },
-    "NL3" => DefKind::Sep,
+    "NL3" <right:@R> => Parsed {
+        node: DefKind::Sep,
+        right: context.position(right),
+    },
 };
 
 // EnterScope ::= ε
@@ -332,8 +347,8 @@ ExitMode: () = {
 };
 
 // DefTypEquals ::= EQ
-DefTypEquals: () = {
-    "EQ" <right:@R> => context.record_def_typ_left(right),
+DefTypEquals: ParserLocation = {
+    "EQ" <right:@R> => right,
 };
 
 // Comma ::= COMMA | COMMA_NL
@@ -342,15 +357,19 @@ Comma: () = {
     "COMMA_NL" => (),
 };
 
-// CommaList<T> ::= ε | T | T Comma CommaList<T>
-CommaList<T>: Vec<T> = {
+// Separated<T, Sep> ::= ε | T (Sep T)*
+Separated<T, Sep>: Vec<T> = {
     => vec![],
-    <item:T> => vec![item],
-    <head:T> <_comma:Comma> <mut tail:CommaList<T>> => {
-        tail.insert(0, head);
-        tail
+    <head:T> <tail:(<Sep> <T>)*> => {
+        let mut items = Vec::with_capacity(tail.len() + 1);
+        items.push(head);
+        items.extend(tail.into_iter().map(|(_, item)| item));
+        items
     },
 };
+
+// CommaList<T> ::= Separated<T, Comma>
+CommaList<T>: Vec<T> = Separated<T, Comma>;
 
 // Id ::= UPID | LOID
 Id: ast::Id = {
@@ -731,17 +750,21 @@ NotTyp: ast::NotTyp = {
 
 // FieldTyp ::= FieldId SEQ PlainTyp Hints
 FieldTyp: ast::TypField = {
-    <field:FieldId> "SEQ" <plain_typ:PlainTyp> <hints:Hints> => (field, plain_typ, hints),
+    <field:FieldId> "SEQ" <plain_typ:PlainTyp> <hints:Hints> => {
+        (field, plain_typ, hints.nodes)
+    },
 };
 
 // CaseTyp ::= Typ Hints
-CaseTyp: (Typ, Vec<ast::Hint>, ParserLocation) = {
-    <typ:Typ> <typ_right:@R> <hints:Hints> => (typ, hints, typ_right),
+CaseTyp: (Typ, Vec<ast::Hint>, Position) = {
+    <typ:Typ> <typ_right:@R> <hints:Hints> => {
+        let right = hints.right.unwrap_or_else(|| context.position(typ_right));
+        (typ, hints.nodes, right)
+    },
 };
 
-// CaseTypList ::= ε | CaseTyp (Bar CaseTyp)* BarAt?
-CaseTypList: (Vec<(Typ, Vec<ast::Hint>, ParserLocation)>, Option<ParserLocation>) = {
-    => (vec![], None),
+// CaseTypList ::= CaseTyp (Bar CaseTyp)* BarAt?
+CaseTypList: (Vec<(Typ, Vec<ast::Hint>, Position)>, Option<ParserLocation>) = {
     <head:CaseTyp> <tail:(<Bar> <CaseTyp>)*> <trailing:BarAt?> => {
         let mut cases = Vec::with_capacity(tail.len() + 1);
         cases.push(head);
@@ -766,21 +789,18 @@ DefTyp: ast::DefTyp = {
             Ok(spanned(context, DefTypKind::Struct(fields), left, right))
         }
     },
-    <left:@L> <_bar:Bar> <bar_right:@R> <case_list:CaseTypList> =>? {
-        let (cases, trailing) = case_list;
+    <left:@L> <_bar:Bar> <bar_right:@R> <case_list:CaseTypList?> =>? {
+        let (cases, trailing) = case_list.unwrap_or_else(|| (vec![], None));
         let actual_right = trailing
             .map(|location| context.position(location))
-            .or_else(|| cases.last().map(|(_typ, hints, typ_right)| hints
-                .last()
-                .map(|_| context.last_hint_right())
-                .unwrap_or_else(|| context.position(*typ_right))))
+            .or_else(|| cases.last().map(|(_, _, right)| right.clone()))
             .unwrap_or_else(|| context.position(bar_right));
         let actual_right_location = context.intern_position(actual_right.clone());
         let cases = cases
             .into_iter()
             .map(|(typ, hints, _)| (typ, hints))
             .collect();
-        def_typ_kind(cases, SyntaxErrorKind::EmptyVariantType)
+        try_build_def_typ_kind(cases, SyntaxErrorKind::EmptyVariantType)
             .map(|kind| Spanned::new(
                 kind,
                 Span::new(context.position(left), actual_right),
@@ -791,27 +811,19 @@ DefTyp: ast::DefTyp = {
         let (cases, trailing) = case_list;
         let actual_right = trailing
             .map(|location| context.position(location))
-            .or_else(|| cases.last().map(|(_typ, hints, typ_right)| hints
-                .last()
-                .map(|_| context.last_hint_right())
-                .unwrap_or_else(|| context.position(*typ_right))))
-            .unwrap_or_else(|| context.last_def_typ_left());
+            .or_else(|| cases.last().map(|(_, _, right)| right.clone()))
+            .expect("a non-empty case type list has a closing position");
         let actual_right_location = context.intern_position(actual_right.clone());
-        let actual_left = if cases.is_empty() {
-            actual_right_location
-        } else {
-            left
-        };
         let cases = cases
             .into_iter()
             .map(|(typ, hints, _)| (typ, hints))
             .collect();
-        def_typ_kind(cases, SyntaxErrorKind::EmptyType)
+        try_build_def_typ_kind(cases, SyntaxErrorKind::EmptyType)
             .map(|kind| Spanned::new(
                 kind,
-                Span::new(context.position(actual_left), actual_right),
+                Span::new(context.position(left), actual_right),
             ))
-            .map_err(|kind| syntax_error(context, kind, actual_left, actual_right_location))
+            .map_err(|kind| syntax_error(context, kind, left, actual_right_location))
     },
 };
 
@@ -938,15 +950,8 @@ Bar: () = {
     "NL_BAR" => (),
 };
 
-// BarList<T> ::= ε | T | T Bar BarList<T>
-BarList<T>: Vec<T> = {
-    => vec![],
-    <item:T> => vec![item],
-    <head:T> <_bar:Bar> <mut tail:BarList<T>> => {
-        tail.insert(0, head);
-        tail
-    },
-};
+// BarList<T> ::= Separated<T, Bar>
+BarList<T>: Vec<T> = Separated<T, Bar>;
 
 // Exp ::= ExpPost | ExpListIter
 //   | Exp SEQ Exp | Exp HASH Exp
@@ -968,19 +973,8 @@ Exp: ast::Exp = {
 
     #[precedence(level="2")]
     #[assoc(side="left")]
-    <left:Exp> "SEQ" <right:Exp> => {
-        let span = span_between(&left, &right);
-        let mut expressions = match left.node {
-            ExpKind::Seq(expressions) if expressions.len() >= 2 => expressions,
-            node => vec![Spanned::new(node, left.span)],
-        };
-        expressions.push(right);
-        Spanned::new(ExpKind::Seq(expressions), span)
-    },
-    <left:Exp> "HASH" <right:Exp> => {
-        let span = span_between(&left, &right);
-        Spanned::new(ExpKind::Fuse(Box::new(left), Box::new(right)), span)
-    },
+    <left:Exp> "SEQ" <right:Exp> => sequence_exp(left, right),
+    <left:Exp> "HASH" <right:Exp> => fuse_exp(left, right),
 
     #[precedence(level="3")]
     <left:@L> "BAR" <exp:Exp> "BAR" <right:@R> => {
@@ -994,47 +988,16 @@ Exp: ast::Exp = {
     #[precedence(level="4")]
     #[assoc(side="left")]
     <left:Exp> <_operator:StarOperator> <right:Exp> => {
-        let span = span_between(&left, &right);
-        Spanned::new(
-            ExpKind::Bin(Box::new(left), BinOp::Num(num::BinOp::Mul), Box::new(right)),
-            span,
-        )
+        numeric_bin_exp(left, num::BinOp::Mul, right)
     },
-    <left:Exp> "SLASH" <right:Exp> => {
-        let span = span_between(&left, &right);
-        Spanned::new(
-            ExpKind::Bin(Box::new(left), BinOp::Num(num::BinOp::Div), Box::new(right)),
-            span,
-        )
-    },
-    <left:Exp> "BACKSLASH" <right:Exp> => {
-        let span = span_between(&left, &right);
-        Spanned::new(
-            ExpKind::Bin(Box::new(left), BinOp::Num(num::BinOp::Mod), Box::new(right)),
-            span,
-        )
-    },
+    <left:Exp> "SLASH" <right:Exp> => numeric_bin_exp(left, num::BinOp::Div, right),
+    <left:Exp> "BACKSLASH" <right:Exp> => numeric_bin_exp(left, num::BinOp::Mod, right),
 
     #[precedence(level="5")]
     #[assoc(side="left")]
-    <left:Exp> "PLUS" <right:Exp> => {
-        let span = span_between(&left, &right);
-        Spanned::new(
-            ExpKind::Bin(Box::new(left), BinOp::Num(num::BinOp::Add), Box::new(right)),
-            span,
-        )
-    },
-    <left:Exp> "MINUS" <right:Exp> => {
-        let span = span_between(&left, &right);
-        Spanned::new(
-            ExpKind::Bin(Box::new(left), BinOp::Num(num::BinOp::Sub), Box::new(right)),
-            span,
-        )
-    },
-    <left:Exp> "PLUS2" <right:Exp> => {
-        let span = span_between(&left, &right);
-        Spanned::new(ExpKind::Cat(Box::new(left), Box::new(right)), span)
-    },
+    <left:Exp> "PLUS" <right:Exp> => numeric_bin_exp(left, num::BinOp::Add, right),
+    <left:Exp> "MINUS" <right:Exp> => numeric_bin_exp(left, num::BinOp::Sub, right),
+    <left:Exp> "PLUS2" <right:Exp> => cat_exp(left, right),
 
     #[precedence(level="6")]
     #[assoc(side="left")]
@@ -1050,38 +1013,21 @@ Exp: ast::Exp = {
 
     #[precedence(level="9")]
     #[assoc(side="right")]
-    <head:Exp> "COLON2" <tail:Exp> => {
-        let span = span_between(&head, &tail);
-        Spanned::new(ExpKind::Cons(Box::new(head), Box::new(tail)), span)
-    },
+    <head:Exp> "COLON2" <tail:Exp> => cons_exp(head, tail),
 
     #[precedence(level="10")]
     #[assoc(side="right")]
     <left:Exp> "EQ" <right:Exp> => {
-        let span = span_between(&left, &right);
-        Spanned::new(
-            ExpKind::Cmp(Box::new(left), CmpOp::Bool(xl::bool::CmpOp::Eq), Box::new(right)),
-            span,
-        )
+        compare_exp(left, CmpOp::Bool(xl::bool::CmpOp::Eq), right)
     },
     <left:Exp> "NEQ" <right:Exp> => {
-        let span = span_between(&left, &right);
-        Spanned::new(
-            ExpKind::Cmp(Box::new(left), CmpOp::Bool(xl::bool::CmpOp::Ne), Box::new(right)),
-            span,
-        )
+        compare_exp(left, CmpOp::Bool(xl::bool::CmpOp::Ne), right)
     },
-    <left:Exp> "LANGLE_DASH" <right:Exp> => {
-        let span = span_between(&left, &right);
-        Spanned::new(ExpKind::Mem(Box::new(left), Box::new(right)), span)
-    },
+    <left:Exp> "LANGLE_DASH" <right:Exp> => member_exp(left, right),
 
     #[precedence(level="11")]
     #[assoc(side="left")]
-    <left:Exp> "SUB" <plain_typ:PlainTyp> => {
-        let span = span_between(&left, &plain_typ);
-        Spanned::new(ExpKind::Sub(Box::new(left), plain_typ), span)
-    },
+    <left:Exp> "SUB" <plain_typ:PlainTyp> => subtype_exp(left, plain_typ),
     <left:Exp> <operator:ColonTypOperator> <right:Exp> => infix_exp(left, operator, right),
 
     #[precedence(level="12")]
@@ -1098,39 +1044,19 @@ Exp: ast::Exp = {
 
     #[precedence(level="15")]
     #[assoc(side="left")]
-    <left:Exp> "AND" <right:Exp> => {
-        let span = span_between(&left, &right);
-        Spanned::new(
-            ExpKind::Bin(Box::new(left), BinOp::Bool(xl::bool::BinOp::And), Box::new(right)),
-            span,
-        )
-    },
+    <left:Exp> "AND" <right:Exp> => boolean_bin_exp(left, xl::bool::BinOp::And, right),
 
     #[precedence(level="16")]
     #[assoc(side="left")]
-    <left:Exp> "OR" <right:Exp> => {
-        let span = span_between(&left, &right);
-        Spanned::new(
-            ExpKind::Bin(Box::new(left), BinOp::Bool(xl::bool::BinOp::Or), Box::new(right)),
-            span,
-        )
-    },
+    <left:Exp> "OR" <right:Exp> => boolean_bin_exp(left, xl::bool::BinOp::Or, right),
 
     #[precedence(level="17")]
     #[assoc(side="right")]
     <left:Exp> "DOUBLE_ARROW" <right:Exp> => {
-        let span = span_between(&left, &right);
-        Spanned::new(
-            ExpKind::Bin(Box::new(left), BinOp::Bool(xl::bool::BinOp::Impl), Box::new(right)),
-            span,
-        )
+        boolean_bin_exp(left, xl::bool::BinOp::Impl, right)
     },
     <left:Exp> "DOUBLE_ARROW_BOTH" <right:Exp> => {
-        let span = span_between(&left, &right);
-        Spanned::new(
-            ExpKind::Bin(Box::new(left), BinOp::Bool(xl::bool::BinOp::Equiv), Box::new(right)),
-            span,
-        )
+        boolean_bin_exp(left, xl::bool::BinOp::Equiv, right)
     },
     <left:Exp> <operator:DoubleArrowTypOperator> <right:Exp> => {
         infix_exp(left, operator, right)
@@ -1165,19 +1091,8 @@ ExpBin: ast::Exp = {
 
     #[precedence(level="2")]
     #[assoc(side="left")]
-    <left:ExpBin> "SEQ" <right:ExpBin> => {
-        let span = span_between(&left, &right);
-        let mut expressions = match left.node {
-            ExpKind::Seq(expressions) if expressions.len() >= 2 => expressions,
-            node => vec![Spanned::new(node, left.span)],
-        };
-        expressions.push(right);
-        Spanned::new(ExpKind::Seq(expressions), span)
-    },
-    <left:ExpBin> "HASH" <right:ExpBin> => {
-        let span = span_between(&left, &right);
-        Spanned::new(ExpKind::Fuse(Box::new(left), Box::new(right)), span)
-    },
+    <left:ExpBin> "SEQ" <right:ExpBin> => sequence_exp(left, right),
+    <left:ExpBin> "HASH" <right:ExpBin> => fuse_exp(left, right),
 
     #[precedence(level="3")]
     <left:@L> "BAR" <exp:Exp> "BAR" <right:@R> => {
@@ -1191,47 +1106,24 @@ ExpBin: ast::Exp = {
     #[precedence(level="4")]
     #[assoc(side="left")]
     <left:ExpBin> <_operator:StarOperator> <right:ExpBin> => {
-        let span = span_between(&left, &right);
-        Spanned::new(
-            ExpKind::Bin(Box::new(left), BinOp::Num(num::BinOp::Mul), Box::new(right)),
-            span,
-        )
+        numeric_bin_exp(left, num::BinOp::Mul, right)
     },
     <left:ExpBin> "SLASH" <right:ExpBin> => {
-        let span = span_between(&left, &right);
-        Spanned::new(
-            ExpKind::Bin(Box::new(left), BinOp::Num(num::BinOp::Div), Box::new(right)),
-            span,
-        )
+        numeric_bin_exp(left, num::BinOp::Div, right)
     },
     <left:ExpBin> "BACKSLASH" <right:ExpBin> => {
-        let span = span_between(&left, &right);
-        Spanned::new(
-            ExpKind::Bin(Box::new(left), BinOp::Num(num::BinOp::Mod), Box::new(right)),
-            span,
-        )
+        numeric_bin_exp(left, num::BinOp::Mod, right)
     },
 
     #[precedence(level="5")]
     #[assoc(side="left")]
     <left:ExpBin> "PLUS" <right:ExpBin> => {
-        let span = span_between(&left, &right);
-        Spanned::new(
-            ExpKind::Bin(Box::new(left), BinOp::Num(num::BinOp::Add), Box::new(right)),
-            span,
-        )
+        numeric_bin_exp(left, num::BinOp::Add, right)
     },
     <left:ExpBin> "MINUS" <right:ExpBin> => {
-        let span = span_between(&left, &right);
-        Spanned::new(
-            ExpKind::Bin(Box::new(left), BinOp::Num(num::BinOp::Sub), Box::new(right)),
-            span,
-        )
+        numeric_bin_exp(left, num::BinOp::Sub, right)
     },
-    <left:ExpBin> "PLUS2" <right:ExpBin> => {
-        let span = span_between(&left, &right);
-        Spanned::new(ExpKind::Cat(Box::new(left), Box::new(right)), span)
-    },
+    <left:ExpBin> "PLUS2" <right:ExpBin> => cat_exp(left, right),
 
     #[precedence(level="6")]
     #[assoc(side="left")]
@@ -1253,74 +1145,41 @@ ExpBin: ast::Exp = {
 
     #[precedence(level="9")]
     #[assoc(side="right")]
-    <head:ExpBin> "COLON2" <tail:ExpBin> => {
-        let span = span_between(&head, &tail);
-        Spanned::new(ExpKind::Cons(Box::new(head), Box::new(tail)), span)
-    },
+    <head:ExpBin> "COLON2" <tail:ExpBin> => cons_exp(head, tail),
 
     #[precedence(level="10")]
     #[assoc(side="right")]
     <left:ExpBin> "EQ" <right:ExpBin> => {
-        let span = span_between(&left, &right);
-        Spanned::new(
-            ExpKind::Cmp(Box::new(left), CmpOp::Bool(xl::bool::CmpOp::Eq), Box::new(right)),
-            span,
-        )
+        compare_exp(left, CmpOp::Bool(xl::bool::CmpOp::Eq), right)
     },
     <left:ExpBin> "NEQ" <right:ExpBin> => {
-        let span = span_between(&left, &right);
-        Spanned::new(
-            ExpKind::Cmp(Box::new(left), CmpOp::Bool(xl::bool::CmpOp::Ne), Box::new(right)),
-            span,
-        )
+        compare_exp(left, CmpOp::Bool(xl::bool::CmpOp::Ne), right)
     },
-    <left:ExpBin> "LANGLE_DASH" <right:ExpBin> => {
-        let span = span_between(&left, &right);
-        Spanned::new(ExpKind::Mem(Box::new(left), Box::new(right)), span)
-    },
+    <left:ExpBin> "LANGLE_DASH" <right:ExpBin> => member_exp(left, right),
 
     #[precedence(level="11")]
     #[assoc(side="left")]
-    <left:ExpBin> "SUB" <plain_typ:PlainTyp> => {
-        let span = span_between(&left, &plain_typ);
-        Spanned::new(ExpKind::Sub(Box::new(left), plain_typ), span)
-    },
+    <left:ExpBin> "SUB" <plain_typ:PlainTyp> => subtype_exp(left, plain_typ),
 
     #[precedence(level="15")]
     #[assoc(side="left")]
     <left:ExpBin> "AND" <right:ExpBin> => {
-        let span = span_between(&left, &right);
-        Spanned::new(
-            ExpKind::Bin(Box::new(left), BinOp::Bool(xl::bool::BinOp::And), Box::new(right)),
-            span,
-        )
+        boolean_bin_exp(left, xl::bool::BinOp::And, right)
     },
 
     #[precedence(level="16")]
     #[assoc(side="left")]
     <left:ExpBin> "OR" <right:ExpBin> => {
-        let span = span_between(&left, &right);
-        Spanned::new(
-            ExpKind::Bin(Box::new(left), BinOp::Bool(xl::bool::BinOp::Or), Box::new(right)),
-            span,
-        )
+        boolean_bin_exp(left, xl::bool::BinOp::Or, right)
     },
 
     #[precedence(level="17")]
     #[assoc(side="right")]
     <left:ExpBin> "DOUBLE_ARROW" <right:ExpBin> => {
-        let span = span_between(&left, &right);
-        Spanned::new(
-            ExpKind::Bin(Box::new(left), BinOp::Bool(xl::bool::BinOp::Impl), Box::new(right)),
-            span,
-        )
+        boolean_bin_exp(left, xl::bool::BinOp::Impl, right)
     },
     <left:ExpBin> "DOUBLE_ARROW_BOTH" <right:ExpBin> => {
-        let span = span_between(&left, &right);
-        Spanned::new(
-            ExpKind::Bin(Box::new(left), BinOp::Bool(xl::bool::BinOp::Equiv), Box::new(right)),
-            span,
-        )
+        boolean_bin_exp(left, xl::bool::BinOp::Equiv, right)
     },
     <left:ExpBin> <operator:DoubleArrowTypOperator> <right:ExpBin> => {
         infix_exp(left, operator, right)
@@ -1621,18 +1480,10 @@ Arith: ast::Exp = {
 //   | ArithOr
 ArithDoubleArrow: ast::Exp = {
     <left:ArithOr> "DOUBLE_ARROW" <right:ArithDoubleArrow> => {
-        let span = span_between(&left, &right);
-        Spanned::new(
-            ExpKind::Bin(Box::new(left), BinOp::Bool(xl::bool::BinOp::Impl), Box::new(right)),
-            span,
-        )
+        boolean_bin_exp(left, xl::bool::BinOp::Impl, right)
     },
     <left:ArithOr> "DOUBLE_ARROW_BOTH" <right:ArithDoubleArrow> => {
-        let span = span_between(&left, &right);
-        Spanned::new(
-            ExpKind::Bin(Box::new(left), BinOp::Bool(xl::bool::BinOp::Equiv), Box::new(right)),
-            span,
-        )
+        boolean_bin_exp(left, xl::bool::BinOp::Equiv, right)
     },
     ArithOr,
 };
@@ -1640,11 +1491,7 @@ ArithDoubleArrow: ast::Exp = {
 // ArithOr ::= ArithOr OR ArithAnd | ArithAnd
 ArithOr: ast::Exp = {
     <left:ArithOr> "OR" <right:ArithAnd> => {
-        let span = span_between(&left, &right);
-        Spanned::new(
-            ExpKind::Bin(Box::new(left), BinOp::Bool(xl::bool::BinOp::Or), Box::new(right)),
-            span,
-        )
+        boolean_bin_exp(left, xl::bool::BinOp::Or, right)
     },
     ArithAnd,
 };
@@ -1652,11 +1499,7 @@ ArithOr: ast::Exp = {
 // ArithAnd ::= ArithAnd AND ArithComparison | ArithComparison
 ArithAnd: ast::Exp = {
     <left:ArithAnd> "AND" <right:ArithComparison> => {
-        let span = span_between(&left, &right);
-        Spanned::new(
-            ExpKind::Bin(Box::new(left), BinOp::Bool(xl::bool::BinOp::And), Box::new(right)),
-            span,
-        )
+        boolean_bin_exp(left, xl::bool::BinOp::And, right)
     },
     ArithComparison,
 };
@@ -1666,13 +1509,9 @@ ArithAnd: ast::Exp = {
 //   | ArithAdd
 ArithComparison: ast::Exp = {
     <left:ArithAdd> <operator:ArithCompareOperator> <right:ArithComparison> => {
-        let span = span_between(&left, &right);
-        Spanned::new(ExpKind::Cmp(Box::new(left), operator, Box::new(right)), span)
+        compare_exp(left, operator, right)
     },
-    <left:ArithAdd> "LANGLE_DASH" <right:ArithComparison> => {
-        let span = span_between(&left, &right);
-        Spanned::new(ExpKind::Mem(Box::new(left), Box::new(right)), span)
-    },
+    <left:ArithAdd> "LANGLE_DASH" <right:ArithComparison> => member_exp(left, right),
     ArithAdd,
 };
 
@@ -1693,23 +1532,12 @@ ArithCompareOperator: CmpOp = {
 //   | ArithMul
 ArithAdd: ast::Exp = {
     <left:ArithAdd> "PLUS" <right:ArithMul> => {
-        let span = span_between(&left, &right);
-        Spanned::new(
-            ExpKind::Bin(Box::new(left), BinOp::Num(num::BinOp::Add), Box::new(right)),
-            span,
-        )
+        numeric_bin_exp(left, num::BinOp::Add, right)
     },
     <left:ArithAdd> "MINUS" <right:ArithMul> => {
-        let span = span_between(&left, &right);
-        Spanned::new(
-            ExpKind::Bin(Box::new(left), BinOp::Num(num::BinOp::Sub), Box::new(right)),
-            span,
-        )
+        numeric_bin_exp(left, num::BinOp::Sub, right)
     },
-    <left:ArithAdd> "PLUS2" <right:ArithMul> => {
-        let span = span_between(&left, &right);
-        Spanned::new(ExpKind::Cat(Box::new(left), Box::new(right)), span)
-    },
+    <left:ArithAdd> "PLUS2" <right:ArithMul> => cat_exp(left, right),
     ArithMul,
 };
 
@@ -1719,25 +1547,13 @@ ArithAdd: ast::Exp = {
 //   | ArithUnary
 ArithMul: ast::Exp = {
     <left:ArithMul> <_operator:StarOperator> <right:ArithUnary> => {
-        let span = span_between(&left, &right);
-        Spanned::new(
-            ExpKind::Bin(Box::new(left), BinOp::Num(num::BinOp::Mul), Box::new(right)),
-            span,
-        )
+        numeric_bin_exp(left, num::BinOp::Mul, right)
     },
     <left:ArithMul> "SLASH" <right:ArithUnary> => {
-        let span = span_between(&left, &right);
-        Spanned::new(
-            ExpKind::Bin(Box::new(left), BinOp::Num(num::BinOp::Div), Box::new(right)),
-            span,
-        )
+        numeric_bin_exp(left, num::BinOp::Div, right)
     },
     <left:ArithMul> "BACKSLASH" <right:ArithUnary> => {
-        let span = span_between(&left, &right);
-        Spanned::new(
-            ExpKind::Bin(Box::new(left), BinOp::Num(num::BinOp::Mod), Box::new(right)),
-            span,
-        )
+        numeric_bin_exp(left, num::BinOp::Mod, right)
     },
     ArithUnary,
 };
@@ -1854,10 +1670,13 @@ ParamKindRule: ParamKind = {
 };
 
 // PremList ::= EnterScope PremEntry* ExitScope
-PremList: Vec<ast::Prem> = {
+PremList: ParsedList<ast::Prem> = {
     <_enter:EnterScope> <entries:PremEntry*> <right:@R> <_exit:ExitScope> => {
-        context.record_prem_list(right, !entries.is_empty());
-        entries.into_iter().flatten().collect()
+        let actual_right = (!entries.is_empty()).then(|| context.position(right));
+        ParsedList {
+            nodes: entries.into_iter().flatten().collect(),
+            right: actual_right,
+        }
     },
 };
 
@@ -1923,26 +1742,26 @@ PremKindRule: PremKind = {
 
 // Hint ::= HINT_LPAREN HintId SEQ Exp RPAREN
 //   | HINT_LPAREN HintId RPAREN
-Hint: ast::Hint = {
+Hint: (ast::Hint, Position) = {
     "HINT_LPAREN" <left:@L> <id:HintId> <right:@R> "SEQ" <exp:Exp> "RPAREN"
         <hint_right:@R> => {
-        context.record_hint_right(hint_right);
-        (spanned(context, id, left, right), exp)
+        ((spanned(context, id, left, right), exp), context.position(hint_right))
     },
     "HINT_LPAREN" <left:@L> <id:HintId> <right:@R> "RPAREN" <hint_right:@R> => {
-        context.record_hint_right(hint_right);
         let id = spanned(context, id, left, right);
         let exp = Spanned::new(ExpKind::Seq(vec![]), id.span.clone());
-        (id, exp)
+        ((id, exp), context.position(hint_right))
     },
 };
 
-// Hints ::= ε | Hint Hints
-Hints: Vec<ast::Hint> = {
-    => vec![],
-    <head:Hint> <mut tail:Hints> => {
-        tail.insert(0, head);
-        tail
+// Hints ::= Hint*
+Hints: ParsedList<ast::Hint> = {
+    <hints:Hint*> => {
+        let right = hints.last().map(|(_, right)| right.clone());
+        ParsedList {
+            nodes: hints.into_iter().map(|(hint, _)| hint).collect(),
+            right,
+        }
     },
 };
 
@@ -1966,16 +1785,10 @@ TablePattern: ast::Exp = ExpSeq;
 ExpSeq: ast::Exp = {
     <first:ExpSeqStart> <rest:ExpSeqTail*> => {
         rest.into_iter().fold(first, |left, (fuse, right)| {
-            let span = span_between(&left, &right);
             if fuse {
-                Spanned::new(ExpKind::Fuse(Box::new(left), Box::new(right)), span)
+                fuse_exp(left, right)
             } else {
-                let mut expressions = match left.node {
-                    ExpKind::Seq(expressions) if expressions.len() >= 2 => expressions,
-                    node => vec![Spanned::new(node, left.span)],
-                };
-                expressions.push(right);
-                Spanned::new(ExpKind::Seq(expressions), span)
+                sequence_exp(left, right)
             }
         })
     },
@@ -2003,9 +1816,9 @@ RuleRule: ast::Rule = {
                 ruleids.node[1..].to_owned()
             };
             let groupid = Spanned::new(groupid, ruleids.span);
-            let right = context.last_prem_list_right_or(exp.span.right.clone());
+            let right = premises.right.unwrap_or_else(|| exp.span.right.clone());
             Spanned::new(
-                (relid, groupid, exp, premises),
+                (relid, groupid, exp, premises.nodes),
                 Span::new(context.position(left), right),
             )
         },
@@ -2030,33 +1843,41 @@ Rules: Vec<ast::Rule> = {
 //       Hints ExitScope
 //   | DefIdLAngle EnterScope CommaList<TParam> RANGLE_LPAREN
 //       CommaList<Param> RPAREN COLON PlainTyp Hints ExitScope
-CallableDec: (ast::Id, Vec<ast::TParam>, Vec<ast::Param>, ast::PlainTyp, Vec<ast::Hint>) = {
+CallableDec: Parsed<(ast::Id, Vec<ast::TParam>, Vec<ast::Param>, ast::PlainTyp, Vec<ast::Hint>)> = {
     <id:DefId> "COLON" <plain_typ:PlainTyp> <hints:Hints> => {
-        (id, vec![], vec![], plain_typ, hints)
+        let right = hints.right.unwrap_or_else(|| plain_typ.span.right.clone());
+        Parsed { node: (id, vec![], vec![], plain_typ, hints.nodes), right }
     },
     <id:DefIdLParen> <_enter:EnterScope> <params:CommaList<Param>> "RPAREN" "COLON"
         <plain_typ:PlainTyp> <hints:Hints> <_exit:ExitScope> => {
-            (id, vec![], params, plain_typ, hints)
+            let right = hints.right.unwrap_or_else(|| plain_typ.span.right.clone());
+            Parsed { node: (id, vec![], params, plain_typ, hints.nodes), right }
         },
     <id:DefIdLAngle> <_enter:EnterScope> <tparams:CommaList<TParam>> "RANGLE" "COLON"
         <plain_typ:PlainTyp> <hints:Hints> <_exit:ExitScope> => {
-            (id, tparams, vec![], plain_typ, hints)
+            let right = hints.right.unwrap_or_else(|| plain_typ.span.right.clone());
+            Parsed { node: (id, tparams, vec![], plain_typ, hints.nodes), right }
         },
     <id:DefIdLAngle> <_enter:EnterScope> <tparams:CommaList<TParam>> "RANGLE_LPAREN"
         <params:CommaList<Param>> "RPAREN" "COLON" <plain_typ:PlainTyp> <hints:Hints>
-        <_exit:ExitScope> => (id, tparams, params, plain_typ, hints),
+        <_exit:ExitScope> => {
+            let right = hints.right.unwrap_or_else(|| plain_typ.span.right.clone());
+            Parsed { node: (id, tparams, params, plain_typ, hints.nodes), right }
+        },
 };
 
 // TableDecSignature ::= DefId COLON PlainTyp Hints
 //   | DefIdLParen EnterScope CommaList<Param> RPAREN COLON PlainTyp
 //       Hints ExitScope
-TableDecSignature: (ast::Id, Vec<ast::Param>, ast::PlainTyp, Vec<ast::Hint>) = {
+TableDecSignature: Parsed<(ast::Id, Vec<ast::Param>, ast::PlainTyp, Vec<ast::Hint>)> = {
     <id:DefId> "COLON" <plain_typ:PlainTyp> <hints:Hints> => {
-        (id, vec![], plain_typ, hints)
+        let right = hints.right.unwrap_or_else(|| plain_typ.span.right.clone());
+        Parsed { node: (id, vec![], plain_typ, hints.nodes), right }
     },
     <id:DefIdLParen> <_enter:EnterScope> <params:CommaList<Param>> "RPAREN" "COLON"
         <plain_typ:PlainTyp> <hints:Hints> <_exit:ExitScope> => {
-            (id, params, plain_typ, hints)
+            let right = hints.right.unwrap_or_else(|| plain_typ.span.right.clone());
+            Parsed { node: (id, params, plain_typ, hints.nodes), right }
         },
 };
 
@@ -2067,19 +1888,25 @@ TableDecSignature: (ast::Id, Vec<ast::Param>, ast::PlainTyp, Vec<ast::Hint>) = {
 //       ExitScope
 //   | DefIdLAngle EnterScope CommaList<TParam> RANGLE_LPAREN
 //       CommaList<Arg> RPAREN EQ Exp PremList ExitScope
-FunctionDefSignature: (ast::Id, Vec<ast::TParam>, Vec<ast::Arg>, ast::Exp, Vec<ast::Prem>) = {
+FunctionDefSignature: Parsed<(ast::Id, Vec<ast::TParam>, Vec<ast::Arg>, ast::Exp, Vec<ast::Prem>)> = {
     <id:DefId> "EQ" <exp:Exp> <prems:PremList> => {
-        (id, vec![], vec![], exp, prems)
+        let right = prems.right.unwrap_or_else(|| exp.span.right.clone());
+        Parsed { node: (id, vec![], vec![], exp, prems.nodes), right }
     },
     <id:DefIdLParen> <_enter:EnterScope> <args:CommaList<Arg>> "RPAREN" "EQ"
         <exp:Exp> <prems:PremList> <_exit:ExitScope> => {
-            (id, vec![], args, exp, prems)
+            let right = prems.right.unwrap_or_else(|| exp.span.right.clone());
+            Parsed { node: (id, vec![], args, exp, prems.nodes), right }
         },
     <id:DefIdLAngle> <_enter:EnterScope> <tparams:CommaList<TParam>> "RANGLE" "EQ"
         <exp:Exp> <prems:PremList> <_exit:ExitScope> => {
-            (id, tparams, vec![], exp, prems)
+            let right = prems.right.unwrap_or_else(|| exp.span.right.clone());
+            Parsed { node: (id, tparams, vec![], exp, prems.nodes), right }
         },
     <id:DefIdLAngle> <_enter:EnterScope> <tparams:CommaList<TParam>> "RANGLE_LPAREN"
         <args:CommaList<Arg>> "RPAREN" "EQ" <exp:Exp> <prems:PremList>
-        <_exit:ExitScope> => (id, tparams, args, exp, prems),
+        <_exit:ExitScope> => {
+            let right = prems.right.unwrap_or_else(|| exp.span.right.clone());
+            Parsed { node: (id, tparams, args, exp, prems.nodes), right }
+        },
 };

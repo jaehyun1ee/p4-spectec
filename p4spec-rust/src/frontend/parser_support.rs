@@ -1,11 +1,14 @@
-use std::{cell::RefCell, collections::BTreeSet};
+use std::{cell::RefCell, collections::BTreeSet, rc::Rc};
 
 use crate::lang::{
     common::{
         notation::atom::Atom,
         source::{Position, Span, Spanned},
     },
-    el::ast::{DefTypKind, Exp, ExpKind, Hint, Iter, NotTypKind, Path, PathKind, Typ},
+    el::ast::{
+        BinOp, CmpOp, DefTypKind, Exp, ExpKind, Hint, Iter, NotTypKind, Path, PathKind, PlainTyp,
+        Typ,
+    },
     xl,
 };
 
@@ -14,15 +17,17 @@ use super::{
     lexer::Token,
 };
 
-/// Variable bindings shared by parser actions and contextual lexing
+/// Variable bindings preserved across related SpecTec source files
 #[derive(Default)]
-pub(crate) struct ParserContext {
+pub(crate) struct ParserBindings {
     variables: RefCell<BTreeSet<String>>,
-    scopes: RefCell<Vec<BTreeSet<String>>>,
+}
+
+/// Per-source state shared by parser actions and contextual lexing
+pub(crate) struct ParserContext {
+    bindings: Rc<ParserBindings>,
+    scopes: RefCell<Vec<Vec<String>>>,
     positions: RefCell<Vec<Position>>,
-    last_def_typ_left: RefCell<Option<Position>>,
-    last_hint_right: RefCell<Option<Position>>,
-    last_prem_list: RefCell<Option<(Position, bool)>>,
     modes: RefCell<Vec<ParserMode>>,
 }
 
@@ -32,30 +37,56 @@ enum ParserMode {
     Arith,
 }
 
+impl Default for ParserContext {
+    fn default() -> Self {
+        Self::with_bindings(Rc::new(ParserBindings::default()))
+    }
+}
+
 impl ParserContext {
+    pub(crate) fn with_bindings(bindings: Rc<ParserBindings>) -> Self {
+        Self {
+            bindings,
+            scopes: RefCell::default(),
+            positions: RefCell::default(),
+            modes: RefCell::default(),
+        }
+    }
+
     pub(crate) fn is_var(&self, identifier: &str) -> bool {
-        self.variables
+        self.bindings
+            .variables
             .borrow()
             .contains(xl::var::strip_var_suffix_name(identifier))
     }
 
     pub(crate) fn bind(&self, identifier: &str) {
-        self.variables.borrow_mut().insert(identifier.to_owned());
+        let identifier = identifier.to_owned();
+        if self
+            .bindings
+            .variables
+            .borrow_mut()
+            .insert(identifier.clone())
+            && let Some(scope) = self.scopes.borrow_mut().last_mut()
+        {
+            scope.push(identifier);
+        }
     }
 
     pub(crate) fn enter_scope(&self) {
-        self.scopes
-            .borrow_mut()
-            .push(self.variables.borrow().clone());
+        self.scopes.borrow_mut().push(Vec::new());
     }
 
     pub(crate) fn exit_scope(&self) {
-        let variables = self
+        let identifiers = self
             .scopes
             .borrow_mut()
             .pop()
             .expect("parser scope actions are balanced");
-        *self.variables.borrow_mut() = variables;
+        let mut variables = self.bindings.variables.borrow_mut();
+        for identifier in identifiers {
+            variables.remove(&identifier);
+        }
     }
 
     pub(crate) fn intern_position(&self, position: Position) -> ParserLocation {
@@ -71,41 +102,6 @@ impl ParserContext {
 
     pub(crate) fn span(&self, left: ParserLocation, right: ParserLocation) -> Span {
         Span::new(self.position(left), self.position(right))
-    }
-
-    pub(crate) fn record_def_typ_left(&self, left: ParserLocation) {
-        *self.last_def_typ_left.borrow_mut() = Some(self.position(left));
-    }
-
-    pub(crate) fn last_def_typ_left(&self) -> Position {
-        self.last_def_typ_left
-            .borrow()
-            .clone()
-            .expect("a type definition records its opening position")
-    }
-
-    pub(crate) fn record_hint_right(&self, right: ParserLocation) {
-        *self.last_hint_right.borrow_mut() = Some(self.position(right));
-    }
-
-    pub(crate) fn last_hint_right(&self) -> Position {
-        self.last_hint_right
-            .borrow()
-            .clone()
-            .expect("a parsed hint records its closing position")
-    }
-
-    pub(crate) fn record_prem_list(&self, right: ParserLocation, has_entries: bool) {
-        *self.last_prem_list.borrow_mut() = Some((self.position(right), has_entries));
-    }
-
-    pub(crate) fn last_prem_list_right_or(&self, fallback: Position) -> Position {
-        let (right, has_entries) = self
-            .last_prem_list
-            .borrow()
-            .clone()
-            .expect("a parsed premise list records its closing position");
-        if has_entries { right } else { fallback }
     }
 
     pub(crate) fn enter_exp(&self) {
@@ -130,6 +126,16 @@ impl ParserContext {
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct ParserLocation(usize);
+
+pub(crate) struct Parsed<T> {
+    pub(crate) node: T,
+    pub(crate) right: Position,
+}
+
+pub(crate) struct ParsedList<T> {
+    pub(crate) nodes: Vec<T>,
+    pub(crate) right: Option<Position>,
+}
 
 pub(crate) fn spanned<T>(
     context: &ParserContext,
@@ -168,6 +174,26 @@ pub(crate) fn prefix_typ(operator: Spanned<Atom>, right: Typ) -> Typ {
     ))
 }
 
+pub(crate) fn try_build_def_typ_kind(
+    cases: Vec<(Typ, Vec<Hint>)>,
+    empty_kind: SyntaxErrorKind,
+) -> Result<DefTypKind, SyntaxErrorKind> {
+    if cases.is_empty() {
+        return Err(empty_kind);
+    }
+    if cases
+        .iter()
+        .any(|(typ, hints)| matches!(typ, Typ::Plain(_)) && !hints.is_empty())
+    {
+        return Err(SyntaxErrorKind::HintsInPlainTypeDefinition);
+    }
+    if let [(Typ::Plain(plain_typ), _)] = cases.as_slice() {
+        Ok(DefTypKind::Plain(plain_typ.clone()))
+    } else {
+        Ok(DefTypKind::Variant(cases))
+    }
+}
+
 pub(crate) fn infix_exp(left: Exp, operator: Spanned<Atom>, right: Exp) -> Exp {
     let span = span_between(&left, &right);
     Spanned::new(
@@ -183,6 +209,65 @@ pub(crate) fn prefix_exp(operator: Spanned<Atom>, right: Exp) -> Exp {
         ExpKind::Infix(Box::new(left), operator, Box::new(right)),
         span,
     )
+}
+
+pub(crate) fn sequence_exp(left: Exp, right: Exp) -> Exp {
+    let span = span_between(&left, &right);
+    let mut expressions = match left.node {
+        ExpKind::Seq(expressions) if expressions.len() >= 2 => expressions,
+        node => vec![Spanned::new(node, left.span)],
+    };
+    expressions.push(right);
+    Spanned::new(ExpKind::Seq(expressions), span)
+}
+
+pub(crate) fn fuse_exp(left: Exp, right: Exp) -> Exp {
+    let span = span_between(&left, &right);
+    Spanned::new(ExpKind::Fuse(Box::new(left), Box::new(right)), span)
+}
+
+pub(crate) fn numeric_bin_exp(left: Exp, operator: xl::num::BinOp, right: Exp) -> Exp {
+    let span = span_between(&left, &right);
+    Spanned::new(
+        ExpKind::Bin(Box::new(left), BinOp::Num(operator), Box::new(right)),
+        span,
+    )
+}
+
+pub(crate) fn boolean_bin_exp(left: Exp, operator: xl::bool::BinOp, right: Exp) -> Exp {
+    let span = span_between(&left, &right);
+    Spanned::new(
+        ExpKind::Bin(Box::new(left), BinOp::Bool(operator), Box::new(right)),
+        span,
+    )
+}
+
+pub(crate) fn compare_exp(left: Exp, operator: CmpOp, right: Exp) -> Exp {
+    let span = span_between(&left, &right);
+    Spanned::new(
+        ExpKind::Cmp(Box::new(left), operator, Box::new(right)),
+        span,
+    )
+}
+
+pub(crate) fn cat_exp(left: Exp, right: Exp) -> Exp {
+    let span = span_between(&left, &right);
+    Spanned::new(ExpKind::Cat(Box::new(left), Box::new(right)), span)
+}
+
+pub(crate) fn cons_exp(head: Exp, tail: Exp) -> Exp {
+    let span = span_between(&head, &tail);
+    Spanned::new(ExpKind::Cons(Box::new(head), Box::new(tail)), span)
+}
+
+pub(crate) fn member_exp(left: Exp, right: Exp) -> Exp {
+    let span = span_between(&left, &right);
+    Spanned::new(ExpKind::Mem(Box::new(left), Box::new(right)), span)
+}
+
+pub(crate) fn subtype_exp(left: Exp, plain_typ: PlainTyp) -> Exp {
+    let span = span_between(&left, &plain_typ);
+    Spanned::new(ExpKind::Sub(Box::new(left), plain_typ), span)
 }
 
 pub(crate) fn dot_exp(
@@ -271,26 +356,6 @@ pub(crate) fn apply_exp_postfixes(
         };
     }
     exp
-}
-
-pub(crate) fn def_typ_kind(
-    cases: Vec<(Typ, Vec<Hint>)>,
-    empty_kind: SyntaxErrorKind,
-) -> Result<DefTypKind, SyntaxErrorKind> {
-    if cases.is_empty() {
-        return Err(empty_kind);
-    }
-    if cases
-        .iter()
-        .any(|(typ, hints)| matches!(typ, Typ::Plain(_)) && !hints.is_empty())
-    {
-        return Err(SyntaxErrorKind::HintsInPlainTypeDefinition);
-    }
-    if let [(Typ::Plain(plain_typ), _)] = cases.as_slice() {
-        Ok(DefTypKind::Plain(plain_typ.clone()))
-    } else {
-        Ok(DefTypKind::Variant(cases))
-    }
 }
 
 pub(crate) enum PathStep {

@@ -3,6 +3,7 @@
 use std::{
     fs, io,
     path::{Path, PathBuf},
+    rc::Rc,
     str,
 };
 
@@ -17,7 +18,7 @@ use super::{
     error::{FrontendError, SyntaxError, SyntaxErrorKind},
     lexer::{Lexer, Token},
     parser,
-    parser_support::{ParserContext, ParserLocation, parser_tokens},
+    parser_support::{ParserBindings, ParserContext, ParserLocation, parser_tokens},
 };
 
 /// Parses a SpecTec string with no filesystem source name
@@ -42,9 +43,10 @@ where
         expand_path(path.as_ref(), &mut files)?;
     }
 
-    let context = ParserContext::default();
+    let bindings = Rc::new(ParserBindings::default());
     let mut spec = Vec::new();
     for file in files {
+        let context = ParserContext::with_bindings(Rc::clone(&bindings));
         spec.extend(parse_file_with_context(&file, &context)?);
     }
     Ok(spec)
