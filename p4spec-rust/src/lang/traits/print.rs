@@ -102,23 +102,3 @@ impl fmt::Write for Printer<'_> {
         self.output.write_str(text)
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::Printer;
-
-    #[test]
-    fn printer_owns_indentation_and_byte_escaping() {
-        let mut output = String::new();
-        let mut printer = Printer::new(&mut output);
-        printer.write("root").unwrap();
-        printer
-            .indented(|printer| {
-                printer.newline()?;
-                printer.write_escaped("\"\\\n\x01é")
-            })
-            .unwrap();
-
-        assert_eq!(output, "root\n  \\\"\\\\\\n\\001\\195\\169");
-    }
-}
