@@ -18,12 +18,17 @@ impl FailTrace {
         }
     }
 
-    fn best_error<'a>(&'a self, depth: usize, best: &mut Option<(usize, bool, &'a ElabError)>) {
+    fn best_error<'a>(
+        &'a self,
+        depth: usize,
+        best: &mut Option<(usize, bool, bool, &'a ElabError)>,
+    ) {
         let located = self.error.span != Span::default();
-        if best.is_none_or(|(best_depth, best_located, _)| {
-            (located && !best_located) || (located == best_located && depth > best_depth)
+        let specific = self.error.kind != ElabErrorKind::NoMatchingAlternative;
+        if best.is_none_or(|(best_depth, best_located, best_specific, _)| {
+            (located, specific, depth) > (best_located, best_specific, best_depth)
         }) {
-            *best = Some((depth, located, &self.error));
+            *best = Some((depth, located, specific, &self.error));
         }
         for child in &self.children {
             child.best_error(depth + 1, best);
@@ -89,7 +94,7 @@ impl<T> Attempt<T> {
                     trace.best_error(0, &mut best);
                 }
                 match best {
-                    Some((_, _, error)) => Err(error.clone()),
+                    Some((_, _, _, error)) => Err(error.clone()),
                     None => Err(ElabError::new(
                         ElabErrorKind::NoMatchingAlternative,
                         Span::default(),

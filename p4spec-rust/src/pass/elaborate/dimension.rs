@@ -16,11 +16,9 @@ struct DimContext(IdMap<Vec<Dim>>);
 
 impl DimContext {
     fn add(&mut self, id: &Id, dim: Dim) {
-        if let Some(dims) = self.0.get_mut(id) {
-            dims.push(dim);
-        } else {
-            self.0.insert(id.clone(), vec![dim]);
-        }
+        let mut dims = self.0.remove(id).unwrap_or_default();
+        dims.push(dim);
+        self.0.insert(id.clone(), dims);
     }
 
     fn infer(self) -> Result<VEnv, ElabError> {
@@ -829,7 +827,12 @@ mod tests {
             TypKind::Bool,
             "left-variable",
         );
-        let variable_r = variable("x", "second-variable");
+        let variable_r_span = span("second-variable");
+        let variable_r = exp(
+            ExpKind::Var(Spanned::new("x".to_owned(), variable_r_span.clone())),
+            TypKind::Bool,
+            "right-variable",
+        );
         let rule = rule(Mixfix::Seq(vec![
             Mixfix::Arg(iter(variable_l, Iter::Opt, "optional")),
             Mixfix::Arg(iter(variable_r, Iter::List, "list")),
@@ -838,7 +841,7 @@ mod tests {
         let error = infer_rule(&rule).and_then(|dims| dims.infer()).unwrap_err();
 
         assert_eq!(error.kind, ElabErrorKind::DimensionMismatch);
-        assert_eq!(error.span, variable_span);
+        assert_eq!(error.span, variable_r_span);
     }
 
     #[test]
