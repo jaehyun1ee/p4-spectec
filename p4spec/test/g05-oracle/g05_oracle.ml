@@ -11,12 +11,29 @@ let contains text pattern =
 let category message =
   if contains message "not defined" || contains message "undefined" then
     "undefined"
-  else if contains message "already defined" then "duplicate"
-  else if contains message "do not match" then "arity_mismatch"
+  else if contains message "already defined" || contains message "not distinct"
+  then "duplicate"
+  else if contains message "do not match" || contains message "arity mismatch"
+  then "arity_mismatch"
+  else if contains message "cannot destruct" then "cannot_destructure"
   else if contains message "cannot infer" then "cannot_infer"
   else if contains message "cannot cast" then "invalid_cast"
   else if contains message "operator" then "operator_not_defined"
+  else if contains message "type mismatch" then "type_mismatch"
+  else if contains message "iteration dimensions" then "dimension_mismatch"
+  else if contains message "iteration" then "invalid_iteration"
+  else if contains message "misplaced" then "misplaced_construct"
   else if contains message "identifier" then "invalid_identifier"
+  else if contains message "ambiguous" then "ambiguous_variant"
+  else if contains message "type extension" then "invalid_type_extension"
+  else if contains message "argument" then "invalid_argument"
+  else if contains message "premise" then "invalid_premise"
+  else if contains message "rule" then "invalid_rule"
+  else if contains message "clause" then "invalid_clause"
+  else if contains message "input hint" then "invalid_input_hint"
+  else if contains message "already populated" then "already_populated"
+  else if contains message "no elaboration alternative" then
+    "no_matching_alternative"
   else "invalid_definition"
 
 let () =

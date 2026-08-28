@@ -1,6 +1,7 @@
 use std::{
     path::Path,
     process::{Command, Output},
+    sync::Mutex,
 };
 
 use p4spec_rust::{
@@ -12,6 +13,8 @@ use p4spec_rust::{
     },
 };
 use serde_json::Value;
+
+static OCAML_ORACLE_LOCK: Mutex<()> = Mutex::new(());
 
 fn first_difference(left: &Value, right: &Value, path: &str) -> Option<(String, String, String)> {
     if left == right {
@@ -27,9 +30,11 @@ fn first_difference(left: &Value, right: &Value, path: &str) -> Option<(String, 
             }),
         (Value::Object(left), Value::Object(right)) if left.len() == right.len() => {
             left.iter().find_map(|(key, left)| {
-                right
-                    .get(key)
-                    .and_then(|right| first_difference(left, right, &format!("{path}.{key}")))
+                let path = format!("{path}.{key}");
+                match right.get(key) {
+                    Some(right) => first_difference(left, right, &path),
+                    None => Some((path, left.to_string(), "<missing>".to_owned())),
+                }
             })
         }
         _ => Some((path.to_owned(), left.to_string(), right.to_string())),
@@ -37,6 +42,9 @@ fn first_difference(left: &Value, right: &Value, path: &str) -> Option<(String, 
 }
 
 fn run_ocaml_oracle(repo: &Path, spec_path: &Path) -> Output {
+    let _guard = OCAML_ORACLE_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     Command::new("opam")
         .args([
             "exec",
@@ -84,15 +92,36 @@ fn full_il_matches_ocaml_exactly() {
 }
 
 fn rust_error_category(kind: &ElabErrorKind) -> &'static str {
+    use p4spec_rust::runtime::types::TypeErrorKind;
+
     match kind {
-        ElabErrorKind::Undefined(_) | ElabErrorKind::Type(_) => "undefined",
+        ElabErrorKind::Undefined(_) | ElabErrorKind::Type(TypeErrorKind::UndefinedType(_)) => {
+            "undefined"
+        }
         ElabErrorKind::Duplicate(_) => "duplicate",
-        ElabErrorKind::ArityMismatch => "arity_mismatch",
+        ElabErrorKind::ArityMismatch | ElabErrorKind::Type(TypeErrorKind::ArityMismatch(_)) => {
+            "arity_mismatch"
+        }
+        ElabErrorKind::Type(TypeErrorKind::HigherOrderSubstitution) => "type_error",
+        ElabErrorKind::CannotDestructure(_) => "cannot_destructure",
         ElabErrorKind::CannotInfer => "cannot_infer",
-        ElabErrorKind::InvalidCast => "invalid_cast",
         ElabErrorKind::OperatorNotDefined => "operator_not_defined",
+        ElabErrorKind::TypeMismatch => "type_mismatch",
+        ElabErrorKind::DimensionMismatch => "dimension_mismatch",
+        ElabErrorKind::InvalidIteration => "invalid_iteration",
+        ElabErrorKind::MisplacedConstruct => "misplaced_construct",
         ElabErrorKind::InvalidIdentifier => "invalid_identifier",
-        _ => "invalid_definition",
+        ElabErrorKind::AmbiguousVariant => "ambiguous_variant",
+        ElabErrorKind::InvalidTypeExtension => "invalid_type_extension",
+        ElabErrorKind::InvalidCast => "invalid_cast",
+        ElabErrorKind::InvalidArgument => "invalid_argument",
+        ElabErrorKind::InvalidPremise => "invalid_premise",
+        ElabErrorKind::InvalidRule => "invalid_rule",
+        ElabErrorKind::InvalidClause => "invalid_clause",
+        ElabErrorKind::InvalidDefinition => "invalid_definition",
+        ElabErrorKind::InvalidInputHint => "invalid_input_hint",
+        ElabErrorKind::AlreadyPopulated => "already_populated",
+        ElabErrorKind::NoMatchingAlternative => "no_matching_alternative",
     }
 }
 
@@ -104,12 +133,23 @@ fn rejected_elaboration_matches_ocaml_category_and_span() {
         .expect("Rust crate is inside the repository");
     let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/elaboration");
 
-    for name in ["duplicate_metavariable.watsup", "undefined_function.watsup"] {
+    for name in [
+        "duplicate_metavariable.watsup",
+        "duplicate_type_parameter.watsup",
+        "forward_type_parameter_mismatch.watsup",
+        "undefined_function.watsup",
+        "variable_type_collision.watsup",
+    ] {
         let fixture = fixtures.join(name);
         let output = run_ocaml_oracle(repo, &fixture);
         assert!(!output.status.success(), "OCaml accepted {name}");
-        let diagnostic: Value =
-            serde_json::from_slice(&output.stdout).expect("decode OCaml elaboration diagnostic");
+        let diagnostic: Value = serde_json::from_slice(&output.stdout).unwrap_or_else(|error| {
+            panic!(
+                "decode OCaml elaboration diagnostic for {name}: {error}\nstdout:\n{}\nstderr:\n{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr),
+            )
+        });
         let category = diagnostic["category"]
             .as_str()
             .expect("diagnostic category");
@@ -121,4 +161,15 @@ fn rejected_elaboration_matches_ocaml_category_and_span() {
         assert_eq!(rust_error_category(&error.kind), category, "{name}");
         assert_eq!(error.span, span, "{name}");
     }
+}
+
+#[test]
+fn exact_comparison_detects_different_object_keys() {
+    let left = serde_json::json!({"left": 1});
+    let right = serde_json::json!({"right": 1});
+
+    let difference = first_difference(&left, &right, "payload").expect("different object keys");
+
+    assert_eq!(difference.0, "payload.left");
+    assert_eq!(difference.2, "<missing>");
 }

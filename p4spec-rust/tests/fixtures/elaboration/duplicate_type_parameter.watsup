@@ -1,0 +1,1 @@
+syntax duplicate<T, T> = bool
