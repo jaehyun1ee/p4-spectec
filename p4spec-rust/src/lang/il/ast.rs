@@ -111,7 +111,10 @@ pub type Value = Spanned<Noted<ValueKind, TypKind>>;
 
 /// Constructs a typed value.
 pub fn value(kind: ValueKind, typ: TypKind, span: Span) -> Value {
-    Spanned::new(Noted::new(kind, typ), span)
+    crate::spanned! {
+        node: Noted::new(kind, typ),
+        span: span,
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -151,7 +154,10 @@ pub type Exp = Spanned<Noted<ExpKind, TypKind>>;
 
 /// Constructs a typed expression.
 pub fn exp(kind: ExpKind, typ: TypKind, span: Span) -> Exp {
-    Spanned::new(Noted::new(kind, typ), span)
+    crate::spanned! {
+        node: Noted::new(kind, typ),
+        span: span,
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -241,7 +247,10 @@ pub type Path = Spanned<Noted<PathKind, TypKind>>;
 
 /// Constructs a typed path.
 pub fn path(kind: PathKind, typ: TypKind, span: Span) -> Path {
-    Spanned::new(Noted::new(kind, typ), span)
+    crate::spanned! {
+        node: Noted::new(kind, typ),
+        span: span,
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]

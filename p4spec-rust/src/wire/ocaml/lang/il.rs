@@ -5,7 +5,7 @@ use serde_json::{Map, Number, Value, json};
 use thiserror::Error;
 
 use crate::lang::{
-    common::{notation::mixfix::Mixfix, noted::Noted, source::Spanned},
+    common::{notation::mixfix::Mixfix, noted::Noted},
     il::ast::{self, *},
     xl::{bool, num},
 };
@@ -569,13 +569,13 @@ fn decode_yojson_mixfix(value: &yojson::Value) -> Result<ast::ValueCase, DecodeE
 
 fn decode_yojson_value(value: &yojson::Value) -> Result<ast::Value, DecodeError> {
     let fields = yojson_assoc(value)?;
-    Ok(Spanned::new(
-        Noted::new(
+    Ok(crate::spanned! {
+        node: Noted::new(
             decode_yojson_value_kind(yojson_field(fields, "it")?)?,
             decode_vnote(&standard_json(yojson_field(fields, "note")?)?)?,
         ),
-        source::decode_region(&standard_json(yojson_field(fields, "at")?)?)?,
-    ))
+        span: source::decode_region(&standard_json(yojson_field(fields, "at")?)?)?,
+    })
 }
 
 fn decode_yojson_value_kind(value: &yojson::Value) -> Result<ValueKind, DecodeError> {
@@ -624,7 +624,10 @@ fn decode_yojson_value_kind(value: &yojson::Value) -> Result<ValueKind, DecodeEr
 
 fn decode_value(value: &Value) -> Result<ast::Value, DecodeError> {
     let (kind, typ, span) = source::decode_annotated(value, decode_value_kind, decode_vnote)?;
-    Ok(Spanned::new(Noted::new(kind, typ), span))
+    Ok(crate::spanned! {
+        node: Noted::new(kind, typ),
+        span: span,
+    })
 }
 
 fn decode_value_kind(value: &Value) -> Result<ValueKind, DecodeError> {
@@ -985,7 +988,10 @@ pub(super) fn encode_subcheck(subcheck: &ast::Subcheck) -> Value {
 
 pub(super) fn decode_exp(value: &Value) -> Result<ast::Exp, DecodeError> {
     let (kind, typ, span) = source::decode_annotated(value, decode_exp_kind, decode_typ_kind)?;
-    Ok(Spanned::new(Noted::new(kind, typ), span))
+    Ok(crate::spanned! {
+        node: Noted::new(kind, typ),
+        span: span,
+    })
 }
 
 pub(super) fn encode_exp(exp: &ast::Exp) -> Value {
@@ -1266,7 +1272,10 @@ fn encode_opt_pattern(pattern: OptPattern) -> Value {
 
 fn decode_path(value: &Value) -> Result<ast::Path, DecodeError> {
     let (kind, typ, span) = source::decode_annotated(value, decode_path_kind, decode_typ_kind)?;
-    Ok(Spanned::new(Noted::new(kind, typ), span))
+    Ok(crate::spanned! {
+        node: Noted::new(kind, typ),
+        span: span,
+    })
 }
 
 fn encode_path(path: &ast::Path) -> Value {

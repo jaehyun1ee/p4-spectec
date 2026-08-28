@@ -52,6 +52,32 @@ fn parse_string_returns_el_with_an_empty_source_name() {
 }
 
 #[test]
+fn empty_trailing_syntax_does_not_extend_a_definition_span() {
+    let spec = parse_string("var b : bool\n\nvar i : int").expect("parse adjacent definitions");
+
+    assert_eq!(spec[0].span.right, Position::new("", 1, 12));
+}
+
+#[test]
+fn trailing_hint_sets_the_definition_span() {
+    let source = concat!(
+        "dec $ite<X>(bool, X, X) : X\n",
+        "  hint(prose_in %1 \"if\" %0 \"otherwise\" %2)\n",
+        "def $ite<X>(true, X_t, X_f) = X_t",
+    );
+    let spec = parse_string(source).expect("parse a declaration with a hint");
+
+    assert_eq!(spec[0].span.right, Position::new("", 2, 42));
+}
+
+#[test]
+fn bracketed_type_syntax_sets_the_definition_span() {
+    let spec = parse_string("syntax set<K> = `{ K* `}").expect("parse a bracketed notation type");
+
+    assert_eq!(spec[0].span.right, Position::new("", 1, 24));
+}
+
+#[test]
 fn parse_file_uses_the_path_in_source_locations() {
     let directory = TempDirectory::new();
     let path = directory.path("one.watsup");
@@ -117,23 +143,28 @@ fn parse_file_reports_invalid_utf8_at_the_invalid_byte() {
     fs::write(&path, b"var x : nat\n\xff").expect("write invalid UTF-8 file");
 
     let error = parse_file(&path).expect_err("reject invalid UTF-8");
-    let FrontendError::InvalidUtf8 { span, .. } = error else {
+    let FrontendError::InvalidUtf8(error) = error else {
         panic!("expected invalid UTF-8 error")
     };
 
-    assert_eq!(span.left, Position::new(path.to_string_lossy(), 2, 0));
-    assert_eq!(span.right, Position::new(path.to_string_lossy(), 2, 1));
+    assert_eq!(error.span.left, Position::new(path.to_string_lossy(), 2, 0));
+    assert_eq!(
+        error.span.right,
+        Position::new(path.to_string_lossy(), 2, 1)
+    );
 }
 
 #[test]
 fn parse_file_reports_io_and_syntax_failures_with_file_spans() {
     let directory = TempDirectory::new();
     let missing = directory.path("missing.watsup");
-    let FrontendError::Io { span, .. } = parse_file(&missing).expect_err("report missing file")
-    else {
+    let FrontendError::Io(error) = parse_file(&missing).expect_err("report missing file") else {
         panic!("expected I/O error")
     };
-    assert_eq!(span.left, Position::new(missing.to_string_lossy(), 0, 0));
+    assert_eq!(
+        error.span.left,
+        Position::new(missing.to_string_lossy(), 0, 0)
+    );
 
     let invalid = directory.path("syntax.watsup");
     fs::write(&invalid, "def").expect("write invalid SpecTec file");
@@ -141,7 +172,7 @@ fn parse_file_reports_io_and_syntax_failures_with_file_spans() {
     else {
         panic!("expected syntax error")
     };
-    assert_eq!(error.kind, SyntaxErrorKind::UnexpectedToken);
+    assert_eq!(error.node, SyntaxErrorKind::UnexpectedToken);
     assert_eq!(
         error.span.left,
         Position::new(invalid.to_string_lossy(), 1, 3)

@@ -153,7 +153,10 @@ pub type Instr = Spanned<Noted<InstrKind, Iid>>;
 
 /// Constructs an instruction
 pub fn instr(kind: InstrKind, iid: Iid, span: Span) -> Instr {
-    Spanned::new(Noted::new(kind, iid), span)
+    crate::spanned! {
+        node: Noted::new(kind, iid),
+        span: span,
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]

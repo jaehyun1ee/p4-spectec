@@ -1,7 +1,7 @@
 //! Contextual token adaptation between the lexer and LALRPOP
 //!
 //! `parser_tokens` wraps a lexer iterator in [`ParserTokens`]. Each
-//! `ParserTokens::next` call converts source positions to [`ParserLocation`]
+//! `ParserTokens::next` call converts source positions to [`Location`]
 //! handles and forwards lexical failures as [`FrontendError`]. Outside
 //! arithmetic mode it relabels `Star` as `IterStar` for postfix iteration.
 //!
@@ -22,12 +22,12 @@
 use crate::lang::common::source::{Position, Spanned};
 
 use super::{
-    ctx::{ParserContext, ParserLocation},
+    ctx::{Context, Location},
     error::{FrontendError, LexError},
     lexer::Token,
 };
 
-pub(crate) fn parser_tokens<I>(context: &ParserContext, lexemes: I) -> ParserTokens<'_, I>
+pub(crate) fn parser_tokens<I>(context: &Context, lexemes: I) -> ParserTokens<'_, I>
 where
     I: Iterator,
 {
@@ -41,7 +41,7 @@ where
 }
 
 pub(crate) struct ParserTokens<'context, I: Iterator> {
-    context: &'context ParserContext,
+    context: &'context Context,
     lexemes: I,
     previous_right: Option<Position>,
     previous_token: Option<Token>,
@@ -119,7 +119,7 @@ impl<I> Iterator for ParserTokens<'_, I>
 where
     I: Iterator<Item = Result<Spanned<Token>, LexError>>,
 {
-    type Item = Result<(ParserLocation, Token, ParserLocation), FrontendError>;
+    type Item = Result<(Location, Token, Location), FrontendError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let mut lexeme = match self.pending.take() {
@@ -145,15 +145,15 @@ where
             self.previous_token = Some(Token::Sequence);
             self.previous_right = Some(right_position.clone());
             return Some(Ok((
-                self.context.intern_position(left_position),
+                self.context.location(left_position),
                 Token::Sequence,
-                self.context.intern_position(right_position),
+                self.context.location(right_position),
             )));
         }
 
-        let left = self.context.intern_position(lexeme.span.left);
+        let left = self.context.location(lexeme.span.left);
         self.previous_right = Some(lexeme.span.right.clone());
-        let right = self.context.intern_position(lexeme.span.right);
+        let right = self.context.location(lexeme.span.right);
         self.previous_token = Some(lexeme.node.clone());
         Some(Ok((left, lexeme.node, right)))
     }

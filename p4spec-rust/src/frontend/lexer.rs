@@ -862,12 +862,15 @@ where
     }
 
     fn lexeme(&self, token: Token, start: Cursor) -> Spanned<Token> {
-        Spanned::new(token, self.span(start))
+        crate::spanned! {
+            node: token,
+            span: self.span(start),
+        }
     }
 
     fn error(&self, kind: LexErrorKind, start: Cursor) -> LexError {
-        LexError {
-            kind,
+        crate::spanned! {
+            node: kind,
             span: self.span(start),
         }
     }

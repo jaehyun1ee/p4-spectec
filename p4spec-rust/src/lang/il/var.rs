@@ -20,11 +20,11 @@ pub fn as_exp(is_dim: bool, var: &Var) -> Exp {
             node: TypKind::Iter(
                 Box::new(crate::spanned! {
                     node: exp.node.note.clone(),
-                    span: exp,
+                    span: exp.span.clone(),
                 }),
                 *iter,
             ),
-            span: var.typ,
+            span: var.typ.span.clone(),
         };
         let var_binder = Var {
             id: var.id.clone(),

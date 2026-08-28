@@ -162,7 +162,7 @@ fn byte_escapes_reject_non_utf8_text() {
             .expect("lexer result")
             .expect_err("byte-only text");
 
-        assert_eq!(error.kind, LexErrorKind::InvalidTextEncoding);
+        assert_eq!(error.node, LexErrorKind::InvalidTextEncoding);
         assert_eq!(
             error.span.left,
             Position::new("unicode-policy.watsup", 1, 0)
@@ -295,7 +295,7 @@ fn lexical_failures_report_typed_kinds_and_precise_spans() {
             .expect("lexer result")
             .expect_err("invalid source");
 
-        assert_eq!(error.kind, kind, "source: {source:?}");
+        assert_eq!(error.node, kind, "source: {source:?}");
         assert_eq!(
             error.span.left,
             Position::new("error.watsup", 1, left_column)

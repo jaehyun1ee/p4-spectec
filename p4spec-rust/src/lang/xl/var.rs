@@ -10,7 +10,7 @@ pub fn strip_var_suffix(id: &Spanned<String>) -> Spanned<String> {
     }
     crate::spanned! {
         node: stripped.to_owned(),
-        span: id,
+        span: id.span.clone(),
     }
 }
 

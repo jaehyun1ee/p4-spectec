@@ -83,7 +83,7 @@ macro_rules! annotated {
     (node: $node:expr, span: $span:expr $(,)?) => {
         $crate::lang::pl::annot::Annotated::new($crate::spanned! {
             node: $node,
-            span: $span,
+            span: $span.span.clone(),
         })
     };
 }

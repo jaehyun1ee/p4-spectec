@@ -139,17 +139,17 @@ fn ocaml_diagnostic(path: &Path, stderr: &[u8]) -> Diagnostic {
 fn rust_diagnostic(error: FrontendError) -> Diagnostic {
     match error {
         FrontendError::Lexical(error) => Diagnostic {
-            kind: DiagnosticKind::Lexical(error.kind),
+            kind: DiagnosticKind::Lexical(error.node),
             span: error.span,
         },
         FrontendError::Syntax(error) => {
-            let kind = match error.kind {
+            let kind = match error.node {
                 SyntaxErrorKind::ExpectedNotationType
                 | SyntaxErrorKind::EmptyStructType
                 | SyntaxErrorKind::EmptyVariantType
                 | SyntaxErrorKind::EmptyType
                 | SyntaxErrorKind::HintsInPlainTypeDefinition
-                | SyntaxErrorKind::EmptySyntaxDeclaration => DiagnosticKind::Semantic(error.kind),
+                | SyntaxErrorKind::EmptySyntaxDeclaration => DiagnosticKind::Semantic(error.node),
                 SyntaxErrorKind::InvalidToken
                 | SyntaxErrorKind::UnexpectedEndOfInput
                 | SyntaxErrorKind::UnexpectedToken
@@ -160,7 +160,7 @@ fn rust_diagnostic(error: FrontendError) -> Diagnostic {
                 span: error.span,
             }
         }
-        FrontendError::Io { .. } | FrontendError::InvalidUtf8 { .. } => {
+        FrontendError::Io(_) | FrontendError::InvalidUtf8(_) => {
             panic!("negative source fixture must reach lexing or parsing")
         }
     }

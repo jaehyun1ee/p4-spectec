@@ -18,18 +18,18 @@ fn lexical_errors_convert_without_losing_category_or_span() {
         .unwrap_err();
     let expected_span = span("source.watsup", 0, 1);
 
-    assert_eq!(lexical.kind, LexErrorKind::MalformedToken);
+    assert_eq!(lexical.node, LexErrorKind::MalformedToken);
     assert_eq!(lexical.span, expected_span);
 
     let error = FrontendError::from(lexical);
 
-    assert_eq!(error.span(), &expected_span);
+    assert!(matches!(
+        &error,
+        FrontendError::Lexical(error)
+            if error.node == LexErrorKind::MalformedToken && error.span == expected_span
+    ));
     assert_eq!(
         error.to_string(),
         "malformed token at source.watsup:1.1-1.2"
     );
-    assert!(matches!(
-        error,
-        FrontendError::Lexical(error) if error.kind == LexErrorKind::MalformedToken
-    ));
 }

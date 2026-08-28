@@ -4,7 +4,7 @@ use std::{io, str::Utf8Error};
 
 use thiserror::Error;
 
-use crate::lang::common::source::{Position, Span};
+use crate::lang::common::source::Spanned;
 
 /// A lexical failure category produced before parsing begins
 #[derive(Clone, Copy, Debug, Error, PartialEq, Eq)]
@@ -32,12 +32,7 @@ pub enum LexErrorKind {
 }
 
 /// A lexical failure paired with the offending source span
-#[derive(Clone, Debug, Error, PartialEq, Eq)]
-#[error("{kind} at {span}")]
-pub struct LexError {
-    pub kind: LexErrorKind,
-    pub span: Span,
-}
+pub type LexError = Spanned<LexErrorKind>;
 
 /// A syntax failure category independent of the parser implementation
 #[derive(Clone, Copy, Debug, Error, PartialEq, Eq)]
@@ -65,19 +60,10 @@ pub enum SyntaxErrorKind {
 }
 
 /// A syntax failure paired with the source span reported by the parser
-#[derive(Clone, Debug, Error, PartialEq, Eq)]
-#[error("{kind} at {span}")]
-pub struct SyntaxError {
-    pub kind: SyntaxErrorKind,
-    pub span: Span,
-}
+pub type SyntaxError = Spanned<SyntaxErrorKind>;
 
-impl SyntaxError {
-    /// Constructs a syntax failure at an explicit source span
-    pub fn new(kind: SyntaxErrorKind, span: Span) -> Self {
-        Self { kind, span }
-    }
-}
+/// A UTF-8 decoding failure produced before parsing begins
+pub type InvalidUtf8Error = Utf8Error;
 
 /// A failure from any stage of the SpecTec source frontend
 #[derive(Debug, Error)]
@@ -86,45 +72,8 @@ pub enum FrontendError {
     Lexical(#[from] LexError),
     #[error(transparent)]
     Syntax(#[from] SyntaxError),
-    #[error("i/o error at {span}: {source}")]
-    Io {
-        span: Span,
-        #[source]
-        source: io::Error,
-    },
-    #[error("source is not valid UTF-8 at {span}: {source}")]
-    InvalidUtf8 {
-        span: Span,
-        #[source]
-        source: Utf8Error,
-    },
-}
-
-impl FrontendError {
-    /// Constructs an I/O failure associated with a source file
-    pub fn io(file: impl Into<String>, source: io::Error) -> Self {
-        Self::Io {
-            span: file_span(file),
-            source,
-        }
-    }
-
-    /// Constructs a UTF-8 decoding failure at a caller-computed source span
-    pub fn invalid_utf8(span: Span, source: Utf8Error) -> Self {
-        Self::InvalidUtf8 { span, source }
-    }
-
-    /// Returns the source span associated with this failure
-    pub fn span(&self) -> &Span {
-        match self {
-            Self::Lexical(error) => &error.span,
-            Self::Syntax(error) => &error.span,
-            Self::Io { span, .. } | Self::InvalidUtf8 { span, .. } => span,
-        }
-    }
-}
-
-fn file_span(file: impl Into<String>) -> Span {
-    let position = Position::new(file, 0, 0);
-    Span::new(position.clone(), position)
+    #[error("i/o error at {}: {}", .0.span, .0.node)]
+    Io(#[source] Spanned<io::Error>),
+    #[error("source is not valid UTF-8 at {}: {}", .0.span, .0.node)]
+    InvalidUtf8(#[source] Spanned<InvalidUtf8Error>),
 }

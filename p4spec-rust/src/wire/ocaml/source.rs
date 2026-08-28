@@ -46,10 +46,10 @@ pub fn decode_phrase<T>(
     if !field(object, "note")?.is_null() {
         return Err(DecodeError::Expected("null unit note"));
     }
-    Ok(Spanned::new(
-        decode_it(field(object, "it")?)?,
-        decode_region(field(object, "at")?)?,
-    ))
+    Ok(crate::spanned! {
+        node: decode_it(field(object, "it")?)?,
+        span: decode_region(field(object, "at")?)?,
+    })
 }
 
 pub fn encode_phrase<T>(phrase: &Spanned<T>, encode_it: impl FnOnce(&T) -> Value) -> Value {

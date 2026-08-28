@@ -4,7 +4,6 @@ pub mod error;
 pub mod lexer;
 pub mod parse;
 
-mod actions;
 mod ctx;
 mod tokens;
 

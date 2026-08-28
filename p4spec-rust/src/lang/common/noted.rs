@@ -35,7 +35,7 @@ macro_rules! noted {
     (kind: $kind:expr, note: $note:expr, span: $span:expr $(,)?) => {
         $crate::spanned! {
             node: $crate::lang::common::noted::Noted::new($kind, $note),
-            span: $span,
+            span: $span.span.clone(),
         }
     };
 }

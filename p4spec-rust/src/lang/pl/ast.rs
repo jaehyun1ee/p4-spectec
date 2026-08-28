@@ -71,7 +71,10 @@ pub type Exp = annot::Annotated<ExpNode>;
 
 /// Constructs a typed expression
 pub fn exp(kind: ExpKind, typ: TypKind, span: Span) -> Exp {
-    annot::Annotated::new(Spanned::new(Noted::new(kind, typ), span))
+    annot::Annotated::new(crate::spanned! {
+        node: Noted::new(kind, typ),
+        span: span,
+    })
 }
 #[derive(Clone, Debug, PartialEq)]
 pub enum ExpKind {
@@ -115,7 +118,10 @@ pub type Path = Spanned<Noted<PathKind, TypKind>>;
 
 /// Constructs a typed path
 pub fn path(kind: PathKind, typ: TypKind, span: Span) -> Path {
-    Spanned::new(Noted::new(kind, typ), span)
+    crate::spanned! {
+        node: Noted::new(kind, typ),
+        span: span,
+    }
 }
 #[derive(Clone, Debug, PartialEq)]
 pub enum PathKind {
@@ -212,10 +218,10 @@ pub fn instr<Tier>(
     fallthrough: Option<Fallthrough>,
     span: Span,
 ) -> Instr<Tier> {
-    annot::Annotated::new(Spanned::new(
-        Noted::new(kind, InstrNote { iid, fallthrough }),
-        span,
-    ))
+    annot::Annotated::new(crate::spanned! {
+        node: Noted::new(kind, InstrNote { iid, fallthrough }),
+        span: span,
+    })
 }
 
 #[derive(Clone, Debug, PartialEq)]
