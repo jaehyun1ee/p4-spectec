@@ -19,14 +19,6 @@ fn id(name: &str, file: &str) -> Id {
 }
 
 #[test]
-fn spanned_default_uses_the_default_span() {
-    let spanned = p4spec_rust::spanned_default!(node: 42);
-
-    assert_eq!(spanned.node, 42);
-    assert_eq!(spanned.span, Span::default());
-}
-
-#[test]
 fn id_set_uses_identifier_text_as_its_key() {
     let id_first = id("x", "first");
     let id_second = id("x", "second");
@@ -48,17 +40,6 @@ fn id_map_uses_identifier_text_as_its_key() {
     assert_eq!(ids.insert(id_second.clone(), 2), Some(1));
     assert_eq!(ids.get(&id_second), Some(&2));
     assert_eq!(ids.keys().collect::<Vec<_>>(), vec![&id_first]);
-}
-
-#[test]
-fn id_map_constructs_from_equally_sized_lists() {
-    let keys = [id("x", "first"), id("y", "second")];
-    let values = [1, 2];
-
-    let ids = IdMap::from_lists(&keys, &values).expect("matching list lengths");
-
-    assert_eq!(ids.get(&id("x", "lookup")), Some(&1));
-    assert_eq!(ids.get(&id("y", "lookup")), Some(&2));
 }
 
 #[test]

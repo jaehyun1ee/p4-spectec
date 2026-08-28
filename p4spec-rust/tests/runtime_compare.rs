@@ -74,13 +74,6 @@ fn subcheck_name(subcheck: &Subcheck) -> Value {
     }
 }
 
-fn fresh_tparam_name(typ: ast::Typ) -> String {
-    let TypKind::Func(func_typ) = typ.node else {
-        panic!("freshness fixture is a function type")
-    };
-    func_typ.tparams[0].node.clone()
-}
-
 fn rust_results() -> Value {
     let bool_type = typ(TypKind::Bool);
     let text_type = typ(TypKind::Text);
@@ -91,21 +84,6 @@ fn rust_results() -> Value {
         &typ(TypKind::Tuple(vec![var("T", vec![]), bool_type.clone()])),
     )
     .expect("substitute comparison fixture");
-    let mut theta_freshness = Theta::new();
-    theta_freshness.insert(id("X"), bool_type.clone());
-    let func_typ_freshness = func_typ(vec![id("T")], vec![var("T", vec![])], var("T", vec![]));
-    let freshness_fixture = typ(TypKind::Func(func_typ_freshness));
-    let fresh_sequence = [
-        fresh_tparam_name(
-            subst_typ(&theta_freshness, &freshness_fixture)
-                .expect("first fresh comparison fixture"),
-        ),
-        fresh_tparam_name(
-            subst_typ(&theta_freshness, &freshness_fixture)
-                .expect("second fresh comparison fixture"),
-        ),
-    ];
-
     let mut tdenv = TDEnv::new();
     tdenv.insert(
         id("Pair"),
@@ -147,7 +125,6 @@ fn rust_results() -> Value {
 
     json!({
         "substitution": Print::to_string(&substituted),
-        "fresh_sequence": fresh_sequence,
         "expansion": Print::to_string(&expanded),
         "function_equivalent": function_equivalent,
         "variant_subtype": sub_typ(

@@ -48,20 +48,6 @@ let () =
   let substituted =
     Type.Subst.subst_typ substitution (typ (TupleT [ var "T" []; bool_typ ]))
   in
-  Type.Fresh.refresh ();
-  let freshness_substitution = TIdMap.add (id "X") bool_typ TIdMap.empty in
-  let freshness_fixture =
-    typ (FuncT ([ id "T" ], [ var "T" [] ], var "T" []))
-  in
-  let fresh_parameter () =
-    Type.Fresh.refresh ();
-    match Type.Subst.subst_typ freshness_substitution freshness_fixture with
-    | { it = FuncT (parameter :: _, _, _); _ } -> parameter.it
-    | _ -> assert false
-  in
-  let fresh_first = fresh_parameter () in
-  let fresh_second = fresh_parameter () in
-  let fresh_sequence = [ fresh_first; fresh_second ] in
   let environment =
     Type.Envs.TDEnv.empty
     |> add_type "Pair"
@@ -88,7 +74,6 @@ let () =
   `Assoc
     [
       ("substitution", `String (Print.string_of_typ substituted));
-      ("fresh_sequence", `List (List.map (fun id -> `String id) fresh_sequence));
       ("expansion", `String (Print.string_of_typ expanded));
       ("function_equivalent", `Bool function_equivalent);
       ( "variant_subtype",

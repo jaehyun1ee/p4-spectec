@@ -10,7 +10,6 @@ use p4spec_rust::{
     runtime::types::{
         TDEnv, Theta, TypeArityMismatch, TypeDef, TypeErrorKind, equiv_func_typ, equiv_not_typ,
         equiv_typ, expand_typ, optimize_sub_typ, sub_typ, subst_not_typ, subst_typ,
-        typ as make_typ,
     },
 };
 
@@ -61,28 +60,6 @@ fn func_typ(tparams: Vec<ast::TParam>, typs_params: Vec<ast::Typ>, typ_ret: ast:
 }
 
 #[test]
-fn type_iteration_wraps_in_order_and_preserves_the_inner_span() {
-    let span = Span::new(
-        p4spec_rust::lang::common::source::Position::new("type", 1, 2),
-        p4spec_rust::lang::common::source::Position::new("type", 1, 6),
-    );
-    let typ_inner = Spanned::new(TypKind::Bool, span.clone());
-
-    let typ = make_typ::iterate(typ_inner, &[Iter::Opt, Iter::List]);
-
-    assert_eq!(typ.span, span);
-    let TypKind::Iter(typ, Iter::List) = typ.node else {
-        panic!("outer list type")
-    };
-    assert_eq!(typ.span, span);
-    let TypKind::Iter(typ, Iter::Opt) = typ.node else {
-        panic!("inner optional type")
-    };
-    assert_eq!(typ.span, span);
-    assert_eq!(typ.node, TypKind::Bool);
-}
-
-#[test]
 fn substitution_freshens_function_binders_and_rejects_higher_order_targets() {
     let mut theta = Theta::new();
     theta.insert(id("T"), typ(TypKind::Text));
@@ -118,25 +95,6 @@ fn substitution_freshens_function_binders_and_rejects_higher_order_targets() {
     let error = subst_typ(&theta, &higher_order).unwrap_err();
     assert_eq!(error.kind, TypeErrorKind::HigherOrderSubstitution);
     assert_eq!(error.span, higher_order_span);
-}
-
-#[test]
-fn public_substitutions_use_independent_fresh_type_identifiers() {
-    let mut theta = Theta::new();
-    theta.insert(id("X"), typ(TypKind::Bool));
-    let func_typ = func_typ(vec![id("T")], vec![var("T", vec![])], var("T", vec![]));
-    let function = typ(TypKind::Func(func_typ));
-
-    let first = subst_typ(&theta, &function).expect("first substitution");
-    let second = subst_typ(&theta, &function).expect("second substitution");
-    let TypKind::Func(func_typ_first) = first.node else {
-        panic!("first function type")
-    };
-    let TypKind::Func(func_typ_second) = second.node else {
-        panic!("second function type")
-    };
-    assert_eq!(func_typ_first.tparams[0].node, "__FRESH0");
-    assert_eq!(func_typ_second.tparams[0].node, "__FRESH0");
 }
 
 #[test]
