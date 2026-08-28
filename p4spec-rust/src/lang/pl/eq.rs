@@ -60,8 +60,7 @@ impl SyntaxEq for ExpKind {
                             atom_l.syntax_eq(atom_r) && exp_l.syntax_eq(exp_r)
                         })
             }
-            (ExpKind::Opt(Some(exp_l)), ExpKind::Opt(Some(exp_r))) => exp_l.syntax_eq(exp_r),
-            (ExpKind::Opt(None), ExpKind::Opt(None)) => true,
+            (ExpKind::Opt(exp_opt_l), ExpKind::Opt(exp_opt_r)) => exp_opt_l.syntax_eq(exp_opt_r),
             (ExpKind::Cons(exp_l_l, exp_r_l), ExpKind::Cons(exp_l_r, exp_r_r))
             | (ExpKind::Cat(exp_l_l, exp_r_l), ExpKind::Cat(exp_l_r, exp_r_r))
             | (ExpKind::Mem(exp_l_l, exp_r_l), ExpKind::Mem(exp_l_r, exp_r_r)) => {
@@ -453,11 +452,7 @@ impl SyntaxEq for Rel {
             && self.rel_signature.syntax_eq(&other.rel_signature)
             && self.exps_input.syntax_eq(&other.exps_input)
             && self.block.syntax_eq(&other.block)
-            && match (&self.block_else_opt, &other.block_else_opt) {
-                (Some(block_l), Some(block_r)) => block_l.syntax_eq(block_r),
-                (None, None) => true,
-                _ => false,
-            }
+            && self.block_else_opt.syntax_eq(&other.block_else_opt)
     }
 }
 
@@ -503,11 +498,7 @@ impl SyntaxEq for DefinedFunc {
             && self.params.syntax_eq(&other.params)
             && self.typ.syntax_eq(&other.typ)
             && self.block.syntax_eq(&other.block)
-            && match (&self.block_else_opt, &other.block_else_opt) {
-                (Some(block_l), Some(block_r)) => block_l.syntax_eq(block_r),
-                (None, None) => true,
-                _ => false,
-            }
+            && self.block_else_opt.syntax_eq(&other.block_else_opt)
     }
 }
 

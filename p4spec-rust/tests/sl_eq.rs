@@ -103,3 +103,13 @@ fn holding_cases_compare_variant_blocks_and_dangling_flags() {
             .syntax_eq(&sl::ast::HoldCase::NotHold(block, false))
     );
 }
+
+#[test]
+fn wrapper_equality_delegates_and_ignores_source_regions() {
+    let value_l = Some(Box::new(Spanned::new("value".to_owned(), span("left"))));
+    let value_r = Some(Box::new(Spanned::new("value".to_owned(), span("right"))));
+    let absent: Option<Box<Spanned<String>>> = None;
+
+    assert!(value_l.syntax_eq(&value_r));
+    assert!(!value_l.syntax_eq(&absent));
+}

@@ -72,8 +72,8 @@ fn numbers_preserve_ocaml_variant_order_and_subtyping() {
     let large_nat = natural(100);
     let small_int = Number::Int(BigInt::from(-100));
 
-    assert_eq!(num::compare(&large_nat, &small_int), Ordering::Less);
-    assert_eq!(num::compare_typ(Typ::Nat, Typ::Int), Ordering::Less);
+    assert_eq!(large_nat.cmp(&small_int), Ordering::Less);
+    assert_eq!(Typ::Nat.cmp(&Typ::Int), Ordering::Less);
     assert!(num::sub(Typ::Nat, Typ::Int));
     assert!(!num::sub(Typ::Int, Typ::Nat));
 }
@@ -91,8 +91,8 @@ fn numeric_operations_preserve_kinds_and_signed_rendering() {
     );
     assert_eq!(num::un(UnOp::Minus, &two), Number::Int((-2).into()));
     assert_eq!(num::cmp(CmpOp::Lt, &two, &three), Ok(true));
-    assert_eq!(Print::to_string(&Number::Int(3.into())), "+3");
-    assert_eq!(Print::to_string(&negative_three), "-3");
+    assert_eq!(Print::render(&Number::Int(3.into())), "+3");
+    assert_eq!(Print::render(&negative_three), "-3");
 }
 
 #[test]

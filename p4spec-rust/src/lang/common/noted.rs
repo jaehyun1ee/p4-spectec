@@ -17,8 +17,8 @@ impl<T: SyntaxEq, S> SyntaxEq for Noted<T, S> {
 }
 
 impl<T: Free, S> Free for Noted<T, S> {
-    fn free(&self) -> IdSet {
-        self.kind.free()
+    fn collect_free(&self, free: &mut IdSet) {
+        self.kind.collect_free(free);
     }
 }
 

@@ -36,9 +36,34 @@ impl SyntaxEq for String {
     }
 }
 
-impl<T: SyntaxEq> SyntaxEq for Spanned<T> {
-    fn syntax_eq(&self, other: &Self) -> bool {
+impl<T, Rhs> SyntaxEq<Spanned<Rhs>> for Spanned<T>
+where
+    T: SyntaxEq<Rhs>,
+{
+    fn syntax_eq(&self, other: &Spanned<Rhs>) -> bool {
         self.node.syntax_eq(&other.node)
+    }
+}
+
+impl<T, Rhs> SyntaxEq<Box<Rhs>> for Box<T>
+where
+    T: SyntaxEq<Rhs>,
+{
+    fn syntax_eq(&self, other: &Box<Rhs>) -> bool {
+        self.as_ref().syntax_eq(other.as_ref())
+    }
+}
+
+impl<T, Rhs> SyntaxEq<Option<Rhs>> for Option<T>
+where
+    T: SyntaxEq<Rhs>,
+{
+    fn syntax_eq(&self, other: &Option<Rhs>) -> bool {
+        match (self, other) {
+            (Some(value_l), Some(value_r)) => value_l.syntax_eq(value_r),
+            (None, None) => true,
+            _ => false,
+        }
     }
 }
 

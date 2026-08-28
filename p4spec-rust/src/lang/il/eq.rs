@@ -89,10 +89,9 @@ impl SyntaxEq for ValueKind {
             | (ValueKind::List(values_l), ValueKind::List(values_r)) => {
                 values_l.syntax_eq(values_r)
             }
-            (ValueKind::Opt(Some(value_l)), ValueKind::Opt(Some(value_r))) => {
-                value_l.syntax_eq(value_r)
+            (ValueKind::Opt(value_opt_l), ValueKind::Opt(value_opt_r)) => {
+                value_opt_l.syntax_eq(value_opt_r)
             }
-            (ValueKind::Opt(None), ValueKind::Opt(None)) => true,
             (ValueKind::Func(id_l), ValueKind::Func(id_r)) => id_l == id_r,
             (ValueKind::Extern(value_l), ValueKind::Extern(value_r)) => value_l == value_r,
             _ => false,
@@ -160,8 +159,7 @@ impl SyntaxEq for ExpKind {
                             atom_l.syntax_eq(atom_r) && exp_l.syntax_eq(exp_r)
                         })
             }
-            (ExpKind::Opt(Some(exp_l)), ExpKind::Opt(Some(exp_r))) => exp_l.syntax_eq(exp_r),
-            (ExpKind::Opt(None), ExpKind::Opt(None)) => true,
+            (ExpKind::Opt(exp_opt_l), ExpKind::Opt(exp_opt_r)) => exp_opt_l.syntax_eq(exp_opt_r),
             (ExpKind::Cons(exp_l_l, exp_r_l), ExpKind::Cons(exp_l_r, exp_r_r))
             | (ExpKind::Cat(exp_l_l, exp_r_l), ExpKind::Cat(exp_l_r, exp_r_r))
             | (ExpKind::Mem(exp_l_l, exp_r_l), ExpKind::Mem(exp_l_r, exp_r_r)) => {
@@ -209,7 +207,9 @@ impl SyntaxEq for Pattern {
         match (self, other) {
             (Pattern::Case(mixop_l), Pattern::Case(mixop_r)) => mixop_l == mixop_r,
             (Pattern::List(pattern_l), Pattern::List(pattern_r)) => pattern_l == pattern_r,
-            (Pattern::Opt(pattern_l), Pattern::Opt(pattern_r)) => pattern_l == pattern_r,
+            (Pattern::Opt(pattern_opt_l), Pattern::Opt(pattern_opt_r)) => {
+                pattern_opt_l == pattern_opt_r
+            }
             _ => false,
         }
     }
@@ -481,11 +481,7 @@ impl SyntaxEq for Rel {
             && self.not_typ.syntax_eq(&other.not_typ)
             && self.input_hint == other.input_hint
             && self.rule_groups.syntax_eq(&other.rule_groups)
-            && match (&self.else_group, &other.else_group) {
-                (Some(group_l), Some(group_r)) => group_l.syntax_eq(group_r),
-                (None, None) => true,
-                _ => false,
-            }
+            && self.else_group.syntax_eq(&other.else_group)
             && self.hints.syntax_eq(&other.hints)
     }
 }
@@ -527,11 +523,7 @@ impl SyntaxEq for FuncDec {
             && self.params.syntax_eq(&other.params)
             && self.typ.syntax_eq(&other.typ)
             && self.clauses.syntax_eq(&other.clauses)
-            && match (&self.else_clause, &other.else_clause) {
-                (Some(clause_l), Some(clause_r)) => clause_l.syntax_eq(clause_r),
-                (None, None) => true,
-                _ => false,
-            }
+            && self.else_clause.syntax_eq(&other.else_clause)
             && self.hints.syntax_eq(&other.hints)
     }
 }

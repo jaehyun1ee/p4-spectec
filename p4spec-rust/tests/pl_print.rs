@@ -71,12 +71,9 @@ fn group_printer_escapes_text_and_omits_annotations_and_fallthrough() {
     second.node.span = span("other-source");
     second.hints.prose = Some(alter::AlterationHint::Text("other prose".to_owned()));
 
+    assert_eq!(Print::render(&vec![first]), "1. Return \"line\\n\\\"\\\\\"");
     assert_eq!(
-        Print::to_string(&vec![first]),
-        "1. Return \"line\\n\\\"\\\\\""
-    );
-    assert_eq!(
-        Print::to_string(&vec![second]),
+        Print::render(&vec![second]),
         "1. Return \"line\\n\\\"\\\\\""
     );
 }
@@ -97,7 +94,7 @@ fn shared_control_flow_renders_group_tier_at_nested_level() {
     branch.node.node.note.iid = 42;
 
     assert_eq!(
-        Print::to_string(&vec![branch]),
+        Print::render(&vec![branch]),
         concat!(
             "1. If (condition), then\n\n",
             "  1. Return value\n\n",
@@ -125,7 +122,7 @@ fn group_and_dispatch_backtracking_preserve_arm_order() {
         }),
     }));
     assert_eq!(
-        Print::to_string(&vec![backtrack]),
+        Print::render(&vec![backtrack]),
         concat!(
             "1. Block (2 arms)\n\n",
             "Arm 1:\n\n  1. Return a\n\n",
@@ -157,7 +154,7 @@ fn group_and_dispatch_backtracking_preserve_arm_order() {
         }),
     }));
     assert_eq!(
-        Print::to_string(&vec![route]),
+        Print::render(&vec![route]),
         concat!(
             "1. Block (2 arms)\n\n",
             "Arm 1:\n\n  1. Group first: first\n\n",

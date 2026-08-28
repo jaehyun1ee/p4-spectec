@@ -11,26 +11,6 @@ use super::ast::*;
 
 // == Printing
 
-// - Helpers
-
-fn indent(level: usize) -> String {
-    "  ".repeat(level)
-}
-fn escaped(text: &str) -> String {
-    text.bytes()
-        .map(|byte| match byte {
-            b'"' => "\\\"".into(),
-            b'\\' => "\\\\".into(),
-            8 => "\\b".into(),
-            9 => "\\t".into(),
-            10 => "\\n".into(),
-            13 => "\\r".into(),
-            32..=126 => char::from(byte).to_string(),
-            _ => format!("\\{byte:03}"),
-        })
-        .collect()
-}
-
 // - Iterators
 
 impl Print for Iter {
@@ -166,64 +146,66 @@ impl Print for [TypCase] {
 
 // - Values
 
-fn write_value_with(
-    output: &mut Printer<'_>,
-    value: &Value,
-    short: bool,
-    level: usize,
-) -> fmt::Result {
+fn write_value_with(output: &mut Printer<'_>, value: &Value, short: bool) -> fmt::Result {
     match &value.node.kind {
         ValueKind::Bool(value) => write!(output, "{value}"),
         ValueKind::Num(value) => value.print(output),
-        ValueKind::Text(text) => output.write_str(&escaped(text)),
+        ValueKind::Text(text) => output.write_escaped(text),
         ValueKind::Struct(fields) if fields.is_empty() => output.write_str("{}"),
         ValueKind::Struct(fields) if short => write!(output, "{{ .../{} }}", fields.len()),
         ValueKind::Struct(fields) => {
-            output.write_str("{\n")?;
-            for (index, (atom, value)) in fields.iter().enumerate() {
-                if index != 0 {
-                    output.write_str(";\n")?;
+            output.write_char('{')?;
+            output.indented(|output| {
+                for (index, (atom, value)) in fields.iter().enumerate() {
+                    if index != 0 {
+                        output.write_char(';')?;
+                    }
+                    output.newline()?;
+                    atom.print(output)?;
+                    output.write_char(' ')?;
+                    write_value_with(output, value, short)?;
                 }
-                output.write_str(&indent(level + 1))?;
-                atom.print(output)?;
-                output.write_char(' ')?;
-                write_value_with(output, value, short, level + 1)?;
-            }
-            output.write_char('\n')?;
-            output.write_str(&indent(level))?;
+                Ok(())
+            })?;
+            output.newline()?;
             output.write_char('}')
         }
         ValueKind::Case(case) if short => case.to_mixop().print(output),
-        ValueKind::Case(case) => write_notval_with(output, case, level),
+        ValueKind::Case(case) => write_notval_with(output, case),
         ValueKind::Tuple(values) => {
             output.write_char('(')?;
-            for (index, value) in values.iter().enumerate() {
-                if index != 0 {
-                    output.write_str(", ")?;
+            output.indented(|output| {
+                for (index, value) in values.iter().enumerate() {
+                    if index != 0 {
+                        output.write_str(", ")?;
+                    }
+                    write_value_with(output, value, short)?;
                 }
-                write_value_with(output, value, short, level + 1)?;
-            }
+                Ok(())
+            })?;
             output.write_char(')')
         }
         ValueKind::Opt(Some(value)) => {
             output.write_str("Some(")?;
-            write_value_with(output, value, short, level + 1)?;
+            output.indented(|output| write_value_with(output, value, short))?;
             output.write_char(')')
         }
         ValueKind::Opt(None) => output.write_str("None"),
         ValueKind::List(values) if values.is_empty() => output.write_str("[]"),
         ValueKind::List(values) if short => write!(output, "[ .../{} ]", values.len()),
         ValueKind::List(values) => {
-            output.write_str("[\n")?;
-            for (index, value) in values.iter().enumerate() {
-                if index != 0 {
-                    output.write_str(",\n")?;
+            output.write_char('[')?;
+            output.indented(|output| {
+                for (index, value) in values.iter().enumerate() {
+                    if index != 0 {
+                        output.write_char(',')?;
+                    }
+                    output.newline()?;
+                    write_value_with(output, value, short)?;
                 }
-                output.write_str(&indent(level + 1))?;
-                write_value_with(output, value, short, level + 1)?;
-            }
-            output.write_char('\n')?;
-            output.write_str(&indent(level))?;
+                Ok(())
+            })?;
+            output.newline()?;
             output.write_char(']')
         }
         ValueKind::Func(id) => {
@@ -237,26 +219,26 @@ fn write_value_with(
 /// Renders a value with explicit abbreviation and indentation settings
 pub fn render_value_with(value: &Value, short: bool, level: usize) -> String {
     let mut output = String::new();
-    write_value_with(&mut Printer::new(&mut output), value, short, level)
+    write_value_with(&mut Printer::with_level(&mut output, level), value, short)
         .expect("writing to a String cannot fail");
     output
 }
 
-fn write_notval_with(output: &mut Printer<'_>, not_val: &ValueCase, level: usize) -> fmt::Result {
+fn write_notval_with(output: &mut Printer<'_>, not_val: &ValueCase) -> fmt::Result {
     not_val.print_with(output, |value, output| {
-        write_value_with(output, value, false, level + 1)
+        output.indented(|output| write_value_with(output, value, false))
     })
 }
 
 impl Print for Value {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        write_value_with(printer, self, false, 0)
+        write_value_with(printer, self, false)
     }
 }
 
 impl Print for ValueCase {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        write_notval_with(printer, self, 0)
+        write_notval_with(printer, self)
     }
 }
 
@@ -267,7 +249,11 @@ impl Print for Exp {
         match &self.node.kind {
             ExpKind::Bool(value) => write!(printer, "{value}"),
             ExpKind::Num(value) => value.print(printer),
-            ExpKind::Text(text) => write!(printer, "\"{}\"", escaped(text)),
+            ExpKind::Text(text) => {
+                printer.write_char('"')?;
+                printer.write_escaped(text)?;
+                printer.write_char('"')
+            }
             ExpKind::Var(id) => printer.write_str(&id.node),
             ExpKind::Un(op, _, exp) => {
                 op.print(printer)?;
@@ -560,18 +546,15 @@ impl Print for [Arg] {
 /// Renders prems with
 pub fn render_prems_with(level: usize, prems: &[Prem]) -> String {
     let mut output = String::new();
-    write_prems_with(&mut Printer::new(&mut output), level, prems)
+    write_prems_with(&mut Printer::with_level(&mut output, level), prems)
         .expect("writing to a String cannot fail");
     output
 }
 
-pub(crate) fn write_prems_with(
-    output: &mut Printer<'_>,
-    level: usize,
-    prems: &[Prem],
-) -> fmt::Result {
+pub(crate) fn write_prems_with(output: &mut Printer<'_>, prems: &[Prem]) -> fmt::Result {
     for prem in prems {
-        write!(output, "\n{}-- ", indent(level))?;
+        output.newline()?;
+        output.write_str("-- ")?;
         prem.print(output)?;
     }
     Ok(())
@@ -635,7 +618,7 @@ impl Print for Prem {
 
 impl Print for [Prem] {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        write_prems_with(printer, 0, self)
+        write_prems_with(printer, self)
     }
 }
 
@@ -679,7 +662,9 @@ impl Print for Rule {
         self.node.id.print(printer)?;
         printer.write_str(": ")?;
         self.node.not_exp.print(printer)?;
-        write_prems_with(printer, 2, &self.node.prems)
+        printer.indented(|printer| {
+            printer.indented(|printer| write_prems_with(printer, &self.node.prems))
+        })
     }
 }
 
@@ -743,7 +728,7 @@ impl Print for Clause {
         self.node.args.print(printer)?;
         printer.write_str(" = ")?;
         self.node.expression.print(printer)?;
-        write_prems_with(printer, 1, &self.node.premises)
+        printer.indented(|printer| write_prems_with(printer, &self.node.premises))
     }
 }
 

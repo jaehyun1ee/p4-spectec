@@ -194,15 +194,16 @@ impl<T: Hash> Hash for Mixfix<T> {
 // == Free identifiers
 
 impl<T: Free> Free for Mixfix<T> {
-    fn free(&self) -> IdSet {
+    fn collect_free(&self, free: &mut IdSet) {
         match self {
-            Self::Arg(arg) => arg.free(),
-            Self::Atom(_) => IdSet::new(),
-            Self::Brack(_, mixfix, _) => mixfix.free(),
-            Self::Infix(mixfix_l, _, mixfix_r) => mixfix_l.free().union(mixfix_r.free()),
-            Self::Seq(mixfixes) => mixfixes
-                .iter()
-                .fold(IdSet::new(), |free, mixfix| free.union(mixfix.free())),
+            Self::Arg(arg) => arg.collect_free(free),
+            Self::Atom(_) => {}
+            Self::Brack(_, mixfix, _) => mixfix.collect_free(free),
+            Self::Infix(mixfix_l, _, mixfix_r) => {
+                mixfix_l.collect_free(free);
+                mixfix_r.collect_free(free);
+            }
+            Self::Seq(mixfixes) => mixfixes.as_slice().collect_free(free),
         }
     }
 }
@@ -486,17 +487,17 @@ impl<T> Mixfix<T> {
     fn display_inner(&self) -> String {
         match self {
             Self::Arg(_) => "%".into(),
-            Self::Atom(atom) => atom.node.to_string(),
+            Self::Atom(atom) => atom.node.to_source_string(),
             Self::Brack(atom_l, mixfix, atom_r) => format!(
                 "{}{}{}",
-                atom_l.node.to_string(),
+                atom_l.node.to_source_string(),
                 mixfix.display_inner(),
-                atom_r.node.to_string()
+                atom_r.node.to_source_string()
             ),
             Self::Infix(mixfix_l, atom, mixfix_r) => format!(
                 "{}{}{}",
                 mixfix_l.display_inner(),
-                atom.node.to_string(),
+                atom.node.to_source_string(),
                 mixfix_r.display_inner()
             ),
             Self::Seq(mixfixes) => mixfixes

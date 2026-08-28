@@ -8,23 +8,6 @@ use super::ast::*;
 
 // == Printing
 
-// - Helpers
-
-fn escaped(text: &str) -> String {
-    text.bytes()
-        .map(|byte| match byte {
-            b'"' => "\\\"".into(),
-            b'\\' => "\\\\".into(),
-            8 => "\\b".into(),
-            9 => "\\t".into(),
-            10 => "\\n".into(),
-            13 => "\\r".into(),
-            32..=126 => char::from(byte).to_string(),
-            _ => format!("\\{byte:03}"),
-        })
-        .collect()
-}
-
 // - Expressions
 
 impl Print for Exp {
@@ -32,7 +15,11 @@ impl Print for Exp {
         match &self.node.node.kind {
             ExpKind::Bool(value) => write!(printer, "{value}"),
             ExpKind::Num(value) => value.print(printer),
-            ExpKind::Text(text) => write!(printer, "\"{}\"", escaped(text)),
+            ExpKind::Text(text) => {
+                printer.write_char('"')?;
+                printer.write_escaped(text)?;
+                printer.write_char('"')
+            }
             ExpKind::Var(id) => printer.write_str(&id.node),
             ExpKind::Un(op, _, exp) => {
                 op.print(printer)?;
@@ -285,32 +272,31 @@ impl Print for [Arg] {
 
 // - Case analysis
 
-type TierPrinter<Tier> = fn(&mut Printer<'_>, &Tier, bool, usize, usize) -> fmt::Result;
+type TierPrinter<Tier> = fn(&mut Printer<'_>, &Tier, bool, usize) -> fmt::Result;
 
 fn write_case_with<Tier>(
     output: &mut Printer<'_>,
     case: &Case<Tier>,
     tier_printer: TierPrinter<Tier>,
-    level: usize,
     index: usize,
 ) -> fmt::Result {
-    write!(output, "{}{index}. Case ", "  ".repeat(level))?;
+    output.write_indent()?;
+    write!(output, "{index}. Case ")?;
     case.guard.print(output)?;
     output.write_str("\n\n")?;
-    write_block_with(output, &case.block, tier_printer, level + 1, 0)
+    output.indented(|output| write_block_with(output, &case.block, tier_printer, 0))
 }
 
 fn write_cases_with<Tier>(
     output: &mut Printer<'_>,
     cases: &[Case<Tier>],
     tier_printer: TierPrinter<Tier>,
-    level: usize,
 ) -> fmt::Result {
     for (index, case) in cases.iter().enumerate() {
         if index != 0 {
             output.write_str("\n\n")?;
         }
-        write_case_with(output, case, tier_printer, level, index + 1)?;
+        write_case_with(output, case, tier_printer, index + 1)?;
     }
     Ok(())
 }
@@ -367,15 +353,14 @@ fn write_instr_with<Tier>(
     instr: &Instr<Tier>,
     tier_printer: TierPrinter<Tier>,
     short: bool,
-    level: usize,
     index: usize,
 ) -> fmt::Result {
-    let order = format!("{}{index}. ", "  ".repeat(level));
     let write_order = |output: &mut Printer<'_>| {
         if short {
             Ok(())
         } else {
-            output.write_str(&order)
+            output.write_indent()?;
+            write!(output, "{index}. ")
         }
     };
 
@@ -394,13 +379,11 @@ fn write_instr_with<Tier>(
             output.write_str(", then")?;
             if !short {
                 output.write_str("\n\n")?;
-                write_block_with(output, block, tier_printer, level + 1, 0)?;
+                output.indented(|output| write_block_with(output, block, tier_printer, 0))?;
                 if *dangle {
-                    write!(
-                        output,
-                        "\n\n{order}Else Dangling#{}",
-                        instr.node.node.note.iid
-                    )?;
+                    output.write_str("\n\n")?;
+                    write_order(output)?;
+                    write!(output, "Else Dangling#{}", instr.node.node.note.iid)?;
                 }
             }
             Ok(())
@@ -428,9 +411,15 @@ fn write_instr_with<Tier>(
                     write_holding(output, false)?;
                     if !short {
                         output.write_str("\n\n")?;
-                        write_block_with(output, block_hold, tier_printer, level + 1, 0)?;
-                        write!(output, "\n\n{order}Else,\n\n")?;
-                        write_block_with(output, block_not_hold, tier_printer, level + 1, 0)?;
+                        output.indented(|output| {
+                            write_block_with(output, block_hold, tier_printer, 0)
+                        })?;
+                        output.write_str("\n\n")?;
+                        write_order(output)?;
+                        output.write_str("Else,\n\n")?;
+                        output.indented(|output| {
+                            write_block_with(output, block_not_hold, tier_printer, 0)
+                        })?;
                     }
                     Ok(())
                 }
@@ -439,13 +428,12 @@ fn write_instr_with<Tier>(
                     write_holding(output, matches!(hold_case, HoldCase::NotHold(..)))?;
                     if !short {
                         output.write_str("\n\n")?;
-                        write_block_with(output, block, tier_printer, level + 1, 0)?;
+                        output
+                            .indented(|output| write_block_with(output, block, tier_printer, 0))?;
                         if *dangle {
-                            write!(
-                                output,
-                                "\n\n{order}Else Dangling#{}",
-                                instr.node.node.note.iid
-                            )?;
+                            output.write_str("\n\n")?;
+                            write_order(output)?;
+                            write!(output, "Else Dangling#{}", instr.node.node.note.iid)?;
                         }
                     }
                     Ok(())
@@ -458,13 +446,11 @@ fn write_instr_with<Tier>(
             exp.print(output)?;
             if !short {
                 output.write_str("\n\n")?;
-                write_cases_with(output, cases, tier_printer, level + 1)?;
+                output.indented(|output| write_cases_with(output, cases, tier_printer))?;
                 if *dangle {
-                    write!(
-                        output,
-                        "\n\n{order}Else Dangling#{}",
-                        instr.node.node.note.iid
-                    )?;
+                    output.write_str("\n\n")?;
+                    write_order(output)?;
+                    write!(output, "Else Dangling#{}", instr.node.node.note.iid)?;
                 }
             }
             Ok(())
@@ -522,7 +508,7 @@ fn write_instr_with<Tier>(
             output.write_char(')')?;
             if !short {
                 output.write_str("\n\n")?;
-                write_block_with(output, block, tier_printer, level + 1, 0)?;
+                output.indented(|output| write_block_with(output, block, tier_printer, 0))?;
             }
             Ok(())
         }
@@ -544,7 +530,7 @@ fn write_instr_with<Tier>(
             output.write_char(')')?;
             if !short {
                 output.write_str("\n\n")?;
-                write_block_with(output, block, tier_printer, level + 1, 0)?;
+                output.indented(|output| write_block_with(output, block, tier_printer, 0))?;
             }
             Ok(())
         }
@@ -561,11 +547,11 @@ fn write_instr_with<Tier>(
             output.write_char(')')?;
             if !short {
                 output.write_str("\n\n")?;
-                write_block_with(output, block, tier_printer, level + 1, 0)?;
+                output.indented(|output| write_block_with(output, block, tier_printer, 0))?;
             }
             Ok(())
         }
-        InstrKind::Tier(TierInstr { tier }) => tier_printer(output, tier, short, level, index),
+        InstrKind::Tier(TierInstr { tier }) => tier_printer(output, tier, short, index),
     }
 }
 
@@ -573,21 +559,13 @@ fn write_block_with<Tier>(
     output: &mut Printer<'_>,
     block: &Block<Tier>,
     tier_printer: TierPrinter<Tier>,
-    level: usize,
     index: usize,
 ) -> fmt::Result {
     for (offset, instr) in block.iter().enumerate() {
         if offset != 0 {
             output.write_str("\n\n")?;
         }
-        write_instr_with(
-            output,
-            instr,
-            tier_printer,
-            false,
-            level,
-            index + offset + 1,
-        )?;
+        write_instr_with(output, instr, tier_printer, false, index + offset + 1)?;
     }
     Ok(())
 }
@@ -596,17 +574,13 @@ fn write_elseblock_opt_with<Tier>(
     output: &mut Printer<'_>,
     block: &Option<Block<Tier>>,
     tier_printer: TierPrinter<Tier>,
-    level: usize,
     index: usize,
 ) -> fmt::Result {
     if let Some(block) = block {
-        write!(
-            output,
-            "\n\n{}{next}. Otherwise,\n\n",
-            "  ".repeat(level),
-            next = index + 1
-        )?;
-        write_block_with(output, block, tier_printer, level + 1, 0)?;
+        output.write_str("\n\n")?;
+        output.write_indent()?;
+        write!(output, "{next}. Otherwise,\n\n", next = index + 1)?;
+        output.indented(|output| write_block_with(output, block, tier_printer, 0))?;
     }
     Ok(())
 }
@@ -679,7 +653,6 @@ impl Print for Rel {
             printer,
             &self.block_else_opt,
             write_instr_dispatch_tier_with,
-            0,
             self.block.len(),
         )
     }
@@ -691,12 +664,11 @@ fn write_instr_group_tier_with(
     output: &mut Printer<'_>,
     tier: &InstrGroup,
     short: bool,
-    level: usize,
     index: usize,
 ) -> fmt::Result {
-    let order = format!("{}{index}. ", "  ".repeat(level));
     if !short {
-        output.write_str(&order)?;
+        output.write_indent()?;
+        write!(output, "{index}. ")?;
     }
 
     match tier {
@@ -730,14 +702,14 @@ fn write_instr_group_tier_with(
         InstrGroup::Backtrack(BacktrackGroupInstr { blocks }) => {
             write!(output, "Block ({} arms)", blocks.len())?;
             if !short {
-                let indent = "  ".repeat(level);
                 output.write_str("\n\n")?;
                 for (arm_index, arm) in blocks.iter().enumerate() {
                     if arm_index != 0 {
                         output.write_str("\n\n")?;
                     }
-                    write!(output, "{indent}Arm {}:\n\n", arm_index + 1)?;
-                    write_block_group_with(output, arm, level + 1, 0)?;
+                    output.write_indent()?;
+                    write!(output, "Arm {}:\n\n", arm_index + 1)?;
+                    output.indented(|output| write_block_group_with(output, arm, 0))?;
                 }
             }
             Ok(())
@@ -748,21 +720,20 @@ fn write_instr_group_tier_with(
 fn write_block_group_with(
     output: &mut Printer<'_>,
     block: &BlockGroup,
-    level: usize,
     index: usize,
 ) -> fmt::Result {
-    write_block_with(output, block, write_instr_group_tier_with, level, index)
+    write_block_with(output, block, write_instr_group_tier_with, index)
 }
 
 impl Print for Instr<InstrGroup> {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        write_instr_with(printer, self, write_instr_group_tier_with, false, 0, 0)
+        write_instr_with(printer, self, write_instr_group_tier_with, false, 0)
     }
 }
 
 impl Print for BlockGroup {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        write_block_group_with(printer, self, 0, 0)
+        write_block_group_with(printer, self, 0)
     }
 }
 
@@ -772,12 +743,11 @@ fn write_instr_dispatch_tier_with(
     output: &mut Printer<'_>,
     tier: &InstrDispatch,
     short: bool,
-    level: usize,
     index: usize,
 ) -> fmt::Result {
-    let order = format!("{}{index}. ", "  ".repeat(level));
     if !short {
-        output.write_str(&order)?;
+        output.write_indent()?;
+        write!(output, "{index}. ")?;
     }
 
     match tier {
@@ -794,21 +764,21 @@ fn write_instr_dispatch_tier_with(
             write_relinput(output, rel_signature, exps_input)?;
             if !short {
                 output.write_str("\n\n")?;
-                write_block_group_with(output, block, level + 1, 0)?;
+                output.indented(|output| write_block_group_with(output, block, 0))?;
             }
             Ok(())
         }
         InstrDispatch::Route(RouteDispatchInstr { blocks }) => {
             write!(output, "Block ({} arms)", blocks.len())?;
             if !short {
-                let indent = "  ".repeat(level);
                 output.write_str("\n\n")?;
                 for (arm_index, arm) in blocks.iter().enumerate() {
                     if arm_index != 0 {
                         output.write_str("\n\n")?;
                     }
-                    write!(output, "{indent}Arm {}:\n\n", arm_index + 1)?;
-                    write_block_dispatch_with(output, arm, level + 1, 0)?;
+                    output.write_indent()?;
+                    write!(output, "Arm {}:\n\n", arm_index + 1)?;
+                    output.indented(|output| write_block_dispatch_with(output, arm, 0))?;
                 }
             }
             Ok(())
@@ -819,21 +789,20 @@ fn write_instr_dispatch_tier_with(
 fn write_block_dispatch_with(
     output: &mut Printer<'_>,
     block: &BlockDispatch,
-    level: usize,
     index: usize,
 ) -> fmt::Result {
-    write_block_with(output, block, write_instr_dispatch_tier_with, level, index)
+    write_block_with(output, block, write_instr_dispatch_tier_with, index)
 }
 
 impl Print for Instr<InstrDispatch> {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        write_instr_with(printer, self, write_instr_dispatch_tier_with, false, 0, 0)
+        write_instr_with(printer, self, write_instr_dispatch_tier_with, false, 0)
     }
 }
 
 impl Print for BlockDispatch {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        write_block_dispatch_with(printer, self, 0, 0)
+        write_block_dispatch_with(printer, self, 0)
     }
 }
 
@@ -872,7 +841,9 @@ impl Print for TableRow {
         printer.write_str(" -> ")?;
         self.exp.print(printer)?;
         printer.write_str(":\n\n")?;
-        write_block_group_with(printer, &self.block, 2, 0)
+        printer.indented(|printer| {
+            printer.indented(|printer| write_block_group_with(printer, &self.block, 0))
+        })
     }
 }
 
@@ -914,7 +885,6 @@ impl Print for DefinedFunc {
             printer,
             &self.block_else_opt,
             write_instr_group_tier_with,
-            0,
             self.block.len(),
         )
     }

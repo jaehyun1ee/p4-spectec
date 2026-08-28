@@ -60,16 +60,6 @@ impl SyntaxEq for Block {
     }
 }
 
-impl SyntaxEq for Option<ElseBlock> {
-    fn syntax_eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Some(block_l), Some(block_r)) => block_l.syntax_eq(block_r),
-            (None, None) => true,
-            _ => false,
-        }
-    }
-}
-
 // - Relations
 
 impl SyntaxEq for RelSignature {

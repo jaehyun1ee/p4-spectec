@@ -1,6 +1,6 @@
 //! Numeric values and operations
 
-use std::{cmp::Ordering, fmt};
+use std::fmt;
 
 use num_bigint::BigInt;
 use num_traits::{Signed, Zero};
@@ -14,17 +14,17 @@ use crate::lang::traits::print::{Print, Printer};
 ///
 /// Construct with `TryFrom<BigInt>`;
 /// negative inputs return `NumericError::NegativeNatural`
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Natural(BigInt);
 
 /// A natural number or a signed integer
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Number {
     Nat(Natural),
     Int(BigInt),
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Typ {
     Nat,
     Int,
@@ -119,45 +119,11 @@ impl fmt::Display for Natural {
     }
 }
 
-// Comparison
-
-/// Compares number kind before numeric value;
-/// every natural number sorts before every signed integer
-pub fn compare(number_a: &Number, number_b: &Number) -> Ordering {
-    match (number_a, number_b) {
-        (Number::Nat(natural_a), Number::Nat(natural_b)) => natural_a.0.cmp(&natural_b.0),
-        (Number::Int(integer_a), Number::Int(integer_b)) => integer_a.cmp(integer_b),
-        (Number::Nat(_), Number::Int(_)) => Ordering::Less,
-        (Number::Int(_), Number::Nat(_)) => Ordering::Greater,
-    }
-}
-
-/// Compares typ
-pub fn compare_typ(type_a: Typ, type_b: Typ) -> Ordering {
-    match (type_a, type_b) {
-        (Typ::Nat, Typ::Nat) | (Typ::Int, Typ::Int) => Ordering::Equal,
-        (Typ::Nat, Typ::Int) => Ordering::Less,
-        (Typ::Int, Typ::Nat) => Ordering::Greater,
-    }
-}
-
-// Equality
-
-/// Compares numeric value with number-kind sensitivity
-pub fn eq(number_a: &Number, number_b: &Number) -> bool {
-    compare(number_a, number_b) == Ordering::Equal
-}
-
 // Subtyping
-
-/// Checks equality of uiv
-pub fn equiv(type_a: Typ, type_b: Typ) -> bool {
-    type_a == type_b
-}
 
 /// Applies sub
 pub fn sub(type_a: Typ, type_b: Typ) -> bool {
-    matches!((type_a, type_b), (Typ::Nat, Typ::Int)) || equiv(type_a, type_b)
+    matches!((type_a, type_b), (Typ::Nat, Typ::Int)) || type_a == type_b
 }
 
 // Stringifiers

@@ -38,6 +38,32 @@ pub(crate) fn array(value: &Value) -> Result<&[Value], DecodeError> {
         .ok_or(DecodeError::Expected("array"))
 }
 
+pub(crate) fn decode_list<T>(
+    value: &Value,
+    decode: impl Fn(&Value) -> Result<T, DecodeError>,
+) -> Result<Vec<T>, DecodeError> {
+    array(value)?.iter().map(decode).collect()
+}
+
+pub(crate) fn encode_list<T>(values: &[T], encode: impl Fn(&T) -> Value) -> Value {
+    Value::Array(values.iter().map(encode).collect())
+}
+
+pub(crate) fn decode_option<T>(
+    value: &Value,
+    decode: impl FnOnce(&Value) -> Result<T, DecodeError>,
+) -> Result<Option<T>, DecodeError> {
+    if value.is_null() {
+        Ok(None)
+    } else {
+        Ok(Some(decode(value)?))
+    }
+}
+
+pub(crate) fn encode_option<T>(value: Option<&T>, encode: impl FnOnce(&T) -> Value) -> Value {
+    value.map_or(Value::Null, encode)
+}
+
 pub(crate) fn string(value: &Value) -> Result<&str, DecodeError> {
     value.as_str().ok_or(DecodeError::Expected("string"))
 }
@@ -67,4 +93,25 @@ pub(crate) fn variant(value: &Value) -> Result<(&str, &[Value]), DecodeError> {
         .split_first()
         .ok_or(DecodeError::Expected("non-empty variant array"))?;
     Ok((string(tag)?, fields))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn collection_combinators_preserve_ocaml_json_shapes() {
+        let values = serde_json::json!([1, 2]);
+        assert_eq!(decode_list(&values, integer), Ok(vec![1, 2]));
+        assert_eq!(
+            encode_list(&[1, 2], |value| serde_json::json!(value)),
+            values
+        );
+        assert_eq!(decode_option(&Value::Null, integer), Ok(None));
+        assert_eq!(decode_option(&serde_json::json!(3), integer), Ok(Some(3)));
+        assert_eq!(
+            encode_option::<i64>(None, |value| serde_json::json!(value)),
+            Value::Null
+        );
+    }
 }
