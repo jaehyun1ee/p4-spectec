@@ -60,7 +60,7 @@ impl SyntaxEq for ExpKind {
                             atom_l.syntax_eq(atom_r) && exp_l.syntax_eq(exp_r)
                         })
             }
-            (ExpKind::Opt(exp_l), ExpKind::Opt(exp_r)) => exp_l.syntax_eq(exp_r),
+            (ExpKind::Opt(exp_opt_l), ExpKind::Opt(exp_opt_r)) => exp_opt_l.syntax_eq(exp_opt_r),
             (ExpKind::Cons(exp_l_l, exp_r_l), ExpKind::Cons(exp_l_r, exp_r_r))
             | (ExpKind::Cat(exp_l_l, exp_r_l), ExpKind::Cat(exp_l_r, exp_r_r))
             | (ExpKind::Mem(exp_l_l, exp_r_l), ExpKind::Mem(exp_l_r, exp_r_r)) => {
