@@ -3,6 +3,7 @@
 mod attempt;
 mod context;
 mod dimension;
+mod elab;
 mod error;
 
 pub use error::*;

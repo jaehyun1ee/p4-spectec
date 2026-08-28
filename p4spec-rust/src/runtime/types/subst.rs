@@ -115,6 +115,18 @@ pub fn subst_not_typ(theta: &Theta, not_typ: &ast::NotTyp) -> Result<ast::NotTyp
     subst_not_typ_inner(&mut fresh, theta, not_typ)
 }
 
+/// Substitutes type variables in a variant case and its recorded origin
+pub fn subst_typ_case(theta: &Theta, typ_case: &ast::TypCase) -> Result<ast::TypCase, TypeError> {
+    let (not_typ, origin, hints) = typ_case;
+    let not_typ = subst_not_typ(theta, not_typ)?;
+    let targs = subst_typs(theta, &origin.node.1)?;
+    let origin = crate::spanned! {
+        node: (origin.node.0.clone(), targs),
+        span: origin.span.clone(),
+    };
+    Ok((not_typ, origin, hints.clone()))
+}
+
 pub(crate) fn subst_not_typ_inner(
     fresh: &mut Fresh,
     theta: &Theta,
