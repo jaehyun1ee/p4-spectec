@@ -312,6 +312,7 @@ pub type BlockGroup = Block<InstrGroup>;
 // Dispatch tier
 
 #[derive(Clone, Debug, PartialEq)]
+#[allow(clippy::large_enum_variant)]
 pub enum InstrDispatch {
     Group(GroupDispatchInstr),
     Route(RouteDispatchInstr),

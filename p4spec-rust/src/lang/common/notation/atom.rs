@@ -128,6 +128,7 @@ impl Free for Atom {
 
 impl Atom {
     /// String representation of the atom
+    #[allow(clippy::inherent_to_string)]
     pub fn to_string(&self) -> String {
         match self {
             Self::Keyword(id) => id.clone(),

@@ -270,6 +270,7 @@ fn populate_exp(unifiers: &IdSet, exp_template: &ast::Exp, exp: &ast::Exp) -> Ve
 }
 
 /// Anti-unifies input paths and returns shared templates plus per-path premises
+#[allow(clippy::type_complexity)]
 pub fn antiunify(
     mut ctx: Context,
     exps_group: Vec<Vec<ast::Exp>>,

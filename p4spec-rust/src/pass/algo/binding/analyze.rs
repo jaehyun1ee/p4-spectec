@@ -455,6 +455,7 @@ fn analyze_prems(
     Ok((ctx, prems_analyzed))
 }
 
+#[allow(clippy::type_complexity)]
 fn analyze_rule_match(
     ctx: &Context,
     mut ctxs_local: Vec<Context>,

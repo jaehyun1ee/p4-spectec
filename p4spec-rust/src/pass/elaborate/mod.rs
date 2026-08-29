@@ -1,5 +1,7 @@
 //! Surface-language validation and conversion to the intermediate language
 
+#![allow(clippy::result_large_err)]
+
 mod attempt;
 mod context;
 mod dimension;

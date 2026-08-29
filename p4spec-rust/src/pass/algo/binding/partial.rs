@@ -26,6 +26,7 @@ use super::{
 };
 
 #[derive(Clone, Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum Source {
     Bound {
         exp_from: ast::Exp,

@@ -1829,6 +1829,7 @@ fn elab_args(
 
 // == Premises
 
+#[allow(clippy::large_enum_variant)]
 enum PremInternal {
     Some(il::Prem),
     Var,

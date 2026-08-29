@@ -28,6 +28,7 @@ enum ClassKind {
     Equiv,
 }
 
+#[allow(clippy::large_enum_variant)]
 enum Class {
     Equals(Vec<ast::Exp>),
     Equiv(Vec<ast::Exp>),
