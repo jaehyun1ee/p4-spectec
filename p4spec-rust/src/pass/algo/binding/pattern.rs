@@ -2,7 +2,7 @@
 
 use std::cmp::Ordering;
 
-use crate::lang::{common::source::Span, il::ast, traits::eq::SyntaxEq, xl::num};
+use crate::lang::{common::source::Span, il::ast, xl::num};
 
 use super::super::{AlgoError, AlgoErrorKind};
 
@@ -36,6 +36,10 @@ fn compare_typ(typ_l: &ast::Typ, typ_r: &ast::Typ) -> Ordering {
     compare_typ_kind(&typ_l.node, &typ_r.node)
 }
 
+fn compare_typ_phrase(typ_l: &ast::Typ, typ_r: &ast::Typ) -> Ordering {
+    compare_typ_kind(&typ_l.node, &typ_r.node).then_with(|| typ_l.span.cmp(&typ_r.span))
+}
+
 fn compare_typ_kind(typ_l: &ast::TypKind, typ_r: &ast::TypKind) -> Ordering {
     match (typ_l, typ_r) {
         (ast::TypKind::Bool, ast::TypKind::Bool) | (ast::TypKind::Text, ast::TypKind::Text) => {
@@ -45,21 +49,22 @@ fn compare_typ_kind(typ_l: &ast::TypKind, typ_r: &ast::TypKind) -> Ordering {
             num::compare_typ(*num_typ_l, *num_typ_r)
         }
         (ast::TypKind::Var(id_l, targs_l), ast::TypKind::Var(id_r, targs_r)) => id_l
-            .node
-            .cmp(&id_r.node)
-            .then_with(|| compare_slices(targs_l, targs_r, compare_typ)),
+            .cmp(id_r)
+            .then_with(|| compare_slices(targs_l, targs_r, compare_typ_phrase)),
         (ast::TypKind::Tuple(typs_l), ast::TypKind::Tuple(typs_r)) => {
-            compare_slices(typs_l, typs_r, compare_typ)
+            compare_slices(typs_l, typs_r, compare_typ_phrase)
         }
         (ast::TypKind::Iter(typ_l, iter_l), ast::TypKind::Iter(typ_r, iter_r)) => {
-            compare_typ(typ_l, typ_r).then_with(|| iter_l.cmp(iter_r))
+            compare_typ_phrase(typ_l, typ_r).then_with(|| iter_l.cmp(iter_r))
         }
         (ast::TypKind::Func(func_l), ast::TypKind::Func(func_r)) => {
             compare_slices(&func_l.tparams, &func_r.tparams, |tparam_l, tparam_r| {
-                tparam_l.node.cmp(&tparam_r.node)
+                tparam_l.cmp(tparam_r)
             })
-            .then_with(|| compare_slices(&func_l.typs_params, &func_r.typs_params, compare_typ))
-            .then_with(|| compare_typ(&func_l.typ_ret, &func_r.typ_ret))
+            .then_with(|| {
+                compare_slices(&func_l.typs_params, &func_r.typs_params, compare_typ_phrase)
+            })
+            .then_with(|| compare_typ_phrase(&func_l.typ_ret, &func_r.typ_ret))
         }
         _ => typ_tag(typ_l).cmp(&typ_tag(typ_r)),
     }
@@ -97,7 +102,9 @@ impl PatternSet {
     }
 
     pub fn contains(&self, not_typ: &ast::NotTyp) -> bool {
-        self.elements.iter().any(|item| item.syntax_eq(not_typ))
+        self.elements
+            .iter()
+            .any(|item| compare_not_typ(item, not_typ) == Ordering::Equal)
     }
 
     pub fn insert(&mut self, not_typ: ast::NotTyp) -> bool {
