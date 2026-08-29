@@ -13,6 +13,20 @@ fn test_printer_renders_case_patterns_as_canonical_mixops() {
     ])));
 
     assert_eq!(Print::to_string(&pattern), "`% , %`");
+
+    let angle = ast::Pattern::Case(Box::new(Mixfix::Brack(
+        p4spec_rust::phrase! {
+            node: Atom::LAngle,
+            span: Span::default(),
+        },
+        Box::new(Mixfix::Arg(())),
+        p4spec_rust::phrase! {
+            node: Atom::RAngle,
+            span: Span::default(),
+        },
+    )));
+
+    assert_eq!(Print::to_string(&angle), "`<%>`");
 }
 
 #[test]

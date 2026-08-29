@@ -437,10 +437,7 @@ impl Print for [IterExp] {
 impl Print for Pattern {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         match self {
-            Pattern::Case(mixop) => {
-                let rendered = mixop.render(|atom| atom.node.render(), |()| "%".to_owned());
-                write!(printer, "`{rendered}`")
-            }
+            Pattern::Case(mixop) => write!(printer, "{mixop}"),
             Pattern::List(ListPattern::Cons) => printer.write_str("_ :: _"),
             Pattern::List(ListPattern::Fixed(length)) => write!(printer, "[ _/{length} ]"),
             Pattern::List(ListPattern::Nil) => printer.write_str("[]"),

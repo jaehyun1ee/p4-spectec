@@ -486,17 +486,17 @@ impl<T> Mixfix<T> {
     fn display_inner(&self) -> String {
         match self {
             Self::Arg(_) => "%".into(),
-            Self::Atom(atom) => atom.node.to_string(),
+            Self::Atom(atom) => atom.node.render(),
             Self::Brack(atom_l, mixfix, atom_r) => format!(
                 "{}{}{}",
-                atom_l.node.to_string(),
+                atom_l.node.render(),
                 mixfix.display_inner(),
-                atom_r.node.to_string()
+                atom_r.node.render()
             ),
             Self::Infix(mixfix_l, atom, mixfix_r) => format!(
                 "{}{}{}",
                 mixfix_l.display_inner(),
-                atom.node.to_string(),
+                atom.node.render(),
                 mixfix_r.display_inner()
             ),
             Self::Seq(mixfixes) => mixfixes
