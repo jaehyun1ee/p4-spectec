@@ -30,9 +30,13 @@ fn collect_exp_refs<'a>(
     ctx: &Context,
     exps: impl IntoIterator<Item = &'a ast::Exp>,
 ) -> Result<Bindings, AlgoError> {
-    let mut bindings = Bindings::new();
+    let mut collected = Vec::new();
     for exp in exps {
-        bindings = bind::union(bindings, collect_exp(ctx, exp)?)?;
+        collected.push(collect_exp(ctx, exp)?);
+    }
+    let mut bindings = Bindings::new();
+    for bindings_head in collected.into_iter().rev() {
+        bindings = bind::union(bindings_head, bindings)?;
     }
     Ok(bindings)
 }
@@ -171,9 +175,13 @@ pub fn collect_arg(ctx: &Context, arg: &ast::Arg) -> Result<Bindings, AlgoError>
 }
 
 pub fn collect_args(ctx: &Context, args: &[ast::Arg]) -> Result<Bindings, AlgoError> {
-    let mut bindings = Bindings::new();
+    let mut collected = Vec::with_capacity(args.len());
     for arg in args {
-        bindings = bind::union(bindings, collect_arg(ctx, arg)?)?;
+        collected.push(collect_arg(ctx, arg)?);
+    }
+    let mut bindings = Bindings::new();
+    for bindings_head in collected.into_iter().rev() {
+        bindings = bind::union(bindings_head, bindings)?;
     }
     Ok(bindings)
 }

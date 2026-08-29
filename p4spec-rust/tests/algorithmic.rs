@@ -10,7 +10,7 @@ use p4spec_rust::{
         xl,
     },
     pass::algo::{
-        AlgoErrorKind,
+        self, AlgoErrorKind,
         binding::{
             bind::{self, Binding, Bindings},
             collect,
@@ -54,6 +54,30 @@ fn pattern_set(names: &[&str]) -> PatternSet {
         .enumerate()
         .map(|(index, name)| not_typ(name, index as i64 + 1))
         .collect()
+}
+
+#[test]
+fn unsupported_conversion_uses_the_first_definition_span() {
+    let spec = vec![
+        Spanned::new(
+            ast::DefKind::ExternTyp(ast::ExternTyp {
+                id: id("first", 41),
+                hints: vec![],
+            }),
+            span(41),
+        ),
+        Spanned::new(
+            ast::DefKind::ExternTyp(ast::ExternTyp {
+                id: id("last", 43),
+                hints: vec![],
+            }),
+            span(43),
+        ),
+    ];
+    let error = algo::convert(&spec).expect_err("foundation conversion stub");
+
+    assert_eq!(error.kind, AlgoErrorKind::Unsupported);
+    assert_eq!(error.span, span(41));
 }
 
 #[test]
@@ -188,6 +212,45 @@ fn collection_rejects_a_binding_inside_a_noninvertible_operator() {
 }
 
 #[test]
+fn expression_collection_reports_right_associated_conflict_span() {
+    let iterated = exp(
+        ast::ExpKind::Iter(Box::new(var_exp("x", 3)), (ast::Iter::List, vec![])),
+        ast::TypKind::Iter(Box::new(typ::bool()), ast::Iter::List),
+        3,
+    );
+    let tuple = exp(
+        ast::ExpKind::Tuple(vec![var_exp("x", 1), var_exp("x", 2), iterated]),
+        ast::TypKind::Tuple(vec![]),
+        1,
+    );
+
+    let error = collect::collect_exp(&Context::new(), &tuple)
+        .expect_err("third occurrence conflicts with the repeated tail binding");
+
+    assert_eq!(error.kind, AlgoErrorKind::InconsistentDimensions);
+    assert_eq!(error.span, span(2));
+}
+
+#[test]
+fn argument_collection_reports_right_associated_conflict_span() {
+    let iterated = exp(
+        ast::ExpKind::Iter(Box::new(var_exp("x", 3)), (ast::Iter::List, vec![])),
+        ast::TypKind::Iter(Box::new(typ::bool()), ast::Iter::List),
+        3,
+    );
+    let args = [var_exp("x", 1), var_exp("x", 2), iterated]
+        .into_iter()
+        .map(|exp| Spanned::new(ast::ArgKind::Exp(Box::new(exp)), span(1)))
+        .collect::<Vec<_>>();
+
+    let error = collect::collect_args(&Context::new(), &args)
+        .expect_err("third occurrence conflicts with the repeated tail binding");
+
+    assert_eq!(error.kind, AlgoErrorKind::InconsistentDimensions);
+    assert_eq!(error.span, span(2));
+}
+
+#[test]
 fn shallow_cases_accept_only_iterated_variables_as_arguments() {
     let variable = var_exp("x", 1);
     let iterated = exp(
@@ -217,20 +280,52 @@ fn shallow_cases_accept_only_iterated_variables_as_arguments() {
 
 #[test]
 fn pattern_overlap_requires_intersection_in_every_dimension() {
+    let owner_span = span(1);
     let pattern_a: PatternSets = vec![pattern_set(&["A", "B"]), pattern_set(&["X"])];
     let pattern_b: PatternSets = vec![pattern_set(&["B"]), pattern_set(&["X", "Y"])];
     let pattern_c: PatternSets = vec![pattern_set(&["B"]), pattern_set(&["Y"])];
 
-    assert!(pattern::has_overlap(&pattern_a, &pattern_b).expect("matching arity"));
-    assert!(!pattern::has_overlap(&pattern_a, &pattern_c).expect("matching arity"));
+    assert!(pattern::has_overlap(&owner_span, &pattern_a, &pattern_b).expect("matching arity"));
+    assert!(!pattern::has_overlap(&owner_span, &pattern_a, &pattern_c).expect("matching arity"));
+}
+
+#[test]
+fn pattern_arity_errors_use_the_owning_source_span() {
+    let owner_span = span(31);
+    let patterns_l: PatternSets = vec![pattern_set(&["A"])];
+    let patterns_r: PatternSets = vec![pattern_set(&["A"]), pattern_set(&["B"])];
+
+    let error = pattern::has_overlap(&owner_span, &patterns_l, &patterns_r)
+        .expect_err("different pattern arities");
+
+    assert_eq!(
+        error.kind,
+        AlgoErrorKind::PatternArityMismatch {
+            expected: 1,
+            actual: 2,
+        }
+    );
+    assert_eq!(error.span, owner_span);
+}
+
+#[test]
+fn pattern_sets_order_mixfix_structure_before_rendered_text() {
+    let argument = Spanned::new(Mixfix::Arg(typ::bool()), span(2));
+    let atom = not_typ("A", 1);
+    let patterns: PatternSet = [atom, argument].into_iter().collect();
+    let ordered = patterns.iter().collect::<Vec<_>>();
+
+    assert!(matches!(ordered[0].node, Mixfix::Arg(_)));
+    assert!(matches!(ordered[1].node, Mixfix::Atom(_)));
 }
 
 #[test]
 fn pattern_subtraction_preserves_cartesian_fragment_order() {
+    let owner_span = span(1);
     let total: PatternSets = vec![pattern_set(&["A", "B"]), pattern_set(&["X", "Y"])];
     let covered: PatternSets = vec![pattern_set(&["A"]), pattern_set(&["X"])];
 
-    let missing = pattern::subtract(&total, &covered).expect("matching arity");
+    let missing = pattern::subtract(&owner_span, &total, &covered).expect("matching arity");
 
     assert_eq!(
         missing,

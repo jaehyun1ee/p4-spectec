@@ -1,11 +1,81 @@
 //! Sets of notation-type patterns
 
-use crate::lang::{
-    il::ast,
-    traits::{eq::SyntaxEq, print::Print},
-};
+use std::cmp::Ordering;
+
+use crate::lang::{common::source::Span, il::ast, traits::eq::SyntaxEq, xl::num};
 
 use super::super::{AlgoError, AlgoErrorKind};
+
+fn compare_slices<T, U>(
+    items_l: &[T],
+    items_r: &[U],
+    mut compare_item: impl FnMut(&T, &U) -> Ordering,
+) -> Ordering {
+    for (item_l, item_r) in items_l.iter().zip(items_r) {
+        let ordering = compare_item(item_l, item_r);
+        if ordering != Ordering::Equal {
+            return ordering;
+        }
+    }
+    items_l.len().cmp(&items_r.len())
+}
+
+fn typ_tag(typ: &ast::TypKind) -> u8 {
+    match typ {
+        ast::TypKind::Bool => 0,
+        ast::TypKind::Num(_) => 1,
+        ast::TypKind::Text => 2,
+        ast::TypKind::Var(_, _) => 3,
+        ast::TypKind::Tuple(_) => 4,
+        ast::TypKind::Iter(_, _) => 5,
+        ast::TypKind::Func(_) => 6,
+    }
+}
+
+fn compare_typ(typ_l: &ast::Typ, typ_r: &ast::Typ) -> Ordering {
+    compare_typ_kind(&typ_l.node, &typ_r.node)
+}
+
+fn compare_typ_kind(typ_l: &ast::TypKind, typ_r: &ast::TypKind) -> Ordering {
+    match (typ_l, typ_r) {
+        (ast::TypKind::Bool, ast::TypKind::Bool) | (ast::TypKind::Text, ast::TypKind::Text) => {
+            Ordering::Equal
+        }
+        (ast::TypKind::Num(num_typ_l), ast::TypKind::Num(num_typ_r)) => {
+            num::compare_typ(*num_typ_l, *num_typ_r)
+        }
+        (ast::TypKind::Var(id_l, targs_l), ast::TypKind::Var(id_r, targs_r)) => id_l
+            .node
+            .cmp(&id_r.node)
+            .then_with(|| compare_slices(targs_l, targs_r, compare_typ)),
+        (ast::TypKind::Tuple(typs_l), ast::TypKind::Tuple(typs_r)) => {
+            compare_slices(typs_l, typs_r, compare_typ)
+        }
+        (ast::TypKind::Iter(typ_l, iter_l), ast::TypKind::Iter(typ_r, iter_r)) => {
+            compare_typ(typ_l, typ_r).then_with(|| iter_l.cmp(iter_r))
+        }
+        (ast::TypKind::Func(func_l), ast::TypKind::Func(func_r)) => {
+            compare_slices(&func_l.tparams, &func_r.tparams, |tparam_l, tparam_r| {
+                tparam_l.node.cmp(&tparam_r.node)
+            })
+            .then_with(|| compare_slices(&func_l.typs_params, &func_r.typs_params, compare_typ))
+            .then_with(|| compare_typ(&func_l.typ_ret, &func_r.typ_ret))
+        }
+        _ => typ_tag(typ_l).cmp(&typ_tag(typ_r)),
+    }
+}
+
+fn compare_not_typ(not_typ_l: &ast::NotTyp, not_typ_r: &ast::NotTyp) -> Ordering {
+    let structure = not_typ_l
+        .node
+        .cmp_by(&not_typ_r.node, |_, _| Ordering::Equal);
+    if structure != Ordering::Equal {
+        return structure;
+    }
+    let typs_l = not_typ_l.node.args();
+    let typs_r = not_typ_r.node.args();
+    compare_slices(&typs_l, &typs_r, |typ_l, typ_r| compare_typ(typ_l, typ_r))
+}
 
 /// A source-insensitive set of notation types
 #[derive(Clone, Debug, Default)]
@@ -35,7 +105,7 @@ impl PatternSet {
             return false;
         }
         self.elements.push(not_typ);
-        self.elements.sort_by_key(Print::to_string);
+        self.elements.sort_by(compare_not_typ);
         true
     }
 
@@ -78,7 +148,11 @@ impl FromIterator<ast::NotTyp> for PatternSet {
 
 pub type PatternSets = Vec<PatternSet>;
 
-fn check_arity(patterns_l: &PatternSets, patterns_r: &PatternSets) -> Result<(), AlgoError> {
+fn check_arity(
+    span: &Span,
+    patterns_l: &PatternSets,
+    patterns_r: &PatternSets,
+) -> Result<(), AlgoError> {
     if patterns_l.len() == patterns_r.len() {
         return Ok(());
     }
@@ -87,24 +161,29 @@ fn check_arity(patterns_l: &PatternSets, patterns_r: &PatternSets) -> Result<(),
             expected: patterns_l.len(),
             actual: patterns_r.len(),
         },
-        Default::default(),
+        span.clone(),
     ))
 }
 
-pub fn has_overlap(patterns_l: &PatternSets, patterns_r: &PatternSets) -> Result<bool, AlgoError> {
-    check_arity(patterns_l, patterns_r)?;
+pub fn has_overlap(
+    span: &Span,
+    patterns_l: &PatternSets,
+    patterns_r: &PatternSets,
+) -> Result<bool, AlgoError> {
+    check_arity(span, patterns_l, patterns_r)?;
     Ok(patterns_l
         .iter()
         .zip(patterns_r)
         .all(|(pattern_l, pattern_r)| !pattern_l.intersection(pattern_r).is_empty()))
 }
 
-pub fn find_overlap(
-    pattern_group: &[PatternSets],
-) -> Result<Option<(&PatternSets, &PatternSets)>, AlgoError> {
+pub fn find_overlap<'a>(
+    span: &Span,
+    pattern_group: &'a [PatternSets],
+) -> Result<Option<(&'a PatternSets, &'a PatternSets)>, AlgoError> {
     for (index, patterns) in pattern_group.iter().enumerate() {
         for patterns_other in &pattern_group[index + 1..] {
-            if has_overlap(patterns, patterns_other)? {
+            if has_overlap(span, patterns, patterns_other)? {
                 return Ok(Some((patterns, patterns_other)));
             }
         }
@@ -113,10 +192,11 @@ pub fn find_overlap(
 }
 
 pub fn subtract(
+    span: &Span,
     patterns_total: &PatternSets,
     patterns: &PatternSets,
 ) -> Result<Vec<PatternSets>, AlgoError> {
-    if !has_overlap(patterns_total, patterns)? {
+    if !has_overlap(span, patterns_total, patterns)? {
         return Ok(vec![patterns_total.clone()]);
     }
 
@@ -140,6 +220,7 @@ pub fn subtract(
 }
 
 pub fn find_missing(
+    span: &Span,
     patterns_total: &PatternSets,
     pattern_group: &[PatternSets],
 ) -> Result<Vec<PatternSets>, AlgoError> {
@@ -147,7 +228,7 @@ pub fn find_missing(
     for patterns in pattern_group {
         let mut remaining = Vec::new();
         for patterns_total in &missing {
-            remaining.extend(subtract(patterns_total, patterns)?);
+            remaining.extend(subtract(span, patterns_total, patterns)?);
         }
         missing = remaining;
     }
