@@ -1,6 +1,6 @@
 //! Binding analysis for algorithmic conversion
 
-pub mod analyze;
+pub(in crate::pass::algo) mod analyze;
 pub mod antiunify;
 pub mod bind;
 pub mod collect;

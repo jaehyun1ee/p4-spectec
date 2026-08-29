@@ -873,7 +873,7 @@ fn analyze_def(ctx: &Context, def: &ast::Def) -> Result<al::ast::Def, AlgoError>
 }
 
 /// Analyzes a complete IL specification before side-condition guard insertion
-pub fn analyze_spec(spec: &ast::Spec) -> Result<al::ast::Spec, AlgoError> {
+pub(in crate::pass::algo) fn analyze_spec(spec: &ast::Spec) -> Result<al::ast::Spec, AlgoError> {
     let mut ctx = Context::new();
     ctx.load_spec(spec);
     spec.iter().map(|def| analyze_def(&ctx, def)).collect()

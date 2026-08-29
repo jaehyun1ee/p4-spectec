@@ -14,7 +14,7 @@ use p4spec_rust::{
     pass::algo::{
         self, AlgoErrorKind,
         binding::{
-            analyze, antiunify,
+            antiunify,
             bind::{self, Binding, Bindings},
             collect,
             context::Context,
@@ -159,6 +159,53 @@ fn equality_prem(exp_l: ast::Exp, exp_r: ast::Exp, line: i64) -> ast::Prem {
         line,
     );
     if_prem(condition)
+}
+
+fn indexed_exp(base: ast::Exp, index: ast::Exp, note: ast::TypKind, line: i64) -> ast::Exp {
+    exp(
+        ast::ExpKind::Idx(Box::new(base), Box::new(index)),
+        note,
+        line,
+    )
+}
+
+fn literal_index_exp(value: bool, line: i64) -> ast::Exp {
+    let typ_bool = typ::bool();
+    let base = exp(
+        ast::ExpKind::List(vec![exp(
+            ast::ExpKind::Bool(value),
+            ast::TypKind::Bool,
+            line,
+        )]),
+        typ::list(typ_bool).node,
+        line,
+    );
+    let index = exp(
+        ast::ExpKind::Num(ast::Num::Nat(0_u64.into())),
+        ast::TypKind::Num(xl::num::Typ::Nat),
+        line,
+    );
+    indexed_exp(base, index, ast::TypKind::Bool, line)
+}
+
+fn assert_index_guard_span(prem: &ast::Prem, expected_span: Span) {
+    assert_eq!(prem.span, expected_span);
+    let ast::PremKind::If(if_prem) = &prem.node else {
+        panic!("expected index guard premise");
+    };
+    assert_eq!(if_prem.exp.span, expected_span);
+    assert!(matches!(
+        if_prem.exp.node.kind,
+        ast::ExpKind::Cmp(ast::CmpOp::Num(xl::num::CmpOp::Lt), _, _, _)
+    ));
+}
+
+fn iteration_var(name: &str, typ: ast::Typ, line: i64) -> ast::Var {
+    ast::Var {
+        id: id(name, line),
+        typ,
+        iters: vec![],
+    }
 }
 
 fn function_clause(spec: &p4spec_rust::lang::al::ast::Spec) -> &ast::Clause {
@@ -692,6 +739,306 @@ fn conversion_preserves_numeric_and_slice_checks_before_output_guards() {
         ast::ExpKind::Cmp(ast::CmpOp::Num(xl::num::CmpOp::Lt), _, _, _)
     ));
     assert_eq!(index_guard.span, span(22));
+}
+
+#[test]
+fn conversion_distinguishes_let_must_guards_from_insert_guards() {
+    let typ_bool = typ::bool();
+    let exp_l = joint_iteration(&[("bound_l", 20), ("bound_r", 21)], ast::Iter::List, 22);
+    let exp_r = joint_iteration(&[("input_l", 23), ("input_r", 24)], ast::Iter::List, 25);
+    let prem_equality = equality_prem(exp_l, exp_r, 30);
+    let exp_output = joint_iteration(&[("bound_l", 20), ("bound_r", 21)], ast::Iter::List, 40);
+    let spec = function_spec(
+        vec![typ::list(typ_bool.clone()), typ::list(typ_bool.clone())],
+        vec![
+            iterated_var_exp("input_l", &typ_bool, ast::Iter::List, 2),
+            iterated_var_exp("input_r", &typ_bool, ast::Iter::List, 3),
+        ],
+        exp_output.clone(),
+        vec![prem_equality],
+    );
+
+    let converted = algo::convert(&spec).expect("let guard conversion");
+    let clause = function_clause(&converted);
+    let [right_guard, let_premise] = clause.node.premises.as_slice() else {
+        panic!("expected only the right guard before the generated let premise");
+    };
+
+    assert_eq!(right_guard.span, Span::over(&[span(23), span(24)]));
+    assert!(matches!(right_guard.node, ast::PremKind::If(_)));
+    assert_eq!(let_premise.span, span(30));
+    let ast::PremKind::Let(let_prem) = &let_premise.node else {
+        panic!("expected binding analysis to produce a let premise");
+    };
+    assert!(matches!(let_prem.exp_l.node.kind, ast::ExpKind::Iter(_, _)));
+    assert!(matches!(let_prem.exp_r.node.kind, ast::ExpKind::Iter(_, _)));
+    assert_eq!(clause.node.expression, exp_output);
+}
+
+#[test]
+fn conversion_distinguishes_iterated_must_guards_from_insert_guards() {
+    let typ_bool = typ::bool();
+    let exp_condition = exp(
+        ast::ExpKind::Cmp(
+            ast::CmpOp::Bool(xl::bool::CmpOp::Eq),
+            ast::OpTyp::Bool,
+            Box::new(typed_var_exp("left", &typ_bool, 12)),
+            Box::new(typed_var_exp("right", &typ_bool, 13)),
+        ),
+        ast::TypKind::Bool,
+        14,
+    );
+    let prem_iterated = Spanned::new(
+        ast::PremKind::Iter(ast::IteratedPrem {
+            prem: Box::new(if_prem(exp_condition)),
+            iter_prem: ast::IterPrem {
+                iter: ast::Iter::List,
+                vars_bound: vec![
+                    iteration_var("left", typ_bool.clone(), 10),
+                    iteration_var("right", typ_bool.clone(), 11),
+                ],
+                vars_bind: vec![],
+            },
+        }),
+        span(15),
+    );
+    let insert_spec = function_spec(
+        vec![typ::list(typ_bool.clone()), typ::list(typ_bool.clone())],
+        vec![
+            iterated_var_exp("left", &typ_bool, ast::Iter::List, 2),
+            iterated_var_exp("right", &typ_bool, ast::Iter::List, 3),
+        ],
+        exp(ast::ExpKind::Bool(true), ast::TypKind::Bool, 16),
+        vec![prem_iterated],
+    );
+
+    let converted = algo::convert(&insert_spec).expect("iterated insertion conversion");
+    let [joint_guard, source_premise] = function_clause(&converted).node.premises.as_slice() else {
+        panic!("expected a joint guard before the iterated premise");
+    };
+    assert_eq!(joint_guard.span, Span::over(&[span(10), span(11)]));
+    assert!(matches!(joint_guard.node, ast::PremKind::If(_)));
+    assert_eq!(source_premise.span, span(14));
+    assert!(matches!(source_premise.node, ast::PremKind::Iter(_)));
+
+    let prem_binding = Spanned::new(
+        ast::PremKind::Iter(ast::IteratedPrem {
+            prem: Box::new(equality_prem(
+                typed_var_exp("output", &typ_bool, 23),
+                typed_var_exp("input", &typ_bool, 22),
+                24,
+            )),
+            iter_prem: ast::IterPrem {
+                iter: ast::Iter::List,
+                vars_bound: vec![iteration_var("input", typ_bool.clone(), 22)],
+                vars_bind: vec![],
+            },
+        }),
+        span(25),
+    );
+    let exp_output = joint_iteration(&[("input", 22), ("output", 23)], ast::Iter::List, 30);
+    let must_spec = function_spec(
+        vec![typ::list(typ_bool.clone())],
+        vec![iterated_var_exp("input", &typ_bool, ast::Iter::List, 20)],
+        exp_output.clone(),
+        vec![prem_binding],
+    );
+
+    let converted = algo::convert(&must_spec).expect("iterated binding conversion");
+    let clause = function_clause(&converted);
+    let [source_premise] = clause.node.premises.as_slice() else {
+        panic!("bound-plus-bind guard must suppress the matching output guard");
+    };
+    assert_eq!(source_premise.span, span(24));
+    let ast::PremKind::Iter(iterated) = &source_premise.node else {
+        panic!("expected analyzed iterated binding premise");
+    };
+    assert_eq!(
+        iterated
+            .iter_prem
+            .vars_bound
+            .iter()
+            .map(|var| var.id.node.as_str())
+            .collect::<Vec<_>>(),
+        vec!["input"]
+    );
+    assert_eq!(
+        iterated
+            .iter_prem
+            .vars_bind
+            .iter()
+            .map(|var| var.id.node.as_str())
+            .collect::<Vec<_>>(),
+        vec!["output"]
+    );
+    assert_eq!(clause.node.expression, exp_output);
+}
+
+#[test]
+fn conversion_traverses_relation_matches_paths_and_else_without_sibling_leaks() {
+    let rule =
+        |name: &str, input: ast::Exp, output: ast::Exp, premises: Vec<ast::Prem>, line: i64| {
+            Spanned::new(
+                ast::RuleKind {
+                    id: id(name, line),
+                    not_exp: Mixfix::Seq(vec![Mixfix::Arg(input), Mixfix::Arg(output)]),
+                    prems: premises,
+                },
+                span(line),
+            )
+        };
+    let debug_index = |value: bool, line: i64| {
+        Spanned::new(
+            ast::PremKind::Debug(ast::DebugPrem {
+                exp: literal_index_exp(value, line),
+            }),
+            span(line),
+        )
+    };
+    let match_rule = rule(
+        "match_path",
+        literal_index_exp(true, 10),
+        literal_index_exp(true, 11),
+        vec![],
+        10,
+    );
+    let first_sibling = rule(
+        "first_sibling",
+        exp(ast::ExpKind::Bool(true), ast::TypKind::Bool, 20),
+        literal_index_exp(false, 22),
+        vec![debug_index(false, 21)],
+        20,
+    );
+    let second_sibling = rule(
+        "second_sibling",
+        exp(ast::ExpKind::Bool(true), ast::TypKind::Bool, 30),
+        literal_index_exp(false, 31),
+        vec![],
+        30,
+    );
+    let else_rule = rule(
+        "else_path",
+        literal_index_exp(true, 40),
+        literal_index_exp(true, 42),
+        vec![debug_index(false, 41)],
+        40,
+    );
+    let spec = vec![Spanned::new(
+        ast::DefKind::Rel(ast::Rel {
+            id: id("relation", 1),
+            not_typ: Spanned::new(
+                Mixfix::Seq(vec![Mixfix::Arg(typ::bool()), Mixfix::Arg(typ::bool())]),
+                span(1),
+            ),
+            input_hint: InputHint::new(vec![0]),
+            rule_groups: vec![
+                Spanned::new((id("match_group", 9), vec![match_rule]), span(9)),
+                Spanned::new(
+                    (id("sibling_group", 19), vec![first_sibling, second_sibling]),
+                    span(19),
+                ),
+            ],
+            else_group: Some(Spanned::new((id("else_group", 39), else_rule), span(39))),
+            hints: vec![],
+        }),
+        span(1),
+    )];
+
+    let converted = algo::convert(&spec).expect("guarded relation conversion");
+    let p4spec_rust::lang::al::ast::DefKind::Rel(relation) = &converted[0].node else {
+        panic!("expected relation definition");
+    };
+    let [match_group, sibling_group] = relation.rule_groups.as_slice() else {
+        panic!("expected match and sibling groups in source order");
+    };
+    assert_eq!(match_group.span, span(9));
+    assert_eq!(match_group.node.rule_match.exps_input[0].span, span(10));
+    let [match_guard, match_source] = match_group.node.rule_match.prems.as_slice() else {
+        panic!("expected a guard before the analyzed match premise");
+    };
+    assert_index_guard_span(match_guard, span(10));
+    assert_eq!(match_source.span, span(10));
+    assert!(match_group.node.rule_paths[0].prems.is_empty());
+
+    let [first_path, second_path] = sibling_group.node.rule_paths.as_slice() else {
+        panic!("expected both sibling paths in source order");
+    };
+    let [first_guard, first_source] = first_path.prems.as_slice() else {
+        panic!("expected one path-local guard before the source premise");
+    };
+    assert_index_guard_span(first_guard, span(21));
+    assert_eq!(first_source.span, span(21));
+    assert!(matches!(first_source.node, ast::PremKind::Debug(_)));
+    let [second_guard] = second_path.prems.as_slice() else {
+        panic!("the first sibling must not guard the second sibling output");
+    };
+    assert_index_guard_span(second_guard, span(31));
+
+    let else_group = relation.else_group.as_ref().expect("else group preserved");
+    assert_eq!(else_group.span, span(39));
+    assert_eq!(else_group.node.rule_match.exps_input[0].span, span(40));
+    let [else_guard, else_source] = else_group.node.rule_path.prems.as_slice() else {
+        panic!("expected else-path guard and source premise only");
+    };
+    assert_index_guard_span(else_guard, span(41));
+    assert_eq!(else_source.span, span(41));
+    assert!(matches!(else_source.node, ast::PremKind::Debug(_)));
+}
+
+#[test]
+fn conversion_traverses_else_clauses_in_guard_order() {
+    let typ_bool = typ::bool();
+    let exp_argument = joint_iteration(&[("left", 50), ("right", 51)], ast::Iter::List, 50);
+    let exp_output = joint_iteration(&[("left", 50), ("right", 51)], ast::Iter::List, 52);
+    let prem_debug = Spanned::new(
+        ast::PremKind::Debug(ast::DebugPrem {
+            exp: literal_index_exp(false, 53),
+        }),
+        span(53),
+    );
+    let else_clause = Spanned::new(
+        ast::ClauseKind {
+            args: vec![exp_arg(exp_argument)],
+            expression: exp_output.clone(),
+            premises: vec![prem_debug],
+        },
+        span(50),
+    );
+    let spec = vec![Spanned::new(
+        ast::DefKind::FuncDec(ast::FuncDec {
+            id: id("otherwise", 49),
+            tparams: vec![],
+            params: vec![Spanned::new(
+                ast::ParamKind::Exp(typ::list(Spanned::new(
+                    ast::TypKind::Tuple(vec![typ_bool.clone(), typ_bool]),
+                    span(49),
+                ))),
+                span(49),
+            )],
+            typ: Spanned::new(exp_output.node.note.clone(), span(49)),
+            clauses: vec![],
+            else_clause: Some(else_clause),
+            hints: vec![],
+        }),
+        span(49),
+    )];
+
+    let converted = algo::convert(&spec).expect("guarded else-clause conversion");
+    let p4spec_rust::lang::al::ast::DefKind::FuncDec(function) = &converted[0].node else {
+        panic!("expected function definition");
+    };
+    let clause = function
+        .else_clause
+        .as_ref()
+        .expect("else clause preserved");
+    let [guard, source] = clause.node.premises.as_slice() else {
+        panic!("expected guard before the else-clause source premise");
+    };
+    assert_index_guard_span(guard, span(53));
+    assert_eq!(source.span, span(53));
+    assert!(matches!(source.node, ast::PremKind::Debug(_)));
+    assert_eq!(clause.node.expression, exp_output);
+    assert_eq!(clause.span, span(50));
 }
 
 #[test]
@@ -1570,7 +1917,7 @@ fn antiunification_uses_runtime_equivalence_for_plain_type_aliases() {
 }
 
 #[test]
-fn analysis_preserves_rule_paths_and_populates_antiunified_inputs_in_order() {
+fn conversion_preserves_rule_paths_and_populates_antiunified_inputs_in_order() {
     let tuple = |left: bool, right: bool, line: i64| {
         exp(
             ast::ExpKind::Tuple(vec![
@@ -1624,7 +1971,7 @@ fn analysis_preserves_rule_paths_and_populates_antiunified_inputs_in_order() {
         span(1),
     )];
 
-    let analyzed = analyze::analyze_spec(&spec).expect("analyzable relation");
+    let analyzed = algo::convert(&spec).expect("convertible relation");
 
     let p4spec_rust::lang::al::ast::DefKind::Rel(relation) = &analyzed[0].node else {
         panic!("expected relation definition");
@@ -1728,7 +2075,7 @@ fn clause_analysis_orders_partial_then_repeated_then_source_premises() {
         span(1),
     )];
 
-    let analyzed = analyze::analyze_spec(&spec).expect("analyzable function");
+    let analyzed = algo::convert(&spec).expect("convertible function");
 
     let p4spec_rust::lang::al::ast::DefKind::FuncDec(function) = &analyzed[0].node else {
         panic!("expected function definition");
@@ -1796,8 +2143,7 @@ fn otherwise_clauses_and_rules_reject_impure_premises_at_the_branch_span() {
         span(9),
     )];
 
-    let function_error =
-        analyze::analyze_spec(&function_spec).expect_err("impure otherwise clause");
+    let function_error = algo::convert(&function_spec).expect_err("impure otherwise clause");
     assert_eq!(function_error.kind, AlgoErrorKind::ImpureElsePremises);
     assert_eq!(function_error.span, span(10));
 
@@ -1822,13 +2168,13 @@ fn otherwise_clauses_and_rules_reject_impure_premises_at_the_branch_span() {
         span(20),
     )];
 
-    let relation_error = analyze::analyze_spec(&relation_spec).expect_err("impure otherwise rule");
+    let relation_error = algo::convert(&relation_spec).expect_err("impure otherwise rule");
     assert_eq!(relation_error.kind, AlgoErrorKind::ImpureElsePremises);
     assert_eq!(relation_error.span, span(21));
 }
 
 #[test]
-fn table_analysis_rejects_overlapping_and_missing_variant_patterns() {
+fn conversion_rejects_overlapping_and_missing_variant_table_patterns() {
     let choice_id = id("Choice", 1);
     let choice_typ = Spanned::new(ast::TypKind::Var(choice_id.clone(), vec![]), span(1));
     let origin = Spanned::new((choice_id.clone(), vec![]), span(1));
@@ -1899,19 +2245,19 @@ fn table_analysis_rejects_overlapping_and_missing_variant_patterns() {
     ];
 
     let overlap_error =
-        analyze::analyze_spec(&overlap_spec).expect_err("overlap takes precedence over missing");
+        algo::convert(&overlap_spec).expect_err("overlap takes precedence over missing");
     assert_eq!(overlap_error.kind, AlgoErrorKind::OverlappingTablePatterns);
     assert_eq!(overlap_error.span, span(8));
 
     let missing_spec = vec![choice_def, table(vec![row(case_pattern("A", 20), 20)], 19)];
 
-    let missing_error = analyze::analyze_spec(&missing_spec).expect_err("missing B variant row");
+    let missing_error = algo::convert(&missing_spec).expect_err("missing B variant row");
     assert_eq!(missing_error.kind, AlgoErrorKind::MissingTablePatterns);
     assert_eq!(missing_error.span, span(18));
 }
 
 #[test]
-fn analysis_preserves_definition_clause_and_table_row_order() {
+fn conversion_preserves_definition_clause_and_table_row_order() {
     let choice_id = id("Choice", 2);
     let choice_typ = Spanned::new(ast::TypKind::Var(choice_id.clone(), vec![]), span(2));
     let origin = Spanned::new((choice_id.clone(), vec![]), span(2));
@@ -1967,7 +2313,7 @@ fn analysis_preserves_definition_clause_and_table_row_order() {
                     ast::ArgKind::Exp(Box::new(pattern)),
                     span(line),
                 )],
-                exp(ast::ExpKind::Bool(value), ast::TypKind::Bool, line),
+                literal_index_exp(value, line),
             ),
             span(line),
         )
@@ -2039,7 +2385,7 @@ fn analysis_preserves_definition_clause_and_table_row_order() {
         table_def,
     ];
 
-    let analyzed = analyze::analyze_spec(&spec).expect("ordered specification");
+    let analyzed = algo::convert(&spec).expect("ordered specification");
 
     let definition_ids = analyzed
         .iter()
@@ -2101,4 +2447,15 @@ fn analysis_preserves_definition_clause_and_table_row_order() {
         })
         .collect::<Vec<_>>();
     assert_eq!(row_ids, vec!["specific", "_closer"]);
+    assert_eq!(
+        table
+            .table_rows
+            .iter()
+            .map(|row| row.span.clone())
+            .collect::<Vec<_>>(),
+        vec![span(7), span(8)]
+    );
+    assert!(table.table_rows.iter().all(|row| {
+        row.node.prems.is_empty() && matches!(row.node.exp.node.kind, ast::ExpKind::Idx(_, _))
+    }));
 }
