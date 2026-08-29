@@ -13,7 +13,7 @@ use crate::{
     },
     runtime::types::{
         Theta, TypeArityMismatch, TypeDef, TypeError, TypeErrorKind, equiv_func_typ, equiv_typ,
-        expand_typ, optimize_sub_typ, sub_typ, subst_params, subst_typ, subst_typ_case,
+        expand_typ, optimize_sub_typ, sub_typ, subst_not_typ, subst_params, subst_typ, subst_typs,
     },
     spanned,
 };
@@ -205,7 +205,15 @@ fn elab_typ_case_plain(ctx: &Context, typ: &il::Typ) -> Result<Vec<il::TypCase>,
             })?;
             cases
                 .iter()
-                .map(|case| subst_typ_case(&theta, case).map_err(ElabError::from))
+                .map(|(not_typ, origin, hints)| {
+                    let not_typ = subst_not_typ(&theta, not_typ).map_err(ElabError::from)?;
+                    let targs = subst_typs(&theta, &origin.node.1).map_err(ElabError::from)?;
+                    let origin = spanned! {
+                        node: (origin.node.0.clone(), targs),
+                        span: origin.span.clone(),
+                    };
+                    Ok((not_typ, origin, hints.clone()))
+                })
                 .collect()
         }
         TypeDef::Parameter | TypeDef::Extern => Err(ElabError::new(
@@ -1620,8 +1628,14 @@ fn elab_exp_contextual(
                     }
                     if let il::DefTypKind::Variant(cases) = &def_typ.node {
                         let mut cases_subst = Vec::with_capacity(cases.len());
-                        for case in cases {
-                            cases_subst.push(attempt!(type_result(subst_typ_case(&theta, case))));
+                        for (not_typ, origin, hints) in cases {
+                            let not_typ = attempt!(type_result(subst_not_typ(&theta, not_typ)));
+                            let targs = attempt!(type_result(subst_typs(&theta, &origin.node.1)));
+                            let origin = spanned! {
+                                node: (origin.node.0.clone(), targs),
+                                span: origin.span.clone(),
+                            };
+                            cases_subst.push((not_typ, origin, hints.clone()));
                         }
                         return elab_variant_exp(ctx, typ_expect, &cases_subst, exp);
                     }

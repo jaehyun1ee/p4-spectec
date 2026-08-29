@@ -115,20 +115,28 @@ pub fn subst_not_typ(theta: &Theta, not_typ: &ast::NotTyp) -> Result<ast::NotTyp
     subst_not_typ_inner(&mut fresh, theta, not_typ)
 }
 
-/// Substitutes type variables in a variant case and its recorded origin
-pub(crate) fn subst_typ_case(
+pub(crate) fn subst_not_typ_inner(
+    fresh: &mut Fresh,
     theta: &Theta,
-    typ_case: &ast::TypCase,
-) -> Result<ast::TypCase, TypeError> {
-    let (not_typ, origin, hints) = typ_case;
-    let not_typ = subst_not_typ(theta, not_typ)?;
-    let targs = subst_typs(theta, &origin.node.1)?;
-    let origin = crate::spanned! {
-        node: (origin.node.0.clone(), targs),
-        span: origin.span.clone(),
-    };
-    Ok((not_typ, origin, hints.clone()))
+    not_typ: &ast::NotTyp,
+) -> Result<ast::NotTyp, TypeError> {
+    if theta.is_empty() {
+        return Ok(not_typ.clone());
+    }
+    let (mixop, typs) = not_typ.node.split();
+    let mut typs_subst = Vec::with_capacity(typs.len());
+    for typ in typs {
+        let typ_subst = subst_typ_inner(fresh, theta, typ)?;
+        typs_subst.push(typ_subst);
+    }
+    let not_typ_node = Mixop::fill(&mixop, typs_subst);
+    let not_typ_node =
+        not_typ_node.expect("arguments obtained from the same mixfix must match its arity");
+    let not_typ_subst = spanned!(node: not_typ_node, span: not_typ.span.clone());
+    Ok(not_typ_subst)
 }
+
+// == Parameters
 
 fn subst_param_inner(
     fresh: &mut Fresh,
@@ -171,25 +179,4 @@ fn subst_params_inner(
         .iter()
         .map(|param| subst_param_inner(fresh, theta, param))
         .collect()
-}
-
-pub(crate) fn subst_not_typ_inner(
-    fresh: &mut Fresh,
-    theta: &Theta,
-    not_typ: &ast::NotTyp,
-) -> Result<ast::NotTyp, TypeError> {
-    if theta.is_empty() {
-        return Ok(not_typ.clone());
-    }
-    let (mixop, typs) = not_typ.node.split();
-    let mut typs_subst = Vec::with_capacity(typs.len());
-    for typ in typs {
-        let typ_subst = subst_typ_inner(fresh, theta, typ)?;
-        typs_subst.push(typ_subst);
-    }
-    let not_typ_node = Mixop::fill(&mixop, typs_subst);
-    let not_typ_node =
-        not_typ_node.expect("arguments obtained from the same mixfix must match its arity");
-    let not_typ_subst = spanned!(node: not_typ_node, span: not_typ.span.clone());
-    Ok(not_typ_subst)
 }
