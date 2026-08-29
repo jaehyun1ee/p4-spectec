@@ -417,31 +417,27 @@ fn infer_cmp_exp(
     match op {
         el::CmpOp::Bool(_) => {
             let ctx_r = ctx.clone();
-            let exp_l_r = exp_l.clone();
-            let exp_r_r = exp_r.clone();
             let ctx_l = ctx;
-            let exp_l_l = exp_l.clone();
-            let exp_r_l = exp_r.clone();
-            Attempt::choose_sequential(vec![
-                Box::new(move || {
-                    let (ctx, exp_r, typ_r) = attempt!(infer_exp(ctx_r, &exp_r_r));
-                    let (ctx, exp_l) = attempt!(elab_exp(ctx, &typ_r, &exp_l_r));
+            Attempt::choose_sequential(
+                move || {
+                    let (ctx, exp_r, typ_r) = attempt!(infer_exp(ctx_r, exp_r));
+                    let (ctx, exp_l) = attempt!(elab_exp(ctx, &typ_r, exp_l));
                     Attempt::ok((
                         ctx,
                         il::ExpKind::Cmp(op, il::OpTyp::Bool, Box::new(exp_l), Box::new(exp_r)),
                         il::TypKind::Bool,
                     ))
-                }),
-                Box::new(move || {
-                    let (ctx, exp_l, typ_l) = attempt!(infer_exp(ctx_l, &exp_l_l));
-                    let (ctx, exp_r) = attempt!(elab_exp(ctx, &typ_l, &exp_r_l));
+                },
+                move || {
+                    let (ctx, exp_l, typ_l) = attempt!(infer_exp(ctx_l, exp_l));
+                    let (ctx, exp_r) = attempt!(elab_exp(ctx, &typ_l, exp_r));
                     Attempt::ok((
                         ctx,
                         il::ExpKind::Cmp(op, il::OpTyp::Bool, Box::new(exp_l), Box::new(exp_r)),
                         il::TypKind::Bool,
                     ))
-                }),
-            ])
+                },
+            )
         }
         el::CmpOp::Num(_) => {
             let (ctx, exp_l, typ_l) = attempt!(infer_exp(ctx, exp_l));
@@ -547,90 +543,75 @@ fn infer_exp(ctx: Context, exp: &el::Exp) -> Attempt<(Context, il::Exp, il::Typ)
         }
         el::ExpKind::Cat(exp_l, exp_r) => {
             let ctx_list = ctx.clone();
-            let exp_l_list = exp_l.clone();
-            let exp_r_list = exp_r.clone();
             let ctx_text = ctx;
-            let exp_l_text = exp_l.clone();
-            let exp_r_text = exp_r.clone();
-            let (ctx, kind, typ) = attempt!(Attempt::choose_sequential(vec![
-                Box::new(move || {
-                    let (ctx, exp_l, typ_l) = attempt!(infer_exp(ctx_list, &exp_l_list));
+            let (ctx, kind, typ) = attempt!(Attempt::choose_sequential(
+                move || {
+                    let (ctx, exp_l, typ_l) = attempt!(infer_exp(ctx_list, exp_l));
                     let typ_base = attempt!(as_list_typ(&ctx, &typ_l));
                     let typ_list_kind =
                         il::TypKind::Iter(Box::new(typ_base.clone()), il::Iter::List);
                     let typ_list = spanned!(node: typ_list_kind, span: typ_base.span);
-                    let (ctx, exp_r) = attempt!(elab_exp(ctx, &typ_list, &exp_r_list));
+                    let (ctx, exp_r) = attempt!(elab_exp(ctx, &typ_list, exp_r));
                     Attempt::ok((
                         ctx,
                         il::ExpKind::Cat(Box::new(exp_l), Box::new(exp_r)),
                         typ_list.node,
                     ))
-                }),
-                Box::new(move || {
-                    let typ_text = typ_at(il::TypKind::Text, &exp_l_text.span);
-                    let (ctx, exp_l) = attempt!(elab_exp(ctx_text, &typ_text, &exp_l_text));
-                    let typ_text_r = typ_at(il::TypKind::Text, &exp_r_text.span);
-                    let (ctx, exp_r) = attempt!(elab_exp(ctx, &typ_text_r, &exp_r_text));
+                },
+                move || {
+                    let typ_text = typ_at(il::TypKind::Text, &exp_l.span);
+                    let (ctx, exp_l) = attempt!(elab_exp(ctx_text, &typ_text, exp_l));
+                    let typ_text_r = typ_at(il::TypKind::Text, &exp_r.span);
+                    let (ctx, exp_r) = attempt!(elab_exp(ctx, &typ_text_r, exp_r));
                     Attempt::ok((
                         ctx,
                         il::ExpKind::Cat(Box::new(exp_l), Box::new(exp_r)),
                         il::TypKind::Text,
                     ))
-                }),
-            ]));
+                },
+            ));
             (ctx, kind, typ)
         }
         el::ExpKind::Idx(exp_base, exp_index) => {
             let ctx_list = ctx.clone();
-            let exp_base_list = exp_base.clone();
-            let exp_index_list = exp_index.clone();
             let ctx_text = ctx;
-            let exp_base_text = exp_base.clone();
-            let exp_index_text = exp_index.clone();
-            let (ctx, kind, typ) = attempt!(Attempt::choose_sequential(vec![
-                Box::new(move || {
-                    let (ctx, exp_base, typ_base) = attempt!(infer_exp(ctx_list, &exp_base_list));
+            let (ctx, kind, typ) = attempt!(Attempt::choose_sequential(
+                move || {
+                    let (ctx, exp_base, typ_base) = attempt!(infer_exp(ctx_list, exp_base));
                     let typ_element = attempt!(as_list_typ(&ctx, &typ_base));
-                    let typ_nat = typ_at(il::TypKind::Num(xl::num::Typ::Nat), &exp_index_list.span);
-                    let (ctx, exp_index) = attempt!(elab_exp(ctx, &typ_nat, &exp_index_list));
+                    let typ_nat = typ_at(il::TypKind::Num(xl::num::Typ::Nat), &exp_index.span);
+                    let (ctx, exp_index) = attempt!(elab_exp(ctx, &typ_nat, exp_index));
                     Attempt::ok((
                         ctx,
                         il::ExpKind::Idx(Box::new(exp_base), Box::new(exp_index)),
                         typ_element.node,
                     ))
-                }),
-                Box::new(move || {
-                    let typ_text = typ_at(il::TypKind::Text, &exp_base_text.span);
-                    let (ctx, exp_base) = attempt!(elab_exp(ctx_text, &typ_text, &exp_base_text));
-                    let typ_nat = typ_at(il::TypKind::Num(xl::num::Typ::Nat), &exp_index_text.span);
-                    let (ctx, exp_index) = attempt!(elab_exp(ctx, &typ_nat, &exp_index_text));
+                },
+                move || {
+                    let typ_text = typ_at(il::TypKind::Text, &exp_base.span);
+                    let (ctx, exp_base) = attempt!(elab_exp(ctx_text, &typ_text, exp_base));
+                    let typ_nat = typ_at(il::TypKind::Num(xl::num::Typ::Nat), &exp_index.span);
+                    let (ctx, exp_index) = attempt!(elab_exp(ctx, &typ_nat, exp_index));
                     Attempt::ok((
                         ctx,
                         il::ExpKind::Idx(Box::new(exp_base), Box::new(exp_index)),
                         il::TypKind::Text,
                     ))
-                }),
-            ]));
+                },
+            ));
             (ctx, kind, typ)
         }
         el::ExpKind::Slice(exp_base, exp_index, exp_length) => {
             let ctx_list = ctx.clone();
-            let exp_base_list = exp_base.clone();
-            let exp_index_list = exp_index.clone();
-            let exp_length_list = exp_length.clone();
             let ctx_text = ctx;
-            let exp_base_text = exp_base.clone();
-            let exp_index_text = exp_index.clone();
-            let exp_length_text = exp_length.clone();
-            let (ctx, kind, typ) = attempt!(Attempt::choose_sequential(vec![
-                Box::new(move || {
-                    let (ctx, exp_base, typ_base) = attempt!(infer_exp(ctx_list, &exp_base_list));
+            let (ctx, kind, typ) = attempt!(Attempt::choose_sequential(
+                move || {
+                    let (ctx, exp_base, typ_base) = attempt!(infer_exp(ctx_list, exp_base));
                     attempt!(as_list_typ(&ctx, &typ_base));
-                    let typ_nat = typ_at(il::TypKind::Num(xl::num::Typ::Nat), &exp_index_list.span);
-                    let (ctx, exp_index) = attempt!(elab_exp(ctx, &typ_nat, &exp_index_list));
-                    let typ_nat =
-                        typ_at(il::TypKind::Num(xl::num::Typ::Nat), &exp_length_list.span);
-                    let (ctx, exp_length) = attempt!(elab_exp(ctx, &typ_nat, &exp_length_list));
+                    let typ_nat = typ_at(il::TypKind::Num(xl::num::Typ::Nat), &exp_index.span);
+                    let (ctx, exp_index) = attempt!(elab_exp(ctx, &typ_nat, exp_index));
+                    let typ_nat = typ_at(il::TypKind::Num(xl::num::Typ::Nat), &exp_length.span);
+                    let (ctx, exp_length) = attempt!(elab_exp(ctx, &typ_nat, exp_length));
                     Attempt::ok((
                         ctx,
                         il::ExpKind::Slice(
@@ -640,15 +621,14 @@ fn infer_exp(ctx: Context, exp: &el::Exp) -> Attempt<(Context, il::Exp, il::Typ)
                         ),
                         typ_base.node,
                     ))
-                }),
-                Box::new(move || {
-                    let typ_text = typ_at(il::TypKind::Text, &exp_base_text.span);
-                    let (ctx, exp_base) = attempt!(elab_exp(ctx_text, &typ_text, &exp_base_text));
-                    let typ_nat = typ_at(il::TypKind::Num(xl::num::Typ::Nat), &exp_index_text.span);
-                    let (ctx, exp_index) = attempt!(elab_exp(ctx, &typ_nat, &exp_index_text));
-                    let typ_nat =
-                        typ_at(il::TypKind::Num(xl::num::Typ::Nat), &exp_length_text.span);
-                    let (ctx, exp_length) = attempt!(elab_exp(ctx, &typ_nat, &exp_length_text));
+                },
+                move || {
+                    let typ_text = typ_at(il::TypKind::Text, &exp_base.span);
+                    let (ctx, exp_base) = attempt!(elab_exp(ctx_text, &typ_text, exp_base));
+                    let typ_nat = typ_at(il::TypKind::Num(xl::num::Typ::Nat), &exp_index.span);
+                    let (ctx, exp_index) = attempt!(elab_exp(ctx, &typ_nat, exp_index));
+                    let typ_nat = typ_at(il::TypKind::Num(xl::num::Typ::Nat), &exp_length.span);
+                    let (ctx, exp_length) = attempt!(elab_exp(ctx, &typ_nat, exp_length));
                     Attempt::ok((
                         ctx,
                         il::ExpKind::Slice(
@@ -658,8 +638,8 @@ fn infer_exp(ctx: Context, exp: &el::Exp) -> Attempt<(Context, il::Exp, il::Typ)
                         ),
                         il::TypKind::Text,
                     ))
-                }),
-            ]));
+                },
+            ));
             (ctx, kind, typ)
         }
         el::ExpKind::Tuple(exps) => {
@@ -668,62 +648,56 @@ fn infer_exp(ctx: Context, exp: &el::Exp) -> Attempt<(Context, il::Exp, il::Typ)
         }
         el::ExpKind::Len(exp_inner) => {
             let ctx_list = ctx.clone();
-            let exp_list = exp_inner.clone();
             let ctx_text = ctx;
-            let exp_text = exp_inner.clone();
-            let (ctx, kind, typ) = attempt!(Attempt::choose_sequential(vec![
-                Box::new(move || {
-                    let (ctx, exp, typ) = attempt!(infer_exp(ctx_list, &exp_list));
+            let (ctx, kind, typ) = attempt!(Attempt::choose_sequential(
+                move || {
+                    let (ctx, exp, typ) = attempt!(infer_exp(ctx_list, exp_inner));
                     attempt!(as_list_typ(&ctx, &typ));
                     Attempt::ok((
                         ctx,
                         il::ExpKind::Len(Box::new(exp)),
                         il::TypKind::Num(xl::num::Typ::Nat),
                     ))
-                }),
-                Box::new(move || {
-                    let typ_text = typ_at(il::TypKind::Text, &exp_text.span);
-                    let (ctx, exp) = attempt!(elab_exp(ctx_text, &typ_text, &exp_text));
+                },
+                move || {
+                    let typ_text = typ_at(il::TypKind::Text, &exp_inner.span);
+                    let (ctx, exp) = attempt!(elab_exp(ctx_text, &typ_text, exp_inner));
                     Attempt::ok((
                         ctx,
                         il::ExpKind::Len(Box::new(exp)),
                         il::TypKind::Num(xl::num::Typ::Nat),
                     ))
-                }),
-            ]));
+                },
+            ));
             (ctx, kind, typ)
         }
         el::ExpKind::Mem(exp_element, exp_set) => {
             let ctx_element = ctx.clone();
-            let exp_element_l = exp_element.clone();
-            let exp_set_l = exp_set.clone();
             let ctx_set = ctx;
-            let exp_element_r = exp_element.clone();
-            let exp_set_r = exp_set.clone();
-            let (ctx, kind, typ) = attempt!(Attempt::choose_sequential(vec![
-                Box::new(move || {
+            let (ctx, kind, typ) = attempt!(Attempt::choose_sequential(
+                move || {
                     let (ctx, exp_element, typ_element) =
-                        attempt!(infer_exp(ctx_element, &exp_element_l));
+                        attempt!(infer_exp(ctx_element, exp_element));
                     let typ_list_kind = il::TypKind::Iter(Box::new(typ_element), il::Iter::List);
-                    let typ_list = spanned!(node: typ_list_kind, span: exp_set_l.span.clone());
-                    let (ctx, exp_set) = attempt!(elab_exp(ctx, &typ_list, &exp_set_l));
+                    let typ_list = spanned!(node: typ_list_kind, span: exp_set.span.clone());
+                    let (ctx, exp_set) = attempt!(elab_exp(ctx, &typ_list, exp_set));
                     Attempt::ok((
                         ctx,
                         il::ExpKind::Mem(Box::new(exp_element), Box::new(exp_set)),
                         il::TypKind::Bool,
                     ))
-                }),
-                Box::new(move || {
-                    let (ctx, exp_set, typ_set) = attempt!(infer_exp(ctx_set, &exp_set_r));
+                },
+                move || {
+                    let (ctx, exp_set, typ_set) = attempt!(infer_exp(ctx_set, exp_set));
                     let typ_element = attempt!(as_list_typ(&ctx, &typ_set));
-                    let (ctx, exp_element) = attempt!(elab_exp(ctx, &typ_element, &exp_element_r));
+                    let (ctx, exp_element) = attempt!(elab_exp(ctx, &typ_element, exp_element));
                     Attempt::ok((
                         ctx,
                         il::ExpKind::Mem(Box::new(exp_element), Box::new(exp_set)),
                         il::TypKind::Bool,
                     ))
-                }),
-            ]));
+                },
+            ));
             (ctx, kind, typ)
         }
         el::ExpKind::Dot(exp_inner, atom) => {
@@ -905,30 +879,26 @@ fn elab_exp_inner(
 ) -> Attempt<(Context, il::Exp)> {
     if let Attempt::Ok((typ_base, iter)) = as_iter_typ(&ctx, typ_expect) {
         let ctx_wrap = ctx.clone();
-        let typ_expect_wrap = typ_expect.clone();
-        let exp_wrap = exp.clone();
-        let ctx_normal = ctx.clone();
-        let typ_normal = typ_expect.clone();
-        let exp_normal = exp.clone();
-        return Attempt::choose_sequential(vec![
-            Box::new(move || {
-                if matches!(&exp_wrap.node, el::ExpKind::Var(id) if id.node == "_")
-                    || matches!(&exp_wrap.node, el::ExpKind::Eps)
-                    || matches!(&exp_wrap.node, el::ExpKind::List(exps) if exps.is_empty())
+        let ctx_normal = ctx;
+        return Attempt::choose_sequential(
+            move || {
+                if matches!(&exp.node, el::ExpKind::Var(id) if id.node == "_")
+                    || matches!(&exp.node, el::ExpKind::Eps)
+                    || matches!(&exp.node, el::ExpKind::List(exps) if exps.is_empty())
                 {
                     return Attempt::fail_silent();
                 }
-                let (ctx, exp) = attempt!(elab_exp(ctx_wrap, &typ_base, &exp_wrap));
+                let (ctx, exp_inner) = attempt!(elab_exp(ctx_wrap, &typ_base, exp));
                 let kind = match iter {
-                    il::Iter::Opt => il::ExpKind::Opt(Some(Box::new(exp))),
-                    il::Iter::List => il::ExpKind::List(vec![exp]),
+                    il::Iter::Opt => il::ExpKind::Opt(Some(Box::new(exp_inner))),
+                    il::Iter::List => il::ExpKind::List(vec![exp_inner]),
                 };
-                let exp = Noted::new(kind, typ_expect_wrap.node.clone());
-                let exp = spanned!(node: exp, span: exp_wrap.span);
-                Attempt::ok((ctx, exp))
-            }),
-            Box::new(move || elab_exp_normal(ctx_normal, &typ_normal, &exp_normal)),
-        ]);
+                let exp_il = Noted::new(kind, typ_expect.node.clone());
+                let exp_il = spanned!(node: exp_il, span: exp.span.clone());
+                Attempt::ok((ctx, exp_il))
+            },
+            move || elab_exp_normal(ctx_normal, typ_expect, exp),
+        );
     }
     elab_exp_normal(ctx, typ_expect, exp)
 }
@@ -961,39 +931,33 @@ fn elab_path(
         }
         el::PathKind::Idx(path_inner, exp_index) => {
             let ctx_list = ctx.clone();
-            let typ_list = typ_expect.clone();
-            let path_list = path_inner.clone();
-            let index_list = exp_index.clone();
             let ctx_text = ctx;
-            let typ_text = typ_expect.clone();
-            let path_text = path_inner.clone();
-            let index_text = exp_index.clone();
-            Attempt::choose_sequential(vec![
-                Box::new(move || {
+            Attempt::choose_sequential(
+                move || {
                     let (ctx, path_inner, typ_inner) =
-                        attempt!(elab_path(ctx_list, &typ_list, &path_list));
+                        attempt!(elab_path(ctx_list, typ_expect, path_inner));
                     let typ_element = attempt!(as_list_typ(&ctx, &typ_inner));
-                    let typ_nat = typ_at(il::TypKind::Num(xl::num::Typ::Nat), &index_list.span);
-                    let (ctx, index) = attempt!(elab_exp(ctx, &typ_nat, &index_list));
+                    let typ_nat = typ_at(il::TypKind::Num(xl::num::Typ::Nat), &exp_index.span);
+                    let (ctx, index) = attempt!(elab_exp(ctx, &typ_nat, exp_index));
                     let path_kind = il::PathKind::Idx(Box::new(path_inner), Box::new(index));
                     let path_il = Noted::new(path_kind, typ_element.node.clone());
                     let path_il = spanned!(node: path_il, span: path.span.clone());
                     let typ_element = spanned!(node: typ_element.node, span: path.span.clone());
                     Attempt::ok((ctx, path_il, typ_element))
-                }),
-                Box::new(move || {
+                },
+                move || {
                     let (ctx, path_inner, typ_inner) =
-                        attempt!(elab_path(ctx_text, &typ_text, &path_text));
+                        attempt!(elab_path(ctx_text, typ_expect, path_inner));
                     attempt!(as_text_typ(&ctx, &typ_inner));
-                    let typ_nat = typ_at(il::TypKind::Num(xl::num::Typ::Nat), &index_text.span);
-                    let (ctx, index) = attempt!(elab_exp(ctx, &typ_nat, &index_text));
+                    let typ_nat = typ_at(il::TypKind::Num(xl::num::Typ::Nat), &exp_index.span);
+                    let (ctx, index) = attempt!(elab_exp(ctx, &typ_nat, exp_index));
                     let path_kind = il::PathKind::Idx(Box::new(path_inner), Box::new(index));
                     let path_il = Noted::new(path_kind, typ_inner.node.clone());
                     let path_il = spanned!(node: path_il, span: path.span.clone());
                     let typ_inner = spanned!(node: typ_inner.node, span: path.span.clone());
                     Attempt::ok((ctx, path_il, typ_inner))
-                }),
-            ])
+                },
+            )
         }
         el::PathKind::Slice(path_inner, exp_index, exp_length) => {
             let (ctx, path_inner, typ_inner) = attempt!(elab_path(ctx, typ_expect, path_inner));
@@ -1565,29 +1529,24 @@ fn elab_exp_contextual(
         }
         el::ExpKind::Cat(exp_l, exp_r) => {
             let ctx_iter = ctx.clone();
-            let typ_iter = typ_expect.clone();
-            let exp_l_iter = exp_l.clone();
-            let exp_r_iter = exp_r.clone();
             let ctx_text = ctx;
-            let exp_l_text = exp_l.clone();
-            let exp_r_text = exp_r.clone();
-            let (ctx, kind) = attempt!(Attempt::choose_sequential(vec![
-                Box::new(move || {
-                    let (typ_base, iter) = attempt!(as_iter_typ(&ctx_iter, &typ_iter));
+            let (ctx, kind) = attempt!(Attempt::choose_sequential(
+                move || {
+                    let (typ_base, iter) = attempt!(as_iter_typ(&ctx_iter, typ_expect));
                     let typ_iter_kind = il::TypKind::Iter(Box::new(typ_base.clone()), iter);
                     let typ_iter = spanned!(node: typ_iter_kind, span: typ_base.span);
-                    let (ctx, exp_l) = attempt!(elab_exp(ctx_iter, &typ_iter, &exp_l_iter));
-                    let (ctx, exp_r) = attempt!(elab_exp(ctx, &typ_iter, &exp_r_iter));
+                    let (ctx, exp_l) = attempt!(elab_exp(ctx_iter, &typ_iter, exp_l));
+                    let (ctx, exp_r) = attempt!(elab_exp(ctx, &typ_iter, exp_r));
                     Attempt::ok((ctx, il::ExpKind::Cat(Box::new(exp_l), Box::new(exp_r))))
-                }),
-                Box::new(move || {
-                    let typ_text = typ_at(il::TypKind::Text, &exp_l_text.span);
-                    let (ctx, exp_l) = attempt!(elab_exp(ctx_text, &typ_text, &exp_l_text));
-                    let typ_text = typ_at(il::TypKind::Text, &exp_r_text.span);
-                    let (ctx, exp_r) = attempt!(elab_exp(ctx, &typ_text, &exp_r_text));
+                },
+                move || {
+                    let typ_text = typ_at(il::TypKind::Text, &exp_l.span);
+                    let (ctx, exp_l) = attempt!(elab_exp(ctx_text, &typ_text, exp_l));
+                    let typ_text = typ_at(il::TypKind::Text, &exp_r.span);
+                    let (ctx, exp_r) = attempt!(elab_exp(ctx, &typ_text, exp_r));
                     Attempt::ok((ctx, il::ExpKind::Cat(Box::new(exp_l), Box::new(exp_r))))
-                }),
-            ]));
+                },
+            ));
             let span = exp.span.clone();
             let exp = Noted::new(kind, typ_expect.node.clone());
             let exp = spanned!(node: exp, span: span);

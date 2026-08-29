@@ -74,15 +74,20 @@ impl<T> Attempt<T> {
         }
     }
 
-    pub(super) fn choose_sequential<'a>(alternatives: Vec<Box<dyn FnOnce() -> Self + 'a>>) -> Self {
-        let mut failures = vec![];
-        for alternative in alternatives {
-            match alternative() {
-                Self::Ok(value) => return Self::Ok(value),
-                Self::Fail(mut traces) => failures.append(&mut traces),
-            }
+    pub(super) fn choose_sequential(
+        first: impl FnOnce() -> Self,
+        second: impl FnOnce() -> Self,
+    ) -> Self {
+        match first() {
+            Self::Ok(value) => Self::Ok(value),
+            Self::Fail(mut traces) => match second() {
+                Self::Ok(value) => Self::Ok(value),
+                Self::Fail(mut traces_second) => {
+                    traces.append(&mut traces_second);
+                    Self::Fail(traces)
+                }
+            },
         }
-        Self::Fail(failures)
     }
 
     pub(super) fn commit(self) -> Result<T, ElabError> {
@@ -128,20 +133,24 @@ mod tests {
     #[test]
     fn alternatives_stop_after_the_first_success() {
         let calls = Cell::new(0);
-        let result = Attempt::choose_sequential(vec![
-            Box::new(|| {
+        let result = Attempt::choose_sequential(
+            || {
                 calls.set(calls.get() + 1);
                 Attempt::fail(error(ElabErrorKind::CannotInfer, "first"))
-            }),
-            Box::new(|| {
-                calls.set(calls.get() + 1);
-                Attempt::ok(7)
-            }),
-            Box::new(|| {
-                calls.set(calls.get() + 1);
-                Attempt::ok(9)
-            }),
-        ])
+            },
+            || {
+                Attempt::choose_sequential(
+                    || {
+                        calls.set(calls.get() + 1);
+                        Attempt::ok(7)
+                    },
+                    || {
+                        calls.set(calls.get() + 1);
+                        Attempt::ok(9)
+                    },
+                )
+            },
+        )
         .commit()
         .expect("successful alternative");
 
@@ -153,15 +162,15 @@ mod tests {
     fn committing_alternatives_selects_the_deepest_located_cause() {
         let shallow_span = span("shallow");
         let deep_span = span("deep");
-        let attempt = Attempt::<()>::choose_sequential(vec![
-            Box::new(|| {
+        let attempt = Attempt::<()>::choose_sequential(
+            || {
                 Attempt::fail(ElabError::new(
                     ElabErrorKind::Undefined(EntityKind::Function),
                     shallow_span.clone(),
                     "undefined function",
                 ))
-            }),
-            Box::new(|| {
+            },
+            || {
                 Attempt::fail(ElabError::new(
                     ElabErrorKind::TypeMismatch,
                     deep_span.clone(),
@@ -169,8 +178,8 @@ mod tests {
                 ))
                 .nest(error(ElabErrorKind::InvalidCast, "cast"))
                 .nest(error(ElabErrorKind::NoMatchingAlternative, "expression"))
-            }),
-        ]);
+            },
+        );
 
         let error = attempt.commit().unwrap_err();
 
