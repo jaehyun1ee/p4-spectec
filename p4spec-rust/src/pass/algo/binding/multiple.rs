@@ -25,17 +25,24 @@ use super::{
 #[derive(Clone, Debug, Default)]
 pub struct RenameEnv {
     renames: IdMap<Vec<Id>>,
+    dimensions: IdMap<Dim>,
 }
 
 impl RenameEnv {
     pub fn from_bindings(bindings: &Bindings) -> Self {
-        let renames = bindings
-            .iter()
-            .filter_map(|(id, binding)| {
-                matches!(binding, Binding::Multiple(_)).then(|| (id.clone(), Vec::new()))
-            })
-            .collect();
-        Self { renames }
+        let mut renames = IdMap::new();
+        let mut dimensions = IdMap::new();
+        for (id, binding) in bindings.iter() {
+            let Binding::Multiple(dim) = binding else {
+                continue;
+            };
+            renames.insert(id.clone(), Vec::new());
+            dimensions.insert(id.clone(), dim.clone());
+        }
+        Self {
+            renames,
+            dimensions,
+        }
     }
 
     pub fn iter(&self) -> impl Iterator<Item = (&Id, &Vec<Id>)> {
@@ -48,6 +55,10 @@ impl RenameEnv {
 
     fn get_mut(&mut self, id: &Id) -> Option<&mut Vec<Id>> {
         self.renames.get_mut(id)
+    }
+
+    fn dimension(&self, id: &Id) -> Option<&Dim> {
+        self.dimensions.get(id)
     }
 }
 
@@ -182,19 +193,13 @@ fn equality_exp(id: &Id, id_rename: &Id, typ: &ast::Typ) -> ast::Exp {
 }
 
 fn generate_side_condition(
-    bindings: &Bindings,
+    dim: &Dim,
     iterctx: &IterationContext,
     id: &Id,
     ids_rename: &[Id],
-) -> ast::Prem {
-    let dim = bindings
-        .get(id)
-        .expect("rename environment came from bindings")
-        .dim();
+) -> Option<ast::Prem> {
     let mut ids_repeated = ids_rename.iter().skip(1);
-    let id_rename = ids_repeated
-        .next()
-        .expect("side conditions require a repeated occurrence");
+    let id_rename = ids_repeated.next()?;
     let mut exp = equality_exp(id, id_rename, &dim.typ);
     for id_rename in ids_repeated {
         let exp_r = equality_exp(id, id_rename, &dim.typ);
@@ -230,18 +235,18 @@ fn generate_side_condition(
         .map(|id| (id.clone(), Dim::new(dim.typ.clone(), vec![])))
         .collect::<VEnv>();
     side_iterctx.add_vars_bound(venv);
-    side_iterctx.iterate_prem(prem)
+    Some(side_iterctx.iterate_prem(prem))
 }
 
 pub fn generate_side_conditions(
-    bindings: &Bindings,
+    _bindings: &Bindings,
     iterctx: &IterationContext,
     renv: &RenameEnv,
 ) -> Vec<ast::Prem> {
     renv.iter()
         .filter_map(|(id, ids_rename)| {
-            (ids_rename.len() > 1)
-                .then(|| generate_side_condition(bindings, iterctx, id, ids_rename))
+            let dim = renv.dimension(id)?;
+            generate_side_condition(dim, iterctx, id, ids_rename)
         })
         .collect()
 }

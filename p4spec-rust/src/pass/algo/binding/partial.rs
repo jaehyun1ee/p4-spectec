@@ -197,6 +197,21 @@ pub fn rename_exp(
     iterctx: IterationContext,
     exp: &ast::Exp,
 ) -> Result<(IterationContext, ast::Exp), AlgoError> {
+    let mut ctx_next = ctx.clone();
+    let mut renv_next = renv.clone();
+    let result = rename_exp_in_place(&mut ctx_next, binds, &mut renv_next, iterctx, exp)?;
+    *ctx = ctx_next;
+    *renv = renv_next;
+    Ok(result)
+}
+
+fn rename_exp_in_place(
+    ctx: &mut Context,
+    binds: &IdSet,
+    renv: &mut RenameEnv,
+    iterctx: IterationContext,
+    exp: &ast::Exp,
+) -> Result<(IterationContext, ast::Exp), AlgoError> {
     if !has_binding(binds, exp) && !is_upcast_terminal(exp) {
         return Ok(rename_bound(ctx, renv, iterctx, exp));
     }
@@ -214,7 +229,7 @@ fn rename_binding_exp(
     let note = exp.node.note.clone();
     match &exp.node.kind {
         ast::ExpKind::UpCast(typ, exp_inner) => {
-            let (iterctx, exp_sub) = rename_exp(ctx, binds, renv, iterctx, exp_inner)?;
+            let (iterctx, exp_sub) = rename_exp_in_place(ctx, binds, renv, iterctx, exp_inner)?;
             let exp_from = Spanned::new(
                 Noted::new(
                     ast::ExpKind::UpCast(typ.clone(), Box::new(exp_sub.clone())),
@@ -228,14 +243,14 @@ fn rename_binding_exp(
             ))
         }
         ast::ExpKind::Tuple(exps) => {
-            let (iterctx, exps) = rename_exps(ctx, binds, renv, iterctx, exps)?;
+            let (iterctx, exps) = rename_exps_in_place(ctx, binds, renv, iterctx, exps)?;
             let exp = Spanned::new(Noted::new(ast::ExpKind::Tuple(exps), note), span);
             Ok((iterctx, exp))
         }
         ast::ExpKind::Case(not_exp) => {
             let args = not_exp.args().into_iter().cloned().collect::<Vec<_>>();
             let mixop = not_exp.to_mixop();
-            let (iterctx, args) = rename_exps(ctx, binds, renv, iterctx, &args)?;
+            let (iterctx, args) = rename_exps_in_place(ctx, binds, renv, iterctx, &args)?;
             let not_exp = Mixop::fill(&mixop, args)
                 .expect("arguments obtained from the same mixfix must match its arity");
             let exp_from = Spanned::new(
@@ -255,7 +270,7 @@ fn rename_binding_exp(
                 .iter()
                 .map(|(_, exp)| exp.clone())
                 .collect::<Vec<_>>();
-            let (iterctx, exps) = rename_exps(ctx, binds, renv, iterctx, &exps)?;
+            let (iterctx, exps) = rename_exps_in_place(ctx, binds, renv, iterctx, &exps)?;
             let fields = fields
                 .iter()
                 .map(|(atom, _)| atom.clone())
@@ -265,7 +280,7 @@ fn rename_binding_exp(
             Ok((iterctx, exp))
         }
         ast::ExpKind::Opt(Some(exp_inner)) => {
-            let (iterctx, exp_inner) = rename_exp(ctx, binds, renv, iterctx, exp_inner)?;
+            let (iterctx, exp_inner) = rename_exp_in_place(ctx, binds, renv, iterctx, exp_inner)?;
             let exp_from = Spanned::new(
                 Noted::new(ast::ExpKind::Opt(Some(Box::new(exp_inner))), note),
                 span,
@@ -286,7 +301,7 @@ fn rename_binding_exp(
             exp.clone(),
         )),
         ast::ExpKind::List(exps) => {
-            let (iterctx, exps) = rename_exps(ctx, binds, renv, iterctx, exps)?;
+            let (iterctx, exps) = rename_exps_in_place(ctx, binds, renv, iterctx, exps)?;
             let length = i64::try_from(exps.len()).expect("expression list length fits i64");
             let exp_from = Spanned::new(Noted::new(ast::ExpKind::List(exps), note), span.clone());
             let pattern = if length == 0 {
@@ -303,8 +318,8 @@ fn rename_binding_exp(
             ))
         }
         ast::ExpKind::Cons(exp_h, exp_t) => {
-            let (iterctx, exp_h) = rename_exp(ctx, binds, renv, iterctx, exp_h)?;
-            let (iterctx, exp_t) = rename_exp(ctx, binds, renv, iterctx, exp_t)?;
+            let (iterctx, exp_h) = rename_exp_in_place(ctx, binds, renv, iterctx, exp_h)?;
+            let (iterctx, exp_t) = rename_exp_in_place(ctx, binds, renv, iterctx, exp_t)?;
             let exp_from = Spanned::new(
                 Noted::new(ast::ExpKind::Cons(Box::new(exp_h), Box::new(exp_t)), note),
                 span,
@@ -325,7 +340,7 @@ fn rename_binding_exp(
             }];
             iterations.extend(iterctx.as_slice().iter().cloned());
             let iterctx = IterationContext::from_iterations(iterations);
-            let (iterctx, exp_inner) = rename_exp(ctx, binds, renv, iterctx, exp_inner)?;
+            let (iterctx, exp_inner) = rename_exp_in_place(ctx, binds, renv, iterctx, exp_inner)?;
             let Some(iteration) = iterctx.as_slice().first() else {
                 return Err(AlgoError::new(AlgoErrorKind::EmptyIteration, span));
             };
@@ -350,6 +365,21 @@ pub fn rename_exps(
     ctx: &mut Context,
     binds: &IdSet,
     renv: &mut RenameEnv,
+    iterctx: IterationContext,
+    exps: &[ast::Exp],
+) -> Result<(IterationContext, Vec<ast::Exp>), AlgoError> {
+    let mut ctx_next = ctx.clone();
+    let mut renv_next = renv.clone();
+    let result = rename_exps_in_place(&mut ctx_next, binds, &mut renv_next, iterctx, exps)?;
+    *ctx = ctx_next;
+    *renv = renv_next;
+    Ok(result)
+}
+
+fn rename_exps_in_place(
+    ctx: &mut Context,
+    binds: &IdSet,
+    renv: &mut RenameEnv,
     mut iterctx: IterationContext,
     exps: &[ast::Exp],
 ) -> Result<(IterationContext, Vec<ast::Exp>), AlgoError> {
@@ -357,7 +387,8 @@ pub fn rename_exps(
     for exp in exps {
         let depth = iterctx.as_slice().len();
         let mut renv_post = RenameEnv::new();
-        let (iterctx_post, exp) = rename_exp(ctx, binds, &mut renv_post, iterctx.clone(), exp)?;
+        let (iterctx_post, exp) =
+            rename_exp_in_place(ctx, binds, &mut renv_post, iterctx.clone(), exp)?;
         let drop = iterctx_post.as_slice().len().saturating_sub(depth);
         iterctx = IterationContext::from_iterations(iterctx_post.as_slice()[drop..].to_vec());
         renv.append(renv_post);
@@ -373,17 +404,47 @@ pub fn rename_arg(
     iterctx: IterationContext,
     arg: &ast::Arg,
 ) -> Result<(IterationContext, ast::Arg), AlgoError> {
+    let mut ctx_next = ctx.clone();
+    let mut renv_next = renv.clone();
+    let result = rename_arg_in_place(&mut ctx_next, binds, &mut renv_next, iterctx, arg)?;
+    *ctx = ctx_next;
+    *renv = renv_next;
+    Ok(result)
+}
+
+fn rename_arg_in_place(
+    ctx: &mut Context,
+    binds: &IdSet,
+    renv: &mut RenameEnv,
+    iterctx: IterationContext,
+    arg: &ast::Arg,
+) -> Result<(IterationContext, ast::Arg), AlgoError> {
     let ast::ArgKind::Exp(exp) = &arg.node else {
         return Ok((iterctx, arg.clone()));
     };
     let mut renv_post = RenameEnv::new();
-    let (iterctx, exp) = rename_exp(ctx, binds, &mut renv_post, iterctx, exp)?;
+    let (iterctx, exp) = rename_exp_in_place(ctx, binds, &mut renv_post, iterctx, exp)?;
     renv.append(renv_post);
     let arg = Spanned::new(ast::ArgKind::Exp(Box::new(exp)), arg.span.clone());
     Ok((iterctx, arg))
 }
 
 pub fn rename_args(
+    ctx: &mut Context,
+    binds: &IdSet,
+    renv: &mut RenameEnv,
+    iterctx: IterationContext,
+    args: &[ast::Arg],
+) -> Result<(IterationContext, Vec<ast::Arg>), AlgoError> {
+    let mut ctx_next = ctx.clone();
+    let mut renv_next = renv.clone();
+    let result = rename_args_in_place(&mut ctx_next, binds, &mut renv_next, iterctx, args)?;
+    *ctx = ctx_next;
+    *renv = renv_next;
+    Ok(result)
+}
+
+fn rename_args_in_place(
     ctx: &mut Context,
     binds: &IdSet,
     renv: &mut RenameEnv,
@@ -394,7 +455,8 @@ pub fn rename_args(
     for arg in args {
         let depth = iterctx.as_slice().len();
         let mut renv_post = RenameEnv::new();
-        let (iterctx_post, arg) = rename_arg(ctx, binds, &mut renv_post, iterctx.clone(), arg)?;
+        let (iterctx_post, arg) =
+            rename_arg_in_place(ctx, binds, &mut renv_post, iterctx.clone(), arg)?;
         let drop = iterctx_post.as_slice().len().saturating_sub(depth);
         iterctx = IterationContext::from_iterations(iterctx_post.as_slice()[drop..].to_vec());
         renv.append(renv_post);

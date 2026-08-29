@@ -396,6 +396,35 @@ fn multiple_binding_renames_repetitions_and_compares_them_in_occurrence_order() 
 }
 
 #[test]
+fn multiple_side_conditions_use_the_rename_environment_dimension() {
+    let mut bindings = Bindings::new();
+    bindings.insert(
+        id("x", 1),
+        Binding::Multiple(Dim::new(typ::bool(), vec![ast::Iter::List])),
+    );
+    let tuple = exp(
+        ast::ExpKind::Tuple(vec![var_exp("x", 1), var_exp("x", 2)]),
+        ast::TypKind::Tuple(vec![typ::bool(), typ::bool()]),
+        1,
+    );
+    let mut context = Context::new();
+    let mut renames = multiple::RenameEnv::from_bindings(&bindings);
+    multiple::rename_exp(&mut context, &mut renames, &tuple);
+
+    let premises =
+        multiple::generate_side_conditions(&Bindings::new(), &IterationContext::new(), &renames);
+
+    let [premise] = premises.as_slice() else {
+        panic!("expected one repeated-binding premise");
+    };
+    let ast::PremKind::Iter(iterated) = &premise.node else {
+        panic!("expected the collected binding dimension");
+    };
+    assert_eq!(iterated.iter_prem.iter, ast::Iter::List);
+    assert!(matches!(iterated.prem.node, ast::PremKind::If(_)));
+}
+
+#[test]
 fn partial_binding_preserves_expression_and_premise_iteration_dimensions() {
     let bool_value = exp(ast::ExpKind::Bool(true), ast::TypKind::Bool, 2);
     let tuple = exp(
@@ -469,6 +498,154 @@ fn partial_binding_preserves_expression_and_premise_iteration_dimensions() {
     };
     assert!(matches!(&exp_l.node.kind, ast::ExpKind::Var(id) if id == id_rename));
     assert!(matches!(exp_r.node.kind, ast::ExpKind::Bool(true)));
+}
+
+#[test]
+fn partial_binding_preserves_nested_iteration_order_and_dimensions() {
+    let tuple_typ = Spanned::new(ast::TypKind::Tuple(vec![typ::bool(), typ::bool()]), span(1));
+    let tuple = exp(
+        ast::ExpKind::Tuple(vec![
+            var_exp("x", 1),
+            exp(ast::ExpKind::Bool(true), ast::TypKind::Bool, 2),
+        ]),
+        tuple_typ.node.clone(),
+        1,
+    );
+    let inner_typ = Spanned::new(
+        ast::TypKind::Iter(Box::new(tuple_typ), ast::Iter::Opt),
+        span(1),
+    );
+    let inner = exp(
+        ast::ExpKind::Iter(
+            Box::new(tuple),
+            (
+                ast::Iter::Opt,
+                vec![ast::Var {
+                    id: id("x", 1),
+                    typ: typ::bool(),
+                    iters: vec![],
+                }],
+            ),
+        ),
+        inner_typ.node.clone(),
+        1,
+    );
+    let iterated = exp(
+        ast::ExpKind::Iter(
+            Box::new(inner),
+            (
+                ast::Iter::List,
+                vec![ast::Var {
+                    id: id("x", 1),
+                    typ: typ::bool(),
+                    iters: vec![ast::Iter::Opt],
+                }],
+            ),
+        ),
+        ast::TypKind::Iter(Box::new(inner_typ), ast::Iter::List),
+        1,
+    );
+    let mut context = Context::new();
+    let bindings = collect::collect_exp(&context, &iterated).expect("binding collection");
+    let mut renames = partial::RenameEnv::new();
+
+    let (_, renamed) = partial::rename_exp(
+        &mut context,
+        &bindings.domain(),
+        &mut renames,
+        IterationContext::new(),
+        &iterated,
+    )
+    .expect("nested partial binding rename");
+    let premises = partial::generate_prems(&context, &IterationContext::new(), &renames)
+        .expect("nested partial binding premises");
+
+    let ast::ExpKind::Iter(inner, (ast::Iter::List, outer_vars)) = &renamed.node.kind else {
+        panic!("expected outer list iteration");
+    };
+    let ast::ExpKind::Iter(tuple, (ast::Iter::Opt, inner_vars)) = &inner.node.kind else {
+        panic!("expected inner optional iteration");
+    };
+    let ast::ExpKind::Tuple(exps) = &tuple.node.kind else {
+        panic!("expected iterated tuple");
+    };
+    let ast::ExpKind::Var(id_rename) = &exps[1].node.kind else {
+        panic!("expected nested bound value rename");
+    };
+    assert_eq!(inner_vars.len(), 2);
+    assert_eq!(outer_vars.len(), 2);
+    assert_eq!(inner_vars[1].id, *id_rename);
+    assert_eq!(outer_vars[1].id, *id_rename);
+
+    let [premise] = premises.as_slice() else {
+        panic!("expected one nested equality premise");
+    };
+    let ast::PremKind::Iter(outer) = &premise.node else {
+        panic!("expected outer premise iteration");
+    };
+    assert_eq!(outer.iter_prem.iter, ast::Iter::List);
+    assert_eq!(outer.iter_prem.vars_bound[0].id, *id_rename);
+    let ast::PremKind::Iter(inner) = &outer.prem.node else {
+        panic!("expected inner premise iteration");
+    };
+    assert_eq!(inner.iter_prem.iter, ast::Iter::Opt);
+    assert_eq!(inner.iter_prem.vars_bound[0].id, *id_rename);
+}
+
+#[test]
+fn partial_binding_rolls_back_context_and_renames_after_late_failure() {
+    let initial = exp(ast::ExpKind::Bool(true), ast::TypKind::Bool, 1);
+    let mut context = Context::new();
+    let initial_bindings = collect::collect_exp(&context, &initial).expect("binding collection");
+    let mut renames = partial::RenameEnv::new();
+    partial::rename_exp(
+        &mut context,
+        &initial_bindings.domain(),
+        &mut renames,
+        IterationContext::new(),
+        &initial,
+    )
+    .expect("initial partial binding rename");
+    let frees_before = context.frees.clone();
+    let premise_count_before =
+        partial::generate_prems(&context, &IterationContext::new(), &renames)
+            .expect("initial premises")
+            .len();
+
+    let missing_typ = ast::TypKind::Var(id("Missing", 12), vec![]);
+    let case = exp(
+        ast::ExpKind::Case(Box::new(Mixfix::Arg(var_exp("y", 12)))),
+        missing_typ.clone(),
+        12,
+    );
+    let tuple = exp(
+        ast::ExpKind::Tuple(vec![
+            exp(ast::ExpKind::Bool(false), ast::TypKind::Bool, 11),
+            case,
+        ]),
+        ast::TypKind::Tuple(vec![typ::bool(), Spanned::new(missing_typ, span(12))]),
+        11,
+    );
+    let bindings = collect::collect_exp(&context, &tuple).expect("binding collection");
+
+    let error = partial::rename_exp(
+        &mut context,
+        &bindings.domain(),
+        &mut renames,
+        IterationContext::new(),
+        &tuple,
+    )
+    .expect_err("undefined case type");
+
+    assert_eq!(error.kind, AlgoErrorKind::UndefinedType);
+    assert_eq!(error.span, span(12));
+    assert_eq!(context.frees, frees_before);
+    assert_eq!(
+        partial::generate_prems(&context, &IterationContext::new(), &renames)
+            .expect("rolled-back premises")
+            .len(),
+        premise_count_before
+    );
 }
 
 #[test]
@@ -731,6 +908,33 @@ fn antiunification_populates_each_path_in_left_to_right_expression_order() {
 }
 
 #[test]
+fn antiunification_freshness_avoids_collisions_within_each_operation() {
+    let fresh_unifier = |context: Context| {
+        let (_, template, _) = antiunify::antiunify(
+            context,
+            vec![
+                vec![exp(ast::ExpKind::Bool(true), ast::TypKind::Bool, 1)],
+                vec![exp(ast::ExpKind::Bool(false), ast::TypKind::Bool, 2)],
+            ],
+        )
+        .expect("equivalent boolean inputs");
+        let ast::ExpKind::Var(id) = &template[0].node.kind else {
+            panic!("expected fresh unifier");
+        };
+        id.clone()
+    };
+
+    let id_first = fresh_unifier(Context::new());
+    let mut context_collision = Context::new();
+    context_collision.add_free(id_first.clone());
+    let id_after_collision = fresh_unifier(context_collision);
+    let id_independent = fresh_unifier(Context::new());
+
+    assert_ne!(id_after_collision.node, id_first.node);
+    assert_eq!(id_independent.node, id_first.node);
+}
+
+#[test]
 fn antiunification_uses_runtime_equivalence_for_plain_type_aliases() {
     let alias_id = id("Flag", 1);
     let alias_typ = Spanned::new(ast::TypKind::Var(alias_id.clone(), vec![]), span(1));
@@ -791,16 +995,20 @@ fn analysis_preserves_rule_paths_and_populates_antiunified_inputs_in_order() {
             span(line),
         )
     };
-    let rules = vec![
+    let rules_first = vec![
         rule("first", tuple(true, false, 2), true, 2),
         rule("second", tuple(false, true, 5), false, 5),
     ];
+    let rules_second = vec![rule("third", tuple(true, true, 8), false, 8)];
     let spec = vec![Spanned::new(
         ast::DefKind::Rel(ast::Rel {
             id: id("relation", 1),
             not_typ: relation_not_typ,
             input_hint: InputHint::new(vec![0]),
-            rule_groups: vec![Spanned::new((id("group", 1), rules), span(1))],
+            rule_groups: vec![
+                Spanned::new((id("first_group", 1), rules_first), span(1)),
+                Spanned::new((id("second_group", 8), rules_second), span(8)),
+            ],
             else_group: None,
             hints: vec![],
         }),
@@ -812,10 +1020,12 @@ fn analysis_preserves_rule_paths_and_populates_antiunified_inputs_in_order() {
     let p4spec_rust::lang::al::ast::DefKind::Rel(relation) = &analyzed[0].node else {
         panic!("expected relation definition");
     };
-    let [rule_group] = relation.rule_groups.as_slice() else {
-        panic!("expected one rule group");
+    let [rule_group, second_group] = relation.rule_groups.as_slice() else {
+        panic!("expected two rule groups");
     };
-    assert_eq!(rule_group.node.id.node, "group");
+    assert_eq!(rule_group.node.id.node, "first_group");
+    assert_eq!(second_group.node.id.node, "second_group");
+    assert_eq!(second_group.node.rule_paths[0].id.node, "third");
     assert_eq!(
         rule_group
             .node
@@ -1055,9 +1265,15 @@ fn table_analysis_rejects_overlapping_and_missing_variant_patterns() {
             span(line),
         )
     };
-    let wildcard = |name: &str, line: i64| {
+    let case_pattern = |name: &str, line: i64| {
+        let keyword = Spanned::new(Atom::Keyword(name.to_owned()), span(line));
+        let case = exp(
+            ast::ExpKind::Case(Box::new(Mixfix::Atom(keyword))),
+            choice_typ.node.clone(),
+            line,
+        );
         exp(
-            ast::ExpKind::Var(id(name, line)),
+            ast::ExpKind::UpCast(choice_typ.clone(), Box::new(case)),
             choice_typ.node.clone(),
             line,
         )
@@ -1066,30 +1282,19 @@ fn table_analysis_rejects_overlapping_and_missing_variant_patterns() {
         choice_def.clone(),
         table(
             vec![
-                row(wildcard("left", 10), 10),
-                row(wildcard("right", 11), 11),
+                row(case_pattern("A", 10), 10),
+                row(case_pattern("A", 11), 11),
             ],
             9,
         ),
     ];
 
     let overlap_error =
-        analyze::analyze_spec(&overlap_spec).expect_err("overlapping wildcard rows");
+        analyze::analyze_spec(&overlap_spec).expect_err("overlap takes precedence over missing");
     assert_eq!(overlap_error.kind, AlgoErrorKind::OverlappingTablePatterns);
     assert_eq!(overlap_error.span, span(8));
 
-    let keyword = Spanned::new(Atom::Keyword("A".to_owned()), span(20));
-    let case = exp(
-        ast::ExpKind::Case(Box::new(Mixfix::Atom(keyword))),
-        choice_typ.node.clone(),
-        20,
-    );
-    let case = exp(
-        ast::ExpKind::UpCast(choice_typ.clone(), Box::new(case)),
-        choice_typ.node.clone(),
-        20,
-    );
-    let missing_spec = vec![choice_def, table(vec![row(case, 20)], 19)];
+    let missing_spec = vec![choice_def, table(vec![row(case_pattern("A", 20), 20)], 19)];
 
     let missing_error = analyze::analyze_spec(&missing_spec).expect_err("missing B variant row");
     assert_eq!(missing_error.kind, AlgoErrorKind::MissingTablePatterns);
@@ -1171,6 +1376,43 @@ fn analysis_preserves_definition_clause_and_table_row_order() {
         }),
         span(6),
     );
+    let variable_def = Spanned::new(
+        ast::DefKind::Var(ast::VarDef {
+            id: id("variable", 9),
+            typ: typ::bool(),
+            hints: vec![],
+        }),
+        span(9),
+    );
+    let extern_relation_def = Spanned::new(
+        ast::DefKind::ExternRel(ast::ExternRel {
+            id: id("external_relation", 10),
+            not_typ: Spanned::new(Mixfix::Arg(typ::bool()), span(10)),
+            input_hint: InputHint::new(vec![0]),
+            hints: vec![],
+        }),
+        span(10),
+    );
+    let extern_dec_def = Spanned::new(
+        ast::DefKind::ExternDec(ast::ExternDec {
+            id: id("external_dec", 11),
+            tparams: vec![],
+            params: vec![Spanned::new(ast::ParamKind::Exp(typ::bool()), span(11))],
+            typ: typ::bool(),
+            hints: vec![],
+        }),
+        span(11),
+    );
+    let builtin_dec_def = Spanned::new(
+        ast::DefKind::BuiltinDec(ast::BuiltinDec {
+            id: id("builtin_dec", 12),
+            tparams: vec![],
+            params: vec![Spanned::new(ast::ParamKind::Exp(typ::bool()), span(12))],
+            typ: typ::bool(),
+            hints: vec![],
+        }),
+        span(12),
+    );
     let spec = vec![
         Spanned::new(
             ast::DefKind::ExternTyp(ast::ExternTyp {
@@ -1179,7 +1421,11 @@ fn analysis_preserves_definition_clause_and_table_row_order() {
             }),
             span(1),
         ),
+        variable_def,
+        extern_relation_def,
         choice_def,
+        extern_dec_def,
+        builtin_dec_def,
         function_def,
         table_def,
     ];
@@ -1190,18 +1436,31 @@ fn analysis_preserves_definition_clause_and_table_row_order() {
         .iter()
         .map(|def| match &def.node {
             p4spec_rust::lang::al::ast::DefKind::ExternTyp(def) => def.id.node.as_str(),
+            p4spec_rust::lang::al::ast::DefKind::Var(def) => def.id.node.as_str(),
+            p4spec_rust::lang::al::ast::DefKind::ExternRel(def) => def.id.node.as_str(),
+            p4spec_rust::lang::al::ast::DefKind::Rel(def) => def.id.node.as_str(),
             p4spec_rust::lang::al::ast::DefKind::Typ(def) => def.id.node.as_str(),
+            p4spec_rust::lang::al::ast::DefKind::ExternDec(def) => def.id.node.as_str(),
+            p4spec_rust::lang::al::ast::DefKind::BuiltinDec(def) => def.id.node.as_str(),
             p4spec_rust::lang::al::ast::DefKind::FuncDec(def) => def.id.node.as_str(),
             p4spec_rust::lang::al::ast::DefKind::TableDec(def) => def.id.node.as_str(),
-            _ => panic!("unexpected definition"),
         })
         .collect::<Vec<_>>();
     assert_eq!(
         definition_ids,
-        vec!["external", "Choice", "function", "table"]
+        vec![
+            "external",
+            "variable",
+            "external_relation",
+            "Choice",
+            "external_dec",
+            "builtin_dec",
+            "function",
+            "table",
+        ]
     );
 
-    let p4spec_rust::lang::al::ast::DefKind::FuncDec(function) = &analyzed[2].node else {
+    let p4spec_rust::lang::al::ast::DefKind::FuncDec(function) = &analyzed[6].node else {
         panic!("expected function definition");
     };
     let clause_ids = function
@@ -1219,7 +1478,7 @@ fn analysis_preserves_definition_clause_and_table_row_order() {
         .collect::<Vec<_>>();
     assert_eq!(clause_ids, vec!["first_clause", "second_clause"]);
 
-    let p4spec_rust::lang::al::ast::DefKind::TableDec(table) = &analyzed[3].node else {
+    let p4spec_rust::lang::al::ast::DefKind::TableDec(table) = &analyzed[7].node else {
         panic!("expected table definition");
     };
     let row_ids = table
