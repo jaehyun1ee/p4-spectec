@@ -9,7 +9,7 @@ use crate::{
         il::ast,
     },
     runtime::{
-        sta::{FEnv, Func, MEnv, REnv, Rel, VEnv},
+        sta::{FEnv, Func, MEnv, REnv, Rel},
         types::{TDEnv, TypeDef, typ},
     },
     spanned_default,
@@ -38,14 +38,10 @@ type FuncSignature<'a> = (&'a [ast::TParam], &'a [ast::Param], &'a ast::Typ);
 #[derive(Clone, Debug)]
 pub(super) struct Context {
     pub(super) frees: IdSet,
-    #[allow(dead_code)]
-    pub(super) venv: Rc<VEnv>,
     pub(super) tdenv: Rc<TDEnv>,
     pub(super) menv: Rc<MEnv>,
     pub(super) renv: Rc<REnv>,
     pub(super) fenv: Rc<FEnv>,
-    #[allow(dead_code)]
-    next_fresh: u64,
 }
 
 impl Context {
@@ -62,20 +58,11 @@ impl Context {
         }
         Self {
             frees: IdSet::new(),
-            venv: Rc::new(VEnv::new()),
             tdenv: Rc::new(TDEnv::new()),
             menv: Rc::new(menv),
             renv: Rc::new(REnv::new()),
             fenv: Rc::new(FEnv::new()),
-            next_fresh: 0,
         }
-    }
-
-    #[allow(dead_code)]
-    pub(super) fn fresh_index(&mut self) -> u64 {
-        let fresh = self.next_fresh;
-        self.next_fresh += 1;
-        fresh
     }
 
     pub(super) fn find_typdef_opt(&self, id: &Id) -> Option<&TypeDef> {
@@ -93,13 +80,6 @@ impl Context {
 
     pub(super) fn find_metavar_opt(&self, id: &Id) -> Option<&ast::Typ> {
         self.menv.get(id)
-    }
-
-    #[allow(dead_code)]
-    pub(super) fn find_metavar(&self, id: &Id) -> Result<&ast::Typ, ElabError> {
-        self.find_metavar_opt(id).ok_or_else(|| {
-            ElabError::undefined(EntityKind::MetaVariable, &id.node, id.span.clone())
-        })
     }
 
     pub(super) fn bound_metavar(&self, id: &Id) -> bool {
@@ -643,19 +623,23 @@ mod tests {
         let ctx = Context::new();
 
         assert_eq!(
-            ctx.find_metavar(&id_default("bool")).expect("bool").node,
+            ctx.find_metavar_opt(&id_default("bool"))
+                .expect("bool")
+                .node,
             TypKind::Bool
         );
         assert_eq!(
-            ctx.find_metavar(&id_default("nat")).expect("nat").node,
+            ctx.find_metavar_opt(&id_default("nat")).expect("nat").node,
             TypKind::Num(crate::lang::xl::num::Typ::Nat)
         );
         assert_eq!(
-            ctx.find_metavar(&id_default("int")).expect("int").node,
+            ctx.find_metavar_opt(&id_default("int")).expect("int").node,
             TypKind::Num(crate::lang::xl::num::Typ::Int)
         );
         assert_eq!(
-            ctx.find_metavar(&id_default("text")).expect("text").node,
+            ctx.find_metavar_opt(&id_default("text"))
+                .expect("text")
+                .node,
             TypKind::Text
         );
     }
@@ -700,19 +684,9 @@ mod tests {
 
         assert_eq!(ctx.find_typdef(&tparam), Ok(&TypeDef::Parameter));
         assert!(matches!(
-            &ctx.find_metavar(&tparam).expect("metavariable").node,
+            &ctx.find_metavar_opt(&tparam).expect("metavariable").node,
             TypKind::Var(id, targs) if id == &tparam && targs.is_empty()
         ));
-    }
-
-    #[test]
-    fn fresh_state_is_scoped_to_each_context() {
-        let mut ctx_l = Context::new();
-        let mut ctx_r = Context::new();
-
-        assert_eq!(ctx_l.fresh_index(), 0);
-        assert_eq!(ctx_l.fresh_index(), 1);
-        assert_eq!(ctx_r.fresh_index(), 0);
     }
 
     #[test]
