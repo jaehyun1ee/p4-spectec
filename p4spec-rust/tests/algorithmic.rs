@@ -48,6 +48,126 @@ fn var_exp(name: &str, line: i64) -> ast::Exp {
     exp(ast::ExpKind::Var(id(name, line)), ast::TypKind::Bool, line)
 }
 
+fn typed_var_exp(name: &str, typ: &ast::Typ, line: i64) -> ast::Exp {
+    exp(ast::ExpKind::Var(id(name, line)), typ.node.clone(), line)
+}
+
+fn iterated_var_exp(name: &str, typ: &ast::Typ, iter: ast::Iter, line: i64) -> ast::Exp {
+    let exp_inner = typed_var_exp(name, typ, line);
+    exp(
+        ast::ExpKind::Iter(Box::new(exp_inner), (iter, vec![])),
+        ast::TypKind::Iter(Box::new(typ.clone()), iter),
+        line,
+    )
+}
+
+fn exp_arg(exp: ast::Exp) -> ast::Arg {
+    let span = exp.span.clone();
+    Spanned::new(ast::ArgKind::Exp(Box::new(exp)), span)
+}
+
+fn if_prem(exp: ast::Exp) -> ast::Prem {
+    let span = exp.span.clone();
+    Spanned::new(ast::PremKind::If(ast::IfPrem { exp }), span)
+}
+
+fn function_spec(
+    params: Vec<ast::Typ>,
+    args: Vec<ast::Exp>,
+    expression: ast::Exp,
+    premises: Vec<ast::Prem>,
+) -> ast::Spec {
+    let typ = Spanned::new(expression.node.note.clone(), expression.span.clone());
+    let clause = Spanned::new(
+        ast::ClauseKind {
+            args: args.into_iter().map(exp_arg).collect(),
+            expression,
+            premises,
+        },
+        span(1),
+    );
+    let params = params
+        .into_iter()
+        .map(|typ| Spanned::new(ast::ParamKind::Exp(typ), span(1)))
+        .collect();
+    vec![Spanned::new(
+        ast::DefKind::FuncDec(ast::FuncDec {
+            id: id("function", 1),
+            tparams: vec![],
+            params,
+            typ,
+            clauses: vec![clause],
+            else_clause: None,
+            hints: vec![],
+        }),
+        span(1),
+    )]
+}
+
+fn joint_iteration(names: &[(&str, i64)], iter: ast::Iter, line: i64) -> ast::Exp {
+    let typ_bool = typ::bool();
+    let exps = names
+        .iter()
+        .map(|(name, line)| typed_var_exp(name, &typ_bool, *line))
+        .collect::<Vec<_>>();
+    let vars = names
+        .iter()
+        .map(|(name, line)| ast::Var {
+            id: id(name, *line),
+            typ: typ_bool.clone(),
+            iters: vec![],
+        })
+        .collect::<Vec<_>>();
+    let typ_tuple = Spanned::new(ast::TypKind::Tuple(vec![typ_bool; names.len()]), span(line));
+    let exp_inner = exp(ast::ExpKind::Tuple(exps), typ_tuple.node.clone(), line);
+    exp(
+        ast::ExpKind::Iter(Box::new(exp_inner), (iter, vars)),
+        ast::TypKind::Iter(Box::new(typ_tuple), iter),
+        line,
+    )
+}
+
+fn dimension_exp(name: &str, iter: ast::Iter, line: i64) -> ast::Exp {
+    p4spec_rust::lang::il::var::as_exp(
+        true,
+        &ast::Var {
+            id: id(name, line),
+            typ: typ::bool(),
+            iters: vec![iter],
+        },
+    )
+}
+
+fn len_exp(name: &str, line: i64) -> ast::Exp {
+    let exp_inner = dimension_exp(name, ast::Iter::List, line);
+    exp(
+        ast::ExpKind::Len(Box::new(exp_inner)),
+        ast::TypKind::Num(xl::num::Typ::Nat),
+        line,
+    )
+}
+
+fn equality_prem(exp_l: ast::Exp, exp_r: ast::Exp, line: i64) -> ast::Prem {
+    let condition = exp(
+        ast::ExpKind::Cmp(
+            ast::CmpOp::Bool(xl::bool::CmpOp::Eq),
+            ast::OpTyp::Bool,
+            Box::new(exp_l),
+            Box::new(exp_r),
+        ),
+        ast::TypKind::Bool,
+        line,
+    );
+    if_prem(condition)
+}
+
+fn function_clause(spec: &p4spec_rust::lang::al::ast::Spec) -> &ast::Clause {
+    let p4spec_rust::lang::al::ast::DefKind::FuncDec(function) = &spec[0].node else {
+        panic!("expected function definition");
+    };
+    &function.clauses[0]
+}
+
 fn not_typ(name: &str, line: i64) -> ast::NotTyp {
     let atom = Spanned::new(Atom::Keyword(name.to_owned()), span(line));
     Spanned::new(Mixfix::Atom(atom), span(line))
@@ -62,27 +182,516 @@ fn pattern_set(names: &[&str]) -> PatternSet {
 }
 
 #[test]
-fn unsupported_conversion_uses_the_first_definition_span() {
-    let spec = vec![
-        Spanned::new(
-            ast::DefKind::ExternTyp(ast::ExternTyp {
-                id: id("first", 41),
-                hints: vec![],
-            }),
-            span(41),
+fn conversion_propagates_located_binding_errors() {
+    let variable = var_exp("x", 41);
+    let negated = exp(
+        ast::ExpKind::Un(
+            ast::UnOp::Bool(xl::bool::UnOp::Not),
+            ast::OpTyp::Bool,
+            Box::new(variable),
         ),
-        Spanned::new(
-            ast::DefKind::ExternTyp(ast::ExternTyp {
-                id: id("last", 43),
-                hints: vec![],
-            }),
-            span(43),
-        ),
-    ];
-    let error = algo::convert(&spec).expect_err("foundation conversion stub");
+        ast::TypKind::Bool,
+        40,
+    );
+    let spec = function_spec(
+        vec![typ::bool()],
+        vec![negated],
+        exp(ast::ExpKind::Bool(true), ast::TypKind::Bool, 42),
+        vec![],
+    );
 
-    assert_eq!(error.kind, AlgoErrorKind::Unsupported);
+    let error = algo::convert(&spec).expect_err("binding below a unary operator");
+
+    assert_eq!(
+        error.kind,
+        AlgoErrorKind::NonInvertibleBinding("unary operator")
+    );
     assert_eq!(error.span, span(41));
+}
+
+#[test]
+fn conversion_inserts_index_guards_at_evaluation_sites_in_source_order() {
+    fn assert_index_guard(
+        prem: &ast::Prem,
+        guard_span: Span,
+        base_span: Span,
+        index_name: &str,
+        index_span: Span,
+    ) {
+        assert_eq!(prem.span, guard_span);
+        let ast::PremKind::If(if_prem) = &prem.node else {
+            panic!("expected index guard premise");
+        };
+        assert_eq!(if_prem.exp.span, guard_span);
+        let ast::ExpKind::Cmp(
+            ast::CmpOp::Num(xl::num::CmpOp::Lt),
+            ast::OpTyp::Bool,
+            exp_i,
+            exp_len,
+        ) = &if_prem.exp.node.kind
+        else {
+            panic!("expected strict index bound");
+        };
+        assert_eq!(exp_i.span, index_span);
+        assert!(matches!(&exp_i.node.kind, ast::ExpKind::Var(id) if id.node == index_name));
+        assert_eq!(exp_len.span, guard_span);
+        let ast::ExpKind::Len(exp_base) = &exp_len.node.kind else {
+            panic!("expected indexed-base length");
+        };
+        assert_eq!(exp_base.span, base_span);
+    }
+
+    let typ_bool = typ::bool();
+    let typ_nat = typ::nat();
+    let typ_list = typ::list(typ_bool.clone());
+    let exp_index_prem = exp(
+        ast::ExpKind::Idx(
+            Box::new(iterated_var_exp("xs", &typ_bool, ast::Iter::List, 10)),
+            Box::new(typed_var_exp("i", &typ_nat, 11)),
+        ),
+        ast::TypKind::Bool,
+        12,
+    );
+    let exp_condition = exp(
+        ast::ExpKind::Cmp(
+            ast::CmpOp::Bool(xl::bool::CmpOp::Eq),
+            ast::OpTyp::Bool,
+            Box::new(exp_index_prem),
+            Box::new(exp(ast::ExpKind::Bool(true), ast::TypKind::Bool, 13)),
+        ),
+        ast::TypKind::Bool,
+        13,
+    );
+    let prem_source = if_prem(exp_condition);
+    let exp_output = exp(
+        ast::ExpKind::Idx(
+            Box::new(iterated_var_exp("xs", &typ_bool, ast::Iter::List, 20)),
+            Box::new(typed_var_exp("j", &typ_nat, 21)),
+        ),
+        ast::TypKind::Bool,
+        22,
+    );
+    let spec = function_spec(
+        vec![typ_list, typ_nat.clone(), typ_nat.clone()],
+        vec![
+            iterated_var_exp("xs", &typ_bool, ast::Iter::List, 2),
+            typed_var_exp("i", &typ_nat, 3),
+            typed_var_exp("j", &typ_nat, 4),
+        ],
+        exp_output.clone(),
+        vec![prem_source.clone()],
+    );
+
+    let converted = algo::convert(&spec).expect("guarded conversion");
+    let clause = function_clause(&converted);
+    let [guard_premise, source_premise, guard_output] = clause.node.premises.as_slice() else {
+        panic!("expected premise and output index guards");
+    };
+
+    assert_index_guard(guard_premise, span(12), span(10), "i", span(11));
+    assert_eq!(source_premise, &prem_source);
+    assert_index_guard(guard_output, span(22), span(20), "j", span(21));
+    assert_eq!(clause.node.expression, exp_output);
+    assert_eq!(clause.span, span(1));
+}
+
+#[test]
+fn conversion_inserts_list_and_optional_iteration_guards_in_source_order() {
+    fn dimension_name(exp: &ast::Exp, iter: ast::Iter) -> &str {
+        let ast::ExpKind::Iter(exp_inner, (actual_iter, _)) = &exp.node.kind else {
+            panic!("expected dimension expression");
+        };
+        assert_eq!(*actual_iter, iter);
+        let ast::ExpKind::Var(id) = &exp_inner.node.kind else {
+            panic!("expected dimension variable");
+        };
+        &id.node
+    }
+
+    fn list_pair(exp: &ast::Exp) -> (&str, &str) {
+        let ast::ExpKind::Cmp(
+            ast::CmpOp::Bool(xl::bool::CmpOp::Eq),
+            ast::OpTyp::Bool,
+            exp_l,
+            exp_r,
+        ) = &exp.node.kind
+        else {
+            panic!("expected list-length equality");
+        };
+        let ast::ExpKind::Len(exp_l) = &exp_l.node.kind else {
+            panic!("expected left length");
+        };
+        let ast::ExpKind::Len(exp_r) = &exp_r.node.kind else {
+            panic!("expected right length");
+        };
+        (
+            dimension_name(exp_l, ast::Iter::List),
+            dimension_name(exp_r, ast::Iter::List),
+        )
+    }
+
+    fn optional_name(exp: &ast::Exp) -> &str {
+        let ast::ExpKind::Cmp(
+            ast::CmpOp::Bool(xl::bool::CmpOp::Eq),
+            ast::OpTyp::Bool,
+            exp_l,
+            exp_r,
+        ) = &exp.node.kind
+        else {
+            panic!("expected optional-presence equality");
+        };
+        assert!(matches!(exp_r.node.kind, ast::ExpKind::Opt(None)));
+        dimension_name(exp_l, ast::Iter::Opt)
+    }
+
+    fn optional_pair(exp: &ast::Exp) -> (&str, &str) {
+        let ast::ExpKind::Bin(
+            ast::BinOp::Bool(xl::bool::BinOp::Equiv),
+            ast::OpTyp::Bool,
+            exp_l,
+            exp_r,
+        ) = &exp.node.kind
+        else {
+            panic!("expected optional-presence equivalence");
+        };
+        (optional_name(exp_l), optional_name(exp_r))
+    }
+
+    let typ_bool = typ::bool();
+    let list_names = [("x", 2), ("y", 3), ("z", 4)];
+    let optional_names = [("p", 5), ("q", 6), ("r", 7)];
+    let mut params = vec![typ::list(typ_bool.clone()); list_names.len()];
+    params.extend(vec![typ::opt(typ_bool.clone()); optional_names.len()]);
+    let mut args = list_names
+        .iter()
+        .map(|(name, line)| iterated_var_exp(name, &typ_bool, ast::Iter::List, *line))
+        .collect::<Vec<_>>();
+    args.extend(
+        optional_names
+            .iter()
+            .map(|(name, line)| iterated_var_exp(name, &typ_bool, ast::Iter::Opt, *line)),
+    );
+    let exp_list = joint_iteration(&list_names, ast::Iter::List, 20);
+    let exp_optional = joint_iteration(&optional_names, ast::Iter::Opt, 21);
+    let typ_output = ast::TypKind::Tuple(vec![
+        Spanned::new(exp_list.node.note.clone(), exp_list.span.clone()),
+        Spanned::new(exp_optional.node.note.clone(), exp_optional.span.clone()),
+    ]);
+    let exp_output = exp(
+        ast::ExpKind::Tuple(vec![exp_list, exp_optional]),
+        typ_output,
+        22,
+    );
+    let spec = function_spec(params, args, exp_output, vec![]);
+
+    let converted = algo::convert(&spec).expect("guarded joint iterations");
+    let clause = function_clause(&converted);
+    let [prem_list, prem_optional] = clause.node.premises.as_slice() else {
+        panic!("expected list and optional guards");
+    };
+
+    assert_eq!(prem_list.span, Span::over(&[span(2), span(3), span(4)]));
+    let ast::PremKind::If(if_list) = &prem_list.node else {
+        panic!("expected list guard premise");
+    };
+    let ast::ExpKind::Bin(
+        ast::BinOp::Bool(xl::bool::BinOp::And),
+        ast::OpTyp::Bool,
+        pair_xy,
+        pair_yz,
+    ) = &if_list.exp.node.kind
+    else {
+        panic!("expected pairwise list guard conjunction");
+    };
+    assert_eq!(list_pair(pair_xy), ("x", "y"));
+    assert_eq!(list_pair(pair_yz), ("y", "z"));
+
+    assert_eq!(prem_optional.span, Span::over(&[span(5), span(6), span(7)]));
+    let ast::PremKind::If(if_optional) = &prem_optional.node else {
+        panic!("expected optional guard premise");
+    };
+    let ast::ExpKind::Bin(
+        ast::BinOp::Bool(xl::bool::BinOp::And),
+        ast::OpTyp::Bool,
+        pair_pq,
+        pair_qr,
+    ) = &if_optional.exp.node.kind
+    else {
+        panic!("expected pairwise optional guard conjunction");
+    };
+    assert_eq!(optional_pair(pair_pq), ("p", "q"));
+    assert_eq!(optional_pair(pair_qr), ("q", "r"));
+}
+
+#[test]
+fn conversion_omits_iteration_guards_entailed_by_prior_premises() {
+    let typ_bool = typ::bool();
+    let names = [("x", 2), ("y", 3), ("z", 4)];
+    let args = names
+        .iter()
+        .map(|(name, line)| iterated_var_exp(name, &typ_bool, ast::Iter::List, *line))
+        .collect::<Vec<_>>();
+    let prem_xy = equality_prem(len_exp("x", 10), len_exp("y", 11), 12);
+    let prem_yz = equality_prem(len_exp("y", 13), len_exp("z", 14), 15);
+    let exp_output = joint_iteration(&[("x", 20), ("z", 21)], ast::Iter::List, 22);
+    let spec = function_spec(
+        vec![typ::list(typ_bool); names.len()],
+        args,
+        exp_output,
+        vec![prem_xy.clone(), prem_yz.clone()],
+    );
+
+    let converted = algo::convert(&spec).expect("transitively guarded iteration");
+    let premises = &function_clause(&converted).node.premises;
+
+    assert_eq!(premises, &[prem_xy, prem_yz]);
+}
+
+#[test]
+fn conversion_preserves_binding_match_and_cast_guards_before_bindings() {
+    let parent_id = id("Parent", 1);
+    let child_id = id("Child", 2);
+    let parent_typ = Spanned::new(ast::TypKind::Var(parent_id.clone(), vec![]), span(1));
+    let child_typ = Spanned::new(ast::TypKind::Var(child_id.clone(), vec![]), span(2));
+    let parent_origin = Spanned::new((parent_id.clone(), vec![]), span(1));
+    let child_origin = Spanned::new((child_id.clone(), vec![]), span(2));
+    let parent_def = Spanned::new(
+        ast::DefKind::Typ(ast::TypDef {
+            id: parent_id,
+            tparams: vec![],
+            def_typ: Spanned::new(
+                ast::DefTypKind::Variant(vec![
+                    (not_typ("A", 1), parent_origin.clone(), vec![]),
+                    (not_typ("B", 1), parent_origin, vec![]),
+                ]),
+                span(1),
+            ),
+            hints: vec![],
+        }),
+        span(1),
+    );
+    let child_def = Spanned::new(
+        ast::DefKind::Typ(ast::TypDef {
+            id: child_id,
+            tparams: vec![],
+            def_typ: Spanned::new(
+                ast::DefTypKind::Variant(vec![(not_typ("A", 2), child_origin, vec![])]),
+                span(2),
+            ),
+            hints: vec![],
+        }),
+        span(2),
+    );
+    let typ_bool = typ::bool();
+    let typ_list = typ::list(typ_bool.clone());
+    let exp_list = exp(
+        ast::ExpKind::List(vec![typed_var_exp("item", &typ_bool, 10)]),
+        typ_list.node.clone(),
+        10,
+    );
+    let exp_upcast = exp(
+        ast::ExpKind::UpCast(
+            parent_typ.clone(),
+            Box::new(typed_var_exp("child", &child_typ, 11)),
+        ),
+        parent_typ.node.clone(),
+        11,
+    );
+    let exp_output = exp(
+        ast::ExpKind::Tuple(vec![
+            typed_var_exp("item", &typ_bool, 12),
+            typed_var_exp("child", &child_typ, 12),
+        ]),
+        ast::TypKind::Tuple(vec![typ_bool.clone(), child_typ.clone()]),
+        12,
+    );
+    let mut spec = function_spec(
+        vec![typ_list, parent_typ],
+        vec![exp_list, exp_upcast],
+        exp_output,
+        vec![],
+    );
+    spec.insert(0, child_def);
+    spec.insert(0, parent_def);
+
+    let converted = algo::convert(&spec).expect("partial binding conversion");
+    let p4spec_rust::lang::al::ast::DefKind::FuncDec(function) = &converted[2].node else {
+        panic!("expected converted function");
+    };
+    let [match_guard, list_binding, subtype_guard, cast_binding] =
+        function.clauses[0].node.premises.as_slice()
+    else {
+        panic!("expected match/bind and subtype/downcast pairs");
+    };
+
+    assert!(matches!(
+        &match_guard.node,
+        ast::PremKind::If(ast::IfPrem {
+            exp: Spanned {
+                node: Noted {
+                    kind: ast::ExpKind::Match(_, ast::Pattern::List(ast::ListPattern::Fixed(1))),
+                    ..
+                },
+                ..
+            }
+        })
+    ));
+    assert!(matches!(&list_binding.node, ast::PremKind::Let(_)));
+    assert!(matches!(
+        &subtype_guard.node,
+        ast::PremKind::If(ast::IfPrem {
+            exp: Spanned {
+                node: Noted {
+                    kind: ast::ExpKind::Sub(_, typ, _),
+                    ..
+                },
+                ..
+            }
+        }) if typ.syntax_eq(&child_typ)
+    ));
+    assert!(matches!(
+        &cast_binding.node,
+        ast::PremKind::Let(ast::LetPrem {
+            exp_r: Spanned {
+                node: Noted {
+                    kind: ast::ExpKind::DownCast(typ, _),
+                    ..
+                },
+                ..
+            },
+            ..
+        }) if typ.syntax_eq(&child_typ)
+    ));
+}
+
+#[test]
+fn conversion_preserves_numeric_and_slice_checks_before_output_guards() {
+    let typ_nat = typ::nat();
+    let typ_list = typ::list(typ_nat.clone());
+    let exp_zero = exp(
+        ast::ExpKind::Num(ast::Num::Nat(0_u64.into())),
+        ast::TypKind::Num(xl::num::Typ::Nat),
+        10,
+    );
+    let exp_nonzero = exp(
+        ast::ExpKind::Cmp(
+            ast::CmpOp::Bool(xl::bool::CmpOp::Ne),
+            ast::OpTyp::Bool,
+            Box::new(typed_var_exp("d", &typ_nat, 10)),
+            Box::new(exp_zero),
+        ),
+        ast::TypKind::Bool,
+        10,
+    );
+    let prem_nonzero = if_prem(exp_nonzero);
+    let exp_end = exp(
+        ast::ExpKind::Bin(
+            ast::BinOp::Num(xl::num::BinOp::Add),
+            ast::OpTyp::Nat,
+            Box::new(typed_var_exp("offset", &typ_nat, 11)),
+            Box::new(typed_var_exp("length", &typ_nat, 11)),
+        ),
+        ast::TypKind::Num(xl::num::Typ::Nat),
+        11,
+    );
+    let exp_base_for_len = iterated_var_exp("xs", &typ_nat, ast::Iter::List, 12);
+    let exp_length = exp(
+        ast::ExpKind::Len(Box::new(exp_base_for_len)),
+        ast::TypKind::Num(xl::num::Typ::Nat),
+        12,
+    );
+    let exp_slice_bound = exp(
+        ast::ExpKind::Cmp(
+            ast::CmpOp::Num(xl::num::CmpOp::Le),
+            ast::OpTyp::Bool,
+            Box::new(exp_end),
+            Box::new(exp_length),
+        ),
+        ast::TypKind::Bool,
+        12,
+    );
+    let prem_slice_bound = if_prem(exp_slice_bound);
+    let exp_index = exp(
+        ast::ExpKind::Idx(
+            Box::new(iterated_var_exp("xs", &typ_nat, ast::Iter::List, 20)),
+            Box::new(typed_var_exp("index", &typ_nat, 21)),
+        ),
+        ast::TypKind::Num(xl::num::Typ::Nat),
+        22,
+    );
+    let exp_division = exp(
+        ast::ExpKind::Bin(
+            ast::BinOp::Num(xl::num::BinOp::Div),
+            ast::OpTyp::Nat,
+            Box::new(exp_index),
+            Box::new(typed_var_exp("d", &typ_nat, 23)),
+        ),
+        ast::TypKind::Num(xl::num::Typ::Nat),
+        23,
+    );
+    let exp_slice = exp(
+        ast::ExpKind::Slice(
+            Box::new(iterated_var_exp("xs", &typ_nat, ast::Iter::List, 24)),
+            Box::new(typed_var_exp("offset", &typ_nat, 24)),
+            Box::new(typed_var_exp("length", &typ_nat, 24)),
+        ),
+        typ_list.node.clone(),
+        24,
+    );
+    let exp_remainder = exp(
+        ast::ExpKind::Bin(
+            ast::BinOp::Num(xl::num::BinOp::Mod),
+            ast::OpTyp::Nat,
+            Box::new(typed_var_exp("value", &typ_nat, 25)),
+            Box::new(typed_var_exp("d", &typ_nat, 25)),
+        ),
+        ast::TypKind::Num(xl::num::Typ::Nat),
+        25,
+    );
+    let exp_output = exp(
+        ast::ExpKind::Tuple(vec![exp_division, exp_slice, exp_remainder]),
+        ast::TypKind::Tuple(vec![typ_nat.clone(), typ_list.clone(), typ_nat.clone()]),
+        26,
+    );
+    let params = vec![
+        typ_list,
+        typ_nat.clone(),
+        typ_nat.clone(),
+        typ_nat.clone(),
+        typ_nat.clone(),
+        typ_nat.clone(),
+    ];
+    let args = vec![
+        iterated_var_exp("xs", &typ_nat, ast::Iter::List, 2),
+        typed_var_exp("index", &typ_nat, 3),
+        typed_var_exp("offset", &typ_nat, 4),
+        typed_var_exp("length", &typ_nat, 5),
+        typed_var_exp("value", &typ_nat, 6),
+        typed_var_exp("d", &typ_nat, 7),
+    ];
+    let spec = function_spec(
+        params,
+        args,
+        exp_output,
+        vec![prem_nonzero.clone(), prem_slice_bound.clone()],
+    );
+
+    let converted = algo::convert(&spec).expect("numeric and slice conversion");
+    let premises = &function_clause(&converted).node.premises;
+    let [actual_nonzero, actual_slice_bound, index_guard] = premises.as_slice() else {
+        panic!("expected two explicit checks and one index guard");
+    };
+
+    assert_eq!(actual_nonzero, &prem_nonzero);
+    assert_eq!(actual_slice_bound, &prem_slice_bound);
+    let ast::PremKind::If(if_index) = &index_guard.node else {
+        panic!("expected index guard");
+    };
+    assert!(matches!(
+        if_index.exp.node.kind,
+        ast::ExpKind::Cmp(ast::CmpOp::Num(xl::num::CmpOp::Lt), _, _, _)
+    ));
+    assert_eq!(index_guard.span, span(22));
 }
 
 #[test]
