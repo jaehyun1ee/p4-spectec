@@ -2,7 +2,7 @@
 
 use crate::{lang::common::source::Span, runtime::types::TypeError};
 
-use super::{ElabError, ElabErrorKind, error::ElabTrace};
+use super::{ElabError, ElabErrorKind, context::Context, error::ElabTrace};
 
 /// A successful elaboration result or recoverable backtracking failure
 pub(super) type Attempt<T> = Result<T, Backtrack>;
@@ -18,15 +18,30 @@ pub(super) fn fail_silent<T>() -> Attempt<T> {
 }
 
 pub(super) fn choose_sequential<T>(
-    first: impl FnOnce() -> Attempt<T>,
-    second: impl FnOnce() -> Attempt<T>,
+    ctx: &mut Context,
+    first: impl FnOnce(&mut Context) -> Attempt<T>,
+    second: impl FnOnce(&mut Context) -> Attempt<T>,
 ) -> Attempt<T> {
-    match first() {
-        Ok(value) => Ok(value),
-        Err(failure) => match second() {
-            Ok(value) => Ok(value),
-            Err(failure_second) => Err(failure.merge(failure_second)),
-        },
+    let checkpoint = ctx.checkpoint();
+    match first(ctx) {
+        Ok(value) => {
+            ctx.commit(checkpoint);
+            Ok(value)
+        }
+        Err(failure) => {
+            ctx.rollback(checkpoint);
+            let checkpoint = ctx.checkpoint();
+            match second(ctx) {
+                Ok(value) => {
+                    ctx.commit(checkpoint);
+                    Ok(value)
+                }
+                Err(failure_second) => {
+                    ctx.rollback(checkpoint);
+                    Err(failure.merge(failure_second))
+                }
+            }
+        }
     }
 }
 

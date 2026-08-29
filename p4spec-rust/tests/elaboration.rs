@@ -46,6 +46,35 @@ fn parenthesized_variant_keeps_the_case_origin() {
 }
 
 #[test]
+fn failed_variant_alternative_does_not_leak_wildcard_bindings() {
+    let spec = parse_string(
+        "syntax choice =\n\
+         | bool BAD\n\
+         | bool GOOD\n\
+         dec $pick(choice) : bool\n\
+         def $pick(_ GOOD) = true",
+    )
+    .expect("parse variant alternatives");
+
+    let spec = elaborate::elaborate(&spec).expect("elaborate matching alternative");
+    let ast::DefKind::FuncDec(function) = &spec[1].node else {
+        panic!("expected function declaration");
+    };
+    let ast::ArgKind::Exp(argument) = &function.clauses[0].node.args[0].node else {
+        panic!("expected expression argument");
+    };
+    let ast::ExpKind::Case(case) = &argument.node.kind else {
+        panic!("expected variant case");
+    };
+
+    assert!(
+        case.args()
+            .iter()
+            .any(|exp| { matches!(&exp.node.kind, ast::ExpKind::Var(id) if id.node == "_bool") })
+    );
+}
+
+#[test]
 #[ignore = "runs the full specification corpus"]
 fn full_spec_elaborates() {
     let repo = Path::new(env!("CARGO_MANIFEST_DIR"))
