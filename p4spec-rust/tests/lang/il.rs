@@ -3,7 +3,7 @@ use p4spec_rust::{
     lang::{
         common::{
             ds::{map::IdMap, set::IdSet},
-            notation::mixfix::Mixfix,
+            notation::{atom::Atom, mixfix::Mixfix},
         },
         hints::input::InputHint,
         il::{ast, fresh as fresh_impl},

@@ -1,6 +1,21 @@
 use super::*;
 
 #[test]
+fn test_printer_renders_case_patterns_as_canonical_mixops() {
+    let comma = p4spec_rust::phrase! {
+        node: Atom::operator(",").expect("comma operator"),
+        span: Span::default(),
+    };
+    let pattern = ast::Pattern::Case(Box::new(Mixfix::Seq(vec![
+        Mixfix::Arg(()),
+        Mixfix::Atom(comma),
+        Mixfix::Arg(()),
+    ])));
+
+    assert_eq!(Print::to_string(&pattern), "`% , %`");
+}
+
+#[test]
 fn test_printer_renders_nested_premises_and_definition_spec_goldens() {
     let iteration = ast::IterPrem {
         iter: ast::Iter::List,
