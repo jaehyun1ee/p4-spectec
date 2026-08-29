@@ -86,8 +86,6 @@ pub enum ElabErrorKind {
     InvalidPremise,
     #[error("rule is invalid")]
     InvalidRule,
-    #[error("clause is invalid")]
-    InvalidClause,
     #[error("definition is invalid")]
     InvalidDefinition,
     #[error("input hint is invalid")]

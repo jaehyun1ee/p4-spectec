@@ -117,7 +117,6 @@ fn rust_error_category(kind: &ElabErrorKind) -> &'static str {
         ElabErrorKind::InvalidArgument => "invalid_argument",
         ElabErrorKind::InvalidPremise => "invalid_premise",
         ElabErrorKind::InvalidRule => "invalid_rule",
-        ElabErrorKind::InvalidClause => "invalid_clause",
         ElabErrorKind::InvalidDefinition => "invalid_definition",
         ElabErrorKind::InvalidInputHint => "invalid_input_hint",
         ElabErrorKind::AlreadyPopulated => "already_populated",
