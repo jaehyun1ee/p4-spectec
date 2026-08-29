@@ -116,7 +116,10 @@ pub fn subst_not_typ(theta: &Theta, not_typ: &ast::NotTyp) -> Result<ast::NotTyp
 }
 
 /// Substitutes type variables in a variant case and its recorded origin
-pub fn subst_typ_case(theta: &Theta, typ_case: &ast::TypCase) -> Result<ast::TypCase, TypeError> {
+pub(crate) fn subst_typ_case(
+    theta: &Theta,
+    typ_case: &ast::TypCase,
+) -> Result<ast::TypCase, TypeError> {
     let (not_typ, origin, hints) = typ_case;
     let not_typ = subst_not_typ(theta, not_typ)?;
     let targs = subst_typs(theta, &origin.node.1)?;
@@ -125,12 +128,6 @@ pub fn subst_typ_case(theta: &Theta, typ_case: &ast::TypCase) -> Result<ast::Typ
         span: origin.span.clone(),
     };
     Ok((not_typ, origin, hints.clone()))
-}
-
-/// Substitutes type variables in a parameter while freshening nested binders
-pub fn subst_param(theta: &Theta, param: &ast::Param) -> Result<ast::Param, TypeError> {
-    let mut fresh = Fresh::default();
-    subst_param_inner(&mut fresh, theta, param)
 }
 
 fn subst_param_inner(
@@ -157,7 +154,10 @@ fn subst_param_inner(
 }
 
 /// Substitutes type variables in parameters while sharing fresh state
-pub fn subst_params(theta: &Theta, params: &[ast::Param]) -> Result<Vec<ast::Param>, TypeError> {
+pub(crate) fn subst_params(
+    theta: &Theta,
+    params: &[ast::Param],
+) -> Result<Vec<ast::Param>, TypeError> {
     let mut fresh = Fresh::default();
     subst_params_inner(&mut fresh, theta, params)
 }
