@@ -27,7 +27,7 @@ impl DimContext {
         for (id, dims) in self.0.iter() {
             let dim_min = dims
                 .iter()
-                .min_by_key(|dim| dim.iters().len())
+                .min_by_key(|dim| dim.iters.len())
                 .expect("identifier has an occurrence");
             if dims.iter().any(|dim| !dim_min.sub(dim)) {
                 return Err(ElabError::new(
@@ -240,14 +240,14 @@ fn singleton(id: &Id, typ: ast::Typ) -> VEnv {
 fn union(mut occurs_l: VEnv, occurs_r: VEnv) -> Result<VEnv, ElabError> {
     for (id, dim_r) in occurs_r.iter() {
         if let Some(dim_l) = occurs_l.get(id) {
-            if !dim_l.typ().syntax_eq(dim_r.typ()) {
+            if !dim_l.typ.syntax_eq(&dim_r.typ) {
                 return Err(ElabError::new(
                     ElabErrorKind::TypeMismatch,
                     id.span.clone(),
                     format!("type mismatch for identifier `{}` in union", id.node),
                 ));
             }
-            if dim_r.iters().len() <= dim_l.iters().len() {
+            if dim_r.iters.len() <= dim_l.iters.len() {
                 occurs_l.insert(id.clone(), dim_r.clone());
             }
         } else {
@@ -277,8 +277,8 @@ fn collect_iter_vars(bounds: &VEnv, occurs: &VEnv, iter: ast::Iter) -> Vec<ast::
             if dim.clone().add_iter(iter).sub(expected) {
                 Some(ast::Var {
                     id: id.clone(),
-                    typ: dim.typ().clone(),
-                    iters: dim.iters().to_vec(),
+                    typ: dim.typ.clone(),
+                    iters: dim.iters.clone(),
                 })
             } else {
                 None
@@ -869,8 +869,8 @@ mod tests {
             .expect("compatible dimensions");
         let dim = bounds.get(&id("x", "query")).expect("variable bound");
 
-        assert_eq!(dim.iters(), &[Iter::Opt, Iter::List]);
-        assert_eq!(dim.typ().node, TypKind::Bool);
+        assert_eq!(dim.iters, [Iter::Opt, Iter::List]);
+        assert_eq!(dim.typ.node, TypKind::Bool);
     }
 
     #[test]
@@ -910,7 +910,7 @@ mod tests {
             .expect("compatible occurrence types");
         let dim = occurs.get(&id("x", "query")).expect("merged occurrence");
 
-        assert_eq!(dim.typ().span, span("right-type"));
+        assert_eq!(dim.typ.span, span("right-type"));
     }
 
     #[test]
