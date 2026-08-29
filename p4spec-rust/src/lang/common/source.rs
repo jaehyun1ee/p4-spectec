@@ -1,16 +1,16 @@
-use std::fmt;
+use std::{fmt, rc::Rc};
 
 /// A source position
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Position {
-    pub file: String,
+    pub file: Rc<str>,
     pub line: i64,
     pub column: i64,
 }
 
 impl Position {
     /// Constructs a source position
-    pub fn new(file: impl Into<String>, line: i64, column: i64) -> Self {
+    pub fn new(file: impl Into<Rc<str>>, line: i64, column: i64) -> Self {
         Self {
             file: file.into(),
             line,

@@ -17,7 +17,7 @@ pub fn decode_position(value: &Value) -> Result<Position, DecodeError> {
 
 pub fn encode_position(position: &Position) -> Value {
     json!({
-        "file": position.file,
+        "file": position.file.as_ref(),
         "line": position.line,
         "column": position.column,
     })

@@ -41,6 +41,8 @@
 //! lexer:  TextLiteral("Hi")
 //! ```
 
+use std::rc::Rc;
+
 use num_bigint::BigInt;
 
 use crate::lang::{
@@ -174,7 +176,7 @@ struct Cursor {
 /// parser's current scope. Input is valid UTF-8 by construction; file entry
 /// points must report decoding failures before constructing a lexer.
 pub struct Lexer<'input, Classify> {
-    file: String,
+    file: Rc<str>,
     source: &'input str,
     cursor: Cursor,
     finished: bool,
@@ -188,7 +190,11 @@ where
     Classify: FnMut(&str) -> bool,
 {
     /// Tokenizes `source` using the parser's uppercase-variable classifier
-    pub fn new(file: impl Into<String>, source: &'input str, classify_uppercase: Classify) -> Self {
+    pub fn new(
+        file: impl Into<Rc<str>>,
+        source: &'input str,
+        classify_uppercase: Classify,
+    ) -> Self {
         Self {
             file: file.into(),
             source,

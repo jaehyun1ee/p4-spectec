@@ -24,10 +24,10 @@ use super::{
 
 /// Parses a SpecTec string with no filesystem source name
 pub fn parse_string(source: &str) -> Result<Spec, FrontendError> {
-    parse_source("", source, &Context::default())
+    parse_source(Rc::from(""), source, &Context::default())
 }
 
-fn parse_source(name: &str, source: &str, context: &Context) -> Result<Spec, FrontendError> {
+fn parse_source(name: Rc<str>, source: &str, context: &Context) -> Result<Spec, FrontendError> {
     let lexer = Lexer::new(name, source, |id| context.find_id(id));
     parser::SpecParser::new()
         .parse(context, parser_tokens(context, lexer))
@@ -67,8 +67,8 @@ pub fn parse_file(path: impl AsRef<Path>) -> Result<Spec, FrontendError> {
 }
 
 fn parse_file_with_context(path: &Path, context: &Context) -> Result<Spec, FrontendError> {
-    let name = path.to_string_lossy().into_owned();
-    let position = Position::new(name.clone(), 0, 0);
+    let name = Rc::<str>::from(path.to_string_lossy().into_owned());
+    let position = Position::new(Rc::clone(&name), 0, 0);
     let file_span = Span::new(position.clone(), position);
     let bytes = fs::read(path).map_err(|source| {
         FrontendError::Io(crate::spanned! {
@@ -79,13 +79,13 @@ fn parse_file_with_context(path: &Path, context: &Context) -> Result<Spec, Front
     let source = str::from_utf8(&bytes).map_err(|source| {
         FrontendError::InvalidUtf8(crate::spanned! {
             node: source,
-            span: invalid_utf8_span(&name, &bytes, &source),
+            span: invalid_utf8_span(Rc::clone(&name), &bytes, &source),
         })
     })?;
-    parse_source(&name, source, context)
+    parse_source(name, source, context)
 }
 
-fn invalid_utf8_span(name: &str, bytes: &[u8], error: &str::Utf8Error) -> Span {
+fn invalid_utf8_span(name: Rc<str>, bytes: &[u8], error: &str::Utf8Error) -> Span {
     let offset = error.valid_up_to();
     let valid_prefix = &bytes[..offset];
     let line = valid_prefix.iter().filter(|byte| **byte == b'\n').count() as i64 + 1;
@@ -97,7 +97,7 @@ fn invalid_utf8_span(name: &str, bytes: &[u8], error: &str::Utf8Error) -> Span {
     let invalid_length = error
         .error_len()
         .unwrap_or_else(|| bytes.len().saturating_sub(offset)) as i64;
-    let left = Position::new(name, line, column);
+    let left = Position::new(Rc::clone(&name), line, column);
     let right = Position::new(name, line, column + invalid_length);
     Span::new(left, right)
 }
