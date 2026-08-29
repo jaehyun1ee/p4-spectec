@@ -1,5 +1,7 @@
 //! Typed failures produced while elaborating surface-language syntax
 
+use std::fmt;
+
 use thiserror::Error;
 
 use crate::{
@@ -96,13 +98,46 @@ pub enum ElabErrorKind {
     NoMatchingAlternative,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct ElabTrace {
+    pub(super) error: ElabError,
+    pub(super) children: Vec<ElabTrace>,
+}
+
+impl ElabTrace {
+    pub(super) fn leaf(error: ElabError) -> Self {
+        Self {
+            error,
+            children: vec![],
+        }
+    }
+
+    fn fmt(&self, f: &mut fmt::Formatter<'_>, depth: usize, first: &mut bool) -> fmt::Result {
+        if !*first {
+            writeln!(f)?;
+        }
+        *first = false;
+        write!(
+            f,
+            "{indent}- {} at {}",
+            self.error.diagnostic,
+            self.error.span,
+            indent = "  ".repeat(depth),
+        )?;
+        for child in &self.children {
+            child.fmt(f, depth + 1, first)?;
+        }
+        Ok(())
+    }
+}
+
 /// An elaboration failure paired with the source span that caused it
-#[derive(Clone, Debug, Error, PartialEq, Eq)]
-#[error("{diagnostic} at {span}")]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ElabError {
     pub kind: ElabErrorKind,
     pub span: Span,
     diagnostic: String,
+    traces: Vec<ElabTrace>,
 }
 
 impl ElabError {
@@ -111,7 +146,13 @@ impl ElabError {
             kind,
             span,
             diagnostic: diagnostic.into(),
+            traces: vec![],
         }
+    }
+
+    pub(super) fn with_traces(mut self, traces: Vec<ElabTrace>) -> Self {
+        self.traces = traces;
+        self
     }
 
     pub(crate) fn undefined(entity: EntityKind, name: &str, span: Span) -> Self {
@@ -130,6 +171,21 @@ impl ElabError {
         )
     }
 }
+
+impl fmt::Display for ElabError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.traces.is_empty() {
+            return write!(f, "{} at {}", self.diagnostic, self.span);
+        }
+        let mut first = true;
+        for trace in &self.traces {
+            trace.fmt(f, 0, &mut first)?;
+        }
+        Ok(())
+    }
+}
+
+impl std::error::Error for ElabError {}
 
 impl From<TypeError> for ElabError {
     fn from(error: TypeError) -> Self {
