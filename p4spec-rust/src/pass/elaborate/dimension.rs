@@ -2,11 +2,12 @@
 
 use crate::{
     lang::{
-        common::{Id, ds::map::IdMap, notation::mixfix::Mixfix, noted::Noted, source::Spanned},
+        common::{Id, ds::map::IdMap, notation::mixfix::Mixfix, noted::Noted},
         il::ast,
         traits::eq::SyntaxEq,
     },
     runtime::sta::{Dim, VEnv},
+    spanned,
 };
 
 use super::{ElabError, ElabErrorKind};
@@ -45,7 +46,7 @@ impl DimContext {
 }
 
 fn infer_exp(dims: &mut DimContext, exp: &ast::Exp, iters: &[ast::Iter]) -> Result<(), ElabError> {
-    let typ = Spanned::new(exp.node.note.clone(), exp.span.clone());
+    let typ = spanned!(node: exp.node.note.clone(), span: exp.span.clone());
     match &exp.node.kind {
         ast::ExpKind::Bool(_) | ast::ExpKind::Num(_) | ast::ExpKind::Text(_) => {}
         ast::ExpKind::Var(id) => dims.add(id, Dim::new(typ, iters.to_vec())),
@@ -294,7 +295,7 @@ fn annotate_exp(bounds: &VEnv, exp: &ast::Exp) -> Result<(VEnv, ast::Exp), ElabE
         ast::ExpKind::Num(value) => (VEnv::new(), ast::ExpKind::Num(value.clone())),
         ast::ExpKind::Text(value) => (VEnv::new(), ast::ExpKind::Text(value.clone())),
         ast::ExpKind::Var(id) => {
-            let typ = Spanned::new(note.clone(), span.clone());
+            let typ = spanned!(node: note.clone(), span: span.clone());
             (singleton(id, typ), ast::ExpKind::Var(id.clone()))
         }
         ast::ExpKind::Un(op, op_typ, exp_inner) => {
@@ -304,16 +305,18 @@ fn annotate_exp(bounds: &VEnv, exp: &ast::Exp) -> Result<(VEnv, ast::Exp), ElabE
         ast::ExpKind::Bin(op, op_typ, exp_l, exp_r) => {
             let (occurs_l, exp_l) = annotate_exp(bounds, exp_l)?;
             let (occurs_r, exp_r) = annotate_exp(bounds, exp_r)?;
+            let occurs = union(occurs_l, occurs_r)?;
             (
-                union(occurs_l, occurs_r)?,
+                occurs,
                 ast::ExpKind::Bin(*op, *op_typ, Box::new(exp_l), Box::new(exp_r)),
             )
         }
         ast::ExpKind::Cmp(op, op_typ, exp_l, exp_r) => {
             let (occurs_l, exp_l) = annotate_exp(bounds, exp_l)?;
             let (occurs_r, exp_r) = annotate_exp(bounds, exp_r)?;
+            let occurs = union(occurs_l, occurs_r)?;
             (
-                union(occurs_l, occurs_r)?,
+                occurs,
                 ast::ExpKind::Cmp(*op, *op_typ, Box::new(exp_l), Box::new(exp_r)),
             )
         }
@@ -380,26 +383,20 @@ fn annotate_exp(bounds: &VEnv, exp: &ast::Exp) -> Result<(VEnv, ast::Exp), ElabE
         ast::ExpKind::Cons(exp_l, exp_r) => {
             let (occurs_l, exp_l) = annotate_exp(bounds, exp_l)?;
             let (occurs_r, exp_r) = annotate_exp(bounds, exp_r)?;
-            (
-                union(occurs_l, occurs_r)?,
-                ast::ExpKind::Cons(Box::new(exp_l), Box::new(exp_r)),
-            )
+            let occurs = union(occurs_l, occurs_r)?;
+            (occurs, ast::ExpKind::Cons(Box::new(exp_l), Box::new(exp_r)))
         }
         ast::ExpKind::Cat(exp_l, exp_r) => {
             let (occurs_l, exp_l) = annotate_exp(bounds, exp_l)?;
             let (occurs_r, exp_r) = annotate_exp(bounds, exp_r)?;
-            (
-                union(occurs_l, occurs_r)?,
-                ast::ExpKind::Cat(Box::new(exp_l), Box::new(exp_r)),
-            )
+            let occurs = union(occurs_l, occurs_r)?;
+            (occurs, ast::ExpKind::Cat(Box::new(exp_l), Box::new(exp_r)))
         }
         ast::ExpKind::Mem(exp_l, exp_r) => {
             let (occurs_l, exp_l) = annotate_exp(bounds, exp_l)?;
             let (occurs_r, exp_r) = annotate_exp(bounds, exp_r)?;
-            (
-                union(occurs_l, occurs_r)?,
-                ast::ExpKind::Mem(Box::new(exp_l), Box::new(exp_r)),
-            )
+            let occurs = union(occurs_l, occurs_r)?;
+            (occurs, ast::ExpKind::Mem(Box::new(exp_l), Box::new(exp_r)))
         }
         ast::ExpKind::Len(exp_inner) => {
             let (occurs, exp_inner) = annotate_exp(bounds, exp_inner)?;
@@ -412,17 +409,17 @@ fn annotate_exp(bounds: &VEnv, exp: &ast::Exp) -> Result<(VEnv, ast::Exp), ElabE
         ast::ExpKind::Idx(exp_l, exp_r) => {
             let (occurs_l, exp_l) = annotate_exp(bounds, exp_l)?;
             let (occurs_r, exp_r) = annotate_exp(bounds, exp_r)?;
-            (
-                union(occurs_l, occurs_r)?,
-                ast::ExpKind::Idx(Box::new(exp_l), Box::new(exp_r)),
-            )
+            let occurs = union(occurs_l, occurs_r)?;
+            (occurs, ast::ExpKind::Idx(Box::new(exp_l), Box::new(exp_r)))
         }
         ast::ExpKind::Slice(exp_base, exp_l, exp_h) => {
             let (occurs_base, exp_base) = annotate_exp(bounds, exp_base)?;
             let (occurs_l, exp_l) = annotate_exp(bounds, exp_l)?;
             let (occurs_h, exp_h) = annotate_exp(bounds, exp_h)?;
+            let occurs = union(occurs_base, occurs_l)?;
+            let occurs = union(occurs, occurs_h)?;
             (
-                union(union(occurs_base, occurs_l)?, occurs_h)?,
+                occurs,
                 ast::ExpKind::Slice(Box::new(exp_base), Box::new(exp_l), Box::new(exp_h)),
             )
         }
@@ -430,8 +427,10 @@ fn annotate_exp(bounds: &VEnv, exp: &ast::Exp) -> Result<(VEnv, ast::Exp), ElabE
             let (occurs_base, exp_base) = annotate_exp(bounds, exp_base)?;
             let (occurs_field, exp_field) = annotate_exp(bounds, exp_field)?;
             let (occurs_path, path) = annotate_path(bounds, path)?;
+            let occurs = union(occurs_base, occurs_field)?;
+            let occurs = union(occurs, occurs_path)?;
             (
-                union(union(occurs_base, occurs_field)?, occurs_path)?,
+                occurs,
                 ast::ExpKind::Upd(Box::new(exp_base), path, Box::new(exp_field)),
             )
         }
@@ -463,7 +462,8 @@ fn annotate_exp(bounds: &VEnv, exp: &ast::Exp) -> Result<(VEnv, ast::Exp), ElabE
             )
         }
     };
-    let exp = Spanned::new(Noted::new(kind, note), exp.span.clone());
+    let exp = Noted::new(kind, note);
+    let exp = spanned!(node: exp, span: span);
     Ok((occurs, exp))
 }
 
@@ -498,10 +498,9 @@ fn annotate_not_exp(
         Mixfix::Infix(not_exp_l, atom, not_exp_r) => {
             let (occurs_l, not_exp_l) = annotate_not_exp(bounds, not_exp_l)?;
             let (occurs_r, not_exp_r) = annotate_not_exp(bounds, not_exp_r)?;
-            Ok((
-                union(occurs_l, occurs_r)?,
-                Mixfix::Infix(Box::new(not_exp_l), atom.clone(), Box::new(not_exp_r)),
-            ))
+            let occurs = union(occurs_l, occurs_r)?;
+            let not_exp = Mixfix::Infix(Box::new(not_exp_l), atom.clone(), Box::new(not_exp_r));
+            Ok((occurs, not_exp))
         }
         Mixfix::Seq(not_exps) => {
             let mut occurs = VEnv::new();
@@ -523,14 +522,17 @@ fn annotate_path(bounds: &VEnv, path: &ast::Path) -> Result<(VEnv, ast::Path), E
             let (occurs_path, path_inner) = annotate_path(bounds, path_inner)?;
             let (occurs_exp, exp) = annotate_exp(bounds, exp)?;
             let kind = ast::PathKind::Idx(Box::new(path_inner), Box::new(exp));
-            (union(occurs_path, occurs_exp)?, kind)
+            let occurs = union(occurs_path, occurs_exp)?;
+            (occurs, kind)
         }
         ast::PathKind::Slice(path_inner, exp_l, exp_h) => {
             let (occurs_path, path_inner) = annotate_path(bounds, path_inner)?;
             let (occurs_l, exp_l) = annotate_exp(bounds, exp_l)?;
             let (occurs_h, exp_h) = annotate_exp(bounds, exp_h)?;
             let kind = ast::PathKind::Slice(Box::new(path_inner), Box::new(exp_l), Box::new(exp_h));
-            (union(union(occurs_path, occurs_l)?, occurs_h)?, kind)
+            let occurs = union(occurs_path, occurs_l)?;
+            let occurs = union(occurs, occurs_h)?;
+            (occurs, kind)
         }
         ast::PathKind::Dot(path_inner, atom) => {
             let (occurs, path_inner) = annotate_path(bounds, path_inner)?;
@@ -540,17 +542,19 @@ fn annotate_path(bounds: &VEnv, path: &ast::Path) -> Result<(VEnv, ast::Path), E
     };
     let (occurs, kind) = kind;
     let node = Noted::new(kind, path.node.note.clone());
-    Ok((occurs, Spanned::new(node, path.span.clone())))
+    let path = spanned!(node: node, span: path.span.clone());
+    Ok((occurs, path))
 }
 
 fn annotate_arg(bounds: &VEnv, arg: &ast::Arg) -> Result<(VEnv, ast::Arg), ElabError> {
     match &arg.node {
         ast::ArgKind::Exp(exp) => {
             let (occurs, exp) = annotate_exp(bounds, exp)?;
-            Ok((
-                occurs,
-                Spanned::new(ast::ArgKind::Exp(Box::new(exp)), arg.span.clone()),
-            ))
+            let span = arg.span.clone();
+            let exp = Box::new(exp);
+            let arg = ast::ArgKind::Exp(exp);
+            let arg = spanned!(node: arg, span: span);
+            Ok((occurs, arg))
         }
         ast::ArgKind::Def(_) => Ok((VEnv::new(), arg.clone())),
     }
@@ -640,7 +644,8 @@ fn annotate_prem(bounds: &VEnv, prem: &ast::Prem) -> Result<(VEnv, ast::Prem), E
             (occurs, ast::PremKind::Debug(ast::DebugPrem { exp }))
         }
     };
-    Ok((occurs, Spanned::new(kind, prem.span.clone())))
+    let prem = spanned!(node: kind, span: prem.span.clone());
+    Ok((occurs, prem))
 }
 
 fn annotate_prems(bounds: &VEnv, prems: &[ast::Prem]) -> Result<(VEnv, Vec<ast::Prem>), ElabError> {
@@ -655,7 +660,8 @@ fn annotate_prems(bounds: &VEnv, prems: &[ast::Prem]) -> Result<(VEnv, Vec<ast::
 }
 
 fn analyze_rule(rule: &ast::Rule) -> Result<ast::Rule, ElabError> {
-    let bounds = infer_rule(rule)?.infer()?;
+    let dims = infer_rule(rule)?;
+    let bounds = dims.infer()?;
     let (_, not_exp) = annotate_not_exp(&bounds, &rule.node.not_exp)?;
     let (_, prems) = annotate_prems(&bounds, &rule.node.prems)?;
     let kind = ast::RuleKind {
@@ -663,29 +669,31 @@ fn analyze_rule(rule: &ast::Rule) -> Result<ast::Rule, ElabError> {
         not_exp,
         prems,
     };
-    Ok(Spanned::new(kind, rule.span.clone()))
+    let rule = spanned!(node: kind, span: rule.span.clone());
+    Ok(rule)
 }
 
 fn analyze_rule_group(group: &ast::RuleGroup) -> Result<ast::RuleGroup, ElabError> {
     let mut rules = Vec::with_capacity(group.node.1.len());
     for rule in &group.node.1 {
-        rules.push(analyze_rule(rule)?);
+        let rule = analyze_rule(rule)?;
+        rules.push(rule);
     }
-    Ok(Spanned::new(
-        (group.node.0.clone(), rules),
-        group.span.clone(),
-    ))
+    let group_node = (group.node.0.clone(), rules);
+    let group = spanned!(node: group_node, span: group.span.clone());
+    Ok(group)
 }
 
 fn analyze_else_group(group: &ast::ElseGroup) -> Result<ast::ElseGroup, ElabError> {
-    Ok(Spanned::new(
-        (group.node.0.clone(), analyze_rule(&group.node.1)?),
-        group.span.clone(),
-    ))
+    let rule = analyze_rule(&group.node.1)?;
+    let group_node = (group.node.0.clone(), rule);
+    let group = spanned!(node: group_node, span: group.span.clone());
+    Ok(group)
 }
 
 fn analyze_clause(clause: &ast::Clause) -> Result<ast::Clause, ElabError> {
-    let bounds = infer_clause(clause)?.infer()?;
+    let dims = infer_clause(clause)?;
+    let bounds = dims.infer()?;
     let (_, args) = annotate_args(&bounds, &clause.node.args)?;
     let (_, premises) = annotate_prems(&bounds, &clause.node.premises)?;
     let (_, expression) = annotate_exp(&bounds, &clause.node.expression)?;
@@ -694,14 +702,18 @@ fn analyze_clause(clause: &ast::Clause) -> Result<ast::Clause, ElabError> {
         expression,
         premises,
     };
-    Ok(Spanned::new(kind, clause.span.clone()))
+    let clause = spanned!(node: kind, span: clause.span.clone());
+    Ok(clause)
 }
 
 fn analyze_table_row(row: &ast::TableRow) -> Result<ast::TableRow, ElabError> {
-    let bounds = infer_table_row(row)?.infer()?;
+    let dims = infer_table_row(row)?;
+    let bounds = dims.infer()?;
     let (_, args) = annotate_args(&bounds, &row.node.0)?;
     let (_, expression) = annotate_exp(&bounds, &row.node.1)?;
-    Ok(Spanned::new((args, expression), row.span.clone()))
+    let row_node = (args, expression);
+    let row = spanned!(node: row_node, span: row.span.clone());
+    Ok(row)
 }
 
 fn analyze_def(def: &ast::Def) -> Result<ast::Def, ElabError> {
@@ -709,7 +721,8 @@ fn analyze_def(def: &ast::Def) -> Result<ast::Def, ElabError> {
         ast::DefKind::Rel(rel) => {
             let mut rule_groups = Vec::with_capacity(rel.rule_groups.len());
             for group in &rel.rule_groups {
-                rule_groups.push(analyze_rule_group(group)?);
+                let group = analyze_rule_group(group)?;
+                rule_groups.push(group);
             }
             let else_group = rel
                 .else_group
@@ -728,7 +741,8 @@ fn analyze_def(def: &ast::Def) -> Result<ast::Def, ElabError> {
         ast::DefKind::TableDec(table) => {
             let mut rows = Vec::with_capacity(table.rows.len());
             for row in &table.rows {
-                rows.push(analyze_table_row(row)?);
+                let row = analyze_table_row(row)?;
+                rows.push(row);
             }
             ast::DefKind::TableDec(ast::TableDec {
                 id: table.id.clone(),
@@ -741,7 +755,8 @@ fn analyze_def(def: &ast::Def) -> Result<ast::Def, ElabError> {
         ast::DefKind::FuncDec(func) => {
             let mut clauses = Vec::with_capacity(func.clauses.len());
             for clause in &func.clauses {
-                clauses.push(analyze_clause(clause)?);
+                let clause = analyze_clause(clause)?;
+                clauses.push(clause);
             }
             let else_clause = func.else_clause.as_ref().map(analyze_clause).transpose()?;
             ast::DefKind::FuncDec(ast::FuncDec {
@@ -756,13 +771,15 @@ fn analyze_def(def: &ast::Def) -> Result<ast::Def, ElabError> {
         }
         _ => return Ok(def.clone()),
     };
-    Ok(Spanned::new(kind, def.span.clone()))
+    let def = spanned!(node: kind, span: def.span.clone());
+    Ok(def)
 }
 
 pub(super) fn analyze_spec(spec: &ast::Spec) -> Result<ast::Spec, ElabError> {
     let mut analyzed = Vec::with_capacity(spec.len());
     for def in spec {
-        analyzed.push(analyze_def(def)?);
+        let def = analyze_def(def)?;
+        analyzed.push(def);
     }
     Ok(analyzed)
 }
@@ -774,12 +791,13 @@ mod tests {
             common::{
                 notation::mixfix::Mixfix,
                 noted::Noted,
-                source::{Position, Span, Spanned},
+                source::{Position, Span},
             },
             hints::input::InputHint,
             il::ast::{self, ExpKind, Iter, RuleKind, TypKind},
         },
         pass::elaborate::ElabErrorKind,
+        spanned,
     };
 
     use super::{analyze_rule, analyze_spec, infer_rule, singleton, union};
@@ -789,11 +807,12 @@ mod tests {
     }
 
     fn id(name: &str, label: &str) -> ast::Id {
-        Spanned::new(name.to_owned(), span(label))
+        spanned!(node: name.to_owned(), span: span(label))
     }
 
     fn exp(kind: ExpKind, typ: TypKind, label: &str) -> ast::Exp {
-        Spanned::new(Noted::new(kind, typ), span(label))
+        let exp = Noted::new(kind, typ);
+        spanned!(node: exp, span: span(label))
     }
 
     fn variable(name: &str, label: &str) -> ast::Exp {
@@ -801,38 +820,30 @@ mod tests {
     }
 
     fn iter(exp_inner: ast::Exp, iter: Iter, label: &str) -> ast::Exp {
-        exp(
-            ExpKind::Iter(Box::new(exp_inner), (iter, vec![])),
-            TypKind::Iter(Box::new(Spanned::new(TypKind::Bool, span(label))), iter),
-            label,
-        )
+        let exp_inner = Box::new(exp_inner);
+        let exp_kind = ExpKind::Iter(exp_inner, (iter, vec![]));
+        let typ_inner = spanned!(node: TypKind::Bool, span: span(label));
+        let typ_kind = TypKind::Iter(Box::new(typ_inner), iter);
+        exp(exp_kind, typ_kind, label)
     }
 
     fn rule(not_exp: ast::NotExp) -> ast::Rule {
-        Spanned::new(
-            RuleKind {
-                id: id("relation", "relation"),
-                not_exp,
-                prems: vec![],
-            },
-            span("rule"),
-        )
+        let rule = RuleKind {
+            id: id("relation", "relation"),
+            not_exp,
+            prems: vec![],
+        };
+        spanned!(node: rule, span: span("rule"))
     }
 
     #[test]
     fn inference_rejects_incompatible_iteration_bounds_at_the_identifier() {
         let variable_span = span("first-variable");
-        let variable_l = exp(
-            ExpKind::Var(Spanned::new("x".to_owned(), variable_span.clone())),
-            TypKind::Bool,
-            "left-variable",
-        );
+        let variable_l_id = spanned!(node: "x".to_owned(), span: variable_span.clone());
+        let variable_l = exp(ExpKind::Var(variable_l_id), TypKind::Bool, "left-variable");
         let variable_r_span = span("second-variable");
-        let variable_r = exp(
-            ExpKind::Var(Spanned::new("x".to_owned(), variable_r_span.clone())),
-            TypKind::Bool,
-            "right-variable",
-        );
+        let variable_r_id = spanned!(node: "x".to_owned(), span: variable_r_span.clone());
+        let variable_r = exp(ExpKind::Var(variable_r_id), TypKind::Bool, "right-variable");
         let rule = rule(Mixfix::Seq(vec![
             Mixfix::Arg(iter(variable_l, Iter::Opt, "optional")),
             Mixfix::Arg(iter(variable_r, Iter::List, "list")),
@@ -892,8 +903,8 @@ mod tests {
     fn equal_dimension_occurrences_keep_the_rightmost_type_span() {
         let id_l = id("x", "left-id");
         let id_r = id("x", "right-id");
-        let typ_l = Spanned::new(TypKind::Bool, span("left-type"));
-        let typ_r = Spanned::new(TypKind::Bool, span("right-type"));
+        let typ_l = spanned!(node: TypKind::Bool, span: span("left-type"));
+        let typ_r = spanned!(node: TypKind::Bool, span: span("right-type"));
 
         let occurs = union(singleton(&id_l, typ_l), singleton(&id_r, typ_r))
             .expect("compatible occurrence types");
@@ -906,16 +917,11 @@ mod tests {
     fn annotation_rejects_empty_iteration_at_the_iteration_span() {
         let iteration_span = span("empty-iteration");
         let literal = exp(ExpKind::Bool(true), TypKind::Bool, "literal");
-        let iteration = Spanned::new(
-            Noted::new(
-                ExpKind::Iter(Box::new(literal), (Iter::List, vec![])),
-                TypKind::Iter(
-                    Box::new(Spanned::new(TypKind::Bool, span("iter-type"))),
-                    Iter::List,
-                ),
-            ),
-            iteration_span.clone(),
-        );
+        let exp_kind = ExpKind::Iter(Box::new(literal), (Iter::List, vec![]));
+        let typ_inner = spanned!(node: TypKind::Bool, span: span("iter-type"));
+        let typ_kind = TypKind::Iter(Box::new(typ_inner), Iter::List);
+        let iteration = Noted::new(exp_kind, typ_kind);
+        let iteration = spanned!(node: iteration, span: iteration_span.clone());
 
         let error = analyze_rule(&rule(Mixfix::Arg(iteration))).unwrap_err();
 
@@ -927,22 +933,25 @@ mod tests {
     fn whole_spec_analysis_reaches_rules_nested_in_relation_definitions() {
         let nested = iter(variable("x", "variable"), Iter::List, "list");
         let rule = rule(Mixfix::Arg(nested));
-        let group = Spanned::new((id("group", "group"), vec![rule]), span("group"));
+        let group_node = (id("group", "group"), vec![rule]);
+        let group = spanned!(node: group_node, span: span("group"));
+        let relation_typ = spanned!(node: TypKind::Bool, span: span("relation-type"));
+        let relation_not_typ = Mixfix::Arg(relation_typ);
+        let relation_not_typ = spanned!(
+            node: relation_not_typ,
+            span: span("relation-type"),
+        );
         let relation = ast::Rel {
             id: id("relation", "relation"),
-            not_typ: Spanned::new(
-                Mixfix::Arg(Spanned::new(TypKind::Bool, span("relation-type"))),
-                span("relation-type"),
-            ),
+            not_typ: relation_not_typ,
             input_hint: InputHint::new(vec![0]),
             rule_groups: vec![group],
             else_group: None,
             hints: vec![],
         };
-        let spec = vec![Spanned::new(
-            ast::DefKind::Rel(relation),
-            span("definition"),
-        )];
+        let definition = ast::DefKind::Rel(relation);
+        let definition = spanned!(node: definition, span: span("definition"));
+        let spec = vec![definition];
 
         let analyzed = analyze_spec(&spec).expect("analyze spec");
         let ast::DefKind::Rel(relation) = &analyzed[0].node else {

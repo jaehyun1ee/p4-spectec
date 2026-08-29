@@ -4,11 +4,7 @@ use std::rc::Rc;
 
 use crate::{
     lang::{
-        common::{
-            Id,
-            ds::set::IdSet,
-            source::{Span, Spanned},
-        },
+        common::{Id, ds::set::IdSet},
         hints::input::InputHint,
         il::ast,
     },
@@ -16,6 +12,7 @@ use crate::{
         sta::{FEnv, Func, MEnv, REnv, Rel, VEnv},
         types::{TDEnv, TypeDef, typ},
     },
+    spanned_default,
 };
 
 use super::{ElabError, EntityKind};
@@ -60,7 +57,7 @@ impl Context {
             ("int", typ::int()),
             ("text", typ::text()),
         ] {
-            let id = Spanned::new(name.to_owned(), Span::default());
+            let id = spanned_default!(node: name.to_owned());
             menv.insert(id, typ);
         }
         Self {
@@ -596,6 +593,7 @@ mod tests {
         },
         pass::elaborate::{ElabErrorKind, EntityKind},
         runtime::types::TypeDef,
+        spanned, spanned_default,
     };
 
     use super::Context;
@@ -605,40 +603,39 @@ mod tests {
     }
 
     fn id(name: &str, span: Span) -> Spanned<String> {
-        Spanned::new(name.to_owned(), span)
+        spanned!(node: name.to_owned(), span: span)
+    }
+
+    fn id_default(name: &str) -> Spanned<String> {
+        spanned_default!(node: name.to_owned())
     }
 
     fn not_typ() -> ast::NotTyp {
-        Spanned::new(
-            Mixfix::Arg(crate::runtime::types::typ::bool()),
-            Span::default(),
-        )
+        let not_typ = Mixfix::Arg(crate::runtime::types::typ::bool());
+        spanned_default!(node: not_typ)
     }
 
     fn bool_exp(label: &str) -> ast::Exp {
-        Spanned::new(Noted::new(ExpKind::Bool(true), TypKind::Bool), span(label))
+        let exp = Noted::new(ExpKind::Bool(true), TypKind::Bool);
+        spanned!(node: exp, span: span(label))
     }
 
     fn clause(label: &str) -> ast::Clause {
-        Spanned::new(
-            ast::ClauseKind {
-                args: vec![],
-                expression: bool_exp(label),
-                premises: vec![],
-            },
-            span(label),
-        )
+        let clause = ast::ClauseKind {
+            args: vec![],
+            expression: bool_exp(label),
+            premises: vec![],
+        };
+        spanned!(node: clause, span: span(label))
     }
 
     fn rule(label: &str) -> ast::Rule {
-        Spanned::new(
-            RuleKind {
-                id: id("relation", span(label)),
-                not_exp: Mixfix::Arg(bool_exp(label)),
-                prems: vec![],
-            },
-            span(label),
-        )
+        let rule = RuleKind {
+            id: id("relation", span(label)),
+            not_exp: Mixfix::Arg(bool_exp(label)),
+            prems: vec![],
+        };
+        spanned!(node: rule, span: span(label))
     }
 
     #[test]
@@ -646,27 +643,19 @@ mod tests {
         let ctx = Context::new();
 
         assert_eq!(
-            ctx.find_metavar(&id("bool", Span::default()))
-                .expect("bool")
-                .node,
+            ctx.find_metavar(&id_default("bool")).expect("bool").node,
             TypKind::Bool
         );
         assert_eq!(
-            ctx.find_metavar(&id("nat", Span::default()))
-                .expect("nat")
-                .node,
+            ctx.find_metavar(&id_default("nat")).expect("nat").node,
             TypKind::Num(crate::lang::xl::num::Typ::Nat)
         );
         assert_eq!(
-            ctx.find_metavar(&id("int", Span::default()))
-                .expect("int")
-                .node,
+            ctx.find_metavar(&id_default("int")).expect("int").node,
             TypKind::Num(crate::lang::xl::num::Typ::Int)
         );
         assert_eq!(
-            ctx.find_metavar(&id("text", Span::default()))
-                .expect("text")
-                .node,
+            ctx.find_metavar(&id_default("text")).expect("text").node,
             TypKind::Text
         );
     }
@@ -737,13 +726,10 @@ mod tests {
             )
             .expect("branch binding");
 
-        assert!(
-            base.find_metavar_opt(&id("branch_only", Span::default()))
-                .is_none()
-        );
+        assert!(base.find_metavar_opt(&id_default("branch_only")).is_none());
         assert!(
             branch
-                .find_metavar_opt(&id("branch_only", Span::default()))
+                .find_metavar_opt(&id_default("branch_only"))
                 .is_some()
         );
     }
@@ -755,10 +741,7 @@ mod tests {
         let repeated = id("item", span("repeated-free"));
         let ctx = Context::new().add_free(first).add_free(repeated);
 
-        assert_eq!(
-            ctx.frees.get(&id("item", Span::default())).unwrap().span,
-            first_span
-        );
+        assert_eq!(ctx.frees.get(&id_default("item")).unwrap().span, first_span);
     }
 
     #[test]
@@ -801,14 +784,10 @@ mod tests {
         assert_eq!(error.kind, ElabErrorKind::Duplicate(EntityKind::Relation));
         assert_eq!(error.span, duplicate_span);
 
-        let group_l = Spanned::new(
-            (id("left", span("left-group")), vec![rule("left-rule")]),
-            span("left-group"),
-        );
-        let group_r = Spanned::new(
-            (id("right", span("right-group")), vec![rule("right-rule")]),
-            span("right-group"),
-        );
+        let group_l_node = (id("left", span("left-group")), vec![rule("left-rule")]);
+        let group_l = spanned!(node: group_l_node, span: span("left-group"));
+        let group_r_node = (id("right", span("right-group")), vec![rule("right-rule")]);
+        let group_r = spanned!(node: group_r_node, span: span("right-group"));
         let ctx = Context::new()
             .add_defined_rel(relid.clone(), not_typ(), InputHint::new(vec![0]))
             .expect("defined relation")

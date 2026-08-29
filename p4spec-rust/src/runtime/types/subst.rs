@@ -149,10 +149,11 @@ fn subst_param_inner(
             ast::ParamKind::Def(id.clone(), tparams, params, typ)
         }
     };
-    Ok(crate::spanned! {
+    let param = crate::spanned! {
         node: kind,
         span: param.span.clone(),
-    })
+    };
+    Ok(param)
 }
 
 /// Substitutes type variables in parameters while sharing fresh state
@@ -201,30 +202,28 @@ mod tests {
             il::ast::{ParamKind, TypKind},
         },
         runtime::types::typ,
+        spanned_default,
     };
 
     use super::{Theta, subst_params};
 
     fn id(name: &str) -> Spanned<String> {
-        Spanned::new(name.to_owned(), Span::default())
+        spanned_default!(node: name.to_owned())
     }
 
     #[test]
     fn parameter_substitution_respects_nested_function_binders() {
         let outer = id("T");
         let inner = id("U");
-        let param = Spanned::new(
-            ParamKind::Def(
-                id("callback"),
-                vec![inner.clone()],
-                vec![Spanned::new(
-                    ParamKind::Exp(typ::var(outer.clone(), vec![])),
-                    Span::default(),
-                )],
-                typ::var(inner, vec![]),
-            ),
-            Span::default(),
+        let typ_outer = typ::var(outer.clone(), vec![]);
+        let param_inner = spanned_default!(node: ParamKind::Exp(typ_outer));
+        let param_kind = ParamKind::Def(
+            id("callback"),
+            vec![inner.clone()],
+            vec![param_inner],
+            typ::var(inner, vec![]),
         );
+        let param = spanned_default!(node: param_kind);
         let mut theta = Theta::new();
         theta.insert(outer, typ::text());
 
