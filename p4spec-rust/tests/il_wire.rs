@@ -18,7 +18,7 @@ fn phrase(it: Value) -> Value {
     })
 }
 
-fn noted_phrase(it: Value, note: Value) -> Value {
+fn note_phrase(it: Value, note: Value) -> Value {
     json!({
         "it": it,
         "note": note,
@@ -35,25 +35,25 @@ fn bool_typ() -> Value {
 }
 
 fn bool_exp(value: bool) -> Value {
-    noted_phrase(json!(["BoolE", value]), json!(["BoolT"]))
+    note_phrase(json!(["BoolE", value]), json!(["BoolT"]))
 }
 
 fn bool_value(value: bool, vid: i64) -> Value {
-    noted_phrase(
+    note_phrase(
         json!(["BoolV", value]),
         json!({"vid": vid, "typ": ["BoolT"], "vhash": 0}),
     )
 }
 
 fn natural_value(value: &str, vid: i64) -> Value {
-    noted_phrase(
+    note_phrase(
         json!(["NumV", ["Nat", value]]),
         json!({"vid": vid, "typ": ["NumT", ["NatT"]], "vhash": 0}),
     )
 }
 
 fn tuple_value() -> Value {
-    noted_phrase(
+    note_phrase(
         json!(["TupleV", [bool_value(true, 41), bool_value(false, 42)]]),
         json!({
             "vid": 43,

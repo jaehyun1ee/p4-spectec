@@ -2,7 +2,7 @@
 
 use std::{borrow::Borrow, cmp::Ordering};
 
-use super::super::source::Spanned;
+use super::super::source::NotePhrase;
 
 /// Selects the representation used to compare collection keys
 pub trait CollectionKey {
@@ -13,7 +13,7 @@ pub trait CollectionKey {
     fn repr(&self) -> &Self::Repr;
 }
 
-impl<T: Ord> CollectionKey for Spanned<T> {
+impl<T: Ord, N> CollectionKey for NotePhrase<T, N> {
     type Repr = T;
 
     fn repr(&self) -> &Self::Repr {
@@ -25,7 +25,7 @@ impl<T: Ord> CollectionKey for Spanned<T> {
 #[derive(Clone, Debug)]
 pub(crate) struct ByKey<K: ?Sized>(pub(crate) K);
 
-impl<T> Borrow<T> for ByKey<Spanned<T>> {
+impl<T, N> Borrow<T> for ByKey<NotePhrase<T, N>> {
     fn borrow(&self) -> &T {
         &self.0.node
     }

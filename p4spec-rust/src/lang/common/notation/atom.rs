@@ -1,7 +1,7 @@
 use std::{error::Error, fmt};
 
 use crate::lang::{
-    common::{ds::set::IdSet, source::Spanned},
+    common::{ds::set::IdSet, source::Phrase},
     traits::{
         eq::SyntaxEq,
         free::Free,
@@ -104,7 +104,7 @@ impl Print for Atom {
     }
 }
 
-impl Print for Spanned<Atom> {
+impl Print for Phrase<Atom> {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         self.node.print(printer)
     }

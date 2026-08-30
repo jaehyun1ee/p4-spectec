@@ -4,11 +4,11 @@ use std::collections::BTreeMap;
 
 use thiserror::Error;
 
-use crate::lang::common::{Id, source::Spanned};
+use crate::lang::common::{Id, source::Phrase};
 
 use super::{
     collections::{ByKey, CollectionKey},
-    set::SpannedSet,
+    set::PhraseSet,
 };
 
 /// A mismatch between the lengths of key and value lists
@@ -28,11 +28,11 @@ impl ArityMismatch {
 /// An ordered map that compares keys through `CollectionKey`
 #[repr(transparent)]
 #[derive(Clone, Debug)]
-pub struct SpannedMap<K: CollectionKey, V> {
+pub struct PhraseMap<K: CollectionKey, V> {
     entries: BTreeMap<ByKey<K>, V>,
 }
 
-impl<K: CollectionKey, V> SpannedMap<K, V> {
+impl<K: CollectionKey, V> PhraseMap<K, V> {
     /// Constructs an empty map
     pub fn new() -> Self {
         Self {
@@ -96,7 +96,7 @@ impl<K: CollectionKey, V> SpannedMap<K, V> {
     }
 
     /// Returns the set of stored keys
-    pub fn domain(&self) -> SpannedSet<K>
+    pub fn domain(&self) -> PhraseSet<K>
     where
         K: Clone,
     {
@@ -104,49 +104,49 @@ impl<K: CollectionKey, V> SpannedMap<K, V> {
     }
 }
 
-impl<T: Ord, V> SpannedMap<Spanned<T>, V> {
+impl<T: Ord, V> PhraseMap<Phrase<T>, V> {
     /// Returns the value for an equivalent key
-    pub fn get(&self, key: &Spanned<T>) -> Option<&V> {
+    pub fn get(&self, key: &Phrase<T>) -> Option<&V> {
         self.entries.get(&key.node)
     }
 
     /// Returns the mutable value for an equivalent key
-    pub fn get_mut(&mut self, key: &Spanned<T>) -> Option<&mut V> {
+    pub fn get_mut(&mut self, key: &Phrase<T>) -> Option<&mut V> {
         self.entries.get_mut(&key.node)
     }
 
     /// Returns whether an equivalent key is present
-    pub fn contains_key(&self, key: &Spanned<T>) -> bool {
+    pub fn contains_key(&self, key: &Phrase<T>) -> bool {
         self.entries.contains_key(&key.node)
     }
 
     /// Removes and returns the value for an equivalent key
-    pub fn remove(&mut self, key: &Spanned<T>) -> Option<V> {
+    pub fn remove(&mut self, key: &Phrase<T>) -> Option<V> {
         self.entries.remove(&key.node)
     }
 
     /// Removes and returns the stored key and value for an equivalent key
-    pub fn remove_entry(&mut self, key: &Spanned<T>) -> Option<(Spanned<T>, V)> {
+    pub fn remove_entry(&mut self, key: &Phrase<T>) -> Option<(Phrase<T>, V)> {
         self.entries
             .remove_entry(&key.node)
             .map(|(key, value)| (key.0, value))
     }
 }
 
-impl<K: CollectionKey, V> Default for SpannedMap<K, V> {
+impl<K: CollectionKey, V> Default for PhraseMap<K, V> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<K: CollectionKey, V> Extend<(K, V)> for SpannedMap<K, V> {
+impl<K: CollectionKey, V> Extend<(K, V)> for PhraseMap<K, V> {
     fn extend<T: IntoIterator<Item = (K, V)>>(&mut self, bindings: T) {
         self.entries
             .extend(bindings.into_iter().map(|(key, value)| (ByKey(key), value)));
     }
 }
 
-impl<K: CollectionKey, V> FromIterator<(K, V)> for SpannedMap<K, V> {
+impl<K: CollectionKey, V> FromIterator<(K, V)> for PhraseMap<K, V> {
     fn from_iter<T: IntoIterator<Item = (K, V)>>(bindings: T) -> Self {
         let mut map = Self::new();
         map.extend(bindings);
@@ -155,4 +155,4 @@ impl<K: CollectionKey, V> FromIterator<(K, V)> for SpannedMap<K, V> {
 }
 
 /// Map keyed by source-annotated identifiers
-pub type IdMap<V> = SpannedMap<Id, V>;
+pub type IdMap<V> = PhraseMap<Id, V>;

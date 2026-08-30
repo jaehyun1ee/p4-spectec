@@ -1,7 +1,12 @@
 //! Fresh type-variable generation scoped to a runtime operation
 
-use crate::lang::il::ast::{self, TypKind};
-use crate::spanned_default;
+use crate::{
+    lang::{
+        common::source::Span,
+        il::ast::{self, TypKind},
+    },
+    phrase,
+};
 
 #[derive(Default)]
 pub(crate) struct Fresh {
@@ -12,9 +17,9 @@ impl Fresh {
     pub(crate) fn fresh(&mut self) -> (ast::TParam, ast::Typ) {
         let next = self.next;
         self.next += 1;
-        let tparam = spanned_default!(node: format!("__FRESH{next}"));
+        let tparam = phrase!(node: format!("__FRESH{next}"), span: Span::default());
         let typ_kind = TypKind::Var(tparam.clone(), vec![]);
-        let typ = spanned_default!(node: typ_kind);
+        let typ = phrase!(node: typ_kind, span: Span::default());
         (tparam, typ)
     }
 }

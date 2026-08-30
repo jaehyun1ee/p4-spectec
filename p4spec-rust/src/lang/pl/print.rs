@@ -29,7 +29,7 @@ fn escaped(text: &str) -> String {
 
 impl Print for Exp {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        match &self.node.node.kind {
+        match &self.node.node {
             ExpKind::Bool(value) => write!(printer, "{value}"),
             ExpKind::Num(value) => value.print(printer),
             ExpKind::Text(text) => write!(printer, "\"{}\"", escaped(text)),
@@ -187,7 +187,7 @@ impl Print for NotExp {
 
 impl Print for Path {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        match &self.node.kind {
+        match &self.node {
             PathKind::Root => Ok(()),
             PathKind::Idx(path, exp_i) => {
                 path.print(printer)?;
@@ -203,9 +203,7 @@ impl Print for Path {
                 exp_n.print(printer)?;
                 printer.write_char(']')
             }
-            PathKind::Dot(path, atom) if matches!(path.node.kind, PathKind::Root) => {
-                atom.print(printer)
-            }
+            PathKind::Dot(path, atom) if matches!(path.node, PathKind::Root) => atom.print(printer),
             PathKind::Dot(path, atom) => {
                 path.print(printer)?;
                 printer.write_char('.')?;
@@ -379,7 +377,7 @@ fn write_instr_with<Tier>(
         }
     };
 
-    match &instr.node.node.kind {
+    match &instr.node.node {
         InstrKind::If(IfInstr {
             exp,
             iter_exps,
@@ -396,11 +394,7 @@ fn write_instr_with<Tier>(
                 output.write_str("\n\n")?;
                 write_block_with(output, block, tier_printer, level + 1, 0)?;
                 if *dangle {
-                    write!(
-                        output,
-                        "\n\n{order}Else Dangling#{}",
-                        instr.node.node.note.iid
-                    )?;
+                    write!(output, "\n\n{order}Else Dangling#{}", instr.node.note.iid)?;
                 }
             }
             Ok(())
@@ -441,11 +435,7 @@ fn write_instr_with<Tier>(
                         output.write_str("\n\n")?;
                         write_block_with(output, block, tier_printer, level + 1, 0)?;
                         if *dangle {
-                            write!(
-                                output,
-                                "\n\n{order}Else Dangling#{}",
-                                instr.node.node.note.iid
-                            )?;
+                            write!(output, "\n\n{order}Else Dangling#{}", instr.node.note.iid)?;
                         }
                     }
                     Ok(())
@@ -460,11 +450,7 @@ fn write_instr_with<Tier>(
                 output.write_str("\n\n")?;
                 write_cases_with(output, cases, tier_printer, level + 1)?;
                 if *dangle {
-                    write!(
-                        output,
-                        "\n\n{order}Else Dangling#{}",
-                        instr.node.node.note.iid
-                    )?;
+                    write!(output, "\n\n{order}Else Dangling#{}", instr.node.note.iid)?;
                 }
             }
             Ok(())

@@ -46,7 +46,7 @@ use std::rc::Rc;
 use num_bigint::BigInt;
 
 use crate::lang::{
-    common::source::{Position, Span, Spanned},
+    common::source::{Phrase, Position, Span},
     xl::{num::Natural, utf8},
 };
 
@@ -309,8 +309,8 @@ where
         Span::new(self.position(cursor_start), self.position(self.cursor))
     }
 
-    fn lexeme(&self, token: Token, start: Cursor) -> Spanned<Token> {
-        crate::spanned! {
+    fn lexeme(&self, token: Token, start: Cursor) -> Phrase<Token> {
+        crate::phrase! {
             node: token,
             span: self.span(start),
         }
@@ -339,7 +339,7 @@ where
 
     // - Token state
 
-    fn scan_token(&mut self) -> Result<Spanned<Token>, LexError> {
+    fn scan_token(&mut self) -> Result<Phrase<Token>, LexError> {
         loop {
             let start = self.cursor;
             if self.cursor_is_eof() {
@@ -418,7 +418,7 @@ where
 
     // - Newline states
 
-    fn scan_after_newline(&mut self) -> Result<Option<Spanned<Token>>, LexError> {
+    fn scan_after_newline(&mut self) -> Result<Option<Phrase<Token>>, LexError> {
         if let Some(lexeme) = self.scan_newline_bar() {
             return Ok(Some(lexeme));
         }
@@ -433,7 +433,7 @@ where
         Ok(None)
     }
 
-    fn scan_after_two_newlines(&mut self) -> Result<Spanned<Token>, LexError> {
+    fn scan_after_two_newlines(&mut self) -> Result<Phrase<Token>, LexError> {
         loop {
             if let Some(lexeme) = self.scan_newline_bar() {
                 return Ok(lexeme);
@@ -467,7 +467,7 @@ where
         }
     }
 
-    fn scan_newline_bar(&mut self) -> Option<Spanned<Token>> {
+    fn scan_newline_bar(&mut self) -> Option<Phrase<Token>> {
         let start = self.cursor;
         let indent_end = self.find_indentation_end();
         if self.cursor_offset(indent_end) != Some(b'|')
@@ -509,7 +509,7 @@ where
 
     // - Token-state layout rules
 
-    fn scan_line_comment(&mut self, start: Cursor) -> Result<Option<Spanned<Token>>, LexError> {
+    fn scan_line_comment(&mut self, start: Cursor) -> Result<Option<Phrase<Token>>, LexError> {
         self.advance_to_line_end();
         if self.cursor_is_eof() {
             return Ok(Some(self.lexeme(Token::Eof, start)));
@@ -519,7 +519,7 @@ where
         self.scan_after_newline()
     }
 
-    fn scan_comma_newline(&mut self, start: Cursor) -> Option<Spanned<Token>> {
+    fn scan_comma_newline(&mut self, start: Cursor) -> Option<Phrase<Token>> {
         if self.cursor_current() != Some(b',') {
             return None;
         }
@@ -542,7 +542,7 @@ where
 
     // - Token-state identifier rules
 
-    fn scan_tag(&mut self, start: Cursor) -> Option<Spanned<Token>> {
+    fn scan_tag(&mut self, start: Cursor) -> Option<Phrase<Token>> {
         if self.cursor_current() != Some(b'_')
             || !self
                 .cursor_offset(self.cursor.offset + 1)?
@@ -561,7 +561,7 @@ where
         Some(self.lexeme(Token::TagUpperId(identifier), start))
     }
 
-    fn scan_dot_identifier(&mut self, start: Cursor) -> Option<Spanned<Token>> {
+    fn scan_dot_identifier(&mut self, start: Cursor) -> Option<Phrase<Token>> {
         if self.cursor_current() != Some(b'.')
             || !Self::is_identifier_start(self.cursor_offset(self.cursor.offset + 1)?)
         {
@@ -605,7 +605,7 @@ where
         })
     }
 
-    fn scan_identifier(&mut self, start: Cursor) -> Option<Spanned<Token>> {
+    fn scan_identifier(&mut self, start: Cursor) -> Option<Phrase<Token>> {
         let first = self.cursor_current()?;
         if !Self::is_identifier_start(first) {
             return None;
@@ -655,7 +655,7 @@ where
 
     // - Token-state numbered holes
 
-    fn scan_numbered_hole(&mut self, start: Cursor) -> Result<Option<Spanned<Token>>, LexError> {
+    fn scan_numbered_hole(&mut self, start: Cursor) -> Result<Option<Phrase<Token>>, LexError> {
         if self.cursor_current() != Some(b'%')
             || !Self::is_digit(
                 self.cursor_offset(self.cursor.offset + 1)
@@ -682,7 +682,7 @@ where
         Natural::try_from(integer).expect("digit sequence is non-negative")
     }
 
-    fn scan_number(&mut self, start: Cursor) -> Option<Spanned<Token>> {
+    fn scan_number(&mut self, start: Cursor) -> Option<Phrase<Token>> {
         if !Self::is_digit(self.cursor_current()?) {
             return None;
         }
@@ -708,7 +708,7 @@ where
 
     // - Token-state fixed rules
 
-    fn scan_fixed(&mut self, start: Cursor) -> Option<Spanned<Token>> {
+    fn scan_fixed(&mut self, start: Cursor) -> Option<Phrase<Token>> {
         let (length, token) = if self.cursor_starts_with("->_") {
             (3, Token::ArrowSub)
         } else if self.cursor_starts_with("=>_") {
@@ -823,7 +823,7 @@ where
 
     // - Token-state operator rule
 
-    fn scan_operator(&mut self, start: Cursor) -> Result<Spanned<Token>, LexError> {
+    fn scan_operator(&mut self, start: Cursor) -> Result<Phrase<Token>, LexError> {
         let content_start = self.cursor.offset + 1;
         let mut end = content_start;
         while let Some(byte) = self.cursor_offset(end) {
@@ -844,7 +844,7 @@ where
 
     // - Text state
 
-    fn scan_text(&mut self, start: Cursor) -> Result<Spanned<Token>, LexError> {
+    fn scan_text(&mut self, start: Cursor) -> Result<Phrase<Token>, LexError> {
         self.advance_add(1);
         let mut bytes = Vec::new();
         loop {
@@ -974,7 +974,7 @@ where
     }
 
     fn error(&self, kind: LexErrorKind, start: Cursor) -> LexError {
-        crate::spanned! {
+        crate::phrase! {
             node: kind,
             span: self.span(start),
         }
@@ -985,7 +985,7 @@ impl<Classify> Iterator for Lexer<'_, Classify>
 where
     Classify: FnMut(&str) -> bool,
 {
-    type Item = Result<Spanned<Token>, LexError>;
+    type Item = Result<Phrase<Token>, LexError>;
 
     // - Iteration
 

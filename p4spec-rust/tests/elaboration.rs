@@ -38,7 +38,7 @@ fn parenthesized_variant_keeps_the_case_origin() {
     let ast::ArgKind::Exp(argument) = &function.clauses[0].node.args[0].node else {
         panic!("expected expression argument");
     };
-    let ast::TypKind::Var(id, _) = &argument.node.note else {
+    let ast::TypKind::Var(id, _) = &argument.note else {
         panic!("expected nominal variant type");
     };
     assert_eq!(id.node, "pair");
@@ -63,14 +63,14 @@ fn failed_variant_alternative_does_not_leak_wildcard_bindings() {
     let ast::ArgKind::Exp(argument) = &function.clauses[0].node.args[0].node else {
         panic!("expected expression argument");
     };
-    let ast::ExpKind::Case(case) = &argument.node.kind else {
+    let ast::ExpKind::Case(case) = &argument.node else {
         panic!("expected variant case");
     };
 
     assert!(
         case.args()
             .iter()
-            .any(|exp| { matches!(&exp.node.kind, ast::ExpKind::Var(id) if id.node == "_bool") })
+            .any(|exp| { matches!(&exp.node, ast::ExpKind::Var(id) if id.node == "_bool") })
     );
 }
 

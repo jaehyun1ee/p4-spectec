@@ -73,44 +73,45 @@ impl fmt::Display for Span {
     }
 }
 
-/// A syntax node paired with its source span
+/// A syntax node paired with semantic and source annotations
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Spanned<T> {
+pub struct NotePhrase<T, N = ()> {
     pub node: T,
+    pub note: N,
     pub span: Span,
 }
 
-impl<T> Spanned<T> {
-    /// Builds a node with an explicit source span
-    pub fn new(node: T, span: Span) -> Self {
-        Self { node, span }
-    }
-}
+/// A syntax node paired with its source span
+pub type Phrase<T> = NotePhrase<T>;
 
-impl<T: fmt::Display> fmt::Display for Spanned<T> {
+impl<T: fmt::Display, N> fmt::Display for NotePhrase<T, N> {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(fmt, "{} at {}", self.node, self.span)
     }
 }
 
-impl<T: std::error::Error> std::error::Error for Spanned<T> {}
+impl<T: std::error::Error, N: fmt::Debug> std::error::Error for NotePhrase<T, N> {}
 
 /// Builds a syntax node with an explicit source span
 #[macro_export]
-macro_rules! spanned {
-    (node: $node:expr, span: $span:expr $(,)?) => {{
-        let span = $span;
-        $crate::lang::common::source::Spanned::new($node, span)
-    }};
+macro_rules! phrase {
+    (node: $node:expr, span: $span:expr $(,)?) => {
+        $crate::lang::common::source::NotePhrase {
+            node: $node,
+            note: (),
+            span: $span,
+        }
+    };
 }
 
-/// Builds a syntax node with the default source span
+/// Builds a syntax node with semantic and source annotations
 #[macro_export]
-macro_rules! spanned_default {
-    (node: $node:expr $(,)?) => {
-        $crate::spanned! {
+macro_rules! note_phrase {
+    (node: $node:expr, note: $note:expr, span: $span:expr $(,)?) => {
+        $crate::lang::common::source::NotePhrase {
             node: $node,
-            span: $crate::lang::common::source::Span::default(),
+            note: $note,
+            span: $span,
         }
     };
 }

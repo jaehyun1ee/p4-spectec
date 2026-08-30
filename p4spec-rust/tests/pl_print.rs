@@ -1,8 +1,5 @@
 use p4spec_rust::{
-    lang::common::{
-        noted::Noted,
-        source::{Position, Span, Spanned},
-    },
+    lang::common::source::{Position, Span},
     lang::{
         common::notation::mixfix::Mixfix,
         hints::{alter, input::InputHint},
@@ -16,20 +13,24 @@ fn span(name: &str) -> Span {
 }
 
 fn id(name: &str) -> il::ast::Id {
-    Spanned::new(name.to_owned(), span(name))
+    p4spec_rust::phrase! {
+        node: name.to_owned(),
+        span: span(name),
+    }
 }
 
 fn typ() -> il::ast::Typ {
-    Spanned::new(il::ast::TypKind::Bool, span("type"))
+    p4spec_rust::phrase! {
+        node: il::ast::TypKind::Bool,
+        span: span("type"),
+    }
 }
 
 fn variable(name: &str) -> pl::ast::Exp {
     pl::annot::Annotated {
-        node: p4spec_rust::spanned! {
-            node: Noted {
-                kind: pl::ast::ExpKind::Var(id(name)),
-                note: il::ast::TypKind::Bool,
-            },
+        node: p4spec_rust::note_phrase! {
+            node: pl::ast::ExpKind::Var(id(name)),
+            note: il::ast::TypKind::Bool,
             span: span(name),
         },
         hints: pl::annot::Hints::default(),
@@ -38,11 +39,9 @@ fn variable(name: &str) -> pl::ast::Exp {
 
 fn text(value: &str) -> pl::ast::Exp {
     pl::annot::Annotated {
-        node: p4spec_rust::spanned! {
-            node: Noted {
-                kind: pl::ast::ExpKind::Text(value.to_owned()),
-                note: il::ast::TypKind::Text,
-            },
+        node: p4spec_rust::note_phrase! {
+            node: pl::ast::ExpKind::Text(value.to_owned()),
+            note: il::ast::TypKind::Text,
             span: span("text"),
         },
         hints: pl::annot::Hints::default(),
@@ -51,7 +50,10 @@ fn text(value: &str) -> pl::ast::Exp {
 
 fn signature() -> pl::ast::RelSignature {
     pl::ast::RelSignature {
-        not_typ: Spanned::new(Mixfix::Arg(typ()), span("signature")),
+        not_typ: p4spec_rust::phrase! {
+            node: Mixfix::Arg(typ()),
+            span: span("signature"),
+        },
         input_hint: InputHint::new(vec![0]),
     }
 }
@@ -60,16 +62,10 @@ fn group_instr(
     kind: pl::ast::InstrKind<pl::ast::InstrGroup>,
 ) -> pl::ast::Instr<pl::ast::InstrGroup> {
     pl::annot::Annotated {
-        node: p4spec_rust::spanned! {
-            node: Noted {
-                kind,
-                note: pl::ast::InstrNote {
-                    iid: 1,
-                    fallthrough: None,
-                },
-            },
-            span: span("group-instruction"),
-        },
+        node: p4spec_rust::note_phrase! { node: kind, note: pl::ast::InstrNote {
+            iid: 1,
+            fallthrough: None,
+        }, span: span("group-instruction") },
         hints: pl::annot::Hints::default(),
     }
 }
@@ -78,16 +74,10 @@ fn dispatch_instr(
     kind: pl::ast::InstrKind<pl::ast::InstrDispatch>,
 ) -> pl::ast::Instr<pl::ast::InstrDispatch> {
     pl::annot::Annotated {
-        node: p4spec_rust::spanned! {
-            node: Noted {
-                kind,
-                note: pl::ast::InstrNote {
-                    iid: 1,
-                    fallthrough: None,
-                },
-            },
-            span: span("dispatch-instruction"),
-        },
+        node: p4spec_rust::note_phrase! { node: kind, note: pl::ast::InstrNote {
+            iid: 1,
+            fallthrough: None,
+        }, span: span("dispatch-instruction") },
         hints: pl::annot::Hints::default(),
     }
 }
@@ -99,12 +89,12 @@ fn group_printer_escapes_text_and_omits_annotations_and_fallthrough() {
             exp: text("line\n\"\\"),
         }),
     }));
-    first.node.node.note.fallthrough = Some(pl::ast::Fallthrough::FallNext);
+    first.node.note.fallthrough = Some(pl::ast::Fallthrough::FallNext);
     first.hints.prose = Some(alter::AlterationHint::Text("first prose".to_owned()));
 
     let mut second = first.clone();
-    second.node.node.note.iid = 99;
-    second.node.node.note.fallthrough = Some(pl::ast::Fallthrough::FallFail);
+    second.node.note.iid = 99;
+    second.node.note.fallthrough = Some(pl::ast::Fallthrough::FallFail);
     second.node.span = span("other-source");
     second.hints.prose = Some(alter::AlterationHint::Text("other prose".to_owned()));
 
@@ -131,7 +121,7 @@ fn shared_control_flow_renders_group_tier_at_nested_level() {
         dangle: true,
     }));
     let mut branch = branch;
-    branch.node.node.note.iid = 42;
+    branch.node.note.iid = 42;
 
     assert_eq!(
         Print::to_string(&vec![branch]),

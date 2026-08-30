@@ -54,7 +54,7 @@ fn parse_error(
         } => (SyntaxErrorKind::ExtraToken, left, right),
         ParseError::User { error } => return error,
     };
-    crate::spanned! {
+    crate::phrase! {
         node: kind,
         span: context.span(left, right),
     }
@@ -71,13 +71,13 @@ fn parse_file_with_context(path: &Path, context: &Context) -> Result<Spec, Front
     let position = Position::new(Rc::clone(&name), 0, 0);
     let file_span = Span::new(position.clone(), position);
     let bytes = fs::read(path).map_err(|source| {
-        FrontendError::Io(crate::spanned! {
+        FrontendError::Io(crate::phrase! {
             node: source,
             span: file_span,
         })
     })?;
     let source = str::from_utf8(&bytes).map_err(|source| {
-        FrontendError::InvalidUtf8(crate::spanned! {
+        FrontendError::InvalidUtf8(crate::phrase! {
             node: source,
             span: invalid_utf8_span(Rc::clone(&name), &bytes, &source),
         })
@@ -128,7 +128,7 @@ fn expand_path(path: &Path, files: &mut Vec<PathBuf>) -> Result<(), FrontendErro
     let position = Position::new(name, 0, 0);
     let span = Span::new(position.clone(), position);
     let metadata = fs::metadata(path).map_err(|source| {
-        FrontendError::Io(crate::spanned! {
+        FrontendError::Io(crate::phrase! {
             node: source,
             span: span.clone(),
         })
@@ -140,14 +140,14 @@ fn expand_path(path: &Path, files: &mut Vec<PathBuf>) -> Result<(), FrontendErro
 
     let mut entries = fs::read_dir(path)
         .map_err(|source| {
-            FrontendError::Io(crate::spanned! {
+            FrontendError::Io(crate::phrase! {
                 node: source,
                 span: span.clone(),
             })
         })?
         .collect::<Result<Vec<_>, io::Error>>()
         .map_err(|source| {
-            FrontendError::Io(crate::spanned! {
+            FrontendError::Io(crate::phrase! {
                 node: source,
                 span: span,
             })
@@ -160,7 +160,7 @@ fn expand_path(path: &Path, files: &mut Vec<PathBuf>) -> Result<(), FrontendErro
         let position = Position::new(entry_name.clone(), 0, 0);
         let span = Span::new(position.clone(), position);
         let entry_metadata = fs::metadata(&entry_path).map_err(|source| {
-            FrontendError::Io(crate::spanned! {
+            FrontendError::Io(crate::phrase! {
                 node: source,
                 span: span,
             })

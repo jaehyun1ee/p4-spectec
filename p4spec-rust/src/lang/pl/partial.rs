@@ -5,7 +5,7 @@ use super::ast::*;
 /// A construct is partial when its evaluation can fail because it invokes a
 /// relation or function that may not match
 pub fn is_partial_exp(exp: &Exp) -> bool {
-    match &exp.node.node.kind {
+    match &exp.node.node {
         ExpKind::Bool(_) | ExpKind::Num(_) | ExpKind::Text(_) | ExpKind::Var(_) => false,
         ExpKind::Un(_, _, exp)
         | ExpKind::UpCast(_, exp)
@@ -37,7 +37,7 @@ pub fn is_partial_exp(exp: &Exp) -> bool {
 
 /// Checks whether a path may fail during evaluation
 pub fn is_partial_path(path: &Path) -> bool {
-    match &path.node.kind {
+    match &path.node {
         PathKind::Root => false,
         PathKind::Idx(path, exp_i) => is_partial_path(path) || is_partial_exp(exp_i),
         PathKind::Slice(path, exp_i, exp_n) => {
@@ -88,7 +88,7 @@ pub fn is_partial_instr<Tier>(
     is_partial_tier: impl Fn(&Tier) -> bool,
     instr: &Instr<Tier>,
 ) -> bool {
-    match &instr.node.node.kind {
+    match &instr.node.node {
         InstrKind::If(IfInstr { exp, .. }) => is_partial_exp(exp),
         InstrKind::Hold(..) => true,
         InstrKind::Case(CaseInstr { exp, cases, .. }) => {

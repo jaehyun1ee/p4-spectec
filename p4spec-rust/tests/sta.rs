@@ -1,6 +1,6 @@
 use p4spec_rust::{
     lang::{
-        common::source::{Position, Span, Spanned},
+        common::source::{Position, Span},
         il::ast::{self, Iter, TypKind},
     },
     runtime::sta::Dim,
@@ -11,7 +11,10 @@ fn span(file: &str) -> Span {
 }
 
 fn typ(kind: TypKind, file: &str) -> ast::Typ {
-    Spanned::new(kind, span(file))
+    p4spec_rust::phrase! {
+        node: kind,
+        span: span(file),
+    }
 }
 
 #[test]

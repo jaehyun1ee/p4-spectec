@@ -4,7 +4,7 @@ use std::{io, str::Utf8Error};
 
 use thiserror::Error;
 
-use crate::lang::common::source::Spanned;
+use crate::lang::common::source::Phrase;
 
 /// A lexical failure category produced before parsing begins
 #[derive(Clone, Copy, Debug, Error, PartialEq, Eq)]
@@ -32,7 +32,7 @@ pub enum LexErrorKind {
 }
 
 /// A lexical failure paired with the offending source span
-pub type LexError = Spanned<LexErrorKind>;
+pub type LexError = Phrase<LexErrorKind>;
 
 /// A syntax failure category independent of the parser implementation
 #[derive(Clone, Copy, Debug, Error, PartialEq, Eq)]
@@ -60,7 +60,7 @@ pub enum SyntaxErrorKind {
 }
 
 /// A syntax failure paired with the source span reported by the parser
-pub type SyntaxError = Spanned<SyntaxErrorKind>;
+pub type SyntaxError = Phrase<SyntaxErrorKind>;
 
 /// A UTF-8 decoding failure produced before parsing begins
 pub type InvalidUtf8Error = Utf8Error;
@@ -73,7 +73,7 @@ pub enum FrontendError {
     #[error(transparent)]
     Syntax(#[from] SyntaxError),
     #[error("i/o error at {}: {}", .0.span, .0.node)]
-    Io(#[source] Spanned<io::Error>),
+    Io(#[source] Phrase<io::Error>),
     #[error("source is not valid UTF-8 at {}: {}", .0.span, .0.node)]
-    InvalidUtf8(#[source] Spanned<InvalidUtf8Error>),
+    InvalidUtf8(#[source] Phrase<InvalidUtf8Error>),
 }

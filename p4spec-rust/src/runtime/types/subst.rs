@@ -6,7 +6,7 @@ use crate::lang::{
     common::{ds::map::IdMap, notation::mixop::Mixop},
     il::ast::{self, TypKind},
 };
-use crate::spanned;
+use crate::phrase;
 
 use super::{Fresh, TypeError, TypeErrorKind};
 
@@ -51,14 +51,14 @@ pub(crate) fn subst_typ_inner(
             None => {
                 let targs = subst_typs_inner(fresh, theta, targs)?;
                 let typ_kind = TypKind::Var(id.clone(), targs);
-                let typ_subst = spanned!(node: typ_kind, span: typ.span.clone());
+                let typ_subst = phrase!(node: typ_kind, span: typ.span.clone());
                 Ok(typ_subst)
             }
         },
         TypKind::Tuple(typs) => {
             let typs = subst_typs_inner(fresh, theta, typs)?;
             let typ_kind = TypKind::Tuple(typs);
-            let typ_subst = spanned!(node: typ_kind, span: typ.span.clone());
+            let typ_subst = phrase!(node: typ_kind, span: typ.span.clone());
             Ok(typ_subst)
         }
         TypKind::Iter(typ_inner, iter) => {
@@ -66,7 +66,7 @@ pub(crate) fn subst_typ_inner(
             let span = typ_inner.span.clone();
             let typ_inner = Box::new(typ_inner);
             let typ_kind = TypKind::Iter(typ_inner, *iter);
-            let typ_subst = spanned!(node: typ_kind, span: span);
+            let typ_subst = phrase!(node: typ_kind, span: span);
             Ok(typ_subst)
         }
         TypKind::Func(func_typ) => {
@@ -82,7 +82,7 @@ pub(crate) fn subst_typ_inner(
                 typ_ret,
             };
             let typ_kind = TypKind::Func(func_typ);
-            let typ_subst = spanned!(node: typ_kind, span: typ.span.clone());
+            let typ_subst = phrase!(node: typ_kind, span: typ.span.clone());
             Ok(typ_subst)
         }
     }
@@ -132,7 +132,7 @@ pub(crate) fn subst_not_typ_inner(
     let not_typ_node = Mixop::fill(&mixop, typs_subst);
     let not_typ_node =
         not_typ_node.expect("arguments obtained from the same mixfix must match its arity");
-    let not_typ_subst = spanned!(node: not_typ_node, span: not_typ.span.clone());
+    let not_typ_subst = phrase!(node: not_typ_node, span: not_typ.span.clone());
     Ok(not_typ_subst)
 }
 
@@ -154,7 +154,7 @@ fn subst_param_inner(
             ast::ParamKind::Def(id.clone(), tparams, params, typ)
         }
     };
-    let param = crate::spanned! {
+    let param = crate::phrase! {
         node: kind,
         span: param.span.clone(),
     };

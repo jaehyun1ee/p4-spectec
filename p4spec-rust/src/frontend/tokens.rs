@@ -19,7 +19,7 @@
 //! arithmetic mode: Star -> Star
 //! ```
 
-use crate::lang::common::source::{Position, Spanned};
+use crate::lang::common::source::{Phrase, Position};
 
 use super::{
     ctx::{Context, Location},
@@ -45,7 +45,7 @@ pub(crate) struct ParserTokens<'context, I: Iterator> {
     lexemes: I,
     previous_right: Option<Position>,
     previous_token: Option<Token>,
-    pending: Option<Spanned<Token>>,
+    pending: Option<Phrase<Token>>,
 }
 
 fn starts_sequence(token: &Token) -> bool {
@@ -117,7 +117,7 @@ fn ends_sequence(token: &Token) -> bool {
 
 impl<I> Iterator for ParserTokens<'_, I>
 where
-    I: Iterator<Item = Result<Spanned<Token>, LexError>>,
+    I: Iterator<Item = Result<Phrase<Token>, LexError>>,
 {
     type Item = Result<(Location, Token, Location), FrontendError>;
 

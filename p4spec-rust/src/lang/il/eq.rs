@@ -1,7 +1,7 @@
 //! Syntax equality for intermediate-language data
 //!
 //! Ignores source regions;
-//! compares syntax represented by spanned nodes
+//! compares source-annotated syntax by node contents
 
 use crate::lang::traits::eq::SyntaxEq;
 

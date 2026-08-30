@@ -1,6 +1,6 @@
 //! Free identifiers shared across language stages
 
-use crate::lang::common::{ds::set::IdSet, source::Spanned};
+use crate::lang::common::{ds::set::IdSet, source::NotePhrase};
 
 /// Collects free term identifiers from syntax
 pub trait Free {
@@ -14,7 +14,7 @@ impl Free for String {
     }
 }
 
-impl<T: Free> Free for Spanned<T> {
+impl<T: Free, N> Free for NotePhrase<T, N> {
     fn free(&self) -> IdSet {
         self.node.free()
     }

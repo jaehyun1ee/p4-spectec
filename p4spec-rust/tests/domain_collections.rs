@@ -1,21 +1,20 @@
 use p4spec_rust::{
-    lang::common::source::{Position, Span, Spanned},
+    lang::common::source::{Position, Span},
     lang::common::{
         Id,
         ds::{
             map::{ArityMismatch, IdMap},
             set::IdSet,
         },
-        noted::Noted,
     },
     lang::{il, traits::free::Free},
 };
 
 fn id(name: &str, file: &str) -> Id {
-    Spanned::new(
-        name.to_owned(),
-        Span::new(Position::new(file, 0, 0), Position::new(file, 0, 0)),
-    )
+    p4spec_rust::phrase! {
+        node: name.to_owned(),
+        span: Span::new(Position::new(file, 0, 0), Position::new(file, 0, 0)),
+    }
 }
 
 #[test]
@@ -56,11 +55,9 @@ fn id_map_rejects_mismatched_lists() {
 fn free_identifier_sets_preserve_source_spans() {
     let id_stored = id("x", "stored");
     let id_lookup = id("x", "lookup");
-    let exp = p4spec_rust::spanned! {
-        node: Noted {
-            kind: il::ast::ExpKind::Var(id_stored.clone()),
-            note: il::ast::TypKind::Bool,
-        },
+    let exp = p4spec_rust::note_phrase! {
+        node: il::ast::ExpKind::Var(id_stored.clone()),
+        note: il::ast::TypKind::Bool,
         span: Span::default(),
     };
 
@@ -75,7 +72,10 @@ fn fresh_variables_lookup_aliases_by_identifier_text() {
         Position::new("requested", 0, 0),
         Position::new("requested", 0, 0),
     );
-    let typ = Spanned::new(il::ast::TypKind::Bool, Span::default());
+    let typ = p4spec_rust::phrase! {
+        node: il::ast::TypKind::Bool,
+        span: Span::default(),
+    };
     let mut metavars = IdMap::new();
     metavars.insert(id("Alias", "declaration"), typ.clone());
 

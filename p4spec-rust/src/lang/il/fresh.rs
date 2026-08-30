@@ -37,7 +37,7 @@ fn find_alias(metavars: &Metavars, span: &Span, typ: &Typ) -> Option<Var> {
         return None;
     }
     Some(Var {
-        id: crate::spanned! {
+        id: crate::phrase! {
             node: id_alias.node.clone(),
             span: span.clone(),
         },
@@ -57,7 +57,7 @@ fn var_from_typ_inner(metavars: &Metavars, span: &Span, typ: &Typ) -> Var {
             var
         }
         _ => Var {
-            id: crate::spanned! {
+            id: crate::phrase! {
                 node: Print::to_string(typ),
                 span: span.clone(),
             },

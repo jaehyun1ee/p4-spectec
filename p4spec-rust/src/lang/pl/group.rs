@@ -27,7 +27,7 @@ fn collect_groups_from_block(block: &BlockDispatch, rule_groups: &mut Vec<RuleGr
 }
 
 fn collect_groups_from_instr(instr: &Instr<InstrDispatch>, rule_groups: &mut Vec<RuleGroup>) {
-    match &instr.node.node.kind {
+    match &instr.node.node {
         InstrKind::If(IfInstr { block, .. }) => collect_groups_from_block(block, rule_groups),
         InstrKind::Hold(HoldInstr { hold_case, .. }) => match hold_case {
             HoldCase::Both(block_hold, block_not_hold) => {

@@ -4,15 +4,15 @@ use std::ops::{Deref, DerefMut};
 
 use crate::{
     lang::{
-        common::{Id, ds::set::IdSet},
+        common::{Id, ds::set::IdSet, source::Span},
         hints::input::InputHint,
         il::ast,
     },
+    phrase,
     runtime::{
         sta::{FEnv, Func, MEnv, REnv, Rel},
         types::{TDEnv, TypeDef, typ},
     },
-    spanned_default,
 };
 
 use super::{ElabError, EntityKind};
@@ -102,7 +102,7 @@ impl Context {
             ("int", typ::int()),
             ("text", typ::text()),
         ] {
-            let id = spanned_default!(node: name.to_owned());
+            let id = phrase!(node: name.to_owned(), span: Span::default());
             menv.insert(id, typ);
         }
         Self {

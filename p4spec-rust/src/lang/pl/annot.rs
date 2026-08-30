@@ -58,7 +58,7 @@ impl<N> Annotated<N> {
 #[macro_export]
 macro_rules! annotated {
     (node: $node:expr, span: $span:expr $(,)?) => {
-        $crate::lang::pl::annot::Annotated::new($crate::spanned! {
+        $crate::lang::pl::annot::Annotated::new($crate::phrase! {
             node: $node,
             span: $span.span.clone(),
         })

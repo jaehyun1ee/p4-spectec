@@ -1,10 +1,9 @@
 use p4spec_rust::{
-    lang::common::source::{Position, Span, Spanned},
+    lang::common::source::{Position, Span},
     lang::{
         common::{
             ds::{map::IdMap, set::IdSet},
             notation::mixfix::Mixfix,
-            noted::Noted,
         },
         hints::input::InputHint,
         il::{ast, fresh},
@@ -13,17 +12,21 @@ use p4spec_rust::{
 };
 
 fn typ() -> ast::Typ {
-    Spanned::new(ast::TypKind::Bool, Span::default())
+    p4spec_rust::phrase! {
+        node: ast::TypKind::Bool,
+        span: Span::default(),
+    }
 }
 fn id(name: &str) -> ast::Id {
-    Spanned::new(name.into(), Span::default())
+    p4spec_rust::phrase! {
+        node: name.into(),
+        span: Span::default(),
+    }
 }
 fn exp(kind: ast::ExpKind) -> ast::Exp {
-    p4spec_rust::spanned! {
-        node: Noted {
-            kind,
-            note: ast::TypKind::Bool,
-        },
+    p4spec_rust::note_phrase! {
+        node: kind,
+        note: ast::TypKind::Bool,
         span: Span::default(),
     }
 }
@@ -31,30 +34,41 @@ fn var(name: &str) -> ast::Exp {
     exp(ast::ExpKind::Var(id(name)))
 }
 fn arg(kind: ast::ArgKind) -> ast::Arg {
-    Spanned::new(kind, Span::default())
+    p4spec_rust::phrase! {
+        node: kind,
+        span: Span::default(),
+    }
 }
 fn prem(kind: ast::PremKind) -> ast::Prem {
-    Spanned::new(kind, Span::default())
+    p4spec_rust::phrase! {
+        node: kind,
+        span: Span::default(),
+    }
 }
 fn notexp(name: &str) -> ast::NotExp {
     Mixfix::Seq(vec![Mixfix::Arg(var(name))])
 }
 fn not_typ() -> ast::NotTyp {
-    Spanned::new(Mixfix::Arg(typ()), Span::default())
+    p4spec_rust::phrase! {
+        node: Mixfix::Arg(typ()),
+        span: Span::default(),
+    }
 }
 fn names(names: &[&str]) -> IdSet {
     names.iter().map(|name| id(name)).collect()
 }
 fn hint() -> ast::Hint {
     (
-        Spanned::new("meta".into(), Span::default()),
-        Spanned::new(
-            p4spec_rust::lang::el::ast::ExpKind::Var(Spanned::new(
-                "payload".into(),
-                Span::default(),
-            )),
-            Span::default(),
-        ),
+        p4spec_rust::phrase! {
+            node: "meta".into(),
+            span: Span::default(),
+        },
+        p4spec_rust::phrase! { node: p4spec_rust::lang::el::ast::ExpKind::Var(
+            p4spec_rust::phrase! {
+                node: "payload".into(),
+                span: Span::default(),
+            },
+        ), span: Span::default() },
     )
 }
 
@@ -84,138 +98,114 @@ fn printer_renders_nested_premises_and_definition_spec_goldens() {
         Print::to_string(&nested),
         "(if ready)*{bound <- bound*, output? -> output?*}*{bound <- bound*, output? -> output?*}"
     );
-    let rule = Spanned::new(
-        ast::RuleKind {
-            id: id("r"),
-            not_exp: notexp("head"),
-            prems: vec![
-                prem(ast::PremKind::Rule(ast::RulePrem {
-                    id: id("relation"),
-                    not_exp: notexp("input"),
-                    input_hint: InputHint::new(vec![0]),
-                })),
-                prem(ast::PremKind::Let(ast::LetPrem {
-                    exp_l: var("left"),
-                    exp_r: var("right"),
-                })),
-                nested,
-            ],
-        },
-        Span::default(),
-    );
-    let group = Spanned::new((id("main"), vec![rule.clone()]), Span::default());
-    let else_group = Spanned::new((id("fallback"), rule.clone()), Span::default());
-    let clause = Spanned::new(
-        ast::ClauseKind {
-            args: vec![arg(ast::ArgKind::Exp(Box::new(var("argument"))))],
-            expression: var("result"),
-            premises: vec![prem(ast::PremKind::Debug(ast::DebugPrem {
-                exp: var("debug"),
-            }))],
-        },
-        Span::default(),
-    );
-    let row = Spanned::new(
-        (
-            vec![arg(ast::ArgKind::Exp(Box::new(var("key"))))],
-            var("value"),
-        ),
-        Span::default(),
-    );
-    let definitions = vec![
-        Spanned::new(
-            ast::DefKind::ExternTyp(ast::ExternTyp {
-                id: id("Syntax"),
-                hints: vec![],
-            }),
-            Span::default(),
-        ),
-        Spanned::new(
-            ast::DefKind::Typ(ast::TypDef {
-                id: id("Alias"),
-                tparams: vec![Spanned::new("T".into(), Span::default())],
-                def_typ: Spanned::new(
-                    ast::DefTypKind::Variant(vec![(
-                        not_typ(),
-                        Spanned::new((id("Origin"), vec![]), Span::default()),
-                        vec![],
-                    )]),
-                    Span::default(),
-                ),
-                hints: vec![],
-            }),
-            Span::default(),
-        ),
-        Spanned::new(
-            ast::DefKind::Var(ast::VarDef {
-                id: id("value"),
-                typ: typ(),
-                hints: vec![],
-            }),
-            Span::default(),
-        ),
-        Spanned::new(
-            ast::DefKind::ExternRel(ast::ExternRel {
-                id: id("external"),
-                not_typ: not_typ(),
-                input_hint: InputHint::new(vec![]),
-                hints: vec![],
-            }),
-            Span::default(),
-        ),
-        Spanned::new(
-            ast::DefKind::Rel(ast::Rel {
+    let rule = p4spec_rust::phrase! { node: ast::RuleKind {
+        id: id("r"),
+        not_exp: notexp("head"),
+        prems: vec![
+            prem(ast::PremKind::Rule(ast::RulePrem {
                 id: id("relation"),
-                not_typ: not_typ(),
-                input_hint: InputHint::new(vec![]),
-                rule_groups: vec![group],
-                else_group: Some(else_group),
-                hints: vec![],
-            }),
-            Span::default(),
-        ),
-        Spanned::new(
-            ast::DefKind::ExternDec(ast::ExternDec {
-                id: id("extern"),
-                tparams: vec![],
-                params: vec![],
-                typ: typ(),
-                hints: vec![],
-            }),
-            Span::default(),
-        ),
-        Spanned::new(
-            ast::DefKind::BuiltinDec(ast::BuiltinDec {
-                id: id("builtin"),
-                tparams: vec![],
-                params: vec![],
-                typ: typ(),
-                hints: vec![],
-            }),
-            Span::default(),
-        ),
-        Spanned::new(
-            ast::DefKind::TableDec(ast::TableDec {
-                id: id("table"),
-                params: vec![],
-                typ: typ(),
-                rows: vec![row],
-                hints: vec![],
-            }),
-            Span::default(),
-        ),
-        Spanned::new(
-            ast::DefKind::FuncDec(ast::FuncDec {
-                id: id("function"),
-                tparams: vec![],
-                params: vec![],
-                typ: typ(),
-                clauses: vec![clause.clone()],
-                else_clause: Some(clause),
-                hints: vec![],
-            }),
-            Span::default(),
-        ),
+                not_exp: notexp("input"),
+                input_hint: InputHint::new(vec![0]),
+            })),
+            prem(ast::PremKind::Let(ast::LetPrem {
+                exp_l: var("left"),
+                exp_r: var("right"),
+            })),
+            nested,
+        ],
+    }, span: Span::default() };
+    let group = p4spec_rust::phrase! {
+        node: (id("main"), vec![rule.clone()]),
+        span: Span::default(),
+    };
+    let else_group = p4spec_rust::phrase! {
+        node: (id("fallback"), rule.clone()),
+        span: Span::default(),
+    };
+    let clause = p4spec_rust::phrase! { node: ast::ClauseKind {
+        args: vec![arg(ast::ArgKind::Exp(Box::new(var("argument"))))],
+        expression: var("result"),
+        premises: vec![prem(ast::PremKind::Debug(ast::DebugPrem {
+            exp: var("debug"),
+        }))],
+    }, span: Span::default() };
+    let row = p4spec_rust::phrase! { node: (
+        vec![arg(ast::ArgKind::Exp(Box::new(var("key"))))],
+        var("value"),
+    ), span: Span::default() };
+    let definitions = vec![
+        p4spec_rust::phrase! { node: ast::DefKind::ExternTyp(ast::ExternTyp {
+            id: id("Syntax"),
+            hints: vec![],
+        }), span: Span::default() },
+        p4spec_rust::phrase! { node: ast::DefKind::Typ(ast::TypDef {
+            id: id("Alias"),
+            tparams: vec![p4spec_rust::phrase! {
+                node: "T".into(),
+                span: Span::default(),
+            }],
+            def_typ: p4spec_rust::phrase! {
+                node: ast::DefTypKind::Variant(vec![(
+                    not_typ(),
+                    p4spec_rust::phrase! {
+                        node: (id("Origin"), vec![]),
+                        span: Span::default(),
+                    },
+                    vec![],
+                )]),
+                span: Span::default(),
+            },
+            hints: vec![],
+        }), span: Span::default() },
+        p4spec_rust::phrase! { node: ast::DefKind::Var(ast::VarDef {
+            id: id("value"),
+            typ: typ(),
+            hints: vec![],
+        }), span: Span::default() },
+        p4spec_rust::phrase! { node: ast::DefKind::ExternRel(ast::ExternRel {
+            id: id("external"),
+            not_typ: not_typ(),
+            input_hint: InputHint::new(vec![]),
+            hints: vec![],
+        }), span: Span::default() },
+        p4spec_rust::phrase! { node: ast::DefKind::Rel(ast::Rel {
+            id: id("relation"),
+            not_typ: not_typ(),
+            input_hint: InputHint::new(vec![]),
+            rule_groups: vec![group],
+            else_group: Some(else_group),
+            hints: vec![],
+        }), span: Span::default() },
+        p4spec_rust::phrase! { node: ast::DefKind::ExternDec(ast::ExternDec {
+            id: id("extern"),
+            tparams: vec![],
+            params: vec![],
+            typ: typ(),
+            hints: vec![],
+        }), span: Span::default() },
+        p4spec_rust::phrase! { node: ast::DefKind::BuiltinDec(ast::BuiltinDec {
+            id: id("builtin"),
+            tparams: vec![],
+            params: vec![],
+            typ: typ(),
+            hints: vec![],
+        }), span: Span::default() },
+        p4spec_rust::phrase! { node: ast::DefKind::TableDec(ast::TableDec {
+            id: id("table"),
+            params: vec![],
+            typ: typ(),
+            rows: vec![row],
+            hints: vec![],
+        }), span: Span::default() },
+        p4spec_rust::phrase! { node: ast::DefKind::FuncDec(ast::FuncDec {
+            id: id("function"),
+            tparams: vec![],
+            params: vec![],
+            typ: typ(),
+            clauses: vec![clause.clone()],
+            else_clause: Some(clause),
+            hints: vec![],
+        }), span: Span::default() },
     ];
     let rendered = Print::to_string(&definitions);
     assert_eq!(
@@ -250,14 +240,13 @@ fn printer_renders_nested_premises_and_definition_spec_goldens() {
     assert_eq!(Print::to_string(&definitions), rendered);
     assert_eq!(Print::to_string(&[hint()][..]), " hint(meta payload)");
     assert_eq!(
-        Print::to_string(&Spanned::new(
-            ast::DefKind::Var(ast::VarDef {
+        Print::to_string(
+            &p4spec_rust::phrase! { node: ast::DefKind::Var(ast::VarDef {
                 id: id("hidden_metadata"),
                 typ: typ(),
                 hints: vec![hint()],
-            }),
-            Span::default(),
-        )),
+            }), span: Span::default() }
+        ),
         "var hidden_metadata : bool"
     );
 }
@@ -296,16 +285,13 @@ fn fresh_uses_aliases_collisions_wildcards_and_dimensions_deterministically() {
             .node,
         "_bool"
     );
-    let nested = Spanned::new(
-        ast::TypKind::Iter(
-            Box::new(Spanned::new(
-                ast::TypKind::Iter(Box::new(typ()), ast::Iter::Opt),
-                at.clone(),
-            )),
-            ast::Iter::List,
-        ),
-        at.clone(),
-    );
+    let nested = p4spec_rust::phrase! { node: ast::TypKind::Iter(
+        Box::new(p4spec_rust::phrase! {
+            node: ast::TypKind::Iter(Box::new(typ()), ast::Iter::Opt),
+            span: at.clone(),
+        }),
+        ast::Iter::List,
+    ), span: at.clone() };
     let nested_var = fresh::var_from_typ(&IdMap::new(), &IdSet::new(), at.clone(), &nested);
     assert_eq!(nested_var.id.node, "bool");
     assert_eq!(nested_var.typ.node, ast::TypKind::Bool);
@@ -313,11 +299,11 @@ fn fresh_uses_aliases_collisions_wildcards_and_dimensions_deterministically() {
 }
 
 fn assert_iterated_exp(exp: &ast::Exp, dim: bool, id_span: &Span, typ_span: &Span) {
-    let ast::ExpKind::Iter(inner, (ast::Iter::List, outer_binders)) = &exp.node.kind else {
+    let ast::ExpKind::Iter(inner, (ast::Iter::List, outer_binders)) = &exp.node else {
         panic!("outer iteration")
     };
     assert_eq!(&exp.span, id_span);
-    let ast::TypKind::Iter(outer_typ, ast::Iter::List) = &exp.node.note else {
+    let ast::TypKind::Iter(outer_typ, ast::Iter::List) = &exp.note else {
         panic!("outer type")
     };
     assert_eq!(&outer_typ.span, id_span);
@@ -326,16 +312,16 @@ fn assert_iterated_exp(exp: &ast::Exp, dim: bool, id_span: &Span, typ_span: &Spa
     };
     assert_eq!(base_typ.node, ast::TypKind::Bool);
     assert_eq!(&base_typ.span, id_span);
-    let ast::ExpKind::Iter(base, (ast::Iter::Opt, inner_binders)) = &inner.node.kind else {
+    let ast::ExpKind::Iter(base, (ast::Iter::Opt, inner_binders)) = &inner.node else {
         panic!("inner iteration")
     };
     assert_eq!(&inner.span, id_span);
     assert!(
-        matches!(&inner.node.note, ast::TypKind::Iter(typ, ast::Iter::Opt) if typ.node == ast::TypKind::Bool && typ.span == *id_span)
+        matches!(&inner.note, ast::TypKind::Iter(typ, ast::Iter::Opt) if typ.node == ast::TypKind::Bool && typ.span == *id_span)
     );
-    assert!(matches!(base.node.kind, ast::ExpKind::Var(_)));
+    assert!(matches!(base.node, ast::ExpKind::Var(_)));
     assert_eq!(base.span, *id_span);
-    assert_eq!(base.node.note, ast::TypKind::Bool);
+    assert_eq!(base.note, ast::TypKind::Bool);
     match (dim, inner_binders.as_slice(), outer_binders.as_slice()) {
         (false, [], []) => {}
         (true, [inner], [outer]) => {
@@ -364,13 +350,10 @@ fn fresh_exact_edges_preserve_aliases_regions_and_full_dimension_shapes() {
         Position::new("requested", 0, 0),
         Position::new("requested", 0, 0),
     );
-    let alias_typ = Spanned::new(
-        ast::TypKind::Bool,
-        Span::new(
-            Position::new("alias_type", 0, 0),
-            Position::new("alias_type", 0, 0),
-        ),
-    );
+    let alias_typ = p4spec_rust::phrase! { node: ast::TypKind::Bool, span: Span::new(
+        Position::new("alias_type", 0, 0),
+        Position::new("alias_type", 0, 0),
+    ) };
     let mut aliases = IdMap::new();
     aliases.insert(id("bool"), alias_typ.clone());
     let rejected = fresh::var_from_typ(&aliases, &IdSet::new(), at.clone(), &typ());
@@ -416,13 +399,10 @@ fn fresh_exact_edges_preserve_aliases_regions_and_full_dimension_shapes() {
             Position::new("wildcard", 0, 0)
         )
     );
-    let iter_bool = Spanned::new(
-        ast::TypKind::Iter(Box::new(typ()), ast::Iter::List),
-        Span::new(
-            Position::new("iter_type", 0, 0),
-            Position::new("iter_type", 0, 0),
-        ),
-    );
+    let iter_bool = p4spec_rust::phrase! { node: ast::TypKind::Iter(Box::new(typ()), ast::Iter::List), span: Span::new(
+        Position::new("iter_type", 0, 0),
+        Position::new("iter_type", 0, 0),
+    ) };
     let inside_iter = fresh::var_from_typ(
         &aliases,
         &IdSet::new(),
@@ -442,38 +422,29 @@ fn fresh_exact_edges_preserve_aliases_regions_and_full_dimension_shapes() {
     );
     assert_eq!(
         inside_iter.typ,
-        Spanned::new(
-            ast::TypKind::Bool,
-            Span::new(
-                Position::new("alias_type", 0, 0),
-                Position::new("alias_type", 0, 0)
-            )
-        )
+        p4spec_rust::phrase! { node: ast::TypKind::Bool, span: Span::new(
+            Position::new("alias_type", 0, 0),
+            Position::new("alias_type", 0, 0)
+        ) }
     );
     assert_eq!(inside_iter.iters, vec![ast::Iter::List]);
-    let base_typ = Spanned::new(
-        ast::TypKind::Bool,
-        Span::new(
-            Position::new("base_type", 0, 0),
-            Position::new("base_type", 0, 0),
-        ),
-    );
-    let nested = Spanned::new(
-        ast::TypKind::Iter(
-            Box::new(Spanned::new(
-                ast::TypKind::Iter(Box::new(base_typ.clone()), ast::Iter::Opt),
-                Span::new(
-                    Position::new("nested_inner", 0, 0),
-                    Position::new("nested_inner", 0, 0),
-                ),
-            )),
-            ast::Iter::List,
-        ),
-        Span::new(
-            Position::new("nested_type", 0, 0),
-            Position::new("nested_type", 0, 0),
-        ),
-    );
+    let base_typ = p4spec_rust::phrase! { node: ast::TypKind::Bool, span: Span::new(
+        Position::new("base_type", 0, 0),
+        Position::new("base_type", 0, 0),
+    ) };
+    let nested = p4spec_rust::phrase! { node: ast::TypKind::Iter(
+        Box::new(p4spec_rust::phrase! {
+            node: ast::TypKind::Iter(Box::new(base_typ.clone()), ast::Iter::Opt),
+            span: Span::new(
+                Position::new("nested_inner", 0, 0),
+                Position::new("nested_inner", 0, 0),
+            ),
+        }),
+        ast::Iter::List,
+    ), span: Span::new(
+        Position::new("nested_type", 0, 0),
+        Position::new("nested_type", 0, 0),
+    ) };
     for dim in [false, true] {
         let (ids, expression) = fresh::exp_from_typ(dim, &IdMap::new(), &IdSet::new(), &nested);
         assert_eq!(ids, names(&["bool"]));

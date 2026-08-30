@@ -13,7 +13,7 @@ fn phrase(it: Value) -> Value {
     json!({"it": it, "note": null, "at": region()})
 }
 
-fn noted_phrase(it: Value, note: Value) -> Value {
+fn note_phrase(it: Value, note: Value) -> Value {
     json!({"it": it, "note": note, "at": region()})
 }
 
@@ -30,11 +30,11 @@ fn bool_typ() -> Value {
 }
 
 fn bool_exp(value: bool) -> Value {
-    noted_phrase(json!(["BoolE", value]), json!(["BoolT"]))
+    note_phrase(json!(["BoolE", value]), json!(["BoolT"]))
 }
 
 fn int_exp(value: &str) -> Value {
-    noted_phrase(json!(["NumE", ["Int", value]]), json!(["NumT", ["IntT"]]))
+    note_phrase(json!(["NumE", ["Int", value]]), json!(["NumT", ["IntT"]]))
 }
 
 fn input_notation() -> Value {
@@ -53,7 +53,7 @@ fn el_hint() -> Value {
 }
 
 fn instruction(kind: Value, iid: i64) -> Value {
-    noted_phrase(kind, json!({"iid": iid}))
+    note_phrase(kind, json!({"iid": iid}))
 }
 
 #[test]

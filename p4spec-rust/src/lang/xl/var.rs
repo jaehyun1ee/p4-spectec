@@ -1,14 +1,14 @@
 //! XL variable identifiers
 
-use crate::lang::common::source::Spanned;
+use crate::lang::common::source::Phrase;
 
 /// Applies strip var suffix
-pub fn strip_var_suffix(id: &Spanned<String>) -> Spanned<String> {
+pub fn strip_var_suffix(id: &Phrase<String>) -> Phrase<String> {
     let stripped = strip_var_suffix_name(&id.node);
     if stripped.len() == id.node.len() {
         return id.clone();
     }
-    crate::spanned! {
+    crate::phrase! {
         node: stripped.to_owned(),
         span: id.span.clone(),
     }

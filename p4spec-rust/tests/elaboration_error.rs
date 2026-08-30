@@ -3,7 +3,7 @@ use std::path::Path;
 use p4spec_rust::{
     frontend::parse::parse_files,
     lang::{
-        common::source::{Position, Span, Spanned},
+        common::source::{Position, Span},
         il::ast::TypKind,
     },
     pass::elaborate::{self, ElabError, ElabErrorKind},
@@ -16,8 +16,14 @@ fn runtime_type_failure_keeps_its_category_and_source_span() {
         Position::new("elaboration.watsup", 7, 2),
         Position::new("elaboration.watsup", 7, 8),
     );
-    let id = Spanned::new("Missing".to_owned(), span.clone());
-    let typ = Spanned::new(TypKind::Var(id, vec![]), span.clone());
+    let id = p4spec_rust::phrase! {
+        node: "Missing".to_owned(),
+        span: span.clone(),
+    };
+    let typ = p4spec_rust::phrase! {
+        node: TypKind::Var(id, vec![]),
+        span: span.clone(),
+    };
     let type_error = expand_typ(&TDEnv::new(), &typ).unwrap_err();
 
     let error = ElabError::from(type_error);

@@ -1,7 +1,10 @@
 //! Prose language model
 
 use crate::lang::{
-    common::{notation::mixfix::Mixfix, noted::Noted, source::Spanned},
+    common::{
+        notation::mixfix::Mixfix,
+        source::{NotePhrase, Phrase},
+    },
     pl::annot,
     sl,
 };
@@ -62,7 +65,7 @@ pub type Subcheck = sl::ast::Subcheck;
 
 // Expressions
 
-pub type ExpNode = Spanned<Noted<ExpKind, TypKind>>;
+pub type ExpNode = NotePhrase<ExpKind, TypKind>;
 pub type Exp = annot::Annotated<ExpNode>;
 #[derive(Clone, Debug, PartialEq)]
 pub enum ExpKind {
@@ -102,7 +105,7 @@ pub type Pattern = sl::ast::Pattern;
 
 // Path
 
-pub type Path = Spanned<Noted<PathKind, TypKind>>;
+pub type Path = NotePhrase<PathKind, TypKind>;
 #[derive(Clone, Debug, PartialEq)]
 pub enum PathKind {
     Root,
@@ -117,7 +120,7 @@ pub type TParam = sl::ast::TParam;
 
 // Parameters
 
-pub type Param = Spanned<ParamKind>;
+pub type Param = Phrase<ParamKind>;
 #[derive(Clone, Debug, PartialEq)]
 pub enum ParamKind {
     Exp(Typ, Box<Exp>),
@@ -130,7 +133,7 @@ pub type Targ = sl::ast::Targ;
 
 // Arguments
 
-pub type Arg = Spanned<ArgKind>;
+pub type Arg = Phrase<ArgKind>;
 #[derive(Clone, Debug, PartialEq)]
 pub enum ArgKind {
     Exp(Box<Exp>),
@@ -188,7 +191,7 @@ pub struct InstrNote {
     pub fallthrough: Option<Fallthrough>,
 }
 
-pub type InstrNode<Tier> = Spanned<Noted<InstrKind<Tier>, InstrNote>>;
+pub type InstrNode<Tier> = NotePhrase<InstrKind<Tier>, InstrNote>;
 pub type Instr<Tier> = annot::Annotated<InstrNode<Tier>>;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -392,7 +395,7 @@ pub struct DefinedFunc {
 
 // Definitions
 
-pub type DefNode = Spanned<DefKind>;
+pub type DefNode = Phrase<DefKind>;
 pub type Def = annot::Annotated<DefNode>;
 
 #[derive(Clone, Debug, PartialEq)]

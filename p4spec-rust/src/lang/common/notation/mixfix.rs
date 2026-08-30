@@ -13,10 +13,10 @@ use crate::lang::{
     },
 };
 
-use super::{super::source::Spanned, atom::Atom};
+use super::{super::source::Phrase, atom::Atom};
 
 /// An atom paired with its source span
-pub type AtomPhrase = Spanned<Atom>;
+pub type AtomPhrase = Phrase<Atom>;
 
 /// A mixfix expression with arguments of type `T`
 #[derive(Clone, Debug)]

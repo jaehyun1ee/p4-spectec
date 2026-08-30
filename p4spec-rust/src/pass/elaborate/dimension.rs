@@ -2,12 +2,12 @@
 
 use crate::{
     lang::{
-        common::{Id, ds::map::IdMap, notation::mixfix::Mixfix, noted::Noted},
+        common::{Id, ds::map::IdMap, notation::mixfix::Mixfix},
         il::ast,
         traits::eq::SyntaxEq,
     },
+    note_phrase, phrase,
     runtime::sta::{Dim, VEnv},
-    spanned,
 };
 
 use super::{ElabError, ElabErrorKind};
@@ -46,8 +46,8 @@ impl DimContext {
 }
 
 fn infer_exp(dims: &mut DimContext, exp: &ast::Exp, iters: &[ast::Iter]) -> Result<(), ElabError> {
-    let typ = spanned!(node: exp.node.note.clone(), span: exp.span.clone());
-    match &exp.node.kind {
+    let typ = phrase!(node: exp.note.clone(), span: exp.span.clone());
+    match &exp.node {
         ast::ExpKind::Bool(_) | ast::ExpKind::Num(_) | ast::ExpKind::Text(_) => {}
         ast::ExpKind::Var(id) => dims.add(id, Dim::new(typ, iters.to_vec())),
         ast::ExpKind::Un(_, _, exp)
@@ -131,7 +131,7 @@ fn infer_path(
     path: &ast::Path,
     iters: &[ast::Iter],
 ) -> Result<(), ElabError> {
-    match &path.node.kind {
+    match &path.node {
         ast::PathKind::Root => {}
         ast::PathKind::Idx(path, exp) => {
             infer_path(dims, path, iters)?;
@@ -289,13 +289,13 @@ fn collect_iter_vars(bounds: &VEnv, occurs: &VEnv, iter: ast::Iter) -> Vec<ast::
 
 fn annotate_exp(bounds: &VEnv, exp: &ast::Exp) -> Result<(VEnv, ast::Exp), ElabError> {
     let span = exp.span.clone();
-    let note = exp.node.note.clone();
-    let (occurs, kind) = match &exp.node.kind {
+    let note = exp.note.clone();
+    let (occurs, kind) = match &exp.node {
         ast::ExpKind::Bool(value) => (VEnv::new(), ast::ExpKind::Bool(*value)),
         ast::ExpKind::Num(value) => (VEnv::new(), ast::ExpKind::Num(value.clone())),
         ast::ExpKind::Text(value) => (VEnv::new(), ast::ExpKind::Text(value.clone())),
         ast::ExpKind::Var(id) => {
-            let typ = spanned!(node: note.clone(), span: span.clone());
+            let typ = phrase!(node: note.clone(), span: span.clone());
             (singleton(id, typ), ast::ExpKind::Var(id.clone()))
         }
         ast::ExpKind::Un(op, op_typ, exp_inner) => {
@@ -462,8 +462,11 @@ fn annotate_exp(bounds: &VEnv, exp: &ast::Exp) -> Result<(VEnv, ast::Exp), ElabE
             )
         }
     };
-    let exp = Noted::new(kind, note);
-    let exp = spanned!(node: exp, span: span);
+    let exp = note_phrase! {
+        node: kind,
+        note: note,
+        span: span,
+    };
     Ok((occurs, exp))
 }
 
@@ -516,7 +519,7 @@ fn annotate_not_exp(
 }
 
 fn annotate_path(bounds: &VEnv, path: &ast::Path) -> Result<(VEnv, ast::Path), ElabError> {
-    let kind = match &path.node.kind {
+    let kind = match &path.node {
         ast::PathKind::Root => return Ok((VEnv::new(), path.clone())),
         ast::PathKind::Idx(path_inner, exp) => {
             let (occurs_path, path_inner) = annotate_path(bounds, path_inner)?;
@@ -541,8 +544,11 @@ fn annotate_path(bounds: &VEnv, path: &ast::Path) -> Result<(VEnv, ast::Path), E
         }
     };
     let (occurs, kind) = kind;
-    let node = Noted::new(kind, path.node.note.clone());
-    let path = spanned!(node: node, span: path.span.clone());
+    let path = note_phrase! {
+        node: kind,
+        note: path.note.clone(),
+        span: path.span.clone(),
+    };
     Ok((occurs, path))
 }
 
@@ -553,7 +559,7 @@ fn annotate_arg(bounds: &VEnv, arg: &ast::Arg) -> Result<(VEnv, ast::Arg), ElabE
             let span = arg.span.clone();
             let exp = Box::new(exp);
             let arg = ast::ArgKind::Exp(exp);
-            let arg = spanned!(node: arg, span: span);
+            let arg = phrase!(node: arg, span: span);
             Ok((occurs, arg))
         }
         ast::ArgKind::Def(_) => Ok((VEnv::new(), arg.clone())),
@@ -644,7 +650,7 @@ fn annotate_prem(bounds: &VEnv, prem: &ast::Prem) -> Result<(VEnv, ast::Prem), E
             (occurs, ast::PremKind::Debug(ast::DebugPrem { exp }))
         }
     };
-    let prem = spanned!(node: kind, span: prem.span.clone());
+    let prem = phrase!(node: kind, span: prem.span.clone());
     Ok((occurs, prem))
 }
 
@@ -669,7 +675,7 @@ fn analyze_rule(rule: &ast::Rule) -> Result<ast::Rule, ElabError> {
         not_exp,
         prems,
     };
-    let rule = spanned!(node: kind, span: rule.span.clone());
+    let rule = phrase!(node: kind, span: rule.span.clone());
     Ok(rule)
 }
 
@@ -680,14 +686,14 @@ fn analyze_rule_group(group: &ast::RuleGroup) -> Result<ast::RuleGroup, ElabErro
         rules.push(rule);
     }
     let group_node = (group.node.0.clone(), rules);
-    let group = spanned!(node: group_node, span: group.span.clone());
+    let group = phrase!(node: group_node, span: group.span.clone());
     Ok(group)
 }
 
 fn analyze_else_group(group: &ast::ElseGroup) -> Result<ast::ElseGroup, ElabError> {
     let rule = analyze_rule(&group.node.1)?;
     let group_node = (group.node.0.clone(), rule);
-    let group = spanned!(node: group_node, span: group.span.clone());
+    let group = phrase!(node: group_node, span: group.span.clone());
     Ok(group)
 }
 
@@ -702,7 +708,7 @@ fn analyze_clause(clause: &ast::Clause) -> Result<ast::Clause, ElabError> {
         expression,
         premises,
     };
-    let clause = spanned!(node: kind, span: clause.span.clone());
+    let clause = phrase!(node: kind, span: clause.span.clone());
     Ok(clause)
 }
 
@@ -712,7 +718,7 @@ fn analyze_table_row(row: &ast::TableRow) -> Result<ast::TableRow, ElabError> {
     let (_, args) = annotate_args(&bounds, &row.node.0)?;
     let (_, expression) = annotate_exp(&bounds, &row.node.1)?;
     let row_node = (args, expression);
-    let row = spanned!(node: row_node, span: row.span.clone());
+    let row = phrase!(node: row_node, span: row.span.clone());
     Ok(row)
 }
 
@@ -771,7 +777,7 @@ fn analyze_def(def: &ast::Def) -> Result<ast::Def, ElabError> {
         }
         _ => return Ok(def.clone()),
     };
-    let def = spanned!(node: kind, span: def.span.clone());
+    let def = phrase!(node: kind, span: def.span.clone());
     Ok(def)
 }
 
