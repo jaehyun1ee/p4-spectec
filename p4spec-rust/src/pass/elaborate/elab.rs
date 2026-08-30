@@ -29,7 +29,9 @@ use super::{
     dimension,
 };
 
-// == Validation
+// == Checks
+
+// - Identifiers
 
 fn valid_tid(id: &Id) -> bool {
     xl::var::strip_var_suffix(id).node == id.node
@@ -48,7 +50,9 @@ fn distinct_tparams(tparams: &[el::TParam], span: &Span) -> Result<(), ElabError
     }
 }
 
-// == Iteration
+// == Iterations
+
+// - Iteration elaboration
 
 fn elab_iter(iter: el::Iter) -> il::Iter {
     match iter {
@@ -115,7 +119,7 @@ fn as_struct_typ(ctx: &Context, typ_il: &il::Typ) -> Attempt<Vec<il::TypField>> 
     }
 }
 
-// - Plain and notation types
+// - Plain types
 
 fn arity_error(expected: usize, actual: usize, span: Span) -> ElabError {
     let mismatch = ArityMismatch::new(expected, actual);
@@ -162,6 +166,8 @@ fn elab_plain_typ(ctx: &Context, plain_typ: &el::PlainTyp) -> Result<il::Typ, El
     let typ_il = spanned!(node: typ_il_kind, span: plain_typ.span.clone());
     Ok(typ_il)
 }
+
+// - Notation types
 
 fn elab_not_typ(ctx: &Context, typ: &el::Typ) -> Result<il::NotTyp, ElabError> {
     match typ {
@@ -318,6 +324,8 @@ fn elab_def_typ(
     Ok((type_def, def_typ_il))
 }
 
+// == Elaboration helpers
+
 fn fail_attempt<T>(kind: ElabErrorKind, span: Span, message: impl Into<String>) -> Attempt<T> {
     fail(ElabError::new(kind, span, message))
 }
@@ -392,13 +400,15 @@ fn infer_exps(ctx: &mut Context, exps: &[el::Exp]) -> Attempt<Vec<il::Exp>> {
     Ok(exps_il)
 }
 
-// - Literal and variable expressions
+// - Boolean expression inference
 
 fn infer_bool_exp(_ctx: &mut Context, span: &Span, value: bool) -> Attempt<il::Exp> {
     let exp_il = Noted::new(il::ExpKind::Bool(value), il::TypKind::Bool);
     let exp_il = spanned!(node: exp_il, span: span.clone());
     Ok(exp_il)
 }
+
+// - Number expression inference
 
 fn infer_num_exp(_ctx: &mut Context, span: &Span, value: &el::Num) -> Attempt<il::Exp> {
     let exp_il = Noted::new(
@@ -409,11 +419,15 @@ fn infer_num_exp(_ctx: &mut Context, span: &Span, value: &el::Num) -> Attempt<il
     Ok(exp_il)
 }
 
+// - Text expression inference
+
 fn infer_text_exp(_ctx: &mut Context, span: &Span, value: &el::Text) -> Attempt<il::Exp> {
     let exp_il = Noted::new(il::ExpKind::Text(value.clone()), il::TypKind::Text);
     let exp_il = spanned!(node: exp_il, span: span.clone());
     Ok(exp_il)
 }
+
+// - Variable expression inference
 
 fn infer_var_exp(ctx: &mut Context, span: &Span, id: &Id) -> Attempt<il::Exp> {
     let tid = xl::var::strip_var_suffix(id);
@@ -425,7 +439,7 @@ fn infer_var_exp(ctx: &mut Context, span: &Span, id: &Id) -> Attempt<il::Exp> {
     Ok(exp_il)
 }
 
-// - Operator expressions
+// - Operator inference failures
 
 fn operator_error<T>(span: Span) -> Attempt<T> {
     fail_attempt(
@@ -434,6 +448,8 @@ fn operator_error<T>(span: Span) -> Attempt<T> {
         "operator is not defined for the operand types",
     )
 }
+
+// - Unary expression inference
 
 fn infer_un_exp(ctx: &mut Context, span: &Span, op: el::UnOp, exp: &el::Exp) -> Attempt<il::Exp> {
     let exp_il = infer_exp(ctx, exp)?;
@@ -465,6 +481,8 @@ fn infer_un_exp(ctx: &mut Context, span: &Span, op: el::UnOp, exp: &el::Exp) -> 
     }
     operator_error(span.clone())
 }
+
+// - Binary expression inference
 
 fn infer_bin_exp(
     ctx: &mut Context,
@@ -530,6 +548,8 @@ fn infer_bin_exp(
     operator_error(span.clone())
 }
 
+// - Comparison expression inference
+
 fn infer_cmp_exp(
     ctx: &mut Context,
     span: &Span,
@@ -592,13 +612,15 @@ fn infer_cmp_exp(
     }
 }
 
-// - Sequence expressions
+// - Arithmetic expression inference
 
 fn infer_arith_exp(ctx: &mut Context, span: &Span, exp: &el::Exp) -> Attempt<il::Exp> {
     let mut exp_il = infer_exp(ctx, exp)?;
     exp_il.span = span.clone();
     Ok(exp_il)
 }
+
+// - List expression inference
 
 fn infer_list_exp(ctx: &mut Context, span: &Span, exps: &[el::Exp]) -> Attempt<il::Exp> {
     let Some((exp_first, exps_rest)) = exps.split_first() else {
@@ -625,6 +647,8 @@ fn infer_list_exp(ctx: &mut Context, span: &Span, exps: &[el::Exp]) -> Attempt<i
     Ok(exp_il)
 }
 
+// - Cons expression inference
+
 fn infer_cons_exp(
     ctx: &mut Context,
     span: &Span,
@@ -643,6 +667,8 @@ fn infer_cons_exp(
     let exp_il = spanned!(node: exp_il, span: span.clone());
     Ok(exp_il)
 }
+
+// - Concatenation expression inference
 
 fn infer_cat_exp(
     ctx: &mut Context,
@@ -681,6 +707,8 @@ fn infer_cat_exp(
     )
 }
 
+// - Tuple expression inference
+
 fn infer_tuple_exp(ctx: &mut Context, span: &Span, exps: &[el::Exp]) -> Attempt<il::Exp> {
     let exps_il = infer_exps(ctx, exps)?;
     let typs_il = exps_il
@@ -691,6 +719,8 @@ fn infer_tuple_exp(ctx: &mut Context, span: &Span, exps: &[el::Exp]) -> Attempt<
     let exp_il = spanned!(node: exp_il, span: span.clone());
     Ok(exp_il)
 }
+
+// - Length expression inference
 
 fn infer_len_exp(ctx: &mut Context, span: &Span, exp: &el::Exp) -> Attempt<il::Exp> {
     choose_sequential(
@@ -718,6 +748,8 @@ fn infer_len_exp(ctx: &mut Context, span: &Span, exp: &el::Exp) -> Attempt<il::E
         },
     )
 }
+
+// - Membership expression inference
 
 fn infer_mem_exp(
     ctx: &mut Context,
@@ -757,7 +789,7 @@ fn infer_mem_exp(
     )
 }
 
-// - Access and update expressions
+// - Index expression inference
 
 fn infer_idx_exp(
     ctx: &mut Context,
@@ -795,6 +827,8 @@ fn infer_idx_exp(
         },
     )
 }
+
+// - Slice expression inference
 
 fn infer_slice_exp(
     ctx: &mut Context,
@@ -846,6 +880,8 @@ fn infer_slice_exp(
     )
 }
 
+// - Dot expression inference
+
 fn infer_dot_exp(
     ctx: &mut Context,
     span: &Span,
@@ -869,6 +905,8 @@ fn infer_dot_exp(
     Ok(exp_il)
 }
 
+// - Update expression inference
+
 fn infer_upd_exp(
     ctx: &mut Context,
     span: &Span,
@@ -889,13 +927,15 @@ fn infer_upd_exp(
     Ok(exp_il)
 }
 
-// - Call, iteration, and subtype expressions
+// - Parenthesized expression inference
 
 fn infer_paren_exp(ctx: &mut Context, span: &Span, exp: &el::Exp) -> Attempt<il::Exp> {
     let mut exp_il = infer_exp(ctx, exp)?;
     exp_il.span = span.clone();
     Ok(exp_il)
 }
+
+// - Call expression inference
 
 fn infer_call_exp(
     ctx: &mut Context,
@@ -940,6 +980,8 @@ fn infer_call_exp(
     Ok(exp_il)
 }
 
+// - Iterated expression inference
+
 fn infer_iter_exp(
     ctx: &mut Context,
     span: &Span,
@@ -956,6 +998,8 @@ fn infer_iter_exp(
     let exp_il = spanned!(node: exp_il, span: span.clone());
     Ok(exp_il)
 }
+
+// - Subtype expression inference
 
 fn infer_sub_exp(
     ctx: &mut Context,
@@ -987,7 +1031,7 @@ fn infer_sub_exp(
     Ok(exp_il)
 }
 
-// - Expression elaboration
+// - Expected-type expression elaboration
 
 fn cast_exp(ctx: &Context, typ_il_expect: &il::Typ, exp_il: il::Exp) -> Attempt<il::Exp> {
     let typ_il_infer = spanned!(node: exp_il.node.note.clone(), span: exp_il.span.clone());
@@ -1051,6 +1095,8 @@ fn elab_exp_inner(ctx: &mut Context, typ_il_expect: &il::Typ, exp: &el::Exp) -> 
     elab_exp_normal(ctx, typ_il_expect, exp)
 }
 
+// - Singleton iteration expression elaboration
+
 fn elab_singleton_iter_exp(
     ctx: &mut Context,
     typ_il_expect: &il::Typ,
@@ -1072,6 +1118,8 @@ fn elab_singleton_iter_exp(
     let exp_il = Noted::new(exp_il_kind, typ_il_expect.node.clone());
     Ok(spanned!(node: exp_il, span: exp.span.clone()))
 }
+
+// - Normal expression elaboration
 
 fn elab_exp_normal(ctx: &mut Context, typ_il_expect: &il::Typ, exp: &el::Exp) -> Attempt<il::Exp> {
     let checkpoint = ctx.checkpoint();
@@ -1137,6 +1185,8 @@ fn elab_exp_normal(ctx: &mut Context, typ_il_expect: &il::Typ, exp: &el::Exp) ->
     }
 }
 
+// - Wildcard expression elaboration
+
 fn elab_wildcard_exp(
     ctx: &mut Context,
     typ_il_expect: &il::Typ,
@@ -1148,6 +1198,8 @@ fn elab_wildcard_exp(
     ctx.add_free(var_il.id);
     Ok(exp_il)
 }
+
+// - Plain expression elaboration
 
 fn elab_plain_exp(ctx: &mut Context, typ_il_expect: &il::Typ, exp: &el::Exp) -> Attempt<il::Exp> {
     let exp_il_kind = match &exp.node {
@@ -1172,6 +1224,8 @@ fn elab_plain_exp(ctx: &mut Context, typ_il_expect: &il::Typ, exp: &el::Exp) -> 
     Ok(spanned!(node: exp_il, span: exp.span.clone()))
 }
 
+// - Epsilon expression elaboration
+
 fn elab_eps_exp(ctx: &Context, typ_il_expect: &il::Typ) -> Attempt<il::ExpKind> {
     let (_, iter_il_expect) = as_iter_typ(ctx, typ_il_expect)?;
     Ok(match iter_il_expect {
@@ -1179,6 +1233,8 @@ fn elab_eps_exp(ctx: &Context, typ_il_expect: &il::Typ) -> Attempt<il::ExpKind> 
         il::Iter::List => il::ExpKind::List(vec![]),
     })
 }
+
+// - List expression elaboration
 
 fn elab_list_exp(
     ctx: &mut Context,
@@ -1200,6 +1256,8 @@ fn elab_list_exp(
     Ok(il::ExpKind::List(exps_il))
 }
 
+// - Cons expression elaboration
+
 fn elab_cons_exp(
     ctx: &mut Context,
     typ_il_expect: &il::Typ,
@@ -1216,6 +1274,8 @@ fn elab_cons_exp(
         Box::new(exp_il_tail),
     ))
 }
+
+// - Concatenation expression elaboration
 
 fn elab_cat_exp(
     ctx: &mut Context,
@@ -1243,6 +1303,8 @@ fn elab_cat_exp(
     )
 }
 
+// - Tuple expression elaboration
+
 fn elab_tuple_exp(
     ctx: &mut Context,
     typ_il_expect: &il::Typ,
@@ -1263,6 +1325,8 @@ fn elab_tuple_exp(
     Ok(il::ExpKind::Tuple(exps_il))
 }
 
+// - Parenthesized expression elaboration
+
 fn elab_paren_exp(
     ctx: &mut Context,
     typ_il_expect: &il::Typ,
@@ -1271,6 +1335,8 @@ fn elab_paren_exp(
     let exp_il = elab_exp(ctx, typ_il_expect, exp)?;
     Ok(exp_il.node.kind)
 }
+
+// - Iterated expression elaboration
 
 fn elab_iter_exp(
     ctx: &mut Context,
@@ -1291,7 +1357,7 @@ fn elab_iter_exp(
     Ok(il::ExpKind::Iter(Box::new(exp_il), (iter_il, vec![])))
 }
 
-// - Notation expressions
+// - Notation expression elaboration
 
 fn elab_not_exp(ctx: &mut Context, not_typ_il: &il::NotTyp, exp: &el::Exp) -> Attempt<il::NotExp> {
     if let el::ExpKind::Paren(exp) = &exp.node {
@@ -1361,7 +1427,7 @@ fn elab_not_exp(ctx: &mut Context, not_typ_il: &il::NotTyp, exp: &el::Exp) -> At
     }
 }
 
-// - Struct expressions
+// - Struct expression elaboration
 
 fn elab_struct_exp(
     ctx: &mut Context,
@@ -1399,7 +1465,7 @@ fn elab_struct_exp(
     Ok(spanned!(node: exp_il, span: exp.span.clone()))
 }
 
-// - Variant expressions
+// - Variant expression elaboration
 
 fn elab_variant_exp(
     ctx: &mut Context,
@@ -1457,7 +1523,9 @@ fn elab_variant_exp(
     }
 }
 
-// - Paths
+// == Paths
+
+// - Path elaboration
 
 fn elab_path(ctx: &mut Context, typ_il_expect: &il::Typ, path: &el::Path) -> Attempt<il::Path> {
     match &path.node {
@@ -1479,10 +1547,14 @@ fn elab_path(ctx: &mut Context, typ_il_expect: &il::Typ, path: &el::Path) -> Att
     }
 }
 
+// - Root path elaboration
+
 fn elab_root_path(span: &Span, typ_il_expect: &il::Typ) -> il::Path {
     let path_il = Noted::new(il::PathKind::Root, typ_il_expect.node.clone());
     spanned!(node: path_il, span: span.clone())
 }
+
+// - Index path elaboration
 
 fn elab_idx_path(
     ctx: &mut Context,
@@ -1516,6 +1588,8 @@ fn elab_idx_path(
     )
 }
 
+// - Slice path elaboration
+
 fn elab_slice_path(
     ctx: &mut Context,
     span: &Span,
@@ -1548,6 +1622,8 @@ fn elab_slice_path(
     Ok(spanned!(node: path_il, span: span.clone()))
 }
 
+// - Dot path elaboration
+
 fn elab_dot_path(
     ctx: &mut Context,
     span: &Span,
@@ -1569,7 +1645,9 @@ fn elab_dot_path(
     Ok(spanned!(node: path_il, span: span.clone()))
 }
 
-// - Parameters and arguments
+// == Parameters and arguments
+
+// - Parameter elaboration
 
 fn elab_param(ctx: &mut Context, param: &el::Param) -> Result<il::Param, ElabError> {
     let param_il_kind = match &param.node {
@@ -1620,6 +1698,8 @@ fn typ_of_param(param_il: &il::Param) -> il::Typ {
         }
     }
 }
+
+// - Argument elaboration
 
 fn elab_arg(
     ctx: &mut Context,
@@ -1723,7 +1803,7 @@ enum PremInternal {
     Else,
 }
 
-// - Premise dispatch
+// - Premise elaboration
 
 fn elab_prem(ctx: &mut Context, prem: &el::Prem) -> Attempt<PremInternal> {
     let prem_il_kind = match &prem.node {
@@ -1766,7 +1846,8 @@ fn elab_prems(
     }
     Ok((prems_il, else_count == 1))
 }
-// - Variable premises
+
+// - Variable premise elaboration
 
 fn elab_var_prem(ctx: &mut Context, prem: &el::VarPrem) -> Attempt<()> {
     if !valid_tid(&prem.id) {
@@ -1793,7 +1874,7 @@ fn elab_var_prem(ctx: &mut Context, prem: &el::VarPrem) -> Attempt<()> {
     Ok(())
 }
 
-// - Rule premises
+// - Rule premise elaboration
 
 fn elab_rule_prem(ctx: &mut Context, prem: &el::RulePrem) -> Attempt<il::PremKind> {
     let (not_typ_il, input_hint) = match ctx.find_rel_signature(&prem.id) {
@@ -1826,7 +1907,7 @@ fn elab_rule_prem(ctx: &mut Context, prem: &el::RulePrem) -> Attempt<il::PremKin
     }
 }
 
-// - Negated rule premises
+// - Negated rule premise elaboration
 
 fn elab_rule_not_prem(ctx: &mut Context, prem: &el::RuleNotPrem) -> Attempt<il::PremKind> {
     let (not_typ_il, input_hint) = match ctx.find_rel_signature(&prem.id) {
@@ -1858,7 +1939,7 @@ fn elab_rule_not_prem(ctx: &mut Context, prem: &el::RuleNotPrem) -> Attempt<il::
     }))
 }
 
-// - Conditional premises
+// - Conditional premise elaboration
 
 fn elab_if_prem(ctx: &mut Context, prem: &el::IfPrem) -> Attempt<il::PremKind> {
     let typ_il_bool = typ_at(il::TypKind::Bool, &prem.exp.span);
@@ -1866,7 +1947,7 @@ fn elab_if_prem(ctx: &mut Context, prem: &el::IfPrem) -> Attempt<il::PremKind> {
     Ok(il::PremKind::If(il::IfPrem { exp: exp_il }))
 }
 
-// - Iterated premises
+// - Iterated premise elaboration
 
 fn elab_iter_prem(ctx: &mut Context, prem: &el::IterPrem) -> Attempt<il::PremKind> {
     let prem_il_inner = elab_prem(ctx, &prem.prem)?;
@@ -1888,7 +1969,7 @@ fn elab_iter_prem(ctx: &mut Context, prem: &el::IterPrem) -> Attempt<il::PremKin
     }))
 }
 
-// - Debug premises
+// - Debug premise elaboration
 
 fn elab_debug_prem(ctx: &mut Context, prem: &el::DebugPrem) -> Attempt<il::PremKind> {
     let exp_il = infer_exp(ctx, &prem.exp)?;
@@ -1896,6 +1977,8 @@ fn elab_debug_prem(ctx: &mut Context, prem: &el::DebugPrem) -> Attempt<il::PremK
 }
 
 // == Rules and clauses
+
+// - Rule elaboration
 
 fn elab_rule(
     ctx: &mut Context,
@@ -1963,6 +2046,8 @@ fn elab_rule_group(
     }
 }
 
+// - Clause elaboration
+
 fn elab_clause(
     ctx: &mut Context,
     def: &Spanned<&el::FuncDef>,
@@ -2003,6 +2088,8 @@ fn elab_clause(
 }
 
 // == Definitions
+
+// - Definition dispatch
 
 fn elab_def(ctx: &mut Context, def: &el::Def) -> Result<Option<il::Def>, ElabError> {
     match &def.node {
@@ -2176,7 +2263,7 @@ fn elab_typ_def(ctx: &mut Context, def: &el::TypDef) -> Result<il::DefKind, Elab
     Ok(il::DefKind::Typ(typ_def_il))
 }
 
-// - Variables
+// - Variable definitions
 
 fn elab_var_def(ctx: &mut Context, def: &el::VarDef) -> Result<il::DefKind, ElabError> {
     if !valid_tid(&def.id) {
@@ -2202,6 +2289,8 @@ fn elab_var_def(ctx: &mut Context, def: &el::VarDef) -> Result<il::DefKind, Elab
     };
     Ok(il::DefKind::Var(var_def_il))
 }
+
+// - Input hints
 
 fn fetch_input_hint(
     span: &Span,
@@ -2229,7 +2318,7 @@ fn fetch_input_hint(
     Ok(input_hint)
 }
 
-// - Relations
+// - Relation definitions
 
 fn elab_extern_rel_def(
     ctx: &mut Context,
@@ -2268,7 +2357,7 @@ fn elab_rel_def(ctx: &mut Context, def: &Spanned<&el::RelDef>) -> Result<il::Def
     Ok(il::DefKind::Rel(rel_il))
 }
 
-// - Rule groups
+// - Rule group definitions
 
 fn elab_rule_group_def(
     ctx: &mut Context,
@@ -2478,6 +2567,8 @@ fn elab_func_def(ctx: &mut Context, def: &Spanned<&el::FuncDef>) -> Result<(), E
     Ok(())
 }
 
+// == Specification
+
 // - Definition population
 
 fn populate_defs(ctx: &Context, defs_il: il::Spec) -> Result<il::Spec, ElabError> {
@@ -2532,7 +2623,7 @@ fn populate_defs(ctx: &Context, defs_il: il::Spec) -> Result<il::Spec, ElabError
         .collect()
 }
 
-// == Entry point
+// - Entry point
 
 pub(super) fn elaborate(spec: &el::Spec) -> Result<il::Spec, ElabError> {
     let mut ctx = Context::new();
