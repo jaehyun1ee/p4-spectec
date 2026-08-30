@@ -1,8 +1,8 @@
 //! Binding collection through invertible expression positions
 
-use crate::lang::{
-    common::source::{Span, Spanned},
-    il::ast,
+use crate::{
+    lang::{common::source::Span, il::ast},
+    phrase,
 };
 
 use super::{
@@ -42,13 +42,13 @@ fn collect_exp_refs<'a>(
 }
 
 pub fn collect_exp(ctx: &Context, exp: &ast::Exp) -> Result<Bindings, AlgoError> {
-    match &exp.node.kind {
+    match &exp.node {
         ast::ExpKind::Bool(_) | ast::ExpKind::Num(_) | ast::ExpKind::Text(_) => Ok(Bindings::new()),
         ast::ExpKind::Var(id) => {
             if ctx.venv.contains_key(id) {
                 Ok(Bindings::new())
             } else {
-                let typ = Spanned::new(exp.node.note.clone(), exp.span.clone());
+                let typ = phrase!(node: exp.note.clone(), span: exp.span.clone());
                 Ok(bind::singleton(id.clone(), typ))
             }
         }
@@ -149,7 +149,7 @@ pub fn collect_exps(ctx: &Context, exps: &[ast::Exp]) -> Result<Bindings, AlgoEr
 }
 
 pub fn collect_path(ctx: &Context, path: &ast::Path) -> Result<Bindings, AlgoError> {
-    match &path.node.kind {
+    match &path.node {
         ast::PathKind::Root => Ok(Bindings::new()),
         ast::PathKind::Idx(path, exp) => {
             let bindings_path = collect_path(ctx, path)?;

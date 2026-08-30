@@ -2,16 +2,12 @@
 
 use crate::{
     lang::{
-        common::{
-            ds::set::IdSet,
-            notation::mixop::Mixop,
-            noted::Noted,
-            source::{Span, Spanned},
-        },
+        common::{ds::set::IdSet, notation::mixop::Mixop, source::Span},
         il::{ast, fresh, var},
         traits::free::Free,
         xl,
     },
+    note_phrase, phrase,
     runtime::{
         sta::{Dim, VEnv},
         types::{Theta, TypeDef, optimize_sub_typ, subst_typ},
@@ -99,7 +95,7 @@ fn is_singleton_case(ctx: &Context, typ: &ast::Typ) -> Result<bool, AlgoError> {
 }
 
 fn var_from_exp(ctx: &mut Context, exp: &ast::Exp) -> ast::Var {
-    let typ = Spanned::new(exp.node.note.clone(), exp.span.clone());
+    let typ = phrase!(node: exp.note.clone(), span: exp.span.clone());
     let destination = fresh::var_from_typ(&ctx.menv, &ctx.frees, exp.span.clone(), &typ);
     ctx.add_free(destination.id.clone());
     destination
@@ -185,9 +181,9 @@ fn has_binding(binds: &IdSet, exp: &ast::Exp) -> bool {
 
 fn is_upcast_terminal(exp: &ast::Exp) -> bool {
     matches!(
-        &exp.node.kind,
+        &exp.node,
         ast::ExpKind::UpCast(_, exp_inner)
-            if matches!(&exp_inner.node.kind, ast::ExpKind::Case(not_exp) if not_exp.arity() == 0)
+            if matches!(&exp_inner.node, ast::ExpKind::Case(not_exp) if not_exp.arity() == 0)
     )
 }
 
@@ -227,25 +223,23 @@ fn rename_binding_exp(
     exp: &ast::Exp,
 ) -> Result<(IterationContext, ast::Exp), AlgoError> {
     let span = exp.span.clone();
-    let note = exp.node.note.clone();
-    match &exp.node.kind {
+    let note = exp.note.clone();
+    match &exp.node {
         ast::ExpKind::UpCast(typ, exp_inner) => {
             let (iterctx, exp_sub) = rename_exp_in_place(ctx, binds, renv, iterctx, exp_inner)?;
-            let exp_from = Spanned::new(
-                Noted::new(
-                    ast::ExpKind::UpCast(typ.clone(), Box::new(exp_sub.clone())),
-                    note,
-                ),
-                span.clone(),
-            );
-            let typ_sub = Spanned::new(exp_sub.node.note.clone(), span);
+            let exp_from = note_phrase! {
+                node: ast::ExpKind::UpCast(typ.clone(), Box::new(exp_sub.clone())),
+                note: note,
+                span: span.clone(),
+            };
+            let typ_sub = phrase!(node: exp_sub.note.clone(), span: span);
             Ok(rename_bind_sub(
                 ctx, renv, iterctx, typ_sub, exp_sub, exp_from,
             ))
         }
         ast::ExpKind::Tuple(exps) => {
             let (iterctx, exps) = rename_exps_in_place(ctx, binds, renv, iterctx, exps)?;
-            let exp = Spanned::new(Noted::new(ast::ExpKind::Tuple(exps), note), span);
+            let exp = note_phrase!(node: ast::ExpKind::Tuple(exps), note: note, span: span);
             Ok((iterctx, exp))
         }
         ast::ExpKind::Case(not_exp) => {
@@ -254,11 +248,12 @@ fn rename_binding_exp(
             let (iterctx, args) = rename_exps_in_place(ctx, binds, renv, iterctx, &args)?;
             let not_exp = Mixop::fill(&mixop, args)
                 .expect("arguments obtained from the same mixfix must match its arity");
-            let exp_from = Spanned::new(
-                Noted::new(ast::ExpKind::Case(Box::new(not_exp)), note.clone()),
-                span.clone(),
-            );
-            let typ = Spanned::new(note, span.clone());
+            let exp_from = note_phrase! {
+                node: ast::ExpKind::Case(Box::new(not_exp)),
+                note: note.clone(),
+                span: span.clone(),
+            };
+            let typ = phrase!(node: note, span: span.clone());
             if is_singleton_case(ctx, &typ)? {
                 Ok((iterctx, exp_from))
             } else {
@@ -277,15 +272,16 @@ fn rename_binding_exp(
                 .map(|(atom, _)| atom.clone())
                 .zip(exps)
                 .collect();
-            let exp = Spanned::new(Noted::new(ast::ExpKind::Str(fields), note), span);
+            let exp = note_phrase!(node: ast::ExpKind::Str(fields), note: note, span: span);
             Ok((iterctx, exp))
         }
         ast::ExpKind::Opt(Some(exp_inner)) => {
             let (iterctx, exp_inner) = rename_exp_in_place(ctx, binds, renv, iterctx, exp_inner)?;
-            let exp_from = Spanned::new(
-                Noted::new(ast::ExpKind::Opt(Some(Box::new(exp_inner))), note),
-                span,
-            );
+            let exp_from = note_phrase! {
+                node: ast::ExpKind::Opt(Some(Box::new(exp_inner))),
+                note: note,
+                span: span,
+            };
             Ok(rename_bind_match(
                 ctx,
                 renv,
@@ -304,7 +300,11 @@ fn rename_binding_exp(
         ast::ExpKind::List(exps) => {
             let (iterctx, exps) = rename_exps_in_place(ctx, binds, renv, iterctx, exps)?;
             let length = i64::try_from(exps.len()).expect("expression list length fits i64");
-            let exp_from = Spanned::new(Noted::new(ast::ExpKind::List(exps), note), span.clone());
+            let exp_from = note_phrase! {
+                node: ast::ExpKind::List(exps),
+                note: note,
+                span: span.clone(),
+            };
             let pattern = if length == 0 {
                 ast::ListPattern::Nil
             } else {
@@ -321,10 +321,11 @@ fn rename_binding_exp(
         ast::ExpKind::Cons(exp_h, exp_t) => {
             let (iterctx, exp_h) = rename_exp_in_place(ctx, binds, renv, iterctx, exp_h)?;
             let (iterctx, exp_t) = rename_exp_in_place(ctx, binds, renv, iterctx, exp_t)?;
-            let exp_from = Spanned::new(
-                Noted::new(ast::ExpKind::Cons(Box::new(exp_h), Box::new(exp_t)), note),
-                span,
-            );
+            let exp_from = note_phrase! {
+                node: ast::ExpKind::Cons(Box::new(exp_h), Box::new(exp_t)),
+                note: note,
+                span: span,
+            };
             Ok(rename_bind_match(
                 ctx,
                 renv,
@@ -345,16 +346,14 @@ fn rename_binding_exp(
             let Some(iteration) = iterctx.as_slice().first() else {
                 return Err(AlgoError::new(AlgoErrorKind::EmptyIteration, span));
             };
-            let exp = Spanned::new(
-                Noted::new(
-                    ast::ExpKind::Iter(
-                        Box::new(exp_inner),
-                        (iteration.iter, iteration.vars_bound.clone()),
-                    ),
-                    note,
+            let exp = note_phrase! {
+                node: ast::ExpKind::Iter(
+                    Box::new(exp_inner),
+                    (iteration.iter, iteration.vars_bound.clone()),
                 ),
-                span,
-            );
+                note: note,
+                span: span,
+            };
             let iterctx = IterationContext::from_iterations(iterctx.as_slice()[1..].to_vec());
             Ok((iterctx, exp))
         }
@@ -426,7 +425,7 @@ fn rename_arg_in_place(
     let mut renv_post = RenameEnv::new();
     let (iterctx, exp) = rename_exp_in_place(ctx, binds, &mut renv_post, iterctx, exp)?;
     renv.append(renv_post);
-    let arg = Spanned::new(ast::ArgKind::Exp(Box::new(exp)), arg.span.clone());
+    let arg = phrase!(node: ast::ArgKind::Exp(Box::new(exp)), span: arg.span.clone());
     Ok((iterctx, arg))
 }
 
@@ -481,11 +480,11 @@ fn empty_iterctx(iterctx: &IterationContext) -> IterationContext {
 }
 
 fn bool_exp(kind: ast::ExpKind, span: Span) -> ast::Exp {
-    Spanned::new(Noted::new(kind, ast::TypKind::Bool), span)
+    note_phrase!(node: kind, note: ast::TypKind::Bool, span: span)
 }
 
 fn if_prem(exp: ast::Exp, span: Span) -> ast::Prem {
-    Spanned::new(ast::PremKind::If(ast::IfPrem { exp }), span)
+    phrase!(node: ast::PremKind::If(ast::IfPrem { exp }), span: span)
 }
 
 fn generate_bound(
@@ -495,12 +494,12 @@ fn generate_bound(
     iterctx: &IterationContext,
 ) -> Result<Vec<ast::Prem>, AlgoError> {
     let exp_l = var::as_exp(true, destination);
-    let kind = match &exp_from.node.kind {
+    let kind = match &exp_from.node {
         ast::ExpKind::Case(not_exp)
             if not_exp.arity() == 0
                 && !is_singleton_case(
                     ctx,
-                    &Spanned::new(exp_from.node.note.clone(), exp_from.span.clone()),
+                    &phrase!(node: exp_from.note.clone(), span: exp_from.span.clone()),
                 )? =>
         {
             ast::ExpKind::Match(
@@ -558,13 +557,13 @@ fn generate_bind_match(
         destination.iters.clone(),
     );
 
-    let prem_bind = Spanned::new(
-        ast::PremKind::Let(ast::LetPrem {
+    let prem_bind = phrase! {
+        node: ast::PremKind::Let(ast::LetPrem {
             exp_l: exp_from.clone(),
             exp_r: exp_to,
         }),
-        exp_from.span.clone(),
-    );
+        span: exp_from.span.clone(),
+    };
     let mut iterctx_bind = empty_iterctx(iterctx);
     iterctx_bind.add_vars_bind(dimension::infer_exp(exp_from));
     iterctx_bind.add_var_bound(
@@ -587,7 +586,7 @@ fn generate_bind_sub(
     iterctx: &IterationContext,
 ) -> Result<Vec<ast::Prem>, AlgoError> {
     let exp_to = var::as_exp(true, destination);
-    let typ_source = Spanned::new(exp_to.node.note.clone(), exp_to.span.clone());
+    let typ_source = phrase!(node: exp_to.note.clone(), span: exp_to.span.clone());
     let subcheck = optimize_sub_typ(&ctx.tdenv, &typ_source, typ_sub)?;
     let exp_subcheck = bool_exp(
         ast::ExpKind::Sub(
@@ -605,20 +604,18 @@ fn generate_bind_sub(
         destination.iters.clone(),
     );
 
-    let exp_downcast = Spanned::new(
-        Noted::new(
-            ast::ExpKind::DownCast(typ_sub.clone(), Box::new(exp_to)),
-            typ_sub.node.clone(),
-        ),
-        exp_from.span.clone(),
-    );
-    let prem_bind = Spanned::new(
-        ast::PremKind::Let(ast::LetPrem {
+    let exp_downcast = note_phrase! {
+        node: ast::ExpKind::DownCast(typ_sub.clone(), Box::new(exp_to)),
+        note: typ_sub.node.clone(),
+        span: exp_from.span.clone(),
+    };
+    let prem_bind = phrase! {
+        node: ast::PremKind::Let(ast::LetPrem {
             exp_l: exp_sub.clone(),
             exp_r: exp_downcast,
         }),
-        exp_from.span.clone(),
-    );
+        span: exp_from.span.clone(),
+    };
     let mut iterctx_bind = empty_iterctx(iterctx);
     iterctx_bind.add_vars_bind(dimension::infer_exp(exp_from));
     iterctx_bind.add_var_bound(

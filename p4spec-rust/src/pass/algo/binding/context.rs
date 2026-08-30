@@ -2,14 +2,14 @@
 
 use crate::{
     lang::{
-        common::{Id, ds::set::IdSet},
+        common::{Id, ds::set::IdSet, source::Span},
         il::ast,
     },
+    phrase,
     runtime::{
         sta::{MEnv, VEnv},
         types::{TDEnv, TypeDef, typ},
     },
-    spanned_default,
 };
 
 use super::super::{AlgoError, AlgoErrorKind};
@@ -32,7 +32,7 @@ impl Context {
             ("int", typ::int()),
             ("text", typ::text()),
         ] {
-            let id = spanned_default!(node: name.to_owned());
+            let id = phrase!(node: name.to_owned(), span: Span::default());
             menv.insert(id, typ);
         }
         Self {

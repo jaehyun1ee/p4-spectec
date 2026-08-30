@@ -1,15 +1,13 @@
 //! Minimal-dimension inference for expression variables
 
 use crate::{
-    lang::{
-        common::{ds::map::IdMap, source::Spanned},
-        il::ast,
-    },
+    lang::{common::ds::map::IdMap, il::ast},
+    phrase,
     runtime::sta::{Dim, VEnv},
 };
 
 fn infer_var(exp: &ast::Exp, id: &ast::Id, iters: &[ast::Iter], venv: &mut VEnv) {
-    let typ = Spanned::new(exp.node.note.clone(), exp.span.clone());
+    let typ = phrase!(node: exp.note.clone(), span: exp.span.clone());
     let dim = Dim::new(typ, iters.to_vec());
     if venv
         .get(id)
@@ -20,7 +18,7 @@ fn infer_var(exp: &ast::Exp, id: &ast::Id, iters: &[ast::Iter], venv: &mut VEnv)
 }
 
 fn infer_exp_inner(exp: &ast::Exp, iters: &[ast::Iter], venv: &mut VEnv) {
-    match &exp.node.kind {
+    match &exp.node {
         ast::ExpKind::Bool(_) | ast::ExpKind::Num(_) | ast::ExpKind::Text(_) => {}
         ast::ExpKind::Var(id) => infer_var(exp, id, iters, venv),
         ast::ExpKind::Un(_, _, exp)
@@ -81,7 +79,7 @@ fn infer_exps_inner(exps: &[ast::Exp], iters: &[ast::Iter], venv: &mut VEnv) {
 }
 
 fn infer_path_inner(path: &ast::Path, iters: &[ast::Iter], venv: &mut VEnv) {
-    match &path.node.kind {
+    match &path.node {
         ast::PathKind::Root => {}
         ast::PathKind::Idx(path, exp) => {
             infer_path_inner(path, iters, venv);

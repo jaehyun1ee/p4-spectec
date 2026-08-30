@@ -2,16 +2,12 @@
 
 use crate::{
     lang::{
-        common::{
-            ds::set::IdSet,
-            notation::mixop::Mixop,
-            noted::Noted,
-            source::{Span, Spanned},
-        },
+        common::{ds::set::IdSet, notation::mixop::Mixop, source::Span},
         il::{ast, fresh, var},
         traits::eq::SyntaxEq,
         xl,
     },
+    note_phrase, phrase,
     runtime::{
         sta::MEnv,
         types::{TDEnv, equiv_typ},
@@ -70,8 +66,8 @@ fn overlap_structure(
     exp: &ast::Exp,
 ) -> Result<Option<ast::Exp>, AlgoError> {
     let span = exp_template.span.clone();
-    let note = exp_template.node.note.clone();
-    let kind = match (&exp_template.node.kind, &exp.node.kind) {
+    let note = exp_template.note.clone();
+    let kind = match (&exp_template.node, &exp.node) {
         (ast::ExpKind::Var(id_template), _) if unifiers.contains(id_template) => {
             return Ok(Some(exp_template.clone()));
         }
@@ -127,7 +123,7 @@ fn overlap_structure(
         }
         _ => return Ok(None),
     };
-    Ok(Some(Spanned::new(Noted::new(kind, note), span)))
+    Ok(Some(note_phrase!(node: kind, note: note, span: span)))
 }
 
 fn overlap_exp(
@@ -162,8 +158,8 @@ fn overlap_exp(
         Err(error) => return Err(error),
     }
 
-    let typ_template = Spanned::new(exp_template.node.note.clone(), exp_template.span.clone());
-    let typ = Spanned::new(exp.node.note.clone(), exp.span.clone());
+    let typ_template = phrase!(node: exp_template.note.clone(), span: exp_template.span.clone());
+    let typ = phrase!(node: exp.note.clone(), span: exp.span.clone());
     if !equiv_typ(tdenv, &typ_template, &typ)? {
         return Err(AlgoError::new(
             AlgoErrorKind::AntiUnification,
@@ -201,19 +197,17 @@ fn overlap_exp_group(
 
 fn equality_prem(exp_template: &ast::Exp, exp: &ast::Exp) -> ast::Prem {
     let span = Span::over(&[exp_template.span.clone(), exp.span.clone()]);
-    let exp_match = Spanned::new(
-        Noted::new(
-            ast::ExpKind::Cmp(
-                ast::CmpOp::Bool(xl::bool::CmpOp::Eq),
-                ast::OpTyp::Bool,
-                Box::new(exp_template.clone()),
-                Box::new(exp.clone()),
-            ),
-            ast::TypKind::Bool,
+    let exp_match = note_phrase! {
+        node: ast::ExpKind::Cmp(
+            ast::CmpOp::Bool(xl::bool::CmpOp::Eq),
+            ast::OpTyp::Bool,
+            Box::new(exp_template.clone()),
+            Box::new(exp.clone()),
         ),
-        span.clone(),
-    );
-    Spanned::new(ast::PremKind::If(ast::IfPrem { exp: exp_match }), span)
+        note: ast::TypKind::Bool,
+        span: span.clone(),
+    };
+    phrase!(node: ast::PremKind::If(ast::IfPrem { exp: exp_match }), span: span)
 }
 
 fn populate_exps(
@@ -232,7 +226,7 @@ fn populate_exp(unifiers: &IdSet, exp_template: &ast::Exp, exp: &ast::Exp) -> Ve
     if exp_template.syntax_eq(exp) {
         return vec![];
     }
-    match (&exp_template.node.kind, &exp.node.kind) {
+    match (&exp_template.node, &exp.node) {
         (ast::ExpKind::Var(id_template), _) if unifiers.contains(id_template) => {
             vec![equality_prem(exp_template, exp)]
         }

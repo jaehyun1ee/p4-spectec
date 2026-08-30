@@ -4,8 +4,7 @@ use p4spec_rust::{
         common::{
             Id,
             notation::{atom::Atom, mixfix::Mixfix},
-            noted::Noted,
-            source::{Position, Span, Spanned},
+            source::{NotePhrase, Position, Span},
         },
         hints::input::InputHint,
         il::ast,
@@ -41,11 +40,11 @@ fn span(line: i64) -> Span {
 }
 
 fn id(name: &str, line: i64) -> Id {
-    Spanned::new(name.to_owned(), span(line))
+    p4spec_rust::phrase! { node: name.to_owned(), span:  span(line) }
 }
 
 fn exp(kind: ast::ExpKind, note: ast::TypKind, line: i64) -> ast::Exp {
-    Spanned::new(Noted::new(kind, note), span(line))
+    p4spec_rust::note_phrase! { node: kind, note:  note, span:  span(line) }
 }
 
 fn var_exp(name: &str, line: i64) -> ast::Exp {
@@ -67,12 +66,12 @@ fn iterated_var_exp(name: &str, typ: &ast::Typ, iter: ast::Iter, line: i64) -> a
 
 fn exp_arg(exp: ast::Exp) -> ast::Arg {
     let span = exp.span.clone();
-    Spanned::new(ast::ArgKind::Exp(Box::new(exp)), span)
+    p4spec_rust::phrase! { node: ast::ArgKind::Exp(Box::new(exp)), span:  span }
 }
 
 fn if_prem(exp: ast::Exp) -> ast::Prem {
     let span = exp.span.clone();
-    Spanned::new(ast::PremKind::If(ast::IfPrem { exp }), span)
+    p4spec_rust::phrase! { node: ast::PremKind::If(ast::IfPrem { exp }), span:  span }
 }
 
 fn function_spec(
@@ -81,31 +80,30 @@ fn function_spec(
     expression: ast::Exp,
     premises: Vec<ast::Prem>,
 ) -> ast::Spec {
-    let typ = Spanned::new(expression.node.note.clone(), expression.span.clone());
-    let clause = Spanned::new(
-        ast::ClauseKind {
-            args: args.into_iter().map(exp_arg).collect(),
-            expression,
-            premises,
-        },
-        span(1),
-    );
+    let typ =
+        p4spec_rust::phrase! { node: expression.note.clone(), span:  expression.span.clone() };
+    let clause = p4spec_rust::phrase! { node:
+    ast::ClauseKind {
+        args: args.into_iter().map(exp_arg).collect(),
+        expression,
+        premises,
+    }, span:
+    span(1) };
     let params = params
         .into_iter()
-        .map(|typ| Spanned::new(ast::ParamKind::Exp(typ), span(1)))
+        .map(|typ| p4spec_rust::phrase! { node: ast::ParamKind::Exp(typ), span:  span(1) })
         .collect();
-    vec![Spanned::new(
-        ast::DefKind::FuncDec(ast::FuncDec {
-            id: id("function", 1),
-            tparams: vec![],
-            params,
-            typ,
-            clauses: vec![clause],
-            else_clause: None,
-            hints: vec![],
-        }),
-        span(1),
-    )]
+    vec![p4spec_rust::phrase! { node:
+    ast::DefKind::FuncDec(ast::FuncDec {
+        id: id("function", 1),
+        tparams: vec![],
+        params,
+        typ,
+        clauses: vec![clause],
+        else_clause: None,
+        hints: vec![],
+    }), span:
+    span(1) }]
 }
 
 fn joint_iteration(names: &[(&str, i64)], iter: ast::Iter, line: i64) -> ast::Exp {
@@ -122,7 +120,7 @@ fn joint_iteration(names: &[(&str, i64)], iter: ast::Iter, line: i64) -> ast::Ex
             iters: vec![],
         })
         .collect::<Vec<_>>();
-    let typ_tuple = Spanned::new(ast::TypKind::Tuple(vec![typ_bool; names.len()]), span(line));
+    let typ_tuple = p4spec_rust::phrase! { node: ast::TypKind::Tuple(vec![typ_bool; names.len()]), span:  span(line) };
     let exp_inner = exp(ast::ExpKind::Tuple(exps), typ_tuple.node.clone(), line);
     exp(
         ast::ExpKind::Iter(Box::new(exp_inner), (iter, vars)),
@@ -199,7 +197,7 @@ fn assert_index_guard_span(prem: &ast::Prem, expected_span: Span) {
     };
     assert_eq!(if_prem.exp.span, expected_span);
     assert!(matches!(
-        if_prem.exp.node.kind,
+        if_prem.exp.node,
         ast::ExpKind::Cmp(ast::CmpOp::Num(xl::num::CmpOp::Lt), _, _, _)
     ));
 }
@@ -220,8 +218,8 @@ fn function_clause(spec: &p4spec_rust::lang::al::ast::Spec) -> &ast::Clause {
 }
 
 fn not_typ(name: &str, line: i64) -> ast::NotTyp {
-    let atom = Spanned::new(Atom::Keyword(name.to_owned()), span(line));
-    Spanned::new(Mixfix::Atom(atom), span(line))
+    let atom = p4spec_rust::phrase! { node: Atom::Keyword(name.to_owned()), span:  span(line) };
+    p4spec_rust::phrase! { node: Mixfix::Atom(atom), span:  span(line) }
 }
 
 fn pattern_set(names: &[&str]) -> PatternSet {
@@ -279,14 +277,14 @@ fn conversion_inserts_index_guards_at_evaluation_sites_in_source_order() {
             ast::OpTyp::Bool,
             exp_i,
             exp_len,
-        ) = &if_prem.exp.node.kind
+        ) = &if_prem.exp.node
         else {
             panic!("expected strict index bound");
         };
         assert_eq!(exp_i.span, index_span);
-        assert!(matches!(&exp_i.node.kind, ast::ExpKind::Var(id) if id.node == index_name));
+        assert!(matches!(&exp_i.node, ast::ExpKind::Var(id) if id.node == index_name));
         assert_eq!(exp_len.span, guard_span);
-        let ast::ExpKind::Len(exp_base) = &exp_len.node.kind else {
+        let ast::ExpKind::Len(exp_base) = &exp_len.node else {
             panic!("expected indexed-base length");
         };
         assert_eq!(exp_base.span, base_span);
@@ -349,11 +347,11 @@ fn conversion_inserts_index_guards_at_evaluation_sites_in_source_order() {
 #[test]
 fn conversion_inserts_list_and_optional_iteration_guards_in_source_order() {
     fn dimension_name(exp: &ast::Exp, iter: ast::Iter) -> &str {
-        let ast::ExpKind::Iter(exp_inner, (actual_iter, _)) = &exp.node.kind else {
+        let ast::ExpKind::Iter(exp_inner, (actual_iter, _)) = &exp.node else {
             panic!("expected dimension expression");
         };
         assert_eq!(*actual_iter, iter);
-        let ast::ExpKind::Var(id) = &exp_inner.node.kind else {
+        let ast::ExpKind::Var(id) = &exp_inner.node else {
             panic!("expected dimension variable");
         };
         &id.node
@@ -365,14 +363,14 @@ fn conversion_inserts_list_and_optional_iteration_guards_in_source_order() {
             ast::OpTyp::Bool,
             exp_l,
             exp_r,
-        ) = &exp.node.kind
+        ) = &exp.node
         else {
             panic!("expected list-length equality");
         };
-        let ast::ExpKind::Len(exp_l) = &exp_l.node.kind else {
+        let ast::ExpKind::Len(exp_l) = &exp_l.node else {
             panic!("expected left length");
         };
-        let ast::ExpKind::Len(exp_r) = &exp_r.node.kind else {
+        let ast::ExpKind::Len(exp_r) = &exp_r.node else {
             panic!("expected right length");
         };
         (
@@ -387,11 +385,11 @@ fn conversion_inserts_list_and_optional_iteration_guards_in_source_order() {
             ast::OpTyp::Bool,
             exp_l,
             exp_r,
-        ) = &exp.node.kind
+        ) = &exp.node
         else {
             panic!("expected optional-presence equality");
         };
-        assert!(matches!(exp_r.node.kind, ast::ExpKind::Opt(None)));
+        assert!(matches!(exp_r.node, ast::ExpKind::Opt(None)));
         dimension_name(exp_l, ast::Iter::Opt)
     }
 
@@ -401,7 +399,7 @@ fn conversion_inserts_list_and_optional_iteration_guards_in_source_order() {
             ast::OpTyp::Bool,
             exp_l,
             exp_r,
-        ) = &exp.node.kind
+        ) = &exp.node
         else {
             panic!("expected optional-presence equivalence");
         };
@@ -425,8 +423,8 @@ fn conversion_inserts_list_and_optional_iteration_guards_in_source_order() {
     let exp_list = joint_iteration(&list_names, ast::Iter::List, 20);
     let exp_optional = joint_iteration(&optional_names, ast::Iter::Opt, 21);
     let typ_output = ast::TypKind::Tuple(vec![
-        Spanned::new(exp_list.node.note.clone(), exp_list.span.clone()),
-        Spanned::new(exp_optional.node.note.clone(), exp_optional.span.clone()),
+        p4spec_rust::phrase! { node: exp_list.note.clone(), span:  exp_list.span.clone() },
+        p4spec_rust::phrase! { node: exp_optional.note.clone(), span:  exp_optional.span.clone() },
     ]);
     let exp_output = exp(
         ast::ExpKind::Tuple(vec![exp_list, exp_optional]),
@@ -450,7 +448,7 @@ fn conversion_inserts_list_and_optional_iteration_guards_in_source_order() {
         ast::OpTyp::Bool,
         pair_xy,
         pair_yz,
-    ) = &if_list.exp.node.kind
+    ) = &if_list.exp.node
     else {
         panic!("expected pairwise list guard conjunction");
     };
@@ -466,7 +464,7 @@ fn conversion_inserts_list_and_optional_iteration_guards_in_source_order() {
         ast::OpTyp::Bool,
         pair_pq,
         pair_qr,
-    ) = &if_optional.exp.node.kind
+    ) = &if_optional.exp.node
     else {
         panic!("expected pairwise optional guard conjunction");
     };
@@ -502,37 +500,35 @@ fn conversion_omits_iteration_guards_entailed_by_prior_premises() {
 fn conversion_preserves_binding_match_and_cast_guards_before_bindings() {
     let parent_id = id("Parent", 1);
     let child_id = id("Child", 2);
-    let parent_typ = Spanned::new(ast::TypKind::Var(parent_id.clone(), vec![]), span(1));
-    let child_typ = Spanned::new(ast::TypKind::Var(child_id.clone(), vec![]), span(2));
-    let parent_origin = Spanned::new((parent_id.clone(), vec![]), span(1));
-    let child_origin = Spanned::new((child_id.clone(), vec![]), span(2));
-    let parent_def = Spanned::new(
-        ast::DefKind::Typ(ast::TypDef {
-            id: parent_id,
-            tparams: vec![],
-            def_typ: Spanned::new(
-                ast::DefTypKind::Variant(vec![
-                    (not_typ("A", 1), parent_origin.clone(), vec![]),
-                    (not_typ("B", 1), parent_origin, vec![]),
-                ]),
-                span(1),
-            ),
-            hints: vec![],
-        }),
-        span(1),
-    );
-    let child_def = Spanned::new(
-        ast::DefKind::Typ(ast::TypDef {
-            id: child_id,
-            tparams: vec![],
-            def_typ: Spanned::new(
-                ast::DefTypKind::Variant(vec![(not_typ("A", 2), child_origin, vec![])]),
-                span(2),
-            ),
-            hints: vec![],
-        }),
-        span(2),
-    );
+    let parent_typ =
+        p4spec_rust::phrase! { node: ast::TypKind::Var(parent_id.clone(), vec![]), span:  span(1) };
+    let child_typ =
+        p4spec_rust::phrase! { node: ast::TypKind::Var(child_id.clone(), vec![]), span:  span(2) };
+    let parent_origin = p4spec_rust::phrase! { node: (parent_id.clone(), vec![]), span:  span(1) };
+    let child_origin = p4spec_rust::phrase! { node: (child_id.clone(), vec![]), span:  span(2) };
+    let parent_def = p4spec_rust::phrase! { node:
+    ast::DefKind::Typ(ast::TypDef {
+        id: parent_id,
+        tparams: vec![],
+        def_typ: p4spec_rust::phrase! { node:
+            ast::DefTypKind::Variant(vec![
+                (not_typ("A", 1), parent_origin.clone(), vec![]),
+                (not_typ("B", 1), parent_origin, vec![]),
+            ]), span:
+            span(1) },
+        hints: vec![],
+    }), span:
+    span(1) };
+    let child_def = p4spec_rust::phrase! { node:
+    ast::DefKind::Typ(ast::TypDef {
+        id: child_id,
+        tparams: vec![],
+        def_typ: p4spec_rust::phrase! { node:
+            ast::DefTypKind::Variant(vec![(not_typ("A", 2), child_origin, vec![])]), span:
+            span(2) },
+        hints: vec![],
+    }), span:
+    span(2) };
     let typ_bool = typ::bool();
     let typ_list = typ::list(typ_bool.clone());
     let exp_list = exp(
@@ -578,11 +574,8 @@ fn conversion_preserves_binding_match_and_cast_guards_before_bindings() {
     assert!(matches!(
         &match_guard.node,
         ast::PremKind::If(ast::IfPrem {
-            exp: Spanned {
-                node: Noted {
-                    kind: ast::ExpKind::Match(_, ast::Pattern::List(ast::ListPattern::Fixed(1))),
-                    ..
-                },
+            exp: NotePhrase {
+                node: ast::ExpKind::Match(_, ast::Pattern::List(ast::ListPattern::Fixed(1))),
                 ..
             }
         })
@@ -591,11 +584,8 @@ fn conversion_preserves_binding_match_and_cast_guards_before_bindings() {
     assert!(matches!(
         &subtype_guard.node,
         ast::PremKind::If(ast::IfPrem {
-            exp: Spanned {
-                node: Noted {
-                    kind: ast::ExpKind::Sub(_, typ, _),
-                    ..
-                },
+            exp: NotePhrase {
+                node: ast::ExpKind::Sub(_, typ, _),
                 ..
             }
         }) if typ.syntax_eq(&child_typ)
@@ -603,11 +593,8 @@ fn conversion_preserves_binding_match_and_cast_guards_before_bindings() {
     assert!(matches!(
         &cast_binding.node,
         ast::PremKind::Let(ast::LetPrem {
-            exp_r: Spanned {
-                node: Noted {
-                    kind: ast::ExpKind::DownCast(typ, _),
-                    ..
-                },
+            exp_r: NotePhrase {
+                node: ast::ExpKind::DownCast(typ, _),
                 ..
             },
             ..
@@ -739,7 +726,7 @@ fn conversion_preserves_numeric_and_slice_checks_before_output_guards() {
         panic!("expected index guard");
     };
     assert!(matches!(
-        if_index.exp.node.kind,
+        if_index.exp.node,
         ast::ExpKind::Cmp(ast::CmpOp::Num(xl::num::CmpOp::Lt), _, _, _)
     ));
     assert_eq!(index_guard.span, span(22));
@@ -774,8 +761,8 @@ fn conversion_distinguishes_let_must_guards_from_insert_guards() {
     let ast::PremKind::Let(let_prem) = &let_premise.node else {
         panic!("expected binding analysis to produce a let premise");
     };
-    assert!(matches!(let_prem.exp_l.node.kind, ast::ExpKind::Iter(_, _)));
-    assert!(matches!(let_prem.exp_r.node.kind, ast::ExpKind::Iter(_, _)));
+    assert!(matches!(let_prem.exp_l.node, ast::ExpKind::Iter(_, _)));
+    assert!(matches!(let_prem.exp_r.node, ast::ExpKind::Iter(_, _)));
     assert_eq!(clause.node.expression, exp_output);
 }
 
@@ -792,20 +779,19 @@ fn conversion_distinguishes_iterated_must_guards_from_insert_guards() {
         ast::TypKind::Bool,
         14,
     );
-    let prem_iterated = Spanned::new(
-        ast::PremKind::Iter(ast::IteratedPrem {
-            prem: Box::new(if_prem(exp_condition)),
-            iter_prem: ast::IterPrem {
-                iter: ast::Iter::List,
-                vars_bound: vec![
-                    iteration_var("left", typ_bool.clone(), 10),
-                    iteration_var("right", typ_bool.clone(), 11),
-                ],
-                vars_bind: vec![],
-            },
-        }),
-        span(15),
-    );
+    let prem_iterated = p4spec_rust::phrase! { node:
+    ast::PremKind::Iter(ast::IteratedPrem {
+        prem: Box::new(if_prem(exp_condition)),
+        iter_prem: ast::IterPrem {
+            iter: ast::Iter::List,
+            vars_bound: vec![
+                iteration_var("left", typ_bool.clone(), 10),
+                iteration_var("right", typ_bool.clone(), 11),
+            ],
+            vars_bind: vec![],
+        },
+    }), span:
+    span(15) };
     let insert_spec = function_spec(
         vec![typ::list(typ_bool.clone()), typ::list(typ_bool.clone())],
         vec![
@@ -825,21 +811,20 @@ fn conversion_distinguishes_iterated_must_guards_from_insert_guards() {
     assert_eq!(source_premise.span, span(14));
     assert!(matches!(source_premise.node, ast::PremKind::Iter(_)));
 
-    let prem_binding = Spanned::new(
-        ast::PremKind::Iter(ast::IteratedPrem {
-            prem: Box::new(equality_prem(
-                typed_var_exp("output", &typ_bool, 23),
-                typed_var_exp("input", &typ_bool, 22),
-                24,
-            )),
-            iter_prem: ast::IterPrem {
-                iter: ast::Iter::List,
-                vars_bound: vec![iteration_var("input", typ_bool.clone(), 22)],
-                vars_bind: vec![],
-            },
-        }),
-        span(25),
-    );
+    let prem_binding = p4spec_rust::phrase! { node:
+    ast::PremKind::Iter(ast::IteratedPrem {
+        prem: Box::new(equality_prem(
+            typed_var_exp("output", &typ_bool, 23),
+            typed_var_exp("input", &typ_bool, 22),
+            24,
+        )),
+        iter_prem: ast::IterPrem {
+            iter: ast::Iter::List,
+            vars_bound: vec![iteration_var("input", typ_bool.clone(), 22)],
+            vars_bind: vec![],
+        },
+    }), span:
+    span(25) };
     let exp_output = joint_iteration(&[("input", 22), ("output", 23)], ast::Iter::List, 30);
     let must_spec = function_spec(
         vec![typ::list(typ_bool.clone())],
@@ -882,22 +867,20 @@ fn conversion_distinguishes_iterated_must_guards_from_insert_guards() {
 fn conversion_traverses_relation_matches_paths_and_else_without_sibling_leaks() {
     let rule =
         |name: &str, input: ast::Exp, output: ast::Exp, premises: Vec<ast::Prem>, line: i64| {
-            Spanned::new(
-                ast::RuleKind {
-                    id: id(name, line),
-                    not_exp: Mixfix::Seq(vec![Mixfix::Arg(input), Mixfix::Arg(output)]),
-                    prems: premises,
-                },
-                span(line),
-            )
+            p4spec_rust::phrase! { node:
+            ast::RuleKind {
+                id: id(name, line),
+                not_exp: Mixfix::Seq(vec![Mixfix::Arg(input), Mixfix::Arg(output)]),
+                prems: premises,
+            }, span:
+            span(line) }
         };
     let debug_index = |value: bool, line: i64| {
-        Spanned::new(
-            ast::PremKind::Debug(ast::DebugPrem {
-                exp: literal_index_exp(value, line),
-            }),
-            span(line),
-        )
+        p4spec_rust::phrase! { node:
+        ast::PremKind::Debug(ast::DebugPrem {
+            exp: literal_index_exp(value, line),
+        }), span:
+        span(line) }
     };
     let match_rule = rule(
         "match_path",
@@ -927,26 +910,23 @@ fn conversion_traverses_relation_matches_paths_and_else_without_sibling_leaks() 
         vec![debug_index(false, 41)],
         40,
     );
-    let spec = vec![Spanned::new(
-        ast::DefKind::Rel(ast::Rel {
-            id: id("relation", 1),
-            not_typ: Spanned::new(
-                Mixfix::Seq(vec![Mixfix::Arg(typ::bool()), Mixfix::Arg(typ::bool())]),
-                span(1),
-            ),
-            input_hint: InputHint::new(vec![0]),
-            rule_groups: vec![
-                Spanned::new((id("match_group", 9), vec![match_rule]), span(9)),
-                Spanned::new(
-                    (id("sibling_group", 19), vec![first_sibling, second_sibling]),
-                    span(19),
-                ),
-            ],
-            else_group: Some(Spanned::new((id("else_group", 39), else_rule), span(39))),
-            hints: vec![],
-        }),
-        span(1),
-    )];
+    let spec = vec![p4spec_rust::phrase! { node:
+    ast::DefKind::Rel(ast::Rel {
+        id: id("relation", 1),
+        not_typ: p4spec_rust::phrase! { node:
+            Mixfix::Seq(vec![Mixfix::Arg(typ::bool()), Mixfix::Arg(typ::bool())]), span:
+            span(1) },
+        input_hint: InputHint::new(vec![0]),
+        rule_groups: vec![
+            p4spec_rust::phrase! { node: (id("match_group", 9), vec![match_rule]), span:  span(9) },
+            p4spec_rust::phrase! { node:
+                (id("sibling_group", 19), vec![first_sibling, second_sibling]), span:
+                span(19) },
+        ],
+        else_group: Some(p4spec_rust::phrase! { node: (id("else_group", 39), else_rule), span:  span(39) }),
+        hints: vec![],
+    }), span:
+    span(1) }];
 
     let converted = algo::convert(&spec).expect("guarded relation conversion");
     let p4spec_rust::lang::al::ast::DefKind::Rel(relation) = &converted[0].node else {
@@ -994,38 +974,33 @@ fn conversion_traverses_else_clauses_in_guard_order() {
     let typ_bool = typ::bool();
     let exp_argument = joint_iteration(&[("left", 50), ("right", 51)], ast::Iter::List, 50);
     let exp_output = joint_iteration(&[("left", 50), ("right", 51)], ast::Iter::List, 52);
-    let prem_debug = Spanned::new(
-        ast::PremKind::Debug(ast::DebugPrem {
-            exp: literal_index_exp(false, 53),
-        }),
-        span(53),
-    );
-    let else_clause = Spanned::new(
-        ast::ClauseKind {
-            args: vec![exp_arg(exp_argument)],
-            expression: exp_output.clone(),
-            premises: vec![prem_debug],
-        },
-        span(50),
-    );
-    let spec = vec![Spanned::new(
-        ast::DefKind::FuncDec(ast::FuncDec {
-            id: id("otherwise", 49),
-            tparams: vec![],
-            params: vec![Spanned::new(
-                ast::ParamKind::Exp(typ::list(Spanned::new(
-                    ast::TypKind::Tuple(vec![typ_bool.clone(), typ_bool]),
-                    span(49),
-                ))),
-                span(49),
-            )],
-            typ: Spanned::new(exp_output.node.note.clone(), span(49)),
-            clauses: vec![],
-            else_clause: Some(else_clause),
-            hints: vec![],
-        }),
-        span(49),
-    )];
+    let prem_debug = p4spec_rust::phrase! { node:
+    ast::PremKind::Debug(ast::DebugPrem {
+        exp: literal_index_exp(false, 53),
+    }), span:
+    span(53) };
+    let else_clause = p4spec_rust::phrase! { node:
+    ast::ClauseKind {
+        args: vec![exp_arg(exp_argument)],
+        expression: exp_output.clone(),
+        premises: vec![prem_debug],
+    }, span:
+    span(50) };
+    let spec = vec![p4spec_rust::phrase! { node:
+    ast::DefKind::FuncDec(ast::FuncDec {
+        id: id("otherwise", 49),
+        tparams: vec![],
+        params: vec![p4spec_rust::phrase! { node:
+            ast::ParamKind::Exp(typ::list(p4spec_rust::phrase! { node:
+                ast::TypKind::Tuple(vec![typ_bool.clone(), typ_bool]), span:
+                span(49) })), span:
+            span(49) }],
+        typ: p4spec_rust::phrase! { node: exp_output.note.clone(), span:  span(49) },
+        clauses: vec![],
+        else_clause: Some(else_clause),
+        hints: vec![],
+    }), span:
+    span(49) }];
 
     let converted = algo::convert(&spec).expect("guarded else-clause conversion");
     let p4spec_rust::lang::al::ast::DefKind::FuncDec(function) = &converted[0].node else {
@@ -1050,33 +1025,31 @@ fn context_loads_type_and_metavariable_definitions() {
     let extern_id = id("extern_type", 1);
     let defined_id = id("defined_type", 2);
     let variable_id = id("value", 3);
-    let bool_typ = Spanned::new(ast::TypKind::Bool, span(2));
-    let def_typ = Spanned::new(ast::DefTypKind::Plain(bool_typ.clone()), span(2));
+    let bool_typ = p4spec_rust::phrase! { node: ast::TypKind::Bool, span:  span(2) };
+    let def_typ =
+        p4spec_rust::phrase! { node: ast::DefTypKind::Plain(bool_typ.clone()), span:  span(2) };
     let spec = vec![
-        Spanned::new(
-            ast::DefKind::ExternTyp(ast::ExternTyp {
-                id: extern_id.clone(),
-                hints: vec![],
-            }),
-            span(1),
-        ),
-        Spanned::new(
-            ast::DefKind::Typ(ast::TypDef {
-                id: defined_id.clone(),
-                tparams: vec![],
-                def_typ: def_typ.clone(),
-                hints: vec![],
-            }),
-            span(2),
-        ),
-        Spanned::new(
-            ast::DefKind::Var(ast::VarDef {
-                id: variable_id.clone(),
-                typ: bool_typ.clone(),
-                hints: vec![],
-            }),
-            span(3),
-        ),
+        p4spec_rust::phrase! { node:
+        ast::DefKind::ExternTyp(ast::ExternTyp {
+            id: extern_id.clone(),
+            hints: vec![],
+        }), span:
+        span(1) },
+        p4spec_rust::phrase! { node:
+        ast::DefKind::Typ(ast::TypDef {
+            id: defined_id.clone(),
+            tparams: vec![],
+            def_typ: def_typ.clone(),
+            hints: vec![],
+        }), span:
+        span(2) },
+        p4spec_rust::phrase! { node:
+        ast::DefKind::Var(ast::VarDef {
+            id: variable_id.clone(),
+            typ: bool_typ.clone(),
+            hints: vec![],
+        }), span:
+        span(3) },
     ];
 
     let mut context = Context::new();
@@ -1205,7 +1178,7 @@ fn argument_collection_reports_right_associated_conflict_span() {
     );
     let args = [var_exp("x", 1), var_exp("x", 2), iterated]
         .into_iter()
-        .map(|exp| Spanned::new(ast::ArgKind::Exp(Box::new(exp)), span(1)))
+        .map(|exp| p4spec_rust::phrase! { node: ast::ArgKind::Exp(Box::new(exp)), span:  span(1) })
         .collect::<Vec<_>>();
 
     let error = collect::collect_args(&Context::new(), &args)
@@ -1275,7 +1248,7 @@ fn pattern_arity_errors_use_the_owning_source_span() {
 
 #[test]
 fn pattern_sets_order_mixfix_structure_before_rendered_text() {
-    let argument = Spanned::new(Mixfix::Arg(typ::bool()), span(2));
+    let argument = p4spec_rust::phrase! { node: Mixfix::Arg(typ::bool()), span:  span(2) };
     let atom = not_typ("A", 1);
     let patterns: PatternSet = [atom, argument].into_iter().collect();
     let ordered = patterns.iter().collect::<Vec<_>>();
@@ -1316,12 +1289,12 @@ fn multiple_binding_renames_repetitions_and_compares_them_in_occurrence_order() 
     let side_conditions =
         multiple::generate_side_conditions(&bindings, &IterationContext::new(), &renames);
 
-    let ast::ExpKind::Tuple(exps) = &renamed.node.kind else {
+    let ast::ExpKind::Tuple(exps) = &renamed.node else {
         panic!("expected tuple binding");
     };
     let ids = exps
         .iter()
-        .map(|exp| match &exp.node.kind {
+        .map(|exp| match &exp.node {
             ast::ExpKind::Var(id) => id,
             _ => panic!("expected variable binding"),
         })
@@ -1339,14 +1312,14 @@ fn multiple_binding_renames_repetitions_and_compares_them_in_occurrence_order() 
     let ast::PremKind::If(if_prem) = &side_condition.node else {
         panic!("expected conditional premise");
     };
-    let ast::ExpKind::Bin(_, ast::OpTyp::Bool, first, second) = &if_prem.exp.node.kind else {
+    let ast::ExpKind::Bin(_, ast::OpTyp::Bool, first, second) = &if_prem.exp.node else {
         panic!("expected ordered equality conjunction");
     };
     let compared_span = |exp: &ast::Exp| {
-        let ast::ExpKind::Cmp(_, ast::OpTyp::Bool, _, exp_r) = &exp.node.kind else {
+        let ast::ExpKind::Cmp(_, ast::OpTyp::Bool, _, exp_r) = &exp.node else {
             panic!("expected equality comparison");
         };
-        let ast::ExpKind::Var(id) = &exp_r.node.kind else {
+        let ast::ExpKind::Var(id) = &exp_r.node else {
             panic!("expected renamed right operand");
         };
         id.span.clone()
@@ -1405,10 +1378,9 @@ fn partial_binding_preserves_expression_and_premise_iteration_dimensions() {
             ),
         ),
         ast::TypKind::Iter(
-            Box::new(Spanned::new(
-                ast::TypKind::Tuple(vec![typ::bool(), typ::bool()]),
-                span(1),
-            )),
+            Box::new(p4spec_rust::phrase! { node:
+            ast::TypKind::Tuple(vec![typ::bool(), typ::bool()]), span:
+            span(1) }),
             ast::Iter::List,
         ),
         1,
@@ -1428,13 +1400,13 @@ fn partial_binding_preserves_expression_and_premise_iteration_dimensions() {
     let premises = partial::generate_prems(&context, &IterationContext::new(), &renames)
         .expect("partial binding premises");
 
-    let ast::ExpKind::Iter(exp_inner, (ast::Iter::List, vars)) = &renamed.node.kind else {
+    let ast::ExpKind::Iter(exp_inner, (ast::Iter::List, vars)) = &renamed.node else {
         panic!("expected iterated binding");
     };
-    let ast::ExpKind::Tuple(exps) = &exp_inner.node.kind else {
+    let ast::ExpKind::Tuple(exps) = &exp_inner.node else {
         panic!("expected tuple binding");
     };
-    let ast::ExpKind::Var(id_rename) = &exps[1].node.kind else {
+    let ast::ExpKind::Var(id_rename) = &exps[1].node else {
         panic!("expected bound value to be renamed");
     };
     assert_eq!(vars.len(), 2);
@@ -1453,16 +1425,16 @@ fn partial_binding_preserves_expression_and_premise_iteration_dimensions() {
     let ast::PremKind::If(if_prem) = &iterated_prem.prem.node else {
         panic!("expected equality side condition");
     };
-    let ast::ExpKind::Cmp(_, ast::OpTyp::Bool, exp_l, exp_r) = &if_prem.exp.node.kind else {
+    let ast::ExpKind::Cmp(_, ast::OpTyp::Bool, exp_l, exp_r) = &if_prem.exp.node else {
         panic!("expected equality comparison");
     };
-    assert!(matches!(&exp_l.node.kind, ast::ExpKind::Var(id) if id == id_rename));
-    assert!(matches!(exp_r.node.kind, ast::ExpKind::Bool(true)));
+    assert!(matches!(&exp_l.node, ast::ExpKind::Var(id) if id == id_rename));
+    assert!(matches!(exp_r.node, ast::ExpKind::Bool(true)));
 }
 
 #[test]
 fn partial_binding_preserves_nested_iteration_order_and_dimensions() {
-    let tuple_typ = Spanned::new(ast::TypKind::Tuple(vec![typ::bool(), typ::bool()]), span(1));
+    let tuple_typ = p4spec_rust::phrase! { node: ast::TypKind::Tuple(vec![typ::bool(), typ::bool()]), span:  span(1) };
     let tuple = exp(
         ast::ExpKind::Tuple(vec![
             var_exp("x", 1),
@@ -1471,10 +1443,9 @@ fn partial_binding_preserves_nested_iteration_order_and_dimensions() {
         tuple_typ.node.clone(),
         1,
     );
-    let inner_typ = Spanned::new(
-        ast::TypKind::Iter(Box::new(tuple_typ), ast::Iter::Opt),
-        span(1),
-    );
+    let inner_typ = p4spec_rust::phrase! { node:
+    ast::TypKind::Iter(Box::new(tuple_typ), ast::Iter::Opt), span:
+    span(1) };
     let inner = exp(
         ast::ExpKind::Iter(
             Box::new(tuple),
@@ -1520,16 +1491,16 @@ fn partial_binding_preserves_nested_iteration_order_and_dimensions() {
     let premises = partial::generate_prems(&context, &IterationContext::new(), &renames)
         .expect("nested partial binding premises");
 
-    let ast::ExpKind::Iter(inner, (ast::Iter::List, outer_vars)) = &renamed.node.kind else {
+    let ast::ExpKind::Iter(inner, (ast::Iter::List, outer_vars)) = &renamed.node else {
         panic!("expected outer list iteration");
     };
-    let ast::ExpKind::Iter(tuple, (ast::Iter::Opt, inner_vars)) = &inner.node.kind else {
+    let ast::ExpKind::Iter(tuple, (ast::Iter::Opt, inner_vars)) = &inner.node else {
         panic!("expected inner optional iteration");
     };
-    let ast::ExpKind::Tuple(exps) = &tuple.node.kind else {
+    let ast::ExpKind::Tuple(exps) = &tuple.node else {
         panic!("expected iterated tuple");
     };
-    let ast::ExpKind::Var(id_rename) = &exps[1].node.kind else {
+    let ast::ExpKind::Var(id_rename) = &exps[1].node else {
         panic!("expected nested bound value rename");
     };
     assert_eq!(inner_vars.len(), 2);
@@ -1583,7 +1554,10 @@ fn partial_binding_rolls_back_context_and_renames_after_late_failure() {
             exp(ast::ExpKind::Bool(false), ast::TypKind::Bool, 11),
             case,
         ]),
-        ast::TypKind::Tuple(vec![typ::bool(), Spanned::new(missing_typ, span(12))]),
+        ast::TypKind::Tuple(vec![
+            typ::bool(),
+            p4spec_rust::phrase! { node: missing_typ, span:  span(12) },
+        ]),
         11,
     );
     let bindings = collect::collect_exp(&context, &tuple).expect("binding collection");
@@ -1611,21 +1585,21 @@ fn partial_binding_rolls_back_context_and_renames_after_late_failure() {
 #[test]
 fn partial_case_and_list_bindings_generate_match_then_bind_premises_in_source_order() {
     let choice_id = id("Choice", 1);
-    let choice_typ = Spanned::new(ast::TypKind::Var(choice_id.clone(), vec![]), span(1));
-    let origin = Spanned::new((choice_id.clone(), vec![]), span(1));
-    let def_typ = Spanned::new(
-        ast::DefTypKind::Variant(vec![
-            (not_typ("A", 1), origin.clone(), vec![]),
-            (not_typ("B", 1), origin, vec![]),
-        ]),
-        span(1),
-    );
+    let choice_typ =
+        p4spec_rust::phrase! { node: ast::TypKind::Var(choice_id.clone(), vec![]), span:  span(1) };
+    let origin = p4spec_rust::phrase! { node: (choice_id.clone(), vec![]), span:  span(1) };
+    let def_typ = p4spec_rust::phrase! { node:
+    ast::DefTypKind::Variant(vec![
+        (not_typ("A", 1), origin.clone(), vec![]),
+        (not_typ("B", 1), origin, vec![]),
+    ]), span:
+    span(1) };
     let mut context = Context::new();
     context
         .tdenv
         .insert(choice_id, TypeDef::Defined(vec![], Box::new(def_typ)));
 
-    let keyword = Spanned::new(Atom::Keyword("A".to_owned()), span(2));
+    let keyword = p4spec_rust::phrase! { node: Atom::Keyword("A".to_owned()), span:  span(2) };
     let case = exp(
         ast::ExpKind::Case(Box::new(Mixfix::Seq(vec![
             Mixfix::Atom(keyword),
@@ -1634,10 +1608,9 @@ fn partial_case_and_list_bindings_generate_match_then_bind_premises_in_source_or
         choice_typ.node.clone(),
         2,
     );
-    let list_typ = Spanned::new(
-        ast::TypKind::Iter(Box::new(typ::bool()), ast::Iter::List),
-        span(3),
-    );
+    let list_typ = p4spec_rust::phrase! { node:
+    ast::TypKind::Iter(Box::new(typ::bool()), ast::Iter::List), span:
+    span(3) };
     let list = exp(
         ast::ExpKind::List(vec![var_exp("z", 3)]),
         list_typ.node.clone(),
@@ -1662,20 +1635,17 @@ fn partial_case_and_list_bindings_generate_match_then_bind_premises_in_source_or
     let premises = partial::generate_prems(&context, &IterationContext::new(), &renames)
         .expect("partial binding premises");
 
-    let ast::ExpKind::Tuple(exps) = &renamed.node.kind else {
+    let ast::ExpKind::Tuple(exps) = &renamed.node else {
         panic!("expected tuple binding");
     };
-    assert!(matches!(exps[0].node.kind, ast::ExpKind::Var(_)));
-    assert!(matches!(exps[1].node.kind, ast::ExpKind::Iter(_, _)));
+    assert!(matches!(exps[0].node, ast::ExpKind::Var(_)));
+    assert!(matches!(exps[1].node, ast::ExpKind::Iter(_, _)));
     assert_eq!(premises.len(), 4);
     assert!(matches!(
         &premises[0].node,
         ast::PremKind::If(ast::IfPrem {
-            exp: Spanned {
-                node: Noted {
-                    kind: ast::ExpKind::Match(_, ast::Pattern::Case(_)),
-                    ..
-                },
+            exp: NotePhrase {
+                node: ast::ExpKind::Match(_, ast::Pattern::Case(_)),
                 ..
             }
         })
@@ -1683,11 +1653,8 @@ fn partial_case_and_list_bindings_generate_match_then_bind_premises_in_source_or
     assert!(matches!(
         &premises[1].node,
         ast::PremKind::Let(ast::LetPrem {
-            exp_l: Spanned {
-                node: Noted {
-                    kind: ast::ExpKind::Case(_),
-                    ..
-                },
+            exp_l: NotePhrase {
+                node: ast::ExpKind::Case(_),
                 ..
             },
             ..
@@ -1696,11 +1663,8 @@ fn partial_case_and_list_bindings_generate_match_then_bind_premises_in_source_or
     assert!(matches!(
         &premises[2].node,
         ast::PremKind::If(ast::IfPrem {
-            exp: Spanned {
-                node: Noted {
-                    kind: ast::ExpKind::Match(_, ast::Pattern::List(ast::ListPattern::Fixed(1))),
-                    ..
-                },
+            exp: NotePhrase {
+                node: ast::ExpKind::Match(_, ast::Pattern::List(ast::ListPattern::Fixed(1))),
                 ..
             }
         })
@@ -1708,11 +1672,8 @@ fn partial_case_and_list_bindings_generate_match_then_bind_premises_in_source_or
     assert!(matches!(
         &premises[3].node,
         ast::PremKind::Let(ast::LetPrem {
-            exp_l: Spanned {
-                node: Noted {
-                    kind: ast::ExpKind::List(_),
-                    ..
-                },
+            exp_l: NotePhrase {
+                node: ast::ExpKind::List(_),
                 ..
             },
             ..
@@ -1724,32 +1685,32 @@ fn partial_case_and_list_bindings_generate_match_then_bind_premises_in_source_or
 fn partial_upcast_binding_checks_subtype_before_binding_the_downcast_value() {
     let parent_id = id("Parent", 1);
     let child_id = id("Child", 1);
-    let parent_typ = Spanned::new(ast::TypKind::Var(parent_id.clone(), vec![]), span(1));
-    let child_typ = Spanned::new(ast::TypKind::Var(child_id.clone(), vec![]), span(1));
-    let parent_origin = Spanned::new((parent_id.clone(), vec![]), span(1));
-    let child_origin = Spanned::new((child_id.clone(), vec![]), span(1));
+    let parent_typ =
+        p4spec_rust::phrase! { node: ast::TypKind::Var(parent_id.clone(), vec![]), span:  span(1) };
+    let child_typ =
+        p4spec_rust::phrase! { node: ast::TypKind::Var(child_id.clone(), vec![]), span:  span(1) };
+    let parent_origin = p4spec_rust::phrase! { node: (parent_id.clone(), vec![]), span:  span(1) };
+    let child_origin = p4spec_rust::phrase! { node: (child_id.clone(), vec![]), span:  span(1) };
     let mut context = Context::new();
     context.tdenv.insert(
         parent_id,
         TypeDef::Defined(
             vec![],
-            Box::new(Spanned::new(
-                ast::DefTypKind::Variant(vec![
-                    (not_typ("A", 1), parent_origin.clone(), vec![]),
-                    (not_typ("B", 1), parent_origin, vec![]),
-                ]),
-                span(1),
-            )),
+            Box::new(p4spec_rust::phrase! { node:
+            ast::DefTypKind::Variant(vec![
+                (not_typ("A", 1), parent_origin.clone(), vec![]),
+                (not_typ("B", 1), parent_origin, vec![]),
+            ]), span:
+            span(1) }),
         ),
     );
     context.tdenv.insert(
         child_id,
         TypeDef::Defined(
             vec![],
-            Box::new(Spanned::new(
-                ast::DefTypKind::Variant(vec![(not_typ("A", 1), child_origin, vec![])]),
-                span(1),
-            )),
+            Box::new(p4spec_rust::phrase! { node:
+            ast::DefTypKind::Variant(vec![(not_typ("A", 1), child_origin, vec![])]), span:
+            span(1) }),
         ),
     );
     let child_var = exp(ast::ExpKind::Var(id("child", 2)), child_typ.node.clone(), 2);
@@ -1778,11 +1739,8 @@ fn partial_upcast_binding_checks_subtype_before_binding_the_downcast_value() {
     assert!(matches!(
         &subtype.node,
         ast::PremKind::If(ast::IfPrem {
-            exp: Spanned {
-                node: Noted {
-                    kind: ast::ExpKind::Sub(_, typ, _),
-                    ..
-                },
+            exp: NotePhrase {
+                node: ast::ExpKind::Sub(_, typ, _),
                 ..
             }
         }) if typ.syntax_eq(&child_typ)
@@ -1790,18 +1748,12 @@ fn partial_upcast_binding_checks_subtype_before_binding_the_downcast_value() {
     assert!(matches!(
         &binding.node,
         ast::PremKind::Let(ast::LetPrem {
-            exp_l: Spanned {
-                node: Noted {
-                    kind: ast::ExpKind::Var(_),
-                    ..
-                },
+            exp_l: NotePhrase {
+                node: ast::ExpKind::Var(_),
                 ..
             },
-            exp_r: Spanned {
-                node: Noted {
-                    kind: ast::ExpKind::DownCast(typ, _),
-                    ..
-                },
+            exp_r: NotePhrase {
+                node: ast::ExpKind::DownCast(typ, _),
                 ..
             }
         }) if typ.syntax_eq(&child_typ)
@@ -1829,12 +1781,12 @@ fn antiunification_populates_each_path_in_left_to_right_expression_order() {
         antiunify::antiunify(Context::new(), groups).expect("equivalent tuple inputs");
 
     assert_eq!(template.len(), 2);
-    let ast::ExpKind::Tuple(items) = &template[0].node.kind else {
+    let ast::ExpKind::Tuple(items) = &template[0].node else {
         panic!("expected tuple template");
     };
     let template_ids = items
         .iter()
-        .map(|item| match &item.node.kind {
+        .map(|item| match &item.node {
             ast::ExpKind::Var(id) => id,
             _ => panic!("expected fresh unifier"),
         })
@@ -1842,7 +1794,7 @@ fn antiunification_populates_each_path_in_left_to_right_expression_order() {
     assert_ne!(template_ids[0].node, template_ids[1].node);
     assert!(context.frees.contains(template_ids[0]));
     assert!(context.frees.contains(template_ids[1]));
-    assert!(matches!(&template[1].node.kind, ast::ExpKind::Var(id) if id.node == "shared"));
+    assert!(matches!(&template[1].node, ast::ExpKind::Var(id) if id.node == "shared"));
 
     let compared_values = |prems: &[ast::Prem]| {
         prems
@@ -1851,11 +1803,10 @@ fn antiunification_populates_each_path_in_left_to_right_expression_order() {
                 let ast::PremKind::If(if_prem) = &prem.node else {
                     panic!("expected equality premise");
                 };
-                let ast::ExpKind::Cmp(_, ast::OpTyp::Bool, _, exp_r) = &if_prem.exp.node.kind
-                else {
+                let ast::ExpKind::Cmp(_, ast::OpTyp::Bool, _, exp_r) = &if_prem.exp.node else {
                     panic!("expected equality comparison");
                 };
-                let ast::ExpKind::Bool(value) = exp_r.node.kind else {
+                let ast::ExpKind::Bool(value) = exp_r.node else {
                     panic!("expected original boolean expression");
                 };
                 value
@@ -1878,7 +1829,7 @@ fn antiunification_freshness_avoids_collisions_within_each_operation() {
             ],
         )
         .expect("equivalent boolean inputs");
-        let ast::ExpKind::Var(id) = &template[0].node.kind else {
+        let ast::ExpKind::Var(id) = &template[0].node else {
             panic!("expected fresh unifier");
         };
         id.clone()
@@ -1897,13 +1848,16 @@ fn antiunification_freshness_avoids_collisions_within_each_operation() {
 #[test]
 fn antiunification_uses_runtime_equivalence_for_plain_type_aliases() {
     let alias_id = id("Flag", 1);
-    let alias_typ = Spanned::new(ast::TypKind::Var(alias_id.clone(), vec![]), span(1));
+    let alias_typ =
+        p4spec_rust::phrase! { node: ast::TypKind::Var(alias_id.clone(), vec![]), span:  span(1) };
     let mut context = Context::new();
     context.tdenv.insert(
         alias_id,
         TypeDef::Defined(
             vec![],
-            Box::new(Spanned::new(ast::DefTypKind::Plain(typ::bool()), span(1))),
+            Box::new(
+                p4spec_rust::phrase! { node: ast::DefTypKind::Plain(typ::bool()), span:  span(1) },
+            ),
         ),
     );
     let alias_value = exp(ast::ExpKind::Bool(true), alias_typ.node, 2);
@@ -1913,7 +1867,7 @@ fn antiunification_uses_runtime_equivalence_for_plain_type_aliases() {
         antiunify::antiunify(context, vec![vec![alias_value], vec![bool_value]])
             .expect("plain alias is equivalent to its underlying type");
 
-    assert!(matches!(template[0].node.kind, ast::ExpKind::Var(_)));
+    assert!(matches!(template[0].node, ast::ExpKind::Var(_)));
     assert_eq!(
         premises.iter().map(Vec::len).collect::<Vec<_>>(),
         vec![1, 1]
@@ -1932,48 +1886,44 @@ fn conversion_preserves_rule_paths_and_populates_antiunified_inputs_in_order() {
             line,
         )
     };
-    let relation_not_typ = Spanned::new(
-        Mixfix::Seq(vec![
-            Mixfix::Arg(Spanned::new(
-                ast::TypKind::Tuple(vec![typ::bool(), typ::bool()]),
-                span(1),
-            )),
-            Mixfix::Arg(typ::bool()),
-        ]),
-        span(1),
-    );
+    let relation_not_typ = p4spec_rust::phrase! { node:
+    Mixfix::Seq(vec![
+        Mixfix::Arg(p4spec_rust::phrase! { node:
+            ast::TypKind::Tuple(vec![typ::bool(), typ::bool()]), span:
+            span(1) }),
+        Mixfix::Arg(typ::bool()),
+    ]), span:
+    span(1) };
     let rule = |name: &str, input: ast::Exp, output: bool, line: i64| {
-        Spanned::new(
-            ast::RuleKind {
-                id: id(name, line),
-                not_exp: Mixfix::Seq(vec![
-                    Mixfix::Arg(input),
-                    Mixfix::Arg(exp(ast::ExpKind::Bool(output), ast::TypKind::Bool, line)),
-                ]),
-                prems: vec![],
-            },
-            span(line),
-        )
+        p4spec_rust::phrase! { node:
+        ast::RuleKind {
+            id: id(name, line),
+            not_exp: Mixfix::Seq(vec![
+                Mixfix::Arg(input),
+                Mixfix::Arg(exp(ast::ExpKind::Bool(output), ast::TypKind::Bool, line)),
+            ]),
+            prems: vec![],
+        }, span:
+        span(line) }
     };
     let rules_first = vec![
         rule("first", tuple(true, false, 2), true, 2),
         rule("second", tuple(false, true, 5), false, 5),
     ];
     let rules_second = vec![rule("third", tuple(true, true, 8), false, 8)];
-    let spec = vec![Spanned::new(
-        ast::DefKind::Rel(ast::Rel {
-            id: id("relation", 1),
-            not_typ: relation_not_typ,
-            input_hint: InputHint::new(vec![0]),
-            rule_groups: vec![
-                Spanned::new((id("first_group", 1), rules_first), span(1)),
-                Spanned::new((id("second_group", 8), rules_second), span(8)),
-            ],
-            else_group: None,
-            hints: vec![],
-        }),
-        span(1),
-    )];
+    let spec = vec![p4spec_rust::phrase! { node:
+    ast::DefKind::Rel(ast::Rel {
+        id: id("relation", 1),
+        not_typ: relation_not_typ,
+        input_hint: InputHint::new(vec![0]),
+        rule_groups: vec![
+            p4spec_rust::phrase! { node: (id("first_group", 1), rules_first), span:  span(1) },
+            p4spec_rust::phrase! { node: (id("second_group", 8), rules_second), span:  span(8) },
+        ],
+        else_group: None,
+        hints: vec![],
+    }), span:
+    span(1) }];
 
     let analyzed = algo::convert(&spec).expect("convertible relation");
 
@@ -1995,13 +1945,13 @@ fn conversion_preserves_rule_paths_and_populates_antiunified_inputs_in_order() {
             .collect::<Vec<_>>(),
         vec!["first", "second"]
     );
-    let ast::ExpKind::Tuple(items) = &rule_group.node.rule_match.exps_signature[0].node.kind else {
+    let ast::ExpKind::Tuple(items) = &rule_group.node.rule_match.exps_signature[0].node else {
         panic!("expected tuple rule signature");
     };
     assert!(
         items
             .iter()
-            .all(|item| matches!(item.node.kind, ast::ExpKind::Var(_)))
+            .all(|item| matches!(item.node, ast::ExpKind::Var(_)))
     );
     let compared_values = |prems: &[ast::Prem]| {
         prems
@@ -2010,10 +1960,10 @@ fn conversion_preserves_rule_paths_and_populates_antiunified_inputs_in_order() {
                 let ast::PremKind::If(if_prem) = &prem.node else {
                     panic!("expected populated equality premise");
                 };
-                let ast::ExpKind::Cmp(_, _, _, exp_r) = &if_prem.exp.node.kind else {
+                let ast::ExpKind::Cmp(_, _, _, exp_r) = &if_prem.exp.node else {
                     panic!("expected equality comparison");
                 };
-                let ast::ExpKind::Bool(value) = exp_r.node.kind else {
+                let ast::ExpKind::Bool(value) = exp_r.node else {
                     panic!("expected original boolean input");
                 };
                 value
@@ -2029,21 +1979,20 @@ fn conversion_preserves_rule_paths_and_populates_antiunified_inputs_in_order() {
         vec![false, true]
     );
     assert!(matches!(
-        rule_group.node.rule_paths[0].exps_output[0].node.kind,
+        rule_group.node.rule_paths[0].exps_output[0].node,
         ast::ExpKind::Bool(true)
     ));
     assert!(matches!(
-        rule_group.node.rule_paths[1].exps_output[0].node.kind,
+        rule_group.node.rule_paths[1].exps_output[0].node,
         ast::ExpKind::Bool(false)
     ));
 }
 
 #[test]
 fn clause_analysis_orders_partial_then_repeated_then_source_premises() {
-    let tuple_typ = Spanned::new(
-        ast::TypKind::Tuple(vec![typ::bool(), typ::bool(), typ::bool()]),
-        span(1),
-    );
+    let tuple_typ = p4spec_rust::phrase! { node:
+    ast::TypKind::Tuple(vec![typ::bool(), typ::bool(), typ::bool()]), span:
+    span(1) };
     let tuple = exp(
         ast::ExpKind::Tuple(vec![
             var_exp("x", 2),
@@ -2053,31 +2002,28 @@ fn clause_analysis_orders_partial_then_repeated_then_source_premises() {
         tuple_typ.node.clone(),
         2,
     );
-    let clause = Spanned::new(
-        ast::ClauseKind {
-            args: vec![Spanned::new(ast::ArgKind::Exp(Box::new(tuple)), span(2))],
-            expression: var_exp("x", 5),
-            premises: vec![Spanned::new(
-                ast::PremKind::Debug(ast::DebugPrem {
-                    exp: exp(ast::ExpKind::Bool(false), ast::TypKind::Bool, 6),
-                }),
-                span(6),
-            )],
-        },
-        span(2),
-    );
-    let spec = vec![Spanned::new(
-        ast::DefKind::FuncDec(ast::FuncDec {
-            id: id("function", 1),
-            tparams: vec![],
-            params: vec![Spanned::new(ast::ParamKind::Exp(tuple_typ), span(1))],
-            typ: typ::bool(),
-            clauses: vec![clause],
-            else_clause: None,
-            hints: vec![],
-        }),
-        span(1),
-    )];
+    let clause = p4spec_rust::phrase! { node:
+    ast::ClauseKind {
+        args: vec![p4spec_rust::phrase! { node: ast::ArgKind::Exp(Box::new(tuple)), span:  span(2) }],
+        expression: var_exp("x", 5),
+        premises: vec![p4spec_rust::phrase! { node:
+            ast::PremKind::Debug(ast::DebugPrem {
+                exp: exp(ast::ExpKind::Bool(false), ast::TypKind::Bool, 6),
+            }), span:
+            span(6) }],
+    }, span:
+    span(2) };
+    let spec = vec![p4spec_rust::phrase! { node:
+    ast::DefKind::FuncDec(ast::FuncDec {
+        id: id("function", 1),
+        tparams: vec![],
+        params: vec![p4spec_rust::phrase! { node: ast::ParamKind::Exp(tuple_typ), span:  span(1) }],
+        typ: typ::bool(),
+        clauses: vec![clause],
+        else_clause: None,
+        hints: vec![],
+    }), span:
+    span(1) }];
 
     let analyzed = algo::convert(&spec).expect("convertible function");
 
@@ -2089,26 +2035,20 @@ fn clause_analysis_orders_partial_then_repeated_then_source_premises() {
     assert!(matches!(
         &prems[0].node,
         ast::PremKind::If(ast::IfPrem {
-            exp: Spanned {
-                node: Noted {
-                    kind: ast::ExpKind::Cmp(_, _, _, exp_r),
-                    ..
-                },
+            exp: NotePhrase {
+                node: ast::ExpKind::Cmp(_, _, _, exp_r),
                 ..
             }
-        }) if matches!(exp_r.node.kind, ast::ExpKind::Bool(true))
+        }) if matches!(exp_r.node, ast::ExpKind::Bool(true))
     ));
     assert!(matches!(
         &prems[1].node,
         ast::PremKind::If(ast::IfPrem {
-            exp: Spanned {
-                node: Noted {
-                    kind: ast::ExpKind::Cmp(_, _, _, exp_r),
-                    ..
-                },
+            exp: NotePhrase {
+                node: ast::ExpKind::Cmp(_, _, _, exp_r),
                 ..
             }
-        }) if matches!(exp_r.node.kind, ast::ExpKind::Var(_))
+        }) if matches!(exp_r.node, ast::ExpKind::Var(_))
     ));
     assert!(matches!(&prems[2].node, ast::PremKind::Debug(_)));
 }
@@ -2116,61 +2056,55 @@ fn clause_analysis_orders_partial_then_repeated_then_source_premises() {
 #[test]
 fn otherwise_clauses_and_rules_reject_impure_premises_at_the_branch_span() {
     let impure_premise = |line: i64| {
-        Spanned::new(
-            ast::PremKind::If(ast::IfPrem {
-                exp: exp(ast::ExpKind::Bool(true), ast::TypKind::Bool, line),
-            }),
-            span(line),
-        )
+        p4spec_rust::phrase! { node:
+        ast::PremKind::If(ast::IfPrem {
+            exp: exp(ast::ExpKind::Bool(true), ast::TypKind::Bool, line),
+        }), span:
+        span(line) }
     };
-    let else_clause = Spanned::new(
-        ast::ClauseKind {
-            args: vec![Spanned::new(
-                ast::ArgKind::Exp(Box::new(var_exp("x", 10))),
-                span(10),
-            )],
-            expression: var_exp("x", 10),
-            premises: vec![impure_premise(11)],
-        },
-        span(10),
-    );
-    let function_spec = vec![Spanned::new(
-        ast::DefKind::FuncDec(ast::FuncDec {
-            id: id("function", 9),
-            tparams: vec![],
-            params: vec![Spanned::new(ast::ParamKind::Exp(typ::bool()), span(9))],
-            typ: typ::bool(),
-            clauses: vec![],
-            else_clause: Some(else_clause),
-            hints: vec![],
-        }),
-        span(9),
-    )];
+    let else_clause = p4spec_rust::phrase! { node:
+    ast::ClauseKind {
+        args: vec![p4spec_rust::phrase! { node:
+            ast::ArgKind::Exp(Box::new(var_exp("x", 10))), span:
+            span(10) }],
+        expression: var_exp("x", 10),
+        premises: vec![impure_premise(11)],
+    }, span:
+    span(10) };
+    let function_spec = vec![p4spec_rust::phrase! { node:
+    ast::DefKind::FuncDec(ast::FuncDec {
+        id: id("function", 9),
+        tparams: vec![],
+        params: vec![p4spec_rust::phrase! { node: ast::ParamKind::Exp(typ::bool()), span:  span(9) }],
+        typ: typ::bool(),
+        clauses: vec![],
+        else_clause: Some(else_clause),
+        hints: vec![],
+    }), span:
+    span(9) }];
 
     let function_error = algo::convert(&function_spec).expect_err("impure otherwise clause");
     assert_eq!(function_error.kind, AlgoErrorKind::ImpureElsePremises);
     assert_eq!(function_error.span, span(10));
 
-    let relation_not_typ = Spanned::new(Mixfix::Arg(typ::bool()), span(20));
-    let else_rule = Spanned::new(
-        ast::RuleKind {
-            id: id("else_rule", 21),
-            not_exp: Mixfix::Arg(var_exp("input", 21)),
-            prems: vec![impure_premise(22)],
-        },
-        span(21),
-    );
-    let relation_spec = vec![Spanned::new(
-        ast::DefKind::Rel(ast::Rel {
-            id: id("relation", 20),
-            not_typ: relation_not_typ,
-            input_hint: InputHint::new(vec![0]),
-            rule_groups: vec![],
-            else_group: Some(Spanned::new((id("else_group", 20), else_rule), span(20))),
-            hints: vec![],
-        }),
-        span(20),
-    )];
+    let relation_not_typ = p4spec_rust::phrase! { node: Mixfix::Arg(typ::bool()), span:  span(20) };
+    let else_rule = p4spec_rust::phrase! { node:
+    ast::RuleKind {
+        id: id("else_rule", 21),
+        not_exp: Mixfix::Arg(var_exp("input", 21)),
+        prems: vec![impure_premise(22)],
+    }, span:
+    span(21) };
+    let relation_spec = vec![p4spec_rust::phrase! { node:
+    ast::DefKind::Rel(ast::Rel {
+        id: id("relation", 20),
+        not_typ: relation_not_typ,
+        input_hint: InputHint::new(vec![0]),
+        rule_groups: vec![],
+        else_group: Some(p4spec_rust::phrase! { node: (id("else_group", 20), else_rule), span:  span(20) }),
+        hints: vec![],
+    }), span:
+    span(20) }];
 
     let relation_error = algo::convert(&relation_spec).expect_err("impure otherwise rule");
     assert_eq!(relation_error.kind, AlgoErrorKind::ImpureElsePremises);
@@ -2180,52 +2114,48 @@ fn otherwise_clauses_and_rules_reject_impure_premises_at_the_branch_span() {
 #[test]
 fn conversion_rejects_overlapping_and_missing_variant_table_patterns() {
     let choice_id = id("Choice", 1);
-    let choice_typ = Spanned::new(ast::TypKind::Var(choice_id.clone(), vec![]), span(1));
-    let origin = Spanned::new((choice_id.clone(), vec![]), span(1));
-    let choice_def = Spanned::new(
-        ast::DefKind::Typ(ast::TypDef {
-            id: choice_id,
-            tparams: vec![],
-            def_typ: Spanned::new(
-                ast::DefTypKind::Variant(vec![
-                    (not_typ("A", 1), origin.clone(), vec![]),
-                    (not_typ("B", 1), origin, vec![]),
-                ]),
-                span(1),
-            ),
-            hints: vec![],
-        }),
-        span(1),
-    );
+    let choice_typ =
+        p4spec_rust::phrase! { node: ast::TypKind::Var(choice_id.clone(), vec![]), span:  span(1) };
+    let origin = p4spec_rust::phrase! { node: (choice_id.clone(), vec![]), span:  span(1) };
+    let choice_def = p4spec_rust::phrase! { node:
+    ast::DefKind::Typ(ast::TypDef {
+        id: choice_id,
+        tparams: vec![],
+        def_typ: p4spec_rust::phrase! { node:
+            ast::DefTypKind::Variant(vec![
+                (not_typ("A", 1), origin.clone(), vec![]),
+                (not_typ("B", 1), origin, vec![]),
+            ]), span:
+            span(1) },
+        hints: vec![],
+    }), span:
+    span(1) };
     let table = |rows: Vec<ast::TableRow>, line: i64| {
-        Spanned::new(
-            ast::DefKind::TableDec(ast::TableDec {
-                id: id("table", line),
-                params: vec![Spanned::new(
-                    ast::ParamKind::Exp(choice_typ.clone()),
-                    span(line),
-                )],
-                typ: typ::bool(),
-                rows,
-                hints: vec![],
-            }),
-            span(line - 1),
-        )
+        p4spec_rust::phrase! { node:
+        ast::DefKind::TableDec(ast::TableDec {
+            id: id("table", line),
+            params: vec![p4spec_rust::phrase! { node:
+                ast::ParamKind::Exp(choice_typ.clone()), span:
+                span(line) }],
+            typ: typ::bool(),
+            rows,
+            hints: vec![],
+        }), span:
+        span(line - 1) }
     };
     let row = |pattern: ast::Exp, line: i64| {
-        Spanned::new(
-            (
-                vec![Spanned::new(
-                    ast::ArgKind::Exp(Box::new(pattern)),
-                    span(line),
-                )],
-                exp(ast::ExpKind::Bool(true), ast::TypKind::Bool, line),
-            ),
-            span(line),
-        )
+        p4spec_rust::phrase! { node:
+        (
+            vec![p4spec_rust::phrase! { node:
+                ast::ArgKind::Exp(Box::new(pattern)), span:
+                span(line) }],
+            exp(ast::ExpKind::Bool(true), ast::TypKind::Bool, line),
+        ), span:
+        span(line) }
     };
     let case_pattern = |name: &str, line: i64| {
-        let keyword = Spanned::new(Atom::Keyword(name.to_owned()), span(line));
+        let keyword =
+            p4spec_rust::phrase! { node: Atom::Keyword(name.to_owned()), span:  span(line) };
         let case = exp(
             ast::ExpKind::Case(Box::new(Mixfix::Atom(keyword))),
             choice_typ.node.clone(),
@@ -2287,123 +2217,110 @@ tbl def $compat =
 #[test]
 fn conversion_preserves_definition_clause_and_table_row_order() {
     let choice_id = id("Choice", 2);
-    let choice_typ = Spanned::new(ast::TypKind::Var(choice_id.clone(), vec![]), span(2));
-    let origin = Spanned::new((choice_id.clone(), vec![]), span(2));
-    let choice_def = Spanned::new(
-        ast::DefKind::Typ(ast::TypDef {
-            id: choice_id,
-            tparams: vec![],
-            def_typ: Spanned::new(
-                ast::DefTypKind::Variant(vec![
-                    (not_typ("A", 2), origin.clone(), vec![]),
-                    (not_typ("B", 2), origin, vec![]),
-                ]),
-                span(2),
-            ),
-            hints: vec![],
-        }),
-        span(2),
-    );
+    let choice_typ =
+        p4spec_rust::phrase! { node: ast::TypKind::Var(choice_id.clone(), vec![]), span:  span(2) };
+    let origin = p4spec_rust::phrase! { node: (choice_id.clone(), vec![]), span:  span(2) };
+    let choice_def = p4spec_rust::phrase! { node:
+    ast::DefKind::Typ(ast::TypDef {
+        id: choice_id,
+        tparams: vec![],
+        def_typ: p4spec_rust::phrase! { node:
+            ast::DefTypKind::Variant(vec![
+                (not_typ("A", 2), origin.clone(), vec![]),
+                (not_typ("B", 2), origin, vec![]),
+            ]), span:
+            span(2) },
+        hints: vec![],
+    }), span:
+    span(2) };
     let clause = |name: &str, line: i64| {
-        Spanned::new(
-            ast::ClauseKind {
-                args: vec![Spanned::new(
-                    ast::ArgKind::Exp(Box::new(var_exp(name, line))),
-                    span(line),
-                )],
-                expression: var_exp(name, line),
-                premises: vec![],
-            },
-            span(line),
-        )
+        p4spec_rust::phrase! { node:
+        ast::ClauseKind {
+            args: vec![p4spec_rust::phrase! { node:
+                ast::ArgKind::Exp(Box::new(var_exp(name, line))), span:
+                span(line) }],
+            expression: var_exp(name, line),
+            premises: vec![],
+        }, span:
+        span(line) }
     };
-    let function_def = Spanned::new(
-        ast::DefKind::FuncDec(ast::FuncDec {
-            id: id("function", 3),
-            tparams: vec![],
-            params: vec![Spanned::new(ast::ParamKind::Exp(typ::bool()), span(3))],
-            typ: typ::bool(),
-            clauses: vec![clause("first_clause", 4), clause("second_clause", 5)],
-            else_clause: None,
-            hints: vec![],
-        }),
-        span(3),
-    );
+    let function_def = p4spec_rust::phrase! { node:
+    ast::DefKind::FuncDec(ast::FuncDec {
+        id: id("function", 3),
+        tparams: vec![],
+        params: vec![p4spec_rust::phrase! { node: ast::ParamKind::Exp(typ::bool()), span:  span(3) }],
+        typ: typ::bool(),
+        clauses: vec![clause("first_clause", 4), clause("second_clause", 5)],
+        else_clause: None,
+        hints: vec![],
+    }), span:
+    span(3) };
     let row = |name: &str, value: bool, line: i64| {
         let pattern = exp(
             ast::ExpKind::Var(id(name, line)),
             choice_typ.node.clone(),
             line,
         );
-        Spanned::new(
-            (
-                vec![Spanned::new(
-                    ast::ArgKind::Exp(Box::new(pattern)),
-                    span(line),
-                )],
-                literal_index_exp(value, line),
-            ),
-            span(line),
-        )
+        p4spec_rust::phrase! { node:
+        (
+            vec![p4spec_rust::phrase! { node:
+                ast::ArgKind::Exp(Box::new(pattern)), span:
+                span(line) }],
+            literal_index_exp(value, line),
+        ), span:
+        span(line) }
     };
-    let table_def = Spanned::new(
-        ast::DefKind::TableDec(ast::TableDec {
-            id: id("table", 6),
-            params: vec![Spanned::new(
-                ast::ParamKind::Exp(choice_typ.clone()),
-                span(6),
-            )],
-            typ: typ::bool(),
-            rows: vec![row("specific", true, 7), row("_closer", false, 8)],
-            hints: vec![],
-        }),
-        span(6),
-    );
-    let variable_def = Spanned::new(
-        ast::DefKind::Var(ast::VarDef {
-            id: id("variable", 9),
-            typ: typ::bool(),
-            hints: vec![],
-        }),
-        span(9),
-    );
-    let extern_relation_def = Spanned::new(
-        ast::DefKind::ExternRel(ast::ExternRel {
-            id: id("external_relation", 10),
-            not_typ: Spanned::new(Mixfix::Arg(typ::bool()), span(10)),
-            input_hint: InputHint::new(vec![0]),
-            hints: vec![],
-        }),
-        span(10),
-    );
-    let extern_dec_def = Spanned::new(
-        ast::DefKind::ExternDec(ast::ExternDec {
-            id: id("external_dec", 11),
-            tparams: vec![],
-            params: vec![Spanned::new(ast::ParamKind::Exp(typ::bool()), span(11))],
-            typ: typ::bool(),
-            hints: vec![],
-        }),
-        span(11),
-    );
-    let builtin_dec_def = Spanned::new(
-        ast::DefKind::BuiltinDec(ast::BuiltinDec {
-            id: id("builtin_dec", 12),
-            tparams: vec![],
-            params: vec![Spanned::new(ast::ParamKind::Exp(typ::bool()), span(12))],
-            typ: typ::bool(),
-            hints: vec![],
-        }),
-        span(12),
-    );
+    let table_def = p4spec_rust::phrase! { node:
+    ast::DefKind::TableDec(ast::TableDec {
+        id: id("table", 6),
+        params: vec![p4spec_rust::phrase! { node:
+            ast::ParamKind::Exp(choice_typ.clone()), span:
+            span(6) }],
+        typ: typ::bool(),
+        rows: vec![row("specific", true, 7), row("_closer", false, 8)],
+        hints: vec![],
+    }), span:
+    span(6) };
+    let variable_def = p4spec_rust::phrase! { node:
+    ast::DefKind::Var(ast::VarDef {
+        id: id("variable", 9),
+        typ: typ::bool(),
+        hints: vec![],
+    }), span:
+    span(9) };
+    let extern_relation_def = p4spec_rust::phrase! { node:
+    ast::DefKind::ExternRel(ast::ExternRel {
+        id: id("external_relation", 10),
+        not_typ: p4spec_rust::phrase! { node: Mixfix::Arg(typ::bool()), span:  span(10) },
+        input_hint: InputHint::new(vec![0]),
+        hints: vec![],
+    }), span:
+    span(10) };
+    let extern_dec_def = p4spec_rust::phrase! { node:
+    ast::DefKind::ExternDec(ast::ExternDec {
+        id: id("external_dec", 11),
+        tparams: vec![],
+        params: vec![p4spec_rust::phrase! { node: ast::ParamKind::Exp(typ::bool()), span:  span(11) }],
+        typ: typ::bool(),
+        hints: vec![],
+    }), span:
+    span(11) };
+    let builtin_dec_def = p4spec_rust::phrase! { node:
+    ast::DefKind::BuiltinDec(ast::BuiltinDec {
+        id: id("builtin_dec", 12),
+        tparams: vec![],
+        params: vec![p4spec_rust::phrase! { node: ast::ParamKind::Exp(typ::bool()), span:  span(12) }],
+        typ: typ::bool(),
+        hints: vec![],
+    }), span:
+    span(12) };
     let spec = vec![
-        Spanned::new(
-            ast::DefKind::ExternTyp(ast::ExternTyp {
-                id: id("external", 1),
-                hints: vec![],
-            }),
-            span(1),
-        ),
+        p4spec_rust::phrase! { node:
+        ast::DefKind::ExternTyp(ast::ExternTyp {
+            id: id("external", 1),
+            hints: vec![],
+        }), span:
+        span(1) },
         variable_def,
         extern_relation_def,
         choice_def,
@@ -2453,7 +2370,7 @@ fn conversion_preserves_definition_clause_and_table_row_order() {
             let ast::ArgKind::Exp(exp) = &clause.node.args[0].node else {
                 panic!("expected expression argument");
             };
-            let ast::ExpKind::Var(id) = &exp.node.kind else {
+            let ast::ExpKind::Var(id) = &exp.node else {
                 panic!("expected variable argument");
             };
             id.node.as_str()
@@ -2468,7 +2385,7 @@ fn conversion_preserves_definition_clause_and_table_row_order() {
         .table_rows
         .iter()
         .map(|row| {
-            let ast::ExpKind::Var(id) = &row.node.exps_signature[0].node.kind else {
+            let ast::ExpKind::Var(id) = &row.node.exps_signature[0].node else {
                 panic!("expected variable signature");
             };
             id.node.as_str()
@@ -2484,6 +2401,6 @@ fn conversion_preserves_definition_clause_and_table_row_order() {
         vec![span(7), span(8)]
     );
     assert!(table.table_rows.iter().all(|row| {
-        row.node.prems.is_empty() && matches!(row.node.exp.node.kind, ast::ExpKind::Idx(_, _))
+        row.node.prems.is_empty() && matches!(row.node.exp.node, ast::ExpKind::Idx(_, _))
     }));
 }

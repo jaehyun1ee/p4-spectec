@@ -1,11 +1,13 @@
 //! Explicit guards for partial algorithmic expressions
 
-use crate::lang::{
-    al,
-    common::{noted::Noted, source::Spanned},
-    il::ast,
-    traits::{eq::SyntaxEq, free::Free},
-    xl,
+use crate::{
+    lang::{
+        al,
+        il::ast,
+        traits::{eq::SyntaxEq, free::Free},
+        xl,
+    },
+    note_phrase, phrase,
 };
 
 #[derive(Default)]
@@ -62,7 +64,7 @@ impl EquivalenceTable {
     }
 
     fn add_if_exp(&mut self, exp: &ast::Exp) {
-        match &exp.node.kind {
+        match &exp.node {
             ast::ExpKind::Cmp(ast::CmpOp::Bool(xl::bool::CmpOp::Eq), _, exp_l, exp_r) => {
                 self.union(ClassKind::Equals, exp_l, exp_r)
             }
@@ -164,7 +166,7 @@ impl EquivalenceTable {
     }
 
     fn implies_exp(&self, exp: &ast::Exp) -> bool {
-        match &exp.node.kind {
+        match &exp.node {
             ast::ExpKind::Cmp(ast::CmpOp::Bool(xl::bool::CmpOp::Eq), _, exp_l, exp_r) => {
                 self.contains(ClassKind::Equals, exp_l, exp_r)
             }
@@ -215,7 +217,7 @@ fn iterate_prem(iter: ast::Iter, vars: &[ast::Var], prem: ast::Prem) -> Option<a
         prem: Box::new(prem),
         iter_prem,
     });
-    Some(Spanned::new(prem, span))
+    Some(phrase!(node: prem, span: span))
 }
 
 fn iterate_prems(iter: ast::Iter, vars: &[ast::Var], prems: Vec<ast::Prem>) -> Vec<ast::Prem> {
@@ -239,29 +241,22 @@ fn iterate_collected(
 
 fn gen_index_guard(exp: &ast::Exp, exp_base: &ast::Exp, exp_index: &ast::Exp) -> Vec<ast::Prem> {
     let span = exp.span.clone();
-    let exp_len = Spanned::new(
-        Noted::new(
-            ast::ExpKind::Len(Box::new(exp_base.clone())),
-            ast::TypKind::Num(xl::num::Typ::Nat),
+    let exp_len = note_phrase! {
+        node: ast::ExpKind::Len(Box::new(exp_base.clone())),
+        note: ast::TypKind::Num(xl::num::Typ::Nat),
+        span: span.clone(),
+    };
+    let exp_if = note_phrase! {
+        node: ast::ExpKind::Cmp(
+            ast::CmpOp::Num(xl::num::CmpOp::Lt),
+            ast::OpTyp::Bool,
+            Box::new(exp_index.clone()),
+            Box::new(exp_len),
         ),
-        span.clone(),
-    );
-    let exp_if = Spanned::new(
-        Noted::new(
-            ast::ExpKind::Cmp(
-                ast::CmpOp::Num(xl::num::CmpOp::Lt),
-                ast::OpTyp::Bool,
-                Box::new(exp_index.clone()),
-                Box::new(exp_len),
-            ),
-            ast::TypKind::Bool,
-        ),
-        span.clone(),
-    );
-    vec![Spanned::new(
-        ast::PremKind::If(ast::IfPrem { exp: exp_if }),
-        span,
-    )]
+        note: ast::TypKind::Bool,
+        span: span.clone(),
+    };
+    vec![phrase!(node: ast::PremKind::If(ast::IfPrem { exp: exp_if }), span: span)]
 }
 
 fn gen_eq_epsilon_exp(iter: ast::Iter, var: &ast::Var) -> ast::Exp {
@@ -269,20 +264,22 @@ fn gen_eq_epsilon_exp(iter: ast::Iter, var: &ast::Var) -> ast::Exp {
     var.iters.push(iter);
     let exp = al::var::as_exp(true, &var);
     let span = exp.span.clone();
-    let note = exp.node.note.clone();
-    let exp_epsilon = Spanned::new(Noted::new(ast::ExpKind::Opt(None), note), span.clone());
-    Spanned::new(
-        Noted::new(
-            ast::ExpKind::Cmp(
-                ast::CmpOp::Bool(xl::bool::CmpOp::Eq),
-                ast::OpTyp::Bool,
-                Box::new(exp),
-                Box::new(exp_epsilon),
-            ),
-            ast::TypKind::Bool,
+    let note = exp.note.clone();
+    let exp_epsilon = note_phrase! {
+        node: ast::ExpKind::Opt(None),
+        note: note,
+        span: span.clone(),
+    };
+    note_phrase! {
+        node: ast::ExpKind::Cmp(
+            ast::CmpOp::Bool(xl::bool::CmpOp::Eq),
+            ast::OpTyp::Bool,
+            Box::new(exp),
+            Box::new(exp_epsilon),
         ),
-        span,
-    )
+        note: ast::TypKind::Bool,
+        span: span,
+    }
 }
 
 fn gen_len_exp(iter: ast::Iter, var: &ast::Var) -> ast::Exp {
@@ -290,13 +287,11 @@ fn gen_len_exp(iter: ast::Iter, var: &ast::Var) -> ast::Exp {
     var.iters.push(iter);
     let exp = al::var::as_exp(true, &var);
     let span = exp.span.clone();
-    Spanned::new(
-        Noted::new(
-            ast::ExpKind::Len(Box::new(exp)),
-            ast::TypKind::Num(xl::num::Typ::Nat),
-        ),
-        span,
-    )
+    note_phrase! {
+        node: ast::ExpKind::Len(Box::new(exp)),
+        note: ast::TypKind::Num(xl::num::Typ::Nat),
+        span: span,
+    }
 }
 
 fn pair_exp(iter: ast::Iter, exp_l: ast::Exp, exp_r: ast::Exp) -> ast::Exp {
@@ -315,23 +310,21 @@ fn pair_exp(iter: ast::Iter, exp_l: ast::Exp, exp_r: ast::Exp) -> ast::Exp {
             Box::new(exp_r),
         ),
     };
-    Spanned::new(Noted::new(kind, ast::TypKind::Bool), span)
+    note_phrase!(node: kind, note: ast::TypKind::Bool, span: span)
 }
 
 fn and_exp(exp_l: ast::Exp, exp_r: ast::Exp) -> ast::Exp {
     let span = crate::lang::common::source::Span::over(&[exp_l.span.clone(), exp_r.span.clone()]);
-    Spanned::new(
-        Noted::new(
-            ast::ExpKind::Bin(
-                ast::BinOp::Bool(xl::bool::BinOp::And),
-                ast::OpTyp::Bool,
-                Box::new(exp_l),
-                Box::new(exp_r),
-            ),
-            ast::TypKind::Bool,
+    note_phrase! {
+        node: ast::ExpKind::Bin(
+            ast::BinOp::Bool(xl::bool::BinOp::And),
+            ast::OpTyp::Bool,
+            Box::new(exp_l),
+            Box::new(exp_r),
         ),
-        span,
-    )
+        note: ast::TypKind::Bool,
+        span: span,
+    }
 }
 
 fn gen_iter_guard(iter_exp: &ast::IterExp) -> Vec<ast::Prem> {
@@ -354,10 +347,7 @@ fn gen_iter_guard(iter_exp: &ast::IterExp) -> Vec<ast::Prem> {
         exp_previous = exp;
     }
     let span = exp_if.span.clone();
-    vec![Spanned::new(
-        ast::PremKind::If(ast::IfPrem { exp: exp_if }),
-        span,
-    )]
+    vec![phrase!(node: ast::PremKind::If(ast::IfPrem { exp: exp_if }), span: span)]
 }
 
 fn compose_inserts(mut inserts: Vec<ast::Prem>, other: Vec<ast::Prem>) -> Vec<ast::Prem> {
@@ -366,7 +356,7 @@ fn compose_inserts(mut inserts: Vec<ast::Prem>, other: Vec<ast::Prem>) -> Vec<as
 }
 
 fn collect_exp(exp: &ast::Exp) -> Vec<ast::Prem> {
-    match &exp.node.kind {
+    match &exp.node {
         ast::ExpKind::Bool(_)
         | ast::ExpKind::Num(_)
         | ast::ExpKind::Text(_)
@@ -417,7 +407,7 @@ fn collect_exps<'a>(exps: impl IntoIterator<Item = &'a ast::Exp>) -> Vec<ast::Pr
 }
 
 fn collect_path(path: &ast::Path) -> Vec<ast::Prem> {
-    match &path.node.kind {
+    match &path.node {
         ast::PathKind::Root => vec![],
         ast::PathKind::Idx(path, exp) => compose_inserts(collect_path(path), collect_exp(exp)),
         ast::PathKind::Slice(path, exp_l, exp_h) => {

@@ -5,8 +5,8 @@ use crate::{
         common::{Id, source::Span},
         il::ast,
     },
+    phrase,
     runtime::sta::{Dim, VEnv},
-    spanned,
 };
 
 use super::super::{AlgoError, AlgoErrorKind};
@@ -116,7 +116,7 @@ impl IterationContext {
                 prem: Box::new(prem),
                 iter_prem,
             };
-            prem = spanned!(node: ast::PremKind::Iter(iterated), span: span);
+            prem = phrase!(node: ast::PremKind::Iter(iterated), span: span);
         }
         prem
     }

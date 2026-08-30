@@ -5,13 +5,12 @@ use crate::{
         common::{
             Id,
             ds::{map::IdMap, set::IdSet},
-            noted::Noted,
-            source::Spanned,
         },
         il::ast,
         traits::free::Free,
         xl,
     },
+    note_phrase, phrase,
     runtime::sta::{Dim, VEnv},
 };
 
@@ -87,14 +86,15 @@ fn rename_var(ctx: &mut Context, renv: &mut RenameEnv, exp: &ast::Exp, id: &Id) 
     };
     ctx.add_free(id_rename.clone());
     ids_rename.push(id_rename.clone());
-    Spanned::new(
-        Noted::new(ast::ExpKind::Var(id_rename), exp.node.note.clone()),
-        exp.span.clone(),
-    )
+    note_phrase! {
+        node: ast::ExpKind::Var(id_rename),
+        note: exp.note.clone(),
+        span: exp.span.clone(),
+    }
 }
 
 pub fn rename_exp(ctx: &mut Context, renv: &mut RenameEnv, exp: &ast::Exp) -> ast::Exp {
-    let kind = match &exp.node.kind {
+    let kind = match &exp.node {
         ast::ExpKind::Var(id) => return rename_var(ctx, renv, exp, id),
         ast::ExpKind::UpCast(typ, exp_inner) => {
             let exp_inner = rename_exp(ctx, renv, exp_inner);
@@ -149,7 +149,7 @@ pub fn rename_exp(ctx: &mut Context, renv: &mut RenameEnv, exp: &ast::Exp) -> as
         }
         _ => return exp.clone(),
     };
-    Spanned::new(Noted::new(kind, exp.node.note.clone()), exp.span.clone())
+    note_phrase!(node: kind, note: exp.note.clone(), span: exp.span.clone())
 }
 
 pub fn rename_exps(ctx: &mut Context, renv: &mut RenameEnv, exps: &[ast::Exp]) -> Vec<ast::Exp> {
@@ -161,7 +161,7 @@ pub fn rename_arg(ctx: &mut Context, renv: &mut RenameEnv, arg: &ast::Arg) -> as
         return arg.clone();
     };
     let exp = rename_exp(ctx, renv, exp);
-    Spanned::new(ast::ArgKind::Exp(Box::new(exp)), arg.span.clone())
+    phrase!(node: ast::ArgKind::Exp(Box::new(exp)), span: arg.span.clone())
 }
 
 pub fn rename_args(ctx: &mut Context, renv: &mut RenameEnv, args: &[ast::Arg]) -> Vec<ast::Arg> {
@@ -169,27 +169,26 @@ pub fn rename_args(ctx: &mut Context, renv: &mut RenameEnv, args: &[ast::Arg]) -
 }
 
 fn variable_exp(id: &Id, typ: &ast::Typ, span: &crate::lang::common::source::Span) -> ast::Exp {
-    Spanned::new(
-        Noted::new(ast::ExpKind::Var(id.clone()), typ.node.clone()),
-        span.clone(),
-    )
+    note_phrase! {
+        node: ast::ExpKind::Var(id.clone()),
+        note: typ.node.clone(),
+        span: span.clone(),
+    }
 }
 
 fn equality_exp(id: &Id, id_rename: &Id, typ: &ast::Typ) -> ast::Exp {
     let exp_l = variable_exp(id, typ, &id.span);
     let exp_r = variable_exp(id_rename, typ, &id.span);
-    Spanned::new(
-        Noted::new(
-            ast::ExpKind::Cmp(
-                ast::CmpOp::Bool(xl::bool::CmpOp::Eq),
-                ast::OpTyp::Bool,
-                Box::new(exp_l),
-                Box::new(exp_r),
-            ),
-            ast::TypKind::Bool,
+    note_phrase! {
+        node: ast::ExpKind::Cmp(
+            ast::CmpOp::Bool(xl::bool::CmpOp::Eq),
+            ast::OpTyp::Bool,
+            Box::new(exp_l),
+            Box::new(exp_r),
         ),
-        id.span.clone(),
-    )
+        note: ast::TypKind::Bool,
+        span: id.span.clone(),
+    }
 }
 
 fn generate_side_condition(
@@ -203,20 +202,18 @@ fn generate_side_condition(
     let mut exp = equality_exp(id, id_rename, &dim.typ);
     for id_rename in ids_repeated {
         let exp_r = equality_exp(id, id_rename, &dim.typ);
-        exp = Spanned::new(
-            Noted::new(
-                ast::ExpKind::Bin(
-                    ast::BinOp::Bool(xl::bool::BinOp::And),
-                    ast::OpTyp::Bool,
-                    Box::new(exp),
-                    Box::new(exp_r),
-                ),
-                ast::TypKind::Bool,
+        exp = note_phrase! {
+            node: ast::ExpKind::Bin(
+                ast::BinOp::Bool(xl::bool::BinOp::And),
+                ast::OpTyp::Bool,
+                Box::new(exp),
+                Box::new(exp_r),
             ),
-            id.span.clone(),
-        );
+            note: ast::TypKind::Bool,
+            span: id.span.clone(),
+        };
     }
-    let prem = Spanned::new(ast::PremKind::If(ast::IfPrem { exp }), id.span.clone());
+    let prem = phrase!(node: ast::PremKind::If(ast::IfPrem { exp }), span: id.span.clone());
 
     let mut iterations = dim.iters.clone();
     iterations.extend(iterctx.iters());

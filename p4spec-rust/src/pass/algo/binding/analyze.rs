@@ -3,16 +3,13 @@
 use crate::{
     lang::{
         al,
-        common::{
-            ds::set::IdSet,
-            notation::mixop::Mixop,
-            source::{Span, Spanned},
-        },
+        common::{ds::set::IdSet, notation::mixop::Mixop, source::Span},
         hints::input::{self, InputHint},
         il::ast,
         traits::free::Free,
         xl,
     },
+    phrase,
     runtime::{
         sta::{Dim, VEnv},
         types::TypeDef,
@@ -191,7 +188,7 @@ fn analyze_args_as_bound_shallow(ctx: &Context, args: &[ast::Arg]) -> Result<(),
 }
 
 fn is_pure_exp(exp: &ast::Exp) -> bool {
-    match &exp.node.kind {
+    match &exp.node {
         ast::ExpKind::Bool(_)
         | ast::ExpKind::Num(_)
         | ast::ExpKind::Text(_)
@@ -226,7 +223,7 @@ fn is_pure_exp(exp: &ast::Exp) -> bool {
 }
 
 fn is_pure_path(path: &ast::Path) -> bool {
-    match &path.node.kind {
+    match &path.node {
         ast::PathKind::Root => true,
         ast::PathKind::Idx(path, exp) => is_pure_path(path) && is_pure_exp(exp),
         ast::PathKind::Slice(path, exp_i, exp_n) => {
@@ -297,13 +294,13 @@ fn analyze_let_prem(
     let mut prems = partial::generate_prems(&ctx, &iterctx, &renv_partial)?;
     prems.extend(side_conditions_multiple);
 
-    let prem = Spanned::new(
-        ast::PremKind::Let(ast::LetPrem {
+    let prem = phrase! {
+        node: ast::PremKind::Let(ast::LetPrem {
             exp_l: exp_l.clone(),
             exp_r: exp_r.clone(),
         }),
-        span.clone(),
-    );
+        span: span.clone(),
+    };
     let venv_l = dimension::infer_exp(&exp_l);
     let venv_r = dimension::infer_exp(exp_r);
     let mut iterctx = iterctx;
@@ -345,14 +342,14 @@ fn analyze_prem(
             .map_err(|error| input_error(error, prem.span.clone()))?;
             let not_exp = Mixop::fill(&mixop, exps)
                 .expect("arguments obtained from the same mixfix must match its arity");
-            let prem_analyzed = Spanned::new(
-                ast::PremKind::Rule(ast::RulePrem {
+            let prem_analyzed = phrase! {
+                node: ast::PremKind::Rule(ast::RulePrem {
                     id: rule_prem.id.clone(),
                     not_exp,
                     input_hint: rule_prem.input_hint.clone(),
                 }),
-                prem.span.clone(),
-            );
+                span: prem.span.clone(),
+            };
             let venv_bound = dimension::infer_exps(&exps_input);
             let mut iterctx = iterctx;
             iterctx.filter_bound(|var| {
@@ -367,7 +364,7 @@ fn analyze_prem(
         }
         ast::PremKind::If(if_prem) => {
             if let ast::ExpKind::Cmp(ast::CmpOp::Bool(xl::bool::CmpOp::Eq), _, exp_l, exp_r) =
-                &if_prem.exp.node.kind
+                &if_prem.exp.node
             {
                 let (bindings_l, bindings_r) = equality_bindings(&ctx, exp_l, exp_r)?;
                 match (bindings_l.is_empty(), bindings_r.is_empty()) {
@@ -570,7 +567,7 @@ fn analyze_rule_group(
         rule_match,
         rule_paths,
     };
-    Ok(Spanned::new(rule_group, span))
+    Ok(phrase!(node: rule_group, span: span))
 }
 
 fn analyze_else_group(
@@ -580,10 +577,10 @@ fn analyze_else_group(
 ) -> Result<al::ast::ElseGroup, AlgoError> {
     let span = else_group.span.clone();
     let (id_group, rule) = &else_group.node;
-    let rule_group = Spanned::new(
-        (id_group.clone(), vec![rule.clone()]),
-        else_group.span.clone(),
-    );
+    let rule_group = phrase! {
+        node: (id_group.clone(), vec![rule.clone()]),
+        span: else_group.span.clone(),
+    };
     let rule_group = analyze_rule_group(ctx, inputs, &rule_group, true)?;
     let rule_path = rule_group
         .node
@@ -596,7 +593,7 @@ fn analyze_else_group(
         rule_match: rule_group.node.rule_match,
         rule_path,
     };
-    Ok(Spanned::new(else_group, span))
+    Ok(phrase!(node: else_group, span: span))
 }
 
 fn analyze_clause(
@@ -615,14 +612,14 @@ fn analyze_clause(
     if is_else {
         check_prems_in_else(&clause.span, &prems_all)?;
     }
-    Ok(Spanned::new(
-        ast::ClauseKind {
+    Ok(phrase! {
+        node: ast::ClauseKind {
             args,
             expression: clause.node.expression.clone(),
             premises: prems_all,
         },
-        clause.span.clone(),
-    ))
+        span: clause.span.clone(),
+    })
 }
 
 fn pattern_set_covered_by_typ(ctx: &Context, typ: &ast::Typ) -> Result<PatternSet, AlgoError> {
@@ -651,27 +648,27 @@ fn pattern_set_covered_by_typ(ctx: &Context, typ: &ast::Typ) -> Result<PatternSe
 }
 
 fn pattern_set_covered_by_exp(ctx: &Context, exp: &ast::Exp) -> Result<PatternSet, AlgoError> {
-    match &exp.node.kind {
-        ast::ExpKind::Var(_) => {
-            pattern_set_covered_by_typ(ctx, &Spanned::new(exp.node.note.clone(), exp.span.clone()))
-        }
-        ast::ExpKind::UpCast(_, exp_inner)
-            if matches!(exp_inner.node.kind, ast::ExpKind::Var(_)) =>
-        {
+    match &exp.node {
+        ast::ExpKind::Var(_) => pattern_set_covered_by_typ(
+            ctx,
+            &phrase!(node: exp.note.clone(), span: exp.span.clone()),
+        ),
+        ast::ExpKind::UpCast(_, exp_inner) if matches!(exp_inner.node, ast::ExpKind::Var(_)) => {
             pattern_set_covered_by_typ(
                 ctx,
-                &Spanned::new(exp_inner.node.note.clone(), exp_inner.span.clone()),
+                &phrase!(node: exp_inner.note.clone(), span: exp_inner.span.clone()),
             )
         }
         ast::ExpKind::UpCast(_, exp_inner) => {
-            let ast::ExpKind::Case(not_exp) = &exp_inner.node.kind else {
+            let ast::ExpKind::Case(not_exp) = &exp_inner.node else {
                 return Err(AlgoError::new(
                     AlgoErrorKind::InvalidTablePattern,
                     exp.span.clone(),
                 ));
             };
-            let not_typ = not_exp.map(|exp| Spanned::new(exp.node.note.clone(), exp.span.clone()));
-            Ok([Spanned::new(not_typ, exp_inner.span.clone())]
+            let not_typ =
+                not_exp.map(|exp| phrase!(node: exp.note.clone(), span: exp.span.clone()));
+            Ok([phrase!(node: not_typ, span: exp_inner.span.clone())]
                 .into_iter()
                 .collect())
         }
@@ -692,7 +689,7 @@ fn check_valid_table_rows(
         row.node
             .exps_signature
             .iter()
-            .all(|exp| matches!(&exp.node.kind, ast::ExpKind::Var(id) if id.node.starts_with('_')))
+            .all(|exp| matches!(&exp.node, ast::ExpKind::Var(id) if id.node.starts_with('_')))
     });
     let pattern_rows = if has_closer {
         &rows[..rows.len() - 1]
@@ -745,15 +742,15 @@ fn analyze_table_row(ctx: &Context, row: &ast::TableRow) -> Result<al::ast::Tabl
         exps_signature.push((**exp).clone());
     }
     analyze_exp_as_bound(&ctx, exp)?;
-    Ok(Spanned::new(
-        al::ast::TableRowKind {
+    Ok(phrase! {
+        node: al::ast::TableRowKind {
             exps_signature,
             args: args_input,
             exp: exp.clone(),
             prems,
         },
-        row.span.clone(),
-    ))
+        span: row.span.clone(),
+    })
 }
 
 fn analyze_table_rows(
@@ -870,7 +867,7 @@ fn analyze_def(ctx: &Context, def: &ast::Def) -> Result<al::ast::Def, AlgoError>
             })
         }
     };
-    Ok(Spanned::new(kind, def.span.clone()))
+    Ok(phrase!(node: kind, span: def.span.clone()))
 }
 
 /// Analyzes a complete IL specification before side-condition guard insertion
