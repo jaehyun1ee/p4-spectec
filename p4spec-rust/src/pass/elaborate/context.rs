@@ -17,23 +17,6 @@ use crate::{
 
 use super::{ElabError, EntityKind};
 
-type DefinedRelState<'a> = (
-    &'a ast::NotTyp,
-    &'a InputHint,
-    &'a [ast::RuleGroup],
-    Option<&'a ast::ElseGroup>,
-);
-type RelSignature<'a> = (&'a ast::NotTyp, &'a InputHint);
-type TableFuncState<'a> = (&'a [ast::Param], &'a ast::Typ, &'a [ast::TableRow]);
-type DefinedFuncState<'a> = (
-    &'a [ast::TParam],
-    &'a [ast::Param],
-    &'a ast::Typ,
-    &'a [ast::Clause],
-    Option<&'a ast::ElseClause>,
-);
-type FuncSignature<'a> = (&'a [ast::TParam], &'a [ast::Param], &'a ast::Typ);
-
 /// Bindings and fresh state threaded through one elaboration operation
 #[derive(Debug)]
 pub(super) struct Context {
@@ -48,26 +31,29 @@ pub(super) struct Context {
 
 #[derive(Debug)]
 enum Undo {
-    RemoveFree(Id),
-    RestoreFrees(IdSet),
-    RemoveTypDef(Id),
-    RestoreTypDef(Id, TypeDef),
-    RemoveMetavar(Id),
-    RemoveRel(Id),
-    PopRuleGroup(Id),
-    ClearElseGroup(Id),
-    RemoveFunc(Id),
-    ClearTableRows(Id),
-    PopClause(Id),
-    ClearElseClause(Id),
+    AddFree(Id),
+    AddTypDef(Id),
+    AddMetavar(Id),
+    AddRel(Id),
+    AddRuleGroup(Id),
+    AddElseGroup(Id),
+    AddFunc(Id),
+    AddTableRows(Id),
+    AddClause(Id),
+    AddElseClause(Id),
+    ResetFrees(IdSet),
+    UpdateTypDef(Id, TypeDef),
 }
 
+/// A checkpoint in the elaboration context that can be rolled back to
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) struct Checkpoint {
     depth: usize,
     undo_len: usize,
 }
 
+/// A scope of elaboration bindings and fresh state
+/// that is automatically rolled back when dropped
 pub(super) struct Scope<'a> {
     ctx: &'a mut Context,
     checkpoint: Checkpoint,
@@ -94,6 +80,8 @@ impl Drop for Scope<'_> {
 }
 
 impl Context {
+    // == Constructors
+
     pub(super) fn new() -> Self {
         let mut menv = MEnv::new();
         for (name, typ) in [
@@ -116,6 +104,13 @@ impl Context {
         }
     }
 
+    // == Transactions
+
+    fn assert_checkpoint(&self, checkpoint: Checkpoint) {
+        assert_eq!(checkpoint.depth + 1, self.checkpoints.len());
+        assert_eq!(Some(&checkpoint.undo_len), self.checkpoints.last());
+    }
+
     pub(super) fn checkpoint(&mut self) -> Checkpoint {
         let checkpoint = Checkpoint {
             depth: self.checkpoints.len(),
@@ -125,13 +120,8 @@ impl Context {
         checkpoint
     }
 
-    fn assert_innermost(&self, checkpoint: Checkpoint) {
-        assert_eq!(checkpoint.depth + 1, self.checkpoints.len());
-        assert_eq!(Some(&checkpoint.undo_len), self.checkpoints.last());
-    }
-
     pub(super) fn commit(&mut self, checkpoint: Checkpoint) {
-        self.assert_innermost(checkpoint);
+        self.assert_checkpoint(checkpoint);
         self.checkpoints.pop();
         if self.checkpoints.is_empty() {
             self.undo.clear();
@@ -139,29 +129,25 @@ impl Context {
     }
 
     pub(super) fn rollback(&mut self, checkpoint: Checkpoint) {
-        self.assert_innermost(checkpoint);
+        self.assert_checkpoint(checkpoint);
         self.checkpoints.pop();
         while self.undo.len() > checkpoint.undo_len {
             match self.undo.pop().expect("undo entry") {
-                Undo::RemoveFree(id) => {
+                Undo::AddFree(id) => {
                     self.frees.take(&id).expect("recorded free binding");
                 }
-                Undo::RestoreFrees(frees) => self.frees = frees,
-                Undo::RemoveTypDef(id) => {
+                Undo::AddTypDef(id) => {
                     self.tdenv.remove(&id).expect("recorded type binding");
                 }
-                Undo::RestoreTypDef(id, typdef) => {
-                    self.tdenv.insert(id, typdef);
-                }
-                Undo::RemoveMetavar(id) => {
+                Undo::AddMetavar(id) => {
                     self.menv
                         .remove(&id)
                         .expect("recorded metavariable binding");
                 }
-                Undo::RemoveRel(id) => {
+                Undo::AddRel(id) => {
                     self.renv.remove(&id).expect("recorded relation binding");
                 }
-                Undo::PopRuleGroup(id) => {
+                Undo::AddRuleGroup(id) => {
                     let Rel::Defined { rule_groups, .. } =
                         self.renv.get_mut(&id).expect("recorded defined relation")
                     else {
@@ -169,7 +155,7 @@ impl Context {
                     };
                     rule_groups.pop().expect("recorded rule group");
                 }
-                Undo::ClearElseGroup(id) => {
+                Undo::AddElseGroup(id) => {
                     let Rel::Defined { else_group, .. } =
                         self.renv.get_mut(&id).expect("recorded defined relation")
                     else {
@@ -177,10 +163,10 @@ impl Context {
                     };
                     else_group.take().expect("recorded else group");
                 }
-                Undo::RemoveFunc(id) => {
+                Undo::AddFunc(id) => {
                     self.fenv.remove(&id).expect("recorded function binding");
                 }
-                Undo::ClearTableRows(id) => {
+                Undo::AddTableRows(id) => {
                     let Func::Table { table_rows, .. } =
                         self.fenv.get_mut(&id).expect("recorded table function")
                     else {
@@ -188,7 +174,7 @@ impl Context {
                     };
                     table_rows.clear();
                 }
-                Undo::PopClause(id) => {
+                Undo::AddClause(id) => {
                     let Func::Defined { clauses, .. } =
                         self.fenv.get_mut(&id).expect("recorded defined function")
                     else {
@@ -196,13 +182,17 @@ impl Context {
                     };
                     clauses.pop().expect("recorded function clause");
                 }
-                Undo::ClearElseClause(id) => {
+                Undo::AddElseClause(id) => {
                     let Func::Defined { else_clause, .. } =
                         self.fenv.get_mut(&id).expect("recorded defined function")
                     else {
                         unreachable!("recorded defined function")
                     };
                     else_clause.take().expect("recorded else clause");
+                }
+                Undo::ResetFrees(frees) => self.frees = frees,
+                Undo::UpdateTypDef(id, typdef) => {
+                    self.tdenv.insert(id, typdef);
                 }
             }
         }
@@ -224,6 +214,10 @@ impl Context {
         }
     }
 
+    // == Finders
+
+    // - Type definitions
+
     pub(super) fn find_typdef_opt(&self, id: &Id) -> Option<&TypeDef> {
         self.tdenv.get(id)
     }
@@ -237,6 +231,8 @@ impl Context {
         self.find_typdef_opt(id).is_some()
     }
 
+    // - Meta-variables
+
     pub(super) fn find_metavar_opt(&self, id: &Id) -> Option<&ast::Typ> {
         self.menv.get(id)
     }
@@ -245,9 +241,135 @@ impl Context {
         self.find_metavar_opt(id).is_some()
     }
 
+    // - Relations
+
+    pub(super) fn find_defined_rel_opt(&self, id: &Id) -> Option<&Rel> {
+        self.renv
+            .get(id)
+            .filter(|rel| matches!(rel, Rel::Defined { .. }))
+    }
+
+    pub(super) fn find_defined_rel(&self, id: &Id) -> Result<&Rel, ElabError> {
+        self.find_defined_rel_opt(id).ok_or_else(|| {
+            ElabError::undefined(EntityKind::DefinedRelation, &id.node, id.span.clone())
+        })
+    }
+
+    pub(super) fn find_rel_signature_opt(&self, id: &Id) -> Option<(&ast::NotTyp, &InputHint)> {
+        match self.renv.get(id)? {
+            Rel::Extern {
+                not_typ,
+                input_hint,
+            }
+            | Rel::Defined {
+                not_typ,
+                input_hint,
+                ..
+            } => Some((not_typ, input_hint)),
+        }
+    }
+
+    pub(super) fn find_rel_signature(
+        &self,
+        id: &Id,
+    ) -> Result<(&ast::NotTyp, &InputHint), ElabError> {
+        self.find_rel_signature_opt(id)
+            .ok_or_else(|| ElabError::undefined(EntityKind::Relation, &id.node, id.span.clone()))
+    }
+
+    pub(super) fn bound_rel(&self, id: &Id) -> bool {
+        self.find_rel_signature_opt(id).is_some()
+    }
+
+    fn bound_rule_group(&self, relid: &Id, groupid: &Id) -> bool {
+        let Some(Rel::Defined {
+            rule_groups,
+            else_group,
+            ..
+        }) = self.find_defined_rel_opt(relid)
+        else {
+            return false;
+        };
+        rule_groups
+            .iter()
+            .any(|group| group.node.0.node == groupid.node)
+            || else_group
+                .as_ref()
+                .is_some_and(|group| group.node.0.node == groupid.node)
+    }
+
+    // - Functions
+
+    pub(super) fn find_table_func_opt(&self, id: &Id) -> Option<&Func> {
+        self.fenv
+            .get(id)
+            .filter(|func| matches!(func, Func::Table { .. }))
+    }
+
+    pub(super) fn find_table_func(&self, id: &Id) -> Result<&Func, ElabError> {
+        self.find_table_func_opt(id).ok_or_else(|| {
+            ElabError::undefined(EntityKind::TableFunction, &id.node, id.span.clone())
+        })
+    }
+
+    pub(super) fn find_defined_func_opt(&self, id: &Id) -> Option<&Func> {
+        self.fenv
+            .get(id)
+            .filter(|func| matches!(func, Func::Defined { .. }))
+    }
+
+    pub(super) fn find_defined_func(&self, id: &Id) -> Result<&Func, ElabError> {
+        self.find_defined_func_opt(id).ok_or_else(|| {
+            ElabError::undefined(EntityKind::DefinedFunction, &id.node, id.span.clone())
+        })
+    }
+
+    pub(super) fn find_func_signature_opt(
+        &self,
+        id: &Id,
+    ) -> Option<(&[ast::TParam], &[ast::Param], &ast::Typ)> {
+        match self.fenv.get(id)? {
+            Func::Extern {
+                tparams,
+                params,
+                typ_ret,
+            }
+            | Func::Builtin {
+                tparams,
+                params,
+                typ_ret,
+            }
+            | Func::Defined {
+                tparams,
+                params,
+                typ_ret,
+                ..
+            } => Some((tparams, params, typ_ret)),
+            Func::Table {
+                params, typ_ret, ..
+            } => Some((&[], params, typ_ret)),
+        }
+    }
+
+    pub(super) fn find_func_signature(
+        &self,
+        id: &Id,
+    ) -> Result<(&[ast::TParam], &[ast::Param], &ast::Typ), ElabError> {
+        self.find_func_signature_opt(id)
+            .ok_or_else(|| ElabError::undefined(EntityKind::Function, &id.node, id.span.clone()))
+    }
+
+    pub(super) fn bound_func(&self, id: &Id) -> bool {
+        self.find_func_signature_opt(id).is_some()
+    }
+
+    // == Adders
+
+    // - Free variables
+
     pub(super) fn add_free(&mut self, id: Id) {
         if self.frees.insert(id.clone()) && !self.checkpoints.is_empty() {
-            self.undo.push(Undo::RemoveFree(id));
+            self.undo.push(Undo::AddFree(id));
         }
     }
 
@@ -260,9 +382,11 @@ impl Context {
     pub(super) fn reset_frees(&mut self) {
         let frees = std::mem::take(&mut self.frees);
         if !self.checkpoints.is_empty() && !frees.is_empty() {
-            self.undo.push(Undo::RestoreFrees(frees));
+            self.undo.push(Undo::ResetFrees(frees));
         }
     }
+
+    // - Meta-variables
 
     pub(super) fn add_metavar(&mut self, id: Id, typ: ast::Typ) -> Result<(), ElabError> {
         if self.bound_metavar(&id) {
@@ -274,10 +398,12 @@ impl Context {
         }
         self.menv.insert(id.clone(), typ);
         if !self.checkpoints.is_empty() {
-            self.undo.push(Undo::RemoveMetavar(id));
+            self.undo.push(Undo::AddMetavar(id));
         }
         Ok(())
     }
+
+    // - Type definitions
 
     pub(super) fn add_typdef(&mut self, id: Id, typdef: TypeDef) -> Result<(), ElabError> {
         if self.bound_typdef(&id) {
@@ -285,7 +411,7 @@ impl Context {
         }
         self.tdenv.insert(id.clone(), typdef);
         if !self.checkpoints.is_empty() {
-            self.undo.push(Undo::RemoveTypDef(id));
+            self.undo.push(Undo::AddTypDef(id));
         }
         Ok(())
     }
@@ -317,72 +443,7 @@ impl Context {
         Ok(())
     }
 
-    pub(super) fn update_typdef(&mut self, id: &Id, typdef: TypeDef) -> Result<(), ElabError> {
-        if !self.bound_typdef(id) {
-            return Err(ElabError::undefined(
-                EntityKind::Type,
-                &id.node,
-                id.span.clone(),
-            ));
-        }
-        let previous = self
-            .tdenv
-            .insert(id.clone(), typdef)
-            .expect("checked type binding");
-        if !self.checkpoints.is_empty() {
-            self.undo.push(Undo::RestoreTypDef(id.clone(), previous));
-        }
-        Ok(())
-    }
-
-    pub(super) fn find_defined_rel_opt(&self, id: &Id) -> Option<DefinedRelState<'_>> {
-        match self.renv.get(id)? {
-            Rel::Defined {
-                not_typ,
-                input_hint,
-                rule_groups,
-                else_group,
-            } => Some((not_typ, input_hint, rule_groups, else_group.as_deref())),
-            Rel::Extern { .. } => None,
-        }
-    }
-
-    pub(super) fn find_defined_rel(&self, id: &Id) -> Result<DefinedRelState<'_>, ElabError> {
-        self.find_defined_rel_opt(id).ok_or_else(|| {
-            ElabError::undefined(EntityKind::DefinedRelation, &id.node, id.span.clone())
-        })
-    }
-
-    pub(super) fn find_rel_signature_opt(&self, id: &Id) -> Option<RelSignature<'_>> {
-        match self.renv.get(id)? {
-            Rel::Extern {
-                not_typ,
-                input_hint,
-            }
-            | Rel::Defined {
-                not_typ,
-                input_hint,
-                ..
-            } => Some((not_typ, input_hint)),
-        }
-    }
-
-    pub(super) fn find_rel_signature(&self, id: &Id) -> Result<RelSignature<'_>, ElabError> {
-        self.find_rel_signature_opt(id)
-            .ok_or_else(|| ElabError::undefined(EntityKind::Relation, &id.node, id.span.clone()))
-    }
-
-    pub(super) fn bound_rel(&self, id: &Id) -> bool {
-        self.find_rel_signature_opt(id).is_some()
-    }
-
-    fn bound_rule_group(&self, relid: &Id, groupid: &Id) -> bool {
-        let Some((_, _, groups, else_group)) = self.find_defined_rel_opt(relid) else {
-            return false;
-        };
-        groups.iter().any(|group| group.node.0.node == groupid.node)
-            || else_group.is_some_and(|group| group.node.0.node == groupid.node)
-    }
+    // - Relations
 
     pub(super) fn add_extern_rel(
         &mut self,
@@ -405,7 +466,7 @@ impl Context {
             },
         );
         if !self.checkpoints.is_empty() {
-            self.undo.push(Undo::RemoveRel(id));
+            self.undo.push(Undo::AddRel(id));
         }
         Ok(())
     }
@@ -433,7 +494,7 @@ impl Context {
             },
         );
         if !self.checkpoints.is_empty() {
-            self.undo.push(Undo::RemoveRel(id));
+            self.undo.push(Undo::AddRel(id));
         }
         Ok(())
     }
@@ -464,7 +525,7 @@ impl Context {
         };
         rule_groups.push(rule_group);
         if !self.checkpoints.is_empty() {
-            self.undo.push(Undo::PopRuleGroup(relid.clone()));
+            self.undo.push(Undo::AddRuleGroup(relid.clone()));
         }
         Ok(())
     }
@@ -504,79 +565,12 @@ impl Context {
         }
         *stored = Some(Box::new(else_group));
         if !self.checkpoints.is_empty() {
-            self.undo.push(Undo::ClearElseGroup(relid.clone()));
+            self.undo.push(Undo::AddElseGroup(relid.clone()));
         }
         Ok(())
     }
 
-    pub(super) fn find_table_func_opt(&self, id: &Id) -> Option<TableFuncState<'_>> {
-        match self.fenv.get(id)? {
-            Func::Table {
-                params,
-                typ_ret,
-                table_rows,
-            } => Some((params, typ_ret, table_rows)),
-            _ => None,
-        }
-    }
-
-    pub(super) fn find_table_func(&self, id: &Id) -> Result<TableFuncState<'_>, ElabError> {
-        self.find_table_func_opt(id).ok_or_else(|| {
-            ElabError::undefined(EntityKind::TableFunction, &id.node, id.span.clone())
-        })
-    }
-
-    pub(super) fn find_defined_func_opt(&self, id: &Id) -> Option<DefinedFuncState<'_>> {
-        match self.fenv.get(id)? {
-            Func::Defined {
-                tparams,
-                params,
-                typ_ret,
-                clauses,
-                else_clause,
-            } => Some((tparams, params, typ_ret, clauses, else_clause.as_deref())),
-            _ => None,
-        }
-    }
-
-    pub(super) fn find_defined_func(&self, id: &Id) -> Result<DefinedFuncState<'_>, ElabError> {
-        self.find_defined_func_opt(id).ok_or_else(|| {
-            ElabError::undefined(EntityKind::DefinedFunction, &id.node, id.span.clone())
-        })
-    }
-
-    pub(super) fn find_func_signature_opt(&self, id: &Id) -> Option<FuncSignature<'_>> {
-        match self.fenv.get(id)? {
-            Func::Extern {
-                tparams,
-                params,
-                typ_ret,
-            }
-            | Func::Builtin {
-                tparams,
-                params,
-                typ_ret,
-            }
-            | Func::Defined {
-                tparams,
-                params,
-                typ_ret,
-                ..
-            } => Some((tparams, params, typ_ret)),
-            Func::Table {
-                params, typ_ret, ..
-            } => Some((&[], params, typ_ret)),
-        }
-    }
-
-    pub(super) fn find_func_signature(&self, id: &Id) -> Result<FuncSignature<'_>, ElabError> {
-        self.find_func_signature_opt(id)
-            .ok_or_else(|| ElabError::undefined(EntityKind::Function, &id.node, id.span.clone()))
-    }
-
-    pub(super) fn bound_func(&self, id: &Id) -> bool {
-        self.find_func_signature_opt(id).is_some()
-    }
+    // - Functions
 
     pub(super) fn add_extern_func(
         &mut self,
@@ -595,7 +589,7 @@ impl Context {
             },
         );
         if !self.checkpoints.is_empty() {
-            self.undo.push(Undo::RemoveFunc(id));
+            self.undo.push(Undo::AddFunc(id));
         }
         Ok(())
     }
@@ -617,7 +611,7 @@ impl Context {
             },
         );
         if !self.checkpoints.is_empty() {
-            self.undo.push(Undo::RemoveFunc(id));
+            self.undo.push(Undo::AddFunc(id));
         }
         Ok(())
     }
@@ -638,7 +632,7 @@ impl Context {
             },
         );
         if !self.checkpoints.is_empty() {
-            self.undo.push(Undo::RemoveFunc(id));
+            self.undo.push(Undo::AddFunc(id));
         }
         Ok(())
     }
@@ -662,7 +656,7 @@ impl Context {
             },
         );
         if !self.checkpoints.is_empty() {
-            self.undo.push(Undo::RemoveFunc(id));
+            self.undo.push(Undo::AddFunc(id));
         }
         Ok(())
     }
@@ -683,7 +677,11 @@ impl Context {
         id: &Id,
         table_rows: Vec<ast::TableRow>,
     ) -> Result<(), ElabError> {
-        let Some((_, _, rows_found)) = self.find_table_func_opt(id) else {
+        let Some(Func::Table {
+            table_rows: rows_found,
+            ..
+        }) = self.find_table_func_opt(id)
+        else {
             let span = table_rows
                 .first()
                 .map_or_else(|| id.span.clone(), |row| row.span.clone());
@@ -708,7 +706,7 @@ impl Context {
         };
         *stored = table_rows;
         if !self.checkpoints.is_empty() {
-            self.undo.push(Undo::ClearTableRows(id.clone()));
+            self.undo.push(Undo::AddTableRows(id.clone()));
         }
         Ok(())
     }
@@ -730,7 +728,7 @@ impl Context {
         };
         clauses.push(clause);
         if !self.checkpoints.is_empty() {
-            self.undo.push(Undo::PopClause(id.clone()));
+            self.undo.push(Undo::AddClause(id.clone()));
         }
         Ok(())
     }
@@ -763,14 +761,30 @@ impl Context {
         }
         *stored = Some(Box::new(else_clause));
         if !self.checkpoints.is_empty() {
-            self.undo.push(Undo::ClearElseClause(id.clone()));
+            self.undo.push(Undo::AddElseClause(id.clone()));
         }
         Ok(())
     }
-}
 
-impl Default for Context {
-    fn default() -> Self {
-        Self::new()
+    // == Updaters
+
+    // - Type definitions
+
+    pub(super) fn update_typdef(&mut self, id: &Id, typdef: TypeDef) -> Result<(), ElabError> {
+        if !self.bound_typdef(id) {
+            return Err(ElabError::undefined(
+                EntityKind::Type,
+                &id.node,
+                id.span.clone(),
+            ));
+        }
+        let previous = self
+            .tdenv
+            .insert(id.clone(), typdef)
+            .expect("checked type binding");
+        if !self.checkpoints.is_empty() {
+            self.undo.push(Undo::UpdateTypDef(id.clone(), previous));
+        }
+        Ok(())
     }
 }

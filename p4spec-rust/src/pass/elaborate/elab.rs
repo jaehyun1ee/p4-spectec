@@ -15,9 +15,13 @@ use crate::{
         xl,
     },
     note_phrase, phrase,
-    runtime::types::{
-        Theta, TypeArityMismatch, TypeDef, TypeErrorKind, equiv_func_typ, equiv_typ, expand_typ,
-        optimize_sub_typ, sub_typ, subst_not_typ, subst_params, subst_typ, subst_typs,
+    runtime::{
+        sta::{Func, Rel},
+        types::{
+            Theta, TypeArityMismatch, TypeDef, TypeErrorKind, equiv_func_typ, equiv_typ,
+            expand_typ, optimize_sub_typ, sub_typ, subst_not_typ, subst_params, subst_typ,
+            subst_typs,
+        },
     },
 };
 
@@ -2043,7 +2047,13 @@ fn elab_rule_group(
 ) -> Result<(Option<il::RuleGroup>, Option<il::ElseGroup>), ElabError> {
     let span = &def.span;
     let def = def.node;
-    let (not_typ_il, _, _, _) = ctx.find_defined_rel(&def.relid)?;
+    let Rel::Defined {
+        not_typ: not_typ_il,
+        ..
+    } = ctx.find_defined_rel(&def.relid)?
+    else {
+        unreachable!("checked defined relation")
+    };
     let not_typ_il = not_typ_il.clone();
     let mut rules_il = Vec::with_capacity(def.rules.len());
     let mut rules_il_else = Vec::new();
@@ -2082,7 +2092,15 @@ fn elab_clause(
 ) -> Result<(il::Clause, bool), ElabError> {
     let span = &def.span;
     let def = def.node;
-    let (tparams_il_expect, params_il, typ_il_ret, _, _) = ctx.find_defined_func(&def.id)?;
+    let Func::Defined {
+        tparams: tparams_il_expect,
+        params: params_il,
+        typ_ret: typ_il_ret,
+        ..
+    } = ctx.find_defined_func(&def.id)?
+    else {
+        unreachable!("checked defined function")
+    };
     if def.tparams.len() != tparams_il_expect.len()
         || def
             .tparams
@@ -2557,7 +2575,14 @@ fn elab_func_dec_def(ctx: &mut Context, def: &el::FuncDecDef) -> Result<il::DefK
 // - Table function definitions
 
 fn elab_table_def(ctx: &mut Context, def: &el::TableDef) -> Result<(), ElabError> {
-    let (params_il, typ_il, _) = ctx.find_table_func(&def.id)?;
+    let Func::Table {
+        params: params_il,
+        typ_ret: typ_il,
+        ..
+    } = ctx.find_table_func(&def.id)?
+    else {
+        unreachable!("checked table function")
+    };
     let params_il = params_il.to_vec();
     let typ_il = typ_il.clone();
     let mut rows_il = Vec::with_capacity(def.rows.len());
@@ -2627,9 +2652,16 @@ fn populate_defs(ctx: &Context, defs_il: il::Spec) -> Result<il::Spec, ElabError
                             "relation was already populated",
                         ));
                     }
-                    let (_, _, rule_groups_il, else_group_il) = ctx.find_defined_rel(&rel_il.id)?;
+                    let Rel::Defined {
+                        rule_groups: rule_groups_il,
+                        else_group: else_group_il,
+                        ..
+                    } = ctx.find_defined_rel(&rel_il.id)?
+                    else {
+                        unreachable!("checked defined relation")
+                    };
                     rel_il.rule_groups = rule_groups_il.to_vec();
-                    rel_il.else_group = else_group_il.cloned();
+                    rel_il.else_group = else_group_il.as_deref().cloned();
                     il::DefKind::Rel(rel_il)
                 }
                 il::DefKind::TableDec(mut table_il) => {
@@ -2640,7 +2672,13 @@ fn populate_defs(ctx: &Context, defs_il: il::Spec) -> Result<il::Spec, ElabError
                             "table was already populated",
                         ));
                     }
-                    let (_, _, rows_il) = ctx.find_table_func(&table_il.id)?;
+                    let Func::Table {
+                        table_rows: rows_il,
+                        ..
+                    } = ctx.find_table_func(&table_il.id)?
+                    else {
+                        unreachable!("checked table function")
+                    };
                     table_il.rows = rows_il.to_vec();
                     il::DefKind::TableDec(table_il)
                 }
@@ -2652,10 +2690,16 @@ fn populate_defs(ctx: &Context, defs_il: il::Spec) -> Result<il::Spec, ElabError
                             "function was already populated",
                         ));
                     }
-                    let (_, _, _, clauses_il, else_clause_il) =
-                        ctx.find_defined_func(&func_il.id)?;
+                    let Func::Defined {
+                        clauses: clauses_il,
+                        else_clause: else_clause_il,
+                        ..
+                    } = ctx.find_defined_func(&func_il.id)?
+                    else {
+                        unreachable!("checked defined function")
+                    };
                     func_il.clauses = clauses_il.to_vec();
-                    func_il.else_clause = else_clause_il.cloned();
+                    func_il.else_clause = else_clause_il.as_deref().cloned();
                     il::DefKind::FuncDec(func_il)
                 }
                 def_il_kind => def_il_kind,
