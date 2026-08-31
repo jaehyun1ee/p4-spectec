@@ -10,8 +10,11 @@ use std::{
 use lalrpop_util::ParseError;
 
 use crate::lang::{
-    common::source::{Position, Span},
-    el::ast::Spec,
+    common::{
+        notation::{mixfix::Mixfix, mixop::Mixop},
+        source::{Position, Span},
+    },
+    el::ast::{self, Spec},
 };
 
 use super::{
@@ -25,6 +28,34 @@ use super::{
 /// Parses a SpecTec string with no filesystem source name
 pub fn parse_string(source: &str) -> Result<Spec, FrontendError> {
     parse_source(Rc::from(""), source, &Context::default())
+}
+
+/// Parses the notation shape syntax used by runtime case constructors.
+pub fn parse_mixop(source: &str) -> Result<Mixop, FrontendError> {
+    fn from_typ(typ: &ast::Typ) -> Mixop {
+        match typ {
+            ast::Typ::Plain(_) => Mixfix::Arg(()),
+            ast::Typ::Notation(notation) => match &notation.node {
+                ast::NotTypKind::Atom(atom) => Mixfix::Atom(atom.clone()),
+                ast::NotTypKind::Seq(types) => Mixfix::Seq(types.iter().map(from_typ).collect()),
+                ast::NotTypKind::Infix(left, atom, right) => Mixfix::Infix(
+                    Box::new(from_typ(left)),
+                    atom.clone(),
+                    Box::new(from_typ(right)),
+                ),
+                ast::NotTypKind::Brack(left, inner, right) => {
+                    Mixfix::Brack(left.clone(), Box::new(from_typ(inner)), right.clone())
+                }
+            },
+        }
+    }
+
+    let context = Context::default();
+    let lexer = Lexer::new(Rc::from("<mixop>"), source, |id| context.find_id(id));
+    let typ = parser::CheckTypParser::new()
+        .parse(&context, parser_tokens(&context, lexer))
+        .map_err(|error| parse_error(&context, error))?;
+    Ok(from_typ(&typ))
 }
 
 fn parse_source(name: Rc<str>, source: &str, context: &Context) -> Result<Spec, FrontendError> {

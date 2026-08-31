@@ -1,6 +1,14 @@
-use std::{cell::RefCell, collections::BTreeMap};
+use std::{
+    cell::{Cell, RefCell},
+    collections::BTreeMap,
+};
+
+use crate::lang::common::source::{Position, Span};
 
 use super::error::ContextError;
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) struct Location(usize);
 
 pub type Namespace = BTreeMap<String, IdentKind>;
 
@@ -28,6 +36,8 @@ pub struct Context {
     backup: RefCell<Vec<Namespace>>,
     previous_id: RefCell<Option<String>>,
     parent_namespace: RefCell<Option<Namespace>>,
+    positions: RefCell<Vec<Position>>,
+    template_expected: Cell<bool>,
 }
 
 impl Context {
@@ -37,6 +47,8 @@ impl Context {
             backup: RefCell::new(Vec::new()),
             previous_id: RefCell::new(None),
             parent_namespace: RefCell::new(None),
+            positions: RefCell::new(Vec::new()),
+            template_expected: Cell::new(false),
         }
     }
 
@@ -45,6 +57,8 @@ impl Context {
         self.backup.borrow_mut().clear();
         self.previous_id.borrow_mut().take();
         self.parent_namespace.borrow_mut().take();
+        self.positions.borrow_mut().clear();
+        self.template_expected.set(false);
     }
 
     pub fn declare(&self, id: impl Into<String>, kind: IdentKind) -> Result<(), ContextError> {
@@ -106,6 +120,7 @@ impl Context {
 
     pub fn push_scope(&self) {
         self.scopes.borrow_mut().push(Namespace::new());
+        self.template_expected.set(true);
     }
 
     pub fn pop_scope(&self) -> Result<Namespace, ContextError> {
@@ -169,6 +184,25 @@ impl Context {
 
     pub fn clear_parent_namespace(&self) {
         self.parent_namespace.borrow_mut().take();
+    }
+
+    pub(crate) fn location(&self, position: Position) -> Location {
+        let mut positions = self.positions.borrow_mut();
+        let location = Location(positions.len());
+        positions.push(position);
+        location
+    }
+
+    pub(crate) fn position(&self, location: Location) -> Position {
+        self.positions.borrow()[location.0].clone()
+    }
+
+    pub(crate) fn span(&self, left: Location, right: Location) -> Span {
+        Span::new(self.position(left), self.position(right))
+    }
+
+    pub(crate) fn take_template_expected(&self) -> bool {
+        self.template_expected.replace(false)
     }
 }
 
