@@ -1,6 +1,11 @@
+use std::fmt;
+
 use crate::lang::{
     il::ast::{self, Iter},
-    traits::eq::SyntaxEq,
+    traits::{
+        eq::SyntaxEq,
+        print::{Print, Printer},
+    },
 };
 
 /// A base type paired with the iteration dimensions around it
@@ -17,11 +22,6 @@ impl Dim {
         Self { typ, iters }
     }
 
-    /// Tests type syntax and every dimension for equality
-    pub fn equiv(&self, other: &Self) -> bool {
-        self.typ.syntax_eq(&other.typ) && self.iters == other.iters
-    }
-
     /// Tests whether this value's dimensions are a prefix of `other`
     pub fn sub(&self, other: &Self) -> bool {
         self.typ.syntax_eq(&other.typ)
@@ -33,5 +33,15 @@ impl Dim {
     pub fn add_iter(mut self, iter: Iter) -> Self {
         self.iters.push(iter);
         self
+    }
+}
+
+impl Print for Dim {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        self.typ.print(printer)?;
+        for iter in &self.iters {
+            iter.print(printer)?;
+        }
+        Ok(())
     }
 }

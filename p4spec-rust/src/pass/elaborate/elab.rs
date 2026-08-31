@@ -2676,6 +2676,7 @@ pub(super) fn elaborate(spec: &el::Spec) -> Result<il::Spec, ElabError> {
             defs_il.push(def_il);
         }
     }
-    let defs_il = populate_defs(&ctx, defs_il)?;
-    dimension::analyze_spec(&defs_il)
+    let mut defs_il = populate_defs(&ctx, defs_il)?;
+    dimension::analyze_spec(&mut defs_il)?;
+    Ok(defs_il)
 }

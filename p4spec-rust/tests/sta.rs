@@ -18,12 +18,10 @@ fn typ(kind: TypKind, file: &str) -> ast::Typ {
 }
 
 #[test]
-fn type_dimensions_ignore_spans_and_track_iterator_prefixes() {
+fn type_dimensions_track_iterator_prefixes() {
     let bool_a = Dim::new(typ(TypKind::Bool, "a"), vec![Iter::Opt]);
-    let bool_b = Dim::new(typ(TypKind::Bool, "b"), vec![Iter::Opt]);
     let bool_list = bool_a.clone().add_iter(Iter::List);
 
-    assert!(bool_a.equiv(&bool_b));
     assert!(bool_a.sub(&bool_list));
     assert!(!bool_list.sub(&bool_a));
 }

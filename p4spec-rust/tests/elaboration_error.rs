@@ -47,3 +47,17 @@ fn backtracking_failure_displays_its_elaboration_trace() {
     assert!(diagnostic.contains("expression elaboration failed"));
     assert!(diagnostic.contains("expression does not match any variant case"));
 }
+
+#[test]
+fn dimension_mismatch_displays_the_conflicting_dimensions() {
+    let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/elaboration/dimension_mismatch.watsup");
+    let spec = parse_files([fixture]).expect("parse dimension mismatch fixture");
+
+    let error = elaborate::elaborate(&spec).expect_err("reject mismatched dimensions");
+    let diagnostic = error.to_string();
+
+    assert!(diagnostic.contains("`K_x`"));
+    assert!(diagnostic.contains("K*"));
+    assert!(diagnostic.contains("K?"));
+}
