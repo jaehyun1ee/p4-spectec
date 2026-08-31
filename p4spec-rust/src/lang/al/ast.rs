@@ -1,6 +1,6 @@
 //! Algorithmic language model
 
-use crate::lang::{common::source::Spanned, el, hints::input::InputHint, il};
+use crate::lang::{common::source::Phrase, el, hints::input::InputHint, il};
 
 // Numbers
 
@@ -119,7 +119,7 @@ pub struct RulePath {
     pub exps_output: Vec<Exp>,
 }
 
-pub type RuleGroup = Spanned<RuleGroupKind>;
+pub type RuleGroup = Phrase<RuleGroupKind>;
 #[derive(Clone, Debug, PartialEq)]
 pub struct RuleGroupKind {
     pub id: Id,
@@ -127,7 +127,7 @@ pub struct RuleGroupKind {
     pub rule_paths: Vec<RulePath>,
 }
 
-pub type ElseGroup = Spanned<ElseGroupKind>;
+pub type ElseGroup = Phrase<ElseGroupKind>;
 #[derive(Clone, Debug, PartialEq)]
 pub struct ElseGroupKind {
     pub id: Id,
@@ -144,7 +144,7 @@ pub type ElseClauseKind = il::ast::ElseClauseKind;
 
 // Table rows
 
-pub type TableRow = Spanned<TableRowKind>;
+pub type TableRow = Phrase<TableRowKind>;
 #[derive(Clone, Debug, PartialEq)]
 pub struct TableRowKind {
     pub exps_signature: Vec<Exp>,
@@ -159,7 +159,7 @@ pub type Hint = el::ast::Hint;
 
 // Definitions
 
-pub type Def = Spanned<DefKind>;
+pub type Def = Phrase<DefKind>;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ExternTypDef {

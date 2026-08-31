@@ -1,6 +1,6 @@
 //! Syntax equality shared across language stages
 
-use crate::{lang::common::source::Spanned, yojson::ExternalData};
+use crate::{lang::common::source::NotePhrase, yojson::ExternalData};
 
 /// Compares syntax while ignoring source and analysis metadata
 pub trait SyntaxEq<Rhs: ?Sized = Self> {
@@ -36,7 +36,7 @@ impl SyntaxEq for String {
     }
 }
 
-impl<T: SyntaxEq> SyntaxEq for Spanned<T> {
+impl<T: SyntaxEq, N> SyntaxEq for NotePhrase<T, N> {
     fn syntax_eq(&self, other: &Self) -> bool {
         self.node.syntax_eq(&other.node)
     }

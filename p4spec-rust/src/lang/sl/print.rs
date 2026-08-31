@@ -118,7 +118,7 @@ fn write_instr_with(
             output.write_str(&order)
         }
     };
-    match &instr.node.kind {
+    match &instr.node {
         InstrKind::If(IfInstr {
             exp,
             iter_exps,
@@ -135,7 +135,7 @@ fn write_instr_with(
                 output.write_str("\n\n")?;
                 write_block_with(output, block, level + 1, 0)?;
                 if *dangle {
-                    write!(output, "\n\n{order}Else Dangling#{}", instr.node.note)?;
+                    write!(output, "\n\n{order}Else Dangling#{}", instr.note)?;
                 }
             }
             Ok(())
@@ -182,7 +182,7 @@ fn write_instr_with(
                     output.write_str("\n\n")?;
                     write_block_with(output, block, level + 1, 0)?;
                     if *dangle {
-                        write!(output, "\n\n{order}Else Dangling#{}", instr.node.note)?;
+                        write!(output, "\n\n{order}Else Dangling#{}", instr.note)?;
                     }
                 }
                 Ok(())
@@ -196,7 +196,7 @@ fn write_instr_with(
                 output.write_str("\n\n")?;
                 write_cases_with(output, cases, level + 1)?;
                 if *dangle {
-                    write!(output, "\n\n{order}Else Dangling#{}", instr.node.note)?;
+                    write!(output, "\n\n{order}Else Dangling#{}", instr.note)?;
                 }
             }
             Ok(())

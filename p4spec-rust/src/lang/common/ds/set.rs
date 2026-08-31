@@ -2,18 +2,18 @@
 
 use std::collections::BTreeSet;
 
-use crate::lang::common::{Id, source::Spanned};
+use crate::lang::common::{Id, source::Phrase};
 
 use super::collections::{ByKey, CollectionKey};
 
 /// An ordered set that compares keys through `CollectionKey`
 #[repr(transparent)]
 #[derive(Clone, Debug)]
-pub struct SpannedSet<K: CollectionKey> {
+pub struct PhraseSet<K: CollectionKey> {
     entries: BTreeSet<ByKey<K>>,
 }
 
-impl<K: CollectionKey> SpannedSet<K> {
+impl<K: CollectionKey> PhraseSet<K> {
     /// Constructs an empty set
     pub fn new() -> Self {
         Self {
@@ -48,44 +48,44 @@ impl<K: CollectionKey> SpannedSet<K> {
     }
 }
 
-impl<T: Ord> SpannedSet<Spanned<T>> {
+impl<T: Ord> PhraseSet<Phrase<T>> {
     /// Returns whether an equivalent key is present
-    pub fn contains(&self, key: &Spanned<T>) -> bool {
+    pub fn contains(&self, key: &Phrase<T>) -> bool {
         self.entries.contains(&key.node)
     }
 
     /// Returns the stored key equivalent to `key`
-    pub fn get(&self, key: &Spanned<T>) -> Option<&Spanned<T>> {
+    pub fn get(&self, key: &Phrase<T>) -> Option<&Phrase<T>> {
         self.entries.get(&key.node).map(|key| &key.0)
     }
 
     /// Removes and returns the stored key equivalent to `key`
-    pub fn take(&mut self, key: &Spanned<T>) -> Option<Spanned<T>> {
+    pub fn take(&mut self, key: &Phrase<T>) -> Option<Phrase<T>> {
         self.entries.take(&key.node).map(|key| key.0)
     }
 }
 
-impl<K: CollectionKey> Default for SpannedSet<K> {
+impl<K: CollectionKey> Default for PhraseSet<K> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<K: CollectionKey> PartialEq for SpannedSet<K> {
+impl<K: CollectionKey> PartialEq for PhraseSet<K> {
     fn eq(&self, set_other: &Self) -> bool {
         self.entries == set_other.entries
     }
 }
 
-impl<K: CollectionKey> Eq for SpannedSet<K> {}
+impl<K: CollectionKey> Eq for PhraseSet<K> {}
 
-impl<K: CollectionKey> Extend<K> for SpannedSet<K> {
+impl<K: CollectionKey> Extend<K> for PhraseSet<K> {
     fn extend<T: IntoIterator<Item = K>>(&mut self, keys: T) {
         self.entries.extend(keys.into_iter().map(ByKey));
     }
 }
 
-impl<K: CollectionKey> FromIterator<K> for SpannedSet<K> {
+impl<K: CollectionKey> FromIterator<K> for PhraseSet<K> {
     fn from_iter<T: IntoIterator<Item = K>>(keys: T) -> Self {
         let mut set = Self::new();
         set.extend(keys);
@@ -93,14 +93,14 @@ impl<K: CollectionKey> FromIterator<K> for SpannedSet<K> {
     }
 }
 
-impl<K: CollectionKey, const N: usize> From<[K; N]> for SpannedSet<K> {
+impl<K: CollectionKey, const N: usize> From<[K; N]> for PhraseSet<K> {
     fn from(keys: [K; N]) -> Self {
         keys.into_iter().collect()
     }
 }
 
 /// Set of source-annotated identifiers
-pub type IdSet = SpannedSet<Id>;
+pub type IdSet = PhraseSet<Id>;
 
 /// Set of source-annotated type identifiers
 pub type TIdSet = IdSet;

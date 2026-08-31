@@ -1,5 +1,5 @@
 use p4spec_rust::{
-    lang::common::source::{Position, Span, Spanned},
+    lang::common::source::{Position, Span},
     lang::{
         common::notation::atom::Atom,
         el::ast::{self, ExpKind, Hole},
@@ -17,13 +17,22 @@ fn span(s: &str) -> Span {
     Span::new(Position::new(s, 0, 0), Position::new(s, 0, 0))
 }
 fn atom(s: &str) -> ast::Atom {
-    Spanned::new(Atom::Keyword(s.into()), span(s))
+    p4spec_rust::phrase! {
+        node: Atom::Keyword(s.into()),
+        span: span(s),
+    }
 }
 fn exp(node: ExpKind) -> ast::Exp {
-    Spanned::new(node, span("exp"))
+    p4spec_rust::phrase! {
+        node: node,
+        span: span("exp"),
+    }
 }
 fn id(name: &str, source: &str) -> ast::Id {
-    Spanned::new(name.to_owned(), span(source))
+    p4spec_rust::phrase! {
+        node: name.to_owned(),
+        span: span(source),
+    }
 }
 
 struct StringRenderer {

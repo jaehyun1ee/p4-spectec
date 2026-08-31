@@ -1,6 +1,6 @@
 use serde_json::{Value, json};
 
-use crate::lang::common::source::{Position, Span, Spanned};
+use crate::lang::common::source::{NotePhrase, Phrase, Position, Span};
 
 use super::{DecodeError, field, integer, object};
 
@@ -17,7 +17,7 @@ pub fn decode_position(value: &Value) -> Result<Position, DecodeError> {
 
 pub fn encode_position(position: &Position) -> Value {
     json!({
-        "file": position.file,
+        "file": position.file.as_ref(),
         "line": position.line,
         "column": position.column,
     })
@@ -41,44 +41,41 @@ pub fn encode_region(region: &Span) -> Value {
 pub fn decode_phrase<T>(
     value: &Value,
     decode_it: impl FnOnce(&Value) -> Result<T, DecodeError>,
-) -> Result<Spanned<T>, DecodeError> {
+) -> Result<Phrase<T>, DecodeError> {
+    decode_note_phrase(value, decode_it, |value| {
+        if value.is_null() {
+            Ok(())
+        } else {
+            Err(DecodeError::Expected("null unit note"))
+        }
+    })
+}
+
+pub fn encode_phrase<T>(phrase: &Phrase<T>, encode_it: impl FnOnce(&T) -> Value) -> Value {
+    encode_note_phrase(phrase, encode_it, |_| Value::Null)
+}
+
+pub(crate) fn decode_note_phrase<T, N>(
+    value: &Value,
+    decode_it: impl FnOnce(&Value) -> Result<T, DecodeError>,
+    decode_note: impl FnOnce(&Value) -> Result<N, DecodeError>,
+) -> Result<NotePhrase<T, N>, DecodeError> {
     let object = object(value)?;
-    if !field(object, "note")?.is_null() {
-        return Err(DecodeError::Expected("null unit note"));
-    }
-    Ok(crate::spanned! {
+    Ok(crate::note_phrase! {
         node: decode_it(field(object, "it")?)?,
+        note: decode_note(field(object, "note")?)?,
         span: decode_region(field(object, "at")?)?,
     })
 }
 
-pub fn encode_phrase<T>(phrase: &Spanned<T>, encode_it: impl FnOnce(&T) -> Value) -> Value {
-    json!({
-        "it": encode_it(&phrase.node),
-        "note": null,
-        "at": encode_region(&phrase.span),
-    })
-}
-
-pub(crate) fn decode_annotated<T, N>(
-    value: &Value,
-    decode_it: impl FnOnce(&Value) -> Result<T, DecodeError>,
-    decode_note: impl FnOnce(&Value) -> Result<N, DecodeError>,
-) -> Result<(T, N, Span), DecodeError> {
-    let object = object(value)?;
-    Ok((
-        decode_it(field(object, "it")?)?,
-        decode_note(field(object, "note")?)?,
-        decode_region(field(object, "at")?)?,
-    ))
-}
-
-pub(crate) fn encode_annotated<T, N>(
-    node: &T,
-    note: &N,
-    span: &Span,
+pub(crate) fn encode_note_phrase<T, N>(
+    phrase: &NotePhrase<T, N>,
     encode_it: impl FnOnce(&T) -> Value,
     encode_note: impl FnOnce(&N) -> Value,
 ) -> Value {
-    json!({"it": encode_it(node), "note": encode_note(note), "at": encode_region(span)})
+    json!({
+        "it": encode_it(&phrase.node),
+        "note": encode_note(&phrase.note),
+        "at": encode_region(&phrase.span),
+    })
 }

@@ -1,11 +1,10 @@
 use p4spec_rust::{
-    lang::common::source::{Position, Span, Spanned},
+    lang::common::source::{Position, Span},
     lang::{
         al,
         common::{
             ds::{map::IdMap, set::IdSet},
             notation::{atom::Atom, mixfix::Mixfix},
-            noted::Noted,
         },
         el,
         hints::input::InputHint,
@@ -20,37 +19,45 @@ fn span(name: &str) -> Span {
 }
 
 fn id(name: &str) -> il::ast::Id {
-    Spanned::new(name.to_owned(), span(name))
+    p4spec_rust::phrase! {
+        node: name.to_owned(),
+        span: span(name),
+    }
 }
 
 fn typ() -> il::ast::Typ {
-    Spanned::new(il::ast::TypKind::Bool, span("type"))
+    p4spec_rust::phrase! {
+        node: il::ast::TypKind::Bool,
+        span: span("type"),
+    }
 }
 
 fn not_typ() -> il::ast::NotTyp {
-    Spanned::new(Mixfix::Seq(Vec::new()), span("notation"))
+    p4spec_rust::phrase! {
+        node: Mixfix::Seq(Vec::new()),
+        span: span("notation"),
+    }
 }
 
 fn atom() -> il::ast::Atom {
-    Spanned::new(Atom::Keyword("A".to_owned()), span("atom"))
+    p4spec_rust::phrase! {
+        node: Atom::Keyword("A".to_owned()),
+        span: span("atom"),
+    }
 }
 
 fn variable(name: &str) -> il::ast::Exp {
-    p4spec_rust::spanned! {
-        node: Noted {
-            kind: il::ast::ExpKind::Var(id(name)),
-            note: il::ast::TypKind::Bool,
-        },
+    p4spec_rust::note_phrase! {
+        node: il::ast::ExpKind::Var(id(name)),
+        note: il::ast::TypKind::Bool,
         span: span(name),
     }
 }
 
 fn expr(kind: il::ast::ExpKind) -> il::ast::Exp {
-    p4spec_rust::spanned! {
-        node: Noted {
-            kind,
-            note: il::ast::TypKind::Bool,
-        },
+    p4spec_rust::note_phrase! {
+        node: kind,
+        note: il::ast::TypKind::Bool,
         span: span("expression"),
     }
 }
@@ -60,26 +67,21 @@ fn not_exp(name: &str) -> il::ast::NotExp {
 }
 
 fn arg_exp(name: &str) -> il::ast::Arg {
-    Spanned::new(il::ast::ArgKind::Exp(Box::new(variable(name))), span("arg"))
+    p4spec_rust::phrase! {
+        node: il::ast::ArgKind::Exp(Box::new(variable(name))),
+        span: span("arg"),
+    }
 }
 
 fn path_with(name: &str) -> il::ast::Path {
-    p4spec_rust::spanned! {
-        node: Noted {
-            kind: il::ast::PathKind::Idx(
-            Box::new(p4spec_rust::spanned! {
-                node: Noted {
-                    kind: il::ast::PathKind::Root,
-                    note: il::ast::TypKind::Bool,
-                },
-                span: span("root"),
-            }),
-            Box::new(variable(name)),
-            ),
-            note: il::ast::TypKind::Bool,
-        },
-        span: span("path"),
-    }
+    p4spec_rust::note_phrase! { node: il::ast::PathKind::Idx(
+    Box::new(p4spec_rust::note_phrase! {
+        node: il::ast::PathKind::Root,
+        note: il::ast::TypKind::Bool,
+        span: span("root"),
+    }),
+    Box::new(variable(name)),
+    ), note: il::ast::TypKind::Bool, span: span("path") }
 }
 
 fn ids(names: &[&str]) -> IdSet {
@@ -87,28 +89,16 @@ fn ids(names: &[&str]) -> IdSet {
 }
 #[test]
 fn syntax_equality_ignores_spans_and_subcheck_strategy() {
-    let exp_l = p4spec_rust::spanned! {
-        node: Noted {
-            kind: il::ast::ExpKind::Sub(
-            Box::new(variable("x")),
-            typ(),
-            Box::new(il::ast::Subcheck::Skip),
-            ),
-            note: il::ast::TypKind::Bool,
-        },
-        span: span("left"),
-    };
-    let exp_r = p4spec_rust::spanned! {
-        node: Noted {
-            kind: il::ast::ExpKind::Sub(
-            Box::new(variable("x")),
-            typ(),
-            Box::new(il::ast::Subcheck::Recurse(typ())),
-            ),
-            note: il::ast::TypKind::Text,
-        },
-        span: span("right"),
-    };
+    let exp_l = p4spec_rust::note_phrase! { node: il::ast::ExpKind::Sub(
+    Box::new(variable("x")),
+    typ(),
+    Box::new(il::ast::Subcheck::Skip),
+    ), note: il::ast::TypKind::Bool, span: span("left") };
+    let exp_r = p4spec_rust::note_phrase! { node: il::ast::ExpKind::Sub(
+    Box::new(variable("x")),
+    typ(),
+    Box::new(il::ast::Subcheck::Recurse(typ())),
+    ), note: il::ast::TypKind::Text, span: span("right") };
 
     assert!(exp_l.syntax_eq(&exp_r));
     assert!(
@@ -118,25 +108,23 @@ fn syntax_equality_ignores_spans_and_subcheck_strategy() {
     assert!(id("name").syntax_eq(&id("name")));
     assert!(arg_exp("x").syntax_eq(&arg_exp("x")));
     assert!(
-        Spanned::new(
-            il::ast::PremKind::If(il::ast::IfPrem { exp: variable("x") }),
-            span("prem"),
-        )
-        .syntax_eq(&Spanned::new(
-            il::ast::PremKind::If(il::ast::IfPrem { exp: variable("x") }),
-            span("other-prem"),
-        ))
+        p4spec_rust::phrase! {
+            node: il::ast::PremKind::If(il::ast::IfPrem { exp: variable("x") }),
+            span: span("prem"),
+        }
+        .syntax_eq(&p4spec_rust::phrase! {
+            node: il::ast::PremKind::If(il::ast::IfPrem { exp: variable("x") }),
+            span: span("other-prem"),
+        })
     );
 }
 
 #[test]
 fn syntax_equality_distinguishes_recursive_operands_variants_and_collection_rules() {
     let value = |kind| {
-        p4spec_rust::spanned! {
-            node: Noted {
-                kind,
-                note: il::ast::TypKind::Bool,
-            },
+        p4spec_rust::note_phrase! {
+            node: kind,
+            note: il::ast::TypKind::Bool,
             span: span("value"),
         }
     };
@@ -165,26 +153,20 @@ fn syntax_equality_distinguishes_recursive_operands_variants_and_collection_rule
     );
 
     let path_root = || {
-        p4spec_rust::spanned! {
-            node: Noted {
-                kind: il::ast::PathKind::Root,
-                note: il::ast::TypKind::Bool,
-            },
+        p4spec_rust::note_phrase! {
+            node: il::ast::PathKind::Root,
+            note: il::ast::TypKind::Bool,
             span: span("root"),
         }
     };
-    let path_x = p4spec_rust::spanned! {
-        node: Noted {
-            kind: il::ast::PathKind::Idx(Box::new(path_root()), Box::new(variable("x"))),
-            note: il::ast::TypKind::Bool,
-        },
+    let path_x = p4spec_rust::note_phrase! {
+        node: il::ast::PathKind::Idx(Box::new(path_root()), Box::new(variable("x"))),
+        note: il::ast::TypKind::Bool,
         span: span("path-x"),
     };
-    let path_y = p4spec_rust::spanned! {
-        node: Noted {
-            kind: il::ast::PathKind::Idx(Box::new(path_root()), Box::new(variable("y"))),
-            note: il::ast::TypKind::Bool,
-        },
+    let path_y = p4spec_rust::note_phrase! {
+        node: il::ast::PathKind::Idx(Box::new(path_root()), Box::new(variable("y"))),
+        note: il::ast::TypKind::Bool,
         span: span("path-y"),
     };
     assert!(path_x.syntax_eq(&path_x));
@@ -195,26 +177,23 @@ fn syntax_equality_distinguishes_recursive_operands_variants_and_collection_rule
     );
 
     let prem_rule = |input_hint| {
-        Spanned::new(
-            il::ast::PremKind::Rule(il::ast::RulePrem {
-                id: id("r"),
-                not_exp: not_exp("x"),
-                input_hint,
-            }),
-            span("rule"),
-        )
+        p4spec_rust::phrase! { node: il::ast::PremKind::Rule(il::ast::RulePrem {
+            id: id("r"),
+            not_exp: not_exp("x"),
+            input_hint,
+        }), span: span("rule") }
     };
     assert!(prem_rule(InputHint::new(vec![0])).syntax_eq(&prem_rule(InputHint::new(vec![0]))));
     assert!(!prem_rule(InputHint::new(vec![0])).syntax_eq(&prem_rule(InputHint::new(vec![1]))));
     assert!(
-        !Spanned::new(
-            il::ast::PremKind::If(il::ast::IfPrem { exp: variable("x") }),
-            span("if"),
-        )
-        .syntax_eq(&Spanned::new(
-            il::ast::PremKind::Debug(il::ast::DebugPrem { exp: variable("x") }),
-            span("debug"),
-        ))
+        !p4spec_rust::phrase! {
+            node: il::ast::PremKind::If(il::ast::IfPrem { exp: variable("x") }),
+            span: span("if"),
+        }
+        .syntax_eq(&p4spec_rust::phrase! {
+            node: il::ast::PremKind::Debug(il::ast::DebugPrem { exp: variable("x") }),
+            span: span("debug"),
+        })
     );
     let iter_prem = |vars_bound, vars_bind| il::ast::IterPrem {
         iter: il::ast::Iter::List,
@@ -356,36 +335,26 @@ fn free_expression_path_argument_and_premise_variants_collect_identifier_text() 
 
     let paths = vec![
         (
-            p4spec_rust::spanned! {
-                node: Noted {
-                    kind: il::ast::PathKind::Root,
-                    note: il::ast::TypKind::Bool,
-                },
+            p4spec_rust::note_phrase! {
+                node: il::ast::PathKind::Root,
+                note: il::ast::TypKind::Bool,
                 span: span("root"),
             },
             ids(&[]),
         ),
         (path_with("x"), ids(&["x"])),
         (
-            p4spec_rust::spanned! {
-                node: Noted {
-                    kind: il::ast::PathKind::Slice(
-                    Box::new(path_with("x")),
-                    Box::new(variable("y")),
-                    Box::new(variable("z")),
-                    ),
-                    note: il::ast::TypKind::Bool,
-                },
-                span: span("slice"),
-            },
+            p4spec_rust::note_phrase! { node: il::ast::PathKind::Slice(
+            Box::new(path_with("x")),
+            Box::new(variable("y")),
+            Box::new(variable("z")),
+            ), note: il::ast::TypKind::Bool, span: span("slice") },
             ids(&["x", "y", "z"]),
         ),
         (
-            p4spec_rust::spanned! {
-                node: Noted {
-                    kind: il::ast::PathKind::Dot(Box::new(path_with("x")), atom()),
-                    note: il::ast::TypKind::Bool,
-                },
+            p4spec_rust::note_phrase! {
+                node: il::ast::PathKind::Dot(Box::new(path_with("x")), atom()),
+                note: il::ast::TypKind::Bool,
                 span: span("dot"),
             },
             ids(&["x"]),
@@ -397,7 +366,11 @@ fn free_expression_path_argument_and_premise_variants_collect_identifier_text() 
 
     assert_eq!(arg_exp("x").free(), ids(&["x"]));
     assert_eq!(
-        Spanned::new(il::ast::ArgKind::Def(id("x")), span("def")).free(),
+        p4spec_rust::phrase! {
+            node: il::ast::ArgKind::Def(id("x")),
+            span: span("def"),
+        }
+        .free(),
         ids(&[])
     );
     let premises = vec![
@@ -436,10 +409,10 @@ fn free_expression_path_argument_and_premise_variants_collect_identifier_text() 
         ),
         (
             il::ast::PremKind::Iter(il::ast::IteratedPrem {
-                prem: Box::new(Spanned::new(
-                    il::ast::PremKind::If(il::ast::IfPrem { exp: variable("x") }),
-                    span("nested"),
-                )),
+                prem: Box::new(p4spec_rust::phrase! {
+                    node: il::ast::PremKind::If(il::ast::IfPrem { exp: variable("x") }),
+                    span: span("nested"),
+                }),
                 iter_prem: il::ast::IterPrem {
                     iter: il::ast::Iter::List,
                     vars_bound: Vec::new(),
@@ -454,17 +427,24 @@ fn free_expression_path_argument_and_premise_variants_collect_identifier_text() 
         ),
     ];
     for (premise, expected) in premises {
-        assert_eq!(Spanned::new(premise, span("premise")).free(), expected);
+        assert_eq!(
+            p4spec_rust::phrase! {
+                node: premise,
+                span: span("premise"),
+            }
+            .free(),
+            expected
+        );
     }
 }
 
 #[test]
 fn free_al_shapes_and_definition_arms_are_exhaustive() {
     let premise = || {
-        Spanned::new(
-            il::ast::PremKind::If(il::ast::IfPrem { exp: variable("p") }),
-            span("premise"),
-        )
+        p4spec_rust::phrase! {
+            node: il::ast::PremKind::If(il::ast::IfPrem { exp: variable("p") }),
+            span: span("premise"),
+        }
     };
     let rule_match = al::ast::RuleMatch {
         exps_signature: vec![variable("s")],
@@ -476,39 +456,27 @@ fn free_al_shapes_and_definition_arms_are_exhaustive() {
         prems: vec![premise()],
         exps_output: vec![variable("o")],
     };
-    let group: al::ast::RuleGroup = Spanned::new(
-        al::ast::RuleGroupKind {
-            id: id("group"),
-            rule_match: rule_match.clone(),
-            rule_paths: vec![rule_path.clone()],
-        },
-        span("group"),
-    );
-    let else_group: al::ast::ElseGroup = Spanned::new(
-        al::ast::ElseGroupKind {
-            id: id("else"),
-            rule_match: rule_match.clone(),
-            rule_path: rule_path.clone(),
-        },
-        span("else"),
-    );
-    let clause: al::ast::Clause = Spanned::new(
-        il::ast::ClauseKind {
-            args: vec![arg_exp("a")],
-            expression: variable("c"),
-            premises: vec![premise()],
-        },
-        span("clause"),
-    );
-    let table: al::ast::TableRow = Spanned::new(
-        al::ast::TableRowKind {
-            exps_signature: vec![variable("signature")],
-            args: vec![arg_exp("a")],
-            exp: variable("t"),
-            prems: vec![premise()],
-        },
-        span("table"),
-    );
+    let group: al::ast::RuleGroup = p4spec_rust::phrase! { node: al::ast::RuleGroupKind {
+        id: id("group"),
+        rule_match: rule_match.clone(),
+        rule_paths: vec![rule_path.clone()],
+    }, span: span("group") };
+    let else_group: al::ast::ElseGroup = p4spec_rust::phrase! { node: al::ast::ElseGroupKind {
+        id: id("else"),
+        rule_match: rule_match.clone(),
+        rule_path: rule_path.clone(),
+    }, span: span("else") };
+    let clause: al::ast::Clause = p4spec_rust::phrase! { node: il::ast::ClauseKind {
+        args: vec![arg_exp("a")],
+        expression: variable("c"),
+        premises: vec![premise()],
+    }, span: span("clause") };
+    let table: al::ast::TableRow = p4spec_rust::phrase! { node: al::ast::TableRowKind {
+        exps_signature: vec![variable("signature")],
+        args: vec![arg_exp("a")],
+        exp: variable("t"),
+        prems: vec![premise()],
+    }, span: span("table") };
 
     assert_eq!(rule_match.free(), ids(&["s", "i", "p"]));
     assert_eq!(rule_path.free(), ids(&["p", "o"]));
@@ -517,119 +485,95 @@ fn free_al_shapes_and_definition_arms_are_exhaustive() {
     assert_eq!(clause.free(), ids(&["a", "c", "p"]));
     assert_eq!(table.free(), ids(&["a", "t", "p"]));
 
-    let def_type = Spanned::new(il::ast::DefTypKind::Plain(typ()), span("def-type"));
+    let def_type = p4spec_rust::phrase! {
+        node: il::ast::DefTypKind::Plain(typ()),
+        span: span("def-type"),
+    };
     let definitions: Vec<(al::ast::Def, IdSet)> = vec![
         (
-            Spanned::new(
-                al::ast::DefKind::ExternTyp(al::ast::ExternTypDef {
-                    id: id("e"),
-                    hints: Vec::new(),
-                }),
-                span("def"),
-            ),
+            p4spec_rust::phrase! { node: al::ast::DefKind::ExternTyp(al::ast::ExternTypDef {
+                id: id("e"),
+                hints: Vec::new(),
+            }), span: span("def") },
             ids(&[]),
         ),
         (
-            Spanned::new(
-                al::ast::DefKind::Typ(al::ast::TypDef {
-                    id: id("t"),
-                    tparams: Vec::new(),
-                    def_typ: def_type,
-                    hints: Vec::new(),
-                }),
-                span("def"),
-            ),
+            p4spec_rust::phrase! { node: al::ast::DefKind::Typ(al::ast::TypDef {
+                id: id("t"),
+                tparams: Vec::new(),
+                def_typ: def_type,
+                hints: Vec::new(),
+            }), span: span("def") },
             ids(&[]),
         ),
         (
-            Spanned::new(
-                al::ast::DefKind::Var(al::ast::VarDef {
-                    id: id("v"),
-                    typ: typ(),
-                    hints: Vec::new(),
-                }),
-                span("def"),
-            ),
+            p4spec_rust::phrase! { node: al::ast::DefKind::Var(al::ast::VarDef {
+                id: id("v"),
+                typ: typ(),
+                hints: Vec::new(),
+            }), span: span("def") },
             ids(&[]),
         ),
         (
-            Spanned::new(
-                al::ast::DefKind::ExternRel(al::ast::ExternRelDef {
-                    id: id("er"),
-                    not_typ: not_typ(),
-                    input_hint: InputHint::new(Vec::new()),
-                    hints: Vec::new(),
-                }),
-                span("def"),
-            ),
+            p4spec_rust::phrase! { node: al::ast::DefKind::ExternRel(al::ast::ExternRelDef {
+                id: id("er"),
+                not_typ: not_typ(),
+                input_hint: InputHint::new(Vec::new()),
+                hints: Vec::new(),
+            }), span: span("def") },
             ids(&[]),
         ),
         (
-            Spanned::new(
-                al::ast::DefKind::Rel(al::ast::RelDef {
-                    id: id("r"),
-                    not_typ: not_typ(),
-                    input_hint: InputHint::new(Vec::new()),
-                    rule_groups: vec![group],
-                    else_group: Some(else_group),
-                    hints: Vec::new(),
-                }),
-                span("def"),
-            ),
+            p4spec_rust::phrase! { node: al::ast::DefKind::Rel(al::ast::RelDef {
+                id: id("r"),
+                not_typ: not_typ(),
+                input_hint: InputHint::new(Vec::new()),
+                rule_groups: vec![group],
+                else_group: Some(else_group),
+                hints: Vec::new(),
+            }), span: span("def") },
             ids(&["s", "i", "p", "o"]),
         ),
         (
-            Spanned::new(
-                al::ast::DefKind::ExternDec(al::ast::ExternDecDef {
-                    id: id("ed"),
-                    tparams: Vec::new(),
-                    params: Vec::new(),
-                    typ: typ(),
-                    hints: Vec::new(),
-                }),
-                span("def"),
-            ),
+            p4spec_rust::phrase! { node: al::ast::DefKind::ExternDec(al::ast::ExternDecDef {
+                id: id("ed"),
+                tparams: Vec::new(),
+                params: Vec::new(),
+                typ: typ(),
+                hints: Vec::new(),
+            }), span: span("def") },
             ids(&[]),
         ),
         (
-            Spanned::new(
-                al::ast::DefKind::BuiltinDec(al::ast::BuiltinDecDef {
-                    id: id("bd"),
-                    tparams: Vec::new(),
-                    params: Vec::new(),
-                    typ: typ(),
-                    hints: Vec::new(),
-                }),
-                span("def"),
-            ),
+            p4spec_rust::phrase! { node: al::ast::DefKind::BuiltinDec(al::ast::BuiltinDecDef {
+                id: id("bd"),
+                tparams: Vec::new(),
+                params: Vec::new(),
+                typ: typ(),
+                hints: Vec::new(),
+            }), span: span("def") },
             ids(&[]),
         ),
         (
-            Spanned::new(
-                al::ast::DefKind::TableDec(al::ast::TableDecDef {
-                    id: id("td"),
-                    params: Vec::new(),
-                    typ: typ(),
-                    table_rows: vec![table],
-                    hints: Vec::new(),
-                }),
-                span("def"),
-            ),
+            p4spec_rust::phrase! { node: al::ast::DefKind::TableDec(al::ast::TableDecDef {
+                id: id("td"),
+                params: Vec::new(),
+                typ: typ(),
+                table_rows: vec![table],
+                hints: Vec::new(),
+            }), span: span("def") },
             ids(&["a", "t", "p"]),
         ),
         (
-            Spanned::new(
-                al::ast::DefKind::FuncDec(al::ast::FuncDecDef {
-                    id: id("fd"),
-                    tparams: Vec::new(),
-                    params: Vec::new(),
-                    typ: typ(),
-                    clauses: vec![clause.clone()],
-                    else_clause: Some(clause),
-                    hints: Vec::new(),
-                }),
-                span("def"),
-            ),
+            p4spec_rust::phrase! { node: al::ast::DefKind::FuncDec(al::ast::FuncDecDef {
+                id: id("fd"),
+                tparams: Vec::new(),
+                params: Vec::new(),
+                typ: typ(),
+                clauses: vec![clause.clone()],
+                else_clause: Some(clause),
+                hints: Vec::new(),
+            }), span: span("def") },
             ids(&["a", "c", "p"]),
         ),
     ];
@@ -639,35 +583,48 @@ fn free_al_shapes_and_definition_arms_are_exhaustive() {
 }
 
 fn text_typ() -> il::ast::Typ {
-    Spanned::new(il::ast::TypKind::Text, span("text-type"))
+    p4spec_rust::phrase! {
+        node: il::ast::TypKind::Text,
+        span: span("text-type"),
+    }
 }
 
 fn text_expression(text: &str) -> il::ast::Exp {
-    p4spec_rust::spanned! {
-        node: Noted {
-            kind: il::ast::ExpKind::Text(text.to_owned()),
-            note: il::ast::TypKind::Text,
-        },
+    p4spec_rust::note_phrase! {
+        node: il::ast::ExpKind::Text(text.to_owned()),
+        note: il::ast::TypKind::Text,
         span: span("text-expression"),
     }
 }
 
 fn keyword(name: &str) -> il::ast::Atom {
-    Spanned::new(Atom::Keyword(name.to_owned()), span(name))
+    p4spec_rust::phrase! {
+        node: Atom::Keyword(name.to_owned()),
+        span: span(name),
+    }
 }
 
 fn notation(parts: Vec<Mixfix<il::ast::Typ>>) -> il::ast::NotTyp {
-    Spanned::new(Mixfix::Seq(parts), span("notation"))
+    p4spec_rust::phrase! {
+        node: Mixfix::Seq(parts),
+        span: span("notation"),
+    }
 }
 
 fn premise(kind: il::ast::PremKind) -> il::ast::Prem {
-    Spanned::new(kind, span("premise"))
+    p4spec_rust::phrase! {
+        node: kind,
+        span: span("premise"),
+    }
 }
 
 fn metadata_hint(metadata: &str) -> al::ast::Hint {
     (
         id(&format!("ignored-{metadata}")),
-        Spanned::new(el::ast::ExpKind::Text(metadata.to_owned()), span(metadata)),
+        p4spec_rust::phrase! {
+            node: el::ast::ExpKind::Text(metadata.to_owned()),
+            span: span(metadata),
+        },
     )
 }
 
@@ -693,14 +650,11 @@ fn composite_spec(metadata: &str, extern_inputs: Vec<i64>) -> al::ast::Spec {
         }))],
         exps_output: vec![text_expression("done")],
     };
-    let evaluate_group = Spanned::new(
-        al::ast::RuleGroupKind {
-            id: id("main"),
-            rule_match: evaluate_match,
-            rule_paths: vec![evaluate_path],
-        },
-        span(metadata),
-    );
+    let evaluate_group = p4spec_rust::phrase! { node: al::ast::RuleGroupKind {
+        id: id("main"),
+        rule_match: evaluate_match,
+        rule_paths: vec![evaluate_path],
+    }, span: span(metadata) };
     let fallback_match = al::ast::RuleMatch {
         exps_signature: vec![variable("fallback_signature")],
         exps_input: vec![variable("fallback_input")],
@@ -711,161 +665,122 @@ fn composite_spec(metadata: &str, extern_inputs: Vec<i64>) -> al::ast::Spec {
         prems: Vec::new(),
         exps_output: vec![text_expression("fallback")],
     };
-    let else_group = Spanned::new(
-        al::ast::ElseGroupKind {
-            id: id("fallback_group"),
-            rule_match: fallback_match,
-            rule_path: fallback_path,
-        },
-        span(metadata),
-    );
+    let else_group = p4spec_rust::phrase! { node: al::ast::ElseGroupKind {
+        id: id("fallback_group"),
+        rule_match: fallback_match,
+        rule_path: fallback_path,
+    }, span: span(metadata) };
     let ready_notation = notation(vec![Mixfix::Atom(keyword("ready")), Mixfix::Arg(typ())]);
-    let ready_group = Spanned::new(
-        al::ast::RuleGroupKind {
-            id: id("ready_group"),
-            rule_match: al::ast::RuleMatch {
-                exps_signature: vec![variable("ready_signature")],
-                exps_input: vec![variable("ready_input")],
-                prems: Vec::new(),
-            },
-            rule_paths: vec![al::ast::RulePath {
-                id: id("holds"),
-                prems: Vec::new(),
-                exps_output: Vec::new(),
-            }],
+    let ready_group = p4spec_rust::phrase! { node: al::ast::RuleGroupKind {
+        id: id("ready_group"),
+        rule_match: al::ast::RuleMatch {
+            exps_signature: vec![variable("ready_signature")],
+            exps_input: vec![variable("ready_input")],
+            prems: Vec::new(),
         },
-        span(metadata),
-    );
-    let table_row = Spanned::new(
-        al::ast::TableRowKind {
-            exps_signature: vec![variable("table_signature")],
-            args: vec![arg_exp("key")],
-            exp: text_expression("row\tvalue"),
-            prems: vec![premise(il::ast::PremKind::If(il::ast::IfPrem {
-                exp: variable("ready"),
-            }))],
-        },
-        span(metadata),
-    );
-    let function_clause = Spanned::new(
-        il::ast::ClauseKind {
-            args: vec![arg_exp("argument")],
-            expression: text_expression("quoted\"\\"),
-            premises: vec![premise(il::ast::PremKind::If(il::ast::IfPrem {
-                exp: variable("ready"),
-            }))],
-        },
-        span(metadata),
-    );
-    let else_clause = Spanned::new(
-        il::ast::ClauseKind {
-            args: vec![arg_exp("fallback")],
-            expression: expr(il::ast::ExpKind::Bool(false)),
-            premises: Vec::new(),
-        },
-        span(metadata),
-    );
-    let def_type = Spanned::new(il::ast::DefTypKind::Plain(typ()), span("defined-type"));
-    let parameter = Spanned::new(il::ast::ParamKind::Exp(typ()), span("parameter"));
+        rule_paths: vec![al::ast::RulePath {
+            id: id("holds"),
+            prems: Vec::new(),
+            exps_output: Vec::new(),
+        }],
+    }, span: span(metadata) };
+    let table_row = p4spec_rust::phrase! { node: al::ast::TableRowKind {
+        exps_signature: vec![variable("table_signature")],
+        args: vec![arg_exp("key")],
+        exp: text_expression("row\tvalue"),
+        prems: vec![premise(il::ast::PremKind::If(il::ast::IfPrem {
+            exp: variable("ready"),
+        }))],
+    }, span: span(metadata) };
+    let function_clause = p4spec_rust::phrase! { node: il::ast::ClauseKind {
+        args: vec![arg_exp("argument")],
+        expression: text_expression("quoted\"\\"),
+        premises: vec![premise(il::ast::PremKind::If(il::ast::IfPrem {
+            exp: variable("ready"),
+        }))],
+    }, span: span(metadata) };
+    let else_clause = p4spec_rust::phrase! { node: il::ast::ClauseKind {
+        args: vec![arg_exp("fallback")],
+        expression: expr(il::ast::ExpKind::Bool(false)),
+        premises: Vec::new(),
+    }, span: span(metadata) };
+    let def_type = p4spec_rust::phrase! {
+        node: il::ast::DefTypKind::Plain(typ()),
+        span: span("defined-type"),
+    };
+    let parameter = p4spec_rust::phrase! {
+        node: il::ast::ParamKind::Exp(typ()),
+        span: span("parameter"),
+    };
 
     vec![
-        Spanned::new(
-            al::ast::DefKind::ExternTyp(al::ast::ExternTypDef {
-                id: id("External"),
-                hints: hints.clone(),
-            }),
-            span(metadata),
-        ),
-        Spanned::new(
-            al::ast::DefKind::Typ(al::ast::TypDef {
-                id: id("Box"),
-                tparams: vec![id("T")],
-                def_typ: def_type,
-                hints: hints.clone(),
-            }),
-            span(metadata),
-        ),
-        Spanned::new(
-            al::ast::DefKind::Var(al::ast::VarDef {
-                id: id("state"),
-                typ: typ(),
-                hints: hints.clone(),
-            }),
-            span(metadata),
-        ),
-        Spanned::new(
-            al::ast::DefKind::ExternRel(al::ast::ExternRelDef {
-                id: id("Check"),
-                not_typ: notation(vec![Mixfix::Atom(keyword("check")), Mixfix::Arg(typ())]),
-                input_hint: InputHint::new(extern_inputs),
-                hints: hints.clone(),
-            }),
-            span(metadata),
-        ),
-        Spanned::new(
-            al::ast::DefKind::Rel(al::ast::RelDef {
-                id: id("Evaluate"),
-                not_typ: evaluate_notation,
-                input_hint: InputHint::new(vec![0]),
-                rule_groups: vec![evaluate_group],
-                else_group: Some(else_group),
-                hints: hints.clone(),
-            }),
-            span(metadata),
-        ),
-        Spanned::new(
-            al::ast::DefKind::Rel(al::ast::RelDef {
-                id: id("Ready"),
-                not_typ: ready_notation,
-                input_hint: InputHint::new(vec![0]),
-                rule_groups: vec![ready_group],
-                else_group: None,
-                hints: hints.clone(),
-            }),
-            span(metadata),
-        ),
-        Spanned::new(
-            al::ast::DefKind::ExternDec(al::ast::ExternDecDef {
-                id: id("external"),
-                tparams: Vec::new(),
-                params: vec![parameter.clone()],
-                typ: typ(),
-                hints: hints.clone(),
-            }),
-            span(metadata),
-        ),
-        Spanned::new(
-            al::ast::DefKind::BuiltinDec(al::ast::BuiltinDecDef {
-                id: id("builtin"),
-                tparams: Vec::new(),
-                params: vec![parameter.clone()],
-                typ: typ(),
-                hints: hints.clone(),
-            }),
-            span(metadata),
-        ),
-        Spanned::new(
-            al::ast::DefKind::TableDec(al::ast::TableDecDef {
-                id: id("lookup"),
-                params: vec![parameter.clone()],
-                typ: typ(),
-                table_rows: vec![table_row],
-                hints: hints.clone(),
-            }),
-            span(metadata),
-        ),
-        Spanned::new(
-            al::ast::DefKind::FuncDec(al::ast::FuncDecDef {
-                id: id("run"),
-                tparams: vec![id("T")],
-                params: vec![parameter],
-                typ: typ(),
-                clauses: vec![function_clause],
-                else_clause: Some(else_clause),
-                hints,
-            }),
-            span(metadata),
-        ),
+        p4spec_rust::phrase! { node: al::ast::DefKind::ExternTyp(al::ast::ExternTypDef {
+            id: id("External"),
+            hints: hints.clone(),
+        }), span: span(metadata) },
+        p4spec_rust::phrase! { node: al::ast::DefKind::Typ(al::ast::TypDef {
+            id: id("Box"),
+            tparams: vec![id("T")],
+            def_typ: def_type,
+            hints: hints.clone(),
+        }), span: span(metadata) },
+        p4spec_rust::phrase! { node: al::ast::DefKind::Var(al::ast::VarDef {
+            id: id("state"),
+            typ: typ(),
+            hints: hints.clone(),
+        }), span: span(metadata) },
+        p4spec_rust::phrase! { node: al::ast::DefKind::ExternRel(al::ast::ExternRelDef {
+            id: id("Check"),
+            not_typ: notation(vec![Mixfix::Atom(keyword("check")), Mixfix::Arg(typ())]),
+            input_hint: InputHint::new(extern_inputs),
+            hints: hints.clone(),
+        }), span: span(metadata) },
+        p4spec_rust::phrase! { node: al::ast::DefKind::Rel(al::ast::RelDef {
+            id: id("Evaluate"),
+            not_typ: evaluate_notation,
+            input_hint: InputHint::new(vec![0]),
+            rule_groups: vec![evaluate_group],
+            else_group: Some(else_group),
+            hints: hints.clone(),
+        }), span: span(metadata) },
+        p4spec_rust::phrase! { node: al::ast::DefKind::Rel(al::ast::RelDef {
+            id: id("Ready"),
+            not_typ: ready_notation,
+            input_hint: InputHint::new(vec![0]),
+            rule_groups: vec![ready_group],
+            else_group: None,
+            hints: hints.clone(),
+        }), span: span(metadata) },
+        p4spec_rust::phrase! { node: al::ast::DefKind::ExternDec(al::ast::ExternDecDef {
+            id: id("external"),
+            tparams: Vec::new(),
+            params: vec![parameter.clone()],
+            typ: typ(),
+            hints: hints.clone(),
+        }), span: span(metadata) },
+        p4spec_rust::phrase! { node: al::ast::DefKind::BuiltinDec(al::ast::BuiltinDecDef {
+            id: id("builtin"),
+            tparams: Vec::new(),
+            params: vec![parameter.clone()],
+            typ: typ(),
+            hints: hints.clone(),
+        }), span: span(metadata) },
+        p4spec_rust::phrase! { node: al::ast::DefKind::TableDec(al::ast::TableDecDef {
+            id: id("lookup"),
+            params: vec![parameter.clone()],
+            typ: typ(),
+            table_rows: vec![table_row],
+            hints: hints.clone(),
+        }), span: span(metadata) },
+        p4spec_rust::phrase! { node: al::ast::DefKind::FuncDec(al::ast::FuncDecDef {
+            id: id("run"),
+            tparams: vec![id("T")],
+            params: vec![parameter],
+            typ: typ(),
+            clauses: vec![function_clause],
+            else_clause: Some(else_clause),
+            hints,
+        }), span: span(metadata) },
     ]
 }
 
@@ -935,17 +850,18 @@ fn composite_al_spec_omits_source_hints_and_extern_relation_inputs() {
 #[test]
 fn fresh_names_combine_aliases_collisions_wildcards_and_nested_dimensions() {
     let requested = span("requested");
-    let alias_typ = Spanned::new(il::ast::TypKind::Bool, span("alias-type"));
-    let nested = Spanned::new(
-        il::ast::TypKind::Iter(
-            Box::new(Spanned::new(
-                il::ast::TypKind::Iter(Box::new(typ()), il::ast::Iter::Opt),
-                span("inner-iteration"),
-            )),
-            il::ast::Iter::List,
-        ),
-        span("outer-iteration"),
-    );
+    let alias_typ = p4spec_rust::phrase! {
+        node: il::ast::TypKind::Bool,
+        span: span("alias-type"),
+    };
+    let nested = p4spec_rust::phrase! { node: il::ast::TypKind::Iter(
+        Box::new(p4spec_rust::phrase! {
+            node:
+            il::ast::TypKind::Iter(Box::new(typ()), il::ast::Iter::Opt),
+            span: span("inner-iteration"),
+        }),
+        il::ast::Iter::List,
+    ), span: span("outer-iteration") };
     let mut aliases = IdMap::new();
     aliases.insert(id("Alias"), alias_typ.clone());
 
@@ -965,7 +881,10 @@ fn fresh_names_combine_aliases_collisions_wildcards_and_nested_dimensions() {
 
     aliases.insert(
         id("Other"),
-        Spanned::new(il::ast::TypKind::Bool, span("other-type")),
+        p4spec_rust::phrase! {
+            node: il::ast::TypKind::Bool,
+            span: span("other-type"),
+        },
     );
     let wildcard = il::fresh::var_from_typ_wildcard(
         &aliases,
@@ -984,11 +903,10 @@ fn fresh_names_combine_aliases_collisions_wildcards_and_nested_dimensions() {
     let (generated_ids, generated) =
         il::fresh::exp_from_typ(true, &aliases, &ids(&["bool"]), &nested);
     assert_eq!(generated_ids, ids(&["bool", "bool'"]));
-    let il::ast::ExpKind::Iter(inner, (il::ast::Iter::List, outer_binders)) = generated.node.kind
-    else {
+    let il::ast::ExpKind::Iter(inner, (il::ast::Iter::List, outer_binders)) = generated.node else {
         panic!("outer iteration")
     };
-    let il::ast::ExpKind::Iter(_, (il::ast::Iter::Opt, inner_binders)) = inner.node.kind else {
+    let il::ast::ExpKind::Iter(_, (il::ast::Iter::Opt, inner_binders)) = inner.node else {
         panic!("inner iteration")
     };
     assert_eq!(inner_binders.len(), 1);

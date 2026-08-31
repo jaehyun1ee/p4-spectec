@@ -2,7 +2,6 @@ use serde_json::{Value, json};
 
 use crate::{
     lang::{
-        common::noted::Noted,
         hints::{alter, fields},
         pl::{
             annot,
@@ -180,21 +179,11 @@ fn encode_exp(exp: &ast::Exp) -> Value {
 }
 
 fn decode_exp_node(value: &Value) -> Result<ast::ExpNode, DecodeError> {
-    let (kind, ty, span) = source::decode_annotated(value, decode_exp_kind, il::decode_typ_kind)?;
-    Ok(crate::spanned! {
-        node: Noted::new(kind, ty),
-        span: span,
-    })
+    source::decode_note_phrase(value, decode_exp_kind, il::decode_typ_kind)
 }
 
 fn encode_exp_node(exp: &ast::ExpNode) -> Value {
-    source::encode_annotated(
-        &exp.node.kind,
-        &exp.node.note,
-        &exp.span,
-        encode_exp_kind,
-        il::encode_typ_kind,
-    )
+    source::encode_note_phrase(exp, encode_exp_kind, il::encode_typ_kind)
 }
 
 fn decode_exp_kind(value: &Value) -> Result<ExpKind, DecodeError> {
@@ -375,21 +364,11 @@ fn encode_exp_kind(exp: &ExpKind) -> Value {
 }
 
 fn decode_path(value: &Value) -> Result<ast::Path, DecodeError> {
-    let (kind, ty, span) = source::decode_annotated(value, decode_path_kind, il::decode_typ_kind)?;
-    Ok(crate::spanned! {
-        node: Noted::new(kind, ty),
-        span: span,
-    })
+    source::decode_note_phrase(value, decode_path_kind, il::decode_typ_kind)
 }
 
 fn encode_path(path: &ast::Path) -> Value {
-    source::encode_annotated(
-        &path.node.kind,
-        &path.node.note,
-        &path.span,
-        encode_path_kind,
-        il::encode_typ_kind,
-    )
+    source::encode_note_phrase(path, encode_path_kind, il::encode_typ_kind)
 }
 
 fn decode_path_kind(value: &Value) -> Result<PathKind, DecodeError> {
@@ -583,27 +562,21 @@ fn decode_instr<T>(
     decode_tier: fn(&Value) -> Result<T, DecodeError>,
 ) -> Result<ast::Instr<T>, DecodeError> {
     let value = object(value)?;
-    let (kind, (iid, fallthrough), span) = source::decode_annotated(
+    let node = source::decode_note_phrase(
         field(value, "node")?,
         |value| decode_instr_kind(value, decode_tier),
-        decode_inote,
+        |value| {
+            let (iid, fallthrough) = decode_inote(value)?;
+            Ok(ast::InstrNote { iid, fallthrough })
+        },
     )?;
     let hints = decode_hints(field(value, "hints")?)?;
-    Ok(annot::Annotated {
-        node: crate::spanned! {
-            node: Noted {
-                kind,
-                note: ast::InstrNote { iid, fallthrough },
-            },
-            span: span,
-        },
-        hints,
-    })
+    Ok(annot::Annotated { node, hints })
 }
 
 fn encode_instr<T>(instr: &ast::Instr<T>, encode_tier: fn(&T) -> Value) -> Value {
     json!({
-        "node": source::encode_annotated(&instr.node.node.kind, &(instr.node.node.note.iid, instr.node.node.note.fallthrough.as_ref()), &instr.node.span, |kind| encode_instr_kind(kind, encode_tier), |(iid, fallthrough)| encode_inote(*iid, *fallthrough)),
+        "node": source::encode_note_phrase(&instr.node, |kind| encode_instr_kind(kind, encode_tier), |note| encode_inote(note.iid, note.fallthrough.as_ref())),
         "hints": encode_hints(&instr.hints)
     })
 }
@@ -1157,7 +1130,7 @@ fn decode_def(value: &Value) -> Result<ast::Def, DecodeError> {
 
 fn encode_def(def: &ast::Def) -> Value {
     let node = source::encode_phrase(
-        &crate::spanned! {
+        &crate::phrase! {
             node: def.node.node.clone(),
             span: def.node.span.clone(),
         },

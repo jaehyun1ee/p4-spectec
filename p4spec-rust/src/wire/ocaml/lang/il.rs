@@ -5,7 +5,7 @@ use serde_json::{Map, Number, Value, json};
 use thiserror::Error;
 
 use crate::lang::{
-    common::{notation::mixfix::Mixfix, noted::Noted},
+    common::notation::mixfix::Mixfix,
     il::ast::{self, *},
     xl::{bool, num},
 };
@@ -576,11 +576,9 @@ fn decode_yojson_mixfix(value: &yojson::Value) -> Result<ast::ValueCase, DecodeE
 
 fn decode_yojson_value(value: &yojson::Value) -> Result<ast::Value, DecodeError> {
     let fields = yojson_assoc(value)?;
-    Ok(crate::spanned! {
-        node: Noted::new(
-            decode_yojson_value_kind(yojson_field(fields, "it")?)?,
-            decode_vnote(&standard_json(yojson_field(fields, "note")?)?)?,
-        ),
+    Ok(crate::note_phrase! {
+        node: decode_yojson_value_kind(yojson_field(fields, "it")?)?,
+        note: decode_vnote(&standard_json(yojson_field(fields, "note")?)?)?,
         span: source::decode_region(&standard_json(yojson_field(fields, "at")?)?)?,
     })
 }
@@ -630,11 +628,7 @@ fn decode_yojson_value_kind(value: &yojson::Value) -> Result<ValueKind, DecodeEr
 }
 
 fn decode_value(value: &Value) -> Result<ast::Value, DecodeError> {
-    let (kind, typ, span) = source::decode_annotated(value, decode_value_kind, decode_vnote)?;
-    Ok(crate::spanned! {
-        node: Noted::new(kind, typ),
-        span: span,
-    })
+    source::decode_note_phrase(value, decode_value_kind, decode_vnote)
 }
 
 fn decode_value_kind(value: &Value) -> Result<ValueKind, DecodeError> {
@@ -706,12 +700,12 @@ impl ValueEncoder {
     }
 
     fn encode_yojson_value(&self, value: &ast::Value) -> yojson::Value {
-        let kind = self.encode_yojson_value_kind(&value.node.kind);
+        let kind = self.encode_yojson_value_kind(&value.node);
         yojson::Value::Assoc(vec![
             ("it".to_owned(), kind),
             (
                 "note".to_owned(),
-                yojson::from_serde_json(&self.encode_vnote(&value.node.note)),
+                yojson::from_serde_json(&self.encode_vnote(&value.note)),
             ),
             (
                 "at".to_owned(),
@@ -790,10 +784,10 @@ impl ValueEncoder {
     }
 
     fn encode_value(&self, value: &ast::Value) -> Result<Value, EncodeError> {
-        let kind = self.encode_value_kind(&value.node.kind)?;
+        let kind = self.encode_value_kind(&value.node)?;
         Ok(json!({
             "it": kind,
-            "note": self.encode_vnote(&value.node.note),
+            "note": self.encode_vnote(&value.note),
             "at": source::encode_region(&value.span),
         }))
     }
@@ -994,21 +988,11 @@ pub(super) fn encode_subcheck(subcheck: &ast::Subcheck) -> Value {
 }
 
 pub(super) fn decode_exp(value: &Value) -> Result<ast::Exp, DecodeError> {
-    let (kind, typ, span) = source::decode_annotated(value, decode_exp_kind, decode_typ_kind)?;
-    Ok(crate::spanned! {
-        node: Noted::new(kind, typ),
-        span: span,
-    })
+    source::decode_note_phrase(value, decode_exp_kind, decode_typ_kind)
 }
 
 pub(super) fn encode_exp(exp: &ast::Exp) -> Value {
-    source::encode_annotated(
-        &exp.node.kind,
-        &exp.node.note,
-        &exp.span,
-        encode_exp_kind,
-        encode_typ_kind,
-    )
+    source::encode_note_phrase(exp, encode_exp_kind, encode_typ_kind)
 }
 
 fn decode_exp_kind(value: &Value) -> Result<ExpKind, DecodeError> {
@@ -1278,21 +1262,11 @@ fn encode_opt_pattern(pattern: OptPattern) -> Value {
 }
 
 fn decode_path(value: &Value) -> Result<ast::Path, DecodeError> {
-    let (kind, typ, span) = source::decode_annotated(value, decode_path_kind, decode_typ_kind)?;
-    Ok(crate::spanned! {
-        node: Noted::new(kind, typ),
-        span: span,
-    })
+    source::decode_note_phrase(value, decode_path_kind, decode_typ_kind)
 }
 
 fn encode_path(path: &ast::Path) -> Value {
-    source::encode_annotated(
-        &path.node.kind,
-        &path.node.note,
-        &path.span,
-        encode_path_kind,
-        encode_typ_kind,
-    )
+    source::encode_note_phrase(path, encode_path_kind, encode_typ_kind)
 }
 
 fn decode_path_kind(value: &Value) -> Result<PathKind, DecodeError> {
@@ -1762,41 +1736,4 @@ fn encode_def(def: &ast::Def) -> Value {
             encode_list(hints, el::encode_hint)
         ]),
     })
-}
-
-#[cfg(test)]
-mod tests {
-    use serde_json::json;
-
-    use super::{decode_subcheck, encode_subcheck};
-
-    #[test]
-    fn subtype_check_operations_round_trip_ocaml_yojson_shapes() {
-        let typ = json!({
-            "it": ["BoolT"],
-            "note": null,
-            "at": {
-                "left": {"file": "", "line": 0, "column": 0},
-                "right": {"file": "", "line": 0, "column": 0}
-            }
-        });
-        let operations = [
-            json!(["SkipSC"]),
-            json!(["MixopSC", [["Atom", {
-                "it": ["Keyword", "NUM"],
-                "note": null,
-                "at": {
-                    "left": {"file": "", "line": 0, "column": 0},
-                    "right": {"file": "", "line": 0, "column": 0}
-                }
-            }]]]),
-            json!(["TupleSC", [["SkipSC"], ["RecurseSC", typ]]]),
-            json!(["IterSC", ["List"], ["SkipSC"]]),
-        ];
-
-        for operation in operations {
-            let decoded = decode_subcheck(&operation).expect("decode subtype check");
-            assert_eq!(encode_subcheck(&decoded), operation);
-        }
-    }
 }

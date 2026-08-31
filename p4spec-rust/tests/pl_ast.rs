@@ -1,8 +1,7 @@
 use p4spec_rust::{
     lang::common::{
         ds::set::IdSet,
-        noted::Noted,
-        source::{Position, Span, Spanned},
+        source::{Position, Span},
     },
     lang::{hints::alter, il, pl, traits::free::Free},
 };
@@ -14,38 +13,28 @@ fn span(name: &str) -> Span {
 #[test]
 fn prose_nodes_collect_free_identifiers_through_annotations() {
     let exp_l = pl::annot::Annotated {
-        node: p4spec_rust::spanned! {
-            node: Noted {
-                kind: pl::ast::ExpKind::Var(id("left")),
-                note: il::ast::TypKind::Bool,
-            },
+        node: p4spec_rust::note_phrase! {
+            node: pl::ast::ExpKind::Var(id("left")),
+            note: il::ast::TypKind::Bool,
             span: span("left"),
         },
         hints: pl::annot::Hints::default(),
     };
     let exp_r = pl::annot::Annotated {
-        node: p4spec_rust::spanned! {
-            node: Noted {
-                kind: pl::ast::ExpKind::Var(id("right")),
-                note: il::ast::TypKind::Bool,
-            },
+        node: p4spec_rust::note_phrase! {
+            node: pl::ast::ExpKind::Var(id("right")),
+            note: il::ast::TypKind::Bool,
             span: span("right"),
         },
         hints: pl::annot::Hints::default(),
     };
     let expression = pl::annot::Annotated {
-        node: p4spec_rust::spanned! {
-            node: Noted {
-                kind: pl::ast::ExpKind::Bin(
-            il::ast::BinOp::Bool(p4spec_rust::lang::xl::bool::BinOp::And),
-            il::ast::OpTyp::Bool,
-            Box::new(exp_l),
-            Box::new(exp_r),
-                ),
-                note: il::ast::TypKind::Bool,
-            },
-            span: span("binary"),
-        },
+        node: p4spec_rust::note_phrase! { node: pl::ast::ExpKind::Bin(
+        il::ast::BinOp::Bool(p4spec_rust::lang::xl::bool::BinOp::And),
+        il::ast::OpTyp::Bool,
+        Box::new(exp_l),
+        Box::new(exp_r),
+            ), note: il::ast::TypKind::Bool, span: span("binary") },
         hints: pl::annot::Hints::default(),
     };
 
@@ -53,38 +42,33 @@ fn prose_nodes_collect_free_identifiers_through_annotations() {
 }
 
 fn id(name: &str) -> il::ast::Id {
-    Spanned::new(name.to_owned(), span(name))
+    p4spec_rust::phrase! {
+        node: name.to_owned(),
+        span: span(name),
+    }
 }
 
 #[test]
 fn annotation_wrappers_forward_source_and_keep_nested_hints() {
     let mut nested = pl::annot::Annotated {
-        node: p4spec_rust::spanned! {
-            node: Noted {
-                kind: pl::ast::ExpKind::Var(id("nested")),
-                note: il::ast::TypKind::Bool,
-            },
+        node: p4spec_rust::note_phrase! {
+            node: pl::ast::ExpKind::Var(id("nested")),
+            note: il::ast::TypKind::Bool,
             span: span("nested-source"),
         },
         hints: pl::annot::Hints::default(),
     };
     nested.hints.prose = Some(alter::AlterationHint::Text("nested prose".to_owned()));
     let outer = pl::annot::Annotated {
-        node: p4spec_rust::spanned! {
-            node: Noted {
-                kind: pl::ast::ExpKind::Un(
-            il::ast::UnOp::Bool(p4spec_rust::lang::xl::bool::UnOp::Not),
-            il::ast::OpTyp::Bool,
-            Box::new(nested),
-                ),
-                note: il::ast::TypKind::Bool,
-            },
-            span: span("outer-source"),
-        },
+        node: p4spec_rust::note_phrase! { node: pl::ast::ExpKind::Un(
+        il::ast::UnOp::Bool(p4spec_rust::lang::xl::bool::UnOp::Not),
+        il::ast::OpTyp::Bool,
+        Box::new(nested),
+            ), note: il::ast::TypKind::Bool, span: span("outer-source") },
         hints: pl::annot::Hints::default(),
     };
 
-    let pl::ast::ExpKind::Un(_, _, inner) = &outer.node.node.kind else {
+    let pl::ast::ExpKind::Un(_, _, inner) = &outer.node.node else {
         panic!("expected nested unary expression")
     };
     assert_eq!(outer.node.span, span("outer-source"));

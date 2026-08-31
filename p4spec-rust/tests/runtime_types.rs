@@ -1,10 +1,6 @@
 use p4spec_rust::{
     lang::{
-        common::{
-            ds::map::ArityMismatch,
-            notation::mixfix::Mixfix,
-            source::{Span, Spanned},
-        },
+        common::{ds::map::ArityMismatch, notation::mixfix::Mixfix, source::Span},
         il::ast::{self, DefTypKind, FuncTyp, Iter, Subcheck, TypKind},
     },
     runtime::types::{
@@ -14,11 +10,17 @@ use p4spec_rust::{
 };
 
 fn id(name: &str) -> ast::Id {
-    Spanned::new(name.to_owned(), Span::default())
+    p4spec_rust::phrase! {
+        node: name.to_owned(),
+        span: Span::default(),
+    }
 }
 
 fn typ(kind: TypKind) -> ast::Typ {
-    Spanned::new(kind, Span::default())
+    p4spec_rust::phrase! {
+        node: kind,
+        span: Span::default(),
+    }
 }
 
 fn var(name: &str, args: Vec<ast::Targ>) -> ast::Typ {
@@ -30,7 +32,10 @@ fn iter(inner: ast::Typ, iter: Iter) -> ast::Typ {
 }
 
 fn plain(inner: ast::Typ) -> ast::DefTyp {
-    Spanned::new(DefTypKind::Plain(inner), Span::default())
+    p4spec_rust::phrase! {
+        node: DefTypKind::Plain(inner),
+        span: Span::default(),
+    }
 }
 
 fn variant(cases: Vec<ast::NotTyp>) -> ast::DefTyp {
@@ -39,16 +44,25 @@ fn variant(cases: Vec<ast::NotTyp>) -> ast::DefTyp {
         .map(|not_typ| {
             (
                 not_typ,
-                Spanned::new((id("Origin"), vec![]), Span::default()),
+                p4spec_rust::phrase! {
+                    node: (id("Origin"), vec![]),
+                    span: Span::default(),
+                },
                 vec![],
             )
         })
         .collect();
-    Spanned::new(DefTypKind::Variant(cases), Span::default())
+    p4spec_rust::phrase! {
+        node: DefTypKind::Variant(cases),
+        span: Span::default(),
+    }
 }
 
 fn not_typ(name: &str) -> ast::NotTyp {
-    Spanned::new(Mixfix::Arg(var(name, vec![])), Span::default())
+    p4spec_rust::phrase! {
+        node: Mixfix::Arg(var(name, vec![])),
+        span: Span::default(),
+    }
 }
 
 fn func_typ(tparams: Vec<ast::TParam>, typs_params: Vec<ast::Typ>, typ_ret: ast::Typ) -> FuncTyp {
@@ -88,10 +102,10 @@ fn substitution_freshens_function_binders_and_rejects_higher_order_targets() {
         p4spec_rust::lang::common::source::Position::new("higher-order", 2, 3),
         p4spec_rust::lang::common::source::Position::new("higher-order", 2, 7),
     );
-    let higher_order = Spanned::new(
-        TypKind::Var(id("U"), vec![typ(TypKind::Bool)]),
-        higher_order_span.clone(),
-    );
+    let higher_order = p4spec_rust::phrase! {
+        node: TypKind::Var(id("U"), vec![typ(TypKind::Bool)]),
+        span: higher_order_span.clone(),
+    };
     let error = subst_typ(&theta, &higher_order).unwrap_err();
     assert_eq!(error.kind, TypeErrorKind::HigherOrderSubstitution);
     assert_eq!(error.span, higher_order_span);
@@ -102,7 +116,7 @@ fn substitution_maps_nested_notation_type_arguments() {
     let mut theta = Theta::new();
     theta.insert(id("T"), typ(TypKind::Bool));
     theta.insert(id("U"), typ(TypKind::Text));
-    let not_typ = p4spec_rust::spanned!(
+    let not_typ = p4spec_rust::phrase!(
         node: Mixfix::Seq(vec![
             Mixfix::Arg(var("T", vec![])),
             Mixfix::Arg(var("U", vec![])),
@@ -187,11 +201,14 @@ fn notation_equivalence_compares_shape_and_type_arguments() {
         TypeDef::Defined(vec![], Box::new(plain(typ(TypKind::Bool)))),
     );
     let not_typ_l = not_typ("Truth");
-    let not_typ_r = Spanned::new(Mixfix::Arg(typ(TypKind::Bool)), Span::default());
-    let not_typ_shape = Spanned::new(
-        Mixfix::Seq(vec![Mixfix::Arg(typ(TypKind::Bool))]),
-        Span::default(),
-    );
+    let not_typ_r = p4spec_rust::phrase! {
+        node: Mixfix::Arg(typ(TypKind::Bool)),
+        span: Span::default(),
+    };
+    let not_typ_shape = p4spec_rust::phrase! {
+        node: Mixfix::Seq(vec![Mixfix::Arg(typ(TypKind::Bool))]),
+        span: Span::default(),
+    };
 
     assert!(equiv_not_typ(&env, &not_typ_l, &not_typ_r).unwrap());
     assert!(!equiv_not_typ(&env, &not_typ_l, &not_typ_shape).unwrap());

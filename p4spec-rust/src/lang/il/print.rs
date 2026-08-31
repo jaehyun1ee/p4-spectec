@@ -172,7 +172,7 @@ fn write_value_with(
     short: bool,
     level: usize,
 ) -> fmt::Result {
-    match &value.node.kind {
+    match &value.node {
         ValueKind::Bool(value) => write!(output, "{value}"),
         ValueKind::Num(value) => value.print(output),
         ValueKind::Text(text) => output.write_str(&escaped(text)),
@@ -256,7 +256,7 @@ impl Print for ValueCase {
 
 impl Print for Exp {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        match &self.node.kind {
+        match &self.node {
             ExpKind::Bool(value) => write!(printer, "{value}"),
             ExpKind::Num(value) => value.print(printer),
             ExpKind::Text(text) => write!(printer, "\"{}\"", escaped(text)),
@@ -451,7 +451,7 @@ impl Print for Pattern {
 
 impl Print for Path {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        match &self.node.kind {
+        match &self.node {
             PathKind::Root => Ok(()),
             PathKind::Idx(path, exp_i) => {
                 path.print(printer)?;
@@ -467,9 +467,7 @@ impl Print for Path {
                 exp_n.print(printer)?;
                 printer.write_char(']')
             }
-            PathKind::Dot(path, atom) if matches!(path.node.kind, PathKind::Root) => {
-                atom.print(printer)
-            }
+            PathKind::Dot(path, atom) if matches!(path.node, PathKind::Root) => atom.print(printer),
             PathKind::Dot(path, atom) => {
                 path.print(printer)?;
                 printer.write_char('.')?;

@@ -9,17 +9,17 @@ use super::ast::*;
 /// iteration carries a binder describing that dimension; otherwise its binder
 /// list is empty
 pub fn as_exp(is_dim: bool, var: &Var) -> Exp {
-    let mut exp = crate::noted! {
-        kind: ExpKind::Var(var.id.clone()),
+    let mut exp = crate::note_phrase! {
+        node: ExpKind::Var(var.id.clone()),
         note: var.typ.node.clone(),
-        span: var.id,
+        span: var.id.span.clone(),
     };
     let mut iters_prior = Vec::new();
     for iter in &var.iters {
-        let typ_iter = crate::spanned! {
+        let typ_iter = crate::phrase! {
             node: TypKind::Iter(
-                Box::new(crate::spanned! {
-                    node: exp.node.note.clone(),
+                Box::new(crate::phrase! {
+                    node: exp.note.clone(),
                     span: exp.span.clone(),
                 }),
                 *iter,
@@ -31,13 +31,14 @@ pub fn as_exp(is_dim: bool, var: &Var) -> Exp {
             typ: typ_iter.clone(),
             iters: iters_prior.clone(),
         };
-        exp = crate::noted! {
-            kind: ExpKind::Iter(
+        let span = exp.span.clone();
+        exp = crate::note_phrase! {
+            node: ExpKind::Iter(
                 Box::new(exp),
                 (*iter, if is_dim { vec![var_binder] } else { vec![] }),
             ),
             note: typ_iter.node.clone(),
-            span: exp,
+            span: span,
         };
         iters_prior.push(*iter);
     }

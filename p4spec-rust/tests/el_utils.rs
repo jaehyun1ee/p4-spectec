@@ -1,5 +1,5 @@
 use p4spec_rust::{
-    lang::common::source::{Position, Span, Spanned},
+    lang::common::source::{Position, Span},
     lang::{
         common::{ds::set::IdSet, notation::atom::Atom as DomainAtom},
         el::ast::{self, BinOp, ExpKind},
@@ -12,7 +12,10 @@ fn span(file: &str) -> Span {
 }
 
 fn id(name: &str, file: &str) -> ast::Id {
-    Spanned::new(name.to_owned(), span(file))
+    p4spec_rust::phrase! {
+        node: name.to_owned(),
+        span: span(file),
+    }
 }
 
 fn ids(names: &[&str]) -> IdSet {
@@ -23,15 +26,24 @@ fn ids(names: &[&str]) -> IdSet {
 }
 
 fn exp(kind: ExpKind, file: &str) -> ast::Exp {
-    Spanned::new(kind, span(file))
+    p4spec_rust::phrase! {
+        node: kind,
+        span: span(file),
+    }
 }
 
 fn atom(source: &str) -> ast::Atom {
-    Spanned::new(DomainAtom::Keyword(source.to_owned()), span("atom.watsup"))
+    p4spec_rust::phrase! {
+        node: DomainAtom::Keyword(source.to_owned()),
+        span: span("atom.watsup"),
+    }
 }
 
 fn plain(kind: ast::PlainTypKind) -> ast::PlainTyp {
-    Spanned::new(kind, span("type.watsup"))
+    p4spec_rust::phrase! {
+        node: kind,
+        span: span("type.watsup"),
+    }
 }
 
 fn bool_typ() -> ast::PlainTyp {
@@ -39,15 +51,24 @@ fn bool_typ() -> ast::PlainTyp {
 }
 
 fn param(kind: ast::ParamKind) -> ast::Param {
-    Spanned::new(kind, span("param.watsup"))
+    p4spec_rust::phrase! {
+        node: kind,
+        span: span("param.watsup"),
+    }
 }
 
 fn prem(kind: ast::PremKind) -> ast::Prem {
-    Spanned::new(kind, span("prem.watsup"))
+    p4spec_rust::phrase! {
+        node: kind,
+        span: span("prem.watsup"),
+    }
 }
 
 fn definition(kind: ast::DefKind) -> ast::Def {
-    Spanned::new(kind, span("def.watsup"))
+    p4spec_rust::phrase! {
+        node: kind,
+        span: span("def.watsup"),
+    }
 }
 
 #[test]
@@ -76,33 +97,34 @@ fn free_collection_covers_paths_calls_premises_and_definition_bodies() {
             "expr.watsup",
         )
     };
-    let path = Spanned::new(
-        ast::PathKind::Slice(
-            Box::new(Spanned::new(
-                ast::PathKind::Idx(
-                    Box::new(Spanned::new(ast::PathKind::Root, span("path.watsup"))),
-                    Box::new(variable("index")),
-                ),
-                span("path.watsup"),
-            )),
-            Box::new(variable("low")),
-            Box::new(variable("high")),
-        ),
-        span("path.watsup"),
-    );
+    let path = p4spec_rust::phrase! { node: ast::PathKind::Slice(
+        Box::new(p4spec_rust::phrase! {
+            node:
+            ast::PathKind::Idx(
+                Box::new(p4spec_rust::phrase! {
+                    node: ast::PathKind::Root,
+                    span: span("path.watsup"),
+                }),
+                Box::new(variable("index")),
+            ),
+            span: span("path.watsup"),
+        }),
+        Box::new(variable("low")),
+        Box::new(variable("high")),
+    ), span: span("path.watsup") };
     let call = exp(
         ExpKind::Call(
             id("defined", "definition.watsup"),
             vec![bool_typ()],
             vec![
-                Spanned::new(
-                    ast::ArgKind::Def(id("not_free", "arg.watsup")),
-                    span("arg.watsup"),
-                ),
-                Spanned::new(
-                    ast::ArgKind::Exp(Box::new(variable("argument"))),
-                    span("arg.watsup"),
-                ),
+                p4spec_rust::phrase! {
+                    node: ast::ArgKind::Def(id("not_free", "arg.watsup")),
+                    span: span("arg.watsup"),
+                },
+                p4spec_rust::phrase! {
+                    node: ast::ArgKind::Exp(Box::new(variable("argument"))),
+                    span: span("arg.watsup"),
+                },
             ],
         ),
         "call.watsup",
@@ -118,27 +140,27 @@ fn free_collection_covers_paths_calls_premises_and_definition_bodies() {
         }))),
         iter: ast::Iter::List,
     }));
-    let rule = Spanned::new(
-        (
-            id("relation", "rule.watsup"),
-            id("", "rule.watsup"),
-            expression.clone(),
-            vec![
-                iteration,
-                prem(ast::PremKind::If(ast::IfPrem {
-                    exp: variable("guard"),
-                })),
-            ],
-        ),
-        span("rule.watsup"),
-    );
+    let rule = p4spec_rust::phrase! { node: (
+        id("relation", "rule.watsup"),
+        id("", "rule.watsup"),
+        expression.clone(),
+        vec![
+            iteration,
+            prem(ast::PremKind::If(ast::IfPrem {
+                exp: variable("guard"),
+            })),
+        ],
+    ), span: span("rule.watsup") };
     let function = definition(ast::DefKind::FuncDef(ast::FuncDef {
         id: id("function", "def.watsup"),
-        tparams: vec![Spanned::new("T".to_owned(), span("def.watsup"))],
-        args: vec![Spanned::new(
-            ast::ArgKind::Exp(Box::new(variable("argument"))),
-            span("def.watsup"),
-        )],
+        tparams: vec![p4spec_rust::phrase! {
+            node: "T".to_owned(),
+            span: span("def.watsup"),
+        }],
+        args: vec![p4spec_rust::phrase! {
+            node: ast::ArgKind::Exp(Box::new(variable("argument"))),
+            span: span("def.watsup"),
+        }],
         exp: variable("body"),
         prems: vec![prem(ast::PremKind::Debug(ast::DebugPrem {
             exp: variable("debug"),
@@ -198,10 +220,10 @@ fn printer_preserves_el_delimiters_precedence_hints_and_definition_separators() 
             ExpKind::Call(
                 id("f", "call"),
                 vec![plain(ast::PlainTypKind::Text)],
-                vec![Spanned::new(
-                    ast::ArgKind::Def(id("g", "call")),
-                    span("call")
-                )]
+                vec![p4spec_rust::phrase! {
+                    node: ast::ArgKind::Def(id("g", "call")),
+                    span: span("call"),
+                }]
             ),
             "call"
         )),
@@ -217,7 +239,10 @@ fn printer_preserves_el_delimiters_precedence_hints_and_definition_separators() 
         "(if ready)*"
     );
 
-    let not_typ = Spanned::new(ast::NotTypKind::Atom(atom("TERM")), span("type"));
+    let not_typ = p4spec_rust::phrase! {
+        node: ast::NotTypKind::Atom(atom("TERM")),
+        span: span("type"),
+    };
     let definitions = vec![
         definition(ast::DefKind::ExternSyntax(ast::ExternSyntaxDef {
             id: id("Syntax", "def"),
@@ -226,16 +251,19 @@ fn printer_preserves_el_delimiters_precedence_hints_and_definition_separators() 
         definition(ast::DefKind::Syntax(ast::SyntaxDef {
             entries: vec![ast::SyntaxDefEntry {
                 id: id("Pair", "def"),
-                tparams: vec![Spanned::new("T".to_owned(), span("def"))],
+                tparams: vec![p4spec_rust::phrase! {
+                    node: "T".to_owned(),
+                    span: span("def"),
+                }],
             }],
         })),
         definition(ast::DefKind::Typ(ast::TypDef {
             id: id("Record", "def"),
             tparams: vec![],
-            def_typ: Spanned::new(
-                ast::DefTypKind::Struct(vec![(atom("field"), bool_typ(), vec![hint.clone()])]),
-                span("def"),
-            ),
+            def_typ: p4spec_rust::phrase! {
+                node: ast::DefTypKind::Struct(vec![(atom("field"), bool_typ(), vec![hint.clone()])]),
+                span: span("def"),
+            },
             hints: vec![hint.clone()],
         })),
         definition(ast::DefKind::Var(ast::VarDef {
@@ -282,13 +310,10 @@ fn printer_preserves_el_delimiters_precedence_hints_and_definition_separators() 
         })),
         definition(ast::DefKind::TableDef(ast::TableDef {
             id: id("rows", "def"),
-            rows: vec![Spanned::new(
-                (
-                    exp(ExpKind::Var(id("pattern", "row")), "row"),
-                    exp(ExpKind::Var(id("body", "row")), "row"),
-                ),
-                span("row"),
-            )],
+            rows: vec![p4spec_rust::phrase! { node: (
+                exp(ExpKind::Var(id("pattern", "row")), "row"),
+                exp(ExpKind::Var(id("body", "row")), "row"),
+            ), span: span("row") }],
         })),
         definition(ast::DefKind::FuncDef(ast::FuncDef {
             id: id("defined", "def"),
@@ -328,28 +353,28 @@ fn printer_matches_ocaml_byte_escaping_and_public_collection_helpers() {
         Print::to_string(&ast::CmpOp::Bool(p4spec_rust::lang::xl::bool::CmpOp::Ne)),
         "=/="
     );
-    let atom_type = Spanned::new(ast::NotTypKind::Atom(atom("A")), span("type"));
+    let atom_type = p4spec_rust::phrase! {
+        node: ast::NotTypKind::Atom(atom("A")),
+        span: span("type"),
+    };
     assert_eq!(
         Print::to_string(&[atom_type.clone(), atom_type][..]),
         "A, A"
     );
-    let row = Spanned::new(
-        (exp(ExpKind::Eps, "row"), exp(ExpKind::Eps, "row")),
-        span("row"),
-    );
+    let row = p4spec_rust::phrase! {
+        node: (exp(ExpKind::Eps, "row"), exp(ExpKind::Eps, "row")),
+        span: span("row"),
+    };
     assert_eq!(
         Print::to_string(&[row.clone(), row][..]),
         "eps => eps\n  | eps => eps"
     );
-    let rule = Spanned::new(
-        (
-            id("r", "rule"),
-            id("", "rule"),
-            exp(ExpKind::Eps, "rule"),
-            vec![],
-        ),
-        span("rule"),
-    );
+    let rule = p4spec_rust::phrase! { node: (
+        id("r", "rule"),
+        id("", "rule"),
+        exp(ExpKind::Eps, "rule"),
+        vec![],
+    ), span: span("rule") };
     assert_eq!(
         Print::to_string(&[rule.clone(), rule][..]),
         "rule r:\n  eps\nrule r:\n  eps"

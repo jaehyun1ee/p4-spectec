@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 
 use num_bigint::BigInt;
 use p4spec_rust::{
-    lang::common::source::{Position, Span, Spanned},
+    lang::common::source::{Position, Span},
     lang::traits::print::Print,
     lang::xl::{
         num::{self, BinOp, CmpOp, Natural, Number, NumericError, Typ, UnOp},
@@ -56,9 +56,18 @@ fn strip_var_suffix_preserves_source_and_all_underscore_suffixes() {
         Position::new("suffix-source", 0, 0),
         Position::new("suffix-source", 0, 0),
     );
-    let suffixed = Spanned::new("value_suffix".to_owned(), source.clone());
-    let apostrophe = Spanned::new("value'".to_owned(), Span::default());
-    let all_underscores = Spanned::new("value___".to_owned(), Span::default());
+    let suffixed = p4spec_rust::phrase! {
+        node: "value_suffix".to_owned(),
+        span: source.clone(),
+    };
+    let apostrophe = p4spec_rust::phrase! {
+        node: "value'".to_owned(),
+        span: Span::default(),
+    };
+    let all_underscores = p4spec_rust::phrase! {
+        node: "value___".to_owned(),
+        span: Span::default(),
+    };
 
     let stripped = var::strip_var_suffix(&suffixed);
     assert_eq!(stripped.node, "value");

@@ -1,0 +1,2 @@
+dec $takes_int(int) : bool
+def $takes_int(true) = false

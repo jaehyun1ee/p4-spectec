@@ -1,7 +1,7 @@
 use p4spec_rust::{
-    lang::common::source::{Position, Span, Spanned},
+    lang::common::source::{Position, Span},
     lang::{
-        common::{ds::set::IdSet, notation::mixfix::Mixfix, noted::Noted},
+        common::{ds::set::IdSet, notation::mixfix::Mixfix},
         hints::input::InputHint,
         il, sl,
         traits::free::Free,
@@ -13,26 +13,31 @@ fn span(name: &str) -> Span {
 }
 
 fn id(name: &str) -> il::ast::Id {
-    Spanned::new(name.to_owned(), span(name))
+    p4spec_rust::phrase! {
+        node: name.to_owned(),
+        span: span(name),
+    }
 }
 
 fn typ() -> il::ast::Typ {
-    Spanned::new(il::ast::TypKind::Bool, span("type"))
+    p4spec_rust::phrase! {
+        node: il::ast::TypKind::Bool,
+        span: span("type"),
+    }
 }
 
 fn variable(name: &str) -> il::ast::Exp {
-    p4spec_rust::spanned! {
-        node: Noted {
-            kind: il::ast::ExpKind::Var(id(name)),
-            note: il::ast::TypKind::Bool,
-        },
+    p4spec_rust::note_phrase! {
+        node: il::ast::ExpKind::Var(id(name)),
+        note: il::ast::TypKind::Bool,
         span: span(name),
     }
 }
 
 fn instr(kind: sl::ast::InstrKind) -> sl::ast::Instr {
-    p4spec_rust::spanned! {
-        node: Noted { kind, note: 0 },
+    p4spec_rust::note_phrase! {
+        node: kind,
+        note: 0,
         span: span("instruction"),
     }
 }
@@ -43,14 +48,14 @@ fn names(items: &[&str]) -> IdSet {
 
 #[test]
 fn parameters_collect_only_expression_defaults() {
-    let expression = Spanned::new(
-        sl::ast::ParamKind::Exp(typ(), Box::new(variable("default"))),
-        span("expression-parameter"),
-    );
-    let definition = Spanned::new(
-        sl::ast::ParamKind::Def(id("f"), Vec::new(), Vec::new(), typ()),
-        span("definition-parameter"),
-    );
+    let expression = p4spec_rust::phrase! {
+        node: sl::ast::ParamKind::Exp(typ(), Box::new(variable("default"))),
+        span: span("expression-parameter"),
+    };
+    let definition = p4spec_rust::phrase! {
+        node: sl::ast::ParamKind::Def(id("f"), Vec::new(), Vec::new(), typ()),
+        span: span("definition-parameter"),
+    };
 
     assert_eq!(expression.free(), names(&["default"]));
     assert_eq!(definition.free(), names(&[]));
@@ -95,7 +100,10 @@ fn instructions_collect_nested_expressions_and_omit_binding_metadata() {
         iters: Vec::new(),
     };
     let signature = sl::ast::RelSignature {
-        not_typ: Spanned::new(Mixfix::Seq(Vec::new()), span("notation")),
+        not_typ: p4spec_rust::phrase! {
+            node: Mixfix::Seq(Vec::new()),
+            span: span("notation"),
+        },
         input_hint: InputHint::new(vec![0]),
     };
     let instructions = vec![

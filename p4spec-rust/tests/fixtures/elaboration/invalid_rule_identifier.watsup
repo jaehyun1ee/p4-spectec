@@ -1,0 +1,7 @@
+relation Expected: |- bool
+  hint(input %0)
+
+rulegroup Expected {
+  rule Other/case:
+    |- true
+}

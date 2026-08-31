@@ -1,6 +1,7 @@
 use std::{
     fs,
     path::{Path, PathBuf},
+    rc::Rc,
     sync::atomic::{AtomicUsize, Ordering},
 };
 
@@ -85,7 +86,13 @@ fn parse_file_uses_the_path_in_source_locations() {
 
     let spec = parse_file(&path).expect("parse SpecTec file");
 
-    assert_eq!(spec[0].span.left.file, path.to_string_lossy());
+    assert_eq!(spec[0].span.left.file.as_ref(), path.to_string_lossy());
+    assert!(Rc::ptr_eq(
+        &spec[0].span.left.file,
+        &spec[0].span.right.file
+    ));
+    let span = spec[0].span.clone();
+    assert!(Rc::ptr_eq(&spec[0].span.left.file, &span.left.file));
     assert!(matches!(&spec[0].node, DefKind::Var(definition) if definition.id.node == "one"));
 }
 

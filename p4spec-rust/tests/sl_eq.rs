@@ -1,10 +1,7 @@
 use p4spec_rust::{
-    lang::common::source::{Position, Span, Spanned},
+    lang::common::source::{Position, Span},
     lang::{
-        common::{notation::mixfix::Mixfix, noted::Noted},
-        hints::input::InputHint,
-        il, sl,
-        traits::eq::SyntaxEq,
+        common::notation::mixfix::Mixfix, hints::input::InputHint, il, sl, traits::eq::SyntaxEq,
     },
 };
 
@@ -13,26 +10,31 @@ fn span(name: &str) -> Span {
 }
 
 fn id(name: &str) -> il::ast::Id {
-    Spanned::new(name.to_owned(), span(name))
+    p4spec_rust::phrase! {
+        node: name.to_owned(),
+        span: span(name),
+    }
 }
 
 fn typ() -> il::ast::Typ {
-    Spanned::new(il::ast::TypKind::Bool, span("type"))
+    p4spec_rust::phrase! {
+        node: il::ast::TypKind::Bool,
+        span: span("type"),
+    }
 }
 
 fn variable(name: &str) -> il::ast::Exp {
-    p4spec_rust::spanned! {
-        node: Noted {
-            kind: il::ast::ExpKind::Var(id(name)),
-            note: il::ast::TypKind::Bool,
-        },
+    p4spec_rust::note_phrase! {
+        node: il::ast::ExpKind::Var(id(name)),
+        note: il::ast::TypKind::Bool,
         span: span(name),
     }
 }
 
 fn instruction(kind: sl::ast::InstrKind, iid: i64, source: &str) -> sl::ast::Instr {
-    p4spec_rust::spanned! {
-        node: Noted { kind, note: iid },
+    p4spec_rust::note_phrase! {
+        node: kind,
+        note: iid,
         span: span(source),
     }
 }
@@ -58,7 +60,10 @@ fn subtype_guards_ignore_subcheck_strategy_but_compare_type() {
     let guard_skip = sl::ast::Guard::Sub(typ(), Box::new(il::ast::Subcheck::Skip));
     let guard_recurse = sl::ast::Guard::Sub(typ(), Box::new(il::ast::Subcheck::Recurse(typ())));
     let guard_text = sl::ast::Guard::Sub(
-        Spanned::new(il::ast::TypKind::Text, span("text")),
+        p4spec_rust::phrase! {
+            node: il::ast::TypKind::Text,
+            span: span("text"),
+        },
         Box::new(il::ast::Subcheck::Skip),
     );
 

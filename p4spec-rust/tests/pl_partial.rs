@@ -1,8 +1,5 @@
 use p4spec_rust::{
-    lang::common::{
-        noted::Noted,
-        source::{Position, Span, Spanned},
-    },
+    lang::common::source::{Position, Span},
     lang::{common::notation::mixfix::Mixfix, hints::input::InputHint, il, pl},
 };
 
@@ -11,20 +8,24 @@ fn span(name: &str) -> Span {
 }
 
 fn id(name: &str) -> il::ast::Id {
-    Spanned::new(name.to_owned(), span(name))
+    p4spec_rust::phrase! {
+        node: name.to_owned(),
+        span: span(name),
+    }
 }
 
 fn typ() -> il::ast::Typ {
-    Spanned::new(il::ast::TypKind::Bool, span("type"))
+    p4spec_rust::phrase! {
+        node: il::ast::TypKind::Bool,
+        span: span("type"),
+    }
 }
 
 fn exp(kind: pl::ast::ExpKind) -> pl::ast::Exp {
     pl::annot::Annotated {
-        node: p4spec_rust::spanned! {
-            node: Noted {
-                kind,
-                note: il::ast::TypKind::Bool,
-            },
+        node: p4spec_rust::note_phrase! {
+            node: kind,
+            note: il::ast::TypKind::Bool,
             span: span("expression"),
         },
         hints: pl::annot::Hints::default(),
@@ -43,16 +44,10 @@ fn group_instr(
     kind: pl::ast::InstrKind<pl::ast::InstrGroup>,
 ) -> pl::ast::Instr<pl::ast::InstrGroup> {
     pl::annot::Annotated {
-        node: p4spec_rust::spanned! {
-            node: Noted {
-                kind,
-                note: pl::ast::InstrNote {
-                    iid: 0,
-                    fallthrough: None,
-                },
-            },
-            span: span("instruction"),
-        },
+        node: p4spec_rust::note_phrase! { node: kind, note: pl::ast::InstrNote {
+            iid: 0,
+            fallthrough: None,
+        }, span: span("instruction") },
         hints: pl::annot::Hints::default(),
     }
 }
@@ -61,22 +56,14 @@ fn group_instr(
 fn expression_and_path_classification_finds_recursive_calls() {
     let nested = exp(pl::ast::ExpKind::Tuple(vec![exp(pl::ast::ExpKind::Upd(
         Box::new(variable("base")),
-        Box::new(p4spec_rust::spanned! {
-            node: Noted {
-                kind: pl::ast::PathKind::Idx(
-                Box::new(p4spec_rust::spanned! {
-                    node: Noted {
-                        kind: pl::ast::PathKind::Root,
-                        note: il::ast::TypKind::Bool,
-                    },
-                    span: span("root"),
-                }),
-                Box::new(call("index")),
-                ),
-                note: il::ast::TypKind::Bool,
-            },
-            span: span("path"),
+        Box::new(p4spec_rust::note_phrase! { node: pl::ast::PathKind::Idx(
+        Box::new(p4spec_rust::note_phrase! {
+            node: pl::ast::PathKind::Root,
+            note: il::ast::TypKind::Bool,
+            span: span("root"),
         }),
+        Box::new(call("index")),
+        ), note: il::ast::TypKind::Bool, span: span("path") }),
         Box::new(variable("field")),
     ))]));
 
@@ -148,7 +135,10 @@ fn tier_classification_handles_rules_results_backtracking_and_dispatch() {
     assert!(pl::partial::is_partial_instr_group(
         &pl::ast::InstrGroup::Result(pl::ast::ResultGroupInstr {
             rel_signature: pl::ast::RelSignature {
-                not_typ: Spanned::new(Mixfix::Arg(typ()), span("signature")),
+                not_typ: p4spec_rust::phrase! {
+                    node: Mixfix::Arg(typ()),
+                    span: span("signature"),
+                },
                 input_hint: InputHint::new(Vec::new()),
             },
             exps_output: vec![call("result")],

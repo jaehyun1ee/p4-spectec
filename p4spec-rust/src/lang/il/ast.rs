@@ -4,8 +4,7 @@ use crate::lang::{
     common::{
         self,
         notation::{atom, mixfix::Mixfix, mixop},
-        noted::Noted,
-        source::Spanned,
+        source::{NotePhrase, Phrase},
     },
     el,
     hints::input::InputHint,
@@ -28,7 +27,7 @@ pub type IdKind = common::IdKind;
 
 // Atoms
 
-pub type Atom = Spanned<atom::Atom>;
+pub type Atom = Phrase<atom::Atom>;
 
 // Mixfix operators
 
@@ -55,7 +54,7 @@ pub struct Var {
 
 // Types
 
-pub type Typ = Spanned<TypKind>;
+pub type Typ = Phrase<TypKind>;
 
 /// Function type signature
 #[derive(Clone, Debug, PartialEq)]
@@ -96,10 +95,10 @@ pub enum Subcheck {
 
 // Defined types
 
-pub type NotTyp = Spanned<NotTypKind>;
+pub type NotTyp = Phrase<NotTypKind>;
 pub type NotTypKind = Mixfix<Typ>;
 
-pub type DefTyp = Spanned<DefTypKind>;
+pub type DefTyp = Phrase<DefTypKind>;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum DefTypKind {
@@ -109,13 +108,13 @@ pub enum DefTypKind {
 }
 
 pub type TypField = (Atom, Typ);
-pub type TypOrigin = Spanned<TypOriginKind>;
+pub type TypOrigin = Phrase<TypOriginKind>;
 pub type TypOriginKind = (Id, Vec<Targ>);
 pub type TypCase = (NotTyp, TypOrigin, Vec<Hint>);
 
 // Values
 
-pub type Value = Spanned<Noted<ValueKind, TypKind>>;
+pub type Value = NotePhrase<ValueKind, TypKind>;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ValueKind {
@@ -150,7 +149,7 @@ pub enum OpTyp {
 
 // Expressions
 
-pub type Exp = Spanned<Noted<ExpKind, TypKind>>;
+pub type Exp = NotePhrase<ExpKind, TypKind>;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ExpKind {
@@ -235,7 +234,7 @@ pub enum OptPattern {
 
 // Paths
 
-pub type Path = Spanned<Noted<PathKind, TypKind>>;
+pub type Path = NotePhrase<PathKind, TypKind>;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum PathKind {
@@ -250,7 +249,7 @@ pub enum PathKind {
 
 // Parameters
 
-pub type Param = Spanned<ParamKind>;
+pub type Param = Phrase<ParamKind>;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ParamKind {
@@ -262,12 +261,12 @@ pub enum ParamKind {
 
 // Type parameters
 
-pub type TParam = Spanned<TParamKind>;
+pub type TParam = Phrase<TParamKind>;
 pub type TParamKind = IdKind;
 
 // Arguments
 
-pub type Arg = Spanned<ArgKind>;
+pub type Arg = Phrase<ArgKind>;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ArgKind {
@@ -279,12 +278,12 @@ pub enum ArgKind {
 
 // Type arguments
 
-pub type Targ = Spanned<TargKind>;
+pub type Targ = Phrase<TargKind>;
 pub type TargKind = TypKind;
 
 // Premises
 
-pub type Prem = Spanned<PremKind>;
+pub type Prem = Phrase<PremKind>;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct RulePrem {
@@ -355,7 +354,7 @@ pub struct IterPrem {
 
 // Rules
 
-pub type Rule = Spanned<RuleKind>;
+pub type Rule = Phrase<RuleKind>;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct RuleKind {
@@ -364,15 +363,15 @@ pub struct RuleKind {
     pub prems: Vec<Prem>,
 }
 
-pub type RuleGroup = Spanned<RuleGroupKind>;
+pub type RuleGroup = Phrase<RuleGroupKind>;
 pub type RuleGroupKind = (Id, Vec<Rule>);
 
-pub type ElseGroup = Spanned<ElseGroupKind>;
+pub type ElseGroup = Phrase<ElseGroupKind>;
 pub type ElseGroupKind = (Id, Rule);
 
 // Clauses
 
-pub type Clause = Spanned<ClauseKind>;
+pub type Clause = Phrase<ClauseKind>;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ClauseKind {
@@ -386,7 +385,7 @@ pub type ElseClauseKind = ClauseKind;
 
 // Table rows
 
-pub type TableRow = Spanned<TableRowKind>;
+pub type TableRow = Phrase<TableRowKind>;
 pub type TableRowKind = (Vec<Arg>, Exp);
 
 // Hints
@@ -395,7 +394,7 @@ pub type Hint = el::ast::Hint;
 
 // Definitions
 
-pub type Def = Spanned<DefKind>;
+pub type Def = Phrase<DefKind>;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ExternTyp {

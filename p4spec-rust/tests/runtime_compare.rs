@@ -2,10 +2,7 @@ use std::{path::Path, process::Command};
 
 use p4spec_rust::{
     lang::{
-        common::{
-            notation::mixfix::Mixfix,
-            source::{Span, Spanned},
-        },
+        common::{notation::mixfix::Mixfix, source::Span},
         il::ast::{self, DefTypKind, FuncTyp, Iter, Subcheck, TypKind},
         traits::print::Print,
     },
@@ -19,11 +16,17 @@ use p4spec_rust::{
 use serde_json::{Value, json};
 
 fn id(name: &str) -> ast::Id {
-    Spanned::new(name.to_owned(), Span::default())
+    p4spec_rust::phrase! {
+        node: name.to_owned(),
+        span: Span::default(),
+    }
 }
 
 fn typ(kind: TypKind) -> ast::Typ {
-    Spanned::new(kind, Span::default())
+    p4spec_rust::phrase! {
+        node: kind,
+        span: Span::default(),
+    }
 }
 
 fn var(name: &str, targs: Vec<ast::Targ>) -> ast::Typ {
@@ -39,20 +42,23 @@ fn func_typ(tparams: Vec<ast::TParam>, typs_params: Vec<ast::Typ>, typ_ret: ast:
 }
 
 fn variant(typs: Vec<ast::Typ>) -> ast::DefTyp {
-    Spanned::new(
-        DefTypKind::Variant(
-            typs.into_iter()
-                .map(|typ| {
-                    (
-                        Spanned::new(Mixfix::Arg(typ), Span::default()),
-                        Spanned::new((id("Origin"), vec![]), Span::default()),
-                        vec![],
-                    )
-                })
-                .collect(),
-        ),
-        Span::default(),
-    )
+    p4spec_rust::phrase! { node: DefTypKind::Variant(
+        typs.into_iter()
+            .map(|typ| {
+                (
+                    p4spec_rust::phrase! {
+                        node: Mixfix::Arg(typ),
+                        span: Span::default(),
+                    },
+                    p4spec_rust::phrase! {
+                        node: (id("Origin"), vec![]),
+                        span: Span::default(),
+                    },
+                    vec![],
+                )
+            })
+            .collect(),
+    ), span: Span::default() }
 }
 
 fn subcheck_name(subcheck: &Subcheck) -> Value {
@@ -89,13 +95,12 @@ fn rust_results() -> Value {
         id("Pair"),
         TypeDef::Defined(
             vec![id("T")],
-            Box::new(Spanned::new(
-                DefTypKind::Plain(typ(TypKind::Tuple(vec![
+            Box::new(
+                p4spec_rust::phrase! { node: DefTypKind::Plain(typ(TypKind::Tuple(vec![
                     var("T", vec![]),
                     var("T", vec![]),
-                ]))),
-                Span::default(),
-            )),
+                ]))), span: Span::default() },
+            ),
         ),
     );
     tdenv.insert(

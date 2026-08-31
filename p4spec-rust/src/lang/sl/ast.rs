@@ -1,7 +1,7 @@
 //! Structured language model
 
 use crate::lang::{
-    common::{noted::Noted, source::Spanned},
+    common::source::{NotePhrase, Phrase},
     el,
     hints::input::InputHint,
     il,
@@ -94,7 +94,7 @@ pub type TParamKind = il::ast::TParamKind;
 
 // Parameters
 
-pub type Param = Spanned<ParamKind>;
+pub type Param = Phrase<ParamKind>;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ParamKind {
@@ -146,7 +146,7 @@ pub enum Guard {
 
 pub type Iid = i64;
 
-pub type Instr = Spanned<Noted<InstrKind, Iid>>;
+pub type Instr = NotePhrase<InstrKind, Iid>;
 
 #[derive(Clone, Debug, PartialEq)]
 #[allow(clippy::large_enum_variant)]
@@ -310,7 +310,7 @@ pub struct DefinedFunc {
 
 // Definitions
 
-pub type Def = Spanned<DefKind>;
+pub type Def = Phrase<DefKind>;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ExternTypDef {

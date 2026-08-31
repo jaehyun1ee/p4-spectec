@@ -1,8 +1,7 @@
 use p4spec_rust::lang::{
     common::{
         notation::{atom::Atom, mixfix::Mixfix},
-        noted::Noted,
-        source::{Position, Span, Spanned},
+        source::{Position, Span},
     },
     el,
     hints::input::InputHint,
@@ -15,52 +14,55 @@ fn span(name: &str) -> Span {
 }
 
 fn id(name: &str) -> il::ast::Id {
-    Spanned::new(name.to_owned(), span(name))
+    p4spec_rust::phrase! {
+        node: name.to_owned(),
+        span: span(name),
+    }
 }
 
 fn atom(name: &str) -> il::ast::Atom {
-    Spanned::new(Atom::Keyword(name.to_owned()), span(name))
+    p4spec_rust::phrase! {
+        node: Atom::Keyword(name.to_owned()),
+        span: span(name),
+    }
 }
 
 fn typ(kind: il::ast::TypKind) -> il::ast::Typ {
-    Spanned::new(kind, span("type"))
+    p4spec_rust::phrase! {
+        node: kind,
+        span: span("type"),
+    }
 }
 
 fn variable(name: &str) -> il::ast::Exp {
-    p4spec_rust::spanned! {
-        node: Noted {
-            kind: il::ast::ExpKind::Var(id(name)),
-            note: il::ast::TypKind::Bool,
-        },
+    p4spec_rust::note_phrase! {
+        node: il::ast::ExpKind::Var(id(name)),
+        note: il::ast::TypKind::Bool,
         span: span(name),
     }
 }
 
 fn text(value: &str) -> il::ast::Exp {
-    p4spec_rust::spanned! {
-        node: Noted {
-            kind: il::ast::ExpKind::Text(value.to_owned()),
-            note: il::ast::TypKind::Text,
-        },
+    p4spec_rust::note_phrase! {
+        node: il::ast::ExpKind::Text(value.to_owned()),
+        note: il::ast::TypKind::Text,
         span: span("text"),
     }
 }
 
 fn notation() -> il::ast::NotTyp {
-    Spanned::new(
-        Mixfix::Seq(vec![
-            Mixfix::Atom(atom("eval")),
-            Mixfix::Arg(typ(il::ast::TypKind::Bool)),
-            Mixfix::Atom(atom("=>")),
-            Mixfix::Arg(typ(il::ast::TypKind::Text)),
-        ]),
-        span("notation"),
-    )
+    p4spec_rust::phrase! { node: Mixfix::Seq(vec![
+        Mixfix::Atom(atom("eval")),
+        Mixfix::Arg(typ(il::ast::TypKind::Bool)),
+        Mixfix::Atom(atom("=>")),
+        Mixfix::Arg(typ(il::ast::TypKind::Text)),
+    ]), span: span("notation") }
 }
 
 fn instr(kind: sl::ast::InstrKind, iid: i64) -> sl::ast::Instr {
-    p4spec_rust::spanned! {
-        node: Noted { kind, note: iid },
+    p4spec_rust::note_phrase! {
+        node: kind,
+        note: iid,
         span: span("instruction"),
     }
 }
@@ -68,7 +70,10 @@ fn instr(kind: sl::ast::InstrKind, iid: i64) -> sl::ast::Instr {
 fn hint(source: &str) -> el::ast::Hint {
     (
         id("metadata"),
-        Spanned::new(el::ast::ExpKind::Text(source.to_owned()), span(source)),
+        p4spec_rust::phrase! {
+            node: el::ast::ExpKind::Text(source.to_owned()),
+            span: span(source),
+        },
     )
 }
 
@@ -77,94 +82,76 @@ fn composite_spec(metadata: &str) -> sl::ast::Spec {
         not_typ: notation(),
         input_hint: InputHint::new(vec![0]),
     };
-    let parameter = Spanned::new(
-        sl::ast::ParamKind::Exp(typ(il::ast::TypKind::Bool), Box::new(variable("default"))),
-        span("parameter"),
-    );
+    let parameter = p4spec_rust::phrase! {
+        node: sl::ast::ParamKind::Exp(typ(il::ast::TypKind::Bool), Box::new(variable("default"))),
+        span: span("parameter"),
+    };
     let hints = vec![hint(metadata)];
 
     vec![
-        Spanned::new(
-            sl::ast::DefKind::ExternTyp(sl::ast::ExternTypDef {
-                id: id("External"),
-                hints: hints.clone(),
-            }),
-            span(metadata),
-        ),
-        Spanned::new(
-            sl::ast::DefKind::Var(sl::ast::VarDef {
-                id: id("state"),
-                typ: typ(il::ast::TypKind::Bool),
-                hints: hints.clone(),
-            }),
-            span(metadata),
-        ),
-        Spanned::new(
-            sl::ast::DefKind::Rel(sl::ast::Rel {
-                id: id("Evaluate"),
-                rel_signature: signature.clone(),
-                exps_input: vec![variable("input")],
+        p4spec_rust::phrase! { node: sl::ast::DefKind::ExternTyp(sl::ast::ExternTypDef {
+            id: id("External"),
+            hints: hints.clone(),
+        }), span: span(metadata) },
+        p4spec_rust::phrase! { node: sl::ast::DefKind::Var(sl::ast::VarDef {
+            id: id("state"),
+            typ: typ(il::ast::TypKind::Bool),
+            hints: hints.clone(),
+        }), span: span(metadata) },
+        p4spec_rust::phrase! { node: sl::ast::DefKind::Rel(sl::ast::Rel {
+            id: id("Evaluate"),
+            rel_signature: signature.clone(),
+            exps_input: vec![variable("input")],
+            block: vec![instr(
+                sl::ast::InstrKind::Result(sl::ast::ResultInstr {
+                    rel_signature: signature.clone(),
+                    exps: vec![text("line\n\"\\")],
+                }),
+                7,
+            )],
+            else_block: Some(vec![instr(
+                sl::ast::InstrKind::Return(sl::ast::ReturnInstr {
+                    exp: variable("fallback"),
+                }),
+                8,
+            )]),
+            hints: hints.clone(),
+        }), span: span(metadata) },
+        p4spec_rust::phrase! { node: sl::ast::DefKind::ExternDec(sl::ast::ExternFunc {
+            id: id("external"),
+            tparams: Vec::new(),
+            params: vec![parameter.clone()],
+            typ: typ(il::ast::TypKind::Bool),
+            hints: hints.clone(),
+        }), span: span(metadata) },
+        p4spec_rust::phrase! { node: sl::ast::DefKind::TableDec(sl::ast::TableFunc {
+            id: id("lookup"),
+            params: vec![parameter.clone()],
+            typ: typ(il::ast::TypKind::Bool),
+            table_rows: vec![sl::ast::TableRow {
+                exps_input: vec![variable("key")],
+                exp: text("row\tvalue"),
                 block: vec![instr(
-                    sl::ast::InstrKind::Result(sl::ast::ResultInstr {
-                        rel_signature: signature.clone(),
-                        exps: vec![text("line\n\"\\")],
-                    }),
-                    7,
-                )],
-                else_block: Some(vec![instr(
                     sl::ast::InstrKind::Return(sl::ast::ReturnInstr {
-                        exp: variable("fallback"),
+                        exp: variable("row-result"),
                     }),
-                    8,
-                )]),
-                hints: hints.clone(),
-            }),
-            span(metadata),
-        ),
-        Spanned::new(
-            sl::ast::DefKind::ExternDec(sl::ast::ExternFunc {
-                id: id("external"),
-                tparams: Vec::new(),
-                params: vec![parameter.clone()],
-                typ: typ(il::ast::TypKind::Bool),
-                hints: hints.clone(),
-            }),
-            span(metadata),
-        ),
-        Spanned::new(
-            sl::ast::DefKind::TableDec(sl::ast::TableFunc {
-                id: id("lookup"),
-                params: vec![parameter.clone()],
-                typ: typ(il::ast::TypKind::Bool),
-                table_rows: vec![sl::ast::TableRow {
-                    exps_input: vec![variable("key")],
-                    exp: text("row\tvalue"),
-                    block: vec![instr(
-                        sl::ast::InstrKind::Return(sl::ast::ReturnInstr {
-                            exp: variable("row-result"),
-                        }),
-                        9,
-                    )],
-                }],
-                hints: hints.clone(),
-            }),
-            span(metadata),
-        ),
-        Spanned::new(
-            sl::ast::DefKind::FuncDec(sl::ast::DefinedFunc {
-                id: id("run"),
-                tparams: Vec::new(),
-                params: vec![parameter],
-                typ: typ(il::ast::TypKind::Bool),
-                block: vec![instr(
-                    sl::ast::InstrKind::Return(sl::ast::ReturnInstr { exp: text("done") }),
-                    10,
+                    9,
                 )],
-                else_block: None,
-                hints,
-            }),
-            span(metadata),
-        ),
+            }],
+            hints: hints.clone(),
+        }), span: span(metadata) },
+        p4spec_rust::phrase! { node: sl::ast::DefKind::FuncDec(sl::ast::DefinedFunc {
+            id: id("run"),
+            tparams: Vec::new(),
+            params: vec![parameter],
+            typ: typ(il::ast::TypKind::Bool),
+            block: vec![instr(
+                sl::ast::InstrKind::Return(sl::ast::ReturnInstr { exp: text("done") }),
+                10,
+            )],
+            else_block: None,
+            hints,
+        }), span: span(metadata) },
     ]
 }
 

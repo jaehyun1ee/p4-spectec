@@ -1,11 +1,11 @@
 //! Static definitions and environments consumed by language passes
 
-mod envs;
 mod dim;
+mod envs;
 mod func;
 mod rel;
 
-pub use envs::*;
 pub use dim::*;
+pub use envs::*;
 pub use func::*;
 pub use rel::*;

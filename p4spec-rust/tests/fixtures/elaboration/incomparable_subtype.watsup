@@ -1,0 +1,2 @@
+dec $bad(bool) : bool
+def $bad(true) = (true <: nat)
