@@ -1069,10 +1069,12 @@ fn binding_union_keeps_the_first_span_and_marks_repetition() {
     let id_first = id("x", 1);
     let id_second = id("x", 2);
     let dim = Dim::new(typ::bool(), vec![]);
+    let mut typ_second = typ::bool();
+    typ_second.span = span(3);
     let mut bindings_l = Bindings::new();
     bindings_l.insert(id_first.clone(), Binding::Single(dim.clone()));
     let mut bindings_r = Bindings::new();
-    bindings_r.insert(id_second, Binding::Single(dim.clone()));
+    bindings_r.insert(id_second, Binding::Single(Dim::new(typ_second, vec![])));
 
     let bindings = bind::union(bindings_l, bindings_r).expect("equivalent dimensions");
 
@@ -1080,7 +1082,8 @@ fn binding_union_keeps_the_first_span_and_marks_repetition() {
     let Binding::Multiple(actual) = bindings.get(&id_first).expect("merged binding") else {
         panic!("expected a repeated binding");
     };
-    assert!(actual.equiv(&dim));
+    assert!(actual.sub(&dim));
+    assert!(dim.sub(actual));
 }
 
 #[test]
@@ -1123,7 +1126,9 @@ fn dimension_inference_keeps_the_minimal_occurrence() {
     let (stored_id, actual) = dimensions.iter().next().expect("inferred variable");
 
     assert_eq!(stored_id.span, span(2));
-    assert!(actual.equiv(&Dim::new(typ::bool(), vec![])));
+    let expected = Dim::new(typ::bool(), vec![]);
+    assert!(actual.sub(&expected));
+    assert!(expected.sub(actual));
 }
 
 #[test]

@@ -66,10 +66,12 @@ pub fn union(mut bindings_l: Bindings, bindings_r: Bindings) -> Result<Bindings,
             bindings_l.insert(id.clone(), binding_r.clone());
             continue;
         };
-        if !binding_l.dim().equiv(binding_r.dim()) {
+        let dim_l = binding_l.dim();
+        let dim_r = binding_r.dim();
+        if !(dim_l.sub(dim_r) && dim_r.sub(dim_l)) {
             return Err(AlgoError::new(AlgoErrorKind::InconsistentDimensions, span));
         }
-        let dim = binding_l.dim().clone();
+        let dim = dim_l.clone();
         bindings_l.insert(id.clone(), Binding::Multiple(dim));
     }
     Ok(bindings_l)
