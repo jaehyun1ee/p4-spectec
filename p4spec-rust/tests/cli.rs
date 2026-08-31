@@ -11,7 +11,7 @@ fn fixture(path: &str) -> std::path::PathBuf {
 }
 
 #[test]
-fn elab_command_prints_the_intermediate_spec() {
+fn test_elab_command_prints_the_intermediate_spec() {
     let output = binary()
         .arg("elab")
         .arg(fixture("cli/simple.watsup"))
@@ -24,7 +24,7 @@ fn elab_command_prints_the_intermediate_spec() {
 }
 
 #[test]
-fn elab_command_reports_frontend_errors_on_stderr() {
+fn test_elab_command_reports_frontend_errors_on_stderr() {
     let output = binary()
         .arg("elab")
         .arg(fixture("frontend/negative/malformed-token.watsup"))
@@ -41,7 +41,7 @@ fn elab_command_reports_frontend_errors_on_stderr() {
 }
 
 #[test]
-fn elab_command_reports_elaboration_errors_on_stderr() {
+fn test_elab_command_reports_elaboration_errors_on_stderr() {
     let output = binary()
         .arg("elab")
         .arg(fixture("elaboration/operator_not_defined.watsup"))
@@ -58,7 +58,7 @@ fn elab_command_reports_elaboration_errors_on_stderr() {
 }
 
 #[test]
-fn elab_command_requires_at_least_one_path() {
+fn test_elab_command_requires_at_least_one_path() {
     let output = binary().arg("elab").output().expect("run elab command");
 
     assert!(!output.status.success());
@@ -71,7 +71,7 @@ fn elab_command_requires_at_least_one_path() {
 }
 
 #[test]
-fn help_prints_usage() {
+fn test_help_prints_usage() {
     let output = binary().arg("--help").output().expect("run help command");
 
     assert!(output.status.success());
