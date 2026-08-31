@@ -13,7 +13,8 @@ use crate::lang::{
 };
 use crate::phrase;
 
-use super::{Fresh, TypeError, TypeErrorKind};
+use super::{TypeError, TypeErrorKind};
+use crate::runtime::value::Fresh;
 
 #[derive(Default)]
 pub struct Theta(IdMap<ast::Typ>);

@@ -14,6 +14,8 @@ pub enum StfErrorKind {
     UnterminatedQuotedIdentifier,
     #[error("integer priority is out of range: {0}")]
     InvalidPriority(String),
+    #[error("invalid numeric literal: {0}")]
+    InvalidNumber(String),
     #[error("unexpected end of input")]
     UnexpectedEndOfInput,
     #[error("unexpected token")]

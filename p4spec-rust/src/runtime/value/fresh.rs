@@ -8,13 +8,21 @@ use crate::{
     phrase,
 };
 
-#[derive(Default)]
-pub(crate) struct Fresh {
+/// Caller-owned source of fresh runtime type variables.
+///
+/// Separate values intentionally produce the same sequence, which keeps
+/// independent runtime operations deterministic without process-global state.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Fresh {
     next: u64,
 }
 
 impl Fresh {
-    pub(crate) fn fresh(&mut self) -> (ast::TParam, ast::Typ) {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn fresh(&mut self) -> (ast::TParam, ast::Typ) {
         let next = self.next;
         self.next += 1;
         let tparam = phrase!(node: format!("__FRESH{next}"), span: Span::default());

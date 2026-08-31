@@ -4,10 +4,12 @@ use thiserror::Error;
 
 use crate::{
     lang::{
+        al,
         common::notation::{atom::Atom, mixfix::Mixfix, mixop::Mixop},
-        el::ast as el,
+        hints::alter::{self, AlterationError, AlterationHint, Renderer},
         il::ast::{DefTypKind, TypKind},
-        sl::ast::{Def, DefKind},
+        pl, sl,
+        traits::print::Print,
         xl::num::Number,
     },
     runtime::value::{Value, ValueKind, ValueRef},
@@ -15,39 +17,9 @@ use crate::{
 
 type CaseId = (String, Mixop);
 
-#[derive(Clone, Debug)]
-enum Alter {
-    Text(String),
-    Atom(el::Atom),
-    Seq(Vec<Self>),
-    Brack(el::Atom, Box<Self>, el::Atom),
-    Hole(el::Hole),
-    Fuse(Box<Self>, Box<Self>),
-    Other(el::Exp),
-}
-
-impl Alter {
-    fn from_exp(exp: &el::Exp) -> Self {
-        match &exp.node {
-            el::ExpKind::Text(text) => Self::Text(text.clone()),
-            el::ExpKind::Atom(atom) => Self::Atom(atom.clone()),
-            el::ExpKind::Seq(exps) => Self::Seq(exps.iter().map(Self::from_exp).collect()),
-            el::ExpKind::Brack(left, exp, right) => {
-                Self::Brack(left.clone(), Box::new(Self::from_exp(exp)), right.clone())
-            }
-            el::ExpKind::Hole(hole) => Self::Hole(hole.clone()),
-            el::ExpKind::Fuse(left, right) => Self::Fuse(
-                Box::new(Self::from_exp(left)),
-                Box::new(Self::from_exp(right)),
-            ),
-            _ => Self::Other(exp.clone()),
-        }
-    }
-}
-
 #[derive(Clone, Debug, Default)]
 pub struct P4Unparser {
-    hints: HashMap<CaseId, Alter>,
+    hints: HashMap<CaseId, AlterationHint>,
 }
 
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
@@ -56,6 +28,8 @@ pub enum P4UnparseError {
     UnsupportedValue(&'static str),
     #[error("print hint argument {index} is out of bounds for {len} value(s)")]
     HintArgumentOutOfBounds { index: usize, len: usize },
+    #[error("print hint references missing index {0}")]
+    InvalidHintIndex(i64),
 }
 
 impl P4Unparser {
@@ -63,27 +37,68 @@ impl P4Unparser {
         Self::default()
     }
 
-    pub fn from_sl_spec(spec: &[Def]) -> Self {
+    pub fn from_al_spec(spec: &[al::ast::Def]) -> Self {
         let mut hints = HashMap::new();
         for definition in spec {
-            let DefKind::Typ(type_definition) = &definition.node else {
+            let al::ast::DefKind::Typ(type_definition) = &definition.node else {
                 continue;
             };
-            let DefTypKind::Variant(cases) = &type_definition.def_typ.node else {
-                continue;
-            };
-            for (notation, _, case_hints) in cases {
-                let Some((_, expression)) = case_hints.iter().find(|(id, _)| id.node == "print")
-                else {
-                    continue;
-                };
-                hints.insert(
-                    (type_definition.id.node.clone(), notation.node.to_mixop()),
-                    Alter::from_exp(expression),
-                );
-            }
+            insert_case_hints(
+                &mut hints,
+                &type_definition.id.node,
+                &type_definition.def_typ,
+            );
         }
         Self { hints }
+    }
+
+    pub fn from_sl_spec(spec: &[sl::ast::Def]) -> Self {
+        let mut hints = HashMap::new();
+        for definition in spec {
+            let sl::ast::DefKind::Typ(type_definition) = &definition.node else {
+                continue;
+            };
+            insert_case_hints(
+                &mut hints,
+                &type_definition.id.node,
+                &type_definition.def_typ,
+            );
+        }
+        Self { hints }
+    }
+
+    pub fn from_pl_spec(spec: &[pl::ast::Def]) -> Self {
+        let mut hints = HashMap::new();
+        for definition in spec {
+            let pl::ast::DefKind::Typ(type_definition) = &definition.node.node else {
+                continue;
+            };
+            insert_case_hints(
+                &mut hints,
+                &type_definition.id.node,
+                &type_definition.def_typ,
+            );
+        }
+        Self { hints }
+    }
+
+    fn render_hint(
+        &self,
+        hint: &AlterationHint,
+        values: &[&ValueRef],
+    ) -> Result<String, P4UnparseError> {
+        match alter::alternate(hint, values, &ValueRenderer(self)) {
+            Ok(rendered) => rendered,
+            Err(AlterationError::IndexOutOfBounds { index, item_count }) => {
+                Err(P4UnparseError::HintArgumentOutOfBounds {
+                    index: usize::try_from(index).unwrap_or(usize::MAX),
+                    len: item_count,
+                })
+            }
+            Err(AlterationError::MissingIndex(index)) => {
+                Err(P4UnparseError::InvalidHintIndex(index))
+            }
+        }
     }
 
     pub fn render(&self, value: &Value) -> Result<String, P4UnparseError> {
@@ -136,71 +151,65 @@ impl P4Unparser {
             |_| rendered.next().unwrap_or_default(),
         ))
     }
+}
 
-    fn render_hint(&self, hint: &Alter, values: &[&ValueRef]) -> Result<String, P4UnparseError> {
-        fn go(
-            unparser: &P4Unparser,
-            hint: &Alter,
-            values: &[&ValueRef],
-            cursor: &mut usize,
-        ) -> Result<String, P4UnparseError> {
-            match hint {
-                Alter::Text(text) => Ok(text.clone()),
-                Alter::Atom(atom) => Ok(render_atom(&atom.node)),
-                Alter::Seq(hints) => hints
-                    .iter()
-                    .map(|hint| go(unparser, hint, values, cursor))
-                    .collect::<Result<Vec<_>, _>>()
-                    .map(|parts| {
-                        parts
-                            .into_iter()
-                            .filter(|part| !part.is_empty())
-                            .collect::<Vec<_>>()
-                            .join(" ")
-                    }),
-                Alter::Brack(left, middle, right) => Ok([
-                    render_atom(&left.node),
-                    go(unparser, middle, values, cursor)?,
-                    render_atom(&right.node),
-                ]
-                .into_iter()
-                .filter(|part| !part.is_empty())
-                .collect::<Vec<_>>()
-                .join(" ")),
-                Alter::Hole(el::Hole::Next) => {
-                    let index = *cursor;
-                    *cursor += 1;
-                    render_at(unparser, values, index)
-                }
-                Alter::Hole(el::Hole::Num(index)) => render_at(
-                    unparser,
-                    values,
-                    usize::try_from(*index).unwrap_or(usize::MAX),
-                ),
-                Alter::Fuse(left, right) => {
-                    Ok(go(unparser, left, values, cursor)? + &go(unparser, right, values, cursor)?)
-                }
-                Alter::Other(expression) => Ok(format!("{:?}", expression.node)),
-                Alter::Hole(el::Hole::Rest | el::Hole::None) => Ok(String::new()),
-            }
-        }
-
-        go(self, hint, values, &mut 0)
+fn insert_case_hints(
+    hints: &mut HashMap<CaseId, AlterationHint>,
+    type_id: &str,
+    def_typ: &crate::lang::il::ast::DefTyp,
+) {
+    let DefTypKind::Variant(cases) = &def_typ.node else {
+        return;
+    };
+    for (notation, _, case_hints) in cases {
+        let Some((_, expression)) = case_hints.iter().find(|(id, _)| id.node == "print") else {
+            continue;
+        };
+        let Some(hint) = alter::init(expression) else {
+            continue;
+        };
+        hints.insert((type_id.to_owned(), notation.node.to_mixop()), hint);
     }
 }
 
-fn render_at(
-    unparser: &P4Unparser,
-    values: &[&ValueRef],
-    index: usize,
-) -> Result<String, P4UnparseError> {
-    let value = values
-        .get(index)
-        .ok_or(P4UnparseError::HintArgumentOutOfBounds {
-            index,
-            len: values.len(),
-        })?;
-    unparser.render(value)
+struct ValueRenderer<'a>(&'a P4Unparser);
+
+impl Renderer<&ValueRef> for ValueRenderer<'_> {
+    type Output = Result<String, P4UnparseError>;
+
+    fn empty(&self) -> Self::Output {
+        Ok(String::new())
+    }
+
+    fn text(&self, text: &str) -> Option<Self::Output> {
+        (!text.is_empty()).then(|| Ok(text.to_owned()))
+    }
+
+    fn atom(&self, atom: &crate::lang::el::ast::Atom) -> Self::Output {
+        Ok(render_atom(&atom.node))
+    }
+
+    fn join(&self, items: Vec<Self::Output>) -> Self::Output {
+        Ok(items
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
+            .filter(|item| !item.is_empty())
+            .collect::<Vec<_>>()
+            .join(" "))
+    }
+
+    fn fuse(&self, output_l: Self::Output, output_r: Self::Output) -> Self::Output {
+        Ok(output_l? + &output_r?)
+    }
+
+    fn other(&self, exp: &crate::lang::el::ast::Exp) -> Self::Output {
+        Ok(Print::to_string(exp))
+    }
+
+    fn item(&self, item: &&ValueRef) -> Self::Output {
+        self.0.render(item)
+    }
 }
 
 fn render_atom(atom: &Atom) -> String {

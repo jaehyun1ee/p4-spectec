@@ -145,9 +145,6 @@ pub fn strip_all_whitespace(
     values: &[ValueRef],
 ) -> BuiltinResult {
     extract::zero(span, type_args)?;
-    let text = text_of_value(span, extract::one(span, values)?)?
-        .chars()
-        .filter(|character| !character.is_ascii_whitespace())
-        .collect();
+    let text = text_of_value(span, extract::one(span, values)?)?.replace(' ', "");
     return_value(add, make::text(text, Span::default()))
 }

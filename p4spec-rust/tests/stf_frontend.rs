@@ -1,3 +1,4 @@
+use p4spec_rust::lang::traits::print::Print;
 use p4spec_rust::stf::{
     ast::{Action, Condition, CounterKind, IdOrIndex, MatchKind, Statement},
     compare, parse, print, transform,
@@ -75,6 +76,16 @@ fn reports_filename_line_and_column() {
 }
 
 #[test]
+fn rejects_digits_outside_the_selected_radix() {
+    for number in ["0b102", "12b", "0x0g"] {
+        let source = format!("register_read r {number}\n");
+        let error = parse::parse_str("number.stf", &source).expect_err(number);
+        assert_eq!(error.span.left.file.as_ref(), "number.stf");
+        assert_eq!(error.span.left.line, 1);
+    }
+}
+
+#[test]
 fn transforms_names_matches_and_actions() {
     assert_eq!(
         transform::rewrite_name_prefix("pipe0.tbl", &["pipe"], "ingress"),
@@ -114,6 +125,10 @@ fn compares_wildcard_packets_and_prints_statements() {
         print::convert_dollar_to_brackets("hdr.$12.field"),
         "hdr.[12].field"
     );
+    assert_eq!(Print::to_string(&statement), print::statement(&statement));
+
+    let program = parse::parse_str("print.stf", "wait\nno_packet\n").unwrap();
+    assert_eq!(Print::to_string(&program), "wait\nno_packet");
 }
 
 #[test]

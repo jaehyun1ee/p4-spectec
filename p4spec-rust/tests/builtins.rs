@@ -109,5 +109,19 @@ fn list_and_text_builtins_preserve_ocaml_results() {
 
     let text = make::text("  a\n b\t".to_owned(), Span::default());
     let (stripped, _) = invoke(&mut Builtins::new(), "strip_all_whitespace", &[text]).unwrap();
-    assert_eq!(get::text(&stripped), Ok("ab"));
+    assert_eq!(get::text(&stripped), Ok("a\nb\t"));
+}
+
+#[test]
+fn zero_and_negative_bit_widths_match_ocaml() {
+    for width in [0, -1] {
+        for name in ["bitstr_to_int", "int_to_bitstr"] {
+            let values = [
+                make::int(width.into(), Span::default()),
+                make::int(17.into(), Span::default()),
+            ];
+            let (result, _) = invoke(&mut Builtins::new(), name, &values).unwrap();
+            assert_eq!(get::num(&result).unwrap().to_string(), "+0", "{name}");
+        }
+    }
 }
