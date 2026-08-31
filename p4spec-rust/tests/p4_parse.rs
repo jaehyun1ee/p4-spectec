@@ -86,6 +86,28 @@ fn parses_the_positive_p4_corpus() {
     );
 }
 
+#[test]
+fn rejects_the_negative_p4_parse_corpus() {
+    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let corpus = manifest.join("../p4spec/test/micro/programs-parse-neg");
+    let includes = [manifest.join("../../../p4c/p4include")];
+    let mut files = Vec::new();
+    collect_p4_files(&corpus, &mut files);
+    files.sort();
+    assert!(!files.is_empty(), "the negative P4 corpus must be present");
+
+    let accepted: Vec<_> = files
+        .iter()
+        .filter(|file| parse_file(&includes, file).is_ok())
+        .map(|file| file.display().to_string())
+        .collect();
+    assert!(
+        accepted.is_empty(),
+        "invalid P4 programs were accepted:\n{}",
+        accepted.join("\n")
+    );
+}
+
 fn collect_p4_files(directory: &Path, files: &mut Vec<PathBuf>) {
     for entry in fs::read_dir(directory).expect("read P4 corpus directory") {
         let path = entry.expect("read P4 corpus entry").path();
