@@ -40,6 +40,7 @@ fn parses_nested_conditionals_and_switch_fallthrough() {
     let source = r#"
 control C() {
     apply {
+        bool comparison = a < b > (c);
         if (true) if (false) exit; else exit;
         switch (1) {
             1:

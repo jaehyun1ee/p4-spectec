@@ -354,11 +354,7 @@ impl<'source> Lexer<'source> {
             }
             IdentKind::Ident { has_params, .. } => (Token::Identifier, has_params),
         };
-        self.state = if has_params || self.template_follows_name() {
-            State::Template
-        } else {
-            next
-        };
+        self.state = if has_params { State::Template } else { next };
         self.pending
             .push_back(phrase!(node: token, span: span.clone()));
     }
@@ -369,11 +365,6 @@ impl<'source> Lexer<'source> {
             return true;
         }
         angle_suffix(rest).is_some_and(|suffix| suffix.trim_start().starts_with('('))
-    }
-
-    fn template_follows_name(&self) -> bool {
-        angle_suffix(self.remaining_significant())
-            .is_some_and(|suffix| suffix.trim_start().starts_with(['(', '{']))
     }
 
     fn remaining_significant(&self) -> &str {

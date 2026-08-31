@@ -354,7 +354,7 @@ typeParameterList: ValueRef = {
 
 typeParameterListOpt: ValueRef = {
     <left:@L>  <right:@R> => value::case_value(context, "_EMPTY", vec![], "typeParameterListOpt", left, right),
-    <left:@L> "L_ANGLE_ARGS" <tps:typeParameterList> r_angle <right:@R> => { value::declare_names_as_types(context, &tps); value::case_value(context, "`< typeParameterList `>", vec![tps], "typeParameterListOpt", left, right) },
+    <left:@L> l_angle <tps:typeParameterList> r_angle <right:@R> => { value::declare_names_as_types(context, &tps); value::case_value(context, "`< typeParameterList `>", vec![tps], "typeParameterListOpt", left, right) },
 };
 
 parameter: ValueRef = {
