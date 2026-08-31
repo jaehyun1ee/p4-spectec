@@ -43,6 +43,7 @@ pub(crate) fn case_value(
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn binary_value(
     context: &Context,
     left_value: ValueRef,
