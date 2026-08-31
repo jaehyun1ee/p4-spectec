@@ -2,6 +2,7 @@
 
 pub mod context;
 pub mod error;
+pub mod extract;
 pub mod lexer;
 pub mod parse;
 pub mod preprocessor;
