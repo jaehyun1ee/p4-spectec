@@ -158,10 +158,7 @@ pub fn bitstr_to_int(
     let width = bigint_of_value(span, value_width)?;
     let width = width_of_bigint(span, width, "bitstr width too large")?;
     if width == 0 {
-        return Err(BuiltinError::new(
-            span.clone(),
-            "bitstr width must be positive",
-        ));
+        return value_of_bigint(add, BigInt::zero());
     }
     let modulus = BigInt::one() << width;
     let half = &modulus / 2;
@@ -183,10 +180,7 @@ pub fn int_to_bitstr(
     let width = bigint_of_value(span, value_width)?;
     let width = width_of_bigint(span, width, "bitstr width too large")?;
     if width == 0 {
-        return Err(BuiltinError::new(
-            span.clone(),
-            "bitstr width must be positive",
-        ));
+        return value_of_bigint(add, BigInt::zero());
     }
     let modulus = BigInt::one() << width;
     let rawint = bigint_of_value(span, value_int)?;

@@ -1,6 +1,8 @@
 //! Stable STF diagnostic text output.
 
-use std::fmt::Write;
+use std::{fmt, fmt::Write};
+
+use crate::lang::traits::print::{Print, Printer};
 
 use super::ast::{Action, Condition, CounterKind, IdOrIndex, Match, MatchKind, Program, Statement};
 
@@ -140,4 +142,16 @@ pub fn program(program: &Program) -> String {
         .map(|statement| self::statement(&statement.node))
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+impl Print for Statement {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        printer.write(&statement(self))
+    }
+}
+
+impl Print for Program {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        printer.write(&program(self))
+    }
 }

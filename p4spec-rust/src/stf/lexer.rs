@@ -194,6 +194,20 @@ impl<'source> Lexer<'source> {
             let value = self.take_while(|next| {
                 next.is_ascii_hexdigit() || matches!(next, 'x' | 'X' | 'b' | 'B' | '*')
             });
+            let digits = value.get(2..).unwrap_or_default();
+            let valid = if value.starts_with("0x") || value.starts_with("0X") {
+                !digits.is_empty()
+                    && digits
+                        .chars()
+                        .all(|digit| digit.is_ascii_hexdigit() || digit == '*')
+            } else if value.starts_with("0b") || value.starts_with("0B") {
+                !digits.is_empty() && digits.chars().all(|digit| matches!(digit, '0' | '1' | '*'))
+            } else {
+                value.chars().all(|digit| digit.is_ascii_digit())
+            };
+            if !valid {
+                return Err(self.error(StfErrorKind::InvalidNumber(value.to_owned()), left));
+            }
             return Ok(if value.starts_with("0x") || value.starts_with("0X") {
                 if value.contains('*') {
                     Token::TernaryHex(value.to_owned())

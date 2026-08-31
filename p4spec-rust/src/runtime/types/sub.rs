@@ -4,9 +4,10 @@ use crate::lang::{
     il::ast::{self, DefTypKind, Iter, Subcheck, TypKind},
     xl::num,
 };
+use crate::runtime::value::Fresh;
 
 use super::{
-    Fresh, TDEnv, Theta, TypeArityMismatch, TypeDef, TypeError, TypeErrorKind, equiv_not_typ,
+    TDEnv, Theta, TypeArityMismatch, TypeDef, TypeError, TypeErrorKind, equiv_not_typ,
     equiv_typ_expanded, expand_typ, subst_not_typ_inner,
 };
 

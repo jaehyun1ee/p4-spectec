@@ -12,7 +12,7 @@ use p4spec_rust::{
     },
     runtime::{
         types::typ,
-        value::{ValueError, ValueKind, ValueTag, get, make},
+        value::{Fresh, ValueError, ValueKind, ValueTag, get, make},
     },
 };
 
@@ -85,4 +85,14 @@ fn cloned_values_share_immutable_storage() {
     let cloned = Rc::clone(&value);
 
     assert!(Rc::ptr_eq(&value, &cloned));
+}
+
+#[test]
+fn fresh_type_variables_are_isolated_by_instance() {
+    let mut first = Fresh::new();
+    let mut second = Fresh::new();
+
+    assert_eq!(first.fresh().0.node, "__FRESH0");
+    assert_eq!(first.fresh().0.node, "__FRESH1");
+    assert_eq!(second.fresh().0.node, "__FRESH0");
 }
