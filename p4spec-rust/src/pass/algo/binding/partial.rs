@@ -1,4 +1,8 @@
-//! Rewriting of partially bound patterns
+//! Rewriting of partially bound patterns.
+//!
+//! Bound values inside a binder become fresh variables plus equality premises. Variant
+//! and subtype injections additionally become match or subtype guards followed by simpler
+//! binding premises. Generated premises retain the iteration context of the source pattern.
 
 use crate::{
     lang::{
@@ -93,6 +97,230 @@ fn is_singleton_case(ctx: &Context, typ: &ast::Typ) -> Result<bool, AlgoError> {
         ast::DefTypKind::Variant(cases) => Ok(cases.len() == 1),
     }
 }
+
+// Generate premises
+
+fn empty_iterctx(iterctx: &IterationContext) -> IterationContext {
+    IterationContext::from_iterations(
+        iterctx
+            .as_slice()
+            .iter()
+            .map(|entry| Iteration {
+                iter: entry.iter,
+                vars_bound: vec![],
+                vars_bind: vec![],
+            })
+            .collect(),
+    )
+}
+
+fn bool_exp(kind: ast::ExpKind, span: Span) -> ast::Exp {
+    note_phrase!(node: kind, note: ast::TypKind::Bool, span: span)
+}
+
+fn if_prem(exp: ast::Exp, span: Span) -> ast::Prem {
+    phrase!(node: ast::PremKind::If(ast::IfPrem { exp }), span: span)
+}
+
+fn generate_bound(
+    ctx: &Context,
+    destination: &ast::Var,
+    exp_from: &ast::Exp,
+    iterctx: &IterationContext,
+) -> Result<Vec<ast::Prem>, AlgoError> {
+    let exp_l = var::as_exp(true, destination);
+    let kind = match &exp_from.node {
+        ast::ExpKind::Case(not_exp)
+            if not_exp.arity() == 0
+                && !is_singleton_case(
+                    ctx,
+                    &phrase!(node: exp_from.note.clone(), span: exp_from.span.clone()),
+                )? =>
+        {
+            ast::ExpKind::Match(
+                Box::new(exp_l),
+                ast::Pattern::Case(Box::new(not_exp.to_mixop())),
+            )
+        }
+        ast::ExpKind::Opt(Some(_)) => {
+            ast::ExpKind::Match(Box::new(exp_l), ast::Pattern::Opt(ast::OptPattern::Some))
+        }
+        ast::ExpKind::Opt(None) => {
+            ast::ExpKind::Match(Box::new(exp_l), ast::Pattern::Opt(ast::OptPattern::None))
+        }
+        ast::ExpKind::List(exps) if exps.is_empty() => {
+            ast::ExpKind::Match(Box::new(exp_l), ast::Pattern::List(ast::ListPattern::Nil))
+        }
+        _ => ast::ExpKind::Cmp(
+            ast::CmpOp::Bool(xl::bool::CmpOp::Eq),
+            ast::OpTyp::Bool,
+            Box::new(exp_l),
+            Box::new(exp_from.clone()),
+        ),
+    };
+    let prem = if_prem(bool_exp(kind, exp_from.span.clone()), exp_from.span.clone());
+    let mut iterctx = iterctx.clone();
+    let venv = dimension::infer_exp(exp_from);
+    iterctx.filter_bound(|var| {
+        venv.get(&var.id)
+            .is_some_and(|dim_source| dim_source.sub(&Dim::new(var.typ.clone(), var.iters.clone())))
+    });
+    iterctx.add_var_bound(
+        destination.id.clone(),
+        destination.typ.clone(),
+        destination.iters.clone(),
+    );
+    Ok(vec![iterctx.iterate_prem(prem)])
+}
+
+fn generate_bind_match(
+    destination: &ast::Var,
+    pattern: &ast::Pattern,
+    exp_from: &ast::Exp,
+    iterctx: &IterationContext,
+) -> Vec<ast::Prem> {
+    let exp_to = var::as_exp(true, destination);
+    let exp_match = bool_exp(
+        ast::ExpKind::Match(Box::new(exp_to.clone()), pattern.clone()),
+        exp_from.span.clone(),
+    );
+    let prem_match = if_prem(exp_match, exp_from.span.clone());
+    let mut iterctx_match = empty_iterctx(iterctx);
+    iterctx_match.add_var_bound(
+        destination.id.clone(),
+        destination.typ.clone(),
+        destination.iters.clone(),
+    );
+
+    let prem_bind = phrase! {
+        node: ast::PremKind::Let(ast::LetPrem {
+            exp_l: exp_from.clone(),
+            exp_r: exp_to,
+        }),
+        span: exp_from.span.clone(),
+    };
+    let mut iterctx_bind = empty_iterctx(iterctx);
+    iterctx_bind.add_vars_bind(dimension::infer_exp(exp_from));
+    iterctx_bind.add_var_bound(
+        destination.id.clone(),
+        destination.typ.clone(),
+        destination.iters.clone(),
+    );
+    vec![
+        iterctx_match.iterate_prem(prem_match),
+        iterctx_bind.iterate_prem(prem_bind),
+    ]
+}
+
+fn generate_bind_sub(
+    ctx: &Context,
+    destination: &ast::Var,
+    typ_sub: &ast::Typ,
+    exp_sub: &ast::Exp,
+    exp_from: &ast::Exp,
+    iterctx: &IterationContext,
+) -> Result<Vec<ast::Prem>, AlgoError> {
+    let exp_to = var::as_exp(true, destination);
+    let typ_source = phrase!(node: exp_to.note.clone(), span: exp_to.span.clone());
+    let subcheck = optimize_sub_typ(&ctx.tdenv, &typ_source, typ_sub)?;
+    let exp_subcheck = bool_exp(
+        ast::ExpKind::Sub(
+            Box::new(exp_to.clone()),
+            typ_sub.clone(),
+            Box::new(subcheck),
+        ),
+        exp_from.span.clone(),
+    );
+    let prem_subcheck = if_prem(exp_subcheck, exp_from.span.clone());
+    let mut iterctx_subcheck = empty_iterctx(iterctx);
+    iterctx_subcheck.add_var_bound(
+        destination.id.clone(),
+        destination.typ.clone(),
+        destination.iters.clone(),
+    );
+
+    let exp_downcast = note_phrase! {
+        node: ast::ExpKind::DownCast(typ_sub.clone(), Box::new(exp_to)),
+        note: typ_sub.node.clone(),
+        span: exp_from.span.clone(),
+    };
+    let prem_bind = phrase! {
+        node: ast::PremKind::Let(ast::LetPrem {
+            exp_l: exp_sub.clone(),
+            exp_r: exp_downcast,
+        }),
+        span: exp_from.span.clone(),
+    };
+    let mut iterctx_bind = empty_iterctx(iterctx);
+    iterctx_bind.add_vars_bind(dimension::infer_exp(exp_from));
+    iterctx_bind.add_var_bound(
+        destination.id.clone(),
+        destination.typ.clone(),
+        destination.iters.clone(),
+    );
+    Ok(vec![
+        iterctx_subcheck.iterate_prem(prem_subcheck),
+        iterctx_bind.iterate_prem(prem_bind),
+    ])
+}
+
+fn generate_prem(
+    ctx: &Context,
+    rename: &Rename,
+    iterctx_prem: &IterationContext,
+) -> Result<Vec<ast::Prem>, AlgoError> {
+    let mut iterations = rename.iterctx.as_slice().to_vec();
+    iterations.extend(iterctx_prem.as_slice().iter().cloned());
+    let iterctx = IterationContext::from_iterations(iterations);
+    match &rename.source {
+        Source::Bound { exp_from } => generate_bound(ctx, &rename.destination, exp_from, &iterctx),
+        Source::BindMatch { pattern, exp_from } => Ok(generate_bind_match(
+            &rename.destination,
+            pattern,
+            exp_from,
+            &iterctx,
+        )),
+        Source::BindSub {
+            typ_sub,
+            exp_sub,
+            exp_from,
+        } => generate_bind_sub(
+            ctx,
+            &rename.destination,
+            typ_sub,
+            exp_sub,
+            exp_from,
+            &iterctx,
+        ),
+    }
+}
+
+pub fn generate_prems(
+    ctx: &Context,
+    iterctx_prem: &IterationContext,
+    renv: &RenameEnv,
+) -> Result<Vec<ast::Prem>, AlgoError> {
+    let mut prems = Vec::new();
+    for rename in renv.iter() {
+        prems.extend(generate_prem(ctx, rename, iterctx_prem)?);
+    }
+    Ok(prems)
+}
+
+pub fn destination_env(renv: &RenameEnv) -> VEnv {
+    renv.iter()
+        .map(|rename| {
+            let mut iters = rename.destination.iters.clone();
+            iters.extend(rename.iterctx.iters());
+            (
+                rename.destination.id.clone(),
+                Dim::new(rename.destination.typ.clone(), iters),
+            )
+        })
+        .collect()
+}
+
+// Rewrite expressions
 
 fn var_from_exp(ctx: &mut Context, exp: &ast::Exp) -> ast::Var {
     let typ = phrase!(node: exp.note.clone(), span: exp.span.clone());
@@ -397,20 +625,7 @@ fn rename_exps_in_place(
     Ok((iterctx, exps_renamed))
 }
 
-pub fn rename_arg(
-    ctx: &mut Context,
-    binds: &IdSet,
-    renv: &mut RenameEnv,
-    iterctx: IterationContext,
-    arg: &ast::Arg,
-) -> Result<(IterationContext, ast::Arg), AlgoError> {
-    let mut ctx_next = ctx.clone();
-    let mut renv_next = renv.clone();
-    let result = rename_arg_in_place(&mut ctx_next, binds, &mut renv_next, iterctx, arg)?;
-    *ctx = ctx_next;
-    *renv = renv_next;
-    Ok(result)
-}
+// Arguments
 
 fn rename_arg_in_place(
     ctx: &mut Context,
@@ -463,224 +678,4 @@ fn rename_args_in_place(
         args_renamed.push(arg);
     }
     Ok((iterctx, args_renamed))
-}
-
-fn empty_iterctx(iterctx: &IterationContext) -> IterationContext {
-    IterationContext::from_iterations(
-        iterctx
-            .as_slice()
-            .iter()
-            .map(|entry| Iteration {
-                iter: entry.iter,
-                vars_bound: vec![],
-                vars_bind: vec![],
-            })
-            .collect(),
-    )
-}
-
-fn bool_exp(kind: ast::ExpKind, span: Span) -> ast::Exp {
-    note_phrase!(node: kind, note: ast::TypKind::Bool, span: span)
-}
-
-fn if_prem(exp: ast::Exp, span: Span) -> ast::Prem {
-    phrase!(node: ast::PremKind::If(ast::IfPrem { exp }), span: span)
-}
-
-fn generate_bound(
-    ctx: &Context,
-    destination: &ast::Var,
-    exp_from: &ast::Exp,
-    iterctx: &IterationContext,
-) -> Result<Vec<ast::Prem>, AlgoError> {
-    let exp_l = var::as_exp(true, destination);
-    let kind = match &exp_from.node {
-        ast::ExpKind::Case(not_exp)
-            if not_exp.arity() == 0
-                && !is_singleton_case(
-                    ctx,
-                    &phrase!(node: exp_from.note.clone(), span: exp_from.span.clone()),
-                )? =>
-        {
-            ast::ExpKind::Match(
-                Box::new(exp_l),
-                ast::Pattern::Case(Box::new(not_exp.to_mixop())),
-            )
-        }
-        ast::ExpKind::Opt(Some(_)) => {
-            ast::ExpKind::Match(Box::new(exp_l), ast::Pattern::Opt(ast::OptPattern::Some))
-        }
-        ast::ExpKind::Opt(None) => {
-            ast::ExpKind::Match(Box::new(exp_l), ast::Pattern::Opt(ast::OptPattern::None))
-        }
-        ast::ExpKind::List(exps) if exps.is_empty() => {
-            ast::ExpKind::Match(Box::new(exp_l), ast::Pattern::List(ast::ListPattern::Nil))
-        }
-        _ => ast::ExpKind::Cmp(
-            ast::CmpOp::Bool(xl::bool::CmpOp::Eq),
-            ast::OpTyp::Bool,
-            Box::new(exp_l),
-            Box::new(exp_from.clone()),
-        ),
-    };
-    let prem = if_prem(bool_exp(kind, exp_from.span.clone()), exp_from.span.clone());
-    let mut iterctx = iterctx.clone();
-    let venv = dimension::infer_exp(exp_from);
-    iterctx.filter_bound(|var| {
-        venv.get(&var.id)
-            .is_some_and(|dim_source| dim_source.sub(&Dim::new(var.typ.clone(), var.iters.clone())))
-    });
-    iterctx.add_var_bound(
-        destination.id.clone(),
-        destination.typ.clone(),
-        destination.iters.clone(),
-    );
-    Ok(vec![iterctx.iterate_prem(prem)])
-}
-
-fn generate_bind_match(
-    destination: &ast::Var,
-    pattern: &ast::Pattern,
-    exp_from: &ast::Exp,
-    iterctx: &IterationContext,
-) -> Vec<ast::Prem> {
-    let exp_to = var::as_exp(true, destination);
-    let exp_match = bool_exp(
-        ast::ExpKind::Match(Box::new(exp_to.clone()), pattern.clone()),
-        exp_from.span.clone(),
-    );
-    let prem_match = if_prem(exp_match, exp_from.span.clone());
-    let mut iterctx_match = empty_iterctx(iterctx);
-    iterctx_match.add_var_bound(
-        destination.id.clone(),
-        destination.typ.clone(),
-        destination.iters.clone(),
-    );
-
-    let prem_bind = phrase! {
-        node: ast::PremKind::Let(ast::LetPrem {
-            exp_l: exp_from.clone(),
-            exp_r: exp_to,
-        }),
-        span: exp_from.span.clone(),
-    };
-    let mut iterctx_bind = empty_iterctx(iterctx);
-    iterctx_bind.add_vars_bind(dimension::infer_exp(exp_from));
-    iterctx_bind.add_var_bound(
-        destination.id.clone(),
-        destination.typ.clone(),
-        destination.iters.clone(),
-    );
-    vec![
-        iterctx_match.iterate_prem(prem_match),
-        iterctx_bind.iterate_prem(prem_bind),
-    ]
-}
-
-fn generate_bind_sub(
-    ctx: &Context,
-    destination: &ast::Var,
-    typ_sub: &ast::Typ,
-    exp_sub: &ast::Exp,
-    exp_from: &ast::Exp,
-    iterctx: &IterationContext,
-) -> Result<Vec<ast::Prem>, AlgoError> {
-    let exp_to = var::as_exp(true, destination);
-    let typ_source = phrase!(node: exp_to.note.clone(), span: exp_to.span.clone());
-    let subcheck = optimize_sub_typ(&ctx.tdenv, &typ_source, typ_sub)?;
-    let exp_subcheck = bool_exp(
-        ast::ExpKind::Sub(
-            Box::new(exp_to.clone()),
-            typ_sub.clone(),
-            Box::new(subcheck),
-        ),
-        exp_from.span.clone(),
-    );
-    let prem_subcheck = if_prem(exp_subcheck, exp_from.span.clone());
-    let mut iterctx_subcheck = empty_iterctx(iterctx);
-    iterctx_subcheck.add_var_bound(
-        destination.id.clone(),
-        destination.typ.clone(),
-        destination.iters.clone(),
-    );
-
-    let exp_downcast = note_phrase! {
-        node: ast::ExpKind::DownCast(typ_sub.clone(), Box::new(exp_to)),
-        note: typ_sub.node.clone(),
-        span: exp_from.span.clone(),
-    };
-    let prem_bind = phrase! {
-        node: ast::PremKind::Let(ast::LetPrem {
-            exp_l: exp_sub.clone(),
-            exp_r: exp_downcast,
-        }),
-        span: exp_from.span.clone(),
-    };
-    let mut iterctx_bind = empty_iterctx(iterctx);
-    iterctx_bind.add_vars_bind(dimension::infer_exp(exp_from));
-    iterctx_bind.add_var_bound(
-        destination.id.clone(),
-        destination.typ.clone(),
-        destination.iters.clone(),
-    );
-    Ok(vec![
-        iterctx_subcheck.iterate_prem(prem_subcheck),
-        iterctx_bind.iterate_prem(prem_bind),
-    ])
-}
-
-fn generate_prem(
-    ctx: &Context,
-    rename: &Rename,
-    iterctx_prem: &IterationContext,
-) -> Result<Vec<ast::Prem>, AlgoError> {
-    let mut iterations = rename.iterctx.as_slice().to_vec();
-    iterations.extend(iterctx_prem.as_slice().iter().cloned());
-    let iterctx = IterationContext::from_iterations(iterations);
-    match &rename.source {
-        Source::Bound { exp_from } => generate_bound(ctx, &rename.destination, exp_from, &iterctx),
-        Source::BindMatch { pattern, exp_from } => Ok(generate_bind_match(
-            &rename.destination,
-            pattern,
-            exp_from,
-            &iterctx,
-        )),
-        Source::BindSub {
-            typ_sub,
-            exp_sub,
-            exp_from,
-        } => generate_bind_sub(
-            ctx,
-            &rename.destination,
-            typ_sub,
-            exp_sub,
-            exp_from,
-            &iterctx,
-        ),
-    }
-}
-
-pub fn generate_prems(
-    ctx: &Context,
-    iterctx_prem: &IterationContext,
-    renv: &RenameEnv,
-) -> Result<Vec<ast::Prem>, AlgoError> {
-    let mut prems = Vec::new();
-    for rename in renv.iter() {
-        prems.extend(generate_prem(ctx, rename, iterctx_prem)?);
-    }
-    Ok(prems)
-}
-
-pub fn destination_env(renv: &RenameEnv) -> VEnv {
-    renv.iter()
-        .map(|rename| {
-            let mut iters = rename.destination.iters.clone();
-            iters.extend(rename.iterctx.iters());
-            (
-                rename.destination.id.clone(),
-                Dim::new(rename.destination.typ.clone(), iters),
-            )
-        })
-        .collect()
 }

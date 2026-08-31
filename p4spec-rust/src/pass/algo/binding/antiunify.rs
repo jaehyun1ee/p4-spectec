@@ -19,6 +19,8 @@ use super::{
     context::Context,
 };
 
+// Compute a shared template by overlapping expressions
+
 fn is_overlap_mismatch(error: &AlgoError) -> bool {
     matches!(
         error.kind,
@@ -195,6 +197,8 @@ fn overlap_exp_group(
     Ok((unifiers, exp_template))
 }
 
+// Populate the template with per-path equality premises
+
 fn equality_prem(exp_template: &ast::Exp, exp: &ast::Exp) -> ast::Prem {
     let span = Span::over(&[exp_template.span.clone(), exp.span.clone()]);
     let exp_match = note_phrase! {
@@ -262,6 +266,8 @@ fn populate_exp(unifiers: &IdSet, exp_template: &ast::Exp, exp: &ast::Exp) -> Ve
         _ => vec![equality_prem(exp_template, exp)],
     }
 }
+
+// Entry point
 
 /// Anti-unifies input paths and returns shared templates plus per-path premises
 #[allow(clippy::type_complexity)]

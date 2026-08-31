@@ -1,4 +1,7 @@
-//! Checks for shallow binding patterns
+//! Checks for shallow binding patterns.
+//!
+//! Shallow binders are variables, upcasts of variables or cases, and cases whose arguments
+//! are variables under any number of iterations.
 
 use crate::lang::il::ast;
 
@@ -9,6 +12,8 @@ fn is_iterated_var(exp: &ast::Exp) -> bool {
         _ => false,
     }
 }
+
+// Expressions
 
 pub fn check_exp(exp: &ast::Exp) -> bool {
     match &exp.node {
@@ -21,9 +26,7 @@ pub fn check_exp(exp: &ast::Exp) -> bool {
     }
 }
 
-pub fn check_exps(exps: &[ast::Exp]) -> bool {
-    exps.iter().all(check_exp)
-}
+// Arguments
 
 pub fn check_arg(arg: &ast::Arg) -> bool {
     match &arg.node {

@@ -1,4 +1,8 @@
-//! Explicit guards for partial algorithmic expressions
+//! Explicit guards for partial algorithmic expressions.
+//!
+//! Indexing requires an in-bounds premise, list iterations require equal lengths, and
+//! optional iterations require equivalent presence. Conditions implied by earlier binding
+//! premises are tracked as must-premises and filtered from the inserted guards.
 
 use crate::{
     lang::{
@@ -10,19 +14,7 @@ use crate::{
     note_phrase, phrase,
 };
 
-#[derive(Default)]
-struct Collected {
-    must: Vec<ast::Prem>,
-    insert: Vec<ast::Prem>,
-}
-
-impl Collected {
-    fn compose(mut self, other: Self) -> Self {
-        self.must.extend(other.must);
-        self.insert.extend(other.insert);
-        self
-    }
-}
+// Equivalence classes for transitive guard filtering
 
 #[derive(Clone, Copy)]
 enum ClassKind {
@@ -187,6 +179,22 @@ impl EquivalenceTable {
     }
 }
 
+// Must-premises hold before evaluation; insert-premises guard partial operations
+
+#[derive(Default)]
+struct Collected {
+    must: Vec<ast::Prem>,
+    insert: Vec<ast::Prem>,
+}
+
+impl Collected {
+    fn compose(mut self, other: Self) -> Self {
+        self.must.extend(other.must);
+        self.insert.extend(other.insert);
+        self
+    }
+}
+
 fn filter_insert(must: &[ast::Prem], insert: Vec<ast::Prem>) -> Vec<ast::Prem> {
     let table = EquivalenceTable::from_prems(must);
     insert
@@ -238,6 +246,8 @@ fn iterate_collected(
         insert: iterate_prems(iter, vars_insert, collected.insert),
     }
 }
+
+// Guard generation
 
 fn gen_index_guard(exp: &ast::Exp, exp_base: &ast::Exp, exp_index: &ast::Exp) -> Vec<ast::Prem> {
     let span = exp.span.clone();
@@ -354,6 +364,8 @@ fn compose_inserts(mut inserts: Vec<ast::Prem>, other: Vec<ast::Prem>) -> Vec<as
     inserts.extend(other);
     inserts
 }
+
+// Guard collection
 
 fn collect_exp(exp: &ast::Exp) -> Vec<ast::Prem> {
     match &exp.node {
@@ -477,6 +489,8 @@ fn collect_iter_prem(iter_prem: &ast::IterPrem) -> Collected {
         insert: gen_iter_guard(&(iter_prem.iter, iter_prem.vars_bound.clone())),
     }
 }
+
+// Insertion entry points
 
 fn insert_prem(prems_must_prev: &[ast::Prem], prem: ast::Prem) -> Collected {
     let collected = collect_prem(&prem);

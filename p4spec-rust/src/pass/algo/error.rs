@@ -8,8 +8,6 @@ use crate::runtime::types::{TypeError, TypeErrorKind};
 /// Stable semantic category of an algorithmic-conversion failure
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
 pub enum AlgoErrorKind {
-    #[error("algorithmic conversion is not implemented")]
-    Unsupported,
     #[error("type definition is undefined")]
     UndefinedType,
     #[error("inconsistent dimensions for multiple bindings")]

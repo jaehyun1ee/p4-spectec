@@ -38,6 +38,8 @@ fn add_iter(venv: VEnv, iter: ast::Iter) -> VEnv {
 }
 
 impl IterationContext {
+    // Constructors
+
     pub fn new() -> Self {
         Self::default()
     }
@@ -53,6 +55,8 @@ impl IterationContext {
     pub fn iters(&self) -> Vec<ast::Iter> {
         self.iterations.iter().map(|entry| entry.iter).collect()
     }
+
+    // Adders
 
     pub fn add_vars_bound(&mut self, mut venv: VEnv) {
         for entry in &mut self.iterations {
@@ -78,17 +82,15 @@ impl IterationContext {
         }
     }
 
-    pub fn add_var_bind(&mut self, id: Id, typ: ast::Typ, iters: Vec<ast::Iter>) {
-        let mut venv = VEnv::new();
-        venv.insert(id, Dim::new(typ, iters));
-        self.add_vars_bind(venv);
-    }
+    // Filtering
 
     pub fn filter_bound(&mut self, mut predicate: impl FnMut(&ast::Var) -> bool) {
         for entry in &mut self.iterations {
             entry.vars_bound.retain(&mut predicate);
         }
     }
+
+    // Validation
 
     pub fn validate(&self, span: Span) -> Result<(), AlgoError> {
         for entry in &self.iterations {
@@ -103,6 +105,8 @@ impl IterationContext {
         }
         Ok(())
     }
+
+    // Iterated premises
 
     pub fn iterate_prem(&self, mut prem: ast::Prem) -> ast::Prem {
         for entry in &self.iterations {

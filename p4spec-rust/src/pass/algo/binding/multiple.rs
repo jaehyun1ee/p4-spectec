@@ -199,9 +199,11 @@ fn generate_side_condition(
 ) -> Option<ast::Prem> {
     let mut ids_repeated = ids_rename.iter().skip(1);
     let id_rename = ids_repeated.next()?;
-    let mut exp = equality_exp(id, id_rename, &dim.typ);
+    let mut id_condition = id.clone();
+    id_condition.span = ids_rename.last()?.span.clone();
+    let mut exp = equality_exp(&id_condition, id_rename, &dim.typ);
     for id_rename in ids_repeated {
-        let exp_r = equality_exp(id, id_rename, &dim.typ);
+        let exp_r = equality_exp(&id_condition, id_rename, &dim.typ);
         exp = note_phrase! {
             node: ast::ExpKind::Bin(
                 ast::BinOp::Bool(xl::bool::BinOp::And),
@@ -210,10 +212,13 @@ fn generate_side_condition(
                 Box::new(exp_r),
             ),
             note: ast::TypKind::Bool,
-            span: id.span.clone(),
+            span: id_condition.span.clone(),
         };
     }
-    let prem = phrase!(node: ast::PremKind::If(ast::IfPrem { exp }), span: id.span.clone());
+    let prem = phrase! {
+        node: ast::PremKind::If(ast::IfPrem { exp }),
+        span: id_condition.span.clone(),
+    };
 
     let mut iterations = dim.iters.clone();
     iterations.extend(iterctx.iters());
@@ -227,7 +232,7 @@ fn generate_side_condition(
             })
             .collect(),
     );
-    let venv = std::iter::once(id)
+    let venv = std::iter::once(&id_condition)
         .chain(ids_rename)
         .map(|id| (id.clone(), Dim::new(dim.typ.clone(), vec![])))
         .collect::<VEnv>();

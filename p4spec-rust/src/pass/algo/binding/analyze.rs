@@ -1,4 +1,9 @@
-//! Full binding analysis from IL definitions to AL definitions
+//! Binding analysis from IL definitions to AL definitions.
+//!
+//! Each binding construct is processed in three phases: collect variables only from
+//! invertible positions, rename repeated bindings and add equality premises, then
+//! desugar partial patterns into guards and simpler binders. The resulting binders are
+//! variables, tuples, structs, singleton cases, or iterations of those forms.
 
 use crate::{
     lang::{
@@ -51,6 +56,54 @@ fn update_venv_multiple(venv: &mut VEnv, renv: &multiple::RenameEnv) {
     }
 }
 
+// Expressions
+
+fn is_pure_exp(exp: &ast::Exp) -> bool {
+    match &exp.node {
+        ast::ExpKind::Bool(_)
+        | ast::ExpKind::Num(_)
+        | ast::ExpKind::Text(_)
+        | ast::ExpKind::Var(_) => true,
+        ast::ExpKind::Un(_, _, exp)
+        | ast::ExpKind::UpCast(_, exp)
+        | ast::ExpKind::DownCast(_, exp)
+        | ast::ExpKind::Sub(exp, _, _)
+        | ast::ExpKind::Match(exp, _)
+        | ast::ExpKind::Len(exp)
+        | ast::ExpKind::Dot(exp, _)
+        | ast::ExpKind::Iter(exp, _) => is_pure_exp(exp),
+        ast::ExpKind::Bin(_, _, exp_l, exp_r)
+        | ast::ExpKind::Cmp(_, _, exp_l, exp_r)
+        | ast::ExpKind::Cons(exp_l, exp_r)
+        | ast::ExpKind::Cat(exp_l, exp_r)
+        | ast::ExpKind::Mem(exp_l, exp_r)
+        | ast::ExpKind::Idx(exp_l, exp_r) => is_pure_exp(exp_l) && is_pure_exp(exp_r),
+        ast::ExpKind::Tuple(exps) | ast::ExpKind::List(exps) => exps.iter().all(is_pure_exp),
+        ast::ExpKind::Case(not_exp) => not_exp.args().into_iter().all(is_pure_exp),
+        ast::ExpKind::Str(fields) => fields.iter().all(|(_, exp)| is_pure_exp(exp)),
+        ast::ExpKind::Opt(Some(exp)) => is_pure_exp(exp),
+        ast::ExpKind::Opt(None) => true,
+        ast::ExpKind::Slice(exp_b, exp_i, exp_n) => {
+            is_pure_exp(exp_b) && is_pure_exp(exp_i) && is_pure_exp(exp_n)
+        }
+        ast::ExpKind::Upd(exp_b, path, exp_f) => {
+            is_pure_exp(exp_b) && is_pure_path(path) && is_pure_exp(exp_f)
+        }
+        ast::ExpKind::Call(_, _, _) => false,
+    }
+}
+
+fn is_pure_path(path: &ast::Path) -> bool {
+    match &path.node {
+        ast::PathKind::Root => true,
+        ast::PathKind::Idx(path, exp) => is_pure_path(path) && is_pure_exp(exp),
+        ast::PathKind::Slice(path, exp_i, exp_n) => {
+            is_pure_path(path) && is_pure_exp(exp_i) && is_pure_exp(exp_n)
+        }
+        ast::PathKind::Dot(path, _) => is_pure_path(path),
+    }
+}
+
 fn analyze_exps_as_bind(
     mut ctx: Context,
     iterctx: &IterationContext,
@@ -97,6 +150,8 @@ fn analyze_exps_as_bound(ctx: &Context, exps: &[ast::Exp]) -> Result<(), AlgoErr
     }
     Ok(())
 }
+
+// Arguments
 
 fn analyze_args_as_bind(
     mut ctx: Context,
@@ -187,51 +242,7 @@ fn analyze_args_as_bound_shallow(ctx: &Context, args: &[ast::Arg]) -> Result<(),
     Ok(())
 }
 
-fn is_pure_exp(exp: &ast::Exp) -> bool {
-    match &exp.node {
-        ast::ExpKind::Bool(_)
-        | ast::ExpKind::Num(_)
-        | ast::ExpKind::Text(_)
-        | ast::ExpKind::Var(_) => true,
-        ast::ExpKind::Un(_, _, exp)
-        | ast::ExpKind::UpCast(_, exp)
-        | ast::ExpKind::DownCast(_, exp)
-        | ast::ExpKind::Sub(exp, _, _)
-        | ast::ExpKind::Match(exp, _)
-        | ast::ExpKind::Len(exp)
-        | ast::ExpKind::Dot(exp, _)
-        | ast::ExpKind::Iter(exp, _) => is_pure_exp(exp),
-        ast::ExpKind::Bin(_, _, exp_l, exp_r)
-        | ast::ExpKind::Cmp(_, _, exp_l, exp_r)
-        | ast::ExpKind::Cons(exp_l, exp_r)
-        | ast::ExpKind::Cat(exp_l, exp_r)
-        | ast::ExpKind::Mem(exp_l, exp_r)
-        | ast::ExpKind::Idx(exp_l, exp_r) => is_pure_exp(exp_l) && is_pure_exp(exp_r),
-        ast::ExpKind::Tuple(exps) | ast::ExpKind::List(exps) => exps.iter().all(is_pure_exp),
-        ast::ExpKind::Case(not_exp) => not_exp.args().into_iter().all(is_pure_exp),
-        ast::ExpKind::Str(fields) => fields.iter().all(|(_, exp)| is_pure_exp(exp)),
-        ast::ExpKind::Opt(Some(exp)) => is_pure_exp(exp),
-        ast::ExpKind::Opt(None) => true,
-        ast::ExpKind::Slice(exp_b, exp_i, exp_n) => {
-            is_pure_exp(exp_b) && is_pure_exp(exp_i) && is_pure_exp(exp_n)
-        }
-        ast::ExpKind::Upd(exp_b, path, exp_f) => {
-            is_pure_exp(exp_b) && is_pure_path(path) && is_pure_exp(exp_f)
-        }
-        ast::ExpKind::Call(_, _, _) => false,
-    }
-}
-
-fn is_pure_path(path: &ast::Path) -> bool {
-    match &path.node {
-        ast::PathKind::Root => true,
-        ast::PathKind::Idx(path, exp) => is_pure_path(path) && is_pure_exp(exp),
-        ast::PathKind::Slice(path, exp_i, exp_n) => {
-            is_pure_path(path) && is_pure_exp(exp_i) && is_pure_exp(exp_n)
-        }
-        ast::PathKind::Dot(path, _) => is_pure_path(path),
-    }
-}
+// Premises
 
 fn is_pure_prem(prem: &ast::Prem) -> bool {
     match &prem.node {
@@ -452,6 +463,8 @@ fn analyze_prems(
     Ok((ctx, prems_analyzed))
 }
 
+// Rules
+
 #[allow(clippy::type_complexity)]
 fn analyze_rule_match(
     ctx: &Context,
@@ -596,6 +609,8 @@ fn analyze_else_group(
     Ok(phrase!(node: else_group, span: span))
 }
 
+// Clauses
+
 fn analyze_clause(
     ctx: &Context,
     clause: &ast::Clause,
@@ -621,6 +636,8 @@ fn analyze_clause(
         span: clause.span.clone(),
     })
 }
+
+// Table rows
 
 fn pattern_set_covered_by_typ(ctx: &Context, typ: &ast::Typ) -> Result<PatternSet, AlgoError> {
     let ast::TypKind::Var(id, _) = &typ.node else {
@@ -776,6 +793,8 @@ fn analyze_table_rows(
     check_valid_table_rows(ctx, span, &typs_match, &rows_analyzed)?;
     Ok(rows_analyzed)
 }
+
+// Definitions
 
 fn analyze_def(ctx: &Context, def: &ast::Def) -> Result<al::ast::Def, AlgoError> {
     let kind = match &def.node {

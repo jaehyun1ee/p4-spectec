@@ -1,4 +1,7 @@
-//! Binding collection through invertible expression positions
+//! Binding collection through invertible expression positions.
+//!
+//! Free identifiers become binders only while traversing invertible constructs. A binder
+//! found below any non-invertible operation is rejected at that operation's source span.
 
 use crate::{
     lang::{common::source::Span, il::ast},

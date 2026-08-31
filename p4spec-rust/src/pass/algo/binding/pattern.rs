@@ -6,6 +6,8 @@ use crate::lang::{common::source::Span, il::ast, xl::num};
 
 use super::super::{AlgoError, AlgoErrorKind};
 
+// Source-insensitive pattern ordering
+
 fn compare_slices<T, U>(
     items_l: &[T],
     items_r: &[U],
@@ -155,6 +157,8 @@ impl FromIterator<ast::NotTyp> for PatternSet {
 
 pub type PatternSets = Vec<PatternSet>;
 
+// Overlap checks
+
 fn check_arity(
     span: &Span,
     patterns_l: &PatternSets,
@@ -197,6 +201,8 @@ pub fn find_overlap<'a>(
     }
     Ok(None)
 }
+
+// Exhaustiveness checks
 
 pub fn subtract(
     span: &Span,

@@ -1,4 +1,7 @@
-//! Minimal-dimension inference for expression variables
+//! Minimal-dimension inference for expression variables.
+//!
+//! This is the binding pass's reduced form of elaboration dimension inference: it records
+//! free variables and retains the minimal dimension when one occurs more than once.
 
 use crate::{
     lang::{common::ds::map::IdMap, il::ast},

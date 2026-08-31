@@ -100,7 +100,7 @@ impl Error for AtomError {}
 
 impl Print for Atom {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        printer.write(&self.to_string())
+        printer.write(&format!("{self}"))
     }
 }
 
@@ -126,40 +126,39 @@ impl Free for Atom {
 
 // == String conversion and parsing
 
-impl Atom {
+impl fmt::Display for Atom {
     /// String representation of the atom
-    #[allow(clippy::inherent_to_string)]
-    pub fn to_string(&self) -> String {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Keyword(id) => id.clone(),
-            Self::Tag(id) => format!("_{id}"),
-            Self::Operator(op) => format!("'{op}'"),
-            Self::Sub => "<:".into(),
-            Self::Sup => ":>".into(),
-            Self::Turnstile => "|-".into(),
-            Self::Tilesturn => "-|".into(),
-            Self::Arrow => "->".into(),
-            Self::ArrowSub => "->_".into(),
-            Self::DoubleArrowSub => "=>_".into(),
-            Self::DoubleArrowLong => "==>".into(),
-            Self::SqArrow => "~>".into(),
-            Self::SqArrowStar => "~>*".into(),
-            Self::Dot => ".".into(),
-            Self::Dot2 => "..".into(),
-            Self::Dot3 => "...".into(),
-            Self::Semicolon => ";".into(),
-            Self::Colon => ":".into(),
-            Self::ColonEq => ":=".into(),
-            Self::Tilde2 => "~~".into(),
-            Self::Backslash => "\\".into(),
-            Self::LAngle => "`<".into(),
-            Self::RAngle => "`>".into(),
-            Self::LParen => "`(".into(),
-            Self::RParen => "`)".into(),
-            Self::LBrack => "`[".into(),
-            Self::RBrack => "`]".into(),
-            Self::LBrace => "`{".into(),
-            Self::RBrace => "`}".into(),
+            Self::Keyword(id) => formatter.write_str(id),
+            Self::Tag(id) => write!(formatter, "_{id}"),
+            Self::Operator(op) => write!(formatter, "'{op}'"),
+            Self::Sub => formatter.write_str("<:"),
+            Self::Sup => formatter.write_str(":>"),
+            Self::Turnstile => formatter.write_str("|-"),
+            Self::Tilesturn => formatter.write_str("-|"),
+            Self::Arrow => formatter.write_str("->"),
+            Self::ArrowSub => formatter.write_str("->_"),
+            Self::DoubleArrowSub => formatter.write_str("=>_"),
+            Self::DoubleArrowLong => formatter.write_str("==>"),
+            Self::SqArrow => formatter.write_str("~>"),
+            Self::SqArrowStar => formatter.write_str("~>*"),
+            Self::Dot => formatter.write_str("."),
+            Self::Dot2 => formatter.write_str(".."),
+            Self::Dot3 => formatter.write_str("..."),
+            Self::Semicolon => formatter.write_str(";"),
+            Self::Colon => formatter.write_str(":"),
+            Self::ColonEq => formatter.write_str(":="),
+            Self::Tilde2 => formatter.write_str("~~"),
+            Self::Backslash => formatter.write_str("\\"),
+            Self::LAngle => formatter.write_str("`<"),
+            Self::RAngle => formatter.write_str("`>"),
+            Self::LParen => formatter.write_str("`("),
+            Self::RParen => formatter.write_str("`)"),
+            Self::LBrack => formatter.write_str("`["),
+            Self::RBrack => formatter.write_str("`]"),
+            Self::LBrace => formatter.write_str("`{"),
+            Self::RBrace => formatter.write_str("`}"),
         }
     }
 }
@@ -180,7 +179,7 @@ impl Atom {
             Self::RBrack => "]".into(),
             Self::LBrace => "{".into(),
             Self::RBrace => "}".into(),
-            _ => self.to_string(),
+            _ => format!("{self}"),
         }
     }
 }

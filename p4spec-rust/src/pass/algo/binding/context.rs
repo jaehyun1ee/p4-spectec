@@ -24,6 +24,8 @@ pub struct Context {
 }
 
 impl Context {
+    // Constructors
+
     pub fn new() -> Self {
         let mut menv = MEnv::new();
         for (name, typ) in [
@@ -43,6 +45,8 @@ impl Context {
         }
     }
 
+    // Adders
+
     pub fn add_free(&mut self, id: Id) {
         self.frees.insert(id);
     }
@@ -60,6 +64,8 @@ impl Context {
         }
     }
 
+    // Finders
+
     pub fn find_typdef_opt(&self, id: &Id) -> Option<&TypeDef> {
         self.tdenv.get(id)
     }
@@ -68,6 +74,8 @@ impl Context {
         self.find_typdef_opt(id)
             .ok_or_else(|| AlgoError::new(AlgoErrorKind::UndefinedType, id.span.clone()))
     }
+
+    // Load definitions
 
     pub fn load_def(&mut self, def: &ast::Def) {
         match &def.node {
