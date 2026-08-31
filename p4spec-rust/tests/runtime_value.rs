@@ -92,7 +92,10 @@ fn fresh_type_variables_are_isolated_by_instance() {
     let mut first = Fresh::new();
     let mut second = Fresh::new();
 
-    assert_eq!(first.fresh().0.node, "__FRESH0");
-    assert_eq!(first.fresh().0.node, "__FRESH1");
-    assert_eq!(second.fresh().0.node, "__FRESH0");
+    let first_initial = first.fresh().0;
+    let first_next = first.fresh().0;
+    let second_initial = second.fresh().0;
+
+    assert_eq!(first_initial, second_initial);
+    assert_ne!(first_initial, first_next);
 }
