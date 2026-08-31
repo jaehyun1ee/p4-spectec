@@ -26,11 +26,12 @@ use super::{
 pub enum Token {
     End,
     TypeName,
+    TypeNameExpression,
     Identifier,
     Name(ValueRef),
     StringLiteral(ValueRef),
-    NumberInt { value: ValueRef, lexeme: String },
-    Number { value: ValueRef, lexeme: String },
+    NumberInt(ValueRef, String),
+    Number(ValueRef, String),
     UnexpectedToken(ValueRef),
     LessEqual,
     GreaterEqual,
@@ -39,6 +40,7 @@ pub enum Token {
     Or,
     NotEqual,
     Equal,
+    ShiftRight,
     Plus,
     Minus,
     PlusSaturating,
@@ -63,7 +65,9 @@ pub enum Token {
     RightParen,
     Assign,
     Colon,
+    BlockColon,
     Comma,
+    TrailingComma,
     Question,
     Dot,
     Not,
@@ -92,6 +96,7 @@ pub enum Token {
     Entries,
     Enum,
     Error,
+    ErrorExpression,
     Exit,
     Extern,
     Header,
@@ -144,7 +149,6 @@ enum State {
     Regular,
     Template,
     Pragma,
-    AfterRightAngle(Position),
 }
 
 pub struct Lexer<'source> {
@@ -156,6 +160,7 @@ pub struct Lexer<'source> {
     context: Rc<Context>,
     state: State,
     pending: VecDeque<Phrase<Token>>,
+    template_depth: usize,
     finished: bool,
 }
 
@@ -170,6 +175,7 @@ impl<'source> Lexer<'source> {
             context,
             state: State::Regular,
             pending: VecDeque::new(),
+            template_depth: 0,
             finished: false,
         }
     }
@@ -219,6 +225,28 @@ impl<'source> Lexer<'source> {
                 Err(error) => return Some(Err(error)),
             };
             let span = token.span.clone();
+            let token = if self.context.take_template_expected() && token.node == Token::LeftAngle {
+                phrase!(node: Token::LeftAngleArgs, span: span.clone())
+            } else {
+                token
+            };
+            let token = if token.node == Token::Comma
+                && self.remaining_significant().starts_with(['}', ']'])
+            {
+                phrase!(node: Token::TrailingComma, span: span.clone())
+            } else if token.node == Token::Error && self.remaining_significant().starts_with('.') {
+                phrase!(node: Token::ErrorExpression, span: span.clone())
+            } else {
+                token
+            };
+            let token = if token.node == Token::Colon
+                && (self.remaining_significant().starts_with(['{', '@'])
+                    || self.remaining_significant().starts_with("#pragma"))
+            {
+                phrase!(node: Token::BlockColon, span: span.clone())
+            } else {
+                token
+            };
             let token = match self.state.clone() {
                 State::Regular => match token.node {
                     Token::Name(value) => {
@@ -229,11 +257,16 @@ impl<'source> Lexer<'source> {
                         self.state = State::Pragma;
                         Token::Pragma
                     }
-                    Token::PragmaEnd => continue,
-                    Token::RightAngle => {
-                        self.state = State::AfterRightAngle(span.right.clone());
-                        Token::RightAngle
+                    token @ (Token::Bit
+                    | Token::Int
+                    | Token::Varbit
+                    | Token::List
+                    | Token::Tuple
+                    | Token::ValueSet) => {
+                        self.state = State::Template;
+                        token
                     }
+                    Token::PragmaEnd => continue,
                     token => token,
                 },
                 State::Template => match token.node {
@@ -250,10 +283,6 @@ impl<'source> Lexer<'source> {
                         Token::Pragma
                     }
                     Token::PragmaEnd => continue,
-                    Token::RightAngle => {
-                        self.state = State::AfterRightAngle(span.right.clone());
-                        Token::RightAngle
-                    }
                     token => {
                         self.state = State::Regular;
                         token
@@ -270,30 +299,42 @@ impl<'source> Lexer<'source> {
                     }
                     token => token,
                 },
-                State::AfterRightAngle(previous_end) => match token.node {
-                    Token::RightAngle if span.left == previous_end => {
-                        self.state = State::Regular;
-                        Token::RightAngleShift
-                    }
-                    Token::Pragma => {
-                        self.state = State::Pragma;
-                        Token::Pragma
-                    }
-                    Token::PragmaEnd => {
-                        self.state = State::Regular;
-                        continue;
-                    }
-                    Token::Name(value) => {
-                        self.queue_classification(&value, &span, State::Regular);
-                        Token::Name(value)
-                    }
-                    token => {
-                        self.state = State::Regular;
-                        token
-                    }
-                },
             };
+            let (token, span) = self.disambiguate_angles(token, span);
             return Some(Ok(phrase!(node: token, span: span)));
+        }
+    }
+
+    fn disambiguate_angles(&mut self, token: Token, span: Span) -> (Token, Span) {
+        match token {
+            Token::LeftAngleArgs => {
+                self.template_depth += 1;
+                (Token::LeftAngleArgs, span)
+            }
+            Token::RightAngle if self.template_depth > 0 => {
+                self.template_depth -= 1;
+                (Token::RightAngle, span)
+            }
+            Token::ShiftRight if self.template_depth > 0 => {
+                let middle = Position::new(
+                    Rc::clone(&span.left.file),
+                    span.left.line,
+                    span.left.column + 1,
+                );
+                let second = if self.template_depth > 1 {
+                    self.template_depth -= 2;
+                    Token::RightAngleShift
+                } else {
+                    self.template_depth = 0;
+                    Token::RightAngle
+                };
+                self.pending.push_back(phrase!(
+                    node: second,
+                    span: Span::new(middle.clone(), span.right.clone())
+                ));
+                (Token::RightAngle, Span::new(span.left, middle))
+            }
+            token => (token, span),
         }
     }
 
@@ -303,12 +344,50 @@ impl<'source> Lexer<'source> {
             _ => return,
         };
         let (token, has_params) = match self.context.get_kind(name) {
-            IdentKind::TypeName { has_params, .. } => (Token::TypeName, has_params),
+            IdentKind::TypeName { has_params, .. } => {
+                let token = if self.type_name_starts_expression() {
+                    Token::TypeNameExpression
+                } else {
+                    Token::TypeName
+                };
+                (token, has_params)
+            }
             IdentKind::Ident { has_params, .. } => (Token::Identifier, has_params),
         };
-        self.state = if has_params { State::Template } else { next };
+        self.state = if has_params || self.template_follows_name() {
+            State::Template
+        } else {
+            next
+        };
         self.pending
             .push_back(phrase!(node: token, span: span.clone()));
+    }
+
+    fn type_name_starts_expression(&self) -> bool {
+        let rest = self.remaining_significant();
+        if rest.starts_with(['.', '(']) {
+            return true;
+        }
+        angle_suffix(rest).is_some_and(|suffix| suffix.trim_start().starts_with('('))
+    }
+
+    fn template_follows_name(&self) -> bool {
+        angle_suffix(self.remaining_significant())
+            .is_some_and(|suffix| suffix.trim_start().starts_with(['(', '{']))
+    }
+
+    fn remaining_significant(&self) -> &str {
+        let mut rest = &self.source[self.index..];
+        loop {
+            rest = rest.trim_start();
+            if let Some(after) = rest.strip_prefix("//") {
+                rest = after.find('\n').map_or("", |index| &after[index + 1..]);
+            } else if let Some(after) = rest.strip_prefix("/*") {
+                rest = after.find("*/").map_or("", |index| &after[index + 2..]);
+            } else {
+                return rest;
+            }
+        }
     }
 
     fn raw_token(&mut self) -> Option<Result<Phrase<Token>, P4Error>> {
@@ -498,15 +577,9 @@ impl<'source> Lexer<'source> {
         };
         let span = self.span_from(left);
         let token = if width_end.is_some() {
-            Token::Number {
-                value: token,
-                lexeme,
-            }
+            Token::Number(token, lexeme)
         } else {
-            Token::NumberInt {
-                value: token,
-                lexeme,
-            }
+            Token::NumberInt(token, lexeme)
         };
         Ok(phrase!(node: token, span: span))
     }
@@ -532,6 +605,26 @@ impl<'source> Lexer<'source> {
             self.column = 0;
         }
     }
+}
+
+fn angle_suffix(rest: &str) -> Option<&str> {
+    if !rest.starts_with('<') {
+        return None;
+    }
+    let mut depth = 0usize;
+    for (index, character) in rest.char_indices() {
+        match character {
+            '<' => depth += 1,
+            '>' => {
+                depth = depth.checked_sub(1)?;
+                if depth == 0 {
+                    return Some(&rest[index + character.len_utf8()..]);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
 }
 
 impl Iterator for Lexer<'_> {
@@ -644,6 +737,7 @@ fn operators() -> &'static [(&'static str, Token)] {
         ("|-|", Token::MinusSaturating),
         ("<=", Token::LessEqual),
         (">=", Token::GreaterEqual),
+        (">>", Token::ShiftRight),
         ("<<", Token::ShiftLeft),
         ("&&", Token::And),
         ("||", Token::Or),

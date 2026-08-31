@@ -24,8 +24,8 @@ fn identifiers_are_followed_by_context_sensitive_classification() {
     assert_eq!(tokens[1], Token::TypeName);
     assert_eq!(tokens[2], Token::LeftAngleArgs);
     assert_eq!(tokens[3], Token::Bit);
-    assert_eq!(tokens[4], Token::LeftAngle);
-    assert!(matches!(&tokens[5], Token::NumberInt { lexeme, .. } if lexeme == "8"));
+    assert_eq!(tokens[4], Token::LeftAngleArgs);
+    assert!(matches!(&tokens[5], Token::NumberInt(_, lexeme) if lexeme == "8"));
     assert_eq!(tokens[6], Token::RightAngle);
     assert_eq!(tokens[7], Token::RightAngleShift);
     assert!(matches!(&tokens[8], Token::Name(value) if get::text(value) == Ok("value")));
@@ -68,4 +68,16 @@ fn comments_are_skipped_and_unsupported_escapes_are_located_errors() {
         error.kind,
         p4spec_rust::interface::p4::error::P4ErrorKind::Lex(_)
     ));
+}
+
+#[test]
+fn shift_and_type_constructor_angles_are_distinct() {
+    let context = Rc::new(Context::new());
+    context.declare_type("Header", true).unwrap();
+
+    let tokens = tokens("Header<bit<8>>(x); x >> 1", context);
+
+    assert_eq!(tokens[1], Token::TypeNameExpression);
+    assert_eq!(tokens[7], Token::RightAngleShift);
+    assert!(tokens.contains(&Token::ShiftRight));
 }

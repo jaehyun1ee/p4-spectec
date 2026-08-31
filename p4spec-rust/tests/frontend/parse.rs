@@ -8,7 +8,7 @@ use std::{
 use p4spec_rust::{
     frontend::{
         error::{FrontendError, SyntaxErrorKind},
-        parse::{parse_file, parse_files, parse_string},
+        parse::{parse_file, parse_files, parse_mixop, parse_string},
     },
     lang::{
         common::source::Position,
@@ -17,6 +17,12 @@ use p4spec_rust::{
 };
 
 static TEMP_DIRECTORY_ID: AtomicUsize = AtomicUsize::new(0);
+
+#[test]
+fn parses_runtime_mixop_shapes() {
+    let mixop = parse_mixop("name '=' expression").expect("parse mixop shape");
+    assert_eq!(mixop.args().len(), 2);
+}
 
 struct TempDirectory {
     path: PathBuf,

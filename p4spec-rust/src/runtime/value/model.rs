@@ -378,6 +378,10 @@ pub mod make {
     pub fn external(typ: &Typ, value: ExternalData, span: Span) -> ValueRef {
         new(ValueKind::Extern(value), typ.node.clone(), span)
     }
+
+    pub fn retag(value: &Value, typ: &Typ) -> ValueRef {
+        new(value.kind.clone(), typ.node.clone(), value.span.clone())
+    }
 }
 
 pub mod get {
