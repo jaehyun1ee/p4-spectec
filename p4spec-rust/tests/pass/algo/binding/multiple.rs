@@ -7,13 +7,12 @@ fn test_multiple_binding_renames_repetitions_and_compares_them_in_occurrence_ord
         ast::TypKind::Tuple(vec![typ::bool(), typ::bool(), typ::bool()]),
         1,
     );
-    let bindings = collect::collect_exp(&Context::new(), &tuple).expect("binding collection");
+    let benv = collect::collect_exp(&Context::new(), &tuple).expect("binding collection");
     let mut context = Context::new();
-    let mut renames = multiple::RenameEnv::from_bindings(&bindings);
+    let mut renames = multiple::RenameEnv::from_bindings(&benv);
 
     let renamed = multiple::rename_exp(&mut context, &mut renames, &tuple);
-    let side_conditions =
-        multiple::generate_side_conditions(&bindings, &IterationContext::new(), &renames);
+    let side_conditions = multiple::generate_side_conditions(&IterationContext::new(), &renames);
 
     let ast::ExpKind::Tuple(exps) = &renamed.node else {
         panic!("expected tuple binding");
@@ -58,22 +57,19 @@ fn test_multiple_binding_renames_repetitions_and_compares_them_in_occurrence_ord
 
 #[test]
 fn test_multiple_side_conditions_use_the_rename_environment_dimension() {
-    let mut bindings = Bindings::new();
-    bindings.insert(
-        id("x", 1),
-        Binding::Multiple(Dim::new(typ::bool(), vec![ast::Iter::List])),
-    );
+    let benv_l = BEnv::singleton(id("x", 1), typ::bool()).add_iter(ast::Iter::List);
+    let benv_r = BEnv::singleton(id("x", 2), typ::bool()).add_iter(ast::Iter::List);
+    let benv = benv_l.union(benv_r).expect("equivalent dimensions");
     let tuple = exp(
         ast::ExpKind::Tuple(vec![var_exp("x", 1), var_exp("x", 2)]),
         ast::TypKind::Tuple(vec![typ::bool(), typ::bool()]),
         1,
     );
     let mut context = Context::new();
-    let mut renames = multiple::RenameEnv::from_bindings(&bindings);
+    let mut renames = multiple::RenameEnv::from_bindings(&benv);
     multiple::rename_exp(&mut context, &mut renames, &tuple);
 
-    let premises =
-        multiple::generate_side_conditions(&Bindings::new(), &IterationContext::new(), &renames);
+    let premises = multiple::generate_side_conditions(&IterationContext::new(), &renames);
 
     let [premise] = premises.as_slice() else {
         panic!("expected one repeated-binding premise");

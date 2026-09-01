@@ -59,7 +59,7 @@ use crate::{
 use super::{
     super::{AlgoError, AlgoErrorKind},
     antiunify,
-    bind::{self, Bindings},
+    bind::BEnv,
     collect,
     context::Context,
     dimension,
@@ -104,14 +104,14 @@ fn analyze_exps_as_bind(
     iter_ctx: &IterationContext,
     exps_il: &[ast::Exp],
 ) -> Result<(VEnv, Vec<ast::Exp>, Vec<ast::Prem>), AlgoError> {
-    let bindings = collect::collect_exps(ctx, exps_il)?;
-    let mut venv = bind::flatten(&bindings);
+    let benv = collect::collect_exps(ctx, exps_il)?;
+    let mut venv = benv.flatten();
 
-    let mut renv_multiple = multiple::RenameEnv::from_bindings(&bindings);
+    let mut renv_multiple = multiple::RenameEnv::from_bindings(&benv);
     let exps_al = multiple::rename_exps(ctx, &mut renv_multiple, exps_il);
     update_venv_multiple(&mut venv, &renv_multiple);
     let prem_sideconditions_multiple_al =
-        multiple::generate_side_conditions(&bindings, iter_ctx, &renv_multiple);
+        multiple::generate_side_conditions(iter_ctx, &renv_multiple);
 
     let mut renv_partial = partial::RenameEnv::new();
     let (_, exps_al) = partial::rename_exps(
@@ -128,8 +128,8 @@ fn analyze_exps_as_bind(
 }
 
 fn analyze_exp_as_bound(ctx: &Context, exp: &ast::Exp) -> Result<(), AlgoError> {
-    let bindings = collect::collect_exp(ctx, exp)?;
-    if bindings.is_empty() {
+    let benv = collect::collect_exp(ctx, exp)?;
+    if benv.is_empty() {
         Ok(())
     } else {
         Err(AlgoError::new(
@@ -152,14 +152,14 @@ fn analyze_args_as_bind(
     ctx: &mut Context,
     args_il: &[ast::Arg],
 ) -> Result<(VEnv, Vec<ast::Arg>, Vec<ast::Prem>), AlgoError> {
-    let bindings = collect::collect_args(ctx, args_il)?;
-    let mut venv = bind::flatten(&bindings);
+    let benv = collect::collect_args(ctx, args_il)?;
+    let mut venv = benv.flatten();
 
-    let mut renv_multiple = multiple::RenameEnv::from_bindings(&bindings);
+    let mut renv_multiple = multiple::RenameEnv::from_bindings(&benv);
     let args_al = multiple::rename_args(ctx, &mut renv_multiple, args_il);
     update_venv_multiple(&mut venv, &renv_multiple);
     let prem_sideconditions_multiple_al =
-        multiple::generate_side_conditions(&bindings, &IterationContext::new(), &renv_multiple);
+        multiple::generate_side_conditions(&IterationContext::new(), &renv_multiple);
 
     let mut renv_partial = partial::RenameEnv::new();
     let (_, args_al) = partial::rename_args(
@@ -188,13 +188,13 @@ fn analyze_args_as_bind_shallow(
         return Err(AlgoError::new(AlgoErrorKind::BindingsNotShallow, span));
     }
 
-    let bindings = collect::collect_args(ctx, args_il)?;
-    let mut venv = bind::flatten(&bindings);
-    let mut renv_multiple = multiple::RenameEnv::from_bindings(&bindings);
+    let benv = collect::collect_args(ctx, args_il)?;
+    let mut venv = benv.flatten();
+    let mut renv_multiple = multiple::RenameEnv::from_bindings(&benv);
     let args_al = multiple::rename_args(ctx, &mut renv_multiple, args_il);
     update_venv_multiple(&mut venv, &renv_multiple);
     let prem_sideconditions_al =
-        multiple::generate_side_conditions(&bindings, &IterationContext::new(), &renv_multiple);
+        multiple::generate_side_conditions(&IterationContext::new(), &renv_multiple);
     if !prem_sideconditions_al.is_empty() {
         return Err(AlgoError::new(
             AlgoErrorKind::ShallowSideConditions,
@@ -226,8 +226,8 @@ fn analyze_args_as_bound_shallow(ctx: &Context, args: &[ast::Arg]) -> Result<(),
                 arg.span.clone(),
             ));
         }
-        let bindings = collect::collect_arg(ctx, arg)?;
-        if !bindings.is_empty() {
+        let benv = collect::collect_arg(ctx, arg)?;
+        if !benv.is_empty() {
             return Err(AlgoError::new(
                 AlgoErrorKind::FreeBindings,
                 arg.span.clone(),
@@ -342,9 +342,9 @@ fn analyze_if_eq_prem(
     exp_l_il: &ast::Exp,
     exp_r_il: &ast::Exp,
 ) -> Result<(VEnv, ast::Prem, Vec<ast::Prem>), AlgoError> {
-    let bindings_l = collect::collect_exp(ctx, exp_l_il)?;
-    let bindings_r = collect::collect_exp(ctx, exp_r_il)?;
-    match (bindings_l.is_empty(), bindings_r.is_empty()) {
+    let benv_l = collect::collect_exp(ctx, exp_l_il)?;
+    let benv_r = collect::collect_exp(ctx, exp_r_il)?;
+    match (benv_l.is_empty(), benv_r.is_empty()) {
         (true, true) => {
             let prem_al = phrase! {
                 node: ast::PremKind::If(if_prem_il.clone()),
@@ -352,8 +352,8 @@ fn analyze_if_eq_prem(
             };
             Ok((VEnv::new(), iter_ctx.iterate_prem(prem_al), vec![]))
         }
-        (false, true) => analyze_let_prem(ctx, span, iter_ctx, exp_l_il, &bindings_l, exp_r_il),
-        (true, false) => analyze_let_prem(ctx, span, iter_ctx, exp_r_il, &bindings_r, exp_l_il),
+        (false, true) => analyze_let_prem(ctx, span, iter_ctx, exp_l_il, &benv_l, exp_r_il),
+        (true, false) => analyze_let_prem(ctx, span, iter_ctx, exp_r_il, &benv_r, exp_l_il),
         (false, false) => Err(AlgoError::new(
             AlgoErrorKind::BindingOnBothEqualitySides,
             if_prem_il.exp.span.clone(),
@@ -424,15 +424,15 @@ fn analyze_let_prem(
     span: &Span,
     iter_ctx: IterationContext,
     exp_l_il: &ast::Exp,
-    bindings_l: &Bindings,
+    benv_l: &BEnv,
     exp_r_il: &ast::Exp,
 ) -> Result<(VEnv, ast::Prem, Vec<ast::Prem>), AlgoError> {
-    let mut venv = bind::flatten(bindings_l);
-    let mut renv_multiple = multiple::RenameEnv::from_bindings(bindings_l);
+    let mut venv = benv_l.flatten();
+    let mut renv_multiple = multiple::RenameEnv::from_bindings(benv_l);
     let exp_l_al = multiple::rename_exp(ctx, &mut renv_multiple, exp_l_il);
     update_venv_multiple(&mut venv, &renv_multiple);
     let prem_sideconditions_multiple_al =
-        multiple::generate_side_conditions(bindings_l, &iter_ctx, &renv_multiple);
+        multiple::generate_side_conditions(&iter_ctx, &renv_multiple);
 
     let mut renv_partial = partial::RenameEnv::new();
     let (_, exp_l_al) = partial::rename_exp(

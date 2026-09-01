@@ -15,7 +15,7 @@ use crate::{
 };
 
 use super::{
-    bind::{Binding, Bindings},
+    bind::{BEnv, Binding},
     context::Context,
     iteration::{Iteration, IterationContext},
 };
@@ -28,10 +28,10 @@ pub struct RenameEnv {
 }
 
 impl RenameEnv {
-    pub fn from_bindings(bindings: &Bindings) -> Self {
+    pub fn from_bindings(benv: &BEnv) -> Self {
         let mut renames = IdMap::new();
         let mut dimensions = IdMap::new();
-        for (id, binding) in bindings.iter() {
+        for (id, binding) in benv.iter() {
             let Binding::Multiple(dim) = binding else {
                 continue;
             };
@@ -240,11 +240,7 @@ fn generate_side_condition(
     Some(side_iterctx.iterate_prem(prem))
 }
 
-pub fn generate_side_conditions(
-    _bindings: &Bindings,
-    iterctx: &IterationContext,
-    renv: &RenameEnv,
-) -> Vec<ast::Prem> {
+pub fn generate_side_conditions(iterctx: &IterationContext, renv: &RenameEnv) -> Vec<ast::Prem> {
     renv.iter()
         .filter_map(|(id, ids_rename)| {
             let dim = renv.dimension(id)?;

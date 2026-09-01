@@ -135,12 +135,13 @@ fn test_partial_binding_preserves_expression_and_premise_iteration_dimensions() 
         1,
     );
     let mut context = Context::new();
-    let bindings = collect::collect_exp(&context, &iterated).expect("binding collection");
+    let benv = collect::collect_exp(&context, &iterated).expect("binding collection");
+    let ids_bind = benv_domain(&benv);
     let mut renames = partial::RenameEnv::new();
 
     let (_, renamed) = partial::rename_exp(
         &mut context,
-        &bindings.domain(),
+        &ids_bind,
         &mut renames,
         IterationContext::new(),
         &iterated,
@@ -226,12 +227,13 @@ fn test_partial_binding_preserves_nested_iteration_order_and_dimensions() {
         1,
     );
     let mut context = Context::new();
-    let bindings = collect::collect_exp(&context, &iterated).expect("binding collection");
+    let benv = collect::collect_exp(&context, &iterated).expect("binding collection");
+    let ids_bind = benv_domain(&benv);
     let mut renames = partial::RenameEnv::new();
 
     let (_, renamed) = partial::rename_exp(
         &mut context,
-        &bindings.domain(),
+        &ids_bind,
         &mut renames,
         IterationContext::new(),
         &iterated,
@@ -276,11 +278,12 @@ fn test_partial_binding_preserves_nested_iteration_order_and_dimensions() {
 fn test_partial_binding_rolls_back_context_and_renames_after_late_failure() {
     let initial = exp(ast::ExpKind::Bool(true), ast::TypKind::Bool, 1);
     let mut context = Context::new();
-    let initial_bindings = collect::collect_exp(&context, &initial).expect("binding collection");
+    let benv_initial = collect::collect_exp(&context, &initial).expect("binding collection");
+    let ids_bind_initial = benv_domain(&benv_initial);
     let mut renames = partial::RenameEnv::new();
     partial::rename_exp(
         &mut context,
-        &initial_bindings.domain(),
+        &ids_bind_initial,
         &mut renames,
         IterationContext::new(),
         &initial,
@@ -309,11 +312,12 @@ fn test_partial_binding_rolls_back_context_and_renames_after_late_failure() {
         ]),
         11,
     );
-    let bindings = collect::collect_exp(&context, &tuple).expect("binding collection");
+    let benv = collect::collect_exp(&context, &tuple).expect("binding collection");
+    let ids_bind = benv_domain(&benv);
 
     let error = partial::rename_exp(
         &mut context,
-        &bindings.domain(),
+        &ids_bind,
         &mut renames,
         IterationContext::new(),
         &tuple,
@@ -370,12 +374,13 @@ fn test_partial_case_and_list_bindings_generate_match_then_bind_premises_in_sour
         ast::TypKind::Tuple(vec![choice_typ, list_typ]),
         2,
     );
-    let bindings = collect::collect_exp(&context, &tuple).expect("binding collection");
+    let benv = collect::collect_exp(&context, &tuple).expect("binding collection");
+    let ids_bind = benv_domain(&benv);
     let mut renames = partial::RenameEnv::new();
 
     let (_, renamed) = partial::rename_exp(
         &mut context,
-        &bindings.domain(),
+        &ids_bind,
         &mut renames,
         IterationContext::new(),
         &tuple,
@@ -468,12 +473,13 @@ fn test_partial_upcast_binding_checks_subtype_before_binding_the_downcast_value(
         parent_typ.node.clone(),
         2,
     );
-    let bindings = collect::collect_exp(&context, &upcast).expect("binding collection");
+    let benv = collect::collect_exp(&context, &upcast).expect("binding collection");
+    let ids_bind = benv_domain(&benv);
     let mut renames = partial::RenameEnv::new();
 
     partial::rename_exp(
         &mut context,
-        &bindings.domain(),
+        &ids_bind,
         &mut renames,
         IterationContext::new(),
         &upcast,

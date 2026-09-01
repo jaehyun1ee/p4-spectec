@@ -180,7 +180,7 @@ pub enum ExpKind {
     /// `notexp`
     Case(Box<NotExp>),
     /// `{` expfield* `}`
-    Str(Vec<(Atom, Exp)>),
+    Str(Vec<ExpField>),
     /// `exp?`
     Opt(Option<Box<Exp>>),
     /// `[` exp* `]`
@@ -208,6 +208,7 @@ pub enum ExpKind {
 }
 
 pub type NotExp = Mixfix<Exp>;
+pub type ExpField = (Atom, Exp);
 pub type IterExp = (Iter, Vec<Var>);
 
 // Patterns

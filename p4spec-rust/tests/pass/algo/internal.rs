@@ -2,6 +2,7 @@ use crate::{
     lang::{
         common::{
             Id,
+            ds::set::IdSet,
             notation::{atom::Atom, mixfix::Mixfix},
             source::{NotePhrase, Position, Span},
         },
@@ -14,7 +15,7 @@ use crate::{
         self, AlgoErrorKind,
         binding::{
             antiunify,
-            bind::{self, Binding, Bindings},
+            bind::{BEnv, Binding},
             collect,
             context::Context,
             dimension,
@@ -37,6 +38,10 @@ fn span(line: i64) -> Span {
 
 fn id(name: &str, line: i64) -> Id {
     crate::phrase! { node: name.to_owned(), span:  span(line) }
+}
+
+fn benv_domain(benv: &BEnv) -> IdSet {
+    benv.iter().map(|(id, _)| id.clone()).collect()
 }
 
 fn exp(kind: ast::ExpKind, note: ast::TypKind, line: i64) -> ast::Exp {

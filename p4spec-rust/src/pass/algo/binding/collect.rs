@@ -10,181 +10,202 @@ use crate::{
 
 use super::{
     super::{AlgoError, AlgoErrorKind},
-    bind::{self, Bindings},
+    bind::BEnv,
     context::Context,
 };
+
+// == Helpers
+
+// - Errors
 
 fn reject_noninvertible(
     span: Span,
     construct: &'static str,
-    bindings: Bindings,
-) -> Result<Bindings, AlgoError> {
-    if bindings.is_empty() {
-        Ok(bindings)
+    benv: BEnv,
+) -> Result<BEnv, AlgoError> {
+    if benv.is_empty() {
+        Ok(benv)
     } else {
-        Err(AlgoError::new(
-            AlgoErrorKind::NonInvertibleBinding(construct),
-            span,
-        ))
+        let error = AlgoError::new(AlgoErrorKind::NonInvertibleBinding(construct), span);
+        Err(error)
     }
 }
 
-fn collect_exp_refs<'a>(
-    ctx: &Context,
-    exps: impl IntoIterator<Item = &'a ast::Exp>,
-) -> Result<Bindings, AlgoError> {
-    let mut collected = Vec::new();
-    for exp in exps {
-        collected.push(collect_exp(ctx, exp)?);
-    }
-    let mut bindings = Bindings::new();
-    for bindings_head in collected.into_iter().rev() {
-        bindings = bind::union(bindings_head, bindings)?;
-    }
-    Ok(bindings)
-}
+// == Binding collection
 
-pub fn collect_exp(ctx: &Context, exp: &ast::Exp) -> Result<Bindings, AlgoError> {
+// - Expressions
+
+pub fn collect_exp(ctx: &Context, exp: &ast::Exp) -> Result<BEnv, AlgoError> {
     match &exp.node {
-        ast::ExpKind::Bool(_) | ast::ExpKind::Num(_) | ast::ExpKind::Text(_) => Ok(Bindings::new()),
+        ast::ExpKind::Bool(_) | ast::ExpKind::Num(_) | ast::ExpKind::Text(_) => {
+            let benv = BEnv::new();
+            Ok(benv)
+        }
         ast::ExpKind::Var(id) => {
             if ctx.venv().contains_key(id) {
-                Ok(Bindings::new())
+                let benv = BEnv::new();
+                Ok(benv)
             } else {
                 let typ = phrase!(node: exp.note.clone(), span: exp.span.clone());
-                Ok(bind::singleton(id.clone(), typ))
+                let benv = BEnv::singleton(id.clone(), typ);
+                Ok(benv)
             }
         }
         ast::ExpKind::Un(_, _, exp_inner) => {
-            let bindings = collect_exp(ctx, exp_inner)?;
-            reject_noninvertible(exp_inner.span.clone(), "unary operator", bindings)
+            let benv = collect_exp(ctx, exp_inner)?;
+            reject_noninvertible(exp_inner.span.clone(), "unary operator", benv)
         }
         ast::ExpKind::Bin(_, _, exp_l, exp_r) => {
-            let bindings_l = collect_exp(ctx, exp_l)?;
-            let bindings_r = collect_exp(ctx, exp_r)?;
-            let bindings = bind::union(bindings_l, bindings_r)?;
-            reject_noninvertible(exp.span.clone(), "binary operator", bindings)
+            let benv_l = collect_exp(ctx, exp_l)?;
+            let benv_r = collect_exp(ctx, exp_r)?;
+            let benv = benv_l.union(benv_r)?;
+            reject_noninvertible(exp.span.clone(), "binary operator", benv)
         }
         ast::ExpKind::Cmp(_, _, exp_l, exp_r) => {
-            let bindings_l = collect_exp(ctx, exp_l)?;
-            let bindings_r = collect_exp(ctx, exp_r)?;
-            let bindings = bind::union(bindings_l, bindings_r)?;
-            reject_noninvertible(exp.span.clone(), "comparison operator", bindings)
+            let benv_l = collect_exp(ctx, exp_l)?;
+            let benv_r = collect_exp(ctx, exp_r)?;
+            let benv = benv_l.union(benv_r)?;
+            reject_noninvertible(exp.span.clone(), "comparison operator", benv)
         }
         ast::ExpKind::UpCast(_, exp_inner) => collect_exp(ctx, exp_inner),
         ast::ExpKind::DownCast(_, exp_inner) => {
-            let bindings = collect_exp(ctx, exp_inner)?;
-            reject_noninvertible(exp_inner.span.clone(), "downcast operator", bindings)
+            let benv = collect_exp(ctx, exp_inner)?;
+            reject_noninvertible(exp_inner.span.clone(), "downcast operator", benv)
         }
         ast::ExpKind::Sub(exp_inner, _, _) => {
-            let bindings = collect_exp(ctx, exp_inner)?;
-            reject_noninvertible(exp_inner.span.clone(), "subtype check operator", bindings)
+            let benv = collect_exp(ctx, exp_inner)?;
+            reject_noninvertible(exp_inner.span.clone(), "subtype check operator", benv)
         }
         ast::ExpKind::Match(exp_inner, _) => {
-            let bindings = collect_exp(ctx, exp_inner)?;
-            reject_noninvertible(exp_inner.span.clone(), "match check operator", bindings)
+            let benv = collect_exp(ctx, exp_inner)?;
+            reject_noninvertible(exp_inner.span.clone(), "match check operator", benv)
         }
         ast::ExpKind::Tuple(exps) | ast::ExpKind::List(exps) => collect_exps(ctx, exps),
-        ast::ExpKind::Case(not_exp) => collect_exp_refs(ctx, not_exp.args()),
-        ast::ExpKind::Str(fields) => collect_exp_refs(ctx, fields.iter().map(|(_, exp)| exp)),
+        ast::ExpKind::Case(not_exp) => collect_exps(ctx, not_exp.args()),
+        ast::ExpKind::Str(fields) => collect_exps(ctx, fields.iter().map(|(_, exp)| exp)),
         ast::ExpKind::Opt(Some(exp_inner)) => collect_exp(ctx, exp_inner),
-        ast::ExpKind::Opt(None) => Ok(Bindings::new()),
+        ast::ExpKind::Opt(None) => {
+            let benv = BEnv::new();
+            Ok(benv)
+        }
         ast::ExpKind::Cons(exp_l, exp_r) => {
-            let bindings_l = collect_exp(ctx, exp_l)?;
-            let bindings_r = collect_exp(ctx, exp_r)?;
-            bind::union(bindings_l, bindings_r)
+            let benv_l = collect_exp(ctx, exp_l)?;
+            let benv_r = collect_exp(ctx, exp_r)?;
+            benv_l.union(benv_r)
         }
         ast::ExpKind::Cat(exp_l, exp_r) => {
-            let bindings_l = collect_exp(ctx, exp_l)?;
-            let bindings_r = collect_exp(ctx, exp_r)?;
-            let bindings = bind::union(bindings_l, bindings_r)?;
-            reject_noninvertible(exp.span.clone(), "concatenation operator", bindings)
+            let benv_l = collect_exp(ctx, exp_l)?;
+            let benv_r = collect_exp(ctx, exp_r)?;
+            let benv = benv_l.union(benv_r)?;
+            reject_noninvertible(exp.span.clone(), "concatenation operator", benv)
         }
         ast::ExpKind::Mem(exp_l, exp_r) => {
-            let bindings_l = collect_exp(ctx, exp_l)?;
-            let bindings_r = collect_exp(ctx, exp_r)?;
-            let bindings = bind::union(bindings_l, bindings_r)?;
-            reject_noninvertible(exp.span.clone(), "set membership operator", bindings)
+            let benv_l = collect_exp(ctx, exp_l)?;
+            let benv_r = collect_exp(ctx, exp_r)?;
+            let benv = benv_l.union(benv_r)?;
+            reject_noninvertible(exp.span.clone(), "set membership operator", benv)
         }
         ast::ExpKind::Len(exp_inner) => {
-            let bindings = collect_exp(ctx, exp_inner)?;
-            reject_noninvertible(exp_inner.span.clone(), "length operator", bindings)
+            let benv = collect_exp(ctx, exp_inner)?;
+            reject_noninvertible(exp_inner.span.clone(), "length operator", benv)
         }
         ast::ExpKind::Dot(exp_inner, _) => {
-            let bindings = collect_exp(ctx, exp_inner)?;
-            reject_noninvertible(exp_inner.span.clone(), "dot operator", bindings)
+            let benv = collect_exp(ctx, exp_inner)?;
+            reject_noninvertible(exp_inner.span.clone(), "dot operator", benv)
         }
         ast::ExpKind::Idx(exp_base, exp_index) => {
-            let bindings_base = collect_exp(ctx, exp_base)?;
-            let bindings_index = collect_exp(ctx, exp_index)?;
-            let bindings = bind::union(bindings_base, bindings_index)?;
-            reject_noninvertible(exp.span.clone(), "indexing operator", bindings)
+            let benv_base = collect_exp(ctx, exp_base)?;
+            let benv_index = collect_exp(ctx, exp_index)?;
+            let benv = benv_base.union(benv_index)?;
+            reject_noninvertible(exp.span.clone(), "indexing operator", benv)
         }
         ast::ExpKind::Slice(exp_base, exp_l, exp_h) => {
-            let bindings_base = collect_exp(ctx, exp_base)?;
-            let bindings_l = collect_exp(ctx, exp_l)?;
-            let bindings_h = collect_exp(ctx, exp_h)?;
-            let bindings = bind::union(bindings_base, bindings_l)?;
-            let bindings = bind::union(bindings, bindings_h)?;
-            reject_noninvertible(exp.span.clone(), "slicing operator", bindings)
+            let benv_base = collect_exp(ctx, exp_base)?;
+            let benv_l = collect_exp(ctx, exp_l)?;
+            let benv_h = collect_exp(ctx, exp_h)?;
+            let benv = benv_base.union(benv_l)?;
+            let benv = benv.union(benv_h)?;
+            reject_noninvertible(exp.span.clone(), "slicing operator", benv)
         }
         ast::ExpKind::Upd(exp_base, path, exp_field) => {
-            let bindings_base = collect_exp(ctx, exp_base)?;
-            let bindings_path = collect_path(ctx, path)?;
-            let bindings_field = collect_exp(ctx, exp_field)?;
-            let bindings = bind::union(bindings_base, bindings_field)?;
-            let bindings = bind::union(bindings, bindings_path)?;
-            reject_noninvertible(exp.span.clone(), "update operator", bindings)
+            let benv_base = collect_exp(ctx, exp_base)?;
+            let benv_path = collect_path(ctx, path)?;
+            let benv_field = collect_exp(ctx, exp_field)?;
+            let benv = benv_base.union(benv_field)?;
+            let benv = benv.union(benv_path)?;
+            reject_noninvertible(exp.span.clone(), "update operator", benv)
         }
         ast::ExpKind::Call(_, _, args) => {
-            let bindings = collect_args(ctx, args)?;
-            reject_noninvertible(exp.span.clone(), "call operator", bindings)
+            let benv = collect_args(ctx, args)?;
+            reject_noninvertible(exp.span.clone(), "call operator", benv)
         }
         ast::ExpKind::Iter(exp_inner, (iter, _)) => {
-            let bindings = collect_exp(ctx, exp_inner)?;
-            Ok(bind::add_iter(bindings, *iter))
+            let benv = collect_exp(ctx, exp_inner)?;
+            let benv = benv.add_iter(*iter);
+            Ok(benv)
         }
     }
 }
 
-pub fn collect_exps(ctx: &Context, exps: &[ast::Exp]) -> Result<Bindings, AlgoError> {
-    collect_exp_refs(ctx, exps)
+pub fn collect_exps<'a>(
+    ctx: &Context,
+    exps: impl IntoIterator<Item = &'a ast::Exp>,
+) -> Result<BEnv, AlgoError> {
+    let mut benvs = Vec::new();
+    for exp in exps {
+        benvs.push(collect_exp(ctx, exp)?);
+    }
+    let mut benv = BEnv::new();
+    for benv_head in benvs.into_iter().rev() {
+        benv = benv_head.union(benv)?;
+    }
+    Ok(benv)
 }
 
-pub fn collect_path(ctx: &Context, path: &ast::Path) -> Result<Bindings, AlgoError> {
+// - Paths
+
+pub fn collect_path(ctx: &Context, path: &ast::Path) -> Result<BEnv, AlgoError> {
     match &path.node {
-        ast::PathKind::Root => Ok(Bindings::new()),
+        ast::PathKind::Root => {
+            let benv = BEnv::new();
+            Ok(benv)
+        }
         ast::PathKind::Idx(path, exp) => {
-            let bindings_path = collect_path(ctx, path)?;
-            let bindings_exp = collect_exp(ctx, exp)?;
-            bind::union(bindings_path, bindings_exp)
+            let benv_path = collect_path(ctx, path)?;
+            let benv_exp = collect_exp(ctx, exp)?;
+            benv_path.union(benv_exp)
         }
         ast::PathKind::Slice(path, exp_l, exp_h) => {
-            let bindings_path = collect_path(ctx, path)?;
-            let bindings_l = collect_exp(ctx, exp_l)?;
-            let bindings_h = collect_exp(ctx, exp_h)?;
-            let bindings = bind::union(bindings_path, bindings_l)?;
-            bind::union(bindings, bindings_h)
+            let benv_path = collect_path(ctx, path)?;
+            let benv_l = collect_exp(ctx, exp_l)?;
+            let benv_h = collect_exp(ctx, exp_h)?;
+            let benv = benv_path.union(benv_l)?;
+            benv.union(benv_h)
         }
         ast::PathKind::Dot(path, _) => collect_path(ctx, path),
     }
 }
 
-pub fn collect_arg(ctx: &Context, arg: &ast::Arg) -> Result<Bindings, AlgoError> {
+// - Arguments
+
+pub fn collect_arg(ctx: &Context, arg: &ast::Arg) -> Result<BEnv, AlgoError> {
     match &arg.node {
         ast::ArgKind::Exp(exp) => collect_exp(ctx, exp),
-        ast::ArgKind::Def(_) => Ok(Bindings::new()),
+        ast::ArgKind::Def(_) => {
+            let benv = BEnv::new();
+            Ok(benv)
+        }
     }
 }
 
-pub fn collect_args(ctx: &Context, args: &[ast::Arg]) -> Result<Bindings, AlgoError> {
-    let mut collected = Vec::with_capacity(args.len());
+pub fn collect_args(ctx: &Context, args: &[ast::Arg]) -> Result<BEnv, AlgoError> {
+    let mut benvs = Vec::with_capacity(args.len());
     for arg in args {
-        collected.push(collect_arg(ctx, arg)?);
+        benvs.push(collect_arg(ctx, arg)?);
     }
-    let mut bindings = Bindings::new();
-    for bindings_head in collected.into_iter().rev() {
-        bindings = bind::union(bindings_head, bindings)?;
+    let mut benv = BEnv::new();
+    for benv_head in benvs.into_iter().rev() {
+        benv = benv_head.union(benv)?;
     }
-    Ok(bindings)
+    Ok(benv)
 }
