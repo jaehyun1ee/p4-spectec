@@ -272,11 +272,11 @@ fn populate_exp(unifiers: &IdSet, exp_template: &ast::Exp, exp: &ast::Exp) -> Ve
 /// Anti-unifies input paths and returns shared templates plus per-path premises
 #[allow(clippy::type_complexity)]
 pub fn antiunify(
-    mut ctx: Context,
+    ctx: &mut Context,
     exps_group: Vec<Vec<ast::Exp>>,
-) -> Result<(Context, Vec<ast::Exp>, Vec<Vec<ast::Prem>>), AlgoError> {
+) -> Result<(Vec<ast::Exp>, Vec<Vec<ast::Prem>>), AlgoError> {
     let Some(first) = exps_group.first() else {
-        return Ok((ctx, vec![], vec![]));
+        return Ok((vec![], vec![]));
     };
     for exps in &exps_group[1..] {
         if exps.len() != first.len() {
@@ -290,10 +290,10 @@ pub fn antiunify(
         }
     }
     if exps_group.len() == 1 {
-        return Ok((ctx, first.clone(), vec![vec![]]));
+        return Ok((first.clone(), vec![vec![]]));
     }
 
-    let mut frees = ctx.frees.clone();
+    let mut frees = ctx.frees().clone();
     let mut unifiers = IdSet::new();
     let mut exps_template = Vec::with_capacity(first.len());
     for index in 0..first.len() {
@@ -302,7 +302,7 @@ pub fn antiunify(
             .map(|group| group[index].clone())
             .collect::<Vec<_>>();
         let (unifiers_column, exp_template) =
-            overlap_exp_group(&ctx.tdenv, &ctx.menv, &mut frees, &exps)?;
+            overlap_exp_group(ctx.tdenv(), ctx.menv(), &mut frees, &exps)?;
         unifiers.extend(unifiers_column.iter().cloned());
         exps_template.push(exp_template);
     }
@@ -311,5 +311,5 @@ pub fn antiunify(
         .map(|exps| populate_exps(&unifiers, &exps_template, exps))
         .collect();
     ctx.add_frees(&unifiers);
-    Ok((ctx, exps_template, prems_group))
+    Ok((exps_template, prems_group))
 }

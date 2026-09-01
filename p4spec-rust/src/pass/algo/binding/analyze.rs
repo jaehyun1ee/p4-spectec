@@ -1,14 +1,49 @@
-//! Binding analysis from IL definitions to AL definitions.
+//! Binding analysis from IL to AL:
 //!
-//! Each binding construct is processed in three phases: collect variables only from
-//! invertible positions, rename repeated bindings and add equality premises, then
-//! desugar partial patterns into guards and simpler binders. The resulting binders are
-//! variables, tuples, structs, singleton cases, or iterations of those forms.
+//! 1. Collect all binding occurrences of variables in an IL construct
+//!    - Check that all binding occurrences reside in invertible constructs
+//! 2. Rename multi/parallel binding occurrences
+//!
+//!    -- let (int, int) = ...
+//!
+//!    becomes
+//!
+//!    -- let (int, int') = ..., -- if int = int'
+//!
+//! 3. Desugar partial bindings, occurring as either:
+//!    1. Bound values occurring inside binder patterns
+//!
+//!       -- let PATTERN (a, 1 + 2) = ...
+//!
+//!       becomes
+//!
+//!       -- let PATTERN (a, int) = ..., -- if int == 1 + 2
+//!
+//!    2. Injection of a variant case
+//!
+//!       -- let PATTERN (a, int) = pat
+//!
+//!       becomes
+//!
+//!       -- if pat matches PATTERN, -- let PATTERN (a, b) = pat
+//!
+//!    3. Injection of a subtype case
+//!
+//!       -- let ((typ) child) = parent
+//!
+//!       becomes
+//!
+//!       -- if parent <: child, -- let child = parent as child
+//!
+//! At this point, binder patterns are one of:
+//!
+//! - `VarE`, `TupleE`, `CaseE` of a singleton case, or `StrE`
+//! - `IterE` of the above cases
 
 use crate::{
     lang::{
         al,
-        common::{ds::set::IdSet, notation::mixop::Mixop, source::Span},
+        common::{notation::mixop::Mixop, source::Span},
         hints::input::{self, InputHint},
         il::ast,
         traits::free::Free,
@@ -34,9 +69,15 @@ use super::{
     shallow,
 };
 
+// == Helpers
+
+// - Errors
+
 fn input_error(error: input::InputError, span: Span) -> AlgoError {
     AlgoError::new(AlgoErrorKind::InputHint(error), span)
 }
+
+// - Environments
 
 fn add_venv(venv: &mut VEnv, additions: VEnv) {
     for (id, dim) in additions.iter() {
@@ -48,7 +89,7 @@ fn update_venv_multiple(venv: &mut VEnv, renv: &multiple::RenameEnv) {
     for (id, ids_rename) in renv.iter() {
         let dim = venv
             .get(id)
-            .expect("multiple rename environment came from bindings")
+            .expect("multiple-bound variable must exist in the variable environment")
             .clone();
         for id_rename in ids_rename {
             venv.insert(id_rename.clone(), dim.clone());
@@ -56,80 +97,34 @@ fn update_venv_multiple(venv: &mut VEnv, renv: &multiple::RenameEnv) {
     }
 }
 
-// Expressions
-
-fn is_pure_exp(exp: &ast::Exp) -> bool {
-    match &exp.node {
-        ast::ExpKind::Bool(_)
-        | ast::ExpKind::Num(_)
-        | ast::ExpKind::Text(_)
-        | ast::ExpKind::Var(_) => true,
-        ast::ExpKind::Un(_, _, exp)
-        | ast::ExpKind::UpCast(_, exp)
-        | ast::ExpKind::DownCast(_, exp)
-        | ast::ExpKind::Sub(exp, _, _)
-        | ast::ExpKind::Match(exp, _)
-        | ast::ExpKind::Len(exp)
-        | ast::ExpKind::Dot(exp, _)
-        | ast::ExpKind::Iter(exp, _) => is_pure_exp(exp),
-        ast::ExpKind::Bin(_, _, exp_l, exp_r)
-        | ast::ExpKind::Cmp(_, _, exp_l, exp_r)
-        | ast::ExpKind::Cons(exp_l, exp_r)
-        | ast::ExpKind::Cat(exp_l, exp_r)
-        | ast::ExpKind::Mem(exp_l, exp_r)
-        | ast::ExpKind::Idx(exp_l, exp_r) => is_pure_exp(exp_l) && is_pure_exp(exp_r),
-        ast::ExpKind::Tuple(exps) | ast::ExpKind::List(exps) => exps.iter().all(is_pure_exp),
-        ast::ExpKind::Case(not_exp) => not_exp.args().into_iter().all(is_pure_exp),
-        ast::ExpKind::Str(fields) => fields.iter().all(|(_, exp)| is_pure_exp(exp)),
-        ast::ExpKind::Opt(Some(exp)) => is_pure_exp(exp),
-        ast::ExpKind::Opt(None) => true,
-        ast::ExpKind::Slice(exp_b, exp_i, exp_n) => {
-            is_pure_exp(exp_b) && is_pure_exp(exp_i) && is_pure_exp(exp_n)
-        }
-        ast::ExpKind::Upd(exp_b, path, exp_f) => {
-            is_pure_exp(exp_b) && is_pure_path(path) && is_pure_exp(exp_f)
-        }
-        ast::ExpKind::Call(_, _, _) => false,
-    }
-}
-
-fn is_pure_path(path: &ast::Path) -> bool {
-    match &path.node {
-        ast::PathKind::Root => true,
-        ast::PathKind::Idx(path, exp) => is_pure_path(path) && is_pure_exp(exp),
-        ast::PathKind::Slice(path, exp_i, exp_n) => {
-            is_pure_path(path) && is_pure_exp(exp_i) && is_pure_exp(exp_n)
-        }
-        ast::PathKind::Dot(path, _) => is_pure_path(path),
-    }
-}
+// == Expression binding analysis
 
 fn analyze_exps_as_bind(
-    mut ctx: Context,
-    iterctx: &IterationContext,
-    exps: &[ast::Exp],
-) -> Result<(Context, VEnv, Vec<ast::Exp>, Vec<ast::Prem>), AlgoError> {
-    let bindings = collect::collect_exps(&ctx, exps)?;
+    ctx: &mut Context,
+    iter_ctx: &IterationContext,
+    exps_il: &[ast::Exp],
+) -> Result<(VEnv, Vec<ast::Exp>, Vec<ast::Prem>), AlgoError> {
+    let bindings = collect::collect_exps(ctx, exps_il)?;
     let mut venv = bind::flatten(&bindings);
 
     let mut renv_multiple = multiple::RenameEnv::from_bindings(&bindings);
-    let exps = multiple::rename_exps(&mut ctx, &mut renv_multiple, exps);
+    let exps_al = multiple::rename_exps(ctx, &mut renv_multiple, exps_il);
     update_venv_multiple(&mut venv, &renv_multiple);
-    let side_conditions_multiple =
-        multiple::generate_side_conditions(&bindings, iterctx, &renv_multiple);
+    let prem_sideconditions_multiple_al =
+        multiple::generate_side_conditions(&bindings, iter_ctx, &renv_multiple);
 
     let mut renv_partial = partial::RenameEnv::new();
-    let (_, exps) = partial::rename_exps(
-        &mut ctx,
+    let (_, exps_al) = partial::rename_exps(
+        ctx,
         &venv.domain(),
         &mut renv_partial,
         IterationContext::new(),
-        &exps,
+        &exps_al,
     )?;
     add_venv(&mut venv, partial::destination_env(&renv_partial));
-    let mut prems = partial::generate_prems(&ctx, iterctx, &renv_partial)?;
-    prems.extend(side_conditions_multiple);
-    Ok((ctx, venv, exps, prems))
+    let mut prems_al = partial::generate_prems(ctx, iter_ctx, &renv_partial)?;
+    prems_al.extend(prem_sideconditions_multiple_al);
+    Ok((venv, exps_al, prems_al))
 }
 
 fn analyze_exp_as_bound(ctx: &Context, exp: &ast::Exp) -> Result<(), AlgoError> {
@@ -151,76 +146,76 @@ fn analyze_exps_as_bound(ctx: &Context, exps: &[ast::Exp]) -> Result<(), AlgoErr
     Ok(())
 }
 
-// Arguments
+// == Argument binding analysis
 
 fn analyze_args_as_bind(
-    mut ctx: Context,
-    args: &[ast::Arg],
-) -> Result<(Context, VEnv, Vec<ast::Arg>, Vec<ast::Prem>), AlgoError> {
-    let bindings = collect::collect_args(&ctx, args)?;
+    ctx: &mut Context,
+    args_il: &[ast::Arg],
+) -> Result<(VEnv, Vec<ast::Arg>, Vec<ast::Prem>), AlgoError> {
+    let bindings = collect::collect_args(ctx, args_il)?;
     let mut venv = bind::flatten(&bindings);
 
     let mut renv_multiple = multiple::RenameEnv::from_bindings(&bindings);
-    let args = multiple::rename_args(&mut ctx, &mut renv_multiple, args);
+    let args_al = multiple::rename_args(ctx, &mut renv_multiple, args_il);
     update_venv_multiple(&mut venv, &renv_multiple);
-    let side_conditions_multiple =
+    let prem_sideconditions_multiple_al =
         multiple::generate_side_conditions(&bindings, &IterationContext::new(), &renv_multiple);
 
     let mut renv_partial = partial::RenameEnv::new();
-    let (_, args) = partial::rename_args(
-        &mut ctx,
+    let (_, args_al) = partial::rename_args(
+        ctx,
         &venv.domain(),
         &mut renv_partial,
         IterationContext::new(),
-        &args,
+        &args_al,
     )?;
     add_venv(&mut venv, partial::destination_env(&renv_partial));
-    let mut prems = partial::generate_prems(&ctx, &IterationContext::new(), &renv_partial)?;
-    prems.extend(side_conditions_multiple);
-    Ok((ctx, venv, args, prems))
+    let mut prems_al = partial::generate_prems(ctx, &IterationContext::new(), &renv_partial)?;
+    prems_al.extend(prem_sideconditions_multiple_al);
+    Ok((venv, args_al, prems_al))
 }
 
 fn analyze_args_as_bind_shallow(
-    ctx: Context,
-    args: &[ast::Arg],
+    ctx: &mut Context,
+    args_il: &[ast::Arg],
     span: &Span,
-) -> Result<(Context, VEnv, Vec<ast::Arg>, Vec<ast::Prem>), AlgoError> {
-    if !shallow::check_args(args) {
-        let span = args
+) -> Result<(VEnv, Vec<ast::Arg>, Vec<ast::Prem>), AlgoError> {
+    if !shallow::check_args(args_il) {
+        let span = args_il
             .first()
             .map(|arg| arg.span.clone())
             .unwrap_or_else(|| span.clone());
         return Err(AlgoError::new(AlgoErrorKind::BindingsNotShallow, span));
     }
 
-    let bindings = collect::collect_args(&ctx, args)?;
+    let bindings = collect::collect_args(ctx, args_il)?;
     let mut venv = bind::flatten(&bindings);
-    let mut ctx = ctx;
     let mut renv_multiple = multiple::RenameEnv::from_bindings(&bindings);
-    let args = multiple::rename_args(&mut ctx, &mut renv_multiple, args);
+    let args_al = multiple::rename_args(ctx, &mut renv_multiple, args_il);
     update_venv_multiple(&mut venv, &renv_multiple);
-    let side_conditions =
+    let prem_sideconditions_al =
         multiple::generate_side_conditions(&bindings, &IterationContext::new(), &renv_multiple);
-    if !side_conditions.is_empty() {
+    if !prem_sideconditions_al.is_empty() {
         return Err(AlgoError::new(
             AlgoErrorKind::ShallowSideConditions,
-            args.first()
+            args_al
+                .first()
                 .map(|arg| arg.span.clone())
                 .unwrap_or_else(|| span.clone()),
         ));
     }
 
     let mut renv_partial = partial::RenameEnv::new();
-    let (_, args) = partial::rename_args(
-        &mut ctx,
+    let (_, args_al) = partial::rename_args(
+        ctx,
         &venv.domain(),
         &mut renv_partial,
         IterationContext::new(),
-        &args,
+        &args_al,
     )?;
     add_venv(&mut venv, partial::destination_env(&renv_partial));
-    let prems = partial::generate_prems(&ctx, &IterationContext::new(), &renv_partial)?;
-    Ok((ctx, venv, args, prems))
+    let prems_al = partial::generate_prems(ctx, &IterationContext::new(), &renv_partial)?;
+    Ok((venv, args_al, prems_al))
 }
 
 fn analyze_args_as_bound_shallow(ctx: &Context, args: &[ast::Arg]) -> Result<(), AlgoError> {
@@ -242,22 +237,12 @@ fn analyze_args_as_bound_shallow(ctx: &Context, args: &[ast::Arg]) -> Result<(),
     Ok(())
 }
 
-// Premises
+// == Premise binding analysis
 
-fn is_pure_prem(prem: &ast::Prem) -> bool {
-    match &prem.node {
-        ast::PremKind::Rule(_)
-        | ast::PremKind::If(_)
-        | ast::PremKind::IfHold(_)
-        | ast::PremKind::IfNotHold(_) => false,
-        ast::PremKind::Let(prem) => is_pure_exp(&prem.exp_r),
-        ast::PremKind::Iter(prem) => is_pure_prem(&prem.prem),
-        ast::PremKind::Debug(prem) => is_pure_exp(&prem.exp),
-    }
-}
+// - Helpers
 
 fn check_prems_in_else(span: &Span, prems: &[ast::Prem]) -> Result<(), AlgoError> {
-    if prems.iter().all(is_pure_prem) {
+    if prems.iter().all(|prem| !al::partial::is_partial_prem(prem)) {
         Ok(())
     } else {
         Err(AlgoError::new(
@@ -267,377 +252,439 @@ fn check_prems_in_else(span: &Span, prems: &[ast::Prem]) -> Result<(), AlgoError
     }
 }
 
-fn equality_bindings(
-    ctx: &Context,
-    exp_l: &ast::Exp,
-    exp_r: &ast::Exp,
-) -> Result<(Bindings, Bindings), AlgoError> {
-    Ok((
-        collect::collect_exp(ctx, exp_l)?,
-        collect::collect_exp(ctx, exp_r)?,
-    ))
+// - Premise dispatch
+
+fn analyze_prem(
+    ctx: &mut Context,
+    iter_ctx: IterationContext,
+    prem_il: &ast::Prem,
+) -> Result<(VEnv, ast::Prem, Vec<ast::Prem>), AlgoError> {
+    match &prem_il.node {
+        ast::PremKind::Rule(rule_prem_il) => {
+            analyze_rule_prem(ctx, iter_ctx, &prem_il.span, rule_prem_il)
+        }
+        ast::PremKind::If(if_prem_il) => analyze_if_prem(ctx, iter_ctx, &prem_il.span, if_prem_il),
+        ast::PremKind::IfHold(if_prem_il) => {
+            analyze_if_hold_prem(ctx, iter_ctx, &prem_il.span, if_prem_il)
+        }
+        ast::PremKind::IfNotHold(if_prem_il) => {
+            analyze_if_not_hold_prem(ctx, iter_ctx, &prem_il.span, if_prem_il)
+        }
+        ast::PremKind::Let(_) => Err(AlgoError::new(
+            AlgoErrorKind::UnexpectedLetPremise,
+            prem_il.span.clone(),
+        )),
+        ast::PremKind::Iter(iterated_il) => {
+            analyze_iter_prem(ctx, iter_ctx, &prem_il.span, iterated_il)
+        }
+        ast::PremKind::Debug(debug_prem_il) => {
+            analyze_debug_prem(ctx, iter_ctx, &prem_il.span, debug_prem_il)
+        }
+    }
 }
 
-fn analyze_let_prem(
-    mut ctx: Context,
+// - Rule premises
+
+fn analyze_rule_prem(
+    ctx: &mut Context,
+    iter_ctx: IterationContext,
     span: &Span,
-    iterctx: IterationContext,
-    exp_l: &ast::Exp,
-    bindings_l: &Bindings,
-    exp_r: &ast::Exp,
-) -> Result<(Context, VEnv, ast::Prem, Vec<ast::Prem>), AlgoError> {
-    let mut venv = bind::flatten(bindings_l);
-    let mut renv_multiple = multiple::RenameEnv::from_bindings(bindings_l);
-    let exp_l = multiple::rename_exp(&mut ctx, &mut renv_multiple, exp_l);
-    update_venv_multiple(&mut venv, &renv_multiple);
-    let side_conditions_multiple =
-        multiple::generate_side_conditions(bindings_l, &iterctx, &renv_multiple);
-
-    let mut renv_partial = partial::RenameEnv::new();
-    let (_, exp_l) = partial::rename_exp(
-        &mut ctx,
-        &venv.domain(),
-        &mut renv_partial,
-        IterationContext::new(),
-        &exp_l,
-    )?;
-    add_venv(&mut venv, partial::destination_env(&renv_partial));
-    let mut prems = partial::generate_prems(&ctx, &iterctx, &renv_partial)?;
-    prems.extend(side_conditions_multiple);
-
-    let prem = phrase! {
-        node: ast::PremKind::Let(ast::LetPrem {
-            exp_l: exp_l.clone(),
-            exp_r: exp_r.clone(),
+    rule_prem_il: &ast::RulePrem,
+) -> Result<(VEnv, ast::Prem, Vec<ast::Prem>), AlgoError> {
+    let mixop = rule_prem_il.not_exp.to_mixop();
+    let exps_il = rule_prem_il
+        .not_exp
+        .args()
+        .into_iter()
+        .cloned()
+        .collect::<Vec<_>>();
+    let (exps_input_il, exps_output_il) = input::split(&rule_prem_il.input_hint, &exps_il)
+        .map_err(|error| input_error(error, span.clone()))?;
+    analyze_exps_as_bound(ctx, &exps_input_il)?;
+    let (venv, exps_output_al, prem_sideconditions_al) =
+        analyze_exps_as_bind(ctx, &iter_ctx, &exps_output_il)?;
+    let exps_al = input::combine(
+        &rule_prem_il.input_hint,
+        exps_input_il.clone(),
+        exps_output_al.clone(),
+    )
+    .map_err(|error| input_error(error, span.clone()))?;
+    let not_exp_al = Mixop::fill(&mixop, exps_al)
+        .expect("arguments obtained from the same mixfix must match its arity");
+    let prem_al = phrase! {
+        node: ast::PremKind::Rule(ast::RulePrem {
+            id: rule_prem_il.id.clone(),
+            not_exp: not_exp_al,
+            input_hint: rule_prem_il.input_hint.clone(),
         }),
         span: span.clone(),
     };
-    let venv_l = dimension::infer_exp(&exp_l);
-    let venv_r = dimension::infer_exp(exp_r);
-    let mut iterctx = iterctx;
-    iterctx.filter_bound(|var| {
+    let venv_bound = dimension::infer_exps(&exps_input_il);
+    let mut iter_ctx = iter_ctx;
+    iter_ctx.filter_bound(|var| {
+        venv_bound
+            .get(&var.id)
+            .is_some_and(|dim_bound| dim_bound.sub(&Dim::new(var.typ.clone(), var.iters.clone())))
+    });
+    iter_ctx.add_vars_bind(dimension::infer_exps(&exps_output_al));
+    iter_ctx.validate(span.clone())?;
+    let prem_al = iter_ctx.iterate_prem(prem_al);
+    Ok((venv, prem_al, prem_sideconditions_al))
+}
+
+// - Conditional premises
+
+fn analyze_if_eq_prem(
+    ctx: &mut Context,
+    iter_ctx: IterationContext,
+    span: &Span,
+    if_prem_il: &ast::IfPrem,
+    exp_l_il: &ast::Exp,
+    exp_r_il: &ast::Exp,
+) -> Result<(VEnv, ast::Prem, Vec<ast::Prem>), AlgoError> {
+    let bindings_l = collect::collect_exp(ctx, exp_l_il)?;
+    let bindings_r = collect::collect_exp(ctx, exp_r_il)?;
+    match (bindings_l.is_empty(), bindings_r.is_empty()) {
+        (true, true) => {
+            let prem_al = phrase! {
+                node: ast::PremKind::If(if_prem_il.clone()),
+                span: span.clone(),
+            };
+            Ok((VEnv::new(), iter_ctx.iterate_prem(prem_al), vec![]))
+        }
+        (false, true) => analyze_let_prem(ctx, span, iter_ctx, exp_l_il, &bindings_l, exp_r_il),
+        (true, false) => analyze_let_prem(ctx, span, iter_ctx, exp_r_il, &bindings_r, exp_l_il),
+        (false, false) => Err(AlgoError::new(
+            AlgoErrorKind::BindingOnBothEqualitySides,
+            if_prem_il.exp.span.clone(),
+        )),
+    }
+}
+
+fn analyze_if_prem(
+    ctx: &mut Context,
+    iter_ctx: IterationContext,
+    span: &Span,
+    if_prem_il: &ast::IfPrem,
+) -> Result<(VEnv, ast::Prem, Vec<ast::Prem>), AlgoError> {
+    if let ast::ExpKind::Cmp(ast::CmpOp::Bool(xl::bool::CmpOp::Eq), _, exp_l_il, exp_r_il) =
+        &if_prem_il.exp.node
+    {
+        analyze_if_eq_prem(ctx, iter_ctx, span, if_prem_il, exp_l_il, exp_r_il)
+    } else {
+        analyze_exp_as_bound(ctx, &if_prem_il.exp)?;
+        let prem_al = phrase! {
+            node: ast::PremKind::If(if_prem_il.clone()),
+            span: span.clone(),
+        };
+        Ok((VEnv::new(), iter_ctx.iterate_prem(prem_al), vec![]))
+    }
+}
+
+// - Holding premises
+
+fn analyze_if_hold_prem(
+    ctx: &mut Context,
+    iter_ctx: IterationContext,
+    span: &Span,
+    if_prem_il: &ast::IfHoldPrem,
+) -> Result<(VEnv, ast::Prem, Vec<ast::Prem>), AlgoError> {
+    for exp_il in if_prem_il.not_exp.args() {
+        analyze_exp_as_bound(ctx, exp_il)?;
+    }
+    let prem_al = phrase! {
+        node: ast::PremKind::IfHold(if_prem_il.clone()),
+        span: span.clone(),
+    };
+    Ok((VEnv::new(), iter_ctx.iterate_prem(prem_al), vec![]))
+}
+
+// - Non-holding premises
+
+fn analyze_if_not_hold_prem(
+    ctx: &mut Context,
+    iter_ctx: IterationContext,
+    span: &Span,
+    if_prem_il: &ast::IfNotHoldPrem,
+) -> Result<(VEnv, ast::Prem, Vec<ast::Prem>), AlgoError> {
+    for exp_il in if_prem_il.not_exp.args() {
+        analyze_exp_as_bound(ctx, exp_il)?;
+    }
+    let prem_al = phrase! {
+        node: ast::PremKind::IfNotHold(if_prem_il.clone()),
+        span: span.clone(),
+    };
+    Ok((VEnv::new(), iter_ctx.iterate_prem(prem_al), vec![]))
+}
+
+// - Let premises
+
+fn analyze_let_prem(
+    ctx: &mut Context,
+    span: &Span,
+    iter_ctx: IterationContext,
+    exp_l_il: &ast::Exp,
+    bindings_l: &Bindings,
+    exp_r_il: &ast::Exp,
+) -> Result<(VEnv, ast::Prem, Vec<ast::Prem>), AlgoError> {
+    let mut venv = bind::flatten(bindings_l);
+    let mut renv_multiple = multiple::RenameEnv::from_bindings(bindings_l);
+    let exp_l_al = multiple::rename_exp(ctx, &mut renv_multiple, exp_l_il);
+    update_venv_multiple(&mut venv, &renv_multiple);
+    let prem_sideconditions_multiple_al =
+        multiple::generate_side_conditions(bindings_l, &iter_ctx, &renv_multiple);
+
+    let mut renv_partial = partial::RenameEnv::new();
+    let (_, exp_l_al) = partial::rename_exp(
+        ctx,
+        &venv.domain(),
+        &mut renv_partial,
+        IterationContext::new(),
+        &exp_l_al,
+    )?;
+    add_venv(&mut venv, partial::destination_env(&renv_partial));
+    let mut prems_al = partial::generate_prems(ctx, &iter_ctx, &renv_partial)?;
+    prems_al.extend(prem_sideconditions_multiple_al);
+
+    let prem_al = phrase! {
+        node: ast::PremKind::Let(ast::LetPrem {
+            exp_l: exp_l_al.clone(),
+            exp_r: exp_r_il.clone(),
+        }),
+        span: span.clone(),
+    };
+    let venv_l = dimension::infer_exp(&exp_l_al);
+    let venv_r = dimension::infer_exp(exp_r_il);
+    let mut iter_ctx = iter_ctx;
+    iter_ctx.filter_bound(|var| {
         venv_r
             .get(&var.id)
             .is_some_and(|dim_r| dim_r.sub(&Dim::new(var.typ.clone(), var.iters.clone())))
     });
-    iterctx.add_vars_bind(venv_l);
-    iterctx.validate(span.clone())?;
-    let prem = iterctx.iterate_prem(prem);
-    Ok((ctx, venv, prem, prems))
+    iter_ctx.add_vars_bind(venv_l);
+    iter_ctx.validate(span.clone())?;
+    let prem_al = iter_ctx.iterate_prem(prem_al);
+    Ok((venv, prem_al, prems_al))
 }
 
-fn analyze_prem(
-    ctx: Context,
-    iterctx: IterationContext,
-    prem: &ast::Prem,
-) -> Result<(Context, VEnv, ast::Prem, Vec<ast::Prem>), AlgoError> {
-    match &prem.node {
-        ast::PremKind::Rule(rule_prem) => {
-            let mixop = rule_prem.not_exp.to_mixop();
-            let exps = rule_prem
-                .not_exp
-                .args()
-                .into_iter()
-                .cloned()
-                .collect::<Vec<_>>();
-            let (exps_input, exps_output) = input::split(&rule_prem.input_hint, &exps)
-                .map_err(|error| input_error(error, prem.span.clone()))?;
-            analyze_exps_as_bound(&ctx, &exps_input)?;
-            let (ctx, venv, exps_output, side_conditions) =
-                analyze_exps_as_bind(ctx, &iterctx, &exps_output)?;
-            let exps = input::combine(
-                &rule_prem.input_hint,
-                exps_input.clone(),
-                exps_output.clone(),
-            )
-            .map_err(|error| input_error(error, prem.span.clone()))?;
-            let not_exp = Mixop::fill(&mixop, exps)
-                .expect("arguments obtained from the same mixfix must match its arity");
-            let prem_analyzed = phrase! {
-                node: ast::PremKind::Rule(ast::RulePrem {
-                    id: rule_prem.id.clone(),
-                    not_exp,
-                    input_hint: rule_prem.input_hint.clone(),
-                }),
-                span: prem.span.clone(),
-            };
-            let venv_bound = dimension::infer_exps(&exps_input);
-            let mut iterctx = iterctx;
-            iterctx.filter_bound(|var| {
-                venv_bound.get(&var.id).is_some_and(|dim_bound| {
-                    dim_bound.sub(&Dim::new(var.typ.clone(), var.iters.clone()))
-                })
-            });
-            iterctx.add_vars_bind(dimension::infer_exps(&exps_output));
-            iterctx.validate(prem.span.clone())?;
-            let prem_analyzed = iterctx.iterate_prem(prem_analyzed);
-            Ok((ctx, venv, prem_analyzed, side_conditions))
-        }
-        ast::PremKind::If(if_prem) => {
-            if let ast::ExpKind::Cmp(ast::CmpOp::Bool(xl::bool::CmpOp::Eq), _, exp_l, exp_r) =
-                &if_prem.exp.node
-            {
-                let (bindings_l, bindings_r) = equality_bindings(&ctx, exp_l, exp_r)?;
-                match (bindings_l.is_empty(), bindings_r.is_empty()) {
-                    (true, true) => {
-                        let prem = iterctx.iterate_prem(prem.clone());
-                        Ok((ctx, VEnv::new(), prem, vec![]))
-                    }
-                    (false, true) => {
-                        analyze_let_prem(ctx, &prem.span, iterctx, exp_l, &bindings_l, exp_r)
-                    }
-                    (true, false) => {
-                        analyze_let_prem(ctx, &prem.span, iterctx, exp_r, &bindings_r, exp_l)
-                    }
-                    (false, false) => Err(AlgoError::new(
-                        AlgoErrorKind::BindingOnBothEqualitySides,
-                        if_prem.exp.span.clone(),
-                    )),
-                }
-            } else {
-                analyze_exp_as_bound(&ctx, &if_prem.exp)?;
-                let prem = iterctx.iterate_prem(prem.clone());
-                Ok((ctx, VEnv::new(), prem, vec![]))
-            }
-        }
-        ast::PremKind::IfHold(if_prem) => {
-            let exps = if_prem.not_exp.args();
-            for exp in exps {
-                analyze_exp_as_bound(&ctx, exp)?;
-            }
-            let prem = iterctx.iterate_prem(prem.clone());
-            Ok((ctx, VEnv::new(), prem, vec![]))
-        }
-        ast::PremKind::IfNotHold(if_prem) => {
-            let exps = if_prem.not_exp.args();
-            for exp in exps {
-                analyze_exp_as_bound(&ctx, exp)?;
-            }
-            let prem = iterctx.iterate_prem(prem.clone());
-            Ok((ctx, VEnv::new(), prem, vec![]))
-        }
-        ast::PremKind::Let(_) => Err(AlgoError::new(
-            AlgoErrorKind::UnexpectedLetPremise,
-            prem.span.clone(),
-        )),
-        ast::PremKind::Iter(iterated) => {
-            if !iterated.iter_prem.vars_bind.is_empty() {
-                return Err(AlgoError::new(
-                    AlgoErrorKind::UnexpectedIterationBindings,
-                    prem.span.clone(),
-                ));
-            }
-            let mut iterations = vec![Iteration {
-                iter: iterated.iter_prem.iter,
-                vars_bound: iterated.iter_prem.vars_bound.clone(),
-                vars_bind: vec![],
-            }];
-            iterations.extend(iterctx.as_slice().iter().cloned());
-            analyze_prem(
-                ctx,
-                IterationContext::from_iterations(iterations),
-                &iterated.prem,
-            )
-        }
-        ast::PremKind::Debug(debug_prem) => {
-            analyze_exp_as_bound(&ctx, &debug_prem.exp)?;
-            let prem = iterctx.iterate_prem(prem.clone());
-            Ok((ctx, VEnv::new(), prem, vec![]))
-        }
+// - Iteration premises
+
+fn analyze_iter_prem(
+    ctx: &mut Context,
+    iter_ctx: IterationContext,
+    span: &Span,
+    iterated_il: &ast::IteratedPrem,
+) -> Result<(VEnv, ast::Prem, Vec<ast::Prem>), AlgoError> {
+    if !iterated_il.iter_prem.vars_bind.is_empty() {
+        return Err(AlgoError::new(
+            AlgoErrorKind::UnexpectedIterationBindings,
+            span.clone(),
+        ));
     }
+    let mut iterations = vec![Iteration {
+        iter: iterated_il.iter_prem.iter,
+        vars_bound: iterated_il.iter_prem.vars_bound.clone(),
+        vars_bind: vec![],
+    }];
+    iterations.extend(iter_ctx.as_slice().iter().cloned());
+    analyze_prem(
+        ctx,
+        IterationContext::from_iterations(iterations),
+        &iterated_il.prem,
+    )
 }
 
-fn analyze_prems(
-    mut ctx: Context,
-    prems: &[ast::Prem],
-) -> Result<(Context, Vec<ast::Prem>), AlgoError> {
-    let mut prems_analyzed = Vec::new();
-    for prem in prems {
-        let (ctx_post, venv, prem, side_conditions) =
-            analyze_prem(ctx, IterationContext::new(), prem)?;
-        ctx = ctx_post;
+// - Debug premises
+
+fn analyze_debug_prem(
+    ctx: &mut Context,
+    iter_ctx: IterationContext,
+    span: &Span,
+    debug_prem_il: &ast::DebugPrem,
+) -> Result<(VEnv, ast::Prem, Vec<ast::Prem>), AlgoError> {
+    analyze_exp_as_bound(ctx, &debug_prem_il.exp)?;
+    let prem_al = phrase! {
+        node: ast::PremKind::Debug(debug_prem_il.clone()),
+        span: span.clone(),
+    };
+    Ok((VEnv::new(), iter_ctx.iterate_prem(prem_al), vec![]))
+}
+
+// - Premise lists
+
+fn analyze_prems(ctx: &mut Context, prems_il: &[ast::Prem]) -> Result<Vec<ast::Prem>, AlgoError> {
+    let mut prems_al = Vec::new();
+    for prem_il in prems_il {
+        let (venv, prem_al, prem_sideconditions_al) =
+            analyze_prem(ctx, IterationContext::new(), prem_il)?;
         ctx.add_bounds(&venv);
-        prems_analyzed.push(prem);
-        prems_analyzed.extend(side_conditions);
+        prems_al.push(prem_al);
+        prems_al.extend(prem_sideconditions_al);
     }
-    Ok((ctx, prems_analyzed))
+    Ok(prems_al)
 }
 
-// Rules
+// == Rule binding analysis
 
 #[allow(clippy::type_complexity)]
 fn analyze_rule_match(
-    ctx: &Context,
-    mut ctxs_local: Vec<Context>,
-    exps_input_group: Vec<Vec<ast::Exp>>,
-) -> Result<(Vec<Context>, al::ast::RuleMatch, Vec<Vec<ast::Prem>>), AlgoError> {
-    let mut frees = IdSet::new();
-    for ctx_local in &ctxs_local {
-        frees.extend(ctx_local.frees.iter().cloned());
-    }
-    let mut ctx_unified = ctx.clone();
-    ctx_unified.add_frees(&frees);
-    let (ctx_unified_post, exps_signature, prems_unified_group) =
-        antiunify::antiunify(ctx_unified, exps_input_group)?;
-    let (mut ctx_unified, venv, exps_input, prems) =
-        analyze_exps_as_bind(ctx_unified_post, &IterationContext::new(), &exps_signature)?;
-    ctx_unified.add_bounds(&venv);
-    analyze_exps_as_bound(&ctx_unified, &exps_signature)?;
+    ctx: &mut Context,
+    exps_input_group_il: Vec<Vec<ast::Exp>>,
+) -> Result<(al::ast::RuleMatch, Vec<Vec<ast::Prem>>), AlgoError> {
+    let (exps_signature_al, prems_unified_group_al) =
+        antiunify::antiunify(ctx, exps_input_group_il)?;
+    let (venv, exps_input_al, prems_al) =
+        analyze_exps_as_bind(ctx, &IterationContext::new(), &exps_signature_al)?;
+    ctx.add_bounds(&venv);
+    analyze_exps_as_bound(ctx, &exps_signature_al)?;
 
-    for ctx_local in &mut ctxs_local {
-        ctx_local.frees = ctx_unified.frees.clone();
-        ctx_local.venv = ctx_unified.venv.clone();
-    }
-    let mut prems_analyzed_group = Vec::with_capacity(prems_unified_group.len());
-    for (ctx_local, prems_unified) in ctxs_local.iter_mut().zip(prems_unified_group) {
-        let (ctx_post, prems_unified) = analyze_prems(ctx_local.clone(), &prems_unified)?;
-        *ctx_local = ctx_post;
-        prems_analyzed_group.push(prems_unified);
-    }
-    let rule_match = al::ast::RuleMatch {
-        exps_signature,
-        exps_input,
-        prems,
+    let rule_match_al = al::ast::RuleMatch {
+        exps_signature: exps_signature_al,
+        exps_input: exps_input_al,
+        prems: prems_al,
     };
-    Ok((ctxs_local, rule_match, prems_analyzed_group))
+    Ok((rule_match_al, prems_unified_group_al))
 }
 
 fn analyze_rule_path(
-    ctx: Context,
+    ctx: &mut Context,
     id: ast::Id,
-    prems_unified: Vec<ast::Prem>,
-    prems: &[ast::Prem],
-    exps_output: Vec<ast::Exp>,
+    prems_unified_al: Vec<ast::Prem>,
+    prems_il: &[ast::Prem],
+    exps_output_il: Vec<ast::Exp>,
     is_else: bool,
 ) -> Result<al::ast::RulePath, AlgoError> {
-    let (ctx, prems) = analyze_prems(ctx, prems)?;
-    let mut prems_all = prems_unified;
-    prems_all.extend(prems);
+    let prems_al = analyze_prems(ctx, prems_il)?;
+    let mut prems_all_al = prems_unified_al;
+    prems_all_al.extend(prems_al);
     if is_else {
-        check_prems_in_else(&id.span, &prems_all)?;
+        check_prems_in_else(&id.span, &prems_all_al)?;
     }
-    analyze_exps_as_bound(&ctx, &exps_output)?;
+    analyze_exps_as_bound(ctx, &exps_output_il)?;
     Ok(al::ast::RulePath {
         id,
-        prems: prems_all,
-        exps_output,
+        prems: prems_all_al,
+        exps_output: exps_output_il,
     })
 }
 
 fn analyze_rule_group(
-    ctx: &Context,
+    ctx: &mut Context,
     inputs: &InputHint,
-    rule_group: &ast::RuleGroup,
+    rule_group_il: &ast::RuleGroup,
     is_else: bool,
 ) -> Result<al::ast::RuleGroup, AlgoError> {
-    let span = rule_group.span.clone();
-    let (id_group, rules) = &rule_group.node;
-    let mut ctxs_local = Vec::with_capacity(rules.len());
-    let mut ids = Vec::with_capacity(rules.len());
-    let mut prems_group = Vec::with_capacity(rules.len());
-    let mut exps_input_group = Vec::with_capacity(rules.len());
-    let mut exps_output_group = Vec::with_capacity(rules.len());
-    for rule in rules {
-        let mut ctx_local = ctx.clone();
-        ctx_local.add_frees(&rule.free());
-        ctxs_local.push(ctx_local);
-        ids.push(rule.node.id.clone());
-        prems_group.push(rule.node.prems.clone());
-        let exps = rule
+    let mut ctx = ctx.scope();
+    let span = rule_group_il.span.clone();
+    let (id_group, rules_il) = &rule_group_il.node;
+    let mut ids = Vec::with_capacity(rules_il.len());
+    let mut prems_group_il = Vec::with_capacity(rules_il.len());
+    let mut exps_input_group_il = Vec::with_capacity(rules_il.len());
+    let mut exps_output_group_il = Vec::with_capacity(rules_il.len());
+    for rule_il in rules_il {
+        ctx.add_frees(&rule_il.free());
+        ids.push(rule_il.node.id.clone());
+        prems_group_il.push(rule_il.node.prems.clone());
+        let exps_il = rule_il
             .node
             .not_exp
             .args()
             .into_iter()
             .cloned()
             .collect::<Vec<_>>();
-        let (exps_input, exps_output) =
-            input::split(inputs, &exps).map_err(|error| input_error(error, rule.span.clone()))?;
-        exps_input_group.push(exps_input);
-        exps_output_group.push(exps_output);
+        let (exps_input_il, exps_output_il) = input::split(inputs, &exps_il)
+            .map_err(|error| input_error(error, rule_il.span.clone()))?;
+        exps_input_group_il.push(exps_input_il);
+        exps_output_group_il.push(exps_output_il);
     }
 
-    let (ctxs_local, rule_match, prems_unified_group) =
-        analyze_rule_match(ctx, ctxs_local, exps_input_group)?;
-    let mut rule_paths = Vec::with_capacity(rules.len());
-    for ((((ctx_local, id), prems_unified), prems), exps_output) in ctxs_local
+    let (rule_match_al, prems_unified_group_al) =
+        analyze_rule_match(&mut ctx, exps_input_group_il)?;
+    let mut rule_paths_al = Vec::with_capacity(rules_il.len());
+    for (((id, prems_unified_al), prems_il), exps_output_il) in ids
         .into_iter()
-        .zip(ids)
-        .zip(prems_unified_group)
-        .zip(prems_group)
-        .zip(exps_output_group)
+        .zip(prems_unified_group_al)
+        .zip(prems_group_il)
+        .zip(exps_output_group_il)
     {
-        rule_paths.push(analyze_rule_path(
-            ctx_local,
+        let mut ctx_local = ctx.scope();
+        let prems_unified_al = analyze_prems(&mut ctx_local, &prems_unified_al)?;
+        rule_paths_al.push(analyze_rule_path(
+            &mut ctx_local,
             id,
-            prems_unified,
-            &prems,
-            exps_output,
+            prems_unified_al,
+            &prems_il,
+            exps_output_il,
             is_else,
         )?);
     }
-    let rule_group = al::ast::RuleGroupKind {
+    let rule_group_al = al::ast::RuleGroupKind {
         id: id_group.clone(),
-        rule_match,
-        rule_paths,
+        rule_match: rule_match_al,
+        rule_paths: rule_paths_al,
     };
-    Ok(phrase!(node: rule_group, span: span))
+    let rule_group_al = phrase!(node: rule_group_al, span: span);
+    Ok(rule_group_al)
 }
 
 fn analyze_else_group(
-    ctx: &Context,
+    ctx: &mut Context,
     inputs: &InputHint,
-    else_group: &ast::ElseGroup,
+    else_group_il: &ast::ElseGroup,
 ) -> Result<al::ast::ElseGroup, AlgoError> {
-    let span = else_group.span.clone();
-    let (id_group, rule) = &else_group.node;
-    let rule_group = phrase! {
-        node: (id_group.clone(), vec![rule.clone()]),
-        span: else_group.span.clone(),
+    let span = else_group_il.span.clone();
+    let (id_group, rule_il) = &else_group_il.node;
+    let rule_group_il = phrase! {
+        node: (id_group.clone(), vec![rule_il.clone()]),
+        span: else_group_il.span.clone(),
     };
-    let rule_group = analyze_rule_group(ctx, inputs, &rule_group, true)?;
-    let rule_path = rule_group
+    let rule_group_al = analyze_rule_group(ctx, inputs, &rule_group_il, true)?;
+    let rule_path_al = rule_group_al
         .node
         .rule_paths
         .into_iter()
         .next()
         .expect("else groups contain one rule");
-    let else_group = al::ast::ElseGroupKind {
-        id: rule_group.node.id,
-        rule_match: rule_group.node.rule_match,
-        rule_path,
+    let else_group_al = al::ast::ElseGroupKind {
+        id: rule_group_al.node.id,
+        rule_match: rule_group_al.node.rule_match,
+        rule_path: rule_path_al,
     };
-    Ok(phrase!(node: else_group, span: span))
+    let else_group_al = phrase!(node: else_group_al, span: span);
+    Ok(else_group_al)
 }
 
-// Clauses
+// == Clause binding analysis
 
 fn analyze_clause(
-    ctx: &Context,
-    clause: &ast::Clause,
+    ctx: &mut Context,
+    clause_il: &ast::Clause,
     is_else: bool,
 ) -> Result<al::ast::Clause, AlgoError> {
-    let mut ctx = ctx.clone();
-    ctx.add_frees(&clause.free());
-    let (mut ctx, venv, args, side_conditions) = analyze_args_as_bind(ctx, &clause.node.args)?;
+    let mut ctx = ctx.scope();
+    ctx.add_frees(&clause_il.free());
+    let (venv, args_al, prem_sideconditions_al) =
+        analyze_args_as_bind(&mut ctx, &clause_il.node.args)?;
     ctx.add_bounds(&venv);
-    let (ctx, prems) = analyze_prems(ctx, &clause.node.premises)?;
-    analyze_exp_as_bound(&ctx, &clause.node.expression)?;
-    let mut prems_all = side_conditions;
-    prems_all.extend(prems);
+    let prems_al = analyze_prems(&mut ctx, &clause_il.node.premises)?;
+    analyze_exp_as_bound(&ctx, &clause_il.node.expression)?;
+    let mut prems_all_al = prem_sideconditions_al;
+    prems_all_al.extend(prems_al);
     if is_else {
-        check_prems_in_else(&clause.span, &prems_all)?;
+        check_prems_in_else(&clause_il.span, &prems_all_al)?;
     }
-    Ok(phrase! {
+    let clause_al = phrase! {
         node: ast::ClauseKind {
-            args,
-            expression: clause.node.expression.clone(),
-            premises: prems_all,
+            args: args_al,
+            expression: clause_il.node.expression.clone(),
+            premises: prems_all_al,
         },
-        span: clause.span.clone(),
-    })
+        span: clause_il.span.clone(),
+    };
+    Ok(clause_al)
 }
 
-// Table rows
+// == Table row binding analysis
 
 fn pattern_set_covered_by_typ(ctx: &Context, typ: &ast::Typ) -> Result<PatternSet, AlgoError> {
     let ast::TypKind::Var(id, _) = &typ.node else {
@@ -664,11 +711,11 @@ fn pattern_set_covered_by_typ(ctx: &Context, typ: &ast::Typ) -> Result<PatternSe
         .collect())
 }
 
-fn pattern_set_covered_by_exp(ctx: &Context, exp: &ast::Exp) -> Result<PatternSet, AlgoError> {
-    match &exp.node {
+fn pattern_set_covered_by_exp(ctx: &Context, exp_al: &ast::Exp) -> Result<PatternSet, AlgoError> {
+    match &exp_al.node {
         ast::ExpKind::Var(_) => pattern_set_covered_by_typ(
             ctx,
-            &phrase!(node: exp.note.clone(), span: exp.span.clone()),
+            &phrase!(node: exp_al.note.clone(), span: exp_al.span.clone()),
         ),
         ast::ExpKind::UpCast(_, exp_inner) if matches!(exp_inner.node, ast::ExpKind::Var(_)) => {
             pattern_set_covered_by_typ(
@@ -680,7 +727,7 @@ fn pattern_set_covered_by_exp(ctx: &Context, exp: &ast::Exp) -> Result<PatternSe
             let ast::ExpKind::Case(not_exp) = &exp_inner.node else {
                 return Err(AlgoError::new(
                     AlgoErrorKind::InvalidTablePattern,
-                    exp.span.clone(),
+                    exp_al.span.clone(),
                 ));
             };
             let not_typ =
@@ -691,7 +738,7 @@ fn pattern_set_covered_by_exp(ctx: &Context, exp: &ast::Exp) -> Result<PatternSe
         }
         _ => Err(AlgoError::new(
             AlgoErrorKind::InvalidTablePattern,
-            exp.span.clone(),
+            exp_al.span.clone(),
         )),
     }
 }
@@ -699,25 +746,25 @@ fn pattern_set_covered_by_exp(ctx: &Context, exp: &ast::Exp) -> Result<PatternSe
 fn check_valid_table_rows(
     ctx: &Context,
     span: &Span,
-    typs_match: &[ast::Typ],
-    rows: &[al::ast::TableRow],
+    typs_match_il: &[ast::Typ],
+    rows_al: &[al::ast::TableRow],
 ) -> Result<(), AlgoError> {
-    let has_closer = rows.last().is_some_and(|row| {
-        row.node
-            .exps_signature
-            .iter()
-            .all(|exp| matches!(&exp.node, ast::ExpKind::Var(id) if id.node.starts_with('_')))
-    });
+    let has_closer =
+        rows_al.last().is_some_and(|row_al| {
+            row_al.node.exps_signature.iter().all(
+                |exp_al| matches!(&exp_al.node, ast::ExpKind::Var(id) if id.node.starts_with('_')),
+            )
+        });
     let pattern_rows = if has_closer {
-        &rows[..rows.len() - 1]
+        &rows_al[..rows_al.len() - 1]
     } else {
-        rows
+        rows_al
     };
     let mut pattern_group = Vec::with_capacity(pattern_rows.len());
-    for row in pattern_rows {
-        let mut patterns = Vec::with_capacity(row.node.exps_signature.len());
-        for exp in &row.node.exps_signature {
-            patterns.push(pattern_set_covered_by_exp(ctx, exp)?);
+    for row_al in pattern_rows {
+        let mut patterns = Vec::with_capacity(row_al.node.exps_signature.len());
+        for exp_al in &row_al.node.exps_signature {
+            patterns.push(pattern_set_covered_by_exp(ctx, exp_al)?);
         }
         pattern_group.push(patterns);
     }
@@ -727,9 +774,9 @@ fn check_valid_table_rows(
             span.clone(),
         ));
     }
-    let mut patterns_total: PatternSets = Vec::with_capacity(typs_match.len());
-    for typ in typs_match {
-        patterns_total.push(pattern_set_covered_by_typ(ctx, typ)?);
+    let mut patterns_total: PatternSets = Vec::with_capacity(typs_match_il.len());
+    for typ_il in typs_match_il {
+        patterns_total.push(pattern_set_covered_by_typ(ctx, typ_il)?);
     }
     let missing = pattern::find_missing(span, &patterns_total, &pattern_group)?;
     if !has_closer && !missing.is_empty() {
@@ -741,157 +788,252 @@ fn check_valid_table_rows(
     Ok(())
 }
 
-fn analyze_table_row(ctx: &Context, row: &ast::TableRow) -> Result<al::ast::TableRow, AlgoError> {
-    let (args, exp) = &row.node;
-    let mut ctx = ctx.clone();
-    ctx.add_frees(&row.free());
-    let (mut ctx, venv, args_input, prems) = analyze_args_as_bind_shallow(ctx, args, &row.span)?;
+fn analyze_table_row(
+    ctx: &mut Context,
+    row_il: &ast::TableRow,
+) -> Result<al::ast::TableRow, AlgoError> {
+    let (args_il, exp_il) = &row_il.node;
+    let mut ctx = ctx.scope();
+    ctx.add_frees(&row_il.free());
+    let (venv, args_input_al, prems_al) =
+        analyze_args_as_bind_shallow(&mut ctx, args_il, &row_il.span)?;
     ctx.add_bounds(&venv);
-    analyze_args_as_bound_shallow(&ctx, args)?;
-    let mut exps_signature = Vec::with_capacity(args.len());
-    for arg in args {
-        let ast::ArgKind::Exp(exp) = &arg.node else {
+    analyze_args_as_bound_shallow(&ctx, args_il)?;
+    let mut exps_signature_al = Vec::with_capacity(args_il.len());
+    for arg_il in args_il {
+        let ast::ArgKind::Exp(exp_il) = &arg_il.node else {
             return Err(AlgoError::new(
                 AlgoErrorKind::InvalidTablePattern,
-                arg.span.clone(),
+                arg_il.span.clone(),
             ));
         };
-        exps_signature.push((**exp).clone());
+        exps_signature_al.push((**exp_il).clone());
     }
-    analyze_exp_as_bound(&ctx, exp)?;
-    Ok(phrase! {
+    analyze_exp_as_bound(&ctx, exp_il)?;
+    let row_al = phrase! {
         node: al::ast::TableRowKind {
-            exps_signature,
-            args: args_input,
-            exp: exp.clone(),
-            prems,
+            exps_signature: exps_signature_al,
+            args: args_input_al,
+            exp: exp_il.clone(),
+            prems: prems_al,
         },
-        span: row.span.clone(),
-    })
+        span: row_il.span.clone(),
+    };
+    Ok(row_al)
 }
 
 fn analyze_table_rows(
-    ctx: &Context,
+    ctx: &mut Context,
     span: &Span,
-    params: &[ast::Param],
-    rows: &[ast::TableRow],
+    params_il: &[ast::Param],
+    rows_il: &[ast::TableRow],
 ) -> Result<Vec<al::ast::TableRow>, AlgoError> {
-    let mut rows_analyzed = Vec::with_capacity(rows.len());
-    for row in rows {
-        rows_analyzed.push(analyze_table_row(ctx, row)?);
+    let mut rows_al = Vec::with_capacity(rows_il.len());
+    for row_il in rows_il {
+        rows_al.push(analyze_table_row(ctx, row_il)?);
     }
-    let mut typs_match = Vec::with_capacity(params.len());
-    for param in params {
-        let ast::ParamKind::Exp(typ) = &param.node else {
+    let mut typs_match_il = Vec::with_capacity(params_il.len());
+    for param_il in params_il {
+        let ast::ParamKind::Exp(typ_il) = &param_il.node else {
             return Err(AlgoError::new(
                 AlgoErrorKind::InvalidTableParameter,
-                param.span.clone(),
+                param_il.span.clone(),
             ));
         };
-        typs_match.push(typ.clone());
+        typs_match_il.push(typ_il.clone());
     }
-    check_valid_table_rows(ctx, span, &typs_match, &rows_analyzed)?;
-    Ok(rows_analyzed)
+    check_valid_table_rows(ctx, span, &typs_match_il, &rows_al)?;
+    Ok(rows_al)
 }
 
-// Definitions
+// == Definition binding analysis
 
-fn analyze_def(ctx: &Context, def: &ast::Def) -> Result<al::ast::Def, AlgoError> {
-    let kind = match &def.node {
-        ast::DefKind::ExternTyp(def) => al::ast::DefKind::ExternTyp(al::ast::ExternTypDef {
-            id: def.id.clone(),
-            hints: def.hints.clone(),
-        }),
-        ast::DefKind::Typ(def) => al::ast::DefKind::Typ(al::ast::TypDef {
-            id: def.id.clone(),
-            tparams: def.tparams.clone(),
-            def_typ: def.def_typ.clone(),
-            hints: def.hints.clone(),
-        }),
-        ast::DefKind::Var(def) => al::ast::DefKind::Var(al::ast::VarDef {
-            id: def.id.clone(),
-            typ: def.typ.clone(),
-            hints: def.hints.clone(),
-        }),
-        ast::DefKind::ExternRel(def) => al::ast::DefKind::ExternRel(al::ast::ExternRelDef {
-            id: def.id.clone(),
-            not_typ: def.not_typ.clone(),
-            input_hint: def.input_hint.clone(),
-            hints: def.hints.clone(),
-        }),
-        ast::DefKind::Rel(def) => {
-            let mut rule_groups = Vec::with_capacity(def.rule_groups.len());
-            for rule_group in &def.rule_groups {
-                let mut analyzed = analyze_rule_group(ctx, &def.input_hint, rule_group, false)?;
-                analyzed.span = rule_group.span.clone();
-                rule_groups.push(analyzed);
-            }
-            let else_group = def
-                .else_group
-                .as_ref()
-                .map(|group| analyze_else_group(ctx, &def.input_hint, group))
-                .transpose()?;
-            al::ast::DefKind::Rel(al::ast::RelDef {
-                id: def.id.clone(),
-                not_typ: def.not_typ.clone(),
-                input_hint: def.input_hint.clone(),
-                rule_groups,
-                else_group,
-                hints: def.hints.clone(),
-            })
+// - Dispatch
+
+fn analyze_def(ctx: &mut Context, def_il: &ast::Def) -> Result<al::ast::Def, AlgoError> {
+    let def_kind_al = match &def_il.node {
+        ast::DefKind::ExternTyp(def_il) => {
+            let def_al = analyze_extern_typ_def(def_il);
+            al::ast::DefKind::ExternTyp(def_al)
         }
-        ast::DefKind::ExternDec(def) => al::ast::DefKind::ExternDec(al::ast::ExternDecDef {
-            id: def.id.clone(),
-            tparams: def.tparams.clone(),
-            params: def.params.clone(),
-            typ: def.typ.clone(),
-            hints: def.hints.clone(),
-        }),
-        ast::DefKind::BuiltinDec(def) => al::ast::DefKind::BuiltinDec(al::ast::BuiltinDecDef {
-            id: def.id.clone(),
-            tparams: def.tparams.clone(),
-            params: def.params.clone(),
-            typ: def.typ.clone(),
-            hints: def.hints.clone(),
-        }),
-        ast::DefKind::TableDec(table_def) => {
-            let table_rows =
-                analyze_table_rows(ctx, &def.span, &table_def.params, &table_def.rows)?;
-            al::ast::DefKind::TableDec(al::ast::TableDecDef {
-                id: table_def.id.clone(),
-                params: table_def.params.clone(),
-                typ: table_def.typ.clone(),
-                table_rows,
-                hints: table_def.hints.clone(),
-            })
+        ast::DefKind::Typ(def_il) => {
+            let def_al = analyze_typ_def(def_il);
+            al::ast::DefKind::Typ(def_al)
         }
-        ast::DefKind::FuncDec(def) => {
-            let mut clauses = Vec::with_capacity(def.clauses.len());
-            for clause in &def.clauses {
-                clauses.push(analyze_clause(ctx, clause, false)?);
-            }
-            let else_clause = def
-                .else_clause
-                .as_ref()
-                .map(|clause| analyze_clause(ctx, clause, true))
-                .transpose()?;
-            al::ast::DefKind::FuncDec(al::ast::FuncDecDef {
-                id: def.id.clone(),
-                tparams: def.tparams.clone(),
-                params: def.params.clone(),
-                typ: def.typ.clone(),
-                clauses,
-                else_clause,
-                hints: def.hints.clone(),
-            })
+        ast::DefKind::Var(def_il) => {
+            let def_al = analyze_var_def(def_il);
+            al::ast::DefKind::Var(def_al)
+        }
+        ast::DefKind::ExternRel(def_il) => {
+            let def_al = analyze_extern_rel_def(def_il);
+            al::ast::DefKind::ExternRel(def_al)
+        }
+        ast::DefKind::Rel(def_il) => {
+            let def_al = analyze_rel_def(ctx, def_il)?;
+            al::ast::DefKind::Rel(def_al)
+        }
+        ast::DefKind::ExternDec(def_il) => {
+            let def_al = analyze_extern_dec_def(def_il);
+            al::ast::DefKind::ExternDec(def_al)
+        }
+        ast::DefKind::BuiltinDec(def_il) => {
+            let def_al = analyze_builtin_dec_def(def_il);
+            al::ast::DefKind::BuiltinDec(def_al)
+        }
+        ast::DefKind::TableDec(table_def_il) => {
+            let def_al = analyze_table_def(ctx, table_def_il, &def_il.span)?;
+            al::ast::DefKind::TableDec(def_al)
+        }
+        ast::DefKind::FuncDec(def_il) => {
+            let def_al = analyze_func_def(ctx, def_il)?;
+            al::ast::DefKind::FuncDec(def_al)
         }
     };
-    Ok(phrase!(node: kind, span: def.span.clone()))
+    let def_al = phrase!(node: def_kind_al, span: def_il.span.clone());
+    Ok(def_al)
 }
 
-/// Analyzes a complete IL specification before side-condition guard insertion
-pub(in crate::pass::algo) fn analyze_spec(spec: &ast::Spec) -> Result<al::ast::Spec, AlgoError> {
+// - External type definitions
+
+fn analyze_extern_typ_def(def_il: &ast::ExternTyp) -> al::ast::ExternTypDef {
+    al::ast::ExternTypDef {
+        id: def_il.id.clone(),
+        hints: def_il.hints.clone(),
+    }
+}
+
+// - Type definitions
+
+fn analyze_typ_def(def_il: &ast::TypDef) -> al::ast::TypDef {
+    al::ast::TypDef {
+        id: def_il.id.clone(),
+        tparams: def_il.tparams.clone(),
+        def_typ: def_il.def_typ.clone(),
+        hints: def_il.hints.clone(),
+    }
+}
+
+// - Variable definitions
+
+fn analyze_var_def(def_il: &ast::VarDef) -> al::ast::VarDef {
+    al::ast::VarDef {
+        id: def_il.id.clone(),
+        typ: def_il.typ.clone(),
+        hints: def_il.hints.clone(),
+    }
+}
+
+// - External relation definitions
+
+fn analyze_extern_rel_def(def_il: &ast::ExternRel) -> al::ast::ExternRelDef {
+    al::ast::ExternRelDef {
+        id: def_il.id.clone(),
+        not_typ: def_il.not_typ.clone(),
+        input_hint: def_il.input_hint.clone(),
+        hints: def_il.hints.clone(),
+    }
+}
+
+// - Relation definitions
+
+fn analyze_rel_def(ctx: &mut Context, def_il: &ast::Rel) -> Result<al::ast::RelDef, AlgoError> {
+    let mut rule_groups_al = Vec::with_capacity(def_il.rule_groups.len());
+    for rule_group_il in &def_il.rule_groups {
+        let mut rule_group_al = analyze_rule_group(ctx, &def_il.input_hint, rule_group_il, false)?;
+        rule_group_al.span = rule_group_il.span.clone();
+        rule_groups_al.push(rule_group_al);
+    }
+    let else_group_al = def_il
+        .else_group
+        .as_ref()
+        .map(|else_group_il| analyze_else_group(ctx, &def_il.input_hint, else_group_il))
+        .transpose()?;
+    Ok(al::ast::RelDef {
+        id: def_il.id.clone(),
+        not_typ: def_il.not_typ.clone(),
+        input_hint: def_il.input_hint.clone(),
+        rule_groups: rule_groups_al,
+        else_group: else_group_al,
+        hints: def_il.hints.clone(),
+    })
+}
+
+// - External declaration definitions
+
+fn analyze_extern_dec_def(def_il: &ast::ExternDec) -> al::ast::ExternDecDef {
+    al::ast::ExternDecDef {
+        id: def_il.id.clone(),
+        tparams: def_il.tparams.clone(),
+        params: def_il.params.clone(),
+        typ: def_il.typ.clone(),
+        hints: def_il.hints.clone(),
+    }
+}
+
+// - Builtin declaration definitions
+
+fn analyze_builtin_dec_def(def_il: &ast::BuiltinDec) -> al::ast::BuiltinDecDef {
+    al::ast::BuiltinDecDef {
+        id: def_il.id.clone(),
+        tparams: def_il.tparams.clone(),
+        params: def_il.params.clone(),
+        typ: def_il.typ.clone(),
+        hints: def_il.hints.clone(),
+    }
+}
+
+// - Table definitions
+
+fn analyze_table_def(
+    ctx: &mut Context,
+    def_il: &ast::TableDec,
+    span: &Span,
+) -> Result<al::ast::TableDecDef, AlgoError> {
+    let table_rows_al = analyze_table_rows(ctx, span, &def_il.params, &def_il.rows)?;
+    Ok(al::ast::TableDecDef {
+        id: def_il.id.clone(),
+        params: def_il.params.clone(),
+        typ: def_il.typ.clone(),
+        table_rows: table_rows_al,
+        hints: def_il.hints.clone(),
+    })
+}
+
+// - Function definitions
+
+fn analyze_func_def(
+    ctx: &mut Context,
+    def_il: &ast::FuncDec,
+) -> Result<al::ast::FuncDecDef, AlgoError> {
+    let mut clauses_al = Vec::with_capacity(def_il.clauses.len());
+    for clause_il in &def_il.clauses {
+        clauses_al.push(analyze_clause(ctx, clause_il, false)?);
+    }
+    let else_clause_al = def_il
+        .else_clause
+        .as_ref()
+        .map(|clause_il| analyze_clause(ctx, clause_il, true))
+        .transpose()?;
+    Ok(al::ast::FuncDecDef {
+        id: def_il.id.clone(),
+        tparams: def_il.tparams.clone(),
+        params: def_il.params.clone(),
+        typ: def_il.typ.clone(),
+        clauses: clauses_al,
+        else_clause: else_clause_al,
+        hints: def_il.hints.clone(),
+    })
+}
+
+// - Specification
+
+/// Binding analysis of an IL specification
+pub(in crate::pass::algo) fn analyze_spec(spec_il: &ast::Spec) -> Result<al::ast::Spec, AlgoError> {
     let mut ctx = Context::new();
-    ctx.load_spec(spec);
-    spec.iter().map(|def| analyze_def(&ctx, def)).collect()
+    ctx.load_spec(spec_il);
+    let mut defs_al = Vec::with_capacity(spec_il.len());
+    for def_il in spec_il {
+        defs_al.push(analyze_def(&mut ctx, def_il)?);
+    }
+    Ok(defs_al)
 }

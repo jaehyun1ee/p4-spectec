@@ -1,4 +1,6 @@
-//! State accumulated while analyzing bindings
+//! Transactional state accumulated while analyzing bindings
+
+use std::ops::{Deref, DerefMut};
 
 use crate::{
     lang::{
@@ -14,17 +16,68 @@ use crate::{
 
 use super::super::{AlgoError, AlgoErrorKind};
 
-/// Environments threaded through binding analysis
-#[derive(Clone, Debug)]
+/// Environments and fresh state threaded through binding analysis
+#[derive(Debug)]
 pub struct Context {
-    pub frees: IdSet,
-    pub venv: VEnv,
-    pub tdenv: TDEnv,
-    pub menv: MEnv,
+    frees: IdSet,
+    venv: VEnv,
+    tdenv: TDEnv,
+    menv: MEnv,
+    undo: Vec<Undo>,
+    checkpoints: Vec<usize>,
+}
+
+#[derive(Debug)]
+enum Undo {
+    AddFree(Id),
+    AddBound(Id),
+}
+
+/// A checkpoint in the binding context that can be committed or rolled back
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Checkpoint {
+    depth: usize,
+    undo_len: usize,
+}
+
+/// A scope that rolls back its context changes unless committed
+pub struct Scope<'a> {
+    ctx: &'a mut Context,
+    checkpoint: Option<Checkpoint>,
+}
+
+impl Deref for Scope<'_> {
+    type Target = Context;
+
+    fn deref(&self) -> &Self::Target {
+        self.ctx
+    }
+}
+
+impl DerefMut for Scope<'_> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.ctx
+    }
+}
+
+impl Scope<'_> {
+    /// Keeps the changes made through this scope
+    pub fn commit(mut self) {
+        let checkpoint = self.checkpoint.take().expect("open binding scope");
+        self.ctx.commit(checkpoint);
+    }
+}
+
+impl Drop for Scope<'_> {
+    fn drop(&mut self) {
+        if let Some(checkpoint) = self.checkpoint.take() {
+            self.ctx.rollback_scope(checkpoint);
+        }
+    }
 }
 
 impl Context {
-    // Constructors
+    // == Constructors
 
     pub fn new() -> Self {
         let mut menv = MEnv::new();
@@ -42,17 +95,100 @@ impl Context {
             venv: VEnv::new(),
             tdenv: TDEnv::new(),
             menv,
+            undo: vec![],
+            checkpoints: vec![],
         }
     }
 
-    // Adders
+    // == Transactions
+
+    fn assert_checkpoint(&self, checkpoint: Checkpoint) {
+        assert_eq!(checkpoint.depth + 1, self.checkpoints.len());
+        assert_eq!(Some(&checkpoint.undo_len), self.checkpoints.last());
+    }
+
+    fn checkpoint(&mut self) -> Checkpoint {
+        let checkpoint = Checkpoint {
+            depth: self.checkpoints.len(),
+            undo_len: self.undo.len(),
+        };
+        self.checkpoints.push(checkpoint.undo_len);
+        checkpoint
+    }
+
+    fn commit(&mut self, checkpoint: Checkpoint) {
+        self.assert_checkpoint(checkpoint);
+        self.checkpoints.pop();
+        if self.checkpoints.is_empty() {
+            self.undo.clear();
+        }
+    }
+
+    fn rollback(&mut self, checkpoint: Checkpoint) {
+        self.assert_checkpoint(checkpoint);
+        self.checkpoints.pop();
+        while self.undo.len() > checkpoint.undo_len {
+            match self.undo.pop().expect("recorded binding change") {
+                Undo::AddFree(id) => {
+                    self.frees.take(&id).expect("recorded free binding");
+                }
+                Undo::AddBound(id) => {
+                    self.venv.remove(&id).expect("recorded bound binding");
+                }
+            }
+        }
+    }
+
+    fn rollback_scope(&mut self, checkpoint: Checkpoint) {
+        if std::thread::panicking() && self.checkpoints.len() > checkpoint.depth + 1 {
+            self.checkpoints.truncate(checkpoint.depth + 1);
+        }
+        self.rollback(checkpoint);
+    }
+
+    pub fn scope(&mut self) -> Scope<'_> {
+        let checkpoint = self.checkpoint();
+        Scope {
+            ctx: self,
+            checkpoint: Some(checkpoint),
+        }
+    }
+
+    // == Getters
+
+    pub fn frees(&self) -> &IdSet {
+        &self.frees
+    }
+
+    pub fn venv(&self) -> &VEnv {
+        &self.venv
+    }
+
+    pub fn tdenv(&self) -> &TDEnv {
+        &self.tdenv
+    }
+
+    #[cfg(test)]
+    pub fn tdenv_mut(&mut self) -> &mut TDEnv {
+        &mut self.tdenv
+    }
+
+    pub fn menv(&self) -> &MEnv {
+        &self.menv
+    }
+
+    // == Adders
 
     pub fn add_free(&mut self, id: Id) {
-        self.frees.insert(id);
+        if self.frees.insert(id.clone()) && !self.checkpoints.is_empty() {
+            self.undo.push(Undo::AddFree(id));
+        }
     }
 
     pub fn add_frees(&mut self, ids: &IdSet) {
-        self.frees.extend(ids.iter().cloned());
+        for id in ids.iter() {
+            self.add_free(id.clone());
+        }
     }
 
     /// Adds bounds without replacing bindings already present in this context
@@ -60,11 +196,14 @@ impl Context {
         for (id, dim) in venv.iter() {
             if !self.venv.contains_key(id) {
                 self.venv.insert(id.clone(), dim.clone());
+                if !self.checkpoints.is_empty() {
+                    self.undo.push(Undo::AddBound(id.clone()));
+                }
             }
         }
     }
 
-    // Finders
+    // == Finders
 
     pub fn find_typdef_opt(&self, id: &Id) -> Option<&TypeDef> {
         self.tdenv.get(id)
@@ -75,7 +214,7 @@ impl Context {
             .ok_or_else(|| AlgoError::new(AlgoErrorKind::UndefinedType, id.span.clone()))
     }
 
-    // Load definitions
+    // == Definition loading
 
     pub fn load_def(&mut self, def: &ast::Def) {
         match &def.node {

@@ -286,7 +286,7 @@ fn test_partial_binding_rolls_back_context_and_renames_after_late_failure() {
         &initial,
     )
     .expect("initial partial binding rename");
-    let frees_before = context.frees.clone();
+    let frees_before = context.frees().clone();
     let premise_count_before =
         partial::generate_prems(&context, &IterationContext::new(), &renames)
             .expect("initial premises")
@@ -322,7 +322,7 @@ fn test_partial_binding_rolls_back_context_and_renames_after_late_failure() {
 
     assert_eq!(error.kind, AlgoErrorKind::UndefinedType);
     assert_eq!(error.span, span(12));
-    assert_eq!(context.frees, frees_before);
+    assert_eq!(context.frees(), &frees_before);
     assert_eq!(
         partial::generate_prems(&context, &IterationContext::new(), &renames)
             .expect("rolled-back premises")
@@ -345,7 +345,7 @@ fn test_partial_case_and_list_bindings_generate_match_then_bind_premises_in_sour
     span(1) };
     let mut context = Context::new();
     context
-        .tdenv
+        .tdenv_mut()
         .insert(choice_id, TypeDef::Defined(vec![], Box::new(def_typ)));
 
     let keyword = crate::phrase! { node: Atom::Keyword("A".to_owned()), span:  span(2) };
@@ -441,7 +441,7 @@ fn test_partial_upcast_binding_checks_subtype_before_binding_the_downcast_value(
     let parent_origin = crate::phrase! { node: (parent_id.clone(), vec![]), span:  span(1) };
     let child_origin = crate::phrase! { node: (child_id.clone(), vec![]), span:  span(1) };
     let mut context = Context::new();
-    context.tdenv.insert(
+    context.tdenv_mut().insert(
         parent_id,
         TypeDef::Defined(
             vec![],
@@ -453,7 +453,7 @@ fn test_partial_upcast_binding_checks_subtype_before_binding_the_downcast_value(
             span(1) }),
         ),
     );
-    context.tdenv.insert(
+    context.tdenv_mut().insert(
         child_id,
         TypeDef::Defined(
             vec![],

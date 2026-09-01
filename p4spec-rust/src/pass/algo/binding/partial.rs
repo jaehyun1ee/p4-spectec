@@ -222,7 +222,7 @@ fn generate_bind_sub(
 ) -> Result<Vec<ast::Prem>, AlgoError> {
     let exp_to = var::as_exp(true, destination);
     let typ_source = phrase!(node: exp_to.note.clone(), span: exp_to.span.clone());
-    let subcheck = optimize_sub_typ(&ctx.tdenv, &typ_source, typ_sub)?;
+    let subcheck = optimize_sub_typ(ctx.tdenv(), &typ_source, typ_sub)?;
     let exp_subcheck = bool_exp(
         ast::ExpKind::Sub(
             Box::new(exp_to.clone()),
@@ -324,7 +324,7 @@ pub fn destination_env(renv: &RenameEnv) -> VEnv {
 
 fn var_from_exp(ctx: &mut Context, exp: &ast::Exp) -> ast::Var {
     let typ = phrase!(node: exp.note.clone(), span: exp.span.clone());
-    let destination = fresh::var_from_typ(&ctx.menv, &ctx.frees, exp.span.clone(), &typ);
+    let destination = fresh::var_from_typ(ctx.menv(), ctx.frees(), exp.span.clone(), &typ);
     ctx.add_free(destination.id.clone());
     destination
 }
@@ -422,10 +422,10 @@ pub fn rename_exp(
     iterctx: IterationContext,
     exp: &ast::Exp,
 ) -> Result<(IterationContext, ast::Exp), AlgoError> {
-    let mut ctx_next = ctx.clone();
+    let mut scope = ctx.scope();
     let mut renv_next = renv.clone();
-    let result = rename_exp_in_place(&mut ctx_next, binds, &mut renv_next, iterctx, exp)?;
-    *ctx = ctx_next;
+    let result = rename_exp_in_place(&mut scope, binds, &mut renv_next, iterctx, exp)?;
+    scope.commit();
     *renv = renv_next;
     Ok(result)
 }
@@ -596,10 +596,10 @@ pub fn rename_exps(
     iterctx: IterationContext,
     exps: &[ast::Exp],
 ) -> Result<(IterationContext, Vec<ast::Exp>), AlgoError> {
-    let mut ctx_next = ctx.clone();
+    let mut scope = ctx.scope();
     let mut renv_next = renv.clone();
-    let result = rename_exps_in_place(&mut ctx_next, binds, &mut renv_next, iterctx, exps)?;
-    *ctx = ctx_next;
+    let result = rename_exps_in_place(&mut scope, binds, &mut renv_next, iterctx, exps)?;
+    scope.commit();
     *renv = renv_next;
     Ok(result)
 }
@@ -651,10 +651,10 @@ pub fn rename_args(
     iterctx: IterationContext,
     args: &[ast::Arg],
 ) -> Result<(IterationContext, Vec<ast::Arg>), AlgoError> {
-    let mut ctx_next = ctx.clone();
+    let mut scope = ctx.scope();
     let mut renv_next = renv.clone();
-    let result = rename_args_in_place(&mut ctx_next, binds, &mut renv_next, iterctx, args)?;
-    *ctx = ctx_next;
+    let result = rename_args_in_place(&mut scope, binds, &mut renv_next, iterctx, args)?;
+    scope.commit();
     *renv = renv_next;
     Ok(result)
 }

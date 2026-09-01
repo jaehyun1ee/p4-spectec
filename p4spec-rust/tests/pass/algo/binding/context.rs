@@ -34,11 +34,11 @@ fn test_context_loads_type_and_metavariable_definitions() {
     let mut context = Context::new();
     context.load_spec(&spec);
 
-    assert_eq!(context.tdenv.get(&extern_id), Some(&TypeDef::Extern));
+    assert_eq!(context.tdenv().get(&extern_id), Some(&TypeDef::Extern));
     assert_eq!(
-        context.tdenv.get(&defined_id),
+        context.tdenv().get(&defined_id),
         Some(&TypeDef::Defined(vec![], Box::new(def_typ)))
     );
-    assert_eq!(context.menv.get(&variable_id), Some(&bool_typ));
-    assert!(context.menv.contains_key(&id("bool", 99)));
+    assert_eq!(context.menv().get(&variable_id), Some(&bool_typ));
+    assert!(context.menv().contains_key(&id("bool", 99)));
 }

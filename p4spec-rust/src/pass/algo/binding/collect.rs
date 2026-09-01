@@ -48,7 +48,7 @@ pub fn collect_exp(ctx: &Context, exp: &ast::Exp) -> Result<Bindings, AlgoError>
     match &exp.node {
         ast::ExpKind::Bool(_) | ast::ExpKind::Num(_) | ast::ExpKind::Text(_) => Ok(Bindings::new()),
         ast::ExpKind::Var(id) => {
-            if ctx.venv.contains_key(id) {
+            if ctx.venv().contains_key(id) {
                 Ok(Bindings::new())
             } else {
                 let typ = phrase!(node: exp.note.clone(), span: exp.span.clone());

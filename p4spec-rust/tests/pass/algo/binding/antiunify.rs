@@ -17,8 +17,9 @@ fn test_antiunification_populates_each_path_in_left_to_right_expression_order() 
         vec![tuple(false, true, 5), var_exp("shared", 7)],
     ];
 
-    let (context, template, premises) =
-        antiunify::antiunify(Context::new(), groups).expect("equivalent tuple inputs");
+    let mut context = Context::new();
+    let (template, premises) =
+        antiunify::antiunify(&mut context, groups).expect("equivalent tuple inputs");
 
     assert_eq!(template.len(), 2);
     let ast::ExpKind::Tuple(items) = &template[0].node else {
@@ -32,8 +33,8 @@ fn test_antiunification_populates_each_path_in_left_to_right_expression_order() 
         })
         .collect::<Vec<_>>();
     assert_ne!(template_ids[0].node, template_ids[1].node);
-    assert!(context.frees.contains(template_ids[0]));
-    assert!(context.frees.contains(template_ids[1]));
+    assert!(context.frees().contains(template_ids[0]));
+    assert!(context.frees().contains(template_ids[1]));
     assert!(matches!(&template[1].node, ast::ExpKind::Var(id) if id.node == "shared"));
 
     let compared_values = |prems: &[ast::Prem]| {
@@ -60,9 +61,9 @@ fn test_antiunification_populates_each_path_in_left_to_right_expression_order() 
 
 #[test]
 fn test_antiunification_freshness_avoids_collisions_within_each_operation() {
-    let fresh_unifier = |context: Context| {
-        let (_, template, _) = antiunify::antiunify(
-            context,
+    let fresh_unifier = |mut context: Context| {
+        let (template, _) = antiunify::antiunify(
+            &mut context,
             vec![
                 vec![exp(ast::ExpKind::Bool(true), ast::TypKind::Bool, 1)],
                 vec![exp(ast::ExpKind::Bool(false), ast::TypKind::Bool, 2)],
@@ -91,7 +92,7 @@ fn test_antiunification_uses_runtime_equivalence_for_plain_type_aliases() {
     let alias_typ =
         crate::phrase! { node: ast::TypKind::Var(alias_id.clone(), vec![]), span:  span(1) };
     let mut context = Context::new();
-    context.tdenv.insert(
+    context.tdenv_mut().insert(
         alias_id,
         TypeDef::Defined(
             vec![],
@@ -101,8 +102,8 @@ fn test_antiunification_uses_runtime_equivalence_for_plain_type_aliases() {
     let alias_value = exp(ast::ExpKind::Bool(true), alias_typ.node, 2);
     let bool_value = exp(ast::ExpKind::Bool(false), ast::TypKind::Bool, 3);
 
-    let (_, template, premises) =
-        antiunify::antiunify(context, vec![vec![alias_value], vec![bool_value]])
+    let (template, premises) =
+        antiunify::antiunify(&mut context, vec![vec![alias_value], vec![bool_value]])
             .expect("plain alias is equivalent to its underlying type");
 
     assert!(matches!(template[0].node, ast::ExpKind::Var(_)));
