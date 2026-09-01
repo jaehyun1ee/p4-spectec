@@ -3,14 +3,41 @@
 //! Function-type binders are freshened before applying the outer substitution
 
 use crate::lang::{
-    common::{ds::map::IdMap, notation::mixop::Mixop},
+    common::{
+        ds::map::{ArityMismatch, IdMap},
+        notation::mixop::Mixop,
+    },
     il::ast::{self, TypKind},
 };
 use crate::phrase;
 
 use super::{Fresh, TypeError, TypeErrorKind};
 
-pub type Theta = IdMap<ast::Typ>;
+#[derive(Default)]
+pub struct Theta(IdMap<ast::Typ>);
+
+impl Theta {
+    pub fn new() -> Self {
+        Self(IdMap::new())
+    }
+
+    pub fn from_lists(tparams: &[ast::TParam], targs: &[ast::Typ]) -> Result<Self, ArityMismatch> {
+        let theta = IdMap::from_lists(tparams, targs)?;
+        Ok(Self(theta))
+    }
+
+    pub fn insert(&mut self, tparam: ast::TParam, targ: ast::Typ) -> Option<ast::Typ> {
+        self.0.insert(tparam, targ)
+    }
+
+    fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    fn get(&self, tparam: &ast::TParam) -> Option<&ast::Typ> {
+        self.0.get(tparam)
+    }
+}
 
 fn freshen_tparams(fresh: &mut Fresh, tparams: &[ast::TParam]) -> (Theta, Vec<ast::TParam>) {
     let mut theta = Theta::new();

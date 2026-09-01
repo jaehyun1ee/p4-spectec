@@ -486,16 +486,16 @@ fn encode_fallthrough(value: &Fallthrough) -> Value {
     }
 }
 
-fn decode_inote(value: &Value) -> Result<(i64, Option<Fallthrough>), DecodeError> {
+fn decode_inote(value: &Value) -> Result<(ast::Iid, Option<Fallthrough>), DecodeError> {
     let value = object(value)?;
-    Ok((
-        integer(field(value, "iid")?)?,
-        decode_option(field(value, "fallthrough")?, decode_fallthrough)?,
-    ))
+    let iid = integer(field(value, "iid")?)?;
+    let iid = ast::Iid::new(iid);
+    let fallthrough = decode_option(field(value, "fallthrough")?, decode_fallthrough)?;
+    Ok((iid, fallthrough))
 }
 
-fn encode_inote(iid: i64, fallthrough: Option<&Fallthrough>) -> Value {
-    json!({"iid": iid, "fallthrough": encode_option(fallthrough, encode_fallthrough)})
+fn encode_inote(iid: ast::Iid, fallthrough: Option<&Fallthrough>) -> Value {
+    json!({"iid": iid.get(), "fallthrough": encode_option(fallthrough, encode_fallthrough)})
 }
 
 fn decode_guard(value: &Value) -> Result<Guard, DecodeError> {

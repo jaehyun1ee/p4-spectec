@@ -62,7 +62,7 @@ fn notation() -> il::ast::NotTyp {
 fn instr(kind: sl::ast::InstrKind, iid: i64) -> sl::ast::Instr {
     p4spec_rust::note_phrase! {
         node: kind,
-        note: iid,
+        note: sl::ast::Iid::new(iid),
         span: span("instruction"),
     }
 }

@@ -155,7 +155,45 @@ impl FromIterator<ast::NotTyp> for PatternSet {
     }
 }
 
-pub type PatternSets = Vec<PatternSet>;
+/// Ordered pattern sets for the arguments of one table row
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PatternSets(Vec<PatternSet>);
+
+impl PatternSets {
+    fn new() -> Self {
+        Self(Vec::new())
+    }
+
+    pub(super) fn with_capacity(capacity: usize) -> Self {
+        Self(Vec::with_capacity(capacity))
+    }
+
+    fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub(super) fn push(&mut self, pattern: PatternSet) {
+        self.0.push(pattern);
+    }
+
+    fn iter(&self) -> impl Iterator<Item = &PatternSet> {
+        self.0.iter()
+    }
+
+    fn extend_from_slice(&mut self, patterns: &[PatternSet]) {
+        self.0.extend_from_slice(patterns);
+    }
+
+    fn tail(&self, index: usize) -> &[PatternSet] {
+        &self.0[index..]
+    }
+}
+
+impl FromIterator<PatternSet> for PatternSets {
+    fn from_iter<T: IntoIterator<Item = PatternSet>>(patterns: T) -> Self {
+        Self(patterns.into_iter().collect())
+    }
+}
 
 // Overlap checks
 
@@ -184,7 +222,7 @@ pub fn has_overlap(
     check_arity(span, patterns_l, patterns_r)?;
     Ok(patterns_l
         .iter()
-        .zip(patterns_r)
+        .zip(patterns_r.iter())
         .all(|(pattern_l, pattern_r)| !pattern_l.intersection(pattern_r).is_empty()))
 }
 
@@ -214,14 +252,15 @@ pub fn subtract(
     }
 
     let mut fragments = Vec::new();
-    let mut prefix = Vec::new();
-    for (index, (pattern_total, pattern)) in patterns_total.iter().zip(patterns).enumerate() {
+    let mut prefix = PatternSets::new();
+    for (index, (pattern_total, pattern)) in patterns_total.iter().zip(patterns.iter()).enumerate()
+    {
         let difference = pattern_total.difference(pattern);
         let intersection = pattern_total.intersection(pattern);
         if !difference.is_empty() {
             let mut fragment = prefix.clone();
             fragment.push(difference);
-            fragment.extend_from_slice(&patterns_total[index + 1..]);
+            fragment.extend_from_slice(patterns_total.tail(index + 1));
             fragments.push(fragment);
         }
         if intersection.is_empty() {

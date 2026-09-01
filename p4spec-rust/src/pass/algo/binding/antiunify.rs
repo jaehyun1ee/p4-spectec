@@ -21,6 +21,34 @@ use super::{
 
 // == Helpers
 
+// - Unifier identifiers
+
+#[derive(Clone)]
+struct UnifierIds(IdSet);
+
+impl UnifierIds {
+    fn new() -> Self {
+        Self(IdSet::new())
+    }
+
+    fn contains(&self, id: &ast::Id) -> bool {
+        self.0.contains(id)
+    }
+
+    fn insert(&mut self, ids_free: &mut IdSet, id: ast::Id) {
+        ids_free.insert(id.clone());
+        self.0.insert(id);
+    }
+
+    fn extend(&mut self, ids_other: &Self) {
+        self.0.extend(ids_other.0.iter().cloned());
+    }
+
+    fn as_ids(&self) -> &IdSet {
+        &self.0
+    }
+}
+
 // - Errors
 
 fn is_overlap_mismatch(error: &AlgoError) -> bool {
@@ -38,7 +66,7 @@ fn overlap_exp(
     tdenv: &TDEnv,
     menv: &MEnv,
     ids_free: &mut IdSet,
-    ids_unifier: &mut IdSet,
+    ids_unifier: &mut UnifierIds,
     exp_template: &ast::Exp,
     exp: &ast::Exp,
 ) -> Result<ast::Exp, AlgoError> {
@@ -189,8 +217,7 @@ fn overlap_exp(
         return Err(error);
     }
     let var_fresh = fresh::var_from_typ(menv, ids_free, exp_template.span.clone(), &typ_template);
-    ids_free.insert(var_fresh.id.clone());
-    ids_unifier.insert(var_fresh.id.clone());
+    ids_unifier.insert(ids_free, var_fresh.id.clone());
     let exp_template = var::as_exp(true, &var_fresh);
     Ok(exp_template)
 }
@@ -199,7 +226,7 @@ fn overlap_exps(
     tdenv: &TDEnv,
     menv: &MEnv,
     ids_free: &mut IdSet,
-    ids_unifier: &mut IdSet,
+    ids_unifier: &mut UnifierIds,
     exps_template: &[ast::Exp],
     exps: &[ast::Exp],
 ) -> Result<Vec<ast::Exp>, AlgoError> {
@@ -226,7 +253,7 @@ fn overlap_exp_group(
     menv: &MEnv,
     ids_free: &mut IdSet,
     exps: &[ast::Exp],
-) -> Result<(IdSet, ast::Exp), AlgoError> {
+) -> Result<(UnifierIds, ast::Exp), AlgoError> {
     let Some((exp_template, exps)) = exps.split_first() else {
         let kind = AlgoErrorKind::ExpressionArityMismatch {
             expected: 1,
@@ -235,7 +262,7 @@ fn overlap_exp_group(
         let error = AlgoError::new(kind, Span::default());
         return Err(error);
     };
-    let mut ids_unifier = IdSet::new();
+    let mut ids_unifier = UnifierIds::new();
     let mut exp_template = exp_template.clone();
     for exp in exps {
         exp_template = overlap_exp(tdenv, menv, ids_free, &mut ids_unifier, &exp_template, exp)?;
@@ -248,9 +275,9 @@ fn overlap_exps_group(
     menv: &MEnv,
     ids_free: &mut IdSet,
     exps_group: &[Vec<ast::Exp>],
-) -> Result<(IdSet, Vec<ast::Exp>), AlgoError> {
+) -> Result<(UnifierIds, Vec<ast::Exp>), AlgoError> {
     let Some(exps_first) = exps_group.first() else {
-        let ids_unifier = IdSet::new();
+        let ids_unifier = UnifierIds::new();
         let exps_template = Vec::new();
         return Ok((ids_unifier, exps_template));
     };
@@ -265,12 +292,12 @@ fn overlap_exps_group(
         }
     }
     if exps_group.len() == 1 {
-        let ids_unifier = IdSet::new();
+        let ids_unifier = UnifierIds::new();
         let exps_template = exps_first.clone();
         return Ok((ids_unifier, exps_template));
     }
 
-    let mut ids_unifier = IdSet::new();
+    let mut ids_unifier = UnifierIds::new();
     let mut exps_template = Vec::with_capacity(exps_first.len());
     for index in 0..exps_first.len() {
         let exps_column = exps_group
@@ -279,7 +306,7 @@ fn overlap_exps_group(
             .collect::<Vec<_>>();
         let (ids_unifier_column, exp_template) =
             overlap_exp_group(tdenv, menv, ids_free, &exps_column)?;
-        ids_unifier.extend(ids_unifier_column.iter().cloned());
+        ids_unifier.extend(&ids_unifier_column);
         exps_template.push(exp_template);
     }
     Ok((ids_unifier, exps_template))
@@ -307,7 +334,7 @@ fn equality_prem(exp_template: &ast::Exp, exp: &ast::Exp) -> ast::Prem {
 }
 
 fn populate_exps(
-    ids_unifier: &IdSet,
+    ids_unifier: &UnifierIds,
     exps_template: &[ast::Exp],
     exps: &[ast::Exp],
 ) -> Vec<ast::Prem> {
@@ -318,7 +345,11 @@ fn populate_exps(
         .collect()
 }
 
-fn populate_exp(ids_unifier: &IdSet, exp_template: &ast::Exp, exp: &ast::Exp) -> Vec<ast::Prem> {
+fn populate_exp(
+    ids_unifier: &UnifierIds,
+    exp_template: &ast::Exp,
+    exp: &ast::Exp,
+) -> Vec<ast::Prem> {
     if exp_template.syntax_eq(exp) {
         return vec![];
     }
@@ -368,7 +399,7 @@ fn populate_exp(ids_unifier: &IdSet, exp_template: &ast::Exp, exp: &ast::Exp) ->
 // - Expression groups
 
 fn populate_exps_group(
-    ids_unifier: &IdSet,
+    ids_unifier: &UnifierIds,
     exps_template: &[ast::Exp],
     exps_group: &[Vec<ast::Exp>],
 ) -> Vec<Vec<ast::Prem>> {
@@ -390,6 +421,6 @@ pub fn antiunify(
     let (ids_unifier, exps_template) =
         overlap_exps_group(ctx.tdenv(), ctx.menv(), &mut ids_free, &exps_group)?;
     let prems_group = populate_exps_group(&ids_unifier, &exps_template, &exps_group);
-    ctx.add_frees(&ids_unifier);
+    ctx.add_frees(ids_unifier.as_ids());
     Ok((exps_template, prems_group))
 }

@@ -34,7 +34,7 @@ fn variable(name: &str) -> il::ast::Exp {
 fn instruction(kind: sl::ast::InstrKind, iid: i64, source: &str) -> sl::ast::Instr {
     p4spec_rust::note_phrase! {
         node: kind,
-        note: iid,
+        note: sl::ast::Iid::new(iid),
         span: span(source),
     }
 }

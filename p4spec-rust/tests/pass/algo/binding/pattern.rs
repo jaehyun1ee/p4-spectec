@@ -3,9 +3,15 @@ use super::super::*;
 #[test]
 fn test_pattern_overlap_requires_intersection_in_every_dimension() {
     let owner_span = span(1);
-    let pattern_a: PatternSets = vec![pattern_set(&["A", "B"]), pattern_set(&["X"])];
-    let pattern_b: PatternSets = vec![pattern_set(&["B"]), pattern_set(&["X", "Y"])];
-    let pattern_c: PatternSets = vec![pattern_set(&["B"]), pattern_set(&["Y"])];
+    let pattern_a = [pattern_set(&["A", "B"]), pattern_set(&["X"])]
+        .into_iter()
+        .collect::<PatternSets>();
+    let pattern_b = [pattern_set(&["B"]), pattern_set(&["X", "Y"])]
+        .into_iter()
+        .collect::<PatternSets>();
+    let pattern_c = [pattern_set(&["B"]), pattern_set(&["Y"])]
+        .into_iter()
+        .collect::<PatternSets>();
 
     assert!(pattern::has_overlap(&owner_span, &pattern_a, &pattern_b).expect("matching arity"));
     assert!(!pattern::has_overlap(&owner_span, &pattern_a, &pattern_c).expect("matching arity"));
@@ -14,8 +20,10 @@ fn test_pattern_overlap_requires_intersection_in_every_dimension() {
 #[test]
 fn test_pattern_arity_errors_use_the_owning_source_span() {
     let owner_span = span(31);
-    let patterns_l: PatternSets = vec![pattern_set(&["A"])];
-    let patterns_r: PatternSets = vec![pattern_set(&["A"]), pattern_set(&["B"])];
+    let patterns_l = [pattern_set(&["A"])].into_iter().collect::<PatternSets>();
+    let patterns_r = [pattern_set(&["A"]), pattern_set(&["B"])]
+        .into_iter()
+        .collect::<PatternSets>();
 
     let error = pattern::has_overlap(&owner_span, &patterns_l, &patterns_r)
         .expect_err("different pattern arities");
@@ -44,16 +52,24 @@ fn test_pattern_sets_order_mixfix_structure_before_rendered_text() {
 #[test]
 fn test_pattern_subtraction_preserves_cartesian_fragment_order() {
     let owner_span = span(1);
-    let total: PatternSets = vec![pattern_set(&["A", "B"]), pattern_set(&["X", "Y"])];
-    let covered: PatternSets = vec![pattern_set(&["A"]), pattern_set(&["X"])];
+    let total = [pattern_set(&["A", "B"]), pattern_set(&["X", "Y"])]
+        .into_iter()
+        .collect::<PatternSets>();
+    let covered = [pattern_set(&["A"]), pattern_set(&["X"])]
+        .into_iter()
+        .collect::<PatternSets>();
 
     let missing = pattern::subtract(&owner_span, &total, &covered).expect("matching arity");
 
     assert_eq!(
         missing,
         vec![
-            vec![pattern_set(&["B"]), pattern_set(&["X", "Y"])],
-            vec![pattern_set(&["A"]), pattern_set(&["Y"])],
+            [pattern_set(&["B"]), pattern_set(&["X", "Y"])]
+                .into_iter()
+                .collect::<PatternSets>(),
+            [pattern_set(&["A"]), pattern_set(&["Y"])]
+                .into_iter()
+                .collect::<PatternSets>(),
         ]
     );
 }

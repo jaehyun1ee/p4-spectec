@@ -762,7 +762,7 @@ fn check_valid_table_rows(
     };
     let mut pattern_group = Vec::with_capacity(pattern_rows.len());
     for row_al in pattern_rows {
-        let mut patterns = Vec::with_capacity(row_al.node.exps_signature.len());
+        let mut patterns = PatternSets::with_capacity(row_al.node.exps_signature.len());
         for exp_al in &row_al.node.exps_signature {
             patterns.push(pattern_set_covered_by_exp(ctx, exp_al)?);
         }
@@ -774,7 +774,7 @@ fn check_valid_table_rows(
             span.clone(),
         ));
     }
-    let mut patterns_total: PatternSets = Vec::with_capacity(typs_match_il.len());
+    let mut patterns_total = PatternSets::with_capacity(typs_match_il.len());
     for typ_il in typs_match_il {
         patterns_total.push(pattern_set_covered_by_typ(ctx, typ_il)?);
     }

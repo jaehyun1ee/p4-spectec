@@ -156,11 +156,12 @@ fn encode_guard(guard: &Guard) -> Value {
 
 fn decode_iid(value: &Value) -> Result<ast::Iid, DecodeError> {
     let object = object(value)?;
-    integer(field(object, "iid")?)
+    let iid = integer(field(object, "iid")?)?;
+    Ok(ast::Iid::new(iid))
 }
 
 fn encode_iid(iid: &ast::Iid) -> Value {
-    json!({"iid": iid})
+    json!({"iid": iid.get()})
 }
 
 fn decode_instr(value: &Value) -> Result<ast::Instr, DecodeError> {

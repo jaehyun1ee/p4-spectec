@@ -54,7 +54,7 @@ fn group(name: &str) -> pl::ast::Instr<pl::ast::InstrDispatch> {
     });
     let mut instruction = pl::annot::Annotated {
         node: p4spec_rust::note_phrase! { node: kind, note: pl::ast::InstrNote {
-            iid: 0,
+            iid: pl::ast::Iid::new(0),
             fallthrough: None,
         }, span: span(name) },
         hints: pl::annot::Hints::default(),
@@ -68,7 +68,7 @@ fn control(
 ) -> pl::ast::Instr<pl::ast::InstrDispatch> {
     pl::annot::Annotated {
         node: p4spec_rust::note_phrase! { node: kind, note: pl::ast::InstrNote {
-            iid: 0,
+            iid: pl::ast::Iid::new(0),
             fallthrough: None,
         }, span: span("control") },
         hints: pl::annot::Hints::default(),

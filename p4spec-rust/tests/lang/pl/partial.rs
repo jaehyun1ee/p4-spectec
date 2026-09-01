@@ -45,7 +45,7 @@ fn group_instr(
 ) -> pl::ast::Instr<pl::ast::InstrGroup> {
     pl::annot::Annotated {
         node: p4spec_rust::note_phrase! { node: kind, note: pl::ast::InstrNote {
-            iid: 0,
+            iid: pl::ast::Iid::new(0),
             fallthrough: None,
         }, span: span("instruction") },
         hints: pl::annot::Hints::default(),
