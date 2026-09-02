@@ -65,7 +65,7 @@ use super::{
     dimension,
     iteration::{ICtx, Iteration},
     multiple, partial,
-    pattern::{self, PatternSet, PatternSets},
+    pattern::{self, PatternSet},
     shallow,
 };
 
@@ -719,23 +719,22 @@ fn pattern_set_covered_by_typ(ctx: &Context, typ: &ast::Typ) -> Result<PatternSe
             typ.span.clone(),
         ));
     };
-    Ok(cases
+    let pattern_set = cases
         .iter()
         .map(|(not_typ, _, _)| not_typ.clone())
-        .collect())
+        .collect();
+    Ok(pattern_set)
 }
 
 fn pattern_set_covered_by_exp(ctx: &Context, exp_al: &ast::Exp) -> Result<PatternSet, AlgoError> {
     match &exp_al.node {
-        ast::ExpKind::Var(_) => pattern_set_covered_by_typ(
-            ctx,
-            &phrase!(node: exp_al.note.clone(), span: exp_al.span.clone()),
-        ),
+        ast::ExpKind::Var(_) => {
+            let typ = phrase!(node: exp_al.note.clone(), span: exp_al.span.clone());
+            pattern_set_covered_by_typ(ctx, &typ)
+        }
         ast::ExpKind::UpCast(_, exp_inner) if matches!(exp_inner.node, ast::ExpKind::Var(_)) => {
-            pattern_set_covered_by_typ(
-                ctx,
-                &phrase!(node: exp_inner.note.clone(), span: exp_inner.span.clone()),
-            )
+            let typ = phrase!(node: exp_inner.note.clone(), span: exp_inner.span.clone());
+            pattern_set_covered_by_typ(ctx, &typ)
         }
         ast::ExpKind::UpCast(_, exp_inner) => {
             let ast::ExpKind::Case(not_exp) = &exp_inner.node else {
@@ -746,9 +745,9 @@ fn pattern_set_covered_by_exp(ctx: &Context, exp_al: &ast::Exp) -> Result<Patter
             };
             let not_typ =
                 not_exp.map(|exp| phrase!(node: exp.note.clone(), span: exp.span.clone()));
-            Ok([phrase!(node: not_typ, span: exp_inner.span.clone())]
-                .into_iter()
-                .collect())
+            let not_typ = phrase!(node: not_typ, span: exp_inner.span.clone());
+            let pattern_set = [not_typ].into_iter().collect();
+            Ok(pattern_set)
         }
         _ => Err(AlgoError::new(
             AlgoErrorKind::InvalidTablePattern,
@@ -764,36 +763,44 @@ fn check_valid_table_rows(
     rows_al: &[al::ast::TableRow],
 ) -> Result<(), AlgoError> {
     let has_closer =
-        rows_al.last().is_some_and(|row_al| {
+        if let Some(row_al) = rows_al.last() {
             row_al.node.exps_signature.iter().all(
                 |exp_al| matches!(&exp_al.node, ast::ExpKind::Var(id) if id.node.starts_with('_')),
             )
-        });
-    let pattern_rows = if has_closer {
+        } else {
+            false
+        };
+    let rows_pattern_al = if has_closer {
         &rows_al[..rows_al.len() - 1]
     } else {
         rows_al
     };
-    let mut pattern_group = Vec::with_capacity(pattern_rows.len());
-    for row_al in pattern_rows {
-        let mut patterns = PatternSets::with_capacity(row_al.node.exps_signature.len());
+    let mut pattern_sets_group = Vec::with_capacity(rows_pattern_al.len());
+    for row_al in rows_pattern_al {
+        let mut pattern_sets = Vec::with_capacity(row_al.node.exps_signature.len());
         for exp_al in &row_al.node.exps_signature {
-            patterns.push(pattern_set_covered_by_exp(ctx, exp_al)?);
+            let pattern_set = pattern_set_covered_by_exp(ctx, exp_al)?;
+            pattern_sets.push(pattern_set);
         }
-        pattern_group.push(patterns);
+        let pattern_sets = pattern_sets.into_iter().collect();
+        pattern_sets_group.push(pattern_sets);
     }
-    if pattern::find_overlap(span, &pattern_group)?.is_some() {
+    let pattern_sets_overlap = pattern::find_overlap(span, &pattern_sets_group)?;
+    if pattern_sets_overlap.is_some() {
         return Err(AlgoError::new(
             AlgoErrorKind::OverlappingTablePatterns,
             span.clone(),
         ));
     }
-    let mut patterns_total = PatternSets::with_capacity(typs_match_il.len());
+    let mut pattern_sets_total = Vec::with_capacity(typs_match_il.len());
     for typ_il in typs_match_il {
-        patterns_total.push(pattern_set_covered_by_typ(ctx, typ_il)?);
+        let pattern_set = pattern_set_covered_by_typ(ctx, typ_il)?;
+        pattern_sets_total.push(pattern_set);
     }
-    let missing = pattern::find_missing(span, &patterns_total, &pattern_group)?;
-    if !has_closer && !missing.is_empty() {
+    let pattern_sets_total = pattern_sets_total.into_iter().collect();
+    let pattern_sets_group_missing =
+        pattern::find_missing(span, &pattern_sets_total, &pattern_sets_group)?;
+    if !has_closer && !pattern_sets_group_missing.is_empty() {
         return Err(AlgoError::new(
             AlgoErrorKind::MissingTablePatterns,
             span.clone(),

@@ -171,7 +171,7 @@ fn test_exact_comparison_detects_different_object_keys() {
 }
 
 #[test]
-fn test_conversion_accepts_crossed_alias_table_rows_from_source() {
+fn test_conversion_rejects_overlapping_crossed_alias_table_rows() {
     let source = r#"
 syntax typeIR
 syntax typeId = text
@@ -191,5 +191,7 @@ tbl def $compat =
     let spec_el = parse_string(source).expect("parse crossed alias table");
     let spec_il = elaborate::elaborate(&spec_el).expect("elaborate crossed alias table");
 
-    algo::convert(&spec_il).expect("pinned conversion accepts source-distinct alias rows");
+    let error = algo::convert(&spec_il).expect_err("crossed alias rows overlap by syntax");
+
+    assert_eq!(error.kind, AlgoErrorKind::OverlappingTablePatterns);
 }

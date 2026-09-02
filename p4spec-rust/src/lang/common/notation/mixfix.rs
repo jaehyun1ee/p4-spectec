@@ -7,6 +7,7 @@ use std::{
 use crate::lang::{
     common::ds::set::IdSet,
     traits::{
+        cmp::SyntaxCmp,
         eq::SyntaxEq,
         free::Free,
         print::{Print, Printer},
@@ -151,6 +152,12 @@ impl<T: Eq> Eq for Mixfix<T> {}
 impl<T: SyntaxEq> SyntaxEq for Mixfix<T> {
     fn syntax_eq(&self, other: &Self) -> bool {
         self.eq_by(other, SyntaxEq::syntax_eq)
+    }
+}
+
+impl<T: SyntaxCmp> SyntaxCmp for Mixfix<T> {
+    fn syntax_cmp(&self, other: &Self) -> Ordering {
+        self.cmp_by(other, SyntaxCmp::syntax_cmp)
     }
 }
 

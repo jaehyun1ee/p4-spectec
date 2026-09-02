@@ -1,15 +1,12 @@
-//! Maps that compare source-annotated keys without their spans
+//! Maps that compare syntax keys without source or analysis metadata
 
 use std::collections::BTreeMap;
 
 use thiserror::Error;
 
-use crate::lang::common::{Id, source::Phrase};
+use crate::lang::{common::Id, traits::cmp::SyntaxCmp};
 
-use super::{
-    collections::{ByKey, CollectionKey},
-    set::PhraseSet,
-};
+use super::{collections::ByKey, set::PhraseSet};
 
 /// A mismatch between the lengths of key and value lists
 #[derive(Clone, Copy, Debug, Error, PartialEq, Eq)]
@@ -25,14 +22,14 @@ impl ArityMismatch {
     }
 }
 
-/// An ordered map that compares keys through `CollectionKey`
+/// An ordered map that compares keys through `SyntaxCmp`
 #[repr(transparent)]
 #[derive(Clone, Debug)]
-pub struct PhraseMap<K: CollectionKey, V> {
+pub struct PhraseMap<K: SyntaxCmp, V> {
     entries: BTreeMap<ByKey<K>, V>,
 }
 
-impl<K: CollectionKey, V> PhraseMap<K, V> {
+impl<K: SyntaxCmp, V> PhraseMap<K, V> {
     /// Constructs an empty map
     pub fn new() -> Self {
         Self {
@@ -104,49 +101,49 @@ impl<K: CollectionKey, V> PhraseMap<K, V> {
     }
 }
 
-impl<T: Ord, V> PhraseMap<Phrase<T>, V> {
+impl<V> PhraseMap<Id, V> {
     /// Returns the value for an equivalent key
-    pub fn get(&self, key: &Phrase<T>) -> Option<&V> {
+    pub fn get(&self, key: &Id) -> Option<&V> {
         self.entries.get(&key.node)
     }
 
     /// Returns the mutable value for an equivalent key
-    pub fn get_mut(&mut self, key: &Phrase<T>) -> Option<&mut V> {
+    pub fn get_mut(&mut self, key: &Id) -> Option<&mut V> {
         self.entries.get_mut(&key.node)
     }
 
     /// Returns whether an equivalent key is present
-    pub fn contains_key(&self, key: &Phrase<T>) -> bool {
+    pub fn contains_key(&self, key: &Id) -> bool {
         self.entries.contains_key(&key.node)
     }
 
     /// Removes and returns the value for an equivalent key
-    pub fn remove(&mut self, key: &Phrase<T>) -> Option<V> {
+    pub fn remove(&mut self, key: &Id) -> Option<V> {
         self.entries.remove(&key.node)
     }
 
     /// Removes and returns the stored key and value for an equivalent key
-    pub fn remove_entry(&mut self, key: &Phrase<T>) -> Option<(Phrase<T>, V)> {
+    pub fn remove_entry(&mut self, key: &Id) -> Option<(Id, V)> {
         self.entries
             .remove_entry(&key.node)
             .map(|(key, value)| (key.0, value))
     }
 }
 
-impl<K: CollectionKey, V> Default for PhraseMap<K, V> {
+impl<K: SyntaxCmp, V> Default for PhraseMap<K, V> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<K: CollectionKey, V> Extend<(K, V)> for PhraseMap<K, V> {
+impl<K: SyntaxCmp, V> Extend<(K, V)> for PhraseMap<K, V> {
     fn extend<T: IntoIterator<Item = (K, V)>>(&mut self, bindings: T) {
         self.entries
             .extend(bindings.into_iter().map(|(key, value)| (ByKey(key), value)));
     }
 }
 
-impl<K: CollectionKey, V> FromIterator<(K, V)> for PhraseMap<K, V> {
+impl<K: SyntaxCmp, V> FromIterator<(K, V)> for PhraseMap<K, V> {
     fn from_iter<T: IntoIterator<Item = (K, V)>>(bindings: T) -> Self {
         let mut map = Self::new();
         map.extend(bindings);
