@@ -79,12 +79,6 @@ fn input_error(error: input::InputError, span: Span) -> AlgoError {
 
 // - Environments
 
-fn add_venv(venv: &mut VEnv, additions: VEnv) {
-    for (id, dim) in additions.iter() {
-        venv.insert(id.clone(), dim.clone());
-    }
-}
-
 fn update_venv_multiple(venv: &mut VEnv, renv: &multiple::RenameEnv) {
     for (id, ids_rename) in renv.iter() {
         let dim = venv
@@ -94,6 +88,17 @@ fn update_venv_multiple(venv: &mut VEnv, renv: &multiple::RenameEnv) {
         for id_rename in ids_rename {
             venv.insert(id_rename.clone(), dim.clone());
         }
+    }
+}
+
+fn update_venv_partial(venv: &mut VEnv, renv: &partial::RenameEnv) {
+    for rename in &renv.renames {
+        let mut iters = rename.destination.iters.clone();
+        iters.extend(rename.iter_ctx.iters());
+        venv.insert(
+            rename.destination.id.clone(),
+            Dim::new(rename.destination.typ.clone(), iters),
+        );
     }
 }
 
@@ -114,15 +119,16 @@ fn analyze_exps_as_bind(
         multiple::generate_side_conditions(iter_ctx, &renv_multiple);
 
     let mut renv_partial = partial::RenameEnv::new();
-    let (_, exps_al) = partial::rename_exps(
+    let mut iter_ctx_exp = ICtx::new();
+    let exps_al = partial::rename_exps(
         ctx,
         &venv.domain(),
         &mut renv_partial,
-        ICtx::new(),
+        &mut iter_ctx_exp,
         &exps_al,
     )?;
-    add_venv(&mut venv, partial::destination_env(&renv_partial));
-    let mut prems_al = partial::generate_prems(ctx, iter_ctx, &renv_partial)?;
+    update_venv_partial(&mut venv, &renv_partial);
+    let mut prems_al = partial::gen_prems(ctx, iter_ctx, &renv_partial)?;
     prems_al.extend(prem_sideconditions_multiple_al);
     Ok((venv, exps_al, prems_al))
 }
@@ -162,15 +168,16 @@ fn analyze_args_as_bind(
         multiple::generate_side_conditions(&ICtx::new(), &renv_multiple);
 
     let mut renv_partial = partial::RenameEnv::new();
-    let (_, args_al) = partial::rename_args(
+    let mut iter_ctx_arg = ICtx::new();
+    let args_al = partial::rename_args(
         ctx,
         &venv.domain(),
         &mut renv_partial,
-        ICtx::new(),
+        &mut iter_ctx_arg,
         &args_al,
     )?;
-    add_venv(&mut venv, partial::destination_env(&renv_partial));
-    let mut prems_al = partial::generate_prems(ctx, &ICtx::new(), &renv_partial)?;
+    update_venv_partial(&mut venv, &renv_partial);
+    let mut prems_al = partial::gen_prems(ctx, &ICtx::new(), &renv_partial)?;
     prems_al.extend(prem_sideconditions_multiple_al);
     Ok((venv, args_al, prems_al))
 }
@@ -205,15 +212,16 @@ fn analyze_args_as_bind_shallow(
     }
 
     let mut renv_partial = partial::RenameEnv::new();
-    let (_, args_al) = partial::rename_args(
+    let mut iter_ctx_arg = ICtx::new();
+    let args_al = partial::rename_args(
         ctx,
         &venv.domain(),
         &mut renv_partial,
-        ICtx::new(),
+        &mut iter_ctx_arg,
         &args_al,
     )?;
-    add_venv(&mut venv, partial::destination_env(&renv_partial));
-    let prems_al = partial::generate_prems(ctx, &ICtx::new(), &renv_partial)?;
+    update_venv_partial(&mut venv, &renv_partial);
+    let prems_al = partial::gen_prems(ctx, &ICtx::new(), &renv_partial)?;
     Ok((venv, args_al, prems_al))
 }
 
@@ -440,15 +448,16 @@ fn analyze_let_prem(
         multiple::generate_side_conditions(&iter_ctx, &renv_multiple);
 
     let mut renv_partial = partial::RenameEnv::new();
-    let (_, exp_l_al) = partial::rename_exp(
+    let mut iter_ctx_exp = ICtx::new();
+    let exp_l_al = partial::rename_exp(
         ctx,
         &venv.domain(),
         &mut renv_partial,
-        ICtx::new(),
+        &mut iter_ctx_exp,
         &exp_l_al,
     )?;
-    add_venv(&mut venv, partial::destination_env(&renv_partial));
-    let mut prems_al = partial::generate_prems(ctx, &iter_ctx, &renv_partial)?;
+    update_venv_partial(&mut venv, &renv_partial);
+    let mut prems_al = partial::gen_prems(ctx, &iter_ctx, &renv_partial)?;
     prems_al.extend(prem_sideconditions_multiple_al);
 
     let prem_al = phrase! {

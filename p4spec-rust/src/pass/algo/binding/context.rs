@@ -33,17 +33,17 @@ enum Undo {
     AddBound(Id),
 }
 
-/// A checkpoint in the binding context that can be committed or rolled back
+/// A checkpoint in the binding context
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct Checkpoint {
     depth: usize,
     undo_len: usize,
 }
 
-/// A scope that rolls back its context changes unless committed
+/// A scope that rolls back its context changes when dropped
 pub struct Scope<'a> {
     ctx: &'a mut Context,
-    checkpoint: Option<Checkpoint>,
+    checkpoint: Checkpoint,
 }
 
 impl Deref for Scope<'_> {
@@ -60,19 +60,9 @@ impl DerefMut for Scope<'_> {
     }
 }
 
-impl Scope<'_> {
-    /// Keeps the changes made through this scope
-    pub fn commit(mut self) {
-        let checkpoint = self.checkpoint.take().expect("open binding scope");
-        self.ctx.commit(checkpoint);
-    }
-}
-
 impl Drop for Scope<'_> {
     fn drop(&mut self) {
-        if let Some(checkpoint) = self.checkpoint.take() {
-            self.ctx.rollback_scope(checkpoint);
-        }
+        self.ctx.rollback_scope(self.checkpoint);
     }
 }
 
@@ -116,14 +106,6 @@ impl Context {
         checkpoint
     }
 
-    fn commit(&mut self, checkpoint: Checkpoint) {
-        self.assert_checkpoint(checkpoint);
-        self.checkpoints.pop();
-        if self.checkpoints.is_empty() {
-            self.undo.clear();
-        }
-    }
-
     fn rollback(&mut self, checkpoint: Checkpoint) {
         self.assert_checkpoint(checkpoint);
         self.checkpoints.pop();
@@ -150,7 +132,7 @@ impl Context {
         let checkpoint = self.checkpoint();
         Scope {
             ctx: self,
-            checkpoint: Some(checkpoint),
+            checkpoint,
         }
     }
 

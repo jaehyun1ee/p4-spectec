@@ -1,4 +1,15 @@
-//! Rewriting of repeated binding occurrences
+//! Rewriting of repeated binding occurrences:
+//!
+//! The leftmost occurrence keeps its identifier. Each later occurrence is
+//! renamed, and a side condition requires every renamed occurrence to equal the
+//! leftmost one.
+//!
+//! -- let (int, int, int) = ...
+//!
+//! becomes
+//!
+//! -- let (int, int', int'') = ...,
+//! -- if int = int' && int = int''
 
 use crate::{
     lang::{
@@ -21,8 +32,10 @@ use super::{
     iteration::{ICtx, Iteration},
 };
 
+// == Rename environment
+
 /// Ordered renamed occurrences for each repeated source identifier
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct RenameEnv {
     renames: IdMap<Vec<Id>>,
     dimensions: IdMap<Dim>,
@@ -61,6 +74,8 @@ impl RenameEnv {
         self.dimensions.get(id)
     }
 }
+
+// == Binding renaming
 
 fn fresh_id(ids: &IdSet, id: &Id) -> Id {
     let base = xl::var::strip_var_suffix(id).node;
@@ -169,17 +184,19 @@ pub fn rename_args(ctx: &mut Context, renv: &mut RenameEnv, args: &[ast::Arg]) -
     args.iter().map(|arg| rename_arg(ctx, renv, arg)).collect()
 }
 
-fn variable_exp(id: &Id, typ: &ast::Typ, span: &crate::lang::common::source::Span) -> ast::Exp {
-    note_phrase! {
+// == Side-condition generation
+
+fn gen_exp_equality(id: &Id, id_rename: &Id, typ: &ast::Typ) -> ast::Exp {
+    let exp_l = note_phrase! {
         node: ast::ExpKind::Var(id.clone()),
         note: typ.node.clone(),
-        span: span.clone(),
-    }
-}
-
-fn equality_exp(id: &Id, id_rename: &Id, typ: &ast::Typ) -> ast::Exp {
-    let exp_l = variable_exp(id, typ, &id.span);
-    let exp_r = variable_exp(id_rename, typ, &id.span);
+        span: id.span.clone(),
+    };
+    let exp_r = note_phrase! {
+        node: ast::ExpKind::Var(id_rename.clone()),
+        note: typ.node.clone(),
+        span: id.span.clone(),
+    };
     note_phrase! {
         node: ast::ExpKind::Cmp(
             ast::CmpOp::Bool(xl::bool::CmpOp::Eq),
@@ -194,7 +211,7 @@ fn equality_exp(id: &Id, id_rename: &Id, typ: &ast::Typ) -> ast::Exp {
 
 fn generate_side_condition(
     dim: &Dim,
-    iterctx: &ICtx,
+    iter_ctx: &ICtx,
     id: &Id,
     ids_rename: &[Id],
 ) -> Option<al::ast::Prem> {
@@ -202,9 +219,9 @@ fn generate_side_condition(
     let id_rename = ids_repeated.next()?;
     let mut id_condition = id.clone();
     id_condition.span = ids_rename.last()?.span.clone();
-    let mut exp = equality_exp(&id_condition, id_rename, &dim.typ);
+    let mut exp = gen_exp_equality(&id_condition, id_rename, &dim.typ);
     for id_rename in ids_repeated {
-        let exp_r = equality_exp(&id_condition, id_rename, &dim.typ);
+        let exp_r = gen_exp_equality(&id_condition, id_rename, &dim.typ);
         exp = note_phrase! {
             node: ast::ExpKind::Bin(
                 ast::BinOp::Bool(xl::bool::BinOp::And),
@@ -222,7 +239,7 @@ fn generate_side_condition(
     };
 
     let mut iterations = dim.iters.clone();
-    iterations.extend(iterctx.iters());
+    iterations.extend(iter_ctx.iters());
     let mut side_iterctx = ICtx::from_iterations(
         iterations
             .into_iter()
@@ -241,11 +258,11 @@ fn generate_side_condition(
     Some(side_iterctx.iterate_prem(prem))
 }
 
-pub fn generate_side_conditions(iterctx: &ICtx, renv: &RenameEnv) -> Vec<al::ast::Prem> {
+pub fn generate_side_conditions(iter_ctx: &ICtx, renv: &RenameEnv) -> Vec<al::ast::Prem> {
     renv.iter()
         .filter_map(|(id, ids_rename)| {
             let dim = renv.dimension(id)?;
-            generate_side_condition(dim, iterctx, id, ids_rename)
+            generate_side_condition(dim, iter_ctx, id, ids_rename)
         })
         .collect()
 }

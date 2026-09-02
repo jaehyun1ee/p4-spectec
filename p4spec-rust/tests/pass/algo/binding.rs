@@ -10,6 +10,8 @@ mod collect;
 mod context;
 #[path = "binding/dimension.rs"]
 mod dimension;
+#[path = "binding/iteration.rs"]
+mod iteration;
 #[path = "binding/multiple.rs"]
 mod multiple;
 #[path = "binding/partial.rs"]
