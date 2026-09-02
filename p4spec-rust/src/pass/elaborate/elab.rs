@@ -1,5 +1,7 @@
 //! Elaboration-language validation and conversion to intermediate syntax
 
+use std::borrow::Cow;
+
 use crate::{
     lang::{
         common::{
@@ -78,47 +80,80 @@ fn destruct_error(shape: TypeShape, span: Span) -> ElabError {
 
 fn as_text_typ(ctx: &Context, typ_il: &il::Typ) -> Attempt<()> {
     let typ_il = expand_typ(&ctx.tdenv, typ_il)?;
-    match typ_il.node {
+    match &typ_il.node {
         il::TypKind::Text => Ok(()),
-        _ => fail(destruct_error(TypeShape::Text, typ_il.span)),
+        _ => fail(destruct_error(TypeShape::Text, typ_il.span.clone())),
     }
 }
 
 fn as_iter_typ(ctx: &Context, typ_il: &il::Typ) -> Attempt<(il::Typ, il::Iter)> {
     let typ_il = expand_typ(&ctx.tdenv, typ_il)?;
-    match typ_il.node {
-        il::TypKind::Iter(typ_il, iter_il) => Ok((*typ_il, iter_il)),
-        _ => fail(destruct_error(TypeShape::Iteration, typ_il.span)),
+    match typ_il {
+        Cow::Borrowed(typ_il) => {
+            let il::TypKind::Iter(typ_inner_il, iter_il) = &typ_il.node else {
+                return fail(destruct_error(TypeShape::Iteration, typ_il.span.clone()));
+            };
+            Ok(((**typ_inner_il).clone(), *iter_il))
+        }
+        Cow::Owned(typ_il) => {
+            let span = typ_il.span;
+            let il::TypKind::Iter(typ_inner_il, iter_il) = typ_il.node else {
+                return fail(destruct_error(TypeShape::Iteration, span));
+            };
+            Ok((*typ_inner_il, iter_il))
+        }
     }
 }
 
 fn as_tuple_typ(ctx: &Context, typ_il: &il::Typ) -> Attempt<Vec<il::Typ>> {
     let typ_il = expand_typ(&ctx.tdenv, typ_il)?;
-    match typ_il.node {
-        il::TypKind::Tuple(typs_il) => Ok(typs_il),
-        _ => fail(destruct_error(TypeShape::Tuple, typ_il.span)),
+    match typ_il {
+        Cow::Borrowed(typ_il) => {
+            let il::TypKind::Tuple(typs_il) = &typ_il.node else {
+                return fail(destruct_error(TypeShape::Tuple, typ_il.span.clone()));
+            };
+            Ok(typs_il.clone())
+        }
+        Cow::Owned(typ_il) => {
+            let span = typ_il.span;
+            let il::TypKind::Tuple(typs_il) = typ_il.node else {
+                return fail(destruct_error(TypeShape::Tuple, span));
+            };
+            Ok(typs_il)
+        }
     }
 }
 
 fn as_list_typ(ctx: &Context, typ_il: &il::Typ) -> Attempt<il::Typ> {
     let typ_il = expand_typ(&ctx.tdenv, typ_il)?;
-    match typ_il.node {
-        il::TypKind::Iter(typ_il, il::Iter::List) => Ok(*typ_il),
-        _ => fail(destruct_error(TypeShape::List, typ_il.span)),
+    match typ_il {
+        Cow::Borrowed(typ_il) => {
+            let il::TypKind::Iter(typ_inner_il, il::Iter::List) = &typ_il.node else {
+                return fail(destruct_error(TypeShape::List, typ_il.span.clone()));
+            };
+            Ok((**typ_inner_il).clone())
+        }
+        Cow::Owned(typ_il) => {
+            let span = typ_il.span;
+            let il::TypKind::Iter(typ_inner_il, il::Iter::List) = typ_il.node else {
+                return fail(destruct_error(TypeShape::List, span));
+            };
+            Ok(*typ_inner_il)
+        }
     }
 }
 
 fn as_struct_typ(ctx: &Context, typ_il: &il::Typ) -> Attempt<Vec<il::TypField>> {
     let typ_il = expand_typ(&ctx.tdenv, typ_il)?;
     let il::TypKind::Var(id, _) = &typ_il.node else {
-        return fail(destruct_error(TypeShape::Struct, typ_il.span));
+        return fail(destruct_error(TypeShape::Struct, typ_il.span.clone()));
     };
     let Some(TypeDef::Defined(_, def_typ_il)) = ctx.find_typdef_opt(id) else {
-        return fail(destruct_error(TypeShape::Struct, typ_il.span));
+        return fail(destruct_error(TypeShape::Struct, typ_il.span.clone()));
     };
     match &def_typ_il.node {
         il::DefTypKind::Struct(typ_fields_il) => Ok(typ_fields_il.clone()),
-        _ => fail(destruct_error(TypeShape::Struct, typ_il.span)),
+        _ => fail(destruct_error(TypeShape::Struct, typ_il.span.clone())),
     }
 }
 
@@ -218,21 +253,21 @@ fn elab_typ_case_plain(ctx: &Context, typ_il: &il::Typ) -> Result<Vec<il::TypCas
     let il::TypKind::Var(id, targs_il) = &typ_il.node else {
         return Err(ElabError::new(
             ElabErrorKind::InvalidTypeExtension,
-            typ_il.span,
+            typ_il.span.clone(),
             "cannot extend a non-variant type",
         ));
     };
     match ctx.find_typdef(id)? {
         TypeDef::Defining(_) => Err(ElabError::new(
             ElabErrorKind::InvalidTypeExtension,
-            typ_il.span,
+            typ_il.span.clone(),
             "cannot extend an incomplete type",
         )),
         TypeDef::Defined(tparams, def_typ_il) => {
             let il::DefTypKind::Variant(typ_cases_il) = &def_typ_il.node else {
                 return Err(ElabError::new(
                     ElabErrorKind::InvalidTypeExtension,
-                    typ_il.span,
+                    typ_il.span.clone(),
                     "cannot extend a non-variant type",
                 ));
             };
@@ -255,7 +290,7 @@ fn elab_typ_case_plain(ctx: &Context, typ_il: &il::Typ) -> Result<Vec<il::TypCas
         }
         TypeDef::Parameter | TypeDef::Extern => Err(ElabError::new(
             ElabErrorKind::InvalidTypeExtension,
-            typ_il.span,
+            typ_il.span.clone(),
             "cannot extend a non-variant type",
         )),
     }

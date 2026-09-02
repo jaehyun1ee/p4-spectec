@@ -115,8 +115,8 @@ fn rust_results() -> Value {
         ),
     );
 
-    let expanded = expand_typ(&tdenv, &var("Pair", vec![bool_type.clone()]))
-        .expect("expand comparison fixture");
+    let typ_alias = var("Pair", vec![bool_type.clone()]);
+    let expanded = expand_typ(&tdenv, &typ_alias).expect("expand comparison fixture");
     let func_typ_l = func_typ(vec![id("T")], vec![var("T", vec![])], var("T", vec![]));
     let func_typ_r = func_typ(vec![id("U")], vec![var("U", vec![])], var("U", vec![]));
     let function_equivalent = equiv_func_typ(&tdenv, &Span::default(), &func_typ_l, &func_typ_r)
@@ -130,7 +130,7 @@ fn rust_results() -> Value {
 
     json!({
         "substitution": Print::to_string(&substituted),
-        "expansion": Print::to_string(&expanded),
+        "expansion": Print::to_string(expanded.as_ref()),
         "function_equivalent": function_equivalent,
         "variant_subtype": sub_typ(
             &tdenv,
