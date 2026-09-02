@@ -223,7 +223,7 @@ fn generate_bind_sub(
 ) -> Result<Vec<al::ast::Prem>, AlgoError> {
     let exp_to = var::as_exp(true, destination);
     let typ_source = phrase!(node: exp_to.note.clone(), span: exp_to.span.clone());
-    let subcheck = optimize_sub_typ(ctx.tdenv(), &typ_source, typ_sub)?;
+    let subcheck = optimize_sub_typ(&ctx.tdenv, &typ_source, typ_sub)?;
     let exp_subcheck = bool_exp(
         ast::ExpKind::Sub(
             Box::new(exp_to.clone()),
@@ -325,7 +325,7 @@ pub fn destination_env(renv: &RenameEnv) -> VEnv {
 
 fn var_from_exp(ctx: &mut Context, exp: &ast::Exp) -> ast::Var {
     let typ = phrase!(node: exp.note.clone(), span: exp.span.clone());
-    let destination = fresh::var_from_typ(ctx.menv(), ctx.frees(), exp.span.clone(), &typ);
+    let destination = fresh::var_from_typ(&ctx.menv, &ctx.frees, exp.span.clone(), &typ);
     ctx.add_free(destination.id.clone());
     destination
 }

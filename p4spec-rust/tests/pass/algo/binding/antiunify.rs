@@ -33,8 +33,8 @@ fn test_antiunification_populates_each_path_in_left_to_right_expression_order() 
         })
         .collect::<Vec<_>>();
     assert_ne!(template_ids[0].node, template_ids[1].node);
-    assert!(context.frees().contains(template_ids[0]));
-    assert!(context.frees().contains(template_ids[1]));
+    assert!(context.frees.contains(template_ids[0]));
+    assert!(context.frees.contains(template_ids[1]));
     assert!(matches!(&template[1].node, ast::ExpKind::Var(id) if id.node == "shared"));
 
     let compared_values = |prems: &[ast::Prem]| {
@@ -92,7 +92,7 @@ fn test_antiunification_uses_runtime_equivalence_for_plain_type_aliases() {
     let alias_typ =
         crate::phrase! { node: ast::TypKind::Var(alias_id.clone(), vec![]), span:  span(1) };
     let mut context = Context::new();
-    context.tdenv_mut().insert(
+    context.tdenv.insert(
         alias_id,
         TypeDef::Defined(
             vec![],

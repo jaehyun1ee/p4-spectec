@@ -417,9 +417,9 @@ pub fn antiunify(
     ctx: &mut Context,
     exps_group: Vec<Vec<ast::Exp>>,
 ) -> Result<(Vec<ast::Exp>, Vec<Vec<ast::Prem>>), AlgoError> {
-    let mut ids_free = ctx.frees().clone();
+    let mut ids_free = ctx.frees.clone();
     let (ids_unifier, exps_template) =
-        overlap_exps_group(ctx.tdenv(), ctx.menv(), &mut ids_free, &exps_group)?;
+        overlap_exps_group(&ctx.tdenv, &ctx.menv, &mut ids_free, &exps_group)?;
     let prems_group = populate_exps_group(&ids_unifier, &exps_template, &exps_group);
     ctx.add_frees(ids_unifier.as_ids());
     Ok((exps_template, prems_group))

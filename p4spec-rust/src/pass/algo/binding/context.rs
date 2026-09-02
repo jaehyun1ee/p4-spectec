@@ -19,10 +19,10 @@ use super::super::{AlgoError, AlgoErrorKind};
 /// Environments and fresh state threaded through binding analysis
 #[derive(Debug)]
 pub struct Context {
-    frees: IdSet,
-    venv: VEnv,
-    tdenv: TDEnv,
-    menv: MEnv,
+    pub(crate) frees: IdSet,
+    pub(crate) venv: VEnv,
+    pub(crate) tdenv: TDEnv,
+    pub(crate) menv: MEnv,
     undo: Vec<Undo>,
     checkpoints: Vec<usize>,
 }
@@ -154,29 +154,6 @@ impl Context {
         }
     }
 
-    // == Getters
-
-    pub fn frees(&self) -> &IdSet {
-        &self.frees
-    }
-
-    pub fn venv(&self) -> &VEnv {
-        &self.venv
-    }
-
-    pub fn tdenv(&self) -> &TDEnv {
-        &self.tdenv
-    }
-
-    #[cfg(test)]
-    pub fn tdenv_mut(&mut self) -> &mut TDEnv {
-        &mut self.tdenv
-    }
-
-    pub fn menv(&self) -> &MEnv {
-        &self.menv
-    }
-
     // == Adders
 
     pub fn add_free(&mut self, id: Id) {
@@ -191,7 +168,6 @@ impl Context {
         }
     }
 
-    /// Adds bounds without replacing bindings already present in this context
     pub fn add_bounds(&mut self, venv: &VEnv) {
         for (id, dim) in venv.iter() {
             if !self.venv.contains_key(id) {
@@ -237,11 +213,5 @@ impl Context {
         for def in spec {
             self.load_def(def);
         }
-    }
-}
-
-impl Default for Context {
-    fn default() -> Self {
-        Self::new()
     }
 }

@@ -83,7 +83,7 @@ fn rename_var(ctx: &mut Context, renv: &mut RenameEnv, exp: &ast::Exp, id: &Id) 
     let id_rename = if ids_rename.is_empty() {
         id.clone()
     } else {
-        fresh_id(ctx.frees(), id)
+        fresh_id(&ctx.frees, id)
     };
     ctx.add_free(id_rename.clone());
     ids_rename.push(id_rename.clone());

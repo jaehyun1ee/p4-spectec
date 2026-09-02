@@ -42,7 +42,7 @@ pub fn collect_exp(ctx: &Context, exp: &ast::Exp) -> Result<BEnv, AlgoError> {
             Ok(benv)
         }
         ast::ExpKind::Var(id) => {
-            if ctx.venv().contains_key(id) {
+            if ctx.venv.contains_key(id) {
                 let benv = BEnv::new();
                 Ok(benv)
             } else {
