@@ -123,7 +123,7 @@ fn overlap_exp(
             }
         }
         (ast::ExpKind::Case(not_exp_template), ast::ExpKind::Case(not_exp))
-            if not_exp_template.to_mixop().syntax_eq(&not_exp.to_mixop()) =>
+            if not_exp_template.same_shape(not_exp) =>
         {
             let mixop = not_exp_template.to_mixop();
             let exps_template = not_exp_template
@@ -368,7 +368,7 @@ fn populate_exp(
             populate_exps(ids_unifier, exps_template, exps)
         }
         (ast::ExpKind::Case(not_exp_template), ast::ExpKind::Case(not_exp))
-            if not_exp_template.to_mixop().syntax_eq(&not_exp.to_mixop()) =>
+            if not_exp_template.same_shape(not_exp) =>
         {
             let exps_template = not_exp_template
                 .args()

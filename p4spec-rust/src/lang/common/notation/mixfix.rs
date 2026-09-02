@@ -105,6 +105,11 @@ impl<T> Mixfix<T> {
         self.eq_by_inner(mixfix_other, &mut eq_arg)
     }
 
+    /// Tests whether two mixfixes have the same atoms and argument positions
+    pub fn same_shape<U>(&self, mixfix_other: &Mixfix<U>) -> bool {
+        self.eq_by(mixfix_other, |_, _| true)
+    }
+
     fn eq_by_inner<U>(
         &self,
         mixfix_other: &Mixfix<U>,

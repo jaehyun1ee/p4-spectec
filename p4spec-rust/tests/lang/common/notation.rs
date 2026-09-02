@@ -31,3 +31,28 @@ fn test_into_split_preserves_nested_shape_and_argument_order() {
     assert_eq!(mixop.arity(), args.len());
     assert!(matches!(mixop, Mixfix::Seq(_)));
 }
+
+#[test]
+fn test_same_shape_borrows_nested_mixfixes_and_ignores_arguments() {
+    let left = Mixfix::Infix(
+        Box::new(Mixfix::Arg(1)),
+        atom(Atom::Arrow),
+        Box::new(Mixfix::Brack(
+            atom(Atom::LParen),
+            Box::new(Mixfix::Arg(2)),
+            atom(Atom::RParen),
+        )),
+    );
+    let right = Mixfix::Infix(
+        Box::new(Mixfix::Arg("left")),
+        atom(Atom::Arrow),
+        Box::new(Mixfix::Brack(
+            atom(Atom::LParen),
+            Box::new(Mixfix::Arg("right")),
+            atom(Atom::RParen),
+        )),
+    );
+
+    assert!(left.same_shape(&right));
+    assert!(!left.same_shape(&Mixfix::Seq(vec![Mixfix::Arg("left")])));
+}
