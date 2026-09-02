@@ -20,25 +20,9 @@ pub struct Iteration {
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct IterationContext {
-    iterations: Vec<Iteration>,
-}
+pub struct ICtx(Vec<Iteration>);
 
-fn var(id: &Id, dim: &Dim) -> ast::Var {
-    ast::Var {
-        id: id.clone(),
-        typ: dim.typ.clone(),
-        iters: dim.iters.clone(),
-    }
-}
-
-fn add_iter(venv: VEnv, iter: ast::Iter) -> VEnv {
-    venv.iter()
-        .map(|(id, dim)| (id.clone(), dim.clone().add_iter(iter)))
-        .collect()
-}
-
-impl IterationContext {
+impl ICtx {
     // Constructors
 
     pub fn new() -> Self {
@@ -46,25 +30,35 @@ impl IterationContext {
     }
 
     pub fn from_iterations(iterations: Vec<Iteration>) -> Self {
-        Self { iterations }
+        Self(iterations)
     }
 
     pub fn as_slice(&self) -> &[Iteration] {
-        &self.iterations
+        &self.0
     }
 
     pub fn iters(&self) -> Vec<ast::Iter> {
-        self.iterations.iter().map(|entry| entry.iter).collect()
+        self.0.iter().map(|entry| entry.iter).collect()
     }
 
     // Adders
 
+    fn add_iter(venv: VEnv, iter: ast::Iter) -> VEnv {
+        venv.iter()
+            .map(|(id, dim)| (id.clone(), dim.clone().add_iter(iter)))
+            .collect()
+    }
+
     pub fn add_vars_bound(&mut self, mut venv: VEnv) {
-        for entry in &mut self.iterations {
+        for entry in &mut self.0 {
             entry
                 .vars_bound
-                .extend(venv.iter().map(|(id, dim)| var(id, dim)));
-            venv = add_iter(venv, entry.iter);
+                .extend(venv.iter().map(|(id, dim)| ast::Var {
+                    id: id.clone(),
+                    typ: dim.typ.clone(),
+                    iters: dim.iters.clone(),
+                }));
+            venv = Self::add_iter(venv, entry.iter);
         }
     }
 
@@ -75,18 +69,22 @@ impl IterationContext {
     }
 
     pub fn add_vars_bind(&mut self, mut venv: VEnv) {
-        for entry in &mut self.iterations {
+        for entry in &mut self.0 {
             entry
                 .vars_bind
-                .extend(venv.iter().map(|(id, dim)| var(id, dim)));
-            venv = add_iter(venv, entry.iter);
+                .extend(venv.iter().map(|(id, dim)| ast::Var {
+                    id: id.clone(),
+                    typ: dim.typ.clone(),
+                    iters: dim.iters.clone(),
+                }));
+            venv = Self::add_iter(venv, entry.iter);
         }
     }
 
     // Filtering
 
     pub fn filter_bound(&mut self, mut predicate: impl FnMut(&ast::Var) -> bool) {
-        for entry in &mut self.iterations {
+        for entry in &mut self.0 {
             entry.vars_bound.retain(&mut predicate);
         }
     }
@@ -94,7 +92,7 @@ impl IterationContext {
     // Validation
 
     pub fn validate(&self, span: Span) -> Result<(), AlgoError> {
-        for entry in &self.iterations {
+        for entry in &self.0 {
             if entry.vars_bound.is_empty() {
                 let kind = if entry.vars_bind.is_empty() {
                     AlgoErrorKind::EmptyIteration
@@ -110,7 +108,7 @@ impl IterationContext {
     // Iterated premises
 
     pub fn iterate_prem(&self, mut prem: al::ast::Prem) -> al::ast::Prem {
-        for entry in &self.iterations {
+        for entry in &self.0 {
             let span = prem.span.clone();
             let iter_prem = al::ast::IterPrem {
                 iter: entry.iter,

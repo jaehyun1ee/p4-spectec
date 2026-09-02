@@ -23,7 +23,7 @@ use super::{
     super::{AlgoError, AlgoErrorKind},
     context::Context,
     dimension,
-    iteration::{Iteration, IterationContext},
+    iteration::{ICtx, Iteration},
 };
 
 #[derive(Clone, Debug)]
@@ -47,7 +47,7 @@ pub enum Source {
 pub struct Rename {
     pub destination: ast::Var,
     pub source: Source,
-    pub iterctx: IterationContext,
+    pub iterctx: ICtx,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -101,8 +101,8 @@ fn is_singleton_case(ctx: &Context, typ: &ast::Typ) -> Result<bool, AlgoError> {
 
 // Generate premises
 
-fn empty_iterctx(iterctx: &IterationContext) -> IterationContext {
-    IterationContext::from_iterations(
+fn empty_iterctx(iterctx: &ICtx) -> ICtx {
+    ICtx::from_iterations(
         iterctx
             .as_slice()
             .iter()
@@ -127,7 +127,7 @@ fn generate_bound(
     ctx: &Context,
     destination: &ast::Var,
     exp_from: &ast::Exp,
-    iterctx: &IterationContext,
+    iterctx: &ICtx,
 ) -> Result<Vec<al::ast::Prem>, AlgoError> {
     let exp_l = var::as_exp(true, destination);
     let kind = match &exp_from.node {
@@ -178,7 +178,7 @@ fn generate_bind_match(
     destination: &ast::Var,
     pattern: &ast::Pattern,
     exp_from: &ast::Exp,
-    iterctx: &IterationContext,
+    iterctx: &ICtx,
 ) -> Vec<al::ast::Prem> {
     let exp_to = var::as_exp(true, destination);
     let exp_match = bool_exp(
@@ -219,7 +219,7 @@ fn generate_bind_sub(
     typ_sub: &ast::Typ,
     exp_sub: &ast::Exp,
     exp_from: &ast::Exp,
-    iterctx: &IterationContext,
+    iterctx: &ICtx,
 ) -> Result<Vec<al::ast::Prem>, AlgoError> {
     let exp_to = var::as_exp(true, destination);
     let typ_source = phrase!(node: exp_to.note.clone(), span: exp_to.span.clone());
@@ -268,11 +268,11 @@ fn generate_bind_sub(
 fn generate_prem(
     ctx: &Context,
     rename: &Rename,
-    iterctx_prem: &IterationContext,
+    iterctx_prem: &ICtx,
 ) -> Result<Vec<al::ast::Prem>, AlgoError> {
     let mut iterations = rename.iterctx.as_slice().to_vec();
     iterations.extend(iterctx_prem.as_slice().iter().cloned());
-    let iterctx = IterationContext::from_iterations(iterations);
+    let iterctx = ICtx::from_iterations(iterations);
     match &rename.source {
         Source::Bound { exp_from } => generate_bound(ctx, &rename.destination, exp_from, &iterctx),
         Source::BindMatch { pattern, exp_from } => Ok(generate_bind_match(
@@ -298,7 +298,7 @@ fn generate_prem(
 
 pub fn generate_prems(
     ctx: &Context,
-    iterctx_prem: &IterationContext,
+    iterctx_prem: &ICtx,
     renv: &RenameEnv,
 ) -> Result<Vec<al::ast::Prem>, AlgoError> {
     let mut prems = Vec::new();
@@ -330,7 +330,7 @@ fn var_from_exp(ctx: &mut Context, exp: &ast::Exp) -> ast::Var {
     destination
 }
 
-fn add_destination(iterctx: &mut IterationContext, destination: &ast::Var, exp_from: &ast::Exp) {
+fn add_destination(iterctx: &mut ICtx, destination: &ast::Var, exp_from: &ast::Exp) {
     let bounds = exp_from.free();
     iterctx.filter_bound(|var| !bounds.contains(&var.id));
     iterctx.add_var_bound(
@@ -343,9 +343,9 @@ fn add_destination(iterctx: &mut IterationContext, destination: &ast::Var, exp_f
 fn rename_bound(
     ctx: &mut Context,
     renv: &mut RenameEnv,
-    mut iterctx: IterationContext,
+    mut iterctx: ICtx,
     exp: &ast::Exp,
-) -> (IterationContext, ast::Exp) {
+) -> (ICtx, ast::Exp) {
     let destination = var_from_exp(ctx, exp);
     renv.add_front(Rename {
         destination: destination.clone(),
@@ -362,10 +362,10 @@ fn rename_bound(
 fn rename_bind_match(
     ctx: &mut Context,
     renv: &mut RenameEnv,
-    mut iterctx: IterationContext,
+    mut iterctx: ICtx,
     pattern: ast::Pattern,
     exp_from: ast::Exp,
-) -> (IterationContext, ast::Exp) {
+) -> (ICtx, ast::Exp) {
     let destination = var_from_exp(ctx, &exp_from);
     renv.add_front(Rename {
         destination: destination.clone(),
@@ -383,11 +383,11 @@ fn rename_bind_match(
 fn rename_bind_sub(
     ctx: &mut Context,
     renv: &mut RenameEnv,
-    mut iterctx: IterationContext,
+    mut iterctx: ICtx,
     typ_sub: ast::Typ,
     exp_sub: ast::Exp,
     exp_from: ast::Exp,
-) -> (IterationContext, ast::Exp) {
+) -> (ICtx, ast::Exp) {
     let destination = var_from_exp(ctx, &exp_from);
     renv.add_front(Rename {
         destination: destination.clone(),
@@ -420,9 +420,9 @@ pub fn rename_exp(
     ctx: &mut Context,
     binds: &IdSet,
     renv: &mut RenameEnv,
-    iterctx: IterationContext,
+    iterctx: ICtx,
     exp: &ast::Exp,
-) -> Result<(IterationContext, ast::Exp), AlgoError> {
+) -> Result<(ICtx, ast::Exp), AlgoError> {
     let mut scope = ctx.scope();
     let mut renv_next = renv.clone();
     let result = rename_exp_in_place(&mut scope, binds, &mut renv_next, iterctx, exp)?;
@@ -435,9 +435,9 @@ fn rename_exp_in_place(
     ctx: &mut Context,
     binds: &IdSet,
     renv: &mut RenameEnv,
-    iterctx: IterationContext,
+    iterctx: ICtx,
     exp: &ast::Exp,
-) -> Result<(IterationContext, ast::Exp), AlgoError> {
+) -> Result<(ICtx, ast::Exp), AlgoError> {
     if !has_binding(binds, exp) && !is_upcast_terminal(exp) {
         return Ok(rename_bound(ctx, renv, iterctx, exp));
     }
@@ -448,9 +448,9 @@ fn rename_binding_exp(
     ctx: &mut Context,
     binds: &IdSet,
     renv: &mut RenameEnv,
-    iterctx: IterationContext,
+    iterctx: ICtx,
     exp: &ast::Exp,
-) -> Result<(IterationContext, ast::Exp), AlgoError> {
+) -> Result<(ICtx, ast::Exp), AlgoError> {
     let span = exp.span.clone();
     let note = exp.note.clone();
     match &exp.node {
@@ -570,7 +570,7 @@ fn rename_binding_exp(
                 vars_bind: vec![],
             }];
             iterations.extend(iterctx.as_slice().iter().cloned());
-            let iterctx = IterationContext::from_iterations(iterations);
+            let iterctx = ICtx::from_iterations(iterations);
             let (iterctx, exp_inner) = rename_exp_in_place(ctx, binds, renv, iterctx, exp_inner)?;
             let Some(iteration) = iterctx.as_slice().first() else {
                 return Err(AlgoError::new(AlgoErrorKind::EmptyIteration, span));
@@ -583,7 +583,7 @@ fn rename_binding_exp(
                 note: note,
                 span: span,
             };
-            let iterctx = IterationContext::from_iterations(iterctx.as_slice()[1..].to_vec());
+            let iterctx = ICtx::from_iterations(iterctx.as_slice()[1..].to_vec());
             Ok((iterctx, exp))
         }
         _ => Ok((iterctx, exp.clone())),
@@ -594,9 +594,9 @@ pub fn rename_exps(
     ctx: &mut Context,
     binds: &IdSet,
     renv: &mut RenameEnv,
-    iterctx: IterationContext,
+    iterctx: ICtx,
     exps: &[ast::Exp],
-) -> Result<(IterationContext, Vec<ast::Exp>), AlgoError> {
+) -> Result<(ICtx, Vec<ast::Exp>), AlgoError> {
     let mut scope = ctx.scope();
     let mut renv_next = renv.clone();
     let result = rename_exps_in_place(&mut scope, binds, &mut renv_next, iterctx, exps)?;
@@ -609,9 +609,9 @@ fn rename_exps_in_place(
     ctx: &mut Context,
     binds: &IdSet,
     renv: &mut RenameEnv,
-    mut iterctx: IterationContext,
+    mut iterctx: ICtx,
     exps: &[ast::Exp],
-) -> Result<(IterationContext, Vec<ast::Exp>), AlgoError> {
+) -> Result<(ICtx, Vec<ast::Exp>), AlgoError> {
     let mut exps_renamed = Vec::with_capacity(exps.len());
     for exp in exps {
         let depth = iterctx.as_slice().len();
@@ -619,7 +619,7 @@ fn rename_exps_in_place(
         let (iterctx_post, exp) =
             rename_exp_in_place(ctx, binds, &mut renv_post, iterctx.clone(), exp)?;
         let drop = iterctx_post.as_slice().len().saturating_sub(depth);
-        iterctx = IterationContext::from_iterations(iterctx_post.as_slice()[drop..].to_vec());
+        iterctx = ICtx::from_iterations(iterctx_post.as_slice()[drop..].to_vec());
         renv.append(renv_post);
         exps_renamed.push(exp);
     }
@@ -632,9 +632,9 @@ fn rename_arg_in_place(
     ctx: &mut Context,
     binds: &IdSet,
     renv: &mut RenameEnv,
-    iterctx: IterationContext,
+    iterctx: ICtx,
     arg: &ast::Arg,
-) -> Result<(IterationContext, ast::Arg), AlgoError> {
+) -> Result<(ICtx, ast::Arg), AlgoError> {
     let ast::ArgKind::Exp(exp) = &arg.node else {
         return Ok((iterctx, arg.clone()));
     };
@@ -649,9 +649,9 @@ pub fn rename_args(
     ctx: &mut Context,
     binds: &IdSet,
     renv: &mut RenameEnv,
-    iterctx: IterationContext,
+    iterctx: ICtx,
     args: &[ast::Arg],
-) -> Result<(IterationContext, Vec<ast::Arg>), AlgoError> {
+) -> Result<(ICtx, Vec<ast::Arg>), AlgoError> {
     let mut scope = ctx.scope();
     let mut renv_next = renv.clone();
     let result = rename_args_in_place(&mut scope, binds, &mut renv_next, iterctx, args)?;
@@ -664,9 +664,9 @@ fn rename_args_in_place(
     ctx: &mut Context,
     binds: &IdSet,
     renv: &mut RenameEnv,
-    mut iterctx: IterationContext,
+    mut iterctx: ICtx,
     args: &[ast::Arg],
-) -> Result<(IterationContext, Vec<ast::Arg>), AlgoError> {
+) -> Result<(ICtx, Vec<ast::Arg>), AlgoError> {
     let mut args_renamed = Vec::with_capacity(args.len());
     for arg in args {
         let depth = iterctx.as_slice().len();
@@ -674,7 +674,7 @@ fn rename_args_in_place(
         let (iterctx_post, arg) =
             rename_arg_in_place(ctx, binds, &mut renv_post, iterctx.clone(), arg)?;
         let drop = iterctx_post.as_slice().len().saturating_sub(depth);
-        iterctx = IterationContext::from_iterations(iterctx_post.as_slice()[drop..].to_vec());
+        iterctx = ICtx::from_iterations(iterctx_post.as_slice()[drop..].to_vec());
         renv.append(renv_post);
         args_renamed.push(arg);
     }

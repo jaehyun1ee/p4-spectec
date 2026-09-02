@@ -12,7 +12,7 @@ fn test_multiple_binding_renames_repetitions_and_compares_them_in_occurrence_ord
     let mut renames = multiple::RenameEnv::from_bindings(&benv);
 
     let renamed = multiple::rename_exp(&mut context, &mut renames, &tuple);
-    let side_conditions = multiple::generate_side_conditions(&IterationContext::new(), &renames);
+    let side_conditions = multiple::generate_side_conditions(&ICtx::new(), &renames);
 
     let ast::ExpKind::Tuple(exps) = &renamed.node else {
         panic!("expected tuple binding");
@@ -69,7 +69,7 @@ fn test_multiple_side_conditions_use_the_rename_environment_dimension() {
     let mut renames = multiple::RenameEnv::from_bindings(&benv);
     multiple::rename_exp(&mut context, &mut renames, &tuple);
 
-    let premises = multiple::generate_side_conditions(&IterationContext::new(), &renames);
+    let premises = multiple::generate_side_conditions(&ICtx::new(), &renames);
 
     let [premise] = premises.as_slice() else {
         panic!("expected one repeated-binding premise");

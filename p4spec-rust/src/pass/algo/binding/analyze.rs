@@ -63,7 +63,7 @@ use super::{
     collect,
     context::Context,
     dimension,
-    iteration::{Iteration, IterationContext},
+    iteration::{ICtx, Iteration},
     multiple, partial,
     pattern::{self, PatternSet, PatternSets},
     shallow,
@@ -101,7 +101,7 @@ fn update_venv_multiple(venv: &mut VEnv, renv: &multiple::RenameEnv) {
 
 fn analyze_exps_as_bind(
     ctx: &mut Context,
-    iter_ctx: &IterationContext,
+    iter_ctx: &ICtx,
     exps_il: &[ast::Exp],
 ) -> Result<(VEnv, Vec<ast::Exp>, Vec<al::ast::Prem>), AlgoError> {
     let benv = collect::collect_exps(ctx, exps_il)?;
@@ -118,7 +118,7 @@ fn analyze_exps_as_bind(
         ctx,
         &venv.domain(),
         &mut renv_partial,
-        IterationContext::new(),
+        ICtx::new(),
         &exps_al,
     )?;
     add_venv(&mut venv, partial::destination_env(&renv_partial));
@@ -159,18 +159,18 @@ fn analyze_args_as_bind(
     let args_al = multiple::rename_args(ctx, &mut renv_multiple, args_il);
     update_venv_multiple(&mut venv, &renv_multiple);
     let prem_sideconditions_multiple_al =
-        multiple::generate_side_conditions(&IterationContext::new(), &renv_multiple);
+        multiple::generate_side_conditions(&ICtx::new(), &renv_multiple);
 
     let mut renv_partial = partial::RenameEnv::new();
     let (_, args_al) = partial::rename_args(
         ctx,
         &venv.domain(),
         &mut renv_partial,
-        IterationContext::new(),
+        ICtx::new(),
         &args_al,
     )?;
     add_venv(&mut venv, partial::destination_env(&renv_partial));
-    let mut prems_al = partial::generate_prems(ctx, &IterationContext::new(), &renv_partial)?;
+    let mut prems_al = partial::generate_prems(ctx, &ICtx::new(), &renv_partial)?;
     prems_al.extend(prem_sideconditions_multiple_al);
     Ok((venv, args_al, prems_al))
 }
@@ -193,8 +193,7 @@ fn analyze_args_as_bind_shallow(
     let mut renv_multiple = multiple::RenameEnv::from_bindings(&benv);
     let args_al = multiple::rename_args(ctx, &mut renv_multiple, args_il);
     update_venv_multiple(&mut venv, &renv_multiple);
-    let prem_sideconditions_al =
-        multiple::generate_side_conditions(&IterationContext::new(), &renv_multiple);
+    let prem_sideconditions_al = multiple::generate_side_conditions(&ICtx::new(), &renv_multiple);
     if !prem_sideconditions_al.is_empty() {
         return Err(AlgoError::new(
             AlgoErrorKind::ShallowSideConditions,
@@ -210,11 +209,11 @@ fn analyze_args_as_bind_shallow(
         ctx,
         &venv.domain(),
         &mut renv_partial,
-        IterationContext::new(),
+        ICtx::new(),
         &args_al,
     )?;
     add_venv(&mut venv, partial::destination_env(&renv_partial));
-    let prems_al = partial::generate_prems(ctx, &IterationContext::new(), &renv_partial)?;
+    let prems_al = partial::generate_prems(ctx, &ICtx::new(), &renv_partial)?;
     Ok((venv, args_al, prems_al))
 }
 
@@ -256,7 +255,7 @@ fn check_prems_in_else(span: &Span, prems: &[al::ast::Prem]) -> Result<(), AlgoE
 
 fn analyze_prem(
     ctx: &mut Context,
-    iter_ctx: IterationContext,
+    iter_ctx: ICtx,
     prem_il: &ast::Prem,
 ) -> Result<(VEnv, al::ast::Prem, Vec<al::ast::Prem>), AlgoError> {
     match &prem_il.node {
@@ -283,7 +282,7 @@ fn analyze_prem(
 
 fn analyze_rule_prem(
     ctx: &mut Context,
-    iter_ctx: IterationContext,
+    iter_ctx: ICtx,
     span: &Span,
     rule_prem_il: &ast::RulePrem,
 ) -> Result<(VEnv, al::ast::Prem, Vec<al::ast::Prem>), AlgoError> {
@@ -332,7 +331,7 @@ fn analyze_rule_prem(
 
 fn analyze_if_eq_prem(
     ctx: &mut Context,
-    iter_ctx: IterationContext,
+    iter_ctx: ICtx,
     span: &Span,
     if_prem_il: &ast::IfPrem,
     exp_l_il: &ast::Exp,
@@ -361,7 +360,7 @@ fn analyze_if_eq_prem(
 
 fn analyze_if_prem(
     ctx: &mut Context,
-    iter_ctx: IterationContext,
+    iter_ctx: ICtx,
     span: &Span,
     if_prem_il: &ast::IfPrem,
 ) -> Result<(VEnv, al::ast::Prem, Vec<al::ast::Prem>), AlgoError> {
@@ -385,7 +384,7 @@ fn analyze_if_prem(
 
 fn analyze_if_hold_prem(
     ctx: &mut Context,
-    iter_ctx: IterationContext,
+    iter_ctx: ICtx,
     span: &Span,
     if_prem_il: &ast::IfHoldPrem,
 ) -> Result<(VEnv, al::ast::Prem, Vec<al::ast::Prem>), AlgoError> {
@@ -406,7 +405,7 @@ fn analyze_if_hold_prem(
 
 fn analyze_if_not_hold_prem(
     ctx: &mut Context,
-    iter_ctx: IterationContext,
+    iter_ctx: ICtx,
     span: &Span,
     if_prem_il: &ast::IfNotHoldPrem,
 ) -> Result<(VEnv, al::ast::Prem, Vec<al::ast::Prem>), AlgoError> {
@@ -428,7 +427,7 @@ fn analyze_if_not_hold_prem(
 fn analyze_let_prem(
     ctx: &mut Context,
     span: &Span,
-    iter_ctx: IterationContext,
+    iter_ctx: ICtx,
     exp_l_il: &ast::Exp,
     benv_l: &BEnv,
     exp_r_il: &ast::Exp,
@@ -445,7 +444,7 @@ fn analyze_let_prem(
         ctx,
         &venv.domain(),
         &mut renv_partial,
-        IterationContext::new(),
+        ICtx::new(),
         &exp_l_al,
     )?;
     add_venv(&mut venv, partial::destination_env(&renv_partial));
@@ -477,7 +476,7 @@ fn analyze_let_prem(
 
 fn analyze_iter_prem(
     ctx: &mut Context,
-    iter_ctx: IterationContext,
+    iter_ctx: ICtx,
     span: &Span,
     iterated_il: &ast::IteratedPrem,
 ) -> Result<(VEnv, al::ast::Prem, Vec<al::ast::Prem>), AlgoError> {
@@ -493,18 +492,14 @@ fn analyze_iter_prem(
         vars_bind: vec![],
     }];
     iterations.extend(iter_ctx.as_slice().iter().cloned());
-    analyze_prem(
-        ctx,
-        IterationContext::from_iterations(iterations),
-        &iterated_il.prem,
-    )
+    analyze_prem(ctx, ICtx::from_iterations(iterations), &iterated_il.prem)
 }
 
 // - Debug premises
 
 fn analyze_debug_prem(
     ctx: &mut Context,
-    iter_ctx: IterationContext,
+    iter_ctx: ICtx,
     span: &Span,
     debug_prem_il: &ast::DebugPrem,
 ) -> Result<(VEnv, al::ast::Prem, Vec<al::ast::Prem>), AlgoError> {
@@ -526,8 +521,7 @@ fn analyze_prems(
 ) -> Result<Vec<al::ast::Prem>, AlgoError> {
     let mut prems_al = Vec::new();
     for prem_il in prems_il {
-        let (venv, prem_al, prem_sideconditions_al) =
-            analyze_prem(ctx, IterationContext::new(), prem_il)?;
+        let (venv, prem_al, prem_sideconditions_al) = analyze_prem(ctx, ICtx::new(), prem_il)?;
         ctx.add_bounds(&venv);
         prems_al.push(prem_al);
         prems_al.extend(prem_sideconditions_al);
@@ -545,7 +539,7 @@ fn analyze_rule_match(
     let (exps_signature_al, prems_unified_group_il) =
         antiunify::antiunify(ctx, exps_input_group_il)?;
     let (venv, exps_input_al, prems_al) =
-        analyze_exps_as_bind(ctx, &IterationContext::new(), &exps_signature_al)?;
+        analyze_exps_as_bind(ctx, &ICtx::new(), &exps_signature_al)?;
     ctx.add_bounds(&venv);
     analyze_exps_as_bound(ctx, &exps_signature_al)?;
 

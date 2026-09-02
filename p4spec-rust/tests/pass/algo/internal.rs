@@ -20,7 +20,7 @@ use crate::{
             collect,
             context::Context,
             dimension,
-            iteration::IterationContext,
+            iteration::ICtx,
             multiple, partial,
             pattern::{self, PatternSet, PatternSets},
             shallow,

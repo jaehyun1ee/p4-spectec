@@ -18,7 +18,7 @@ use crate::{
 use super::{
     bind::{BEnv, Binding},
     context::Context,
-    iteration::{Iteration, IterationContext},
+    iteration::{ICtx, Iteration},
 };
 
 /// Ordered renamed occurrences for each repeated source identifier
@@ -194,7 +194,7 @@ fn equality_exp(id: &Id, id_rename: &Id, typ: &ast::Typ) -> ast::Exp {
 
 fn generate_side_condition(
     dim: &Dim,
-    iterctx: &IterationContext,
+    iterctx: &ICtx,
     id: &Id,
     ids_rename: &[Id],
 ) -> Option<al::ast::Prem> {
@@ -223,7 +223,7 @@ fn generate_side_condition(
 
     let mut iterations = dim.iters.clone();
     iterations.extend(iterctx.iters());
-    let mut side_iterctx = IterationContext::from_iterations(
+    let mut side_iterctx = ICtx::from_iterations(
         iterations
             .into_iter()
             .map(|iter| Iteration {
@@ -241,10 +241,7 @@ fn generate_side_condition(
     Some(side_iterctx.iterate_prem(prem))
 }
 
-pub fn generate_side_conditions(
-    iterctx: &IterationContext,
-    renv: &RenameEnv,
-) -> Vec<al::ast::Prem> {
+pub fn generate_side_conditions(iterctx: &ICtx, renv: &RenameEnv) -> Vec<al::ast::Prem> {
     renv.iter()
         .filter_map(|(id, ids_rename)| {
             let dim = renv.dimension(id)?;
