@@ -66,6 +66,18 @@ fn run_ocaml_exporter(repo: &Path, spec_path: &Path) -> Output {
 }
 
 #[test]
+fn test_full_spec_converts() {
+    let repo = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("Rust crate is inside the repository");
+    let spec_path = repo.join("spec");
+    let spec_el = parse_files([spec_path]).expect("parse specification corpus");
+    let spec_il = elaborate::elaborate(&spec_el).expect("elaborate specification corpus");
+
+    algo::convert(&spec_il).expect("convert specification corpus");
+}
+
+#[test]
 #[ignore = "requires the pinned OCaml toolchain"]
 fn test_full_al_matches_ocaml_exactly() {
     let repo = Path::new(env!("CARGO_MANIFEST_DIR"))
