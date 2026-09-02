@@ -104,14 +104,9 @@ fn equiv_not_typ_with<'env>(
     if !not_typ_l.node.same_shape(&not_typ_r.node) {
         return Ok(false);
     }
-    let typs_l = not_typ_l.node.args();
-    let typs_r = not_typ_r.node.args();
-    for (typ_l, typ_r) in typs_l.into_iter().zip(typs_r) {
-        if !equiv_typ_with(find_typdef_opt, typ_l, typ_r)? {
-            return Ok(false);
-        }
-    }
-    Ok(true)
+    not_typ_l.node.try_eq_by(&not_typ_r.node, |typ_l, typ_r| {
+        equiv_typ_with(find_typdef_opt, typ_l, typ_r)
+    })
 }
 
 // == Function types

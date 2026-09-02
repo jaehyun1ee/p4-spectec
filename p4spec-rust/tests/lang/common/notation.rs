@@ -56,3 +56,18 @@ fn test_same_shape_borrows_nested_mixfixes_and_ignores_arguments() {
     assert!(left.same_shape(&right));
     assert!(!left.same_shape(&Mixfix::Seq(vec![Mixfix::Arg("left")])));
 }
+
+#[test]
+fn test_try_eq_by_compares_nested_arguments_without_collecting_them() {
+    let left = Mixfix::Seq(vec![Mixfix::Arg(1), Mixfix::Arg(2)]);
+    let right = Mixfix::Seq(vec![Mixfix::Arg(1), Mixfix::Arg(2)]);
+    let mut compared = Vec::new();
+
+    let equal: Result<bool, ()> = left.try_eq_by(&right, |left, right| {
+        compared.push((*left, *right));
+        Ok(left == right)
+    });
+
+    assert_eq!(equal, Ok(true));
+    assert_eq!(compared, vec![(1, 1), (2, 2)]);
+}

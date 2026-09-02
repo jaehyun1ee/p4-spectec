@@ -110,6 +110,50 @@ impl<T> Mixfix<T> {
         self.eq_by(mixfix_other, |_, _| true)
     }
 
+    /// Compares structure and atoms while fallibly comparing arguments
+    pub fn try_eq_by<U, E>(
+        &self,
+        mixfix_other: &Mixfix<U>,
+        mut eq_arg: impl FnMut(&T, &U) -> Result<bool, E>,
+    ) -> Result<bool, E> {
+        self.try_eq_by_inner(mixfix_other, &mut eq_arg)
+    }
+
+    fn try_eq_by_inner<U, E>(
+        &self,
+        mixfix_other: &Mixfix<U>,
+        eq_arg: &mut impl FnMut(&T, &U) -> Result<bool, E>,
+    ) -> Result<bool, E> {
+        match (self, mixfix_other) {
+            (Self::Arg(arg_l), Mixfix::Arg(arg_r)) => eq_arg(arg_l, arg_r),
+            (Self::Atom(atom_l), Mixfix::Atom(atom_r)) => Ok(atom_l.node == atom_r.node),
+            (
+                Self::Brack(atom_l_l, mixfix_l, atom_l_r),
+                Mixfix::Brack(atom_r_l, mixfix_r, atom_r_r),
+            ) => Ok(atom_l_l.node == atom_r_l.node
+                && mixfix_l.try_eq_by_inner(mixfix_r, eq_arg)?
+                && atom_l_r.node == atom_r_r.node),
+            (
+                Self::Infix(mixfix_l_l, atom_l, mixfix_l_r),
+                Mixfix::Infix(mixfix_r_l, atom_r, mixfix_r_r),
+            ) => Ok(mixfix_l_l.try_eq_by_inner(mixfix_r_l, eq_arg)?
+                && atom_l.node == atom_r.node
+                && mixfix_l_r.try_eq_by_inner(mixfix_r_r, eq_arg)?),
+            (Self::Seq(mixfixes_l), Mixfix::Seq(mixfixes_r)) => {
+                if mixfixes_l.len() != mixfixes_r.len() {
+                    return Ok(false);
+                }
+                for (mixfix_l, mixfix_r) in mixfixes_l.iter().zip(mixfixes_r) {
+                    if !mixfix_l.try_eq_by_inner(mixfix_r, eq_arg)? {
+                        return Ok(false);
+                    }
+                }
+                Ok(true)
+            }
+            _ => Ok(false),
+        }
+    }
+
     fn eq_by_inner<U>(
         &self,
         mixfix_other: &Mixfix<U>,
