@@ -2,14 +2,14 @@ use super::*;
 
 #[test]
 fn test_syntax_equality_ignores_spans_and_subcheck_strategy() {
-    let exp_l = p4spec_rust::note_phrase! { node: il::ast::ExpKind::Sub(
+    let exp_l: il::ast::Exp = p4spec_rust::note_phrase! { node: il::ast::ExpKind::Sub(
     Box::new(variable("x")),
-    typ(),
+    Box::new(typ()),
     Box::new(il::ast::Subcheck::Skip),
     ), note: il::ast::TypKind::Bool, span: span("left") };
-    let exp_r = p4spec_rust::note_phrase! { node: il::ast::ExpKind::Sub(
+    let exp_r: il::ast::Exp = p4spec_rust::note_phrase! { node: il::ast::ExpKind::Sub(
     Box::new(variable("x")),
-    typ(),
+    Box::new(typ()),
     Box::new(il::ast::Subcheck::Recurse(typ())),
     ), note: il::ast::TypKind::Text, span: span("right") };
 
@@ -71,12 +71,12 @@ fn test_syntax_equality_distinguishes_recursive_operands_variants_and_collection
             span: span("root"),
         }
     };
-    let path_x = p4spec_rust::note_phrase! {
+    let path_x: il::ast::Path = p4spec_rust::note_phrase! {
         node: il::ast::PathKind::Idx(Box::new(path_root()), Box::new(variable("x"))),
         note: il::ast::TypKind::Bool,
         span: span("path-x"),
     };
-    let path_y = p4spec_rust::note_phrase! {
+    let path_y: il::ast::Path = p4spec_rust::note_phrase! {
         node: il::ast::PathKind::Idx(Box::new(path_root()), Box::new(variable("y"))),
         note: il::ast::TypKind::Bool,
         span: span("path-y"),

@@ -35,7 +35,7 @@ fn test_id_map_rejects_mismatched_lists() {
 fn test_free_identifier_sets_preserve_source_spans() {
     let id_stored = id("x", "stored");
     let id_lookup = id("x", "lookup");
-    let exp = p4spec_rust::note_phrase! {
+    let exp: il::ast::Exp = p4spec_rust::note_phrase! {
         node: il::ast::ExpKind::Var(id_stored.clone()),
         note: il::ast::TypKind::Bool,
         span: Span::default(),

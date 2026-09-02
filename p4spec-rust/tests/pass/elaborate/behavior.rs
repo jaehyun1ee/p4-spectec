@@ -38,7 +38,7 @@ fn test_parenthesized_variant_keeps_the_case_origin() {
     let ast::ArgKind::Exp(argument) = &function.clauses[0].node.args[0].node else {
         panic!("expected expression argument");
     };
-    let ast::TypKind::Var(id, _) = &argument.note else {
+    let ast::TypKind::Var(id, _) = argument.note.as_ref() else {
         panic!("expected nominal variant type");
     };
     assert_eq!(id.node, "pair");

@@ -37,12 +37,18 @@ fn test_free_expression_path_argument_and_premise_variants_collect_identifier_te
             )),
             ids(&["x"]),
         ),
-        (expr(il::ast::ExpKind::UpCast(typ(), x())), ids(&["x"])),
-        (expr(il::ast::ExpKind::DownCast(typ(), x())), ids(&["x"])),
+        (
+            expr(il::ast::ExpKind::UpCast(Box::new(typ()), x())),
+            ids(&["x"]),
+        ),
+        (
+            expr(il::ast::ExpKind::DownCast(Box::new(typ()), x())),
+            ids(&["x"]),
+        ),
         (
             expr(il::ast::ExpKind::Sub(
                 x(),
-                typ(),
+                Box::new(typ()),
                 Box::new(il::ast::Subcheck::Skip),
             )),
             ids(&["x"]),
@@ -80,7 +86,7 @@ fn test_free_expression_path_argument_and_premise_variants_collect_identifier_te
         (expr(il::ast::ExpKind::Idx(x(), x())), ids(&["x"])),
         (expr(il::ast::ExpKind::Slice(x(), x(), x())), ids(&["x"])),
         (
-            expr(il::ast::ExpKind::Upd(x(), path_with("x"), x())),
+            expr(il::ast::ExpKind::Upd(x(), Box::new(path_with("x")), x())),
             ids(&["x"]),
         ),
         (

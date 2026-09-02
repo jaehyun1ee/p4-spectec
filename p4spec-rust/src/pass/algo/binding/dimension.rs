@@ -5,14 +5,13 @@
 
 use crate::{
     lang::{common::ds::map::IdMap, il::ast},
-    phrase,
     runtime::sta::{Dim, VEnv},
 };
 
 // == Variable inference
 
 fn infer_var(venv: &mut VEnv, exp: &ast::Exp, id: &ast::Id, iters: &[ast::Iter]) {
-    let typ = phrase!(node: exp.note.clone(), span: exp.span.clone());
+    let typ = ast::typ_from_note(&exp.note, exp.span.clone());
     let dim = Dim::new(typ, iters.to_vec());
     if venv
         .get(id)

@@ -98,7 +98,7 @@ fn infer_exp(dim_ctx: &mut DimContext, exp: &ast::Exp, iters: &[ast::Iter]) {
     match &exp.node {
         ast::ExpKind::Bool(_) | ast::ExpKind::Num(_) | ast::ExpKind::Text(_) => {}
         ast::ExpKind::Var(id) => {
-            let typ = phrase!(node: exp.note.clone(), span: exp.span.clone());
+            let typ = ast::typ_from_note(&exp.note, exp.span.clone());
             dim_ctx.add(id, Dim::new(typ, iters.to_vec()));
         }
         ast::ExpKind::Un(_, _, exp_inner)
@@ -345,7 +345,7 @@ fn collect_iter_vars(bounds: &VEnv, occurs: &Occurrences, iter: ast::Iter) -> Ve
 
 fn annotate_exp(bounds: &VEnv, exp: &mut ast::Exp) -> Result<Occurrences, ElabError> {
     let span = &exp.span;
-    let typ_kind = &exp.note;
+    let typ_kind = exp.note.as_ref();
     match &mut exp.node {
         ast::ExpKind::Bool(_) => Ok(annotate_bool_exp()),
         ast::ExpKind::Num(_) => Ok(annotate_num_exp()),

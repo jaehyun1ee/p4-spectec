@@ -11,6 +11,9 @@ use p4spec_rust::{
     },
 };
 
+#[path = "il/layout.rs"]
+mod layout;
+
 fn typ() -> ast::Typ {
     p4spec_rust::phrase! {
         node: ast::TypKind::Bool,
@@ -77,7 +80,7 @@ fn assert_iterated_exp(exp: &ast::Exp, dim: bool, id_span: &Span, typ_span: &Spa
         panic!("outer iteration")
     };
     assert_eq!(&exp.span, id_span);
-    let ast::TypKind::Iter(outer_typ, ast::Iter::List) = &exp.note else {
+    let ast::TypKind::Iter(outer_typ, ast::Iter::List) = exp.note.as_ref() else {
         panic!("outer type")
     };
     assert_eq!(&outer_typ.span, id_span);
@@ -91,11 +94,11 @@ fn assert_iterated_exp(exp: &ast::Exp, dim: bool, id_span: &Span, typ_span: &Spa
     };
     assert_eq!(&inner.span, id_span);
     assert!(
-        matches!(&inner.note, ast::TypKind::Iter(typ, ast::Iter::Opt) if typ.node == ast::TypKind::Bool && typ.span == *id_span)
+        matches!(inner.note.as_ref(), ast::TypKind::Iter(typ, ast::Iter::Opt) if typ.node == ast::TypKind::Bool && typ.span == *id_span)
     );
     assert!(matches!(base.node, ast::ExpKind::Var(_)));
     assert_eq!(base.span, *id_span);
-    assert_eq!(base.note, ast::TypKind::Bool);
+    assert_eq!(base.note.as_ref(), &ast::TypKind::Bool);
     match (dim, inner_binders.as_slice(), outer_binders.as_slice()) {
         (false, [], []) => {}
         (true, [inner], [outer]) => {

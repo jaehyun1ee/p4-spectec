@@ -9,7 +9,7 @@ use super::ast::*;
 /// iteration carries a binder describing that dimension; otherwise its binder
 /// list is empty
 pub fn as_exp(is_dim: bool, var: &Var) -> Exp {
-    let mut exp = crate::note_phrase! {
+    let mut exp: Exp = crate::note_phrase! {
         node: ExpKind::Var(var.id.clone()),
         note: var.typ.node.clone(),
         span: var.id.span.clone(),
@@ -19,7 +19,7 @@ pub fn as_exp(is_dim: bool, var: &Var) -> Exp {
         let typ_iter = crate::phrase! {
             node: TypKind::Iter(
                 Box::new(crate::phrase! {
-                    node: exp.note.clone(),
+                    node: exp.note.as_ref().clone(),
                     span: exp.span.clone(),
                 }),
                 *iter,

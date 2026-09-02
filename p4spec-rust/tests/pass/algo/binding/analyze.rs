@@ -287,7 +287,7 @@ fn test_conversion_rejects_overlapping_and_missing_variant_table_patterns() {
             line,
         );
         exp(
-            ast::ExpKind::UpCast(choice_typ.clone(), Box::new(case)),
+            ast::ExpKind::UpCast(Box::new(choice_typ.clone()), Box::new(case)),
             choice_typ.node.clone(),
             line,
         )

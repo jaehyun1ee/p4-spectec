@@ -3,10 +3,7 @@
 //! Free identifiers become binders only while traversing invertible constructs. A binder
 //! found below any non-invertible operation is rejected at that operation's source span.
 
-use crate::{
-    lang::{common::source::Span, il::ast},
-    phrase,
-};
+use crate::lang::{common::source::Span, il::ast};
 
 use super::{
     super::{AlgoError, AlgoErrorKind},
@@ -46,7 +43,7 @@ pub fn collect_exp(ctx: &Context, exp: &ast::Exp) -> Result<BEnv, AlgoError> {
                 let benv = BEnv::new();
                 Ok(benv)
             } else {
-                let typ = phrase!(node: exp.note.clone(), span: exp.span.clone());
+                let typ = ast::typ_from_note(&exp.note, exp.span.clone());
                 let benv = BEnv::singleton(id.clone(), typ);
                 Ok(benv)
             }

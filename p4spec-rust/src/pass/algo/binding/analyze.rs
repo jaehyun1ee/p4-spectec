@@ -734,11 +734,11 @@ fn pattern_set_covered_by_typ(ctx: &Context, typ: &ast::Typ) -> Result<PatternSe
 fn pattern_set_covered_by_exp(ctx: &Context, exp_al: &ast::Exp) -> Result<PatternSet, AlgoError> {
     match &exp_al.node {
         ast::ExpKind::Var(_) => {
-            let typ = phrase!(node: exp_al.note.clone(), span: exp_al.span.clone());
+            let typ = ast::typ_from_note(&exp_al.note, exp_al.span.clone());
             pattern_set_covered_by_typ(ctx, &typ)
         }
         ast::ExpKind::UpCast(_, exp_inner) if matches!(exp_inner.node, ast::ExpKind::Var(_)) => {
-            let typ = phrase!(node: exp_inner.note.clone(), span: exp_inner.span.clone());
+            let typ = ast::typ_from_note(&exp_inner.note, exp_inner.span.clone());
             pattern_set_covered_by_typ(ctx, &typ)
         }
         ast::ExpKind::UpCast(_, exp_inner) => {
@@ -748,8 +748,7 @@ fn pattern_set_covered_by_exp(ctx: &Context, exp_al: &ast::Exp) -> Result<Patter
                     exp_al.span.clone(),
                 ));
             };
-            let not_typ =
-                not_exp.map(|exp| phrase!(node: exp.note.clone(), span: exp.span.clone()));
+            let not_typ = not_exp.map(|exp| ast::typ_from_note(&exp.note, exp.span.clone()));
             let not_typ = phrase!(node: not_typ, span: exp_inner.span.clone());
             let pattern_set = [not_typ].into_iter().collect();
             Ok(pattern_set)

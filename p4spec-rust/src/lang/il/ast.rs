@@ -1,10 +1,12 @@
 //! Intermediate language model
 
+use std::rc::Rc;
+
 use crate::lang::{
     common::{
         self,
         notation::{atom, mixfix::Mixfix, mixop},
-        source::{NotePhrase, Phrase},
+        source::{NotePhrase, Phrase, Span},
     },
     el,
     hints::input::InputHint,
@@ -149,7 +151,16 @@ pub enum OpTyp {
 
 // Expressions
 
-pub type Exp = NotePhrase<ExpKind, TypKind>;
+pub type TypNote = Rc<TypKind>;
+pub type Exp = NotePhrase<ExpKind, TypNote>;
+
+pub fn typ_from_note(note: &TypNote, span: Span) -> Typ {
+    Phrase {
+        node: note.as_ref().clone(),
+        note: (),
+        span,
+    }
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ExpKind {
@@ -168,11 +179,11 @@ pub enum ExpKind {
     /// `exp cmpop exp`
     Cmp(CmpOp, OpTyp, Box<Exp>, Box<Exp>),
     /// `exp as typ`
-    UpCast(Typ, Box<Exp>),
+    UpCast(Box<Typ>, Box<Exp>),
     /// `exp as typ`
-    DownCast(Typ, Box<Exp>),
+    DownCast(Box<Typ>, Box<Exp>),
     /// `exp <: typ`
-    Sub(Box<Exp>, Typ, Box<Subcheck>),
+    Sub(Box<Exp>, Box<Typ>, Box<Subcheck>),
     /// `exp matches pattern`
     Match(Box<Exp>, Pattern),
     /// `(` exp* `)`
@@ -200,7 +211,7 @@ pub enum ExpKind {
     /// `exp [` exp `:` exp `]`
     Slice(Box<Exp>, Box<Exp>, Box<Exp>),
     /// `exp [` path `=` exp `]`
-    Upd(Box<Exp>, Path, Box<Exp>),
+    Upd(Box<Exp>, Box<Path>, Box<Exp>),
     /// `$id<` targ* `>(` arg* `)`
     Call(Id, Vec<Targ>, Vec<Arg>),
     /// `exp iterexp`
@@ -235,7 +246,7 @@ pub enum OptPattern {
 
 // Paths
 
-pub type Path = NotePhrase<PathKind, TypKind>;
+pub type Path = NotePhrase<PathKind, TypNote>;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum PathKind {

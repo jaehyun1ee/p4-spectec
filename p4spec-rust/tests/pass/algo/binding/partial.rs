@@ -42,7 +42,7 @@ fn test_conversion_preserves_binding_match_and_cast_guards_before_bindings() {
     );
     let exp_upcast = exp(
         ast::ExpKind::UpCast(
-            parent_typ.clone(),
+            Box::new(parent_typ.clone()),
             Box::new(typed_var_exp("child", &child_typ, 11)),
         ),
         parent_typ.node.clone(),
@@ -405,7 +405,7 @@ fn test_partial_upcast_binding_checks_subtype_before_binding_the_downcast_value(
     );
     let child_var = exp(ast::ExpKind::Var(id("child", 2)), child_typ.node.clone(), 2);
     let upcast = exp(
-        ast::ExpKind::UpCast(parent_typ.clone(), Box::new(child_var)),
+        ast::ExpKind::UpCast(Box::new(parent_typ.clone()), Box::new(child_var)),
         parent_typ.node.clone(),
         2,
     );

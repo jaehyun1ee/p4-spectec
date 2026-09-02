@@ -988,11 +988,13 @@ pub(super) fn encode_subcheck(subcheck: &ast::Subcheck) -> Value {
 }
 
 pub(super) fn decode_exp(value: &Value) -> Result<ast::Exp, DecodeError> {
-    source::decode_note_phrase(value, decode_exp_kind, decode_typ_kind)
+    source::decode_note_phrase(value, decode_exp_kind, |value| {
+        decode_typ_kind(value).map(Into::into)
+    })
 }
 
 pub(super) fn encode_exp(exp: &ast::Exp) -> Value {
-    source::encode_note_phrase(exp, encode_exp_kind, encode_typ_kind)
+    source::encode_note_phrase(exp, encode_exp_kind, |note| encode_typ_kind(note))
 }
 
 fn decode_exp_kind(value: &Value) -> Result<ExpKind, DecodeError> {
@@ -1020,16 +1022,16 @@ fn decode_exp_kind(value: &Value) -> Result<ExpKind, DecodeError> {
             Box::new(decode_exp(right)?),
         )),
         ("UpCastE", [typ, exp]) => Ok(ExpKind::UpCast(
-            decode_typ(typ)?,
+            Box::new(decode_typ(typ)?),
             Box::new(decode_exp(exp)?),
         )),
         ("DownCastE", [typ, exp]) => Ok(ExpKind::DownCast(
-            decode_typ(typ)?,
+            Box::new(decode_typ(typ)?),
             Box::new(decode_exp(exp)?),
         )),
         ("SubE", [exp, typ, subcheck]) => Ok(ExpKind::Sub(
             Box::new(decode_exp(exp)?),
-            decode_typ(typ)?,
+            Box::new(decode_typ(typ)?),
             Box::new(decode_subcheck(subcheck)?),
         )),
         ("MatchE", [exp, pattern]) => Ok(ExpKind::Match(
@@ -1074,7 +1076,7 @@ fn decode_exp_kind(value: &Value) -> Result<ExpKind, DecodeError> {
         )),
         ("UpdE", [base, path, value]) => Ok(ExpKind::Upd(
             Box::new(decode_exp(base)?),
-            decode_path(path)?,
+            Box::new(decode_path(path)?),
             Box::new(decode_exp(value)?),
         )),
         ("CallE", [id, targs, args]) => Ok(ExpKind::Call(
@@ -1262,11 +1264,13 @@ fn encode_opt_pattern(pattern: OptPattern) -> Value {
 }
 
 fn decode_path(value: &Value) -> Result<ast::Path, DecodeError> {
-    source::decode_note_phrase(value, decode_path_kind, decode_typ_kind)
+    source::decode_note_phrase(value, decode_path_kind, |value| {
+        decode_typ_kind(value).map(Into::into)
+    })
 }
 
 fn encode_path(path: &ast::Path) -> Value {
-    source::encode_note_phrase(path, encode_path_kind, encode_typ_kind)
+    source::encode_note_phrase(path, encode_path_kind, |note| encode_typ_kind(note))
 }
 
 fn decode_path_kind(value: &Value) -> Result<PathKind, DecodeError> {

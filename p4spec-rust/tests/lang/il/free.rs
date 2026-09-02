@@ -150,19 +150,25 @@ fn test_free_expression_variants_follow_the_oracle() {
         ),
         (
             "upcast",
-            exp(ast::ExpKind::UpCast(typ(), Box::new(variable("cast")))),
+            exp(ast::ExpKind::UpCast(
+                Box::new(typ()),
+                Box::new(variable("cast")),
+            )),
             names(&["cast"]),
         ),
         (
             "downcast",
-            exp(ast::ExpKind::DownCast(typ(), Box::new(variable("cast")))),
+            exp(ast::ExpKind::DownCast(
+                Box::new(typ()),
+                Box::new(variable("cast")),
+            )),
             names(&["cast"]),
         ),
         (
             "subtype",
             exp(ast::ExpKind::Sub(
                 Box::new(variable("sub")),
-                typ(),
+                Box::new(typ()),
                 Box::new(ast::Subcheck::Skip),
             )),
             names(&["sub"]),
@@ -268,7 +274,7 @@ fn test_free_expression_variants_follow_the_oracle() {
             "update",
             exp(ast::ExpKind::Upd(
                 Box::new(variable("base")),
-                path,
+                Box::new(path),
                 Box::new(variable("replacement")),
             )),
             names(&["base", "path_high", "path_low", "replacement"]),
@@ -620,7 +626,7 @@ fn assert_var(exp: &ast::Exp, expected_id: &ast::Id, expected_ty: ast::TypKind) 
         panic!("expected variable expression")
     };
     assert_eq!(id, expected_id);
-    assert_eq!(exp.note, expected_ty);
+    assert_eq!(exp.note.as_ref(), &expected_ty);
     assert_eq!(exp.span, expected_id.span);
 }
 fn assert_iter_type(typ: &ast::Typ, iter: ast::Iter, inner: ast::TypKind, inner_span: &Span) {
@@ -662,7 +668,7 @@ fn test_as_exp_preserves_empty_one_and_two_level_shapes_and_spans() {
     assert_eq!(&one_false.span, &id.span);
     assert_iter_type(
         &p4spec_rust::phrase! {
-            node: one_false.note.clone(),
+            node: one_false.note.as_ref().clone(),
             span: typ.span.clone(),
         },
         ast::Iter::Opt,
@@ -691,7 +697,7 @@ fn test_as_exp_preserves_empty_one_and_two_level_shapes_and_spans() {
     assert_eq!(&one_true.span, &id.span);
     assert_iter_type(
         &p4spec_rust::phrase! {
-            node: one_true.note.clone(),
+            node: one_true.note.as_ref().clone(),
             span: typ.span.clone(),
         },
         ast::Iter::Opt,
@@ -712,7 +718,7 @@ fn test_as_exp_preserves_empty_one_and_two_level_shapes_and_spans() {
             panic!("expected outer iteration")
         };
         assert_eq!(&two.span, &id.span);
-        let ast::TypKind::Iter(outer_inner_typ, ast::Iter::List) = &two.note else {
+        let ast::TypKind::Iter(outer_inner_typ, ast::Iter::List) = two.note.as_ref() else {
             panic!("expected outer iteration type")
         };
         assert_eq!(outer_inner_typ.span, id.span);
@@ -727,7 +733,7 @@ fn test_as_exp_preserves_empty_one_and_two_level_shapes_and_spans() {
         assert_eq!(&inner.span, &id.span);
         assert_iter_type(
             &p4spec_rust::phrase! {
-                node: inner.note.clone(),
+                node: inner.note.as_ref().clone(),
                 span: typ.span.clone(),
             },
             ast::Iter::Opt,
