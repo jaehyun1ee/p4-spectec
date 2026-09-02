@@ -11,57 +11,58 @@ use super::ast::*;
 // - Premises
 
 impl Free for RulePrem {
-    fn free(&self) -> IdSet {
-        self.not_exp.free()
+    fn free_into(&self, free: &mut IdSet) {
+        self.not_exp.free_into(free);
     }
 }
 
 impl Free for IfPrem {
-    fn free(&self) -> IdSet {
-        self.exp.free()
+    fn free_into(&self, free: &mut IdSet) {
+        self.exp.free_into(free);
     }
 }
 
 impl Free for IfHoldPrem {
-    fn free(&self) -> IdSet {
-        self.not_exp.free()
+    fn free_into(&self, free: &mut IdSet) {
+        self.not_exp.free_into(free);
     }
 }
 
 impl Free for IfNotHoldPrem {
-    fn free(&self) -> IdSet {
-        self.not_exp.free()
+    fn free_into(&self, free: &mut IdSet) {
+        self.not_exp.free_into(free);
     }
 }
 
 impl Free for LetPrem {
-    fn free(&self) -> IdSet {
-        self.exp_l.free().union(self.exp_r.free())
+    fn free_into(&self, free: &mut IdSet) {
+        self.exp_l.free_into(free);
+        self.exp_r.free_into(free);
     }
 }
 
 impl Free for IterPrem {
-    fn free(&self) -> IdSet {
-        self.prem.free()
+    fn free_into(&self, free: &mut IdSet) {
+        self.prem.free_into(free);
     }
 }
 
 impl Free for DebugPrem {
-    fn free(&self) -> IdSet {
-        self.exp.free()
+    fn free_into(&self, free: &mut IdSet) {
+        self.exp.free_into(free);
     }
 }
 
 impl Free for PremKind {
-    fn free(&self) -> IdSet {
+    fn free_into(&self, free: &mut IdSet) {
         match self {
-            Self::Rule(prem) => prem.free(),
-            Self::If(prem) => prem.free(),
-            Self::IfHold(prem) => prem.free(),
-            Self::IfNotHold(prem) => prem.free(),
-            Self::Let(prem) => prem.free(),
-            Self::Iter(prem) => prem.free(),
-            Self::Debug(prem) => prem.free(),
+            Self::Rule(prem) => prem.free_into(free),
+            Self::If(prem) => prem.free_into(free),
+            Self::IfHold(prem) => prem.free_into(free),
+            Self::IfNotHold(prem) => prem.free_into(free),
+            Self::Let(prem) => prem.free_into(free),
+            Self::Iter(prem) => prem.free_into(free),
+            Self::Debug(prem) => prem.free_into(free),
         }
     }
 }

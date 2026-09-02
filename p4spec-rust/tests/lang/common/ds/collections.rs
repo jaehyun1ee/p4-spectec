@@ -45,3 +45,27 @@ fn test_free_identifier_sets_preserve_source_spans() {
 
     assert_eq!(ids.get(&id_lookup), Some(&id_stored));
 }
+
+#[test]
+fn test_free_into_extends_one_ordered_set_without_duplicates() {
+    let variable = |name| -> il::ast::Exp {
+        p4spec_rust::note_phrase! {
+            node: il::ast::ExpKind::Var(id(name, name)),
+            note: il::ast::TypKind::Bool,
+            span: Span::default(),
+        }
+    };
+    let exp: il::ast::Exp = p4spec_rust::note_phrase! {
+        node: il::ast::ExpKind::Tuple(vec![variable("x"), variable("x"), variable("y")]),
+        note: il::ast::TypKind::Bool,
+        span: Span::default(),
+    };
+    let mut ids = IdSet::from([id("seed", "seed")]);
+
+    exp.free_into(&mut ids);
+
+    assert_eq!(
+        ids,
+        IdSet::from([id("seed", "seed"), id("x", "x"), id("y", "y")])
+    );
+}

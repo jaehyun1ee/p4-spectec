@@ -201,15 +201,16 @@ impl<T: Hash> Hash for Mixfix<T> {
 // == Free identifiers
 
 impl<T: Free> Free for Mixfix<T> {
-    fn free(&self) -> IdSet {
+    fn free_into(&self, free: &mut IdSet) {
         match self {
-            Self::Arg(arg) => arg.free(),
-            Self::Atom(_) => IdSet::new(),
-            Self::Brack(_, mixfix, _) => mixfix.free(),
-            Self::Infix(mixfix_l, _, mixfix_r) => mixfix_l.free().union(mixfix_r.free()),
-            Self::Seq(mixfixes) => mixfixes
-                .iter()
-                .fold(IdSet::new(), |free, mixfix| free.union(mixfix.free())),
+            Self::Arg(arg) => arg.free_into(free),
+            Self::Atom(_) => {}
+            Self::Brack(_, mixfix, _) => mixfix.free_into(free),
+            Self::Infix(mixfix_l, _, mixfix_r) => {
+                mixfix_l.free_into(free);
+                mixfix_r.free_into(free);
+            }
+            Self::Seq(mixfixes) => mixfixes.as_slice().free_into(free),
         }
     }
 }

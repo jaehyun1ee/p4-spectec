@@ -73,22 +73,20 @@ impl Free for TypCase {
 // - Values
 
 impl Free for ValueKind {
-    fn free(&self) -> IdSet {
+    fn free_into(&self, free: &mut IdSet) {
         match self {
-            Self::Struct(fields) => fields.as_slice().free(),
-            Self::Case(value_case) => value_case.free(),
-            Self::Tuple(values) | Self::List(values) => values.as_slice().free(),
-            Self::Opt(value) => value.free(),
-            Self::Bool(_) | Self::Num(_) | Self::Text(_) | Self::Func(_) | Self::Extern(_) => {
-                IdSet::new()
-            }
+            Self::Struct(fields) => fields.as_slice().free_into(free),
+            Self::Case(value_case) => value_case.free_into(free),
+            Self::Tuple(values) | Self::List(values) => values.as_slice().free_into(free),
+            Self::Opt(value) => value.free_into(free),
+            Self::Bool(_) | Self::Num(_) | Self::Text(_) | Self::Func(_) | Self::Extern(_) => {}
         }
     }
 }
 
 impl Free for ValueField {
-    fn free(&self) -> IdSet {
-        self.1.free()
+    fn free_into(&self, free: &mut IdSet) {
+        self.1.free_into(free);
     }
 }
 
@@ -103,10 +101,12 @@ impl Free for OpTyp {
 // - Expressions
 
 impl Free for ExpKind {
-    fn free(&self) -> IdSet {
+    fn free_into(&self, free: &mut IdSet) {
         match self {
-            Self::Bool(_) | Self::Num(_) | Self::Text(_) => IdSet::new(),
-            Self::Var(id) => IdSet::from([id.clone()]),
+            Self::Bool(_) | Self::Num(_) | Self::Text(_) => {}
+            Self::Var(id) => {
+                free.insert(id.clone());
+            }
             Self::Un(_, _, exp)
             | Self::UpCast(_, exp)
             | Self::DownCast(_, exp)
@@ -114,24 +114,35 @@ impl Free for ExpKind {
             | Self::Match(exp, _)
             | Self::Len(exp)
             | Self::Dot(exp, _)
-            | Self::Iter(exp, _) => exp.free(),
+            | Self::Iter(exp, _) => exp.free_into(free),
             Self::Bin(_, _, exp_l, exp_r)
             | Self::Cmp(_, _, exp_l, exp_r)
             | Self::Cons(exp_l, exp_r)
             | Self::Cat(exp_l, exp_r)
             | Self::Mem(exp_l, exp_r)
-            | Self::Idx(exp_l, exp_r) => exp_l.free().union(exp_r.free()),
-            Self::Tuple(exps) | Self::List(exps) => exps.as_slice().free(),
-            Self::Case(not_exp) => not_exp.free(),
-            Self::Str(fields) => fields
-                .iter()
-                .fold(IdSet::new(), |free, (_, exp)| free.union(exp.free())),
-            Self::Opt(exp) => exp.free(),
-            Self::Slice(exp_b, exp_i, exp_n) => {
-                exp_b.free().union(exp_i.free()).union(exp_n.free())
+            | Self::Idx(exp_l, exp_r) => {
+                exp_l.free_into(free);
+                exp_r.free_into(free);
             }
-            Self::Upd(exp_b, path, exp_f) => exp_b.free().union(path.free()).union(exp_f.free()),
-            Self::Call(_, _, args) => args.as_slice().free(),
+            Self::Tuple(exps) | Self::List(exps) => exps.as_slice().free_into(free),
+            Self::Case(not_exp) => not_exp.free_into(free),
+            Self::Str(fields) => {
+                for (_, exp) in fields {
+                    exp.free_into(free);
+                }
+            }
+            Self::Opt(exp) => exp.free_into(free),
+            Self::Slice(exp_b, exp_i, exp_n) => {
+                exp_b.free_into(free);
+                exp_i.free_into(free);
+                exp_n.free_into(free);
+            }
+            Self::Upd(exp_b, path, exp_f) => {
+                exp_b.free_into(free);
+                path.free_into(free);
+                exp_f.free_into(free);
+            }
+            Self::Call(_, _, args) => args.as_slice().free_into(free),
         }
     }
 }
@@ -165,12 +176,19 @@ impl Free for OptPattern {
 // - Paths
 
 impl Free for PathKind {
-    fn free(&self) -> IdSet {
+    fn free_into(&self, free: &mut IdSet) {
         match self {
-            Self::Root => IdSet::new(),
-            Self::Idx(path, exp_i) => path.free().union(exp_i.free()),
-            Self::Slice(path, exp_i, exp_n) => path.free().union(exp_i.free()).union(exp_n.free()),
-            Self::Dot(path, _) => path.free(),
+            Self::Root => {}
+            Self::Idx(path, exp_i) => {
+                path.free_into(free);
+                exp_i.free_into(free);
+            }
+            Self::Slice(path, exp_i, exp_n) => {
+                path.free_into(free);
+                exp_i.free_into(free);
+                exp_n.free_into(free);
+            }
+            Self::Dot(path, _) => path.free_into(free),
         }
     }
 }
@@ -188,10 +206,10 @@ impl Free for ParamKind {
 // - Arguments
 
 impl Free for ArgKind {
-    fn free(&self) -> IdSet {
+    fn free_into(&self, free: &mut IdSet) {
         match self {
-            Self::Exp(exp) => exp.free(),
-            Self::Def(_) => IdSet::new(),
+            Self::Exp(exp) => exp.free_into(free),
+            Self::Def(_) => {}
         }
     }
 }
@@ -201,50 +219,50 @@ impl Free for ArgKind {
 // - Premises
 
 impl Free for RulePrem {
-    fn free(&self) -> IdSet {
-        self.not_exp.free()
+    fn free_into(&self, free: &mut IdSet) {
+        self.not_exp.free_into(free);
     }
 }
 
 impl Free for IfPrem {
-    fn free(&self) -> IdSet {
-        self.exp.free()
+    fn free_into(&self, free: &mut IdSet) {
+        self.exp.free_into(free);
     }
 }
 
 impl Free for IfHoldPrem {
-    fn free(&self) -> IdSet {
-        self.not_exp.free()
+    fn free_into(&self, free: &mut IdSet) {
+        self.not_exp.free_into(free);
     }
 }
 
 impl Free for IfNotHoldPrem {
-    fn free(&self) -> IdSet {
-        self.not_exp.free()
+    fn free_into(&self, free: &mut IdSet) {
+        self.not_exp.free_into(free);
     }
 }
 
 impl Free for IterPrem {
-    fn free(&self) -> IdSet {
-        self.prem.free()
+    fn free_into(&self, free: &mut IdSet) {
+        self.prem.free_into(free);
     }
 }
 
 impl Free for DebugPrem {
-    fn free(&self) -> IdSet {
-        self.exp.free()
+    fn free_into(&self, free: &mut IdSet) {
+        self.exp.free_into(free);
     }
 }
 
 impl Free for PremKind {
-    fn free(&self) -> IdSet {
+    fn free_into(&self, free: &mut IdSet) {
         match self {
-            Self::Rule(prem) => prem.free(),
-            Self::If(prem) => prem.free(),
-            Self::IfHold(prem) => prem.free(),
-            Self::IfNotHold(prem) => prem.free(),
-            Self::Iter(prem) => prem.free(),
-            Self::Debug(prem) => prem.free(),
+            Self::Rule(prem) => prem.free_into(free),
+            Self::If(prem) => prem.free_into(free),
+            Self::IfHold(prem) => prem.free_into(free),
+            Self::IfNotHold(prem) => prem.free_into(free),
+            Self::Iter(prem) => prem.free_into(free),
+            Self::Debug(prem) => prem.free_into(free),
         }
     }
 }
@@ -258,32 +276,31 @@ impl Free for PremIter {
 // - Rules
 
 impl Free for RuleKind {
-    fn free(&self) -> IdSet {
-        self.not_exp.free().union(self.prems.as_slice().free())
+    fn free_into(&self, free: &mut IdSet) {
+        self.not_exp.free_into(free);
+        self.prems.as_slice().free_into(free);
     }
 }
 
 impl Free for RuleGroupKind {
-    fn free(&self) -> IdSet {
-        self.1.as_slice().free()
+    fn free_into(&self, free: &mut IdSet) {
+        self.1.as_slice().free_into(free);
     }
 }
 
 impl Free for ElseGroupKind {
-    fn free(&self) -> IdSet {
-        self.1.free()
+    fn free_into(&self, free: &mut IdSet) {
+        self.1.free_into(free);
     }
 }
 
 // - Clauses
 
 impl Free for ClauseKind {
-    fn free(&self) -> IdSet {
-        self.args
-            .as_slice()
-            .free()
-            .union(self.expression.free())
-            .union(self.premises.as_slice().free())
+    fn free_into(&self, free: &mut IdSet) {
+        self.args.as_slice().free_into(free);
+        self.expression.free_into(free);
+        self.premises.as_slice().free_into(free);
     }
 }
 
@@ -292,8 +309,9 @@ impl Free for ClauseKind {
 // - Table rows
 
 impl Free for TableRowKind {
-    fn free(&self) -> IdSet {
-        self.0.as_slice().free().union(self.1.free())
+    fn free_into(&self, free: &mut IdSet) {
+        self.0.as_slice().free_into(free);
+        self.1.free_into(free);
     }
 }
 
@@ -326,11 +344,9 @@ impl Free for ExternRel {
 }
 
 impl Free for Rel {
-    fn free(&self) -> IdSet {
-        self.rule_groups
-            .as_slice()
-            .free()
-            .union(self.else_group.free())
+    fn free_into(&self, free: &mut IdSet) {
+        self.rule_groups.as_slice().free_into(free);
+        self.else_group.free_into(free);
     }
 }
 
@@ -347,32 +363,30 @@ impl Free for BuiltinDec {
 }
 
 impl Free for TableDec {
-    fn free(&self) -> IdSet {
-        self.rows.as_slice().free()
+    fn free_into(&self, free: &mut IdSet) {
+        self.rows.as_slice().free_into(free);
     }
 }
 
 impl Free for FuncDec {
-    fn free(&self) -> IdSet {
-        self.clauses
-            .as_slice()
-            .free()
-            .union(self.else_clause.free())
+    fn free_into(&self, free: &mut IdSet) {
+        self.clauses.as_slice().free_into(free);
+        self.else_clause.free_into(free);
     }
 }
 
 impl Free for DefKind {
-    fn free(&self) -> IdSet {
+    fn free_into(&self, free: &mut IdSet) {
         match self {
-            Self::ExternTyp(definition) => definition.free(),
-            Self::Typ(definition) => definition.free(),
-            Self::Var(definition) => definition.free(),
-            Self::ExternRel(definition) => definition.free(),
-            Self::Rel(definition) => definition.free(),
-            Self::ExternDec(definition) => definition.free(),
-            Self::BuiltinDec(definition) => definition.free(),
-            Self::TableDec(definition) => definition.free(),
-            Self::FuncDec(definition) => definition.free(),
+            Self::ExternTyp(definition) => definition.free_into(free),
+            Self::Typ(definition) => definition.free_into(free),
+            Self::Var(definition) => definition.free_into(free),
+            Self::ExternRel(definition) => definition.free_into(free),
+            Self::Rel(definition) => definition.free_into(free),
+            Self::ExternDec(definition) => definition.free_into(free),
+            Self::BuiltinDec(definition) => definition.free_into(free),
+            Self::TableDec(definition) => definition.free_into(free),
+            Self::FuncDec(definition) => definition.free_into(free),
         }
     }
 }
@@ -380,7 +394,7 @@ impl Free for DefKind {
 // - Specifications
 
 impl Free for Spec {
-    fn free(&self) -> IdSet {
-        self.as_slice().free()
+    fn free_into(&self, free: &mut IdSet) {
+        self.as_slice().free_into(free);
     }
 }

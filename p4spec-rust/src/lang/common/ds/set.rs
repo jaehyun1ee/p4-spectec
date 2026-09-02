@@ -36,9 +36,14 @@ impl<K: SyntaxCmp> PhraseSet<K> {
         self.entries.insert(ByKey(key))
     }
 
+    /// Moves every key from `set_other` into this set
+    pub fn append(&mut self, set_other: Self) {
+        self.entries.extend(set_other.entries);
+    }
+
     /// Returns the union with `set_other`
     pub fn union(mut self, set_other: Self) -> Self {
-        self.entries.extend(set_other.entries);
+        self.append(set_other);
         self
     }
 
