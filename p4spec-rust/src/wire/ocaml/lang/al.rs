@@ -46,9 +46,9 @@ fn decode_prem(value: &Value) -> Result<ast::Prem, DecodeError> {
                 exp_l: il::decode_exp(exp_l)?,
                 exp_r: il::decode_exp(exp_r)?,
             })),
-            ("IterPr", [prem, iter_prem]) => Ok(PremKind::Iter(IteratedPrem {
+            ("IterPr", [prem, prem_iter]) => Ok(PremKind::Iter(IterPrem {
                 prem: Box::new(decode_prem(prem)?),
-                iter_prem: il::decode_iter_prem(iter_prem)?,
+                prem_iter: il::decode_prem_iter(prem_iter)?,
             })),
             ("DebugPr", [exp]) => Ok(PremKind::Debug(DebugPrem {
                 exp: il::decode_exp(exp)?,
@@ -88,8 +88,8 @@ fn encode_prem(prem: &ast::Prem) -> Value {
         PremKind::Let(LetPrem { exp_l, exp_r }) => {
             json!(["LetPr", il::encode_exp(exp_l), il::encode_exp(exp_r)])
         }
-        PremKind::Iter(IteratedPrem { prem, iter_prem }) => {
-            json!(["IterPr", encode_prem(prem), il::encode_iter_prem(iter_prem)])
+        PremKind::Iter(IterPrem { prem, prem_iter }) => {
+            json!(["IterPr", encode_prem(prem), il::encode_prem_iter(prem_iter)])
         }
         PremKind::Debug(DebugPrem { exp }) => json!(["DebugPr", il::encode_exp(exp)]),
     })

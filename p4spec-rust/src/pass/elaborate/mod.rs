@@ -12,7 +12,7 @@ pub use error::*;
 
 use crate::lang::{el, il};
 
-/// Validates and converts an elaboration-language specification to intermediate syntax.
+/// Validates and converts an EL specification to IL
 pub fn elaborate(spec: &el::ast::Spec) -> Result<il::ast::Spec, ElabError> {
     elab::elaborate(spec)
 }

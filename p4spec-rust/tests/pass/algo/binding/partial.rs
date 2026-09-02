@@ -167,13 +167,13 @@ fn test_partial_binding_preserves_expression_and_premise_iteration_dimensions() 
     let [premise] = premises.as_slice() else {
         panic!("expected one equality premise");
     };
-    let ast_al::PremKind::Iter(iterated_prem) = &premise.node else {
+    let ast_al::PremKind::Iter(iter_prem) = &premise.node else {
         panic!("expected premise iteration");
     };
-    assert_eq!(iterated_prem.iter_prem.iter, ast::Iter::List);
-    assert_eq!(iterated_prem.iter_prem.vars_bound.len(), 1);
-    assert_eq!(iterated_prem.iter_prem.vars_bound[0].id, *id_rename);
-    let ast_al::PremKind::If(if_prem) = &iterated_prem.prem.node else {
+    assert_eq!(iter_prem.prem_iter.iter, ast::Iter::List);
+    assert_eq!(iter_prem.prem_iter.vars_bound.len(), 1);
+    assert_eq!(iter_prem.prem_iter.vars_bound[0].id, *id_rename);
+    let ast_al::PremKind::If(if_prem) = &iter_prem.prem.node else {
         panic!("expected equality side condition");
     };
     let ast::ExpKind::Cmp(_, ast::OpTyp::Bool, exp_l, exp_r) = &if_prem.exp.node else {
@@ -267,13 +267,13 @@ fn test_partial_binding_preserves_nested_iteration_order_and_dimensions() {
     let ast_al::PremKind::Iter(outer) = &premise.node else {
         panic!("expected outer premise iteration");
     };
-    assert_eq!(outer.iter_prem.iter, ast::Iter::List);
-    assert_eq!(outer.iter_prem.vars_bound[0].id, *id_rename);
+    assert_eq!(outer.prem_iter.iter, ast::Iter::List);
+    assert_eq!(outer.prem_iter.vars_bound[0].id, *id_rename);
     let ast_al::PremKind::Iter(inner) = &outer.prem.node else {
         panic!("expected inner premise iteration");
     };
-    assert_eq!(inner.iter_prem.iter, ast::Iter::Opt);
-    assert_eq!(inner.iter_prem.vars_bound[0].id, *id_rename);
+    assert_eq!(inner.prem_iter.iter, ast::Iter::Opt);
+    assert_eq!(inner.prem_iter.vars_bound[0].id, *id_rename);
 }
 
 #[test]

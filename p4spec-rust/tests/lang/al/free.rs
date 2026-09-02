@@ -178,12 +178,12 @@ fn test_free_expression_path_argument_and_premise_variants_collect_identifier_te
             ids(&["x", "y"]),
         ),
         (
-            al::ast::PremKind::Iter(al::ast::IteratedPrem {
+            al::ast::PremKind::Iter(al::ast::IterPrem {
                 prem: Box::new(p4spec_rust::phrase! {
                     node: al::ast::PremKind::If(al::ast::IfPrem { exp: variable("x") }),
                     span: span("nested"),
                 }),
-                iter_prem: il::ast::IterPrem {
+                prem_iter: il::ast::PremIter {
                     iter: il::ast::Iter::List,
                     vars_bound: Vec::new(),
                     vars_bind: Vec::new(),

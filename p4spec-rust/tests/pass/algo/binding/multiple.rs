@@ -74,9 +74,9 @@ fn test_multiple_side_conditions_use_the_rename_environment_dimension() {
     let [premise] = premises.as_slice() else {
         panic!("expected one repeated-binding premise");
     };
-    let ast_al::PremKind::Iter(iterated) = &premise.node else {
+    let ast_al::PremKind::Iter(iter_prem) = &premise.node else {
         panic!("expected the collected binding dimension");
     };
-    assert_eq!(iterated.iter_prem.iter, ast::Iter::List);
-    assert!(matches!(iterated.prem.node, ast_al::PremKind::If(_)));
+    assert_eq!(iter_prem.prem_iter.iter, ast::Iter::List);
+    assert!(matches!(iter_prem.prem.node, ast_al::PremKind::If(_)));
 }

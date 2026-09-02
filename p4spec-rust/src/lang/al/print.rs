@@ -75,21 +75,21 @@ impl Print for Prem {
                 printer.write_str(" = ")?;
                 exp_r.print(printer)
             }
-            PremKind::Iter(IteratedPrem {
+            PremKind::Iter(IterPrem {
                 prem: prem_inner,
-                iter_prem,
+                prem_iter,
             }) if matches!(prem_inner.node, PremKind::Iter(_)) => {
                 prem_inner.print(printer)?;
-                iter_prem.print(printer)
+                prem_iter.print(printer)
             }
-            PremKind::Iter(IteratedPrem {
+            PremKind::Iter(IterPrem {
                 prem: prem_inner,
-                iter_prem,
+                prem_iter,
             }) => {
                 printer.write_char('(')?;
                 prem_inner.print(printer)?;
                 printer.write_char(')')?;
-                iter_prem.print(printer)
+                prem_iter.print(printer)
             }
             PremKind::Debug(DebugPrem { exp }) => {
                 printer.write_str("debug ")?;

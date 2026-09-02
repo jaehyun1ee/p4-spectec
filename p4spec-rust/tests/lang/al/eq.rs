@@ -107,7 +107,7 @@ fn test_syntax_equality_distinguishes_recursive_operands_variants_and_collection
             span: span("debug"),
         })
     );
-    let iter_prem = |vars_bound, vars_bind| il::ast::IterPrem {
+    let prem_iter = |vars_bound, vars_bind| il::ast::PremIter {
         iter: il::ast::Iter::List,
         vars_bound,
         vars_bind,
@@ -123,18 +123,18 @@ fn test_syntax_equality_distinguishes_recursive_operands_variants_and_collection
         iters: Vec::new(),
     };
     assert!(
-        iter_prem(vec![var_x.clone(), var_y.clone()], vec![var_x.clone()]).syntax_eq(&iter_prem(
+        prem_iter(vec![var_x.clone(), var_y.clone()], vec![var_x.clone()]).syntax_eq(&prem_iter(
             vec![var_y.clone(), var_x.clone()],
             vec![var_x.clone()]
         ))
     );
     assert!(
-        !iter_prem(vec![var_x.clone()], vec![var_x.clone()])
-            .syntax_eq(&iter_prem(vec![var_y.clone()], vec![var_x.clone()]))
+        !prem_iter(vec![var_x.clone()], vec![var_x.clone()])
+            .syntax_eq(&prem_iter(vec![var_y.clone()], vec![var_x.clone()]))
     );
     assert!(
-        !iter_prem(vec![var_x.clone()], vec![var_x.clone()])
-            .syntax_eq(&iter_prem(vec![var_x.clone()], vec![var_y.clone()]))
+        !prem_iter(vec![var_x.clone()], vec![var_x.clone()])
+            .syntax_eq(&prem_iter(vec![var_x.clone()], vec![var_y.clone()]))
     );
     assert!(![variable("x"), variable("y")].syntax_eq(&[variable("y"), variable("x")]));
     assert!([var_x.clone(), var_y.clone()].syntax_eq(&[var_y, var_x]));

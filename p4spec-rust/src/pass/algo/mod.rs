@@ -13,7 +13,7 @@ pub use error::*;
 
 use crate::lang::{al, il};
 
-/// Converts an intermediate-language specification to algorithmic syntax.
+/// Converts an IL specification to AL
 pub fn convert(spec: &il::ast::Spec) -> Result<al::ast::Spec, AlgoError> {
     let spec = binding::analyze::analyze_spec(spec)?;
     Ok(sidecondition::guard::insert_spec(spec))

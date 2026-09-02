@@ -418,9 +418,9 @@ fn test_free_path_argument_and_premise_variants_follow_the_oracle() {
         ),
         (
             "iteration_omits_binder_variables",
-            prem(ast::PremKind::Iter(ast::IteratedPrem {
+            prem(ast::PremKind::Iter(ast::IterPrem {
                 prem: Box::new(nested),
-                iter_prem: ast::IterPrem {
+                prem_iter: ast::PremIter {
                     iter: ast::Iter::List,
                     vars_bound: vec![ast::Var {
                         id: id("input"),

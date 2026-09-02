@@ -419,9 +419,9 @@ fn test_conversion_distinguishes_iterated_must_guards_from_insert_guards() {
         14,
     );
     let prem_iterated = crate::phrase! { node:
-    ast::PremKind::Iter(ast::IteratedPrem {
+    ast::PremKind::Iter(ast::IterPrem {
         prem: Box::new(if_prem(exp_condition)),
-        iter_prem: ast::IterPrem {
+        prem_iter: ast::PremIter {
             iter: ast::Iter::List,
             vars_bound: vec![
                 iteration_var("left", typ_bool.clone(), 10),
@@ -451,13 +451,13 @@ fn test_conversion_distinguishes_iterated_must_guards_from_insert_guards() {
     assert!(matches!(source_premise.node, ast_al::PremKind::Iter(_)));
 
     let prem_binding = crate::phrase! { node:
-    ast::PremKind::Iter(ast::IteratedPrem {
+    ast::PremKind::Iter(ast::IterPrem {
         prem: Box::new(equality_prem(
             typed_var_exp("output", &typ_bool, 23),
             typed_var_exp("input", &typ_bool, 22),
             24,
         )),
-        iter_prem: ast::IterPrem {
+        prem_iter: ast::PremIter {
             iter: ast::Iter::List,
             vars_bound: vec![iteration_var("input", typ_bool.clone(), 22)],
             vars_bind: vec![],
@@ -478,12 +478,12 @@ fn test_conversion_distinguishes_iterated_must_guards_from_insert_guards() {
         panic!("bound-plus-bind guard must suppress the matching output guard");
     };
     assert_eq!(source_premise.span, span(24));
-    let ast_al::PremKind::Iter(iterated) = &source_premise.node else {
+    let ast_al::PremKind::Iter(iter_prem) = &source_premise.node else {
         panic!("expected analyzed iterated binding premise");
     };
     assert_eq!(
-        iterated
-            .iter_prem
+        iter_prem
+            .prem_iter
             .vars_bound
             .iter()
             .map(|var| var.id.node.as_str())
@@ -491,8 +491,8 @@ fn test_conversion_distinguishes_iterated_must_guards_from_insert_guards() {
         vec!["input"]
     );
     assert_eq!(
-        iterated
-            .iter_prem
+        iter_prem
+            .prem_iter
             .vars_bind
             .iter()
             .map(|var| var.id.node.as_str())

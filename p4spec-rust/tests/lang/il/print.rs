@@ -31,7 +31,7 @@ fn test_printer_renders_case_patterns_as_canonical_mixops() {
 
 #[test]
 fn test_printer_renders_nested_premises_and_definition_spec_goldens() {
-    let iteration = ast::IterPrem {
+    let prem_iter = ast::PremIter {
         iter: ast::Iter::List,
         vars_bound: vec![ast::Var {
             id: id("bound"),
@@ -44,12 +44,12 @@ fn test_printer_renders_nested_premises_and_definition_spec_goldens() {
             iters: vec![ast::Iter::Opt],
         }],
     };
-    let nested = prem(ast::PremKind::Iter(ast::IteratedPrem {
-        prem: Box::new(prem(ast::PremKind::Iter(ast::IteratedPrem {
+    let nested = prem(ast::PremKind::Iter(ast::IterPrem {
+        prem: Box::new(prem(ast::PremKind::Iter(ast::IterPrem {
             prem: Box::new(prem(ast::PremKind::If(ast::IfPrem { exp: var("ready") }))),
-            iter_prem: iteration.clone(),
+            prem_iter: prem_iter.clone(),
         }))),
-        iter_prem: iteration,
+        prem_iter,
     }));
     assert_eq!(
         Print::to_string(&nested),

@@ -1,19 +1,27 @@
-//! Explicit guards for partial algorithmic expressions.
+//! Explicit guard insertion for partial algorithmic expressions:
 //!
-//! Indexing requires an in-bounds premise, list iterations require equal lengths, and
-//! optional iterations require equivalent presence. Conditions implied by earlier binding
-//! premises are tracked as must-premises and filtered from the inserted guards.
+//! - `a[n]` requires `n < |a|`
+//! - `e*{x <- x*, y <- y*, z <- z*}` requires
+//!   `(|x*| = |y*|) /\ (|y*| = |z*|)`
+//! - `e?{x <- x?, y <- y?}` requires `(x? = eps) <=> (y? = eps)`
+//!
+//! Binding sites also produce must-premises. For example,
+//! `(let (x, y) = z){x -> x*, y -> y*, z <- z*}` establishes the list-length
+//! equalities above. Guards entailed by these earlier premises are omitted.
 
 use crate::{
     lang::{
         al::{self, ast},
+        common::source::Span,
         traits::{eq::SyntaxEq, free::Free},
         xl,
     },
     note_phrase, phrase,
 };
 
-// Equivalence classes for transitive guard filtering
+// == Equivalence filtering
+
+// - Equivalence classes
 
 #[derive(Clone, Copy)]
 enum ClassKind {
@@ -36,7 +44,16 @@ impl Class {
             _ => None,
         }
     }
+
+    fn new(kind: ClassKind, conditions: Vec<ast::Exp>) -> Self {
+        match kind {
+            ClassKind::Equals => Self::Equals(conditions),
+            ClassKind::Equiv => Self::Equiv(conditions),
+        }
+    }
 }
+
+// - Equivalence table
 
 #[derive(Default)]
 struct EquivalenceTable {
@@ -44,10 +61,10 @@ struct EquivalenceTable {
 }
 
 impl EquivalenceTable {
-    fn from_prems(prems: &[ast::Prem]) -> Self {
+    fn from_prems(prems_al: &[ast::Prem]) -> Self {
         let mut table = Self::default();
-        for prem in prems {
-            if let ast::PremKind::If(if_prem) = &prem.node {
+        for prem_al in prems_al {
+            if let ast::PremKind::If(if_prem) = &prem_al.node {
                 table.add_if_exp(&if_prem.exp);
             }
         }
@@ -72,18 +89,21 @@ impl EquivalenceTable {
 
     fn find(&self, kind: ClassKind, condition: &ast::Exp) -> Option<usize> {
         self.classes.iter().position(|class| {
-            class.conditions(kind).is_some_and(|conditions| {
-                conditions
-                    .iter()
-                    .any(|candidate| condition.syntax_eq(candidate))
-            })
+            let Some(conditions) = class.conditions(kind) else {
+                return false;
+            };
+            conditions
+                .iter()
+                .any(|candidate| condition.syntax_eq(candidate))
         })
     }
 
-    fn wrap(kind: ClassKind, conditions: Vec<ast::Exp>) -> Class {
-        match kind {
-            ClassKind::Equals => Class::Equals(conditions),
-            ClassKind::Equiv => Class::Equiv(conditions),
+    fn take_conditions(&mut self, kind: ClassKind, index: usize) -> Vec<ast::Exp> {
+        let class = self.classes.remove(index);
+        match (kind, class) {
+            (ClassKind::Equals, Class::Equals(conditions))
+            | (ClassKind::Equiv, Class::Equiv(conditions)) => conditions,
+            _ => unreachable!("class lookup preserves the equivalence kind"),
         }
     }
 
@@ -93,67 +113,51 @@ impl EquivalenceTable {
         match (index_a, index_b) {
             (Some(index_a), Some(index_b)) if index_a == index_b => {}
             (Some(index_a), Some(index_b)) => {
-                let Some(conditions_a) = self
-                    .classes
-                    .get(index_a)
-                    .and_then(|class| class.conditions(kind))
-                    .map(<[ast::Exp]>::to_vec)
-                else {
-                    return;
-                };
-                let Some(conditions_b) = self
-                    .classes
-                    .get(index_b)
-                    .and_then(|class| class.conditions(kind))
-                    .map(<[ast::Exp]>::to_vec)
-                else {
-                    return;
-                };
-                let mut conditions = conditions_a;
-                conditions.extend(conditions_b);
                 let index_high = index_a.max(index_b);
                 let index_low = index_a.min(index_b);
-                self.classes.remove(index_high);
-                self.classes.remove(index_low);
-                self.classes.insert(0, Self::wrap(kind, conditions));
+                let conditions_high = self.take_conditions(kind, index_high);
+                let conditions_low = self.take_conditions(kind, index_low);
+                let (mut conditions_a, mut conditions_b) = if index_a == index_low {
+                    (conditions_low, conditions_high)
+                } else {
+                    (conditions_high, conditions_low)
+                };
+                conditions_a.append(&mut conditions_b);
+                let class = Class::new(kind, conditions_a);
+                self.classes.insert(0, class);
             }
             (Some(index), None) | (None, Some(index)) => {
-                let condition = if index_a.is_some() {
+                let condition_new = if index_a.is_some() {
                     condition_b
                 } else {
                     condition_a
                 };
-                let Some(mut conditions) = self
-                    .classes
-                    .get(index)
-                    .and_then(|class| class.conditions(kind))
-                    .map(<[ast::Exp]>::to_vec)
-                else {
-                    return;
-                };
-                conditions.insert(0, condition.clone());
-                self.classes.remove(index);
-                self.classes.insert(0, Self::wrap(kind, conditions));
+                let mut conditions = self.take_conditions(kind, index);
+                conditions.insert(0, condition_new.clone());
+                let class = Class::new(kind, conditions);
+                self.classes.insert(0, class);
             }
-            (None, None) => self.classes.insert(
-                0,
-                Self::wrap(kind, vec![condition_a.clone(), condition_b.clone()]),
-            ),
+            (None, None) => {
+                let conditions = vec![condition_a.clone(), condition_b.clone()];
+                let class = Class::new(kind, conditions);
+                self.classes.insert(0, class);
+            }
         }
     }
 
     fn contains(&self, kind: ClassKind, condition_a: &ast::Exp, condition_b: &ast::Exp) -> bool {
-        condition_a.syntax_eq(condition_b)
-            || self.find(kind, condition_a).is_some_and(|index| {
-                self.classes
-                    .get(index)
-                    .and_then(|class| class.conditions(kind))
-                    .is_some_and(|conditions| {
-                        conditions
-                            .iter()
-                            .any(|condition| condition.syntax_eq(condition_b))
-                    })
-            })
+        if condition_a.syntax_eq(condition_b) {
+            return true;
+        }
+        let Some(index) = self.find(kind, condition_a) else {
+            return false;
+        };
+        let Some(conditions) = self.classes[index].conditions(kind) else {
+            return false;
+        };
+        conditions
+            .iter()
+            .any(|condition| condition.syntax_eq(condition_b))
     }
 
     fn implies_exp(&self, exp: &ast::Exp) -> bool {
@@ -173,39 +177,47 @@ impl EquivalenceTable {
         }
     }
 
-    fn implies(&self, prem: &ast::Prem) -> bool {
-        matches!(&prem.node, ast::PremKind::If(if_prem) if self.implies_exp(&if_prem.exp))
+    fn implies(&self, prem_al: &ast::Prem) -> bool {
+        let ast::PremKind::If(if_prem) = &prem_al.node else {
+            return false;
+        };
+        self.implies_exp(&if_prem.exp)
     }
 }
 
+// == Collection result
+
 // Must-premises hold before evaluation; insert-premises guard partial operations
 
-#[derive(Default)]
 struct Collected {
-    must: Vec<ast::Prem>,
-    insert: Vec<ast::Prem>,
+    prems_must: Vec<ast::Prem>,
+    prems_insert: Vec<ast::Prem>,
 }
 
 impl Collected {
-    fn compose(mut self, other: Self) -> Self {
-        self.must.extend(other.must);
-        self.insert.extend(other.insert);
+    fn compose(mut self, mut other: Self) -> Self {
+        self.prems_must.append(&mut other.prems_must);
+        self.prems_insert.append(&mut other.prems_insert);
         self
     }
 }
 
-fn filter_insert(must: &[ast::Prem], insert: Vec<ast::Prem>) -> Vec<ast::Prem> {
-    let table = EquivalenceTable::from_prems(must);
-    insert
+fn filter_prems_insert(prems_must: &[ast::Prem], prems_insert: Vec<ast::Prem>) -> Vec<ast::Prem> {
+    let table = EquivalenceTable::from_prems(prems_must);
+    prems_insert
         .into_iter()
-        .filter(|prem| {
-            !table.implies(prem) && !must.iter().any(|prem_must| prem.syntax_eq(prem_must))
+        .filter(|prem_al| {
+            let implied = table.implies(prem_al);
+            let duplicated = prems_must
+                .iter()
+                .any(|prem_must_al| prem_al.syntax_eq(prem_must_al));
+            !implied && !duplicated
         })
         .collect()
 }
 
-fn iterate_prem(iter: ast::Iter, vars: &[ast::Var], prem: ast::Prem) -> Option<ast::Prem> {
-    let frees = prem.free();
+fn iterate_prem(iter: ast::Iter, vars: &[ast::Var], prem_al: ast::Prem) -> Option<ast::Prem> {
+    let frees = prem_al.free();
     let vars_bound = vars
         .iter()
         .filter(|var| frees.contains(&var.id))
@@ -214,23 +226,24 @@ fn iterate_prem(iter: ast::Iter, vars: &[ast::Var], prem: ast::Prem) -> Option<a
     if vars_bound.is_empty() {
         return None;
     }
-    let span = prem.span.clone();
-    let iter_prem = ast::IterPrem {
+    let span = prem_al.span.clone();
+    let prem_iter = ast::PremIter {
         iter,
         vars_bound,
         vars_bind: vec![],
     };
-    let prem = ast::PremKind::Iter(ast::IteratedPrem {
-        prem: Box::new(prem),
-        iter_prem,
+    let prem_kind = ast::PremKind::Iter(ast::IterPrem {
+        prem: Box::new(prem_al),
+        prem_iter,
     });
-    Some(phrase!(node: prem, span: span))
+    let prem_al = phrase!(node: prem_kind, span: span);
+    Some(prem_al)
 }
 
-fn iterate_prems(iter: ast::Iter, vars: &[ast::Var], prems: Vec<ast::Prem>) -> Vec<ast::Prem> {
-    prems
+fn iterate_prems(iter: ast::Iter, vars: &[ast::Var], prems_al: Vec<ast::Prem>) -> Vec<ast::Prem> {
+    prems_al
         .into_iter()
-        .filter_map(|prem| iterate_prem(iter, vars, prem))
+        .filter_map(|prem_al| iterate_prem(iter, vars, prem_al))
         .collect()
 }
 
@@ -241,95 +254,101 @@ fn iterate_collected(
     collected: Collected,
 ) -> Collected {
     Collected {
-        must: iterate_prems(iter, vars_must, collected.must),
-        insert: iterate_prems(iter, vars_insert, collected.insert),
+        prems_must: iterate_prems(iter, vars_must, collected.prems_must),
+        prems_insert: iterate_prems(iter, vars_insert, collected.prems_insert),
     }
 }
 
-// Guard generation
+// == Guard generation
 
-fn gen_index_guard(exp: &ast::Exp, exp_base: &ast::Exp, exp_index: &ast::Exp) -> Vec<ast::Prem> {
-    let span = exp.span.clone();
-    let exp_len = note_phrase! {
-        node: ast::ExpKind::Len(Box::new(exp_base.clone())),
+fn gen_index_guard(
+    exp_al: &ast::Exp,
+    exp_base_al: &ast::Exp,
+    exp_index_al: &ast::Exp,
+) -> Vec<ast::Prem> {
+    let span = exp_al.span.clone();
+    let exp_len_al = note_phrase! {
+        node: ast::ExpKind::Len(Box::new(exp_base_al.clone())),
         note: ast::TypKind::Num(xl::num::Typ::Nat),
         span: span.clone(),
     };
-    let exp_if = note_phrase! {
+    let exp_guard_al = note_phrase! {
         node: ast::ExpKind::Cmp(
             ast::CmpOp::Num(xl::num::CmpOp::Lt),
             ast::OpTyp::Bool,
-            Box::new(exp_index.clone()),
-            Box::new(exp_len),
+            Box::new(exp_index_al.clone()),
+            Box::new(exp_len_al),
         ),
         note: ast::TypKind::Bool,
         span: span.clone(),
     };
-    vec![phrase!(node: ast::PremKind::If(ast::IfPrem { exp: exp_if }), span: span)]
+    let prem_kind = ast::PremKind::If(ast::IfPrem { exp: exp_guard_al });
+    let prem_guard_al = phrase!(node: prem_kind, span: span);
+    vec![prem_guard_al]
 }
 
-fn gen_eq_epsilon_exp(iter: ast::Iter, var: &ast::Var) -> ast::Exp {
+fn gen_exp_eq_epsilon(iter: ast::Iter, var: &ast::Var) -> ast::Exp {
     let mut var = var.clone();
     var.iters.push(iter);
-    let exp = al::var::as_exp(true, &var);
-    let span = exp.span.clone();
-    let note = exp.note.clone();
-    let exp_epsilon = note_phrase! {
+    let exp_al = al::var::as_exp(true, &var);
+    let span = exp_al.span.clone();
+    let typ = exp_al.note.clone();
+    let exp_epsilon_al = note_phrase! {
         node: ast::ExpKind::Opt(None),
-        note: note,
+        note: typ,
         span: span.clone(),
     };
     note_phrase! {
         node: ast::ExpKind::Cmp(
             ast::CmpOp::Bool(xl::bool::CmpOp::Eq),
             ast::OpTyp::Bool,
-            Box::new(exp),
-            Box::new(exp_epsilon),
+            Box::new(exp_al),
+            Box::new(exp_epsilon_al),
         ),
         note: ast::TypKind::Bool,
         span: span,
     }
 }
 
-fn gen_len_exp(iter: ast::Iter, var: &ast::Var) -> ast::Exp {
+fn gen_exp_len(iter: ast::Iter, var: &ast::Var) -> ast::Exp {
     let mut var = var.clone();
     var.iters.push(iter);
-    let exp = al::var::as_exp(true, &var);
-    let span = exp.span.clone();
+    let exp_al = al::var::as_exp(true, &var);
+    let span = exp_al.span.clone();
     note_phrase! {
-        node: ast::ExpKind::Len(Box::new(exp)),
+        node: ast::ExpKind::Len(Box::new(exp_al)),
         note: ast::TypKind::Num(xl::num::Typ::Nat),
         span: span,
     }
 }
 
-fn pair_exp(iter: ast::Iter, exp_l: ast::Exp, exp_r: ast::Exp) -> ast::Exp {
-    let span = crate::lang::common::source::Span::over(&[exp_l.span.clone(), exp_r.span.clone()]);
-    let kind = match iter {
+fn gen_exp_pair(iter: ast::Iter, exp_l_al: ast::Exp, exp_r_al: ast::Exp) -> ast::Exp {
+    let span = Span::over(&[exp_l_al.span.clone(), exp_r_al.span.clone()]);
+    let exp_kind = match iter {
         ast::Iter::Opt => ast::ExpKind::Bin(
             ast::BinOp::Bool(xl::bool::BinOp::Equiv),
             ast::OpTyp::Bool,
-            Box::new(exp_l),
-            Box::new(exp_r),
+            Box::new(exp_l_al),
+            Box::new(exp_r_al),
         ),
         ast::Iter::List => ast::ExpKind::Cmp(
             ast::CmpOp::Bool(xl::bool::CmpOp::Eq),
             ast::OpTyp::Bool,
-            Box::new(exp_l),
-            Box::new(exp_r),
+            Box::new(exp_l_al),
+            Box::new(exp_r_al),
         ),
     };
-    note_phrase!(node: kind, note: ast::TypKind::Bool, span: span)
+    note_phrase!(node: exp_kind, note: ast::TypKind::Bool, span: span)
 }
 
-fn and_exp(exp_l: ast::Exp, exp_r: ast::Exp) -> ast::Exp {
-    let span = crate::lang::common::source::Span::over(&[exp_l.span.clone(), exp_r.span.clone()]);
+fn gen_exp_and(exp_l_al: ast::Exp, exp_r_al: ast::Exp) -> ast::Exp {
+    let span = Span::over(&[exp_l_al.span.clone(), exp_r_al.span.clone()]);
     note_phrase! {
         node: ast::ExpKind::Bin(
             ast::BinOp::Bool(xl::bool::BinOp::And),
             ast::OpTyp::Bool,
-            Box::new(exp_l),
-            Box::new(exp_r),
+            Box::new(exp_l_al),
+            Box::new(exp_r_al),
         ),
         note: ast::TypKind::Bool,
         span: span,
@@ -341,257 +360,331 @@ fn gen_iter_guard(iter_exp: &ast::IterExp) -> Vec<ast::Prem> {
     if vars.len() < 2 {
         return vec![];
     }
-    let exps = vars
-        .iter()
-        .map(|var| match iter {
-            ast::Iter::Opt => gen_eq_epsilon_exp(*iter, var),
-            ast::Iter::List => gen_len_exp(*iter, var),
-        })
-        .collect::<Vec<_>>();
-    let mut exp_previous = exps[1].clone();
-    let mut exp_if = pair_exp(*iter, exps[0].clone(), exp_previous.clone());
-    for exp in exps.into_iter().skip(2) {
-        let exp_pair = pair_exp(*iter, exp_previous, exp.clone());
-        exp_if = and_exp(exp_if, exp_pair);
-        exp_previous = exp;
+    let mut exps_al = vars.iter().map(|var| match iter {
+        ast::Iter::Opt => gen_exp_eq_epsilon(*iter, var),
+        ast::Iter::List => gen_exp_len(*iter, var),
+    });
+    let Some(exp_first_al) = exps_al.next() else {
+        return vec![];
+    };
+    let Some(mut exp_prev_al) = exps_al.next() else {
+        return vec![];
+    };
+    let mut exp_guard_al = gen_exp_pair(*iter, exp_first_al, exp_prev_al.clone());
+    for exp_al in exps_al {
+        let exp_pair_al = gen_exp_pair(*iter, exp_prev_al, exp_al.clone());
+        exp_guard_al = gen_exp_and(exp_guard_al, exp_pair_al);
+        exp_prev_al = exp_al;
     }
-    let span = exp_if.span.clone();
-    vec![phrase!(node: ast::PremKind::If(ast::IfPrem { exp: exp_if }), span: span)]
+    let span = exp_guard_al.span.clone();
+    let prem_kind = ast::PremKind::If(ast::IfPrem { exp: exp_guard_al });
+    let prem_guard_al = phrase!(node: prem_kind, span: span);
+    vec![prem_guard_al]
 }
 
-fn compose_inserts(mut inserts: Vec<ast::Prem>, other: Vec<ast::Prem>) -> Vec<ast::Prem> {
-    inserts.extend(other);
-    inserts
-}
+// == Guard collection
 
-// Guard collection
+// - Expressions
 
-fn collect_exp(exp: &ast::Exp) -> Vec<ast::Prem> {
-    match &exp.node {
+fn collect_exp(exp_al: &ast::Exp) -> Vec<ast::Prem> {
+    match &exp_al.node {
         ast::ExpKind::Bool(_)
         | ast::ExpKind::Num(_)
         | ast::ExpKind::Text(_)
         | ast::ExpKind::Var(_) => vec![],
-        ast::ExpKind::Un(_, _, exp)
-        | ast::ExpKind::UpCast(_, exp)
-        | ast::ExpKind::DownCast(_, exp)
-        | ast::ExpKind::Sub(exp, _, _)
-        | ast::ExpKind::Match(exp, _)
-        | ast::ExpKind::Len(exp)
-        | ast::ExpKind::Dot(exp, _) => collect_exp(exp),
+        ast::ExpKind::Un(_, _, exp_inner_al)
+        | ast::ExpKind::UpCast(_, exp_inner_al)
+        | ast::ExpKind::DownCast(_, exp_inner_al)
+        | ast::ExpKind::Sub(exp_inner_al, _, _)
+        | ast::ExpKind::Match(exp_inner_al, _)
+        | ast::ExpKind::Len(exp_inner_al)
+        | ast::ExpKind::Dot(exp_inner_al, _) => collect_exp(exp_inner_al),
         ast::ExpKind::Bin(_, _, exp_l, exp_r)
         | ast::ExpKind::Cmp(_, _, exp_l, exp_r)
         | ast::ExpKind::Cons(exp_l, exp_r)
         | ast::ExpKind::Cat(exp_l, exp_r)
         | ast::ExpKind::Mem(exp_l, exp_r) => {
-            compose_inserts(collect_exp(exp_l), collect_exp(exp_r))
+            let mut prems_insert = collect_exp(exp_l);
+            let prems_r_insert = collect_exp(exp_r);
+            prems_insert.extend(prems_r_insert);
+            prems_insert
         }
         ast::ExpKind::Tuple(exps) | ast::ExpKind::List(exps) => collect_exps(exps.iter()),
         ast::ExpKind::Case(not_exp) => collect_exps(not_exp.args()),
         ast::ExpKind::Str(fields) => collect_exps(fields.iter().map(|(_, exp)| exp)),
-        ast::ExpKind::Opt(Some(exp)) => collect_exp(exp),
+        ast::ExpKind::Opt(Some(exp_inner_al)) => collect_exp(exp_inner_al),
         ast::ExpKind::Opt(None) => vec![],
         ast::ExpKind::Idx(exp_base, exp_index) => {
-            let inserts = compose_inserts(collect_exp(exp_base), collect_exp(exp_index));
-            compose_inserts(inserts, gen_index_guard(exp, exp_base, exp_index))
+            let mut prems_insert = collect_exp(exp_base);
+            let prems_index_insert = collect_exp(exp_index);
+            let prems_guard = gen_index_guard(exp_al, exp_base, exp_index);
+            prems_insert.extend(prems_index_insert);
+            prems_insert.extend(prems_guard);
+            prems_insert
         }
         ast::ExpKind::Slice(exp_base, exp_l, exp_h) => {
-            let inserts = compose_inserts(collect_exp(exp_base), collect_exp(exp_l));
-            compose_inserts(inserts, collect_exp(exp_h))
+            let mut prems_insert = collect_exp(exp_base);
+            let prems_l_insert = collect_exp(exp_l);
+            let prems_h_insert = collect_exp(exp_h);
+            prems_insert.extend(prems_l_insert);
+            prems_insert.extend(prems_h_insert);
+            prems_insert
         }
         ast::ExpKind::Upd(exp_base, path, exp_field) => {
-            let inserts = compose_inserts(collect_exp(exp_base), collect_path(path));
-            compose_inserts(inserts, collect_exp(exp_field))
+            let mut prems_insert = collect_exp(exp_base);
+            let prems_path_insert = collect_path(path);
+            let prems_field_insert = collect_exp(exp_field);
+            prems_insert.extend(prems_path_insert);
+            prems_insert.extend(prems_field_insert);
+            prems_insert
         }
         ast::ExpKind::Call(_, _, args) => collect_args(args),
         ast::ExpKind::Iter(exp_inner, iter_exp) => {
-            let inserts = iterate_prems(iter_exp.0, &iter_exp.1, collect_exp(exp_inner));
-            compose_inserts(inserts, gen_iter_guard(iter_exp))
+            let prems_inner_insert = collect_exp(exp_inner);
+            let mut prems_insert = iterate_prems(iter_exp.0, &iter_exp.1, prems_inner_insert);
+            let prems_guard = gen_iter_guard(iter_exp);
+            prems_insert.extend(prems_guard);
+            prems_insert
         }
     }
 }
 
 fn collect_exps<'a>(exps: impl IntoIterator<Item = &'a ast::Exp>) -> Vec<ast::Prem> {
-    exps.into_iter().fold(Vec::new(), |inserts, exp| {
-        compose_inserts(inserts, collect_exp(exp))
-    })
+    let mut prems_insert = Vec::new();
+    for exp_al in exps {
+        let prems_exp_insert = collect_exp(exp_al);
+        prems_insert.extend(prems_exp_insert);
+    }
+    prems_insert
 }
+
+// - Paths
 
 fn collect_path(path: &ast::Path) -> Vec<ast::Prem> {
     match &path.node {
         ast::PathKind::Root => vec![],
-        ast::PathKind::Idx(path, exp) => compose_inserts(collect_path(path), collect_exp(exp)),
+        ast::PathKind::Idx(path, exp_al) => {
+            let mut prems_insert = collect_path(path);
+            let prems_exp_insert = collect_exp(exp_al);
+            prems_insert.extend(prems_exp_insert);
+            prems_insert
+        }
         ast::PathKind::Slice(path, exp_l, exp_h) => {
-            let inserts = compose_inserts(collect_path(path), collect_exp(exp_l));
-            compose_inserts(inserts, collect_exp(exp_h))
+            let mut prems_insert = collect_path(path);
+            let prems_l_insert = collect_exp(exp_l);
+            let prems_h_insert = collect_exp(exp_h);
+            prems_insert.extend(prems_l_insert);
+            prems_insert.extend(prems_h_insert);
+            prems_insert
         }
         ast::PathKind::Dot(path, _) => collect_path(path),
     }
 }
 
+// - Arguments
+
 fn collect_arg(arg: &ast::Arg) -> Vec<ast::Prem> {
     match &arg.node {
-        ast::ArgKind::Exp(exp) => collect_exp(exp),
+        ast::ArgKind::Exp(exp_al) => collect_exp(exp_al),
         ast::ArgKind::Def(_) => vec![],
     }
 }
 
 fn collect_args(args: &[ast::Arg]) -> Vec<ast::Prem> {
-    args.iter().fold(Vec::new(), |inserts, arg| {
-        compose_inserts(inserts, collect_arg(arg))
-    })
+    let mut prems_insert = Vec::new();
+    for arg in args {
+        let prems_arg_insert = collect_arg(arg);
+        prems_insert.extend(prems_arg_insert);
+    }
+    prems_insert
 }
 
-fn collect_prem(prem: &ast::Prem) -> Collected {
-    match &prem.node {
-        ast::PremKind::Let(let_prem) => Collected {
-            must: collect_exp(&let_prem.exp_l),
-            insert: collect_exp(&let_prem.exp_r),
-        },
-        ast::PremKind::Iter(iterated) => {
-            let iter_prem = &iterated.iter_prem;
-            let mut vars_must = iter_prem.vars_bound.clone();
-            vars_must.extend(iter_prem.vars_bind.clone());
-            let collected = collect_prem(&iterated.prem);
-            let collected =
-                iterate_collected(iter_prem.iter, &vars_must, &iter_prem.vars_bound, collected);
-            collected.compose(collect_iter_prem(iter_prem))
-        }
-        ast::PremKind::Rule(rule_prem) => Collected {
-            must: vec![],
-            insert: collect_exps(rule_prem.not_exp.args()),
-        },
-        ast::PremKind::If(if_prem) => Collected {
-            must: vec![],
-            insert: collect_exp(&if_prem.exp),
-        },
-        ast::PremKind::IfHold(if_prem) => Collected {
-            must: vec![],
-            insert: collect_exps(if_prem.not_exp.args()),
-        },
-        ast::PremKind::IfNotHold(if_prem) => Collected {
-            must: vec![],
-            insert: collect_exps(if_prem.not_exp.args()),
-        },
-        ast::PremKind::Debug(debug_prem) => Collected {
-            must: vec![],
-            insert: collect_exp(&debug_prem.exp),
-        },
+// - Premises
+
+fn collect_prem(prem_al: &ast::Prem) -> Collected {
+    match &prem_al.node {
+        ast::PremKind::Rule(rule_prem) => collect_rule_prem(rule_prem),
+        ast::PremKind::If(if_prem) => collect_if_prem(if_prem),
+        ast::PremKind::IfHold(if_prem) => collect_if_hold_prem(if_prem),
+        ast::PremKind::IfNotHold(if_prem) => collect_if_not_hold_prem(if_prem),
+        ast::PremKind::Let(let_prem) => collect_let_prem(let_prem),
+        ast::PremKind::Iter(iter_prem) => collect_iter_prem(iter_prem),
+        ast::PremKind::Debug(debug_prem) => collect_debug_prem(debug_prem),
+    }
+}
+
+fn collect_rule_prem(rule_prem: &ast::RulePrem) -> Collected {
+    let prems_insert = collect_exps(rule_prem.not_exp.args());
+    Collected {
+        prems_must: vec![],
+        prems_insert,
+    }
+}
+
+fn collect_if_prem(if_prem: &ast::IfPrem) -> Collected {
+    let prems_insert = collect_exp(&if_prem.exp);
+    Collected {
+        prems_must: vec![],
+        prems_insert,
+    }
+}
+
+fn collect_if_hold_prem(if_prem: &ast::IfHoldPrem) -> Collected {
+    let prems_insert = collect_exps(if_prem.not_exp.args());
+    Collected {
+        prems_must: vec![],
+        prems_insert,
+    }
+}
+
+fn collect_if_not_hold_prem(if_prem: &ast::IfNotHoldPrem) -> Collected {
+    let prems_insert = collect_exps(if_prem.not_exp.args());
+    Collected {
+        prems_must: vec![],
+        prems_insert,
+    }
+}
+
+fn collect_let_prem(let_prem: &ast::LetPrem) -> Collected {
+    let prems_must = collect_exp(&let_prem.exp_l);
+    let prems_insert = collect_exp(&let_prem.exp_r);
+    Collected {
+        prems_must,
+        prems_insert,
     }
 }
 
 fn collect_iter_prem(iter_prem: &ast::IterPrem) -> Collected {
-    let mut vars_must = iter_prem.vars_bound.clone();
-    vars_must.extend(iter_prem.vars_bind.clone());
+    let prem_iter = &iter_prem.prem_iter;
+    let mut vars_must = prem_iter.vars_bound.clone();
+    vars_must.extend(prem_iter.vars_bind.clone());
+
+    let collected = collect_prem(&iter_prem.prem);
+    let collected = iterate_collected(prem_iter.iter, &vars_must, &prem_iter.vars_bound, collected);
+    let collected_guard = Collected {
+        prems_must: gen_iter_guard(&(prem_iter.iter, vars_must)),
+        prems_insert: gen_iter_guard(&(prem_iter.iter, prem_iter.vars_bound.clone())),
+    };
+    collected.compose(collected_guard)
+}
+
+fn collect_debug_prem(debug_prem: &ast::DebugPrem) -> Collected {
+    let prems_insert = collect_exp(&debug_prem.exp);
     Collected {
-        must: gen_iter_guard(&(iter_prem.iter, vars_must)),
-        insert: gen_iter_guard(&(iter_prem.iter, iter_prem.vars_bound.clone())),
+        prems_must: vec![],
+        prems_insert,
     }
 }
 
-// Insertion entry points
+// == Guard insertion
 
-fn insert_prem(prems_must_prev: &[ast::Prem], prem: ast::Prem) -> Collected {
-    let collected = collect_prem(&prem);
-    let mut prems_insert = filter_insert(prems_must_prev, collected.insert);
-    prems_insert.push(prem);
-    let mut prems_must = prems_must_prev.to_vec();
-    prems_must.extend(collected.must);
-    prems_must.extend(prems_insert.clone());
-    Collected {
-        must: prems_must,
-        insert: prems_insert,
-    }
+// - Premises
+
+fn insert_prem(prems_must: &mut Vec<ast::Prem>, prem_al: ast::Prem) -> Vec<ast::Prem> {
+    let collected = collect_prem(&prem_al);
+    let mut prems_insert = filter_prems_insert(prems_must, collected.prems_insert);
+    prems_insert.push(prem_al);
+    prems_must.extend(collected.prems_must);
+    prems_must.extend(prems_insert.iter().cloned());
+    prems_insert
 }
 
-fn insert_prems(prems_must_prev: Vec<ast::Prem>, prems: Vec<ast::Prem>) -> Collected {
-    let mut prems_must = prems_must_prev;
+fn insert_prems(prems_must: &mut Vec<ast::Prem>, prems_al: Vec<ast::Prem>) -> Vec<ast::Prem> {
     let mut prems_insert = Vec::new();
-    for prem in prems {
-        let collected = insert_prem(&prems_must, prem);
-        prems_must = collected.must;
-        prems_insert.extend(collected.insert);
+    for prem_al in prems_al {
+        let mut prems_prem_insert = insert_prem(prems_must, prem_al);
+        prems_insert.append(&mut prems_prem_insert);
     }
-    Collected {
-        must: prems_must,
-        insert: prems_insert,
+    prems_insert
+}
+
+// - Rule groups
+
+fn insert_rule_group(mut rule_group_al: ast::RuleGroup) -> ast::RuleGroup {
+    let mut prems_must = collect_exps(rule_group_al.node.rule_match.exps_input.iter());
+    let prems_match_al = std::mem::take(&mut rule_group_al.node.rule_match.prems);
+    rule_group_al.node.rule_match.prems = insert_prems(&mut prems_must, prems_match_al);
+
+    for rule_path_al in &mut rule_group_al.node.rule_paths {
+        let mut prems_path_must = prems_must.clone();
+        let prems_path_al = std::mem::take(&mut rule_path_al.prems);
+        rule_path_al.prems = insert_prems(&mut prems_path_must, prems_path_al);
+
+        let prems_output = collect_exps(rule_path_al.exps_output.iter());
+        let prems_output = filter_prems_insert(&prems_path_must, prems_output);
+        rule_path_al.prems.extend(prems_output);
     }
+    rule_group_al
 }
 
-fn insert_rule_group(mut rule_group: al::ast::RuleGroup) -> al::ast::RuleGroup {
-    let mut prems_must = collect_exps(rule_group.node.rule_match.exps_input.iter());
-    let collected = insert_prems(
-        prems_must,
-        std::mem::take(&mut rule_group.node.rule_match.prems),
-    );
-    prems_must = collected.must;
-    rule_group.node.rule_match.prems = collected.insert;
-    for rule_path in &mut rule_group.node.rule_paths {
-        let collected = insert_prems(prems_must.clone(), std::mem::take(&mut rule_path.prems));
-        let prems_output = collect_exps(rule_path.exps_output.iter());
-        rule_path.prems = collected.insert;
-        rule_path
-            .prems
-            .extend(filter_insert(&collected.must, prems_output));
-    }
-    rule_group
+fn insert_else_group(mut else_group_al: ast::ElseGroup) -> ast::ElseGroup {
+    let mut prems_must = collect_exps(else_group_al.node.rule_match.exps_input.iter());
+    let prems_match_al = std::mem::take(&mut else_group_al.node.rule_match.prems);
+    else_group_al.node.rule_match.prems = insert_prems(&mut prems_must, prems_match_al);
+
+    let prems_path_al = std::mem::take(&mut else_group_al.node.rule_path.prems);
+    else_group_al.node.rule_path.prems = insert_prems(&mut prems_must, prems_path_al);
+
+    let prems_output = collect_exps(else_group_al.node.rule_path.exps_output.iter());
+    let prems_output = filter_prems_insert(&prems_must, prems_output);
+    else_group_al.node.rule_path.prems.extend(prems_output);
+    else_group_al
 }
 
-fn insert_else_group(mut else_group: al::ast::ElseGroup) -> al::ast::ElseGroup {
-    let prems_must = collect_exps(else_group.node.rule_match.exps_input.iter());
-    let collected = insert_prems(
-        prems_must,
-        std::mem::take(&mut else_group.node.rule_match.prems),
-    );
-    else_group.node.rule_match.prems = collected.insert;
-    let collected = insert_prems(
-        collected.must,
-        std::mem::take(&mut else_group.node.rule_path.prems),
-    );
-    let prems_output = collect_exps(else_group.node.rule_path.exps_output.iter());
-    else_group.node.rule_path.prems = collected.insert;
-    else_group
-        .node
-        .rule_path
-        .prems
-        .extend(filter_insert(&collected.must, prems_output));
-    else_group
+// - Clauses
+
+fn insert_clause(mut clause_al: ast::Clause) -> ast::Clause {
+    let mut prems_must = collect_args(&clause_al.node.args);
+    let prems_clause_al = std::mem::take(&mut clause_al.node.premises);
+    clause_al.node.premises = insert_prems(&mut prems_must, prems_clause_al);
+
+    let prems_output = collect_exp(&clause_al.node.expression);
+    let prems_output = filter_prems_insert(&prems_must, prems_output);
+    clause_al.node.premises.extend(prems_output);
+    clause_al
 }
 
-fn insert_clause(mut clause: al::ast::Clause) -> al::ast::Clause {
-    let prems_must = collect_args(&clause.node.args);
-    let collected = insert_prems(prems_must, std::mem::take(&mut clause.node.premises));
-    let prems_output = collect_exp(&clause.node.expression);
-    clause.node.premises = collected.insert;
-    clause
-        .node
-        .premises
-        .extend(filter_insert(&collected.must, prems_output));
-    clause
-}
+// - Definitions
 
-fn insert_def(mut def: al::ast::Def) -> al::ast::Def {
-    match &mut def.node {
-        al::ast::DefKind::Rel(relation) => {
-            relation.rule_groups = std::mem::take(&mut relation.rule_groups)
-                .into_iter()
-                .map(insert_rule_group)
-                .collect();
-            relation.else_group = relation.else_group.take().map(insert_else_group);
+fn insert_def(def_al: ast::Def) -> ast::Def {
+    let span = def_al.span;
+    let def_kind_al = match def_al.node {
+        ast::DefKind::Rel(rel_def_al) => {
+            let rel_def_al = insert_rel_def(rel_def_al);
+            ast::DefKind::Rel(rel_def_al)
         }
-        al::ast::DefKind::FuncDec(function) => {
-            function.clauses = std::mem::take(&mut function.clauses)
-                .into_iter()
-                .map(insert_clause)
-                .collect();
-            function.else_clause = function.else_clause.take().map(insert_clause);
+        ast::DefKind::FuncDec(func_dec_def_al) => {
+            let func_dec_def_al = insert_func_dec_def(func_dec_def_al);
+            ast::DefKind::FuncDec(func_dec_def_al)
         }
-        _ => {}
-    }
-    def
+        def_kind_al => def_kind_al,
+    };
+    phrase!(node: def_kind_al, span: span)
 }
+
+fn insert_rel_def(mut rel_def_al: ast::RelDef) -> ast::RelDef {
+    rel_def_al.rule_groups = rel_def_al
+        .rule_groups
+        .into_iter()
+        .map(insert_rule_group)
+        .collect();
+    rel_def_al.else_group = rel_def_al.else_group.map(insert_else_group);
+    rel_def_al
+}
+
+fn insert_func_dec_def(mut func_dec_def_al: ast::FuncDecDef) -> ast::FuncDecDef {
+    func_dec_def_al.clauses = func_dec_def_al
+        .clauses
+        .into_iter()
+        .map(insert_clause)
+        .collect();
+    func_dec_def_al.else_clause = func_dec_def_al.else_clause.map(insert_clause);
+    func_dec_def_al
+}
+
+// == Entry point
 
 /// Inserts side-condition guards throughout an analyzed specification.
-pub(in crate::pass::algo) fn insert_spec(spec: al::ast::Spec) -> al::ast::Spec {
-    spec.into_iter().map(insert_def).collect()
+pub(in crate::pass::algo) fn insert_spec(spec_al: ast::Spec) -> ast::Spec {
+    spec_al.into_iter().map(insert_def).collect()
 }

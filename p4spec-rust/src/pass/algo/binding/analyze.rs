@@ -277,8 +277,8 @@ fn analyze_prem(
         ast::PremKind::IfNotHold(if_prem_il) => {
             analyze_if_not_hold_prem(ctx, iter_ctx, &prem_il.span, if_prem_il)
         }
-        ast::PremKind::Iter(iterated_il) => {
-            analyze_iter_prem(ctx, iter_ctx, &prem_il.span, iterated_il)
+        ast::PremKind::Iter(iter_prem_il) => {
+            analyze_iter_prem(ctx, iter_ctx, &prem_il.span, iter_prem_il)
         }
         ast::PremKind::Debug(debug_prem_il) => {
             analyze_debug_prem(ctx, iter_ctx, &prem_il.span, debug_prem_il)
@@ -487,21 +487,21 @@ fn analyze_iter_prem(
     ctx: &mut Context,
     iter_ctx: ICtx,
     span: &Span,
-    iterated_il: &ast::IteratedPrem,
+    iter_prem_il: &ast::IterPrem,
 ) -> Result<(VEnv, al::ast::Prem, Vec<al::ast::Prem>), AlgoError> {
-    if !iterated_il.iter_prem.vars_bind.is_empty() {
+    if !iter_prem_il.prem_iter.vars_bind.is_empty() {
         return Err(AlgoError::new(
             AlgoErrorKind::UnexpectedIterationBindings,
             span.clone(),
         ));
     }
     let mut iterations = vec![Iteration {
-        iter: iterated_il.iter_prem.iter,
-        vars_bound: iterated_il.iter_prem.vars_bound.clone(),
+        iter: iter_prem_il.prem_iter.iter,
+        vars_bound: iter_prem_il.prem_iter.vars_bound.clone(),
         vars_bind: vec![],
     }];
     iterations.extend(iter_ctx.as_slice().iter().cloned());
-    analyze_prem(ctx, ICtx::from_iterations(iterations), &iterated_il.prem)
+    analyze_prem(ctx, ICtx::from_iterations(iterations), &iter_prem_il.prem)
 }
 
 // - Debug premises

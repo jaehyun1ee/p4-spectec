@@ -311,9 +311,9 @@ pub struct IfNotHoldPrem {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct IteratedPrem {
+pub struct IterPrem {
     pub prem: Box<Prem>,
-    pub iter_prem: IterPrem,
+    pub prem_iter: PremIter,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -333,13 +333,13 @@ pub enum PremKind {
     /// `if id : notexp does not hold`
     IfNotHold(IfNotHoldPrem),
     /// `prem iterprem`
-    Iter(IteratedPrem),
+    Iter(IterPrem),
     /// `debug exp`
     Debug(DebugPrem),
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct IterPrem {
+pub struct PremIter {
     pub iter: Iter,
     pub vars_bound: Vec<Var>,
     pub vars_bind: Vec<Var>,

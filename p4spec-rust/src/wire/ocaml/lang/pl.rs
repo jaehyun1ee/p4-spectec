@@ -665,7 +665,7 @@ fn decode_instr_kind<T>(
         ("LetI", [left, right, iters]) => Ok(InstrKind::Let(LetInstr {
             exp_l: decode_exp(left)?,
             exp_r: decode_exp(right)?,
-            iter_instrs: il::decode_list(iters, il::decode_iter_prem)?,
+            iter_instrs: il::decode_list(iters, il::decode_prem_iter)?,
         })),
         ("DebugI", [exp]) => Ok(InstrKind::Debug(DebugInstr {
             exp: decode_exp(exp)?,
@@ -760,7 +760,7 @@ fn encode_instr_kind<T>(instr: &InstrKind<T>, encode_tier: fn(&T) -> Value) -> V
             "LetI",
             encode_exp(left),
             encode_exp(right),
-            il::encode_list(iters, il::encode_iter_prem)
+            il::encode_list(iters, il::encode_prem_iter)
         ]),
         InstrKind::Debug(DebugInstr { exp }) => json!(["DebugI", encode_exp(exp)]),
         InstrKind::Destruct(DestructInstr { bindings, exp }) => json!([
@@ -845,7 +845,7 @@ fn decode_instr_group(value: &Value) -> Result<InstrGroup, DecodeError> {
             id: il::decode_id(id)?,
             not_exp: mixfix::decode(not_exp, decode_exp)?,
             input_hint: il::decode_input_hint(input_hint)?,
-            iter_instrs: il::decode_list(iter_instrs, il::decode_iter_prem)?,
+            iter_instrs: il::decode_list(iter_instrs, il::decode_prem_iter)?,
         })),
         ("BacktrackI", [arms]) => Ok(InstrGroup::Backtrack(BacktrackGroupInstr {
             blocks: il::decode_list(arms, |block| decode_block(block, decode_instr_group))?,
@@ -878,7 +878,7 @@ fn encode_instr_group(instr: &InstrGroup) -> Value {
             il::encode_id(id),
             mixfix::encode(not_exp, encode_exp),
             il::encode_input_hint(input_hint),
-            il::encode_list(iter_instrs, il::encode_iter_prem)
+            il::encode_list(iter_instrs, il::encode_prem_iter)
         ]),
         InstrGroup::Backtrack(BacktrackGroupInstr { blocks }) => json!([
             "BacktrackI",

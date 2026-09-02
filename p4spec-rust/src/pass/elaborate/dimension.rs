@@ -207,8 +207,9 @@ fn infer_prem(
         ast::PremKind::If(if_prem) => infer_exp(dim_ctx, &if_prem.exp, iters),
         ast::PremKind::IfHold(if_prem) => infer_not_exp(dim_ctx, &if_prem.not_exp, iters),
         ast::PremKind::IfNotHold(if_prem) => infer_not_exp(dim_ctx, &if_prem.not_exp, iters),
-        ast::PremKind::Iter(iterated) => {
-            if !iterated.iter_prem.vars_bound.is_empty() || !iterated.iter_prem.vars_bind.is_empty()
+        ast::PremKind::Iter(iter_prem) => {
+            if !iter_prem.prem_iter.vars_bound.is_empty()
+                || !iter_prem.prem_iter.vars_bind.is_empty()
             {
                 return Err(ElabError::new(
                     ElabErrorKind::InvalidIteration,
@@ -217,9 +218,9 @@ fn infer_prem(
                 ));
             }
             let mut iters_inner = Vec::with_capacity(iters.len() + 1);
-            iters_inner.push(iterated.iter_prem.iter);
+            iters_inner.push(iter_prem.prem_iter.iter);
             iters_inner.extend_from_slice(iters);
-            infer_prem(dim_ctx, &iterated.prem, &iters_inner)?;
+            infer_prem(dim_ctx, &iter_prem.prem, &iters_inner)?;
         }
         ast::PremKind::Debug(debug) => infer_exp(dim_ctx, &debug.exp, iters),
     }
@@ -779,7 +780,7 @@ fn annotate_prem(bounds: &VEnv, prem: &mut ast::Prem) -> Result<Occurrences, Ela
         ast::PremKind::If(if_prem) => annotate_if_prem(bounds, if_prem),
         ast::PremKind::IfHold(if_prem) => annotate_if_hold_prem(bounds, if_prem),
         ast::PremKind::IfNotHold(if_prem) => annotate_if_not_hold_prem(bounds, if_prem),
-        ast::PremKind::Iter(iterated) => annotate_iter_prem(bounds, span, iterated),
+        ast::PremKind::Iter(iter_prem) => annotate_iter_prem(bounds, span, iter_prem),
         ast::PremKind::Debug(debug) => annotate_debug_prem(bounds, debug),
     }
 }
@@ -828,17 +829,17 @@ fn annotate_if_not_hold_prem(
 fn annotate_iter_prem(
     bounds: &VEnv,
     span: &Span,
-    iterated: &mut ast::IteratedPrem,
+    iter_prem: &mut ast::IterPrem,
 ) -> Result<Occurrences, ElabError> {
-    if !iterated.iter_prem.vars_bound.is_empty() || !iterated.iter_prem.vars_bind.is_empty() {
+    if !iter_prem.prem_iter.vars_bound.is_empty() || !iter_prem.prem_iter.vars_bind.is_empty() {
         return Err(ElabError::new(
             ElabErrorKind::InvalidIteration,
             span.clone(),
             "iterated premise should initially have no annotations",
         ));
     }
-    let occurs = annotate_prem(bounds, &mut iterated.prem)?;
-    let iter = iterated.iter_prem.iter;
+    let occurs = annotate_prem(bounds, &mut iter_prem.prem)?;
+    let iter = iter_prem.prem_iter.iter;
     let vars_bound = collect_iter_vars(bounds, &occurs, iter);
     if vars_bound.is_empty() {
         return Err(ElabError::new(
@@ -848,7 +849,7 @@ fn annotate_iter_prem(
         ));
     }
     let occurs = occurs.iterate(&vars_bound, iter);
-    iterated.iter_prem.vars_bound = vars_bound;
+    iter_prem.prem_iter.vars_bound = vars_bound;
     Ok(occurs)
 }
 

@@ -154,21 +154,21 @@ impl ICtx {
         Ok(())
     }
 
-    // == Iterated premises
+    // == Iteration premises
 
     pub fn iterate_prem(&self, mut prem: al::ast::Prem) -> al::ast::Prem {
         for entry in &self.0 {
             let span = prem.span.clone();
-            let iter_prem = al::ast::IterPrem {
+            let prem_iter = al::ast::PremIter {
                 iter: entry.iter,
                 vars_bound: entry.vars_bound.clone(),
                 vars_bind: entry.vars_bind.clone(),
             };
-            let iterated = al::ast::IteratedPrem {
+            let iter_prem = al::ast::IterPrem {
                 prem: Box::new(prem),
-                iter_prem,
+                prem_iter,
             };
-            prem = phrase!(node: al::ast::PremKind::Iter(iterated), span: span);
+            prem = phrase!(node: al::ast::PremKind::Iter(iter_prem), span: span);
         }
         prem
     }

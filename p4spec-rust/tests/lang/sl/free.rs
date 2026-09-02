@@ -155,7 +155,7 @@ fn test_instructions_collect_nested_expressions_and_omit_binding_metadata() {
             instr(sl::ast::InstrKind::Let(sl::ast::LetInstr {
                 exp_l: variable("left"),
                 exp_r: variable("right"),
-                iter_instrs: vec![il::ast::IterPrem {
+                iter_instrs: vec![il::ast::PremIter {
                     iter: il::ast::Iter::List,
                     vars_bound: vec![binder.clone()],
                     vars_bind: vec![binder.clone()],
@@ -171,7 +171,7 @@ fn test_instructions_collect_nested_expressions_and_omit_binding_metadata() {
                 id: id("rule"),
                 not_exp: Mixfix::Arg(variable("rule-input")),
                 input_hint: InputHint::new(vec![0]),
-                iter_instrs: vec![il::ast::IterPrem {
+                iter_instrs: vec![il::ast::PremIter {
                     iter: il::ast::Iter::List,
                     vars_bound: vec![binder.clone()],
                     vars_bind: vec![binder],

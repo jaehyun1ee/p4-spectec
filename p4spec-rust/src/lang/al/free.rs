@@ -40,7 +40,7 @@ impl Free for LetPrem {
     }
 }
 
-impl Free for IteratedPrem {
+impl Free for IterPrem {
     fn free(&self) -> IdSet {
         self.prem.free()
     }

@@ -1980,7 +1980,7 @@ fn elab_if_prem(ctx: &mut Context, prem: &el::IfPrem) -> Attempt<il::PremKind> {
     Ok(il::PremKind::If(il::IfPrem { exp: exp_il }))
 }
 
-// - Iterated premise elaboration
+// - Iteration premise elaboration
 
 fn elab_iter_prem(ctx: &mut Context, prem: &el::IterPrem) -> Attempt<il::PremKind> {
     let prem_il_inner = elab_prem(ctx, &prem.prem)?;
@@ -1991,14 +1991,14 @@ fn elab_iter_prem(ctx: &mut Context, prem: &el::IterPrem) -> Attempt<il::PremKin
             "cannot iterate variable or otherwise premise",
         );
     };
-    let iter_prem_il = il::IterPrem {
+    let prem_iter_il = il::PremIter {
         iter: elab_iter(prem.iter),
         vars_bound: vec![],
         vars_bind: vec![],
     };
-    Ok(il::PremKind::Iter(il::IteratedPrem {
+    Ok(il::PremKind::Iter(il::IterPrem {
         prem: Box::new(prem_il_inner),
-        iter_prem: iter_prem_il,
+        prem_iter: prem_iter_il,
     }))
 }
 

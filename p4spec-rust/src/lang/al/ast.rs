@@ -133,9 +133,9 @@ pub struct LetPrem {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct IteratedPrem {
+pub struct IterPrem {
     pub prem: Box<Prem>,
-    pub iter_prem: IterPrem,
+    pub prem_iter: PremIter,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -157,12 +157,12 @@ pub enum PremKind {
     /// `let exp = exp`
     Let(LetPrem),
     /// `prem iterprem`
-    Iter(IteratedPrem),
+    Iter(IterPrem),
     /// `debug exp`
     Debug(DebugPrem),
 }
 
-pub type IterPrem = il::ast::IterPrem;
+pub type PremIter = il::ast::PremIter;
 
 // Rules
 

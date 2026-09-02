@@ -224,7 +224,7 @@ impl Free for IfNotHoldPrem {
     }
 }
 
-impl Free for IteratedPrem {
+impl Free for IterPrem {
     fn free(&self) -> IdSet {
         self.prem.free()
     }
@@ -249,7 +249,7 @@ impl Free for PremKind {
     }
 }
 
-impl Free for IterPrem {
+impl Free for PremIter {
     fn free(&self) -> IdSet {
         IdSet::new()
     }

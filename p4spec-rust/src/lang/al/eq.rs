@@ -42,9 +42,9 @@ impl SyntaxEq for LetPrem {
     }
 }
 
-impl SyntaxEq for IteratedPrem {
+impl SyntaxEq for IterPrem {
     fn syntax_eq(&self, other: &Self) -> bool {
-        self.prem.syntax_eq(&other.prem) && self.iter_prem.syntax_eq(&other.iter_prem)
+        self.prem.syntax_eq(&other.prem) && self.prem_iter.syntax_eq(&other.prem_iter)
     }
 }
 

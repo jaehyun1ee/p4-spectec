@@ -240,7 +240,7 @@ pub struct DebugInstr {
 
 pub type Block = Vec<Instr>;
 pub type ElseBlock = Vec<Instr>;
-pub type IterInstr = il::ast::IterPrem;
+pub type IterInstr = il::ast::PremIter;
 
 // Hints
 
