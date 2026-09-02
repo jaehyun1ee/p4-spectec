@@ -82,7 +82,7 @@ fn test_full_il_matches_ocaml_exactly() {
     assert_eq!(expected.kind(), "il");
 
     let spec = parse_files([&spec_path]).expect("parse corpus with Rust frontend");
-    let spec = elaborate::elaborate(&spec).expect("elaborate corpus with Rust");
+    let spec = elaborate::elaborate(spec).expect("elaborate corpus with Rust");
     let actual = SpecCodec::encode(&spec).expect("encode Rust IL");
 
     if let Some((path, expected, actual)) = first_difference(expected.payload(), &actual, "payload")
@@ -167,7 +167,7 @@ fn test_rejected_elaboration_matches_ocaml_category_and_span() {
         let span = source::decode_region(&diagnostic["span"]).expect("diagnostic span");
 
         let spec = parse_files([&fixture]).expect("parse negative fixture with Rust frontend");
-        let error = elaborate::elaborate(&spec).expect_err("Rust rejects fixture");
+        let error = elaborate::elaborate(spec).expect_err("Rust rejects fixture");
 
         assert_eq!(rust_error_category(&error.kind), category, "{name}");
         if ocaml_has_location {

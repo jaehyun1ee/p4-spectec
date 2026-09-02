@@ -19,7 +19,7 @@ fn test_conversion_propagates_located_binding_errors() {
         vec![],
     );
 
-    let error = algo::convert(&spec).expect_err("binding below a unary operator");
+    let error = algo::convert(spec).expect_err("binding below a unary operator");
 
     assert_eq!(
         error.kind,

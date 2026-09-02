@@ -65,7 +65,7 @@ fn test_conversion_preserves_binding_match_and_cast_guards_before_bindings() {
     spec.insert(0, child_def);
     spec.insert(0, parent_def);
 
-    let converted = algo::convert(&spec).expect("partial binding conversion");
+    let converted = algo::convert(spec).expect("partial binding conversion");
     let crate::lang::al::ast::DefKind::FuncDec(function) = &converted[2].node else {
         panic!("expected converted function");
     };

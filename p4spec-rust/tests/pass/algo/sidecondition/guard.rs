@@ -73,7 +73,7 @@ fn test_conversion_inserts_index_guards_at_evaluation_sites_in_source_order() {
         vec![prem_source.clone()],
     );
 
-    let converted = algo::convert(&spec).expect("guarded conversion");
+    let converted = algo::convert(spec).expect("guarded conversion");
     let clause = function_clause(&converted);
     let [guard_premise, source_premise, guard_output] = clause.node.premises.as_slice() else {
         panic!("expected premise and output index guards");
@@ -175,7 +175,7 @@ fn test_conversion_inserts_list_and_optional_iteration_guards_in_source_order() 
     );
     let spec = function_spec(params, args, exp_output, vec![]);
 
-    let converted = algo::convert(&spec).expect("guarded joint iterations");
+    let converted = algo::convert(spec).expect("guarded joint iterations");
     let clause = function_clause(&converted);
     let [prem_list, prem_optional] = clause.node.premises.as_slice() else {
         panic!("expected list and optional guards");
@@ -232,7 +232,7 @@ fn test_conversion_omits_iteration_guards_entailed_by_prior_premises() {
         vec![prem_xy.clone(), prem_yz.clone()],
     );
 
-    let converted = algo::convert(&spec).expect("transitively guarded iteration");
+    let converted = algo::convert(spec).expect("transitively guarded iteration");
     let premises = &function_clause(&converted).node.premises;
 
     assert_eq!(
@@ -353,7 +353,7 @@ fn test_conversion_preserves_numeric_and_slice_checks_before_output_guards() {
         vec![prem_nonzero.clone(), prem_slice_bound.clone()],
     );
 
-    let converted = algo::convert(&spec).expect("numeric and slice conversion");
+    let converted = algo::convert(spec).expect("numeric and slice conversion");
     let premises = &function_clause(&converted).node.premises;
     let [actual_nonzero, actual_slice_bound, index_guard] = premises.as_slice() else {
         panic!("expected two explicit checks and one index guard");
@@ -388,7 +388,7 @@ fn test_conversion_distinguishes_let_must_guards_from_insert_guards() {
         vec![prem_equality],
     );
 
-    let converted = algo::convert(&spec).expect("let guard conversion");
+    let converted = algo::convert(spec).expect("let guard conversion");
     let clause = function_clause(&converted);
     let [right_guard, let_premise] = clause.node.premises.as_slice() else {
         panic!("expected only the right guard before the generated let premise");
@@ -441,7 +441,7 @@ fn test_conversion_distinguishes_iterated_must_guards_from_insert_guards() {
         vec![prem_iterated],
     );
 
-    let converted = algo::convert(&insert_spec).expect("iterated insertion conversion");
+    let converted = algo::convert(insert_spec).expect("iterated insertion conversion");
     let [joint_guard, source_premise] = function_clause(&converted).node.premises.as_slice() else {
         panic!("expected a joint guard before the iterated premise");
     };
@@ -472,7 +472,7 @@ fn test_conversion_distinguishes_iterated_must_guards_from_insert_guards() {
         vec![prem_binding],
     );
 
-    let converted = algo::convert(&must_spec).expect("iterated binding conversion");
+    let converted = algo::convert(must_spec).expect("iterated binding conversion");
     let clause = function_clause(&converted);
     let [source_premise] = clause.node.premises.as_slice() else {
         panic!("bound-plus-bind guard must suppress the matching output guard");
@@ -567,7 +567,7 @@ fn test_conversion_traverses_relation_matches_paths_and_else_without_sibling_lea
     }), span:
     span(1) }];
 
-    let converted = algo::convert(&spec).expect("guarded relation conversion");
+    let converted = algo::convert(spec).expect("guarded relation conversion");
     let crate::lang::al::ast::DefKind::Rel(relation) = &converted[0].node else {
         panic!("expected relation definition");
     };
@@ -641,7 +641,7 @@ fn test_conversion_traverses_else_clauses_in_guard_order() {
     }), span:
     span(49) }];
 
-    let converted = algo::convert(&spec).expect("guarded else-clause conversion");
+    let converted = algo::convert(spec).expect("guarded else-clause conversion");
     let crate::lang::al::ast::DefKind::FuncDec(function) = &converted[0].node else {
         panic!("expected function definition");
     };

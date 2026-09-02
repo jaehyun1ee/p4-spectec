@@ -37,7 +37,7 @@ fn main() -> ExitCode {
         Ok(spec) => spec,
         Err(error) => return command_error(error),
     };
-    let spec_il = match elaborate::elaborate(&spec_el) {
+    let spec_il = match elaborate::elaborate(spec_el) {
         Ok(spec) => spec,
         Err(error) => return command_error(error),
     };
@@ -47,7 +47,7 @@ fn main() -> ExitCode {
         return ExitCode::SUCCESS;
     }
 
-    let spec_al = match algo::convert(&spec_il) {
+    let spec_al = match algo::convert(spec_il) {
         Ok(spec) => spec,
         Err(error) => return command_error(error),
     };

@@ -2138,85 +2138,76 @@ fn elab_clause(
 
 // - Definition dispatch
 
-fn elab_def(ctx: &mut Context, def: &el::Def) -> Result<Option<il::Def>, ElabError> {
-    match &def.node {
+fn elab_def(ctx: &mut Context, def_el: el::Def) -> Result<Option<il::Def>, ElabError> {
+    let span = def_el.span;
+    match def_el.node {
         el::DefKind::ExternSyntax(extern_syntax_def) => {
             let def_il_kind = elab_extern_syntax_def(ctx, extern_syntax_def)?;
-            let def_il = phrase!(node: def_il_kind, span: def.span.clone());
+            let def_il = phrase!(node: def_il_kind, span: span);
             Ok(Some(def_il))
         }
         el::DefKind::Syntax(syntax_def) => {
-            elab_syntax_def(ctx, syntax_def)?;
+            elab_syntax_def(ctx, &syntax_def)?;
             Ok(None)
         }
         el::DefKind::Typ(typ_def) => {
+            let span = typ_def.def_typ.span.clone();
             let def_il_kind = elab_typ_def(ctx, typ_def)?;
-            let def_il = phrase!(node: def_il_kind, span: typ_def.def_typ.span.clone());
+            let def_il = phrase!(node: def_il_kind, span: span);
             Ok(Some(def_il))
         }
         el::DefKind::Var(var_def) => {
+            let span = var_def.id.span.clone();
             let def_il_kind = elab_var_def(ctx, var_def)?;
-            let def_il = phrase!(node: def_il_kind, span: var_def.id.span.clone());
+            let def_il = phrase!(node: def_il_kind, span: span);
             Ok(Some(def_il))
         }
         el::DefKind::ExternRel(extern_rel_def) => {
-            let extern_rel_def = crate::phrase! {
-                node: extern_rel_def,
-                span: def.span.clone(),
-            };
-            let def_il_kind = elab_extern_rel_def(ctx, &extern_rel_def)?;
-            let def_il = phrase!(node: def_il_kind, span: def.span.clone());
+            let def_il_kind = elab_extern_rel_def(ctx, extern_rel_def, &span)?;
+            let def_il = phrase!(node: def_il_kind, span: span);
             Ok(Some(def_il))
         }
         el::DefKind::Rel(rel_def) => {
-            let rel_def = crate::phrase! {
-                node: rel_def,
-                span: def.span.clone(),
-            };
-            let def_il_kind = elab_rel_def(ctx, &rel_def)?;
-            let def_il = phrase!(node: def_il_kind, span: def.span.clone());
+            let def_il_kind = elab_rel_def(ctx, rel_def, &span)?;
+            let def_il = phrase!(node: def_il_kind, span: span);
             Ok(Some(def_il))
         }
         el::DefKind::RuleGroup(rule_group_def) => {
             let rule_group_def = crate::phrase! {
-                node: rule_group_def,
-                span: def.span.clone(),
+                node: &rule_group_def,
+                span: span,
             };
             elab_rule_group_def(ctx, &rule_group_def)?;
             Ok(None)
         }
         el::DefKind::ExternDec(extern_dec_def) => {
             let def_il_kind = elab_extern_dec_def(ctx, extern_dec_def)?;
-            let def_il = phrase!(node: def_il_kind, span: def.span.clone());
+            let def_il = phrase!(node: def_il_kind, span: span);
             Ok(Some(def_il))
         }
         el::DefKind::BuiltinDec(builtin_dec_def) => {
             let def_il_kind = elab_builtin_dec_def(ctx, builtin_dec_def)?;
-            let def_il = phrase!(node: def_il_kind, span: def.span.clone());
+            let def_il = phrase!(node: def_il_kind, span: span);
             Ok(Some(def_il))
         }
         el::DefKind::TableDec(table_dec_def) => {
-            let table_dec_def = crate::phrase! {
-                node: table_dec_def,
-                span: def.span.clone(),
-            };
-            let def_il_kind = elab_table_dec_def(ctx, &table_dec_def)?;
-            let def_il = phrase!(node: def_il_kind, span: def.span.clone());
+            let def_il_kind = elab_table_dec_def(ctx, table_dec_def, &span)?;
+            let def_il = phrase!(node: def_il_kind, span: span);
             Ok(Some(def_il))
         }
         el::DefKind::FuncDec(func_dec_def) => {
             let def_il_kind = elab_func_dec_def(ctx, func_dec_def)?;
-            let def_il = phrase!(node: def_il_kind, span: def.span.clone());
+            let def_il = phrase!(node: def_il_kind, span: span);
             Ok(Some(def_il))
         }
         el::DefKind::TableDef(table_def) => {
-            elab_table_def(ctx, table_def)?;
+            elab_table_def(ctx, &table_def)?;
             Ok(None)
         }
         el::DefKind::FuncDef(func_def) => {
             let func_def = crate::phrase! {
-                node: func_def,
-                span: def.span.clone(),
+                node: &func_def,
+                span: span,
             };
             elab_func_def(ctx, &func_def)?;
             Ok(None)
@@ -2229,7 +2220,7 @@ fn elab_def(ctx: &mut Context, def: &el::Def) -> Result<Option<il::Def>, ElabErr
 
 fn elab_extern_syntax_def(
     ctx: &mut Context,
-    def: &el::ExternSyntaxDef,
+    def: el::ExternSyntaxDef,
 ) -> Result<il::DefKind, ElabError> {
     if !valid_tid(&def.id) {
         return Err(ElabError::new(
@@ -2243,8 +2234,8 @@ fn elab_extern_syntax_def(
     let typ_il = phrase!(node: typ_il_kind, span: def.id.span.clone());
     ctx.add_metavar(def.id.clone(), typ_il)?;
     let extern_typ_il = il::ExternTyp {
-        id: def.id.clone(),
-        hints: def.hints.clone(),
+        id: def.id,
+        hints: def.hints,
     };
     Ok(il::DefKind::ExternTyp(extern_typ_il))
 }
@@ -2271,7 +2262,7 @@ fn elab_syntax_def(ctx: &mut Context, def: &el::SyntaxDef) -> Result<(), ElabErr
 
 // - Type definitions
 
-fn elab_typ_def(ctx: &mut Context, def: &el::TypDef) -> Result<il::DefKind, ElabError> {
+fn elab_typ_def(ctx: &mut Context, def: el::TypDef) -> Result<il::DefKind, ElabError> {
     match ctx.find_typdef_opt(&def.id) {
         Some(TypeDef::Defining(tparams)) => {
             let matches = tparams.len() == def.tparams.len()
@@ -2317,17 +2308,17 @@ fn elab_typ_def(ctx: &mut Context, def: &el::TypDef) -> Result<il::DefKind, Elab
     };
     ctx.update_typdef(&def.id, type_def)?;
     let typ_def_il = il::TypDef {
-        id: def.id.clone(),
-        tparams: def.tparams.clone(),
+        id: def.id,
+        tparams: def.tparams,
         def_typ: def_typ_il,
-        hints: def.hints.clone(),
+        hints: def.hints,
     };
     Ok(il::DefKind::Typ(typ_def_il))
 }
 
 // - Variable definitions
 
-fn elab_var_def(ctx: &mut Context, def: &el::VarDef) -> Result<il::DefKind, ElabError> {
+fn elab_var_def(ctx: &mut Context, def: el::VarDef) -> Result<il::DefKind, ElabError> {
     if !valid_tid(&def.id) {
         return Err(ElabError::new(
             ElabErrorKind::InvalidIdentifier,
@@ -2345,9 +2336,9 @@ fn elab_var_def(ctx: &mut Context, def: &el::VarDef) -> Result<il::DefKind, Elab
     let typ_il = elab_plain_typ(ctx, &def.plain_typ)?;
     ctx.add_metavar(def.id.clone(), typ_il.clone())?;
     let var_def_il = il::VarDef {
-        id: def.id.clone(),
+        id: def.id,
         typ: typ_il,
-        hints: def.hints.clone(),
+        hints: def.hints,
     };
     Ok(il::DefKind::Var(var_def_il))
 }
@@ -2384,37 +2375,34 @@ fn fetch_input_hint(
 
 fn elab_extern_rel_def(
     ctx: &mut Context,
-    def: &Phrase<&el::ExternRelDef>,
+    def: el::ExternRelDef,
+    span: &Span,
 ) -> Result<il::DefKind, ElabError> {
-    let span = &def.span;
-    let def = def.node;
     let typ = el::Typ::Notation(def.not_typ.clone());
     let not_typ_il = elab_not_typ(ctx, &typ)?;
     let input_hint = fetch_input_hint(span, &not_typ_il, &def.hints)?;
     ctx.add_extern_rel(def.id.clone(), not_typ_il.clone(), input_hint.clone())?;
     let rel_il = il::ExternRel {
-        id: def.id.clone(),
+        id: def.id,
         not_typ: not_typ_il,
         input_hint,
-        hints: def.hints.clone(),
+        hints: def.hints,
     };
     Ok(il::DefKind::ExternRel(rel_il))
 }
 
-fn elab_rel_def(ctx: &mut Context, def: &Phrase<&el::RelDef>) -> Result<il::DefKind, ElabError> {
-    let span = &def.span;
-    let def = def.node;
+fn elab_rel_def(ctx: &mut Context, def: el::RelDef, span: &Span) -> Result<il::DefKind, ElabError> {
     let typ = el::Typ::Notation(def.not_typ.clone());
     let not_typ_il = elab_not_typ(ctx, &typ)?;
     let input_hint = fetch_input_hint(span, &not_typ_il, &def.hints)?;
     ctx.add_defined_rel(def.id.clone(), not_typ_il.clone(), input_hint.clone())?;
     let rel_il = il::Rel {
-        id: def.id.clone(),
+        id: def.id,
         not_typ: not_typ_il,
         input_hint,
         rule_groups: vec![],
         else_group: None,
-        hints: def.hints.clone(),
+        hints: def.hints,
     };
     Ok(il::DefKind::Rel(rel_il))
 }
@@ -2438,10 +2426,7 @@ fn elab_rule_group_def(
 
 // - Function declarations
 
-fn elab_extern_dec_def(
-    ctx: &mut Context,
-    def: &el::ExternDecDef,
-) -> Result<il::DefKind, ElabError> {
+fn elab_extern_dec_def(ctx: &mut Context, def: el::ExternDecDef) -> Result<il::DefKind, ElabError> {
     distinct_tparams(&def.tparams, &def.id.span)?;
     let (params_il, typ_il) = {
         let mut ctx_local = ctx.scope();
@@ -2461,18 +2446,18 @@ fn elab_extern_dec_def(
         typ_il.clone(),
     )?;
     let dec_il = il::ExternDec {
-        id: def.id.clone(),
-        tparams: def.tparams.clone(),
+        id: def.id,
+        tparams: def.tparams,
         params: params_il,
         typ: typ_il,
-        hints: def.hints.clone(),
+        hints: def.hints,
     };
     Ok(il::DefKind::ExternDec(dec_il))
 }
 
 fn elab_builtin_dec_def(
     ctx: &mut Context,
-    def: &el::BuiltinDecDef,
+    def: el::BuiltinDecDef,
 ) -> Result<il::DefKind, ElabError> {
     distinct_tparams(&def.tparams, &def.id.span)?;
     let (params_il, typ_il) = {
@@ -2493,21 +2478,20 @@ fn elab_builtin_dec_def(
         typ_il.clone(),
     )?;
     let dec_il = il::BuiltinDec {
-        id: def.id.clone(),
-        tparams: def.tparams.clone(),
+        id: def.id,
+        tparams: def.tparams,
         params: params_il,
         typ: typ_il,
-        hints: def.hints.clone(),
+        hints: def.hints,
     };
     Ok(il::DefKind::BuiltinDec(dec_il))
 }
 
 fn elab_table_dec_def(
     ctx: &mut Context,
-    def: &Phrase<&el::TableDecDef>,
+    def: el::TableDecDef,
+    span: &Span,
 ) -> Result<il::DefKind, ElabError> {
-    let span = &def.span;
-    let def = def.node;
     let params_il = def
         .params
         .iter()
@@ -2533,16 +2517,16 @@ fn elab_table_dec_def(
     }
     ctx.add_table_func(def.id.clone(), params_il.clone(), typ_il.clone())?;
     let table_dec_il = il::TableDec {
-        id: def.id.clone(),
+        id: def.id,
         params: params_il,
         typ: typ_il,
         rows: vec![],
-        hints: def.hints.clone(),
+        hints: def.hints,
     };
     Ok(il::DefKind::TableDec(table_dec_il))
 }
 
-fn elab_func_dec_def(ctx: &mut Context, def: &el::FuncDecDef) -> Result<il::DefKind, ElabError> {
+fn elab_func_dec_def(ctx: &mut Context, def: el::FuncDecDef) -> Result<il::DefKind, ElabError> {
     distinct_tparams(&def.tparams, &def.id.span)?;
     let (params_il, typ_il) = {
         let mut ctx_local = ctx.scope();
@@ -2562,13 +2546,13 @@ fn elab_func_dec_def(ctx: &mut Context, def: &el::FuncDecDef) -> Result<il::DefK
         typ_il.clone(),
     )?;
     let dec_il = il::FuncDec {
-        id: def.id.clone(),
-        tparams: def.tparams.clone(),
+        id: def.id,
+        tparams: def.tparams,
         params: params_il,
         typ: typ_il,
         clauses: vec![],
         else_clause: None,
-        hints: def.hints.clone(),
+        hints: def.hints,
     };
     Ok(il::DefKind::FuncDec(dec_il))
 }
@@ -2713,11 +2697,11 @@ fn populate_defs(ctx: &Context, defs_il: il::Spec) -> Result<il::Spec, ElabError
 
 // - Entry point
 
-pub(super) fn elaborate(spec: &el::Spec) -> Result<il::Spec, ElabError> {
+pub(super) fn elaborate(spec_el: el::Spec) -> Result<il::Spec, ElabError> {
     let mut ctx = Context::new();
     let mut defs_il = Vec::new();
-    for def in spec {
-        if let Some(def_il) = elab_def(&mut ctx, def)? {
+    for def_el in spec_el {
+        if let Some(def_il) = elab_def(&mut ctx, def_el)? {
             defs_il.push(def_il);
         }
     }

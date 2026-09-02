@@ -672,28 +672,33 @@ fn analyze_else_group(
 
 fn analyze_clause(
     ctx: &mut Context,
-    clause_il: &ast::Clause,
+    clause_il: ast::Clause,
     is_else: bool,
 ) -> Result<al::ast::Clause, AlgoError> {
     let mut ctx = ctx.scope();
     ctx.add_frees(&clause_il.free());
-    let (venv, args_al, prem_sideconditions_al) =
-        analyze_args_as_bind(&mut ctx, &clause_il.node.args)?;
+    let span = clause_il.span;
+    let ast::ClauseKind {
+        args: args_il,
+        expression: exp_il,
+        premises: prems_il,
+    } = clause_il.node;
+    let (venv, args_al, prem_sideconditions_al) = analyze_args_as_bind(&mut ctx, &args_il)?;
     ctx.add_bounds(&venv);
-    let prems_al = analyze_prems(&mut ctx, &clause_il.node.premises)?;
-    analyze_exp_as_bound(&ctx, &clause_il.node.expression)?;
+    let prems_al = analyze_prems(&mut ctx, &prems_il)?;
+    analyze_exp_as_bound(&ctx, &exp_il)?;
     let mut prems_all_al = prem_sideconditions_al;
     prems_all_al.extend(prems_al);
     if is_else {
-        check_prems_in_else(&clause_il.span, &prems_all_al)?;
+        check_prems_in_else(&span, &prems_all_al)?;
     }
     let clause_al = phrase! {
         node: al::ast::ClauseKind {
             args: args_al,
-            expression: clause_il.node.expression.clone(),
+            expression: exp_il,
             premises: prems_all_al,
         },
-        span: clause_il.span.clone(),
+        span: span,
     };
     Ok(clause_al)
 }
@@ -811,34 +816,34 @@ fn check_valid_table_rows(
 
 fn analyze_table_row(
     ctx: &mut Context,
-    row_il: &ast::TableRow,
+    row_il: ast::TableRow,
 ) -> Result<al::ast::TableRow, AlgoError> {
-    let (args_il, exp_il) = &row_il.node;
     let mut ctx = ctx.scope();
     ctx.add_frees(&row_il.free());
-    let (venv, args_input_al, prems_al) =
-        analyze_args_as_bind_shallow(&mut ctx, args_il, &row_il.span)?;
+    let span = row_il.span;
+    let (args_il, exp_il) = row_il.node;
+    let (venv, args_input_al, prems_al) = analyze_args_as_bind_shallow(&mut ctx, &args_il, &span)?;
     ctx.add_bounds(&venv);
-    analyze_args_as_bound_shallow(&ctx, args_il)?;
+    analyze_args_as_bound_shallow(&ctx, &args_il)?;
     let mut exps_signature_al = Vec::with_capacity(args_il.len());
     for arg_il in args_il {
-        let ast::ArgKind::Exp(exp_il) = &arg_il.node else {
+        let ast::ArgKind::Exp(exp_il) = arg_il.node else {
             return Err(AlgoError::new(
                 AlgoErrorKind::InvalidTablePattern,
-                arg_il.span.clone(),
+                arg_il.span,
             ));
         };
-        exps_signature_al.push((**exp_il).clone());
+        exps_signature_al.push(*exp_il);
     }
-    analyze_exp_as_bound(&ctx, exp_il)?;
+    analyze_exp_as_bound(&ctx, &exp_il)?;
     let row_al = phrase! {
         node: al::ast::TableRowKind {
             exps_signature: exps_signature_al,
             args: args_input_al,
-            exp: exp_il.clone(),
+            exp: exp_il,
             prems: prems_al,
         },
-        span: row_il.span.clone(),
+        span: span,
     };
     Ok(row_al)
 }
@@ -847,7 +852,7 @@ fn analyze_table_rows(
     ctx: &mut Context,
     span: &Span,
     params_il: &[ast::Param],
-    rows_il: &[ast::TableRow],
+    rows_il: Vec<ast::TableRow>,
 ) -> Result<Vec<al::ast::TableRow>, AlgoError> {
     let mut rows_al = Vec::with_capacity(rows_il.len());
     for row_il in rows_il {
@@ -871,8 +876,9 @@ fn analyze_table_rows(
 
 // - Dispatch
 
-fn analyze_def(ctx: &mut Context, def_il: &ast::Def) -> Result<al::ast::Def, AlgoError> {
-    let def_kind_al = match &def_il.node {
+fn analyze_def(ctx: &mut Context, def_il: ast::Def) -> Result<al::ast::Def, AlgoError> {
+    let span = def_il.span;
+    let def_kind_al = match def_il.node {
         ast::DefKind::ExternTyp(def_il) => {
             let def_al = analyze_extern_typ_def(def_il);
             al::ast::DefKind::ExternTyp(def_al)
@@ -902,7 +908,7 @@ fn analyze_def(ctx: &mut Context, def_il: &ast::Def) -> Result<al::ast::Def, Alg
             al::ast::DefKind::BuiltinDec(def_al)
         }
         ast::DefKind::TableDec(table_def_il) => {
-            let def_al = analyze_table_def(ctx, table_def_il, &def_il.span)?;
+            let def_al = analyze_table_def(ctx, table_def_il, &span)?;
             al::ast::DefKind::TableDec(def_al)
         }
         ast::DefKind::FuncDec(def_il) => {
@@ -910,54 +916,54 @@ fn analyze_def(ctx: &mut Context, def_il: &ast::Def) -> Result<al::ast::Def, Alg
             al::ast::DefKind::FuncDec(def_al)
         }
     };
-    let def_al = phrase!(node: def_kind_al, span: def_il.span.clone());
+    let def_al = phrase!(node: def_kind_al, span: span);
     Ok(def_al)
 }
 
 // - External type definitions
 
-fn analyze_extern_typ_def(def_il: &ast::ExternTyp) -> al::ast::ExternTypDef {
+fn analyze_extern_typ_def(def_il: ast::ExternTyp) -> al::ast::ExternTypDef {
     al::ast::ExternTypDef {
-        id: def_il.id.clone(),
-        hints: def_il.hints.clone(),
+        id: def_il.id,
+        hints: def_il.hints,
     }
 }
 
 // - Type definitions
 
-fn analyze_typ_def(def_il: &ast::TypDef) -> al::ast::TypDef {
+fn analyze_typ_def(def_il: ast::TypDef) -> al::ast::TypDef {
     al::ast::TypDef {
-        id: def_il.id.clone(),
-        tparams: def_il.tparams.clone(),
-        def_typ: def_il.def_typ.clone(),
-        hints: def_il.hints.clone(),
+        id: def_il.id,
+        tparams: def_il.tparams,
+        def_typ: def_il.def_typ,
+        hints: def_il.hints,
     }
 }
 
 // - Variable definitions
 
-fn analyze_var_def(def_il: &ast::VarDef) -> al::ast::VarDef {
+fn analyze_var_def(def_il: ast::VarDef) -> al::ast::VarDef {
     al::ast::VarDef {
-        id: def_il.id.clone(),
-        typ: def_il.typ.clone(),
-        hints: def_il.hints.clone(),
+        id: def_il.id,
+        typ: def_il.typ,
+        hints: def_il.hints,
     }
 }
 
 // - External relation definitions
 
-fn analyze_extern_rel_def(def_il: &ast::ExternRel) -> al::ast::ExternRelDef {
+fn analyze_extern_rel_def(def_il: ast::ExternRel) -> al::ast::ExternRelDef {
     al::ast::ExternRelDef {
-        id: def_il.id.clone(),
-        not_typ: def_il.not_typ.clone(),
-        input_hint: def_il.input_hint.clone(),
-        hints: def_il.hints.clone(),
+        id: def_il.id,
+        not_typ: def_il.not_typ,
+        input_hint: def_il.input_hint,
+        hints: def_il.hints,
     }
 }
 
 // - Relation definitions
 
-fn analyze_rel_def(ctx: &mut Context, def_il: &ast::Rel) -> Result<al::ast::RelDef, AlgoError> {
+fn analyze_rel_def(ctx: &mut Context, def_il: ast::Rel) -> Result<al::ast::RelDef, AlgoError> {
     let mut rule_groups_al = Vec::with_capacity(def_il.rule_groups.len());
     for rule_group_il in &def_il.rule_groups {
         let mut rule_group_al = analyze_rule_group(ctx, &def_il.input_hint, rule_group_il, false)?;
@@ -970,36 +976,36 @@ fn analyze_rel_def(ctx: &mut Context, def_il: &ast::Rel) -> Result<al::ast::RelD
         .map(|else_group_il| analyze_else_group(ctx, &def_il.input_hint, else_group_il))
         .transpose()?;
     Ok(al::ast::RelDef {
-        id: def_il.id.clone(),
-        not_typ: def_il.not_typ.clone(),
-        input_hint: def_il.input_hint.clone(),
+        id: def_il.id,
+        not_typ: def_il.not_typ,
+        input_hint: def_il.input_hint,
         rule_groups: rule_groups_al,
         else_group: else_group_al,
-        hints: def_il.hints.clone(),
+        hints: def_il.hints,
     })
 }
 
 // - External declaration definitions
 
-fn analyze_extern_dec_def(def_il: &ast::ExternDec) -> al::ast::ExternDecDef {
+fn analyze_extern_dec_def(def_il: ast::ExternDec) -> al::ast::ExternDecDef {
     al::ast::ExternDecDef {
-        id: def_il.id.clone(),
-        tparams: def_il.tparams.clone(),
-        params: def_il.params.clone(),
-        typ: def_il.typ.clone(),
-        hints: def_il.hints.clone(),
+        id: def_il.id,
+        tparams: def_il.tparams,
+        params: def_il.params,
+        typ: def_il.typ,
+        hints: def_il.hints,
     }
 }
 
 // - Builtin declaration definitions
 
-fn analyze_builtin_dec_def(def_il: &ast::BuiltinDec) -> al::ast::BuiltinDecDef {
+fn analyze_builtin_dec_def(def_il: ast::BuiltinDec) -> al::ast::BuiltinDecDef {
     al::ast::BuiltinDecDef {
-        id: def_il.id.clone(),
-        tparams: def_il.tparams.clone(),
-        params: def_il.params.clone(),
-        typ: def_il.typ.clone(),
-        hints: def_il.hints.clone(),
+        id: def_il.id,
+        tparams: def_il.tparams,
+        params: def_il.params,
+        typ: def_il.typ,
+        hints: def_il.hints,
     }
 }
 
@@ -1007,16 +1013,16 @@ fn analyze_builtin_dec_def(def_il: &ast::BuiltinDec) -> al::ast::BuiltinDecDef {
 
 fn analyze_table_def(
     ctx: &mut Context,
-    def_il: &ast::TableDec,
+    def_il: ast::TableDec,
     span: &Span,
 ) -> Result<al::ast::TableDecDef, AlgoError> {
-    let table_rows_al = analyze_table_rows(ctx, span, &def_il.params, &def_il.rows)?;
+    let table_rows_al = analyze_table_rows(ctx, span, &def_il.params, def_il.rows)?;
     Ok(al::ast::TableDecDef {
-        id: def_il.id.clone(),
-        params: def_il.params.clone(),
-        typ: def_il.typ.clone(),
+        id: def_il.id,
+        params: def_il.params,
+        typ: def_il.typ,
         table_rows: table_rows_al,
-        hints: def_il.hints.clone(),
+        hints: def_il.hints,
     })
 }
 
@@ -1024,34 +1030,33 @@ fn analyze_table_def(
 
 fn analyze_func_def(
     ctx: &mut Context,
-    def_il: &ast::FuncDec,
+    def_il: ast::FuncDec,
 ) -> Result<al::ast::FuncDecDef, AlgoError> {
     let mut clauses_al = Vec::with_capacity(def_il.clauses.len());
-    for clause_il in &def_il.clauses {
+    for clause_il in def_il.clauses {
         clauses_al.push(analyze_clause(ctx, clause_il, false)?);
     }
     let else_clause_al = def_il
         .else_clause
-        .as_ref()
         .map(|clause_il| analyze_clause(ctx, clause_il, true))
         .transpose()?;
     Ok(al::ast::FuncDecDef {
-        id: def_il.id.clone(),
-        tparams: def_il.tparams.clone(),
-        params: def_il.params.clone(),
-        typ: def_il.typ.clone(),
+        id: def_il.id,
+        tparams: def_il.tparams,
+        params: def_il.params,
+        typ: def_il.typ,
         clauses: clauses_al,
         else_clause: else_clause_al,
-        hints: def_il.hints.clone(),
+        hints: def_il.hints,
     })
 }
 
 // - Specification
 
 /// Binding analysis of an IL specification
-pub(in crate::pass::algo) fn analyze_spec(spec_il: &ast::Spec) -> Result<al::ast::Spec, AlgoError> {
+pub(in crate::pass::algo) fn analyze_spec(spec_il: ast::Spec) -> Result<al::ast::Spec, AlgoError> {
     let mut ctx = Context::new();
-    ctx.load_spec(spec_il);
+    ctx.load_spec(&spec_il);
     let mut defs_al = Vec::with_capacity(spec_il.len());
     for def_il in spec_il {
         defs_al.push(analyze_def(&mut ctx, def_il)?);

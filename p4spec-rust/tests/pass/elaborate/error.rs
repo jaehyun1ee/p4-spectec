@@ -41,7 +41,7 @@ fn test_backtracking_failure_displays_its_elaboration_trace() {
         .join("tests/fixtures/elaboration/unmatched_variant.watsup");
     let spec = parse_files([fixture]).expect("parse unmatched variant fixture");
 
-    let error = elaborate::elaborate(&spec).expect_err("reject unmatched variant fixture");
+    let error = elaborate::elaborate(spec).expect_err("reject unmatched variant fixture");
     let diagnostic = error.to_string();
 
     assert!(diagnostic.contains("expression elaboration failed"));
@@ -54,7 +54,7 @@ fn test_dimension_mismatch_displays_the_conflicting_dimensions() {
         .join("tests/fixtures/elaboration/dimension_mismatch.watsup");
     let spec = parse_files([fixture]).expect("parse dimension mismatch fixture");
 
-    let error = elaborate::elaborate(&spec).expect_err("reject mismatched dimensions");
+    let error = elaborate::elaborate(spec).expect_err("reject mismatched dimensions");
     let diagnostic = error.to_string();
 
     assert!(diagnostic.contains("`K_x`"));

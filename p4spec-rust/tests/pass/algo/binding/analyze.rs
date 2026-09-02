@@ -51,7 +51,7 @@ fn test_conversion_preserves_rule_paths_and_populates_antiunified_inputs_in_orde
     }), span:
     span(1) }];
 
-    let analyzed = algo::convert(&spec).expect("convertible relation");
+    let analyzed = algo::convert(spec).expect("convertible relation");
 
     let crate::lang::al::ast::DefKind::Rel(relation) = &analyzed[0].node else {
         panic!("expected relation definition");
@@ -151,7 +151,7 @@ fn test_clause_analysis_orders_partial_then_repeated_then_source_premises() {
     }), span:
     span(1) }];
 
-    let analyzed = algo::convert(&spec).expect("convertible function");
+    let analyzed = algo::convert(spec).expect("convertible function");
 
     let crate::lang::al::ast::DefKind::FuncDec(function) = &analyzed[0].node else {
         panic!("expected function definition");
@@ -209,7 +209,7 @@ fn test_otherwise_clauses_and_rules_reject_impure_premises_at_the_branch_span() 
     }), span:
     span(9) }];
 
-    let function_error = algo::convert(&function_spec).expect_err("impure otherwise clause");
+    let function_error = algo::convert(function_spec).expect_err("impure otherwise clause");
     assert_eq!(function_error.kind, AlgoErrorKind::ImpureElsePremises);
     assert_eq!(function_error.span, span(10));
 
@@ -232,7 +232,7 @@ fn test_otherwise_clauses_and_rules_reject_impure_premises_at_the_branch_span() 
     }), span:
     span(20) }];
 
-    let relation_error = algo::convert(&relation_spec).expect_err("impure otherwise rule");
+    let relation_error = algo::convert(relation_spec).expect_err("impure otherwise rule");
     assert_eq!(relation_error.kind, AlgoErrorKind::ImpureElsePremises);
     assert_eq!(relation_error.span, span(21));
 }
@@ -304,13 +304,13 @@ fn test_conversion_rejects_overlapping_and_missing_variant_table_patterns() {
     ];
 
     let overlap_error =
-        algo::convert(&overlap_spec).expect_err("overlap takes precedence over missing");
+        algo::convert(overlap_spec).expect_err("overlap takes precedence over missing");
     assert_eq!(overlap_error.kind, AlgoErrorKind::OverlappingTablePatterns);
     assert_eq!(overlap_error.span, span(8));
 
     let missing_spec = vec![choice_def, table(vec![row(case_pattern("A", 20), 20)], 19)];
 
-    let missing_error = algo::convert(&missing_spec).expect_err("missing B variant row");
+    let missing_error = algo::convert(missing_spec).expect_err("missing B variant row");
     assert_eq!(missing_error.kind, AlgoErrorKind::MissingTablePatterns);
     assert_eq!(missing_error.span, span(18));
 }
@@ -431,7 +431,7 @@ fn test_conversion_preserves_definition_clause_and_table_row_order() {
         table_def,
     ];
 
-    let analyzed = algo::convert(&spec).expect("ordered specification");
+    let analyzed = algo::convert(spec).expect("ordered specification");
 
     let definition_ids = analyzed
         .iter()

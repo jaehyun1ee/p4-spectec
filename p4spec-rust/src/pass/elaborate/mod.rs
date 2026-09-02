@@ -13,6 +13,6 @@ pub use error::*;
 use crate::lang::{el, il};
 
 /// Validates and converts an EL specification to IL
-pub fn elaborate(spec: &el::ast::Spec) -> Result<il::ast::Spec, ElabError> {
-    elab::elaborate(spec)
+pub fn elaborate(spec_el: el::ast::Spec) -> Result<il::ast::Spec, ElabError> {
+    elab::elaborate(spec_el)
 }

@@ -72,9 +72,9 @@ fn test_full_spec_converts() {
         .expect("Rust crate is inside the repository");
     let spec_path = repo.join("spec");
     let spec_el = parse_files([spec_path]).expect("parse specification corpus");
-    let spec_il = elaborate::elaborate(&spec_el).expect("elaborate specification corpus");
+    let spec_il = elaborate::elaborate(spec_el).expect("elaborate specification corpus");
 
-    algo::convert(&spec_il).expect("convert specification corpus");
+    algo::convert(spec_il).expect("convert specification corpus");
 }
 
 #[test]
@@ -98,8 +98,8 @@ fn test_full_al_matches_ocaml_exactly() {
     assert_eq!(expected.kind(), "al");
 
     let spec_el = parse_files([&spec_path]).expect("parse corpus with Rust frontend");
-    let spec_il = elaborate::elaborate(&spec_el).expect("elaborate corpus with Rust");
-    let spec_al = algo::convert(&spec_il).expect("convert corpus with Rust");
+    let spec_il = elaborate::elaborate(spec_el).expect("elaborate corpus with Rust");
+    let spec_al = algo::convert(spec_il).expect("convert corpus with Rust");
     let actual = SpecCodec::encode(&spec_al).expect("encode Rust AL");
 
     if let Some((path, expected, actual)) = first_difference(expected.payload(), &actual, "payload")
@@ -160,8 +160,8 @@ fn test_rejected_conversion_matches_ocaml_category_and_span() {
         .expect("located OCaml diagnostic");
 
     let spec_el = parse_files([&fixture]).expect("parse negative fixture with Rust frontend");
-    let spec_il = elaborate::elaborate(&spec_el).expect("elaborate negative fixture with Rust");
-    let error = algo::convert(&spec_il).expect_err("Rust rejects fixture");
+    let spec_il = elaborate::elaborate(spec_el).expect("elaborate negative fixture with Rust");
+    let error = algo::convert(spec_il).expect_err("Rust rejects fixture");
 
     assert_eq!(
         Some(rust_error_category(&error.kind)),
@@ -201,9 +201,9 @@ tbl def $compat =
   | (_, _) => false
 "#;
     let spec_el = parse_string(source).expect("parse crossed alias table");
-    let spec_il = elaborate::elaborate(&spec_el).expect("elaborate crossed alias table");
+    let spec_il = elaborate::elaborate(spec_el).expect("elaborate crossed alias table");
 
-    let error = algo::convert(&spec_il).expect_err("crossed alias rows overlap by syntax");
+    let error = algo::convert(spec_il).expect_err("crossed alias rows overlap by syntax");
 
     assert_eq!(error.kind, AlgoErrorKind::OverlappingTablePatterns);
 }
