@@ -37,6 +37,10 @@ fn test_input_hints_validate_and_preserve_split_order() {
     assert_eq!(items_input, vec!["zero", "two"]);
     assert_eq!(items_output, vec!["one", "three"]);
     assert_eq!(
+        input_impl::split_owned(&hint, items.to_vec()),
+        Ok((items_input.clone(), items_output.clone()))
+    );
+    assert_eq!(
         input_impl::combine(&hint, items_input, items_output),
         Ok(items.to_vec())
     );

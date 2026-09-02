@@ -135,6 +135,26 @@ pub fn split<Item: Clone>(
     Ok((items_input, items_output))
 }
 
+/// Splits owned items into input and output positions
+///
+/// Validates the hint against `items.len()`
+pub fn split_owned<Item>(
+    hint: &InputHint,
+    items: Vec<Item>,
+) -> Result<(Vec<Item>, Vec<Item>), InputError> {
+    validate(hint, items.len())?;
+    let mut items_input = Vec::new();
+    let mut items_output = Vec::new();
+    for (index, item) in items.into_iter().enumerate() {
+        if hint.indices.contains(&(index as i64)) {
+            items_input.push(item);
+        } else {
+            items_output.push(item);
+        }
+    }
+    Ok((items_input, items_output))
+}
+
 /// Reconstructs source-order items from input and output positions
 ///
 /// Validates the hint and both item counts

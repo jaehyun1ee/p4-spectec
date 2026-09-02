@@ -526,10 +526,10 @@ fn analyze_debug_prem(
 
 fn analyze_prems(
     ctx: &mut Context,
-    prems_il: &[ast::Prem],
+    prems_il: Vec<ast::Prem>,
 ) -> Result<Vec<al::ast::Prem>, AlgoError> {
     let mut prems_al = Vec::new();
-    for prem_il in prems_il {
+    for prem_il in &prems_il {
         let (venv, prem_al, prem_sideconditions_al) = analyze_prem(ctx, ICtx::new(), prem_il)?;
         ctx.add_bounds(&venv);
         prems_al.push(prem_al);
@@ -564,7 +564,7 @@ fn analyze_rule_path(
     ctx: &mut Context,
     id: ast::Id,
     prems_unified_al: Vec<al::ast::Prem>,
-    prems_il: &[ast::Prem],
+    prems_il: Vec<ast::Prem>,
     exps_output_il: Vec<ast::Exp>,
     is_else: bool,
 ) -> Result<al::ast::RulePath, AlgoError> {
@@ -585,36 +585,32 @@ fn analyze_rule_path(
 fn analyze_rule_group(
     ctx: &mut Context,
     inputs: &InputHint,
-    rule_group_il: &ast::RuleGroup,
+    rule_group_il: ast::RuleGroup,
     is_else: bool,
 ) -> Result<al::ast::RuleGroup, AlgoError> {
     let mut ctx = ctx.scope();
-    let span = rule_group_il.span.clone();
-    let (id_group, rules_il) = &rule_group_il.node;
+    let span = rule_group_il.span;
+    let (id_group, rules_il) = rule_group_il.node;
     let mut ids = Vec::with_capacity(rules_il.len());
     let mut prems_group_il = Vec::with_capacity(rules_il.len());
     let mut exps_input_group_il = Vec::with_capacity(rules_il.len());
     let mut exps_output_group_il = Vec::with_capacity(rules_il.len());
     for rule_il in rules_il {
         ctx.add_frees(&rule_il.free());
-        ids.push(rule_il.node.id.clone());
-        prems_group_il.push(rule_il.node.prems.clone());
-        let exps_il = rule_il
-            .node
-            .not_exp
-            .args()
-            .into_iter()
-            .cloned()
-            .collect::<Vec<_>>();
-        let (exps_input_il, exps_output_il) = input::split(inputs, &exps_il)
-            .map_err(|error| input_error(error, rule_il.span.clone()))?;
+        let rule_span = rule_il.span;
+        let ast::RuleKind { id, not_exp, prems } = rule_il.node;
+        ids.push(id);
+        prems_group_il.push(prems);
+        let (_, exps_il) = not_exp.into_split();
+        let (exps_input_il, exps_output_il) =
+            input::split_owned(inputs, exps_il).map_err(|error| input_error(error, rule_span))?;
         exps_input_group_il.push(exps_input_il);
         exps_output_group_il.push(exps_output_il);
     }
 
     let (rule_match_al, prems_unified_group_il) =
         analyze_rule_match(&mut ctx, exps_input_group_il)?;
-    let mut rule_paths_al = Vec::with_capacity(rules_il.len());
+    let mut rule_paths_al = Vec::with_capacity(prems_group_il.len());
     for (((id, prems_unified_il), prems_il), exps_output_il) in ids
         .into_iter()
         .zip(prems_unified_group_il)
@@ -622,18 +618,18 @@ fn analyze_rule_group(
         .zip(exps_output_group_il)
     {
         let mut ctx_local = ctx.scope();
-        let prems_unified_al = analyze_prems(&mut ctx_local, &prems_unified_il)?;
+        let prems_unified_al = analyze_prems(&mut ctx_local, prems_unified_il)?;
         rule_paths_al.push(analyze_rule_path(
             &mut ctx_local,
             id,
             prems_unified_al,
-            &prems_il,
+            prems_il,
             exps_output_il,
             is_else,
         )?);
     }
     let rule_group_al = al::ast::RuleGroupKind {
-        id: id_group.clone(),
+        id: id_group,
         rule_match: rule_match_al,
         rule_paths: rule_paths_al,
     };
@@ -644,15 +640,15 @@ fn analyze_rule_group(
 fn analyze_else_group(
     ctx: &mut Context,
     inputs: &InputHint,
-    else_group_il: &ast::ElseGroup,
+    else_group_il: ast::ElseGroup,
 ) -> Result<al::ast::ElseGroup, AlgoError> {
-    let span = else_group_il.span.clone();
-    let (id_group, rule_il) = &else_group_il.node;
+    let span = else_group_il.span;
+    let (id_group, rule_il) = else_group_il.node;
     let rule_group_il = phrase! {
-        node: (id_group.clone(), vec![rule_il.clone()]),
-        span: else_group_il.span.clone(),
+        node: (id_group, vec![rule_il]),
+        span: span.clone(),
     };
-    let rule_group_al = analyze_rule_group(ctx, inputs, &rule_group_il, true)?;
+    let rule_group_al = analyze_rule_group(ctx, inputs, rule_group_il, true)?;
     let rule_path_al = rule_group_al
         .node
         .rule_paths
@@ -685,7 +681,7 @@ fn analyze_clause(
     } = clause_il.node;
     let (venv, args_al, prem_sideconditions_al) = analyze_args_as_bind(&mut ctx, &args_il)?;
     ctx.add_bounds(&venv);
-    let prems_al = analyze_prems(&mut ctx, &prems_il)?;
+    let prems_al = analyze_prems(&mut ctx, prems_il)?;
     analyze_exp_as_bound(&ctx, &exp_il)?;
     let mut prems_all_al = prem_sideconditions_al;
     prems_all_al.extend(prems_al);
@@ -963,24 +959,31 @@ fn analyze_extern_rel_def(def_il: ast::ExternRel) -> al::ast::ExternRelDef {
 // - Relation definitions
 
 fn analyze_rel_def(ctx: &mut Context, def_il: ast::Rel) -> Result<al::ast::RelDef, AlgoError> {
-    let mut rule_groups_al = Vec::with_capacity(def_il.rule_groups.len());
-    for rule_group_il in &def_il.rule_groups {
-        let mut rule_group_al = analyze_rule_group(ctx, &def_il.input_hint, rule_group_il, false)?;
-        rule_group_al.span = rule_group_il.span.clone();
+    let ast::Rel {
+        id,
+        not_typ,
+        input_hint,
+        rule_groups,
+        else_group,
+        hints,
+    } = def_il;
+    let mut rule_groups_al = Vec::with_capacity(rule_groups.len());
+    for rule_group_il in rule_groups {
+        let span = rule_group_il.span.clone();
+        let mut rule_group_al = analyze_rule_group(ctx, &input_hint, rule_group_il, false)?;
+        rule_group_al.span = span;
         rule_groups_al.push(rule_group_al);
     }
-    let else_group_al = def_il
-        .else_group
-        .as_ref()
-        .map(|else_group_il| analyze_else_group(ctx, &def_il.input_hint, else_group_il))
+    let else_group_al = else_group
+        .map(|else_group_il| analyze_else_group(ctx, &input_hint, else_group_il))
         .transpose()?;
     Ok(al::ast::RelDef {
-        id: def_il.id,
-        not_typ: def_il.not_typ,
-        input_hint: def_il.input_hint,
+        id,
+        not_typ,
+        input_hint,
         rule_groups: rule_groups_al,
         else_group: else_group_al,
-        hints: def_il.hints,
+        hints,
     })
 }
 
