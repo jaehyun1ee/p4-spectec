@@ -20,12 +20,110 @@ impl SpecCodec {
     }
 }
 
+// == Premises
+
+fn decode_prem(value: &Value) -> Result<ast::Prem, DecodeError> {
+    source::decode_phrase(value, |value| {
+        let (tag, fields) = variant(value)?;
+        match (tag, fields) {
+            ("RulePr", [id, exp, input_hint]) => Ok(PremKind::Rule(RulePrem {
+                id: il::decode_id(id)?,
+                not_exp: il::decode_not_exp(exp)?,
+                input_hint: il::decode_input_hint(input_hint)?,
+            })),
+            ("IfPr", [exp]) => Ok(PremKind::If(IfPrem {
+                exp: il::decode_exp(exp)?,
+            })),
+            ("IfHoldPr", [id, exp]) => Ok(PremKind::IfHold(IfHoldPrem {
+                id: il::decode_id(id)?,
+                not_exp: il::decode_not_exp(exp)?,
+            })),
+            ("IfNotHoldPr", [id, exp]) => Ok(PremKind::IfNotHold(IfNotHoldPrem {
+                id: il::decode_id(id)?,
+                not_exp: il::decode_not_exp(exp)?,
+            })),
+            ("LetPr", [exp_l, exp_r]) => Ok(PremKind::Let(LetPrem {
+                exp_l: il::decode_exp(exp_l)?,
+                exp_r: il::decode_exp(exp_r)?,
+            })),
+            ("IterPr", [prem, iter_prem]) => Ok(PremKind::Iter(IteratedPrem {
+                prem: Box::new(decode_prem(prem)?),
+                iter_prem: il::decode_iter_prem(iter_prem)?,
+            })),
+            ("DebugPr", [exp]) => Ok(PremKind::Debug(DebugPrem {
+                exp: il::decode_exp(exp)?,
+            })),
+            (
+                "RulePr" | "IfPr" | "IfHoldPr" | "IfNotHoldPr" | "LetPr" | "IterPr" | "DebugPr",
+                _,
+            ) => Err(DecodeError::Expected("valid AL premise arity")),
+            (unknown, _) => Err(DecodeError::UnknownVariant(unknown.to_owned())),
+        }
+    })
+}
+
+fn encode_prem(prem: &ast::Prem) -> Value {
+    source::encode_phrase(prem, |prem| match prem {
+        PremKind::Rule(RulePrem {
+            id,
+            not_exp,
+            input_hint,
+        }) => json!([
+            "RulePr",
+            il::encode_id(id),
+            il::encode_not_exp(not_exp),
+            il::encode_input_hint(input_hint)
+        ]),
+        PremKind::If(IfPrem { exp }) => json!(["IfPr", il::encode_exp(exp)]),
+        PremKind::IfHold(IfHoldPrem { id, not_exp }) => {
+            json!(["IfHoldPr", il::encode_id(id), il::encode_not_exp(not_exp)])
+        }
+        PremKind::IfNotHold(IfNotHoldPrem { id, not_exp }) => {
+            json!([
+                "IfNotHoldPr",
+                il::encode_id(id),
+                il::encode_not_exp(not_exp)
+            ])
+        }
+        PremKind::Let(LetPrem { exp_l, exp_r }) => {
+            json!(["LetPr", il::encode_exp(exp_l), il::encode_exp(exp_r)])
+        }
+        PremKind::Iter(IteratedPrem { prem, iter_prem }) => {
+            json!(["IterPr", encode_prem(prem), il::encode_iter_prem(iter_prem)])
+        }
+        PremKind::Debug(DebugPrem { exp }) => json!(["DebugPr", il::encode_exp(exp)]),
+    })
+}
+
+// == Clauses
+
+fn decode_clause(value: &Value) -> Result<ast::Clause, DecodeError> {
+    source::decode_phrase(value, |value| match array(value)? {
+        [args, exp, prems] => Ok(ast::ClauseKind {
+            args: il::decode_list(args, il::decode_arg)?,
+            expression: il::decode_exp(exp)?,
+            premises: il::decode_list(prems, decode_prem)?,
+        }),
+        _ => Err(DecodeError::Expected("AL clause triple")),
+    })
+}
+
+fn encode_clause(clause: &ast::Clause) -> Value {
+    source::encode_phrase(clause, |clause| {
+        json!([
+            il::encode_list(&clause.args, il::encode_arg),
+            il::encode_exp(&clause.expression),
+            il::encode_list(&clause.premises, encode_prem)
+        ])
+    })
+}
+
 fn decode_rule_match(value: &Value) -> Result<ast::RuleMatch, DecodeError> {
     match array(value)? {
         [exps_signature, exps_input, prems] => Ok(ast::RuleMatch {
             exps_signature: il::decode_list(exps_signature, il::decode_exp)?,
             exps_input: il::decode_list(exps_input, il::decode_exp)?,
-            prems: il::decode_list(prems, il::decode_prem)?,
+            prems: il::decode_list(prems, decode_prem)?,
         }),
         _ => Err(DecodeError::Expected("AL rule match triple")),
     }
@@ -35,7 +133,7 @@ fn encode_rule_match(rule_match: &ast::RuleMatch) -> Value {
     json!([
         il::encode_list(&rule_match.exps_signature, il::encode_exp),
         il::encode_list(&rule_match.exps_input, il::encode_exp),
-        il::encode_list(&rule_match.prems, il::encode_prem)
+        il::encode_list(&rule_match.prems, encode_prem)
     ])
 }
 
@@ -43,7 +141,7 @@ fn decode_rule_path(value: &Value) -> Result<ast::RulePath, DecodeError> {
     match array(value)? {
         [id, prems, exps_output] => Ok(ast::RulePath {
             id: il::decode_id(id)?,
-            prems: il::decode_list(prems, il::decode_prem)?,
+            prems: il::decode_list(prems, decode_prem)?,
             exps_output: il::decode_list(exps_output, il::decode_exp)?,
         }),
         _ => Err(DecodeError::Expected("AL rule path triple")),
@@ -53,7 +151,7 @@ fn decode_rule_path(value: &Value) -> Result<ast::RulePath, DecodeError> {
 fn encode_rule_path(rule_path: &ast::RulePath) -> Value {
     json!([
         il::encode_id(&rule_path.id),
-        il::encode_list(&rule_path.prems, il::encode_prem),
+        il::encode_list(&rule_path.prems, encode_prem),
         il::encode_list(&rule_path.exps_output, il::encode_exp)
     ])
 }
@@ -106,7 +204,7 @@ fn decode_table_row(value: &Value) -> Result<ast::TableRow, DecodeError> {
             exps_signature: il::decode_list(exps_signature, il::decode_exp)?,
             args: il::decode_list(args, il::decode_arg)?,
             exp: il::decode_exp(exp)?,
-            prems: il::decode_list(prems, il::decode_prem)?,
+            prems: il::decode_list(prems, decode_prem)?,
         }),
         _ => Err(DecodeError::Expected("AL table row quadruple")),
     })
@@ -118,7 +216,7 @@ fn encode_table_row(row: &ast::TableRow) -> Value {
             il::encode_list(&row.exps_signature, il::encode_exp),
             il::encode_list(&row.args, il::encode_arg),
             il::encode_exp(&row.exp),
-            il::encode_list(&row.prems, il::encode_prem)
+            il::encode_list(&row.prems, encode_prem)
         ])
     })
 }
@@ -189,8 +287,8 @@ fn decode_def(value: &Value) -> Result<ast::Def, DecodeError> {
                     tparams: il::decode_list(tparams, il::decode_tparam)?,
                     params: il::decode_list(params, il::decode_param)?,
                     typ: il::decode_typ(typ)?,
-                    clauses: il::decode_list(clauses, il::decode_clause)?,
-                    else_clause: il::decode_option(else_clause, il::decode_clause)?,
+                    clauses: il::decode_list(clauses, decode_clause)?,
+                    else_clause: il::decode_option(else_clause, decode_clause)?,
                     hints: il::decode_list(hints, el::decode_hint)?,
                 }))
             }
@@ -313,8 +411,8 @@ fn encode_def(def: &ast::Def) -> Value {
             il::encode_list(tparams, il::encode_tparam),
             il::encode_list(params, il::encode_param),
             il::encode_typ(typ),
-            il::encode_list(clauses, il::encode_clause),
-            il::encode_option(else_clause.as_ref(), il::encode_clause),
+            il::encode_list(clauses, encode_clause),
+            il::encode_option(else_clause.as_ref(), encode_clause),
             il::encode_list(hints, el::encode_hint)
         ]),
     })

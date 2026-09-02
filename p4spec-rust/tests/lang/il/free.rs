@@ -417,14 +417,6 @@ fn test_free_path_argument_and_premise_variants_follow_the_oracle() {
             names(&["not_holds"]),
         ),
         (
-            "let",
-            prem(ast::PremKind::Let(ast::LetPrem {
-                exp_l: variable("left"),
-                exp_r: variable("right"),
-            })),
-            names(&["left", "right"]),
-        ),
-        (
             "iteration_omits_binder_variables",
             prem(ast::PremKind::Iter(ast::IteratedPrem {
                 prem: Box::new(nested),
@@ -458,16 +450,7 @@ fn test_free_path_argument_and_premise_variants_follow_the_oracle() {
             .map(|(_, premise, _)| premise.clone())
             .collect::<Vec<_>>()
             .free(),
-        names(&[
-            "debug",
-            "holds",
-            "if",
-            "left",
-            "nested",
-            "not_holds",
-            "right",
-            "rule"
-        ])
+        names(&["debug", "holds", "if", "nested", "not_holds", "rule"])
     );
     for (case, premise, expected) in prems {
         assert_eq!(premise.free(), expected, "premise {case}");

@@ -1,5 +1,6 @@
 use crate::{
     lang::{
+        al::ast as ast_al,
         common::{
             Id,
             ds::set::IdSet,
@@ -73,6 +74,18 @@ fn exp_arg(exp: ast::Exp) -> ast::Arg {
 fn if_prem(exp: ast::Exp) -> ast::Prem {
     let span = exp.span.clone();
     crate::phrase! { node: ast::PremKind::If(ast::IfPrem { exp }), span:  span }
+}
+
+fn as_if_prem_al(prem_il: &ast::Prem) -> ast_al::Prem {
+    let ast::PremKind::If(if_prem_il) = &prem_il.node else {
+        panic!("expected conditional IL premise");
+    };
+    crate::phrase! {
+        node: ast_al::PremKind::If(ast_al::IfPrem {
+            exp: if_prem_il.exp.clone(),
+        }),
+        span: prem_il.span.clone(),
+    }
 }
 
 fn function_spec(
@@ -190,9 +203,9 @@ fn literal_index_exp(value: bool, line: i64) -> ast::Exp {
     indexed_exp(base, index, ast::TypKind::Bool, line)
 }
 
-fn assert_index_guard_span(prem: &ast::Prem, expected_span: Span) {
+fn assert_index_guard_span(prem: &ast_al::Prem, expected_span: Span) {
     assert_eq!(prem.span, expected_span);
-    let ast::PremKind::If(if_prem) = &prem.node else {
+    let ast_al::PremKind::If(if_prem) = &prem.node else {
         panic!("expected index guard premise");
     };
     assert_eq!(if_prem.exp.span, expected_span);
@@ -210,7 +223,7 @@ fn iteration_var(name: &str, typ: ast::Typ, line: i64) -> ast::Var {
     }
 }
 
-fn function_clause(spec: &crate::lang::al::ast::Spec) -> &ast::Clause {
+fn function_clause(spec: &crate::lang::al::ast::Spec) -> &ast_al::Clause {
     let crate::lang::al::ast::DefKind::FuncDec(function) = &spec[0].node else {
         panic!("expected function definition");
     };

@@ -6,7 +6,65 @@ use super::ast::*;
 
 // == Free identifiers
 
-// Nodes through premises alias IL nodes and use their implementations.
+// Nodes through type arguments alias IL nodes and use their implementations.
+
+// - Premises
+
+impl Free for RulePrem {
+    fn free(&self) -> IdSet {
+        self.not_exp.free()
+    }
+}
+
+impl Free for IfPrem {
+    fn free(&self) -> IdSet {
+        self.exp.free()
+    }
+}
+
+impl Free for IfHoldPrem {
+    fn free(&self) -> IdSet {
+        self.not_exp.free()
+    }
+}
+
+impl Free for IfNotHoldPrem {
+    fn free(&self) -> IdSet {
+        self.not_exp.free()
+    }
+}
+
+impl Free for LetPrem {
+    fn free(&self) -> IdSet {
+        self.exp_l.free().union(self.exp_r.free())
+    }
+}
+
+impl Free for IteratedPrem {
+    fn free(&self) -> IdSet {
+        self.prem.free()
+    }
+}
+
+impl Free for DebugPrem {
+    fn free(&self) -> IdSet {
+        self.exp.free()
+    }
+}
+
+impl Free for PremKind {
+    fn free(&self) -> IdSet {
+        match self {
+            Self::Rule(prem) => prem.free(),
+            Self::If(prem) => prem.free(),
+            Self::IfHold(prem) => prem.free(),
+            Self::IfNotHold(prem) => prem.free(),
+            Self::Let(prem) => prem.free(),
+            Self::Iter(prem) => prem.free(),
+            Self::Debug(prem) => prem.free(),
+        }
+    }
+}
 
 // - Rules
 
@@ -43,7 +101,17 @@ impl Free for ElseGroupKind {
     }
 }
 
-// Clauses alias IL clauses and use their implementations.
+// - Clauses
+
+impl Free for ClauseKind {
+    fn free(&self) -> IdSet {
+        self.args
+            .as_slice()
+            .free()
+            .union(self.expression.free())
+            .union(self.premises.as_slice().free())
+    }
+}
 
 // - Table rows
 

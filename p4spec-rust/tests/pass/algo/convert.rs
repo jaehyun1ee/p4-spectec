@@ -113,7 +113,6 @@ fn rust_error_category(kind: &AlgoErrorKind) -> &'static str {
         AlgoErrorKind::BindingsNotShallow => "bindings_not_shallow",
         AlgoErrorKind::ShallowSideConditions => "shallow_side_conditions",
         AlgoErrorKind::BindingOnBothEqualitySides => "binding_on_both_equality_sides",
-        AlgoErrorKind::UnexpectedLetPremise => "unexpected_let_premise",
         AlgoErrorKind::UnexpectedIterationBindings => "unexpected_iteration_bindings",
         AlgoErrorKind::ImpureElsePremises => "impure_else_premises",
         AlgoErrorKind::NonVariantPatternType => "non_variant_pattern_type",

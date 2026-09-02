@@ -6,8 +6,7 @@
 
 use crate::{
     lang::{
-        al,
-        il::ast,
+        al::{self, ast},
         traits::{eq::SyntaxEq, free::Free},
         xl,
     },

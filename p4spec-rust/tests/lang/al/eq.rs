@@ -22,11 +22,11 @@ fn test_syntax_equality_ignores_spans_and_subcheck_strategy() {
     assert!(arg_exp("x").syntax_eq(&arg_exp("x")));
     assert!(
         p4spec_rust::phrase! {
-            node: il::ast::PremKind::If(il::ast::IfPrem { exp: variable("x") }),
+            node: al::ast::PremKind::If(al::ast::IfPrem { exp: variable("x") }),
             span: span("prem"),
         }
         .syntax_eq(&p4spec_rust::phrase! {
-            node: il::ast::PremKind::If(il::ast::IfPrem { exp: variable("x") }),
+            node: al::ast::PremKind::If(al::ast::IfPrem { exp: variable("x") }),
             span: span("other-prem"),
         })
     );
@@ -89,7 +89,7 @@ fn test_syntax_equality_distinguishes_recursive_operands_variants_and_collection
     );
 
     let prem_rule = |input_hint| {
-        p4spec_rust::phrase! { node: il::ast::PremKind::Rule(il::ast::RulePrem {
+        p4spec_rust::phrase! { node: al::ast::PremKind::Rule(al::ast::RulePrem {
             id: id("r"),
             not_exp: not_exp("x"),
             input_hint,
@@ -99,11 +99,11 @@ fn test_syntax_equality_distinguishes_recursive_operands_variants_and_collection
     assert!(!prem_rule(InputHint::new(vec![0])).syntax_eq(&prem_rule(InputHint::new(vec![1]))));
     assert!(
         !p4spec_rust::phrase! {
-            node: il::ast::PremKind::If(il::ast::IfPrem { exp: variable("x") }),
+            node: al::ast::PremKind::If(al::ast::IfPrem { exp: variable("x") }),
             span: span("if"),
         }
         .syntax_eq(&p4spec_rust::phrase! {
-            node: il::ast::PremKind::Debug(il::ast::DebugPrem { exp: variable("x") }),
+            node: al::ast::PremKind::Debug(al::ast::DebugPrem { exp: variable("x") }),
             span: span("debug"),
         })
     );

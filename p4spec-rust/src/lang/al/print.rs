@@ -5,7 +5,6 @@ use std::fmt::{self, Write};
 use crate::lang::{
     common::notation::mixop::Mixop,
     hints::input::InputHint,
-    il::print::write_prems_with,
     traits::print::{Print, Printer},
 };
 
@@ -32,6 +31,78 @@ fn write_notation(
             Some(exp) => exp.print(output),
             None => output.write("%"),
         })
+}
+
+// - Premises
+
+fn write_prems_with(output: &mut Printer<'_>, level: usize, prems: &[Prem]) -> fmt::Result {
+    for prem in prems {
+        write!(output, "\n{}-- ", indent(level))?;
+        prem.print(output)?;
+    }
+    Ok(())
+}
+
+impl Print for Prem {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        match &self.node {
+            PremKind::Rule(RulePrem { id, not_exp, .. }) => {
+                id.print(printer)?;
+                printer.write_str(": ")?;
+                not_exp.print(printer)
+            }
+            PremKind::If(IfPrem { exp }) => {
+                printer.write_str("if ")?;
+                exp.print(printer)
+            }
+            PremKind::IfHold(IfHoldPrem { id, not_exp }) => {
+                printer.write_str("if ")?;
+                id.print(printer)?;
+                printer.write_str(": ")?;
+                not_exp.print(printer)?;
+                printer.write_str(" holds")
+            }
+            PremKind::IfNotHold(IfNotHoldPrem { id, not_exp }) => {
+                printer.write_str("if ")?;
+                id.print(printer)?;
+                printer.write_str(": ")?;
+                not_exp.print(printer)?;
+                printer.write_str(" does not hold")
+            }
+            PremKind::Let(LetPrem { exp_l, exp_r }) => {
+                printer.write_str("let ")?;
+                exp_l.print(printer)?;
+                printer.write_str(" = ")?;
+                exp_r.print(printer)
+            }
+            PremKind::Iter(IteratedPrem {
+                prem: prem_inner,
+                iter_prem,
+            }) if matches!(prem_inner.node, PremKind::Iter(_)) => {
+                prem_inner.print(printer)?;
+                iter_prem.print(printer)
+            }
+            PremKind::Iter(IteratedPrem {
+                prem: prem_inner,
+                iter_prem,
+            }) => {
+                printer.write_char('(')?;
+                prem_inner.print(printer)?;
+                printer.write_char(')')?;
+                iter_prem.print(printer)
+            }
+            PremKind::Debug(DebugPrem { exp }) => {
+                printer.write_str("debug ")?;
+                exp.print(printer)
+            }
+        }
+    }
+}
+
+impl Print for [Prem] {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        write_prems_with(printer, 0, self)
+    }
 }
 
 // - Rules
@@ -186,6 +257,17 @@ fn write_elsegroup_opt(
         write_elsegroup(output, not_typ, input_hint, else_group)?;
     }
     Ok(())
+}
+
+// - Clauses
+
+impl Print for Clause {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        self.node.args.print(printer)?;
+        printer.write_str(" = ")?;
+        self.node.expression.print(printer)?;
+        write_prems_with(printer, 1, &self.node.premises)
+    }
 }
 
 // - Table rows

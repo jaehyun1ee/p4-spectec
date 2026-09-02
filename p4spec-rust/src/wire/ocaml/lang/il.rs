@@ -1390,10 +1390,6 @@ pub(super) fn decode_prem(value: &Value) -> Result<ast::Prem, DecodeError> {
                 id: decode_id(id)?,
                 not_exp: decode_not_exp(exp)?,
             })),
-            ("LetPr", [exp_l, exp_r]) => Ok(PremKind::Let(LetPrem {
-                exp_l: decode_exp(exp_l)?,
-                exp_r: decode_exp(exp_r)?,
-            })),
             ("IterPr", [prem, iter]) => Ok(PremKind::Iter(IteratedPrem {
                 prem: Box::new(decode_prem(prem)?),
                 iter_prem: decode_iter_prem(iter)?,
@@ -1401,10 +1397,9 @@ pub(super) fn decode_prem(value: &Value) -> Result<ast::Prem, DecodeError> {
             ("DebugPr", [exp]) => Ok(PremKind::Debug(DebugPrem {
                 exp: decode_exp(exp)?,
             })),
-            (
-                "RulePr" | "IfPr" | "IfHoldPr" | "IfNotHoldPr" | "LetPr" | "IterPr" | "DebugPr",
-                _,
-            ) => Err(DecodeError::Expected("valid IL premise arity")),
+            ("RulePr" | "IfPr" | "IfHoldPr" | "IfNotHoldPr" | "IterPr" | "DebugPr", _) => {
+                Err(DecodeError::Expected("valid IL premise arity"))
+            }
             (unknown, _) => Err(DecodeError::UnknownVariant(unknown.to_owned())),
         }
     })
@@ -1429,10 +1424,6 @@ pub(super) fn encode_prem(prem: &ast::Prem) -> Value {
         PremKind::IfNotHold(IfNotHoldPrem { id, not_exp }) => {
             json!(["IfNotHoldPr", encode_id(id), encode_not_exp(not_exp)])
         }
-        PremKind::Let(LetPrem {
-            exp_l: left,
-            exp_r: right,
-        }) => json!(["LetPr", encode_exp(left), encode_exp(right)]),
         PremKind::Iter(IteratedPrem {
             prem,
             iter_prem: iter,

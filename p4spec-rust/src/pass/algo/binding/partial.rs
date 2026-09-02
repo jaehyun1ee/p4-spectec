@@ -6,6 +6,7 @@
 
 use crate::{
     lang::{
+        al,
         common::{ds::set::IdSet, notation::mixop::Mixop, source::Span},
         il::{ast, fresh, var},
         traits::free::Free,
@@ -118,8 +119,8 @@ fn bool_exp(kind: ast::ExpKind, span: Span) -> ast::Exp {
     note_phrase!(node: kind, note: ast::TypKind::Bool, span: span)
 }
 
-fn if_prem(exp: ast::Exp, span: Span) -> ast::Prem {
-    phrase!(node: ast::PremKind::If(ast::IfPrem { exp }), span: span)
+fn if_prem(exp: ast::Exp, span: Span) -> al::ast::Prem {
+    phrase!(node: al::ast::PremKind::If(al::ast::IfPrem { exp }), span: span)
 }
 
 fn generate_bound(
@@ -127,7 +128,7 @@ fn generate_bound(
     destination: &ast::Var,
     exp_from: &ast::Exp,
     iterctx: &IterationContext,
-) -> Result<Vec<ast::Prem>, AlgoError> {
+) -> Result<Vec<al::ast::Prem>, AlgoError> {
     let exp_l = var::as_exp(true, destination);
     let kind = match &exp_from.node {
         ast::ExpKind::Case(not_exp)
@@ -178,7 +179,7 @@ fn generate_bind_match(
     pattern: &ast::Pattern,
     exp_from: &ast::Exp,
     iterctx: &IterationContext,
-) -> Vec<ast::Prem> {
+) -> Vec<al::ast::Prem> {
     let exp_to = var::as_exp(true, destination);
     let exp_match = bool_exp(
         ast::ExpKind::Match(Box::new(exp_to.clone()), pattern.clone()),
@@ -193,7 +194,7 @@ fn generate_bind_match(
     );
 
     let prem_bind = phrase! {
-        node: ast::PremKind::Let(ast::LetPrem {
+        node: al::ast::PremKind::Let(al::ast::LetPrem {
             exp_l: exp_from.clone(),
             exp_r: exp_to,
         }),
@@ -219,7 +220,7 @@ fn generate_bind_sub(
     exp_sub: &ast::Exp,
     exp_from: &ast::Exp,
     iterctx: &IterationContext,
-) -> Result<Vec<ast::Prem>, AlgoError> {
+) -> Result<Vec<al::ast::Prem>, AlgoError> {
     let exp_to = var::as_exp(true, destination);
     let typ_source = phrase!(node: exp_to.note.clone(), span: exp_to.span.clone());
     let subcheck = optimize_sub_typ(ctx.tdenv(), &typ_source, typ_sub)?;
@@ -245,7 +246,7 @@ fn generate_bind_sub(
         span: exp_from.span.clone(),
     };
     let prem_bind = phrase! {
-        node: ast::PremKind::Let(ast::LetPrem {
+        node: al::ast::PremKind::Let(al::ast::LetPrem {
             exp_l: exp_sub.clone(),
             exp_r: exp_downcast,
         }),
@@ -268,7 +269,7 @@ fn generate_prem(
     ctx: &Context,
     rename: &Rename,
     iterctx_prem: &IterationContext,
-) -> Result<Vec<ast::Prem>, AlgoError> {
+) -> Result<Vec<al::ast::Prem>, AlgoError> {
     let mut iterations = rename.iterctx.as_slice().to_vec();
     iterations.extend(iterctx_prem.as_slice().iter().cloned());
     let iterctx = IterationContext::from_iterations(iterations);
@@ -299,7 +300,7 @@ pub fn generate_prems(
     ctx: &Context,
     iterctx_prem: &IterationContext,
     renv: &RenameEnv,
-) -> Result<Vec<ast::Prem>, AlgoError> {
+) -> Result<Vec<al::ast::Prem>, AlgoError> {
     let mut prems = Vec::new();
     for rename in renv.iter() {
         prems.extend(generate_prem(ctx, rename, iterctx_prem)?);

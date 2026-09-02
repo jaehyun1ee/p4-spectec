@@ -207,13 +207,6 @@ fn infer_prem(
         ast::PremKind::If(if_prem) => infer_exp(dim_ctx, &if_prem.exp, iters),
         ast::PremKind::IfHold(if_prem) => infer_not_exp(dim_ctx, &if_prem.not_exp, iters),
         ast::PremKind::IfNotHold(if_prem) => infer_not_exp(dim_ctx, &if_prem.not_exp, iters),
-        ast::PremKind::Let(_) => {
-            return Err(ElabError::new(
-                ElabErrorKind::MisplacedConstruct,
-                prem.span.clone(),
-                "let premise should appear only after algorithmic conversion",
-            ));
-        }
         ast::PremKind::Iter(iterated) => {
             if !iterated.iter_prem.vars_bound.is_empty() || !iterated.iter_prem.vars_bind.is_empty()
             {
@@ -786,7 +779,6 @@ fn annotate_prem(bounds: &VEnv, prem: &mut ast::Prem) -> Result<Occurrences, Ela
         ast::PremKind::If(if_prem) => annotate_if_prem(bounds, if_prem),
         ast::PremKind::IfHold(if_prem) => annotate_if_hold_prem(bounds, if_prem),
         ast::PremKind::IfNotHold(if_prem) => annotate_if_not_hold_prem(bounds, if_prem),
-        ast::PremKind::Let(_) => annotate_let_prem(span),
         ast::PremKind::Iter(iterated) => annotate_iter_prem(bounds, span, iterated),
         ast::PremKind::Debug(debug) => annotate_debug_prem(bounds, debug),
     }
@@ -829,16 +821,6 @@ fn annotate_if_not_hold_prem(
     if_prem: &mut ast::IfNotHoldPrem,
 ) -> Result<Occurrences, ElabError> {
     annotate_not_exp(bounds, &mut if_prem.not_exp)
-}
-
-// - Let premises
-
-fn annotate_let_prem(span: &Span) -> Result<Occurrences, ElabError> {
-    Err(ElabError::new(
-        ElabErrorKind::MisplacedConstruct,
-        span.clone(),
-        "let premise should appear only after algorithmic conversion",
-    ))
 }
 
 // - Iteration premises

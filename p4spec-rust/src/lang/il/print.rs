@@ -547,11 +547,7 @@ impl Print for [Arg] {
 
 // - Premises
 
-pub(crate) fn write_prems_with(
-    output: &mut Printer<'_>,
-    level: usize,
-    prems: &[Prem],
-) -> fmt::Result {
+fn write_prems_with(output: &mut Printer<'_>, level: usize, prems: &[Prem]) -> fmt::Result {
     for prem in prems {
         write!(output, "\n{}-- ", indent(level))?;
         prem.print(output)?;
@@ -584,12 +580,6 @@ impl Print for Prem {
                 printer.write_str(": ")?;
                 not_exp.print(printer)?;
                 printer.write_str(" does not hold")
-            }
-            PremKind::Let(LetPrem { exp_l, exp_r }) => {
-                printer.write_str("let ")?;
-                exp_l.print(printer)?;
-                printer.write_str(" = ")?;
-                exp_r.print(printer)
             }
             PremKind::Iter(IteratedPrem {
                 prem: inner,

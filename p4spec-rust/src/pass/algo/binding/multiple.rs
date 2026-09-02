@@ -2,6 +2,7 @@
 
 use crate::{
     lang::{
+        al,
         common::{
             Id,
             ds::{map::IdMap, set::IdSet},
@@ -196,7 +197,7 @@ fn generate_side_condition(
     iterctx: &IterationContext,
     id: &Id,
     ids_rename: &[Id],
-) -> Option<ast::Prem> {
+) -> Option<al::ast::Prem> {
     let mut ids_repeated = ids_rename.iter().skip(1);
     let id_rename = ids_repeated.next()?;
     let mut id_condition = id.clone();
@@ -216,7 +217,7 @@ fn generate_side_condition(
         };
     }
     let prem = phrase! {
-        node: ast::PremKind::If(ast::IfPrem { exp }),
+        node: al::ast::PremKind::If(al::ast::IfPrem { exp }),
         span: id_condition.span.clone(),
     };
 
@@ -240,7 +241,10 @@ fn generate_side_condition(
     Some(side_iterctx.iterate_prem(prem))
 }
 
-pub fn generate_side_conditions(iterctx: &IterationContext, renv: &RenameEnv) -> Vec<ast::Prem> {
+pub fn generate_side_conditions(
+    iterctx: &IterationContext,
+    renv: &RenameEnv,
+) -> Vec<al::ast::Prem> {
     renv.iter()
         .filter_map(|(id, ids_rename)| {
             let dim = renv.dimension(id)?;

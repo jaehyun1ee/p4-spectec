@@ -79,11 +79,11 @@ fn test_conversion_preserves_rule_paths_and_populates_antiunified_inputs_in_orde
             .iter()
             .all(|item| matches!(item.node, ast::ExpKind::Var(_)))
     );
-    let compared_values = |prems: &[ast::Prem]| {
+    let compared_values = |prems: &[ast_al::Prem]| {
         prems
             .iter()
             .map(|prem| {
-                let ast::PremKind::If(if_prem) = &prem.node else {
+                let ast_al::PremKind::If(if_prem) = &prem.node else {
                     panic!("expected populated equality premise");
                 };
                 let ast::ExpKind::Cmp(_, _, _, exp_r) = &if_prem.exp.node else {
@@ -160,7 +160,7 @@ fn test_clause_analysis_orders_partial_then_repeated_then_source_premises() {
     assert_eq!(prems.len(), 3);
     assert!(matches!(
         &prems[0].node,
-        ast::PremKind::If(ast::IfPrem {
+        ast_al::PremKind::If(ast_al::IfPrem {
             exp: NotePhrase {
                 node: ast::ExpKind::Cmp(_, _, _, exp_r),
                 ..
@@ -169,14 +169,14 @@ fn test_clause_analysis_orders_partial_then_repeated_then_source_premises() {
     ));
     assert!(matches!(
         &prems[1].node,
-        ast::PremKind::If(ast::IfPrem {
+        ast_al::PremKind::If(ast_al::IfPrem {
             exp: NotePhrase {
                 node: ast::ExpKind::Cmp(_, _, _, exp_r),
                 ..
             }
         }) if matches!(exp_r.node, ast::ExpKind::Var(_))
     ));
-    assert!(matches!(&prems[2].node, ast::PremKind::Debug(_)));
+    assert!(matches!(&prems[2].node, ast_al::PremKind::Debug(_)));
 }
 
 #[test]

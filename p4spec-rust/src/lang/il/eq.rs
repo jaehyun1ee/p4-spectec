@@ -267,7 +267,6 @@ impl SyntaxEq for PremKind {
             (PremKind::If(prem_l), PremKind::If(prem_r)) => prem_l.syntax_eq(prem_r),
             (PremKind::IfHold(prem_l), PremKind::IfHold(prem_r)) => prem_l.syntax_eq(prem_r),
             (PremKind::IfNotHold(prem_l), PremKind::IfNotHold(prem_r)) => prem_l.syntax_eq(prem_r),
-            (PremKind::Let(prem_l), PremKind::Let(prem_r)) => prem_l.syntax_eq(prem_r),
             (PremKind::Iter(prem_l), PremKind::Iter(prem_r)) => prem_l.syntax_eq(prem_r),
             (PremKind::Debug(prem_l), PremKind::Debug(prem_r)) => prem_l.syntax_eq(prem_r),
             _ => false,
@@ -392,12 +391,6 @@ impl SyntaxEq for IfHoldPrem {
 impl SyntaxEq for IfNotHoldPrem {
     fn syntax_eq(&self, other: &Self) -> bool {
         self.id.syntax_eq(&other.id) && self.not_exp.syntax_eq(&other.not_exp)
-    }
-}
-
-impl SyntaxEq for LetPrem {
-    fn syntax_eq(&self, other: &Self) -> bool {
-        self.exp_l.syntax_eq(&other.exp_l) && self.exp_r.syntax_eq(&other.exp_r)
     }
 }
 

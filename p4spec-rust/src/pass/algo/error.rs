@@ -38,8 +38,6 @@ pub enum AlgoErrorKind {
     ShallowSideConditions,
     #[error("cannot bind on both sides of an equality")]
     BindingOnBothEqualitySides,
-    #[error("let premise is invalid before binding analysis")]
-    UnexpectedLetPremise,
     #[error("iterated premise has binding variables before binding analysis")]
     UnexpectedIterationBindings,
     #[error("otherwise branch contains an impure premise")]

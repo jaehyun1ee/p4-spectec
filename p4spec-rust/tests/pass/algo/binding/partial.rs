@@ -77,17 +77,17 @@ fn test_conversion_preserves_binding_match_and_cast_guards_before_bindings() {
 
     assert!(matches!(
         &match_guard.node,
-        ast::PremKind::If(ast::IfPrem {
+        ast_al::PremKind::If(ast_al::IfPrem {
             exp: NotePhrase {
                 node: ast::ExpKind::Match(_, ast::Pattern::List(ast::ListPattern::Fixed(1))),
                 ..
             }
         })
     ));
-    assert!(matches!(&list_binding.node, ast::PremKind::Let(_)));
+    assert!(matches!(&list_binding.node, ast_al::PremKind::Let(_)));
     assert!(matches!(
         &subtype_guard.node,
-        ast::PremKind::If(ast::IfPrem {
+        ast_al::PremKind::If(ast_al::IfPrem {
             exp: NotePhrase {
                 node: ast::ExpKind::Sub(_, typ, _),
                 ..
@@ -96,7 +96,7 @@ fn test_conversion_preserves_binding_match_and_cast_guards_before_bindings() {
     ));
     assert!(matches!(
         &cast_binding.node,
-        ast::PremKind::Let(ast::LetPrem {
+        ast_al::PremKind::Let(ast_al::LetPrem {
             exp_r: NotePhrase {
                 node: ast::ExpKind::DownCast(typ, _),
                 ..
@@ -166,13 +166,13 @@ fn test_partial_binding_preserves_expression_and_premise_iteration_dimensions() 
     let [premise] = premises.as_slice() else {
         panic!("expected one equality premise");
     };
-    let ast::PremKind::Iter(iterated_prem) = &premise.node else {
+    let ast_al::PremKind::Iter(iterated_prem) = &premise.node else {
         panic!("expected premise iteration");
     };
     assert_eq!(iterated_prem.iter_prem.iter, ast::Iter::List);
     assert_eq!(iterated_prem.iter_prem.vars_bound.len(), 1);
     assert_eq!(iterated_prem.iter_prem.vars_bound[0].id, *id_rename);
-    let ast::PremKind::If(if_prem) = &iterated_prem.prem.node else {
+    let ast_al::PremKind::If(if_prem) = &iterated_prem.prem.node else {
         panic!("expected equality side condition");
     };
     let ast::ExpKind::Cmp(_, ast::OpTyp::Bool, exp_l, exp_r) = &if_prem.exp.node else {
@@ -262,12 +262,12 @@ fn test_partial_binding_preserves_nested_iteration_order_and_dimensions() {
     let [premise] = premises.as_slice() else {
         panic!("expected one nested equality premise");
     };
-    let ast::PremKind::Iter(outer) = &premise.node else {
+    let ast_al::PremKind::Iter(outer) = &premise.node else {
         panic!("expected outer premise iteration");
     };
     assert_eq!(outer.iter_prem.iter, ast::Iter::List);
     assert_eq!(outer.iter_prem.vars_bound[0].id, *id_rename);
-    let ast::PremKind::Iter(inner) = &outer.prem.node else {
+    let ast_al::PremKind::Iter(inner) = &outer.prem.node else {
         panic!("expected inner premise iteration");
     };
     assert_eq!(inner.iter_prem.iter, ast::Iter::Opt);
@@ -397,7 +397,7 @@ fn test_partial_case_and_list_bindings_generate_match_then_bind_premises_in_sour
     assert_eq!(premises.len(), 4);
     assert!(matches!(
         &premises[0].node,
-        ast::PremKind::If(ast::IfPrem {
+        ast_al::PremKind::If(ast_al::IfPrem {
             exp: NotePhrase {
                 node: ast::ExpKind::Match(_, ast::Pattern::Case(_)),
                 ..
@@ -406,7 +406,7 @@ fn test_partial_case_and_list_bindings_generate_match_then_bind_premises_in_sour
     ));
     assert!(matches!(
         &premises[1].node,
-        ast::PremKind::Let(ast::LetPrem {
+        ast_al::PremKind::Let(ast_al::LetPrem {
             exp_l: NotePhrase {
                 node: ast::ExpKind::Case(_),
                 ..
@@ -416,7 +416,7 @@ fn test_partial_case_and_list_bindings_generate_match_then_bind_premises_in_sour
     ));
     assert!(matches!(
         &premises[2].node,
-        ast::PremKind::If(ast::IfPrem {
+        ast_al::PremKind::If(ast_al::IfPrem {
             exp: NotePhrase {
                 node: ast::ExpKind::Match(_, ast::Pattern::List(ast::ListPattern::Fixed(1))),
                 ..
@@ -425,7 +425,7 @@ fn test_partial_case_and_list_bindings_generate_match_then_bind_premises_in_sour
     ));
     assert!(matches!(
         &premises[3].node,
-        ast::PremKind::Let(ast::LetPrem {
+        ast_al::PremKind::Let(ast_al::LetPrem {
             exp_l: NotePhrase {
                 node: ast::ExpKind::List(_),
                 ..
@@ -493,7 +493,7 @@ fn test_partial_upcast_binding_checks_subtype_before_binding_the_downcast_value(
     };
     assert!(matches!(
         &subtype.node,
-        ast::PremKind::If(ast::IfPrem {
+        ast_al::PremKind::If(ast_al::IfPrem {
             exp: NotePhrase {
                 node: ast::ExpKind::Sub(_, typ, _),
                 ..
@@ -502,7 +502,7 @@ fn test_partial_upcast_binding_checks_subtype_before_binding_the_downcast_value(
     ));
     assert!(matches!(
         &binding.node,
-        ast::PremKind::Let(ast::LetPrem {
+        ast_al::PremKind::Let(ast_al::LetPrem {
             exp_l: NotePhrase {
                 node: ast::ExpKind::Var(_),
                 ..

@@ -2,6 +2,7 @@
 
 use crate::{
     lang::{
+        al,
         common::{Id, source::Span},
         il::ast,
     },
@@ -108,19 +109,19 @@ impl IterationContext {
 
     // Iterated premises
 
-    pub fn iterate_prem(&self, mut prem: ast::Prem) -> ast::Prem {
+    pub fn iterate_prem(&self, mut prem: al::ast::Prem) -> al::ast::Prem {
         for entry in &self.iterations {
             let span = prem.span.clone();
-            let iter_prem = ast::IterPrem {
+            let iter_prem = al::ast::IterPrem {
                 iter: entry.iter,
                 vars_bound: entry.vars_bound.clone(),
                 vars_bind: entry.vars_bind.clone(),
             };
-            let iterated = ast::IteratedPrem {
+            let iterated = al::ast::IteratedPrem {
                 prem: Box::new(prem),
                 iter_prem,
             };
-            prem = phrase!(node: ast::PremKind::Iter(iterated), span: span);
+            prem = phrase!(node: al::ast::PremKind::Iter(iterated), span: span);
         }
         prem
     }

@@ -103,7 +103,7 @@ fn analyze_exps_as_bind(
     ctx: &mut Context,
     iter_ctx: &IterationContext,
     exps_il: &[ast::Exp],
-) -> Result<(VEnv, Vec<ast::Exp>, Vec<ast::Prem>), AlgoError> {
+) -> Result<(VEnv, Vec<ast::Exp>, Vec<al::ast::Prem>), AlgoError> {
     let benv = collect::collect_exps(ctx, exps_il)?;
     let mut venv = benv.flatten();
 
@@ -151,7 +151,7 @@ fn analyze_exps_as_bound(ctx: &Context, exps: &[ast::Exp]) -> Result<(), AlgoErr
 fn analyze_args_as_bind(
     ctx: &mut Context,
     args_il: &[ast::Arg],
-) -> Result<(VEnv, Vec<ast::Arg>, Vec<ast::Prem>), AlgoError> {
+) -> Result<(VEnv, Vec<ast::Arg>, Vec<al::ast::Prem>), AlgoError> {
     let benv = collect::collect_args(ctx, args_il)?;
     let mut venv = benv.flatten();
 
@@ -179,7 +179,7 @@ fn analyze_args_as_bind_shallow(
     ctx: &mut Context,
     args_il: &[ast::Arg],
     span: &Span,
-) -> Result<(VEnv, Vec<ast::Arg>, Vec<ast::Prem>), AlgoError> {
+) -> Result<(VEnv, Vec<ast::Arg>, Vec<al::ast::Prem>), AlgoError> {
     if !shallow::check_args(args_il) {
         let span = args_il
             .first()
@@ -241,7 +241,7 @@ fn analyze_args_as_bound_shallow(ctx: &Context, args: &[ast::Arg]) -> Result<(),
 
 // - Helpers
 
-fn check_prems_in_else(span: &Span, prems: &[ast::Prem]) -> Result<(), AlgoError> {
+fn check_prems_in_else(span: &Span, prems: &[al::ast::Prem]) -> Result<(), AlgoError> {
     if prems.iter().all(|prem| !al::partial::is_partial_prem(prem)) {
         Ok(())
     } else {
@@ -258,7 +258,7 @@ fn analyze_prem(
     ctx: &mut Context,
     iter_ctx: IterationContext,
     prem_il: &ast::Prem,
-) -> Result<(VEnv, ast::Prem, Vec<ast::Prem>), AlgoError> {
+) -> Result<(VEnv, al::ast::Prem, Vec<al::ast::Prem>), AlgoError> {
     match &prem_il.node {
         ast::PremKind::Rule(rule_prem_il) => {
             analyze_rule_prem(ctx, iter_ctx, &prem_il.span, rule_prem_il)
@@ -270,10 +270,6 @@ fn analyze_prem(
         ast::PremKind::IfNotHold(if_prem_il) => {
             analyze_if_not_hold_prem(ctx, iter_ctx, &prem_il.span, if_prem_il)
         }
-        ast::PremKind::Let(_) => Err(AlgoError::new(
-            AlgoErrorKind::UnexpectedLetPremise,
-            prem_il.span.clone(),
-        )),
         ast::PremKind::Iter(iterated_il) => {
             analyze_iter_prem(ctx, iter_ctx, &prem_il.span, iterated_il)
         }
@@ -290,7 +286,7 @@ fn analyze_rule_prem(
     iter_ctx: IterationContext,
     span: &Span,
     rule_prem_il: &ast::RulePrem,
-) -> Result<(VEnv, ast::Prem, Vec<ast::Prem>), AlgoError> {
+) -> Result<(VEnv, al::ast::Prem, Vec<al::ast::Prem>), AlgoError> {
     let mixop = rule_prem_il.not_exp.to_mixop();
     let exps_il = rule_prem_il
         .not_exp
@@ -312,7 +308,7 @@ fn analyze_rule_prem(
     let not_exp_al = Mixop::fill(&mixop, exps_al)
         .expect("arguments obtained from the same mixfix must match its arity");
     let prem_al = phrase! {
-        node: ast::PremKind::Rule(ast::RulePrem {
+        node: al::ast::PremKind::Rule(al::ast::RulePrem {
             id: rule_prem_il.id.clone(),
             not_exp: not_exp_al,
             input_hint: rule_prem_il.input_hint.clone(),
@@ -341,13 +337,15 @@ fn analyze_if_eq_prem(
     if_prem_il: &ast::IfPrem,
     exp_l_il: &ast::Exp,
     exp_r_il: &ast::Exp,
-) -> Result<(VEnv, ast::Prem, Vec<ast::Prem>), AlgoError> {
+) -> Result<(VEnv, al::ast::Prem, Vec<al::ast::Prem>), AlgoError> {
     let benv_l = collect::collect_exp(ctx, exp_l_il)?;
     let benv_r = collect::collect_exp(ctx, exp_r_il)?;
     match (benv_l.is_empty(), benv_r.is_empty()) {
         (true, true) => {
             let prem_al = phrase! {
-                node: ast::PremKind::If(if_prem_il.clone()),
+                node: al::ast::PremKind::If(al::ast::IfPrem {
+                    exp: if_prem_il.exp.clone(),
+                }),
                 span: span.clone(),
             };
             Ok((VEnv::new(), iter_ctx.iterate_prem(prem_al), vec![]))
@@ -366,7 +364,7 @@ fn analyze_if_prem(
     iter_ctx: IterationContext,
     span: &Span,
     if_prem_il: &ast::IfPrem,
-) -> Result<(VEnv, ast::Prem, Vec<ast::Prem>), AlgoError> {
+) -> Result<(VEnv, al::ast::Prem, Vec<al::ast::Prem>), AlgoError> {
     if let ast::ExpKind::Cmp(ast::CmpOp::Bool(xl::bool::CmpOp::Eq), _, exp_l_il, exp_r_il) =
         &if_prem_il.exp.node
     {
@@ -374,7 +372,9 @@ fn analyze_if_prem(
     } else {
         analyze_exp_as_bound(ctx, &if_prem_il.exp)?;
         let prem_al = phrase! {
-            node: ast::PremKind::If(if_prem_il.clone()),
+            node: al::ast::PremKind::If(al::ast::IfPrem {
+                exp: if_prem_il.exp.clone(),
+            }),
             span: span.clone(),
         };
         Ok((VEnv::new(), iter_ctx.iterate_prem(prem_al), vec![]))
@@ -388,12 +388,15 @@ fn analyze_if_hold_prem(
     iter_ctx: IterationContext,
     span: &Span,
     if_prem_il: &ast::IfHoldPrem,
-) -> Result<(VEnv, ast::Prem, Vec<ast::Prem>), AlgoError> {
+) -> Result<(VEnv, al::ast::Prem, Vec<al::ast::Prem>), AlgoError> {
     for exp_il in if_prem_il.not_exp.args() {
         analyze_exp_as_bound(ctx, exp_il)?;
     }
     let prem_al = phrase! {
-        node: ast::PremKind::IfHold(if_prem_il.clone()),
+        node: al::ast::PremKind::IfHold(al::ast::IfHoldPrem {
+            id: if_prem_il.id.clone(),
+            not_exp: if_prem_il.not_exp.clone(),
+        }),
         span: span.clone(),
     };
     Ok((VEnv::new(), iter_ctx.iterate_prem(prem_al), vec![]))
@@ -406,12 +409,15 @@ fn analyze_if_not_hold_prem(
     iter_ctx: IterationContext,
     span: &Span,
     if_prem_il: &ast::IfNotHoldPrem,
-) -> Result<(VEnv, ast::Prem, Vec<ast::Prem>), AlgoError> {
+) -> Result<(VEnv, al::ast::Prem, Vec<al::ast::Prem>), AlgoError> {
     for exp_il in if_prem_il.not_exp.args() {
         analyze_exp_as_bound(ctx, exp_il)?;
     }
     let prem_al = phrase! {
-        node: ast::PremKind::IfNotHold(if_prem_il.clone()),
+        node: al::ast::PremKind::IfNotHold(al::ast::IfNotHoldPrem {
+            id: if_prem_il.id.clone(),
+            not_exp: if_prem_il.not_exp.clone(),
+        }),
         span: span.clone(),
     };
     Ok((VEnv::new(), iter_ctx.iterate_prem(prem_al), vec![]))
@@ -426,7 +432,7 @@ fn analyze_let_prem(
     exp_l_il: &ast::Exp,
     benv_l: &BEnv,
     exp_r_il: &ast::Exp,
-) -> Result<(VEnv, ast::Prem, Vec<ast::Prem>), AlgoError> {
+) -> Result<(VEnv, al::ast::Prem, Vec<al::ast::Prem>), AlgoError> {
     let mut venv = benv_l.flatten();
     let mut renv_multiple = multiple::RenameEnv::from_bindings(benv_l);
     let exp_l_al = multiple::rename_exp(ctx, &mut renv_multiple, exp_l_il);
@@ -447,7 +453,7 @@ fn analyze_let_prem(
     prems_al.extend(prem_sideconditions_multiple_al);
 
     let prem_al = phrase! {
-        node: ast::PremKind::Let(ast::LetPrem {
+        node: al::ast::PremKind::Let(al::ast::LetPrem {
             exp_l: exp_l_al.clone(),
             exp_r: exp_r_il.clone(),
         }),
@@ -474,7 +480,7 @@ fn analyze_iter_prem(
     iter_ctx: IterationContext,
     span: &Span,
     iterated_il: &ast::IteratedPrem,
-) -> Result<(VEnv, ast::Prem, Vec<ast::Prem>), AlgoError> {
+) -> Result<(VEnv, al::ast::Prem, Vec<al::ast::Prem>), AlgoError> {
     if !iterated_il.iter_prem.vars_bind.is_empty() {
         return Err(AlgoError::new(
             AlgoErrorKind::UnexpectedIterationBindings,
@@ -501,10 +507,12 @@ fn analyze_debug_prem(
     iter_ctx: IterationContext,
     span: &Span,
     debug_prem_il: &ast::DebugPrem,
-) -> Result<(VEnv, ast::Prem, Vec<ast::Prem>), AlgoError> {
+) -> Result<(VEnv, al::ast::Prem, Vec<al::ast::Prem>), AlgoError> {
     analyze_exp_as_bound(ctx, &debug_prem_il.exp)?;
     let prem_al = phrase! {
-        node: ast::PremKind::Debug(debug_prem_il.clone()),
+        node: al::ast::PremKind::Debug(al::ast::DebugPrem {
+            exp: debug_prem_il.exp.clone(),
+        }),
         span: span.clone(),
     };
     Ok((VEnv::new(), iter_ctx.iterate_prem(prem_al), vec![]))
@@ -512,7 +520,10 @@ fn analyze_debug_prem(
 
 // - Premise lists
 
-fn analyze_prems(ctx: &mut Context, prems_il: &[ast::Prem]) -> Result<Vec<ast::Prem>, AlgoError> {
+fn analyze_prems(
+    ctx: &mut Context,
+    prems_il: &[ast::Prem],
+) -> Result<Vec<al::ast::Prem>, AlgoError> {
     let mut prems_al = Vec::new();
     for prem_il in prems_il {
         let (venv, prem_al, prem_sideconditions_al) =
@@ -531,7 +542,7 @@ fn analyze_rule_match(
     ctx: &mut Context,
     exps_input_group_il: Vec<Vec<ast::Exp>>,
 ) -> Result<(al::ast::RuleMatch, Vec<Vec<ast::Prem>>), AlgoError> {
-    let (exps_signature_al, prems_unified_group_al) =
+    let (exps_signature_al, prems_unified_group_il) =
         antiunify::antiunify(ctx, exps_input_group_il)?;
     let (venv, exps_input_al, prems_al) =
         analyze_exps_as_bind(ctx, &IterationContext::new(), &exps_signature_al)?;
@@ -543,13 +554,13 @@ fn analyze_rule_match(
         exps_input: exps_input_al,
         prems: prems_al,
     };
-    Ok((rule_match_al, prems_unified_group_al))
+    Ok((rule_match_al, prems_unified_group_il))
 }
 
 fn analyze_rule_path(
     ctx: &mut Context,
     id: ast::Id,
-    prems_unified_al: Vec<ast::Prem>,
+    prems_unified_al: Vec<al::ast::Prem>,
     prems_il: &[ast::Prem],
     exps_output_il: Vec<ast::Exp>,
     is_else: bool,
@@ -598,17 +609,17 @@ fn analyze_rule_group(
         exps_output_group_il.push(exps_output_il);
     }
 
-    let (rule_match_al, prems_unified_group_al) =
+    let (rule_match_al, prems_unified_group_il) =
         analyze_rule_match(&mut ctx, exps_input_group_il)?;
     let mut rule_paths_al = Vec::with_capacity(rules_il.len());
-    for (((id, prems_unified_al), prems_il), exps_output_il) in ids
+    for (((id, prems_unified_il), prems_il), exps_output_il) in ids
         .into_iter()
-        .zip(prems_unified_group_al)
+        .zip(prems_unified_group_il)
         .zip(prems_group_il)
         .zip(exps_output_group_il)
     {
         let mut ctx_local = ctx.scope();
-        let prems_unified_al = analyze_prems(&mut ctx_local, &prems_unified_al)?;
+        let prems_unified_al = analyze_prems(&mut ctx_local, &prems_unified_il)?;
         rule_paths_al.push(analyze_rule_path(
             &mut ctx_local,
             id,
@@ -674,7 +685,7 @@ fn analyze_clause(
         check_prems_in_else(&clause_il.span, &prems_all_al)?;
     }
     let clause_al = phrase! {
-        node: ast::ClauseKind {
+        node: al::ast::ClauseKind {
             args: args_al,
             expression: clause_il.node.expression.clone(),
             premises: prems_all_al,

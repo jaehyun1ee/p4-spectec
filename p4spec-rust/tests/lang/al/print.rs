@@ -61,3 +61,13 @@ fn test_composite_al_spec_omits_source_hints_and_extern_relation_inputs() {
         Print::to_string(&changed_metadata)
     );
 }
+
+#[test]
+fn test_al_printer_renders_let_premises() {
+    let prem_al = premise(al::ast::PremKind::Let(al::ast::LetPrem {
+        exp_l: variable("left"),
+        exp_r: variable("right"),
+    }));
+
+    assert_eq!(Print::to_string(&prem_al), "let left = right");
+}

@@ -311,12 +311,6 @@ pub struct IfNotHoldPrem {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct LetPrem {
-    pub exp_l: Exp,
-    pub exp_r: Exp,
-}
-
-#[derive(Clone, Debug, PartialEq)]
 pub struct IteratedPrem {
     pub prem: Box<Prem>,
     pub iter_prem: IterPrem,
@@ -338,8 +332,6 @@ pub enum PremKind {
     IfHold(IfHoldPrem),
     /// `if id : notexp does not hold`
     IfNotHold(IfNotHoldPrem),
-    /// `let exp = exp`
-    Let(LetPrem),
     /// `prem iterprem`
     Iter(IteratedPrem),
     /// `debug exp`

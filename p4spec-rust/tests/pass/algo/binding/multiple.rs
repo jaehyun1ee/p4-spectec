@@ -35,7 +35,7 @@ fn test_multiple_binding_renames_repetitions_and_compares_them_in_occurrence_ord
         panic!("expected one equality side condition");
     };
     assert_eq!(side_condition.span, span(3));
-    let ast::PremKind::If(if_prem) = &side_condition.node else {
+    let ast_al::PremKind::If(if_prem) = &side_condition.node else {
         panic!("expected conditional premise");
     };
     assert_eq!(if_prem.exp.span, span(3));
@@ -74,9 +74,9 @@ fn test_multiple_side_conditions_use_the_rename_environment_dimension() {
     let [premise] = premises.as_slice() else {
         panic!("expected one repeated-binding premise");
     };
-    let ast::PremKind::Iter(iterated) = &premise.node else {
+    let ast_al::PremKind::Iter(iterated) = &premise.node else {
         panic!("expected the collected binding dimension");
     };
     assert_eq!(iterated.iter_prem.iter, ast::Iter::List);
-    assert!(matches!(iterated.prem.node, ast::PremKind::If(_)));
+    assert!(matches!(iterated.prem.node, ast_al::PremKind::If(_)));
 }

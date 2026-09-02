@@ -224,12 +224,6 @@ impl Free for IfNotHoldPrem {
     }
 }
 
-impl Free for LetPrem {
-    fn free(&self) -> IdSet {
-        self.exp_l.free().union(self.exp_r.free())
-    }
-}
-
 impl Free for IteratedPrem {
     fn free(&self) -> IdSet {
         self.prem.free()
@@ -249,7 +243,6 @@ impl Free for PremKind {
             Self::If(prem) => prem.free(),
             Self::IfHold(prem) => prem.free(),
             Self::IfNotHold(prem) => prem.free(),
-            Self::Let(prem) => prem.free(),
             Self::Iter(prem) => prem.free(),
             Self::Debug(prem) => prem.free(),
         }

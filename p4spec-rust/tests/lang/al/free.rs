@@ -145,7 +145,7 @@ fn test_free_expression_path_argument_and_premise_variants_collect_identifier_te
     );
     let premises = vec![
         (
-            il::ast::PremKind::Rule(il::ast::RulePrem {
+            al::ast::PremKind::Rule(al::ast::RulePrem {
                 id: id("r"),
                 not_exp: not_exp("x"),
                 input_hint: InputHint::new(Vec::new()),
@@ -153,34 +153,34 @@ fn test_free_expression_path_argument_and_premise_variants_collect_identifier_te
             ids(&["x"]),
         ),
         (
-            il::ast::PremKind::If(il::ast::IfPrem { exp: variable("x") }),
+            al::ast::PremKind::If(al::ast::IfPrem { exp: variable("x") }),
             ids(&["x"]),
         ),
         (
-            il::ast::PremKind::IfHold(il::ast::IfHoldPrem {
+            al::ast::PremKind::IfHold(al::ast::IfHoldPrem {
                 id: id("r"),
                 not_exp: not_exp("x"),
             }),
             ids(&["x"]),
         ),
         (
-            il::ast::PremKind::IfNotHold(il::ast::IfNotHoldPrem {
+            al::ast::PremKind::IfNotHold(al::ast::IfNotHoldPrem {
                 id: id("r"),
                 not_exp: not_exp("x"),
             }),
             ids(&["x"]),
         ),
         (
-            il::ast::PremKind::Let(il::ast::LetPrem {
+            al::ast::PremKind::Let(al::ast::LetPrem {
                 exp_l: variable("x"),
                 exp_r: variable("y"),
             }),
             ids(&["x", "y"]),
         ),
         (
-            il::ast::PremKind::Iter(il::ast::IteratedPrem {
+            al::ast::PremKind::Iter(al::ast::IteratedPrem {
                 prem: Box::new(p4spec_rust::phrase! {
-                    node: il::ast::PremKind::If(il::ast::IfPrem { exp: variable("x") }),
+                    node: al::ast::PremKind::If(al::ast::IfPrem { exp: variable("x") }),
                     span: span("nested"),
                 }),
                 iter_prem: il::ast::IterPrem {
@@ -192,7 +192,7 @@ fn test_free_expression_path_argument_and_premise_variants_collect_identifier_te
             ids(&["x"]),
         ),
         (
-            il::ast::PremKind::Debug(il::ast::DebugPrem { exp: variable("x") }),
+            al::ast::PremKind::Debug(al::ast::DebugPrem { exp: variable("x") }),
             ids(&["x"]),
         ),
     ];
@@ -211,7 +211,7 @@ fn test_free_expression_path_argument_and_premise_variants_collect_identifier_te
 fn test_free_al_shapes_and_definition_arms_are_exhaustive() {
     let premise = || {
         p4spec_rust::phrase! {
-            node: il::ast::PremKind::If(il::ast::IfPrem { exp: variable("p") }),
+            node: al::ast::PremKind::If(al::ast::IfPrem { exp: variable("p") }),
             span: span("premise"),
         }
     };
@@ -235,7 +235,7 @@ fn test_free_al_shapes_and_definition_arms_are_exhaustive() {
         rule_match: rule_match.clone(),
         rule_path: rule_path.clone(),
     }, span: span("else") };
-    let clause: al::ast::Clause = p4spec_rust::phrase! { node: il::ast::ClauseKind {
+    let clause: al::ast::Clause = p4spec_rust::phrase! { node: al::ast::ClauseKind {
         args: vec![arg_exp("a")],
         expression: variable("c"),
         premises: vec![premise()],
