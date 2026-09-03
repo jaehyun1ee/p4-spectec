@@ -13,7 +13,7 @@ use lalrpop_util::ParseError;
 
 use crate::{
     lang::common::source::{Position, Span},
-    runtime::value::ValueRef,
+    runtime::value::Value,
 };
 
 use super::{
@@ -28,7 +28,7 @@ use super::{
 // == Entry points
 
 /// Parses an already-preprocessed P4 source string.
-pub fn parse_string(path: impl AsRef<Path>, source: &str) -> Result<ValueRef, P4Error> {
+pub fn parse_string(path: impl AsRef<Path>, source: &str) -> Result<Rc<Value>, P4Error> {
     let file: Rc<str> = Rc::from(path.as_ref().to_string_lossy().into_owned());
     let context = Rc::new(Context::new());
     let lexer = Lexer::new(Rc::clone(&file), source, Rc::clone(&context));
@@ -39,7 +39,7 @@ pub fn parse_string(path: impl AsRef<Path>, source: &str) -> Result<ValueRef, P4
 }
 
 /// Preprocesses and parses a P4 source file.
-pub fn parse_file(includes: &[PathBuf], path: impl AsRef<Path>) -> Result<ValueRef, P4Error> {
+pub fn parse_file(includes: &[PathBuf], path: impl AsRef<Path>) -> Result<Rc<Value>, P4Error> {
     let path = path.as_ref();
     let source = preprocess(includes, path)?;
     parse_string(path, &source)

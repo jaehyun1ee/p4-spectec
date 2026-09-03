@@ -5,11 +5,11 @@
 //! calls its implementation; for example, `sum_nat` dispatches to
 //! `nats::sum_nat`, while `fresh_typeId` also advances instance-local state.
 
-use std::collections::HashMap;
+use std::{collections::HashMap, rc::Rc};
 
 use crate::{
     lang::il::ast::{Id, Typ},
-    runtime::value::ValueRef,
+    runtime::value::Value,
 };
 
 use super::{
@@ -22,7 +22,7 @@ use super::{
 pub type BuiltinImpl = fn(
     span: &crate::lang::common::source::Span,
     targs: &[Typ],
-    values: &[ValueRef],
+    values: &[Rc<Value>],
 ) -> BuiltinResult;
 
 #[derive(Clone, Copy)]
@@ -267,8 +267,8 @@ impl Builtins {
         &mut self,
         id: &Id,
         targs: &[Typ],
-        values: &[ValueRef],
-    ) -> Result<(ValueRef, bool), BuiltinError> {
+        values: &[Rc<Value>],
+    ) -> Result<(Rc<Value>, bool), BuiltinError> {
         let entry = self
             .functions
             .get(&id.node)

@@ -14,7 +14,7 @@ use crate::{
     lang::{il::ast::Typ, xl::num},
     runtime::{
         types::typ,
-        value::{Value, ValueKind, ValueRef, get, make},
+        value::{Value, ValueKind, get, make},
     },
 };
 
@@ -22,7 +22,7 @@ use super::{BuiltinError, BuiltinResult, extract};
 
 // == Conversion between runtime values and Rust collections
 
-fn list_of_value<'a>(span: &Span, value: &'a Value) -> Result<&'a [ValueRef], BuiltinError> {
+fn list_of_value<'a>(span: &Span, value: &'a Value) -> Result<&'a [Rc<Value>], BuiltinError> {
     get::list(value).map_err(|error| BuiltinError::new(span.clone(), error.to_string()))
 }
 
@@ -34,7 +34,7 @@ fn bigint_of_value<'a>(span: &Span, value: &'a Value) -> Result<&'a BigInt, Buil
 
 // dec $rev_<X>(X*) : X*
 
-pub fn rev_(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
+pub fn rev_(span: &Span, targs: &[Typ], values: &[Rc<Value>]) -> BuiltinResult {
     let typ = extract::one(span, targs)?;
     let typ_list = typ::list(typ.clone());
     let value_list = extract::one(span, values)?;
@@ -46,7 +46,7 @@ pub fn rev_(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
 
 // dec $concat_<X>((X*)*) : X*
 
-pub fn concat_(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
+pub fn concat_(span: &Span, targs: &[Typ], values: &[Rc<Value>]) -> BuiltinResult {
     let typ = extract::one(span, targs)?;
     let typ_list = typ::list(typ.clone());
     let mut concatenated = Vec::new();
@@ -62,7 +62,7 @@ pub fn concat_(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult
 
 // dec $distinct_<K>(K*) : bool
 
-pub fn distinct_(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
+pub fn distinct_(span: &Span, targs: &[Typ], values: &[Rc<Value>]) -> BuiltinResult {
     let _typ = extract::one(span, targs)?;
     let value_list = extract::one(span, values)?;
     let values = list_of_value(span, value_list)?;
@@ -74,7 +74,7 @@ pub fn distinct_(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResu
 
 // dec $partition_<X>(X*, nat) : (X*, X*)
 
-pub fn partition_(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
+pub fn partition_(span: &Span, targs: &[Typ], values: &[Rc<Value>]) -> BuiltinResult {
     let typ = extract::one(span, targs)?;
     let typ_list = typ::list(typ.clone());
     let (value_list, value_len) = extract::two(span, values)?;
@@ -107,7 +107,7 @@ pub fn partition_(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinRes
 
 // dec $assoc_<X, Y>(X, (X, Y)*) : Y?
 
-pub fn assoc_(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
+pub fn assoc_(span: &Span, targs: &[Typ], values: &[Rc<Value>]) -> BuiltinResult {
     let (_typ_key, typ_value) = extract::two(span, targs)?;
     let (value, value_list) = extract::two(span, values)?;
     let mut found = None;
@@ -132,7 +132,7 @@ pub fn assoc_(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult 
 
 // dec $sort_<X>((nat, X)*) : (nat, X)*
 
-pub fn sort_(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
+pub fn sort_(span: &Span, targs: &[Typ], values: &[Rc<Value>]) -> BuiltinResult {
     let typ_value = extract::one(span, targs)?;
     let typ_pair = typ::tuple(vec![typ::nat(), typ_value.clone()]);
     let typ_list = typ::list(typ_pair);
@@ -157,7 +157,7 @@ pub fn sort_(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
 
 // builtin dec $transpose_<X>(X**) : X**
 
-pub fn transpose_(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
+pub fn transpose_(span: &Span, targs: &[Typ], values: &[Rc<Value>]) -> BuiltinResult {
     let typ = extract::one(span, targs)?;
     let typ_list = typ::list(typ.clone());
     let typ_matrix = typ::list(typ_list.clone());

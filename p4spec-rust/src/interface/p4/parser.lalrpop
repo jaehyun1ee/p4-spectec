@@ -1,15 +1,8 @@
-// Parses P4 tokens while updating the lexer namespace and directly builds the
-// executable IL value tree. Production names, order, and section boundaries
-// follow `p4spec/lib/interface/p4/parser.mly`, which in turn follows the P4-16
-// grammar. BNF comments use the OCaml production vocabulary, even where the
-// lexer supplies a more specific token to LALRPOP. Parser-only token adapters
-// and conflict lowering stay beside the canonical production they implement
-// and are called out explicitly. For example, `x + y` becomes a binary case
-// containing the left value, the `+` operator case, and the right value.
+use std::rc::Rc;
 
 use crate::{
     interface::p4::{context::{Context, Location, Namespace}, error::P4Error, lexer::Token, value},
-    runtime::value::ValueRef,
+    runtime::value::Value,
 };
 
 grammar(context: &Context);
@@ -25,11 +18,11 @@ extern {
         "TYPENAME" => Token::TypeName,
         "TYPENAME_EXPR" => Token::TypeNameExpression,
         "IDENTIFIER" => Token::Identifier,
-        "NAME" => Token::Name(<ValueRef>),
-        "STRING_LITERAL" => Token::StringLiteral(<ValueRef>),
-        "NUMBER_INT" => Token::NumberInt(<ValueRef>, <String>),
-        "NUMBER" => Token::Number(<ValueRef>, <String>),
-        "UNEXPECTED_TOKEN" => Token::UnexpectedToken(<ValueRef>),
+        "NAME" => Token::Name(<Rc<Value>>),
+        "STRING_LITERAL" => Token::StringLiteral(<Rc<Value>>),
+        "NUMBER_INT" => Token::NumberInt(<Rc<Value>>, <String>),
+        "NUMBER" => Token::Number(<Rc<Value>>, <String>),
+        "UNEXPECTED_TOKEN" => Token::UnexpectedToken(<Rc<Value>>),
         "LE" => Token::LessEqual,
         "GE" => Token::GreaterEqual,
         "SHL" => Token::ShiftLeft,
@@ -168,17 +161,17 @@ push_scope: () = {
 
 // The lexer distinguishes type names that begin expressions.  OCaml has one
 // TYPENAME token, so declaration names must admit the Rust-only spelling too.
-declarationName: ValueRef = {
+declarationName: Rc<Value> = {
     name,
     expressionTypeName,
 };
 
-push_name: ValueRef = {
+push_name: Rc<Value> = {
     // push_name ::= name
     <n:declarationName> => { context.push_scope(); value::declare_type_value(context, &n, false); n },
 };
 
-push_externName: ValueRef = {
+push_externName: Rc<Value> = {
     // push_externName ::= externName
     <n:externName> => { context.push_scope(); value::declare_type_value(context, &n, false); n },
 };
@@ -217,12 +210,12 @@ clear_parent_namespace: () = {
 
 // - Aux
 
-externName: ValueRef = {
+externName: Rc<Value> = {
     // externName ::= nonTypeName
     <n:nonTypeName> => { value::declare_type_value(context, &n, false); n },
 };
 
-int: ValueRef = {
+int: Rc<Value> = {
     // int ::= "NUMBER_INT"
     <int:"NUMBER_INT"> => int.0,
 };
@@ -246,7 +239,7 @@ l_angle: () = {
 // - Misc
 
 // `TRAILING_COMMA` preserves the canonical `COMMA` after lexer lookahead.
-trailingCommaOpt: ValueRef = {
+trailingCommaOpt: Rc<Value> = {
     // trailingCommaOpt ::= epsilon
     <l:@L>  <r:@R> => value::case_value(context, "_EMPTY", vec![], "trailingCommaOpt", l, r),
 
@@ -256,7 +249,7 @@ trailingCommaOpt: ValueRef = {
 
 // - Booleans
 
-booleanLiteral: ValueRef = {
+booleanLiteral: Rc<Value> = {
     // booleanLiteral ::= "TRUE"
     <l:@L> "TRUE" <r:@R> => value::case_value(context, "TRUE", vec![], "booleanLiteral", l, r),
 
@@ -266,7 +259,7 @@ booleanLiteral: ValueRef = {
 
 // - Integers
 
-integerLiteral: ValueRef = {
+integerLiteral: Rc<Value> = {
     // integerLiteral ::= int
     <l:@L> <int:int> <r:@R> => value::case_value(context, "D int", vec![int], "integerLiteral", l, r),
 
@@ -276,7 +269,7 @@ integerLiteral: ValueRef = {
 
 // - Strings
 
-stringLiteral: ValueRef = {
+stringLiteral: Rc<Value> = {
     // stringLiteral ::= "STRING_LITERAL"
     <l:@L> <text:"STRING_LITERAL"> <r:@R> =>
         value::case_value(context, "'\"' text '\"'", vec![text], "stringLiteral", l, r),
@@ -284,13 +277,13 @@ stringLiteral: ValueRef = {
 
 // - Names
 
-identifier: ValueRef = {
+identifier: Rc<Value> = {
     // identifier ::= "NAME" "IDENTIFIER"
     <l:@L> <text:"NAME"> "IDENTIFIER" <r:@R> =>
         value::case_value(context, "_ID text", vec![text], "identifier", l, r),
 };
 
-typeIdentifier: ValueRef = {
+typeIdentifier: Rc<Value> = {
     // typeIdentifier ::= "NAME" "TYPENAME"
     <l:@L> <text:"NAME"> "TYPENAME" <r:@R> =>
         value::case_value(context, "_TID text", vec![text], "typeIdentifier", l, r),
@@ -298,7 +291,7 @@ typeIdentifier: ValueRef = {
 
 // - Non-type names
 
-nonTypeName: ValueRef = {
+nonTypeName: Rc<Value> = {
     // nonTypeName ::= identifier
     <id:identifier> => id,
 
@@ -324,7 +317,7 @@ nonTypeName: ValueRef = {
     <l:@L> "PRIORITY" <r:@R> => value::case_value(context, "PRIORITY", vec![], "nonTypeName", l, r),
 };
 
-prefixedNonTypeName: ValueRef = {
+prefixedNonTypeName: Rc<Value> = {
     // prefixedNonTypeName ::= nonTypeName
     <n:nonTypeName> => n,
 
@@ -335,12 +328,12 @@ prefixedNonTypeName: ValueRef = {
 
 // - Type names
 
-typeName: ValueRef = {
+typeName: Rc<Value> = {
     // typeName ::= typeIdentifier
     <n:typeIdentifier> => n,
 };
 
-prefixedTypeName: ValueRef = {
+prefixedTypeName: Rc<Value> = {
     // prefixedTypeName ::= typeName
     <n:typeName> => n,
 
@@ -351,7 +344,7 @@ prefixedTypeName: ValueRef = {
 
 // - Table custom property names
 
-tableCustomName: ValueRef = {
+tableCustomName: Rc<Value> = {
     // tableCustomName ::= identifier
     <id:identifier> => id,
 
@@ -373,7 +366,7 @@ tableCustomName: ValueRef = {
 
 // - Names
 
-name: ValueRef = {
+name: Rc<Value> = {
     // name ::= nonTypeName
     <n:nonTypeName> => n,
 
@@ -384,7 +377,7 @@ name: ValueRef = {
     <l:@L> "LIST" <r:@R> => value::case_value(context, "LIST", vec![], "name", l, r),
 };
 
-nameList: ValueRef = {
+nameList: Rc<Value> = {
     // nameList ::= name
     <n:name> => n,
 
@@ -393,7 +386,7 @@ nameList: ValueRef = {
         value::case_value(context, "nameList ',' name", vec![ns, n], "nameList", l, r),
 };
 
-member: ValueRef = {
+member: Rc<Value> = {
     // member ::= name
     <name:name> => name,
 };
@@ -401,7 +394,7 @@ member: ValueRef = {
 // - Directions
 
 #[inline]
-direction: ValueRef = {
+direction: Rc<Value> = {
     // direction ::= epsilon
     <l:@L>  <r:@R> => value::case_value(context, "_EMPTY", vec![], "direction", l, r),
 
@@ -419,7 +412,7 @@ direction: ValueRef = {
 
 // - Base types
 
-baseType: ValueRef = {
+baseType: Rc<Value> = {
     // baseType ::= "BOOL"
     <l:@L> "BOOL" <r:@R> => value::case_value(context, "BOOL", vec![], "baseType", l, r),
 
@@ -465,7 +458,7 @@ baseType: ValueRef = {
 
 // - Named types
 
-specializedType: ValueRef = {
+specializedType: Rc<Value> = {
     // specializedType ::= prefixedTypeName l_angle typeArgumentList r_angle
     <l:@L> <n:prefixedTypeName> "L_ANGLE_ARGS" <tal:typeArgumentList> r_angle <r:@R> =>
         value::case_value(
@@ -478,7 +471,7 @@ specializedType: ValueRef = {
         ),
 };
 
-namedType: ValueRef = {
+namedType: Rc<Value> = {
     // namedType ::= prefixedTypeName
     <t:prefixedTypeName> => t,
 
@@ -489,7 +482,7 @@ namedType: ValueRef = {
 // - Array types
 
 #[inline]
-arrayType: ValueRef = {
+arrayType: Rc<Value> = {
     // arrayType ::= typeRef "L_BRACKET" expression "R_BRACKET"
     <l:@L> <t:typeRef> "L_BRACKET" <e:expression> "R_BRACKET" <r:@R> =>
         value::case_value(context, "typeRef `[ expression `]", vec![t, e], "arrayType", l, r),
@@ -497,7 +490,7 @@ arrayType: ValueRef = {
 
 // - List types
 
-listType: ValueRef = {
+listType: Rc<Value> = {
     // listType ::= "LIST" l_angle typeArgument r_angle
     <l:@L> "LIST" "L_ANGLE_ARGS" <targ:typeArgument> r_angle <r:@R> =>
         value::case_value(context, "LIST `< typeArgument `>", vec![targ], "listType", l, r),
@@ -505,7 +498,7 @@ listType: ValueRef = {
 
 // - Tuple types
 
-tupleType: ValueRef = {
+tupleType: Rc<Value> = {
     // tupleType ::= "TUPLE" l_angle typeArgumentList r_angle
     <l:@L> "TUPLE" "L_ANGLE_ARGS" <targs:typeArgumentList> r_angle <r:@R> =>
         value::case_value(context, "TUPLE `< typeArgumentList `>", vec![targs], "tupleType", l, r),
@@ -513,7 +506,7 @@ tupleType: ValueRef = {
 
 // - Types
 
-typeRef: ValueRef = {
+typeRef: Rc<Value> = {
     // typeRef ::= baseType
     <t:baseType> => t,
 
@@ -530,7 +523,7 @@ typeRef: ValueRef = {
     <t:tupleType> => t,
 };
 
-typeOrVoid: ValueRef = {
+typeOrVoid: Rc<Value> = {
     // typeOrVoid ::= typeRef
     <t:typeRef> => t,
 
@@ -543,12 +536,12 @@ typeOrVoid: ValueRef = {
 
 // - Type parameters
 
-typeParameter: ValueRef = {
+typeParameter: Rc<Value> = {
     // typeParameter ::= name
     <n:name> => n,
 };
 
-typeParameterList: ValueRef = {
+typeParameterList: Rc<Value> = {
     // typeParameterList ::= typeParameter
     <tp:typeParameter> => tp,
 
@@ -564,7 +557,7 @@ typeParameterList: ValueRef = {
         ),
 };
 
-typeParameterListOpt: ValueRef = {
+typeParameterListOpt: Rc<Value> = {
     // typeParameterListOpt ::= epsilon
     <l:@L>  <r:@R> => value::case_value(context, "_EMPTY", vec![], "typeParameterListOpt", l, r),
 
@@ -585,7 +578,7 @@ typeParameterListOpt: ValueRef = {
 
 // - Parameters
 
-parameter: ValueRef = {
+parameter: Rc<Value> = {
     // parameter ::= annotationList direction typeRef name initializerOpt
     <l:@L> <al:annotationList> <dir:direction> <t:typeRef> <n:name> <i:initializerOpt> <r:@R>
         =>
@@ -602,7 +595,7 @@ parameter: ValueRef = {
         },
 };
 
-nonEmptyParameterList: ValueRef = {
+nonEmptyParameterList: Rc<Value> = {
     // nonEmptyParameterList ::= parameter
     <p:parameter> => p,
 
@@ -619,7 +612,7 @@ nonEmptyParameterList: ValueRef = {
 };
 
 #[inline]
-parameterList: ValueRef = {
+parameterList: Rc<Value> = {
     // parameterList ::= epsilon
     <l:@L>  <r:@R> => value::case_value(context, "_EMPTY", vec![], "parameterList", l, r),
 
@@ -629,7 +622,7 @@ parameterList: ValueRef = {
 
 // - Constructor parameters
 
-constructorParameterListOpt: ValueRef = {
+constructorParameterListOpt: Rc<Value> = {
     // constructorParameterListOpt ::= epsilon
     <l:@L>  <r:@R> => value::case_value(context, "_EMPTY", vec![], "constructorParameterListOpt", l, r),
 
@@ -640,13 +633,13 @@ constructorParameterListOpt: ValueRef = {
 
 // - Expression key-value pairs
 
-namedExpression: ValueRef = {
+namedExpression: Rc<Value> = {
     // namedExpression ::= name "ASSIGN" expression
     <l:@L> <n:name> "ASSIGN" <e:expression> <r:@R> =>
         value::case_value(context, "name '=' expression", vec![n, e], "namedExpression", l, r),
 };
 
-namedExpressionList: ValueRef = {
+namedExpressionList: Rc<Value> = {
     // namedExpressionList ::= namedExpression
     <e:namedExpression> => e,
 
@@ -666,7 +659,7 @@ namedExpressionList: ValueRef = {
 
 // - Literal expressions
 
-literalExpression: ValueRef = {
+literalExpression: Rc<Value> = {
     // literalExpression ::= booleanLiteral
     <bool:booleanLiteral> => bool,
 
@@ -679,7 +672,7 @@ literalExpression: ValueRef = {
 
 // - Reference expressions
 
-referenceExpression: ValueRef = {
+referenceExpression: Rc<Value> = {
     // referenceExpression ::= prefixedNonTypeName
     <n:prefixedNonTypeName> => n,
 
@@ -689,7 +682,7 @@ referenceExpression: ValueRef = {
 
 // - Default expressions
 
-defaultExpression: ValueRef = {
+defaultExpression: Rc<Value> = {
     // defaultExpression ::= "DOTS"
     <l:@L> "DOTS" <r:@R> => value::case_value(context, "'...'", vec![], "defaultExpression", l, r),
 };
@@ -723,7 +716,7 @@ defaultExpression: ValueRef = {
 // errorAccessExpression ::= "ERROR" "DOT" member
 // memberAccessExpression ::= memberAccessBase "DOT" member
 // indexAccessExpression ::= expression "L_BRACKET" expression "R_BRACKET"
-sliceop: ValueRef = {
+sliceop: Rc<Value> = {
     // sliceop ::= "COLON"
     <l:@L> colon <r:@R> => value::case_value(context, "':'", vec![], "sliceop", l, r),
 
@@ -759,7 +752,7 @@ sliceop: ValueRef = {
 
 // - LALRPOP precedence lowering
 
-TernaryExpression: ValueRef = {
+TernaryExpression: Rc<Value> = {
     // TernaryExpression ::= ExpressionOr
     ExpressionOr,
 
@@ -776,7 +769,7 @@ TernaryExpression: ValueRef = {
         ),
 };
 
-ExpressionOr: ValueRef = {
+ExpressionOr: Rc<Value> = {
     // ExpressionOr ::= ExpressionAnd
     ExpressionAnd,
 
@@ -785,7 +778,7 @@ ExpressionOr: ValueRef = {
         value::binary_value(context, lhs, "'||'", op_l, op_r, rhs, l, r),
 };
 
-ExpressionAnd: ValueRef = {
+ExpressionAnd: Rc<Value> = {
     // ExpressionAnd ::= ExpressionEquality
     ExpressionEquality,
 
@@ -795,7 +788,7 @@ ExpressionAnd: ValueRef = {
         value::binary_value(context, lhs, "'&&'", op_l, op_r, rhs, l, r),
 };
 
-ExpressionEquality: ValueRef = {
+ExpressionEquality: Rc<Value> = {
     // ExpressionEquality ::= ExpressionComparison
     ExpressionComparison,
 
@@ -810,7 +803,7 @@ ExpressionEquality: ValueRef = {
         value::binary_value(context, lhs, "'!='", op_l, op_r, rhs, l, r),
 };
 
-ExpressionComparison: ValueRef = {
+ExpressionComparison: Rc<Value> = {
     // ExpressionComparison ::= ExpressionBitOr
     ExpressionBitOr,
 
@@ -835,7 +828,7 @@ ExpressionComparison: ValueRef = {
         value::binary_value(context, lhs, "'>'", op_l, op_r, rhs, l, r),
 };
 
-ExpressionBitOr: ValueRef = {
+ExpressionBitOr: Rc<Value> = {
     // ExpressionBitOr ::= ExpressionBitXor
     ExpressionBitXor,
 
@@ -845,7 +838,7 @@ ExpressionBitOr: ValueRef = {
         value::binary_value(context, lhs, "'|'", op_l, op_r, rhs, l, r),
 };
 
-ExpressionBitXor: ValueRef = {
+ExpressionBitXor: Rc<Value> = {
     // ExpressionBitXor ::= ExpressionBitAnd
     ExpressionBitAnd,
 
@@ -855,7 +848,7 @@ ExpressionBitXor: ValueRef = {
         value::binary_value(context, lhs, "'^'", op_l, op_r, rhs, l, r),
 };
 
-ExpressionBitAnd: ValueRef = {
+ExpressionBitAnd: Rc<Value> = {
     // ExpressionBitAnd ::= ExpressionShift
     ExpressionShift,
 
@@ -865,7 +858,7 @@ ExpressionBitAnd: ValueRef = {
         value::binary_value(context, lhs, "'&'", op_l, op_r, rhs, l, r),
 };
 
-ExpressionShift: ValueRef = {
+ExpressionShift: Rc<Value> = {
     // ExpressionShift ::= ExpressionAdditive
     ExpressionAdditive,
 
@@ -880,7 +873,7 @@ ExpressionShift: ValueRef = {
         value::binary_value(context, lhs, "'>>'", op_l, op_r, rhs, l, r),
 };
 
-ExpressionAdditive: ValueRef = {
+ExpressionAdditive: Rc<Value> = {
     // ExpressionAdditive ::= ExpressionMultiplicative
     ExpressionMultiplicative,
 
@@ -910,7 +903,7 @@ ExpressionAdditive: ValueRef = {
         value::binary_value(context, lhs, "'|-|'", op_l, op_r, rhs, l, r),
 };
 
-ExpressionMultiplicative: ValueRef = {
+ExpressionMultiplicative: Rc<Value> = {
     // ExpressionMultiplicative ::= ExpressionPrefix
     ExpressionPrefix,
 
@@ -930,7 +923,7 @@ ExpressionMultiplicative: ValueRef = {
         value::binary_value(context, lhs, "'%'", op_l, op_r, rhs, l, r),
 };
 
-ExpressionPrefix: ValueRef = {
+ExpressionPrefix: Rc<Value> = {
     // ExpressionPrefix ::= ExpressionPostfix
     ExpressionPostfix,
 
@@ -955,7 +948,7 @@ ExpressionPrefix: ValueRef = {
         value::case_value(context, "`( typeRef `) expression", vec![typ, inner], "castExpression", l, r),
 };
 
-ExpressionPostfix: ValueRef = {
+ExpressionPostfix: Rc<Value> = {
     // ExpressionPostfix ::= ExpressionPrimary
     ExpressionPrimary,
 
@@ -1045,7 +1038,7 @@ ExpressionPostfix: ValueRef = {
         ),
 };
 
-ExpressionPrimary: ValueRef = {
+ExpressionPrimary: Rc<Value> = {
     // ExpressionPrimary ::= literalExpression
     literalExpression,
 
@@ -1084,7 +1077,7 @@ ExpressionPrimary: ValueRef = {
 
 // The canonical expression alternatives are implemented by the precedence
 // ladder above
-expression: ValueRef = {
+expression: Rc<Value> = {
     // expression ::= TernaryExpression
     TernaryExpression,
 };
@@ -1094,18 +1087,18 @@ expression: ValueRef = {
 // The Rust lexer marks type names used inside expressions separately so the
 // precedence ladder can distinguish constructor calls from value calls.
 
-expressionTypeIdentifier: ValueRef = {
+expressionTypeIdentifier: Rc<Value> = {
     // expressionTypeIdentifier ::= "NAME" "TYPENAME_EXPR"
     <l:@L> <text:"NAME"> "TYPENAME_EXPR" <r:@R> =>
         value::case_value(context, "_TID text", vec![text], "typeIdentifier", l, r),
 };
 
-expressionTypeName: ValueRef = {
+expressionTypeName: Rc<Value> = {
     // expressionTypeName ::= expressionTypeIdentifier
     expressionTypeIdentifier,
 };
 
-expressionPrefixedTypeName: ValueRef = {
+expressionPrefixedTypeName: Rc<Value> = {
     // expressionPrefixedTypeName ::= expressionTypeName
     expressionTypeName,
 
@@ -1114,7 +1107,7 @@ expressionPrefixedTypeName: ValueRef = {
         value::case_value(context, "_TID '.' typeName", vec![typ], "prefixedTypeName", l, r),
 };
 
-expressionSpecializedType: ValueRef = {
+expressionSpecializedType: Rc<Value> = {
     // expressionSpecializedType ::= expressionPrefixedTypeName "L_ANGLE_ARGS"
     //   typeArgumentList r_angle
     <l:@L> <name:expressionPrefixedTypeName> "L_ANGLE_ARGS" <arguments:typeArgumentList> r_angle
@@ -1129,7 +1122,7 @@ expressionSpecializedType: ValueRef = {
         ),
 };
 
-expressionNamedType: ValueRef = {
+expressionNamedType: Rc<Value> = {
     // expressionNamedType ::= expressionPrefixedTypeName
     expressionPrefixedTypeName,
 
@@ -1138,12 +1131,12 @@ expressionNamedType: ValueRef = {
 };
 
 // LALRPOP factors the canonical expressionList through its non-empty form
-expressionList: ValueRef = {
+expressionList: Rc<Value> = {
     // expressionList ::= expressionListNonEmpty
     expressionListNonEmpty,
 };
 
-expressionListNonEmpty: ValueRef = {
+expressionListNonEmpty: Rc<Value> = {
     // expressionListNonEmpty ::= expression
     <e:expression> => e,
 
@@ -1155,14 +1148,14 @@ expressionListNonEmpty: ValueRef = {
 // memberAccessBase ::= prefixedTypeName | expression
 
 // LALRPOP lowering for expressionList ::= epsilon
-sequenceElementExpression: ValueRef = {
+sequenceElementExpression: Rc<Value> = {
     <l:@L> <r:@R> => value::case_value(context, "_EMPTY", vec![], "expressionList", l, r),
 
     // sequenceElementExpression ::= expressionList
     expressionList,
 };
 
-recordElementExpression: ValueRef = {
+recordElementExpression: Rc<Value> = {
     // recordElementExpression ::= name "ASSIGN" expression
     <l:@L> <n:name> "ASSIGN" <e:expression> <r:@R> =>
         value::case_value(context, "name '=' expression", vec![n, e], "recordElementExpression", l, r),
@@ -1196,7 +1189,7 @@ recordElementExpression: ValueRef = {
         ),
 };
 
-sequenceOrRecordElementExpression: ValueRef = {
+sequenceOrRecordElementExpression: Rc<Value> = {
     // sequenceOrRecordElementExpression ::= sequenceElementExpression
     <e:sequenceElementExpression> => e,
 
@@ -1207,7 +1200,7 @@ sequenceOrRecordElementExpression: ValueRef = {
 // - Non-brace Expressions
 
 // The shared ladder implements the canonical brace-free alternatives
-expressionNonBrace: ValueRef = {
+expressionNonBrace: Rc<Value> = {
     // expressionNonBrace ::= expression
     expression,
 };
@@ -1217,7 +1210,7 @@ expressionNonBrace: ValueRef = {
 
 // - Keyset expressions
 
-simpleKeysetExpression: ValueRef = {
+simpleKeysetExpression: Rc<Value> = {
     // simpleKeysetExpression ::= expression
     <e:expression> => e,
 
@@ -1237,7 +1230,7 @@ simpleKeysetExpression: ValueRef = {
     <l:@L> "DONTCARE" <r:@R> => value::case_value(context, "'_'", vec![], "simpleKeysetExpression", l, r),
 };
 
-simpleKeysetExpressionList: ValueRef = {
+simpleKeysetExpressionList: Rc<Value> = {
     // simpleKeysetExpressionList ::= simpleKeysetExpression
     <e:simpleKeysetExpression> => e,
 
@@ -1253,7 +1246,7 @@ simpleKeysetExpressionList: ValueRef = {
         ),
 };
 
-tupleKeysetExpression: ValueRef = {
+tupleKeysetExpression: Rc<Value> = {
     // tupleKeysetExpression ::= "L_PAREN" expression "MASK" expression "R_PAREN"
     <l:@L> "L_PAREN" <b:expression> "MASK" <m:expression> "R_PAREN" <r:@R> =>
         value::case_value(
@@ -1298,7 +1291,7 @@ tupleKeysetExpression: ValueRef = {
         ),
 };
 
-keysetExpression: ValueRef = {
+keysetExpression: Rc<Value> = {
     // keysetExpression ::= simpleKeysetExpression
     <e:simpleKeysetExpression> => e,
 
@@ -1308,7 +1301,7 @@ keysetExpression: ValueRef = {
 
 // - Type arguments
 
-realTypeArgument: ValueRef = {
+realTypeArgument: Rc<Value> = {
     // realTypeArgument ::= typeRef
     <t:typeRef> => t,
 
@@ -1319,7 +1312,7 @@ realTypeArgument: ValueRef = {
     <l:@L> "DONTCARE" <r:@R> => value::case_value(context, "'_'", vec![], "realTypeArgument", l, r),
 };
 
-realTypeArgumentList: ValueRef = {
+realTypeArgumentList: Rc<Value> = {
     // realTypeArgumentList ::= realTypeArgument
     <targ:realTypeArgument> => targ,
 
@@ -1335,7 +1328,7 @@ realTypeArgumentList: ValueRef = {
         ),
 };
 
-typeArgument: ValueRef = {
+typeArgument: Rc<Value> = {
     // typeArgument ::= typeRef
     <t:typeRef> => t,
 
@@ -1349,7 +1342,7 @@ typeArgument: ValueRef = {
     <l:@L> "DONTCARE" <r:@R> => value::case_value(context, "'_'", vec![], "typeArgument", l, r),
 };
 
-typeArgumentList: ValueRef = {
+typeArgumentList: Rc<Value> = {
     // typeArgumentList ::= epsilon
     <l:@L> <r:@R> => value::case_value(context, "_EMPTY", vec![], "typeArgumentList", l, r),
 
@@ -1357,7 +1350,7 @@ typeArgumentList: ValueRef = {
     typeArgumentListNonEmpty,
 };
 
-typeArgumentListNonEmpty: ValueRef = {
+typeArgumentListNonEmpty: Rc<Value> = {
     // typeArgumentListNonEmpty ::= typeArgument
     <targ:typeArgument> => targ,
 
@@ -1375,7 +1368,7 @@ typeArgumentListNonEmpty: ValueRef = {
 
 // - Arguments
 
-argument: ValueRef = {
+argument: Rc<Value> = {
     // argument ::= expression
     <e:expression> => e,
 
@@ -1391,7 +1384,7 @@ argument: ValueRef = {
     <l:@L> "DONTCARE" <r:@R> => value::case_value(context, "'_'", vec![], "argument", l, r),
 };
 
-argumentListNonEmpty: ValueRef = {
+argumentListNonEmpty: Rc<Value> = {
     // argumentListNonEmpty ::= argument
     <arg:argument> => arg,
 
@@ -1407,7 +1400,7 @@ argumentListNonEmpty: ValueRef = {
         ),
 };
 
-argumentList: ValueRef = {
+argumentList: Rc<Value> = {
     // argumentList ::= epsilon
     <l:@L>  <r:@R> => value::case_value(context, "_EMPTY", vec![], "argumentList", l, r),
 
@@ -1417,7 +1410,7 @@ argumentList: ValueRef = {
 
 // - L-values
 
-lvalue: ValueRef = {
+lvalue: Rc<Value> = {
     // lvalue ::= referenceExpression
     <e:referenceExpression> => e,
 
@@ -1450,14 +1443,14 @@ lvalue: ValueRef = {
 
 // - Empty statements
 
-emptyStatement: ValueRef = {
+emptyStatement: Rc<Value> = {
     // emptyStatement ::= "SEMICOLON"
     <l:@L> "SEMICOLON" <r:@R> => value::case_value(context, "';'", vec![], "emptyStatement", l, r),
 };
 
 // - Assignment statements
 
-assignop: ValueRef = {
+assignop: Rc<Value> = {
     // assignop ::= "ASSIGN"
     <l:@L> "ASSIGN" <r:@R> => value::case_value(context, "'='", vec![], "assignop", l, r),
 
@@ -1498,7 +1491,7 @@ assignop: ValueRef = {
     <l:@L> "BIT_OR_ASSIGN" <r:@R> => value::case_value(context, "'|='", vec![], "assignop", l, r),
 };
 
-assignmentStatement: ValueRef = {
+assignmentStatement: Rc<Value> = {
     // assignmentStatement ::= lvalue assignop expression "SEMICOLON"
     <l:@L> <lv:lvalue> <o:assignop> <e:expression> "SEMICOLON" <r:@R> =>
         value::case_value(
@@ -1513,7 +1506,7 @@ assignmentStatement: ValueRef = {
 
 // - Call statements
 
-callStatement: ValueRef = {
+callStatement: Rc<Value> = {
     // callStatement ::= lvalue "L_PAREN" argumentList "R_PAREN" "SEMICOLON"
     <l:@L> <lv:lvalue> "L_PAREN" <args:argumentList> "R_PAREN" "SEMICOLON" <r:@R> =>
         value::case_value(context, "lvalue `( argumentList `) ';'", vec![lv, args], "callStatement", l, r),
@@ -1536,12 +1529,12 @@ callStatement: ValueRef = {
 
 // The lexer marks a bare canonical `namedType` as expression-context before
 // `.`, but a specialized type retains its declaration-context marker.
-directApplicationType: ValueRef = {
+directApplicationType: Rc<Value> = {
     namedType,
     expressionNamedType,
 };
 
-directApplicationStatement: ValueRef = {
+directApplicationStatement: Rc<Value> = {
     // directApplicationStatement ::= namedType "DOT" "APPLY" "L_PAREN"
     //   argumentList "R_PAREN" "SEMICOLON"
     <l:@L> <t:directApplicationType> "DOT" "APPLY" "L_PAREN" <args:argumentList> "R_PAREN"
@@ -1558,7 +1551,7 @@ directApplicationStatement: ValueRef = {
 
 // - Return statements
 
-returnStatement: ValueRef = {
+returnStatement: Rc<Value> = {
     // returnStatement ::= "RETURN" "SEMICOLON"
     <l:@L> "RETURN" "SEMICOLON" <r:@R> =>
         value::case_value(context, "RETURN ';'", vec![], "returnStatement", l, r),
@@ -1570,7 +1563,7 @@ returnStatement: ValueRef = {
 
 // - Exit statements
 
-exitStatement: ValueRef = {
+exitStatement: Rc<Value> = {
     // exitStatement ::= "EXIT" "SEMICOLON"
     <l:@L> "EXIT" "SEMICOLON" <r:@R> =>
         value::case_value(context, "EXIT ';'", vec![], "exitStatement", l, r),
@@ -1578,7 +1571,7 @@ exitStatement: ValueRef = {
 
 // - Block statements
 
-blockStatement: ValueRef = {
+blockStatement: Rc<Value> = {
     // blockStatement ::= annotationList "L_BRACE" push_scope
     //   blockElementStatementList "R_BRACE" pop_scope
     <l:@L> <al:annotationList> "L_BRACE" push_scope <sl:blockElementStatementList> "R_BRACE"
@@ -1600,7 +1593,7 @@ blockStatement: ValueRef = {
 
 // - For statements
 
-forInitStatement: ValueRef = {
+forInitStatement: Rc<Value> = {
     // forInitStatement ::= annotationList typeRef name initializerOpt
     <l:@L> <al:annotationList> <t:typeRef> <n:name> <i:initializerOpt> <r:@R> =>
         value::case_value(
@@ -1633,7 +1626,7 @@ forInitStatement: ValueRef = {
         value::case_value(context, "lvalue assignop expression", vec![lv, o, e], "forInitStatement", l, r),
 };
 
-forInitStatementListNonEmpty: ValueRef = {
+forInitStatementListNonEmpty: Rc<Value> = {
     // forInitStatementListNonEmpty ::= forInitStatement
     <s:forInitStatement> => s,
 
@@ -1650,7 +1643,7 @@ forInitStatementListNonEmpty: ValueRef = {
 };
 
 #[inline]
-forInitStatementList: ValueRef = {
+forInitStatementList: Rc<Value> = {
     // forInitStatementList ::= epsilon
     <l:@L>  <r:@R> => value::case_value(context, "_EMPTY", vec![], "forInitStatementList", l, r),
 
@@ -1658,12 +1651,12 @@ forInitStatementList: ValueRef = {
     <sl:forInitStatementListNonEmpty> => sl,
 };
 
-forUpdateStatement: ValueRef = {
+forUpdateStatement: Rc<Value> = {
     // forUpdateStatement ::= forInitStatement
     <s:forInitStatement> => s,
 };
 
-forUpdateStatementListNonEmpty: ValueRef = {
+forUpdateStatementListNonEmpty: Rc<Value> = {
     // forUpdateStatementListNonEmpty ::= forUpdateStatement
     <s:forUpdateStatement> => s,
 
@@ -1680,7 +1673,7 @@ forUpdateStatementListNonEmpty: ValueRef = {
 };
 
 #[inline]
-forUpdateStatementList: ValueRef = {
+forUpdateStatementList: Rc<Value> = {
     // forUpdateStatementList ::= epsilon
     <l:@L>  <r:@R> => value::case_value(context, "_EMPTY", vec![], "forUpdateStatementList", l, r),
 
@@ -1688,7 +1681,7 @@ forUpdateStatementList: ValueRef = {
     <sl:forUpdateStatementListNonEmpty> => sl,
 };
 
-forCollectionExpression: ValueRef = {
+forCollectionExpression: Rc<Value> = {
     // forCollectionExpression ::= expression
     <e:expression> => e,
 
@@ -1706,7 +1699,7 @@ forCollectionExpression: ValueRef = {
 
 // - Switch statements
 
-switchLabel: ValueRef = {
+switchLabel: Rc<Value> = {
     // switchLabel ::= "DEFAULT"
     <l:@L> "DEFAULT" <r:@R> => value::case_value(context, "DEFAULT", vec![], "switchLabel", l, r),
 
@@ -1715,7 +1708,7 @@ switchLabel: ValueRef = {
 };
 
 #[inline]
-switchCase: ValueRef = {
+switchCase: Rc<Value> = {
     // switchCase ::= switchLabel "COLON" blockStatement
     <l:@L> <label:switchLabel> "BLOCK_COLON" <body:blockStatement> <r:@R> =>
         value::case_value(context, "switchLabel ':' blockStatement", vec![label, body], "switchCase", l, r),
@@ -1725,7 +1718,7 @@ switchCase: ValueRef = {
         value::case_value(context, "switchLabel ':'", vec![label], "switchCase", l, r),
 };
 
-switchCaseList: ValueRef = {
+switchCaseList: Rc<Value> = {
     // switchCaseList ::= epsilon
     <l:@L>  <r:@R> => value::case_value(context, "_EMPTY", vec![], "switchCaseList", l, r),
 
@@ -1734,7 +1727,7 @@ switchCaseList: ValueRef = {
         value::case_value(context, "switchCaseList switchCase", vec![cs, c], "switchCaseList", l, r),
 };
 
-switchStatement: ValueRef = {
+switchStatement: Rc<Value> = {
     // switchStatement ::= "SWITCH" "L_PAREN" expression "R_PAREN" "L_BRACE" switchCaseList "R_BRACE"
     <l:@L> "SWITCH" "L_PAREN" <e:expression> "R_PAREN" "L_BRACE" <cs:switchCaseList> "R_BRACE"
         <r:@R> =>
@@ -1750,13 +1743,13 @@ switchStatement: ValueRef = {
 
 // - Break and continue statements
 
-breakStatement: ValueRef = {
+breakStatement: Rc<Value> = {
     // breakStatement ::= "BREAK" "SEMICOLON"
     <l:@L> "BREAK" "SEMICOLON" <r:@R> =>
         value::case_value(context, "BREAK ';'", vec![], "breakStatement", l, r),
 };
 
-continueStatement: ValueRef = {
+continueStatement: Rc<Value> = {
     // continueStatement ::= "CONTINUE" "SEMICOLON"
     <l:@L> "CONTINUE" "SEMICOLON" <r:@R> =>
         value::case_value(context, "CONTINUE ';'", vec![], "continueStatement", l, r),
@@ -1765,7 +1758,7 @@ continueStatement: ValueRef = {
 // - Statements
 
 // The matched forms below implement the canonical statement alternatives
-statement: ValueRef = {
+statement: Rc<Value> = {
     // statement ::= MatchedStatement
     MatchedStatement,
 
@@ -1779,7 +1772,7 @@ statement: ValueRef = {
 // and unmatched forms encode the same attachment rule without moving the
 // canonical statement productions away from their OCaml position.
 
-MatchedStatement: ValueRef = {
+MatchedStatement: Rc<Value> = {
     // MatchedStatement ::= emptyStatement
     emptyStatement,
 
@@ -1827,7 +1820,7 @@ MatchedStatement: ValueRef = {
         ),
 };
 
-UnmatchedStatement: ValueRef = {
+UnmatchedStatement: Rc<Value> = {
     // UnmatchedStatement ::= UnmatchedForStatement
     UnmatchedForStatement,
 
@@ -1856,7 +1849,7 @@ UnmatchedStatement: ValueRef = {
         ),
 };
 
-MatchedForStatement: ValueRef = {
+MatchedForStatement: Rc<Value> = {
     // MatchedForStatement ::= annotationList "FOR" "L_PAREN" forInitStatementList "SEMICOLON"
     //     expression "SEMICOLON" forUpdateStatementList "R_PAREN" MatchedStatement
     <l:@L> <annotations:annotationList> "FOR" "L_PAREN" <init:forInitStatementList> "SEMICOLON"
@@ -1906,7 +1899,7 @@ MatchedForStatement: ValueRef = {
         ),
 };
 
-UnmatchedForStatement: ValueRef = {
+UnmatchedForStatement: Rc<Value> = {
     // UnmatchedForStatement ::= annotationList "FOR" "L_PAREN" forInitStatementList "SEMICOLON"
     //     expression "SEMICOLON" forUpdateStatementList "R_PAREN" UnmatchedStatement
     <l:@L> <annotations:annotationList> "FOR" "L_PAREN" <init:forInitStatementList> "SEMICOLON"
@@ -1959,13 +1952,13 @@ UnmatchedForStatement: ValueRef = {
 // - Declarations
 
 // - Constant and variable declarations
-initialValue: ValueRef = {
+initialValue: Rc<Value> = {
     // initialValue ::= "ASSIGN" expression
     <l:@L> "ASSIGN" <e:expression> <r:@R> =>
         value::case_value(context, "'=' expression", vec![e], "initializer", l, r),
 };
 
-constantDeclaration: ValueRef = {
+constantDeclaration: Rc<Value> = {
     // constantDeclaration ::= annotationList "CONST" typeRef name initialValue "SEMICOLON"
     <l:@L> <al:annotationList> "CONST" <t:typeRef> <n:name> <i:initialValue> "SEMICOLON"
         <r:@R> =>
@@ -1980,7 +1973,7 @@ constantDeclaration: ValueRef = {
 };
 
 #[inline]
-initializerOpt: ValueRef = {
+initializerOpt: Rc<Value> = {
     // initializerOpt ::= epsilon
     <l:@L>  <r:@R> => value::case_value(context, "_EMPTY", vec![], "initializerOpt", l, r),
 
@@ -1988,7 +1981,7 @@ initializerOpt: ValueRef = {
     <i:initialValue> => i,
 };
 
-variableDeclaration: ValueRef = {
+variableDeclaration: Rc<Value> = {
     // variableDeclaration ::= annotationList typeRef name initializerOpt "SEMICOLON"
     <l:@L> <al:annotationList> <t:typeRef> <n:name> <i:initializerOpt> "SEMICOLON" <r:@R> =>
         {
@@ -2004,7 +1997,7 @@ variableDeclaration: ValueRef = {
         },
 };
 
-blockElementStatement: ValueRef = {
+blockElementStatement: Rc<Value> = {
     // blockElementStatement ::= constantDeclaration
     <d:constantDeclaration> => d,
 
@@ -2015,7 +2008,7 @@ blockElementStatement: ValueRef = {
     <d:statement> => d,
 };
 
-blockElementStatementList: ValueRef = {
+blockElementStatementList: Rc<Value> = {
     // blockElementStatementList ::= epsilon
     <l:@L>  <r:@R> => value::case_value(context, "_EMPTY", vec![], "blockElementStatementList", l, r),
 
@@ -2032,7 +2025,7 @@ blockElementStatementList: ValueRef = {
 };
 
 // - Function declarations
-functionPrototype: ValueRef = {
+functionPrototype: Rc<Value> = {
     // functionPrototype ::= typeOrVoid name push_scope typeParameterListOpt "L_PAREN" parameterList
     //     "R_PAREN"
     <l:@L> <t:typeOrVoid> <n:declarationName> push_scope <tpl:typeParameterListOpt> "L_PAREN"
@@ -2047,7 +2040,7 @@ functionPrototype: ValueRef = {
         ),
 };
 
-functionDeclaration: ValueRef = {
+functionDeclaration: Rc<Value> = {
     // functionDeclaration ::= annotationList functionPrototype blockStatement pop_scope
     <l:@L> <al:annotationList> <p:functionPrototype> <b:blockStatement> pop_scope <r:@R> =>
         value::case_value(
@@ -2061,7 +2054,7 @@ functionDeclaration: ValueRef = {
 };
 
 // - Action declarations
-actionDeclaration: ValueRef = {
+actionDeclaration: Rc<Value> = {
     // actionDeclaration ::= annotationList "ACTION" name "L_PAREN" parameterList "R_PAREN"
     //     blockStatement
     <l:@L> <al:annotationList> "ACTION" <n:name> "L_PAREN" <pl:parameterList> "R_PAREN"
@@ -2077,7 +2070,7 @@ actionDeclaration: ValueRef = {
 };
 
 // - Instantiations
-objectInitializer: ValueRef = {
+objectInitializer: Rc<Value> = {
     // objectInitializer ::= "ASSIGN" "L_BRACE" objectDeclarationList "R_BRACE"
     <l:@L> "ASSIGN" "L_BRACE" <ds:objectDeclarationList> "R_BRACE" <r:@R> =>
         value::case_value(context, "'=' `{ objectDeclarationList `}", vec![ds], "objectInitializer", l, r),
@@ -2085,7 +2078,7 @@ objectInitializer: ValueRef = {
 
 // LALRPOP distinguishes a type name seen in an expression from one seen in a
 // declaration. Both alternatives implement the OCaml `typeRef` occurrence.
-instantiationTypeRef: ValueRef = {
+instantiationTypeRef: Rc<Value> = {
     // instantiationTypeRef ::= typeRef
     typeRef,
 
@@ -2093,7 +2086,7 @@ instantiationTypeRef: ValueRef = {
     expressionNamedType,
 };
 
-instantiation: ValueRef = {
+instantiation: Rc<Value> = {
     // instantiation ::= annotationList instantiationTypeRef "L_PAREN" argumentList "R_PAREN" name
     //     "SEMICOLON"
     <l:@L> <al:annotationList> <t:instantiationTypeRef> "L_PAREN" <args:argumentList> "R_PAREN"
@@ -2121,7 +2114,7 @@ instantiation: ValueRef = {
         ),
 };
 
-objectDeclaration: ValueRef = {
+objectDeclaration: Rc<Value> = {
     // objectDeclaration ::= functionDeclaration
     <d:functionDeclaration> => d,
 
@@ -2129,7 +2122,7 @@ objectDeclaration: ValueRef = {
     <d:instantiation> => d,
 };
 
-objectDeclarationList: ValueRef = {
+objectDeclarationList: Rc<Value> = {
     // objectDeclarationList ::= epsilon
     <l:@L>  <r:@R> => value::case_value(context, "_EMPTY", vec![], "objectDeclarationList", l, r),
 
@@ -2146,7 +2139,7 @@ objectDeclarationList: ValueRef = {
 };
 
 // - Error declarations
-errorDeclaration: ValueRef = {
+errorDeclaration: Rc<Value> = {
     // errorDeclaration ::= "ERROR" "L_BRACE" nameList "R_BRACE"
     <l:@L> "ERROR" "L_BRACE" <nl:nameList> "R_BRACE" <r:@R> =>
         {
@@ -2163,7 +2156,7 @@ errorDeclaration: ValueRef = {
 };
 
 // - Match kind declarations
-matchKindDeclaration: ValueRef = {
+matchKindDeclaration: Rc<Value> = {
     // matchKindDeclaration ::= "MATCH_KIND" "L_BRACE" nameList trailingCommaOpt "R_BRACE"
     <l:@L> "MATCH_KIND" "L_BRACE" <nl:nameList> <c:trailingCommaOpt> "R_BRACE" <r:@R> =>
         {
@@ -2183,7 +2176,7 @@ matchKindDeclaration: ValueRef = {
 
 // - Enum declarations
 
-enumTypeDeclaration: ValueRef = {
+enumTypeDeclaration: Rc<Value> = {
     // enumTypeDeclaration ::= annotationList "ENUM" name "L_BRACE" nameList trailingCommaOpt "R_BRACE"
     <l:@L> <al:annotationList> "ENUM" <n:name> "L_BRACE" <nl:nameList> <c:trailingCommaOpt>
         "R_BRACE" <r:@R> =>
@@ -2212,13 +2205,13 @@ enumTypeDeclaration: ValueRef = {
 
 // - Struct, header, and union declarations
 
-typeField: ValueRef = {
+typeField: Rc<Value> = {
     // typeField ::= annotationList typeRef name "SEMICOLON"
     <l:@L> <al:annotationList> <t:typeRef> <n:name> "SEMICOLON" <r:@R> =>
         value::case_value(context, "annotationList typeRef name ';'", vec![al, t, n], "typeField", l, r),
 };
 
-typeFieldList: ValueRef = {
+typeFieldList: Rc<Value> = {
     // typeFieldList ::= epsilon
     <l:@L>  <r:@R> => value::case_value(context, "_EMPTY", vec![], "typeFieldList", l, r),
 
@@ -2227,7 +2220,7 @@ typeFieldList: ValueRef = {
         value::case_value(context, "typeFieldList typeField", vec![fl, f], "typeFieldList", l, r),
 };
 
-structTypeDeclaration: ValueRef = {
+structTypeDeclaration: Rc<Value> = {
     // structTypeDeclaration ::= annotationList "STRUCT" name typeParameterListOpt "L_BRACE"
     //     typeFieldList "R_BRACE"
     <l:@L> <al:annotationList> "STRUCT" <n:name> <tpl:typeParameterListOpt> "L_BRACE"
@@ -2242,7 +2235,7 @@ structTypeDeclaration: ValueRef = {
         ),
 };
 
-headerTypeDeclaration: ValueRef = {
+headerTypeDeclaration: Rc<Value> = {
     // headerTypeDeclaration ::= annotationList "HEADER" name typeParameterListOpt "L_BRACE"
     //     typeFieldList "R_BRACE"
     <l:@L> <al:annotationList> "HEADER" <n:name> <tpl:typeParameterListOpt> "L_BRACE"
@@ -2257,7 +2250,7 @@ headerTypeDeclaration: ValueRef = {
         ),
 };
 
-headerUnionTypeDeclaration: ValueRef = {
+headerUnionTypeDeclaration: Rc<Value> = {
     // headerUnionTypeDeclaration ::= annotationList "HEADER_UNION" name typeParameterListOpt "L_BRACE"
     //     typeFieldList "R_BRACE"
     <l:@L> <al:annotationList> "HEADER_UNION" <n:name> <tpl:typeParameterListOpt> "L_BRACE"
@@ -2272,7 +2265,7 @@ headerUnionTypeDeclaration: ValueRef = {
         ),
 };
 
-derivedTypeDeclaration: ValueRef = {
+derivedTypeDeclaration: Rc<Value> = {
     // derivedTypeDeclaration ::= enumTypeDeclaration
     <d:enumTypeDeclaration> => d,
 
@@ -2287,7 +2280,7 @@ derivedTypeDeclaration: ValueRef = {
 };
 
 // - Typedef and newtype declarations
-typedef: ValueRef = {
+typedef: Rc<Value> = {
     // typedef ::= typeRef
     <t:typeRef> => t,
 
@@ -2295,7 +2288,7 @@ typedef: ValueRef = {
     <t:derivedTypeDeclaration> => { value::declare_declaration_type(context, &t); t },
 };
 
-typedefDeclaration: ValueRef = {
+typedefDeclaration: Rc<Value> = {
     // typedefDeclaration ::= annotationList "TYPEDEF" typedef name "SEMICOLON"
     <l:@L> <al:annotationList> "TYPEDEF" <t:typedef> <n:name> "SEMICOLON" <r:@R> =>
         value::case_value(
@@ -2320,7 +2313,7 @@ typedefDeclaration: ValueRef = {
 };
 
 // - Extern declarations
-externFunctionDeclaration: ValueRef = {
+externFunctionDeclaration: Rc<Value> = {
     // externFunctionDeclaration ::= annotationList "EXTERN" functionPrototype pop_scope "SEMICOLON"
     <l:@L> <al:annotationList> "EXTERN" <p:functionPrototype> pop_scope "SEMICOLON" <r:@R> =>
         {
@@ -2338,7 +2331,7 @@ externFunctionDeclaration: ValueRef = {
 
 // The lexer has separate declaration- and expression-context type-name
 // markers; an extern constructor accepts either spelling of the OCaml token.
-constructorTypeIdentifier: ValueRef = {
+constructorTypeIdentifier: Rc<Value> = {
     // constructorTypeIdentifier ::= "NAME" "TYPENAME"
     <l:@L> <text:"NAME"> "TYPENAME" <r:@R> =>
         value::case_value(context, "_TID text", vec![text], "typeIdentifier", l, r),
@@ -2348,7 +2341,7 @@ constructorTypeIdentifier: ValueRef = {
         value::case_value(context, "_TID text", vec![text], "typeIdentifier", l, r),
 };
 
-externConstructorPrototype: ValueRef = {
+externConstructorPrototype: Rc<Value> = {
     // externConstructorPrototype ::= annotationList constructorTypeIdentifier "L_PAREN" parameterList
     //     "R_PAREN" "SEMICOLON"
     <l:@L> <al:annotationList> <tid:constructorTypeIdentifier> "L_PAREN" <pl:parameterList>
@@ -2363,7 +2356,7 @@ externConstructorPrototype: ValueRef = {
         ),
 };
 
-externMethodPrototype: ValueRef = {
+externMethodPrototype: Rc<Value> = {
     // externMethodPrototype ::= annotationList functionPrototype pop_scope "SEMICOLON"
     <l:@L> <al:annotationList> <p:functionPrototype> pop_scope "SEMICOLON" <r:@R> =>
         {
@@ -2394,7 +2387,7 @@ externMethodPrototype: ValueRef = {
         },
 };
 
-externConstructorOrMethodPrototype: ValueRef = {
+externConstructorOrMethodPrototype: Rc<Value> = {
     // externConstructorOrMethodPrototype ::= externConstructorPrototype
     <p:externConstructorPrototype> => p,
 
@@ -2402,7 +2395,7 @@ externConstructorOrMethodPrototype: ValueRef = {
     <p:externMethodPrototype> => p,
 };
 
-externConstructorOrMethodPrototypeList: ValueRef = {
+externConstructorOrMethodPrototypeList: Rc<Value> = {
     // externConstructorOrMethodPrototypeList ::= epsilon
     <l:@L>  <r:@R> =>
         value::case_value(context, "_EMPTY", vec![], "externConstructorOrMethodPrototypeList", l, r),
@@ -2421,7 +2414,7 @@ externConstructorOrMethodPrototypeList: ValueRef = {
         ),
 };
 
-externObjectDeclaration: ValueRef = {
+externObjectDeclaration: Rc<Value> = {
     // externObjectDeclaration ::= annotationList "EXTERN" push_externName typeParameterListOpt
     //     "L_BRACE" externConstructorOrMethodPrototypeList "R_BRACE" pop_scope
     <l:@L> <al:annotationList> "EXTERN" <n:push_externName> <tpl:typeParameterListOpt> "L_BRACE"
@@ -2445,7 +2438,7 @@ externObjectDeclaration: ValueRef = {
         },
 };
 
-externDeclaration: ValueRef = {
+externDeclaration: Rc<Value> = {
     // externDeclaration ::= externFunctionDeclaration
     <d:externFunctionDeclaration> => d,
 
@@ -2456,13 +2449,13 @@ externDeclaration: ValueRef = {
 // - Parser statements and declarations
 
 // - Select expressions
-selectCase: ValueRef = {
+selectCase: Rc<Value> = {
     // selectCase ::= keysetExpression "COLON" name "SEMICOLON"
     <l:@L> <k:keysetExpression> colon <n:name> "SEMICOLON" <r:@R> =>
         value::case_value(context, "keysetExpression ':' name ';'", vec![k, n], "selectCase", l, r),
 };
 
-selectCaseList: ValueRef = {
+selectCaseList: Rc<Value> = {
     // selectCaseList ::= epsilon
     <l:@L>  <r:@R> => value::case_value(context, "_EMPTY", vec![], "selectCaseList", l, r),
 
@@ -2471,7 +2464,7 @@ selectCaseList: ValueRef = {
         value::case_value(context, "selectCaseList selectCase", vec![cl, c], "selectCaseList", l, r),
 };
 
-selectExpression: ValueRef = {
+selectExpression: Rc<Value> = {
     // selectExpression ::= "SELECT" "L_PAREN" "R_PAREN" "L_BRACE" selectCaseList "R_BRACE"
     <l:@L> "SELECT" "L_PAREN" <empty_l:@L> "R_PAREN" "L_BRACE" <cl:selectCaseList> "R_BRACE" <r:@R> => {
         let empty = value::case_value(context, "_EMPTY", vec![], "expressionList", empty_l, empty_l);
@@ -2500,7 +2493,7 @@ selectExpression: ValueRef = {
 };
 
 // - Transition statements
-stateExpression: ValueRef = {
+stateExpression: Rc<Value> = {
     // stateExpression ::= name "SEMICOLON"
     <l:@L> <n:name> "SEMICOLON" <r:@R> =>
         value::case_value(context, "name ';'", vec![n], "stateExpression", l, r),
@@ -2510,7 +2503,7 @@ stateExpression: ValueRef = {
 };
 
 #[inline]
-transitionStatement: ValueRef = {
+transitionStatement: Rc<Value> = {
     // transitionStatement ::= epsilon
     <l:@L>  <r:@R> => value::case_value(context, "_EMPTY", vec![], "transitionStatement", l, r),
 
@@ -2520,7 +2513,7 @@ transitionStatement: ValueRef = {
 };
 
 // - Value set declarations
-valueSetType: ValueRef = {
+valueSetType: Rc<Value> = {
     // valueSetType ::= baseType
     <t:baseType> => t,
 
@@ -2531,7 +2524,7 @@ valueSetType: ValueRef = {
     <t:prefixedTypeName> => t,
 };
 
-valueSetDeclaration: ValueRef = {
+valueSetDeclaration: Rc<Value> = {
     // valueSetDeclaration ::= annotationList "VALUE_SET" l_angle valueSetType
     //   r_angle "L_PAREN" expression "R_PAREN" name "SEMICOLON"
     <l:@L> <al:annotationList> "VALUE_SET" "L_ANGLE_ARGS" <t:valueSetType> r_angle "L_PAREN"
@@ -2547,7 +2540,7 @@ valueSetDeclaration: ValueRef = {
 };
 
 // - Parser type declarations
-parserTypeDeclaration: ValueRef = {
+parserTypeDeclaration: Rc<Value> = {
     // parserTypeDeclaration ::= annotationList "PARSER" push_name typeParameterListOpt "L_PAREN"
     //     parameterList "R_PAREN" pop_scope "SEMICOLON"
     <l:@L> <al:annotationList> "PARSER" <n:push_name> <tpl:typeParameterListOpt> "L_PAREN"
@@ -2563,7 +2556,7 @@ parserTypeDeclaration: ValueRef = {
 };
 
 // - Parser declarations
-parserBlockElementStatement: ValueRef = {
+parserBlockElementStatement: Rc<Value> = {
     // parserBlockElementStatement ::= constantDeclaration
     <s:constantDeclaration> => s,
 
@@ -2574,7 +2567,7 @@ parserBlockElementStatement: ValueRef = {
     <s:parserStatement> => s,
 };
 
-parserBlockElementStatementList: ValueRef = {
+parserBlockElementStatementList: Rc<Value> = {
     // parserBlockElementStatementList ::= epsilon
     <l:@L>  <r:@R> =>
         value::case_value(context, "_EMPTY", vec![], "parserBlockElementStatementList", l, r),
@@ -2592,7 +2585,7 @@ parserBlockElementStatementList: ValueRef = {
         ),
 };
 
-parserBlockStatement: ValueRef = {
+parserBlockStatement: Rc<Value> = {
     // parserBlockStatement ::= annotationList "L_BRACE" parserBlockElementStatementList "R_BRACE"
     <l:@L> <al:annotationList> "L_BRACE" <sl:parserBlockElementStatementList> "R_BRACE"
         <r:@R> =>
@@ -2612,7 +2605,7 @@ parserBlockStatement: ValueRef = {
 //     parserStatement
 
 // The matched forms below implement the canonical parserStatement alternatives
-parserStatement: ValueRef = {
+parserStatement: Rc<Value> = {
     // parserStatement ::= ParserMatchedStatement
     ParserMatchedStatement,
 
@@ -2622,7 +2615,7 @@ parserStatement: ValueRef = {
 
 // - LALRPOP parser-statement dangling-else lowering
 
-ParserMatchedStatement: ValueRef = {
+ParserMatchedStatement: Rc<Value> = {
     // ParserMatchedStatement ::= emptyStatement
     emptyStatement,
 
@@ -2652,7 +2645,7 @@ ParserMatchedStatement: ValueRef = {
         ),
 };
 
-ParserUnmatchedStatement: ValueRef = {
+ParserUnmatchedStatement: Rc<Value> = {
     // ParserUnmatchedStatement ::= "IF" "L_PAREN" expression "R_PAREN" parserStatement
     <l:@L> "IF" "L_PAREN" <condition:expression> "R_PAREN" <yes:parserStatement> <r:@R> =>
         value::case_value(
@@ -2678,7 +2671,7 @@ ParserUnmatchedStatement: ValueRef = {
         ),
 };
 
-parserState: ValueRef = {
+parserState: Rc<Value> = {
     // parserState ::= annotationList "STATE" push_name "L_BRACE" parserBlockElementStatementList
     //     transitionStatement "R_BRACE" pop_scope
     <l:@L> <al:annotationList> "STATE" <n:push_name> "L_BRACE"
@@ -2694,7 +2687,7 @@ parserState: ValueRef = {
         ),
 };
 
-parserStateList: ValueRef = {
+parserStateList: Rc<Value> = {
     // parserStateList ::= parserState
     <s:parserState> => s,
 
@@ -2703,7 +2696,7 @@ parserStateList: ValueRef = {
         value::case_value(context, "parserStateList parserState", vec![sl, s], "parserStateList", l, r),
 };
 
-parserLocalDeclaration: ValueRef = {
+parserLocalDeclaration: Rc<Value> = {
     // parserLocalDeclaration ::= constantDeclaration
     <d:constantDeclaration> => d,
 
@@ -2717,7 +2710,7 @@ parserLocalDeclaration: ValueRef = {
     <d:valueSetDeclaration> => d,
 };
 
-parserLocalDeclarationList: ValueRef = {
+parserLocalDeclarationList: Rc<Value> = {
     // parserLocalDeclarationList ::= epsilon
     <l:@L>  <r:@R> => value::case_value(context, "_EMPTY", vec![], "parserLocalDeclarationList", l, r),
 
@@ -2733,7 +2726,7 @@ parserLocalDeclarationList: ValueRef = {
         ),
 };
 
-parserDeclaration: ValueRef = {
+parserDeclaration: Rc<Value> = {
     // parserDeclaration ::= annotationList "PARSER" push_name typeParameterListOpt "L_PAREN"
     //     parameterList "R_PAREN" constructorParameterListOpt "L_BRACE" parserLocalDeclarationList
     //     parserStateList "R_BRACE" pop_scope
@@ -2755,7 +2748,7 @@ parserDeclaration: ValueRef = {
 // - Table declarations
 
 #[inline]
-constOpt: ValueRef = {
+constOpt: Rc<Value> = {
     // constOpt ::= epsilon
     <l:@L>  <r:@R> => value::case_value(context, "_EMPTY", vec![], "constOpt", l, r),
 
@@ -2765,13 +2758,13 @@ constOpt: ValueRef = {
 
 // - Table key property
 
-tableKey: ValueRef = {
+tableKey: Rc<Value> = {
     // tableKey ::= expression "COLON" name annotationList "SEMICOLON"
     <l:@L> <e:expression> colon <n:name> <al:annotationList> "SEMICOLON" <r:@R> =>
         value::case_value(context, "expression ':' name annotationList ';'", vec![e, n, al], "tableKey", l, r),
 };
 
-tableKeyList: ValueRef = {
+tableKeyList: Rc<Value> = {
     // tableKeyList ::= epsilon
     <l:@L>  <r:@R> => value::case_value(context, "_EMPTY", vec![], "tableKeyList", l, r),
 
@@ -2782,7 +2775,7 @@ tableKeyList: ValueRef = {
 
 // - Table actions property
 
-tableActionReference: ValueRef = {
+tableActionReference: Rc<Value> = {
     // tableActionReference ::= prefixedNonTypeName
     <n:prefixedNonTypeName> => n,
 
@@ -2798,13 +2791,13 @@ tableActionReference: ValueRef = {
         ),
 };
 
-tableAction: ValueRef = {
+tableAction: Rc<Value> = {
     // tableAction ::= annotationList tableActionReference "SEMICOLON"
     <l:@L> <al:annotationList> <ac:tableActionReference> "SEMICOLON" <r:@R> =>
         value::case_value(context, "annotationList tableActionReference ';'", vec![al, ac], "tableAction", l, r),
 };
 
-tableActionList: ValueRef = {
+tableActionList: Rc<Value> = {
     // tableActionList ::= epsilon
     <l:@L>  <r:@R> => value::case_value(context, "_EMPTY", vec![], "tableActionList", l, r),
 
@@ -2815,7 +2808,7 @@ tableActionList: ValueRef = {
 
 // - Table entry property
 
-tableEntryPriority: ValueRef = {
+tableEntryPriority: Rc<Value> = {
     // tableEntryPriority ::= "PRIORITY" "ASSIGN" integerLiteral "COLON"
     <l:@L> "PRIORITY" "ASSIGN" <int:integerLiteral> colon <r:@R> =>
         value::case_value(context, "PRIORITY '=' integerLiteral ':'", vec![int], "tableEntryPriority", l, r),
@@ -2825,7 +2818,7 @@ tableEntryPriority: ValueRef = {
         value::case_value(context, "PRIORITY '=' `( expression `) ':'", vec![e], "tableEntryPriority", l, r),
 };
 
-tableEntry: ValueRef = {
+tableEntry: Rc<Value> = {
     // tableEntry ::= constOpt tableEntryPriority keysetExpression "COLON"
     //   tableActionReference annotationList "SEMICOLON"
     <l:@L> <c:constOpt> <p:tableEntryPriority> <k:keysetExpression> colon
@@ -2853,7 +2846,7 @@ tableEntry: ValueRef = {
         ),
 };
 
-tableEntryList: ValueRef = {
+tableEntryList: Rc<Value> = {
     // tableEntryList ::= epsilon
     <l:@L>  <r:@R> => value::case_value(context, "_EMPTY", vec![], "tableEntryList", l, r),
 
@@ -2864,7 +2857,7 @@ tableEntryList: ValueRef = {
 
 // - Table properties
 
-tableProperty: ValueRef = {
+tableProperty: Rc<Value> = {
     // tableProperty ::= "KEY" "ASSIGN" "L_BRACE" tableKeyList "R_BRACE"
     <l:@L> "KEY" "ASSIGN" "L_BRACE" <kl:tableKeyList> "R_BRACE" <r:@R> =>
         value::case_value(context, "KEY '=' `{ tableKeyList `}", vec![kl], "tableProperty", l, r),
@@ -2899,7 +2892,7 @@ tableProperty: ValueRef = {
         ),
 };
 
-tablePropertyList: ValueRef = {
+tablePropertyList: Rc<Value> = {
     // tablePropertyList ::= epsilon
     <l:@L>  <r:@R> => value::case_value(context, "_EMPTY", vec![], "tablePropertyList", l, r),
 
@@ -2908,7 +2901,7 @@ tablePropertyList: ValueRef = {
         value::case_value(context, "tablePropertyList tableProperty", vec![pl, p], "tablePropertyList", l, r),
 };
 
-tableDeclaration: ValueRef = {
+tableDeclaration: Rc<Value> = {
     // tableDeclaration ::= annotationList "TABLE" name "L_BRACE" tablePropertyList "R_BRACE"
     <l:@L> <al:annotationList> "TABLE" <n:name> "L_BRACE" <pl:tablePropertyList> "R_BRACE"
         <r:@R> =>
@@ -2923,7 +2916,7 @@ tableDeclaration: ValueRef = {
 };
 
 // - Control type declarations
-controlTypeDeclaration: ValueRef = {
+controlTypeDeclaration: Rc<Value> = {
     // controlTypeDeclaration ::= annotationList "CONTROL" push_name typeParameterListOpt "L_PAREN"
     //     parameterList "R_PAREN" pop_scope "SEMICOLON"
     <l:@L> <al:annotationList> "CONTROL" <n:push_name> <tpl:typeParameterListOpt> "L_PAREN"
@@ -2939,12 +2932,12 @@ controlTypeDeclaration: ValueRef = {
 };
 
 // - Control declarations
-controlBody: ValueRef = {
+controlBody: Rc<Value> = {
     // controlBody ::= blockStatement
     <b:blockStatement> => b,
 };
 
-controlLocalDeclaration: ValueRef = {
+controlLocalDeclaration: Rc<Value> = {
     // controlLocalDeclaration ::= constantDeclaration
     <d:constantDeclaration> => d,
 
@@ -2961,7 +2954,7 @@ controlLocalDeclaration: ValueRef = {
     <d:tableDeclaration> => { value::declare_declaration_var(context, &d); d },
 };
 
-controlLocalDeclarationList: ValueRef = {
+controlLocalDeclarationList: Rc<Value> = {
     // controlLocalDeclarationList ::= epsilon
     <l:@L>  <r:@R> => value::case_value(context, "_EMPTY", vec![], "controlLocalDeclarationList", l, r),
 
@@ -2977,7 +2970,7 @@ controlLocalDeclarationList: ValueRef = {
         ),
 };
 
-controlDeclaration: ValueRef = {
+controlDeclaration: Rc<Value> = {
     // controlDeclaration ::= annotationList "CONTROL" push_name typeParameterListOpt "L_PAREN"
     //     parameterList "R_PAREN" constructorParameterListOpt "L_BRACE" controlLocalDeclarationList
     //     "APPLY" controlBody "R_BRACE" pop_scope
@@ -2996,7 +2989,7 @@ controlDeclaration: ValueRef = {
 
 // - Package type declarations
 
-packageTypeDeclaration: ValueRef = {
+packageTypeDeclaration: Rc<Value> = {
     // packageTypeDeclaration ::= annotationList "PACKAGE" push_name typeParameterListOpt "L_PAREN"
     //     parameterList "R_PAREN" pop_scope "SEMICOLON"
     <l:@L> <al:annotationList> "PACKAGE" <n:push_name> <tpl:typeParameterListOpt> "L_PAREN"
@@ -3013,7 +3006,7 @@ packageTypeDeclaration: ValueRef = {
 
 // - Type declarations
 
-typeDeclaration: ValueRef = {
+typeDeclaration: Rc<Value> = {
     // typeDeclaration ::= derivedTypeDeclaration
     <d:derivedTypeDeclaration> => d,
 
@@ -3032,7 +3025,7 @@ typeDeclaration: ValueRef = {
 
 // - Declarations
 
-declaration: ValueRef = {
+declaration: Rc<Value> = {
     // declaration ::= constantDeclaration
     <constant:constantDeclaration> => { value::declare_declaration_var(context, &constant); constant },
 
@@ -3068,7 +3061,7 @@ declaration: ValueRef = {
 
 // LALRPOP also accepts expression-context type and angle markers emitted by
 // the Rust lexer; both retain the canonical annotation token value.
-annotationToken: ValueRef = {
+annotationToken: Rc<Value> = {
     // annotationToken ::= "UNEXPECTED_TOKEN"
     <l:@L> "UNEXPECTED_TOKEN" <r:@R> =>
         value::case_value(context, "UNEXPECTED_TOKEN", vec![], "annotationToken", l, r),
@@ -3350,7 +3343,7 @@ annotationToken: ValueRef = {
     <l:@L> "AT" <r:@R> => value::case_value(context, "'@'", vec![], "annotationToken", l, r),
 };
 
-annotationBody: ValueRef = {
+annotationBody: Rc<Value> = {
     // annotationBody ::= epsilon
     <l:@L>  <r:@R> => value::case_value(context, "_EMPTY", vec![], "annotationBody", l, r),
 
@@ -3370,7 +3363,7 @@ annotationBody: ValueRef = {
         value::case_value(context, "annotationBody annotationToken", vec![ab, atoken], "annotationBody", l, r),
 };
 
-structuredAnnotationBody: ValueRef = {
+structuredAnnotationBody: Rc<Value> = {
     // structuredAnnotationBody ::= sequenceOrRecordElementExpression trailingCommaOpt
     <l:@L> <e:sequenceOrRecordElementExpression> <c:trailingCommaOpt> <r:@R> =>
         value::case_value(
@@ -3383,7 +3376,7 @@ structuredAnnotationBody: ValueRef = {
         ),
 };
 
-annotation: ValueRef = {
+annotation: Rc<Value> = {
     // annotation ::= "AT" name
     <l:@L> "AT" <name:name> <r:@R> =>
         value::case_value(context, "'@' name", vec![name], "annotation", l, r),
@@ -3408,7 +3401,7 @@ annotation: ValueRef = {
         value::case_value(context, "'@' PRAGMA name annotationBody", vec![name, body], "annotation", l, r),
 };
 
-annotationListNonEmpty: ValueRef = {
+annotationListNonEmpty: Rc<Value> = {
     // annotationListNonEmpty ::= annotation
     <a:annotation> => a,
 
@@ -3425,7 +3418,7 @@ annotationListNonEmpty: ValueRef = {
 };
 
 #[inline]
-annotationList: ValueRef = {
+annotationList: Rc<Value> = {
     // annotationList ::= epsilon
     <l:@L>  <r:@R> => value::case_value(context, "_EMPTY", vec![], "annotationList", l, r),
 
@@ -3435,7 +3428,7 @@ annotationList: ValueRef = {
 
 // - P4 program
 
-declarationList: ValueRef = {
+declarationList: Rc<Value> = {
     // declarationList ::= epsilon
     <l:@L>  <r:@R> => value::case_value(context, "_EMPTY", vec![], "declarationList", l, r),
 
@@ -3448,7 +3441,7 @@ declarationList: ValueRef = {
         value::case_value(context, "declarationList ';'", vec![ds], "declarationList", l, r),
 };
 
-pub p4program: ValueRef = {
+pub p4program: Rc<Value> = {
     // p4program ::= declarationList "END"
     <dl:declarationList> "END" => value::retag(dl, "p4program"),
 };

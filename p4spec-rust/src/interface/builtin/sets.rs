@@ -4,7 +4,7 @@
 //! in semantic value order. For example, the union of `{a}` and `{a, b}` is
 //! emitted once as `{a, b}`.
 
-use std::collections::BTreeSet;
+use std::{collections::BTreeSet, rc::Rc};
 
 use crate::{
     lang::{
@@ -16,7 +16,7 @@ use crate::{
     },
     runtime::{
         types::typ,
-        value::{Value, ValueRef, get, make},
+        value::{Value, get, make},
     },
 };
 
@@ -24,7 +24,7 @@ use super::{BuiltinError, BuiltinResult, extract};
 
 // == Value set
 
-type ValueSet = BTreeSet<ValueRef>;
+type ValueSet = BTreeSet<Rc<Value>>;
 
 // == Conversion between meta-sets and OCaml lists
 
@@ -65,7 +65,7 @@ fn value_of_set(typ_key: &Typ, set: ValueSet) -> BuiltinResult {
 
 // dec $intersect_set<K>(set<K>, set<K>) : set<K>
 
-pub fn intersect_set(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
+pub fn intersect_set(span: &Span, targs: &[Typ], values: &[Rc<Value>]) -> BuiltinResult {
     let typ_key = extract::one(span, targs)?;
     let (value_set_a, value_set_b) = extract::two(span, values)?;
     let set_a = set_of_value(span, value_set_a)?;
@@ -76,7 +76,7 @@ pub fn intersect_set(span: &Span, targs: &[Typ], values: &[ValueRef]) -> Builtin
 
 // dec $union_set<K>(set<K>, set<K>) : set<K>
 
-pub fn union_set(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
+pub fn union_set(span: &Span, targs: &[Typ], values: &[Rc<Value>]) -> BuiltinResult {
     let typ_key = extract::one(span, targs)?;
     let (value_set_a, value_set_b) = extract::two(span, values)?;
     let set_a = set_of_value(span, value_set_a)?;
@@ -87,7 +87,7 @@ pub fn union_set(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResu
 
 // dec $unions_set<K>(set<K>*) : set<K>
 
-pub fn unions_set(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
+pub fn unions_set(span: &Span, targs: &[Typ], values: &[Rc<Value>]) -> BuiltinResult {
     let typ_key = extract::one(span, targs)?;
     let value_sets = extract::one(span, values)?;
     let values = get::list(value_sets)
@@ -102,7 +102,7 @@ pub fn unions_set(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinRes
 
 // dec $diff_set<K>(set<K>, set<K>) : set<K>
 
-pub fn diff_set(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
+pub fn diff_set(span: &Span, targs: &[Typ], values: &[Rc<Value>]) -> BuiltinResult {
     let typ_key = extract::one(span, targs)?;
     let (value_set_a, value_set_b) = extract::two(span, values)?;
     let set_a = set_of_value(span, value_set_a)?;
@@ -113,7 +113,7 @@ pub fn diff_set(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResul
 
 // dec $sub_set<K>(set<K>, set<K>) : bool
 
-pub fn sub_set(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
+pub fn sub_set(span: &Span, targs: &[Typ], values: &[Rc<Value>]) -> BuiltinResult {
     let _typ_key = extract::one(span, targs)?;
     let (value_set_a, value_set_b) = extract::two(span, values)?;
     let set_a = set_of_value(span, value_set_a)?;
@@ -125,7 +125,7 @@ pub fn sub_set(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult
 
 // dec $eq_set<K>(set<K>, set<K>) : bool
 
-pub fn eq_set(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
+pub fn eq_set(span: &Span, targs: &[Typ], values: &[Rc<Value>]) -> BuiltinResult {
     let _typ_key = extract::one(span, targs)?;
     let (value_set_a, value_set_b) = extract::two(span, values)?;
     let set_a = set_of_value(span, value_set_a)?;

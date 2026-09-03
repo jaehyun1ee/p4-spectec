@@ -4,11 +4,13 @@
 //! return host results, and expose a checkpoint for side-effect detection. The
 //! null implementation reports a located configuration error for every call.
 
+use std::rc::Rc;
+
 use thiserror::Error;
 
 use crate::{
     lang::{common::source::Span, il::ast::Typ},
-    runtime::value::ValueRef,
+    runtime::value::Value,
 };
 
 // == Extern errors
@@ -35,10 +37,11 @@ pub trait SpecCall {
         &mut self,
         name: &str,
         targs: &[Typ],
-        values: &[ValueRef],
-    ) -> Result<ValueRef, ExternError>;
+        values: &[Rc<Value>],
+    ) -> Result<Rc<Value>, ExternError>;
 
-    fn eval_rel(&mut self, name: &str, values: &[ValueRef]) -> Result<Vec<ValueRef>, ExternError>;
+    fn eval_rel(&mut self, name: &str, values: &[Rc<Value>])
+    -> Result<Vec<Rc<Value>>, ExternError>;
 }
 
 pub trait Extern {
@@ -46,16 +49,16 @@ pub trait Extern {
         &mut self,
         spec: &mut dyn SpecCall,
         name: &str,
-        values: &[ValueRef],
-    ) -> Result<Vec<ValueRef>, ExternError>;
+        values: &[Rc<Value>],
+    ) -> Result<Vec<Rc<Value>>, ExternError>;
 
     fn eval_func(
         &mut self,
         spec: &mut dyn SpecCall,
         name: &str,
         targs: &[Typ],
-        values: &[ValueRef],
-    ) -> Result<ValueRef, ExternError>;
+        values: &[Rc<Value>],
+    ) -> Result<Rc<Value>, ExternError>;
 
     fn checkpoint(&self) -> u64;
 
@@ -75,8 +78,8 @@ impl Extern for NullExtern {
         &mut self,
         _spec: &mut dyn SpecCall,
         _name: &str,
-        _values: &[ValueRef],
-    ) -> Result<Vec<ValueRef>, ExternError> {
+        _values: &[Rc<Value>],
+    ) -> Result<Vec<Rc<Value>>, ExternError> {
         Err(not_configured())
     }
 
@@ -85,8 +88,8 @@ impl Extern for NullExtern {
         _spec: &mut dyn SpecCall,
         _name: &str,
         _targs: &[Typ],
-        _values: &[ValueRef],
-    ) -> Result<ValueRef, ExternError> {
+        _values: &[Rc<Value>],
+    ) -> Result<Rc<Value>, ExternError> {
         Err(not_configured())
     }
 

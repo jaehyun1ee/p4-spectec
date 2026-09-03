@@ -8,14 +8,6 @@ use super::ast::*;
 
 // == Syntax equality
 
-// - Iterators
-
-impl SyntaxEq for Iter {
-    fn syntax_eq(&self, other: &Self) -> bool {
-        self == other
-    }
-}
-
 // - Plain types
 
 impl SyntaxEq for PlainTypKind {

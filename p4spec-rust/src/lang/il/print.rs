@@ -31,17 +31,6 @@ fn escaped(text: &str) -> String {
         .collect()
 }
 
-// - Iterators
-
-impl Print for Iter {
-    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        printer.write(match self {
-            Self::Opt => "?",
-            Self::List => "*",
-        })
-    }
-}
-
 // - Variables
 
 impl Print for Var {

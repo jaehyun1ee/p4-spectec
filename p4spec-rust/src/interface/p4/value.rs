@@ -16,7 +16,7 @@ use crate::{
     phrase,
     runtime::{
         types::typ,
-        value::{Value, ValueKind, ValueRef, get, make},
+        value::{Value, ValueKind, get, make},
     },
 };
 
@@ -53,11 +53,11 @@ fn shape(shape_text: &str) -> Rc<Mixop> {
 pub(crate) fn case_value(
     context: &Context,
     shape_text: &str,
-    values: Vec<ValueRef>,
+    values: Vec<Rc<Value>>,
     type_name: &str,
     left: Location,
     right: Location,
-) -> ValueRef {
+) -> Rc<Value> {
     let mixop = shape(shape_text);
     let value_case = Mixop::fill(mixop.as_ref(), values)
         .expect("P4 grammar mixop arity matches its semantic action");
@@ -69,14 +69,14 @@ pub(crate) fn case_value(
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn binary_value(
     context: &Context,
-    left_value: ValueRef,
+    left_value: Rc<Value>,
     operator_shape: &str,
     operator_left: Location,
     operator_right: Location,
-    right_value: ValueRef,
+    right_value: Rc<Value>,
     left: Location,
     right: Location,
-) -> ValueRef {
+) -> Rc<Value> {
     let operator = case_value(
         context,
         operator_shape,
@@ -100,10 +100,10 @@ pub(crate) fn unary_value(
     operator_shape: &str,
     operator_left: Location,
     operator_right: Location,
-    expression: ValueRef,
+    expression: Rc<Value>,
     left: Location,
     right: Location,
-) -> ValueRef {
+) -> Rc<Value> {
     let operator = case_value(
         context,
         operator_shape,
@@ -122,7 +122,7 @@ pub(crate) fn unary_value(
     )
 }
 
-pub(crate) fn retag(value: ValueRef, type_name: &str) -> ValueRef {
+pub(crate) fn retag(value: Rc<Value>, type_name: &str) -> Rc<Value> {
     let typ = named_type(type_name);
     make::retag(value, &typ)
 }
@@ -132,7 +132,7 @@ pub(crate) fn retag(value: ValueRef, type_name: &str) -> ValueRef {
 pub(crate) fn matches<'value>(
     value: &'value Value,
     shape_text: &str,
-) -> Option<Vec<&'value ValueRef>> {
+) -> Option<Vec<&'value Rc<Value>>> {
     let ValueKind::Case(value_case) = &value.node else {
         return None;
     };
@@ -164,7 +164,7 @@ pub fn id_of_name(value: &Value) -> Option<String> {
     None
 }
 
-pub(crate) fn value_at(value: &Value, shape_text: &str, index: usize) -> Option<ValueRef> {
+pub(crate) fn value_at(value: &Value, shape_text: &str, index: usize) -> Option<Rc<Value>> {
     matches(value, shape_text).and_then(|values| values.get(index).map(|value| Rc::clone(value)))
 }
 
@@ -230,7 +230,7 @@ fn has_type_parameters(value: &Value) -> bool {
     matches(value, "`< typeParameterList `>").is_some()
 }
 
-pub(crate) fn declaration_name(value: &Value) -> Option<ValueRef> {
+pub(crate) fn declaration_name(value: &Value) -> Option<Rc<Value>> {
     let cases = [
         ("annotationList CONST type name initializer ';'", 2),
         ("annotationList type `( argumentList `) name ';'", 3),

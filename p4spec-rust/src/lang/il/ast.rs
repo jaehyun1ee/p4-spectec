@@ -11,13 +11,12 @@ use crate::lang::{
     common::{
         self,
         notation::{atom, mixfix::Mixfix, mixop},
-        source::{NotePhrase, Phrase, Span},
+        source::{NotePhrase, Phrase},
     },
-    el,
+    data, el,
     hints::input::InputHint,
     xl::num,
 };
-use crate::yojson::ExternalData;
 
 // Numbers
 
@@ -42,13 +41,7 @@ pub type Mixop = mixop::Mixop;
 
 // Iterators
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum Iter {
-    /// `?`
-    Opt,
-    /// `*`
-    List,
-}
+pub type Iter = common::Iter;
 
 // Variables
 
@@ -61,33 +54,9 @@ pub struct Var {
 
 // Types
 
-pub type Typ = Phrase<TypKind>;
-
-/// Function type signature
-#[derive(Clone, Debug, PartialEq)]
-pub struct FuncTyp {
-    pub tparams: Vec<TParam>,
-    pub typs_params: Vec<Typ>,
-    pub typ_ret: Box<Typ>,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum TypKind {
-    /// `bool`
-    Bool,
-    /// `numtyp`
-    Num(num::Typ),
-    /// `text`
-    Text,
-    /// `id (`<` list(targ, `,`) `>`)?`
-    Var(Id, Vec<Targ>),
-    /// `(` list(typ, `,`) `)`
-    Tuple(Vec<Typ>),
-    /// `typ iter`
-    Iter(Box<Typ>, Iter),
-    /// `<` list(tparam, `,`) `>` `(` list(typ, `,`) `)` `:` typ
-    Func(FuncTyp),
-}
+pub type Typ = data::typ::Typ;
+pub type TypKind = data::typ::TypKind;
+pub type FuncTyp = data::typ::FuncTyp;
 
 // Subtype checks
 
@@ -114,48 +83,17 @@ pub enum DefTypKind {
     Variant(Vec<TypCase>),
 }
 
-pub type TypField = (Atom, Typ);
+pub type TypField = (Phrase<atom::Atom>, Typ);
 pub type TypOrigin = Phrase<TypOriginKind>;
 pub type TypOriginKind = (Id, Vec<Targ>);
 pub type TypCase = (NotTyp, TypOrigin, Vec<Hint>);
 
 // == Values
 
-/// Immutable executable value with its runtime type and source span
-///
-/// Recursive children share their storage so cloning a value is constant-time.
-/// The cached hash accelerates the semantic equality used by runtime caches.
-pub type Value = Rc<ValueNode>;
-
-#[derive(Debug)]
-pub struct ValueNode {
-    pub node: ValueKind,
-    pub note: ValueNote,
-    pub span: Span,
-}
-
-#[derive(Clone, Debug)]
-pub struct ValueNote {
-    pub typ: TypKind,
-    pub(crate) semantic_hash: u64,
-}
-
-#[derive(Clone, Debug)]
-pub enum ValueKind {
-    Bool(bool),
-    Num(Num),
-    Text(Text),
-    Struct(Vec<ValueField>),
-    Case(ValueCase),
-    Tuple(Vec<Value>),
-    Opt(Option<Value>),
-    List(Vec<Value>),
-    Func(Id),
-    Extern(ExternalData),
-}
-
-pub type ValueField = (Atom, Value);
-pub type ValueCase = Mixfix<Value>;
+pub type Value = data::value::Value;
+pub type ValueKind = data::value::ValueKind;
+pub type ValueField = data::value::ValueField;
+pub type ValueCase = data::value::ValueCase;
 
 // Operators
 
@@ -286,7 +224,7 @@ pub enum ParamKind {
 
 // Type parameters
 
-pub type TParam = Phrase<TParamKind>;
+pub type TParam = common::TId;
 pub type TParamKind = IdKind;
 
 // Arguments
@@ -303,7 +241,7 @@ pub enum ArgKind {
 
 // Type arguments
 
-pub type Targ = Phrase<TargKind>;
+pub type Targ = Typ;
 pub type TargKind = TypKind;
 
 // Premises

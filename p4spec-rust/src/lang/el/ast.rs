@@ -24,13 +24,7 @@ pub type Atom = Phrase<atom::Atom>;
 
 // Iterators
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum Iter {
-    /// `?`
-    Opt,
-    /// `*`
-    List,
-}
+pub type Iter = common::Iter;
 
 // Types
 

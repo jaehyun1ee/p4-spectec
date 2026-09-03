@@ -36,7 +36,7 @@ fn test_extraction_rejects_unrelated_values() {
 }
 
 fn find_typed<'a>(value: &'a Value, name: &str) -> Option<&'a Value> {
-    if matches!(&value.note.typ, TypKind::Var(id, _) if id.node == name) {
+    if matches!(&value.note, TypKind::Var(id, _) if id.node == name) {
         return Some(value);
     }
     match &value.node {
