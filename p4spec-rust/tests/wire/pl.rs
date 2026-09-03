@@ -38,9 +38,9 @@ fn exp(kind: Value) -> Value {
     json!({"node": {"it": kind, "note": ["BoolT"], "at": region()}, "hints": hints()})
 }
 
-fn instr(kind: Value, iid: i64, fallthrough: Value) -> Value {
+fn instr(kind: Value, fallthrough: Value) -> Value {
     json!({
-        "node": {"it": kind, "note": {"iid": iid, "fallthrough": fallthrough}, "at": region()},
+        "node": {"it": kind, "note": {"iid": 0, "fallthrough": fallthrough}, "at": region()},
         "hints": hints()
     })
 }
@@ -78,7 +78,6 @@ fn test_whole_spec_roundtrip_preserves_dispatch_and_groups() {
     let signature = json!([phrase(json!(["Seq", [["Arg", typ()]]])), [0]]);
     let returned = instr(
         json!(["TierI", ["ReturnI", exp(json!(["BoolE", true]))]]),
-        2,
         json!(["FallNext"]),
     );
     let group = instr(
@@ -86,17 +85,12 @@ fn test_whole_spec_roundtrip_preserves_dispatch_and_groups() {
             "TierI",
             ["GroupI", id("group"), id("step"), signature, [], [returned]]
         ]),
-        1,
         json!(["FallGroup", id("next")]),
     );
     let row = json!([
         [],
         exp(json!(["BoolE", false])),
-        [instr(
-            json!(["TierI", ["BacktrackI", [[]]]]),
-            3,
-            Value::Null
-        )]
+        [instr(json!(["TierI", ["BacktrackI", [[]]]]), Value::Null)]
     ]);
     let param = phrase(json!(["ExpP", typ(), exp(json!(["BoolE", true]))]));
     let spec = json!([
@@ -112,7 +106,6 @@ fn test_whole_spec_roundtrip_preserves_dispatch_and_groups() {
                 typ(),
                 [instr(
                     json!(["TierI", ["ReturnI", exp(json!(["BoolE", true]))]]),
-                    4,
                     json!(["FallFail"])
                 )],
                 []

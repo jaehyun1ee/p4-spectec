@@ -1,13 +1,6 @@
 //! Structured language model
 
-use std::fmt;
-
-use crate::lang::{
-    common::source::{NotePhrase, Phrase},
-    el,
-    hints::input::InputHint,
-    il,
-};
+use crate::lang::{common::source::Phrase, el, hints::input::InputHint, il};
 
 // Numbers
 
@@ -146,26 +139,7 @@ pub enum Guard {
 
 // Instructions
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Iid(i64);
-
-impl Iid {
-    pub const fn new(value: i64) -> Self {
-        Self(value)
-    }
-
-    pub const fn get(self) -> i64 {
-        self.0
-    }
-}
-
-impl fmt::Display for Iid {
-    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.0.fmt(fmt)
-    }
-}
-
-pub type Instr = NotePhrase<InstrKind, Iid>;
+pub type Instr = Phrase<InstrKind>;
 
 #[derive(Clone, Debug, PartialEq)]
 #[allow(clippy::large_enum_variant)]

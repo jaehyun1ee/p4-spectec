@@ -175,8 +175,6 @@ pub enum Guard {
 
 // Instructions
 
-pub type Iid = sl::ast::Iid;
-
 #[derive(Clone, Debug, PartialEq)]
 pub enum Fallthrough {
     FallGroup(Id),
@@ -185,13 +183,7 @@ pub enum Fallthrough {
     FallFail,
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct InstrNote {
-    pub iid: Iid,
-    pub fallthrough: Option<Fallthrough>,
-}
-
-pub type InstrNode<Tier> = NotePhrase<InstrKind<Tier>, InstrNote>;
+pub type InstrNode<Tier> = NotePhrase<InstrKind<Tier>, Option<Fallthrough>>;
 pub type Instr<Tier> = annot::Annotated<InstrNode<Tier>>;
 
 #[derive(Clone, Debug, PartialEq)]

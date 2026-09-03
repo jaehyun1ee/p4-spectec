@@ -62,10 +62,7 @@ fn group_instr(
     kind: pl::ast::InstrKind<pl::ast::InstrGroup>,
 ) -> pl::ast::Instr<pl::ast::InstrGroup> {
     pl::annot::Annotated {
-        node: p4spec_rust::note_phrase! { node: kind, note: pl::ast::InstrNote {
-            iid: pl::ast::Iid::new(1),
-            fallthrough: None,
-        }, span: span("group-instruction") },
+        node: p4spec_rust::note_phrase! { node: kind, note: None, span: span("group-instruction") },
         hints: pl::annot::Hints::default(),
     }
 }
@@ -74,10 +71,7 @@ fn dispatch_instr(
     kind: pl::ast::InstrKind<pl::ast::InstrDispatch>,
 ) -> pl::ast::Instr<pl::ast::InstrDispatch> {
     pl::annot::Annotated {
-        node: p4spec_rust::note_phrase! { node: kind, note: pl::ast::InstrNote {
-            iid: pl::ast::Iid::new(1),
-            fallthrough: None,
-        }, span: span("dispatch-instruction") },
+        node: p4spec_rust::note_phrase! { node: kind, note: None, span: span("dispatch-instruction") },
         hints: pl::annot::Hints::default(),
     }
 }
@@ -89,12 +83,11 @@ fn test_group_printer_escapes_text_and_omits_annotations_and_fallthrough() {
             exp: text("line\n\"\\"),
         }),
     }));
-    first.node.note.fallthrough = Some(pl::ast::Fallthrough::FallNext);
+    first.node.note = Some(pl::ast::Fallthrough::FallNext);
     first.hints.prose = Some(alter::AlterationHint::Text("first prose".to_owned()));
 
     let mut second = first.clone();
-    second.node.note.iid = pl::ast::Iid::new(99);
-    second.node.note.fallthrough = Some(pl::ast::Fallthrough::FallFail);
+    second.node.note = Some(pl::ast::Fallthrough::FallFail);
     second.node.span = span("other-source");
     second.hints.prose = Some(alter::AlterationHint::Text("other prose".to_owned()));
 
@@ -120,15 +113,12 @@ fn test_shared_control_flow_renders_group_tier_at_nested_level() {
         }))],
         dangle: true,
     }));
-    let mut branch = branch;
-    branch.node.note.iid = pl::ast::Iid::new(42);
-
     assert_eq!(
         Print::to_string(&vec![branch]),
         concat!(
             "1. If (condition), then\n\n",
             "  1. Return value\n\n",
-            "1. Else Dangling#42",
+            "1. Else Dangling",
         )
     );
 }

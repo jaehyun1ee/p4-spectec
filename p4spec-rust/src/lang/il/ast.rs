@@ -151,8 +151,7 @@ pub enum OpTyp {
 
 // Expressions
 
-pub type TypNote = Rc<TypKind>;
-pub type Exp = NotePhrase<ExpKind, TypNote>;
+pub type Exp = NotePhrase<ExpKind, Rc<TypKind>>;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ExpKind {
@@ -238,7 +237,7 @@ pub enum OptPattern {
 
 // Paths
 
-pub type Path = NotePhrase<PathKind, TypNote>;
+pub type Path = NotePhrase<PathKind, Rc<TypKind>>;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum PathKind {

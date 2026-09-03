@@ -202,18 +202,6 @@ impl SyntaxEq for Guard {
     }
 }
 
-impl SyntaxEq for Fallthrough {
-    fn syntax_eq(&self, _other: &Self) -> bool {
-        true
-    }
-}
-
-impl SyntaxEq for InstrNote {
-    fn syntax_eq(&self, _other: &Self) -> bool {
-        true
-    }
-}
-
 // - Instructions
 
 impl<Tier> SyntaxEq for Block<Tier>

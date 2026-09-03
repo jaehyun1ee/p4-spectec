@@ -394,7 +394,7 @@ fn write_instr_with<Tier>(
                 output.write_str("\n\n")?;
                 write_block_with(output, block, tier_printer, level + 1, 0)?;
                 if *dangle {
-                    write!(output, "\n\n{order}Else Dangling#{}", instr.node.note.iid)?;
+                    write!(output, "\n\n{order}Else Dangling")?;
                 }
             }
             Ok(())
@@ -435,7 +435,7 @@ fn write_instr_with<Tier>(
                         output.write_str("\n\n")?;
                         write_block_with(output, block, tier_printer, level + 1, 0)?;
                         if *dangle {
-                            write!(output, "\n\n{order}Else Dangling#{}", instr.node.note.iid)?;
+                            write!(output, "\n\n{order}Else Dangling")?;
                         }
                     }
                     Ok(())
@@ -450,7 +450,7 @@ fn write_instr_with<Tier>(
                 output.write_str("\n\n")?;
                 write_cases_with(output, cases, tier_printer, level + 1)?;
                 if *dangle {
-                    write!(output, "\n\n{order}Else Dangling#{}", instr.node.note.iid)?;
+                    write!(output, "\n\n{order}Else Dangling")?;
                 }
             }
             Ok(())

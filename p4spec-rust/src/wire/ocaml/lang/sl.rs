@@ -154,22 +154,23 @@ fn encode_guard(guard: &Guard) -> Value {
     }
 }
 
-fn decode_iid(value: &Value) -> Result<ast::Iid, DecodeError> {
+fn decode_instr_note(value: &Value) -> Result<(), DecodeError> {
     let object = object(value)?;
-    let iid = integer(field(object, "iid")?)?;
-    Ok(ast::Iid::new(iid))
+    integer(field(object, "iid")?)?;
+    Ok(())
 }
 
-fn encode_iid(iid: &ast::Iid) -> Value {
-    json!({"iid": iid.get()})
+fn encode_instr_note(_note: &()) -> Value {
+    // OCaml still requires an instruction identifier in its wire format.
+    json!({"iid": 0})
 }
 
 fn decode_instr(value: &Value) -> Result<ast::Instr, DecodeError> {
-    source::decode_note_phrase(value, decode_instr_kind, decode_iid)
+    source::decode_note_phrase(value, decode_instr_kind, decode_instr_note)
 }
 
 fn encode_instr(instr: &ast::Instr) -> Value {
-    source::encode_note_phrase(instr, encode_instr_kind, encode_iid)
+    source::encode_note_phrase(instr, encode_instr_kind, encode_instr_note)
 }
 
 fn decode_instr_kind(value: &Value) -> Result<InstrKind, DecodeError> {

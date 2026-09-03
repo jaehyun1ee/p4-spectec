@@ -124,12 +124,6 @@ impl Free for Fallthrough {
     }
 }
 
-impl Free for InstrNote {
-    fn free(&self) -> IdSet {
-        IdSet::new()
-    }
-}
-
 impl<Tier: Free> Free for Block<Tier> {
     fn free(&self) -> IdSet {
         self.as_slice().free()

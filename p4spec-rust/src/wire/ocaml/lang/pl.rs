@@ -486,16 +486,16 @@ fn encode_fallthrough(value: &Fallthrough) -> Value {
     }
 }
 
-fn decode_inote(value: &Value) -> Result<(ast::Iid, Option<Fallthrough>), DecodeError> {
+fn decode_instr_note(value: &Value) -> Result<Option<Fallthrough>, DecodeError> {
     let value = object(value)?;
-    let iid = integer(field(value, "iid")?)?;
-    let iid = ast::Iid::new(iid);
+    integer(field(value, "iid")?)?;
     let fallthrough = decode_option(field(value, "fallthrough")?, decode_fallthrough)?;
-    Ok((iid, fallthrough))
+    Ok(fallthrough)
 }
 
-fn encode_inote(iid: ast::Iid, fallthrough: Option<&Fallthrough>) -> Value {
-    json!({"iid": iid.get(), "fallthrough": encode_option(fallthrough, encode_fallthrough)})
+fn encode_instr_note(fallthrough: &Option<Fallthrough>) -> Value {
+    // OCaml still requires an instruction identifier in its wire format.
+    json!({"iid": 0, "fallthrough": encode_option(fallthrough.as_ref(), encode_fallthrough)})
 }
 
 fn decode_guard(value: &Value) -> Result<Guard, DecodeError> {
@@ -565,10 +565,7 @@ fn decode_instr<T>(
     let node = source::decode_note_phrase(
         field(value, "node")?,
         |value| decode_instr_kind(value, decode_tier),
-        |value| {
-            let (iid, fallthrough) = decode_inote(value)?;
-            Ok(ast::InstrNote { iid, fallthrough })
-        },
+        decode_instr_note,
     )?;
     let hints = decode_hints(field(value, "hints")?)?;
     Ok(annot::Annotated { node, hints })
@@ -576,7 +573,7 @@ fn decode_instr<T>(
 
 fn encode_instr<T>(instr: &ast::Instr<T>, encode_tier: fn(&T) -> Value) -> Value {
     json!({
-        "node": source::encode_note_phrase(&instr.node, |kind| encode_instr_kind(kind, encode_tier), |note| encode_inote(note.iid, note.fallthrough.as_ref())),
+        "node": source::encode_note_phrase(&instr.node, |kind| encode_instr_kind(kind, encode_tier), encode_instr_note),
         "hints": encode_hints(&instr.hints)
     })
 }
