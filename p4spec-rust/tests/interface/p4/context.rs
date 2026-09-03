@@ -1,7 +1,7 @@
 use p4spec_rust::interface::p4::context::{Context, IdentKind, TypeId};
 
 #[test]
-fn scopes_shadow_and_restore_identifier_kinds() {
+fn test_scopes_shadow_and_restore_identifier_kinds() {
     let context = Context::new();
     context.declare_type("T", false).unwrap();
     context.push_scope();
@@ -21,7 +21,7 @@ fn scopes_shadow_and_restore_identifier_kinds() {
 }
 
 #[test]
-fn parent_namespace_classifies_members_without_global_state() {
+fn test_parent_namespace_classifies_members_without_global_state() {
     let context = Context::new();
     context.declare_type("Header", false).unwrap();
     context.push_scope();
@@ -49,7 +49,7 @@ fn parent_namespace_classifies_members_without_global_state() {
 }
 
 #[test]
-fn contexts_are_isolated() {
+fn test_contexts_are_isolated() {
     let context_a = Context::new();
     let context_b = Context::new();
     context_a.declare_type("T", false).unwrap();
@@ -59,4 +59,25 @@ fn contexts_are_isolated() {
         IdentKind::TypeName { .. }
     ));
     assert!(matches!(context_b.get_kind("T"), IdentKind::Ident { .. }));
+}
+
+#[test]
+fn test_go_local_discards_scopes_created_while_locals_are_suspended() {
+    let context = Context::new();
+    context.push_scope();
+    context.declare_type("Local", false).unwrap();
+    context.go_toplevel().unwrap();
+    context.push_scope();
+    context.declare_type("Temporary", false).unwrap();
+
+    context.go_local();
+
+    assert!(matches!(
+        context.get_kind("Local"),
+        IdentKind::TypeName { .. }
+    ));
+    assert!(matches!(
+        context.get_kind("Temporary"),
+        IdentKind::Ident { .. }
+    ));
 }

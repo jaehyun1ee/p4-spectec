@@ -2,9 +2,10 @@
 
 mod fresh;
 pub mod r#match;
-pub mod model;
+mod ops;
 
-pub use fresh::Fresh;
-pub use model::{
-    Value, ValueCase, ValueError, ValueField, ValueKind, ValueRef, ValueTag, get, make,
+pub use crate::lang::il::ast::{
+    Value as ValueRef, ValueCase, ValueField, ValueKind, ValueNode as Value,
 };
+pub use fresh::Fresh;
+pub use ops::{ValueError, ValueTag, get, make};

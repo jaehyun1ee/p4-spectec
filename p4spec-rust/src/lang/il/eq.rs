@@ -76,6 +76,12 @@ impl SyntaxEq for FuncTyp {
 
 // - Values
 
+impl SyntaxEq for ValueNode {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.node.syntax_eq(&other.node)
+    }
+}
+
 impl SyntaxEq for ValueKind {
     fn syntax_eq(&self, other: &Self) -> bool {
         match (self, other) {
@@ -101,7 +107,7 @@ impl SyntaxEq for ValueKind {
                 value_l.syntax_eq(value_r)
             }
             (ValueKind::Opt(None), ValueKind::Opt(None)) => true,
-            (ValueKind::Func(id_l), ValueKind::Func(id_r)) => id_l == id_r,
+            (ValueKind::Func(id_l), ValueKind::Func(id_r)) => id_l.syntax_eq(id_r),
             (ValueKind::Extern(value_l), ValueKind::Extern(value_r)) => value_l == value_r,
             _ => false,
         }

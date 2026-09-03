@@ -1,3 +1,7 @@
+// Parses SpecTec source by entering declaration scopes, building EL phrases,
+// and attaching source spans; for example, `syntax bit = nat` becomes one type
+// definition whose right edge is the `nat` token.
+
 use crate::frontend::{
     ctx::{Context, Location as Loc},
     error::{FrontendError, SyntaxErrorKind},

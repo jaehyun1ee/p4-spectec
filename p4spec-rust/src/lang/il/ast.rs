@@ -1,4 +1,9 @@
-//! Intermediate language model
+//! Intermediate-language syntax and executable values.
+//!
+//! Definitions and expressions carry their stage-specific annotations, while
+//! runtime values use immutable shared nodes so recursive children and cache
+//! keys clone in constant time. For example, cloning a list value shares its
+//! element tree while retaining the list's runtime type and source span.
 
 use std::rc::Rc;
 
@@ -114,19 +119,36 @@ pub type TypOrigin = Phrase<TypOriginKind>;
 pub type TypOriginKind = (Id, Vec<Targ>);
 pub type TypCase = (NotTyp, TypOrigin, Vec<Hint>);
 
-// Values
+// == Values
 
-pub type Value = NotePhrase<ValueKind, TypKind>;
+/// Immutable executable value with its runtime type and source span
+///
+/// Recursive children share their storage so cloning a value is constant-time.
+/// The cached hash accelerates the semantic equality used by runtime caches.
+pub type Value = Rc<ValueNode>;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Debug)]
+pub struct ValueNode {
+    pub node: ValueKind,
+    pub note: ValueNote,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug)]
+pub struct ValueNote {
+    pub typ: TypKind,
+    pub(crate) semantic_hash: u64,
+}
+
+#[derive(Clone, Debug)]
 pub enum ValueKind {
     Bool(bool),
     Num(Num),
     Text(Text),
     Struct(Vec<ValueField>),
-    Case(Box<ValueCase>),
+    Case(ValueCase),
     Tuple(Vec<Value>),
-    Opt(Option<Box<Value>>),
+    Opt(Option<Value>),
     List(Vec<Value>),
     Func(Id),
     Extern(ExternalData),

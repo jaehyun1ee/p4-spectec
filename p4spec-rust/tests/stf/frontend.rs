@@ -6,7 +6,7 @@ use p4spec_rust::stf::{
 use std::path::{Path, PathBuf};
 
 #[test]
-fn parses_commands_in_source_order() {
+fn test_parses_commands_in_source_order() {
     let source = r#"
         packet 1 001122aB
         expect 2 0011**ab$
@@ -58,7 +58,7 @@ fn parses_commands_in_source_order() {
 }
 
 #[test]
-fn parses_packet_wildcards_and_comments() {
+fn test_parses_packet_wildcards_and_comments() {
     let source = "# generated\nexpect 0 0a**??ff\nno_packet\n";
     let statements = parse::parse_str("wildcards.stf", source).expect("valid STF");
     assert_eq!(
@@ -69,14 +69,26 @@ fn parses_packet_wildcards_and_comments() {
 }
 
 #[test]
-fn reports_filename_line_and_column() {
+fn test_reports_filename_line_and_column() {
     let error = parse::parse_str("bad.stf", "packet port nope\n").unwrap_err();
     let rendered = error.to_string();
     assert!(rendered.contains("bad.stf:1."), "{rendered}");
 }
 
 #[test]
-fn rejects_digits_outside_the_selected_radix() {
+fn test_rejects_priorities_outside_the_ocaml_integer_range() {
+    let source = "add table 4611686018427387904 field:1 action()\n";
+
+    let error = parse::parse_str("priority.stf", source).expect_err("priority overflow");
+
+    assert!(matches!(
+        error.kind,
+        p4spec_rust::stf::error::StfErrorKind::InvalidPriority(_)
+    ));
+}
+
+#[test]
+fn test_rejects_digits_outside_the_selected_radix() {
     for number in ["0b102", "12b", "0x0g"] {
         let source = format!("register_read r {number}\n");
         let error = parse::parse_str("number.stf", &source).expect_err(number);
@@ -86,7 +98,7 @@ fn rejects_digits_outside_the_selected_radix() {
 }
 
 #[test]
-fn transforms_names_matches_and_actions() {
+fn test_transforms_names_matches_and_actions() {
     assert_eq!(
         transform::rewrite_name_prefix("pipe0.tbl", &["pipe"], "ingress"),
         "ingress.tbl"
@@ -106,7 +118,7 @@ fn transforms_names_matches_and_actions() {
 }
 
 #[test]
-fn compares_wildcard_packets_and_prints_statements() {
+fn test_compares_wildcard_packets_and_prints_statements() {
     assert!(compare::packet_matches("a01f", "a**f"));
     assert!(!compare::packet_matches("a01f", "a*f"));
 
@@ -132,7 +144,7 @@ fn compares_wildcard_packets_and_prints_statements() {
 }
 
 #[test]
-fn parses_repository_stf_corpus() {
+fn test_parses_repository_stf_corpus() {
     let repository = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
     let mut files = Vec::new();
     collect_stf(&repository.join("p4spec/test"), &mut files);

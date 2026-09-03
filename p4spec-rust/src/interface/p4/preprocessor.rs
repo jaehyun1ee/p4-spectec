@@ -1,3 +1,9 @@
+//! Invoke the configured C preprocessor for P4 file inputs.
+//!
+//! Include directories and the source path are passed to `cc -E`; stdout
+//! becomes lexer input and a nonzero status becomes a located P4 error. A file
+//! containing `#include <core.p4>` is therefore expanded before tokenization.
+
 use std::{
     path::{Path, PathBuf},
     process::Command,
@@ -15,7 +21,8 @@ pub fn preprocess(includes: &[PathBuf], path: impl AsRef<Path>) -> Result<String
     }
     command.args(["-undef", "-nostdinc", "-E", "-x", "c"]);
     command.arg(path);
-    let output = command.output().map_err(|error| {
+    let output = command.output();
+    let output = output.map_err(|error| {
         let kind = P4ErrorKind::Preprocessor {
             status: None,
             stderr: error.to_string(),
@@ -29,7 +36,8 @@ pub fn preprocess(includes: &[PathBuf], path: impl AsRef<Path>) -> Result<String
         };
         return Err(P4Error::new(kind, file_span(path)));
     }
-    String::from_utf8(output.stdout).map_err(|error| {
+    let source = String::from_utf8(output.stdout);
+    source.map_err(|error| {
         let kind = P4ErrorKind::Preprocessor {
             status: output.status.code(),
             stderr: error.to_string(),

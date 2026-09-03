@@ -1,8 +1,13 @@
+//! Fixed-arity argument extraction for builtin calls.
+//!
+//! Each helper returns borrowed arguments on an exact match and a located
+//! arity error otherwise; for example, `two(span, &[a, b])` returns `(a, b)`.
+
 use crate::lang::common::source::Span;
 
 use super::BuiltinError;
 
-// Shorthand for extracting type arguments and values
+// == Shorthand for extracting type arguments and values
 
 pub fn zero<T>(span: &Span, values: &[T]) -> Result<(), BuiltinError> {
     match values {

@@ -9,6 +9,7 @@ use crate::lang::{
     il::ast::{self, *},
     xl::{bool, num},
 };
+use crate::runtime::value::make;
 use crate::yojson::ExternalData;
 
 use super::{
@@ -576,11 +577,10 @@ fn decode_yojson_mixfix(value: &yojson::Value) -> Result<ast::ValueCase, DecodeE
 
 fn decode_yojson_value(value: &yojson::Value) -> Result<ast::Value, DecodeError> {
     let fields = yojson_assoc(value)?;
-    Ok(crate::note_phrase! {
-        node: decode_yojson_value_kind(yojson_field(fields, "it")?)?,
-        note: decode_vnote(&standard_json(yojson_field(fields, "note")?)?)?,
-        span: source::decode_region(&standard_json(yojson_field(fields, "at")?)?)?,
-    })
+    let node = decode_yojson_value_kind(yojson_field(fields, "it")?)?;
+    let typ = decode_vnote(&standard_json(yojson_field(fields, "note")?)?)?;
+    let span = source::decode_region(&standard_json(yojson_field(fields, "at")?)?)?;
+    Ok(make::new(node, typ, span))
 }
 
 fn decode_yojson_value_kind(value: &yojson::Value) -> Result<ValueKind, DecodeError> {
@@ -601,7 +601,7 @@ fn decode_yojson_value_kind(value: &yojson::Value) -> Result<ValueKind, DecodeEr
                 })
                 .collect::<Result<_, _>>()?,
         )),
-        ("CaseV", [case]) => Ok(ValueKind::Case(Box::new(decode_yojson_mixfix(case)?))),
+        ("CaseV", [case]) => Ok(ValueKind::Case(decode_yojson_mixfix(case)?)),
         ("TupleV", [values]) => Ok(ValueKind::Tuple(
             yojson_list(values)?
                 .iter()
@@ -609,7 +609,7 @@ fn decode_yojson_value_kind(value: &yojson::Value) -> Result<ValueKind, DecodeEr
                 .collect::<Result<_, _>>()?,
         )),
         ("OptV", [yojson::Value::Null]) => Ok(ValueKind::Opt(None)),
-        ("OptV", [value]) => Ok(ValueKind::Opt(Some(Box::new(decode_yojson_value(value)?)))),
+        ("OptV", [value]) => Ok(ValueKind::Opt(Some(decode_yojson_value(value)?))),
         ("ListV", [values]) => Ok(ValueKind::List(
             yojson_list(values)?
                 .iter()
@@ -628,7 +628,11 @@ fn decode_yojson_value_kind(value: &yojson::Value) -> Result<ValueKind, DecodeEr
 }
 
 fn decode_value(value: &Value) -> Result<ast::Value, DecodeError> {
-    source::decode_note_phrase(value, decode_value_kind, decode_vnote)
+    let object = object(value)?;
+    let node = decode_value_kind(field(object, "it")?)?;
+    let typ = decode_vnote(field(object, "note")?)?;
+    let span = source::decode_region(field(object, "at")?)?;
+    Ok(make::new(node, typ, span))
 }
 
 fn decode_value_kind(value: &Value) -> Result<ValueKind, DecodeError> {
@@ -644,14 +648,9 @@ fn decode_value_kind(value: &Value) -> Result<ValueKind, DecodeError> {
                 _ => Err(DecodeError::Expected("IL value field pair")),
             },
         )?)),
-        ("CaseV", [case]) => Ok(ValueKind::Case(Box::new(mixfix::decode(
-            case,
-            decode_value,
-        )?))),
+        ("CaseV", [case]) => Ok(ValueKind::Case(mixfix::decode(case, decode_value)?)),
         ("TupleV", [values]) => Ok(ValueKind::Tuple(decode_list(values, decode_value)?)),
-        ("OptV", [value]) => Ok(ValueKind::Opt(
-            decode_option(value, decode_value)?.map(Box::new),
-        )),
+        ("OptV", [value]) => Ok(ValueKind::Opt(decode_option(value, decode_value)?)),
         ("ListV", [values]) => Ok(ValueKind::List(decode_list(values, decode_value)?)),
         ("FuncV", [id]) => Ok(ValueKind::Func(decode_id(id)?)),
         ("ExternV", [value]) => Ok(ValueKind::Extern(decode_external(value))),
@@ -705,7 +704,7 @@ impl ValueEncoder {
             ("it".to_owned(), kind),
             (
                 "note".to_owned(),
-                yojson::from_serde_json(&self.encode_vnote(&value.note)),
+                yojson::from_serde_json(&self.encode_vnote(&value.note.typ)),
             ),
             (
                 "at".to_owned(),
@@ -758,7 +757,7 @@ impl ValueEncoder {
             ValueKind::Opt(value) => vec![
                 yojson::Value::String("OptV".to_owned()),
                 value
-                    .as_deref()
+                    .as_ref()
                     .map(|value| self.encode_yojson_value(value))
                     .unwrap_or(yojson::Value::Null),
             ],
@@ -787,7 +786,7 @@ impl ValueEncoder {
         let kind = self.encode_value_kind(&value.node)?;
         Ok(json!({
             "it": kind,
-            "note": self.encode_vnote(&value.note),
+            "note": self.encode_vnote(&value.note.typ),
             "at": source::encode_region(&value.span),
         }))
     }

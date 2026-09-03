@@ -1,3 +1,10 @@
+//! Render runtime values back to P4 surface syntax.
+//!
+//! The unparser collects `@print` hints from one specification IR, recursively
+//! renders each runtime value, and applies a matching hint before falling back
+//! to its mixfix shape. For example, a case carrying an infix `+` hint renders
+//! its two arguments as `left + right`.
+
 use std::collections::HashMap;
 
 use thiserror::Error;
@@ -16,6 +23,8 @@ use crate::{
 };
 
 type CaseId = (String, Mixop);
+
+// == Unparser and errors
 
 #[derive(Clone, Debug, Default)]
 pub struct P4Unparser {
@@ -37,46 +46,46 @@ impl P4Unparser {
         Self::default()
     }
 
-    pub fn from_al_spec(spec: &[al::ast::Def]) -> Self {
+    pub fn from_al_spec(spec_al: &[al::ast::Def]) -> Self {
         let mut hints = HashMap::new();
-        for definition in spec {
-            let al::ast::DefKind::Typ(type_definition) = &definition.node else {
+        for definition_al in spec_al {
+            let al::ast::DefKind::Typ(type_definition_al) = &definition_al.node else {
                 continue;
             };
             insert_case_hints(
                 &mut hints,
-                &type_definition.id.node,
-                &type_definition.def_typ,
+                &type_definition_al.id.node,
+                &type_definition_al.def_typ,
             );
         }
         Self { hints }
     }
 
-    pub fn from_sl_spec(spec: &[sl::ast::Def]) -> Self {
+    pub fn from_sl_spec(spec_sl: &[sl::ast::Def]) -> Self {
         let mut hints = HashMap::new();
-        for definition in spec {
-            let sl::ast::DefKind::Typ(type_definition) = &definition.node else {
+        for definition_sl in spec_sl {
+            let sl::ast::DefKind::Typ(type_definition_sl) = &definition_sl.node else {
                 continue;
             };
             insert_case_hints(
                 &mut hints,
-                &type_definition.id.node,
-                &type_definition.def_typ,
+                &type_definition_sl.id.node,
+                &type_definition_sl.def_typ,
             );
         }
         Self { hints }
     }
 
-    pub fn from_pl_spec(spec: &[pl::ast::Def]) -> Self {
+    pub fn from_pl_spec(spec_pl: &[pl::ast::Def]) -> Self {
         let mut hints = HashMap::new();
-        for definition in spec {
-            let pl::ast::DefKind::Typ(type_definition) = &definition.node.node else {
+        for definition_pl in spec_pl {
+            let pl::ast::DefKind::Typ(type_definition_pl) = &definition_pl.node.node else {
                 continue;
             };
             insert_case_hints(
                 &mut hints,
-                &type_definition.id.node,
-                &type_definition.def_typ,
+                &type_definition_pl.id.node,
+                &type_definition_pl.def_typ,
             );
         }
         Self { hints }
@@ -102,14 +111,17 @@ impl P4Unparser {
     }
 
     pub fn render(&self, value: &Value) -> Result<String, P4UnparseError> {
-        match &value.kind {
+        match &value.node {
             ValueKind::Bool(value) => Ok(value.to_string()),
             ValueKind::Num(Number::Nat(value)) => Ok(value.to_string()),
             ValueKind::Num(Number::Int(value)) => Ok(value.to_string()),
             ValueKind::Text(value) => Ok(escape_text(value)),
             ValueKind::Struct(_) => Err(P4UnparseError::UnsupportedValue("Struct")),
-            ValueKind::Case(value_case) => self.render_case(&value.typ, value_case),
-            ValueKind::Tuple(values) => Ok(format!("({})", self.render_values(values, ", ")?)),
+            ValueKind::Case(value_case) => self.render_case(&value.note.typ, value_case),
+            ValueKind::Tuple(values) => {
+                let rendered = self.render_values(values, ", ")?;
+                Ok(format!("({rendered})"))
+            }
             ValueKind::Opt(Some(value)) => self.render(value),
             ValueKind::Opt(None) => Ok(String::new()),
             ValueKind::List(values) => self.render_values(values, " "),
@@ -153,6 +165,8 @@ impl P4Unparser {
     }
 }
 
+// == Hint collection
+
 fn insert_case_hints(
     hints: &mut HashMap<CaseId, AlterationHint>,
     type_id: &str,
@@ -174,6 +188,8 @@ fn insert_case_hints(
 
 struct ValueRenderer<'a>(&'a P4Unparser);
 
+// == Print-hint rendering
+
 impl Renderer<&ValueRef> for ValueRenderer<'_> {
     type Output = Result<String, P4UnparseError>;
 
@@ -190,9 +206,8 @@ impl Renderer<&ValueRef> for ValueRenderer<'_> {
     }
 
     fn join(&self, items: Vec<Self::Output>) -> Self::Output {
+        let items = items.into_iter().collect::<Result<Vec<_>, _>>()?;
         Ok(items
-            .into_iter()
-            .collect::<Result<Vec<_>, _>>()?
             .into_iter()
             .filter(|item| !item.is_empty())
             .collect::<Vec<_>>()
@@ -200,7 +215,9 @@ impl Renderer<&ValueRef> for ValueRenderer<'_> {
     }
 
     fn fuse(&self, output_l: Self::Output, output_r: Self::Output) -> Self::Output {
-        Ok(output_l? + &output_r?)
+        let output_l = output_l?;
+        let output_r = output_r?;
+        Ok(output_l + &output_r)
     }
 
     fn other(&self, exp: &crate::lang::el::ast::Exp) -> Self::Output {
@@ -218,6 +235,8 @@ fn render_atom(atom: &Atom) -> String {
         _ => atom.render().to_ascii_lowercase(),
     }
 }
+
+// == Text escaping
 
 fn escape_text(text: &str) -> String {
     text.chars().fold(String::new(), |mut escaped, character| {

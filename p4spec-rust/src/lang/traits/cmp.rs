@@ -1,6 +1,6 @@
 //! Syntax comparison shared across language stages
 
-use std::cmp::Ordering;
+use std::{cmp::Ordering, rc::Rc};
 
 use crate::lang::common::source::NotePhrase;
 
@@ -45,5 +45,11 @@ impl SyntaxCmp for String {
 impl<T: SyntaxCmp, N> SyntaxCmp for NotePhrase<T, N> {
     fn syntax_cmp(&self, other: &Self) -> Ordering {
         self.node.syntax_cmp(&other.node)
+    }
+}
+
+impl<T: SyntaxCmp + ?Sized> SyntaxCmp for Rc<T> {
+    fn syntax_cmp(&self, other: &Self) -> Ordering {
+        self.as_ref().syntax_cmp(other.as_ref())
     }
 }

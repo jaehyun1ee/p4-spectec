@@ -1,9 +1,17 @@
+//! Contracts between the specification runner and host extern implementations.
+//!
+//! An extern can call back into specification functions through `SpecCall`,
+//! return host results, and expose a checkpoint for side-effect detection. The
+//! null implementation reports a located configuration error for every call.
+
 use thiserror::Error;
 
 use crate::{
     lang::{common::source::Span, il::ast::Typ},
     runtime::value::ValueRef,
 };
+
+// == Extern errors
 
 #[derive(Clone, Debug, Error, Eq, PartialEq)]
 pub enum ExternErrorKind {
@@ -19,6 +27,8 @@ pub struct ExternError {
     pub kind: ExternErrorKind,
     pub span: Span,
 }
+
+// == Interpreter callback and extern contracts
 
 pub trait SpecCall {
     fn eval_func(
@@ -55,6 +65,8 @@ pub trait Extern {
 
     fn clear(&mut self);
 }
+
+// == Null implementation
 
 pub struct NullExtern;
 

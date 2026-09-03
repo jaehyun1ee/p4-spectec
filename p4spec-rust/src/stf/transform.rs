@@ -1,6 +1,12 @@
 //! Target-specific normalizations used between STF parsing and simulation.
+//!
+//! Public transforms rewrite qualified-name components, validity markers, and
+//! action qualification before simulation. For example, `hdr.$valid$` becomes
+//! `hdr.isValid()`.
 
 use super::ast::{Action, Match};
+
+// == Public transforms
 
 /// Rewrites the first qualified-name segment when it contains one of `substrings`.
 pub fn rewrite_name_prefix(name: &str, substrings: &[&str], replacement: &str) -> String {
@@ -45,6 +51,8 @@ pub fn transform_action(mut action: Action) -> Action {
     action.name = unqualify_action(&action.name);
     action
 }
+
+// == Case-insensitive string helpers
 
 fn contains_ignore_ascii_case(value: &str, pattern: &str) -> bool {
     value

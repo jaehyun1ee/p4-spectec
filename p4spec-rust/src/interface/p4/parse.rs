@@ -1,3 +1,9 @@
+//! Entry points for preprocessing and parsing P4 into runtime values.
+//!
+//! `parse_file` preprocesses includes, the lexer classifies tokens with a fresh
+//! context, and LALRPOP builds the mixfix value tree. For example, parsing an
+//! empty source yields the grammar's empty `p4program` case value.
+
 use std::{
     path::{Path, PathBuf},
     rc::Rc,
@@ -19,6 +25,8 @@ use super::{
     tokens::parser_tokens,
 };
 
+// == Entry points
+
 /// Parses an already-preprocessed P4 source string.
 pub fn parse_string(path: impl AsRef<Path>, source: &str) -> Result<ValueRef, P4Error> {
     let file: Rc<str> = Rc::from(path.as_ref().to_string_lossy().into_owned());
@@ -26,9 +34,8 @@ pub fn parse_string(path: impl AsRef<Path>, source: &str) -> Result<ValueRef, P4
     let lexer = Lexer::new(Rc::clone(&file), source, Rc::clone(&context));
     let tokens = parser_tokens(context.as_ref(), lexer);
 
-    p4programParser::new()
-        .parse(context.as_ref(), tokens)
-        .map_err(|error| syntax_error(context.as_ref(), file, error))
+    let result = p4programParser::new().parse(context.as_ref(), tokens);
+    result.map_err(|error| syntax_error(context.as_ref(), file, error))
 }
 
 /// Preprocesses and parses a P4 source file.
@@ -37,6 +44,8 @@ pub fn parse_file(includes: &[PathBuf], path: impl AsRef<Path>) -> Result<ValueR
     let source = preprocess(includes, path)?;
     parse_string(path, &source)
 }
+
+// == Error translation
 
 fn syntax_error(
     context: &Context,

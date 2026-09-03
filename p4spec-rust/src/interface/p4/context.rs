@@ -1,3 +1,11 @@
+//! Mutable name-resolution context used while parsing P4.
+//!
+//! The parser keeps a global scope followed by nested local scopes.  A
+//! top-level-only grammar production temporarily moves the local scopes aside,
+//! then restores them without copying their namespace maps.  For example, a
+//! declaration parsed inside a control can inspect the global type namespace
+//! and then resume resolving the control's parameters.
+
 use std::{
     cell::{Cell, RefCell},
     collections::BTreeMap,
@@ -6,6 +14,8 @@ use std::{
 use crate::lang::common::source::{Position, Span};
 
 use super::error::ContextError;
+
+// == Names and scopes
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct Location(usize);
@@ -33,18 +43,20 @@ pub enum IdentKind {
 
 pub struct Context {
     scopes: RefCell<Vec<Namespace>>,
-    backup: RefCell<Vec<Namespace>>,
+    suspended_scopes: RefCell<Vec<Namespace>>,
     previous_id: RefCell<Option<String>>,
     parent_namespace: RefCell<Option<Namespace>>,
     positions: RefCell<Vec<Position>>,
     template_expected: Cell<bool>,
 }
 
+// == Context operations
+
 impl Context {
     pub fn new() -> Self {
         Self {
             scopes: RefCell::new(vec![Namespace::new()]),
-            backup: RefCell::new(Vec::new()),
+            suspended_scopes: RefCell::new(Vec::new()),
             previous_id: RefCell::new(None),
             parent_namespace: RefCell::new(None),
             positions: RefCell::new(Vec::new()),
@@ -54,7 +66,7 @@ impl Context {
 
     pub fn reset(&self) {
         *self.scopes.borrow_mut() = vec![Namespace::new()];
-        self.backup.borrow_mut().clear();
+        self.suspended_scopes.borrow_mut().clear();
         self.previous_id.borrow_mut().take();
         self.parent_namespace.borrow_mut().take();
         self.positions.borrow_mut().clear();
@@ -132,18 +144,19 @@ impl Context {
     }
 
     pub fn go_toplevel(&self) -> Result<(), ContextError> {
-        let scopes = self.scopes.borrow().clone();
-        let global = scopes.first().cloned().ok_or(ContextError::MissingScope)?;
-        *self.backup.borrow_mut() = scopes;
-        *self.scopes.borrow_mut() = vec![global];
+        let mut scopes = self.scopes.borrow_mut();
+        if scopes.is_empty() {
+            return Err(ContextError::MissingScope);
+        }
+        *self.suspended_scopes.borrow_mut() = scopes.split_off(1);
         Ok(())
     }
 
     pub fn go_local(&self) {
-        let backup = self.backup.borrow().clone();
-        if !backup.is_empty() {
-            *self.scopes.borrow_mut() = backup;
-        }
+        let mut suspended_scopes = self.suspended_scopes.borrow_mut();
+        let mut scopes = self.scopes.borrow_mut();
+        scopes.truncate(1);
+        scopes.append(&mut suspended_scopes);
     }
 
     pub fn set_type_namespace(&self, id: &str, namespace: Namespace) {
@@ -205,6 +218,8 @@ impl Context {
         self.template_expected.replace(false)
     }
 }
+
+// == Lookup helpers
 
 impl Default for Context {
     fn default() -> Self {

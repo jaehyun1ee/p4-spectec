@@ -1,3 +1,10 @@
+//! Construction, semantic comparison, hashing, and projection of IL values.
+//!
+//! Constructors allocate the immutable value node defined in the IL AST and
+//! cache its semantic hash. Comparisons ignore types and source spans while
+//! recursing through payloads, so equal `true` values from two files are the
+//! same cache key.
+
 use std::{
     cmp::Ordering,
     hash::{DefaultHasher, Hash, Hasher},
@@ -8,39 +15,20 @@ use thiserror::Error;
 
 use crate::{
     lang::{
-        common::{notation::mixfix::Mixfix, source::Span},
-        il::ast::{Atom, Id, TParam, Typ, TypKind},
+        common::source::Span,
+        il::ast::{
+            Id, TParam, Typ, TypKind, ValueCase, ValueField, ValueKind, ValueNode, ValueNote,
+        },
         xl::num::{self, Number},
     },
     runtime::types::typ,
     yojson::ExternalData,
 };
 
-pub type ValueRef = Rc<Value>;
-pub type ValueField = (Atom, ValueRef);
-pub type ValueCase = Mixfix<ValueRef>;
+type ValueRef = crate::lang::il::ast::Value;
+type Value = ValueNode;
 
-#[derive(Debug)]
-pub struct Value {
-    pub kind: ValueKind,
-    pub typ: TypKind,
-    pub span: Span,
-    semantic_hash: u64,
-}
-
-#[derive(Clone, Debug)]
-pub enum ValueKind {
-    Bool(bool),
-    Num(Number),
-    Text(String),
-    Struct(Vec<ValueField>),
-    Case(ValueCase),
-    Tuple(Vec<ValueRef>),
-    Opt(Option<ValueRef>),
-    List(Vec<ValueRef>),
-    Func(Id),
-    Extern(ExternalData),
-}
+// == Value kinds
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ValueTag {
@@ -108,7 +96,9 @@ fn compare_float(float_l: f64, float_r: f64) -> Ordering {
         (true, true) => Ordering::Equal,
         (true, false) => Ordering::Less,
         (false, true) => Ordering::Greater,
-        (false, false) => float_l.total_cmp(&float_r),
+        (false, false) => float_l
+            .partial_cmp(&float_r)
+            .expect("non-NaN floats have a total order"),
     }
 }
 
@@ -183,12 +173,12 @@ fn compare_external(value_l: &ExternalData, value_r: &ExternalData) -> Ordering 
     }
 }
 
-impl Ord for Value {
+impl Ord for ValueNode {
     fn cmp(&self, other: &Self) -> Ordering {
         if std::ptr::eq(self, other) {
             return Ordering::Equal;
         }
-        match (&self.kind, &other.kind) {
+        match (&self.node, &other.node) {
             (ValueKind::Bool(value_l), ValueKind::Bool(value_r)) => value_l.cmp(value_r),
             (ValueKind::Num(value_l), ValueKind::Num(value_r)) => num::compare(value_l, value_r),
             (ValueKind::Text(value_l), ValueKind::Text(value_r)) => value_l.cmp(value_r),
@@ -203,24 +193,26 @@ impl Ord for Value {
             (ValueKind::Extern(value_l), ValueKind::Extern(value_r)) => {
                 compare_external(value_l, value_r)
             }
-            _ => kind_rank(&self.kind).cmp(&kind_rank(&other.kind)),
+            _ => kind_rank(&self.node).cmp(&kind_rank(&other.node)),
         }
     }
 }
 
-impl PartialOrd for Value {
+impl PartialOrd for ValueNode {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl PartialEq for Value {
+impl PartialEq for ValueNode {
     fn eq(&self, other: &Self) -> bool {
-        self.semantic_hash == other.semantic_hash && self.cmp(other) == Ordering::Equal
+        self.note.semantic_hash == other.note.semantic_hash && self.cmp(other) == Ordering::Equal
     }
 }
 
-impl Eq for Value {}
+impl Eq for ValueNode {}
+
+// == Semantic hashing
 
 fn hash_external<H: Hasher>(value: &ExternalData, state: &mut H) {
     external_rank(value).hash(state);
@@ -289,9 +281,9 @@ fn semantic_hash(kind: &ValueKind) -> u64 {
     state.finish()
 }
 
-impl Hash for Value {
+impl Hash for ValueNode {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        state.write_u64(self.semantic_hash);
+        state.write_u64(self.note.semantic_hash);
     }
 }
 
@@ -308,29 +300,38 @@ pub enum ValueError {
     ExpectedCount { expected: usize, actual: usize },
 }
 
+// == Constructors
+
 pub mod make {
     use super::*;
 
     pub fn new(kind: ValueKind, typ: TypKind, span: Span) -> ValueRef {
         let semantic_hash = semantic_hash(&kind);
-        Rc::new(Value {
-            kind,
-            typ,
+        Rc::new(ValueNode {
+            node: kind,
+            note: ValueNote { typ, semantic_hash },
             span,
-            semantic_hash,
         })
     }
 
     pub fn bool(value: bool, span: Span) -> ValueRef {
-        new(ValueKind::Bool(value), typ::bool().node, span)
+        let kind = ValueKind::Bool(value);
+        let typ = typ::bool().node;
+        new(kind, typ, span)
     }
 
     pub fn nat(value: num::Natural, span: Span) -> ValueRef {
-        new(ValueKind::Num(Number::Nat(value)), typ::nat().node, span)
+        let number = Number::Nat(value);
+        let kind = ValueKind::Num(number);
+        let typ = typ::nat().node;
+        new(kind, typ, span)
     }
 
     pub fn int(value: num_bigint::BigInt, span: Span) -> ValueRef {
-        new(ValueKind::Num(Number::Int(value)), typ::int().node, span)
+        let number = Number::Int(value);
+        let kind = ValueKind::Num(number);
+        let typ = typ::int().node;
+        new(kind, typ, span)
     }
 
     pub fn num(value: Number, span: Span) -> ValueRef {
@@ -341,27 +342,39 @@ pub mod make {
     }
 
     pub fn text(value: String, span: Span) -> ValueRef {
-        new(ValueKind::Text(value), typ::text().node, span)
+        let kind = ValueKind::Text(value);
+        let typ = typ::text().node;
+        new(kind, typ, span)
     }
 
     pub fn structure(typ: &Typ, fields: Vec<ValueField>, span: Span) -> ValueRef {
-        new(ValueKind::Struct(fields), typ.node.clone(), span)
+        let kind = ValueKind::Struct(fields);
+        let typ = typ.node.clone();
+        new(kind, typ, span)
     }
 
     pub fn case(typ: &Typ, value_case: ValueCase, span: Span) -> ValueRef {
-        new(ValueKind::Case(value_case), typ.node.clone(), span)
+        let kind = ValueKind::Case(value_case);
+        let typ = typ.node.clone();
+        new(kind, typ, span)
     }
 
     pub fn tuple(typ: &Typ, values: Vec<ValueRef>, span: Span) -> ValueRef {
-        new(ValueKind::Tuple(values), typ.node.clone(), span)
+        let kind = ValueKind::Tuple(values);
+        let typ = typ.node.clone();
+        new(kind, typ, span)
     }
 
     pub fn opt(typ: &Typ, value: Option<ValueRef>, span: Span) -> ValueRef {
-        new(ValueKind::Opt(value), typ.node.clone(), span)
+        let kind = ValueKind::Opt(value);
+        let typ = typ.node.clone();
+        new(kind, typ, span)
     }
 
     pub fn list(typ: &Typ, values: Vec<ValueRef>, span: Span) -> ValueRef {
-        new(ValueKind::List(values), typ.node.clone(), span)
+        let kind = ValueKind::List(values);
+        let typ = typ.node.clone();
+        new(kind, typ, span)
     }
 
     pub fn func(
@@ -372,17 +385,28 @@ pub mod make {
         span: Span,
     ) -> ValueRef {
         let typ = typ::func(tparams, typs_params, typ_ret).node;
-        new(ValueKind::Func(id), typ, span)
+        let kind = ValueKind::Func(id);
+        new(kind, typ, span)
     }
 
     pub fn external(typ: &Typ, value: ExternalData, span: Span) -> ValueRef {
-        new(ValueKind::Extern(value), typ.node.clone(), span)
+        let kind = ValueKind::Extern(value);
+        let typ = typ.node.clone();
+        new(kind, typ, span)
     }
 
-    pub fn retag(value: &Value, typ: &Typ) -> ValueRef {
-        new(value.kind.clone(), typ.node.clone(), value.span.clone())
+    pub fn retag(value: ValueRef, typ: &Typ) -> ValueRef {
+        match Rc::try_unwrap(value) {
+            Ok(mut value) => {
+                value.note.typ = typ.node.clone();
+                Rc::new(value)
+            }
+            Err(value) => new(value.node.clone(), typ.node.clone(), value.span.clone()),
+        }
     }
 }
+
+// == Projections
 
 pub mod get {
     use super::*;
@@ -390,75 +414,75 @@ pub mod get {
     fn unexpected(value: &Value, expected: ValueTag) -> ValueError {
         ValueError::UnexpectedKind {
             expected,
-            actual: value.kind.tag(),
+            actual: value.node.tag(),
         }
     }
 
     pub fn bool(value: &Value) -> Result<bool, ValueError> {
-        match &value.kind {
+        match &value.node {
             ValueKind::Bool(value) => Ok(*value),
             _ => Err(unexpected(value, ValueTag::Bool)),
         }
     }
 
     pub fn num(value: &Value) -> Result<&Number, ValueError> {
-        match &value.kind {
+        match &value.node {
             ValueKind::Num(value) => Ok(value),
             _ => Err(unexpected(value, ValueTag::Num)),
         }
     }
 
     pub fn text(value: &Value) -> Result<&str, ValueError> {
-        match &value.kind {
+        match &value.node {
             ValueKind::Text(value) => Ok(value),
             _ => Err(unexpected(value, ValueTag::Text)),
         }
     }
 
     pub fn structure(value: &Value) -> Result<&[ValueField], ValueError> {
-        match &value.kind {
+        match &value.node {
             ValueKind::Struct(fields) => Ok(fields),
             _ => Err(unexpected(value, ValueTag::Struct)),
         }
     }
 
     pub fn case(value: &Value) -> Result<&ValueCase, ValueError> {
-        match &value.kind {
+        match &value.node {
             ValueKind::Case(value_case) => Ok(value_case),
             _ => Err(unexpected(value, ValueTag::Case)),
         }
     }
 
     pub fn tuple(value: &Value) -> Result<&[ValueRef], ValueError> {
-        match &value.kind {
+        match &value.node {
             ValueKind::Tuple(values) => Ok(values),
             _ => Err(unexpected(value, ValueTag::Tuple)),
         }
     }
 
     pub fn opt(value: &Value) -> Result<Option<&ValueRef>, ValueError> {
-        match &value.kind {
+        match &value.node {
             ValueKind::Opt(value) => Ok(value.as_ref()),
             _ => Err(unexpected(value, ValueTag::Opt)),
         }
     }
 
     pub fn list(value: &Value) -> Result<&[ValueRef], ValueError> {
-        match &value.kind {
+        match &value.node {
             ValueKind::List(values) => Ok(values),
             _ => Err(unexpected(value, ValueTag::List)),
         }
     }
 
     pub fn func(value: &Value) -> Result<&Id, ValueError> {
-        match &value.kind {
+        match &value.node {
             ValueKind::Func(id) => Ok(id),
             _ => Err(unexpected(value, ValueTag::Func)),
         }
     }
 
     pub fn external(value: &Value) -> Result<&ExternalData, ValueError> {
-        match &value.kind {
+        match &value.node {
             ValueKind::Extern(value) => Ok(value),
             _ => Err(unexpected(value, ValueTag::Extern)),
         }

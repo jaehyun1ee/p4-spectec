@@ -1,3 +1,8 @@
+//! Runtime variables identified by a source-insensitive id and iterator path.
+//!
+//! Ordering, equality, and hashing all use the same semantic pair. For example,
+//! `x*` and an equal `x*` from another source span address the same binding.
+
 use std::{
     cmp::Ordering,
     fmt,
@@ -5,6 +10,8 @@ use std::{
 };
 
 use crate::lang::il::ast::{Id, Iter};
+
+// == Variable identity
 
 #[derive(Clone, Debug)]
 pub struct Variable {

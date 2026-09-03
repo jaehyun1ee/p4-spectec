@@ -1,3 +1,5 @@
+//! Stateful fresh-type-id builtin.
+
 use crate::{
     lang::common::source::Span,
     lang::il::ast::Typ,
@@ -19,5 +21,6 @@ pub fn fresh_type_id(
     extract::zero(span, values)?;
     let type_id = format!("FRESH__{counter}");
     *counter += 1;
-    return_value(add, make::text(type_id, Span::default()))
+    let value = make::text(type_id, Span::default());
+    return_value(add, value)
 }

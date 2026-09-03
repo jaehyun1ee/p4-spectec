@@ -20,7 +20,7 @@ fn id(name: &str) -> p4spec_rust::lang::il::ast::Id {
 }
 
 #[test]
-fn numeric_membership_preserves_nat_subtyping() {
+fn test_numeric_membership_preserves_nat_subtyping() {
     let tdenv = TDEnv::new();
     let find_func = |_: &str| None::<FuncSignature>;
     let mut cache = SubCache::new();
@@ -53,7 +53,7 @@ fn numeric_membership_preserves_nat_subtyping() {
 }
 
 #[test]
-fn extern_type_membership_uses_shared_type_environment() {
+fn test_extern_type_membership_uses_shared_type_environment() {
     let mut tdenv = TDEnv::new();
     let extern_id = id("object");
     tdenv.insert(extern_id.clone(), TypeDef::Extern);
@@ -73,7 +73,7 @@ fn extern_type_membership_uses_shared_type_environment() {
 }
 
 #[test]
-fn undefined_types_return_located_typed_errors() {
+fn test_undefined_types_return_located_typed_errors() {
     let missing_typ = typ::var(id("missing"), vec![]);
     let value = make::bool(true, Span::default());
     let mut cache = SubCache::new();
@@ -91,7 +91,7 @@ fn undefined_types_return_located_typed_errors() {
 }
 
 #[test]
-fn recursive_subchecks_walk_tuple_and_list_values() {
+fn test_recursive_subchecks_walk_tuple_and_list_values() {
     let bool_typ = typ::bool();
     let tuple_typ = typ::tuple(vec![bool_typ.clone(), typ::list(bool_typ.clone())]);
     let bool_value = make::bool(true, Span::default());
@@ -119,7 +119,7 @@ fn recursive_subchecks_walk_tuple_and_list_values() {
 }
 
 #[test]
-fn list_membership_rejects_arity_mismatch() {
+fn test_list_membership_rejects_arity_mismatch() {
     let values = vec![make::bool(true, Span::default())];
     let func_typ = FuncTyp {
         tparams: vec![],

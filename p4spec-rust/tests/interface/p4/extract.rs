@@ -5,7 +5,7 @@ use p4spec_rust::{
 };
 
 #[test]
-fn extracts_declaration_names_and_type_parameters() {
+fn test_extracts_declaration_names_and_type_parameters() {
     let program = parse_string(
         "extract.p4",
         "header Header<T> { T field; } const bit<8> width = 8w3;",
@@ -23,7 +23,7 @@ fn extracts_declaration_names_and_type_parameters() {
 }
 
 #[test]
-fn extraction_rejects_unrelated_values() {
+fn test_extraction_rejects_unrelated_values() {
     let program = parse_string("empty.p4", "").expect("parse empty program");
     assert_eq!(
         extract::declaration_id(&program),
@@ -36,10 +36,10 @@ fn extraction_rejects_unrelated_values() {
 }
 
 fn find_typed<'a>(value: &'a Value, name: &str) -> Option<&'a Value> {
-    if matches!(&value.typ, TypKind::Var(id, _) if id.node == name) {
+    if matches!(&value.note.typ, TypKind::Var(id, _) if id.node == name) {
         return Some(value);
     }
-    match &value.kind {
+    match &value.node {
         ValueKind::Struct(fields) => fields.iter().find_map(|(_, value)| find_typed(value, name)),
         ValueKind::Case(value_case) => value_case
             .split()

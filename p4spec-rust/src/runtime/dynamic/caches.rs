@@ -1,8 +1,19 @@
-use std::rc::Rc;
+//! Standard hash-map caches used by dynamic evaluation.
+//!
+//! Value computations key directly by immutable runtime values; function calls
+//! key by a shared function name and argument slice. Inserting the same call
+//! twice therefore replaces its previous result with normal `HashMap`
+//! semantics.
 
-use crate::runtime::{cache::ClockCache, value::ValueRef};
+use std::{collections::HashMap, rc::Rc};
 
-pub type ValueCache<V> = ClockCache<ValueRef, V>;
+use crate::runtime::value::ValueRef;
+
+// == Value cache
+
+pub type ValueCache<V> = HashMap<ValueRef, V>;
+
+// == Call cache
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct CallKey {
@@ -19,4 +30,4 @@ impl CallKey {
     }
 }
 
-pub type CallCache<V> = ClockCache<CallKey, V>;
+pub type CallCache<V> = HashMap<CallKey, V>;

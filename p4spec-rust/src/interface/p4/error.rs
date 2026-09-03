@@ -1,3 +1,5 @@
+//! Located errors produced by P4 preprocessing, lexing, and parsing.
+
 use std::fmt;
 
 use thiserror::Error;

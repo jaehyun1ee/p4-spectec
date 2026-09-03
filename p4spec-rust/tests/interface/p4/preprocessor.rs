@@ -16,7 +16,7 @@ fn temporary_file() -> PathBuf {
 }
 
 #[test]
-fn preprocessing_expands_macros_without_system_headers() {
+fn test_preprocessing_expands_macros_without_system_headers() {
     let path = temporary_file();
     fs::write(&path, "#define WIDTH 8\nbit<WIDTH> field;\n").unwrap();
 
@@ -28,7 +28,7 @@ fn preprocessing_expands_macros_without_system_headers() {
 }
 
 #[test]
-fn preprocessing_reports_a_typed_failure_for_missing_input() {
+fn test_preprocessing_reports_a_typed_failure_for_missing_input() {
     let error = preprocess(&[], "/definitely/missing/p4spec-input.p4").unwrap_err();
     assert!(matches!(
         error.kind,

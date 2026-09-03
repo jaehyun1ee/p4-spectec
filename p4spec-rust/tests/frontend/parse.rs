@@ -19,7 +19,7 @@ use p4spec_rust::{
 static TEMP_DIRECTORY_ID: AtomicUsize = AtomicUsize::new(0);
 
 #[test]
-fn parses_runtime_mixop_shapes() {
+fn test_parses_runtime_mixop_shapes() {
     let mixop = parse_mixop("name '=' expression").expect("parse mixop shape");
     assert_eq!(mixop.args().len(), 2);
 }

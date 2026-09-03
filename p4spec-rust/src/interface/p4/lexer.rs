@@ -1,3 +1,10 @@
+//! Context-sensitive lexer for preprocessed P4 source.
+//!
+//! Raw spelling is scanned first, then contextual name classification and
+//! angle-bracket disambiguation enqueue the parser tokens. For example, `>>`
+//! inside two nested type arguments is emitted as two closing-angle tokens,
+//! while the same spelling in an expression remains a shift.
+
 use std::{collections::VecDeque, rc::Rc};
 
 use num_bigint::BigInt;
@@ -21,6 +28,8 @@ use super::{
     context::{Context, IdentKind},
     error::{LexErrorKind, P4Error},
 };
+
+// == Tokens
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Token {
@@ -144,12 +153,14 @@ pub enum Token {
     BitOrAssign,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 enum State {
     Regular,
     Template,
     Pragma,
 }
+
+// == Lexer state
 
 pub struct Lexer<'source> {
     source: &'source str,
@@ -247,7 +258,7 @@ impl<'source> Lexer<'source> {
             } else {
                 token
             };
-            let token = match self.state.clone() {
+            let token = match self.state {
                 State::Regular => match token.node {
                     Token::Name(value) => {
                         self.queue_classification(&value, &span, State::Regular);
@@ -339,7 +350,7 @@ impl<'source> Lexer<'source> {
     }
 
     fn queue_classification(&mut self, value: &ValueRef, span: &Span, next: State) {
-        let name = match &value.kind {
+        let name = match &value.node {
             crate::runtime::value::ValueKind::Text(name) => name,
             _ => return,
         };
@@ -598,6 +609,8 @@ impl<'source> Lexer<'source> {
     }
 }
 
+// == Angle lookahead and token stream
+
 fn angle_suffix(rest: &str) -> Option<&str> {
     if !rest.starts_with('<') {
         return None;
@@ -625,6 +638,8 @@ impl Iterator for Lexer<'_> {
         self.next_token()
     }
 }
+
+// == Literal and fixed-token classification
 
 fn parse_integer(spelling: &str) -> Option<BigInt> {
     let sanitized = spelling.replace('_', "");
@@ -714,6 +729,8 @@ fn keyword(text: &str) -> Option<Token> {
         _ => return None,
     })
 }
+
+// - Operators
 
 fn operators() -> &'static [(&'static str, Token)] {
     &[

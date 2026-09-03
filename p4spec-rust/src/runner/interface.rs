@@ -1,3 +1,9 @@
+//! Runner-facing interface for stateful specification builtins.
+//!
+//! Calls are delegated to an interface implementation, while checkpoints let
+//! the runner detect effects around speculative evaluation. For example, the
+//! builtin interface changes its checkpoint after `$fresh_typeId`.
+
 use thiserror::Error;
 
 use crate::{
@@ -8,6 +14,8 @@ use crate::{
     },
     runtime::value::ValueRef,
 };
+
+// == Interface errors
 
 #[derive(Clone, Debug, Error, Eq, PartialEq)]
 pub enum InterfaceErrorKind {
@@ -33,6 +41,8 @@ impl From<BuiltinError> for InterfaceError {
     }
 }
 
+// == Interface contract
+
 pub trait Interface {
     fn call_builtin(
         &mut self,
@@ -50,6 +60,8 @@ pub trait Interface {
 
     fn clear(&mut self);
 }
+
+// == Standard implementations
 
 #[derive(Default)]
 pub struct BuiltinInterface {

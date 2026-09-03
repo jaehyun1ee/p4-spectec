@@ -35,7 +35,7 @@ fn invoke_with_types(
 }
 
 #[test]
-fn numeric_builtin_returns_and_reports_the_same_value() {
+fn test_numeric_builtin_returns_and_reports_the_same_value() {
     let list_typ = typ::list(typ::int());
     let input = make::list(
         &list_typ,
@@ -54,7 +54,7 @@ fn numeric_builtin_returns_and_reports_the_same_value() {
 }
 
 #[test]
-fn fresh_type_ids_are_instance_owned_and_checkpointed() {
+fn test_fresh_type_ids_are_instance_owned_and_checkpointed() {
     let mut builtins_a = Builtins::new();
     let mut builtins_b = Builtins::new();
     let before = builtins_a.checkpoint();
@@ -70,7 +70,7 @@ fn fresh_type_ids_are_instance_owned_and_checkpointed() {
 }
 
 #[test]
-fn missing_builtin_and_wrong_arity_are_typed_failures() {
+fn test_missing_builtin_and_wrong_arity_are_typed_failures() {
     let missing = invoke(&mut Builtins::new(), "missing", &[]).unwrap_err();
     assert!(matches!(
         missing.kind,
@@ -88,7 +88,7 @@ fn missing_builtin_and_wrong_arity_are_typed_failures() {
 }
 
 #[test]
-fn list_and_text_builtins_preserve_ocaml_results() {
+fn test_list_and_text_builtins_preserve_ocaml_results() {
     let list_typ = typ::list(typ::text());
     let repeated = make::list(
         &list_typ,
@@ -113,7 +113,19 @@ fn list_and_text_builtins_preserve_ocaml_results() {
 }
 
 #[test]
-fn zero_and_negative_bit_widths_match_ocaml() {
+fn test_int_to_text_preserves_the_explicit_integer_sign() {
+    let integer = make::int(7.into(), Span::default());
+    let natural = make::nat(7_u64.into(), Span::default());
+
+    let (integer_text, _) = invoke(&mut Builtins::new(), "int_to_text", &[integer]).unwrap();
+    let (natural_text, _) = invoke(&mut Builtins::new(), "int_to_text", &[natural]).unwrap();
+
+    assert_eq!(get::text(&integer_text), Ok("+7"));
+    assert_eq!(get::text(&natural_text), Ok("7"));
+}
+
+#[test]
+fn test_zero_and_negative_bit_widths_match_ocaml() {
     for width in [0, -1] {
         for name in ["bitstr_to_int", "int_to_bitstr"] {
             let values = [
@@ -123,5 +135,18 @@ fn zero_and_negative_bit_widths_match_ocaml() {
             let (result, _) = invoke(&mut Builtins::new(), name, &values).unwrap();
             assert_eq!(get::num(&result).unwrap().to_string(), "+0", "{name}");
         }
+    }
+}
+
+#[test]
+fn test_negative_array_width_is_rejected_like_ocaml_array_init() {
+    for name in ["int_to_bits_unsigned", "int_to_bits_signed"] {
+        let values = [
+            make::int((-1).into(), Span::default()),
+            make::int(17.into(), Span::default()),
+        ];
+        let result = invoke(&mut Builtins::new(), name, &values);
+
+        assert!(result.is_err(), "{name}");
     }
 }
