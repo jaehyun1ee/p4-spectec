@@ -1,7 +1,5 @@
 //! Elaboration-language validation and conversion to intermediate syntax
 
-use std::borrow::Cow;
-
 use crate::{
     lang::{
         common::{
@@ -87,60 +85,30 @@ fn as_text_typ(ctx: &Context, typ_il: &il::Typ) -> Attempt<()> {
 }
 
 fn as_iter_typ(ctx: &Context, typ_il: &il::Typ) -> Attempt<(il::Typ, il::Iter)> {
-    let typ_il = expand_typ(&ctx.tdenv, typ_il)?;
-    match typ_il {
-        Cow::Borrowed(typ_il) => {
-            let il::TypKind::Iter(typ_inner_il, iter_il) = &typ_il.node else {
-                return fail(destruct_error(TypeShape::Iteration, typ_il.span.clone()));
-            };
-            Ok(((**typ_inner_il).clone(), *iter_il))
-        }
-        Cow::Owned(typ_il) => {
-            let span = typ_il.span;
-            let il::TypKind::Iter(typ_inner_il, iter_il) = typ_il.node else {
-                return fail(destruct_error(TypeShape::Iteration, span));
-            };
-            Ok((*typ_inner_il, iter_il))
-        }
-    }
+    let typ_il = expand_typ(&ctx.tdenv, typ_il)?.into_owned();
+    let span = typ_il.span;
+    let il::TypKind::Iter(typ_inner_il, iter_il) = typ_il.node else {
+        return fail(destruct_error(TypeShape::Iteration, span));
+    };
+    Ok((*typ_inner_il, iter_il))
 }
 
 fn as_tuple_typ(ctx: &Context, typ_il: &il::Typ) -> Attempt<Vec<il::Typ>> {
-    let typ_il = expand_typ(&ctx.tdenv, typ_il)?;
-    match typ_il {
-        Cow::Borrowed(typ_il) => {
-            let il::TypKind::Tuple(typs_il) = &typ_il.node else {
-                return fail(destruct_error(TypeShape::Tuple, typ_il.span.clone()));
-            };
-            Ok(typs_il.clone())
-        }
-        Cow::Owned(typ_il) => {
-            let span = typ_il.span;
-            let il::TypKind::Tuple(typs_il) = typ_il.node else {
-                return fail(destruct_error(TypeShape::Tuple, span));
-            };
-            Ok(typs_il)
-        }
-    }
+    let typ_il = expand_typ(&ctx.tdenv, typ_il)?.into_owned();
+    let span = typ_il.span;
+    let il::TypKind::Tuple(typs_il) = typ_il.node else {
+        return fail(destruct_error(TypeShape::Tuple, span));
+    };
+    Ok(typs_il)
 }
 
 fn as_list_typ(ctx: &Context, typ_il: &il::Typ) -> Attempt<il::Typ> {
-    let typ_il = expand_typ(&ctx.tdenv, typ_il)?;
-    match typ_il {
-        Cow::Borrowed(typ_il) => {
-            let il::TypKind::Iter(typ_inner_il, il::Iter::List) = &typ_il.node else {
-                return fail(destruct_error(TypeShape::List, typ_il.span.clone()));
-            };
-            Ok((**typ_inner_il).clone())
-        }
-        Cow::Owned(typ_il) => {
-            let span = typ_il.span;
-            let il::TypKind::Iter(typ_inner_il, il::Iter::List) = typ_il.node else {
-                return fail(destruct_error(TypeShape::List, span));
-            };
-            Ok(*typ_inner_il)
-        }
-    }
+    let typ_il = expand_typ(&ctx.tdenv, typ_il)?.into_owned();
+    let span = typ_il.span;
+    let il::TypKind::Iter(typ_inner_il, il::Iter::List) = typ_il.node else {
+        return fail(destruct_error(TypeShape::List, span));
+    };
+    Ok(*typ_inner_il)
 }
 
 fn as_struct_typ(ctx: &Context, typ_il: &il::Typ) -> Attempt<Vec<il::TypField>> {
