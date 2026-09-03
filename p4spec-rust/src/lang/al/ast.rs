@@ -67,7 +67,7 @@ pub type Exp = il::ast::Exp;
 pub type ExpField = il::ast::ExpField;
 pub type ExpKind = il::ast::ExpKind;
 pub type NotExp = il::ast::NotExp;
-pub type IterExp = il::ast::IterExp;
+pub type ExpIter = il::ast::ExpIter;
 
 // Patterns
 

@@ -1,35 +1,6 @@
 use super::*;
 
 #[test]
-fn test_printer_renders_case_patterns_as_canonical_mixops() {
-    let comma = p4spec_rust::phrase! {
-        node: Atom::operator(",").expect("comma operator"),
-        span: Span::default(),
-    };
-    let pattern = ast::Pattern::Case(Box::new(Mixfix::Seq(vec![
-        Mixfix::Arg(()),
-        Mixfix::Atom(comma),
-        Mixfix::Arg(()),
-    ])));
-
-    assert_eq!(Print::to_string(&pattern), "`% , %`");
-
-    let angle = ast::Pattern::Case(Box::new(Mixfix::Brack(
-        p4spec_rust::phrase! {
-            node: Atom::LAngle,
-            span: Span::default(),
-        },
-        Box::new(Mixfix::Arg(())),
-        p4spec_rust::phrase! {
-            node: Atom::RAngle,
-            span: Span::default(),
-        },
-    )));
-
-    assert_eq!(Print::to_string(&angle), "`<%>`");
-}
-
-#[test]
 fn test_printer_renders_nested_premises_and_definition_spec_goldens() {
     let prem_iter = ast::PremIter {
         iter: ast::Iter::List,

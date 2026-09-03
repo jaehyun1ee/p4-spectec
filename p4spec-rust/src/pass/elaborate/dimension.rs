@@ -98,7 +98,7 @@ fn infer_exp(dim_ctx: &mut DimContext, exp: &ast::Exp, iters: &[ast::Iter]) {
     match &exp.node {
         ast::ExpKind::Bool(_) | ast::ExpKind::Num(_) | ast::ExpKind::Text(_) => {}
         ast::ExpKind::Var(id) => {
-            let typ = ast::typ_from_note(&exp.note, exp.span.clone());
+            let typ = phrase!(node: exp.note.as_ref().clone(), span: exp.span.clone());
             dim_ctx.add(id, Dim::new(typ, iters.to_vec()));
         }
         ast::ExpKind::Un(_, _, exp_inner)

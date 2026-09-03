@@ -138,13 +138,10 @@ fn gen_prem_bound(
     iter_ctx: &ICtx,
 ) -> Result<al::ast::Prem, AlgoError> {
     let exp_l = var::as_exp(true, destination);
+    let typ_from = phrase!(node: exp_from.note.as_ref().clone(), span: exp_from.span.clone());
     let kind = match &exp_from.node {
         ast::ExpKind::Case(not_exp)
-            if not_exp.arity() == 0
-                && !is_singleton_case(
-                    ctx,
-                    &ast::typ_from_note(&exp_from.note, exp_from.span.clone()),
-                )? =>
+            if not_exp.arity() == 0 && !is_singleton_case(ctx, &typ_from)? =>
         {
             ast::ExpKind::Match(
                 Box::new(exp_l),
@@ -264,7 +261,7 @@ fn gen_prem_bind_sub(
     iter_ctx: &ICtx,
 ) -> Result<Vec<al::ast::Prem>, AlgoError> {
     let exp_to = var::as_exp(true, destination);
-    let typ_source = ast::typ_from_note(&exp_to.note, exp_to.span.clone());
+    let typ_source = phrase!(node: exp_to.note.as_ref().clone(), span: exp_to.span.clone());
     let subcheck = optimize_sub_typ(&ctx.tdenv, &typ_source, typ_sub)?;
     let exp_guard_sub = note_phrase! {
         node: ast::ExpKind::Sub(
@@ -383,7 +380,7 @@ fn rename_exp_bind_match(
     pattern: ast::Pattern,
     exp_from: ast::Exp,
 ) -> ast::Exp {
-    let typ = ast::typ_from_note(&exp_from.note, exp_from.span.clone());
+    let typ = phrase!(node: exp_from.note.as_ref().clone(), span: exp_from.span.clone());
     let destination = fresh::var_from_typ(&ctx.menv, &ctx.frees, exp_from.span.clone(), &typ);
     ctx.add_free(destination.id.clone());
     renv.prepend(Rename {
@@ -412,7 +409,7 @@ fn rename_exp_bind_sub(
     exp_sub: ast::Exp,
     exp_from: ast::Exp,
 ) -> ast::Exp {
-    let typ = ast::typ_from_note(&exp_from.note, exp_from.span.clone());
+    let typ = phrase!(node: exp_from.note.as_ref().clone(), span: exp_from.span.clone());
     let destination = fresh::var_from_typ(&ctx.menv, &ctx.frees, exp_from.span.clone(), &typ);
     ctx.add_free(destination.id.clone());
     renv.prepend(Rename {
@@ -456,7 +453,7 @@ fn rename_exp_bound(
     iter_ctx: &mut ICtx,
     exp: &ast::Exp,
 ) -> ast::Exp {
-    let typ = ast::typ_from_note(&exp.note, exp.span.clone());
+    let typ = phrase!(node: exp.note.as_ref().clone(), span: exp.span.clone());
     let destination = fresh::var_from_typ(&ctx.menv, &ctx.frees, exp.span.clone(), &typ);
     ctx.add_free(destination.id.clone());
     renv.prepend(Rename {
@@ -493,7 +490,7 @@ fn rename_exp_bind(
                 note: note,
                 span: span.clone(),
             };
-            let typ_sub = ast::typ_from_note(&exp_sub.note, span);
+            let typ_sub = phrase!(node: exp_sub.note.as_ref().clone(), span: span);
             let exp = rename_exp_bind_sub(ctx, renv, iter_ctx, typ_sub, exp_sub, exp_from);
             Ok(exp)
         }
@@ -513,7 +510,7 @@ fn rename_exp_bind(
                 note: note.clone(),
                 span: span.clone(),
             };
-            let typ = ast::typ_from_note(&note, span.clone());
+            let typ = phrase!(node: note.as_ref().clone(), span: span.clone());
             if is_singleton_case(ctx, &typ)? {
                 Ok(exp_from)
             } else {

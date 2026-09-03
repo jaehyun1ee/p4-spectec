@@ -94,7 +94,10 @@ fn function_spec(
     expression: ast::Exp,
     premises: Vec<ast::Prem>,
 ) -> ast::Spec {
-    let typ = ast::typ_from_note(&expression.note, expression.span.clone());
+    let typ = crate::phrase! {
+        node: expression.note.as_ref().clone(),
+        span: expression.span.clone(),
+    };
     let clause = crate::phrase! { node:
     ast::ClauseKind {
         args: args.into_iter().map(exp_arg).collect(),

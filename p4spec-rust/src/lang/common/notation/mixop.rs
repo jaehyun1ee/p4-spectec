@@ -9,7 +9,7 @@ use crate::lang::{
     },
 };
 
-use super::mixfix::{AtomPhrase, Mixfix};
+use super::mixfix::Mixfix;
 
 /// A mixfix shape with unfilled argument positions
 pub type Mixop = Mixfix<()>;
@@ -45,37 +45,6 @@ impl<T> Mixfix<T> {
     /// Separates the mixop shape from its arguments
     pub fn split(&self) -> (Mixop, Vec<&T>) {
         (self.to_mixop(), self.args())
-    }
-
-    /// Separates an owned mixop shape from its owned arguments
-    pub fn into_split(self) -> (Mixop, Vec<T>) {
-        let mut args = Vec::with_capacity(self.arity());
-        let mixop = self.into_split_inner(&mut args);
-        (mixop, args)
-    }
-
-    fn into_split_inner(self, args: &mut Vec<T>) -> Mixop {
-        match self {
-            Self::Arg(arg) => {
-                args.push(arg);
-                Mixfix::Arg(())
-            }
-            Self::Atom(atom) => Mixfix::Atom(atom),
-            Self::Brack(atom_l, mixfix, atom_r) => {
-                Mixfix::Brack(atom_l, Box::new(mixfix.into_split_inner(args)), atom_r)
-            }
-            Self::Infix(mixfix_l, atom, mixfix_r) => Mixfix::Infix(
-                Box::new(mixfix_l.into_split_inner(args)),
-                atom,
-                Box::new(mixfix_r.into_split_inner(args)),
-            ),
-            Self::Seq(mixfixes) => Mixfix::Seq(
-                mixfixes
-                    .into_iter()
-                    .map(|mixfix| mixfix.into_split_inner(args))
-                    .collect(),
-            ),
-        }
     }
 }
 
@@ -140,18 +109,5 @@ impl Mixop {
                     .collect::<Result<_, _>>()?,
             )),
         }
-    }
-}
-
-// == Rendering a filled mixfix
-
-impl Mixop {
-    /// Renders a mixfix operator with string arguments
-    pub fn to_string(
-        &self,
-        args: impl IntoIterator<Item = String>,
-        render_atom: impl FnMut(&AtomPhrase) -> String,
-    ) -> Result<String, ArityMismatch> {
-        Ok(Self::fill(self, args)?.render(render_atom, Clone::clone))
     }
 }

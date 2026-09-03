@@ -118,27 +118,7 @@ pub fn validate(hint: &InputHint, arity: usize) -> Result<(), InputError> {
 /// Splits items into input and output positions
 ///
 /// Validates the hint against `items.len()`
-pub fn split<Item: Clone>(
-    hint: &InputHint,
-    items: &[Item],
-) -> Result<(Vec<Item>, Vec<Item>), InputError> {
-    validate(hint, items.len())?;
-    let mut items_input = Vec::new();
-    let mut items_output = Vec::new();
-    for (index, item) in items.iter().enumerate() {
-        if hint.indices.contains(&(index as i64)) {
-            items_input.push(item.clone());
-        } else {
-            items_output.push(item.clone());
-        }
-    }
-    Ok((items_input, items_output))
-}
-
-/// Splits owned items into input and output positions
-///
-/// Validates the hint against `items.len()`
-pub fn split_owned<Item>(
+pub fn split<Item>(
     hint: &InputHint,
     items: Vec<Item>,
 ) -> Result<(Vec<Item>, Vec<Item>), InputError> {

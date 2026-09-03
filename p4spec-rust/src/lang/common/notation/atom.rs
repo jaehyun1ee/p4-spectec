@@ -100,7 +100,37 @@ impl Error for AtomError {}
 
 impl Print for Atom {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        printer.write(&format!("{self}"))
+        match self {
+            Self::Keyword(id) => printer.write(id),
+            Self::Tag(id) => write!(printer, "_{id}"),
+            Self::Operator(op) => write!(printer, "'{op}'"),
+            Self::Sub => printer.write("<:"),
+            Self::Sup => printer.write(":>"),
+            Self::Turnstile => printer.write("|-"),
+            Self::Tilesturn => printer.write("-|"),
+            Self::Arrow => printer.write("->"),
+            Self::ArrowSub => printer.write("->_"),
+            Self::DoubleArrowSub => printer.write("=>_"),
+            Self::DoubleArrowLong => printer.write("==>"),
+            Self::SqArrow => printer.write("~>"),
+            Self::SqArrowStar => printer.write("~>*"),
+            Self::Dot => printer.write("."),
+            Self::Dot2 => printer.write(".."),
+            Self::Dot3 => printer.write("..."),
+            Self::Semicolon => printer.write(";"),
+            Self::Colon => printer.write(":"),
+            Self::ColonEq => printer.write(":="),
+            Self::Tilde2 => printer.write("~~"),
+            Self::Backslash => printer.write("\\"),
+            Self::LAngle => printer.write("`<"),
+            Self::RAngle => printer.write("`>"),
+            Self::LParen => printer.write("`("),
+            Self::RParen => printer.write("`)"),
+            Self::LBrack => printer.write("`["),
+            Self::RBrack => printer.write("`]"),
+            Self::LBrace => printer.write("`{"),
+            Self::RBrace => printer.write("`}"),
+        }
     }
 }
 
@@ -121,66 +151,6 @@ impl SyntaxEq for Atom {
 impl Free for Atom {
     fn free(&self) -> IdSet {
         IdSet::new()
-    }
-}
-
-// == String conversion and parsing
-
-impl fmt::Display for Atom {
-    /// String representation of the atom
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Keyword(id) => formatter.write_str(id),
-            Self::Tag(id) => write!(formatter, "_{id}"),
-            Self::Operator(op) => write!(formatter, "'{op}'"),
-            Self::Sub => formatter.write_str("<:"),
-            Self::Sup => formatter.write_str(":>"),
-            Self::Turnstile => formatter.write_str("|-"),
-            Self::Tilesturn => formatter.write_str("-|"),
-            Self::Arrow => formatter.write_str("->"),
-            Self::ArrowSub => formatter.write_str("->_"),
-            Self::DoubleArrowSub => formatter.write_str("=>_"),
-            Self::DoubleArrowLong => formatter.write_str("==>"),
-            Self::SqArrow => formatter.write_str("~>"),
-            Self::SqArrowStar => formatter.write_str("~>*"),
-            Self::Dot => formatter.write_str("."),
-            Self::Dot2 => formatter.write_str(".."),
-            Self::Dot3 => formatter.write_str("..."),
-            Self::Semicolon => formatter.write_str(";"),
-            Self::Colon => formatter.write_str(":"),
-            Self::ColonEq => formatter.write_str(":="),
-            Self::Tilde2 => formatter.write_str("~~"),
-            Self::Backslash => formatter.write_str("\\"),
-            Self::LAngle => formatter.write_str("`<"),
-            Self::RAngle => formatter.write_str("`>"),
-            Self::LParen => formatter.write_str("`("),
-            Self::RParen => formatter.write_str("`)"),
-            Self::LBrack => formatter.write_str("`["),
-            Self::RBrack => formatter.write_str("`]"),
-            Self::LBrace => formatter.write_str("`{"),
-            Self::RBrace => formatter.write_str("`}"),
-        }
-    }
-}
-
-// == Rendering
-
-impl Atom {
-    /// Returns the display spelling, omitting source-only quoting where applicable
-    pub fn render(&self) -> String {
-        match self {
-            Self::Tag(id) if id == "EMPTY" => "/* empty */".into(),
-            Self::Operator(op) => op.clone(),
-            Self::LAngle => "<".into(),
-            Self::RAngle => ">".into(),
-            Self::LParen => "(".into(),
-            Self::RParen => ")".into(),
-            Self::LBrack => "[".into(),
-            Self::RBrack => "]".into(),
-            Self::LBrace => "{".into(),
-            Self::RBrace => "}".into(),
-            _ => format!("{self}"),
-        }
     }
 }
 

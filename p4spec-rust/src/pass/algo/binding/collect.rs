@@ -43,7 +43,7 @@ pub fn collect_exp(ctx: &Context, exp: &ast::Exp) -> Result<BEnv, AlgoError> {
                 let benv = BEnv::new();
                 Ok(benv)
             } else {
-                let typ = ast::typ_from_note(&exp.note, exp.span.clone());
+                let typ = crate::phrase!(node: exp.note.as_ref().clone(), span: exp.span.clone());
                 let benv = BEnv::singleton(id.clone(), typ);
                 Ok(benv)
             }

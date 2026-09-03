@@ -6,7 +6,7 @@ use crate::lang::{
     common::{
         self,
         notation::{atom, mixfix::Mixfix, mixop},
-        source::{NotePhrase, Phrase, Span},
+        source::{NotePhrase, Phrase},
     },
     el,
     hints::input::InputHint,
@@ -154,14 +154,6 @@ pub enum OpTyp {
 pub type TypNote = Rc<TypKind>;
 pub type Exp = NotePhrase<ExpKind, TypNote>;
 
-pub fn typ_from_note(note: &TypNote, span: Span) -> Typ {
-    Phrase {
-        node: note.as_ref().clone(),
-        note: (),
-        span,
-    }
-}
-
 #[derive(Clone, Debug, PartialEq)]
 pub enum ExpKind {
     /// `bool`
@@ -215,12 +207,12 @@ pub enum ExpKind {
     /// `$id<` targ* `>(` arg* `)`
     Call(Id, Vec<Targ>, Vec<Arg>),
     /// `exp iterexp`
-    Iter(Box<Exp>, IterExp),
+    Iter(Box<Exp>, ExpIter),
 }
 
 pub type NotExp = Mixfix<Exp>;
 pub type ExpField = (Atom, Exp);
-pub type IterExp = (Iter, Vec<Var>);
+pub type ExpIter = (Iter, Vec<Var>);
 
 // Patterns
 

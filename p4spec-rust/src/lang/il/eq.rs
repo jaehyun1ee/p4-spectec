@@ -204,7 +204,7 @@ impl SyntaxEq for ExpKind {
     }
 }
 
-impl SyntaxEq for IterExp {
+impl SyntaxEq for ExpIter {
     fn syntax_eq(&self, other: &Self) -> bool {
         self.0 == other.0 && self.1.syntax_eq(&other.1)
     }

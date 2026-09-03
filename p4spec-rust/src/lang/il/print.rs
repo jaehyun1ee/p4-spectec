@@ -405,7 +405,7 @@ impl Print for NotExp {
     }
 }
 
-impl Print for IterExp {
+impl Print for ExpIter {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         self.0.print(printer)?;
         printer.write_char('{')?;
@@ -423,7 +423,7 @@ impl Print for IterExp {
     }
 }
 
-impl Print for [IterExp] {
+impl Print for [ExpIter] {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         for iter_exp in self {
             iter_exp.print(printer)?;
@@ -437,7 +437,7 @@ impl Print for [IterExp] {
 impl Print for Pattern {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         match self {
-            Pattern::Case(mixop) => write!(printer, "{mixop}"),
+            Pattern::Case(mixop) => mixop.print(printer),
             Pattern::List(ListPattern::Cons) => printer.write_str("_ :: _"),
             Pattern::List(ListPattern::Fixed(length)) => write!(printer, "[ _/{length} ]"),
             Pattern::List(ListPattern::Nil) => printer.write_str("[]"),

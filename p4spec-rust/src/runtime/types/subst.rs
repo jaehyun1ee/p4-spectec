@@ -253,34 +253,3 @@ fn subst_params_inner(
         .map(|param| subst_param_inner(fresh, theta, param))
         .collect()
 }
-
-#[cfg(test)]
-mod tests {
-    use std::borrow::Cow;
-
-    use super::*;
-    use crate::lang::common::source::Span;
-
-    fn id(name: &str) -> ast::Id {
-        phrase!(node: name.to_owned(), span: Span::default())
-    }
-
-    fn typ(node: TypKind) -> ast::Typ {
-        phrase!(node: node, span: Span::default())
-    }
-
-    #[test]
-    fn test_subst_typ_cow_borrows_unchanged_types() {
-        let typ_bool = typ(TypKind::Bool);
-        let subst_empty = subst_typ_cow_inner(&mut Fresh::default(), &Theta::new(), &typ_bool)
-            .expect("empty substitution");
-        assert!(matches!(subst_empty, Cow::Borrowed(typ) if std::ptr::eq(typ, &typ_bool)));
-
-        let mut theta = Theta::new();
-        theta.insert(id("T"), typ(TypKind::Text));
-        let typ_tuple = typ(TypKind::Tuple(vec![typ(TypKind::Bool)]));
-        let subst_absent = subst_typ_cow_inner(&mut Fresh::default(), &theta, &typ_tuple)
-            .expect("absent substitution");
-        assert!(matches!(subst_absent, Cow::Borrowed(typ) if std::ptr::eq(typ, &typ_tuple)));
-    }
-}

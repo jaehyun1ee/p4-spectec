@@ -1192,14 +1192,14 @@ pub(super) fn encode_not_exp(exp: &ast::NotExp) -> Value {
     mixfix::encode(exp, encode_exp)
 }
 
-pub(super) fn decode_iter_exp(value: &Value) -> Result<ast::IterExp, DecodeError> {
+pub(super) fn decode_iter_exp(value: &Value) -> Result<ast::ExpIter, DecodeError> {
     match array(value)? {
         [iter, vars] => Ok((decode_iter(iter)?, decode_list(vars, decode_var)?)),
         _ => Err(DecodeError::Expected("IL expression iterator pair")),
     }
 }
 
-pub(super) fn encode_iter_exp((iter, vars): &ast::IterExp) -> Value {
+pub(super) fn encode_iter_exp((iter, vars): &ast::ExpIter) -> Value {
     json!([encode_iter(*iter), encode_list(vars, encode_var)])
 }
 

@@ -94,10 +94,10 @@ pub enum ExpKind {
     Slice(Box<Exp>, Box<Exp>, Box<Exp>),
     Upd(Box<Exp>, Box<Path>, Box<Exp>),
     Call(Id, Vec<Targ>, Vec<Arg>),
-    Iter(Box<Exp>, IterExp),
+    Iter(Box<Exp>, ExpIter),
 }
 pub type NotExp = Mixfix<Exp>;
-pub type IterExp = sl::ast::IterExp;
+pub type ExpIter = sl::ast::ExpIter;
 
 // Patterns
 
@@ -211,7 +211,7 @@ pub enum InstrKind<Tier> {
 #[derive(Clone, Debug, PartialEq)]
 pub struct IfInstr<Tier> {
     pub exp: Exp,
-    pub iter_exps: Vec<IterExp>,
+    pub iter_exps: Vec<ExpIter>,
     pub block: Block<Tier>,
     pub dangle: Dangle,
 }
@@ -219,7 +219,7 @@ pub struct IfInstr<Tier> {
 pub struct HoldInstr<Tier> {
     pub id: Id,
     pub not_exp: NotExp,
-    pub iter_exps: Vec<IterExp>,
+    pub iter_exps: Vec<ExpIter>,
     pub hold_case: HoldCase<Tier>,
 }
 #[derive(Clone, Debug, PartialEq)]
@@ -232,7 +232,7 @@ pub struct CaseInstr<Tier> {
 pub struct LetInstr {
     pub exp_l: Exp,
     pub exp_r: Exp,
-    pub iter_instrs: Vec<IterInstr>,
+    pub iter_instrs: Vec<InstrIter>,
 }
 #[derive(Clone, Debug, PartialEq)]
 pub struct DebugInstr {
@@ -270,7 +270,7 @@ pub struct TierInstr<Tier> {
 }
 
 pub type Block<Tier> = Vec<Instr<Tier>>;
-pub type IterInstr = sl::ast::IterInstr;
+pub type InstrIter = sl::ast::InstrIter;
 
 // Relations
 
@@ -300,7 +300,7 @@ pub struct RuleGroupInstr {
     pub id: Id,
     pub not_exp: NotExp,
     pub input_hint: crate::lang::hints::input::InputHint,
-    pub iter_instrs: Vec<IterInstr>,
+    pub iter_instrs: Vec<InstrIter>,
 }
 #[derive(Clone, Debug, PartialEq)]
 pub struct BacktrackGroupInstr {

@@ -164,10 +164,15 @@ fn test_conversion_inserts_list_and_optional_iteration_guards_in_source_order() 
     );
     let exp_list = joint_iteration(&list_names, ast::Iter::List, 20);
     let exp_optional = joint_iteration(&optional_names, ast::Iter::Opt, 21);
-    let typ_output = ast::TypKind::Tuple(vec![
-        ast::typ_from_note(&exp_list.note, exp_list.span.clone()),
-        ast::typ_from_note(&exp_optional.note, exp_optional.span.clone()),
-    ]);
+    let typ_list = crate::phrase! {
+        node: exp_list.note.as_ref().clone(),
+        span: exp_list.span.clone(),
+    };
+    let typ_optional = crate::phrase! {
+        node: exp_optional.note.as_ref().clone(),
+        span: exp_optional.span.clone(),
+    };
+    let typ_output = ast::TypKind::Tuple(vec![typ_list, typ_optional]);
     let exp_output = exp(
         ast::ExpKind::Tuple(vec![exp_list, exp_optional]),
         typ_output,
@@ -625,6 +630,10 @@ fn test_conversion_traverses_else_clauses_in_guard_order() {
         premises: vec![prem_debug],
     }, span:
     span(50) };
+    let typ_output = crate::phrase! {
+        node: exp_output.note.as_ref().clone(),
+        span: span(49),
+    };
     let spec = vec![crate::phrase! { node:
     ast::DefKind::FuncDec(ast::FuncDec {
         id: id("otherwise", 49),
@@ -634,7 +643,7 @@ fn test_conversion_traverses_else_clauses_in_guard_order() {
                 ast::TypKind::Tuple(vec![typ_bool.clone(), typ_bool]), span:
                 span(49) })), span:
             span(49) }],
-        typ: ast::typ_from_note(&exp_output.note, span(49)),
+        typ: typ_output,
         clauses: vec![],
         else_clause: Some(else_clause),
         hints: vec![],

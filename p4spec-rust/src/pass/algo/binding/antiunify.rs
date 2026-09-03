@@ -123,7 +123,7 @@ fn overlap_exp(
             }
         }
         (ast::ExpKind::Case(not_exp_template), ast::ExpKind::Case(not_exp))
-            if not_exp_template.same_shape(not_exp) =>
+            if not_exp_template.eq_shape(not_exp) =>
         {
             let mixop = not_exp_template.to_mixop();
             let exps_template = not_exp_template
@@ -209,8 +209,9 @@ fn overlap_exp(
         Err(error) => return Err(error),
     }
 
-    let typ_template = ast::typ_from_note(&exp_template.note, exp_template.span.clone());
-    let typ = ast::typ_from_note(&exp.note, exp.span.clone());
+    let typ_template =
+        phrase!(node: exp_template.note.as_ref().clone(), span: exp_template.span.clone());
+    let typ = phrase!(node: exp.note.as_ref().clone(), span: exp.span.clone());
     let is_equivalent = equiv_typ(tdenv, &typ_template, &typ)?;
     if !is_equivalent {
         let error = AlgoError::new(AlgoErrorKind::AntiUnification, exp.span.clone());
@@ -368,7 +369,7 @@ fn populate_exp(
             populate_exps(ids_unifier, exps_template, exps)
         }
         (ast::ExpKind::Case(not_exp_template), ast::ExpKind::Case(not_exp))
-            if not_exp_template.same_shape(not_exp) =>
+            if not_exp_template.eq_shape(not_exp) =>
         {
             let exps_template = not_exp_template
                 .args()

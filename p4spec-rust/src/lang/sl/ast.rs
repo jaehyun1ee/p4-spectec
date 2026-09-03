@@ -78,7 +78,7 @@ pub type Exp = il::ast::Exp;
 pub type ExpKind = il::ast::ExpKind;
 
 pub type NotExp = il::ast::NotExp;
-pub type IterExp = il::ast::IterExp;
+pub type ExpIter = il::ast::ExpIter;
 
 // Patterns
 
@@ -184,7 +184,7 @@ pub enum InstrKind {
 #[derive(Clone, Debug, PartialEq)]
 pub struct IfInstr {
     pub exp: Exp,
-    pub iter_exps: Vec<IterExp>,
+    pub iter_exps: Vec<ExpIter>,
     pub block: Block,
     pub dangle: Dangle,
 }
@@ -192,7 +192,7 @@ pub struct IfInstr {
 pub struct HoldInstr {
     pub id: Id,
     pub not_exp: NotExp,
-    pub iter_exps: Vec<IterExp>,
+    pub iter_exps: Vec<ExpIter>,
     pub hold_case: HoldCase,
 }
 #[derive(Clone, Debug, PartialEq)]
@@ -212,7 +212,7 @@ pub struct GroupInstr {
 pub struct LetInstr {
     pub exp_l: Exp,
     pub exp_r: Exp,
-    pub iter_instrs: Vec<IterInstr>,
+    pub iter_instrs: Vec<InstrIter>,
     pub block: Block,
 }
 #[derive(Clone, Debug, PartialEq)]
@@ -220,7 +220,7 @@ pub struct RuleInstr {
     pub id: Id,
     pub not_exp: NotExp,
     pub input_hint: InputHint,
-    pub iter_instrs: Vec<IterInstr>,
+    pub iter_instrs: Vec<InstrIter>,
     pub block: Block,
 }
 #[derive(Clone, Debug, PartialEq)]
@@ -240,7 +240,7 @@ pub struct DebugInstr {
 
 pub type Block = Vec<Instr>;
 pub type ElseBlock = Vec<Instr>;
-pub type IterInstr = il::ast::PremIter;
+pub type InstrIter = il::ast::PremIter;
 
 // Hints
 

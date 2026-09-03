@@ -301,7 +301,7 @@ fn analyze_rule_prem(
         .into_iter()
         .cloned()
         .collect::<Vec<_>>();
-    let (exps_input_il, exps_output_il) = input::split(&rule_prem_il.input_hint, &exps_il)
+    let (exps_input_il, exps_output_il) = input::split(&rule_prem_il.input_hint, exps_il)
         .map_err(|error| input_error(error, span.clone()))?;
     analyze_exps_as_bound(ctx, &exps_input_il)?;
     let (venv, exps_output_al, prem_sideconditions_al) =
@@ -601,9 +601,9 @@ fn analyze_rule_group(
         let ast::RuleKind { id, not_exp, prems } = rule_il.node;
         ids.push(id);
         prems_group_il.push(prems);
-        let (_, exps_il) = not_exp.into_split();
+        let exps_il = not_exp.into_args();
         let (exps_input_il, exps_output_il) =
-            input::split_owned(inputs, exps_il).map_err(|error| input_error(error, rule_span))?;
+            input::split(inputs, exps_il).map_err(|error| input_error(error, rule_span))?;
         exps_input_group_il.push(exps_input_il);
         exps_output_group_il.push(exps_output_il);
     }
@@ -730,11 +730,11 @@ fn pattern_set_covered_by_typ(ctx: &Context, typ: &ast::Typ) -> Result<PatternSe
 fn pattern_set_covered_by_exp(ctx: &Context, exp_al: &ast::Exp) -> Result<PatternSet, AlgoError> {
     match &exp_al.node {
         ast::ExpKind::Var(_) => {
-            let typ = ast::typ_from_note(&exp_al.note, exp_al.span.clone());
+            let typ = phrase!(node: exp_al.note.as_ref().clone(), span: exp_al.span.clone());
             pattern_set_covered_by_typ(ctx, &typ)
         }
         ast::ExpKind::UpCast(_, exp_inner) if matches!(exp_inner.node, ast::ExpKind::Var(_)) => {
-            let typ = ast::typ_from_note(&exp_inner.note, exp_inner.span.clone());
+            let typ = phrase!(node: exp_inner.note.as_ref().clone(), span: exp_inner.span.clone());
             pattern_set_covered_by_typ(ctx, &typ)
         }
         ast::ExpKind::UpCast(_, exp_inner) => {
@@ -744,7 +744,8 @@ fn pattern_set_covered_by_exp(ctx: &Context, exp_al: &ast::Exp) -> Result<Patter
                     exp_al.span.clone(),
                 ));
             };
-            let not_typ = not_exp.map(|exp| ast::typ_from_note(&exp.note, exp.span.clone()));
+            let not_typ =
+                not_exp.map(|exp| phrase!(node: exp.note.as_ref().clone(), span: exp.span.clone()));
             let not_typ = phrase!(node: not_typ, span: exp_inner.span.clone());
             let pattern_set = [not_typ].into_iter().collect();
             Ok(pattern_set)

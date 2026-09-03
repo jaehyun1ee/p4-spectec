@@ -11,7 +11,7 @@ use crate::{
 // == Variable inference
 
 fn infer_var(venv: &mut VEnv, exp: &ast::Exp, id: &ast::Id, iters: &[ast::Iter]) {
-    let typ = ast::typ_from_note(&exp.note, exp.span.clone());
+    let typ = crate::phrase!(node: exp.note.as_ref().clone(), span: exp.span.clone());
     let dim = Dim::new(typ, iters.to_vec());
     if venv
         .get(id)

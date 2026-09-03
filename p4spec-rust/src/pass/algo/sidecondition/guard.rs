@@ -372,7 +372,7 @@ fn gen_exp_and(exp_l_al: ast::Exp, exp_r_al: ast::Exp) -> ast::Exp {
     }
 }
 
-fn gen_iter_guard(iter_exp: &ast::IterExp) -> Vec<ast::Prem> {
+fn gen_iter_guard(iter_exp: &ast::ExpIter) -> Vec<ast::Prem> {
     let (iter, vars) = iter_exp;
     if vars.len() < 2 {
         return vec![];

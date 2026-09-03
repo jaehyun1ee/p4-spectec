@@ -147,7 +147,7 @@ impl Free for ExpKind {
     }
 }
 
-impl Free for IterExp {
+impl Free for ExpIter {
     fn free(&self) -> IdSet {
         IdSet::new()
     }
