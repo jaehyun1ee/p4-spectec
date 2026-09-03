@@ -31,24 +31,21 @@ fn variable(name: &str) -> il::ast::Exp {
     }
 }
 
-fn instruction(kind: sl::ast::InstrKind, iid: i64, source: &str) -> sl::ast::Instr {
-    p4spec_rust::note_phrase! {
+fn instruction(kind: sl::ast::InstrKind, source: &str) -> sl::ast::Instr {
+    p4spec_rust::phrase! {
         node: kind,
-        note: iid,
         span: span(source),
     }
 }
 
 #[test]
-fn test_instruction_equality_ignores_iids_and_source_regions() {
+fn test_instruction_equality_ignores_source_regions() {
     let instr_l = instruction(
         sl::ast::InstrKind::Return(sl::ast::ReturnInstr { exp: variable("x") }),
-        1,
         "left",
     );
     let instr_r = instruction(
         sl::ast::InstrKind::Return(sl::ast::ReturnInstr { exp: variable("x") }),
-        99,
         "right",
     );
 
@@ -82,11 +79,9 @@ fn test_rule_instructions_compare_inputs_iterations_and_nested_blocks() {
                 iter_instrs: Vec::new(),
                 block: vec![instruction(
                     sl::ast::InstrKind::Return(sl::ast::ReturnInstr { exp: variable("x") }),
-                    2,
                     "nested",
                 )],
             }),
-            1,
             "rule",
         )
     };
@@ -99,7 +94,6 @@ fn test_rule_instructions_compare_inputs_iterations_and_nested_blocks() {
 fn test_holding_cases_compare_variant_blocks_and_dangling_flags() {
     let block = vec![instruction(
         sl::ast::InstrKind::Return(sl::ast::ReturnInstr { exp: variable("x") }),
-        1,
         "block",
     )];
 

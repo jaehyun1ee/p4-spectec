@@ -2,14 +2,14 @@ use super::*;
 
 #[test]
 fn test_syntax_equality_ignores_spans_and_subcheck_strategy() {
-    let exp_l = p4spec_rust::note_phrase! { node: il::ast::ExpKind::Sub(
+    let exp_l: il::ast::Exp = p4spec_rust::note_phrase! { node: il::ast::ExpKind::Sub(
     Box::new(variable("x")),
-    typ(),
+    Box::new(typ()),
     Box::new(il::ast::Subcheck::Skip),
     ), note: il::ast::TypKind::Bool, span: span("left") };
-    let exp_r = p4spec_rust::note_phrase! { node: il::ast::ExpKind::Sub(
+    let exp_r: il::ast::Exp = p4spec_rust::note_phrase! { node: il::ast::ExpKind::Sub(
     Box::new(variable("x")),
-    typ(),
+    Box::new(typ()),
     Box::new(il::ast::Subcheck::Recurse(typ())),
     ), note: il::ast::TypKind::Text, span: span("right") };
 
@@ -22,11 +22,11 @@ fn test_syntax_equality_ignores_spans_and_subcheck_strategy() {
     assert!(arg_exp("x").syntax_eq(&arg_exp("x")));
     assert!(
         p4spec_rust::phrase! {
-            node: il::ast::PremKind::If(il::ast::IfPrem { exp: variable("x") }),
+            node: al::ast::PremKind::If(al::ast::IfPrem { exp: variable("x") }),
             span: span("prem"),
         }
         .syntax_eq(&p4spec_rust::phrase! {
-            node: il::ast::PremKind::If(il::ast::IfPrem { exp: variable("x") }),
+            node: al::ast::PremKind::If(al::ast::IfPrem { exp: variable("x") }),
             span: span("other-prem"),
         })
     );
@@ -71,12 +71,12 @@ fn test_syntax_equality_distinguishes_recursive_operands_variants_and_collection
             span: span("root"),
         }
     };
-    let path_x = p4spec_rust::note_phrase! {
+    let path_x: il::ast::Path = p4spec_rust::note_phrase! {
         node: il::ast::PathKind::Idx(Box::new(path_root()), Box::new(variable("x"))),
         note: il::ast::TypKind::Bool,
         span: span("path-x"),
     };
-    let path_y = p4spec_rust::note_phrase! {
+    let path_y: il::ast::Path = p4spec_rust::note_phrase! {
         node: il::ast::PathKind::Idx(Box::new(path_root()), Box::new(variable("y"))),
         note: il::ast::TypKind::Bool,
         span: span("path-y"),
@@ -89,7 +89,7 @@ fn test_syntax_equality_distinguishes_recursive_operands_variants_and_collection
     );
 
     let prem_rule = |input_hint| {
-        p4spec_rust::phrase! { node: il::ast::PremKind::Rule(il::ast::RulePrem {
+        p4spec_rust::phrase! { node: al::ast::PremKind::Rule(al::ast::RulePrem {
             id: id("r"),
             not_exp: not_exp("x"),
             input_hint,
@@ -99,15 +99,15 @@ fn test_syntax_equality_distinguishes_recursive_operands_variants_and_collection
     assert!(!prem_rule(InputHint::new(vec![0])).syntax_eq(&prem_rule(InputHint::new(vec![1]))));
     assert!(
         !p4spec_rust::phrase! {
-            node: il::ast::PremKind::If(il::ast::IfPrem { exp: variable("x") }),
+            node: al::ast::PremKind::If(al::ast::IfPrem { exp: variable("x") }),
             span: span("if"),
         }
         .syntax_eq(&p4spec_rust::phrase! {
-            node: il::ast::PremKind::Debug(il::ast::DebugPrem { exp: variable("x") }),
+            node: al::ast::PremKind::Debug(al::ast::DebugPrem { exp: variable("x") }),
             span: span("debug"),
         })
     );
-    let iter_prem = |vars_bound, vars_bind| il::ast::IterPrem {
+    let prem_iter = |vars_bound, vars_bind| il::ast::PremIter {
         iter: il::ast::Iter::List,
         vars_bound,
         vars_bind,
@@ -123,18 +123,18 @@ fn test_syntax_equality_distinguishes_recursive_operands_variants_and_collection
         iters: Vec::new(),
     };
     assert!(
-        iter_prem(vec![var_x.clone(), var_y.clone()], vec![var_x.clone()]).syntax_eq(&iter_prem(
+        prem_iter(vec![var_x.clone(), var_y.clone()], vec![var_x.clone()]).syntax_eq(&prem_iter(
             vec![var_y.clone(), var_x.clone()],
             vec![var_x.clone()]
         ))
     );
     assert!(
-        !iter_prem(vec![var_x.clone()], vec![var_x.clone()])
-            .syntax_eq(&iter_prem(vec![var_y.clone()], vec![var_x.clone()]))
+        !prem_iter(vec![var_x.clone()], vec![var_x.clone()])
+            .syntax_eq(&prem_iter(vec![var_y.clone()], vec![var_x.clone()]))
     );
     assert!(
-        !iter_prem(vec![var_x.clone()], vec![var_x.clone()])
-            .syntax_eq(&iter_prem(vec![var_x.clone()], vec![var_y.clone()]))
+        !prem_iter(vec![var_x.clone()], vec![var_x.clone()])
+            .syntax_eq(&prem_iter(vec![var_x.clone()], vec![var_y.clone()]))
     );
     assert!(![variable("x"), variable("y")].syntax_eq(&[variable("y"), variable("x")]));
     assert!([var_x.clone(), var_y.clone()].syntax_eq(&[var_y, var_x]));

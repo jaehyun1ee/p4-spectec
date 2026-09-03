@@ -9,6 +9,9 @@ use p4spec_rust::{
     },
 };
 
+#[path = "types/expand.rs"]
+mod expand;
+
 fn id(name: &str) -> ast::Id {
     p4spec_rust::phrase! {
         node: name.to_owned(),
@@ -150,8 +153,8 @@ fn test_expansion_resolves_plain_aliases_and_reports_invalid_references() {
         ),
     );
 
-    let expanded = expand_typ(&env, &var("Pair", vec![typ(TypKind::Bool)]))
-        .expect("expand parameterized alias");
+    let typ_alias = var("Pair", vec![typ(TypKind::Bool)]);
+    let expanded = expand_typ(&env, &typ_alias).expect("expand parameterized alias");
     assert_eq!(
         expanded.node,
         TypKind::Tuple(vec![typ(TypKind::Bool), typ(TypKind::Bool)])

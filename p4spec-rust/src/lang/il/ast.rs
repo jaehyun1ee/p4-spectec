@@ -1,5 +1,7 @@
 //! Intermediate language model
 
+use std::rc::Rc;
+
 use crate::lang::{
     common::{
         self,
@@ -149,7 +151,7 @@ pub enum OpTyp {
 
 // Expressions
 
-pub type Exp = NotePhrase<ExpKind, TypKind>;
+pub type Exp = NotePhrase<ExpKind, Rc<TypKind>>;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ExpKind {
@@ -168,11 +170,11 @@ pub enum ExpKind {
     /// `exp cmpop exp`
     Cmp(CmpOp, OpTyp, Box<Exp>, Box<Exp>),
     /// `exp as typ`
-    UpCast(Typ, Box<Exp>),
+    UpCast(Box<Typ>, Box<Exp>),
     /// `exp as typ`
-    DownCast(Typ, Box<Exp>),
+    DownCast(Box<Typ>, Box<Exp>),
     /// `exp <: typ`
-    Sub(Box<Exp>, Typ, Box<Subcheck>),
+    Sub(Box<Exp>, Box<Typ>, Box<Subcheck>),
     /// `exp matches pattern`
     Match(Box<Exp>, Pattern),
     /// `(` exp* `)`
@@ -180,7 +182,7 @@ pub enum ExpKind {
     /// `notexp`
     Case(Box<NotExp>),
     /// `{` expfield* `}`
-    Str(Vec<(Atom, Exp)>),
+    Str(Vec<ExpField>),
     /// `exp?`
     Opt(Option<Box<Exp>>),
     /// `[` exp* `]`
@@ -200,15 +202,16 @@ pub enum ExpKind {
     /// `exp [` exp `:` exp `]`
     Slice(Box<Exp>, Box<Exp>, Box<Exp>),
     /// `exp [` path `=` exp `]`
-    Upd(Box<Exp>, Path, Box<Exp>),
+    Upd(Box<Exp>, Box<Path>, Box<Exp>),
     /// `$id<` targ* `>(` arg* `)`
     Call(Id, Vec<Targ>, Vec<Arg>),
     /// `exp iterexp`
-    Iter(Box<Exp>, IterExp),
+    Iter(Box<Exp>, ExpIter),
 }
 
 pub type NotExp = Mixfix<Exp>;
-pub type IterExp = (Iter, Vec<Var>);
+pub type ExpField = (Atom, Exp);
+pub type ExpIter = (Iter, Vec<Var>);
 
 // Patterns
 
@@ -234,7 +237,7 @@ pub enum OptPattern {
 
 // Paths
 
-pub type Path = NotePhrase<PathKind, TypKind>;
+pub type Path = NotePhrase<PathKind, Rc<TypKind>>;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum PathKind {
@@ -310,15 +313,9 @@ pub struct IfNotHoldPrem {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct LetPrem {
-    pub exp_l: Exp,
-    pub exp_r: Exp,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct IteratedPrem {
+pub struct IterPrem {
     pub prem: Box<Prem>,
-    pub iter_prem: IterPrem,
+    pub prem_iter: PremIter,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -337,16 +334,14 @@ pub enum PremKind {
     IfHold(IfHoldPrem),
     /// `if id : notexp does not hold`
     IfNotHold(IfNotHoldPrem),
-    /// `let exp = exp`
-    Let(LetPrem),
     /// `prem iterprem`
-    Iter(IteratedPrem),
+    Iter(IterPrem),
     /// `debug exp`
     Debug(DebugPrem),
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct IterPrem {
+pub struct PremIter {
     pub iter: Iter,
     pub vars_bound: Vec<Var>,
     pub vars_bind: Vec<Var>,

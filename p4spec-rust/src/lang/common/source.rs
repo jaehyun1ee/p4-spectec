@@ -110,7 +110,7 @@ macro_rules! note_phrase {
     (node: $node:expr, note: $note:expr, span: $span:expr $(,)?) => {
         $crate::lang::common::source::NotePhrase {
             node: $node,
-            note: $note,
+            note: ($note).into(),
             span: $span,
         }
     };

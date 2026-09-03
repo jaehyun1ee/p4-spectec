@@ -51,12 +51,6 @@ impl Free for Guard {
 
 // - Instructions
 
-impl Free for Iid {
-    fn free(&self) -> IdSet {
-        IdSet::new()
-    }
-}
-
 impl Free for InstrKind {
     fn free(&self) -> IdSet {
         match self {

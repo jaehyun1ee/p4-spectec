@@ -154,21 +154,23 @@ fn encode_guard(guard: &Guard) -> Value {
     }
 }
 
-fn decode_iid(value: &Value) -> Result<ast::Iid, DecodeError> {
+fn decode_instr_note(value: &Value) -> Result<(), DecodeError> {
     let object = object(value)?;
-    integer(field(object, "iid")?)
+    integer(field(object, "iid")?)?;
+    Ok(())
 }
 
-fn encode_iid(iid: &ast::Iid) -> Value {
-    json!({"iid": iid})
+fn encode_instr_note(_note: &()) -> Value {
+    // OCaml still requires an instruction identifier in its wire format.
+    json!({"iid": 0})
 }
 
 fn decode_instr(value: &Value) -> Result<ast::Instr, DecodeError> {
-    source::decode_note_phrase(value, decode_instr_kind, decode_iid)
+    source::decode_note_phrase(value, decode_instr_kind, decode_instr_note)
 }
 
 fn encode_instr(instr: &ast::Instr) -> Value {
-    source::encode_note_phrase(instr, encode_instr_kind, encode_iid)
+    source::encode_note_phrase(instr, encode_instr_kind, encode_instr_note)
 }
 
 fn decode_instr_kind(value: &Value) -> Result<InstrKind, DecodeError> {
@@ -200,14 +202,14 @@ fn decode_instr_kind(value: &Value) -> Result<InstrKind, DecodeError> {
         ("LetI", [exp_l, exp_r, iters, block]) => Ok(InstrKind::Let(LetInstr {
             exp_l: il::decode_exp(exp_l)?,
             exp_r: il::decode_exp(exp_r)?,
-            iter_instrs: il::decode_list(iters, il::decode_iter_prem)?,
+            iter_instrs: il::decode_list(iters, il::decode_prem_iter)?,
             block: decode_block(block)?,
         })),
         ("RuleI", [id, exp, input, iters, block]) => Ok(InstrKind::Rule(RuleInstr {
             id: il::decode_id(id)?,
             not_exp: il::decode_not_exp(exp)?,
             input_hint: il::decode_input_hint(input)?,
-            iter_instrs: il::decode_list(iters, il::decode_iter_prem)?,
+            iter_instrs: il::decode_list(iters, il::decode_prem_iter)?,
             block: decode_block(block)?,
         })),
         ("ResultI", [rel_signature, exps]) => Ok(InstrKind::Result(ResultInstr {
@@ -283,7 +285,7 @@ fn encode_instr_kind(instr: &InstrKind) -> Value {
             "LetI",
             il::encode_exp(exp_l),
             il::encode_exp(exp_r),
-            il::encode_list(iters, il::encode_iter_prem),
+            il::encode_list(iters, il::encode_prem_iter),
             encode_block(block)
         ]),
         InstrKind::Rule(RuleInstr {
@@ -297,7 +299,7 @@ fn encode_instr_kind(instr: &InstrKind) -> Value {
             il::encode_id(id),
             il::encode_not_exp(not_exp),
             il::encode_input_hint(input),
-            il::encode_list(iters, il::encode_iter_prem),
+            il::encode_list(iters, il::encode_prem_iter),
             encode_block(block)
         ]),
         InstrKind::Result(ResultInstr {

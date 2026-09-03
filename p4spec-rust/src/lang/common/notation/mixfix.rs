@@ -7,6 +7,7 @@ use std::{
 use crate::lang::{
     common::ds::set::IdSet,
     traits::{
+        cmp::SyntaxCmp,
         eq::SyntaxEq,
         free::Free,
         print::{Print, Printer},
@@ -138,6 +139,11 @@ impl<T> Mixfix<T> {
             _ => false,
         }
     }
+
+    /// Tests whether two mixfixes have the same atoms and argument positions
+    pub fn eq_shape<U>(&self, mixfix_other: &Mixfix<U>) -> bool {
+        self.eq_by(mixfix_other, |_, _| true)
+    }
 }
 
 impl<T: PartialEq> PartialEq for Mixfix<T> {
@@ -151,6 +157,12 @@ impl<T: Eq> Eq for Mixfix<T> {}
 impl<T: SyntaxEq> SyntaxEq for Mixfix<T> {
     fn syntax_eq(&self, other: &Self) -> bool {
         self.eq_by(other, SyntaxEq::syntax_eq)
+    }
+}
+
+impl<T: SyntaxCmp> SyntaxCmp for Mixfix<T> {
+    fn syntax_cmp(&self, other: &Self) -> Ordering {
+        self.cmp_by(other, SyntaxCmp::syntax_cmp)
     }
 }
 
@@ -194,15 +206,16 @@ impl<T: Hash> Hash for Mixfix<T> {
 // == Free identifiers
 
 impl<T: Free> Free for Mixfix<T> {
-    fn free(&self) -> IdSet {
+    fn free_into(&self, free: &mut IdSet) {
         match self {
-            Self::Arg(arg) => arg.free(),
-            Self::Atom(_) => IdSet::new(),
-            Self::Brack(_, mixfix, _) => mixfix.free(),
-            Self::Infix(mixfix_l, _, mixfix_r) => mixfix_l.free().union(mixfix_r.free()),
-            Self::Seq(mixfixes) => mixfixes
-                .iter()
-                .fold(IdSet::new(), |free, mixfix| free.union(mixfix.free())),
+            Self::Arg(arg) => arg.free_into(free),
+            Self::Atom(_) => {}
+            Self::Brack(_, mixfix, _) => mixfix.free_into(free),
+            Self::Infix(mixfix_l, _, mixfix_r) => {
+                mixfix_l.free_into(free);
+                mixfix_r.free_into(free);
+            }
+            Self::Seq(mixfixes) => mixfixes.as_slice().free_into(free),
         }
     }
 }
@@ -328,75 +341,33 @@ impl<T> Mixfix<T> {
             }
         }
     }
-}
 
-// == Assembly
-
-impl<T: Clone> Mixfix<T> {
-    /// Combines arguments and selected atoms, inserting `space` between adjacent pieces
-    pub fn assemble(
-        &self,
-        empty: T,
-        space: T,
-        mut atom: impl FnMut(&AtomPhrase) -> Option<T>,
-        mut concat: impl FnMut(T, T) -> T,
-    ) -> T {
-        self.assemble_inner(&space, &mut atom, &mut concat)
-            .unwrap_or(empty)
+    /// Collects owned arguments in left-to-right tree order
+    pub fn into_args(self) -> Vec<T> {
+        let mut args = Vec::with_capacity(self.arity());
+        self.collect_into_args(&mut args);
+        args
     }
 
-    fn assemble_join(
-        options: impl IntoIterator<Item = Option<T>>,
-        space: &T,
-        concat: &mut impl FnMut(T, T) -> T,
-    ) -> Option<T> {
-        let mut values = options.into_iter().flatten();
-        let value = values.next()?;
-        Some(values.fold(value, |value_l, value_r| {
-            let value_l = concat(value_l, space.clone());
-            concat(value_l, value_r)
-        }))
-    }
-
-    fn assemble_inner(
-        &self,
-        space: &T,
-        atom: &mut impl FnMut(&AtomPhrase) -> Option<T>,
-        concat: &mut impl FnMut(T, T) -> T,
-    ) -> Option<T> {
+    fn collect_into_args(self, args: &mut Vec<T>) {
         match self {
-            Self::Arg(arg) => Some(arg.clone()),
-            Self::Atom(atom_phrase) => atom(atom_phrase),
-            Self::Brack(atom_l, mixfix, atom_r) => Self::assemble_join(
-                [
-                    atom(atom_l),
-                    mixfix.assemble_inner(space, atom, concat),
-                    atom(atom_r),
-                ],
-                space,
-                concat,
-            ),
-            Self::Infix(mixfix_l, atom_phrase, mixfix_r) => Self::assemble_join(
-                [
-                    mixfix_l.assemble_inner(space, atom, concat),
-                    atom(atom_phrase),
-                    mixfix_r.assemble_inner(space, atom, concat),
-                ],
-                space,
-                concat,
-            ),
+            Self::Arg(arg) => args.push(arg),
+            Self::Atom(_) => {}
+            Self::Brack(_, mixfix, _) => mixfix.collect_into_args(args),
+            Self::Infix(mixfix_l, _, mixfix_r) => {
+                mixfix_l.collect_into_args(args);
+                mixfix_r.collect_into_args(args);
+            }
             Self::Seq(mixfixes) => {
-                let options = mixfixes
-                    .iter()
-                    .map(|mixfix| mixfix.assemble_inner(space, atom, concat))
-                    .collect::<Vec<_>>();
-                Self::assemble_join(options, space, concat)
+                for mixfix in mixfixes {
+                    mixfix.collect_into_args(args);
+                }
             }
         }
     }
 }
 
-// == Rendering
+// == Printing
 
 impl<T> Mixfix<T> {
     /// Writes atoms and arguments, separating non-empty pieces with spaces
@@ -456,60 +427,5 @@ impl<T> Mixfix<T> {
                 Ok(())
             }
         }
-    }
-
-    /// Renders atoms and arguments, separating non-empty pieces with spaces
-    pub fn render(
-        &self,
-        mut render_atom: impl FnMut(&AtomPhrase) -> String,
-        mut render_arg: impl FnMut(&T) -> String,
-    ) -> String {
-        self.map(|arg| render_arg(arg)).assemble(
-            String::new(),
-            " ".to_owned(),
-            |atom| {
-                let string = render_atom(atom);
-                (!string.is_empty()).then_some(string)
-            },
-            |string_l, string_r| string_l + &string_r,
-        )
-    }
-}
-
-// == Display
-
-impl<T> Mixfix<T> {
-    fn display(&self) -> String {
-        format!("`{}`", self.display_inner())
-    }
-
-    fn display_inner(&self) -> String {
-        match self {
-            Self::Arg(_) => "%".into(),
-            Self::Atom(atom) => atom.node.to_string(),
-            Self::Brack(atom_l, mixfix, atom_r) => format!(
-                "{}{}{}",
-                atom_l.node.to_string(),
-                mixfix.display_inner(),
-                atom_r.node.to_string()
-            ),
-            Self::Infix(mixfix_l, atom, mixfix_r) => format!(
-                "{}{}{}",
-                mixfix_l.display_inner(),
-                atom.node.to_string(),
-                mixfix_r.display_inner()
-            ),
-            Self::Seq(mixfixes) => mixfixes
-                .iter()
-                .map(Self::display_inner)
-                .collect::<Vec<_>>()
-                .join(" "),
-        }
-    }
-}
-
-impl<T> fmt::Display for Mixfix<T> {
-    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt.write_str(&self.display())
     }
 }

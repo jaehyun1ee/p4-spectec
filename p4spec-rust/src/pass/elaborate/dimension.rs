@@ -98,7 +98,7 @@ fn infer_exp(dim_ctx: &mut DimContext, exp: &ast::Exp, iters: &[ast::Iter]) {
     match &exp.node {
         ast::ExpKind::Bool(_) | ast::ExpKind::Num(_) | ast::ExpKind::Text(_) => {}
         ast::ExpKind::Var(id) => {
-            let typ = phrase!(node: exp.note.clone(), span: exp.span.clone());
+            let typ = phrase!(node: exp.note.as_ref().clone(), span: exp.span.clone());
             dim_ctx.add(id, Dim::new(typ, iters.to_vec()));
         }
         ast::ExpKind::Un(_, _, exp_inner)
@@ -207,15 +207,9 @@ fn infer_prem(
         ast::PremKind::If(if_prem) => infer_exp(dim_ctx, &if_prem.exp, iters),
         ast::PremKind::IfHold(if_prem) => infer_not_exp(dim_ctx, &if_prem.not_exp, iters),
         ast::PremKind::IfNotHold(if_prem) => infer_not_exp(dim_ctx, &if_prem.not_exp, iters),
-        ast::PremKind::Let(_) => {
-            return Err(ElabError::new(
-                ElabErrorKind::MisplacedConstruct,
-                prem.span.clone(),
-                "let premise should appear only after algorithmic conversion",
-            ));
-        }
-        ast::PremKind::Iter(iterated) => {
-            if !iterated.iter_prem.vars_bound.is_empty() || !iterated.iter_prem.vars_bind.is_empty()
+        ast::PremKind::Iter(iter_prem) => {
+            if !iter_prem.prem_iter.vars_bound.is_empty()
+                || !iter_prem.prem_iter.vars_bind.is_empty()
             {
                 return Err(ElabError::new(
                     ElabErrorKind::InvalidIteration,
@@ -224,9 +218,9 @@ fn infer_prem(
                 ));
             }
             let mut iters_inner = Vec::with_capacity(iters.len() + 1);
-            iters_inner.push(iterated.iter_prem.iter);
+            iters_inner.push(iter_prem.prem_iter.iter);
             iters_inner.extend_from_slice(iters);
-            infer_prem(dim_ctx, &iterated.prem, &iters_inner)?;
+            infer_prem(dim_ctx, &iter_prem.prem, &iters_inner)?;
         }
         ast::PremKind::Debug(debug) => infer_exp(dim_ctx, &debug.exp, iters),
     }
@@ -270,57 +264,64 @@ fn infer_table_row(row: &ast::TableRow) -> DimContext {
 
 // == Dimension annotation
 
-// - Occurrence constructors
+// - Occurrences
 
-// - Singleton occurrences
+struct Occurrences(VEnv);
 
-fn singleton(id: &Id, typ: ast::Typ) -> VEnv {
-    let mut occurs = VEnv::new();
-    occurs.insert(id.clone(), Dim::new(typ, vec![]));
-    occurs
-}
+impl Occurrences {
+    fn new() -> Self {
+        Self(VEnv::new())
+    }
 
-// - Occurrence unions
+    fn singleton(id: &Id, typ: ast::Typ) -> Self {
+        let mut occurs = VEnv::new();
+        occurs.insert(id.clone(), Dim::new(typ, vec![]));
+        Self(occurs)
+    }
 
-fn union(mut occurs_l: VEnv, occurs_r: VEnv) -> Result<VEnv, ElabError> {
-    for (id, dim_r) in occurs_r.iter() {
-        if let Some(dim_l) = occurs_l.get(id) {
-            if !dim_l.typ.syntax_eq(&dim_r.typ) {
-                return Err(ElabError::new(
-                    ElabErrorKind::TypeMismatch,
-                    id.span.clone(),
-                    format!(
-                        "type mismatch for identifier `{}` in union: {} vs {}",
-                        id.node,
-                        Print::to_string(&dim_l.typ),
-                        Print::to_string(&dim_r.typ),
-                    ),
-                ));
+    fn union(mut self, occurs_other: Self) -> Result<Self, ElabError> {
+        for (id, dim_other) in occurs_other.0.iter() {
+            if let Some(dim) = self.0.get(id) {
+                if !dim.typ.syntax_eq(&dim_other.typ) {
+                    return Err(ElabError::new(
+                        ElabErrorKind::TypeMismatch,
+                        id.span.clone(),
+                        format!(
+                            "type mismatch for identifier `{}` in union: {} vs {}",
+                            id.node,
+                            Print::to_string(&dim.typ),
+                            Print::to_string(&dim_other.typ),
+                        ),
+                    ));
+                }
+                if dim_other.iters.len() <= dim.iters.len() {
+                    self.0.insert(id.clone(), dim_other.clone());
+                }
+            } else {
+                self.0.insert(id.clone(), dim_other.clone());
             }
-            if dim_r.iters.len() <= dim_l.iters.len() {
-                occurs_l.insert(id.clone(), dim_r.clone());
-            }
-        } else {
-            occurs_l.insert(id.clone(), dim_r.clone());
         }
+        Ok(self)
     }
-    Ok(occurs_l)
-}
 
-// - Iterated occurrences
-
-fn iterate_occurs(mut occurs: VEnv, vars: &[ast::Var], iter: ast::Iter) -> VEnv {
-    for var in vars {
-        let mut iters = var.iters.clone();
-        iters.push(iter);
-        occurs.insert(var.id.clone(), Dim::new(var.typ.clone(), iters));
+    fn iterate(mut self, vars: &[ast::Var], iter: ast::Iter) -> Self {
+        for var in vars {
+            let mut iters = var.iters.clone();
+            iters.push(iter);
+            self.0
+                .insert(var.id.clone(), Dim::new(var.typ.clone(), iters));
+        }
+        self
     }
-    occurs
+
+    fn iter(&self) -> impl Iterator<Item = (&Id, &Dim)> {
+        self.0.iter()
+    }
 }
 
 // - Iteration variables
 
-fn collect_iter_vars(bounds: &VEnv, occurs: &VEnv, iter: ast::Iter) -> Vec<ast::Var> {
+fn collect_iter_vars(bounds: &VEnv, occurs: &Occurrences, iter: ast::Iter) -> Vec<ast::Var> {
     occurs
         .iter()
         .filter_map(|(id, dim)| {
@@ -342,9 +343,9 @@ fn collect_iter_vars(bounds: &VEnv, occurs: &VEnv, iter: ast::Iter) -> Vec<ast::
 
 // - Expression annotation
 
-fn annotate_exp(bounds: &VEnv, exp: &mut ast::Exp) -> Result<VEnv, ElabError> {
+fn annotate_exp(bounds: &VEnv, exp: &mut ast::Exp) -> Result<Occurrences, ElabError> {
     let span = &exp.span;
-    let typ_kind = &exp.note;
+    let typ_kind = exp.note.as_ref();
     match &mut exp.node {
         ast::ExpKind::Bool(_) => Ok(annotate_bool_exp()),
         ast::ExpKind::Num(_) => Ok(annotate_num_exp()),
@@ -381,43 +382,43 @@ fn annotate_exp(bounds: &VEnv, exp: &mut ast::Exp) -> Result<VEnv, ElabError> {
     }
 }
 
-fn annotate_exps(bounds: &VEnv, exps: &mut [ast::Exp]) -> Result<VEnv, ElabError> {
-    let mut occurs = VEnv::new();
+fn annotate_exps(bounds: &VEnv, exps: &mut [ast::Exp]) -> Result<Occurrences, ElabError> {
+    let mut occurs = Occurrences::new();
     for exp in exps {
         let occurs_exp = annotate_exp(bounds, exp)?;
-        occurs = union(occurs, occurs_exp)?;
+        occurs = occurs.union(occurs_exp)?;
     }
     Ok(occurs)
 }
 
 // - Boolean expressions
 
-fn annotate_bool_exp() -> VEnv {
-    VEnv::new()
+fn annotate_bool_exp() -> Occurrences {
+    Occurrences::new()
 }
 
 // - Numeric expressions
 
-fn annotate_num_exp() -> VEnv {
-    VEnv::new()
+fn annotate_num_exp() -> Occurrences {
+    Occurrences::new()
 }
 
 // - Text expressions
 
-fn annotate_text_exp() -> VEnv {
-    VEnv::new()
+fn annotate_text_exp() -> Occurrences {
+    Occurrences::new()
 }
 
 // - Variable expressions
 
-fn annotate_var_exp(span: &Span, typ_kind: &ast::TypKind, id: &Id) -> VEnv {
+fn annotate_var_exp(span: &Span, typ_kind: &ast::TypKind, id: &Id) -> Occurrences {
     let typ = phrase!(node: typ_kind.clone(), span: span.clone());
-    singleton(id, typ)
+    Occurrences::singleton(id, typ)
 }
 
 // - Unary expressions
 
-fn annotate_un_exp(bounds: &VEnv, exp_inner: &mut ast::Exp) -> Result<VEnv, ElabError> {
+fn annotate_un_exp(bounds: &VEnv, exp_inner: &mut ast::Exp) -> Result<Occurrences, ElabError> {
     annotate_exp(bounds, exp_inner)
 }
 
@@ -427,10 +428,10 @@ fn annotate_bin_exp(
     bounds: &VEnv,
     exp_l: &mut ast::Exp,
     exp_r: &mut ast::Exp,
-) -> Result<VEnv, ElabError> {
+) -> Result<Occurrences, ElabError> {
     let occurs_l = annotate_exp(bounds, exp_l)?;
     let occurs_r = annotate_exp(bounds, exp_r)?;
-    union(occurs_l, occurs_r)
+    occurs_l.union(occurs_r)
 }
 
 // - Comparison expressions
@@ -439,45 +440,48 @@ fn annotate_cmp_exp(
     bounds: &VEnv,
     exp_l: &mut ast::Exp,
     exp_r: &mut ast::Exp,
-) -> Result<VEnv, ElabError> {
+) -> Result<Occurrences, ElabError> {
     let occurs_l = annotate_exp(bounds, exp_l)?;
     let occurs_r = annotate_exp(bounds, exp_r)?;
-    union(occurs_l, occurs_r)
+    occurs_l.union(occurs_r)
 }
 
 // - Upcast expressions
 
-fn annotate_upcast_exp(bounds: &VEnv, exp_inner: &mut ast::Exp) -> Result<VEnv, ElabError> {
+fn annotate_upcast_exp(bounds: &VEnv, exp_inner: &mut ast::Exp) -> Result<Occurrences, ElabError> {
     annotate_exp(bounds, exp_inner)
 }
 
 // - Downcast expressions
 
-fn annotate_downcast_exp(bounds: &VEnv, exp_inner: &mut ast::Exp) -> Result<VEnv, ElabError> {
+fn annotate_downcast_exp(
+    bounds: &VEnv,
+    exp_inner: &mut ast::Exp,
+) -> Result<Occurrences, ElabError> {
     annotate_exp(bounds, exp_inner)
 }
 
 // - Subtype expressions
 
-fn annotate_sub_exp(bounds: &VEnv, exp_inner: &mut ast::Exp) -> Result<VEnv, ElabError> {
+fn annotate_sub_exp(bounds: &VEnv, exp_inner: &mut ast::Exp) -> Result<Occurrences, ElabError> {
     annotate_exp(bounds, exp_inner)
 }
 
 // - Match expressions
 
-fn annotate_match_exp(bounds: &VEnv, exp_inner: &mut ast::Exp) -> Result<VEnv, ElabError> {
+fn annotate_match_exp(bounds: &VEnv, exp_inner: &mut ast::Exp) -> Result<Occurrences, ElabError> {
     annotate_exp(bounds, exp_inner)
 }
 
 // - Tuple expressions
 
-fn annotate_tuple_exp(bounds: &VEnv, exps: &mut [ast::Exp]) -> Result<VEnv, ElabError> {
+fn annotate_tuple_exp(bounds: &VEnv, exps: &mut [ast::Exp]) -> Result<Occurrences, ElabError> {
     annotate_exps(bounds, exps)
 }
 
 // - Case expressions
 
-fn annotate_case_exp(bounds: &VEnv, not_exp: &mut ast::NotExp) -> Result<VEnv, ElabError> {
+fn annotate_case_exp(bounds: &VEnv, not_exp: &mut ast::NotExp) -> Result<Occurrences, ElabError> {
     annotate_not_exp(bounds, not_exp)
 }
 
@@ -486,24 +490,27 @@ fn annotate_case_exp(bounds: &VEnv, not_exp: &mut ast::NotExp) -> Result<VEnv, E
 fn annotate_str_exp(
     bounds: &VEnv,
     fields: &mut [(ast::Atom, ast::Exp)],
-) -> Result<VEnv, ElabError> {
-    let mut occurs = VEnv::new();
+) -> Result<Occurrences, ElabError> {
+    let mut occurs = Occurrences::new();
     for (_, exp) in fields {
         let occurs_exp = annotate_exp(bounds, exp)?;
-        occurs = union(occurs, occurs_exp)?;
+        occurs = occurs.union(occurs_exp)?;
     }
     Ok(occurs)
 }
 
 // - Optional expressions
 
-fn annotate_opt_exp(bounds: &VEnv, exp_inner: Option<&mut ast::Exp>) -> Result<VEnv, ElabError> {
-    exp_inner.map_or_else(|| Ok(VEnv::new()), |exp| annotate_exp(bounds, exp))
+fn annotate_opt_exp(
+    bounds: &VEnv,
+    exp_inner: Option<&mut ast::Exp>,
+) -> Result<Occurrences, ElabError> {
+    exp_inner.map_or_else(|| Ok(Occurrences::new()), |exp| annotate_exp(bounds, exp))
 }
 
 // - List expressions
 
-fn annotate_list_exp(bounds: &VEnv, exps: &mut [ast::Exp]) -> Result<VEnv, ElabError> {
+fn annotate_list_exp(bounds: &VEnv, exps: &mut [ast::Exp]) -> Result<Occurrences, ElabError> {
     annotate_exps(bounds, exps)
 }
 
@@ -513,10 +520,10 @@ fn annotate_cons_exp(
     bounds: &VEnv,
     exp_l: &mut ast::Exp,
     exp_r: &mut ast::Exp,
-) -> Result<VEnv, ElabError> {
+) -> Result<Occurrences, ElabError> {
     let occurs_l = annotate_exp(bounds, exp_l)?;
     let occurs_r = annotate_exp(bounds, exp_r)?;
-    union(occurs_l, occurs_r)
+    occurs_l.union(occurs_r)
 }
 
 // - Concatenation expressions
@@ -525,10 +532,10 @@ fn annotate_cat_exp(
     bounds: &VEnv,
     exp_l: &mut ast::Exp,
     exp_r: &mut ast::Exp,
-) -> Result<VEnv, ElabError> {
+) -> Result<Occurrences, ElabError> {
     let occurs_l = annotate_exp(bounds, exp_l)?;
     let occurs_r = annotate_exp(bounds, exp_r)?;
-    union(occurs_l, occurs_r)
+    occurs_l.union(occurs_r)
 }
 
 // - Membership expressions
@@ -537,21 +544,21 @@ fn annotate_mem_exp(
     bounds: &VEnv,
     exp_l: &mut ast::Exp,
     exp_r: &mut ast::Exp,
-) -> Result<VEnv, ElabError> {
+) -> Result<Occurrences, ElabError> {
     let occurs_l = annotate_exp(bounds, exp_l)?;
     let occurs_r = annotate_exp(bounds, exp_r)?;
-    union(occurs_l, occurs_r)
+    occurs_l.union(occurs_r)
 }
 
 // - Length expressions
 
-fn annotate_len_exp(bounds: &VEnv, exp_inner: &mut ast::Exp) -> Result<VEnv, ElabError> {
+fn annotate_len_exp(bounds: &VEnv, exp_inner: &mut ast::Exp) -> Result<Occurrences, ElabError> {
     annotate_exp(bounds, exp_inner)
 }
 
 // - Field access expressions
 
-fn annotate_dot_exp(bounds: &VEnv, exp_inner: &mut ast::Exp) -> Result<VEnv, ElabError> {
+fn annotate_dot_exp(bounds: &VEnv, exp_inner: &mut ast::Exp) -> Result<Occurrences, ElabError> {
     annotate_exp(bounds, exp_inner)
 }
 
@@ -561,10 +568,10 @@ fn annotate_idx_exp(
     bounds: &VEnv,
     exp_l: &mut ast::Exp,
     exp_r: &mut ast::Exp,
-) -> Result<VEnv, ElabError> {
+) -> Result<Occurrences, ElabError> {
     let occurs_l = annotate_exp(bounds, exp_l)?;
     let occurs_r = annotate_exp(bounds, exp_r)?;
-    union(occurs_l, occurs_r)
+    occurs_l.union(occurs_r)
 }
 
 // - Slice expressions
@@ -574,12 +581,12 @@ fn annotate_slice_exp(
     exp_base: &mut ast::Exp,
     exp_l: &mut ast::Exp,
     exp_h: &mut ast::Exp,
-) -> Result<VEnv, ElabError> {
+) -> Result<Occurrences, ElabError> {
     let occurs_base = annotate_exp(bounds, exp_base)?;
     let occurs_l = annotate_exp(bounds, exp_l)?;
     let occurs_h = annotate_exp(bounds, exp_h)?;
-    let occurs = union(occurs_base, occurs_l)?;
-    union(occurs, occurs_h)
+    let occurs = occurs_base.union(occurs_l)?;
+    occurs.union(occurs_h)
 }
 
 // - Update expressions
@@ -589,17 +596,17 @@ fn annotate_upd_exp(
     exp_base: &mut ast::Exp,
     path: &mut ast::Path,
     exp_field: &mut ast::Exp,
-) -> Result<VEnv, ElabError> {
+) -> Result<Occurrences, ElabError> {
     let occurs_base = annotate_exp(bounds, exp_base)?;
     let occurs_field = annotate_exp(bounds, exp_field)?;
     let occurs_path = annotate_path(bounds, path)?;
-    let occurs = union(occurs_base, occurs_field)?;
-    union(occurs, occurs_path)
+    let occurs = occurs_base.union(occurs_field)?;
+    occurs.union(occurs_path)
 }
 
 // - Call expressions
 
-fn annotate_call_exp(bounds: &VEnv, args: &mut [ast::Arg]) -> Result<VEnv, ElabError> {
+fn annotate_call_exp(bounds: &VEnv, args: &mut [ast::Arg]) -> Result<Occurrences, ElabError> {
     annotate_args(bounds, args)
 }
 
@@ -611,7 +618,7 @@ fn annotate_iter_exp(
     exp_inner: &mut ast::Exp,
     iter: ast::Iter,
     vars: &mut Vec<ast::Var>,
-) -> Result<VEnv, ElabError> {
+) -> Result<Occurrences, ElabError> {
     if !vars.is_empty() {
         return Err(ElabError::new(
             ElabErrorKind::InvalidIteration,
@@ -628,14 +635,14 @@ fn annotate_iter_exp(
             "empty iteration",
         ));
     }
-    let occurs = iterate_occurs(occurs, &vars_inner, iter);
+    let occurs = occurs.iterate(&vars_inner, iter);
     *vars = vars_inner;
     Ok(occurs)
 }
 
 // - Notation expression annotation
 
-fn annotate_not_exp(bounds: &VEnv, not_exp: &mut ast::NotExp) -> Result<VEnv, ElabError> {
+fn annotate_not_exp(bounds: &VEnv, not_exp: &mut ast::NotExp) -> Result<Occurrences, ElabError> {
     match not_exp {
         Mixfix::Arg(exp) => annotate_arg_not_exp(bounds, exp),
         Mixfix::Atom(_) => Ok(annotate_atom_not_exp()),
@@ -649,14 +656,14 @@ fn annotate_not_exp(bounds: &VEnv, not_exp: &mut ast::NotExp) -> Result<VEnv, El
 
 // - Notation arguments
 
-fn annotate_arg_not_exp(bounds: &VEnv, exp: &mut ast::Exp) -> Result<VEnv, ElabError> {
+fn annotate_arg_not_exp(bounds: &VEnv, exp: &mut ast::Exp) -> Result<Occurrences, ElabError> {
     annotate_exp(bounds, exp)
 }
 
 // - Notation atoms
 
-fn annotate_atom_not_exp() -> VEnv {
-    VEnv::new()
+fn annotate_atom_not_exp() -> Occurrences {
+    Occurrences::new()
 }
 
 // - Bracketed notation expressions
@@ -664,7 +671,7 @@ fn annotate_atom_not_exp() -> VEnv {
 fn annotate_brack_not_exp(
     bounds: &VEnv,
     not_exp_inner: &mut ast::NotExp,
-) -> Result<VEnv, ElabError> {
+) -> Result<Occurrences, ElabError> {
     annotate_not_exp(bounds, not_exp_inner)
 }
 
@@ -674,26 +681,29 @@ fn annotate_infix_not_exp(
     bounds: &VEnv,
     not_exp_l: &mut ast::NotExp,
     not_exp_r: &mut ast::NotExp,
-) -> Result<VEnv, ElabError> {
+) -> Result<Occurrences, ElabError> {
     let occurs_l = annotate_not_exp(bounds, not_exp_l)?;
     let occurs_r = annotate_not_exp(bounds, not_exp_r)?;
-    union(occurs_l, occurs_r)
+    occurs_l.union(occurs_r)
 }
 
 // - Notation sequences
 
-fn annotate_seq_not_exp(bounds: &VEnv, not_exps: &mut [ast::NotExp]) -> Result<VEnv, ElabError> {
-    let mut occurs = VEnv::new();
+fn annotate_seq_not_exp(
+    bounds: &VEnv,
+    not_exps: &mut [ast::NotExp],
+) -> Result<Occurrences, ElabError> {
+    let mut occurs = Occurrences::new();
     for not_exp in not_exps {
         let occurs_exp = annotate_not_exp(bounds, not_exp)?;
-        occurs = union(occurs, occurs_exp)?;
+        occurs = occurs.union(occurs_exp)?;
     }
     Ok(occurs)
 }
 
 // - Path annotation
 
-fn annotate_path(bounds: &VEnv, path: &mut ast::Path) -> Result<VEnv, ElabError> {
+fn annotate_path(bounds: &VEnv, path: &mut ast::Path) -> Result<Occurrences, ElabError> {
     match &mut path.node {
         ast::PathKind::Root => Ok(annotate_root_path()),
         ast::PathKind::Idx(path_inner, exp) => annotate_idx_path(bounds, path_inner, exp),
@@ -706,8 +716,8 @@ fn annotate_path(bounds: &VEnv, path: &mut ast::Path) -> Result<VEnv, ElabError>
 
 // - Root paths
 
-fn annotate_root_path() -> VEnv {
-    VEnv::new()
+fn annotate_root_path() -> Occurrences {
+    Occurrences::new()
 }
 
 // - Index paths
@@ -716,10 +726,10 @@ fn annotate_idx_path(
     bounds: &VEnv,
     path_inner: &mut ast::Path,
     exp: &mut ast::Exp,
-) -> Result<VEnv, ElabError> {
+) -> Result<Occurrences, ElabError> {
     let occurs_path = annotate_path(bounds, path_inner)?;
     let occurs_exp = annotate_exp(bounds, exp)?;
-    union(occurs_path, occurs_exp)
+    occurs_path.union(occurs_exp)
 }
 
 // - Slice paths
@@ -729,77 +739,79 @@ fn annotate_slice_path(
     path_inner: &mut ast::Path,
     exp_l: &mut ast::Exp,
     exp_h: &mut ast::Exp,
-) -> Result<VEnv, ElabError> {
+) -> Result<Occurrences, ElabError> {
     let occurs_path = annotate_path(bounds, path_inner)?;
     let occurs_l = annotate_exp(bounds, exp_l)?;
     let occurs_h = annotate_exp(bounds, exp_h)?;
-    let occurs = union(occurs_path, occurs_l)?;
-    union(occurs, occurs_h)
+    let occurs = occurs_path.union(occurs_l)?;
+    occurs.union(occurs_h)
 }
 
 // - Field paths
 
-fn annotate_dot_path(bounds: &VEnv, path_inner: &mut ast::Path) -> Result<VEnv, ElabError> {
+fn annotate_dot_path(bounds: &VEnv, path_inner: &mut ast::Path) -> Result<Occurrences, ElabError> {
     annotate_path(bounds, path_inner)
 }
 
 // - Argument annotation
 
-fn annotate_arg(bounds: &VEnv, arg: &mut ast::Arg) -> Result<VEnv, ElabError> {
+fn annotate_arg(bounds: &VEnv, arg: &mut ast::Arg) -> Result<Occurrences, ElabError> {
     match &mut arg.node {
         ast::ArgKind::Exp(exp) => annotate_exp(bounds, exp),
-        ast::ArgKind::Def(_) => Ok(VEnv::new()),
+        ast::ArgKind::Def(_) => Ok(Occurrences::new()),
     }
 }
 
-fn annotate_args(bounds: &VEnv, args: &mut [ast::Arg]) -> Result<VEnv, ElabError> {
-    let mut occurs = VEnv::new();
+fn annotate_args(bounds: &VEnv, args: &mut [ast::Arg]) -> Result<Occurrences, ElabError> {
+    let mut occurs = Occurrences::new();
     for arg in args {
         let occurs_arg = annotate_arg(bounds, arg)?;
-        occurs = union(occurs, occurs_arg)?;
+        occurs = occurs.union(occurs_arg)?;
     }
     Ok(occurs)
 }
 
 // - Premise annotation
 
-fn annotate_prem(bounds: &VEnv, prem: &mut ast::Prem) -> Result<VEnv, ElabError> {
+fn annotate_prem(bounds: &VEnv, prem: &mut ast::Prem) -> Result<Occurrences, ElabError> {
     let span = &prem.span;
     match &mut prem.node {
         ast::PremKind::Rule(rule) => annotate_rule_prem(bounds, rule),
         ast::PremKind::If(if_prem) => annotate_if_prem(bounds, if_prem),
         ast::PremKind::IfHold(if_prem) => annotate_if_hold_prem(bounds, if_prem),
         ast::PremKind::IfNotHold(if_prem) => annotate_if_not_hold_prem(bounds, if_prem),
-        ast::PremKind::Let(_) => annotate_let_prem(span),
-        ast::PremKind::Iter(iterated) => annotate_iter_prem(bounds, span, iterated),
+        ast::PremKind::Iter(iter_prem) => annotate_iter_prem(bounds, span, iter_prem),
         ast::PremKind::Debug(debug) => annotate_debug_prem(bounds, debug),
     }
 }
 
-fn annotate_prems(bounds: &VEnv, prems: &mut [ast::Prem]) -> Result<VEnv, ElabError> {
-    let mut occurs = VEnv::new();
+fn annotate_prems(bounds: &VEnv, prems: &mut [ast::Prem]) -> Result<Occurrences, ElabError> {
+    let mut occurs = Occurrences::new();
     for prem in prems {
         let occurs_prem = annotate_prem(bounds, prem)?;
-        occurs = union(occurs, occurs_prem)?;
+        occurs = occurs.union(occurs_prem)?;
     }
     Ok(occurs)
 }
 
 // - Rule premises
 
-fn annotate_rule_prem(bounds: &VEnv, rule: &mut ast::RulePrem) -> Result<VEnv, ElabError> {
+fn annotate_rule_prem(bounds: &VEnv, rule: &mut ast::RulePrem) -> Result<Occurrences, ElabError> {
     annotate_not_exp(bounds, &mut rule.not_exp)
 }
 
 // - Conditional premises
 
-fn annotate_if_prem(bounds: &VEnv, if_prem: &mut ast::IfPrem) -> Result<VEnv, ElabError> {
+fn annotate_if_prem(bounds: &VEnv, if_prem: &mut ast::IfPrem) -> Result<Occurrences, ElabError> {
     annotate_exp(bounds, &mut if_prem.exp)
 }
 
 // - Holding premises
 
-fn annotate_if_hold_prem(bounds: &VEnv, if_prem: &mut ast::IfHoldPrem) -> Result<VEnv, ElabError> {
+fn annotate_if_hold_prem(
+    bounds: &VEnv,
+    if_prem: &mut ast::IfHoldPrem,
+) -> Result<Occurrences, ElabError> {
     annotate_not_exp(bounds, &mut if_prem.not_exp)
 }
 
@@ -808,18 +820,8 @@ fn annotate_if_hold_prem(bounds: &VEnv, if_prem: &mut ast::IfHoldPrem) -> Result
 fn annotate_if_not_hold_prem(
     bounds: &VEnv,
     if_prem: &mut ast::IfNotHoldPrem,
-) -> Result<VEnv, ElabError> {
+) -> Result<Occurrences, ElabError> {
     annotate_not_exp(bounds, &mut if_prem.not_exp)
-}
-
-// - Let premises
-
-fn annotate_let_prem(span: &Span) -> Result<VEnv, ElabError> {
-    Err(ElabError::new(
-        ElabErrorKind::MisplacedConstruct,
-        span.clone(),
-        "let premise should appear only after algorithmic conversion",
-    ))
 }
 
 // - Iteration premises
@@ -827,17 +829,17 @@ fn annotate_let_prem(span: &Span) -> Result<VEnv, ElabError> {
 fn annotate_iter_prem(
     bounds: &VEnv,
     span: &Span,
-    iterated: &mut ast::IteratedPrem,
-) -> Result<VEnv, ElabError> {
-    if !iterated.iter_prem.vars_bound.is_empty() || !iterated.iter_prem.vars_bind.is_empty() {
+    iter_prem: &mut ast::IterPrem,
+) -> Result<Occurrences, ElabError> {
+    if !iter_prem.prem_iter.vars_bound.is_empty() || !iter_prem.prem_iter.vars_bind.is_empty() {
         return Err(ElabError::new(
             ElabErrorKind::InvalidIteration,
             span.clone(),
             "iterated premise should initially have no annotations",
         ));
     }
-    let occurs = annotate_prem(bounds, &mut iterated.prem)?;
-    let iter = iterated.iter_prem.iter;
+    let occurs = annotate_prem(bounds, &mut iter_prem.prem)?;
+    let iter = iter_prem.prem_iter.iter;
     let vars_bound = collect_iter_vars(bounds, &occurs, iter);
     if vars_bound.is_empty() {
         return Err(ElabError::new(
@@ -846,14 +848,17 @@ fn annotate_iter_prem(
             "empty iteration",
         ));
     }
-    let occurs = iterate_occurs(occurs, &vars_bound, iter);
-    iterated.iter_prem.vars_bound = vars_bound;
+    let occurs = occurs.iterate(&vars_bound, iter);
+    iter_prem.prem_iter.vars_bound = vars_bound;
     Ok(occurs)
 }
 
 // - Debug premises
 
-fn annotate_debug_prem(bounds: &VEnv, debug: &mut ast::DebugPrem) -> Result<VEnv, ElabError> {
+fn annotate_debug_prem(
+    bounds: &VEnv,
+    debug: &mut ast::DebugPrem,
+) -> Result<Occurrences, ElabError> {
     annotate_exp(bounds, &mut debug.exp)
 }
 

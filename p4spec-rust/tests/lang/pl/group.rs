@@ -53,10 +53,7 @@ fn group(name: &str) -> pl::ast::Instr<pl::ast::InstrDispatch> {
         }),
     });
     let mut instruction = pl::annot::Annotated {
-        node: p4spec_rust::note_phrase! { node: kind, note: pl::ast::InstrNote {
-            iid: 0,
-            fallthrough: None,
-        }, span: span(name) },
+        node: p4spec_rust::note_phrase! { node: kind, note: None, span: span(name) },
         hints: pl::annot::Hints::default(),
     };
     instruction.hints.prose = Some(alter::AlterationHint::Text(format!("hint-{name}")));
@@ -67,10 +64,7 @@ fn control(
     kind: pl::ast::InstrKind<pl::ast::InstrDispatch>,
 ) -> pl::ast::Instr<pl::ast::InstrDispatch> {
     pl::annot::Annotated {
-        node: p4spec_rust::note_phrase! { node: kind, note: pl::ast::InstrNote {
-            iid: 0,
-            fallthrough: None,
-        }, span: span("control") },
+        node: p4spec_rust::note_phrase! { node: kind, note: None, span: span("control") },
         hints: pl::annot::Hints::default(),
     }
 }

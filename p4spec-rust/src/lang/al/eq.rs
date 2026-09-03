@@ -1,12 +1,73 @@
 //! Syntax equality for algorithmic-language data
 //!
-//! Reuses IL equality for aliases and compares AL-specific rule structure
+//! Reuses IL equality for aliases and compares AL-specific structure
 
 use crate::lang::traits::eq::SyntaxEq;
 
 use super::ast::*;
 
 // == Syntax equality
+
+// - Premise payloads
+
+impl SyntaxEq for RulePrem {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.id.syntax_eq(&other.id)
+            && self.not_exp.syntax_eq(&other.not_exp)
+            && self.input_hint == other.input_hint
+    }
+}
+
+impl SyntaxEq for IfPrem {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.exp.syntax_eq(&other.exp)
+    }
+}
+
+impl SyntaxEq for IfHoldPrem {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.id.syntax_eq(&other.id) && self.not_exp.syntax_eq(&other.not_exp)
+    }
+}
+
+impl SyntaxEq for IfNotHoldPrem {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.id.syntax_eq(&other.id) && self.not_exp.syntax_eq(&other.not_exp)
+    }
+}
+
+impl SyntaxEq for LetPrem {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.exp_l.syntax_eq(&other.exp_l) && self.exp_r.syntax_eq(&other.exp_r)
+    }
+}
+
+impl SyntaxEq for IterPrem {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.prem.syntax_eq(&other.prem) && self.prem_iter.syntax_eq(&other.prem_iter)
+    }
+}
+
+impl SyntaxEq for DebugPrem {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.exp.syntax_eq(&other.exp)
+    }
+}
+
+impl SyntaxEq for PremKind {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (PremKind::Rule(prem_l), PremKind::Rule(prem_r)) => prem_l.syntax_eq(prem_r),
+            (PremKind::If(prem_l), PremKind::If(prem_r)) => prem_l.syntax_eq(prem_r),
+            (PremKind::IfHold(prem_l), PremKind::IfHold(prem_r)) => prem_l.syntax_eq(prem_r),
+            (PremKind::IfNotHold(prem_l), PremKind::IfNotHold(prem_r)) => prem_l.syntax_eq(prem_r),
+            (PremKind::Let(prem_l), PremKind::Let(prem_r)) => prem_l.syntax_eq(prem_r),
+            (PremKind::Iter(prem_l), PremKind::Iter(prem_r)) => prem_l.syntax_eq(prem_r),
+            (PremKind::Debug(prem_l), PremKind::Debug(prem_r)) => prem_l.syntax_eq(prem_r),
+            _ => false,
+        }
+    }
+}
 
 // - Rules
 
@@ -39,6 +100,16 @@ impl SyntaxEq for ElseGroupKind {
         self.id.syntax_eq(&other.id)
             && self.rule_match.syntax_eq(&other.rule_match)
             && self.rule_path.syntax_eq(&other.rule_path)
+    }
+}
+
+// - Clauses
+
+impl SyntaxEq for ClauseKind {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.args.syntax_eq(&other.args)
+            && self.expression.syntax_eq(&other.expression)
+            && self.premises.syntax_eq(&other.premises)
     }
 }
 

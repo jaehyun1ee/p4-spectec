@@ -64,9 +64,10 @@ pub type Subcheck = il::ast::Subcheck;
 // Expressions
 
 pub type Exp = il::ast::Exp;
+pub type ExpField = il::ast::ExpField;
 pub type ExpKind = il::ast::ExpKind;
 pub type NotExp = il::ast::NotExp;
-pub type IterExp = il::ast::IterExp;
+pub type ExpIter = il::ast::ExpIter;
 
 // Patterns
 
@@ -99,9 +100,69 @@ pub type TargKind = il::ast::TargKind;
 
 // Premises
 
-pub type Prem = il::ast::Prem;
-pub type PremKind = il::ast::PremKind;
-pub type IterPrem = il::ast::IterPrem;
+pub type Prem = Phrase<PremKind>;
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct RulePrem {
+    pub id: Id,
+    pub not_exp: NotExp,
+    pub input_hint: InputHint,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct IfPrem {
+    pub exp: Exp,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct IfHoldPrem {
+    pub id: Id,
+    pub not_exp: NotExp,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct IfNotHoldPrem {
+    pub id: Id,
+    pub not_exp: NotExp,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct LetPrem {
+    pub exp_l: Exp,
+    pub exp_r: Exp,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct IterPrem {
+    pub prem: Box<Prem>,
+    pub prem_iter: PremIter,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct DebugPrem {
+    pub exp: Exp,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+#[allow(clippy::large_enum_variant)]
+pub enum PremKind {
+    /// `id : notexp`
+    Rule(RulePrem),
+    /// `if exp`
+    If(IfPrem),
+    /// `if id : notexp holds`
+    IfHold(IfHoldPrem),
+    /// `if id : notexp does not hold`
+    IfNotHold(IfNotHoldPrem),
+    /// `let exp = exp`
+    Let(LetPrem),
+    /// `prem iterprem`
+    Iter(IterPrem),
+    /// `debug exp`
+    Debug(DebugPrem),
+}
+
+pub type PremIter = il::ast::PremIter;
 
 // Rules
 
@@ -137,10 +198,17 @@ pub struct ElseGroupKind {
 
 // Clauses
 
-pub type Clause = il::ast::Clause;
-pub type ClauseKind = il::ast::ClauseKind;
-pub type ElseClause = il::ast::ElseClause;
-pub type ElseClauseKind = il::ast::ElseClauseKind;
+pub type Clause = Phrase<ClauseKind>;
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ClauseKind {
+    pub args: Vec<Arg>,
+    pub expression: Exp,
+    pub premises: Vec<Prem>,
+}
+
+pub type ElseClause = Clause;
+pub type ElseClauseKind = ClauseKind;
 
 // Table rows
 

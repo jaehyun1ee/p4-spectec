@@ -7,7 +7,7 @@ use crate::lang::{
 
 use super::{
     Fresh, TDEnv, Theta, TypeArityMismatch, TypeDef, TypeError, TypeErrorKind, equiv_not_typ,
-    equiv_typ, expand_typ, subst_not_typ_inner,
+    equiv_typ_expanded, expand_typ, subst_not_typ_inner,
 };
 
 // == Subtyping
@@ -18,7 +18,17 @@ pub fn sub_typ(
     typ_source: &ast::Typ,
     typ_target: &ast::Typ,
 ) -> Result<bool, TypeError> {
-    if equiv_typ(tdenv, typ_source, typ_target)? {
+    let typ_source = expand_typ(tdenv, typ_source)?;
+    let typ_target = expand_typ(tdenv, typ_target)?;
+    sub_typ_expanded(tdenv, &typ_source, &typ_target)
+}
+
+fn sub_typ_expanded(
+    tdenv: &TDEnv,
+    typ_source: &ast::Typ,
+    typ_target: &ast::Typ,
+) -> Result<bool, TypeError> {
+    if equiv_typ_expanded(tdenv, typ_source, typ_target)? {
         return Ok(true);
     }
     sub_typ_inner(tdenv, typ_source, typ_target)
@@ -29,8 +39,6 @@ fn sub_typ_inner(
     typ_source: &ast::Typ,
     typ_target: &ast::Typ,
 ) -> Result<bool, TypeError> {
-    let typ_source = expand_typ(tdenv, typ_source)?;
-    let typ_target = expand_typ(tdenv, typ_target)?;
     match (&typ_source.node, &typ_target.node) {
         (TypKind::Num(num_typ_source), TypKind::Num(num_typ_target)) => {
             let is_sub = num::sub(*num_typ_source, *num_typ_target);
@@ -112,7 +120,7 @@ fn sub_typ_inner(
             sub_typ(tdenv, typ_source, typ_target)
         }
         (_, TypKind::Iter(typ_target, Iter::Opt | Iter::List)) => {
-            sub_typ(tdenv, &typ_source, typ_target)
+            sub_typ(tdenv, typ_source, typ_target)
         }
         _ => Ok(false),
     }
@@ -126,13 +134,13 @@ pub fn optimize_sub_typ(
     typ_source: &ast::Typ,
     typ_target: &ast::Typ,
 ) -> Result<Subcheck, TypeError> {
-    if sub_typ(tdenv, typ_source, typ_target)? {
+    let typ_source_expanded = expand_typ(tdenv, typ_source)?;
+    let typ_target_expanded = expand_typ(tdenv, typ_target)?;
+    if sub_typ_expanded(tdenv, &typ_source_expanded, &typ_target_expanded)? {
         let subcheck = Subcheck::Skip;
         return Ok(subcheck);
     }
 
-    let typ_source_expanded = expand_typ(tdenv, typ_source)?;
-    let typ_target_expanded = expand_typ(tdenv, typ_target)?;
     match (&typ_source_expanded.node, &typ_target_expanded.node) {
         (TypKind::Tuple(typs_source), TypKind::Tuple(typs_target))
             if typs_source.len() == typs_target.len() =>
@@ -154,7 +162,7 @@ pub fn optimize_sub_typ(
             Ok(subcheck)
         }
         (TypKind::Var(id_source, _), TypKind::Var(id_target, _))
-            if sub_typ(tdenv, &typ_target_expanded, &typ_source_expanded)? =>
+            if sub_typ_expanded(tdenv, &typ_target_expanded, &typ_source_expanded)? =>
         {
             let Some(TypeDef::Defined(_, deftyp_source)) = tdenv.get(id_source) else {
                 let subcheck = Subcheck::Recurse(typ_target.clone());

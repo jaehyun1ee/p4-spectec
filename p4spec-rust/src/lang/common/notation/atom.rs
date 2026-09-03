@@ -100,7 +100,37 @@ impl Error for AtomError {}
 
 impl Print for Atom {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        printer.write(&self.to_string())
+        match self {
+            Self::Keyword(id) => printer.write(id),
+            Self::Tag(id) => write!(printer, "_{id}"),
+            Self::Operator(op) => write!(printer, "'{op}'"),
+            Self::Sub => printer.write("<:"),
+            Self::Sup => printer.write(":>"),
+            Self::Turnstile => printer.write("|-"),
+            Self::Tilesturn => printer.write("-|"),
+            Self::Arrow => printer.write("->"),
+            Self::ArrowSub => printer.write("->_"),
+            Self::DoubleArrowSub => printer.write("=>_"),
+            Self::DoubleArrowLong => printer.write("==>"),
+            Self::SqArrow => printer.write("~>"),
+            Self::SqArrowStar => printer.write("~>*"),
+            Self::Dot => printer.write("."),
+            Self::Dot2 => printer.write(".."),
+            Self::Dot3 => printer.write("..."),
+            Self::Semicolon => printer.write(";"),
+            Self::Colon => printer.write(":"),
+            Self::ColonEq => printer.write(":="),
+            Self::Tilde2 => printer.write("~~"),
+            Self::Backslash => printer.write("\\"),
+            Self::LAngle => printer.write("`<"),
+            Self::RAngle => printer.write("`>"),
+            Self::LParen => printer.write("`("),
+            Self::RParen => printer.write("`)"),
+            Self::LBrack => printer.write("`["),
+            Self::RBrack => printer.write("`]"),
+            Self::LBrace => printer.write("`{"),
+            Self::RBrace => printer.write("`}"),
+        }
     }
 }
 
@@ -121,66 +151,6 @@ impl SyntaxEq for Atom {
 impl Free for Atom {
     fn free(&self) -> IdSet {
         IdSet::new()
-    }
-}
-
-// == String conversion and parsing
-
-impl Atom {
-    /// String representation of the atom
-    pub fn to_string(&self) -> String {
-        match self {
-            Self::Keyword(id) => id.clone(),
-            Self::Tag(id) => format!("_{id}"),
-            Self::Operator(op) => format!("'{op}'"),
-            Self::Sub => "<:".into(),
-            Self::Sup => ":>".into(),
-            Self::Turnstile => "|-".into(),
-            Self::Tilesturn => "-|".into(),
-            Self::Arrow => "->".into(),
-            Self::ArrowSub => "->_".into(),
-            Self::DoubleArrowSub => "=>_".into(),
-            Self::DoubleArrowLong => "==>".into(),
-            Self::SqArrow => "~>".into(),
-            Self::SqArrowStar => "~>*".into(),
-            Self::Dot => ".".into(),
-            Self::Dot2 => "..".into(),
-            Self::Dot3 => "...".into(),
-            Self::Semicolon => ";".into(),
-            Self::Colon => ":".into(),
-            Self::ColonEq => ":=".into(),
-            Self::Tilde2 => "~~".into(),
-            Self::Backslash => "\\".into(),
-            Self::LAngle => "`<".into(),
-            Self::RAngle => "`>".into(),
-            Self::LParen => "`(".into(),
-            Self::RParen => "`)".into(),
-            Self::LBrack => "`[".into(),
-            Self::RBrack => "`]".into(),
-            Self::LBrace => "`{".into(),
-            Self::RBrace => "`}".into(),
-        }
-    }
-}
-
-// == Rendering
-
-impl Atom {
-    /// Returns the display spelling, omitting source-only quoting where applicable
-    pub fn render(&self) -> String {
-        match self {
-            Self::Tag(id) if id == "EMPTY" => "/* empty */".into(),
-            Self::Operator(op) => op.clone(),
-            Self::LAngle => "<".into(),
-            Self::RAngle => ">".into(),
-            Self::LParen => "(".into(),
-            Self::RParen => ")".into(),
-            Self::LBrack => "[".into(),
-            Self::RBrack => "]".into(),
-            Self::LBrace => "{".into(),
-            Self::RBrace => "}".into(),
-            _ => self.to_string(),
-        }
     }
 }
 

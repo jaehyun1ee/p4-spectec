@@ -204,7 +204,7 @@ impl SyntaxEq for ExpKind {
     }
 }
 
-impl SyntaxEq for IterExp {
+impl SyntaxEq for ExpIter {
     fn syntax_eq(&self, other: &Self) -> bool {
         self.0 == other.0 && self.1.syntax_eq(&other.1)
     }
@@ -267,14 +267,13 @@ impl SyntaxEq for PremKind {
             (PremKind::If(prem_l), PremKind::If(prem_r)) => prem_l.syntax_eq(prem_r),
             (PremKind::IfHold(prem_l), PremKind::IfHold(prem_r)) => prem_l.syntax_eq(prem_r),
             (PremKind::IfNotHold(prem_l), PremKind::IfNotHold(prem_r)) => prem_l.syntax_eq(prem_r),
-            (PremKind::Let(prem_l), PremKind::Let(prem_r)) => prem_l.syntax_eq(prem_r),
             (PremKind::Iter(prem_l), PremKind::Iter(prem_r)) => prem_l.syntax_eq(prem_r),
             (PremKind::Debug(prem_l), PremKind::Debug(prem_r)) => prem_l.syntax_eq(prem_r),
             _ => false,
         }
     }
 }
-impl SyntaxEq for IterPrem {
+impl SyntaxEq for PremIter {
     fn syntax_eq(&self, other: &Self) -> bool {
         self.iter.syntax_eq(&other.iter)
             && self.vars_bound.syntax_eq(&other.vars_bound)
@@ -395,15 +394,9 @@ impl SyntaxEq for IfNotHoldPrem {
     }
 }
 
-impl SyntaxEq for LetPrem {
+impl SyntaxEq for IterPrem {
     fn syntax_eq(&self, other: &Self) -> bool {
-        self.exp_l.syntax_eq(&other.exp_l) && self.exp_r.syntax_eq(&other.exp_r)
-    }
-}
-
-impl SyntaxEq for IteratedPrem {
-    fn syntax_eq(&self, other: &Self) -> bool {
-        self.prem.syntax_eq(&other.prem) && self.iter_prem.syntax_eq(&other.iter_prem)
+        self.prem.syntax_eq(&other.prem) && self.prem_iter.syntax_eq(&other.prem_iter)
     }
 }
 

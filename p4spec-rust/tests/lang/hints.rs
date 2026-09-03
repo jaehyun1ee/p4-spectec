@@ -11,7 +11,7 @@ use p4spec_rust::{
             flag as flag_impl, hint as hint_impl,
             input::{self as input_impl, InputError, InputHint},
         },
-        traits::eq::SyntaxEq,
+        traits::{eq::SyntaxEq, print::Print},
     },
 };
 
@@ -52,7 +52,7 @@ impl Renderer<&str> for StringRenderer {
         (text != "omit").then(|| text.into())
     }
     fn atom(&self, atom: &ast::Atom) -> String {
-        atom.node.render()
+        Print::to_string(atom)
     }
     fn join(&self, items: Vec<String>) -> String {
         items.join(self.separator)

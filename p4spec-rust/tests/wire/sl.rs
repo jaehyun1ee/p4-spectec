@@ -52,8 +52,8 @@ fn el_hint() -> Value {
     })
 }
 
-fn instruction(kind: Value, iid: i64) -> Value {
-    note_phrase(kind, json!({"iid": iid}))
+fn instruction(kind: Value) -> Value {
+    note_phrase(kind, json!({"iid": 0}))
 }
 
 #[test]
@@ -68,70 +68,55 @@ fn test_sl_spec_codec_covers_all_sl_only_variant_families() {
     let empty_block: Vec<Value> = Vec::new();
 
     let all_instructions = vec![
-        instruction(
-            json!(["IfI", bool_exp(true), [iterexp.clone()], [], false]),
-            1,
-        ),
-        instruction(
-            json!([
-                "HoldI",
-                id("r"),
-                ["Arg", bool_exp(true)],
-                [iterexp.clone()],
-                ["BothH", [], []],
-            ]),
-            2,
-        ),
-        instruction(
-            json!([
-                "CaseI",
-                int_exp("5"),
-                [
-                    [["BoolG", true], []],
-                    [["CmpG", ["EqOp"], ["BoolT"], bool_exp(false)], []],
-                    [["SubG", bool_typ(), ["SkipSC"]], []],
-                    [["MatchG", ["ListP", ["Fixed", 3]]], []],
-                    [["MemG", bool_exp(true)], []],
-                ],
-                true,
-            ]),
-            3,
-        ),
-        instruction(
-            json!(["GroupI", id("group"), rel_signature.clone(), [], []]),
-            4,
-        ),
-        instruction(
-            json!([
-                "LetI",
-                bool_exp(true),
-                bool_exp(false),
-                [iterinstr.clone()],
-                [],
-            ]),
-            5,
-        ),
-        instruction(
-            json!([
-                "RuleI",
-                id("r"),
-                ["Arg", bool_exp(true)],
-                [1, 0],
-                [iterinstr],
-                [],
-            ]),
-            6,
-        ),
-        instruction(json!(["ResultI", rel_signature.clone(), []]), 7),
-        instruction(json!(["ReturnI", bool_exp(true)]), 8),
-        instruction(
-            json!([
-                "DebugI",
-                bool_exp(false),
-                instruction(json!(["ReturnI", bool_exp(true)]), 10),
-            ]),
-            9,
-        ),
+        instruction(json!(["IfI", bool_exp(true), [iterexp.clone()], [], false])),
+        instruction(json!([
+            "HoldI",
+            id("r"),
+            ["Arg", bool_exp(true)],
+            [iterexp.clone()],
+            ["BothH", [], []],
+        ])),
+        instruction(json!([
+            "CaseI",
+            int_exp("5"),
+            [
+                [["BoolG", true], []],
+                [["CmpG", ["EqOp"], ["BoolT"], bool_exp(false)], []],
+                [["SubG", bool_typ(), ["SkipSC"]], []],
+                [["MatchG", ["ListP", ["Fixed", 3]]], []],
+                [["MemG", bool_exp(true)], []],
+            ],
+            true,
+        ])),
+        instruction(json!([
+            "GroupI",
+            id("group"),
+            rel_signature.clone(),
+            [],
+            []
+        ])),
+        instruction(json!([
+            "LetI",
+            bool_exp(true),
+            bool_exp(false),
+            [iterinstr.clone()],
+            [],
+        ])),
+        instruction(json!([
+            "RuleI",
+            id("r"),
+            ["Arg", bool_exp(true)],
+            [1, 0],
+            [iterinstr],
+            [],
+        ])),
+        instruction(json!(["ResultI", rel_signature.clone(), []])),
+        instruction(json!(["ReturnI", bool_exp(true)])),
+        instruction(json!([
+            "DebugI",
+            bool_exp(false),
+            instruction(json!(["ReturnI", bool_exp(true)])),
+        ])),
     ];
 
     let sl_params = vec![
@@ -193,7 +178,7 @@ fn test_sl_spec_codec_covers_all_sl_only_variant_families() {
                 [],
                 sl_params,
                 bool_typ(),
-                [instruction(json!(["ReturnI", bool_exp(true)]), 11)],
+                [instruction(json!(["ReturnI", bool_exp(true)]))],
                 null,
                 [],
             ],

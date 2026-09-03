@@ -11,7 +11,7 @@ fn test_function_clauses_are_populated_after_definition_traversal() {
     let spec = parse_string("dec $negate(bool) : bool\ndef $negate(true) = false")
         .expect("parse function declaration and clause");
 
-    let spec = elaborate::elaborate(&spec).expect("elaborate function");
+    let spec = elaborate::elaborate(spec).expect("elaborate function");
 
     let ast::DefKind::FuncDec(function) = &spec[0].node else {
         panic!("expected function declaration");
@@ -30,7 +30,7 @@ fn test_parenthesized_variant_keeps_the_case_origin() {
     )
     .expect("parse variant alias and clause");
 
-    let spec = elaborate::elaborate(&spec).expect("elaborate variant alias and clause");
+    let spec = elaborate::elaborate(spec).expect("elaborate variant alias and clause");
 
     let ast::DefKind::FuncDec(function) = &spec[2].node else {
         panic!("expected function declaration");
@@ -38,7 +38,7 @@ fn test_parenthesized_variant_keeps_the_case_origin() {
     let ast::ArgKind::Exp(argument) = &function.clauses[0].node.args[0].node else {
         panic!("expected expression argument");
     };
-    let ast::TypKind::Var(id, _) = &argument.note else {
+    let ast::TypKind::Var(id, _) = argument.note.as_ref() else {
         panic!("expected nominal variant type");
     };
     assert_eq!(id.node, "pair");
@@ -56,7 +56,7 @@ fn test_failed_variant_alternative_does_not_leak_wildcard_bindings() {
     )
     .expect("parse variant alternatives");
 
-    let spec = elaborate::elaborate(&spec).expect("elaborate matching alternative");
+    let spec = elaborate::elaborate(spec).expect("elaborate matching alternative");
     let ast::DefKind::FuncDec(function) = &spec[1].node else {
         panic!("expected function declaration");
     };
@@ -85,5 +85,5 @@ fn test_full_spec_elaborates() {
         .unwrap_or_else(|| repo.join("spec"));
     let spec = parse_files([spec_path]).expect("parse the specification corpus");
 
-    elaborate::elaborate(&spec).expect("elaborate the specification corpus");
+    elaborate::elaborate(spec).expect("elaborate the specification corpus");
 }

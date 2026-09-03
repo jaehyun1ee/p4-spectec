@@ -405,7 +405,7 @@ impl Print for NotExp {
     }
 }
 
-impl Print for IterExp {
+impl Print for ExpIter {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         self.0.print(printer)?;
         printer.write_char('{')?;
@@ -423,7 +423,7 @@ impl Print for IterExp {
     }
 }
 
-impl Print for [IterExp] {
+impl Print for [ExpIter] {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         for iter_exp in self {
             iter_exp.print(printer)?;
@@ -547,11 +547,7 @@ impl Print for [Arg] {
 
 // - Premises
 
-pub(crate) fn write_prems_with(
-    output: &mut Printer<'_>,
-    level: usize,
-    prems: &[Prem],
-) -> fmt::Result {
+fn write_prems_with(output: &mut Printer<'_>, level: usize, prems: &[Prem]) -> fmt::Result {
     for prem in prems {
         write!(output, "\n{}-- ", indent(level))?;
         prem.print(output)?;
@@ -585,27 +581,21 @@ impl Print for Prem {
                 not_exp.print(printer)?;
                 printer.write_str(" does not hold")
             }
-            PremKind::Let(LetPrem { exp_l, exp_r }) => {
-                printer.write_str("let ")?;
-                exp_l.print(printer)?;
-                printer.write_str(" = ")?;
-                exp_r.print(printer)
-            }
-            PremKind::Iter(IteratedPrem {
+            PremKind::Iter(IterPrem {
                 prem: inner,
-                iter_prem,
+                prem_iter,
             }) if matches!(inner.node, PremKind::Iter(_)) => {
                 inner.print(printer)?;
-                iter_prem.print(printer)
+                prem_iter.print(printer)
             }
-            PremKind::Iter(IteratedPrem {
+            PremKind::Iter(IterPrem {
                 prem: inner,
-                iter_prem,
+                prem_iter,
             }) => {
                 printer.write_char('(')?;
                 inner.print(printer)?;
                 printer.write_char(')')?;
-                iter_prem.print(printer)
+                prem_iter.print(printer)
             }
             PremKind::Debug(DebugPrem { exp }) => {
                 printer.write_str("debug ")?;
@@ -621,7 +611,7 @@ impl Print for [Prem] {
     }
 }
 
-impl Print for IterPrem {
+impl Print for PremIter {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         self.iter.print(printer)?;
         printer.write_char('{')?;
@@ -644,10 +634,10 @@ impl Print for IterPrem {
     }
 }
 
-impl Print for [IterPrem] {
+impl Print for [PremIter] {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        for iter_prem in self {
-            iter_prem.print(printer)?;
+        for prem_iter in self {
+            prem_iter.print(printer)?;
         }
         Ok(())
     }

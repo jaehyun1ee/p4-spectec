@@ -9,7 +9,7 @@ use crate::lang::{
     },
 };
 
-use super::mixfix::{AtomPhrase, Mixfix};
+use super::mixfix::Mixfix;
 
 /// A mixfix shape with unfilled argument positions
 pub type Mixop = Mixfix<()>;
@@ -109,18 +109,5 @@ impl Mixop {
                     .collect::<Result<_, _>>()?,
             )),
         }
-    }
-}
-
-// == Rendering a filled mixfix
-
-impl Mixop {
-    /// Renders a mixfix operator with string arguments
-    pub fn to_string(
-        &self,
-        args: impl IntoIterator<Item = String>,
-        render_atom: impl FnMut(&AtomPhrase) -> String,
-    ) -> Result<String, ArityMismatch> {
-        Ok(Self::fill(self, args)?.render(render_atom, Clone::clone))
     }
 }

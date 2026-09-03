@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn test_printer_renders_nested_premises_and_definition_spec_goldens() {
-    let iteration = ast::IterPrem {
+    let prem_iter = ast::PremIter {
         iter: ast::Iter::List,
         vars_bound: vec![ast::Var {
             id: id("bound"),
@@ -15,12 +15,12 @@ fn test_printer_renders_nested_premises_and_definition_spec_goldens() {
             iters: vec![ast::Iter::Opt],
         }],
     };
-    let nested = prem(ast::PremKind::Iter(ast::IteratedPrem {
-        prem: Box::new(prem(ast::PremKind::Iter(ast::IteratedPrem {
+    let nested = prem(ast::PremKind::Iter(ast::IterPrem {
+        prem: Box::new(prem(ast::PremKind::Iter(ast::IterPrem {
             prem: Box::new(prem(ast::PremKind::If(ast::IfPrem { exp: var("ready") }))),
-            iter_prem: iteration.clone(),
+            prem_iter: prem_iter.clone(),
         }))),
-        iter_prem: iteration,
+        prem_iter,
     }));
     assert_eq!(
         Print::to_string(&nested),
@@ -34,10 +34,6 @@ fn test_printer_renders_nested_premises_and_definition_spec_goldens() {
                 id: id("relation"),
                 not_exp: notexp("input"),
                 input_hint: InputHint::new(vec![0]),
-            })),
-            prem(ast::PremKind::Let(ast::LetPrem {
-                exp_l: var("left"),
-                exp_r: var("right"),
             })),
             nested,
         ],
@@ -147,13 +143,11 @@ fn test_printer_renders_nested_premises_and_definition_spec_goldens() {
             "  rulegroup main\n\n",
             "    rule r: head\n",
             "    -- relation: input\n",
-            "    -- let left = right\n",
             "    -- (if ready)*{bound <- bound*, output? -> output?*}*{bound <- bound*, output? -> output?*}\n\n",
             "  elsegroup\n\n",
             "  rulegroup fallback\n\n",
             "    rule r: head\n",
             "    -- relation: input\n",
-            "    -- let left = right\n",
             "    -- (if ready)*{bound <- bound*, output? -> output?*}*{bound <- bound*, output? -> output?*}\n\n",
             "extern def $extern : bool\n\n",
             "builtin def $builtin : bool\n\n",

@@ -3,7 +3,7 @@ use p4spec_rust::{
     lang::{
         al,
         common::{
-            ds::{map::IdMap, set::IdSet},
+            ds::set::IdSet,
             notation::{atom::Atom, mixfix::Mixfix},
         },
         el,
@@ -116,7 +116,7 @@ fn notation(parts: Vec<Mixfix<il::ast::Typ>>) -> il::ast::NotTyp {
     }
 }
 
-fn premise(kind: il::ast::PremKind) -> il::ast::Prem {
+fn premise(kind: al::ast::PremKind) -> al::ast::Prem {
     p4spec_rust::phrase! {
         node: kind,
         span: span("premise"),
@@ -144,13 +144,13 @@ fn composite_spec(metadata: &str, extern_inputs: Vec<i64>) -> al::ast::Spec {
     let evaluate_match = al::ast::RuleMatch {
         exps_signature: vec![variable("signature")],
         exps_input: vec![text_expression("line\n\"\\")],
-        prems: vec![premise(il::ast::PremKind::If(il::ast::IfPrem {
+        prems: vec![premise(al::ast::PremKind::If(al::ast::IfPrem {
             exp: variable("ready"),
         }))],
     };
     let evaluate_path = al::ast::RulePath {
         id: id("success"),
-        prems: vec![premise(il::ast::PremKind::Debug(il::ast::DebugPrem {
+        prems: vec![premise(al::ast::PremKind::Debug(al::ast::DebugPrem {
             exp: variable("trace"),
         }))],
         exps_output: vec![text_expression("done")],
@@ -193,18 +193,18 @@ fn composite_spec(metadata: &str, extern_inputs: Vec<i64>) -> al::ast::Spec {
         exps_signature: vec![variable("table_signature")],
         args: vec![arg_exp("key")],
         exp: text_expression("row\tvalue"),
-        prems: vec![premise(il::ast::PremKind::If(il::ast::IfPrem {
+        prems: vec![premise(al::ast::PremKind::If(al::ast::IfPrem {
             exp: variable("ready"),
         }))],
     }, span: span(metadata) };
-    let function_clause = p4spec_rust::phrase! { node: il::ast::ClauseKind {
+    let function_clause = p4spec_rust::phrase! { node: al::ast::ClauseKind {
         args: vec![arg_exp("argument")],
         expression: text_expression("quoted\"\\"),
-        premises: vec![premise(il::ast::PremKind::If(il::ast::IfPrem {
+        premises: vec![premise(al::ast::PremKind::If(al::ast::IfPrem {
             exp: variable("ready"),
         }))],
     }, span: span(metadata) };
-    let else_clause = p4spec_rust::phrase! { node: il::ast::ClauseKind {
+    let else_clause = p4spec_rust::phrase! { node: al::ast::ClauseKind {
         args: vec![arg_exp("fallback")],
         expression: expr(il::ast::ExpKind::Bool(false)),
         premises: Vec::new(),

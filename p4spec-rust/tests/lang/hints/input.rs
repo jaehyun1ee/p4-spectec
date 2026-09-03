@@ -33,7 +33,7 @@ fn test_input_hints_validate_and_preserve_split_order() {
     assert_eq!(input_impl::validate(&hint, 3), Ok(()));
 
     let items = ["zero", "one", "two", "three"];
-    let (items_input, items_output) = input_impl::split(&hint, &items).unwrap();
+    let (items_input, items_output) = input_impl::split(&hint, items.to_vec()).unwrap();
     assert_eq!(items_input, vec!["zero", "two"]);
     assert_eq!(items_output, vec!["one", "three"]);
     assert_eq!(
@@ -48,7 +48,7 @@ fn test_input_hints_validate_and_preserve_split_order() {
         })
     );
     assert_eq!(
-        input_impl::split(&InputHint::new(vec![4]), &items),
+        input_impl::split(&InputHint::new(vec![4]), items.to_vec()),
         Err(InputError::IndexOutOfBounds { index: 4, arity: 4 })
     );
     assert_eq!(

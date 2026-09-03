@@ -486,16 +486,16 @@ fn encode_fallthrough(value: &Fallthrough) -> Value {
     }
 }
 
-fn decode_inote(value: &Value) -> Result<(i64, Option<Fallthrough>), DecodeError> {
+fn decode_instr_note(value: &Value) -> Result<Option<Fallthrough>, DecodeError> {
     let value = object(value)?;
-    Ok((
-        integer(field(value, "iid")?)?,
-        decode_option(field(value, "fallthrough")?, decode_fallthrough)?,
-    ))
+    integer(field(value, "iid")?)?;
+    let fallthrough = decode_option(field(value, "fallthrough")?, decode_fallthrough)?;
+    Ok(fallthrough)
 }
 
-fn encode_inote(iid: i64, fallthrough: Option<&Fallthrough>) -> Value {
-    json!({"iid": iid, "fallthrough": encode_option(fallthrough, encode_fallthrough)})
+fn encode_instr_note(fallthrough: &Option<Fallthrough>) -> Value {
+    // OCaml still requires an instruction identifier in its wire format.
+    json!({"iid": 0, "fallthrough": encode_option(fallthrough.as_ref(), encode_fallthrough)})
 }
 
 fn decode_guard(value: &Value) -> Result<Guard, DecodeError> {
@@ -565,10 +565,7 @@ fn decode_instr<T>(
     let node = source::decode_note_phrase(
         field(value, "node")?,
         |value| decode_instr_kind(value, decode_tier),
-        |value| {
-            let (iid, fallthrough) = decode_inote(value)?;
-            Ok(ast::InstrNote { iid, fallthrough })
-        },
+        decode_instr_note,
     )?;
     let hints = decode_hints(field(value, "hints")?)?;
     Ok(annot::Annotated { node, hints })
@@ -576,7 +573,7 @@ fn decode_instr<T>(
 
 fn encode_instr<T>(instr: &ast::Instr<T>, encode_tier: fn(&T) -> Value) -> Value {
     json!({
-        "node": source::encode_note_phrase(&instr.node, |kind| encode_instr_kind(kind, encode_tier), |note| encode_inote(note.iid, note.fallthrough.as_ref())),
+        "node": source::encode_note_phrase(&instr.node, |kind| encode_instr_kind(kind, encode_tier), encode_instr_note),
         "hints": encode_hints(&instr.hints)
     })
 }
@@ -665,7 +662,7 @@ fn decode_instr_kind<T>(
         ("LetI", [left, right, iters]) => Ok(InstrKind::Let(LetInstr {
             exp_l: decode_exp(left)?,
             exp_r: decode_exp(right)?,
-            iter_instrs: il::decode_list(iters, il::decode_iter_prem)?,
+            iter_instrs: il::decode_list(iters, il::decode_prem_iter)?,
         })),
         ("DebugI", [exp]) => Ok(InstrKind::Debug(DebugInstr {
             exp: decode_exp(exp)?,
@@ -760,7 +757,7 @@ fn encode_instr_kind<T>(instr: &InstrKind<T>, encode_tier: fn(&T) -> Value) -> V
             "LetI",
             encode_exp(left),
             encode_exp(right),
-            il::encode_list(iters, il::encode_iter_prem)
+            il::encode_list(iters, il::encode_prem_iter)
         ]),
         InstrKind::Debug(DebugInstr { exp }) => json!(["DebugI", encode_exp(exp)]),
         InstrKind::Destruct(DestructInstr { bindings, exp }) => json!([
@@ -845,7 +842,7 @@ fn decode_instr_group(value: &Value) -> Result<InstrGroup, DecodeError> {
             id: il::decode_id(id)?,
             not_exp: mixfix::decode(not_exp, decode_exp)?,
             input_hint: il::decode_input_hint(input_hint)?,
-            iter_instrs: il::decode_list(iter_instrs, il::decode_iter_prem)?,
+            iter_instrs: il::decode_list(iter_instrs, il::decode_prem_iter)?,
         })),
         ("BacktrackI", [arms]) => Ok(InstrGroup::Backtrack(BacktrackGroupInstr {
             blocks: il::decode_list(arms, |block| decode_block(block, decode_instr_group))?,
@@ -878,7 +875,7 @@ fn encode_instr_group(instr: &InstrGroup) -> Value {
             il::encode_id(id),
             mixfix::encode(not_exp, encode_exp),
             il::encode_input_hint(input_hint),
-            il::encode_list(iter_instrs, il::encode_iter_prem)
+            il::encode_list(iter_instrs, il::encode_prem_iter)
         ]),
         InstrGroup::Backtrack(BacktrackGroupInstr { blocks }) => json!([
             "BacktrackI",

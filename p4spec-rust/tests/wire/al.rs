@@ -31,7 +31,10 @@ fn test_whole_spec_roundtrip_preserves_rule_paths_and_tables() {
     ]);
     let rule_path = json!([
         id("step"),
-        [phrase(json!(["DebugPr", exp(false)]))],
+        [
+            phrase(json!(["DebugPr", exp(false)])),
+            phrase(json!(["LetPr", exp(true), exp(false)]))
+        ],
         [exp(true)]
     ]);
     let group = phrase(json!([id("step"), rule_match, [rule_path]]));

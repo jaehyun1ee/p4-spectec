@@ -1,8 +1,12 @@
 use std::{env, ffi::OsStr, path::PathBuf, process::ExitCode};
 
-use p4spec_rust::{frontend::parse::parse_files, lang::traits::print::Print, pass::elaborate};
+use p4spec_rust::{
+    frontend::parse::parse_files,
+    lang::traits::print::Print,
+    pass::{algo, elaborate},
+};
 
-const USAGE: &str = "Usage: p4spec-rust elab <path>...";
+const USAGE: &str = "Usage: p4spec-rust <elab|algo> <path>...";
 
 fn main() -> ExitCode {
     let mut args = env::args_os().skip(1);
@@ -14,7 +18,7 @@ fn main() -> ExitCode {
         println!("{USAGE}");
         return ExitCode::SUCCESS;
     }
-    if command != OsStr::new("elab") {
+    if command != OsStr::new("elab") && command != OsStr::new("algo") {
         eprintln!("unknown command: {}", command.to_string_lossy());
         return usage_error();
     }
@@ -33,11 +37,21 @@ fn main() -> ExitCode {
         Ok(spec) => spec,
         Err(error) => return command_error(error),
     };
-    let spec_il = match elaborate::elaborate(&spec_el) {
+    let spec_il = match elaborate::elaborate(spec_el) {
         Ok(spec) => spec,
         Err(error) => return command_error(error),
     };
-    println!("{}", Print::to_string(&spec_il));
+
+    if command == OsStr::new("elab") {
+        println!("{}", Print::to_string(&spec_il));
+        return ExitCode::SUCCESS;
+    }
+
+    let spec_al = match algo::convert(spec_il) {
+        Ok(spec) => spec,
+        Err(error) => return command_error(error),
+    };
+    println!("{}", Print::to_string(&spec_al));
     ExitCode::SUCCESS
 }
 

@@ -59,10 +59,9 @@ fn notation() -> il::ast::NotTyp {
     ]), span: span("notation") }
 }
 
-fn instr(kind: sl::ast::InstrKind, iid: i64) -> sl::ast::Instr {
-    p4spec_rust::note_phrase! {
+fn instr(kind: sl::ast::InstrKind) -> sl::ast::Instr {
+    p4spec_rust::phrase! {
         node: kind,
-        note: iid,
         span: span("instruction"),
     }
 }
@@ -107,13 +106,11 @@ fn composite_spec(metadata: &str) -> sl::ast::Spec {
                     rel_signature: signature.clone(),
                     exps: vec![text("line\n\"\\")],
                 }),
-                7,
             )],
             else_block: Some(vec![instr(
                 sl::ast::InstrKind::Return(sl::ast::ReturnInstr {
                     exp: variable("fallback"),
                 }),
-                8,
             )]),
             hints: hints.clone(),
         }), span: span(metadata) },
@@ -135,7 +132,6 @@ fn composite_spec(metadata: &str) -> sl::ast::Spec {
                     sl::ast::InstrKind::Return(sl::ast::ReturnInstr {
                         exp: variable("row-result"),
                     }),
-                    9,
                 )],
             }],
             hints: hints.clone(),
@@ -147,7 +143,6 @@ fn composite_spec(metadata: &str) -> sl::ast::Spec {
             typ: typ(il::ast::TypKind::Bool),
             block: vec![instr(
                 sl::ast::InstrKind::Return(sl::ast::ReturnInstr { exp: text("done") }),
-                10,
             )],
             else_block: None,
             hints,
@@ -185,24 +180,18 @@ fn test_specification_printer_omits_source_and_hint_metadata() {
 }
 
 #[test]
-fn test_dangling_branches_render_the_instruction_identifier() {
-    let branch = instr(
-        sl::ast::InstrKind::If(sl::ast::IfInstr {
-            exp: variable("condition"),
-            iter_exps: Vec::new(),
-            block: vec![instr(
-                sl::ast::InstrKind::Return(sl::ast::ReturnInstr {
-                    exp: variable("value"),
-                }),
-                2,
-            )],
-            dangle: true,
-        }),
-        42,
-    );
+fn test_dangling_branches_render_the_marker() {
+    let branch = instr(sl::ast::InstrKind::If(sl::ast::IfInstr {
+        exp: variable("condition"),
+        iter_exps: Vec::new(),
+        block: vec![instr(sl::ast::InstrKind::Return(sl::ast::ReturnInstr {
+            exp: variable("value"),
+        }))],
+        dangle: true,
+    }));
 
     assert_eq!(
         Print::to_string(&vec![branch]),
-        "1. If (condition), then\n\n  1. Return value\n\n1. Else Dangling#42"
+        "1. If (condition), then\n\n  1. Return value\n\n1. Else Dangling"
     );
 }

@@ -988,11 +988,13 @@ pub(super) fn encode_subcheck(subcheck: &ast::Subcheck) -> Value {
 }
 
 pub(super) fn decode_exp(value: &Value) -> Result<ast::Exp, DecodeError> {
-    source::decode_note_phrase(value, decode_exp_kind, decode_typ_kind)
+    source::decode_note_phrase(value, decode_exp_kind, |value| {
+        decode_typ_kind(value).map(Into::into)
+    })
 }
 
 pub(super) fn encode_exp(exp: &ast::Exp) -> Value {
-    source::encode_note_phrase(exp, encode_exp_kind, encode_typ_kind)
+    source::encode_note_phrase(exp, encode_exp_kind, |note| encode_typ_kind(note))
 }
 
 fn decode_exp_kind(value: &Value) -> Result<ExpKind, DecodeError> {
@@ -1020,16 +1022,16 @@ fn decode_exp_kind(value: &Value) -> Result<ExpKind, DecodeError> {
             Box::new(decode_exp(right)?),
         )),
         ("UpCastE", [typ, exp]) => Ok(ExpKind::UpCast(
-            decode_typ(typ)?,
+            Box::new(decode_typ(typ)?),
             Box::new(decode_exp(exp)?),
         )),
         ("DownCastE", [typ, exp]) => Ok(ExpKind::DownCast(
-            decode_typ(typ)?,
+            Box::new(decode_typ(typ)?),
             Box::new(decode_exp(exp)?),
         )),
         ("SubE", [exp, typ, subcheck]) => Ok(ExpKind::Sub(
             Box::new(decode_exp(exp)?),
-            decode_typ(typ)?,
+            Box::new(decode_typ(typ)?),
             Box::new(decode_subcheck(subcheck)?),
         )),
         ("MatchE", [exp, pattern]) => Ok(ExpKind::Match(
@@ -1074,7 +1076,7 @@ fn decode_exp_kind(value: &Value) -> Result<ExpKind, DecodeError> {
         )),
         ("UpdE", [base, path, value]) => Ok(ExpKind::Upd(
             Box::new(decode_exp(base)?),
-            decode_path(path)?,
+            Box::new(decode_path(path)?),
             Box::new(decode_exp(value)?),
         )),
         ("CallE", [id, targs, args]) => Ok(ExpKind::Call(
@@ -1190,14 +1192,14 @@ pub(super) fn encode_not_exp(exp: &ast::NotExp) -> Value {
     mixfix::encode(exp, encode_exp)
 }
 
-pub(super) fn decode_iter_exp(value: &Value) -> Result<ast::IterExp, DecodeError> {
+pub(super) fn decode_iter_exp(value: &Value) -> Result<ast::ExpIter, DecodeError> {
     match array(value)? {
         [iter, vars] => Ok((decode_iter(iter)?, decode_list(vars, decode_var)?)),
         _ => Err(DecodeError::Expected("IL expression iterator pair")),
     }
 }
 
-pub(super) fn encode_iter_exp((iter, vars): &ast::IterExp) -> Value {
+pub(super) fn encode_iter_exp((iter, vars): &ast::ExpIter) -> Value {
     json!([encode_iter(*iter), encode_list(vars, encode_var)])
 }
 
@@ -1262,11 +1264,13 @@ fn encode_opt_pattern(pattern: OptPattern) -> Value {
 }
 
 fn decode_path(value: &Value) -> Result<ast::Path, DecodeError> {
-    source::decode_note_phrase(value, decode_path_kind, decode_typ_kind)
+    source::decode_note_phrase(value, decode_path_kind, |value| {
+        decode_typ_kind(value).map(Into::into)
+    })
 }
 
 fn encode_path(path: &ast::Path) -> Value {
-    source::encode_note_phrase(path, encode_path_kind, encode_typ_kind)
+    source::encode_note_phrase(path, encode_path_kind, |note| encode_typ_kind(note))
 }
 
 fn decode_path_kind(value: &Value) -> Result<PathKind, DecodeError> {
@@ -1390,21 +1394,16 @@ pub(super) fn decode_prem(value: &Value) -> Result<ast::Prem, DecodeError> {
                 id: decode_id(id)?,
                 not_exp: decode_not_exp(exp)?,
             })),
-            ("LetPr", [exp_l, exp_r]) => Ok(PremKind::Let(LetPrem {
-                exp_l: decode_exp(exp_l)?,
-                exp_r: decode_exp(exp_r)?,
-            })),
-            ("IterPr", [prem, iter]) => Ok(PremKind::Iter(IteratedPrem {
+            ("IterPr", [prem, prem_iter]) => Ok(PremKind::Iter(IterPrem {
                 prem: Box::new(decode_prem(prem)?),
-                iter_prem: decode_iter_prem(iter)?,
+                prem_iter: decode_prem_iter(prem_iter)?,
             })),
             ("DebugPr", [exp]) => Ok(PremKind::Debug(DebugPrem {
                 exp: decode_exp(exp)?,
             })),
-            (
-                "RulePr" | "IfPr" | "IfHoldPr" | "IfNotHoldPr" | "LetPr" | "IterPr" | "DebugPr",
-                _,
-            ) => Err(DecodeError::Expected("valid IL premise arity")),
+            ("RulePr" | "IfPr" | "IfHoldPr" | "IfNotHoldPr" | "IterPr" | "DebugPr", _) => {
+                Err(DecodeError::Expected("valid IL premise arity"))
+            }
             (unknown, _) => Err(DecodeError::UnknownVariant(unknown.to_owned())),
         }
     })
@@ -1429,23 +1428,16 @@ pub(super) fn encode_prem(prem: &ast::Prem) -> Value {
         PremKind::IfNotHold(IfNotHoldPrem { id, not_exp }) => {
             json!(["IfNotHoldPr", encode_id(id), encode_not_exp(not_exp)])
         }
-        PremKind::Let(LetPrem {
-            exp_l: left,
-            exp_r: right,
-        }) => json!(["LetPr", encode_exp(left), encode_exp(right)]),
-        PremKind::Iter(IteratedPrem {
-            prem,
-            iter_prem: iter,
-        }) => {
-            json!(["IterPr", encode_prem(prem), encode_iter_prem(iter)])
+        PremKind::Iter(IterPrem { prem, prem_iter }) => {
+            json!(["IterPr", encode_prem(prem), encode_prem_iter(prem_iter)])
         }
         PremKind::Debug(DebugPrem { exp }) => json!(["DebugPr", encode_exp(exp)]),
     })
 }
 
-pub(super) fn decode_iter_prem(value: &Value) -> Result<ast::IterPrem, DecodeError> {
+pub(super) fn decode_prem_iter(value: &Value) -> Result<ast::PremIter, DecodeError> {
     match array(value)? {
-        [iter, left, right] => Ok(ast::IterPrem {
+        [iter, left, right] => Ok(ast::PremIter {
             iter: decode_iter(iter)?,
             vars_bound: decode_list(left, decode_var)?,
             vars_bind: decode_list(right, decode_var)?,
@@ -1454,11 +1446,11 @@ pub(super) fn decode_iter_prem(value: &Value) -> Result<ast::IterPrem, DecodeErr
     }
 }
 
-pub(super) fn encode_iter_prem(iterprem: &ast::IterPrem) -> Value {
+pub(super) fn encode_prem_iter(prem_iter: &ast::PremIter) -> Value {
     json!([
-        encode_iter(iterprem.iter),
-        encode_list(&iterprem.vars_bound, encode_var),
-        encode_list(&iterprem.vars_bind, encode_var)
+        encode_iter(prem_iter.iter),
+        encode_list(&prem_iter.vars_bound, encode_var),
+        encode_list(&prem_iter.vars_bind, encode_var)
     ])
 }
 
