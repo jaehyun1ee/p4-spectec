@@ -171,6 +171,7 @@ pub struct Lexer<'source> {
     context: Rc<Context>,
     state: State,
     pending: VecDeque<Phrase<Token>>,
+    deferred_classification: Option<(ValueRef, Span, State)>,
     template_depth: usize,
     finished: bool,
 }
@@ -186,6 +187,7 @@ impl<'source> Lexer<'source> {
             context,
             state: State::Regular,
             pending: VecDeque::new(),
+            deferred_classification: None,
             template_depth: 0,
             finished: false,
         }
@@ -227,6 +229,9 @@ impl<'source> Lexer<'source> {
     }
 
     fn next_token(&mut self) -> Option<Result<Phrase<Token>, P4Error>> {
+        if let Some((value, span, next)) = self.deferred_classification.take() {
+            return Some(Ok(self.classify_name(&value, &span, next)));
+        }
         if let Some(token) = self.pending.pop_front() {
             return Some(Ok(token));
         }
@@ -261,7 +266,7 @@ impl<'source> Lexer<'source> {
             let token = match self.state {
                 State::Regular => match token.node {
                     Token::Name(value) => {
-                        self.queue_classification(&value, &span, State::Regular);
+                        self.defer_classification(&value, &span, State::Regular);
                         Token::Name(value)
                     }
                     Token::Pragma => {
@@ -286,7 +291,7 @@ impl<'source> Lexer<'source> {
                         Token::LeftAngleArgs
                     }
                     Token::Name(value) => {
-                        self.queue_classification(&value, &span, State::Regular);
+                        self.defer_classification(&value, &span, State::Regular);
                         Token::Name(value)
                     }
                     Token::Pragma => {
@@ -305,7 +310,7 @@ impl<'source> Lexer<'source> {
                         Token::PragmaEnd
                     }
                     Token::Name(value) => {
-                        self.queue_classification(&value, &span, State::Pragma);
+                        self.defer_classification(&value, &span, State::Pragma);
                         Token::Name(value)
                     }
                     token => token,
@@ -349,25 +354,38 @@ impl<'source> Lexer<'source> {
         }
     }
 
-    fn queue_classification(&mut self, value: &ValueRef, span: &Span, next: State) {
+    fn defer_classification(&mut self, value: &ValueRef, span: &Span, next: State) {
+        self.deferred_classification = Some((Rc::clone(value), span.clone(), next));
+    }
+
+    fn classify_name(&mut self, value: &ValueRef, span: &Span, next: State) -> Phrase<Token> {
         let name = match &value.node {
             crate::runtime::value::ValueKind::Text(name) => name,
-            _ => return,
+            _ => return phrase!(node: Token::Identifier, span: span.clone()),
         };
-        let (token, has_params) = match self.context.get_kind(name) {
+        let (token, template_expected) = match self.context.get_kind(name) {
             IdentKind::TypeName { has_params, .. } => {
                 let token = if self.type_name_starts_expression() {
                     Token::TypeNameExpression
                 } else {
                     Token::TypeName
                 };
-                (token, has_params)
+                let template_expected = has_params
+                    || self.remaining_significant().starts_with('<')
+                    || self.template_arguments_follow();
+                (token, template_expected)
             }
-            IdentKind::Ident { has_params, .. } => (Token::Identifier, has_params),
+            IdentKind::Ident { has_params, .. } => (
+                Token::Identifier,
+                has_params || self.adjacent_template_arguments_follow(),
+            ),
         };
-        self.state = if has_params { State::Template } else { next };
-        self.pending
-            .push_back(phrase!(node: token, span: span.clone()));
+        self.state = if template_expected {
+            State::Template
+        } else {
+            next
+        };
+        phrase!(node: token, span: span.clone())
     }
 
     fn type_name_starts_expression(&self) -> bool {
@@ -375,7 +393,17 @@ impl<'source> Lexer<'source> {
         if rest.starts_with(['.', '(']) {
             return true;
         }
-        angle_suffix(rest).is_some_and(|suffix| suffix.trim_start().starts_with('('))
+        self.template_arguments_follow()
+    }
+
+    fn template_arguments_follow(&self) -> bool {
+        angle_suffix(self.remaining_significant())
+            .is_some_and(|suffix| suffix.trim_start().starts_with('('))
+    }
+
+    fn adjacent_template_arguments_follow(&self) -> bool {
+        angle_suffix(&self.source[self.index..])
+            .is_some_and(|suffix| suffix.trim_start().starts_with('('))
     }
 
     fn remaining_significant(&self) -> &str {
