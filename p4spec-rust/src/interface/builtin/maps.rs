@@ -15,12 +15,12 @@ use crate::{
         il::ast::Typ,
     },
     runtime::{
-        types::typ as make_type,
+        types::typ,
         value::{Value, ValueRef, get, make},
     },
 };
 
-use super::{BuiltinError, BuiltinResult, extract, return_value};
+use super::{BuiltinError, BuiltinResult, extract};
 
 // == Value map
 
@@ -57,24 +57,20 @@ fn map_find_opt(key: &Value, map: &[ValueRef]) -> Option<ValueRef> {
 }
 
 fn make_pair(
-    add: &mut dyn FnMut(ValueRef),
     typ_key: &Typ,
     typ_value: &Typ,
     value_key: ValueRef,
     value_value: ValueRef,
 ) -> ValueRef {
     let pair_id = crate::phrase!(node: "pair".to_owned(), span: Span::default());
-    let typ = make_type::var(pair_id, vec![typ_key.clone(), typ_value.clone()]);
+    let typ = typ::var(pair_id, vec![typ_key.clone(), typ_value.clone()]);
     let pair_mixop = pair_mixop();
     let value_case = Mixop::fill(&pair_mixop, [value_key, value_value])
         .expect("the pair mixop has exactly two arguments");
-    let value_pair = make::case(&typ, value_case, Span::default());
-    add(Rc::clone(&value_pair));
-    value_pair
+    make::case(&typ, value_case, Span::default())
 }
 
 fn map_update(
-    add: &mut dyn FnMut(ValueRef),
     typ_key: &Typ,
     typ_value: &Typ,
     key: &ValueRef,
@@ -94,7 +90,6 @@ fn map_update(
         });
         if !found && matching {
             updated.push(make_pair(
-                add,
                 typ_key,
                 typ_value,
                 Rc::clone(key),
@@ -107,7 +102,6 @@ fn map_update(
     }
     if !found {
         updated.push(make_pair(
-            add,
             typ_key,
             typ_value,
             Rc::clone(key),
@@ -133,54 +127,38 @@ fn map_of_value(span: &Span, value: &Value) -> Result<ValueMap, BuiltinError> {
         .map_err(|_| BuiltinError::new(span.clone(), "expected a map"))
 }
 
-fn value_of_map(
-    add: &mut dyn FnMut(ValueRef),
-    typ_key: &Typ,
-    typ_value: &Typ,
-    map: ValueMap,
-) -> BuiltinResult {
+fn value_of_map(typ_key: &Typ, typ_value: &Typ, map: ValueMap) -> BuiltinResult {
     let pair_id = crate::phrase!(node: "pair".to_owned(), span: Span::default());
-    let typ_pair = make_type::var(pair_id, vec![typ_key.clone(), typ_value.clone()]);
-    let typ_pairs = make_type::list(typ_pair);
+    let typ_pair = typ::var(pair_id, vec![typ_key.clone(), typ_value.clone()]);
+    let typ_pairs = typ::list(typ_pair);
     let value_pairs = make::list(&typ_pairs, map, Span::default());
-    add(Rc::clone(&value_pairs));
     let map_id = crate::phrase!(node: "map".to_owned(), span: Span::default());
-    let typ = make_type::var(map_id, vec![typ_key.clone(), typ_value.clone()]);
+    let typ = typ::var(map_id, vec![typ_key.clone(), typ_value.clone()]);
     let map_mixop = map_mixop();
     let value_case =
         Mixop::fill(&map_mixop, [value_pairs]).expect("the map mixop has exactly one argument");
     let value = make::case(&typ, value_case, Span::default());
-    return_value(add, value)
+    Ok(value)
 }
 
 // == Built-in implementations
 
 // dec $find_map<K, V>(map<K, V>, K) : V?
 
-pub fn find_map(
-    add: &mut dyn FnMut(ValueRef),
-    span: &Span,
-    type_args: &[Typ],
-    values: &[ValueRef],
-) -> BuiltinResult {
-    let (_typ_key, typ_value) = extract::two(span, type_args)?;
+pub fn find_map(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
+    let (_typ_key, typ_value) = extract::two(span, targs)?;
     let (value_map, value_key) = extract::two(span, values)?;
     let map = map_of_value(span, value_map)?;
-    let typ_opt = make_type::opt(typ_value.clone());
+    let typ_opt = typ::opt(typ_value.clone());
     let value_opt = map_find_opt(value_key, &map);
     let value = make::opt(&typ_opt, value_opt, Span::default());
-    return_value(add, value)
+    Ok(value)
 }
 
 // dec $find_maps<K, V>(map<K, V>*, K) : V?
 
-pub fn find_maps(
-    add: &mut dyn FnMut(ValueRef),
-    span: &Span,
-    type_args: &[Typ],
-    values: &[ValueRef],
-) -> BuiltinResult {
-    let (_typ_key, typ_value) = extract::two(span, type_args)?;
+pub fn find_maps(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
+    let (_typ_key, typ_value) = extract::two(span, targs)?;
     let (value_maps, value_key) = extract::two(span, values)?;
     let values = get::list(value_maps)
         .map_err(|error| BuiltinError::new(span.clone(), error.to_string()))?;
@@ -191,35 +169,25 @@ pub fn find_maps(
             value_opt = map_find_opt(value_key, &map);
         }
     }
-    let typ_opt = make_type::opt(typ_value.clone());
+    let typ_opt = typ::opt(typ_value.clone());
     let value = make::opt(&typ_opt, value_opt, Span::default());
-    return_value(add, value)
+    Ok(value)
 }
 
 // dec $add_map<K, V>(map<K, V>, K, V) : map<K, V>
 
-pub fn add_map(
-    add: &mut dyn FnMut(ValueRef),
-    span: &Span,
-    type_args: &[Typ],
-    values: &[ValueRef],
-) -> BuiltinResult {
-    let (typ_key, typ_value) = extract::two(span, type_args)?;
+pub fn add_map(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
+    let (typ_key, typ_value) = extract::two(span, targs)?;
     let (value_map, value_key, value_value) = extract::three(span, values)?;
     let map = map_of_value(span, value_map)?;
-    let map = map_update(add, typ_key, typ_value, value_key, value_value, &map);
-    value_of_map(add, typ_key, typ_value, map)
+    let map = map_update(typ_key, typ_value, value_key, value_value, &map);
+    value_of_map(typ_key, typ_value, map)
 }
 
-// dec $adds_map<K, V>(map<K, V>, K*, V* ) : map<K, V>
+// dec $adds_map<K, V>(map<K, V>, K*, V*) : map<K, V>
 
-pub fn adds_map(
-    add: &mut dyn FnMut(ValueRef),
-    span: &Span,
-    type_args: &[Typ],
-    values: &[ValueRef],
-) -> BuiltinResult {
-    let (typ_key, typ_value) = extract::two(span, type_args)?;
+pub fn adds_map(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
+    let (typ_key, typ_value) = extract::two(span, targs)?;
     let (value_map, value_keys, value_values) = extract::three(span, values)?;
     let mut map = map_of_value(span, value_map)?;
     let values_key = get::list(value_keys)
@@ -233,22 +201,17 @@ pub fn adds_map(
         ));
     }
     for (value_key, value_value) in values_key.iter().zip(values_value) {
-        map = map_update(add, typ_key, typ_value, value_key, value_value, &map);
+        map = map_update(typ_key, typ_value, value_key, value_value, &map);
     }
-    value_of_map(add, typ_key, typ_value, map)
+    value_of_map(typ_key, typ_value, map)
 }
 
 // dec $update_map<K, V>(map<K, V>, K, V) : map<K, V>
 
-pub fn update_map(
-    add: &mut dyn FnMut(ValueRef),
-    span: &Span,
-    type_args: &[Typ],
-    values: &[ValueRef],
-) -> BuiltinResult {
-    let (typ_key, typ_value) = extract::two(span, type_args)?;
+pub fn update_map(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
+    let (typ_key, typ_value) = extract::two(span, targs)?;
     let (value_map, value_key, value_value) = extract::three(span, values)?;
     let map = map_of_value(span, value_map)?;
-    let map = map_update(add, typ_key, typ_value, value_key, value_value, &map);
-    value_of_map(add, typ_key, typ_value, map)
+    let map = map_update(typ_key, typ_value, value_key, value_value, &map);
+    value_of_map(typ_key, typ_value, map)
 }

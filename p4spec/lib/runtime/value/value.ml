@@ -53,7 +53,6 @@ let rec compare (value_l : t) (value_r : t) =
         | None, Some _ -> -1
         | None, None -> 0)
     | ListV values_l, ListV values_r -> compares values_l values_r
-    | FuncV id_l, FuncV id_r -> String.compare id_l.it id_r.it
     | ExternV json_l, ExternV json_r -> Stdlib.compare json_l json_r
     | _ -> Int.compare (tag value_l) (tag value_r)
 

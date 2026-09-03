@@ -1,7 +1,7 @@
 //! Text builtins, preserving the function order of the OCaml implementation.
 //!
 //! Arguments are decoded from runtime values before the textual operation is
-//! performed, then the result is encoded and registered.  For example,
+//! performed, then the encoded result is returned. For example,
 //! `strip_prefix("prebody", "pre")` yields `"body"`.
 
 use num_bigint::BigInt;
@@ -10,12 +10,12 @@ use crate::{
     lang::common::source::Span,
     lang::{il::ast::Typ, traits::print::Print},
     runtime::{
-        types::typ as make_type,
+        types::typ,
         value::{ValueRef, get, make},
     },
 };
 
-use super::{BuiltinError, BuiltinResult, extract, return_value};
+use super::{BuiltinError, BuiltinResult, extract};
 
 // == Conversion between runtime values and text
 
@@ -33,13 +33,8 @@ fn numeric_text(span: &Span, value: &ValueRef) -> Result<String, BuiltinError> {
 
 // dec $text_to_int(text) : int
 
-pub fn text_to_int(
-    add: &mut dyn FnMut(ValueRef),
-    span: &Span,
-    type_args: &[Typ],
-    values: &[ValueRef],
-) -> BuiltinResult {
-    extract::zero(span, type_args)?;
+pub fn text_to_int(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
+    extract::zero(span, targs)?;
     let value_text = extract::one(span, values)?;
     let text = text_of_value(span, value_text)?;
     let (negative, unsigned) = match text.as_bytes().first() {
@@ -68,33 +63,23 @@ pub fn text_to_int(
         integer = -integer;
     }
     let value = make::int(integer, Span::default());
-    return_value(add, value)
+    Ok(value)
 }
 
 // dec $int_to_text(int) : text
 
-pub fn int_to_text(
-    add: &mut dyn FnMut(ValueRef),
-    span: &Span,
-    type_args: &[Typ],
-    values: &[ValueRef],
-) -> BuiltinResult {
-    extract::zero(span, type_args)?;
+pub fn int_to_text(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
+    extract::zero(span, targs)?;
     let value_int = extract::one(span, values)?;
     let text = numeric_text(span, value_int)?;
     let value = make::text(text, Span::default());
-    return_value(add, value)
+    Ok(value)
 }
 
 // dec $split_text(text, text) : text*
 
-pub fn split_text(
-    add: &mut dyn FnMut(ValueRef),
-    span: &Span,
-    type_args: &[Typ],
-    values: &[ValueRef],
-) -> BuiltinResult {
-    extract::zero(span, type_args)?;
+pub fn split_text(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
+    extract::zero(span, targs)?;
     let (value_text, value_separator) = extract::two(span, values)?;
     let text = text_of_value(span, value_text)?;
     let separator = text_of_value(span, value_separator)?;
@@ -109,20 +94,15 @@ pub fn split_text(
         .split(separator)
         .map(|part| make::text(part.to_owned(), Span::default()))
         .collect();
-    let list_type = make_type::list(make_type::bool());
-    let value = make::list(&list_type, parts, Span::default());
-    return_value(add, value)
+    let typ_list = typ::list(typ::bool());
+    let value = make::list(&typ_list, parts, Span::default());
+    Ok(value)
 }
 
 // dec $strip_prefix(text, text) : text
 
-pub fn strip_prefix(
-    add: &mut dyn FnMut(ValueRef),
-    span: &Span,
-    type_args: &[Typ],
-    values: &[ValueRef],
-) -> BuiltinResult {
-    extract::zero(span, type_args)?;
+pub fn strip_prefix(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
+    extract::zero(span, targs)?;
     let (value_text, value_prefix) = extract::two(span, values)?;
     let text = text_of_value(span, value_text)?;
     let prefix = text_of_value(span, value_prefix)?;
@@ -130,18 +110,13 @@ pub fn strip_prefix(
         .strip_prefix(prefix)
         .ok_or_else(|| BuiltinError::new(span.clone(), "text does not start with prefix"))?;
     let value = make::text(text.to_owned(), Span::default());
-    return_value(add, value)
+    Ok(value)
 }
 
 // dec $strip_suffix(text, text) : text
 
-pub fn strip_suffix(
-    add: &mut dyn FnMut(ValueRef),
-    span: &Span,
-    type_args: &[Typ],
-    values: &[ValueRef],
-) -> BuiltinResult {
-    extract::zero(span, type_args)?;
+pub fn strip_suffix(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
+    extract::zero(span, targs)?;
     let (value_text, value_suffix) = extract::two(span, values)?;
     let text = text_of_value(span, value_text)?;
     let suffix = text_of_value(span, value_suffix)?;
@@ -149,20 +124,15 @@ pub fn strip_suffix(
         .strip_suffix(suffix)
         .ok_or_else(|| BuiltinError::new(span.clone(), "text does not end with suffix"))?;
     let value = make::text(text.to_owned(), Span::default());
-    return_value(add, value)
+    Ok(value)
 }
 
 // dec $strip_all_whitespace(text) : text
 
-pub fn strip_all_whitespace(
-    add: &mut dyn FnMut(ValueRef),
-    span: &Span,
-    type_args: &[Typ],
-    values: &[ValueRef],
-) -> BuiltinResult {
-    extract::zero(span, type_args)?;
+pub fn strip_all_whitespace(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
+    extract::zero(span, targs)?;
     let value_text = extract::one(span, values)?;
     let text = text_of_value(span, value_text)?.replace(' ', "");
     let value = make::text(text, Span::default());
-    return_value(add, value)
+    Ok(value)
 }

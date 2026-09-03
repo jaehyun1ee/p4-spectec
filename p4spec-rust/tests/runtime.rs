@@ -1,7 +1,7 @@
 #[path = "runtime/compare.rs"]
 mod compare;
-#[path = "runtime/dynamic.rs"]
-mod dynamic;
+#[path = "runtime/dyn.rs"]
+mod r#dyn;
 #[path = "runtime/runner.rs"]
 mod runner;
 #[path = "runtime/sta.rs"]

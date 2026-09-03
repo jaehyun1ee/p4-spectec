@@ -20,14 +20,13 @@ use super::{
 // == Extensibility point: extra or override builtins per interface
 
 pub type BuiltinImpl = fn(
-    add: &mut dyn FnMut(ValueRef),
     span: &crate::lang::common::source::Span,
-    type_args: &[Typ],
+    targs: &[Typ],
     values: &[ValueRef],
 ) -> BuiltinResult;
 
 #[derive(Clone, Copy)]
-enum Entry {
+enum BuiltinEntry {
     Pure(BuiltinImpl),
     FreshTypeId,
 }
@@ -36,7 +35,7 @@ enum Entry {
 
 pub struct Builtins {
     counter: u64,
-    functions: HashMap<String, Entry>,
+    functions: HashMap<String, BuiltinEntry>,
 }
 
 impl Default for Builtins {
@@ -55,185 +54,200 @@ impl Builtins {
             // Nats
             (
                 "sum_nat".to_owned(),
-                Entry::Pure(nats::sum_nat as BuiltinImpl),
+                BuiltinEntry::Pure(nats::sum_nat as BuiltinImpl),
             ),
             (
                 "max_nat".to_owned(),
-                Entry::Pure(nats::max_nat as BuiltinImpl),
+                BuiltinEntry::Pure(nats::max_nat as BuiltinImpl),
             ),
             (
                 "min_nat".to_owned(),
-                Entry::Pure(nats::min_nat as BuiltinImpl),
+                BuiltinEntry::Pure(nats::min_nat as BuiltinImpl),
             ),
             // Ints
             (
                 "sum_int".to_owned(),
-                Entry::Pure(ints::sum_int as BuiltinImpl),
+                BuiltinEntry::Pure(ints::sum_int as BuiltinImpl),
             ),
             (
                 "max_int".to_owned(),
-                Entry::Pure(ints::max_int as BuiltinImpl),
+                BuiltinEntry::Pure(ints::max_int as BuiltinImpl),
             ),
             (
                 "min_int".to_owned(),
-                Entry::Pure(ints::min_int as BuiltinImpl),
+                BuiltinEntry::Pure(ints::min_int as BuiltinImpl),
             ),
             // Texts
             (
                 "text_to_int".to_owned(),
-                Entry::Pure(texts::text_to_int as BuiltinImpl),
+                BuiltinEntry::Pure(texts::text_to_int as BuiltinImpl),
             ),
             (
                 "int_to_text".to_owned(),
-                Entry::Pure(texts::int_to_text as BuiltinImpl),
+                BuiltinEntry::Pure(texts::int_to_text as BuiltinImpl),
             ),
             (
                 "split_text".to_owned(),
-                Entry::Pure(texts::split_text as BuiltinImpl),
+                BuiltinEntry::Pure(texts::split_text as BuiltinImpl),
             ),
             (
                 "strip_prefix".to_owned(),
-                Entry::Pure(texts::strip_prefix as BuiltinImpl),
+                BuiltinEntry::Pure(texts::strip_prefix as BuiltinImpl),
             ),
             (
                 "strip_suffix".to_owned(),
-                Entry::Pure(texts::strip_suffix as BuiltinImpl),
+                BuiltinEntry::Pure(texts::strip_suffix as BuiltinImpl),
             ),
             (
                 "strip_all_whitespace".to_owned(),
-                Entry::Pure(texts::strip_all_whitespace as BuiltinImpl),
+                BuiltinEntry::Pure(texts::strip_all_whitespace as BuiltinImpl),
             ),
             // Lists
-            ("rev_".to_owned(), Entry::Pure(lists::rev_ as BuiltinImpl)),
+            (
+                "rev_".to_owned(),
+                BuiltinEntry::Pure(lists::rev_ as BuiltinImpl),
+            ),
             (
                 "concat_".to_owned(),
-                Entry::Pure(lists::concat_ as BuiltinImpl),
+                BuiltinEntry::Pure(lists::concat_ as BuiltinImpl),
             ),
             (
                 "distinct_".to_owned(),
-                Entry::Pure(lists::distinct_ as BuiltinImpl),
+                BuiltinEntry::Pure(lists::distinct_ as BuiltinImpl),
             ),
             (
                 "partition_".to_owned(),
-                Entry::Pure(lists::partition_ as BuiltinImpl),
+                BuiltinEntry::Pure(lists::partition_ as BuiltinImpl),
             ),
             (
                 "assoc_".to_owned(),
-                Entry::Pure(lists::assoc_ as BuiltinImpl),
+                BuiltinEntry::Pure(lists::assoc_ as BuiltinImpl),
             ),
-            ("sort_".to_owned(), Entry::Pure(lists::sort_ as BuiltinImpl)),
+            (
+                "sort_".to_owned(),
+                BuiltinEntry::Pure(lists::sort_ as BuiltinImpl),
+            ),
             (
                 "transpose_".to_owned(),
-                Entry::Pure(lists::transpose_ as BuiltinImpl),
+                BuiltinEntry::Pure(lists::transpose_ as BuiltinImpl),
             ),
             // Sets
             (
                 "intersect_set".to_owned(),
-                Entry::Pure(sets::intersect_set as BuiltinImpl),
+                BuiltinEntry::Pure(sets::intersect_set as BuiltinImpl),
             ),
             (
                 "union_set".to_owned(),
-                Entry::Pure(sets::union_set as BuiltinImpl),
+                BuiltinEntry::Pure(sets::union_set as BuiltinImpl),
             ),
             (
                 "unions_set".to_owned(),
-                Entry::Pure(sets::unions_set as BuiltinImpl),
+                BuiltinEntry::Pure(sets::unions_set as BuiltinImpl),
             ),
             (
                 "diff_set".to_owned(),
-                Entry::Pure(sets::diff_set as BuiltinImpl),
+                BuiltinEntry::Pure(sets::diff_set as BuiltinImpl),
             ),
             (
                 "sub_set".to_owned(),
-                Entry::Pure(sets::sub_set as BuiltinImpl),
+                BuiltinEntry::Pure(sets::sub_set as BuiltinImpl),
             ),
             (
                 "eq_set".to_owned(),
-                Entry::Pure(sets::eq_set as BuiltinImpl),
+                BuiltinEntry::Pure(sets::eq_set as BuiltinImpl),
             ),
             // Maps
             (
                 "find_map".to_owned(),
-                Entry::Pure(maps::find_map as BuiltinImpl),
+                BuiltinEntry::Pure(maps::find_map as BuiltinImpl),
             ),
             (
                 "find_maps".to_owned(),
-                Entry::Pure(maps::find_maps as BuiltinImpl),
+                BuiltinEntry::Pure(maps::find_maps as BuiltinImpl),
             ),
             (
                 "add_map".to_owned(),
-                Entry::Pure(maps::add_map as BuiltinImpl),
+                BuiltinEntry::Pure(maps::add_map as BuiltinImpl),
             ),
             (
                 "adds_map".to_owned(),
-                Entry::Pure(maps::adds_map as BuiltinImpl),
+                BuiltinEntry::Pure(maps::adds_map as BuiltinImpl),
             ),
             (
                 "update_map".to_owned(),
-                Entry::Pure(maps::update_map as BuiltinImpl),
+                BuiltinEntry::Pure(maps::update_map as BuiltinImpl),
             ),
             // Fresh type id
-            ("fresh_typeId".to_owned(), Entry::FreshTypeId),
+            ("fresh_typeId".to_owned(), BuiltinEntry::FreshTypeId),
             // Numerics
-            ("shl".to_owned(), Entry::Pure(numerics::shl as BuiltinImpl)),
-            ("shr".to_owned(), Entry::Pure(numerics::shr as BuiltinImpl)),
+            (
+                "shl".to_owned(),
+                BuiltinEntry::Pure(numerics::shl as BuiltinImpl),
+            ),
+            (
+                "shr".to_owned(),
+                BuiltinEntry::Pure(numerics::shr as BuiltinImpl),
+            ),
             (
                 "shr_arith".to_owned(),
-                Entry::Pure(numerics::shr_arith as BuiltinImpl),
+                BuiltinEntry::Pure(numerics::shr_arith as BuiltinImpl),
             ),
             (
                 "pow2".to_owned(),
-                Entry::Pure(numerics::pow2 as BuiltinImpl),
+                BuiltinEntry::Pure(numerics::pow2 as BuiltinImpl),
             ),
             (
                 "bitstr_to_int".to_owned(),
-                Entry::Pure(numerics::bitstr_to_int as BuiltinImpl),
+                BuiltinEntry::Pure(numerics::bitstr_to_int as BuiltinImpl),
             ),
             (
                 "int_to_bitstr".to_owned(),
-                Entry::Pure(numerics::int_to_bitstr as BuiltinImpl),
+                BuiltinEntry::Pure(numerics::int_to_bitstr as BuiltinImpl),
             ),
             (
                 "bits_to_int_unsigned".to_owned(),
-                Entry::Pure(numerics::bits_to_int_unsigned as BuiltinImpl),
+                BuiltinEntry::Pure(numerics::bits_to_int_unsigned as BuiltinImpl),
             ),
             (
                 "bits_to_int_signed".to_owned(),
-                Entry::Pure(numerics::bits_to_int_signed as BuiltinImpl),
+                BuiltinEntry::Pure(numerics::bits_to_int_signed as BuiltinImpl),
             ),
             (
                 "int_to_bits_unsigned".to_owned(),
-                Entry::Pure(numerics::int_to_bits_unsigned as BuiltinImpl),
+                BuiltinEntry::Pure(numerics::int_to_bits_unsigned as BuiltinImpl),
             ),
             (
                 "int_to_bits_signed".to_owned(),
-                Entry::Pure(numerics::int_to_bits_signed as BuiltinImpl),
+                BuiltinEntry::Pure(numerics::int_to_bits_signed as BuiltinImpl),
             ),
             (
                 "bneg".to_owned(),
-                Entry::Pure(numerics::bneg as BuiltinImpl),
+                BuiltinEntry::Pure(numerics::bneg as BuiltinImpl),
             ),
             (
                 "band".to_owned(),
-                Entry::Pure(numerics::band as BuiltinImpl),
+                BuiltinEntry::Pure(numerics::band as BuiltinImpl),
             ),
             (
                 "bxor".to_owned(),
-                Entry::Pure(numerics::bxor as BuiltinImpl),
+                BuiltinEntry::Pure(numerics::bxor as BuiltinImpl),
             ),
-            ("bor".to_owned(), Entry::Pure(numerics::bor as BuiltinImpl)),
+            (
+                "bor".to_owned(),
+                BuiltinEntry::Pure(numerics::bor as BuiltinImpl),
+            ),
             (
                 "bitacc".to_owned(),
-                Entry::Pure(numerics::bitacc as BuiltinImpl),
+                BuiltinEntry::Pure(numerics::bitacc as BuiltinImpl),
             ),
             (
                 "bitacc_replace".to_owned(),
-                Entry::Pure(numerics::bitacc_replace as BuiltinImpl),
+                BuiltinEntry::Pure(numerics::bitacc_replace as BuiltinImpl),
             ),
         ]);
         // Extension entries are merged last, allowing interface-specific overrides.
         for (name, implementation) in entries {
-            functions.insert(name.to_owned(), Entry::Pure(implementation));
+            functions.insert(name.to_owned(), BuiltinEntry::Pure(implementation));
         }
         Self {
             counter: 0,
@@ -247,25 +261,14 @@ impl Builtins {
         self.counter = 0;
     }
 
-    // State management
-
-    pub fn checkpoint(&self) -> u64 {
-        self.counter
-    }
-
-    pub fn side_effected(before: u64, after: u64) -> bool {
-        before != after
-    }
-
     // Builtin calls
 
     pub fn invoke(
         &mut self,
-        add: &mut dyn FnMut(ValueRef),
         id: &Id,
-        type_args: &[Typ],
+        targs: &[Typ],
         values: &[ValueRef],
-    ) -> BuiltinResult {
+    ) -> Result<(ValueRef, bool), BuiltinError> {
         let entry = self
             .functions
             .get(&id.node)
@@ -274,11 +277,16 @@ impl Builtins {
                 kind: BuiltinErrorKind::MissingImplementation(id.node.clone()),
                 span: id.span.clone(),
             })?;
-        match entry {
-            Entry::Pure(implementation) => implementation(add, &id.span, type_args, values),
-            Entry::FreshTypeId => {
-                fresh::fresh_type_id(&mut self.counter, add, &id.span, type_args, values)
+        let (value, side_effected) = match entry {
+            BuiltinEntry::Pure(implementation) => {
+                let value = implementation(&id.span, targs, values)?;
+                (value, false)
             }
-        }
+            BuiltinEntry::FreshTypeId => {
+                let value = fresh::fresh_type_id(&mut self.counter, &id.span, targs, values)?;
+                (value, true)
+            }
+        };
+        Ok((value, side_effected))
     }
 }

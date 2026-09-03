@@ -1,7 +1,7 @@
 //! Bit and integer builtins, in the declaration order of `numerics.ml`.
 //!
 //! Calls decode runtime numerics, apply the bounded arithmetic operation, and
-//! register one encoded result. For example, unsigned bits `[true, false]`
+//! return one encoded result. For example, unsigned bits `[true, false]`
 //! decode to the integer `2`.
 
 use num_bigint::BigInt;
@@ -10,12 +10,12 @@ use num_traits::{One, ToPrimitive, Zero};
 use crate::{
     lang::{common::source::Span, il::ast::Typ, xl::num},
     runtime::{
-        types::typ as make_type,
+        types::typ,
         value::{Value, ValueRef, get, make},
     },
 };
 
-use super::{BuiltinError, BuiltinResult, extract, return_value};
+use super::{BuiltinError, BuiltinResult, extract};
 
 // == Maximum bit width
 
@@ -35,16 +35,16 @@ fn bits_of_value(span: &Span, value: &Value) -> Result<Vec<bool>, BuiltinError> 
     Ok(bits)
 }
 
-fn value_of_bits(add: &mut dyn FnMut(ValueRef), bits: Vec<bool>) -> BuiltinResult {
+fn value_of_bits(bits: Vec<bool>) -> BuiltinResult {
     let bit_id = crate::phrase!(node: "bit".to_owned(), span: Span::default());
-    let typ = make_type::var(bit_id, Vec::new());
+    let typ = typ::var(bit_id, Vec::new());
     let mut bit_values = Vec::with_capacity(bits.len());
     for bit in bits {
         let bit_value = make::bool(bit, Span::default());
         bit_values.push(bit_value);
     }
     let value = make::list(&typ, bit_values, Span::default());
-    return_value(add, value)
+    Ok(value)
 }
 
 // == Conversion between meta-numerics and OCaml numerics
@@ -55,9 +55,9 @@ fn bigint_of_value<'a>(span: &Span, value: &'a Value) -> Result<&'a BigInt, Buil
     Ok(num::to_int(number))
 }
 
-fn value_of_bigint(add: &mut dyn FnMut(ValueRef), value: BigInt) -> BuiltinResult {
+fn value_of_bigint(value: BigInt) -> BuiltinResult {
     let value = make::int(value, Span::default());
-    return_value(add, value)
+    Ok(value)
 }
 
 fn width_of_bigint(
@@ -98,48 +98,33 @@ fn pow2_value(span: &Span, width: &BigInt) -> Result<BigInt, BuiltinError> {
 
 // dec $shl(int, int) : int
 
-pub fn shl(
-    add: &mut dyn FnMut(ValueRef),
-    span: &Span,
-    type_args: &[Typ],
-    values: &[ValueRef],
-) -> BuiltinResult {
-    extract::zero(span, type_args)?;
+pub fn shl(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
+    extract::zero(span, targs)?;
     let (value_base, value_offset) = extract::two(span, values)?;
     let base = bigint_of_value(span, value_base)?;
     let offset = bigint_of_value(span, value_offset)?;
     let offset = width_of_bigint(span, offset, "shift amount too large")?;
     let value = base << offset;
-    value_of_bigint(add, value)
+    value_of_bigint(value)
 }
 
 // dec $shr(int, int) : int
 
-pub fn shr(
-    add: &mut dyn FnMut(ValueRef),
-    span: &Span,
-    type_args: &[Typ],
-    values: &[ValueRef],
-) -> BuiltinResult {
-    extract::zero(span, type_args)?;
+pub fn shr(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
+    extract::zero(span, targs)?;
     let (value_base, value_offset) = extract::two(span, values)?;
     let base = bigint_of_value(span, value_base)?;
     let offset = bigint_of_value(span, value_offset)?;
     let offset = width_of_bigint(span, offset, "shift amount too large")?;
     let divisor = BigInt::one() << offset;
     let value = base / divisor;
-    value_of_bigint(add, value)
+    value_of_bigint(value)
 }
 
 // dec $shr_arith(int, int, int) : int
 
-pub fn shr_arith(
-    add: &mut dyn FnMut(ValueRef),
-    span: &Span,
-    type_args: &[Typ],
-    values: &[ValueRef],
-) -> BuiltinResult {
-    extract::zero(span, type_args)?;
+pub fn shr_arith(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
+    extract::zero(span, targs)?;
     let (value_base, value_offset, value_modulus) = extract::three(span, values)?;
     let base = bigint_of_value(span, value_base)?;
     let mut base = base.clone();
@@ -149,68 +134,53 @@ pub fn shr_arith(
     for _ in 0..offset {
         base = base / 2 + modulus;
     }
-    value_of_bigint(add, base)
+    value_of_bigint(base)
 }
 
 // dec $pow2(int) : int
 
-pub fn pow2(
-    add: &mut dyn FnMut(ValueRef),
-    span: &Span,
-    type_args: &[Typ],
-    values: &[ValueRef],
-) -> BuiltinResult {
-    extract::zero(span, type_args)?;
+pub fn pow2(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
+    extract::zero(span, targs)?;
     let value_width = extract::one(span, values)?;
     let width = bigint_of_value(span, value_width)?;
     let value = pow2_value(span, width)?;
-    value_of_bigint(add, value)
+    value_of_bigint(value)
 }
 
 // dec $bitstr_to_int(int, bitstr) : int
 
-pub fn bitstr_to_int(
-    add: &mut dyn FnMut(ValueRef),
-    span: &Span,
-    type_args: &[Typ],
-    values: &[ValueRef],
-) -> BuiltinResult {
-    extract::zero(span, type_args)?;
+pub fn bitstr_to_int(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
+    extract::zero(span, targs)?;
     let (value_width, value_bitstr) = extract::two(span, values)?;
     let width = bigint_of_value(span, value_width)?;
     let width = width_of_bigint(span, width, "bitstr width too large")?;
     if width == 0 {
-        return value_of_bigint(add, BigInt::zero());
+        return value_of_bigint(BigInt::zero());
     }
     let modulus = BigInt::one() << width;
     let half = &modulus / 2;
     let bitstr = bigint_of_value(span, value_bitstr)?;
     let normalized = ((bitstr + &half) % &modulus + &modulus) % &modulus - half;
-    value_of_bigint(add, normalized)
+    value_of_bigint(normalized)
 }
 
 // dec $int_to_bitstr(int, int) : bitstr
 
-pub fn int_to_bitstr(
-    add: &mut dyn FnMut(ValueRef),
-    span: &Span,
-    type_args: &[Typ],
-    values: &[ValueRef],
-) -> BuiltinResult {
-    extract::zero(span, type_args)?;
+pub fn int_to_bitstr(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
+    extract::zero(span, targs)?;
     let (value_width, value_int) = extract::two(span, values)?;
     let width = bigint_of_value(span, value_width)?;
     let width = width_of_bigint(span, width, "bitstr width too large")?;
     if width == 0 {
-        return value_of_bigint(add, BigInt::zero());
+        return value_of_bigint(BigInt::zero());
     }
     let modulus = BigInt::one() << width;
     let rawint = bigint_of_value(span, value_int)?;
     let normalized = (rawint % &modulus + &modulus) % modulus;
-    value_of_bigint(add, normalized)
+    value_of_bigint(normalized)
 }
 
-// dec $bits_to_int_unsigned(bool* ) : int
+// dec $bits_to_int_unsigned(bool*) : int
 
 fn bits_to_int_unsigned_value(bits: &[bool]) -> BigInt {
     bits.iter().fold(BigInt::zero(), |value, bit| {
@@ -218,28 +188,18 @@ fn bits_to_int_unsigned_value(bits: &[bool]) -> BigInt {
     })
 }
 
-pub fn bits_to_int_unsigned(
-    add: &mut dyn FnMut(ValueRef),
-    span: &Span,
-    type_args: &[Typ],
-    values: &[ValueRef],
-) -> BuiltinResult {
-    extract::zero(span, type_args)?;
+pub fn bits_to_int_unsigned(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
+    extract::zero(span, targs)?;
     let value_bits = extract::one(span, values)?;
     let bits = bits_of_value(span, value_bits)?;
     let value = bits_to_int_unsigned_value(&bits);
-    value_of_bigint(add, value)
+    value_of_bigint(value)
 }
 
-// dec $bits_to_int_signed(bool* ) : int
+// dec $bits_to_int_signed(bool*) : int
 
-pub fn bits_to_int_signed(
-    add: &mut dyn FnMut(ValueRef),
-    span: &Span,
-    type_args: &[Typ],
-    values: &[ValueRef],
-) -> BuiltinResult {
-    extract::zero(span, type_args)?;
+pub fn bits_to_int_signed(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
+    extract::zero(span, targs)?;
     let value_bits = extract::one(span, values)?;
     let bits = bits_of_value(span, value_bits)?;
     let Some(sign) = bits.first() else {
@@ -249,7 +209,7 @@ pub fn bits_to_int_signed(
     if *sign {
         value -= BigInt::one() << bits.len();
     }
-    value_of_bigint(add, value)
+    value_of_bigint(value)
 }
 
 // dec $int_to_bits_unsigned(int) : bool*
@@ -261,30 +221,20 @@ fn int_to_bits_unsigned_value(value: &BigInt, width: usize) -> Vec<bool> {
         .collect()
 }
 
-pub fn int_to_bits_unsigned(
-    add: &mut dyn FnMut(ValueRef),
-    span: &Span,
-    type_args: &[Typ],
-    values: &[ValueRef],
-) -> BuiltinResult {
-    extract::zero(span, type_args)?;
+pub fn int_to_bits_unsigned(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
+    extract::zero(span, targs)?;
     let (value_width, value_int) = extract::two(span, values)?;
     let width = bigint_of_value(span, value_width)?;
     let width = array_width_of_bigint(span, width)?;
     let value = bigint_of_value(span, value_int)?;
     let bits = int_to_bits_unsigned_value(value, width);
-    value_of_bits(add, bits)
+    value_of_bits(bits)
 }
 
 // dec $int_to_bits_signed(int) : bool*
 
-pub fn int_to_bits_signed(
-    add: &mut dyn FnMut(ValueRef),
-    span: &Span,
-    type_args: &[Typ],
-    values: &[ValueRef],
-) -> BuiltinResult {
-    extract::zero(span, type_args)?;
+pub fn int_to_bits_signed(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
+    extract::zero(span, targs)?;
     let (value_width, value_int) = extract::two(span, values)?;
     let width = bigint_of_value(span, value_width)?;
     let width = array_width_of_bigint(span, width)?;
@@ -292,77 +242,52 @@ pub fn int_to_bits_signed(
     let mask = (BigInt::one() << width) - 1;
     let value = value & mask;
     let bits = int_to_bits_unsigned_value(&value, width);
-    value_of_bits(add, bits)
+    value_of_bits(bits)
 }
 
 // dec $bneg(int) : int
 
-pub fn bneg(
-    add: &mut dyn FnMut(ValueRef),
-    span: &Span,
-    type_args: &[Typ],
-    values: &[ValueRef],
-) -> BuiltinResult {
-    extract::zero(span, type_args)?;
+pub fn bneg(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
+    extract::zero(span, targs)?;
     let value = extract::one(span, values)?;
     let rawint = bigint_of_value(span, value)?;
-    value_of_bigint(add, !rawint)
+    value_of_bigint(!rawint)
 }
 
 // dec $band(int, int) : int
 
-pub fn band(
-    add: &mut dyn FnMut(ValueRef),
-    span: &Span,
-    type_args: &[Typ],
-    values: &[ValueRef],
-) -> BuiltinResult {
-    extract::zero(span, type_args)?;
+pub fn band(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
+    extract::zero(span, targs)?;
     let (value_l, value_r) = extract::two(span, values)?;
     let rawint_l = bigint_of_value(span, value_l)?;
     let rawint_r = bigint_of_value(span, value_r)?;
-    value_of_bigint(add, rawint_l & rawint_r)
+    value_of_bigint(rawint_l & rawint_r)
 }
 
 // dec $bxor(int, int) : int
 
-pub fn bxor(
-    add: &mut dyn FnMut(ValueRef),
-    span: &Span,
-    type_args: &[Typ],
-    values: &[ValueRef],
-) -> BuiltinResult {
-    extract::zero(span, type_args)?;
+pub fn bxor(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
+    extract::zero(span, targs)?;
     let (value_l, value_r) = extract::two(span, values)?;
     let rawint_l = bigint_of_value(span, value_l)?;
     let rawint_r = bigint_of_value(span, value_r)?;
-    value_of_bigint(add, rawint_l ^ rawint_r)
+    value_of_bigint(rawint_l ^ rawint_r)
 }
 
 // dec $bor(int, int) : int
 
-pub fn bor(
-    add: &mut dyn FnMut(ValueRef),
-    span: &Span,
-    type_args: &[Typ],
-    values: &[ValueRef],
-) -> BuiltinResult {
-    extract::zero(span, type_args)?;
+pub fn bor(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
+    extract::zero(span, targs)?;
     let (value_l, value_r) = extract::two(span, values)?;
     let rawint_l = bigint_of_value(span, value_l)?;
     let rawint_r = bigint_of_value(span, value_r)?;
-    value_of_bigint(add, rawint_l | rawint_r)
+    value_of_bigint(rawint_l | rawint_r)
 }
 
 // dec $bitacc(int, int, int) : int
 
-pub fn bitacc(
-    add: &mut dyn FnMut(ValueRef),
-    span: &Span,
-    type_args: &[Typ],
-    values: &[ValueRef],
-) -> BuiltinResult {
-    extract::zero(span, type_args)?;
+pub fn bitacc(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
+    extract::zero(span, targs)?;
     let (value_b, value_h, value_l) = extract::three(span, values)?;
     let rawint_b = bigint_of_value(span, value_b)?;
     let rawint_h = bigint_of_value(span, value_h)?;
@@ -380,18 +305,13 @@ pub fn bitacc(
     let mask = pow2_value(span, &slice_width)? - 1;
     let shifted = rawint_b >> low;
     let value = shifted & mask;
-    value_of_bigint(add, value)
+    value_of_bigint(value)
 }
 
 // dec $bitacc_replace(int, int, int, int) : int
 
-pub fn bitacc_replace(
-    add: &mut dyn FnMut(ValueRef),
-    span: &Span,
-    type_args: &[Typ],
-    values: &[ValueRef],
-) -> BuiltinResult {
-    extract::zero(span, type_args)?;
+pub fn bitacc_replace(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
+    extract::zero(span, targs)?;
     let (value_b, value_h, value_l, value_rhs) = extract::four(span, values)?;
     let rawint_b = bigint_of_value(span, value_b)?;
     let rawint_h = bigint_of_value(span, value_h)?;
@@ -412,5 +332,5 @@ pub fn bitacc_replace(
     let mask_lo: BigInt = pow2_value(span, rawint_l)? - BigInt::one();
     let mask: BigInt = !(mask_hi ^ mask_lo);
     let value = (rawint_b & mask) ^ rhs;
-    value_of_bigint(add, value)
+    value_of_bigint(value)
 }

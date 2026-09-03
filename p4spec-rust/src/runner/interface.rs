@@ -1,8 +1,9 @@
 //! Runner-facing interface for stateful specification builtins.
 //!
-//! Calls are delegated to an interface implementation, while checkpoints let
-//! the runner detect effects around speculative evaluation. For example, the
-//! builtin interface changes its checkpoint after `$fresh_typeId`.
+//! Calls are delegated to an interface implementation and report whether they
+//! changed interface state. For example, `$fresh_typeId` returns `true` with
+//! its fresh identifier, while a pure builtin such as `$sum_nat` returns
+//! `false` with its value.
 
 use thiserror::Error;
 
@@ -46,17 +47,10 @@ impl From<BuiltinError> for InterfaceError {
 pub trait Interface {
     fn call_builtin(
         &mut self,
-        add: &mut dyn FnMut(ValueRef),
         id: &Id,
         targs: &[Typ],
         values: &[ValueRef],
-    ) -> Result<ValueRef, InterfaceError>;
-
-    fn checkpoint(&self) -> u64;
-
-    fn side_effected(&self, before: u64, after: u64) -> bool {
-        before != after
-    }
+    ) -> Result<(ValueRef, bool), InterfaceError>;
 
     fn clear(&mut self);
 }
@@ -77,18 +71,11 @@ impl BuiltinInterface {
 impl Interface for BuiltinInterface {
     fn call_builtin(
         &mut self,
-        add: &mut dyn FnMut(ValueRef),
         id: &Id,
         targs: &[Typ],
         values: &[ValueRef],
-    ) -> Result<ValueRef, InterfaceError> {
-        self.builtins
-            .invoke(add, id, targs, values)
-            .map_err(Into::into)
-    }
-
-    fn checkpoint(&self) -> u64 {
-        self.builtins.checkpoint()
+    ) -> Result<(ValueRef, bool), InterfaceError> {
+        self.builtins.invoke(id, targs, values).map_err(Into::into)
     }
 
     fn clear(&mut self) {
@@ -101,19 +88,14 @@ pub struct NullInterface;
 impl Interface for NullInterface {
     fn call_builtin(
         &mut self,
-        _add: &mut dyn FnMut(ValueRef),
         id: &Id,
         _targs: &[Typ],
         _values: &[ValueRef],
-    ) -> Result<ValueRef, InterfaceError> {
+    ) -> Result<(ValueRef, bool), InterfaceError> {
         Err(InterfaceError {
             kind: InterfaceErrorKind::NotConfigured,
             span: id.span.clone(),
         })
-    }
-
-    fn checkpoint(&self) -> u64 {
-        0
     }
 
     fn clear(&mut self) {}

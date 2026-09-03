@@ -4,7 +4,7 @@
 //! in semantic value order. For example, the union of `{a}` and `{a, b}` is
 //! emitted once as `{a, b}`.
 
-use std::{collections::BTreeSet, rc::Rc};
+use std::collections::BTreeSet;
 
 use crate::{
     lang::{
@@ -15,12 +15,12 @@ use crate::{
         il::ast::Typ,
     },
     runtime::{
-        types::typ as make_type,
+        types::typ,
         value::{Value, ValueRef, get, make},
     },
 };
 
-use super::{BuiltinError, BuiltinResult, extract, return_value};
+use super::{BuiltinError, BuiltinResult, extract};
 
 // == Value set
 
@@ -48,63 +48,47 @@ fn set_of_value(span: &Span, value: &Value) -> Result<ValueSet, BuiltinError> {
     Ok(values.iter().cloned().collect())
 }
 
-fn value_of_set(add: &mut dyn FnMut(ValueRef), typ_key: &Typ, set: ValueSet) -> BuiltinResult {
+fn value_of_set(typ_key: &Typ, set: ValueSet) -> BuiltinResult {
     let values_element = set.into_iter().collect();
-    let typ_list = make_type::list(typ_key.clone());
+    let typ_list = typ::list(typ_key.clone());
     let value_elements = make::list(&typ_list, values_element, Span::default());
-    add(Rc::clone(&value_elements));
     let set_id = crate::phrase!(node: "set".to_owned(), span: Span::default());
-    let typ = make_type::var(set_id, vec![typ_key.clone()]);
+    let typ = typ::var(set_id, vec![typ_key.clone()]);
     let set_mixop = set_mixop();
     let value_case =
         Mixop::fill(&set_mixop, [value_elements]).expect("the set mixop has exactly one argument");
     let value = make::case(&typ, value_case, Span::default());
-    return_value(add, value)
+    Ok(value)
 }
 
 // == Built-in implementations
 
 // dec $intersect_set<K>(set<K>, set<K>) : set<K>
 
-pub fn intersect_set(
-    add: &mut dyn FnMut(ValueRef),
-    span: &Span,
-    type_args: &[Typ],
-    values: &[ValueRef],
-) -> BuiltinResult {
-    let typ_key = extract::one(span, type_args)?;
+pub fn intersect_set(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
+    let typ_key = extract::one(span, targs)?;
     let (value_set_a, value_set_b) = extract::two(span, values)?;
     let set_a = set_of_value(span, value_set_a)?;
     let set_b = set_of_value(span, value_set_b)?;
     let intersection = set_a.intersection(&set_b).cloned().collect();
-    value_of_set(add, typ_key, intersection)
+    value_of_set(typ_key, intersection)
 }
 
 // dec $union_set<K>(set<K>, set<K>) : set<K>
 
-pub fn union_set(
-    add: &mut dyn FnMut(ValueRef),
-    span: &Span,
-    type_args: &[Typ],
-    values: &[ValueRef],
-) -> BuiltinResult {
-    let typ_key = extract::one(span, type_args)?;
+pub fn union_set(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
+    let typ_key = extract::one(span, targs)?;
     let (value_set_a, value_set_b) = extract::two(span, values)?;
     let set_a = set_of_value(span, value_set_a)?;
     let set_b = set_of_value(span, value_set_b)?;
     let union = set_a.union(&set_b).cloned().collect();
-    value_of_set(add, typ_key, union)
+    value_of_set(typ_key, union)
 }
 
-// dec $unions_set<K>(set<K>* ) : set<K>
+// dec $unions_set<K>(set<K>*) : set<K>
 
-pub fn unions_set(
-    add: &mut dyn FnMut(ValueRef),
-    span: &Span,
-    type_args: &[Typ],
-    values: &[ValueRef],
-) -> BuiltinResult {
-    let typ_key = extract::one(span, type_args)?;
+pub fn unions_set(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
+    let typ_key = extract::one(span, targs)?;
     let value_sets = extract::one(span, values)?;
     let values = get::list(value_sets)
         .map_err(|error| BuiltinError::new(span.clone(), error.to_string()))?;
@@ -113,55 +97,40 @@ pub fn unions_set(
         let set = set_of_value(span, value)?;
         union.extend(set);
     }
-    value_of_set(add, typ_key, union)
+    value_of_set(typ_key, union)
 }
 
 // dec $diff_set<K>(set<K>, set<K>) : set<K>
 
-pub fn diff_set(
-    add: &mut dyn FnMut(ValueRef),
-    span: &Span,
-    type_args: &[Typ],
-    values: &[ValueRef],
-) -> BuiltinResult {
-    let typ_key = extract::one(span, type_args)?;
+pub fn diff_set(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
+    let typ_key = extract::one(span, targs)?;
     let (value_set_a, value_set_b) = extract::two(span, values)?;
     let set_a = set_of_value(span, value_set_a)?;
     let set_b = set_of_value(span, value_set_b)?;
     let difference = set_a.difference(&set_b).cloned().collect();
-    value_of_set(add, typ_key, difference)
+    value_of_set(typ_key, difference)
 }
 
 // dec $sub_set<K>(set<K>, set<K>) : bool
 
-pub fn sub_set(
-    add: &mut dyn FnMut(ValueRef),
-    span: &Span,
-    type_args: &[Typ],
-    values: &[ValueRef],
-) -> BuiltinResult {
-    let _typ_key = extract::one(span, type_args)?;
+pub fn sub_set(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
+    let _typ_key = extract::one(span, targs)?;
     let (value_set_a, value_set_b) = extract::two(span, values)?;
     let set_a = set_of_value(span, value_set_a)?;
     let set_b = set_of_value(span, value_set_b)?;
     let is_subset = set_a.is_subset(&set_b);
     let value = make::bool(is_subset, Span::default());
-    return_value(add, value)
+    Ok(value)
 }
 
 // dec $eq_set<K>(set<K>, set<K>) : bool
 
-pub fn eq_set(
-    add: &mut dyn FnMut(ValueRef),
-    span: &Span,
-    type_args: &[Typ],
-    values: &[ValueRef],
-) -> BuiltinResult {
-    let _typ_key = extract::one(span, type_args)?;
+pub fn eq_set(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
+    let _typ_key = extract::one(span, targs)?;
     let (value_set_a, value_set_b) = extract::two(span, values)?;
     let set_a = set_of_value(span, value_set_a)?;
     let set_b = set_of_value(span, value_set_b)?;
     let equal = set_a == set_b;
     let value = make::bool(equal, Span::default());
-    return_value(add, value)
+    Ok(value)
 }
