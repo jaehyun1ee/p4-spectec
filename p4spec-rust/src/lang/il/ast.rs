@@ -11,7 +11,7 @@ use crate::lang::{
     common::{
         self,
         notation::{atom, mixfix::Mixfix, mixop},
-        source::{NotePhrase, Phrase},
+        source::{NotePhrase, Phrase, Span},
     },
     el,
     hints::input::InputHint,
