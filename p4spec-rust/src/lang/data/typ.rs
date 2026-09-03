@@ -1,7 +1,7 @@
 //! Types shared by the intermediate language representations
 
 use crate::lang::{
-    common::{Id, Iter, TId, notation::atom, source::Phrase},
+    common::{Id, Iter, TId, source::Phrase},
     xl::num,
 };
 

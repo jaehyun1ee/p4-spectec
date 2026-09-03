@@ -51,15 +51,16 @@ fn test_numeric_builtin_returns_value_without_side_effect() {
 }
 
 #[test]
-fn test_fresh_type_ids_are_instance_owned_and_report_side_effects() {
+fn test_fresh_type_ids_share_state_and_report_side_effects() {
     let mut builtins_a = Builtins::new();
     let mut builtins_b = Builtins::new();
+    builtins_a.init();
 
     let (value_a, side_effected_a) = invoke(&mut builtins_a, "fresh_typeId", &[]).unwrap();
     let (value_b, side_effected_b) = invoke(&mut builtins_b, "fresh_typeId", &[]).unwrap();
 
     assert_eq!(get::text(&value_a), Ok("FRESH__0"));
-    assert_eq!(get::text(&value_b), Ok("FRESH__0"));
+    assert_eq!(get::text(&value_b), Ok("FRESH__1"));
     assert!(side_effected_a);
     assert!(side_effected_b);
 

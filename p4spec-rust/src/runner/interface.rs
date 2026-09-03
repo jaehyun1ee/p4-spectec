@@ -35,15 +35,6 @@ pub struct InterfaceError {
     pub span: Span,
 }
 
-impl From<BuiltinError> for InterfaceError {
-    fn from(error: BuiltinError) -> Self {
-        Self {
-            span: error.span.clone(),
-            kind: InterfaceErrorKind::Builtin(Box::new(error)),
-        }
-    }
-}
-
 // == Interface contract
 
 pub trait Interface {
@@ -77,7 +68,12 @@ impl Interface for BuiltinInterface {
         targs: &[Typ],
         values: &[Rc<Value>],
     ) -> Result<(Rc<Value>, bool), InterfaceError> {
-        self.builtins.invoke(id, targs, values).map_err(Into::into)
+        self.builtins
+            .invoke(id, targs, values)
+            .map_err(|error| InterfaceError {
+                kind: InterfaceErrorKind::Builtin(Box::new(error)),
+                span: id.span.clone(),
+            })
     }
 
     fn clear(&mut self) {

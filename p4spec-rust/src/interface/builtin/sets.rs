@@ -20,7 +20,7 @@ use crate::{
     },
 };
 
-use super::{BuiltinError, BuiltinResult, extract};
+use super::{BuiltinError, extract};
 
 // == Value set
 
@@ -34,21 +34,19 @@ fn set_mixop() -> Mixop {
     Mixfix::Brack(left, Box::new(Mixfix::Arg(())), right)
 }
 
-fn set_of_value(span: &Span, value: &Value) -> Result<ValueSet, BuiltinError> {
-    let value_case =
-        get::case(value).map_err(|_| BuiltinError::new(span.clone(), "expected a set"))?;
+fn set_of_value(value: &Value) -> Result<ValueSet, BuiltinError> {
+    let value_case = get::case(value).map_err(|_| BuiltinError::new("expected a set"))?;
     let set_mixop = set_mixop();
     if value_case.split().0 != set_mixop {
-        return Err(BuiltinError::new(span.clone(), "expected a set"));
+        return Err(BuiltinError::new("expected a set"));
     }
     let args = value_case.args();
-    let value_elements = extract::one(span, &args)?;
-    let values =
-        get::list(value_elements).map_err(|_| BuiltinError::new(span.clone(), "expected a set"))?;
+    let value_elements = extract::one(&args)?;
+    let values = get::list(value_elements).map_err(|_| BuiltinError::new("expected a set"))?;
     Ok(values.iter().cloned().collect())
 }
 
-fn value_of_set(typ_key: &Typ, set: ValueSet) -> BuiltinResult {
+fn value_of_set(typ_key: &Typ, set: ValueSet) -> Result<Rc<Value>, BuiltinError> {
     let values_element = set.into_iter().collect();
     let typ_list = typ::list(typ_key.clone());
     let value_elements = make::list(&typ_list, values_element, Span::default());
@@ -65,36 +63,35 @@ fn value_of_set(typ_key: &Typ, set: ValueSet) -> BuiltinResult {
 
 // dec $intersect_set<K>(set<K>, set<K>) : set<K>
 
-pub fn intersect_set(span: &Span, targs: &[Typ], values: &[Rc<Value>]) -> BuiltinResult {
-    let typ_key = extract::one(span, targs)?;
-    let (value_set_a, value_set_b) = extract::two(span, values)?;
-    let set_a = set_of_value(span, value_set_a)?;
-    let set_b = set_of_value(span, value_set_b)?;
+pub fn intersect_set(targs: &[Typ], values: &[Rc<Value>]) -> Result<Rc<Value>, BuiltinError> {
+    let typ_key = extract::one(targs)?;
+    let (value_set_a, value_set_b) = extract::two(values)?;
+    let set_a = set_of_value(value_set_a)?;
+    let set_b = set_of_value(value_set_b)?;
     let intersection = set_a.intersection(&set_b).cloned().collect();
     value_of_set(typ_key, intersection)
 }
 
 // dec $union_set<K>(set<K>, set<K>) : set<K>
 
-pub fn union_set(span: &Span, targs: &[Typ], values: &[Rc<Value>]) -> BuiltinResult {
-    let typ_key = extract::one(span, targs)?;
-    let (value_set_a, value_set_b) = extract::two(span, values)?;
-    let set_a = set_of_value(span, value_set_a)?;
-    let set_b = set_of_value(span, value_set_b)?;
+pub fn union_set(targs: &[Typ], values: &[Rc<Value>]) -> Result<Rc<Value>, BuiltinError> {
+    let typ_key = extract::one(targs)?;
+    let (value_set_a, value_set_b) = extract::two(values)?;
+    let set_a = set_of_value(value_set_a)?;
+    let set_b = set_of_value(value_set_b)?;
     let union = set_a.union(&set_b).cloned().collect();
     value_of_set(typ_key, union)
 }
 
 // dec $unions_set<K>(set<K>*) : set<K>
 
-pub fn unions_set(span: &Span, targs: &[Typ], values: &[Rc<Value>]) -> BuiltinResult {
-    let typ_key = extract::one(span, targs)?;
-    let value_sets = extract::one(span, values)?;
-    let values = get::list(value_sets)
-        .map_err(|error| BuiltinError::new(span.clone(), error.to_string()))?;
+pub fn unions_set(targs: &[Typ], values: &[Rc<Value>]) -> Result<Rc<Value>, BuiltinError> {
+    let typ_key = extract::one(targs)?;
+    let value_sets = extract::one(values)?;
+    let values = get::list(value_sets).map_err(|error| BuiltinError::new(error.to_string()))?;
     let mut union = ValueSet::new();
     for value in values {
-        let set = set_of_value(span, value)?;
+        let set = set_of_value(value)?;
         union.extend(set);
     }
     value_of_set(typ_key, union)
@@ -102,22 +99,22 @@ pub fn unions_set(span: &Span, targs: &[Typ], values: &[Rc<Value>]) -> BuiltinRe
 
 // dec $diff_set<K>(set<K>, set<K>) : set<K>
 
-pub fn diff_set(span: &Span, targs: &[Typ], values: &[Rc<Value>]) -> BuiltinResult {
-    let typ_key = extract::one(span, targs)?;
-    let (value_set_a, value_set_b) = extract::two(span, values)?;
-    let set_a = set_of_value(span, value_set_a)?;
-    let set_b = set_of_value(span, value_set_b)?;
+pub fn diff_set(targs: &[Typ], values: &[Rc<Value>]) -> Result<Rc<Value>, BuiltinError> {
+    let typ_key = extract::one(targs)?;
+    let (value_set_a, value_set_b) = extract::two(values)?;
+    let set_a = set_of_value(value_set_a)?;
+    let set_b = set_of_value(value_set_b)?;
     let difference = set_a.difference(&set_b).cloned().collect();
     value_of_set(typ_key, difference)
 }
 
 // dec $sub_set<K>(set<K>, set<K>) : bool
 
-pub fn sub_set(span: &Span, targs: &[Typ], values: &[Rc<Value>]) -> BuiltinResult {
-    let _typ_key = extract::one(span, targs)?;
-    let (value_set_a, value_set_b) = extract::two(span, values)?;
-    let set_a = set_of_value(span, value_set_a)?;
-    let set_b = set_of_value(span, value_set_b)?;
+pub fn sub_set(targs: &[Typ], values: &[Rc<Value>]) -> Result<Rc<Value>, BuiltinError> {
+    let _typ_key = extract::one(targs)?;
+    let (value_set_a, value_set_b) = extract::two(values)?;
+    let set_a = set_of_value(value_set_a)?;
+    let set_b = set_of_value(value_set_b)?;
     let is_subset = set_a.is_subset(&set_b);
     let value = make::bool(is_subset, Span::default());
     Ok(value)
@@ -125,11 +122,11 @@ pub fn sub_set(span: &Span, targs: &[Typ], values: &[Rc<Value>]) -> BuiltinResul
 
 // dec $eq_set<K>(set<K>, set<K>) : bool
 
-pub fn eq_set(span: &Span, targs: &[Typ], values: &[Rc<Value>]) -> BuiltinResult {
-    let _typ_key = extract::one(span, targs)?;
-    let (value_set_a, value_set_b) = extract::two(span, values)?;
-    let set_a = set_of_value(span, value_set_a)?;
-    let set_b = set_of_value(span, value_set_b)?;
+pub fn eq_set(targs: &[Typ], values: &[Rc<Value>]) -> Result<Rc<Value>, BuiltinError> {
+    let _typ_key = extract::one(targs)?;
+    let (value_set_a, value_set_b) = extract::two(values)?;
+    let set_a = set_of_value(value_set_a)?;
+    let set_b = set_of_value(value_set_b)?;
     let equal = set_a == set_b;
     let value = make::bool(equal, Span::default());
     Ok(value)

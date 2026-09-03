@@ -1,5 +1,5 @@
 use p4spec_rust::{
-    lang::common::source::Span,
+    lang::common::source::{Position, Span},
     phrase,
     runner::{BuiltinInterface, Interface, InterfaceErrorKind, NullInterface},
     runtime::value::get,
@@ -34,4 +34,19 @@ fn test_builtin_interface_reports_side_effects_and_clears() {
         .unwrap();
     assert_eq!(get::text(&value), Ok("FRESH__0"));
     assert!(side_effected);
+}
+
+#[test]
+fn test_builtin_interface_locates_builtin_failures_at_the_call() {
+    let span = Span::new(
+        Position::new("test.spec", 3, 4),
+        Position::new("test.spec", 3, 11),
+    );
+    let id = phrase!(node: "sum_int".to_owned(), span: span.clone());
+    let error = BuiltinInterface::new()
+        .call_builtin(&id, &[], &[])
+        .unwrap_err();
+
+    assert_eq!(error.span, span);
+    assert!(matches!(error.kind, InterfaceErrorKind::Builtin(_)));
 }
