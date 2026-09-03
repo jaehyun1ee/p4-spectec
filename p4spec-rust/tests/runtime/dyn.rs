@@ -5,7 +5,7 @@ use p4spec_rust::{
     },
     phrase,
     runtime::{
-        dynamic::{CallCache, CallKey, VEnv, Variable},
+        r#dyn::{CallCache, CallKey, VEnv, Variable},
         value::make,
     },
 };

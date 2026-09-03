@@ -2,6 +2,7 @@ use p4spec_rust::{
     lang::common::source::Span,
     phrase,
     runner::{BuiltinInterface, Interface, InterfaceErrorKind, NullInterface},
+    runtime::value::get,
 };
 
 fn id(name: &str) -> p4spec_rust::lang::il::ast::Id {
@@ -11,22 +12,26 @@ fn id(name: &str) -> p4spec_rust::lang::il::ast::Id {
 #[test]
 fn test_null_interface_reports_configuration_failure() {
     let error = NullInterface
-        .call_builtin(&mut |_| {}, &id("sum_int"), &[], &[])
+        .call_builtin(&id("sum_int"), &[], &[])
         .unwrap_err();
 
     assert!(matches!(error.kind, InterfaceErrorKind::NotConfigured));
 }
 
 #[test]
-fn test_builtin_interface_exposes_checkpoint_and_clear() {
+fn test_builtin_interface_reports_side_effects_and_clears() {
     let mut interface = BuiltinInterface::new();
-    let before = interface.checkpoint();
-    interface
-        .call_builtin(&mut |_| {}, &id("fresh_typeId"), &[], &[])
+    let (value, side_effected) = interface
+        .call_builtin(&id("fresh_typeId"), &[], &[])
         .unwrap();
-    let after = interface.checkpoint();
 
-    assert!(interface.side_effected(before, after));
+    assert_eq!(get::text(&value), Ok("FRESH__0"));
+    assert!(side_effected);
+
     interface.clear();
-    assert_eq!(interface.checkpoint(), before);
+    let (value, side_effected) = interface
+        .call_builtin(&id("fresh_typeId"), &[], &[])
+        .unwrap();
+    assert_eq!(get::text(&value), Ok("FRESH__0"));
+    assert!(side_effected);
 }

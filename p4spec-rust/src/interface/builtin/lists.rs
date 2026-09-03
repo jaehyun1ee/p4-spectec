@@ -1,7 +1,7 @@
 //! List builtins, in the same order as `interface/builtin/lists.ml`.
 //!
 //! Each builtin first extracts its type and value arguments, performs the list
-//! operation, and finally registers the newly constructed runtime value.  For
+//! operation, and returns the newly constructed runtime value. For
 //! example, `rev_` turns `[a, b]` into `[b, a]` while preserving the element
 //! type supplied by the specification.
 
@@ -13,12 +13,12 @@ use crate::{
     lang::common::source::Span,
     lang::{il::ast::Typ, xl::num},
     runtime::{
-        types::typ as make_type,
+        types::typ,
         value::{Value, ValueKind, ValueRef, get, make},
     },
 };
 
-use super::{BuiltinError, BuiltinResult, extract, return_value};
+use super::{BuiltinError, BuiltinResult, extract};
 
 // == Conversion between runtime values and Rust collections
 
@@ -32,33 +32,23 @@ fn bigint_of_value<'a>(span: &Span, value: &'a Value) -> Result<&'a BigInt, Buil
     Ok(num::to_int(number))
 }
 
-// dec $rev_<X>(X* ) : X*
+// dec $rev_<X>(X*) : X*
 
-pub fn rev_(
-    add: &mut dyn FnMut(ValueRef),
-    span: &Span,
-    type_args: &[Typ],
-    values: &[ValueRef],
-) -> BuiltinResult {
-    let typ = extract::one(span, type_args)?;
-    let list_type = make_type::list(typ.clone());
+pub fn rev_(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
+    let typ = extract::one(span, targs)?;
+    let typ_list = typ::list(typ.clone());
     let value_list = extract::one(span, values)?;
     let mut values = list_of_value(span, value_list)?.to_vec();
     values.reverse();
-    let value = make::list(&list_type, values, Span::default());
-    return_value(add, value)
+    let value = make::list(&typ_list, values, Span::default());
+    Ok(value)
 }
 
-// dec $concat_<X>((X* )* ) : X*
+// dec $concat_<X>((X*)*) : X*
 
-pub fn concat_(
-    add: &mut dyn FnMut(ValueRef),
-    span: &Span,
-    type_args: &[Typ],
-    values: &[ValueRef],
-) -> BuiltinResult {
-    let typ = extract::one(span, type_args)?;
-    let list_type = make_type::list(typ.clone());
+pub fn concat_(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
+    let typ = extract::one(span, targs)?;
+    let typ_list = typ::list(typ.clone());
     let mut concatenated = Vec::new();
     let value_lists = extract::one(span, values)?;
     let lists = list_of_value(span, value_lists)?;
@@ -66,37 +56,27 @@ pub fn concat_(
         let values = list_of_value(span, value_list)?;
         concatenated.extend(values.iter().cloned());
     }
-    let value = make::list(&list_type, concatenated, Span::default());
-    return_value(add, value)
+    let value = make::list(&typ_list, concatenated, Span::default());
+    Ok(value)
 }
 
-// dec $distinct_<K>(K* ) : bool
+// dec $distinct_<K>(K*) : bool
 
-pub fn distinct_(
-    add: &mut dyn FnMut(ValueRef),
-    span: &Span,
-    type_args: &[Typ],
-    values: &[ValueRef],
-) -> BuiltinResult {
-    let _typ = extract::one(span, type_args)?;
+pub fn distinct_(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
+    let _typ = extract::one(span, targs)?;
     let value_list = extract::one(span, values)?;
     let values = list_of_value(span, value_list)?;
     let set: BTreeSet<_> = values.iter().collect();
     let all_distinct = set.len() == values.len();
     let value = make::bool(all_distinct, Span::default());
-    return_value(add, value)
+    Ok(value)
 }
 
-// dec $partition_<X>(X*, nat) : (X*, X* )
+// dec $partition_<X>(X*, nat) : (X*, X*)
 
-pub fn partition_(
-    add: &mut dyn FnMut(ValueRef),
-    span: &Span,
-    type_args: &[Typ],
-    values: &[ValueRef],
-) -> BuiltinResult {
-    let typ = extract::one(span, type_args)?;
-    let list_type = make_type::list(typ.clone());
+pub fn partition_(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
+    let typ = extract::one(span, targs)?;
+    let typ_list = typ::list(typ.clone());
     let (value_list, value_len) = extract::two(span, values)?;
     let values = list_of_value(span, value_list)?;
     let len = bigint_of_value(span, value_len)?;
@@ -105,37 +85,30 @@ pub fn partition_(
         .enumerate()
         .partition(|(index, _)| BigInt::from(*index) < *len);
     let value_left = make::list(
-        &list_type,
+        &typ_list,
         values_left
             .into_iter()
             .map(|(_, value)| Rc::clone(value))
             .collect(),
         Span::default(),
     );
-    add(Rc::clone(&value_left));
     let value_right = make::list(
-        &list_type,
+        &typ_list,
         values_right
             .into_iter()
             .map(|(_, value)| Rc::clone(value))
             .collect(),
         Span::default(),
     );
-    add(Rc::clone(&value_right));
-    let tuple_type = make_type::tuple(vec![typ.clone(), typ.clone()]);
-    let value = make::tuple(&tuple_type, vec![value_left, value_right], Span::default());
-    return_value(add, value)
+    let typ_tuple = typ::tuple(vec![typ.clone(), typ.clone()]);
+    let value = make::tuple(&typ_tuple, vec![value_left, value_right], Span::default());
+    Ok(value)
 }
 
-// dec $assoc_<X, Y>(X, (X, Y)* ) : Y?
+// dec $assoc_<X, Y>(X, (X, Y)*) : Y?
 
-pub fn assoc_(
-    add: &mut dyn FnMut(ValueRef),
-    span: &Span,
-    type_args: &[Typ],
-    values: &[ValueRef],
-) -> BuiltinResult {
-    let (_key_type, value_type) = extract::two(span, type_args)?;
+pub fn assoc_(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
+    let (_typ_key, typ_value) = extract::two(span, targs)?;
     let (value, value_list) = extract::two(span, values)?;
     let mut found = None;
     for pair in list_of_value(span, value_list)? {
@@ -152,22 +125,17 @@ pub fn assoc_(
             found = Some(Rc::clone(&pair[1]));
         }
     }
-    let option_type = make_type::opt(value_type.clone());
-    let value = make::opt(&option_type, found, Span::default());
-    return_value(add, value)
+    let typ_opt = typ::opt(typ_value.clone());
+    let value = make::opt(&typ_opt, found, Span::default());
+    Ok(value)
 }
 
-// dec $sort_<X>((nat, X)* ) : (nat, X)*
+// dec $sort_<X>((nat, X)*) : (nat, X)*
 
-pub fn sort_(
-    add: &mut dyn FnMut(ValueRef),
-    span: &Span,
-    type_args: &[Typ],
-    values: &[ValueRef],
-) -> BuiltinResult {
-    let value_type = extract::one(span, type_args)?;
-    let pair_type = make_type::tuple(vec![make_type::nat(), value_type.clone()]);
-    let list_type = make_type::list(pair_type);
+pub fn sort_(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
+    let typ_value = extract::one(span, targs)?;
+    let typ_pair = typ::tuple(vec![typ::nat(), typ_value.clone()]);
+    let typ_list = typ::list(typ_pair);
     let mut keyed = Vec::new();
     let value_list = extract::one(span, values)?;
     let pairs = list_of_value(span, value_list)?;
@@ -183,21 +151,16 @@ pub fn sort_(
     }
     keyed.sort_by(|(key_a, _), (key_b, _)| key_a.cmp(key_b));
     let values = keyed.into_iter().map(|(_, value)| value).collect();
-    let value = make::list(&list_type, values, Span::default());
-    return_value(add, value)
+    let value = make::list(&typ_list, values, Span::default());
+    Ok(value)
 }
 
-// builtin dec $transpose_<X>(X** ) : X**
+// builtin dec $transpose_<X>(X**) : X**
 
-pub fn transpose_(
-    add: &mut dyn FnMut(ValueRef),
-    span: &Span,
-    type_args: &[Typ],
-    values: &[ValueRef],
-) -> BuiltinResult {
-    let typ = extract::one(span, type_args)?;
-    let list_type = make_type::list(typ.clone());
-    let matrix_type = make_type::list(list_type.clone());
+pub fn transpose_(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
+    let typ = extract::one(span, targs)?;
+    let typ_list = typ::list(typ.clone());
+    let typ_matrix = typ::list(typ_list.clone());
     let value_matrix = extract::one(span, values)?;
     let rows = list_of_value(span, value_matrix)?;
     let width = match rows.first() {
@@ -222,10 +185,9 @@ pub fn transpose_(
     }
     let mut value_rows = Vec::with_capacity(columns.len());
     for column in columns {
-        let value_row = make::list(&list_type, column, Span::default());
-        add(Rc::clone(&value_row));
+        let value_row = make::list(&typ_list, column, Span::default());
         value_rows.push(value_row);
     }
-    let value = make::list(&matrix_type, value_rows, Span::default());
-    return_value(add, value)
+    let value = make::list(&typ_matrix, value_rows, Span::default());
+    Ok(value)
 }

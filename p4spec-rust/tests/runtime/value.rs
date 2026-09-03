@@ -14,7 +14,7 @@ use p4spec_rust::{
     },
     runtime::{
         types::typ,
-        value::{Fresh, ValueError, ValueKind, ValueTag, get, make},
+        value::{ValueError, ValueKind, ValueTag, get, make},
     },
     yojson::ExternalData,
 };
@@ -111,19 +111,6 @@ fn test_cloned_values_share_immutable_storage() {
     let cloned = Rc::clone(&value);
 
     assert!(Rc::ptr_eq(&value, &cloned));
-}
-
-#[test]
-fn test_fresh_type_variables_are_isolated_by_instance() {
-    let mut first = Fresh::new();
-    let mut second = Fresh::new();
-
-    let first_initial = first.fresh().0;
-    let first_next = first.fresh().0;
-    let second_initial = second.fresh().0;
-
-    assert_eq!(first_initial, second_initial);
-    assert_ne!(first_initial, first_next);
 }
 
 #[test]

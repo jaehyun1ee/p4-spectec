@@ -1,5 +1,3 @@
-use std::rc::Rc;
-
 use num_bigint::BigInt;
 use p4spec_rust::{
     interface::builtin::{BuiltinErrorKind, call::Builtins},
@@ -19,7 +17,7 @@ fn invoke(
     builtins: &mut Builtins,
     name: &str,
     values: &[ValueRef],
-) -> Result<(ValueRef, Vec<ValueRef>), p4spec_rust::interface::builtin::BuiltinError> {
+) -> Result<(ValueRef, bool), p4spec_rust::interface::builtin::BuiltinError> {
     invoke_with_types(builtins, name, &[], values)
 }
 
@@ -28,17 +26,15 @@ fn invoke_with_types(
     name: &str,
     targs: &[p4spec_rust::lang::il::ast::Typ],
     values: &[ValueRef],
-) -> Result<(ValueRef, Vec<ValueRef>), p4spec_rust::interface::builtin::BuiltinError> {
-    let mut added = Vec::new();
-    let value = builtins.invoke(&mut |value| added.push(value), &id(name), targs, values)?;
-    Ok((value, added))
+) -> Result<(ValueRef, bool), p4spec_rust::interface::builtin::BuiltinError> {
+    builtins.invoke(&id(name), targs, values)
 }
 
 #[test]
-fn test_numeric_builtin_returns_and_reports_the_same_value() {
-    let list_typ = typ::list(typ::int());
+fn test_numeric_builtin_returns_value_without_side_effect() {
+    let typ_list = typ::list(typ::int());
     let input = make::list(
-        &list_typ,
+        &typ_list,
         vec![
             make::int(BigInt::from(2), Span::default()),
             make::int(BigInt::from(5), Span::default()),
@@ -46,27 +42,29 @@ fn test_numeric_builtin_returns_and_reports_the_same_value() {
         Span::default(),
     );
 
-    let (result, added) = invoke(&mut Builtins::new(), "sum_int", &[input]).unwrap();
+    let (result, side_effected) = invoke(&mut Builtins::new(), "sum_int", &[input]).unwrap();
 
     assert_eq!(get::num(&result).unwrap().to_string(), "+7");
-    assert_eq!(added.len(), 1);
-    assert!(Rc::ptr_eq(&result, &added[0]));
+    assert!(!side_effected);
 }
 
 #[test]
-fn test_fresh_type_ids_are_instance_owned_and_checkpointed() {
+fn test_fresh_type_ids_are_instance_owned_and_report_side_effects() {
     let mut builtins_a = Builtins::new();
     let mut builtins_b = Builtins::new();
-    let before = builtins_a.checkpoint();
 
-    let (value_a, _) = invoke(&mut builtins_a, "fresh_typeId", &[]).unwrap();
-    let (value_b, _) = invoke(&mut builtins_b, "fresh_typeId", &[]).unwrap();
+    let (value_a, side_effected_a) = invoke(&mut builtins_a, "fresh_typeId", &[]).unwrap();
+    let (value_b, side_effected_b) = invoke(&mut builtins_b, "fresh_typeId", &[]).unwrap();
 
     assert_eq!(get::text(&value_a), Ok("FRESH__0"));
     assert_eq!(get::text(&value_b), Ok("FRESH__0"));
-    assert!(Builtins::side_effected(before, builtins_a.checkpoint()));
+    assert!(side_effected_a);
+    assert!(side_effected_b);
+
     builtins_a.init();
-    assert_eq!(builtins_a.checkpoint(), before);
+    let (value_a, side_effected_a) = invoke(&mut builtins_a, "fresh_typeId", &[]).unwrap();
+    assert_eq!(get::text(&value_a), Ok("FRESH__0"));
+    assert!(side_effected_a);
 }
 
 #[test]
@@ -89,9 +87,9 @@ fn test_missing_builtin_and_wrong_arity_are_typed_failures() {
 
 #[test]
 fn test_list_and_text_builtins_preserve_ocaml_results() {
-    let list_typ = typ::list(typ::text());
+    let typ_list = typ::list(typ::text());
     let repeated = make::list(
-        &list_typ,
+        &typ_list,
         vec![
             make::text("a".to_owned(), Span::default()),
             make::text("a".to_owned(), Span::default()),
