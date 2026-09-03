@@ -15,7 +15,7 @@ fn tokens(source: &str, context: Rc<Context>) -> Vec<Token> {
 }
 
 #[test]
-fn identifiers_are_followed_by_context_sensitive_classification() {
+fn test_identifiers_are_followed_by_context_sensitive_classification() {
     let context = Rc::new(Context::new());
     context.declare_type("Header", true).unwrap();
     let tokens = tokens("Header<bit<8>> value", context);
@@ -34,7 +34,7 @@ fn identifiers_are_followed_by_context_sensitive_classification() {
 }
 
 #[test]
-fn lexer_preserves_string_escapes_and_preprocessor_locations() {
+fn test_lexer_preserves_string_escapes_and_preprocessor_locations() {
     let context = Rc::new(Context::new());
     let mut lexer = Lexer::new(
         Rc::from("preprocessed.p4"),
@@ -49,7 +49,7 @@ fn lexer_preserves_string_escapes_and_preprocessor_locations() {
 }
 
 #[test]
-fn comments_are_skipped_and_unsupported_escapes_are_located_errors() {
+fn test_comments_are_skipped_and_unsupported_escapes_are_located_errors() {
     let context = Rc::new(Context::new());
     assert_eq!(
         tokens(
@@ -71,7 +71,7 @@ fn comments_are_skipped_and_unsupported_escapes_are_located_errors() {
 }
 
 #[test]
-fn shift_and_type_constructor_angles_are_distinct() {
+fn test_shift_and_type_constructor_angles_are_distinct() {
     let context = Rc::new(Context::new());
     context.declare_type("Header", true).unwrap();
 

@@ -1,4 +1,8 @@
 //! String and filesystem entry points for the STF parser.
+//!
+//! A source map converts lexer byte offsets to spans, LALRPOP builds statements
+//! in order, and parse errors are translated to typed STF errors. For example,
+//! `wait` becomes one located `Statement::Wait`.
 
 use std::{fs, path::Path, rc::Rc};
 
@@ -15,6 +19,10 @@ use super::{
     lexer::{Lexer, Token},
     parser,
 };
+
+const OCAML_INT_MAX: i64 = i64::MAX / 2;
+
+// == Source mapping
 
 pub(crate) struct SourceMap {
     file: Rc<str>,
@@ -41,7 +49,8 @@ impl SourceMap {
     }
 
     pub(crate) fn phrase(&self, node: Statement, left: usize, right: usize) -> Phrase<Statement> {
-        phrase! { node: node, span: self.span(left, right) }
+        let span = self.span(left, right);
+        phrase! { node: node, span: span }
     }
 
     pub(crate) fn priority(
@@ -50,18 +59,25 @@ impl SourceMap {
         left: usize,
         right: usize,
     ) -> Result<i64, StfError> {
-        value.parse().map_err(|_| {
-            StfError::new(StfErrorKind::InvalidPriority(value), self.span(left, right))
-        })
+        let priority = value.parse::<i64>().ok();
+        match priority.filter(|priority| *priority <= OCAML_INT_MAX) {
+            Some(priority) => Ok(priority),
+            None => Err(StfError::new(
+                StfErrorKind::InvalidPriority(value),
+                self.span(left, right),
+            )),
+        }
     }
 }
+
+// == Entry points
 
 /// Parses an STF source string and retains statement source spans.
 pub fn parse_str(file: impl Into<Rc<str>>, source: &str) -> Result<Program, StfError> {
     let source_map = SourceMap::new(file.into(), source);
-    parser::StatementsParser::new()
-        .parse(&source_map, Lexer::new(Rc::clone(&source_map.file), source))
-        .map_err(|error| parse_error(&source_map, error))
+    let lexer = Lexer::new(Rc::clone(&source_map.file), source);
+    let result = parser::StatementsParser::new().parse(&source_map, lexer);
+    result.map_err(|error| parse_error(&source_map, error))
 }
 
 /// Reads and parses an STF file.
@@ -77,6 +93,8 @@ pub fn parse_file(path: impl AsRef<Path>) -> Result<Program, StfError> {
     })?;
     parse_str(file, &source)
 }
+
+// == Error translation
 
 fn parse_error(source: &SourceMap, error: ParseError<usize, Token, StfError>) -> StfError {
     let (kind, left, right) = match error {

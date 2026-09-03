@@ -1,10 +1,16 @@
-//! Stateful STF lexer. Packet payloads deliberately use a different token vocabulary.
+//! Stateful STF lexer with a separate packet-data vocabulary.
+//!
+//! Keyword mode skips layout and recognizes commands; `packet` and `expect`
+//! switch to packet-data mode until newline or `$`. For example, `**` after
+//! `expect` becomes two packet wildcards rather than identifier punctuation.
 
 use std::rc::Rc;
 
 use crate::lang::common::source::{Position, Span};
 
 use super::error::{StfError, StfErrorKind};
+
+// == Tokens
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Token {
@@ -61,6 +67,8 @@ enum Mode {
     Keyword,
     PacketData,
 }
+
+// == Lexer state
 
 pub struct Lexer<'source> {
     source: &'source str,
@@ -291,6 +299,8 @@ impl<'source> Lexer<'source> {
         Err(self.error(StfErrorKind::InvalidCharacter(character), left))
     }
 }
+
+// == Token stream
 
 impl Iterator for Lexer<'_> {
     type Item = Result<(usize, Token, usize), StfError>;

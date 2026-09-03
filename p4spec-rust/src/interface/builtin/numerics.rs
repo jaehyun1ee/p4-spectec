@@ -1,3 +1,9 @@
+//! Bit and integer builtins, in the declaration order of `numerics.ml`.
+//!
+//! Calls decode runtime numerics, apply the bounded arithmetic operation, and
+//! register one encoded result. For example, unsigned bits `[true, false]`
+//! decode to the integer `2`.
+
 use num_bigint::BigInt;
 use num_traits::{One, ToPrimitive, Zero};
 
@@ -11,35 +17,37 @@ use crate::{
 
 use super::{BuiltinError, BuiltinResult, extract, return_value};
 
-// Maximum bit width
+// == Maximum bit width
 
 const MAX_BIT_WIDTH: usize = 2048;
 
-// Conversion between meta-bits and OCaml bool array
+// == Conversion between meta-bits and OCaml bool array
 
 fn bits_of_value(span: &Span, value: &Value) -> Result<Vec<bool>, BuiltinError> {
-    get::list(value)
-        .map_err(|error| BuiltinError::new(span.clone(), error.to_string()))?
-        .iter()
-        .map(|value| {
-            get::bool(value).map_err(|error| BuiltinError::new(span.clone(), error.to_string()))
-        })
-        .collect()
+    let values =
+        get::list(value).map_err(|error| BuiltinError::new(span.clone(), error.to_string()))?;
+    let mut bits = Vec::with_capacity(values.len());
+    for value in values {
+        let bit =
+            get::bool(value).map_err(|error| BuiltinError::new(span.clone(), error.to_string()))?;
+        bits.push(bit);
+    }
+    Ok(bits)
 }
 
 fn value_of_bits(add: &mut dyn FnMut(ValueRef), bits: Vec<bool>) -> BuiltinResult {
-    let typ = make_type::var(
-        crate::phrase!(node: "bit".to_owned(), span: Span::default()),
-        Vec::new(),
-    );
-    let values_bit = bits
-        .into_iter()
-        .map(|bit| make::bool(bit, Span::default()))
-        .collect();
-    return_value(add, make::list(&typ, values_bit, Span::default()))
+    let bit_id = crate::phrase!(node: "bit".to_owned(), span: Span::default());
+    let typ = make_type::var(bit_id, Vec::new());
+    let mut bit_values = Vec::with_capacity(bits.len());
+    for bit in bits {
+        let bit_value = make::bool(bit, Span::default());
+        bit_values.push(bit_value);
+    }
+    let value = make::list(&typ, bit_values, Span::default());
+    return_value(add, value)
 }
 
-// Conversion between meta-numerics and OCaml numerics
+// == Conversion between meta-numerics and OCaml numerics
 
 fn bigint_of_value<'a>(span: &Span, value: &'a Value) -> Result<&'a BigInt, BuiltinError> {
     let number =
@@ -48,7 +56,8 @@ fn bigint_of_value<'a>(span: &Span, value: &'a Value) -> Result<&'a BigInt, Buil
 }
 
 fn value_of_bigint(add: &mut dyn FnMut(ValueRef), value: BigInt) -> BuiltinResult {
-    return_value(add, make::int(value, Span::default()))
+    let value = make::int(value, Span::default());
+    return_value(add, value)
 }
 
 fn width_of_bigint(
@@ -67,6 +76,13 @@ fn width_of_bigint(
         .ok_or_else(|| BuiltinError::new(span.clone(), too_large))
 }
 
+fn array_width_of_bigint(span: &Span, width: &BigInt) -> Result<usize, BuiltinError> {
+    if width < &BigInt::zero() {
+        return Err(BuiltinError::new(span.clone(), "negative bit array width"));
+    }
+    width_of_bigint(span, width, "bitstr width too large")
+}
+
 fn pow2_value(span: &Span, width: &BigInt) -> Result<BigInt, BuiltinError> {
     if width <= &BigInt::zero() {
         return Ok(BigInt::one());
@@ -74,10 +90,11 @@ fn pow2_value(span: &Span, width: &BigInt) -> Result<BigInt, BuiltinError> {
     let width = width
         .to_usize()
         .ok_or_else(|| BuiltinError::new(span.clone(), "shift amount too large"))?;
-    Ok(BigInt::one() << width)
+    let value = BigInt::one() << width;
+    Ok(value)
 }
 
-// Built-in implementations
+// == Built-in implementations
 
 // dec $shl(int, int) : int
 
@@ -92,7 +109,8 @@ pub fn shl(
     let base = bigint_of_value(span, value_base)?;
     let offset = bigint_of_value(span, value_offset)?;
     let offset = width_of_bigint(span, offset, "shift amount too large")?;
-    value_of_bigint(add, base << offset)
+    let value = base << offset;
+    value_of_bigint(add, value)
 }
 
 // dec $shr(int, int) : int
@@ -108,7 +126,9 @@ pub fn shr(
     let base = bigint_of_value(span, value_base)?;
     let offset = bigint_of_value(span, value_offset)?;
     let offset = width_of_bigint(span, offset, "shift amount too large")?;
-    value_of_bigint(add, base / (BigInt::one() << offset))
+    let divisor = BigInt::one() << offset;
+    let value = base / divisor;
+    value_of_bigint(add, value)
 }
 
 // dec $shr_arith(int, int, int) : int
@@ -121,7 +141,8 @@ pub fn shr_arith(
 ) -> BuiltinResult {
     extract::zero(span, type_args)?;
     let (value_base, value_offset, value_modulus) = extract::three(span, values)?;
-    let mut base = bigint_of_value(span, value_base)?.clone();
+    let base = bigint_of_value(span, value_base)?;
+    let mut base = base.clone();
     let offset = bigint_of_value(span, value_offset)?;
     let offset = width_of_bigint(span, offset, "shift amount too large")?;
     let modulus = bigint_of_value(span, value_modulus)?;
@@ -142,7 +163,8 @@ pub fn pow2(
     extract::zero(span, type_args)?;
     let value_width = extract::one(span, values)?;
     let width = bigint_of_value(span, value_width)?;
-    value_of_bigint(add, pow2_value(span, width)?)
+    let value = pow2_value(span, width)?;
+    value_of_bigint(add, value)
 }
 
 // dec $bitstr_to_int(int, bitstr) : int
@@ -205,7 +227,8 @@ pub fn bits_to_int_unsigned(
     extract::zero(span, type_args)?;
     let value_bits = extract::one(span, values)?;
     let bits = bits_of_value(span, value_bits)?;
-    value_of_bigint(add, bits_to_int_unsigned_value(&bits))
+    let value = bits_to_int_unsigned_value(&bits);
+    value_of_bigint(add, value)
 }
 
 // dec $bits_to_int_signed(bool* ) : int
@@ -247,9 +270,10 @@ pub fn int_to_bits_unsigned(
     extract::zero(span, type_args)?;
     let (value_width, value_int) = extract::two(span, values)?;
     let width = bigint_of_value(span, value_width)?;
-    let width = width_of_bigint(span, width, "bitstr width too large")?;
+    let width = array_width_of_bigint(span, width)?;
     let value = bigint_of_value(span, value_int)?;
-    value_of_bits(add, int_to_bits_unsigned_value(value, width))
+    let bits = int_to_bits_unsigned_value(value, width);
+    value_of_bits(add, bits)
 }
 
 // dec $int_to_bits_signed(int) : bool*
@@ -263,11 +287,12 @@ pub fn int_to_bits_signed(
     extract::zero(span, type_args)?;
     let (value_width, value_int) = extract::two(span, values)?;
     let width = bigint_of_value(span, value_width)?;
-    let width = width_of_bigint(span, width, "bitstr width too large")?;
+    let width = array_width_of_bigint(span, width)?;
     let value = bigint_of_value(span, value_int)?;
     let mask = (BigInt::one() << width) - 1;
     let value = value & mask;
-    value_of_bits(add, int_to_bits_unsigned_value(&value, width))
+    let bits = int_to_bits_unsigned_value(&value, width);
+    value_of_bits(add, bits)
 }
 
 // dec $bneg(int) : int
@@ -353,7 +378,9 @@ pub fn bitacc(
         .ok_or_else(|| BuiltinError::new(span.clone(), "bitslice index too large"))?;
     let slice_width = rawint_h + 1 - rawint_l;
     let mask = pow2_value(span, &slice_width)? - 1;
-    value_of_bigint(add, (rawint_b >> low) & mask)
+    let shifted = rawint_b >> low;
+    let value = shifted & mask;
+    value_of_bigint(add, value)
 }
 
 // dec $bitacc_replace(int, int, int, int) : int
@@ -380,8 +407,10 @@ pub fn bitacc_replace(
         .to_usize()
         .ok_or_else(|| BuiltinError::new(span.clone(), "bitslice index too large"))?;
     let rhs = rawint_rhs << low;
-    let mask_hi: BigInt = pow2_value(span, &(rawint_h + 1))? - BigInt::one();
+    let mask_hi_width = rawint_h + 1;
+    let mask_hi: BigInt = pow2_value(span, &mask_hi_width)? - BigInt::one();
     let mask_lo: BigInt = pow2_value(span, rawint_l)? - BigInt::one();
     let mask: BigInt = !(mask_hi ^ mask_lo);
-    value_of_bigint(add, (rawint_b & mask) ^ rhs)
+    let value = (rawint_b & mask) ^ rhs;
+    value_of_bigint(add, value)
 }

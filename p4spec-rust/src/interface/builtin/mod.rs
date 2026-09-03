@@ -1,3 +1,9 @@
+//! Runtime implementations of the standard SpecTec builtins.
+//!
+//! The dispatcher validates arity, each family decodes and computes its
+//! result, and `return_value` registers the final value with the runner. Thus a
+//! call such as `$sum_int([2, 5])` both returns and records the same value `7`.
+
 use std::rc::Rc;
 
 use thiserror::Error;
@@ -17,6 +23,8 @@ pub mod nats;
 pub mod numerics;
 pub mod sets;
 pub mod texts;
+
+// == Errors
 
 #[derive(Clone, Debug, Error, Eq, PartialEq)]
 pub enum BuiltinErrorKind {
@@ -57,6 +65,8 @@ impl BuiltinError {
 }
 
 pub type BuiltinResult = Result<ValueRef, BuiltinError>;
+
+// == Result registration
 
 pub(crate) fn return_value(add: &mut dyn FnMut(ValueRef), value: ValueRef) -> BuiltinResult {
     add(Rc::clone(&value));

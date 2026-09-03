@@ -1,3 +1,10 @@
+//! Dispatch specification builtin calls to their Rust implementations.
+//!
+//! Construction installs the standard entries in OCaml declaration order and
+//! then applies interface-specific overrides. Invocation resolves one name and
+//! calls its implementation; for example, `sum_nat` dispatches to
+//! `nats::sum_nat`, while `fresh_typeId` also advances instance-local state.
+
 use std::collections::HashMap;
 
 use crate::{
@@ -10,7 +17,7 @@ use super::{
     texts,
 };
 
-// Extensibility point: extra or override builtins per interface
+// == Extensibility point: extra or override builtins per interface
 
 pub type BuiltinImpl = fn(
     add: &mut dyn FnMut(ValueRef),
@@ -25,7 +32,7 @@ enum Entry {
     FreshTypeId,
 }
 
-// Create builtins from entries containing extensions
+// == Builtin registry
 
 pub struct Builtins {
     counter: u64,

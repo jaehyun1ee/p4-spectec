@@ -1,3 +1,5 @@
+//! Dynamic value and type environments.
+
 use std::collections::BTreeMap;
 
 use crate::runtime::value::ValueRef;

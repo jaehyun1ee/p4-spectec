@@ -1,3 +1,7 @@
+// Parses P4 tokens while updating the lexer namespace and directly builds the
+// executable IL value tree; for example, `x + y` becomes a binary-expression
+// case containing the left value, the `+` operator case, and the right value.
+
 use crate::{
     interface::p4::{context::{Context, Location, Namespace}, error::P4Error, lexer::Token, value},
     runtime::value::ValueRef,
@@ -132,16 +136,21 @@ extern {
 }
 
 #[inline]
+// colon ::= "COLON"
+//   | "BLOCK_COLON"
 colon: () = {
     "COLON" => (),
     "BLOCK_COLON" => (),
 };
 
 #[inline]
+// plain_colon ::= "COLON"
 plain_colon: () = {
     "COLON" => (),
 };
 
+// constructorTypeIdentifier ::= "NAME" "TYPENAME"
+//   | "NAME" "TYPENAME_EXPR"
 constructorTypeIdentifier: ValueRef = {
     <left:@L> <text:"NAME"> "TYPENAME" <right:@R> =>
         value::case_value(context, "_TID text", vec![text], "typeIdentifier", left, right),
@@ -149,92 +158,126 @@ constructorTypeIdentifier: ValueRef = {
         value::case_value(context, "_TID text", vec![text], "typeIdentifier", left, right),
 };
 
+// instantiationTypeRef ::= namedType
+//   | expressionNamedType
 instantiationTypeRef: ValueRef = {
     namedType,
     expressionNamedType,
 };
 
+// push_scope ::= epsilon
 push_scope: () = {
      => { context.push_scope(); },
 };
 
+// push_name ::= name
 push_name: ValueRef = {
     <n:name> => { context.push_scope(); value::declare_type_value(context, &n, false); n },
 };
 
+// push_externName ::= externName
 push_externName: ValueRef = {
     <n:externName> => { context.push_scope(); value::declare_type_value(context, &n, false); n },
 };
 
+// pop_scope ::= epsilon
 pop_scope: Namespace = {
      => context.pop_scope().expect("P4 parser scope"),
 };
 
+// go_toplevel ::= epsilon
 go_toplevel: () = {
      => { context.go_toplevel().expect("P4 parser scope"); },
 };
 
+// go_local ::= epsilon
 go_local: () = {
      => context.go_local(),
 };
 
+// toplevel ::= go_toplevel X go_local
 toplevel<X>: X = {
     go_toplevel <x:X> go_local => x,
 };
 
+// set_parent_namespace ::= epsilon
 set_parent_namespace: () = {
      => context.set_parent_namespace(),
 };
 
+// clear_parent_namespace ::= epsilon
 clear_parent_namespace: () = {
      => context.clear_parent_namespace(),
 };
 
+// externName ::= nonTypeName
 externName: ValueRef = {
     <n:nonTypeName> => { value::declare_type_value(context, &n, false); n },
 };
 
+// int ::= "NUMBER_INT"
 int: ValueRef = {
     <int:"NUMBER_INT"> => int.0,
 };
 
+// r_angle ::= "R_ANGLE"
+//   | "R_ANGLE_SHIFT"
 r_angle: () = {
     <r_angle:"R_ANGLE"> => (),
     <r_angle:"R_ANGLE_SHIFT"> => (),
 };
 
+// l_angle ::= "L_ANGLE"
+//   | "L_ANGLE_ARGS"
 l_angle: () = {
     <l_angle:"L_ANGLE"> => (),
     <l_angle:"L_ANGLE_ARGS"> => (),
 };
 
+// trailingCommaOpt ::= epsilon
+//   | "TRAILING_COMMA"
 trailingCommaOpt: ValueRef = {
     <left:@L>  <right:@R> => value::case_value(context, "_EMPTY", vec![], "trailingCommaOpt", left, right),
     <left:@L> "TRAILING_COMMA" <right:@R> => value::case_value(context, "','", vec![], "trailingCommaOpt", left, right),
 };
 
+// booleanLiteral ::= "TRUE"
+//   | "FALSE"
 booleanLiteral: ValueRef = {
     <left:@L> "TRUE" <right:@R> => value::case_value(context, "TRUE", vec![], "booleanLiteral", left, right),
     <left:@L> "FALSE" <right:@R> => value::case_value(context, "FALSE", vec![], "booleanLiteral", left, right),
 };
 
+// integerLiteral ::= int
+//   | "NUMBER"
 integerLiteral: ValueRef = {
     <left:@L> <int:int> <right:@R> => value::case_value(context, "D int", vec![int], "integerLiteral", left, right),
     <number:"NUMBER"> => number.0,
 };
 
+// stringLiteral ::= "STRING_LITERAL"
 stringLiteral: ValueRef = {
     <left:@L> <text:"STRING_LITERAL"> <right:@R> => value::case_value(context, "'\"' text '\"'", vec![text], "stringLiteral", left, right),
 };
 
+// identifier ::= "NAME" "IDENTIFIER"
 identifier: ValueRef = {
     <left:@L> <text:"NAME"> "IDENTIFIER" <right:@R> => value::case_value(context, "_ID text", vec![text], "identifier", left, right),
 };
 
+// typeIdentifier ::= "NAME" "TYPENAME"
 typeIdentifier: ValueRef = {
     <left:@L> <text:"NAME"> "TYPENAME" <right:@R> => value::case_value(context, "_TID text", vec![text], "typeIdentifier", left, right),
 };
 
+// nonTypeName ::= identifier
+//   | "APPLY"
+//   | "KEY"
+//   | "ACTIONS"
+//   | "STATE"
+//   | "ENTRIES"
+//   | "TYPE"
+//   | "PRIORITY"
 nonTypeName: ValueRef = {
     <id:identifier> => id,
     <left:@L> "APPLY" <right:@R> => value::case_value(context, "APPLY", vec![], "nonTypeName", left, right),
@@ -246,20 +289,31 @@ nonTypeName: ValueRef = {
     <left:@L> "PRIORITY" <right:@R> => value::case_value(context, "PRIORITY", vec![], "nonTypeName", left, right),
 };
 
+// prefixedNonTypeName ::= nonTypeName
+//   | "DOT" go_toplevel nonTypeName go_local
 prefixedNonTypeName: ValueRef = {
     <n:nonTypeName> => n,
     <left:@L> "DOT" go_toplevel <n:nonTypeName> go_local <right:@R> => value::case_value(context, "_ID '.' nonTypeName", vec![n], "prefixedNonTypeName", left, right),
 };
 
+// typeName ::= typeIdentifier
 typeName: ValueRef = {
     <n:typeIdentifier> => n,
 };
 
+// prefixedTypeName ::= typeName
+//   | "DOT" go_toplevel typeName go_local
 prefixedTypeName: ValueRef = {
     <n:typeName> => n,
     <left:@L> "DOT" go_toplevel <tid:typeName> go_local <right:@R> => value::case_value(context, "_TID '.' typeName", vec![tid], "prefixedTypeName", left, right),
 };
 
+// tableCustomName ::= identifier
+//   | typeIdentifier
+//   | "APPLY"
+//   | "STATE"
+//   | "TYPE"
+//   | "PRIORITY"
 tableCustomName: ValueRef = {
     <id:identifier> => id,
     <tid:typeIdentifier> => tid,
@@ -269,22 +323,32 @@ tableCustomName: ValueRef = {
     <left:@L> "PRIORITY" <right:@R> => value::case_value(context, "PRIORITY", vec![], "tableCustomName", left, right),
 };
 
+// name ::= nonTypeName
+//   | typeName
+//   | "LIST"
 name: ValueRef = {
     <n:nonTypeName> => n,
     <n:typeName> => n,
     <left:@L> "LIST" <right:@R> => value::case_value(context, "LIST", vec![], "name", left, right),
 };
 
+// nameList ::= name
+//   | nameList "COMMA" name
 nameList: ValueRef = {
     <n:name> => n,
     <left:@L> <ns:nameList> "COMMA" <n:name> <right:@R> => value::case_value(context, "nameList ',' name", vec![ns, n], "nameList", left, right),
 };
 
+// member ::= name
 member: ValueRef = {
     <name:name> => name,
 };
 
 #[inline]
+// direction ::= epsilon
+//   | "IN"
+//   | "OUT"
+//   | "INOUT"
 direction: ValueRef = {
     <left:@L>  <right:@R> => value::case_value(context, "_EMPTY", vec![], "direction", left, right),
     <left:@L> "IN" <right:@R> => value::case_value(context, "IN", vec![], "direction", left, right),
@@ -292,6 +356,18 @@ direction: ValueRef = {
     <left:@L> "INOUT" <right:@R> => value::case_value(context, "INOUT", vec![], "direction", left, right),
 };
 
+// baseType ::= "BOOL"
+//   | "MATCH_KIND"
+//   | "ERROR"
+//   | "BIT"
+//   | "STRING"
+//   | "INT"
+//   | "BIT" "L_ANGLE_ARGS" int r_angle
+//   | "INT" "L_ANGLE_ARGS" int r_angle
+//   | "VARBIT" "L_ANGLE_ARGS" int r_angle
+//   | "BIT" "L_ANGLE_ARGS" "L_PAREN" expression "R_PAREN" r_angle
+//   | "INT" "L_ANGLE_ARGS" "L_PAREN" expression "R_PAREN" r_angle
+//   | "VARBIT" "L_ANGLE_ARGS" "L_PAREN" expression "R_PAREN" r_angle
 baseType: ValueRef = {
     <left:@L> "BOOL" <right:@R> => value::case_value(context, "BOOL", vec![], "baseType", left, right),
     <left:@L> "MATCH_KIND" <right:@R> => value::case_value(context, "MATCH_KIND", vec![], "baseType", left, right),
@@ -307,28 +383,39 @@ baseType: ValueRef = {
     <left:@L> "VARBIT" "L_ANGLE_ARGS" "L_PAREN" <e:expression> "R_PAREN" r_angle <right:@R> => value::case_value(context, "VARBIT `< `( expression `) `>", vec![e], "baseType", left, right),
 };
 
+// specializedType ::= prefixedTypeName "L_ANGLE_ARGS" typeArgumentList r_angle
 specializedType: ValueRef = {
     <left:@L> <n:prefixedTypeName> "L_ANGLE_ARGS" <tal:typeArgumentList> r_angle <right:@R> => value::case_value(context, "prefixedTypeName `< typeArgumentList `>", vec![n, tal], "specializedType", left, right),
 };
 
+// namedType ::= prefixedTypeName
+//   | specializedType
 namedType: ValueRef = {
     <t:prefixedTypeName> => t,
     <t:specializedType> => t,
 };
 
 #[inline]
+// arrayType ::= typeRef "L_BRACKET" expression "R_BRACKET"
 arrayType: ValueRef = {
     <left:@L> <t:typeRef> "L_BRACKET" <e:expression> "R_BRACKET" <right:@R> => value::case_value(context, "typeRef `[ expression `]", vec![t, e], "arrayType", left, right),
 };
 
+// listType ::= "LIST" "L_ANGLE_ARGS" typeArgument r_angle
 listType: ValueRef = {
     <left:@L> "LIST" "L_ANGLE_ARGS" <targ:typeArgument> r_angle <right:@R> => value::case_value(context, "LIST `< typeArgument `>", vec![targ], "listType", left, right),
 };
 
+// tupleType ::= "TUPLE" "L_ANGLE_ARGS" typeArgumentList r_angle
 tupleType: ValueRef = {
     <left:@L> "TUPLE" "L_ANGLE_ARGS" <targs:typeArgumentList> r_angle <right:@R> => value::case_value(context, "TUPLE `< typeArgumentList `>", vec![targs], "tupleType", left, right),
 };
 
+// typeRef ::= baseType
+//   | namedType
+//   | arrayType
+//   | listType
+//   | tupleType
 typeRef: ValueRef = {
     <t:baseType> => t,
     <t:namedType> => t,
@@ -337,97 +424,133 @@ typeRef: ValueRef = {
     <t:tupleType> => t,
 };
 
+// typeOrVoid ::= typeRef
+//   | "VOID"
+//   | identifier
 typeOrVoid: ValueRef = {
     <t:typeRef> => t,
     <left:@L> "VOID" <right:@R> => value::case_value(context, "VOID", vec![], "typeOrVoid", left, right),
     <id:identifier> => id,
 };
 
+// typeParameter ::= name
 typeParameter: ValueRef = {
     <n:name> => n,
 };
 
+// typeParameterList ::= typeParameter
+//   | typeParameterList "COMMA" typeParameter
 typeParameterList: ValueRef = {
     <tp:typeParameter> => tp,
     <left:@L> <tps:typeParameterList> "COMMA" <tp:typeParameter> <right:@R> => value::case_value(context, "typeParameterList ',' typeParameter", vec![tps, tp], "typeParameterList", left, right),
 };
 
+// typeParameterListOpt ::= epsilon
+//   | l_angle typeParameterList r_angle
 typeParameterListOpt: ValueRef = {
     <left:@L>  <right:@R> => value::case_value(context, "_EMPTY", vec![], "typeParameterListOpt", left, right),
     <left:@L> l_angle <tps:typeParameterList> r_angle <right:@R> => { value::declare_names_as_types(context, &tps); value::case_value(context, "`< typeParameterList `>", vec![tps], "typeParameterListOpt", left, right) },
 };
 
+// parameter ::= annotationList direction typeRef name initializerOpt
 parameter: ValueRef = {
     <left:@L> <al:annotationList> <dir:direction> <t:typeRef> <n:name> <i:initializerOpt> <right:@R> => { value::declare_var_value(context, &n, false, Some(&t)); value::case_value(context, "annotationList direction type name initializerOpt", vec![al, dir, t, n, i], "parameter", left, right) },
 };
 
+// nonEmptyParameterList ::= parameter
+//   | nonEmptyParameterList "COMMA" parameter
 nonEmptyParameterList: ValueRef = {
     <p:parameter> => p,
     <left:@L> <ps:nonEmptyParameterList> "COMMA" <p:parameter> <right:@R> => value::case_value(context, "nonEmptyParameterList ',' parameter", vec![ps, p], "nonEmptyParameterList", left, right),
 };
 
 #[inline]
+// parameterList ::= epsilon
+//   | nonEmptyParameterList
 parameterList: ValueRef = {
     <left:@L>  <right:@R> => value::case_value(context, "_EMPTY", vec![], "parameterList", left, right),
     <ps:nonEmptyParameterList> => ps,
 };
 
+// constructorParameterListOpt ::= epsilon
+//   | "L_PAREN" parameterList "R_PAREN"
 constructorParameterListOpt: ValueRef = {
     <left:@L>  <right:@R> => value::case_value(context, "_EMPTY", vec![], "constructorParameterListOpt", left, right),
     <left:@L> "L_PAREN" <ps:parameterList> "R_PAREN" <right:@R> => value::case_value(context, "`( parameterList `)", vec![ps], "constructorParameterListOpt", left, right),
 };
 
+// namedExpression ::= name "ASSIGN" expression
 namedExpression: ValueRef = {
     <left:@L> <n:name> "ASSIGN" <e:expression> <right:@R> => value::case_value(context, "name '=' expression", vec![n, e], "namedExpression", left, right),
 };
 
+// namedExpressionList ::= namedExpression
+//   | namedExpressionList "COMMA" namedExpression
 namedExpressionList: ValueRef = {
     <e:namedExpression> => e,
     <left:@L> <es:namedExpressionList> "COMMA" <e:namedExpression> <right:@R> => value::case_value(context, "namedExpressionList ',' namedExpression", vec![es, e], "namedExpressionList", left, right),
 };
 
+// literalExpression ::= booleanLiteral
+//   | integerLiteral
+//   | stringLiteral
 literalExpression: ValueRef = {
     <bool:booleanLiteral> => bool,
     <int:integerLiteral> => int,
     <str:stringLiteral> => str,
 };
 
+// referenceExpression ::= prefixedNonTypeName
+//   | "THIS"
 referenceExpression: ValueRef = {
     <n:prefixedNonTypeName> => n,
     <left:@L> "THIS" <right:@R> => value::case_value(context, "THIS", vec![], "referenceExpression", left, right),
 };
 
+// defaultExpression ::= "DOTS"
 defaultExpression: ValueRef = {
     <left:@L> "DOTS" <right:@R> => value::case_value(context, "'...'", vec![], "defaultExpression", left, right),
 };
 
+// sliceop ::= colon
+//   | "PLUSCOLON"
 sliceop: ValueRef = {
     <left:@L> colon <right:@R> => value::case_value(context, "':'", vec![], "sliceop", left, right),
     <left:@L> "PLUSCOLON" <right:@R> => value::case_value(context, "'+:'", vec![], "sliceop", left, right),
 };
 
+// expression ::= ExprTernary
 expression: ValueRef = {
     ExprTernary,
 };
 
+// ExprTernary ::= ExprOr
+//   | ExprOr "QUESTION" expression colon expression
 ExprTernary: ValueRef = {
     ExprOr,
     <left:@L> <condition:ExprOr> "QUESTION" <yes:expression> colon <no:expression> <right:@R> =>
         value::case_value(context, "expression '?' expression ':' expression", vec![condition, yes, no], "ternaryExpression", left, right),
 };
 
+// ExprOr ::= ExprAnd
+//   | ExprOr "OR" ExprAnd
 ExprOr: ValueRef = {
     ExprAnd,
     <left:@L> <lhs:ExprOr> <op_left:@L> "OR" <op_right:@R> <rhs:ExprAnd> <right:@R> =>
         value::binary_value(context, lhs, "'||'", op_left, op_right, rhs, left, right),
 };
 
+// ExprAnd ::= ExprEquality
+//   | ExprAnd "AND" ExprEquality
 ExprAnd: ValueRef = {
     ExprEquality,
     <left:@L> <lhs:ExprAnd> <op_left:@L> "AND" <op_right:@R> <rhs:ExprEquality> <right:@R> =>
         value::binary_value(context, lhs, "'&&'", op_left, op_right, rhs, left, right),
 };
 
+// ExprEquality ::= ExprCompare
+//   | ExprEquality "EQ" ExprCompare
+//   | ExprEquality "NE" ExprCompare
 ExprEquality: ValueRef = {
     ExprCompare,
     <left:@L> <lhs:ExprEquality> <op_left:@L> "EQ" <op_right:@R> <rhs:ExprCompare> <right:@R> =>
@@ -436,6 +559,11 @@ ExprEquality: ValueRef = {
         value::binary_value(context, lhs, "'!='", op_left, op_right, rhs, left, right),
 };
 
+// ExprCompare ::= ExprBitOr
+//   | ExprCompare "LE" ExprBitOr
+//   | ExprCompare "GE" ExprBitOr
+//   | ExprCompare "L_ANGLE" ExprBitOr
+//   | ExprCompare r_angle ExprBitOr
 ExprCompare: ValueRef = {
     ExprBitOr,
     <left:@L> <lhs:ExprCompare> <op_left:@L> "LE" <op_right:@R> <rhs:ExprBitOr> <right:@R> =>
@@ -448,24 +576,33 @@ ExprCompare: ValueRef = {
         value::binary_value(context, lhs, "'>'", op_left, op_right, rhs, left, right),
 };
 
+// ExprBitOr ::= ExprBitXor
+//   | ExprBitOr "BIT_OR" ExprBitXor
 ExprBitOr: ValueRef = {
     ExprBitXor,
     <left:@L> <lhs:ExprBitOr> <op_left:@L> "BIT_OR" <op_right:@R> <rhs:ExprBitXor> <right:@R> =>
         value::binary_value(context, lhs, "'|'", op_left, op_right, rhs, left, right),
 };
 
+// ExprBitXor ::= ExprBitAnd
+//   | ExprBitXor "BIT_XOR" ExprBitAnd
 ExprBitXor: ValueRef = {
     ExprBitAnd,
     <left:@L> <lhs:ExprBitXor> <op_left:@L> "BIT_XOR" <op_right:@R> <rhs:ExprBitAnd> <right:@R> =>
         value::binary_value(context, lhs, "'^'", op_left, op_right, rhs, left, right),
 };
 
+// ExprBitAnd ::= ExprShift
+//   | ExprBitAnd "BIT_AND" ExprShift
 ExprBitAnd: ValueRef = {
     ExprShift,
     <left:@L> <lhs:ExprBitAnd> <op_left:@L> "BIT_AND" <op_right:@R> <rhs:ExprShift> <right:@R> =>
         value::binary_value(context, lhs, "'&'", op_left, op_right, rhs, left, right),
 };
 
+// ExprShift ::= ExprAdd
+//   | ExprShift "SHL" ExprAdd
+//   | ExprShift "SHR" ExprAdd
 ExprShift: ValueRef = {
     ExprAdd,
     <left:@L> <lhs:ExprShift> <op_left:@L> "SHL" <op_right:@R> <rhs:ExprAdd> <right:@R> =>
@@ -474,6 +611,12 @@ ExprShift: ValueRef = {
         value::binary_value(context, lhs, "'>>'", op_left, op_right, rhs, left, right),
 };
 
+// ExprAdd ::= ExprMul
+//   | ExprAdd "PLUSPLUS" ExprMul
+//   | ExprAdd "PLUS" ExprMul
+//   | ExprAdd "PLUS_SAT" ExprMul
+//   | ExprAdd "MINUS" ExprMul
+//   | ExprAdd "MINUS_SAT" ExprMul
 ExprAdd: ValueRef = {
     ExprMul,
     <left:@L> <lhs:ExprAdd> <op_left:@L> "PLUSPLUS" <op_right:@R> <rhs:ExprMul> <right:@R> =>
@@ -488,6 +631,10 @@ ExprAdd: ValueRef = {
         value::binary_value(context, lhs, "'|-|'", op_left, op_right, rhs, left, right),
 };
 
+// ExprMul ::= ExprPrefix
+//   | ExprMul "MUL" ExprPrefix
+//   | ExprMul "DIV" ExprPrefix
+//   | ExprMul "MOD" ExprPrefix
 ExprMul: ValueRef = {
     ExprPrefix,
     <left:@L> <lhs:ExprMul> <op_left:@L> "MUL" <op_right:@R> <rhs:ExprPrefix> <right:@R> =>
@@ -498,6 +645,12 @@ ExprMul: ValueRef = {
         value::binary_value(context, lhs, "'%'", op_left, op_right, rhs, left, right),
 };
 
+// ExprPrefix ::= ExprPostfix
+//   | "NOT" ExprPrefix
+//   | "COMPLEMENT" ExprPrefix
+//   | "MINUS" ExprPrefix
+//   | "PLUS" ExprPrefix
+//   | "L_PAREN" typeRef "R_PAREN" ExprPrefix
 ExprPrefix: ValueRef = {
     ExprPostfix,
     <left:@L> <op_left:@L> "NOT" <op_right:@R> <inner:ExprPrefix> <right:@R> =>
@@ -512,6 +665,14 @@ ExprPrefix: ValueRef = {
         value::case_value(context, "`( typeRef `) expression", vec![typ, inner], "castExpression", left, right),
 };
 
+// ExprPostfix ::= ExprPrimary
+//   | expressionPrefixedTypeName "DOT" set_parent_namespace member clear_parent_namespace
+//   | expressionNamedType "L_PAREN" argumentList "R_PAREN"
+//   | ExprPostfix "DOT" set_parent_namespace member clear_parent_namespace
+//   | ExprPostfix "L_BRACKET" expression "R_BRACKET"
+//   | ExprPostfix "L_BRACKET" expression sliceop expression "R_BRACKET"
+//   | ExprPostfix "L_PAREN" argumentList "R_PAREN"
+//   | ExprPostfix "L_ANGLE_ARGS" realTypeArgumentList r_angle "L_PAREN" argumentList "R_PAREN"
 ExprPostfix: ValueRef = {
     ExprPrimary,
     <left:@L> <base:expressionPrefixedTypeName> "DOT" set_parent_namespace <member:member> clear_parent_namespace <right:@R> =>
@@ -530,6 +691,13 @@ ExprPostfix: ValueRef = {
         value::case_value(context, "callTarget `< realTypeArgumentList `> `( argumentList `)", vec![target, types, arguments], "callExpression", left, right),
 };
 
+// ExprPrimary ::= literalExpression
+//   | referenceExpression
+//   | defaultExpression
+//   | "ERROR_EXPR" "DOT" member
+//   | "INVALID"
+//   | "L_BRACE" sequenceOrRecordElementExpression trailingCommaOpt "R_BRACE"
+//   | "L_PAREN" expression "R_PAREN"
 ExprPrimary: ValueRef = {
     literalExpression,
     referenceExpression,
@@ -544,46 +712,62 @@ ExprPrimary: ValueRef = {
         value::case_value(context, "`( expression `)", vec![inner], "parenthesizedExpression", left, right),
 };
 
+// expressionTypeIdentifier ::= "NAME" "TYPENAME_EXPR"
 expressionTypeIdentifier: ValueRef = {
     <left:@L> <text:"NAME"> "TYPENAME_EXPR" <right:@R> =>
         value::case_value(context, "_TID text", vec![text], "typeIdentifier", left, right),
 };
 
+// expressionTypeName ::= expressionTypeIdentifier
 expressionTypeName: ValueRef = {
     expressionTypeIdentifier,
 };
 
+// expressionPrefixedTypeName ::= expressionTypeName
+//   | "DOT" go_toplevel expressionTypeName go_local
 expressionPrefixedTypeName: ValueRef = {
     expressionTypeName,
     <left:@L> "DOT" go_toplevel <typ:expressionTypeName> go_local <right:@R> =>
         value::case_value(context, "_TID '.' typeName", vec![typ], "prefixedTypeName", left, right),
 };
 
+// expressionSpecializedType ::= expressionPrefixedTypeName "L_ANGLE_ARGS" typeArgumentList r_angle
 expressionSpecializedType: ValueRef = {
     <left:@L> <name:expressionPrefixedTypeName> "L_ANGLE_ARGS" <arguments:typeArgumentList> r_angle <right:@R> =>
         value::case_value(context, "prefixedTypeName `< typeArgumentList `>", vec![name, arguments], "specializedType", left, right),
 };
 
+// expressionNamedType ::= expressionPrefixedTypeName
+//   | expressionSpecializedType
 expressionNamedType: ValueRef = {
     expressionPrefixedTypeName,
     expressionSpecializedType,
 };
 
+// expressionList ::= expressionListNonEmpty
 expressionList: ValueRef = {
     expressionListNonEmpty,
 };
 
+// expressionListNonEmpty ::= expression
+//   | expressionListNonEmpty "COMMA" expression
 expressionListNonEmpty: ValueRef = {
     <e:expression> => e,
     <left:@L> <el:expressionListNonEmpty> "COMMA" <e:expression> <right:@R> =>
         value::case_value(context, "expressionList ',' expression", vec![el, e], "expressionList", left, right),
 };
 
+// sequenceElementExpression ::= epsilon
+//   | expressionList
 sequenceElementExpression: ValueRef = {
     <left:@L> <right:@R> => value::case_value(context, "_EMPTY", vec![], "expressionList", left, right),
     expressionList,
 };
 
+// recordElementExpression ::= name "ASSIGN" expression
+//   | name "ASSIGN" expression "COMMA" "DOTS"
+//   | name "ASSIGN" expression "COMMA" namedExpressionList
+//   | name "ASSIGN" expression "COMMA" namedExpressionList "COMMA" "DOTS"
 recordElementExpression: ValueRef = {
     <left:@L> <n:name> "ASSIGN" <e:expression> <right:@R> => value::case_value(context, "name '=' expression", vec![n, e], "recordElementExpression", left, right),
     <left:@L> <n:name> "ASSIGN" <e:expression> "COMMA" "DOTS" <right:@R> => value::case_value(context, "name '=' expression ',' '...'", vec![n, e], "recordElementExpression", left, right),
@@ -591,13 +775,21 @@ recordElementExpression: ValueRef = {
     <left:@L> <n:name> "ASSIGN" <e:expression> "COMMA" <el:namedExpressionList> "COMMA" "DOTS" <right:@R> => value::case_value(context, "name '=' expression ',' namedExpressionList ',' '...'", vec![n, e, el], "recordElementExpression", left, right),
 };
 
+// sequenceOrRecordElementExpression ::= sequenceElementExpression
+//   | recordElementExpression
 sequenceOrRecordElementExpression: ValueRef = {
     <e:sequenceElementExpression> => e,
     <e:recordElementExpression> => e,
 };
 
+// expressionNonBrace ::= expression
 expressionNonBrace: ValueRef = { expression, };
 
+// simpleKeysetExpression ::= expression
+//   | expression "MASK" expression
+//   | expression "RANGE" expression
+//   | "DEFAULT"
+//   | "DONTCARE"
 simpleKeysetExpression: ValueRef = {
     <e:expression> => e,
     <left:@L> <b:expression> "MASK" <m:expression> <right:@R> => value::case_value(context, "expression '&&&' expression", vec![b, m], "simpleKeysetExpression", left, right),
@@ -606,11 +798,18 @@ simpleKeysetExpression: ValueRef = {
     <left:@L> "DONTCARE" <right:@R> => value::case_value(context, "'_'", vec![], "simpleKeysetExpression", left, right),
 };
 
+// simpleKeysetExpressionList ::= simpleKeysetExpression
+//   | simpleKeysetExpressionList "COMMA" simpleKeysetExpression
 simpleKeysetExpressionList: ValueRef = {
     <e:simpleKeysetExpression> => e,
     <left:@L> <el:simpleKeysetExpressionList> "COMMA" <e:simpleKeysetExpression> <right:@R> => value::case_value(context, "simpleKeysetExpressionList ',' simpleKeysetExpression", vec![el, e], "simpleKeysetExpressionList", left, right),
 };
 
+// tupleKeysetExpression ::= "L_PAREN" expression "MASK" expression "R_PAREN"
+//   | "L_PAREN" expression "RANGE" expression "R_PAREN"
+//   | "L_PAREN" "DEFAULT" "R_PAREN"
+//   | "L_PAREN" "DONTCARE" "R_PAREN"
+//   | "L_PAREN" simpleKeysetExpression "COMMA" simpleKeysetExpressionList "R_PAREN"
 tupleKeysetExpression: ValueRef = {
     <left:@L> "L_PAREN" <b:expression> "MASK" <m:expression> "R_PAREN" <right:@R> => value::case_value(context, "`( expression '&&&' expression `)", vec![b, m], "tupleKeysetExpression", left, right),
     <left:@L> "L_PAREN" <l:expression> "RANGE" <h:expression> "R_PAREN" <right:@R> => value::case_value(context, "`( expression '..' expression `)", vec![l, h], "tupleKeysetExpression", left, right),
@@ -619,22 +818,33 @@ tupleKeysetExpression: ValueRef = {
     <left:@L> "L_PAREN" <e:simpleKeysetExpression> "COMMA" <es:simpleKeysetExpressionList> "R_PAREN" <right:@R> => value::case_value(context, "`( simpleKeysetExpression ',' simpleKeysetExpressionList `)", vec![e, es], "tupleKeysetExpression", left, right),
 };
 
+// keysetExpression ::= simpleKeysetExpression
+//   | tupleKeysetExpression
 keysetExpression: ValueRef = {
     <e:simpleKeysetExpression> => e,
     <e:tupleKeysetExpression> => e,
 };
 
+// realTypeArgument ::= typeRef
+//   | "VOID"
+//   | "DONTCARE"
 realTypeArgument: ValueRef = {
     <t:typeRef> => t,
     <left:@L> "VOID" <right:@R> => value::case_value(context, "VOID", vec![], "realTypeArgument", left, right),
     <left:@L> "DONTCARE" <right:@R> => value::case_value(context, "'_'", vec![], "realTypeArgument", left, right),
 };
 
+// realTypeArgumentList ::= realTypeArgument
+//   | realTypeArgumentList "COMMA" realTypeArgument
 realTypeArgumentList: ValueRef = {
     <targ:realTypeArgument> => targ,
     <left:@L> <targs:realTypeArgumentList> "COMMA" <targ:realTypeArgument> <right:@R> => value::case_value(context, "realTypeArgumentList ',' realTypeArgument", vec![targs, targ], "realTypeArgumentList", left, right),
 };
 
+// typeArgument ::= typeRef
+//   | nonTypeName
+//   | "VOID"
+//   | "DONTCARE"
 typeArgument: ValueRef = {
     <t:typeRef> => t,
     <t:nonTypeName> => t,
@@ -642,17 +852,25 @@ typeArgument: ValueRef = {
     <left:@L> "DONTCARE" <right:@R> => value::case_value(context, "'_'", vec![], "typeArgument", left, right),
 };
 
+// typeArgumentList ::= epsilon
+//   | typeArgumentListNonEmpty
 typeArgumentList: ValueRef = {
     <left:@L> <right:@R> => value::case_value(context, "_EMPTY", vec![], "typeArgumentList", left, right),
     typeArgumentListNonEmpty,
 };
 
+// typeArgumentListNonEmpty ::= typeArgument
+//   | typeArgumentListNonEmpty "COMMA" typeArgument
 typeArgumentListNonEmpty: ValueRef = {
     <targ:typeArgument> => targ,
     <left:@L> <targs:typeArgumentListNonEmpty> "COMMA" <targ:typeArgument> <right:@R> =>
         value::case_value(context, "typeArgumentList ',' typeArgument", vec![targs, targ], "typeArgumentList", left, right),
 };
 
+// argument ::= expression
+//   | name "ASSIGN" expression
+//   | name "ASSIGN" "DONTCARE"
+//   | "DONTCARE"
 argument: ValueRef = {
     <e:expression> => e,
     <left:@L> <n:name> "ASSIGN" <e:expression> <right:@R> => value::case_value(context, "name '=' expression", vec![n, e], "argument", left, right),
@@ -660,16 +878,25 @@ argument: ValueRef = {
     <left:@L> "DONTCARE" <right:@R> => value::case_value(context, "'_'", vec![], "argument", left, right),
 };
 
+// argumentListNonEmpty ::= argument
+//   | argumentListNonEmpty "COMMA" argument
 argumentListNonEmpty: ValueRef = {
     <arg:argument> => arg,
     <left:@L> <args:argumentListNonEmpty> "COMMA" <arg:argument> <right:@R> => value::case_value(context, "argumentListNonEmpty ',' argument", vec![args, arg], "argumentListNonEmpty", left, right),
 };
 
+// argumentList ::= epsilon
+//   | argumentListNonEmpty
 argumentList: ValueRef = {
     <left:@L>  <right:@R> => value::case_value(context, "_EMPTY", vec![], "argumentList", left, right),
     <args:argumentListNonEmpty> => args,
 };
 
+// lvalue ::= referenceExpression
+//   | lvalue "DOT" set_parent_namespace member clear_parent_namespace
+//   | lvalue "L_BRACKET" expression "R_BRACKET"
+//   | lvalue "L_BRACKET" expression sliceop expression "R_BRACKET"
+//   | "L_PAREN" lvalue "R_PAREN"
 lvalue: ValueRef = {
     <e:referenceExpression> => e,
     <left:@L> <lv:lvalue> "DOT" set_parent_namespace <m:member> clear_parent_namespace <right:@R> => value::case_value(context, "lvalue '.' member", vec![lv, m], "lvalue", left, right),
@@ -678,10 +905,24 @@ lvalue: ValueRef = {
     <left:@L> "L_PAREN" <lv:lvalue> "R_PAREN" <right:@R> => value::case_value(context, "`( lvalue `)", vec![lv], "lvalue", left, right),
 };
 
+// emptyStatement ::= "SEMICOLON"
 emptyStatement: ValueRef = {
     <left:@L> "SEMICOLON" <right:@R> => value::case_value(context, "';'", vec![], "emptyStatement", left, right),
 };
 
+// assignop ::= "ASSIGN"
+//   | "PLUS_ASSIGN"
+//   | "PLUS_SAT_ASSIGN"
+//   | "MINUS_ASSIGN"
+//   | "MINUS_SAT_ASSIGN"
+//   | "MUL_ASSIGN"
+//   | "DIV_ASSIGN"
+//   | "MOD_ASSIGN"
+//   | "SHL_ASSIGN"
+//   | "SHR_ASSIGN"
+//   | "BIT_AND_ASSIGN"
+//   | "BIT_XOR_ASSIGN"
+//   | "BIT_OR_ASSIGN"
 assignop: ValueRef = {
     <left:@L> "ASSIGN" <right:@R> => value::case_value(context, "'='", vec![], "assignop", left, right),
     <left:@L> "PLUS_ASSIGN" <right:@R> => value::case_value(context, "'+='", vec![], "assignop", left, right),
@@ -698,32 +939,44 @@ assignop: ValueRef = {
     <left:@L> "BIT_OR_ASSIGN" <right:@R> => value::case_value(context, "'|='", vec![], "assignop", left, right),
 };
 
+// assignmentStatement ::= lvalue assignop expression "SEMICOLON"
 assignmentStatement: ValueRef = {
     <left:@L> <lv:lvalue> <o:assignop> <e:expression> "SEMICOLON" <right:@R> => value::case_value(context, "lvalue assignop expression ';'", vec![lv, o, e], "assignmentStatement", left, right),
 };
 
+// callStatement ::= lvalue "L_PAREN" argumentList "R_PAREN" "SEMICOLON"
+//   | lvalue "L_ANGLE_ARGS" typeArgumentList r_angle "L_PAREN" argumentList "R_PAREN" "SEMICOLON"
 callStatement: ValueRef = {
     <left:@L> <lv:lvalue> "L_PAREN" <args:argumentList> "R_PAREN" "SEMICOLON" <right:@R> => value::case_value(context, "lvalue `( argumentList `) ';'", vec![lv, args], "callStatement", left, right),
     <left:@L> <lv:lvalue> "L_ANGLE_ARGS" <targs:typeArgumentList> r_angle "L_PAREN" <args:argumentList> "R_PAREN" "SEMICOLON" <right:@R> => value::case_value(context, "lvalue `< typeArgumentList `> `( argumentList `) ';'", vec![lv, targs, args], "callStatement", left, right),
 };
 
+// directApplicationStatement ::= namedType "DOT" "APPLY" "L_PAREN" argumentList "R_PAREN" "SEMICOLON"
 directApplicationStatement: ValueRef = {
     <left:@L> <t:namedType> "DOT" "APPLY" "L_PAREN" <args:argumentList> "R_PAREN" "SEMICOLON" <right:@R> => value::case_value(context, "namedType '.' APPLY `( argumentList `) ';'", vec![t, args], "directApplicationStatement", left, right),
 };
 
+// returnStatement ::= "RETURN" "SEMICOLON"
+//   | "RETURN" expression "SEMICOLON"
 returnStatement: ValueRef = {
     <left:@L> "RETURN" "SEMICOLON" <right:@R> => value::case_value(context, "RETURN ';'", vec![], "returnStatement", left, right),
     <left:@L> "RETURN" <e:expression> "SEMICOLON" <right:@R> => value::case_value(context, "RETURN expression ';'", vec![e], "returnStatement", left, right),
 };
 
+// exitStatement ::= "EXIT" "SEMICOLON"
 exitStatement: ValueRef = {
     <left:@L> "EXIT" "SEMICOLON" <right:@R> => value::case_value(context, "EXIT ';'", vec![], "exitStatement", left, right),
 };
 
+// blockStatement ::= annotationList "L_BRACE" push_scope blockElementStatementList "R_BRACE" pop_scope
 blockStatement: ValueRef = {
     <left:@L> <al:annotationList> "L_BRACE" push_scope <sl:blockElementStatementList> "R_BRACE" pop_scope <right:@R> => value::case_value(context, "annotationList `{ blockElementStatementList `}", vec![al, sl], "blockStatement", left, right),
 };
 
+// forInitStatement ::= annotationList typeRef name initializerOpt
+//   | lvalue "L_PAREN" argumentList "R_PAREN"
+//   | lvalue "L_ANGLE_ARGS" typeArgumentList r_angle "L_PAREN" argumentList "R_PAREN"
+//   | lvalue assignop expression
 forInitStatement: ValueRef = {
     <left:@L> <al:annotationList> <t:typeRef> <n:name> <i:initializerOpt> <right:@R> => value::case_value(context, "annotationList type name initializerOpt", vec![al, t, n, i], "forInitStatement", left, right),
     <left:@L> <lv:lvalue> "L_PAREN" <args:argumentList> "R_PAREN" <right:@R> => value::case_value(context, "lvalue `( argumentList `)", vec![lv, args], "forInitStatement", left, right),
@@ -731,43 +984,58 @@ forInitStatement: ValueRef = {
     <left:@L> <lv:lvalue> <o:assignop> <e:expression> <right:@R> => value::case_value(context, "lvalue assignop expression", vec![lv, o, e], "forInitStatement", left, right),
 };
 
+// forInitStatementListNonEmpty ::= forInitStatement
+//   | forInitStatementListNonEmpty "COMMA" forInitStatement
 forInitStatementListNonEmpty: ValueRef = {
     <s:forInitStatement> => s,
     <left:@L> <sl:forInitStatementListNonEmpty> "COMMA" <s:forInitStatement> <right:@R> => value::case_value(context, "forInitStatementListNonEmpty ',' forInitStatement", vec![sl, s], "forInitStatementListNonEmpty", left, right),
 };
 
 #[inline]
+// forInitStatementList ::= epsilon
+//   | forInitStatementListNonEmpty
 forInitStatementList: ValueRef = {
     <left:@L>  <right:@R> => value::case_value(context, "_EMPTY", vec![], "forInitStatementList", left, right),
     <sl:forInitStatementListNonEmpty> => sl,
 };
 
+// forUpdateStatement ::= forInitStatement
 forUpdateStatement: ValueRef = {
     <s:forInitStatement> => s,
 };
 
+// forUpdateStatementListNonEmpty ::= forUpdateStatement
+//   | forUpdateStatementListNonEmpty "COMMA" forUpdateStatement
 forUpdateStatementListNonEmpty: ValueRef = {
     <s:forUpdateStatement> => s,
     <left:@L> <sl:forUpdateStatementListNonEmpty> "COMMA" <s:forUpdateStatement> <right:@R> => value::case_value(context, "forUpdateStatementListNonEmpty ',' forUpdateStatement", vec![sl, s], "forUpdateStatementListNonEmpty", left, right),
 };
 
 #[inline]
+// forUpdateStatementList ::= epsilon
+//   | forUpdateStatementListNonEmpty
 forUpdateStatementList: ValueRef = {
     <left:@L>  <right:@R> => value::case_value(context, "_EMPTY", vec![], "forUpdateStatementList", left, right),
     <sl:forUpdateStatementListNonEmpty> => sl,
 };
 
+// forCollectionExpression ::= expression
+//   | expression "RANGE" expression
 forCollectionExpression: ValueRef = {
     <e:expression> => e,
     <left:@L> <l:expression> "RANGE" <h:expression> <right:@R> => value::case_value(context, "expression '..' expression", vec![l, h], "forCollectionExpression", left, right),
 };
 
+// switchLabel ::= "DEFAULT"
+//   | expressionNonBrace
 switchLabel: ValueRef = {
     <left:@L> "DEFAULT" <right:@R> => value::case_value(context, "DEFAULT", vec![], "switchLabel", left, right),
     <e:expressionNonBrace> => e,
 };
 
 #[inline]
+// switchCase ::= switchLabel "BLOCK_COLON" blockStatement
+//   | switchLabel plain_colon
 switchCase: ValueRef = {
     <left:@L> <label:switchLabel> "BLOCK_COLON" <body:blockStatement> <right:@R> =>
         value::case_value(context, "switchLabel ':' blockStatement", vec![label, body], "switchCase", left, right),
@@ -775,117 +1043,156 @@ switchCase: ValueRef = {
         value::case_value(context, "switchLabel ':'", vec![label], "switchCase", left, right),
 };
 
+// switchCaseList ::= epsilon
+//   | switchCaseList switchCase
 switchCaseList: ValueRef = {
     <left:@L>  <right:@R> => value::case_value(context, "_EMPTY", vec![], "switchCaseList", left, right),
     <left:@L> <cs:switchCaseList> <c:switchCase> <right:@R> => value::case_value(context, "switchCaseList switchCase", vec![cs, c], "switchCaseList", left, right),
 };
 
+// switchStatement ::= "SWITCH" "L_PAREN" expression "R_PAREN" "L_BRACE" switchCaseList "R_BRACE"
 switchStatement: ValueRef = {
     <left:@L> "SWITCH" "L_PAREN" <e:expression> "R_PAREN" "L_BRACE" <cs:switchCaseList> "R_BRACE" <right:@R> => value::case_value(context, "SWITCH `( expression `) `{ switchCaseList `}", vec![e, cs], "switchStatement", left, right),
 };
 
+// breakStatement ::= "BREAK" "SEMICOLON"
 breakStatement: ValueRef = {
     <left:@L> "BREAK" "SEMICOLON" <right:@R> => value::case_value(context, "BREAK ';'", vec![], "breakStatement", left, right),
 };
 
+// continueStatement ::= "CONTINUE" "SEMICOLON"
 continueStatement: ValueRef = {
     <left:@L> "CONTINUE" "SEMICOLON" <right:@R> => value::case_value(context, "CONTINUE ';'", vec![], "continueStatement", left, right),
 };
 
+// initialValue ::= "ASSIGN" expression
 initialValue: ValueRef = {
     <left:@L> "ASSIGN" <e:expression> <right:@R> => value::case_value(context, "'=' expression", vec![e], "initializer", left, right),
 };
 
+// constantDeclaration ::= annotationList "CONST" typeRef name initialValue "SEMICOLON"
 constantDeclaration: ValueRef = {
     <left:@L> <al:annotationList> "CONST" <t:typeRef> <n:name> <i:initialValue> "SEMICOLON" <right:@R> => value::case_value(context, "annotationList CONST typeRef name initializer ';'", vec![al, t, n, i], "constantDeclaration", left, right),
 };
 
 #[inline]
+// initializerOpt ::= epsilon
+//   | initialValue
 initializerOpt: ValueRef = {
     <left:@L>  <right:@R> => value::case_value(context, "_EMPTY", vec![], "initializerOpt", left, right),
     <i:initialValue> => i,
 };
 
+// variableDeclaration ::= annotationList typeRef name initializerOpt "SEMICOLON"
 variableDeclaration: ValueRef = {
     <left:@L> <al:annotationList> <t:typeRef> <n:name> <i:initializerOpt> "SEMICOLON" <right:@R> => { value::declare_var_value(context, &n, false, Some(&t)); value::case_value(context, "annotationList typeRef name initializerOpt ';'", vec![al, t, n, i], "variableDeclaration", left, right) },
 };
 
+// blockElementStatement ::= constantDeclaration
+//   | variableDeclaration
+//   | statement
 blockElementStatement: ValueRef = {
     <d:constantDeclaration> => d,
     <d:variableDeclaration> => d,
     <d:statement> => d,
 };
 
+// blockElementStatementList ::= epsilon
+//   | blockElementStatementList blockElementStatement
 blockElementStatementList: ValueRef = {
     <left:@L>  <right:@R> => value::case_value(context, "_EMPTY", vec![], "blockElementStatementList", left, right),
     <left:@L> <sl:blockElementStatementList> <s:blockElementStatement> <right:@R> => value::case_value(context, "blockElementStatementList blockElementStatement", vec![sl, s], "blockElementStatementList", left, right),
 };
 
+// functionPrototype ::= typeOrVoid name push_scope typeParameterListOpt "L_PAREN" parameterList "R_PAREN"
 functionPrototype: ValueRef = {
     <left:@L> <t:typeOrVoid> <n:name> push_scope <tpl:typeParameterListOpt> "L_PAREN" <pl:parameterList> "R_PAREN" <right:@R> => value::case_value(context, "typeOrVoid name typeParameterListOpt `( parameterList `)", vec![t, n, tpl, pl], "functionPrototype", left, right),
 };
 
+// functionDeclaration ::= annotationList functionPrototype blockStatement pop_scope
 functionDeclaration: ValueRef = {
     <left:@L> <al:annotationList> <p:functionPrototype> <b:blockStatement> pop_scope <right:@R> => value::case_value(context, "annotationList functionPrototype blockStatement", vec![al, p, b], "functionDeclaration", left, right),
 };
 
+// actionDeclaration ::= annotationList "ACTION" name "L_PAREN" parameterList "R_PAREN" blockStatement
 actionDeclaration: ValueRef = {
     <left:@L> <al:annotationList> "ACTION" <n:name> "L_PAREN" <pl:parameterList> "R_PAREN" <s:blockStatement> <right:@R> => value::case_value(context, "annotationList ACTION name `( parameterList `) blockStatement", vec![al, n, pl, s], "actionDeclaration", left, right),
 };
 
+// objectInitializer ::= "ASSIGN" "L_BRACE" objectDeclarationList "R_BRACE"
 objectInitializer: ValueRef = {
     <left:@L> "ASSIGN" "L_BRACE" <ds:objectDeclarationList> "R_BRACE" <right:@R> => value::case_value(context, "'=' `{ objectDeclarationList `}", vec![ds], "objectInitializer", left, right),
 };
 
+// instantiation ::= annotationList instantiationTypeRef "L_PAREN" argumentList "R_PAREN" name "SEMICOLON"
+//   | annotationList instantiationTypeRef "L_PAREN" argumentList "R_PAREN" name objectInitializer "SEMICOLON"
 instantiation: ValueRef = {
     <left:@L> <al:annotationList> <t:instantiationTypeRef> "L_PAREN" <args:argumentList> "R_PAREN" <n:name> "SEMICOLON" <right:@R> => value::case_value(context, "annotationList typeRef `( argumentList `) name ';'", vec![al, t, args, n], "instantiation", left, right),
     <left:@L> <al:annotationList> <t:instantiationTypeRef> "L_PAREN" <args:argumentList> "R_PAREN" <n:name> <i:objectInitializer> "SEMICOLON" <right:@R> => value::case_value(context, "annotationList typeRef `( argumentList `) name objectInitializer ';'", vec![al, t, args, n, i], "instantiation", left, right),
 };
 
+// objectDeclaration ::= functionDeclaration
+//   | instantiation
 objectDeclaration: ValueRef = {
     <d:functionDeclaration> => d,
     <d:instantiation> => d,
 };
 
+// objectDeclarationList ::= epsilon
+//   | objectDeclarationList objectDeclaration
 objectDeclarationList: ValueRef = {
     <left:@L>  <right:@R> => value::case_value(context, "_EMPTY", vec![], "objectDeclarationList", left, right),
     <left:@L> <ds:objectDeclarationList> <d:objectDeclaration> <right:@R> => value::case_value(context, "objectDeclarationList objectDeclaration", vec![ds, d], "objectDeclarationList", left, right),
 };
 
+// errorDeclaration ::= "ERROR" "L_BRACE" nameList "R_BRACE"
 errorDeclaration: ValueRef = {
     <left:@L> "ERROR" "L_BRACE" <nl:nameList> "R_BRACE" <right:@R> => { value::declare_names_as_vars(context, &nl); value::case_value(context, "ERROR `{ nameList `}", vec![nl], "errorDeclaration", left, right) },
 };
 
+// matchKindDeclaration ::= "MATCH_KIND" "L_BRACE" nameList trailingCommaOpt "R_BRACE"
 matchKindDeclaration: ValueRef = {
     <left:@L> "MATCH_KIND" "L_BRACE" <nl:nameList> <c:trailingCommaOpt> "R_BRACE" <right:@R> => { value::declare_names_as_vars(context, &nl); value::case_value(context, "MATCH_KIND `{ nameList trailingCommaOpt `}", vec![nl, c], "matchKindDeclaration", left, right) },
 };
 
+// enumTypeDeclaration ::= annotationList "ENUM" name "L_BRACE" nameList trailingCommaOpt "R_BRACE"
+//   | annotationList "ENUM" typeRef name "L_BRACE" namedExpressionList trailingCommaOpt "R_BRACE"
 enumTypeDeclaration: ValueRef = {
     <left:@L> <al:annotationList> "ENUM" <n:name> "L_BRACE" <nl:nameList> <c:trailingCommaOpt> "R_BRACE" <right:@R> => value::case_value(context, "annotationList ENUM name `{ nameList trailingCommaOpt `}", vec![al, n, nl, c], "enumTypeDeclaration", left, right),
     <left:@L> <al:annotationList> "ENUM" <t:typeRef> <n:name> "L_BRACE" <el:namedExpressionList> <c:trailingCommaOpt> "R_BRACE" <right:@R> => value::case_value(context, "annotationList ENUM typeRef name `{ namedExpressionList trailingCommaOpt `}", vec![al, t, n, el, c], "enumTypeDeclaration", left, right),
 };
 
+// typeField ::= annotationList typeRef name "SEMICOLON"
 typeField: ValueRef = {
     <left:@L> <al:annotationList> <t:typeRef> <n:name> "SEMICOLON" <right:@R> => value::case_value(context, "annotationList typeRef name ';'", vec![al, t, n], "typeField", left, right),
 };
 
+// typeFieldList ::= epsilon
+//   | typeFieldList typeField
 typeFieldList: ValueRef = {
     <left:@L>  <right:@R> => value::case_value(context, "_EMPTY", vec![], "typeFieldList", left, right),
     <left:@L> <fl:typeFieldList> <f:typeField> <right:@R> => value::case_value(context, "typeFieldList typeField", vec![fl, f], "typeFieldList", left, right),
 };
 
+// structTypeDeclaration ::= annotationList "STRUCT" name typeParameterListOpt "L_BRACE" typeFieldList "R_BRACE"
 structTypeDeclaration: ValueRef = {
     <left:@L> <al:annotationList> "STRUCT" <n:name> <tpl:typeParameterListOpt> "L_BRACE" <fl:typeFieldList> "R_BRACE" <right:@R> => value::case_value(context, "annotationList STRUCT name typeParameterListOpt `{ typeFieldList `}", vec![al, n, tpl, fl], "structTypeDeclaration", left, right),
 };
 
+// headerTypeDeclaration ::= annotationList "HEADER" name typeParameterListOpt "L_BRACE" typeFieldList "R_BRACE"
 headerTypeDeclaration: ValueRef = {
     <left:@L> <al:annotationList> "HEADER" <n:name> <tpl:typeParameterListOpt> "L_BRACE" <fl:typeFieldList> "R_BRACE" <right:@R> => value::case_value(context, "annotationList HEADER name typeParameterListOpt `{ typeFieldList `}", vec![al, n, tpl, fl], "headerTypeDeclaration", left, right),
 };
 
+// headerUnionTypeDeclaration ::= annotationList "HEADER_UNION" name typeParameterListOpt "L_BRACE" typeFieldList "R_BRACE"
 headerUnionTypeDeclaration: ValueRef = {
     <left:@L> <al:annotationList> "HEADER_UNION" <n:name> <tpl:typeParameterListOpt> "L_BRACE" <fl:typeFieldList> "R_BRACE" <right:@R> => value::case_value(context, "annotationList HEADER_UNION name typeParameterListOpt `{ typeFieldList `}", vec![al, n, tpl, fl], "headerUnionTypeDeclaration", left, right),
 };
 
+// derivedTypeDeclaration ::= enumTypeDeclaration
+//   | structTypeDeclaration
+//   | headerTypeDeclaration
+//   | headerUnionTypeDeclaration
 derivedTypeDeclaration: ValueRef = {
     <d:enumTypeDeclaration> => d,
     <d:structTypeDeclaration> => d,
@@ -893,57 +1200,77 @@ derivedTypeDeclaration: ValueRef = {
     <d:headerUnionTypeDeclaration> => d,
 };
 
+// typedef ::= typeRef
+//   | derivedTypeDeclaration
 typedef: ValueRef = {
     <t:typeRef> => t,
     <t:derivedTypeDeclaration> => { value::declare_declaration_type(context, &t); t },
 };
 
+// typedefDeclaration ::= annotationList "TYPEDEF" typedef name "SEMICOLON"
+//   | annotationList "TYPE" typeRef name "SEMICOLON"
 typedefDeclaration: ValueRef = {
     <left:@L> <al:annotationList> "TYPEDEF" <t:typedef> <n:name> "SEMICOLON" <right:@R> => value::case_value(context, "annotationList TYPEDEF typedef name ';'", vec![al, t, n], "typedefDeclaration", left, right),
     <left:@L> <al:annotationList> "TYPE" <t:typeRef> <n:name> "SEMICOLON" <right:@R> => value::case_value(context, "annotationList TYPE typeRef name ';'", vec![al, t, n], "typedefDeclaration", left, right),
 };
 
+// externFunctionDeclaration ::= annotationList "EXTERN" functionPrototype pop_scope "SEMICOLON"
 externFunctionDeclaration: ValueRef = {
     <left:@L> <al:annotationList> "EXTERN" <p:functionPrototype> pop_scope "SEMICOLON" <right:@R> => { value::declare_prototype_var(context, &p); value::case_value(context, "annotationList EXTERN functionPrototype ';'", vec![al, p], "externFunctionDeclaration", left, right) },
 };
 
+// externConstructorPrototype ::= annotationList constructorTypeIdentifier "L_PAREN" parameterList "R_PAREN" "SEMICOLON"
 externConstructorPrototype: ValueRef = {
     <left:@L> <al:annotationList> <tid:constructorTypeIdentifier> "L_PAREN" <pl:parameterList> "R_PAREN" "SEMICOLON" <right:@R> => value::case_value(context, "annotationList typeIdentifier `( parameterList `) ';'", vec![al, tid, pl], "externConstructorPrototype", left, right),
 };
 
+// externMethodPrototype ::= annotationList functionPrototype pop_scope "SEMICOLON"
+//   | annotationList "ABSTRACT" functionPrototype pop_scope "SEMICOLON"
 externMethodPrototype: ValueRef = {
     <left:@L> <al:annotationList> <p:functionPrototype> pop_scope "SEMICOLON" <right:@R> => { value::declare_prototype_var(context, &p); value::case_value(context, "annotationList functionPrototype ';'", vec![al, p], "externMethodPrototype", left, right) },
     <left:@L> <al:annotationList> "ABSTRACT" <p:functionPrototype> pop_scope "SEMICOLON" <right:@R> => { value::declare_prototype_var(context, &p); value::case_value(context, "annotationList ABSTRACT functionPrototype ';'", vec![al, p], "externMethodPrototype", left, right) },
 };
 
+// externConstructorOrMethodPrototype ::= externConstructorPrototype
+//   | externMethodPrototype
 externConstructorOrMethodPrototype: ValueRef = {
     <p:externConstructorPrototype> => p,
     <p:externMethodPrototype> => p,
 };
 
+// externConstructorOrMethodPrototypeList ::= epsilon
+//   | externConstructorOrMethodPrototypeList externConstructorOrMethodPrototype
 externConstructorOrMethodPrototypeList: ValueRef = {
     <left:@L>  <right:@R> => value::case_value(context, "_EMPTY", vec![], "externConstructorOrMethodPrototypeList", left, right),
     <left:@L> <pl:externConstructorOrMethodPrototypeList> <p:externConstructorOrMethodPrototype> <right:@R> => value::case_value(context, "externConstructorOrMethodPrototypeList externConstructorOrMethodPrototype", vec![pl, p], "externConstructorOrMethodPrototypeList", left, right),
 };
 
+// externObjectDeclaration ::= annotationList "EXTERN" push_externName typeParameterListOpt "L_BRACE" externConstructorOrMethodPrototypeList "R_BRACE" pop_scope
 externObjectDeclaration: ValueRef = {
     <left:@L> <al:annotationList> "EXTERN" <n:push_externName> <tpl:typeParameterListOpt> "L_BRACE" <pl:externConstructorOrMethodPrototypeList> "R_BRACE" <s:pop_scope> <right:@R> => { let decl = value::case_value(context, "annotationList EXTERN name typeParameterListOpt `{ externConstructorOrMethodPrototypeList `}", vec![al, n.clone(), tpl, pl], "externObjectDeclaration", left, right); value::declare_type_value(context, &n, value::declaration_has_type_parameters(&decl)); value::set_type_namespace(context, &n, s); decl },
 };
 
+// externDeclaration ::= externFunctionDeclaration
+//   | externObjectDeclaration
 externDeclaration: ValueRef = {
     <d:externFunctionDeclaration> => d,
     <d:externObjectDeclaration> => d,
 };
 
+// selectCase ::= keysetExpression colon name "SEMICOLON"
 selectCase: ValueRef = {
     <left:@L> <k:keysetExpression> colon <n:name> "SEMICOLON" <right:@R> => value::case_value(context, "keysetExpression ':' name ';'", vec![k, n], "selectCase", left, right),
 };
 
+// selectCaseList ::= epsilon
+//   | selectCaseList selectCase
 selectCaseList: ValueRef = {
     <left:@L>  <right:@R> => value::case_value(context, "_EMPTY", vec![], "selectCaseList", left, right),
     <left:@L> <cl:selectCaseList> <c:selectCase> <right:@R> => value::case_value(context, "selectCaseList selectCase", vec![cl, c], "selectCaseList", left, right),
 };
 
+// selectExpression ::= "SELECT" "L_PAREN" "R_PAREN" "L_BRACE" selectCaseList "R_BRACE"
+//   | "SELECT" "L_PAREN" expressionList "R_PAREN" "L_BRACE" selectCaseList "R_BRACE"
 selectExpression: ValueRef = {
     <left:@L> "SELECT" "L_PAREN" <empty_left:@L> "R_PAREN" "L_BRACE" <cl:selectCaseList> "R_BRACE" <right:@R> => {
         let empty = value::case_value(context, "_EMPTY", vec![], "expressionList", empty_left, empty_left);
@@ -953,55 +1280,77 @@ selectExpression: ValueRef = {
         value::case_value(context, "SELECT `( expressionList `) `{ selectCaseList `}", vec![el, cl], "selectExpression", left, right),
 };
 
+// stateExpression ::= name "SEMICOLON"
+//   | selectExpression
 stateExpression: ValueRef = {
     <left:@L> <n:name> "SEMICOLON" <right:@R> => value::case_value(context, "name ';'", vec![n], "stateExpression", left, right),
     <e:selectExpression> => e,
 };
 
 #[inline]
+// transitionStatement ::= epsilon
+//   | "TRANSITION" stateExpression
 transitionStatement: ValueRef = {
     <left:@L>  <right:@R> => value::case_value(context, "_EMPTY", vec![], "transitionStatement", left, right),
     <left:@L> "TRANSITION" <e:stateExpression> <right:@R> => value::case_value(context, "TRANSITION stateExpression", vec![e], "transitionStatement", left, right),
 };
 
+// valueSetType ::= baseType
+//   | tupleType
+//   | prefixedTypeName
 valueSetType: ValueRef = {
     <t:baseType> => t,
     <t:tupleType> => t,
     <t:prefixedTypeName> => t,
 };
 
+// valueSetDeclaration ::= annotationList "VALUE_SET" "L_ANGLE_ARGS" valueSetType r_angle "L_PAREN" expression "R_PAREN" name "SEMICOLON"
 valueSetDeclaration: ValueRef = {
     <left:@L> <al:annotationList> "VALUE_SET" "L_ANGLE_ARGS" <t:valueSetType> r_angle "L_PAREN" <s:expression> "R_PAREN" <n:name> "SEMICOLON" <right:@R> => value::case_value(context, "annotationList VALUE_SET `< valueSetType `> `( expression `) name ';'", vec![al, t, s, n], "valueSetDeclaration", left, right),
 };
 
+// parserTypeDeclaration ::= annotationList "PARSER" push_name typeParameterListOpt "L_PAREN" parameterList "R_PAREN" pop_scope "SEMICOLON"
 parserTypeDeclaration: ValueRef = {
     <left:@L> <al:annotationList> "PARSER" <n:push_name> <tpl:typeParameterListOpt> "L_PAREN" <pl:parameterList> "R_PAREN" pop_scope "SEMICOLON" <right:@R> => value::case_value(context, "annotationList PARSER name typeParameterListOpt `( parameterList `) ';'", vec![al, n, tpl, pl], "parserTypeDeclaration", left, right),
 };
 
+// parserBlockElementStatement ::= constantDeclaration
+//   | variableDeclaration
+//   | parserStatement
 parserBlockElementStatement: ValueRef = {
     <s:constantDeclaration> => s,
     <s:variableDeclaration> => s,
     <s:parserStatement> => s,
 };
 
+// parserBlockElementStatementList ::= epsilon
+//   | parserBlockElementStatementList parserBlockElementStatement
 parserBlockElementStatementList: ValueRef = {
     <left:@L>  <right:@R> => value::case_value(context, "_EMPTY", vec![], "parserBlockElementStatementList", left, right),
     <left:@L> <sl:parserBlockElementStatementList> <s:parserBlockElementStatement> <right:@R> => value::case_value(context, "parserBlockElementStatementList parserBlockElementStatement", vec![sl, s], "parserBlockElementStatementList", left, right),
 };
 
+// parserBlockStatement ::= annotationList "L_BRACE" parserBlockElementStatementList "R_BRACE"
 parserBlockStatement: ValueRef = {
     <left:@L> <al:annotationList> "L_BRACE" <sl:parserBlockElementStatementList> "R_BRACE" <right:@R> => value::case_value(context, "annotationList `{ parserBlockElementStatementList `}", vec![al, sl], "parserBlockStatement", left, right),
 };
 
+// parserState ::= annotationList "STATE" push_name "L_BRACE" parserBlockElementStatementList transitionStatement "R_BRACE" pop_scope
 parserState: ValueRef = {
     <left:@L> <al:annotationList> "STATE" <n:push_name> "L_BRACE" <sl:parserBlockElementStatementList> <t:transitionStatement> "R_BRACE" pop_scope <right:@R> => value::case_value(context, "annotationList STATE name `{ parserBlockElementStatementList transitionStatement `}", vec![al, n, sl, t], "parserState", left, right),
 };
 
+// parserStateList ::= parserState
+//   | parserStateList parserState
 parserStateList: ValueRef = {
     <s:parserState> => s,
     <left:@L> <sl:parserStateList> <s:parserState> <right:@R> => value::case_value(context, "parserStateList parserState", vec![sl, s], "parserStateList", left, right),
 };
 
+// parserLocalDeclaration ::= constantDeclaration
+//   | instantiation
+//   | variableDeclaration
+//   | valueSetDeclaration
 parserLocalDeclaration: ValueRef = {
     <d:constantDeclaration> => d,
     <d:instantiation> => d,
@@ -1009,59 +1358,82 @@ parserLocalDeclaration: ValueRef = {
     <d:valueSetDeclaration> => d,
 };
 
+// parserLocalDeclarationList ::= epsilon
+//   | parserLocalDeclarationList parserLocalDeclaration
 parserLocalDeclarationList: ValueRef = {
     <left:@L>  <right:@R> => value::case_value(context, "_EMPTY", vec![], "parserLocalDeclarationList", left, right),
     <left:@L> <dl:parserLocalDeclarationList> <d:parserLocalDeclaration> <right:@R> => value::case_value(context, "parserLocalDeclarationList parserLocalDeclaration", vec![dl, d], "parserLocalDeclarationList", left, right),
 };
 
+// parserDeclaration ::= annotationList "PARSER" push_name typeParameterListOpt "L_PAREN" parameterList "R_PAREN" constructorParameterListOpt "L_BRACE" parserLocalDeclarationList parserStateList "R_BRACE" pop_scope
 parserDeclaration: ValueRef = {
     <left:@L> <al:annotationList> "PARSER" <n:push_name> <tpl:typeParameterListOpt> "L_PAREN" <pl:parameterList> "R_PAREN" <cpl:constructorParameterListOpt> "L_BRACE" <dl:parserLocalDeclarationList> <sl:parserStateList> "R_BRACE" pop_scope <right:@R> => value::case_value(context, "annotationList PARSER name typeParameterListOpt `( parameterList `) constructorParameterListOpt `{ parserLocalDeclarationList parserStateList `}", vec![al, n, tpl, pl, cpl, dl, sl], "parserDeclaration", left, right),
 };
 
 #[inline]
+// constOpt ::= epsilon
+//   | "CONST"
 constOpt: ValueRef = {
     <left:@L>  <right:@R> => value::case_value(context, "_EMPTY", vec![], "constOpt", left, right),
     <left:@L> "CONST" <right:@R> => value::case_value(context, "CONST", vec![], "constOpt", left, right),
 };
 
+// tableKey ::= expression colon name annotationList "SEMICOLON"
 tableKey: ValueRef = {
     <left:@L> <e:expression> colon <n:name> <al:annotationList> "SEMICOLON" <right:@R> => value::case_value(context, "expression ':' name annotationList ';'", vec![e, n, al], "tableKey", left, right),
 };
 
+// tableKeyList ::= epsilon
+//   | tableKeyList tableKey
 tableKeyList: ValueRef = {
     <left:@L>  <right:@R> => value::case_value(context, "_EMPTY", vec![], "tableKeyList", left, right),
     <left:@L> <kl:tableKeyList> <k:tableKey> <right:@R> => value::case_value(context, "tableKeyList tableKey", vec![kl, k], "tableKeyList", left, right),
 };
 
+// tableActionReference ::= prefixedNonTypeName
+//   | prefixedNonTypeName "L_PAREN" argumentList "R_PAREN"
 tableActionReference: ValueRef = {
     <n:prefixedNonTypeName> => n,
     <left:@L> <n:prefixedNonTypeName> "L_PAREN" <al:argumentList> "R_PAREN" <right:@R> => value::case_value(context, "prefixedNonTypeName `( argumentList `)", vec![n, al], "tableActionReference", left, right),
 };
 
+// tableAction ::= annotationList tableActionReference "SEMICOLON"
 tableAction: ValueRef = {
     <left:@L> <al:annotationList> <ac:tableActionReference> "SEMICOLON" <right:@R> => value::case_value(context, "annotationList tableActionReference ';'", vec![al, ac], "tableAction", left, right),
 };
 
+// tableActionList ::= epsilon
+//   | tableActionList tableAction
 tableActionList: ValueRef = {
     <left:@L>  <right:@R> => value::case_value(context, "_EMPTY", vec![], "tableActionList", left, right),
     <left:@L> <acl:tableActionList> <ac:tableAction> <right:@R> => value::case_value(context, "tableActionList tableAction", vec![acl, ac], "tableActionList", left, right),
 };
 
+// tableEntryPriority ::= "PRIORITY" "ASSIGN" integerLiteral colon
+//   | "PRIORITY" "ASSIGN" "L_PAREN" expression "R_PAREN" colon
 tableEntryPriority: ValueRef = {
     <left:@L> "PRIORITY" "ASSIGN" <int:integerLiteral> colon <right:@R> => value::case_value(context, "PRIORITY '=' integerLiteral ':'", vec![int], "tableEntryPriority", left, right),
     <left:@L> "PRIORITY" "ASSIGN" "L_PAREN" <e:expression> "R_PAREN" colon <right:@R> => value::case_value(context, "PRIORITY '=' `( expression `) ':'", vec![e], "tableEntryPriority", left, right),
 };
 
+// tableEntry ::= constOpt tableEntryPriority keysetExpression colon tableActionReference annotationList "SEMICOLON"
+//   | constOpt keysetExpression colon tableActionReference annotationList "SEMICOLON"
 tableEntry: ValueRef = {
     <left:@L> <c:constOpt> <p:tableEntryPriority> <k:keysetExpression> colon <ac:tableActionReference> <al:annotationList> "SEMICOLON" <right:@R> => value::case_value(context, "constOpt tableEntryPriority keysetExpression ':' tableActionReference annotationList ';'", vec![c, p, k, ac, al], "tableEntry", left, right),
     <left:@L> <c:constOpt> <k:keysetExpression> colon <ac:tableActionReference> <al:annotationList> "SEMICOLON" <right:@R> => value::case_value(context, "constOpt keysetExpression ':' tableActionReference annotationList ';'", vec![c, k, ac, al], "tableEntry", left, right),
 };
 
+// tableEntryList ::= epsilon
+//   | tableEntryList tableEntry
 tableEntryList: ValueRef = {
     <left:@L>  <right:@R> => value::case_value(context, "_EMPTY", vec![], "tableEntryList", left, right),
     <left:@L> <el:tableEntryList> <e:tableEntry> <right:@R> => value::case_value(context, "tableEntryList tableEntry", vec![el, e], "tableEntryList", left, right),
 };
 
+// tableProperty ::= "KEY" "ASSIGN" "L_BRACE" tableKeyList "R_BRACE"
+//   | "ACTIONS" "ASSIGN" "L_BRACE" tableActionList "R_BRACE"
+//   | annotationList constOpt "ENTRIES" "ASSIGN" "L_BRACE" tableEntryList "R_BRACE"
+//   | annotationList constOpt tableCustomName initialValue "SEMICOLON"
 tableProperty: ValueRef = {
     <left:@L> "KEY" "ASSIGN" "L_BRACE" <kl:tableKeyList> "R_BRACE" <right:@R> => value::case_value(context, "KEY '=' `{ tableKeyList `}", vec![kl], "tableProperty", left, right),
     <left:@L> "ACTIONS" "ASSIGN" "L_BRACE" <acl:tableActionList> "R_BRACE" <right:@R> => value::case_value(context, "ACTIONS '=' `{ tableActionList `}", vec![acl], "tableProperty", left, right),
@@ -1069,23 +1441,33 @@ tableProperty: ValueRef = {
     <left:@L> <al:annotationList> <c:constOpt> <n:tableCustomName> <i:initialValue> "SEMICOLON" <right:@R> => value::case_value(context, "annotationList constOpt tableCustomName initializer ';'", vec![al, c, n, i], "tableProperty", left, right),
 };
 
+// tablePropertyList ::= epsilon
+//   | tablePropertyList tableProperty
 tablePropertyList: ValueRef = {
     <left:@L>  <right:@R> => value::case_value(context, "_EMPTY", vec![], "tablePropertyList", left, right),
     <left:@L> <pl:tablePropertyList> <p:tableProperty> <right:@R> => value::case_value(context, "tablePropertyList tableProperty", vec![pl, p], "tablePropertyList", left, right),
 };
 
+// tableDeclaration ::= annotationList "TABLE" name "L_BRACE" tablePropertyList "R_BRACE"
 tableDeclaration: ValueRef = {
     <left:@L> <al:annotationList> "TABLE" <n:name> "L_BRACE" <pl:tablePropertyList> "R_BRACE" <right:@R> => value::case_value(context, "annotationList TABLE name `{ tablePropertyList `}", vec![al, n, pl], "tableDeclaration", left, right),
 };
 
+// controlTypeDeclaration ::= annotationList "CONTROL" push_name typeParameterListOpt "L_PAREN" parameterList "R_PAREN" pop_scope "SEMICOLON"
 controlTypeDeclaration: ValueRef = {
     <left:@L> <al:annotationList> "CONTROL" <n:push_name> <tpl:typeParameterListOpt> "L_PAREN" <pl:parameterList> "R_PAREN" pop_scope "SEMICOLON" <right:@R> => value::case_value(context, "annotationList CONTROL name typeParameterListOpt `( parameterList `) ';'", vec![al, n, tpl, pl], "controlTypeDeclaration", left, right),
 };
 
+// controlBody ::= blockStatement
 controlBody: ValueRef = {
     <b:blockStatement> => b,
 };
 
+// controlLocalDeclaration ::= constantDeclaration
+//   | instantiation
+//   | variableDeclaration
+//   | actionDeclaration
+//   | tableDeclaration
 controlLocalDeclaration: ValueRef = {
     <d:constantDeclaration> => d,
     <d:instantiation> => d,
@@ -1094,19 +1476,28 @@ controlLocalDeclaration: ValueRef = {
     <d:tableDeclaration> => { value::declare_declaration_var(context, &d); d },
 };
 
+// controlLocalDeclarationList ::= epsilon
+//   | controlLocalDeclarationList controlLocalDeclaration
 controlLocalDeclarationList: ValueRef = {
     <left:@L>  <right:@R> => value::case_value(context, "_EMPTY", vec![], "controlLocalDeclarationList", left, right),
     <left:@L> <dl:controlLocalDeclarationList> <d:controlLocalDeclaration> <right:@R> => value::case_value(context, "controlLocalDeclarationList controlLocalDeclaration", vec![dl, d], "controlLocalDeclarationList", left, right),
 };
 
+// controlDeclaration ::= annotationList "CONTROL" push_name typeParameterListOpt "L_PAREN" parameterList "R_PAREN" constructorParameterListOpt "L_BRACE" controlLocalDeclarationList "APPLY" controlBody "R_BRACE" pop_scope
 controlDeclaration: ValueRef = {
     <left:@L> <al:annotationList> "CONTROL" <n:push_name> <tpl:typeParameterListOpt> "L_PAREN" <pl:parameterList> "R_PAREN" <cpl:constructorParameterListOpt> "L_BRACE" <dl:controlLocalDeclarationList> "APPLY" <b:controlBody> "R_BRACE" pop_scope <right:@R> => value::case_value(context, "annotationList CONTROL name typeParameterListOpt `( parameterList `) constructorParameterListOpt `{ controlLocalDeclarationList APPLY controlBody `}", vec![al, n, tpl, pl, cpl, dl, b], "controlDeclaration", left, right),
 };
 
+// packageTypeDeclaration ::= annotationList "PACKAGE" push_name typeParameterListOpt "L_PAREN" parameterList "R_PAREN" pop_scope "SEMICOLON"
 packageTypeDeclaration: ValueRef = {
     <left:@L> <al:annotationList> "PACKAGE" <n:push_name> <tpl:typeParameterListOpt> "L_PAREN" <pl:parameterList> "R_PAREN" pop_scope "SEMICOLON" <right:@R> => value::case_value(context, "annotationList PACKAGE name typeParameterListOpt `( parameterList `) ';'", vec![al, n, tpl, pl], "packageTypeDeclaration", left, right),
 };
 
+// typeDeclaration ::= derivedTypeDeclaration
+//   | typedefDeclaration
+//   | parserTypeDeclaration
+//   | controlTypeDeclaration
+//   | packageTypeDeclaration
 typeDeclaration: ValueRef = {
     <d:derivedTypeDeclaration> => d,
     <d:typedefDeclaration> => d,
@@ -1115,6 +1506,16 @@ typeDeclaration: ValueRef = {
     <d:packageTypeDeclaration> => d,
 };
 
+// declaration ::= constantDeclaration
+//   | instantiation
+//   | functionDeclaration
+//   | actionDeclaration
+//   | errorDeclaration
+//   | matchKindDeclaration
+//   | externDeclaration
+//   | parserDeclaration
+//   | controlDeclaration
+//   | typeDeclaration
 declaration: ValueRef = {
     <constant:constantDeclaration> => { value::declare_declaration_var(context, &constant); constant },
     <inst:instantiation> => { value::declare_declaration_var(context, &inst); inst },
@@ -1128,6 +1529,95 @@ declaration: ValueRef = {
     <d:typeDeclaration> => { value::declare_declaration_type(context, &d); d },
 };
 
+// annotationToken ::= "UNEXPECTED_TOKEN"
+//   | "ABSTRACT"
+//   | "ACTION"
+//   | "ACTIONS"
+//   | "APPLY"
+//   | "BOOL"
+//   | "BIT"
+//   | "BREAK"
+//   | "CONST"
+//   | "CONTINUE"
+//   | "CONTROL"
+//   | "DEFAULT"
+//   | "ELSE"
+//   | "ENTRIES"
+//   | "ENUM"
+//   | "ERROR"
+//   | "EXIT"
+//   | "EXTERN"
+//   | "FALSE"
+//   | "FOR"
+//   | "HEADER"
+//   | "HEADER_UNION"
+//   | "IF"
+//   | "IN"
+//   | "INOUT"
+//   | "INT"
+//   | "KEY"
+//   | "MATCH_KIND"
+//   | "TYPE"
+//   | "OUT"
+//   | "PARSER"
+//   | "PACKAGE"
+//   | "PRAGMA"
+//   | "RETURN"
+//   | "SELECT"
+//   | "STATE"
+//   | "STRING"
+//   | "STRUCT"
+//   | "SWITCH"
+//   | "TABLE"
+//   | "THIS"
+//   | "TRANSITION"
+//   | "TRUE"
+//   | "TUPLE"
+//   | "TYPEDEF"
+//   | "VARBIT"
+//   | "VALUE_SET"
+//   | "LIST"
+//   | "VOID"
+//   | "DONTCARE"
+//   | identifier
+//   | typeIdentifier
+//   | stringLiteral
+//   | integerLiteral
+//   | "MASK"
+//   | "RANGE"
+//   | "SHL"
+//   | "AND"
+//   | "OR"
+//   | "EQ"
+//   | "NE"
+//   | "GE"
+//   | "LE"
+//   | "PLUSPLUS"
+//   | "PLUS"
+//   | "PLUS_SAT"
+//   | "MINUS"
+//   | "MINUS_SAT"
+//   | "MUL"
+//   | "DIV"
+//   | "MOD"
+//   | "BIT_OR"
+//   | "BIT_AND"
+//   | "BIT_XOR"
+//   | "COMPLEMENT"
+//   | "L_BRACKET"
+//   | "R_BRACKET"
+//   | "L_BRACE"
+//   | "R_BRACE"
+//   | "L_ANGLE"
+//   | "R_ANGLE"
+//   | "NOT"
+//   | colon
+//   | "COMMA"
+//   | "QUESTION"
+//   | "DOT"
+//   | "ASSIGN"
+//   | "SEMICOLON"
+//   | "AT"
 annotationToken: ValueRef = {
     <left:@L> "UNEXPECTED_TOKEN" <right:@R> => value::case_value(context, "UNEXPECTED_TOKEN", vec![], "annotationToken", left, right),
     <left:@L> "ABSTRACT" <right:@R> => value::case_value(context, "ABSTRACT", vec![], "annotationToken", left, right),
@@ -1220,16 +1710,24 @@ annotationToken: ValueRef = {
     <left:@L> "AT" <right:@R> => value::case_value(context, "'@'", vec![], "annotationToken", left, right),
 };
 
+// annotationBody ::= epsilon
+//   | annotationBody "L_PAREN" annotationBody "R_PAREN"
+//   | annotationBody annotationToken
 annotationBody: ValueRef = {
     <left:@L>  <right:@R> => value::case_value(context, "_EMPTY", vec![], "annotationBody", left, right),
     <left:@L> <ab:annotationBody> "L_PAREN" <ab_in:annotationBody> "R_PAREN" <right:@R> => value::case_value(context, "annotationBody `( annotationBody `)", vec![ab, ab_in], "annotationBody", left, right),
     <left:@L> <ab:annotationBody> <atoken:annotationToken> <right:@R> => value::case_value(context, "annotationBody annotationToken", vec![ab, atoken], "annotationBody", left, right),
 };
 
+// structuredAnnotationBody ::= sequenceOrRecordElementExpression trailingCommaOpt
 structuredAnnotationBody: ValueRef = {
     <left:@L> <e:sequenceOrRecordElementExpression> <c:trailingCommaOpt> <right:@R> => value::case_value(context, "sequenceOrRecordElementExpression trailingCommaOpt", vec![e, c], "structuredAnnotationBody", left, right),
 };
 
+// annotation ::= "AT" name
+//   | "AT" name "L_PAREN" annotationBody "R_PAREN"
+//   | "AT" name "L_BRACKET" structuredAnnotationBody "R_BRACKET"
+//   | "PRAGMA" name annotationBody "PRAGMA_END"
 annotation: ValueRef = {
     <left:@L> "AT" <name:name> <right:@R> => value::case_value(context, "'@' name", vec![name], "annotation", left, right),
     <left:@L> "AT" <name:name> "L_PAREN" <body:annotationBody> "R_PAREN" <right:@R> => value::case_value(context, "'@' name `( annotationBody `)", vec![name, body], "annotation", left, right),
@@ -1237,32 +1735,54 @@ annotation: ValueRef = {
     <left:@L> "PRAGMA" <name:name> <body:annotationBody> "PRAGMA_END" <right:@R> => value::case_value(context, "'@' PRAGMA name annotationBody", vec![name, body], "annotation", left, right),
 };
 
+// annotationListNonEmpty ::= annotation
+//   | annotationListNonEmpty annotation
 annotationListNonEmpty: ValueRef = {
     <a:annotation> => a,
     <left:@L> <al:annotationListNonEmpty> <a:annotation> <right:@R> => value::case_value(context, "annotationListNonEmpty annotation", vec![al, a], "annotationListNonEmpty", left, right),
 };
 
 #[inline]
+// annotationList ::= epsilon
+//   | annotationListNonEmpty
 annotationList: ValueRef = {
     <left:@L>  <right:@R> => value::case_value(context, "_EMPTY", vec![], "annotationList", left, right),
     <al:annotationListNonEmpty> => al,
 };
 
+// declarationList ::= epsilon
+//   | declarationList declaration
+//   | declarationList "SEMICOLON"
 declarationList: ValueRef = {
     <left:@L>  <right:@R> => value::case_value(context, "_EMPTY", vec![], "declarationList", left, right),
     <left:@L> <ds:declarationList> <d:declaration> <right:@R> => value::case_value(context, "declarationList declaration", vec![ds, d], "declarationList", left, right),
     <left:@L> <ds:declarationList> "SEMICOLON" <right:@R> => value::case_value(context, "declarationList ';'", vec![ds], "declarationList", left, right),
 };
 
+// p4program ::= declarationList "END"
 pub p4program: ValueRef = {
-    <dl:declarationList> "END" => value::retag(&dl, "p4program"),
+    <dl:declarationList> "END" => value::retag(dl, "p4program"),
 };
 
+// statement ::= MatchedStatement
+//   | UnmatchedStatement
 statement: ValueRef = {
     MatchedStatement,
     UnmatchedStatement,
 };
 
+// MatchedStatement ::= emptyStatement
+//   | assignmentStatement
+//   | callStatement
+//   | directApplicationStatement
+//   | returnStatement
+//   | exitStatement
+//   | blockStatement
+//   | MatchedForStatement
+//   | breakStatement
+//   | continueStatement
+//   | switchStatement
+//   | "IF" "L_PAREN" expression "R_PAREN" MatchedStatement "ELSE" MatchedStatement
 MatchedStatement: ValueRef = {
     emptyStatement,
     assignmentStatement,
@@ -1279,6 +1799,9 @@ MatchedStatement: ValueRef = {
         value::case_value(context, "IF `( expression `) statement ELSE statement", vec![condition, yes, no], "conditionalStatement", left, right),
 };
 
+// UnmatchedStatement ::= UnmatchedForStatement
+//   | "IF" "L_PAREN" expression "R_PAREN" statement
+//   | "IF" "L_PAREN" expression "R_PAREN" MatchedStatement "ELSE" UnmatchedStatement
 UnmatchedStatement: ValueRef = {
     UnmatchedForStatement,
     <left:@L> "IF" "L_PAREN" <condition:expression> "R_PAREN" <yes:statement> <right:@R> =>
@@ -1287,6 +1810,9 @@ UnmatchedStatement: ValueRef = {
         value::case_value(context, "IF `( expression `) statement ELSE statement", vec![condition, yes, no], "conditionalStatement", left, right),
 };
 
+// MatchedForStatement ::= annotationList "FOR" "L_PAREN" forInitStatementList "SEMICOLON" expression "SEMICOLON" forUpdateStatementList "R_PAREN" MatchedStatement
+//   | annotationList "FOR" "L_PAREN" typeRef name "IN" forCollectionExpression "R_PAREN" MatchedStatement
+//   | annotationList "FOR" "L_PAREN" annotationListNonEmpty typeRef name "IN" forCollectionExpression "R_PAREN" MatchedStatement
 MatchedForStatement: ValueRef = {
     <left:@L> <annotations:annotationList> "FOR" "L_PAREN" <init:forInitStatementList> "SEMICOLON" <condition:expression> "SEMICOLON" <update:forUpdateStatementList> "R_PAREN" <body:MatchedStatement> <right:@R> =>
         value::case_value(context, "annotationList FOR `( forInitStatementList ';' expression ';' forUpdateStatementList `) statement", vec![annotations, init, condition, update, body], "forStatement", left, right),
@@ -1296,6 +1822,9 @@ MatchedForStatement: ValueRef = {
         value::case_value(context, "annotationList FOR `( annotationList typeRef name IN forCollectionExpression `) statement", vec![annotations, inner_annotations, typ, name, collection, body], "forStatement", left, right),
 };
 
+// UnmatchedForStatement ::= annotationList "FOR" "L_PAREN" forInitStatementList "SEMICOLON" expression "SEMICOLON" forUpdateStatementList "R_PAREN" UnmatchedStatement
+//   | annotationList "FOR" "L_PAREN" typeRef name "IN" forCollectionExpression "R_PAREN" UnmatchedStatement
+//   | annotationList "FOR" "L_PAREN" annotationListNonEmpty typeRef name "IN" forCollectionExpression "R_PAREN" UnmatchedStatement
 UnmatchedForStatement: ValueRef = {
     <left:@L> <annotations:annotationList> "FOR" "L_PAREN" <init:forInitStatementList> "SEMICOLON" <condition:expression> "SEMICOLON" <update:forUpdateStatementList> "R_PAREN" <body:UnmatchedStatement> <right:@R> =>
         value::case_value(context, "annotationList FOR `( forInitStatementList ';' expression ';' forUpdateStatementList `) statement", vec![annotations, init, condition, update, body], "forStatement", left, right),
@@ -1305,11 +1834,19 @@ UnmatchedForStatement: ValueRef = {
         value::case_value(context, "annotationList FOR `( annotationList typeRef name IN forCollectionExpression `) statement", vec![annotations, inner_annotations, typ, name, collection, body], "forStatement", left, right),
 };
 
+// parserStatement ::= ParserMatchedStatement
+//   | ParserUnmatchedStatement
 parserStatement: ValueRef = {
     ParserMatchedStatement,
     ParserUnmatchedStatement,
 };
 
+// ParserMatchedStatement ::= emptyStatement
+//   | assignmentStatement
+//   | callStatement
+//   | directApplicationStatement
+//   | parserBlockStatement
+//   | "IF" "L_PAREN" expression "R_PAREN" ParserMatchedStatement "ELSE" ParserMatchedStatement
 ParserMatchedStatement: ValueRef = {
     emptyStatement,
     assignmentStatement,
@@ -1320,6 +1857,8 @@ ParserMatchedStatement: ValueRef = {
         value::case_value(context, "IF `( expression `) parserStatement ELSE parserStatement", vec![condition, yes, no], "parserConditionalStatement", left, right),
 };
 
+// ParserUnmatchedStatement ::= "IF" "L_PAREN" expression "R_PAREN" parserStatement
+//   | "IF" "L_PAREN" expression "R_PAREN" ParserMatchedStatement "ELSE" ParserUnmatchedStatement
 ParserUnmatchedStatement: ValueRef = {
     <left:@L> "IF" "L_PAREN" <condition:expression> "R_PAREN" <yes:parserStatement> <right:@R> =>
         value::case_value(context, "IF `( expression `) parserStatement", vec![condition, yes], "parserConditionalStatement", left, right),

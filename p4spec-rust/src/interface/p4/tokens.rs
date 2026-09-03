@@ -1,3 +1,8 @@
+//! Adapt located lexer tokens to LALRPOP's location-token-location stream.
+//!
+//! Each source position is interned in the parser context and recovered later
+//! when semantic actions form spans; lexical errors pass through unchanged.
+
 use crate::lang::common::source::Phrase;
 
 use super::{

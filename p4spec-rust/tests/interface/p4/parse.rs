@@ -11,7 +11,7 @@ use std::{
 };
 
 #[test]
-fn parses_empty_and_declaration_programs() {
+fn test_parses_empty_and_declaration_programs() {
     for source in [
         "",
         "const bit<8> width = 8w3;",
@@ -21,13 +21,13 @@ fn parses_empty_and_declaration_programs() {
     ] {
         let program = parse_string("fixture.p4", source)
             .unwrap_or_else(|error| panic!("failed to parse {source:?}: {error}"));
-        assert!(matches!(program.kind, ValueKind::Case(_)));
+        assert!(matches!(program.node, ValueKind::Case(_)));
         assert_eq!(program.span.left.file.as_ref(), "fixture.p4");
     }
 }
 
 #[test]
-fn syntax_errors_retain_the_source_location() {
+fn test_syntax_errors_retain_the_source_location() {
     let error =
         parse_string("broken.p4", "const bit<8> x = ;").expect_err("reject a missing initializer");
     assert_eq!(error.kind, P4ErrorKind::Syntax);
@@ -36,7 +36,7 @@ fn syntax_errors_retain_the_source_location() {
 }
 
 #[test]
-fn parses_nested_conditionals_and_switch_fallthrough() {
+fn test_parses_nested_conditionals_and_switch_fallthrough() {
     let source = r#"
 control C() {
     apply {
@@ -53,7 +53,7 @@ control C() {
 }
 
 #[test]
-fn parses_the_positive_p4_corpus() {
+fn test_parses_the_positive_p4_corpus() {
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let corpus = manifest.join("../p4spec/test/micro");
     let includes = [manifest.join("../../../p4c/p4include")];
@@ -87,7 +87,7 @@ fn parses_the_positive_p4_corpus() {
 }
 
 #[test]
-fn rejects_the_negative_p4_parse_corpus() {
+fn test_rejects_the_negative_p4_parse_corpus() {
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let corpus = manifest.join("../p4spec/test/micro/programs-parse-neg");
     let includes = [manifest.join("../../../p4c/p4include")];

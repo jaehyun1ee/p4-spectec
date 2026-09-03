@@ -1,6 +1,12 @@
 //! Syntax model for STF commands.
+//!
+//! Leaf strings retain their source spelling, compound actions and matches
+//! preserve input order, and statements follow the OCaml variant order. For
+//! example, `packet 1 00ff` is `Statement::Packet("1", "00ff")`.
 
 use crate::lang::common::source::Phrase;
+
+// == Leaf syntax
 
 pub type Name = String;
 pub type Id = String;
@@ -14,6 +20,8 @@ pub type Argument = (Id, Number);
 pub type Match = (Name, MatchKind);
 pub type Check = (Option<CounterKind>, Condition, Number);
 pub type Program = Vec<Phrase<Statement>>;
+
+// == Compound syntax
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Action {
@@ -48,6 +56,8 @@ pub enum CounterKind {
     Bytes,
     Packets,
 }
+
+// == Statements
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Statement {

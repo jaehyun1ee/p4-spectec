@@ -8,6 +8,8 @@ use crate::{
     phrase,
 };
 
+// == Fresh type variables
+
 /// Caller-owned source of fresh runtime type variables.
 ///
 /// Separate values intentionally produce the same sequence, which keeps
@@ -25,8 +27,9 @@ impl Fresh {
     pub fn fresh(&mut self) -> (ast::TParam, ast::Typ) {
         let next = self.next;
         self.next += 1;
-        let tparam = phrase!(node: format!("__FRESH{next}"), span: Span::default());
-        let typ_kind = TypKind::Var(tparam.clone(), vec![]);
+        let name = format!("__FRESH{next}");
+        let tparam = phrase!(node: name, span: Span::default());
+        let typ_kind = TypKind::Var(tparam.clone(), Vec::new());
         let typ = phrase!(node: typ_kind, span: Span::default());
         (tparam, typ)
     }

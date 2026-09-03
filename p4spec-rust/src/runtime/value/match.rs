@@ -16,6 +16,8 @@ use crate::{
 
 use super::{Value, ValueKind, ValueRef};
 
+// == Errors and function signatures
+
 pub type FuncSignature = FuncTyp;
 
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
@@ -39,6 +41,8 @@ pub enum MatchError {
     #[error(transparent)]
     Type(#[from] TypeError),
 }
+
+// == Type membership
 
 fn substitution(
     tparams: &[crate::lang::il::ast::TParam],
@@ -64,14 +68,14 @@ where
     F: Fn(&str) -> Option<FuncSignature>,
 {
     match &typ.node {
-        TypKind::Bool => Ok(matches!(value.kind, ValueKind::Bool(_))),
-        TypKind::Num(NumTyp::Nat) => Ok(match &value.kind {
+        TypKind::Bool => Ok(matches!(value.node, ValueKind::Bool(_))),
+        TypKind::Num(NumTyp::Nat) => Ok(match &value.node {
             ValueKind::Num(Number::Nat(_)) => true,
             ValueKind::Num(Number::Int(integer)) => !integer.is_negative(),
             _ => false,
         }),
-        TypKind::Num(NumTyp::Int) => Ok(matches!(value.kind, ValueKind::Num(_))),
-        TypKind::Text => Ok(matches!(value.kind, ValueKind::Text(_))),
+        TypKind::Num(NumTyp::Int) => Ok(matches!(value.node, ValueKind::Num(_))),
+        TypKind::Text => Ok(matches!(value.node, ValueKind::Text(_))),
         TypKind::Var(id, targs) => {
             let type_def = tdenv.get(id).ok_or_else(|| MatchError::UndefinedType {
                 name: id.node.clone(),
@@ -83,10 +87,10 @@ where
                         span: typ.span.clone(),
                     })
                 }
-                TypeDef::Extern => Ok(matches!(value.kind, ValueKind::Extern(_))),
+                TypeDef::Extern => Ok(matches!(value.node, ValueKind::Extern(_))),
                 TypeDef::Defined(tparams, def_typ) => {
                     let theta = substitution(tparams, targs, &typ.span)?;
-                    match (&def_typ.node, &value.kind) {
+                    match (&def_typ.node, &value.node) {
                         (DefTypKind::Plain(typ), _) => {
                             let typ = subst_typ(&theta, typ)?;
                             sub_inner(tdenv, find_func, &typ, value)
@@ -132,7 +136,7 @@ where
                 }
             }
         }
-        TypKind::Tuple(typs) => match &value.kind {
+        TypKind::Tuple(typs) => match &value.node {
             ValueKind::Tuple(values) => subs_inner(
                 tdenv,
                 find_func,
@@ -142,13 +146,13 @@ where
             _ => Ok(false),
         },
         TypKind::Iter(typ_inner, Iter::Opt) => {
-            if let ValueKind::Opt(Some(value)) = &value.kind {
+            if let ValueKind::Opt(Some(value)) = &value.node {
                 sub_inner(tdenv, find_func, typ_inner, value)
             } else {
                 Ok(true)
             }
         }
-        TypKind::Iter(typ_inner, Iter::List) => match &value.kind {
+        TypKind::Iter(typ_inner, Iter::List) => match &value.node {
             ValueKind::List(values) => {
                 for value in values {
                     if !sub_inner(tdenv, find_func, typ_inner, value)? {
@@ -159,14 +163,15 @@ where
             }
             _ => Ok(false),
         },
-        TypKind::Func(func_typ) => match &value.kind {
+        TypKind::Func(func_typ) => match &value.node {
             ValueKind::Func(id) => {
                 let signature =
                     find_func(&id.node).ok_or_else(|| MatchError::UndefinedFunction {
                         name: id.node.clone(),
                         span: id.span.clone(),
                     })?;
-                Ok(equiv_func_typ(tdenv, &typ.span, func_typ, &signature)?)
+                let equivalent = equiv_func_typ(tdenv, &typ.span, func_typ, &signature)?;
+                Ok(equivalent)
             }
             _ => Ok(false),
         },
@@ -196,6 +201,8 @@ where
 }
 
 pub type SubCache = BTreeMap<(String, ValueRef), bool>;
+
+// == Cached entry points
 
 pub fn sub<F>(
     cache: &mut SubCache,
@@ -248,7 +255,7 @@ pub fn check<F>(
 where
     F: Fn(&str) -> Option<FuncSignature>,
 {
-    match (subcheck, &value.kind) {
+    match (subcheck, &value.node) {
         (Subcheck::Skip, _) => Ok(true),
         (Subcheck::Mixop(mixops), ValueKind::Case(value_case)) => {
             Ok(mixops.iter().any(|mixop| mixop == &value_case.to_mixop()))

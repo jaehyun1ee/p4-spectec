@@ -1,3 +1,5 @@
+//! Natural-number aggregation builtins, ordered to match `nats.ml`.
+
 use num_bigint::BigInt;
 use num_traits::Zero;
 
@@ -9,7 +11,7 @@ use crate::{
 
 use super::{BuiltinError, BuiltinResult, extract, return_value};
 
-// Conversion between meta-numerics and Rust numerics
+// == Conversion between meta-numerics and Rust numerics
 
 fn bigint_of_value<'a>(span: &Span, value: &'a Value) -> Result<&'a BigInt, BuiltinError> {
     let number =
@@ -20,13 +22,16 @@ fn bigint_of_value<'a>(span: &Span, value: &'a Value) -> Result<&'a BigInt, Buil
 fn value_of_bigint(add: &mut dyn FnMut(ValueRef), value: BigInt) -> BuiltinResult {
     let value = num::Natural::try_from(value)
         .map_err(|error| BuiltinError::new(Span::default(), error.to_string()))?;
-    return_value(add, make::nat(value, Span::default()))
+    let value = make::nat(value, Span::default());
+    return_value(add, value)
 }
 
 fn input_values<'a>(span: &Span, values: &'a [ValueRef]) -> Result<&'a [ValueRef], BuiltinError> {
     let value = extract::one(span, values)?;
     get::list(value).map_err(|error| BuiltinError::new(span.clone(), error.to_string()))
 }
+
+// == Built-in implementations
 
 // dec $sum_nat(nat* ) : nat
 
@@ -59,7 +64,8 @@ pub fn max_nat(
         .ok_or_else(|| BuiltinError::new(span.clone(), "max of empty list"))?;
     let mut maximum = bigint_of_value(span, first)?.clone();
     for value in rest {
-        maximum = maximum.max(bigint_of_value(span, value)?.clone());
+        let value = bigint_of_value(span, value)?.clone();
+        maximum = maximum.max(value);
     }
     value_of_bigint(add, maximum)
 }
@@ -79,7 +85,8 @@ pub fn min_nat(
         .ok_or_else(|| BuiltinError::new(span.clone(), "min of empty list"))?;
     let mut minimum = bigint_of_value(span, first)?.clone();
     for value in rest {
-        minimum = minimum.min(bigint_of_value(span, value)?.clone());
+        let value = bigint_of_value(span, value)?.clone();
+        minimum = minimum.min(value);
     }
     value_of_bigint(add, minimum)
 }

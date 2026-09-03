@@ -61,7 +61,7 @@ fn wrapped_text() -> p4spec_rust::runtime::value::ValueRef {
 }
 
 #[test]
-fn unparses_scalar_and_container_values() {
+fn test_unparses_scalar_and_container_values() {
     let unparser = P4Unparser::new();
     let span = Span::default();
     assert_eq!(
@@ -94,7 +94,7 @@ fn unparses_scalar_and_container_values() {
 }
 
 #[test]
-fn unsupported_values_return_typed_errors() {
+fn test_unsupported_values_return_typed_errors() {
     let structure = make::structure(&typ::bool(), Vec::new(), Span::default());
     assert_eq!(
         P4Unparser::new().render(&structure),
@@ -103,7 +103,7 @@ fn unsupported_values_return_typed_errors() {
 }
 
 #[test]
-fn print_hints_are_loaded_from_all_runtime_stages() {
+fn test_print_hints_are_loaded_from_all_runtime_stages() {
     let al_spec = vec![p4spec_rust::phrase! {
         node: al::ast::DefKind::Typ(al::ast::TypDef {
             id: id("Wrapper"),

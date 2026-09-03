@@ -1,4 +1,11 @@
 //! Runtime-value constructors and semantic-action helpers for the P4 grammar.
+//!
+//! Grammar actions fill a cached SpecTec mixfix shape, attach its declared P4
+//! type and span, then update the parser's name context where necessary. For
+//! example, a binary expression first constructs its operator value and then
+//! fills `expression binop expression` with the two operands.
+
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::{
     frontend,
@@ -15,6 +22,12 @@ use crate::{
 
 use super::context::{Context, Location, Namespace, TypeId};
 
+// == Runtime value construction
+
+thread_local! {
+    static SHAPE_CACHE: RefCell<HashMap<Rc<str>, Rc<Mixop>>> = RefCell::new(HashMap::new());
+}
+
 fn named_type(name: &str) -> Typ {
     typ::var(
         phrase! { node: name.to_owned(), span: Span::default() },
@@ -22,8 +35,19 @@ fn named_type(name: &str) -> Typ {
     )
 }
 
-fn shape(shape: &str) -> Mixop {
-    frontend::parse::parse_mixop(shape).expect("P4 grammar contains a valid SpecTec mixop")
+fn shape(shape_text: &str) -> Rc<Mixop> {
+    SHAPE_CACHE.with(|cache| {
+        if let Some(mixop) = cache.borrow().get(shape_text).cloned() {
+            return mixop;
+        }
+        let mixop = frontend::parse::parse_mixop(shape_text)
+            .expect("P4 grammar contains a valid SpecTec mixop");
+        let mixop = Rc::new(mixop);
+        cache
+            .borrow_mut()
+            .insert(Rc::from(shape_text), Rc::clone(&mixop));
+        mixop
+    })
 }
 
 pub(crate) fn case_value(
@@ -34,13 +58,12 @@ pub(crate) fn case_value(
     left: Location,
     right: Location,
 ) -> ValueRef {
-    let value_case = Mixop::fill(&shape(shape_text), values)
+    let mixop = shape(shape_text);
+    let value_case = Mixop::fill(mixop.as_ref(), values)
         .expect("P4 grammar mixop arity matches its semantic action");
-    make::case(
-        &named_type(type_name),
-        value_case,
-        context.span(left, right),
-    )
+    let typ = named_type(type_name);
+    let span = context.span(left, right);
+    make::case(&typ, value_case, span)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -99,19 +122,23 @@ pub(crate) fn unary_value(
     )
 }
 
-pub(crate) fn retag(value: &Value, type_name: &str) -> ValueRef {
-    make::retag(value, &named_type(type_name))
+pub(crate) fn retag(value: ValueRef, type_name: &str) -> ValueRef {
+    let typ = named_type(type_name);
+    make::retag(value, &typ)
 }
+
+// == Shape inspection
 
 pub(crate) fn matches<'value>(
     value: &'value Value,
     shape_text: &str,
 ) -> Option<Vec<&'value ValueRef>> {
-    let ValueKind::Case(value_case) = &value.kind else {
+    let ValueKind::Case(value_case) = &value.node else {
         return None;
     };
     let (actual, values) = value_case.split();
-    (actual == shape(shape_text)).then_some(values)
+    let expected = shape(shape_text);
+    (actual == *expected).then_some(values)
 }
 
 pub fn id_of_name(value: &Value) -> Option<String> {
@@ -138,8 +165,10 @@ pub fn id_of_name(value: &Value) -> Option<String> {
 }
 
 pub(crate) fn value_at(value: &Value, shape_text: &str, index: usize) -> Option<ValueRef> {
-    matches(value, shape_text).and_then(|values| values.get(index).map(|value| (*value).clone()))
+    matches(value, shape_text).and_then(|values| values.get(index).map(|value| Rc::clone(value)))
 }
+
+// == Parser context updates
 
 pub(crate) fn declare_type_value(context: &Context, value: &Value, has_params: bool) {
     let id = id_of_name(value).expect("P4 declaration name");

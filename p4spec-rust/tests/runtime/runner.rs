@@ -9,7 +9,7 @@ fn id(name: &str) -> p4spec_rust::lang::il::ast::Id {
 }
 
 #[test]
-fn null_interface_reports_configuration_failure() {
+fn test_null_interface_reports_configuration_failure() {
     let error = NullInterface
         .call_builtin(&mut |_| {}, &id("sum_int"), &[], &[])
         .unwrap_err();
@@ -18,7 +18,7 @@ fn null_interface_reports_configuration_failure() {
 }
 
 #[test]
-fn builtin_interface_exposes_checkpoint_and_clear() {
+fn test_builtin_interface_exposes_checkpoint_and_clear() {
     let mut interface = BuiltinInterface::new();
     let before = interface.checkpoint();
     interface

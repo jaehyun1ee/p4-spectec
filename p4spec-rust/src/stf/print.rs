@@ -1,10 +1,16 @@
 //! Stable STF diagnostic text output.
+//!
+//! Leaf values are normalized first, then statements are rendered in OCaml
+//! variant order and programs join them with newlines. For example, an action
+//! named `drop` with no arguments renders as `"drop"()`.
 
 use std::{fmt, fmt::Write};
 
 use crate::lang::traits::print::{Print, Printer};
 
 use super::ast::{Action, Condition, CounterKind, IdOrIndex, Match, MatchKind, Program, Statement};
+
+// == Lexical helpers
 
 pub fn convert_dollar_to_brackets(value: &str) -> String {
     let mut result = String::with_capacity(value.len());
@@ -65,6 +71,8 @@ fn counter(counter: CounterKind) -> &'static str {
         CounterKind::Packets => "packets",
     }
 }
+
+// == Statements and programs
 
 pub fn statement(statement: &Statement) -> String {
     match statement {
@@ -143,6 +151,8 @@ pub fn program(program: &Program) -> String {
         .collect::<Vec<_>>()
         .join("\n")
 }
+
+// == Language printing
 
 impl Print for Statement {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {

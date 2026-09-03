@@ -1,8 +1,14 @@
+//! Text builtins, preserving the function order of the OCaml implementation.
+//!
+//! Arguments are decoded from runtime values before the textual operation is
+//! performed, then the result is encoded and registered.  For example,
+//! `strip_prefix("prebody", "pre")` yields `"body"`.
+
 use num_bigint::BigInt;
 
 use crate::{
     lang::common::source::Span,
-    lang::{il::ast::Typ, xl::num},
+    lang::{il::ast::Typ, traits::print::Print},
     runtime::{
         types::typ as make_type,
         value::{ValueRef, get, make},
@@ -11,16 +17,19 @@ use crate::{
 
 use super::{BuiltinError, BuiltinResult, extract, return_value};
 
+// == Conversion between runtime values and text
+
 fn text_of_value<'a>(span: &Span, value: &'a ValueRef) -> Result<&'a str, BuiltinError> {
     get::text(value).map_err(|error| BuiltinError::new(span.clone(), error.to_string()))
 }
 
 fn numeric_text(span: &Span, value: &ValueRef) -> Result<String, BuiltinError> {
-    match get::num(value).map_err(|error| BuiltinError::new(span.clone(), error.to_string()))? {
-        num::Number::Nat(value) => Ok(value.to_string()),
-        num::Number::Int(value) => Ok(value.to_string()),
-    }
+    let number =
+        get::num(value).map_err(|error| BuiltinError::new(span.clone(), error.to_string()))?;
+    Ok(Print::to_string(number))
 }
+
+// == Built-in implementations
 
 // dec $text_to_int(text) : int
 
@@ -31,7 +40,8 @@ pub fn text_to_int(
     values: &[ValueRef],
 ) -> BuiltinResult {
     extract::zero(span, type_args)?;
-    let text = text_of_value(span, extract::one(span, values)?)?;
+    let value_text = extract::one(span, values)?;
+    let text = text_of_value(span, value_text)?;
     let (negative, unsigned) = match text.as_bytes().first() {
         Some(b'-') => (true, &text[1..]),
         Some(b'+') => (false, &text[1..]),
@@ -57,7 +67,8 @@ pub fn text_to_int(
     if negative {
         integer = -integer;
     }
-    return_value(add, make::int(integer, Span::default()))
+    let value = make::int(integer, Span::default());
+    return_value(add, value)
 }
 
 // dec $int_to_text(int) : text
@@ -69,8 +80,10 @@ pub fn int_to_text(
     values: &[ValueRef],
 ) -> BuiltinResult {
     extract::zero(span, type_args)?;
-    let text = numeric_text(span, extract::one(span, values)?)?;
-    return_value(add, make::text(text, Span::default()))
+    let value_int = extract::one(span, values)?;
+    let text = numeric_text(span, value_int)?;
+    let value = make::text(text, Span::default());
+    return_value(add, value)
 }
 
 // dec $split_text(text, text) : text*
@@ -97,7 +110,8 @@ pub fn split_text(
         .map(|part| make::text(part.to_owned(), Span::default()))
         .collect();
     let list_type = make_type::list(make_type::bool());
-    return_value(add, make::list(&list_type, parts, Span::default()))
+    let value = make::list(&list_type, parts, Span::default());
+    return_value(add, value)
 }
 
 // dec $strip_prefix(text, text) : text
@@ -115,7 +129,8 @@ pub fn strip_prefix(
     let text = text
         .strip_prefix(prefix)
         .ok_or_else(|| BuiltinError::new(span.clone(), "text does not start with prefix"))?;
-    return_value(add, make::text(text.to_owned(), Span::default()))
+    let value = make::text(text.to_owned(), Span::default());
+    return_value(add, value)
 }
 
 // dec $strip_suffix(text, text) : text
@@ -133,7 +148,8 @@ pub fn strip_suffix(
     let text = text
         .strip_suffix(suffix)
         .ok_or_else(|| BuiltinError::new(span.clone(), "text does not end with suffix"))?;
-    return_value(add, make::text(text.to_owned(), Span::default()))
+    let value = make::text(text.to_owned(), Span::default());
+    return_value(add, value)
 }
 
 // dec $strip_all_whitespace(text) : text
@@ -145,6 +161,8 @@ pub fn strip_all_whitespace(
     values: &[ValueRef],
 ) -> BuiltinResult {
     extract::zero(span, type_args)?;
-    let text = text_of_value(span, extract::one(span, values)?)?.replace(' ', "");
-    return_value(add, make::text(text, Span::default()))
+    let value_text = extract::one(span, values)?;
+    let text = text_of_value(span, value_text)?.replace(' ', "");
+    let value = make::text(text, Span::default());
+    return_value(add, value)
 }
