@@ -12,14 +12,6 @@ use super::ast::*;
 
 // `Mixop` uses the common implementation.
 
-// - Iterators
-
-impl Free for Iter {
-    fn free(&self) -> IdSet {
-        IdSet::new()
-    }
-}
-
 // - Variables
 
 impl Free for Var {
@@ -71,12 +63,6 @@ impl Free for TypCase {
 }
 
 // - Values
-
-impl Free for ValueNode {
-    fn free_into(&self, free: &mut IdSet) {
-        self.node.free_into(free);
-    }
-}
 
 impl Free for ValueKind {
     fn free_into(&self, free: &mut IdSet) {

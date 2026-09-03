@@ -3,11 +3,13 @@
 //! The dispatcher validates arity, then each family decodes its arguments and
 //! computes one result. For example, `$sum_int([2, 5])` returns the value `7`.
 
+use std::rc::Rc;
+
 use thiserror::Error;
 
 use crate::{
     lang::common::source::Span,
-    runtime::value::{ValueError, ValueRef},
+    runtime::value::{Value, ValueError},
 };
 
 pub mod call;
@@ -61,4 +63,4 @@ impl BuiltinError {
     }
 }
 
-pub type BuiltinResult = Result<ValueRef, BuiltinError>;
+pub type BuiltinResult = Result<Rc<Value>, BuiltinError>;

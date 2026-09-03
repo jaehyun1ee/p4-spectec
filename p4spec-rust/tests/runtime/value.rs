@@ -30,14 +30,13 @@ fn hash(value: &impl Hash) -> u64 {
 }
 
 #[test]
-fn test_semantic_equality_ignores_type_and_source_but_preserves_kind() {
-    let bool_a = make::bool(true, span("a.p4", 1));
-    let bool_b = make::new(ValueKind::Bool(true), typ::text().node, span("b.p4", 9));
-    let text = make::text("true".to_owned(), Span::default());
+fn test_value_equality_includes_type_and_source() {
+    let bool_value = make::bool(true, span("a.p4", 1));
+    let different_type = make::new(ValueKind::Bool(true), typ::text().node, span("a.p4", 1));
+    let different_source = make::bool(true, span("b.p4", 9));
 
-    assert_eq!(bool_a, bool_b);
-    assert_eq!(hash(&bool_a), hash(&bool_b));
-    assert_ne!(bool_a, text);
+    assert_ne!(bool_value, different_type);
+    assert_ne!(bool_value, different_source);
 }
 
 #[test]
@@ -81,7 +80,7 @@ fn test_constructors_preserve_runtime_type_and_span() {
     let value = make::num(Number::Nat(Natural::from(7_u64)), value_span.clone());
 
     assert_eq!(value.span, value_span);
-    assert_eq!(value.note.typ, typ::nat().node);
+    assert_eq!(value.note, typ::nat().node);
     assert_eq!(get::num(&value), Ok(&Number::Nat(Natural::from(7_u64))));
 }
 
@@ -115,7 +114,7 @@ fn test_cloned_values_share_immutable_storage() {
 
 #[test]
 fn test_runtime_values_are_il_ast_values() {
-    let value: p4spec_rust::lang::il::ast::Value = make::bool(true, Span::default());
+    let value: Rc<p4spec_rust::lang::il::ast::Value> = make::bool(true, Span::default());
 
     assert_eq!(value.to_string(), "true");
     assert!(ValueCodec::encode(&value).is_ok());

@@ -5,6 +5,8 @@
 //! its fresh identifier, while a pure builtin such as `$sum_nat` returns
 //! `false` with its value.
 
+use std::rc::Rc;
+
 use thiserror::Error;
 
 use crate::{
@@ -13,7 +15,7 @@ use crate::{
         common::source::Span,
         il::ast::{Id, Typ},
     },
-    runtime::value::ValueRef,
+    runtime::value::Value,
 };
 
 // == Interface errors
@@ -49,8 +51,8 @@ pub trait Interface {
         &mut self,
         id: &Id,
         targs: &[Typ],
-        values: &[ValueRef],
-    ) -> Result<(ValueRef, bool), InterfaceError>;
+        values: &[Rc<Value>],
+    ) -> Result<(Rc<Value>, bool), InterfaceError>;
 
     fn clear(&mut self);
 }
@@ -73,8 +75,8 @@ impl Interface for BuiltinInterface {
         &mut self,
         id: &Id,
         targs: &[Typ],
-        values: &[ValueRef],
-    ) -> Result<(ValueRef, bool), InterfaceError> {
+        values: &[Rc<Value>],
+    ) -> Result<(Rc<Value>, bool), InterfaceError> {
         self.builtins.invoke(id, targs, values).map_err(Into::into)
     }
 
@@ -90,8 +92,8 @@ impl Interface for NullInterface {
         &mut self,
         id: &Id,
         _targs: &[Typ],
-        _values: &[ValueRef],
-    ) -> Result<(ValueRef, bool), InterfaceError> {
+        _values: &[Rc<Value>],
+    ) -> Result<(Rc<Value>, bool), InterfaceError> {
         Err(InterfaceError {
             kind: InterfaceErrorKind::NotConfigured,
             span: id.span.clone(),

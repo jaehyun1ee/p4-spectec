@@ -7,22 +7,22 @@
 
 use std::{collections::HashMap, rc::Rc};
 
-use crate::runtime::value::ValueRef;
+use crate::runtime::value::Value;
 
 // == Value cache
 
-pub type ValueCache<V> = HashMap<ValueRef, V>;
+pub type ValueCache<V> = HashMap<Rc<Value>, V>;
 
 // == Call cache
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct CallKey {
     pub id: Rc<str>,
-    pub values: Rc<[ValueRef]>,
+    pub values: Rc<[Rc<Value>]>,
 }
 
 impl CallKey {
-    pub fn new(id: impl Into<Rc<str>>, values: impl Into<Rc<[ValueRef]>>) -> Self {
+    pub fn new(id: impl Into<Rc<str>>, values: impl Into<Rc<[Rc<Value>]>>) -> Self {
         Self {
             id: id.into(),
             values: values.into(),

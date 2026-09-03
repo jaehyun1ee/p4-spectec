@@ -4,6 +4,8 @@
 //! performed, then the encoded result is returned. For example,
 //! `strip_prefix("prebody", "pre")` yields `"body"`.
 
+use std::rc::Rc;
+
 use num_bigint::BigInt;
 
 use crate::{
@@ -11,7 +13,7 @@ use crate::{
     lang::{il::ast::Typ, traits::print::Print},
     runtime::{
         types::typ,
-        value::{ValueRef, get, make},
+        value::{Value, get, make},
     },
 };
 
@@ -19,11 +21,11 @@ use super::{BuiltinError, BuiltinResult, extract};
 
 // == Conversion between runtime values and text
 
-fn text_of_value<'a>(span: &Span, value: &'a ValueRef) -> Result<&'a str, BuiltinError> {
+fn text_of_value<'a>(span: &Span, value: &'a Rc<Value>) -> Result<&'a str, BuiltinError> {
     get::text(value).map_err(|error| BuiltinError::new(span.clone(), error.to_string()))
 }
 
-fn numeric_text(span: &Span, value: &ValueRef) -> Result<String, BuiltinError> {
+fn numeric_text(span: &Span, value: &Rc<Value>) -> Result<String, BuiltinError> {
     let number =
         get::num(value).map_err(|error| BuiltinError::new(span.clone(), error.to_string()))?;
     Ok(Print::to_string(number))
@@ -33,7 +35,7 @@ fn numeric_text(span: &Span, value: &ValueRef) -> Result<String, BuiltinError> {
 
 // dec $text_to_int(text) : int
 
-pub fn text_to_int(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
+pub fn text_to_int(span: &Span, targs: &[Typ], values: &[Rc<Value>]) -> BuiltinResult {
     extract::zero(span, targs)?;
     let value_text = extract::one(span, values)?;
     let text = text_of_value(span, value_text)?;
@@ -68,7 +70,7 @@ pub fn text_to_int(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinRe
 
 // dec $int_to_text(int) : text
 
-pub fn int_to_text(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
+pub fn int_to_text(span: &Span, targs: &[Typ], values: &[Rc<Value>]) -> BuiltinResult {
     extract::zero(span, targs)?;
     let value_int = extract::one(span, values)?;
     let text = numeric_text(span, value_int)?;
@@ -78,7 +80,7 @@ pub fn int_to_text(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinRe
 
 // dec $split_text(text, text) : text*
 
-pub fn split_text(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
+pub fn split_text(span: &Span, targs: &[Typ], values: &[Rc<Value>]) -> BuiltinResult {
     extract::zero(span, targs)?;
     let (value_text, value_separator) = extract::two(span, values)?;
     let text = text_of_value(span, value_text)?;
@@ -101,7 +103,7 @@ pub fn split_text(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinRes
 
 // dec $strip_prefix(text, text) : text
 
-pub fn strip_prefix(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
+pub fn strip_prefix(span: &Span, targs: &[Typ], values: &[Rc<Value>]) -> BuiltinResult {
     extract::zero(span, targs)?;
     let (value_text, value_prefix) = extract::two(span, values)?;
     let text = text_of_value(span, value_text)?;
@@ -115,7 +117,7 @@ pub fn strip_prefix(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinR
 
 // dec $strip_suffix(text, text) : text
 
-pub fn strip_suffix(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
+pub fn strip_suffix(span: &Span, targs: &[Typ], values: &[Rc<Value>]) -> BuiltinResult {
     extract::zero(span, targs)?;
     let (value_text, value_suffix) = extract::two(span, values)?;
     let text = text_of_value(span, value_text)?;
@@ -129,7 +131,7 @@ pub fn strip_suffix(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinR
 
 // dec $strip_all_whitespace(text) : text
 
-pub fn strip_all_whitespace(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
+pub fn strip_all_whitespace(span: &Span, targs: &[Typ], values: &[Rc<Value>]) -> BuiltinResult {
     extract::zero(span, targs)?;
     let value_text = extract::one(span, values)?;
     let text = text_of_value(span, value_text)?.replace(' ', "");

@@ -1,12 +1,14 @@
 //! Integer aggregation builtins, ordered to match `ints.ml`.
 
+use std::rc::Rc;
+
 use num_bigint::BigInt;
 use num_traits::Zero;
 
 use crate::{
     lang::common::source::Span,
     lang::{il::ast::Typ, xl::num},
-    runtime::value::{Value, ValueRef, get, make},
+    runtime::value::{Value, get, make},
 };
 
 use super::{BuiltinError, BuiltinResult, extract};
@@ -24,7 +26,7 @@ fn value_of_bigint(value: BigInt) -> BuiltinResult {
     Ok(value)
 }
 
-fn input_values<'a>(span: &Span, values: &'a [ValueRef]) -> Result<&'a [ValueRef], BuiltinError> {
+fn input_values<'a>(span: &Span, values: &'a [Rc<Value>]) -> Result<&'a [Rc<Value>], BuiltinError> {
     let value = extract::one(span, values)?;
     get::list(value).map_err(|error| BuiltinError::new(span.clone(), error.to_string()))
 }
@@ -33,7 +35,7 @@ fn input_values<'a>(span: &Span, values: &'a [ValueRef]) -> Result<&'a [ValueRef
 
 // dec $sum_int(nat*) : nat
 
-pub fn sum_int(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
+pub fn sum_int(span: &Span, targs: &[Typ], values: &[Rc<Value>]) -> BuiltinResult {
     extract::zero(span, targs)?;
     let mut sum = BigInt::zero();
     for value in input_values(span, values)? {
@@ -44,7 +46,7 @@ pub fn sum_int(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult
 
 // dec $max_int(int*) : int
 
-pub fn max_int(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
+pub fn max_int(span: &Span, targs: &[Typ], values: &[Rc<Value>]) -> BuiltinResult {
     extract::zero(span, targs)?;
     let values = input_values(span, values)?;
     let mut maximum = match values.split_first() {
@@ -63,7 +65,7 @@ pub fn max_int(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult
 
 // dec $min_int(int*) : int
 
-pub fn min_int(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
+pub fn min_int(span: &Span, targs: &[Typ], values: &[Rc<Value>]) -> BuiltinResult {
     extract::zero(span, targs)?;
     let values = input_values(span, values)?;
     let mut minimum = match values.split_first() {

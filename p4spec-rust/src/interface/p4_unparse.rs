@@ -5,7 +5,7 @@
 //! to its mixfix shape. For example, a case carrying an infix `+` hint renders
 //! its two arguments as `left + right`.
 
-use std::collections::HashMap;
+use std::{collections::HashMap, rc::Rc};
 
 use thiserror::Error;
 
@@ -19,7 +19,7 @@ use crate::{
         traits::print::Print,
         xl::num::Number,
     },
-    runtime::value::{Value, ValueKind, ValueRef},
+    runtime::value::{Value, ValueKind},
 };
 
 type CaseId = (String, Mixop);
@@ -94,7 +94,7 @@ impl P4Unparser {
     fn render_hint(
         &self,
         hint: &AlterationHint,
-        values: &[&ValueRef],
+        values: &[&Rc<Value>],
     ) -> Result<String, P4UnparseError> {
         match alter::alternate(hint, values, &ValueRenderer(self)) {
             Ok(rendered) => rendered,
@@ -117,7 +117,7 @@ impl P4Unparser {
             ValueKind::Num(Number::Int(value)) => Ok(value.to_string()),
             ValueKind::Text(value) => Ok(escape_text(value)),
             ValueKind::Struct(_) => Err(P4UnparseError::UnsupportedValue("Struct")),
-            ValueKind::Case(value_case) => self.render_case(&value.note.typ, value_case),
+            ValueKind::Case(value_case) => self.render_case(&value.note, value_case),
             ValueKind::Tuple(values) => {
                 let rendered = self.render_values(values, ", ")?;
                 Ok(format!("({rendered})"))
@@ -132,7 +132,7 @@ impl P4Unparser {
 
     fn render_values(
         &self,
-        values: &[ValueRef],
+        values: &[Rc<Value>],
         separator: &str,
     ) -> Result<String, P4UnparseError> {
         values
@@ -145,7 +145,7 @@ impl P4Unparser {
     fn render_case(
         &self,
         typ: &TypKind,
-        value_case: &Mixfix<ValueRef>,
+        value_case: &Mixfix<Rc<Value>>,
     ) -> Result<String, P4UnparseError> {
         let (mixop, values) = value_case.split();
         if let TypKind::Var(type_id, _) = typ
@@ -160,7 +160,7 @@ impl P4Unparser {
 
     fn render_mixfix(
         &self,
-        mixfix: &Mixfix<ValueRef>,
+        mixfix: &Mixfix<Rc<Value>>,
         rendered: &mut Vec<String>,
     ) -> Result<(), P4UnparseError> {
         match mixfix {
@@ -228,7 +228,7 @@ struct ValueRenderer<'a>(&'a P4Unparser);
 
 // == Print-hint rendering
 
-impl Renderer<&ValueRef> for ValueRenderer<'_> {
+impl Renderer<&Rc<Value>> for ValueRenderer<'_> {
     type Output = Result<String, P4UnparseError>;
 
     fn empty(&self) -> Self::Output {
@@ -262,7 +262,7 @@ impl Renderer<&ValueRef> for ValueRenderer<'_> {
         Ok(Print::to_string(exp))
     }
 
-    fn item(&self, item: &&ValueRef) -> Self::Output {
+    fn item(&self, item: &&Rc<Value>) -> Self::Output {
         self.0.render(item)
     }
 }

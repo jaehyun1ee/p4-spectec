@@ -16,7 +16,7 @@ use crate::{
     },
     runtime::{
         types::typ,
-        value::{Value, ValueRef, get, make},
+        value::{Value, get, make},
     },
 };
 
@@ -24,7 +24,7 @@ use super::{BuiltinError, BuiltinResult, extract};
 
 // == Value map
 
-type ValueMap = Vec<ValueRef>;
+type ValueMap = Vec<Rc<Value>>;
 
 fn pair_mixop() -> Mixop {
     let colon = crate::phrase!(node: Atom::Operator(":".to_owned()), span: Span::default());
@@ -37,7 +37,7 @@ fn map_mixop() -> Mixop {
     Mixfix::Brack(left, Box::new(Mixfix::Arg(())), right)
 }
 
-fn map_find_opt(key: &Value, map: &[ValueRef]) -> Option<ValueRef> {
+fn map_find_opt(key: &Value, map: &[Rc<Value>]) -> Option<Rc<Value>> {
     let pair_mixop = pair_mixop();
     for pair in map {
         let Ok(value_case) = get::case(pair) else {
@@ -59,9 +59,9 @@ fn map_find_opt(key: &Value, map: &[ValueRef]) -> Option<ValueRef> {
 fn make_pair(
     typ_key: &Typ,
     typ_value: &Typ,
-    value_key: ValueRef,
-    value_value: ValueRef,
-) -> ValueRef {
+    value_key: Rc<Value>,
+    value_value: Rc<Value>,
+) -> Rc<Value> {
     let pair_id = crate::phrase!(node: "pair".to_owned(), span: Span::default());
     let typ = typ::var(pair_id, vec![typ_key.clone(), typ_value.clone()]);
     let pair_mixop = pair_mixop();
@@ -73,9 +73,9 @@ fn make_pair(
 fn map_update(
     typ_key: &Typ,
     typ_value: &Typ,
-    key: &ValueRef,
-    value: &ValueRef,
-    map: &[ValueRef],
+    key: &Rc<Value>,
+    value: &Rc<Value>,
+    map: &[Rc<Value>],
 ) -> ValueMap {
     let mut found = false;
     let mut updated = Vec::with_capacity(map.len() + 1);
@@ -123,7 +123,7 @@ fn map_of_value(span: &Span, value: &Value) -> Result<ValueMap, BuiltinError> {
     let args = value_case.args();
     let value_pairs = extract::one(span, &args)?;
     get::list(value_pairs)
-        .map(<[ValueRef]>::to_vec)
+        .map(<[Rc<Value>]>::to_vec)
         .map_err(|_| BuiltinError::new(span.clone(), "expected a map"))
 }
 
@@ -145,7 +145,7 @@ fn value_of_map(typ_key: &Typ, typ_value: &Typ, map: ValueMap) -> BuiltinResult 
 
 // dec $find_map<K, V>(map<K, V>, K) : V?
 
-pub fn find_map(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
+pub fn find_map(span: &Span, targs: &[Typ], values: &[Rc<Value>]) -> BuiltinResult {
     let (_typ_key, typ_value) = extract::two(span, targs)?;
     let (value_map, value_key) = extract::two(span, values)?;
     let map = map_of_value(span, value_map)?;
@@ -157,7 +157,7 @@ pub fn find_map(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResul
 
 // dec $find_maps<K, V>(map<K, V>*, K) : V?
 
-pub fn find_maps(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
+pub fn find_maps(span: &Span, targs: &[Typ], values: &[Rc<Value>]) -> BuiltinResult {
     let (_typ_key, typ_value) = extract::two(span, targs)?;
     let (value_maps, value_key) = extract::two(span, values)?;
     let values = get::list(value_maps)
@@ -176,7 +176,7 @@ pub fn find_maps(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResu
 
 // dec $add_map<K, V>(map<K, V>, K, V) : map<K, V>
 
-pub fn add_map(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
+pub fn add_map(span: &Span, targs: &[Typ], values: &[Rc<Value>]) -> BuiltinResult {
     let (typ_key, typ_value) = extract::two(span, targs)?;
     let (value_map, value_key, value_value) = extract::three(span, values)?;
     let map = map_of_value(span, value_map)?;
@@ -186,7 +186,7 @@ pub fn add_map(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult
 
 // dec $adds_map<K, V>(map<K, V>, K*, V*) : map<K, V>
 
-pub fn adds_map(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
+pub fn adds_map(span: &Span, targs: &[Typ], values: &[Rc<Value>]) -> BuiltinResult {
     let (typ_key, typ_value) = extract::two(span, targs)?;
     let (value_map, value_keys, value_values) = extract::three(span, values)?;
     let mut map = map_of_value(span, value_map)?;
@@ -208,7 +208,7 @@ pub fn adds_map(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResul
 
 // dec $update_map<K, V>(map<K, V>, K, V) : map<K, V>
 
-pub fn update_map(span: &Span, targs: &[Typ], values: &[ValueRef]) -> BuiltinResult {
+pub fn update_map(span: &Span, targs: &[Typ], values: &[Rc<Value>]) -> BuiltinResult {
     let (typ_key, typ_value) = extract::two(span, targs)?;
     let (value_map, value_key, value_value) = extract::three(span, values)?;
     let map = map_of_value(span, value_map)?;

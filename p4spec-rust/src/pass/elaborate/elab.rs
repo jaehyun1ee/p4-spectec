@@ -53,17 +53,6 @@ fn distinct_tparams(tparams: &[el::TParam], span: &Span) -> Result<(), ElabError
     }
 }
 
-// == Iterations
-
-// - Iteration elaboration
-
-fn elab_iter(iter: el::Iter) -> il::Iter {
-    match iter {
-        el::Iter::Opt => il::Iter::Opt,
-        el::Iter::List => il::Iter::List,
-    }
-}
-
 // == Types
 
 // - Type destructuring
@@ -166,7 +155,7 @@ fn elab_plain_typ(ctx: &Context, plain_typ: &el::PlainTyp) -> Result<il::Typ, El
         }
         el::PlainTypKind::Iter(plain_typ, iter) => {
             let typ_il = elab_plain_typ(ctx, plain_typ)?;
-            il::TypKind::Iter(Box::new(typ_il), elab_iter(*iter))
+            il::TypKind::Iter(Box::new(typ_il), *iter)
         }
     };
     let typ_il = phrase!(node: typ_il_kind, span: plain_typ.span.clone());
@@ -1005,7 +994,7 @@ fn infer_iter_exp(
 ) -> Attempt<il::Exp> {
     let exp_il = infer_exp(ctx, exp)?;
     let typ_il = phrase!(node: exp_il.note.as_ref().clone(), span: exp_il.span.clone());
-    let iter_il = elab_iter(iter);
+    let iter_il = iter;
     let exp_il = note_phrase! {
         node: il::ExpKind::Iter(Box::new(exp_il), (iter_il, vec![])),
         note: il::TypKind::Iter(Box::new(typ_il), iter_il),
@@ -1366,7 +1355,7 @@ fn elab_iter_exp(
     iter: el::Iter,
 ) -> Attempt<il::ExpKind> {
     let (typ_il_base, iter_il_expect) = as_iter_typ(ctx, typ_il_expect)?;
-    let iter_il = elab_iter(iter);
+    let iter_il = iter;
     if iter_il != iter_il_expect {
         return fail_attempt(
             ElabErrorKind::InvalidIteration,
@@ -2002,7 +1991,7 @@ fn elab_iter_prem(ctx: &mut Context, prem: &el::IterPrem) -> Attempt<il::PremKin
         );
     };
     let prem_iter_il = il::PremIter {
-        iter: elab_iter(prem.iter),
+        iter: prem.iter,
         vars_bound: vec![],
         vars_bind: vec![],
     };

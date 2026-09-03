@@ -1,5 +1,5 @@
 /// OCaml-compatible JSON codecs for IL data
-use std::{cell::Cell, collections::HashSet};
+use std::{cell::Cell, collections::HashSet, rc::Rc};
 
 use serde_json::{Map, Number, Value, json};
 use thiserror::Error;
@@ -41,7 +41,7 @@ pub struct ValueCodec;
 ///
 /// Use [`ValueEnvelopeCodec`] for lossless OCaml `Yojson.Safe` transport
 impl ValueCodec {
-    pub fn decode(value: &Value) -> Result<ast::Value, DecodeError> {
+    pub fn decode(value: &Value) -> Result<Rc<ast::Value>, DecodeError> {
         on_codec_stack(|| decode_value(value))
     }
 
@@ -54,7 +54,7 @@ impl ValueCodec {
 pub struct ValueEnvelopeCodec;
 
 impl ValueEnvelopeCodec {
-    pub fn decode(input: &[u8]) -> Result<ast::Value, ValueEnvelopeDecodeError> {
+    pub fn decode(input: &[u8]) -> Result<Rc<ast::Value>, ValueEnvelopeDecodeError> {
         on_codec_stack(|| {
             let envelope = yojson::Value::from_slice(input)?;
             let fields = yojson_assoc(&envelope)?;
@@ -575,7 +575,7 @@ fn decode_yojson_mixfix(value: &yojson::Value) -> Result<ast::ValueCase, DecodeE
     }
 }
 
-fn decode_yojson_value(value: &yojson::Value) -> Result<ast::Value, DecodeError> {
+fn decode_yojson_value(value: &yojson::Value) -> Result<Rc<ast::Value>, DecodeError> {
     let fields = yojson_assoc(value)?;
     let node = decode_yojson_value_kind(yojson_field(fields, "it")?)?;
     let typ = decode_vnote(&standard_json(yojson_field(fields, "note")?)?)?;
@@ -627,7 +627,7 @@ fn decode_yojson_value_kind(value: &yojson::Value) -> Result<ValueKind, DecodeEr
     }
 }
 
-fn decode_value(value: &Value) -> Result<ast::Value, DecodeError> {
+fn decode_value(value: &Value) -> Result<Rc<ast::Value>, DecodeError> {
     let object = object(value)?;
     let node = decode_value_kind(field(object, "it")?)?;
     let typ = decode_vnote(field(object, "note")?)?;
@@ -704,7 +704,7 @@ impl ValueEncoder {
             ("it".to_owned(), kind),
             (
                 "note".to_owned(),
-                yojson::from_serde_json(&self.encode_vnote(&value.note.typ)),
+                yojson::from_serde_json(&self.encode_vnote(&value.note)),
             ),
             (
                 "at".to_owned(),
@@ -786,7 +786,7 @@ impl ValueEncoder {
         let kind = self.encode_value_kind(&value.node)?;
         Ok(json!({
             "it": kind,
-            "note": self.encode_vnote(&value.note.typ),
+            "note": self.encode_vnote(&value.note),
             "at": source::encode_region(&value.span),
         }))
     }

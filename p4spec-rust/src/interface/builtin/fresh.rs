@@ -1,9 +1,11 @@
 //! Stateful fresh-type-id builtin.
 
+use std::rc::Rc;
+
 use crate::{
     lang::common::source::Span,
     lang::il::ast::Typ,
-    runtime::value::{ValueRef, make},
+    runtime::value::{Value, make},
 };
 
 use super::{BuiltinResult, extract};
@@ -14,7 +16,7 @@ pub fn fresh_type_id(
     counter: &mut u64,
     span: &Span,
     targs: &[Typ],
-    values: &[ValueRef],
+    values: &[Rc<Value>],
 ) -> BuiltinResult {
     extract::zero(span, targs)?;
     extract::zero(span, values)?;

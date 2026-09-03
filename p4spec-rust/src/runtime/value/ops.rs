@@ -1,13 +1,12 @@
-//! Construction, semantic comparison, hashing, and projection of IL values.
+//! Construction, comparison, hashing, and projection of IL values.
 //!
-//! Constructors allocate the immutable value node defined in the IL AST and
-//! cache its semantic hash. Comparisons ignore types and source spans while
-//! recursing through payloads, so equal `true` values from two files are the
-//! same cache key.
+//! `ValueKind` supplies a total ordering and hash for every payload, including
+//! external floats. Values use phrase comparison, which also includes their
+//! runtime type and source span.
 
 use std::{
     cmp::Ordering,
-    hash::{DefaultHasher, Hash, Hasher},
+    hash::{Hash, Hasher},
     rc::Rc,
 };
 
@@ -16,17 +15,13 @@ use thiserror::Error;
 use crate::{
     lang::{
         common::source::Span,
-        il::ast::{
-            Id, TParam, Typ, TypKind, ValueCase, ValueField, ValueKind, ValueNode, ValueNote,
-        },
+        data::value::Value,
+        il::ast::{Id, TParam, Typ, TypKind, ValueCase, ValueField, ValueKind},
         xl::num::{self, Number},
     },
     runtime::types::typ,
     yojson::ExternalData,
 };
-
-type ValueRef = crate::lang::il::ast::Value;
-type Value = ValueNode;
 
 // == Value kinds
 
@@ -173,12 +168,12 @@ fn compare_external(value_l: &ExternalData, value_r: &ExternalData) -> Ordering 
     }
 }
 
-impl Ord for ValueNode {
+impl Ord for ValueKind {
     fn cmp(&self, other: &Self) -> Ordering {
         if std::ptr::eq(self, other) {
             return Ordering::Equal;
         }
-        match (&self.node, &other.node) {
+        match (self, other) {
             (ValueKind::Bool(value_l), ValueKind::Bool(value_r)) => value_l.cmp(value_r),
             (ValueKind::Num(value_l), ValueKind::Num(value_r)) => num::compare(value_l, value_r),
             (ValueKind::Text(value_l), ValueKind::Text(value_r)) => value_l.cmp(value_r),
@@ -193,26 +188,26 @@ impl Ord for ValueNode {
             (ValueKind::Extern(value_l), ValueKind::Extern(value_r)) => {
                 compare_external(value_l, value_r)
             }
-            _ => kind_rank(&self.node).cmp(&kind_rank(&other.node)),
+            _ => kind_rank(self).cmp(&kind_rank(other)),
         }
     }
 }
 
-impl PartialOrd for ValueNode {
+impl PartialOrd for ValueKind {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl PartialEq for ValueNode {
+impl PartialEq for ValueKind {
     fn eq(&self, other: &Self) -> bool {
-        self.note.semantic_hash == other.note.semantic_hash && self.cmp(other) == Ordering::Equal
+        self.cmp(other) == Ordering::Equal
     }
 }
 
-impl Eq for ValueNode {}
+impl Eq for ValueKind {}
 
-// == Semantic hashing
+// == Hashing
 
 fn hash_external<H: Hasher>(value: &ExternalData, state: &mut H) {
     external_rank(value).hash(state);
@@ -275,15 +270,9 @@ fn hash_kind<H: Hasher>(kind: &ValueKind, state: &mut H) {
     }
 }
 
-fn semantic_hash(kind: &ValueKind) -> u64 {
-    let mut state = DefaultHasher::new();
-    hash_kind(kind, &mut state);
-    state.finish()
-}
-
-impl Hash for ValueNode {
+impl Hash for ValueKind {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        state.write_u64(self.note.semantic_hash);
+        hash_kind(self, state);
     }
 }
 
@@ -305,73 +294,68 @@ pub enum ValueError {
 pub mod make {
     use super::*;
 
-    pub fn new(kind: ValueKind, typ: TypKind, span: Span) -> ValueRef {
-        let semantic_hash = semantic_hash(&kind);
-        Rc::new(ValueNode {
-            node: kind,
-            note: ValueNote { typ, semantic_hash },
-            span,
-        })
+    pub fn new(kind: ValueKind, typ: TypKind, span: Span) -> Rc<Value> {
+        Rc::new(crate::note_phrase!(node: kind, note: typ, span: span))
     }
 
-    pub fn bool(value: bool, span: Span) -> ValueRef {
+    pub fn bool(value: bool, span: Span) -> Rc<Value> {
         let kind = ValueKind::Bool(value);
         let typ = typ::bool().node;
         new(kind, typ, span)
     }
 
-    pub fn nat(value: num::Natural, span: Span) -> ValueRef {
+    pub fn nat(value: num::Natural, span: Span) -> Rc<Value> {
         let number = Number::Nat(value);
         let kind = ValueKind::Num(number);
         let typ = typ::nat().node;
         new(kind, typ, span)
     }
 
-    pub fn int(value: num_bigint::BigInt, span: Span) -> ValueRef {
+    pub fn int(value: num_bigint::BigInt, span: Span) -> Rc<Value> {
         let number = Number::Int(value);
         let kind = ValueKind::Num(number);
         let typ = typ::int().node;
         new(kind, typ, span)
     }
 
-    pub fn num(value: Number, span: Span) -> ValueRef {
+    pub fn num(value: Number, span: Span) -> Rc<Value> {
         match value {
             Number::Nat(value) => nat(value, span),
             Number::Int(value) => int(value, span),
         }
     }
 
-    pub fn text(value: String, span: Span) -> ValueRef {
+    pub fn text(value: String, span: Span) -> Rc<Value> {
         let kind = ValueKind::Text(value);
         let typ = typ::text().node;
         new(kind, typ, span)
     }
 
-    pub fn structure(typ: &Typ, fields: Vec<ValueField>, span: Span) -> ValueRef {
+    pub fn structure(typ: &Typ, fields: Vec<ValueField>, span: Span) -> Rc<Value> {
         let kind = ValueKind::Struct(fields);
         let typ = typ.node.clone();
         new(kind, typ, span)
     }
 
-    pub fn case(typ: &Typ, value_case: ValueCase, span: Span) -> ValueRef {
+    pub fn case(typ: &Typ, value_case: ValueCase, span: Span) -> Rc<Value> {
         let kind = ValueKind::Case(value_case);
         let typ = typ.node.clone();
         new(kind, typ, span)
     }
 
-    pub fn tuple(typ: &Typ, values: Vec<ValueRef>, span: Span) -> ValueRef {
+    pub fn tuple(typ: &Typ, values: Vec<Rc<Value>>, span: Span) -> Rc<Value> {
         let kind = ValueKind::Tuple(values);
         let typ = typ.node.clone();
         new(kind, typ, span)
     }
 
-    pub fn opt(typ: &Typ, value: Option<ValueRef>, span: Span) -> ValueRef {
+    pub fn opt(typ: &Typ, value: Option<Rc<Value>>, span: Span) -> Rc<Value> {
         let kind = ValueKind::Opt(value);
         let typ = typ.node.clone();
         new(kind, typ, span)
     }
 
-    pub fn list(typ: &Typ, values: Vec<ValueRef>, span: Span) -> ValueRef {
+    pub fn list(typ: &Typ, values: Vec<Rc<Value>>, span: Span) -> Rc<Value> {
         let kind = ValueKind::List(values);
         let typ = typ.node.clone();
         new(kind, typ, span)
@@ -383,22 +367,22 @@ pub mod make {
         typs_params: Vec<Typ>,
         typ_ret: Typ,
         span: Span,
-    ) -> ValueRef {
+    ) -> Rc<Value> {
         let typ = typ::func(tparams, typs_params, typ_ret).node;
         let kind = ValueKind::Func(id);
         new(kind, typ, span)
     }
 
-    pub fn external(typ: &Typ, value: ExternalData, span: Span) -> ValueRef {
+    pub fn external(typ: &Typ, value: ExternalData, span: Span) -> Rc<Value> {
         let kind = ValueKind::Extern(value);
         let typ = typ.node.clone();
         new(kind, typ, span)
     }
 
-    pub fn retag(value: ValueRef, typ: &Typ) -> ValueRef {
+    pub fn retag(value: Rc<Value>, typ: &Typ) -> Rc<Value> {
         match Rc::try_unwrap(value) {
             Ok(mut value) => {
-                value.note.typ = typ.node.clone();
+                value.note = typ.node.clone();
                 Rc::new(value)
             }
             Err(value) => new(value.node.clone(), typ.node.clone(), value.span.clone()),
@@ -453,21 +437,21 @@ pub mod get {
         }
     }
 
-    pub fn tuple(value: &Value) -> Result<&[ValueRef], ValueError> {
+    pub fn tuple(value: &Value) -> Result<&[Rc<Value>], ValueError> {
         match &value.node {
             ValueKind::Tuple(values) => Ok(values),
             _ => Err(unexpected(value, ValueTag::Tuple)),
         }
     }
 
-    pub fn opt(value: &Value) -> Result<Option<&ValueRef>, ValueError> {
+    pub fn opt(value: &Value) -> Result<Option<&Rc<Value>>, ValueError> {
         match &value.node {
             ValueKind::Opt(value) => Ok(value.as_ref()),
             _ => Err(unexpected(value, ValueTag::Opt)),
         }
     }
 
-    pub fn list(value: &Value) -> Result<&[ValueRef], ValueError> {
+    pub fn list(value: &Value) -> Result<&[Rc<Value>], ValueError> {
         match &value.node {
             ValueKind::List(values) => Ok(values),
             _ => Err(unexpected(value, ValueTag::List)),
@@ -488,14 +472,14 @@ pub mod get {
         }
     }
 
-    pub fn nth(values: &[ValueRef], index: usize) -> Result<&ValueRef, ValueError> {
+    pub fn nth(values: &[Rc<Value>], index: usize) -> Result<&Rc<Value>, ValueError> {
         values.get(index).ok_or(ValueError::IndexOutOfBounds {
             index,
             len: values.len(),
         })
     }
 
-    pub fn one(values: &[ValueRef]) -> Result<&ValueRef, ValueError> {
+    pub fn one(values: &[Rc<Value>]) -> Result<&Rc<Value>, ValueError> {
         match values {
             [value] => Ok(value),
             _ => Err(ValueError::ExpectedCount {
@@ -505,7 +489,7 @@ pub mod get {
         }
     }
 
-    pub fn two(values: &[ValueRef]) -> Result<(&ValueRef, &ValueRef), ValueError> {
+    pub fn two(values: &[Rc<Value>]) -> Result<(&Rc<Value>, &Rc<Value>), ValueError> {
         match values {
             [value_a, value_b] => Ok((value_a, value_b)),
             _ => Err(ValueError::ExpectedCount {
@@ -515,7 +499,7 @@ pub mod get {
         }
     }
 
-    pub fn three(values: &[ValueRef]) -> Result<(&ValueRef, &ValueRef, &ValueRef), ValueError> {
+    pub fn three(values: &[Rc<Value>]) -> Result<(&Rc<Value>, &Rc<Value>, &Rc<Value>), ValueError> {
         match values {
             [value_a, value_b, value_c] => Ok((value_a, value_b, value_c)),
             _ => Err(ValueError::ExpectedCount {

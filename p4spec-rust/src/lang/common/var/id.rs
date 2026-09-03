@@ -2,7 +2,7 @@
 
 use crate::lang::traits::print::{Print, Printer};
 
-use super::source::Phrase;
+use crate::lang::common::source::Phrase;
 
 /// Identifier text
 pub type IdKind = String;

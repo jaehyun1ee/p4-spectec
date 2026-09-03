@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use num_bigint::BigInt;
 use p4spec_rust::{
     interface::builtin::{BuiltinErrorKind, call::Builtins},
@@ -5,7 +7,7 @@ use p4spec_rust::{
     phrase,
     runtime::{
         types::typ,
-        value::{ValueRef, get, make},
+        value::{Value, get, make},
     },
 };
 
@@ -16,8 +18,8 @@ fn id(name: &str) -> p4spec_rust::lang::il::ast::Id {
 fn invoke(
     builtins: &mut Builtins,
     name: &str,
-    values: &[ValueRef],
-) -> Result<(ValueRef, bool), p4spec_rust::interface::builtin::BuiltinError> {
+    values: &[Rc<Value>],
+) -> Result<(Rc<Value>, bool), p4spec_rust::interface::builtin::BuiltinError> {
     invoke_with_types(builtins, name, &[], values)
 }
 
@@ -25,8 +27,8 @@ fn invoke_with_types(
     builtins: &mut Builtins,
     name: &str,
     targs: &[p4spec_rust::lang::il::ast::Typ],
-    values: &[ValueRef],
-) -> Result<(ValueRef, bool), p4spec_rust::interface::builtin::BuiltinError> {
+    values: &[Rc<Value>],
+) -> Result<(Rc<Value>, bool), p4spec_rust::interface::builtin::BuiltinError> {
     builtins.invoke(&id(name), targs, values)
 }
 

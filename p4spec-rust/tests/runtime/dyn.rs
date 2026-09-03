@@ -56,7 +56,7 @@ fn test_value_environment_iterates_deterministically_and_replaces_equivalent_key
 }
 
 #[test]
-fn test_call_cache_uses_semantic_keys_and_standard_map_operations() {
+fn test_call_cache_uses_structural_value_keys() {
     let value_a = make::bool(true, Span::default());
     let value_b = make::bool(
         true,
@@ -67,8 +67,9 @@ fn test_call_cache_uses_semantic_keys_and_standard_map_operations() {
     let key_b = CallKey::new("f", vec![value_b]);
 
     assert_eq!(cache.insert(key_a, "initial"), None);
-    assert_eq!(cache.insert(key_b.clone(), "replacement"), Some("initial"));
+    assert_eq!(cache.insert(key_b.clone(), "replacement"), None);
     assert_eq!(cache.get(&key_b), Some(&"replacement"));
+    assert_eq!(cache.len(), 2);
 
     cache.clear();
     assert!(cache.is_empty());

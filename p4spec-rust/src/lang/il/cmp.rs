@@ -8,14 +8,6 @@ use super::ast::*;
 
 // == Syntax comparison
 
-// - Iterators
-
-impl SyntaxCmp for Iter {
-    fn syntax_cmp(&self, other: &Self) -> Ordering {
-        self.cmp(other)
-    }
-}
-
 // - Types
 
 fn typ_tag(typ: &TypKind) -> u8 {

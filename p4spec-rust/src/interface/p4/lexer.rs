@@ -20,7 +20,7 @@ use crate::{
     phrase,
     runtime::{
         types::typ,
-        value::{ValueRef, make},
+        value::{Value, make},
     },
 };
 
@@ -37,11 +37,11 @@ pub enum Token {
     TypeName,
     TypeNameExpression,
     Identifier,
-    Name(ValueRef),
-    StringLiteral(ValueRef),
-    NumberInt(ValueRef, String),
-    Number(ValueRef, String),
-    UnexpectedToken(ValueRef),
+    Name(Rc<Value>),
+    StringLiteral(Rc<Value>),
+    NumberInt(Rc<Value>, String),
+    Number(Rc<Value>, String),
+    UnexpectedToken(Rc<Value>),
     LessEqual,
     GreaterEqual,
     ShiftLeft,
@@ -171,7 +171,7 @@ pub struct Lexer<'source> {
     context: Rc<Context>,
     state: State,
     pending: VecDeque<Phrase<Token>>,
-    deferred_classification: Option<(ValueRef, Span, State)>,
+    deferred_classification: Option<(Rc<Value>, Span, State)>,
     template_depth: usize,
     finished: bool,
 }
@@ -354,11 +354,11 @@ impl<'source> Lexer<'source> {
         }
     }
 
-    fn defer_classification(&mut self, value: &ValueRef, span: &Span, next: State) {
+    fn defer_classification(&mut self, value: &Rc<Value>, span: &Span, next: State) {
         self.deferred_classification = Some((Rc::clone(value), span.clone(), next));
     }
 
-    fn classify_name(&mut self, value: &ValueRef, span: &Span, next: State) -> Phrase<Token> {
+    fn classify_name(&mut self, value: &Rc<Value>, span: &Span, next: State) -> Phrase<Token> {
         let name = match &value.node {
             crate::runtime::value::ValueKind::Text(name) => name,
             _ => return phrase!(node: Token::Identifier, span: span.clone()),

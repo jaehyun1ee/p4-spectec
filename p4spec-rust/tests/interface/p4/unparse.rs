@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use p4spec_rust::{
     interface::p4_unparse::{P4UnparseError, P4Unparser},
     lang::{
@@ -9,7 +11,10 @@ use p4spec_rust::{
         el, il, pl, sl,
         xl::num::Natural,
     },
-    runtime::{types::typ, value::make},
+    runtime::{
+        types::typ,
+        value::{Value, make},
+    },
 };
 
 fn id(name: &str) -> il::ast::Id {
@@ -51,7 +56,7 @@ fn hinted_def_type() -> il::ast::DefTyp {
     }
 }
 
-fn wrapped_text() -> p4spec_rust::runtime::value::ValueRef {
+fn wrapped_text() -> Rc<Value> {
     let wrapper_type = typ::var(id("Wrapper"), Vec::new());
     let value_case = Mixfix::Seq(vec![
         Mixfix::Atom(atom("WRAP")),

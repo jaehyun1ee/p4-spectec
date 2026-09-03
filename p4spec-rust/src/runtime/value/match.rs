@@ -1,6 +1,6 @@
 //! Runtime value/type matching
 
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, rc::Rc};
 
 use num_traits::Signed;
 use thiserror::Error;
@@ -14,7 +14,7 @@ use crate::{
     runtime::types::{TDEnv, Theta, TypeDef, TypeError, equiv_func_typ, subst_not_typ, subst_typ},
 };
 
-use super::{Value, ValueKind, ValueRef};
+use super::{Value, ValueKind};
 
 // == Errors and function signatures
 
@@ -200,7 +200,7 @@ where
     Ok(true)
 }
 
-pub type SubCache = BTreeMap<(String, ValueRef), bool>;
+pub type SubCache = BTreeMap<(String, Rc<Value>), bool>;
 
 // == Cached entry points
 
@@ -209,7 +209,7 @@ pub fn sub<F>(
     tdenv: &TDEnv,
     find_func: &F,
     typ: &Typ,
-    value: &ValueRef,
+    value: &Rc<Value>,
 ) -> Result<bool, MatchError>
 where
     F: Fn(&str) -> Option<FuncSignature>,
@@ -232,7 +232,7 @@ pub fn subs<F>(
     tdenv: &TDEnv,
     find_func: &F,
     typs: &[Typ],
-    values: &[ValueRef],
+    values: &[Rc<Value>],
 ) -> Result<bool, MatchError>
 where
     F: Fn(&str) -> Option<FuncSignature>,
@@ -250,7 +250,7 @@ pub fn check<F>(
     tdenv: &TDEnv,
     find_func: &F,
     subcheck: &Subcheck,
-    value: &ValueRef,
+    value: &Rc<Value>,
 ) -> Result<bool, MatchError>
 where
     F: Fn(&str) -> Option<FuncSignature>,
