@@ -153,15 +153,53 @@ impl P4Unparser {
         {
             return self.render_hint(hint, &values);
         }
-        let rendered = values
-            .iter()
-            .map(|value| self.render(value))
-            .collect::<Result<Vec<_>, _>>()?;
-        let mut rendered = rendered.into_iter();
-        Ok(value_case.render(
-            |atom| render_atom(&atom.node),
-            |_| rendered.next().unwrap_or_default(),
-        ))
+        let mut rendered = Vec::new();
+        self.render_mixfix(value_case, &mut rendered)?;
+        Ok(rendered.join(" "))
+    }
+
+    fn render_mixfix(
+        &self,
+        mixfix: &Mixfix<ValueRef>,
+        rendered: &mut Vec<String>,
+    ) -> Result<(), P4UnparseError> {
+        match mixfix {
+            Mixfix::Arg(value) => {
+                let value = self.render(value)?;
+                rendered.push(value);
+            }
+            Mixfix::Atom(atom) => {
+                let atom = render_atom(&atom.node);
+                if !atom.is_empty() {
+                    rendered.push(atom);
+                }
+            }
+            Mixfix::Brack(atom_l, mixfix, atom_r) => {
+                let atom_l = render_atom(&atom_l.node);
+                if !atom_l.is_empty() {
+                    rendered.push(atom_l);
+                }
+                self.render_mixfix(mixfix, rendered)?;
+                let atom_r = render_atom(&atom_r.node);
+                if !atom_r.is_empty() {
+                    rendered.push(atom_r);
+                }
+            }
+            Mixfix::Infix(mixfix_l, atom, mixfix_r) => {
+                self.render_mixfix(mixfix_l, rendered)?;
+                let atom = render_atom(&atom.node);
+                if !atom.is_empty() {
+                    rendered.push(atom);
+                }
+                self.render_mixfix(mixfix_r, rendered)?;
+            }
+            Mixfix::Seq(mixfixes) => {
+                for mixfix in mixfixes {
+                    self.render_mixfix(mixfix, rendered)?;
+                }
+            }
+        }
+        Ok(())
     }
 }
 
@@ -232,7 +270,16 @@ impl Renderer<&ValueRef> for ValueRenderer<'_> {
 fn render_atom(atom: &Atom) -> String {
     match atom {
         Atom::Tag(_) => String::new(),
-        _ => atom.render().to_ascii_lowercase(),
+        Atom::Operator(operator) => operator.to_ascii_lowercase(),
+        Atom::LAngle => "<".to_owned(),
+        Atom::RAngle => ">".to_owned(),
+        Atom::LParen => "(".to_owned(),
+        Atom::RParen => ")".to_owned(),
+        Atom::LBrack => "[".to_owned(),
+        Atom::RBrack => "]".to_owned(),
+        Atom::LBrace => "{".to_owned(),
+        Atom::RBrace => "}".to_owned(),
+        _ => Print::to_string(atom).to_ascii_lowercase(),
     }
 }
 
