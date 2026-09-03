@@ -20,7 +20,7 @@ use crate::{
     },
 };
 
-use super::{BuiltinError, BuiltinResult, extract};
+use super::{BuiltinError, extract};
 
 // == Value map
 
@@ -113,21 +113,20 @@ fn map_update(
 
 // == Conversion between meta-maps and OCaml lists
 
-fn map_of_value(span: &Span, value: &Value) -> Result<ValueMap, BuiltinError> {
-    let value_case =
-        get::case(value).map_err(|_| BuiltinError::new(span.clone(), "expected a map"))?;
+fn map_of_value(value: &Value) -> Result<ValueMap, BuiltinError> {
+    let value_case = get::case(value).map_err(|_| BuiltinError::new("expected a map"))?;
     let map_mixop = map_mixop();
     if value_case.split().0 != map_mixop {
-        return Err(BuiltinError::new(span.clone(), "expected a map"));
+        return Err(BuiltinError::new("expected a map"));
     }
     let args = value_case.args();
-    let value_pairs = extract::one(span, &args)?;
+    let value_pairs = extract::one(&args)?;
     get::list(value_pairs)
         .map(<[Rc<Value>]>::to_vec)
-        .map_err(|_| BuiltinError::new(span.clone(), "expected a map"))
+        .map_err(|_| BuiltinError::new("expected a map"))
 }
 
-fn value_of_map(typ_key: &Typ, typ_value: &Typ, map: ValueMap) -> BuiltinResult {
+fn value_of_map(typ_key: &Typ, typ_value: &Typ, map: ValueMap) -> Result<Rc<Value>, BuiltinError> {
     let pair_id = crate::phrase!(node: "pair".to_owned(), span: Span::default());
     let typ_pair = typ::var(pair_id, vec![typ_key.clone(), typ_value.clone()]);
     let typ_pairs = typ::list(typ_pair);
@@ -145,10 +144,10 @@ fn value_of_map(typ_key: &Typ, typ_value: &Typ, map: ValueMap) -> BuiltinResult 
 
 // dec $find_map<K, V>(map<K, V>, K) : V?
 
-pub fn find_map(span: &Span, targs: &[Typ], values: &[Rc<Value>]) -> BuiltinResult {
-    let (_typ_key, typ_value) = extract::two(span, targs)?;
-    let (value_map, value_key) = extract::two(span, values)?;
-    let map = map_of_value(span, value_map)?;
+pub fn find_map(targs: &[Typ], values: &[Rc<Value>]) -> Result<Rc<Value>, BuiltinError> {
+    let (_typ_key, typ_value) = extract::two(targs)?;
+    let (value_map, value_key) = extract::two(values)?;
+    let map = map_of_value(value_map)?;
     let typ_opt = typ::opt(typ_value.clone());
     let value_opt = map_find_opt(value_key, &map);
     let value = make::opt(&typ_opt, value_opt, Span::default());
@@ -157,14 +156,13 @@ pub fn find_map(span: &Span, targs: &[Typ], values: &[Rc<Value>]) -> BuiltinResu
 
 // dec $find_maps<K, V>(map<K, V>*, K) : V?
 
-pub fn find_maps(span: &Span, targs: &[Typ], values: &[Rc<Value>]) -> BuiltinResult {
-    let (_typ_key, typ_value) = extract::two(span, targs)?;
-    let (value_maps, value_key) = extract::two(span, values)?;
-    let values = get::list(value_maps)
-        .map_err(|error| BuiltinError::new(span.clone(), error.to_string()))?;
+pub fn find_maps(targs: &[Typ], values: &[Rc<Value>]) -> Result<Rc<Value>, BuiltinError> {
+    let (_typ_key, typ_value) = extract::two(targs)?;
+    let (value_maps, value_key) = extract::two(values)?;
+    let values = get::list(value_maps).map_err(|error| BuiltinError::new(error.to_string()))?;
     let mut value_opt = None;
     for value_map in values {
-        let map = map_of_value(span, value_map)?;
+        let map = map_of_value(value_map)?;
         if value_opt.is_none() {
             value_opt = map_find_opt(value_key, &map);
         }
@@ -176,27 +174,25 @@ pub fn find_maps(span: &Span, targs: &[Typ], values: &[Rc<Value>]) -> BuiltinRes
 
 // dec $add_map<K, V>(map<K, V>, K, V) : map<K, V>
 
-pub fn add_map(span: &Span, targs: &[Typ], values: &[Rc<Value>]) -> BuiltinResult {
-    let (typ_key, typ_value) = extract::two(span, targs)?;
-    let (value_map, value_key, value_value) = extract::three(span, values)?;
-    let map = map_of_value(span, value_map)?;
+pub fn add_map(targs: &[Typ], values: &[Rc<Value>]) -> Result<Rc<Value>, BuiltinError> {
+    let (typ_key, typ_value) = extract::two(targs)?;
+    let (value_map, value_key, value_value) = extract::three(values)?;
+    let map = map_of_value(value_map)?;
     let map = map_update(typ_key, typ_value, value_key, value_value, &map);
     value_of_map(typ_key, typ_value, map)
 }
 
 // dec $adds_map<K, V>(map<K, V>, K*, V*) : map<K, V>
 
-pub fn adds_map(span: &Span, targs: &[Typ], values: &[Rc<Value>]) -> BuiltinResult {
-    let (typ_key, typ_value) = extract::two(span, targs)?;
-    let (value_map, value_keys, value_values) = extract::three(span, values)?;
-    let mut map = map_of_value(span, value_map)?;
-    let values_key = get::list(value_keys)
-        .map_err(|error| BuiltinError::new(span.clone(), error.to_string()))?;
-    let values_value = get::list(value_values)
-        .map_err(|error| BuiltinError::new(span.clone(), error.to_string()))?;
+pub fn adds_map(targs: &[Typ], values: &[Rc<Value>]) -> Result<Rc<Value>, BuiltinError> {
+    let (typ_key, typ_value) = extract::two(targs)?;
+    let (value_map, value_keys, value_values) = extract::three(values)?;
+    let mut map = map_of_value(value_map)?;
+    let values_key = get::list(value_keys).map_err(|error| BuiltinError::new(error.to_string()))?;
+    let values_value =
+        get::list(value_values).map_err(|error| BuiltinError::new(error.to_string()))?;
     if values_key.len() != values_value.len() {
         return Err(BuiltinError::new(
-            span.clone(),
             "map key and value lists must have the same length",
         ));
     }
@@ -208,10 +204,10 @@ pub fn adds_map(span: &Span, targs: &[Typ], values: &[Rc<Value>]) -> BuiltinResu
 
 // dec $update_map<K, V>(map<K, V>, K, V) : map<K, V>
 
-pub fn update_map(span: &Span, targs: &[Typ], values: &[Rc<Value>]) -> BuiltinResult {
-    let (typ_key, typ_value) = extract::two(span, targs)?;
-    let (value_map, value_key, value_value) = extract::three(span, values)?;
-    let map = map_of_value(span, value_map)?;
+pub fn update_map(targs: &[Typ], values: &[Rc<Value>]) -> Result<Rc<Value>, BuiltinError> {
+    let (typ_key, typ_value) = extract::two(targs)?;
+    let (value_map, value_key, value_value) = extract::three(values)?;
+    let map = map_of_value(value_map)?;
     let map = map_update(typ_key, typ_value, value_key, value_value, &map);
     value_of_map(typ_key, typ_value, map)
 }
