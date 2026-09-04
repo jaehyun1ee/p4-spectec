@@ -1,23 +1,24 @@
 //! Sets that compare syntax keys without source or analysis metadata
 
-use std::collections::BTreeSet;
-
 use crate::lang::{common::Id, traits::cmp::SyntaxCmp};
+use imbl::{GenericOrdSet, shared_ptr::RcK};
 
 use super::collections::ByKey;
+
+type PersistentOrdSet<K> = GenericOrdSet<K, RcK>;
 
 /// An ordered set that compares keys through `SyntaxCmp`
 #[repr(transparent)]
 #[derive(Clone, Debug)]
 pub struct PhraseSet<K: SyntaxCmp> {
-    entries: BTreeSet<ByKey<K>>,
+    entries: PersistentOrdSet<ByKey<K>>,
 }
 
 impl<K: SyntaxCmp> PhraseSet<K> {
     /// Constructs an empty set
     pub fn new() -> Self {
         Self {
-            entries: BTreeSet::new(),
+            entries: PersistentOrdSet::new(),
         }
     }
 
@@ -32,17 +33,32 @@ impl<K: SyntaxCmp> PhraseSet<K> {
     }
 
     /// Inserts a key, ignoring differences outside its collection representation
-    pub fn insert(&mut self, key: K) -> bool {
-        self.entries.insert(ByKey(key))
+    pub fn insert(&mut self, key: K) -> bool
+    where
+        K: Clone,
+    {
+        let key = ByKey(key);
+        if self.entries.contains(&key) {
+            false
+        } else {
+            self.entries.insert(key).is_none()
+        }
     }
 
     /// Moves every key from `set_other` into this set
-    pub fn append(&mut self, set_other: Self) {
-        self.entries.extend(set_other.entries);
+    pub fn append(&mut self, set_other: Self)
+    where
+        K: Clone,
+    {
+        let entries_other = set_other.entries.relative_complement(self.entries.clone());
+        self.entries = self.entries.clone().union(entries_other);
     }
 
     /// Returns the union with `set_other`
-    pub fn union(mut self, set_other: Self) -> Self {
+    pub fn union(mut self, set_other: Self) -> Self
+    where
+        K: Clone,
+    {
         self.append(set_other);
         self
     }
@@ -52,11 +68,7 @@ impl<K: SyntaxCmp> PhraseSet<K> {
     where
         K: Clone,
     {
-        let entries = self
-            .entries
-            .intersection(&set_other.entries)
-            .cloned()
-            .collect();
+        let entries = set_other.entries.clone().intersection(self.entries.clone());
         Self { entries }
     }
 
@@ -67,9 +79,8 @@ impl<K: SyntaxCmp> PhraseSet<K> {
     {
         let entries = self
             .entries
-            .difference(&set_other.entries)
-            .cloned()
-            .collect();
+            .clone()
+            .relative_complement(set_other.entries.clone());
         Self { entries }
     }
 
@@ -92,7 +103,7 @@ impl PhraseSet<Id> {
 
     /// Removes and returns the stored key equivalent to `key`
     pub fn take(&mut self, key: &Id) -> Option<Id> {
-        self.entries.take(&key.node).map(|key| key.0)
+        self.entries.remove(&key.node).map(|key| key.0)
     }
 }
 
@@ -110,13 +121,15 @@ impl<K: SyntaxCmp> PartialEq for PhraseSet<K> {
 
 impl<K: SyntaxCmp> Eq for PhraseSet<K> {}
 
-impl<K: SyntaxCmp> Extend<K> for PhraseSet<K> {
+impl<K: SyntaxCmp + Clone> Extend<K> for PhraseSet<K> {
     fn extend<T: IntoIterator<Item = K>>(&mut self, keys: T) {
-        self.entries.extend(keys.into_iter().map(ByKey));
+        for key in keys {
+            self.insert(key);
+        }
     }
 }
 
-impl<K: SyntaxCmp> FromIterator<K> for PhraseSet<K> {
+impl<K: SyntaxCmp + Clone> FromIterator<K> for PhraseSet<K> {
     fn from_iter<T: IntoIterator<Item = K>>(keys: T) -> Self {
         let mut set = Self::new();
         set.extend(keys);
@@ -124,7 +137,7 @@ impl<K: SyntaxCmp> FromIterator<K> for PhraseSet<K> {
     }
 }
 
-impl<K: SyntaxCmp, const N: usize> From<[K; N]> for PhraseSet<K> {
+impl<K: SyntaxCmp + Clone, const N: usize> From<[K; N]> for PhraseSet<K> {
     fn from(keys: [K; N]) -> Self {
         keys.into_iter().collect()
     }

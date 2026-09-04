@@ -69,3 +69,31 @@ fn test_free_into_extends_one_ordered_set_without_duplicates() {
         IdSet::from([id("seed", "seed"), id("x", "x"), id("y", "y")])
     );
 }
+
+#[test]
+fn test_id_map_clone_isolates_branch_updates() {
+    let id_x = id("x", "original");
+    let id_y = id("y", "branch");
+    let mut map = [(id_x.clone(), 1)].into_iter().collect::<IdMap<_>>();
+    let mut map_branch = map.clone();
+
+    map_branch.insert(id_x.clone(), 2);
+    map_branch.insert(id_y.clone(), 3);
+
+    assert_eq!(map.get(&id_x), Some(&1));
+    assert_eq!(map.get(&id_y), None);
+    assert_eq!(map_branch.get(&id_x), Some(&2));
+    assert_eq!(map_branch.get(&id_y), Some(&3));
+
+    map.insert(id_y.clone(), 4);
+    assert_eq!(map.get(&id_y), Some(&4));
+    assert_eq!(map_branch.get(&id_y), Some(&3));
+}
+
+#[test]
+fn test_id_set_difference_is_relative_complement() {
+    let ids_l = IdSet::from([id("x", "left"), id("y", "left")]);
+    let ids_r = IdSet::from([id("y", "right"), id("z", "right")]);
+
+    assert_eq!(ids_l.difference(&ids_r), IdSet::from([id("x", "left")]));
+}

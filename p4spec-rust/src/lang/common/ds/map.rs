@@ -1,12 +1,13 @@
 //! Maps that compare syntax keys without source or analysis metadata
 
-use std::collections::BTreeMap;
-
+use imbl::{GenericOrdMap, shared_ptr::RcK};
 use thiserror::Error;
 
 use crate::lang::{common::Id, traits::cmp::SyntaxCmp};
 
 use super::{collections::ByKey, set::PhraseSet};
+
+type PersistentOrdMap<K, V> = GenericOrdMap<K, V, RcK>;
 
 /// A mismatch between the lengths of key and value lists
 #[derive(Clone, Copy, Debug, Error, PartialEq, Eq)]
@@ -26,14 +27,14 @@ impl ArityMismatch {
 #[repr(transparent)]
 #[derive(Clone, Debug)]
 pub struct PhraseMap<K: SyntaxCmp, V> {
-    entries: BTreeMap<ByKey<K>, V>,
+    entries: PersistentOrdMap<ByKey<K>, V>,
 }
 
 impl<K: SyntaxCmp, V> PhraseMap<K, V> {
     /// Constructs an empty map
     pub fn new() -> Self {
         Self {
-            entries: BTreeMap::new(),
+            entries: PersistentOrdMap::new(),
         }
     }
 
@@ -68,18 +69,21 @@ impl<K: SyntaxCmp, V> PhraseMap<K, V> {
     }
 
     /// Inserts a binding and returns the previous value
-    pub fn insert(&mut self, key: K, value: V) -> Option<V> {
-        self.entries.insert(ByKey(key), value)
+    pub fn insert(&mut self, key: K, value: V) -> Option<V>
+    where
+        K: Clone,
+        V: Clone,
+    {
+        let key_lookup = ByKey(key.clone());
+        match self.entries.get_mut(&key_lookup) {
+            Some(value_stored) => Some(std::mem::replace(value_stored, value)),
+            None => self.entries.insert(ByKey(key), value),
+        }
     }
 
     /// Iterates over bindings in collection order
     pub fn iter(&self) -> impl Iterator<Item = (&K, &V)> {
         self.entries.iter().map(|(key, value)| (&key.0, value))
-    }
-
-    /// Iterates mutably over bindings in collection order
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = (&K, &mut V)> {
-        self.entries.iter_mut().map(|(key, value)| (&key.0, value))
     }
 
     /// Iterates over keys in collection order
@@ -108,7 +112,10 @@ impl<V> PhraseMap<Id, V> {
     }
 
     /// Returns the mutable value for an equivalent key
-    pub fn get_mut(&mut self, key: &Id) -> Option<&mut V> {
+    pub fn get_mut(&mut self, key: &Id) -> Option<&mut V>
+    where
+        V: Clone,
+    {
         self.entries.get_mut(&key.node)
     }
 
@@ -118,14 +125,20 @@ impl<V> PhraseMap<Id, V> {
     }
 
     /// Removes and returns the value for an equivalent key
-    pub fn remove(&mut self, key: &Id) -> Option<V> {
+    pub fn remove(&mut self, key: &Id) -> Option<V>
+    where
+        V: Clone,
+    {
         self.entries.remove(&key.node)
     }
 
     /// Removes and returns the stored key and value for an equivalent key
-    pub fn remove_entry(&mut self, key: &Id) -> Option<(Id, V)> {
+    pub fn remove_entry(&mut self, key: &Id) -> Option<(Id, V)>
+    where
+        V: Clone,
+    {
         self.entries
-            .remove_entry(&key.node)
+            .remove_with_key(&key.node)
             .map(|(key, value)| (key.0, value))
     }
 }
@@ -136,14 +149,15 @@ impl<K: SyntaxCmp, V> Default for PhraseMap<K, V> {
     }
 }
 
-impl<K: SyntaxCmp, V> Extend<(K, V)> for PhraseMap<K, V> {
+impl<K: SyntaxCmp + Clone, V: Clone> Extend<(K, V)> for PhraseMap<K, V> {
     fn extend<T: IntoIterator<Item = (K, V)>>(&mut self, bindings: T) {
-        self.entries
-            .extend(bindings.into_iter().map(|(key, value)| (ByKey(key), value)));
+        for (key, value) in bindings {
+            self.insert(key, value);
+        }
     }
 }
 
-impl<K: SyntaxCmp, V> FromIterator<(K, V)> for PhraseMap<K, V> {
+impl<K: SyntaxCmp + Clone, V: Clone> FromIterator<(K, V)> for PhraseMap<K, V> {
     fn from_iter<T: IntoIterator<Item = (K, V)>>(bindings: T) -> Self {
         let mut map = Self::new();
         map.extend(bindings);
