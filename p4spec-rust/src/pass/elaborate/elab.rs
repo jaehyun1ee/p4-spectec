@@ -1142,7 +1142,7 @@ fn elab_singleton_iter_exp(
 fn elab_exp_normal(ctx: &mut Context, typ_il_expect: &il::Typ, exp: &el::Exp) -> Attempt<il::Exp> {
     let mut ctx_candidate = ctx.clone();
     match infer_exp(&mut ctx_candidate, exp) {
-        Ok(exp_il) => match cast_exp(&mut ctx_candidate, typ_il_expect, exp_il) {
+        Ok(exp_il) => match cast_exp(&ctx_candidate, typ_il_expect, exp_il) {
             Ok(exp_il) => {
                 *ctx = ctx_candidate;
                 Ok(exp_il)
@@ -1509,7 +1509,7 @@ fn elab_variant_exp(
             note: typ_il_case.node.clone(),
             span: exp.span.clone(),
         };
-        let exp_il_case = match cast_exp(&mut ctx_candidate, typ_il_expect, exp_il_case) {
+        let exp_il_case = match cast_exp(&ctx_candidate, typ_il_expect, exp_il_case) {
             Ok(exp_il_case) => exp_il_case,
             Err(_) => continue,
         };
