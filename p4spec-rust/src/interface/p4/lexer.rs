@@ -1,9 +1,34 @@
-//! Context-sensitive lexer for preprocessed P4 source.
+//! Lazy context-sensitive tokenization for preprocessed P4
 //!
-//! Raw spelling is scanned first, then contextual name classification and
-//! angle-bracket disambiguation enqueue the parser tokens. For example, `>>`
-//! inside two nested type arguments is emitted as two closing-angle tokens,
-//! while the same spelling in an expression remains a shift.
+//! `Iterator::next` asks `Lexer::lex` for one token. `Lexer::tokenize` first
+//! skips ordinary whitespace and comments, constructs literal values, and
+//! recognizes fixed tokens by maximal munch. `lex` emits a name first and its
+//! context-sensitive identifier/type-name classification on the following
+//! iteration, then distinguishes template angles.
+//!
+//! The two-part name token is a parser synchronization point: an LR parser may
+//! request one token of lookahead before reducing the preceding declaration.
+//! Emitting the spelling first lets that reduction update the name-resolution
+//! context before the lexer classifies the same spelling.
+//!
+//! The grammar needs a few one-token lookahead distinctions to remain
+//! deterministic. `Lexer::classify_name` distinguishes type names that start
+//! expressions, while `Lexer::disambiguate_token` marks block-leading colons,
+//! trailing commas, and `error` member accesses without changing their source
+//! spelling. The expression grammar also needs one `ShiftRight` token, so
+//! `Lexer::disambiguate_angles` splits that token into closing angles only
+//! while scanning nested type arguments.
+//!
+//! # Examples
+//!
+//! ```text
+//! source: Header<bit<8>> value
+//! lexer:  Name("Header"), TypeName, LeftAngleArgs, Bit, LeftAngleArgs,
+//!         NumberInt(8), RightAngle, RightAngleShift, Name("value"), Identifier
+//!
+//! source: x >> 1
+//! lexer:  Name("x"), Identifier, ShiftRight, NumberInt(1)
+//! ```
 
 use std::{collections::VecDeque, rc::Rc};
 
@@ -31,17 +56,18 @@ use super::{
 
 // == Tokens
 
+/// A token consumed by the P4 grammar
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Token {
     End,
     TypeName,
+    /// Type name at the start of a postfix expression
     TypeNameExpression,
     Identifier,
     Name(Rc<Value>),
     StringLiteral(Rc<Value>),
     NumberInt(Rc<Value>, String),
     Number(Rc<Value>, String),
-    UnexpectedToken(Rc<Value>),
     LessEqual,
     GreaterEqual,
     ShiftLeft,
@@ -49,6 +75,7 @@ pub enum Token {
     Or,
     NotEqual,
     Equal,
+    /// Parser-only spelling of `>>` in an expression
     ShiftRight,
     Plus,
     Minus,
@@ -74,8 +101,10 @@ pub enum Token {
     RightParen,
     Assign,
     Colon,
+    /// Parser-only colon immediately before a block or annotation
     BlockColon,
     Comma,
+    /// Parser-only comma immediately before `}` or `]`
     TrailingComma,
     Question,
     Dot,
@@ -105,6 +134,7 @@ pub enum Token {
     Entries,
     Enum,
     Error,
+    /// Parser-only `error` immediately before member access
     ErrorExpression,
     Exit,
     Extern,
@@ -151,17 +181,19 @@ pub enum Token {
     BitAndAssign,
     BitXorAssign,
     BitOrAssign,
+    UnexpectedToken(Rc<Value>),
 }
 
 #[derive(Clone, Copy, Debug)]
-enum State {
+enum LexerState {
     Regular,
-    Template,
     Pragma,
+    Template,
 }
 
-// == Lexer state
+// == Lexer
 
+/// A lazy P4 token stream sharing the parser's name-resolution context
 pub struct Lexer<'source> {
     source: &'source str,
     index: usize,
@@ -169,14 +201,17 @@ pub struct Lexer<'source> {
     line: i64,
     column: i64,
     context: Rc<Context>,
-    state: State,
+    state: LexerState,
     pending: VecDeque<Phrase<Token>>,
-    deferred_classification: Option<(Rc<Value>, Span, State)>,
+    deferred_classification: Option<(Rc<Value>, Span, LexerState)>,
     template_depth: usize,
     finished: bool,
 }
 
+// - Construction
+
 impl<'source> Lexer<'source> {
+    /// Tokenizes preprocessed `source` using context-sensitive name classes
     pub fn new(file: Rc<str>, source: &'source str, context: Rc<Context>) -> Self {
         Self {
             source,
@@ -185,7 +220,7 @@ impl<'source> Lexer<'source> {
             line: 1,
             column: 0,
             context,
-            state: State::Regular,
+            state: LexerState::Regular,
             pending: VecDeque::new(),
             deferred_classification: None,
             template_depth: 0,
@@ -193,16 +228,18 @@ impl<'source> Lexer<'source> {
         }
     }
 
+    // - Source cursor
+
     fn source_position(&self) -> Position {
         Position::new(Rc::clone(&self.file), self.line, self.column)
     }
 
-    fn span_from(&self, left: Position) -> Span {
-        Span::new(left, self.source_position())
+    fn span_from(&self, pos_l: Position) -> Span {
+        Span::new(pos_l, self.source_position())
     }
 
-    fn error(&self, kind: LexErrorKind, left: Position) -> P4Error {
-        P4Error::new(kind, self.span_from(left))
+    fn error(&self, kind: LexErrorKind, pos_l: Position) -> P4Error {
+        P4Error::new(kind, self.span_from(pos_l))
     }
 
     fn bump(&mut self) -> Option<char> {
@@ -228,7 +265,9 @@ impl<'source> Lexer<'source> {
         &self.source[start..self.index]
     }
 
-    fn next_token(&mut self) -> Option<Result<Phrase<Token>, P4Error>> {
+    // - Token emission
+
+    fn lex(&mut self) -> Option<Result<Phrase<Token>, P4Error>> {
         if let Some((value, span, next)) = self.deferred_classification.take() {
             return Some(Ok(self.classify_name(&value, &span, next)));
         }
@@ -236,41 +275,20 @@ impl<'source> Lexer<'source> {
             return Some(Ok(token));
         }
         loop {
-            let token = match self.raw_token()? {
+            let token = match self.tokenize()? {
                 Ok(token) => token,
                 Err(error) => return Some(Err(error)),
             };
             let span = token.span.clone();
-            let token = if self.context.take_template_expected() && token.node == Token::LeftAngle {
-                phrase!(node: Token::LeftAngleArgs, span: span.clone())
-            } else {
-                token
-            };
-            let token = if token.node == Token::Comma
-                && self.remaining_significant().starts_with(['}', ']'])
-            {
-                phrase!(node: Token::TrailingComma, span: span.clone())
-            } else if token.node == Token::Error && self.remaining_significant().starts_with('.') {
-                phrase!(node: Token::ErrorExpression, span: span.clone())
-            } else {
-                token
-            };
-            let token = if token.node == Token::Colon
-                && (self.remaining_significant().starts_with(['{', '@'])
-                    || self.remaining_significant().starts_with("#pragma"))
-            {
-                phrase!(node: Token::BlockColon, span: span.clone())
-            } else {
-                token
-            };
+            let token = self.disambiguate_token(token.node);
             let token = match self.state {
-                State::Regular => match token.node {
+                LexerState::Regular => match token {
                     Token::Name(value) => {
-                        self.defer_classification(&value, &span, State::Regular);
+                        self.defer_classification(&value, &span, LexerState::Regular);
                         Token::Name(value)
                     }
                     Token::Pragma => {
-                        self.state = State::Pragma;
+                        self.state = LexerState::Pragma;
                         Token::Pragma
                     }
                     token @ (Token::Bit
@@ -279,47 +297,49 @@ impl<'source> Lexer<'source> {
                     | Token::List
                     | Token::Tuple
                     | Token::ValueSet) => {
-                        self.state = State::Template;
+                        self.state = LexerState::Template;
                         token
                     }
                     Token::PragmaEnd => continue,
                     token => token,
                 },
-                State::Template => match token.node {
-                    Token::LeftAngle => {
-                        self.state = State::Regular;
+                LexerState::Pragma => match token {
+                    Token::PragmaEnd => {
+                        self.state = LexerState::Regular;
+                        Token::PragmaEnd
+                    }
+                    Token::Name(value) => {
+                        self.defer_classification(&value, &span, LexerState::Pragma);
+                        Token::Name(value)
+                    }
+                    token => token,
+                },
+                LexerState::Template => match token {
+                    Token::LeftAngle | Token::LeftAngleArgs => {
+                        self.state = LexerState::Regular;
                         Token::LeftAngleArgs
                     }
                     Token::Name(value) => {
-                        self.defer_classification(&value, &span, State::Regular);
+                        self.defer_classification(&value, &span, LexerState::Regular);
                         Token::Name(value)
                     }
                     Token::Pragma => {
-                        self.state = State::Pragma;
+                        self.state = LexerState::Pragma;
                         Token::Pragma
                     }
                     Token::PragmaEnd => continue,
                     token => {
-                        self.state = State::Regular;
+                        self.state = LexerState::Regular;
                         token
                     }
-                },
-                State::Pragma => match token.node {
-                    Token::PragmaEnd => {
-                        self.state = State::Regular;
-                        Token::PragmaEnd
-                    }
-                    Token::Name(value) => {
-                        self.defer_classification(&value, &span, State::Pragma);
-                        Token::Name(value)
-                    }
-                    token => token,
                 },
             };
             let (token, span) = self.disambiguate_angles(token, span);
             return Some(Ok(phrase!(node: token, span: span)));
         }
     }
+
+    // - Template angle disambiguation
 
     fn disambiguate_angles(&mut self, token: Token, span: Span) -> (Token, Span) {
         match token {
@@ -332,7 +352,7 @@ impl<'source> Lexer<'source> {
                 (Token::RightAngle, span)
             }
             Token::ShiftRight if self.template_depth > 0 => {
-                let middle = Position::new(
+                let pos_middle = Position::new(
                     Rc::clone(&span.left.file),
                     span.left.line,
                     span.left.column + 1,
@@ -344,21 +364,43 @@ impl<'source> Lexer<'source> {
                     self.template_depth = 0;
                     Token::RightAngle
                 };
-                self.pending.push_back(phrase!(
-                    node: second,
-                    span: Span::new(middle.clone(), span.right.clone())
-                ));
-                (Token::RightAngle, Span::new(span.left, middle))
+                let span_second = Span::new(pos_middle.clone(), span.right.clone());
+                let token_second = phrase!(node: second, span: span_second);
+                self.pending.push_back(token_second);
+                let span_first = Span::new(span.left, pos_middle);
+                (Token::RightAngle, span_first)
             }
             token => (token, span),
         }
     }
 
-    fn defer_classification(&mut self, value: &Rc<Value>, span: &Span, next: State) {
+    // - Contextual token disambiguation
+
+    fn disambiguate_token(&mut self, mut token: Token) -> Token {
+        if self.context.take_template_expected() && token == Token::LeftAngle {
+            token = Token::LeftAngleArgs;
+        }
+        if token == Token::Comma && self.remaining_significant().starts_with(['}', ']']) {
+            token = Token::TrailingComma;
+        } else if token == Token::Error && self.remaining_significant().starts_with('.') {
+            token = Token::ErrorExpression;
+        }
+        if token == Token::Colon
+            && (self.remaining_significant().starts_with(['{', '@'])
+                || self.remaining_significant().starts_with("#pragma"))
+        {
+            token = Token::BlockColon;
+        }
+        token
+    }
+
+    // - Name classification
+
+    fn defer_classification(&mut self, value: &Rc<Value>, span: &Span, next: LexerState) {
         self.deferred_classification = Some((Rc::clone(value), span.clone(), next));
     }
 
-    fn classify_name(&mut self, value: &Rc<Value>, span: &Span, next: State) -> Phrase<Token> {
+    fn classify_name(&mut self, value: &Rc<Value>, span: &Span, next: LexerState) -> Phrase<Token> {
         let name = match &value.node {
             crate::runtime::value::ValueKind::Text(name) => name,
             _ => return phrase!(node: Token::Identifier, span: span.clone()),
@@ -381,7 +423,7 @@ impl<'source> Lexer<'source> {
             ),
         };
         self.state = if template_expected {
-            State::Template
+            LexerState::Template
         } else {
             next
         };
@@ -390,10 +432,7 @@ impl<'source> Lexer<'source> {
 
     fn type_name_starts_expression(&self) -> bool {
         let rest = self.remaining_significant();
-        if rest.starts_with(['.', '(']) {
-            return true;
-        }
-        self.template_arguments_follow()
+        rest.starts_with(['.', '(']) || self.template_arguments_follow()
     }
 
     fn template_arguments_follow(&self) -> bool {
@@ -420,7 +459,9 @@ impl<'source> Lexer<'source> {
         }
     }
 
-    fn raw_token(&mut self) -> Option<Result<Phrase<Token>, P4Error>> {
+    // - Raw scanning
+
+    fn tokenize(&mut self) -> Option<Result<Phrase<Token>, P4Error>> {
         loop {
             if self.index == self.source.len() {
                 if self.finished {
@@ -431,7 +472,7 @@ impl<'source> Lexer<'source> {
                 let span = Span::new(position.clone(), position);
                 return Some(Ok(phrase!(node: Token::End, span: span)));
             }
-            let left = self.source_position();
+            let pos_l = self.source_position();
             let rest = &self.source[self.index..];
 
             if rest.starts_with("/*") {
@@ -443,12 +484,12 @@ impl<'source> Lexer<'source> {
                     crossed_newline |= self.bump() == Some('\n');
                 }
                 if self.index == self.source.len() {
-                    return Some(Err(self.error(LexErrorKind::UnterminatedComment, left)));
+                    return Some(Err(self.error(LexErrorKind::UnterminatedComment, pos_l)));
                 }
                 self.bump();
                 self.bump();
                 if crossed_newline {
-                    let span = self.span_from(left);
+                    let span = self.span_from(pos_l);
                     return Some(Ok(phrase!(node: Token::PragmaEnd, span: span)));
                 }
                 continue;
@@ -459,8 +500,11 @@ impl<'source> Lexer<'source> {
             }
             if rest.starts_with('\n') {
                 self.bump();
-                let span = self.span_from(left);
+                let span = self.span_from(pos_l);
                 return Some(Ok(phrase!(node: Token::PragmaEnd, span: span)));
+            }
+            if rest.starts_with('"') {
+                return Some(self.string_token(pos_l));
             }
             if rest.starts_with([' ', '\t', '\u{000c}', '\r']) {
                 self.take_while(|character| matches!(character, ' ' | '\t' | '\u{000c}' | '\r'));
@@ -470,11 +514,15 @@ impl<'source> Lexer<'source> {
                 self.preprocessor_line();
                 continue;
             }
-            if rest.starts_with('"') {
-                return Some(self.string_token(left));
+            if rest.starts_with("@pragma") {
+                for _ in 0.."@pragma".len() {
+                    self.bump();
+                }
+                let span = self.span_from(pos_l);
+                return Some(Ok(phrase!(node: Token::Pragma, span: span)));
             }
             if rest.as_bytes()[0].is_ascii_digit() {
-                return Some(self.number_token(left));
+                return Some(self.number_token(pos_l));
             }
             if is_name_start(rest.as_bytes()[0]) {
                 let start = self.index;
@@ -482,50 +530,43 @@ impl<'source> Lexer<'source> {
                 self.take_while(|character| character.is_ascii_alphanumeric() || character == '_');
                 let text = &self.source[start..self.index];
                 let token = keyword(text).unwrap_or_else(|| {
-                    let value = make::text(text.to_owned(), self.span_from(left.clone()));
+                    let value = make::text(text.to_owned(), self.span_from(pos_l.clone()));
                     Token::Name(value)
                 });
-                let span = self.span_from(left);
+                let span = self.span_from(pos_l);
                 return Some(Ok(phrase!(node: token, span: span)));
             }
 
-            if rest.starts_with("@pragma") {
-                for _ in 0.."@pragma".len() {
+            if let Some((spelling, token)) = fixed_token(rest) {
+                for _ in 0..spelling.len() {
                     self.bump();
                 }
-                let span = self.span_from(left);
-                return Some(Ok(phrase!(node: Token::Pragma, span: span)));
-            }
-
-            for (spelling, token) in operators() {
-                if rest.starts_with(spelling) {
-                    for _ in 0..spelling.len() {
-                        self.bump();
-                    }
-                    let span = self.span_from(left);
-                    return Some(Ok(phrase!(node: token.clone(), span: span)));
-                }
+                let span = self.span_from(pos_l);
+                return Some(Ok(phrase!(node: token, span: span)));
             }
 
             let text = self.bump().expect("source is not empty").to_string();
-            let span = self.span_from(left);
+            let span = self.span_from(pos_l);
             let value = make::text(text, span.clone());
-            return Some(Ok(phrase!(node: Token::UnexpectedToken(value), span: span)));
+            let token = Token::UnexpectedToken(value);
+            return Some(Ok(phrase!(node: token, span: span)));
         }
     }
 
-    fn string_token(&mut self, left: Position) -> Result<Phrase<Token>, P4Error> {
+    // - String literals
+
+    fn string_token(&mut self, pos_l: Position) -> Result<Phrase<Token>, P4Error> {
         self.bump();
         let mut text = String::new();
         loop {
             let Some(character) = self.bump() else {
-                return Err(self.error(LexErrorKind::UnterminatedString, left));
+                return Err(self.error(LexErrorKind::UnterminatedString, pos_l));
             };
             match character {
                 '"' => break,
                 '\\' => {
                     let Some(escaped) = self.bump() else {
-                        return Err(self.error(LexErrorKind::UnterminatedString, left));
+                        return Err(self.error(LexErrorKind::UnterminatedString, pos_l));
                     };
                     match escaped {
                         '"' => text.push('"'),
@@ -534,7 +575,7 @@ impl<'source> Lexer<'source> {
                         escaped => {
                             return Err(self.error(
                                 LexErrorKind::UnsupportedEscape(format!("\\{escaped}")),
-                                left,
+                                pos_l,
                             ));
                         }
                     }
@@ -542,45 +583,56 @@ impl<'source> Lexer<'source> {
                 character => text.push(character),
             }
         }
-        let span = self.span_from(left);
+        let span = self.span_from(pos_l);
         let value = make::text(text, span.clone());
-        Ok(phrase!(node: Token::StringLiteral(value), span: span))
+        let token = Token::StringLiteral(value);
+        Ok(phrase!(node: token, span: span))
     }
 
-    fn number_token(&mut self, left: Position) -> Result<Phrase<Token>, P4Error> {
+    // - Integer literals
+
+    fn number_token(&mut self, pos_l: Position) -> Result<Phrase<Token>, P4Error> {
         let start = self.index;
-        self.take_while(|character| character.is_ascii_alphanumeric() || character == '_');
+        let rest = &self.source[start..];
+        let int_len = integer_lexeme_len(rest);
+        let sized = sized_integer_lexeme(rest);
+        let (lexeme_len, sign_index) = match sized {
+            Some((sized_len, sign_index)) if sized_len > int_len => (sized_len, Some(sign_index)),
+            _ => (int_len, None),
+        };
+        for _ in 0..lexeme_len {
+            self.bump();
+        }
         let spelling = &self.source[start..self.index];
-        let width_end = spelling.find(['w', 's']);
-        let (token, lexeme) = match width_end {
-            Some(index) if index > 0 => {
+        let (value, lexeme) = match sign_index {
+            Some(index) => {
                 let width = &spelling[..index];
                 let sign = spelling.as_bytes()[index] as char;
                 let digits = &spelling[index + 1..];
-                let integer = parse_integer(digits).ok_or_else(|| {
+                let int = parse_integer(digits).ok_or_else(|| {
                     self.error(
                         LexErrorKind::InvalidInteger(spelling.to_owned()),
-                        left.clone(),
+                        pos_l.clone(),
                     )
                 })?;
-                let width_integer = parse_integer(width).ok_or_else(|| {
+                let int_width = parse_integer(width).ok_or_else(|| {
                     self.error(
                         LexErrorKind::InvalidInteger(spelling.to_owned()),
-                        left.clone(),
+                        pos_l.clone(),
                     )
                 })?;
-                if sign == 's' && width_integer < BigInt::from(2) {
-                    return Err(self.error(LexErrorKind::SignedWidth, left));
+                if sign == 's' && int_width < BigInt::from(2) {
+                    return Err(self.error(LexErrorKind::SignedWidth, pos_l));
                 }
-                let span = self.span_from(left.clone());
-                let width = Natural::try_from(width_integer).map_err(|_| {
+                let span = self.span_from(pos_l.clone());
+                let nat_width = Natural::try_from(int_width).map_err(|_| {
                     self.error(
                         LexErrorKind::InvalidInteger(spelling.to_owned()),
-                        left.clone(),
+                        pos_l.clone(),
                     )
                 })?;
-                let value_width = make::nat(width, span.clone());
-                let value_integer = make::int(integer, span.clone());
+                let value_width = make::nat(nat_width, span.clone());
+                let value_int = make::int(int, span.clone());
                 let atom = phrase!(
                     node: Atom::Keyword(sign.to_ascii_uppercase().to_string()),
                     span: span.clone()
@@ -588,47 +640,55 @@ impl<'source> Lexer<'source> {
                 let value_case = Mixfix::Seq(vec![
                     Mixfix::Arg(value_width),
                     Mixfix::Atom(atom),
-                    Mixfix::Arg(value_integer),
+                    Mixfix::Arg(value_int),
                 ]);
-                let type_id = phrase!(node: "integerLiteral".to_owned(), span: Span::default());
-                let value = make::case(&typ::var(type_id, vec![]), value_case, span);
+                let id_typ = phrase!(node: "integerLiteral".to_owned(), span: Span::default());
+                let value = make::case(&typ::var(id_typ, vec![]), value_case, span);
                 (value, digits.to_owned())
             }
             _ => {
-                let integer = parse_integer(spelling).ok_or_else(|| {
+                let int = parse_integer(spelling).ok_or_else(|| {
                     self.error(
                         LexErrorKind::InvalidInteger(spelling.to_owned()),
-                        left.clone(),
+                        pos_l.clone(),
                     )
                 })?;
-                let span = self.span_from(left.clone());
-                (make::int(integer, span), spelling.to_owned())
+                let span = self.span_from(pos_l.clone());
+                (make::int(int, span), spelling.to_owned())
             }
         };
-        let span = self.span_from(left);
-        let token = if width_end.is_some() {
-            Token::Number(token, lexeme)
+        let span = self.span_from(pos_l);
+        let token = if sign_index.is_some() {
+            Token::Number(value, lexeme)
         } else {
-            Token::NumberInt(token, lexeme)
+            Token::NumberInt(value, lexeme)
         };
         Ok(phrase!(node: token, span: span))
     }
 
+    // - Preprocessor line markers
+
     fn preprocessor_line(&mut self) {
         self.take_while(|character| character != '\n');
-        let line_text = self.source[..self.index]
+        let text_line = self.source[..self.index]
             .rsplit_once('\n')
             .map_or(&self.source[..self.index], |(_, line)| line);
-        let mut fields = line_text[1..].split_whitespace();
-        if let Some(line) = fields.next().and_then(|line| line.parse::<i64>().ok()) {
+        let text_directive = &text_line[1..];
+        let text_before_path = text_directive
+            .split_once('"')
+            .map_or(text_directive, |(before, _)| before);
+        let line = text_before_path
+            .split(|character: char| !character.is_ascii_digit() && character != '_')
+            .filter_map(|text| text.replace('_', "").parse::<i64>().ok())
+            .next_back();
+        if let Some(line) = line {
             self.line = line;
         }
-        if let Some(path) = fields
-            .next()
-            .and_then(|path| path.strip_prefix('"'))
-            .and_then(|path| path.strip_suffix('"'))
-        {
-            self.file = Rc::from(path);
+        if let Some(quote_l) = text_directive.find('"') {
+            let path = &text_directive[quote_l + 1..];
+            if let Some(quote_r) = path.find('"') {
+                self.file = Rc::from(&path[..quote_r]);
+            }
         }
         if self.index < self.source.len() {
             self.index += 1;
@@ -637,7 +697,7 @@ impl<'source> Lexer<'source> {
     }
 }
 
-// == Angle lookahead and token stream
+// == Token lookahead
 
 fn angle_suffix(rest: &str) -> Option<&str> {
     if !rest.starts_with('<') {
@@ -663,11 +723,72 @@ impl Iterator for Lexer<'_> {
     type Item = Result<Phrase<Token>, P4Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.next_token()
+        self.lex()
     }
 }
 
-// == Literal and fixed-token classification
+// == Integer literal helpers
+
+fn integer_lexeme_len(rest: &str) -> usize {
+    let bytes = rest.as_bytes();
+    if !bytes.first().is_some_and(u8::is_ascii_digit) {
+        return 0;
+    }
+
+    let int_len = bytes
+        .iter()
+        .take_while(|byte| byte.is_ascii_digit() || **byte == b'_')
+        .count();
+    let mut len = int_len;
+    for (prefix, valid_digit) in [
+        ("0x", is_hex_digit as fn(u8) -> bool),
+        ("0X", is_hex_digit),
+        ("0d", is_decimal_digit),
+        ("0D", is_decimal_digit),
+        ("0o", is_octal_digit),
+        ("0O", is_octal_digit),
+        ("0b", is_binary_digit),
+        ("0B", is_binary_digit),
+    ] {
+        let Some(digits) = rest.strip_prefix(prefix) else {
+            continue;
+        };
+        let digits_len = digits
+            .bytes()
+            .take_while(|byte| valid_digit(*byte) || *byte == b'_')
+            .count();
+        if digits_len > 0 {
+            len = len.max(prefix.len() + digits_len);
+        }
+    }
+    len
+}
+
+fn sized_integer_lexeme(rest: &str) -> Option<(usize, usize)> {
+    let sign_index = rest.bytes().take_while(u8::is_ascii_digit).count();
+    let sign = *rest.as_bytes().get(sign_index)?;
+    if !matches!(sign, b'w' | b's') {
+        return None;
+    }
+    let integer_len = integer_lexeme_len(&rest[sign_index + 1..]);
+    (integer_len > 0).then_some((sign_index + 1 + integer_len, sign_index))
+}
+
+fn is_hex_digit(byte: u8) -> bool {
+    byte.is_ascii_hexdigit()
+}
+
+fn is_decimal_digit(byte: u8) -> bool {
+    byte.is_ascii_digit()
+}
+
+fn is_octal_digit(byte: u8) -> bool {
+    matches!(byte, b'0'..=b'7')
+}
+
+fn is_binary_digit(byte: u8) -> bool {
+    matches!(byte, b'0' | b'1')
+}
 
 fn parse_integer(spelling: &str) -> Option<BigInt> {
     let sanitized = spelling.replace('_', "");
@@ -696,6 +817,8 @@ fn parse_integer(spelling: &str) -> Option<BigInt> {
     };
     BigInt::parse_bytes(digits.as_bytes(), radix)
 }
+
+// == Names and keywords
 
 fn is_name_start(byte: u8) -> bool {
     byte.is_ascii_alphabetic() || byte == b'_'
@@ -753,46 +876,44 @@ fn keyword(text: &str) -> Option<Token> {
         "varbit" => Token::Varbit,
         "void" => Token::Void,
         "_" => Token::DontCare,
-        "@pragma" => Token::Pragma,
         _ => return None,
     })
 }
 
-// - Operators
+// == Fixed tokens
 
-fn operators() -> &'static [(&'static str, Token)] {
+fn fixed_token(rest: &str) -> Option<(&'static str, Token)> {
+    let mut matched: Option<(&'static str, Token)> = None;
+    for (spelling, token) in fixed_tokens() {
+        if rest.starts_with(spelling)
+            && matched
+                .as_ref()
+                .is_none_or(|(previous, _)| spelling.len() > previous.len())
+        {
+            matched = Some((*spelling, token.clone()));
+        }
+    }
+    matched
+}
+
+fn fixed_tokens() -> &'static [(&'static str, Token)] {
     &[
-        ("|+|=", Token::PlusSaturatingAssign),
-        ("|-|=", Token::MinusSaturatingAssign),
-        ("{#}", Token::Invalid),
-        ("&&&", Token::Mask),
-        ("...", Token::Dots),
-        (">>=", Token::ShiftRightAssign),
-        ("<<=", Token::ShiftLeftAssign),
-        ("|+|", Token::PlusSaturating),
-        ("|-|", Token::MinusSaturating),
         ("<=", Token::LessEqual),
         (">=", Token::GreaterEqual),
-        (">>", Token::ShiftRight),
         ("<<", Token::ShiftLeft),
+        // LALRPOP's precedence grammar requires one expression token
+        (">>", Token::ShiftRight),
         ("&&", Token::And),
         ("||", Token::Or),
         ("!=", Token::NotEqual),
         ("==", Token::Equal),
         ("+:", Token::PlusColon),
-        ("++", Token::PlusPlus),
-        ("..", Token::Range),
-        ("+=", Token::PlusAssign),
-        ("-=", Token::MinusAssign),
-        ("*=", Token::MultiplyAssign),
-        ("/=", Token::DivideAssign),
-        ("%=", Token::ModuloAssign),
-        ("&=", Token::BitAndAssign),
-        ("^=", Token::BitXorAssign),
-        ("|=", Token::BitOrAssign),
         ("+", Token::Plus),
         ("-", Token::Minus),
+        ("|+|", Token::PlusSaturating),
+        ("|-|", Token::MinusSaturating),
         ("*", Token::Multiply),
+        ("{#}", Token::Invalid),
         ("/", Token::Divide),
         ("%", Token::Modulo),
         ("|", Token::BitOr),
@@ -815,5 +936,21 @@ fn operators() -> &'static [(&'static str, Token)] {
         ("=", Token::Assign),
         (";", Token::Semicolon),
         ("@", Token::At),
+        ("++", Token::PlusPlus),
+        ("&&&", Token::Mask),
+        ("...", Token::Dots),
+        ("..", Token::Range),
+        ("+=", Token::PlusAssign),
+        ("|+|=", Token::PlusSaturatingAssign),
+        ("-=", Token::MinusAssign),
+        ("|-|=", Token::MinusSaturatingAssign),
+        ("*=", Token::MultiplyAssign),
+        ("/=", Token::DivideAssign),
+        ("%=", Token::ModuloAssign),
+        ("<<=", Token::ShiftLeftAssign),
+        (">>=", Token::ShiftRightAssign),
+        ("&=", Token::BitAndAssign),
+        ("^=", Token::BitXorAssign),
+        ("|=", Token::BitOrAssign),
     ]
 }

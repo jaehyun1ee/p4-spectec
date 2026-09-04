@@ -6,6 +6,7 @@ pub mod extract;
 pub mod lexer;
 pub mod parse;
 pub mod preprocessor;
+pub mod unparse;
 
 mod tokens;
 mod value;

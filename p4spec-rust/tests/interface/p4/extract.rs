@@ -1,5 +1,6 @@
 use p4spec_rust::{
-    interface::p4::{extract, parse::parse_string},
+    interface::p4::context::TypeId,
+    interface::p4::{error::ExtractError, extract, parse::parse_string},
     lang::il::ast::TypKind,
     runtime::value::{Value, ValueKind},
 };
@@ -12,26 +13,27 @@ fn test_extracts_declaration_names_and_type_parameters() {
     )
     .expect("parse declarations");
     let header = find_typed(&program, "headerTypeDeclaration").expect("find header declaration");
-    assert_eq!(extract::declaration_id(header).unwrap(), "Header");
-    assert!(extract::declaration_has_type_parameters(header).unwrap());
-
-    let parameters = find_typed(&program, "typeParameterListOpt").expect("find type parameters");
-    assert_eq!(extract::type_parameter_ids(parameters).unwrap(), ["T"]);
+    assert_eq!(extract::id_of_declaration(header).unwrap(), "Header");
+    assert!(extract::has_type_params_declaration(header).unwrap());
 
     let constant = find_typed(&program, "constantDeclaration").expect("find constant");
-    assert_eq!(extract::declaration_id(constant).unwrap(), "width");
+    assert_eq!(extract::id_of_declaration(constant).unwrap(), "width");
+    assert_eq!(
+        extract::tid_of_declaration(constant).unwrap(),
+        TypeId::Empty
+    );
 }
 
 #[test]
 fn test_extraction_rejects_unrelated_values() {
     let program = parse_string("empty.p4", "").expect("parse empty program");
     assert_eq!(
-        extract::declaration_id(&program),
-        Err(extract::ExtractError::Declaration)
+        extract::id_of_declaration(&program),
+        Err(ExtractError::UnexpectedValue("id_of_declaration"))
     );
     assert_eq!(
-        extract::type_id_of_ref(&program),
-        Err(extract::ExtractError::TypeReference)
+        extract::tid_of_type_ref(&program),
+        Err(ExtractError::UnexpectedValue("tid_of_type_ref"))
     );
 }
 

@@ -15,6 +15,12 @@ pub enum ContextError {
 }
 
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
+pub enum ExtractError {
+    #[error("@{0}: unexpected value")]
+    UnexpectedValue(&'static str),
+}
+
+#[derive(Clone, Debug, Error, PartialEq, Eq)]
 pub enum LexErrorKind {
     #[error("unterminated string literal")]
     UnterminatedString,
