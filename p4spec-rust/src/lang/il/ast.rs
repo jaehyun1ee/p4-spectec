@@ -1,9 +1,4 @@
-//! Intermediate-language syntax and executable values.
-//!
-//! Definitions and expressions carry their stage-specific annotations, while
-//! runtime values use immutable shared nodes so recursive children and cache
-//! keys clone in constant time. For example, cloning a list value shares its
-//! element tree while retaining the list's runtime type and source span.
+//! Internal language model
 
 use std::rc::Rc;
 
