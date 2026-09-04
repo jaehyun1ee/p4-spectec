@@ -40,13 +40,13 @@ use crate::{
             notation::{atom::Atom, mixfix::Mixfix},
             source::{Phrase, Position, Span},
         },
+        data::{
+            typ,
+            value::{Value, make},
+        },
         xl::num::Natural,
     },
     phrase,
-    runtime::{
-        types::typ,
-        value::{Value, make},
-    },
 };
 
 use super::{
@@ -402,7 +402,7 @@ impl<'source> Lexer<'source> {
 
     fn classify_name(&mut self, value: &Rc<Value>, span: &Span, next: LexerState) -> Phrase<Token> {
         let name = match &value.node {
-            crate::runtime::value::ValueKind::Text(name) => name,
+            crate::lang::data::value::ValueKind::Text(name) => name,
             _ => return phrase!(node: Token::Identifier, span: span.clone()),
         };
         let (token, template_expected) = match self.context.get_kind(name) {
@@ -643,7 +643,7 @@ impl<'source> Lexer<'source> {
                     Mixfix::Arg(value_int),
                 ]);
                 let id_typ = phrase!(node: "integerLiteral".to_owned(), span: Span::default());
-                let value = make::case(&typ::var(id_typ, vec![]), value_case, span);
+                let value = make::case(&typ::make::var(id_typ, vec![]), value_case, span);
                 (value, digits.to_owned())
             }
             _ => {

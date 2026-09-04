@@ -1,8 +1,8 @@
 use p4spec_rust::{
     interface::p4::context::TypeId,
     interface::p4::{error::ExtractError, extract, parse::parse_string},
+    lang::data::value::{Value, ValueKind},
     lang::il::ast::TypKind,
-    runtime::value::{Value, ValueKind},
 };
 
 #[test]

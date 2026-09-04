@@ -32,9 +32,9 @@ fn test_conversion_inserts_index_guards_at_evaluation_sites_in_source_order() {
         assert_eq!(exp_base.span, base_span);
     }
 
-    let typ_bool = typ::bool();
-    let typ_nat = typ::nat();
-    let typ_list = typ::list(typ_bool.clone());
+    let typ_bool = typ::make::bool();
+    let typ_nat = typ::make::nat();
+    let typ_list = typ::make::list(typ_bool.clone());
     let exp_index_prem = exp(
         ast::ExpKind::Idx(
             Box::new(iterated_var_exp("xs", &typ_bool, ast::Iter::List, 10)),
@@ -148,11 +148,11 @@ fn test_conversion_inserts_list_and_optional_iteration_guards_in_source_order() 
         (optional_name(exp_l), optional_name(exp_r))
     }
 
-    let typ_bool = typ::bool();
+    let typ_bool = typ::make::bool();
     let list_names = [("x", 2), ("y", 3), ("z", 4)];
     let optional_names = [("p", 5), ("q", 6), ("r", 7)];
-    let mut params = vec![typ::list(typ_bool.clone()); list_names.len()];
-    params.extend(vec![typ::opt(typ_bool.clone()); optional_names.len()]);
+    let mut params = vec![typ::make::list(typ_bool.clone()); list_names.len()];
+    params.extend(vec![typ::make::opt(typ_bool.clone()); optional_names.len()]);
     let mut args = list_names
         .iter()
         .map(|(name, line)| iterated_var_exp(name, &typ_bool, ast::Iter::List, *line))
@@ -221,7 +221,7 @@ fn test_conversion_inserts_list_and_optional_iteration_guards_in_source_order() 
 
 #[test]
 fn test_conversion_omits_iteration_guards_entailed_by_prior_premises() {
-    let typ_bool = typ::bool();
+    let typ_bool = typ::make::bool();
     let names = [("x", 2), ("y", 3), ("z", 4)];
     let args = names
         .iter()
@@ -231,7 +231,7 @@ fn test_conversion_omits_iteration_guards_entailed_by_prior_premises() {
     let prem_yz = equality_prem(len_exp("y", 13), len_exp("z", 14), 15);
     let exp_output = joint_iteration(&[("x", 20), ("z", 21)], ast::Iter::List, 22);
     let spec = function_spec(
-        vec![typ::list(typ_bool); names.len()],
+        vec![typ::make::list(typ_bool); names.len()],
         args,
         exp_output,
         vec![prem_xy.clone(), prem_yz.clone()],
@@ -248,8 +248,8 @@ fn test_conversion_omits_iteration_guards_entailed_by_prior_premises() {
 
 #[test]
 fn test_conversion_preserves_numeric_and_slice_checks_before_output_guards() {
-    let typ_nat = typ::nat();
-    let typ_list = typ::list(typ_nat.clone());
+    let typ_nat = typ::make::nat();
+    let typ_list = typ::make::list(typ_nat.clone());
     let exp_zero = exp(
         ast::ExpKind::Num(ast::Num::Nat(0_u64.into())),
         ast::TypKind::Num(xl::num::Typ::Nat),
@@ -378,13 +378,16 @@ fn test_conversion_preserves_numeric_and_slice_checks_before_output_guards() {
 
 #[test]
 fn test_conversion_distinguishes_let_must_guards_from_insert_guards() {
-    let typ_bool = typ::bool();
+    let typ_bool = typ::make::bool();
     let exp_l = joint_iteration(&[("bound_l", 20), ("bound_r", 21)], ast::Iter::List, 22);
     let exp_r = joint_iteration(&[("input_l", 23), ("input_r", 24)], ast::Iter::List, 25);
     let prem_equality = equality_prem(exp_l, exp_r, 30);
     let exp_output = joint_iteration(&[("bound_l", 20), ("bound_r", 21)], ast::Iter::List, 40);
     let spec = function_spec(
-        vec![typ::list(typ_bool.clone()), typ::list(typ_bool.clone())],
+        vec![
+            typ::make::list(typ_bool.clone()),
+            typ::make::list(typ_bool.clone()),
+        ],
         vec![
             iterated_var_exp("input_l", &typ_bool, ast::Iter::List, 2),
             iterated_var_exp("input_r", &typ_bool, ast::Iter::List, 3),
@@ -412,7 +415,7 @@ fn test_conversion_distinguishes_let_must_guards_from_insert_guards() {
 
 #[test]
 fn test_conversion_distinguishes_iterated_must_guards_from_insert_guards() {
-    let typ_bool = typ::bool();
+    let typ_bool = typ::make::bool();
     let exp_condition = exp(
         ast::ExpKind::Cmp(
             ast::CmpOp::Bool(xl::bool::CmpOp::Eq),
@@ -437,7 +440,10 @@ fn test_conversion_distinguishes_iterated_must_guards_from_insert_guards() {
     }), span:
     span(15) };
     let insert_spec = function_spec(
-        vec![typ::list(typ_bool.clone()), typ::list(typ_bool.clone())],
+        vec![
+            typ::make::list(typ_bool.clone()),
+            typ::make::list(typ_bool.clone()),
+        ],
         vec![
             iterated_var_exp("left", &typ_bool, ast::Iter::List, 2),
             iterated_var_exp("right", &typ_bool, ast::Iter::List, 3),
@@ -471,7 +477,7 @@ fn test_conversion_distinguishes_iterated_must_guards_from_insert_guards() {
     span(25) };
     let exp_output = joint_iteration(&[("input", 22), ("output", 23)], ast::Iter::List, 30);
     let must_spec = function_spec(
-        vec![typ::list(typ_bool.clone())],
+        vec![typ::make::list(typ_bool.clone())],
         vec![iterated_var_exp("input", &typ_bool, ast::Iter::List, 20)],
         exp_output.clone(),
         vec![prem_binding],
@@ -558,7 +564,7 @@ fn test_conversion_traverses_relation_matches_paths_and_else_without_sibling_lea
     ast::DefKind::Rel(ast::Rel {
         id: id("relation", 1),
         not_typ: crate::phrase! { node:
-            Mixfix::Seq(vec![Mixfix::Arg(typ::bool()), Mixfix::Arg(typ::bool())]), span:
+            Mixfix::Seq(vec![Mixfix::Arg(typ::make::bool()), Mixfix::Arg(typ::make::bool())]), span:
             span(1) },
         input_hint: InputHint::new(vec![0]),
         rule_groups: vec![
@@ -615,7 +621,7 @@ fn test_conversion_traverses_relation_matches_paths_and_else_without_sibling_lea
 
 #[test]
 fn test_conversion_traverses_else_clauses_in_guard_order() {
-    let typ_bool = typ::bool();
+    let typ_bool = typ::make::bool();
     let exp_argument = joint_iteration(&[("left", 50), ("right", 51)], ast::Iter::List, 50);
     let exp_output = joint_iteration(&[("left", 50), ("right", 51)], ast::Iter::List, 52);
     let prem_debug = crate::phrase! { node:
@@ -639,7 +645,7 @@ fn test_conversion_traverses_else_clauses_in_guard_order() {
         id: id("otherwise", 49),
         tparams: vec![],
         params: vec![crate::phrase! { node:
-            ast::ParamKind::Exp(typ::list(crate::phrase! { node:
+            ast::ParamKind::Exp(typ::make::list(crate::phrase! { node:
                 ast::TypKind::Tuple(vec![typ_bool.clone(), typ_bool]), span:
                 span(49) })), span:
             span(49) }],

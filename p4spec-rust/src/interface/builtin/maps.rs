@@ -2,22 +2,20 @@
 //!
 //! A map value is decoded to its pair list, updated at the first matching key,
 //! and encoded again. Thus updating `{a: 1}` with `a: 2` preserves its list
-//! position and produces `{a: 2}`, as in the OCaml implementation.
+//! position and produces `{a: 2}`.
 
 use std::rc::Rc;
 
-use crate::{
-    lang::{
-        common::{
-            notation::{atom::Atom, mixfix::Mixfix, mixop::Mixop},
-            source::Span,
-        },
-        il::ast::Typ,
+use crate::lang::{
+    common::{
+        notation::{atom::Atom, mixfix::Mixfix, mixop::Mixop},
+        source::Span,
     },
-    runtime::{
-        types::typ,
+    data::{
+        typ,
         value::{Value, get, make},
     },
+    il::ast::Typ,
 };
 
 use super::{BuiltinError, extract};
@@ -63,7 +61,7 @@ fn make_pair(
     value_value: Rc<Value>,
 ) -> Rc<Value> {
     let pair_id = crate::phrase!(node: "pair".to_owned(), span: Span::default());
-    let typ = typ::var(pair_id, vec![typ_key.clone(), typ_value.clone()]);
+    let typ = typ::make::var(pair_id, vec![typ_key.clone(), typ_value.clone()]);
     let pair_mixop = pair_mixop();
     let value_case = Mixop::fill(&pair_mixop, [value_key, value_value])
         .expect("the pair mixop has exactly two arguments");
@@ -111,7 +109,7 @@ fn map_update(
     updated
 }
 
-// == Conversion between meta-maps and OCaml lists
+// == Conversion between meta-maps and runtime lists
 
 fn map_of_value(value: &Value) -> Result<ValueMap, BuiltinError> {
     let value_case = get::case(value).map_err(|_| BuiltinError::new("expected a map"))?;
@@ -128,11 +126,11 @@ fn map_of_value(value: &Value) -> Result<ValueMap, BuiltinError> {
 
 fn value_of_map(typ_key: &Typ, typ_value: &Typ, map: ValueMap) -> Result<Rc<Value>, BuiltinError> {
     let pair_id = crate::phrase!(node: "pair".to_owned(), span: Span::default());
-    let typ_pair = typ::var(pair_id, vec![typ_key.clone(), typ_value.clone()]);
-    let typ_pairs = typ::list(typ_pair);
+    let typ_pair = typ::make::var(pair_id, vec![typ_key.clone(), typ_value.clone()]);
+    let typ_pairs = typ::make::list(typ_pair);
     let value_pairs = make::list(&typ_pairs, map, Span::default());
     let map_id = crate::phrase!(node: "map".to_owned(), span: Span::default());
-    let typ = typ::var(map_id, vec![typ_key.clone(), typ_value.clone()]);
+    let typ = typ::make::var(map_id, vec![typ_key.clone(), typ_value.clone()]);
     let map_mixop = map_mixop();
     let value_case =
         Mixop::fill(&map_mixop, [value_pairs]).expect("the map mixop has exactly one argument");
@@ -148,7 +146,7 @@ pub fn find_map(targs: &[Typ], values: &[Rc<Value>]) -> Result<Rc<Value>, Builti
     let (_typ_key, typ_value) = extract::two(targs)?;
     let (value_map, value_key) = extract::two(values)?;
     let map = map_of_value(value_map)?;
-    let typ_opt = typ::opt(typ_value.clone());
+    let typ_opt = typ::make::opt(typ_value.clone());
     let value_opt = map_find_opt(value_key, &map);
     let value = make::opt(&typ_opt, value_opt, Span::default());
     Ok(value)
@@ -167,7 +165,7 @@ pub fn find_maps(targs: &[Typ], values: &[Rc<Value>]) -> Result<Rc<Value>, Built
             value_opt = map_find_opt(value_key, &map);
         }
     }
-    let typ_opt = typ::opt(typ_value.clone());
+    let typ_opt = typ::make::opt(typ_value.clone());
     let value = make::opt(&typ_opt, value_opt, Span::default());
     Ok(value)
 }

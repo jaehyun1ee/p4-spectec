@@ -1,4 +1,4 @@
-//! Natural-number aggregation builtins, ordered to match `nats.ml`.
+//! Natural-number aggregation builtins in specification order.
 
 use std::rc::Rc;
 
@@ -7,8 +7,8 @@ use num_traits::Zero;
 
 use crate::{
     lang::common::source::Span,
+    lang::data::value::{Value, get, make},
     lang::{il::ast::Typ, xl::num},
-    runtime::value::{Value, get, make},
 };
 
 use super::{BuiltinError, extract};

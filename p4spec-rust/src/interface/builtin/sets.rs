@@ -6,18 +6,16 @@
 
 use std::{collections::BTreeSet, rc::Rc};
 
-use crate::{
-    lang::{
-        common::{
-            notation::{atom::Atom, mixfix::Mixfix, mixop::Mixop},
-            source::Span,
-        },
-        il::ast::Typ,
+use crate::lang::{
+    common::{
+        notation::{atom::Atom, mixfix::Mixfix, mixop::Mixop},
+        source::Span,
     },
-    runtime::{
-        types::typ,
+    data::{
+        typ,
         value::{Value, get, make},
     },
+    il::ast::Typ,
 };
 
 use super::{BuiltinError, extract};
@@ -26,7 +24,7 @@ use super::{BuiltinError, extract};
 
 type ValueSet = BTreeSet<Rc<Value>>;
 
-// == Conversion between meta-sets and OCaml lists
+// == Conversion between meta-sets and runtime lists
 
 fn set_mixop() -> Mixop {
     let left = crate::phrase!(node: Atom::LBrace, span: Span::default());
@@ -48,10 +46,10 @@ fn set_of_value(value: &Value) -> Result<ValueSet, BuiltinError> {
 
 fn value_of_set(typ_key: &Typ, set: ValueSet) -> Result<Rc<Value>, BuiltinError> {
     let values_element = set.into_iter().collect();
-    let typ_list = typ::list(typ_key.clone());
+    let typ_list = typ::make::list(typ_key.clone());
     let value_elements = make::list(&typ_list, values_element, Span::default());
     let set_id = crate::phrase!(node: "set".to_owned(), span: Span::default());
-    let typ = typ::var(set_id, vec![typ_key.clone()]);
+    let typ = typ::make::var(set_id, vec![typ_key.clone()]);
     let set_mixop = set_mixop();
     let value_case =
         Mixop::fill(&set_mixop, [value_elements]).expect("the set mixop has exactly one argument");

@@ -1,6 +1,6 @@
 //! Backtracking state for elaboration alternatives
 
-use crate::{lang::common::source::Span, runtime::types::TypeError};
+use crate::{lang::common::source::Span, runtime::ops::typ::TypeError};
 
 use super::{ElabError, ElabErrorKind, context::Context, error::ElabTrace};
 

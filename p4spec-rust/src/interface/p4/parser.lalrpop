@@ -8,7 +8,7 @@ use crate::{
         lexer::Token,
         value,
     },
-    runtime::value::Value,
+    lang::data::value::Value,
 };
 
 grammar(context: &Context);

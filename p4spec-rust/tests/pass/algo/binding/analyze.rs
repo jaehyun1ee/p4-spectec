@@ -8,16 +8,16 @@ fn test_conversion_preserves_rule_paths_and_populates_antiunified_inputs_in_orde
                 exp(ast::ExpKind::Bool(left), ast::TypKind::Bool, line),
                 exp(ast::ExpKind::Bool(right), ast::TypKind::Bool, line + 1),
             ]),
-            ast::TypKind::Tuple(vec![typ::bool(), typ::bool()]),
+            ast::TypKind::Tuple(vec![typ::make::bool(), typ::make::bool()]),
             line,
         )
     };
     let relation_not_typ = crate::phrase! { node:
     Mixfix::Seq(vec![
         Mixfix::Arg(crate::phrase! { node:
-            ast::TypKind::Tuple(vec![typ::bool(), typ::bool()]), span:
+            ast::TypKind::Tuple(vec![typ::make::bool(), typ::make::bool()]), span:
             span(1) }),
-        Mixfix::Arg(typ::bool()),
+        Mixfix::Arg(typ::make::bool()),
     ]), span:
     span(1) };
     let rule = |name: &str, input: ast::Exp, output: bool, line: i64| {
@@ -117,7 +117,7 @@ fn test_conversion_preserves_rule_paths_and_populates_antiunified_inputs_in_orde
 #[test]
 fn test_clause_analysis_orders_partial_then_repeated_then_source_premises() {
     let tuple_typ = crate::phrase! { node:
-    ast::TypKind::Tuple(vec![typ::bool(), typ::bool(), typ::bool()]), span:
+    ast::TypKind::Tuple(vec![typ::make::bool(), typ::make::bool(), typ::make::bool()]), span:
     span(1) };
     let tuple = exp(
         ast::ExpKind::Tuple(vec![
@@ -144,7 +144,7 @@ fn test_clause_analysis_orders_partial_then_repeated_then_source_premises() {
         id: id("function", 1),
         tparams: vec![],
         params: vec![crate::phrase! { node: ast::ParamKind::Exp(tuple_typ), span:  span(1) }],
-        typ: typ::bool(),
+        typ: typ::make::bool(),
         clauses: vec![clause],
         else_clause: None,
         hints: vec![],
@@ -201,8 +201,8 @@ fn test_otherwise_clauses_and_rules_reject_impure_premises_at_the_branch_span() 
     ast::DefKind::FuncDec(ast::FuncDec {
         id: id("function", 9),
         tparams: vec![],
-        params: vec![crate::phrase! { node: ast::ParamKind::Exp(typ::bool()), span:  span(9) }],
-        typ: typ::bool(),
+        params: vec![crate::phrase! { node: ast::ParamKind::Exp(typ::make::bool()), span:  span(9) }],
+        typ: typ::make::bool(),
         clauses: vec![],
         else_clause: Some(else_clause),
         hints: vec![],
@@ -213,7 +213,7 @@ fn test_otherwise_clauses_and_rules_reject_impure_premises_at_the_branch_span() 
     assert_eq!(function_error.kind, AlgoErrorKind::ImpureElsePremises);
     assert_eq!(function_error.span, span(10));
 
-    let relation_not_typ = crate::phrase! { node: Mixfix::Arg(typ::bool()), span:  span(20) };
+    let relation_not_typ = crate::phrase! { node: Mixfix::Arg(typ::make::bool()), span:  span(20) };
     let else_rule = crate::phrase! { node:
     ast::RuleKind {
         id: id("else_rule", 21),
@@ -263,7 +263,7 @@ fn test_conversion_rejects_overlapping_and_missing_variant_table_patterns() {
             params: vec![crate::phrase! { node:
                 ast::ParamKind::Exp(choice_typ.clone()), span:
                 span(line) }],
-            typ: typ::bool(),
+            typ: typ::make::bool(),
             rows,
             hints: vec![],
         }), span:
@@ -349,8 +349,8 @@ fn test_conversion_preserves_definition_clause_and_table_row_order() {
     ast::DefKind::FuncDec(ast::FuncDec {
         id: id("function", 3),
         tparams: vec![],
-        params: vec![crate::phrase! { node: ast::ParamKind::Exp(typ::bool()), span:  span(3) }],
-        typ: typ::bool(),
+        params: vec![crate::phrase! { node: ast::ParamKind::Exp(typ::make::bool()), span:  span(3) }],
+        typ: typ::make::bool(),
         clauses: vec![clause("first_clause", 4), clause("second_clause", 5)],
         else_clause: None,
         hints: vec![],
@@ -377,7 +377,7 @@ fn test_conversion_preserves_definition_clause_and_table_row_order() {
         params: vec![crate::phrase! { node:
             ast::ParamKind::Exp(choice_typ.clone()), span:
             span(6) }],
-        typ: typ::bool(),
+        typ: typ::make::bool(),
         rows: vec![row("specific", true, 7), row("_closer", false, 8)],
         hints: vec![],
     }), span:
@@ -385,14 +385,14 @@ fn test_conversion_preserves_definition_clause_and_table_row_order() {
     let variable_def = crate::phrase! { node:
     ast::DefKind::Var(ast::VarDef {
         id: id("variable", 9),
-        typ: typ::bool(),
+        typ: typ::make::bool(),
         hints: vec![],
     }), span:
     span(9) };
     let extern_relation_def = crate::phrase! { node:
     ast::DefKind::ExternRel(ast::ExternRel {
         id: id("external_relation", 10),
-        not_typ: crate::phrase! { node: Mixfix::Arg(typ::bool()), span:  span(10) },
+        not_typ: crate::phrase! { node: Mixfix::Arg(typ::make::bool()), span:  span(10) },
         input_hint: InputHint::new(vec![0]),
         hints: vec![],
     }), span:
@@ -401,8 +401,8 @@ fn test_conversion_preserves_definition_clause_and_table_row_order() {
     ast::DefKind::ExternDec(ast::ExternDec {
         id: id("external_dec", 11),
         tparams: vec![],
-        params: vec![crate::phrase! { node: ast::ParamKind::Exp(typ::bool()), span:  span(11) }],
-        typ: typ::bool(),
+        params: vec![crate::phrase! { node: ast::ParamKind::Exp(typ::make::bool()), span:  span(11) }],
+        typ: typ::make::bool(),
         hints: vec![],
     }), span:
     span(11) };
@@ -410,8 +410,8 @@ fn test_conversion_preserves_definition_clause_and_table_row_order() {
     ast::DefKind::BuiltinDec(ast::BuiltinDec {
         id: id("builtin_dec", 12),
         tparams: vec![],
-        params: vec![crate::phrase! { node: ast::ParamKind::Exp(typ::bool()), span:  span(12) }],
-        typ: typ::bool(),
+        params: vec![crate::phrase! { node: ast::ParamKind::Exp(typ::make::bool()), span:  span(12) }],
+        typ: typ::make::bool(),
         hints: vec![],
     }), span:
     span(12) };

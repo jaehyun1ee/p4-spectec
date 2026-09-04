@@ -7,8 +7,8 @@ use std::{
 
 use crate::{
     lang::common::source::Span,
+    lang::data::value::{Value, make},
     lang::il::ast::Typ,
-    runtime::value::{Value, make},
 };
 
 use super::{BuiltinError, extract};

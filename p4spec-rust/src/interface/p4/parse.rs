@@ -13,7 +13,7 @@ use lalrpop_util::ParseError;
 
 use crate::{
     lang::common::source::{Position, Span},
-    runtime::value::Value,
+    lang::data::value::Value,
 };
 
 use super::{

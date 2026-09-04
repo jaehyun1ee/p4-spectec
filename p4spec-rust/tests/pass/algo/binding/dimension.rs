@@ -5,7 +5,7 @@ fn test_dimension_inference_keeps_the_minimal_occurrence() {
     let iterated_var = var_exp("x", 2);
     let iterated = exp(
         ast::ExpKind::Iter(Box::new(iterated_var), (ast::Iter::List, vec![])),
-        ast::TypKind::Iter(Box::new(typ::bool()), ast::Iter::List),
+        ast::TypKind::Iter(Box::new(typ::make::bool()), ast::Iter::List),
         3,
     );
     let direct = var_exp("x", 4);
@@ -19,7 +19,7 @@ fn test_dimension_inference_keeps_the_minimal_occurrence() {
     let (stored_id, actual) = dimensions.iter().next().expect("inferred variable");
 
     assert_eq!(stored_id.span, span(2));
-    let expected = Dim::new(typ::bool(), vec![]);
+    let expected = Dim::new(typ::make::bool(), vec![]);
     assert!(actual.sub(&expected));
     assert!(expected.sub(actual));
 }

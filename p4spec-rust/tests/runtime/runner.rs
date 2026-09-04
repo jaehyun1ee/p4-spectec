@@ -1,8 +1,8 @@
 use p4spec_rust::{
     lang::common::source::{Position, Span},
+    lang::data::value::get,
     phrase,
     runner::{BuiltinInterface, Interface, InterfaceErrorKind, NullInterface},
-    runtime::value::get,
 };
 
 fn id(name: &str) -> p4spec_rust::lang::il::ast::Id {

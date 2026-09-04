@@ -4,12 +4,12 @@ use std::{cell::Cell, collections::HashSet, rc::Rc};
 use serde_json::{Map, Number, Value, json};
 use thiserror::Error;
 
+use crate::lang::data::value::make;
 use crate::lang::{
     common::notation::mixfix::Mixfix,
     il::ast::{self, *},
     xl::{bool, num},
 };
-use crate::runtime::value::make;
 use crate::yojson::ExternalData;
 
 use super::{

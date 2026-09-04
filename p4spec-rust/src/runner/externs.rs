@@ -9,8 +9,8 @@ use std::rc::Rc;
 use thiserror::Error;
 
 use crate::{
+    lang::data::value::Value,
     lang::{common::source::Span, il::ast::Typ},
-    runtime::value::Value,
 };
 
 // == Extern errors

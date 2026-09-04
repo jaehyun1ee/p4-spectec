@@ -5,7 +5,7 @@ use p4spec_rust::{
         context::Context,
         lexer::{Lexer, Token},
     },
-    runtime::value::get,
+    lang::data::value::get,
 };
 
 fn tokens(source: &str, context: Rc<Context>) -> Vec<Token> {

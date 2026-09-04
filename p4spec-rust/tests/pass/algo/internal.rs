@@ -7,6 +7,7 @@ use crate::{
             notation::{atom::Atom, mixfix::Mixfix},
             source::{NotePhrase, Position, Span},
         },
+        data::typ,
         hints::input::InputHint,
         il::ast,
         traits::eq::SyntaxEq,
@@ -26,10 +27,7 @@ use crate::{
             shallow,
         },
     },
-    runtime::{
-        sta::Dim,
-        types::{TypeDef, typ},
-    },
+    runtime::{dim::Dim, typdef::TypeDef},
 };
 
 fn span(line: i64) -> Span {
@@ -123,7 +121,7 @@ fn function_spec(
 }
 
 fn joint_iteration(names: &[(&str, i64)], iter: ast::Iter, line: i64) -> ast::Exp {
-    let typ_bool = typ::bool();
+    let typ_bool = typ::make::bool();
     let exps = names
         .iter()
         .map(|(name, line)| typed_var_exp(name, &typ_bool, *line))
@@ -150,7 +148,7 @@ fn dimension_exp(name: &str, iter: ast::Iter, line: i64) -> ast::Exp {
         true,
         &ast::Var {
             id: id(name, line),
-            typ: typ::bool(),
+            typ: typ::make::bool(),
             iters: vec![iter],
         },
     )
@@ -188,14 +186,14 @@ fn indexed_exp(base: ast::Exp, index: ast::Exp, note: ast::TypKind, line: i64) -
 }
 
 fn literal_index_exp(value: bool, line: i64) -> ast::Exp {
-    let typ_bool = typ::bool();
+    let typ_bool = typ::make::bool();
     let base = exp(
         ast::ExpKind::List(vec![exp(
             ast::ExpKind::Bool(value),
             ast::TypKind::Bool,
             line,
         )]),
-        typ::list(typ_bool).node,
+        typ::make::list(typ_bool).node,
         line,
     );
     let index = exp(

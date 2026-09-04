@@ -2,7 +2,7 @@
 
 use thiserror::Error;
 
-use crate::runtime::value::ValueError;
+use crate::lang::data::value::ValueError;
 
 #[derive(Clone, Debug, Error, Eq, PartialEq)]
 pub enum BuiltinErrorKind {
