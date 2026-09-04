@@ -8,12 +8,12 @@ use p4spec_rust::{
             notation::{atom::Atom, mixfix::Mixfix},
             source::Span,
         },
+        data::{
+            typ,
+            value::{Value, make},
+        },
         el, il, pl, sl,
         xl::num::Natural,
-    },
-    runtime::{
-        types::typ,
-        value::{Value, make},
     },
 };
 
@@ -29,7 +29,10 @@ fn atom(name: &str) -> il::ast::Atom {
 }
 
 fn hinted_def_type() -> il::ast::DefTyp {
-    let notation = Mixfix::Seq(vec![Mixfix::Atom(atom("WRAP")), Mixfix::Arg(typ::text())]);
+    let notation = Mixfix::Seq(vec![
+        Mixfix::Atom(atom("WRAP")),
+        Mixfix::Arg(typ::make::text()),
+    ]);
     let hint = p4spec_rust::phrase! {
         node: el::ast::ExpKind::Seq(vec![
             p4spec_rust::phrase! {
@@ -57,7 +60,7 @@ fn hinted_def_type() -> il::ast::DefTyp {
 }
 
 fn wrapped_text() -> Rc<Value> {
-    let wrapper_type = typ::var(id("Wrapper"), Vec::new());
+    let wrapper_type = typ::make::var(id("Wrapper"), Vec::new());
     let value_case = Mixfix::Seq(vec![
         Mixfix::Atom(atom("WRAP")),
         Mixfix::Arg(make::text("payload".to_owned(), Span::default())),
@@ -86,7 +89,7 @@ fn test_unparses_scalar_and_container_values() {
         "a\\n\\\"b"
     );
 
-    let tuple_type = typ::tuple(vec![typ::bool(), typ::nat()]);
+    let tuple_type = typ::make::tuple(vec![typ::make::bool(), typ::make::nat()]);
     let tuple = make::tuple(
         &tuple_type,
         vec![
@@ -100,7 +103,7 @@ fn test_unparses_scalar_and_container_values() {
 
 #[test]
 fn test_unsupported_values_return_typed_errors() {
-    let structure = make::structure(&typ::bool(), Vec::new(), Span::default());
+    let structure = make::structure(&typ::make::bool(), Vec::new(), Span::default());
     assert_eq!(
         P4Unparser::new().render(&structure),
         Err(P4UnparseError::UnsupportedValue("Struct"))

@@ -1,6 +1,6 @@
 //! Dispatch specification builtin calls to their Rust implementations.
 //!
-//! Construction installs the standard entries in OCaml declaration order and
+//! Construction installs the standard entries in specification order and
 //! then applies interface-specific overrides. Invocation resolves one name and
 //! calls its implementation; for example, `sum_nat` dispatches to
 //! `nats::sum_nat`, while `fresh_typeId` advances state hidden in `fresh`.
@@ -8,8 +8,8 @@
 use std::{collections::HashMap, rc::Rc};
 
 use crate::{
+    lang::data::value::Value,
     lang::il::ast::{Id, Typ},
-    runtime::value::Value,
 };
 
 use super::{

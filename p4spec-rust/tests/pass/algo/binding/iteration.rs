@@ -14,7 +14,7 @@ fn test_iteration_context_commits_a_successful_iteration_scope() {
     };
 
     let mut iter_scope = iter_ctx.scope(iteration);
-    iter_scope.add_var_bound(id("x", 1), typ::bool(), vec![]);
+    iter_scope.add_var_bound(id("x", 1), typ::make::bool(), vec![]);
     let iteration = iter_scope.finish();
 
     assert_eq!(iteration.vars_bound.len(), 1);
@@ -42,7 +42,7 @@ fn test_iteration_context_rolls_back_a_failed_iteration_scope() {
 
     {
         let mut iter_scope = iter_ctx.scope(iteration);
-        iter_scope.add_var_bound(id("x", 1), typ::bool(), vec![]);
+        iter_scope.add_var_bound(id("x", 1), typ::make::bool(), vec![]);
     }
 
     assert_eq!(iter_ctx, original);

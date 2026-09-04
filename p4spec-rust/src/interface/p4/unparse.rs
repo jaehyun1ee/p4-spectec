@@ -10,6 +10,7 @@ use std::{collections::HashMap, rc::Rc};
 use thiserror::Error;
 
 use crate::{
+    lang::data::value::{Value, ValueKind},
     lang::{
         al,
         common::notation::{atom::Atom, mixfix::Mixfix, mixop::Mixop},
@@ -19,7 +20,6 @@ use crate::{
         traits::print::Print,
         xl::num::Number,
     },
-    runtime::value::{Value, ValueKind},
 };
 
 type CaseId = (String, Mixop);

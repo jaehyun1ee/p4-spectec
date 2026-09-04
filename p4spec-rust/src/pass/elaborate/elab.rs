@@ -16,12 +16,13 @@ use crate::{
     },
     note_phrase, phrase,
     runtime::{
-        sta::{Func, Rel},
-        types::{
-            Theta, TypeArityMismatch, TypeDef, TypeErrorKind, equiv_func_typ, equiv_typ,
-            expand_typ, optimize_sub_typ, sub_typ, subst_not_typ, subst_params, subst_typ,
-            subst_typs,
+        func::r#static::Func,
+        ops::typ::{
+            Theta, TypeArityMismatch, TypeErrorKind, equiv_func_typ, equiv_typ, expand_typ,
+            optimize_sub_typ, sub_typ, subst_not_typ, subst_params, subst_typ, subst_typs,
         },
+        rel::r#static::Rel,
+        typdef::TypeDef,
     },
 };
 

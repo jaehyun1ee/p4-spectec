@@ -1,4 +1,4 @@
-//! Bit and integer builtins, in the declaration order of `numerics.ml`.
+//! Bit and integer builtins in specification order.
 //!
 //! Calls decode runtime numerics, apply the bounded arithmetic operation, and
 //! return one encoded result. For example, unsigned bits `[true, false]`
@@ -9,12 +9,14 @@ use std::rc::Rc;
 use num_bigint::BigInt;
 use num_traits::{One, ToPrimitive, Zero};
 
-use crate::{
-    lang::{common::source::Span, il::ast::Typ, xl::num},
-    runtime::{
-        types::typ,
+use crate::lang::{
+    common::source::Span,
+    data::{
+        typ,
         value::{Value, get, make},
     },
+    il::ast::Typ,
+    xl::num,
 };
 
 use super::{BuiltinError, extract};
@@ -23,7 +25,7 @@ use super::{BuiltinError, extract};
 
 const MAX_BIT_WIDTH: usize = 2048;
 
-// == Conversion between meta-bits and OCaml bool array
+// == Conversion between meta-bits and bit vectors
 
 fn bits_of_value(value: &Value) -> Result<Vec<bool>, BuiltinError> {
     let values = get::list(value).map_err(|error| BuiltinError::new(error.to_string()))?;
@@ -37,7 +39,7 @@ fn bits_of_value(value: &Value) -> Result<Vec<bool>, BuiltinError> {
 
 fn value_of_bits(bits: Vec<bool>) -> Result<Rc<Value>, BuiltinError> {
     let bit_id = crate::phrase!(node: "bit".to_owned(), span: Span::default());
-    let typ = typ::var(bit_id, Vec::new());
+    let typ = typ::make::var(bit_id, Vec::new());
     let mut bit_values = Vec::with_capacity(bits.len());
     for bit in bits {
         let bit_value = make::bool(bit, Span::default());
@@ -47,7 +49,7 @@ fn value_of_bits(bits: Vec<bool>) -> Result<Rc<Value>, BuiltinError> {
     Ok(value)
 }
 
-// == Conversion between meta-numerics and OCaml numerics
+// == Conversion between meta-numerics and runtime numerics
 
 fn bigint_of_value(value: &Value) -> Result<&BigInt, BuiltinError> {
     let number = get::num(value).map_err(|error| BuiltinError::new(error.to_string()))?;

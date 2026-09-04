@@ -5,7 +5,7 @@
 
 use crate::{
     lang::{common::ds::map::IdMap, il::ast},
-    runtime::sta::{Dim, VEnv},
+    runtime::{dim::Dim, envs::elab::VEnv},
 };
 
 // == Variable inference

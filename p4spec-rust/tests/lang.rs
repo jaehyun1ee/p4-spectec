@@ -2,6 +2,8 @@
 mod al;
 #[path = "lang/common.rs"]
 mod common;
+#[path = "lang/data.rs"]
+mod data;
 #[path = "lang/el.rs"]
 mod el;
 #[path = "lang/hints.rs"]

@@ -3,7 +3,7 @@ use p4spec_rust::{
         error::P4ErrorKind,
         parse::{parse_file, parse_string},
     },
-    runtime::value::ValueKind,
+    lang::data::value::ValueKind,
 };
 use std::{
     collections::{BTreeMap, BTreeSet},

@@ -3,12 +3,15 @@ use std::rc::Rc;
 use num_bigint::BigInt;
 use p4spec_rust::{
     interface::builtin::{BuiltinErrorKind, call::Builtins},
-    lang::{common::source::Span, traits::print::Print},
-    phrase,
-    runtime::{
-        types::typ,
-        value::{Value, get, make},
+    lang::{
+        common::source::Span,
+        data::{
+            typ,
+            value::{Value, get, make},
+        },
+        traits::print::Print,
     },
+    phrase,
 };
 
 fn id(name: &str) -> p4spec_rust::lang::il::ast::Id {
@@ -34,7 +37,7 @@ fn invoke_with_types(
 
 #[test]
 fn test_numeric_builtin_returns_value_without_side_effect() {
-    let typ_list = typ::list(typ::int());
+    let typ_list = typ::make::list(typ::make::int());
     let input = make::list(
         &typ_list,
         vec![
@@ -90,7 +93,7 @@ fn test_missing_builtin_and_wrong_arity_are_typed_failures() {
 
 #[test]
 fn test_list_and_text_builtins_preserve_ocaml_results() {
-    let typ_list = typ::list(typ::text());
+    let typ_list = typ::make::list(typ::make::text());
     let repeated = make::list(
         &typ_list,
         vec![
@@ -102,7 +105,7 @@ fn test_list_and_text_builtins_preserve_ocaml_results() {
     let (distinct, _) = invoke_with_types(
         &mut Builtins::new(),
         "distinct_",
-        &[typ::text()],
+        &[typ::make::text()],
         &[repeated],
     )
     .unwrap();

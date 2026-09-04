@@ -3,7 +3,7 @@
 //! These projections recover declaration names, referenced type identifiers,
 //! and type-parameter presence from the runtime-value parse tree.
 
-use crate::runtime::value::{Value, get};
+use crate::lang::data::value::{Value, get};
 
 use super::{context::TypeId, error::ExtractError, value};
 

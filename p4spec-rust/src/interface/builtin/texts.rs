@@ -1,4 +1,4 @@
-//! Text builtins, preserving the function order of the OCaml implementation.
+//! Text builtins in specification order.
 //!
 //! Arguments are decoded from runtime values before the textual operation is
 //! performed, then the encoded result is returned. For example,
@@ -8,13 +8,14 @@ use std::rc::Rc;
 
 use num_bigint::BigInt;
 
-use crate::{
-    lang::common::source::Span,
-    lang::{il::ast::Typ, traits::print::Print},
-    runtime::{
-        types::typ,
+use crate::lang::{
+    common::source::Span,
+    data::{
+        typ,
         value::{Value, get, make},
     },
+    il::ast::Typ,
+    traits::print::Print,
 };
 
 use super::{BuiltinError, extract};
@@ -92,7 +93,7 @@ pub fn split_text(targs: &[Typ], values: &[Rc<Value>]) -> Result<Rc<Value>, Buil
         .split(separator)
         .map(|part| make::text(part.to_owned(), Span::default()))
         .collect();
-    let typ_list = typ::list(typ::bool());
+    let typ_list = typ::make::list(typ::make::bool());
     let value = make::list(&typ_list, parts, Span::default());
     Ok(value)
 }

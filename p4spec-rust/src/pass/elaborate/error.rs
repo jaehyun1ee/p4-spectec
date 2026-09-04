@@ -6,7 +6,7 @@ use thiserror::Error;
 
 use crate::{
     lang::common::source::Span,
-    runtime::types::{TypeError, TypeErrorKind},
+    runtime::ops::typ::{TypeError, TypeErrorKind},
 };
 
 /// Namespace or definition family involved in a lookup failure

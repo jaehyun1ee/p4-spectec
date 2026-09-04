@@ -11,11 +11,11 @@ use thiserror::Error;
 
 use crate::{
     interface::builtin::{BuiltinError, call::Builtins},
+    lang::data::value::Value,
     lang::{
         common::source::Span,
         il::ast::{Id, Typ},
     },
-    runtime::value::Value,
 };
 
 // == Interface errors

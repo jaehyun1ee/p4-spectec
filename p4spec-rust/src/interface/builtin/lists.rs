@@ -1,4 +1,4 @@
-//! List builtins, in the same order as `interface/builtin/lists.ml`.
+//! List builtins in specification order.
 //!
 //! Each builtin first extracts its type and value arguments, performs the list
 //! operation, and returns the newly constructed runtime value. For
@@ -9,13 +9,14 @@ use std::{collections::BTreeSet, rc::Rc};
 
 use num_bigint::BigInt;
 
-use crate::{
-    lang::common::source::Span,
-    lang::{il::ast::Typ, xl::num},
-    runtime::{
-        types::typ,
+use crate::lang::{
+    common::source::Span,
+    data::{
+        typ,
         value::{Value, ValueKind, get, make},
     },
+    il::ast::Typ,
+    xl::num,
 };
 
 use super::{BuiltinError, extract};
@@ -35,7 +36,7 @@ fn bigint_of_value(value: &Value) -> Result<&BigInt, BuiltinError> {
 
 pub fn rev_(targs: &[Typ], values: &[Rc<Value>]) -> Result<Rc<Value>, BuiltinError> {
     let typ = extract::one(targs)?;
-    let typ_list = typ::list(typ.clone());
+    let typ_list = typ::make::list(typ.clone());
     let value_list = extract::one(values)?;
     let mut values = list_of_value(value_list)?.to_vec();
     values.reverse();
@@ -47,7 +48,7 @@ pub fn rev_(targs: &[Typ], values: &[Rc<Value>]) -> Result<Rc<Value>, BuiltinErr
 
 pub fn concat_(targs: &[Typ], values: &[Rc<Value>]) -> Result<Rc<Value>, BuiltinError> {
     let typ = extract::one(targs)?;
-    let typ_list = typ::list(typ.clone());
+    let typ_list = typ::make::list(typ.clone());
     let mut concatenated = Vec::new();
     let value_lists = extract::one(values)?;
     let lists = list_of_value(value_lists)?;
@@ -75,7 +76,7 @@ pub fn distinct_(targs: &[Typ], values: &[Rc<Value>]) -> Result<Rc<Value>, Built
 
 pub fn partition_(targs: &[Typ], values: &[Rc<Value>]) -> Result<Rc<Value>, BuiltinError> {
     let typ = extract::one(targs)?;
-    let typ_list = typ::list(typ.clone());
+    let typ_list = typ::make::list(typ.clone());
     let (value_list, value_len) = extract::two(values)?;
     let values = list_of_value(value_list)?;
     let len = bigint_of_value(value_len)?;
@@ -99,7 +100,7 @@ pub fn partition_(targs: &[Typ], values: &[Rc<Value>]) -> Result<Rc<Value>, Buil
             .collect(),
         Span::default(),
     );
-    let typ_tuple = typ::tuple(vec![typ.clone(), typ.clone()]);
+    let typ_tuple = typ::make::tuple(vec![typ.clone(), typ.clone()]);
     let value = make::tuple(&typ_tuple, vec![value_left, value_right], Span::default());
     Ok(value)
 }
@@ -121,7 +122,7 @@ pub fn assoc_(targs: &[Typ], values: &[Rc<Value>]) -> Result<Rc<Value>, BuiltinE
             found = Some(Rc::clone(&pair[1]));
         }
     }
-    let typ_opt = typ::opt(typ_value.clone());
+    let typ_opt = typ::make::opt(typ_value.clone());
     let value = make::opt(&typ_opt, found, Span::default());
     Ok(value)
 }
@@ -130,8 +131,8 @@ pub fn assoc_(targs: &[Typ], values: &[Rc<Value>]) -> Result<Rc<Value>, BuiltinE
 
 pub fn sort_(targs: &[Typ], values: &[Rc<Value>]) -> Result<Rc<Value>, BuiltinError> {
     let typ_value = extract::one(targs)?;
-    let typ_pair = typ::tuple(vec![typ::nat(), typ_value.clone()]);
-    let typ_list = typ::list(typ_pair);
+    let typ_pair = typ::make::tuple(vec![typ::make::nat(), typ_value.clone()]);
+    let typ_list = typ::make::list(typ_pair);
     let mut keyed = Vec::new();
     let value_list = extract::one(values)?;
     let pairs = list_of_value(value_list)?;
@@ -155,8 +156,8 @@ pub fn sort_(targs: &[Typ], values: &[Rc<Value>]) -> Result<Rc<Value>, BuiltinEr
 
 pub fn transpose_(targs: &[Typ], values: &[Rc<Value>]) -> Result<Rc<Value>, BuiltinError> {
     let typ = extract::one(targs)?;
-    let typ_list = typ::list(typ.clone());
-    let typ_matrix = typ::list(typ_list.clone());
+    let typ_list = typ::make::list(typ.clone());
+    let typ_matrix = typ::make::list(typ_list.clone());
     let value_matrix = extract::one(values)?;
     let rows = list_of_value(value_matrix)?;
     let width = match rows.first() {

@@ -4,7 +4,11 @@ use super::super::*;
 fn test_multiple_binding_renames_repetitions_and_compares_them_in_occurrence_order() {
     let tuple = exp(
         ast::ExpKind::Tuple(vec![var_exp("x", 1), var_exp("x", 2), var_exp("x", 3)]),
-        ast::TypKind::Tuple(vec![typ::bool(), typ::bool(), typ::bool()]),
+        ast::TypKind::Tuple(vec![
+            typ::make::bool(),
+            typ::make::bool(),
+            typ::make::bool(),
+        ]),
         1,
     );
     let benv = collect::collect_exp(&Context::new(), &tuple).expect("binding collection");
@@ -57,12 +61,12 @@ fn test_multiple_binding_renames_repetitions_and_compares_them_in_occurrence_ord
 
 #[test]
 fn test_multiple_side_conditions_use_the_rename_environment_dimension() {
-    let benv_l = BEnv::singleton(id("x", 1), typ::bool()).add_iter(ast::Iter::List);
-    let benv_r = BEnv::singleton(id("x", 2), typ::bool()).add_iter(ast::Iter::List);
+    let benv_l = BEnv::singleton(id("x", 1), typ::make::bool()).add_iter(ast::Iter::List);
+    let benv_r = BEnv::singleton(id("x", 2), typ::make::bool()).add_iter(ast::Iter::List);
     let benv = benv_l.union(benv_r).expect("equivalent dimensions");
     let tuple = exp(
         ast::ExpKind::Tuple(vec![var_exp("x", 1), var_exp("x", 2)]),
-        ast::TypKind::Tuple(vec![typ::bool(), typ::bool()]),
+        ast::TypKind::Tuple(vec![typ::make::bool(), typ::make::bool()]),
         1,
     );
     let mut context = Context::new();

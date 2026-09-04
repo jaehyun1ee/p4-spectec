@@ -11,13 +11,13 @@ use crate::{
     frontend,
     lang::{
         common::{notation::mixop::Mixop, source::Span},
+        data::{
+            typ,
+            value::{Value, ValueKind, make},
+        },
         il::ast::Typ,
     },
     phrase,
-    runtime::{
-        types::typ,
-        value::{Value, ValueKind, make},
-    },
 };
 
 use super::{
@@ -32,7 +32,7 @@ thread_local! {
 }
 
 fn named_type(name: &str) -> Typ {
-    typ::var(
+    typ::make::var(
         phrase! { node: name.to_owned(), span: Span::default() },
         Vec::new(),
     )
