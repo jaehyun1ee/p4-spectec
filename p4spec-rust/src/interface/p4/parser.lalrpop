@@ -1,7 +1,13 @@
 use std::rc::Rc;
 
 use crate::{
-    interface::p4::{context::{Context, Location, Namespace}, error::P4Error, lexer::Token, value},
+    interface::p4::{
+        context::{Context, Location, Namespace, TypeId},
+        error::P4Error,
+        extract,
+        lexer::Token,
+        value,
+    },
     runtime::value::Value,
 };
 
@@ -22,7 +28,6 @@ extern {
         "STRING_LITERAL" => Token::StringLiteral(<Rc<Value>>),
         "NUMBER_INT" => Token::NumberInt(<Rc<Value>>, <String>),
         "NUMBER" => Token::Number(<Rc<Value>>, <String>),
-        "UNEXPECTED_TOKEN" => Token::UnexpectedToken(<Rc<Value>>),
         "LE" => Token::LessEqual,
         "GE" => Token::GreaterEqual,
         "SHL" => Token::ShiftLeft,
@@ -132,6 +137,7 @@ extern {
         "BIT_AND_ASSIGN" => Token::BitAndAssign,
         "BIT_XOR_ASSIGN" => Token::BitXorAssign,
         "BIT_OR_ASSIGN" => Token::BitOrAssign,
+        "UNEXPECTED_TOKEN" => Token::UnexpectedToken(<Rc<Value>>),
     }
 }
 
@@ -159,8 +165,8 @@ push_scope: () = {
      => { context.push_scope(); },
 };
 
-// The lexer distinguishes type names that begin expressions.  OCaml has one
-// TYPENAME token, so declaration names must admit the Rust-only spelling too.
+// A name followed by `(` or `<...>(` may already carry postfix-expression
+// classification when the surrounding declaration reduces.
 declarationName: Rc<Value> = {
     name,
     expressionTypeName,
@@ -689,9 +695,9 @@ defaultExpression: Rc<Value> = {
 
 // - Unary, binary, and ternary expressions
 //
-// Menhir expresses this part of the OCaml grammar with `unop`, `binop`, and
-// precedence declarations. The canonical productions stay in that order here;
-// the following LALRPOP-only ladder makes the same precedence explicit.
+// The source grammar defines `unop` and `binop` independently of precedence.
+// These productions retain its operator order; the following ladder makes
+// precedence and associativity explicit enough for LALRPOP to remain LR(1).
 //
 // unop ::= "NOT" | "COMPLEMENT" | "MINUS" | "PLUS"
 // unaryExpression ::= unop expression
@@ -1768,9 +1774,8 @@ statement: Rc<Value> = {
 
 // - LALRPOP dangling-else lowering
 //
-// Menhir resolves `IF ... ELSE` with precedence declarations. These matched
-// and unmatched forms encode the same attachment rule without moving the
-// canonical statement productions away from their OCaml position.
+// Matched and unmatched forms attach each `ELSE` to the nearest open `IF`
+// without moving the canonical statement productions from this section.
 
 MatchedStatement: Rc<Value> = {
     // MatchedStatement ::= emptyStatement
@@ -2076,8 +2081,8 @@ objectInitializer: Rc<Value> = {
         value::case_value(context, "'=' `{ objectDeclarationList `}", vec![ds], "objectInitializer", l, r),
 };
 
-// LALRPOP distinguishes a type name seen in an expression from one seen in a
-// declaration. Both alternatives implement the OCaml `typeRef` occurrence.
+// A type name may already carry expression-leading classification when this
+// production reduces, so both alternatives denote the same type reference.
 instantiationTypeRef: Rc<Value> = {
     // instantiationTypeRef ::= typeRef
     typeRef,
@@ -2285,7 +2290,13 @@ typedef: Rc<Value> = {
     <t:typeRef> => t,
 
     // typedef ::= derivedTypeDeclaration
-    <t:derivedTypeDeclaration> => { value::declare_declaration_type(context, &t); t },
+    <t:derivedTypeDeclaration> => {
+        let id = extract::id_of_declaration(&t).expect("known P4 declaration shape");
+        let has_params = extract::has_type_params_declaration(&t)
+            .expect("known P4 declaration type parameters");
+        context.declare_type(id, has_params).expect("P4 parser scope");
+        t
+    },
 };
 
 typedefDeclaration: Rc<Value> = {
@@ -2317,7 +2328,13 @@ externFunctionDeclaration: Rc<Value> = {
     // externFunctionDeclaration ::= annotationList "EXTERN" functionPrototype pop_scope "SEMICOLON"
     <l:@L> <al:annotationList> "EXTERN" <p:functionPrototype> pop_scope "SEMICOLON" <r:@R> =>
         {
-            value::declare_prototype_var(context, &p);
+            let id = extract::id_of_function_prototype(&p)
+                .expect("known P4 function prototype");
+            let has_params = extract::has_type_params_function_prototype(&p)
+                .expect("known P4 function prototype type parameters");
+            context
+                .declare_var(id, has_params, TypeId::Empty)
+                .expect("P4 parser scope");
             value::case_value(
                 context,
                 "annotationList EXTERN functionPrototype ';'",
@@ -2329,8 +2346,8 @@ externFunctionDeclaration: Rc<Value> = {
         },
 };
 
-// The lexer has separate declaration- and expression-context type-name
-// markers; an extern constructor accepts either spelling of the OCaml token.
+// An extern constructor name can carry either type-name marker depending on
+// the following token, so this production accepts both classifications.
 constructorTypeIdentifier: Rc<Value> = {
     // constructorTypeIdentifier ::= "NAME" "TYPENAME"
     <l:@L> <text:"NAME"> "TYPENAME" <r:@R> =>
@@ -2360,7 +2377,13 @@ externMethodPrototype: Rc<Value> = {
     // externMethodPrototype ::= annotationList functionPrototype pop_scope "SEMICOLON"
     <l:@L> <al:annotationList> <p:functionPrototype> pop_scope "SEMICOLON" <r:@R> =>
         {
-            value::declare_prototype_var(context, &p);
+            let id = extract::id_of_function_prototype(&p)
+                .expect("known P4 function prototype");
+            let has_params = extract::has_type_params_function_prototype(&p)
+                .expect("known P4 function prototype type parameters");
+            context
+                .declare_var(id, has_params, TypeId::Empty)
+                .expect("P4 parser scope");
             value::case_value(
                 context,
                 "annotationList functionPrototype ';'",
@@ -2375,7 +2398,13 @@ externMethodPrototype: Rc<Value> = {
     <l:@L> <al:annotationList> "ABSTRACT" <p:functionPrototype> pop_scope "SEMICOLON" <r:@R>
         =>
         {
-            value::declare_prototype_var(context, &p);
+            let id = extract::id_of_function_prototype(&p)
+                .expect("known P4 function prototype");
+            let has_params = extract::has_type_params_function_prototype(&p)
+                .expect("known P4 function prototype type parameters");
+            context
+                .declare_var(id, has_params, TypeId::Empty)
+                .expect("P4 parser scope");
             value::case_value(
                 context,
                 "annotationList ABSTRACT functionPrototype ';'",
@@ -2431,7 +2460,8 @@ externObjectDeclaration: Rc<Value> = {
             value::declare_type_value(
                 context,
                 &n,
-                value::declaration_has_type_parameters(&decl),
+                extract::has_type_params_declaration(&decl)
+                    .expect("known P4 declaration type parameters"),
             );
             value::set_type_namespace(context, &n, s);
             decl
@@ -2951,7 +2981,11 @@ controlLocalDeclaration: Rc<Value> = {
     <d:actionDeclaration> => d,
 
     // controlLocalDeclaration ::= tableDeclaration
-    <d:tableDeclaration> => { value::declare_declaration_var(context, &d); d },
+    <d:tableDeclaration> => {
+        let id = extract::id_of_declaration(&d).expect("known P4 declaration shape");
+        context.declare_var(id, false, TypeId::Empty).expect("P4 parser scope");
+        d
+    },
 };
 
 controlLocalDeclarationList: Rc<Value> = {
@@ -3027,16 +3061,39 @@ typeDeclaration: Rc<Value> = {
 
 declaration: Rc<Value> = {
     // declaration ::= constantDeclaration
-    <constant:constantDeclaration> => { value::declare_declaration_var(context, &constant); constant },
+    <constant:constantDeclaration> => {
+        let id = extract::id_of_declaration(&constant).expect("known P4 declaration shape");
+        let has_params = extract::has_type_params_declaration(&constant)
+            .expect("known P4 declaration type parameters");
+        let type_id = extract::tid_of_declaration(&constant)
+            .expect("known P4 declaration type");
+        context.declare_var(id, has_params, type_id).expect("P4 parser scope");
+        constant
+    },
 
     // declaration ::= instantiation
-    <inst:instantiation> => { value::declare_declaration_var(context, &inst); inst },
+    <inst:instantiation> => {
+        let id = extract::id_of_declaration(&inst).expect("known P4 declaration shape");
+        let type_id = extract::tid_of_declaration(&inst).expect("known P4 declaration type");
+        context.declare_var(id, false, type_id).expect("P4 parser scope");
+        inst
+    },
 
     // declaration ::= functionDeclaration
-    <func:functionDeclaration> => { value::declare_declaration_var(context, &func); func },
+    <func:functionDeclaration> => {
+        let id = extract::id_of_declaration(&func).expect("known P4 declaration shape");
+        let has_params = extract::has_type_params_declaration(&func)
+            .expect("known P4 declaration type parameters");
+        context.declare_var(id, has_params, TypeId::Empty).expect("P4 parser scope");
+        func
+    },
 
     // declaration ::= actionDeclaration
-    <action:actionDeclaration> => { value::declare_declaration_var(context, &action); action },
+    <action:actionDeclaration> => {
+        let id = extract::id_of_declaration(&action).expect("known P4 declaration shape");
+        context.declare_var(id, false, TypeId::Empty).expect("P4 parser scope");
+        action
+    },
 
     // declaration ::= errorDeclaration
     <d:errorDeclaration> => d,
@@ -3048,13 +3105,31 @@ declaration: Rc<Value> = {
     <d:externDeclaration> => d,
 
     // declaration ::= parserDeclaration
-    <d:parserDeclaration> => { value::declare_declaration_type(context, &d); d },
+    <d:parserDeclaration> => {
+        let id = extract::id_of_declaration(&d).expect("known P4 declaration shape");
+        let has_params = extract::has_type_params_declaration(&d)
+            .expect("known P4 declaration type parameters");
+        context.declare_type(id, has_params).expect("P4 parser scope");
+        d
+    },
 
     // declaration ::= controlDeclaration
-    <d:controlDeclaration> => { value::declare_declaration_type(context, &d); d },
+    <d:controlDeclaration> => {
+        let id = extract::id_of_declaration(&d).expect("known P4 declaration shape");
+        let has_params = extract::has_type_params_declaration(&d)
+            .expect("known P4 declaration type parameters");
+        context.declare_type(id, has_params).expect("P4 parser scope");
+        d
+    },
 
     // declaration ::= typeDeclaration
-    <d:typeDeclaration> => { value::declare_declaration_type(context, &d); d },
+    <d:typeDeclaration> => {
+        let id = extract::id_of_declaration(&d).expect("known P4 declaration shape");
+        let has_params = extract::has_type_params_declaration(&d)
+            .expect("known P4 declaration type parameters");
+        context.declare_type(id, has_params).expect("P4 parser scope");
+        d
+    },
 };
 
 // - Annotations

@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
 use p4spec_rust::{
-    interface::p4_unparse::{P4UnparseError, P4Unparser},
+    interface::p4::unparse::{P4UnparseError, P4Unparser},
     lang::{
         al,
         common::{
