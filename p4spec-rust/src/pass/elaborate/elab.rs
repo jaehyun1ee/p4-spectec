@@ -1493,10 +1493,10 @@ fn elab_variant_exp(
     typ_cases_il: &[il::TypCase],
     exp: &el::Exp,
 ) -> Attempt<il::Exp> {
-    let mut ctx_work = ctx.clone();
+    let mut ctx_match = ctx.clone();
     let mut exps_il_match = Vec::new();
     for (not_typ_il, origin_il, _) in typ_cases_il {
-        let mut ctx_candidate = ctx_work.clone();
+        let mut ctx_candidate = ctx_match.clone();
         let not_exp_il = match elab_not_exp(&mut ctx_candidate, not_typ_il, exp) {
             Ok(not_exp_il) => not_exp_il,
             Err(_) => continue,
@@ -1513,12 +1513,12 @@ fn elab_variant_exp(
             Ok(exp_il_case) => exp_il_case,
             Err(_) => continue,
         };
-        ctx_work = ctx_candidate;
+        ctx_match = ctx_candidate;
         exps_il_match.push(exp_il_case);
     }
     match exps_il_match.len() {
         1 => {
-            *ctx = ctx_work;
+            *ctx = ctx_match;
             Ok(exps_il_match.pop().expect("single variant match"))
         }
         0 => fail_attempt(
