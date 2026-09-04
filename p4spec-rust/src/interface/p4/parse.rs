@@ -1,8 +1,10 @@
-//! Entry points for preprocessing and parsing P4 into runtime values.
+//! Preprocessing and parsing P4 into runtime values
 //!
-//! `parse_file` preprocesses includes, the lexer classifies tokens with a fresh
-//! context, and LALRPOP builds the mixfix value tree. For example, parsing an
-//! empty source yields the grammar's empty `p4program` case value.
+//! `parse_file` preprocesses includes before delegating to `parse_string`, which
+//! creates a fresh name-resolution context, lexes the source, adapts located
+//! tokens for LALRPOP, and builds the mixfix value tree. Parse failures retain
+//! lexer locations through the same context. For example, an empty source
+//! produces the grammar's empty `p4program` case value.
 
 use std::{
     path::{Path, PathBuf},
@@ -25,7 +27,9 @@ use super::{
     tokens::parser_tokens,
 };
 
-// == Entry points
+// == Parsing
+
+// - Preprocessed sources
 
 /// Parses an already-preprocessed P4 source string.
 pub fn parse_string(path: impl AsRef<Path>, source: &str) -> Result<Rc<Value>, P4Error> {
@@ -35,8 +39,10 @@ pub fn parse_string(path: impl AsRef<Path>, source: &str) -> Result<Rc<Value>, P
     let tokens = parser_tokens(context.as_ref(), lexer);
 
     let result = p4programParser::new().parse(context.as_ref(), tokens);
-    result.map_err(|error| syntax_error(context.as_ref(), file, error))
+    result.map_err(|error| translate_parse_error(context.as_ref(), file, error))
 }
+
+// - Source files
 
 /// Preprocesses and parses a P4 source file.
 pub fn parse_file(includes: &[PathBuf], path: impl AsRef<Path>) -> Result<Rc<Value>, P4Error> {
@@ -47,14 +53,14 @@ pub fn parse_file(includes: &[PathBuf], path: impl AsRef<Path>) -> Result<Rc<Val
 
 // == Error translation
 
-fn syntax_error(
+fn translate_parse_error(
     context: &Context,
     file: Rc<str>,
     error: ParseError<Location, Token, P4Error>,
 ) -> P4Error {
     let span = match error {
         ParseError::InvalidToken { location } | ParseError::UnrecognizedEof { location, .. } => {
-            point_span(context, file, location)
+            location_span(context, file, location)
         }
         ParseError::UnrecognizedToken {
             token: (left, _, right),
@@ -68,7 +74,7 @@ fn syntax_error(
     P4Error::new(P4ErrorKind::Syntax, span)
 }
 
-fn point_span(context: &Context, file: Rc<str>, location: Location) -> Span {
+fn location_span(context: &Context, file: Rc<str>, location: Location) -> Span {
     let position = context.position(location);
     if position.file.is_empty() {
         let fallback = Position::new(file, position.line, position.column);

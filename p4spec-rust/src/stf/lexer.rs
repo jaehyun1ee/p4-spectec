@@ -1,8 +1,10 @@
-//! Stateful STF lexer with a separate packet-data vocabulary.
+//! Stateful STF tokenization with a separate packet-data vocabulary
 //!
-//! Keyword mode skips layout and recognizes commands; `packet` and `expect`
-//! switch to packet-data mode until newline or `$`. For example, `**` after
-//! `expect` becomes two packet wildcards rather than identifier punctuation.
+//! Each iteration first skips layout for the current mode and then dispatches
+//! to keyword or packet-data lexing. Keyword mode recognizes commands,
+//! identifiers, numbers, and punctuation; `packet` and `expect` switch to
+//! packet-data mode until newline or `$`. For example, `**` after `expect`
+//! becomes two packet wildcards rather than identifier punctuation.
 
 use std::rc::Rc;
 
@@ -62,13 +64,15 @@ pub enum Token {
     DataHex(String),
 }
 
+// == Lexer modes
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Mode {
+enum LexerMode {
     Keyword,
     PacketData,
 }
 
-// == Lexer state
+// == Lexer
 
 pub struct Lexer<'source> {
     source: &'source str,
@@ -76,11 +80,13 @@ pub struct Lexer<'source> {
     index: usize,
     line: i64,
     column: i64,
-    mode: Mode,
+    mode: LexerMode,
     finished: bool,
 }
 
 impl<'source> Lexer<'source> {
+    // - Construction
+
     pub fn new(file: impl Into<Rc<str>>, source: &'source str) -> Self {
         Self {
             source,
@@ -88,12 +94,14 @@ impl<'source> Lexer<'source> {
             index: 0,
             line: 1,
             column: 0,
-            mode: Mode::Keyword,
+            mode: LexerMode::Keyword,
             finished: false,
         }
     }
 
-    fn source_position(&self) -> Position {
+    // - Source cursor
+
+    fn current_position(&self) -> Position {
         Position::new(Rc::clone(&self.file), self.line, self.column)
     }
 
@@ -122,7 +130,30 @@ impl<'source> Lexer<'source> {
     }
 
     fn error(&self, kind: StfErrorKind, left: Position) -> StfError {
-        StfError::new(kind, Span::new(left, self.source_position()))
+        let right = self.current_position();
+        let span = Span::new(left, right);
+        StfError::new(kind, span)
+    }
+
+    // - Layout
+
+    fn skip_layout(&mut self) {
+        loop {
+            match self.mode {
+                LexerMode::Keyword => {
+                    self.skip_keyword_layout();
+                    return;
+                }
+                LexerMode::PacketData => {
+                    self.take_while(|character| matches!(character, ' ' | '\t' | '\r'));
+                    if self.peek() != Some('\n') {
+                        return;
+                    }
+                    self.take_while(|character| character == '\n');
+                    self.mode = LexerMode::Keyword;
+                }
+            }
+        }
     }
 
     fn skip_keyword_layout(&mut self) {
@@ -135,148 +166,178 @@ impl<'source> Lexer<'source> {
         }
     }
 
-    fn identifier(&mut self) -> String {
-        self.take_while(|character| {
-            character == '$'
-                || character == '_'
-                || character == '.'
-                || character.is_ascii_alphanumeric()
-        })
-        .to_owned()
-    }
+    // - Keyword tokens
 
-    fn keyword_token(&mut self) -> Result<Token, StfError> {
-        let left = self.source_position();
+    fn lex_keyword(&mut self) -> Result<Token, StfError> {
+        let left = self.current_position();
         let Some(character) = self.peek() else {
             self.finished = true;
             return Ok(Token::End);
         };
 
-        let punctuation = match character {
-            ':' => Some(Token::Colon),
-            ',' => Some(Token::Comma),
-            '.' => Some(Token::Dot),
-            '[' => Some(Token::LeftBracket),
-            ']' => Some(Token::RightBracket),
-            '(' => Some(Token::LeftParen),
-            ')' => Some(Token::RightParen),
-            '/' => Some(Token::Slash),
-            _ => None,
-        };
-        if let Some(token) = punctuation {
-            self.bump();
+        if let Some(token) = self.lex_punctuation() {
             return Ok(token);
         }
 
         if matches!(character, '=' | '!' | '<' | '>') {
-            self.bump();
-            let paired = self.peek() == Some('=');
-            if paired {
-                self.bump();
-            }
-            return match (character, paired) {
-                ('=', false) => Ok(Token::Assign),
-                ('=', true) => Ok(Token::Eq),
-                ('!', true) => Ok(Token::Ne),
-                ('<', false) => Ok(Token::Lt),
-                ('<', true) => Ok(Token::Le),
-                ('>', false) => Ok(Token::Gt),
-                ('>', true) => Ok(Token::Ge),
-                _ => Err(self.error(StfErrorKind::InvalidCharacter(character), left)),
-            };
+            let token = self.lex_operator(character, left)?;
+            return Ok(token);
         }
 
         if character == '"' {
-            self.bump();
-            let start = self.index;
-            self.take_while(|next| next != '"' && next != '\n');
-            if self.peek() != Some('"') {
-                return Err(self.error(StfErrorKind::UnterminatedQuotedIdentifier, left));
-            }
-            let value = self.source[start..self.index].to_owned();
-            self.bump();
-            return Ok(Token::Id(value));
+            let token = self.lex_quoted_identifier(left)?;
+            return Ok(token);
         }
 
         if character.is_ascii_digit() {
-            let value = self.take_while(|next| {
-                next.is_ascii_hexdigit() || matches!(next, 'x' | 'X' | 'b' | 'B' | '*')
-            });
-            let digits = value.get(2..).unwrap_or_default();
-            let valid = if value.starts_with("0x") || value.starts_with("0X") {
-                !digits.is_empty()
-                    && digits
-                        .chars()
-                        .all(|digit| digit.is_ascii_hexdigit() || digit == '*')
-            } else if value.starts_with("0b") || value.starts_with("0B") {
-                !digits.is_empty() && digits.chars().all(|digit| matches!(digit, '0' | '1' | '*'))
-            } else {
-                value.chars().all(|digit| digit.is_ascii_digit())
-            };
-            if !valid {
-                return Err(self.error(StfErrorKind::InvalidNumber(value.to_owned()), left));
-            }
-            return Ok(if value.starts_with("0x") || value.starts_with("0X") {
-                if value.contains('*') {
-                    Token::TernaryHex(value.to_owned())
-                } else {
-                    Token::IntHex(value.to_owned())
-                }
-            } else if value.starts_with("0b") || value.starts_with("0B") {
-                Token::IntBinary(value.to_owned())
-            } else {
-                Token::IntDecimal(value.to_owned())
-            });
+            let token = self.lex_number(left)?;
+            return Ok(token);
         }
 
         if character == '$' || character == '_' || character.is_ascii_alphabetic() {
-            let identifier = self.identifier();
-            let token = match identifier.as_str() {
-                "add" => Token::Add,
-                "all" => Token::All,
-                "bytes" => Token::Bytes,
-                "check_counter" => Token::CheckCounter,
-                "expect" => {
-                    self.mode = Mode::PacketData;
-                    Token::Expect
-                }
-                "mirroring_add" => Token::MirroringAdd,
-                "mirroring_add_mc" => Token::MirroringAddMc,
-                "mirroring_get" => Token::MirroringGet,
-                "no_packet" => Token::NoPacket,
-                "packet" => {
-                    self.mode = Mode::PacketData;
-                    Token::Packet
-                }
-                "packets" => Token::Packets,
-                "remove" => Token::Remove,
-                "setdefault" => Token::SetDefault,
-                "mc_mgrp_create" => Token::McGroupCreate,
-                "mc_node_create" => Token::McNodeCreate,
-                "mc_node_associate" => Token::McNodeAssociate,
-                "register_read" => Token::RegisterRead,
-                "register_write" => Token::RegisterWrite,
-                "register_reset" => Token::RegisterReset,
-                "wait" => Token::Wait,
-                _ => Token::Id(identifier),
-            };
+            let token = self.lex_identifier();
             return Ok(token);
         }
 
         self.bump();
-        Err(self.error(StfErrorKind::InvalidCharacter(character), left))
+        let error = StfErrorKind::InvalidCharacter(character);
+        Err(self.error(error, left))
     }
 
-    fn packet_token(&mut self) -> Result<Token, StfError> {
-        let left = self.source_position();
+    fn lex_punctuation(&mut self) -> Option<Token> {
+        let token = match self.peek()? {
+            ':' => Token::Colon,
+            ',' => Token::Comma,
+            '.' => Token::Dot,
+            '[' => Token::LeftBracket,
+            ']' => Token::RightBracket,
+            '(' => Token::LeftParen,
+            ')' => Token::RightParen,
+            '/' => Token::Slash,
+            _ => return None,
+        };
+        self.bump();
+        Some(token)
+    }
+
+    fn lex_operator(&mut self, character: char, left: Position) -> Result<Token, StfError> {
+        self.bump();
+        let paired = self.peek() == Some('=');
+        if paired {
+            self.bump();
+        }
+        match (character, paired) {
+            ('=', false) => Ok(Token::Assign),
+            ('=', true) => Ok(Token::Eq),
+            ('!', true) => Ok(Token::Ne),
+            ('<', false) => Ok(Token::Lt),
+            ('<', true) => Ok(Token::Le),
+            ('>', false) => Ok(Token::Gt),
+            ('>', true) => Ok(Token::Ge),
+            _ => {
+                let error = StfErrorKind::InvalidCharacter(character);
+                Err(self.error(error, left))
+            }
+        }
+    }
+
+    fn lex_quoted_identifier(&mut self, left: Position) -> Result<Token, StfError> {
+        self.bump();
+        let start = self.index;
+        self.take_while(|character| character != '"' && character != '\n');
+        if self.peek() != Some('"') {
+            let error = StfErrorKind::UnterminatedQuotedIdentifier;
+            return Err(self.error(error, left));
+        }
+        let identifier = self.source[start..self.index].to_owned();
+        self.bump();
+        Ok(Token::Id(identifier))
+    }
+
+    fn lex_number(&mut self, left: Position) -> Result<Token, StfError> {
+        let spelling = self.take_while(|character| {
+            character.is_ascii_hexdigit() || matches!(character, 'x' | 'X' | 'b' | 'B' | '*')
+        });
+        let digits = spelling.get(2..).unwrap_or_default();
+        let valid = if spelling.starts_with("0x") || spelling.starts_with("0X") {
+            !digits.is_empty()
+                && digits
+                    .chars()
+                    .all(|digit| digit.is_ascii_hexdigit() || digit == '*')
+        } else if spelling.starts_with("0b") || spelling.starts_with("0B") {
+            !digits.is_empty() && digits.chars().all(|digit| matches!(digit, '0' | '1' | '*'))
+        } else {
+            spelling.chars().all(|digit| digit.is_ascii_digit())
+        };
+        if !valid {
+            let error = StfErrorKind::InvalidNumber(spelling.to_owned());
+            return Err(self.error(error, left));
+        }
+
+        let token = if spelling.starts_with("0x") || spelling.starts_with("0X") {
+            if spelling.contains('*') {
+                Token::TernaryHex(spelling.to_owned())
+            } else {
+                Token::IntHex(spelling.to_owned())
+            }
+        } else if spelling.starts_with("0b") || spelling.starts_with("0B") {
+            Token::IntBinary(spelling.to_owned())
+        } else {
+            Token::IntDecimal(spelling.to_owned())
+        };
+        Ok(token)
+    }
+
+    fn lex_identifier(&mut self) -> Token {
+        let identifier = self.take_while(|character| {
+            character == '$'
+                || character == '_'
+                || character == '.'
+                || character.is_ascii_alphanumeric()
+        });
+        match identifier {
+            "add" => Token::Add,
+            "all" => Token::All,
+            "bytes" => Token::Bytes,
+            "check_counter" => Token::CheckCounter,
+            "expect" => {
+                self.mode = LexerMode::PacketData;
+                Token::Expect
+            }
+            "no_packet" => Token::NoPacket,
+            "packet" => {
+                self.mode = LexerMode::PacketData;
+                Token::Packet
+            }
+            "packets" => Token::Packets,
+            "remove" => Token::Remove,
+            "setdefault" => Token::SetDefault,
+            "wait" => Token::Wait,
+            "mirroring_add" => Token::MirroringAdd,
+            "mirroring_add_mc" => Token::MirroringAddMc,
+            "mirroring_get" => Token::MirroringGet,
+            "mc_mgrp_create" => Token::McGroupCreate,
+            "mc_node_create" => Token::McNodeCreate,
+            "mc_node_associate" => Token::McNodeAssociate,
+            "register_read" => Token::RegisterRead,
+            "register_write" => Token::RegisterWrite,
+            "register_reset" => Token::RegisterReset,
+            _ => Token::Id(identifier.to_owned()),
+        }
+    }
+
+    // - Packet-data tokens
+
+    fn lex_packet_data(&mut self) -> Result<Token, StfError> {
+        let left = self.current_position();
         let Some(character) = self.peek() else {
-            self.mode = Mode::Keyword;
+            self.mode = LexerMode::Keyword;
             self.finished = true;
             return Ok(Token::End);
         };
         if character == '$' {
             self.bump();
-            self.mode = Mode::Keyword;
+            self.mode = LexerMode::Keyword;
             return Ok(Token::Exact);
         }
         if character == '*' {
@@ -288,15 +349,17 @@ impl<'source> Lexer<'source> {
             return Ok(Token::DataTernary);
         }
         if character.is_ascii_hexdigit() {
-            let data = self.take_while(|next| next.is_ascii_hexdigit()).to_owned();
-            return Ok(if data.chars().all(|next| next.is_ascii_digit()) {
-                Token::DataDecimal(data)
+            let spelling = self.take_while(|next| next.is_ascii_hexdigit()).to_owned();
+            let token = if spelling.chars().all(|next| next.is_ascii_digit()) {
+                Token::DataDecimal(spelling)
             } else {
-                Token::DataHex(data)
-            });
+                Token::DataHex(spelling)
+            };
+            return Ok(token);
         }
         self.bump();
-        Err(self.error(StfErrorKind::InvalidCharacter(character), left))
+        let error = StfErrorKind::InvalidCharacter(character);
+        Err(self.error(error, left))
     }
 }
 
@@ -309,24 +372,11 @@ impl Iterator for Lexer<'_> {
         if self.finished {
             return None;
         }
-        loop {
-            match self.mode {
-                Mode::Keyword => self.skip_keyword_layout(),
-                Mode::PacketData => {
-                    self.take_while(|character| matches!(character, ' ' | '\t' | '\r'));
-                    if self.peek() == Some('\n') {
-                        self.take_while(|character| character == '\n');
-                        self.mode = Mode::Keyword;
-                        continue;
-                    }
-                }
-            }
-            break;
-        }
+        self.skip_layout();
         let left = self.index;
         let token = match self.mode {
-            Mode::Keyword => self.keyword_token(),
-            Mode::PacketData => self.packet_token(),
+            LexerMode::Keyword => self.lex_keyword(),
+            LexerMode::PacketData => self.lex_packet_data(),
         };
         let right = self.index;
         Some(token.map(|token| (left, token, right)))

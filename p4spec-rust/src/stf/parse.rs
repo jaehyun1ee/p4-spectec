@@ -1,8 +1,9 @@
-//! String and filesystem entry points for the STF parser.
+//! String and filesystem entry points for the STF parser
 //!
-//! A source map converts lexer byte offsets to spans, LALRPOP builds statements
-//! in order, and parse errors are translated to typed STF errors. For example,
-//! `wait` becomes one located `Statement::Wait`.
+//! `parse_file` reads a source before delegating to `parse_str`. A source map
+//! converts lexer byte offsets to positions, LALRPOP builds statements in
+//! order, and parse failures become typed errors with source spans. For
+//! example, `wait` becomes one located `Statement::Wait`.
 
 use std::{fs, path::Path, rc::Rc};
 
@@ -20,9 +21,9 @@ use super::{
     parser,
 };
 
-const OCAML_INT_MAX: i64 = i64::MAX / 2;
+const MAX_PRIORITY: i64 = i64::MAX / 2;
 
-// == Source mapping
+// == Source locations
 
 pub(crate) struct SourceMap {
     file: Rc<str>,
@@ -30,12 +31,16 @@ pub(crate) struct SourceMap {
 }
 
 impl SourceMap {
+    // - Construction
+
     fn new(file: Rc<str>, source: &str) -> Self {
         Self {
             file,
             source: source.into(),
         }
     }
+
+    // - Positions and spans
 
     pub(crate) fn position(&self, offset: usize) -> Position {
         let prefix = &self.source[..offset.min(self.source.len())];
@@ -53,6 +58,8 @@ impl SourceMap {
         phrase! { node: node, span: span }
     }
 
+    // - Numeric fields
+
     pub(crate) fn priority(
         &self,
         value: String,
@@ -60,25 +67,30 @@ impl SourceMap {
         right: usize,
     ) -> Result<i64, StfError> {
         let priority = value.parse::<i64>().ok();
-        match priority.filter(|priority| *priority <= OCAML_INT_MAX) {
+        match priority.filter(|priority| *priority <= MAX_PRIORITY) {
             Some(priority) => Ok(priority),
-            None => Err(StfError::new(
-                StfErrorKind::InvalidPriority(value),
-                self.span(left, right),
-            )),
+            None => {
+                let kind = StfErrorKind::InvalidPriority(value);
+                let span = self.span(left, right);
+                Err(StfError::new(kind, span))
+            }
         }
     }
 }
 
-// == Entry points
+// == Parsing
+
+// - Source strings
 
 /// Parses an STF source string and retains statement source spans.
 pub fn parse_str(file: impl Into<Rc<str>>, source: &str) -> Result<Program, StfError> {
     let source_map = SourceMap::new(file.into(), source);
     let lexer = Lexer::new(Rc::clone(&source_map.file), source);
     let result = parser::StatementsParser::new().parse(&source_map, lexer);
-    result.map_err(|error| parse_error(&source_map, error))
+    result.map_err(|error| translate_parse_error(&source_map, error))
 }
+
+// - Source files
 
 /// Reads and parses an STF file.
 pub fn parse_file(path: impl AsRef<Path>) -> Result<Program, StfError> {
@@ -96,7 +108,10 @@ pub fn parse_file(path: impl AsRef<Path>) -> Result<Program, StfError> {
 
 // == Error translation
 
-fn parse_error(source: &SourceMap, error: ParseError<usize, Token, StfError>) -> StfError {
+fn translate_parse_error(
+    source_map: &SourceMap,
+    error: ParseError<usize, Token, StfError>,
+) -> StfError {
     let (kind, left, right) = match error {
         ParseError::InvalidToken { location } => (StfErrorKind::InvalidToken, location, location),
         ParseError::UnrecognizedEof { location, .. } => {
@@ -111,5 +126,6 @@ fn parse_error(source: &SourceMap, error: ParseError<usize, Token, StfError>) ->
         } => (StfErrorKind::ExtraToken, left, right),
         ParseError::User { error } => return error,
     };
-    StfError::new(kind, source.span(left, right))
+    let span = source_map.span(left, right);
+    StfError::new(kind, span)
 }
