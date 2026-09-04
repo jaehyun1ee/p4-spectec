@@ -1,9 +1,10 @@
 /// OCaml-compatible JSON codecs for IL data
-use std::{cell::Cell, collections::HashSet};
+use std::{cell::Cell, collections::HashSet, rc::Rc};
 
 use serde_json::{Map, Number, Value, json};
 use thiserror::Error;
 
+use crate::lang::data::value::make;
 use crate::lang::{
     common::notation::mixfix::Mixfix,
     il::ast::{self, *},
@@ -40,7 +41,7 @@ pub struct ValueCodec;
 ///
 /// Use [`ValueEnvelopeCodec`] for lossless OCaml `Yojson.Safe` transport
 impl ValueCodec {
-    pub fn decode(value: &Value) -> Result<ast::Value, DecodeError> {
+    pub fn decode(value: &Value) -> Result<Rc<ast::Value>, DecodeError> {
         on_codec_stack(|| decode_value(value))
     }
 
@@ -53,7 +54,7 @@ impl ValueCodec {
 pub struct ValueEnvelopeCodec;
 
 impl ValueEnvelopeCodec {
-    pub fn decode(input: &[u8]) -> Result<ast::Value, ValueEnvelopeDecodeError> {
+    pub fn decode(input: &[u8]) -> Result<Rc<ast::Value>, ValueEnvelopeDecodeError> {
         on_codec_stack(|| {
             let envelope = yojson::Value::from_slice(input)?;
             let fields = yojson_assoc(&envelope)?;
@@ -574,13 +575,12 @@ fn decode_yojson_mixfix(value: &yojson::Value) -> Result<ast::ValueCase, DecodeE
     }
 }
 
-fn decode_yojson_value(value: &yojson::Value) -> Result<ast::Value, DecodeError> {
+fn decode_yojson_value(value: &yojson::Value) -> Result<Rc<ast::Value>, DecodeError> {
     let fields = yojson_assoc(value)?;
-    Ok(crate::note_phrase! {
-        node: decode_yojson_value_kind(yojson_field(fields, "it")?)?,
-        note: decode_vnote(&standard_json(yojson_field(fields, "note")?)?)?,
-        span: source::decode_region(&standard_json(yojson_field(fields, "at")?)?)?,
-    })
+    let node = decode_yojson_value_kind(yojson_field(fields, "it")?)?;
+    let typ = decode_vnote(&standard_json(yojson_field(fields, "note")?)?)?;
+    let span = source::decode_region(&standard_json(yojson_field(fields, "at")?)?)?;
+    Ok(make::new(node, typ, span))
 }
 
 fn decode_yojson_value_kind(value: &yojson::Value) -> Result<ValueKind, DecodeError> {
@@ -601,7 +601,7 @@ fn decode_yojson_value_kind(value: &yojson::Value) -> Result<ValueKind, DecodeEr
                 })
                 .collect::<Result<_, _>>()?,
         )),
-        ("CaseV", [case]) => Ok(ValueKind::Case(Box::new(decode_yojson_mixfix(case)?))),
+        ("CaseV", [case]) => Ok(ValueKind::Case(decode_yojson_mixfix(case)?)),
         ("TupleV", [values]) => Ok(ValueKind::Tuple(
             yojson_list(values)?
                 .iter()
@@ -609,7 +609,7 @@ fn decode_yojson_value_kind(value: &yojson::Value) -> Result<ValueKind, DecodeEr
                 .collect::<Result<_, _>>()?,
         )),
         ("OptV", [yojson::Value::Null]) => Ok(ValueKind::Opt(None)),
-        ("OptV", [value]) => Ok(ValueKind::Opt(Some(Box::new(decode_yojson_value(value)?)))),
+        ("OptV", [value]) => Ok(ValueKind::Opt(Some(decode_yojson_value(value)?))),
         ("ListV", [values]) => Ok(ValueKind::List(
             yojson_list(values)?
                 .iter()
@@ -627,8 +627,12 @@ fn decode_yojson_value_kind(value: &yojson::Value) -> Result<ValueKind, DecodeEr
     }
 }
 
-fn decode_value(value: &Value) -> Result<ast::Value, DecodeError> {
-    source::decode_note_phrase(value, decode_value_kind, decode_vnote)
+fn decode_value(value: &Value) -> Result<Rc<ast::Value>, DecodeError> {
+    let object = object(value)?;
+    let node = decode_value_kind(field(object, "it")?)?;
+    let typ = decode_vnote(field(object, "note")?)?;
+    let span = source::decode_region(field(object, "at")?)?;
+    Ok(make::new(node, typ, span))
 }
 
 fn decode_value_kind(value: &Value) -> Result<ValueKind, DecodeError> {
@@ -644,14 +648,9 @@ fn decode_value_kind(value: &Value) -> Result<ValueKind, DecodeError> {
                 _ => Err(DecodeError::Expected("IL value field pair")),
             },
         )?)),
-        ("CaseV", [case]) => Ok(ValueKind::Case(Box::new(mixfix::decode(
-            case,
-            decode_value,
-        )?))),
+        ("CaseV", [case]) => Ok(ValueKind::Case(mixfix::decode(case, decode_value)?)),
         ("TupleV", [values]) => Ok(ValueKind::Tuple(decode_list(values, decode_value)?)),
-        ("OptV", [value]) => Ok(ValueKind::Opt(
-            decode_option(value, decode_value)?.map(Box::new),
-        )),
+        ("OptV", [value]) => Ok(ValueKind::Opt(decode_option(value, decode_value)?)),
         ("ListV", [values]) => Ok(ValueKind::List(decode_list(values, decode_value)?)),
         ("FuncV", [id]) => Ok(ValueKind::Func(decode_id(id)?)),
         ("ExternV", [value]) => Ok(ValueKind::Extern(decode_external(value))),
@@ -758,7 +757,7 @@ impl ValueEncoder {
             ValueKind::Opt(value) => vec![
                 yojson::Value::String("OptV".to_owned()),
                 value
-                    .as_deref()
+                    .as_ref()
                     .map(|value| self.encode_yojson_value(value))
                     .unwrap_or(yojson::Value::Null),
             ],

@@ -12,14 +12,6 @@ use super::ast::*;
 
 // `Mixop` uses the common implementation.
 
-// - Iterators
-
-impl Free for Iter {
-    fn free(&self) -> IdSet {
-        IdSet::new()
-    }
-}
-
 // - Variables
 
 impl Free for Var {

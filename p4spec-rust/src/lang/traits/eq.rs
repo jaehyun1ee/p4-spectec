@@ -1,5 +1,7 @@
 //! Syntax equality shared across language stages
 
+use std::rc::Rc;
+
 use crate::{lang::common::source::NotePhrase, yojson::ExternalData};
 
 /// Compares syntax while ignoring source and analysis metadata
@@ -39,6 +41,12 @@ impl SyntaxEq for String {
 impl<T: SyntaxEq, N> SyntaxEq for NotePhrase<T, N> {
     fn syntax_eq(&self, other: &Self) -> bool {
         self.node.syntax_eq(&other.node)
+    }
+}
+
+impl<T: SyntaxEq + ?Sized> SyntaxEq for Rc<T> {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.as_ref().syntax_eq(other.as_ref())
     }
 }
 

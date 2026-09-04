@@ -4,9 +4,9 @@ use super::super::*;
 fn test_binding_union_keeps_the_first_span_and_marks_repetition() {
     let id_first = id("x", 1);
     let id_second = id("x", 2);
-    let typ_first = typ::bool();
+    let typ_first = typ::make::bool();
     let dim = Dim::new(typ_first.clone(), vec![]);
-    let mut typ_second = typ::bool();
+    let mut typ_second = typ::make::bool();
     typ_second.span = span(3);
     let benv_l = BEnv::singleton(id_first.clone(), typ_first);
     let benv_r = BEnv::singleton(id_second, typ_second);
@@ -30,8 +30,8 @@ fn test_binding_union_keeps_the_first_span_and_marks_repetition() {
 fn test_binding_union_rejects_conflicting_dimensions_at_the_first_key() {
     let id_first = id("x", 4);
     let id_second = id("x", 8);
-    let benv_l = BEnv::singleton(id_first.clone(), typ::bool());
-    let benv_r = BEnv::singleton(id_second, typ::bool()).add_iter(ast::Iter::List);
+    let benv_l = BEnv::singleton(id_first.clone(), typ::make::bool());
+    let benv_r = BEnv::singleton(id_second, typ::make::bool()).add_iter(ast::Iter::List);
 
     let error = benv_l.union(benv_r).expect_err("conflicting dimensions");
 

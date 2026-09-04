@@ -23,7 +23,7 @@ use crate::{
         xl,
     },
     note_phrase, phrase,
-    runtime::sta::{Dim, VEnv},
+    runtime::{dim::Dim, envs::elab::VEnv},
 };
 
 use super::{
@@ -240,7 +240,7 @@ fn generate_side_condition(
 
     let mut iterations = dim.iters.clone();
     iterations.extend(iter_ctx.iters());
-    let mut side_iterctx = ICtx::from_iterations(
+    let mut iter_ctx_side = ICtx::from_iterations(
         iterations
             .into_iter()
             .map(|iter| Iteration {
@@ -254,8 +254,8 @@ fn generate_side_condition(
         .chain(ids_rename)
         .map(|id| (id.clone(), Dim::new(dim.typ.clone(), vec![])))
         .collect::<VEnv>();
-    side_iterctx.add_vars_bound(venv);
-    Some(side_iterctx.iterate_prem(prem))
+    iter_ctx_side.add_vars_bound(venv);
+    Some(iter_ctx_side.iterate_prem(prem))
 }
 
 pub fn generate_side_conditions(iter_ctx: &ICtx, renv: &RenameEnv) -> Vec<al::ast::Prem> {

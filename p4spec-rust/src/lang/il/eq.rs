@@ -9,14 +9,6 @@ use super::ast::*;
 
 // == Syntax equality
 
-// - Iterators
-
-impl SyntaxEq for Iter {
-    fn syntax_eq(&self, other: &Self) -> bool {
-        self == other
-    }
-}
-
 // - Variables
 
 impl SyntaxEq for Var {
@@ -101,7 +93,7 @@ impl SyntaxEq for ValueKind {
                 value_l.syntax_eq(value_r)
             }
             (ValueKind::Opt(None), ValueKind::Opt(None)) => true,
-            (ValueKind::Func(id_l), ValueKind::Func(id_r)) => id_l == id_r,
+            (ValueKind::Func(id_l), ValueKind::Func(id_r)) => id_l.syntax_eq(id_r),
             (ValueKind::Extern(value_l), ValueKind::Extern(value_r)) => value_l == value_r,
             _ => false,
         }

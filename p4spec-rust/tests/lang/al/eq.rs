@@ -34,11 +34,7 @@ fn test_syntax_equality_ignores_spans_and_subcheck_strategy() {
 #[test]
 fn test_syntax_equality_distinguishes_recursive_operands_variants_and_collection_rules() {
     let value = |kind| {
-        p4spec_rust::note_phrase! {
-            node: kind,
-            note: il::ast::TypKind::Bool,
-            span: span("value"),
-        }
+        p4spec_rust::lang::data::value::make::new(kind, il::ast::TypKind::Bool, span("value"))
     };
     let value_recursive = value(il::ast::ValueKind::List(vec![value(
         il::ast::ValueKind::Struct(vec![(atom(), value(il::ast::ValueKind::Bool(true)))]),

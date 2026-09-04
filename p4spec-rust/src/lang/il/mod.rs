@@ -1,7 +1,6 @@
 //! Intermediate language
 
 pub mod ast;
-pub mod cmp;
 pub mod eq;
 pub mod free;
 pub mod fresh;

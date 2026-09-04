@@ -5,13 +5,17 @@ use std::ops::{Deref, DerefMut};
 use crate::{
     lang::{
         common::{Id, ds::set::IdSet, source::Span},
+        data::typ,
         hints::input::InputHint,
         il::ast,
     },
     phrase,
     runtime::{
-        sta::{FEnv, Func, MEnv, REnv, Rel},
-        types::{TDEnv, TypeDef, typ},
+        env::TDEnv,
+        envs::elab::{FEnv, MEnv, REnv},
+        func::r#static::Func,
+        rel::r#static::Rel,
+        typdef::TypeDef,
     },
 };
 
@@ -85,10 +89,10 @@ impl Context {
     pub(super) fn new() -> Self {
         let mut menv = MEnv::new();
         for (name, typ) in [
-            ("bool", typ::bool()),
-            ("nat", typ::nat()),
-            ("int", typ::int()),
-            ("text", typ::text()),
+            ("bool", typ::make::bool()),
+            ("nat", typ::make::nat()),
+            ("int", typ::make::int()),
+            ("text", typ::make::text()),
         ] {
             let id = phrase!(node: name.to_owned(), span: Span::default());
             menv.insert(id, typ);
@@ -431,7 +435,7 @@ impl Context {
                 tparam.span,
             ));
         }
-        let typ = typ::var(tparam.clone(), vec![]);
+        let typ = typ::make::var(tparam.clone(), vec![]);
         self.add_typdef(tparam.clone(), TypeDef::Parameter)?;
         self.add_metavar(tparam, typ)
     }

@@ -92,7 +92,7 @@ fn test_full_il_matches_ocaml_exactly() {
 }
 
 fn rust_error_category(kind: &ElabErrorKind) -> &'static str {
-    use p4spec_rust::runtime::types::TypeErrorKind;
+    use p4spec_rust::runtime::ops::typ::TypeErrorKind;
 
     match kind {
         ElabErrorKind::Undefined(_) | ElabErrorKind::Type(TypeErrorKind::UndefinedType(_)) => {

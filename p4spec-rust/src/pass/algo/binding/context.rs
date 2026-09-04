@@ -5,12 +5,14 @@ use std::ops::{Deref, DerefMut};
 use crate::{
     lang::{
         common::{Id, ds::set::IdSet, source::Span},
+        data::typ,
         il::ast,
     },
     phrase,
     runtime::{
-        sta::{MEnv, VEnv},
-        types::{TDEnv, TypeDef, typ},
+        env::TDEnv,
+        envs::elab::{MEnv, VEnv},
+        typdef::TypeDef,
     },
 };
 
@@ -72,10 +74,10 @@ impl Context {
     pub fn new() -> Self {
         let mut menv = MEnv::new();
         for (name, typ) in [
-            ("bool", typ::bool()),
-            ("nat", typ::nat()),
-            ("int", typ::int()),
-            ("text", typ::text()),
+            ("bool", typ::make::bool()),
+            ("nat", typ::make::nat()),
+            ("int", typ::make::int()),
+            ("text", typ::make::text()),
         ] {
             let id = phrase!(node: name.to_owned(), span: Span::default());
             menv.insert(id, typ);
