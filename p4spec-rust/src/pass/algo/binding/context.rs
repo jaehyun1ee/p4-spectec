@@ -1,6 +1,4 @@
-//! Transactional state accumulated while analyzing bindings
-
-use std::ops::{Deref, DerefMut};
+//! State accumulated while analyzing bindings
 
 use crate::{
     lang::{
@@ -17,53 +15,12 @@ use crate::{
 use super::super::{AlgoError, AlgoErrorKind};
 
 /// Environments and fresh state threaded through binding analysis
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Context {
     pub(crate) frees: IdSet,
     pub(crate) venv: VEnv,
     pub(crate) tdenv: TDEnv,
     pub(crate) menv: MEnv,
-    undo: Vec<Undo>,
-    checkpoints: Vec<usize>,
-}
-
-#[derive(Debug)]
-enum Undo {
-    AddFree(Id),
-    AddBound(Id),
-}
-
-/// A checkpoint in the binding context
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct Checkpoint {
-    depth: usize,
-    undo_len: usize,
-}
-
-/// A scope that rolls back its context changes when dropped
-pub struct Scope<'a> {
-    ctx: &'a mut Context,
-    checkpoint: Checkpoint,
-}
-
-impl Deref for Scope<'_> {
-    type Target = Context;
-
-    fn deref(&self) -> &Self::Target {
-        self.ctx
-    }
-}
-
-impl DerefMut for Scope<'_> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        self.ctx
-    }
-}
-
-impl Drop for Scope<'_> {
-    fn drop(&mut self) {
-        self.ctx.rollback_scope(self.checkpoint);
-    }
 }
 
 impl Context {
@@ -85,63 +42,13 @@ impl Context {
             venv: VEnv::new(),
             tdenv: TDEnv::new(),
             menv,
-            undo: vec![],
-            checkpoints: vec![],
-        }
-    }
-
-    // == Transactions
-
-    fn assert_checkpoint(&self, checkpoint: Checkpoint) {
-        assert_eq!(checkpoint.depth + 1, self.checkpoints.len());
-        assert_eq!(Some(&checkpoint.undo_len), self.checkpoints.last());
-    }
-
-    fn checkpoint(&mut self) -> Checkpoint {
-        let checkpoint = Checkpoint {
-            depth: self.checkpoints.len(),
-            undo_len: self.undo.len(),
-        };
-        self.checkpoints.push(checkpoint.undo_len);
-        checkpoint
-    }
-
-    fn rollback(&mut self, checkpoint: Checkpoint) {
-        self.assert_checkpoint(checkpoint);
-        self.checkpoints.pop();
-        while self.undo.len() > checkpoint.undo_len {
-            match self.undo.pop().expect("recorded binding change") {
-                Undo::AddFree(id) => {
-                    self.frees.take(&id).expect("recorded free binding");
-                }
-                Undo::AddBound(id) => {
-                    self.venv.remove(&id).expect("recorded bound binding");
-                }
-            }
-        }
-    }
-
-    fn rollback_scope(&mut self, checkpoint: Checkpoint) {
-        if std::thread::panicking() && self.checkpoints.len() > checkpoint.depth + 1 {
-            self.checkpoints.truncate(checkpoint.depth + 1);
-        }
-        self.rollback(checkpoint);
-    }
-
-    pub fn scope(&mut self) -> Scope<'_> {
-        let checkpoint = self.checkpoint();
-        Scope {
-            ctx: self,
-            checkpoint,
         }
     }
 
     // == Adders
 
     pub fn add_free(&mut self, id: Id) {
-        if self.frees.insert(id.clone()) && !self.checkpoints.is_empty() {
-            self.undo.push(Undo::AddFree(id));
-        }
+        self.frees.insert(id);
     }
 
     pub fn add_frees(&mut self, ids: &IdSet) {
@@ -154,9 +61,6 @@ impl Context {
         for (id, dim) in venv.iter() {
             if !self.venv.contains_key(id) {
                 self.venv.insert(id.clone(), dim.clone());
-                if !self.checkpoints.is_empty() {
-                    self.undo.push(Undo::AddBound(id.clone()));
-                }
             }
         }
     }

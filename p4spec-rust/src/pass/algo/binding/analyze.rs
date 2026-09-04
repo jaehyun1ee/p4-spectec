@@ -588,7 +588,7 @@ fn analyze_rule_group(
     rule_group_il: ast::RuleGroup,
     is_else: bool,
 ) -> Result<al::ast::RuleGroup, AlgoError> {
-    let mut ctx = ctx.scope();
+    let mut ctx = ctx.clone();
     let span = rule_group_il.span;
     let (id_group, rules_il) = rule_group_il.node;
     let mut ids = Vec::with_capacity(rules_il.len());
@@ -617,7 +617,7 @@ fn analyze_rule_group(
         .zip(prems_group_il)
         .zip(exps_output_group_il)
     {
-        let mut ctx_local = ctx.scope();
+        let mut ctx_local = ctx.clone();
         let prems_unified_al = analyze_prems(&mut ctx_local, prems_unified_il)?;
         rule_paths_al.push(analyze_rule_path(
             &mut ctx_local,
@@ -671,7 +671,7 @@ fn analyze_clause(
     clause_il: ast::Clause,
     is_else: bool,
 ) -> Result<al::ast::Clause, AlgoError> {
-    let mut ctx = ctx.scope();
+    let mut ctx = ctx.clone();
     ctx.add_frees(&clause_il.free());
     let span = clause_il.span;
     let ast::ClauseKind {
@@ -814,7 +814,7 @@ fn analyze_table_row(
     ctx: &mut Context,
     row_il: ast::TableRow,
 ) -> Result<al::ast::TableRow, AlgoError> {
-    let mut ctx = ctx.scope();
+    let mut ctx = ctx.clone();
     ctx.add_frees(&row_il.free());
     let span = row_il.span;
     let (args_il, exp_il) = row_il.node;
