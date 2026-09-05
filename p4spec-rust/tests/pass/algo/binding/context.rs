@@ -1,6 +1,18 @@
 use super::super::*;
 
 #[test]
+fn test_context_clone_isolates_local_bindings() {
+    let id_free = id("free", 1);
+    let context = Context::new();
+    let mut context_local = context.clone();
+
+    context_local.add_free(id_free.clone());
+
+    assert!(!context.frees.contains(&id_free));
+    assert!(context_local.frees.contains(&id_free));
+}
+
+#[test]
 fn test_context_loads_type_and_metavariable_definitions() {
     let extern_id = id("extern_type", 1);
     let defined_id = id("defined_type", 2);

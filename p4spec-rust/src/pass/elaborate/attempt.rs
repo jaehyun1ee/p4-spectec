@@ -22,24 +22,20 @@ pub(super) fn choose_sequential<T>(
     first: impl FnOnce(&mut Context) -> Attempt<T>,
     second: impl FnOnce(&mut Context) -> Attempt<T>,
 ) -> Attempt<T> {
-    let checkpoint = ctx.checkpoint();
-    match first(ctx) {
+    let mut ctx_first = ctx.clone();
+    match first(&mut ctx_first) {
         Ok(value) => {
-            ctx.commit(checkpoint);
+            *ctx = ctx_first;
             Ok(value)
         }
         Err(failure) => {
-            ctx.rollback(checkpoint);
-            let checkpoint = ctx.checkpoint();
-            match second(ctx) {
+            let mut ctx_second = ctx.clone();
+            match second(&mut ctx_second) {
                 Ok(value) => {
-                    ctx.commit(checkpoint);
+                    *ctx = ctx_second;
                     Ok(value)
                 }
-                Err(failure_second) => {
-                    ctx.rollback(checkpoint);
-                    Err(failure.merge(failure_second))
-                }
+                Err(failure_second) => Err(failure.merge(failure_second)),
             }
         }
     }

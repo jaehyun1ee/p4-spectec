@@ -1140,20 +1140,16 @@ fn elab_singleton_iter_exp(
 // - Normal expression elaboration
 
 fn elab_exp_normal(ctx: &mut Context, typ_il_expect: &il::Typ, exp: &el::Exp) -> Attempt<il::Exp> {
-    let checkpoint = ctx.checkpoint();
-    match infer_exp(ctx, exp) {
-        Ok(exp_il) => match cast_exp(ctx, typ_il_expect, exp_il) {
+    let mut ctx_candidate = ctx.clone();
+    match infer_exp(&mut ctx_candidate, exp) {
+        Ok(exp_il) => match cast_exp(&ctx_candidate, typ_il_expect, exp_il) {
             Ok(exp_il) => {
-                ctx.commit(checkpoint);
+                *ctx = ctx_candidate;
                 Ok(exp_il)
             }
-            Err(failure) => {
-                ctx.rollback(checkpoint);
-                Err(failure)
-            }
+            Err(failure) => Err(failure),
         },
         Err(_) => {
-            ctx.rollback(checkpoint);
             if matches!(&exp.node, el::ExpKind::Var(id) if id.node == "_") {
                 return elab_wildcard_exp(ctx, typ_il_expect, exp);
             }
@@ -1497,16 +1493,13 @@ fn elab_variant_exp(
     typ_cases_il: &[il::TypCase],
     exp: &el::Exp,
 ) -> Attempt<il::Exp> {
-    let checkpoint = ctx.checkpoint();
+    let mut ctx_match = ctx.clone();
     let mut exps_il_match = Vec::new();
     for (not_typ_il, origin_il, _) in typ_cases_il {
-        let candidate = ctx.checkpoint();
-        let not_exp_il = match elab_not_exp(ctx, not_typ_il, exp) {
+        let mut ctx_candidate = ctx_match.clone();
+        let not_exp_il = match elab_not_exp(&mut ctx_candidate, not_typ_il, exp) {
             Ok(not_exp_il) => not_exp_il,
-            Err(_) => {
-                ctx.rollback(candidate);
-                continue;
-            }
+            Err(_) => continue,
         };
         let typ_il_case_kind = il::TypKind::Var(origin_il.node.0.clone(), origin_il.node.1.clone());
         let typ_il_case = phrase!(node: typ_il_case_kind, span: origin_il.span.clone());
@@ -1516,37 +1509,28 @@ fn elab_variant_exp(
             note: typ_il_case.node.clone(),
             span: exp.span.clone(),
         };
-        let exp_il_case = match cast_exp(ctx, typ_il_expect, exp_il_case) {
+        let exp_il_case = match cast_exp(&ctx_candidate, typ_il_expect, exp_il_case) {
             Ok(exp_il_case) => exp_il_case,
-            Err(_) => {
-                ctx.rollback(candidate);
-                continue;
-            }
+            Err(_) => continue,
         };
-        ctx.commit(candidate);
+        ctx_match = ctx_candidate;
         exps_il_match.push(exp_il_case);
     }
     match exps_il_match.len() {
         1 => {
-            ctx.commit(checkpoint);
+            *ctx = ctx_match;
             Ok(exps_il_match.pop().expect("single variant match"))
         }
-        0 => {
-            ctx.rollback(checkpoint);
-            fail_attempt(
-                ElabErrorKind::NoMatchingAlternative,
-                exp.span.clone(),
-                "expression does not match any variant case",
-            )
-        }
-        _ => {
-            ctx.rollback(checkpoint);
-            fail_attempt(
-                ElabErrorKind::AmbiguousVariant,
-                exp.span.clone(),
-                "expression matches multiple variant cases",
-            )
-        }
+        0 => fail_attempt(
+            ElabErrorKind::NoMatchingAlternative,
+            exp.span.clone(),
+            "expression does not match any variant case",
+        ),
+        _ => fail_attempt(
+            ElabErrorKind::AmbiguousVariant,
+            exp.span.clone(),
+            "expression matches multiple variant cases",
+        ),
     }
 }
 
@@ -1710,7 +1694,7 @@ fn elab_param(ctx: &mut Context, param: &el::Param) -> Result<il::Param, ElabErr
                 ));
             }
             let (params_il, typ_il_ret) = {
-                let mut ctx_local = ctx.scope();
+                let mut ctx_local = ctx.clone();
                 ctx_local.add_tparams(tparams)?;
                 let params_il = params
                     .iter()
@@ -2037,7 +2021,7 @@ fn elab_rule(
             "rule relation does not match its group",
         ));
     }
-    let mut ctx_local = ctx.scope();
+    let mut ctx_local = ctx.clone();
     ctx_local.reset_frees();
     let frees = rule.free();
     ctx_local.add_frees(&frees);
@@ -2127,7 +2111,7 @@ fn elab_clause(
     }
     let params_il = params_il.to_vec();
     let typ_il_ret = typ_il_ret.clone();
-    let mut ctx_local = ctx.scope();
+    let mut ctx_local = ctx.clone();
     ctx_local.reset_frees();
     let frees = def.free();
     ctx_local.add_frees(&frees);
@@ -2312,7 +2296,7 @@ fn elab_typ_def(ctx: &mut Context, def: el::TypDef) -> Result<il::DefKind, ElabE
         }
     }
     let (type_def, def_typ_il) = {
-        let mut ctx_local = ctx.scope();
+        let mut ctx_local = ctx.clone();
         ctx_local.add_tparams(&def.tparams)?;
         elab_def_typ(&ctx_local, &def.id, &def.tparams, &def.def_typ)?
     };
@@ -2439,7 +2423,7 @@ fn elab_rule_group_def(
 fn elab_extern_dec_def(ctx: &mut Context, def: el::ExternDecDef) -> Result<il::DefKind, ElabError> {
     distinct_tparams(&def.tparams, &def.id.span)?;
     let (params_il, typ_il) = {
-        let mut ctx_local = ctx.scope();
+        let mut ctx_local = ctx.clone();
         ctx_local.add_tparams(&def.tparams)?;
         let params_il = def
             .params
@@ -2471,7 +2455,7 @@ fn elab_builtin_dec_def(
 ) -> Result<il::DefKind, ElabError> {
     distinct_tparams(&def.tparams, &def.id.span)?;
     let (params_il, typ_il) = {
-        let mut ctx_local = ctx.scope();
+        let mut ctx_local = ctx.clone();
         ctx_local.add_tparams(&def.tparams)?;
         let params_il = def
             .params
@@ -2539,7 +2523,7 @@ fn elab_table_dec_def(
 fn elab_func_dec_def(ctx: &mut Context, def: el::FuncDecDef) -> Result<il::DefKind, ElabError> {
     distinct_tparams(&def.tparams, &def.id.span)?;
     let (params_il, typ_il) = {
-        let mut ctx_local = ctx.scope();
+        let mut ctx_local = ctx.clone();
         ctx_local.add_tparams(&def.tparams)?;
         let params_il = def
             .params
@@ -2596,7 +2580,7 @@ fn elab_table_def(ctx: &mut Context, def: &el::TableDef) -> Result<(), ElabError
             })
             .collect::<Vec<_>>();
         let (args_il, exp_il_body) = {
-            let mut ctx_local = ctx.scope();
+            let mut ctx_local = ctx.clone();
             ctx_local.reset_frees();
             let frees = row.free();
             ctx_local.add_frees(&frees);

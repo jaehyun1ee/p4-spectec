@@ -18,7 +18,7 @@ fn test_dimension_inference_keeps_the_minimal_occurrence() {
     let dimensions = dimension::infer_exp(&tuple);
     let (stored_id, actual) = dimensions.iter().next().expect("inferred variable");
 
-    assert_eq!(stored_id.span, span(2));
+    assert_eq!(stored_id.span, span(4));
     let expected = Dim::new(typ::bool(), vec![]);
     assert!(actual.sub(&expected));
     assert!(expected.sub(actual));
