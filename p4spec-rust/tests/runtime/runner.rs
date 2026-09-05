@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::{cell::Cell, rc::Rc, sync::Mutex};
 
 use p4spec_rust::{
     lang::common::source::{Position, Span},
@@ -12,6 +12,8 @@ use p4spec_rust::{
 };
 use thiserror::Error;
 
+static FRESH_BUILTIN: Mutex<()> = Mutex::new(());
+
 #[derive(Debug, Error)]
 enum FixtureError {
     #[error(transparent)]
@@ -23,7 +25,9 @@ enum FixtureError {
 }
 
 #[derive(Default)]
-struct FixtureState;
+struct FixtureState {
+    next: u64,
+}
 
 struct FixtureInterpreter;
 
@@ -64,6 +68,21 @@ where
                 let (value, _) = context.call_extern_func("missing", targs, values)?;
                 Ok(value)
             }
+            "next_interp" => {
+                let state = context.interp_state();
+                let next = state.next;
+                state.next += 1;
+                Ok(value::make::text(next.to_string(), Span::default()))
+            }
+            "next_extern" => {
+                let (value, _) = context.call_extern_func("next", targs, values)?;
+                Ok(value)
+            }
+            "next_builtin" => {
+                let id = id("fresh_typeId");
+                let (value, _) = context.call_builtin(&id, targs, values)?;
+                Ok(value)
+            }
             _ => Err(FixtureError::Unknown(name.to_owned())),
         }
     }
@@ -76,10 +95,15 @@ where
         Err(FixtureError::Unknown(name.to_owned()))
     }
 
-    fn clear(_state: &mut Self::State) {}
+    fn clear(state: &mut Self::State) {
+        state.next = 0;
+    }
 }
 
-struct FixtureExtern;
+#[derive(Default)]
+struct FixtureExtern {
+    next: Cell<u64>,
+}
 
 impl Extern for FixtureExtern {
     fn eval_func<S, I>(
@@ -110,6 +134,12 @@ impl Extern for FixtureExtern {
                 let value = value::make::bool(true, Span::default());
                 Ok((value, true))
             }
+            "next" => {
+                let next = self.next.get();
+                self.next.set(next + 1);
+                let value = value::make::text(next.to_string(), Span::default());
+                Ok((value, true))
+            }
             _ => {
                 let error = ExternError {
                     kind: p4spec_rust::runner::ExternErrorKind::Failure(name.to_owned()),
@@ -137,7 +167,9 @@ impl Extern for FixtureExtern {
         Err(error.into())
     }
 
-    fn clear(&mut self) {}
+    fn clear(&mut self) {
+        self.next.set(0);
+    }
 }
 
 fn id(name: &str) -> p4spec_rust::lang::il::ast::Id {
@@ -155,7 +187,9 @@ fn test_null_interface_reports_configuration_failure() {
 
 #[test]
 fn test_builtin_interface_reports_side_effects_and_clears() {
+    let _guard = FRESH_BUILTIN.lock().unwrap();
     let mut interface = BuiltinInterface::new();
+    interface.clear();
     let (value, side_effected) = interface
         .call_builtin(&id("fresh_typeId"), &[], &[])
         .unwrap();
@@ -190,7 +224,7 @@ fn test_builtin_interface_locates_builtin_failures_at_the_call() {
 fn test_runner_statically_composes_its_components() {
     let mut runner = Runner::<FixtureInterpreter, NullInterface, NullExtern>::new(
         (),
-        FixtureState,
+        FixtureState::default(),
         NullInterface,
         NullExtern,
     );
@@ -204,9 +238,9 @@ fn test_runner_statically_composes_its_components() {
 fn test_extern_can_reenter_the_interpreter() {
     let mut runner = Runner::<FixtureInterpreter, NullInterface, FixtureExtern>::new(
         (),
-        FixtureState,
+        FixtureState::default(),
         NullInterface,
-        FixtureExtern,
+        FixtureExtern::default(),
     );
 
     let value = runner.eval_func("outer", &[], &[]).unwrap();
@@ -218,9 +252,9 @@ fn test_extern_can_reenter_the_interpreter() {
 fn test_extern_reports_side_effects_with_each_result() {
     let mut runner = Runner::<FixtureInterpreter, NullInterface, FixtureExtern>::new(
         (),
-        FixtureState,
+        FixtureState::default(),
         NullInterface,
-        FixtureExtern,
+        FixtureExtern::default(),
     );
 
     let value_pure = runner.eval_func("pure_effect", &[], &[]).unwrap();
@@ -234,7 +268,7 @@ fn test_extern_reports_side_effects_with_each_result() {
 fn test_null_extern_reports_configuration_failure() {
     let mut runner = Runner::<FixtureInterpreter, NullInterface, NullExtern>::new(
         (),
-        FixtureState,
+        FixtureState::default(),
         NullInterface,
         NullExtern,
     );
@@ -248,4 +282,37 @@ fn test_null_extern_reports_configuration_failure() {
             ..
         })
     ));
+}
+
+#[test]
+fn test_runner_clear_resets_every_component() {
+    let _guard = FRESH_BUILTIN.lock().unwrap();
+    let mut runner = Runner::<FixtureInterpreter, BuiltinInterface, FixtureExtern>::new(
+        (),
+        FixtureState::default(),
+        BuiltinInterface::new(),
+        FixtureExtern::default(),
+    );
+    runner.clear();
+
+    assert_eq!(eval_text(&mut runner, "next_interp"), "0");
+    assert_eq!(eval_text(&mut runner, "next_interp"), "1");
+    assert_eq!(eval_text(&mut runner, "next_extern"), "0");
+    assert_eq!(eval_text(&mut runner, "next_extern"), "1");
+    assert_eq!(eval_text(&mut runner, "next_builtin"), "FRESH__0");
+    assert_eq!(eval_text(&mut runner, "next_builtin"), "FRESH__1");
+
+    runner.clear();
+
+    assert_eq!(eval_text(&mut runner, "next_interp"), "0");
+    assert_eq!(eval_text(&mut runner, "next_extern"), "0");
+    assert_eq!(eval_text(&mut runner, "next_builtin"), "FRESH__0");
+}
+
+fn eval_text(
+    runner: &mut Runner<FixtureInterpreter, BuiltinInterface, FixtureExtern>,
+    name: &str,
+) -> String {
+    let value = runner.eval_func(name, &[], &[]).unwrap();
+    get::text(&value).unwrap().to_owned()
 }
