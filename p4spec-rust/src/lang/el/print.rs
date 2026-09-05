@@ -1,3 +1,5 @@
+//! Pretty-printing for external language data
+
 use crate::lang::xl::num;
 
 use super::ast::*;

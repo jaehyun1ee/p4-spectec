@@ -1,6 +1,6 @@
-use std::fmt;
+//! Source positions, regions, and spans
 
-// Positions and regions
+use std::fmt;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Position {

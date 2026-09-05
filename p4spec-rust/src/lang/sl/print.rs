@@ -1,3 +1,5 @@
+//! Pretty-printing for structured language data
+
 use crate::{
     domain::mixop,
     lang::{il, sl::ast::*},

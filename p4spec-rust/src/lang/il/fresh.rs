@@ -1,3 +1,5 @@
+//! Fresh identifiers for internal language data
+
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{

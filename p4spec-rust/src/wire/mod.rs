@@ -1,4 +1,4 @@
-//! Formats used at external compatibility boundaries.
+//! Formats used at external compatibility boundaries
 
 mod envelope;
 

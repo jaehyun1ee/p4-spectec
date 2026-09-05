@@ -1,3 +1,5 @@
+//! Fresh identifiers for algorithmic language data
+
 use std::collections::BTreeMap;
 
 use crate::{

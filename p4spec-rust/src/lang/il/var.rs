@@ -1,3 +1,5 @@
+//! Variables for internal language data
+
 use super::ast::*;
 pub fn as_exp(var: &Var, dim: bool) -> Exp {
     let (id, typ, iters) = var;

@@ -1,3 +1,5 @@
+//! Prose hints and node annotations
+
 use crate::{
     domain::source::{HasSpan, Span},
     lang::{

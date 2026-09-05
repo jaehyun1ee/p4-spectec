@@ -1,3 +1,5 @@
+//! Equality for internal language data
+
 use std::cmp::Ordering;
 
 use crate::domain::mixfix::Mixfix;

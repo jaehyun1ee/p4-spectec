@@ -1,3 +1,5 @@
+//! Equality for structured language data
+
 use crate::lang::{hints::input, il};
 
 use super::ast::*;

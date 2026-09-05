@@ -1,3 +1,5 @@
+//! Atoms
+
 use std::{error::Error, fmt};
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]

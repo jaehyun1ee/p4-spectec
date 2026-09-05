@@ -1,3 +1,5 @@
+//! Free identifiers in internal language data
+
 use std::collections::BTreeSet;
 
 use super::ast::*;

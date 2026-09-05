@@ -1,3 +1,5 @@
+//! Alternation hints
+
 use crate::lang::{
     el::{
         ast::{Atom, Exp, ExpKind, Hole as ElHole, Text},
@@ -5,8 +7,6 @@ use crate::lang::{
     },
     hints::input,
 };
-
-// Alternation hints
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Hole {

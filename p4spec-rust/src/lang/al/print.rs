@@ -1,3 +1,5 @@
+//! Pretty-printing for algorithmic language data
+
 use crate::{domain::mixfix::Mixop, lang::il::print as il_print};
 
 use super::ast::*;

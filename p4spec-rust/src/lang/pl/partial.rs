@@ -1,3 +1,5 @@
+//! Partiality of prose constructs
+
 use super::ast::*;
 
 /// A construct is partial when its evaluation can fail because it invokes a

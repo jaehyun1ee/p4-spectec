@@ -1,9 +1,9 @@
+//! Natural numbers and integers
+
 use std::cmp::Ordering;
 
 use num_bigint::BigInt;
 use num_traits::{Signed, Zero};
-
-// Numbers: natural numbers and integers
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum T {

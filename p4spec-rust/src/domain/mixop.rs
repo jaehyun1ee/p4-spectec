@@ -1,3 +1,5 @@
+//! Mixfix operators and argument filling
+
 use std::cmp::Ordering;
 
 use super::mixfix::{ArityMismatch, AtomPhrase, Mixfix, Mixop};

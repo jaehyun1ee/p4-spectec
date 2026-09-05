@@ -1,4 +1,4 @@
-//! Serialization-independent representation of `Yojson.Safe.t`
+//! Serialization-independent JSON value model
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ExternalData {

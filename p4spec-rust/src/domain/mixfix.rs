@@ -1,3 +1,5 @@
+//! Mixfix operator notation
+
 use std::{
     cmp::Ordering,
     error::Error,
@@ -10,12 +12,20 @@ use super::{atom::Atom, source::Spanned};
 pub type AtomPhrase = Spanned<Atom>;
 pub type Mixop = Mixfix<()>;
 
+/// A mixfix operator: literal atoms interleaved with argument holes. For
+/// example `_ + _` is an infix operator with two holes and `[ _ ]` brackets a
+/// single hole.
 #[derive(Clone, Debug)]
 pub enum Mixfix<T> {
+    /// An argument hole, filled by a value of type `T`
     Arg(T),
+    /// A literal atom such as `+` or `[`
     Atom(AtomPhrase),
+    /// A body enclosed by an opening and closing atom: `left body right`
     Brack(AtomPhrase, Box<Self>, AtomPhrase),
+    /// Two operands separated by an atom: `left atom right`
     Infix(Box<Self>, AtomPhrase, Box<Self>),
+    /// A sequence of adjacent fragments
     Seq(Vec<Self>),
 }
 

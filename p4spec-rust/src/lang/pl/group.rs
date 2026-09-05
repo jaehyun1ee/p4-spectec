@@ -1,3 +1,5 @@
+//! Rule groups
+
 use super::{annot, ast::*};
 
 /// A rule group extracted from a dispatch block

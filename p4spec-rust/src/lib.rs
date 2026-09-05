@@ -1,4 +1,4 @@
-//! Shared source and domain model for the P4 `SpecTec` Rust port.
+//! Shared source and domain model for P4 `SpecTec`
 
 pub mod domain;
 pub mod lang;

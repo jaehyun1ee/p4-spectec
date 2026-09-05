@@ -1,3 +1,5 @@
+//! Free identifiers in structured language data
+
 use crate::lang::il;
 
 use super::ast::*;

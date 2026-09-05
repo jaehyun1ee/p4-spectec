@@ -1,6 +1,8 @@
+//! Variables for algorithmic language data
+
 use super::ast::*;
 
-// Variable with type and dimention
+// Variable with type and dimension
 
 pub type T = Var;
 

@@ -1,3 +1,5 @@
+//! Pretty-printing for prose language data
+
 use crate::{domain::mixop, lang::sl};
 
 use super::ast::*;

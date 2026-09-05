@@ -1,4 +1,4 @@
-//! OCaml stage AST codecs.
+//! OCaml stage AST codecs
 
 pub mod al;
 pub mod el;

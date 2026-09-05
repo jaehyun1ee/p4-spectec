@@ -1,5 +1,6 @@
-// Keep non-recursive OCaml payloads inline; reserve indirection for
-// recursive edges
+//! Internal language model
+
+// Box only recursive edges; keep other variants inline to bound enum size
 #![allow(clippy::large_enum_variant)]
 
 use crate::domain::{
