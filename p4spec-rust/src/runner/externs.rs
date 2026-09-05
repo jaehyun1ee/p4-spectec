@@ -3,33 +3,25 @@
 //! Each call receives the operation-local runner context and may reenter the
 //! interpreter through it. The result carries its own side-effect flag, so the
 //! extern implementation keeps all architecture-specific state bookkeeping.
+//! Failures describe the host operation; the calling interpreter owns the
+//! source location.
 
 use std::rc::Rc;
 
 use thiserror::Error;
 
-use crate::{
-    lang::data::value::Value,
-    lang::{common::source::Span, il::ast::Typ},
-};
+use crate::{lang::data::value::Value, lang::il::ast::Typ};
 
 use super::{Interface, Interpreter, RunnerContext};
 
 // == Extern errors
 
 #[derive(Clone, Debug, Error, Eq, PartialEq)]
-pub enum ExternErrorKind {
+pub enum ExternError {
     #[error("extern is not configured")]
     NotConfigured,
     #[error("{0}")]
     Failure(String),
-}
-
-#[derive(Clone, Debug, Error, Eq, PartialEq)]
-#[error("{kind} at {span}")]
-pub struct ExternError {
-    pub kind: ExternErrorKind,
-    pub span: Span,
 }
 
 // == Extern contract
@@ -74,7 +66,7 @@ impl Extern for NullExtern {
         I: Interface,
         S: Interpreter<I, Self>,
     {
-        let error = not_configured();
+        let error = ExternError::NotConfigured;
         Err(error.into())
     }
 
@@ -89,16 +81,9 @@ impl Extern for NullExtern {
         I: Interface,
         S: Interpreter<I, Self>,
     {
-        let error = not_configured();
+        let error = ExternError::NotConfigured;
         Err(error.into())
     }
 
     fn clear(&mut self) {}
-}
-
-fn not_configured() -> ExternError {
-    ExternError {
-        kind: ExternErrorKind::NotConfigured,
-        span: Span::default(),
-    }
 }

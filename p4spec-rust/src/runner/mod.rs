@@ -16,10 +16,8 @@ use std::rc::Rc;
 use crate::lang::{data::value::Value, il::ast::Typ};
 
 pub use context::RunnerContext;
-pub use externs::{Extern, ExternError, ExternErrorKind, NullExtern};
-pub use interface::{
-    BuiltinInterface, Interface, InterfaceError, InterfaceErrorKind, NullInterface,
-};
+pub use externs::{Extern, ExternError, NullExtern};
+pub use interface::{BuiltinInterface, Interface, InterfaceError, NullInterface};
 pub use interpreter::Interpreter;
 
 // == Runner assembly
