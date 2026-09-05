@@ -1,13 +1,14 @@
 use std::{cell::Cell, rc::Rc, sync::Mutex};
 
 use p4spec_rust::{
-    lang::common::source::{Position, Span},
+    interface::builtin::BuiltinErrorKind,
+    lang::common::source::Span,
     lang::data::value::{self, Value, get},
     lang::il::ast::Typ,
     phrase,
     runner::{
-        BuiltinInterface, Extern, ExternError, Interface, InterfaceError, InterfaceErrorKind,
-        Interpreter, NullExtern, NullInterface, Runner, RunnerContext,
+        BuiltinInterface, Extern, ExternError, Interface, InterfaceError, Interpreter, NullExtern,
+        NullInterface, Runner, RunnerContext,
     },
 };
 use thiserror::Error;
@@ -141,10 +142,7 @@ impl Extern for FixtureExtern {
                 Ok((value, true))
             }
             _ => {
-                let error = ExternError {
-                    kind: p4spec_rust::runner::ExternErrorKind::Failure(name.to_owned()),
-                    span: Span::default(),
-                };
+                let error = ExternError::Failure(name.to_owned());
                 Err(error.into())
             }
         }
@@ -160,10 +158,7 @@ impl Extern for FixtureExtern {
         I: Interface,
         S: Interpreter<I, Self>,
     {
-        let error = ExternError {
-            kind: p4spec_rust::runner::ExternErrorKind::Failure(name.to_owned()),
-            span: Span::default(),
-        };
+        let error = ExternError::Failure(name.to_owned());
         Err(error.into())
     }
 
@@ -182,7 +177,7 @@ fn test_null_interface_reports_configuration_failure() {
         .call_builtin(&id("sum_int"), &[], &[])
         .unwrap_err();
 
-    assert!(matches!(error.kind, InterfaceErrorKind::NotConfigured));
+    assert!(matches!(error, InterfaceError::NotConfigured));
 }
 
 #[test]
@@ -206,18 +201,16 @@ fn test_builtin_interface_reports_side_effects_and_clears() {
 }
 
 #[test]
-fn test_builtin_interface_locates_builtin_failures_at_the_call() {
-    let span = Span::new(
-        Position::new("test.spec", 3, 4),
-        Position::new("test.spec", 3, 11),
-    );
-    let id = phrase!(node: "sum_int".to_owned(), span: span.clone());
+fn test_builtin_interface_preserves_builtin_failures() {
     let error = BuiltinInterface::new()
-        .call_builtin(&id, &[], &[])
+        .call_builtin(&id("sum_int"), &[], &[])
         .unwrap_err();
 
-    assert_eq!(error.span, span);
-    assert!(matches!(error.kind, InterfaceErrorKind::Builtin(_)));
+    assert!(matches!(
+        error,
+        InterfaceError::Builtin(error)
+            if matches!(error.kind, BuiltinErrorKind::ArityMismatch { .. })
+    ));
 }
 
 #[test]
@@ -277,10 +270,7 @@ fn test_null_extern_reports_configuration_failure() {
 
     assert!(matches!(
         error,
-        FixtureError::Extern(ExternError {
-            kind: p4spec_rust::runner::ExternErrorKind::NotConfigured,
-            ..
-        })
+        FixtureError::Extern(ExternError::NotConfigured)
     ));
 }
 
