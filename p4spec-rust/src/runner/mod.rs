@@ -2,7 +2,9 @@
 //!
 //! `Runner<S, I, E>` owns one interpreter stage, builtin interface, and extern
 //! implementation. Each evaluation splits those components into a short-lived
-//! context, which also supplies the explicit path for extern reentry.
+//! context. For example, a function call may dispatch to an extern, which can
+//! call another specification function through that same context before
+//! returning its value and side-effect flag.
 
 mod context;
 mod externs;
@@ -22,6 +24,8 @@ pub use interpreter::Interpreter;
 
 // == Runner assembly
 
+/// An interpreter, builtin interface, and extern implementation assembled as
+/// one stateful execution unit.
 pub struct Runner<S, I, E>
 where
     S: Interpreter<I, E>,
@@ -78,5 +82,14 @@ where
             &self.externs,
         );
         context.call_func(name, targs, values)
+    }
+
+    // - Lifecycle
+
+    /// Restores every stateful component to its initial execution state.
+    pub fn clear(&mut self) {
+        S::clear(&mut self.interp_state);
+        self.externs.clear();
+        self.interface.clear();
     }
 }
