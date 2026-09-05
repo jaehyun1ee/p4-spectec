@@ -1,8 +1,8 @@
-//! Contracts between the specification runner and host extern implementations.
+//! Host extern contract for a composed specification runner.
 //!
-//! An extern can call back into specification functions through `SpecCall`,
-//! return host results, and expose a checkpoint for side-effect detection. The
-//! null implementation reports a located configuration error for every call.
+//! Each call receives the operation-local runner context and may reenter the
+//! interpreter through it. The result carries its own side-effect flag, so the
+//! extern implementation keeps all architecture-specific state bookkeeping.
 
 use std::rc::Rc;
 
@@ -12,6 +12,8 @@ use crate::{
     lang::data::value::Value,
     lang::{common::source::Span, il::ast::Typ},
 };
+
+use super::{Interface, Interpreter, RunnerContext};
 
 // == Extern errors
 
@@ -30,41 +32,29 @@ pub struct ExternError {
     pub span: Span,
 }
 
-// == Interpreter callback and extern contracts
+// == Extern contract
 
-pub trait SpecCall {
-    fn eval_func(
-        &mut self,
+pub trait Extern: Sized {
+    fn eval_rel<S, I>(
+        &self,
+        context: &mut RunnerContext<'_, S, I, Self>,
+        name: &str,
+        values: &[Rc<Value>],
+    ) -> Result<(Vec<Rc<Value>>, bool), S::Error>
+    where
+        I: Interface,
+        S: Interpreter<I, Self>;
+
+    fn eval_func<S, I>(
+        &self,
+        context: &mut RunnerContext<'_, S, I, Self>,
         name: &str,
         targs: &[Typ],
         values: &[Rc<Value>],
-    ) -> Result<Rc<Value>, ExternError>;
-
-    fn eval_rel(&mut self, name: &str, values: &[Rc<Value>])
-    -> Result<Vec<Rc<Value>>, ExternError>;
-}
-
-pub trait Extern {
-    fn eval_rel(
-        &mut self,
-        spec: &mut dyn SpecCall,
-        name: &str,
-        values: &[Rc<Value>],
-    ) -> Result<Vec<Rc<Value>>, ExternError>;
-
-    fn eval_func(
-        &mut self,
-        spec: &mut dyn SpecCall,
-        name: &str,
-        targs: &[Typ],
-        values: &[Rc<Value>],
-    ) -> Result<Rc<Value>, ExternError>;
-
-    fn checkpoint(&self) -> u64;
-
-    fn side_effected(&self, before: u64, after: u64) -> bool {
-        before != after
-    }
+    ) -> Result<(Rc<Value>, bool), S::Error>
+    where
+        I: Interface,
+        S: Interpreter<I, Self>;
 
     fn clear(&mut self);
 }
@@ -74,27 +64,33 @@ pub trait Extern {
 pub struct NullExtern;
 
 impl Extern for NullExtern {
-    fn eval_rel(
-        &mut self,
-        _spec: &mut dyn SpecCall,
+    fn eval_rel<S, I>(
+        &self,
+        _context: &mut RunnerContext<'_, S, I, Self>,
         _name: &str,
         _values: &[Rc<Value>],
-    ) -> Result<Vec<Rc<Value>>, ExternError> {
-        Err(not_configured())
+    ) -> Result<(Vec<Rc<Value>>, bool), S::Error>
+    where
+        I: Interface,
+        S: Interpreter<I, Self>,
+    {
+        let error = not_configured();
+        Err(error.into())
     }
 
-    fn eval_func(
-        &mut self,
-        _spec: &mut dyn SpecCall,
+    fn eval_func<S, I>(
+        &self,
+        _context: &mut RunnerContext<'_, S, I, Self>,
         _name: &str,
         _targs: &[Typ],
         _values: &[Rc<Value>],
-    ) -> Result<Rc<Value>, ExternError> {
-        Err(not_configured())
-    }
-
-    fn checkpoint(&self) -> u64 {
-        0
+    ) -> Result<(Rc<Value>, bool), S::Error>
+    where
+        I: Interface,
+        S: Interpreter<I, Self>,
+    {
+        let error = not_configured();
+        Err(error.into())
     }
 
     fn clear(&mut self) {}
