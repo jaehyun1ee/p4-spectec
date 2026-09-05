@@ -73,7 +73,7 @@ impl BEnv {
         Self(entries)
     }
 
-    /// Combines parallel bindings while retaining the first stored key span
+    /// Combines parallel bindings
     pub fn union(mut self, other: Self) -> Result<Self, AlgoError> {
         for (id, binding_r) in other.iter() {
             let binding_l = self

@@ -74,11 +74,7 @@ impl<K: SyntaxCmp, V> PhraseMap<K, V> {
         K: Clone,
         V: Clone,
     {
-        let key_lookup = ByKey(key.clone());
-        match self.entries.get_mut(&key_lookup) {
-            Some(value_stored) => Some(std::mem::replace(value_stored, value)),
-            None => self.entries.insert(ByKey(key), value),
-        }
+        self.entries.insert(ByKey(key), value)
     }
 
     /// Iterates over bindings in collection order

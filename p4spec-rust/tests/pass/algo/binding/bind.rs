@@ -1,7 +1,7 @@
 use super::super::*;
 
 #[test]
-fn test_binding_union_keeps_the_first_span_and_marks_repetition() {
+fn test_binding_union_marks_repetition() {
     let id_first = id("x", 1);
     let id_second = id("x", 2);
     let typ_first = typ::bool();
@@ -9,11 +9,11 @@ fn test_binding_union_keeps_the_first_span_and_marks_repetition() {
     let mut typ_second = typ::bool();
     typ_second.span = span(3);
     let benv_l = BEnv::singleton(id_first.clone(), typ_first);
-    let benv_r = BEnv::singleton(id_second, typ_second);
+    let benv_r = BEnv::singleton(id_second.clone(), typ_second);
 
     let benv = benv_l.union(benv_r).expect("equivalent dimensions");
 
-    assert_eq!(benv.iter().next().map(|(id, _)| id), Some(&id_first));
+    assert_eq!(benv.iter().next().map(|(id, _)| id), Some(&id_second));
     let binding = benv
         .iter()
         .find(|(id, _)| id.node == id_first.node)

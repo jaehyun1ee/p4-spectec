@@ -20,8 +20,9 @@ fn test_id_map_uses_identifier_text_as_its_key() {
     assert_eq!(ids.insert(id_first.clone(), 1), None);
     assert_eq!(ids.insert(id_second.clone(), 2), Some(1));
     assert_eq!(ids.get(&id_second), Some(&2));
-    assert_eq!(ids.keys().collect::<Vec<_>>(), vec![&id_first]);
+    assert_eq!(ids.keys().collect::<Vec<_>>(), vec![&id_second]);
 }
+
 #[test]
 fn test_id_map_rejects_mismatched_lists() {
     let keys = [id("x", "first")];
