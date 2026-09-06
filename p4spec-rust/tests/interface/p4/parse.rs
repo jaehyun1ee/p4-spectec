@@ -85,7 +85,7 @@ Outer(Inner()) main;
 fn test_parses_the_positive_p4_corpus() {
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let corpus = manifest.join("../p4spec/test/micro");
-    let includes = [manifest.join("../../../p4c/p4include")];
+    let includes = [manifest.join("../p4c/p4include")];
     let mut files = Vec::new();
     for directory in [
         "programs",
@@ -119,7 +119,7 @@ fn test_parses_the_positive_p4_corpus() {
 fn test_rejects_the_negative_p4_parse_corpus() {
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let corpus = manifest.join("../p4spec/test/micro/programs-parse-neg");
-    let includes = [manifest.join("../../../p4c/p4include")];
+    let includes = [manifest.join("../p4c/p4include")];
     let mut files = Vec::new();
     collect_p4_files(&corpus, &mut files);
     files.sort();
