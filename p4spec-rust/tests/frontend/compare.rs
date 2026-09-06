@@ -17,6 +17,22 @@ use serde_json::Value;
 
 static OCAML_EXPORTER: Mutex<()> = Mutex::new(());
 
+/// Draw a single-line progress bar to stderr. libtest only captures the
+/// `print!`/`eprint!` macros, so a direct `io::stderr()` write stays visible
+/// while these OCaml-differential tests grind through the corpus.
+fn report_progress(label: &str, done: usize, total: usize) {
+    use std::io::Write;
+    const WIDTH: usize = 24;
+    let filled = (done * WIDTH).checked_div(total).unwrap_or(WIDTH);
+    let bar = format!("{}{}", "#".repeat(filled), "-".repeat(WIDTH - filled));
+    let mut stderr = std::io::stderr();
+    let _ = write!(stderr, "\r{label} [{bar}] {done}/{total}");
+    let _ = stderr.flush();
+    if done == total {
+        let _ = writeln!(stderr);
+    }
+}
+
 #[derive(Debug, PartialEq, Eq)]
 enum DiagnosticKind {
     Lexical(LexErrorKind),
@@ -182,9 +198,11 @@ fn test_positive_corpus_matches_ocaml_el_exactly() {
 
     let actual = parse_files([&spec_path]).expect("parse positive corpus with Rust frontend");
     assert_eq!(actual.len(), expected.len(), "definition count changed");
+    let total = expected.len();
     for (index, (actual_definition, expected_definition)) in
         actual.iter().zip(&expected).enumerate()
     {
+        report_progress("frontend positive corpus", index + 1, total);
         if actual_definition != expected_definition {
             let actual_value = SpecCodec::encode(&vec![actual_definition.clone()])
                 .expect("encode Rust definition");
@@ -220,7 +238,8 @@ fn test_negative_corpus_matches_ocaml_diagnostics() {
     fixtures.sort();
     assert!(!fixtures.is_empty(), "negative frontend corpus is empty");
 
-    for fixture in fixtures {
+    let total = fixtures.len();
+    for (index, fixture) in fixtures.into_iter().enumerate() {
         let output = run_ocaml_el(repo, &fixture);
         assert!(
             !output.status.success(),
@@ -237,5 +256,6 @@ fn test_negative_corpus_matches_ocaml_diagnostics() {
             "diagnostic changed for {}",
             fixture.display()
         );
+        report_progress("frontend negative corpus", index + 1, total);
     }
 }
