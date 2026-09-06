@@ -3,7 +3,7 @@
 use thiserror::Error;
 
 use crate::lang::{common::source::Span, hints::input::InputError};
-use crate::runtime::types::{TypeError, TypeErrorKind};
+use crate::runtime::ops::typ::{TypeError, TypeErrorKind};
 
 /// Stable semantic category of an algorithmic-conversion failure
 #[derive(Clone, Debug, Error, PartialEq, Eq)]

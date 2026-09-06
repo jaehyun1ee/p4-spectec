@@ -8,7 +8,7 @@ fn test_antiunification_populates_each_path_in_left_to_right_expression_order() 
                 exp(ast::ExpKind::Bool(left), ast::TypKind::Bool, line),
                 exp(ast::ExpKind::Bool(right), ast::TypKind::Bool, line + 1),
             ]),
-            ast::TypKind::Tuple(vec![typ::bool(), typ::bool()]),
+            ast::TypKind::Tuple(vec![typ::make::bool(), typ::make::bool()]),
             line,
         )
     };
@@ -96,7 +96,9 @@ fn test_antiunification_uses_runtime_equivalence_for_plain_type_aliases() {
         alias_id,
         TypeDef::Defined(
             vec![],
-            Box::new(crate::phrase! { node: ast::DefTypKind::Plain(typ::bool()), span:  span(1) }),
+            Box::new(
+                crate::phrase! { node: ast::DefTypKind::Plain(typ::make::bool()), span:  span(1) },
+            ),
         ),
     );
     let alias_value = exp(ast::ExpKind::Bool(true), alias_typ.node, 2);

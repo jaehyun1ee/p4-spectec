@@ -34,8 +34,9 @@ use crate::{
     },
     note_phrase, phrase,
     runtime::{
-        sta::Dim,
-        types::{Theta, TypeDef, optimize_sub_typ, subst_typ},
+        dim::Dim,
+        ops::typ::{Theta, optimize_sub_typ, subst_typ},
+        typdef::TypeDef,
     },
 };
 

@@ -6,14 +6,6 @@ use super::ast::*;
 
 // == Free identifiers
 
-// - Iterators
-
-impl Free for Iter {
-    fn free(&self) -> IdSet {
-        IdSet::new()
-    }
-}
-
 // - Types
 
 impl Free for PlainTypKind {

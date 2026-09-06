@@ -36,7 +36,7 @@ use crate::{
         traits::{eq::SyntaxEq, print::Print},
     },
     phrase,
-    runtime::sta::{Dim, VEnv},
+    runtime::{dim::Dim, envs::elab::VEnv},
 };
 
 use super::{ElabError, ElabErrorKind};

@@ -9,7 +9,7 @@ use crate::{
         il::ast,
     },
     phrase,
-    runtime::sta::{Dim, VEnv},
+    runtime::{dim::Dim, envs::algo::VEnv},
 };
 
 use super::super::{AlgoError, AlgoErrorKind};

@@ -10,8 +10,11 @@ use std::{
 use lalrpop_util::ParseError;
 
 use crate::lang::{
-    common::source::{Position, Span},
-    el::ast::Spec,
+    common::{
+        notation::{mixfix::Mixfix, mixop::Mixop},
+        source::{Position, Span},
+    },
+    el::ast::{self, Spec},
 };
 
 use super::{
@@ -27,11 +30,50 @@ pub fn parse_string(source: &str) -> Result<Spec, FrontendError> {
     parse_source(Rc::from(""), source, &Context::default())
 }
 
+/// Parses the notation shape syntax used by runtime case constructors.
+pub fn parse_mixop(source: &str) -> Result<Mixop, FrontendError> {
+    fn from_typ(typ: &ast::Typ) -> Mixop {
+        match typ {
+            ast::Typ::Plain(_) => Mixfix::Arg(()),
+            ast::Typ::Notation(notation) => match &notation.node {
+                ast::NotTypKind::Atom(atom) => {
+                    let atom = atom.clone();
+                    Mixfix::Atom(atom)
+                }
+                ast::NotTypKind::Seq(types) => {
+                    let mixfixes = types.iter().map(from_typ).collect();
+                    Mixfix::Seq(mixfixes)
+                }
+                ast::NotTypKind::Infix(left, atom, right) => {
+                    let left = Box::new(from_typ(left));
+                    let atom = atom.clone();
+                    let right = Box::new(from_typ(right));
+                    Mixfix::Infix(left, atom, right)
+                }
+                ast::NotTypKind::Brack(left, inner, right) => {
+                    let left = left.clone();
+                    let inner = Box::new(from_typ(inner));
+                    let right = right.clone();
+                    Mixfix::Brack(left, inner, right)
+                }
+            },
+        }
+    }
+
+    let context = Context::default();
+    let lexer = Lexer::new(Rc::from("<mixop>"), source, |id| context.find_id(id));
+    let tokens = parser_tokens(&context, lexer);
+    let result = parser::CheckTypParser::new().parse(&context, tokens);
+    let typ = result.map_err(|error| parse_error(&context, error))?;
+    let mixop = from_typ(&typ);
+    Ok(mixop)
+}
+
 fn parse_source(name: Rc<str>, source: &str, context: &Context) -> Result<Spec, FrontendError> {
     let lexer = Lexer::new(name, source, |id| context.find_id(id));
-    parser::SpecParser::new()
-        .parse(context, parser_tokens(context, lexer))
-        .map_err(|error| parse_error(context, error))
+    let tokens = parser_tokens(context, lexer);
+    let result = parser::SpecParser::new().parse(context, tokens);
+    result.map_err(|error| parse_error(context, error))
 }
 
 fn parse_error(
@@ -118,7 +160,8 @@ where
     let mut spec = Vec::new();
     for file in files {
         let context = Context::with_bindings(Rc::clone(&bindings));
-        spec.extend(parse_file_with_context(&file, &context)?);
+        let definitions = parse_file_with_context(&file, &context)?;
+        spec.extend(definitions);
     }
     Ok(spec)
 }

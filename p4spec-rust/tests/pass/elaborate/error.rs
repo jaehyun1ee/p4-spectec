@@ -7,7 +7,10 @@ use p4spec_rust::{
         il::ast::TypKind,
     },
     pass::elaborate::{self, ElabError, ElabErrorKind},
-    runtime::types::{TDEnv, TypeErrorKind, expand_typ},
+    runtime::{
+        env::TDEnv,
+        ops::typ::{TypeErrorKind, expand_typ},
+    },
 };
 
 #[test]

@@ -13,7 +13,7 @@ fn test_conversion_propagates_located_binding_errors() {
         40,
     );
     let spec = function_spec(
-        vec![typ::bool()],
+        vec![typ::make::bool()],
         vec![negated],
         exp(ast::ExpKind::Bool(true), ast::TypKind::Bool, 42),
         vec![],
@@ -55,7 +55,7 @@ fn test_collection_rejects_a_binding_inside_a_noninvertible_operator() {
 fn test_expression_collection_reports_right_associated_conflict_span() {
     let iterated = exp(
         ast::ExpKind::Iter(Box::new(var_exp("x", 3)), (ast::Iter::List, vec![])),
-        ast::TypKind::Iter(Box::new(typ::bool()), ast::Iter::List),
+        ast::TypKind::Iter(Box::new(typ::make::bool()), ast::Iter::List),
         3,
     );
     let tuple = exp(
@@ -75,7 +75,7 @@ fn test_expression_collection_reports_right_associated_conflict_span() {
 fn test_argument_collection_reports_right_associated_conflict_span() {
     let iterated = exp(
         ast::ExpKind::Iter(Box::new(var_exp("x", 3)), (ast::Iter::List, vec![])),
-        ast::TypKind::Iter(Box::new(typ::bool()), ast::Iter::List),
+        ast::TypKind::Iter(Box::new(typ::make::bool()), ast::Iter::List),
         3,
     );
     let args = [var_exp("x", 1), var_exp("x", 2), iterated]

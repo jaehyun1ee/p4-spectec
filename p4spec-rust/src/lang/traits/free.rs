@@ -1,5 +1,7 @@
 //! Free identifiers shared across language stages
 
+use std::rc::Rc;
+
 use crate::lang::common::{ds::set::IdSet, source::NotePhrase};
 
 /// Collects free term identifiers from syntax
@@ -30,6 +32,12 @@ impl<T: Free, N> Free for NotePhrase<T, N> {
 }
 
 impl<T: Free + ?Sized> Free for Box<T> {
+    fn free_into(&self, free: &mut IdSet) {
+        self.as_ref().free_into(free);
+    }
+}
+
+impl<T: Free + ?Sized> Free for Rc<T> {
     fn free_into(&self, free: &mut IdSet) {
         self.as_ref().free_into(free);
     }
