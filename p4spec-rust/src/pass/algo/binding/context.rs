@@ -9,7 +9,7 @@ use crate::{
     phrase,
     runtime::{
         env::TDEnv,
-        envs::elab::{MEnv, VEnv},
+        envs::algo::{MEnv, VEnv},
         typdef::TypeDef,
     },
 };

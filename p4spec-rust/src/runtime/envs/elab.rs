@@ -1,4 +1,4 @@
-//! Environments used by elaboration and algorithmic conversion
+//! Environments used by elaboration
 
 use crate::{
     lang::{common::ds::map::IdMap, hints::input::InputHint, il::ast},

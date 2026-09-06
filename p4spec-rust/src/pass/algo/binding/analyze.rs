@@ -50,7 +50,7 @@ use crate::{
         xl,
     },
     phrase,
-    runtime::{dim::Dim, envs::elab::VEnv, typdef::TypeDef},
+    runtime::{dim::Dim, envs::algo::VEnv, typdef::TypeDef},
 };
 
 use super::{

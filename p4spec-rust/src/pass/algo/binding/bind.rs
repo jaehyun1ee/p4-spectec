@@ -5,7 +5,7 @@ use crate::{
         common::{Id, ds::map::IdMap},
         il::ast,
     },
-    runtime::{dim::Dim, envs::elab::VEnv},
+    runtime::{dim::Dim, envs::algo::VEnv},
 };
 
 use super::super::{AlgoError, AlgoErrorKind};

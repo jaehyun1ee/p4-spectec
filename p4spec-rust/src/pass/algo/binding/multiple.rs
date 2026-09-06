@@ -23,7 +23,7 @@ use crate::{
         xl,
     },
     note_phrase, phrase,
-    runtime::{dim::Dim, envs::elab::VEnv},
+    runtime::{dim::Dim, envs::algo::VEnv},
 };
 
 use super::{
