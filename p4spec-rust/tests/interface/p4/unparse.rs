@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
 use p4spec_rust::{
-    interface::p4::unparse::{P4UnparseError, P4Unparser},
+    interface::p4::{error::P4UnparseError, unparse::P4Unparser},
     lang::{
         al,
         common::{
@@ -65,7 +65,7 @@ fn wrapped_text() -> Rc<Value> {
         Mixfix::Atom(atom("WRAP")),
         Mixfix::Arg(make::text("payload".to_owned(), Span::default())),
     ]);
-    make::case(&wrapper_type, value_case, Span::default())
+    make::case_(&wrapper_type, value_case, Span::default())
 }
 
 #[test]

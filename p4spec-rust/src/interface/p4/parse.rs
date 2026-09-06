@@ -14,7 +14,7 @@ use std::{
 use lalrpop_util::ParseError;
 
 use crate::{
-    lang::common::source::{Position, Span},
+    lang::common::source::{Phrase, Span},
     lang::data::value::Value,
 };
 
@@ -24,22 +24,60 @@ use super::{
     lexer::{Lexer, Token},
     parser::p4programParser,
     preprocessor::preprocess,
-    tokens::parser_tokens,
 };
 
 // == Parsing
 
-// - Preprocessed sources
+// - LALRPOP bridge
+
+fn parser_input<'a, I>(
+    context: &'a Context,
+    tokens: I,
+) -> impl Iterator<Item = Result<(Location, Token, Location), P4Error>> + 'a
+where
+    I: Iterator<Item = Result<Phrase<Token>, P4Error>> + 'a,
+{
+    tokens.map(|token| {
+        token.map(|token| {
+            let location_l = context.location_add(token.span.left);
+            let location_r = context.location_add(token.span.right);
+            (location_l, token.node, location_r)
+        })
+    })
+}
+
+fn translate_lalrpop_error(
+    context: &Context,
+    error: ParseError<Location, Token, P4Error>,
+) -> P4Error {
+    let span = match error {
+        ParseError::InvalidToken { location } | ParseError::UnrecognizedEof { location, .. } => {
+            let position = context.location_get(location);
+            Span::new(position.clone(), position)
+        }
+        ParseError::UnrecognizedToken {
+            token: (location_l, _, location_r),
+            ..
+        }
+        | ParseError::ExtraToken {
+            token: (location_l, _, location_r),
+        } => context.location_span(location_l, location_r),
+        ParseError::User { error } => return error,
+    };
+    P4Error::new(P4ErrorKind::Syntax, span)
+}
+
+// - Source strings
 
 /// Parses an already-preprocessed P4 source string.
 pub fn parse_string(path: impl AsRef<Path>, source: &str) -> Result<Rc<Value>, P4Error> {
     let file: Rc<str> = Rc::from(path.as_ref().to_string_lossy().into_owned());
     let context = Rc::new(Context::new());
-    let lexer = Lexer::new(Rc::clone(&file), source, Rc::clone(&context));
-    let tokens = parser_tokens(context.as_ref(), lexer);
+    let lexer = Lexer::new(file, source, Rc::clone(&context));
+    let input = parser_input(context.as_ref(), lexer);
 
-    let result = p4programParser::new().parse(context.as_ref(), tokens);
-    result.map_err(|error| translate_parse_error(context.as_ref(), file, error))
+    let result = p4programParser::new().parse(context.as_ref(), input);
+    result.map_err(|error| translate_lalrpop_error(context.as_ref(), error))
 }
 
 // - Source files
@@ -49,37 +87,4 @@ pub fn parse_file(includes: &[PathBuf], path: impl AsRef<Path>) -> Result<Rc<Val
     let path = path.as_ref();
     let source = preprocess(includes, path)?;
     parse_string(path, &source)
-}
-
-// == Error translation
-
-fn translate_parse_error(
-    context: &Context,
-    file: Rc<str>,
-    error: ParseError<Location, Token, P4Error>,
-) -> P4Error {
-    let span = match error {
-        ParseError::InvalidToken { location } | ParseError::UnrecognizedEof { location, .. } => {
-            location_span(context, file, location)
-        }
-        ParseError::UnrecognizedToken {
-            token: (left, _, right),
-            ..
-        }
-        | ParseError::ExtraToken {
-            token: (left, _, right),
-        } => context.span(left, right),
-        ParseError::User { error } => return error,
-    };
-    P4Error::new(P4ErrorKind::Syntax, span)
-}
-
-fn location_span(context: &Context, file: Rc<str>, location: Location) -> Span {
-    let position = context.position(location);
-    if position.file.is_empty() {
-        let fallback = Position::new(file, position.line, position.column);
-        Span::new(fallback.clone(), fallback)
-    } else {
-        Span::new(position.clone(), position)
-    }
 }

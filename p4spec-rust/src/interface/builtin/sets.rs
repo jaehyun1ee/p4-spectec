@@ -53,7 +53,7 @@ fn value_of_set(typ_key: &Typ, set: ValueSet) -> Result<Rc<Value>, BuiltinError>
     let set_mixop = set_mixop();
     let value_case =
         Mixop::fill(&set_mixop, [value_elements]).expect("the set mixop has exactly one argument");
-    let value = make::case(&typ, value_case, Span::default());
+    let value = make::case_(&typ, value_case, Span::default());
     Ok(value)
 }
 

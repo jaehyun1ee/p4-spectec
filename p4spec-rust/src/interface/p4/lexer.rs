@@ -377,9 +377,6 @@ impl<'source> Lexer<'source> {
     // - Contextual token disambiguation
 
     fn disambiguate_token(&mut self, mut token: Token) -> Token {
-        if self.context.take_template_expected() && token == Token::LeftAngle {
-            token = Token::LeftAngleArgs;
-        }
         if token == Token::Comma && self.remaining_significant().starts_with(['}', ']']) {
             token = Token::TrailingComma;
         } else if token == Token::Error && self.remaining_significant().starts_with('.') {
@@ -405,7 +402,7 @@ impl<'source> Lexer<'source> {
             crate::lang::data::value::ValueKind::Text(name) => name,
             _ => return phrase!(node: Token::Identifier, span: span.clone()),
         };
-        let (token, template_expected) = match self.context.get_kind(name) {
+        let (token, template_expected) = match self.context.ident_kind(name) {
             IdentKind::TypeName { has_params, .. } => {
                 let token = if self.type_name_starts_expression() {
                     Token::TypeNameExpression
@@ -643,7 +640,7 @@ impl<'source> Lexer<'source> {
                     Mixfix::Arg(value_int),
                 ]);
                 let id_typ = phrase!(node: "integerLiteral".to_owned(), span: Span::default());
-                let value = make::case(&typ::make::var(id_typ, vec![]), value_case, span);
+                let value = make::case_(&typ::make::var(id_typ, vec![]), value_case, span);
                 (value, digits.to_owned())
             }
             _ => {

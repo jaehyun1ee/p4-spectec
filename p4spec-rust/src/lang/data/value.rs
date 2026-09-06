@@ -6,7 +6,9 @@
 //! required by runtime caches and collection-valued builtins.
 
 use std::{
+    cell::RefCell,
     cmp::Ordering,
+    collections::HashMap,
     hash::{Hash, Hasher},
     rc::Rc,
 };
@@ -14,10 +16,11 @@ use std::{
 use thiserror::Error;
 
 use crate::{
+    frontend,
     lang::{
         common::{
             Id, TId,
-            notation::{atom, mixfix::Mixfix},
+            notation::{atom, mixfix::Mixfix, mixop::Mixop},
             source::{NotePhrase, Phrase, Span},
         },
         data::typ::{self, Typ, TypKind},
@@ -44,6 +47,28 @@ pub enum ValueKind {
 
 pub type ValueField = (Phrase<atom::Atom>, Rc<Value>);
 pub type ValueCase = Mixfix<Rc<Value>>;
+
+// == Case shapes
+
+thread_local! {
+    static SHAPE_CACHE: RefCell<HashMap<Rc<str>, Rc<Mixop>>> = RefCell::new(HashMap::new());
+}
+
+pub(crate) fn shape(shape_text: &str) -> Rc<Mixop> {
+    SHAPE_CACHE.with(|cache| {
+        if let Some(mixop) = cache.borrow().get(shape_text).cloned() {
+            return mixop;
+        }
+
+        let mixop = frontend::parse::parse_mixop(shape_text)
+            .expect("value constructor contains a valid SpecTec mixop");
+        let mixop = Rc::new(mixop);
+        cache
+            .borrow_mut()
+            .insert(Rc::from(shape_text), Rc::clone(&mixop));
+        mixop
+    })
+}
 
 // == Comparison
 
@@ -157,6 +182,36 @@ pub enum ValueError {
 pub mod make {
     use super::*;
 
+    macro_rules! case {
+        (
+            shape: $shape:expr,
+            args: $args:expr,
+            typ: $typ:expr,
+            span: $span:expr $(,)?
+        ) => {
+            $crate::lang::data::value::make::case__($shape, $args, $typ, $span)
+        };
+    }
+
+    pub(crate) fn case__(
+        shape_text: &str,
+        args: Vec<Rc<Value>>,
+        typ_name: &str,
+        span: Span,
+    ) -> Rc<Value> {
+        let mixop = shape(shape_text);
+        let value_case =
+            Mixop::fill(mixop.as_ref(), args).expect("mixop arity matches its value constructor");
+        let id = crate::phrase! {
+            node: typ_name.to_owned(),
+            span: Span::default(),
+        };
+        let typ = typ::make::var(id, Vec::new());
+        case_(&typ, value_case, span)
+    }
+
+    pub(crate) use case;
+
     pub fn new(kind: ValueKind, typ: TypKind, span: Span) -> Rc<Value> {
         Rc::new(crate::note_phrase!(node: kind, note: typ, span: span))
     }
@@ -200,7 +255,7 @@ pub mod make {
         new(kind, typ, span)
     }
 
-    pub fn case(typ: &Typ, value_case: ValueCase, span: Span) -> Rc<Value> {
+    pub fn case_(typ: &Typ, value_case: ValueCase, span: Span) -> Rc<Value> {
         let kind = ValueKind::Case(value_case);
         let typ = typ.node.clone();
         new(kind, typ, span)
@@ -241,22 +296,52 @@ pub mod make {
         let typ = typ.node.clone();
         new(kind, typ, span)
     }
-
-    pub fn retag(value: Rc<Value>, typ: &Typ) -> Rc<Value> {
-        match Rc::try_unwrap(value) {
-            Ok(mut value) => {
-                value.note = typ.node.clone();
-                Rc::new(value)
-            }
-            Err(value) => new(value.node.clone(), typ.node.clone(), value.span.clone()),
-        }
-    }
 }
 
 // == Projections
 
 pub mod get {
     use super::*;
+
+    macro_rules! matches {
+        (
+            @arms $value_case:ident;
+            $shape:literal $(| $shape_alt:literal)* => |$values:ident| $body:expr,
+            $($rest:tt)+
+        ) => {{
+            match $value_case {
+                Some(value_case)
+                    if [$shape, $($shape_alt),*].into_iter().any(|shape_text| {
+                        let expected = $crate::lang::data::value::shape(shape_text);
+                        value_case.eq_shape(expected.as_ref())
+                    }) =>
+                {
+                    let (_, $values) = value_case.split();
+                    $body
+                }
+                _ => $crate::lang::data::value::get::matches! {
+                    @arms $value_case;
+                    $($rest)+
+                },
+            }
+        }};
+        (@arms $value_case:ident; _ => $fallback:expr $(,)?) => {
+            $fallback
+        };
+        ($value:expr, $($arms:tt)+) => {{
+            let value = $value;
+            let value_case = match &value.node {
+                $crate::lang::data::value::ValueKind::Case(value_case) => Some(value_case),
+                _ => None,
+            };
+            $crate::lang::data::value::get::matches! {
+                @arms value_case;
+                $($arms)+
+            }
+        }};
+    }
+
+    pub(crate) use matches;
 
     fn unexpected(value: &Value, expected: ValueTag) -> ValueError {
         ValueError::UnexpectedKind {

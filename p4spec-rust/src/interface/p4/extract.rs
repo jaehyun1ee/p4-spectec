@@ -1,326 +1,213 @@
-//! Helper functions for P4 parser context management.
+//! Extracts name-resolution metadata from completed P4 parse-tree values.
 //!
-//! These projections recover declaration names, referenced type identifiers,
-//! and type-parameter presence from the runtime-value parse tree.
+//! Parser semantic actions use these projections to register declaration names,
+//! referenced type identifiers, and the presence of type parameters.
 
 use crate::lang::data::value::{Value, get};
 
-use super::{context::TypeId, error::ExtractError, value};
-
-fn unexpected(function: &'static str) -> ExtractError {
-    ExtractError::UnexpectedValue(function)
-}
+use super::{context::TypeId, error::ExtractError};
 
 // == Identifier extraction
 
-pub fn id_of_name(value: &Value) -> Result<String, ExtractError> {
-    if let Some(values) = value::matches(value, "_ID text") {
-        let text = get::text(values[0]).map_err(|_| unexpected("id_of_name"))?;
-        return Ok(text.to_owned());
+pub(super) fn id_name(value: &Value) -> Result<String, ExtractError> {
+    let unexpected = || ExtractError::UnexpectedValue("id_name");
+    get::matches! {
+        value,
+        "_ID text" => |values| {
+            let text = get::text(values[0]).map_err(|_| unexpected())?;
+            Ok(text.to_owned())
+        },
+        "APPLY" => |_values| Ok("apply".to_owned()),
+        "KEY" => |_values| Ok("key".to_owned()),
+        "ACTIONS" => |_values| Ok("actions".to_owned()),
+        "STATE" => |_values| Ok("state".to_owned()),
+        "ENTRIES" => |_values| Ok("entries".to_owned()),
+        "TYPE" => |_values| Ok("type".to_owned()),
+        "PRIORITY" => |_values| Ok("priority".to_owned()),
+        "_TID text" => |values| {
+            let text = get::text(values[0]).map_err(|_| unexpected())?;
+            Ok(text.to_owned())
+        },
+        "LIST" => |_values| Ok("list".to_owned()),
+        _ => Err(unexpected()),
     }
-    if value::matches(value, "APPLY").is_some() {
-        return Ok("apply".to_owned());
-    }
-    if value::matches(value, "KEY").is_some() {
-        return Ok("key".to_owned());
-    }
-    if value::matches(value, "ACTIONS").is_some() {
-        return Ok("actions".to_owned());
-    }
-    if value::matches(value, "STATE").is_some() {
-        return Ok("state".to_owned());
-    }
-    if value::matches(value, "ENTRIES").is_some() {
-        return Ok("entries".to_owned());
-    }
-    if value::matches(value, "TYPE").is_some() {
-        return Ok("type".to_owned());
-    }
-    if value::matches(value, "PRIORITY").is_some() {
-        return Ok("priority".to_owned());
-    }
-    if let Some(values) = value::matches(value, "_TID text") {
-        let text = get::text(values[0]).map_err(|_| unexpected("id_of_name"))?;
-        return Ok(text.to_owned());
-    }
-    if value::matches(value, "LIST").is_some() {
-        return Ok("list".to_owned());
-    }
-    Err(unexpected("id_of_name"))
 }
 
-pub fn id_of_function_prototype(value: &Value) -> Result<String, ExtractError> {
-    if let Some(values) = value::matches(
+pub(super) fn id_function_prototype(value: &Value) -> Result<String, ExtractError> {
+    get::matches! {
         value,
-        "typeOrVoid name typeParameterListOpt `( parameterList `)",
-    ) {
-        return id_of_name(values[1]);
+        "typeOrVoid name typeParameterListOpt `( parameterList `)" => |values| {
+            id_name(values[1])
+        },
+        _ => Err(ExtractError::UnexpectedValue("id_function_prototype")),
     }
-    Err(unexpected("id_of_function_prototype"))
 }
 
-pub fn id_of_declaration(value: &Value) -> Result<String, ExtractError> {
-    if let Some(values) = value::matches(value, "annotationList CONST type name initializer ';'") {
-        return id_of_name(values[2]);
-    }
-    if let Some(values) = value::matches(value, "annotationList type `( argumentList `) name ';'") {
-        return id_of_name(values[3]);
-    }
-    if let Some(values) = value::matches(
+pub(super) fn id_declaration(value: &Value) -> Result<String, ExtractError> {
+    get::matches! {
         value,
-        "annotationList type `( argumentList `) name objectInitializer ';'",
-    ) {
-        return id_of_name(values[3]);
+        "annotationList CONST type name initializer ';'" => |values| id_name(values[2]),
+        "annotationList type `( argumentList `) name ';'" => |values| id_name(values[3]),
+        "annotationList type `( argumentList `) name objectInitializer ';'" => |values| {
+            id_name(values[3])
+        },
+        "annotationList functionPrototype blockStatement" => |values| {
+            id_function_prototype(values[1])
+        },
+        "annotationList ACTION name `( parameterList `) blockStatement" => |values| {
+            id_name(values[1])
+        },
+        "annotationList EXTERN functionPrototype ';'" => |values| {
+            id_function_prototype(values[1])
+        },
+        "annotationList EXTERN nonTypeName typeParameterListOpt `{ externConstructorOrMethodPrototypeList `}" => |values| {
+            id_name(values[1])
+        },
+        "annotationList PARSER name typeParameterListOpt `( parameterList `) constructorParameterListOpt `{ parserLocalDeclarationList parserStateList `}" => |values| {
+            id_name(values[1])
+        },
+        "annotationList CONTROL name typeParameterListOpt `( parameterList `) constructorParameterListOpt `{ controlLocalDeclarationList APPLY controlBody `}" => |values| {
+            id_name(values[1])
+        },
+        "annotationList ENUM name `{ nameList trailingCommaOpt `}" => |values| {
+            id_name(values[1])
+        },
+        "annotationList ENUM type name `{ namedExpressionList trailingCommaOpt `}" => |values| {
+            id_name(values[2])
+        },
+        "annotationList STRUCT name typeParameterListOpt `{ typeFieldList `}" => |values| {
+            id_name(values[1])
+        },
+        "annotationList HEADER name typeParameterListOpt `{ typeFieldList `}" => |values| {
+            id_name(values[1])
+        },
+        "annotationList HEADER_UNION name typeParameterListOpt `{ typeFieldList `}" => |values| {
+            id_name(values[1])
+        },
+        "annotationList TYPEDEF typedef name ';'" => |values| id_name(values[2]),
+        "annotationList TYPE typeRef name ';'" => |values| id_name(values[2]),
+        "annotationList PARSER name typeParameterListOpt `( parameterList `) ';'"
+        | "annotationList CONTROL name typeParameterListOpt `( parameterList `) ';'"
+        | "annotationList PACKAGE name typeParameterListOpt `( parameterList `) ';'" => |values| {
+            id_name(values[1])
+        },
+        "annotationList TABLE name `{ tablePropertyList `}" => |values| id_name(values[1]),
+        _ => Err(ExtractError::UnexpectedValue("id_declaration")),
     }
-    if let Some(values) = value::matches(value, "annotationList functionPrototype blockStatement") {
-        return id_of_function_prototype(values[1]);
-    }
-    if let Some(values) = value::matches(
-        value,
-        "annotationList ACTION name `( parameterList `) blockStatement",
-    ) {
-        return id_of_name(values[1]);
-    }
-    if let Some(values) = value::matches(value, "annotationList EXTERN functionPrototype ';'") {
-        return id_of_function_prototype(values[1]);
-    }
-    if let Some(values) = value::matches(
-        value,
-        "annotationList EXTERN nonTypeName typeParameterListOpt `{ externConstructorOrMethodPrototypeList `}",
-    ) {
-        return id_of_name(values[1]);
-    }
-    if let Some(values) = value::matches(
-        value,
-        "annotationList PARSER name typeParameterListOpt `( parameterList `) constructorParameterListOpt `{ parserLocalDeclarationList parserStateList `}",
-    ) {
-        return id_of_name(values[1]);
-    }
-    if let Some(values) = value::matches(
-        value,
-        "annotationList CONTROL name typeParameterListOpt `( parameterList `) constructorParameterListOpt `{ controlLocalDeclarationList APPLY controlBody `}",
-    ) {
-        return id_of_name(values[1]);
-    }
-    if let Some(values) = value::matches(
-        value,
-        "annotationList ENUM name `{ nameList trailingCommaOpt `}",
-    ) {
-        return id_of_name(values[1]);
-    }
-    if let Some(values) = value::matches(
-        value,
-        "annotationList ENUM type name `{ namedExpressionList trailingCommaOpt `}",
-    ) {
-        return id_of_name(values[2]);
-    }
-    if let Some(values) = value::matches(
-        value,
-        "annotationList STRUCT name typeParameterListOpt `{ typeFieldList `}",
-    ) {
-        return id_of_name(values[1]);
-    }
-    if let Some(values) = value::matches(
-        value,
-        "annotationList HEADER name typeParameterListOpt `{ typeFieldList `}",
-    ) {
-        return id_of_name(values[1]);
-    }
-    if let Some(values) = value::matches(
-        value,
-        "annotationList HEADER_UNION name typeParameterListOpt `{ typeFieldList `}",
-    ) {
-        return id_of_name(values[1]);
-    }
-    if let Some(values) = value::matches(value, "annotationList TYPEDEF typedef name ';'") {
-        return id_of_name(values[2]);
-    }
-    if let Some(values) = value::matches(value, "annotationList TYPE type name ';'") {
-        return id_of_name(values[2]);
-    }
-    if let Some(values) = value::matches(
-        value,
-        "annotationList PARSER name typeParameterListOpt `( parameterList `) ';'",
-    ) {
-        return id_of_name(values[1]);
-    }
-    if let Some(values) = value::matches(
-        value,
-        "annotationList CONTROL name typeParameterListOpt `( parameterList `) ';'",
-    ) {
-        return id_of_name(values[1]);
-    }
-    if let Some(values) = value::matches(
-        value,
-        "annotationList PACKAGE name typeParameterListOpt `( parameterList `) ';'",
-    ) {
-        return id_of_name(values[1]);
-    }
-    if let Some(values) = value::matches(value, "annotationList TABLE name `{ tablePropertyList `}")
-    {
-        return id_of_name(values[1]);
-    }
-    Err(unexpected("id_of_declaration"))
-}
-
-pub fn id_of_parameter(value: &Value) -> Result<String, ExtractError> {
-    if let Some(values) = value::matches(value, "annotationList direction type name initializerOpt")
-    {
-        return id_of_name(values[3]);
-    }
-    Err(unexpected("id_of_parameter"))
 }
 
 // == Type identifier extraction
 
-pub fn tid_of_type_ref(value: &Value) -> Result<TypeId, ExtractError> {
-    for shape in [
-        "BOOL",
-        "ERROR",
-        "MATCH_KIND",
-        "STRING",
-        "INT",
-        "INT `< int `>",
-        "INT `< `( expression `) `>",
-        "BIT",
-        "BIT `< int `>",
-        "BIT `< `( expression `) `>",
-        "VARBIT `< int `>",
-        "VARBIT `< `( expression `) `>",
-    ] {
-        if value::matches(value, shape).is_some() {
-            return Ok(TypeId::Empty);
-        }
+pub(super) fn type_id_type_ref(value: &Value) -> Result<TypeId, ExtractError> {
+    let unexpected = || ExtractError::UnexpectedValue("type_id_type_ref");
+    get::matches! {
+        value,
+        "BOOL"
+        | "ERROR"
+        | "MATCH_KIND"
+        | "STRING"
+        | "INT"
+        | "INT `< int `>"
+        | "INT `< `( expression `) `>"
+        | "BIT"
+        | "BIT `< int `>"
+        | "BIT `< `( expression `) `>"
+        | "VARBIT `< int `>"
+        | "VARBIT `< `( expression `) `>" => |_values| Ok(TypeId::Empty),
+        "_TID text" => |values| {
+            let text = get::text(values[0]).map_err(|_| unexpected())?;
+            Ok(TypeId::Local(text.to_owned()))
+        },
+        "_TID '.' typeName" => |values| {
+            match type_id_type_ref(values[0])? {
+                TypeId::Local(id) => Ok(TypeId::Global(id)),
+                _ => Err(unexpected()),
+            }
+        },
+        "prefixedTypeName `< typeArgumentList `>" => |values| {
+            type_id_type_ref(values[0])
+        },
+        "namedType `[ expression `]"
+        | "LIST `< typeArgument `>"
+        | "TUPLE `< typeArgumentList `>" => |_values| Ok(TypeId::Empty),
+        _ => Err(unexpected()),
     }
-    if let Some(values) = value::matches(value, "_TID text") {
-        let text = get::text(values[0]).map_err(|_| unexpected("tid_of_type_ref"))?;
-        return Ok(TypeId::Local(text.to_owned()));
-    }
-    if let Some(values) = value::matches(value, "_TID '.' typeName") {
-        return match tid_of_type_ref(values[0])? {
-            TypeId::Local(id) => Ok(TypeId::Global(id)),
-            _ => Err(unexpected("tid_of_type_ref")),
-        };
-    }
-    if let Some(values) = value::matches(value, "prefixedTypeName `< typeArgumentList `>") {
-        return tid_of_type_ref(values[0]);
-    }
-    for shape in [
-        "namedType `[ expression `]",
-        "LIST `< typeArgument `>",
-        "TUPLE `< typeArgumentList `>",
-    ] {
-        if value::matches(value, shape).is_some() {
-            return Ok(TypeId::Empty);
-        }
-    }
-    Err(unexpected("tid_of_type_ref"))
 }
 
-pub fn tid_of_declaration(value: &Value) -> Result<TypeId, ExtractError> {
-    for shape in [
-        "annotationList CONST type name initializer ';'",
-        "annotationList type `( argumentList `) name ';'",
-        "annotationList type `( argumentList `) name objectInitializer ';'",
-    ] {
-        if let Some(values) = value::matches(value, shape) {
-            return tid_of_type_ref(values[1]);
-        }
+pub(super) fn type_id_declaration(value: &Value) -> Result<TypeId, ExtractError> {
+    get::matches! {
+        value,
+        "annotationList CONST type name initializer ';'"
+        | "annotationList type `( argumentList `) name ';'"
+        | "annotationList type `( argumentList `) name objectInitializer ';'" => |values| {
+            type_id_type_ref(values[1])
+        },
+        _ => Err(ExtractError::UnexpectedValue("type_id_declaration")),
     }
-    Err(unexpected("tid_of_declaration"))
 }
 
 // == Type parameter extraction
 
-pub fn has_type_params(value: &Value) -> Result<bool, ExtractError> {
-    if value::matches(value, "_EMPTY").is_some() {
-        return Ok(false);
+fn has_type_params(value: &Value) -> Result<bool, ExtractError> {
+    get::matches! {
+        value,
+        "_EMPTY" => |_values| Ok(false),
+        "`< typeParameterList `>" => |_values| Ok(true),
+        _ => Err(ExtractError::UnexpectedValue("has_type_params")),
     }
-    if value::matches(value, "`< typeParameterList `>").is_some() {
-        return Ok(true);
-    }
-    Err(unexpected("has_type_params"))
 }
 
-pub fn has_type_params_function_prototype(value: &Value) -> Result<bool, ExtractError> {
-    if let Some(values) = value::matches(
+pub(super) fn has_type_params_function_prototype(value: &Value) -> Result<bool, ExtractError> {
+    get::matches! {
         value,
-        "typeOrVoid name typeParameterListOpt `( parameterList `)",
-    ) {
-        return has_type_params(values[2]);
+        "typeOrVoid name typeParameterListOpt `( parameterList `)" => |values| {
+            has_type_params(values[2])
+        },
+        _ => Err(ExtractError::UnexpectedValue(
+            "has_type_params_function_prototype",
+        )),
     }
-    Err(unexpected("has_type_params_function_prototype"))
 }
 
-pub fn has_type_params_declaration(value: &Value) -> Result<bool, ExtractError> {
-    for shape in [
-        "annotationList CONST type name initializer ';'",
-        "annotationList type `( argumentList `) name ';'",
-        "annotationList type `( argumentList `) name objectInitializer ';'",
-    ] {
-        if value::matches(value, shape).is_some() {
-            return Ok(false);
-        }
-    }
-    if let Some(values) = value::matches(value, "annotationList functionPrototype blockStatement") {
-        return has_type_params_function_prototype(values[1]);
-    }
-    if value::matches(
+pub(super) fn has_type_params_declaration(value: &Value) -> Result<bool, ExtractError> {
+    get::matches! {
         value,
-        "annotationList ACTION name `( parameterList `) blockStatement",
-    )
-    .is_some()
-    {
-        return Ok(false);
+        "annotationList CONST type name initializer ';'"
+        | "annotationList type `( argumentList `) name ';'"
+        | "annotationList type `( argumentList `) name objectInitializer ';'" => |_values| {
+            Ok(false)
+        },
+        "annotationList functionPrototype blockStatement" => |values| {
+            has_type_params_function_prototype(values[1])
+        },
+        "annotationList ACTION name `( parameterList `) blockStatement" => |_values| Ok(false),
+        "annotationList EXTERN functionPrototype ';'" => |values| {
+            has_type_params_function_prototype(values[1])
+        },
+        "annotationList EXTERN nonTypeName typeParameterListOpt `{ externConstructorOrMethodPrototypeList `}"
+        | "annotationList PARSER name typeParameterListOpt `( parameterList `) constructorParameterListOpt `{ parserLocalDeclarationList parserStateList `}"
+        | "annotationList CONTROL name typeParameterListOpt `( parameterList `) constructorParameterListOpt `{ controlLocalDeclarationList APPLY controlBody `}" => |values| {
+            has_type_params(values[2])
+        },
+        "annotationList ENUM name `{ nameList trailingCommaOpt `}"
+        | "annotationList ENUM type name `{ namedExpressionList trailingCommaOpt `}" => |_values| {
+            Ok(false)
+        },
+        "annotationList STRUCT name typeParameterListOpt `{ typeFieldList `}"
+        | "annotationList HEADER name typeParameterListOpt `{ typeFieldList `}"
+        | "annotationList HEADER_UNION name typeParameterListOpt `{ typeFieldList `}" => |values| {
+            has_type_params(values[2])
+        },
+        "annotationList TYPEDEF typedef name ';'"
+        | "annotationList TYPE typeRef name ';'" => |_values| Ok(false),
+        "annotationList PARSER name typeParameterListOpt `( parameterList `) ';'"
+        | "annotationList CONTROL name typeParameterListOpt `( parameterList `) ';'"
+        | "annotationList PACKAGE name typeParameterListOpt `( parameterList `) ';'" => |values| {
+            has_type_params(values[2])
+        },
+        "annotationList TABLE name `{ tablePropertyList `}" => |_values| Ok(false),
+        _ => Err(ExtractError::UnexpectedValue(
+            "has_type_params_declaration",
+        )),
     }
-    if let Some(values) = value::matches(value, "annotationList EXTERN functionPrototype ';'") {
-        return has_type_params_function_prototype(values[1]);
-    }
-    for shape in [
-        "annotationList EXTERN nonTypeName typeParameterListOpt `{ externConstructorOrMethodPrototypeList `}",
-        "annotationList PARSER name typeParameterListOpt `( parameterList `) constructorParameterListOpt `{ parserLocalDeclarationList parserStateList `}",
-        "annotationList CONTROL name typeParameterListOpt `( parameterList `) constructorParameterListOpt `{ controlLocalDeclarationList APPLY controlBody `}",
-    ] {
-        if let Some(values) = value::matches(value, shape) {
-            return has_type_params(values[2]);
-        }
-    }
-    for shape in [
-        "annotationList ENUM name `{ nameList trailingCommaOpt `}",
-        "annotationList ENUM type name `{ namedExpressionList trailingCommaOpt `}",
-    ] {
-        if value::matches(value, shape).is_some() {
-            return Ok(false);
-        }
-    }
-    for shape in [
-        "annotationList STRUCT name typeParameterListOpt `{ typeFieldList `}",
-        "annotationList HEADER name typeParameterListOpt `{ typeFieldList `}",
-        "annotationList HEADER_UNION name typeParameterListOpt `{ typeFieldList `}",
-    ] {
-        if let Some(values) = value::matches(value, shape) {
-            return has_type_params(values[2]);
-        }
-    }
-    for shape in [
-        "annotationList TYPEDEF typedef name ';'",
-        "annotationList TYPE type name ';'",
-    ] {
-        if value::matches(value, shape).is_some() {
-            return Ok(false);
-        }
-    }
-    for shape in [
-        "annotationList PARSER name typeParameterListOpt `( parameterList `) ';'",
-        "annotationList CONTROL name typeParameterListOpt `( parameterList `) ';'",
-        "annotationList PACKAGE name typeParameterListOpt `( parameterList `) ';'",
-    ] {
-        if let Some(values) = value::matches(value, shape) {
-            return has_type_params(values[2]);
-        }
-    }
-    if value::matches(value, "annotationList TABLE name `{ tablePropertyList `}").is_some() {
-        return Ok(false);
-    }
-    Err(unexpected("has_type_params_declaration"))
 }

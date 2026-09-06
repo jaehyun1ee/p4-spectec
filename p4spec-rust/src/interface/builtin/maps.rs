@@ -65,7 +65,7 @@ fn make_pair(
     let pair_mixop = pair_mixop();
     let value_case = Mixop::fill(&pair_mixop, [value_key, value_value])
         .expect("the pair mixop has exactly two arguments");
-    make::case(&typ, value_case, Span::default())
+    make::case_(&typ, value_case, Span::default())
 }
 
 fn map_update(
@@ -134,7 +134,7 @@ fn value_of_map(typ_key: &Typ, typ_value: &Typ, map: ValueMap) -> Result<Rc<Valu
     let map_mixop = map_mixop();
     let value_case =
         Mixop::fill(&map_mixop, [value_pairs]).expect("the map mixop has exactly one argument");
-    let value = make::case(&typ, value_case, Span::default());
+    let value = make::case_(&typ, value_case, Span::default());
     Ok(value)
 }
 

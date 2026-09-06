@@ -16,6 +16,7 @@ fn test_parses_empty_and_declaration_programs() {
     for source in [
         "",
         "const bit<8> width = 8w3;",
+        "type bit<8> PortId;",
         "header H { bit<8> field; }",
         "control C() { apply { } }",
         "parser P() { state start { transition accept; } }",

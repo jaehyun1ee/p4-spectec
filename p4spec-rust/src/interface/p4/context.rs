@@ -1,15 +1,13 @@
-//! Mutable name-resolution context used while parsing P4.
+//! Mutable state shared by the P4 lexer and parser.
 //!
-//! The parser keeps a global scope followed by nested local scopes.  A
+//! The context keeps a global scope followed by nested local scopes. A
 //! top-level-only grammar production temporarily moves the local scopes aside,
-//! then restores them without copying their namespace maps.  For example, a
+//! then restores them without copying their namespace maps. For example, a
 //! declaration parsed inside a control can inspect the global type namespace
-//! and then resume resolving the control's parameters.
+//! and then resume resolving the control's parameters. Source positions are
+//! interned so LALRPOP can use copyable indices while building spans.
 
-use std::{
-    cell::{Cell, RefCell},
-    collections::BTreeMap,
-};
+use std::{cell::RefCell, collections::BTreeMap};
 
 use crate::lang::common::source::{Position, Span};
 
@@ -42,49 +40,43 @@ pub enum IdentKind {
 }
 
 pub struct Context {
+    /// Global namespace followed by the currently active local namespaces.
     scopes: RefCell<Vec<Namespace>>,
-    suspended_scopes: RefCell<Vec<Namespace>>,
-    previous_id: RefCell<Option<String>>,
-    parent_namespace: RefCell<Option<Namespace>>,
+    /// Local namespaces set aside while parsing a top-level-only production.
+    scopes_suspended: RefCell<Vec<Namespace>>,
+    /// Most recently classified identifier, used to resolve a following member.
+    id_prev: RefCell<Option<String>>,
+    /// Namespace used to classify members of the most recent receiver.
+    namespace_parent: RefCell<Option<Namespace>>,
+    /// Source positions indexed by the copyable locations used by LALRPOP.
     positions: RefCell<Vec<Position>>,
-    template_expected: Cell<bool>,
 }
 
 // == Context operations
 
 impl Context {
+    // - Construction
+
     pub fn new() -> Self {
         Self {
             scopes: RefCell::new(vec![Namespace::new()]),
-            suspended_scopes: RefCell::new(Vec::new()),
-            previous_id: RefCell::new(None),
-            parent_namespace: RefCell::new(None),
+            scopes_suspended: RefCell::new(Vec::new()),
+            id_prev: RefCell::new(None),
+            namespace_parent: RefCell::new(None),
             positions: RefCell::new(Vec::new()),
-            template_expected: Cell::new(false),
         }
     }
 
-    pub fn reset(&self) {
-        *self.scopes.borrow_mut() = vec![Namespace::new()];
-        self.suspended_scopes.borrow_mut().clear();
-        self.previous_id.borrow_mut().take();
-        self.parent_namespace.borrow_mut().take();
-        self.positions.borrow_mut().clear();
-        self.template_expected.set(false);
-    }
+    // - Declarations
 
-    pub fn declare(&self, id: impl Into<String>, kind: IdentKind) -> Result<(), ContextError> {
+    fn declare(&self, id: impl Into<String>, kind: IdentKind) -> Result<(), ContextError> {
         let mut scopes = self.scopes.borrow_mut();
         let scope = scopes.last_mut().ok_or(ContextError::MissingScope)?;
         scope.insert(id.into(), kind);
         Ok(())
     }
 
-    pub fn declare_type(
-        &self,
-        id: impl Into<String>,
-        has_params: bool,
-    ) -> Result<(), ContextError> {
+    pub fn declare_typ(&self, id: impl Into<String>, has_params: bool) -> Result<(), ContextError> {
         self.declare(
             id,
             IdentKind::TypeName {
@@ -109,33 +101,36 @@ impl Context {
         )
     }
 
-    pub fn find(&self, id: &str) -> Option<IdentKind> {
-        find_in(id, &self.scopes.borrow())
+    // - Identifier lookup
+
+    fn ident_find(&self, id: &str) -> Option<IdentKind> {
+        self.scopes
+            .borrow()
+            .iter()
+            .rev()
+            .find_map(|scope| scope.get(id).cloned())
     }
 
-    pub fn get_kind(&self, id: &str) -> IdentKind {
-        let kind = match self.parent_namespace.borrow().as_ref() {
+    pub fn ident_kind(&self, id: &str) -> IdentKind {
+        let kind = match self.namespace_parent.borrow().as_ref() {
             Some(namespace) => namespace.get(id).cloned(),
-            None => self.find(id),
+            None => self.ident_find(id),
         }
         .unwrap_or(IdentKind::Ident {
             has_params: false,
             type_id: TypeId::Empty,
         });
-        *self.previous_id.borrow_mut() = Some(id.to_owned());
+        *self.id_prev.borrow_mut() = Some(id.to_owned());
         kind
     }
 
-    pub fn is_type_name(&self, id: &str) -> bool {
-        matches!(self.get_kind(id), IdentKind::TypeName { .. })
-    }
+    // - Scope stack
 
-    pub fn push_scope(&self) {
+    pub fn scope_push(&self) {
         self.scopes.borrow_mut().push(Namespace::new());
-        self.template_expected.set(true);
     }
 
-    pub fn pop_scope(&self) -> Result<Namespace, ContextError> {
+    pub fn scope_pop(&self) -> Result<Namespace, ContextError> {
         let mut scopes = self.scopes.borrow_mut();
         if scopes.len() <= 1 {
             return Err(ContextError::RootScope);
@@ -143,23 +138,25 @@ impl Context {
         scopes.pop().ok_or(ContextError::MissingScope)
     }
 
-    pub fn go_toplevel(&self) -> Result<(), ContextError> {
+    pub fn scope_to_toplevel(&self) -> Result<(), ContextError> {
         let mut scopes = self.scopes.borrow_mut();
         if scopes.is_empty() {
             return Err(ContextError::MissingScope);
         }
-        *self.suspended_scopes.borrow_mut() = scopes.split_off(1);
+        *self.scopes_suspended.borrow_mut() = scopes.split_off(1);
         Ok(())
     }
 
-    pub fn go_local(&self) {
-        let mut suspended_scopes = self.suspended_scopes.borrow_mut();
+    pub fn scope_to_local(&self) {
+        let mut scopes_suspended = self.scopes_suspended.borrow_mut();
         let mut scopes = self.scopes.borrow_mut();
         scopes.truncate(1);
-        scopes.append(&mut suspended_scopes);
+        scopes.append(&mut scopes_suspended);
     }
 
-    pub fn set_type_namespace(&self, id: &str, namespace: Namespace) {
+    // - Namespaces
+
+    pub fn namespace_set_typ(&self, id: &str, namespace: Namespace) {
         let mut scopes = self.scopes.borrow_mut();
         for scope in scopes.iter_mut().rev() {
             if let Some(IdentKind::TypeName {
@@ -174,66 +171,59 @@ impl Context {
         }
     }
 
-    pub fn set_parent_namespace(&self) {
-        let previous_id = self.previous_id.borrow().clone();
-        let scopes = self.scopes.borrow();
-        let namespace = previous_id
+    pub fn namespace_set_parent(&self) {
+        let id_prev = self.id_prev.borrow().clone();
+        let type_id = id_prev
             .as_deref()
-            .and_then(|id| find_in(id, &scopes))
+            .and_then(|id| self.ident_find(id))
             .and_then(|kind| match kind {
                 IdentKind::Ident { type_id, .. } => Some(type_id),
                 IdentKind::TypeName { .. } => None,
+            });
+
+        let scopes = self.scopes.borrow();
+        let find_namespace = |id: &str, scopes: &[Namespace]| {
+            scopes.iter().rev().find_map(|scope| match scope.get(id) {
+                Some(IdentKind::TypeName { namespace, .. }) => Some(namespace.clone()),
+                _ => None,
             })
+        };
+        let namespace = type_id
             .and_then(|type_id| match type_id {
                 TypeId::Empty => None,
-                TypeId::Local(id) => find_type_namespace(&id, &scopes),
+                TypeId::Local(id) => find_namespace(&id, &scopes),
                 TypeId::Global(id) => scopes
                     .first()
-                    .and_then(|scope| find_type_namespace(&id, std::slice::from_ref(scope))),
+                    .and_then(|scope| find_namespace(&id, std::slice::from_ref(scope))),
             })
             .unwrap_or_default();
-        *self.parent_namespace.borrow_mut() = Some(namespace);
+        *self.namespace_parent.borrow_mut() = Some(namespace);
     }
 
-    pub fn clear_parent_namespace(&self) {
-        self.parent_namespace.borrow_mut().take();
+    pub fn namespace_clear_parent(&self) {
+        self.namespace_parent.borrow_mut().take();
     }
 
-    pub(crate) fn location(&self, position: Position) -> Location {
+    // - Source locations
+
+    pub(crate) fn location_add(&self, position: Position) -> Location {
         let mut positions = self.positions.borrow_mut();
         let location = Location(positions.len());
         positions.push(position);
         location
     }
 
-    pub(crate) fn position(&self, location: Location) -> Position {
+    pub(crate) fn location_get(&self, location: Location) -> Position {
         self.positions.borrow()[location.0].clone()
     }
 
-    pub(crate) fn span(&self, left: Location, right: Location) -> Span {
-        Span::new(self.position(left), self.position(right))
-    }
-
-    pub(crate) fn take_template_expected(&self) -> bool {
-        self.template_expected.replace(false)
+    pub(crate) fn location_span(&self, location_l: Location, location_r: Location) -> Span {
+        Span::new(self.location_get(location_l), self.location_get(location_r))
     }
 }
-
-// == Lookup helpers
 
 impl Default for Context {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-fn find_in(id: &str, scopes: &[Namespace]) -> Option<IdentKind> {
-    scopes.iter().rev().find_map(|scope| scope.get(id).cloned())
-}
-
-fn find_type_namespace(id: &str, scopes: &[Namespace]) -> Option<Namespace> {
-    match find_in(id, scopes) {
-        Some(IdentKind::TypeName { namespace, .. }) => Some(namespace),
-        _ => None,
     }
 }

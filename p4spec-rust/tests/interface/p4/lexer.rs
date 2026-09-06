@@ -17,7 +17,7 @@ fn tokens(source: &str, context: Rc<Context>) -> Vec<Token> {
 #[test]
 fn test_identifiers_are_followed_by_context_sensitive_classification() {
     let context = Rc::new(Context::new());
-    context.declare_type("Header", true).unwrap();
+    context.declare_typ("Header", true).unwrap();
     let tokens = tokens("Header<bit<8>> value", context);
 
     assert!(matches!(&tokens[0], Token::Name(value) if get::text(value) == Ok("Header")));
@@ -90,7 +90,7 @@ fn test_comments_are_skipped_and_unsupported_escapes_are_located_errors() {
 #[test]
 fn test_shift_and_type_constructor_angles_are_distinct() {
     let context = Rc::new(Context::new());
-    context.declare_type("Header", true).unwrap();
+    context.declare_typ("Header", true).unwrap();
 
     let tokens = tokens("Header<bit<8>>(x); x >> 1", context);
 

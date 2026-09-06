@@ -1,10 +1,10 @@
-//! Located errors produced by P4 preprocessing, lexing, and parsing.
+//! Errors produced while reading and rendering P4 programs.
 
 use std::fmt;
 
 use thiserror::Error;
 
-use crate::lang::common::source::Span;
+use crate::lang::{common::source::Span, hints::alter::AlterationError};
 
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
 pub enum ContextError {
@@ -68,3 +68,11 @@ impl fmt::Display for P4Error {
 }
 
 impl std::error::Error for P4Error {}
+
+#[derive(Clone, Debug, Error, PartialEq, Eq)]
+pub enum P4UnparseError {
+    #[error("cannot unparse runtime value kind {0}")]
+    UnsupportedValue(&'static str),
+    #[error(transparent)]
+    Alteration(#[from] AlterationError),
+}

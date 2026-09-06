@@ -13,6 +13,11 @@ use crate::lang::common::source::{Position, Span};
 
 use super::error::{P4Error, P4ErrorKind};
 
+fn span_file(path: &Path) -> Span {
+    let position = Position::new(path.to_string_lossy().into_owned(), 0, 0);
+    Span::new(position.clone(), position)
+}
+
 pub fn preprocess(includes: &[PathBuf], path: impl AsRef<Path>) -> Result<String, P4Error> {
     let path = path.as_ref();
     let mut command = Command::new("cc");
@@ -27,14 +32,14 @@ pub fn preprocess(includes: &[PathBuf], path: impl AsRef<Path>) -> Result<String
             status: None,
             stderr: error.to_string(),
         };
-        P4Error::new(kind, file_span(path))
+        P4Error::new(kind, span_file(path))
     })?;
     if !output.status.success() {
         let kind = P4ErrorKind::Preprocessor {
             status: output.status.code(),
             stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
         };
-        return Err(P4Error::new(kind, file_span(path)));
+        return Err(P4Error::new(kind, span_file(path)));
     }
     let source = String::from_utf8(output.stdout);
     source.map_err(|error| {
@@ -42,11 +47,6 @@ pub fn preprocess(includes: &[PathBuf], path: impl AsRef<Path>) -> Result<String
             status: output.status.code(),
             stderr: error.to_string(),
         };
-        P4Error::new(kind, file_span(path))
+        P4Error::new(kind, span_file(path))
     })
-}
-
-fn file_span(path: &Path) -> Span {
-    let position = Position::new(path.to_string_lossy().into_owned(), 0, 0);
-    Span::new(position.clone(), position)
 }
