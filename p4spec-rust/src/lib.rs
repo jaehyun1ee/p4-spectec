@@ -1,4 +1,4 @@
-//! Language models and codecs for the P4 `SpecTec` Rust port.
+//! Language models and codecs for P4 `SpecTec`
 
 pub mod frontend;
 pub mod lang;
