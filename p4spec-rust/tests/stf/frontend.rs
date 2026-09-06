@@ -1,7 +1,10 @@
 use p4spec_rust::lang::traits::print::Print;
 use p4spec_rust::stf::{
-    ast::{Action, Condition, CounterKind, IdOrIndex, MatchKind, Statement},
-    r#match, parse, print, transform,
+    ast::{
+        Action, Argument, Condition, CounterCheck, CounterKind, CounterTarget, MatchKind, Name,
+        Statement, TableMatch,
+    },
+    r#match, parse,
 };
 use std::path::{Path, PathBuf};
 
@@ -19,24 +22,34 @@ fn test_parses_commands_in_source_order() {
     assert_eq!(statements.len(), 5);
     assert_eq!(
         statements[0].node,
-        Statement::Packet("1".into(), "001122aB".into())
+        Statement::Packet {
+            port: "1".into(),
+            packet: "001122aB".into(),
+        }
     );
     assert_eq!(
         statements[1].node,
-        Statement::Expect("2".into(), Some("0011**ab".into()), true)
+        Statement::Expect {
+            port: "2".into(),
+            packet_expected: Some("0011**ab".into()),
+            exact: true,
+        }
     );
     assert_eq!(
         statements[2].node,
         Statement::Add {
             table: "ingress.ipv4_lpm".into(),
             priority: Some(10),
-            matches: vec![(
-                "hdr.ipv4.dstAddr".into(),
-                MatchKind::Slash("0x0a000001".into(), "24".into()),
-            )],
+            matches: vec![TableMatch {
+                name: "hdr.ipv4.dstAddr".into(),
+                kind: MatchKind::Slash("0x0a000001".into(), "24".into()),
+            }],
             action: Action {
                 name: "set_nhop".into(),
-                args: vec![("port".into(), "3".into())],
+                args: vec![Argument {
+                    id: "port".into(),
+                    number: "3".into(),
+                }],
             },
             id: Some("entry0".into()),
         }
@@ -44,9 +57,13 @@ fn test_parses_commands_in_source_order() {
     assert_eq!(
         statements[3].node,
         Statement::CheckCounter {
-            id: "c_packets".into(),
-            target: IdOrIndex::Index("4".into()),
-            check: (Some(CounterKind::Packets), Condition::Ge, "0x10".into()),
+            counter: "c_packets".into(),
+            target: CounterTarget::Index("4".into()),
+            check: CounterCheck {
+                kind: Some(CounterKind::Packets),
+                condition: Condition::Ge,
+                number: "0x10".into(),
+            },
         }
     );
     assert!(
@@ -63,7 +80,11 @@ fn test_parses_packet_wildcards_and_comments() {
     let statements = parse::parse_str("wildcards.stf", source).expect("valid STF");
     assert_eq!(
         statements[0].node,
-        Statement::Expect("0".into(), Some("0a**ff".into()), false)
+        Statement::Expect {
+            port: "0".into(),
+            packet_expected: Some("0a**ff".into()),
+            exact: false,
+        }
     );
     assert_eq!(statements[1].node, Statement::NoPacket);
 }
@@ -92,6 +113,11 @@ fn test_rejects_digits_outside_the_selected_radix() {
     for number in ["0b102", "12b", "0x0g"] {
         let source = format!("register_read r {number}\n");
         let error = parse::parse_str("number.stf", &source).expect_err(number);
+        assert!(matches!(
+            error.kind,
+            p4spec_rust::stf::error::StfErrorKind::InvalidNumber(ref spelling)
+                if spelling == number
+        ));
         assert_eq!(error.span.left.file.as_ref(), "number.stf");
         assert_eq!(error.span.left.line, 1);
     }
@@ -99,22 +125,26 @@ fn test_rejects_digits_outside_the_selected_radix() {
 
 #[test]
 fn test_transforms_names_matches_and_actions() {
-    assert_eq!(
-        transform::rewrite_name_prefix("pipe0.tbl", &["pipe"], "ingress"),
-        "ingress.tbl"
-    );
-    assert_eq!(
-        transform::replace_name_substrings("foo.MyIngress.bar", &["myingress"], "ingress"),
-        "foo.ingress.bar"
-    );
-    assert_eq!(
-        transform::rewrite_valid_match("hdr.$valid$"),
-        "hdr.isValid()"
-    );
-    assert_eq!(
-        transform::unqualify_action("ingress.ipv4.set_port"),
-        "set_port"
-    );
+    let name = Name::from("pipe0.tbl").rewrite_substring(&["pipe"], "ingress");
+    assert_eq!(name.as_str(), "ingress.tbl");
+
+    let name = Name::from("foo.MyIngress.bar").replace_substring(&["myingress"], "ingress");
+    assert_eq!(name.as_str(), "foo.ingress.bar");
+
+    let table_match = TableMatch {
+        name: "hdr.$valid$".into(),
+        kind: MatchKind::Number("1".into()),
+    }
+    .rewrite_valid();
+    assert_eq!(table_match.name.as_str(), "hdr.isValid()");
+
+    let action = Action {
+        name: "MyIngress.ipv4.set_port".into(),
+        args: vec![],
+    }
+    .replace_substring(&["myingress"], "ingress")
+    .into_unqualified();
+    assert_eq!(action.name.as_str(), "set_port");
 }
 
 #[test]
@@ -135,18 +165,16 @@ fn test_compares_wildcard_packets_and_prints_statements() {
         "setdefault \"ingress.tbl\" \"drop\"()"
     );
     assert_eq!(Print::to_string(&action), "\"drop\"()");
-    assert_eq!(
-        print::convert_dollar_to_brackets("hdr.$12.field"),
-        "hdr.[12].field"
-    );
-
     let program = parse::parse_str("print.stf", "wait\nno_packet\n").unwrap();
     assert_eq!(Print::to_string(&program), "wait\nno_packet");
 }
 
 #[test]
 fn test_prints_empty_node_port_list_with_trailing_separator() {
-    let statement = Statement::McNodeCreate("1".into(), vec![]);
+    let statement = Statement::McNodeCreate {
+        replication_id: "1".into(),
+        ports: vec![],
+    };
 
     assert_eq!(Print::to_string(&statement), "mc_node_create 1 ");
 }

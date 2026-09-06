@@ -1,14 +1,17 @@
 //! Stateful STF tokenization with a separate packet-data vocabulary
 //!
 //! Each iteration first skips layout for the current mode and then dispatches
-//! to keyword or packet-data lexing. Keyword mode recognizes commands,
+//! to command or packet-data lexing. Command mode recognizes keywords,
 //! identifiers, numbers, and punctuation; `packet` and `expect` switch to
 //! packet-data mode until newline or `$`. For example, `**` after `expect`
 //! becomes two packet wildcards rather than identifier punctuation.
 
 use std::rc::Rc;
 
-use crate::lang::common::source::{Position, Span};
+use crate::{
+    lang::common::source::{Phrase, Position, Span},
+    phrase,
+};
 
 use super::error::{StfError, StfErrorKind};
 
@@ -67,8 +70,8 @@ pub enum Token {
 // == Lexer modes
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum LexerMode {
-    Keyword,
+enum Mode {
+    Command,
     PacketData,
 }
 
@@ -80,7 +83,7 @@ pub struct Lexer<'source> {
     index: usize,
     line: i64,
     column: i64,
-    mode: LexerMode,
+    mode: Mode,
     finished: bool,
 }
 
@@ -94,15 +97,19 @@ impl<'source> Lexer<'source> {
             index: 0,
             line: 1,
             column: 0,
-            mode: LexerMode::Keyword,
+            mode: Mode::Command,
             finished: false,
         }
     }
 
     // - Source cursor
 
-    fn current_position(&self) -> Position {
+    fn source_position(&self) -> Position {
         Position::new(Rc::clone(&self.file), self.line, self.column)
+    }
+
+    fn span_from(&self, pos_l: Position) -> Span {
+        Span::new(pos_l, self.source_position())
     }
 
     fn bump(&mut self) -> Option<char> {
@@ -121,17 +128,19 @@ impl<'source> Lexer<'source> {
         self.source[self.index..].chars().next()
     }
 
-    fn take_while(&mut self, predicate: impl Fn(char) -> bool) -> &'source str {
+    fn take_while(&mut self, mut predicate: impl FnMut(char) -> bool) -> &'source str {
         let start = self.index;
-        while self.peek().is_some_and(&predicate) {
+        while let Some(character) = self.peek() {
+            if !predicate(character) {
+                break;
+            }
             self.bump();
         }
         &self.source[start..self.index]
     }
 
-    fn error(&self, kind: StfErrorKind, left: Position) -> StfError {
-        let right = self.current_position();
-        let span = Span::new(left, right);
+    fn error(&self, kind: StfErrorKind, pos_l: Position) -> StfError {
+        let span = self.span_from(pos_l);
         StfError::new(kind, span)
     }
 
@@ -140,23 +149,23 @@ impl<'source> Lexer<'source> {
     fn skip_layout(&mut self) {
         loop {
             match self.mode {
-                LexerMode::Keyword => {
-                    self.skip_keyword_layout();
+                Mode::Command => {
+                    self.skip_command_layout();
                     return;
                 }
-                LexerMode::PacketData => {
+                Mode::PacketData => {
                     self.take_while(|character| matches!(character, ' ' | '\t' | '\r'));
                     if self.peek() != Some('\n') {
                         return;
                     }
                     self.take_while(|character| character == '\n');
-                    self.mode = LexerMode::Keyword;
+                    self.mode = Mode::Command;
                 }
             }
         }
     }
 
-    fn skip_keyword_layout(&mut self) {
+    fn skip_command_layout(&mut self) {
         loop {
             self.take_while(|character| matches!(character, ' ' | '\t' | '\r' | '\n'));
             if self.peek() != Some('#') {
@@ -166,10 +175,10 @@ impl<'source> Lexer<'source> {
         }
     }
 
-    // - Keyword tokens
+    // - Command tokens
 
-    fn lex_keyword(&mut self) -> Result<Token, StfError> {
-        let left = self.current_position();
+    fn lex_command(&mut self) -> Result<Token, StfError> {
+        let pos_l = self.source_position();
         let Some(character) = self.peek() else {
             self.finished = true;
             return Ok(Token::End);
@@ -180,17 +189,17 @@ impl<'source> Lexer<'source> {
         }
 
         if matches!(character, '=' | '!' | '<' | '>') {
-            let token = self.lex_operator(character, left)?;
+            let token = self.lex_operator(character, pos_l)?;
             return Ok(token);
         }
 
         if character == '"' {
-            let token = self.lex_quoted_identifier(left)?;
+            let token = self.lex_quoted_identifier(pos_l)?;
             return Ok(token);
         }
 
         if character.is_ascii_digit() {
-            let token = self.lex_number(left)?;
+            let token = self.lex_number(pos_l)?;
             return Ok(token);
         }
 
@@ -201,7 +210,7 @@ impl<'source> Lexer<'source> {
 
         self.bump();
         let error = StfErrorKind::InvalidCharacter(character);
-        Err(self.error(error, left))
+        Err(self.error(error, pos_l))
     }
 
     fn lex_punctuation(&mut self) -> Option<Token> {
@@ -220,7 +229,7 @@ impl<'source> Lexer<'source> {
         Some(token)
     }
 
-    fn lex_operator(&mut self, character: char, left: Position) -> Result<Token, StfError> {
+    fn lex_operator(&mut self, character: char, pos_l: Position) -> Result<Token, StfError> {
         self.bump();
         let paired = self.peek() == Some('=');
         if paired {
@@ -236,28 +245,27 @@ impl<'source> Lexer<'source> {
             ('>', true) => Ok(Token::Ge),
             _ => {
                 let error = StfErrorKind::InvalidCharacter(character);
-                Err(self.error(error, left))
+                Err(self.error(error, pos_l))
             }
         }
     }
 
-    fn lex_quoted_identifier(&mut self, left: Position) -> Result<Token, StfError> {
+    fn lex_quoted_identifier(&mut self, pos_l: Position) -> Result<Token, StfError> {
         self.bump();
         let start = self.index;
         self.take_while(|character| character != '"' && character != '\n');
         if self.peek() != Some('"') {
             let error = StfErrorKind::UnterminatedQuotedIdentifier;
-            return Err(self.error(error, left));
+            return Err(self.error(error, pos_l));
         }
         let identifier = self.source[start..self.index].to_owned();
         self.bump();
         Ok(Token::Id(identifier))
     }
 
-    fn lex_number(&mut self, left: Position) -> Result<Token, StfError> {
-        let spelling = self.take_while(|character| {
-            character.is_ascii_hexdigit() || matches!(character, 'x' | 'X' | 'b' | 'B' | '*')
-        });
+    fn lex_number(&mut self, pos_l: Position) -> Result<Token, StfError> {
+        let spelling =
+            self.take_while(|character| character.is_ascii_alphanumeric() || character == '*');
         let digits = spelling.get(2..).unwrap_or_default();
         let valid = if spelling.starts_with("0x") || spelling.starts_with("0X") {
             !digits.is_empty()
@@ -271,7 +279,7 @@ impl<'source> Lexer<'source> {
         };
         if !valid {
             let error = StfErrorKind::InvalidNumber(spelling.to_owned());
-            return Err(self.error(error, left));
+            return Err(self.error(error, pos_l));
         }
 
         let token = if spelling.starts_with("0x") || spelling.starts_with("0X") {
@@ -290,23 +298,24 @@ impl<'source> Lexer<'source> {
 
     fn lex_identifier(&mut self) -> Token {
         let identifier = self.take_while(|character| {
-            character == '$'
-                || character == '_'
-                || character == '.'
-                || character.is_ascii_alphanumeric()
+            character == '$' || character == '_' || character.is_ascii_alphanumeric()
         });
+        self.classify_identifier(identifier)
+    }
+
+    fn classify_identifier(&mut self, identifier: &str) -> Token {
         match identifier {
             "add" => Token::Add,
             "all" => Token::All,
             "bytes" => Token::Bytes,
             "check_counter" => Token::CheckCounter,
             "expect" => {
-                self.mode = LexerMode::PacketData;
+                self.mode = Mode::PacketData;
                 Token::Expect
             }
             "no_packet" => Token::NoPacket,
             "packet" => {
-                self.mode = LexerMode::PacketData;
+                self.mode = Mode::PacketData;
                 Token::Packet
             }
             "packets" => Token::Packets,
@@ -329,15 +338,15 @@ impl<'source> Lexer<'source> {
     // - Packet-data tokens
 
     fn lex_packet_data(&mut self) -> Result<Token, StfError> {
-        let left = self.current_position();
+        let pos_l = self.source_position();
         let Some(character) = self.peek() else {
-            self.mode = LexerMode::Keyword;
+            self.mode = Mode::Command;
             self.finished = true;
             return Ok(Token::End);
         };
         if character == '$' {
             self.bump();
-            self.mode = LexerMode::Keyword;
+            self.mode = Mode::Command;
             return Ok(Token::Exact);
         }
         if character == '*' {
@@ -359,26 +368,27 @@ impl<'source> Lexer<'source> {
         }
         self.bump();
         let error = StfErrorKind::InvalidCharacter(character);
-        Err(self.error(error, left))
+        Err(self.error(error, pos_l))
     }
 }
 
 // == Token stream
 
 impl Iterator for Lexer<'_> {
-    type Item = Result<(usize, Token, usize), StfError>;
+    type Item = Result<Phrase<Token>, StfError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.finished {
             return None;
         }
         self.skip_layout();
-        let left = self.index;
+        let pos_l = self.source_position();
         let token = match self.mode {
-            LexerMode::Keyword => self.lex_keyword(),
-            LexerMode::PacketData => self.lex_packet_data(),
+            Mode::Command => self.lex_command(),
+            Mode::PacketData => self.lex_packet_data(),
         };
-        let right = self.index;
-        Some(token.map(|token| (left, token, right)))
+        let pos_r = self.source_position();
+        let span = Span::new(pos_l, pos_r);
+        Some(token.map(|node| phrase! { node: node, span: span }))
     }
 }

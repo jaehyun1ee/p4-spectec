@@ -3,16 +3,24 @@
 // `Statement::Wait` phrase and `END` terminates the program.
 
 use crate::stf::{
-    ast::{Action, Condition, CounterKind, IdOrIndex, Match, MatchKind, Program, Statement},
+    ast::{
+        Action, Argument, Condition, CounterCheck, CounterKind, CounterTarget, MatchKind, Name,
+        Program, Statement, TableMatch,
+    },
     error::StfError,
     lexer::Token,
-    parse::SourceMap,
+    parse::{Location, location_span, parse_priority},
 };
+use crate::{
+    lang::common::source::Phrase,
+    phrase,
+};
+use std::rc::Rc;
 
-grammar(source: &SourceMap);
+grammar(file: &Rc<str>);
 
 extern {
-    type Location = usize;
+    type Location = Location;
     type Error = StfError;
 
     enum Token {
@@ -70,9 +78,12 @@ pub Statements: Program = {
     <statements:StatementRule*> "END" => statements,
 };
 
-StatementRule: crate::lang::common::source::Phrase<Statement> = {
+StatementRule: Phrase<Statement> = {
     // StatementRule ::= StatementNode
-    <l:@L> <node:StatementNode> <r:@R> => source.phrase(node, l, r),
+    <l:@L> <node:StatementNode> <r:@R> => {
+        let span = location_span(file, l, r);
+        phrase! { node: node, span: span }
+    },
 };
 
 StatementNode: Statement = {
@@ -103,9 +114,13 @@ StatementNode: Statement = {
     // StatementNode ::= CHECK_COUNTER ID "(" IdOrIndexRule ")"
     "CHECK_COUNTER" <id:"ID"> "(" <target:IdOrIndexRule> ")" => {
         Statement::CheckCounter {
-            id,
+            counter: id,
             target,
-            check: (None, Condition::Eq, "0".to_owned()),
+            check: CounterCheck {
+                kind: None,
+                condition: Condition::Eq,
+                number: "0".to_owned(),
+            },
         }
     },
 
@@ -113,46 +128,69 @@ StatementNode: Statement = {
     "CHECK_COUNTER" <id:"ID"> "(" <target:IdOrIndexRule> ")"
         <kind:CounterKindRule> <condition:ConditionRule> <number:Number> => {
             Statement::CheckCounter {
-                id,
+                counter: id,
                 target,
-                check: (Some(kind), condition, number),
+                check: CounterCheck {
+                    kind: Some(kind),
+                    condition,
+                    number,
+                },
             }
         },
 
     // StatementNode ::= EXPECT Port ExpectedData EXACT
     "EXPECT" <port:Port> <expected:ExpectedData> "EXACT" => {
-        Statement::Expect(port, expected, true)
+        Statement::Expect {
+            port,
+            packet_expected: expected,
+            exact: true,
+        }
     },
 
     // StatementNode ::= EXPECT Port ExpectedData
     "EXPECT" <port:Port> <expected:ExpectedData> => {
-        Statement::Expect(port, expected, false)
+        Statement::Expect {
+            port,
+            packet_expected: expected,
+            exact: false,
+        }
     },
 
     // StatementNode ::= EXPECT Port EXACT
-    "EXPECT" <port:Port> "EXACT" => Statement::Expect(port, None, true),
+    "EXPECT" <port:Port> "EXACT" => Statement::Expect {
+        port,
+        packet_expected: None,
+        exact: true,
+    },
 
     // StatementNode ::= EXPECT Port
-    "EXPECT" <port:Port> => Statement::Expect(port, None, false),
+    "EXPECT" <port:Port> => Statement::Expect {
+        port,
+        packet_expected: None,
+        exact: false,
+    },
 
     // StatementNode ::= MIRRORING_ADD Decimal Decimal
     "MIRRORING_ADD" <session:Decimal> <port:Decimal> => {
-        Statement::MirroringAdd(session, port)
+        Statement::MirroringAdd { session, port }
     },
 
     // StatementNode ::= MIRRORING_ADD_MC Decimal Decimal
     "MIRRORING_ADD_MC" <session:Decimal> <id:Decimal> => {
-        Statement::MirroringAddMc(session, id)
+        Statement::MirroringAddMc {
+            session,
+            group_id: id,
+        }
     },
 
     // StatementNode ::= MIRRORING_GET Decimal
-    "MIRRORING_GET" <session:Decimal> => Statement::MirroringGet(session),
+    "MIRRORING_GET" <session:Decimal> => Statement::MirroringGet { session },
 
     // StatementNode ::= NO_PACKET
     "NO_PACKET" => Statement::NoPacket,
 
     // StatementNode ::= PACKET Port PacketData
-    "PACKET" <port:Port> <packet:PacketData> => Statement::Packet(port, packet),
+    "PACKET" <port:Port> <packet:PacketData> => Statement::Packet { port, packet },
 
     // StatementNode ::= SETDEFAULT QualifiedName ActionRule
     "SETDEFAULT" <table:QualifiedName> <action:ActionRule> => {
@@ -160,28 +198,34 @@ StatementNode: Statement = {
     },
 
     // StatementNode ::= MC_GROUP_CREATE Decimal
-    "MC_GROUP_CREATE" <id:Decimal> => Statement::McGroupCreate(id),
+    "MC_GROUP_CREATE" <id:Decimal> => Statement::McGroupCreate { group_id: id },
 
     // StatementNode ::= MC_NODE_CREATE Decimal Number+
-    "MC_NODE_CREATE" <id:Decimal> <ports:Number+> => Statement::McNodeCreate(id, ports),
+    "MC_NODE_CREATE" <id:Decimal> <ports:Number+> => Statement::McNodeCreate {
+        replication_id: id,
+        ports,
+    },
 
     // StatementNode ::= MC_NODE_ASSOCIATE Decimal Decimal
     "MC_NODE_ASSOCIATE" <id:Decimal> <handle:Decimal> => {
-        Statement::McNodeAssociate(id, handle)
+        Statement::McNodeAssociate {
+            group_id: id,
+            handle,
+        }
     },
 
     // StatementNode ::= REGISTER_READ QualifiedName Number
     "REGISTER_READ" <name:QualifiedName> <index:Number> => {
-        Statement::RegisterRead(name, index)
+        Statement::RegisterRead { name, index }
     },
 
     // StatementNode ::= REGISTER_WRITE QualifiedName Number Number
     "REGISTER_WRITE" <name:QualifiedName> <index:Number> <value:Number> => {
-        Statement::RegisterWrite(name, index, value)
+        Statement::RegisterWrite { name, index, value }
     },
 
     // StatementNode ::= REGISTER_RESET QualifiedName
-    "REGISTER_RESET" <name:QualifiedName> => Statement::RegisterReset(name),
+    "REGISTER_RESET" <name:QualifiedName> => Statement::RegisterReset { name },
 
     // StatementNode ::= REMOVE ALL
     "REMOVE" "ALL" => Statement::RemoveAll,
@@ -212,28 +256,28 @@ NumberOrLpm: MatchKind = {
     <number:Number> => MatchKind::Number(number),
 };
 
-MatchRule: Match = {
+MatchRule: TableMatch = {
     // MatchRule ::= QualifiedName ":" NumberOrLpm
-    <name:QualifiedName> ":" <kind:NumberOrLpm> => (name, kind),
+    <name:QualifiedName> ":" <kind:NumberOrLpm> => TableMatch { name, kind },
 };
 
-QualifiedName: String = {
+QualifiedName: Name = {
     // QualifiedName ::= ID
-    <id:"ID"> => id,
+    <id:"ID"> => id.into(),
 
     // QualifiedName ::= ID "[" Decimal "]"
-    <id:"ID"> "[" <index:Decimal> "]" => format!("{id}[{index}]"),
+    <id:"ID"> "[" <index:Decimal> "]" => format!("{id}[{index}]").into(),
 
     // QualifiedName ::= QualifiedName "." ID
-    <prefix:QualifiedName> "." <id:"ID"> => format!("{prefix}.{id}"),
+    <prefix:QualifiedName> "." <id:"ID"> => format!("{prefix}.{id}").into(),
 };
 
-IdOrIndexRule: IdOrIndex = {
+IdOrIndexRule: CounterTarget = {
     // IdOrIndexRule ::= ID
-    <id:"ID"> => IdOrIndex::Id(id),
+    <id:"ID"> => CounterTarget::Id(id),
 
     // IdOrIndexRule ::= Number
-    <number:Number> => IdOrIndex::Index(number),
+    <number:Number> => CounterTarget::Index(number),
 };
 
 CounterKindRule: CounterKind = {
@@ -269,12 +313,15 @@ ActionRule: Action = {
     <name:QualifiedName> "(" <args:Comma<Argument>> ")" => Action { name, args },
 };
 
-Argument: (String, String) = {
+Argument: Argument = {
     // Argument ::= ADD ":" Number
-    "ADD" ":" <number:Number> => ("add".to_owned(), number),
+    "ADD" ":" <number:Number> => Argument {
+        id: "add".to_owned(),
+        number,
+    },
 
     // Argument ::= ID ":" Number
-    <id:"ID"> ":" <number:Number> => (id, number),
+    <id:"ID"> ":" <number:Number> => Argument { id, number },
 };
 
 Comma<T>: Vec<T> = {
@@ -291,9 +338,11 @@ Comma<T>: Vec<T> = {
 
 Priority: i64 = {
     // Priority ::= Decimal
-    <l:@L> <value:Decimal> <r:@R> =>? source
-        .priority(value, l, r)
-        .map_err(|error| lalrpop_util::ParseError::User { error }),
+    <l:@L> <value:Decimal> <r:@R> =>? {
+        let span = location_span(file, l, r);
+        let priority = parse_priority(value, span);
+        priority.map_err(|error| lalrpop_util::ParseError::User { error })
+    },
 };
 
 Decimal: String = {

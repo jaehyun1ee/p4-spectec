@@ -1,5 +1,7 @@
 //! STF packet-test language frontend and utilities.
 
+mod name;
+
 pub mod ast;
 pub mod error;
 pub mod lexer;
