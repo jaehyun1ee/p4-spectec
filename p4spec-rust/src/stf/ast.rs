@@ -1,8 +1,8 @@
 //! Syntax model for STF commands.
 //!
 //! Leaf strings retain their source spelling, compound actions and matches
-//! preserve input order, and statements follow the OCaml variant order. For
-//! example, `packet 1 00ff` is `Statement::Packet("1", "00ff")`.
+//! preserve input order, and statements follow declaration order. For example,
+//! `packet 1 00ff` is `Statement::Packet("1", "00ff")`.
 
 use crate::lang::common::source::Phrase;
 

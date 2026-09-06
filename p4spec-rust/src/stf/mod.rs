@@ -1,9 +1,9 @@
 //! STF packet-test language frontend and utilities.
 
 pub mod ast;
-pub mod compare;
 pub mod error;
 pub mod lexer;
+pub mod r#match;
 pub mod parse;
 pub mod print;
 pub mod transform;

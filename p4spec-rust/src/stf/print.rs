@@ -1,10 +1,10 @@
-//! Stable STF diagnostic text output.
+//! Stable STF diagnostic text output
 //!
-//! Leaf values are normalized first, then statements are rendered in OCaml
-//! variant order and programs join them with newlines. For example, an action
-//! named `drop` with no arguments renders as `"drop"()`.
+//! Each syntax type writes directly to the shared language printer. Compound
+//! values delegate to their components, and programs separate statements with
+//! newlines. For example, an action named `drop` renders as `"drop"()`.
 
-use std::{fmt, fmt::Write};
+use std::fmt;
 
 use crate::lang::traits::print::{Print, Printer};
 
@@ -33,135 +33,196 @@ pub fn convert_dollar_to_brackets(value: &str) -> String {
     result
 }
 
-fn action(action: &Action) -> String {
-    let args = action
-        .args
-        .iter()
-        .map(|(id, number)| format!("\"{id}\":{number}"))
-        .collect::<Vec<_>>()
-        .join(",");
-    format!("\"{}\"({args})", action.name)
+fn write_quoted(printer: &mut Printer<'_>, value: &str) -> fmt::Result {
+    printer.write_fmt(format_args!("\"{value}\""))
 }
 
-fn match_kind(kind: &MatchKind) -> String {
-    match kind {
-        MatchKind::Number(number) => number.clone(),
-        MatchKind::Slash(left, right) => format!("{left}/{right}"),
+fn write_argument(printer: &mut Printer<'_>, id: &str, number: &str) -> fmt::Result {
+    write_quoted(printer, id)?;
+    printer.write_fmt(format_args!(":{number}"))
+}
+
+fn write_match(printer: &mut Printer<'_>, (name, kind): &Match) -> fmt::Result {
+    write_quoted(printer, name)?;
+    printer.write(":")?;
+    kind.print(printer)
+}
+
+// == Compound syntax
+
+impl Print for Action {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        write_quoted(printer, &self.name)?;
+        printer.write("(")?;
+        for (index, (id, number)) in self.args.iter().enumerate() {
+            if index != 0 {
+                printer.write(",")?;
+            }
+            write_argument(printer, id, number)?;
+        }
+        printer.write(")")
     }
 }
 
-fn match_value((name, kind): &Match) -> String {
-    format!("\"{name}\":{}", match_kind(kind))
-}
-
-fn condition(condition: Condition) -> &'static str {
-    match condition {
-        Condition::Eq => "==",
-        Condition::Ne => "!=",
-        Condition::Le => "<=",
-        Condition::Lt => "<",
-        Condition::Ge => ">=",
-        Condition::Gt => ">",
+impl Print for MatchKind {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        match self {
+            Self::Number(number) => printer.write(number),
+            Self::Slash(number_l, number_r) => {
+                printer.write_fmt(format_args!("{number_l}/{number_r}"))
+            }
+        }
     }
 }
 
-fn counter(counter: CounterKind) -> &'static str {
-    match counter {
-        CounterKind::Bytes => "bytes",
-        CounterKind::Packets => "packets",
+impl Print for IdOrIndex {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        match self {
+            Self::Id(id) => printer.write(id),
+            Self::Index(number) => printer.write(number),
+        }
+    }
+}
+
+impl Print for Condition {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        let text = match self {
+            Self::Eq => "==",
+            Self::Ne => "!=",
+            Self::Le => "<=",
+            Self::Lt => "<",
+            Self::Ge => ">=",
+            Self::Gt => ">",
+        };
+        printer.write(text)
+    }
+}
+
+impl Print for CounterKind {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        let text = match self {
+            Self::Bytes => "bytes",
+            Self::Packets => "packets",
+        };
+        printer.write(text)
     }
 }
 
 // == Statements and programs
 
-pub fn statement(statement: &Statement) -> String {
-    match statement {
-        Statement::Wait => "wait".to_owned(),
-        Statement::RemoveAll => "remove_all".to_owned(),
-        Statement::Expect(port, expected, exact) => {
-            let expected = expected.as_deref().unwrap_or("");
-            let exact = if *exact { "$" } else { "" };
-            format!("expect {port} {expected}{exact}")
-                .trim_end()
-                .to_owned()
-        }
-        Statement::Packet(port, packet) => format!("packet {port} {packet}"),
-        Statement::NoPacket => "no_packet".to_owned(),
-        Statement::Add {
-            table,
-            priority,
-            matches,
-            action: invocation,
-            id,
-        } => {
-            let mut result = format!("add \"{table}\"");
-            if let Some(priority) = priority {
-                write!(result, " {priority}").expect("writing to String cannot fail");
-            }
-            for entry in matches {
-                write!(result, " {}", match_value(entry)).expect("writing to String cannot fail");
-            }
-            write!(result, " {}", action(invocation)).expect("writing to String cannot fail");
-            if let Some(id) = id {
-                write!(result, " \"{id}\"").expect("writing to String cannot fail");
-            }
-            result
-        }
-        Statement::SetDefault {
-            table,
-            action: invocation,
-        } => format!("setdefault \"{table}\" {}", action(invocation)),
-        Statement::CheckCounter { id, target, check } => {
-            let target = match target {
-                IdOrIndex::Id(id) => id,
-                IdOrIndex::Index(number) => number,
-            };
-            let counter = check
-                .0
-                .map(|value| format!(" {}", counter(value)))
-                .unwrap_or_default();
-            format!(
-                "check_counter \"{id}\"({target}){counter} {} {}",
-                condition(check.1),
-                check.2
-            )
-        }
-        Statement::MirroringAdd(session, port) => format!("mirroring_add {session} {port}"),
-        Statement::MirroringAddMc(session, id) => format!("mirroring_add_mc {session} {id}"),
-        Statement::MirroringGet(session) => format!("mirroring_get {session}"),
-        Statement::McGroupCreate(id) => format!("mc_mgrp_create {id}"),
-        Statement::McNodeCreate(id, ports) => {
-            format!("mc_node_create {id} {}", ports.join(" "))
-        }
-        Statement::McNodeAssociate(id, handle) => {
-            format!("mc_mgrp_associate {id} {handle}")
-        }
-        Statement::RegisterRead(name, index) => format!("register_read \"{name}\" {index}"),
-        Statement::RegisterWrite(name, index, number) => {
-            format!("register_write \"{name}\" {index} {number}")
-        }
-        Statement::RegisterReset(name) => format!("register_reset \"{name}\""),
-    }
-}
-
-pub fn program(program: &Program) -> String {
-    program
-        .iter()
-        .map(|statement| self::statement(&statement.node))
-        .collect::<Vec<_>>()
-        .join("\n")
-}
-
-// == Language printing
-
 impl Print for Statement {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        printer.write(&statement(self))
+        match self {
+            Self::Wait => printer.write("wait"),
+            Self::RemoveAll => printer.write("remove_all"),
+            Self::Expect(port, expected, exact) => {
+                printer.write_fmt(format_args!("expect {port}"))?;
+                if expected.is_some() || *exact {
+                    printer.write(" ")?;
+                }
+                if let Some(expected) = expected {
+                    printer.write(expected)?;
+                }
+                if *exact {
+                    printer.write("$")?;
+                }
+                Ok(())
+            }
+            Self::Packet(port, packet) => printer.write_fmt(format_args!("packet {port} {packet}")),
+            Self::NoPacket => printer.write("no_packet"),
+            Self::Add {
+                table,
+                priority,
+                matches,
+                action,
+                id,
+            } => {
+                printer.write("add ")?;
+                write_quoted(printer, table)?;
+                if let Some(priority) = priority {
+                    printer.write_fmt(format_args!(" {priority}"))?;
+                }
+                for entry in matches {
+                    printer.write(" ")?;
+                    write_match(printer, entry)?;
+                }
+                printer.write(" ")?;
+                action.print(printer)?;
+                if let Some(id) = id {
+                    printer.write(" ")?;
+                    write_quoted(printer, id)?;
+                }
+                Ok(())
+            }
+            Self::SetDefault { table, action } => {
+                printer.write("setdefault ")?;
+                write_quoted(printer, table)?;
+                printer.write(" ")?;
+                action.print(printer)
+            }
+            Self::CheckCounter { id, target, check } => {
+                printer.write("check_counter ")?;
+                write_quoted(printer, id)?;
+                printer.write("(")?;
+                target.print(printer)?;
+                printer.write(")")?;
+                if let Some(counter) = check.0 {
+                    printer.write(" ")?;
+                    counter.print(printer)?;
+                }
+                printer.write(" ")?;
+                check.1.print(printer)?;
+                printer.write_fmt(format_args!(" {}", check.2))
+            }
+            Self::MirroringAdd(session, port) => {
+                printer.write_fmt(format_args!("mirroring_add {session} {port}"))
+            }
+            Self::MirroringAddMc(session, id) => {
+                printer.write_fmt(format_args!("mirroring_add_mc {session} {id}"))
+            }
+            Self::MirroringGet(session) => {
+                printer.write_fmt(format_args!("mirroring_get {session}"))
+            }
+            Self::McGroupCreate(id) => printer.write_fmt(format_args!("mc_mgrp_create {id}")),
+            Self::McNodeCreate(id, ports) => {
+                printer.write_fmt(format_args!("mc_node_create {id} "))?;
+                for (index, port) in ports.iter().enumerate() {
+                    if index != 0 {
+                        printer.write(" ")?;
+                    }
+                    printer.write(port)?;
+                }
+                Ok(())
+            }
+            Self::McNodeAssociate(id, handle) => {
+                printer.write_fmt(format_args!("mc_mgrp_associate {id} {handle}"))
+            }
+            Self::RegisterRead(name, index) => {
+                printer.write("register_read ")?;
+                write_quoted(printer, name)?;
+                printer.write_fmt(format_args!(" {index}"))
+            }
+            Self::RegisterWrite(name, index, number) => {
+                printer.write("register_write ")?;
+                write_quoted(printer, name)?;
+                printer.write_fmt(format_args!(" {index} {number}"))
+            }
+            Self::RegisterReset(name) => {
+                printer.write("register_reset ")?;
+                write_quoted(printer, name)
+            }
+        }
     }
 }
 
 impl Print for Program {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        printer.write(&program(self))
+        for (index, statement) in self.iter().enumerate() {
+            if index != 0 {
+                printer.newline()?;
+            }
+            statement.node.print(printer)?;
+        }
+        Ok(())
     }
 }

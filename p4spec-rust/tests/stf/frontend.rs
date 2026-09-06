@@ -1,7 +1,7 @@
 use p4spec_rust::lang::traits::print::Print;
 use p4spec_rust::stf::{
     ast::{Action, Condition, CounterKind, IdOrIndex, MatchKind, Statement},
-    compare, parse, print, transform,
+    r#match, parse, print, transform,
 };
 use std::path::{Path, PathBuf};
 
@@ -119,28 +119,36 @@ fn test_transforms_names_matches_and_actions() {
 
 #[test]
 fn test_compares_wildcard_packets_and_prints_statements() {
-    assert!(compare::packet_matches("a01f", "a**f"));
-    assert!(!compare::packet_matches("a01f", "a*f"));
+    assert!(r#match::matches("a01f", "a**f"));
+    assert!(!r#match::matches("a01f", "a*f"));
 
+    let action = Action {
+        name: "drop".into(),
+        args: vec![],
+    };
     let statement = Statement::SetDefault {
         table: "ingress.tbl".into(),
-        action: Action {
-            name: "drop".into(),
-            args: vec![],
-        },
+        action: action.clone(),
     };
     assert_eq!(
-        print::statement(&statement),
+        Print::to_string(&statement),
         "setdefault \"ingress.tbl\" \"drop\"()"
     );
+    assert_eq!(Print::to_string(&action), "\"drop\"()");
     assert_eq!(
         print::convert_dollar_to_brackets("hdr.$12.field"),
         "hdr.[12].field"
     );
-    assert_eq!(Print::to_string(&statement), print::statement(&statement));
 
     let program = parse::parse_str("print.stf", "wait\nno_packet\n").unwrap();
     assert_eq!(Print::to_string(&program), "wait\nno_packet");
+}
+
+#[test]
+fn test_prints_empty_node_port_list_with_trailing_separator() {
+    let statement = Statement::McNodeCreate("1".into(), vec![]);
+
+    assert_eq!(Print::to_string(&statement), "mc_node_create 1 ");
 }
 
 #[test]
