@@ -45,25 +45,6 @@ pub enum MatchError {
 
 // == Type membership
 
-fn substitution(
-    tparams: &[crate::lang::il::ast::TParam],
-    targs: &[crate::lang::il::ast::Targ],
-    span: &Span,
-) -> Result<Theta, MatchError> {
-    if tparams.len() != targs.len() {
-        return Err(MatchError::TypeArgumentMismatch {
-            expected: tparams.len(),
-            actual: targs.len(),
-            span: span.clone(),
-        });
-    }
-    let mut theta = Theta::new();
-    for (tparam, targ) in tparams.iter().zip(targs) {
-        theta.insert(tparam.clone(), targ.clone());
-    }
-    Ok(theta)
-}
-
 pub fn sub<F>(tdenv: &TDEnv, find_func: &F, typ: &Typ, value: &Value) -> Result<bool, MatchError>
 where
     F: Fn(&str) -> Option<FuncTyp>,
@@ -90,7 +71,12 @@ where
                 }
                 TypeDef::Extern => Ok(matches!(value.node, ValueKind::Extern(_))),
                 TypeDef::Defined(tparams, def_typ) => {
-                    let theta = substitution(tparams, targs, &typ.span)?;
+                    let theta = Theta::from_lists(tparams, targs);
+                    let theta = theta.map_err(|mismatch| MatchError::TypeArgumentMismatch {
+                        expected: mismatch.expected,
+                        actual: mismatch.actual,
+                        span: typ.span.clone(),
+                    })?;
                     match (&def_typ.node, &value.node) {
                         (DefTypKind::Plain(typ), _) => {
                             let typ = subst_typ(&theta, typ)?;
