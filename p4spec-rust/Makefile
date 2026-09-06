@@ -6,8 +6,8 @@
 
 CARGO := cargo
 
-.PHONY: test test-frontend test-elab test-algo test-lang test-wire test-runtime \
-        test-frontend-diff test-elab-diff test-algo-diff test-diff
+.PHONY: test test-frontend test-p4-parse test-elab test-algo test-lang test-wire \
+        test-runtime test-frontend-diff test-elab-diff test-algo-diff test-diff
 
 # Fast unit tests (no OCaml toolchain required)
 
@@ -16,6 +16,13 @@ test:
 
 test-frontend:
 	$(CARGO) test --test frontend
+
+# P4 program parser. The oracle sub-tests parse the Pos/Neg corpus under
+# `p4c/testdata` and render a progress bar, so they need the `p4c` submodule
+# (`git submodule update --init p4c`) and a C preprocessor; `--nocapture` keeps
+# the bar visible.
+test-p4-parse:
+	$(CARGO) test --test interface p4_parse:: -- --nocapture
 
 test-elab:
 	$(CARGO) test --test pass elaborate::

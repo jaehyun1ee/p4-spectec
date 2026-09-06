@@ -11,6 +11,22 @@ use std::{
     path::{Path, PathBuf},
 };
 
+/// Draw a single-line progress bar to stderr. libtest only captures the
+/// `print!`/`eprint!` macros, so a direct `io::stderr()` write stays visible
+/// while the oracle grinds through the p4c corpus (run with `--nocapture`).
+fn report_progress(label: &str, done: usize, total: usize) {
+    use std::io::Write;
+    const WIDTH: usize = 24;
+    let filled = (done * WIDTH).checked_div(total).unwrap_or(WIDTH);
+    let bar = format!("{}{}", "#".repeat(filled), "-".repeat(WIDTH - filled));
+    let mut stderr = std::io::stderr();
+    let _ = write!(stderr, "\r{label} [{bar}] {done}/{total}");
+    let _ = stderr.flush();
+    if done == total {
+        let _ = writeln!(stderr);
+    }
+}
+
 #[test]
 fn test_parses_empty_and_declaration_programs() {
     for source in [
@@ -164,16 +180,18 @@ fn assert_matches_parser_oracle(root: &Path, oracle_name: &str, directories: &[P
     assert_eq!(corpus_files, oracle_files, "P4 parser corpus changed");
 
     let includes = [root.join("p4c/p4include")];
-    let mismatches = oracle
-        .into_iter()
-        .filter_map(|(file, should_parse)| {
-            let result = parse_file(&includes, &file);
-            (result.is_ok() != should_parse).then(|| match result {
+    let total = oracle.len();
+    let mut mismatches = Vec::new();
+    for (index, (file, should_parse)) in oracle.into_iter().enumerate() {
+        report_progress(&format!("p4 parser {oracle_name}"), index + 1, total);
+        let result = parse_file(&includes, &file);
+        if result.is_ok() != should_parse {
+            mismatches.push(match result {
                 Ok(_) => format!("{}: unexpectedly parsed", file.display()),
                 Err(error) => format!("{}: {error}", file.display()),
-            })
-        })
-        .collect::<Vec<_>>();
+            });
+        }
+    }
     assert!(
         mismatches.is_empty(),
         "P4 parse expectation mismatches:\n{}",
