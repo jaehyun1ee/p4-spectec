@@ -165,6 +165,23 @@ where
     }
 }
 
+pub fn subs<F>(
+    tdenv: &TDEnv,
+    find_func: &F,
+    typs: &[Typ],
+    values: &[Rc<Value>],
+) -> Result<bool, MatchError>
+where
+    F: Fn(&str) -> Option<FuncTyp>,
+{
+    subs_inner(
+        tdenv,
+        find_func,
+        typs.iter(),
+        values.iter().map(AsRef::as_ref),
+    )
+}
+
 fn subs_inner<'typ, 'value, F, T, V>(
     tdenv: &TDEnv,
     find_func: &F,
@@ -185,23 +202,6 @@ where
         }
     }
     Ok(true)
-}
-
-pub fn subs<F>(
-    tdenv: &TDEnv,
-    find_func: &F,
-    typs: &[Typ],
-    values: &[Rc<Value>],
-) -> Result<bool, MatchError>
-where
-    F: Fn(&str) -> Option<FuncTyp>,
-{
-    subs_inner(
-        tdenv,
-        find_func,
-        typs.iter(),
-        values.iter().map(AsRef::as_ref),
-    )
 }
 
 // == Subtype-check execution
