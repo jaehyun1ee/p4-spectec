@@ -19,7 +19,8 @@ use super::{super::source::Phrase, atom::Atom};
 /// An atom paired with its source span
 pub type AtomPhrase = Phrase<Atom>;
 
-/// A mixfix expression with arguments of type `T`
+/// A mixfix expression: literal atoms interleaved with argument holes of type
+/// `T`. For example `_ + _` is infix with two holes and `[ _ ]` brackets one.
 #[derive(Clone, Debug)]
 pub enum Mixfix<T> {
     /// Argument position
