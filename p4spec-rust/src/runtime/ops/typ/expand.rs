@@ -4,7 +4,7 @@ use std::borrow::Cow;
 
 use crate::{
     lang::il::ast::{self, DefTypKind, TypKind},
-    runtime::{env::TDEnv, typdef::TypeDef},
+    runtime::{envs::elab::TDEnv, typdef::TypeDef},
 };
 
 use super::{Theta, TypeArityMismatch, TypeError, TypeErrorKind, subst_typ};

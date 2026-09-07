@@ -8,8 +8,7 @@ use crate::{
     },
     phrase,
     runtime::{
-        env::TDEnv,
-        envs::algo::{MEnv, VEnv},
+        envs::algo::{MEnv, TDEnv, VEnv},
         typdef::TypeDef,
     },
 };

@@ -6,7 +6,7 @@ use p4spec_rust::{
         il::ast::{self, DefTypKind, FuncTyp, Iter, Subcheck, TypKind},
     },
     runtime::{
-        env::TDEnv,
+        envs::elab::TDEnv,
         ops::typ::{
             Theta, TypeArityMismatch, TypeErrorKind, equiv_func_typ, equiv_not_typ, equiv_typ,
             expand_typ, optimize_sub_typ, sub_typ, subst_not_typ, subst_typ,

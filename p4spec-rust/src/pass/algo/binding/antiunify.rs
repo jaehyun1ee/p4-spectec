@@ -8,7 +8,10 @@ use crate::{
         xl,
     },
     note_phrase, phrase,
-    runtime::{env::TDEnv, envs::algo::MEnv, ops::typ::equiv_typ},
+    runtime::{
+        envs::algo::{MEnv, TDEnv},
+        ops::typ::equiv_typ,
+    },
 };
 
 use super::{

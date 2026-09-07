@@ -10,7 +10,7 @@ use p4spec_rust::{
     },
     runtime::{
         dim::Dim,
-        env::TDEnv,
+        envs::elab::TDEnv,
         ops::typ::{Theta, equiv_func_typ, expand_typ, optimize_sub_typ, sub_typ, subst_typ},
         typdef::TypeDef,
     },
