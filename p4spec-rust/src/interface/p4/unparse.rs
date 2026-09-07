@@ -58,14 +58,13 @@ impl P4Unparser {
     pub fn from_al_spec(spec_al: &[al::ast::Def]) -> Self {
         let mut hints = HashMap::new();
         for definition_al in spec_al {
-            let al::ast::DefKind::Typ(type_definition_al) = &definition_al.node else {
+            let al::ast::DefKind::Typ(typ_def_al) = &definition_al.node else {
                 continue;
             };
-            insert_case_hints(
-                &mut hints,
-                &type_definition_al.id.node,
-                &type_definition_al.def_typ,
-            );
+            let al::ast::TypDef::Defined(defined_typ_al) = typ_def_al else {
+                continue;
+            };
+            insert_case_hints(&mut hints, &defined_typ_al.id.node, &defined_typ_al.def_typ);
         }
         Self { hints }
     }
@@ -73,14 +72,13 @@ impl P4Unparser {
     pub fn from_sl_spec(spec_sl: &[sl::ast::Def]) -> Self {
         let mut hints = HashMap::new();
         for definition_sl in spec_sl {
-            let sl::ast::DefKind::Typ(type_definition_sl) = &definition_sl.node else {
+            let sl::ast::DefKind::Typ(typ_def_sl) = &definition_sl.node else {
                 continue;
             };
-            insert_case_hints(
-                &mut hints,
-                &type_definition_sl.id.node,
-                &type_definition_sl.def_typ,
-            );
+            let sl::ast::TypDef::Defined(defined_typ_sl) = typ_def_sl else {
+                continue;
+            };
+            insert_case_hints(&mut hints, &defined_typ_sl.id.node, &defined_typ_sl.def_typ);
         }
         Self { hints }
     }
@@ -88,14 +86,13 @@ impl P4Unparser {
     pub fn from_pl_spec(spec_pl: &[pl::ast::Def]) -> Self {
         let mut hints = HashMap::new();
         for definition_pl in spec_pl {
-            let pl::ast::DefKind::Typ(type_definition_pl) = &definition_pl.node.node else {
+            let pl::ast::DefKind::Typ(typ_def_pl) = &definition_pl.node.node else {
                 continue;
             };
-            insert_case_hints(
-                &mut hints,
-                &type_definition_pl.id.node,
-                &type_definition_pl.def_typ,
-            );
+            let pl::ast::TypDef::Defined(defined_typ_pl) = typ_def_pl else {
+                continue;
+            };
+            insert_case_hints(&mut hints, &defined_typ_pl.id.node, &defined_typ_pl.def_typ);
         }
         Self { hints }
     }

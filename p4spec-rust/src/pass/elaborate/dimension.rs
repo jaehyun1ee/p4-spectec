@@ -907,55 +907,67 @@ fn analyze_table_row(row: &mut ast::TableRow) -> Result<(), ElabError> {
     Ok(())
 }
 
+// - Relations
+
+fn analyze_rel_def(rel_def_il: &mut ast::RelDef) -> Result<(), ElabError> {
+    let ast::RelDef::Defined(defined_rel_il) = rel_def_il else {
+        return Ok(());
+    };
+    for rule_group_il in &mut defined_rel_il.rule_groups {
+        analyze_rule_group(rule_group_il)?;
+    }
+    if let Some(else_group_il) = &mut defined_rel_il.else_group {
+        analyze_else_group(else_group_il)?;
+    }
+    Ok(())
+}
+
+// - Meta-functions
+
+fn analyze_meta_func_def(meta_func_def_il: &mut ast::MetaFuncDef) -> Result<(), ElabError> {
+    match meta_func_def_il {
+        ast::MetaFuncDef::Table(table_func_il) => analyze_table_func(table_func_il),
+        ast::MetaFuncDef::Defined(defined_func_il) => analyze_defined_func(defined_func_il),
+        ast::MetaFuncDef::Extern(_) | ast::MetaFuncDef::Builtin(_) => Ok(()),
+    }
+}
+
+// - Table functions
+
+fn analyze_table_func(table_func_il: &mut ast::TableFunc) -> Result<(), ElabError> {
+    for table_row_il in &mut table_func_il.rows {
+        analyze_table_row(table_row_il)?;
+    }
+    Ok(())
+}
+
+// - Defined functions
+
+fn analyze_defined_func(defined_func_il: &mut ast::DefinedFunc) -> Result<(), ElabError> {
+    for clause_il in &mut defined_func_il.clauses {
+        analyze_clause(clause_il)?;
+    }
+    if let Some(else_clause_il) = &mut defined_func_il.else_clause {
+        analyze_clause(else_clause_il)?;
+    }
+    Ok(())
+}
+
 // - Definitions
 
-fn analyze_def(def: &mut ast::Def) -> Result<(), ElabError> {
-    match &mut def.node {
-        ast::DefKind::Rel(rel) => analyze_rel_def(rel),
-        ast::DefKind::TableDec(table) => analyze_table_def(table),
-        ast::DefKind::FuncDec(func) => analyze_func_def(func),
+fn analyze_def(def_il: &mut ast::Def) -> Result<(), ElabError> {
+    match &mut def_il.node {
+        ast::DefKind::Rel(rel_def_il) => analyze_rel_def(rel_def_il),
+        ast::DefKind::MetaFunc(meta_func_def_il) => analyze_meta_func_def(meta_func_def_il),
         _ => Ok(()),
     }
 }
 
-// - Relation definitions
-
-fn analyze_rel_def(rel: &mut ast::Rel) -> Result<(), ElabError> {
-    for group in &mut rel.rule_groups {
-        analyze_rule_group(group)?;
-    }
-    if let Some(group) = &mut rel.else_group {
-        analyze_else_group(group)?;
-    }
-    Ok(())
-}
-
-// - Table definitions
-
-fn analyze_table_def(table: &mut ast::TableDec) -> Result<(), ElabError> {
-    for row in &mut table.rows {
-        analyze_table_row(row)?;
-    }
-    Ok(())
-}
-
-// - Function definitions
-
-fn analyze_func_def(func: &mut ast::FuncDec) -> Result<(), ElabError> {
-    for clause in &mut func.clauses {
-        analyze_clause(clause)?;
-    }
-    if let Some(clause) = &mut func.else_clause {
-        analyze_clause(clause)?;
-    }
-    Ok(())
-}
-
 // - Specification
 
-pub(super) fn analyze_spec(spec: &mut ast::Spec) -> Result<(), ElabError> {
-    for def in spec {
-        analyze_def(def)?;
+pub(super) fn analyze_spec(spec_il: &mut ast::Spec) -> Result<(), ElabError> {
+    for def_il in spec_il {
+        analyze_def(def_il)?;
     }
     Ok(())
 }

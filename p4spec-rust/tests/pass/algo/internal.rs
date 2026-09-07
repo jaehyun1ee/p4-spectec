@@ -108,7 +108,7 @@ fn function_spec(
         .map(|typ| crate::phrase! { node: ast::ParamKind::Exp(typ), span:  span(1) })
         .collect();
     vec![crate::phrase! { node:
-    ast::DefKind::FuncDec(ast::FuncDec {
+    ast::DefKind::MetaFunc(ast::MetaFuncDef::Defined(Box::new(ast::DefinedFunc {
         id: id("function", 1),
         tparams: vec![],
         params,
@@ -116,7 +116,7 @@ fn function_spec(
         clauses: vec![clause],
         else_clause: None,
         hints: vec![],
-    }), span:
+    }))), span:
     span(1) }]
 }
 
@@ -225,10 +225,13 @@ fn iteration_var(name: &str, typ: ast::Typ, line: i64) -> ast::Var {
 }
 
 fn function_clause(spec: &crate::lang::al::ast::Spec) -> &ast_al::Clause {
-    let crate::lang::al::ast::DefKind::FuncDec(function) = &spec[0].node else {
+    let crate::lang::al::ast::DefKind::MetaFunc(meta_func_def_al) = &spec[0].node else {
         panic!("expected function definition");
     };
-    &function.clauses[0]
+    let ast_al::MetaFuncDef::Defined(defined_func_al) = meta_func_def_al else {
+        panic!("expected defined function");
+    };
+    &defined_func_al.clauses[0]
 }
 
 fn not_typ(name: &str, line: i64) -> ast::NotTyp {

@@ -865,106 +865,85 @@ fn analyze_table_rows(
     Ok(rows_al)
 }
 
-// == Definition binding analysis
-
-// - Dispatch
-
-fn analyze_def(ctx: &mut Context, def_il: ast::Def) -> Result<al::ast::Def, AlgoError> {
-    let span = def_il.span;
-    let def_kind_al = match def_il.node {
-        ast::DefKind::ExternTyp(def_il) => {
-            let def_al = analyze_extern_typ_def(def_il);
-            al::ast::DefKind::ExternTyp(def_al)
-        }
-        ast::DefKind::Typ(def_il) => {
-            let def_al = analyze_typ_def(def_il);
-            al::ast::DefKind::Typ(def_al)
-        }
-        ast::DefKind::Var(def_il) => {
-            let def_al = analyze_var_def(def_il);
-            al::ast::DefKind::Var(def_al)
-        }
-        ast::DefKind::ExternRel(def_il) => {
-            let def_al = analyze_extern_rel_def(def_il);
-            al::ast::DefKind::ExternRel(def_al)
-        }
-        ast::DefKind::Rel(def_il) => {
-            let def_al = analyze_rel_def(ctx, def_il)?;
-            al::ast::DefKind::Rel(def_al)
-        }
-        ast::DefKind::ExternDec(def_il) => {
-            let def_al = analyze_extern_dec_def(def_il);
-            al::ast::DefKind::ExternDec(def_al)
-        }
-        ast::DefKind::BuiltinDec(def_il) => {
-            let def_al = analyze_builtin_dec_def(def_il);
-            al::ast::DefKind::BuiltinDec(def_al)
-        }
-        ast::DefKind::TableDec(table_def_il) => {
-            let def_al = analyze_table_def(ctx, table_def_il, &span)?;
-            al::ast::DefKind::TableDec(def_al)
-        }
-        ast::DefKind::FuncDec(def_il) => {
-            let def_al = analyze_func_def(ctx, def_il)?;
-            al::ast::DefKind::FuncDec(def_al)
-        }
-    };
-    let def_al = phrase!(node: def_kind_al, span: span);
-    Ok(def_al)
-}
-
-// - External type definitions
-
-fn analyze_extern_typ_def(def_il: ast::ExternTyp) -> al::ast::ExternTypDef {
-    al::ast::ExternTypDef {
-        id: def_il.id,
-        hints: def_il.hints,
-    }
-}
-
 // - Type definitions
 
-fn analyze_typ_def(def_il: ast::TypDef) -> al::ast::TypDef {
-    al::ast::TypDef {
-        id: def_il.id,
-        tparams: def_il.tparams,
-        def_typ: def_il.def_typ,
-        hints: def_il.hints,
+fn analyze_typ_def(typ_def_il: ast::TypDef) -> al::ast::TypDef {
+    match typ_def_il {
+        ast::TypDef::Extern(extern_typ_il) => {
+            al::ast::TypDef::Extern(analyze_extern_typ(extern_typ_il))
+        }
+        ast::TypDef::Defined(defined_typ_il) => {
+            let defined_typ_al = analyze_defined_typ(*defined_typ_il);
+            al::ast::TypDef::Defined(Box::new(defined_typ_al))
+        }
     }
 }
 
-// - Variable definitions
+fn analyze_extern_typ(extern_typ_il: ast::ExternTyp) -> al::ast::ExternTyp {
+    al::ast::ExternTyp {
+        id: extern_typ_il.id,
+        hints: extern_typ_il.hints,
+    }
+}
 
-fn analyze_var_def(def_il: ast::VarDef) -> al::ast::VarDef {
+fn analyze_defined_typ(defined_typ_il: ast::DefinedTyp) -> al::ast::DefinedTyp {
+    al::ast::DefinedTyp {
+        id: defined_typ_il.id,
+        tparams: defined_typ_il.tparams,
+        def_typ: defined_typ_il.def_typ,
+        hints: defined_typ_il.hints,
+    }
+}
+
+// - Meta-variables
+
+fn analyze_var_def(var_def_il: ast::VarDef) -> al::ast::VarDef {
     al::ast::VarDef {
-        id: def_il.id,
-        typ: def_il.typ,
-        hints: def_il.hints,
+        id: var_def_il.id,
+        typ: var_def_il.typ,
+        hints: var_def_il.hints,
     }
 }
 
-// - External relation definitions
+// - Relations
 
-fn analyze_extern_rel_def(def_il: ast::ExternRel) -> al::ast::ExternRelDef {
-    al::ast::ExternRelDef {
-        id: def_il.id,
-        not_typ: def_il.not_typ,
-        input_hint: def_il.input_hint,
-        hints: def_il.hints,
+fn analyze_rel_def(
+    ctx: &mut Context,
+    rel_def_il: ast::RelDef,
+) -> Result<al::ast::RelDef, AlgoError> {
+    match rel_def_il {
+        ast::RelDef::Extern(extern_rel_il) => {
+            let extern_rel_al = analyze_extern_rel(*extern_rel_il);
+            Ok(al::ast::RelDef::Extern(Box::new(extern_rel_al)))
+        }
+        ast::RelDef::Defined(defined_rel_il) => {
+            let defined_rel_al = analyze_defined_rel(ctx, *defined_rel_il)?;
+            Ok(al::ast::RelDef::Defined(Box::new(defined_rel_al)))
+        }
     }
 }
 
-// - Relation definitions
+fn analyze_extern_rel(extern_rel_il: ast::ExternRel) -> al::ast::ExternRel {
+    al::ast::ExternRel {
+        id: extern_rel_il.id,
+        not_typ: extern_rel_il.not_typ,
+        input_hint: extern_rel_il.input_hint,
+        hints: extern_rel_il.hints,
+    }
+}
 
-fn analyze_rel_def(ctx: &mut Context, def_il: ast::Rel) -> Result<al::ast::RelDef, AlgoError> {
-    let ast::Rel {
+fn analyze_defined_rel(
+    ctx: &mut Context,
+    defined_rel_il: ast::DefinedRel,
+) -> Result<al::ast::DefinedRel, AlgoError> {
+    let ast::DefinedRel {
         id,
         not_typ,
         input_hint,
         rule_groups,
         else_group,
         hints,
-    } = def_il;
+    } = defined_rel_il;
     let mut rule_groups_al = Vec::with_capacity(rule_groups.len());
     for rule_group_il in rule_groups {
         let span = rule_group_il.span.clone();
@@ -975,7 +954,7 @@ fn analyze_rel_def(ctx: &mut Context, def_il: ast::Rel) -> Result<al::ast::RelDe
     let else_group_al = else_group
         .map(|else_group_il| analyze_else_group(ctx, &input_hint, else_group_il))
         .transpose()?;
-    Ok(al::ast::RelDef {
+    Ok(al::ast::DefinedRel {
         id,
         not_typ,
         input_hint,
@@ -985,70 +964,112 @@ fn analyze_rel_def(ctx: &mut Context, def_il: ast::Rel) -> Result<al::ast::RelDe
     })
 }
 
-// - External declaration definitions
+// - Meta-functions
 
-fn analyze_extern_dec_def(def_il: ast::ExternDec) -> al::ast::ExternDecDef {
-    al::ast::ExternDecDef {
-        id: def_il.id,
-        tparams: def_il.tparams,
-        params: def_il.params,
-        typ: def_il.typ,
-        hints: def_il.hints,
-    }
-}
-
-// - Builtin declaration definitions
-
-fn analyze_builtin_dec_def(def_il: ast::BuiltinDec) -> al::ast::BuiltinDecDef {
-    al::ast::BuiltinDecDef {
-        id: def_il.id,
-        tparams: def_il.tparams,
-        params: def_il.params,
-        typ: def_il.typ,
-        hints: def_il.hints,
-    }
-}
-
-// - Table definitions
-
-fn analyze_table_def(
+fn analyze_meta_func_def(
     ctx: &mut Context,
-    def_il: ast::TableDec,
+    meta_func_def_il: ast::MetaFuncDef,
     span: &Span,
-) -> Result<al::ast::TableDecDef, AlgoError> {
-    let table_rows_al = analyze_table_rows(ctx, span, &def_il.params, def_il.rows)?;
-    Ok(al::ast::TableDecDef {
-        id: def_il.id,
-        params: def_il.params,
-        typ: def_il.typ,
+) -> Result<al::ast::MetaFuncDef, AlgoError> {
+    match meta_func_def_il {
+        ast::MetaFuncDef::Extern(extern_func_il) => Ok(al::ast::MetaFuncDef::Extern(
+            analyze_extern_func(extern_func_il),
+        )),
+        ast::MetaFuncDef::Builtin(builtin_func_il) => Ok(al::ast::MetaFuncDef::Builtin(
+            analyze_builtin_func(builtin_func_il),
+        )),
+        ast::MetaFuncDef::Table(table_func_il) => Ok(al::ast::MetaFuncDef::Table(
+            analyze_table_func(ctx, table_func_il, span)?,
+        )),
+        ast::MetaFuncDef::Defined(defined_func_il) => {
+            let defined_func_al = analyze_defined_func(ctx, *defined_func_il)?;
+            Ok(al::ast::MetaFuncDef::Defined(Box::new(defined_func_al)))
+        }
+    }
+}
+
+fn analyze_extern_func(extern_func_il: ast::ExternFunc) -> al::ast::ExternFunc {
+    al::ast::ExternFunc {
+        id: extern_func_il.id,
+        tparams: extern_func_il.tparams,
+        params: extern_func_il.params,
+        typ: extern_func_il.typ,
+        hints: extern_func_il.hints,
+    }
+}
+
+fn analyze_builtin_func(builtin_func_il: ast::BuiltinFunc) -> al::ast::BuiltinFunc {
+    al::ast::BuiltinFunc {
+        id: builtin_func_il.id,
+        tparams: builtin_func_il.tparams,
+        params: builtin_func_il.params,
+        typ: builtin_func_il.typ,
+        hints: builtin_func_il.hints,
+    }
+}
+
+fn analyze_table_func(
+    ctx: &mut Context,
+    table_func_il: ast::TableFunc,
+    span: &Span,
+) -> Result<al::ast::TableFunc, AlgoError> {
+    let table_rows_al = analyze_table_rows(ctx, span, &table_func_il.params, table_func_il.rows)?;
+    Ok(al::ast::TableFunc {
+        id: table_func_il.id,
+        params: table_func_il.params,
+        typ: table_func_il.typ,
         table_rows: table_rows_al,
-        hints: def_il.hints,
+        hints: table_func_il.hints,
     })
 }
 
-// - Function definitions
-
-fn analyze_func_def(
+fn analyze_defined_func(
     ctx: &mut Context,
-    def_il: ast::FuncDec,
-) -> Result<al::ast::FuncDecDef, AlgoError> {
-    let mut clauses_al = Vec::with_capacity(def_il.clauses.len());
-    for clause_il in def_il.clauses {
+    defined_func_il: ast::DefinedFunc,
+) -> Result<al::ast::DefinedFunc, AlgoError> {
+    let mut clauses_al = Vec::with_capacity(defined_func_il.clauses.len());
+    for clause_il in defined_func_il.clauses {
         clauses_al.push(analyze_clause(ctx, clause_il, false)?);
     }
-    let else_clause_al = def_il
+    let else_clause_al = defined_func_il
         .else_clause
         .map(|clause_il| analyze_clause(ctx, clause_il, true))
         .transpose()?;
-    Ok(al::ast::FuncDecDef {
-        id: def_il.id,
-        tparams: def_il.tparams,
-        params: def_il.params,
-        typ: def_il.typ,
+    Ok(al::ast::DefinedFunc {
+        id: defined_func_il.id,
+        tparams: defined_func_il.tparams,
+        params: defined_func_il.params,
+        typ: defined_func_il.typ,
         clauses: clauses_al,
         else_clause: else_clause_al,
-        hints: def_il.hints,
+        hints: defined_func_il.hints,
     })
+}
+
+// - Definitions
+
+fn analyze_def(ctx: &mut Context, def_il: ast::Def) -> Result<al::ast::Def, AlgoError> {
+    let span = def_il.span;
+    let def_kind_al = match def_il.node {
+        ast::DefKind::Typ(typ_def_il) => {
+            let typ_def_al = analyze_typ_def(typ_def_il);
+            al::ast::DefKind::Typ(typ_def_al)
+        }
+        ast::DefKind::Var(var_def_il) => {
+            let var_def_al = analyze_var_def(var_def_il);
+            al::ast::DefKind::Var(var_def_al)
+        }
+        ast::DefKind::Rel(rel_def_il) => {
+            let rel_def_al = analyze_rel_def(ctx, rel_def_il)?;
+            al::ast::DefKind::Rel(rel_def_al)
+        }
+        ast::DefKind::MetaFunc(meta_func_def_il) => {
+            let meta_func_def_al = analyze_meta_func_def(ctx, meta_func_def_il, &span)?;
+            al::ast::DefKind::MetaFunc(meta_func_def_al)
+        }
+    };
+    let def_al = phrase!(node: def_kind_al, span: span);
+    Ok(def_al)
 }
 
 // - Specification

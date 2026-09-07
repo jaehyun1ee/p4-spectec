@@ -58,11 +58,11 @@ fn test_printer_renders_nested_premises_and_definition_spec_goldens() {
         var("value"),
     ), span: Span::default() };
     let definitions = vec![
-        p4spec_rust::phrase! { node: ast::DefKind::ExternTyp(ast::ExternTyp {
+        p4spec_rust::phrase! { node: ast::DefKind::Typ(ast::TypDef::Extern(ast::ExternTyp {
             id: id("Syntax"),
             hints: vec![],
-        }), span: Span::default() },
-        p4spec_rust::phrase! { node: ast::DefKind::Typ(ast::TypDef {
+        })), span: Span::default() },
+        p4spec_rust::phrase! { node: ast::DefKind::Typ(ast::TypDef::Defined(Box::new(ast::DefinedTyp {
             id: id("Alias"),
             tparams: vec![p4spec_rust::phrase! {
                 node: "T".into(),
@@ -80,48 +80,48 @@ fn test_printer_renders_nested_premises_and_definition_spec_goldens() {
                 span: Span::default(),
             },
             hints: vec![],
-        }), span: Span::default() },
+        }))), span: Span::default() },
         p4spec_rust::phrase! { node: ast::DefKind::Var(ast::VarDef {
             id: id("value"),
             typ: typ(),
             hints: vec![],
         }), span: Span::default() },
-        p4spec_rust::phrase! { node: ast::DefKind::ExternRel(ast::ExternRel {
+        p4spec_rust::phrase! { node: ast::DefKind::Rel(ast::RelDef::Extern(Box::new(ast::ExternRel {
             id: id("external"),
             not_typ: not_typ(),
             input_hint: InputHint::new(vec![]),
             hints: vec![],
-        }), span: Span::default() },
-        p4spec_rust::phrase! { node: ast::DefKind::Rel(ast::Rel {
+        }))), span: Span::default() },
+        p4spec_rust::phrase! { node: ast::DefKind::Rel(ast::RelDef::Defined(Box::new(ast::DefinedRel {
             id: id("relation"),
             not_typ: not_typ(),
             input_hint: InputHint::new(vec![]),
             rule_groups: vec![group],
             else_group: Some(else_group),
             hints: vec![],
-        }), span: Span::default() },
-        p4spec_rust::phrase! { node: ast::DefKind::ExternDec(ast::ExternDec {
+        }))), span: Span::default() },
+        p4spec_rust::phrase! { node: ast::DefKind::MetaFunc(ast::MetaFuncDef::Extern(ast::ExternFunc {
             id: id("extern"),
             tparams: vec![],
             params: vec![],
             typ: typ(),
             hints: vec![],
-        }), span: Span::default() },
-        p4spec_rust::phrase! { node: ast::DefKind::BuiltinDec(ast::BuiltinDec {
+        })), span: Span::default() },
+        p4spec_rust::phrase! { node: ast::DefKind::MetaFunc(ast::MetaFuncDef::Builtin(ast::BuiltinFunc {
             id: id("builtin"),
             tparams: vec![],
             params: vec![],
             typ: typ(),
             hints: vec![],
-        }), span: Span::default() },
-        p4spec_rust::phrase! { node: ast::DefKind::TableDec(ast::TableDec {
+        })), span: Span::default() },
+        p4spec_rust::phrase! { node: ast::DefKind::MetaFunc(ast::MetaFuncDef::Table(ast::TableFunc {
             id: id("table"),
             params: vec![],
             typ: typ(),
             rows: vec![row],
             hints: vec![],
-        }), span: Span::default() },
-        p4spec_rust::phrase! { node: ast::DefKind::FuncDec(ast::FuncDec {
+        })), span: Span::default() },
+        p4spec_rust::phrase! { node: ast::DefKind::MetaFunc(ast::MetaFuncDef::Defined(Box::new(ast::DefinedFunc {
             id: id("function"),
             tparams: vec![],
             params: vec![],
@@ -129,7 +129,7 @@ fn test_printer_renders_nested_premises_and_definition_spec_goldens() {
             clauses: vec![clause.clone()],
             else_clause: Some(clause),
             hints: vec![],
-        }), span: Span::default() },
+        }))), span: Span::default() },
     ];
     let rendered = Print::to_string(&definitions);
     assert_eq!(

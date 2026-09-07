@@ -88,16 +88,16 @@ fn composite_spec(metadata: &str) -> sl::ast::Spec {
     let hints = vec![hint(metadata)];
 
     vec![
-        p4spec_rust::phrase! { node: sl::ast::DefKind::ExternTyp(sl::ast::ExternTypDef {
+        p4spec_rust::phrase! { node: sl::ast::DefKind::Typ(sl::ast::TypDef::Extern(sl::ast::ExternTyp {
             id: id("External"),
             hints: hints.clone(),
-        }), span: span(metadata) },
+        })), span: span(metadata) },
         p4spec_rust::phrase! { node: sl::ast::DefKind::Var(sl::ast::VarDef {
             id: id("state"),
             typ: typ(il::ast::TypKind::Bool),
             hints: hints.clone(),
         }), span: span(metadata) },
-        p4spec_rust::phrase! { node: sl::ast::DefKind::Rel(sl::ast::Rel {
+        p4spec_rust::phrase! { node: sl::ast::DefKind::Rel(sl::ast::RelDef::Defined(sl::ast::DefinedRel {
             id: id("Evaluate"),
             rel_signature: signature.clone(),
             exps_input: vec![variable("input")],
@@ -113,15 +113,15 @@ fn composite_spec(metadata: &str) -> sl::ast::Spec {
                 }),
             )]),
             hints: hints.clone(),
-        }), span: span(metadata) },
-        p4spec_rust::phrase! { node: sl::ast::DefKind::ExternDec(sl::ast::ExternFunc {
+        })), span: span(metadata) },
+        p4spec_rust::phrase! { node: sl::ast::DefKind::MetaFunc(sl::ast::MetaFuncDef::Extern(sl::ast::ExternFunc {
             id: id("external"),
             tparams: Vec::new(),
             params: vec![parameter.clone()],
             typ: typ(il::ast::TypKind::Bool),
             hints: hints.clone(),
-        }), span: span(metadata) },
-        p4spec_rust::phrase! { node: sl::ast::DefKind::TableDec(sl::ast::TableFunc {
+        })), span: span(metadata) },
+        p4spec_rust::phrase! { node: sl::ast::DefKind::MetaFunc(sl::ast::MetaFuncDef::Table(sl::ast::TableFunc {
             id: id("lookup"),
             params: vec![parameter.clone()],
             typ: typ(il::ast::TypKind::Bool),
@@ -135,8 +135,8 @@ fn composite_spec(metadata: &str) -> sl::ast::Spec {
                 )],
             }],
             hints: hints.clone(),
-        }), span: span(metadata) },
-        p4spec_rust::phrase! { node: sl::ast::DefKind::FuncDec(sl::ast::DefinedFunc {
+        })), span: span(metadata) },
+        p4spec_rust::phrase! { node: sl::ast::DefKind::MetaFunc(sl::ast::MetaFuncDef::Defined(sl::ast::DefinedFunc {
             id: id("run"),
             tparams: Vec::new(),
             params: vec![parameter],
@@ -146,7 +146,7 @@ fn composite_spec(metadata: &str) -> sl::ast::Spec {
             )],
             else_block: None,
             hints,
-        }), span: span(metadata) },
+        })), span: span(metadata) },
     ]
 }
 

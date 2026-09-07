@@ -266,19 +266,19 @@ fn test_free_al_shapes_and_definition_arms_are_exhaustive() {
     };
     let definitions: Vec<(al::ast::Def, IdSet)> = vec![
         (
-            p4spec_rust::phrase! { node: al::ast::DefKind::ExternTyp(al::ast::ExternTypDef {
+            p4spec_rust::phrase! { node: al::ast::DefKind::Typ(al::ast::TypDef::Extern(al::ast::ExternTyp {
                 id: id("e"),
                 hints: Vec::new(),
-            }), span: span("def") },
+            })), span: span("def") },
             ids(&[]),
         ),
         (
-            p4spec_rust::phrase! { node: al::ast::DefKind::Typ(al::ast::TypDef {
+            p4spec_rust::phrase! { node: al::ast::DefKind::Typ(al::ast::TypDef::Defined(Box::new(al::ast::DefinedTyp {
                 id: id("t"),
                 tparams: Vec::new(),
                 def_typ: def_type,
                 hints: Vec::new(),
-            }), span: span("def") },
+            }))), span: span("def") },
             ids(&[]),
         ),
         (
@@ -290,57 +290,57 @@ fn test_free_al_shapes_and_definition_arms_are_exhaustive() {
             ids(&[]),
         ),
         (
-            p4spec_rust::phrase! { node: al::ast::DefKind::ExternRel(al::ast::ExternRelDef {
+            p4spec_rust::phrase! { node: al::ast::DefKind::Rel(al::ast::RelDef::Extern(Box::new(al::ast::ExternRel {
                 id: id("er"),
                 not_typ: not_typ(),
                 input_hint: InputHint::new(Vec::new()),
                 hints: Vec::new(),
-            }), span: span("def") },
+            }))), span: span("def") },
             ids(&[]),
         ),
         (
-            p4spec_rust::phrase! { node: al::ast::DefKind::Rel(al::ast::RelDef {
+            p4spec_rust::phrase! { node: al::ast::DefKind::Rel(al::ast::RelDef::Defined(Box::new(al::ast::DefinedRel {
                 id: id("r"),
                 not_typ: not_typ(),
                 input_hint: InputHint::new(Vec::new()),
                 rule_groups: vec![group],
                 else_group: Some(else_group),
                 hints: Vec::new(),
-            }), span: span("def") },
+            }))), span: span("def") },
             ids(&["s", "i", "p", "o"]),
         ),
         (
-            p4spec_rust::phrase! { node: al::ast::DefKind::ExternDec(al::ast::ExternDecDef {
+            p4spec_rust::phrase! { node: al::ast::DefKind::MetaFunc(al::ast::MetaFuncDef::Extern(al::ast::ExternFunc {
                 id: id("ed"),
                 tparams: Vec::new(),
                 params: Vec::new(),
                 typ: typ(),
                 hints: Vec::new(),
-            }), span: span("def") },
+            })), span: span("def") },
             ids(&[]),
         ),
         (
-            p4spec_rust::phrase! { node: al::ast::DefKind::BuiltinDec(al::ast::BuiltinDecDef {
+            p4spec_rust::phrase! { node: al::ast::DefKind::MetaFunc(al::ast::MetaFuncDef::Builtin(al::ast::BuiltinFunc {
                 id: id("bd"),
                 tparams: Vec::new(),
                 params: Vec::new(),
                 typ: typ(),
                 hints: Vec::new(),
-            }), span: span("def") },
+            })), span: span("def") },
             ids(&[]),
         ),
         (
-            p4spec_rust::phrase! { node: al::ast::DefKind::TableDec(al::ast::TableDecDef {
+            p4spec_rust::phrase! { node: al::ast::DefKind::MetaFunc(al::ast::MetaFuncDef::Table(al::ast::TableFunc {
                 id: id("td"),
                 params: Vec::new(),
                 typ: typ(),
                 table_rows: vec![table],
                 hints: Vec::new(),
-            }), span: span("def") },
+            })), span: span("def") },
             ids(&["a", "t", "p"]),
         ),
         (
-            p4spec_rust::phrase! { node: al::ast::DefKind::FuncDec(al::ast::FuncDecDef {
+            p4spec_rust::phrase! { node: al::ast::DefKind::MetaFunc(al::ast::MetaFuncDef::Defined(Box::new(al::ast::DefinedFunc {
                 id: id("fd"),
                 tparams: Vec::new(),
                 params: Vec::new(),
@@ -348,7 +348,7 @@ fn test_free_al_shapes_and_definition_arms_are_exhaustive() {
                 clauses: vec![clause.clone()],
                 else_clause: Some(clause),
                 hints: Vec::new(),
-            }), span: span("def") },
+            }))), span: span("def") },
             ids(&["a", "c", "p"]),
         ),
     ];

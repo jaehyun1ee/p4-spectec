@@ -8,7 +8,7 @@ use p4spec_rust::{
         il::ast::{self, DefTypKind, TypKind},
     },
     phrase,
-    runtime::{env::TDEnv, ops::typ::expand_typ, typdef::TypeDef},
+    runtime::{envs::elab::TDEnv, ops::typ::expand_typ, typdef::TypeDef},
 };
 
 fn id(name: &str) -> ast::Id {

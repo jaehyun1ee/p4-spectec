@@ -10,7 +10,7 @@ use p4spec_rust::{
     },
     phrase,
     runtime::{
-        env::TDEnv,
+        envs::elab::TDEnv,
         ops::value::{MatchError, check, sub, subs},
         typdef::TypeDef,
     },

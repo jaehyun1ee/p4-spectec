@@ -9,10 +9,7 @@ use crate::{
     },
     phrase,
     runtime::{
-        env::TDEnv,
-        envs::elab::{FEnv, MEnv, REnv},
-        func::r#static::Func,
-        rel::r#static::Rel,
+        envs::elab::{FEnv, MEnv, REnv, TDEnv},
         typdef::TypeDef,
     },
 };
@@ -81,13 +78,14 @@ impl Context {
 
     // - Relations
 
-    pub(super) fn find_defined_rel_opt(&self, id: &Id) -> Option<&Rel> {
-        self.renv
-            .get(id)
-            .filter(|rel| matches!(rel, Rel::Defined { .. }))
+    pub(super) fn find_defined_rel_opt(&self, id: &Id) -> Option<&ast::DefinedRel> {
+        match self.renv.get(id)? {
+            ast::RelDef::Defined(defined_rel_il) => Some(defined_rel_il),
+            ast::RelDef::Extern(_) => None,
+        }
     }
 
-    pub(super) fn find_defined_rel(&self, id: &Id) -> Result<&Rel, ElabError> {
+    pub(super) fn find_defined_rel(&self, id: &Id) -> Result<&ast::DefinedRel, ElabError> {
         self.find_defined_rel_opt(id).ok_or_else(|| {
             ElabError::undefined(EntityKind::DefinedRelation, &id.node, id.span.clone())
         })
@@ -95,15 +93,12 @@ impl Context {
 
     pub(super) fn find_rel_signature_opt(&self, id: &Id) -> Option<(&ast::NotTyp, &InputHint)> {
         match self.renv.get(id)? {
-            Rel::Extern {
-                not_typ,
-                input_hint,
+            ast::RelDef::Extern(extern_rel_il) => {
+                Some((&extern_rel_il.not_typ, &extern_rel_il.input_hint))
             }
-            | Rel::Defined {
-                not_typ,
-                input_hint,
-                ..
-            } => Some((not_typ, input_hint)),
+            ast::RelDef::Defined(defined_rel_il) => {
+                Some((&defined_rel_il.not_typ, &defined_rel_il.input_hint))
+            }
         }
     }
 
@@ -120,43 +115,42 @@ impl Context {
     }
 
     fn bound_rule_group(&self, relid: &Id, groupid: &Id) -> bool {
-        let Some(Rel::Defined {
-            rule_groups,
-            else_group,
-            ..
-        }) = self.find_defined_rel_opt(relid)
-        else {
+        let Some(defined_rel_il) = self.find_defined_rel_opt(relid) else {
             return false;
         };
-        rule_groups
+        defined_rel_il
+            .rule_groups
             .iter()
             .any(|group| group.node.0.node == groupid.node)
-            || else_group
+            || defined_rel_il
+                .else_group
                 .as_ref()
                 .is_some_and(|group| group.node.0.node == groupid.node)
     }
 
     // - Functions
 
-    pub(super) fn find_table_func_opt(&self, id: &Id) -> Option<&Func> {
-        self.fenv
-            .get(id)
-            .filter(|func| matches!(func, Func::Table { .. }))
+    pub(super) fn find_table_func_opt(&self, id: &Id) -> Option<&ast::TableFunc> {
+        match self.fenv.get(id)? {
+            ast::MetaFuncDef::Table(table_func_il) => Some(table_func_il),
+            _ => None,
+        }
     }
 
-    pub(super) fn find_table_func(&self, id: &Id) -> Result<&Func, ElabError> {
+    pub(super) fn find_table_func(&self, id: &Id) -> Result<&ast::TableFunc, ElabError> {
         self.find_table_func_opt(id).ok_or_else(|| {
             ElabError::undefined(EntityKind::TableFunction, &id.node, id.span.clone())
         })
     }
 
-    pub(super) fn find_defined_func_opt(&self, id: &Id) -> Option<&Func> {
-        self.fenv
-            .get(id)
-            .filter(|func| matches!(func, Func::Defined { .. }))
+    pub(super) fn find_defined_func_opt(&self, id: &Id) -> Option<&ast::DefinedFunc> {
+        match self.fenv.get(id)? {
+            ast::MetaFuncDef::Defined(defined_func_il) => Some(defined_func_il),
+            _ => None,
+        }
     }
 
-    pub(super) fn find_defined_func(&self, id: &Id) -> Result<&Func, ElabError> {
+    pub(super) fn find_defined_func(&self, id: &Id) -> Result<&ast::DefinedFunc, ElabError> {
         self.find_defined_func_opt(id).ok_or_else(|| {
             ElabError::undefined(EntityKind::DefinedFunction, &id.node, id.span.clone())
         })
@@ -167,25 +161,24 @@ impl Context {
         id: &Id,
     ) -> Option<(&[ast::TParam], &[ast::Param], &ast::Typ)> {
         match self.fenv.get(id)? {
-            Func::Extern {
-                tparams,
-                params,
-                typ_ret,
+            ast::MetaFuncDef::Extern(extern_func_il) => Some((
+                &extern_func_il.tparams,
+                &extern_func_il.params,
+                &extern_func_il.typ,
+            )),
+            ast::MetaFuncDef::Builtin(builtin_func_il) => Some((
+                &builtin_func_il.tparams,
+                &builtin_func_il.params,
+                &builtin_func_il.typ,
+            )),
+            ast::MetaFuncDef::Table(table_func_il) => {
+                Some((&[], &table_func_il.params, &table_func_il.typ))
             }
-            | Func::Builtin {
-                tparams,
-                params,
-                typ_ret,
-            }
-            | Func::Defined {
-                tparams,
-                params,
-                typ_ret,
-                ..
-            } => Some((tparams, params, typ_ret)),
-            Func::Table {
-                params, typ_ret, ..
-            } => Some((&[], params, typ_ret)),
+            ast::MetaFuncDef::Defined(defined_func_il) => Some((
+                &defined_func_il.tparams,
+                &defined_func_il.params,
+                &defined_func_il.typ,
+            )),
         }
     }
 
@@ -274,10 +267,9 @@ impl Context {
 
     pub(super) fn add_extern_rel(
         &mut self,
-        id: Id,
-        not_typ: ast::NotTyp,
-        input_hint: InputHint,
+        extern_rel_il: ast::ExternRel,
     ) -> Result<(), ElabError> {
+        let id = extern_rel_il.id.clone();
         if self.bound_rel(&id) {
             return Err(ElabError::duplicate(
                 EntityKind::Relation,
@@ -285,22 +277,16 @@ impl Context {
                 id.span,
             ));
         }
-        self.renv.insert(
-            id,
-            Rel::Extern {
-                not_typ: Box::new(not_typ),
-                input_hint,
-            },
-        );
+        self.renv
+            .insert(id, ast::RelDef::Extern(Box::new(extern_rel_il)));
         Ok(())
     }
 
     pub(super) fn add_defined_rel(
         &mut self,
-        id: Id,
-        not_typ: ast::NotTyp,
-        input_hint: InputHint,
+        defined_rel_il: ast::DefinedRel,
     ) -> Result<(), ElabError> {
+        let id = defined_rel_il.id.clone();
         if self.bound_rel(&id) {
             return Err(ElabError::duplicate(
                 EntityKind::Relation,
@@ -308,15 +294,8 @@ impl Context {
                 id.span,
             ));
         }
-        self.renv.insert(
-            id,
-            Rel::Defined {
-                not_typ: Box::new(not_typ),
-                input_hint,
-                rule_groups: vec![],
-                else_group: None,
-            },
-        );
+        self.renv
+            .insert(id, ast::RelDef::Defined(Box::new(defined_rel_il)));
         Ok(())
     }
 
@@ -340,11 +319,12 @@ impl Context {
                 groupid.span.clone(),
             ));
         }
-        let Rel::Defined { rule_groups, .. } = self.renv.get_mut(relid).expect("defined relation")
+        let ast::RelDef::Defined(defined_rel_il) =
+            self.renv.get_mut(relid).expect("defined relation")
         else {
             unreachable!("checked defined relation")
         };
-        rule_groups.push(rule_group);
+        defined_rel_il.rule_groups.push(rule_group);
         Ok(())
     }
 
@@ -368,20 +348,19 @@ impl Context {
                 groupid.span.clone(),
             ));
         }
-        let Rel::Defined {
-            else_group: stored, ..
-        } = self.renv.get_mut(relid).expect("defined relation")
+        let ast::RelDef::Defined(defined_rel_il) =
+            self.renv.get_mut(relid).expect("defined relation")
         else {
             unreachable!("checked defined relation")
         };
-        if stored.is_some() {
+        if defined_rel_il.else_group.is_some() {
             return Err(ElabError::duplicate(
                 EntityKind::ElseGroup,
                 &relid.node,
                 else_group.span,
             ));
         }
-        *stored = Some(Box::new(else_group));
+        defined_rel_il.else_group = Some(else_group);
         Ok(())
     }
 
@@ -389,78 +368,44 @@ impl Context {
 
     pub(super) fn add_extern_func(
         &mut self,
-        id: Id,
-        tparams: Vec<ast::TParam>,
-        params: Vec<ast::Param>,
-        typ_ret: ast::Typ,
+        extern_func_il: ast::ExternFunc,
     ) -> Result<(), ElabError> {
+        let id = extern_func_il.id.clone();
         self.ensure_func_unbound(&id)?;
-        self.fenv.insert(
-            id,
-            Func::Extern {
-                tparams,
-                params,
-                typ_ret: Box::new(typ_ret),
-            },
-        );
+        self.fenv
+            .insert(id, ast::MetaFuncDef::Extern(extern_func_il));
         Ok(())
     }
 
     pub(super) fn add_builtin_func(
         &mut self,
-        id: Id,
-        tparams: Vec<ast::TParam>,
-        params: Vec<ast::Param>,
-        typ_ret: ast::Typ,
+        builtin_func_il: ast::BuiltinFunc,
     ) -> Result<(), ElabError> {
+        let id = builtin_func_il.id.clone();
         self.ensure_func_unbound(&id)?;
-        self.fenv.insert(
-            id,
-            Func::Builtin {
-                tparams,
-                params,
-                typ_ret: Box::new(typ_ret),
-            },
-        );
+        self.fenv
+            .insert(id, ast::MetaFuncDef::Builtin(builtin_func_il));
         Ok(())
     }
 
     pub(super) fn add_table_func(
         &mut self,
-        id: Id,
-        params: Vec<ast::Param>,
-        typ_ret: ast::Typ,
+        table_func_il: ast::TableFunc,
     ) -> Result<(), ElabError> {
+        let id = table_func_il.id.clone();
         self.ensure_func_unbound(&id)?;
-        self.fenv.insert(
-            id,
-            Func::Table {
-                params,
-                typ_ret: Box::new(typ_ret),
-                table_rows: vec![],
-            },
-        );
+        self.fenv.insert(id, ast::MetaFuncDef::Table(table_func_il));
         Ok(())
     }
 
     pub(super) fn add_defined_func(
         &mut self,
-        id: Id,
-        tparams: Vec<ast::TParam>,
-        params: Vec<ast::Param>,
-        typ_ret: ast::Typ,
+        defined_func_il: ast::DefinedFunc,
     ) -> Result<(), ElabError> {
+        let id = defined_func_il.id.clone();
         self.ensure_func_unbound(&id)?;
-        self.fenv.insert(
-            id,
-            Func::Defined {
-                tparams,
-                params,
-                typ_ret: Box::new(typ_ret),
-                clauses: vec![],
-                else_clause: None,
-            },
-        );
+        self.fenv
+            .insert(id, ast::MetaFuncDef::Defined(Box::new(defined_func_il)));
         Ok(())
     }
 
@@ -480,11 +425,7 @@ impl Context {
         id: &Id,
         table_rows: Vec<ast::TableRow>,
     ) -> Result<(), ElabError> {
-        let Some(Func::Table {
-            table_rows: rows_found,
-            ..
-        }) = self.find_table_func_opt(id)
-        else {
+        let Some(table_func_il) = self.find_table_func_opt(id) else {
             let span = table_rows
                 .first()
                 .map_or_else(|| id.span.clone(), |row| row.span.clone());
@@ -494,20 +435,18 @@ impl Context {
                 span,
             ));
         };
-        if let Some(row) = rows_found.first() {
+        if let Some(row) = table_func_il.rows.first() {
             return Err(ElabError::duplicate(
                 EntityKind::TableFunction,
                 &id.node,
                 row.span.clone(),
             ));
         }
-        let Func::Table {
-            table_rows: stored, ..
-        } = self.fenv.get_mut(id).expect("table function")
+        let ast::MetaFuncDef::Table(table_func_il) = self.fenv.get_mut(id).expect("table function")
         else {
             unreachable!("checked table function")
         };
-        *stored = table_rows;
+        table_func_il.rows = table_rows;
         Ok(())
     }
 
@@ -523,10 +462,12 @@ impl Context {
                 clause.span,
             ));
         }
-        let Func::Defined { clauses, .. } = self.fenv.get_mut(id).expect("defined function") else {
+        let ast::MetaFuncDef::Defined(defined_func_il) =
+            self.fenv.get_mut(id).expect("defined function")
+        else {
             unreachable!("checked defined function")
         };
-        clauses.push(clause);
+        defined_func_il.clauses.push(clause);
         Ok(())
     }
 
@@ -542,21 +483,19 @@ impl Context {
                 else_clause.span,
             ));
         }
-        let Func::Defined {
-            else_clause: stored,
-            ..
-        } = self.fenv.get_mut(id).expect("defined function")
+        let ast::MetaFuncDef::Defined(defined_func_il) =
+            self.fenv.get_mut(id).expect("defined function")
         else {
             unreachable!("checked defined function")
         };
-        if stored.is_some() {
+        if defined_func_il.else_clause.is_some() {
             return Err(ElabError::duplicate(
                 EntityKind::ElseClause,
                 &id.node,
                 else_clause.span,
             ));
         }
-        *stored = Some(Box::new(else_clause));
+        defined_func_il.else_clause = Some(else_clause);
         Ok(())
     }
 

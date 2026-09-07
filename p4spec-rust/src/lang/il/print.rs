@@ -632,6 +632,30 @@ impl Print for [PremIter] {
     }
 }
 
+// - Type definitions
+
+impl Print for TypDef {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        match self {
+            Self::Extern(extern_typ) => {
+                printer.write_str("extern syntax ")?;
+                extern_typ.id.print(printer)
+            }
+            Self::Defined(defined_typ) => {
+                printer.write_str("syntax ")?;
+                defined_typ.id.print(printer)?;
+                if !defined_typ.tparams.is_empty() {
+                    printer.write_char('<')?;
+                    printer.separated(&defined_typ.tparams, ", ")?;
+                    printer.write_char('>')?;
+                }
+                printer.write_str(" = ")?;
+                defined_typ.def_typ.print(printer)
+            }
+        }
+    }
+}
+
 // - Rules
 
 impl Print for Rule {
@@ -697,6 +721,30 @@ impl Print for Option<ElseGroup> {
     }
 }
 
+// - Relations
+
+impl Print for RelDef {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        match self {
+            Self::Extern(extern_rel) => {
+                printer.write_str("extern relation ")?;
+                extern_rel.id.print(printer)?;
+                printer.write_str(": ")?;
+                extern_rel.not_typ.print(printer)
+            }
+            Self::Defined(defined_rel) => {
+                printer.write_str("relation ")?;
+                defined_rel.id.print(printer)?;
+                printer.write_str(": ")?;
+                defined_rel.not_typ.print(printer)?;
+                printer.write_str("\n\n")?;
+                defined_rel.rule_groups.print(printer)?;
+                defined_rel.else_group.print(printer)
+            }
+        }
+    }
+}
+
 // - Clauses
 
 impl Print for Clause {
@@ -729,6 +777,70 @@ impl Print for [TableRow] {
     }
 }
 
+// - Meta-functions
+
+impl Print for MetaFuncDef {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        match self {
+            Self::Extern(extern_func) => {
+                printer.write_str("extern def $")?;
+                extern_func.id.print(printer)?;
+                if !extern_func.tparams.is_empty() {
+                    printer.write_char('<')?;
+                    printer.separated(&extern_func.tparams, ", ")?;
+                    printer.write_char('>')?;
+                }
+                extern_func.params.print(printer)?;
+                printer.write_str(" : ")?;
+                extern_func.typ.print(printer)
+            }
+            Self::Builtin(builtin_func) => {
+                printer.write_str("builtin def $")?;
+                builtin_func.id.print(printer)?;
+                if !builtin_func.tparams.is_empty() {
+                    printer.write_char('<')?;
+                    printer.separated(&builtin_func.tparams, ", ")?;
+                    printer.write_char('>')?;
+                }
+                builtin_func.params.print(printer)?;
+                printer.write_str(" : ")?;
+                builtin_func.typ.print(printer)
+            }
+            Self::Table(table_func) => {
+                printer.write_str("tbl def $")?;
+                table_func.id.print(printer)?;
+                table_func.params.print(printer)?;
+                printer.write_str(" : ")?;
+                table_func.typ.print(printer)?;
+                printer.write_str(" =")?;
+                table_func.rows.print(printer)
+            }
+            Self::Defined(defined_func) => {
+                printer.write_str("def $")?;
+                defined_func.id.print(printer)?;
+                if !defined_func.tparams.is_empty() {
+                    printer.write_char('<')?;
+                    printer.separated(&defined_func.tparams, ", ")?;
+                    printer.write_char('>')?;
+                }
+                defined_func.params.print(printer)?;
+                printer.write_str(" : ")?;
+                defined_func.typ.print(printer)?;
+                printer.write_str(" =")?;
+                for (index, clause) in defined_func.clauses.iter().enumerate() {
+                    write!(printer, "\n\n  clause {index} : ")?;
+                    clause.print(printer)?;
+                }
+                if let Some(else_clause) = &defined_func.else_clause {
+                    printer.write_str("\n\n  clause -1 : ")?;
+                    else_clause.print(printer)?;
+                }
+                Ok(())
+            }
+        }
+    }
+}
+
 // - Hints
 
 impl Print for Hint {
@@ -753,134 +865,15 @@ impl Print for [Hint] {
 impl Print for Def {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         match &self.node {
-            DefKind::ExternTyp(ExternTyp { id, .. }) => {
-                printer.write_str("extern syntax ")?;
-                id.print(printer)
-            }
-            DefKind::Typ(TypDef {
-                id,
-                tparams,
-                def_typ,
-                ..
-            }) => {
-                printer.write_str("syntax ")?;
-                id.print(printer)?;
-                if !tparams.is_empty() {
-                    printer.write_char('<')?;
-                    printer.separated(tparams, ", ")?;
-                    printer.write_char('>')?;
-                }
-                printer.write_str(" = ")?;
-                def_typ.print(printer)
-            }
-            DefKind::Var(VarDef { id, typ, .. }) => {
+            DefKind::Typ(typ_def) => typ_def.print(printer),
+            DefKind::Var(var_def) => {
                 printer.write_str("var ")?;
-                id.print(printer)?;
+                var_def.id.print(printer)?;
                 printer.write_str(" : ")?;
-                typ.print(printer)
+                var_def.typ.print(printer)
             }
-            DefKind::ExternRel(ExternRel { id, not_typ, .. }) => {
-                printer.write_str("extern relation ")?;
-                id.print(printer)?;
-                printer.write_str(": ")?;
-                not_typ.print(printer)
-            }
-            DefKind::Rel(Rel {
-                id,
-                not_typ,
-                rule_groups,
-                else_group,
-                ..
-            }) => {
-                printer.write_str("relation ")?;
-                id.print(printer)?;
-                printer.write_str(": ")?;
-                not_typ.print(printer)?;
-                printer.write_str("\n\n")?;
-                rule_groups.print(printer)?;
-                else_group.print(printer)
-            }
-            DefKind::ExternDec(ExternDec {
-                id,
-                tparams,
-                params,
-                typ,
-                ..
-            }) => {
-                printer.write_str("extern def $")?;
-                id.print(printer)?;
-                if !tparams.is_empty() {
-                    printer.write_char('<')?;
-                    printer.separated(tparams, ", ")?;
-                    printer.write_char('>')?;
-                }
-                params.print(printer)?;
-                printer.write_str(" : ")?;
-                typ.print(printer)
-            }
-            DefKind::BuiltinDec(BuiltinDec {
-                id,
-                tparams,
-                params,
-                typ,
-                ..
-            }) => {
-                printer.write_str("builtin def $")?;
-                id.print(printer)?;
-                if !tparams.is_empty() {
-                    printer.write_char('<')?;
-                    printer.separated(tparams, ", ")?;
-                    printer.write_char('>')?;
-                }
-                params.print(printer)?;
-                printer.write_str(" : ")?;
-                typ.print(printer)
-            }
-            DefKind::TableDec(TableDec {
-                id,
-                params,
-                typ,
-                rows,
-                ..
-            }) => {
-                printer.write_str("tbl def $")?;
-                id.print(printer)?;
-                params.print(printer)?;
-                printer.write_str(" : ")?;
-                typ.print(printer)?;
-                printer.write_str(" =")?;
-                rows.print(printer)
-            }
-            DefKind::FuncDec(FuncDec {
-                id,
-                tparams,
-                params,
-                typ,
-                clauses,
-                else_clause,
-                ..
-            }) => {
-                printer.write_str("def $")?;
-                id.print(printer)?;
-                if !tparams.is_empty() {
-                    printer.write_char('<')?;
-                    printer.separated(tparams, ", ")?;
-                    printer.write_char('>')?;
-                }
-                params.print(printer)?;
-                printer.write_str(" : ")?;
-                typ.print(printer)?;
-                printer.write_str(" =")?;
-                for (index, clause) in clauses.iter().enumerate() {
-                    write!(printer, "\n\n  clause {index} : ")?;
-                    clause.print(printer)?;
-                }
-                if let Some(else_clause) = else_clause {
-                    printer.write_str("\n\n  clause -1 : ")?;
-                    else_clause.print(printer)?;
-                }
-                Ok(())
-            }
+            DefKind::Rel(rel_def) => rel_def.print(printer),
+            DefKind::MetaFunc(meta_func_def) => meta_func_def.print(printer),
         }
     }
 }

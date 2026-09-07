@@ -124,15 +124,15 @@ impl SyntaxEq for TableRowKind {
     }
 }
 
-// - Definitions
+// - Type definitions
 
-impl SyntaxEq for ExternTypDef {
+impl SyntaxEq for ExternTyp {
     fn syntax_eq(&self, other: &Self) -> bool {
         self.id.syntax_eq(&other.id) && self.hints.syntax_eq(&other.hints)
     }
 }
 
-impl SyntaxEq for TypDef {
+impl SyntaxEq for DefinedTyp {
     fn syntax_eq(&self, other: &Self) -> bool {
         self.id.syntax_eq(&other.id)
             && self.tparams.syntax_eq(&other.tparams)
@@ -140,6 +140,22 @@ impl SyntaxEq for TypDef {
             && self.hints.syntax_eq(&other.hints)
     }
 }
+
+impl SyntaxEq for TypDef {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Extern(extern_typ_l), Self::Extern(extern_typ_r)) => {
+                extern_typ_l.syntax_eq(extern_typ_r)
+            }
+            (Self::Defined(defined_typ_l), Self::Defined(defined_typ_r)) => {
+                defined_typ_l.syntax_eq(defined_typ_r)
+            }
+            _ => false,
+        }
+    }
+}
+
+// - Meta-variables
 
 impl SyntaxEq for VarDef {
     fn syntax_eq(&self, other: &Self) -> bool {
@@ -149,7 +165,9 @@ impl SyntaxEq for VarDef {
     }
 }
 
-impl SyntaxEq for ExternRelDef {
+// - Relations
+
+impl SyntaxEq for ExternRel {
     fn syntax_eq(&self, other: &Self) -> bool {
         self.id.syntax_eq(&other.id)
             && self.not_typ.syntax_eq(&other.not_typ)
@@ -158,7 +176,7 @@ impl SyntaxEq for ExternRelDef {
     }
 }
 
-impl SyntaxEq for RelDef {
+impl SyntaxEq for DefinedRel {
     fn syntax_eq(&self, other: &Self) -> bool {
         self.id.syntax_eq(&other.id)
             && self.not_typ.syntax_eq(&other.not_typ)
@@ -173,7 +191,23 @@ impl SyntaxEq for RelDef {
     }
 }
 
-impl SyntaxEq for ExternDecDef {
+impl SyntaxEq for RelDef {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Extern(extern_rel_l), Self::Extern(extern_rel_r)) => {
+                extern_rel_l.syntax_eq(extern_rel_r)
+            }
+            (Self::Defined(defined_rel_l), Self::Defined(defined_rel_r)) => {
+                defined_rel_l.syntax_eq(defined_rel_r)
+            }
+            _ => false,
+        }
+    }
+}
+
+// - Meta-functions
+
+impl SyntaxEq for ExternFunc {
     fn syntax_eq(&self, other: &Self) -> bool {
         self.id.syntax_eq(&other.id)
             && self.tparams.syntax_eq(&other.tparams)
@@ -183,7 +217,7 @@ impl SyntaxEq for ExternDecDef {
     }
 }
 
-impl SyntaxEq for BuiltinDecDef {
+impl SyntaxEq for BuiltinFunc {
     fn syntax_eq(&self, other: &Self) -> bool {
         self.id.syntax_eq(&other.id)
             && self.tparams.syntax_eq(&other.tparams)
@@ -193,7 +227,7 @@ impl SyntaxEq for BuiltinDecDef {
     }
 }
 
-impl SyntaxEq for TableDecDef {
+impl SyntaxEq for TableFunc {
     fn syntax_eq(&self, other: &Self) -> bool {
         self.id.syntax_eq(&other.id)
             && self.params.syntax_eq(&other.params)
@@ -203,7 +237,7 @@ impl SyntaxEq for TableDecDef {
     }
 }
 
-impl SyntaxEq for FuncDecDef {
+impl SyntaxEq for DefinedFunc {
     fn syntax_eq(&self, other: &Self) -> bool {
         self.id.syntax_eq(&other.id)
             && self.tparams.syntax_eq(&other.tparams)
@@ -219,18 +253,37 @@ impl SyntaxEq for FuncDecDef {
     }
 }
 
+impl SyntaxEq for MetaFuncDef {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Extern(extern_func_l), Self::Extern(extern_func_r)) => {
+                extern_func_l.syntax_eq(extern_func_r)
+            }
+            (Self::Builtin(builtin_func_l), Self::Builtin(builtin_func_r)) => {
+                builtin_func_l.syntax_eq(builtin_func_r)
+            }
+            (Self::Table(table_func_l), Self::Table(table_func_r)) => {
+                table_func_l.syntax_eq(table_func_r)
+            }
+            (Self::Defined(defined_func_l), Self::Defined(defined_func_r)) => {
+                defined_func_l.syntax_eq(defined_func_r)
+            }
+            _ => false,
+        }
+    }
+}
+
+// - Definitions
+
 impl SyntaxEq for DefKind {
     fn syntax_eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (DefKind::ExternTyp(def_l), DefKind::ExternTyp(def_r)) => def_l.syntax_eq(def_r),
-            (DefKind::Typ(def_l), DefKind::Typ(def_r)) => def_l.syntax_eq(def_r),
-            (DefKind::Var(def_l), DefKind::Var(def_r)) => def_l.syntax_eq(def_r),
-            (DefKind::ExternRel(def_l), DefKind::ExternRel(def_r)) => def_l.syntax_eq(def_r),
-            (DefKind::Rel(def_l), DefKind::Rel(def_r)) => def_l.syntax_eq(def_r),
-            (DefKind::ExternDec(def_l), DefKind::ExternDec(def_r)) => def_l.syntax_eq(def_r),
-            (DefKind::BuiltinDec(def_l), DefKind::BuiltinDec(def_r)) => def_l.syntax_eq(def_r),
-            (DefKind::TableDec(def_l), DefKind::TableDec(def_r)) => def_l.syntax_eq(def_r),
-            (DefKind::FuncDec(def_l), DefKind::FuncDec(def_r)) => def_l.syntax_eq(def_r),
+            (DefKind::Typ(typ_def_l), DefKind::Typ(typ_def_r)) => typ_def_l.syntax_eq(typ_def_r),
+            (DefKind::Var(var_def_l), DefKind::Var(var_def_r)) => var_def_l.syntax_eq(var_def_r),
+            (DefKind::Rel(rel_def_l), DefKind::Rel(rel_def_r)) => rel_def_l.syntax_eq(rel_def_r),
+            (DefKind::MetaFunc(meta_func_def_l), DefKind::MetaFunc(meta_func_def_r)) => {
+                meta_func_def_l.syntax_eq(meta_func_def_r)
+            }
             _ => false,
         }
     }

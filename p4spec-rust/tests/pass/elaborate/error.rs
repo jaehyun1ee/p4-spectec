@@ -8,7 +8,7 @@ use p4spec_rust::{
     },
     pass::elaborate::{self, ElabError, ElabErrorKind},
     runtime::{
-        env::TDEnv,
+        envs::elab::TDEnv,
         ops::typ::{TypeErrorKind, expand_typ},
     },
 };

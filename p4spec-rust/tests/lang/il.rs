@@ -11,9 +11,6 @@ use p4spec_rust::{
     },
 };
 
-#[path = "il/layout.rs"]
-mod layout;
-
 fn typ() -> ast::Typ {
     p4spec_rust::phrase! {
         node: ast::TypKind::Bool,

@@ -6,7 +6,7 @@ use crate::{
         il::ast::{self, TypKind},
         xl::num,
     },
-    runtime::{env::TDEnv, typdef::TypeDef},
+    runtime::{envs::elab::TDEnv, typdef::TypeDef},
 };
 
 use super::{

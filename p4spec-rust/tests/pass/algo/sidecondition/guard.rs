@@ -561,7 +561,7 @@ fn test_conversion_traverses_relation_matches_paths_and_else_without_sibling_lea
         40,
     );
     let spec = vec![crate::phrase! { node:
-    ast::DefKind::Rel(ast::Rel {
+    ast::DefKind::Rel(ast::RelDef::Defined(Box::new(ast::DefinedRel {
         id: id("relation", 1),
         not_typ: crate::phrase! { node:
             Mixfix::Seq(vec![Mixfix::Arg(typ::make::bool()), Mixfix::Arg(typ::make::bool())]), span:
@@ -575,14 +575,17 @@ fn test_conversion_traverses_relation_matches_paths_and_else_without_sibling_lea
         ],
         else_group: Some(crate::phrase! { node: (id("else_group", 39), else_rule), span:  span(39) }),
         hints: vec![],
-    }), span:
+    }))), span:
     span(1) }];
 
-    let converted = algo::convert(spec).expect("guarded relation conversion");
-    let crate::lang::al::ast::DefKind::Rel(relation) = &converted[0].node else {
+    let spec_al = algo::convert(spec).expect("guarded relation conversion");
+    let crate::lang::al::ast::DefKind::Rel(rel_def_al) = &spec_al[0].node else {
         panic!("expected relation definition");
     };
-    let [match_group, sibling_group] = relation.rule_groups.as_slice() else {
+    let crate::lang::al::ast::RelDef::Defined(defined_rel_al) = rel_def_al else {
+        panic!("expected defined relation");
+    };
+    let [match_group, sibling_group] = defined_rel_al.rule_groups.as_slice() else {
         panic!("expected match and sibling groups in source order");
     };
     assert_eq!(match_group.span, span(9));
@@ -608,7 +611,10 @@ fn test_conversion_traverses_relation_matches_paths_and_else_without_sibling_lea
     };
     assert_index_guard_span(second_guard, span(31));
 
-    let else_group = relation.else_group.as_ref().expect("else group preserved");
+    let else_group = defined_rel_al
+        .else_group
+        .as_ref()
+        .expect("else group preserved");
     assert_eq!(else_group.span, span(39));
     assert_eq!(else_group.node.rule_match.exps_input[0].span, span(40));
     let [else_guard, else_source] = else_group.node.rule_path.prems.as_slice() else {
@@ -641,7 +647,7 @@ fn test_conversion_traverses_else_clauses_in_guard_order() {
         span: span(49),
     };
     let spec = vec![crate::phrase! { node:
-    ast::DefKind::FuncDec(ast::FuncDec {
+    ast::DefKind::MetaFunc(ast::MetaFuncDef::Defined(Box::new(ast::DefinedFunc {
         id: id("otherwise", 49),
         tparams: vec![],
         params: vec![crate::phrase! { node:
@@ -653,14 +659,17 @@ fn test_conversion_traverses_else_clauses_in_guard_order() {
         clauses: vec![],
         else_clause: Some(else_clause),
         hints: vec![],
-    }), span:
+    }))), span:
     span(49) }];
 
-    let converted = algo::convert(spec).expect("guarded else-clause conversion");
-    let crate::lang::al::ast::DefKind::FuncDec(function) = &converted[0].node else {
+    let spec_al = algo::convert(spec).expect("guarded else-clause conversion");
+    let crate::lang::al::ast::DefKind::MetaFunc(meta_func_def_al) = &spec_al[0].node else {
         panic!("expected function definition");
     };
-    let clause = function
+    let crate::lang::al::ast::MetaFuncDef::Defined(defined_func_al) = meta_func_def_al else {
+        panic!("expected defined function");
+    };
+    let clause = defined_func_al
         .else_clause
         .as_ref()
         .expect("else clause preserved");

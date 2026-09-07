@@ -136,6 +136,37 @@ impl Free for Block {
 
 // Hints alias EL hints and use their implementation.
 
+// - Type definitions
+
+impl Free for ExternTyp {
+    fn free(&self) -> IdSet {
+        IdSet::new()
+    }
+}
+
+impl Free for DefinedTyp {
+    fn free(&self) -> IdSet {
+        IdSet::new()
+    }
+}
+
+impl Free for TypDef {
+    fn free(&self) -> IdSet {
+        match self {
+            Self::Extern(extern_typ) => extern_typ.free(),
+            Self::Defined(defined_typ) => defined_typ.free(),
+        }
+    }
+}
+
+// - Meta-variables
+
+impl Free for VarDef {
+    fn free(&self) -> IdSet {
+        IdSet::new()
+    }
+}
+
 // - Relations
 
 impl Free for RelSignature {
@@ -150,7 +181,7 @@ impl Free for ExternRel {
     }
 }
 
-impl Free for Rel {
+impl Free for DefinedRel {
     fn free(&self) -> IdSet {
         self.exps_input
             .as_slice()
@@ -160,7 +191,16 @@ impl Free for Rel {
     }
 }
 
-// - Functions
+impl Free for RelDef {
+    fn free(&self) -> IdSet {
+        match self {
+            Self::Extern(extern_rel) => extern_rel.free(),
+            Self::Defined(defined_rel) => defined_rel.free(),
+        }
+    }
+}
+
+// - Meta-functions
 
 impl Free for ExternFunc {
     fn free(&self) -> IdSet {
@@ -203,38 +243,26 @@ impl Free for DefinedFunc {
     }
 }
 
+impl Free for MetaFuncDef {
+    fn free(&self) -> IdSet {
+        match self {
+            Self::Extern(extern_func) => extern_func.free(),
+            Self::Builtin(builtin_func) => builtin_func.free(),
+            Self::Table(table_func) => table_func.free(),
+            Self::Defined(defined_func) => defined_func.free(),
+        }
+    }
+}
+
 // - Definitions
-
-impl Free for ExternTypDef {
-    fn free(&self) -> IdSet {
-        IdSet::new()
-    }
-}
-
-impl Free for TypDef {
-    fn free(&self) -> IdSet {
-        IdSet::new()
-    }
-}
-
-impl Free for VarDef {
-    fn free(&self) -> IdSet {
-        IdSet::new()
-    }
-}
 
 impl Free for DefKind {
     fn free(&self) -> IdSet {
         match self {
-            Self::ExternTyp(definition) => definition.free(),
-            Self::Typ(definition) => definition.free(),
-            Self::Var(definition) => definition.free(),
-            Self::ExternRel(definition) => definition.free(),
-            Self::Rel(definition) => definition.free(),
-            Self::ExternDec(definition) => definition.free(),
-            Self::BuiltinDec(definition) => definition.free(),
-            Self::TableDec(definition) => definition.free(),
-            Self::FuncDec(definition) => definition.free(),
+            Self::Typ(typ_def) => typ_def.free(),
+            Self::Var(var_def) => var_def.free(),
+            Self::Rel(rel_def) => rel_def.free(),
+            Self::MetaFunc(meta_func_def) => meta_func_def.free(),
         }
     }
 }

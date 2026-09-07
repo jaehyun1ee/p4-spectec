@@ -8,8 +8,7 @@ use crate::{
     },
     phrase,
     runtime::{
-        env::TDEnv,
-        envs::algo::{MEnv, VEnv},
+        envs::algo::{MEnv, TDEnv, VEnv},
         typdef::TypeDef,
     },
 };
@@ -80,16 +79,9 @@ impl Context {
 
     // == Definition loading
 
-    pub fn load_def(&mut self, def: &ast::Def) {
-        match &def.node {
-            ast::DefKind::ExternTyp(typ_def) => {
-                self.tdenv.insert(typ_def.id.clone(), TypeDef::Extern);
-            }
-            ast::DefKind::Typ(typ_def) => {
-                let value =
-                    TypeDef::Defined(typ_def.tparams.clone(), Box::new(typ_def.def_typ.clone()));
-                self.tdenv.insert(typ_def.id.clone(), value);
-            }
+    pub fn load_def(&mut self, def_al: &ast::Def) {
+        match &def_al.node {
+            ast::DefKind::Typ(typ_def_al) => self.load_typ_def(typ_def_al),
             ast::DefKind::Var(var_def) => {
                 self.menv.insert(var_def.id.clone(), var_def.typ.clone());
             }
@@ -97,9 +89,24 @@ impl Context {
         }
     }
 
-    pub fn load_spec(&mut self, spec: &ast::Spec) {
-        for def in spec {
-            self.load_def(def);
+    fn load_typ_def(&mut self, typ_def_al: &ast::TypDef) {
+        match typ_def_al {
+            ast::TypDef::Extern(extern_typ_al) => {
+                self.tdenv.insert(extern_typ_al.id.clone(), TypeDef::Extern);
+            }
+            ast::TypDef::Defined(defined_typ_al) => {
+                let type_def = TypeDef::Defined(
+                    defined_typ_al.tparams.clone(),
+                    Box::new(defined_typ_al.def_typ.clone()),
+                );
+                self.tdenv.insert(defined_typ_al.id.clone(), type_def);
+            }
+        }
+    }
+
+    pub fn load_spec(&mut self, spec_al: &ast::Spec) {
+        for def_al in spec_al {
+            self.load_def(def_al);
         }
     }
 }

@@ -219,65 +219,65 @@ fn composite_spec(metadata: &str, extern_inputs: Vec<i64>) -> al::ast::Spec {
     };
 
     vec![
-        p4spec_rust::phrase! { node: al::ast::DefKind::ExternTyp(al::ast::ExternTypDef {
+        p4spec_rust::phrase! { node: al::ast::DefKind::Typ(al::ast::TypDef::Extern(al::ast::ExternTyp {
             id: id("External"),
             hints: hints.clone(),
-        }), span: span(metadata) },
-        p4spec_rust::phrase! { node: al::ast::DefKind::Typ(al::ast::TypDef {
+        })), span: span(metadata) },
+        p4spec_rust::phrase! { node: al::ast::DefKind::Typ(al::ast::TypDef::Defined(Box::new(al::ast::DefinedTyp {
             id: id("Box"),
             tparams: vec![id("T")],
             def_typ: def_type,
             hints: hints.clone(),
-        }), span: span(metadata) },
+        }))), span: span(metadata) },
         p4spec_rust::phrase! { node: al::ast::DefKind::Var(al::ast::VarDef {
             id: id("state"),
             typ: typ(),
             hints: hints.clone(),
         }), span: span(metadata) },
-        p4spec_rust::phrase! { node: al::ast::DefKind::ExternRel(al::ast::ExternRelDef {
+        p4spec_rust::phrase! { node: al::ast::DefKind::Rel(al::ast::RelDef::Extern(Box::new(al::ast::ExternRel {
             id: id("Check"),
             not_typ: notation(vec![Mixfix::Atom(keyword("check")), Mixfix::Arg(typ())]),
             input_hint: InputHint::new(extern_inputs),
             hints: hints.clone(),
-        }), span: span(metadata) },
-        p4spec_rust::phrase! { node: al::ast::DefKind::Rel(al::ast::RelDef {
+        }))), span: span(metadata) },
+        p4spec_rust::phrase! { node: al::ast::DefKind::Rel(al::ast::RelDef::Defined(Box::new(al::ast::DefinedRel {
             id: id("Evaluate"),
             not_typ: evaluate_notation,
             input_hint: InputHint::new(vec![0]),
             rule_groups: vec![evaluate_group],
             else_group: Some(else_group),
             hints: hints.clone(),
-        }), span: span(metadata) },
-        p4spec_rust::phrase! { node: al::ast::DefKind::Rel(al::ast::RelDef {
+        }))), span: span(metadata) },
+        p4spec_rust::phrase! { node: al::ast::DefKind::Rel(al::ast::RelDef::Defined(Box::new(al::ast::DefinedRel {
             id: id("Ready"),
             not_typ: ready_notation,
             input_hint: InputHint::new(vec![0]),
             rule_groups: vec![ready_group],
             else_group: None,
             hints: hints.clone(),
-        }), span: span(metadata) },
-        p4spec_rust::phrase! { node: al::ast::DefKind::ExternDec(al::ast::ExternDecDef {
+        }))), span: span(metadata) },
+        p4spec_rust::phrase! { node: al::ast::DefKind::MetaFunc(al::ast::MetaFuncDef::Extern(al::ast::ExternFunc {
             id: id("external"),
             tparams: Vec::new(),
             params: vec![parameter.clone()],
             typ: typ(),
             hints: hints.clone(),
-        }), span: span(metadata) },
-        p4spec_rust::phrase! { node: al::ast::DefKind::BuiltinDec(al::ast::BuiltinDecDef {
+        })), span: span(metadata) },
+        p4spec_rust::phrase! { node: al::ast::DefKind::MetaFunc(al::ast::MetaFuncDef::Builtin(al::ast::BuiltinFunc {
             id: id("builtin"),
             tparams: Vec::new(),
             params: vec![parameter.clone()],
             typ: typ(),
             hints: hints.clone(),
-        }), span: span(metadata) },
-        p4spec_rust::phrase! { node: al::ast::DefKind::TableDec(al::ast::TableDecDef {
+        })), span: span(metadata) },
+        p4spec_rust::phrase! { node: al::ast::DefKind::MetaFunc(al::ast::MetaFuncDef::Table(al::ast::TableFunc {
             id: id("lookup"),
             params: vec![parameter.clone()],
             typ: typ(),
             table_rows: vec![table_row],
             hints: hints.clone(),
-        }), span: span(metadata) },
-        p4spec_rust::phrase! { node: al::ast::DefKind::FuncDec(al::ast::FuncDecDef {
+        })), span: span(metadata) },
+        p4spec_rust::phrase! { node: al::ast::DefKind::MetaFunc(al::ast::MetaFuncDef::Defined(Box::new(al::ast::DefinedFunc {
             id: id("run"),
             tparams: vec![id("T")],
             params: vec![parameter],
@@ -285,7 +285,7 @@ fn composite_spec(metadata: &str, extern_inputs: Vec<i64>) -> al::ast::Spec {
             clauses: vec![function_clause],
             else_clause: Some(else_clause),
             hints,
-        }), span: span(metadata) },
+        }))), span: span(metadata) },
     ]
 }
 

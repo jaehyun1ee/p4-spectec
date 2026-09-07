@@ -113,29 +113,29 @@ fn test_unsupported_values_return_typed_errors() {
 #[test]
 fn test_print_hints_are_loaded_from_all_runtime_stages() {
     let al_spec = vec![p4spec_rust::phrase! {
-        node: al::ast::DefKind::Typ(al::ast::TypDef {
+        node: al::ast::DefKind::Typ(al::ast::TypDef::Defined(Box::new(al::ast::DefinedTyp {
             id: id("Wrapper"),
             tparams: Vec::new(),
             def_typ: hinted_def_type(),
             hints: Vec::new(),
-        }),
+        }))),
         span: Span::default(),
     }];
     let sl_spec = vec![p4spec_rust::phrase! {
-        node: sl::ast::DefKind::Typ(sl::ast::TypDef {
+        node: sl::ast::DefKind::Typ(sl::ast::TypDef::Defined(Box::new(sl::ast::DefinedTyp {
             id: id("Wrapper"),
             tparams: Vec::new(),
             def_typ: hinted_def_type(),
             hints: Vec::new(),
-        }),
+        }))),
         span: Span::default(),
     }];
     let pl_spec = vec![pl::annot::Annotated::new(p4spec_rust::phrase! {
-        node: pl::ast::DefKind::Typ(pl::ast::TypDef {
+        node: pl::ast::DefKind::Typ(pl::ast::TypDef::Defined(Box::new(pl::ast::DefinedTyp {
             id: id("Wrapper"),
             tparams: Vec::new(),
             def_typ: hinted_def_type(),
-        }),
+        }))),
         span: Span::default(),
     })];
     let value = wrapped_text();

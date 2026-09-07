@@ -21,18 +21,18 @@ fn test_context_loads_type_and_metavariable_definitions() {
     let def_typ = crate::phrase! { node: ast::DefTypKind::Plain(bool_typ.clone()), span:  span(2) };
     let spec = vec![
         crate::phrase! { node:
-        ast::DefKind::ExternTyp(ast::ExternTyp {
+        ast::DefKind::Typ(ast::TypDef::Extern(ast::ExternTyp {
             id: extern_id.clone(),
             hints: vec![],
-        }), span:
+        })), span:
         span(1) },
         crate::phrase! { node:
-        ast::DefKind::Typ(ast::TypDef {
+        ast::DefKind::Typ(ast::TypDef::Defined(Box::new(ast::DefinedTyp {
             id: defined_id.clone(),
             tparams: vec![],
             def_typ: def_typ.clone(),
             hints: vec![],
-        }), span:
+        }))), span:
         span(2) },
         crate::phrase! { node:
         ast::DefKind::Var(ast::VarDef {

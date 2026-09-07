@@ -13,7 +13,7 @@ use crate::{
         xl::num::{Number, Typ as NumTyp},
     },
     runtime::{
-        env::TDEnv,
+        envs::elab::TDEnv,
         ops::typ::{Theta, TypeError, equiv_func_typ, subst_not_typ, subst_typ},
         typdef::TypeDef,
     },
