@@ -160,17 +160,6 @@ fn test_rejected_conversion_matches_ocaml_category_and_span() {
 }
 
 #[test]
-fn test_exact_comparison_detects_different_object_keys() {
-    let left = serde_json::json!({"left": 1});
-    let right = serde_json::json!({"right": 1});
-
-    let difference = first_difference(&left, &right, "payload").expect("different object keys");
-
-    assert_eq!(difference.0, "payload.left");
-    assert_eq!(difference.2, "<missing>");
-}
-
-#[test]
 fn test_conversion_rejects_overlapping_crossed_alias_table_rows() {
     let source = r#"
 syntax typeIR

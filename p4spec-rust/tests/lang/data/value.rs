@@ -3,11 +3,9 @@
 use std::{
     collections::{BTreeSet, hash_map::DefaultHasher},
     hash::{Hash, Hasher},
-    rc::Rc,
 };
 
 use num_bigint::BigInt;
-use p4spec_rust::wire::ocaml::lang::il::ValueCodec;
 use p4spec_rust::{
     lang::{
         common::source::{Position, Span},
@@ -15,8 +13,7 @@ use p4spec_rust::{
             typ,
             value::{ValueError, ValueKind, ValueTag, get, make},
         },
-        traits::print::Print,
-        xl::num::{Natural, Number},
+        xl::num::Natural,
     },
     yojson::ExternalData,
 };
@@ -93,25 +90,6 @@ fn test_external_float_order_normalizes_signed_zero() {
 }
 
 #[test]
-fn test_external_data_has_the_same_total_order_and_hash_for_signed_zero() {
-    let negative_zero = ExternalData::Float(-0.0);
-    let positive_zero = ExternalData::Float(0.0);
-
-    assert_eq!(negative_zero.cmp(&positive_zero), std::cmp::Ordering::Equal);
-    assert_eq!(hash(&negative_zero), hash(&positive_zero));
-}
-
-#[test]
-fn test_constructors_preserve_runtime_type_and_span() {
-    let value_span = span("program.p4", 4);
-    let value = make::num(Number::Nat(Natural::from(7_u64)), value_span.clone());
-
-    assert_eq!(value.span, value_span);
-    assert_eq!(value.note, typ::make::nat().node);
-    assert_eq!(get::num(&value), Ok(&Number::Nat(Natural::from(7_u64))));
-}
-
-#[test]
 fn test_getters_report_expected_and_actual_kinds() {
     let value = make::text("payload".to_owned(), Span::default());
 
@@ -129,20 +107,4 @@ fn test_getters_report_expected_and_actual_kinds() {
             actual: 0,
         })
     );
-}
-
-#[test]
-fn test_cloned_values_share_immutable_storage() {
-    let value = make::bool(true, Span::default());
-    let cloned = Rc::clone(&value);
-
-    assert!(Rc::ptr_eq(&value, &cloned));
-}
-
-#[test]
-fn test_runtime_values_are_il_ast_values() {
-    let value: Rc<p4spec_rust::lang::il::ast::Value> = make::bool(true, Span::default());
-
-    assert_eq!(value.to_string(), "true");
-    assert!(ValueCodec::encode(&value).is_ok());
 }

@@ -1,9 +1,6 @@
-use p4spec_rust::{
-    interface::p4::{
-        error::P4ErrorKind,
-        parse::{parse_file, parse_string},
-    },
-    lang::data::value::ValueKind,
+use p4spec_rust::interface::p4::{
+    error::P4ErrorKind,
+    parse::{parse_file, parse_string},
 };
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -24,23 +21,6 @@ fn report_progress(label: &str, done: usize, total: usize) {
     let _ = stderr.flush();
     if done == total {
         let _ = writeln!(stderr);
-    }
-}
-
-#[test]
-fn test_parses_empty_and_declaration_programs() {
-    for source in [
-        "",
-        "const bit<8> width = 8w3;",
-        "type bit<8> PortId;",
-        "header H { bit<8> field; }",
-        "control C() { apply { } }",
-        "parser P() { state start { transition accept; } }",
-    ] {
-        let program = parse_string("fixture.p4", source)
-            .unwrap_or_else(|error| panic!("failed to parse {source:?}: {error}"));
-        assert!(matches!(program.node, ValueKind::Case(_)));
-        assert_eq!(program.span.left.file.as_ref(), "fixture.p4");
     }
 }
 

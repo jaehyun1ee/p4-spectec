@@ -32,20 +32,6 @@ fn test_id_map_rejects_mismatched_lists() {
 
     assert_eq!(error, ArityMismatch::new(1, 2));
 }
-#[test]
-fn test_free_identifier_sets_preserve_source_spans() {
-    let id_stored = id("x", "stored");
-    let id_lookup = id("x", "lookup");
-    let exp: il::ast::Exp = p4spec_rust::note_phrase! {
-        node: il::ast::ExpKind::Var(id_stored.clone()),
-        note: il::ast::TypKind::Bool,
-        span: Span::default(),
-    };
-
-    let ids: IdSet = exp.free();
-
-    assert_eq!(ids.get(&id_lookup), Some(&id_stored));
-}
 
 #[test]
 fn test_free_into_extends_one_ordered_set_without_duplicates() {

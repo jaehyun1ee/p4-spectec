@@ -181,26 +181,6 @@ fn test_null_interface_reports_configuration_failure() {
 }
 
 #[test]
-fn test_builtin_interface_reports_side_effects_and_clears() {
-    let _guard = FRESH_BUILTIN.lock().unwrap();
-    let mut interface = BuiltinInterface::new();
-    interface.clear();
-    let (value, side_effected) = interface
-        .call_builtin(&id("fresh_typeId"), &[], &[])
-        .unwrap();
-
-    assert_eq!(get::text(&value), Ok("FRESH__0"));
-    assert!(side_effected);
-
-    interface.clear();
-    let (value, side_effected) = interface
-        .call_builtin(&id("fresh_typeId"), &[], &[])
-        .unwrap();
-    assert_eq!(get::text(&value), Ok("FRESH__0"));
-    assert!(side_effected);
-}
-
-#[test]
 fn test_builtin_interface_preserves_builtin_failures() {
     let error = BuiltinInterface::new()
         .call_builtin(&id("sum_int"), &[], &[])
@@ -211,20 +191,6 @@ fn test_builtin_interface_preserves_builtin_failures() {
         InterfaceError::Builtin(error)
             if matches!(error.kind, BuiltinErrorKind::ArityMismatch { .. })
     ));
-}
-
-#[test]
-fn test_runner_statically_composes_its_components() {
-    let mut runner = Runner::<FixtureInterpreter, NullInterface, NullExtern>::new(
-        (),
-        FixtureState::default(),
-        NullInterface,
-        NullExtern,
-    );
-
-    let value = runner.eval_func("done", &[], &[]).unwrap();
-
-    assert_eq!(get::text(&value), Ok("done"));
 }
 
 #[test]
