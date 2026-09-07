@@ -36,6 +36,18 @@ impl<T> Backtrack<T> {
     }
 }
 
+// = Finishing
+
+impl<T> Backtrack<T> {
+    pub fn finish(self) -> Result<T, Error> {
+        match self {
+            Backtrack::Ok(value) => Ok(value),
+            Backtrack::Nondet(never, _) => match never {},
+            Backtrack::Err(traces) | Backtrack::Unmatch(traces) => Err(Error::execution(traces)),
+        }
+    }
+}
+
 // = Propagation
 
 macro_rules! back {

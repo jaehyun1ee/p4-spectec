@@ -4,7 +4,7 @@ use std::rc::Rc;
 use p4spec_rust::lang::traits::print::Print;
 use p4spec_rust::{
     frontend::parse::parse_string,
-    interp::al::{Al, State, context::Global, error::ErrorKind},
+    interp::al::{Al, Config, context::Global, error::ErrorKind},
     lang::{
         al::ast,
         common::source::Span,
@@ -27,7 +27,7 @@ fn spec(source: &str) -> ast::Spec {
 fn runner(spec_al: ast::Spec, det: bool) -> Runner<Al, BuiltinInterface, NullExtern> {
     Runner::new(
         Global::load(spec_al).unwrap(),
-        State::new(det),
+        Config::new(det),
         BuiltinInterface::new(),
         NullExtern,
     )
@@ -405,9 +405,7 @@ fn test_program_evaluation_preserves_input_value() {
         spec("var n : nat\nrelation Pass: nat ~> nat\n  hint(input %0)\nrule Pass/pass: n ~> n");
     let mut runner = runner(spec_al, false);
     let program = nat(8);
-    let values =
-        p4spec_rust::interp::al::eval_program(&mut runner.context(), "Pass", program.clone())
-            .unwrap();
+    let values = runner.eval_program("Pass", program.clone()).unwrap();
     assert!(Rc::ptr_eq(&values[0], &program));
 }
 

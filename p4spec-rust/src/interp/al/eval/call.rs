@@ -73,7 +73,7 @@ fn invoke_defined_rel<I: Interface, E: Extern>(
     rel: &ast::DefinedRel,
     values: &[Rc<Value>],
 ) -> Backtrack<Vec<Rc<Value>>> {
-    let det = runner.interp_state().det;
+    let det = runner.config().det;
     let paths: Vec<_> = rel
         .rule_groups
         .iter()
@@ -274,7 +274,7 @@ fn invoke_defined_func<I: Interface, E: Extern>(
     targs: &[ast::Typ],
     values: &[Rc<Value>],
 ) -> Backtrack<Rc<Value>> {
-    let det = runner.interp_state().det;
+    let det = runner.config().det;
     let mut evaluate =
         |index: &usize| invoke_clause(runner, ctx, id, func, &func.clauses[*index], targs, values);
     let result = if det {

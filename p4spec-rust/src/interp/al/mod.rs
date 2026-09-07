@@ -11,44 +11,35 @@ use crate::{
     lang::{al::ast, common::source::Span, data::value::Value},
     runner::{Extern, Interface, Interpreter, RunnerContext},
 };
-use backtrack::Backtrack;
 use context::{Context, Global};
 use error::Error;
 use std::rc::Rc;
 
 pub struct Al;
 
-pub struct State {
+/// Configuration for the AL interpreter
+pub struct Config {
     det: bool,
 }
 
-impl State {
+impl Config {
     pub fn new(det: bool) -> Self {
         Self { det }
     }
 }
 
-/// Evaluates an already parsed program through the selected relation
-pub fn eval_program<I: Interface, E: Extern>(
-    runner: &mut RunnerContext<'_, Al, I, E>,
-    name: &str,
-    program: Rc<Value>,
-) -> Result<Vec<Rc<Value>>, Error> {
-    runner.call_rel(name, &[program])
-}
-
-fn finish<T>(result: Backtrack<T>) -> Result<T, Error> {
-    match result {
-        Backtrack::Ok(value) => Ok(value),
-        Backtrack::Nondet(never, _) => match never {},
-        Backtrack::Err(traces) | Backtrack::Unmatch(traces) => Err(Error::execution(traces)),
-    }
-}
-
 impl<I: Interface, E: Extern> Interpreter<I, E> for Al {
     type Spec = Global;
-    type State = State;
+    type Config = Config;
     type Error = Error;
+
+    fn eval_program(
+        runner: &mut RunnerContext<'_, Self, I, E>,
+        name: &str,
+        program: Rc<Value>,
+    ) -> Result<Vec<Rc<Value>>, Error> {
+        runner.call_rel(name, &[program])
+    }
 
     fn eval_rel(
         runner: &mut RunnerContext<'_, Self, I, E>,
@@ -57,7 +48,7 @@ impl<I: Interface, E: Extern> Interpreter<I, E> for Al {
     ) -> Result<Vec<Rc<Value>>, Error> {
         let id = crate::phrase!(node: name.to_owned(), span: Span::default());
         let ctx = Context::new(runner.spec());
-        finish(eval::call::invoke_rel(runner, &ctx, &id, values))
+        eval::call::invoke_rel(runner, &ctx, &id, values).finish()
     }
     fn eval_func(
         runner: &mut RunnerContext<'_, Self, I, E>,
@@ -67,7 +58,6 @@ impl<I: Interface, E: Extern> Interpreter<I, E> for Al {
     ) -> Result<Rc<Value>, Error> {
         let id = crate::phrase!(node: name.to_owned(), span: Span::default());
         let ctx = Context::new(runner.spec());
-        finish(eval::call::invoke_func(runner, &ctx, &id, targs, values))
+        eval::call::invoke_func(runner, &ctx, &id, targs, values).finish()
     }
-    fn clear(_state: &mut State) {}
 }

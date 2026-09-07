@@ -26,8 +26,8 @@ enum FixtureError {
 }
 
 #[derive(Default)]
-struct FixtureState {
-    next: u64,
+struct FixtureConfig {
+    label: String,
 }
 
 struct FixtureInterpreter;
@@ -38,8 +38,19 @@ where
     E: Extern,
 {
     type Spec = ();
-    type State = FixtureState;
+    type Config = FixtureConfig;
     type Error = FixtureError;
+
+    fn eval_program(
+        _context: &mut RunnerContext<'_, Self, I, E>,
+        name: &str,
+        program: Rc<Value>,
+    ) -> Result<Vec<Rc<Value>>, Self::Error> {
+        match name {
+            "identity" => Ok(vec![program]),
+            _ => Err(FixtureError::Unknown(name.to_owned())),
+        }
+    }
 
     fn eval_func(
         context: &mut RunnerContext<'_, Self, I, E>,
@@ -69,12 +80,10 @@ where
                 let (value, _) = context.call_extern_func("missing", targs, values)?;
                 Ok(value)
             }
-            "next_interp" => {
-                let state = context.interp_state();
-                let next = state.next;
-                state.next += 1;
-                Ok(value::make::text(next.to_string(), Span::default()))
-            }
+            "config" => Ok(value::make::text(
+                context.config().label.clone(),
+                Span::default(),
+            )),
             "next_extern" => {
                 let (value, _) = context.call_extern_func("next", targs, values)?;
                 Ok(value)
@@ -94,10 +103,6 @@ where
         _values: &[Rc<Value>],
     ) -> Result<Vec<Rc<Value>>, Self::Error> {
         Err(FixtureError::Unknown(name.to_owned()))
-    }
-
-    fn clear(state: &mut Self::State) {
-        state.next = 0;
     }
 }
 
@@ -217,7 +222,7 @@ fn test_builtin_interface_preserves_builtin_failures() {
 fn test_runner_statically_composes_its_components() {
     let mut runner = Runner::<FixtureInterpreter, NullInterface, NullExtern>::new(
         (),
-        FixtureState::default(),
+        FixtureConfig::default(),
         NullInterface,
         NullExtern,
     );
@@ -231,7 +236,7 @@ fn test_runner_statically_composes_its_components() {
 fn test_extern_can_reenter_the_interpreter() {
     let mut runner = Runner::<FixtureInterpreter, NullInterface, FixtureExtern>::new(
         (),
-        FixtureState::default(),
+        FixtureConfig::default(),
         NullInterface,
         FixtureExtern::default(),
     );
@@ -245,7 +250,7 @@ fn test_extern_can_reenter_the_interpreter() {
 fn test_extern_reports_side_effects_with_each_result() {
     let mut runner = Runner::<FixtureInterpreter, NullInterface, FixtureExtern>::new(
         (),
-        FixtureState::default(),
+        FixtureConfig::default(),
         NullInterface,
         FixtureExtern::default(),
     );
@@ -261,7 +266,7 @@ fn test_extern_reports_side_effects_with_each_result() {
 fn test_null_extern_reports_configuration_failure() {
     let mut runner = Runner::<FixtureInterpreter, NullInterface, NullExtern>::new(
         (),
-        FixtureState::default(),
+        FixtureConfig::default(),
         NullInterface,
         NullExtern,
     );
@@ -275,18 +280,19 @@ fn test_null_extern_reports_configuration_failure() {
 }
 
 #[test]
-fn test_runner_clear_resets_every_component() {
+fn test_runner_clear_resets_host_state_and_preserves_config() {
     let _guard = FRESH_BUILTIN.lock().unwrap();
     let mut runner = Runner::<FixtureInterpreter, BuiltinInterface, FixtureExtern>::new(
         (),
-        FixtureState::default(),
+        FixtureConfig {
+            label: "configured".to_owned(),
+        },
         BuiltinInterface::new(),
         FixtureExtern::default(),
     );
     runner.clear();
 
-    assert_eq!(eval_text(&mut runner, "next_interp"), "0");
-    assert_eq!(eval_text(&mut runner, "next_interp"), "1");
+    assert_eq!(eval_text(&mut runner, "config"), "configured");
     assert_eq!(eval_text(&mut runner, "next_extern"), "0");
     assert_eq!(eval_text(&mut runner, "next_extern"), "1");
     assert_eq!(eval_text(&mut runner, "next_builtin"), "FRESH__0");
@@ -294,7 +300,7 @@ fn test_runner_clear_resets_every_component() {
 
     runner.clear();
 
-    assert_eq!(eval_text(&mut runner, "next_interp"), "0");
+    assert_eq!(eval_text(&mut runner, "config"), "configured");
     assert_eq!(eval_text(&mut runner, "next_extern"), "0");
     assert_eq!(eval_text(&mut runner, "next_builtin"), "FRESH__0");
 }
@@ -305,4 +311,20 @@ fn eval_text(
 ) -> String {
     let value = runner.eval_func(name, &[], &[]).unwrap();
     get::text(&value).unwrap().to_owned()
+}
+
+#[test]
+fn test_runner_dispatches_program_entry_and_errors() {
+    let mut runner = Runner::<FixtureInterpreter, NullInterface, NullExtern>::new(
+        (),
+        FixtureConfig::default(),
+        NullInterface,
+        NullExtern,
+    );
+    let program = value::make::text("program".to_owned(), Span::default());
+    let values = runner.eval_program("identity", program.clone()).unwrap();
+    assert_eq!(values.len(), 1);
+    assert!(Rc::ptr_eq(&values[0], &program));
+    let error = runner.eval_program("missing", program).unwrap_err();
+    assert!(matches!(error, FixtureError::Unknown(name) if name == "missing"));
 }
