@@ -1,0 +1,3 @@
+(executable
+ (name al_oracle)
+ (libraries p4spectec yojson))

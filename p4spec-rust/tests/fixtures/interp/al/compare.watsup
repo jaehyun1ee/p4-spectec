@@ -1,0 +1,34 @@
+var n : nat
+relation Ordered: nat ~> nat ~> nat
+  hint(input %0)
+rule Ordered/only: n ~> $(n + 1) ~> $(n + 2)
+relation Choice: nat ~> nat
+  hint(input %0)
+rule Choice/first: n ~> 1
+rule Choice/second: n ~> 2
+rule Choice/else: n ~> 9
+  -- otherwise
+dec $ignore(nat) : nat
+def $ignore(n) = 7
+builtin dec $text_to_int(text) : nat
+dec $bad_output() : nat
+def $bad_output() = $text_to_int("-1")
+dec $reject() : nat
+def $reject() = 0
+  -- if false
+relation Ignore: nat ~> nat
+  hint(input %0)
+rule Ignore/only: n ~> 7
+dec $recover() : nat
+def $recover() = 0
+  -- if false
+def $recover() = 9
+  -- otherwise
+extern dec $bridge(nat) : nat
+extern dec $bridge_bad() : nat
+dec $inner(nat) : nat
+def $inner(n) = $(n + 1)
+dec $outer(nat) : nat
+def $outer(n) = $(n + $bridge(n))
+dec $outer_bad() : nat
+def $outer_bad() = $bridge_bad()

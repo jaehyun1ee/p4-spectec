@@ -1,5 +1,10 @@
 use std::rc::Rc;
 
+#[path = "builtin/maps.rs"]
+mod maps;
+#[path = "builtin/sets.rs"]
+mod sets;
+
 use num_bigint::BigInt;
 use p4spec_rust::{
     interface::builtin::{BuiltinErrorKind, call::Builtins},

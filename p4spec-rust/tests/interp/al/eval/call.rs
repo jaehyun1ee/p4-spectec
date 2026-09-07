@@ -28,7 +28,7 @@ fn runner(spec_al: ast::Spec, det: bool) -> Runner<Al, BuiltinInterface, NullExt
     Runner::new(
         Global::load(spec_al).unwrap(),
         Config::new(det, true),
-        BuiltinInterface::new(),
+        BuiltinInterface::new(p4spec_rust::interface::p4::unparse::P4Unparser::new()),
         NullExtern,
     )
 }
@@ -611,7 +611,7 @@ fn test_guards_toggle_input_checks_and_substitute_type_arguments() {
             let mut runner = Runner::<Al, _, _>::new(
                 Global::load(spec_al.clone()).unwrap(),
                 Config::new(det, guard),
-                BuiltinInterface::new(),
+                BuiltinInterface::new(p4spec_rust::interface::p4::unparse::P4Unparser::new()),
                 NullExtern,
             );
             let invalid = make::bool(true, Span::default());
@@ -754,7 +754,7 @@ fn test_extern_relation_output_guards_preserve_call_span() {
         let mut runner = Runner::<Al, _, _>::new(
             Global::load(spec_al.clone()).unwrap(),
             Config::new(false, guard),
-            BuiltinInterface::new(),
+            BuiltinInterface::new(p4spec_rust::interface::p4::unparse::P4Unparser::new()),
             host(nat(4), false),
         );
         let result = runner.eval_rel("Entry", &[nat(1)]);
@@ -838,7 +838,7 @@ fn test_extern_reentry_uses_public_input_guards() {
         let mut runner = Runner::<Al, _, _>::new(
             Global::load(spec(source)).unwrap(),
             Config::new(false, guard),
-            BuiltinInterface::new(),
+            BuiltinInterface::new(p4spec_rust::interface::p4::unparse::P4Unparser::new()),
             host(make::bool(true, Span::default()), true),
         );
         let result = runner.eval_func("bridge", &[], &[nat(1)]);
@@ -945,7 +945,7 @@ fn test_reentrant_public_guard_keeps_no_source_span() {
     let mut runner = Runner::<Al, _, _>::new(
         Global::load(spec(source)).unwrap(),
         Config::new(false, true),
-        BuiltinInterface::new(),
+        BuiltinInterface::new(p4spec_rust::interface::p4::unparse::P4Unparser::new()),
         host(make::bool(true, Span::default()), true),
     );
     let error = runner.eval_func("outer", &[], &[nat(1)]).unwrap_err();

@@ -1,9 +1,15 @@
 use std::{cell::Cell, rc::Rc, sync::Mutex};
 
 use p4spec_rust::{
-    interface::builtin::BuiltinErrorKind,
+    interface::{
+        builtin::BuiltinErrorKind,
+        p4::{error::P4UnparseError, unparse::P4Unparser},
+    },
     lang::common::source::Span,
-    lang::data::value::{self, Value, get},
+    lang::data::{
+        typ,
+        value::{self, Value, get},
+    },
     lang::il::ast::Typ,
     phrase,
     runner::{
@@ -188,7 +194,7 @@ fn test_null_interface_reports_configuration_failure() {
 #[test]
 fn test_builtin_interface_reports_side_effects_and_clears() {
     let _guard = FRESH_BUILTIN.lock().unwrap();
-    let mut interface = BuiltinInterface::new();
+    let mut interface = BuiltinInterface::new(P4Unparser::new());
     interface.clear();
     let (value, side_effected) = interface
         .call_builtin(&id("fresh_typeId"), &[], &[])
@@ -207,7 +213,7 @@ fn test_builtin_interface_reports_side_effects_and_clears() {
 
 #[test]
 fn test_builtin_interface_preserves_builtin_failures() {
-    let error = BuiltinInterface::new()
+    let error = BuiltinInterface::new(P4Unparser::new())
         .call_builtin(&id("sum_int"), &[], &[])
         .unwrap_err();
 
@@ -216,6 +222,109 @@ fn test_builtin_interface_preserves_builtin_failures() {
         InterfaceError::Builtin(error)
             if matches!(error.kind, BuiltinErrorKind::ArityMismatch { .. })
     ));
+}
+
+#[test]
+fn test_builtin_interface_prints_p4_values_without_side_effects() {
+    let value = value::make::text("a\n\"b".to_owned(), Span::default());
+    let (printed, side_effected) = BuiltinInterface::new(P4Unparser::new())
+        .call_builtin(&id("print_"), &[typ::make::text()], &[value])
+        .unwrap();
+
+    assert_eq!(get::text(&printed), Ok("a\\n\\\"b"));
+    assert!(!side_effected);
+}
+
+#[test]
+fn test_builtin_interface_print_validates_both_arities() {
+    let mut interface = BuiltinInterface::new(P4Unparser::new());
+    let typ = typ::make::text();
+    let value = value::make::text("value".to_owned(), Span::default());
+    for (targs, values, actual) in [
+        (vec![], vec![value.clone()], 0),
+        (vec![typ.clone(), typ.clone()], vec![value.clone()], 2),
+        (vec![typ.clone()], vec![], 0),
+        (vec![typ], vec![value.clone(), value], 2),
+    ] {
+        let error = interface
+            .call_builtin(&id("print_"), &targs, &values)
+            .unwrap_err();
+        assert!(matches!(
+            error,
+            InterfaceError::Builtin(error)
+                if error.kind == BuiltinErrorKind::ArityMismatch { expected: 1, actual }
+        ));
+    }
+}
+
+#[test]
+fn test_builtin_interface_print_preserves_unparse_failures() {
+    let typ = typ::make::bool();
+    let value = value::make::structure(&typ, Vec::new(), Span::default());
+    let error = BuiltinInterface::new(P4Unparser::new())
+        .call_builtin(&id("print_"), &[typ], &[value])
+        .unwrap_err();
+    assert!(matches!(
+        error,
+        InterfaceError::Builtin(error)
+            if error.kind == BuiltinErrorKind::P4Unparse(P4UnparseError::UnsupportedValue("Struct"))
+    ));
+}
+
+#[test]
+fn test_builtin_interface_print_preserves_spec_hints_after_clear() {
+    use p4spec_rust::lang::{
+        al::ast,
+        common::notation::{atom::Atom, mixfix::Mixfix},
+        el,
+    };
+
+    let span = Span::default();
+    let atom = phrase!(node: Atom::Keyword("WRAP".to_owned()), span: span.clone());
+    let notation = Mixfix::Seq(vec![
+        Mixfix::Atom(atom.clone()),
+        Mixfix::Arg(typ::make::text()),
+    ]);
+    let hint = phrase!(node: el::ast::ExpKind::Seq(vec![
+        phrase!(node: el::ast::ExpKind::Text("shown".to_owned()), span: span.clone()),
+        phrase!(node: el::ast::ExpKind::Hole(el::ast::Hole::Next), span: span.clone()),
+    ]), span: span.clone());
+    let def_typ = phrase!(node: p4spec_rust::lang::il::ast::DefTypKind::Variant(vec![(
+        phrase!(node: notation, span: span.clone()),
+        phrase!(node: (id("Origin"), Vec::new()), span: span.clone()),
+        vec![(id("print"), hint)],
+    )]), span: span.clone());
+    let defined_typ = ast::DefinedTyp {
+        id: id("Wrapper"),
+        tparams: Vec::new(),
+        def_typ,
+        hints: Vec::new(),
+    };
+    let def = ast::DefKind::Typ(ast::TypDef::Defined(Box::new(defined_typ)));
+    let spec = vec![phrase!(node: def, span: span.clone())];
+    let typ = typ::make::var(id("Wrapper"), Vec::new());
+    let value = value::make::case_(
+        &typ,
+        Mixfix::Seq(vec![
+            Mixfix::Atom(atom),
+            Mixfix::Arg(value::make::text("payload".to_owned(), span.clone())),
+        ]),
+        span,
+    );
+    let _guard = FRESH_BUILTIN.lock().unwrap();
+    let mut interface = BuiltinInterface::new(P4Unparser::from_al_spec(&spec));
+    for _ in 0..2 {
+        let (printed, side_effected) = interface
+            .call_builtin(
+                &id("print_"),
+                std::slice::from_ref(&typ),
+                std::slice::from_ref(&value),
+            )
+            .unwrap();
+        assert_eq!(get::text(&printed), Ok("shown payload"));
+        assert!(!side_effected);
+        interface.clear();
+    }
 }
 
 #[test]
@@ -287,7 +396,7 @@ fn test_runner_clear_resets_host_state_and_preserves_config() {
         FixtureConfig {
             label: "configured".to_owned(),
         },
-        BuiltinInterface::new(),
+        BuiltinInterface::new(P4Unparser::new()),
         FixtureExtern::default(),
     );
     runner.clear();

@@ -11,7 +11,10 @@ use p4spec_rust::{
         parse::{parse_file, parse_files, parse_mixop, parse_string},
     },
     lang::{
-        common::source::Position,
+        common::{
+            notation::mixfix::Mixfix,
+            source::{Position, Span},
+        },
         el::ast::{DefKind, ExpKind},
     },
 };
@@ -22,6 +25,32 @@ static TEMP_DIRECTORY_ID: AtomicUsize = AtomicUsize::new(0);
 fn test_parses_runtime_mixop_shapes() {
     let mixop = parse_mixop("name '=' expression").expect("parse mixop shape");
     assert_eq!(mixop.args().len(), 2);
+}
+
+#[test]
+fn test_runtime_mixop_punctuation_preserves_string_source_positions() {
+    let Mixfix::Seq(items) = parse_mixop("k ':' v").unwrap() else {
+        panic!("expected pair notation");
+    };
+    let Mixfix::Atom(colon) = &items[1] else {
+        panic!("expected colon");
+    };
+    assert_eq!(
+        colon.span,
+        Span::new(Position::new("", 1, 2), Position::new("", 1, 5))
+    );
+
+    let Mixfix::Brack(left, _, right) = parse_mixop("`{ k `}").unwrap() else {
+        panic!("expected bracket notation");
+    };
+    assert_eq!(
+        left.span,
+        Span::new(Position::new("", 1, 0), Position::new("", 1, 2))
+    );
+    assert_eq!(
+        right.span,
+        Span::new(Position::new("", 1, 5), Position::new("", 1, 7))
+    );
 }
 
 struct TempDirectory {

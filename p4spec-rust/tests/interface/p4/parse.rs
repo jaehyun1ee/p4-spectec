@@ -256,3 +256,89 @@ fn collect_p4_files(directory: &Path, files: &mut Vec<PathBuf>) {
         }
     }
 }
+
+#[test]
+fn test_empty_productions_use_previous_token_end_across_whitespace() {
+    use p4spec_rust::lang::{
+        common::source::Span,
+        data::{typ::TypKind, value::Value},
+    };
+    fn spans(value: &Value, name: &str, output: &mut Vec<Span>) {
+        if let TypKind::Var(id, _) = &value.note
+            && id.node == name
+        {
+            output.push(value.span.clone());
+        }
+        if let ValueKind::Case(case) = &value.node {
+            for value in case.args() {
+                spans(value, name, output);
+            }
+        }
+    }
+    let source = "control C() {\n  action a( \n    bit<8> x) { }\n  apply { }\n}";
+    let value = parse_string("empty.p4", source).unwrap();
+    let mut directions = Vec::new();
+    spans(&value, "direction", &mut directions);
+    assert_eq!(directions.len(), 1);
+    assert_eq!(
+        (directions[0].left.line, directions[0].left.column),
+        (2, 11)
+    );
+    assert_eq!(directions[0].left, directions[0].right);
+    let mut annotations = Vec::new();
+    spans(&value, "annotationList", &mut annotations);
+    assert!(
+        annotations
+            .iter()
+            .any(|span| span.left.line == 1 && span.left.column == 13)
+    );
+    assert!(annotations.iter().all(|span| span.left == span.right));
+    let mut names = Vec::new();
+    spans(&value, "identifier", &mut names);
+    assert!(
+        names
+            .iter()
+            .any(|span| span.left.line == 3 && span.left.column == 11 && span.right.column == 12)
+    );
+}
+
+#[test]
+fn test_initial_empty_production_precedes_whitespace_and_line_directives() {
+    use p4spec_rust::lang::{
+        common::source::Position,
+        data::{typ::TypKind, value::Value},
+    };
+    fn initial_annotation(value: &Value) -> Option<&Value> {
+        if let TypKind::Var(id, _) = &value.note
+            && id.node == "annotationList"
+        {
+            return Some(value);
+        }
+        match &value.node {
+            ValueKind::Case(case) => case
+                .args()
+                .into_iter()
+                .find_map(|value| initial_annotation(value)),
+            _ => None,
+        }
+    }
+    for prefix in ["\n  ", "# 20 \"included.p4\"\n  "] {
+        let source = format!("{prefix}control C() {{ apply {{ }} }}");
+        let value = parse_string("initial.p4", &source).unwrap();
+        let annotation = initial_annotation(&value).unwrap();
+        assert_eq!(annotation.span.left, Position::new("initial.p4", 1, 0));
+        assert_eq!(annotation.span.right, annotation.span.left);
+    }
+}
+
+#[test]
+fn test_syntax_error_after_whitespace_uses_offending_token_span() {
+    let source = "\n const bit<8> x =   ;";
+    let error = parse_string("syntax.p4", source).unwrap_err();
+    let column = source.lines().nth(1).unwrap().find(';').unwrap() as i64;
+    assert_eq!((error.span.left.line, error.span.left.column), (2, column));
+    assert_eq!(
+        (error.span.right.line, error.span.right.column),
+        (2, column + 1)
+    );
+}
