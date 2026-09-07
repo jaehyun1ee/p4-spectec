@@ -125,15 +125,18 @@ fn test_rejects_the_negative_p4_parse_corpus() {
     files.sort();
     assert!(!files.is_empty(), "the negative P4 corpus must be present");
 
-    let accepted: Vec<_> = files
+    let failures: Vec<_> = files
         .iter()
-        .filter(|file| parse_file(&includes, file).is_ok())
-        .map(|file| file.display().to_string())
+        .filter_map(|file| match parse_file(&includes, file) {
+            Ok(_) => Some(format!("{}: unexpectedly parsed", file.display())),
+            Err(error) if matches!(error.kind, P4ErrorKind::Lex(_) | P4ErrorKind::Syntax) => None,
+            Err(error) => Some(format!("{}: {error}", file.display())),
+        })
         .collect();
     assert!(
-        accepted.is_empty(),
-        "invalid P4 programs were accepted:\n{}",
-        accepted.join("\n")
+        failures.is_empty(),
+        "negative P4 parser corpus failures:\n{}",
+        failures.join("\n")
     );
 }
 
@@ -182,8 +185,9 @@ fn assert_matches_parser_oracle(root: &Path, oracle_name: &str, directories: &[P
     let includes = [root.join("p4c/p4include")];
     let total = oracle.len();
     let mut mismatches = Vec::new();
+    let label = format!("p4 parser {oracle_name}");
+    report_progress(&label, 0, total);
     for (index, (file, should_parse)) in oracle.into_iter().enumerate() {
-        report_progress(&format!("p4 parser {oracle_name}"), index + 1, total);
         let result = parse_file(&includes, &file);
         if result.is_ok() != should_parse {
             mismatches.push(match result {
@@ -191,6 +195,7 @@ fn assert_matches_parser_oracle(root: &Path, oracle_name: &str, directories: &[P
                 Err(error) => format!("{}: {error}", file.display()),
             });
         }
+        report_progress(&label, index + 1, total);
     }
     assert!(
         mismatches.is_empty(),
