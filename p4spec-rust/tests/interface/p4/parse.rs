@@ -2,9 +2,50 @@ use p4spec_rust::{
     interface::p4::{
         error::P4ErrorKind,
         parse::{parse_file, parse_string},
+        unparse::P4Unparser,
     },
     lang::data::value::ValueKind,
 };
+
+#[test]
+fn test_right_shift_uses_source_parser_comparison_precedence() {
+    use p4spec_rust::lang::data::{typ::TypKind, value::Value};
+
+    fn first_binary(value: &Value) -> Option<&Value> {
+        if let TypKind::Var(id, _) = &value.note
+            && id.node == "binaryExpression"
+        {
+            return Some(value);
+        }
+        match &value.node {
+            ValueKind::Case(case) => case
+                .args()
+                .into_iter()
+                .find_map(|value| first_binary(value.as_ref())),
+            _ => None,
+        }
+    }
+
+    fn binary_part(value: &Value, index: usize) -> &Value {
+        match &value.node {
+            ValueKind::Case(case) => case.args().into_iter().nth(index).unwrap().as_ref(),
+            _ => panic!("binary expression must be a case value"),
+        }
+    }
+
+    fn operator(value: &Value) -> String {
+        P4Unparser::new().render(binary_part(value, 1)).unwrap()
+    }
+
+    let program = parse_string(
+        "shift.p4",
+        "control C() { apply { bit<4> x; x = 4w1 & 4w2 >> 4w3; } }",
+    )
+    .unwrap();
+    let outer = first_binary(&program).unwrap();
+    assert_eq!(operator(outer), ">>");
+    assert_eq!(operator(binary_part(outer, 0)), "&");
+}
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs,

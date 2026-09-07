@@ -5,7 +5,7 @@
 //! to its mixfix shape. For example, a case carrying an infix `+` hint renders
 //! its two arguments as `left + right`.
 
-use std::{collections::HashMap, rc::Rc};
+use std::{collections::HashMap, fmt::Write, rc::Rc};
 
 use crate::{
     lang::data::value::{Value, ValueKind},
@@ -160,15 +160,16 @@ impl P4Unparser {
     }
 
     fn escape_text(text: &str) -> String {
-        text.chars().fold(String::new(), |mut escaped, character| {
-            match character {
-                '\\' => escaped.push_str("\\\\"),
-                '"' => escaped.push_str("\\\""),
-                '\n' => escaped.push_str("\\n"),
-                '\r' => escaped.push_str("\\r"),
-                '\t' => escaped.push_str("\\t"),
-                '\u{0008}' => escaped.push_str("\\b"),
-                character => escaped.push(character),
+        text.bytes().fold(String::new(), |mut escaped, byte| {
+            match byte {
+                b'\\' => escaped.push_str("\\\\"),
+                b'"' => escaped.push_str("\\\""),
+                b'\n' => escaped.push_str("\\n"),
+                b'\r' => escaped.push_str("\\r"),
+                b'\t' => escaped.push_str("\\t"),
+                b'\x08' => escaped.push_str("\\b"),
+                32..=126 => escaped.push(char::from(byte)),
+                _ => write!(escaped, "\\{byte:03}").unwrap(),
             }
             escaped
         })

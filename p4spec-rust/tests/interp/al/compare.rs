@@ -16,8 +16,13 @@ use p4spec_rust::{
     interp::al::{Al, Config, context::Global, error::Error},
     lang::il::ast::Typ,
     lang::{
-        common::source::Span,
-        data::value::{Value, make},
+        common::{Iter, notation::mixfix::Mixfix, source::Span},
+        data::{
+            typ::TypKind,
+            value::{Value, ValueKind, make},
+        },
+        traits::print::Print,
+        xl::num::{Number, Typ as NumTyp},
     },
     pass::{algo, elaborate},
     runner::{
@@ -65,13 +70,9 @@ struct Oracle {
 impl Oracle {
     fn build() {
         let output = Command::new("opam")
-            .args([
-                "exec",
-                "--",
-                "dune",
-                "build",
-                "p4spec/test/al-oracle/al_oracle.exe",
-            ])
+            .args(["exec", "--", "dune", "build", "--root"])
+            .arg(repo())
+            .arg("p4spec/test/al-oracle/al_oracle.exe")
             .current_dir(repo())
             .output()
             .expect("build OCaml oracle");
@@ -103,9 +104,12 @@ impl Oracle {
         }
     }
 
-    fn query(&mut self, request: &Json) -> Json {
+    fn request(&mut self, request: &Json) {
         writeln!(self.input.as_mut().unwrap(), "{request}").unwrap();
         self.input.as_mut().unwrap().flush().unwrap();
+    }
+
+    fn read_protocol_line(&mut self) -> String {
         loop {
             let mut line = String::new();
             assert_ne!(
@@ -113,11 +117,83 @@ impl Oracle {
                 0,
                 "OCaml oracle terminated"
             );
-            if let Some(result) = line.strip_prefix("AL-RESULT ") {
-                return serde_json::from_str(result).expect("structured oracle result");
+            if line.starts_with("AL-") {
+                return line.trim_end().to_owned();
             }
             eprint!("OCaml: {line}");
         }
+    }
+
+    fn query(&mut self, request: &Json) -> Json {
+        self.request(request);
+        let line = self.read_protocol_line();
+        let result = line
+            .strip_prefix("AL-RESULT ")
+            .expect("ordinary oracle request must return AL-RESULT");
+        serde_json::from_str(result).expect("structured oracle result")
+    }
+
+    fn compare_program(
+        &mut self,
+        request: &Json,
+        actual: Result<Vec<Rc<Value>>, Json>,
+        label: &str,
+    ) {
+        self.request(request);
+        let line = self.read_protocol_line();
+        if let Some(result) = line.strip_prefix("AL-RESULT ") {
+            let expected: Json =
+                serde_json::from_str(result).expect("structured oracle failure result");
+            let actual = match actual {
+                Err(actual) => actual,
+                Ok(_) => panic!("{label}: OCaml failed but Rust passed\nOCaml: {expected}"),
+            };
+            assert_ne!(
+                expected["status"], "passed",
+                "{label}: successful program result must use AL-STREAM"
+            );
+            compare(expected, actual, label);
+            return;
+        }
+
+        let expected_arity = line
+            .strip_prefix("AL-STREAM ")
+            .expect("program oracle request must return AL-RESULT or AL-STREAM")
+            .parse::<usize>()
+            .expect("numeric AL-STREAM arity");
+        let values = actual.unwrap_or_else(|actual| {
+            panic!("{label}: OCaml passed but Rust failed\nRust: {actual}")
+        });
+        assert_eq!(
+            expected_arity,
+            values.len(),
+            "{label}: ordered output arity"
+        );
+        for (output_index, value) in values.iter().enumerate() {
+            let mut frame_index = 0;
+            semantic_frames(value, &mut |actual_frame| {
+                let line = self.read_protocol_line();
+                let expected_frame = line
+                    .strip_prefix("AL-FRAME ")
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "{label}: output {output_index}, frame {frame_index}: expected OCaml frame, got {line:?}"
+                        )
+                    });
+                let expected_frame: Json =
+                    serde_json::from_str(expected_frame).expect("structured semantic oracle frame");
+                assert_eq!(
+                    expected_frame, actual_frame,
+                    "{label}: output {output_index}, frame {frame_index}"
+                );
+                frame_index += 1;
+            });
+        }
+        assert_eq!(
+            self.read_protocol_line(),
+            "AL-END",
+            "{label}: OCaml emitted additional semantic frames"
+        );
     }
 }
 
@@ -259,6 +335,173 @@ fn compare(expected: Json, actual: Json, label: &str) {
             );
         }
     }
+}
+
+fn semantic_frames(value: &Value, emit: &mut impl FnMut(Json)) {
+    let typ = semantic_type(&value.note);
+    match &value.node {
+        ValueKind::Bool(value) => emit(json!(["Value", "Bool", typ, value])),
+        ValueKind::Num(Number::Nat(value)) => emit(json!(["Value", "Nat", typ, value.to_string()])),
+        ValueKind::Num(Number::Int(value)) => emit(json!(["Value", "Int", typ, value.to_string()])),
+        ValueKind::Text(value) => emit(json!(["Value", "Text", typ, value])),
+        ValueKind::Struct(fields) => {
+            emit(json!(["Value", "Struct", typ, fields.len()]));
+            for (atom, value) in fields {
+                emit(json!(["Field", Print::to_string(&atom.node)]));
+                semantic_frames(value, emit);
+            }
+        }
+        ValueKind::Case(value_case) => {
+            emit(json!(["Value", "Case", typ]));
+            semantic_mixfix_frames(value_case, emit);
+        }
+        ValueKind::Tuple(values) => {
+            emit(json!(["Value", "Tuple", typ, values.len()]));
+            for value in values {
+                semantic_frames(value, emit);
+            }
+        }
+        ValueKind::Opt(value) => {
+            emit(json!(["Value", "Opt", typ, value.is_some()]));
+            if let Some(value) = value {
+                semantic_frames(value, emit);
+            }
+        }
+        ValueKind::List(values) => {
+            emit(json!(["Value", "List", typ, values.len()]));
+            for value in values {
+                semantic_frames(value, emit);
+            }
+        }
+        ValueKind::Func(id) => emit(json!(["Value", "Func", typ, id.node])),
+        ValueKind::Extern(value) => {
+            emit(json!(["Value", "Extern", typ]));
+            semantic_external_frames(value, emit);
+        }
+    }
+}
+
+fn semantic_type(typ: &TypKind) -> Json {
+    match typ {
+        TypKind::Bool => json!(["BoolT"]),
+        TypKind::Num(NumTyp::Nat) => json!(["NumT", "NatT"]),
+        TypKind::Num(NumTyp::Int) => json!(["NumT", "IntT"]),
+        TypKind::Text => json!(["TextT"]),
+        TypKind::Var(id, targs) => json!([
+            "VarT",
+            id.node,
+            targs
+                .iter()
+                .map(|typ| semantic_type(&typ.node))
+                .collect::<Vec<_>>()
+        ]),
+        TypKind::Tuple(types) => json!([
+            "TupleT",
+            types
+                .iter()
+                .map(|typ| semantic_type(&typ.node))
+                .collect::<Vec<_>>()
+        ]),
+        TypKind::Iter(typ, Iter::Opt) => json!(["IterT", semantic_type(&typ.node), "Opt"]),
+        TypKind::Iter(typ, Iter::List) => {
+            json!(["IterT", semantic_type(&typ.node), "List"])
+        }
+        TypKind::Func(typ) => json!([
+            "FuncT",
+            typ.tparams
+                .iter()
+                .map(|id| id.node.as_str())
+                .collect::<Vec<_>>(),
+            typ.typs_params
+                .iter()
+                .map(|typ| semantic_type(&typ.node))
+                .collect::<Vec<_>>(),
+            semantic_type(&typ.typ_ret.node)
+        ]),
+    }
+}
+
+fn semantic_mixfix_frames(value: &Mixfix<Rc<Value>>, emit: &mut impl FnMut(Json)) {
+    match value {
+        Mixfix::Arg(value) => {
+            emit(json!(["Mixfix", "Arg"]));
+            semantic_frames(value, emit);
+        }
+        Mixfix::Atom(atom) => {
+            emit(json!(["Mixfix", "Atom", Print::to_string(&atom.node)]));
+        }
+        Mixfix::Brack(left, body, right) => {
+            emit(json!([
+                "Mixfix",
+                "Brack",
+                Print::to_string(&left.node),
+                Print::to_string(&right.node)
+            ]));
+            semantic_mixfix_frames(body, emit);
+        }
+        Mixfix::Infix(left, atom, right) => {
+            emit(json!(["Mixfix", "Infix", Print::to_string(&atom.node)]));
+            semantic_mixfix_frames(left, emit);
+            semantic_mixfix_frames(right, emit);
+        }
+        Mixfix::Seq(values) => {
+            emit(json!(["Mixfix", "Seq", values.len()]));
+            for value in values {
+                semantic_mixfix_frames(value, emit);
+            }
+        }
+    }
+}
+
+fn semantic_external_frames(
+    value: &p4spec_rust::yojson::ExternalData,
+    emit: &mut impl FnMut(Json),
+) {
+    use p4spec_rust::yojson::ExternalData;
+
+    match value {
+        ExternalData::Null => emit(json!(["External", "Null"])),
+        ExternalData::Bool(value) => emit(json!(["External", "Bool", value])),
+        ExternalData::Int(value) => emit(json!(["External", "Int", value])),
+        ExternalData::Intlit(value) => emit(json!(["External", "Intlit", value])),
+        ExternalData::Float(value) => emit(json!([
+            "External",
+            "Float",
+            i64::from_ne_bytes(value.to_bits().to_ne_bytes()).to_string()
+        ])),
+        ExternalData::String(value) => emit(json!(["External", "String", value])),
+        ExternalData::Assoc(fields) => {
+            emit(json!(["External", "Assoc", fields.len()]));
+            for (name, value) in fields {
+                emit(json!(["ExternalField", name]));
+                semantic_external_frames(value, emit);
+            }
+        }
+        ExternalData::List(values) => {
+            emit(json!(["External", "List", values.len()]));
+            for value in values {
+                semantic_external_frames(value, emit);
+            }
+        }
+        ExternalData::Tuple(values) => {
+            emit(json!(["External", "Tuple", values.len()]));
+            for value in values {
+                semantic_external_frames(value, emit);
+            }
+        }
+        ExternalData::Variant(name, value) => {
+            emit(json!(["External", "Variant", name, value.is_some()]));
+            if let Some(value) = value {
+                semantic_external_frames(value, emit);
+            }
+        }
+    }
+}
+
+fn collect_semantic_frames(value: &Value) -> Vec<Json> {
+    let mut frames = Vec::new();
+    semantic_frames(value, &mut |frame| frames.push(frame));
+    frames
 }
 
 fn fixtures(det: bool) {
@@ -456,18 +699,18 @@ fn run_corpus(det: bool) {
         );
         // Isolate OCaml's process-global fresh identifiers between programs
         let mut oracle = Oracle::new(&spec, det, false, false);
-        let expected = oracle
-            .query(&json!({"kind": "program", "name": name, "path": path, "includes": includes}));
         runner.clear();
         let actual = match parse_file(&includes, path) {
-            Ok(program) => runner
-                .eval_program(name, program)
-                .map_or_else(failure, success),
-            Err(error) => {
-                json!({"status": "syntax", "span": error.span.to_string(), "message": error.to_string()})
-            }
+            Ok(program) => runner.eval_program(name, program).map_err(failure),
+            Err(error) => Err(
+                json!({"status": "syntax", "span": error.span.to_string(), "message": error.to_string()}),
+            ),
         };
-        compare(expected, actual, &path.display().to_string());
+        oracle.compare_program(
+            &json!({"kind": "program", "name": name, "path": path, "includes": includes}),
+            actual,
+            &path.display().to_string(),
+        );
     }
 }
 
@@ -517,6 +760,130 @@ fn test_semantic_comparison_ignores_spans_but_preserves_values_and_order() {
         first_difference(&expected, &reordered, "")
             .unwrap()
             .contains("/it/0")
+    );
+}
+
+#[test]
+fn test_semantic_frames_detect_nested_value_changes() {
+    use p4spec_rust::lang::{data::typ, xl::num::Natural};
+
+    let typ_list = typ::make::list(typ::make::nat());
+    let original = make::list(
+        &typ_list,
+        vec![make::nat(Natural::from(1_u64), Span::default())],
+        Span::default(),
+    );
+    let mutated = make::list(
+        &typ_list,
+        vec![make::nat(Natural::from(2_u64), Span::default())],
+        Span::default(),
+    );
+    assert_ne!(
+        collect_semantic_frames(&original),
+        collect_semantic_frames(&mutated)
+    );
+}
+
+#[test]
+fn test_semantic_frames_detect_list_order_changes() {
+    use p4spec_rust::lang::{data::typ, xl::num::Natural};
+
+    let typ_list = typ::make::list(typ::make::nat());
+    let first = make::nat(Natural::from(1_u64), Span::default());
+    let second = make::nat(Natural::from(2_u64), Span::default());
+    let original = make::list(
+        &typ_list,
+        vec![Rc::clone(&first), Rc::clone(&second)],
+        Span::default(),
+    );
+    let reordered = make::list(&typ_list, vec![second, first], Span::default());
+    assert_ne!(
+        collect_semantic_frames(&original),
+        collect_semantic_frames(&reordered)
+    );
+}
+
+#[test]
+fn test_semantic_frames_detect_case_atom_changes() {
+    use p4spec_rust::{
+        lang::{
+            common::notation::{atom::Atom, mixfix::Mixfix},
+            data::typ,
+        },
+        phrase,
+    };
+
+    let case = |name: &str| {
+        make::case_(
+            &typ::make::bool(),
+            Mixfix::Atom(phrase! {
+                node: Atom::Keyword(name.to_owned()),
+                span: Span::default(),
+            }),
+            Span::default(),
+        )
+    };
+    assert_ne!(
+        collect_semantic_frames(&case("LEFT")),
+        collect_semantic_frames(&case("RIGHT"))
+    );
+}
+
+#[test]
+fn test_semantic_frames_detect_external_payload_and_order_changes() {
+    use p4spec_rust::{lang::data::typ, yojson::ExternalData};
+
+    let external = |fields| {
+        make::external(
+            &typ::make::bool(),
+            ExternalData::Assoc(fields),
+            Span::default(),
+        )
+    };
+    let original = external(vec![
+        ("a".to_owned(), ExternalData::Int(1)),
+        ("b".to_owned(), ExternalData::Int(2)),
+    ]);
+    let reordered = external(vec![
+        ("b".to_owned(), ExternalData::Int(2)),
+        ("a".to_owned(), ExternalData::Int(1)),
+    ]);
+    let mutated = external(vec![
+        ("a".to_owned(), ExternalData::Int(1)),
+        ("b".to_owned(), ExternalData::Int(3)),
+    ]);
+    let frames = collect_semantic_frames(&original);
+    assert_ne!(frames, collect_semantic_frames(&reordered));
+    assert_ne!(frames, collect_semantic_frames(&mutated));
+}
+
+#[test]
+fn test_semantic_frames_detect_type_changes() {
+    use p4spec_rust::lang::data::{typ::TypKind, value::ValueKind};
+
+    let bool_value = make::new(ValueKind::Bool(true), TypKind::Bool, Span::default());
+    let text_typed = make::new(ValueKind::Bool(true), TypKind::Text, Span::default());
+    assert_ne!(
+        collect_semantic_frames(&bool_value),
+        collect_semantic_frames(&text_typed)
+    );
+}
+
+#[test]
+fn test_semantic_frames_ignore_source_spans() {
+    use p4spec_rust::lang::common::source::Position;
+
+    let original = make::bool(true, Span::default());
+    let relocated = make::bool(
+        true,
+        Span::new(
+            Position::new("other.p4", 10, 20),
+            Position::new("other.p4", 10, 24),
+        ),
+    );
+    assert_eq!(
+        collect_semantic_frames(&original),
+        collect_semantic_frames(&relocated)
     );
 }
 

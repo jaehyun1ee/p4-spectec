@@ -1188,6 +1188,25 @@ ExpressionComparison: Rc<Value> = {
                 span: span_exp,
             }
         },
+
+    // ExpressionComparison ::= ExpressionComparison "SHR" ExpressionBitOr
+    <l:@L> <lhs:ExpressionComparison> <op_l:@L> "SHR" <op_r:@R> <rhs:ExpressionBitOr>
+        <r:@R> => {
+            let span_op = context.location_span(op_l, op_r);
+            let value_op = make::case! {
+                shape: "'>>'",
+                args: vec![],
+                typ: "binop",
+                span: span_op,
+            };
+            let span_exp = context.location_span(l, r);
+            make::case! {
+                shape: "expression binop expression",
+                args: vec![lhs, value_op, rhs],
+                typ: "binaryExpression",
+                span: span_exp,
+            }
+        },
 };
 
 ExpressionBitOr: Rc<Value> = {
@@ -1285,24 +1304,6 @@ ExpressionShift: Rc<Value> = {
             }
         },
 
-    // ExpressionShift ::= ExpressionShift "SHR" ExpressionAdditive
-    <l:@L> <lhs:ExpressionShift> <op_l:@L> "SHR" <op_r:@R> <rhs:ExpressionAdditive>
-        <r:@R> => {
-            let span_op = context.location_span(op_l, op_r);
-            let value_op = make::case! {
-                shape: "'>>'",
-                args: vec![],
-                typ: "binop",
-                span: span_op,
-            };
-            let span_exp = context.location_span(l, r);
-            make::case! {
-                shape: "expression binop expression",
-                args: vec![lhs, value_op, rhs],
-                typ: "binaryExpression",
-                span: span_exp,
-            }
-        },
 };
 
 ExpressionAdditive: Rc<Value> = {
