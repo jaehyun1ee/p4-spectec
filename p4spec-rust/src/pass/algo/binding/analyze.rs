@@ -865,35 +865,19 @@ fn analyze_table_rows(
     Ok(rows_al)
 }
 
-// == Definition binding analysis
-
-// - Dispatch
-
-fn analyze_def(ctx: &mut Context, def_il: ast::Def) -> Result<al::ast::Def, AlgoError> {
-    let span = def_il.span;
-    let def_kind_al = match def_il.node {
-        ast::DefKind::Typ(typ_def_il) => {
-            let typ_def_al = analyze_typ_def(typ_def_il);
-            al::ast::DefKind::Typ(typ_def_al)
-        }
-        ast::DefKind::Var(var_def_il) => {
-            let var_def_al = analyze_var_def(var_def_il);
-            al::ast::DefKind::Var(var_def_al)
-        }
-        ast::DefKind::Rel(rel_def_il) => {
-            let rel_def_al = analyze_rel_def(ctx, rel_def_il)?;
-            al::ast::DefKind::Rel(rel_def_al)
-        }
-        ast::DefKind::MetaFunc(meta_func_def_il) => {
-            let meta_func_def_al = analyze_meta_func_def(ctx, meta_func_def_il, &span)?;
-            al::ast::DefKind::MetaFunc(meta_func_def_al)
-        }
-    };
-    let def_al = phrase!(node: def_kind_al, span: span);
-    Ok(def_al)
-}
-
 // - Type definitions
+
+fn analyze_typ_def(typ_def_il: ast::TypDef) -> al::ast::TypDef {
+    match typ_def_il {
+        ast::TypDef::Extern(extern_typ_il) => {
+            al::ast::TypDef::Extern(analyze_extern_typ(extern_typ_il))
+        }
+        ast::TypDef::Defined(defined_typ_il) => {
+            let defined_typ_al = analyze_defined_typ(*defined_typ_il);
+            al::ast::TypDef::Defined(Box::new(defined_typ_al))
+        }
+    }
+}
 
 fn analyze_extern_typ(extern_typ_il: ast::ExternTyp) -> al::ast::ExternTyp {
     al::ast::ExternTyp {
@@ -911,19 +895,7 @@ fn analyze_defined_typ(defined_typ_il: ast::DefinedTyp) -> al::ast::DefinedTyp {
     }
 }
 
-fn analyze_typ_def(typ_def_il: ast::TypDef) -> al::ast::TypDef {
-    match typ_def_il {
-        ast::TypDef::Extern(extern_typ_il) => {
-            al::ast::TypDef::Extern(analyze_extern_typ(extern_typ_il))
-        }
-        ast::TypDef::Defined(defined_typ_il) => {
-            let defined_typ_al = analyze_defined_typ(*defined_typ_il);
-            al::ast::TypDef::Defined(Box::new(defined_typ_al))
-        }
-    }
-}
-
-// - Meta-variable definitions
+// - Meta-variables
 
 fn analyze_var_def(var_def_il: ast::VarDef) -> al::ast::VarDef {
     al::ast::VarDef {
@@ -933,7 +905,23 @@ fn analyze_var_def(var_def_il: ast::VarDef) -> al::ast::VarDef {
     }
 }
 
-// - Relation definitions
+// - Relations
+
+fn analyze_rel_def(
+    ctx: &mut Context,
+    rel_def_il: ast::RelDef,
+) -> Result<al::ast::RelDef, AlgoError> {
+    match rel_def_il {
+        ast::RelDef::Extern(extern_rel_il) => {
+            let extern_rel_al = analyze_extern_rel(*extern_rel_il);
+            Ok(al::ast::RelDef::Extern(Box::new(extern_rel_al)))
+        }
+        ast::RelDef::Defined(defined_rel_il) => {
+            let defined_rel_al = analyze_defined_rel(ctx, *defined_rel_il)?;
+            Ok(al::ast::RelDef::Defined(Box::new(defined_rel_al)))
+        }
+    }
+}
 
 fn analyze_extern_rel(extern_rel_il: ast::ExternRel) -> al::ast::ExternRel {
     al::ast::ExternRel {
@@ -976,23 +964,29 @@ fn analyze_defined_rel(
     })
 }
 
-fn analyze_rel_def(
+// - Meta-functions
+
+fn analyze_meta_func_def(
     ctx: &mut Context,
-    rel_def_il: ast::RelDef,
-) -> Result<al::ast::RelDef, AlgoError> {
-    match rel_def_il {
-        ast::RelDef::Extern(extern_rel_il) => {
-            let extern_rel_al = analyze_extern_rel(*extern_rel_il);
-            Ok(al::ast::RelDef::Extern(Box::new(extern_rel_al)))
-        }
-        ast::RelDef::Defined(defined_rel_il) => {
-            let defined_rel_al = analyze_defined_rel(ctx, *defined_rel_il)?;
-            Ok(al::ast::RelDef::Defined(Box::new(defined_rel_al)))
+    meta_func_def_il: ast::MetaFuncDef,
+    span: &Span,
+) -> Result<al::ast::MetaFuncDef, AlgoError> {
+    match meta_func_def_il {
+        ast::MetaFuncDef::Extern(extern_func_il) => Ok(al::ast::MetaFuncDef::Extern(
+            analyze_extern_func(extern_func_il),
+        )),
+        ast::MetaFuncDef::Builtin(builtin_func_il) => Ok(al::ast::MetaFuncDef::Builtin(
+            analyze_builtin_func(builtin_func_il),
+        )),
+        ast::MetaFuncDef::Table(table_func_il) => Ok(al::ast::MetaFuncDef::Table(
+            analyze_table_func(ctx, table_func_il, span)?,
+        )),
+        ast::MetaFuncDef::Defined(defined_func_il) => {
+            let defined_func_al = analyze_defined_func(ctx, *defined_func_il)?;
+            Ok(al::ast::MetaFuncDef::Defined(Box::new(defined_func_al)))
         }
     }
 }
-
-// - Meta-function definitions
 
 fn analyze_extern_func(extern_func_il: ast::ExternFunc) -> al::ast::ExternFunc {
     al::ast::ExternFunc {
@@ -1052,26 +1046,30 @@ fn analyze_defined_func(
     })
 }
 
-fn analyze_meta_func_def(
-    ctx: &mut Context,
-    meta_func_def_il: ast::MetaFuncDef,
-    span: &Span,
-) -> Result<al::ast::MetaFuncDef, AlgoError> {
-    match meta_func_def_il {
-        ast::MetaFuncDef::Extern(extern_func_il) => Ok(al::ast::MetaFuncDef::Extern(
-            analyze_extern_func(extern_func_il),
-        )),
-        ast::MetaFuncDef::Builtin(builtin_func_il) => Ok(al::ast::MetaFuncDef::Builtin(
-            analyze_builtin_func(builtin_func_il),
-        )),
-        ast::MetaFuncDef::Table(table_func_il) => Ok(al::ast::MetaFuncDef::Table(
-            analyze_table_func(ctx, table_func_il, span)?,
-        )),
-        ast::MetaFuncDef::Defined(defined_func_il) => {
-            let defined_func_al = analyze_defined_func(ctx, *defined_func_il)?;
-            Ok(al::ast::MetaFuncDef::Defined(Box::new(defined_func_al)))
+// - Definitions
+
+fn analyze_def(ctx: &mut Context, def_il: ast::Def) -> Result<al::ast::Def, AlgoError> {
+    let span = def_il.span;
+    let def_kind_al = match def_il.node {
+        ast::DefKind::Typ(typ_def_il) => {
+            let typ_def_al = analyze_typ_def(typ_def_il);
+            al::ast::DefKind::Typ(typ_def_al)
         }
-    }
+        ast::DefKind::Var(var_def_il) => {
+            let var_def_al = analyze_var_def(var_def_il);
+            al::ast::DefKind::Var(var_def_al)
+        }
+        ast::DefKind::Rel(rel_def_il) => {
+            let rel_def_al = analyze_rel_def(ctx, rel_def_il)?;
+            al::ast::DefKind::Rel(rel_def_al)
+        }
+        ast::DefKind::MetaFunc(meta_func_def_il) => {
+            let meta_func_def_al = analyze_meta_func_def(ctx, meta_func_def_il, &span)?;
+            al::ast::DefKind::MetaFunc(meta_func_def_al)
+        }
+    };
+    let def_al = phrase!(node: def_kind_al, span: span);
+    Ok(def_al)
 }
 
 // - Specification

@@ -907,17 +907,7 @@ fn analyze_table_row(row: &mut ast::TableRow) -> Result<(), ElabError> {
     Ok(())
 }
 
-// - Definitions
-
-fn analyze_def(def_il: &mut ast::Def) -> Result<(), ElabError> {
-    match &mut def_il.node {
-        ast::DefKind::Rel(rel_def_il) => analyze_rel_def(rel_def_il),
-        ast::DefKind::MetaFunc(meta_func_def_il) => analyze_meta_func_def(meta_func_def_il),
-        _ => Ok(()),
-    }
-}
-
-// - Relation definitions
+// - Relations
 
 fn analyze_rel_def(rel_def_il: &mut ast::RelDef) -> Result<(), ElabError> {
     let ast::RelDef::Defined(defined_rel_il) = rel_def_il else {
@@ -932,19 +922,19 @@ fn analyze_rel_def(rel_def_il: &mut ast::RelDef) -> Result<(), ElabError> {
     Ok(())
 }
 
-// - Meta-function definitions
+// - Meta-functions
 
 fn analyze_meta_func_def(meta_func_def_il: &mut ast::MetaFuncDef) -> Result<(), ElabError> {
     match meta_func_def_il {
-        ast::MetaFuncDef::Table(table_func_il) => analyze_table_def(table_func_il),
-        ast::MetaFuncDef::Defined(defined_func_il) => analyze_func_def(defined_func_il),
+        ast::MetaFuncDef::Table(table_func_il) => analyze_table_func(table_func_il),
+        ast::MetaFuncDef::Defined(defined_func_il) => analyze_defined_func(defined_func_il),
         ast::MetaFuncDef::Extern(_) | ast::MetaFuncDef::Builtin(_) => Ok(()),
     }
 }
 
 // - Table functions
 
-fn analyze_table_def(table_func_il: &mut ast::TableFunc) -> Result<(), ElabError> {
+fn analyze_table_func(table_func_il: &mut ast::TableFunc) -> Result<(), ElabError> {
     for table_row_il in &mut table_func_il.rows {
         analyze_table_row(table_row_il)?;
     }
@@ -953,7 +943,7 @@ fn analyze_table_def(table_func_il: &mut ast::TableFunc) -> Result<(), ElabError
 
 // - Defined functions
 
-fn analyze_func_def(defined_func_il: &mut ast::DefinedFunc) -> Result<(), ElabError> {
+fn analyze_defined_func(defined_func_il: &mut ast::DefinedFunc) -> Result<(), ElabError> {
     for clause_il in &mut defined_func_il.clauses {
         analyze_clause(clause_il)?;
     }
@@ -961,6 +951,16 @@ fn analyze_func_def(defined_func_il: &mut ast::DefinedFunc) -> Result<(), ElabEr
         analyze_clause(else_clause_il)?;
     }
     Ok(())
+}
+
+// - Definitions
+
+fn analyze_def(def_il: &mut ast::Def) -> Result<(), ElabError> {
+    match &mut def_il.node {
+        ast::DefKind::Rel(rel_def_il) => analyze_rel_def(rel_def_il),
+        ast::DefKind::MetaFunc(meta_func_def_il) => analyze_meta_func_def(meta_func_def_il),
+        _ => Ok(()),
+    }
 }
 
 // - Specification
