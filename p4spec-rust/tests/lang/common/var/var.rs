@@ -1,10 +1,10 @@
 use p4spec_rust::{
+    lang::common::Variable,
     lang::{
         common::source::{Position, Span},
         il::ast::Iter,
     },
     phrase,
-    runtime::var::Variable,
 };
 
 fn id(name: &str, line: i64) -> p4spec_rust::lang::il::ast::Id {

@@ -21,3 +21,6 @@ fn id(name: &str, file: &str) -> Id {
 mod ds;
 #[path = "common/notation.rs"]
 mod notation;
+
+#[path = "common/var.rs"]
+mod var;

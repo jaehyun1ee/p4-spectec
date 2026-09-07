@@ -4,4 +4,3 @@ pub mod dim;
 pub mod envs;
 pub mod ops;
 pub mod typdef;
-pub mod var;

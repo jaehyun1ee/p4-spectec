@@ -61,7 +61,7 @@ pub fn parse_mixop(source: &str) -> Result<Mixop, FrontendError> {
     }
 
     let context = Context::default();
-    let lexer = Lexer::new(Rc::from("<mixop>"), source, |id| context.find_id(id));
+    let lexer = Lexer::new(Rc::from(""), source, |id| context.find_id(id));
     let tokens = parser_tokens(&context, lexer);
     let result = parser::CheckTypParser::new().parse(&context, tokens);
     let typ = result.map_err(|error| parse_error(&context, error))?;

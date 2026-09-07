@@ -552,18 +552,29 @@ impl<'source> Lexer<'source> {
 
     // - String literals
 
+    fn bump_string(&mut self) -> Option<char> {
+        let character = self.source[self.index..].chars().next()?;
+        self.index += character.len_utf8();
+        // The recursive OCaml string scanner does not call Lexing.new_line
+        self.column += character.len_utf8() as i64;
+        Some(character)
+    }
+
     fn string_token(&mut self, pos_l: Position) -> Result<Phrase<Token>, P4Error> {
-        self.bump();
+        self.bump_string();
         let mut text = String::new();
-        loop {
-            let Some(character) = self.bump() else {
-                return Err(self.error(LexErrorKind::UnterminatedString, pos_l));
+        let pos_quote = loop {
+            let pos_char = self.source_position();
+            let Some(character) = self.bump_string() else {
+                return Err(self.error(LexErrorKind::UnterminatedString, pos_char));
             };
             match character {
-                '"' => break,
+                '"' => break pos_char,
                 '\\' => {
-                    let Some(escaped) = self.bump() else {
-                        return Err(self.error(LexErrorKind::UnterminatedString, pos_l));
+                    let Some(escaped) = self.bump_string() else {
+                        return Err(
+                            self.error(LexErrorKind::UnterminatedString, self.source_position())
+                        );
                     };
                     match escaped {
                         '"' => text.push('"'),
@@ -572,17 +583,17 @@ impl<'source> Lexer<'source> {
                         escaped => {
                             return Err(self.error(
                                 LexErrorKind::UnsupportedEscape(format!("\\{escaped}")),
-                                pos_l,
+                                pos_char,
                             ));
                         }
                     }
                 }
                 character => text.push(character),
             }
-        }
-        let span = self.span_from(pos_l);
-        let value = make::text(text, span.clone());
+        };
+        let value = make::text(text, self.span_from(pos_l));
         let token = Token::StringLiteral(value);
+        let span = self.span_from(pos_quote);
         Ok(phrase!(node: token, span: span))
     }
 

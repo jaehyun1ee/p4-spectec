@@ -7,13 +7,10 @@
 use std::{collections::BTreeSet, rc::Rc};
 
 use crate::lang::{
-    common::{
-        notation::{atom::Atom, mixfix::Mixfix, mixop::Mixop},
-        source::Span,
-    },
+    common::{notation::mixop::Mixop, source::Span},
     data::{
         typ,
-        value::{Value, get, make},
+        value::{Value, get, make, shape},
     },
     il::ast::Typ,
 };
@@ -26,16 +23,14 @@ type ValueSet = BTreeSet<Rc<Value>>;
 
 // == Conversion between meta-sets and runtime lists
 
-fn set_mixop() -> Mixop {
-    let left = crate::phrase!(node: Atom::LBrace, span: Span::default());
-    let right = crate::phrase!(node: Atom::RBrace, span: Span::default());
-    Mixfix::Brack(left, Box::new(Mixfix::Arg(())), right)
+fn set_mixop() -> Rc<Mixop> {
+    shape("`{ k `}")
 }
 
 fn set_of_value(value: &Value) -> Result<ValueSet, BuiltinError> {
     let value_case = get::case(value).map_err(|_| BuiltinError::new("expected a set"))?;
     let set_mixop = set_mixop();
-    if value_case.split().0 != set_mixop {
+    if value_case.split().0 != *set_mixop {
         return Err(BuiltinError::new("expected a set"));
     }
     let args = value_case.args();

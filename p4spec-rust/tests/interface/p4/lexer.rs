@@ -138,3 +138,34 @@ fn test_fixed_tokens_use_maximal_munch_in_grammar_order() {
         ]
     );
 }
+
+#[test]
+fn test_string_token_uses_closing_quote_but_payload_spans_the_literal() {
+    for literal in ["\"\"", "\"text\"", "\"a\\\"b\\n\\\\\"", "\"a\nb\""] {
+        let source = format!("  {literal}");
+        let token = Lexer::new(Rc::from("string.p4"), &source, Rc::new(Context::new()))
+            .next()
+            .unwrap()
+            .unwrap();
+        let Token::StringLiteral(value) = token.node else {
+            panic!("string literal")
+        };
+        assert_eq!(token.span.left.line, 1);
+        assert_eq!(token.span.left.column, source.len() as i64 - 1);
+        assert_eq!(token.span.right.column, source.len() as i64);
+        assert_eq!(value.span.left.column, 2);
+        assert_eq!(value.span.right, token.span.right);
+    }
+}
+
+#[test]
+fn test_string_failures_locate_the_escape_or_end_of_input() {
+    for (source, left, right) in [("\"ab\\t\"", 3, 5), ("\"ab", 3, 3), ("\"ab\\", 4, 4)] {
+        let error = Lexer::new(Rc::from("string.p4"), source, Rc::new(Context::new()))
+            .next()
+            .unwrap()
+            .unwrap_err();
+        assert_eq!((error.span.left.line, error.span.left.column), (1, left));
+        assert_eq!((error.span.right.line, error.span.right.column), (1, right));
+    }
+}

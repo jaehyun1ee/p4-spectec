@@ -1,9 +1,15 @@
 use std::{cell::Cell, rc::Rc, sync::Mutex};
 
 use p4spec_rust::{
-    interface::builtin::BuiltinErrorKind,
+    interface::{
+        builtin::BuiltinErrorKind,
+        p4::{error::P4UnparseError, unparse::P4Unparser},
+    },
     lang::common::source::Span,
-    lang::data::value::{self, Value, get},
+    lang::data::{
+        typ,
+        value::{self, Value, get},
+    },
     lang::il::ast::Typ,
     phrase,
     runner::{
@@ -26,8 +32,8 @@ enum FixtureError {
 }
 
 #[derive(Default)]
-struct FixtureState {
-    next: u64,
+struct FixtureConfig {
+    label: String,
 }
 
 struct FixtureInterpreter;
@@ -38,8 +44,19 @@ where
     E: Extern,
 {
     type Spec = ();
-    type State = FixtureState;
+    type Config = FixtureConfig;
     type Error = FixtureError;
+
+    fn eval_program(
+        _context: &mut RunnerContext<'_, Self, I, E>,
+        name: &str,
+        program: Rc<Value>,
+    ) -> Result<Vec<Rc<Value>>, Self::Error> {
+        match name {
+            "identity" => Ok(vec![program]),
+            _ => Err(FixtureError::Unknown(name.to_owned())),
+        }
+    }
 
     fn eval_func(
         context: &mut RunnerContext<'_, Self, I, E>,
@@ -69,12 +86,10 @@ where
                 let (value, _) = context.call_extern_func("missing", targs, values)?;
                 Ok(value)
             }
-            "next_interp" => {
-                let state = context.interp_state();
-                let next = state.next;
-                state.next += 1;
-                Ok(value::make::text(next.to_string(), Span::default()))
-            }
+            "config" => Ok(value::make::text(
+                context.config().label.clone(),
+                Span::default(),
+            )),
             "next_extern" => {
                 let (value, _) = context.call_extern_func("next", targs, values)?;
                 Ok(value)
@@ -94,10 +109,6 @@ where
         _values: &[Rc<Value>],
     ) -> Result<Vec<Rc<Value>>, Self::Error> {
         Err(FixtureError::Unknown(name.to_owned()))
-    }
-
-    fn clear(state: &mut Self::State) {
-        state.next = 0;
     }
 }
 
@@ -183,7 +194,7 @@ fn test_null_interface_reports_configuration_failure() {
 #[test]
 fn test_builtin_interface_reports_side_effects_and_clears() {
     let _guard = FRESH_BUILTIN.lock().unwrap();
-    let mut interface = BuiltinInterface::new();
+    let mut interface = BuiltinInterface::new(P4Unparser::new());
     interface.clear();
     let (value, side_effected) = interface
         .call_builtin(&id("fresh_typeId"), &[], &[])
@@ -202,7 +213,7 @@ fn test_builtin_interface_reports_side_effects_and_clears() {
 
 #[test]
 fn test_builtin_interface_preserves_builtin_failures() {
-    let error = BuiltinInterface::new()
+    let error = BuiltinInterface::new(P4Unparser::new())
         .call_builtin(&id("sum_int"), &[], &[])
         .unwrap_err();
 
@@ -214,10 +225,113 @@ fn test_builtin_interface_preserves_builtin_failures() {
 }
 
 #[test]
+fn test_builtin_interface_prints_p4_values_without_side_effects() {
+    let value = value::make::text("a\n\"b".to_owned(), Span::default());
+    let (printed, side_effected) = BuiltinInterface::new(P4Unparser::new())
+        .call_builtin(&id("print_"), &[typ::make::text()], &[value])
+        .unwrap();
+
+    assert_eq!(get::text(&printed), Ok("a\\n\\\"b"));
+    assert!(!side_effected);
+}
+
+#[test]
+fn test_builtin_interface_print_validates_both_arities() {
+    let mut interface = BuiltinInterface::new(P4Unparser::new());
+    let typ = typ::make::text();
+    let value = value::make::text("value".to_owned(), Span::default());
+    for (targs, values, actual) in [
+        (vec![], vec![value.clone()], 0),
+        (vec![typ.clone(), typ.clone()], vec![value.clone()], 2),
+        (vec![typ.clone()], vec![], 0),
+        (vec![typ], vec![value.clone(), value], 2),
+    ] {
+        let error = interface
+            .call_builtin(&id("print_"), &targs, &values)
+            .unwrap_err();
+        assert!(matches!(
+            error,
+            InterfaceError::Builtin(error)
+                if error.kind == BuiltinErrorKind::ArityMismatch { expected: 1, actual }
+        ));
+    }
+}
+
+#[test]
+fn test_builtin_interface_print_preserves_unparse_failures() {
+    let typ = typ::make::bool();
+    let value = value::make::structure(&typ, Vec::new(), Span::default());
+    let error = BuiltinInterface::new(P4Unparser::new())
+        .call_builtin(&id("print_"), &[typ], &[value])
+        .unwrap_err();
+    assert!(matches!(
+        error,
+        InterfaceError::Builtin(error)
+            if error.kind == BuiltinErrorKind::P4Unparse(P4UnparseError::UnsupportedValue("Struct"))
+    ));
+}
+
+#[test]
+fn test_builtin_interface_print_preserves_spec_hints_after_clear() {
+    use p4spec_rust::lang::{
+        al::ast,
+        common::notation::{atom::Atom, mixfix::Mixfix},
+        el,
+    };
+
+    let span = Span::default();
+    let atom = phrase!(node: Atom::Keyword("WRAP".to_owned()), span: span.clone());
+    let notation = Mixfix::Seq(vec![
+        Mixfix::Atom(atom.clone()),
+        Mixfix::Arg(typ::make::text()),
+    ]);
+    let hint = phrase!(node: el::ast::ExpKind::Seq(vec![
+        phrase!(node: el::ast::ExpKind::Text("shown".to_owned()), span: span.clone()),
+        phrase!(node: el::ast::ExpKind::Hole(el::ast::Hole::Next), span: span.clone()),
+    ]), span: span.clone());
+    let def_typ = phrase!(node: p4spec_rust::lang::il::ast::DefTypKind::Variant(vec![(
+        phrase!(node: notation, span: span.clone()),
+        phrase!(node: (id("Origin"), Vec::new()), span: span.clone()),
+        vec![(id("print"), hint)],
+    )]), span: span.clone());
+    let defined_typ = ast::DefinedTyp {
+        id: id("Wrapper"),
+        tparams: Vec::new(),
+        def_typ,
+        hints: Vec::new(),
+    };
+    let def = ast::DefKind::Typ(ast::TypDef::Defined(Box::new(defined_typ)));
+    let spec = vec![phrase!(node: def, span: span.clone())];
+    let typ = typ::make::var(id("Wrapper"), Vec::new());
+    let value = value::make::case_(
+        &typ,
+        Mixfix::Seq(vec![
+            Mixfix::Atom(atom),
+            Mixfix::Arg(value::make::text("payload".to_owned(), span.clone())),
+        ]),
+        span,
+    );
+    let _guard = FRESH_BUILTIN.lock().unwrap();
+    let mut interface = BuiltinInterface::new(P4Unparser::from_al_spec(&spec));
+    for _ in 0..2 {
+        let (printed, side_effected) = interface
+            .call_builtin(
+                &id("print_"),
+                std::slice::from_ref(&typ),
+                std::slice::from_ref(&value),
+            )
+            .unwrap();
+        assert_eq!(get::text(&printed), Ok("shown payload"));
+        assert!(!side_effected);
+        interface.clear();
+    }
+}
+
+#[test]
 fn test_runner_statically_composes_its_components() {
     let mut runner = Runner::<FixtureInterpreter, NullInterface, NullExtern>::new(
         (),
-        FixtureState::default(),
+        FixtureConfig::default(),
         NullInterface,
         NullExtern,
     );
@@ -231,7 +345,7 @@ fn test_runner_statically_composes_its_components() {
 fn test_extern_can_reenter_the_interpreter() {
     let mut runner = Runner::<FixtureInterpreter, NullInterface, FixtureExtern>::new(
         (),
-        FixtureState::default(),
+        FixtureConfig::default(),
         NullInterface,
         FixtureExtern::default(),
     );
@@ -245,7 +359,7 @@ fn test_extern_can_reenter_the_interpreter() {
 fn test_extern_reports_side_effects_with_each_result() {
     let mut runner = Runner::<FixtureInterpreter, NullInterface, FixtureExtern>::new(
         (),
-        FixtureState::default(),
+        FixtureConfig::default(),
         NullInterface,
         FixtureExtern::default(),
     );
@@ -261,7 +375,7 @@ fn test_extern_reports_side_effects_with_each_result() {
 fn test_null_extern_reports_configuration_failure() {
     let mut runner = Runner::<FixtureInterpreter, NullInterface, NullExtern>::new(
         (),
-        FixtureState::default(),
+        FixtureConfig::default(),
         NullInterface,
         NullExtern,
     );
@@ -275,18 +389,19 @@ fn test_null_extern_reports_configuration_failure() {
 }
 
 #[test]
-fn test_runner_clear_resets_every_component() {
+fn test_runner_clear_resets_host_state_and_preserves_config() {
     let _guard = FRESH_BUILTIN.lock().unwrap();
     let mut runner = Runner::<FixtureInterpreter, BuiltinInterface, FixtureExtern>::new(
         (),
-        FixtureState::default(),
-        BuiltinInterface::new(),
+        FixtureConfig {
+            label: "configured".to_owned(),
+        },
+        BuiltinInterface::new(P4Unparser::new()),
         FixtureExtern::default(),
     );
     runner.clear();
 
-    assert_eq!(eval_text(&mut runner, "next_interp"), "0");
-    assert_eq!(eval_text(&mut runner, "next_interp"), "1");
+    assert_eq!(eval_text(&mut runner, "config"), "configured");
     assert_eq!(eval_text(&mut runner, "next_extern"), "0");
     assert_eq!(eval_text(&mut runner, "next_extern"), "1");
     assert_eq!(eval_text(&mut runner, "next_builtin"), "FRESH__0");
@@ -294,7 +409,7 @@ fn test_runner_clear_resets_every_component() {
 
     runner.clear();
 
-    assert_eq!(eval_text(&mut runner, "next_interp"), "0");
+    assert_eq!(eval_text(&mut runner, "config"), "configured");
     assert_eq!(eval_text(&mut runner, "next_extern"), "0");
     assert_eq!(eval_text(&mut runner, "next_builtin"), "FRESH__0");
 }
@@ -305,4 +420,20 @@ fn eval_text(
 ) -> String {
     let value = runner.eval_func(name, &[], &[]).unwrap();
     get::text(&value).unwrap().to_owned()
+}
+
+#[test]
+fn test_runner_dispatches_program_entry_and_errors() {
+    let mut runner = Runner::<FixtureInterpreter, NullInterface, NullExtern>::new(
+        (),
+        FixtureConfig::default(),
+        NullInterface,
+        NullExtern,
+    );
+    let program = value::make::text("program".to_owned(), Span::default());
+    let values = runner.eval_program("identity", program.clone()).unwrap();
+    assert_eq!(values.len(), 1);
+    assert!(Rc::ptr_eq(&values[0], &program));
+    let error = runner.eval_program("missing", program).unwrap_err();
+    assert!(matches!(error, FixtureError::Unknown(name) if name == "missing"));
 }

@@ -7,13 +7,10 @@
 use std::rc::Rc;
 
 use crate::lang::{
-    common::{
-        notation::{atom::Atom, mixfix::Mixfix, mixop::Mixop},
-        source::Span,
-    },
+    common::{notation::mixop::Mixop, source::Span},
     data::{
         typ,
-        value::{Value, get, make},
+        value::{Value, get, make, shape},
     },
     il::ast::Typ,
 };
@@ -24,15 +21,12 @@ use super::{BuiltinError, extract};
 
 type ValueMap = Vec<Rc<Value>>;
 
-fn pair_mixop() -> Mixop {
-    let colon = crate::phrase!(node: Atom::Operator(":".to_owned()), span: Span::default());
-    Mixfix::Seq(vec![Mixfix::Arg(()), Mixfix::Atom(colon), Mixfix::Arg(())])
+fn pair_mixop() -> Rc<Mixop> {
+    shape("k ':' v")
 }
 
-fn map_mixop() -> Mixop {
-    let left = crate::phrase!(node: Atom::LBrace, span: Span::default());
-    let right = crate::phrase!(node: Atom::RBrace, span: Span::default());
-    Mixfix::Brack(left, Box::new(Mixfix::Arg(())), right)
+fn map_mixop() -> Rc<Mixop> {
+    shape("`{ k `}")
 }
 
 fn map_find_opt(key: &Value, map: &[Rc<Value>]) -> Option<Rc<Value>> {
@@ -41,7 +35,7 @@ fn map_find_opt(key: &Value, map: &[Rc<Value>]) -> Option<Rc<Value>> {
         let Ok(value_case) = get::case(pair) else {
             continue;
         };
-        if value_case.split().0 != pair_mixop {
+        if value_case.split().0 != *pair_mixop {
             continue;
         }
         let args = value_case.args();
@@ -80,7 +74,7 @@ fn map_update(
     let pair_mixop = pair_mixop();
     for pair in map {
         let matching = get::case(pair).ok().is_some_and(|value_case| {
-            if value_case.split().0 != pair_mixop {
+            if value_case.split().0 != *pair_mixop {
                 return false;
             }
             let args = value_case.args();
@@ -114,7 +108,7 @@ fn map_update(
 fn map_of_value(value: &Value) -> Result<ValueMap, BuiltinError> {
     let value_case = get::case(value).map_err(|_| BuiltinError::new("expected a map"))?;
     let map_mixop = map_mixop();
-    if value_case.split().0 != map_mixop {
+    if value_case.split().0 != *map_mixop {
         return Err(BuiltinError::new("expected a map"));
     }
     let args = value_case.args();

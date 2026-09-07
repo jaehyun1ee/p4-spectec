@@ -2,7 +2,7 @@
 
 use thiserror::Error;
 
-use crate::lang::data::value::ValueError;
+use crate::{interface::p4::error::P4UnparseError, lang::data::value::ValueError};
 
 #[derive(Clone, Debug, Error, Eq, PartialEq)]
 pub enum BuiltinErrorKind {
@@ -17,6 +17,9 @@ pub enum BuiltinErrorKind {
 
     #[error(transparent)]
     Value(#[from] ValueError),
+
+    #[error(transparent)]
+    P4Unparse(#[from] P4UnparseError),
 }
 
 #[derive(Clone, Debug, Error, Eq, PartialEq)]

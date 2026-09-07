@@ -2,7 +2,10 @@
 
 use std::{borrow::Borrow, cmp::Ordering};
 
-use crate::lang::{common::Id, traits::cmp::SyntaxCmp};
+use crate::lang::{
+    common::{Id, Variable},
+    traits::cmp::SyntaxCmp,
+};
 
 #[repr(transparent)]
 #[derive(Clone, Debug)]
@@ -11,6 +14,12 @@ pub(crate) struct ByKey<K: ?Sized>(pub(crate) K);
 impl Borrow<String> for ByKey<Id> {
     fn borrow(&self) -> &String {
         &self.0.node
+    }
+}
+
+impl Borrow<Variable> for ByKey<Variable> {
+    fn borrow(&self) -> &Variable {
+        &self.0
     }
 }
 

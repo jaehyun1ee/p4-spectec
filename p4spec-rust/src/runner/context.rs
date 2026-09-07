@@ -23,7 +23,7 @@ where
     E: Extern,
 {
     spec: &'runner S::Spec,
-    interp_state: &'runner mut S::State,
+    config: &'runner S::Config,
     interface: &'runner mut I,
     externs: &'runner E,
 }
@@ -36,13 +36,13 @@ where
 {
     pub(super) fn new(
         spec: &'runner S::Spec,
-        interp_state: &'runner mut S::State,
+        config: &'runner S::Config,
         interface: &'runner mut I,
         externs: &'runner E,
     ) -> Self {
         Self {
             spec,
-            interp_state,
+            config,
             interface,
             externs,
         }
@@ -50,15 +50,23 @@ where
 
     // - Semantic components
 
-    pub fn spec(&self) -> &S::Spec {
+    pub fn spec(&self) -> &'runner S::Spec {
         self.spec
     }
 
-    pub fn interp_state(&mut self) -> &mut S::State {
-        self.interp_state
+    pub fn config(&self) -> &'runner S::Config {
+        self.config
     }
 
     // - Evaluation dispatch
+
+    pub fn call_program(
+        &mut self,
+        name: &str,
+        program: Rc<Value>,
+    ) -> Result<Vec<Rc<Value>>, S::Error> {
+        S::eval_program(self, name, program)
+    }
 
     pub fn call_rel(
         &mut self,

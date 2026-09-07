@@ -11,8 +11,12 @@ use std::rc::Rc;
 use thiserror::Error;
 
 use crate::{
-    interface::builtin::{BuiltinError, call::Builtins},
-    lang::data::value::Value,
+    interface::{
+        builtin::{BuiltinError, BuiltinErrorKind, call::Builtins, extract},
+        p4::unparse::P4Unparser,
+    },
+    lang::common::source::Span,
+    lang::data::value::{self, Value},
     lang::il::ast::{Id, Typ},
 };
 
@@ -41,14 +45,26 @@ pub trait Interface {
 
 // == Standard implementations
 
-#[derive(Default)]
 pub struct BuiltinInterface {
     builtins: Builtins,
+    unparser: P4Unparser,
 }
 
 impl BuiltinInterface {
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(unparser: P4Unparser) -> Self {
+        Self {
+            builtins: Builtins::new(),
+            unparser,
+        }
+    }
+
+    fn print(&self, targs: &[Typ], values: &[Rc<Value>]) -> Result<Rc<Value>, BuiltinError> {
+        let _typ = extract::one(targs)?;
+        let value = extract::one(values)?;
+        let text = self.unparser.render(value).map_err(|error| BuiltinError {
+            kind: BuiltinErrorKind::P4Unparse(error),
+        })?;
+        Ok(value::make::text(text, Span::default()))
     }
 }
 
@@ -59,7 +75,10 @@ impl Interface for BuiltinInterface {
         targs: &[Typ],
         values: &[Rc<Value>],
     ) -> Result<(Rc<Value>, bool), InterfaceError> {
-        let result = self.builtins.invoke(id, targs, values);
+        let result = match id.node.as_str() {
+            "print_" => self.print(targs, values).map(|value| (value, false)),
+            _ => self.builtins.invoke(id, targs, values),
+        };
         result.map_err(|error| InterfaceError::Builtin(Box::new(error)))
     }
 

@@ -7,7 +7,7 @@
 CARGO := cargo
 
 .PHONY: test test-frontend test-p4-parse test-elab test-algo test-lang test-wire \
-        test-runtime test-frontend-diff test-elab-diff test-algo-diff test-diff
+        test-runtime test-run-al test-run-al-diff test-frontend-diff test-elab-diff test-algo-diff test-diff
 
 # Fast unit tests (no OCaml toolchain required)
 
@@ -42,6 +42,11 @@ test-wire:
 test-runtime:
 	$(CARGO) test --test runtime
 
+# Native AL execution and command-line checks
+test-run-al:
+	$(CARGO) test --locked --test runtime interp::al::
+	$(CARGO) test --locked --test cli
+
 # OCaml-differential tests (need opam/dune; render a corpus progress bar)
 
 test-frontend-diff:
@@ -53,4 +58,8 @@ test-elab-diff:
 test-algo-diff:
 	$(CARGO) test --test pass algo:: -- --ignored --nocapture
 
-test-diff: test-frontend-diff test-elab-diff test-algo-diff
+test-run-al-diff:
+	$(CARGO) test --locked --release --test runtime interp::al::compare::test_run_al_corpus_matches_ocaml -- --ignored --exact --nocapture
+	$(CARGO) test --locked --release --test runtime interp::al::compare::test_run_al_det_corpus_matches_ocaml -- --ignored --exact --nocapture
+
+test-diff: test-frontend-diff test-elab-diff test-algo-diff test-run-al-diff

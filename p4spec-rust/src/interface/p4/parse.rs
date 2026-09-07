@@ -14,7 +14,7 @@ use std::{
 use lalrpop_util::ParseError;
 
 use crate::{
-    lang::common::source::{Phrase, Span},
+    lang::common::source::{Phrase, Position, Span},
     lang::data::value::Value,
 };
 
@@ -33,14 +33,17 @@ use super::{
 fn parser_input<'a, I>(
     context: &'a Context,
     tokens: I,
+    position: Position,
 ) -> impl Iterator<Item = Result<(Location, Token, Location), P4Error>> + 'a
 where
     I: Iterator<Item = Result<Phrase<Token>, P4Error>> + 'a,
 {
-    tokens.map(|token| {
+    let mut location_prev = context.location_add(position, None);
+    tokens.map(move |token| {
         token.map(|token| {
-            let location_l = context.location_add(token.span.left);
-            let location_r = context.location_add(token.span.right);
+            let location_l = context.location_add(token.span.left, Some(location_prev));
+            let location_r = context.location_add(token.span.right, None);
+            location_prev = location_r;
             (location_l, token.node, location_r)
         })
     })
@@ -73,8 +76,9 @@ fn translate_lalrpop_error(
 pub fn parse_string(path: impl AsRef<Path>, source: &str) -> Result<Rc<Value>, P4Error> {
     let file: Rc<str> = Rc::from(path.as_ref().to_string_lossy().into_owned());
     let context = Rc::new(Context::new());
+    let position = Position::new(Rc::clone(&file), 1, 0);
     let lexer = Lexer::new(file, source, Rc::clone(&context));
-    let input = parser_input(context.as_ref(), lexer);
+    let input = parser_input(context.as_ref(), lexer, position);
 
     let result = p4programParser::new().parse(context.as_ref(), input);
     result.map_err(|error| translate_lalrpop_error(context.as_ref(), error))

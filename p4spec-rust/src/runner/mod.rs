@@ -31,7 +31,7 @@ where
     E: Extern,
 {
     spec: S::Spec,
-    interp_state: S::State,
+    config: S::Config,
     interface: I,
     externs: E,
 }
@@ -42,28 +42,37 @@ where
     I: Interface,
     E: Extern,
 {
-    pub fn new(spec: S::Spec, interp_state: S::State, interface: I, externs: E) -> Self {
+    pub fn new(spec: S::Spec, config: S::Config, interface: I, externs: E) -> Self {
         Self {
             spec,
-            interp_state,
+            config,
             interface,
             externs,
         }
     }
 
+    /// Borrows the assembled components for a stage-specific evaluation entry
+    pub fn context(&mut self) -> RunnerContext<'_, S, I, E> {
+        RunnerContext::new(&self.spec, &self.config, &mut self.interface, &self.externs)
+    }
+
     // - Evaluation
+
+    pub fn eval_program(
+        &mut self,
+        name: &str,
+        program: Rc<Value>,
+    ) -> Result<Vec<Rc<Value>>, S::Error> {
+        let mut context = self.context();
+        context.call_program(name, program)
+    }
 
     pub fn eval_rel(
         &mut self,
         name: &str,
         values: &[Rc<Value>],
     ) -> Result<Vec<Rc<Value>>, S::Error> {
-        let mut context: RunnerContext<'_, S, I, E> = RunnerContext::new(
-            &self.spec,
-            &mut self.interp_state,
-            &mut self.interface,
-            &self.externs,
-        );
+        let mut context = self.context();
         context.call_rel(name, values)
     }
 
@@ -73,20 +82,14 @@ where
         targs: &[Typ],
         values: &[Rc<Value>],
     ) -> Result<Rc<Value>, S::Error> {
-        let mut context: RunnerContext<'_, S, I, E> = RunnerContext::new(
-            &self.spec,
-            &mut self.interp_state,
-            &mut self.interface,
-            &self.externs,
-        );
+        let mut context = self.context();
         context.call_func(name, targs, values)
     }
 
     // - Lifecycle
 
-    /// Restores every stateful component to its initial execution state.
+    /// Resets the builtin interface and extern implementation.
     pub fn clear(&mut self) {
-        S::clear(&mut self.interp_state);
         self.externs.clear();
         self.interface.clear();
     }

@@ -3,7 +3,10 @@
 use imbl::{GenericOrdMap, shared_ptr::RcK};
 use thiserror::Error;
 
-use crate::lang::{common::Id, traits::cmp::SyntaxCmp};
+use crate::lang::{
+    common::{Id, Variable},
+    traits::cmp::SyntaxCmp,
+};
 
 use super::{collections::ByKey, set::PhraseSet};
 
@@ -139,6 +142,44 @@ impl<V> PhraseMap<Id, V> {
     }
 }
 
+impl<V> PhraseMap<Variable, V> {
+    /// Returns the value for an equivalent key
+    pub fn get(&self, key: &Variable) -> Option<&V> {
+        self.entries.get(key)
+    }
+
+    /// Returns the mutable value for an equivalent key
+    pub fn get_mut(&mut self, key: &Variable) -> Option<&mut V>
+    where
+        V: Clone,
+    {
+        self.entries.get_mut(key)
+    }
+
+    /// Returns whether an equivalent key is present
+    pub fn contains_key(&self, key: &Variable) -> bool {
+        self.entries.contains_key(key)
+    }
+
+    /// Removes and returns the value for an equivalent key
+    pub fn remove(&mut self, key: &Variable) -> Option<V>
+    where
+        V: Clone,
+    {
+        self.entries.remove(key)
+    }
+
+    /// Removes and returns the stored key and value for an equivalent key
+    pub fn remove_entry(&mut self, key: &Variable) -> Option<(Variable, V)>
+    where
+        V: Clone,
+    {
+        self.entries
+            .remove_with_key(key)
+            .map(|(key, value)| (key.0, value))
+    }
+}
+
 impl<K: SyntaxCmp, V> Default for PhraseMap<K, V> {
     fn default() -> Self {
         Self::new()
@@ -163,3 +204,6 @@ impl<K: SyntaxCmp + Clone, V: Clone> FromIterator<(K, V)> for PhraseMap<K, V> {
 
 /// Map keyed by source-annotated identifiers
 pub type IdMap<V> = PhraseMap<Id, V>;
+
+/// Map keyed by identifiers and iterator paths
+pub type VarMap<V> = PhraseMap<Variable, V>;

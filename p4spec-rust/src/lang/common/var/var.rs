@@ -1,4 +1,4 @@
-//! Runtime variables identified by a source-insensitive id and iterator path
+//! Variables identified by a source-insensitive id and iterator path
 //!
 //! Ordering, equality, and hashing all use the same semantic pair. For example,
 //! `x*` and an equal `x*` from another source span address the same binding.
@@ -9,7 +9,9 @@ use std::{
     hash::{Hash, Hasher},
 };
 
-use crate::lang::il::ast::{Id, Iter};
+use crate::lang::traits::{cmp::SyntaxCmp, eq::SyntaxEq};
+
+use super::{id::Id, iter::Iter};
 
 // == Variable identity
 
@@ -65,5 +67,17 @@ impl Hash for Variable {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.id.node.hash(state);
         self.iters.hash(state);
+    }
+}
+
+impl SyntaxEq for Variable {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self == other
+    }
+}
+
+impl SyntaxCmp for Variable {
+    fn syntax_cmp(&self, other: &Self) -> Ordering {
+        self.cmp(other)
     }
 }

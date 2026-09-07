@@ -16,7 +16,10 @@ use super::error::ContextError;
 // == Names and scopes
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) struct Location(usize);
+pub(crate) struct Location {
+    position: usize,
+    previous: usize,
+}
 
 pub type Namespace = BTreeMap<String, IdentKind>;
 
@@ -206,19 +209,28 @@ impl Context {
 
     // - Source locations
 
-    pub(crate) fn location_add(&self, position: Position) -> Location {
+    pub(crate) fn location_add(&self, position: Position, previous: Option<Location>) -> Location {
         let mut positions = self.positions.borrow_mut();
-        let location = Location(positions.len());
+        let location = Location {
+            position: positions.len(),
+            previous: previous.map_or(positions.len(), |location| location.position),
+        };
         positions.push(position);
         location
     }
 
     pub(crate) fn location_get(&self, location: Location) -> Position {
-        self.positions.borrow()[location.0].clone()
+        self.positions.borrow()[location.position].clone()
     }
 
     pub(crate) fn location_span(&self, location_l: Location, location_r: Location) -> Span {
-        Span::new(self.location_get(location_l), self.location_get(location_r))
+        if location_l == location_r {
+            // Menhir locates epsilon at the preceding token's end
+            let position = self.positions.borrow()[location_l.previous].clone();
+            Span::new(position.clone(), position)
+        } else {
+            Span::new(self.location_get(location_l), self.location_get(location_r))
+        }
     }
 }
 

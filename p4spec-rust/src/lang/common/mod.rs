@@ -9,4 +9,5 @@ pub use var::iter::Iter;
 pub use var::{
     id::{Id, IdKind},
     tid::TId,
+    var::Variable,
 };

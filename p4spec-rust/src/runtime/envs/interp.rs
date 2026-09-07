@@ -1,7 +1,7 @@
-//! Dynamic value and type environments
+//! Dynamic value environments
 
-use std::{collections::BTreeMap, rc::Rc};
+use std::rc::Rc;
 
-use crate::{lang::data::value::Value, runtime::var::Variable};
+use crate::lang::{common::ds::map::VarMap, data::value::Value};
 
-pub type VEnv = BTreeMap<Variable, Rc<Value>>;
+pub type VEnv = VarMap<Rc<Value>>;
