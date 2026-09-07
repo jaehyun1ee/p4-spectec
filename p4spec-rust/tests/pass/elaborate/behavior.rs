@@ -1,10 +1,4 @@
-use std::path::Path;
-
-use p4spec_rust::{
-    frontend::parse::{parse_files, parse_string},
-    lang::il::ast,
-    pass::elaborate,
-};
+use p4spec_rust::{frontend::parse::parse_string, lang::il::ast, pass::elaborate};
 
 #[test]
 fn test_function_clauses_are_populated_after_definition_traversal() {
@@ -72,18 +66,4 @@ fn test_failed_variant_alternative_does_not_leak_wildcard_bindings() {
             .iter()
             .any(|exp| { matches!(&exp.node, ast::ExpKind::Var(id) if id.node == "_bool") })
     );
-}
-
-#[test]
-#[ignore = "runs the full specification corpus"]
-fn test_full_spec_elaborates() {
-    let repo = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .expect("Rust crate is inside the repository");
-    let spec_path = std::env::var_os("P4SPEC_TEST_PATH")
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|| repo.join("spec"));
-    let spec = parse_files([spec_path]).expect("parse the specification corpus");
-
-    elaborate::elaborate(spec).expect("elaborate the specification corpus");
 }

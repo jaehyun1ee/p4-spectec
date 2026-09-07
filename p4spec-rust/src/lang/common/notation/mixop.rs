@@ -9,14 +9,60 @@ use crate::lang::{
     },
 };
 
-use super::mixfix::Mixfix;
+use super::{atom::Atom, mixfix::Mixfix};
 
 /// A mixfix shape with unfilled argument positions
 pub type Mixop = Mixfix<()>;
 
 impl Print for Mixop {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        self.print_with(printer, |(), printer| printer.write("%"))
+        printer.write("`")?;
+        self.print_shape(printer)?;
+        printer.write("`")
+    }
+}
+
+fn print_atom(atom: &Atom, printer: &mut Printer<'_>) -> fmt::Result {
+    match atom {
+        Atom::Tag(id) if id == "EMPTY" => printer.write("/* empty */"),
+        Atom::Operator(op) => printer.write(op),
+        Atom::LAngle => printer.write("<"),
+        Atom::RAngle => printer.write(">"),
+        Atom::LParen => printer.write("("),
+        Atom::RParen => printer.write(")"),
+        Atom::LBrack => printer.write("["),
+        Atom::RBrack => printer.write("]"),
+        Atom::LBrace => printer.write("{"),
+        Atom::RBrace => printer.write("}"),
+        _ => atom.print(printer),
+    }
+}
+
+impl Mixop {
+    fn print_shape(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        match self {
+            Self::Arg(()) => printer.write("%"),
+            Self::Atom(atom) => print_atom(&atom.node, printer),
+            Self::Brack(atom_l, mixop, atom_r) => {
+                print_atom(&atom_l.node, printer)?;
+                mixop.print_shape(printer)?;
+                print_atom(&atom_r.node, printer)
+            }
+            Self::Infix(mixop_l, atom, mixop_r) => {
+                mixop_l.print_shape(printer)?;
+                print_atom(&atom.node, printer)?;
+                mixop_r.print_shape(printer)
+            }
+            Self::Seq(mixops) => {
+                for (index, mixop) in mixops.iter().enumerate() {
+                    if index != 0 {
+                        printer.write(" ")?;
+                    }
+                    mixop.print_shape(printer)?;
+                }
+                Ok(())
+            }
+        }
     }
 }
 
