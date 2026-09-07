@@ -3,7 +3,7 @@ use std::rc::Rc;
 use p4spec_rust::{
     interp::al::{
         backtrack::Backtrack,
-        context::{Context, Scope, Spec},
+        context::{Context, Global, Scope},
         eval::assign::{assign_args, assign_exp, assign_exps},
         util::is_iter_var_exp,
     },
@@ -52,7 +52,7 @@ fn ok<T: std::fmt::Debug>(result: Backtrack<T>) -> T {
         other => panic!("{other:?}"),
     }
 }
-fn binding(ctx: &Context, name: &str, iters: Vec<ast::Iter>) -> Rc<Value> {
+fn binding(ctx: &Context<'_>, name: &str, iters: Vec<ast::Iter>) -> Rc<Value> {
     Rc::clone(ctx.find_value(&Variable::new(id(name), iters)).unwrap())
 }
 fn iter(exp_inner: ast::Exp, iter: ast::Iter, vars: Vec<ast::Var>) -> ast::Exp {
@@ -67,6 +67,7 @@ fn list(values: Vec<Rc<Value>>) -> Rc<Value> {
 
 #[test]
 fn test_iterated_variable_fast_path_preserves_identity_and_path() {
+    let global = Global::load(vec![]).unwrap();
     let exp_inner = iter(var_exp("x"), ast::Iter::Opt, vec![var("x", vec![])]);
     let exp = iter(
         exp_inner.clone(),
@@ -78,7 +79,7 @@ fn test_iterated_variable_fast_path_preserves_identity_and_path() {
         vec![ast::Iter::Opt, ast::Iter::List]
     );
     let value = list(vec![]);
-    let ctx = ok(assign_exp(&Context::new(), &exp, Rc::clone(&value)));
+    let ctx = ok(assign_exp(&Context::new(&global), &exp, Rc::clone(&value)));
     assert!(Rc::ptr_eq(
         &value,
         &binding(&ctx, "x", vec![ast::Iter::Opt, ast::Iter::List])
@@ -92,7 +93,8 @@ fn test_iterated_variable_fast_path_preserves_identity_and_path() {
 
 #[test]
 fn test_list_assignment_collects_rows_without_leaking_scalar_bindings() {
-    let mut ctx = Context::new();
+    let global = Global::load(vec![]).unwrap();
+    let mut ctx = Context::new(&global);
     ctx.add_value(Variable::new(id("x"), vec![]), value(false));
     let exp = iter(
         exp(ast::ExpKind::Tuple(vec![var_exp("x"), var_exp("y")])),
@@ -141,7 +143,8 @@ fn test_list_assignment_collects_rows_without_leaking_scalar_bindings() {
 
 #[test]
 fn test_list_rows_cannot_collect_unassigned_outer_values() {
-    let mut ctx = Context::new();
+    let global = Global::load(vec![]).unwrap();
+    let mut ctx = Context::new(&global);
     ctx.add_value(Variable::new(id("missing"), vec![]), value(true));
     let exp = iter(
         exp(ast::ExpKind::Tuple(vec![var_exp("x")])),
@@ -157,6 +160,7 @@ fn test_list_rows_cannot_collect_unassigned_outer_values() {
 
 #[test]
 fn test_optional_assignment_retains_inner_bindings_and_collects_none() {
+    let global = Global::load(vec![]).unwrap();
     let exp = iter(
         exp(ast::ExpKind::Tuple(vec![var_exp("x")])),
         ast::Iter::Opt,
@@ -164,7 +168,7 @@ fn test_optional_assignment_retains_inner_bindings_and_collects_none() {
     );
     let typ = typ::make::opt(typ::make::bool());
     let ctx = ok(assign_exp(
-        &Context::new(),
+        &Context::new(&global),
         &exp,
         make::opt(&typ, Some(tuple(vec![value(true)])), span(8)),
     ));
@@ -196,12 +200,13 @@ fn test_optional_assignment_retains_inner_bindings_and_collects_none() {
 
 #[test]
 fn test_cons_tail_preserves_value_type_with_default_span() {
+    let global = Global::load(vec![]).unwrap();
     let exp = exp(ast::ExpKind::Cons(
         Box::new(var_exp("h")),
         Box::new(var_exp("t")),
     ));
     let value = list(vec![value(true), value(false)]);
-    let ctx = ok(assign_exp(&Context::new(), &exp, Rc::clone(&value)));
+    let ctx = ok(assign_exp(&Context::new(&global), &exp, Rc::clone(&value)));
     let tail = binding(&ctx, "t", vec![]);
     assert_eq!(tail.note, value.note);
     assert_eq!(tail.span, Span::default());
@@ -218,17 +223,18 @@ fn test_cons_tail_preserves_value_type_with_default_span() {
 
 #[test]
 fn test_assignment_errors_are_fatal_and_located() {
+    let global = Global::load(vec![]).unwrap();
     let exps = vec![
         var_exp("x"),
         note_phrase!(node: ast::ExpKind::Var(id("y")), note: typ::make::bool().node, span: span(9)),
     ];
-    let Backtrack::Err(traces) = assign_exps(&Context::new(), &exps, &[]) else {
+    let Backtrack::Err(traces) = assign_exps(&Context::new(&global), &exps, &[]) else {
         panic!("expected arity error")
     };
     assert_eq!(traces[0].span, Span::over(&[span(4), span(9)]));
     let exp = exp(ast::ExpKind::Opt(None));
     let Backtrack::Err(traces) = assign_exp(
-        &Context::new(),
+        &Context::new(&global),
         &exp,
         make::opt(
             &typ::make::opt(typ::make::bool()),
@@ -243,8 +249,7 @@ fn test_assignment_errors_are_fatal_and_located() {
 
 #[test]
 fn test_function_argument_copies_caller_definition_without_caller_values() {
-    let spec = Spec::load(vec![]).unwrap();
-    let mut caller = Context::new();
+    let global = Global::load(vec![]).unwrap();
     let func = ast::MetaFuncDef::Extern(ast::ExternFunc {
         id: id("f"),
         tparams: vec![],
@@ -252,19 +257,24 @@ fn test_function_argument_copies_caller_definition_without_caller_values() {
         typ: typ::make::bool(),
         hints: vec![],
     });
-    caller.add_func(&spec, id("f"), func.clone()).unwrap();
-    caller.add_value(Variable::new(id("secret"), vec![]), value(true));
-    let arg = phrase!(node: ast::ArgKind::Def(id("alias")), span: span(4));
-    let func_value = make::func(id("f"), vec![], vec![], typ::make::bool(), span(8));
-    let callee = ok(assign_args(
-        &spec,
-        &caller,
-        &Context::new(),
-        &[arg],
-        &[func_value],
-    ));
+    let callee = {
+        let global_caller = Global::load(vec![]).unwrap();
+        let mut caller = Context::new(&global_caller);
+        caller.add_func(id("f"), func.clone()).unwrap();
+        caller.add_value(Variable::new(id("secret"), vec![]), value(true));
+        let arg = phrase!(node: ast::ArgKind::Def(id("alias")), span: span(4));
+        let func_value = make::func(id("f"), vec![], vec![], typ::make::bool(), span(8));
+        let callee = ok(assign_args(
+            &caller,
+            &Context::new(&global),
+            &[arg],
+            &[func_value],
+        ));
+        assert!(caller.find_func_opt(&id("alias")).is_none());
+        callee
+    };
     assert_eq!(
-        callee.find_func(&spec, &id("alias")).unwrap(),
+        callee.find_func(&id("alias")).unwrap(),
         (Scope::Local, &func)
     );
     assert!(
@@ -272,11 +282,11 @@ fn test_function_argument_copies_caller_definition_without_caller_values() {
             .find_value_opt(&Variable::new(id("secret"), vec![]))
             .is_none()
     );
-    assert!(caller.find_func_opt(&spec, &id("alias")).is_none());
 }
 
 #[test]
 fn test_case_and_struct_assignments_follow_argument_order() {
+    let global = Global::load(vec![]).unwrap();
     use p4spec_rust::lang::common::notation::{atom::Atom, mixfix::Mixfix};
     let atom = |name: &str| phrase!(node: Atom::keyword(name), span: span(3));
     let case_exp = exp(ast::ExpKind::Case(Box::new(Mixfix::Seq(vec![
@@ -303,7 +313,7 @@ fn test_case_and_struct_assignments_follow_argument_order() {
         span(8),
     );
     for (exp, value) in [(case_exp, case_value), (struct_exp, struct_value)] {
-        let ctx = ok(assign_exp(&Context::new(), &exp, value));
+        let ctx = ok(assign_exp(&Context::new(&global), &exp, value));
         assert!(get::bool(&binding(&ctx, "x", vec![])).unwrap());
         assert!(!get::bool(&binding(&ctx, "y", vec![])).unwrap());
     }
@@ -311,12 +321,13 @@ fn test_case_and_struct_assignments_follow_argument_order() {
 
 #[test]
 fn test_empty_iteration_creates_empty_collections_for_every_binding() {
+    let global = Global::load(vec![]).unwrap();
     let exp = iter(
         exp(ast::ExpKind::Tuple(vec![var_exp("x"), var_exp("y")])),
         ast::Iter::List,
         vec![var("x", vec![]), var("y", vec![])],
     );
-    let ctx = ok(assign_exp(&Context::new(), &exp, list(vec![])));
+    let ctx = ok(assign_exp(&Context::new(&global), &exp, list(vec![])));
     for name in ["x", "y"] {
         assert!(
             get::list(&binding(&ctx, name, vec![ast::Iter::List]))

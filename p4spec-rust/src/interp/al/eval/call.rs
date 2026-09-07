@@ -18,7 +18,7 @@ use std::rc::Rc;
 
 pub fn invoke_rel<I: Interface, E: Extern>(
     runner: &mut RunnerContext<'_, Al, I, E>,
-    ctx: &Context,
+    ctx: &Context<'_>,
     id: &ast::Id,
     values: &[Rc<Value>],
 ) -> Backtrack<Vec<Rc<Value>>> {
@@ -27,10 +27,7 @@ pub fn invoke_rel<I: Interface, E: Extern>(
         values: values.to_vec(),
     });
     let result = stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
-        let rel = back!(Backtrack::from_result(
-            ctx.find_rel(runner.spec(), id),
-            &id.span
-        ));
+        let rel = back!(Backtrack::from_result(ctx.find_rel(id), &id.span));
         match rel {
             ast::RelDef::Extern(_) => {
                 let (values, _) = back!(Backtrack::from_result(
@@ -54,7 +51,7 @@ pub fn invoke_rel<I: Interface, E: Extern>(
 
 fn invoke_rule_path<I: Interface, E: Extern>(
     runner: &mut RunnerContext<'_, Al, I, E>,
-    ctx: &Context,
+    ctx: &Context<'_>,
     rule_match: &ast::RuleMatch,
     path: &ast::RulePath,
     values: &[Rc<Value>],
@@ -79,7 +76,7 @@ fn invoke_rule_path<I: Interface, E: Extern>(
 
 fn invoke_defined_rel<I: Interface, E: Extern>(
     runner: &mut RunnerContext<'_, Al, I, E>,
-    ctx: &Context,
+    ctx: &Context<'_>,
     id: &ast::Id,
     rel: &ast::DefinedRel,
     values: &[Rc<Value>],
@@ -145,7 +142,7 @@ fn invoke_defined_rel<I: Interface, E: Extern>(
 
 pub fn invoke_func<I: Interface, E: Extern>(
     runner: &mut RunnerContext<'_, Al, I, E>,
-    ctx: &Context,
+    ctx: &Context<'_>,
     id: &ast::Id,
     targs: &[ast::Typ],
     values: &[Rc<Value>],
@@ -155,10 +152,7 @@ pub fn invoke_func<I: Interface, E: Extern>(
         values: values.to_vec(),
     });
     let result = stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
-        let (_, func) = back!(Backtrack::from_result(
-            ctx.find_func(runner.spec(), id),
-            &id.span
-        ));
+        let (_, func) = back!(Backtrack::from_result(ctx.find_func(id), &id.span));
         match func {
             ast::MetaFuncDef::Extern(_) => {
                 let (value, _) = back!(Backtrack::from_result(
@@ -193,7 +187,6 @@ pub fn invoke_func<I: Interface, E: Extern>(
                         })
                     ));
                     let ctx = back!(assign::assign_args(
-                        runner.spec(),
                         ctx,
                         &ctx.localize(),
                         &row.node.args,
@@ -238,7 +231,7 @@ pub fn invoke_func<I: Interface, E: Extern>(
 
 fn invoke_clause<I: Interface, E: Extern>(
     runner: &mut RunnerContext<'_, Al, I, E>,
-    ctx: &Context,
+    ctx: &Context<'_>,
     id: &ast::Id,
     func: &ast::DefinedFunc,
     clause: &ast::Clause,
@@ -259,11 +252,7 @@ fn invoke_clause<I: Interface, E: Extern>(
             let def_typ =
                 crate::phrase!(node: ast::DefTypKind::Plain(targ.clone()), span: targ.span.clone());
             back!(Backtrack::from_result(
-                ctx_local.add_typdef(
-                    runner.spec(),
-                    tparam.clone(),
-                    TypeDef::Defined(vec![], Box::new(def_typ))
-                ),
+                ctx_local.add_typdef(tparam.clone(), TypeDef::Defined(vec![], Box::new(def_typ))),
                 &tparam.span
             ));
         }
@@ -276,7 +265,6 @@ fn invoke_clause<I: Interface, E: Extern>(
             })
         ));
         let ctx = back!(assign::assign_args(
-            runner.spec(),
             ctx,
             &ctx_local,
             &clause.node.args,
@@ -295,7 +283,7 @@ fn invoke_clause<I: Interface, E: Extern>(
 
 fn invoke_defined_func<I: Interface, E: Extern>(
     runner: &mut RunnerContext<'_, Al, I, E>,
-    ctx: &Context,
+    ctx: &Context<'_>,
     id: &ast::Id,
     func: &ast::DefinedFunc,
     targs: &[ast::Typ],

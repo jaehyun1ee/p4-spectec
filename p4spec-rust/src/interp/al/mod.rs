@@ -13,7 +13,7 @@ use crate::{
     runner::{Extern, Interface, Interpreter, RunnerContext},
 };
 use backtrack::Backtrack;
-use context::{Context, Spec};
+use context::{Context, Global};
 use error::Error;
 use std::rc::Rc;
 
@@ -62,7 +62,7 @@ fn finish<T>(result: Backtrack<T>) -> Result<T, Error> {
 }
 
 impl<I: Interface, E: Extern> Interpreter<I, E> for Al {
-    type Spec = Spec;
+    type Spec = Global;
     type State = State;
     type Error = Error;
 
@@ -72,7 +72,8 @@ impl<I: Interface, E: Extern> Interpreter<I, E> for Al {
         values: &[Rc<Value>],
     ) -> Result<Vec<Rc<Value>>, Error> {
         let id = crate::phrase!(node: name.to_owned(), span: Span::default());
-        finish(eval::call::invoke_rel(runner, &Context::new(), &id, values))
+        let ctx = Context::new(runner.spec());
+        finish(eval::call::invoke_rel(runner, &ctx, &id, values))
     }
     fn eval_func(
         runner: &mut RunnerContext<'_, Self, I, E>,
@@ -81,13 +82,8 @@ impl<I: Interface, E: Extern> Interpreter<I, E> for Al {
         values: &[Rc<Value>],
     ) -> Result<Rc<Value>, Error> {
         let id = crate::phrase!(node: name.to_owned(), span: Span::default());
-        finish(eval::call::invoke_func(
-            runner,
-            &Context::new(),
-            &id,
-            targs,
-            values,
-        ))
+        let ctx = Context::new(runner.spec());
+        finish(eval::call::invoke_func(runner, &ctx, &id, targs, values))
     }
     fn clear(_state: &mut State) {}
 }

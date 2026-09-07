@@ -24,11 +24,11 @@ use crate::{
 };
 use std::rc::Rc;
 
-pub fn eval_prems<I: Interface, E: Extern>(
+pub fn eval_prems<'global, I: Interface, E: Extern>(
     runner: &mut RunnerContext<'_, Al, I, E>,
-    ctx: &Context,
+    ctx: &Context<'global>,
     prems: &[ast::Prem],
-) -> Backtrack<Context> {
+) -> Backtrack<Context<'global>> {
     let mut ctx = ctx.clone();
     for prem in prems {
         ctx = back!(eval_prem(runner, &ctx, prem));
@@ -36,11 +36,11 @@ pub fn eval_prems<I: Interface, E: Extern>(
     Backtrack::Ok(ctx)
 }
 
-pub fn eval_prem<I: Interface, E: Extern>(
+pub fn eval_prem<'global, I: Interface, E: Extern>(
     runner: &mut RunnerContext<'_, Al, I, E>,
-    ctx: &Context,
+    ctx: &Context<'global>,
     prem: &ast::Prem,
-) -> Backtrack<Context> {
+) -> Backtrack<Context<'global>> {
     match &prem.node {
         ast::PremKind::Rule(prem) => {
             let exps = prem.not_exp.args().into_iter().cloned().collect();

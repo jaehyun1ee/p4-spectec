@@ -5,7 +5,7 @@ use p4spec_rust::lang::traits::print::Print;
 use p4spec_rust::{
     frontend::parse::parse_string,
     interp::{
-        al::{Al, State, context::Spec, error::ErrorKind},
+        al::{Al, State, context::Global, error::ErrorKind},
         common::{Event, Observer},
     },
     lang::{
@@ -29,7 +29,7 @@ fn spec(source: &str) -> ast::Spec {
 
 fn runner(spec_al: ast::Spec, det: bool) -> Runner<Al, BuiltinInterface, NullExtern> {
     Runner::new(
-        Spec::load(spec_al).unwrap(),
+        Global::load(spec_al).unwrap(),
         State::new(det),
         BuiltinInterface::new(),
         NullExtern,
@@ -404,7 +404,7 @@ def $outer(n) = n_result
     let mut state = State::new(false);
     state.set_observer(Some(Box::new(RecordingObserver(events.clone()))));
     let mut runner = Runner::<Al, _, _>::new(
-        Spec::load(spec(source)).unwrap(),
+        Global::load(spec(source)).unwrap(),
         state,
         BuiltinInterface::new(),
         NullExtern,
@@ -460,7 +460,7 @@ fn test_program_event_precedes_relation_entry() {
     let mut state = State::new(false);
     state.set_observer(Some(Box::new(RecordingObserver(events.clone()))));
     let mut runner = Runner::<Al, _, _>::new(
-        Spec::load(spec_al).unwrap(),
+        Global::load(spec_al).unwrap(),
         state,
         BuiltinInterface::new(),
         NullExtern,

@@ -1,9 +1,8 @@
 //! Loaded definitions and persistent local execution bindings
 //!
-//! `Spec::load` owns global definitions. A `Context` contains only local maps:
-//! cloning preserves lexical bindings for iteration, while `localize` discards
-//! them for a fresh call. Lookups borrow the loaded spec explicitly so neither
-//! operation copies or mutates global definitions.
+//! `Global::load` owns global definitions. A `Context` borrows them and owns
+//! persistent local bindings. Cloning preserves the local scope; `localize`
+//! starts a fresh scope while retaining the same global definitions.
 
 use crate::interp::al::error::ContextErrorKind;
 use std::rc::Rc;
@@ -32,13 +31,13 @@ pub enum Scope {
 }
 
 #[derive(Debug)]
-pub struct Spec {
+pub struct Global {
     tdenv: TDEnv,
     renv: REnv,
     fenv: FEnv,
 }
 
-impl Spec {
+impl Global {
     pub fn load(spec: ast::Spec) -> Result<Self, Error> {
         let mut loaded = Self {
             tdenv: TDEnv::new(),
@@ -103,35 +102,47 @@ impl Spec {
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct Context {
+struct Local {
     tdenv: TDEnv,
     fenv: FEnv,
     venv: VEnv,
 }
 
-impl Context {
+#[derive(Clone, Debug)]
+pub struct Context<'global> {
+    global: &'global Global,
+    local: Local,
+}
+
+impl<'global> Context<'global> {
     // == Constructors
 
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(global: &'global Global) -> Self {
+        Self {
+            global,
+            local: Local::default(),
+        }
     }
 
     pub fn localize(&self) -> Self {
-        Self::new()
+        Self::new(self.global)
     }
 
     pub(super) fn without_values(&self) -> Self {
         Self {
-            tdenv: self.tdenv.clone(),
-            fenv: self.fenv.clone(),
-            venv: VEnv::new(),
+            global: self.global,
+            local: Local {
+                tdenv: self.local.tdenv.clone(),
+                fenv: self.local.fenv.clone(),
+                venv: VEnv::new(),
+            },
         }
     }
 
     // == Finders
 
     pub fn find_value_opt(&self, var: &Variable) -> Option<&Rc<Value>> {
-        self.venv.get(var)
+        self.local.venv.get(var)
     }
 
     pub fn find_value(&self, var: &Variable) -> Result<&Rc<Value>, Error> {
@@ -140,21 +151,23 @@ impl Context {
         })
     }
 
-    pub fn find_typdef_opt<'a>(&'a self, spec: &'a Spec, id: &ast::Id) -> Option<&'a TypeDef> {
-        self.tdenv.get(id).or_else(|| spec.tdenv.get(id))
+    pub fn find_typdef_opt<'a>(&'a self, id: &ast::Id) -> Option<&'a TypeDef> {
+        self.local
+            .tdenv
+            .get(id)
+            .or_else(|| self.global.tdenv.get(id))
     }
 
-    pub fn find_typdef<'a>(&'a self, spec: &'a Spec, id: &ast::Id) -> Result<&'a TypeDef, Error> {
-        self.find_typdef_opt(spec, id)
+    pub fn find_typdef<'a>(&'a self, id: &ast::Id) -> Result<&'a TypeDef, Error> {
+        self.find_typdef_opt(id)
             .ok_or_else(|| Error::undefined(EntityKind::Type, id.node.clone(), id.span.clone()))
     }
 
     pub fn find_defined_typdef<'a>(
         &'a self,
-        spec: &'a Spec,
         id: &ast::Id,
     ) -> Result<(&'a [ast::TParam], &'a ast::DefTyp), Error> {
-        match self.find_typdef(spec, id)? {
+        match self.find_typdef(id)? {
             TypeDef::Defined(tparams, def_typ) => Ok((tparams, def_typ)),
             _ => Err(Error::undefined(
                 EntityKind::DefinedType,
@@ -164,60 +177,47 @@ impl Context {
         }
     }
 
-    pub fn find_rel_opt<'a>(&self, spec: &'a Spec, id: &ast::Id) -> Option<&'a ast::RelDef> {
-        spec.renv.get(id)
+    pub fn find_rel_opt(&self, id: &ast::Id) -> Option<&'global ast::RelDef> {
+        self.global.renv.get(id)
     }
 
-    pub fn find_rel<'a>(&self, spec: &'a Spec, id: &ast::Id) -> Result<&'a ast::RelDef, Error> {
-        self.find_rel_opt(spec, id)
+    pub fn find_rel(&self, id: &ast::Id) -> Result<&'global ast::RelDef, Error> {
+        self.find_rel_opt(id)
             .ok_or_else(|| Error::undefined(EntityKind::Relation, id.node.clone(), id.span.clone()))
     }
 
-    pub fn find_func_opt<'a>(
-        &'a self,
-        spec: &'a Spec,
-        id: &ast::Id,
-    ) -> Option<(Scope, &'a ast::MetaFuncDef)> {
-        if let Some(func) = self.fenv.get(id) {
+    pub fn find_func_opt<'a>(&'a self, id: &ast::Id) -> Option<(Scope, &'a ast::MetaFuncDef)> {
+        if let Some(func) = self.local.fenv.get(id) {
             Some((Scope::Local, func))
         } else {
-            spec.fenv.get(id).map(|func| (Scope::Global, func))
+            self.global.fenv.get(id).map(|func| (Scope::Global, func))
         }
     }
 
-    pub fn find_func<'a>(
-        &'a self,
-        spec: &'a Spec,
-        id: &ast::Id,
-    ) -> Result<(Scope, &'a ast::MetaFuncDef), Error> {
-        self.find_func_opt(spec, id)
+    pub fn find_func<'a>(&'a self, id: &ast::Id) -> Result<(Scope, &'a ast::MetaFuncDef), Error> {
+        self.find_func_opt(id)
             .ok_or_else(|| Error::undefined(EntityKind::Function, id.node.clone(), id.span.clone()))
     }
 
     // == Adders
 
     pub fn add_value(&mut self, var: Variable, value: Rc<Value>) {
-        self.venv.insert(var, value);
+        self.local.venv.insert(var, value);
     }
 
-    pub fn add_typdef(&mut self, spec: &Spec, id: ast::Id, typdef: TypeDef) -> Result<(), Error> {
-        if self.find_typdef_opt(spec, &id).is_some() {
+    pub fn add_typdef(&mut self, id: ast::Id, typdef: TypeDef) -> Result<(), Error> {
+        if self.find_typdef_opt(&id).is_some() {
             return Err(Error::duplicate(EntityKind::Type, id.node, id.span));
         }
-        self.tdenv.insert(id, typdef);
+        self.local.tdenv.insert(id, typdef);
         Ok(())
     }
 
-    pub fn add_func(
-        &mut self,
-        spec: &Spec,
-        id: ast::Id,
-        func: ast::MetaFuncDef,
-    ) -> Result<(), Error> {
-        if self.find_func_opt(spec, &id).is_some() {
+    pub fn add_func(&mut self, id: ast::Id, func: ast::MetaFuncDef) -> Result<(), Error> {
+        if self.find_func_opt(&id).is_some() {
             return Err(Error::duplicate(EntityKind::Function, id.node, id.span));
         }
-        self.fenv.insert(id, func);
+        self.local.fenv.insert(id, func);
         Ok(())
     }
 
@@ -292,11 +292,12 @@ impl Context {
     }
 }
 
-impl Context {
-    pub fn type_env(&self, spec: &Spec) -> TDEnv {
-        let mut tdenv = spec.tdenv.clone();
+impl Context<'_> {
+    pub fn type_env(&self) -> TDEnv {
+        let mut tdenv = self.global.tdenv.clone();
         tdenv.extend(
-            self.tdenv
+            self.local
+                .tdenv
                 .iter()
                 .map(|(id, typdef)| (id.clone(), typdef.clone())),
         );
@@ -305,7 +306,7 @@ impl Context {
 
     pub fn local_theta(&self) -> crate::runtime::ops::typ::Theta {
         let mut theta = crate::runtime::ops::typ::Theta::new();
-        for (id, typdef) in self.tdenv.iter() {
+        for (id, typdef) in self.local.tdenv.iter() {
             if let TypeDef::Defined(tparams, def_typ) = typdef
                 && tparams.is_empty()
                 && let ast::DefTypKind::Plain(typ) = &def_typ.node
@@ -316,11 +317,7 @@ impl Context {
         theta
     }
 
-    pub fn find_func_typ(
-        &self,
-        spec: &Spec,
-        id: &ast::Id,
-    ) -> Result<crate::lang::il::ast::FuncTyp, Error> {
+    pub fn find_func_typ(&self, id: &ast::Id) -> Result<crate::lang::il::ast::FuncTyp, Error> {
         use crate::lang::data::typ::{FuncTyp, make};
         fn param_typ(param: &ast::Param) -> ast::Typ {
             match &param.node {
@@ -332,7 +329,7 @@ impl Context {
                 ),
             }
         }
-        let (_, func) = self.find_func(spec, id)?;
+        let (_, func) = self.find_func(id)?;
         let (tparams, params, typ): (&[ast::TParam], &[ast::Param], &ast::Typ) = match func {
             ast::MetaFuncDef::Extern(func) => (&func.tparams, &func.params, &func.typ),
             ast::MetaFuncDef::Builtin(func) => (&func.tparams, &func.params, &func.typ),

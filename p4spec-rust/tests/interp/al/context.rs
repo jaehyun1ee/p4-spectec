@@ -3,7 +3,7 @@ use std::rc::Rc;
 
 use p4spec_rust::{
     interp::al::{
-        context::{Context, Scope, Spec},
+        context::{Context, Global, Scope},
         error::{EntityKind, ErrorKind},
     },
     lang::{
@@ -74,7 +74,7 @@ fn test_duplicate_global_definition_uses_second_identifier_span() {
             ast::DefKind::MetaFunc(func("x", 9)),
         ),
     ] {
-        let error = Spec::load(vec![def(first), def(second)]).unwrap_err();
+        let error = Global::load(vec![def(first), def(second)]).unwrap_err();
         assert_eq!(error.span, id("x", 9).span);
         assert_eq!(
             *error.kind,
@@ -89,24 +89,23 @@ fn test_duplicate_global_definition_uses_second_identifier_span() {
 #[test]
 fn test_localize_discards_locals_and_retains_global_lookup() {
     let func_global = func("global", 1);
-    let spec = Spec::load(vec![def(ast::DefKind::MetaFunc(func_global.clone()))]).unwrap();
-    let mut ctx = Context::new();
+    let global = Global::load(vec![def(ast::DefKind::MetaFunc(func_global.clone()))]).unwrap();
+    let mut ctx = Context::new(&global);
     let func_local = func("local", 2);
-    ctx.add_func(&spec, id("local", 2), func_local.clone())
-        .unwrap();
-    ctx.add_typdef(&spec, id("T", 3), TypeDef::Extern).unwrap();
+    ctx.add_func(id("local", 2), func_local.clone()).unwrap();
+    ctx.add_typdef(id("T", 3), TypeDef::Extern).unwrap();
     let var = variable(&var("x", vec![]));
     ctx.add_value(var.clone(), make::bool(true, Span::default()));
     assert_eq!(
-        ctx.find_func(&spec, &id("local", 8)).unwrap(),
+        ctx.find_func(&id("local", 8)).unwrap(),
         (Scope::Local, &func_local)
     );
     let ctx_local = ctx.localize();
-    assert!(ctx_local.find_func_opt(&spec, &id("local", 8)).is_none());
-    assert!(ctx_local.find_typdef_opt(&spec, &id("T", 8)).is_none());
+    assert!(ctx_local.find_func_opt(&id("local", 8)).is_none());
+    assert!(ctx_local.find_typdef_opt(&id("T", 8)).is_none());
     assert!(ctx_local.find_value_opt(&var).is_none());
     assert_eq!(
-        ctx_local.find_func(&spec, &id("global", 8)).unwrap(),
+        ctx_local.find_func(&id("global", 8)).unwrap(),
         (Scope::Global, &func_global)
     );
     assert!(ctx.find_value_opt(&var).is_some());
@@ -114,7 +113,7 @@ fn test_localize_discards_locals_and_retains_global_lookup() {
 
 #[test]
 fn test_local_definition_duplicates_do_not_replace_bindings() {
-    let spec = Spec::load(vec![
+    let global = Global::load(vec![
         def(ast::DefKind::MetaFunc(func("f", 1))),
         def(ast::DefKind::Typ(ast::TypDef::Extern(ast::ExternTyp {
             id: id("T", 1),
@@ -122,39 +121,32 @@ fn test_local_definition_duplicates_do_not_replace_bindings() {
         }))),
     ])
     .unwrap();
-    let mut ctx = Context::new();
+    let mut ctx = Context::new(&global);
     assert!(matches!(
-        *ctx.add_func(&spec, id("f", 7), func("f", 7))
-            .unwrap_err()
-            .kind,
+        *ctx.add_func(id("f", 7), func("f", 7)).unwrap_err().kind,
         ErrorKind::Context(ContextErrorKind::Duplicate {
             kind: EntityKind::Function,
             ..
         })
     ));
     assert_eq!(
-        ctx.add_typdef(&spec, id("T", 7), TypeDef::Parameter)
+        ctx.add_typdef(id("T", 7), TypeDef::Parameter)
             .unwrap_err()
             .span,
         id("T", 7).span
     );
-    ctx.add_typdef(&spec, id("U", 2), TypeDef::Extern).unwrap();
-    ctx.add_func(&spec, id("g", 2), func("g", 2)).unwrap();
-    assert!(
-        ctx.add_typdef(&spec, id("U", 7), TypeDef::Parameter)
-            .is_err()
-    );
-    assert!(ctx.add_func(&spec, id("g", 7), func("g", 7)).is_err());
-    assert_eq!(
-        ctx.find_typdef(&spec, &id("U", 8)).unwrap(),
-        &TypeDef::Extern
-    );
-    assert_eq!(ctx.find_func(&spec, &id("g", 8)).unwrap().1, &func("g", 2));
+    ctx.add_typdef(id("U", 2), TypeDef::Extern).unwrap();
+    ctx.add_func(id("g", 2), func("g", 2)).unwrap();
+    assert!(ctx.add_typdef(id("U", 7), TypeDef::Parameter).is_err());
+    assert!(ctx.add_func(id("g", 7), func("g", 7)).is_err());
+    assert_eq!(ctx.find_typdef(&id("U", 8)).unwrap(), &TypeDef::Extern);
+    assert_eq!(ctx.find_func(&id("g", 8)).unwrap().1, &func("g", 2));
 }
 
 #[test]
 fn test_sibling_contexts_isolate_rebinding_and_iterator_paths() {
-    let mut ctx = Context::new();
+    let global = Global::load(vec![]).unwrap();
+    let mut ctx = Context::new(&global);
     let var = variable(&var("x", vec![]));
     ctx.add_value(var.clone(), make::bool(false, Span::default()));
     let mut ctx_a = ctx.clone();
@@ -177,7 +169,8 @@ fn test_sibling_contexts_isolate_rebinding_and_iterator_paths() {
 
 #[test]
 fn test_missing_value_reports_iterator_path_and_lookup_span() {
-    let error = Context::new()
+    let global = Global::load(vec![]).unwrap();
+    let error = Context::new(&global)
         .find_value(&Variable::new(
             id("x", 9),
             vec![ast::Iter::List, ast::Iter::Opt],
@@ -195,9 +188,10 @@ fn test_missing_value_reports_iterator_path_and_lookup_span() {
 
 #[test]
 fn test_optional_subcontexts_require_agreement_and_preserve_parent() {
+    let global = Global::load(vec![]).unwrap();
     let vars = [var("x", vec![ast::Iter::List]), var("y", vec![])];
     let typ = typ::make::bool();
-    let mut ctx = Context::new();
+    let mut ctx = Context::new(&global);
     for var in &vars {
         let mut iters = var.iters.clone();
         iters.push(ast::Iter::Opt);
@@ -233,8 +227,9 @@ fn test_optional_subcontexts_require_agreement_and_preserve_parent() {
 
 #[test]
 fn test_list_subcontexts_transpose_in_order_without_leaking_bindings() {
+    let global = Global::load(vec![]).unwrap();
     let vars = [var("x", vec![]), var("y", vec![])];
-    let mut ctx = Context::new();
+    let mut ctx = Context::new(&global);
     for (var, values) in vars.iter().zip([[true, false], [false, true]]) {
         let values = values
             .into_iter()
@@ -272,8 +267,9 @@ fn test_list_subcontexts_transpose_in_order_without_leaking_bindings() {
 
 #[test]
 fn test_iteration_rejects_wrong_value_kind_at_variable_span() {
+    let global = Global::load(vec![]).unwrap();
     let var = var("x", vec![]);
-    let mut ctx = Context::new();
+    let mut ctx = Context::new(&global);
     ctx.add_value(
         Variable::new(var.id.clone(), vec![ast::Iter::Opt]),
         make::bool(true, Span::default()),
@@ -301,27 +297,29 @@ fn test_loaded_native_spec_preserves_definition_bodies_and_locations() {
     let spec_el = parse_files([path]).unwrap();
     let spec_il = elaborate::elaborate(spec_el).unwrap();
     let spec_al = algo::convert(spec_il).unwrap();
-    let spec = Spec::load(spec_al.clone()).unwrap();
-    let ctx = Context::new();
+    let global = Global::load(spec_al.clone()).unwrap();
+    let ctx = Context::new(&global);
+    let ctx_clone = ctx.clone();
+    let ctx_local = ctx.localize();
     for def in &spec_al {
         match &def.node {
             ast::DefKind::Typ(ast::TypDef::Defined(typdef)) => {
-                let (tparams, def_typ) = ctx.find_defined_typdef(&spec, &typdef.id).unwrap();
+                let (tparams, def_typ) = ctx.find_defined_typdef(&typdef.id).unwrap();
                 assert_eq!(tparams, typdef.tparams);
                 assert_eq!(def_typ, &typdef.def_typ);
             }
             ast::DefKind::Typ(ast::TypDef::Extern(typdef)) => {
-                assert_eq!(
-                    ctx.find_typdef(&spec, &typdef.id).unwrap(),
-                    &TypeDef::Extern
-                );
+                assert_eq!(ctx.find_typdef(&typdef.id).unwrap(), &TypeDef::Extern);
             }
             ast::DefKind::Rel(rel) => {
                 let id = match rel {
                     ast::RelDef::Extern(rel) => &rel.id,
                     ast::RelDef::Defined(rel) => &rel.id,
                 };
-                assert_eq!(ctx.find_rel(&spec, id).unwrap(), rel);
+                let rel_global = ctx.find_rel(id).unwrap();
+                assert_eq!(rel_global, rel);
+                assert!(std::ptr::eq(rel_global, ctx_clone.find_rel(id).unwrap()));
+                assert!(std::ptr::eq(rel_global, ctx_local.find_rel(id).unwrap()));
             }
             ast::DefKind::MetaFunc(func) => {
                 let id = match func {
@@ -330,7 +328,16 @@ fn test_loaded_native_spec_preserves_definition_bodies_and_locations() {
                     ast::MetaFuncDef::Table(func) => &func.id,
                     ast::MetaFuncDef::Defined(func) => &func.id,
                 };
-                assert_eq!(ctx.find_func(&spec, id).unwrap(), (Scope::Global, func));
+                let (scope, func_global) = ctx.find_func(id).unwrap();
+                assert_eq!((scope, func_global), (Scope::Global, func));
+                assert!(std::ptr::eq(
+                    func_global,
+                    ctx_clone.find_func(id).unwrap().1
+                ));
+                assert!(std::ptr::eq(
+                    func_global,
+                    ctx_local.find_func(id).unwrap().1
+                ));
             }
             ast::DefKind::Var(var) => {
                 assert!(
@@ -360,7 +367,7 @@ fn test_duplicate_relations_share_namespace_and_report_second_span() {
         else_group: None,
         hints: vec![],
     }));
-    let error = Spec::load(vec![
+    let error = Global::load(vec![
         def(ast::DefKind::Rel(rel)),
         def(ast::DefKind::Rel(rel_duplicate)),
     ])
@@ -377,13 +384,13 @@ fn test_duplicate_relations_share_namespace_and_report_second_span() {
 
 #[test]
 fn test_definition_lookup_errors_and_local_type_isolation() {
-    let spec = Spec::load(vec![]).unwrap();
-    let ctx = Context::new();
+    let global = Global::load(vec![]).unwrap();
+    let ctx = Context::new(&global);
     let id = id("missing", 8);
     for (kind, error) in [
-        (EntityKind::Type, ctx.find_typdef(&spec, &id).unwrap_err()),
-        (EntityKind::Relation, ctx.find_rel(&spec, &id).unwrap_err()),
-        (EntityKind::Function, ctx.find_func(&spec, &id).unwrap_err()),
+        (EntityKind::Type, ctx.find_typdef(&id).unwrap_err()),
+        (EntityKind::Relation, ctx.find_rel(&id).unwrap_err()),
+        (EntityKind::Function, ctx.find_func(&id).unwrap_err()),
     ] {
         assert_eq!(error.span, id.span);
         assert_eq!(
@@ -395,16 +402,12 @@ fn test_definition_lookup_errors_and_local_type_isolation() {
         );
     }
     let mut ctx_child = ctx.clone();
-    ctx_child
-        .add_typdef(&spec, id.clone(), TypeDef::Extern)
-        .unwrap();
-    ctx_child
-        .add_func(&spec, id.clone(), func("missing", 8))
-        .unwrap();
-    assert!(ctx.find_typdef_opt(&spec, &id).is_none());
-    assert!(ctx.find_func_opt(&spec, &id).is_none());
+    ctx_child.add_typdef(id.clone(), TypeDef::Extern).unwrap();
+    ctx_child.add_func(id.clone(), func("missing", 8)).unwrap();
+    assert!(ctx.find_typdef_opt(&id).is_none());
+    assert!(ctx.find_func_opt(&id).is_none());
     assert_eq!(
-        *ctx_child.find_defined_typdef(&spec, &id).unwrap_err().kind,
+        *ctx_child.find_defined_typdef(&id).unwrap_err().kind,
         ErrorKind::Context(ContextErrorKind::Undefined {
             kind: EntityKind::DefinedType,
             name: id.node

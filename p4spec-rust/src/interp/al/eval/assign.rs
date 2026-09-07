@@ -18,14 +18,18 @@ use crate::{
 
 use super::super::{
     backtrack::{Backtrack, back},
-    context::{Context, Spec},
+    context::Context,
     error::ErrorKind,
     util::is_iter_var_exp,
 };
 
 // = Expression assignment
 
-pub fn assign_exp(ctx: &Context, exp: &ast::Exp, value: Rc<Value>) -> Backtrack<Context> {
+pub fn assign_exp<'global>(
+    ctx: &Context<'global>,
+    exp: &ast::Exp,
+    value: Rc<Value>,
+) -> Backtrack<Context<'global>> {
     match (&exp.node, &value.node) {
         (ast::ExpKind::Var(id), _) => assign_var_exp(ctx, id, value),
         (ast::ExpKind::Tuple(exps), ValueKind::Tuple(values)) => {
@@ -62,7 +66,11 @@ pub fn assign_exp(ctx: &Context, exp: &ast::Exp, value: Rc<Value>) -> Backtrack<
     }
 }
 
-pub fn assign_exps(ctx: &Context, exps: &[ast::Exp], values: &[Rc<Value>]) -> Backtrack<Context> {
+pub fn assign_exps<'global>(
+    ctx: &Context<'global>,
+    exps: &[ast::Exp],
+    values: &[Rc<Value>],
+) -> Backtrack<Context<'global>> {
     if exps.len() != values.len() {
         return Backtrack::err(
             Span::over(&exps.iter().map(|exp| exp.span.clone()).collect::<Vec<_>>()),
@@ -81,7 +89,11 @@ pub fn assign_exps(ctx: &Context, exps: &[ast::Exp], values: &[Rc<Value>]) -> Ba
 
 // - Variable expression
 
-fn assign_var_exp(ctx: &Context, id: &ast::Id, value: Rc<Value>) -> Backtrack<Context> {
+fn assign_var_exp<'global>(
+    ctx: &Context<'global>,
+    id: &ast::Id,
+    value: Rc<Value>,
+) -> Backtrack<Context<'global>> {
     let mut ctx = ctx.clone();
     ctx.add_value(Variable::new(id.clone(), vec![]), value);
     Backtrack::Ok(ctx)
@@ -89,23 +101,31 @@ fn assign_var_exp(ctx: &Context, id: &ast::Id, value: Rc<Value>) -> Backtrack<Co
 
 // - Tuple expression
 
-fn assign_tuple_exp(ctx: &Context, exps: &[ast::Exp], values: &[Rc<Value>]) -> Backtrack<Context> {
+fn assign_tuple_exp<'global>(
+    ctx: &Context<'global>,
+    exps: &[ast::Exp],
+    values: &[Rc<Value>],
+) -> Backtrack<Context<'global>> {
     assign_exps(ctx, exps, values)
 }
 
 // - List expression
 
-fn assign_list_exp(ctx: &Context, exps: &[ast::Exp], values: &[Rc<Value>]) -> Backtrack<Context> {
+fn assign_list_exp<'global>(
+    ctx: &Context<'global>,
+    exps: &[ast::Exp],
+    values: &[Rc<Value>],
+) -> Backtrack<Context<'global>> {
     assign_exps(ctx, exps, values)
 }
 
 // - Case expression
 
-fn assign_case_exp(
-    ctx: &Context,
+fn assign_case_exp<'global>(
+    ctx: &Context<'global>,
     not_exp: &ast::NotExp,
     value_case: &ast::ValueCase,
-) -> Backtrack<Context> {
+) -> Backtrack<Context<'global>> {
     let exps = not_exp.args().into_iter().cloned().collect::<Vec<_>>();
     let values = value_case.args().into_iter().cloned().collect::<Vec<_>>();
     assign_exps(ctx, &exps, &values)
@@ -113,11 +133,11 @@ fn assign_case_exp(
 
 // - Struct expression
 
-fn assign_str_exp(
-    ctx: &Context,
+fn assign_str_exp<'global>(
+    ctx: &Context<'global>,
     exp_fields: &[ast::ExpField],
     value_fields: &[ast::ValueField],
-) -> Backtrack<Context> {
+) -> Backtrack<Context<'global>> {
     let exps = exp_fields
         .iter()
         .map(|(_, exp)| exp.clone())
@@ -131,13 +151,13 @@ fn assign_str_exp(
 
 // - Optional expression
 
-fn assign_opt_exp(
-    ctx: &Context,
+fn assign_opt_exp<'global>(
+    ctx: &Context<'global>,
     exp: &ast::Exp,
     exp_opt: &Option<Box<ast::Exp>>,
     value: &Value,
     value_opt: &Option<Rc<Value>>,
-) -> Backtrack<Context> {
+) -> Backtrack<Context<'global>> {
     match (exp_opt, value_opt) {
         (Some(exp), Some(value)) => assign_exp(ctx, exp, Rc::clone(value)),
         (None, None) => Backtrack::Ok(ctx.clone()),
@@ -153,14 +173,14 @@ fn assign_opt_exp(
 
 // - Cons expression
 
-fn assign_cons_exp(
-    ctx: &Context,
+fn assign_cons_exp<'global>(
+    ctx: &Context<'global>,
     exp: &ast::Exp,
     exp_h: &ast::Exp,
     exp_t: &ast::Exp,
     value: &Value,
     values: &[Rc<Value>],
-) -> Backtrack<Context> {
+) -> Backtrack<Context<'global>> {
     let Some((value_h, values_t)) = values.split_first() else {
         return Backtrack::err(
             exp.span.clone(),
@@ -175,14 +195,14 @@ fn assign_cons_exp(
 
 // - Iter expression
 
-fn assign_iter_exp(
-    ctx: &Context,
+fn assign_iter_exp<'global>(
+    ctx: &Context<'global>,
     exp_inner: &ast::Exp,
     iter: &ast::Iter,
     vars: &[ast::Var],
     value: Rc<Value>,
     span: &Span,
-) -> Backtrack<Context> {
+) -> Backtrack<Context<'global>> {
     match iter {
         ast::Iter::Opt => {
             let value_inner = back!(Backtrack::from_result(get::opt(&value), span));
@@ -238,26 +258,24 @@ fn assign_iter_exp(
 
 // = Argument assignment
 
-pub fn assign_arg(
-    spec: &Spec,
-    ctx_caller: &Context,
-    ctx_callee: &Context,
+pub fn assign_arg<'global>(
+    ctx_caller: &Context<'_>,
+    ctx_callee: &Context<'global>,
     arg: &ast::Arg,
     value: Rc<Value>,
-) -> Backtrack<Context> {
+) -> Backtrack<Context<'global>> {
     match &arg.node {
         ast::ArgKind::Exp(exp) => assign_exp_arg(ctx_callee, exp, value),
-        ast::ArgKind::Def(id) => assign_def_arg(spec, ctx_caller, ctx_callee, id, value),
+        ast::ArgKind::Def(id) => assign_def_arg(ctx_caller, ctx_callee, id, value),
     }
 }
 
-pub fn assign_args(
-    spec: &Spec,
-    ctx_caller: &Context,
-    ctx_callee: &Context,
+pub fn assign_args<'global>(
+    ctx_caller: &Context<'_>,
+    ctx_callee: &Context<'global>,
     args: &[ast::Arg],
     values: &[Rc<Value>],
-) -> Backtrack<Context> {
+) -> Backtrack<Context<'global>> {
     if args.len() != values.len() {
         return Backtrack::err(
             Span::over(&args.iter().map(|arg| arg.span.clone()).collect::<Vec<_>>()),
@@ -269,26 +287,29 @@ pub fn assign_args(
     }
     let mut ctx = ctx_callee.clone();
     for (arg, value) in args.iter().zip(values.iter()) {
-        ctx = back!(assign_arg(spec, ctx_caller, &ctx, arg, Rc::clone(value)));
+        ctx = back!(assign_arg(ctx_caller, &ctx, arg, Rc::clone(value)));
     }
     Backtrack::Ok(ctx)
 }
 
 // - Expression argument
 
-fn assign_exp_arg(ctx: &Context, exp: &ast::Exp, value: Rc<Value>) -> Backtrack<Context> {
+fn assign_exp_arg<'global>(
+    ctx: &Context<'global>,
+    exp: &ast::Exp,
+    value: Rc<Value>,
+) -> Backtrack<Context<'global>> {
     assign_exp(ctx, exp, value)
 }
 
 // - Function argument
 
-fn assign_def_arg(
-    spec: &Spec,
-    ctx_caller: &Context,
-    ctx_callee: &Context,
+fn assign_def_arg<'global>(
+    ctx_caller: &Context<'_>,
+    ctx_callee: &Context<'global>,
     id: &ast::Id,
     value: Rc<Value>,
-) -> Backtrack<Context> {
+) -> Backtrack<Context<'global>> {
     let ValueKind::Func(id_func) = &value.node else {
         return Backtrack::err(
             id.span.clone(),
@@ -299,12 +320,12 @@ fn assign_def_arg(
         );
     };
     let (_, func) = back!(Backtrack::from_result(
-        ctx_caller.find_func(spec, id_func),
+        ctx_caller.find_func(id_func),
         &id_func.span
     ));
     let mut ctx_callee = ctx_callee.clone();
     back!(Backtrack::from_result(
-        ctx_callee.add_func(spec, id.clone(), func.clone()),
+        ctx_callee.add_func(id.clone(), func.clone()),
         &id.span
     ));
     Backtrack::Ok(ctx_callee)

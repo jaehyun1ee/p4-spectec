@@ -24,7 +24,7 @@ use crate::{
 use super::super::{
     Al,
     backtrack::{Backtrack, back},
-    context::{Context, Spec},
+    context::Context,
     error::ErrorKind,
     util::is_iter_var_exp,
 };
@@ -32,7 +32,7 @@ use super::call::invoke_func;
 
 pub(super) fn eval_exps<I: Interface, E: Extern>(
     runner: &mut RunnerContext<'_, Al, I, E>,
-    ctx: &Context,
+    ctx: &Context<'_>,
     exps: &[ast::Exp],
 ) -> Backtrack<Vec<Rc<Value>>> {
     let mut values = Vec::with_capacity(exps.len());
@@ -44,7 +44,7 @@ pub(super) fn eval_exps<I: Interface, E: Extern>(
 
 pub(super) fn eval_args<I: Interface, E: Extern>(
     runner: &mut RunnerContext<'_, Al, I, E>,
-    ctx: &Context,
+    ctx: &Context<'_>,
     args: &[ast::Arg],
 ) -> Backtrack<Vec<Rc<Value>>> {
     let mut values = Vec::with_capacity(args.len());
@@ -52,10 +52,7 @@ pub(super) fn eval_args<I: Interface, E: Extern>(
         let value = match &arg.node {
             ast::ArgKind::Exp(exp) => back!(eval_exp(runner, ctx, exp)),
             ast::ArgKind::Def(id) => {
-                let typ = back!(Backtrack::from_result(
-                    ctx.find_func_typ(runner.spec(), id),
-                    &arg.span
-                ));
+                let typ = back!(Backtrack::from_result(ctx.find_func_typ(id), &arg.span));
                 make::func(
                     id.clone(),
                     typ.tparams,
@@ -72,7 +69,7 @@ pub(super) fn eval_args<I: Interface, E: Extern>(
 
 pub(super) fn eval_exp<I: Interface, E: Extern>(
     runner: &mut RunnerContext<'_, Al, I, E>,
-    ctx: &Context,
+    ctx: &Context<'_>,
     exp: &ast::Exp,
 ) -> Backtrack<Rc<Value>> {
     let span = &exp.span;
@@ -138,14 +135,14 @@ pub(super) fn eval_exp<I: Interface, E: Extern>(
         ast::ExpKind::UpCast(typ, exp_inner) | ast::ExpKind::DownCast(typ, exp_inner) => {
             let value = back!(eval_exp(runner, ctx, exp_inner));
             let down = matches!(&exp.node, ast::ExpKind::DownCast(_, _));
-            return cast(ctx, runner.spec(), typ, value, down);
+            return cast(ctx, typ, value, down);
         }
         ast::ExpKind::Sub(exp, _, subcheck) => {
             let value = back!(eval_exp(runner, ctx, exp));
-            let tdenv = ctx.type_env(runner.spec());
+            let tdenv = ctx.type_env();
             let find_func = |name: &str| {
                 let id = crate::phrase!(node: name.to_owned(), span: span.clone());
-                ctx.find_func_typ(runner.spec(), &id).ok()
+                ctx.find_func_typ(&id).ok()
             };
             let matches = back!(Backtrack::from_result(
                 value::check(&tdenv, &find_func, subcheck, &value),
@@ -319,13 +316,7 @@ pub(super) fn eval_exp<I: Interface, E: Extern>(
     Backtrack::Ok(value)
 }
 
-fn cast(
-    ctx: &Context,
-    spec: &Spec,
-    typ: &ast::Typ,
-    value: Rc<Value>,
-    down: bool,
-) -> Backtrack<Rc<Value>> {
+fn cast(ctx: &Context<'_>, typ: &ast::Typ, value: Rc<Value>, down: bool) -> Backtrack<Rc<Value>> {
     let span = &typ.span;
     let result = match &typ.node {
         ast::TypKind::Num(num::Typ::Int) if !down => {
@@ -349,10 +340,8 @@ fn cast(
             }
         }
         ast::TypKind::Var(id, targs) => {
-            let (tparams, def_typ) = back!(Backtrack::from_result(
-                ctx.find_defined_typdef(spec, id),
-                span
-            ));
+            let (tparams, def_typ) =
+                back!(Backtrack::from_result(ctx.find_defined_typdef(id), span));
             let theta = back!(Backtrack::from_result(
                 Theta::from_lists(tparams, targs),
                 span
@@ -360,7 +349,7 @@ fn cast(
             match &def_typ.node {
                 ast::DefTypKind::Plain(typ) => {
                     let typ = back!(Backtrack::from_result(subst_typ(&theta, typ), span));
-                    return cast(ctx, spec, &typ, value, down);
+                    return cast(ctx, &typ, value, down);
                 }
                 _ => value,
             }
@@ -378,14 +367,14 @@ fn cast(
             }
             let mut values_cast = Vec::with_capacity(values.len());
             for (typ, value) in typs.iter().zip(values) {
-                values_cast.push(back!(cast(ctx, spec, typ, value.clone(), down)));
+                values_cast.push(back!(cast(ctx, typ, value.clone(), down)));
             }
             make::tuple(typ, values_cast, Span::default())
         }
         ast::TypKind::Iter(typ_inner, ast::Iter::Opt) => {
             let value = back!(Backtrack::from_result(get::opt(&value), span));
             let value = match value {
-                Some(value) => Some(back!(cast(ctx, spec, typ_inner, value.clone(), down))),
+                Some(value) => Some(back!(cast(ctx, typ_inner, value.clone(), down))),
                 None => None,
             };
             make::opt(typ_inner, value, Span::default())
@@ -394,7 +383,7 @@ fn cast(
             let values = back!(Backtrack::from_result(get::list(&value), span));
             let mut values_cast = Vec::with_capacity(values.len());
             for value in values {
-                values_cast.push(back!(cast(ctx, spec, typ_inner, value.clone(), down)));
+                values_cast.push(back!(cast(ctx, typ_inner, value.clone(), down)));
             }
             make::list(typ_inner, values_cast, Span::default())
         }
@@ -405,7 +394,7 @@ fn cast(
 
 fn eval_index<I: Interface, E: Extern>(
     runner: &mut RunnerContext<'_, Al, I, E>,
-    ctx: &Context,
+    ctx: &Context<'_>,
     exp: &ast::Exp,
 ) -> Backtrack<i64> {
     let value = back!(eval_exp(runner, ctx, exp));
@@ -520,7 +509,7 @@ fn slice(
 
 fn eval_access_path<I: Interface, E: Extern>(
     runner: &mut RunnerContext<'_, Al, I, E>,
-    ctx: &Context,
+    ctx: &Context<'_>,
     value_b: &Rc<Value>,
     path: &ast::Path,
 ) -> Backtrack<Rc<Value>> {
@@ -547,7 +536,7 @@ fn eval_access_path<I: Interface, E: Extern>(
 
 fn eval_update_path<I: Interface, E: Extern>(
     runner: &mut RunnerContext<'_, Al, I, E>,
-    ctx: &Context,
+    ctx: &Context<'_>,
     value_b: &Rc<Value>,
     path: &ast::Path,
     value_upd: Rc<Value>,
