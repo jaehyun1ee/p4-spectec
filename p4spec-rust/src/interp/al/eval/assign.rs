@@ -35,7 +35,6 @@ pub fn assign_exp<'global>(
         (ast::ExpKind::Tuple(exps), ValueKind::Tuple(values)) => {
             assign_tuple_exp(ctx, exps, values)
         }
-        (ast::ExpKind::List(exps), ValueKind::List(values)) => assign_list_exp(ctx, exps, values),
         (ast::ExpKind::Case(not_exp), ValueKind::Case(value_case)) => {
             assign_case_exp(ctx, not_exp, value_case)
         }
@@ -45,16 +44,12 @@ pub fn assign_exp<'global>(
         (ast::ExpKind::Opt(exp_opt), ValueKind::Opt(value_opt)) => {
             assign_opt_exp(ctx, exp, exp_opt, &value, value_opt)
         }
-        (ast::ExpKind::Cons(exp_h, exp_t), ValueKind::List(values)) => {
-            assign_cons_exp(ctx, exp, exp_h, exp_t, &value, values)
+        (ast::ExpKind::List(exps), ValueKind::List(values)) => assign_list_exp(ctx, exps, values),
+        (ast::ExpKind::Cons(exp_head, exp_tail), ValueKind::List(values)) => {
+            assign_cons_exp(ctx, exp, exp_head, exp_tail, &value, values)
         }
         (ast::ExpKind::Iter(exp_inner, (iter, vars)), _) => {
-            if let Some(var) = is_iter_var_exp(exp) {
-                let mut ctx = ctx.clone();
-                ctx.add_value(var, value);
-                return Backtrack::Ok(ctx);
-            }
-            assign_iter_exp(ctx, exp_inner, iter, vars, value, &exp.span)
+            assign_iter_exp(ctx, exp, exp_inner, iter, vars, value)
         }
         _ => Backtrack::err(
             exp.span.clone(),
@@ -102,16 +97,6 @@ fn assign_var_exp<'global>(
 // - Tuple expression
 
 fn assign_tuple_exp<'global>(
-    ctx: &Context<'global>,
-    exps: &[ast::Exp],
-    values: &[Rc<Value>],
-) -> Backtrack<Context<'global>> {
-    assign_exps(ctx, exps, values)
-}
-
-// - List expression
-
-fn assign_list_exp<'global>(
     ctx: &Context<'global>,
     exps: &[ast::Exp],
     values: &[Rc<Value>],
@@ -171,38 +156,54 @@ fn assign_opt_exp<'global>(
     }
 }
 
+// - List expression
+
+fn assign_list_exp<'global>(
+    ctx: &Context<'global>,
+    exps: &[ast::Exp],
+    values: &[Rc<Value>],
+) -> Backtrack<Context<'global>> {
+    assign_exps(ctx, exps, values)
+}
+
 // - Cons expression
 
 fn assign_cons_exp<'global>(
     ctx: &Context<'global>,
     exp: &ast::Exp,
-    exp_h: &ast::Exp,
-    exp_t: &ast::Exp,
+    exp_head: &ast::Exp,
+    exp_tail: &ast::Exp,
     value: &Value,
     values: &[Rc<Value>],
 ) -> Backtrack<Context<'global>> {
-    let Some((value_h, values_t)) = values.split_first() else {
+    let Some((value_head, values_tail)) = values.split_first() else {
         return Backtrack::err(
             exp.span.clone(),
             ErrorKind::Assign(AssignErrorKind::EmptyCons),
         );
     };
     let typ = phrase!(node: value.note.clone(), span: exp.span.clone());
-    let value_t = make::list(&typ, values_t.to_vec(), Span::default());
-    let ctx = back!(assign_exp(ctx, exp_h, Rc::clone(value_h)));
-    assign_exp(&ctx, exp_t, value_t)
+    let value_tail = make::list(&typ, values_tail.to_vec(), Span::default());
+    let ctx = back!(assign_exp(ctx, exp_head, Rc::clone(value_head)));
+    assign_exp(&ctx, exp_tail, value_tail)
 }
 
-// - Iter expression
+// - Iteration expression
 
 fn assign_iter_exp<'global>(
     ctx: &Context<'global>,
+    exp: &ast::Exp,
     exp_inner: &ast::Exp,
     iter: &ast::Iter,
     vars: &[ast::Var],
     value: Rc<Value>,
-    span: &Span,
 ) -> Backtrack<Context<'global>> {
+    if let Some(var) = is_iter_var_exp(exp) {
+        let mut ctx = ctx.clone();
+        ctx.add_value(var, value);
+        return Backtrack::Ok(ctx);
+    }
+    let span = &exp.span;
     match iter {
         ast::Iter::Opt => {
             let value_inner = back!(Backtrack::from_result(get::opt(&value), span));

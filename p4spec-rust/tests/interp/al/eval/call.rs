@@ -482,3 +482,31 @@ rule Choose/else: n ~> 9
         }
     }
 }
+
+#[test]
+fn test_type_bindings_survive_clause_selection_and_else() {
+    let spec_al = spec(
+        r#"
+var b : bool
+dec $identity<X>(X) : X
+def $identity<X>(X) = X
+dec $pick<X>(bool, X) : X
+def $pick<X>(true, X) = $identity<X>(X)
+  -- if false
+def $pick<X>(true, X) = $identity<X>(X)
+def $pick<X>(b, X) = $identity<X>(X)
+  -- otherwise
+"#,
+    );
+    for det in [false, true] {
+        let mut runner = runner(spec_al.clone(), det);
+        for condition in [true, false] {
+            let value = nat(7);
+            let values = [make::bool(condition, Span::default()), value.clone()];
+            let output = runner
+                .eval_func("pick", &[typ::make::nat()], &values)
+                .unwrap();
+            assert!(Rc::ptr_eq(&output, &value));
+        }
+    }
+}

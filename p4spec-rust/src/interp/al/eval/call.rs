@@ -15,6 +15,8 @@ use crate::{
 };
 use std::rc::Rc;
 
+// = Relation invocation
+
 pub fn invoke_rel<I: Interface, E: Extern>(
     runner: &mut RunnerContext<'_, Al, I, E>,
     ctx: &Context<'_>,
@@ -24,13 +26,7 @@ pub fn invoke_rel<I: Interface, E: Extern>(
     let result = stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
         let rel = back!(Backtrack::from_result(ctx.find_rel(id), &id.span));
         match rel {
-            ast::RelDef::Extern(_) => {
-                let (values, _) = back!(Backtrack::from_result(
-                    runner.call_extern_rel(&id.node, values),
-                    &id.span
-                ));
-                Backtrack::Ok(values)
-            }
+            ast::RelDef::Extern(_) => invoke_extern_rel(runner, id, values),
             ast::RelDef::Defined(rel) => invoke_defined_rel(runner, ctx, id, rel, values),
         }
     });
@@ -41,7 +37,23 @@ pub fn invoke_rel<I: Interface, E: Extern>(
     })
 }
 
-fn invoke_rule_path<I: Interface, E: Extern>(
+// - Extern relation
+
+fn invoke_extern_rel<I: Interface, E: Extern>(
+    runner: &mut RunnerContext<'_, Al, I, E>,
+    id: &ast::Id,
+    values: &[Rc<Value>],
+) -> Backtrack<Vec<Rc<Value>>> {
+    let (values, _) = back!(Backtrack::from_result(
+        runner.call_extern_rel(&id.node, values),
+        &id.span
+    ));
+    Backtrack::Ok(values)
+}
+
+// - Defined relation
+
+fn eval_rule_path<I: Interface, E: Extern>(
     runner: &mut RunnerContext<'_, Al, I, E>,
     ctx: &Context<'_>,
     rule_match: &ast::RuleMatch,
@@ -86,7 +98,7 @@ fn invoke_defined_rel<I: Interface, E: Extern>(
         })
         .collect();
     let mut evaluate = |&(group, path): &(&ast::RuleGroupKind, &ast::RulePath)| {
-        invoke_rule_path(runner, ctx, &group.rule_match, path, values).nest(id.span.clone(), || {
+        eval_rule_path(runner, ctx, &group.rule_match, path, values).nest(id.span.clone(), || {
             ErrorKind::Trace(TraceErrorKind::RuleApplication {
                 relation: id.node.clone(),
                 group: group.id.node.clone(),
@@ -101,9 +113,9 @@ fn invoke_defined_rel<I: Interface, E: Extern>(
     };
     match result {
         Backtrack::Ok(values) => Backtrack::Ok(values),
-        Backtrack::Err(traces) => Backtrack::Err(traces),
-        Backtrack::Unmatch(traces) => match &rel.else_group {
-            Some(group) => invoke_rule_path(
+        Backtrack::Err(errors) => Backtrack::Err(errors),
+        Backtrack::Unmatch(errors) => match &rel.else_group {
+            Some(group) => eval_rule_path(
                 runner,
                 ctx,
                 &group.node.rule_match,
@@ -117,7 +129,7 @@ fn invoke_defined_rel<I: Interface, E: Extern>(
                     path: group.node.rule_path.id.node.clone(),
                 })
             }),
-            None => Backtrack::Unmatch(traces),
+            None => Backtrack::Unmatch(errors),
         },
         Backtrack::Nondet((group_a, path_a), (group_b, path_b)) => Backtrack::err(
             id.span.clone(),
@@ -132,6 +144,8 @@ fn invoke_defined_rel<I: Interface, E: Extern>(
     }
 }
 
+// = Function invocation
+
 pub fn invoke_func<I: Interface, E: Extern>(
     runner: &mut RunnerContext<'_, Al, I, E>,
     ctx: &Context<'_>,
@@ -142,56 +156,11 @@ pub fn invoke_func<I: Interface, E: Extern>(
     let result = stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
         let (_, func) = back!(Backtrack::from_result(ctx.find_func(id), &id.span));
         match func {
-            ast::MetaFuncDef::Extern(_) => {
-                let (value, _) = back!(Backtrack::from_result(
-                    runner.call_extern_func(&id.node, &[], values),
-                    &id.span
-                ));
-                Backtrack::Ok(value)
-            }
-            ast::MetaFuncDef::Builtin(_) => match runner.call_builtin(id, targs, values) {
-                Ok((value, _)) => Backtrack::Ok(value),
-                Err(error) => {
-                    let recoverable = matches!(
-                        error.kind.as_ref(),
-                        ErrorKind::Host(HostErrorKind::Interface(InterfaceError::Builtin(_)))
-                    );
-                    let error = error.at_if_missing(&id.span);
-                    if recoverable {
-                        Backtrack::Unmatch(vec![error])
-                    } else {
-                        Backtrack::Err(vec![error])
-                    }
-                }
-            },
-            ast::MetaFuncDef::Table(func) => choose_sequential(&func.table_rows, |row| {
-                let result = (|| {
-                    back!(Backtrack::check(
-                        row.node.args.len() == values.len(),
-                        row.span.clone(),
-                        ErrorKind::Call(CallErrorKind::TableRowArityMismatch {
-                            expected: row.node.args.len(),
-                            actual: values.len()
-                        })
-                    ));
-                    let ctx = back!(assign::assign_args(
-                        ctx,
-                        &ctx.localize(),
-                        &row.node.args,
-                        values
-                    ));
-                    let ctx = back!(eval_prems(runner, &ctx, &row.node.prems));
-                    expr::eval_exp(runner, &ctx, &row.node.exp)
-                })();
-                result.nest(id.span.clone(), || {
-                    ErrorKind::Trace(TraceErrorKind::TableRowApplication {
-                        function: id.node.clone(),
-                        arguments: Print::to_string(row.node.args.as_slice()),
-                    })
-                })
-            }),
+            ast::MetaFuncDef::Extern(func) => invoke_extern_func(runner, func, values),
+            ast::MetaFuncDef::Builtin(func) => invoke_builtin_func(runner, func, targs, values),
+            ast::MetaFuncDef::Table(func) => invoke_table_func(runner, ctx, func, values),
             ast::MetaFuncDef::Defined(func) => {
-                invoke_defined_func(runner, ctx, id, func, targs, values)
+                invoke_defined_func(runner, ctx, func, targs, values)
             }
         }
     });
@@ -214,33 +183,102 @@ pub fn invoke_func<I: Interface, E: Extern>(
     })
 }
 
-fn invoke_clause<I: Interface, E: Extern>(
+// - Extern function
+
+fn invoke_extern_func<I: Interface, E: Extern>(
+    runner: &mut RunnerContext<'_, Al, I, E>,
+    extern_func: &ast::ExternFunc,
+    values: &[Rc<Value>],
+) -> Backtrack<Rc<Value>> {
+    let (value, _) = back!(Backtrack::from_result(
+        runner.call_extern_func(&extern_func.id.node, &[], values),
+        &extern_func.id.span
+    ));
+    Backtrack::Ok(value)
+}
+
+// - Builtin function
+
+fn invoke_builtin_func<I: Interface, E: Extern>(
+    runner: &mut RunnerContext<'_, Al, I, E>,
+    builtin_func: &ast::BuiltinFunc,
+    targs: &[ast::Typ],
+    values: &[Rc<Value>],
+) -> Backtrack<Rc<Value>> {
+    match runner.call_builtin(&builtin_func.id, targs, values) {
+        Ok((value, _)) => Backtrack::Ok(value),
+        Err(error) => {
+            let recoverable = matches!(
+                error.kind.as_ref(),
+                ErrorKind::Host(HostErrorKind::Interface(InterfaceError::Builtin(_)))
+            );
+            let error = error.at_if_missing(&builtin_func.id.span);
+            if recoverable {
+                Backtrack::Unmatch(vec![error])
+            } else {
+                Backtrack::Err(vec![error])
+            }
+        }
+    }
+}
+
+// - Table function
+
+fn eval_table_row<I: Interface, E: Extern>(
     runner: &mut RunnerContext<'_, Al, I, E>,
     ctx: &Context<'_>,
     id: &ast::Id,
-    func: &ast::DefinedFunc,
-    clause: &ast::Clause,
-    targs: &[ast::Typ],
+    table_row: &ast::TableRow,
     values: &[Rc<Value>],
 ) -> Backtrack<Rc<Value>> {
     let result = (|| {
         back!(Backtrack::check(
-            func.tparams.len() == targs.len(),
-            id.span.clone(),
-            ErrorKind::Call(CallErrorKind::TypeArgumentArityMismatch {
-                expected: func.tparams.len(),
-                actual: targs.len()
+            table_row.node.args.len() == values.len(),
+            table_row.span.clone(),
+            ErrorKind::Call(CallErrorKind::TableRowArityMismatch {
+                expected: table_row.node.args.len(),
+                actual: values.len()
             })
         ));
-        let mut ctx_local = ctx.localize();
-        for (tparam, targ) in func.tparams.iter().zip(targs) {
-            let def_typ =
-                crate::phrase!(node: ast::DefTypKind::Plain(targ.clone()), span: targ.span.clone());
-            back!(Backtrack::from_result(
-                ctx_local.add_typdef(tparam.clone(), TypeDef::Defined(vec![], Box::new(def_typ))),
-                &tparam.span
-            ));
-        }
+        let ctx = back!(assign::assign_args(
+            ctx,
+            &ctx.localize(),
+            &table_row.node.args,
+            values
+        ));
+        let ctx = back!(eval_prems(runner, &ctx, &table_row.node.prems));
+        expr::eval_exp(runner, &ctx, &table_row.node.exp)
+    })();
+    result.nest(id.span.clone(), || {
+        ErrorKind::Trace(TraceErrorKind::TableRowApplication {
+            function: id.node.clone(),
+            arguments: Print::to_string(table_row.node.args.as_slice()),
+        })
+    })
+}
+
+fn invoke_table_func<I: Interface, E: Extern>(
+    runner: &mut RunnerContext<'_, Al, I, E>,
+    ctx: &Context<'_>,
+    table_func: &ast::TableFunc,
+    values: &[Rc<Value>],
+) -> Backtrack<Rc<Value>> {
+    choose_sequential(&table_func.table_rows, |table_row| {
+        eval_table_row(runner, ctx, &table_func.id, table_row, values)
+    })
+}
+
+// - Defined function
+
+fn eval_clause<I: Interface, E: Extern>(
+    runner: &mut RunnerContext<'_, Al, I, E>,
+    ctx_caller: &Context<'_>,
+    ctx_callee: &Context<'_>,
+    defined_func: &ast::DefinedFunc,
+    clause: &ast::Clause,
+    values: &[Rc<Value>],
+) -> Backtrack<Rc<Value>> {
+    let result = (|| {
         back!(Backtrack::check(
             clause.node.args.len() == values.len(),
             clause.span.clone(),
@@ -250,17 +288,17 @@ fn invoke_clause<I: Interface, E: Extern>(
             })
         ));
         let ctx = back!(assign::assign_args(
-            ctx,
-            &ctx_local,
+            ctx_caller,
+            ctx_callee,
             &clause.node.args,
             values
         ));
         let ctx = back!(eval_prems(runner, &ctx, &clause.node.premises));
         expr::eval_exp(runner, &ctx, &clause.node.expression)
     })();
-    result.nest(id.span.clone(), || {
+    result.nest(defined_func.id.span.clone(), || {
         ErrorKind::Trace(TraceErrorKind::ClauseApplication {
-            function: id.node.clone(),
+            function: defined_func.id.node.clone(),
             arguments: Print::to_string(clause.node.args.as_slice()),
         })
     })
@@ -269,32 +307,56 @@ fn invoke_clause<I: Interface, E: Extern>(
 fn invoke_defined_func<I: Interface, E: Extern>(
     runner: &mut RunnerContext<'_, Al, I, E>,
     ctx: &Context<'_>,
-    id: &ast::Id,
-    func: &ast::DefinedFunc,
+    defined_func: &ast::DefinedFunc,
     targs: &[ast::Typ],
     values: &[Rc<Value>],
 ) -> Backtrack<Rc<Value>> {
+    back!(Backtrack::check(
+        defined_func.tparams.len() == targs.len(),
+        defined_func.id.span.clone(),
+        ErrorKind::Call(CallErrorKind::TypeArgumentArityMismatch {
+            expected: defined_func.tparams.len(),
+            actual: targs.len()
+        })
+    ));
+    let mut ctx_local = ctx.localize();
+    for (tparam, targ) in defined_func.tparams.iter().zip(targs) {
+        let def_typ =
+            crate::phrase!(node: ast::DefTypKind::Plain(targ.clone()), span: targ.span.clone());
+        back!(Backtrack::from_result(
+            ctx_local.add_typdef(tparam.clone(), TypeDef::Defined(vec![], Box::new(def_typ))),
+            &tparam.span
+        ));
+    }
     let det = runner.config().det;
-    let mut evaluate =
-        |index: &usize| invoke_clause(runner, ctx, id, func, &func.clauses[*index], targs, values);
+    let mut evaluate = |idx: &usize| {
+        eval_clause(
+            runner,
+            ctx,
+            &ctx_local,
+            defined_func,
+            &defined_func.clauses[*idx],
+            values,
+        )
+    };
     let result = if det {
-        choose_deterministic(0..func.clauses.len(), &mut evaluate)
+        choose_deterministic(0..defined_func.clauses.len(), &mut evaluate)
     } else {
-        choose_sequential(0..func.clauses.len(), &mut evaluate).with_candidates()
+        choose_sequential(0..defined_func.clauses.len(), &mut evaluate).with_candidates()
     };
     match result {
         Backtrack::Ok(value) => Backtrack::Ok(value),
-        Backtrack::Err(traces) => Backtrack::Err(traces),
-        Backtrack::Unmatch(traces) => match &func.else_clause {
-            Some(clause) => invoke_clause(runner, ctx, id, func, clause, targs, values),
-            None => Backtrack::Unmatch(traces),
+        Backtrack::Err(errors) => Backtrack::Err(errors),
+        Backtrack::Unmatch(errors) => match &defined_func.else_clause {
+            Some(clause) => eval_clause(runner, ctx, &ctx_local, defined_func, clause, values),
+            None => Backtrack::Unmatch(errors),
         },
-        Backtrack::Nondet(a, b) => Backtrack::err(
-            id.span.clone(),
+        Backtrack::Nondet(idx_a, idx_b) => Backtrack::err(
+            defined_func.id.span.clone(),
             ErrorKind::Call(CallErrorKind::FunctionNondeterminism {
-                function: id.node.clone(),
-                first: a,
-                second: b,
+                function: defined_func.id.node.clone(),
+                first: idx_a,
+                second: idx_b,
             }),
         ),
     }

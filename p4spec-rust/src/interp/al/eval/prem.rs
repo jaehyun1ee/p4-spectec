@@ -23,6 +23,24 @@ use crate::{
 };
 use std::rc::Rc;
 
+// = Premise evaluation
+
+pub fn eval_prem<'global, I: Interface, E: Extern>(
+    runner: &mut RunnerContext<'_, Al, I, E>,
+    ctx: &Context<'global>,
+    prem: &ast::Prem,
+) -> Backtrack<Context<'global>> {
+    match &prem.node {
+        ast::PremKind::Rule(prem) => eval_rule_prem(runner, ctx, prem),
+        ast::PremKind::If(prem) => eval_if_prem(runner, ctx, prem),
+        ast::PremKind::IfHold(prem) => eval_if_hold_prem(runner, ctx, prem),
+        ast::PremKind::IfNotHold(prem) => eval_if_not_hold_prem(runner, ctx, prem),
+        ast::PremKind::Let(prem) => eval_let_prem(runner, ctx, prem),
+        ast::PremKind::Iter(prem) => eval_iter_prem(runner, ctx, prem),
+        ast::PremKind::Debug(prem) => eval_debug_prem(runner, ctx, prem),
+    }
+}
+
 pub fn eval_prems<'global, I: Interface, E: Extern>(
     runner: &mut RunnerContext<'_, Al, I, E>,
     ctx: &Context<'global>,
@@ -35,117 +53,155 @@ pub fn eval_prems<'global, I: Interface, E: Extern>(
     Backtrack::Ok(ctx)
 }
 
-pub fn eval_prem<'global, I: Interface, E: Extern>(
+// - Rule premise
+
+fn eval_rule_prem<'global, I: Interface, E: Extern>(
     runner: &mut RunnerContext<'_, Al, I, E>,
     ctx: &Context<'global>,
-    prem: &ast::Prem,
+    prem: &ast::RulePrem,
 ) -> Backtrack<Context<'global>> {
-    match &prem.node {
-        ast::PremKind::Rule(prem) => {
-            let exps = prem.not_exp.args().into_iter().cloned().collect();
-            let (exps_input, exps_output) = back!(Backtrack::from_result(
-                input::split(&prem.input_hint, exps),
-                &prem.id.span
-            ));
-            let values = back!(expr::eval_exps(runner, ctx, &exps_input));
-            let values = back!(invoke_rel(runner, ctx, &prem.id, &values));
-            assign::assign_exps(ctx, &exps_output, &values)
-        }
-        ast::PremKind::If(prem) => {
-            let value = back!(expr::eval_exp(runner, ctx, &prem.exp));
-            if back!(Backtrack::from_result(get::bool(&value), &prem.exp.span)) {
-                Backtrack::Ok(ctx.clone())
-            } else {
-                Backtrack::unmatch(
-                    prem.exp.span.clone(),
-                    ErrorKind::Prem(PremErrorKind::ConditionNotMet {
-                        expression: Print::to_string(&prem.exp),
-                    }),
-                )
-            }
-        }
-        ast::PremKind::IfHold(prem) => {
-            let exps: Vec<_> = prem.not_exp.args().into_iter().cloned().collect();
-            let values = back!(expr::eval_exps(runner, ctx, &exps));
-            match invoke_rel(runner, ctx, &prem.id, &values) {
-                Backtrack::Ok(_) => Backtrack::Ok(ctx.clone()),
-                Backtrack::Err(traces) => Backtrack::Err(traces),
-                Backtrack::Unmatch(traces) => {
-                    Backtrack::Unmatch(traces).nest(prem.id.span.clone(), || {
-                        ErrorKind::Prem(PremErrorKind::HoldConditionNotMet {
-                            relation: prem.id.node.clone(),
-                        })
-                    })
-                }
-            }
-        }
-        ast::PremKind::IfNotHold(prem) => {
-            let exps: Vec<_> = prem.not_exp.args().into_iter().cloned().collect();
-            let values = back!(expr::eval_exps(runner, ctx, &exps));
-            match invoke_rel(runner, ctx, &prem.id, &values) {
-                Backtrack::Ok(_) => Backtrack::unmatch(
-                    prem.id.span.clone(),
-                    ErrorKind::Prem(PremErrorKind::NotHoldConditionNotMet {
-                        relation: prem.id.node.clone(),
-                    }),
-                ),
-                Backtrack::Err(traces) => Backtrack::Err(traces),
-                Backtrack::Unmatch(_) => Backtrack::Ok(ctx.clone()),
-            }
-        }
-        ast::PremKind::Let(prem) => {
-            let value = back!(expr::eval_exp(runner, ctx, &prem.exp_r));
-            assign::assign_exp(ctx, &prem.exp_l, value)
-        }
-        ast::PremKind::Iter(prem) => {
-            let iter = &prem.prem_iter;
-            let ctxs = match iter.iter {
-                ast::Iter::Opt => back!(Backtrack::from_result(
-                    ctx.sub_opt(&iter.vars_bound),
-                    &prem.prem.span
-                ))
-                .into_iter()
-                .collect(),
-                ast::Iter::List => back!(Backtrack::from_result(
-                    ctx.sub_list(&iter.vars_bound),
-                    &prem.prem.span
-                )),
-            };
-            let mut batches = vec![Vec::new(); iter.vars_bind.len()];
-            for ctx_sub in ctxs {
-                let ctx_sub = back!(eval_prem(runner, &ctx_sub, &prem.prem));
-                for (var, values) in iter.vars_bind.iter().zip(&mut batches) {
-                    let variable = Variable::new(var.id.clone(), var.iters.clone());
-                    values.push(Rc::clone(back!(Backtrack::from_result(
-                        ctx_sub.find_value(&variable),
-                        &var.id.span
-                    ))));
-                }
-            }
-            let mut ctx = ctx.clone();
-            for (var, values) in iter.vars_bind.iter().zip(batches) {
-                let mut iters = var.iters.clone();
-                iters.push(iter.iter);
-                let typ = typ::make::iterate(var.typ.clone(), &iters);
-                let value = match iter.iter {
-                    ast::Iter::Opt => make::opt(&typ, values.into_iter().next(), Span::default()),
-                    ast::Iter::List => make::list(&typ, values, Span::default()),
-                };
-                ctx.add_value(Variable::new(var.id.clone(), iters), value);
-            }
-            Backtrack::Ok(ctx)
-        }
-        ast::PremKind::Debug(prem) => {
-            let value = back!(expr::eval_exp(runner, ctx, &prem.exp));
-            let expression = Print::to_string(&prem.exp);
-            println!("{}: {}", prem.exp.span, expression);
-            let region = value.span.to_string();
-            if region.is_empty() {
-                println!("{}", Print::to_string(value.as_ref()));
-            } else {
-                println!("{region}: {}", Print::to_string(value.as_ref()));
-            }
-            Backtrack::Ok(ctx.clone())
+    let exps = prem.not_exp.args().into_iter().cloned().collect();
+    let (exps_input, exps_output) = back!(Backtrack::from_result(
+        input::split(&prem.input_hint, exps),
+        &prem.id.span
+    ));
+    let values_input = back!(expr::eval_exps(runner, ctx, &exps_input));
+    let values_output = back!(invoke_rel(runner, ctx, &prem.id, &values_input));
+    assign::assign_exps(ctx, &exps_output, &values_output)
+}
+
+// - If premise
+
+fn eval_if_prem<'global, I: Interface, E: Extern>(
+    runner: &mut RunnerContext<'_, Al, I, E>,
+    ctx: &Context<'global>,
+    prem: &ast::IfPrem,
+) -> Backtrack<Context<'global>> {
+    let value = back!(expr::eval_exp(runner, ctx, &prem.exp));
+    if back!(Backtrack::from_result(get::bool(&value), &prem.exp.span)) {
+        Backtrack::Ok(ctx.clone())
+    } else {
+        Backtrack::unmatch(
+            prem.exp.span.clone(),
+            ErrorKind::Prem(PremErrorKind::ConditionNotMet {
+                expression: Print::to_string(&prem.exp),
+            }),
+        )
+    }
+}
+
+// - Hold premise
+
+fn eval_if_hold_prem<'global, I: Interface, E: Extern>(
+    runner: &mut RunnerContext<'_, Al, I, E>,
+    ctx: &Context<'global>,
+    prem: &ast::IfHoldPrem,
+) -> Backtrack<Context<'global>> {
+    let exps: Vec<_> = prem.not_exp.args().into_iter().cloned().collect();
+    let values = back!(expr::eval_exps(runner, ctx, &exps));
+    match invoke_rel(runner, ctx, &prem.id, &values) {
+        Backtrack::Ok(_) => Backtrack::Ok(ctx.clone()),
+        Backtrack::Err(errors) => Backtrack::Err(errors),
+        Backtrack::Unmatch(errors) => Backtrack::Unmatch(errors).nest(prem.id.span.clone(), || {
+            ErrorKind::Prem(PremErrorKind::HoldConditionNotMet {
+                relation: prem.id.node.clone(),
+            })
+        }),
+    }
+}
+
+// - Not-hold premise
+
+fn eval_if_not_hold_prem<'global, I: Interface, E: Extern>(
+    runner: &mut RunnerContext<'_, Al, I, E>,
+    ctx: &Context<'global>,
+    prem: &ast::IfNotHoldPrem,
+) -> Backtrack<Context<'global>> {
+    let exps: Vec<_> = prem.not_exp.args().into_iter().cloned().collect();
+    let values = back!(expr::eval_exps(runner, ctx, &exps));
+    match invoke_rel(runner, ctx, &prem.id, &values) {
+        Backtrack::Ok(_) => Backtrack::unmatch(
+            prem.id.span.clone(),
+            ErrorKind::Prem(PremErrorKind::NotHoldConditionNotMet {
+                relation: prem.id.node.clone(),
+            }),
+        ),
+        Backtrack::Err(errors) => Backtrack::Err(errors),
+        Backtrack::Unmatch(_) => Backtrack::Ok(ctx.clone()),
+    }
+}
+
+// - Let premise
+
+fn eval_let_prem<'global, I: Interface, E: Extern>(
+    runner: &mut RunnerContext<'_, Al, I, E>,
+    ctx: &Context<'global>,
+    prem: &ast::LetPrem,
+) -> Backtrack<Context<'global>> {
+    let value = back!(expr::eval_exp(runner, ctx, &prem.exp_r));
+    assign::assign_exp(ctx, &prem.exp_l, value)
+}
+
+// - Iteration premise
+
+fn eval_iter_prem<'global, I: Interface, E: Extern>(
+    runner: &mut RunnerContext<'_, Al, I, E>,
+    ctx: &Context<'global>,
+    prem: &ast::IterPrem,
+) -> Backtrack<Context<'global>> {
+    let prem_iter = &prem.prem_iter;
+    let ctxs = match prem_iter.iter {
+        ast::Iter::Opt => back!(Backtrack::from_result(
+            ctx.sub_opt(&prem_iter.vars_bound),
+            &prem.prem.span
+        ))
+        .into_iter()
+        .collect(),
+        ast::Iter::List => back!(Backtrack::from_result(
+            ctx.sub_list(&prem_iter.vars_bound),
+            &prem.prem.span
+        )),
+    };
+    let mut values_bind = vec![Vec::new(); prem_iter.vars_bind.len()];
+    for ctx_sub in ctxs {
+        let ctx_sub = back!(eval_prem(runner, &ctx_sub, &prem.prem));
+        for (var, values) in prem_iter.vars_bind.iter().zip(&mut values_bind) {
+            let var_bound = Variable::new(var.id.clone(), var.iters.clone());
+            values.push(Rc::clone(back!(Backtrack::from_result(
+                ctx_sub.find_value(&var_bound),
+                &var.id.span
+            ))));
         }
     }
+    let mut ctx = ctx.clone();
+    for (var, values) in prem_iter.vars_bind.iter().zip(values_bind) {
+        let mut iters = var.iters.clone();
+        iters.push(prem_iter.iter);
+        let typ = typ::make::iterate(var.typ.clone(), &iters);
+        let value = match prem_iter.iter {
+            ast::Iter::Opt => make::opt(&typ, values.into_iter().next(), Span::default()),
+            ast::Iter::List => make::list(&typ, values, Span::default()),
+        };
+        ctx.add_value(Variable::new(var.id.clone(), iters), value);
+    }
+    Backtrack::Ok(ctx)
+}
+
+// - Debug premise
+
+fn eval_debug_prem<'global, I: Interface, E: Extern>(
+    runner: &mut RunnerContext<'_, Al, I, E>,
+    ctx: &Context<'global>,
+    prem: &ast::DebugPrem,
+) -> Backtrack<Context<'global>> {
+    let value = back!(expr::eval_exp(runner, ctx, &prem.exp));
+    let exp_text = Print::to_string(&prem.exp);
+    println!("{}: {}", prem.exp.span, exp_text);
+    let span_text = value.span.to_string();
+    if span_text.is_empty() {
+        println!("{}", Print::to_string(value.as_ref()));
+    } else {
+        println!("{span_text}: {}", Print::to_string(value.as_ref()));
+    }
+    Backtrack::Ok(ctx.clone())
 }

@@ -3,4 +3,5 @@
 pub mod assign;
 pub mod call;
 pub mod expr;
+pub mod ops;
 pub mod prem;
