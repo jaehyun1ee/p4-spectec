@@ -309,7 +309,7 @@ impl Free for TableRowKind {
 
 // Hints alias EL hints and use their implementation.
 
-// - Definitions
+// - Type definitions
 
 impl Free for ExternTyp {
     fn free(&self) -> IdSet {
@@ -317,11 +317,22 @@ impl Free for ExternTyp {
     }
 }
 
-impl Free for TypDef {
+impl Free for DefinedTyp {
     fn free(&self) -> IdSet {
         IdSet::new()
     }
 }
+
+impl Free for TypDef {
+    fn free_into(&self, free: &mut IdSet) {
+        match self {
+            Self::Extern(extern_typ) => extern_typ.free_into(free),
+            Self::Defined(defined_typ) => defined_typ.free_into(free),
+        }
+    }
+}
+
+// - Meta-variables
 
 impl Free for VarDef {
     fn free(&self) -> IdSet {
@@ -329,56 +340,77 @@ impl Free for VarDef {
     }
 }
 
+// - Relations
+
 impl Free for ExternRel {
     fn free(&self) -> IdSet {
         IdSet::new()
     }
 }
 
-impl Free for Rel {
+impl Free for DefinedRel {
     fn free_into(&self, free: &mut IdSet) {
         self.rule_groups.as_slice().free_into(free);
         self.else_group.free_into(free);
     }
 }
 
-impl Free for ExternDec {
+impl Free for RelDef {
+    fn free_into(&self, free: &mut IdSet) {
+        match self {
+            Self::Extern(extern_rel) => extern_rel.free_into(free),
+            Self::Defined(defined_rel) => defined_rel.free_into(free),
+        }
+    }
+}
+
+// - Meta-functions
+
+impl Free for ExternFunc {
     fn free(&self) -> IdSet {
         IdSet::new()
     }
 }
 
-impl Free for BuiltinDec {
+impl Free for BuiltinFunc {
     fn free(&self) -> IdSet {
         IdSet::new()
     }
 }
 
-impl Free for TableDec {
+impl Free for TableFunc {
     fn free_into(&self, free: &mut IdSet) {
         self.rows.as_slice().free_into(free);
     }
 }
 
-impl Free for FuncDec {
+impl Free for DefinedFunc {
     fn free_into(&self, free: &mut IdSet) {
         self.clauses.as_slice().free_into(free);
         self.else_clause.free_into(free);
     }
 }
 
+impl Free for MetaFuncDef {
+    fn free_into(&self, free: &mut IdSet) {
+        match self {
+            Self::Extern(extern_func) => extern_func.free_into(free),
+            Self::Builtin(builtin_func) => builtin_func.free_into(free),
+            Self::Table(table_func) => table_func.free_into(free),
+            Self::Defined(defined_func) => defined_func.free_into(free),
+        }
+    }
+}
+
+// - Definitions
+
 impl Free for DefKind {
     fn free_into(&self, free: &mut IdSet) {
         match self {
-            Self::ExternTyp(definition) => definition.free_into(free),
-            Self::Typ(definition) => definition.free_into(free),
-            Self::Var(definition) => definition.free_into(free),
-            Self::ExternRel(definition) => definition.free_into(free),
-            Self::Rel(definition) => definition.free_into(free),
-            Self::ExternDec(definition) => definition.free_into(free),
-            Self::BuiltinDec(definition) => definition.free_into(free),
-            Self::TableDec(definition) => definition.free_into(free),
-            Self::FuncDec(definition) => definition.free_into(free),
+            Self::Typ(typ_def) => typ_def.free_into(free),
+            Self::Var(var_def) => var_def.free_into(free),
+            Self::Rel(rel_def) => rel_def.free_into(free),
+            Self::MetaFunc(meta_func_def) => meta_func_def.free_into(free),
         }
     }
 }

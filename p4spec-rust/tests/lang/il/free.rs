@@ -513,7 +513,7 @@ fn test_free_aggregates_and_definition_omissions_follow_the_oracle() {
     let defs = vec![
         (
             "relation",
-            p4spec_rust::phrase! { node: ast::DefKind::Rel(ast::Rel {
+            p4spec_rust::phrase! { node: ast::DefKind::Rel(ast::RelDef::Defined(Box::new(ast::DefinedRel {
                 id: id("relation"),
                 not_typ: p4spec_rust::phrase! {
                     node: Mixfix::Arg(typ()),
@@ -523,23 +523,23 @@ fn test_free_aggregates_and_definition_omissions_follow_the_oracle() {
                 rule_groups: vec![group],
                 else_group: Some(else_group),
                 hints: vec![],
-            }), span: span() },
+            }))), span: span() },
             names(&["head", "premise"]),
         ),
         (
             "table",
-            p4spec_rust::phrase! { node: ast::DefKind::TableDec(ast::TableDec {
+            p4spec_rust::phrase! { node: ast::DefKind::MetaFunc(ast::MetaFuncDef::Table(ast::TableFunc {
                 id: id("table"),
                 params: vec![],
                 typ: typ(),
                 rows: vec![row],
                 hints: vec![],
-            }), span: span() },
+            })), span: span() },
             names(&["key", "value"]),
         ),
         (
             "function",
-            p4spec_rust::phrase! { node: ast::DefKind::FuncDec(ast::FuncDec {
+            p4spec_rust::phrase! { node: ast::DefKind::MetaFunc(ast::MetaFuncDef::Defined(Box::new(ast::DefinedFunc {
                 id: id("function"),
                 tparams: vec![],
                 params: vec![],
@@ -547,20 +547,20 @@ fn test_free_aggregates_and_definition_omissions_follow_the_oracle() {
                 clauses: vec![clause.clone()],
                 else_clause: Some(clause),
                 hints: vec![],
-            }), span: span() },
+            }))), span: span() },
             names(&["argument", "body", "premise"]),
         ),
         (
             "extern_type",
-            p4spec_rust::phrase! { node: ast::DefKind::ExternTyp(ast::ExternTyp {
+            p4spec_rust::phrase! { node: ast::DefKind::Typ(ast::TypDef::Extern(ast::ExternTyp {
                 id: id("ignored"),
                 hints: vec![],
-            }), span: span() },
+            })), span: span() },
             names(&[]),
         ),
         (
             "type",
-            p4spec_rust::phrase! { node: ast::DefKind::Typ(ast::TypDef {
+            p4spec_rust::phrase! { node: ast::DefKind::Typ(ast::TypDef::Defined(Box::new(ast::DefinedTyp {
                 id: id("ignored"),
                 tparams: vec![],
                 def_typ: p4spec_rust::phrase! {
@@ -568,7 +568,7 @@ fn test_free_aggregates_and_definition_omissions_follow_the_oracle() {
                     span: span(),
                 },
                 hints: vec![],
-            }), span: span() },
+            }))), span: span() },
             names(&[]),
         ),
         (
@@ -582,7 +582,7 @@ fn test_free_aggregates_and_definition_omissions_follow_the_oracle() {
         ),
         (
             "extern_relation",
-            p4spec_rust::phrase! { node: ast::DefKind::ExternRel(ast::ExternRel {
+            p4spec_rust::phrase! { node: ast::DefKind::Rel(ast::RelDef::Extern(Box::new(ast::ExternRel {
                 id: id("ignored"),
                 not_typ: p4spec_rust::phrase! {
                     node: Mixfix::Arg(typ()),
@@ -590,29 +590,29 @@ fn test_free_aggregates_and_definition_omissions_follow_the_oracle() {
                 },
                 input_hint: InputHint::new(vec![]),
                 hints: vec![],
-            }), span: span() },
+            }))), span: span() },
             names(&[]),
         ),
         (
             "extern_declaration",
-            p4spec_rust::phrase! { node: ast::DefKind::ExternDec(ast::ExternDec {
+            p4spec_rust::phrase! { node: ast::DefKind::MetaFunc(ast::MetaFuncDef::Extern(ast::ExternFunc {
                 id: id("ignored"),
                 tparams: vec![],
                 params: vec![],
                 typ: typ(),
                 hints: vec![],
-            }), span: span() },
+            })), span: span() },
             names(&[]),
         ),
         (
             "builtin_declaration",
-            p4spec_rust::phrase! { node: ast::DefKind::BuiltinDec(ast::BuiltinDec {
+            p4spec_rust::phrase! { node: ast::DefKind::MetaFunc(ast::MetaFuncDef::Builtin(ast::BuiltinFunc {
                 id: id("ignored"),
                 tparams: vec![],
                 params: vec![],
                 typ: typ(),
                 hints: vec![],
-            }), span: span() },
+            })), span: span() },
             names(&[]),
         ),
     ];

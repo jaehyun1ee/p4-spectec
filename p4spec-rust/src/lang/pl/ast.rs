@@ -325,7 +325,45 @@ pub struct RouteDispatchInstr {
 
 pub type BlockDispatch = Block<InstrDispatch>;
 
+// Type definitions
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum TypDef {
+    /// `extern syntax id hint*`
+    Extern(ExternTyp),
+    /// `syntax id <` list(tparam, `,`) `> : typ hint*`
+    Defined(Box<DefinedTyp>),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ExternTyp {
+    pub id: Id,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct DefinedTyp {
+    pub id: Id,
+    pub tparams: Vec<TParam>,
+    pub def_typ: DefTyp,
+}
+
+// Meta-variables
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct VarDef {
+    pub id: Id,
+    pub typ: Typ,
+}
+
 // Relations
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum RelDef {
+    /// `extern relation id : not_typ hint(input %int*) hint*`
+    Extern(ExternRel),
+    /// `relation id : not_typ hint(input %int*) rulegroup* hint*`
+    Defined(DefinedRel),
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ExternRel {
@@ -335,7 +373,7 @@ pub struct ExternRel {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct Rel {
+pub struct DefinedRel {
     pub id: Id,
     pub rel_signature: RelSignature,
     pub exps_input: Vec<Exp>,
@@ -343,7 +381,19 @@ pub struct Rel {
     pub block_else_opt: Option<BlockDispatch>,
 }
 
-// Functions
+// Meta-functions
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum MetaFuncDef {
+    /// `extern dec id <` list(tparam, `,`) `> list(param, `,`) : typ hint*`
+    Extern(ExternFunc),
+    /// `builtin dec id <` list(tparam, `,`) `> list(param, `,`) : typ hint*`
+    Builtin(BuiltinFunc),
+    /// `table dec id list(param, `,`) : typ hint*`
+    Table(TableFunc),
+    /// `dec id <` list(tparam, `,`) `> list(param, `,`) : typ clause* hint*`
+    Defined(DefinedFunc),
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ExternFunc {
@@ -392,34 +442,11 @@ pub type DefNode = Phrase<DefKind>;
 pub type Def = annot::Annotated<DefNode>;
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct ExternTypDef {
-    pub id: Id,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct TypDef {
-    pub id: Id,
-    pub tparams: Vec<TParam>,
-    pub def_typ: DefTyp,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct VarDef {
-    pub id: Id,
-    pub typ: Typ,
-}
-
-#[derive(Clone, Debug, PartialEq)]
 pub enum DefKind {
-    ExternTyp(ExternTypDef),
     Typ(TypDef),
     Var(VarDef),
-    ExternRel(ExternRel),
-    Rel(Rel),
-    ExternDec(ExternFunc),
-    BuiltinDec(BuiltinFunc),
-    TableDec(TableFunc),
-    FuncDec(DefinedFunc),
+    Rel(RelDef),
+    MetaFunc(MetaFuncDef),
 }
 
 // Spec

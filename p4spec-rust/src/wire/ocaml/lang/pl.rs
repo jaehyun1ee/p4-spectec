@@ -953,9 +953,9 @@ fn encode_extern_rel(relation: &ast::ExternRel) -> Value {
     ])
 }
 
-fn decode_rel(value: &Value) -> Result<ast::Rel, DecodeError> {
+fn decode_defined_rel(value: &Value) -> Result<ast::DefinedRel, DecodeError> {
     match array(value)? {
-        [id, rel_signature, exps_input, block, block_else_opt] => Ok(ast::Rel {
+        [id, rel_signature, exps_input, block, block_else_opt] => Ok(ast::DefinedRel {
             id: il::decode_id(id)?,
             rel_signature: decode_rel_signature(rel_signature)?,
             exps_input: il::decode_list(exps_input, decode_exp)?,
@@ -967,7 +967,7 @@ fn decode_rel(value: &Value) -> Result<ast::Rel, DecodeError> {
         _ => Err(DecodeError::Expected("PL relation quintuple")),
     }
 }
-fn encode_rel(relation: &ast::Rel) -> Value {
+fn encode_defined_rel(relation: &ast::DefinedRel) -> Value {
     json!([
         il::encode_id(&relation.id),
         encode_rel_signature(&relation.rel_signature),
@@ -1091,24 +1091,38 @@ fn decode_def(value: &Value) -> Result<ast::Def, DecodeError> {
     let def = source::decode_phrase(field(value, "node")?, |value| {
         let (tag, fields) = variant(value)?;
         match (tag, fields) {
-            ("ExternTypD", [id]) => Ok(DefKind::ExternTyp(ExternTypDef {
+            ("ExternTypD", [id]) => Ok(DefKind::Typ(TypDef::Extern(ExternTyp {
                 id: il::decode_id(id)?,
-            })),
-            ("TypD", [id, tparams, typ]) => Ok(DefKind::Typ(TypDef {
-                id: il::decode_id(id)?,
-                tparams: il::decode_list(tparams, il::decode_tparam)?,
-                def_typ: il::decode_def_typ(typ)?,
-            })),
+            }))),
+            ("TypD", [id, tparams, typ]) => {
+                Ok(DefKind::Typ(TypDef::Defined(Box::new(DefinedTyp {
+                    id: il::decode_id(id)?,
+                    tparams: il::decode_list(tparams, il::decode_tparam)?,
+                    def_typ: il::decode_def_typ(typ)?,
+                }))))
+            }
             ("VarD", [id, typ]) => Ok(DefKind::Var(VarDef {
                 id: il::decode_id(id)?,
                 typ: il::decode_typ(typ)?,
             })),
-            ("ExternRelD", [rel]) => Ok(DefKind::ExternRel(decode_extern_rel(rel)?)),
-            ("RelD", [rel]) => Ok(DefKind::Rel(decode_rel(rel)?)),
-            ("ExternDecD", [func]) => Ok(DefKind::ExternDec(decode_extern_func(func)?)),
-            ("BuiltinDecD", [func]) => Ok(DefKind::BuiltinDec(decode_builtin_func(func)?)),
-            ("TableDecD", [func]) => Ok(DefKind::TableDec(decode_table_func(func)?)),
-            ("FuncDecD", [func]) => Ok(DefKind::FuncDec(decode_defined_func(func)?)),
+            ("ExternRelD", [rel_value]) => {
+                Ok(DefKind::Rel(RelDef::Extern(decode_extern_rel(rel_value)?)))
+            }
+            ("RelD", [rel_value]) => Ok(DefKind::Rel(RelDef::Defined(decode_defined_rel(
+                rel_value,
+            )?))),
+            ("ExternDecD", [func_value]) => Ok(DefKind::MetaFunc(MetaFuncDef::Extern(
+                decode_extern_func(func_value)?,
+            ))),
+            ("BuiltinDecD", [func_value]) => Ok(DefKind::MetaFunc(MetaFuncDef::Builtin(
+                decode_builtin_func(func_value)?,
+            ))),
+            ("TableDecD", [func_value]) => Ok(DefKind::MetaFunc(MetaFuncDef::Table(
+                decode_table_func(func_value)?,
+            ))),
+            ("FuncDecD", [func_value]) => Ok(DefKind::MetaFunc(MetaFuncDef::Defined(
+                decode_defined_func(func_value)?,
+            ))),
             (
                 "ExternTypD" | "TypD" | "VarD" | "ExternRelD" | "RelD" | "ExternDecD"
                 | "BuiltinDecD" | "TableDecD" | "FuncDecD",
@@ -1125,34 +1139,68 @@ fn decode_def(value: &Value) -> Result<ast::Def, DecodeError> {
     Ok(definition)
 }
 
-fn encode_def(def: &ast::Def) -> Value {
+fn encode_typ_def(typ_def_pl: &TypDef) -> Value {
+    match typ_def_pl {
+        TypDef::Extern(extern_typ_pl) => {
+            json!(["ExternTypD", il::encode_id(&extern_typ_pl.id)])
+        }
+        TypDef::Defined(defined_typ_pl) => json!([
+            "TypD",
+            il::encode_id(&defined_typ_pl.id),
+            il::encode_list(&defined_typ_pl.tparams, il::encode_tparam),
+            il::encode_def_typ(&defined_typ_pl.def_typ)
+        ]),
+    }
+}
+
+fn encode_var_def(var_def_pl: &VarDef) -> Value {
+    json!([
+        "VarD",
+        il::encode_id(&var_def_pl.id),
+        il::encode_typ(&var_def_pl.typ)
+    ])
+}
+
+fn encode_rel_def(rel_def_pl: &RelDef) -> Value {
+    match rel_def_pl {
+        RelDef::Extern(extern_rel_pl) => {
+            json!(["ExternRelD", encode_extern_rel(extern_rel_pl)])
+        }
+        RelDef::Defined(defined_rel_pl) => {
+            json!(["RelD", encode_defined_rel(defined_rel_pl)])
+        }
+    }
+}
+
+fn encode_meta_func_def(meta_func_def_pl: &MetaFuncDef) -> Value {
+    match meta_func_def_pl {
+        MetaFuncDef::Extern(extern_func_pl) => {
+            json!(["ExternDecD", encode_extern_func(extern_func_pl)])
+        }
+        MetaFuncDef::Builtin(builtin_func_pl) => {
+            json!(["BuiltinDecD", encode_builtin_func(builtin_func_pl)])
+        }
+        MetaFuncDef::Table(table_func_pl) => {
+            json!(["TableDecD", encode_table_func(table_func_pl)])
+        }
+        MetaFuncDef::Defined(defined_func_pl) => {
+            json!(["FuncDecD", encode_defined_func(defined_func_pl)])
+        }
+    }
+}
+
+fn encode_def(def_pl: &ast::Def) -> Value {
     let node = source::encode_phrase(
         &crate::phrase! {
-            node: def.node.node.clone(),
-            span: def.node.span.clone(),
+            node: def_pl.node.node.clone(),
+            span: def_pl.node.span.clone(),
         },
-        |def| match def {
-            DefKind::ExternTyp(ExternTypDef { id }) => json!(["ExternTypD", il::encode_id(id)]),
-            DefKind::Typ(TypDef {
-                id,
-                tparams,
-                def_typ: typ,
-            }) => json!([
-                "TypD",
-                il::encode_id(id),
-                il::encode_list(tparams, il::encode_tparam),
-                il::encode_def_typ(typ)
-            ]),
-            DefKind::Var(VarDef { id, typ }) => {
-                json!(["VarD", il::encode_id(id), il::encode_typ(typ)])
-            }
-            DefKind::ExternRel(rel) => json!(["ExternRelD", encode_extern_rel(rel)]),
-            DefKind::Rel(rel) => json!(["RelD", encode_rel(rel)]),
-            DefKind::ExternDec(func) => json!(["ExternDecD", encode_extern_func(func)]),
-            DefKind::BuiltinDec(func) => json!(["BuiltinDecD", encode_builtin_func(func)]),
-            DefKind::TableDec(func) => json!(["TableDecD", encode_table_func(func)]),
-            DefKind::FuncDec(func) => json!(["FuncDecD", encode_defined_func(func)]),
+        |def_kind_pl| match def_kind_pl {
+            DefKind::Typ(typ_def_pl) => encode_typ_def(typ_def_pl),
+            DefKind::Var(var_def_pl) => encode_var_def(var_def_pl),
+            DefKind::Rel(rel_def_pl) => encode_rel_def(rel_def_pl),
+            DefKind::MetaFunc(meta_func_def_pl) => encode_meta_func_def(meta_func_def_pl),
         },
     );
-    json!({"node": node, "hints": encode_hints(&def.hints)})
+    json!({"node": node, "hints": encode_hints(&def_pl.hints)})
 }

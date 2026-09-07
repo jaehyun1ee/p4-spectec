@@ -225,23 +225,31 @@ pub struct TableRowKind {
 
 pub type Hint = el::ast::Hint;
 
-// Definitions
-
-pub type Def = Phrase<DefKind>;
+// Type definitions
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct ExternTypDef {
+pub enum TypDef {
+    /// `extern syntax id hint*`
+    Extern(ExternTyp),
+    /// `syntax id <` list(tparam, `,`) `> : typ hint*`
+    Defined(Box<DefinedTyp>),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ExternTyp {
     pub id: Id,
     pub hints: Vec<Hint>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct TypDef {
+pub struct DefinedTyp {
     pub id: Id,
     pub tparams: Vec<TParam>,
     pub def_typ: DefTyp,
     pub hints: Vec<Hint>,
 }
+
+// Meta-variables
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct VarDef {
@@ -250,8 +258,18 @@ pub struct VarDef {
     pub hints: Vec<Hint>,
 }
 
+// Relations
+
 #[derive(Clone, Debug, PartialEq)]
-pub struct ExternRelDef {
+pub enum RelDef {
+    /// `extern relation id : not_typ hint(input %int*) hint*`
+    Extern(Box<ExternRel>),
+    /// `relation id : not_typ hint(input %int*) rulegroup* hint*`
+    Defined(Box<DefinedRel>),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ExternRel {
     pub id: Id,
     pub not_typ: NotTyp,
     pub input_hint: InputHint,
@@ -259,7 +277,7 @@ pub struct ExternRelDef {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct RelDef {
+pub struct DefinedRel {
     pub id: Id,
     pub not_typ: NotTyp,
     pub input_hint: InputHint,
@@ -268,8 +286,22 @@ pub struct RelDef {
     pub hints: Vec<Hint>,
 }
 
+// Meta-functions
+
 #[derive(Clone, Debug, PartialEq)]
-pub struct ExternDecDef {
+pub enum MetaFuncDef {
+    /// `extern dec id <` list(tparam, `,`) `> list(param, `,`) : typ hint*`
+    Extern(ExternFunc),
+    /// `builtin dec id <` list(tparam, `,`) `> list(param, `,`) : typ hint*`
+    Builtin(BuiltinFunc),
+    /// `table dec id list(param, `,`) : typ hint*`
+    Table(TableFunc),
+    /// `dec id <` list(tparam, `,`) `> list(param, `,`) : typ clause* hint*`
+    Defined(Box<DefinedFunc>),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ExternFunc {
     pub id: Id,
     pub tparams: Vec<TParam>,
     pub params: Vec<Param>,
@@ -278,7 +310,7 @@ pub struct ExternDecDef {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct BuiltinDecDef {
+pub struct BuiltinFunc {
     pub id: Id,
     pub tparams: Vec<TParam>,
     pub params: Vec<Param>,
@@ -287,7 +319,7 @@ pub struct BuiltinDecDef {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct TableDecDef {
+pub struct TableFunc {
     pub id: Id,
     pub params: Vec<Param>,
     pub typ: Typ,
@@ -296,7 +328,7 @@ pub struct TableDecDef {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct FuncDecDef {
+pub struct DefinedFunc {
     pub id: Id,
     pub tparams: Vec<TParam>,
     pub params: Vec<Param>,
@@ -306,26 +338,17 @@ pub struct FuncDecDef {
     pub hints: Vec<Hint>,
 }
 
+// Definitions
+
+pub type Def = Phrase<DefKind>;
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum DefKind {
-    /// `extern syntax id hint*`
-    ExternTyp(ExternTypDef),
-    /// `syntax id <list(tparam, ,)> = def_typ hint*`
     Typ(TypDef),
     /// `var id : typ hint*`
     Var(VarDef),
-    /// `extern relation id : not_typ hint(input %int*) hint*`
-    ExternRel(ExternRelDef),
-    /// `relation id : not_typ hint(input %int*) rulegroup* hint*`
     Rel(RelDef),
-    /// `extern dec id <list(tparam, ,)> list(param, ,) : typ hint*`
-    ExternDec(ExternDecDef),
-    /// `builtin dec id <list(tparam, ,)> list(param, ,) : typ hint*`
-    BuiltinDec(BuiltinDecDef),
-    /// `table dec id list(param, ,) : typ tablerow* hint*`
-    TableDec(TableDecDef),
-    /// `dec id <list(tparam, ,)> list(param, ,) : typ clause* hint*`
-    FuncDec(FuncDecDef),
+    MetaFunc(MetaFuncDef),
 }
 
 // Spec

@@ -225,64 +225,70 @@ fn decode_def(value: &Value) -> Result<ast::Def, DecodeError> {
     source::decode_phrase(value, |value| {
         let (tag, fields) = variant(value)?;
         match (tag, fields) {
-            ("ExternTypD", [id, hints]) => Ok(DefKind::ExternTyp(ExternTypDef {
+            ("ExternTypD", [id, hints]) => Ok(DefKind::Typ(TypDef::Extern(ExternTyp {
                 id: il::decode_id(id)?,
                 hints: il::decode_list(hints, el::decode_hint)?,
-            })),
-            ("TypD", [id, tparams, typ, hints]) => Ok(DefKind::Typ(TypDef {
-                id: il::decode_id(id)?,
-                tparams: il::decode_list(tparams, il::decode_tparam)?,
-                def_typ: il::decode_def_typ(typ)?,
-                hints: il::decode_list(hints, el::decode_hint)?,
-            })),
+            }))),
+            ("TypD", [id, tparams, typ, hints]) => {
+                Ok(DefKind::Typ(TypDef::Defined(Box::new(DefinedTyp {
+                    id: il::decode_id(id)?,
+                    tparams: il::decode_list(tparams, il::decode_tparam)?,
+                    def_typ: il::decode_def_typ(typ)?,
+                    hints: il::decode_list(hints, el::decode_hint)?,
+                }))))
+            }
             ("VarD", [id, typ, hints]) => Ok(DefKind::Var(VarDef {
                 id: il::decode_id(id)?,
                 typ: il::decode_typ(typ)?,
                 hints: il::decode_list(hints, el::decode_hint)?,
             })),
-            ("ExternRelD", [id, typ, input, hints]) => Ok(DefKind::ExternRel(ExternRelDef {
-                id: il::decode_id(id)?,
-                not_typ: il::decode_not_typ(typ)?,
-                input_hint: il::decode_input_hint(input)?,
-                hints: il::decode_list(hints, el::decode_hint)?,
-            })),
-            ("RelD", [id, typ, input, groups, else_group, hints]) => Ok(DefKind::Rel(RelDef {
-                id: il::decode_id(id)?,
-                not_typ: il::decode_not_typ(typ)?,
-                input_hint: il::decode_input_hint(input)?,
-                rule_groups: il::decode_list(groups, decode_rule_group)?,
-                else_group: il::decode_option(else_group, decode_else_group)?,
-                hints: il::decode_list(hints, el::decode_hint)?,
-            })),
+            ("ExternRelD", [id, typ, input, hints]) => {
+                Ok(DefKind::Rel(RelDef::Extern(Box::new(ExternRel {
+                    id: il::decode_id(id)?,
+                    not_typ: il::decode_not_typ(typ)?,
+                    input_hint: il::decode_input_hint(input)?,
+                    hints: il::decode_list(hints, el::decode_hint)?,
+                }))))
+            }
+            ("RelD", [id, typ, input, groups, else_group, hints]) => {
+                Ok(DefKind::Rel(RelDef::Defined(Box::new(DefinedRel {
+                    id: il::decode_id(id)?,
+                    not_typ: il::decode_not_typ(typ)?,
+                    input_hint: il::decode_input_hint(input)?,
+                    rule_groups: il::decode_list(groups, decode_rule_group)?,
+                    else_group: il::decode_option(else_group, decode_else_group)?,
+                    hints: il::decode_list(hints, el::decode_hint)?,
+                }))))
+            }
             ("ExternDecD", [id, tparams, params, typ, hints]) => {
-                Ok(DefKind::ExternDec(ExternDecDef {
+                Ok(DefKind::MetaFunc(MetaFuncDef::Extern(ExternFunc {
                     id: il::decode_id(id)?,
                     tparams: il::decode_list(tparams, il::decode_tparam)?,
                     params: il::decode_list(params, il::decode_param)?,
                     typ: il::decode_typ(typ)?,
                     hints: il::decode_list(hints, el::decode_hint)?,
-                }))
+                })))
             }
             ("BuiltinDecD", [id, tparams, params, typ, hints]) => {
-                Ok(DefKind::BuiltinDec(BuiltinDecDef {
+                Ok(DefKind::MetaFunc(MetaFuncDef::Builtin(BuiltinFunc {
                     id: il::decode_id(id)?,
                     tparams: il::decode_list(tparams, il::decode_tparam)?,
                     params: il::decode_list(params, il::decode_param)?,
                     typ: il::decode_typ(typ)?,
                     hints: il::decode_list(hints, el::decode_hint)?,
-                }))
+                })))
             }
             ("TableDecD", [id, params, typ, table_rows, hints]) => {
-                Ok(DefKind::TableDec(TableDecDef {
+                Ok(DefKind::MetaFunc(MetaFuncDef::Table(TableFunc {
                     id: il::decode_id(id)?,
                     params: il::decode_list(params, il::decode_param)?,
                     typ: il::decode_typ(typ)?,
                     table_rows: il::decode_list(table_rows, decode_table_row)?,
                     hints: il::decode_list(hints, el::decode_hint)?,
-                }))
+                })))
             }
-            ("FuncDecD", [id, tparams, params, typ, clauses, else_clause, hints]) => {
-                Ok(DefKind::FuncDec(FuncDecDef {
+            ("FuncDecD", [id, tparams, params, typ, clauses, else_clause, hints]) => Ok(
+                DefKind::MetaFunc(MetaFuncDef::Defined(Box::new(DefinedFunc {
                     id: il::decode_id(id)?,
                     tparams: il::decode_list(tparams, il::decode_tparam)?,
                     params: il::decode_list(params, il::decode_param)?,
@@ -290,8 +296,8 @@ fn decode_def(value: &Value) -> Result<ast::Def, DecodeError> {
                     clauses: il::decode_list(clauses, decode_clause)?,
                     else_clause: il::decode_option(else_clause, decode_clause)?,
                     hints: il::decode_list(hints, el::decode_hint)?,
-                }))
-            }
+                }))),
+            ),
             (
                 "ExternTypD" | "TypD" | "VarD" | "ExternRelD" | "RelD" | "ExternDecD"
                 | "BuiltinDecD" | "TableDecD" | "FuncDecD",
@@ -302,118 +308,97 @@ fn decode_def(value: &Value) -> Result<ast::Def, DecodeError> {
     })
 }
 
-fn encode_def(def: &ast::Def) -> Value {
-    source::encode_phrase(def, |def| match def {
-        DefKind::ExternTyp(ExternTypDef { id, hints }) => json!([
+fn encode_typ_def(typ_def_al: &TypDef) -> Value {
+    match typ_def_al {
+        TypDef::Extern(extern_typ_al) => json!([
             "ExternTypD",
-            il::encode_id(id),
-            il::encode_list(hints, el::encode_hint)
+            il::encode_id(&extern_typ_al.id),
+            il::encode_list(&extern_typ_al.hints, el::encode_hint)
         ]),
-        DefKind::Typ(TypDef {
-            id,
-            tparams,
-            def_typ: typ,
-            hints,
-        }) => json!([
+        TypDef::Defined(defined_typ_al) => json!([
             "TypD",
-            il::encode_id(id),
-            il::encode_list(tparams, il::encode_tparam),
-            il::encode_def_typ(typ),
-            il::encode_list(hints, el::encode_hint)
+            il::encode_id(&defined_typ_al.id),
+            il::encode_list(&defined_typ_al.tparams, il::encode_tparam),
+            il::encode_def_typ(&defined_typ_al.def_typ),
+            il::encode_list(&defined_typ_al.hints, el::encode_hint)
         ]),
-        DefKind::Var(VarDef { id, typ, hints }) => json!([
-            "VarD",
-            il::encode_id(id),
-            il::encode_typ(typ),
-            il::encode_list(hints, el::encode_hint)
-        ]),
-        DefKind::ExternRel(ExternRelDef {
-            id,
-            not_typ: typ,
-            input_hint: input,
-            hints,
-        }) => json!([
+    }
+}
+
+fn encode_var_def(var_def_al: &VarDef) -> Value {
+    json!([
+        "VarD",
+        il::encode_id(&var_def_al.id),
+        il::encode_typ(&var_def_al.typ),
+        il::encode_list(&var_def_al.hints, el::encode_hint)
+    ])
+}
+
+fn encode_rel_def(rel_def_al: &RelDef) -> Value {
+    match rel_def_al {
+        RelDef::Extern(extern_rel_al) => json!([
             "ExternRelD",
-            il::encode_id(id),
-            il::encode_not_typ(typ),
-            il::encode_input_hint(input),
-            il::encode_list(hints, el::encode_hint)
+            il::encode_id(&extern_rel_al.id),
+            il::encode_not_typ(&extern_rel_al.not_typ),
+            il::encode_input_hint(&extern_rel_al.input_hint),
+            il::encode_list(&extern_rel_al.hints, el::encode_hint)
         ]),
-        DefKind::Rel(RelDef {
-            id,
-            not_typ: typ,
-            input_hint: input,
-            rule_groups: groups,
-            else_group,
-            hints,
-        }) => json!([
+        RelDef::Defined(defined_rel_al) => json!([
             "RelD",
-            il::encode_id(id),
-            il::encode_not_typ(typ),
-            il::encode_input_hint(input),
-            il::encode_list(groups, encode_rule_group),
-            il::encode_option(else_group.as_ref(), encode_else_group),
-            il::encode_list(hints, el::encode_hint)
+            il::encode_id(&defined_rel_al.id),
+            il::encode_not_typ(&defined_rel_al.not_typ),
+            il::encode_input_hint(&defined_rel_al.input_hint),
+            il::encode_list(&defined_rel_al.rule_groups, encode_rule_group),
+            il::encode_option(defined_rel_al.else_group.as_ref(), encode_else_group),
+            il::encode_list(&defined_rel_al.hints, el::encode_hint)
         ]),
-        DefKind::ExternDec(ExternDecDef {
-            id,
-            tparams,
-            params,
-            typ,
-            hints,
-        }) => json!([
+    }
+}
+
+fn encode_meta_func_def(meta_func_def_al: &MetaFuncDef) -> Value {
+    match meta_func_def_al {
+        MetaFuncDef::Extern(extern_func_al) => json!([
             "ExternDecD",
-            il::encode_id(id),
-            il::encode_list(tparams, il::encode_tparam),
-            il::encode_list(params, il::encode_param),
-            il::encode_typ(typ),
-            il::encode_list(hints, el::encode_hint)
+            il::encode_id(&extern_func_al.id),
+            il::encode_list(&extern_func_al.tparams, il::encode_tparam),
+            il::encode_list(&extern_func_al.params, il::encode_param),
+            il::encode_typ(&extern_func_al.typ),
+            il::encode_list(&extern_func_al.hints, el::encode_hint)
         ]),
-        DefKind::BuiltinDec(BuiltinDecDef {
-            id,
-            tparams,
-            params,
-            typ,
-            hints,
-        }) => json!([
+        MetaFuncDef::Builtin(builtin_func_al) => json!([
             "BuiltinDecD",
-            il::encode_id(id),
-            il::encode_list(tparams, il::encode_tparam),
-            il::encode_list(params, il::encode_param),
-            il::encode_typ(typ),
-            il::encode_list(hints, el::encode_hint)
+            il::encode_id(&builtin_func_al.id),
+            il::encode_list(&builtin_func_al.tparams, il::encode_tparam),
+            il::encode_list(&builtin_func_al.params, il::encode_param),
+            il::encode_typ(&builtin_func_al.typ),
+            il::encode_list(&builtin_func_al.hints, el::encode_hint)
         ]),
-        DefKind::TableDec(TableDecDef {
-            id,
-            params,
-            typ,
-            table_rows,
-            hints,
-        }) => json!([
+        MetaFuncDef::Table(table_func_al) => json!([
             "TableDecD",
-            il::encode_id(id),
-            il::encode_list(params, il::encode_param),
-            il::encode_typ(typ),
-            il::encode_list(table_rows, encode_table_row),
-            il::encode_list(hints, el::encode_hint)
+            il::encode_id(&table_func_al.id),
+            il::encode_list(&table_func_al.params, il::encode_param),
+            il::encode_typ(&table_func_al.typ),
+            il::encode_list(&table_func_al.table_rows, encode_table_row),
+            il::encode_list(&table_func_al.hints, el::encode_hint)
         ]),
-        DefKind::FuncDec(FuncDecDef {
-            id,
-            tparams,
-            params,
-            typ,
-            clauses,
-            else_clause,
-            hints,
-        }) => json!([
+        MetaFuncDef::Defined(defined_func_al) => json!([
             "FuncDecD",
-            il::encode_id(id),
-            il::encode_list(tparams, il::encode_tparam),
-            il::encode_list(params, il::encode_param),
-            il::encode_typ(typ),
-            il::encode_list(clauses, encode_clause),
-            il::encode_option(else_clause.as_ref(), encode_clause),
-            il::encode_list(hints, el::encode_hint)
+            il::encode_id(&defined_func_al.id),
+            il::encode_list(&defined_func_al.tparams, il::encode_tparam),
+            il::encode_list(&defined_func_al.params, il::encode_param),
+            il::encode_typ(&defined_func_al.typ),
+            il::encode_list(&defined_func_al.clauses, encode_clause),
+            il::encode_option(defined_func_al.else_clause.as_ref(), encode_clause),
+            il::encode_list(&defined_func_al.hints, el::encode_hint)
         ]),
+    }
+}
+
+fn encode_def(def_al: &ast::Def) -> Value {
+    source::encode_phrase(def_al, |def_kind_al| match def_kind_al {
+        DefKind::Typ(typ_def_al) => encode_typ_def(typ_def_al),
+        DefKind::Var(var_def_al) => encode_var_def(var_def_al),
+        DefKind::Rel(rel_def_al) => encode_rel_def(rel_def_al),
+        DefKind::MetaFunc(meta_func_def_al) => encode_meta_func_def(meta_func_def_al),
     })
 }

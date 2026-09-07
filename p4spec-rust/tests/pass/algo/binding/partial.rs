@@ -11,7 +11,7 @@ fn test_conversion_preserves_binding_match_and_cast_guards_before_bindings() {
     let parent_origin = crate::phrase! { node: (parent_id.clone(), vec![]), span:  span(1) };
     let child_origin = crate::phrase! { node: (child_id.clone(), vec![]), span:  span(2) };
     let parent_def = crate::phrase! { node:
-    ast::DefKind::Typ(ast::TypDef {
+    ast::DefKind::Typ(ast::TypDef::Defined(Box::new(ast::DefinedTyp {
         id: parent_id,
         tparams: vec![],
         def_typ: crate::phrase! { node:
@@ -21,17 +21,17 @@ fn test_conversion_preserves_binding_match_and_cast_guards_before_bindings() {
             ]), span:
             span(1) },
         hints: vec![],
-    }), span:
+    }))), span:
     span(1) };
     let child_def = crate::phrase! { node:
-    ast::DefKind::Typ(ast::TypDef {
+    ast::DefKind::Typ(ast::TypDef::Defined(Box::new(ast::DefinedTyp {
         id: child_id,
         tparams: vec![],
         def_typ: crate::phrase! { node:
             ast::DefTypKind::Variant(vec![(not_typ("A", 2), child_origin, vec![])]), span:
             span(2) },
         hints: vec![],
-    }), span:
+    }))), span:
     span(2) };
     let typ_bool = typ::make::bool();
     let typ_list = typ::make::list(typ_bool.clone());
@@ -66,11 +66,14 @@ fn test_conversion_preserves_binding_match_and_cast_guards_before_bindings() {
     spec.insert(0, parent_def);
 
     let converted = algo::convert(spec).expect("partial binding conversion");
-    let crate::lang::al::ast::DefKind::FuncDec(function) = &converted[2].node else {
+    let crate::lang::al::ast::DefKind::MetaFunc(meta_func_def_al) = &converted[2].node else {
         panic!("expected converted function");
     };
+    let crate::lang::al::ast::MetaFuncDef::Defined(defined_func_al) = meta_func_def_al else {
+        panic!("expected defined function");
+    };
     let [match_guard, list_binding, subtype_guard, cast_binding] =
-        function.clauses[0].node.premises.as_slice()
+        defined_func_al.clauses[0].node.premises.as_slice()
     else {
         panic!("expected match/bind and subtype/downcast pairs");
     };

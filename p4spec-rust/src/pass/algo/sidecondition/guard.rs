@@ -716,33 +716,39 @@ fn insert_def(def_al: ast::Def) -> ast::Def {
             let rel_def_al = insert_rel_def(rel_def_al);
             ast::DefKind::Rel(rel_def_al)
         }
-        ast::DefKind::FuncDec(func_dec_def_al) => {
-            let func_dec_def_al = insert_func_dec_def(func_dec_def_al);
-            ast::DefKind::FuncDec(func_dec_def_al)
+        ast::DefKind::MetaFunc(meta_func_def_al) => {
+            let meta_func_def_al = insert_meta_func_def(meta_func_def_al);
+            ast::DefKind::MetaFunc(meta_func_def_al)
         }
         def_kind_al => def_kind_al,
     };
     phrase!(node: def_kind_al, span: span)
 }
 
-fn insert_rel_def(mut rel_def_al: ast::RelDef) -> ast::RelDef {
-    rel_def_al.rule_groups = rel_def_al
+fn insert_rel_def(rel_def_al: ast::RelDef) -> ast::RelDef {
+    let ast::RelDef::Defined(mut defined_rel_al) = rel_def_al else {
+        return rel_def_al;
+    };
+    defined_rel_al.rule_groups = defined_rel_al
         .rule_groups
         .into_iter()
         .map(insert_rule_group)
         .collect();
-    rel_def_al.else_group = rel_def_al.else_group.map(insert_else_group);
-    rel_def_al
+    defined_rel_al.else_group = defined_rel_al.else_group.map(insert_else_group);
+    ast::RelDef::Defined(defined_rel_al)
 }
 
-fn insert_func_dec_def(mut func_dec_def_al: ast::FuncDecDef) -> ast::FuncDecDef {
-    func_dec_def_al.clauses = func_dec_def_al
+fn insert_meta_func_def(meta_func_def_al: ast::MetaFuncDef) -> ast::MetaFuncDef {
+    let ast::MetaFuncDef::Defined(mut defined_func_al) = meta_func_def_al else {
+        return meta_func_def_al;
+    };
+    defined_func_al.clauses = defined_func_al
         .clauses
         .into_iter()
         .map(insert_clause)
         .collect();
-    func_dec_def_al.else_clause = func_dec_def_al.else_clause.map(insert_clause);
-    func_dec_def_al
+    defined_func_al.else_clause = defined_func_al.else_clause.map(insert_clause);
+    ast::MetaFuncDef::Defined(defined_func_al)
 }
 
 // == Entry point

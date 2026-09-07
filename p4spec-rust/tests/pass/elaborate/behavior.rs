@@ -8,21 +8,24 @@ use p4spec_rust::{
 
 #[test]
 fn test_function_clauses_are_populated_after_definition_traversal() {
-    let spec = parse_string("dec $negate(bool) : bool\ndef $negate(true) = false")
+    let spec_el = parse_string("dec $negate(bool) : bool\ndef $negate(true) = false")
         .expect("parse function declaration and clause");
 
-    let spec = elaborate::elaborate(spec).expect("elaborate function");
+    let spec_il = elaborate::elaborate(spec_el).expect("elaborate function");
 
-    let ast::DefKind::FuncDec(function) = &spec[0].node else {
+    let ast::DefKind::MetaFunc(meta_func_def_il) = &spec_il[0].node else {
         panic!("expected function declaration");
     };
-    assert_eq!(function.clauses.len(), 1);
-    assert_eq!(function.clauses[0].span.left.line, 2);
+    let ast::MetaFuncDef::Defined(defined_func_il) = meta_func_def_il else {
+        panic!("expected defined function");
+    };
+    assert_eq!(defined_func_il.clauses.len(), 1);
+    assert_eq!(defined_func_il.clauses[0].span.left.line, 2);
 }
 
 #[test]
 fn test_parenthesized_variant_keeps_the_case_origin() {
-    let spec = parse_string(
+    let spec_el = parse_string(
         "syntax pair<K, V> = K ':' V\n\
          syntax map<K, V> = pair<K, V>\n\
          dec $take<K, V>(map<K, V>) : bool\n\
@@ -30,12 +33,15 @@ fn test_parenthesized_variant_keeps_the_case_origin() {
     )
     .expect("parse variant alias and clause");
 
-    let spec = elaborate::elaborate(spec).expect("elaborate variant alias and clause");
+    let spec_il = elaborate::elaborate(spec_el).expect("elaborate variant alias and clause");
 
-    let ast::DefKind::FuncDec(function) = &spec[2].node else {
+    let ast::DefKind::MetaFunc(meta_func_def_il) = &spec_il[2].node else {
         panic!("expected function declaration");
     };
-    let ast::ArgKind::Exp(argument) = &function.clauses[0].node.args[0].node else {
+    let ast::MetaFuncDef::Defined(defined_func_il) = meta_func_def_il else {
+        panic!("expected defined function");
+    };
+    let ast::ArgKind::Exp(argument) = &defined_func_il.clauses[0].node.args[0].node else {
         panic!("expected expression argument");
     };
     let ast::TypKind::Var(id, _) = argument.note.as_ref() else {
@@ -47,7 +53,7 @@ fn test_parenthesized_variant_keeps_the_case_origin() {
 
 #[test]
 fn test_failed_variant_alternative_does_not_leak_wildcard_bindings() {
-    let spec = parse_string(
+    let spec_el = parse_string(
         "syntax choice =\n\
          | bool BAD\n\
          | bool GOOD\n\
@@ -56,11 +62,14 @@ fn test_failed_variant_alternative_does_not_leak_wildcard_bindings() {
     )
     .expect("parse variant alternatives");
 
-    let spec = elaborate::elaborate(spec).expect("elaborate matching alternative");
-    let ast::DefKind::FuncDec(function) = &spec[1].node else {
+    let spec_il = elaborate::elaborate(spec_el).expect("elaborate matching alternative");
+    let ast::DefKind::MetaFunc(meta_func_def_il) = &spec_il[1].node else {
         panic!("expected function declaration");
     };
-    let ast::ArgKind::Exp(argument) = &function.clauses[0].node.args[0].node else {
+    let ast::MetaFuncDef::Defined(defined_func_il) = meta_func_def_il else {
+        panic!("expected defined function");
+    };
+    let ast::ArgKind::Exp(argument) = &defined_func_il.clauses[0].node.args[0].node else {
         panic!("expected expression argument");
     };
     let ast::ExpKind::Case(case) = &argument.node else {

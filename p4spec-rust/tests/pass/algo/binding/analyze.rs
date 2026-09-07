@@ -38,7 +38,7 @@ fn test_conversion_preserves_rule_paths_and_populates_antiunified_inputs_in_orde
     ];
     let rules_second = vec![rule("third", tuple(true, true, 8), false, 8)];
     let spec = vec![crate::phrase! { node:
-    ast::DefKind::Rel(ast::Rel {
+    ast::DefKind::Rel(ast::RelDef::Defined(Box::new(ast::DefinedRel {
         id: id("relation", 1),
         not_typ: relation_not_typ,
         input_hint: InputHint::new(vec![0]),
@@ -48,15 +48,18 @@ fn test_conversion_preserves_rule_paths_and_populates_antiunified_inputs_in_orde
         ],
         else_group: None,
         hints: vec![],
-    }), span:
+    }))), span:
     span(1) }];
 
-    let analyzed = algo::convert(spec).expect("convertible relation");
+    let spec_al = algo::convert(spec).expect("convertible relation");
 
-    let crate::lang::al::ast::DefKind::Rel(relation) = &analyzed[0].node else {
+    let ast_al::DefKind::Rel(rel_def_al) = &spec_al[0].node else {
         panic!("expected relation definition");
     };
-    let [rule_group, second_group] = relation.rule_groups.as_slice() else {
+    let ast_al::RelDef::Defined(defined_rel_al) = rel_def_al else {
+        panic!("expected defined relation");
+    };
+    let [rule_group, second_group] = defined_rel_al.rule_groups.as_slice() else {
         panic!("expected two rule groups");
     };
     assert_eq!(rule_group.node.id.node, "first_group");
@@ -140,7 +143,7 @@ fn test_clause_analysis_orders_partial_then_repeated_then_source_premises() {
     }, span:
     span(2) };
     let spec = vec![crate::phrase! { node:
-    ast::DefKind::FuncDec(ast::FuncDec {
+    ast::DefKind::MetaFunc(ast::MetaFuncDef::Defined(Box::new(ast::DefinedFunc {
         id: id("function", 1),
         tparams: vec![],
         params: vec![crate::phrase! { node: ast::ParamKind::Exp(tuple_typ), span:  span(1) }],
@@ -148,15 +151,18 @@ fn test_clause_analysis_orders_partial_then_repeated_then_source_premises() {
         clauses: vec![clause],
         else_clause: None,
         hints: vec![],
-    }), span:
+    }))), span:
     span(1) }];
 
-    let analyzed = algo::convert(spec).expect("convertible function");
+    let spec_al = algo::convert(spec).expect("convertible function");
 
-    let crate::lang::al::ast::DefKind::FuncDec(function) = &analyzed[0].node else {
+    let ast_al::DefKind::MetaFunc(meta_func_def_al) = &spec_al[0].node else {
         panic!("expected function definition");
     };
-    let prems = &function.clauses[0].node.premises;
+    let ast_al::MetaFuncDef::Defined(defined_func_al) = meta_func_def_al else {
+        panic!("expected defined function");
+    };
+    let prems = &defined_func_al.clauses[0].node.premises;
     assert_eq!(prems.len(), 3);
     assert!(matches!(
         &prems[0].node,
@@ -198,7 +204,7 @@ fn test_otherwise_clauses_and_rules_reject_impure_premises_at_the_branch_span() 
     }, span:
     span(10) };
     let function_spec = vec![crate::phrase! { node:
-    ast::DefKind::FuncDec(ast::FuncDec {
+    ast::DefKind::MetaFunc(ast::MetaFuncDef::Defined(Box::new(ast::DefinedFunc {
         id: id("function", 9),
         tparams: vec![],
         params: vec![crate::phrase! { node: ast::ParamKind::Exp(typ::make::bool()), span:  span(9) }],
@@ -206,7 +212,7 @@ fn test_otherwise_clauses_and_rules_reject_impure_premises_at_the_branch_span() 
         clauses: vec![],
         else_clause: Some(else_clause),
         hints: vec![],
-    }), span:
+    }))), span:
     span(9) }];
 
     let function_error = algo::convert(function_spec).expect_err("impure otherwise clause");
@@ -222,14 +228,14 @@ fn test_otherwise_clauses_and_rules_reject_impure_premises_at_the_branch_span() 
     }, span:
     span(21) };
     let relation_spec = vec![crate::phrase! { node:
-    ast::DefKind::Rel(ast::Rel {
+    ast::DefKind::Rel(ast::RelDef::Defined(Box::new(ast::DefinedRel {
         id: id("relation", 20),
         not_typ: relation_not_typ,
         input_hint: InputHint::new(vec![0]),
         rule_groups: vec![],
         else_group: Some(crate::phrase! { node: (id("else_group", 20), else_rule), span:  span(20) }),
         hints: vec![],
-    }), span:
+    }))), span:
     span(20) }];
 
     let relation_error = algo::convert(relation_spec).expect_err("impure otherwise rule");
@@ -244,7 +250,7 @@ fn test_conversion_rejects_overlapping_and_missing_variant_table_patterns() {
         crate::phrase! { node: ast::TypKind::Var(choice_id.clone(), vec![]), span:  span(1) };
     let origin = crate::phrase! { node: (choice_id.clone(), vec![]), span:  span(1) };
     let choice_def = crate::phrase! { node:
-    ast::DefKind::Typ(ast::TypDef {
+    ast::DefKind::Typ(ast::TypDef::Defined(Box::new(ast::DefinedTyp {
         id: choice_id,
         tparams: vec![],
         def_typ: crate::phrase! { node:
@@ -254,11 +260,11 @@ fn test_conversion_rejects_overlapping_and_missing_variant_table_patterns() {
             ]), span:
             span(1) },
         hints: vec![],
-    }), span:
+    }))), span:
     span(1) };
     let table = |rows: Vec<ast::TableRow>, line: i64| {
         crate::phrase! { node:
-        ast::DefKind::TableDec(ast::TableDec {
+        ast::DefKind::MetaFunc(ast::MetaFuncDef::Table(ast::TableFunc {
             id: id("table", line),
             params: vec![crate::phrase! { node:
                 ast::ParamKind::Exp(choice_typ.clone()), span:
@@ -266,7 +272,7 @@ fn test_conversion_rejects_overlapping_and_missing_variant_table_patterns() {
             typ: typ::make::bool(),
             rows,
             hints: vec![],
-        }), span:
+        })), span:
         span(line - 1) }
     };
     let row = |pattern: ast::Exp, line: i64| {
@@ -322,7 +328,7 @@ fn test_conversion_preserves_definition_clause_and_table_row_order() {
         crate::phrase! { node: ast::TypKind::Var(choice_id.clone(), vec![]), span:  span(2) };
     let origin = crate::phrase! { node: (choice_id.clone(), vec![]), span:  span(2) };
     let choice_def = crate::phrase! { node:
-    ast::DefKind::Typ(ast::TypDef {
+    ast::DefKind::Typ(ast::TypDef::Defined(Box::new(ast::DefinedTyp {
         id: choice_id,
         tparams: vec![],
         def_typ: crate::phrase! { node:
@@ -332,7 +338,7 @@ fn test_conversion_preserves_definition_clause_and_table_row_order() {
             ]), span:
             span(2) },
         hints: vec![],
-    }), span:
+    }))), span:
     span(2) };
     let clause = |name: &str, line: i64| {
         crate::phrase! { node:
@@ -346,7 +352,7 @@ fn test_conversion_preserves_definition_clause_and_table_row_order() {
         span(line) }
     };
     let function_def = crate::phrase! { node:
-    ast::DefKind::FuncDec(ast::FuncDec {
+    ast::DefKind::MetaFunc(ast::MetaFuncDef::Defined(Box::new(ast::DefinedFunc {
         id: id("function", 3),
         tparams: vec![],
         params: vec![crate::phrase! { node: ast::ParamKind::Exp(typ::make::bool()), span:  span(3) }],
@@ -354,7 +360,7 @@ fn test_conversion_preserves_definition_clause_and_table_row_order() {
         clauses: vec![clause("first_clause", 4), clause("second_clause", 5)],
         else_clause: None,
         hints: vec![],
-    }), span:
+    }))), span:
     span(3) };
     let row = |name: &str, value: bool, line: i64| {
         let pattern = exp(
@@ -372,7 +378,7 @@ fn test_conversion_preserves_definition_clause_and_table_row_order() {
         span(line) }
     };
     let table_def = crate::phrase! { node:
-    ast::DefKind::TableDec(ast::TableDec {
+    ast::DefKind::MetaFunc(ast::MetaFuncDef::Table(ast::TableFunc {
         id: id("table", 6),
         params: vec![crate::phrase! { node:
             ast::ParamKind::Exp(choice_typ.clone()), span:
@@ -380,7 +386,7 @@ fn test_conversion_preserves_definition_clause_and_table_row_order() {
         typ: typ::make::bool(),
         rows: vec![row("specific", true, 7), row("_closer", false, 8)],
         hints: vec![],
-    }), span:
+    })), span:
     span(6) };
     let variable_def = crate::phrase! { node:
     ast::DefKind::Var(ast::VarDef {
@@ -390,37 +396,37 @@ fn test_conversion_preserves_definition_clause_and_table_row_order() {
     }), span:
     span(9) };
     let extern_relation_def = crate::phrase! { node:
-    ast::DefKind::ExternRel(ast::ExternRel {
+    ast::DefKind::Rel(ast::RelDef::Extern(Box::new(ast::ExternRel {
         id: id("external_relation", 10),
         not_typ: crate::phrase! { node: Mixfix::Arg(typ::make::bool()), span:  span(10) },
         input_hint: InputHint::new(vec![0]),
         hints: vec![],
-    }), span:
+    }))), span:
     span(10) };
     let extern_dec_def = crate::phrase! { node:
-    ast::DefKind::ExternDec(ast::ExternDec {
+    ast::DefKind::MetaFunc(ast::MetaFuncDef::Extern(ast::ExternFunc {
         id: id("external_dec", 11),
         tparams: vec![],
         params: vec![crate::phrase! { node: ast::ParamKind::Exp(typ::make::bool()), span:  span(11) }],
         typ: typ::make::bool(),
         hints: vec![],
-    }), span:
+    })), span:
     span(11) };
     let builtin_dec_def = crate::phrase! { node:
-    ast::DefKind::BuiltinDec(ast::BuiltinDec {
+    ast::DefKind::MetaFunc(ast::MetaFuncDef::Builtin(ast::BuiltinFunc {
         id: id("builtin_dec", 12),
         tparams: vec![],
         params: vec![crate::phrase! { node: ast::ParamKind::Exp(typ::make::bool()), span:  span(12) }],
         typ: typ::make::bool(),
         hints: vec![],
-    }), span:
+    })), span:
     span(12) };
     let spec = vec![
         crate::phrase! { node:
-        ast::DefKind::ExternTyp(ast::ExternTyp {
+        ast::DefKind::Typ(ast::TypDef::Extern(ast::ExternTyp {
             id: id("external", 1),
             hints: vec![],
-        }), span:
+        })), span:
         span(1) },
         variable_def,
         extern_relation_def,
@@ -431,20 +437,26 @@ fn test_conversion_preserves_definition_clause_and_table_row_order() {
         table_def,
     ];
 
-    let analyzed = algo::convert(spec).expect("ordered specification");
+    let spec_al = algo::convert(spec).expect("ordered specification");
 
-    let definition_ids = analyzed
+    let definition_ids = spec_al
         .iter()
-        .map(|def| match &def.node {
-            crate::lang::al::ast::DefKind::ExternTyp(def) => def.id.node.as_str(),
-            crate::lang::al::ast::DefKind::Var(def) => def.id.node.as_str(),
-            crate::lang::al::ast::DefKind::ExternRel(def) => def.id.node.as_str(),
-            crate::lang::al::ast::DefKind::Rel(def) => def.id.node.as_str(),
-            crate::lang::al::ast::DefKind::Typ(def) => def.id.node.as_str(),
-            crate::lang::al::ast::DefKind::ExternDec(def) => def.id.node.as_str(),
-            crate::lang::al::ast::DefKind::BuiltinDec(def) => def.id.node.as_str(),
-            crate::lang::al::ast::DefKind::FuncDec(def) => def.id.node.as_str(),
-            crate::lang::al::ast::DefKind::TableDec(def) => def.id.node.as_str(),
+        .map(|def_al| match &def_al.node {
+            ast_al::DefKind::Typ(typ_def_al) => match typ_def_al {
+                ast_al::TypDef::Extern(extern_typ_al) => extern_typ_al.id.node.as_str(),
+                ast_al::TypDef::Defined(defined_typ_al) => defined_typ_al.id.node.as_str(),
+            },
+            ast_al::DefKind::Var(var_def_al) => var_def_al.id.node.as_str(),
+            ast_al::DefKind::Rel(rel_def_al) => match rel_def_al {
+                ast_al::RelDef::Extern(extern_rel_al) => extern_rel_al.id.node.as_str(),
+                ast_al::RelDef::Defined(defined_rel_al) => defined_rel_al.id.node.as_str(),
+            },
+            ast_al::DefKind::MetaFunc(meta_func_def_al) => match meta_func_def_al {
+                ast_al::MetaFuncDef::Extern(extern_func_al) => extern_func_al.id.node.as_str(),
+                ast_al::MetaFuncDef::Builtin(builtin_func_al) => builtin_func_al.id.node.as_str(),
+                ast_al::MetaFuncDef::Table(table_func_al) => table_func_al.id.node.as_str(),
+                ast_al::MetaFuncDef::Defined(defined_func_al) => defined_func_al.id.node.as_str(),
+            },
         })
         .collect::<Vec<_>>();
     assert_eq!(
@@ -461,10 +473,13 @@ fn test_conversion_preserves_definition_clause_and_table_row_order() {
         ]
     );
 
-    let crate::lang::al::ast::DefKind::FuncDec(function) = &analyzed[6].node else {
+    let ast_al::DefKind::MetaFunc(meta_func_def_al) = &spec_al[6].node else {
         panic!("expected function definition");
     };
-    let clause_ids = function
+    let ast_al::MetaFuncDef::Defined(defined_func_al) = meta_func_def_al else {
+        panic!("expected defined function");
+    };
+    let clause_ids = defined_func_al
         .clauses
         .iter()
         .map(|clause| {
@@ -479,10 +494,13 @@ fn test_conversion_preserves_definition_clause_and_table_row_order() {
         .collect::<Vec<_>>();
     assert_eq!(clause_ids, vec!["first_clause", "second_clause"]);
 
-    let crate::lang::al::ast::DefKind::TableDec(table) = &analyzed[7].node else {
+    let ast_al::DefKind::MetaFunc(meta_func_def_al) = &spec_al[7].node else {
         panic!("expected table definition");
     };
-    let row_ids = table
+    let ast_al::MetaFuncDef::Table(table_func_al) = meta_func_def_al else {
+        panic!("expected table function");
+    };
+    let row_ids = table_func_al
         .table_rows
         .iter()
         .map(|row| {
@@ -494,14 +512,14 @@ fn test_conversion_preserves_definition_clause_and_table_row_order() {
         .collect::<Vec<_>>();
     assert_eq!(row_ids, vec!["specific", "_closer"]);
     assert_eq!(
-        table
+        table_func_al
             .table_rows
             .iter()
             .map(|row| row.span.clone())
             .collect::<Vec<_>>(),
         vec![span(7), span(8)]
     );
-    assert!(table.table_rows.iter().all(|row| {
+    assert!(table_func_al.table_rows.iter().all(|row| {
         row.node.prems.is_empty() && matches!(row.node.exp.node, ast::ExpKind::Idx(_, _))
     }));
 }

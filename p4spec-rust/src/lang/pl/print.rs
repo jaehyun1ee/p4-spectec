@@ -597,6 +597,30 @@ fn write_elseblock_opt_with<Tier>(
     Ok(())
 }
 
+// - Type definitions
+
+impl Print for TypDef {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        match self {
+            Self::Extern(extern_typ) => {
+                printer.write_str("extern syntax ")?;
+                extern_typ.id.print(printer)
+            }
+            Self::Defined(defined_typ) => {
+                printer.write_str("syntax ")?;
+                defined_typ.id.print(printer)?;
+                if !defined_typ.tparams.is_empty() {
+                    printer.write_char('<')?;
+                    printer.separated(&defined_typ.tparams, ", ")?;
+                    printer.write_char('>')?;
+                }
+                printer.write_str(" = ")?;
+                defined_typ.def_typ.print(printer)
+            }
+        }
+    }
+}
+
 // - Relations
 
 fn write_relinput(
@@ -654,7 +678,7 @@ impl Print for ExternRel {
     }
 }
 
-impl Print for Rel {
+impl Print for DefinedRel {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         self.id.print(printer)?;
         printer.write_str(": ")?;
@@ -668,6 +692,21 @@ impl Print for Rel {
             0,
             self.block.len(),
         )
+    }
+}
+
+impl Print for RelDef {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        match self {
+            Self::Extern(relation) => {
+                printer.write_str("extern relation ")?;
+                relation.print(printer)
+            }
+            Self::Defined(relation) => {
+                printer.write_str("relation ")?;
+                relation.print(printer)
+            }
+        }
     }
 }
 
@@ -823,7 +862,7 @@ impl Print for BlockDispatch {
     }
 }
 
-// - Functions
+// - Meta-functions
 
 impl Print for ExternFunc {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
@@ -906,60 +945,43 @@ impl Print for DefinedFunc {
     }
 }
 
+impl Print for MetaFuncDef {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        match self {
+            Self::Extern(function) => {
+                printer.write_str("extern def ")?;
+                function.print(printer)
+            }
+            Self::Builtin(function) => {
+                printer.write_str("builtin def ")?;
+                function.print(printer)
+            }
+            Self::Table(function) => {
+                printer.write_str("tbl def ")?;
+                function.print(printer)
+            }
+            Self::Defined(function) => {
+                printer.write_str("def ")?;
+                function.print(printer)
+            }
+        }
+    }
+}
+
 // - Definitions
 
 impl Print for Def {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         match &self.node.node {
-            DefKind::ExternTyp(ExternTypDef { id }) => {
-                printer.write_str("extern syntax ")?;
-                id.print(printer)
-            }
-            DefKind::Typ(TypDef {
-                id,
-                tparams,
-                def_typ,
-            }) => {
-                printer.write_str("syntax ")?;
-                id.print(printer)?;
-                if !tparams.is_empty() {
-                    printer.write_char('<')?;
-                    printer.separated(tparams, ", ")?;
-                    printer.write_char('>')?;
-                }
-                printer.write_str(" = ")?;
-                def_typ.print(printer)
-            }
-            DefKind::Var(VarDef { id, typ }) => {
+            DefKind::Typ(typ_def) => typ_def.print(printer),
+            DefKind::Var(var_def) => {
                 printer.write_str("var ")?;
-                id.print(printer)?;
+                var_def.id.print(printer)?;
                 printer.write_str(" : ")?;
-                typ.print(printer)
+                var_def.typ.print(printer)
             }
-            DefKind::ExternRel(relation) => {
-                printer.write_str("extern relation ")?;
-                relation.print(printer)
-            }
-            DefKind::Rel(relation) => {
-                printer.write_str("relation ")?;
-                relation.print(printer)
-            }
-            DefKind::ExternDec(function) => {
-                printer.write_str("extern def ")?;
-                function.print(printer)
-            }
-            DefKind::BuiltinDec(function) => {
-                printer.write_str("builtin def ")?;
-                function.print(printer)
-            }
-            DefKind::TableDec(function) => {
-                printer.write_str("tbl def ")?;
-                function.print(printer)
-            }
-            DefKind::FuncDec(function) => {
-                printer.write_str("def ")?;
-                function.print(printer)
-            }
+            DefKind::Rel(rel_def) => rel_def.print(printer),
+            DefKind::MetaFunc(meta_func_def) => meta_func_def.print(printer),
         }
     }
 }

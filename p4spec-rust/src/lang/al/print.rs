@@ -300,140 +300,142 @@ impl Print for [TableRow] {
     }
 }
 
-// - Definitions
+// - Type definitions
 
-impl Print for Def {
+impl Print for TypDef {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        match &self.node {
-            DefKind::ExternTyp(ExternTypDef { id, .. }) => {
+        match self {
+            Self::Extern(extern_typ) => {
                 printer.write_str("extern syntax ")?;
-                id.print(printer)
+                extern_typ.id.print(printer)
             }
-            DefKind::Typ(TypDef {
-                id,
-                tparams,
-                def_typ,
-                ..
-            }) => {
+            Self::Defined(defined_typ) => {
                 printer.write_str("syntax ")?;
-                id.print(printer)?;
-                if !tparams.is_empty() {
+                defined_typ.id.print(printer)?;
+                if !defined_typ.tparams.is_empty() {
                     printer.write_char('<')?;
-                    printer.separated(tparams, ", ")?;
+                    printer.separated(&defined_typ.tparams, ", ")?;
                     printer.write_char('>')?;
                 }
                 printer.write_str(" = ")?;
-                def_typ.print(printer)
+                defined_typ.def_typ.print(printer)
             }
-            DefKind::Var(VarDef { id, typ, .. }) => {
-                printer.write_str("var ")?;
-                id.print(printer)?;
-                printer.write_str(" : ")?;
-                typ.print(printer)
-            }
-            DefKind::ExternRel(ExternRelDef { id, not_typ, .. }) => {
+        }
+    }
+}
+
+// - Relations
+
+impl Print for RelDef {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        match self {
+            Self::Extern(extern_rel) => {
                 printer.write_str("extern relation ")?;
-                id.print(printer)?;
+                extern_rel.id.print(printer)?;
                 printer.write_str(": ")?;
-                not_typ.print(printer)
+                extern_rel.not_typ.print(printer)
             }
-            DefKind::Rel(RelDef {
-                id,
-                not_typ,
-                input_hint,
-                rule_groups,
-                else_group,
-                ..
-            }) => {
+            Self::Defined(defined_rel) => {
                 printer.write_str("relation ")?;
-                id.print(printer)?;
+                defined_rel.id.print(printer)?;
                 printer.write_str(": ")?;
-                not_typ.print(printer)?;
+                defined_rel.not_typ.print(printer)?;
                 printer.write_str("\n\n")?;
-                write_rulegroups(printer, not_typ, input_hint, rule_groups)?;
-                write_elsegroup_opt(printer, not_typ, input_hint, else_group)
+                write_rulegroups(
+                    printer,
+                    &defined_rel.not_typ,
+                    &defined_rel.input_hint,
+                    &defined_rel.rule_groups,
+                )?;
+                write_elsegroup_opt(
+                    printer,
+                    &defined_rel.not_typ,
+                    &defined_rel.input_hint,
+                    &defined_rel.else_group,
+                )
             }
-            DefKind::ExternDec(ExternDecDef {
-                id,
-                tparams,
-                params,
-                typ,
-                ..
-            }) => {
+        }
+    }
+}
+
+// - Meta-functions
+
+impl Print for MetaFuncDef {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        match self {
+            Self::Extern(extern_func) => {
                 printer.write_str("extern def $")?;
-                id.print(printer)?;
-                if !tparams.is_empty() {
+                extern_func.id.print(printer)?;
+                if !extern_func.tparams.is_empty() {
                     printer.write_char('<')?;
-                    printer.separated(tparams, ", ")?;
+                    printer.separated(&extern_func.tparams, ", ")?;
                     printer.write_char('>')?;
                 }
-                params.as_slice().print(printer)?;
+                extern_func.params.as_slice().print(printer)?;
                 printer.write_str(" : ")?;
-                typ.print(printer)
+                extern_func.typ.print(printer)
             }
-            DefKind::BuiltinDec(BuiltinDecDef {
-                id,
-                tparams,
-                params,
-                typ,
-                ..
-            }) => {
+            Self::Builtin(builtin_func) => {
                 printer.write_str("builtin def $")?;
-                id.print(printer)?;
-                if !tparams.is_empty() {
+                builtin_func.id.print(printer)?;
+                if !builtin_func.tparams.is_empty() {
                     printer.write_char('<')?;
-                    printer.separated(tparams, ", ")?;
+                    printer.separated(&builtin_func.tparams, ", ")?;
                     printer.write_char('>')?;
                 }
-                params.as_slice().print(printer)?;
+                builtin_func.params.as_slice().print(printer)?;
                 printer.write_str(" : ")?;
-                typ.print(printer)
+                builtin_func.typ.print(printer)
             }
-            DefKind::TableDec(TableDecDef {
-                id,
-                params,
-                typ,
-                table_rows,
-                ..
-            }) => {
+            Self::Table(table_func) => {
                 printer.write_str("tbl def $")?;
-                id.print(printer)?;
-                params.as_slice().print(printer)?;
+                table_func.id.print(printer)?;
+                table_func.params.as_slice().print(printer)?;
                 printer.write_str(" : ")?;
-                typ.print(printer)?;
+                table_func.typ.print(printer)?;
                 printer.write_str(" =")?;
-                table_rows.print(printer)
+                table_func.table_rows.print(printer)
             }
-            DefKind::FuncDec(FuncDecDef {
-                id,
-                tparams,
-                params,
-                typ,
-                clauses,
-                else_clause,
-                ..
-            }) => {
+            Self::Defined(defined_func) => {
                 printer.write_str("def $")?;
-                id.print(printer)?;
-                if !tparams.is_empty() {
+                defined_func.id.print(printer)?;
+                if !defined_func.tparams.is_empty() {
                     printer.write_char('<')?;
-                    printer.separated(tparams, ", ")?;
+                    printer.separated(&defined_func.tparams, ", ")?;
                     printer.write_char('>')?;
                 }
-                params.as_slice().print(printer)?;
+                defined_func.params.as_slice().print(printer)?;
                 printer.write_str(" : ")?;
-                typ.print(printer)?;
+                defined_func.typ.print(printer)?;
                 printer.write_str(" =")?;
-                for (index, clause) in clauses.iter().enumerate() {
+                for (index, clause) in defined_func.clauses.iter().enumerate() {
                     write!(printer, "\n\n  clause {index} : ")?;
                     clause.print(printer)?;
                 }
-                if let Some(else_clause) = else_clause {
+                if let Some(else_clause) = &defined_func.else_clause {
                     printer.write_str("\n\n  clause -1 : ")?;
                     else_clause.print(printer)?;
                 }
                 Ok(())
             }
+        }
+    }
+}
+
+// - Definitions
+
+impl Print for Def {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        match &self.node {
+            DefKind::Typ(typ_def) => typ_def.print(printer),
+            DefKind::Var(var_def) => {
+                printer.write_str("var ")?;
+                var_def.id.print(printer)?;
+                printer.write_str(" : ")?;
+                var_def.typ.print(printer)
+            }
+            DefKind::Rel(rel_def) => rel_def.print(printer),
+            DefKind::MetaFunc(meta_func_def) => meta_func_def.print(printer),
         }
     }
 }
