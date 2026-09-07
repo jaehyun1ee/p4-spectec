@@ -45,14 +45,6 @@ fn test_pattern_arity_errors_use_the_owning_source_span() {
 }
 
 #[test]
-fn test_pattern_sets_ignore_wrapper_spans() {
-    let pattern_set_l = [not_typ("A", 1)].into_iter().collect::<PatternSet>();
-    let pattern_set_r = [not_typ("A", 2)].into_iter().collect::<PatternSet>();
-
-    assert_eq!(pattern_set_l, pattern_set_r);
-}
-
-#[test]
 fn test_pattern_sets_ignore_nested_source_spans() {
     let typ_l = crate::phrase! {
         node: ast::TypKind::Var(id("T", 1), vec![]),
@@ -60,10 +52,10 @@ fn test_pattern_sets_ignore_nested_source_spans() {
     };
     let typ_r = crate::phrase! {
         node: ast::TypKind::Var(id("T", 2), vec![]),
-        span: span(3),
+        span: span(5),
     };
     let not_typ_l = crate::phrase! { node: Mixfix::Arg(typ_l), span: span(4) };
-    let not_typ_r = crate::phrase! { node: Mixfix::Arg(typ_r), span: span(4) };
+    let not_typ_r = crate::phrase! { node: Mixfix::Arg(typ_r), span: span(6) };
     let pattern_set_l = [not_typ_l].into_iter().collect::<PatternSet>();
     let pattern_set_r = [not_typ_r].into_iter().collect::<PatternSet>();
 

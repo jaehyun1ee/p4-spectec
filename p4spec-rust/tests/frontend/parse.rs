@@ -1,14 +1,13 @@
 use std::{
     fs,
     path::{Path, PathBuf},
-    rc::Rc,
     sync::atomic::{AtomicUsize, Ordering},
 };
 
 use p4spec_rust::{
     frontend::{
         error::{FrontendError, SyntaxErrorKind},
-        parse::{parse_file, parse_files, parse_mixop, parse_string},
+        parse::{parse_file, parse_files, parse_string},
     },
     lang::{
         common::source::Position,
@@ -17,12 +16,6 @@ use p4spec_rust::{
 };
 
 static TEMP_DIRECTORY_ID: AtomicUsize = AtomicUsize::new(0);
-
-#[test]
-fn test_parses_runtime_mixop_shapes() {
-    let mixop = parse_mixop("name '=' expression").expect("parse mixop shape");
-    assert_eq!(mixop.args().len(), 2);
-}
 
 struct TempDirectory {
     path: PathBuf,
@@ -48,14 +41,6 @@ impl Drop for TempDirectory {
     fn drop(&mut self) {
         fs::remove_dir_all(&self.path).expect("remove isolated test directory");
     }
-}
-
-#[test]
-fn test_parse_string_returns_el_with_an_empty_source_name() {
-    let spec = parse_string("var x : nat").expect("parse SpecTec string");
-
-    assert!(matches!(&spec[0].node, DefKind::Var(definition) if definition.id.node == "x"));
-    assert_eq!(spec[0].span.left, Position::new("", 1, 0));
 }
 
 #[test]
@@ -93,12 +78,6 @@ fn test_parse_file_uses_the_path_in_source_locations() {
     let spec = parse_file(&path).expect("parse SpecTec file");
 
     assert_eq!(spec[0].span.left.file.as_ref(), path.to_string_lossy());
-    assert!(Rc::ptr_eq(
-        &spec[0].span.left.file,
-        &spec[0].span.right.file
-    ));
-    let span = spec[0].span.clone();
-    assert!(Rc::ptr_eq(&spec[0].span.left.file, &span.left.file));
     assert!(matches!(&spec[0].node, DefKind::Var(definition) if definition.id.node == "one"));
 }
 

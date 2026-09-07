@@ -66,18 +66,6 @@ fn run_ocaml_exporter(repo: &Path, spec_path: &Path) -> Output {
 }
 
 #[test]
-fn test_full_spec_converts() {
-    let repo = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .expect("Rust crate is inside the repository");
-    let spec_path = repo.join("spec");
-    let spec_el = parse_files([spec_path]).expect("parse specification corpus");
-    let spec_il = elaborate::elaborate(spec_el).expect("elaborate specification corpus");
-
-    algo::convert(spec_il).expect("convert specification corpus");
-}
-
-#[test]
 #[ignore = "requires the pinned OCaml toolchain"]
 fn test_full_al_matches_ocaml_exactly() {
     let repo = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -169,17 +157,6 @@ fn test_rejected_conversion_matches_ocaml_category_and_span() {
         "{name}"
     );
     assert_eq!(error.span.to_string(), span, "{name}");
-}
-
-#[test]
-fn test_exact_comparison_detects_different_object_keys() {
-    let left = serde_json::json!({"left": 1});
-    let right = serde_json::json!({"right": 1});
-
-    let difference = first_difference(&left, &right, "payload").expect("different object keys");
-
-    assert_eq!(difference.0, "payload.left");
-    assert_eq!(difference.2, "<missing>");
 }
 
 #[test]

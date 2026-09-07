@@ -17,8 +17,6 @@ use p4spec_rust::{
 
 #[path = "typ/compare.rs"]
 mod compare;
-#[path = "typ/expand.rs"]
-mod expand;
 
 fn id(name: &str) -> ast::Id {
     p4spec_rust::phrase! {

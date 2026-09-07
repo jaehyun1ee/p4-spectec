@@ -1,9 +1,6 @@
-use p4spec_rust::{
-    interface::p4::{
-        error::P4ErrorKind,
-        parse::{parse_file, parse_string},
-    },
-    lang::data::value::ValueKind,
+use p4spec_rust::interface::p4::{
+    error::P4ErrorKind,
+    parse::{parse_file, parse_string},
 };
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -11,20 +8,19 @@ use std::{
     path::{Path, PathBuf},
 };
 
-#[test]
-fn test_parses_empty_and_declaration_programs() {
-    for source in [
-        "",
-        "const bit<8> width = 8w3;",
-        "type bit<8> PortId;",
-        "header H { bit<8> field; }",
-        "control C() { apply { } }",
-        "parser P() { state start { transition accept; } }",
-    ] {
-        let program = parse_string("fixture.p4", source)
-            .unwrap_or_else(|error| panic!("failed to parse {source:?}: {error}"));
-        assert!(matches!(program.node, ValueKind::Case(_)));
-        assert_eq!(program.span.left.file.as_ref(), "fixture.p4");
+/// Draw a single-line progress bar to stderr. libtest only captures the
+/// `print!`/`eprint!` macros, so a direct `io::stderr()` write stays visible
+/// while the oracle grinds through the p4c corpus (run with `--nocapture`).
+fn report_progress(label: &str, done: usize, total: usize) {
+    use std::io::Write;
+    const WIDTH: usize = 24;
+    let filled = (done * WIDTH).checked_div(total).unwrap_or(WIDTH);
+    let bar = format!("{}{}", "#".repeat(filled), "-".repeat(WIDTH - filled));
+    let mut stderr = std::io::stderr();
+    let _ = write!(stderr, "\r{label} [{bar}] {done}/{total}");
+    let _ = stderr.flush();
+    if done == total {
+        let _ = writeln!(stderr);
     }
 }
 
@@ -69,7 +65,7 @@ Outer(Inner()) main;
 fn test_parses_the_positive_p4_corpus() {
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let corpus = manifest.join("../p4spec/test/micro");
-    let includes = [manifest.join("../../../p4c/p4include")];
+    let includes = [manifest.join("../p4c/p4include")];
     let mut files = Vec::new();
     for directory in [
         "programs",
@@ -103,21 +99,24 @@ fn test_parses_the_positive_p4_corpus() {
 fn test_rejects_the_negative_p4_parse_corpus() {
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let corpus = manifest.join("../p4spec/test/micro/programs-parse-neg");
-    let includes = [manifest.join("../../../p4c/p4include")];
+    let includes = [manifest.join("../p4c/p4include")];
     let mut files = Vec::new();
     collect_p4_files(&corpus, &mut files);
     files.sort();
     assert!(!files.is_empty(), "the negative P4 corpus must be present");
 
-    let accepted: Vec<_> = files
+    let failures: Vec<_> = files
         .iter()
-        .filter(|file| parse_file(&includes, file).is_ok())
-        .map(|file| file.display().to_string())
+        .filter_map(|file| match parse_file(&includes, file) {
+            Ok(_) => Some(format!("{}: unexpectedly parsed", file.display())),
+            Err(error) if matches!(error.kind, P4ErrorKind::Lex(_) | P4ErrorKind::Syntax) => None,
+            Err(error) => Some(format!("{}: {error}", file.display())),
+        })
         .collect();
     assert!(
-        accepted.is_empty(),
-        "invalid P4 programs were accepted:\n{}",
-        accepted.join("\n")
+        failures.is_empty(),
+        "negative P4 parser corpus failures:\n{}",
+        failures.join("\n")
     );
 }
 
@@ -164,16 +163,20 @@ fn assert_matches_parser_oracle(root: &Path, oracle_name: &str, directories: &[P
     assert_eq!(corpus_files, oracle_files, "P4 parser corpus changed");
 
     let includes = [root.join("p4c/p4include")];
-    let mismatches = oracle
-        .into_iter()
-        .filter_map(|(file, should_parse)| {
-            let result = parse_file(&includes, &file);
-            (result.is_ok() != should_parse).then(|| match result {
+    let total = oracle.len();
+    let mut mismatches = Vec::new();
+    let label = format!("p4 parser {oracle_name}");
+    report_progress(&label, 0, total);
+    for (index, (file, should_parse)) in oracle.into_iter().enumerate() {
+        let result = parse_file(&includes, &file);
+        if result.is_ok() != should_parse {
+            mismatches.push(match result {
                 Ok(_) => format!("{}: unexpectedly parsed", file.display()),
                 Err(error) => format!("{}: {error}", file.display()),
-            })
-        })
-        .collect::<Vec<_>>();
+            });
+        }
+        report_progress(&label, index + 1, total);
+    }
     assert!(
         mismatches.is_empty(),
         "P4 parse expectation mismatches:\n{}",

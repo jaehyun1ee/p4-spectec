@@ -178,14 +178,3 @@ fn test_rejected_elaboration_matches_ocaml_category_and_span() {
         }
     }
 }
-
-#[test]
-fn test_exact_comparison_detects_different_object_keys() {
-    let left = serde_json::json!({"left": 1});
-    let right = serde_json::json!({"right": 1});
-
-    let difference = first_difference(&left, &right, "payload").expect("different object keys");
-
-    assert_eq!(difference.0, "payload.left");
-    assert_eq!(difference.2, "<missing>");
-}

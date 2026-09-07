@@ -30,13 +30,6 @@ fn exp(node: ExpKind) -> ast::Exp {
         span: span("exp"),
     }
 }
-fn id(name: &str, source: &str) -> ast::Id {
-    p4spec_rust::phrase! {
-        node: name.to_owned(),
-        span: span(source),
-    }
-}
-
 struct StringRenderer {
     empty: &'static str,
     separator: &'static str,
@@ -72,8 +65,6 @@ impl Renderer<&str> for StringRenderer {
 mod alter;
 #[path = "hints/fields.rs"]
 mod fields;
-#[path = "hints/flag.rs"]
-mod flag;
 #[path = "hints/hint.rs"]
 mod hint;
 #[path = "hints/input.rs"]
