@@ -1,3 +1,4 @@
+use p4spec_rust::interp::al::error::{HostErrorKind, TraceErrorKind};
 use std::{cell::RefCell, rc::Rc};
 
 use p4spec_rust::{
@@ -504,8 +505,8 @@ fn test_call_arguments_substitute_local_types_and_pass_function_values() {
 
 #[test]
 fn test_index_failures_retain_the_index_expression_span() {
-    use p4spec_rust::interp::al::{backtrack::FailTrace, error::ErrorKind};
-    fn contains_span(traces: &[FailTrace], span: &Span) -> bool {
+    use p4spec_rust::interp::al::error::{Error, ErrorKind};
+    fn contains_span(traces: &[Error], span: &Span) -> bool {
         traces
             .iter()
             .any(|trace| &trace.span == span || contains_span(&trace.children, span))
@@ -521,10 +522,10 @@ fn test_index_failures_retain_the_index_expression_span() {
         typ::make::int(),
     );
     let error = eval(expression).unwrap_err();
-    let ErrorKind::Execution(traces) = error.kind else {
+    let ErrorKind::Trace(TraceErrorKind::Execution) = *error.kind else {
         panic!("expected execution traces");
     };
-    assert!(contains_span(&traces, &span));
+    assert!(contains_span(&error.children, &span));
 }
 
 #[test]
@@ -616,4 +617,42 @@ def $first(ns) = ns[0]
     let first = runner.eval_func("first", &[], &[inputs]).unwrap();
     assert_eq!(first.span, span);
     assert!(Rc::ptr_eq(&first, &input));
+}
+
+#[test]
+fn test_builtin_failure_remains_typed_in_public_error_tree() {
+    use p4spec_rust::{
+        interface::builtin::error::BuiltinErrorKind,
+        interp::al::error::{Error, ErrorKind},
+        runner::BuiltinInterface,
+    };
+    fn find_builtin(error: &Error) -> Option<&BuiltinErrorKind> {
+        if let ErrorKind::Host(HostErrorKind::Interface(InterfaceError::Builtin(error))) =
+            error.kind.as_ref()
+        {
+            return Some(&error.kind);
+        }
+        error.children.iter().find_map(find_builtin)
+    }
+    let builtin = p4spec_rust::phrase!(node: ast::DefKind::MetaFunc(ast::MetaFuncDef::Builtin(ast::BuiltinFunc {
+        id: id("missing_builtin"), tparams: vec![], params: vec![],
+        typ: typ::make::int(), hints: vec![],
+    })), span: Span::default());
+    let call = exp(
+        ast::ExpKind::Call(id("missing_builtin"), vec![], vec![]),
+        typ::make::int(),
+    );
+    let mut runner = Runner::<Al, _, _>::new(
+        Spec::load(vec![function("test", call), builtin]).unwrap(),
+        State::new(false),
+        BuiltinInterface::new(),
+        NullExtern,
+    );
+    let error = runner.eval_func("test", &[], &[]).unwrap_err();
+    assert_eq!(
+        find_builtin(&error),
+        Some(&BuiltinErrorKind::MissingImplementation(
+            "missing_builtin".into()
+        ))
+    );
 }

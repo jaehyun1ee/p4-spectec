@@ -3,8 +3,6 @@ mod context;
 
 #[path = "backtrack.rs"]
 mod backtrack;
-#[path = "nondet.rs"]
-mod nondet;
 
 #[path = "error.rs"]
 mod error;

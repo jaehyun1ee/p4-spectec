@@ -1,3 +1,4 @@
+use p4spec_rust::interp::al::error::TraceErrorKind;
 use std::{cell::RefCell, rc::Rc};
 
 use p4spec_rust::lang::traits::print::Print;
@@ -61,7 +62,10 @@ fn test_function_choice_preserves_order_and_counts_equal_successes() {
         let error = runner(spec_al, true)
             .eval_func("pick", &[], &[])
             .unwrap_err();
-        assert!(matches!(error.kind, ErrorKind::Execution(_)));
+        assert!(matches!(
+            *error.kind,
+            ErrorKind::Trace(TraceErrorKind::Execution)
+        ));
         assert!(error.to_string().contains("non-deterministic"), "{error}");
     }
 }
@@ -113,7 +117,10 @@ def $fatal() = +9
             "+7"
         );
         let error = runner.eval_func("fatal", &[], &[]).unwrap_err();
-        assert!(matches!(error.kind, ErrorKind::Execution(_)));
+        assert!(matches!(
+            *error.kind,
+            ErrorKind::Trace(TraceErrorKind::Execution)
+        ));
         let message = error.to_string();
         assert!(message.contains("unavailable"), "{message}");
         assert!(message.contains("fatal"), "{message}");
@@ -192,7 +199,10 @@ fn test_relation_outputs_follow_notation_order_and_equal_paths_are_ambiguous() {
     let error = runner(spec_al, true)
         .eval_rel("Step", &[nat(5)])
         .unwrap_err();
-    assert!(matches!(error.kind, ErrorKind::Execution(_)));
+    assert!(matches!(
+        *error.kind,
+        ErrorKind::Trace(TraceErrorKind::Execution)
+    ));
     assert!(error.to_string().contains("non-deterministic"), "{error}");
 }
 
@@ -213,7 +223,10 @@ rule Recover/fallback: n ~> 9
         let error = runner(spec(source), det)
             .eval_rel("Recover", &[nat(1)])
             .unwrap_err();
-        assert!(matches!(error.kind, ErrorKind::Execution(_)));
+        assert!(matches!(
+            *error.kind,
+            ErrorKind::Trace(TraceErrorKind::Execution)
+        ));
         let message = error.to_string();
         assert!(message.contains("Broken"), "{message}");
         assert!(message.contains("Recover"), "{message}");
@@ -353,7 +366,10 @@ def $not_hold(n) = false
                     let result = runner.eval_func(name, &[], &[nat(n)]);
                     if external {
                         let error = result.unwrap_err();
-                        assert!(matches!(error.kind, ErrorKind::Execution(_)));
+                        assert!(matches!(
+                            *error.kind,
+                            ErrorKind::Trace(TraceErrorKind::Execution)
+                        ));
                         assert!(error.to_string().contains("Check"), "{error}");
                     } else {
                         assert_eq!(get::bool(&result.unwrap()).unwrap(), expected);
@@ -492,7 +508,10 @@ def $none() = $select(C)
         assert!(get::bool(&runner.eval_func("first", &[], &[]).unwrap()).unwrap());
         assert!(!get::bool(&runner.eval_func("later", &[], &[]).unwrap()).unwrap());
         let error = runner.eval_func("none", &[], &[]).unwrap_err();
-        assert!(matches!(error.kind, ErrorKind::Execution(_)));
+        assert!(matches!(
+            *error.kind,
+            ErrorKind::Trace(TraceErrorKind::Execution)
+        ));
         let message = error.to_string();
         assert!(message.contains("select"), "{message}");
         assert!(message.contains("reject"), "{message}");

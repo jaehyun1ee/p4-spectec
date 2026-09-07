@@ -3,7 +3,6 @@
 pub mod backtrack;
 pub mod context;
 pub mod error;
-pub mod nondet;
 
 pub mod eval;
 pub mod util;
@@ -15,7 +14,7 @@ use crate::{
 };
 use backtrack::Backtrack;
 use context::{Context, Spec};
-use error::{Error, ErrorKind};
+use error::Error;
 use std::rc::Rc;
 
 pub struct Al;
@@ -57,9 +56,8 @@ pub fn eval_program<I: Interface, E: Extern>(
 fn finish<T>(result: Backtrack<T>) -> Result<T, Error> {
     match result {
         Backtrack::Ok(value) => Ok(value),
-        Backtrack::Err(traces) | Backtrack::Unmatch(traces) => {
-            Err(Error::new(ErrorKind::Execution(traces), Span::default()))
-        }
+        Backtrack::Nondet(never, _) => match never {},
+        Backtrack::Err(traces) | Backtrack::Unmatch(traces) => Err(Error::execution(traces)),
     }
 }
 

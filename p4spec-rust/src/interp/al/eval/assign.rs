@@ -1,5 +1,6 @@
 //! Destructuring assignments preserve iteration paths and isolate list rows
 
+use crate::interp::al::error::AssignErrorKind;
 use std::rc::Rc;
 
 use crate::{
@@ -18,6 +19,7 @@ use crate::{
 use super::super::{
     backtrack::{Backtrack, back},
     context::{Context, Spec},
+    error::ErrorKind,
     util::is_iter_var_exp,
 };
 
@@ -52,11 +54,10 @@ pub fn assign_exp(ctx: &Context, exp: &ast::Exp, value: Rc<Value>) -> Backtrack<
         }
         _ => Backtrack::err(
             exp.span.clone(),
-            format!(
-                "match failed {} <- {}",
-                Print::to_string(exp),
-                Print::to_string(value.as_ref())
-            ),
+            ErrorKind::Assign(AssignErrorKind::Mismatch {
+                expression: Print::to_string(exp),
+                value: Print::to_string(value.as_ref()),
+            }),
         ),
     }
 }
@@ -65,11 +66,10 @@ pub fn assign_exps(ctx: &Context, exps: &[ast::Exp], values: &[Rc<Value>]) -> Ba
     if exps.len() != values.len() {
         return Backtrack::err(
             Span::over(&exps.iter().map(|exp| exp.span.clone()).collect::<Vec<_>>()),
-            format!(
-                "mismatch in number of expressions and values while assigning, expected {} value(s) but got {}",
-                exps.len(),
-                values.len()
-            ),
+            ErrorKind::Assign(AssignErrorKind::ExpressionArityMismatch {
+                expected: exps.len(),
+                actual: values.len(),
+            }),
         );
     }
     let mut ctx = ctx.clone();
@@ -143,11 +143,10 @@ fn assign_opt_exp(
         (None, None) => Backtrack::Ok(ctx.clone()),
         _ => Backtrack::err(
             exp.span.clone(),
-            format!(
-                "match failed {} <- {}",
-                Print::to_string(exp),
-                Print::to_string(value)
-            ),
+            ErrorKind::Assign(AssignErrorKind::Mismatch {
+                expression: Print::to_string(exp),
+                value: Print::to_string(value),
+            }),
         ),
     }
 }
@@ -165,7 +164,7 @@ fn assign_cons_exp(
     let Some((value_h, values_t)) = values.split_first() else {
         return Backtrack::err(
             exp.span.clone(),
-            "cannot assign an empty list to a cons expression",
+            ErrorKind::Assign(AssignErrorKind::EmptyCons),
         );
     };
     let typ = phrase!(node: value.note.clone(), span: exp.span.clone());
@@ -262,11 +261,10 @@ pub fn assign_args(
     if args.len() != values.len() {
         return Backtrack::err(
             Span::over(&args.iter().map(|arg| arg.span.clone()).collect::<Vec<_>>()),
-            format!(
-                "mismatch in number of arguments and values while assigning, expected {} value(s) but got {}",
-                args.len(),
-                values.len()
-            ),
+            ErrorKind::Assign(AssignErrorKind::ArgumentArityMismatch {
+                expected: args.len(),
+                actual: values.len(),
+            }),
         );
     }
     let mut ctx = ctx_callee.clone();
@@ -294,11 +292,10 @@ fn assign_def_arg(
     let ValueKind::Func(id_func) = &value.node else {
         return Backtrack::err(
             id.span.clone(),
-            format!(
-                "cannot assign a value {} to a definition {}",
-                Print::to_string(value.as_ref()),
-                id.node
-            ),
+            ErrorKind::Assign(AssignErrorKind::DefinitionMismatch {
+                value: Print::to_string(value.as_ref()),
+                definition: id.node.clone(),
+            }),
         );
     };
     let (_, func) = back!(Backtrack::from_result(

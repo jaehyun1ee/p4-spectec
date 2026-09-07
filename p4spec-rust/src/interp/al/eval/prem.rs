@@ -4,8 +4,10 @@ use super::super::{
     Al,
     backtrack::{Backtrack, back},
     context::Context,
+    error::ErrorKind,
 };
 use super::{assign, call::invoke_rel, expr};
+use crate::interp::al::error::PremErrorKind;
 use crate::{
     interp::common::Event,
     lang::{
@@ -57,7 +59,9 @@ pub fn eval_prem<I: Interface, E: Extern>(
             } else {
                 Backtrack::unmatch(
                     prem.exp.span.clone(),
-                    format!("condition {} was not met", Print::to_string(&prem.exp)),
+                    ErrorKind::Prem(PremErrorKind::ConditionNotMet {
+                        expression: Print::to_string(&prem.exp),
+                    }),
                 )
             }
         }
@@ -67,10 +71,13 @@ pub fn eval_prem<I: Interface, E: Extern>(
             match invoke_rel(runner, ctx, &prem.id, &values) {
                 Backtrack::Ok(_) => Backtrack::Ok(ctx.clone()),
                 Backtrack::Err(traces) => Backtrack::Err(traces),
-                Backtrack::Unmatch(traces) => Backtrack::Unmatch(traces)
-                    .nest(prem.id.span.clone(), || {
-                        format!("condition hold {} was not met", prem.id.node)
-                    }),
+                Backtrack::Unmatch(traces) => {
+                    Backtrack::Unmatch(traces).nest(prem.id.span.clone(), || {
+                        ErrorKind::Prem(PremErrorKind::HoldConditionNotMet {
+                            relation: prem.id.node.clone(),
+                        })
+                    })
+                }
             }
         }
         ast::PremKind::IfNotHold(prem) => {
@@ -79,7 +86,9 @@ pub fn eval_prem<I: Interface, E: Extern>(
             match invoke_rel(runner, ctx, &prem.id, &values) {
                 Backtrack::Ok(_) => Backtrack::unmatch(
                     prem.id.span.clone(),
-                    format!("condition not-hold {} was not met", prem.id.node),
+                    ErrorKind::Prem(PremErrorKind::NotHoldConditionNotMet {
+                        relation: prem.id.node.clone(),
+                    }),
                 ),
                 Backtrack::Err(traces) => Backtrack::Err(traces),
                 Backtrack::Unmatch(_) => Backtrack::Ok(ctx.clone()),

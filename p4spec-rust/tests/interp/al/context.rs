@@ -1,3 +1,4 @@
+use p4spec_rust::interp::al::error::{ContextErrorKind, RuntimeErrorKind};
 use std::rc::Rc;
 
 use p4spec_rust::{
@@ -76,11 +77,11 @@ fn test_duplicate_global_definition_uses_second_identifier_span() {
         let error = Spec::load(vec![def(first), def(second)]).unwrap_err();
         assert_eq!(error.span, id("x", 9).span);
         assert_eq!(
-            error.kind,
-            ErrorKind::Duplicate {
+            *error.kind,
+            ErrorKind::Context(ContextErrorKind::Duplicate {
                 kind,
                 name: "x".into()
-            }
+            })
         );
     }
 }
@@ -123,13 +124,13 @@ fn test_local_definition_duplicates_do_not_replace_bindings() {
     .unwrap();
     let mut ctx = Context::new();
     assert!(matches!(
-        ctx.add_func(&spec, id("f", 7), func("f", 7))
+        *ctx.add_func(&spec, id("f", 7), func("f", 7))
             .unwrap_err()
             .kind,
-        ErrorKind::Duplicate {
+        ErrorKind::Context(ContextErrorKind::Duplicate {
             kind: EntityKind::Function,
             ..
-        }
+        })
     ));
     assert_eq!(
         ctx.add_typdef(&spec, id("T", 7), TypeDef::Parameter)
@@ -184,11 +185,11 @@ fn test_missing_value_reports_iterator_path_and_lookup_span() {
         .unwrap_err();
     assert_eq!(error.span, id("x", 9).span);
     assert_eq!(
-        error.kind,
-        ErrorKind::Undefined {
+        *error.kind,
+        ErrorKind::Context(ContextErrorKind::Undefined {
             kind: EntityKind::Value,
             name: "x*?".into()
-        }
+        })
     );
 }
 
@@ -219,8 +220,8 @@ fn test_optional_subcontexts_require_agreement_and_preserve_parent() {
         make::opt(&typ, None, Span::default()),
     );
     assert_eq!(
-        ctx.sub_opt(&vars).unwrap_err().kind,
-        ErrorKind::OptionalityMismatch
+        *ctx.sub_opt(&vars).unwrap_err().kind,
+        ErrorKind::Context(ContextErrorKind::OptionalityMismatch)
     );
     ctx.add_value(
         Variable::new(vars[0].id.clone(), vec![ast::Iter::List, ast::Iter::Opt]),
@@ -260,11 +261,11 @@ fn test_list_subcontexts_transpose_in_order_without_leaking_bindings() {
         make::list(&typ::make::bool(), vec![], Span::default()),
     );
     assert!(matches!(
-        ctx.sub_list(&vars).unwrap_err().kind,
-        ErrorKind::IterationLengthMismatch {
+        *ctx.sub_list(&vars).unwrap_err().kind,
+        ErrorKind::Context(ContextErrorKind::IterationLengthMismatch {
             expected: 2,
             actual: 0
-        }
+        })
     ));
     assert!(ctx.sub_list(&[]).unwrap().is_empty());
 }
@@ -279,7 +280,10 @@ fn test_iteration_rejects_wrong_value_kind_at_variable_span() {
     );
     let error = ctx.sub_opt(std::slice::from_ref(&var)).unwrap_err();
     assert_eq!(error.span, var.id.span);
-    assert!(matches!(error.kind, ErrorKind::Value(_)));
+    assert!(matches!(
+        *error.kind,
+        ErrorKind::Runtime(RuntimeErrorKind::Value(_))
+    ));
     let value = Rc::clone(
         ctx.find_value(&Variable::new(var.id.clone(), vec![ast::Iter::Opt]))
             .unwrap(),
@@ -363,11 +367,11 @@ fn test_duplicate_relations_share_namespace_and_report_second_span() {
     .unwrap_err();
     assert_eq!(error.span, id("r", 9).span);
     assert_eq!(
-        error.kind,
-        ErrorKind::Duplicate {
+        *error.kind,
+        ErrorKind::Context(ContextErrorKind::Duplicate {
             kind: EntityKind::Relation,
             name: "r".into()
-        }
+        })
     );
 }
 
@@ -383,11 +387,11 @@ fn test_definition_lookup_errors_and_local_type_isolation() {
     ] {
         assert_eq!(error.span, id.span);
         assert_eq!(
-            error.kind,
-            ErrorKind::Undefined {
+            *error.kind,
+            ErrorKind::Context(ContextErrorKind::Undefined {
                 kind,
                 name: id.node.clone()
-            }
+            })
         );
     }
     let mut ctx_child = ctx.clone();
@@ -400,10 +404,10 @@ fn test_definition_lookup_errors_and_local_type_isolation() {
     assert!(ctx.find_typdef_opt(&spec, &id).is_none());
     assert!(ctx.find_func_opt(&spec, &id).is_none());
     assert_eq!(
-        ctx_child.find_defined_typdef(&spec, &id).unwrap_err().kind,
-        ErrorKind::Undefined {
+        *ctx_child.find_defined_typdef(&spec, &id).unwrap_err().kind,
+        ErrorKind::Context(ContextErrorKind::Undefined {
             kind: EntityKind::DefinedType,
             name: id.node
-        }
+        })
     );
 }

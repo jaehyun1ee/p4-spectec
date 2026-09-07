@@ -2,12 +2,12 @@
 
 use super::super::{
     Al,
-    backtrack::{Backtrack, back, choose_sequential},
+    backtrack::{Backtrack, back, choose_deterministic, choose_sequential},
     context::Context,
     error::ErrorKind,
-    nondet::{BacktrackDet, choose_deterministic},
 };
 use super::{assign, expr, prem::eval_prems};
+use crate::interp::al::error::{CallErrorKind, HostErrorKind, TraceErrorKind};
 use crate::{
     interp::common::Event,
     lang::{al::ast, data::value::Value, traits::print::Print},
@@ -46,7 +46,9 @@ pub fn invoke_rel<I: Interface, E: Extern>(
         .interp_state()
         .emit(Event::RelExit { id: id.clone() });
     result.nest(id.span.clone(), || {
-        format!("invocation of relation {} failed", id.node)
+        ErrorKind::Trace(TraceErrorKind::RelationInvocation {
+            relation: id.node.clone(),
+        })
     })
 }
 
@@ -60,7 +62,10 @@ fn invoke_rule_path<I: Interface, E: Extern>(
     back!(Backtrack::check(
         rule_match.exps_input.len() == values.len(),
         path.id.span.clone(),
-        "arity mismatch in rule"
+        ErrorKind::Call(CallErrorKind::RuleArityMismatch {
+            expected: rule_match.exps_input.len(),
+            actual: values.len()
+        })
     ));
     let ctx = back!(assign::assign_exps(
         &ctx.localize(),
@@ -93,21 +98,22 @@ fn invoke_defined_rel<I: Interface, E: Extern>(
         .collect();
     let mut evaluate = |&(group, path): &(&ast::RuleGroupKind, &ast::RulePath)| {
         invoke_rule_path(runner, ctx, &group.rule_match, path, values).nest(id.span.clone(), || {
-            format!(
-                "application of rule {}/{}/{} failed",
-                id.node, group.id.node, path.id.node
-            )
+            ErrorKind::Trace(TraceErrorKind::RuleApplication {
+                relation: id.node.clone(),
+                group: group.id.node.clone(),
+                path: path.id.node.clone(),
+            })
         })
     };
     let result = if det {
         choose_deterministic(paths, &mut evaluate)
     } else {
-        choose_sequential(paths, &mut evaluate).into()
+        choose_sequential(paths, &mut evaluate).with_candidates()
     };
     match result {
-        BacktrackDet::Ok(values) => Backtrack::Ok(values),
-        BacktrackDet::Err(traces) => Backtrack::Err(traces),
-        BacktrackDet::Unmatch(traces) => match &rel.else_group {
+        Backtrack::Ok(values) => Backtrack::Ok(values),
+        Backtrack::Err(traces) => Backtrack::Err(traces),
+        Backtrack::Unmatch(traces) => match &rel.else_group {
             Some(group) => invoke_rule_path(
                 runner,
                 ctx,
@@ -116,19 +122,23 @@ fn invoke_defined_rel<I: Interface, E: Extern>(
                 values,
             )
             .nest(id.span.clone(), || {
-                format!(
-                    "application of rule {}/{}/{} failed",
-                    id.node, group.node.id.node, group.node.rule_path.id.node
-                )
+                ErrorKind::Trace(TraceErrorKind::RuleApplication {
+                    relation: id.node.clone(),
+                    group: group.node.id.node.clone(),
+                    path: group.node.rule_path.id.node.clone(),
+                })
             }),
             None => Backtrack::Unmatch(traces),
         },
-        BacktrackDet::Nondet((group_a, path_a), (group_b, path_b)) => Backtrack::err(
+        Backtrack::Nondet((group_a, path_a), (group_b, path_b)) => Backtrack::err(
             id.span.clone(),
-            format!(
-                "non-deterministic application of relation {}: {}/{}, {}/{}",
-                id.node, group_a.id.node, path_a.id.node, group_b.id.node, path_b.id.node
-            ),
+            ErrorKind::Call(CallErrorKind::RelationNondeterminism {
+                relation: id.node.clone(),
+                group_a: group_a.id.node.clone(),
+                path_a: path_a.id.node.clone(),
+                group_b: group_b.id.node.clone(),
+                path_b: path_b.id.node.clone(),
+            }),
         ),
     }
 }
@@ -159,19 +169,28 @@ pub fn invoke_func<I: Interface, E: Extern>(
             }
             ast::MetaFuncDef::Builtin(_) => match runner.call_builtin(id, targs, values) {
                 Ok((value, _)) => Backtrack::Ok(value),
-                Err(error) => match error.kind {
-                    ErrorKind::Interface(InterfaceError::Builtin(error)) => {
-                        Backtrack::unmatch(id.span.clone(), error.to_string())
+                Err(error) => {
+                    let recoverable = matches!(
+                        error.kind.as_ref(),
+                        ErrorKind::Host(HostErrorKind::Interface(InterfaceError::Builtin(_)))
+                    );
+                    let error = error.at_if_missing(&id.span);
+                    if recoverable {
+                        Backtrack::Unmatch(vec![error])
+                    } else {
+                        Backtrack::Err(vec![error])
                     }
-                    kind => Backtrack::err(id.span.clone(), kind.to_string()),
-                },
+                }
             },
             ast::MetaFuncDef::Table(func) => choose_sequential(&func.table_rows, |row| {
                 let result = (|| {
                     back!(Backtrack::check(
                         row.node.args.len() == values.len(),
                         row.span.clone(),
-                        "arity mismatch while matching table row"
+                        ErrorKind::Call(CallErrorKind::TableRowArityMismatch {
+                            expected: row.node.args.len(),
+                            actual: values.len()
+                        })
                     ));
                     let ctx = back!(assign::assign_args(
                         runner.spec(),
@@ -184,11 +203,10 @@ pub fn invoke_func<I: Interface, E: Extern>(
                     expr::eval_exp(runner, &ctx, &row.node.exp)
                 })();
                 result.nest(id.span.clone(), || {
-                    format!(
-                        "application of table row {}{} failed",
-                        id.node,
-                        Print::to_string(row.node.args.as_slice())
-                    )
+                    ErrorKind::Trace(TraceErrorKind::TableRowApplication {
+                        function: id.node.clone(),
+                        arguments: Print::to_string(row.node.args.as_slice()),
+                    })
                 })
             }),
             ast::MetaFuncDef::Defined(func) => {
@@ -200,10 +218,9 @@ pub fn invoke_func<I: Interface, E: Extern>(
         .interp_state()
         .emit(Event::FuncExit { id: id.clone() });
     result.nest(id.span.clone(), || {
-        format!(
-            "invocation of function ${}{} failed",
-            id.node,
-            if targs.is_empty() {
+        ErrorKind::Trace(TraceErrorKind::FunctionInvocation {
+            function: id.node.clone(),
+            type_arguments: if targs.is_empty() {
                 String::new()
             } else {
                 format!(
@@ -214,8 +231,8 @@ pub fn invoke_func<I: Interface, E: Extern>(
                         .collect::<Vec<_>>()
                         .join(", ")
                 )
-            }
-        )
+            },
+        })
     })
 }
 
@@ -232,7 +249,10 @@ fn invoke_clause<I: Interface, E: Extern>(
         back!(Backtrack::check(
             func.tparams.len() == targs.len(),
             id.span.clone(),
-            "arity mismatch in type arguments"
+            ErrorKind::Call(CallErrorKind::TypeArgumentArityMismatch {
+                expected: func.tparams.len(),
+                actual: targs.len()
+            })
         ));
         let mut ctx_local = ctx.localize();
         for (tparam, targ) in func.tparams.iter().zip(targs) {
@@ -250,7 +270,10 @@ fn invoke_clause<I: Interface, E: Extern>(
         back!(Backtrack::check(
             clause.node.args.len() == values.len(),
             clause.span.clone(),
-            "arity mismatch while matching clause"
+            ErrorKind::Call(CallErrorKind::ClauseArityMismatch {
+                expected: clause.node.args.len(),
+                actual: values.len()
+            })
         ));
         let ctx = back!(assign::assign_args(
             runner.spec(),
@@ -263,11 +286,10 @@ fn invoke_clause<I: Interface, E: Extern>(
         expr::eval_exp(runner, &ctx, &clause.node.expression)
     })();
     result.nest(id.span.clone(), || {
-        format!(
-            "application of clause {}{} failed",
-            id.node,
-            Print::to_string(clause.node.args.as_slice())
-        )
+        ErrorKind::Trace(TraceErrorKind::ClauseApplication {
+            function: id.node.clone(),
+            arguments: Print::to_string(clause.node.args.as_slice()),
+        })
     })
 }
 
@@ -285,21 +307,22 @@ fn invoke_defined_func<I: Interface, E: Extern>(
     let result = if det {
         choose_deterministic(0..func.clauses.len(), &mut evaluate)
     } else {
-        choose_sequential(0..func.clauses.len(), &mut evaluate).into()
+        choose_sequential(0..func.clauses.len(), &mut evaluate).with_candidates()
     };
     match result {
-        BacktrackDet::Ok(value) => Backtrack::Ok(value),
-        BacktrackDet::Err(traces) => Backtrack::Err(traces),
-        BacktrackDet::Unmatch(traces) => match &func.else_clause {
+        Backtrack::Ok(value) => Backtrack::Ok(value),
+        Backtrack::Err(traces) => Backtrack::Err(traces),
+        Backtrack::Unmatch(traces) => match &func.else_clause {
             Some(clause) => invoke_clause(runner, ctx, id, func, clause, targs, values),
             None => Backtrack::Unmatch(traces),
         },
-        BacktrackDet::Nondet(a, b) => Backtrack::err(
+        Backtrack::Nondet(a, b) => Backtrack::err(
             id.span.clone(),
-            format!(
-                "non-deterministic application of function {}: {a}, {b}",
-                id.node
-            ),
+            ErrorKind::Call(CallErrorKind::FunctionNondeterminism {
+                function: id.node.clone(),
+                first: a,
+                second: b,
+            }),
         ),
     }
 }

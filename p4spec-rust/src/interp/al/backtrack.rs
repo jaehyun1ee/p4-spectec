@@ -1,100 +1,42 @@
-//! Recoverable mismatches and fatal failures during AL execution
+//! AL failure propagation and ordered candidate selection
 //!
-//! `choose_sequential` evaluates candidates until one succeeds or fails fatally.
-//! Only mismatches try the next candidate. `nest` records call context without
-//! changing that distinction; rendering the resulting trace tree is separate
-//! from choosing a branch.
+//! Mismatches try the next candidate; fatal failures stop evaluation. A
+//! deterministic choice continues after one success and reports the first
+//! two successful candidates. Error trees retain the reasons independently
+//! of these control-flow outcomes.
 
+use super::error::{Error, ErrorKind};
 use crate::lang::common::source::Span;
-use std::fmt::Display;
+use std::convert::Infallible;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct FailTrace {
-    pub span: Span,
-    pub message: String,
-    pub children: Vec<FailTrace>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Backtrack<T> {
+pub enum Backtrack<T, C = Infallible> {
     Ok(T),
-    Err(Vec<FailTrace>),
-    Unmatch(Vec<FailTrace>),
+    Err(Vec<Error>),
+    Unmatch(Vec<Error>),
+    Nondet(C, C),
 }
+
+// = Constructors
 
 impl<T> Backtrack<T> {
-    pub fn from_result(result: Result<T, impl Display>, span: &Span) -> Self {
+    pub fn from_result(result: Result<T, impl Into<Error>>, span: &Span) -> Self {
         match result {
             Ok(value) => Self::Ok(value),
-            Err(error) => Self::err(span.clone(), error.to_string()),
+            Err(error) => Self::Err(vec![error.into().at_if_missing(span)]),
         }
     }
 
-    pub fn err(span: Span, message: impl Into<String>) -> Self {
-        Self::Err(vec![FailTrace {
-            span,
-            message: message.into(),
-            children: Vec::new(),
-        }])
+    pub fn err(span: Span, kind: ErrorKind) -> Self {
+        Self::Err(vec![Error::new(kind, span)])
     }
 
-    pub fn unmatch(span: Span, message: impl Into<String>) -> Self {
-        Self::Unmatch(vec![FailTrace {
-            span,
-            message: message.into(),
-            children: Vec::new(),
-        }])
-    }
-
-    pub fn nest(self, span: Span, message: impl FnOnce() -> String) -> Self {
-        match self {
-            Self::Ok(value) => Self::Ok(value),
-            Self::Err(children) => Self::Err(vec![FailTrace {
-                span,
-                message: message(),
-                children,
-            }]),
-            Self::Unmatch(children) => Self::Unmatch(vec![FailTrace {
-                span,
-                message: message(),
-                children,
-            }]),
-        }
-    }
-
-    pub fn and_then<U>(self, next: impl FnOnce(T) -> Backtrack<U>) -> Backtrack<U> {
-        match self {
-            Self::Ok(value) => next(value),
-            Self::Err(traces) => Backtrack::Err(traces),
-            Self::Unmatch(traces) => Backtrack::Unmatch(traces),
-        }
+    pub fn unmatch(span: Span, kind: ErrorKind) -> Self {
+        Self::Unmatch(vec![Error::new(kind, span)])
     }
 }
 
-impl Backtrack<()> {
-    pub fn check(condition: bool, span: Span, message: impl Into<String>) -> Self {
-        if condition {
-            Self::Ok(())
-        } else {
-            Self::err(span, message)
-        }
-    }
-}
-
-pub fn choose_sequential<C, T>(
-    candidates: impl IntoIterator<Item = C>,
-    mut evaluate: impl FnMut(&C) -> Backtrack<T>,
-) -> Backtrack<T> {
-    let mut traces = Vec::new();
-    for candidate in candidates {
-        match evaluate(&candidate) {
-            Backtrack::Ok(value) => return Backtrack::Ok(value),
-            Backtrack::Err(traces) => return Backtrack::Err(traces),
-            Backtrack::Unmatch(mut traces_candidate) => traces.append(&mut traces_candidate),
-        }
-    }
-    Backtrack::Unmatch(traces)
-}
+// = Propagation
 
 macro_rules! back {
     ($result:expr) => {
@@ -103,6 +45,9 @@ macro_rules! back {
             $crate::interp::al::backtrack::Backtrack::Err(traces) => {
                 return $crate::interp::al::backtrack::Backtrack::Err(traces)
             }
+            $crate::interp::al::backtrack::Backtrack::Nondet(first, second) => {
+                return $crate::interp::al::backtrack::Backtrack::Nondet(first, second)
+            }
             $crate::interp::al::backtrack::Backtrack::Unmatch(traces) => {
                 return $crate::interp::al::backtrack::Backtrack::Unmatch(traces)
             }
@@ -110,3 +55,95 @@ macro_rules! back {
     };
 }
 pub(super) use back;
+
+// = Nesting
+
+impl<T, C> Backtrack<T, C> {
+    pub fn nest(self, span: Span, kind: impl FnOnce() -> ErrorKind) -> Self {
+        match self {
+            Self::Ok(value) => Self::Ok(value),
+            Self::Err(children) => Self::Err(vec![Error {
+                kind: Box::new(kind()),
+                span,
+                children,
+            }]),
+            Self::Unmatch(children) => Self::Unmatch(vec![Error {
+                kind: Box::new(kind()),
+                span,
+                children,
+            }]),
+            Self::Nondet(first, second) => Self::Nondet(first, second),
+        }
+    }
+}
+
+// = Checks
+
+impl Backtrack<()> {
+    pub fn check(condition: bool, span: Span, kind: ErrorKind) -> Self {
+        if condition {
+            Self::Ok(())
+        } else {
+            Self::err(span, kind)
+        }
+    }
+}
+
+// = Choice
+
+impl<T> Backtrack<T> {
+    pub fn with_candidates<C>(self) -> Backtrack<T, C> {
+        match self {
+            Self::Ok(value) => Backtrack::Ok(value),
+            Self::Err(errors) => Backtrack::Err(errors),
+            Self::Unmatch(errors) => Backtrack::Unmatch(errors),
+            Self::Nondet(never, _) => match never {},
+        }
+    }
+}
+
+pub fn choose_sequential<C, T>(
+    candidates: impl IntoIterator<Item = C>,
+    mut evaluate: impl FnMut(&C) -> Backtrack<T>,
+) -> Backtrack<T> {
+    let mut errors = Vec::new();
+    for candidate in candidates {
+        match evaluate(&candidate) {
+            Backtrack::Ok(value) => return Backtrack::Ok(value),
+            Backtrack::Err(errors) => return Backtrack::Err(errors),
+            Backtrack::Unmatch(mut candidate_errors) => errors.append(&mut candidate_errors),
+            Backtrack::Nondet(never, _) => match never {},
+        }
+    }
+    Backtrack::Unmatch(errors)
+}
+
+pub fn choose_deterministic<C, T>(
+    candidates: impl IntoIterator<Item = C>,
+    mut evaluate: impl FnMut(&C) -> Backtrack<T>,
+) -> Backtrack<T, C> {
+    let mut success = None;
+    let mut errors = Vec::new();
+    for candidate in candidates {
+        match evaluate(&candidate) {
+            Backtrack::Ok(value) => {
+                if let Some((first, _)) = success {
+                    return Backtrack::Nondet(first, candidate);
+                }
+                success = Some((candidate, value));
+                errors.clear();
+            }
+            Backtrack::Err(errors) => return Backtrack::Err(errors),
+            Backtrack::Unmatch(mut candidate_errors) => {
+                if success.is_none() {
+                    errors.append(&mut candidate_errors);
+                }
+            }
+            Backtrack::Nondet(never, _) => match never {},
+        }
+    }
+    match success {
+        Some((_, value)) => Backtrack::Ok(value),
+        None => Backtrack::Unmatch(errors),
+    }
+}

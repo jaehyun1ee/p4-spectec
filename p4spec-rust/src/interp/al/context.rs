@@ -5,6 +5,7 @@
 //! them for a fresh call. Lookups borrow the loaded spec explicitly so neither
 //! operation copies or mutates global definitions.
 
+use crate::interp::al::error::ContextErrorKind;
 use std::rc::Rc;
 
 use crate::{
@@ -229,7 +230,7 @@ impl Context {
             iters.push(ast::Iter::Opt);
             let value = self.find_value(&Variable::new(var.id.clone(), iters))?;
             let value =
-                get::opt(value).map_err(|error| Error::new(error.into(), var.id.span.clone()))?;
+                get::opt(value).map_err(|error| Error::from(error).at_if_missing(&var.id.span))?;
             values.push(value);
         }
         if values.iter().all(|value| value.is_some()) {
@@ -244,7 +245,10 @@ impl Context {
         } else if values.iter().all(|value| value.is_none()) {
             Ok(None)
         } else {
-            Err(Error::new(ErrorKind::OptionalityMismatch, Span::default()))
+            Err(Error::new(
+                ErrorKind::Context(ContextErrorKind::OptionalityMismatch),
+                Span::default(),
+            ))
         }
     }
 
@@ -255,7 +259,7 @@ impl Context {
             iters.push(ast::Iter::List);
             let value = self.find_value(&Variable::new(var.id.clone(), iters))?;
             let values =
-                get::list(value).map_err(|error| Error::new(error.into(), var.id.span.clone()))?;
+                get::list(value).map_err(|error| Error::from(error).at_if_missing(&var.id.span))?;
             rows.push(values);
         }
         let Some(row) = rows.first() else {
@@ -265,10 +269,10 @@ impl Context {
         for row in &rows {
             if row.len() != width {
                 return Err(Error::new(
-                    ErrorKind::IterationLengthMismatch {
+                    ErrorKind::Context(ContextErrorKind::IterationLengthMismatch {
                         expected: width,
                         actual: row.len(),
-                    },
+                    }),
                     Span::default(),
                 ));
             }

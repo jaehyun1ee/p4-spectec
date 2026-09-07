@@ -1,5 +1,6 @@
 //! AL expression evaluation
 
+use crate::interp::al::error::ExprErrorKind;
 use std::rc::Rc;
 
 use num_traits::ToPrimitive;
@@ -24,6 +25,7 @@ use super::super::{
     Al,
     backtrack::{Backtrack, back},
     context::{Context, Spec},
+    error::ErrorKind,
     util::is_iter_var_exp,
 };
 use super::call::invoke_func;
@@ -223,7 +225,7 @@ pub(super) fn eval_exp<I: Interface, E: Extern>(
                 _ => {
                     return Backtrack::err(
                         Span::over(&[exp_l.span.clone(), exp_r.span.clone()]),
-                        "concatenation expects either two texts or two lists",
+                        ErrorKind::Expr(ExprErrorKind::ConcatenationOperandMismatch),
                     );
                 }
             }
@@ -245,7 +247,7 @@ pub(super) fn eval_exp<I: Interface, E: Extern>(
                 _ => {
                     return Backtrack::err(
                         exp.span.clone(),
-                        "length operation expects either a text or a list",
+                        ErrorKind::Expr(ExprErrorKind::LengthOperandMismatch),
                     );
                 }
             };
@@ -366,7 +368,13 @@ fn cast(
         ast::TypKind::Tuple(typs) => {
             let values = back!(Backtrack::from_result(get::tuple(&value), span));
             if typs.len() != values.len() {
-                return Backtrack::err(span.clone(), "tuple cast arity mismatch");
+                return Backtrack::err(
+                    span.clone(),
+                    ErrorKind::Expr(ExprErrorKind::TupleCastArityMismatch {
+                        expected: typs.len(),
+                        actual: values.len(),
+                    }),
+                );
             }
             let mut values_cast = Vec::with_capacity(values.len());
             for (typ, value) in typs.iter().zip(values) {
@@ -403,21 +411,30 @@ fn eval_index<I: Interface, E: Extern>(
     let value = back!(eval_exp(runner, ctx, exp));
     let number = back!(Backtrack::from_result(get::num(&value), &exp.span));
     let idx = num::to_int(number).to_i64();
-    Backtrack::from_result(idx.ok_or("index does not fit a machine integer"), &exp.span)
+    Backtrack::from_result(
+        idx.ok_or(ErrorKind::Expr(ExprErrorKind::IndexOverflow)),
+        &exp.span,
+    )
 }
 
 fn dot(value: &Value, atom: &ast::Atom, span: &Span) -> Backtrack<Rc<Value>> {
     let fields = back!(Backtrack::from_result(get::structure(value), span));
     match fields.iter().find(|(field, _)| field.node == atom.node) {
         Some((_, value)) => Backtrack::Ok(value.clone()),
-        None => Backtrack::err(atom.span.clone(), "undefined structure field"),
+        None => Backtrack::err(
+            atom.span.clone(),
+            ErrorKind::Expr(ExprErrorKind::UndefinedField),
+        ),
     }
 }
 
 fn text_slice(text: &str, start: usize, end: usize, span: &Span) -> Backtrack<String> {
     match text.get(start..end) {
         Some(text) => Backtrack::Ok(text.to_owned()),
-        None => Backtrack::err(span.clone(), "text byte slice is not on UTF-8 boundaries"),
+        None => Backtrack::err(
+            span.clone(),
+            ErrorKind::Expr(ExprErrorKind::TextSliceBoundaryMismatch),
+        ),
     }
 }
 
@@ -428,14 +445,14 @@ fn index(value: &Value, idx: i64, base_span: &Span, index_span: &Span) -> Backtr
         _ => {
             return Backtrack::err(
                 base_span.clone(),
-                "indexing expects either a text or a list",
+                ErrorKind::Expr(ExprErrorKind::IndexOperandMismatch),
             );
         }
     };
     if idx < 0 || idx as u64 >= len as u64 {
         return Backtrack::err(
             index_span.clone(),
-            format!("index {idx} out of bounds [0, {len})"),
+            ErrorKind::Expr(ExprErrorKind::IndexOutOfBounds { idx, len }),
         );
     }
     match &value.node {
@@ -458,24 +475,32 @@ fn slice(
 ) -> Backtrack<Rc<Value>> {
     let end = back!(Backtrack::from_result(
         idx.checked_add(len)
-            .ok_or("slice end overflows a machine integer"),
+            .ok_or(ErrorKind::Expr(ExprErrorKind::SliceEndOverflow)),
         bounds_span
     ));
     let size = match &value.node {
         ValueKind::Text(text) => text.len(),
         ValueKind::List(values) => values.len(),
-        _ => return Backtrack::err(base_span.clone(), "slicing expects either a text or a list"),
+        _ => {
+            return Backtrack::err(
+                base_span.clone(),
+                ErrorKind::Expr(ExprErrorKind::SliceOperandMismatch),
+            );
+        }
     };
     if idx < 0 || end > size as i64 {
         return Backtrack::err(
             bounds_span.clone(),
-            format!("slice [{idx}, {end}) out of bounds [0, {size})"),
+            ErrorKind::Expr(ExprErrorKind::SliceOutOfBounds { idx, end, size }),
         );
     }
     match &value.node {
         ValueKind::Text(text) => {
             if len < 0 {
-                return Backtrack::err(bounds_span.clone(), "text slice length is negative");
+                return Backtrack::err(
+                    bounds_span.clone(),
+                    ErrorKind::Expr(ExprErrorKind::NegativeTextSliceLength),
+                );
             }
             let text = back!(text_slice(text, idx as usize, end as usize, bounds_span));
             Backtrack::Ok(make::text(text, Span::default()))
@@ -541,7 +566,7 @@ fn eval_update_path<I: Interface, E: Extern>(
                     if text_upd.len() != 1 {
                         return Backtrack::err(
                             exp_i.span.clone(),
-                            "updating a character requires a single-character text",
+                            ErrorKind::Expr(ExprErrorKind::CharacterUpdateLengthMismatch),
                         );
                     }
                     let left = back!(text_slice(text, 0, idx as usize, &exp_i.span));
@@ -564,7 +589,7 @@ fn eval_update_path<I: Interface, E: Extern>(
             let len = back!(eval_index(runner, ctx, exp_n));
             let end = back!(Backtrack::from_result(
                 idx.checked_add(len)
-                    .ok_or("slice end overflows a machine integer"),
+                    .ok_or(ErrorKind::Expr(ExprErrorKind::SliceEndOverflow)),
                 &exp_n.span
             ));
             let size = match &value.node {
@@ -573,14 +598,14 @@ fn eval_update_path<I: Interface, E: Extern>(
                 _ => {
                     return Backtrack::err(
                         path.span.clone(),
-                        "slicing expects either a text or a list",
+                        ErrorKind::Expr(ExprErrorKind::SliceOperandMismatch),
                     );
                 }
             };
             if idx < 0 || end > size as i64 {
                 return Backtrack::err(
                     exp_n.span.clone(),
-                    format!("slice [{idx}, {end}) out of bounds [0, {size})"),
+                    ErrorKind::Expr(ExprErrorKind::SliceOutOfBounds { idx, end, size }),
                 );
             }
             let value = match &value.node {
@@ -590,10 +615,10 @@ fn eval_update_path<I: Interface, E: Extern>(
                     if len < 0 || text_upd.len() as i64 != len {
                         return Backtrack::err(
                             exp_n.span.clone(),
-                            format!(
-                                "updating a slice of length {len} requires a text of length {len}, but got length {}",
-                                text_upd.len()
-                            ),
+                            ErrorKind::Expr(ExprErrorKind::TextSliceUpdateLengthMismatch {
+                                len,
+                                actual: text_upd.len(),
+                            }),
                         );
                     }
                     let left = back!(text_slice(text, 0, idx as usize, &exp_n.span));
@@ -606,10 +631,10 @@ fn eval_update_path<I: Interface, E: Extern>(
                     if len < 0 || values_upd.len() as i64 != len {
                         return Backtrack::err(
                             exp_n.span.clone(),
-                            format!(
-                                "updating a slice of length {len} requires a list of length {len}, but got length {}",
-                                values_upd.len()
-                            ),
+                            ErrorKind::Expr(ExprErrorKind::ListSliceUpdateLengthMismatch {
+                                len,
+                                actual: values_upd.len(),
+                            }),
                         );
                     }
                     let mut values = values.clone();
