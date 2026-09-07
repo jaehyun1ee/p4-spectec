@@ -9,7 +9,6 @@ use super::super::{
 use super::{assign, expr, prem::eval_prems};
 use crate::interp::al::error::{CallErrorKind, HostErrorKind, TraceErrorKind};
 use crate::{
-    interp::common::Event,
     lang::{al::ast, data::value::Value, traits::print::Print},
     runner::{Extern, Interface, InterfaceError, RunnerContext},
     runtime::typdef::TypeDef,
@@ -22,10 +21,6 @@ pub fn invoke_rel<I: Interface, E: Extern>(
     id: &ast::Id,
     values: &[Rc<Value>],
 ) -> Backtrack<Vec<Rc<Value>>> {
-    runner.interp_state().emit(Event::RelEnter {
-        id: id.clone(),
-        values: values.to_vec(),
-    });
     let result = stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
         let rel = back!(Backtrack::from_result(ctx.find_rel(id), &id.span));
         match rel {
@@ -39,9 +34,6 @@ pub fn invoke_rel<I: Interface, E: Extern>(
             ast::RelDef::Defined(rel) => invoke_defined_rel(runner, ctx, id, rel, values),
         }
     });
-    runner
-        .interp_state()
-        .emit(Event::RelExit { id: id.clone() });
     result.nest(id.span.clone(), || {
         ErrorKind::Trace(TraceErrorKind::RelationInvocation {
             relation: id.node.clone(),
@@ -147,10 +139,6 @@ pub fn invoke_func<I: Interface, E: Extern>(
     targs: &[ast::Typ],
     values: &[Rc<Value>],
 ) -> Backtrack<Rc<Value>> {
-    runner.interp_state().emit(Event::FuncEnter {
-        id: id.clone(),
-        values: values.to_vec(),
-    });
     let result = stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
         let (_, func) = back!(Backtrack::from_result(ctx.find_func(id), &id.span));
         match func {
@@ -207,9 +195,6 @@ pub fn invoke_func<I: Interface, E: Extern>(
             }
         }
     });
-    runner
-        .interp_state()
-        .emit(Event::FuncExit { id: id.clone() });
     result.nest(id.span.clone(), || {
         ErrorKind::Trace(TraceErrorKind::FunctionInvocation {
             function: id.node.clone(),

@@ -9,7 +9,6 @@ use super::super::{
 use super::{assign, call::invoke_rel, expr};
 use crate::interp::al::error::PremErrorKind;
 use crate::{
-    interp::common::Event,
     lang::{
         al::ast,
         common::{Variable, source::Span},
@@ -146,11 +145,6 @@ pub fn eval_prem<'global, I: Interface, E: Extern>(
             } else {
                 println!("{region}: {}", Print::to_string(value.as_ref()));
             }
-            runner.interp_state().emit(Event::Debug {
-                span: prem.exp.span.clone(),
-                expression,
-                value,
-            });
             Backtrack::Ok(ctx.clone())
         }
     }

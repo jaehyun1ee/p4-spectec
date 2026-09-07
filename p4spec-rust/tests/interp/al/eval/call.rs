@@ -1,13 +1,10 @@
 use p4spec_rust::interp::al::error::TraceErrorKind;
-use std::{cell::RefCell, rc::Rc};
+use std::rc::Rc;
 
 use p4spec_rust::lang::traits::print::Print;
 use p4spec_rust::{
     frontend::parse::parse_string,
-    interp::{
-        al::{Al, State, context::Global, error::ErrorKind},
-        common::{Event, Observer},
-    },
+    interp::al::{Al, State, context::Global, error::ErrorKind},
     lang::{
         al::ast,
         common::source::Span,
@@ -315,8 +312,6 @@ def $map_opt(n?) = n_result?
     }
 }
 
-struct RecordingObserver(Rc<RefCell<Vec<Event>>>);
-
 #[test]
 fn test_hold_and_not_hold_distinguish_unmatch_from_fatal_failure() {
     for external in [false, true] {
@@ -380,54 +375,6 @@ def $not_hold(n) = false
     }
 }
 
-impl Observer for RecordingObserver {
-    fn event(&mut self, event: &Event) {
-        self.0.borrow_mut().push(event.clone());
-    }
-}
-
-#[test]
-fn test_observer_records_nested_calls_and_debug_before_exit() {
-    let source = r#"
-var n : nat
-dec $inner(nat) : nat
-def $inner(n) = n
-  -- debug n
-relation Pass: nat ~> nat
-  hint(input %0)
-rule Pass/pass: n ~> $inner(n)
-dec $outer(nat) : nat
-def $outer(n) = n_result
-  -- Pass: n ~> n_result
-"#;
-    let events = Rc::new(RefCell::new(vec![]));
-    let mut state = State::new(false);
-    state.set_observer(Some(Box::new(RecordingObserver(events.clone()))));
-    let mut runner = Runner::<Al, _, _>::new(
-        Global::load(spec(source)).unwrap(),
-        state,
-        BuiltinInterface::new(),
-        NullExtern,
-    );
-    assert_eq!(
-        number(&runner.eval_func("outer", &[], &[nat(8)]).unwrap()),
-        "8"
-    );
-    let events = events.borrow();
-    assert_eq!(events.len(), 7);
-    assert!(
-        matches!(&events[0], Event::FuncEnter { id, values } if id.node == "outer" && number(&values[0]) == "8")
-    );
-    assert!(
-        matches!(&events[1], Event::RelEnter { id, values } if id.node == "Pass" && number(&values[0]) == "8")
-    );
-    assert!(matches!(&events[2], Event::FuncEnter { id, .. } if id.node == "inner"));
-    assert!(matches!(&events[3], Event::Debug { value, .. } if number(value) == "8"));
-    assert!(matches!(&events[4], Event::FuncExit { id } if id.node == "inner"));
-    assert!(matches!(&events[5], Event::RelExit { id } if id.node == "Pass"));
-    assert!(matches!(&events[6], Event::FuncExit { id } if id.node == "outer"));
-}
-
 #[test]
 fn test_native_function_calls_and_else_fallback() {
     let spec_al = spec(
@@ -453,28 +400,15 @@ def $choose(n) = $inc(n)
 }
 
 #[test]
-fn test_program_event_precedes_relation_entry() {
+fn test_program_evaluation_preserves_input_value() {
     let spec_al =
         spec("var n : nat\nrelation Pass: nat ~> nat\n  hint(input %0)\nrule Pass/pass: n ~> n");
-    let events = Rc::new(RefCell::new(vec![]));
-    let mut state = State::new(false);
-    state.set_observer(Some(Box::new(RecordingObserver(events.clone()))));
-    let mut runner = Runner::<Al, _, _>::new(
-        Global::load(spec_al).unwrap(),
-        state,
-        BuiltinInterface::new(),
-        NullExtern,
-    );
+    let mut runner = runner(spec_al, false);
     let program = nat(8);
     let values =
         p4spec_rust::interp::al::eval_program(&mut runner.context(), "Pass", program.clone())
             .unwrap();
     assert!(Rc::ptr_eq(&values[0], &program));
-    let events = events.borrow();
-    assert_eq!(events.len(), 3);
-    assert!(matches!(&events[0], Event::Program(value) if Rc::ptr_eq(value, &program)));
-    assert!(matches!(&events[1], Event::RelEnter { id, .. } if id.node == "Pass"));
-    assert!(matches!(&events[2], Event::RelExit { id } if id.node == "Pass"));
 }
 
 #[test]

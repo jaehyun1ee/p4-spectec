@@ -7,7 +7,6 @@ pub mod error;
 pub mod eval;
 pub mod util;
 
-use super::common::{Event, Observer};
 use crate::{
     lang::{al::ast, common::source::Span, data::value::Value},
     runner::{Extern, Interface, Interpreter, RunnerContext},
@@ -21,23 +20,11 @@ pub struct Al;
 
 pub struct State {
     det: bool,
-    observer: Option<Box<dyn Observer>>,
 }
 
 impl State {
     pub fn new(det: bool) -> Self {
-        Self {
-            det,
-            observer: None,
-        }
-    }
-    pub fn set_observer(&mut self, observer: Option<Box<dyn Observer>>) {
-        self.observer = observer;
-    }
-    pub(super) fn emit(&mut self, event: Event) {
-        if let Some(observer) = &mut self.observer {
-            observer.event(&event);
-        }
+        Self { det }
     }
 }
 
@@ -47,9 +34,6 @@ pub fn eval_program<I: Interface, E: Extern>(
     name: &str,
     program: Rc<Value>,
 ) -> Result<Vec<Rc<Value>>, Error> {
-    runner
-        .interp_state()
-        .emit(Event::Program(Rc::clone(&program)));
     runner.call_rel(name, &[program])
 }
 
