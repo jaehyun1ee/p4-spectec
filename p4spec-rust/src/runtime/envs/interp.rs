@@ -1,9 +1,7 @@
-//! Dynamic value and type environments
+//! Dynamic value environments
 
 use std::rc::Rc;
 
-use imbl::{GenericOrdMap, shared_ptr::RcK};
+use crate::lang::{common::ds::map::VarMap, data::value::Value};
 
-use crate::{lang::data::value::Value, runtime::var::Variable};
-
-pub type VEnv = GenericOrdMap<Variable, Rc<Value>, RcK>;
+pub type VEnv = VarMap<Rc<Value>>;

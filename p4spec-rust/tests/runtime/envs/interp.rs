@@ -1,10 +1,13 @@
 use p4spec_rust::{
     lang::{
-        common::source::{Position, Span},
+        common::{
+            Variable,
+            source::{Position, Span},
+        },
         data::value::{get, make},
     },
     phrase,
-    runtime::{envs::interp::VEnv, var::Variable},
+    runtime::envs::interp::VEnv,
 };
 
 fn id(name: &str, line: i64) -> p4spec_rust::lang::il::ast::Id {

@@ -10,7 +10,7 @@ use std::rc::Rc;
 use crate::{
     lang::{
         al::ast,
-        common::source::Span,
+        common::{Variable, source::Span},
         data::value::{Value, get},
     },
     runtime::{
@@ -19,7 +19,6 @@ use crate::{
             interp::VEnv,
         },
         typdef::TypeDef,
-        var::Variable,
     },
 };
 

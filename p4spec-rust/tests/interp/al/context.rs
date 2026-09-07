@@ -7,14 +7,17 @@ use p4spec_rust::{
     },
     lang::{
         al::ast,
-        common::source::{Position, Span},
+        common::{
+            Variable,
+            source::{Position, Span},
+        },
         data::{
             typ,
             value::{get, make},
         },
     },
     phrase,
-    runtime::{typdef::TypeDef, var::Variable},
+    runtime::typdef::TypeDef,
 };
 
 fn id(name: &str, line: i64) -> ast::Id {
