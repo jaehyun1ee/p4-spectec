@@ -8,7 +8,7 @@ use p4spec_rust::{
 };
 
 #[test]
-fn test_right_shift_uses_source_parser_comparison_precedence() {
+fn test_right_shift_preserves_source_parser_asymmetric_bitwise_binding() {
     use p4spec_rust::lang::data::{typ::TypKind, value::Value};
 
     fn first_binary(value: &Value) -> Option<&Value> {
@@ -37,14 +37,31 @@ fn test_right_shift_uses_source_parser_comparison_precedence() {
         P4Unparser::new().render(binary_part(value, 1)).unwrap()
     }
 
-    let program = parse_string(
+    let program_before = parse_string(
         "shift.p4",
-        "control C() { apply { bit<4> x; x = 4w1 & 4w2 >> 4w3; } }",
+        "control C() { apply { bit<4> x; x = 4w1 | 4w2 ^ 4w3 & 4w4 >> 4w5; } }",
     )
     .unwrap();
-    let outer = first_binary(&program).unwrap();
-    assert_eq!(operator(outer), ">>");
-    assert_eq!(operator(binary_part(outer, 0)), "&");
+    let shift = first_binary(&program_before).unwrap();
+    assert_eq!(operator(shift), ">>");
+    let bit_or = binary_part(shift, 0);
+    assert_eq!(operator(bit_or), "|");
+    let bit_xor = binary_part(bit_or, 2);
+    assert_eq!(operator(bit_xor), "^");
+    assert_eq!(operator(binary_part(bit_xor, 2)), "&");
+
+    let program_after = parse_string(
+        "shift.p4",
+        "control C() { apply { bit<4> x; x = 4w1 >> 4w2 & 4w3 ^ 4w4 | 4w5; } }",
+    )
+    .unwrap();
+    let bit_or = first_binary(&program_after).unwrap();
+    assert_eq!(operator(bit_or), "|");
+    let bit_xor = binary_part(bit_or, 0);
+    assert_eq!(operator(bit_xor), "^");
+    let bit_and = binary_part(bit_xor, 0);
+    assert_eq!(operator(bit_and), "&");
+    assert_eq!(operator(binary_part(bit_and, 0)), ">>");
 }
 use std::{
     collections::{BTreeMap, BTreeSet},

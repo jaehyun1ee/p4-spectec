@@ -16,12 +16,15 @@ use p4spec_rust::{
     interp::al::{Al, Config, context::Global, error::Error},
     lang::il::ast::Typ,
     lang::{
-        common::{Iter, notation::mixfix::Mixfix, source::Span},
+        common::{
+            Iter,
+            notation::{atom::Atom, mixfix::Mixfix},
+            source::Span,
+        },
         data::{
             typ::TypKind,
             value::{Value, ValueKind, make},
         },
-        traits::print::Print,
         xl::num::{Number, Typ as NumTyp},
     },
     pass::{algo, elaborate},
@@ -347,7 +350,7 @@ fn semantic_frames(value: &Value, emit: &mut impl FnMut(Json)) {
         ValueKind::Struct(fields) => {
             emit(json!(["Value", "Struct", typ, fields.len()]));
             for (atom, value) in fields {
-                emit(json!(["Field", Print::to_string(&atom.node)]));
+                emit(json!(["Field", semantic_atom(&atom.node)]));
                 semantic_frames(value, emit);
             }
         }
@@ -421,6 +424,40 @@ fn semantic_type(typ: &TypKind) -> Json {
     }
 }
 
+fn semantic_atom(atom: &Atom) -> Json {
+    match atom {
+        Atom::Keyword(value) => json!(["Keyword", value]),
+        Atom::Tag(value) => json!(["Tag", value]),
+        Atom::Operator(value) => json!(["Operator", value]),
+        Atom::Sub => json!(["Sub"]),
+        Atom::Sup => json!(["Sup"]),
+        Atom::Turnstile => json!(["Turnstile"]),
+        Atom::Tilesturn => json!(["Tilesturn"]),
+        Atom::Arrow => json!(["Arrow"]),
+        Atom::ArrowSub => json!(["ArrowSub"]),
+        Atom::DoubleArrowSub => json!(["DoubleArrowSub"]),
+        Atom::DoubleArrowLong => json!(["DoubleArrowLong"]),
+        Atom::SqArrow => json!(["SqArrow"]),
+        Atom::SqArrowStar => json!(["SqArrowStar"]),
+        Atom::Dot => json!(["Dot"]),
+        Atom::Dot2 => json!(["Dot2"]),
+        Atom::Dot3 => json!(["Dot3"]),
+        Atom::Semicolon => json!(["Semicolon"]),
+        Atom::Colon => json!(["Colon"]),
+        Atom::ColonEq => json!(["ColonEq"]),
+        Atom::Tilde2 => json!(["Tilde2"]),
+        Atom::Backslash => json!(["Backslash"]),
+        Atom::LAngle => json!(["LAngle"]),
+        Atom::RAngle => json!(["RAngle"]),
+        Atom::LParen => json!(["LParen"]),
+        Atom::RParen => json!(["RParen"]),
+        Atom::LBrack => json!(["LBrack"]),
+        Atom::RBrack => json!(["RBrack"]),
+        Atom::LBrace => json!(["LBrace"]),
+        Atom::RBrace => json!(["RBrace"]),
+    }
+}
+
 fn semantic_mixfix_frames(value: &Mixfix<Rc<Value>>, emit: &mut impl FnMut(Json)) {
     match value {
         Mixfix::Arg(value) => {
@@ -428,19 +465,19 @@ fn semantic_mixfix_frames(value: &Mixfix<Rc<Value>>, emit: &mut impl FnMut(Json)
             semantic_frames(value, emit);
         }
         Mixfix::Atom(atom) => {
-            emit(json!(["Mixfix", "Atom", Print::to_string(&atom.node)]));
+            emit(json!(["Mixfix", "Atom", semantic_atom(&atom.node)]));
         }
         Mixfix::Brack(left, body, right) => {
             emit(json!([
                 "Mixfix",
                 "Brack",
-                Print::to_string(&left.node),
-                Print::to_string(&right.node)
+                semantic_atom(&left.node),
+                semantic_atom(&right.node)
             ]));
             semantic_mixfix_frames(body, emit);
         }
         Mixfix::Infix(left, atom, right) => {
-            emit(json!(["Mixfix", "Infix", Print::to_string(&atom.node)]));
+            emit(json!(["Mixfix", "Infix", semantic_atom(&atom.node)]));
             semantic_mixfix_frames(left, emit);
             semantic_mixfix_frames(right, emit);
         }
@@ -826,6 +863,58 @@ fn test_semantic_frames_detect_case_atom_changes() {
     assert_ne!(
         collect_semantic_frames(&case("LEFT")),
         collect_semantic_frames(&case("RIGHT"))
+    );
+}
+
+#[test]
+fn test_semantic_frames_distinguish_mixfix_atom_constructors() {
+    use p4spec_rust::{
+        lang::{
+            common::notation::{atom::Atom, mixfix::Mixfix},
+            data::typ,
+        },
+        phrase,
+    };
+
+    let value = |atom| {
+        make::case_(
+            &typ::make::bool(),
+            Mixfix::Atom(phrase! {
+                node: atom,
+                span: Span::default(),
+            }),
+            Span::default(),
+        )
+    };
+    assert_ne!(
+        collect_semantic_frames(&value(Atom::Keyword("_X".to_owned()))),
+        collect_semantic_frames(&value(Atom::Tag("X".to_owned())))
+    );
+}
+
+#[test]
+fn test_semantic_frames_distinguish_struct_field_atom_constructors() {
+    use p4spec_rust::{
+        lang::{common::notation::atom::Atom, data::typ},
+        phrase,
+    };
+
+    let value = |atom| {
+        make::structure(
+            &typ::make::bool(),
+            vec![(
+                phrase! {
+                    node: atom,
+                    span: Span::default(),
+                },
+                make::bool(true, Span::default()),
+            )],
+            Span::default(),
+        )
+    };
+    assert_ne!(
+        collect_semantic_frames(&value(Atom::Keyword("->".to_owned()))),
+        collect_semantic_frames(&value(Atom::Arrow))
     );
 }
 

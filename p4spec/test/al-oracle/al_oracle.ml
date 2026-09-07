@@ -101,7 +101,37 @@ let rec semantic_typ typ =
         ]
 
 let atom_frame (atom : Lang.Il.atom) =
-  `String (Domain.Atom.string_of_atom atom.it)
+  let open Domain.Atom in
+  match atom.it with
+  | Keyword value -> `List [ `String "Keyword"; `String value ]
+  | Tag value -> `List [ `String "Tag"; `String value ]
+  | Operator value -> `List [ `String "Operator"; `String value ]
+  | Sub -> `List [ `String "Sub" ]
+  | Sup -> `List [ `String "Sup" ]
+  | Turnstile -> `List [ `String "Turnstile" ]
+  | Tilesturn -> `List [ `String "Tilesturn" ]
+  | Arrow -> `List [ `String "Arrow" ]
+  | ArrowSub -> `List [ `String "ArrowSub" ]
+  | DoubleArrowSub -> `List [ `String "DoubleArrowSub" ]
+  | DoubleArrowLong -> `List [ `String "DoubleArrowLong" ]
+  | SqArrow -> `List [ `String "SqArrow" ]
+  | SqArrowStar -> `List [ `String "SqArrowStar" ]
+  | Dot -> `List [ `String "Dot" ]
+  | Dot2 -> `List [ `String "Dot2" ]
+  | Dot3 -> `List [ `String "Dot3" ]
+  | Semicolon -> `List [ `String "Semicolon" ]
+  | Colon -> `List [ `String "Colon" ]
+  | ColonEq -> `List [ `String "ColonEq" ]
+  | Tilde2 -> `List [ `String "Tilde2" ]
+  | Backslash -> `List [ `String "Backslash" ]
+  | LAngle -> `List [ `String "LAngle" ]
+  | RAngle -> `List [ `String "RAngle" ]
+  | LParen -> `List [ `String "LParen" ]
+  | RParen -> `List [ `String "RParen" ]
+  | LBrack -> `List [ `String "LBrack" ]
+  | RBrack -> `List [ `String "RBrack" ]
+  | LBrace -> `List [ `String "LBrace" ]
+  | RBrace -> `List [ `String "RBrace" ]
 
 let rec emit_external_frames value =
   match value with

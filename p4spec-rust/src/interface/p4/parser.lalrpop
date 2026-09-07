@@ -8,7 +8,10 @@ use crate::{
         extract,
         lexer::Token,
     },
-    lang::data::value::{Value, make},
+    lang::{
+        common::source::Span,
+        data::value::{Value, make},
+    },
 };
 
 grammar(context: &Context);
@@ -1110,175 +1113,64 @@ ExpressionEquality: Rc<Value> = {
 };
 
 ExpressionComparison: Rc<Value> = {
-    // ExpressionComparison ::= ExpressionBitOr
-    ExpressionBitOr,
-
-    // ExpressionComparison ::= ExpressionComparison "LE" ExpressionBitOr
-    <l:@L> <lhs:ExpressionComparison> <op_l:@L> "LE" <op_r:@R> <rhs:ExpressionBitOr>
-        <r:@R> => {
-            let span_op = context.location_span(op_l, op_r);
+    <first:ExpressionShift> <parts:ExpressionComparisonPart*> => {
+        let mut values = vec![first];
+        let mut operators: Vec<(&str, u8, Span)> = Vec::new();
+        let reduce = |values: &mut Vec<Rc<Value>>, operators: &mut Vec<(&str, u8, Span)>| {
+            let (shape, _, span_op) = operators.pop().unwrap();
+            let rhs = values.pop().unwrap();
+            let lhs = values.pop().unwrap();
             let value_op = make::case! {
-                shape: "'<='",
+                shape: shape,
                 args: vec![],
                 typ: "binop",
                 span: span_op,
             };
-            let span_exp = context.location_span(l, r);
-            make::case! {
+            let span_exp = Span::over(&[lhs.span.clone(), rhs.span.clone()]);
+            values.push(make::case! {
                 shape: "expression binop expression",
                 args: vec![lhs, value_op, rhs],
                 typ: "binaryExpression",
                 span: span_exp,
-            }
-        },
+            });
+        };
 
-    // ExpressionComparison ::= ExpressionComparison "GE" ExpressionBitOr
-    <l:@L> <lhs:ExpressionComparison> <op_l:@L> "GE" <op_r:@R> <rhs:ExpressionBitOr>
-        <r:@R> => {
-            let span_op = context.location_span(op_l, op_r);
-            let value_op = make::case! {
-                shape: "'>='",
-                args: vec![],
-                typ: "binop",
-                span: span_op,
-            };
-            let span_exp = context.location_span(l, r);
-            make::case! {
-                shape: "expression binop expression",
-                args: vec![lhs, value_op, rhs],
-                typ: "binaryExpression",
-                span: span_exp,
+        for (shape, incoming_precedence, stacked_precedence, span_op, rhs) in parts {
+            while operators
+                .last()
+                .is_some_and(|(_, precedence, _)| *precedence >= incoming_precedence)
+            {
+                reduce(&mut values, &mut operators);
             }
-        },
-
-    // ExpressionComparison ::= ExpressionComparison "L_ANGLE" ExpressionBitOr
-    <l:@L> <lhs:ExpressionComparison> <op_l:@L> "L_ANGLE" <op_r:@R> <rhs:ExpressionBitOr>
-        <r:@R> => {
-            let span_op = context.location_span(op_l, op_r);
-            let value_op = make::case! {
-                shape: "'<'",
-                args: vec![],
-                typ: "binop",
-                span: span_op,
-            };
-            let span_exp = context.location_span(l, r);
-            make::case! {
-                shape: "expression binop expression",
-                args: vec![lhs, value_op, rhs],
-                typ: "binaryExpression",
-                span: span_exp,
-            }
-        },
-
-    // ExpressionComparison ::= ExpressionComparison r_angle ExpressionBitOr
-    <l:@L> <lhs:ExpressionComparison> <op_l:@L> r_angle <op_r:@R> <rhs:ExpressionBitOr>
-        <r:@R> => {
-            let span_op = context.location_span(op_l, op_r);
-            let value_op = make::case! {
-                shape: "'>'",
-                args: vec![],
-                typ: "binop",
-                span: span_op,
-            };
-            let span_exp = context.location_span(l, r);
-            make::case! {
-                shape: "expression binop expression",
-                args: vec![lhs, value_op, rhs],
-                typ: "binaryExpression",
-                span: span_exp,
-            }
-        },
-
-    // ExpressionComparison ::= ExpressionComparison "SHR" ExpressionBitOr
-    <l:@L> <lhs:ExpressionComparison> <op_l:@L> "SHR" <op_r:@R> <rhs:ExpressionBitOr>
-        <r:@R> => {
-            let span_op = context.location_span(op_l, op_r);
-            let value_op = make::case! {
-                shape: "'>>'",
-                args: vec![],
-                typ: "binop",
-                span: span_op,
-            };
-            let span_exp = context.location_span(l, r);
-            make::case! {
-                shape: "expression binop expression",
-                args: vec![lhs, value_op, rhs],
-                typ: "binaryExpression",
-                span: span_exp,
-            }
-        },
+            operators.push((shape, stacked_precedence, span_op));
+            values.push(rhs);
+        }
+        while !operators.is_empty() {
+            reduce(&mut values, &mut operators);
+        }
+        values.pop().unwrap()
+    },
 };
 
-ExpressionBitOr: Rc<Value> = {
-    // ExpressionBitOr ::= ExpressionBitXor
-    ExpressionBitXor,
-
-    // ExpressionBitOr ::= ExpressionBitOr "BIT_OR" ExpressionBitXor
-    <l:@L> <lhs:ExpressionBitOr> <op_l:@L> "BIT_OR" <op_r:@R> <rhs:ExpressionBitXor>
-        <r:@R> => {
-            let span_op = context.location_span(op_l, op_r);
-            let value_op = make::case! {
-                shape: "'|'",
-                args: vec![],
-                typ: "binop",
-                span: span_op,
-            };
-            let span_exp = context.location_span(l, r);
-            make::case! {
-                shape: "expression binop expression",
-                args: vec![lhs, value_op, rhs],
-                typ: "binaryExpression",
-                span: span_exp,
-            }
-        },
-};
-
-ExpressionBitXor: Rc<Value> = {
-    // ExpressionBitXor ::= ExpressionBitAnd
-    ExpressionBitAnd,
-
-    // ExpressionBitXor ::= ExpressionBitXor "BIT_XOR" ExpressionBitAnd
-    <l:@L> <lhs:ExpressionBitXor> <op_l:@L> "BIT_XOR" <op_r:@R> <rhs:ExpressionBitAnd>
-        <r:@R> => {
-            let span_op = context.location_span(op_l, op_r);
-            let value_op = make::case! {
-                shape: "'^'",
-                args: vec![],
-                typ: "binop",
-                span: span_op,
-            };
-            let span_exp = context.location_span(l, r);
-            make::case! {
-                shape: "expression binop expression",
-                args: vec![lhs, value_op, rhs],
-                typ: "binaryExpression",
-                span: span_exp,
-            }
-        },
-};
-
-ExpressionBitAnd: Rc<Value> = {
-    // ExpressionBitAnd ::= ExpressionShift
-    ExpressionShift,
-
-    // ExpressionBitAnd ::= ExpressionBitAnd "BIT_AND" ExpressionShift
-    <l:@L> <lhs:ExpressionBitAnd> <op_l:@L> "BIT_AND" <op_r:@R> <rhs:ExpressionShift>
-        <r:@R> => {
-            let span_op = context.location_span(op_l, op_r);
-            let value_op = make::case! {
-                shape: "'&'",
-                args: vec![],
-                typ: "binop",
-                span: span_op,
-            };
-            let span_exp = context.location_span(l, r);
-            make::case! {
-                shape: "expression binop expression",
-                args: vec![lhs, value_op, rhs],
-                typ: "binaryExpression",
-                span: span_exp,
-            }
-        },
+// Menhir gives the two tokens of `>>` different precedences: the first `>` has
+// comparison precedence, while the completed shift has shift precedence.
+ExpressionComparisonPart: (&'static str, u8, u8, Span, Rc<Value>) = {
+    <l:@L> "LE" <r:@R> <rhs:ExpressionShift> =>
+        ("'<='", 1, 1, context.location_span(l, r), rhs),
+    <l:@L> "GE" <r:@R> <rhs:ExpressionShift> =>
+        ("'>='", 1, 1, context.location_span(l, r), rhs),
+    <l:@L> "L_ANGLE" <r:@R> <rhs:ExpressionShift> =>
+        ("'<'", 1, 1, context.location_span(l, r), rhs),
+    <l:@L> r_angle <r:@R> <rhs:ExpressionShift> =>
+        ("'>'", 1, 1, context.location_span(l, r), rhs),
+    <l:@L> "BIT_OR" <r:@R> <rhs:ExpressionShift> =>
+        ("'|'", 2, 2, context.location_span(l, r), rhs),
+    <l:@L> "BIT_XOR" <r:@R> <rhs:ExpressionShift> =>
+        ("'^'", 3, 3, context.location_span(l, r), rhs),
+    <l:@L> "BIT_AND" <r:@R> <rhs:ExpressionShift> =>
+        ("'&'", 4, 4, context.location_span(l, r), rhs),
+    <l:@L> "SHR" <r:@R> <rhs:ExpressionShift> =>
+        ("'>>'", 1, 5, context.location_span(l, r), rhs),
 };
 
 ExpressionShift: Rc<Value> = {
