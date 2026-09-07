@@ -1,7 +1,7 @@
 use p4spec_rust::{
     lang::{
         common::source::{Position, Span},
-        data::value::make,
+        data::value::{get, make},
     },
     phrase,
     runtime::{envs::interp::VEnv, var::Variable},
@@ -37,4 +37,18 @@ fn test_value_environment_iterates_deterministically_and_replaces_equivalent_key
         .collect::<Vec<_>>();
     assert_eq!(names, ["a", "z"]);
     assert_eq!(venv.len(), 2);
+}
+
+#[test]
+fn test_value_environment_clone_keeps_independent_bindings() {
+    let var = Variable::new(id("a", 1), vec![]);
+    let mut venv = VEnv::new();
+    venv.insert(var.clone(), make::bool(false, Span::default()));
+    let mut venv_local = venv.clone();
+    venv_local.insert(
+        Variable::new(id("a", 2), vec![]),
+        make::bool(true, Span::default()),
+    );
+    assert!(!get::bool(venv.get(&var).unwrap()).unwrap());
+    assert!(get::bool(venv_local.get(&var).unwrap()).unwrap());
 }

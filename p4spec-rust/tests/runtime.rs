@@ -8,3 +8,6 @@ mod ops;
 mod runner;
 #[path = "runtime/var.rs"]
 mod var;
+
+#[path = "interp/mod.rs"]
+mod interp;
