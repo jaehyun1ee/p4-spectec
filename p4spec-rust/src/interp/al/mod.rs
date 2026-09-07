@@ -5,9 +5,8 @@ pub mod context;
 pub mod error;
 pub mod nondet;
 
-pub mod assignment;
-pub mod expression;
-pub mod interpreter;
+pub mod eval;
+pub mod util;
 
 use super::common::{Event, Observer};
 use crate::{
@@ -75,12 +74,7 @@ impl<I: Interface, E: Extern> Interpreter<I, E> for Al {
         values: &[Rc<Value>],
     ) -> Result<Vec<Rc<Value>>, Error> {
         let id = crate::phrase!(node: name.to_owned(), span: Span::default());
-        finish(interpreter::invoke_rel(
-            runner,
-            &Context::new(),
-            &id,
-            values,
-        ))
+        finish(eval::call::invoke_rel(runner, &Context::new(), &id, values))
     }
     fn eval_func(
         runner: &mut RunnerContext<'_, Self, I, E>,
@@ -89,7 +83,7 @@ impl<I: Interface, E: Extern> Interpreter<I, E> for Al {
         values: &[Rc<Value>],
     ) -> Result<Rc<Value>, Error> {
         let id = crate::phrase!(node: name.to_owned(), span: Span::default());
-        finish(interpreter::invoke_func(
+        finish(eval::call::invoke_func(
             runner,
             &Context::new(),
             &id,

@@ -2,9 +2,10 @@ use std::rc::Rc;
 
 use p4spec_rust::{
     interp::al::{
-        assignment::{assign_args, assign_exp, assign_exps, is_iter_var_exp},
         backtrack::Backtrack,
         context::{Context, Scope, Spec},
+        eval::assign::{assign_args, assign_exp, assign_exps},
+        util::is_iter_var_exp,
     },
     lang::{
         al::ast,

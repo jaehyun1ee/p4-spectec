@@ -1,4 +1,4 @@
-//! Expression evaluation preserves left-to-right effects and persistent path updates
+//! AL expression evaluation
 
 use std::rc::Rc;
 
@@ -20,13 +20,13 @@ use crate::{
     },
 };
 
-use super::{
+use super::super::{
     Al,
-    assignment::is_iter_var_exp,
-    backtrack::Backtrack,
+    backtrack::{Backtrack, back},
     context::{Context, Spec},
-    interpreter::{back, invoke_func, located},
+    util::is_iter_var_exp,
 };
+use super::call::invoke_func;
 
 pub(super) fn eval_exps<I: Interface, E: Extern>(
     runner: &mut RunnerContext<'_, Al, I, E>,
@@ -50,7 +50,10 @@ pub(super) fn eval_args<I: Interface, E: Extern>(
         let value = match &arg.node {
             ast::ArgKind::Exp(exp) => back!(eval_exp(runner, ctx, exp)),
             ast::ArgKind::Def(id) => {
-                let typ = back!(located(ctx.find_func_typ(runner.spec(), id), &arg.span));
+                let typ = back!(Backtrack::from_result(
+                    ctx.find_func_typ(runner.spec(), id),
+                    &arg.span
+                ));
                 make::func(
                     id.clone(),
                     typ.tparams,
@@ -78,16 +81,17 @@ pub(super) fn eval_exp<I: Interface, E: Extern>(
         ast::ExpKind::Text(value) => make::text(value.clone(), Span::default()),
         ast::ExpKind::Var(id) => {
             let var = Variable::new(id.clone(), Vec::new());
-            back!(located(ctx.find_value(&var), span)).clone()
+            back!(Backtrack::from_result(ctx.find_value(&var), span)).clone()
         }
         ast::ExpKind::Un(op, _, exp) => {
             let value = back!(eval_exp(runner, ctx, exp));
             match op {
-                ast::UnOp::Bool(boolean::UnOp::Not) => {
-                    make::bool(!back!(located(get::bool(&value), span)), Span::default())
-                }
+                ast::UnOp::Bool(boolean::UnOp::Not) => make::bool(
+                    !back!(Backtrack::from_result(get::bool(&value), span)),
+                    Span::default(),
+                ),
                 ast::UnOp::Num(op) => {
-                    let number = back!(located(get::num(&value), span));
+                    let number = back!(Backtrack::from_result(get::num(&value), span));
                     make::num(num::un(*op, number), Span::default())
                 }
             }
@@ -97,8 +101,8 @@ pub(super) fn eval_exp<I: Interface, E: Extern>(
             let value_r = back!(eval_exp(runner, ctx, exp_r));
             match op {
                 ast::BinOp::Bool(op) => {
-                    let bool_l = back!(located(get::bool(&value_l), span));
-                    let bool_r = back!(located(get::bool(&value_r), span));
+                    let bool_l = back!(Backtrack::from_result(get::bool(&value_l), span));
+                    let bool_r = back!(Backtrack::from_result(get::bool(&value_r), span));
                     let result = match op {
                         boolean::BinOp::And => bool_l && bool_r,
                         boolean::BinOp::Or => bool_l || bool_r,
@@ -108,9 +112,9 @@ pub(super) fn eval_exp<I: Interface, E: Extern>(
                     make::bool(result, Span::default())
                 }
                 ast::BinOp::Num(op) => {
-                    let num_l = back!(located(get::num(&value_l), span));
-                    let num_r = back!(located(get::num(&value_r), span));
-                    let number = back!(located(num::bin(*op, num_l, num_r), span));
+                    let num_l = back!(Backtrack::from_result(get::num(&value_l), span));
+                    let num_r = back!(Backtrack::from_result(get::num(&value_r), span));
+                    let number = back!(Backtrack::from_result(num::bin(*op, num_l, num_r), span));
                     make::num(number, Span::default())
                 }
             }
@@ -122,9 +126,9 @@ pub(super) fn eval_exp<I: Interface, E: Extern>(
                 ast::CmpOp::Bool(boolean::CmpOp::Eq) => value_l.syntax_eq(&value_r),
                 ast::CmpOp::Bool(boolean::CmpOp::Ne) => !value_l.syntax_eq(&value_r),
                 ast::CmpOp::Num(op) => {
-                    let num_l = back!(located(get::num(&value_l), span));
-                    let num_r = back!(located(get::num(&value_r), span));
-                    back!(located(num::cmp(*op, num_l, num_r), span))
+                    let num_l = back!(Backtrack::from_result(get::num(&value_l), span));
+                    let num_r = back!(Backtrack::from_result(get::num(&value_r), span));
+                    back!(Backtrack::from_result(num::cmp(*op, num_l, num_r), span))
                 }
             };
             make::bool(result, Span::default())
@@ -141,7 +145,7 @@ pub(super) fn eval_exp<I: Interface, E: Extern>(
                 let id = crate::phrase!(node: name.to_owned(), span: span.clone());
                 ctx.find_func_typ(runner.spec(), &id).ok()
             };
-            let matches = back!(located(
+            let matches = back!(Backtrack::from_result(
                 value::check(&tdenv, &find_func, subcheck, &value),
                 span
             ));
@@ -172,7 +176,10 @@ pub(super) fn eval_exp<I: Interface, E: Extern>(
             for exp in not_exp.args() {
                 values.push(back!(eval_exp(runner, ctx, exp)));
             }
-            let case = back!(located(ast::Mixop::fill(&not_exp.to_mixop(), values), span));
+            let case = back!(Backtrack::from_result(
+                ast::Mixop::fill(&not_exp.to_mixop(), values),
+                span
+            ));
             make::case_(&typ, case, Span::default())
         }
         ast::ExpKind::Str(fields) => {
@@ -195,7 +202,7 @@ pub(super) fn eval_exp<I: Interface, E: Extern>(
         ast::ExpKind::Cons(exp_h, exp_t) => {
             let value_h = back!(eval_exp(runner, ctx, exp_h));
             let value_t = back!(eval_exp(runner, ctx, exp_t));
-            let values_t = back!(located(get::list(&value_t), span));
+            let values_t = back!(Backtrack::from_result(get::list(&value_t), span));
             let mut values = Vec::with_capacity(values_t.len() + 1);
             values.push(value_h);
             values.extend_from_slice(values_t);
@@ -224,7 +231,7 @@ pub(super) fn eval_exp<I: Interface, E: Extern>(
         ast::ExpKind::Mem(exp_e, exp_s) => {
             let value_e = back!(eval_exp(runner, ctx, exp_e));
             let value_s = back!(eval_exp(runner, ctx, exp_s));
-            let values = back!(located(get::list(&value_s), span));
+            let values = back!(Backtrack::from_result(get::list(&value_s), span));
             make::bool(
                 values.iter().any(|value| value.syntax_eq(&value_e)),
                 Span::default(),
@@ -273,18 +280,23 @@ pub(super) fn eval_exp<I: Interface, E: Extern>(
             let theta = ctx.local_theta();
             let mut typs = Vec::with_capacity(targs.len());
             for targ in targs {
-                typs.push(back!(located(subst_typ(&theta, targ), &targ.span)));
+                typs.push(back!(Backtrack::from_result(
+                    subst_typ(&theta, targ),
+                    &targ.span
+                )));
             }
             let values = back!(eval_args(runner, ctx, args));
             return invoke_func(runner, ctx, id, &typs, &values);
         }
         ast::ExpKind::Iter(exp_inner, (iter, vars)) => {
             if let Some(var) = is_iter_var_exp(exp) {
-                return Backtrack::Ok(back!(located(ctx.find_value(&var), span)).clone());
+                return Backtrack::Ok(
+                    back!(Backtrack::from_result(ctx.find_value(&var), span)).clone(),
+                );
             }
             match iter {
                 ast::Iter::Opt => {
-                    let ctx_sub = back!(located(ctx.sub_opt(vars), span));
+                    let ctx_sub = back!(Backtrack::from_result(ctx.sub_opt(vars), span));
                     let value = match ctx_sub {
                         Some(ctx_sub) => Some(back!(eval_exp(runner, &ctx_sub, exp_inner))),
                         None => None,
@@ -292,7 +304,7 @@ pub(super) fn eval_exp<I: Interface, E: Extern>(
                     make::opt(&typ, value, Span::default())
                 }
                 ast::Iter::List => {
-                    let ctxs_sub = back!(located(ctx.sub_list(vars), span));
+                    let ctxs_sub = back!(Backtrack::from_result(ctx.sub_list(vars), span));
                     let mut values = Vec::with_capacity(ctxs_sub.len());
                     for ctx_sub in ctxs_sub {
                         values.push(back!(eval_exp(runner, &ctx_sub, exp_inner)));
@@ -315,35 +327,44 @@ fn cast(
     let span = &typ.span;
     let result = match &typ.node {
         ast::TypKind::Num(num::Typ::Int) if !down => {
-            let number = back!(located(get::num(&value), span));
+            let number = back!(Backtrack::from_result(get::num(&value), span));
             match number {
                 num::Number::Nat(number) => make::int(number.as_bigint().clone(), Span::default()),
                 num::Number::Int(_) => value,
             }
         }
         ast::TypKind::Num(num::Typ::Nat) if down => {
-            let number = back!(located(get::num(&value), span));
+            let number = back!(Backtrack::from_result(get::num(&value), span));
             match number {
                 num::Number::Nat(_) => value,
                 num::Number::Int(number) => {
-                    let number = back!(located(num::Natural::try_from(number.clone()), span));
+                    let number = back!(Backtrack::from_result(
+                        num::Natural::try_from(number.clone()),
+                        span
+                    ));
                     make::nat(number, Span::default())
                 }
             }
         }
         ast::TypKind::Var(id, targs) => {
-            let (tparams, def_typ) = back!(located(ctx.find_defined_typdef(spec, id), span));
-            let theta = back!(located(Theta::from_lists(tparams, targs), span));
+            let (tparams, def_typ) = back!(Backtrack::from_result(
+                ctx.find_defined_typdef(spec, id),
+                span
+            ));
+            let theta = back!(Backtrack::from_result(
+                Theta::from_lists(tparams, targs),
+                span
+            ));
             match &def_typ.node {
                 ast::DefTypKind::Plain(typ) => {
-                    let typ = back!(located(subst_typ(&theta, typ), span));
+                    let typ = back!(Backtrack::from_result(subst_typ(&theta, typ), span));
                     return cast(ctx, spec, &typ, value, down);
                 }
                 _ => value,
             }
         }
         ast::TypKind::Tuple(typs) => {
-            let values = back!(located(get::tuple(&value), span));
+            let values = back!(Backtrack::from_result(get::tuple(&value), span));
             if typs.len() != values.len() {
                 return Backtrack::err(span.clone(), "tuple cast arity mismatch");
             }
@@ -354,7 +375,7 @@ fn cast(
             make::tuple(typ, values_cast, Span::default())
         }
         ast::TypKind::Iter(typ_inner, ast::Iter::Opt) => {
-            let value = back!(located(get::opt(&value), span));
+            let value = back!(Backtrack::from_result(get::opt(&value), span));
             let value = match value {
                 Some(value) => Some(back!(cast(ctx, spec, typ_inner, value.clone(), down))),
                 None => None,
@@ -362,7 +383,7 @@ fn cast(
             make::opt(typ_inner, value, Span::default())
         }
         ast::TypKind::Iter(typ_inner, ast::Iter::List) => {
-            let values = back!(located(get::list(&value), span));
+            let values = back!(Backtrack::from_result(get::list(&value), span));
             let mut values_cast = Vec::with_capacity(values.len());
             for value in values {
                 values_cast.push(back!(cast(ctx, spec, typ_inner, value.clone(), down)));
@@ -380,13 +401,13 @@ fn eval_index<I: Interface, E: Extern>(
     exp: &ast::Exp,
 ) -> Backtrack<i64> {
     let value = back!(eval_exp(runner, ctx, exp));
-    let number = back!(located(get::num(&value), &exp.span));
+    let number = back!(Backtrack::from_result(get::num(&value), &exp.span));
     let idx = num::to_int(number).to_i64();
-    located(idx.ok_or("index does not fit a machine integer"), &exp.span)
+    Backtrack::from_result(idx.ok_or("index does not fit a machine integer"), &exp.span)
 }
 
 fn dot(value: &Value, atom: &ast::Atom, span: &Span) -> Backtrack<Rc<Value>> {
-    let fields = back!(located(get::structure(value), span));
+    let fields = back!(Backtrack::from_result(get::structure(value), span));
     match fields.iter().find(|(field, _)| field.node == atom.node) {
         Some((_, value)) => Backtrack::Ok(value.clone()),
         None => Backtrack::err(atom.span.clone(), "undefined structure field"),
@@ -435,7 +456,7 @@ fn slice(
     base_span: &Span,
     bounds_span: &Span,
 ) -> Backtrack<Rc<Value>> {
-    let end = back!(located(
+    let end = back!(Backtrack::from_result(
         idx.checked_add(len)
             .ok_or("slice end overflows a machine integer"),
         bounds_span
@@ -515,7 +536,8 @@ fn eval_update_path<I: Interface, E: Extern>(
             back!(index(&value, idx, &path.span, &exp_i.span));
             let value = match &value.node {
                 ValueKind::Text(text) => {
-                    let text_upd = back!(located(get::text(&value_upd), &exp_i.span));
+                    let text_upd =
+                        back!(Backtrack::from_result(get::text(&value_upd), &exp_i.span));
                     if text_upd.len() != 1 {
                         return Backtrack::err(
                             exp_i.span.clone(),
@@ -540,7 +562,7 @@ fn eval_update_path<I: Interface, E: Extern>(
             let value = back!(eval_access_path(runner, ctx, value_b, path));
             let idx = back!(eval_index(runner, ctx, exp_i));
             let len = back!(eval_index(runner, ctx, exp_n));
-            let end = back!(located(
+            let end = back!(Backtrack::from_result(
                 idx.checked_add(len)
                     .ok_or("slice end overflows a machine integer"),
                 &exp_n.span
@@ -563,7 +585,8 @@ fn eval_update_path<I: Interface, E: Extern>(
             }
             let value = match &value.node {
                 ValueKind::Text(text) => {
-                    let text_upd = back!(located(get::text(&value_upd), &exp_n.span));
+                    let text_upd =
+                        back!(Backtrack::from_result(get::text(&value_upd), &exp_n.span));
                     if len < 0 || text_upd.len() as i64 != len {
                         return Backtrack::err(
                             exp_n.span.clone(),
@@ -578,7 +601,8 @@ fn eval_update_path<I: Interface, E: Extern>(
                     make::text(format!("{left}{text_upd}{right}"), Span::default())
                 }
                 ValueKind::List(values) => {
-                    let values_upd = back!(located(get::list(&value_upd), &exp_n.span));
+                    let values_upd =
+                        back!(Backtrack::from_result(get::list(&value_upd), &exp_n.span));
                     if len < 0 || values_upd.len() as i64 != len {
                         return Backtrack::err(
                             exp_n.span.clone(),
@@ -603,7 +627,7 @@ fn eval_update_path<I: Interface, E: Extern>(
         ast::PathKind::Dot(path, atom) => {
             let typ = crate::phrase!(node: path.note.as_ref().clone(), span: path.span.clone());
             let value = back!(eval_access_path(runner, ctx, value_b, path));
-            let fields = back!(located(get::structure(&value), &path.span));
+            let fields = back!(Backtrack::from_result(get::structure(&value), &path.span));
             let fields = fields
                 .iter()
                 .map(|(field, value)| {

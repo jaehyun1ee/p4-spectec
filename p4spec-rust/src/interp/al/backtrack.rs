@@ -6,6 +6,7 @@
 //! from choosing a branch.
 
 use crate::lang::common::source::Span;
+use std::fmt::Display;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FailTrace {
@@ -22,6 +23,13 @@ pub enum Backtrack<T> {
 }
 
 impl<T> Backtrack<T> {
+    pub fn from_result(result: Result<T, impl Display>, span: &Span) -> Self {
+        match result {
+            Ok(value) => Self::Ok(value),
+            Err(error) => Self::err(span.clone(), error.to_string()),
+        }
+    }
+
     pub fn err(span: Span, message: impl Into<String>) -> Self {
         Self::Err(vec![FailTrace {
             span,
@@ -87,3 +95,18 @@ pub fn choose_sequential<C, T>(
     }
     Backtrack::Unmatch(traces)
 }
+
+macro_rules! back {
+    ($result:expr) => {
+        match $result {
+            $crate::interp::al::backtrack::Backtrack::Ok(value) => value,
+            $crate::interp::al::backtrack::Backtrack::Err(traces) => {
+                return $crate::interp::al::backtrack::Backtrack::Err(traces)
+            }
+            $crate::interp::al::backtrack::Backtrack::Unmatch(traces) => {
+                return $crate::interp::al::backtrack::Backtrack::Unmatch(traces)
+            }
+        }
+    };
+}
+pub(super) use back;
