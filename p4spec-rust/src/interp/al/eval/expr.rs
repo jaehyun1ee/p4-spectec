@@ -212,7 +212,7 @@ fn eval_sub_exp<I: Interface, E: Extern>(
     span: &Span,
 ) -> Backtrack<Rc<Value>> {
     let value = back!(eval_exp(runner, ctx, exp_inner));
-    let tdenv = ctx.type_env();
+    let tdenv = ctx.tdenv();
     let find_func = |name: &str| {
         let id = crate::phrase!(node: name.to_owned(), span: span.clone());
         ctx.find_func_typ(&id).ok()
@@ -498,7 +498,7 @@ fn eval_call_exp<I: Interface, E: Extern>(
     targs: &[ast::Typ],
     args: &[ast::Arg],
 ) -> Backtrack<Rc<Value>> {
-    let theta = ctx.local_theta();
+    let theta = ctx.theta_local();
     let mut targs_subst = Vec::with_capacity(targs.len());
     for targ in targs {
         targs_subst.push(back!(Backtrack::from_result(

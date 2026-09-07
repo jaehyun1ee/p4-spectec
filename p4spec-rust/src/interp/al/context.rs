@@ -128,7 +128,7 @@ impl<'global> Context<'global> {
         Self::new(self.global)
     }
 
-    pub(super) fn without_values(&self) -> Self {
+    pub fn wipe(&self) -> Self {
         Self {
             global: self.global,
             local: Local {
@@ -197,6 +197,32 @@ impl<'global> Context<'global> {
     pub fn find_func<'a>(&'a self, id: &ast::Id) -> Result<(Scope, &'a ast::MetaFuncDef), Error> {
         self.find_func_opt(id)
             .ok_or_else(|| Error::undefined(EntityKind::Function, id.node.clone(), id.span.clone()))
+    }
+
+    pub fn find_func_typ(&self, id: &ast::Id) -> Result<crate::lang::il::ast::FuncTyp, Error> {
+        use crate::lang::data::typ::{FuncTyp, make};
+        fn param_typ(param: &ast::Param) -> ast::Typ {
+            match &param.node {
+                ast::ParamKind::Exp(typ) => typ.clone(),
+                ast::ParamKind::Def(_, tparams, params, typ) => make::func(
+                    tparams.clone(),
+                    params.iter().map(param_typ).collect(),
+                    typ.clone(),
+                ),
+            }
+        }
+        let (_, func) = self.find_func(id)?;
+        let (tparams, params, typ): (&[ast::TParam], &[ast::Param], &ast::Typ) = match func {
+            ast::MetaFuncDef::Extern(func) => (&func.tparams, &func.params, &func.typ),
+            ast::MetaFuncDef::Builtin(func) => (&func.tparams, &func.params, &func.typ),
+            ast::MetaFuncDef::Table(func) => (&[], &func.params, &func.typ),
+            ast::MetaFuncDef::Defined(func) => (&func.tparams, &func.params, &func.typ),
+        };
+        Ok(FuncTyp {
+            tparams: tparams.to_vec(),
+            typs_params: params.iter().map(param_typ).collect(),
+            typ_ret: Box::new(typ.clone()),
+        })
     }
 
     // == Adders
@@ -290,10 +316,10 @@ impl<'global> Context<'global> {
         }
         Ok(ctxs)
     }
-}
 
-impl Context<'_> {
-    pub fn type_env(&self) -> TDEnv {
+    // == Environment conversion
+
+    pub fn tdenv(&self) -> TDEnv {
         let mut tdenv = self.global.tdenv.clone();
         tdenv.extend(
             self.local
@@ -304,7 +330,7 @@ impl Context<'_> {
         tdenv
     }
 
-    pub fn local_theta(&self) -> crate::runtime::ops::typ::Theta {
+    pub fn theta_local(&self) -> crate::runtime::ops::typ::Theta {
         let mut theta = crate::runtime::ops::typ::Theta::new();
         for (id, typdef) in self.local.tdenv.iter() {
             if let TypeDef::Defined(tparams, def_typ) = typdef
@@ -315,31 +341,5 @@ impl Context<'_> {
             }
         }
         theta
-    }
-
-    pub fn find_func_typ(&self, id: &ast::Id) -> Result<crate::lang::il::ast::FuncTyp, Error> {
-        use crate::lang::data::typ::{FuncTyp, make};
-        fn param_typ(param: &ast::Param) -> ast::Typ {
-            match &param.node {
-                ast::ParamKind::Exp(typ) => typ.clone(),
-                ast::ParamKind::Def(_, tparams, params, typ) => make::func(
-                    tparams.clone(),
-                    params.iter().map(param_typ).collect(),
-                    typ.clone(),
-                ),
-            }
-        }
-        let (_, func) = self.find_func(id)?;
-        let (tparams, params, typ): (&[ast::TParam], &[ast::Param], &ast::Typ) = match func {
-            ast::MetaFuncDef::Extern(func) => (&func.tparams, &func.params, &func.typ),
-            ast::MetaFuncDef::Builtin(func) => (&func.tparams, &func.params, &func.typ),
-            ast::MetaFuncDef::Table(func) => (&[], &func.params, &func.typ),
-            ast::MetaFuncDef::Defined(func) => (&func.tparams, &func.params, &func.typ),
-        };
-        Ok(FuncTyp {
-            tparams: tparams.to_vec(),
-            typs_params: params.iter().map(param_typ).collect(),
-            typ_ret: Box::new(typ.clone()),
-        })
     }
 }

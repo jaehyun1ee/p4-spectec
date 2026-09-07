@@ -231,7 +231,7 @@ fn assign_iter_exp<'global>(
         }
         ast::Iter::List => {
             let values = back!(Backtrack::from_result(get::list(&value), span));
-            let ctx_sub = ctx.without_values();
+            let ctx_sub = ctx.wipe();
             let mut ctxs = Vec::with_capacity(values.len());
             for value in values {
                 ctxs.push(back!(assign_exp(&ctx_sub, exp_inner, Rc::clone(value))));
