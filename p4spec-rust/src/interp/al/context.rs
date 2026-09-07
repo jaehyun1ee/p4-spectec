@@ -119,6 +119,14 @@ impl Context {
         Self::new()
     }
 
+    pub(super) fn without_values(&self) -> Self {
+        Self {
+            tdenv: self.tdenv.clone(),
+            fenv: self.fenv.clone(),
+            venv: VEnv::new(),
+        }
+    }
+
     // == Finders
 
     pub fn find_value_opt(&self, var: &Variable) -> Option<&Rc<Value>> {
@@ -277,5 +285,60 @@ impl Context {
             ctxs.push(ctx);
         }
         Ok(ctxs)
+    }
+}
+
+impl Context {
+    pub fn type_env(&self, spec: &Spec) -> TDEnv {
+        let mut tdenv = spec.tdenv.clone();
+        tdenv.extend(
+            self.tdenv
+                .iter()
+                .map(|(id, typdef)| (id.clone(), typdef.clone())),
+        );
+        tdenv
+    }
+
+    pub fn local_theta(&self) -> crate::runtime::ops::typ::Theta {
+        let mut theta = crate::runtime::ops::typ::Theta::new();
+        for (id, typdef) in self.tdenv.iter() {
+            if let TypeDef::Defined(tparams, def_typ) = typdef
+                && tparams.is_empty()
+                && let ast::DefTypKind::Plain(typ) = &def_typ.node
+            {
+                theta.insert(id.clone(), typ.clone());
+            }
+        }
+        theta
+    }
+
+    pub fn find_func_typ(
+        &self,
+        spec: &Spec,
+        id: &ast::Id,
+    ) -> Result<crate::lang::il::ast::FuncTyp, Error> {
+        use crate::lang::data::typ::{FuncTyp, make};
+        fn param_typ(param: &ast::Param) -> ast::Typ {
+            match &param.node {
+                ast::ParamKind::Exp(typ) => typ.clone(),
+                ast::ParamKind::Def(_, tparams, params, typ) => make::func(
+                    tparams.clone(),
+                    params.iter().map(param_typ).collect(),
+                    typ.clone(),
+                ),
+            }
+        }
+        let (_, func) = self.find_func(spec, id)?;
+        let (tparams, params, typ): (&[ast::TParam], &[ast::Param], &ast::Typ) = match func {
+            ast::MetaFuncDef::Extern(func) => (&func.tparams, &func.params, &func.typ),
+            ast::MetaFuncDef::Builtin(func) => (&func.tparams, &func.params, &func.typ),
+            ast::MetaFuncDef::Table(func) => (&[], &func.params, &func.typ),
+            ast::MetaFuncDef::Defined(func) => (&func.tparams, &func.params, &func.typ),
+        };
+        Ok(FuncTyp {
+            tparams: tparams.to_vec(),
+            typs_params: params.iter().map(param_typ).collect(),
+            typ_ret: Box::new(typ.clone()),
+        })
     }
 }

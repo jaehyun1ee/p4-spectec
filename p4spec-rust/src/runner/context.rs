@@ -50,7 +50,7 @@ where
 
     // - Semantic components
 
-    pub fn spec(&self) -> &S::Spec {
+    pub fn spec(&self) -> &'runner S::Spec {
         self.spec
     }
 

@@ -51,6 +51,16 @@ where
         }
     }
 
+    /// Borrows the assembled components for a stage-specific evaluation entry
+    pub fn context(&mut self) -> RunnerContext<'_, S, I, E> {
+        RunnerContext::new(
+            &self.spec,
+            &mut self.interp_state,
+            &mut self.interface,
+            &self.externs,
+        )
+    }
+
     // - Evaluation
 
     pub fn eval_rel(
@@ -58,12 +68,7 @@ where
         name: &str,
         values: &[Rc<Value>],
     ) -> Result<Vec<Rc<Value>>, S::Error> {
-        let mut context: RunnerContext<'_, S, I, E> = RunnerContext::new(
-            &self.spec,
-            &mut self.interp_state,
-            &mut self.interface,
-            &self.externs,
-        );
+        let mut context = self.context();
         context.call_rel(name, values)
     }
 
@@ -73,12 +78,7 @@ where
         targs: &[Typ],
         values: &[Rc<Value>],
     ) -> Result<Rc<Value>, S::Error> {
-        let mut context: RunnerContext<'_, S, I, E> = RunnerContext::new(
-            &self.spec,
-            &mut self.interp_state,
-            &mut self.interface,
-            &self.externs,
-        );
+        let mut context = self.context();
         context.call_func(name, targs, values)
     }
 
