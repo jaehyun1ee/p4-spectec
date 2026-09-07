@@ -7,6 +7,7 @@ pub mod lang;
 pub mod pass;
 pub mod runner;
 pub mod runtime;
+pub mod sim;
 pub mod stf;
 pub mod wire;
 pub mod yojson;

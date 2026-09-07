@@ -12,6 +12,13 @@ fn fixture(path: &str) -> std::path::PathBuf {
         .join(path)
 }
 
+fn repo() -> std::path::PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .to_owned()
+}
+
 #[test]
 fn test_elab_command_prints_the_intermediate_spec() {
     let output = binary()
@@ -204,6 +211,28 @@ fn run_command(relation: &str, program: &str) -> Command {
 #[test]
 fn test_run_al_native_success_and_multiple_spec_paths() {
     let output = run_command("Pass", "cli/run/empty.p4").output().unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(output.stdout, b"passed\n");
+    assert!(output.stderr.is_empty());
+}
+
+#[test]
+fn test_run_al_initializes_placeholder_extern_objects() {
+    let repo = repo();
+    let output = binary()
+        .args(["run", "--al"])
+        .arg(repo.join("spec"))
+        .args(["--rel", "Program_inst", "-p"])
+        .arg(repo.join("p4c/testdata/p4_16_samples/action_profile-bmv2.p4"))
+        .arg("-i")
+        .arg(repo.join("p4c/p4include"))
+        .output()
+        .unwrap();
+
     assert!(
         output.status.success(),
         "{}",

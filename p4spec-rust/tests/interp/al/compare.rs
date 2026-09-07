@@ -24,6 +24,7 @@ use p4spec_rust::{
         BuiltinInterface, Extern, ExternError, Interface, Interpreter, NullExtern, Runner,
         RunnerContext,
     },
+    sim::placeholder::Placeholder,
     wire::ocaml::{
         lang::il::{ValueCodec, ValueEnvelopeCodec},
         yojson,
@@ -444,7 +445,7 @@ fn run_corpus(det: bool) {
     let files = corpus();
     assert!(!files.is_empty(), "supported corpus must be present");
     let spec = repo().join("spec");
-    let mut runner = native(&spec, det, false, NullExtern);
+    let mut runner = native(&spec, det, false, Placeholder);
     let includes = vec![repo().join("p4c/p4include")];
     for (index, (path, name)) in files.iter().enumerate() {
         eprintln!(

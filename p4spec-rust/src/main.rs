@@ -8,7 +8,8 @@ use p4spec_rust::{
     interp::al::{Al, Config, context::Global},
     lang::{al, il, traits::print::Print},
     pass::{algo, elaborate},
-    runner::{BuiltinInterface, NullExtern, Runner},
+    runner::{BuiltinInterface, Runner},
+    sim::placeholder::Placeholder,
 };
 
 // = Helpers
@@ -112,7 +113,7 @@ fn run_command(args: RunArgs) -> ExitCode {
         global,
         Config::new(args.det, args.guard),
         BuiltinInterface::new(unparser),
-        NullExtern,
+        Placeholder,
     );
     match runner.eval_program(&args.relation, program) {
         Ok(_) => {
