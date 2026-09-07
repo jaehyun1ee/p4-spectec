@@ -11,46 +11,7 @@ use p4spec_rust::{
     runner::{BuiltinInterface, NullExtern, Runner},
 };
 
-/// Elaborate and convert P4 specifications
-#[derive(Parser)]
-#[command(version)]
-struct Cli {
-    #[command(subcommand)]
-    command: Command,
-}
-
-#[derive(Subcommand)]
-enum Command {
-    /// Elaborate specifications and print the intermediate representation
-    Elab(ElabArgs),
-    /// Convert specifications and print the algorithmic representation
-    Algo(AlgoArgs),
-    /// Run a P4 program with the algorithmic interpreter
-    Run(RunArgs),
-}
-
-#[derive(Args)]
-struct ElabArgs {
-    /// Specification files in processing order
-    #[arg(required = true, value_name = "PATH")]
-    paths: Vec<PathBuf>,
-}
-
-#[derive(Args)]
-struct AlgoArgs {
-    /// Specification files in processing order
-    #[arg(required = true, value_name = "PATH")]
-    paths: Vec<PathBuf>,
-}
-
-fn main() -> ExitCode {
-    let cli = Cli::parse();
-    match cli.command {
-        Command::Elab(args) => elab_command(args),
-        Command::Algo(args) => algo_command(args),
-        Command::Run(args) => run_command(args),
-    }
-}
+// = Helpers
 
 fn elab(paths: Vec<PathBuf>) -> Result<il::ast::Spec, ExitCode> {
     let spec_el = parse_files(paths).map_err(command_error)?;
@@ -62,6 +23,15 @@ fn algo(paths: Vec<PathBuf>) -> Result<al::ast::Spec, ExitCode> {
     algo::convert(spec_il).map_err(command_error)
 }
 
+// = Elab command
+
+#[derive(Args)]
+struct ElabArgs {
+    /// Specification files in processing order
+    #[arg(required = true, value_name = "PATH")]
+    paths: Vec<PathBuf>,
+}
+
 fn elab_command(args: ElabArgs) -> ExitCode {
     let spec_il = match elab(args.paths) {
         Ok(spec) => spec,
@@ -69,6 +39,15 @@ fn elab_command(args: ElabArgs) -> ExitCode {
     };
     println!("{}", Print::to_string(&spec_il));
     ExitCode::SUCCESS
+}
+
+// = Algo command
+
+#[derive(Args)]
+struct AlgoArgs {
+    /// Specification files in processing order
+    #[arg(required = true, value_name = "PATH")]
+    paths: Vec<PathBuf>,
 }
 
 fn algo_command(args: AlgoArgs) -> ExitCode {
@@ -84,6 +63,8 @@ fn command_error(error: impl std::fmt::Display) -> ExitCode {
     eprintln!("{error}");
     ExitCode::FAILURE
 }
+
+// = Run command
 
 #[derive(Args)]
 struct RunArgs {
@@ -142,5 +123,34 @@ fn run_command(args: RunArgs) -> ExitCode {
             eprintln!("runtime error: {error}");
             ExitCode::FAILURE
         }
+    }
+}
+
+// = Entry point
+
+/// Elaborate and convert P4 specifications
+#[derive(Parser)]
+#[command(version)]
+struct Cli {
+    #[command(subcommand)]
+    command: Command,
+}
+
+#[derive(Subcommand)]
+enum Command {
+    /// Elaborate specifications and print the intermediate representation
+    Elab(ElabArgs),
+    /// Convert specifications and print the algorithmic representation
+    Algo(AlgoArgs),
+    /// Run a P4 program with the algorithmic interpreter
+    Run(RunArgs),
+}
+
+fn main() -> ExitCode {
+    let cli = Cli::parse();
+    match cli.command {
+        Command::Elab(args) => elab_command(args),
+        Command::Algo(args) => algo_command(args),
+        Command::Run(args) => run_command(args),
     }
 }
