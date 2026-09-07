@@ -57,7 +57,8 @@ fn function(name: &str, expression: ast::Exp) -> ast::Def {
 
 fn eval(expression: ast::Exp) -> Result<Rc<Value>, p4spec_rust::interp::al::error::Error> {
     let global = Global::load(vec![function("test", expression)]).unwrap();
-    let mut runner = Runner::<Al, _, _>::new(global, Config::new(false), NullInterface, NullExtern);
+    let mut runner =
+        Runner::<Al, _, _>::new(global, Config::new(false, false), NullInterface, NullExtern);
     runner.eval_func("test", &[], &[])
 }
 
@@ -334,7 +335,7 @@ fn test_boolean_operators_evaluate_both_operands_in_order() {
     let calls = Rc::new(RefCell::new(vec![]));
     let mut runner = Runner::<Al, _, _>::new(
         Global::load(defs).unwrap(),
-        Config::new(false),
+        Config::new(false, false),
         RecordingInterface(calls.clone()),
         NullExtern,
     );
@@ -361,7 +362,7 @@ fn test_numeric_errors_are_fatal_before_else_fallback() {
     }
     let mut runner = Runner::<Al, _, _>::new(
         Global::load(vec![def]).unwrap(),
-        Config::new(false),
+        Config::new(false, false),
         NullInterface,
         NullExtern,
     );
@@ -413,7 +414,7 @@ fn test_iteration_evaluates_each_bound_element_and_preserves_empty_options() {
         }
         let mut runner = Runner::<Al, _, _>::new(
             Global::load(vec![def]).unwrap(),
-            Config::new(false),
+            Config::new(false, false),
             NullInterface,
             NullExtern,
         );
@@ -491,7 +492,7 @@ fn test_call_arguments_substitute_local_types_and_pass_function_values() {
     let seen = Rc::new(RefCell::new(vec![]));
     let mut runner = Runner::<Al, _, _>::new(
         Global::load(vec![outer, capture, function("answer", int(42))]).unwrap(),
-        Config::new(false),
+        Config::new(false, false),
         TypeInterface(seen.clone()),
         NullExtern,
     );
@@ -553,7 +554,7 @@ def $destructure() = $sum_pair(($updated())[0])
     let spec_al = algo::convert(spec_il).unwrap();
     let mut runner = Runner::<Al, _, _>::new(
         Global::load(spec_al).unwrap(),
-        Config::new(false),
+        Config::new(false, false),
         NullInterface,
         NullExtern,
     );
@@ -589,7 +590,7 @@ def $first(ns) = ns[0]
     let spec_al = algo::convert(spec_il).unwrap();
     let mut runner = Runner::<Al, _, _>::new(
         Global::load(spec_al).unwrap(),
-        Config::new(false),
+        Config::new(false, false),
         NullInterface,
         NullExtern,
     );
@@ -644,7 +645,7 @@ fn test_builtin_failure_remains_typed_in_public_error_tree() {
     );
     let mut runner = Runner::<Al, _, _>::new(
         Global::load(vec![function("test", call), builtin]).unwrap(),
-        Config::new(false),
+        Config::new(false, false),
         BuiltinInterface::new(),
         NullExtern,
     );

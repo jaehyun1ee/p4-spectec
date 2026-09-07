@@ -57,6 +57,8 @@ pub enum ErrorKind {
     #[error(transparent)]
     Call(#[from] CallErrorKind),
     #[error(transparent)]
+    Guard(#[from] GuardErrorKind),
+    #[error(transparent)]
     Trace(#[from] TraceErrorKind),
 }
 
@@ -165,6 +167,20 @@ pub enum PremErrorKind {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+pub enum GuardErrorKind {
+    #[error("relation input of {relation} does not match the expected type")]
+    RelationInputMismatch { relation: String },
+    #[error("relation output of {relation} does not match the expected type")]
+    RelationOutputMismatch { relation: String },
+    #[error("function argument of {function} does not match the parameter type")]
+    FunctionInputMismatch { function: String },
+    #[error("return value of function {function} does not match the expected type")]
+    FunctionOutputMismatch { function: String },
+    #[error(transparent)]
+    Validation(Box<ErrorKind>),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum CallErrorKind {
     #[error("arity mismatch in rule")]
     RuleArityMismatch { expected: usize, actual: usize },
@@ -240,7 +256,7 @@ impl Error {
     }
 
     pub fn at_if_missing(mut self, span: &Span) -> Self {
-        if self.span == Span::default() {
+        if self.span == Span::default() && !matches!(*self.kind, ErrorKind::Guard(_)) {
             self.span = span.clone();
         }
         self

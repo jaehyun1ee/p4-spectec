@@ -5,7 +5,7 @@
 //! two successful candidates. Error trees retain the reasons independently
 //! of these control-flow outcomes.
 
-use super::error::{Error, ErrorKind};
+use super::error::{Error, ErrorKind, GuardErrorKind};
 use crate::lang::common::source::Span;
 use std::convert::Infallible;
 
@@ -43,6 +43,7 @@ impl<T> Backtrack<T> {
         match self {
             Backtrack::Ok(value) => Ok(value),
             Backtrack::Nondet(never, _) => match never {},
+            Backtrack::Err(mut traces) if is_guard(&traces) => Err(traces.remove(0)),
             Backtrack::Err(traces) | Backtrack::Unmatch(traces) => Err(Error::execution(traces)),
         }
     }
@@ -68,12 +69,38 @@ macro_rules! back {
 }
 pub(super) use back;
 
+// Guard checks escape directly instead of acquiring backtracking traces
+fn is_guard(errors: &[Error]) -> bool {
+    matches!(errors, [error] if matches!(*error.kind, ErrorKind::Guard(_)))
+}
+
+impl<T> Backtrack<T> {
+    pub(in crate::interp::al) fn guard(self) -> Self {
+        match self {
+            Self::Err(errors) => Self::Err(
+                errors
+                    .into_iter()
+                    .map(|mut error| {
+                        if !matches!(*error.kind, ErrorKind::Guard(_)) {
+                            error.kind =
+                                Box::new(ErrorKind::Guard(GuardErrorKind::Validation(error.kind)));
+                        }
+                        error
+                    })
+                    .collect(),
+            ),
+            result => result,
+        }
+    }
+}
+
 // = Nesting
 
 impl<T, C> Backtrack<T, C> {
     pub fn nest(self, span: Span, kind: impl FnOnce() -> ErrorKind) -> Self {
         match self {
             Self::Ok(value) => Self::Ok(value),
+            Self::Err(children) if is_guard(&children) => Self::Err(children),
             Self::Err(children) => Self::Err(vec![Error {
                 kind: Box::new(kind()),
                 span,

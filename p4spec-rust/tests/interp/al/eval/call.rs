@@ -27,7 +27,7 @@ fn spec(source: &str) -> ast::Spec {
 fn runner(spec_al: ast::Spec, det: bool) -> Runner<Al, BuiltinInterface, NullExtern> {
     Runner::new(
         Global::load(spec_al).unwrap(),
-        Config::new(det),
+        Config::new(det, true),
         BuiltinInterface::new(),
         NullExtern,
     )
@@ -509,4 +509,446 @@ def $pick<X>(b, X) = $identity<X>(X)
             assert!(Rc::ptr_eq(&output, &value));
         }
     }
+}
+
+#[test]
+fn test_public_guard_rejects_malformed_function_input() {
+    let mut runner = runner(
+        spec("var n : nat\ndec $ignore(nat) : nat\ndef $ignore(n) = 1"),
+        false,
+    );
+    let error = runner
+        .eval_func("ignore", &[], &[make::bool(true, Span::default())])
+        .unwrap_err();
+    assert!(
+        error.to_string().contains("function argument of ignore"),
+        "{error}"
+    );
+}
+
+struct Host {
+    calls: Rc<std::cell::Cell<u64>>,
+    value: Rc<Value>,
+    reenter: bool,
+}
+
+impl p4spec_rust::runner::Interface for Host {
+    fn call_builtin(
+        &mut self,
+        _id: &ast::Id,
+        _targs: &[ast::Typ],
+        _values: &[Rc<Value>],
+    ) -> Result<(Rc<Value>, bool), p4spec_rust::runner::InterfaceError> {
+        self.calls.set(self.calls.get() + 1);
+        Ok((self.value.clone(), true))
+    }
+
+    fn clear(&mut self) {
+        self.calls.set(0);
+    }
+}
+
+impl p4spec_rust::runner::Extern for Host {
+    fn eval_rel<S, I>(
+        &self,
+        context: &mut p4spec_rust::runner::RunnerContext<'_, S, I, Self>,
+        _name: &str,
+        values: &[Rc<Value>],
+    ) -> Result<(Vec<Rc<Value>>, bool), S::Error>
+    where
+        I: p4spec_rust::runner::Interface,
+        S: p4spec_rust::runner::Interpreter<I, Self>,
+    {
+        self.calls.set(self.calls.get() + 1);
+        let values = if self.reenter {
+            context.call_rel("Step", values)?
+        } else {
+            vec![self.value.clone()]
+        };
+        Ok((values, true))
+    }
+
+    fn eval_func<S, I>(
+        &self,
+        context: &mut p4spec_rust::runner::RunnerContext<'_, S, I, Self>,
+        _name: &str,
+        targs: &[ast::Typ],
+        _values: &[Rc<Value>],
+    ) -> Result<(Rc<Value>, bool), S::Error>
+    where
+        I: p4spec_rust::runner::Interface,
+        S: p4spec_rust::runner::Interpreter<I, Self>,
+    {
+        // The OCaml extern boundary erases type arguments
+        assert!(targs.is_empty());
+        self.calls.set(self.calls.get() + 1);
+        let value = if self.reenter {
+            context.call_func("inner", &[], std::slice::from_ref(&self.value))?
+        } else {
+            self.value.clone()
+        };
+        Ok((value, true))
+    }
+
+    fn clear(&mut self) {
+        self.calls.set(0);
+    }
+}
+
+fn host(value: Rc<Value>, reenter: bool) -> Host {
+    Host {
+        calls: Rc::new(std::cell::Cell::new(0)),
+        value,
+        reenter,
+    }
+}
+
+#[test]
+fn test_guards_toggle_input_checks_and_substitute_type_arguments() {
+    let spec_al = spec("var n : nat\ndec $ignore<X>(X) : nat\ndef $ignore<X>(X) = 1");
+    for det in [false, true] {
+        for guard in [false, true] {
+            let mut runner = Runner::<Al, _, _>::new(
+                Global::load(spec_al.clone()).unwrap(),
+                Config::new(det, guard),
+                BuiltinInterface::new(),
+                NullExtern,
+            );
+            let invalid = make::bool(true, Span::default());
+            let result = runner.eval_func(
+                "ignore",
+                &[typ::make::nat()],
+                std::slice::from_ref(&invalid),
+            );
+            if guard {
+                assert!(
+                    result
+                        .unwrap_err()
+                        .to_string()
+                        .contains("function argument of ignore")
+                );
+                assert!(
+                    runner
+                        .eval_func("ignore", &[], &[nat(1)])
+                        .unwrap_err()
+                        .to_string()
+                        .contains("arity mismatch in type arguments")
+                );
+                assert!(
+                    runner
+                        .eval_func("ignore", &[typ::make::nat()], &[])
+                        .unwrap_err()
+                        .to_string()
+                        .contains("function argument of ignore")
+                );
+            } else {
+                assert_eq!(number(&result.unwrap()), "1");
+            }
+            assert_eq!(
+                number(
+                    &runner
+                        .eval_func("ignore", &[typ::make::bool()], &[invalid])
+                        .unwrap()
+                ),
+                "1"
+            );
+        }
+    }
+}
+
+#[test]
+fn test_relation_input_guards_use_hint_order() {
+    let mut spec_al = spec(
+        "var n : nat\nvar b : bool\nrelation Pick: nat ~> bool ~> nat\n  hint(input %0 %1)\nrule Pick/pick: n ~> b ~> 7",
+    );
+    let rel = spec_al
+        .iter_mut()
+        .find_map(|def| match &mut def.node {
+            ast::DefKind::Rel(ast::RelDef::Defined(rel)) => Some(rel),
+            _ => None,
+        })
+        .expect("relation");
+    rel.input_hint = p4spec_rust::lang::hints::input::InputHint::new(vec![1, 0]);
+    let mut runner = runner(spec_al, false);
+    let boolean = make::bool(true, Span::default());
+    assert_eq!(
+        number(&runner.eval_rel("Pick", &[boolean.clone(), nat(1)]).unwrap()[0]),
+        "7"
+    );
+    let error = runner.eval_rel("Pick", &[nat(1), boolean]).unwrap_err();
+    assert!(error.to_string().contains("relation input of Pick"));
+}
+
+#[test]
+fn test_host_output_guards_are_fatal_and_substitute_return_types() {
+    let source = r#"
+builtin dec $builtin<X>() : X
+extern dec $external<X>() : X
+dec $pick<X>() : X
+def $pick<X>() = $builtin<X>()
+def $pick<X>() = $external<X>()
+  -- otherwise
+"#;
+    let spec_al = spec(source);
+    for det in [false, true] {
+        for guard in [false, true] {
+            let builtin = host(make::bool(true, Span::default()), false);
+            let external = host(make::bool(false, Span::default()), false);
+            let calls = external.calls.clone();
+            let mut runner = Runner::<Al, _, _>::new(
+                Global::load(spec_al.clone()).unwrap(),
+                Config::new(det, guard),
+                builtin,
+                external,
+            );
+            for name in ["builtin", "external", "pick"] {
+                let result = runner.eval_func(name, &[typ::make::nat()], &[]);
+                if guard {
+                    let error = result.unwrap_err();
+                    assert!(
+                        error.to_string().contains("return value of function"),
+                        "{error}"
+                    );
+                } else {
+                    assert!(get::bool(&result.unwrap()).is_ok());
+                }
+                assert!(
+                    get::bool(&runner.eval_func(name, &[typ::make::bool()], &[]).unwrap()).is_ok()
+                );
+            }
+            assert_eq!(calls.get(), 2, "fatal builtin output must not select else");
+        }
+    }
+}
+
+#[test]
+fn test_extern_relation_output_guards_preserve_call_span() {
+    let source = "extern relation External: nat ~> bool\n  hint(input %0)\nvar n : nat\nvar b : bool\nrelation Entry: nat ~> bool\n  hint(input %0)\nrule Entry/entry: n ~> b\n  -- External: n ~> b";
+    let spec_al = spec(source);
+    let rel = spec_al
+        .iter()
+        .find_map(|def| match &def.node {
+            ast::DefKind::Rel(ast::RelDef::Defined(rel)) => Some(rel),
+            _ => None,
+        })
+        .expect("relation");
+    let ast::PremKind::Rule(prem) = &rel.rule_groups[0].node.rule_paths[0].prems[0].node else {
+        panic!("relation premise")
+    };
+    let span = prem.id.span.clone();
+    fn find_output(
+        error: &p4spec_rust::interp::al::error::Error,
+    ) -> Option<&p4spec_rust::interp::al::error::Error> {
+        if matches!(
+            *error.kind,
+            ErrorKind::Guard(
+                p4spec_rust::interp::al::error::GuardErrorKind::RelationOutputMismatch { .. }
+            )
+        ) {
+            Some(error)
+        } else {
+            error.children.iter().find_map(find_output)
+        }
+    }
+    for guard in [false, true] {
+        let mut runner = Runner::<Al, _, _>::new(
+            Global::load(spec_al.clone()).unwrap(),
+            Config::new(false, guard),
+            BuiltinInterface::new(),
+            host(nat(4), false),
+        );
+        let result = runner.eval_rel("Entry", &[nat(1)]);
+        if guard {
+            let error = result.unwrap_err();
+            assert_eq!(find_output(&error).expect("output guard error").span, span);
+            assert_eq!(error.span, span);
+        } else {
+            assert_eq!(number(&result.unwrap()[0]), "4");
+        }
+    }
+}
+
+#[test]
+fn test_uncached_extern_reentry_preserves_outer_scope_and_clear_policy() {
+    let source = r#"
+var n : nat
+builtin dec $tick() : nat
+extern dec $bridge(nat) : nat
+dec $inner(nat) : nat
+def $inner(n) = $(n + $tick())
+dec $outer(nat) : nat
+def $outer(n) = $(n + $bridge(n))
+relation Step: nat ~> nat
+  hint(input %0)
+rule Step/step: n ~> $(n + 1)
+extern relation Relay: nat ~> nat
+  hint(input %0)
+dec $ambiguous() : nat
+def $ambiguous() = 1
+def $ambiguous() = 2
+"#;
+    let builtin = host(nat(1), false);
+    let external = host(nat(40), true);
+    let calls_builtin = builtin.calls.clone();
+    let calls_extern = external.calls.clone();
+    let mut runner = Runner::<Al, _, _>::new(
+        Global::load(spec(source)).unwrap(),
+        Config::new(true, true),
+        builtin,
+        external,
+    );
+    for _ in 0..2 {
+        for count in 1..=2 {
+            assert_eq!(
+                number(&runner.eval_func("outer", &[], &[nat(5)]).unwrap()),
+                "46"
+            );
+            assert_eq!(
+                number(&runner.eval_rel("Relay", &[nat(8)]).unwrap()[0]),
+                "9"
+            );
+            assert_eq!(calls_builtin.get(), count);
+            assert_eq!(calls_extern.get(), count * 2);
+        }
+        assert!(
+            runner
+                .eval_func("outer", &[], &[make::bool(true, Span::default())])
+                .unwrap_err()
+                .to_string()
+                .contains("function argument of outer")
+        );
+        assert!(
+            runner
+                .eval_func("ambiguous", &[], &[])
+                .unwrap_err()
+                .to_string()
+                .contains("non-deterministic")
+        );
+        runner.clear();
+        assert_eq!(calls_builtin.get(), 0);
+        assert_eq!(calls_extern.get(), 0);
+    }
+}
+
+#[test]
+fn test_extern_reentry_uses_public_input_guards() {
+    let source =
+        "extern dec $bridge(nat) : nat\nvar n : nat\ndec $inner(nat) : nat\ndef $inner(n) = 7";
+    for guard in [false, true] {
+        let mut runner = Runner::<Al, _, _>::new(
+            Global::load(spec(source)).unwrap(),
+            Config::new(false, guard),
+            BuiltinInterface::new(),
+            host(make::bool(true, Span::default()), true),
+        );
+        let result = runner.eval_func("bridge", &[], &[nat(1)]);
+        if guard {
+            assert!(
+                result
+                    .unwrap_err()
+                    .to_string()
+                    .contains("function argument of inner")
+            );
+        } else {
+            assert_eq!(number(&result.unwrap()), "7");
+        }
+    }
+}
+
+#[test]
+fn test_output_guard_after_success_is_fatal_only_in_deterministic_choice() {
+    let source = "builtin dec $bad() : nat\ndec $pick() : nat\ndef $pick() = 1\ndef $pick() = $bad()\ndef $pick() = 9\n  -- otherwise";
+    for det in [false, true] {
+        let mut runner = Runner::<Al, _, _>::new(
+            Global::load(spec(source)).unwrap(),
+            Config::new(det, true),
+            host(make::bool(true, Span::default()), false),
+            NullExtern,
+        );
+        let result = runner.eval_func("pick", &[], &[]);
+        if det {
+            assert!(
+                result
+                    .unwrap_err()
+                    .to_string()
+                    .contains("return value of function bad")
+            );
+        } else {
+            assert_eq!(number(&result.unwrap()), "1");
+        }
+    }
+}
+
+#[test]
+fn test_uncached_input_guards_are_limited_to_public_entries() {
+    let source = "var n : nat\ndec $ignore(nat) : nat\ndef $ignore(n) = 1\ndec $entry() : nat\ndef $entry() = $ignore(0)";
+    let mut spec_al = spec(source);
+    let func = spec_al
+        .iter_mut()
+        .find_map(|def| match &mut def.node {
+            ast::DefKind::MetaFunc(ast::MetaFuncDef::Defined(func)) if func.id.node == "entry" => {
+                Some(func)
+            }
+            _ => None,
+        })
+        .unwrap();
+    let ast::ExpKind::Call(_, _, args) = &mut func.clauses[0].node.expression.node else {
+        panic!("call")
+    };
+    let ast::ArgKind::Exp(exp) = &mut args[0].node else {
+        panic!("argument")
+    };
+    // Ill-typed AL distinguishes public entry guards from recursive calls
+    exp.node = ast::ExpKind::Bool(true);
+    exp.note = Rc::new(ast::TypKind::Bool);
+    let mut runner = runner(spec_al, true);
+    assert_eq!(number(&runner.eval_func("entry", &[], &[]).unwrap()), "1");
+    assert!(
+        runner
+            .eval_func("ignore", &[], &[make::bool(true, Span::default())])
+            .unwrap_err()
+            .to_string()
+            .contains("function argument of ignore")
+    );
+}
+
+#[test]
+fn test_guard_failure_keeps_its_source_span_through_extern_reentry() {
+    let source = "builtin dec $bad() : nat\nextern dec $bridge(nat) : nat\nvar n : nat\ndec $inner(nat) : nat\ndef $inner(n) = $bad()";
+    let spec_al = spec(source);
+    let func = spec_al
+        .iter()
+        .find_map(|def| match &def.node {
+            ast::DefKind::MetaFunc(ast::MetaFuncDef::Defined(func)) => Some(func),
+            _ => None,
+        })
+        .unwrap();
+    let ast::ExpKind::Call(id, _, _) = &func.clauses[0].node.expression.node else {
+        panic!("call")
+    };
+    let span = id.span.clone();
+    let mut runner = Runner::<Al, _, _>::new(
+        Global::load(spec_al).unwrap(),
+        Config::new(false, true),
+        host(make::bool(true, Span::default()), false),
+        host(nat(3), true),
+    );
+    let error = runner.eval_func("bridge", &[], &[nat(1)]).unwrap_err();
+    assert_eq!(error.span, span);
+    assert!(matches!(*error.kind, ErrorKind::Guard(_)));
+    assert!(error.children.is_empty());
+}
+
+#[test]
+fn test_reentrant_public_guard_keeps_no_source_span() {
+    let source = "extern dec $bridge(nat) : nat\nvar n : nat\ndec $inner(nat) : nat\ndef $inner(n) = 7\ndec $outer(nat) : nat\ndef $outer(n) = $bridge(n)";
+    let mut runner = Runner::<Al, _, _>::new(
+        Global::load(spec(source)).unwrap(),
+        Config::new(false, true),
+        BuiltinInterface::new(),
+        host(make::bool(true, Span::default()), true),
+    );
+    let error = runner.eval_func("outer", &[], &[nat(1)]).unwrap_err();
+    assert!(error.to_string().contains("function argument of inner"));
+    assert_eq!(error.span, Span::default());
 }

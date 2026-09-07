@@ -7,13 +7,127 @@ use super::super::{
     error::ErrorKind,
 };
 use super::{assign, expr, prem::eval_prems};
-use crate::interp::al::error::{CallErrorKind, HostErrorKind, TraceErrorKind};
+use crate::interp::al::error::{CallErrorKind, GuardErrorKind, HostErrorKind, TraceErrorKind};
 use crate::{
     lang::{al::ast, data::value::Value, traits::print::Print},
     runner::{Extern, Interface, InterfaceError, RunnerContext},
     runtime::typdef::TypeDef,
 };
 use std::rc::Rc;
+
+// = Input and output checks
+
+pub(in crate::interp::al) fn check_rel_inputs(
+    ctx: &Context<'_>,
+    id: &ast::Id,
+    values: &[Rc<Value>],
+) -> Backtrack<()> {
+    let rel = back!(Backtrack::from_result(ctx.find_rel(id), &id.span));
+    let (not_typ, inputs) = match rel {
+        ast::RelDef::Extern(rel) => (&rel.not_typ, &rel.input_hint),
+        ast::RelDef::Defined(rel) => (&rel.not_typ, &rel.input_hint),
+    };
+    let typs = not_typ.node.args();
+    back!(Backtrack::from_result(
+        crate::lang::hints::input::validate(inputs, typs.len()),
+        &id.span
+    ));
+    let typs = inputs
+        .indices()
+        .iter()
+        .map(|index| typs[*index as usize].clone())
+        .collect::<Vec<_>>();
+    check_values(
+        ctx,
+        id,
+        &typs,
+        values,
+        GuardErrorKind::RelationInputMismatch {
+            relation: id.node.clone(),
+        },
+    )
+}
+
+pub(in crate::interp::al) fn check_func_inputs(
+    ctx: &Context<'_>,
+    id: &ast::Id,
+    targs: &[ast::Typ],
+    values: &[Rc<Value>],
+) -> Backtrack<()> {
+    let typ = back!(Backtrack::from_result(ctx.find_func_typ(id), &id.span));
+    back!(Backtrack::check(
+        typ.tparams.len() == targs.len(),
+        id.span.clone(),
+        ErrorKind::Call(CallErrorKind::TypeArgumentArityMismatch {
+            expected: typ.tparams.len(),
+            actual: targs.len()
+        })
+    ));
+    let mut ctx_local = ctx.localize();
+    for (tparam, targ) in typ.tparams.iter().zip(targs) {
+        let def_typ =
+            crate::phrase!(node: ast::DefTypKind::Plain(targ.clone()), span: targ.span.clone());
+        back!(Backtrack::from_result(
+            ctx_local.add_typdef(tparam.clone(), TypeDef::Defined(vec![], Box::new(def_typ))),
+            &tparam.span
+        ));
+    }
+    check_values(
+        &ctx_local,
+        id,
+        &typ.typs_params,
+        values,
+        GuardErrorKind::FunctionInputMismatch {
+            function: id.node.clone(),
+        },
+    )
+}
+
+fn check_values(
+    ctx: &Context<'_>,
+    id: &ast::Id,
+    typs: &[ast::Typ],
+    values: &[Rc<Value>],
+    error: GuardErrorKind,
+) -> Backtrack<()> {
+    let tdenv = ctx.tdenv();
+    let find_func = |name: &str| {
+        let id = crate::phrase!(node: name.to_owned(), span: id.span.clone());
+        ctx.find_func_typ(&id).ok()
+    };
+    let matches = back!(Backtrack::from_result(
+        crate::runtime::ops::value::subs(&tdenv, &find_func, typs, values),
+        &id.span
+    ));
+    Backtrack::check(matches, id.span.clone(), ErrorKind::Guard(error))
+}
+
+fn check_func_output(
+    ctx: &Context<'_>,
+    id: &ast::Id,
+    tparams: &[ast::TParam],
+    typ: &ast::Typ,
+    targs: &[ast::Typ],
+    value: &Rc<Value>,
+) -> Backtrack<()> {
+    let theta = back!(Backtrack::from_result(
+        crate::runtime::ops::typ::Theta::from_lists(tparams, targs),
+        &id.span
+    ));
+    let typ = back!(Backtrack::from_result(
+        crate::runtime::ops::typ::subst_typ(&theta, typ),
+        &id.span
+    ));
+    check_values(
+        ctx,
+        id,
+        &[typ],
+        std::slice::from_ref(value),
+        GuardErrorKind::FunctionOutputMismatch {
+            function: id.node.clone(),
+        },
+    )
+}
 
 // = Relation invocation
 
@@ -26,7 +140,7 @@ pub fn invoke_rel<I: Interface, E: Extern>(
     let result = stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
         let rel = back!(Backtrack::from_result(ctx.find_rel(id), &id.span));
         match rel {
-            ast::RelDef::Extern(_) => invoke_extern_rel(runner, id, values),
+            ast::RelDef::Extern(rel) => invoke_extern_rel(runner, ctx, id, rel, values),
             ast::RelDef::Defined(rel) => invoke_defined_rel(runner, ctx, id, rel, values),
         }
     });
@@ -41,13 +155,34 @@ pub fn invoke_rel<I: Interface, E: Extern>(
 
 fn invoke_extern_rel<I: Interface, E: Extern>(
     runner: &mut RunnerContext<'_, Al, I, E>,
+    ctx: &Context<'_>,
     id: &ast::Id,
+    rel: &ast::ExternRel,
     values: &[Rc<Value>],
 ) -> Backtrack<Vec<Rc<Value>>> {
     let (values, _) = back!(Backtrack::from_result(
         runner.call_extern_rel(&id.node, values),
         &id.span
     ));
+    if runner.config().guard {
+        let typs = rel.not_typ.node.args().into_iter().cloned().collect();
+        let (_, typs) = back!(Backtrack::from_result(
+            crate::lang::hints::input::split(&rel.input_hint, typs),
+            &id.span
+        ));
+        back!(
+            check_values(
+                ctx,
+                id,
+                &typs,
+                &values,
+                GuardErrorKind::RelationOutputMismatch {
+                    relation: id.node.clone()
+                }
+            )
+            .guard()
+        );
+    }
     Backtrack::Ok(values)
 }
 
@@ -156,8 +291,12 @@ pub fn invoke_func<I: Interface, E: Extern>(
     let result = stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
         let (_, func) = back!(Backtrack::from_result(ctx.find_func(id), &id.span));
         match func {
-            ast::MetaFuncDef::Extern(func) => invoke_extern_func(runner, func, values),
-            ast::MetaFuncDef::Builtin(func) => invoke_builtin_func(runner, func, targs, values),
+            ast::MetaFuncDef::Extern(func) => {
+                invoke_extern_func(runner, ctx, id, func, targs, values)
+            }
+            ast::MetaFuncDef::Builtin(func) => {
+                invoke_builtin_func(runner, ctx, id, func, targs, values)
+            }
             ast::MetaFuncDef::Table(func) => invoke_table_func(runner, ctx, func, values),
             ast::MetaFuncDef::Defined(func) => {
                 invoke_defined_func(runner, ctx, func, targs, values)
@@ -187,13 +326,29 @@ pub fn invoke_func<I: Interface, E: Extern>(
 
 fn invoke_extern_func<I: Interface, E: Extern>(
     runner: &mut RunnerContext<'_, Al, I, E>,
+    ctx: &Context<'_>,
+    id: &ast::Id,
     extern_func: &ast::ExternFunc,
+    targs: &[ast::Typ],
     values: &[Rc<Value>],
 ) -> Backtrack<Rc<Value>> {
     let (value, _) = back!(Backtrack::from_result(
-        runner.call_extern_func(&extern_func.id.node, &[], values),
-        &extern_func.id.span
+        runner.call_extern_func(&id.node, &[], values),
+        &id.span
     ));
+    if runner.config().guard {
+        back!(
+            check_func_output(
+                ctx,
+                id,
+                &extern_func.tparams,
+                &extern_func.typ,
+                targs,
+                &value
+            )
+            .guard()
+        );
+    }
     Backtrack::Ok(value)
 }
 
@@ -201,18 +356,35 @@ fn invoke_extern_func<I: Interface, E: Extern>(
 
 fn invoke_builtin_func<I: Interface, E: Extern>(
     runner: &mut RunnerContext<'_, Al, I, E>,
+    ctx: &Context<'_>,
+    id: &ast::Id,
     builtin_func: &ast::BuiltinFunc,
     targs: &[ast::Typ],
     values: &[Rc<Value>],
 ) -> Backtrack<Rc<Value>> {
-    match runner.call_builtin(&builtin_func.id, targs, values) {
-        Ok((value, _)) => Backtrack::Ok(value),
+    match runner.call_builtin(id, targs, values) {
+        Ok((value, _)) => {
+            if runner.config().guard {
+                back!(
+                    check_func_output(
+                        ctx,
+                        id,
+                        &builtin_func.tparams,
+                        &builtin_func.typ,
+                        targs,
+                        &value
+                    )
+                    .guard()
+                );
+            }
+            Backtrack::Ok(value)
+        }
         Err(error) => {
             let recoverable = matches!(
                 error.kind.as_ref(),
                 ErrorKind::Host(HostErrorKind::Interface(InterfaceError::Builtin(_)))
             );
-            let error = error.at_if_missing(&builtin_func.id.span);
+            let error = error.at_if_missing(&id.span);
             if recoverable {
                 Backtrack::Unmatch(vec![error])
             } else {
