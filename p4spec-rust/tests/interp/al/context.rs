@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use p4spec_rust::{
     interp::al::{
-        context::{Context, Cursor, Spec},
+        context::{Context, Scope, Spec},
         error::{EntityKind, ErrorKind},
     },
     lang::{
@@ -98,7 +98,7 @@ fn test_localize_discards_locals_and_retains_global_lookup() {
     ctx.add_value(var.clone(), make::bool(true, Span::default()));
     assert_eq!(
         ctx.find_func(&spec, &id("local", 8)).unwrap(),
-        (Cursor::Local, &func_local)
+        (Scope::Local, &func_local)
     );
     let ctx_local = ctx.localize();
     assert!(ctx_local.find_func_opt(&spec, &id("local", 8)).is_none());
@@ -106,7 +106,7 @@ fn test_localize_discards_locals_and_retains_global_lookup() {
     assert!(ctx_local.find_value_opt(&var).is_none());
     assert_eq!(
         ctx_local.find_func(&spec, &id("global", 8)).unwrap(),
-        (Cursor::Global, &func_global)
+        (Scope::Global, &func_global)
     );
     assert!(ctx.find_value_opt(&var).is_some());
 }
@@ -326,7 +326,7 @@ fn test_loaded_native_spec_preserves_definition_bodies_and_locations() {
                     ast::MetaFuncDef::Table(func) => &func.id,
                     ast::MetaFuncDef::Defined(func) => &func.id,
                 };
-                assert_eq!(ctx.find_func(&spec, id).unwrap(), (Cursor::Global, func));
+                assert_eq!(ctx.find_func(&spec, id).unwrap(), (Scope::Global, func));
             }
             ast::DefKind::Var(var) => {
                 assert!(

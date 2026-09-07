@@ -15,8 +15,8 @@ use crate::{
     },
     runtime::{
         envs::{
-            al::{FEnv, REnv, TDEnv},
             interp::VEnv,
+            interp_al::{FEnv, REnv, TDEnv},
         },
         typdef::TypeDef,
     },
@@ -25,7 +25,7 @@ use crate::{
 use super::error::{EntityKind, Error, ErrorKind};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Cursor {
+pub enum Scope {
     Global,
     Local,
 }
@@ -168,11 +168,11 @@ impl Context {
         &'a self,
         spec: &'a Spec,
         id: &ast::Id,
-    ) -> Option<(Cursor, &'a ast::MetaFuncDef)> {
+    ) -> Option<(Scope, &'a ast::MetaFuncDef)> {
         if let Some(func) = self.fenv.get(id) {
-            Some((Cursor::Local, func))
+            Some((Scope::Local, func))
         } else {
-            spec.fenv.get(id).map(|func| (Cursor::Global, func))
+            spec.fenv.get(id).map(|func| (Scope::Global, func))
         }
     }
 
@@ -180,7 +180,7 @@ impl Context {
         &'a self,
         spec: &'a Spec,
         id: &ast::Id,
-    ) -> Result<(Cursor, &'a ast::MetaFuncDef), Error> {
+    ) -> Result<(Scope, &'a ast::MetaFuncDef), Error> {
         self.find_func_opt(spec, id)
             .ok_or_else(|| Error::undefined(EntityKind::Function, id.node.clone(), id.span.clone()))
     }
