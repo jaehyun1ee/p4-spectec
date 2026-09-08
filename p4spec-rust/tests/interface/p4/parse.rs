@@ -85,6 +85,26 @@ fn test_right_and_left_shift_share_left_associative_source_precedence() {
     assert_eq!(operator(right_shift), ">>");
     assert_eq!(operator(binary_part(right_shift, 0)), "<<");
 }
+
+#[test]
+fn test_binary_expression_span_preserves_mapped_token_order() {
+    let program = parse_string(
+        "preprocessed.p4",
+        r#"control C() { apply { bit<4> x; x =
+# 200 "later.p4"
+4w1
+# 10 "earlier.p4"
+& 4w2; } }"#,
+    )
+    .unwrap();
+    let binary = first_binary(&program).unwrap();
+
+    assert_eq!(binary.span.left.file.as_ref(), "later.p4");
+    assert_eq!(binary.span.left.line, 200);
+    assert_eq!(binary.span.right.file.as_ref(), "earlier.p4");
+    assert_eq!(binary.span.right.line, 10);
+}
+
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs,

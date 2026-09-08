@@ -1126,7 +1126,7 @@ ExpressionComparison: Rc<Value> = {
                 typ: "binop",
                 span: span_op,
             };
-            let span_exp = Span::over(&[lhs.span.clone(), rhs.span.clone()]);
+            let span_exp = Span::new(lhs.span.left.clone(), rhs.span.right.clone());
             values.push(make::case! {
                 shape: "expression binop expression",
                 args: vec![lhs, value_op, rhs],
