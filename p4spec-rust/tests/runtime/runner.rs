@@ -19,7 +19,7 @@ use p4spec_rust::{
 };
 use thiserror::Error;
 
-static FRESH_BUILTIN: Mutex<()> = Mutex::new(());
+pub(crate) static FRESH_BUILTIN: Mutex<()> = Mutex::new(());
 
 #[derive(Debug, Error)]
 enum FixtureError {

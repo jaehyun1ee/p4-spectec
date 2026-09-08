@@ -69,13 +69,16 @@ impl Loaded {
         guard: bool,
         extern_: E,
     ) -> Runner<Al, BuiltinInterface, E> {
-        Runner::new(
+        let mut runner = Runner::new(
             Rc::clone(&self.global),
             Config::new(det, guard),
             ValueArena::new(),
             BuiltinInterface::new(self.unparser.clone()),
             extern_,
-        )
+        );
+        // Each independent oracle session starts with reset builtin state
+        runner.clear();
+        runner
     }
 }
 
@@ -83,6 +86,26 @@ struct Oracle {
     child: Child,
     input: Option<ChildStdin>,
     output: BufReader<ChildStdout>,
+}
+
+#[test]
+fn test_comparison_sessions_reset_fresh_names() {
+    let _guard = crate::runner::FRESH_BUILTIN.lock().unwrap();
+    let loaded = Loaded::load(&repo().join("p4spec-rust/tests/fixtures/interp/al/compare.watsup"));
+    let next = |runner: &mut Runner<Al, BuiltinInterface, NullExtern>| {
+        let id = p4spec_rust::phrase!(node: "fresh_typeId".to_owned(), span: Span::default());
+        let (value, side_effected) = runner.context().call_builtin(&id, &[], &[]).unwrap();
+        assert!(side_effected);
+        p4spec_rust::lang::data::value::get::text(runner.arena(), &value)
+            .unwrap()
+            .to_owned()
+    };
+    let mut runner = loaded.runner(false, false, NullExtern);
+    let first = next(&mut runner);
+    assert_ne!(first, next(&mut runner));
+    let mut runner = loaded.runner(false, false, NullExtern);
+    assert_eq!(first, next(&mut runner));
+    assert_ne!(first, next(&mut runner));
 }
 
 impl Oracle {
