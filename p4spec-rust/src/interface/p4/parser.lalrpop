@@ -1113,7 +1113,7 @@ ExpressionEquality: Rc<Value> = {
 };
 
 ExpressionComparison: Rc<Value> = {
-    <first:ExpressionShift> <parts:ExpressionComparisonPart*> => {
+    <first:ExpressionAdditive> <parts:ExpressionComparisonPart*> => {
         let mut values = vec![first];
         let mut operators: Vec<(&str, u8, Span)> = Vec::new();
         let reduce = |values: &mut Vec<Rc<Value>>, operators: &mut Vec<(&str, u8, Span)>| {
@@ -1155,47 +1155,24 @@ ExpressionComparison: Rc<Value> = {
 // Menhir gives the two tokens of `>>` different precedences: the first `>` has
 // comparison precedence, while the completed shift has shift precedence.
 ExpressionComparisonPart: (&'static str, u8, u8, Span, Rc<Value>) = {
-    <l:@L> "LE" <r:@R> <rhs:ExpressionShift> =>
+    <l:@L> "LE" <r:@R> <rhs:ExpressionAdditive> =>
         ("'<='", 1, 1, context.location_span(l, r), rhs),
-    <l:@L> "GE" <r:@R> <rhs:ExpressionShift> =>
+    <l:@L> "GE" <r:@R> <rhs:ExpressionAdditive> =>
         ("'>='", 1, 1, context.location_span(l, r), rhs),
-    <l:@L> "L_ANGLE" <r:@R> <rhs:ExpressionShift> =>
+    <l:@L> "L_ANGLE" <r:@R> <rhs:ExpressionAdditive> =>
         ("'<'", 1, 1, context.location_span(l, r), rhs),
-    <l:@L> r_angle <r:@R> <rhs:ExpressionShift> =>
+    <l:@L> r_angle <r:@R> <rhs:ExpressionAdditive> =>
         ("'>'", 1, 1, context.location_span(l, r), rhs),
-    <l:@L> "BIT_OR" <r:@R> <rhs:ExpressionShift> =>
+    <l:@L> "BIT_OR" <r:@R> <rhs:ExpressionAdditive> =>
         ("'|'", 2, 2, context.location_span(l, r), rhs),
-    <l:@L> "BIT_XOR" <r:@R> <rhs:ExpressionShift> =>
+    <l:@L> "BIT_XOR" <r:@R> <rhs:ExpressionAdditive> =>
         ("'^'", 3, 3, context.location_span(l, r), rhs),
-    <l:@L> "BIT_AND" <r:@R> <rhs:ExpressionShift> =>
+    <l:@L> "BIT_AND" <r:@R> <rhs:ExpressionAdditive> =>
         ("'&'", 4, 4, context.location_span(l, r), rhs),
-    <l:@L> "SHR" <r:@R> <rhs:ExpressionShift> =>
+    <l:@L> "SHL" <r:@R> <rhs:ExpressionAdditive> =>
+        ("'<<'", 5, 5, context.location_span(l, r), rhs),
+    <l:@L> "SHR" <r:@R> <rhs:ExpressionAdditive> =>
         ("'>>'", 1, 5, context.location_span(l, r), rhs),
-};
-
-ExpressionShift: Rc<Value> = {
-    // ExpressionShift ::= ExpressionAdditive
-    ExpressionAdditive,
-
-    // ExpressionShift ::= ExpressionShift "SHL" ExpressionAdditive
-    <l:@L> <lhs:ExpressionShift> <op_l:@L> "SHL" <op_r:@R> <rhs:ExpressionAdditive>
-        <r:@R> => {
-            let span_op = context.location_span(op_l, op_r);
-            let value_op = make::case! {
-                shape: "'<<'",
-                args: vec![],
-                typ: "binop",
-                span: span_op,
-            };
-            let span_exp = context.location_span(l, r);
-            make::case! {
-                shape: "expression binop expression",
-                args: vec![lhs, value_op, rhs],
-                typ: "binaryExpression",
-                span: span_exp,
-            }
-        },
-
 };
 
 ExpressionAdditive: Rc<Value> = {

@@ -4,39 +4,40 @@ use p4spec_rust::{
         parse::{parse_file, parse_string},
         unparse::P4Unparser,
     },
-    lang::data::value::ValueKind,
+    lang::data::{
+        typ::TypKind,
+        value::{Value, ValueKind},
+    },
 };
+
+fn first_binary(value: &Value) -> Option<&Value> {
+    if let TypKind::Var(id, _) = &value.note
+        && id.node == "binaryExpression"
+    {
+        return Some(value);
+    }
+    match &value.node {
+        ValueKind::Case(case) => case
+            .args()
+            .into_iter()
+            .find_map(|value| first_binary(value.as_ref())),
+        _ => None,
+    }
+}
+
+fn binary_part(value: &Value, index: usize) -> &Value {
+    match &value.node {
+        ValueKind::Case(case) => case.args().into_iter().nth(index).unwrap().as_ref(),
+        _ => panic!("binary expression must be a case value"),
+    }
+}
+
+fn operator(value: &Value) -> String {
+    P4Unparser::new().render(binary_part(value, 1)).unwrap()
+}
 
 #[test]
 fn test_right_shift_preserves_source_parser_asymmetric_bitwise_binding() {
-    use p4spec_rust::lang::data::{typ::TypKind, value::Value};
-
-    fn first_binary(value: &Value) -> Option<&Value> {
-        if let TypKind::Var(id, _) = &value.note
-            && id.node == "binaryExpression"
-        {
-            return Some(value);
-        }
-        match &value.node {
-            ValueKind::Case(case) => case
-                .args()
-                .into_iter()
-                .find_map(|value| first_binary(value.as_ref())),
-            _ => None,
-        }
-    }
-
-    fn binary_part(value: &Value, index: usize) -> &Value {
-        match &value.node {
-            ValueKind::Case(case) => case.args().into_iter().nth(index).unwrap().as_ref(),
-            _ => panic!("binary expression must be a case value"),
-        }
-    }
-
-    fn operator(value: &Value) -> String {
-        P4Unparser::new().render(binary_part(value, 1)).unwrap()
-    }
-
     let program_before = parse_string(
         "shift.p4",
         "control C() { apply { bit<4> x; x = 4w1 | 4w2 ^ 4w3 & 4w4 >> 4w5; } }",
@@ -62,6 +63,27 @@ fn test_right_shift_preserves_source_parser_asymmetric_bitwise_binding() {
     let bit_and = binary_part(bit_xor, 0);
     assert_eq!(operator(bit_and), "&");
     assert_eq!(operator(binary_part(bit_and, 0)), ">>");
+}
+
+#[test]
+fn test_right_and_left_shift_share_left_associative_source_precedence() {
+    let program_right_then_left = parse_string(
+        "shift.p4",
+        "control C() { apply { bit<4> x; x = 4w1 >> 4w2 << 4w3; } }",
+    )
+    .unwrap();
+    let left_shift = first_binary(&program_right_then_left).unwrap();
+    assert_eq!(operator(left_shift), "<<");
+    assert_eq!(operator(binary_part(left_shift, 0)), ">>");
+
+    let program_left_then_right = parse_string(
+        "shift.p4",
+        "control C() { apply { bit<4> x; x = 4w1 << 4w2 >> 4w3; } }",
+    )
+    .unwrap();
+    let right_shift = first_binary(&program_left_then_right).unwrap();
+    assert_eq!(operator(right_shift), ">>");
+    assert_eq!(operator(binary_part(right_shift, 0)), "<<");
 }
 use std::{
     collections::{BTreeMap, BTreeSet},
