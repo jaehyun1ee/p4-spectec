@@ -2,16 +2,14 @@ use std::rc::Rc;
 
 use crate::{
     interface::p4::{
+        binary::{self, BinaryExpressionPart, BinaryOperator},
         context::{Context, Location, Namespace, TypeId},
         declare,
         error::P4Error,
         extract,
         lexer::Token,
     },
-    lang::{
-        common::source::Span,
-        data::value::{Value, make},
-    },
+    lang::data::value::{Value, make},
 };
 
 grammar(context: &Context);
@@ -38,7 +36,6 @@ extern {
         "OR" => Token::Or,
         "NE" => Token::NotEqual,
         "EQ" => Token::Equal,
-        "SHR" => Token::ShiftRight,
         "PLUS" => Token::Plus,
         "MINUS" => Token::Minus,
         "PLUS_SAT" => Token::PlusSaturating,
@@ -1113,66 +1110,28 @@ ExpressionEquality: Rc<Value> = {
 };
 
 ExpressionComparison: Rc<Value> = {
-    <first:ExpressionAdditive> <parts:ExpressionComparisonPart*> => {
-        let mut values = vec![first];
-        let mut operators: Vec<(&str, u8, Span)> = Vec::new();
-        let reduce = |values: &mut Vec<Rc<Value>>, operators: &mut Vec<(&str, u8, Span)>| {
-            let (shape, _, span_op) = operators.pop().unwrap();
-            let rhs = values.pop().unwrap();
-            let lhs = values.pop().unwrap();
-            let value_op = make::case! {
-                shape: shape,
-                args: vec![],
-                typ: "binop",
-                span: span_op,
-            };
-            let span_exp = Span::new(lhs.span.left.clone(), rhs.span.right.clone());
-            values.push(make::case! {
-                shape: "expression binop expression",
-                args: vec![lhs, value_op, rhs],
-                typ: "binaryExpression",
-                span: span_exp,
-            });
-        };
-
-        for (shape, incoming_precedence, stacked_precedence, span_op, rhs) in parts {
-            while operators
-                .last()
-                .is_some_and(|(_, precedence, _)| *precedence >= incoming_precedence)
-            {
-                reduce(&mut values, &mut operators);
-            }
-            operators.push((shape, stacked_precedence, span_op));
-            values.push(rhs);
-        }
-        while !operators.is_empty() {
-            reduce(&mut values, &mut operators);
-        }
-        values.pop().unwrap()
-    },
+    <first:ExpressionAdditive> <parts:ExpressionPrecedencePart*> => binary::fold(first, parts),
 };
 
-// Menhir gives the two tokens of `>>` different precedences: the first `>` has
-// comparison precedence, while the completed shift has shift precedence.
-ExpressionComparisonPart: (&'static str, u8, u8, Span, Rc<Value>) = {
+ExpressionPrecedencePart: BinaryExpressionPart = {
     <l:@L> "LE" <r:@R> <rhs:ExpressionAdditive> =>
-        ("'<='", 1, 1, context.location_span(l, r), rhs),
+        BinaryExpressionPart::new(BinaryOperator::LessEqual, context.location_span(l, r), rhs),
     <l:@L> "GE" <r:@R> <rhs:ExpressionAdditive> =>
-        ("'>='", 1, 1, context.location_span(l, r), rhs),
+        BinaryExpressionPart::new(BinaryOperator::GreaterEqual, context.location_span(l, r), rhs),
     <l:@L> "L_ANGLE" <r:@R> <rhs:ExpressionAdditive> =>
-        ("'<'", 1, 1, context.location_span(l, r), rhs),
+        BinaryExpressionPart::new(BinaryOperator::Less, context.location_span(l, r), rhs),
     <l:@L> r_angle <r:@R> <rhs:ExpressionAdditive> =>
-        ("'>'", 1, 1, context.location_span(l, r), rhs),
+        BinaryExpressionPart::new(BinaryOperator::Greater, context.location_span(l, r), rhs),
     <l:@L> "BIT_OR" <r:@R> <rhs:ExpressionAdditive> =>
-        ("'|'", 2, 2, context.location_span(l, r), rhs),
+        BinaryExpressionPart::new(BinaryOperator::BitOr, context.location_span(l, r), rhs),
     <l:@L> "BIT_XOR" <r:@R> <rhs:ExpressionAdditive> =>
-        ("'^'", 3, 3, context.location_span(l, r), rhs),
+        BinaryExpressionPart::new(BinaryOperator::BitXor, context.location_span(l, r), rhs),
     <l:@L> "BIT_AND" <r:@R> <rhs:ExpressionAdditive> =>
-        ("'&'", 4, 4, context.location_span(l, r), rhs),
+        BinaryExpressionPart::new(BinaryOperator::BitAnd, context.location_span(l, r), rhs),
     <l:@L> "SHL" <r:@R> <rhs:ExpressionAdditive> =>
-        ("'<<'", 5, 5, context.location_span(l, r), rhs),
-    <l:@L> "SHR" <r:@R> <rhs:ExpressionAdditive> =>
-        ("'>>'", 1, 5, context.location_span(l, r), rhs),
+        BinaryExpressionPart::new(BinaryOperator::ShiftLeft, context.location_span(l, r), rhs),
+    <l:@L> r_angle "R_ANGLE_SHIFT" <r:@R> <rhs:ExpressionAdditive> =>
+        BinaryExpressionPart::new(BinaryOperator::ShiftRight, context.location_span(l, r), rhs),
 };
 
 ExpressionAdditive: Rc<Value> = {

@@ -96,7 +96,23 @@ fn test_shift_and_type_constructor_angles_are_distinct() {
 
     assert_eq!(tokens[1], Token::TypeNameExpression);
     assert_eq!(tokens[7], Token::RightAngleShift);
-    assert!(tokens.contains(&Token::ShiftRight));
+    assert!(
+        tokens
+            .windows(2)
+            .any(|tokens| tokens == [Token::RightAngle, Token::RightAngleShift])
+    );
+}
+
+#[test]
+fn test_right_shift_uses_source_two_token_stream() {
+    let tokens = tokens("x >> 1", Rc::new(Context::new()));
+
+    assert!(matches!(&tokens[0], Token::Name(value) if get::text(value) == Ok("x")));
+    assert_eq!(tokens[1], Token::Identifier);
+    assert_eq!(tokens[2], Token::RightAngle);
+    assert_eq!(tokens[3], Token::RightAngleShift);
+    assert!(matches!(&tokens[4], Token::NumberInt(_, lexeme) if lexeme == "1"));
+    assert_eq!(tokens[5], Token::End);
 }
 
 #[test]
@@ -133,7 +149,8 @@ fn test_fixed_tokens_use_maximal_munch_in_grammar_order() {
             Token::RightAngle,
             Token::GreaterEqual,
             Token::ShiftRightAssign,
-            Token::ShiftRight,
+            Token::RightAngle,
+            Token::RightAngleShift,
             Token::End,
         ]
     );

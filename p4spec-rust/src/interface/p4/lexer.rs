@@ -15,9 +15,8 @@
 //! deterministic. `Lexer::classify_name` distinguishes type names that start
 //! expressions, while `Lexer::disambiguate_token` marks block-leading colons,
 //! trailing commas, and `error` member accesses without changing their source
-//! spelling. The expression grammar also needs one `ShiftRight` token, so
-//! `Lexer::disambiguate_angles` splits that token into closing angles only
-//! while scanning nested type arguments.
+//! spelling. `Lexer::disambiguate_angles` splits the scanner's `ShiftRight`
+//! token into the source parser's adjacent right-angle tokens.
 //!
 //! # Examples
 //!
@@ -27,7 +26,7 @@
 //!         NumberInt(8), RightAngle, RightAngleShift, Name("value"), Identifier
 //!
 //! source: x >> 1
-//! lexer:  Name("x"), Identifier, ShiftRight, NumberInt(1)
+//! lexer:  Name("x"), Identifier, RightAngle, RightAngleShift, NumberInt(1)
 //! ```
 
 use std::{collections::VecDeque, rc::Rc};
@@ -75,7 +74,7 @@ pub enum Token {
     Or,
     NotEqual,
     Equal,
-    /// Parser-only spelling of `>>` in an expression
+    /// Scanner-only spelling of adjacent `>` characters
     ShiftRight,
     Plus,
     Minus,
@@ -351,7 +350,7 @@ impl<'source> Lexer<'source> {
                 self.template_depth -= 1;
                 (Token::RightAngle, span)
             }
-            Token::ShiftRight if self.template_depth > 0 => {
+            Token::ShiftRight => {
                 let pos_middle = Position::new(
                     Rc::clone(&span.left.file),
                     span.left.line,
@@ -360,9 +359,11 @@ impl<'source> Lexer<'source> {
                 let second = if self.template_depth > 1 {
                     self.template_depth -= 2;
                     Token::RightAngleShift
-                } else {
+                } else if self.template_depth == 1 {
                     self.template_depth = 0;
                     Token::RightAngle
+                } else {
+                    Token::RightAngleShift
                 };
                 let span_second = Span::new(pos_middle.clone(), span.right.clone());
                 let token_second = phrase!(node: second, span: span_second);
