@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 import stat
 import tempfile
+from types import SimpleNamespace
 import unittest
 
 
@@ -13,6 +14,46 @@ SPEC.loader.exec_module(benchmark)
 
 
 class BenchmarkTest(unittest.TestCase):
+    def test_collect_preflights_before_reserving_stage_and_refuses_overwrite(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            rust_bin = root / "rust"
+            ocaml_bin = root / "ocaml"
+            ocaml_bin.write_text("#!/bin/sh\nprintf 'passed\\n'\n")
+            ocaml_bin.chmod(ocaml_bin.stat().st_mode | stat.S_IXUSR)
+            args = SimpleNamespace(
+                repo=Path(__file__).parents[2],
+                rust_bin=rust_bin,
+                ocaml_bin=ocaml_bin,
+                rust_commit="rust-commit",
+                ocaml_commit="ocaml-commit",
+                p4c_commit="p4c-commit",
+                rustc_version="rustc exact",
+                ocamlc_version="ocamlc exact",
+                output_root=root / "output",
+                stage="retryable",
+                rust_cache_mode="absent",
+                only=["rust"],
+                warmups=0,
+                measurements=1,
+                relation="Program_inst",
+                include=root,
+                program=root / "input.p4",
+            )
+            stage = args.output_root / args.stage
+
+            with self.assertRaises(FileNotFoundError):
+                benchmark.collect(args)
+            self.assertFalse(stage.exists())
+
+            rust_bin.write_text("#!/bin/sh\nprintf 'passed\\n'\n")
+            rust_bin.chmod(rust_bin.stat().st_mode | stat.S_IXUSR)
+            benchmark.collect(args)
+            self.assertTrue((stage / "summary.json").is_file())
+
+            with self.assertRaises(FileExistsError):
+                benchmark.collect(args)
+
     def test_parse_time_reads_wall_seconds_and_maximum_rss(self):
         sample = benchmark.parse_time(
             "        12.34 real         9.87 user         0.11 sys\n"

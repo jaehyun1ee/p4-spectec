@@ -173,7 +173,6 @@ def configs(args):
 
 def collect(args):
     output_dir = args.output_root.resolve() / args.stage
-    output_dir.mkdir(parents=True, exist_ok=False)
     config_list = select_configs(configs(args), args.only)
     metadata = {
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -199,6 +198,7 @@ def collect(args):
         "host": host_metadata(),
         "configs": {config.name: config.command for config in config_list},
     }
+    output_dir.mkdir(parents=True, exist_ok=False)
     write_json(output_dir / "metadata.json", metadata)
 
     by_name = {config.name: config for config in config_list}
