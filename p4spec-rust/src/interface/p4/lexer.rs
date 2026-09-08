@@ -35,14 +35,7 @@ use num_bigint::BigInt;
 
 use crate::{
     lang::{
-        common::{
-            notation::{atom::Atom, mixfix::Mixfix},
-            source::{Phrase, Position, Span},
-        },
-        data::{
-            typ,
-            value::{Value, make},
-        },
+        common::source::{Phrase, Position, Span},
         xl::num::Natural,
     },
     phrase,
@@ -52,6 +45,13 @@ use super::{
     context::{Context, IdentKind},
     error::{LexErrorKind, P4Error},
 };
+
+/// Located integer payload retained until its grammar reduction
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct IntegerLiteral {
+    pub int: BigInt,
+    pub width: Option<(Natural, char)>,
+}
 
 // == Tokens
 
@@ -63,10 +63,10 @@ pub enum Token {
     /// Type name at the start of a postfix expression
     TypeNameExpression,
     Identifier,
-    Name(Rc<Value>),
-    StringLiteral(Rc<Value>),
-    NumberInt(Rc<Value>, String),
-    Number(Rc<Value>, String),
+    Name(Box<Phrase<String>>),
+    StringLiteral(Box<Phrase<String>>),
+    NumberInt(Box<Phrase<IntegerLiteral>>, String),
+    Number(Box<Phrase<IntegerLiteral>>, String),
     LessEqual,
     GreaterEqual,
     ShiftLeft,
@@ -180,7 +180,7 @@ pub enum Token {
     BitAndAssign,
     BitXorAssign,
     BitOrAssign,
-    UnexpectedToken(Rc<Value>),
+    UnexpectedToken(Box<Phrase<String>>),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -202,7 +202,7 @@ pub struct Lexer<'source> {
     context: Rc<Context>,
     state: LexerState,
     pending: VecDeque<Phrase<Token>>,
-    deferred_classification: Option<(Rc<Value>, Span, LexerState)>,
+    deferred_classification: Option<(Phrase<String>, Span, LexerState)>,
     template_depth: usize,
     finished: bool,
 }
@@ -394,15 +394,17 @@ impl<'source> Lexer<'source> {
 
     // - Name classification
 
-    fn defer_classification(&mut self, value: &Rc<Value>, span: &Span, next: LexerState) {
-        self.deferred_classification = Some((Rc::clone(value), span.clone(), next));
+    fn defer_classification(&mut self, value: &Phrase<String>, span: &Span, next: LexerState) {
+        self.deferred_classification = Some((value.clone(), span.clone(), next));
     }
 
-    fn classify_name(&mut self, value: &Rc<Value>, span: &Span, next: LexerState) -> Phrase<Token> {
-        let name = match &value.node {
-            crate::lang::data::value::ValueKind::Text(name) => name,
-            _ => return phrase!(node: Token::Identifier, span: span.clone()),
-        };
+    fn classify_name(
+        &mut self,
+        value: &Phrase<String>,
+        span: &Span,
+        next: LexerState,
+    ) -> Phrase<Token> {
+        let name = &value.node;
         let (token, template_expected) = match self.context.ident_kind(name) {
             IdentKind::TypeName { has_params, .. } => {
                 let token = if self.type_name_starts_expression() {
@@ -528,8 +530,8 @@ impl<'source> Lexer<'source> {
                 self.take_while(|character| character.is_ascii_alphanumeric() || character == '_');
                 let text = &self.source[start..self.index];
                 let token = keyword(text).unwrap_or_else(|| {
-                    let value = make::text(text.to_owned(), self.span_from(pos_l.clone()));
-                    Token::Name(value)
+                    let value = phrase!(node: text.to_owned(), span: self.span_from(pos_l.clone()));
+                    Token::Name(Box::new(value))
                 });
                 let span = self.span_from(pos_l);
                 return Some(Ok(phrase!(node: token, span: span)));
@@ -545,8 +547,8 @@ impl<'source> Lexer<'source> {
 
             let text = self.bump().expect("source is not empty").to_string();
             let span = self.span_from(pos_l);
-            let value = make::text(text, span.clone());
-            let token = Token::UnexpectedToken(value);
+            let value = phrase!(node: text, span: span.clone());
+            let token = Token::UnexpectedToken(Box::new(value));
             return Some(Ok(phrase!(node: token, span: span)));
         }
     }
@@ -592,8 +594,8 @@ impl<'source> Lexer<'source> {
                 character => text.push(character),
             }
         };
-        let value = make::text(text, self.span_from(pos_l));
-        let token = Token::StringLiteral(value);
+        let value = phrase!(node: text, span: self.span_from(pos_l));
+        let token = Token::StringLiteral(Box::new(value));
         let span = self.span_from(pos_quote);
         Ok(phrase!(node: token, span: span))
     }
@@ -640,19 +642,7 @@ impl<'source> Lexer<'source> {
                         pos_l.clone(),
                     )
                 })?;
-                let value_width = make::nat(nat_width, span.clone());
-                let value_int = make::int(int, span.clone());
-                let atom = phrase!(
-                    node: Atom::Keyword(sign.to_ascii_uppercase().to_string()),
-                    span: span.clone()
-                );
-                let value_case = Mixfix::Seq(vec![
-                    Mixfix::Arg(value_width),
-                    Mixfix::Atom(atom),
-                    Mixfix::Arg(value_int),
-                ]);
-                let id_typ = phrase!(node: "integerLiteral".to_owned(), span: Span::default());
-                let value = make::case_(&typ::make::var(id_typ, vec![]), value_case, span);
+                let value = phrase!(node: IntegerLiteral { int, width: Some((nat_width, sign)) }, span: span);
                 (value, digits.to_owned())
             }
             _ => {
@@ -663,14 +653,17 @@ impl<'source> Lexer<'source> {
                     )
                 })?;
                 let span = self.span_from(pos_l.clone());
-                (make::int(int, span), spelling.to_owned())
+                (
+                    phrase!(node: IntegerLiteral { int, width: None }, span: span),
+                    spelling.to_owned(),
+                )
             }
         };
         let span = self.span_from(pos_l);
         let token = if sign_index.is_some() {
-            Token::Number(value, lexeme)
+            Token::Number(Box::new(value), lexeme)
         } else {
-            Token::NumberInt(value, lexeme)
+            Token::NumberInt(Box::new(value), lexeme)
         };
         Ok(phrase!(node: token, span: span))
     }

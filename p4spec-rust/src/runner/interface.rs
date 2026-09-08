@@ -6,8 +6,6 @@
 //! `false` with its value. Failures remain independent of source locations;
 //! the interpreter that evaluates a call owns that location.
 
-use std::rc::Rc;
-
 use thiserror::Error;
 
 use crate::{
@@ -16,7 +14,7 @@ use crate::{
         p4::unparse::P4Unparser,
     },
     lang::common::source::Span,
-    lang::data::value::{self, Value},
+    lang::data::value::{self, Value, ValueArena},
     lang::il::ast::{Id, Typ},
 };
 
@@ -35,10 +33,11 @@ pub enum InterfaceError {
 pub trait Interface {
     fn call_builtin(
         &mut self,
+        arena: &mut ValueArena,
         id: &Id,
         targs: &[Typ],
-        values: &[Rc<Value>],
-    ) -> Result<(Rc<Value>, bool), InterfaceError>;
+        values: &[Value],
+    ) -> Result<(Value, bool), InterfaceError>;
 
     fn clear(&mut self);
 }
@@ -58,26 +57,35 @@ impl BuiltinInterface {
         }
     }
 
-    fn print(&self, targs: &[Typ], values: &[Rc<Value>]) -> Result<Rc<Value>, BuiltinError> {
+    fn print(
+        &self,
+        arena: &mut ValueArena,
+        targs: &[Typ],
+        values: &[Value],
+    ) -> Result<Value, BuiltinError> {
         let _typ = extract::one(targs)?;
         let value = extract::one(values)?;
-        let text = self.unparser.render(value).map_err(|error| BuiltinError {
-            kind: BuiltinErrorKind::P4Unparse(error),
-        })?;
-        Ok(value::make::text(text, Span::default()))
+        let text = self
+            .unparser
+            .render(arena, value)
+            .map_err(|error| BuiltinError {
+                kind: BuiltinErrorKind::P4Unparse(error),
+            })?;
+        Ok(value::make::text(arena, text, Span::default())?)
     }
 }
 
 impl Interface for BuiltinInterface {
     fn call_builtin(
         &mut self,
+        arena: &mut ValueArena,
         id: &Id,
         targs: &[Typ],
-        values: &[Rc<Value>],
-    ) -> Result<(Rc<Value>, bool), InterfaceError> {
+        values: &[Value],
+    ) -> Result<(Value, bool), InterfaceError> {
         let result = match id.node.as_str() {
-            "print_" => self.print(targs, values).map(|value| (value, false)),
-            _ => self.builtins.invoke(id, targs, values),
+            "print_" => self.print(arena, targs, values).map(|value| (value, false)),
+            _ => self.builtins.invoke(arena, id, targs, values),
         };
         result.map_err(|error| InterfaceError::Builtin(Box::new(error)))
     }
@@ -92,10 +100,11 @@ pub struct NullInterface;
 impl Interface for NullInterface {
     fn call_builtin(
         &mut self,
+        _arena: &mut ValueArena,
         _id: &Id,
         _targs: &[Typ],
-        _values: &[Rc<Value>],
-    ) -> Result<(Rc<Value>, bool), InterfaceError> {
+        _values: &[Value],
+    ) -> Result<(Value, bool), InterfaceError> {
         Err(InterfaceError::NotConfigured)
     }
 

@@ -8,7 +8,7 @@ use p4spec_rust::{
         context::Global,
         error::{Error, ErrorKind, HostErrorKind},
     },
-    lang::data::value::Value,
+    lang::data::value::{Value, ValueArena},
     pass::{algo, elaborate},
     runner::{BuiltinInterface, Extern, ExternError, Runner},
 };
@@ -32,8 +32,9 @@ fn runner_from_spec<E: Extern>(spec: &Path, externs: E) -> Runner<Al, BuiltinInt
     let spec_al = algo::convert(spec_il).expect("native algorithmic conversion");
     let unparser = P4Unparser::from_al_spec(&spec_al);
     Runner::new(
-        Global::load(spec_al).unwrap(),
+        Rc::new(Global::load(spec_al).unwrap()),
         Config::new(false, false),
+        ValueArena::new(),
         BuiltinInterface::new(unparser),
         externs,
     )
@@ -50,6 +51,6 @@ fn has_extern_failure(error: &Error, expected: &str) -> bool {
         .any(|error| has_extern_failure(error, expected))
 }
 
-fn parse_program(path: &Path) -> Rc<Value> {
-    parse_file(&[repo().join("p4c/p4include")], path).expect("native P4 parsing")
+fn parse_program(arena: &mut ValueArena, path: &Path) -> Value {
+    parse_file(arena, &[repo().join("p4c/p4include")], path).expect("native P4 parsing")
 }

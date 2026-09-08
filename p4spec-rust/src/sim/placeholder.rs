@@ -1,5 +1,3 @@
-use std::rc::Rc;
-
 use crate::{
     lang::{
         common::source::Span,
@@ -22,8 +20,8 @@ impl Extern for Placeholder {
         &self,
         context: &mut RunnerContext<'_, S, I, Self>,
         name: &str,
-        values: &[Rc<Value>],
-    ) -> Result<(Vec<Rc<Value>>, bool), S::Error>
+        values: &[Value],
+    ) -> Result<(Vec<Value>, bool), S::Error>
     where
         I: Interface,
         S: Interpreter<I, Self>,
@@ -40,14 +38,15 @@ impl Extern for Placeholder {
             )
             .into());
         };
-        let name_func = crate::lang::data::value::get::text(value_name)
+        let name_func = crate::lang::data::value::get::text(context.arena(), value_name)
             .map_err(|error| S::Error::from(ExternError::Failure(error.to_string())))?;
-        let values_name_param = crate::lang::data::value::get::list(value_names_param)
-            .map_err(|error| S::Error::from(ExternError::Failure(error.to_string())))?;
+        let values_name_param =
+            crate::lang::data::value::get::list(context.arena(), value_names_param)
+                .map_err(|error| S::Error::from(ExternError::Failure(error.to_string())))?;
         let names_param = values_name_param
             .iter()
             .map(|value| {
-                crate::lang::data::value::get::text(value)
+                crate::lang::data::value::get::text(context.arena(), value)
                     .map_err(|error| S::Error::from(ExternError::Failure(error.to_string())))
             })
             .collect::<Result<Vec<_>, _>>()?;
@@ -68,11 +67,11 @@ impl Extern for Placeholder {
 
     fn eval_func<S, I>(
         &self,
-        _context: &mut RunnerContext<'_, S, I, Self>,
+        context: &mut RunnerContext<'_, S, I, Self>,
         name: &str,
         _targs: &[Typ],
-        _values: &[Rc<Value>],
-    ) -> Result<(Rc<Value>, bool), S::Error>
+        _values: &[Value],
+    ) -> Result<(Value, bool), S::Error>
     where
         I: Interface,
         S: Interpreter<I, Self>,
@@ -84,7 +83,13 @@ impl Extern for Placeholder {
                     span: Span::default(),
                 );
                 let typ = make_typ::var(id, Vec::new());
-                let value = make_value::external(&typ, ExternalData::Null, Span::default());
+                let value = make_value::external(
+                    context.arena_mut(),
+                    &typ,
+                    ExternalData::Null,
+                    Span::default(),
+                )
+                .map_err(crate::runner::ExternError::from)?;
                 Ok((value, false))
             }
             _ => Err(ExternError::Failure(format!("unimplemented extern function: {name}")).into()),

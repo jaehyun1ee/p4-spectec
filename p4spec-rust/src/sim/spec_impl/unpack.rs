@@ -1,5 +1,5 @@
 use crate::{
-    lang::data::value::{Value, get},
+    lang::data::value::{Value, ValueArena, get},
     runner::ExternError,
 };
 
@@ -7,8 +7,8 @@ fn failure(error: impl std::fmt::Display) -> ExternError {
     ExternError::Failure(error.to_string())
 }
 
-pub fn p4_bool(value: &Value) -> Result<bool, ExternError> {
-    get::matches! {
+pub fn p4_bool(arena: &ValueArena, value: &Value) -> Result<bool, ExternError> {
+    get::matches! { arena,
         value,
         "_B bool" => |values| {
             let [value] = values.as_slice() else {
@@ -17,14 +17,14 @@ pub fn p4_bool(value: &Value) -> Result<bool, ExternError> {
                     values.len()
                 )));
             };
-            get::bool(value).map_err(failure)
+            get::bool(arena, value).map_err(failure)
         },
         _ => Err(ExternError::Failure("expected P4 bool value".to_owned())),
     }
 }
 
-pub fn p4_string(value: &Value) -> Result<String, ExternError> {
-    get::matches! {
+pub fn p4_string(arena: &ValueArena, value: &Value) -> Result<String, ExternError> {
+    get::matches! { arena,
         value,
         "'\"' text '\"'" => |values| {
             let [value] = values.as_slice() else {
@@ -33,7 +33,7 @@ pub fn p4_string(value: &Value) -> Result<String, ExternError> {
                     values.len()
                 )));
             };
-            get::text(value).map(str::to_owned).map_err(failure)
+            get::text(arena, value).map(str::to_owned).map_err(failure)
         },
         _ => Err(ExternError::Failure("expected P4 string value".to_owned())),
     }

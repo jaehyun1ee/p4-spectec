@@ -14,30 +14,80 @@ use crate::lang::{
     },
 };
 
-use super::{super::source::Phrase, atom::Atom};
+use super::{
+    super::source::{Phrase, Span},
+    atom::Atom,
+};
 
 /// An atom paired with its source span
-pub type AtomPhrase = Phrase<Atom>;
+pub type AtomPhrase<S = Span> = Phrase<Atom, S>;
 
 /// A mixfix expression: literal atoms interleaved with argument holes of type
 /// `T`. For example `_ + _` is infix with two holes and `[ _ ]` brackets one.
 #[derive(Clone, Debug)]
-pub enum Mixfix<T> {
+pub enum Mixfix<T, S = Span> {
     /// Argument position
     Arg(T),
     /// Literal atom
-    Atom(AtomPhrase),
+    Atom(AtomPhrase<S>),
     /// Bracketed expression
-    Brack(AtomPhrase, Box<Self>, AtomPhrase),
+    Brack(AtomPhrase<S>, Box<Self>, AtomPhrase<S>),
     /// Infix expression
-    Infix(Box<Self>, AtomPhrase, Box<Self>),
+    Infix(Box<Self>, AtomPhrase<S>, Box<Self>),
     /// Sequence of expressions
     Seq(Vec<Self>),
 }
 
 // == Equality and comparison
 
-impl<T> Mixfix<T> {
+impl<T, S> Mixfix<T, S> {
+    pub fn map_spans<R>(self, mut map_span: impl FnMut(S) -> R) -> Mixfix<T, R> {
+        match self.try_map_spans(|span| Ok::<_, std::convert::Infallible>(map_span(span))) {
+            Ok(value) => value,
+            Err(error) => match error {},
+        }
+    }
+
+    /// Transforms atom locations without changing arguments or notation
+    pub fn try_map_spans<R, E>(
+        self,
+        mut map_span: impl FnMut(S) -> Result<R, E>,
+    ) -> Result<Mixfix<T, R>, E> {
+        self.try_map_spans_inner(&mut map_span)
+    }
+
+    fn try_map_spans_inner<R, E>(
+        self,
+        map_span: &mut impl FnMut(S) -> Result<R, E>,
+    ) -> Result<Mixfix<T, R>, E> {
+        fn atom<S, R, E>(
+            atom: AtomPhrase<S>,
+            map_span: &mut impl FnMut(S) -> Result<R, E>,
+        ) -> Result<AtomPhrase<R>, E> {
+            Ok(crate::phrase!(node: atom.node, span: map_span(atom.span)?))
+        }
+        Ok(match self {
+            Self::Arg(arg) => Mixfix::Arg(arg),
+            Self::Atom(value) => Mixfix::Atom(atom(value, map_span)?),
+            Self::Brack(left, inner, right) => Mixfix::Brack(
+                atom(left, map_span)?,
+                Box::new(inner.try_map_spans_inner(map_span)?),
+                atom(right, map_span)?,
+            ),
+            Self::Infix(left, value, right) => Mixfix::Infix(
+                Box::new(left.try_map_spans_inner(map_span)?),
+                atom(value, map_span)?,
+                Box::new(right.try_map_spans_inner(map_span)?),
+            ),
+            Self::Seq(values) => Mixfix::Seq(
+                values
+                    .into_iter()
+                    .map(|value| value.try_map_spans_inner(map_span))
+                    .collect::<Result<_, _>>()?,
+            ),
+        })
+    }
+
     // - Tagging for comparison
 
     fn tag(&self) -> u8 {
@@ -53,17 +103,17 @@ impl<T> Mixfix<T> {
     // - Comparison
 
     /// Compares structure and atoms lexicographically, using `compare_arg` for arguments
-    pub fn cmp_by<U>(
+    pub fn cmp_by<U, R>(
         &self,
-        mixfix_other: &Mixfix<U>,
+        mixfix_other: &Mixfix<U, R>,
         mut compare_arg: impl FnMut(&T, &U) -> Ordering,
     ) -> Ordering {
         self.cmp_by_inner(mixfix_other, &mut compare_arg)
     }
 
-    fn cmp_by_inner<U>(
+    fn cmp_by_inner<U, R>(
         &self,
-        mixfix_other: &Mixfix<U>,
+        mixfix_other: &Mixfix<U, R>,
         compare_arg: &mut impl FnMut(&T, &U) -> Ordering,
     ) -> Ordering {
         match (self, mixfix_other) {
@@ -98,17 +148,17 @@ impl<T> Mixfix<T> {
     }
 
     /// Compares structure and atoms, using `eq_arg` for arguments
-    pub fn eq_by<U>(
+    pub fn eq_by<U, R>(
         &self,
-        mixfix_other: &Mixfix<U>,
+        mixfix_other: &Mixfix<U, R>,
         mut eq_arg: impl FnMut(&T, &U) -> bool,
     ) -> bool {
         self.eq_by_inner(mixfix_other, &mut eq_arg)
     }
 
-    fn eq_by_inner<U>(
+    fn eq_by_inner<U, R>(
         &self,
-        mixfix_other: &Mixfix<U>,
+        mixfix_other: &Mixfix<U, R>,
         eq_arg: &mut impl FnMut(&T, &U) -> bool,
     ) -> bool {
         match (self, mixfix_other) {
@@ -142,26 +192,26 @@ impl<T> Mixfix<T> {
     }
 
     /// Tests whether two mixfixes have the same atoms and argument positions
-    pub fn eq_shape<U>(&self, mixfix_other: &Mixfix<U>) -> bool {
+    pub fn eq_shape<U, R>(&self, mixfix_other: &Mixfix<U, R>) -> bool {
         self.eq_by(mixfix_other, |_, _| true)
     }
 }
 
-impl<T: PartialEq> PartialEq for Mixfix<T> {
+impl<T: PartialEq, S> PartialEq for Mixfix<T, S> {
     fn eq(&self, mixfix_other: &Self) -> bool {
         self.eq_by(mixfix_other, PartialEq::eq)
     }
 }
 
-impl<T: Eq> Eq for Mixfix<T> {}
+impl<T: Eq, S> Eq for Mixfix<T, S> {}
 
-impl<T: SyntaxEq> SyntaxEq for Mixfix<T> {
+impl<T: SyntaxEq, S> SyntaxEq for Mixfix<T, S> {
     fn syntax_eq(&self, other: &Self) -> bool {
         self.eq_by(other, SyntaxEq::syntax_eq)
     }
 }
 
-impl<T: SyntaxCmp> SyntaxCmp for Mixfix<T> {
+impl<T: SyntaxCmp, S> SyntaxCmp for Mixfix<T, S> {
     fn syntax_cmp(&self, other: &Self) -> Ordering {
         self.cmp_by(other, SyntaxCmp::syntax_cmp)
     }
@@ -169,13 +219,13 @@ impl<T: SyntaxCmp> SyntaxCmp for Mixfix<T> {
 
 // == Ordering
 
-impl<T: Ord> Ord for Mixfix<T> {
+impl<T: Ord, S> Ord for Mixfix<T, S> {
     fn cmp(&self, mixfix_other: &Self) -> Ordering {
         self.cmp_by(mixfix_other, Ord::cmp)
     }
 }
 
-impl<T: Ord> PartialOrd for Mixfix<T> {
+impl<T: Ord, S> PartialOrd for Mixfix<T, S> {
     fn partial_cmp(&self, mixfix_other: &Self) -> Option<Ordering> {
         Some(self.cmp(mixfix_other))
     }
@@ -183,7 +233,7 @@ impl<T: Ord> PartialOrd for Mixfix<T> {
 
 // == Hashing
 
-impl<T: Hash> Hash for Mixfix<T> {
+impl<T: Hash, S> Hash for Mixfix<T, S> {
     fn hash<H: Hasher>(&self, hasher: &mut H) {
         self.tag().hash(hasher);
         match self {
@@ -206,7 +256,7 @@ impl<T: Hash> Hash for Mixfix<T> {
 
 // == Free identifiers
 
-impl<T: Free> Free for Mixfix<T> {
+impl<T: Free, S> Free for Mixfix<T, S> {
     fn free_into(&self, free: &mut IdSet) {
         match self {
             Self::Arg(arg) => arg.free_into(free),
@@ -223,7 +273,7 @@ impl<T: Free> Free for Mixfix<T> {
 
 // == Fold, map, and iter
 
-impl<T> Mixfix<T> {
+impl<T, S> Mixfix<T, S> {
     /// Folds arguments from left to right
     pub fn fold<A>(&self, acc: A, mut fold_arg: impl FnMut(A, &T) -> A) -> A {
         self.fold_inner(acc, &mut fold_arg)
@@ -245,11 +295,17 @@ impl<T> Mixfix<T> {
     }
 
     /// Maps arguments while preserving mixfix structure and atoms
-    pub fn map<U>(&self, mut map_arg: impl FnMut(&T) -> U) -> Mixfix<U> {
+    pub fn map<U>(&self, mut map_arg: impl FnMut(&T) -> U) -> Mixfix<U, S>
+    where
+        S: Clone,
+    {
         self.map_inner(&mut map_arg)
     }
 
-    fn map_inner<U>(&self, map_arg: &mut impl FnMut(&T) -> U) -> Mixfix<U> {
+    fn map_inner<U>(&self, map_arg: &mut impl FnMut(&T) -> U) -> Mixfix<U, S>
+    where
+        S: Clone,
+    {
         match self {
             Self::Arg(arg) => Mixfix::Arg(map_arg(arg)),
             Self::Atom(atom) => Mixfix::Atom(atom.clone()),
@@ -280,7 +336,7 @@ impl<T> Mixfix<T> {
 
 // == Utilities using fold, map, and iter
 
-impl<T> Mixfix<T> {
+impl<T, S> Mixfix<T, S> {
     // - Arity
 
     /// Returns the number of argument positions
@@ -291,13 +347,13 @@ impl<T> Mixfix<T> {
     // - Atoms and args
 
     /// Collects atoms in left-to-right tree order
-    pub fn atoms(&self) -> Vec<&AtomPhrase> {
+    pub fn atoms(&self) -> Vec<&AtomPhrase<S>> {
         let mut atoms = Vec::new();
         self.collect_atoms(&mut atoms);
         atoms
     }
 
-    fn collect_atoms<'a>(&'a self, atoms: &mut Vec<&'a AtomPhrase>) {
+    fn collect_atoms<'a>(&'a self, atoms: &mut Vec<&'a AtomPhrase<S>>) {
         match self {
             Self::Arg(_) => {}
             Self::Atom(atom) => atoms.push(atom),
@@ -370,7 +426,7 @@ impl<T> Mixfix<T> {
 
 // == Printing
 
-impl<T> Mixfix<T> {
+impl<T, S> Mixfix<T, S> {
     /// Writes atoms and arguments, separating non-empty pieces with spaces
     pub fn print_with(
         &self,
@@ -396,12 +452,12 @@ impl<T> Mixfix<T> {
             }
         };
 
-        let print_atom = |atom: &AtomPhrase, printer: &mut Printer<'_>, is_first: &mut bool| {
+        let print_atom = |atom: &AtomPhrase<S>, printer: &mut Printer<'_>, is_first: &mut bool| {
             if matches!(&atom.node, Atom::Keyword(keyword) if keyword.is_empty()) {
                 Ok(())
             } else {
                 print_sep(printer, is_first)?;
-                atom.print(printer)
+                atom.node.print(printer)
             }
         };
 

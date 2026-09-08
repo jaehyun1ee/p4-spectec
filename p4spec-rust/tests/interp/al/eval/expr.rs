@@ -11,7 +11,7 @@ use p4spec_rust::{
         },
         data::{
             typ,
-            value::{Value, get, make},
+            value::{Value, ValueArena, get, make},
         },
         il::ast::{ListPattern, OptPattern},
         xl::{bool as boolean, num},
@@ -55,18 +55,28 @@ fn function(name: &str, expression: ast::Exp) -> ast::Def {
     }))), span: Span::default())
 }
 
-fn eval(expression: ast::Exp) -> Result<Rc<Value>, p4spec_rust::interp::al::error::Error> {
+fn eval(
+    arena: &mut ValueArena,
+    expression: ast::Exp,
+) -> Result<Value, p4spec_rust::interp::al::error::Error> {
     let global = Global::load(vec![function("test", expression)]).unwrap();
-    let mut runner =
-        Runner::<Al, _, _>::new(global, Config::new(false, false), NullInterface, NullExtern);
-    runner.eval_func("test", &[], &[])
+    let mut runner = Runner::<Al, _, _>::new(
+        Rc::new(global),
+        Config::new(false, false),
+        std::mem::take(arena),
+        NullInterface,
+        NullExtern,
+    );
+    let result = runner.eval_func("test", &[], &[]);
+    *arena = std::mem::take(runner.arena_mut());
+    result
 }
 
-fn numbers(value: &Value) -> Vec<String> {
-    get::list(value)
+fn numbers(arena: &ValueArena, value: &Value) -> Vec<String> {
+    get::list(arena, value)
         .unwrap()
         .iter()
-        .map(|value| num::to_int(get::num(value).unwrap()).to_string())
+        .map(|value| num::to_int(get::num(arena, value).unwrap()).to_string())
         .collect()
 }
 
@@ -76,6 +86,7 @@ fn path(kind: ast::PathKind, typ: ast::Typ) -> ast::Path {
 
 #[test]
 fn test_nested_updates_preserve_the_original_and_surrounding_fields() {
+    let mut arena = ValueArena::new();
     let atom = p4spec_rust::phrase!(node: Atom::Keyword("items".into()), span: Span::default());
     let typ_list = typ::make::list(typ::make::int());
     let typ_struct = typ::make::var(id("record"), vec![]);
@@ -105,12 +116,25 @@ fn test_nested_updates_preserve_the_original_and_surrounding_fields() {
         typ_list.clone(),
     );
     let original = exp(ast::ExpKind::Dot(Box::new(original), atom), typ_list);
-    assert_eq!(numbers(&eval(updated).unwrap()), ["1", "9", "3"]);
-    assert_eq!(numbers(&eval(original).unwrap()), ["1", "2", "3"]);
+    assert_eq!(
+        {
+            let (value_arg0,) = (&eval(&mut arena, updated).unwrap(),);
+            numbers(&arena, value_arg0)
+        },
+        ["1", "9", "3"]
+    );
+    assert_eq!(
+        {
+            let (value_arg0,) = (&eval(&mut arena, original).unwrap(),);
+            numbers(&arena, value_arg0)
+        },
+        ["1", "2", "3"]
+    );
 }
 
 #[test]
 fn test_slice_updates_require_equal_lengths_and_support_text() {
+    let mut arena = ValueArena::new();
     let typ_text = typ::make::text();
     let root = path(ast::PathKind::Root, typ_text.clone());
     let slice = path(
@@ -127,9 +151,16 @@ fn test_slice_updates_require_equal_lengths_and_support_text() {
             typ_text.clone(),
         )
     };
-    assert_eq!(get::text(&eval(update("XY")).unwrap()).unwrap(), "aXYd");
+    assert_eq!(
+        {
+            let (value_arg0,) = (&eval(&mut arena, update("XY")).unwrap(),);
+            get::text(&arena, value_arg0)
+        }
+        .unwrap(),
+        "aXYd"
+    );
     assert!(
-        eval(update("X"))
+        eval(&mut arena, update("X"))
             .unwrap_err()
             .to_string()
             .contains("slice of length 2")
@@ -138,6 +169,7 @@ fn test_slice_updates_require_equal_lengths_and_support_text() {
 
 #[test]
 fn test_negative_list_slice_lengths_are_empty_but_text_lengths_fail() {
+    let mut arena = ValueArena::new();
     let slice = |base, typ| {
         exp(
             ast::ExpKind::Slice(Box::new(base), Box::new(int(2)), Box::new(int(-3))),
@@ -145,18 +177,22 @@ fn test_negative_list_slice_lengths_are_empty_but_text_lengths_fail() {
         )
     };
     assert!(
-        get::list(
-            &eval(slice(
-                list(vec![int(1), int(2), int(3)]),
-                typ::make::list(typ::make::int())
-            ))
-            .unwrap()
-        )
+        {
+            let (value_arg0,) = (&eval(
+                &mut arena,
+                slice(
+                    list(vec![int(1), int(2), int(3)]),
+                    typ::make::list(typ::make::int()),
+                ),
+            )
+            .unwrap(),);
+            get::list(&arena, value_arg0)
+        }
         .unwrap()
         .is_empty()
     );
     assert!(
-        eval(slice(text("abc"), typ::make::text()))
+        eval(&mut arena, slice(text("abc"), typ::make::text()))
             .unwrap_err()
             .to_string()
             .contains("negative")
@@ -165,22 +201,37 @@ fn test_negative_list_slice_lengths_are_empty_but_text_lengths_fail() {
 
 #[test]
 fn test_text_operations_use_byte_lengths_and_reject_split_utf8() {
+    let mut arena = ValueArena::new();
     let length = exp(ast::ExpKind::Len(Box::new(text("é"))), typ::make::nat());
     assert_eq!(
-        num::to_int(get::num(&eval(length).unwrap()).unwrap()).to_string(),
+        num::to_int(
+            {
+                let (value_arg0,) = (&eval(&mut arena, length).unwrap(),);
+                get::num(&arena, value_arg0)
+            }
+            .unwrap()
+        )
+        .to_string(),
         "2"
     );
     let slice = exp(
         ast::ExpKind::Slice(Box::new(text("éa")), Box::new(int(0)), Box::new(int(2))),
         typ::make::text(),
     );
-    assert_eq!(get::text(&eval(slice).unwrap()).unwrap(), "é");
+    assert_eq!(
+        {
+            let (value_arg0,) = (&eval(&mut arena, slice).unwrap(),);
+            get::text(&arena, value_arg0)
+        }
+        .unwrap(),
+        "é"
+    );
     let index = exp(
         ast::ExpKind::Idx(Box::new(text("é")), Box::new(int(0))),
         typ::make::text(),
     );
     assert!(
-        eval(index)
+        eval(&mut arena, index)
             .unwrap_err()
             .to_string()
             .contains("UTF-8 boundaries")
@@ -189,6 +240,7 @@ fn test_text_operations_use_byte_lengths_and_reject_split_utf8() {
 
 #[test]
 fn test_structural_equality_ignores_nested_spans_and_type_notes() {
+    let mut arena = ValueArena::new();
     let left = list(vec![int(3)]);
     let mut right = list(vec![int(3)]);
     if let ast::ExpKind::List(exps) = &mut right.node {
@@ -214,16 +266,29 @@ fn test_structural_equality_ignores_nested_spans_and_type_notes() {
         ),
         typ::make::bool(),
     );
-    assert!(get::bool(&eval(equal).unwrap()).unwrap());
+    assert!(
+        {
+            let (value_arg0,) = (&eval(&mut arena, equal).unwrap(),);
+            get::bool(&arena, value_arg0)
+        }
+        .unwrap()
+    );
     let membership = exp(
         ast::ExpKind::Mem(Box::new(left), Box::new(list(vec![right]))),
         typ::make::bool(),
     );
-    assert!(get::bool(&eval(membership).unwrap()).unwrap());
+    assert!(
+        {
+            let (value_arg0,) = (&eval(&mut arena, membership).unwrap(),);
+            get::bool(&arena, value_arg0)
+        }
+        .unwrap()
+    );
 }
 
 #[test]
 fn test_recursive_casts_and_subtype_checks() {
+    let mut arena = ValueArena::new();
     let nat = typ::make::nat();
     let cast = exp(
         ast::ExpKind::DownCast(
@@ -238,11 +303,18 @@ fn test_recursive_casts_and_subtype_checks() {
         ),
         typ::make::tuple(vec![nat.clone(), typ::make::list(nat.clone())]),
     );
-    let value = eval(cast).unwrap();
-    let values = get::tuple(&value).unwrap();
-    assert!(matches!(get::num(&values[0]).unwrap(), num::Number::Nat(_)));
+    let value = eval(&mut arena, cast).unwrap();
+    let values = get::tuple(&arena, &value).unwrap();
     assert!(matches!(
-        get::num(&get::list(&values[1]).unwrap()[0]).unwrap(),
+        get::num(&arena, &values[0]).unwrap(),
+        num::Number::Nat(_)
+    ));
+    assert!(matches!(
+        {
+            let (value_arg0,) = (&get::list(&arena, &values[1]).unwrap()[0],);
+            get::num(&arena, value_arg0)
+        }
+        .unwrap(),
         num::Number::Nat(_)
     ));
     let check = exp(
@@ -253,11 +325,18 @@ fn test_recursive_casts_and_subtype_checks() {
         ),
         typ::make::bool(),
     );
-    assert!(!get::bool(&eval(check).unwrap()).unwrap());
+    assert!(
+        !{
+            let (value_arg0,) = (&eval(&mut arena, check).unwrap(),);
+            get::bool(&arena, value_arg0)
+        }
+        .unwrap()
+    );
 }
 
 #[test]
 fn test_case_and_container_patterns() {
+    let mut arena = ValueArena::new();
     let atom = p4spec_rust::phrase!(node: Atom::Keyword("SomeCase".into()), span: Span::default());
     let case = Mixfix::Seq(vec![Mixfix::Atom(atom), Mixfix::Arg(int(5))]);
     let pattern = ast::Pattern::Case(Box::new(case.to_mixop()));
@@ -290,7 +369,13 @@ fn test_case_and_container_patterns() {
             ast::ExpKind::Match(Box::new(value), pattern),
             typ::make::bool(),
         );
-        assert!(get::bool(&eval(matches).unwrap()).unwrap());
+        assert!(
+            {
+                let (value_arg0,) = (&eval(&mut arena, matches).unwrap(),);
+                get::bool(&arena, value_arg0)
+            }
+            .unwrap()
+        );
     }
 }
 
@@ -299,12 +384,16 @@ struct RecordingInterface(Rc<RefCell<Vec<String>>>);
 impl Interface for RecordingInterface {
     fn call_builtin(
         &mut self,
+        arena: &mut ValueArena,
         id: &ast::Id,
         _targs: &[ast::Typ],
-        _values: &[Rc<Value>],
-    ) -> Result<(Rc<Value>, bool), InterfaceError> {
+        _values: &[Value],
+    ) -> Result<(Value, bool), InterfaceError> {
         self.0.borrow_mut().push(id.node.clone());
-        Ok((make::bool(id.node == "right", Span::default()), true))
+        Ok((
+            make::bool(arena, id.node == "right", Span::default()).unwrap(),
+            true,
+        ))
     }
     fn clear(&mut self) {
         self.0.borrow_mut().clear();
@@ -334,12 +423,19 @@ fn test_boolean_operators_evaluate_both_operands_in_order() {
     }
     let calls = Rc::new(RefCell::new(vec![]));
     let mut runner = Runner::<Al, _, _>::new(
-        Global::load(defs).unwrap(),
+        Rc::new(Global::load(defs).unwrap()),
         Config::new(false, false),
+        ValueArena::new(),
         RecordingInterface(calls.clone()),
         NullExtern,
     );
-    assert!(!get::bool(&runner.eval_func("test", &[], &[]).unwrap()).unwrap());
+    assert!(
+        !{
+            let (value_arg0,) = (&runner.eval_func("test", &[], &[]).unwrap(),);
+            get::bool(runner.arena(), value_arg0)
+        }
+        .unwrap()
+    );
     assert_eq!(*calls.borrow(), ["left", "right"]);
 }
 
@@ -361,8 +457,9 @@ fn test_numeric_errors_are_fatal_before_else_fallback() {
         );
     }
     let mut runner = Runner::<Al, _, _>::new(
-        Global::load(vec![def]).unwrap(),
+        Rc::new(Global::load(vec![def]).unwrap()),
         Config::new(false, false),
+        ValueArena::new(),
         NullInterface,
         NullExtern,
     );
@@ -413,36 +510,59 @@ fn test_iteration_evaluates_each_bound_element_and_preserves_empty_options() {
             ];
         }
         let mut runner = Runner::<Al, _, _>::new(
-            Global::load(vec![def]).unwrap(),
+            Rc::new(Global::load(vec![def]).unwrap()),
             Config::new(false, false),
+            ValueArena::new(),
             NullInterface,
             NullExtern,
         );
-        let input = make::int(2.into(), Span::default());
+        let input = make::int(runner.arena_mut(), 2.into(), Span::default()).unwrap();
         match iter {
             ast::Iter::List => {
-                let input = make::list(
-                    &typ_iter,
-                    vec![input, make::int(4.into(), Span::default())],
-                    Span::default(),
-                );
+                let input = {
+                    let (value_arg0, value_arg1, value_arg2) = (
+                        &typ_iter,
+                        vec![
+                            input,
+                            make::int(runner.arena_mut(), 4.into(), Span::default()).unwrap(),
+                        ],
+                        Span::default(),
+                    );
+                    make::list(runner.arena_mut(), value_arg0, value_arg1, value_arg2).unwrap()
+                };
                 assert_eq!(
-                    numbers(&runner.eval_func("test", &[], &[input]).unwrap()),
+                    {
+                        let (value_arg0,) = (&runner.eval_func("test", &[], &[input]).unwrap(),);
+                        numbers(runner.arena(), value_arg0)
+                    },
                     ["12", "14"]
                 );
             }
             ast::Iter::Opt => {
-                let input = make::opt(&typ_iter, Some(input), Span::default());
+                let input =
+                    make::opt(runner.arena_mut(), &typ_iter, Some(input), Span::default()).unwrap();
                 let value = runner.eval_func("test", &[], &[input]).unwrap();
                 assert_eq!(
-                    num::to_int(get::num(get::opt(&value).unwrap().unwrap()).unwrap()).to_string(),
+                    num::to_int(
+                        {
+                            let (value_arg0,) =
+                                (get::opt(runner.arena(), &value).unwrap().unwrap(),);
+                            get::num(runner.arena(), value_arg0)
+                        }
+                        .unwrap()
+                    )
+                    .to_string(),
                     "12"
                 );
-                let input = make::opt(&typ_iter, None, Span::default());
+                let input =
+                    make::opt(runner.arena_mut(), &typ_iter, None, Span::default()).unwrap();
                 assert!(
-                    get::opt(&runner.eval_func("test", &[], &[input]).unwrap())
-                        .unwrap()
-                        .is_none()
+                    {
+                        let (value_arg0,) = (&runner.eval_func("test", &[], &[input]).unwrap(),);
+                        get::opt(runner.arena(), value_arg0)
+                    }
+                    .unwrap()
+                    .is_none()
                 );
             }
         }
@@ -454,12 +574,13 @@ struct TypeInterface(Rc<RefCell<Vec<ast::Typ>>>);
 impl Interface for TypeInterface {
     fn call_builtin(
         &mut self,
+        _arena: &mut ValueArena,
         _id: &ast::Id,
         targs: &[ast::Typ],
-        values: &[Rc<Value>],
-    ) -> Result<(Rc<Value>, bool), InterfaceError> {
+        values: &[Value],
+    ) -> Result<(Value, bool), InterfaceError> {
         self.0.borrow_mut().extend_from_slice(targs);
-        Ok((values[0].clone(), true))
+        Ok((values[0], true))
     }
     fn clear(&mut self) {
         self.0.borrow_mut().clear();
@@ -491,13 +612,14 @@ fn test_call_arguments_substitute_local_types_and_pass_function_values() {
     })), span: Span::default());
     let seen = Rc::new(RefCell::new(vec![]));
     let mut runner = Runner::<Al, _, _>::new(
-        Global::load(vec![outer, capture, function("answer", int(42))]).unwrap(),
+        Rc::new(Global::load(vec![outer, capture, function("answer", int(42))]).unwrap()),
         Config::new(false, false),
+        ValueArena::new(),
         TypeInterface(seen.clone()),
         NullExtern,
     );
     let value = runner.eval_func("test", &[typ::make::nat()], &[]).unwrap();
-    assert_eq!(get::func(&value).unwrap().node, "answer");
+    assert_eq!(get::func(runner.arena(), &value).unwrap().node, "answer");
     assert!(matches!(
         seen.borrow()[0].node,
         ast::TypKind::Num(num::Typ::Nat)
@@ -506,6 +628,7 @@ fn test_call_arguments_substitute_local_types_and_pass_function_values() {
 
 #[test]
 fn test_index_failures_retain_the_index_expression_span() {
+    let mut arena = ValueArena::new();
     use p4spec_rust::interp::al::error::{Error, ErrorKind};
     fn contains_span(traces: &[Error], span: &Span) -> bool {
         traces
@@ -522,7 +645,7 @@ fn test_index_failures_retain_the_index_expression_span() {
         ast::ExpKind::Idx(Box::new(list(vec![int(1)])), Box::new(index)),
         typ::make::int(),
     );
-    let error = eval(expression).unwrap_err();
+    let error = eval(&mut arena, expression).unwrap_err();
     let ErrorKind::Trace(TraceErrorKind::Execution) = *error.kind else {
         panic!("expected execution traces");
     };
@@ -553,17 +676,21 @@ def $destructure() = $sum_pair(($updated())[0])
     let spec_il = elaborate::elaborate(spec_el).unwrap();
     let spec_al = algo::convert(spec_il).unwrap();
     let mut runner = Runner::<Al, _, _>::new(
-        Global::load(spec_al).unwrap(),
+        Rc::new(Global::load(spec_al).unwrap()),
         Config::new(false, false),
+        ValueArena::new(),
         NullInterface,
         NullExtern,
     );
     let value = runner.eval_func("updated", &[], &[]).unwrap();
-    let rows = get::list(&value).unwrap();
-    assert_eq!(numbers(&rows[0]), ["1", "9"]);
-    assert_eq!(numbers(&rows[1]), ["3", "4"]);
+    let rows = get::list(runner.arena(), &value).unwrap();
+    assert_eq!(numbers(runner.arena(), &rows[0]), ["1", "9"]);
+    assert_eq!(numbers(runner.arena(), &rows[1]), ["3", "4"]);
     let value = runner.eval_func("destructure", &[], &[]).unwrap();
-    assert_eq!(num::to_int(get::num(&value).unwrap()).to_string(), "10");
+    assert_eq!(
+        num::to_int(get::num(runner.arena(), &value).unwrap()).to_string(),
+        "10"
+    );
 }
 
 #[test]
@@ -589,8 +716,9 @@ def $first(ns) = ns[0]
     let spec_il = elaborate::elaborate(spec_el).unwrap();
     let spec_al = algo::convert(spec_il).unwrap();
     let mut runner = Runner::<Al, _, _>::new(
-        Global::load(spec_al).unwrap(),
+        Rc::new(Global::load(spec_al).unwrap()),
         Config::new(false, false),
+        ValueArena::new(),
         NullInterface,
         NullExtern,
     );
@@ -598,26 +726,28 @@ def $first(ns) = ns[0]
         Position::new("input.watsup", 3, 4),
         Position::new("input.watsup", 3, 5),
     );
-    let input = make::nat(7u64.into(), span.clone());
+    let input = make::nat(runner.arena_mut(), 7u64.into(), span.clone()).unwrap();
     let literal = runner.eval_func("literal", &[], &[]).unwrap();
-    assert_eq!(literal.span, Span::default());
+    assert_eq!(*runner.arena().span(&literal), Span::default());
     let increment = runner
         .eval_func("increment", &[], std::slice::from_ref(&input))
         .unwrap();
-    assert_eq!(increment.span, Span::default());
+    assert_eq!(*runner.arena().span(&increment), Span::default());
     let identity = runner
         .eval_func("identity", &[], std::slice::from_ref(&input))
         .unwrap();
-    assert_eq!(identity.span, span);
-    assert!(Rc::ptr_eq(&identity, &input));
+    assert_eq!(*runner.arena().span(&identity), span);
+    assert!(std::cmp::PartialEq::eq(&identity, &input));
     let inputs = make::list(
+        runner.arena_mut(),
         &typ::make::list(typ::make::nat()),
-        vec![input.clone()],
+        vec![input],
         Span::default(),
-    );
+    )
+    .unwrap();
     let first = runner.eval_func("first", &[], &[inputs]).unwrap();
-    assert_eq!(first.span, span);
-    assert!(Rc::ptr_eq(&first, &input));
+    assert_eq!(*runner.arena().span(&first), span);
+    assert!(std::cmp::PartialEq::eq(&first, &input));
 }
 
 #[test]
@@ -644,8 +774,9 @@ fn test_builtin_failure_remains_typed_in_public_error_tree() {
         typ::make::int(),
     );
     let mut runner = Runner::<Al, _, _>::new(
-        Global::load(vec![function("test", call), builtin]).unwrap(),
+        Rc::new(Global::load(vec![function("test", call), builtin]).unwrap()),
         Config::new(false, false),
+        ValueArena::new(),
         BuiltinInterface::new(p4spec_rust::interface::p4::unparse::P4Unparser::new()),
         NullExtern,
     );

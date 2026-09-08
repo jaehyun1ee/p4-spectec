@@ -1,5 +1,7 @@
 //! Text rendering for intermediate-language data
 
+use crate::lang::data::value::ValueArena;
+
 use std::fmt::{self, Write};
 
 use crate::lang::{
@@ -157,11 +159,12 @@ impl Print for [TypCase] {
 
 fn write_value_with(
     output: &mut Printer<'_>,
+    arena: &ValueArena,
     value: &Value,
     short: bool,
     level: usize,
 ) -> fmt::Result {
-    match &value.node {
+    match arena.kind(value) {
         ValueKind::Bool(value) => write!(output, "{value}"),
         ValueKind::Num(value) => value.print(output),
         ValueKind::Text(text) => output.write_str(&escaped(text)),
@@ -174,29 +177,29 @@ fn write_value_with(
                     output.write_str(";\n")?;
                 }
                 output.write_str(&indent(level + 1))?;
-                atom.print(output)?;
+                atom.node.print(output)?;
                 output.write_char(' ')?;
-                write_value_with(output, value, short, level + 1)?;
+                write_value_with(output, arena, value, short, level + 1)?;
             }
             output.write_char('\n')?;
             output.write_str(&indent(level))?;
             output.write_char('}')
         }
         ValueKind::Case(case) if short => case.to_mixop().print(output),
-        ValueKind::Case(case) => write_notval_with(output, case, level),
+        ValueKind::Case(case) => write_notval_with(output, arena, case, level),
         ValueKind::Tuple(values) => {
             output.write_char('(')?;
             for (index, value) in values.iter().enumerate() {
                 if index != 0 {
                     output.write_str(", ")?;
                 }
-                write_value_with(output, value, short, level + 1)?;
+                write_value_with(output, arena, value, short, level + 1)?;
             }
             output.write_char(')')
         }
         ValueKind::Opt(Some(value)) => {
             output.write_str("Some(")?;
-            write_value_with(output, value, short, level + 1)?;
+            write_value_with(output, arena, value, short, level + 1)?;
             output.write_char(')')
         }
         ValueKind::Opt(None) => output.write_str("None"),
@@ -209,7 +212,7 @@ fn write_value_with(
                     output.write_str(",\n")?;
                 }
                 output.write_str(&indent(level + 1))?;
-                write_value_with(output, value, short, level + 1)?;
+                write_value_with(output, arena, value, short, level + 1)?;
             }
             output.write_char('\n')?;
             output.write_str(&indent(level))?;
@@ -217,28 +220,30 @@ fn write_value_with(
         }
         ValueKind::Func(id) => {
             output.write_char('$')?;
-            id.print(output)
+            output.write_str(&id.node)
         }
         ValueKind::Extern(_) => output.write_str("extern"),
     }
 }
 
-fn write_notval_with(output: &mut Printer<'_>, not_val: &ValueCase, level: usize) -> fmt::Result {
+fn write_notval_with(
+    output: &mut Printer<'_>,
+    arena: &ValueArena,
+    not_val: &ValueCase,
+    level: usize,
+) -> fmt::Result {
     not_val.print_with(output, |value, output| {
-        write_value_with(output, value, false, level + 1)
+        write_value_with(output, arena, value, false, level + 1)
     })
 }
 
-impl Print for Value {
-    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        write_value_with(printer, self, false, 0)
-    }
-}
-
-impl Print for ValueCase {
-    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        write_notval_with(printer, self, 0)
-    }
+/// Renders a runtime value using its owning arena
+pub fn string_of_value(arena: &ValueArena, value: &Value) -> String {
+    let mut output = String::new();
+    let mut printer = Printer::new(&mut output);
+    write_value_with(&mut printer, arena, value, false, 0)
+        .expect("writing to a String cannot fail");
+    output
 }
 
 // - Expressions

@@ -11,9 +11,10 @@ mod externs;
 mod interface;
 mod interpreter;
 
-use std::rc::Rc;
-
-use crate::lang::{data::value::Value, il::ast::Typ};
+use crate::lang::{
+    data::value::{Value, ValueArena},
+    il::ast::Typ,
+};
 
 pub use context::RunnerContext;
 pub use externs::{Extern, ExternError, NullExtern};
@@ -32,6 +33,7 @@ where
 {
     spec: S::Spec,
     config: S::Config,
+    arena: ValueArena,
     interface: I,
     externs: E,
 }
@@ -42,10 +44,17 @@ where
     I: Interface,
     E: Extern,
 {
-    pub fn new(spec: S::Spec, config: S::Config, interface: I, externs: E) -> Self {
+    pub fn new(
+        spec: S::Spec,
+        config: S::Config,
+        arena: ValueArena,
+        interface: I,
+        externs: E,
+    ) -> Self {
         Self {
             spec,
             config,
+            arena,
             interface,
             externs,
         }
@@ -53,25 +62,30 @@ where
 
     /// Borrows the assembled components for a stage-specific evaluation entry
     pub fn context(&mut self) -> RunnerContext<'_, S, I, E> {
-        RunnerContext::new(&self.spec, &self.config, &mut self.interface, &self.externs)
+        RunnerContext::new(
+            &self.spec,
+            &self.config,
+            &mut self.arena,
+            &mut self.interface,
+            &self.externs,
+        )
+    }
+
+    pub fn arena(&self) -> &ValueArena {
+        &self.arena
+    }
+    pub fn arena_mut(&mut self) -> &mut ValueArena {
+        &mut self.arena
     }
 
     // - Evaluation
 
-    pub fn eval_program(
-        &mut self,
-        name: &str,
-        program: Rc<Value>,
-    ) -> Result<Vec<Rc<Value>>, S::Error> {
+    pub fn eval_program(&mut self, name: &str, program: Value) -> Result<Vec<Value>, S::Error> {
         let mut context = self.context();
         context.call_program(name, program)
     }
 
-    pub fn eval_rel(
-        &mut self,
-        name: &str,
-        values: &[Rc<Value>],
-    ) -> Result<Vec<Rc<Value>>, S::Error> {
+    pub fn eval_rel(&mut self, name: &str, values: &[Value]) -> Result<Vec<Value>, S::Error> {
         let mut context = self.context();
         context.call_rel(name, values)
     }
@@ -80,8 +94,8 @@ where
         &mut self,
         name: &str,
         targs: &[Typ],
-        values: &[Rc<Value>],
-    ) -> Result<Rc<Value>, S::Error> {
+        values: &[Value],
+    ) -> Result<Value, S::Error> {
         let mut context = self.context();
         context.call_func(name, targs, values)
     }

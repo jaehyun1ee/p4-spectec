@@ -4,11 +4,9 @@
 //! token at comparison precedence, then assigns shift precedence to the
 //! completed operator. Other operators use one precedence in both positions.
 
-use std::rc::Rc;
-
 use crate::lang::{
     common::source::Span,
-    data::value::{Value, make},
+    data::value::{Value, ValueArena, ValueError, make},
 };
 
 #[derive(Clone, Copy)]
@@ -36,11 +34,11 @@ enum Precedence {
 pub(crate) struct BinaryExpressionPart {
     operator: BinaryOperator,
     span: Span,
-    rhs: Rc<Value>,
+    rhs: Value,
 }
 
 impl BinaryExpressionPart {
-    pub(crate) fn new(operator: BinaryOperator, span: Span, rhs: Rc<Value>) -> Self {
+    pub(crate) fn new(operator: BinaryOperator, span: Span, rhs: Value) -> Self {
         Self {
             operator,
             span,
@@ -91,26 +89,38 @@ impl BinaryOperator {
     }
 }
 
-fn reduce(values: &mut Vec<Rc<Value>>, operators: &mut Vec<StackedOperator>) {
+fn reduce(
+    arena: &mut ValueArena,
+    values: &mut Vec<Value>,
+    operators: &mut Vec<StackedOperator>,
+) -> Result<(), ValueError> {
     let operator = operators.pop().expect("binary operator");
     let rhs = values.pop().expect("binary right operand");
     let lhs = values.pop().expect("binary left operand");
-    let value_operator = make::case! {
+    let value_operator = make::case! { arena: arena,
         shape: operator.operator.shape(),
         args: vec![],
         typ: "binop",
         span: operator.span,
-    };
-    let span = Span::new(lhs.span.left.clone(), rhs.span.right.clone());
-    values.push(make::case! {
+    }?;
+    let span = Span::new(
+        arena.span(&lhs).left.clone(),
+        arena.span(&rhs).right.clone(),
+    );
+    values.push(make::case! { arena: arena,
         shape: "expression binop expression",
         args: vec![lhs, value_operator, rhs],
         typ: "binaryExpression",
         span: span,
-    });
+    }?);
+    Ok(())
 }
 
-pub(crate) fn fold(first: Rc<Value>, parts: Vec<BinaryExpressionPart>) -> Rc<Value> {
+pub(crate) fn fold(
+    arena: &mut ValueArena,
+    first: Value,
+    parts: Vec<BinaryExpressionPart>,
+) -> Result<Value, ValueError> {
     let mut values = vec![first];
     let mut operators: Vec<StackedOperator> = Vec::new();
 
@@ -119,7 +129,7 @@ pub(crate) fn fold(first: Rc<Value>, parts: Vec<BinaryExpressionPart>) -> Rc<Val
             .last()
             .is_some_and(|operator| operator.precedence >= part.operator.incoming_precedence())
         {
-            reduce(&mut values, &mut operators);
+            reduce(arena, &mut values, &mut operators)?;
         }
         operators.push(StackedOperator {
             operator: part.operator,
@@ -129,7 +139,7 @@ pub(crate) fn fold(first: Rc<Value>, parts: Vec<BinaryExpressionPart>) -> Rc<Val
         values.push(part.rhs);
     }
     while !operators.is_empty() {
-        reduce(&mut values, &mut operators);
+        reduce(arena, &mut values, &mut operators)?;
     }
-    values.pop().expect("binary expression")
+    Ok(values.pop().expect("binary expression"))
 }

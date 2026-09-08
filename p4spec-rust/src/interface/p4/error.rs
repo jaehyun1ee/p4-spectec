@@ -36,6 +36,8 @@ pub enum LexErrorKind {
 
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
 pub enum P4ErrorKind {
+    #[error(transparent)]
+    Value(#[from] crate::lang::data::value::ValueError),
     #[error("preprocessor failed with status {status:?}: {stderr}")]
     Preprocessor { status: Option<i32>, stderr: String },
     #[error(transparent)]
@@ -58,6 +60,12 @@ impl P4Error {
             kind: kind.into(),
             span,
         }
+    }
+}
+
+impl From<crate::lang::data::value::ValueError> for P4Error {
+    fn from(error: crate::lang::data::value::ValueError) -> Self {
+        Self::new(error, Span::default())
     }
 }
 

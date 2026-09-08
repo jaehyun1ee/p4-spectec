@@ -52,5 +52,5 @@ fn test_eq_shape_borrows_nested_mixfixes_and_ignores_arguments() {
     );
 
     assert!(left.eq_shape(&right));
-    assert!(!left.eq_shape(&Mixfix::Seq(vec![Mixfix::Arg("left")])));
+    assert!(!left.eq_shape(&Mixfix::<&str>::Seq(vec![Mixfix::Arg("left")])));
 }

@@ -2,9 +2,7 @@
 //!
 //! Arguments are decoded from runtime values before the textual operation is
 //! performed, then the encoded result is returned. For example,
-//! `strip_prefix("prebody", "pre")` yields `"body"`.
-
-use std::rc::Rc;
+//! `strip_prefix(arena, "prebody", "pre")` yields `"body"`.
 
 use num_bigint::BigInt;
 
@@ -12,7 +10,7 @@ use crate::lang::{
     common::source::Span,
     data::{
         typ,
-        value::{Value, get, make},
+        value::{Value, ValueArena, get, make},
     },
     il::ast::Typ,
     traits::print::Print,
@@ -22,23 +20,27 @@ use super::{BuiltinError, extract};
 
 // == Conversion between runtime values and text
 
-fn text_of_value(value: &Value) -> Result<&str, BuiltinError> {
-    get::text(value).map_err(|error| BuiltinError::new(error.to_string()))
+fn text_of_value<'a>(arena: &'a ValueArena, value: &Value) -> Result<&'a str, BuiltinError> {
+    get::text(arena, value).map_err(|error| BuiltinError::new(error.to_string()))
 }
 
-fn numeric_text(value: &Value) -> Result<String, BuiltinError> {
-    let number = get::num(value).map_err(|error| BuiltinError::new(error.to_string()))?;
+fn numeric_text(arena: &ValueArena, value: &Value) -> Result<String, BuiltinError> {
+    let number = get::num(arena, value).map_err(|error| BuiltinError::new(error.to_string()))?;
     Ok(Print::to_string(number))
 }
 
 // == Built-in implementations
 
-// dec $text_to_int(text) : int
+// dec $text_to_int(arena, text) : int
 
-pub fn text_to_int(targs: &[Typ], values: &[Rc<Value>]) -> Result<Rc<Value>, BuiltinError> {
+pub fn text_to_int(
+    arena: &mut ValueArena,
+    targs: &[Typ],
+    values: &[Value],
+) -> Result<Value, BuiltinError> {
     extract::zero(targs)?;
     let value_text = extract::one(values)?;
-    let text = text_of_value(value_text)?;
+    let text = text_of_value(arena, value_text)?;
     let (negative, unsigned) = match text.as_bytes().first() {
         Some(b'-') => (true, &text[1..]),
         Some(b'+') => (false, &text[1..]),
@@ -64,77 +66,98 @@ pub fn text_to_int(targs: &[Typ], values: &[Rc<Value>]) -> Result<Rc<Value>, Bui
     if negative {
         integer = -integer;
     }
-    let value = make::int(integer, Span::default());
+    let value = make::int(arena, integer, Span::default())?;
     Ok(value)
 }
 
-// dec $int_to_text(int) : text
+// dec $int_to_text(arena, int) : text
 
-pub fn int_to_text(targs: &[Typ], values: &[Rc<Value>]) -> Result<Rc<Value>, BuiltinError> {
+pub fn int_to_text(
+    arena: &mut ValueArena,
+    targs: &[Typ],
+    values: &[Value],
+) -> Result<Value, BuiltinError> {
     extract::zero(targs)?;
     let value_int = extract::one(values)?;
-    let text = numeric_text(value_int)?;
-    let value = make::text(text, Span::default());
+    let text = numeric_text(arena, value_int)?;
+    let value = make::text(arena, text, Span::default())?;
     Ok(value)
 }
 
-// dec $split_text(text, text) : text*
+// dec $split_text(arena, text, text) : text*
 
-pub fn split_text(targs: &[Typ], values: &[Rc<Value>]) -> Result<Rc<Value>, BuiltinError> {
+pub fn split_text(
+    arena: &mut ValueArena,
+    targs: &[Typ],
+    values: &[Value],
+) -> Result<Value, BuiltinError> {
     extract::zero(targs)?;
     let (value_text, value_separator) = extract::two(values)?;
-    let text = text_of_value(value_text)?;
-    let separator = text_of_value(value_separator)?;
+    let text = text_of_value(arena, value_text)?;
+    let separator = text_of_value(arena, value_separator)?;
     if separator.len() != 1 {
         return Err(BuiltinError::new("separator must be one byte"));
     }
     let separator = char::from(separator.as_bytes()[0]);
     let parts = text
         .split(separator)
-        .map(|part| make::text(part.to_owned(), Span::default()))
-        .collect();
+        .map(|part| part.to_owned())
+        .collect::<Vec<_>>();
+    let parts = parts
+        .into_iter()
+        .map(|part| make::text(arena, part, Span::default()))
+        .collect::<Result<Vec<_>, _>>()?;
     let typ_list = typ::make::list(typ::make::bool());
-    let value = make::list(&typ_list, parts, Span::default());
+    let value = make::list(arena, &typ_list, parts, Span::default())?;
     Ok(value)
 }
 
-// dec $strip_prefix(text, text) : text
+// dec $strip_prefix(arena, text, text) : text
 
-pub fn strip_prefix(targs: &[Typ], values: &[Rc<Value>]) -> Result<Rc<Value>, BuiltinError> {
+pub fn strip_prefix(
+    arena: &mut ValueArena,
+    targs: &[Typ],
+    values: &[Value],
+) -> Result<Value, BuiltinError> {
     extract::zero(targs)?;
     let (value_text, value_prefix) = extract::two(values)?;
-    let text = text_of_value(value_text)?;
-    let prefix = text_of_value(value_prefix)?;
+    let text = text_of_value(arena, value_text)?;
+    let prefix = text_of_value(arena, value_prefix)?;
     let text = text
         .strip_prefix(prefix)
         .ok_or_else(|| BuiltinError::new("text does not start with prefix"))?;
-    let value = make::text(text.to_owned(), Span::default());
+    let value = make::text(arena, text.to_owned(), Span::default())?;
     Ok(value)
 }
 
-// dec $strip_suffix(text, text) : text
+// dec $strip_suffix(arena, text, text) : text
 
-pub fn strip_suffix(targs: &[Typ], values: &[Rc<Value>]) -> Result<Rc<Value>, BuiltinError> {
+pub fn strip_suffix(
+    arena: &mut ValueArena,
+    targs: &[Typ],
+    values: &[Value],
+) -> Result<Value, BuiltinError> {
     extract::zero(targs)?;
     let (value_text, value_suffix) = extract::two(values)?;
-    let text = text_of_value(value_text)?;
-    let suffix = text_of_value(value_suffix)?;
+    let text = text_of_value(arena, value_text)?;
+    let suffix = text_of_value(arena, value_suffix)?;
     let text = text
         .strip_suffix(suffix)
         .ok_or_else(|| BuiltinError::new("text does not end with suffix"))?;
-    let value = make::text(text.to_owned(), Span::default());
+    let value = make::text(arena, text.to_owned(), Span::default())?;
     Ok(value)
 }
 
-// dec $strip_all_whitespace(text) : text
+// dec $strip_all_whitespace(arena, text) : text
 
 pub fn strip_all_whitespace(
+    arena: &mut ValueArena,
     targs: &[Typ],
-    values: &[Rc<Value>],
-) -> Result<Rc<Value>, BuiltinError> {
+    values: &[Value],
+) -> Result<Value, BuiltinError> {
     extract::zero(targs)?;
     let value_text = extract::one(values)?;
-    let text = text_of_value(value_text)?.replace(' ', "");
-    let value = make::text(text, Span::default());
+    let text = text_of_value(arena, value_text)?.replace(' ', "");
+    let value = make::text(arena, text, Span::default())?;
     Ok(value)
 }

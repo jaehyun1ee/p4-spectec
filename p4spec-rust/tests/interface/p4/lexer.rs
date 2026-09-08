@@ -1,11 +1,8 @@
 use std::rc::Rc;
 
-use p4spec_rust::{
-    interface::p4::{
-        context::Context,
-        lexer::{Lexer, Token},
-    },
-    lang::data::value::get,
+use p4spec_rust::interface::p4::{
+    context::Context,
+    lexer::{Lexer, Token},
 };
 
 fn tokens(source: &str, context: Rc<Context>) -> Vec<Token> {
@@ -20,7 +17,7 @@ fn test_identifiers_are_followed_by_context_sensitive_classification() {
     context.declare_typ("Header", true).unwrap();
     let tokens = tokens("Header<bit<8>> value", context);
 
-    assert!(matches!(&tokens[0], Token::Name(value) if get::text(value) == Ok("Header")));
+    assert!(matches!(&tokens[0], Token::Name(value) if value.node == "Header"));
     assert_eq!(tokens[1], Token::TypeName);
     assert_eq!(tokens[2], Token::LeftAngleArgs);
     assert_eq!(tokens[3], Token::Bit);
@@ -28,7 +25,7 @@ fn test_identifiers_are_followed_by_context_sensitive_classification() {
     assert!(matches!(&tokens[5], Token::NumberInt(_, lexeme) if lexeme == "8"));
     assert_eq!(tokens[6], Token::RightAngle);
     assert_eq!(tokens[7], Token::RightAngleShift);
-    assert!(matches!(&tokens[8], Token::Name(value) if get::text(value) == Ok("value")));
+    assert!(matches!(&tokens[8], Token::Name(value) if value.node == "value"));
     assert_eq!(tokens[9], Token::Identifier);
     assert_eq!(tokens[10], Token::End);
 }
@@ -43,7 +40,7 @@ fn test_lexer_preserves_string_escapes_and_preprocessor_locations() {
     );
     let token = lexer.next().unwrap().unwrap();
 
-    assert!(matches!(&token.node, Token::StringLiteral(value) if get::text(value) == Ok("a\n\"b")));
+    assert!(matches!(&token.node, Token::StringLiteral(value) if value.node == "a\n\"b"));
     assert_eq!(token.span.left.file.as_ref(), "original.p4");
     assert_eq!(token.span.left.line, 42);
 }
@@ -107,7 +104,7 @@ fn test_shift_and_type_constructor_angles_are_distinct() {
 fn test_right_shift_uses_source_two_token_stream() {
     let tokens = tokens("x >> 1", Rc::new(Context::new()));
 
-    assert!(matches!(&tokens[0], Token::Name(value) if get::text(value) == Ok("x")));
+    assert!(matches!(&tokens[0], Token::Name(value) if value.node == "x"));
     assert_eq!(tokens[1], Token::Identifier);
     assert_eq!(tokens[2], Token::RightAngle);
     assert_eq!(tokens[3], Token::RightAngleShift);
@@ -121,12 +118,12 @@ fn test_numbers_end_at_their_lexical_boundary() {
     let tokens = tokens("123abc 0b102 8w3foo", context);
 
     assert!(matches!(&tokens[0], Token::NumberInt(_, lexeme) if lexeme == "123"));
-    assert!(matches!(&tokens[1], Token::Name(value) if get::text(value) == Ok("abc")));
+    assert!(matches!(&tokens[1], Token::Name(value) if value.node == "abc"));
     assert_eq!(tokens[2], Token::Identifier);
     assert!(matches!(&tokens[3], Token::NumberInt(_, lexeme) if lexeme == "0b10"));
     assert!(matches!(&tokens[4], Token::NumberInt(_, lexeme) if lexeme == "2"));
     assert!(matches!(&tokens[5], Token::Number(_, lexeme) if lexeme == "3"));
-    assert!(matches!(&tokens[6], Token::Name(value) if get::text(value) == Ok("foo")));
+    assert!(matches!(&tokens[6], Token::Name(value) if value.node == "foo"));
     assert_eq!(tokens[7], Token::Identifier);
     assert_eq!(tokens[8], Token::End);
 }

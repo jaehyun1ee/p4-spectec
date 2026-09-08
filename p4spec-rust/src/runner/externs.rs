@@ -6,8 +6,6 @@
 //! Failures describe the host operation; the calling interpreter owns the
 //! source location.
 
-use std::rc::Rc;
-
 use thiserror::Error;
 
 use crate::{lang::data::value::Value, lang::il::ast::Typ};
@@ -18,6 +16,8 @@ use super::{Interface, Interpreter, RunnerContext};
 
 #[derive(Clone, Debug, Error, Eq, PartialEq)]
 pub enum ExternError {
+    #[error(transparent)]
+    Value(#[from] crate::lang::data::value::ValueError),
     #[error("extern is not configured")]
     NotConfigured,
     #[error("{0}")]
@@ -31,8 +31,8 @@ pub trait Extern: Sized {
         &self,
         context: &mut RunnerContext<'_, S, I, Self>,
         name: &str,
-        values: &[Rc<Value>],
-    ) -> Result<(Vec<Rc<Value>>, bool), S::Error>
+        values: &[Value],
+    ) -> Result<(Vec<Value>, bool), S::Error>
     where
         I: Interface,
         S: Interpreter<I, Self>;
@@ -42,8 +42,8 @@ pub trait Extern: Sized {
         context: &mut RunnerContext<'_, S, I, Self>,
         name: &str,
         targs: &[Typ],
-        values: &[Rc<Value>],
-    ) -> Result<(Rc<Value>, bool), S::Error>
+        values: &[Value],
+    ) -> Result<(Value, bool), S::Error>
     where
         I: Interface,
         S: Interpreter<I, Self>;
@@ -60,8 +60,8 @@ impl Extern for NullExtern {
         &self,
         _context: &mut RunnerContext<'_, S, I, Self>,
         _name: &str,
-        _values: &[Rc<Value>],
-    ) -> Result<(Vec<Rc<Value>>, bool), S::Error>
+        _values: &[Value],
+    ) -> Result<(Vec<Value>, bool), S::Error>
     where
         I: Interface,
         S: Interpreter<I, Self>,
@@ -75,8 +75,8 @@ impl Extern for NullExtern {
         _context: &mut RunnerContext<'_, S, I, Self>,
         _name: &str,
         _targs: &[Typ],
-        _values: &[Rc<Value>],
-    ) -> Result<(Rc<Value>, bool), S::Error>
+        _values: &[Value],
+    ) -> Result<(Value, bool), S::Error>
     where
         I: Interface,
         S: Interpreter<I, Self>,

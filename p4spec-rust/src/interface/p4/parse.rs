@@ -15,7 +15,7 @@ use lalrpop_util::ParseError;
 
 use crate::{
     lang::common::source::{Phrase, Position, Span},
-    lang::data::value::Value,
+    lang::data::value::{Value, ValueArena, ValueError, make},
 };
 
 use super::{
@@ -73,22 +73,60 @@ fn translate_lalrpop_error(
 // - Source strings
 
 /// Parses an already-preprocessed P4 source string.
-pub fn parse_string(path: impl AsRef<Path>, source: &str) -> Result<Rc<Value>, P4Error> {
+pub fn parse_string(
+    arena: &mut ValueArena,
+    path: impl AsRef<Path>,
+    source: &str,
+) -> Result<Value, P4Error> {
     let file: Rc<str> = Rc::from(path.as_ref().to_string_lossy().into_owned());
     let context = Rc::new(Context::new());
     let position = Position::new(Rc::clone(&file), 1, 0);
     let lexer = Lexer::new(file, source, Rc::clone(&context));
     let input = parser_input(context.as_ref(), lexer, position);
 
-    let result = p4programParser::new().parse(context.as_ref(), input);
+    let result = p4programParser::new().parse(context.as_ref(), arena, input);
     result.map_err(|error| translate_lalrpop_error(context.as_ref(), error))
 }
 
 // - Source files
 
 /// Preprocesses and parses a P4 source file.
-pub fn parse_file(includes: &[PathBuf], path: impl AsRef<Path>) -> Result<Rc<Value>, P4Error> {
+pub fn parse_file(
+    arena: &mut ValueArena,
+    includes: &[PathBuf],
+    path: impl AsRef<Path>,
+) -> Result<Value, P4Error> {
     let path = path.as_ref();
     let source = preprocess(includes, path)?;
-    parse_string(path, &source)
+    parse_string(arena, path, &source)
+}
+
+pub(super) fn integer(
+    arena: &mut ValueArena,
+    literal: Phrase<super::lexer::IntegerLiteral>,
+) -> Result<Value, ValueError> {
+    use crate::lang::common::notation::{atom::Atom, mixfix::Mixfix};
+    use crate::lang::data::typ;
+    let span = literal.span;
+    match literal.node.width {
+        None => make::int(arena, literal.node.int, span),
+        Some((width, sign)) => {
+            let value_width = make::nat(arena, width, span.clone())?;
+            let value_int = make::int(arena, literal.node.int, span.clone())?;
+            let atom = crate::phrase!(node: Atom::Keyword(sign.to_ascii_uppercase().to_string()), span: span.clone());
+            let value_case = Mixfix::Seq(vec![
+                Mixfix::Arg(value_width),
+                Mixfix::Atom(atom),
+                Mixfix::Arg(value_int),
+            ]);
+            let id = crate::phrase!(node: "integerLiteral".to_owned(), span: Span::default());
+            make::case_(arena, &typ::make::var(id, vec![]), value_case, span)
+        }
+    }
+}
+
+pub(super) fn action<T>(
+    action: impl FnOnce() -> Result<T, P4Error>,
+) -> Result<T, ParseError<Location, Token, P4Error>> {
+    action().map_err(|error| ParseError::User { error })
 }

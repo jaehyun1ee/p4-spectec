@@ -10,11 +10,12 @@ use crate::lang::{
 };
 
 use super::mixfix::Mixfix;
+use crate::lang::common::source::Span;
 
 /// A mixfix shape with unfilled argument positions
-pub type Mixop = Mixfix<()>;
+pub type Mixop<S = Span> = Mixfix<(), S>;
 
-impl Print for Mixop {
+impl<S> Print for Mixop<S> {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         self.print_with(printer, |(), printer| printer.write("%"))
     }
@@ -36,14 +37,14 @@ impl Free for () {
 
 // == Converting a mixfix to a mixop
 
-impl<T> Mixfix<T> {
+impl<T, S: Clone> Mixfix<T, S> {
     /// Replaces every argument with an unfilled mixop position
-    pub fn to_mixop(&self) -> Mixop {
+    pub fn to_mixop(&self) -> Mixop<S> {
         self.map(|_| ())
     }
 
     /// Separates the mixop shape from its arguments
-    pub fn split(&self) -> (Mixop, Vec<&T>) {
+    pub fn split(&self) -> (Mixop<S>, Vec<&T>) {
         (self.to_mixop(), self.args())
     }
 }
@@ -70,12 +71,12 @@ impl fmt::Display for ArityMismatch {
 
 impl Error for ArityMismatch {}
 
-impl Mixop {
+impl<S: Clone> Mixop<S> {
     /// Fills a mixfix operator with arguments
     pub fn fill<T>(
         mixop: &Self,
         args: impl IntoIterator<Item = T>,
-    ) -> Result<Mixfix<T>, ArityMismatch> {
+    ) -> Result<Mixfix<T, S>, ArityMismatch> {
         let mut args = args.into_iter();
         let mixfix = mixop.fill_inner(&mut args)?;
         if args.next().is_some() {
@@ -88,7 +89,7 @@ impl Mixop {
     fn fill_inner<T>(
         &self,
         args: &mut impl Iterator<Item = T>,
-    ) -> Result<Mixfix<T>, ArityMismatch> {
+    ) -> Result<Mixfix<T, S>, ArityMismatch> {
         match self {
             Self::Arg(()) => args.next().map(Mixfix::Arg).ok_or(ArityMismatch::TooFew),
             Self::Atom(atom) => Ok(Mixfix::Atom(atom.clone())),

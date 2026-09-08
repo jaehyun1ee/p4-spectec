@@ -74,23 +74,26 @@ impl fmt::Display for Span {
 }
 
 /// A syntax node paired with semantic and source annotations
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct NotePhrase<T, N = ()> {
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct NotePhrase<T, N = (), S = Span> {
     pub node: T,
     pub note: N,
-    pub span: Span,
+    pub span: S,
 }
 
 /// A syntax node paired with its source span
-pub type Phrase<T> = NotePhrase<T>;
+pub type Phrase<T, S = Span> = NotePhrase<T, (), S>;
 
-impl<T: fmt::Display, N> fmt::Display for NotePhrase<T, N> {
+impl<T: fmt::Display, N, S: fmt::Display> fmt::Display for NotePhrase<T, N, S> {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(fmt, "{} at {}", self.node, self.span)
     }
 }
 
-impl<T: std::error::Error, N: fmt::Debug> std::error::Error for NotePhrase<T, N> {}
+impl<T: std::error::Error, N: fmt::Debug, S: fmt::Debug + fmt::Display> std::error::Error
+    for NotePhrase<T, N, S>
+{
+}
 
 /// Builds a syntax node with an explicit source span
 #[macro_export]

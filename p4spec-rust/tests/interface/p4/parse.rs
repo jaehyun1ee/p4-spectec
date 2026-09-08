@@ -6,89 +6,99 @@ use p4spec_rust::{
     },
     lang::data::{
         typ::TypKind,
-        value::{Value, ValueKind},
+        value::{Value, ValueArena, ValueKind},
     },
 };
 
-fn first_binary(value: &Value) -> Option<&Value> {
-    if let TypKind::Var(id, _) = &value.note
+fn first_binary<'a>(arena: &'a ValueArena, value: &'a Value) -> Option<&'a Value> {
+    if let TypKind::Var(id, _) = arena.typ(value)
         && id.node == "binaryExpression"
     {
         return Some(value);
     }
-    match &value.node {
+    match arena.kind(value) {
         ValueKind::Case(case) => case
             .args()
             .into_iter()
-            .find_map(|value| first_binary(value.as_ref())),
+            .find_map(|value| first_binary(arena, value)),
         _ => None,
     }
 }
 
-fn binary_part(value: &Value, index: usize) -> &Value {
-    match &value.node {
-        ValueKind::Case(case) => case.args().into_iter().nth(index).unwrap().as_ref(),
+fn binary_part<'a>(arena: &'a ValueArena, value: &Value, index: usize) -> &'a Value {
+    match arena.kind(value) {
+        ValueKind::Case(case) => case.args().into_iter().nth(index).unwrap(),
         _ => panic!("binary expression must be a case value"),
     }
 }
 
-fn operator(value: &Value) -> String {
-    P4Unparser::new().render(binary_part(value, 1)).unwrap()
+fn operator(arena: &ValueArena, value: &Value) -> String {
+    P4Unparser::new()
+        .render(arena, binary_part(arena, value, 1))
+        .unwrap()
 }
 
 #[test]
 fn test_right_shift_preserves_source_parser_asymmetric_bitwise_binding() {
+    let mut arena = ValueArena::new();
     let program_before = parse_string(
+        &mut arena,
         "shift.p4",
         "control C() { apply { bit<4> x; x = 4w1 | 4w2 ^ 4w3 & 4w4 >> 4w5; } }",
     )
     .unwrap();
-    let shift = first_binary(&program_before).unwrap();
-    assert_eq!(operator(shift), ">>");
-    let bit_or = binary_part(shift, 0);
-    assert_eq!(operator(bit_or), "|");
-    let bit_xor = binary_part(bit_or, 2);
-    assert_eq!(operator(bit_xor), "^");
-    assert_eq!(operator(binary_part(bit_xor, 2)), "&");
+    let shift = first_binary(&arena, &program_before).unwrap();
+    assert_eq!(operator(&arena, shift), ">>");
+    let bit_or = binary_part(&arena, shift, 0);
+    assert_eq!(operator(&arena, bit_or), "|");
+    let bit_xor = binary_part(&arena, bit_or, 2);
+    assert_eq!(operator(&arena, bit_xor), "^");
+    assert_eq!(operator(&arena, binary_part(&arena, bit_xor, 2)), "&");
 
     let program_after = parse_string(
+        &mut arena,
         "shift.p4",
         "control C() { apply { bit<4> x; x = 4w1 >> 4w2 & 4w3 ^ 4w4 | 4w5; } }",
     )
     .unwrap();
-    let bit_or = first_binary(&program_after).unwrap();
-    assert_eq!(operator(bit_or), "|");
-    let bit_xor = binary_part(bit_or, 0);
-    assert_eq!(operator(bit_xor), "^");
-    let bit_and = binary_part(bit_xor, 0);
-    assert_eq!(operator(bit_and), "&");
-    assert_eq!(operator(binary_part(bit_and, 0)), ">>");
+    let bit_or = first_binary(&arena, &program_after).unwrap();
+    assert_eq!(operator(&arena, bit_or), "|");
+    let bit_xor = binary_part(&arena, bit_or, 0);
+    assert_eq!(operator(&arena, bit_xor), "^");
+    let bit_and = binary_part(&arena, bit_xor, 0);
+    assert_eq!(operator(&arena, bit_and), "&");
+    assert_eq!(operator(&arena, binary_part(&arena, bit_and, 0)), ">>");
 }
 
 #[test]
 fn test_right_and_left_shift_share_left_associative_source_precedence() {
+    let mut arena = ValueArena::new();
     let program_right_then_left = parse_string(
+        &mut arena,
         "shift.p4",
         "control C() { apply { bit<4> x; x = 4w1 >> 4w2 << 4w3; } }",
     )
     .unwrap();
-    let left_shift = first_binary(&program_right_then_left).unwrap();
-    assert_eq!(operator(left_shift), "<<");
-    assert_eq!(operator(binary_part(left_shift, 0)), ">>");
+    let left_shift = first_binary(&arena, &program_right_then_left).unwrap();
+    assert_eq!(operator(&arena, left_shift), "<<");
+    assert_eq!(operator(&arena, binary_part(&arena, left_shift, 0)), ">>");
 
     let program_left_then_right = parse_string(
+        &mut arena,
         "shift.p4",
         "control C() { apply { bit<4> x; x = 4w1 << 4w2 >> 4w3; } }",
     )
     .unwrap();
-    let right_shift = first_binary(&program_left_then_right).unwrap();
-    assert_eq!(operator(right_shift), ">>");
-    assert_eq!(operator(binary_part(right_shift, 0)), "<<");
+    let right_shift = first_binary(&arena, &program_left_then_right).unwrap();
+    assert_eq!(operator(&arena, right_shift), ">>");
+    assert_eq!(operator(&arena, binary_part(&arena, right_shift, 0)), "<<");
 }
 
 #[test]
 fn test_binary_expression_span_preserves_mapped_token_order() {
+    let mut arena = ValueArena::new();
     let program = parse_string(
+        &mut arena,
         "preprocessed.p4",
         r#"control C() { apply { bit<4> x; x =
 # 200 "later.p4"
@@ -97,12 +107,75 @@ fn test_binary_expression_span_preserves_mapped_token_order() {
 & 4w2; } }"#,
     )
     .unwrap();
-    let binary = first_binary(&program).unwrap();
+    let binary = first_binary(&arena, &program).unwrap();
+    let span = arena.span(binary);
 
-    assert_eq!(binary.span.left.file.as_ref(), "later.p4");
-    assert_eq!(binary.span.left.line, 200);
-    assert_eq!(binary.span.right.file.as_ref(), "earlier.p4");
-    assert_eq!(binary.span.right.line, 10);
+    assert_eq!(span.left.file.as_ref(), "later.p4");
+    assert_eq!(span.left.line, 200);
+    assert_eq!(span.right.file.as_ref(), "earlier.p4");
+    assert_eq!(span.right.line, 10);
+}
+
+#[test]
+fn test_sized_integer_preserves_child_atom_and_type_label_spans() {
+    use p4spec_rust::lang::common::{
+        notation::mixfix::Mixfix,
+        source::{Position, Span},
+    };
+
+    fn find_literal(arena: &ValueArena, value: Value) -> Option<Value> {
+        let children = match arena.kind(&value) {
+            ValueKind::Case(case) => {
+                if let Mixfix::Seq(items) = case
+                    && matches!(
+                        items.as_slice(),
+                        [Mixfix::Arg(_), Mixfix::Atom(_), Mixfix::Arg(_)]
+                    )
+                    && matches!(arena.typ(&value), TypKind::Var(id, _) if id.node == "integerLiteral")
+                {
+                    return Some(value);
+                }
+                case.args()
+            }
+            ValueKind::List(values) | ValueKind::Tuple(values) => values.iter().collect(),
+            ValueKind::Opt(value) => value.iter().collect(),
+            _ => Vec::new(),
+        };
+        children
+            .into_iter()
+            .find_map(|value| find_literal(arena, *value))
+    }
+
+    for (literal, sign) in [("8w3", "W"), ("8s3", "S")] {
+        let mut arena = ValueArena::new();
+        let prefix = "const bit<8> x = ";
+        let program =
+            parse_string(&mut arena, "literal.p4", &format!("{prefix}{literal};")).unwrap();
+        let value = find_literal(&arena, program).expect("sized integer literal");
+        let expected = Span::new(
+            Position::new("literal.p4", 1, prefix.len() as i64),
+            Position::new("literal.p4", 1, (prefix.len() + literal.len()) as i64),
+        );
+        assert_eq!(arena.span(&value), &expected);
+        let ValueKind::Case(Mixfix::Seq(items)) = arena.kind(&value) else {
+            unreachable!()
+        };
+        let [Mixfix::Arg(width), Mixfix::Atom(atom), Mixfix::Arg(integer)] = items.as_slice()
+        else {
+            unreachable!()
+        };
+        assert_eq!(arena.span(width), &expected);
+        assert_eq!(arena.span(integer), &expected);
+        assert_eq!(arena.location(atom.span), &expected);
+        assert_eq!(
+            atom.node,
+            p4spec_rust::lang::common::notation::atom::Atom::Keyword(sign.to_owned())
+        );
+        let TypKind::Var(id, _) = arena.typ(&value) else {
+            unreachable!()
+        };
+        assert_eq!(id.span, Span::default());
+    }
 }
 
 use std::{
@@ -137,17 +210,19 @@ fn test_parses_empty_and_declaration_programs() {
         "control C() { apply { } }",
         "parser P() { state start { transition accept; } }",
     ] {
-        let program = parse_string("fixture.p4", source)
+        let mut arena = ValueArena::new();
+        let program = parse_string(&mut arena, "fixture.p4", source)
             .unwrap_or_else(|error| panic!("failed to parse {source:?}: {error}"));
-        assert!(matches!(program.node, ValueKind::Case(_)));
-        assert_eq!(program.span.left.file.as_ref(), "fixture.p4");
+        assert!(matches!(arena.kind(&program), ValueKind::Case(_)));
+        assert_eq!(arena.span(&program).left.file.as_ref(), "fixture.p4");
     }
 }
 
 #[test]
 fn test_syntax_errors_retain_the_source_location() {
-    let error =
-        parse_string("broken.p4", "const bit<8> x = ;").expect_err("reject a missing initializer");
+    let mut arena = ValueArena::new();
+    let error = parse_string(&mut arena, "broken.p4", "const bit<8> x = ;")
+        .expect_err("reject a missing initializer");
     assert_eq!(error.kind, P4ErrorKind::Syntax);
     assert_eq!(error.span.left.file.as_ref(), "broken.p4");
     assert_eq!(error.span.left.line, 1);
@@ -167,7 +242,7 @@ control C() {
     }
 }
 "#;
-    parse_string("control.p4", source).expect("parse nested control flow");
+    parse_string(&mut ValueArena::new(), "control.p4", source).expect("parse nested control flow");
 }
 
 #[test]
@@ -178,7 +253,8 @@ package Outer(Inner inner);
 Outer(Inner()) main;
 "#;
 
-    parse_string("lookahead.p4", source).expect("parse newly declared constructor names");
+    parse_string(&mut ValueArena::new(), "lookahead.p4", source)
+        .expect("parse newly declared constructor names");
 }
 
 #[test]
@@ -203,7 +279,7 @@ fn test_parses_the_positive_p4_corpus() {
     let failures: Vec<_> = files
         .iter()
         .filter_map(|file| {
-            parse_file(&includes, file)
+            parse_file(&mut ValueArena::new(), &includes, file)
                 .err()
                 .map(|error| format!("{}: {error}", file.display()))
         })
@@ -227,7 +303,7 @@ fn test_rejects_the_negative_p4_parse_corpus() {
 
     let accepted: Vec<_> = files
         .iter()
-        .filter(|file| parse_file(&includes, file).is_ok())
+        .filter(|file| parse_file(&mut ValueArena::new(), &includes, file).is_ok())
         .map(|file| file.display().to_string())
         .collect();
     assert!(
@@ -284,7 +360,7 @@ fn assert_matches_parser_oracle(root: &Path, oracle_name: &str, directories: &[P
     let mut mismatches = Vec::new();
     for (index, (file, should_parse)) in oracle.into_iter().enumerate() {
         report_progress(&format!("p4 parser {oracle_name}"), index + 1, total);
-        let result = parse_file(&includes, &file);
+        let result = parse_file(&mut ValueArena::new(), &includes, &file);
         if result.is_ok() != should_parse {
             mismatches.push(match result {
                 Ok(_) => format!("{}: unexpectedly parsed", file.display()),
@@ -363,22 +439,23 @@ fn test_empty_productions_use_previous_token_end_across_whitespace() {
         common::source::Span,
         data::{typ::TypKind, value::Value},
     };
-    fn spans(value: &Value, name: &str, output: &mut Vec<Span>) {
-        if let TypKind::Var(id, _) = &value.note
+    fn spans(arena: &ValueArena, value: &Value, name: &str, output: &mut Vec<Span>) {
+        if let TypKind::Var(id, _) = arena.typ(value)
             && id.node == name
         {
-            output.push(value.span.clone());
+            output.push(arena.span(value).clone());
         }
-        if let ValueKind::Case(case) = &value.node {
+        if let ValueKind::Case(case) = arena.kind(value) {
             for value in case.args() {
-                spans(value, name, output);
+                spans(arena, value, name, output);
             }
         }
     }
     let source = "control C() {\n  action a( \n    bit<8> x) { }\n  apply { }\n}";
-    let value = parse_string("empty.p4", source).unwrap();
+    let mut arena = ValueArena::new();
+    let value = parse_string(&mut arena, "empty.p4", source).unwrap();
     let mut directions = Vec::new();
-    spans(&value, "direction", &mut directions);
+    spans(&arena, &value, "direction", &mut directions);
     assert_eq!(directions.len(), 1);
     assert_eq!(
         (directions[0].left.line, directions[0].left.column),
@@ -386,7 +463,7 @@ fn test_empty_productions_use_previous_token_end_across_whitespace() {
     );
     assert_eq!(directions[0].left, directions[0].right);
     let mut annotations = Vec::new();
-    spans(&value, "annotationList", &mut annotations);
+    spans(&arena, &value, "annotationList", &mut annotations);
     assert!(
         annotations
             .iter()
@@ -394,7 +471,7 @@ fn test_empty_productions_use_previous_token_end_across_whitespace() {
     );
     assert!(annotations.iter().all(|span| span.left == span.right));
     let mut names = Vec::new();
-    spans(&value, "identifier", &mut names);
+    spans(&arena, &value, "identifier", &mut names);
     assert!(
         names
             .iter()
@@ -408,33 +485,35 @@ fn test_initial_empty_production_precedes_whitespace_and_line_directives() {
         common::source::Position,
         data::{typ::TypKind, value::Value},
     };
-    fn initial_annotation(value: &Value) -> Option<&Value> {
-        if let TypKind::Var(id, _) = &value.note
+    fn initial_annotation<'a>(arena: &'a ValueArena, value: &'a Value) -> Option<&'a Value> {
+        if let TypKind::Var(id, _) = arena.typ(value)
             && id.node == "annotationList"
         {
             return Some(value);
         }
-        match &value.node {
+        match arena.kind(value) {
             ValueKind::Case(case) => case
                 .args()
                 .into_iter()
-                .find_map(|value| initial_annotation(value)),
+                .find_map(|value| initial_annotation(arena, value)),
             _ => None,
         }
     }
     for prefix in ["\n  ", "# 20 \"included.p4\"\n  "] {
         let source = format!("{prefix}control C() {{ apply {{ }} }}");
-        let value = parse_string("initial.p4", &source).unwrap();
-        let annotation = initial_annotation(&value).unwrap();
-        assert_eq!(annotation.span.left, Position::new("initial.p4", 1, 0));
-        assert_eq!(annotation.span.right, annotation.span.left);
+        let mut arena = ValueArena::new();
+        let value = parse_string(&mut arena, "initial.p4", &source).unwrap();
+        let annotation = initial_annotation(&arena, &value).unwrap();
+        let span = arena.span(annotation);
+        assert_eq!(span.left, Position::new("initial.p4", 1, 0));
+        assert_eq!(span.right, span.left);
     }
 }
 
 #[test]
 fn test_syntax_error_after_whitespace_uses_offending_token_span() {
     let source = "\n const bit<8> x =   ;";
-    let error = parse_string("syntax.p4", source).unwrap_err();
+    let error = parse_string(&mut ValueArena::new(), "syntax.p4", source).unwrap_err();
     let column = source.lines().nth(1).unwrap().find(';').unwrap() as i64;
     assert_eq!((error.span.left.line, error.span.left.column), (2, column));
     assert_eq!(

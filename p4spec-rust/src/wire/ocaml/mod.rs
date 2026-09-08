@@ -11,6 +11,8 @@ use thiserror::Error;
 
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
 pub enum DecodeError {
+    #[error(transparent)]
+    Value(#[from] crate::lang::data::value::ValueError),
     #[error("expected {0}")]
     Expected(&'static str),
     #[error("missing field `{0}`")]

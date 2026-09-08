@@ -23,7 +23,7 @@ use p4spec_rust::{
         },
         data::{
             typ::TypKind,
-            value::{Value, ValueKind, make},
+            value::{Value, ValueArena, ValueCase, ValueKind, make},
         },
         xl::num::{Number, Typ as NumTyp},
     },
@@ -46,22 +46,37 @@ fn repo() -> &'static Path {
     Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap()
 }
 
-fn native<E: Extern>(
-    spec: &Path,
-    det: bool,
-    guard: bool,
-    extern_: E,
-) -> Runner<Al, BuiltinInterface, E> {
-    let spec_el = parse_files([spec]).expect("native specification parsing");
-    let spec_il = elaborate::elaborate(spec_el).expect("native elaboration");
-    let spec_al = algo::convert(spec_il).expect("native algorithmic conversion");
-    let unparser = P4Unparser::from_al_spec(&spec_al);
-    Runner::new(
-        Global::load(spec_al).unwrap(),
-        Config::new(det, guard),
-        BuiltinInterface::new(unparser),
-        extern_,
-    )
+struct Loaded {
+    global: Rc<Global>,
+    unparser: P4Unparser,
+}
+
+impl Loaded {
+    fn load(spec: &Path) -> Self {
+        let spec_el = parse_files([spec]).expect("native specification parsing");
+        let spec_il = elaborate::elaborate(spec_el).expect("native elaboration");
+        let spec_al = algo::convert(spec_il).expect("native algorithmic conversion");
+        let unparser = P4Unparser::from_al_spec(&spec_al);
+        Self {
+            global: Rc::new(Global::load(spec_al).unwrap()),
+            unparser,
+        }
+    }
+
+    fn runner<E: Extern>(
+        &self,
+        det: bool,
+        guard: bool,
+        extern_: E,
+    ) -> Runner<Al, BuiltinInterface, E> {
+        Runner::new(
+            Rc::clone(&self.global),
+            Config::new(det, guard),
+            ValueArena::new(),
+            BuiltinInterface::new(self.unparser.clone()),
+            extern_,
+        )
+    }
 }
 
 struct Oracle {
@@ -138,8 +153,9 @@ impl Oracle {
 
     fn compare_program(
         &mut self,
+        arena: &ValueArena,
         request: &Json,
-        actual: Result<Vec<Rc<Value>>, Json>,
+        actual: Result<Vec<Value>, Json>,
         label: &str,
     ) {
         self.request(request);
@@ -174,7 +190,7 @@ impl Oracle {
         );
         for (output_index, value) in values.iter().enumerate() {
             let mut frame_index = 0;
-            semantic_frames(value, &mut |actual_frame| {
+            semantic_frames(arena, value, &mut |actual_frame| {
                 let line = self.read_protocol_line();
                 let expected_frame = line
                     .strip_prefix("AL-FRAME ")
@@ -209,8 +225,8 @@ impl Drop for Oracle {
     }
 }
 
-fn success(values: Vec<Rc<Value>>) -> Json {
-    json!({"status": "passed", "values": values.iter().map(|value| String::from_utf8(ValueEnvelopeCodec::encode(value).unwrap()).unwrap()).collect::<Vec<_>>()})
+fn success(arena: &ValueArena, values: Vec<Value>) -> Json {
+    json!({"status": "passed", "values": values.iter().map(|value| String::from_utf8(ValueEnvelopeCodec::encode(arena, value).unwrap()).unwrap()).collect::<Vec<_>>()})
 }
 
 fn failure(error: Error) -> Json {
@@ -319,13 +335,19 @@ fn compare(expected: Json, actual: Json, label: &str) {
         );
         for (index, (expected, actual)) in expected.iter().zip(actual).enumerate() {
             // Decode the wire note, which includes OCaml-only cached hash metadata
+            let mut arena = ValueArena::new();
             let expected =
-                ValueEnvelopeCodec::decode(expected.as_str().unwrap().as_bytes()).unwrap();
-            let actual = ValueEnvelopeCodec::decode(actual.as_str().unwrap().as_bytes()).unwrap();
-            let expected =
-                yojson::Value::from_slice(&ValueEnvelopeCodec::encode(&expected).unwrap()).unwrap();
+                ValueEnvelopeCodec::decode(&mut arena, expected.as_str().unwrap().as_bytes())
+                    .unwrap();
             let actual =
-                yojson::Value::from_slice(&ValueEnvelopeCodec::encode(&actual).unwrap()).unwrap();
+                ValueEnvelopeCodec::decode(&mut arena, actual.as_str().unwrap().as_bytes())
+                    .unwrap();
+            let expected =
+                yojson::Value::from_slice(&ValueEnvelopeCodec::encode(&arena, &expected).unwrap())
+                    .unwrap();
+            let actual =
+                yojson::Value::from_slice(&ValueEnvelopeCodec::encode(&arena, &actual).unwrap())
+                    .unwrap();
             if let Some(difference) = first_difference(&expected, &actual, "") {
                 panic!("{label}: output {index}, first difference {difference}");
             }
@@ -340,9 +362,9 @@ fn compare(expected: Json, actual: Json, label: &str) {
     }
 }
 
-fn semantic_frames(value: &Value, emit: &mut impl FnMut(Json)) {
-    let typ = semantic_type(&value.note);
-    match &value.node {
+fn semantic_frames(arena: &ValueArena, value: &Value, emit: &mut impl FnMut(Json)) {
+    let typ = semantic_type(arena.typ(value));
+    match arena.kind(value) {
         ValueKind::Bool(value) => emit(json!(["Value", "Bool", typ, value])),
         ValueKind::Num(Number::Nat(value)) => emit(json!(["Value", "Nat", typ, value.to_string()])),
         ValueKind::Num(Number::Int(value)) => emit(json!(["Value", "Int", typ, value.to_string()])),
@@ -351,29 +373,29 @@ fn semantic_frames(value: &Value, emit: &mut impl FnMut(Json)) {
             emit(json!(["Value", "Struct", typ, fields.len()]));
             for (atom, value) in fields {
                 emit(json!(["Field", semantic_atom(&atom.node)]));
-                semantic_frames(value, emit);
+                semantic_frames(arena, value, emit);
             }
         }
         ValueKind::Case(value_case) => {
             emit(json!(["Value", "Case", typ]));
-            semantic_mixfix_frames(value_case, emit);
+            semantic_mixfix_frames(arena, value_case, emit);
         }
         ValueKind::Tuple(values) => {
             emit(json!(["Value", "Tuple", typ, values.len()]));
             for value in values {
-                semantic_frames(value, emit);
+                semantic_frames(arena, value, emit);
             }
         }
         ValueKind::Opt(value) => {
             emit(json!(["Value", "Opt", typ, value.is_some()]));
             if let Some(value) = value {
-                semantic_frames(value, emit);
+                semantic_frames(arena, value, emit);
             }
         }
         ValueKind::List(values) => {
             emit(json!(["Value", "List", typ, values.len()]));
             for value in values {
-                semantic_frames(value, emit);
+                semantic_frames(arena, value, emit);
             }
         }
         ValueKind::Func(id) => emit(json!(["Value", "Func", typ, id.node])),
@@ -458,11 +480,11 @@ fn semantic_atom(atom: &Atom) -> Json {
     }
 }
 
-fn semantic_mixfix_frames(value: &Mixfix<Rc<Value>>, emit: &mut impl FnMut(Json)) {
+fn semantic_mixfix_frames(arena: &ValueArena, value: &ValueCase, emit: &mut impl FnMut(Json)) {
     match value {
         Mixfix::Arg(value) => {
             emit(json!(["Mixfix", "Arg"]));
-            semantic_frames(value, emit);
+            semantic_frames(arena, value, emit);
         }
         Mixfix::Atom(atom) => {
             emit(json!(["Mixfix", "Atom", semantic_atom(&atom.node)]));
@@ -474,17 +496,17 @@ fn semantic_mixfix_frames(value: &Mixfix<Rc<Value>>, emit: &mut impl FnMut(Json)
                 semantic_atom(&left.node),
                 semantic_atom(&right.node)
             ]));
-            semantic_mixfix_frames(body, emit);
+            semantic_mixfix_frames(arena, body, emit);
         }
         Mixfix::Infix(left, atom, right) => {
             emit(json!(["Mixfix", "Infix", semantic_atom(&atom.node)]));
-            semantic_mixfix_frames(left, emit);
-            semantic_mixfix_frames(right, emit);
+            semantic_mixfix_frames(arena, left, emit);
+            semantic_mixfix_frames(arena, right, emit);
         }
         Mixfix::Seq(values) => {
             emit(json!(["Mixfix", "Seq", values.len()]));
             for value in values {
-                semantic_mixfix_frames(value, emit);
+                semantic_mixfix_frames(arena, value, emit);
             }
         }
     }
@@ -535,29 +557,30 @@ fn semantic_external_frames(
     }
 }
 
-fn collect_semantic_frames(value: &Value) -> Vec<Json> {
+fn collect_semantic_frames(arena: &ValueArena, value: &Value) -> Vec<Json> {
     let mut frames = Vec::new();
-    semantic_frames(value, &mut |frame| frames.push(frame));
+    semantic_frames(arena, value, &mut |frame| frames.push(frame));
     frames
 }
 
 fn fixtures(det: bool) {
     let spec = repo().join("p4spec-rust/tests/fixtures/interp/al/compare.watsup");
+    let loaded = Loaded::load(&spec);
     for guard in [false, true] {
-        let mut runner = native(&spec, det, guard, NullExtern);
+        let mut runner = loaded.runner(det, guard, NullExtern);
         let mut oracle = Oracle::new(&spec, det, guard, false);
-        let nat = make::nat(5.into(), Span::default());
-        let malformed = make::bool(true, Span::default());
+        let nat = make::nat(runner.arena_mut(), 5.into(), Span::default()).unwrap();
+        let malformed = make::bool(runner.arena_mut(), true, Span::default()).unwrap();
         for (kind, name, values) in [
-            ("relation", "Ordered", vec![nat.clone()]),
+            ("relation", "Ordered", vec![nat]),
             ("relation", "Choice", vec![nat]),
-            ("function", "ignore", vec![malformed.clone()]),
+            ("function", "ignore", vec![malformed]),
             ("relation", "Ignore", vec![malformed]),
             ("function", "recover", vec![]),
             ("function", "bad_output", vec![]),
             ("function", "reject", vec![]),
         ] {
-            let request = json!({"kind": kind, "name": name, "values": values.iter().map(|value| ValueCodec::encode(value).unwrap()).collect::<Vec<_>>()});
+            let request = json!({"kind": kind, "name": name, "values": values.iter().map(|value| ValueCodec::encode(runner.arena(), value).unwrap()).collect::<Vec<_>>()});
             let expected = oracle.query(&request);
             let result = if kind == "relation" {
                 runner.eval_rel(name, &values)
@@ -566,7 +589,7 @@ fn fixtures(det: bool) {
                     .eval_func(name, &[], &values)
                     .map(|value| vec![value])
             };
-            let actual = result.map_or_else(failure, success);
+            let actual = result.map_or_else(failure, |values| success(runner.arena(), values));
             compare(
                 expected,
                 actual,
@@ -584,8 +607,8 @@ impl Extern for Bridge {
         context: &mut RunnerContext<'_, S, I, Self>,
         name: &str,
         targs: &[Typ],
-        values: &[Rc<Value>],
-    ) -> Result<(Rc<Value>, bool), S::Error>
+        values: &[Value],
+    ) -> Result<(Value, bool), S::Error>
     where
         I: Interface,
         S: Interpreter<I, Self>,
@@ -593,7 +616,8 @@ impl Extern for Bridge {
         let value = match name {
             "bridge" => context.call_func("inner", targs, values)?,
             "bridge_bad" => {
-                context.call_func("ignore", &[], &[make::bool(true, Span::default())])?
+                let value = make::bool(context.arena_mut(), true, Span::default()).unwrap();
+                context.call_func("ignore", &[], &[value])?
             }
             _ => return Err(ExternError::Failure("unknown bridge function".to_owned()).into()),
         };
@@ -604,8 +628,8 @@ impl Extern for Bridge {
         &self,
         _context: &mut RunnerContext<'_, S, I, Self>,
         _name: &str,
-        _values: &[Rc<Value>],
-    ) -> Result<(Vec<Rc<Value>>, bool), S::Error>
+        _values: &[Value],
+    ) -> Result<(Vec<Value>, bool), S::Error>
     where
         I: Interface,
         S: Interpreter<I, Self>,
@@ -618,19 +642,26 @@ impl Extern for Bridge {
 
 fn reentry(det: bool) {
     let spec = repo().join("p4spec-rust/tests/fixtures/interp/al/compare.watsup");
+    let loaded = Loaded::load(&spec);
     for guard in [false, true] {
-        let mut runner = native(&spec, det, guard, Bridge);
+        let mut runner = loaded.runner(det, guard, Bridge);
         let mut oracle = Oracle::new(&spec, det, guard, true);
         for (name, values) in [
-            ("outer", vec![make::nat(5.into(), Span::default())]),
+            (
+                "outer",
+                vec![make::nat(runner.arena_mut(), 5.into(), Span::default()).unwrap()],
+            ),
             ("outer_bad", vec![]),
-            ("outer", vec![make::nat(9.into(), Span::default())]),
+            (
+                "outer",
+                vec![make::nat(runner.arena_mut(), 9.into(), Span::default()).unwrap()],
+            ),
         ] {
-            let expected = oracle.query(&json!({"kind": "function", "name": name, "values": values.iter().map(|value| ValueCodec::encode(value).unwrap()).collect::<Vec<_>>()}));
+            let expected = oracle.query(&json!({"kind": "function", "name": name, "values": values.iter().map(|value| ValueCodec::encode(runner.arena(), value).unwrap()).collect::<Vec<_>>()}));
             let actual = runner
                 .eval_func(name, &[], &values)
                 .map(|value| vec![value])
-                .map_or_else(failure, success);
+                .map_or_else(failure, |values| success(runner.arena(), values));
             compare(
                 expected,
                 actual,
@@ -725,7 +756,7 @@ fn run_corpus(det: bool) {
     let files = corpus();
     assert!(!files.is_empty(), "supported corpus must be present");
     let spec = repo().join("spec");
-    let mut runner = native(&spec, det, false, Placeholder);
+    let loaded = Loaded::load(&spec);
     let includes = vec![repo().join("p4c/p4include")];
     for (index, (path, name)) in files.iter().enumerate() {
         eprintln!(
@@ -736,14 +767,15 @@ fn run_corpus(det: bool) {
         );
         // Isolate OCaml's process-global fresh identifiers between programs
         let mut oracle = Oracle::new(&spec, det, false, false);
-        runner.clear();
-        let actual = match parse_file(&includes, path) {
+        let mut runner = loaded.runner(det, false, Placeholder);
+        let actual = match parse_file(runner.arena_mut(), &includes, path) {
             Ok(program) => runner.eval_program(name, program).map_err(failure),
             Err(error) => Err(
                 json!({"status": "syntax", "span": error.span.to_string(), "message": error.to_string()}),
             ),
         };
         oracle.compare_program(
+            runner.arena(),
             &json!({"kind": "program", "name": name, "path": path, "includes": includes}),
             actual,
             &path.display().to_string(),
@@ -805,19 +837,14 @@ fn test_semantic_frames_detect_nested_value_changes() {
     use p4spec_rust::lang::{data::typ, xl::num::Natural};
 
     let typ_list = typ::make::list(typ::make::nat());
-    let original = make::list(
-        &typ_list,
-        vec![make::nat(Natural::from(1_u64), Span::default())],
-        Span::default(),
-    );
-    let mutated = make::list(
-        &typ_list,
-        vec![make::nat(Natural::from(2_u64), Span::default())],
-        Span::default(),
-    );
+    let mut arena = ValueArena::new();
+    let first = make::nat(&mut arena, Natural::from(1_u64), Span::default()).unwrap();
+    let second = make::nat(&mut arena, Natural::from(2_u64), Span::default()).unwrap();
+    let original = make::list(&mut arena, &typ_list, vec![first], Span::default()).unwrap();
+    let mutated = make::list(&mut arena, &typ_list, vec![second], Span::default()).unwrap();
     assert_ne!(
-        collect_semantic_frames(&original),
-        collect_semantic_frames(&mutated)
+        collect_semantic_frames(&arena, &original),
+        collect_semantic_frames(&arena, &mutated)
     );
 }
 
@@ -826,17 +853,15 @@ fn test_semantic_frames_detect_list_order_changes() {
     use p4spec_rust::lang::{data::typ, xl::num::Natural};
 
     let typ_list = typ::make::list(typ::make::nat());
-    let first = make::nat(Natural::from(1_u64), Span::default());
-    let second = make::nat(Natural::from(2_u64), Span::default());
-    let original = make::list(
-        &typ_list,
-        vec![Rc::clone(&first), Rc::clone(&second)],
-        Span::default(),
-    );
-    let reordered = make::list(&typ_list, vec![second, first], Span::default());
+    let mut arena = ValueArena::new();
+    let first = make::nat(&mut arena, Natural::from(1_u64), Span::default()).unwrap();
+    let second = make::nat(&mut arena, Natural::from(2_u64), Span::default()).unwrap();
+    let original = make::list(&mut arena, &typ_list, vec![first, second], Span::default()).unwrap();
+    let reordered =
+        make::list(&mut arena, &typ_list, vec![second, first], Span::default()).unwrap();
     assert_ne!(
-        collect_semantic_frames(&original),
-        collect_semantic_frames(&reordered)
+        collect_semantic_frames(&arena, &original),
+        collect_semantic_frames(&arena, &reordered)
     );
 }
 
@@ -850,8 +875,10 @@ fn test_semantic_frames_detect_case_atom_changes() {
         phrase,
     };
 
-    let case = |name: &str| {
+    let mut arena = ValueArena::new();
+    let mut case = |name: &str| {
         make::case_(
+            &mut arena,
             &typ::make::bool(),
             Mixfix::Atom(phrase! {
                 node: Atom::Keyword(name.to_owned()),
@@ -859,10 +886,13 @@ fn test_semantic_frames_detect_case_atom_changes() {
             }),
             Span::default(),
         )
+        .unwrap()
     };
+    let left = case("LEFT");
+    let right = case("RIGHT");
     assert_ne!(
-        collect_semantic_frames(&case("LEFT")),
-        collect_semantic_frames(&case("RIGHT"))
+        collect_semantic_frames(&arena, &left),
+        collect_semantic_frames(&arena, &right)
     );
 }
 
@@ -876,8 +906,10 @@ fn test_semantic_frames_distinguish_mixfix_atom_constructors() {
         phrase,
     };
 
-    let value = |atom| {
+    let mut arena = ValueArena::new();
+    let mut value = |atom| {
         make::case_(
+            &mut arena,
             &typ::make::bool(),
             Mixfix::Atom(phrase! {
                 node: atom,
@@ -885,10 +917,13 @@ fn test_semantic_frames_distinguish_mixfix_atom_constructors() {
             }),
             Span::default(),
         )
+        .unwrap()
     };
+    let keyword = value(Atom::Keyword("_X".to_owned()));
+    let tag = value(Atom::Tag("X".to_owned()));
     assert_ne!(
-        collect_semantic_frames(&value(Atom::Keyword("_X".to_owned()))),
-        collect_semantic_frames(&value(Atom::Tag("X".to_owned())))
+        collect_semantic_frames(&arena, &keyword),
+        collect_semantic_frames(&arena, &tag)
     );
 }
 
@@ -899,22 +934,28 @@ fn test_semantic_frames_distinguish_struct_field_atom_constructors() {
         phrase,
     };
 
-    let value = |atom| {
+    let mut arena = ValueArena::new();
+    let inner = make::bool(&mut arena, true, Span::default()).unwrap();
+    let mut value = |atom| {
         make::structure(
+            &mut arena,
             &typ::make::bool(),
             vec![(
                 phrase! {
                     node: atom,
                     span: Span::default(),
                 },
-                make::bool(true, Span::default()),
+                inner,
             )],
             Span::default(),
         )
+        .unwrap()
     };
+    let keyword = value(Atom::Keyword("->".to_owned()));
+    let arrow = value(Atom::Arrow);
     assert_ne!(
-        collect_semantic_frames(&value(Atom::Keyword("->".to_owned()))),
-        collect_semantic_frames(&value(Atom::Arrow))
+        collect_semantic_frames(&arena, &keyword),
+        collect_semantic_frames(&arena, &arrow)
     );
 }
 
@@ -922,12 +963,15 @@ fn test_semantic_frames_distinguish_struct_field_atom_constructors() {
 fn test_semantic_frames_detect_external_payload_and_order_changes() {
     use p4spec_rust::{lang::data::typ, yojson::ExternalData};
 
-    let external = |fields| {
+    let mut arena = ValueArena::new();
+    let mut external = |fields| {
         make::external(
+            &mut arena,
             &typ::make::bool(),
             ExternalData::Assoc(fields),
             Span::default(),
         )
+        .unwrap()
     };
     let original = external(vec![
         ("a".to_owned(), ExternalData::Int(1)),
@@ -941,20 +985,33 @@ fn test_semantic_frames_detect_external_payload_and_order_changes() {
         ("a".to_owned(), ExternalData::Int(1)),
         ("b".to_owned(), ExternalData::Int(3)),
     ]);
-    let frames = collect_semantic_frames(&original);
-    assert_ne!(frames, collect_semantic_frames(&reordered));
-    assert_ne!(frames, collect_semantic_frames(&mutated));
+    let frames = collect_semantic_frames(&arena, &original);
+    assert_ne!(frames, collect_semantic_frames(&arena, &reordered));
+    assert_ne!(frames, collect_semantic_frames(&arena, &mutated));
 }
 
 #[test]
 fn test_semantic_frames_detect_type_changes() {
     use p4spec_rust::lang::data::{typ::TypKind, value::ValueKind};
 
-    let bool_value = make::new(ValueKind::Bool(true), TypKind::Bool, Span::default());
-    let text_typed = make::new(ValueKind::Bool(true), TypKind::Text, Span::default());
+    let mut arena = ValueArena::new();
+    let bool_value = make::new(
+        &mut arena,
+        ValueKind::Bool(true),
+        TypKind::Bool,
+        Span::default(),
+    )
+    .unwrap();
+    let text_typed = make::new(
+        &mut arena,
+        ValueKind::Bool(true),
+        TypKind::Text,
+        Span::default(),
+    )
+    .unwrap();
     assert_ne!(
-        collect_semantic_frames(&bool_value),
-        collect_semantic_frames(&text_typed)
+        collect_semantic_frames(&arena, &bool_value),
+        collect_semantic_frames(&arena, &text_typed)
     );
 }
 
@@ -962,18 +1019,48 @@ fn test_semantic_frames_detect_type_changes() {
 fn test_semantic_frames_ignore_source_spans() {
     use p4spec_rust::lang::common::source::Position;
 
-    let original = make::bool(true, Span::default());
+    let mut arena = ValueArena::new();
+    let original = make::bool(&mut arena, true, Span::default()).unwrap();
     let relocated = make::bool(
+        &mut arena,
         true,
         Span::new(
             Position::new("other.p4", 10, 20),
             Position::new("other.p4", 10, 24),
         ),
-    );
+    )
+    .unwrap();
     assert_eq!(
-        collect_semantic_frames(&original),
-        collect_semantic_frames(&relocated)
+        collect_semantic_frames(&arena, &original),
+        collect_semantic_frames(&arena, &relocated)
     );
+}
+
+#[test]
+fn test_semantic_frames_ignore_arena_allocation_order() {
+    use p4spec_rust::lang::data::typ;
+
+    let expected = vec![
+        json!(["Value", "List", ["IterT", ["BoolT"], "List"], 2]),
+        json!(["Value", "Bool", ["BoolT"], true]),
+        json!(["Value", "Bool", ["BoolT"], false]),
+    ];
+    for reverse in [false, true] {
+        let mut arena = ValueArena::new();
+        if reverse {
+            make::text(&mut arena, "unrelated".to_owned(), Span::default()).unwrap();
+        }
+        let first = make::bool(&mut arena, !reverse, Span::default()).unwrap();
+        let second = make::bool(&mut arena, reverse, Span::default()).unwrap();
+        let values = if reverse {
+            vec![second, first]
+        } else {
+            vec![first, second]
+        };
+        let typ_list = typ::make::list(typ::make::bool());
+        let value = make::list(&mut arena, &typ_list, values, Span::default()).unwrap();
+        assert_eq!(collect_semantic_frames(&arena, &value), expected);
+    }
 }
 
 #[test]

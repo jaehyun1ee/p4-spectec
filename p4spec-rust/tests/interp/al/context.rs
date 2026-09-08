@@ -1,5 +1,5 @@
 use p4spec_rust::interp::al::error::{ContextErrorKind, RuntimeErrorKind};
-use std::rc::Rc;
+use p4spec_rust::lang::data::value::ValueArena;
 
 use p4spec_rust::{
     interp::al::{
@@ -56,6 +56,7 @@ fn variable(var: &ast::Var) -> Variable {
 
 #[test]
 fn test_duplicate_global_definition_uses_second_identifier_span() {
+    let _arena = ValueArena::new();
     for (kind, first, second) in [
         (
             EntityKind::Type,
@@ -88,6 +89,7 @@ fn test_duplicate_global_definition_uses_second_identifier_span() {
 
 #[test]
 fn test_localize_discards_locals_and_retains_global_lookup() {
+    let mut arena = ValueArena::new();
     let func_global = func("global", 1);
     let global = Global::load(vec![def(ast::DefKind::MetaFunc(func_global.clone()))]).unwrap();
     let mut ctx = Context::new(&global);
@@ -95,7 +97,10 @@ fn test_localize_discards_locals_and_retains_global_lookup() {
     ctx.add_func(id("local", 2), func_local.clone()).unwrap();
     ctx.add_typdef(id("T", 3), TypeDef::Extern).unwrap();
     let var = variable(&var("x", vec![]));
-    ctx.add_value(var.clone(), make::bool(true, Span::default()));
+    ctx.add_value(
+        var.clone(),
+        make::bool(&mut arena, true, Span::default()).unwrap(),
+    );
     assert_eq!(
         ctx.find_func(&id("local", 8)).unwrap(),
         (Scope::Local, &func_local)
@@ -113,6 +118,7 @@ fn test_localize_discards_locals_and_retains_global_lookup() {
 
 #[test]
 fn test_local_definition_duplicates_do_not_replace_bindings() {
+    let _arena = ValueArena::new();
     let global = Global::load(vec![
         def(ast::DefKind::MetaFunc(func("f", 1))),
         def(ast::DefKind::Typ(ast::TypDef::Extern(ast::ExternTyp {
@@ -145,22 +151,26 @@ fn test_local_definition_duplicates_do_not_replace_bindings() {
 
 #[test]
 fn test_sibling_contexts_isolate_rebinding_and_iterator_paths() {
+    let mut arena = ValueArena::new();
     let global = Global::load(vec![]).unwrap();
     let mut ctx = Context::new(&global);
     let var = variable(&var("x", vec![]));
-    ctx.add_value(var.clone(), make::bool(false, Span::default()));
+    ctx.add_value(
+        var.clone(),
+        make::bool(&mut arena, false, Span::default()).unwrap(),
+    );
     let mut ctx_a = ctx.clone();
     let ctx_b = ctx.clone();
     ctx_a.add_value(
         Variable::new(id("x", 9), vec![]),
-        make::bool(true, Span::default()),
+        make::bool(&mut arena, true, Span::default()).unwrap(),
     );
     ctx_a.add_value(
         Variable::new(id("x", 9), vec![ast::Iter::List]),
-        make::bool(true, Span::default()),
+        make::bool(&mut arena, true, Span::default()).unwrap(),
     );
-    assert!(get::bool(ctx_a.find_value(&var).unwrap()).unwrap());
-    assert!(!get::bool(ctx_b.find_value(&var).unwrap()).unwrap());
+    assert!(get::bool(&arena, ctx_a.find_value(&var).unwrap()).unwrap());
+    assert!(!get::bool(&arena, ctx_b.find_value(&var).unwrap()).unwrap());
     assert!(
         ctx.find_value_opt(&Variable::new(id("x", 1), vec![ast::Iter::List]))
             .is_none()
@@ -169,6 +179,7 @@ fn test_sibling_contexts_isolate_rebinding_and_iterator_paths() {
 
 #[test]
 fn test_missing_value_reports_iterator_path_and_lookup_span() {
+    let _arena = ValueArena::new();
     let global = Global::load(vec![]).unwrap();
     let error = Context::new(&global)
         .find_value(&Variable::new(
@@ -188,6 +199,7 @@ fn test_missing_value_reports_iterator_path_and_lookup_span() {
 
 #[test]
 fn test_optional_subcontexts_require_agreement_and_preserve_parent() {
+    let mut arena = ValueArena::new();
     let global = Global::load(vec![]).unwrap();
     let vars = [var("x", vec![ast::Iter::List]), var("y", vec![])];
     let typ = typ::make::bool();
@@ -195,57 +207,58 @@ fn test_optional_subcontexts_require_agreement_and_preserve_parent() {
     for var in &vars {
         let mut iters = var.iters.clone();
         iters.push(ast::Iter::Opt);
-        ctx.add_value(
-            Variable::new(var.id.clone(), iters),
-            make::opt(
+        ctx.add_value(Variable::new(var.id.clone(), iters), {
+            let (value_arg0, value_arg1, value_arg2) = (
                 &typ,
-                Some(make::bool(true, Span::default())),
+                Some(make::bool(&mut arena, true, Span::default()).unwrap()),
                 Span::default(),
-            ),
-        );
+            );
+            make::opt(&mut arena, value_arg0, value_arg1, value_arg2).unwrap()
+        });
     }
-    let ctx_sub = ctx.sub_opt(&vars).unwrap().unwrap();
+    let ctx_sub = ctx.sub_opt(&arena, &vars).unwrap().unwrap();
     for var in &vars {
-        assert!(get::bool(ctx_sub.find_value(&variable(var)).unwrap()).unwrap());
+        assert!(get::bool(&arena, ctx_sub.find_value(&variable(var)).unwrap()).unwrap());
         assert!(ctx.find_value_opt(&variable(var)).is_none());
     }
     ctx.add_value(
         Variable::new(vars[1].id.clone(), vec![ast::Iter::Opt]),
-        make::opt(&typ, None, Span::default()),
+        make::opt(&mut arena, &typ, None, Span::default()).unwrap(),
     );
     assert_eq!(
-        *ctx.sub_opt(&vars).unwrap_err().kind,
+        *ctx.sub_opt(&arena, &vars).unwrap_err().kind,
         ErrorKind::Context(ContextErrorKind::OptionalityMismatch)
     );
     ctx.add_value(
         Variable::new(vars[0].id.clone(), vec![ast::Iter::List, ast::Iter::Opt]),
-        make::opt(&typ, None, Span::default()),
+        make::opt(&mut arena, &typ, None, Span::default()).unwrap(),
     );
-    assert!(ctx.sub_opt(&vars).unwrap().is_none());
-    assert!(ctx.sub_opt(&[]).unwrap().is_some());
+    assert!(ctx.sub_opt(&arena, &vars).unwrap().is_none());
+    assert!(ctx.sub_opt(&arena, &[]).unwrap().is_some());
 }
 
 #[test]
 fn test_list_subcontexts_transpose_in_order_without_leaking_bindings() {
+    let mut arena = ValueArena::new();
     let global = Global::load(vec![]).unwrap();
     let vars = [var("x", vec![]), var("y", vec![])];
     let mut ctx = Context::new(&global);
     for (var, values) in vars.iter().zip([[true, false], [false, true]]) {
         let values = values
             .into_iter()
-            .map(|b| make::bool(b, Span::default()))
+            .map(|b| make::bool(&mut arena, b, Span::default()).unwrap())
             .collect();
         ctx.add_value(
             Variable::new(var.id.clone(), vec![ast::Iter::List]),
-            make::list(&typ::make::bool(), values, Span::default()),
+            make::list(&mut arena, &typ::make::bool(), values, Span::default()).unwrap(),
         );
     }
-    let ctxs = ctx.sub_list(&vars).unwrap();
+    let ctxs = ctx.sub_list(&arena, &vars).unwrap();
     let values: Vec<_> = ctxs
         .iter()
         .map(|ctx| {
             vars.iter()
-                .map(|var| get::bool(ctx.find_value(&variable(var)).unwrap()).unwrap())
+                .map(|var| get::bool(&arena, ctx.find_value(&variable(var)).unwrap()).unwrap())
                 .collect::<Vec<_>>()
         })
         .collect();
@@ -253,42 +266,43 @@ fn test_list_subcontexts_transpose_in_order_without_leaking_bindings() {
     assert!(ctx.find_value_opt(&variable(&vars[0])).is_none());
     ctx.add_value(
         Variable::new(vars[1].id.clone(), vec![ast::Iter::List]),
-        make::list(&typ::make::bool(), vec![], Span::default()),
+        make::list(&mut arena, &typ::make::bool(), vec![], Span::default()).unwrap(),
     );
     assert!(matches!(
-        *ctx.sub_list(&vars).unwrap_err().kind,
+        *ctx.sub_list(&arena, &vars).unwrap_err().kind,
         ErrorKind::Context(ContextErrorKind::IterationLengthMismatch {
             expected: 2,
             actual: 0
         })
     ));
-    assert!(ctx.sub_list(&[]).unwrap().is_empty());
+    assert!(ctx.sub_list(&arena, &[]).unwrap().is_empty());
 }
 
 #[test]
 fn test_iteration_rejects_wrong_value_kind_at_variable_span() {
+    let mut arena = ValueArena::new();
     let global = Global::load(vec![]).unwrap();
     let var = var("x", vec![]);
     let mut ctx = Context::new(&global);
     ctx.add_value(
         Variable::new(var.id.clone(), vec![ast::Iter::Opt]),
-        make::bool(true, Span::default()),
+        make::bool(&mut arena, true, Span::default()).unwrap(),
     );
-    let error = ctx.sub_opt(std::slice::from_ref(&var)).unwrap_err();
+    let error = ctx.sub_opt(&arena, std::slice::from_ref(&var)).unwrap_err();
     assert_eq!(error.span, var.id.span);
     assert!(matches!(
         *error.kind,
         ErrorKind::Runtime(RuntimeErrorKind::Value(_))
     ));
-    let value = Rc::clone(
-        ctx.find_value(&Variable::new(var.id.clone(), vec![ast::Iter::Opt]))
-            .unwrap(),
-    );
-    assert!(get::bool(&value).unwrap());
+    let value = *ctx
+        .find_value(&Variable::new(var.id.clone(), vec![ast::Iter::Opt]))
+        .unwrap();
+    assert!(get::bool(&arena, &value).unwrap());
 }
 
 #[test]
 fn test_loaded_native_spec_preserves_definition_bodies_and_locations() {
+    let _arena = ValueArena::new();
     use p4spec_rust::{
         frontend::parse::parse_files,
         pass::{algo, elaborate},
@@ -351,6 +365,7 @@ fn test_loaded_native_spec_preserves_definition_bodies_and_locations() {
 
 #[test]
 fn test_duplicate_relations_share_namespace_and_report_second_span() {
+    let _arena = ValueArena::new();
     use p4spec_rust::lang::hints::input::InputHint;
     let not_typ = phrase!(node: ast::NotTypKind::Arg(typ::make::bool()), span: id("r", 1).span);
     let rel = ast::RelDef::Extern(Box::new(ast::ExternRel {
@@ -384,6 +399,7 @@ fn test_duplicate_relations_share_namespace_and_report_second_span() {
 
 #[test]
 fn test_definition_lookup_errors_and_local_type_isolation() {
+    let _arena = ValueArena::new();
     let global = Global::load(vec![]).unwrap();
     let ctx = Context::new(&global);
     let id = id("missing", 8);

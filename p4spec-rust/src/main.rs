@@ -1,4 +1,5 @@
-use std::{path::PathBuf, process::ExitCode};
+use p4spec_rust::lang::data::value::ValueArena;
+use std::{path::PathBuf, process::ExitCode, rc::Rc};
 
 use clap::{Args, Parser, Subcommand};
 
@@ -102,7 +103,8 @@ fn run_command(args: RunArgs) -> ExitCode {
         Ok(global) => global,
         Err(error) => return command_error(error),
     };
-    let program = match parse_file(&args.includes, args.program) {
+    let mut arena = ValueArena::new();
+    let program = match parse_file(&mut arena, &args.includes, args.program) {
         Ok(program) => program,
         Err(error) => {
             eprintln!("syntax error: {error}");
@@ -110,8 +112,9 @@ fn run_command(args: RunArgs) -> ExitCode {
         }
     };
     let mut runner = Runner::<Al, _, _>::new(
-        global,
+        Rc::new(global),
         Config::new(args.det, args.guard),
+        arena,
         BuiltinInterface::new(unparser),
         Placeholder,
     );

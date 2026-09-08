@@ -5,7 +5,7 @@
 //! values, then update the active parser scope. List-shaped declarations are
 //! traversed left to right so every name is available to following tokens.
 
-use crate::lang::data::value::{Value, get};
+use crate::lang::data::value::{Value, ValueArena, get};
 
 use super::{
     context::{Context, Namespace, TypeId},
@@ -14,17 +14,23 @@ use super::{
 
 // == Individual names
 
-pub(super) fn typ(context: &Context, value: &Value, has_params: bool) {
-    let id = extract::id_name(value).expect("P4 declaration name");
+pub(super) fn typ(arena: &ValueArena, context: &Context, value: &Value, has_params: bool) {
+    let id = extract::id_name(arena, value).expect("P4 declaration name");
     context
         .declare_typ(id, has_params)
         .expect("P4 parser scope");
 }
 
-pub(super) fn var(context: &Context, value: &Value, has_params: bool, type_ref: Option<&Value>) {
-    let id = extract::id_name(value).expect("P4 declaration name");
+pub(super) fn var(
+    arena: &ValueArena,
+    context: &Context,
+    value: &Value,
+    has_params: bool,
+    type_ref: Option<&Value>,
+) {
+    let id = extract::id_name(arena, value).expect("P4 declaration name");
     let type_id = match type_ref {
-        Some(type_ref) => extract::type_id_type_ref(type_ref).expect("P4 type reference"),
+        Some(type_ref) => extract::type_id_type_ref(arena, type_ref).expect("P4 type reference"),
         None => TypeId::Empty,
     };
     context
@@ -34,31 +40,36 @@ pub(super) fn var(context: &Context, value: &Value, has_params: bool, type_ref: 
 
 // == Name lists
 
-pub(super) fn vars(context: &Context, value: &Value) {
-    get::matches! {
+pub(super) fn vars(arena: &ValueArena, context: &Context, value: &Value) {
+    get::matches! { arena,
         value,
         "nameList ',' name" => |values| {
-            vars(context, values[0]);
-            var(context, values[1], false, None);
+            vars(arena, context, values[0]);
+            var(arena, context, values[1], false, None);
         },
-        _ => var(context, value, false, None),
+        _ => var(arena, context, value, false, None),
     }
 }
 
-pub(super) fn typs(context: &Context, value: &Value) {
-    get::matches! {
+pub(super) fn typs(arena: &ValueArena, context: &Context, value: &Value) {
+    get::matches! { arena,
         value,
         "typeParameterList ',' typeParameter" => |values| {
-            typs(context, values[0]);
-            typ(context, values[1], false);
+            typs(arena, context, values[0]);
+            typ(arena, context, values[1], false);
         },
-        _ => typ(context, value, false),
+        _ => typ(arena, context, value, false),
     }
 }
 
 // == Type namespaces
 
-pub(super) fn type_namespace(context: &Context, value: &Value, namespace: Namespace) {
-    let id = extract::id_name(value).expect("P4 type name");
+pub(super) fn type_namespace(
+    arena: &ValueArena,
+    context: &Context,
+    value: &Value,
+    namespace: Namespace,
+) {
+    let id = extract::id_name(arena, value).expect("P4 type name");
     context.namespace_set_typ(&id, namespace);
 }

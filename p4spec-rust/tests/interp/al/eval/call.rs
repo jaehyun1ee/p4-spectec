@@ -10,7 +10,7 @@ use p4spec_rust::{
         common::source::Span,
         data::{
             typ,
-            value::{Value, get, make},
+            value::{Value, ValueArena, get, make},
         },
     },
     pass::{algo, elaborate},
@@ -26,19 +26,20 @@ fn spec(source: &str) -> ast::Spec {
 
 fn runner(spec_al: ast::Spec, det: bool) -> Runner<Al, BuiltinInterface, NullExtern> {
     Runner::new(
-        Global::load(spec_al).unwrap(),
+        Rc::new(Global::load(spec_al).unwrap()),
         Config::new(det, true),
+        ValueArena::new(),
         BuiltinInterface::new(p4spec_rust::interface::p4::unparse::P4Unparser::new()),
         NullExtern,
     )
 }
 
-fn nat(n: u64) -> Rc<Value> {
-    make::nat(n.into(), Span::default())
+fn nat(arena: &mut ValueArena, n: u64) -> Value {
+    make::nat(arena, n.into(), Span::default()).unwrap()
 }
 
-fn number(value: &Value) -> String {
-    get::num(value).unwrap().to_string()
+fn number(arena: &ValueArena, value: &Value) -> String {
+    get::num(arena, value).unwrap().to_string()
 }
 
 #[test]
@@ -48,14 +49,9 @@ fn test_function_choice_preserves_order_and_counts_equal_successes() {
             "dec $pick() : nat\ndef $pick() = 1\ndef $pick() = {output}\ndef $pick() = 9\n  -- otherwise\n"
         );
         let spec_al = spec(&source);
-        assert_eq!(
-            number(
-                &runner(spec_al.clone(), false)
-                    .eval_func("pick", &[], &[])
-                    .unwrap()
-            ),
-            "1"
-        );
+        let mut native = runner(spec_al.clone(), false);
+        let result = native.eval_func("pick", &[], &[]).unwrap();
+        assert_eq!(number(native.arena(), &result), "1");
         let error = runner(spec_al, true)
             .eval_func("pick", &[], &[])
             .unwrap_err();
@@ -87,10 +83,9 @@ fn test_table_rows_remain_sequential_in_deterministic_mode() {
     let def = phrase!(node: ast::DefKind::MetaFunc(ast::MetaFuncDef::Table(ast::TableFunc {
         id: func.id, params: func.params, typ: func.typ, table_rows, hints: func.hints,
     })), span: Span::default());
-    assert_eq!(
-        number(&runner(vec![def], true).eval_func("pick", &[], &[]).unwrap()),
-        "1"
-    );
+    let mut runner = runner(vec![def], true);
+    let result = runner.eval_func("pick", &[], &[]).unwrap();
+    assert_eq!(number(runner.arena(), &result), "1");
 }
 
 #[test]
@@ -109,10 +104,8 @@ def $fatal() = +9
 "#;
     for det in [false, true] {
         let mut runner = runner(spec(source), det);
-        assert_eq!(
-            number(&runner.eval_func("recover", &[], &[]).unwrap()),
-            "+7"
-        );
+        let result = runner.eval_func("recover", &[], &[]).unwrap();
+        assert_eq!(number(runner.arena(), &result), "+7");
         let error = runner.eval_func("fatal", &[], &[]).unwrap_err();
         assert!(matches!(
             *error.kind,
@@ -138,14 +131,10 @@ def $forward(n, def $g) = $apply(n, def $g)
 dec $entry(nat) : nat
 def $entry(n) = $forward(n, def $add)
 "#;
-    assert_eq!(
-        number(
-            &runner(spec(source), true)
-                .eval_func("entry", &[], &[nat(4)])
-                .unwrap()
-        ),
-        "7"
-    );
+    let mut runner = runner(spec(source), true);
+    let value = nat(runner.arena_mut(), 4);
+    let result = runner.eval_func("entry", &[], &[value]).unwrap();
+    assert_eq!(number(runner.arena(), &result), "7");
 }
 
 const RELATION: &str = r#"
@@ -172,30 +161,30 @@ def $use(n) = $(n_a * 10 + n_b)
 "#;
     for det in [false, true] {
         let mut runner = runner(spec(source), det);
-        assert_eq!(
-            number(&runner.eval_func("use", &[], &[nat(0)]).unwrap()),
-            "89"
-        );
-        assert_eq!(
-            number(&runner.eval_func("use", &[], &[nat(2)]).unwrap()),
-            "34"
-        );
+        for (input, expected) in [(0, "89"), (2, "34")] {
+            let value = nat(runner.arena_mut(), input);
+            let result = runner.eval_func("use", &[], &[value]).unwrap();
+            assert_eq!(number(runner.arena(), &result), expected);
+        }
     }
 }
 
 #[test]
 fn test_relation_outputs_follow_notation_order_and_equal_paths_are_ambiguous() {
     let spec_al = spec(RELATION);
-    let values = runner(spec_al.clone(), false)
-        .eval_rel("Step", &[nat(5)])
-        .unwrap();
+    let mut native = runner(spec_al.clone(), false);
+    let input = nat(native.arena_mut(), 5);
+    let values = native.eval_rel("Step", &[input]).unwrap();
     assert_eq!(
-        values.iter().map(|value| number(value)).collect::<Vec<_>>(),
+        values
+            .iter()
+            .map(|value| number(native.arena(), value))
+            .collect::<Vec<_>>(),
         ["6", "7"]
     );
-    let error = runner(spec_al, true)
-        .eval_rel("Step", &[nat(5)])
-        .unwrap_err();
+    let mut native = runner(spec_al, true);
+    let input = nat(native.arena_mut(), 5);
+    let error = native.eval_rel("Step", &[input]).unwrap_err();
     assert!(matches!(
         *error.kind,
         ErrorKind::Trace(TraceErrorKind::Execution)
@@ -217,9 +206,9 @@ rule Recover/fallback: n ~> 9
   -- otherwise
 "#;
     for det in [false, true] {
-        let error = runner(spec(source), det)
-            .eval_rel("Recover", &[nat(1)])
-            .unwrap_err();
+        let mut runner = runner(spec(source), det);
+        let input = nat(runner.arena_mut(), 1);
+        let error = runner.eval_rel("Recover", &[input]).unwrap_err();
         assert!(matches!(
             *error.kind,
             ErrorKind::Trace(TraceErrorKind::Execution)
@@ -263,12 +252,15 @@ def $fallback(n*) = n*
         clause.node.premises.insert(1, prem);
     }
     let mut runner = runner(spec_al, false);
-    for values in [vec![], vec![nat(2), nat(4)]] {
+    let nonempty = vec![nat(runner.arena_mut(), 2), nat(runner.arena_mut(), 4)];
+    for values in [vec![], nonempty] {
         let value = make::list(
+            runner.arena_mut(),
             &typ::make::list(typ::make::nat()),
             values.clone(),
             Span::default(),
-        );
+        )
+        .unwrap();
         let mapped = runner
             .eval_func("map", &[], std::slice::from_ref(&value))
             .unwrap();
@@ -278,17 +270,24 @@ def $fallback(n*) = n*
             vec!["3", "5"]
         };
         assert_eq!(
-            get::list(&mapped)
+            get::list(runner.arena(), &mapped)
                 .unwrap()
                 .iter()
-                .map(|v| number(v))
+                .map(|v| number(runner.arena(), v))
                 .collect::<Vec<_>>(),
             expected
         );
         let fallback = runner
             .eval_func("fallback", &[], std::slice::from_ref(&value))
             .unwrap();
-        assert_eq!(fallback.node, value.node);
+        let fallback_values = get::list(runner.arena(), &fallback).unwrap();
+        assert_eq!(fallback_values.len(), values.len());
+        assert!(
+            fallback_values
+                .iter()
+                .zip(&values)
+                .all(|(left, right)| runner.arena().equal(left, right))
+        );
     }
 }
 
@@ -301,12 +300,21 @@ def $map_opt(n?) = n_result?
   -- if (n_result = $(n + 1))?
 "#;
     let mut runner = runner(spec(source), true);
-    for input in [None, Some(nat(6))] {
+    let some = nat(runner.arena_mut(), 6);
+    for input in [None, Some(some)] {
         let present = input.is_some();
-        let value = make::opt(&typ::make::opt(typ::make::nat()), input, Span::default());
+        let value = make::opt(
+            runner.arena_mut(),
+            &typ::make::opt(typ::make::nat()),
+            input,
+            Span::default(),
+        )
+        .unwrap();
         let output = runner.eval_func("map_opt", &[], &[value]).unwrap();
         assert_eq!(
-            get::opt(&output).unwrap().map(|value| number(value)),
+            get::opt(runner.arena(), &output)
+                .unwrap()
+                .map(|value| number(runner.arena(), value)),
             present.then(|| "7".to_owned())
         );
     }
@@ -358,7 +366,8 @@ def $not_hold(n) = false
             let mut runner = runner(spec_al.clone(), det);
             for n in [0, 1] {
                 for (name, expected) in [("hold", n == 0), ("not_hold", n != 0)] {
-                    let result = runner.eval_func(name, &[], &[nat(n)]);
+                    let input = nat(runner.arena_mut(), n);
+                    let result = runner.eval_func(name, &[], &[input]);
                     if external {
                         let error = result.unwrap_err();
                         assert!(matches!(
@@ -367,7 +376,10 @@ def $not_hold(n) = false
                         ));
                         assert!(error.to_string().contains("Check"), "{error}");
                     } else {
-                        assert_eq!(get::bool(&result.unwrap()).unwrap(), expected);
+                        assert_eq!(
+                            get::bool(runner.arena(), &result.unwrap()).unwrap(),
+                            expected
+                        );
                     }
                 }
             }
@@ -389,14 +401,10 @@ def $choose(n) = $inc(n)
   -- otherwise
 "#,
     );
-    assert_eq!(
-        number(
-            &runner(spec_al, false)
-                .eval_func("choose", &[], &[nat(4)])
-                .unwrap()
-        ),
-        "5"
-    );
+    let mut runner = runner(spec_al, false);
+    let input = nat(runner.arena_mut(), 4);
+    let result = runner.eval_func("choose", &[], &[input]).unwrap();
+    assert_eq!(number(runner.arena(), &result), "5");
 }
 
 #[test]
@@ -404,9 +412,9 @@ fn test_program_evaluation_preserves_input_value() {
     let spec_al =
         spec("var n : nat\nrelation Pass: nat ~> nat\n  hint(input %0)\nrule Pass/pass: n ~> n");
     let mut runner = runner(spec_al, false);
-    let program = nat(8);
-    let values = runner.eval_program("Pass", program.clone()).unwrap();
-    assert!(Rc::ptr_eq(&values[0], &program));
+    let program = nat(runner.arena_mut(), 8);
+    let values = runner.eval_program("Pass", program).unwrap();
+    assert_eq!(values[0], program);
 }
 
 #[test]
@@ -437,8 +445,10 @@ def $none() = $select(C)
 ";
     for det in [false, true] {
         let mut runner = runner(spec(source), det);
-        assert!(get::bool(&runner.eval_func("first", &[], &[]).unwrap()).unwrap());
-        assert!(!get::bool(&runner.eval_func("later", &[], &[]).unwrap()).unwrap());
+        let first = runner.eval_func("first", &[], &[]).unwrap();
+        assert!(get::bool(runner.arena(), &first).unwrap());
+        let later = runner.eval_func("later", &[], &[]).unwrap();
+        assert!(!get::bool(runner.arena(), &later).unwrap());
         let error = runner.eval_func("none", &[], &[]).unwrap_err();
         assert!(matches!(
             *error.kind,
@@ -472,13 +482,14 @@ rule Choose/else: n ~> 9
     for det in [false, true] {
         let mut runner = runner(spec_al.clone(), det);
         let func = runner.eval_func("choose", &[], &[]);
-        let rel = runner.eval_rel("Choose", &[nat(0)]);
+        let input = nat(runner.arena_mut(), 0);
+        let rel = runner.eval_rel("Choose", &[input]);
         if det {
             assert!(func.unwrap_err().to_string().contains("fail"));
             assert!(rel.unwrap_err().to_string().contains("fail"));
         } else {
-            assert_eq!(number(&func.unwrap()), "1");
-            assert_eq!(number(&rel.unwrap()[0]), "1");
+            assert_eq!(number(runner.arena(), &func.unwrap()), "1");
+            assert_eq!(number(runner.arena(), &rel.unwrap()[0]), "1");
         }
     }
 }
@@ -501,12 +512,15 @@ def $pick<X>(b, X) = $identity<X>(X)
     for det in [false, true] {
         let mut runner = runner(spec_al.clone(), det);
         for condition in [true, false] {
-            let value = nat(7);
-            let values = [make::bool(condition, Span::default()), value.clone()];
+            let value = nat(runner.arena_mut(), 7);
+            let values = [
+                make::bool(runner.arena_mut(), condition, Span::default()).unwrap(),
+                value,
+            ];
             let output = runner
                 .eval_func("pick", &[typ::make::nat()], &values)
                 .unwrap();
-            assert!(Rc::ptr_eq(&output, &value));
+            assert_eq!(output, value);
         }
     }
 }
@@ -517,9 +531,8 @@ fn test_public_guard_rejects_malformed_function_input() {
         spec("var n : nat\ndec $ignore(nat) : nat\ndef $ignore(n) = 1"),
         false,
     );
-    let error = runner
-        .eval_func("ignore", &[], &[make::bool(true, Span::default())])
-        .unwrap_err();
+    let invalid = make::bool(runner.arena_mut(), true, Span::default()).unwrap();
+    let error = runner.eval_func("ignore", &[], &[invalid]).unwrap_err();
     assert!(
         error.to_string().contains("function argument of ignore"),
         "{error}"
@@ -528,19 +541,20 @@ fn test_public_guard_rejects_malformed_function_input() {
 
 struct Host {
     calls: Rc<std::cell::Cell<u64>>,
-    value: Rc<Value>,
+    value: Value,
     reenter: bool,
 }
 
 impl p4spec_rust::runner::Interface for Host {
     fn call_builtin(
         &mut self,
+        _arena: &mut ValueArena,
         _id: &ast::Id,
         _targs: &[ast::Typ],
-        _values: &[Rc<Value>],
-    ) -> Result<(Rc<Value>, bool), p4spec_rust::runner::InterfaceError> {
+        _values: &[Value],
+    ) -> Result<(Value, bool), p4spec_rust::runner::InterfaceError> {
         self.calls.set(self.calls.get() + 1);
-        Ok((self.value.clone(), true))
+        Ok((self.value, true))
     }
 
     fn clear(&mut self) {
@@ -553,8 +567,8 @@ impl p4spec_rust::runner::Extern for Host {
         &self,
         context: &mut p4spec_rust::runner::RunnerContext<'_, S, I, Self>,
         _name: &str,
-        values: &[Rc<Value>],
-    ) -> Result<(Vec<Rc<Value>>, bool), S::Error>
+        values: &[Value],
+    ) -> Result<(Vec<Value>, bool), S::Error>
     where
         I: p4spec_rust::runner::Interface,
         S: p4spec_rust::runner::Interpreter<I, Self>,
@@ -563,7 +577,7 @@ impl p4spec_rust::runner::Extern for Host {
         let values = if self.reenter {
             context.call_rel("Step", values)?
         } else {
-            vec![self.value.clone()]
+            vec![self.value]
         };
         Ok((values, true))
     }
@@ -573,8 +587,8 @@ impl p4spec_rust::runner::Extern for Host {
         context: &mut p4spec_rust::runner::RunnerContext<'_, S, I, Self>,
         _name: &str,
         targs: &[ast::Typ],
-        _values: &[Rc<Value>],
-    ) -> Result<(Rc<Value>, bool), S::Error>
+        _values: &[Value],
+    ) -> Result<(Value, bool), S::Error>
     where
         I: p4spec_rust::runner::Interface,
         S: p4spec_rust::runner::Interpreter<I, Self>,
@@ -585,7 +599,7 @@ impl p4spec_rust::runner::Extern for Host {
         let value = if self.reenter {
             context.call_func("inner", &[], std::slice::from_ref(&self.value))?
         } else {
-            self.value.clone()
+            self.value
         };
         Ok((value, true))
     }
@@ -595,7 +609,7 @@ impl p4spec_rust::runner::Extern for Host {
     }
 }
 
-fn host(value: Rc<Value>, reenter: bool) -> Host {
+fn host(value: Value, reenter: bool) -> Host {
     Host {
         calls: Rc::new(std::cell::Cell::new(0)),
         value,
@@ -609,12 +623,13 @@ fn test_guards_toggle_input_checks_and_substitute_type_arguments() {
     for det in [false, true] {
         for guard in [false, true] {
             let mut runner = Runner::<Al, _, _>::new(
-                Global::load(spec_al.clone()).unwrap(),
+                Rc::new(Global::load(spec_al.clone()).unwrap()),
                 Config::new(det, guard),
+                ValueArena::new(),
                 BuiltinInterface::new(p4spec_rust::interface::p4::unparse::P4Unparser::new()),
                 NullExtern,
             );
-            let invalid = make::bool(true, Span::default());
+            let invalid = make::bool(runner.arena_mut(), true, Span::default()).unwrap();
             let result = runner.eval_func(
                 "ignore",
                 &[typ::make::nat()],
@@ -627,9 +642,10 @@ fn test_guards_toggle_input_checks_and_substitute_type_arguments() {
                         .to_string()
                         .contains("function argument of ignore")
                 );
+                let value = nat(runner.arena_mut(), 1);
                 assert!(
                     runner
-                        .eval_func("ignore", &[], &[nat(1)])
+                        .eval_func("ignore", &[], &[value])
                         .unwrap_err()
                         .to_string()
                         .contains("arity mismatch in type arguments")
@@ -642,16 +658,12 @@ fn test_guards_toggle_input_checks_and_substitute_type_arguments() {
                         .contains("function argument of ignore")
                 );
             } else {
-                assert_eq!(number(&result.unwrap()), "1");
+                assert_eq!(number(runner.arena(), &result.unwrap()), "1");
             }
-            assert_eq!(
-                number(
-                    &runner
-                        .eval_func("ignore", &[typ::make::bool()], &[invalid])
-                        .unwrap()
-                ),
-                "1"
-            );
+            let result = runner
+                .eval_func("ignore", &[typ::make::bool()], &[invalid])
+                .unwrap();
+            assert_eq!(number(runner.arena(), &result), "1");
         }
     }
 }
@@ -670,12 +682,11 @@ fn test_relation_input_guards_use_hint_order() {
         .expect("relation");
     rel.input_hint = p4spec_rust::lang::hints::input::InputHint::new(vec![1, 0]);
     let mut runner = runner(spec_al, false);
-    let boolean = make::bool(true, Span::default());
-    assert_eq!(
-        number(&runner.eval_rel("Pick", &[boolean.clone(), nat(1)]).unwrap()[0]),
-        "7"
-    );
-    let error = runner.eval_rel("Pick", &[nat(1), boolean]).unwrap_err();
+    let boolean = make::bool(runner.arena_mut(), true, Span::default()).unwrap();
+    let value = nat(runner.arena_mut(), 1);
+    let result = runner.eval_rel("Pick", &[boolean, value]).unwrap();
+    assert_eq!(number(runner.arena(), &result[0]), "7");
+    let error = runner.eval_rel("Pick", &[value, boolean]).unwrap_err();
     assert!(error.to_string().contains("relation input of Pick"));
 }
 
@@ -692,12 +703,20 @@ def $pick<X>() = $external<X>()
     let spec_al = spec(source);
     for det in [false, true] {
         for guard in [false, true] {
-            let builtin = host(make::bool(true, Span::default()), false);
-            let external = host(make::bool(false, Span::default()), false);
+            let mut arena = ValueArena::new();
+            let builtin = host(
+                make::bool(&mut arena, true, Span::default()).unwrap(),
+                false,
+            );
+            let external = host(
+                make::bool(&mut arena, false, Span::default()).unwrap(),
+                false,
+            );
             let calls = external.calls.clone();
             let mut runner = Runner::<Al, _, _>::new(
-                Global::load(spec_al.clone()).unwrap(),
+                Rc::new(Global::load(spec_al.clone()).unwrap()),
                 Config::new(det, guard),
+                arena,
                 builtin,
                 external,
             );
@@ -710,11 +729,10 @@ def $pick<X>() = $external<X>()
                         "{error}"
                     );
                 } else {
-                    assert!(get::bool(&result.unwrap()).is_ok());
+                    assert!(get::bool(runner.arena(), &result.unwrap()).is_ok());
                 }
-                assert!(
-                    get::bool(&runner.eval_func(name, &[typ::make::bool()], &[]).unwrap()).is_ok()
-                );
+                let result = runner.eval_func(name, &[typ::make::bool()], &[]).unwrap();
+                assert!(get::bool(runner.arena(), &result).is_ok());
             }
             assert_eq!(calls.get(), 2, "fatal builtin output must not select else");
         }
@@ -751,19 +769,23 @@ fn test_extern_relation_output_guards_preserve_call_span() {
         }
     }
     for guard in [false, true] {
+        let mut arena = ValueArena::new();
+        let external = host(nat(&mut arena, 4), false);
         let mut runner = Runner::<Al, _, _>::new(
-            Global::load(spec_al.clone()).unwrap(),
+            Rc::new(Global::load(spec_al.clone()).unwrap()),
             Config::new(false, guard),
+            arena,
             BuiltinInterface::new(p4spec_rust::interface::p4::unparse::P4Unparser::new()),
-            host(nat(4), false),
+            external,
         );
-        let result = runner.eval_rel("Entry", &[nat(1)]);
+        let input = nat(runner.arena_mut(), 1);
+        let result = runner.eval_rel("Entry", &[input]);
         if guard {
             let error = result.unwrap_err();
             assert_eq!(find_output(&error).expect("output guard error").span, span);
             assert_eq!(error.span, span);
         } else {
-            assert_eq!(number(&result.unwrap()[0]), "4");
+            assert_eq!(number(runner.arena(), &result.unwrap()[0]), "4");
         }
     }
 }
@@ -787,32 +809,33 @@ dec $ambiguous() : nat
 def $ambiguous() = 1
 def $ambiguous() = 2
 "#;
-    let builtin = host(nat(1), false);
-    let external = host(nat(40), true);
+    let mut arena = ValueArena::new();
+    let builtin = host(nat(&mut arena, 1), false);
+    let external = host(nat(&mut arena, 40), true);
     let calls_builtin = builtin.calls.clone();
     let calls_extern = external.calls.clone();
     let mut runner = Runner::<Al, _, _>::new(
-        Global::load(spec(source)).unwrap(),
+        Rc::new(Global::load(spec(source)).unwrap()),
         Config::new(true, true),
+        arena,
         builtin,
         external,
     );
     for _ in 0..2 {
         for count in 1..=2 {
-            assert_eq!(
-                number(&runner.eval_func("outer", &[], &[nat(5)]).unwrap()),
-                "46"
-            );
-            assert_eq!(
-                number(&runner.eval_rel("Relay", &[nat(8)]).unwrap()[0]),
-                "9"
-            );
+            let input = nat(runner.arena_mut(), 5);
+            let result = runner.eval_func("outer", &[], &[input]).unwrap();
+            assert_eq!(number(runner.arena(), &result), "46");
+            let input = nat(runner.arena_mut(), 8);
+            let result = runner.eval_rel("Relay", &[input]).unwrap();
+            assert_eq!(number(runner.arena(), &result[0]), "9");
             assert_eq!(calls_builtin.get(), count);
             assert_eq!(calls_extern.get(), count * 2);
         }
+        let invalid = make::bool(runner.arena_mut(), true, Span::default()).unwrap();
         assert!(
             runner
-                .eval_func("outer", &[], &[make::bool(true, Span::default())])
+                .eval_func("outer", &[], &[invalid])
                 .unwrap_err()
                 .to_string()
                 .contains("function argument of outer")
@@ -835,13 +858,17 @@ fn test_extern_reentry_uses_public_input_guards() {
     let source =
         "extern dec $bridge(nat) : nat\nvar n : nat\ndec $inner(nat) : nat\ndef $inner(n) = 7";
     for guard in [false, true] {
+        let mut arena = ValueArena::new();
+        let external = host(make::bool(&mut arena, true, Span::default()).unwrap(), true);
         let mut runner = Runner::<Al, _, _>::new(
-            Global::load(spec(source)).unwrap(),
+            Rc::new(Global::load(spec(source)).unwrap()),
             Config::new(false, guard),
+            arena,
             BuiltinInterface::new(p4spec_rust::interface::p4::unparse::P4Unparser::new()),
-            host(make::bool(true, Span::default()), true),
+            external,
         );
-        let result = runner.eval_func("bridge", &[], &[nat(1)]);
+        let input = nat(runner.arena_mut(), 1);
+        let result = runner.eval_func("bridge", &[], &[input]);
         if guard {
             assert!(
                 result
@@ -850,7 +877,7 @@ fn test_extern_reentry_uses_public_input_guards() {
                     .contains("function argument of inner")
             );
         } else {
-            assert_eq!(number(&result.unwrap()), "7");
+            assert_eq!(number(runner.arena(), &result.unwrap()), "7");
         }
     }
 }
@@ -859,10 +886,16 @@ fn test_extern_reentry_uses_public_input_guards() {
 fn test_output_guard_after_success_is_fatal_only_in_deterministic_choice() {
     let source = "builtin dec $bad() : nat\ndec $pick() : nat\ndef $pick() = 1\ndef $pick() = $bad()\ndef $pick() = 9\n  -- otherwise";
     for det in [false, true] {
+        let mut arena = ValueArena::new();
+        let builtin = host(
+            make::bool(&mut arena, true, Span::default()).unwrap(),
+            false,
+        );
         let mut runner = Runner::<Al, _, _>::new(
-            Global::load(spec(source)).unwrap(),
+            Rc::new(Global::load(spec(source)).unwrap()),
             Config::new(det, true),
-            host(make::bool(true, Span::default()), false),
+            arena,
+            builtin,
             NullExtern,
         );
         let result = runner.eval_func("pick", &[], &[]);
@@ -874,7 +907,7 @@ fn test_output_guard_after_success_is_fatal_only_in_deterministic_choice() {
                     .contains("return value of function bad")
             );
         } else {
-            assert_eq!(number(&result.unwrap()), "1");
+            assert_eq!(number(runner.arena(), &result.unwrap()), "1");
         }
     }
 }
@@ -902,10 +935,12 @@ fn test_uncached_input_guards_are_limited_to_public_entries() {
     exp.node = ast::ExpKind::Bool(true);
     exp.note = Rc::new(ast::TypKind::Bool);
     let mut runner = runner(spec_al, true);
-    assert_eq!(number(&runner.eval_func("entry", &[], &[]).unwrap()), "1");
+    let result = runner.eval_func("entry", &[], &[]).unwrap();
+    assert_eq!(number(runner.arena(), &result), "1");
+    let invalid = make::bool(runner.arena_mut(), true, Span::default()).unwrap();
     assert!(
         runner
-            .eval_func("ignore", &[], &[make::bool(true, Span::default())])
+            .eval_func("ignore", &[], &[invalid])
             .unwrap_err()
             .to_string()
             .contains("function argument of ignore")
@@ -927,13 +962,21 @@ fn test_guard_failure_keeps_its_source_span_through_extern_reentry() {
         panic!("call")
     };
     let span = id.span.clone();
-    let mut runner = Runner::<Al, _, _>::new(
-        Global::load(spec_al).unwrap(),
-        Config::new(false, true),
-        host(make::bool(true, Span::default()), false),
-        host(nat(3), true),
+    let mut arena = ValueArena::new();
+    let builtin = host(
+        make::bool(&mut arena, true, Span::default()).unwrap(),
+        false,
     );
-    let error = runner.eval_func("bridge", &[], &[nat(1)]).unwrap_err();
+    let external = host(nat(&mut arena, 3), true);
+    let mut runner = Runner::<Al, _, _>::new(
+        Rc::new(Global::load(spec_al).unwrap()),
+        Config::new(false, true),
+        arena,
+        builtin,
+        external,
+    );
+    let input = nat(runner.arena_mut(), 1);
+    let error = runner.eval_func("bridge", &[], &[input]).unwrap_err();
     assert_eq!(error.span, span);
     assert!(matches!(*error.kind, ErrorKind::Guard(_)));
     assert!(error.children.is_empty());
@@ -942,13 +985,17 @@ fn test_guard_failure_keeps_its_source_span_through_extern_reentry() {
 #[test]
 fn test_reentrant_public_guard_keeps_no_source_span() {
     let source = "extern dec $bridge(nat) : nat\nvar n : nat\ndec $inner(nat) : nat\ndef $inner(n) = 7\ndec $outer(nat) : nat\ndef $outer(n) = $bridge(n)";
+    let mut arena = ValueArena::new();
+    let external = host(make::bool(&mut arena, true, Span::default()).unwrap(), true);
     let mut runner = Runner::<Al, _, _>::new(
-        Global::load(spec(source)).unwrap(),
+        Rc::new(Global::load(spec(source)).unwrap()),
         Config::new(false, true),
+        arena,
         BuiltinInterface::new(p4spec_rust::interface::p4::unparse::P4Unparser::new()),
-        host(make::bool(true, Span::default()), true),
+        external,
     );
-    let error = runner.eval_func("outer", &[], &[nat(1)]).unwrap_err();
+    let input = nat(runner.arena_mut(), 1);
+    let error = runner.eval_func("outer", &[], &[input]).unwrap_err();
     assert!(error.to_string().contains("function argument of inner"));
     assert_eq!(error.span, Span::default());
 }

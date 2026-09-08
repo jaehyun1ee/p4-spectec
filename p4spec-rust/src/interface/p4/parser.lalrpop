@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use crate::lang::common::source::Phrase;
 
 use crate::{
     interface::p4::{
@@ -7,12 +7,13 @@ use crate::{
         declare,
         error::P4Error,
         extract,
-        lexer::Token,
+        lexer::{Token, IntegerLiteral},
+        parse,
     },
-    lang::data::value::{Value, make},
+    lang::data::value::{Value, ValueArena, make},
 };
 
-grammar(context: &Context);
+grammar(context: &Context, arena: &mut ValueArena);
 
 // == Tokens
 
@@ -25,10 +26,10 @@ extern {
         "TYPENAME" => Token::TypeName,
         "TYPENAME_EXPR" => Token::TypeNameExpression,
         "IDENTIFIER" => Token::Identifier,
-        "NAME" => Token::Name(<Rc<Value>>),
-        "STRING_LITERAL" => Token::StringLiteral(<Rc<Value>>),
-        "NUMBER_INT" => Token::NumberInt(<Rc<Value>>, <String>),
-        "NUMBER" => Token::Number(<Rc<Value>>, <String>),
+        "RAW_NAME" => Token::Name(<Box<Phrase<String>>>),
+        "RAW_STRING_LITERAL" => Token::StringLiteral(<Box<Phrase<String>>>),
+        "RAW_NUMBER_INT" => Token::NumberInt(<Box<Phrase<IntegerLiteral>>>, <String>),
+        "RAW_NUMBER" => Token::Number(<Box<Phrase<IntegerLiteral>>>, <String>),
         "LE" => Token::LessEqual,
         "GE" => Token::GreaterEqual,
         "SHL" => Token::ShiftLeft,
@@ -137,9 +138,15 @@ extern {
         "BIT_AND_ASSIGN" => Token::BitAndAssign,
         "BIT_XOR_ASSIGN" => Token::BitXorAssign,
         "BIT_OR_ASSIGN" => Token::BitOrAssign,
-        "UNEXPECTED_TOKEN" => Token::UnexpectedToken(<Rc<Value>>),
+        "RAW_UNEXPECTED_TOKEN" => Token::UnexpectedToken(<Box<Phrase<String>>>),
     }
 }
+
+token_name: Value = <value:"RAW_NAME"> =>? parse::action(|| make::text(arena, value.node, value.span).map_err(Into::into));
+token_string_literal: Value = <value:"RAW_STRING_LITERAL"> =>? parse::action(|| make::text(arena, value.node, value.span).map_err(Into::into));
+token_unexpected_token: Value = <value:"RAW_UNEXPECTED_TOKEN"> =>? parse::action(|| make::text(arena, value.node, value.span).map_err(Into::into));
+token_number_int: (Value, String) = <value:"RAW_NUMBER_INT"> =>? parse::action(|| Ok((parse::integer(arena, *value.0)?, value.1)));
+token_number: (Value, String) = <value:"RAW_NUMBER"> =>? parse::action(|| Ok((parse::integer(arena, *value.0)?, value.1)));
 
 // == LALRPOP token adapters
 
@@ -167,19 +174,19 @@ push_scope: () = {
 
 // A name followed by `(` or `<...>(` may already carry postfix-expression
 // classification when the surrounding declaration reduces.
-declarationName: Rc<Value> = {
+declarationName: Value = {
     name,
     expressionTypeName,
 };
 
-push_name: Rc<Value> = {
+push_name: Value = {
     // push_name ::= name
-    <n:declarationName> => { context.scope_push(); declare::typ(context, &n, false); n },
+    <n:declarationName> => { context.scope_push(); declare::typ(arena, context, &n, false); n },
 };
 
-push_externName: Rc<Value> = {
+push_externName: Value = {
     // push_externName ::= externName
-    <n:externName> => { context.scope_push(); declare::typ(context, &n, false); n },
+    <n:externName> => { context.scope_push(); declare::typ(arena, context, &n, false); n },
 };
 
 pop_scope: Namespace = {
@@ -216,14 +223,14 @@ clear_parent_namespace: () = {
 
 // - Aux
 
-externName: Rc<Value> = {
+externName: Value = {
     // externName ::= nonTypeName
-    <n:nonTypeName> => { declare::typ(context, &n, false); n },
+    <n:nonTypeName> => { declare::typ(arena, context, &n, false); n },
 };
 
-int: Rc<Value> = {
-    // int ::= "NUMBER_INT"
-    <int:"NUMBER_INT"> => int.0,
+int: Value = {
+    // int ::= token_number_int
+    <int:token_number_int> => int.0,
 };
 
 r_angle: () = {
@@ -245,197 +252,192 @@ l_angle: () = {
 // - Misc
 
 // `TRAILING_COMMA` preserves the canonical `COMMA` after lexer lookahead.
-trailingCommaOpt: Rc<Value> = {
+trailingCommaOpt: Value = {
     // trailingCommaOpt ::= epsilon
-    <l:@L>  <r:@R> => make::case! {
+    <l:@L>  <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "_EMPTY",
         args: vec![],
         typ: "trailingCommaOpt",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // trailingCommaOpt ::= "COMMA"
-    <l:@L> "TRAILING_COMMA" <r:@R> => make::case! {
+    <l:@L> "TRAILING_COMMA" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "','",
         args: vec![],
         typ: "trailingCommaOpt",
         span: context.location_span(l, r),
-    },
+    }?) }),
 };
 
 // - Booleans
 
-booleanLiteral: Rc<Value> = {
+booleanLiteral: Value = {
     // booleanLiteral ::= "TRUE"
-    <l:@L> "TRUE" <r:@R> => make::case! {
+    <l:@L> "TRUE" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "TRUE",
         args: vec![],
         typ: "booleanLiteral",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // booleanLiteral ::= "FALSE"
-    <l:@L> "FALSE" <r:@R> => make::case! {
+    <l:@L> "FALSE" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "FALSE",
         args: vec![],
         typ: "booleanLiteral",
         span: context.location_span(l, r),
-    },
+    }?) }),
 };
 
 // - Integers
 
-integerLiteral: Rc<Value> = {
+integerLiteral: Value = {
     // integerLiteral ::= int
-    <l:@L> <int:int> <r:@R> => make::case! {
+    <l:@L> <int:int> <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "D int",
         args: vec![int],
         typ: "integerLiteral",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
-    // integerLiteral ::= "NUMBER"
-    <number:"NUMBER"> => number.0,
+    // integerLiteral ::= token_number
+    <number:token_number> => number.0,
 };
 
 // - Strings
 
-stringLiteral: Rc<Value> = {
-    // stringLiteral ::= "STRING_LITERAL"
-    <l:@L> <text:"STRING_LITERAL"> <r:@R> =>
-        make::case! {
+stringLiteral: Value = {
+    // stringLiteral ::= token_string_literal
+    <l:@L> <text:token_string_literal> <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "'\"' text '\"'",
             args: vec![text],
             typ: "stringLiteral",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
 // - Names
 
-identifier: Rc<Value> = {
-    // identifier ::= "NAME" "IDENTIFIER"
-    <l:@L> <text:"NAME"> "IDENTIFIER" <r:@R> =>
-        make::case! {
+identifier: Value = {
+    // identifier ::= token_name "IDENTIFIER"
+    <l:@L> <text:token_name> "IDENTIFIER" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "_ID text",
             args: vec![text],
             typ: "identifier",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
-typeIdentifier: Rc<Value> = {
-    // typeIdentifier ::= "NAME" "TYPENAME"
-    <l:@L> <text:"NAME"> "TYPENAME" <r:@R> =>
-        make::case! {
+typeIdentifier: Value = {
+    // typeIdentifier ::= token_name "TYPENAME"
+    <l:@L> <text:token_name> "TYPENAME" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "_TID text",
             args: vec![text],
             typ: "typeIdentifier",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
 // - Non-type names
 
-nonTypeName: Rc<Value> = {
+nonTypeName: Value = {
     // nonTypeName ::= identifier
     <id:identifier> => id,
 
     // nonTypeName ::= "APPLY"
-    <l:@L> "APPLY" <r:@R> => make::case! {
+    <l:@L> "APPLY" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "APPLY",
         args: vec![],
         typ: "nonTypeName",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // nonTypeName ::= "KEY"
-    <l:@L> "KEY" <r:@R> => make::case! {
+    <l:@L> "KEY" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "KEY",
         args: vec![],
         typ: "nonTypeName",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // nonTypeName ::= "ACTIONS"
-    <l:@L> "ACTIONS" <r:@R> => make::case! {
+    <l:@L> "ACTIONS" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "ACTIONS",
         args: vec![],
         typ: "nonTypeName",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // nonTypeName ::= "STATE"
-    <l:@L> "STATE" <r:@R> => make::case! {
+    <l:@L> "STATE" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "STATE",
         args: vec![],
         typ: "nonTypeName",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // nonTypeName ::= "ENTRIES"
-    <l:@L> "ENTRIES" <r:@R> => make::case! {
+    <l:@L> "ENTRIES" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "ENTRIES",
         args: vec![],
         typ: "nonTypeName",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // nonTypeName ::= "TYPE"
-    <l:@L> "TYPE" <r:@R> => make::case! {
+    <l:@L> "TYPE" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "TYPE",
         args: vec![],
         typ: "nonTypeName",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // nonTypeName ::= "PRIORITY"
-    <l:@L> "PRIORITY" <r:@R> => make::case! {
+    <l:@L> "PRIORITY" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "PRIORITY",
         args: vec![],
         typ: "nonTypeName",
         span: context.location_span(l, r),
-    },
+    }?) }),
 };
 
-prefixedNonTypeName: Rc<Value> = {
+prefixedNonTypeName: Value = {
     // prefixedNonTypeName ::= nonTypeName
     <n:nonTypeName> => n,
 
     // prefixedNonTypeName ::= "DOT" go_toplevel nonTypeName go_local
-    <l:@L> "DOT" go_toplevel <n:nonTypeName> go_local <r:@R> =>
-        make::case! {
+    <l:@L> "DOT" go_toplevel <n:nonTypeName> go_local <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "_ID '.' nonTypeName",
             args: vec![n],
             typ: "prefixedNonTypeName",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
 // - Type names
 
-typeName: Rc<Value> = {
+typeName: Value = {
     // typeName ::= typeIdentifier
     <n:typeIdentifier> => n,
 };
 
-prefixedTypeName: Rc<Value> = {
+prefixedTypeName: Value = {
     // prefixedTypeName ::= typeName
     <n:typeName> => n,
 
     // prefixedTypeName ::= "DOT" go_toplevel typeName go_local
-    <l:@L> "DOT" go_toplevel <tid:typeName> go_local <r:@R> =>
-        make::case! {
+    <l:@L> "DOT" go_toplevel <tid:typeName> go_local <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "_TID '.' typeName",
             args: vec![tid],
             typ: "prefixedTypeName",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
 // - Table custom property names
 
-tableCustomName: Rc<Value> = {
+tableCustomName: Value = {
     // tableCustomName ::= identifier
     <id:identifier> => id,
 
@@ -443,41 +445,41 @@ tableCustomName: Rc<Value> = {
     <tid:typeIdentifier> => tid,
 
     // tableCustomName ::= "APPLY"
-    <l:@L> "APPLY" <r:@R> => make::case! {
+    <l:@L> "APPLY" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "APPLY",
         args: vec![],
         typ: "tableCustomName",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // tableCustomName ::= "STATE"
-    <l:@L> "STATE" <r:@R> => make::case! {
+    <l:@L> "STATE" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "STATE",
         args: vec![],
         typ: "tableCustomName",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // tableCustomName ::= "TYPE"
-    <l:@L> "TYPE" <r:@R> => make::case! {
+    <l:@L> "TYPE" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "TYPE",
         args: vec![],
         typ: "tableCustomName",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // tableCustomName ::= "PRIORITY"
-    <l:@L> "PRIORITY" <r:@R> => make::case! {
+    <l:@L> "PRIORITY" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "PRIORITY",
         args: vec![],
         typ: "tableCustomName",
         span: context.location_span(l, r),
-    },
+    }?) }),
 };
 
 // - Names
 
-name: Rc<Value> = {
+name: Value = {
     // name ::= nonTypeName
     <n:nonTypeName> => n,
 
@@ -485,29 +487,28 @@ name: Rc<Value> = {
     <n:typeName> => n,
 
     // name ::= "LIST"
-    <l:@L> "LIST" <r:@R> => make::case! {
+    <l:@L> "LIST" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "LIST",
         args: vec![],
         typ: "name",
         span: context.location_span(l, r),
-    },
+    }?) }),
 };
 
-nameList: Rc<Value> = {
+nameList: Value = {
     // nameList ::= name
     <n:name> => n,
 
     // nameList ::= nameList "COMMA" name
-    <l:@L> <ns:nameList> "COMMA" <n:name> <r:@R> =>
-        make::case! {
+    <l:@L> <ns:nameList> "COMMA" <n:name> <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "nameList ',' name",
             args: vec![ns, n],
             typ: "nameList",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
-member: Rc<Value> = {
+member: Value = {
     // member ::= name
     <name:name> => name,
 };
@@ -515,162 +516,155 @@ member: Rc<Value> = {
 // - Directions
 
 #[inline]
-direction: Rc<Value> = {
+direction: Value = {
     // direction ::= epsilon
-    <l:@L>  <r:@R> => make::case! {
+    <l:@L>  <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "_EMPTY",
         args: vec![],
         typ: "direction",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // direction ::= "IN"
-    <l:@L> "IN" <r:@R> => make::case! {
+    <l:@L> "IN" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "IN",
         args: vec![],
         typ: "direction",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // direction ::= "OUT"
-    <l:@L> "OUT" <r:@R> => make::case! {
+    <l:@L> "OUT" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "OUT",
         args: vec![],
         typ: "direction",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // direction ::= "INOUT"
-    <l:@L> "INOUT" <r:@R> => make::case! {
+    <l:@L> "INOUT" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "INOUT",
         args: vec![],
         typ: "direction",
         span: context.location_span(l, r),
-    },
+    }?) }),
 };
 
 // - Types
 
 // - Base types
 
-baseType: Rc<Value> = {
+baseType: Value = {
     // baseType ::= "BOOL"
-    <l:@L> "BOOL" <r:@R> => make::case! {
+    <l:@L> "BOOL" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "BOOL",
         args: vec![],
         typ: "baseType",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // baseType ::= "MATCH_KIND"
-    <l:@L> "MATCH_KIND" <r:@R> => make::case! {
+    <l:@L> "MATCH_KIND" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "MATCH_KIND",
         args: vec![],
         typ: "baseType",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // baseType ::= "ERROR"
-    <l:@L> "ERROR" <r:@R> => make::case! {
+    <l:@L> "ERROR" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "ERROR",
         args: vec![],
         typ: "baseType",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // baseType ::= "BIT"
-    <l:@L> "BIT" <r:@R> => make::case! {
+    <l:@L> "BIT" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "BIT",
         args: vec![],
         typ: "baseType",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // baseType ::= "STRING"
-    <l:@L> "STRING" <r:@R> => make::case! {
+    <l:@L> "STRING" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "STRING",
         args: vec![],
         typ: "baseType",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // baseType ::= "INT"
-    <l:@L> "INT" <r:@R> => make::case! {
+    <l:@L> "INT" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "INT",
         args: vec![],
         typ: "baseType",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // baseType ::= "BIT" l_angle int r_angle
-    <l:@L> "BIT" "L_ANGLE_ARGS" <v:int> r_angle <r:@R> =>
-        make::case! {
+    <l:@L> "BIT" "L_ANGLE_ARGS" <v:int> r_angle <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "BIT `< int `>",
             args: vec![v],
             typ: "baseType",
             span: context.location_span(l, r),
-        },
+        }?) }),
 
     // baseType ::= "INT" l_angle int r_angle
-    <l:@L> "INT" "L_ANGLE_ARGS" <v:int> r_angle <r:@R> =>
-        make::case! {
+    <l:@L> "INT" "L_ANGLE_ARGS" <v:int> r_angle <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "INT `< int `>",
             args: vec![v],
             typ: "baseType",
             span: context.location_span(l, r),
-        },
+        }?) }),
 
     // baseType ::= "VARBIT" l_angle int r_angle
-    <l:@L> "VARBIT" "L_ANGLE_ARGS" <v:int> r_angle <r:@R> =>
-        make::case! {
+    <l:@L> "VARBIT" "L_ANGLE_ARGS" <v:int> r_angle <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "VARBIT `< int `>",
             args: vec![v],
             typ: "baseType",
             span: context.location_span(l, r),
-        },
+        }?) }),
 
     // baseType ::= "BIT" l_angle "L_PAREN" expression "R_PAREN" r_angle
-    <l:@L> "BIT" "L_ANGLE_ARGS" "L_PAREN" <e:expression> "R_PAREN" r_angle <r:@R> =>
-        make::case! {
+    <l:@L> "BIT" "L_ANGLE_ARGS" "L_PAREN" <e:expression> "R_PAREN" r_angle <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "BIT `< `( expression `) `>",
             args: vec![e],
             typ: "baseType",
             span: context.location_span(l, r),
-        },
+        }?) }),
 
     // baseType ::= "INT" l_angle "L_PAREN" expression "R_PAREN" r_angle
-    <l:@L> "INT" "L_ANGLE_ARGS" "L_PAREN" <e:expression> "R_PAREN" r_angle <r:@R> =>
-        make::case! {
+    <l:@L> "INT" "L_ANGLE_ARGS" "L_PAREN" <e:expression> "R_PAREN" r_angle <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "INT `< `( expression `) `>",
             args: vec![e],
             typ: "baseType",
             span: context.location_span(l, r),
-        },
+        }?) }),
 
     // baseType ::= "VARBIT" l_angle "L_PAREN" expression "R_PAREN" r_angle
-    <l:@L> "VARBIT" "L_ANGLE_ARGS" "L_PAREN" <e:expression> "R_PAREN" r_angle <r:@R> =>
-        make::case! {
+    <l:@L> "VARBIT" "L_ANGLE_ARGS" "L_PAREN" <e:expression> "R_PAREN" r_angle <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "VARBIT `< `( expression `) `>",
             args: vec![e],
             typ: "baseType",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
 // - Named types
 
-specializedType: Rc<Value> = {
+specializedType: Value = {
     // specializedType ::= prefixedTypeName l_angle typeArgumentList r_angle
-    <l:@L> <n:prefixedTypeName> "L_ANGLE_ARGS" <tal:typeArgumentList> r_angle <r:@R> =>
-        make::case! {
+    <l:@L> <n:prefixedTypeName> "L_ANGLE_ARGS" <tal:typeArgumentList> r_angle <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "prefixedTypeName `< typeArgumentList `>",
             args: vec![n, tal],
             typ: "specializedType",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
-namedType: Rc<Value> = {
+namedType: Value = {
     // namedType ::= prefixedTypeName
     <t:prefixedTypeName> => t,
 
@@ -681,46 +675,43 @@ namedType: Rc<Value> = {
 // - Array types
 
 #[inline]
-arrayType: Rc<Value> = {
+arrayType: Value = {
     // arrayType ::= typeRef "L_BRACKET" expression "R_BRACKET"
-    <l:@L> <t:typeRef> "L_BRACKET" <e:expression> "R_BRACKET" <r:@R> =>
-        make::case! {
+    <l:@L> <t:typeRef> "L_BRACKET" <e:expression> "R_BRACKET" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "typeRef `[ expression `]",
             args: vec![t, e],
             typ: "arrayType",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
 // - List types
 
-listType: Rc<Value> = {
+listType: Value = {
     // listType ::= "LIST" l_angle typeArgument r_angle
-    <l:@L> "LIST" "L_ANGLE_ARGS" <targ:typeArgument> r_angle <r:@R> =>
-        make::case! {
+    <l:@L> "LIST" "L_ANGLE_ARGS" <targ:typeArgument> r_angle <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "LIST `< typeArgument `>",
             args: vec![targ],
             typ: "listType",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
 // - Tuple types
 
-tupleType: Rc<Value> = {
+tupleType: Value = {
     // tupleType ::= "TUPLE" l_angle typeArgumentList r_angle
-    <l:@L> "TUPLE" "L_ANGLE_ARGS" <targs:typeArgumentList> r_angle <r:@R> =>
-        make::case! {
+    <l:@L> "TUPLE" "L_ANGLE_ARGS" <targs:typeArgumentList> r_angle <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "TUPLE `< typeArgumentList `>",
             args: vec![targs],
             typ: "tupleType",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
 // - Types
 
-typeRef: Rc<Value> = {
+typeRef: Value = {
     // typeRef ::= baseType
     <t:baseType> => t,
 
@@ -737,17 +728,17 @@ typeRef: Rc<Value> = {
     <t:tupleType> => t,
 };
 
-typeOrVoid: Rc<Value> = {
+typeOrVoid: Value = {
     // typeOrVoid ::= typeRef
     <t:typeRef> => t,
 
     // typeOrVoid ::= "VOID"
-    <l:@L> "VOID" <r:@R> => make::case! {
+    <l:@L> "VOID" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "VOID",
         args: vec![],
         typ: "typeOrVoid",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // typeOrVoid ::= identifier
     <id:identifier> => id,
@@ -755,85 +746,83 @@ typeOrVoid: Rc<Value> = {
 
 // - Type parameters
 
-typeParameter: Rc<Value> = {
+typeParameter: Value = {
     // typeParameter ::= name
     <n:name> => n,
 };
 
-typeParameterList: Rc<Value> = {
+typeParameterList: Value = {
     // typeParameterList ::= typeParameter
     <tp:typeParameter> => tp,
 
     // typeParameterList ::= typeParameterList "COMMA" typeParameter
-    <l:@L> <tps:typeParameterList> "COMMA" <tp:typeParameter> <r:@R> =>
-        make::case! {
+    <l:@L> <tps:typeParameterList> "COMMA" <tp:typeParameter> <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "typeParameterList ',' typeParameter",
             args: vec![tps, tp],
             typ: "typeParameterList",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
-typeParameterListOpt: Rc<Value> = {
+typeParameterListOpt: Value = {
     // typeParameterListOpt ::= epsilon
-    <l:@L>  <r:@R> => make::case! {
+    <l:@L>  <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "_EMPTY",
         args: vec![],
         typ: "typeParameterListOpt",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // typeParameterListOpt ::= l_angle typeParameterList r_angle
-    <l:@L> l_angle <tps:typeParameterList> r_angle <r:@R> => {
-        declare::typs(context, &tps);
-        make::case! {
+    <l:@L> l_angle <tps:typeParameterList> r_angle <r:@R> =>? parse::action(|| { Ok({
+        declare::typs(arena, context, &tps);
+        make::case! { arena: arena,
             shape: "`< typeParameterList `>",
             args: vec![tps],
             typ: "typeParameterListOpt",
             span: context.location_span(l, r),
-        }
-    },
+        }?
+    }) }),
 };
 
 // - Parameters
 
-parameter: Rc<Value> = {
+parameter: Value = {
     // parameter ::= annotationList direction typeRef name initializerOpt
     <l:@L> <al:annotationList> <dir:direction> <t:typeRef> <n:name> <i:initializerOpt> <r:@R>
-        => {
-            declare::var(context, &n, false, Some(&t));
-            make::case! {
+        =>? parse::action(|| { Ok({
+            declare::var(arena, context, &n, false, Some(&t));
+            make::case! { arena: arena,
                 shape: "annotationList direction type name initializerOpt",
                 args: vec![al, dir, t, n, i],
                 typ: "parameter",
                 span: context.location_span(l, r),
-            }
-        },
+            }?
+        }) }),
 };
 
-nonEmptyParameterList: Rc<Value> = {
+nonEmptyParameterList: Value = {
     // nonEmptyParameterList ::= parameter
     <p:parameter> => p,
 
     // nonEmptyParameterList ::= nonEmptyParameterList "COMMA" parameter
-    <l:@L> <ps:nonEmptyParameterList> "COMMA" <p:parameter> <r:@R> =>
-        make::case! {
+    <l:@L> <ps:nonEmptyParameterList> "COMMA" <p:parameter> <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "nonEmptyParameterList ',' parameter",
             args: vec![ps, p],
             typ: "nonEmptyParameterList",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
 #[inline]
-parameterList: Rc<Value> = {
+parameterList: Value = {
     // parameterList ::= epsilon
-    <l:@L>  <r:@R> => make::case! {
+    <l:@L>  <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "_EMPTY",
         args: vec![],
         typ: "parameterList",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // parameterList ::= nonEmptyParameterList
     <ps:nonEmptyParameterList> => ps,
@@ -841,57 +830,54 @@ parameterList: Rc<Value> = {
 
 // - Constructor parameters
 
-constructorParameterListOpt: Rc<Value> = {
+constructorParameterListOpt: Value = {
     // constructorParameterListOpt ::= epsilon
-    <l:@L>  <r:@R> => make::case! {
+    <l:@L>  <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "_EMPTY",
         args: vec![],
         typ: "constructorParameterListOpt",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // constructorParameterListOpt ::= "L_PAREN" parameterList "R_PAREN"
-    <l:@L> "L_PAREN" <ps:parameterList> "R_PAREN" <r:@R> =>
-        make::case! {
+    <l:@L> "L_PAREN" <ps:parameterList> "R_PAREN" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "`( parameterList `)",
             args: vec![ps],
             typ: "constructorParameterListOpt",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
 // - Expression key-value pairs
 
-namedExpression: Rc<Value> = {
+namedExpression: Value = {
     // namedExpression ::= name "ASSIGN" expression
-    <l:@L> <n:name> "ASSIGN" <e:expression> <r:@R> =>
-        make::case! {
+    <l:@L> <n:name> "ASSIGN" <e:expression> <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "name '=' expression",
             args: vec![n, e],
             typ: "namedExpression",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
-namedExpressionList: Rc<Value> = {
+namedExpressionList: Value = {
     // namedExpressionList ::= namedExpression
     <e:namedExpression> => e,
 
     // namedExpressionList ::= namedExpressionList "COMMA" namedExpression
-    <l:@L> <es:namedExpressionList> "COMMA" <e:namedExpression> <r:@R> =>
-        make::case! {
+    <l:@L> <es:namedExpressionList> "COMMA" <e:namedExpression> <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "namedExpressionList ',' namedExpression",
             args: vec![es, e],
             typ: "namedExpressionList",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
 // - Expressions
 
 // - Literal expressions
 
-literalExpression: Rc<Value> = {
+literalExpression: Value = {
     // literalExpression ::= booleanLiteral
     <bool:booleanLiteral> => bool,
 
@@ -904,29 +890,29 @@ literalExpression: Rc<Value> = {
 
 // - Reference expressions
 
-referenceExpression: Rc<Value> = {
+referenceExpression: Value = {
     // referenceExpression ::= prefixedNonTypeName
     <n:prefixedNonTypeName> => n,
 
     // referenceExpression ::= "THIS"
-    <l:@L> "THIS" <r:@R> => make::case! {
+    <l:@L> "THIS" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "THIS",
         args: vec![],
         typ: "referenceExpression",
         span: context.location_span(l, r),
-    },
+    }?) }),
 };
 
 // - Default expressions
 
-defaultExpression: Rc<Value> = {
+defaultExpression: Value = {
     // defaultExpression ::= "DOTS"
-    <l:@L> "DOTS" <r:@R> => make::case! {
+    <l:@L> "DOTS" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "'...'",
         args: vec![],
         typ: "defaultExpression",
         span: context.location_span(l, r),
-    },
+    }?) }),
 };
 
 // - Unary, binary, and ternary expressions
@@ -958,22 +944,22 @@ defaultExpression: Rc<Value> = {
 // errorAccessExpression ::= "ERROR" "DOT" member
 // memberAccessExpression ::= memberAccessBase "DOT" member
 // indexAccessExpression ::= expression "L_BRACKET" expression "R_BRACKET"
-sliceop: Rc<Value> = {
+sliceop: Value = {
     // sliceop ::= "COLON"
-    <l:@L> colon <r:@R> => make::case! {
+    <l:@L> colon <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "':'",
         args: vec![],
         typ: "sliceop",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // sliceop ::= "PLUSCOLON"
-    <l:@L> "PLUSCOLON" <r:@R> => make::case! {
+    <l:@L> "PLUSCOLON" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "'+:'",
         args: vec![],
         typ: "sliceop",
         span: context.location_span(l, r),
-    },
+    }?) }),
 };
 // sliceAccessExpression ::= expression "L_BRACKET" expression sliceop expression "R_BRACKET"
 // accessExpression ::= errorAccessExpression | memberAccessExpression
@@ -1004,113 +990,112 @@ sliceop: Rc<Value> = {
 
 // - LALRPOP precedence lowering
 
-TernaryExpression: Rc<Value> = {
+TernaryExpression: Value = {
     // TernaryExpression ::= ExpressionOr
     ExpressionOr,
 
     // TernaryExpression ::= ExpressionOr "QUESTION" expression colon expression
     <l:@L> <condition:ExpressionOr> "QUESTION" <yes:expression> colon <no:expression> <r:@R>
-        =>
-        make::case! {
+        =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "expression '?' expression ':' expression",
             args: vec![condition, yes, no],
             typ: "ternaryExpression",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
-ExpressionOr: Rc<Value> = {
+ExpressionOr: Value = {
     // ExpressionOr ::= ExpressionAnd
     ExpressionAnd,
 
     // ExpressionOr ::= ExpressionOr "OR" ExpressionAnd
-    <l:@L> <lhs:ExpressionOr> <op_l:@L> "OR" <op_r:@R> <rhs:ExpressionAnd> <r:@R> => {
+    <l:@L> <lhs:ExpressionOr> <op_l:@L> "OR" <op_r:@R> <rhs:ExpressionAnd> <r:@R> =>? parse::action(|| { Ok({
         let span_op = context.location_span(op_l, op_r);
-        let value_op = make::case! {
+        let value_op = make::case! { arena: arena,
             shape: "'||'",
             args: vec![],
             typ: "binop",
             span: span_op,
-        };
+        }?;
         let span_exp = context.location_span(l, r);
-        make::case! {
+        make::case! { arena: arena,
             shape: "expression binop expression",
             args: vec![lhs, value_op, rhs],
             typ: "binaryExpression",
             span: span_exp,
-        }
-    },
+        }?
+    }) }),
 };
 
-ExpressionAnd: Rc<Value> = {
+ExpressionAnd: Value = {
     // ExpressionAnd ::= ExpressionEquality
     ExpressionEquality,
 
     // ExpressionAnd ::= ExpressionAnd "AND" ExpressionEquality
     <l:@L> <lhs:ExpressionAnd> <op_l:@L> "AND" <op_r:@R> <rhs:ExpressionEquality>
-        <r:@R> => {
+        <r:@R> =>? parse::action(|| { Ok({
             let span_op = context.location_span(op_l, op_r);
-            let value_op = make::case! {
+            let value_op = make::case! { arena: arena,
                 shape: "'&&'",
                 args: vec![],
                 typ: "binop",
                 span: span_op,
-            };
+            }?;
             let span_exp = context.location_span(l, r);
-            make::case! {
+            make::case! { arena: arena,
                 shape: "expression binop expression",
                 args: vec![lhs, value_op, rhs],
                 typ: "binaryExpression",
                 span: span_exp,
-            }
-        },
+            }?
+        }) }),
 };
 
-ExpressionEquality: Rc<Value> = {
+ExpressionEquality: Value = {
     // ExpressionEquality ::= ExpressionComparison
     ExpressionComparison,
 
     // ExpressionEquality ::= ExpressionEquality "EQ" ExpressionComparison
     <l:@L> <lhs:ExpressionEquality> <op_l:@L> "EQ" <op_r:@R> <rhs:ExpressionComparison>
-        <r:@R> => {
+        <r:@R> =>? parse::action(|| { Ok({
             let span_op = context.location_span(op_l, op_r);
-            let value_op = make::case! {
+            let value_op = make::case! { arena: arena,
                 shape: "'=='",
                 args: vec![],
                 typ: "binop",
                 span: span_op,
-            };
+            }?;
             let span_exp = context.location_span(l, r);
-            make::case! {
+            make::case! { arena: arena,
                 shape: "expression binop expression",
                 args: vec![lhs, value_op, rhs],
                 typ: "binaryExpression",
                 span: span_exp,
-            }
-        },
+            }?
+        }) }),
 
     // ExpressionEquality ::= ExpressionEquality "NE" ExpressionComparison
     <l:@L> <lhs:ExpressionEquality> <op_l:@L> "NE" <op_r:@R> <rhs:ExpressionComparison>
-        <r:@R> => {
+        <r:@R> =>? parse::action(|| { Ok({
             let span_op = context.location_span(op_l, op_r);
-            let value_op = make::case! {
+            let value_op = make::case! { arena: arena,
                 shape: "'!='",
                 args: vec![],
                 typ: "binop",
                 span: span_op,
-            };
+            }?;
             let span_exp = context.location_span(l, r);
-            make::case! {
+            make::case! { arena: arena,
                 shape: "expression binop expression",
                 args: vec![lhs, value_op, rhs],
                 typ: "binaryExpression",
                 span: span_exp,
-            }
-        },
+            }?
+        }) }),
 };
 
-ExpressionComparison: Rc<Value> = {
-    <first:ExpressionAdditive> <parts:ExpressionPrecedencePart*> => binary::fold(first, parts),
+ExpressionComparison: Value = {
+    <first:ExpressionAdditive> <parts:ExpressionPrecedencePart*> =>? parse::action(|| { Ok(binary::fold(arena, first, parts)?) }),
 };
 
 ExpressionPrecedencePart: BinaryExpressionPart = {
@@ -1134,331 +1119,323 @@ ExpressionPrecedencePart: BinaryExpressionPart = {
         BinaryExpressionPart::new(BinaryOperator::ShiftRight, context.location_span(l, r), rhs),
 };
 
-ExpressionAdditive: Rc<Value> = {
+ExpressionAdditive: Value = {
     // ExpressionAdditive ::= ExpressionMultiplicative
     ExpressionMultiplicative,
 
     // ExpressionAdditive ::= ExpressionAdditive "PLUSPLUS" ExpressionMultiplicative
     <l:@L> <lhs:ExpressionAdditive> <op_l:@L> "PLUSPLUS" <op_r:@R>
-        <rhs:ExpressionMultiplicative> <r:@R> => {
+        <rhs:ExpressionMultiplicative> <r:@R> =>? parse::action(|| { Ok({
             let span_op = context.location_span(op_l, op_r);
-            let value_op = make::case! {
+            let value_op = make::case! { arena: arena,
                 shape: "'++'",
                 args: vec![],
                 typ: "binop",
                 span: span_op,
-            };
+            }?;
             let span_exp = context.location_span(l, r);
-            make::case! {
+            make::case! { arena: arena,
                 shape: "expression binop expression",
                 args: vec![lhs, value_op, rhs],
                 typ: "binaryExpression",
                 span: span_exp,
-            }
-        },
+            }?
+        }) }),
 
     // ExpressionAdditive ::= ExpressionAdditive "PLUS" ExpressionMultiplicative
     <l:@L> <lhs:ExpressionAdditive> <op_l:@L> "PLUS" <op_r:@R>
-        <rhs:ExpressionMultiplicative> <r:@R> => {
+        <rhs:ExpressionMultiplicative> <r:@R> =>? parse::action(|| { Ok({
             let span_op = context.location_span(op_l, op_r);
-            let value_op = make::case! {
+            let value_op = make::case! { arena: arena,
                 shape: "'+'",
                 args: vec![],
                 typ: "binop",
                 span: span_op,
-            };
+            }?;
             let span_exp = context.location_span(l, r);
-            make::case! {
+            make::case! { arena: arena,
                 shape: "expression binop expression",
                 args: vec![lhs, value_op, rhs],
                 typ: "binaryExpression",
                 span: span_exp,
-            }
-        },
+            }?
+        }) }),
 
     // ExpressionAdditive ::= ExpressionAdditive "PLUS_SAT" ExpressionMultiplicative
     <l:@L> <lhs:ExpressionAdditive> <op_l:@L> "PLUS_SAT" <op_r:@R>
-        <rhs:ExpressionMultiplicative> <r:@R> => {
+        <rhs:ExpressionMultiplicative> <r:@R> =>? parse::action(|| { Ok({
             let span_op = context.location_span(op_l, op_r);
-            let value_op = make::case! {
+            let value_op = make::case! { arena: arena,
                 shape: "'|+|'",
                 args: vec![],
                 typ: "binop",
                 span: span_op,
-            };
+            }?;
             let span_exp = context.location_span(l, r);
-            make::case! {
+            make::case! { arena: arena,
                 shape: "expression binop expression",
                 args: vec![lhs, value_op, rhs],
                 typ: "binaryExpression",
                 span: span_exp,
-            }
-        },
+            }?
+        }) }),
 
     // ExpressionAdditive ::= ExpressionAdditive "MINUS" ExpressionMultiplicative
     <l:@L> <lhs:ExpressionAdditive> <op_l:@L> "MINUS" <op_r:@R>
-        <rhs:ExpressionMultiplicative> <r:@R> => {
+        <rhs:ExpressionMultiplicative> <r:@R> =>? parse::action(|| { Ok({
             let span_op = context.location_span(op_l, op_r);
-            let value_op = make::case! {
+            let value_op = make::case! { arena: arena,
                 shape: "'-'",
                 args: vec![],
                 typ: "binop",
                 span: span_op,
-            };
+            }?;
             let span_exp = context.location_span(l, r);
-            make::case! {
+            make::case! { arena: arena,
                 shape: "expression binop expression",
                 args: vec![lhs, value_op, rhs],
                 typ: "binaryExpression",
                 span: span_exp,
-            }
-        },
+            }?
+        }) }),
 
     // ExpressionAdditive ::= ExpressionAdditive "MINUS_SAT" ExpressionMultiplicative
     <l:@L> <lhs:ExpressionAdditive> <op_l:@L> "MINUS_SAT" <op_r:@R>
-        <rhs:ExpressionMultiplicative> <r:@R> => {
+        <rhs:ExpressionMultiplicative> <r:@R> =>? parse::action(|| { Ok({
             let span_op = context.location_span(op_l, op_r);
-            let value_op = make::case! {
+            let value_op = make::case! { arena: arena,
                 shape: "'|-|'",
                 args: vec![],
                 typ: "binop",
                 span: span_op,
-            };
+            }?;
             let span_exp = context.location_span(l, r);
-            make::case! {
+            make::case! { arena: arena,
                 shape: "expression binop expression",
                 args: vec![lhs, value_op, rhs],
                 typ: "binaryExpression",
                 span: span_exp,
-            }
-        },
+            }?
+        }) }),
 };
 
-ExpressionMultiplicative: Rc<Value> = {
+ExpressionMultiplicative: Value = {
     // ExpressionMultiplicative ::= ExpressionPrefix
     ExpressionPrefix,
 
     // ExpressionMultiplicative ::= ExpressionMultiplicative "MUL" ExpressionPrefix
     <l:@L> <lhs:ExpressionMultiplicative> <op_l:@L> "MUL" <op_r:@R> <rhs:ExpressionPrefix>
-        <r:@R> => {
+        <r:@R> =>? parse::action(|| { Ok({
             let span_op = context.location_span(op_l, op_r);
-            let value_op = make::case! {
+            let value_op = make::case! { arena: arena,
                 shape: "'*'",
                 args: vec![],
                 typ: "binop",
                 span: span_op,
-            };
+            }?;
             let span_exp = context.location_span(l, r);
-            make::case! {
+            make::case! { arena: arena,
                 shape: "expression binop expression",
                 args: vec![lhs, value_op, rhs],
                 typ: "binaryExpression",
                 span: span_exp,
-            }
-        },
+            }?
+        }) }),
 
     // ExpressionMultiplicative ::= ExpressionMultiplicative "DIV" ExpressionPrefix
     <l:@L> <lhs:ExpressionMultiplicative> <op_l:@L> "DIV" <op_r:@R> <rhs:ExpressionPrefix>
-        <r:@R> => {
+        <r:@R> =>? parse::action(|| { Ok({
             let span_op = context.location_span(op_l, op_r);
-            let value_op = make::case! {
+            let value_op = make::case! { arena: arena,
                 shape: "'/'",
                 args: vec![],
                 typ: "binop",
                 span: span_op,
-            };
+            }?;
             let span_exp = context.location_span(l, r);
-            make::case! {
+            make::case! { arena: arena,
                 shape: "expression binop expression",
                 args: vec![lhs, value_op, rhs],
                 typ: "binaryExpression",
                 span: span_exp,
-            }
-        },
+            }?
+        }) }),
 
     // ExpressionMultiplicative ::= ExpressionMultiplicative "MOD" ExpressionPrefix
     <l:@L> <lhs:ExpressionMultiplicative> <op_l:@L> "MOD" <op_r:@R> <rhs:ExpressionPrefix>
-        <r:@R> => {
+        <r:@R> =>? parse::action(|| { Ok({
             let span_op = context.location_span(op_l, op_r);
-            let value_op = make::case! {
+            let value_op = make::case! { arena: arena,
                 shape: "'%'",
                 args: vec![],
                 typ: "binop",
                 span: span_op,
-            };
+            }?;
             let span_exp = context.location_span(l, r);
-            make::case! {
+            make::case! { arena: arena,
                 shape: "expression binop expression",
                 args: vec![lhs, value_op, rhs],
                 typ: "binaryExpression",
                 span: span_exp,
-            }
-        },
+            }?
+        }) }),
 };
 
-ExpressionPrefix: Rc<Value> = {
+ExpressionPrefix: Value = {
     // ExpressionPrefix ::= ExpressionPostfix
     ExpressionPostfix,
 
     // ExpressionPrefix ::= "NOT" ExpressionPrefix
-    <l:@L> <op_l:@L> "NOT" <op_r:@R> <inner:ExpressionPrefix> <r:@R> => {
+    <l:@L> <op_l:@L> "NOT" <op_r:@R> <inner:ExpressionPrefix> <r:@R> =>? parse::action(|| { Ok({
         let span_op = context.location_span(op_l, op_r);
-        let value_op = make::case! {
+        let value_op = make::case! { arena: arena,
             shape: "'!'",
             args: vec![],
             typ: "unop",
             span: span_op,
-        };
+        }?;
         let span_exp = context.location_span(l, r);
-        make::case! {
+        make::case! { arena: arena,
             shape: "unop expression",
             args: vec![value_op, inner],
             typ: "unaryExpression",
             span: span_exp,
-        }
-    },
+        }?
+    }) }),
 
     // ExpressionPrefix ::= "COMPLEMENT" ExpressionPrefix
-    <l:@L> <op_l:@L> "COMPLEMENT" <op_r:@R> <inner:ExpressionPrefix> <r:@R> => {
+    <l:@L> <op_l:@L> "COMPLEMENT" <op_r:@R> <inner:ExpressionPrefix> <r:@R> =>? parse::action(|| { Ok({
         let span_op = context.location_span(op_l, op_r);
-        let value_op = make::case! {
+        let value_op = make::case! { arena: arena,
             shape: "'~'",
             args: vec![],
             typ: "unop",
             span: span_op,
-        };
+        }?;
         let span_exp = context.location_span(l, r);
-        make::case! {
+        make::case! { arena: arena,
             shape: "unop expression",
             args: vec![value_op, inner],
             typ: "unaryExpression",
             span: span_exp,
-        }
-    },
+        }?
+    }) }),
 
     // ExpressionPrefix ::= "MINUS" ExpressionPrefix
-    <l:@L> <op_l:@L> "MINUS" <op_r:@R> <inner:ExpressionPrefix> <r:@R> => {
+    <l:@L> <op_l:@L> "MINUS" <op_r:@R> <inner:ExpressionPrefix> <r:@R> =>? parse::action(|| { Ok({
         let span_op = context.location_span(op_l, op_r);
-        let value_op = make::case! {
+        let value_op = make::case! { arena: arena,
             shape: "'-'",
             args: vec![],
             typ: "unop",
             span: span_op,
-        };
+        }?;
         let span_exp = context.location_span(l, r);
-        make::case! {
+        make::case! { arena: arena,
             shape: "unop expression",
             args: vec![value_op, inner],
             typ: "unaryExpression",
             span: span_exp,
-        }
-    },
+        }?
+    }) }),
 
     // ExpressionPrefix ::= "PLUS" ExpressionPrefix
-    <l:@L> <op_l:@L> "PLUS" <op_r:@R> <inner:ExpressionPrefix> <r:@R> => {
+    <l:@L> <op_l:@L> "PLUS" <op_r:@R> <inner:ExpressionPrefix> <r:@R> =>? parse::action(|| { Ok({
         let span_op = context.location_span(op_l, op_r);
-        let value_op = make::case! {
+        let value_op = make::case! { arena: arena,
             shape: "'+'",
             args: vec![],
             typ: "unop",
             span: span_op,
-        };
+        }?;
         let span_exp = context.location_span(l, r);
-        make::case! {
+        make::case! { arena: arena,
             shape: "unop expression",
             args: vec![value_op, inner],
             typ: "unaryExpression",
             span: span_exp,
-        }
-    },
+        }?
+    }) }),
 
     // ExpressionPrefix ::= "L_PAREN" typeRef "R_PAREN" ExpressionPrefix
-    <l:@L> "L_PAREN" <typ:typeRef> "R_PAREN" <inner:ExpressionPrefix> <r:@R> =>
-        make::case! {
+    <l:@L> "L_PAREN" <typ:typeRef> "R_PAREN" <inner:ExpressionPrefix> <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "`( typeRef `) expression",
             args: vec![typ, inner],
             typ: "castExpression",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
-ExpressionPostfix: Rc<Value> = {
+ExpressionPostfix: Value = {
     // ExpressionPostfix ::= ExpressionPrimary
     ExpressionPrimary,
 
     // ExpressionPostfix ::= expressionPrefixedTypeName "DOT" set_parent_namespace member
     //     clear_parent_namespace
     <l:@L> <base:expressionPrefixedTypeName> "DOT" set_parent_namespace <member:member>
-        clear_parent_namespace <r:@R> =>
-        make::case! {
+        clear_parent_namespace <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "memberAccessBase '.' member",
             args: vec![base, member],
             typ: "memberAccessExpression",
             span: context.location_span(l, r),
-        },
+        }?) }),
 
     // ExpressionPostfix ::= expressionNamedType "L_PAREN" argumentList "R_PAREN"
     <l:@L> <target:expressionNamedType> "L_PAREN" <arguments:argumentList> "R_PAREN" <r:@R>
-        =>
-        make::case! {
+        =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "callTarget `( argumentList `)",
             args: vec![target, arguments],
             typ: "callExpression",
             span: context.location_span(l, r),
-        },
+        }?) }),
 
     // ExpressionPostfix ::= ExpressionPostfix "DOT" set_parent_namespace member
     //     clear_parent_namespace
     <l:@L> <base:ExpressionPostfix> "DOT" set_parent_namespace <member:member>
-        clear_parent_namespace <r:@R> =>
-        make::case! {
+        clear_parent_namespace <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "memberAccessBase '.' member",
             args: vec![base, member],
             typ: "memberAccessExpression",
             span: context.location_span(l, r),
-        },
+        }?) }),
 
     // ExpressionPostfix ::= ExpressionPostfix "L_BRACKET" expression "R_BRACKET"
-    <l:@L> <base:ExpressionPostfix> "L_BRACKET" <index:expression> "R_BRACKET" <r:@R> =>
-        make::case! {
+    <l:@L> <base:ExpressionPostfix> "L_BRACKET" <index:expression> "R_BRACKET" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "expression `[ expression `]",
             args: vec![base, index],
             typ: "indexAccessExpression",
             span: context.location_span(l, r),
-        },
+        }?) }),
 
     // ExpressionPostfix ::= ExpressionPostfix "L_BRACKET" expression sliceop expression "R_BRACKET"
     <l:@L> <base:ExpressionPostfix> "L_BRACKET" <slice_l:expression> <operator:sliceop>
-        <slice_r:expression> "R_BRACKET" <r:@R> =>
-        make::case! {
+        <slice_r:expression> "R_BRACKET" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "expression `[ expression sliceop expression `]",
             args: vec![base, slice_l, operator, slice_r],
             typ: "sliceAccessExpression",
             span: context.location_span(l, r),
-        },
+        }?) }),
 
     // ExpressionPostfix ::= ExpressionPostfix "L_PAREN" argumentList "R_PAREN"
-    <l:@L> <target:ExpressionPostfix> "L_PAREN" <arguments:argumentList> "R_PAREN" <r:@R> =>
-        make::case! {
+    <l:@L> <target:ExpressionPostfix> "L_PAREN" <arguments:argumentList> "R_PAREN" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "callTarget `( argumentList `)",
             args: vec![target, arguments],
             typ: "callExpression",
             span: context.location_span(l, r),
-        },
+        }?) }),
 
     // ExpressionPostfix ::= ExpressionPostfix "L_ANGLE_ARGS" realTypeArgumentList r_angle "L_PAREN"
     //     argumentList "R_PAREN"
     <l:@L> <target:ExpressionPostfix> "L_ANGLE_ARGS" <types:realTypeArgumentList> r_angle
-        "L_PAREN" <arguments:argumentList> "R_PAREN" <r:@R> =>
-        make::case! {
+        "L_PAREN" <arguments:argumentList> "R_PAREN" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "callTarget `< realTypeArgumentList `> `( argumentList `)",
             args: vec![target, types, arguments],
             typ: "callExpression",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
-ExpressionPrimary: Rc<Value> = {
+ExpressionPrimary: Value = {
     // ExpressionPrimary ::= literalExpression
     literalExpression,
 
@@ -1469,48 +1446,44 @@ ExpressionPrimary: Rc<Value> = {
     defaultExpression,
 
     // ExpressionPrimary ::= "ERROR_EXPR" "DOT" member
-    <l:@L> "ERROR_EXPR" "DOT" <member:member> <r:@R> =>
-        make::case! {
+    <l:@L> "ERROR_EXPR" "DOT" <member:member> <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "ERROR '.' member",
             args: vec![member],
             typ: "errorAccessExpression",
             span: context.location_span(l, r),
-        },
+        }?) }),
 
     // ExpressionPrimary ::= "INVALID"
-    <l:@L> "INVALID" <r:@R> =>
-        make::case! {
+    <l:@L> "INVALID" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "'{#}'",
             args: vec![],
             typ: "invalidHeaderExpression",
             span: context.location_span(l, r),
-        },
+        }?) }),
 
     // ExpressionPrimary ::= "L_BRACE" sequenceOrRecordElementExpression trailingCommaOpt "R_BRACE"
     <l:@L> "L_BRACE" <elements:sequenceOrRecordElementExpression> <comma:trailingCommaOpt>
-        "R_BRACE" <r:@R> =>
-        make::case! {
+        "R_BRACE" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "`{ sequenceOrRecordElementExpression trailingCommaOpt `}",
             args: vec![elements, comma],
             typ: "sequenceOrRecordExpression",
             span: context.location_span(l, r),
-        },
+        }?) }),
 
     // ExpressionPrimary ::= "L_PAREN" expression "R_PAREN"
-    <l:@L> "L_PAREN" <inner:expression> "R_PAREN" <r:@R> =>
-        make::case! {
+    <l:@L> "L_PAREN" <inner:expression> "R_PAREN" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "`( expression `)",
             args: vec![inner],
             typ: "parenthesizedExpression",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
 // - Expressions
 
 // The canonical expression alternatives are implemented by the precedence
 // ladder above
-expression: Rc<Value> = {
+expression: Value = {
     // expression ::= TernaryExpression
     TernaryExpression,
 };
@@ -1520,50 +1493,47 @@ expression: Rc<Value> = {
 // The Rust lexer marks type names used inside expressions separately so the
 // precedence ladder can distinguish constructor calls from value calls.
 
-expressionTypeIdentifier: Rc<Value> = {
-    // expressionTypeIdentifier ::= "NAME" "TYPENAME_EXPR"
-    <l:@L> <text:"NAME"> "TYPENAME_EXPR" <r:@R> =>
-        make::case! {
+expressionTypeIdentifier: Value = {
+    // expressionTypeIdentifier ::= token_name "TYPENAME_EXPR"
+    <l:@L> <text:token_name> "TYPENAME_EXPR" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "_TID text",
             args: vec![text],
             typ: "typeIdentifier",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
-expressionTypeName: Rc<Value> = {
+expressionTypeName: Value = {
     // expressionTypeName ::= expressionTypeIdentifier
     expressionTypeIdentifier,
 };
 
-expressionPrefixedTypeName: Rc<Value> = {
+expressionPrefixedTypeName: Value = {
     // expressionPrefixedTypeName ::= expressionTypeName
     expressionTypeName,
 
     // expressionPrefixedTypeName ::= "DOT" go_toplevel expressionTypeName go_local
-    <l:@L> "DOT" go_toplevel <typ:expressionTypeName> go_local <r:@R> =>
-        make::case! {
+    <l:@L> "DOT" go_toplevel <typ:expressionTypeName> go_local <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "_TID '.' typeName",
             args: vec![typ],
             typ: "prefixedTypeName",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
-expressionSpecializedType: Rc<Value> = {
+expressionSpecializedType: Value = {
     // expressionSpecializedType ::= expressionPrefixedTypeName "L_ANGLE_ARGS"
     //   typeArgumentList r_angle
     <l:@L> <name:expressionPrefixedTypeName> "L_ANGLE_ARGS" <arguments:typeArgumentList> r_angle
-        <r:@R> =>
-        make::case! {
+        <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "prefixedTypeName `< typeArgumentList `>",
             args: vec![name, arguments],
             typ: "specializedType",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
-expressionNamedType: Rc<Value> = {
+expressionNamedType: Value = {
     // expressionNamedType ::= expressionPrefixedTypeName
     expressionPrefixedTypeName,
 
@@ -1572,81 +1542,76 @@ expressionNamedType: Rc<Value> = {
 };
 
 // LALRPOP factors the canonical expressionList through its non-empty form
-expressionList: Rc<Value> = {
+expressionList: Value = {
     // expressionList ::= expressionListNonEmpty
     expressionListNonEmpty,
 };
 
-expressionListNonEmpty: Rc<Value> = {
+expressionListNonEmpty: Value = {
     // expressionListNonEmpty ::= expression
     <e:expression> => e,
 
     // expressionListNonEmpty ::= expressionListNonEmpty "COMMA" expression
-    <l:@L> <el:expressionListNonEmpty> "COMMA" <e:expression> <r:@R> =>
-        make::case! {
+    <l:@L> <el:expressionListNonEmpty> "COMMA" <e:expression> <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "expressionList ',' expression",
             args: vec![el, e],
             typ: "expressionList",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
 // memberAccessBase ::= prefixedTypeName | expression
 
 // LALRPOP lowering for expressionList ::= epsilon
-sequenceElementExpression: Rc<Value> = {
-    <l:@L> <r:@R> => make::case! {
+sequenceElementExpression: Value = {
+    <l:@L> <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "_EMPTY",
         args: vec![],
         typ: "expressionList",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // sequenceElementExpression ::= expressionList
     expressionList,
 };
 
-recordElementExpression: Rc<Value> = {
+recordElementExpression: Value = {
     // recordElementExpression ::= name "ASSIGN" expression
-    <l:@L> <n:name> "ASSIGN" <e:expression> <r:@R> =>
-        make::case! {
+    <l:@L> <n:name> "ASSIGN" <e:expression> <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "name '=' expression",
             args: vec![n, e],
             typ: "recordElementExpression",
             span: context.location_span(l, r),
-        },
+        }?) }),
 
     // recordElementExpression ::= name "ASSIGN" expression "COMMA" "DOTS"
-    <l:@L> <n:name> "ASSIGN" <e:expression> "COMMA" "DOTS" <r:@R> =>
-        make::case! {
+    <l:@L> <n:name> "ASSIGN" <e:expression> "COMMA" "DOTS" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "name '=' expression ',' '...'",
             args: vec![n, e],
             typ: "recordElementExpression",
             span: context.location_span(l, r),
-        },
+        }?) }),
 
     // recordElementExpression ::= name "ASSIGN" expression "COMMA" namedExpressionList
-    <l:@L> <n:name> "ASSIGN" <e:expression> "COMMA" <el:namedExpressionList> <r:@R> =>
-        make::case! {
+    <l:@L> <n:name> "ASSIGN" <e:expression> "COMMA" <el:namedExpressionList> <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "name '=' expression ',' namedExpressionList",
             args: vec![n, e, el],
             typ: "recordElementExpression",
             span: context.location_span(l, r),
-        },
+        }?) }),
 
     // recordElementExpression ::= name "ASSIGN" expression "COMMA" namedExpressionList "COMMA"
     //     "DOTS"
     <l:@L> <n:name> "ASSIGN" <e:expression> "COMMA" <el:namedExpressionList> "COMMA" "DOTS"
-        <r:@R> =>
-        make::case! {
+        <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "name '=' expression ',' namedExpressionList ',' '...'",
             args: vec![n, e, el],
             typ: "recordElementExpression",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
-sequenceOrRecordElementExpression: Rc<Value> = {
+sequenceOrRecordElementExpression: Value = {
     // sequenceOrRecordElementExpression ::= sequenceElementExpression
     <e:sequenceElementExpression> => e,
 
@@ -1657,7 +1622,7 @@ sequenceOrRecordElementExpression: Rc<Value> = {
 // - Non-brace Expressions
 
 // The shared ladder implements the canonical brace-free alternatives
-expressionNonBrace: Rc<Value> = {
+expressionNonBrace: Value = {
     // expressionNonBrace ::= expression
     expression,
 };
@@ -1667,110 +1632,101 @@ expressionNonBrace: Rc<Value> = {
 
 // - Keyset expressions
 
-simpleKeysetExpression: Rc<Value> = {
+simpleKeysetExpression: Value = {
     // simpleKeysetExpression ::= expression
     <e:expression> => e,
 
     // simpleKeysetExpression ::= expression "MASK" expression
-    <l:@L> <b:expression> "MASK" <m:expression> <r:@R> =>
-        make::case! {
+    <l:@L> <b:expression> "MASK" <m:expression> <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "expression '&&&' expression",
             args: vec![b, m],
             typ: "simpleKeysetExpression",
             span: context.location_span(l, r),
-        },
+        }?) }),
 
     // simpleKeysetExpression ::= expression "RANGE" expression
-    <l:@L> <lo:expression> "RANGE" <hi:expression> <r:@R> =>
-        make::case! {
+    <l:@L> <lo:expression> "RANGE" <hi:expression> <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "expression '..' expression",
             args: vec![lo, hi],
             typ: "simpleKeysetExpression",
             span: context.location_span(l, r),
-        },
+        }?) }),
 
     // simpleKeysetExpression ::= "DEFAULT"
-    <l:@L> "DEFAULT" <r:@R> =>
-        make::case! {
+    <l:@L> "DEFAULT" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "DEFAULT",
             args: vec![],
             typ: "simpleKeysetExpression",
             span: context.location_span(l, r),
-        },
+        }?) }),
 
     // simpleKeysetExpression ::= "DONTCARE"
-    <l:@L> "DONTCARE" <r:@R> => make::case! {
+    <l:@L> "DONTCARE" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "'_'",
         args: vec![],
         typ: "simpleKeysetExpression",
         span: context.location_span(l, r),
-    },
+    }?) }),
 };
 
-simpleKeysetExpressionList: Rc<Value> = {
+simpleKeysetExpressionList: Value = {
     // simpleKeysetExpressionList ::= simpleKeysetExpression
     <e:simpleKeysetExpression> => e,
 
     // simpleKeysetExpressionList ::= simpleKeysetExpressionList "COMMA" simpleKeysetExpression
-    <l:@L> <el:simpleKeysetExpressionList> "COMMA" <e:simpleKeysetExpression> <r:@R> =>
-        make::case! {
+    <l:@L> <el:simpleKeysetExpressionList> "COMMA" <e:simpleKeysetExpression> <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "simpleKeysetExpressionList ',' simpleKeysetExpression",
             args: vec![el, e],
             typ: "simpleKeysetExpressionList",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
-tupleKeysetExpression: Rc<Value> = {
+tupleKeysetExpression: Value = {
     // tupleKeysetExpression ::= "L_PAREN" expression "MASK" expression "R_PAREN"
-    <l:@L> "L_PAREN" <b:expression> "MASK" <m:expression> "R_PAREN" <r:@R> =>
-        make::case! {
+    <l:@L> "L_PAREN" <b:expression> "MASK" <m:expression> "R_PAREN" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "`( expression '&&&' expression `)",
             args: vec![b, m],
             typ: "tupleKeysetExpression",
             span: context.location_span(l, r),
-        },
+        }?) }),
 
     // tupleKeysetExpression ::= "L_PAREN" expression "RANGE" expression "R_PAREN"
-    <l:@L> "L_PAREN" <lo:expression> "RANGE" <hi:expression> "R_PAREN" <r:@R> =>
-        make::case! {
+    <l:@L> "L_PAREN" <lo:expression> "RANGE" <hi:expression> "R_PAREN" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "`( expression '..' expression `)",
             args: vec![lo, hi],
             typ: "tupleKeysetExpression",
             span: context.location_span(l, r),
-        },
+        }?) }),
 
     // tupleKeysetExpression ::= "L_PAREN" "DEFAULT" "R_PAREN"
-    <l:@L> "L_PAREN" "DEFAULT" "R_PAREN" <r:@R> =>
-        make::case! {
+    <l:@L> "L_PAREN" "DEFAULT" "R_PAREN" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "`( DEFAULT `)",
             args: vec![],
             typ: "tupleKeysetExpression",
             span: context.location_span(l, r),
-        },
+        }?) }),
 
     // tupleKeysetExpression ::= "L_PAREN" "DONTCARE" "R_PAREN"
-    <l:@L> "L_PAREN" "DONTCARE" "R_PAREN" <r:@R> =>
-        make::case! {
+    <l:@L> "L_PAREN" "DONTCARE" "R_PAREN" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "`( '_' `)",
             args: vec![],
             typ: "tupleKeysetExpression",
             span: context.location_span(l, r),
-        },
+        }?) }),
 
     // tupleKeysetExpression ::= "L_PAREN" simpleKeysetExpression "COMMA" simpleKeysetExpressionList
     //     "R_PAREN"
     <l:@L> "L_PAREN" <e:simpleKeysetExpression> "COMMA" <es:simpleKeysetExpressionList> "R_PAREN"
-        <r:@R> =>
-        make::case! {
+        <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "`( simpleKeysetExpression ',' simpleKeysetExpressionList `)",
             args: vec![e, es],
             typ: "tupleKeysetExpression",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
-keysetExpression: Rc<Value> = {
+keysetExpression: Value = {
     // keysetExpression ::= simpleKeysetExpression
     <e:simpleKeysetExpression> => e,
 
@@ -1780,42 +1736,41 @@ keysetExpression: Rc<Value> = {
 
 // - Type arguments
 
-realTypeArgument: Rc<Value> = {
+realTypeArgument: Value = {
     // realTypeArgument ::= typeRef
     <t:typeRef> => t,
 
     // realTypeArgument ::= "VOID"
-    <l:@L> "VOID" <r:@R> => make::case! {
+    <l:@L> "VOID" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "VOID",
         args: vec![],
         typ: "realTypeArgument",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // realTypeArgument ::= "DONTCARE"
-    <l:@L> "DONTCARE" <r:@R> => make::case! {
+    <l:@L> "DONTCARE" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "'_'",
         args: vec![],
         typ: "realTypeArgument",
         span: context.location_span(l, r),
-    },
+    }?) }),
 };
 
-realTypeArgumentList: Rc<Value> = {
+realTypeArgumentList: Value = {
     // realTypeArgumentList ::= realTypeArgument
     <targ:realTypeArgument> => targ,
 
     // realTypeArgumentList ::= realTypeArgumentList "COMMA" realTypeArgument
-    <l:@L> <targs:realTypeArgumentList> "COMMA" <targ:realTypeArgument> <r:@R> =>
-        make::case! {
+    <l:@L> <targs:realTypeArgumentList> "COMMA" <targ:realTypeArgument> <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "realTypeArgumentList ',' realTypeArgument",
             args: vec![targs, targ],
             typ: "realTypeArgumentList",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
-typeArgument: Rc<Value> = {
+typeArgument: Value = {
     // typeArgument ::= typeRef
     <t:typeRef> => t,
 
@@ -1823,104 +1778,100 @@ typeArgument: Rc<Value> = {
     <t:nonTypeName> => t,
 
     // typeArgument ::= "VOID"
-    <l:@L> "VOID" <r:@R> => make::case! {
+    <l:@L> "VOID" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "VOID",
         args: vec![],
         typ: "typeArgument",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // typeArgument ::= "DONTCARE"
-    <l:@L> "DONTCARE" <r:@R> => make::case! {
+    <l:@L> "DONTCARE" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "'_'",
         args: vec![],
         typ: "typeArgument",
         span: context.location_span(l, r),
-    },
+    }?) }),
 };
 
-typeArgumentList: Rc<Value> = {
+typeArgumentList: Value = {
     // typeArgumentList ::= epsilon
-    <l:@L> <r:@R> => make::case! {
+    <l:@L> <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "_EMPTY",
         args: vec![],
         typ: "typeArgumentList",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // typeArgumentList ::= typeArgumentListNonEmpty
     typeArgumentListNonEmpty,
 };
 
-typeArgumentListNonEmpty: Rc<Value> = {
+typeArgumentListNonEmpty: Value = {
     // typeArgumentListNonEmpty ::= typeArgument
     <targ:typeArgument> => targ,
 
     // typeArgumentListNonEmpty ::= typeArgumentListNonEmpty "COMMA" typeArgument
-    <l:@L> <targs:typeArgumentListNonEmpty> "COMMA" <targ:typeArgument> <r:@R> =>
-        make::case! {
+    <l:@L> <targs:typeArgumentListNonEmpty> "COMMA" <targ:typeArgument> <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "typeArgumentList ',' typeArgument",
             args: vec![targs, targ],
             typ: "typeArgumentList",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
 // - Arguments
 
-argument: Rc<Value> = {
+argument: Value = {
     // argument ::= expression
     <e:expression> => e,
 
     // argument ::= name "ASSIGN" expression
-    <l:@L> <n:name> "ASSIGN" <e:expression> <r:@R> =>
-        make::case! {
+    <l:@L> <n:name> "ASSIGN" <e:expression> <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "name '=' expression",
             args: vec![n, e],
             typ: "argument",
             span: context.location_span(l, r),
-        },
+        }?) }),
 
     // argument ::= name "ASSIGN" "DONTCARE"
-    <l:@L> <name:name> "ASSIGN" "DONTCARE" <r:@R> =>
-        make::case! {
+    <l:@L> <name:name> "ASSIGN" "DONTCARE" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "name '=' '_' ",
             args: vec![name],
             typ: "argument",
             span: context.location_span(l, r),
-        },
+        }?) }),
 
     // argument ::= "DONTCARE"
-    <l:@L> "DONTCARE" <r:@R> => make::case! {
+    <l:@L> "DONTCARE" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "'_'",
         args: vec![],
         typ: "argument",
         span: context.location_span(l, r),
-    },
+    }?) }),
 };
 
-argumentListNonEmpty: Rc<Value> = {
+argumentListNonEmpty: Value = {
     // argumentListNonEmpty ::= argument
     <arg:argument> => arg,
 
     // argumentListNonEmpty ::= argumentListNonEmpty "COMMA" argument
-    <l:@L> <args:argumentListNonEmpty> "COMMA" <arg:argument> <r:@R> =>
-        make::case! {
+    <l:@L> <args:argumentListNonEmpty> "COMMA" <arg:argument> <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "argumentListNonEmpty ',' argument",
             args: vec![args, arg],
             typ: "argumentListNonEmpty",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
-argumentList: Rc<Value> = {
+argumentList: Value = {
     // argumentList ::= epsilon
-    <l:@L>  <r:@R> => make::case! {
+    <l:@L>  <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "_EMPTY",
         args: vec![],
         typ: "argumentList",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // argumentList ::= argumentListNonEmpty
     <args:argumentListNonEmpty> => args,
@@ -1928,275 +1879,263 @@ argumentList: Rc<Value> = {
 
 // - L-values
 
-lvalue: Rc<Value> = {
+lvalue: Value = {
     // lvalue ::= referenceExpression
     <e:referenceExpression> => e,
 
     // lvalue ::= lvalue "DOT" set_parent_namespace member clear_parent_namespace
-    <l:@L> <lv:lvalue> "DOT" set_parent_namespace <m:member> clear_parent_namespace <r:@R> =>
-        make::case! {
+    <l:@L> <lv:lvalue> "DOT" set_parent_namespace <m:member> clear_parent_namespace <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "lvalue '.' member",
             args: vec![lv, m],
             typ: "lvalue",
             span: context.location_span(l, r),
-        },
+        }?) }),
 
     // lvalue ::= lvalue "L_BRACKET" expression "R_BRACKET"
-    <l:@L> <lv:lvalue> "L_BRACKET" <i:expression> "R_BRACKET" <r:@R> =>
-        make::case! {
+    <l:@L> <lv:lvalue> "L_BRACKET" <i:expression> "R_BRACKET" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "lvalue `[ expression `]",
             args: vec![lv, i],
             typ: "lvalue",
             span: context.location_span(l, r),
-        },
+        }?) }),
 
     // lvalue ::= lvalue "L_BRACKET" expression sliceop expression "R_BRACKET"
     <l:@L> <lv:lvalue> "L_BRACKET" <exp_l:expression> <s:sliceop> <exp_r:expression> "R_BRACKET"
-        <r:@R> =>
-        make::case! {
+        <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "lvalue `[ expression sliceop expression `]",
             args: vec![lv, exp_l, s, exp_r],
             typ: "lvalue",
             span: context.location_span(l, r),
-        },
+        }?) }),
 
     // lvalue ::= "L_PAREN" lvalue "R_PAREN"
-    <l:@L> "L_PAREN" <lv:lvalue> "R_PAREN" <r:@R> =>
-        make::case! {
+    <l:@L> "L_PAREN" <lv:lvalue> "R_PAREN" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "`( lvalue `)",
             args: vec![lv],
             typ: "lvalue",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
 // - Statements
 
 // - Empty statements
 
-emptyStatement: Rc<Value> = {
+emptyStatement: Value = {
     // emptyStatement ::= "SEMICOLON"
-    <l:@L> "SEMICOLON" <r:@R> => make::case! {
+    <l:@L> "SEMICOLON" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "';'",
         args: vec![],
         typ: "emptyStatement",
         span: context.location_span(l, r),
-    },
+    }?) }),
 };
 
 // - Assignment statements
 
-assignop: Rc<Value> = {
+assignop: Value = {
     // assignop ::= "ASSIGN"
-    <l:@L> "ASSIGN" <r:@R> => make::case! {
+    <l:@L> "ASSIGN" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "'='",
         args: vec![],
         typ: "assignop",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // assignop ::= "PLUS_ASSIGN"
-    <l:@L> "PLUS_ASSIGN" <r:@R> => make::case! {
+    <l:@L> "PLUS_ASSIGN" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "'+='",
         args: vec![],
         typ: "assignop",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // assignop ::= "PLUS_SAT_ASSIGN"
-    <l:@L> "PLUS_SAT_ASSIGN" <r:@R> => make::case! {
+    <l:@L> "PLUS_SAT_ASSIGN" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "'|+|='",
         args: vec![],
         typ: "assignop",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // assignop ::= "MINUS_ASSIGN"
-    <l:@L> "MINUS_ASSIGN" <r:@R> => make::case! {
+    <l:@L> "MINUS_ASSIGN" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "'-='",
         args: vec![],
         typ: "assignop",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // assignop ::= "MINUS_SAT_ASSIGN"
-    <l:@L> "MINUS_SAT_ASSIGN" <r:@R> => make::case! {
+    <l:@L> "MINUS_SAT_ASSIGN" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "'|-|='",
         args: vec![],
         typ: "assignop",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // assignop ::= "MUL_ASSIGN"
-    <l:@L> "MUL_ASSIGN" <r:@R> => make::case! {
+    <l:@L> "MUL_ASSIGN" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "'*='",
         args: vec![],
         typ: "assignop",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // assignop ::= "DIV_ASSIGN"
-    <l:@L> "DIV_ASSIGN" <r:@R> => make::case! {
+    <l:@L> "DIV_ASSIGN" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "'/='",
         args: vec![],
         typ: "assignop",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // assignop ::= "MOD_ASSIGN"
-    <l:@L> "MOD_ASSIGN" <r:@R> => make::case! {
+    <l:@L> "MOD_ASSIGN" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "'%='",
         args: vec![],
         typ: "assignop",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // assignop ::= "SHL_ASSIGN"
-    <l:@L> "SHL_ASSIGN" <r:@R> => make::case! {
+    <l:@L> "SHL_ASSIGN" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "'<<='",
         args: vec![],
         typ: "assignop",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // assignop ::= "SHR_ASSIGN"
-    <l:@L> "SHR_ASSIGN" <r:@R> => make::case! {
+    <l:@L> "SHR_ASSIGN" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "'>>='",
         args: vec![],
         typ: "assignop",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // assignop ::= "BIT_AND_ASSIGN"
-    <l:@L> "BIT_AND_ASSIGN" <r:@R> => make::case! {
+    <l:@L> "BIT_AND_ASSIGN" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "'&='",
         args: vec![],
         typ: "assignop",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // assignop ::= "BIT_XOR_ASSIGN"
-    <l:@L> "BIT_XOR_ASSIGN" <r:@R> => make::case! {
+    <l:@L> "BIT_XOR_ASSIGN" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "'^='",
         args: vec![],
         typ: "assignop",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // assignop ::= "BIT_OR_ASSIGN"
-    <l:@L> "BIT_OR_ASSIGN" <r:@R> => make::case! {
+    <l:@L> "BIT_OR_ASSIGN" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "'|='",
         args: vec![],
         typ: "assignop",
         span: context.location_span(l, r),
-    },
+    }?) }),
 };
 
-assignmentStatement: Rc<Value> = {
+assignmentStatement: Value = {
     // assignmentStatement ::= lvalue assignop expression "SEMICOLON"
-    <l:@L> <lv:lvalue> <o:assignop> <e:expression> "SEMICOLON" <r:@R> =>
-        make::case! {
+    <l:@L> <lv:lvalue> <o:assignop> <e:expression> "SEMICOLON" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "lvalue assignop expression ';'",
             args: vec![lv, o, e],
             typ: "assignmentStatement",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
 // - Call statements
 
-callStatement: Rc<Value> = {
+callStatement: Value = {
     // callStatement ::= lvalue "L_PAREN" argumentList "R_PAREN" "SEMICOLON"
-    <l:@L> <lv:lvalue> "L_PAREN" <args:argumentList> "R_PAREN" "SEMICOLON" <r:@R> =>
-        make::case! {
+    <l:@L> <lv:lvalue> "L_PAREN" <args:argumentList> "R_PAREN" "SEMICOLON" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "lvalue `( argumentList `) ';'",
             args: vec![lv, args],
             typ: "callStatement",
             span: context.location_span(l, r),
-        },
+        }?) }),
 
     // callStatement ::= lvalue l_angle typeArgumentList r_angle "L_PAREN" argumentList "R_PAREN"
     //     "SEMICOLON"
     <l:@L> <lv:lvalue> "L_ANGLE_ARGS" <targs:typeArgumentList> r_angle "L_PAREN"
-        <args:argumentList> "R_PAREN" "SEMICOLON" <r:@R> =>
-        make::case! {
+        <args:argumentList> "R_PAREN" "SEMICOLON" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "lvalue `< typeArgumentList `> `( argumentList `) ';'",
             args: vec![lv, targs, args],
             typ: "callStatement",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
 // - Direct application statements
 
 // The lexer marks a bare canonical `namedType` as expression-context before
 // `.`, but a specialized type retains its declaration-context marker.
-directApplicationType: Rc<Value> = {
+directApplicationType: Value = {
     namedType,
     expressionNamedType,
 };
 
-directApplicationStatement: Rc<Value> = {
+directApplicationStatement: Value = {
     // directApplicationStatement ::= namedType "DOT" "APPLY" "L_PAREN"
     //   argumentList "R_PAREN" "SEMICOLON"
     <l:@L> <t:directApplicationType> "DOT" "APPLY" "L_PAREN" <args:argumentList> "R_PAREN"
-        "SEMICOLON" <r:@R> =>
-        make::case! {
+        "SEMICOLON" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "namedType '.' APPLY `( argumentList `) ';'",
             args: vec![t, args],
             typ: "directApplicationStatement",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
 // - Return statements
 
-returnStatement: Rc<Value> = {
+returnStatement: Value = {
     // returnStatement ::= "RETURN" "SEMICOLON"
-    <l:@L> "RETURN" "SEMICOLON" <r:@R> =>
-        make::case! {
+    <l:@L> "RETURN" "SEMICOLON" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "RETURN ';'",
             args: vec![],
             typ: "returnStatement",
             span: context.location_span(l, r),
-        },
+        }?) }),
 
     // returnStatement ::= "RETURN" expression "SEMICOLON"
-    <l:@L> "RETURN" <e:expression> "SEMICOLON" <r:@R> =>
-        make::case! {
+    <l:@L> "RETURN" <e:expression> "SEMICOLON" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "RETURN expression ';'",
             args: vec![e],
             typ: "returnStatement",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
 // - Exit statements
 
-exitStatement: Rc<Value> = {
+exitStatement: Value = {
     // exitStatement ::= "EXIT" "SEMICOLON"
-    <l:@L> "EXIT" "SEMICOLON" <r:@R> =>
-        make::case! {
+    <l:@L> "EXIT" "SEMICOLON" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "EXIT ';'",
             args: vec![],
             typ: "exitStatement",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
 // - Block statements
 
-blockStatement: Rc<Value> = {
+blockStatement: Value = {
     // blockStatement ::= annotationList "L_BRACE" push_scope
     //   blockElementStatementList "R_BRACE" pop_scope
     <l:@L> <al:annotationList> "L_BRACE" push_scope <sl:blockElementStatementList> "R_BRACE"
-        pop_scope <r:@R> =>
-        make::case! {
+        pop_scope <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "annotationList `{ blockElementStatementList `}",
             args: vec![al, sl],
             typ: "blockStatement",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
 // - Conditional statements
@@ -2206,118 +2145,111 @@ blockStatement: Rc<Value> = {
 
 // - For statements
 
-forInitStatement: Rc<Value> = {
+forInitStatement: Value = {
     // forInitStatement ::= annotationList typeRef name initializerOpt
-    <l:@L> <al:annotationList> <t:typeRef> <n:name> <i:initializerOpt> <r:@R> =>
-        make::case! {
+    <l:@L> <al:annotationList> <t:typeRef> <n:name> <i:initializerOpt> <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "annotationList type name initializerOpt",
             args: vec![al, t, n, i],
             typ: "forInitStatement",
             span: context.location_span(l, r),
-        },
+        }?) }),
 
     // forInitStatement ::= lvalue "L_PAREN" argumentList "R_PAREN"
-    <l:@L> <lv:lvalue> "L_PAREN" <args:argumentList> "R_PAREN" <r:@R> =>
-        make::case! {
+    <l:@L> <lv:lvalue> "L_PAREN" <args:argumentList> "R_PAREN" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "lvalue `( argumentList `)",
             args: vec![lv, args],
             typ: "forInitStatement",
             span: context.location_span(l, r),
-        },
+        }?) }),
 
     // forInitStatement ::= lvalue l_angle typeArgumentList r_angle "L_PAREN" argumentList "R_PAREN"
     <l:@L> <lv:lvalue> "L_ANGLE_ARGS" <targs:typeArgumentList> r_angle "L_PAREN"
-        <args:argumentList> "R_PAREN" <r:@R> =>
-        make::case! {
+        <args:argumentList> "R_PAREN" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "lvalue `< typeArgumentList `> `( argumentList `)",
             args: vec![lv, targs, args],
             typ: "forInitStatement",
             span: context.location_span(l, r),
-        },
+        }?) }),
 
     // forInitStatement ::= lvalue assignop expression
-    <l:@L> <lv:lvalue> <o:assignop> <e:expression> <r:@R> =>
-        make::case! {
+    <l:@L> <lv:lvalue> <o:assignop> <e:expression> <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "lvalue assignop expression",
             args: vec![lv, o, e],
             typ: "forInitStatement",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
-forInitStatementListNonEmpty: Rc<Value> = {
+forInitStatementListNonEmpty: Value = {
     // forInitStatementListNonEmpty ::= forInitStatement
     <s:forInitStatement> => s,
 
     // forInitStatementListNonEmpty ::= forInitStatementListNonEmpty "COMMA" forInitStatement
-    <l:@L> <sl:forInitStatementListNonEmpty> "COMMA" <s:forInitStatement> <r:@R> =>
-        make::case! {
+    <l:@L> <sl:forInitStatementListNonEmpty> "COMMA" <s:forInitStatement> <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "forInitStatementListNonEmpty ',' forInitStatement",
             args: vec![sl, s],
             typ: "forInitStatementListNonEmpty",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
 #[inline]
-forInitStatementList: Rc<Value> = {
+forInitStatementList: Value = {
     // forInitStatementList ::= epsilon
-    <l:@L>  <r:@R> => make::case! {
+    <l:@L>  <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "_EMPTY",
         args: vec![],
         typ: "forInitStatementList",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // forInitStatementList ::= forInitStatementListNonEmpty
     <sl:forInitStatementListNonEmpty> => sl,
 };
 
-forUpdateStatement: Rc<Value> = {
+forUpdateStatement: Value = {
     // forUpdateStatement ::= forInitStatement
     <s:forInitStatement> => s,
 };
 
-forUpdateStatementListNonEmpty: Rc<Value> = {
+forUpdateStatementListNonEmpty: Value = {
     // forUpdateStatementListNonEmpty ::= forUpdateStatement
     <s:forUpdateStatement> => s,
 
     // forUpdateStatementListNonEmpty ::= forUpdateStatementListNonEmpty "COMMA" forUpdateStatement
-    <l:@L> <sl:forUpdateStatementListNonEmpty> "COMMA" <s:forUpdateStatement> <r:@R> =>
-        make::case! {
+    <l:@L> <sl:forUpdateStatementListNonEmpty> "COMMA" <s:forUpdateStatement> <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "forUpdateStatementListNonEmpty ',' forUpdateStatement",
             args: vec![sl, s],
             typ: "forUpdateStatementListNonEmpty",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
 #[inline]
-forUpdateStatementList: Rc<Value> = {
+forUpdateStatementList: Value = {
     // forUpdateStatementList ::= epsilon
-    <l:@L>  <r:@R> => make::case! {
+    <l:@L>  <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "_EMPTY",
         args: vec![],
         typ: "forUpdateStatementList",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // forUpdateStatementList ::= forUpdateStatementListNonEmpty
     <sl:forUpdateStatementListNonEmpty> => sl,
 };
 
-forCollectionExpression: Rc<Value> = {
+forCollectionExpression: Value = {
     // forCollectionExpression ::= expression
     <e:expression> => e,
 
     // forCollectionExpression ::= expression "RANGE" expression
-    <l:@L> <lo:expression> "RANGE" <hi:expression> <r:@R> =>
-        make::case! {
+    <l:@L> <lo:expression> "RANGE" <hi:expression> <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "expression '..' expression",
             args: vec![lo, hi],
             typ: "forCollectionExpression",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
 // forStatement ::= annotationList "FOR" "L_PAREN" forInitStatementList
@@ -2329,99 +2261,93 @@ forCollectionExpression: Rc<Value> = {
 
 // - Switch statements
 
-switchLabel: Rc<Value> = {
+switchLabel: Value = {
     // switchLabel ::= "DEFAULT"
-    <l:@L> "DEFAULT" <r:@R> => make::case! {
+    <l:@L> "DEFAULT" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "DEFAULT",
         args: vec![],
         typ: "switchLabel",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // switchLabel ::= expressionNonBrace
     <e:expressionNonBrace> => e,
 };
 
 #[inline]
-switchCase: Rc<Value> = {
+switchCase: Value = {
     // switchCase ::= switchLabel "COLON" blockStatement
-    <l:@L> <label:switchLabel> "BLOCK_COLON" <body:blockStatement> <r:@R> =>
-        make::case! {
+    <l:@L> <label:switchLabel> "BLOCK_COLON" <body:blockStatement> <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "switchLabel ':' blockStatement",
             args: vec![label, body],
             typ: "switchCase",
             span: context.location_span(l, r),
-        },
+        }?) }),
 
     // switchCase ::= switchLabel "COLON"
-    <l:@L> <label:switchLabel> plain_colon <r:@R> =>
-        make::case! {
+    <l:@L> <label:switchLabel> plain_colon <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "switchLabel ':'",
             args: vec![label],
             typ: "switchCase",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
-switchCaseList: Rc<Value> = {
+switchCaseList: Value = {
     // switchCaseList ::= epsilon
-    <l:@L>  <r:@R> => make::case! {
+    <l:@L>  <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "_EMPTY",
         args: vec![],
         typ: "switchCaseList",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // switchCaseList ::= switchCaseList switchCase
-    <l:@L> <cs:switchCaseList> <c:switchCase> <r:@R> =>
-        make::case! {
+    <l:@L> <cs:switchCaseList> <c:switchCase> <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "switchCaseList switchCase",
             args: vec![cs, c],
             typ: "switchCaseList",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
-switchStatement: Rc<Value> = {
+switchStatement: Value = {
     // switchStatement ::= "SWITCH" "L_PAREN" expression "R_PAREN" "L_BRACE" switchCaseList "R_BRACE"
     <l:@L> "SWITCH" "L_PAREN" <e:expression> "R_PAREN" "L_BRACE" <cs:switchCaseList> "R_BRACE"
-        <r:@R> =>
-        make::case! {
+        <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "SWITCH `( expression `) `{ switchCaseList `}",
             args: vec![e, cs],
             typ: "switchStatement",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
 // - Break and continue statements
 
-breakStatement: Rc<Value> = {
+breakStatement: Value = {
     // breakStatement ::= "BREAK" "SEMICOLON"
-    <l:@L> "BREAK" "SEMICOLON" <r:@R> =>
-        make::case! {
+    <l:@L> "BREAK" "SEMICOLON" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "BREAK ';'",
             args: vec![],
             typ: "breakStatement",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
-continueStatement: Rc<Value> = {
+continueStatement: Value = {
     // continueStatement ::= "CONTINUE" "SEMICOLON"
-    <l:@L> "CONTINUE" "SEMICOLON" <r:@R> =>
-        make::case! {
+    <l:@L> "CONTINUE" "SEMICOLON" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "CONTINUE ';'",
             args: vec![],
             typ: "continueStatement",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
 // - Statements
 
 // The matched forms below implement the canonical statement alternatives
-statement: Rc<Value> = {
+statement: Value = {
     // statement ::= MatchedStatement
     MatchedStatement,
 
@@ -2434,7 +2360,7 @@ statement: Rc<Value> = {
 // Matched and unmatched forms attach each `ELSE` to the nearest open `IF`
 // without moving the canonical statement productions from this section.
 
-MatchedStatement: Rc<Value> = {
+MatchedStatement: Value = {
     // MatchedStatement ::= emptyStatement
     emptyStatement,
 
@@ -2471,70 +2397,64 @@ MatchedStatement: Rc<Value> = {
     // MatchedStatement ::= "IF" "L_PAREN" expression "R_PAREN" MatchedStatement "ELSE"
     //     MatchedStatement
     <l:@L> "IF" "L_PAREN" <condition:expression> "R_PAREN" <yes:MatchedStatement> "ELSE"
-        <no:MatchedStatement> <r:@R> =>
-        make::case! {
+        <no:MatchedStatement> <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "IF `( expression `) statement ELSE statement",
             args: vec![condition, yes, no],
             typ: "conditionalStatement",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
-UnmatchedStatement: Rc<Value> = {
+UnmatchedStatement: Value = {
     // UnmatchedStatement ::= UnmatchedForStatement
     UnmatchedForStatement,
 
     // UnmatchedStatement ::= "IF" "L_PAREN" expression "R_PAREN" statement
-    <l:@L> "IF" "L_PAREN" <condition:expression> "R_PAREN" <yes:statement> <r:@R> =>
-        make::case! {
+    <l:@L> "IF" "L_PAREN" <condition:expression> "R_PAREN" <yes:statement> <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "IF `( expression `) statement",
             args: vec![condition, yes],
             typ: "conditionalStatement",
             span: context.location_span(l, r),
-        },
+        }?) }),
 
     // UnmatchedStatement ::= "IF" "L_PAREN" expression "R_PAREN" MatchedStatement "ELSE"
     //     UnmatchedStatement
     <l:@L> "IF" "L_PAREN" <condition:expression> "R_PAREN" <yes:MatchedStatement> "ELSE"
-        <no:UnmatchedStatement> <r:@R> =>
-        make::case! {
+        <no:UnmatchedStatement> <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "IF `( expression `) statement ELSE statement",
             args: vec![condition, yes, no],
             typ: "conditionalStatement",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
-MatchedForStatement: Rc<Value> = {
+MatchedForStatement: Value = {
     // MatchedForStatement ::= annotationList "FOR" "L_PAREN" forInitStatementList "SEMICOLON"
     //     expression "SEMICOLON" forUpdateStatementList "R_PAREN" MatchedStatement
     <l:@L> <annotations:annotationList> "FOR" "L_PAREN" <init:forInitStatementList> "SEMICOLON"
         <condition:expression> "SEMICOLON" <update:forUpdateStatementList> "R_PAREN"
-        <body:MatchedStatement> <r:@R> =>
-        make::case! {
+        <body:MatchedStatement> <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "annotationList FOR `( forInitStatementList ';' expression ';' forUpdateStatementList `) statement",
             args: vec![annotations, init, condition, update, body],
             typ: "forStatement",
             span: context.location_span(l, r),
-        },
+        }?) }),
 
     // MatchedForStatement ::= annotationList "FOR" "L_PAREN" typeRef name "IN"
     //     forCollectionExpression "R_PAREN" MatchedStatement
     <l:@L> <annotations:annotationList> "FOR" "L_PAREN" <typ:typeRef> <name:name> "IN"
-        <collection:forCollectionExpression> "R_PAREN" <body:MatchedStatement> <r:@R> =>
-        make::case! {
+        <collection:forCollectionExpression> "R_PAREN" <body:MatchedStatement> <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "annotationList FOR `( typeRef name IN forCollectionExpression `) statement",
             args: vec![annotations, typ, name, collection, body],
             typ: "forStatement",
             span: context.location_span(l, r),
-        },
+        }?) }),
 
     // MatchedForStatement ::= annotationList "FOR" "L_PAREN" annotationListNonEmpty typeRef name
     //     "IN" forCollectionExpression "R_PAREN" MatchedStatement
     <l:@L> <annotations:annotationList> "FOR" "L_PAREN"
         <inner_annotations:annotationListNonEmpty> <typ:typeRef> <name:name> "IN"
-        <collection:forCollectionExpression> "R_PAREN" <body:MatchedStatement> <r:@R> =>
-        make::case! {
+        <collection:forCollectionExpression> "R_PAREN" <body:MatchedStatement> <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "annotationList FOR `( annotationList typeRef name IN forCollectionExpression `) statement",
             args: vec![
                 annotations,
@@ -2546,39 +2466,36 @@ MatchedForStatement: Rc<Value> = {
             ],
             typ: "forStatement",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
-UnmatchedForStatement: Rc<Value> = {
+UnmatchedForStatement: Value = {
     // UnmatchedForStatement ::= annotationList "FOR" "L_PAREN" forInitStatementList "SEMICOLON"
     //     expression "SEMICOLON" forUpdateStatementList "R_PAREN" UnmatchedStatement
     <l:@L> <annotations:annotationList> "FOR" "L_PAREN" <init:forInitStatementList> "SEMICOLON"
         <condition:expression> "SEMICOLON" <update:forUpdateStatementList> "R_PAREN"
-        <body:UnmatchedStatement> <r:@R> =>
-        make::case! {
+        <body:UnmatchedStatement> <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "annotationList FOR `( forInitStatementList ';' expression ';' forUpdateStatementList `) statement",
             args: vec![annotations, init, condition, update, body],
             typ: "forStatement",
             span: context.location_span(l, r),
-        },
+        }?) }),
 
     // UnmatchedForStatement ::= annotationList "FOR" "L_PAREN" typeRef name "IN"
     //     forCollectionExpression "R_PAREN" UnmatchedStatement
     <l:@L> <annotations:annotationList> "FOR" "L_PAREN" <typ:typeRef> <name:name> "IN"
-        <collection:forCollectionExpression> "R_PAREN" <body:UnmatchedStatement> <r:@R> =>
-        make::case! {
+        <collection:forCollectionExpression> "R_PAREN" <body:UnmatchedStatement> <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "annotationList FOR `( typeRef name IN forCollectionExpression `) statement",
             args: vec![annotations, typ, name, collection, body],
             typ: "forStatement",
             span: context.location_span(l, r),
-        },
+        }?) }),
 
     // UnmatchedForStatement ::= annotationList "FOR" "L_PAREN" annotationListNonEmpty typeRef name
     //     "IN" forCollectionExpression "R_PAREN" UnmatchedStatement
     <l:@L> <annotations:annotationList> "FOR" "L_PAREN"
         <inner_annotations:annotationListNonEmpty> <typ:typeRef> <name:name> "IN"
-        <collection:forCollectionExpression> "R_PAREN" <body:UnmatchedStatement> <r:@R> =>
-        make::case! {
+        <collection:forCollectionExpression> "R_PAREN" <body:UnmatchedStatement> <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "annotationList FOR `( annotationList typeRef name IN forCollectionExpression `) statement",
             args: vec![
                 annotations,
@@ -2590,63 +2507,61 @@ UnmatchedForStatement: Rc<Value> = {
             ],
             typ: "forStatement",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
 // - Declarations
 
 // - Constant and variable declarations
-initialValue: Rc<Value> = {
+initialValue: Value = {
     // initialValue ::= "ASSIGN" expression
-    <l:@L> "ASSIGN" <e:expression> <r:@R> =>
-        make::case! {
+    <l:@L> "ASSIGN" <e:expression> <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "'=' expression",
             args: vec![e],
             typ: "initializer",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
-constantDeclaration: Rc<Value> = {
+constantDeclaration: Value = {
     // constantDeclaration ::= annotationList "CONST" typeRef name initialValue "SEMICOLON"
     <l:@L> <al:annotationList> "CONST" <t:typeRef> <n:name> <i:initialValue> "SEMICOLON"
-        <r:@R> =>
-        make::case! {
+        <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "annotationList CONST typeRef name initializer ';'",
             args: vec![al, t, n, i],
             typ: "constantDeclaration",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
 #[inline]
-initializerOpt: Rc<Value> = {
+initializerOpt: Value = {
     // initializerOpt ::= epsilon
-    <l:@L>  <r:@R> => make::case! {
+    <l:@L>  <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "_EMPTY",
         args: vec![],
         typ: "initializerOpt",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // initializerOpt ::= initialValue
     <i:initialValue> => i,
 };
 
-variableDeclaration: Rc<Value> = {
+variableDeclaration: Value = {
     // variableDeclaration ::= annotationList typeRef name initializerOpt "SEMICOLON"
-    <l:@L> <al:annotationList> <t:typeRef> <n:name> <i:initializerOpt> "SEMICOLON" <r:@R> => {
-        declare::var(context, &n, false, Some(&t));
-        make::case! {
+    <l:@L> <al:annotationList> <t:typeRef> <n:name> <i:initializerOpt> "SEMICOLON" <r:@R> =>? parse::action(|| { Ok({
+        declare::var(arena, context, &n, false, Some(&t));
+        make::case! { arena: arena,
             shape: "annotationList typeRef name initializerOpt ';'",
             args: vec![al, t, n, i],
             typ: "variableDeclaration",
             span: context.location_span(l, r),
-        }
-    },
+        }?
+    }) }),
 };
 
-blockElementStatement: Rc<Value> = {
+blockElementStatement: Value = {
     // blockElementStatement ::= constantDeclaration
     <d:constantDeclaration> => d,
 
@@ -2657,79 +2572,74 @@ blockElementStatement: Rc<Value> = {
     <d:statement> => d,
 };
 
-blockElementStatementList: Rc<Value> = {
+blockElementStatementList: Value = {
     // blockElementStatementList ::= epsilon
-    <l:@L>  <r:@R> => make::case! {
+    <l:@L>  <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "_EMPTY",
         args: vec![],
         typ: "blockElementStatementList",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // blockElementStatementList ::= blockElementStatementList blockElementStatement
-    <l:@L> <sl:blockElementStatementList> <s:blockElementStatement> <r:@R> =>
-        make::case! {
+    <l:@L> <sl:blockElementStatementList> <s:blockElementStatement> <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "blockElementStatementList blockElementStatement",
             args: vec![sl, s],
             typ: "blockElementStatementList",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
 // - Function declarations
-functionPrototype: Rc<Value> = {
+functionPrototype: Value = {
     // functionPrototype ::= typeOrVoid name push_scope typeParameterListOpt "L_PAREN" parameterList
     //     "R_PAREN"
     <l:@L> <t:typeOrVoid> <n:declarationName> push_scope <tpl:typeParameterListOpt> "L_PAREN"
-        <pl:parameterList> "R_PAREN" <r:@R> =>
-        make::case! {
+        <pl:parameterList> "R_PAREN" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "typeOrVoid name typeParameterListOpt `( parameterList `)",
             args: vec![t, n, tpl, pl],
             typ: "functionPrototype",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
-functionDeclaration: Rc<Value> = {
+functionDeclaration: Value = {
     // functionDeclaration ::= annotationList functionPrototype blockStatement pop_scope
-    <l:@L> <al:annotationList> <p:functionPrototype> <b:blockStatement> pop_scope <r:@R> =>
-        make::case! {
+    <l:@L> <al:annotationList> <p:functionPrototype> <b:blockStatement> pop_scope <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "annotationList functionPrototype blockStatement",
             args: vec![al, p, b],
             typ: "functionDeclaration",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
 // - Action declarations
-actionDeclaration: Rc<Value> = {
+actionDeclaration: Value = {
     // actionDeclaration ::= annotationList "ACTION" name "L_PAREN" parameterList "R_PAREN"
     //     blockStatement
     <l:@L> <al:annotationList> "ACTION" <n:name> "L_PAREN" <pl:parameterList> "R_PAREN"
-        <s:blockStatement> <r:@R> =>
-        make::case! {
+        <s:blockStatement> <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "annotationList ACTION name `( parameterList `) blockStatement",
             args: vec![al, n, pl, s],
             typ: "actionDeclaration",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
 // - Instantiations
-objectInitializer: Rc<Value> = {
+objectInitializer: Value = {
     // objectInitializer ::= "ASSIGN" "L_BRACE" objectDeclarationList "R_BRACE"
-    <l:@L> "ASSIGN" "L_BRACE" <ds:objectDeclarationList> "R_BRACE" <r:@R> =>
-        make::case! {
+    <l:@L> "ASSIGN" "L_BRACE" <ds:objectDeclarationList> "R_BRACE" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "'=' `{ objectDeclarationList `}",
             args: vec![ds],
             typ: "objectInitializer",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
 // A type name may already carry expression-leading classification when this
 // production reduces, so both alternatives denote the same type reference.
-instantiationTypeRef: Rc<Value> = {
+instantiationTypeRef: Value = {
     // instantiationTypeRef ::= typeRef
     typeRef,
 
@@ -2737,31 +2647,29 @@ instantiationTypeRef: Rc<Value> = {
     expressionNamedType,
 };
 
-instantiation: Rc<Value> = {
+instantiation: Value = {
     // instantiation ::= annotationList instantiationTypeRef "L_PAREN" argumentList "R_PAREN" name
     //     "SEMICOLON"
     <l:@L> <al:annotationList> <t:instantiationTypeRef> "L_PAREN" <args:argumentList> "R_PAREN"
-        <n:name> "SEMICOLON" <r:@R> =>
-        make::case! {
+        <n:name> "SEMICOLON" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "annotationList typeRef `( argumentList `) name ';'",
             args: vec![al, t, args, n],
             typ: "instantiation",
             span: context.location_span(l, r),
-        },
+        }?) }),
 
     // instantiation ::= annotationList instantiationTypeRef "L_PAREN" argumentList "R_PAREN" name
     //     objectInitializer "SEMICOLON"
     <l:@L> <al:annotationList> <t:instantiationTypeRef> "L_PAREN" <args:argumentList> "R_PAREN"
-        <n:name> <i:objectInitializer> "SEMICOLON" <r:@R> =>
-        make::case! {
+        <n:name> <i:objectInitializer> "SEMICOLON" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "annotationList typeRef `( argumentList `) name objectInitializer ';'",
             args: vec![al, t, args, n, i],
             typ: "instantiation",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
-objectDeclaration: Rc<Value> = {
+objectDeclaration: Value = {
     // objectDeclaration ::= functionDeclaration
     <d:functionDeclaration> => d,
 
@@ -2769,152 +2677,144 @@ objectDeclaration: Rc<Value> = {
     <d:instantiation> => d,
 };
 
-objectDeclarationList: Rc<Value> = {
+objectDeclarationList: Value = {
     // objectDeclarationList ::= epsilon
-    <l:@L>  <r:@R> => make::case! {
+    <l:@L>  <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "_EMPTY",
         args: vec![],
         typ: "objectDeclarationList",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // objectDeclarationList ::= objectDeclarationList objectDeclaration
-    <l:@L> <ds:objectDeclarationList> <d:objectDeclaration> <r:@R> =>
-        make::case! {
+    <l:@L> <ds:objectDeclarationList> <d:objectDeclaration> <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "objectDeclarationList objectDeclaration",
             args: vec![ds, d],
             typ: "objectDeclarationList",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
 // - Error declarations
-errorDeclaration: Rc<Value> = {
+errorDeclaration: Value = {
     // errorDeclaration ::= "ERROR" "L_BRACE" nameList "R_BRACE"
-    <l:@L> "ERROR" "L_BRACE" <nl:nameList> "R_BRACE" <r:@R> => {
-        declare::vars(context, &nl);
-        make::case! {
+    <l:@L> "ERROR" "L_BRACE" <nl:nameList> "R_BRACE" <r:@R> =>? parse::action(|| { Ok({
+        declare::vars(arena, context, &nl);
+        make::case! { arena: arena,
             shape: "ERROR `{ nameList `}",
             args: vec![nl],
             typ: "errorDeclaration",
             span: context.location_span(l, r),
-        }
-    },
+        }?
+    }) }),
 };
 
 // - Match kind declarations
-matchKindDeclaration: Rc<Value> = {
+matchKindDeclaration: Value = {
     // matchKindDeclaration ::= "MATCH_KIND" "L_BRACE" nameList trailingCommaOpt "R_BRACE"
-    <l:@L> "MATCH_KIND" "L_BRACE" <nl:nameList> <c:trailingCommaOpt> "R_BRACE" <r:@R> => {
-        declare::vars(context, &nl);
-        make::case! {
+    <l:@L> "MATCH_KIND" "L_BRACE" <nl:nameList> <c:trailingCommaOpt> "R_BRACE" <r:@R> =>? parse::action(|| { Ok({
+        declare::vars(arena, context, &nl);
+        make::case! { arena: arena,
             shape: "MATCH_KIND `{ nameList trailingCommaOpt `}",
             args: vec![nl, c],
             typ: "matchKindDeclaration",
             span: context.location_span(l, r),
-        }
-    },
+        }?
+    }) }),
 };
 
 // - Derived type declarations
 
 // - Enum declarations
 
-enumTypeDeclaration: Rc<Value> = {
+enumTypeDeclaration: Value = {
     // enumTypeDeclaration ::= annotationList "ENUM" name "L_BRACE" nameList trailingCommaOpt "R_BRACE"
     <l:@L> <al:annotationList> "ENUM" <n:name> "L_BRACE" <nl:nameList> <c:trailingCommaOpt>
-        "R_BRACE" <r:@R> =>
-        make::case! {
+        "R_BRACE" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "annotationList ENUM name `{ nameList trailingCommaOpt `}",
             args: vec![al, n, nl, c],
             typ: "enumTypeDeclaration",
             span: context.location_span(l, r),
-        },
+        }?) }),
 
     // enumTypeDeclaration ::= annotationList "ENUM" typeRef name "L_BRACE" namedExpressionList
     //     trailingCommaOpt "R_BRACE"
     <l:@L> <al:annotationList> "ENUM" <t:typeRef> <n:name> "L_BRACE" <el:namedExpressionList>
-        <c:trailingCommaOpt> "R_BRACE" <r:@R> =>
-        make::case! {
+        <c:trailingCommaOpt> "R_BRACE" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "annotationList ENUM typeRef name `{ namedExpressionList trailingCommaOpt `}",
             args: vec![al, t, n, el, c],
             typ: "enumTypeDeclaration",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
 // - Struct, header, and union declarations
 
-typeField: Rc<Value> = {
+typeField: Value = {
     // typeField ::= annotationList typeRef name "SEMICOLON"
-    <l:@L> <al:annotationList> <t:typeRef> <n:name> "SEMICOLON" <r:@R> =>
-        make::case! {
+    <l:@L> <al:annotationList> <t:typeRef> <n:name> "SEMICOLON" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "annotationList typeRef name ';'",
             args: vec![al, t, n],
             typ: "typeField",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
-typeFieldList: Rc<Value> = {
+typeFieldList: Value = {
     // typeFieldList ::= epsilon
-    <l:@L>  <r:@R> => make::case! {
+    <l:@L>  <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "_EMPTY",
         args: vec![],
         typ: "typeFieldList",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // typeFieldList ::= typeFieldList typeField
-    <l:@L> <fl:typeFieldList> <f:typeField> <r:@R> =>
-        make::case! {
+    <l:@L> <fl:typeFieldList> <f:typeField> <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "typeFieldList typeField",
             args: vec![fl, f],
             typ: "typeFieldList",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
-structTypeDeclaration: Rc<Value> = {
+structTypeDeclaration: Value = {
     // structTypeDeclaration ::= annotationList "STRUCT" name typeParameterListOpt "L_BRACE"
     //     typeFieldList "R_BRACE"
     <l:@L> <al:annotationList> "STRUCT" <n:name> <tpl:typeParameterListOpt> "L_BRACE"
-        <fl:typeFieldList> "R_BRACE" <r:@R> =>
-        make::case! {
+        <fl:typeFieldList> "R_BRACE" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "annotationList STRUCT name typeParameterListOpt `{ typeFieldList `}",
             args: vec![al, n, tpl, fl],
             typ: "structTypeDeclaration",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
-headerTypeDeclaration: Rc<Value> = {
+headerTypeDeclaration: Value = {
     // headerTypeDeclaration ::= annotationList "HEADER" name typeParameterListOpt "L_BRACE"
     //     typeFieldList "R_BRACE"
     <l:@L> <al:annotationList> "HEADER" <n:name> <tpl:typeParameterListOpt> "L_BRACE"
-        <fl:typeFieldList> "R_BRACE" <r:@R> =>
-        make::case! {
+        <fl:typeFieldList> "R_BRACE" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "annotationList HEADER name typeParameterListOpt `{ typeFieldList `}",
             args: vec![al, n, tpl, fl],
             typ: "headerTypeDeclaration",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
-headerUnionTypeDeclaration: Rc<Value> = {
+headerUnionTypeDeclaration: Value = {
     // headerUnionTypeDeclaration ::= annotationList "HEADER_UNION" name typeParameterListOpt "L_BRACE"
     //     typeFieldList "R_BRACE"
     <l:@L> <al:annotationList> "HEADER_UNION" <n:name> <tpl:typeParameterListOpt> "L_BRACE"
-        <fl:typeFieldList> "R_BRACE" <r:@R> =>
-        make::case! {
+        <fl:typeFieldList> "R_BRACE" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "annotationList HEADER_UNION name typeParameterListOpt `{ typeFieldList `}",
             args: vec![al, n, tpl, fl],
             typ: "headerUnionTypeDeclaration",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
-derivedTypeDeclaration: Rc<Value> = {
+derivedTypeDeclaration: Value = {
     // derivedTypeDeclaration ::= enumTypeDeclaration
     <d:enumTypeDeclaration> => d,
 
@@ -2929,133 +2829,128 @@ derivedTypeDeclaration: Rc<Value> = {
 };
 
 // - Typedef and newtype declarations
-typedef: Rc<Value> = {
+typedef: Value = {
     // typedef ::= typeRef
     <t:typeRef> => t,
 
     // typedef ::= derivedTypeDeclaration
     <t:derivedTypeDeclaration> => {
-    let id = extract::id_declaration(&t).expect("known P4 declaration shape");
-    let has_params = extract::has_type_params_declaration(&t)
+    let id = extract::id_declaration(arena, &t).expect("known P4 declaration shape");
+    let has_params = extract::has_type_params_declaration(arena, &t)
         .expect("known P4 declaration type parameters");
     context.declare_typ(id, has_params).expect("P4 parser scope");
     t
 },
 };
 
-typedefDeclaration: Rc<Value> = {
+typedefDeclaration: Value = {
     // typedefDeclaration ::= annotationList "TYPEDEF" typedef name "SEMICOLON"
-    <l:@L> <al:annotationList> "TYPEDEF" <t:typedef> <n:name> "SEMICOLON" <r:@R> =>
-        make::case! {
+    <l:@L> <al:annotationList> "TYPEDEF" <t:typedef> <n:name> "SEMICOLON" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "annotationList TYPEDEF typedef name ';'",
             args: vec![al, t, n],
             typ: "typedefDeclaration",
             span: context.location_span(l, r),
-        },
+        }?) }),
 
     // typedefDeclaration ::= annotationList "TYPE" typeRef name "SEMICOLON"
-    <l:@L> <al:annotationList> "TYPE" <t:typeRef> <n:name> "SEMICOLON" <r:@R> =>
-        make::case! {
+    <l:@L> <al:annotationList> "TYPE" <t:typeRef> <n:name> "SEMICOLON" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "annotationList TYPE typeRef name ';'",
             args: vec![al, t, n],
             typ: "typedefDeclaration",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
 // - Extern declarations
-externFunctionDeclaration: Rc<Value> = {
+externFunctionDeclaration: Value = {
     // externFunctionDeclaration ::= annotationList "EXTERN" functionPrototype pop_scope "SEMICOLON"
-    <l:@L> <al:annotationList> "EXTERN" <p:functionPrototype> pop_scope "SEMICOLON" <r:@R> => {
-        let id = extract::id_function_prototype(&p)
+    <l:@L> <al:annotationList> "EXTERN" <p:functionPrototype> pop_scope "SEMICOLON" <r:@R> =>? parse::action(|| { Ok({
+        let id = extract::id_function_prototype(arena, &p)
             .expect("known P4 function prototype");
-        let has_params = extract::has_type_params_function_prototype(&p)
+        let has_params = extract::has_type_params_function_prototype(arena, &p)
             .expect("known P4 function prototype type parameters");
         context
             .declare_var(id, has_params, TypeId::Empty)
             .expect("P4 parser scope");
-        make::case! {
+        make::case! { arena: arena,
             shape: "annotationList EXTERN functionPrototype ';'",
             args: vec![al, p],
             typ: "externFunctionDeclaration",
             span: context.location_span(l, r),
-        }
-    },
+        }?
+    }) }),
 };
 
 // An extern constructor name can carry either type-name marker depending on
 // the following token, so this production accepts both classifications.
-constructorTypeIdentifier: Rc<Value> = {
-    // constructorTypeIdentifier ::= "NAME" "TYPENAME"
-    <l:@L> <text:"NAME"> "TYPENAME" <r:@R> =>
-        make::case! {
+constructorTypeIdentifier: Value = {
+    // constructorTypeIdentifier ::= token_name "TYPENAME"
+    <l:@L> <text:token_name> "TYPENAME" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "_TID text",
             args: vec![text],
             typ: "typeIdentifier",
             span: context.location_span(l, r),
-        },
+        }?) }),
 
-    // constructorTypeIdentifier ::= "NAME" "TYPENAME_EXPR"
-    <l:@L> <text:"NAME"> "TYPENAME_EXPR" <r:@R> =>
-        make::case! {
+    // constructorTypeIdentifier ::= token_name "TYPENAME_EXPR"
+    <l:@L> <text:token_name> "TYPENAME_EXPR" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "_TID text",
             args: vec![text],
             typ: "typeIdentifier",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
-externConstructorPrototype: Rc<Value> = {
+externConstructorPrototype: Value = {
     // externConstructorPrototype ::= annotationList constructorTypeIdentifier "L_PAREN" parameterList
     //     "R_PAREN" "SEMICOLON"
     <l:@L> <al:annotationList> <tid:constructorTypeIdentifier> "L_PAREN" <pl:parameterList>
-        "R_PAREN" "SEMICOLON" <r:@R> =>
-        make::case! {
+        "R_PAREN" "SEMICOLON" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "annotationList typeIdentifier `( parameterList `) ';'",
             args: vec![al, tid, pl],
             typ: "externConstructorPrototype",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
-externMethodPrototype: Rc<Value> = {
+externMethodPrototype: Value = {
     // externMethodPrototype ::= annotationList functionPrototype pop_scope "SEMICOLON"
-    <l:@L> <al:annotationList> <p:functionPrototype> pop_scope "SEMICOLON" <r:@R> => {
-        let id = extract::id_function_prototype(&p)
+    <l:@L> <al:annotationList> <p:functionPrototype> pop_scope "SEMICOLON" <r:@R> =>? parse::action(|| { Ok({
+        let id = extract::id_function_prototype(arena, &p)
             .expect("known P4 function prototype");
-        let has_params = extract::has_type_params_function_prototype(&p)
+        let has_params = extract::has_type_params_function_prototype(arena, &p)
             .expect("known P4 function prototype type parameters");
         context
             .declare_var(id, has_params, TypeId::Empty)
             .expect("P4 parser scope");
-        make::case! {
+        make::case! { arena: arena,
             shape: "annotationList functionPrototype ';'",
             args: vec![al, p],
             typ: "externMethodPrototype",
             span: context.location_span(l, r),
-        }
-    },
+        }?
+    }) }),
 
     // externMethodPrototype ::= annotationList "ABSTRACT" functionPrototype pop_scope "SEMICOLON"
     <l:@L> <al:annotationList> "ABSTRACT" <p:functionPrototype> pop_scope "SEMICOLON" <r:@R>
-        => {
-            let id = extract::id_function_prototype(&p)
+        =>? parse::action(|| { Ok({
+            let id = extract::id_function_prototype(arena, &p)
                 .expect("known P4 function prototype");
-            let has_params = extract::has_type_params_function_prototype(&p)
+            let has_params = extract::has_type_params_function_prototype(arena, &p)
                 .expect("known P4 function prototype type parameters");
             context
                 .declare_var(id, has_params, TypeId::Empty)
                 .expect("P4 parser scope");
-            make::case! {
+            make::case! { arena: arena,
                 shape: "annotationList ABSTRACT functionPrototype ';'",
                 args: vec![al, p],
                 typ: "externMethodPrototype",
                 span: context.location_span(l, r),
-            }
-        },
+            }?
+        }) }),
 };
 
-externConstructorOrMethodPrototype: Rc<Value> = {
+externConstructorOrMethodPrototype: Value = {
     // externConstructorOrMethodPrototype ::= externConstructorPrototype
     <p:externConstructorPrototype> => p,
 
@@ -3063,51 +2958,49 @@ externConstructorOrMethodPrototype: Rc<Value> = {
     <p:externMethodPrototype> => p,
 };
 
-externConstructorOrMethodPrototypeList: Rc<Value> = {
+externConstructorOrMethodPrototypeList: Value = {
     // externConstructorOrMethodPrototypeList ::= epsilon
-    <l:@L>  <r:@R> =>
-        make::case! {
+    <l:@L>  <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "_EMPTY",
             args: vec![],
             typ: "externConstructorOrMethodPrototypeList",
             span: context.location_span(l, r),
-        },
+        }?) }),
 
     // externConstructorOrMethodPrototypeList ::= externConstructorOrMethodPrototypeList
     //     externConstructorOrMethodPrototype
     <l:@L> <pl:externConstructorOrMethodPrototypeList> <p:externConstructorOrMethodPrototype>
-        <r:@R> =>
-        make::case! {
+        <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "externConstructorOrMethodPrototypeList externConstructorOrMethodPrototype",
             args: vec![pl, p],
             typ: "externConstructorOrMethodPrototypeList",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
-externObjectDeclaration: Rc<Value> = {
+externObjectDeclaration: Value = {
     // externObjectDeclaration ::= annotationList "EXTERN" push_externName typeParameterListOpt
     //     "L_BRACE" externConstructorOrMethodPrototypeList "R_BRACE" pop_scope
     <l:@L> <al:annotationList> "EXTERN" <n:push_externName> <tpl:typeParameterListOpt> "L_BRACE"
-        <pl:externConstructorOrMethodPrototypeList> "R_BRACE" <s:pop_scope> <r:@R> => {
-            let decl = make::case! {
+        <pl:externConstructorOrMethodPrototypeList> "R_BRACE" <s:pop_scope> <r:@R> =>? parse::action(|| { Ok({
+            let decl = make::case! { arena: arena,
                 shape: "annotationList EXTERN name typeParameterListOpt `{ externConstructorOrMethodPrototypeList `}",
-                args: vec![al, n.clone(), tpl, pl],
+                args: vec![al, n, tpl, pl],
                 typ: "externObjectDeclaration",
                 span: context.location_span(l, r),
-            };
-            declare::typ(
+            }?;
+            declare::typ(arena,
                 context,
                 &n,
-                extract::has_type_params_declaration(&decl)
+                extract::has_type_params_declaration(arena, &decl)
                     .expect("known P4 declaration type parameters"),
             );
-            declare::type_namespace(context, &n, s);
+            declare::type_namespace(arena, context, &n, s);
             decl
-        },
+        }) }),
 };
 
-externDeclaration: Rc<Value> = {
+externDeclaration: Value = {
     // externDeclaration ::= externFunctionDeclaration
     <d:externFunctionDeclaration> => d,
 
@@ -3118,102 +3011,97 @@ externDeclaration: Rc<Value> = {
 // - Parser statements and declarations
 
 // - Select expressions
-selectCase: Rc<Value> = {
+selectCase: Value = {
     // selectCase ::= keysetExpression "COLON" name "SEMICOLON"
-    <l:@L> <k:keysetExpression> colon <n:name> "SEMICOLON" <r:@R> =>
-        make::case! {
+    <l:@L> <k:keysetExpression> colon <n:name> "SEMICOLON" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "keysetExpression ':' name ';'",
             args: vec![k, n],
             typ: "selectCase",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
-selectCaseList: Rc<Value> = {
+selectCaseList: Value = {
     // selectCaseList ::= epsilon
-    <l:@L>  <r:@R> => make::case! {
+    <l:@L>  <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "_EMPTY",
         args: vec![],
         typ: "selectCaseList",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // selectCaseList ::= selectCaseList selectCase
-    <l:@L> <cl:selectCaseList> <c:selectCase> <r:@R> =>
-        make::case! {
+    <l:@L> <cl:selectCaseList> <c:selectCase> <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "selectCaseList selectCase",
             args: vec![cl, c],
             typ: "selectCaseList",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
-selectExpression: Rc<Value> = {
+selectExpression: Value = {
     // selectExpression ::= "SELECT" "L_PAREN" "R_PAREN" "L_BRACE" selectCaseList "R_BRACE"
-    <l:@L> "SELECT" "L_PAREN" <empty_l:@L> "R_PAREN" "L_BRACE" <cl:selectCaseList> "R_BRACE" <r:@R> => {
-    let empty = make::case! {
+    <l:@L> "SELECT" "L_PAREN" <empty_l:@L> "R_PAREN" "L_BRACE" <cl:selectCaseList> "R_BRACE" <r:@R> =>? parse::action(|| { Ok({
+    let empty = make::case! { arena: arena,
         shape: "_EMPTY",
         args: vec![],
         typ: "expressionList",
         span: context.location_span(empty_l, empty_l),
-    };
-    make::case! {
+    }?;
+    make::case! { arena: arena,
         shape: "SELECT `( expressionList `) `{ selectCaseList `}",
         args: vec![empty, cl],
         typ: "selectExpression",
         span: context.location_span(l, r),
-    }
-},
+    }?
+}) }),
 
     // selectExpression ::= "SELECT" "L_PAREN" expressionList "R_PAREN" "L_BRACE" selectCaseList
     //     "R_BRACE"
     <l:@L> "SELECT" "L_PAREN" <el:expressionList> "R_PAREN" "L_BRACE" <cl:selectCaseList>
-        "R_BRACE" <r:@R> =>
-        make::case! {
+        "R_BRACE" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "SELECT `( expressionList `) `{ selectCaseList `}",
             args: vec![el, cl],
             typ: "selectExpression",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
 // - Transition statements
-stateExpression: Rc<Value> = {
+stateExpression: Value = {
     // stateExpression ::= name "SEMICOLON"
-    <l:@L> <n:name> "SEMICOLON" <r:@R> =>
-        make::case! {
+    <l:@L> <n:name> "SEMICOLON" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "name ';'",
             args: vec![n],
             typ: "stateExpression",
             span: context.location_span(l, r),
-        },
+        }?) }),
 
     // stateExpression ::= selectExpression
     <e:selectExpression> => e,
 };
 
 #[inline]
-transitionStatement: Rc<Value> = {
+transitionStatement: Value = {
     // transitionStatement ::= epsilon
-    <l:@L>  <r:@R> => make::case! {
+    <l:@L>  <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "_EMPTY",
         args: vec![],
         typ: "transitionStatement",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // transitionStatement ::= "TRANSITION" stateExpression
-    <l:@L> "TRANSITION" <e:stateExpression> <r:@R> =>
-        make::case! {
+    <l:@L> "TRANSITION" <e:stateExpression> <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "TRANSITION stateExpression",
             args: vec![e],
             typ: "transitionStatement",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
 // - Value set declarations
-valueSetType: Rc<Value> = {
+valueSetType: Value = {
     // valueSetType ::= baseType
     <t:baseType> => t,
 
@@ -3224,35 +3112,33 @@ valueSetType: Rc<Value> = {
     <t:prefixedTypeName> => t,
 };
 
-valueSetDeclaration: Rc<Value> = {
+valueSetDeclaration: Value = {
     // valueSetDeclaration ::= annotationList "VALUE_SET" l_angle valueSetType
     //   r_angle "L_PAREN" expression "R_PAREN" name "SEMICOLON"
     <l:@L> <al:annotationList> "VALUE_SET" "L_ANGLE_ARGS" <t:valueSetType> r_angle "L_PAREN"
-        <s:expression> "R_PAREN" <n:name> "SEMICOLON" <r:@R> =>
-        make::case! {
+        <s:expression> "R_PAREN" <n:name> "SEMICOLON" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "annotationList VALUE_SET `< valueSetType `> `( expression `) name ';'",
             args: vec![al, t, s, n],
             typ: "valueSetDeclaration",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
 // - Parser type declarations
-parserTypeDeclaration: Rc<Value> = {
+parserTypeDeclaration: Value = {
     // parserTypeDeclaration ::= annotationList "PARSER" push_name typeParameterListOpt "L_PAREN"
     //     parameterList "R_PAREN" pop_scope "SEMICOLON"
     <l:@L> <al:annotationList> "PARSER" <n:push_name> <tpl:typeParameterListOpt> "L_PAREN"
-        <pl:parameterList> "R_PAREN" pop_scope "SEMICOLON" <r:@R> =>
-        make::case! {
+        <pl:parameterList> "R_PAREN" pop_scope "SEMICOLON" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "annotationList PARSER name typeParameterListOpt `( parameterList `) ';'",
             args: vec![al, n, tpl, pl],
             typ: "parserTypeDeclaration",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
 // - Parser declarations
-parserBlockElementStatement: Rc<Value> = {
+parserBlockElementStatement: Value = {
     // parserBlockElementStatement ::= constantDeclaration
     <s:constantDeclaration> => s,
 
@@ -3263,37 +3149,34 @@ parserBlockElementStatement: Rc<Value> = {
     <s:parserStatement> => s,
 };
 
-parserBlockElementStatementList: Rc<Value> = {
+parserBlockElementStatementList: Value = {
     // parserBlockElementStatementList ::= epsilon
-    <l:@L>  <r:@R> =>
-        make::case! {
+    <l:@L>  <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "_EMPTY",
             args: vec![],
             typ: "parserBlockElementStatementList",
             span: context.location_span(l, r),
-        },
+        }?) }),
 
     // parserBlockElementStatementList ::= parserBlockElementStatementList
     //     parserBlockElementStatement
-    <l:@L> <sl:parserBlockElementStatementList> <s:parserBlockElementStatement> <r:@R> =>
-        make::case! {
+    <l:@L> <sl:parserBlockElementStatementList> <s:parserBlockElementStatement> <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "parserBlockElementStatementList parserBlockElementStatement",
             args: vec![sl, s],
             typ: "parserBlockElementStatementList",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
-parserBlockStatement: Rc<Value> = {
+parserBlockStatement: Value = {
     // parserBlockStatement ::= annotationList "L_BRACE" parserBlockElementStatementList "R_BRACE"
     <l:@L> <al:annotationList> "L_BRACE" <sl:parserBlockElementStatementList> "R_BRACE"
-        <r:@R> =>
-        make::case! {
+        <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "annotationList `{ parserBlockElementStatementList `}",
             args: vec![al, sl],
             typ: "parserBlockStatement",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
 // parserConditionalStatement ::= "IF" "L_PAREN" expression "R_PAREN"
@@ -3302,7 +3185,7 @@ parserBlockStatement: Rc<Value> = {
 //     parserStatement
 
 // The matched forms below implement the canonical parserStatement alternatives
-parserStatement: Rc<Value> = {
+parserStatement: Value = {
     // parserStatement ::= ParserMatchedStatement
     ParserMatchedStatement,
 
@@ -3312,7 +3195,7 @@ parserStatement: Rc<Value> = {
 
 // - LALRPOP parser-statement dangling-else lowering
 
-ParserMatchedStatement: Rc<Value> = {
+ParserMatchedStatement: Value = {
     // ParserMatchedStatement ::= emptyStatement
     emptyStatement,
 
@@ -3331,66 +3214,61 @@ ParserMatchedStatement: Rc<Value> = {
     // ParserMatchedStatement ::= "IF" "L_PAREN" expression "R_PAREN" ParserMatchedStatement "ELSE"
     //     ParserMatchedStatement
     <l:@L> "IF" "L_PAREN" <condition:expression> "R_PAREN" <yes:ParserMatchedStatement> "ELSE"
-        <no:ParserMatchedStatement> <r:@R> =>
-        make::case! {
+        <no:ParserMatchedStatement> <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "IF `( expression `) parserStatement ELSE parserStatement",
             args: vec![condition, yes, no],
             typ: "parserConditionalStatement",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
-ParserUnmatchedStatement: Rc<Value> = {
+ParserUnmatchedStatement: Value = {
     // ParserUnmatchedStatement ::= "IF" "L_PAREN" expression "R_PAREN" parserStatement
-    <l:@L> "IF" "L_PAREN" <condition:expression> "R_PAREN" <yes:parserStatement> <r:@R> =>
-        make::case! {
+    <l:@L> "IF" "L_PAREN" <condition:expression> "R_PAREN" <yes:parserStatement> <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "IF `( expression `) parserStatement",
             args: vec![condition, yes],
             typ: "parserConditionalStatement",
             span: context.location_span(l, r),
-        },
+        }?) }),
 
     // ParserUnmatchedStatement ::= "IF" "L_PAREN" expression "R_PAREN" ParserMatchedStatement
     //     "ELSE" ParserUnmatchedStatement
     <l:@L> "IF" "L_PAREN" <condition:expression> "R_PAREN" <yes:ParserMatchedStatement> "ELSE"
-        <no:ParserUnmatchedStatement> <r:@R> =>
-        make::case! {
+        <no:ParserUnmatchedStatement> <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "IF `( expression `) parserStatement ELSE parserStatement",
             args: vec![condition, yes, no],
             typ: "parserConditionalStatement",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
-parserState: Rc<Value> = {
+parserState: Value = {
     // parserState ::= annotationList "STATE" push_name "L_BRACE" parserBlockElementStatementList
     //     transitionStatement "R_BRACE" pop_scope
     <l:@L> <al:annotationList> "STATE" <n:push_name> "L_BRACE"
         <sl:parserBlockElementStatementList> <t:transitionStatement> "R_BRACE" pop_scope <r:@R>
-        =>
-        make::case! {
+        =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "annotationList STATE name `{ parserBlockElementStatementList transitionStatement `}",
             args: vec![al, n, sl, t],
             typ: "parserState",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
-parserStateList: Rc<Value> = {
+parserStateList: Value = {
     // parserStateList ::= parserState
     <s:parserState> => s,
 
     // parserStateList ::= parserStateList parserState
-    <l:@L> <sl:parserStateList> <s:parserState> <r:@R> =>
-        make::case! {
+    <l:@L> <sl:parserStateList> <s:parserState> <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "parserStateList parserState",
             args: vec![sl, s],
             typ: "parserStateList",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
-parserLocalDeclaration: Rc<Value> = {
+parserLocalDeclaration: Value = {
     // parserLocalDeclaration ::= constantDeclaration
     <d:constantDeclaration> => d,
 
@@ -3404,38 +3282,36 @@ parserLocalDeclaration: Rc<Value> = {
     <d:valueSetDeclaration> => d,
 };
 
-parserLocalDeclarationList: Rc<Value> = {
+parserLocalDeclarationList: Value = {
     // parserLocalDeclarationList ::= epsilon
-    <l:@L>  <r:@R> => make::case! {
+    <l:@L>  <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "_EMPTY",
         args: vec![],
         typ: "parserLocalDeclarationList",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // parserLocalDeclarationList ::= parserLocalDeclarationList parserLocalDeclaration
-    <l:@L> <dl:parserLocalDeclarationList> <d:parserLocalDeclaration> <r:@R> =>
-        make::case! {
+    <l:@L> <dl:parserLocalDeclarationList> <d:parserLocalDeclaration> <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "parserLocalDeclarationList parserLocalDeclaration",
             args: vec![dl, d],
             typ: "parserLocalDeclarationList",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
-parserDeclaration: Rc<Value> = {
+parserDeclaration: Value = {
     // parserDeclaration ::= annotationList "PARSER" push_name typeParameterListOpt "L_PAREN"
     //     parameterList "R_PAREN" constructorParameterListOpt "L_BRACE" parserLocalDeclarationList
     //     parserStateList "R_BRACE" pop_scope
     <l:@L> <al:annotationList> "PARSER" <n:push_name> <tpl:typeParameterListOpt> "L_PAREN"
         <pl:parameterList> "R_PAREN" <cpl:constructorParameterListOpt> "L_BRACE"
-        <dl:parserLocalDeclarationList> <sl:parserStateList> "R_BRACE" pop_scope <r:@R> =>
-        make::case! {
+        <dl:parserLocalDeclarationList> <sl:parserStateList> "R_BRACE" pop_scope <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "annotationList PARSER name typeParameterListOpt `( parameterList `) constructorParameterListOpt `{ parserLocalDeclarationList parserStateList `}",
             args: vec![al, n, tpl, pl, cpl, dl, sl],
             typ: "parserDeclaration",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
 // - Control statements and declarations
@@ -3443,262 +3319,245 @@ parserDeclaration: Rc<Value> = {
 // - Table declarations
 
 #[inline]
-constOpt: Rc<Value> = {
+constOpt: Value = {
     // constOpt ::= epsilon
-    <l:@L>  <r:@R> => make::case! {
+    <l:@L>  <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "_EMPTY",
         args: vec![],
         typ: "constOpt",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // constOpt ::= "CONST"
-    <l:@L> "CONST" <r:@R> => make::case! {
+    <l:@L> "CONST" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "CONST",
         args: vec![],
         typ: "constOpt",
         span: context.location_span(l, r),
-    },
+    }?) }),
 };
 
 // - Table key property
 
-tableKey: Rc<Value> = {
+tableKey: Value = {
     // tableKey ::= expression "COLON" name annotationList "SEMICOLON"
-    <l:@L> <e:expression> colon <n:name> <al:annotationList> "SEMICOLON" <r:@R> =>
-        make::case! {
+    <l:@L> <e:expression> colon <n:name> <al:annotationList> "SEMICOLON" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "expression ':' name annotationList ';'",
             args: vec![e, n, al],
             typ: "tableKey",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
-tableKeyList: Rc<Value> = {
+tableKeyList: Value = {
     // tableKeyList ::= epsilon
-    <l:@L>  <r:@R> => make::case! {
+    <l:@L>  <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "_EMPTY",
         args: vec![],
         typ: "tableKeyList",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // tableKeyList ::= tableKeyList tableKey
-    <l:@L> <kl:tableKeyList> <k:tableKey> <r:@R> =>
-        make::case! {
+    <l:@L> <kl:tableKeyList> <k:tableKey> <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "tableKeyList tableKey",
             args: vec![kl, k],
             typ: "tableKeyList",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
 // - Table actions property
 
-tableActionReference: Rc<Value> = {
+tableActionReference: Value = {
     // tableActionReference ::= prefixedNonTypeName
     <n:prefixedNonTypeName> => n,
 
     // tableActionReference ::= prefixedNonTypeName "L_PAREN" argumentList "R_PAREN"
-    <l:@L> <n:prefixedNonTypeName> "L_PAREN" <al:argumentList> "R_PAREN" <r:@R> =>
-        make::case! {
+    <l:@L> <n:prefixedNonTypeName> "L_PAREN" <al:argumentList> "R_PAREN" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "prefixedNonTypeName `( argumentList `)",
             args: vec![n, al],
             typ: "tableActionReference",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
-tableAction: Rc<Value> = {
+tableAction: Value = {
     // tableAction ::= annotationList tableActionReference "SEMICOLON"
-    <l:@L> <al:annotationList> <ac:tableActionReference> "SEMICOLON" <r:@R> =>
-        make::case! {
+    <l:@L> <al:annotationList> <ac:tableActionReference> "SEMICOLON" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "annotationList tableActionReference ';'",
             args: vec![al, ac],
             typ: "tableAction",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
-tableActionList: Rc<Value> = {
+tableActionList: Value = {
     // tableActionList ::= epsilon
-    <l:@L>  <r:@R> => make::case! {
+    <l:@L>  <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "_EMPTY",
         args: vec![],
         typ: "tableActionList",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // tableActionList ::= tableActionList tableAction
-    <l:@L> <acl:tableActionList> <ac:tableAction> <r:@R> =>
-        make::case! {
+    <l:@L> <acl:tableActionList> <ac:tableAction> <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "tableActionList tableAction",
             args: vec![acl, ac],
             typ: "tableActionList",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
 // - Table entry property
 
-tableEntryPriority: Rc<Value> = {
+tableEntryPriority: Value = {
     // tableEntryPriority ::= "PRIORITY" "ASSIGN" integerLiteral "COLON"
-    <l:@L> "PRIORITY" "ASSIGN" <int:integerLiteral> colon <r:@R> =>
-        make::case! {
+    <l:@L> "PRIORITY" "ASSIGN" <int:integerLiteral> colon <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "PRIORITY '=' integerLiteral ':'",
             args: vec![int],
             typ: "tableEntryPriority",
             span: context.location_span(l, r),
-        },
+        }?) }),
 
     // tableEntryPriority ::= "PRIORITY" "ASSIGN" "L_PAREN" expression "R_PAREN" "COLON"
-    <l:@L> "PRIORITY" "ASSIGN" "L_PAREN" <e:expression> "R_PAREN" colon <r:@R> =>
-        make::case! {
+    <l:@L> "PRIORITY" "ASSIGN" "L_PAREN" <e:expression> "R_PAREN" colon <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "PRIORITY '=' `( expression `) ':'",
             args: vec![e],
             typ: "tableEntryPriority",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
-tableEntry: Rc<Value> = {
+tableEntry: Value = {
     // tableEntry ::= constOpt tableEntryPriority keysetExpression "COLON"
     //   tableActionReference annotationList "SEMICOLON"
     <l:@L> <c:constOpt> <p:tableEntryPriority> <k:keysetExpression> colon
-        <ac:tableActionReference> <al:annotationList> "SEMICOLON" <r:@R> =>
-        make::case! {
+        <ac:tableActionReference> <al:annotationList> "SEMICOLON" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "constOpt tableEntryPriority keysetExpression ':' tableActionReference annotationList ';'",
             args: vec![c, p, k, ac, al],
             typ: "tableEntry",
             span: context.location_span(l, r),
-        },
+        }?) }),
 
     // tableEntry ::= constOpt keysetExpression "COLON" tableActionReference annotationList
     //     "SEMICOLON"
     <l:@L> <c:constOpt> <k:keysetExpression> colon <ac:tableActionReference> <al:annotationList>
-        "SEMICOLON" <r:@R> =>
-        make::case! {
+        "SEMICOLON" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "constOpt keysetExpression ':' tableActionReference annotationList ';'",
             args: vec![c, k, ac, al],
             typ: "tableEntry",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
-tableEntryList: Rc<Value> = {
+tableEntryList: Value = {
     // tableEntryList ::= epsilon
-    <l:@L>  <r:@R> => make::case! {
+    <l:@L>  <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "_EMPTY",
         args: vec![],
         typ: "tableEntryList",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // tableEntryList ::= tableEntryList tableEntry
-    <l:@L> <el:tableEntryList> <e:tableEntry> <r:@R> =>
-        make::case! {
+    <l:@L> <el:tableEntryList> <e:tableEntry> <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "tableEntryList tableEntry",
             args: vec![el, e],
             typ: "tableEntryList",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
 // - Table properties
 
-tableProperty: Rc<Value> = {
+tableProperty: Value = {
     // tableProperty ::= "KEY" "ASSIGN" "L_BRACE" tableKeyList "R_BRACE"
-    <l:@L> "KEY" "ASSIGN" "L_BRACE" <kl:tableKeyList> "R_BRACE" <r:@R> =>
-        make::case! {
+    <l:@L> "KEY" "ASSIGN" "L_BRACE" <kl:tableKeyList> "R_BRACE" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "KEY '=' `{ tableKeyList `}",
             args: vec![kl],
             typ: "tableProperty",
             span: context.location_span(l, r),
-        },
+        }?) }),
 
     // tableProperty ::= "ACTIONS" "ASSIGN" "L_BRACE" tableActionList "R_BRACE"
-    <l:@L> "ACTIONS" "ASSIGN" "L_BRACE" <acl:tableActionList> "R_BRACE" <r:@R> =>
-        make::case! {
+    <l:@L> "ACTIONS" "ASSIGN" "L_BRACE" <acl:tableActionList> "R_BRACE" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "ACTIONS '=' `{ tableActionList `}",
             args: vec![acl],
             typ: "tableProperty",
             span: context.location_span(l, r),
-        },
+        }?) }),
 
     // tableProperty ::= annotationList constOpt "ENTRIES" "ASSIGN" "L_BRACE" tableEntryList
     //     "R_BRACE"
     <l:@L> <al:annotationList> <c:constOpt> "ENTRIES" "ASSIGN" "L_BRACE" <el:tableEntryList>
-        "R_BRACE" <r:@R> =>
-        make::case! {
+        "R_BRACE" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "annotationList constOpt ENTRIES '=' `{ tableEntryList `}",
             args: vec![al, c, el],
             typ: "tableProperty",
             span: context.location_span(l, r),
-        },
+        }?) }),
 
     // tableProperty ::= annotationList constOpt tableCustomName initialValue "SEMICOLON"
     <l:@L> <al:annotationList> <c:constOpt> <n:tableCustomName> <i:initialValue> "SEMICOLON"
-        <r:@R> =>
-        make::case! {
+        <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "annotationList constOpt tableCustomName initializer ';'",
             args: vec![al, c, n, i],
             typ: "tableProperty",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
-tablePropertyList: Rc<Value> = {
+tablePropertyList: Value = {
     // tablePropertyList ::= epsilon
-    <l:@L>  <r:@R> => make::case! {
+    <l:@L>  <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "_EMPTY",
         args: vec![],
         typ: "tablePropertyList",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // tablePropertyList ::= tablePropertyList tableProperty
-    <l:@L> <pl:tablePropertyList> <p:tableProperty> <r:@R> =>
-        make::case! {
+    <l:@L> <pl:tablePropertyList> <p:tableProperty> <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "tablePropertyList tableProperty",
             args: vec![pl, p],
             typ: "tablePropertyList",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
-tableDeclaration: Rc<Value> = {
+tableDeclaration: Value = {
     // tableDeclaration ::= annotationList "TABLE" name "L_BRACE" tablePropertyList "R_BRACE"
     <l:@L> <al:annotationList> "TABLE" <n:name> "L_BRACE" <pl:tablePropertyList> "R_BRACE"
-        <r:@R> =>
-        make::case! {
+        <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "annotationList TABLE name `{ tablePropertyList `}",
             args: vec![al, n, pl],
             typ: "tableDeclaration",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
 // - Control type declarations
-controlTypeDeclaration: Rc<Value> = {
+controlTypeDeclaration: Value = {
     // controlTypeDeclaration ::= annotationList "CONTROL" push_name typeParameterListOpt "L_PAREN"
     //     parameterList "R_PAREN" pop_scope "SEMICOLON"
     <l:@L> <al:annotationList> "CONTROL" <n:push_name> <tpl:typeParameterListOpt> "L_PAREN"
-        <pl:parameterList> "R_PAREN" pop_scope "SEMICOLON" <r:@R> =>
-        make::case! {
+        <pl:parameterList> "R_PAREN" pop_scope "SEMICOLON" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "annotationList CONTROL name typeParameterListOpt `( parameterList `) ';'",
             args: vec![al, n, tpl, pl],
             typ: "controlTypeDeclaration",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
 // - Control declarations
-controlBody: Rc<Value> = {
+controlBody: Value = {
     // controlBody ::= blockStatement
     <b:blockStatement> => b,
 };
 
-controlLocalDeclaration: Rc<Value> = {
+controlLocalDeclaration: Value = {
     // controlLocalDeclaration ::= constantDeclaration
     <d:constantDeclaration> => d,
 
@@ -3713,64 +3572,61 @@ controlLocalDeclaration: Rc<Value> = {
 
     // controlLocalDeclaration ::= tableDeclaration
     <d:tableDeclaration> => {
-    let id = extract::id_declaration(&d).expect("known P4 declaration shape");
+    let id = extract::id_declaration(arena, &d).expect("known P4 declaration shape");
     context.declare_var(id, false, TypeId::Empty).expect("P4 parser scope");
     d
 },
 };
 
-controlLocalDeclarationList: Rc<Value> = {
+controlLocalDeclarationList: Value = {
     // controlLocalDeclarationList ::= epsilon
-    <l:@L>  <r:@R> => make::case! {
+    <l:@L>  <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "_EMPTY",
         args: vec![],
         typ: "controlLocalDeclarationList",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // controlLocalDeclarationList ::= controlLocalDeclarationList controlLocalDeclaration
-    <l:@L> <dl:controlLocalDeclarationList> <d:controlLocalDeclaration> <r:@R> =>
-        make::case! {
+    <l:@L> <dl:controlLocalDeclarationList> <d:controlLocalDeclaration> <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "controlLocalDeclarationList controlLocalDeclaration",
             args: vec![dl, d],
             typ: "controlLocalDeclarationList",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
-controlDeclaration: Rc<Value> = {
+controlDeclaration: Value = {
     // controlDeclaration ::= annotationList "CONTROL" push_name typeParameterListOpt "L_PAREN"
     //     parameterList "R_PAREN" constructorParameterListOpt "L_BRACE" controlLocalDeclarationList
     //     "APPLY" controlBody "R_BRACE" pop_scope
     <l:@L> <al:annotationList> "CONTROL" <n:push_name> <tpl:typeParameterListOpt> "L_PAREN"
         <pl:parameterList> "R_PAREN" <cpl:constructorParameterListOpt> "L_BRACE"
-        <dl:controlLocalDeclarationList> "APPLY" <b:controlBody> "R_BRACE" pop_scope <r:@R> =>
-        make::case! {
+        <dl:controlLocalDeclarationList> "APPLY" <b:controlBody> "R_BRACE" pop_scope <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "annotationList CONTROL name typeParameterListOpt `( parameterList `) constructorParameterListOpt `{ controlLocalDeclarationList APPLY controlBody `}",
             args: vec![al, n, tpl, pl, cpl, dl, b],
             typ: "controlDeclaration",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
 // - Package type declarations
 
-packageTypeDeclaration: Rc<Value> = {
+packageTypeDeclaration: Value = {
     // packageTypeDeclaration ::= annotationList "PACKAGE" push_name typeParameterListOpt "L_PAREN"
     //     parameterList "R_PAREN" pop_scope "SEMICOLON"
     <l:@L> <al:annotationList> "PACKAGE" <n:push_name> <tpl:typeParameterListOpt> "L_PAREN"
-        <pl:parameterList> "R_PAREN" pop_scope "SEMICOLON" <r:@R> =>
-        make::case! {
+        <pl:parameterList> "R_PAREN" pop_scope "SEMICOLON" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "annotationList PACKAGE name typeParameterListOpt `( parameterList `) ';'",
             args: vec![al, n, tpl, pl],
             typ: "packageTypeDeclaration",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
 // - Type declarations
 
-typeDeclaration: Rc<Value> = {
+typeDeclaration: Value = {
     // typeDeclaration ::= derivedTypeDeclaration
     <d:derivedTypeDeclaration> => d,
 
@@ -3789,13 +3645,13 @@ typeDeclaration: Rc<Value> = {
 
 // - Declarations
 
-declaration: Rc<Value> = {
+declaration: Value = {
     // declaration ::= constantDeclaration
     <constant:constantDeclaration> => {
-    let id = extract::id_declaration(&constant).expect("known P4 declaration shape");
-    let has_params = extract::has_type_params_declaration(&constant)
+    let id = extract::id_declaration(arena, &constant).expect("known P4 declaration shape");
+    let has_params = extract::has_type_params_declaration(arena, &constant)
         .expect("known P4 declaration type parameters");
-    let type_id = extract::type_id_declaration(&constant)
+    let type_id = extract::type_id_declaration(arena, &constant)
         .expect("known P4 declaration type");
     context.declare_var(id, has_params, type_id).expect("P4 parser scope");
     constant
@@ -3803,16 +3659,16 @@ declaration: Rc<Value> = {
 
     // declaration ::= instantiation
     <inst:instantiation> => {
-    let id = extract::id_declaration(&inst).expect("known P4 declaration shape");
-    let type_id = extract::type_id_declaration(&inst).expect("known P4 declaration type");
+    let id = extract::id_declaration(arena, &inst).expect("known P4 declaration shape");
+    let type_id = extract::type_id_declaration(arena, &inst).expect("known P4 declaration type");
     context.declare_var(id, false, type_id).expect("P4 parser scope");
     inst
 },
 
     // declaration ::= functionDeclaration
     <func:functionDeclaration> => {
-    let id = extract::id_declaration(&func).expect("known P4 declaration shape");
-    let has_params = extract::has_type_params_declaration(&func)
+    let id = extract::id_declaration(arena, &func).expect("known P4 declaration shape");
+    let has_params = extract::has_type_params_declaration(arena, &func)
         .expect("known P4 declaration type parameters");
     context.declare_var(id, has_params, TypeId::Empty).expect("P4 parser scope");
     func
@@ -3820,7 +3676,7 @@ declaration: Rc<Value> = {
 
     // declaration ::= actionDeclaration
     <action:actionDeclaration> => {
-    let id = extract::id_declaration(&action).expect("known P4 declaration shape");
+    let id = extract::id_declaration(arena, &action).expect("known P4 declaration shape");
     context.declare_var(id, false, TypeId::Empty).expect("P4 parser scope");
     action
 },
@@ -3836,8 +3692,8 @@ declaration: Rc<Value> = {
 
     // declaration ::= parserDeclaration
     <d:parserDeclaration> => {
-    let id = extract::id_declaration(&d).expect("known P4 declaration shape");
-    let has_params = extract::has_type_params_declaration(&d)
+    let id = extract::id_declaration(arena, &d).expect("known P4 declaration shape");
+    let has_params = extract::has_type_params_declaration(arena, &d)
         .expect("known P4 declaration type parameters");
     context.declare_typ(id, has_params).expect("P4 parser scope");
     d
@@ -3845,8 +3701,8 @@ declaration: Rc<Value> = {
 
     // declaration ::= controlDeclaration
     <d:controlDeclaration> => {
-    let id = extract::id_declaration(&d).expect("known P4 declaration shape");
-    let has_params = extract::has_type_params_declaration(&d)
+    let id = extract::id_declaration(arena, &d).expect("known P4 declaration shape");
+    let has_params = extract::has_type_params_declaration(arena, &d)
         .expect("known P4 declaration type parameters");
     context.declare_typ(id, has_params).expect("P4 parser scope");
     d
@@ -3854,8 +3710,8 @@ declaration: Rc<Value> = {
 
     // declaration ::= typeDeclaration
     <d:typeDeclaration> => {
-    let id = extract::id_declaration(&d).expect("known P4 declaration shape");
-    let has_params = extract::has_type_params_declaration(&d)
+    let id = extract::id_declaration(arena, &d).expect("known P4 declaration shape");
+    let has_params = extract::has_type_params_declaration(arena, &d)
         .expect("known P4 declaration type parameters");
     context.declare_typ(id, has_params).expect("P4 parser scope");
     d
@@ -3866,410 +3722,406 @@ declaration: Rc<Value> = {
 
 // LALRPOP also accepts expression-context type and angle markers emitted by
 // the Rust lexer; both retain the canonical annotation token value.
-annotationToken: Rc<Value> = {
-    // annotationToken ::= "UNEXPECTED_TOKEN"
-    <l:@L> "UNEXPECTED_TOKEN" <r:@R> =>
-        make::case! {
+annotationToken: Value = {
+    // annotationToken ::= token_unexpected_token
+    <l:@L> token_unexpected_token <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "UNEXPECTED_TOKEN",
             args: vec![],
             typ: "annotationToken",
             span: context.location_span(l, r),
-        },
+        }?) }),
 
     // annotationToken ::= "ABSTRACT"
-    <l:@L> "ABSTRACT" <r:@R> => make::case! {
+    <l:@L> "ABSTRACT" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "ABSTRACT",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "ACTION"
-    <l:@L> "ACTION" <r:@R> => make::case! {
+    <l:@L> "ACTION" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "ACTION",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "ACTIONS"
-    <l:@L> "ACTIONS" <r:@R> => make::case! {
+    <l:@L> "ACTIONS" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "ACTIONS",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "APPLY"
-    <l:@L> "APPLY" <r:@R> => make::case! {
+    <l:@L> "APPLY" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "APPLY",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "BOOL"
-    <l:@L> "BOOL" <r:@R> => make::case! {
+    <l:@L> "BOOL" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "BOOL",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "BIT"
-    <l:@L> "BIT" <r:@R> => make::case! {
+    <l:@L> "BIT" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "BIT",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "BREAK"
-    <l:@L> "BREAK" <r:@R> => make::case! {
+    <l:@L> "BREAK" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "BREAK",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "CONST"
-    <l:@L> "CONST" <r:@R> => make::case! {
+    <l:@L> "CONST" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "CONST",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "CONTINUE"
-    <l:@L> "CONTINUE" <r:@R> => make::case! {
+    <l:@L> "CONTINUE" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "CONTINUE",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "CONTROL"
-    <l:@L> "CONTROL" <r:@R> => make::case! {
+    <l:@L> "CONTROL" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "CONTROL",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "DEFAULT"
-    <l:@L> "DEFAULT" <r:@R> => make::case! {
+    <l:@L> "DEFAULT" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "DEFAULT",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "ELSE"
-    <l:@L> "ELSE" <r:@R> => make::case! {
+    <l:@L> "ELSE" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "ELSE",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "ENTRIES"
-    <l:@L> "ENTRIES" <r:@R> => make::case! {
+    <l:@L> "ENTRIES" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "ENTRIES",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "ENUM"
-    <l:@L> "ENUM" <r:@R> => make::case! {
+    <l:@L> "ENUM" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "ENUM",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "ERROR"
-    <l:@L> "ERROR" <r:@R> => make::case! {
+    <l:@L> "ERROR" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "ERROR",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "EXIT"
-    <l:@L> "EXIT" <r:@R> => make::case! {
+    <l:@L> "EXIT" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "EXIT",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "EXTERN"
-    <l:@L> "EXTERN" <r:@R> => make::case! {
+    <l:@L> "EXTERN" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "EXTERN",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "FALSE"
-    <l:@L> "FALSE" <r:@R> => make::case! {
+    <l:@L> "FALSE" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "FALSE",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "FOR"
-    <l:@L> "FOR" <r:@R> => make::case! {
+    <l:@L> "FOR" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "FOR",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "HEADER"
-    <l:@L> "HEADER" <r:@R> => make::case! {
+    <l:@L> "HEADER" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "HEADER",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "HEADER_UNION"
-    <l:@L> "HEADER_UNION" <r:@R> =>
-        make::case! {
+    <l:@L> "HEADER_UNION" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "HEADER_UNION",
             args: vec![],
             typ: "annotationToken",
             span: context.location_span(l, r),
-        },
+        }?) }),
 
     // annotationToken ::= "IF"
-    <l:@L> "IF" <r:@R> => make::case! {
+    <l:@L> "IF" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "IF",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "IN"
-    <l:@L> "IN" <r:@R> => make::case! {
+    <l:@L> "IN" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "IN",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "INOUT"
-    <l:@L> "INOUT" <r:@R> => make::case! {
+    <l:@L> "INOUT" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "INOUT",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "INT"
-    <l:@L> "INT" <r:@R> => make::case! {
+    <l:@L> "INT" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "INT",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "KEY"
-    <l:@L> "KEY" <r:@R> => make::case! {
+    <l:@L> "KEY" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "KEY",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "MATCH_KIND"
-    <l:@L> "MATCH_KIND" <r:@R> =>
-        make::case! {
+    <l:@L> "MATCH_KIND" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "MATCH_KIND",
             args: vec![],
             typ: "annotationToken",
             span: context.location_span(l, r),
-        },
+        }?) }),
 
     // annotationToken ::= "TYPE"
-    <l:@L> "TYPE" <r:@R> => make::case! {
+    <l:@L> "TYPE" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "TYPE",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "OUT"
-    <l:@L> "OUT" <r:@R> => make::case! {
+    <l:@L> "OUT" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "OUT",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "PARSER"
-    <l:@L> "PARSER" <r:@R> => make::case! {
+    <l:@L> "PARSER" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "PARSER",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "PACKAGE"
-    <l:@L> "PACKAGE" <r:@R> => make::case! {
+    <l:@L> "PACKAGE" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "PACKAGE",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "PRAGMA"
-    <l:@L> "PRAGMA" <r:@R> => make::case! {
+    <l:@L> "PRAGMA" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "PRAGMA",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "RETURN"
-    <l:@L> "RETURN" <r:@R> => make::case! {
+    <l:@L> "RETURN" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "RETURN",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "SELECT"
-    <l:@L> "SELECT" <r:@R> => make::case! {
+    <l:@L> "SELECT" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "SELECT",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "STATE"
-    <l:@L> "STATE" <r:@R> => make::case! {
+    <l:@L> "STATE" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "STATE",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "STRING"
-    <l:@L> "STRING" <r:@R> => make::case! {
+    <l:@L> "STRING" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "STRING",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "STRUCT"
-    <l:@L> "STRUCT" <r:@R> => make::case! {
+    <l:@L> "STRUCT" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "STRUCT",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "SWITCH"
-    <l:@L> "SWITCH" <r:@R> => make::case! {
+    <l:@L> "SWITCH" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "SWITCH",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "TABLE"
-    <l:@L> "TABLE" <r:@R> => make::case! {
+    <l:@L> "TABLE" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "TABLE",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "THIS"
-    <l:@L> "THIS" <r:@R> => make::case! {
+    <l:@L> "THIS" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "THIS",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "TRANSITION"
-    <l:@L> "TRANSITION" <r:@R> =>
-        make::case! {
+    <l:@L> "TRANSITION" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "TRANSITION",
             args: vec![],
             typ: "annotationToken",
             span: context.location_span(l, r),
-        },
+        }?) }),
 
     // annotationToken ::= "TRUE"
-    <l:@L> "TRUE" <r:@R> => make::case! {
+    <l:@L> "TRUE" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "TRUE",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "TUPLE"
-    <l:@L> "TUPLE" <r:@R> => make::case! {
+    <l:@L> "TUPLE" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "TUPLE",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "TYPEDEF"
-    <l:@L> "TYPEDEF" <r:@R> => make::case! {
+    <l:@L> "TYPEDEF" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "TYPEDEF",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "VARBIT"
-    <l:@L> "VARBIT" <r:@R> => make::case! {
+    <l:@L> "VARBIT" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "VARBIT",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "VALUE_SET"
-    <l:@L> "VALUE_SET" <r:@R> => make::case! {
+    <l:@L> "VALUE_SET" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "VALUE_SET",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "LIST"
-    <l:@L> "LIST" <r:@R> => make::case! {
+    <l:@L> "LIST" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "LIST",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "VOID"
-    <l:@L> "VOID" <r:@R> => make::case! {
+    <l:@L> "VOID" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "VOID",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "DONTCARE"
-    <l:@L> "DONTCARE" <r:@R> => make::case! {
+    <l:@L> "DONTCARE" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "'_'",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= identifier
     <id:identifier> => id,
@@ -4287,402 +4139,394 @@ annotationToken: Rc<Value> = {
     <int:integerLiteral> => int,
 
     // annotationToken ::= "MASK"
-    <l:@L> "MASK" <r:@R> => make::case! {
+    <l:@L> "MASK" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "'&&&'",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "RANGE"
-    <l:@L> "RANGE" <r:@R> => make::case! {
+    <l:@L> "RANGE" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "'..'",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "SHL"
-    <l:@L> "SHL" <r:@R> => make::case! {
+    <l:@L> "SHL" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "'<<'",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "AND"
-    <l:@L> "AND" <r:@R> => make::case! {
+    <l:@L> "AND" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "'&&'",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "OR"
-    <l:@L> "OR" <r:@R> => make::case! {
+    <l:@L> "OR" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "'||'",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "EQ"
-    <l:@L> "EQ" <r:@R> => make::case! {
+    <l:@L> "EQ" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "'=='",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "NE"
-    <l:@L> "NE" <r:@R> => make::case! {
+    <l:@L> "NE" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "'!='",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "GE"
-    <l:@L> "GE" <r:@R> => make::case! {
+    <l:@L> "GE" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "'>='",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "LE"
-    <l:@L> "LE" <r:@R> => make::case! {
+    <l:@L> "LE" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "'<='",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "PLUSPLUS"
-    <l:@L> "PLUSPLUS" <r:@R> => make::case! {
+    <l:@L> "PLUSPLUS" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "'++'",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "PLUS"
-    <l:@L> "PLUS" <r:@R> => make::case! {
+    <l:@L> "PLUS" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "'+'",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "PLUS_SAT"
-    <l:@L> "PLUS_SAT" <r:@R> => make::case! {
+    <l:@L> "PLUS_SAT" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "'|+|'",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "MINUS"
-    <l:@L> "MINUS" <r:@R> => make::case! {
+    <l:@L> "MINUS" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "'-'",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "MINUS_SAT"
-    <l:@L> "MINUS_SAT" <r:@R> => make::case! {
+    <l:@L> "MINUS_SAT" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "'|-|'",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "MUL"
-    <l:@L> "MUL" <r:@R> => make::case! {
+    <l:@L> "MUL" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "'*'",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "DIV"
-    <l:@L> "DIV" <r:@R> => make::case! {
+    <l:@L> "DIV" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "'/'",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "MOD"
-    <l:@L> "MOD" <r:@R> => make::case! {
+    <l:@L> "MOD" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "'%'",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "BIT_OR"
-    <l:@L> "BIT_OR" <r:@R> => make::case! {
+    <l:@L> "BIT_OR" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "'|'",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "BIT_AND"
-    <l:@L> "BIT_AND" <r:@R> => make::case! {
+    <l:@L> "BIT_AND" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "'&'",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "BIT_XOR"
-    <l:@L> "BIT_XOR" <r:@R> => make::case! {
+    <l:@L> "BIT_XOR" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "'^'",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "COMPLEMENT"
-    <l:@L> "COMPLEMENT" <r:@R> => make::case! {
+    <l:@L> "COMPLEMENT" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "'~'",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "L_BRACKET"
-    <l:@L> "L_BRACKET" <r:@R> => make::case! {
+    <l:@L> "L_BRACKET" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "'['",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "R_BRACKET"
-    <l:@L> "R_BRACKET" <r:@R> => make::case! {
+    <l:@L> "R_BRACKET" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "']'",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "L_BRACE"
-    <l:@L> "L_BRACE" <r:@R> => make::case! {
+    <l:@L> "L_BRACE" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "'{'",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "R_BRACE"
-    <l:@L> "R_BRACE" <r:@R> => make::case! {
+    <l:@L> "R_BRACE" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "'}'",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "L_ANGLE"
-    <l:@L> "L_ANGLE" <r:@R> => make::case! {
+    <l:@L> "L_ANGLE" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "'<'",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // Rust lexer adapter for annotationToken ::= "L_ANGLE"
-    <l:@L> "L_ANGLE_ARGS" <r:@R> => make::case! {
+    <l:@L> "L_ANGLE_ARGS" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "'<'",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "R_ANGLE"
-    <l:@L> "R_ANGLE" <r:@R> => make::case! {
+    <l:@L> "R_ANGLE" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "'>'",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "NOT"
-    <l:@L> "NOT" <r:@R> => make::case! {
+    <l:@L> "NOT" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "'!'",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "COLON"
-    <l:@L> colon <r:@R> => make::case! {
+    <l:@L> colon <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "':'",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "COMMA"
-    <l:@L> "COMMA" <r:@R> => make::case! {
+    <l:@L> "COMMA" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "','",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // Rust lexer adapter for annotationToken ::= "COMMA"
-    <l:@L> "TRAILING_COMMA" <r:@R> => make::case! {
+    <l:@L> "TRAILING_COMMA" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "','",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "QUESTION"
-    <l:@L> "QUESTION" <r:@R> => make::case! {
+    <l:@L> "QUESTION" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "'?'",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "DOT"
-    <l:@L> "DOT" <r:@R> => make::case! {
+    <l:@L> "DOT" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "'.'",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "ASSIGN"
-    <l:@L> "ASSIGN" <r:@R> => make::case! {
+    <l:@L> "ASSIGN" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "'='",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "SEMICOLON"
-    <l:@L> "SEMICOLON" <r:@R> => make::case! {
+    <l:@L> "SEMICOLON" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "';'",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationToken ::= "AT"
-    <l:@L> "AT" <r:@R> => make::case! {
+    <l:@L> "AT" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "'@'",
         args: vec![],
         typ: "annotationToken",
         span: context.location_span(l, r),
-    },
+    }?) }),
 };
 
-annotationBody: Rc<Value> = {
+annotationBody: Value = {
     // annotationBody ::= epsilon
-    <l:@L>  <r:@R> => make::case! {
+    <l:@L>  <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "_EMPTY",
         args: vec![],
         typ: "annotationBody",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationBody ::= annotationBody "L_PAREN" annotationBody "R_PAREN"
-    <l:@L> <ab:annotationBody> "L_PAREN" <ab_in:annotationBody> "R_PAREN" <r:@R> =>
-        make::case! {
+    <l:@L> <ab:annotationBody> "L_PAREN" <ab_in:annotationBody> "R_PAREN" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "annotationBody `( annotationBody `)",
             args: vec![ab, ab_in],
             typ: "annotationBody",
             span: context.location_span(l, r),
-        },
+        }?) }),
 
     // annotationBody ::= annotationBody annotationToken
-    <l:@L> <ab:annotationBody> <atoken:annotationToken> <r:@R> =>
-        make::case! {
+    <l:@L> <ab:annotationBody> <atoken:annotationToken> <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "annotationBody annotationToken",
             args: vec![ab, atoken],
             typ: "annotationBody",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
-structuredAnnotationBody: Rc<Value> = {
+structuredAnnotationBody: Value = {
     // structuredAnnotationBody ::= sequenceOrRecordElementExpression trailingCommaOpt
-    <l:@L> <e:sequenceOrRecordElementExpression> <c:trailingCommaOpt> <r:@R> =>
-        make::case! {
+    <l:@L> <e:sequenceOrRecordElementExpression> <c:trailingCommaOpt> <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "sequenceOrRecordElementExpression trailingCommaOpt",
             args: vec![e, c],
             typ: "structuredAnnotationBody",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
-annotation: Rc<Value> = {
+annotation: Value = {
     // annotation ::= "AT" name
-    <l:@L> "AT" <name:name> <r:@R> =>
-        make::case! {
+    <l:@L> "AT" <name:name> <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "'@' name",
             args: vec![name],
             typ: "annotation",
             span: context.location_span(l, r),
-        },
+        }?) }),
 
     // annotation ::= "AT" name "L_PAREN" annotationBody "R_PAREN"
-    <l:@L> "AT" <name:name> "L_PAREN" <body:annotationBody> "R_PAREN" <r:@R> =>
-        make::case! {
+    <l:@L> "AT" <name:name> "L_PAREN" <body:annotationBody> "R_PAREN" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "'@' name `( annotationBody `)",
             args: vec![name, body],
             typ: "annotation",
             span: context.location_span(l, r),
-        },
+        }?) }),
 
     // annotation ::= "AT" name "L_BRACKET" structuredAnnotationBody "R_BRACKET"
-    <l:@L> "AT" <name:name> "L_BRACKET" <body:structuredAnnotationBody> "R_BRACKET" <r:@R> =>
-        make::case! {
+    <l:@L> "AT" <name:name> "L_BRACKET" <body:structuredAnnotationBody> "R_BRACKET" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "'@' name `[ structuredAnnotationBody `]",
             args: vec![name, body],
             typ: "annotation",
             span: context.location_span(l, r),
-        },
+        }?) }),
 
     // annotation ::= "PRAGMA" name annotationBody "PRAGMA_END"
-    <l:@L> "PRAGMA" <name:name> <body:annotationBody> "PRAGMA_END" <r:@R> =>
-        make::case! {
+    <l:@L> "PRAGMA" <name:name> <body:annotationBody> "PRAGMA_END" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "'@' PRAGMA name annotationBody",
             args: vec![name, body],
             typ: "annotation",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
-annotationListNonEmpty: Rc<Value> = {
+annotationListNonEmpty: Value = {
     // annotationListNonEmpty ::= annotation
     <a:annotation> => a,
 
     // annotationListNonEmpty ::= annotationListNonEmpty annotation
-    <l:@L> <al:annotationListNonEmpty> <a:annotation> <r:@R> =>
-        make::case! {
+    <l:@L> <al:annotationListNonEmpty> <a:annotation> <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "annotationListNonEmpty annotation",
             args: vec![al, a],
             typ: "annotationListNonEmpty",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
 #[inline]
-annotationList: Rc<Value> = {
+annotationList: Value = {
     // annotationList ::= epsilon
-    <l:@L>  <r:@R> => make::case! {
+    <l:@L>  <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "_EMPTY",
         args: vec![],
         typ: "annotationList",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // annotationList ::= annotationListNonEmpty
     <al:annotationListNonEmpty> => al,
@@ -4690,35 +4534,33 @@ annotationList: Rc<Value> = {
 
 // - P4 program
 
-declarationList: Rc<Value> = {
+declarationList: Value = {
     // declarationList ::= epsilon
-    <l:@L>  <r:@R> => make::case! {
+    <l:@L>  <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
         shape: "_EMPTY",
         args: vec![],
         typ: "p4program",
         span: context.location_span(l, r),
-    },
+    }?) }),
 
     // declarationList ::= declarationList declaration
-    <l:@L> <ds:declarationList> <d:declaration> <r:@R> =>
-        make::case! {
+    <l:@L> <ds:declarationList> <d:declaration> <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "p4program declaration",
             args: vec![ds, d],
             typ: "p4program",
             span: context.location_span(l, r),
-        },
+        }?) }),
 
     // declarationList ::= declarationList "SEMICOLON"
-    <l:@L> <ds:declarationList> "SEMICOLON" <r:@R> =>
-        make::case! {
+    <l:@L> <ds:declarationList> "SEMICOLON" <r:@R> =>? parse::action(|| { Ok(make::case! { arena: arena,
             shape: "p4program ';'",
             args: vec![ds],
             typ: "p4program",
             span: context.location_span(l, r),
-        },
+        }?) }),
 };
 
-pub p4program: Rc<Value> = {
+pub p4program: Value = {
     // p4program ::= declarationList "END"
     <program:declarationList> "END" => program,
 };

@@ -1,7 +1,7 @@
+use p4spec_rust::lang::data::value::ValueArena;
 use p4spec_rust::lang::{
     common::source::{Position, Span},
     data::{typ, value::make},
-    traits::eq::SyntaxEq,
 };
 
 fn span(file: &str) -> Span {
@@ -12,22 +12,27 @@ fn span(file: &str) -> Span {
 
 #[test]
 fn test_function_value_syntax_equality_ignores_identifier_spans() {
+    let mut arena = ValueArena::new();
     let id_l = p4spec_rust::phrase!(node: "f".to_owned(), span: span("left.spec"));
     let id_r = p4spec_rust::phrase!(node: "f".to_owned(), span: span("right.spec"));
     let value_l = make::func(
+        &mut arena,
         id_l,
         Vec::new(),
         Vec::new(),
         typ::make::bool(),
         Span::default(),
-    );
+    )
+    .unwrap();
     let value_r = make::func(
+        &mut arena,
         id_r,
         Vec::new(),
         Vec::new(),
         typ::make::bool(),
         Span::default(),
-    );
+    )
+    .unwrap();
 
-    assert!(value_l.syntax_eq(&value_r));
+    assert!(arena.syntax_eq(&value_l, &value_r));
 }
