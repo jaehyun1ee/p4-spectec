@@ -102,6 +102,15 @@ fn test_unparses_scalar_and_container_values() {
 }
 
 #[test]
+fn test_unparses_non_ascii_text_as_decimal_bytes() {
+    let value = make::text("prefix◕‿◕😀ツsimple_table_1".to_owned(), Span::default());
+    assert_eq!(
+        P4Unparser::new().render(&value).unwrap(),
+        "prefix\\226\\151\\149\\226\\128\\191\\226\\151\\149\\240\\159\\152\\128\\227\\131\\132simple_table_1"
+    );
+}
+
+#[test]
 fn test_unsupported_values_return_typed_errors() {
     let structure = make::structure(&typ::make::bool(), Vec::new(), Span::default());
     assert_eq!(

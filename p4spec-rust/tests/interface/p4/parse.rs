@@ -2,9 +2,109 @@ use p4spec_rust::{
     interface::p4::{
         error::P4ErrorKind,
         parse::{parse_file, parse_string},
+        unparse::P4Unparser,
     },
-    lang::data::value::ValueKind,
+    lang::data::{
+        typ::TypKind,
+        value::{Value, ValueKind},
+    },
 };
+
+fn first_binary(value: &Value) -> Option<&Value> {
+    if let TypKind::Var(id, _) = &value.note
+        && id.node == "binaryExpression"
+    {
+        return Some(value);
+    }
+    match &value.node {
+        ValueKind::Case(case) => case
+            .args()
+            .into_iter()
+            .find_map(|value| first_binary(value.as_ref())),
+        _ => None,
+    }
+}
+
+fn binary_part(value: &Value, index: usize) -> &Value {
+    match &value.node {
+        ValueKind::Case(case) => case.args().into_iter().nth(index).unwrap().as_ref(),
+        _ => panic!("binary expression must be a case value"),
+    }
+}
+
+fn operator(value: &Value) -> String {
+    P4Unparser::new().render(binary_part(value, 1)).unwrap()
+}
+
+#[test]
+fn test_right_shift_preserves_source_parser_asymmetric_bitwise_binding() {
+    let program_before = parse_string(
+        "shift.p4",
+        "control C() { apply { bit<4> x; x = 4w1 | 4w2 ^ 4w3 & 4w4 >> 4w5; } }",
+    )
+    .unwrap();
+    let shift = first_binary(&program_before).unwrap();
+    assert_eq!(operator(shift), ">>");
+    let bit_or = binary_part(shift, 0);
+    assert_eq!(operator(bit_or), "|");
+    let bit_xor = binary_part(bit_or, 2);
+    assert_eq!(operator(bit_xor), "^");
+    assert_eq!(operator(binary_part(bit_xor, 2)), "&");
+
+    let program_after = parse_string(
+        "shift.p4",
+        "control C() { apply { bit<4> x; x = 4w1 >> 4w2 & 4w3 ^ 4w4 | 4w5; } }",
+    )
+    .unwrap();
+    let bit_or = first_binary(&program_after).unwrap();
+    assert_eq!(operator(bit_or), "|");
+    let bit_xor = binary_part(bit_or, 0);
+    assert_eq!(operator(bit_xor), "^");
+    let bit_and = binary_part(bit_xor, 0);
+    assert_eq!(operator(bit_and), "&");
+    assert_eq!(operator(binary_part(bit_and, 0)), ">>");
+}
+
+#[test]
+fn test_right_and_left_shift_share_left_associative_source_precedence() {
+    let program_right_then_left = parse_string(
+        "shift.p4",
+        "control C() { apply { bit<4> x; x = 4w1 >> 4w2 << 4w3; } }",
+    )
+    .unwrap();
+    let left_shift = first_binary(&program_right_then_left).unwrap();
+    assert_eq!(operator(left_shift), "<<");
+    assert_eq!(operator(binary_part(left_shift, 0)), ">>");
+
+    let program_left_then_right = parse_string(
+        "shift.p4",
+        "control C() { apply { bit<4> x; x = 4w1 << 4w2 >> 4w3; } }",
+    )
+    .unwrap();
+    let right_shift = first_binary(&program_left_then_right).unwrap();
+    assert_eq!(operator(right_shift), ">>");
+    assert_eq!(operator(binary_part(right_shift, 0)), "<<");
+}
+
+#[test]
+fn test_binary_expression_span_preserves_mapped_token_order() {
+    let program = parse_string(
+        "preprocessed.p4",
+        r#"control C() { apply { bit<4> x; x =
+# 200 "later.p4"
+4w1
+# 10 "earlier.p4"
+& 4w2; } }"#,
+    )
+    .unwrap();
+    let binary = first_binary(&program).unwrap();
+
+    assert_eq!(binary.span.left.file.as_ref(), "later.p4");
+    assert_eq!(binary.span.left.line, 200);
+    assert_eq!(binary.span.right.file.as_ref(), "earlier.p4");
+    assert_eq!(binary.span.right.line, 10);
+}
+
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs,

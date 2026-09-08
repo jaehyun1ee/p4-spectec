@@ -7,6 +7,7 @@ pub mod parse;
 pub mod preprocessor;
 pub mod unparse;
 
+mod binary;
 mod declare;
 mod extract;
 
