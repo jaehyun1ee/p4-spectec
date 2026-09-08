@@ -39,7 +39,219 @@ fn test_arena_growth_preserves_handles_and_structural_order() {
     assert_eq!(get::text(&arena, &last), Ok("z"));
     assert_eq!(arena.compare(&first, &last), Ordering::Less);
     assert!(arena.equal(&last, &duplicate));
-    assert_ne!(last.node, duplicate.node);
+    assert_eq!(last, duplicate);
+}
+
+#[test]
+fn test_interning_shares_root_body_and_exact_annotations() {
+    let mut arena = ValueArena::new();
+    let value = make::bool(&mut arena, true, span("a", 1)).unwrap();
+    let duplicate = make::bool(&mut arena, true, span("a", 1)).unwrap();
+    let moved = make::bool(&mut arena, true, span("b", 2)).unwrap();
+    let annotated = make::new(
+        &mut arena,
+        ValueKind::Bool(true),
+        typ::make::text().node,
+        span("a", 1),
+    )
+    .unwrap();
+    assert_eq!(value, duplicate);
+    assert_eq!(value.node, moved.node);
+    assert_eq!(value.node, annotated.node);
+    assert_eq!(value.note, moved.note);
+    assert_eq!(value.span, annotated.span);
+    assert_ne!(value.span, moved.span);
+    assert_ne!(value.note, annotated.note);
+    assert!(!arena.equal(&value, &moved));
+    assert!(!arena.equal(&value, &annotated));
+}
+
+#[test]
+fn test_semantic_identity_shares_nested_annotations_but_exact_parents_do_not() {
+    let mut arena = ValueArena::new();
+    let child = make::bool(&mut arena, true, span("child", 1)).unwrap();
+    let moved = arena.relocate(child, span("child", 2)).unwrap();
+    let annotated = arena.annotate(child, typ::make::text().node).unwrap();
+    let mut parents = vec![];
+    for child in [child, moved, annotated] {
+        let parent =
+            make::list(&mut arena, &typ::make::bool(), vec![child], Span::default()).unwrap();
+        let duplicate =
+            make::list(&mut arena, &typ::make::bool(), vec![child], Span::default()).unwrap();
+        assert_eq!(parent, duplicate);
+        assert_eq!(get::list(&arena, &parent).unwrap(), &[child]);
+        parents.push(parent);
+    }
+    for parent in &parents[1..] {
+        assert_ne!(parents[0].node, parent.node);
+        assert_eq!(arena.semantic_id(&parents[0]), arena.semantic_id(parent));
+        assert!(!arena.equal(&parents[0], parent));
+    }
+    let grandparents = parents
+        .iter()
+        .map(|parent| {
+            make::opt(
+                &mut arena,
+                &typ::make::bool(),
+                Some(*parent),
+                Span::default(),
+            )
+            .unwrap()
+        })
+        .collect::<Vec<_>>();
+    assert_ne!(grandparents[0].node, grandparents[1].node);
+    assert_eq!(
+        arena.semantic_id(&grandparents[0]),
+        arena.semantic_id(&grandparents[1])
+    );
+}
+
+#[test]
+fn test_interning_preserves_mixfix_and_function_label_locations() {
+    let mut arena = ValueArena::new();
+    let child = make::bool(&mut arena, true, Span::default()).unwrap();
+    let case = |line| {
+        let label =
+            |name| p4spec_rust::phrase!(node: Atom::keyword(name), span: span("label", line));
+        Mixfix::Infix(
+            Box::new(Mixfix::Brack(
+                label("("),
+                Box::new(Mixfix::Arg(child)),
+                label(")"),
+            )),
+            label("+"),
+            Box::new(Mixfix::Seq(vec![Mixfix::Atom(label("END"))])),
+        )
+    };
+    let left = make::case_(&mut arena, &typ::make::bool(), case(1), Span::default()).unwrap();
+    let same = make::case_(&mut arena, &typ::make::bool(), case(1), Span::default()).unwrap();
+    let right = make::case_(&mut arena, &typ::make::bool(), case(2), Span::default()).unwrap();
+    assert_eq!(left, same);
+    assert_ne!(left.node, right.node);
+    assert_eq!(arena.semantic_id(&left), arena.semantic_id(&right));
+    assert_ne!(
+        ValueCodec::encode(&arena, &left).unwrap(),
+        ValueCodec::encode(&arena, &right).unwrap()
+    );
+    let mut functions = vec![];
+    for line in [1, 1, 2] {
+        let id = p4spec_rust::phrase!(node: "f".to_owned(), span: span("function", line));
+        functions.push(
+            make::func(
+                &mut arena,
+                id,
+                vec![],
+                vec![],
+                typ::make::bool(),
+                Span::default(),
+            )
+            .unwrap(),
+        );
+    }
+    assert_eq!(functions[0], functions[1]);
+    assert_ne!(functions[0].node, functions[2].node);
+    assert_eq!(
+        arena.semantic_id(&functions[0]),
+        arena.semantic_id(&functions[2])
+    );
+}
+
+#[test]
+fn test_semantic_identity_preserves_variants_names_and_order() {
+    let mut arena = ValueArena::new();
+    let typ = typ::make::bool();
+    let nat = make::nat(&mut arena, 1_u64.into(), Span::default()).unwrap();
+    let int = make::int(&mut arena, 1.into(), Span::default()).unwrap();
+    let label = |atom| p4spec_rust::phrase!(node: atom, span: Span::default());
+    let mut values = vec![nat, int];
+    for children in [vec![nat, int], vec![int, nat], vec![nat, nat], vec![nat]] {
+        values.push(make::list(&mut arena, &typ, children.clone(), Span::default()).unwrap());
+        values.push(make::tuple(&mut arena, &typ, children, Span::default()).unwrap());
+    }
+    for atom in [
+        Atom::Keyword("X".into()),
+        Atom::Tag("X".into()),
+        Atom::Operator("X".into()),
+        Atom::Arrow,
+    ] {
+        values.push(
+            make::case_(&mut arena, &typ, Mixfix::Atom(label(atom)), Span::default()).unwrap(),
+        );
+    }
+    for fields in [
+        vec![
+            (label(Atom::keyword("a")), nat),
+            (label(Atom::keyword("b")), int),
+        ],
+        vec![
+            (label(Atom::keyword("b")), int),
+            (label(Atom::keyword("a")), nat),
+        ],
+        vec![
+            (label(Atom::keyword("a")), nat),
+            (label(Atom::keyword("a")), int),
+        ],
+    ] {
+        values.push(make::structure(&mut arena, &typ, fields, Span::default()).unwrap());
+    }
+    for name in ["f", "g"] {
+        values.push(
+            make::func(
+                &mut arena,
+                p4spec_rust::phrase!(node: name.to_owned(), span: Span::default()),
+                vec![],
+                vec![],
+                typ.clone(),
+                Span::default(),
+            )
+            .unwrap(),
+        );
+    }
+    values.push(make::opt(&mut arena, &typ, None, Span::default()).unwrap());
+    values.push(make::opt(&mut arena, &typ, Some(nat), Span::default()).unwrap());
+    for (index, left) in values.iter().enumerate() {
+        for right in &values[index + 1..] {
+            assert_ne!(left.node, right.node);
+            assert_ne!(arena.semantic_id(left), arena.semantic_id(right));
+        }
+    }
+}
+
+#[test]
+fn test_external_interning_uses_normalized_float_equality_and_ordered_associations() {
+    let mut arena = ValueArena::new();
+    let typ = typ::make::text();
+    for (left, right) in [
+        (ExternalData::Float(-0.0), ExternalData::Float(0.0)),
+        (
+            ExternalData::Float(f64::NAN),
+            ExternalData::Float(f64::from_bits(0x7ff8_0000_0000_0001)),
+        ),
+    ] {
+        let left = make::external(&mut arena, &typ, left, Span::default()).unwrap();
+        let right = make::external(&mut arena, &typ, right, Span::default()).unwrap();
+        assert_eq!(left, right);
+        assert_eq!(arena.semantic_id(&left), arena.semantic_id(&right));
+    }
+    let mut values = vec![];
+    for data in [
+        ExternalData::Assoc(vec![
+            ("x".into(), ExternalData::Int(1)),
+            ("x".into(), ExternalData::Int(2)),
+        ]),
+        ExternalData::Assoc(vec![
+            ("x".into(), ExternalData::Int(2)),
+            ("x".into(), ExternalData::Int(1)),
+        ]),
+        ExternalData::Assoc(vec![("x".into(), ExternalData::Int(1))]),
+    ] {
+        values.push(make::external(&mut arena, &typ, data, Span::default()).unwrap());
+    }
+    for (index, left) in values.iter().enumerate() {
+        for right in &values[index + 1..] {
+            assert_ne!(arena.semantic_id(left), arena.semantic_id(right));
+        }
+    }
 }
 
 #[test]
@@ -58,6 +270,43 @@ fn test_value_equality_includes_type_and_source() {
     assert!(!arena.equal(&value, &different_source));
     assert!(arena.syntax_eq(&value, &different_type));
     assert!(arena.syntax_eq(&value, &different_source));
+}
+
+#[test]
+fn test_type_interning_preserves_nested_annotation_locations() {
+    let mut arena = ValueArena::new();
+    let type_at = |line| {
+        let id = p4spec_rust::phrase!(node: "T".to_owned(), span: span("type", line));
+        let nested = p4spec_rust::phrase!(node: typ::TypKind::Bool, span: span("argument", line));
+        typ::make::var(id, vec![nested]).node
+    };
+    let first = make::new(
+        &mut arena,
+        ValueKind::Bool(true),
+        type_at(1),
+        Span::default(),
+    )
+    .unwrap();
+    let duplicate = make::new(
+        &mut arena,
+        ValueKind::Bool(true),
+        type_at(1),
+        Span::default(),
+    )
+    .unwrap();
+    let other = make::new(
+        &mut arena,
+        ValueKind::Bool(true),
+        type_at(2),
+        Span::default(),
+    )
+    .unwrap();
+    assert_eq!(first, duplicate);
+    assert_eq!(first.node, other.node);
+    assert_ne!(first.note, other.note);
+    assert_eq!(arena.typ(&other), &type_at(2));
+    assert_eq!(arena.semantic_id(&first), arena.semantic_id(&other));
+    assert!(!arena.equal(&first, &other));
 }
 
 #[test]
@@ -196,6 +445,8 @@ fn test_full_comparison_ignores_label_spans_but_includes_child_annotations() {
     assert!(arena.equal(&left, &right));
     assert!(!arena.equal(&left, &changed));
     assert!(arena.syntax_eq(&left, &changed));
+    assert_ne!(left.node, right.node);
+    assert_ne!(right.node, changed.node);
     assert_ne!(
         ValueCodec::encode(&arena, &left).unwrap(),
         ValueCodec::encode(&arena, &right).unwrap()

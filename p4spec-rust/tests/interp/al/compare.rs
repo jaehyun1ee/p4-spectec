@@ -815,6 +815,56 @@ fn with_stack(f: impl FnOnce() + Send + 'static) {
         .unwrap();
 }
 
+#[cfg(feature = "arena-stats")]
+#[test]
+#[ignore = "reports full-spec xor_test.p4 sharing; run separately from CLI timing"]
+fn test_xor_value_arena_sharing() {
+    with_stack(|| {
+        let _comparison_lock = OCAML_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _guard = crate::runner::FRESH_BUILTIN.lock().unwrap();
+        let loaded = Loaded::load(&repo().join("spec"));
+        let includes = [repo().join("p4c/p4include")];
+        let path = repo().join("p4c/testdata/p4_16_samples/xor_test.p4");
+        for det in [false, true] {
+            let mut runner = loaded.runner(det, false, Placeholder);
+            let program = parse_file(runner.arena_mut(), &includes, &path)
+                .expect("parse xor sharing workload");
+            let parsed = runner.arena().stats();
+            let outputs = runner
+                .eval_program("Program_inst", program)
+                .expect("instantiate xor sharing workload");
+            assert_eq!(outputs.len(), 2, "global instantiation layer and store");
+            let executed = runner.arena().stats();
+            assert!(executed.generation_requests > parsed.generation_requests);
+            assert!(executed.stored_bodies >= parsed.stored_bodies);
+            assert!(executed.semantic_identities >= parsed.semantic_identities);
+            for (phase, stats) in [("parsed", parsed), ("executed", executed)] {
+                assert!(stats.semantic_identities <= stats.stored_bodies);
+                assert_eq!(
+                    stats.generation_requests,
+                    stats.stored_bodies + stats.body_reuses
+                );
+                eprintln!(
+                    "{}",
+                    json!({
+                        "workload": "xor_test.p4",
+                        "relation": "Program_inst",
+                        "deterministic": det,
+                        "guard": false,
+                        "phase": phase,
+                        "generation_requests": stats.generation_requests,
+                        "stored_bodies": stats.stored_bodies,
+                        "semantic_identities": stats.semantic_identities,
+                        "body_reuses": stats.body_reuses,
+                    })
+                );
+            }
+        }
+    });
+}
+
 #[test]
 #[ignore = "requires pinned OCaml toolchain; full uncached P4 corpus is slow"]
 fn test_run_al_corpus_matches_ocaml() {

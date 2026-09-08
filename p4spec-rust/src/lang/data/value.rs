@@ -4,7 +4,15 @@
 //! Child handles retain their type and source annotations. Projections,
 //! structural comparison, and serialization resolve those handles in the arena.
 
-use std::{cell::RefCell, cmp::Ordering, collections::HashMap, rc::Rc};
+use std::{
+    cell::RefCell,
+    cmp::Ordering,
+    collections::{HashMap, hash_map::DefaultHasher},
+    hash::{Hash, Hasher},
+    rc::Rc,
+};
+
+mod intern;
 
 use thiserror::Error;
 
@@ -45,6 +53,10 @@ pub type ValueCase = Mixfix<Value, SpanId>;
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub struct ValueId(u32);
 
+/// An arena-local identity ignoring value and label annotations recursively
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+pub struct SemanticId(u32);
+
 /// An arena-local runtime type annotation index
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub struct TypeId(u32);
@@ -58,6 +70,7 @@ pub enum ArenaIndexKind {
     Value,
     Type,
     Span,
+    Semantic,
 }
 
 /// Append-only storage shared by parser, evaluator, and host calls
@@ -66,6 +79,26 @@ pub struct ValueArena {
     values: Vec<ValueKind>,
     types: Vec<TypKind>,
     spans: Vec<Span>,
+    value_buckets: HashMap<u64, Vec<ValueId>>,
+    type_buckets: HashMap<u64, Vec<TypeId>>,
+    span_buckets: HashMap<u64, Vec<SpanId>>,
+    semantic_ids: Vec<SemanticId>,
+    semantic_representatives: Vec<ValueId>,
+    semantic_buckets: HashMap<u64, Vec<SemanticId>>,
+    #[cfg(any(test, feature = "arena-stats"))]
+    generation_requests: usize,
+    #[cfg(test)]
+    force_hash_collisions: bool,
+}
+
+/// Session-local diagnostic counts, excluded from default production builds
+#[cfg(any(test, feature = "arena-stats"))]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ArenaStats {
+    pub generation_requests: usize,
+    pub stored_bodies: usize,
+    pub semantic_identities: usize,
+    pub body_reuses: usize,
 }
 
 impl ValueArena {
@@ -77,15 +110,57 @@ impl ValueArena {
         u32::try_from(len).map_err(|_| ValueError::IndexOverflow { kind })
     }
 
+    fn finish_hash(&self, state: DefaultHasher) -> u64 {
+        #[cfg(test)]
+        if self.force_hash_collisions {
+            return 0;
+        }
+        state.finish()
+    }
+
+    fn hash(&self, value: &impl Hash) -> u64 {
+        let mut state = DefaultHasher::new();
+        value.hash(&mut state);
+        self.finish_hash(state)
+    }
+
+    fn body_hash(&self, body: &ValueKind, annotations: bool) -> u64 {
+        let mut state = DefaultHasher::new();
+        intern::Key {
+            arena: self,
+            annotations,
+        }
+        .hash(body, &mut state);
+        self.finish_hash(state)
+    }
+
     pub fn alloc_span(&mut self, span: Span) -> Result<SpanId, ValueError> {
+        let hash = self.hash(&span);
+        if let Some(id) = self
+            .span_buckets
+            .get(&hash)
+            .and_then(|ids| ids.iter().find(|id| self.location(**id) == &span))
+        {
+            return Ok(*id);
+        }
         let id = SpanId(Self::index(self.spans.len(), ArenaIndexKind::Span)?);
         self.spans.push(span);
+        self.span_buckets.entry(hash).or_default().push(id);
         Ok(id)
     }
 
     pub fn alloc_type(&mut self, typ: TypKind) -> Result<TypeId, ValueError> {
+        let hash = self.hash(&typ);
+        if let Some(id) = self
+            .type_buckets
+            .get(&hash)
+            .and_then(|ids| ids.iter().find(|id| self.type_annotation(**id) == &typ))
+        {
+            return Ok(*id);
+        }
         let id = TypeId(Self::index(self.types.len(), ArenaIndexKind::Type)?);
         self.types.push(typ);
+        self.type_buckets.entry(hash).or_default().push(id);
         Ok(id)
     }
 
@@ -95,13 +170,76 @@ impl ValueArena {
         typ: TypKind,
         span: Span,
     ) -> Result<Value, ValueError> {
-        let node = ValueId(Self::index(self.values.len(), ArenaIndexKind::Value)?);
-        Self::index(self.types.len(), ArenaIndexKind::Type)?;
-        Self::index(self.spans.len(), ArenaIndexKind::Span)?;
         let note = self.alloc_type(typ)?;
         let span = self.alloc_span(span)?;
-        self.values.push(kind);
+        let hash = self.body_hash(&kind, true);
+        let existing = self.value_buckets.get(&hash).and_then(|ids| {
+            let key = intern::Key {
+                arena: self,
+                annotations: true,
+            };
+            ids.iter()
+                .find(|id| key.equal(&kind, self.body(**id)))
+                .copied()
+        });
+        let node = if let Some(id) = existing {
+            id
+        } else {
+            let id = ValueId(Self::index(self.values.len(), ArenaIndexKind::Value)?);
+            let semantic_hash = self.body_hash(&kind, false);
+            let existing_semantic = self.semantic_buckets.get(&semantic_hash).and_then(|ids| {
+                let key = intern::Key {
+                    arena: self,
+                    annotations: false,
+                };
+                ids.iter()
+                    .find(|id| {
+                        key.equal(
+                            &kind,
+                            self.body(self.semantic_representatives[id.0 as usize]),
+                        )
+                    })
+                    .copied()
+            });
+            let semantic = match existing_semantic {
+                Some(id) => id,
+                None => {
+                    let semantic = SemanticId(Self::index(
+                        self.semantic_representatives.len(),
+                        ArenaIndexKind::Semantic,
+                    )?);
+                    self.semantic_representatives.push(id);
+                    self.semantic_buckets
+                        .entry(semantic_hash)
+                        .or_default()
+                        .push(semantic);
+                    semantic
+                }
+            };
+            self.values.push(kind);
+            self.semantic_ids.push(semantic);
+            self.value_buckets.entry(hash).or_default().push(id);
+            id
+        };
+        #[cfg(any(test, feature = "arena-stats"))]
+        {
+            self.generation_requests += 1;
+        }
         Ok(crate::note_phrase!(node: node, note: note, span: span))
+    }
+
+    pub fn semantic_id(&self, value: &Value) -> SemanticId {
+        self.semantic_ids[value.node.0 as usize]
+    }
+
+    #[cfg(any(test, feature = "arena-stats"))]
+    pub fn stats(&self) -> ArenaStats {
+        ArenaStats {
+            generation_requests: self.generation_requests,
+            stored_bodies: self.values.len(),
+            semantic_identities: self.semantic_representatives.len(),
+            body_reuses: self.generation_requests - self.values.len(),
+        }
     }
 
     pub fn body(&self, id: ValueId) -> &ValueKind {
@@ -639,12 +777,174 @@ mod tests {
             ArenaIndexKind::Value,
             ArenaIndexKind::Type,
             ArenaIndexKind::Span,
+            ArenaIndexKind::Semantic,
         ] {
             assert_eq!(
                 ValueArena::index(overflow, kind),
                 Err(ValueError::IndexOverflow { kind })
             );
             assert_eq!(ValueArena::index(overflow - 1, kind), Ok(u32::MAX));
+        }
+    }
+
+    #[test]
+    fn test_hash_collisions_preserve_annotations_bodies_and_semantics() {
+        let mut arena = ValueArena {
+            force_hash_collisions: true,
+            ..ValueArena::new()
+        };
+        let first_span = Span::default();
+        let mut second_span = first_span.clone();
+        second_span.left.line = 9;
+        let first = make::bool(&mut arena, true, first_span.clone()).unwrap();
+        let duplicate = make::bool(&mut arena, true, first_span.clone()).unwrap();
+        let other = make::bool(&mut arena, false, first_span.clone()).unwrap();
+        let moved = make::bool(&mut arena, true, second_span.clone()).unwrap();
+        let annotated = make::new(
+            &mut arena,
+            ValueKind::Bool(true),
+            typ::make::text().node,
+            first_span.clone(),
+        )
+        .unwrap();
+        assert_eq!(first, duplicate);
+        assert_ne!(first.node, other.node);
+        assert_eq!(first.node, moved.node);
+        assert_eq!(first.node, annotated.node);
+        assert_ne!(first.span, moved.span);
+        assert_ne!(first.note, annotated.note);
+        assert_eq!(arena.span(&moved), &second_span);
+        assert_eq!(arena.typ(&annotated), &TypKind::Text);
+        let mut parents = vec![];
+        for child in [first, moved, annotated, other] {
+            let parent = make::list(
+                &mut arena,
+                &typ::make::bool(),
+                vec![child],
+                first_span.clone(),
+            )
+            .unwrap();
+            let duplicate = make::list(
+                &mut arena,
+                &typ::make::bool(),
+                vec![child],
+                first_span.clone(),
+            )
+            .unwrap();
+            assert_eq!(parent, duplicate);
+            assert_eq!(get::list(&arena, &parent).unwrap(), &[child]);
+            parents.push(parent);
+        }
+        assert_ne!(parents[0].node, parents[1].node);
+        assert_ne!(parents[0].node, parents[2].node);
+        assert_eq!(
+            arena.semantic_id(&parents[0]),
+            arena.semantic_id(&parents[1])
+        );
+        assert_eq!(
+            arena.semantic_id(&parents[0]),
+            arena.semantic_id(&parents[2])
+        );
+        assert_ne!(
+            arena.semantic_id(&parents[0]),
+            arena.semantic_id(&parents[3])
+        );
+        assert_ne!(arena.semantic_id(&first), arena.semantic_id(&parents[0]));
+        assert_eq!(
+            arena.stats(),
+            ArenaStats {
+                generation_requests: 13,
+                stored_bodies: 6,
+                semantic_identities: 4,
+                body_reuses: 7,
+            }
+        );
+        assert_eq!(arena.value_buckets.len(), 1);
+        assert_eq!(arena.type_buckets.len(), 1);
+        assert_eq!(arena.span_buckets.len(), 1);
+        assert_eq!(arena.semantic_buckets.len(), 1);
+    }
+
+    #[test]
+    fn test_hash_collisions_resolve_exact_labels_and_semantic_payloads() {
+        let mut arena = ValueArena {
+            force_hash_collisions: true,
+            ..ValueArena::new()
+        };
+        let child = make::bool(&mut arena, true, Span::default()).unwrap();
+        let mut labels = vec![];
+        for line in [1, 2] {
+            let mut span = Span::default();
+            span.left.line = line;
+            labels.push(
+                arena
+                    .alloc_phrase(crate::phrase!(node: atom::Atom::keyword("X"), span: span))
+                    .unwrap(),
+            );
+        }
+        let case = |label| {
+            Mixfix::Infix(
+                Box::new(Mixfix::Brack(
+                    label,
+                    Box::new(Mixfix::Arg(child)),
+                    labels[0].clone(),
+                )),
+                labels[0].clone(),
+                Box::new(Mixfix::Seq(vec![Mixfix::Atom(labels[0].clone())])),
+            )
+        };
+        for bodies in [
+            [
+                ValueKind::Case(case(labels[0].clone())),
+                ValueKind::Case(case(labels[1].clone())),
+            ],
+            [
+                ValueKind::Struct(vec![(labels[0].clone(), child)]),
+                ValueKind::Struct(vec![(labels[1].clone(), child)]),
+            ],
+            [
+                ValueKind::Func(crate::phrase!(node: "f".into(), span: labels[0].span)),
+                ValueKind::Func(crate::phrase!(node: "f".into(), span: labels[1].span)),
+            ],
+        ] {
+            let left = arena
+                .alloc(bodies[0].clone(), TypKind::Bool, Span::default())
+                .unwrap();
+            let same = arena
+                .alloc(bodies[0].clone(), TypKind::Bool, Span::default())
+                .unwrap();
+            let right = arena
+                .alloc(bodies[1].clone(), TypKind::Bool, Span::default())
+                .unwrap();
+            assert_eq!(left, same);
+            assert_ne!(left.node, right.node);
+            assert_eq!(arena.semantic_id(&left), arena.semantic_id(&right));
+        }
+        let mut distinct = vec![];
+        for body in [
+            ValueKind::Num(Number::Nat(1_u64.into())),
+            ValueKind::Num(Number::Int(1.into())),
+            ValueKind::Text("X".into()),
+            ValueKind::Case(Mixfix::Atom(labels[0].clone())),
+            ValueKind::Case(Mixfix::Atom(
+                crate::phrase!(node: atom::Atom::Tag("X".into()), span: labels[0].span),
+            )),
+            ValueKind::List(vec![child]),
+            ValueKind::Tuple(vec![child]),
+            ValueKind::Opt(Some(child)),
+            ValueKind::Opt(None),
+            ValueKind::Extern(ExternalData::Int(1)),
+            ValueKind::Extern(ExternalData::Int(2)),
+        ] {
+            let value = arena
+                .alloc(body.clone(), TypKind::Bool, Span::default())
+                .unwrap();
+            let same = arena.alloc(body, TypKind::Bool, Span::default()).unwrap();
+            assert_eq!(value, same);
+            for prior in &distinct {
+                assert_ne!(arena.semantic_id(prior), arena.semantic_id(&value));
+            }
+            distinct.push(value);
         }
     }
 }

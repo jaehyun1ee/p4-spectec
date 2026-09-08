@@ -4,6 +4,9 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.97.1"
 
+[features]
+arena-stats = []
+
 [dependencies]
 clap = { version = "4.6.6", features = ["derive"] }
 imbl = { version = "7.0.1", default-features = false }

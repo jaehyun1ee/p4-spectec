@@ -4,7 +4,7 @@ use p4spec_rust::{
     interface::builtin::maps,
     lang::{
         common::{
-            notation::{mixfix::Mixfix, mixop::Mixop},
+            notation::{atom::Atom, mixfix::Mixfix, mixop::Mixop},
             source::{Position, Span},
         },
         data::{
@@ -65,7 +65,7 @@ fn test_map_update_retains_parsed_punctuation_spans() {
 #[test]
 fn test_map_lookup_compares_key_content_and_annotations_not_handles() {
     let mut arena = ValueArena::new();
-    let typ_key = typ::make::text();
+    let typ_key = typ::make::var(super::id("key"), vec![]);
     let typ_value = typ::make::bool();
     let typ_pair = typ::make::var(super::id("pair"), vec![typ_key.clone(), typ_value.clone()]);
     let pairs = make::list(
@@ -84,11 +84,18 @@ fn test_map_lookup_compares_key_content_and_annotations_not_handles() {
         Span::default(),
     )
     .unwrap();
-    let key = make::text(&mut arena, "key".to_owned(), Span::default()).unwrap();
+    let key_at = |arena: &mut ValueArena, line| {
+        let label = p4spec_rust::phrase!(
+            node: Atom::keyword("KEY"),
+            span: Span::new(Position::new("key.p4", line, 0), Position::new("key.p4", line, 3))
+        );
+        make::case_(arena, &typ_key, Mixfix::Atom(label), Span::default()).unwrap()
+    };
+    let key = key_at(&mut arena, 1);
+    let equal_key = key_at(&mut arena, 2);
     let value = make::bool(&mut arena, true, Span::default()).unwrap();
     let targs = [typ_key, typ_value];
     let map = maps::add_map(&mut arena, &targs, &[map, key, value]).unwrap();
-    let equal_key = make::text(&mut arena, "key".to_owned(), Span::default()).unwrap();
     assert_ne!(key, equal_key);
     let found = maps::find_map(&mut arena, &targs, &[map, equal_key]).unwrap();
     assert_eq!(get::opt(&arena, &found).unwrap().copied(), Some(value));
