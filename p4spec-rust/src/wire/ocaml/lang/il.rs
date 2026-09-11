@@ -570,15 +570,15 @@ fn decode_yojson_mixfix(
         ("Atom", [atom]) => Ok(Mixfix::Atom(AtomPhraseCodec::decode(&standard_json(
             atom,
         )?)?)),
-        ("Brack", [left, body, right]) => Ok(Mixfix::Brack(
-            AtomPhraseCodec::decode(&standard_json(left)?)?,
-            Box::new(decode_yojson_mixfix(arena, body)?),
-            AtomPhraseCodec::decode(&standard_json(right)?)?,
+        ("Brack", [atom_l, mixfix_inner, atom_r]) => Ok(Mixfix::Brack(
+            AtomPhraseCodec::decode(&standard_json(atom_l)?)?,
+            Box::new(decode_yojson_mixfix(arena, mixfix_inner)?),
+            AtomPhraseCodec::decode(&standard_json(atom_r)?)?,
         )),
-        ("Infix", [left, atom, right]) => Ok(Mixfix::Infix(
-            Box::new(decode_yojson_mixfix(arena, left)?),
+        ("Infix", [mixfix_l, atom, mixfix_r]) => Ok(Mixfix::Infix(
+            Box::new(decode_yojson_mixfix(arena, mixfix_l)?),
             AtomPhraseCodec::decode(&standard_json(atom)?)?,
-            Box::new(decode_yojson_mixfix(arena, right)?),
+            Box::new(decode_yojson_mixfix(arena, mixfix_r)?),
         )),
         ("Seq", [items]) => Ok(Mixfix::Seq(
             yojson_list(items)?
@@ -706,17 +706,17 @@ impl ValueEncoder<'_> {
                 yojson::Value::String("Atom".to_owned()),
                 yojson::from_serde_json(&AtomPhraseCodec::encode(atom)),
             ]),
-            Mixfix::Brack(left, body, right) => yojson::Value::List(vec![
+            Mixfix::Brack(atom_l, mixfix_inner, atom_r) => yojson::Value::List(vec![
                 yojson::Value::String("Brack".to_owned()),
-                yojson::from_serde_json(&AtomPhraseCodec::encode(left)),
-                self.encode_yojson_mixfix(body),
-                yojson::from_serde_json(&AtomPhraseCodec::encode(right)),
+                yojson::from_serde_json(&AtomPhraseCodec::encode(atom_l)),
+                self.encode_yojson_mixfix(mixfix_inner),
+                yojson::from_serde_json(&AtomPhraseCodec::encode(atom_r)),
             ]),
-            Mixfix::Infix(left, atom, right) => yojson::Value::List(vec![
+            Mixfix::Infix(mixfix_l, atom, mixfix_r) => yojson::Value::List(vec![
                 yojson::Value::String("Infix".to_owned()),
-                self.encode_yojson_mixfix(left),
+                self.encode_yojson_mixfix(mixfix_l),
                 yojson::from_serde_json(&AtomPhraseCodec::encode(atom)),
-                self.encode_yojson_mixfix(right),
+                self.encode_yojson_mixfix(mixfix_r),
             ]),
             Mixfix::Seq(items) => yojson::Value::List(vec![
                 yojson::Value::String("Seq".to_owned()),
@@ -1040,17 +1040,17 @@ fn decode_exp_kind(value: &Value) -> Result<ExpKind, DecodeError> {
             decode_op_typ(typ)?,
             Box::new(decode_exp(exp)?),
         )),
-        ("BinE", [op, typ, left, right]) => Ok(ExpKind::Bin(
+        ("BinE", [op, typ, exp_l, exp_r]) => Ok(ExpKind::Bin(
             decode_bin_op(op)?,
             decode_op_typ(typ)?,
-            Box::new(decode_exp(left)?),
-            Box::new(decode_exp(right)?),
+            Box::new(decode_exp(exp_l)?),
+            Box::new(decode_exp(exp_r)?),
         )),
-        ("CmpE", [op, typ, left, right]) => Ok(ExpKind::Cmp(
+        ("CmpE", [op, typ, exp_l, exp_r]) => Ok(ExpKind::Cmp(
             decode_cmp_op(op)?,
             decode_op_typ(typ)?,
-            Box::new(decode_exp(left)?),
-            Box::new(decode_exp(right)?),
+            Box::new(decode_exp(exp_l)?),
+            Box::new(decode_exp(exp_r)?),
         )),
         ("UpCastE", [typ, exp]) => Ok(ExpKind::UpCast(
             Box::new(decode_typ(typ)?),
@@ -1079,36 +1079,36 @@ fn decode_exp_kind(value: &Value) -> Result<ExpKind, DecodeError> {
         })?)),
         ("OptE", [exp]) => Ok(ExpKind::Opt(decode_option(exp, decode_exp)?.map(Box::new))),
         ("ListE", [exps]) => Ok(ExpKind::List(decode_list(exps, decode_exp)?)),
-        ("ConsE", [head, tail]) => Ok(ExpKind::Cons(
-            Box::new(decode_exp(head)?),
-            Box::new(decode_exp(tail)?),
+        ("ConsE", [exp_head, exp_tail]) => Ok(ExpKind::Cons(
+            Box::new(decode_exp(exp_head)?),
+            Box::new(decode_exp(exp_tail)?),
         )),
-        ("CatE", [left, right]) => Ok(ExpKind::Cat(
-            Box::new(decode_exp(left)?),
-            Box::new(decode_exp(right)?),
+        ("CatE", [exp_l, exp_r]) => Ok(ExpKind::Cat(
+            Box::new(decode_exp(exp_l)?),
+            Box::new(decode_exp(exp_r)?),
         )),
-        ("MemE", [left, right]) => Ok(ExpKind::Mem(
-            Box::new(decode_exp(left)?),
-            Box::new(decode_exp(right)?),
+        ("MemE", [exp_l, exp_r]) => Ok(ExpKind::Mem(
+            Box::new(decode_exp(exp_l)?),
+            Box::new(decode_exp(exp_r)?),
         )),
         ("LenE", [exp]) => Ok(ExpKind::Len(Box::new(decode_exp(exp)?))),
         ("DotE", [exp, atom]) => Ok(ExpKind::Dot(
             Box::new(decode_exp(exp)?),
             AtomPhraseCodec::decode(atom)?,
         )),
-        ("IdxE", [base, index]) => Ok(ExpKind::Idx(
-            Box::new(decode_exp(base)?),
-            Box::new(decode_exp(index)?),
+        ("IdxE", [exp_base, exp_idx]) => Ok(ExpKind::Idx(
+            Box::new(decode_exp(exp_base)?),
+            Box::new(decode_exp(exp_idx)?),
         )),
-        ("SliceE", [base, left, right]) => Ok(ExpKind::Slice(
-            Box::new(decode_exp(base)?),
-            Box::new(decode_exp(left)?),
-            Box::new(decode_exp(right)?),
+        ("SliceE", [exp_base, exp_idx, exp_len]) => Ok(ExpKind::Slice(
+            Box::new(decode_exp(exp_base)?),
+            Box::new(decode_exp(exp_idx)?),
+            Box::new(decode_exp(exp_len)?),
         )),
-        ("UpdE", [base, path, value]) => Ok(ExpKind::Upd(
-            Box::new(decode_exp(base)?),
+        ("UpdE", [exp_base, path, exp_field]) => Ok(ExpKind::Upd(
+            Box::new(decode_exp(exp_base)?),
             Box::new(decode_path(path)?),
-            Box::new(decode_exp(value)?),
+            Box::new(decode_exp(exp_field)?),
         )),
         ("CallE", [id, targs, args]) => Ok(ExpKind::Call(
             decode_id(id)?,
@@ -1143,19 +1143,19 @@ fn encode_exp_kind(exp: &ExpKind) -> Value {
                 encode_exp(exp)
             ])
         }
-        ExpKind::Bin(op, typ, left, right) => json!([
+        ExpKind::Bin(op, typ, exp_l, exp_r) => json!([
             "BinE",
             encode_bin_op(*op),
             encode_op_typ(*typ),
-            encode_exp(left),
-            encode_exp(right)
+            encode_exp(exp_l),
+            encode_exp(exp_r)
         ]),
-        ExpKind::Cmp(op, typ, left, right) => json!([
+        ExpKind::Cmp(op, typ, exp_l, exp_r) => json!([
             "CmpE",
             encode_cmp_op(*op),
             encode_op_typ(*typ),
-            encode_exp(left),
-            encode_exp(right)
+            encode_exp(exp_l),
+            encode_exp(exp_r)
         ]),
         ExpKind::UpCast(typ, exp) => json!(["UpCastE", encode_typ(typ), encode_exp(exp)]),
         ExpKind::DownCast(typ, exp) => {
@@ -1181,26 +1181,30 @@ fn encode_exp_kind(exp: &ExpKind) -> Value {
         ]),
         ExpKind::Opt(exp) => json!(["OptE", encode_option(exp.as_deref(), encode_exp)]),
         ExpKind::List(exps) => json!(["ListE", encode_list(exps, encode_exp)]),
-        ExpKind::Cons(head, tail) => json!(["ConsE", encode_exp(head), encode_exp(tail)]),
-        ExpKind::Cat(left, right) => json!(["CatE", encode_exp(left), encode_exp(right)]),
-        ExpKind::Mem(left, right) => json!(["MemE", encode_exp(left), encode_exp(right)]),
+        ExpKind::Cons(exp_head, exp_tail) => {
+            json!(["ConsE", encode_exp(exp_head), encode_exp(exp_tail)])
+        }
+        ExpKind::Cat(exp_l, exp_r) => json!(["CatE", encode_exp(exp_l), encode_exp(exp_r)]),
+        ExpKind::Mem(exp_l, exp_r) => json!(["MemE", encode_exp(exp_l), encode_exp(exp_r)]),
         ExpKind::Len(exp) => json!(["LenE", encode_exp(exp)]),
         ExpKind::Dot(exp, atom) => {
             json!(["DotE", encode_exp(exp), AtomPhraseCodec::encode(atom)])
         }
-        ExpKind::Idx(base, index) => json!(["IdxE", encode_exp(base), encode_exp(index)]),
-        ExpKind::Slice(base, left, right) => json!([
+        ExpKind::Idx(exp_base, exp_idx) => {
+            json!(["IdxE", encode_exp(exp_base), encode_exp(exp_idx)])
+        }
+        ExpKind::Slice(exp_base, exp_idx, exp_len) => json!([
             "SliceE",
-            encode_exp(base),
-            encode_exp(left),
-            encode_exp(right)
+            encode_exp(exp_base),
+            encode_exp(exp_idx),
+            encode_exp(exp_len)
         ]),
-        ExpKind::Upd(base, path, value) => {
+        ExpKind::Upd(exp_base, path, exp_field) => {
             json!([
                 "UpdE",
-                encode_exp(base),
+                encode_exp(exp_base),
                 encode_path(path),
-                encode_exp(value)
+                encode_exp(exp_field)
             ])
         }
         ExpKind::Call(id, targs, args) => json!([
@@ -1312,10 +1316,10 @@ fn decode_path_kind(value: &Value) -> Result<PathKind, DecodeError> {
             Box::new(decode_path(path)?),
             Box::new(decode_exp(exp)?),
         )),
-        ("SliceP", [path, left, right]) => Ok(PathKind::Slice(
+        ("SliceP", [path, exp_idx, exp_len]) => Ok(PathKind::Slice(
             Box::new(decode_path(path)?),
-            Box::new(decode_exp(left)?),
-            Box::new(decode_exp(right)?),
+            Box::new(decode_exp(exp_idx)?),
+            Box::new(decode_exp(exp_len)?),
         )),
         ("DotP", [path, atom]) => Ok(PathKind::Dot(
             Box::new(decode_path(path)?),
@@ -1332,11 +1336,11 @@ fn encode_path_kind(path: &PathKind) -> Value {
     match path {
         PathKind::Root => json!(["RootP"]),
         PathKind::Idx(path, exp) => json!(["IdxP", encode_path(path), encode_exp(exp)]),
-        PathKind::Slice(path, left, right) => json!([
+        PathKind::Slice(path, exp_idx, exp_len) => json!([
             "SliceP",
             encode_path(path),
-            encode_exp(left),
-            encode_exp(right)
+            encode_exp(exp_idx),
+            encode_exp(exp_len)
         ]),
         PathKind::Dot(path, atom) => {
             json!(["DotP", encode_path(path), AtomPhraseCodec::encode(atom)])
@@ -1402,7 +1406,7 @@ pub(super) fn decode_input_hint(
 }
 
 pub(super) fn encode_input_hint(hint: &crate::lang::hints::input::InputHint) -> Value {
-    encode_list(hint.indices(), |index| json!(index))
+    encode_list(hint.indices(), |idx| json!(idx))
 }
 
 pub(super) fn decode_prem(value: &Value) -> Result<ast::Prem, DecodeError> {
@@ -1468,10 +1472,10 @@ pub(super) fn encode_prem(prem: &ast::Prem) -> Value {
 
 pub(super) fn decode_prem_iter(value: &Value) -> Result<ast::PremIter, DecodeError> {
     match array(value)? {
-        [iter, left, right] => Ok(ast::PremIter {
+        [iter, vars_bound, vars_bind] => Ok(ast::PremIter {
             iter: decode_iter(iter)?,
-            vars_bound: decode_list(left, decode_var)?,
-            vars_bind: decode_list(right, decode_var)?,
+            vars_bound: decode_list(vars_bound, decode_var)?,
+            vars_bind: decode_list(vars_bind, decode_var)?,
         }),
         _ => Err(DecodeError::Expected("IL premise iterator triple")),
     }

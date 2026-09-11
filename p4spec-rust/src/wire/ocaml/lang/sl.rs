@@ -75,7 +75,10 @@ fn encode_param(param: &ast::Param) -> Value {
 fn decode_hold_case(value: &Value) -> Result<HoldCase, DecodeError> {
     let (tag, fields) = variant(value)?;
     match (tag, fields) {
-        ("BothH", [left, right]) => Ok(HoldCase::Both(decode_block(left)?, decode_block(right)?)),
+        ("BothH", [block_hold, block_not_hold]) => Ok(HoldCase::Both(
+            decode_block(block_hold)?,
+            decode_block(block_not_hold)?,
+        )),
         ("HoldH", [block, dangle]) => Ok(HoldCase::Hold(decode_block(block)?, boolean(dangle)?)),
         ("NotHoldH", [block, dangle]) => {
             Ok(HoldCase::NotHold(decode_block(block)?, boolean(dangle)?))
@@ -89,8 +92,12 @@ fn decode_hold_case(value: &Value) -> Result<HoldCase, DecodeError> {
 
 fn encode_hold_case(case: &HoldCase) -> Value {
     match case {
-        HoldCase::Both(left, right) => {
-            json!(["BothH", encode_block(left), encode_block(right)])
+        HoldCase::Both(block_hold, block_not_hold) => {
+            json!([
+                "BothH",
+                encode_block(block_hold),
+                encode_block(block_not_hold)
+            ])
         }
         HoldCase::Hold(block, dangle) => {
             json!(["HoldH", encode_block(block), dangle])

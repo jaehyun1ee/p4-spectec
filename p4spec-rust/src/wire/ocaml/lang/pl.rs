@@ -79,10 +79,10 @@ fn decode_alter(value: &Value) -> Result<alter::AlterationHint, DecodeError> {
             hints,
             decode_alter,
         )?)),
-        ("BrackH", [left, hint, right]) => Ok(alter::AlterationHint::Brack(
-            AtomPhraseCodec::decode(left)?,
+        ("BrackH", [atom_l, hint, atom_r]) => Ok(alter::AlterationHint::Brack(
+            AtomPhraseCodec::decode(atom_l)?,
             Box::new(decode_alter(hint)?),
-            AtomPhraseCodec::decode(right)?,
+            AtomPhraseCodec::decode(atom_r)?,
         )),
         ("HoleH", [hole]) => {
             let (tag, fields) = variant(hole)?;
@@ -95,9 +95,9 @@ fn decode_alter(value: &Value) -> Result<alter::AlterationHint, DecodeError> {
                 (unknown, _) => Err(DecodeError::UnknownVariant(unknown.to_owned())),
             }
         }
-        ("FuseH", [left, right]) => Ok(alter::AlterationHint::Fuse(
-            Box::new(decode_alter(left)?),
-            Box::new(decode_alter(right)?),
+        ("FuseH", [hint_l, hint_r]) => Ok(alter::AlterationHint::Fuse(
+            Box::new(decode_alter(hint_l)?),
+            Box::new(decode_alter(hint_r)?),
         )),
         ("OtherH", [exp]) => Ok(alter::AlterationHint::Other(el::decode_exp(exp)?)),
         ("TextH" | "AtomH" | "SeqH" | "BrackH" | "HoleH" | "FuseH" | "OtherH", _) => {
@@ -114,18 +114,18 @@ fn encode_alter(hint: &alter::AlterationHint) -> Value {
         alter::AlterationHint::Seq(hints) => {
             json!(["SeqH", il::encode_list(hints, encode_alter)])
         }
-        alter::AlterationHint::Brack(left, hint, right) => json!([
+        alter::AlterationHint::Brack(atom_l, hint, atom_r) => json!([
             "BrackH",
-            AtomPhraseCodec::encode(left),
+            AtomPhraseCodec::encode(atom_l),
             encode_alter(hint),
-            AtomPhraseCodec::encode(right)
+            AtomPhraseCodec::encode(atom_r)
         ]),
         alter::AlterationHint::Hole(alter::Hole::Next) => json!(["HoleH", ["Next"]]),
         alter::AlterationHint::Hole(alter::Hole::Num(index)) => {
             json!(["HoleH", ["Num", index]])
         }
-        alter::AlterationHint::Fuse(left, right) => {
-            json!(["FuseH", encode_alter(left), encode_alter(right)])
+        alter::AlterationHint::Fuse(hint_l, hint_r) => {
+            json!(["FuseH", encode_alter(hint_l), encode_alter(hint_r)])
         }
         alter::AlterationHint::Other(exp) => json!(["OtherH", el::encode_exp(exp)]),
     }
@@ -198,17 +198,17 @@ fn decode_exp_kind(value: &Value) -> Result<ExpKind, DecodeError> {
             il::decode_op_typ(typ)?,
             Box::new(decode_exp(exp)?),
         )),
-        ("BinE", [op, typ, left, right]) => Ok(ExpKind::Bin(
+        ("BinE", [op, typ, exp_l, exp_r]) => Ok(ExpKind::Bin(
             il::decode_bin_op(op)?,
             il::decode_op_typ(typ)?,
-            Box::new(decode_exp(left)?),
-            Box::new(decode_exp(right)?),
+            Box::new(decode_exp(exp_l)?),
+            Box::new(decode_exp(exp_r)?),
         )),
-        ("CmpE", [op, typ, left, right]) => Ok(ExpKind::Cmp(
+        ("CmpE", [op, typ, exp_l, exp_r]) => Ok(ExpKind::Cmp(
             il::decode_cmp_op(op)?,
             il::decode_op_typ(typ)?,
-            Box::new(decode_exp(left)?),
-            Box::new(decode_exp(right)?),
+            Box::new(decode_exp(exp_l)?),
+            Box::new(decode_exp(exp_r)?),
         )),
         ("UpCastE", [typ, exp]) => Ok(ExpKind::UpCast(
             il::decode_typ(typ)?,
@@ -240,36 +240,36 @@ fn decode_exp_kind(value: &Value) -> Result<ExpKind, DecodeError> {
             Ok(Box::new(decode_exp(exp)?))
         })?)),
         ("ListE", [exps]) => Ok(ExpKind::List(il::decode_list(exps, decode_exp)?)),
-        ("ConsE", [left, right]) => Ok(ExpKind::Cons(
-            Box::new(decode_exp(left)?),
-            Box::new(decode_exp(right)?),
+        ("ConsE", [exp_head, exp_tail]) => Ok(ExpKind::Cons(
+            Box::new(decode_exp(exp_head)?),
+            Box::new(decode_exp(exp_tail)?),
         )),
-        ("CatE", [left, right]) => Ok(ExpKind::Cat(
-            Box::new(decode_exp(left)?),
-            Box::new(decode_exp(right)?),
+        ("CatE", [exp_l, exp_r]) => Ok(ExpKind::Cat(
+            Box::new(decode_exp(exp_l)?),
+            Box::new(decode_exp(exp_r)?),
         )),
-        ("MemE", [left, right]) => Ok(ExpKind::Mem(
-            Box::new(decode_exp(left)?),
-            Box::new(decode_exp(right)?),
+        ("MemE", [exp_l, exp_r]) => Ok(ExpKind::Mem(
+            Box::new(decode_exp(exp_l)?),
+            Box::new(decode_exp(exp_r)?),
         )),
         ("LenE", [exp]) => Ok(ExpKind::Len(Box::new(decode_exp(exp)?))),
         ("DotE", [exp, atom]) => Ok(ExpKind::Dot(
             Box::new(decode_exp(exp)?),
             AtomPhraseCodec::decode(atom)?,
         )),
-        ("IdxE", [base, index]) => Ok(ExpKind::Idx(
-            Box::new(decode_exp(base)?),
-            Box::new(decode_exp(index)?),
+        ("IdxE", [exp_base, exp_idx]) => Ok(ExpKind::Idx(
+            Box::new(decode_exp(exp_base)?),
+            Box::new(decode_exp(exp_idx)?),
         )),
-        ("SliceE", [base, left, right]) => Ok(ExpKind::Slice(
-            Box::new(decode_exp(base)?),
-            Box::new(decode_exp(left)?),
-            Box::new(decode_exp(right)?),
+        ("SliceE", [exp_base, exp_idx, exp_len]) => Ok(ExpKind::Slice(
+            Box::new(decode_exp(exp_base)?),
+            Box::new(decode_exp(exp_idx)?),
+            Box::new(decode_exp(exp_len)?),
         )),
-        ("UpdE", [base, path, exp]) => Ok(ExpKind::Upd(
-            Box::new(decode_exp(base)?),
+        ("UpdE", [exp_base, path, exp_field]) => Ok(ExpKind::Upd(
+            Box::new(decode_exp(exp_base)?),
             Box::new(decode_path(path)?),
-            Box::new(decode_exp(exp)?),
+            Box::new(decode_exp(exp_field)?),
         )),
         ("CallE", [id, targs, args]) => Ok(ExpKind::Call(
             il::decode_id(id)?,
@@ -302,19 +302,19 @@ fn encode_exp_kind(exp: &ExpKind) -> Value {
             il::encode_op_typ(*typ),
             encode_exp(exp)
         ]),
-        ExpKind::Bin(op, typ, left, right) => json!([
+        ExpKind::Bin(op, typ, exp_l, exp_r) => json!([
             "BinE",
             il::encode_bin_op(*op),
             il::encode_op_typ(*typ),
-            encode_exp(left),
-            encode_exp(right)
+            encode_exp(exp_l),
+            encode_exp(exp_r)
         ]),
-        ExpKind::Cmp(op, typ, left, right) => json!([
+        ExpKind::Cmp(op, typ, exp_l, exp_r) => json!([
             "CmpE",
             il::encode_cmp_op(*op),
             il::encode_op_typ(*typ),
-            encode_exp(left),
-            encode_exp(right)
+            encode_exp(exp_l),
+            encode_exp(exp_r)
         ]),
         ExpKind::UpCast(typ, exp) => json!(["UpCastE", il::encode_typ(typ), encode_exp(exp)]),
         ExpKind::DownCast(typ, exp) => json!(["DownCastE", il::encode_typ(typ), encode_exp(exp)]),
@@ -338,20 +338,29 @@ fn encode_exp_kind(exp: &ExpKind) -> Value {
         ]),
         ExpKind::Opt(exp) => json!(["OptE", encode_option(exp.as_deref(), encode_exp)]),
         ExpKind::List(exps) => json!(["ListE", il::encode_list(exps, encode_exp)]),
-        ExpKind::Cons(left, right) => json!(["ConsE", encode_exp(left), encode_exp(right)]),
-        ExpKind::Cat(left, right) => json!(["CatE", encode_exp(left), encode_exp(right)]),
-        ExpKind::Mem(left, right) => json!(["MemE", encode_exp(left), encode_exp(right)]),
+        ExpKind::Cons(exp_head, exp_tail) => {
+            json!(["ConsE", encode_exp(exp_head), encode_exp(exp_tail)])
+        }
+        ExpKind::Cat(exp_l, exp_r) => json!(["CatE", encode_exp(exp_l), encode_exp(exp_r)]),
+        ExpKind::Mem(exp_l, exp_r) => json!(["MemE", encode_exp(exp_l), encode_exp(exp_r)]),
         ExpKind::Len(exp) => json!(["LenE", encode_exp(exp)]),
         ExpKind::Dot(exp, atom) => json!(["DotE", encode_exp(exp), AtomPhraseCodec::encode(atom)]),
-        ExpKind::Idx(base, index) => json!(["IdxE", encode_exp(base), encode_exp(index)]),
-        ExpKind::Slice(base, left, right) => json!([
+        ExpKind::Idx(exp_base, exp_idx) => {
+            json!(["IdxE", encode_exp(exp_base), encode_exp(exp_idx)])
+        }
+        ExpKind::Slice(exp_base, exp_idx, exp_len) => json!([
             "SliceE",
-            encode_exp(base),
-            encode_exp(left),
-            encode_exp(right)
+            encode_exp(exp_base),
+            encode_exp(exp_idx),
+            encode_exp(exp_len)
         ]),
-        ExpKind::Upd(base, path, exp) => {
-            json!(["UpdE", encode_exp(base), encode_path(path), encode_exp(exp)])
+        ExpKind::Upd(exp_base, path, exp_field) => {
+            json!([
+                "UpdE",
+                encode_exp(exp_base),
+                encode_path(path),
+                encode_exp(exp_field)
+            ])
         }
         ExpKind::Call(id, targs, args) => json!([
             "CallE",
@@ -375,14 +384,14 @@ fn decode_path_kind(value: &Value) -> Result<PathKind, DecodeError> {
     let (tag, fields) = variant(value)?;
     match (tag, fields) {
         ("RootP", []) => Ok(PathKind::Root),
-        ("IdxP", [path, exp]) => Ok(PathKind::Idx(
+        ("IdxP", [path, exp_idx]) => Ok(PathKind::Idx(
             Box::new(decode_path(path)?),
-            Box::new(decode_exp(exp)?),
+            Box::new(decode_exp(exp_idx)?),
         )),
-        ("SliceP", [path, left, right]) => Ok(PathKind::Slice(
+        ("SliceP", [path, exp_idx, exp_len]) => Ok(PathKind::Slice(
             Box::new(decode_path(path)?),
-            Box::new(decode_exp(left)?),
-            Box::new(decode_exp(right)?),
+            Box::new(decode_exp(exp_idx)?),
+            Box::new(decode_exp(exp_len)?),
         )),
         ("DotP", [path, atom]) => Ok(PathKind::Dot(
             Box::new(decode_path(path)?),
@@ -398,12 +407,12 @@ fn decode_path_kind(value: &Value) -> Result<PathKind, DecodeError> {
 fn encode_path_kind(path: &PathKind) -> Value {
     match path {
         PathKind::Root => json!(["RootP"]),
-        PathKind::Idx(path, exp) => json!(["IdxP", encode_path(path), encode_exp(exp)]),
-        PathKind::Slice(path, left, right) => json!([
+        PathKind::Idx(path, exp_idx) => json!(["IdxP", encode_path(path), encode_exp(exp_idx)]),
+        PathKind::Slice(path, exp_idx, exp_len) => json!([
             "SliceP",
             encode_path(path),
-            encode_exp(left),
-            encode_exp(right)
+            encode_exp(exp_idx),
+            encode_exp(exp_len)
         ]),
         PathKind::Dot(path, atom) => {
             json!(["DotP", encode_path(path), AtomPhraseCodec::encode(atom)])
@@ -595,9 +604,9 @@ fn decode_hold_case<T>(
 ) -> Result<HoldCase<T>, DecodeError> {
     let (tag, fields) = variant(value)?;
     match (tag, fields) {
-        ("BothH", [left, right]) => Ok(HoldCase::Both(
-            decode_block(left, decode_tier)?,
-            decode_block(right, decode_tier)?,
+        ("BothH", [block_hold, block_not_hold]) => Ok(HoldCase::Both(
+            decode_block(block_hold, decode_tier)?,
+            decode_block(block_not_hold, decode_tier)?,
         )),
         ("HoldH", [block, dangle]) => Ok(HoldCase::Hold(
             decode_block(block, decode_tier)?,
@@ -616,10 +625,10 @@ fn decode_hold_case<T>(
 
 fn encode_hold_case<T>(case: &HoldCase<T>, encode_tier: fn(&T) -> Value) -> Value {
     match case {
-        HoldCase::Both(left, right) => json!([
+        HoldCase::Both(block_hold, block_not_hold) => json!([
             "BothH",
-            encode_block(left, encode_tier),
-            encode_block(right, encode_tier)
+            encode_block(block_hold, encode_tier),
+            encode_block(block_not_hold, encode_tier)
         ]),
         HoldCase::Hold(block, dangle) => {
             json!(["HoldH", encode_block(block, encode_tier), dangle])
@@ -659,9 +668,9 @@ fn decode_instr_kind<T>(
             })?,
             dangle: boolean(dangle)?,
         })),
-        ("LetI", [left, right, iters]) => Ok(InstrKind::Let(LetInstr {
-            exp_l: decode_exp(left)?,
-            exp_r: decode_exp(right)?,
+        ("LetI", [exp_l, exp_r, iters]) => Ok(InstrKind::Let(LetInstr {
+            exp_l: decode_exp(exp_l)?,
+            exp_r: decode_exp(exp_r)?,
             iter_instrs: il::decode_list(iters, il::decode_prem_iter)?,
         })),
         ("DebugI", [exp]) => Ok(InstrKind::Debug(DebugInstr {
@@ -677,26 +686,26 @@ fn decode_instr_kind<T>(
             })?,
             exp: decode_exp(exp)?,
         })),
-        ("CheckLetSubI", [typ, subcheck, left, right, block]) => {
+        ("CheckLetSubI", [typ, subcheck, exp_l, exp_r, block]) => {
             Ok(InstrKind::CheckLetSub(CheckLetSubInstr {
                 typ: il::decode_typ(typ)?,
                 subcheck: Box::new(il::decode_subcheck(subcheck)?),
-                exp_l: decode_exp(left)?,
-                exp_r: decode_exp(right)?,
+                exp_l: decode_exp(exp_l)?,
+                exp_r: decode_exp(exp_r)?,
                 block: decode_block(block, decode_tier)?,
             }))
         }
-        ("CheckLetMatchI", [pattern, left, right, block]) => {
+        ("CheckLetMatchI", [pattern, exp_l, exp_r, block]) => {
             Ok(InstrKind::CheckLetMatch(CheckLetMatchInstr {
                 pattern: il::decode_pattern(pattern)?,
-                exp_l: decode_exp(left)?,
-                exp_r: decode_exp(right)?,
+                exp_l: decode_exp(exp_l)?,
+                exp_r: decode_exp(exp_r)?,
                 block: decode_block(block, decode_tier)?,
             }))
         }
-        ("OptionGetI", [left, right, block]) => Ok(InstrKind::OptionGet(OptionGetInstr {
-            exp_l: decode_exp(left)?,
-            exp_r: decode_exp(right)?,
+        ("OptionGetI", [exp_l, exp_r, block]) => Ok(InstrKind::OptionGet(OptionGetInstr {
+            exp_l: decode_exp(exp_l)?,
+            exp_r: decode_exp(exp_r)?,
             block: decode_block(block, decode_tier)?,
         })),
         ("TierI", [tier]) => Ok(InstrKind::Tier(TierInstr {
@@ -750,13 +759,13 @@ fn encode_instr_kind<T>(instr: &InstrKind<T>, encode_tier: fn(&T) -> Value) -> V
             dangle
         ]),
         InstrKind::Let(LetInstr {
-            exp_l: left,
-            exp_r: right,
+            exp_l,
+            exp_r,
             iter_instrs: iters,
         }) => json!([
             "LetI",
-            encode_exp(left),
-            encode_exp(right),
+            encode_exp(exp_l),
+            encode_exp(exp_r),
             il::encode_list(iters, il::encode_prem_iter)
         ]),
         InstrKind::Debug(DebugInstr { exp }) => json!(["DebugI", encode_exp(exp)]),
@@ -774,37 +783,37 @@ fn encode_instr_kind<T>(instr: &InstrKind<T>, encode_tier: fn(&T) -> Value) -> V
         InstrKind::CheckLetSub(CheckLetSubInstr {
             typ,
             subcheck,
-            exp_l: left,
-            exp_r: right,
+            exp_l,
+            exp_r,
             block,
         }) => json!([
             "CheckLetSubI",
             il::encode_typ(typ),
             il::encode_subcheck(subcheck),
-            encode_exp(left),
-            encode_exp(right),
+            encode_exp(exp_l),
+            encode_exp(exp_r),
             encode_block(block, encode_tier)
         ]),
         InstrKind::CheckLetMatch(CheckLetMatchInstr {
             pattern,
-            exp_l: left,
-            exp_r: right,
+            exp_l,
+            exp_r,
             block,
         }) => json!([
             "CheckLetMatchI",
             il::encode_pattern(pattern),
-            encode_exp(left),
-            encode_exp(right),
+            encode_exp(exp_l),
+            encode_exp(exp_r),
             encode_block(block, encode_tier)
         ]),
         InstrKind::OptionGet(OptionGetInstr {
-            exp_l: left,
-            exp_r: right,
+            exp_l,
+            exp_r,
             block,
         }) => json!([
             "OptionGetI",
-            encode_exp(left),
-            encode_exp(right),
+            encode_exp(exp_l),
+            encode_exp(exp_r),
             encode_block(block, encode_tier)
         ]),
         InstrKind::Tier(TierInstr { tier }) => json!(["TierI", encode_tier(tier)]),
