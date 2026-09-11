@@ -5,10 +5,10 @@
 //! calls its implementation; for example, `sum_nat` dispatches to
 //! `nats::sum_nat`, while `fresh_typeId` advances state hidden in `fresh`.
 
-use std::{collections::HashMap, rc::Rc};
+use std::collections::HashMap;
 
 use crate::{
-    lang::data::value::Value,
+    lang::data::value::{Value, ValueArena},
     lang::il::ast::{Id, Typ},
 };
 
@@ -18,7 +18,8 @@ use super::{
 
 // == Extensibility point: extra or override builtins per interface
 
-pub type BuiltinImpl = fn(targs: &[Typ], values: &[Rc<Value>]) -> Result<Rc<Value>, BuiltinError>;
+pub type BuiltinImpl =
+    fn(arena: &mut ValueArena, targs: &[Typ], values: &[Value]) -> Result<Value, BuiltinError>;
 
 #[derive(Clone, Copy)]
 enum BuiltinEntry {
@@ -178,10 +179,11 @@ impl Builtins {
 
     pub fn invoke(
         &mut self,
+        arena: &mut ValueArena,
         id: &Id,
         targs: &[Typ],
-        values: &[Rc<Value>],
-    ) -> Result<(Rc<Value>, bool), BuiltinError> {
+        values: &[Value],
+    ) -> Result<(Value, bool), BuiltinError> {
         let entry = self
             .functions
             .get(&id.node)
@@ -191,11 +193,11 @@ impl Builtins {
             })?;
         let (value, side_effected) = match entry {
             BuiltinEntry::Pure(builtin_impl) => {
-                let value = builtin_impl(targs, values)?;
+                let value = builtin_impl(arena, targs, values)?;
                 (value, false)
             }
             BuiltinEntry::Impure(builtin_impl) => {
-                let value = builtin_impl(targs, values)?;
+                let value = builtin_impl(arena, targs, values)?;
                 (value, true)
             }
         };

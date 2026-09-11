@@ -4,8 +4,6 @@
 //! one language stage. Evaluation receives the assembled runner context, so it
 //! can call builtins and externs without storing callbacks or global state.
 
-use std::rc::Rc;
-
 use crate::{
     lang::{data::value::Value, il::ast::Typ},
     runner::{ExternError, InterfaceError},
@@ -28,19 +26,19 @@ where
     fn eval_program(
         context: &mut RunnerContext<'_, Self, I, E>,
         name: &str,
-        program: Rc<Value>,
-    ) -> Result<Vec<Rc<Value>>, Self::Error>;
+        program: Value,
+    ) -> Result<Vec<Value>, Self::Error>;
 
     fn eval_rel(
         context: &mut RunnerContext<'_, Self, I, E>,
         name: &str,
-        values: &[Rc<Value>],
-    ) -> Result<Vec<Rc<Value>>, Self::Error>;
+        values: &[Value],
+    ) -> Result<Vec<Value>, Self::Error>;
 
     fn eval_func(
         context: &mut RunnerContext<'_, Self, I, E>,
         name: &str,
         targs: &[Typ],
-        values: &[Rc<Value>],
-    ) -> Result<Rc<Value>, Self::Error>;
+        values: &[Value],
+    ) -> Result<Value, Self::Error>;
 }

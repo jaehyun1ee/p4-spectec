@@ -21,7 +21,6 @@ use crate::{
     },
     runner::{Extern, Interface, RunnerContext},
 };
-use std::rc::Rc;
 
 // = Premise evaluation
 
@@ -67,7 +66,7 @@ fn eval_rule_prem<'global, I: Interface, E: Extern>(
     ));
     let values_input = back!(expr::eval_exps(runner, ctx, &exps_input));
     let values_output = back!(invoke_rel(runner, ctx, &prem.id, &values_input));
-    assign::assign_exps(ctx, &exps_output, &values_output)
+    assign::assign_exps(runner.arena_mut(), ctx, &exps_output, &values_output)
 }
 
 // - If premise
@@ -78,7 +77,10 @@ fn eval_if_prem<'global, I: Interface, E: Extern>(
     prem: &ast::IfPrem,
 ) -> Backtrack<Context<'global>> {
     let value = back!(expr::eval_exp(runner, ctx, &prem.exp));
-    if back!(Backtrack::from_result(get::bool(&value), &prem.exp.span)) {
+    if back!(Backtrack::from_result(
+        get::bool(runner.arena(), &value),
+        &prem.exp.span
+    )) {
         Backtrack::Ok(ctx.clone())
     } else {
         Backtrack::unmatch(
@@ -139,7 +141,7 @@ fn eval_let_prem<'global, I: Interface, E: Extern>(
     prem: &ast::LetPrem,
 ) -> Backtrack<Context<'global>> {
     let value = back!(expr::eval_exp(runner, ctx, &prem.exp_r));
-    assign::assign_exp(ctx, &prem.exp_l, value)
+    assign::assign_exp(runner.arena_mut(), ctx, &prem.exp_l, value)
 }
 
 // - Iteration premise
@@ -152,13 +154,13 @@ fn eval_iter_prem<'global, I: Interface, E: Extern>(
     let prem_iter = &prem.prem_iter;
     let ctxs = match prem_iter.iter {
         ast::Iter::Opt => back!(Backtrack::from_result(
-            ctx.sub_opt(&prem_iter.vars_bound),
+            ctx.sub_opt(runner.arena(), &prem_iter.vars_bound),
             &prem.prem.span
         ))
         .into_iter()
         .collect(),
         ast::Iter::List => back!(Backtrack::from_result(
-            ctx.sub_list(&prem_iter.vars_bound),
+            ctx.sub_list(runner.arena(), &prem_iter.vars_bound),
             &prem.prem.span
         )),
     };
@@ -167,10 +169,12 @@ fn eval_iter_prem<'global, I: Interface, E: Extern>(
         let ctx_sub = back!(eval_prem(runner, &ctx_sub, &prem.prem));
         for (var, values) in prem_iter.vars_bind.iter().zip(&mut values_bind) {
             let var_bound = Variable::new(var.id.clone(), var.iters.clone());
-            values.push(Rc::clone(back!(Backtrack::from_result(
-                ctx_sub.find_value(&var_bound),
-                &var.id.span
-            ))));
+            values.push(
+                *(back!(Backtrack::from_result(
+                    ctx_sub.find_value(&var_bound),
+                    &var.id.span
+                ))),
+            );
         }
     }
     let mut ctx = ctx.clone();
@@ -179,8 +183,24 @@ fn eval_iter_prem<'global, I: Interface, E: Extern>(
         iters.push(prem_iter.iter);
         let typ = typ::make::iterate(var.typ.clone(), &iters);
         let value = match prem_iter.iter {
-            ast::Iter::Opt => make::opt(&typ, values.into_iter().next(), Span::default()),
-            ast::Iter::List => make::list(&typ, values, Span::default()),
+            ast::Iter::Opt => back!(Backtrack::from_result(
+                make::opt(
+                    runner.arena_mut(),
+                    typ.node.clone(),
+                    values.into_iter().next(),
+                    Span::default()
+                ),
+                &Span::default()
+            )),
+            ast::Iter::List => back!(Backtrack::from_result(
+                make::list(
+                    runner.arena_mut(),
+                    typ.node.clone(),
+                    values,
+                    Span::default()
+                ),
+                &Span::default()
+            )),
         };
         ctx.add_value(Variable::new(var.id.clone(), iters), value);
     }
@@ -197,11 +217,11 @@ fn eval_debug_prem<'global, I: Interface, E: Extern>(
     let value = back!(expr::eval_exp(runner, ctx, &prem.exp));
     let exp_text = Print::to_string(&prem.exp);
     println!("{}: {}", prem.exp.span, exp_text);
-    let span_text = value.span.to_string();
+    let span_text = runner.arena().span(&value).to_string();
     if span_text.is_empty() {
-        println!("{}", Print::to_string(value.as_ref()));
+        println!("{}", runner.arena().to_string(&value));
     } else {
-        println!("{span_text}: {}", Print::to_string(value.as_ref()));
+        println!("{span_text}: {}", runner.arena().to_string(&value));
     }
     Backtrack::Ok(ctx.clone())
 }

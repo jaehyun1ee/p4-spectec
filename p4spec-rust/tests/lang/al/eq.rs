@@ -33,15 +33,6 @@ fn test_syntax_equality_ignores_spans_and_subcheck_strategy() {
 }
 #[test]
 fn test_syntax_equality_distinguishes_recursive_operands_variants_and_collection_rules() {
-    let value = |kind| {
-        p4spec_rust::lang::data::value::make::new(kind, il::ast::TypKind::Bool, span("value"))
-    };
-    let value_recursive = value(il::ast::ValueKind::List(vec![value(
-        il::ast::ValueKind::Struct(vec![(atom(), value(il::ast::ValueKind::Bool(true)))]),
-    )]));
-    let value_recursive_changed = value(il::ast::ValueKind::List(vec![value(
-        il::ast::ValueKind::Struct(vec![(atom(), value(il::ast::ValueKind::Bool(false)))]),
-    )]));
     let exp_cases = [
         (variable("x"), variable("x"), true),
         (variable("x"), variable("y"), false),
@@ -54,12 +45,6 @@ fn test_syntax_equality_distinguishes_recursive_operands_variants_and_collection
     for (exp_l, exp_r, is_equal) in exp_cases {
         assert_eq!(exp_l.syntax_eq(&exp_r), is_equal);
     }
-    assert!(!value_recursive.syntax_eq(&value_recursive_changed));
-    assert!(
-        !value(il::ast::ValueKind::Bool(true))
-            .syntax_eq(&value(il::ast::ValueKind::Text("true".to_owned())))
-    );
-
     let path_root = || {
         p4spec_rust::note_phrase! {
             node: il::ast::PathKind::Root,
@@ -134,6 +119,5 @@ fn test_syntax_equality_distinguishes_recursive_operands_variants_and_collection
     );
     assert!(![variable("x"), variable("y")].syntax_eq(&[variable("y"), variable("x")]));
     assert!([var_x.clone(), var_y.clone()].syntax_eq(&[var_y, var_x]));
-    assert!(!std::slice::from_ref(&value_recursive).syntax_eq(&[value_recursive_changed]));
     assert!(![arg_exp("x")].syntax_eq(&[arg_exp("y")]));
 }

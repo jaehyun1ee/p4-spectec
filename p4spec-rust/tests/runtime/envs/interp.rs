@@ -1,3 +1,4 @@
+use p4spec_rust::lang::data::value::ValueArena;
 use p4spec_rust::{
     lang::{
         common::{
@@ -20,18 +21,19 @@ fn id(name: &str, line: i64) -> p4spec_rust::lang::il::ast::Id {
 
 #[test]
 fn test_value_environment_iterates_deterministically_and_replaces_equivalent_keys() {
+    let mut arena = ValueArena::new();
     let mut venv = VEnv::new();
     venv.insert(
         Variable::new(id("z", 1), vec![]),
-        make::bool(false, Span::default()),
+        make::bool(&mut arena, false, Span::default()).unwrap(),
     );
     venv.insert(
         Variable::new(id("a", 2), vec![]),
-        make::bool(true, Span::default()),
+        make::bool(&mut arena, true, Span::default()).unwrap(),
     );
     venv.insert(
         Variable::new(id("a", 8), vec![]),
-        make::bool(false, Span::default()),
+        make::bool(&mut arena, false, Span::default()).unwrap(),
     );
 
     let names = venv
@@ -44,14 +46,18 @@ fn test_value_environment_iterates_deterministically_and_replaces_equivalent_key
 
 #[test]
 fn test_value_environment_clone_keeps_independent_bindings() {
+    let mut arena = ValueArena::new();
     let var = Variable::new(id("a", 1), vec![]);
     let mut venv = VEnv::new();
-    venv.insert(var.clone(), make::bool(false, Span::default()));
+    venv.insert(
+        var.clone(),
+        make::bool(&mut arena, false, Span::default()).unwrap(),
+    );
     let mut venv_local = venv.clone();
     venv_local.insert(
         Variable::new(id("a", 2), vec![]),
-        make::bool(true, Span::default()),
+        make::bool(&mut arena, true, Span::default()).unwrap(),
     );
-    assert!(!get::bool(venv.get(&var).unwrap()).unwrap());
-    assert!(get::bool(venv_local.get(&var).unwrap()).unwrap());
+    assert!(!get::bool(&arena, venv.get(&var).unwrap()).unwrap());
+    assert!(get::bool(&arena, venv_local.get(&var).unwrap()).unwrap());
 }

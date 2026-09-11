@@ -63,10 +63,10 @@ pub enum Token {
     /// Type name at the start of a postfix expression
     TypeNameExpression,
     Identifier,
-    Name(Rc<Value>),
-    StringLiteral(Rc<Value>),
-    NumberInt(Rc<Value>, String),
-    Number(Rc<Value>, String),
+    Name(Value),
+    StringLiteral(Value),
+    NumberInt(Value, String),
+    Number(Value, String),
     LessEqual,
     GreaterEqual,
     ShiftLeft,
@@ -180,7 +180,7 @@ pub enum Token {
     BitAndAssign,
     BitXorAssign,
     BitOrAssign,
-    UnexpectedToken(Rc<Value>),
+    UnexpectedToken(Value),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -193,25 +193,25 @@ enum LexerState {
 // == Lexer
 
 /// A lazy P4 token stream sharing the parser's name-resolution context
-pub struct Lexer<'source> {
+pub struct Lexer<'source, 'arena> {
     source: &'source str,
     index: usize,
     file: Rc<str>,
     line: i64,
     column: i64,
-    context: Rc<Context>,
+    context: Rc<Context<'arena>>,
     state: LexerState,
     pending: VecDeque<Phrase<Token>>,
-    deferred_classification: Option<(Rc<Value>, Span, LexerState)>,
+    deferred_classification: Option<(Value, Span, LexerState)>,
     template_depth: usize,
     finished: bool,
 }
 
 // - Construction
 
-impl<'source> Lexer<'source> {
+impl<'source, 'arena> Lexer<'source, 'arena> {
     /// Tokenizes preprocessed `source` using context-sensitive name classes
-    pub fn new(file: Rc<str>, source: &'source str, context: Rc<Context>) -> Self {
+    pub fn new(file: Rc<str>, source: &'source str, context: Rc<Context<'arena>>) -> Self {
         Self {
             source,
             index: 0,
@@ -394,12 +394,13 @@ impl<'source> Lexer<'source> {
 
     // - Name classification
 
-    fn defer_classification(&mut self, value: &Rc<Value>, span: &Span, next: LexerState) {
-        self.deferred_classification = Some((Rc::clone(value), span.clone(), next));
+    fn defer_classification(&mut self, value: &Value, span: &Span, next: LexerState) {
+        self.deferred_classification = Some((*value, span.clone(), next));
     }
 
-    fn classify_name(&mut self, value: &Rc<Value>, span: &Span, next: LexerState) -> Phrase<Token> {
-        let name = match &value.node {
+    fn classify_name(&mut self, value: &Value, span: &Span, next: LexerState) -> Phrase<Token> {
+        let arena = self.context.arena();
+        let name = match arena.kind(value) {
             crate::lang::data::value::ValueKind::Text(name) => name,
             _ => return phrase!(node: Token::Identifier, span: span.clone()),
         };
@@ -527,11 +528,18 @@ impl<'source> Lexer<'source> {
                 self.bump();
                 self.take_while(|character| character.is_ascii_alphanumeric() || character == '_');
                 let text = &self.source[start..self.index];
-                let token = keyword(text).unwrap_or_else(|| {
-                    let value = make::text(text.to_owned(), self.span_from(pos_l.clone()));
-                    Token::Name(value)
-                });
                 let span = self.span_from(pos_l);
+                let token = match keyword(text) {
+                    Some(token) => token,
+                    None => match make::text(
+                        &mut self.context.arena_mut(),
+                        text.to_owned(),
+                        span.clone(),
+                    ) {
+                        Ok(value) => Token::Name(value),
+                        Err(error) => return Some(Err(P4Error::new(error, span))),
+                    },
+                };
                 return Some(Ok(phrase!(node: token, span: span)));
             }
 
@@ -545,7 +553,10 @@ impl<'source> Lexer<'source> {
 
             let text = self.bump().expect("source is not empty").to_string();
             let span = self.span_from(pos_l);
-            let value = make::text(text, span.clone());
+            let value = match make::text(&mut self.context.arena_mut(), text, span.clone()) {
+                Ok(value) => value,
+                Err(error) => return Some(Err(P4Error::new(error, span))),
+            };
             let token = Token::UnexpectedToken(value);
             return Some(Ok(phrase!(node: token, span: span)));
         }
@@ -592,7 +603,7 @@ impl<'source> Lexer<'source> {
                 character => text.push(character),
             }
         };
-        let value = make::text(text, self.span_from(pos_l));
+        let value = make::text(&mut self.context.arena_mut(), text, self.span_from(pos_l))?;
         let token = Token::StringLiteral(value);
         let span = self.span_from(pos_quote);
         Ok(phrase!(node: token, span: span))
@@ -640,8 +651,9 @@ impl<'source> Lexer<'source> {
                         pos_l.clone(),
                     )
                 })?;
-                let value_width = make::nat(nat_width, span.clone());
-                let value_int = make::int(int, span.clone());
+                let value_width =
+                    make::nat(&mut self.context.arena_mut(), nat_width, span.clone())?;
+                let value_int = make::int(&mut self.context.arena_mut(), int, span.clone())?;
                 let atom = phrase!(
                     node: Atom::Keyword(sign.to_ascii_uppercase().to_string()),
                     span: span.clone()
@@ -652,7 +664,12 @@ impl<'source> Lexer<'source> {
                     Mixfix::Arg(value_int),
                 ]);
                 let id_typ = phrase!(node: "integerLiteral".to_owned(), span: Span::default());
-                let value = make::case_(&typ::make::var(id_typ, vec![]), value_case, span);
+                let value = make::case(
+                    &mut self.context.arena_mut(),
+                    (typ::make::var(id_typ, vec![])).node,
+                    value_case,
+                    span,
+                )?;
                 (value, digits.to_owned())
             }
             _ => {
@@ -663,7 +680,10 @@ impl<'source> Lexer<'source> {
                     )
                 })?;
                 let span = self.span_from(pos_l.clone());
-                (make::int(int, span), spelling.to_owned())
+                (
+                    make::int(&mut self.context.arena_mut(), int, span)?,
+                    spelling.to_owned(),
+                )
             }
         };
         let span = self.span_from(pos_l);
@@ -728,7 +748,7 @@ fn angle_suffix(rest: &str) -> Option<&str> {
     None
 }
 
-impl Iterator for Lexer<'_> {
+impl Iterator for Lexer<'_, '_> {
     type Item = Result<Phrase<Token>, P4Error>;
 
     fn next(&mut self) -> Option<Self::Item> {

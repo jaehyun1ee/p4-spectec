@@ -8,19 +8,20 @@ use super::super::{
 };
 use super::{assign, expr, prem::eval_prems};
 use crate::interp::al::error::{CallErrorKind, GuardErrorKind, HostErrorKind, TraceErrorKind};
+use crate::lang::data::value::ValueArena;
 use crate::{
     lang::{al::ast, data::value::Value, traits::print::Print},
     runner::{Extern, Interface, InterfaceError, RunnerContext},
     runtime::typdef::TypeDef,
 };
-use std::rc::Rc;
 
 // = Input and output checks
 
 pub(in crate::interp::al) fn check_rel_inputs(
+    arena: &ValueArena,
     ctx: &Context<'_>,
     id: &ast::Id,
-    values: &[Rc<Value>],
+    values: &[Value],
 ) -> Backtrack<()> {
     let rel = back!(Backtrack::from_result(ctx.find_rel(id), &id.span));
     let (not_typ, inputs) = match rel {
@@ -38,6 +39,7 @@ pub(in crate::interp::al) fn check_rel_inputs(
         .map(|index| typs[*index as usize].clone())
         .collect::<Vec<_>>();
     check_values(
+        arena,
         ctx,
         id,
         &typs,
@@ -49,10 +51,11 @@ pub(in crate::interp::al) fn check_rel_inputs(
 }
 
 pub(in crate::interp::al) fn check_func_inputs(
+    arena: &ValueArena,
     ctx: &Context<'_>,
     id: &ast::Id,
     targs: &[ast::Typ],
-    values: &[Rc<Value>],
+    values: &[Value],
 ) -> Backtrack<()> {
     let typ = back!(Backtrack::from_result(ctx.find_func_typ(id), &id.span));
     back!(Backtrack::check(
@@ -73,6 +76,7 @@ pub(in crate::interp::al) fn check_func_inputs(
         ));
     }
     check_values(
+        arena,
         &ctx_local,
         id,
         &typ.typs_params,
@@ -84,10 +88,11 @@ pub(in crate::interp::al) fn check_func_inputs(
 }
 
 fn check_values(
+    arena: &ValueArena,
     ctx: &Context<'_>,
     id: &ast::Id,
     typs: &[ast::Typ],
-    values: &[Rc<Value>],
+    values: &[Value],
     error: GuardErrorKind,
 ) -> Backtrack<()> {
     let tdenv = ctx.tdenv();
@@ -96,19 +101,20 @@ fn check_values(
         ctx.find_func_typ(&id).ok()
     };
     let matches = back!(Backtrack::from_result(
-        crate::runtime::ops::value::subs(&tdenv, &find_func, typs, values),
+        crate::runtime::ops::value::subs(arena, &tdenv, &find_func, typs, values),
         &id.span
     ));
     Backtrack::check(matches, id.span.clone(), ErrorKind::Guard(error))
 }
 
 fn check_func_output(
+    arena: &ValueArena,
     ctx: &Context<'_>,
     id: &ast::Id,
     tparams: &[ast::TParam],
     typ: &ast::Typ,
     targs: &[ast::Typ],
-    value: &Rc<Value>,
+    value: &Value,
 ) -> Backtrack<()> {
     let theta = back!(Backtrack::from_result(
         crate::runtime::ops::typ::Theta::from_lists(tparams, targs),
@@ -119,6 +125,7 @@ fn check_func_output(
         &id.span
     ));
     check_values(
+        arena,
         ctx,
         id,
         &[typ],
@@ -135,8 +142,8 @@ pub fn invoke_rel<I: Interface, E: Extern>(
     runner: &mut RunnerContext<'_, Al, I, E>,
     ctx: &Context<'_>,
     id: &ast::Id,
-    values: &[Rc<Value>],
-) -> Backtrack<Vec<Rc<Value>>> {
+    values: &[Value],
+) -> Backtrack<Vec<Value>> {
     let result = stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
         let rel = back!(Backtrack::from_result(ctx.find_rel(id), &id.span));
         match rel {
@@ -158,8 +165,8 @@ fn invoke_extern_rel<I: Interface, E: Extern>(
     ctx: &Context<'_>,
     id: &ast::Id,
     rel: &ast::ExternRel,
-    values: &[Rc<Value>],
-) -> Backtrack<Vec<Rc<Value>>> {
+    values: &[Value],
+) -> Backtrack<Vec<Value>> {
     let (values, _) = back!(Backtrack::from_result(
         runner.call_extern_rel(&id.node, values),
         &id.span
@@ -172,6 +179,7 @@ fn invoke_extern_rel<I: Interface, E: Extern>(
         ));
         back!(
             check_values(
+                runner.arena(),
                 ctx,
                 id,
                 &typs,
@@ -193,8 +201,8 @@ fn eval_rule_path<I: Interface, E: Extern>(
     ctx: &Context<'_>,
     rule_match: &ast::RuleMatch,
     path: &ast::RulePath,
-    values: &[Rc<Value>],
-) -> Backtrack<Vec<Rc<Value>>> {
+    values: &[Value],
+) -> Backtrack<Vec<Value>> {
     back!(Backtrack::check(
         rule_match.exps_input.len() == values.len(),
         path.id.span.clone(),
@@ -204,6 +212,7 @@ fn eval_rule_path<I: Interface, E: Extern>(
         })
     ));
     let ctx = back!(assign::assign_exps(
+        runner.arena_mut(),
         &ctx.localize(),
         &rule_match.exps_input,
         values
@@ -218,8 +227,8 @@ fn invoke_defined_rel<I: Interface, E: Extern>(
     ctx: &Context<'_>,
     id: &ast::Id,
     rel: &ast::DefinedRel,
-    values: &[Rc<Value>],
-) -> Backtrack<Vec<Rc<Value>>> {
+    values: &[Value],
+) -> Backtrack<Vec<Value>> {
     let det = runner.config().det;
     let paths: Vec<_> = rel
         .rule_groups
@@ -286,8 +295,8 @@ pub fn invoke_func<I: Interface, E: Extern>(
     ctx: &Context<'_>,
     id: &ast::Id,
     targs: &[ast::Typ],
-    values: &[Rc<Value>],
-) -> Backtrack<Rc<Value>> {
+    values: &[Value],
+) -> Backtrack<Value> {
     let result = stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
         let (_, func) = back!(Backtrack::from_result(ctx.find_func(id), &id.span));
         match func {
@@ -330,8 +339,8 @@ fn invoke_extern_func<I: Interface, E: Extern>(
     id: &ast::Id,
     extern_func: &ast::ExternFunc,
     targs: &[ast::Typ],
-    values: &[Rc<Value>],
-) -> Backtrack<Rc<Value>> {
+    values: &[Value],
+) -> Backtrack<Value> {
     let (value, _) = back!(Backtrack::from_result(
         runner.call_extern_func(&id.node, &[], values),
         &id.span
@@ -339,6 +348,7 @@ fn invoke_extern_func<I: Interface, E: Extern>(
     if runner.config().guard {
         back!(
             check_func_output(
+                runner.arena(),
                 ctx,
                 id,
                 &extern_func.tparams,
@@ -360,13 +370,14 @@ fn invoke_builtin_func<I: Interface, E: Extern>(
     id: &ast::Id,
     builtin_func: &ast::BuiltinFunc,
     targs: &[ast::Typ],
-    values: &[Rc<Value>],
-) -> Backtrack<Rc<Value>> {
+    values: &[Value],
+) -> Backtrack<Value> {
     match runner.call_builtin(id, targs, values) {
         Ok((value, _)) => {
             if runner.config().guard {
                 back!(
                     check_func_output(
+                        runner.arena(),
                         ctx,
                         id,
                         &builtin_func.tparams,
@@ -401,8 +412,8 @@ fn eval_table_row<I: Interface, E: Extern>(
     ctx: &Context<'_>,
     id: &ast::Id,
     table_row: &ast::TableRow,
-    values: &[Rc<Value>],
-) -> Backtrack<Rc<Value>> {
+    values: &[Value],
+) -> Backtrack<Value> {
     let result = (|| {
         back!(Backtrack::check(
             table_row.node.args.len() == values.len(),
@@ -413,6 +424,7 @@ fn eval_table_row<I: Interface, E: Extern>(
             })
         ));
         let ctx = back!(assign::assign_args(
+            runner.arena_mut(),
             ctx,
             &ctx.localize(),
             &table_row.node.args,
@@ -433,8 +445,8 @@ fn invoke_table_func<I: Interface, E: Extern>(
     runner: &mut RunnerContext<'_, Al, I, E>,
     ctx: &Context<'_>,
     table_func: &ast::TableFunc,
-    values: &[Rc<Value>],
-) -> Backtrack<Rc<Value>> {
+    values: &[Value],
+) -> Backtrack<Value> {
     choose_sequential(&table_func.table_rows, |table_row| {
         eval_table_row(runner, ctx, &table_func.id, table_row, values)
     })
@@ -448,8 +460,8 @@ fn eval_clause<I: Interface, E: Extern>(
     ctx_callee: &Context<'_>,
     defined_func: &ast::DefinedFunc,
     clause: &ast::Clause,
-    values: &[Rc<Value>],
-) -> Backtrack<Rc<Value>> {
+    values: &[Value],
+) -> Backtrack<Value> {
     let result = (|| {
         back!(Backtrack::check(
             clause.node.args.len() == values.len(),
@@ -460,6 +472,7 @@ fn eval_clause<I: Interface, E: Extern>(
             })
         ));
         let ctx = back!(assign::assign_args(
+            runner.arena_mut(),
             ctx_caller,
             ctx_callee,
             &clause.node.args,
@@ -481,8 +494,8 @@ fn invoke_defined_func<I: Interface, E: Extern>(
     ctx: &Context<'_>,
     defined_func: &ast::DefinedFunc,
     targs: &[ast::Typ],
-    values: &[Rc<Value>],
-) -> Backtrack<Rc<Value>> {
+    values: &[Value],
+) -> Backtrack<Value> {
     back!(Backtrack::check(
         defined_func.tparams.len() == targs.len(),
         defined_func.id.span.clone(),

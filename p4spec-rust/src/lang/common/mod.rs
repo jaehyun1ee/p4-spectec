@@ -6,8 +6,4 @@ pub mod source;
 pub mod var;
 
 pub use var::iter::Iter;
-pub use var::{
-    id::{Id, IdKind},
-    tid::TId,
-    var::Variable,
-};
+pub use var::{id::Id, tid::TId, var::Variable};

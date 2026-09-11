@@ -26,30 +26,31 @@ impl MixopCodec {
     }
 }
 
-pub(crate) fn try_encode<T, E>(
-    mixfix: &Mixfix<T>,
+pub(crate) fn try_encode_with_atom<T, S, E>(
+    mixfix: &Mixfix<T, S>,
+    encode_atom: impl Copy + Fn(&crate::lang::common::notation::mixfix::AtomPhrase<S>) -> Value,
     encode_arg: impl Copy + Fn(&T) -> Result<Value, E>,
 ) -> Result<Value, E> {
     Ok(match mixfix {
         Mixfix::Arg(arg) => json!(["Arg", encode_arg(arg)?]),
-        Mixfix::Atom(atom) => json!(["Atom", AtomPhraseCodec::encode(atom)]),
+        Mixfix::Atom(atom) => json!(["Atom", encode_atom(atom)]),
         Mixfix::Brack(left, body, right) => json!([
             "Brack",
-            AtomPhraseCodec::encode(left),
-            try_encode(body, encode_arg)?,
-            AtomPhraseCodec::encode(right)
+            encode_atom(left),
+            try_encode_with_atom(body, encode_atom, encode_arg)?,
+            encode_atom(right)
         ]),
         Mixfix::Infix(left, atom, right) => json!([
             "Infix",
-            try_encode(left, encode_arg)?,
-            AtomPhraseCodec::encode(atom),
-            try_encode(right, encode_arg)?
+            try_encode_with_atom(left, encode_atom, encode_arg)?,
+            encode_atom(atom),
+            try_encode_with_atom(right, encode_atom, encode_arg)?
         ]),
         Mixfix::Seq(items) => json!([
             "Seq",
             items
                 .iter()
-                .map(|item| try_encode(item, encode_arg))
+                .map(|item| try_encode_with_atom(item, encode_atom, encode_arg))
                 .collect::<Result<Vec<_>, _>>()?
         ]),
     })
@@ -57,7 +58,14 @@ pub(crate) fn try_encode<T, E>(
 
 pub(crate) fn decode<T>(
     value: &Value,
-    decode_arg: impl Copy + Fn(&Value) -> Result<T, DecodeError>,
+    mut decode_arg: impl FnMut(&Value) -> Result<T, DecodeError>,
+) -> Result<Mixfix<T>, DecodeError> {
+    decode_inner(value, &mut decode_arg)
+}
+
+fn decode_inner<T>(
+    value: &Value,
+    decode_arg: &mut impl FnMut(&Value) -> Result<T, DecodeError>,
 ) -> Result<Mixfix<T>, DecodeError> {
     let (tag, fields) = variant(value)?;
     match (tag, fields) {
@@ -65,18 +73,18 @@ pub(crate) fn decode<T>(
         ("Atom", [atom]) => Ok(Mixfix::Atom(AtomPhraseCodec::decode(atom)?)),
         ("Brack", [left, body, right]) => Ok(Mixfix::Brack(
             AtomPhraseCodec::decode(left)?,
-            Box::new(decode(body, decode_arg)?),
+            Box::new(decode_inner(body, decode_arg)?),
             AtomPhraseCodec::decode(right)?,
         )),
         ("Infix", [left, atom, right]) => Ok(Mixfix::Infix(
-            Box::new(decode(left, decode_arg)?),
+            Box::new(decode_inner(left, decode_arg)?),
             AtomPhraseCodec::decode(atom)?,
-            Box::new(decode(right, decode_arg)?),
+            Box::new(decode_inner(right, decode_arg)?),
         )),
         ("Seq", [items]) => Ok(Mixfix::Seq(
             array(items)?
                 .iter()
-                .map(|item| decode(item, decode_arg))
+                .map(|item| decode_inner(item, decode_arg))
                 .collect::<Result<_, _>>()?,
         )),
         ("Arg" | "Atom" | "Brack" | "Infix" | "Seq", _) => {

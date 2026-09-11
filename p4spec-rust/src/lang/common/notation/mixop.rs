@@ -1,7 +1,9 @@
-use std::{error::Error, fmt};
+use std::{cell::RefCell, collections::HashMap, error::Error, fmt, rc::Rc};
+
+use crate::frontend;
 
 use crate::lang::{
-    common::ds::set::IdSet,
+    common::{ds::set::IdSet, source::Span},
     traits::{
         eq::SyntaxEq,
         free::Free,
@@ -12,9 +14,9 @@ use crate::lang::{
 use super::mixfix::Mixfix;
 
 /// A mixfix shape with unfilled argument positions
-pub type Mixop = Mixfix<()>;
+pub type Mixop<S = Span> = Mixfix<(), S>;
 
-impl Print for Mixop {
+impl<S> Print for Mixop<S> {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         self.print_with(printer, |(), printer| printer.write("%"))
     }
@@ -34,16 +36,38 @@ impl Free for () {
     }
 }
 
+// = Shape parsing
+
+thread_local! {
+    static SHAPE_CACHE: RefCell<HashMap<Rc<str>, Rc<Mixop>>> = RefCell::new(HashMap::new());
+}
+
+pub(crate) fn shape(shape_text: &str) -> Rc<Mixop> {
+    SHAPE_CACHE.with(|cache| {
+        if let Some(mixop) = cache.borrow().get(shape_text).cloned() {
+            return mixop;
+        }
+
+        let mixop = frontend::parse::parse_mixop(shape_text)
+            .expect("value constructor contains a valid SpecTec mixop");
+        let mixop = Rc::new(mixop);
+        cache
+            .borrow_mut()
+            .insert(Rc::from(shape_text), Rc::clone(&mixop));
+        mixop
+    })
+}
+
 // == Converting a mixfix to a mixop
 
-impl<T> Mixfix<T> {
+impl<T, S: Clone> Mixfix<T, S> {
     /// Replaces every argument with an unfilled mixop position
-    pub fn to_mixop(&self) -> Mixop {
+    pub fn to_mixop(&self) -> Mixop<S> {
         self.map(|_| ())
     }
 
     /// Separates the mixop shape from its arguments
-    pub fn split(&self) -> (Mixop, Vec<&T>) {
+    pub fn split(&self) -> (Mixop<S>, Vec<&T>) {
         (self.to_mixop(), self.args())
     }
 }
@@ -70,12 +94,12 @@ impl fmt::Display for ArityMismatch {
 
 impl Error for ArityMismatch {}
 
-impl Mixop {
+impl<S: Clone> Mixop<S> {
     /// Fills a mixfix operator with arguments
     pub fn fill<T>(
         mixop: &Self,
         args: impl IntoIterator<Item = T>,
-    ) -> Result<Mixfix<T>, ArityMismatch> {
+    ) -> Result<Mixfix<T, S>, ArityMismatch> {
         let mut args = args.into_iter();
         let mixfix = mixop.fill_inner(&mut args)?;
         if args.next().is_some() {
@@ -88,7 +112,7 @@ impl Mixop {
     fn fill_inner<T>(
         &self,
         args: &mut impl Iterator<Item = T>,
-    ) -> Result<Mixfix<T>, ArityMismatch> {
+    ) -> Result<Mixfix<T, S>, ArityMismatch> {
         match self {
             Self::Arg(()) => args.next().map(Mixfix::Arg).ok_or(ArityMismatch::TooFew),
             Self::Atom(atom) => Ok(Mixfix::Atom(atom.clone())),

@@ -13,7 +13,6 @@ pub type Text = il::ast::Text;
 // Identifiers
 
 pub type Id = il::ast::Id;
-pub type IdKind = il::ast::IdKind;
 
 // Atoms
 

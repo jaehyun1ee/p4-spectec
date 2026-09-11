@@ -62,26 +62,6 @@ impl Free for TypCase {
     }
 }
 
-// - Values
-
-impl Free for ValueKind {
-    fn free_into(&self, free: &mut IdSet) {
-        match self {
-            Self::Struct(fields) => fields.as_slice().free_into(free),
-            Self::Case(value_case) => value_case.free_into(free),
-            Self::Tuple(values) | Self::List(values) => values.as_slice().free_into(free),
-            Self::Opt(value) => value.free_into(free),
-            Self::Bool(_) | Self::Num(_) | Self::Text(_) | Self::Func(_) | Self::Extern(_) => {}
-        }
-    }
-}
-
-impl Free for ValueField {
-    fn free_into(&self, free: &mut IdSet) {
-        self.1.free_into(free);
-    }
-}
-
 // - Operator types
 
 impl Free for OpTyp {

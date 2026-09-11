@@ -38,7 +38,7 @@ impl SyntaxEq for String {
     }
 }
 
-impl<T: SyntaxEq, N> SyntaxEq for NotePhrase<T, N> {
+impl<T: SyntaxEq, N, S> SyntaxEq for NotePhrase<T, N, S> {
     fn syntax_eq(&self, other: &Self) -> bool {
         self.node.syntax_eq(&other.node)
     }

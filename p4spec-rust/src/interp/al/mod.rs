@@ -13,7 +13,6 @@ use crate::{
 };
 use context::{Context, Global};
 use error::Error;
-use std::rc::Rc;
 
 pub struct Al;
 
@@ -37,20 +36,20 @@ impl<I: Interface, E: Extern> Interpreter<I, E> for Al {
     fn eval_program(
         runner: &mut RunnerContext<'_, Self, I, E>,
         name: &str,
-        program: Rc<Value>,
-    ) -> Result<Vec<Rc<Value>>, Error> {
+        program: Value,
+    ) -> Result<Vec<Value>, Error> {
         runner.call_rel(name, &[program])
     }
 
     fn eval_rel(
         runner: &mut RunnerContext<'_, Self, I, E>,
         name: &str,
-        values: &[Rc<Value>],
-    ) -> Result<Vec<Rc<Value>>, Error> {
+        values: &[Value],
+    ) -> Result<Vec<Value>, Error> {
         let id = crate::phrase!(node: name.to_owned(), span: Span::default());
         let ctx = Context::new(runner.spec());
         if runner.config().guard {
-            eval::call::check_rel_inputs(&ctx, &id, values)
+            eval::call::check_rel_inputs(runner.arena(), &ctx, &id, values)
                 .guard()
                 .finish()?;
         }
@@ -60,12 +59,12 @@ impl<I: Interface, E: Extern> Interpreter<I, E> for Al {
         runner: &mut RunnerContext<'_, Self, I, E>,
         name: &str,
         targs: &[ast::Typ],
-        values: &[Rc<Value>],
-    ) -> Result<Rc<Value>, Error> {
+        values: &[Value],
+    ) -> Result<Value, Error> {
         let id = crate::phrase!(node: name.to_owned(), span: Span::default());
         let ctx = Context::new(runner.spec());
         if runner.config().guard {
-            eval::call::check_func_inputs(&ctx, &id, targs, values)
+            eval::call::check_func_inputs(runner.arena(), &ctx, &id, targs, values)
                 .guard()
                 .finish()?;
         }

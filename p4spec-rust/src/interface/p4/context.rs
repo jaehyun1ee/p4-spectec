@@ -7,11 +7,15 @@
 //! and then resume resolving the control's parameters. Source positions are
 //! interned so LALRPOP can use copyable indices while building spans.
 
-use std::{cell::RefCell, collections::BTreeMap};
+use std::{
+    cell::{Ref, RefCell, RefMut},
+    collections::BTreeMap,
+};
 
 use crate::lang::common::source::{Position, Span};
 
 use super::error::ContextError;
+use crate::lang::data::value::ValueArena;
 
 // == Names and scopes
 
@@ -42,7 +46,8 @@ pub enum IdentKind {
     },
 }
 
-pub struct Context {
+pub struct Context<'a> {
+    arena: RefCell<&'a mut ValueArena>,
     /// Global namespace followed by the currently active local namespaces.
     scopes: RefCell<Vec<Namespace>>,
     /// Local namespaces set aside while parsing a top-level-only production.
@@ -57,17 +62,26 @@ pub struct Context {
 
 // == Context operations
 
-impl Context {
+impl<'a> Context<'a> {
     // - Construction
 
-    pub fn new() -> Self {
+    pub fn new(arena: &'a mut ValueArena) -> Self {
         Self {
+            arena: RefCell::new(arena),
             scopes: RefCell::new(vec![Namespace::new()]),
             scopes_suspended: RefCell::new(Vec::new()),
             id_prev: RefCell::new(None),
             namespace_parent: RefCell::new(None),
             positions: RefCell::new(Vec::new()),
         }
+    }
+
+    pub fn arena(&self) -> Ref<'_, ValueArena> {
+        Ref::map(self.arena.borrow(), |arena| &**arena)
+    }
+
+    pub fn arena_mut(&self) -> RefMut<'_, ValueArena> {
+        RefMut::map(self.arena.borrow_mut(), |arena| &mut **arena)
     }
 
     // - Declarations
@@ -231,11 +245,5 @@ impl Context {
         } else {
             Span::new(self.location_get(location_l), self.location_get(location_r))
         }
-    }
-}
-
-impl Default for Context {
-    fn default() -> Self {
-        Self::new()
     }
 }

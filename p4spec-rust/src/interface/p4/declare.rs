@@ -15,16 +15,18 @@ use super::{
 // == Individual names
 
 pub(super) fn typ(context: &Context, value: &Value, has_params: bool) {
-    let id = extract::id_name(value).expect("P4 declaration name");
+    let id = extract::id_name(&context.arena(), value).expect("P4 declaration name");
     context
         .declare_typ(id, has_params)
         .expect("P4 parser scope");
 }
 
 pub(super) fn var(context: &Context, value: &Value, has_params: bool, type_ref: Option<&Value>) {
-    let id = extract::id_name(value).expect("P4 declaration name");
+    let id = extract::id_name(&context.arena(), value).expect("P4 declaration name");
     let type_id = match type_ref {
-        Some(type_ref) => extract::type_id_type_ref(type_ref).expect("P4 type reference"),
+        Some(type_ref) => {
+            extract::type_id_type_ref(&context.arena(), type_ref).expect("P4 type reference")
+        }
         None => TypeId::Empty,
     };
     context
@@ -35,7 +37,7 @@ pub(super) fn var(context: &Context, value: &Value, has_params: bool, type_ref: 
 // == Name lists
 
 pub(super) fn vars(context: &Context, value: &Value) {
-    get::matches! {
+    get::matches! { &context.arena(),
         value,
         "nameList ',' name" => |values| {
             vars(context, values[0]);
@@ -46,7 +48,7 @@ pub(super) fn vars(context: &Context, value: &Value) {
 }
 
 pub(super) fn typs(context: &Context, value: &Value) {
-    get::matches! {
+    get::matches! { &context.arena(),
         value,
         "typeParameterList ',' typeParameter" => |values| {
             typs(context, values[0]);
@@ -59,6 +61,6 @@ pub(super) fn typs(context: &Context, value: &Value) {
 // == Type namespaces
 
 pub(super) fn type_namespace(context: &Context, value: &Value, namespace: Namespace) {
-    let id = extract::id_name(value).expect("P4 type name");
+    let id = extract::id_name(&context.arena(), value).expect("P4 type name");
     context.namespace_set_typ(&id, namespace);
 }

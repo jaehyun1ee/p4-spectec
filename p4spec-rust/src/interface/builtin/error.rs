@@ -41,3 +41,11 @@ impl BuiltinError {
         }
     }
 }
+
+impl From<ValueError> for BuiltinError {
+    fn from(error: ValueError) -> Self {
+        Self {
+            kind: BuiltinErrorKind::Value(error),
+        }
+    }
+}

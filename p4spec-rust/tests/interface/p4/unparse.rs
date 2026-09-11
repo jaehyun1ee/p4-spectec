@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use p4spec_rust::lang::data::value::ValueArena;
 
 use p4spec_rust::{
     interface::p4::{error::P4UnparseError, unparse::P4Unparser},
@@ -59,68 +59,96 @@ fn hinted_def_type() -> il::ast::DefTyp {
     }
 }
 
-fn wrapped_text() -> Rc<Value> {
+fn wrapped_text(arena: &mut ValueArena) -> Value {
     let wrapper_type = typ::make::var(id("Wrapper"), Vec::new());
     let value_case = Mixfix::Seq(vec![
         Mixfix::Atom(atom("WRAP")),
-        Mixfix::Arg(make::text("payload".to_owned(), Span::default())),
+        Mixfix::Arg(make::text(arena, "payload".to_owned(), Span::default()).unwrap()),
     ]);
-    make::case_(&wrapper_type, value_case, Span::default())
+    make::case(
+        arena,
+        (wrapper_type).node.clone(),
+        value_case,
+        Span::default(),
+    )
+    .unwrap()
 }
 
 #[test]
 fn test_unparses_scalar_and_container_values() {
+    let mut arena = ValueArena::new();
     let unparser = P4Unparser::new();
     let span = Span::default();
     assert_eq!(
-        unparser.render(&make::bool(true, span.clone())).unwrap(),
+        {
+            let value = &make::bool(&mut arena, true, span.clone()).unwrap();
+            unparser.render(&arena, value)
+        }
+        .unwrap(),
         "true"
     );
     assert_eq!(
-        unparser
-            .render(&make::nat(Natural::from(42_u64), span.clone()))
-            .unwrap(),
+        {
+            let value = &make::nat(&mut arena, Natural::from(42_u64), span.clone()).unwrap();
+            unparser.render(&arena, value)
+        }
+        .unwrap(),
         "42"
     );
     assert_eq!(
-        unparser
-            .render(&make::text("a\n\"b".into(), span.clone()))
-            .unwrap(),
+        {
+            let value = &make::text(&mut arena, "a\n\"b".into(), span.clone()).unwrap();
+            unparser.render(&arena, value)
+        }
+        .unwrap(),
         "a\\n\\\"b"
     );
 
     let tuple_type = typ::make::tuple(vec![typ::make::bool(), typ::make::nat()]);
-    let tuple = make::tuple(
-        &tuple_type,
-        vec![
-            make::bool(false, span.clone()),
-            make::nat(7_u64.into(), span.clone()),
-        ],
-        span,
-    );
-    assert_eq!(unparser.render(&tuple).unwrap(), "(false, 7)");
+    let tuple = {
+        let values = vec![
+            make::bool(&mut arena, false, span.clone()).unwrap(),
+            make::nat(&mut arena, 7_u64.into(), span.clone()).unwrap(),
+        ];
+        make::tuple(&mut arena, (tuple_type).node.clone(), values, span).unwrap()
+    };
+    assert_eq!(unparser.render(&arena, &tuple).unwrap(), "(false, 7)");
 }
 
 #[test]
 fn test_unparses_non_ascii_text_as_decimal_bytes() {
-    let value = make::text("prefix◕‿◕😀ツsimple_table_1".to_owned(), Span::default());
+    let mut arena = ValueArena::new();
+    let value = make::text(
+        &mut arena,
+        "prefix◕‿◕😀ツsimple_table_1".to_owned(),
+        Span::default(),
+    )
+    .unwrap();
     assert_eq!(
-        P4Unparser::new().render(&value).unwrap(),
+        P4Unparser::new().render(&arena, &value).unwrap(),
         "prefix\\226\\151\\149\\226\\128\\191\\226\\151\\149\\240\\159\\152\\128\\227\\131\\132simple_table_1"
     );
 }
 
 #[test]
 fn test_unsupported_values_return_typed_errors() {
-    let structure = make::structure(&typ::make::bool(), Vec::new(), Span::default());
+    let mut arena = ValueArena::new();
+    let structure = make::structure(
+        &mut arena,
+        (typ::make::bool()).node.clone(),
+        Vec::new(),
+        Span::default(),
+    )
+    .unwrap();
     assert_eq!(
-        P4Unparser::new().render(&structure),
+        P4Unparser::new().render(&arena, &structure),
         Err(P4UnparseError::UnsupportedValue("Struct"))
     );
 }
 
 #[test]
 fn test_print_hints_are_loaded_from_all_runtime_stages() {
+    let mut arena = ValueArena::new();
     let al_spec = vec![p4spec_rust::phrase! {
         node: al::ast::DefKind::Typ(al::ast::TypDef::Defined(Box::new(al::ast::DefinedTyp {
             id: id("Wrapper"),
@@ -147,18 +175,18 @@ fn test_print_hints_are_loaded_from_all_runtime_stages() {
         }))),
         span: Span::default(),
     })];
-    let value = wrapped_text();
+    let value = wrapped_text(&mut arena);
 
     assert_eq!(
-        P4Unparser::from_al_spec(&al_spec).render(&value),
+        P4Unparser::from_al_spec(&al_spec).render(&arena, &value),
         Ok("show payload".to_owned())
     );
     assert_eq!(
-        P4Unparser::from_sl_spec(&sl_spec).render(&value),
+        P4Unparser::from_sl_spec(&sl_spec).render(&arena, &value),
         Ok("show payload".to_owned())
     );
     assert_eq!(
-        P4Unparser::from_pl_spec(&pl_spec).render(&value),
+        P4Unparser::from_pl_spec(&pl_spec).render(&arena, &value),
         Ok("show payload".to_owned())
     );
 }

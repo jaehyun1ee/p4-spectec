@@ -66,46 +66,6 @@ impl SyntaxEq for FuncTyp {
     }
 }
 
-// - Values
-
-impl SyntaxEq for ValueKind {
-    fn syntax_eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (ValueKind::Bool(value_l), ValueKind::Bool(value_r)) => value_l == value_r,
-            (ValueKind::Num(value_l), ValueKind::Num(value_r)) => value_l == value_r,
-            (ValueKind::Text(value_l), ValueKind::Text(value_r)) => value_l == value_r,
-            (ValueKind::Struct(fields_l), ValueKind::Struct(fields_r)) => {
-                fields_l.len() == fields_r.len()
-                    && fields_l.iter().zip(fields_r).all(
-                        |((atom_l, value_l), (atom_r, value_r))| {
-                            atom_l.syntax_eq(atom_r) && value_l.syntax_eq(value_r)
-                        },
-                    )
-            }
-            (ValueKind::Case(value_l), ValueKind::Case(value_r)) => {
-                value_l.eq_by(value_r, SyntaxEq::syntax_eq)
-            }
-            (ValueKind::Tuple(values_l), ValueKind::Tuple(values_r))
-            | (ValueKind::List(values_l), ValueKind::List(values_r)) => {
-                values_l.syntax_eq(values_r)
-            }
-            (ValueKind::Opt(Some(value_l)), ValueKind::Opt(Some(value_r))) => {
-                value_l.syntax_eq(value_r)
-            }
-            (ValueKind::Opt(None), ValueKind::Opt(None)) => true,
-            (ValueKind::Func(id_l), ValueKind::Func(id_r)) => id_l.syntax_eq(id_r),
-            (ValueKind::Extern(value_l), ValueKind::Extern(value_r)) => value_l == value_r,
-            _ => false,
-        }
-    }
-}
-
-impl SyntaxEq for ValueField {
-    fn syntax_eq(&self, other: &Self) -> bool {
-        self.0.syntax_eq(&other.0) && self.1.syntax_eq(&other.1)
-    }
-}
-
 // - Expressions
 
 impl SyntaxEq for ExpKind {

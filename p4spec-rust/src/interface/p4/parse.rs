@@ -15,7 +15,7 @@ use lalrpop_util::ParseError;
 
 use crate::{
     lang::common::source::{Phrase, Position, Span},
-    lang::data::value::Value,
+    lang::data::value::{Value, ValueArena},
 };
 
 use super::{
@@ -73,9 +73,13 @@ fn translate_lalrpop_error(
 // - Source strings
 
 /// Parses an already-preprocessed P4 source string.
-pub fn parse_string(path: impl AsRef<Path>, source: &str) -> Result<Rc<Value>, P4Error> {
+pub fn parse_string(
+    arena: &mut ValueArena,
+    path: impl AsRef<Path>,
+    source: &str,
+) -> Result<Value, P4Error> {
     let file: Rc<str> = Rc::from(path.as_ref().to_string_lossy().into_owned());
-    let context = Rc::new(Context::new());
+    let context = Rc::new(Context::new(arena));
     let position = Position::new(Rc::clone(&file), 1, 0);
     let lexer = Lexer::new(file, source, Rc::clone(&context));
     let input = parser_input(context.as_ref(), lexer, position);
@@ -87,8 +91,12 @@ pub fn parse_string(path: impl AsRef<Path>, source: &str) -> Result<Rc<Value>, P
 // - Source files
 
 /// Preprocesses and parses a P4 source file.
-pub fn parse_file(includes: &[PathBuf], path: impl AsRef<Path>) -> Result<Rc<Value>, P4Error> {
+pub fn parse_file(
+    arena: &mut ValueArena,
+    includes: &[PathBuf],
+    path: impl AsRef<Path>,
+) -> Result<Value, P4Error> {
     let path = path.as_ref();
     let source = preprocess(includes, path)?;
-    parse_string(path, &source)
+    parse_string(arena, path, &source)
 }

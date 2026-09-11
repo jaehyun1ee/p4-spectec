@@ -5,13 +5,12 @@
 //! starts a fresh scope while retaining the same global definitions.
 
 use crate::interp::al::error::ContextErrorKind;
-use std::rc::Rc;
 
 use crate::{
     lang::{
         al::ast,
         common::{Variable, source::Span},
-        data::value::{Value, get},
+        data::value::{Value, ValueArena, get},
     },
     runtime::{
         envs::{
@@ -141,11 +140,11 @@ impl<'global> Context<'global> {
 
     // == Finders
 
-    pub fn find_value_opt(&self, var: &Variable) -> Option<&Rc<Value>> {
+    pub fn find_value_opt(&self, var: &Variable) -> Option<&Value> {
         self.local.venv.get(var)
     }
 
-    pub fn find_value(&self, var: &Variable) -> Result<&Rc<Value>, Error> {
+    pub fn find_value(&self, var: &Variable) -> Result<&Value, Error> {
         self.find_value_opt(var).ok_or_else(|| {
             Error::undefined(EntityKind::Value, var.to_string(), var.id.span.clone())
         })
@@ -227,7 +226,7 @@ impl<'global> Context<'global> {
 
     // == Adders
 
-    pub fn add_value(&mut self, var: Variable, value: Rc<Value>) {
+    pub fn add_value(&mut self, var: Variable, value: Value) {
         self.local.venv.insert(var, value);
     }
 
@@ -249,23 +248,20 @@ impl<'global> Context<'global> {
 
     // == Iteration contexts
 
-    pub fn sub_opt(&self, vars: &[ast::Var]) -> Result<Option<Self>, Error> {
+    pub fn sub_opt(&self, arena: &ValueArena, vars: &[ast::Var]) -> Result<Option<Self>, Error> {
         let mut values = Vec::with_capacity(vars.len());
         for var in vars {
             let mut iters = var.iters.clone();
             iters.push(ast::Iter::Opt);
             let value = self.find_value(&Variable::new(var.id.clone(), iters))?;
-            let value =
-                get::opt(value).map_err(|error| Error::from(error).at_if_missing(&var.id.span))?;
+            let value = get::opt(arena, value)
+                .map_err(|error| Error::from(error).at_if_missing(&var.id.span))?;
             values.push(value);
         }
         if values.iter().all(|value| value.is_some()) {
             let mut ctx = self.clone();
             for (var, value) in vars.iter().zip(values.into_iter().flatten()) {
-                ctx.add_value(
-                    Variable::new(var.id.clone(), var.iters.clone()),
-                    Rc::clone(value),
-                );
+                ctx.add_value(Variable::new(var.id.clone(), var.iters.clone()), value);
             }
             Ok(Some(ctx))
         } else if values.iter().all(|value| value.is_none()) {
@@ -278,14 +274,14 @@ impl<'global> Context<'global> {
         }
     }
 
-    pub fn sub_list(&self, vars: &[ast::Var]) -> Result<Vec<Self>, Error> {
+    pub fn sub_list(&self, arena: &ValueArena, vars: &[ast::Var]) -> Result<Vec<Self>, Error> {
         let mut rows = Vec::with_capacity(vars.len());
         for var in vars {
             let mut iters = var.iters.clone();
             iters.push(ast::Iter::List);
             let value = self.find_value(&Variable::new(var.id.clone(), iters))?;
-            let values =
-                get::list(value).map_err(|error| Error::from(error).at_if_missing(&var.id.span))?;
+            let values = get::list(arena, value)
+                .map_err(|error| Error::from(error).at_if_missing(&var.id.span))?;
             rows.push(values);
         }
         let Some(row) = rows.first() else {
@@ -309,7 +305,7 @@ impl<'global> Context<'global> {
             for (var, row) in vars.iter().zip(&rows) {
                 ctx.add_value(
                     Variable::new(var.id.clone(), var.iters.clone()),
-                    Rc::clone(&row[column]),
+                    row[column],
                 );
             }
             ctxs.push(ctx);
