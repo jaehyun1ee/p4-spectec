@@ -62,7 +62,7 @@ fn test_printer_preserves_el_delimiters_precedence_hints_and_definition_separato
         node: ast::NotTypKind::Atom(atom("TERM")),
         span: span("type"),
     };
-    let definitions = vec![
+    let defs = vec![
         definition(ast::DefKind::ExternSyntax(ast::ExternSyntaxDef {
             id: id("Syntax", "def"),
             hints: vec![hint.clone()],
@@ -144,7 +144,7 @@ fn test_printer_preserves_el_delimiters_precedence_hints_and_definition_separato
         definition(ast::DefKind::Sep),
     ];
     assert_eq!(
-        Print::to_string(&definitions),
+        Print::to_string(&defs),
         "extern syntax Syntax\nsyntax Pair<T>\nsyntax Record = {field bool}\nvar value : bool\nextern relation external: TERM\nrelation internal: TERM\nextern dec $extern(bool) : bool\nbuiltin dec $builtin : bool\ntbl dec $table : bool\ndec $declared : bool\ntbl def $rows =\n  pattern => body\ndef $defined = body\n -- otherwise\n\n\n\n"
     );
 }

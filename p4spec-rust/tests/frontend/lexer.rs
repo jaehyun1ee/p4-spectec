@@ -247,9 +247,9 @@ fn test_lexemes_carry_byte_based_source_positions() {
 #[test]
 fn test_uppercase_identifier_classification_is_lazy_and_contextual() {
     let classifier_calls = Cell::new(0);
-    let mut lexer = Lexer::new("scope.watsup", "Bound Next", |identifier| {
+    let mut lexer = Lexer::new("scope.watsup", "Bound Next", |id| {
         classifier_calls.set(classifier_calls.get() + 1);
-        identifier == "Bound"
+        id == "Bound"
     });
 
     assert_eq!(classifier_calls.get(), 0);

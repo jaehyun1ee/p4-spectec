@@ -75,12 +75,12 @@ fn test_conversion_inserts_index_guards_at_evaluation_sites_in_source_order() {
 
     let converted = algo::convert(spec).expect("guarded conversion");
     let clause = function_clause(&converted);
-    let [guard_premise, source_premise, guard_output] = clause.node.prems.as_slice() else {
+    let [prem_guard, prem_source_out, guard_output] = clause.node.prems.as_slice() else {
         panic!("expected premise and output index guards");
     };
 
-    assert_index_guard(guard_premise, span(12), span(10), "i", span(11));
-    assert_eq!(source_premise, &as_if_prem_al(&prem_source));
+    assert_index_guard(prem_guard, span(12), span(10), "i", span(11));
+    assert_eq!(prem_source_out, &as_if_prem_al(&prem_source));
     assert_index_guard(guard_output, span(22), span(20), "j", span(21));
     assert_eq!(clause.node.exp, exp_output);
     assert_eq!(clause.span, span(1));
@@ -238,12 +238,9 @@ fn test_conversion_omits_iteration_guards_entailed_by_prior_premises() {
     );
 
     let converted = algo::convert(spec).expect("transitively guarded iteration");
-    let premises = &function_clause(&converted).node.prems;
+    let prems = &function_clause(&converted).node.prems;
 
-    assert_eq!(
-        premises,
-        &[as_if_prem_al(&prem_xy), as_if_prem_al(&prem_yz)]
-    );
+    assert_eq!(prems, &[as_if_prem_al(&prem_xy), as_if_prem_al(&prem_yz)]);
 }
 
 #[test]
@@ -359,8 +356,8 @@ fn test_conversion_preserves_numeric_and_slice_checks_before_output_guards() {
     );
 
     let converted = algo::convert(spec).expect("numeric and slice conversion");
-    let premises = &function_clause(&converted).node.prems;
-    let [actual_nonzero, actual_slice_bound, index_guard] = premises.as_slice() else {
+    let prems = &function_clause(&converted).node.prems;
+    let [actual_nonzero, actual_slice_bound, index_guard] = prems.as_slice() else {
         panic!("expected two explicit checks and one index guard");
     };
 
@@ -398,14 +395,14 @@ fn test_conversion_distinguishes_let_must_guards_from_insert_guards() {
 
     let converted = algo::convert(spec).expect("let guard conversion");
     let clause = function_clause(&converted);
-    let [right_guard, let_premise] = clause.node.prems.as_slice() else {
+    let [right_guard, prem_let] = clause.node.prems.as_slice() else {
         panic!("expected only the right guard before the generated let premise");
     };
 
     assert_eq!(right_guard.span, Span::over(&[span(23), span(24)]));
     assert!(matches!(right_guard.node, ast_al::PremKind::If(_)));
-    assert_eq!(let_premise.span, span(30));
-    let ast_al::PremKind::Let(let_prem) = &let_premise.node else {
+    assert_eq!(prem_let.span, span(30));
+    let ast_al::PremKind::Let(let_prem) = &prem_let.node else {
         panic!("expected binding analysis to produce a let premise");
     };
     assert!(matches!(let_prem.exp_l.node, ast::ExpKind::Iter(_, _)));
@@ -453,13 +450,13 @@ fn test_conversion_distinguishes_iterated_must_guards_from_insert_guards() {
     );
 
     let converted = algo::convert(insert_spec).expect("iterated insertion conversion");
-    let [joint_guard, source_premise] = function_clause(&converted).node.prems.as_slice() else {
+    let [joint_guard, prem_source] = function_clause(&converted).node.prems.as_slice() else {
         panic!("expected a joint guard before the iterated premise");
     };
     assert_eq!(joint_guard.span, Span::over(&[span(10), span(11)]));
     assert!(matches!(joint_guard.node, ast_al::PremKind::If(_)));
-    assert_eq!(source_premise.span, span(14));
-    assert!(matches!(source_premise.node, ast_al::PremKind::Iter(_)));
+    assert_eq!(prem_source.span, span(14));
+    assert!(matches!(prem_source.node, ast_al::PremKind::Iter(_)));
 
     let prem_binding = crate::phrase! { node:
     ast::PremKind::Iter(ast::IterPrem {
@@ -485,11 +482,11 @@ fn test_conversion_distinguishes_iterated_must_guards_from_insert_guards() {
 
     let converted = algo::convert(must_spec).expect("iterated binding conversion");
     let clause = function_clause(&converted);
-    let [source_premise] = clause.node.prems.as_slice() else {
+    let [prem_source] = clause.node.prems.as_slice() else {
         panic!("bound-plus-bind guard must suppress the matching output guard");
     };
-    assert_eq!(source_premise.span, span(24));
-    let ast_al::PremKind::Iter(iter_prem) = &source_premise.node else {
+    assert_eq!(prem_source.span, span(24));
+    let ast_al::PremKind::Iter(iter_prem) = &prem_source.node else {
         panic!("expected analyzed iterated binding premise");
     };
     assert_eq!(
@@ -515,16 +512,15 @@ fn test_conversion_distinguishes_iterated_must_guards_from_insert_guards() {
 
 #[test]
 fn test_conversion_traverses_relation_matches_paths_and_else_without_sibling_leaks() {
-    let rule =
-        |name: &str, input: ast::Exp, output: ast::Exp, premises: Vec<ast::Prem>, line: i64| {
-            crate::phrase! { node:
-            ast::RuleKind {
-                id: id(name, line),
-                not_exp: Mixfix::Seq(vec![Mixfix::Arg(input), Mixfix::Arg(output)]),
-                prems: premises,
-            }, span:
-            span(line) }
-        };
+    let rule = |name: &str, input: ast::Exp, output: ast::Exp, prems: Vec<ast::Prem>, line: i64| {
+        crate::phrase! { node:
+        ast::RuleKind {
+            id: id(name, line),
+            not_exp: Mixfix::Seq(vec![Mixfix::Arg(input), Mixfix::Arg(output)]),
+            prems,
+        }, span:
+        span(line) }
+    };
     let debug_index = |value: bool, line: i64| {
         crate::phrase! { node:
         ast::PremKind::Debug(ast::DebugPrem {

@@ -17,11 +17,11 @@ fn trace(message: &str, children: Vec<Error>) -> Error {
 #[test]
 fn test_failure_rendering_retains_branch_order_and_locations() {
     let span = Span::new(Position::new("spec", 3, 4), Position::new("spec", 3, 5));
-    let mut first = trace("first mismatch", vec![]);
-    first.span = span.clone();
+    let mut error_first = trace("first mismatch", vec![]);
+    error_first.span = span.clone();
     let error = Error::execution(vec![trace(
         "call failed",
-        vec![first, trace("second mismatch", vec![])],
+        vec![error_first, trace("second mismatch", vec![])],
     )]);
     assert_eq!(
         error.to_string(),

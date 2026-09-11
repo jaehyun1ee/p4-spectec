@@ -2,11 +2,11 @@ use super::super::*;
 
 #[test]
 fn test_conversion_preserves_rule_paths_and_populates_antiunified_inputs_in_order() {
-    let tuple = |left: bool, right: bool, line: i64| {
+    let tuple = |bool_l: bool, bool_r: bool, line: i64| {
         exp(
             ast::ExpKind::Tuple(vec![
-                exp(ast::ExpKind::Bool(left), ast::TypKind::Bool, line),
-                exp(ast::ExpKind::Bool(right), ast::TypKind::Bool, line + 1),
+                exp(ast::ExpKind::Bool(bool_l), ast::TypKind::Bool, line),
+                exp(ast::ExpKind::Bool(bool_r), ast::TypKind::Bool, line + 1),
             ]),
             ast::TypKind::Tuple(vec![typ::make::bool(), typ::make::bool()]),
             line,

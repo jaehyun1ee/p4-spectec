@@ -95,8 +95,8 @@ fn test_substitution_freshens_function_binders_and_rejects_higher_order_targets(
         vec![var("T", vec![]), var("U", vec![])],
         var("T", vec![]),
     );
-    let function = typ(TypKind::Func(func_typ));
-    let substituted = subst_typ(&theta, &function).expect("substitute function");
+    let typ_func = typ(TypKind::Func(func_typ));
+    let substituted = subst_typ(&theta, &typ_func).expect("substitute function");
     let TypKind::Func(func_typ) = substituted.node else {
         panic!("function type")
     };

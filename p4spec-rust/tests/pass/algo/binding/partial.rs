@@ -137,22 +137,15 @@ fn test_partial_binding_preserves_expression_and_premise_iteration_dimensions() 
         ),
         1,
     );
-    let mut context = Context::new();
-    let benv = collect::collect_exp(&context, &iterated).expect("binding collection");
+    let mut ctx = Context::new();
+    let benv = collect::collect_exp(&ctx, &iterated).expect("binding collection");
     let ids_bind = benv_domain(&benv);
     let mut renames = partial::RenameEnv::new();
     let mut iter_ctx = ICtx::new();
 
-    let renamed = partial::rename_exp(
-        &mut context,
-        &ids_bind,
-        &mut renames,
-        &mut iter_ctx,
-        iterated,
-    )
-    .expect("partial binding rename");
-    let premises =
-        partial::gen_prems(&context, &ICtx::new(), &renames).expect("partial binding premises");
+    let renamed = partial::rename_exp(&mut ctx, &ids_bind, &mut renames, &mut iter_ctx, iterated)
+        .expect("partial binding rename");
+    let prems = partial::gen_prems(&ctx, &ICtx::new(), &renames).expect("partial binding premises");
 
     let ast::ExpKind::Iter(exp_inner, (ast::Iter::List, vars)) = &renamed.node else {
         panic!("expected iterated binding");
@@ -167,10 +160,10 @@ fn test_partial_binding_preserves_expression_and_premise_iteration_dimensions() 
     assert_eq!(vars[0].id.node, "x");
     assert_eq!(vars[1].id, *id_rename);
 
-    let [premise] = premises.as_slice() else {
+    let [prem] = prems.as_slice() else {
         panic!("expected one equality premise");
     };
-    let ast_al::PremKind::Iter(iter_prem) = &premise.node else {
+    let ast_al::PremKind::Iter(iter_prem) = &prem.node else {
         panic!("expected premise iteration");
     };
     assert_eq!(iter_prem.prem_iter.iter, ast::Iter::List);
@@ -230,22 +223,16 @@ fn test_partial_binding_preserves_nested_iteration_order_and_dimensions() {
         ast::TypKind::Iter(Box::new(inner_typ), ast::Iter::List),
         1,
     );
-    let mut context = Context::new();
-    let benv = collect::collect_exp(&context, &iterated).expect("binding collection");
+    let mut ctx = Context::new();
+    let benv = collect::collect_exp(&ctx, &iterated).expect("binding collection");
     let ids_bind = benv_domain(&benv);
     let mut renames = partial::RenameEnv::new();
     let mut iter_ctx = ICtx::new();
 
-    let renamed = partial::rename_exp(
-        &mut context,
-        &ids_bind,
-        &mut renames,
-        &mut iter_ctx,
-        iterated,
-    )
-    .expect("nested partial binding rename");
-    let premises = partial::gen_prems(&context, &ICtx::new(), &renames)
-        .expect("nested partial binding premises");
+    let renamed = partial::rename_exp(&mut ctx, &ids_bind, &mut renames, &mut iter_ctx, iterated)
+        .expect("nested partial binding rename");
+    let prems =
+        partial::gen_prems(&ctx, &ICtx::new(), &renames).expect("nested partial binding premises");
 
     let ast::ExpKind::Iter(inner, (ast::Iter::List, outer_vars)) = &renamed.node else {
         panic!("expected outer list iteration");
@@ -264,10 +251,10 @@ fn test_partial_binding_preserves_nested_iteration_order_and_dimensions() {
     assert_eq!(inner_vars[1].id, *id_rename);
     assert_eq!(outer_vars[1].id, *id_rename);
 
-    let [premise] = premises.as_slice() else {
+    let [prem] = prems.as_slice() else {
         panic!("expected one nested equality premise");
     };
-    let ast_al::PremKind::Iter(outer) = &premise.node else {
+    let ast_al::PremKind::Iter(outer) = &prem.node else {
         panic!("expected outer premise iteration");
     };
     assert_eq!(outer.prem_iter.iter, ast::Iter::List);
@@ -291,9 +278,8 @@ fn test_partial_case_and_list_bindings_generate_match_then_bind_premises_in_sour
         (not_typ("B", 1), origin, vec![]),
     ]), span:
     span(1) };
-    let mut context = Context::new();
-    context
-        .tdenv
+    let mut ctx = Context::new();
+    ctx.tdenv
         .insert(choice_id, TypeDef::Defined(vec![], Box::new(def_typ)));
 
     let keyword = crate::phrase! { node: Atom::Keyword("A".to_owned()), span:  span(2) };
@@ -318,24 +304,23 @@ fn test_partial_case_and_list_bindings_generate_match_then_bind_premises_in_sour
         ast::TypKind::Tuple(vec![choice_typ, list_typ]),
         2,
     );
-    let benv = collect::collect_exp(&context, &tuple).expect("binding collection");
+    let benv = collect::collect_exp(&ctx, &tuple).expect("binding collection");
     let ids_bind = benv_domain(&benv);
     let mut renames = partial::RenameEnv::new();
     let mut iter_ctx = ICtx::new();
 
-    let renamed = partial::rename_exp(&mut context, &ids_bind, &mut renames, &mut iter_ctx, tuple)
+    let renamed = partial::rename_exp(&mut ctx, &ids_bind, &mut renames, &mut iter_ctx, tuple)
         .expect("partial binding rename");
-    let premises =
-        partial::gen_prems(&context, &ICtx::new(), &renames).expect("partial binding premises");
+    let prems = partial::gen_prems(&ctx, &ICtx::new(), &renames).expect("partial binding premises");
 
     let ast::ExpKind::Tuple(exps) = &renamed.node else {
         panic!("expected tuple binding");
     };
     assert!(matches!(exps[0].node, ast::ExpKind::Var(_)));
     assert!(matches!(exps[1].node, ast::ExpKind::Iter(_, _)));
-    assert_eq!(premises.len(), 4);
+    assert_eq!(prems.len(), 4);
     assert!(matches!(
-        &premises[0].node,
+        &prems[0].node,
         ast_al::PremKind::If(ast_al::IfPrem {
             exp: NotePhrase {
                 node: ast::ExpKind::Match(_, ast::Pattern::Case(_)),
@@ -344,7 +329,7 @@ fn test_partial_case_and_list_bindings_generate_match_then_bind_premises_in_sour
         })
     ));
     assert!(matches!(
-        &premises[1].node,
+        &prems[1].node,
         ast_al::PremKind::Let(ast_al::LetPrem {
             exp_l: NotePhrase {
                 node: ast::ExpKind::Case(_),
@@ -354,7 +339,7 @@ fn test_partial_case_and_list_bindings_generate_match_then_bind_premises_in_sour
         })
     ));
     assert!(matches!(
-        &premises[2].node,
+        &prems[2].node,
         ast_al::PremKind::If(ast_al::IfPrem {
             exp: NotePhrase {
                 node: ast::ExpKind::Match(_, ast::Pattern::List(ast::ListPattern::Fixed(1))),
@@ -363,7 +348,7 @@ fn test_partial_case_and_list_bindings_generate_match_then_bind_premises_in_sour
         })
     ));
     assert!(matches!(
-        &premises[3].node,
+        &prems[3].node,
         ast_al::PremKind::Let(ast_al::LetPrem {
             exp_l: NotePhrase {
                 node: ast::ExpKind::List(_),
@@ -384,8 +369,8 @@ fn test_partial_upcast_binding_checks_subtype_before_binding_the_downcast_value(
         crate::phrase! { node: ast::TypKind::Var(child_id.clone(), vec![]), span:  span(1) };
     let parent_origin = crate::phrase! { node: (parent_id.clone(), vec![]), span:  span(1) };
     let child_origin = crate::phrase! { node: (child_id.clone(), vec![]), span:  span(1) };
-    let mut context = Context::new();
-    context.tdenv.insert(
+    let mut ctx = Context::new();
+    ctx.tdenv.insert(
         parent_id,
         TypeDef::Defined(
             vec![],
@@ -397,7 +382,7 @@ fn test_partial_upcast_binding_checks_subtype_before_binding_the_downcast_value(
             span(1) }),
         ),
     );
-    context.tdenv.insert(
+    ctx.tdenv.insert(
         child_id,
         TypeDef::Defined(
             vec![],
@@ -412,17 +397,16 @@ fn test_partial_upcast_binding_checks_subtype_before_binding_the_downcast_value(
         parent_typ.node.clone(),
         2,
     );
-    let benv = collect::collect_exp(&context, &upcast).expect("binding collection");
+    let benv = collect::collect_exp(&ctx, &upcast).expect("binding collection");
     let ids_bind = benv_domain(&benv);
     let mut renames = partial::RenameEnv::new();
     let mut iter_ctx = ICtx::new();
 
-    partial::rename_exp(&mut context, &ids_bind, &mut renames, &mut iter_ctx, upcast)
+    partial::rename_exp(&mut ctx, &ids_bind, &mut renames, &mut iter_ctx, upcast)
         .expect("partial binding rename");
-    let premises =
-        partial::gen_prems(&context, &ICtx::new(), &renames).expect("partial binding premises");
+    let prems = partial::gen_prems(&ctx, &ICtx::new(), &renames).expect("partial binding premises");
 
-    let [subtype, binding] = premises.as_slice() else {
+    let [subtype, binding] = prems.as_slice() else {
         panic!("expected subtype and binding premises");
     };
     assert!(matches!(

@@ -57,7 +57,7 @@ fn test_printer_renders_nested_premises_and_definition_spec_goldens() {
         vec![arg(ast::ArgKind::Exp(Box::new(var("key"))))],
         var("value"),
     ), span: Span::default() };
-    let definitions = vec![
+    let defs = vec![
         p4spec_rust::phrase! { node: ast::DefKind::Typ(ast::TypDef::Extern(ast::ExternTyp {
             id: id("Syntax"),
             hints: vec![],
@@ -131,7 +131,7 @@ fn test_printer_renders_nested_premises_and_definition_spec_goldens() {
             hints: vec![],
         }))), span: Span::default() },
     ];
-    let rendered = Print::to_string(&definitions);
+    let rendered = Print::to_string(&defs);
     assert_eq!(
         rendered,
         concat!(
@@ -159,7 +159,7 @@ fn test_printer_renders_nested_premises_and_definition_spec_goldens() {
             "  -- debug debug"
         )
     );
-    assert_eq!(Print::to_string(&definitions), rendered);
+    assert_eq!(Print::to_string(&defs), rendered);
     assert_eq!(Print::to_string(&[hint()][..]), " hint(meta payload)");
     assert_eq!(
         Print::to_string(

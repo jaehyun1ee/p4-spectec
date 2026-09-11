@@ -59,7 +59,7 @@ fn variable(var: &ast::Var) -> Variable {
 
 #[test]
 fn test_duplicate_global_definition_uses_second_identifier_span() {
-    for (kind, first, second) in [
+    for (kind, def_a, def_b) in [
         (
             EntityKind::Type,
             ast::DefKind::Typ(ast::TypDef::Extern(ast::ExternTyp {
@@ -77,7 +77,7 @@ fn test_duplicate_global_definition_uses_second_identifier_span() {
             ast::DefKind::MetaFunc(func("x", 9)),
         ),
     ] {
-        let error = Global::load(vec![def(first), def(second)]).unwrap_err();
+        let error = Global::load(vec![def(def_a), def(def_b)]).unwrap_err();
         assert_eq!(error.span, id("x", 9).span);
         assert_eq!(
             *error.kind,

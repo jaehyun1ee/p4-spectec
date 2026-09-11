@@ -43,7 +43,7 @@ fn test_multiple_binding_renames_repetitions_and_compares_them_in_occurrence_ord
         panic!("expected conditional premise");
     };
     assert_eq!(if_prem.exp.span, span(3));
-    let ast::ExpKind::Bin(_, ast::OpTyp::Bool, first, second) = &if_prem.exp.node else {
+    let ast::ExpKind::Bin(_, ast::OpTyp::Bool, exp_l, exp_r) = &if_prem.exp.node else {
         panic!("expected ordered equality conjunction");
     };
     let compared_span = |exp: &ast::Exp| {
@@ -55,8 +55,8 @@ fn test_multiple_binding_renames_repetitions_and_compares_them_in_occurrence_ord
         };
         id.span.clone()
     };
-    assert_eq!(compared_span(first), span(2));
-    assert_eq!(compared_span(second), span(3));
+    assert_eq!(compared_span(exp_l), span(2));
+    assert_eq!(compared_span(exp_r), span(3));
 }
 
 #[test]
@@ -73,12 +73,12 @@ fn test_multiple_side_conditions_use_the_rename_environment_dimension() {
     let mut renames = multiple::RenameEnv::from_bindings(&benv);
     multiple::rename_exp(&mut context, &mut renames, &tuple);
 
-    let premises = multiple::generate_side_conditions(&ICtx::new(), &renames);
+    let prems = multiple::generate_side_conditions(&ICtx::new(), &renames);
 
-    let [premise] = premises.as_slice() else {
+    let [prem] = prems.as_slice() else {
         panic!("expected one repeated-binding premise");
     };
-    let ast_al::PremKind::Iter(iter_prem) = &premise.node else {
+    let ast_al::PremKind::Iter(iter_prem) = &prem.node else {
         panic!("expected the collected binding dimension");
     };
     assert_eq!(iter_prem.prem_iter.iter, ast::Iter::List);

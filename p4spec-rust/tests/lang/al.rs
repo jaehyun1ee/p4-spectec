@@ -209,7 +209,7 @@ fn composite_spec(metadata: &str, extern_inputs: Vec<i64>) -> al::ast::Spec {
         exp: expr(il::ast::ExpKind::Bool(false)),
         prems: Vec::new(),
     }, span: span(metadata) };
-    let def_type = p4spec_rust::phrase! {
+    let def_typ = p4spec_rust::phrase! {
         node: il::ast::DefTypKind::Plain(typ()),
         span: span("defined-type"),
     };
@@ -226,7 +226,7 @@ fn composite_spec(metadata: &str, extern_inputs: Vec<i64>) -> al::ast::Spec {
         p4spec_rust::phrase! { node: al::ast::DefKind::Typ(al::ast::TypDef::Defined(Box::new(al::ast::DefinedTyp {
             id: id("Box"),
             tparams: vec![id("T")],
-            def_typ: def_type,
+            def_typ,
             hints: hints.clone(),
         }))), span: span(metadata) },
         p4spec_rust::phrase! { node: al::ast::DefKind::Var(al::ast::VarDef {

@@ -40,15 +40,15 @@ fn test_runtime_mixop_punctuation_preserves_string_source_positions() {
         Span::new(Position::new("", 1, 2), Position::new("", 1, 5))
     );
 
-    let Mixfix::Brack(left, _, right) = parse_mixop("`{ k `}").unwrap() else {
+    let Mixfix::Brack(atom_l, _, atom_r) = parse_mixop("`{ k `}").unwrap() else {
         panic!("expected bracket notation");
     };
     assert_eq!(
-        left.span,
+        atom_l.span,
         Span::new(Position::new("", 1, 0), Position::new("", 1, 2))
     );
     assert_eq!(
-        right.span,
+        atom_r.span,
         Span::new(Position::new("", 1, 5), Position::new("", 1, 7))
     );
 }
@@ -152,8 +152,8 @@ fn test_parse_files_preserves_path_order_and_expands_directories_in_name_order()
     let spec = parse_files([first.as_path(), specs.as_path()]).expect("parse SpecTec paths");
     let ids = spec
         .iter()
-        .map(|definition| match &definition.node {
-            DefKind::Var(definition) => definition.id.node.as_str(),
+        .map(|def| match &def.node {
+            DefKind::Var(def) => def.id.node.as_str(),
             _ => panic!("expected variable definition"),
         })
         .collect::<Vec<_>>();
@@ -173,8 +173,8 @@ fn test_parse_files_shares_uppercase_variable_context_between_files() {
 
     assert!(matches!(
         &spec[1].node,
-        DefKind::FuncDef(definition)
-            if matches!(&definition.exp.node, ExpKind::Var(id) if id.node == "X")
+        DefKind::FuncDef(def)
+            if matches!(&def.exp.node, ExpKind::Var(id) if id.node == "X")
     ));
 }
 

@@ -6,8 +6,8 @@ use p4spec_rust::{
     lang::common::source::{Position, Span},
 };
 
-fn span(file: &str, left: i64, right: i64) -> Span {
-    Span::new(Position::new(file, 1, left), Position::new(file, 1, right))
+fn span(file: &str, col_l: i64, col_r: i64) -> Span {
+    Span::new(Position::new(file, 1, col_l), Position::new(file, 1, col_r))
 }
 
 #[test]

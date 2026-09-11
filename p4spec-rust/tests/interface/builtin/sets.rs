@@ -28,11 +28,11 @@ fn test_set_union_retains_notation() {
     )
     .unwrap();
     let result = sets::unions_set(&mut arena, &[typ_key], &[sets]).unwrap();
-    let Mixfix::Brack(left, _, right) = get::case(&arena, &result).unwrap() else {
+    let Mixfix::Brack(atom_l, _, atom_r) = get::case(&arena, &result).unwrap() else {
         panic!("expected set notation");
     };
-    assert_eq!(left.node, Atom::LBrace);
-    assert_eq!(right.node, Atom::RBrace);
+    assert_eq!(atom_l.node, Atom::LBrace);
+    assert_eq!(atom_r.node, Atom::RBrace);
 }
 
 #[test]

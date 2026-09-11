@@ -47,17 +47,17 @@ fn names(items: &[&str]) -> IdSet {
 
 #[test]
 fn test_parameters_collect_only_expression_defaults() {
-    let expression = p4spec_rust::phrase! {
+    let param_exp = p4spec_rust::phrase! {
         node: sl::ast::ParamKind::Exp(typ(), Box::new(variable("default"))),
         span: span("expression-parameter"),
     };
-    let definition = p4spec_rust::phrase! {
+    let param_def = p4spec_rust::phrase! {
         node: sl::ast::ParamKind::Def(id("f"), Vec::new(), Vec::new(), typ()),
         span: span("definition-parameter"),
     };
 
-    assert_eq!(expression.free(), names(&["default"]));
-    assert_eq!(definition.free(), names(&[]));
+    assert_eq!(param_exp.free(), names(&["default"]));
+    assert_eq!(param_def.free(), names(&[]));
 }
 
 #[test]
