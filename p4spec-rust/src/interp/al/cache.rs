@@ -25,16 +25,16 @@ impl CallKey {
     }
 }
 
-// = Execution state
+// = Call cache
 
 #[derive(Default)]
-pub struct State {
+pub struct Cache {
     pub(super) funcs: HashMap<CallKey, Value>,
     pub(super) rels: HashMap<CallKey, Vec<Value>>,
     effects: Vec<bool>,
 }
 
-impl State {
+impl Cache {
     // - Lifecycle
 
     pub(super) fn clear(&mut self) {

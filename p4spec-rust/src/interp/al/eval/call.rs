@@ -5,9 +5,9 @@ use super::super::{
     backtrack::{
         Backtrack, backtrack, backtrack_from_result, choose_deterministic, choose_sequential,
     },
+    cache::CallKey,
     context::{Context, Scope},
     error::ErrorKind,
-    state::CallKey,
 };
 use super::{assign, expr, prem::eval_prems};
 use crate::interp::al::error::{CallErrorKind, GuardErrorKind, HostErrorKind, TraceErrorKind};

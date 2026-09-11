@@ -1,9 +1,9 @@
 //! Algorithmic-language execution over the composed runner
 
 pub mod backtrack;
+pub mod cache;
 pub mod context;
 pub mod error;
-pub mod state;
 
 pub mod eval;
 pub mod util;
@@ -19,7 +19,6 @@ pub struct Al;
 
 /// Configuration for the AL interpreter
 pub struct Config {
-    /// Eligible public calls bypass input guards when caching is enabled
     cache: bool,
     det: bool,
     guard: bool,
@@ -34,7 +33,7 @@ impl Config {
 impl<I: Interface, E: Extern> Interpreter<I, E> for Al {
     type Spec = Global;
     type Config = Config;
-    type State = state::State;
+    type State = cache::Cache;
     type Error = Error;
 
     fn clear(state: &mut Self::State) {
