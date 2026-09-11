@@ -44,17 +44,17 @@ pub fn parse_mixop(source: &str) -> Result<Mixop, FrontendError> {
                     let mixfixes = types.iter().map(from_typ).collect();
                     Mixfix::Seq(mixfixes)
                 }
-                ast::NotTypKind::Infix(left, atom, right) => {
-                    let left = Box::new(from_typ(left));
+                ast::NotTypKind::Infix(typ_l, atom, typ_r) => {
+                    let typ_l = Box::new(from_typ(typ_l));
                     let atom = atom.clone();
-                    let right = Box::new(from_typ(right));
-                    Mixfix::Infix(left, atom, right)
+                    let typ_r = Box::new(from_typ(typ_r));
+                    Mixfix::Infix(typ_l, atom, typ_r)
                 }
-                ast::NotTypKind::Brack(left, inner, right) => {
-                    let left = left.clone();
-                    let inner = Box::new(from_typ(inner));
-                    let right = right.clone();
-                    Mixfix::Brack(left, inner, right)
+                ast::NotTypKind::Brack(atom_l, typ_inner, atom_r) => {
+                    let atom_l = atom_l.clone();
+                    let typ_inner = Box::new(from_typ(typ_inner));
+                    let atom_r = atom_r.clone();
+                    Mixfix::Brack(atom_l, typ_inner, atom_r)
                 }
             },
         }
@@ -77,23 +77,23 @@ fn parse_source(name: Rc<str>, source: &str, ctx: &Context) -> Result<Spec, Fron
 }
 
 fn parse_error(ctx: &Context, error: ParseError<Location, Token, FrontendError>) -> FrontendError {
-    let (kind, left, right) = match error {
+    let (kind, loc_l, loc_r) = match error {
         ParseError::InvalidToken { location: loc } => (SyntaxErrorKind::InvalidToken, loc, loc),
         ParseError::UnrecognizedEof { location: loc, .. } => {
             (SyntaxErrorKind::UnexpectedEndOfInput, loc, loc)
         }
         ParseError::UnrecognizedToken {
-            token: (left, _, right),
+            token: (loc_l, _, loc_r),
             ..
-        } => (SyntaxErrorKind::UnexpectedToken, left, right),
+        } => (SyntaxErrorKind::UnexpectedToken, loc_l, loc_r),
         ParseError::ExtraToken {
-            token: (left, _, right),
-        } => (SyntaxErrorKind::ExtraToken, left, right),
+            token: (loc_l, _, loc_r),
+        } => (SyntaxErrorKind::ExtraToken, loc_l, loc_r),
         ParseError::User { error } => return error,
     };
     crate::phrase! {
         node: kind,
-        span: ctx.span(left, right),
+        span: ctx.span(loc_l, loc_r),
     }
     .into()
 }
@@ -134,9 +134,9 @@ fn invalid_utf8_span(name: Rc<str>, bytes: &[u8], error: &str::Utf8Error) -> Spa
     let invalid_length = error
         .error_len()
         .unwrap_or_else(|| bytes.len().saturating_sub(offset)) as i64;
-    let left = Position::new(Rc::clone(&name), line, column);
-    let right = Position::new(name, line, column + invalid_length);
-    Span::new(left, right)
+    let pos_l = Position::new(Rc::clone(&name), line, column);
+    let pos_r = Position::new(name, line, column + invalid_length);
+    Span::new(pos_l, pos_r)
 }
 
 /// Parses files and directories in order, recursively expanding `.watsup` files

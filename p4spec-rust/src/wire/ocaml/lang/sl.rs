@@ -365,12 +365,12 @@ fn encode_extern_rel(relation: &ast::ExternRel) -> Value {
 
 fn decode_defined_rel(value: &Value) -> Result<ast::DefinedRel, DecodeError> {
     match array(value)? {
-        [id, rel_signature, exps_input, block, else_block, hints] => Ok(ast::DefinedRel {
+        [id, rel_signature, exps_input, block, block_else, hints] => Ok(ast::DefinedRel {
             id: il::decode_id(id)?,
             rel_signature: decode_rel_signature(rel_signature)?,
             exps_input: il::decode_list(exps_input, il::decode_exp)?,
             block: decode_block(block)?,
-            else_block: decode_option(else_block, decode_block)?,
+            block_else: decode_option(block_else, decode_block)?,
             hints: il::decode_list(hints, el::decode_hint)?,
         }),
         _ => Err(DecodeError::Expected("SL relation tuple")),
@@ -383,7 +383,7 @@ fn encode_defined_rel(relation: &ast::DefinedRel) -> Value {
         encode_rel_signature(&relation.rel_signature),
         il::encode_list(&relation.exps_input, il::encode_exp),
         encode_block(&relation.block),
-        encode_option(relation.else_block.as_ref(), encode_block),
+        encode_option(relation.block_else.as_ref(), encode_block),
         il::encode_list(&relation.hints, el::encode_hint)
     ])
 }
@@ -465,13 +465,13 @@ fn encode_table_func(func: &ast::TableFunc) -> Value {
 
 fn decode_defined_func(value: &Value) -> Result<ast::DefinedFunc, DecodeError> {
     match array(value)? {
-        [id, tparams, params, typ, block, else_block, hints] => Ok(ast::DefinedFunc {
+        [id, tparams, params, typ, block, block_else, hints] => Ok(ast::DefinedFunc {
             id: il::decode_id(id)?,
             tparams: il::decode_list(tparams, il::decode_tparam)?,
             params: il::decode_list(params, decode_param)?,
             typ: il::decode_typ(typ)?,
             block: decode_block(block)?,
-            else_block: decode_option(else_block, decode_block)?,
+            block_else: decode_option(block_else, decode_block)?,
             hints: il::decode_list(hints, el::decode_hint)?,
         }),
         _ => Err(DecodeError::Expected("SL defined function tuple")),
@@ -485,7 +485,7 @@ fn encode_defined_func(func: &ast::DefinedFunc) -> Value {
         il::encode_list(&func.params, encode_param),
         il::encode_typ(&func.typ),
         encode_block(&func.block),
-        encode_option(func.else_block.as_ref(), encode_block),
+        encode_option(func.block_else.as_ref(), encode_block),
         il::encode_list(&func.hints, el::encode_hint)
     ])
 }

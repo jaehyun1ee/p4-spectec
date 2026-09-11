@@ -176,7 +176,7 @@ pub fn sort_(
         let key = bigint_of_value(arena, &pair_values[0])?.clone();
         keyed.push((key, *pair));
     }
-    keyed.sort_by(|(key_a, _), (key_b, _)| key_a.cmp(key_b));
+    keyed.sort_by(|(key_l, _), (key_r, _)| key_l.cmp(key_r));
     let values = keyed.into_iter().map(|(_, value)| value).collect();
     let value = make::list(arena, typ_list.node.into(), values, Span::default())?;
     Ok(value)

@@ -356,7 +356,7 @@ impl<'source, 'arena> Lexer<'source, 'arena> {
                     span.left.line,
                     span.left.column + 1,
                 );
-                let second = if self.template_depth > 1 {
+                let token_r = if self.template_depth > 1 {
                     self.template_depth -= 2;
                     Token::RightAngleShift
                 } else if self.template_depth == 1 {
@@ -365,11 +365,11 @@ impl<'source, 'arena> Lexer<'source, 'arena> {
                 } else {
                     Token::RightAngleShift
                 };
-                let span_second = Span::new(pos_middle.clone(), span.right.clone());
-                let token_second = phrase!(node: second, span: span_second);
-                self.pending.push_back(token_second);
-                let span_first = Span::new(span.left, pos_middle);
-                (Token::RightAngle, span_first)
+                let span_r = Span::new(pos_middle.clone(), span.right.clone());
+                let lexeme_r = phrase!(node: token_r, span: span_r);
+                self.pending.push_back(lexeme_r);
+                let span_l = Span::new(span.left, pos_middle);
+                (Token::RightAngle, span_l)
             }
             token => (token, span),
         }
@@ -531,14 +531,12 @@ impl<'source, 'arena> Lexer<'source, 'arena> {
                 let span = self.span_from(pos_l);
                 let token = match keyword(text) {
                     Some(token) => token,
-                    None => match make::text(
-                        &mut self.ctx.arena_mut(),
-                        text.to_owned(),
-                        span.clone(),
-                    ) {
-                        Ok(value) => Token::Name(value),
-                        Err(error) => return Some(Err(P4Error::new(error, span))),
-                    },
+                    None => {
+                        match make::text(&mut self.ctx.arena_mut(), text.to_owned(), span.clone()) {
+                            Ok(value) => Token::Name(value),
+                            Err(error) => return Some(Err(P4Error::new(error, span))),
+                        }
+                    }
                 };
                 return Some(Ok(phrase!(node: token, span: span)));
             }
@@ -651,8 +649,7 @@ impl<'source, 'arena> Lexer<'source, 'arena> {
                         pos_l.clone(),
                     )
                 })?;
-                let value_width =
-                    make::nat(&mut self.ctx.arena_mut(), nat_width, span.clone())?;
+                let value_width = make::nat(&mut self.ctx.arena_mut(), nat_width, span.clone())?;
                 let value_int = make::int(&mut self.ctx.arena_mut(), int, span.clone())?;
                 let atom = phrase!(
                     node: Atom::Keyword(sign.to_ascii_uppercase().to_string()),

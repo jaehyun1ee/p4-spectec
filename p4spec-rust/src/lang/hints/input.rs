@@ -143,22 +143,22 @@ pub fn combine<Item>(
     items_input: Vec<Item>,
     items_output: Vec<Item>,
 ) -> Result<Vec<Item>, InputError> {
-    let actual_input = items_input.len();
-    let actual_output = items_output.len();
-    let length = actual_input + actual_output;
+    let input_actual = items_input.len();
+    let output_actual = items_output.len();
+    let length = input_actual + output_actual;
     validate(hint, length)?;
-    let expected_input = hint.indices.len();
-    let expected_output = length - expected_input;
-    if actual_input != expected_input {
+    let input_expected = hint.indices.len();
+    let output_expected = length - input_expected;
+    if input_actual != input_expected {
         return Err(InputError::InputCountMismatch {
-            expected: expected_input,
-            actual: actual_input,
+            expected: input_expected,
+            actual: input_actual,
         });
     }
-    if actual_output != expected_output {
+    if output_actual != output_expected {
         return Err(InputError::OutputCountMismatch {
-            expected: expected_output,
-            actual: actual_output,
+            expected: output_expected,
+            actual: output_actual,
         });
     }
 
@@ -168,13 +168,13 @@ pub fn combine<Item>(
     for index in 0..length {
         let item = if hint.indices.contains(&(index as i64)) {
             items_input.next().ok_or(InputError::InputCountMismatch {
-                expected: expected_input,
-                actual: actual_input,
+                expected: input_expected,
+                actual: input_actual,
             })?
         } else {
             items_output.next().ok_or(InputError::OutputCountMismatch {
-                expected: expected_output,
-                actual: actual_output,
+                expected: output_expected,
+                actual: output_actual,
             })?
         };
         items.push(item);

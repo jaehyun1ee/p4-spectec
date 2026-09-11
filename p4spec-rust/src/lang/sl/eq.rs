@@ -249,7 +249,7 @@ impl SyntaxEq for DefinedRel {
             && self.rel_signature.syntax_eq(&other.rel_signature)
             && self.exps_input.syntax_eq(&other.exps_input)
             && self.block.syntax_eq(&other.block)
-            && self.else_block.syntax_eq(&other.else_block)
+            && self.block_else.syntax_eq(&other.block_else)
             && self.hints.syntax_eq(&other.hints)
     }
 }
@@ -315,7 +315,7 @@ impl SyntaxEq for DefinedFunc {
             && self.params.syntax_eq(&other.params)
             && self.typ.syntax_eq(&other.typ)
             && self.block.syntax_eq(&other.block)
-            && self.else_block.syntax_eq(&other.else_block)
+            && self.block_else.syntax_eq(&other.block_else)
             && self.hints.syntax_eq(&other.hints)
     }
 }

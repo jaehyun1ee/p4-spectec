@@ -73,8 +73,8 @@ impl Context {
         self.positions.borrow()[loc.0].clone()
     }
 
-    pub(crate) fn span(&self, left: Location, right: Location) -> Span {
-        Span::new(self.position(left), self.position(right))
+    pub(crate) fn span(&self, loc_l: Location, loc_r: Location) -> Span {
+        Span::new(self.position(loc_l), self.position(loc_r))
     }
 
     // - Variable scopes

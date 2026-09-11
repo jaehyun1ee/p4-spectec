@@ -430,7 +430,7 @@ impl Print for DefinedRel {
         write_relinput(printer, &self.rel_signature, &self.exps_input)?;
         printer.write_str("\n\n")?;
         write_block_with(printer, &self.block, 0, 0)?;
-        write_elseblock_opt_with(printer, &self.else_block, 0, self.block.len())
+        write_elseblock_opt_with(printer, &self.block_else, 0, self.block.len())
     }
 }
 
@@ -528,7 +528,7 @@ impl Print for DefinedFunc {
         self.params.as_slice().print(printer)?;
         printer.write_str("\n\n")?;
         write_block_with(printer, &self.block, 0, 0)?;
-        write_elseblock_opt_with(printer, &self.else_block, 0, self.block.len())
+        write_elseblock_opt_with(printer, &self.block_else, 0, self.block.len())
     }
 }
 

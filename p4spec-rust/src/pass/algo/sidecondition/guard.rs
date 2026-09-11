@@ -111,30 +111,30 @@ impl<'a> EquivalenceTable<'a> {
         }
     }
 
-    fn union(&mut self, kind: ClassKind, condition_a: &'a ast::Exp, condition_b: &'a ast::Exp) {
-        let index_a = self.find(kind, condition_a);
-        let index_b = self.find(kind, condition_b);
-        match (index_a, index_b) {
-            (Some(index_a), Some(index_b)) if index_a == index_b => {}
-            (Some(index_a), Some(index_b)) => {
-                let index_high = index_a.max(index_b);
-                let index_low = index_a.min(index_b);
-                let conditions_high = self.take_conditions(kind, index_high);
-                let conditions_low = self.take_conditions(kind, index_low);
-                let (mut conditions_a, mut conditions_b) = if index_a == index_low {
+    fn union(&mut self, kind: ClassKind, condition_l: &'a ast::Exp, condition_r: &'a ast::Exp) {
+        let idx_l = self.find(kind, condition_l);
+        let idx_r = self.find(kind, condition_r);
+        match (idx_l, idx_r) {
+            (Some(idx_l), Some(idx_r)) if idx_l == idx_r => {}
+            (Some(idx_l), Some(idx_r)) => {
+                let idx_high = idx_l.max(idx_r);
+                let idx_low = idx_l.min(idx_r);
+                let conditions_high = self.take_conditions(kind, idx_high);
+                let conditions_low = self.take_conditions(kind, idx_low);
+                let (mut conditions_l, mut conditions_r) = if idx_l == idx_low {
                     (conditions_low, conditions_high)
                 } else {
                     (conditions_high, conditions_low)
                 };
-                conditions_a.append(&mut conditions_b);
-                let class = Class::new(kind, conditions_a);
+                conditions_l.append(&mut conditions_r);
+                let class = Class::new(kind, conditions_l);
                 self.classes.insert(0, class);
             }
             (Some(index), None) | (None, Some(index)) => {
-                let condition_new = if index_a.is_some() {
-                    condition_b
+                let condition_new = if idx_l.is_some() {
+                    condition_r
                 } else {
-                    condition_a
+                    condition_l
                 };
                 let mut conditions = self.take_conditions(kind, index);
                 conditions.insert(0, condition_new);
@@ -142,18 +142,18 @@ impl<'a> EquivalenceTable<'a> {
                 self.classes.insert(0, class);
             }
             (None, None) => {
-                let conditions = vec![condition_a, condition_b];
+                let conditions = vec![condition_l, condition_r];
                 let class = Class::new(kind, conditions);
                 self.classes.insert(0, class);
             }
         }
     }
 
-    fn contains(&self, kind: ClassKind, condition_a: &ast::Exp, condition_b: &ast::Exp) -> bool {
-        if condition_a.syntax_eq(condition_b) {
+    fn contains(&self, kind: ClassKind, condition_l: &ast::Exp, condition_r: &ast::Exp) -> bool {
+        if condition_l.syntax_eq(condition_r) {
             return true;
         }
-        let Some(index) = self.find(kind, condition_a) else {
+        let Some(index) = self.find(kind, condition_l) else {
             return false;
         };
         let Some(conditions) = self.classes[index].conditions(kind) else {
@@ -161,7 +161,7 @@ impl<'a> EquivalenceTable<'a> {
         };
         conditions
             .iter()
-            .any(|condition| condition.syntax_eq(condition_b))
+            .any(|condition| condition.syntax_eq(condition_r))
     }
 
     fn implies_exp(&self, exp: &ast::Exp) -> bool {

@@ -123,18 +123,18 @@ impl fmt::Display for Natural {
 
 /// Compares number kind before numeric value;
 /// every natural number sorts before every signed integer
-pub fn compare(number_a: &Number, number_b: &Number) -> Ordering {
-    match (number_a, number_b) {
-        (Number::Nat(natural_a), Number::Nat(natural_b)) => natural_a.0.cmp(&natural_b.0),
-        (Number::Int(integer_a), Number::Int(integer_b)) => integer_a.cmp(integer_b),
+pub fn compare(num_l: &Number, num_r: &Number) -> Ordering {
+    match (num_l, num_r) {
+        (Number::Nat(nat_l), Number::Nat(nat_r)) => nat_l.0.cmp(&nat_r.0),
+        (Number::Int(int_l), Number::Int(int_r)) => int_l.cmp(int_r),
         (Number::Nat(_), Number::Int(_)) => Ordering::Less,
         (Number::Int(_), Number::Nat(_)) => Ordering::Greater,
     }
 }
 
 /// Compares typ
-pub fn compare_typ(type_a: Typ, type_b: Typ) -> Ordering {
-    match (type_a, type_b) {
+pub fn compare_typ(typ_l: Typ, typ_r: Typ) -> Ordering {
+    match (typ_l, typ_r) {
         (Typ::Nat, Typ::Nat) | (Typ::Int, Typ::Int) => Ordering::Equal,
         (Typ::Nat, Typ::Int) => Ordering::Less,
         (Typ::Int, Typ::Nat) => Ordering::Greater,
@@ -144,20 +144,20 @@ pub fn compare_typ(type_a: Typ, type_b: Typ) -> Ordering {
 // Equality
 
 /// Compares numeric value with number-kind sensitivity
-pub fn eq(number_a: &Number, number_b: &Number) -> bool {
-    compare(number_a, number_b) == Ordering::Equal
+pub fn eq(num_l: &Number, num_r: &Number) -> bool {
+    compare(num_l, num_r) == Ordering::Equal
 }
 
 // Subtyping
 
 /// Checks equality of uiv
-pub fn equiv(type_a: Typ, type_b: Typ) -> bool {
-    type_a == type_b
+pub fn equiv(typ_l: Typ, typ_r: Typ) -> bool {
+    typ_l == typ_r
 }
 
 /// Applies sub
-pub fn sub(type_a: Typ, type_b: Typ) -> bool {
-    matches!((type_a, type_b), (Typ::Nat, Typ::Int)) || equiv(type_a, type_b)
+pub fn sub(typ_l: Typ, typ_r: Typ) -> bool {
+    matches!((typ_l, typ_r), (Typ::Nat, Typ::Int)) || equiv(typ_l, typ_r)
 }
 
 // Stringifiers

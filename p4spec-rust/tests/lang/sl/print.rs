@@ -107,7 +107,7 @@ fn composite_spec(metadata: &str) -> sl::ast::Spec {
                     exps: vec![text("line\n\"\\")],
                 }),
             )],
-            else_block: Some(vec![instr(
+            block_else: Some(vec![instr(
                 sl::ast::InstrKind::Return(sl::ast::ReturnInstr {
                     exp: variable("fallback"),
                 }),
@@ -144,7 +144,7 @@ fn composite_spec(metadata: &str) -> sl::ast::Spec {
             block: vec![instr(
                 sl::ast::InstrKind::Return(sl::ast::ReturnInstr { exp: text("done") }),
             )],
-            else_block: None,
+            block_else: None,
             hints,
         })), span: span(metadata) },
     ]

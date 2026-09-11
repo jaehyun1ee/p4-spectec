@@ -2239,7 +2239,7 @@ fn elab_typ_def(ctx: &mut Context, def: el::TypDef) -> Result<il::DefKind, ElabE
                 && tparams
                     .iter()
                     .zip(&def.tparams)
-                    .all(|(left, right)| left.node == right.node);
+                    .all(|(id_l, id_r)| id_l.node == id_r.node);
             if !matches {
                 return Err(ElabError::new(
                     ElabErrorKind::ArityMismatch,
