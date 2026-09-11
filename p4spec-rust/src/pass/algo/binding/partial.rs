@@ -384,15 +384,12 @@ fn rename_exp_bind_match(
     let typ = phrase!(node: exp_from.note.as_ref().clone(), span: exp_from.span.clone());
     let destination = fresh::var_from_typ(&ctx.menv, &ctx.frees, exp_from.span.clone(), &typ);
     ctx.add_free(destination.id.clone());
+    let bounds = exp_from.free();
     renv.prepend(Rename {
         destination: destination.clone(),
-        source: Source::BindMatch {
-            pattern,
-            exp_from: exp_from.clone(),
-        },
+        source: Source::BindMatch { pattern, exp_from },
         iter_ctx: iter_ctx.clone(),
     });
-    let bounds = exp_from.free();
     iter_ctx.filter_bound(|var| !bounds.contains(&var.id));
     iter_ctx.add_var_bound(
         destination.id.clone(),
@@ -413,16 +410,16 @@ fn rename_exp_bind_sub(
     let typ = phrase!(node: exp_from.note.as_ref().clone(), span: exp_from.span.clone());
     let destination = fresh::var_from_typ(&ctx.menv, &ctx.frees, exp_from.span.clone(), &typ);
     ctx.add_free(destination.id.clone());
+    let bounds = exp_from.free();
     renv.prepend(Rename {
         destination: destination.clone(),
         source: Source::BindSub {
             typ_sub,
             exp_sub,
-            exp_from: exp_from.clone(),
+            exp_from,
         },
         iter_ctx: iter_ctx.clone(),
     });
-    let bounds = exp_from.free();
     iter_ctx.filter_bound(|var| !bounds.contains(&var.id));
     iter_ctx.add_var_bound(
         destination.id.clone(),
@@ -437,11 +434,11 @@ pub fn rename_exp(
     binds: &IdSet,
     renv: &mut RenameEnv,
     iter_ctx: &mut ICtx,
-    exp: &ast::Exp,
+    exp: ast::Exp,
 ) -> Result<ast::Exp, AlgoError> {
     let frees = exp.free();
     let has_binding = binds.iter().any(|id| frees.contains(id));
-    if !has_binding && !is_upcast_terminal(exp) {
+    if !has_binding && !is_upcast_terminal(&exp) {
         let exp = rename_exp_bound(ctx, renv, iter_ctx, exp);
         return Ok(exp);
     }
@@ -452,19 +449,17 @@ fn rename_exp_bound(
     ctx: &mut Context,
     renv: &mut RenameEnv,
     iter_ctx: &mut ICtx,
-    exp: &ast::Exp,
+    exp: ast::Exp,
 ) -> ast::Exp {
     let typ = phrase!(node: exp.note.as_ref().clone(), span: exp.span.clone());
     let destination = fresh::var_from_typ(&ctx.menv, &ctx.frees, exp.span.clone(), &typ);
     ctx.add_free(destination.id.clone());
+    let bounds = exp.free();
     renv.prepend(Rename {
         destination: destination.clone(),
-        source: Source::Bound {
-            exp_from: exp.clone(),
-        },
+        source: Source::Bound { exp_from: exp },
         iter_ctx: iter_ctx.clone(),
     });
-    let bounds = exp.free();
     iter_ctx.filter_bound(|var| !bounds.contains(&var.id));
     iter_ctx.add_var_bound(
         destination.id.clone(),
@@ -479,15 +474,15 @@ fn rename_exp_bind(
     binds: &IdSet,
     renv: &mut RenameEnv,
     iter_ctx: &mut ICtx,
-    exp: &ast::Exp,
+    exp: ast::Exp,
 ) -> Result<ast::Exp, AlgoError> {
-    let span = exp.span.clone();
-    let note = exp.note.clone();
-    match &exp.node {
+    let span = exp.span;
+    let note = exp.note;
+    match exp.node {
         ast::ExpKind::UpCast(typ, exp_inner) => {
-            let exp_sub = rename_exp(ctx, binds, renv, iter_ctx, exp_inner)?;
+            let exp_sub = rename_exp(ctx, binds, renv, iter_ctx, *exp_inner)?;
             let exp_from = note_phrase! {
-                node: ast::ExpKind::UpCast(typ.clone(), Box::new(exp_sub.clone())),
+                node: ast::ExpKind::UpCast(typ, Box::new(exp_sub.clone())),
                 note: note,
                 span: span.clone(),
             };
@@ -501,9 +496,9 @@ fn rename_exp_bind(
             Ok(exp)
         }
         ast::ExpKind::Case(not_exp) => {
-            let args = not_exp.args().into_iter().cloned().collect::<Vec<_>>();
             let mixop = not_exp.to_mixop();
-            let args = rename_exps(ctx, binds, renv, iter_ctx, &args)?;
+            let args = not_exp.into_args();
+            let args = rename_exps(ctx, binds, renv, iter_ctx, args)?;
             let not_exp = Mixop::fill(&mixop, args)
                 .expect("arguments obtained from the same mixfix must match its arity");
             let exp_from = note_phrase! {
@@ -521,21 +516,14 @@ fn rename_exp_bind(
             }
         }
         ast::ExpKind::Str(fields) => {
-            let exps = fields
-                .iter()
-                .map(|(_, exp)| exp.clone())
-                .collect::<Vec<_>>();
-            let exps = rename_exps(ctx, binds, renv, iter_ctx, &exps)?;
-            let fields = fields
-                .iter()
-                .map(|(atom, _)| atom.clone())
-                .zip(exps)
-                .collect();
+            let (atoms, exps): (Vec<_>, Vec<_>) = fields.into_iter().unzip();
+            let exps = rename_exps(ctx, binds, renv, iter_ctx, exps)?;
+            let fields = atoms.into_iter().zip(exps).collect();
             let exp = note_phrase!(node: ast::ExpKind::Str(fields), note: note, span: span);
             Ok(exp)
         }
         ast::ExpKind::Opt(Some(exp_inner)) => {
-            let exp_inner = rename_exp(ctx, binds, renv, iter_ctx, exp_inner)?;
+            let exp_inner = rename_exp(ctx, binds, renv, iter_ctx, *exp_inner)?;
             let exp_from = note_phrase! {
                 node: ast::ExpKind::Opt(Some(Box::new(exp_inner))),
                 note: note,
@@ -547,7 +535,7 @@ fn rename_exp_bind(
         }
         ast::ExpKind::Opt(None) => {
             let pattern = ast::Pattern::Opt(ast::OptPattern::None);
-            let exp_from = exp.clone();
+            let exp_from = note_phrase!(node: ast::ExpKind::Opt(None), note: note, span: span);
             let exp = rename_exp_bind_match(ctx, renv, iter_ctx, pattern, exp_from);
             Ok(exp)
         }
@@ -569,8 +557,8 @@ fn rename_exp_bind(
             Ok(exp)
         }
         ast::ExpKind::Cons(exp_h, exp_t) => {
-            let exp_h = rename_exp(ctx, binds, renv, iter_ctx, exp_h)?;
-            let exp_t = rename_exp(ctx, binds, renv, iter_ctx, exp_t)?;
+            let exp_h = rename_exp(ctx, binds, renv, iter_ctx, *exp_h)?;
+            let exp_t = rename_exp(ctx, binds, renv, iter_ctx, *exp_t)?;
             let exp_from = note_phrase! {
                 node: ast::ExpKind::Cons(Box::new(exp_h), Box::new(exp_t)),
                 note: note,
@@ -582,12 +570,12 @@ fn rename_exp_bind(
         }
         ast::ExpKind::Iter(exp_inner, (iter, vars)) => {
             let iteration = Iteration {
-                iter: *iter,
-                vars_bound: vars.clone(),
+                iter,
+                vars_bound: vars,
                 vars_bind: vec![],
             };
             let mut iter_scope = iter_ctx.scope(iteration);
-            let exp_inner = rename_exp(ctx, binds, renv, &mut iter_scope, exp_inner)?;
+            let exp_inner = rename_exp(ctx, binds, renv, &mut iter_scope, *exp_inner)?;
             let iteration = iter_scope.finish();
             let exp = note_phrase! {
                 node: ast::ExpKind::Iter(
@@ -599,7 +587,7 @@ fn rename_exp_bind(
             };
             Ok(exp)
         }
-        _ => Ok(exp.clone()),
+        kind => Ok(note_phrase!(node: kind, note: note, span: span)),
     }
 }
 
@@ -608,7 +596,7 @@ pub fn rename_exps(
     binds: &IdSet,
     renv: &mut RenameEnv,
     iter_ctx: &mut ICtx,
-    exps: &[ast::Exp],
+    exps: Vec<ast::Exp>,
 ) -> Result<Vec<ast::Exp>, AlgoError> {
     let mut exps_renamed = Vec::with_capacity(exps.len());
     for exp in exps {
@@ -627,15 +615,15 @@ fn rename_arg(
     binds: &IdSet,
     renv: &mut RenameEnv,
     iter_ctx: &mut ICtx,
-    arg: &ast::Arg,
+    arg: ast::Arg,
 ) -> Result<ast::Arg, AlgoError> {
-    let ast::ArgKind::Exp(exp) = &arg.node else {
-        return Ok(arg.clone());
+    let ast::ArgKind::Exp(exp) = arg.node else {
+        return Ok(arg);
     };
     let mut renv_post = RenameEnv::new();
-    let exp = rename_exp(ctx, binds, &mut renv_post, iter_ctx, exp)?;
+    let exp = rename_exp(ctx, binds, &mut renv_post, iter_ctx, *exp)?;
     renv.append(renv_post);
-    let arg = phrase!(node: ast::ArgKind::Exp(Box::new(exp)), span: arg.span.clone());
+    let arg = phrase!(node: ast::ArgKind::Exp(Box::new(exp)), span: arg.span);
     Ok(arg)
 }
 
@@ -644,7 +632,7 @@ pub fn rename_args(
     binds: &IdSet,
     renv: &mut RenameEnv,
     iter_ctx: &mut ICtx,
-    args: &[ast::Arg],
+    args: Vec<ast::Arg>,
 ) -> Result<Vec<ast::Arg>, AlgoError> {
     let mut args_renamed = Vec::with_capacity(args.len());
     for arg in args {
