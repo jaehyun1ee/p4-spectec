@@ -267,8 +267,8 @@ impl<'global> Context<'global> {
     pub fn map_list<I: Interface, E: Extern>(
         &self,
         runner: &mut RunnerContext<'_, Al, I, E>,
-        vars: &[ast::Var],
         span: &Span,
+        vars: &[ast::Var],
         mut eval: impl FnMut(&mut RunnerContext<'_, Al, I, E>, &Self) -> Backtrack<Value>,
     ) -> Backtrack<Vec<Value>> {
         let rows = back!(Backtrack::from_result(
@@ -296,8 +296,8 @@ impl<'global> Context<'global> {
     pub fn map_opt<I: Interface, E: Extern>(
         &self,
         runner: &mut RunnerContext<'_, Al, I, E>,
-        vars: &[ast::Var],
         span: &Span,
+        vars: &[ast::Var],
         mut eval: impl FnMut(&mut RunnerContext<'_, Al, I, E>, &Self) -> Backtrack<Value>,
     ) -> Backtrack<Option<Value>> {
         let values = back!(Backtrack::from_result(
@@ -319,9 +319,9 @@ impl<'global> Context<'global> {
     pub fn yield_list<I: Interface, E: Extern>(
         mut self,
         runner: &mut RunnerContext<'_, Al, I, E>,
+        span: &Span,
         vars_bound: &[ast::Var],
         vars_bind: &[ast::Var],
-        span: &Span,
         mut eval: impl FnMut(&mut RunnerContext<'_, Al, I, E>, Self) -> Backtrack<Self>,
     ) -> Backtrack<Self> {
         let rows = back!(Backtrack::from_result(
@@ -351,9 +351,9 @@ impl<'global> Context<'global> {
     pub fn yield_opt<I: Interface, E: Extern>(
         mut self,
         runner: &mut RunnerContext<'_, Al, I, E>,
+        span: &Span,
         vars_bound: &[ast::Var],
         vars_bind: &[ast::Var],
-        span: &Span,
         mut eval: impl FnMut(&mut RunnerContext<'_, Al, I, E>, Self) -> Backtrack<Self>,
     ) -> Backtrack<Self> {
         let values = back!(Backtrack::from_result(

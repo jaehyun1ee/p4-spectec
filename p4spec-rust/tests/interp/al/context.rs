@@ -237,7 +237,7 @@ fn test_map_opt_requires_agreement_and_preserves_parent() {
         );
     }
     let value_opt = ctx
-        .map_opt(&mut runner, &vars, &span, |runner, ctx_sub| {
+        .map_opt(&mut runner, &span, &vars, |runner, ctx_sub| {
             for var in &vars {
                 assert!(
                     get::bool(runner.arena(), ctx_sub.find_value(&variable(var)).unwrap()).unwrap()
@@ -261,7 +261,7 @@ fn test_map_opt_requires_agreement_and_preserves_parent() {
         )
         .unwrap(),
     );
-    let Backtrack::Err(errors) = ctx.map_opt(&mut runner, &vars, &span, |_, _| {
+    let Backtrack::Err(errors) = ctx.map_opt(&mut runner, &span, &vars, |_, _| {
         panic!("mixed optionality")
     }) else {
         panic!("expected optionality mismatch");
@@ -282,13 +282,13 @@ fn test_map_opt_requires_agreement_and_preserves_parent() {
         .unwrap(),
     );
     assert!(
-        ctx.map_opt(&mut runner, &vars, &span, |_, _| panic!("absent inputs"))
+        ctx.map_opt(&mut runner, &span, &vars, |_, _| panic!("absent inputs"))
             .finish()
             .unwrap()
             .is_none()
     );
     assert_eq!(
-        ctx.map_opt(&mut runner, &[], &span, |_, _| Backtrack::Ok(value))
+        ctx.map_opt(&mut runner, &span, &[], |_, _| Backtrack::Ok(value))
             .finish()
             .unwrap(),
         Some(value)
@@ -325,7 +325,7 @@ fn test_map_list_transposes_in_order_without_leaking_bindings() {
     }
     let mut rows = Vec::new();
     let values = ctx
-        .map_list(&mut runner, &vars, &span, |runner, ctx_sub| {
+        .map_list(&mut runner, &span, &vars, |runner, ctx_sub| {
             rows.push(
                 vars.iter()
                     .map(|var| {
@@ -348,7 +348,7 @@ fn test_map_list_transposes_in_order_without_leaking_bindings() {
     );
     assert!(ctx.find_value_opt(&variable(&vars[0])).is_none());
     let mut count = 0;
-    let result = ctx.map_list(&mut runner, &vars, &span, |_, _| {
+    let result = ctx.map_list(&mut runner, &span, &vars, |_, _| {
         count += 1;
         Backtrack::Unmatch(vec![])
     });
@@ -365,7 +365,7 @@ fn test_map_list_transposes_in_order_without_leaking_bindings() {
         .unwrap(),
     );
     let Backtrack::Err(errors) =
-        ctx.map_list(&mut runner, &vars, &span, |_, _| panic!("unequal lengths"))
+        ctx.map_list(&mut runner, &span, &vars, |_, _| panic!("unequal lengths"))
     else {
         panic!("expected iteration length mismatch");
     };
@@ -378,7 +378,7 @@ fn test_map_list_transposes_in_order_without_leaking_bindings() {
     ));
     assert_eq!(errors[0].span, span);
     assert!(
-        ctx.map_list(&mut runner, &[], &span, |_, _| panic!("no inputs"))
+        ctx.map_list(&mut runner, &span, &[], |_, _| panic!("no inputs"))
             .finish()
             .unwrap()
             .is_empty()
@@ -402,8 +402,8 @@ fn test_iteration_rejects_wrong_value_kind_at_variable_span() {
     );
     let Backtrack::Err(errors) = ctx.map_opt(
         &mut runner,
-        std::slice::from_ref(&var),
         &id("iteration", 9).span,
+        std::slice::from_ref(&var),
         |_, _| panic!("wrong input kind"),
     ) else {
         panic!("expected value kind error");

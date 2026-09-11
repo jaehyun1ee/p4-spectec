@@ -145,16 +145,16 @@ fn eval_iter_prem<'global, I: Interface, E: Extern>(
     match prem_iter.iter {
         ast::Iter::Opt => ctx.yield_opt(
             runner,
+            &prem.prem.span,
             &prem_iter.vars_bound,
             &prem_iter.vars_bind,
-            &prem.prem.span,
             |runner, ctx_sub| eval_prem(runner, ctx_sub, &prem.prem),
         ),
         ast::Iter::List => ctx.yield_list(
             runner,
+            &prem.prem.span,
             &prem_iter.vars_bound,
             &prem_iter.vars_bind,
-            &prem.prem.span,
             |runner, ctx_sub| eval_prem(runner, ctx_sub, &prem.prem),
         ),
     }
