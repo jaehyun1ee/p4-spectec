@@ -27,9 +27,9 @@ fn exp(kind: ast::ExpKind, typ: ast::Typ) -> ast::Exp {
     p4spec_rust::note_phrase!(node: kind, note: Rc::new(typ.node), span: typ.span)
 }
 
-fn int(number: i64) -> ast::Exp {
+fn int(num: i64) -> ast::Exp {
     exp(
-        ast::ExpKind::Num(num::Number::Int(number.into())),
+        ast::ExpKind::Num(num::Number::Int(num.into())),
         typ::make::int(),
     )
 }

@@ -35,7 +35,7 @@ fn test_conversion_inserts_index_guards_at_evaluation_sites_in_source_order() {
     let typ_bool = typ::make::bool();
     let typ_nat = typ::make::nat();
     let typ_list = typ::make::list(typ_bool.clone());
-    let exp_index_prem = exp(
+    let exp_idx_prem = exp(
         ast::ExpKind::Idx(
             Box::new(iterated_var_exp("xs", &typ_bool, ast::Iter::List, 10)),
             Box::new(typed_var_exp("i", &typ_nat, 11)),
@@ -47,7 +47,7 @@ fn test_conversion_inserts_index_guards_at_evaluation_sites_in_source_order() {
         ast::ExpKind::Cmp(
             ast::CmpOp::Bool(xl::bool::CmpOp::Eq),
             ast::OpTyp::Bool,
-            Box::new(exp_index_prem),
+            Box::new(exp_idx_prem),
             Box::new(exp(ast::ExpKind::Bool(true), ast::TypKind::Bool, 13)),
         ),
         ast::TypKind::Bool,

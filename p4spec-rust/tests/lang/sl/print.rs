@@ -81,7 +81,7 @@ fn composite_spec(metadata: &str) -> sl::ast::Spec {
         not_typ: notation(),
         input_hint: InputHint::new(vec![0]),
     };
-    let parameter = p4spec_rust::phrase! {
+    let param = p4spec_rust::phrase! {
         node: sl::ast::ParamKind::Exp(typ(il::ast::TypKind::Bool), Box::new(variable("default"))),
         span: span("parameter"),
     };
@@ -117,13 +117,13 @@ fn composite_spec(metadata: &str) -> sl::ast::Spec {
         p4spec_rust::phrase! { node: sl::ast::DefKind::MetaFunc(sl::ast::MetaFuncDef::Extern(sl::ast::ExternFunc {
             id: id("external"),
             tparams: Vec::new(),
-            params: vec![parameter.clone()],
+            params: vec![param.clone()],
             typ: typ(il::ast::TypKind::Bool),
             hints: hints.clone(),
         })), span: span(metadata) },
         p4spec_rust::phrase! { node: sl::ast::DefKind::MetaFunc(sl::ast::MetaFuncDef::Table(sl::ast::TableFunc {
             id: id("lookup"),
-            params: vec![parameter.clone()],
+            params: vec![param.clone()],
             typ: typ(il::ast::TypKind::Bool),
             table_rows: vec![sl::ast::TableRow {
                 exps_input: vec![variable("key")],
@@ -139,7 +139,7 @@ fn composite_spec(metadata: &str) -> sl::ast::Spec {
         p4spec_rust::phrase! { node: sl::ast::DefKind::MetaFunc(sl::ast::MetaFuncDef::Defined(sl::ast::DefinedFunc {
             id: id("run"),
             tparams: Vec::new(),
-            params: vec![parameter],
+            params: vec![param],
             typ: typ(il::ast::TypKind::Bool),
             block: vec![instr(
                 sl::ast::InstrKind::Return(sl::ast::ReturnInstr { exp: text("done") }),

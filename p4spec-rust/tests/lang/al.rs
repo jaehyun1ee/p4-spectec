@@ -213,7 +213,7 @@ fn composite_spec(metadata: &str, extern_inputs: Vec<i64>) -> al::ast::Spec {
         node: il::ast::DefTypKind::Plain(typ()),
         span: span("defined-type"),
     };
-    let parameter = p4spec_rust::phrase! {
+    let param = p4spec_rust::phrase! {
         node: il::ast::ParamKind::Exp(typ()),
         span: span("parameter"),
     };
@@ -259,20 +259,20 @@ fn composite_spec(metadata: &str, extern_inputs: Vec<i64>) -> al::ast::Spec {
         p4spec_rust::phrase! { node: al::ast::DefKind::MetaFunc(al::ast::MetaFuncDef::Extern(al::ast::ExternFunc {
             id: id("external"),
             tparams: Vec::new(),
-            params: vec![parameter.clone()],
+            params: vec![param.clone()],
             typ: typ(),
             hints: hints.clone(),
         })), span: span(metadata) },
         p4spec_rust::phrase! { node: al::ast::DefKind::MetaFunc(al::ast::MetaFuncDef::Builtin(al::ast::BuiltinFunc {
             id: id("builtin"),
             tparams: Vec::new(),
-            params: vec![parameter.clone()],
+            params: vec![param.clone()],
             typ: typ(),
             hints: hints.clone(),
         })), span: span(metadata) },
         p4spec_rust::phrase! { node: al::ast::DefKind::MetaFunc(al::ast::MetaFuncDef::Table(al::ast::TableFunc {
             id: id("lookup"),
-            params: vec![parameter.clone()],
+            params: vec![param.clone()],
             typ: typ(),
             table_rows: vec![table_row],
             hints: hints.clone(),
@@ -280,7 +280,7 @@ fn composite_spec(metadata: &str, extern_inputs: Vec<i64>) -> al::ast::Spec {
         p4spec_rust::phrase! { node: al::ast::DefKind::MetaFunc(al::ast::MetaFuncDef::Defined(Box::new(al::ast::DefinedFunc {
             id: id("run"),
             tparams: vec![id("T")],
-            params: vec![parameter],
+            params: vec![param],
             typ: typ(),
             clauses: vec![function_clause],
             else_clause: Some(else_clause),

@@ -253,7 +253,7 @@ NumberOrLpm: MatchKind = {
     <l:Number> "/" <r:Number> => MatchKind::Slash(l, r),
 
     // NumberOrLpm ::= Number
-    <number:Number> => MatchKind::Number(number),
+    <num:Number> => MatchKind::Number(num),
 };
 
 MatchRule: TableMatch = {
@@ -277,7 +277,7 @@ IdOrIndexRule: CounterTarget = {
     <id:"ID"> => CounterTarget::Id(id),
 
     // IdOrIndexRule ::= Number
-    <number:Number> => CounterTarget::Index(number),
+    <num:Number> => CounterTarget::Index(num),
 };
 
 CounterKindRule: CounterKind = {

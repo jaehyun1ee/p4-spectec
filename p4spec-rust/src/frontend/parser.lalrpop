@@ -365,11 +365,11 @@ DefKindRule: ast::Def = {
         let (id, tparams, args, exp, prems) = signature;
         let r = prems
             .last()
-            .map(|premise| premise.span.right.clone())
+            .map(|prem| prem.span.right.clone())
             .unwrap_or_else(|| exp.span.right.clone());
         let prems = prems
             .into_iter()
-            .filter_map(|premise| premise.node)
+            .filter_map(|prem| prem.node)
             .collect();
         crate::phrase! {
             node: DefKind::FuncDef(FuncDef { id, tparams, args, exp, prems }),
@@ -1378,16 +1378,16 @@ Exp: ast::Exp = {
     #[assoc(side="left")]
     <l:Exp> "SEQ" <r:Exp> => {
         let span = Span::new(l.span.left.clone(), r.span.right.clone());
-        let mut expressions = match l.node {
-            ExpKind::Seq(expressions) if expressions.len() >= 2 => expressions,
-            node => vec![crate::phrase! {
-                node: node,
+        let mut exps = match l.node {
+            ExpKind::Seq(exps) if exps.len() >= 2 => exps,
+            exp_kind => vec![crate::phrase! {
+                node: exp_kind,
                 span: l.span,
             }],
         };
-        expressions.push(r);
+        exps.push(r);
         crate::phrase! {
-            node: ExpKind::Seq(expressions),
+            node: ExpKind::Seq(exps),
             span: span,
         }
     },
@@ -1699,16 +1699,16 @@ ExpBin: ast::Exp = {
     #[assoc(side="left")]
     <l:ExpBin> "SEQ" <r:ExpBin> => {
         let span = Span::new(l.span.left.clone(), r.span.right.clone());
-        let mut expressions = match l.node {
-            ExpKind::Seq(expressions) if expressions.len() >= 2 => expressions,
-            node => vec![crate::phrase! {
-                node: node,
+        let mut exps = match l.node {
+            ExpKind::Seq(exps) if exps.len() >= 2 => exps,
+            exp_kind => vec![crate::phrase! {
+                node: exp_kind,
                 span: l.span,
             }],
         };
-        expressions.push(r);
+        exps.push(r);
         crate::phrase! {
-            node: ExpKind::Seq(expressions),
+            node: ExpKind::Seq(exps),
             span: span,
         }
     },
@@ -1948,9 +1948,9 @@ ExpBin: ast::Exp = {
 
 ExpListBase: ast::Exp = {
     // ExpListBase ::= LBRACK CommaList<ExpBin> RBRACK
-    <l:@L> "LBRACK" <expressions:CommaList<ExpBin>> "RBRACK" <r:@R> => {
+    <l:@L> "LBRACK" <exps:CommaList<ExpBin>> "RBRACK" <r:@R> => {
         crate::phrase! {
-            node: ExpKind::List(expressions),
+            node: ExpKind::List(exps),
             span: ctx.span(l, r),
         }
     },
@@ -2095,11 +2095,11 @@ ExpPost: ast::Exp = {
                         span: span,
                     }
                 }
-                node => crate::phrase! {
+                atom_kind => crate::phrase! {
                     node: ExpKind::Dot(
                         Box::new(crate::phrase! {
                             node: ExpKind::Atom(crate::phrase! {
-                                node: node,
+                                node: atom_kind,
                                 span: atom.span,
                             }),
                             span: base.span,
@@ -2112,14 +2112,14 @@ ExpPost: ast::Exp = {
                     span: ctx.span(l, r),
                 },
             },
-            (node, field_node) => crate::phrase! {
+            (exp_kind, atom_kind) => crate::phrase! {
                 node: ExpKind::Dot(
                     Box::new(crate::phrase! {
-                        node: node,
+                        node: exp_kind,
                         span: base.span,
                     }),
                     crate::phrase! {
-                        node: field_node,
+                        node: atom_kind,
                         span: field.span,
                     },
                 ),
@@ -2157,14 +2157,14 @@ ExpPrimary: ast::Exp = {
     },
 
     // ExpPrimary ::= LPAREN CommaList<ExpBin> RPAREN
-    <l:@L> "LPAREN" <expressions:CommaList<ExpBin>> "RPAREN" <r:@R> => {
-        let kind = match expressions.as_slice() {
+    <l:@L> "LPAREN" <exps:CommaList<ExpBin>> "RPAREN" <r:@R> => {
+        let kind = match exps.as_slice() {
             [] => ExpKind::Paren(Box::new(crate::phrase! {
                 node: ExpKind::Tuple(vec![]),
                 span: ctx.span(l, r),
             })),
             [exp] => ExpKind::Paren(Box::new(exp.clone())),
-            _ => ExpKind::Tuple(expressions),
+            _ => ExpKind::Tuple(exps),
         };
         crate::phrase! {
             node: kind,
@@ -2402,28 +2402,26 @@ ExpHole: ast::Exp = {
 FieldExp: (ast::Atom, ast::Exp) = {
     // FieldExp ::= FieldId SEQ ExpPost (SEQ ExpPost)*
     <field:FieldId> "SEQ" <first:ExpPost> <rest:("SEQ" <ExpPost>)*> => {
-        let mut expressions = Vec::with_capacity(rest.len() + 1);
-        expressions.push(first);
-        expressions.extend(rest);
-        let exp = if expressions.len() == 1 {
-            expressions.into_iter().next().expect("one expression")
+        let mut exps = Vec::with_capacity(rest.len() + 1);
+        exps.push(first);
+        exps.extend(rest);
+        let exp = if exps.len() == 1 {
+            exps.into_iter().next().expect("one expression")
         } else {
             let span = Span::new(
-                expressions
-                    .first()
+                exps.first()
                     .expect("nonempty expressions")
                     .span
                     .left
                     .clone(),
-                expressions
-                    .last()
+                exps.last()
                     .expect("nonempty expressions")
                     .span
                     .right
                     .clone(),
             );
             crate::phrase! {
-                node: ExpKind::Seq(expressions),
+                node: ExpKind::Seq(exps),
                 span: span,
             }
         };
@@ -2672,11 +2670,11 @@ ArithPost: ast::Exp = {
                         span: span,
                     }
                 }
-                node => crate::phrase! {
+                atom_kind => crate::phrase! {
                     node: ExpKind::Dot(
                         Box::new(crate::phrase! {
                             node: ExpKind::Atom(crate::phrase! {
-                                node: node,
+                                node: atom_kind,
                                 span: atom.span,
                             }),
                             span: base.span,
@@ -2689,14 +2687,14 @@ ArithPost: ast::Exp = {
                     span: ctx.span(l, r),
                 },
             },
-            (node, field_node) => crate::phrase! {
+            (exp_kind, atom_kind) => crate::phrase! {
                 node: ExpKind::Dot(
                     Box::new(crate::phrase! {
-                        node: node,
+                        node: exp_kind,
                         span: base.span,
                     }),
                     crate::phrase! {
-                        node: field_node,
+                        node: atom_kind,
                         span: field.span,
                     },
                 ),
@@ -2833,8 +2831,8 @@ PremEntry: Phrase<Option<ast::Prem>> = {
     },
 
     // PremEntry ::= DASH Prem
-    <l:@L> "DASH" <premise:Prem> <r:@R> => crate::phrase! {
-        node: Some(premise),
+    <l:@L> "DASH" <prem:Prem> <r:@R> => crate::phrase! {
+        node: Some(prem),
         span: ctx.span(l, r),
     },
 };
@@ -2852,18 +2850,18 @@ PremKindRule: PremKind = {
     "OTHERWISE" => PremKind::Else,
 
     // PremKindRule ::= LPAREN Prem RPAREN IterRule*
-    <l:@L> "LPAREN" <premise:Prem> "RPAREN" <iterations:IterRule*> <r:@R> => {
-        let mut premise = premise;
+    <l:@L> "LPAREN" <prem:Prem> "RPAREN" <iterations:IterRule*> <r:@R> => {
+        let mut prem = prem;
         for iter in iterations {
-            premise = crate::phrase! {
+            prem = crate::phrase! {
                 node: PremKind::Iter(IterPrem {
-                    prem: Box::new(premise),
+                    prem: Box::new(prem),
                     iter,
                 }),
                 span: ctx.span(l, r),
             };
         }
-        premise.node
+        prem.node
     },
 
     // PremKindRule ::= RelId COLON Exp
@@ -2891,9 +2889,9 @@ PremKindRule: PremKind = {
                         iter,
                     })
                 }
-                node => PremKind::If(IfPrem {
+                exp_kind => PremKind::If(IfPrem {
                     exp: crate::phrase! {
-                        node: node,
+                        node: exp_kind,
                         span: exp.span,
                     },
                 }),
@@ -2973,16 +2971,16 @@ ExpSeq: ast::Exp = {
                     span: span,
                 }
             } else {
-                let mut expressions = match l.node {
-                    ExpKind::Seq(expressions) if expressions.len() >= 2 => expressions,
-                    node => vec![crate::phrase! {
-                        node: node,
+                let mut exps = match l.node {
+                    ExpKind::Seq(exps) if exps.len() >= 2 => exps,
+                    exp_kind => vec![crate::phrase! {
+                        node: exp_kind,
                         span: l.span,
                     }],
                 };
-                expressions.push(r);
+                exps.push(r);
                 crate::phrase! {
-                    node: ExpKind::Seq(expressions),
+                    node: ExpKind::Seq(exps),
                     span: span,
                 }
             }
@@ -3021,11 +3019,11 @@ RuleRule: ast::Rule = {
             };
             let r = premises
                 .last()
-                .map(|premise| premise.span.right.clone())
+                .map(|prem| prem.span.right.clone())
                 .unwrap_or_else(|| exp.span.right.clone());
             let premises = premises
                 .into_iter()
-                .filter_map(|premise| premise.node)
+                .filter_map(|prem| prem.node)
                 .collect();
             crate::phrase! {
                 node: (relid, groupid, exp, premises),

@@ -773,7 +773,7 @@ impl p4spec_rust::runner::Interface for Host {
 impl p4spec_rust::runner::Extern for Host {
     fn eval_rel<S, I>(
         &self,
-        context: &mut p4spec_rust::runner::RunnerContext<'_, S, I, Self>,
+        ctx: &mut p4spec_rust::runner::RunnerContext<'_, S, I, Self>,
         _name: &str,
         values: &[Value],
     ) -> Result<(Vec<Value>, bool), S::Error>
@@ -783,16 +783,16 @@ impl p4spec_rust::runner::Extern for Host {
     {
         self.calls.set(self.calls.get() + 1);
         let values = if self.reenter {
-            context.call_rel("Step", values)?
+            ctx.call_rel("Step", values)?
         } else {
-            vec![(self.value)(context.arena_mut())]
+            vec![(self.value)(ctx.arena_mut())]
         };
         Ok((values, true))
     }
 
     fn eval_func<S, I>(
         &self,
-        context: &mut p4spec_rust::runner::RunnerContext<'_, S, I, Self>,
+        ctx: &mut p4spec_rust::runner::RunnerContext<'_, S, I, Self>,
         _name: &str,
         targs: &[ast::Typ],
         _values: &[Value],
@@ -805,10 +805,10 @@ impl p4spec_rust::runner::Extern for Host {
         assert!(targs.is_empty());
         self.calls.set(self.calls.get() + 1);
         let value = if self.reenter {
-            let value = (self.value)(context.arena_mut());
-            context.call_func("inner", &[], &[value])?
+            let value = (self.value)(ctx.arena_mut());
+            ctx.call_func("inner", &[], &[value])?
         } else {
-            (self.value)(context.arena_mut())
+            (self.value)(ctx.arena_mut())
         };
         Ok((value, true))
     }
@@ -1302,7 +1302,7 @@ impl p4spec_rust::runner::Interface for CacheHost {
 impl p4spec_rust::runner::Extern for CacheHost {
     fn eval_func<S, I>(
         &self,
-        context: &mut p4spec_rust::runner::RunnerContext<'_, S, I, Self>,
+        ctx: &mut p4spec_rust::runner::RunnerContext<'_, S, I, Self>,
         name: &str,
         targs: &[ast::Typ],
         values: &[Value],
@@ -1314,7 +1314,7 @@ impl p4spec_rust::runner::Extern for CacheHost {
         assert!(targs.is_empty());
         self.record(name);
         let value = if name == "bridge" {
-            context.call_func("inner", &[], values)?
+            ctx.call_func("inner", &[], values)?
         } else {
             values[0]
         };
@@ -1547,9 +1547,9 @@ def $pair() = ($pure<nat>(7), $pure<bool>(7))
     );
     let id = phrase!(node: "pair".to_owned(), span: Span::default());
     let value = {
-        let mut context = runner.context();
-        let ctx = p4spec_rust::interp::al::context::Context::new(context.spec());
-        p4spec_rust::interp::al::eval::call::invoke_func(&mut context, &ctx, &id, &[], &[])
+        let mut ctx_runner = runner.context();
+        let ctx = p4spec_rust::interp::al::context::Context::new(ctx_runner.spec());
+        p4spec_rust::interp::al::eval::call::invoke_func(&mut ctx_runner, &ctx, &id, &[], &[])
             .finish()
             .unwrap()
     };
@@ -1557,9 +1557,9 @@ def $pair() = ($pure<nat>(7), $pure<bool>(7))
     runner.clear();
     assert_eq!(get::tuple(runner.arena(), &value).unwrap().len(), 2);
     let value_new = {
-        let mut context = runner.context();
-        let ctx = p4spec_rust::interp::al::context::Context::new(context.spec());
-        p4spec_rust::interp::al::eval::call::invoke_func(&mut context, &ctx, &id, &[], &[])
+        let mut ctx_runner = runner.context();
+        let ctx = p4spec_rust::interp::al::context::Context::new(ctx_runner.spec());
+        p4spec_rust::interp::al::eval::call::invoke_func(&mut ctx_runner, &ctx, &id, &[], &[])
             .finish()
             .unwrap()
     };

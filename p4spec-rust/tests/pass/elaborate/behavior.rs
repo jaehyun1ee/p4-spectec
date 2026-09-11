@@ -41,10 +41,10 @@ fn test_parenthesized_variant_keeps_the_case_origin() {
     let ast::MetaFuncDef::Defined(defined_func_il) = meta_func_def_il else {
         panic!("expected defined function");
     };
-    let ast::ArgKind::Exp(argument) = &defined_func_il.clauses[0].node.args[0].node else {
+    let ast::ArgKind::Exp(exp_arg) = &defined_func_il.clauses[0].node.args[0].node else {
         panic!("expected expression argument");
     };
-    let ast::TypKind::Var(id, _) = argument.note.as_ref() else {
+    let ast::TypKind::Var(id, _) = exp_arg.note.as_ref() else {
         panic!("expected nominal variant type");
     };
     assert_eq!(id.node, "pair");
@@ -69,10 +69,10 @@ fn test_failed_variant_alternative_does_not_leak_wildcard_bindings() {
     let ast::MetaFuncDef::Defined(defined_func_il) = meta_func_def_il else {
         panic!("expected defined function");
     };
-    let ast::ArgKind::Exp(argument) = &defined_func_il.clauses[0].node.args[0].node else {
+    let ast::ArgKind::Exp(exp_arg) = &defined_func_il.clauses[0].node.args[0].node else {
         panic!("expected expression argument");
     };
-    let ast::ExpKind::Case(case) = &argument.node else {
+    let ast::ExpKind::Case(case) = &exp_arg.node else {
         panic!("expected variant case");
     };
 

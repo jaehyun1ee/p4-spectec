@@ -22,12 +22,12 @@ impl Print for Action {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         write_quoted(printer, self.name.as_str())?;
         printer.write("(")?;
-        for (index, argument) in self.args.iter().enumerate() {
+        for (index, arg) in self.args.iter().enumerate() {
             if index != 0 {
                 printer.write(",")?;
             }
-            write_quoted(printer, &argument.id)?;
-            printer.write_fmt(format_args!(":{}", argument.num))?;
+            write_quoted(printer, &arg.id)?;
+            printer.write_fmt(format_args!(":{}", arg.num))?;
         }
         printer.write(")")
     }

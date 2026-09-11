@@ -48,9 +48,8 @@ fn set_of_value(arena: &ValueArena, value: &Value) -> Result<ValueSet, BuiltinEr
         return Err(BuiltinError::new("expected a set"));
     }
     let args = value_case.args();
-    let value_elements = extract::one(&args)?;
-    let values =
-        get::list(arena, value_elements).map_err(|_| BuiltinError::new("expected a set"))?;
+    let value_set = extract::one(&args)?;
+    let values = get::list(arena, value_set).map_err(|_| BuiltinError::new("expected a set"))?;
     let mut set = values.to_vec();
     sort_set(arena, &mut set);
     Ok(set)
@@ -63,12 +62,12 @@ fn value_of_set(
 ) -> Result<Value, BuiltinError> {
     let values_elem = set.into_iter().collect();
     let typ_list = typ::make::list(typ_key.clone());
-    let value_elements = make::list(arena, typ_list.node.into(), values_elem, Span::default())?;
+    let value_set = make::list(arena, typ_list.node.into(), values_elem, Span::default())?;
     let set_id = crate::phrase!(node: "set".to_owned(), span: Span::default());
     let typ = typ::make::var(set_id, vec![typ_key.clone()]);
     let set_mixop = set_mixop();
     let value_case =
-        Mixop::fill(&set_mixop, [value_elements]).expect("the set mixop has exactly one argument");
+        Mixop::fill(&set_mixop, [value_set]).expect("the set mixop has exactly one argument");
     let value = make::case(arena, typ.node.into(), value_case, Span::default())?;
     Ok(value)
 }

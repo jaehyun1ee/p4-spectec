@@ -3,13 +3,13 @@ use super::super::*;
 #[test]
 fn test_context_clone_isolates_local_bindings() {
     let id_free = id("free", 1);
-    let context = Context::new();
-    let mut context_local = context.clone();
+    let ctx = Context::new();
+    let mut ctx_local = ctx.clone();
 
-    context_local.add_free(id_free.clone());
+    ctx_local.add_free(id_free.clone());
 
-    assert!(!context.frees.contains(&id_free));
-    assert!(context_local.frees.contains(&id_free));
+    assert!(!ctx.frees.contains(&id_free));
+    assert!(ctx_local.frees.contains(&id_free));
 }
 
 #[test]
@@ -43,14 +43,14 @@ fn test_context_loads_type_and_metavariable_definitions() {
         span(3) },
     ];
 
-    let mut context = Context::new();
-    context.load_spec(&spec);
+    let mut ctx = Context::new();
+    ctx.load_spec(&spec);
 
-    assert_eq!(context.tdenv.get(&extern_id), Some(&TypeDef::Extern));
+    assert_eq!(ctx.tdenv.get(&extern_id), Some(&TypeDef::Extern));
     assert_eq!(
-        context.tdenv.get(&defined_id),
+        ctx.tdenv.get(&defined_id),
         Some(&TypeDef::Defined(vec![], Box::new(def_typ)))
     );
-    assert_eq!(context.menv.get(&variable_id), Some(&bool_typ));
-    assert!(context.menv.contains_key(&id("bool", 99)));
+    assert_eq!(ctx.menv.get(&variable_id), Some(&bool_typ));
+    assert!(ctx.menv.contains_key(&id("bool", 99)));
 }

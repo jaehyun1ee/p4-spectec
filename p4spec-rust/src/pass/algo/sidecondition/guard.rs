@@ -281,7 +281,7 @@ fn iterate_collected(
 fn gen_index_guard(
     exp_al: &ast::Exp,
     exp_base_al: &ast::Exp,
-    exp_index_al: &ast::Exp,
+    exp_idx_al: &ast::Exp,
 ) -> Vec<ast::Prem> {
     let span = exp_al.span.clone();
     let exp_len_al = note_phrase! {
@@ -293,7 +293,7 @@ fn gen_index_guard(
         node: ast::ExpKind::Cmp(
             ast::CmpOp::Num(xl::num::CmpOp::Lt),
             ast::OpTyp::Bool,
-            Box::new(exp_index_al.clone()),
+            Box::new(exp_idx_al.clone()),
             Box::new(exp_len_al),
         ),
         note: ast::TypKind::Bool,

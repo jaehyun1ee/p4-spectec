@@ -83,7 +83,7 @@ impl Drop for TempDirectory {
 fn test_parse_string_returns_el_with_an_empty_source_name() {
     let spec = parse_string("var x : nat").expect("parse SpecTec string");
 
-    assert!(matches!(&spec[0].node, DefKind::Var(definition) if definition.id.node == "x"));
+    assert!(matches!(&spec[0].node, DefKind::Var(def) if def.id.node == "x"));
     assert_eq!(spec[0].span.left, Position::new("", 1, 0));
 }
 
@@ -128,7 +128,7 @@ fn test_parse_file_uses_the_path_in_source_locations() {
     ));
     let span = spec[0].span.clone();
     assert!(Rc::ptr_eq(&spec[0].span.left.file, &span.left.file));
-    assert!(matches!(&spec[0].node, DefKind::Var(definition) if definition.id.node == "one"));
+    assert!(matches!(&spec[0].node, DefKind::Var(def) if def.id.node == "one"));
 }
 
 #[test]

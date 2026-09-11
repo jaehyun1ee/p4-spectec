@@ -229,10 +229,10 @@ impl Print for Exp {
                 printer.separated(exps, ", ")?;
                 printer.write_char(']')
             }
-            ExpKind::Cons(exp_l, exp_r) => {
-                exp_l.print(printer)?;
+            ExpKind::Cons(exp_head, exp_tail) => {
+                exp_head.print(printer)?;
                 printer.write_str(" :: ")?;
-                exp_r.print(printer)
+                exp_tail.print(printer)
             }
             ExpKind::Cat(exp_l, exp_r) => {
                 exp_l.print(printer)?;

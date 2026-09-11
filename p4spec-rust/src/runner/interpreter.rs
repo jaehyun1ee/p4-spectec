@@ -28,19 +28,19 @@ where
 
     /// Evaluates an already parsed program through the selected entry
     fn eval_program(
-        context: &mut RunnerContext<'_, Self, I, E>,
+        ctx: &mut RunnerContext<'_, Self, I, E>,
         name: &str,
         program: Value,
     ) -> Result<Vec<Value>, Self::Error>;
 
     fn eval_rel(
-        context: &mut RunnerContext<'_, Self, I, E>,
+        ctx: &mut RunnerContext<'_, Self, I, E>,
         name: &str,
         values: &[Value],
     ) -> Result<Vec<Value>, Self::Error>;
 
     fn eval_func(
-        context: &mut RunnerContext<'_, Self, I, E>,
+        ctx: &mut RunnerContext<'_, Self, I, E>,
         name: &str,
         targs: &[Typ],
         values: &[Value],

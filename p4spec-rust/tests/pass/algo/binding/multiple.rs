@@ -12,10 +12,10 @@ fn test_multiple_binding_renames_repetitions_and_compares_them_in_occurrence_ord
         1,
     );
     let benv = collect::collect_exp(&Context::new(), &tuple).expect("binding collection");
-    let mut context = Context::new();
+    let mut ctx = Context::new();
     let mut renames = multiple::RenameEnv::from_bindings(&benv);
 
-    let renamed = multiple::rename_exp(&mut context, &mut renames, &tuple);
+    let renamed = multiple::rename_exp(&mut ctx, &mut renames, &tuple);
     let side_conditions = multiple::generate_side_conditions(&ICtx::new(), &renames);
 
     let ast::ExpKind::Tuple(exps) = &renamed.node else {
@@ -69,9 +69,9 @@ fn test_multiple_side_conditions_use_the_rename_environment_dimension() {
         ast::TypKind::Tuple(vec![typ::make::bool(), typ::make::bool()]),
         1,
     );
-    let mut context = Context::new();
+    let mut ctx = Context::new();
     let mut renames = multiple::RenameEnv::from_bindings(&benv);
-    multiple::rename_exp(&mut context, &mut renames, &tuple);
+    multiple::rename_exp(&mut ctx, &mut renames, &tuple);
 
     let prems = multiple::generate_side_conditions(&ICtx::new(), &renames);
 
