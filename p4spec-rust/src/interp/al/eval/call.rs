@@ -3,12 +3,13 @@
 use super::super::{
     Al,
     backtrack::{Backtrack, back, choose_deterministic, choose_sequential},
-    context::Context,
+    context::{Context, Scope},
     error::ErrorKind,
+    state::CallKey,
 };
 use super::{assign, expr, prem::eval_prems};
 use crate::interp::al::error::{CallErrorKind, GuardErrorKind, HostErrorKind, TraceErrorKind};
-use crate::lang::data::value::ValueArena;
+use crate::lang::data::value::{ValueArena, ValueKind};
 use crate::{
     lang::{al::ast, data::value::Value, traits::print::Print},
     runner::{Extern, Interface, InterfaceError, RunnerContext},
@@ -136,6 +137,30 @@ fn check_func_output(
     )
 }
 
+// = Cache eligibility
+
+pub(in crate::interp::al) fn cache_rel<I: Interface, E: Extern>(
+    runner: &RunnerContext<'_, Al, I, E>,
+    ctx: &Context<'_>,
+    id: &ast::Id,
+) -> bool {
+    runner.config().cache && matches!(ctx.find_rel(id), Ok(ast::RelDef::Defined(_)))
+}
+
+pub(in crate::interp::al) fn cache_func<I: Interface, E: Extern>(
+    runner: &RunnerContext<'_, Al, I, E>,
+    ctx: &Context<'_>,
+    id: &ast::Id,
+    values: &[Value],
+) -> bool {
+    runner.config().cache
+        && matches!(ctx.find_func(id), Ok((Scope::Global, func))
+            if !matches!(func, ast::MetaFuncDef::Extern(_)))
+        && !values
+            .iter()
+            .any(|value| matches!(runner.arena().kind(value), ValueKind::Func(_)))
+}
+
 // = Relation invocation
 
 pub fn invoke_rel<I: Interface, E: Extern>(
@@ -144,6 +169,11 @@ pub fn invoke_rel<I: Interface, E: Extern>(
     id: &ast::Id,
     values: &[Value],
 ) -> Backtrack<Vec<Value>> {
+    let key = cache_rel(runner, ctx, id).then(|| CallKey::new(runner.arena(), &id.node, values));
+    if let Some(values) = key.as_ref().and_then(|key| runner.state().rels.get(key)) {
+        return Backtrack::Ok(values.clone());
+    }
+    runner.state_mut().begin();
     let result = stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
         let rel = back!(Backtrack::from_result(ctx.find_rel(id), &id.span));
         match rel {
@@ -151,6 +181,10 @@ pub fn invoke_rel<I: Interface, E: Extern>(
             ast::RelDef::Defined(rel) => invoke_defined_rel(runner, ctx, id, rel, values),
         }
     });
+    let pure = runner.state_mut().end();
+    if pure && let (Some(key), Backtrack::Ok(values)) = (key, &result) {
+        runner.state_mut().rels.insert(key, values.clone());
+    }
     result.nest(id.span.clone(), || {
         ErrorKind::Trace(TraceErrorKind::RelationInvocation {
             relation: id.node.clone(),
@@ -167,10 +201,11 @@ fn invoke_extern_rel<I: Interface, E: Extern>(
     rel: &ast::ExternRel,
     values: &[Value],
 ) -> Backtrack<Vec<Value>> {
-    let (values, _) = back!(Backtrack::from_result(
-        runner.call_extern_rel(&id.node, values),
-        &id.span
-    ));
+    let result = runner.call_extern_rel(&id.node, values);
+    runner
+        .state_mut()
+        .mark_effect(result.as_ref().map_or(true, |(_, effect)| *effect));
+    let (values, _) = back!(Backtrack::from_result(result, &id.span));
     if runner.config().guard {
         let typs = rel.not_typ.node.args().into_iter().cloned().collect();
         let (_, typs) = back!(Backtrack::from_result(
@@ -297,6 +332,12 @@ pub fn invoke_func<I: Interface, E: Extern>(
     targs: &[ast::Typ],
     values: &[Value],
 ) -> Backtrack<Value> {
+    let key =
+        cache_func(runner, ctx, id, values).then(|| CallKey::new(runner.arena(), &id.node, values));
+    if let Some(value) = key.as_ref().and_then(|key| runner.state().funcs.get(key)) {
+        return Backtrack::Ok(*value);
+    }
+    runner.state_mut().begin();
     let result = stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
         let (_, func) = back!(Backtrack::from_result(ctx.find_func(id), &id.span));
         match func {
@@ -312,6 +353,10 @@ pub fn invoke_func<I: Interface, E: Extern>(
             }
         }
     });
+    let pure = runner.state_mut().end();
+    if pure && let (Some(key), Backtrack::Ok(value)) = (key, &result) {
+        runner.state_mut().funcs.insert(key, *value);
+    }
     result.nest(id.span.clone(), || {
         ErrorKind::Trace(TraceErrorKind::FunctionInvocation {
             function: id.node.clone(),
@@ -341,10 +386,11 @@ fn invoke_extern_func<I: Interface, E: Extern>(
     targs: &[ast::Typ],
     values: &[Value],
 ) -> Backtrack<Value> {
-    let (value, _) = back!(Backtrack::from_result(
-        runner.call_extern_func(&id.node, &[], values),
-        &id.span
-    ));
+    let result = runner.call_extern_func(&id.node, &[], values);
+    runner
+        .state_mut()
+        .mark_effect(result.as_ref().map_or(true, |(_, effect)| *effect));
+    let (value, _) = back!(Backtrack::from_result(result, &id.span));
     if runner.config().guard {
         back!(
             check_func_output(
@@ -372,7 +418,11 @@ fn invoke_builtin_func<I: Interface, E: Extern>(
     targs: &[ast::Typ],
     values: &[Value],
 ) -> Backtrack<Value> {
-    match runner.call_builtin(id, targs, values) {
+    let result = runner.call_builtin(id, targs, values);
+    runner
+        .state_mut()
+        .mark_effect(result.as_ref().map_or(true, |(_, effect)| *effect));
+    match result {
         Ok((value, _)) => {
             if runner.config().guard {
                 back!(

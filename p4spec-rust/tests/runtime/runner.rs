@@ -45,7 +45,10 @@ where
 {
     type Spec = ();
     type Config = FixtureConfig;
+    type State = ();
     type Error = FixtureError;
+
+    fn clear(_state: &mut Self::State) {}
 
     fn eval_program(
         _context: &mut RunnerContext<'_, Self, I, E>,

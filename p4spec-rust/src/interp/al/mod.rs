@@ -3,6 +3,7 @@
 pub mod backtrack;
 pub mod context;
 pub mod error;
+pub mod state;
 
 pub mod eval;
 pub mod util;
@@ -18,20 +19,27 @@ pub struct Al;
 
 /// Configuration for the AL interpreter
 pub struct Config {
+    /// Eligible public calls bypass input guards when caching is enabled
+    cache: bool,
     det: bool,
     guard: bool,
 }
 
 impl Config {
-    pub fn new(det: bool, guard: bool) -> Self {
-        Self { det, guard }
+    pub fn new(cache: bool, det: bool, guard: bool) -> Self {
+        Self { cache, det, guard }
     }
 }
 
 impl<I: Interface, E: Extern> Interpreter<I, E> for Al {
     type Spec = Global;
     type Config = Config;
+    type State = state::State;
     type Error = Error;
+
+    fn clear(state: &mut Self::State) {
+        state.clear();
+    }
 
     fn eval_program(
         runner: &mut RunnerContext<'_, Self, I, E>,
@@ -46,9 +54,10 @@ impl<I: Interface, E: Extern> Interpreter<I, E> for Al {
         name: &str,
         values: &[Value],
     ) -> Result<Vec<Value>, Error> {
+        runner.state_mut().clear();
         let id = crate::phrase!(node: name.to_owned(), span: Span::default());
         let ctx = Context::new(runner.spec());
-        if runner.config().guard {
+        if runner.config().guard && !eval::call::cache_rel(runner, &ctx, &id) {
             eval::call::check_rel_inputs(runner.arena(), &ctx, &id, values)
                 .guard()
                 .finish()?;
@@ -61,9 +70,10 @@ impl<I: Interface, E: Extern> Interpreter<I, E> for Al {
         targs: &[ast::Typ],
         values: &[Value],
     ) -> Result<Value, Error> {
+        runner.state_mut().clear();
         let id = crate::phrase!(node: name.to_owned(), span: Span::default());
         let ctx = Context::new(runner.spec());
-        if runner.config().guard {
+        if runner.config().guard && !eval::call::cache_func(runner, &ctx, &id, values) {
             eval::call::check_func_inputs(runner.arena(), &ctx, &id, targs, values)
                 .guard()
                 .finish()?;

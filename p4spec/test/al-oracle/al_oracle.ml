@@ -286,7 +286,7 @@ let stream_success values =
   print_endline "AL-END";
   flush stdout
 
-let reentrant spec_al det guard =
+let reentrant spec_al cache det guard =
   let call_func =
     ref (fun _ _ _ : Run.func_result ->
         Run.Fail (Util.Source.no_region, "uninitialized bridge"))
@@ -324,7 +324,7 @@ let reentrant spec_al det guard =
     | Error (error : Run.error) -> failwith error.msg
   in
   Interface.P4.init (Run.AL spec_al) |> check;
-  Interp.init ~cache:false ~det ~guard spec_al |> check;
+  Interp.init ~cache ~det ~guard spec_al |> check;
   call_func := Interp.eval_func;
   (module Interp : Run.INTERP)
 
@@ -332,13 +332,14 @@ let () =
   let path_spec = Sys.argv.(1) in
   let det = bool_of_string Sys.argv.(2) in
   let guard = bool_of_string Sys.argv.(3) in
+  let cache = bool_of_string Sys.argv.(5) in
   let spec_al = P4spectec.algo [ path_spec ] |> unwrap in
   let (module Interp : Run.INTERP) =
     if Array.length Sys.argv > 4 && Sys.argv.(4) = "reentry" then
-      reentrant spec_al det guard
+      reentrant spec_al cache det guard
     else
       let (module Runner : Runtime.Sim.Signature.SIM) =
-        P4spectec.build_sim ~cache:false ~det ~guard (Run.AL spec_al) |> unwrap
+        P4spectec.build_sim ~cache ~det ~guard (Run.AL spec_al) |> unwrap
       in
       (module Runner.Interp : Run.INTERP)
   in

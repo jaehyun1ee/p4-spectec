@@ -84,6 +84,9 @@ struct RunArgs {
     /// Include directories for the P4 program
     #[arg(short = 'i', value_name = "DIR")]
     includes: Vec<PathBuf>,
+    /// Disable AL call caching
+    #[arg(long)]
+    no_cache: bool,
     /// Check deterministic execution
     #[arg(long)]
     det: bool,
@@ -104,7 +107,7 @@ fn run_command(args: RunArgs) -> ExitCode {
     };
     let mut runner = Runner::<Al, _, _>::new(
         global,
-        Config::new(args.det, args.guard),
+        Config::new(!args.no_cache, args.det, args.guard),
         BuiltinInterface::new(unparser),
         Placeholder,
     );

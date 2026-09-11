@@ -1,4 +1,4 @@
-//! Native AL comparisons against an uncached, independently built OCaml runner
+//! Native AL comparisons against an independently built OCaml runner
 
 use p4spec_rust::lang::data::value::{ValueArena, ValueCase};
 use std::{
@@ -48,6 +48,7 @@ fn repo() -> &'static Path {
 
 fn native<E: Extern>(
     spec: &Path,
+    cache: bool,
     det: bool,
     guard: bool,
     extern_: E,
@@ -58,7 +59,7 @@ fn native<E: Extern>(
     let unparser = P4Unparser::from_al_spec(&spec_al);
     Runner::new(
         Global::load(spec_al).unwrap(),
-        Config::new(det, guard),
+        Config::new(cache, det, guard),
         BuiltinInterface::new(unparser),
         extern_,
     )
@@ -86,18 +87,19 @@ impl Oracle {
         );
     }
 
-    fn new(spec: &Path, det: bool, guard: bool, reentry: bool) -> Self {
+    fn new(spec: &Path, cache: bool, det: bool, guard: bool, reentry: bool) -> Self {
         let mut child =
             Command::new(repo().join("_build/default/p4spec/test/al-oracle/al_oracle.exe"))
                 .arg(spec)
                 .arg(det.to_string())
                 .arg(guard.to_string())
                 .arg(if reentry { "reentry" } else { "p4" })
+                .arg(cache.to_string())
                 .stdin(Stdio::piped())
                 .stdout(Stdio::piped())
                 .stderr(Stdio::inherit())
                 .spawn()
-                .expect("start uncached OCaml oracle");
+                .expect("start OCaml oracle");
         let input = child.stdin.take();
         let output = BufReader::new(child.stdout.take().unwrap());
         Self {
@@ -548,11 +550,11 @@ fn collect_semantic_frames(arena: &ValueArena, value: &Value) -> Vec<Json> {
     frames
 }
 
-fn fixtures(det: bool) {
+fn fixtures(cache: bool, det: bool) {
     let spec = repo().join("p4spec-rust/tests/fixtures/interp/al/compare.watsup");
     for guard in [false, true] {
-        let mut runner = native(&spec, det, guard, NullExtern);
-        let mut oracle = Oracle::new(&spec, det, guard, false);
+        let mut runner = native(&spec, cache, det, guard, NullExtern);
+        let mut oracle = Oracle::new(&spec, cache, det, guard, false);
         let nat = make::nat(runner.arena_mut(), 5.into(), Span::default()).unwrap();
         let malformed = make::bool(runner.arena_mut(), true, Span::default()).unwrap();
         for (kind, name, values) in [
@@ -577,7 +579,7 @@ fn fixtures(det: bool) {
             compare(
                 expected,
                 actual,
-                &format!("{name}, det={det}, guard={guard}, cache=false"),
+                &format!("{name}, det={det}, guard={guard}, cache={cache}"),
             );
         }
     }
@@ -628,11 +630,11 @@ impl Extern for Bridge {
     fn clear(&mut self) {}
 }
 
-fn reentry(det: bool) {
+fn reentry(cache: bool, det: bool) {
     let spec = repo().join("p4spec-rust/tests/fixtures/interp/al/compare.watsup");
     for guard in [false, true] {
-        let mut runner = native(&spec, det, guard, Bridge);
-        let mut oracle = Oracle::new(&spec, det, guard, true);
+        let mut runner = native(&spec, cache, det, guard, Bridge);
+        let mut oracle = Oracle::new(&spec, cache, det, guard, true);
         for (name, values) in [
             (
                 "outer",
@@ -652,7 +654,7 @@ fn reentry(det: bool) {
             compare(
                 expected,
                 actual,
-                &format!("reentry {name}, det={det}, guard={guard}, cache=false"),
+                &format!("reentry {name}, det={det}, guard={guard}, cache={cache}"),
             );
         }
     }
@@ -736,27 +738,27 @@ fn corpus() -> Vec<(PathBuf, &'static str)> {
     corpus
 }
 
-fn run_corpus(det: bool) {
+fn run_corpus(cache: bool, det: bool) {
     let _lock = OCAML_LOCK
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     Oracle::build();
-    fixtures(det);
-    reentry(det);
+    fixtures(cache, det);
+    reentry(cache, det);
     let files = corpus();
     assert!(!files.is_empty(), "supported corpus must be present");
     let spec = repo().join("spec");
     let includes = vec![repo().join("p4c/p4include")];
     for (index, (path, name)) in files.iter().enumerate() {
         eprintln!(
-            "[{}/{}] {} {name}, det={det}, guard=false, cache=false",
+            "[{}/{}] {} {name}, det={det}, guard=false, cache={cache}",
             index + 1,
             files.len(),
             path.display()
         );
         // Each program owns its runner and arena, matching the OCaml process boundary
-        let mut oracle = Oracle::new(&spec, det, false, false);
-        let mut runner = native(&spec, det, false, Placeholder);
+        let mut oracle = Oracle::new(&spec, cache, det, false, false);
+        let mut runner = native(&spec, cache, det, false, Placeholder);
         runner.clear();
         let actual = match parse_file(runner.arena_mut(), &includes, path) {
             Ok(program) => runner.eval_program(name, program).map_err(failure),
@@ -785,13 +787,25 @@ fn with_stack(f: impl FnOnce() + Send + 'static) {
 #[test]
 #[ignore = "requires pinned OCaml toolchain; full uncached P4 corpus is slow"]
 fn test_run_al_corpus_matches_ocaml() {
-    with_stack(|| run_corpus(false));
+    with_stack(|| run_corpus(false, false));
 }
 
 #[test]
 #[ignore = "requires pinned OCaml toolchain; full deterministic uncached P4 corpus is slow"]
 fn test_run_al_det_corpus_matches_ocaml() {
-    with_stack(|| run_corpus(true));
+    with_stack(|| run_corpus(false, true));
+}
+
+#[test]
+#[ignore = "requires pinned OCaml toolchain; full cached P4 corpus is slow"]
+fn test_run_al_cached_corpus_matches_ocaml() {
+    with_stack(|| run_corpus(true, false));
+}
+
+#[test]
+#[ignore = "requires pinned OCaml toolchain; full deterministic cached P4 corpus is slow"]
+fn test_run_al_cached_det_corpus_matches_ocaml() {
+    with_stack(|| run_corpus(true, true));
 }
 
 #[test]
@@ -802,10 +816,42 @@ fn test_choice_and_guards_match_ocaml() {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         Oracle::build();
-        fixtures(false);
-        fixtures(true);
-        reentry(false);
-        reentry(true);
+        for cache in [false, true] {
+            fixtures(cache, false);
+            fixtures(cache, true);
+            reentry(cache, false);
+            reentry(cache, true);
+        }
+    });
+}
+
+#[test]
+#[ignore = "requires pinned OCaml toolchain"]
+fn test_oracle_cache_flag_controls_public_input_guard() {
+    with_stack(|| {
+        let _lock = OCAML_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        Oracle::build();
+        let spec = repo().join("p4spec-rust/tests/fixtures/interp/al/compare.watsup");
+        for cache in [false, true] {
+            let mut runner = native(&spec, cache, false, true, NullExtern);
+            let mut oracle = Oracle::new(&spec, cache, false, true, false);
+            let value = make::bool(runner.arena_mut(), true, Span::default()).unwrap();
+            let expected = oracle.query(&json!({
+                "kind": "function", "name": "ignore",
+                "values": [ValueCodec::encode(runner.arena(), &value).unwrap()],
+            }));
+            assert_eq!(expected["status"] == "passed", cache);
+            let result = runner.eval_func("ignore", &[], &[value]);
+            assert_eq!(result.is_ok(), cache);
+            let actual = result.map_or_else(failure, |value| success(runner.arena(), vec![value]));
+            compare(
+                expected,
+                actual,
+                &format!("public input guard, cache={cache}"),
+            );
+        }
     });
 }
 

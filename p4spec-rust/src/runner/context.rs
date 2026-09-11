@@ -22,6 +22,7 @@ where
 {
     spec: &'runner S::Spec,
     config: &'runner S::Config,
+    state: &'runner mut S::State,
     interface: &'runner mut I,
     externs: &'runner E,
     arena: &'runner mut ValueArena,
@@ -36,6 +37,7 @@ where
     pub(super) fn new(
         spec: &'runner S::Spec,
         config: &'runner S::Config,
+        state: &'runner mut S::State,
         interface: &'runner mut I,
         externs: &'runner E,
         arena: &'runner mut ValueArena,
@@ -43,6 +45,7 @@ where
         Self {
             spec,
             config,
+            state,
             interface,
             externs,
             arena,
@@ -57,6 +60,14 @@ where
 
     pub fn config(&self) -> &'runner S::Config {
         self.config
+    }
+
+    pub fn state(&self) -> &S::State {
+        self.state
+    }
+
+    pub fn state_mut(&mut self) -> &mut S::State {
+        self.state
     }
 
     pub fn arena(&self) -> &ValueArena {

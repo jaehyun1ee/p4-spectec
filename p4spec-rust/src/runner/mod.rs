@@ -33,6 +33,7 @@ where
 {
     spec: S::Spec,
     config: S::Config,
+    state: S::State,
     interface: I,
     externs: E,
     arena: ValueArena,
@@ -48,6 +49,7 @@ where
         Self {
             spec,
             config,
+            state: S::State::default(),
             interface,
             externs,
             arena: ValueArena::new(),
@@ -59,6 +61,7 @@ where
         RunnerContext::new(
             &self.spec,
             &self.config,
+            &mut self.state,
             &mut self.interface,
             &self.externs,
             &mut self.arena,
@@ -97,8 +100,9 @@ where
 
     // - Lifecycle
 
-    /// Resets the builtin interface and extern implementation.
+    /// Clears execution state and resets the builtin interface and externs
     pub fn clear(&mut self) {
+        S::clear(&mut self.state);
         self.externs.clear();
         self.interface.clear();
     }

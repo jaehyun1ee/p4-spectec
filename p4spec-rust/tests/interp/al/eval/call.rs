@@ -28,7 +28,7 @@ fn spec(source: &str) -> ast::Spec {
 fn make_runner(spec_al: ast::Spec, det: bool) -> Runner<Al, BuiltinInterface, NullExtern> {
     Runner::new(
         Global::load(spec_al).unwrap(),
-        Config::new(det, true),
+        Config::new(false, det, true),
         BuiltinInterface::new(p4spec_rust::interface::p4::unparse::P4Unparser::new()),
         NullExtern,
     )
@@ -306,7 +306,9 @@ def $fallback(n*) = n*
     ] {
         let value = make::list(
             runner.arena_mut(),
-            (typ::make::list(typ::make::nat())).node.clone(),
+            (typ::make::iter(typ::make::nat(), p4spec_rust::lang::common::Iter::List))
+                .node
+                .clone(),
             values.clone(),
             Span::default(),
         )
@@ -696,7 +698,7 @@ fn test_guards_toggle_input_checks_and_substitute_type_arguments() {
         for guard in [false, true] {
             let mut runner = Runner::<Al, _, _>::new(
                 Global::load(spec_al.clone()).unwrap(),
-                Config::new(det, guard),
+                Config::new(false, det, guard),
                 BuiltinInterface::new(p4spec_rust::interface::p4::unparse::P4Unparser::new()),
                 NullExtern,
             );
@@ -803,7 +805,7 @@ def $pick<X>() = $external<X>()
             let calls = external.calls.clone();
             let mut runner = Runner::<Al, _, _>::new(
                 Global::load(spec_al.clone()).unwrap(),
-                Config::new(det, guard),
+                Config::new(false, det, guard),
                 builtin,
                 external,
             );
@@ -863,7 +865,7 @@ fn test_extern_relation_output_guards_preserve_call_span() {
     for guard in [false, true] {
         let mut runner = Runner::<Al, _, _>::new(
             Global::load(spec_al.clone()).unwrap(),
-            Config::new(false, guard),
+            Config::new(false, false, guard),
             BuiltinInterface::new(p4spec_rust::interface::p4::unparse::P4Unparser::new()),
             host(|arena| nat(arena, 4), false),
         );
@@ -906,7 +908,7 @@ def $ambiguous() = 2
     let calls_extern = external.calls.clone();
     let mut runner = Runner::<Al, _, _>::new(
         Global::load(spec(source)).unwrap(),
-        Config::new(true, true),
+        Config::new(false, true, true),
         builtin,
         external,
     );
@@ -970,7 +972,7 @@ fn test_extern_reentry_uses_public_input_guards() {
     for guard in [false, true] {
         let mut runner = Runner::<Al, _, _>::new(
             Global::load(spec(source)).unwrap(),
-            Config::new(false, guard),
+            Config::new(false, false, guard),
             BuiltinInterface::new(p4spec_rust::interface::p4::unparse::P4Unparser::new()),
             host(
                 |arena| make::bool(arena, true, Span::default()).unwrap(),
@@ -1000,7 +1002,7 @@ fn test_output_guard_after_success_is_fatal_only_in_deterministic_choice() {
     for det in [false, true] {
         let mut runner = Runner::<Al, _, _>::new(
             Global::load(spec(source)).unwrap(),
-            Config::new(det, true),
+            Config::new(false, det, true),
             host(
                 |arena| make::bool(arena, true, Span::default()).unwrap(),
                 false,
@@ -1083,7 +1085,7 @@ fn test_guard_failure_keeps_its_source_span_through_extern_reentry() {
     let span = id.span.clone();
     let mut runner = Runner::<Al, _, _>::new(
         Global::load(spec_al).unwrap(),
-        Config::new(false, true),
+        Config::new(false, false, true),
         host(
             |arena| make::bool(arena, true, Span::default()).unwrap(),
             false,
@@ -1105,7 +1107,7 @@ fn test_reentrant_public_guard_keeps_no_source_span() {
     let source = "extern dec $bridge(nat) : nat\nvar n : nat\ndec $inner(nat) : nat\ndef $inner(n) = 7\ndec $outer(nat) : nat\ndef $outer(n) = $bridge(n)";
     let mut runner = Runner::<Al, _, _>::new(
         Global::load(spec(source)).unwrap(),
-        Config::new(false, true),
+        Config::new(false, false, true),
         BuiltinInterface::new(p4spec_rust::interface::p4::unparse::P4Unparser::new()),
         host(
             |arena| make::bool(arena, true, Span::default()).unwrap(),
@@ -1119,4 +1121,338 @@ fn test_reentrant_public_guard_keeps_no_source_span() {
     .unwrap_err();
     assert!(error.to_string().contains("function argument of inner"));
     assert_eq!(error.span, Span::default());
+}
+
+// = Call caching
+
+#[derive(Clone, Default)]
+struct CacheHost {
+    calls: Rc<std::cell::RefCell<std::collections::HashMap<String, usize>>>,
+}
+
+impl CacheHost {
+    fn count(&self, name: &str) -> usize {
+        self.calls.borrow().get(name).copied().unwrap_or(0)
+    }
+
+    fn record(&self, name: &str) {
+        *self.calls.borrow_mut().entry(name.to_owned()).or_default() += 1;
+    }
+}
+
+impl p4spec_rust::runner::Interface for CacheHost {
+    fn call_builtin(
+        &mut self,
+        arena: &mut ValueArena,
+        id: &ast::Id,
+        _targs: &[ast::Typ],
+        values: &[Value],
+    ) -> Result<(Value, bool), p4spec_rust::runner::InterfaceError> {
+        self.record(&id.node);
+        if id.node == "fail" {
+            return Err(Box::new(p4spec_rust::interface::builtin::BuiltinError::new(
+                "failure",
+            ))
+            .into());
+        }
+        let value = values.first().copied().unwrap_or_else(|| nat(arena, 7));
+        Ok((value, id.node == "impure"))
+    }
+
+    fn clear(&mut self) {
+        self.calls.borrow_mut().clear();
+    }
+}
+
+impl p4spec_rust::runner::Extern for CacheHost {
+    fn eval_func<S, I>(
+        &self,
+        context: &mut p4spec_rust::runner::RunnerContext<'_, S, I, Self>,
+        name: &str,
+        targs: &[ast::Typ],
+        values: &[Value],
+    ) -> Result<(Value, bool), S::Error>
+    where
+        I: p4spec_rust::runner::Interface,
+        S: p4spec_rust::runner::Interpreter<I, Self>,
+    {
+        assert!(targs.is_empty());
+        self.record(name);
+        let value = if name == "bridge" {
+            context.call_func("inner", &[], values)?
+        } else {
+            values[0]
+        };
+        Ok((value, false))
+    }
+
+    fn eval_rel<S, I>(
+        &self,
+        _context: &mut p4spec_rust::runner::RunnerContext<'_, S, I, Self>,
+        name: &str,
+        values: &[Value],
+    ) -> Result<(Vec<Value>, bool), S::Error>
+    where
+        I: p4spec_rust::runner::Interface,
+        S: p4spec_rust::runner::Interpreter<I, Self>,
+    {
+        self.record(name);
+        Ok((values.to_vec(), false))
+    }
+
+    fn clear(&mut self) {
+        self.calls.borrow_mut().clear();
+    }
+}
+
+#[test]
+fn test_cache_reuses_canonical_arguments_and_original_annotations() {
+    let source = r#"
+var ns : nat*
+builtin dec $pure(nat*) : nat*
+dec $pair(nat*, nat*) : (nat*, nat*)
+def $pair(ns_1, ns_2) = ($pure(ns_1), $pure(ns_2))
+"#;
+    let host = CacheHost::default();
+    let mut runner = Runner::<Al, _, _>::new(
+        Global::load(spec(source)).unwrap(),
+        Config::new(true, false, false),
+        host.clone(),
+        NullExtern,
+    );
+    let value_l = nat(runner.arena_mut(), 7);
+    let span = Span::new(
+        p4spec_rust::lang::common::source::Position::new("right.p4", 50, 0),
+        p4spec_rust::lang::common::source::Position::new("right.p4", 50, 2),
+    );
+    let value_r = runner.arena_mut().update_span(value_l, span).unwrap();
+    let value_r = runner
+        .arena_mut()
+        .update_typ(value_r, typ::make::int().node)
+        .unwrap();
+    let typ = typ::make::iter(typ::make::nat(), p4spec_rust::lang::common::Iter::List).node;
+    let value_l = make::list(
+        runner.arena_mut(),
+        typ.clone(),
+        vec![value_l],
+        Span::default(),
+    )
+    .unwrap();
+    let value_r = make::list(runner.arena_mut(), typ, vec![value_r], Span::default()).unwrap();
+    assert_ne!(value_l.node, value_r.node);
+    for expected in [1, 2] {
+        let value = runner.eval_func("pair", &[], &[value_l, value_r]).unwrap();
+        assert_eq!(
+            get::tuple(runner.arena(), &value).unwrap(),
+            &[value_l, value_l]
+        );
+        assert_eq!(
+            host.count("pure"),
+            expected,
+            "public entry clears memo tables"
+        );
+    }
+}
+
+#[test]
+fn test_cache_propagates_effects_and_host_failures_but_caches_pure_children() {
+    for det in [false, true] {
+        for operation in ["impure", "fail"] {
+            let source = format!(
+                r#"
+var n : nat
+builtin dec $pure(nat) : nat
+builtin dec ${operation}(nat) : nat
+dec $recover(nat) : nat
+def $recover(n) = ${operation}(n)
+def $recover(n) = $pure(n)
+  -- otherwise
+dec $pair(nat) : (nat, nat)
+def $pair(n) = ($recover(n), $recover(n))
+"#
+            );
+            let host = CacheHost::default();
+            let mut runner = Runner::<Al, _, _>::new(
+                Global::load(spec(&source)).unwrap(),
+                Config::new(true, det, false),
+                host.clone(),
+                NullExtern,
+            );
+            let value = nat(runner.arena_mut(), 5);
+            let result = runner.eval_func("pair", &[], &[value]).unwrap();
+            assert_eq!(
+                get::tuple(runner.arena(), &result).unwrap(),
+                &[value, value]
+            );
+            assert_eq!(
+                host.count(operation),
+                2,
+                "tainted wrappers cannot be cached"
+            );
+            assert_eq!(host.count("pure"), usize::from(operation == "fail"));
+        }
+    }
+}
+
+#[test]
+fn test_cache_memoizes_relations_but_not_direct_extern_calls() {
+    let source = r#"
+var n : nat
+extern dec $probe(nat) : nat
+extern relation Probe: nat ~> nat
+  hint(input %0)
+relation Step: nat ~> nat
+  hint(input %0)
+rule Step/step: n ~> $probe(n)
+dec $pair(nat) : (nat, nat, nat, nat)
+def $pair(n) = (n_1, n_2, n_3, n_4)
+  -- Step: n ~> n_1
+  -- Step: n ~> n_2
+  -- Probe: n ~> n_3
+  -- Probe: n ~> n_4
+dec $direct(nat) : (nat, nat)
+def $direct(n) = ($probe(n), $probe(n))
+"#;
+    for cache in [false, true] {
+        let host = CacheHost::default();
+        let mut runner = Runner::<Al, _, _>::new(
+            Global::load(spec(source)).unwrap(),
+            Config::new(cache, false, false),
+            host.clone(),
+            host.clone(),
+        );
+        let value = nat(runner.arena_mut(), 5);
+        let result = runner.eval_func("pair", &[], &[value]).unwrap();
+        assert_eq!(get::tuple(runner.arena(), &result).unwrap(), &[value; 4]);
+        assert_eq!(host.count("probe"), if cache { 1 } else { 2 });
+        assert_eq!(host.count("Probe"), 2);
+        runner.clear();
+        assert_eq!(number(runner.arena(), &value), "5");
+        runner.eval_func("direct", &[], &[value]).unwrap();
+        assert_eq!(host.count("probe"), 2);
+    }
+}
+
+#[test]
+fn test_cache_reentry_clears_results_and_preserves_outer_effects() {
+    for operation in ["pure", "impure"] {
+        let source = format!(
+            r#"
+var n : nat
+builtin dec $pure(nat) : nat
+builtin dec $impure(nat) : nat
+extern dec $bridge(nat) : nat
+dec $inner(nat) : nat
+def $inner(n) = $pure(n)
+dec $outer(nat) : (nat, nat, nat)
+def $outer(n) = ($pure(n), $bridge(${operation}(n)), $pure(n))
+dec $pair(nat) : ((nat, nat, nat), (nat, nat, nat))
+def $pair(n) = ($outer(n), $outer(n))
+"#
+        );
+        let host = CacheHost::default();
+        let mut runner = Runner::<Al, _, _>::new(
+            Global::load(spec(&source)).unwrap(),
+            Config::new(true, false, false),
+            host.clone(),
+            host.clone(),
+        );
+        let value = nat(runner.arena_mut(), 5);
+        runner.eval_func("pair", &[], &[value]).unwrap();
+        let impure = operation == "impure";
+        assert_eq!(host.count("bridge"), if impure { 2 } else { 1 });
+        assert_eq!(host.count("pure"), if impure { 3 } else { 2 });
+        assert_eq!(host.count("impure"), if impure { 2 } else { 0 });
+    }
+}
+
+#[test]
+fn test_cache_excludes_local_and_higher_order_calls() {
+    let source = r#"
+var n : nat
+extern dec $probe(nat) : nat
+dec $forward(nat) : nat
+def $forward(n) = $probe(n)
+dec $apply(nat, def $f(nat) : nat) : (nat, nat)
+def $apply(n, def $f) = ($f(n), $f(n))
+dec $pair(nat) : ((nat, nat), (nat, nat))
+def $pair(n) = ($apply(n, def $forward), $apply(n, def $forward))
+"#;
+    let host = CacheHost::default();
+    let mut runner = Runner::<Al, _, _>::new(
+        Global::load(spec(source)).unwrap(),
+        Config::new(true, false, false),
+        host.clone(),
+        host.clone(),
+    );
+    let value = nat(runner.arena_mut(), 5);
+    runner.eval_func("pair", &[], &[value]).unwrap();
+    assert_eq!(host.count("probe"), 4);
+}
+
+#[test]
+fn test_cache_omits_type_arguments_and_runner_clear_discards_results() {
+    let source = r#"
+builtin dec $pure<X>(nat) : nat
+dec $pair() : (nat, nat)
+def $pair() = ($pure<nat>(7), $pure<bool>(7))
+"#;
+    let host = CacheHost::default();
+    let mut runner = Runner::<Al, _, _>::new(
+        Global::load(spec(source)).unwrap(),
+        Config::new(true, false, true),
+        host.clone(),
+        NullExtern,
+    );
+    let id = phrase!(node: "pair".to_owned(), span: Span::default());
+    let value = {
+        let mut context = runner.context();
+        let ctx = p4spec_rust::interp::al::context::Context::new(context.spec());
+        p4spec_rust::interp::al::eval::call::invoke_func(&mut context, &ctx, &id, &[], &[])
+            .finish()
+            .unwrap()
+    };
+    assert_eq!(host.count("pure"), 1);
+    runner.clear();
+    assert_eq!(get::tuple(runner.arena(), &value).unwrap().len(), 2);
+    let value_new = {
+        let mut context = runner.context();
+        let ctx = p4spec_rust::interp::al::context::Context::new(context.spec());
+        p4spec_rust::interp::al::eval::call::invoke_func(&mut context, &ctx, &id, &[], &[])
+            .finish()
+            .unwrap()
+    };
+    assert_eq!(value, value_new);
+    assert_eq!(
+        host.count("pure"),
+        1,
+        "clear also discards internal call results"
+    );
+}
+
+#[test]
+fn test_cache_distinguishes_call_names_and_argument_order() {
+    let source = r#"
+var n : nat
+builtin dec $pure(nat, nat) : nat
+builtin dec $other(nat, nat) : nat
+dec $use(nat, nat) : (nat, nat, nat, nat)
+def $use(n_1, n_2) = ($pure(n_1, n_2), $pure(n_2, n_1), $pure(n_1, n_2), $other(n_1, n_2))
+"#;
+    let host = CacheHost::default();
+    let mut runner = Runner::<Al, _, _>::new(
+        Global::load(spec(source)).unwrap(),
+        Config::new(true, false, true),
+        host.clone(),
+        NullExtern,
+    );
+    let value_l = nat(runner.arena_mut(), 5);
+    let value_r = nat(runner.arena_mut(), 7);
+    let value = runner.eval_func("use", &[], &[value_l, value_r]).unwrap();
+    assert_eq!(
+        get::tuple(runner.arena(), &value).unwrap(),
+        &[value_l, value_r, value_l, value_l]
+    );
+    assert_eq!(host.count("pure"), 2);
+    assert_eq!(host.count("other"), 1);
 }
