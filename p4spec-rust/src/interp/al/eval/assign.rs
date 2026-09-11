@@ -18,7 +18,7 @@ use crate::{
 };
 
 use super::super::{
-    backtrack::{Backtrack, back},
+    backtrack::{Backtrack, backtrack, backtrack_from_result},
     context::Context,
     error::ErrorKind,
     util::is_iter_var_exp,
@@ -95,7 +95,7 @@ pub fn assign_exps<'global, T: Borrow<ast::Exp>>(
         );
     }
     for (exp, value) in exps.iter().zip(values) {
-        ctx = back!(assign_exp(arena, ctx, exp.borrow(), *value));
+        ctx = backtrack!(assign_exp(arena, ctx, exp.borrow(), *value));
     }
     Backtrack::Ok(ctx)
 }
@@ -199,7 +199,7 @@ fn assign_cons_exp<'global>(
         );
     };
     let typ = phrase!(node: arena.typ(value).clone(), span: exp.span.clone());
-    let value_tail = back!(Backtrack::from_result(
+    let value_tail = backtrack_from_result!(
         make::list(
             arena,
             typ.node.clone(),
@@ -207,8 +207,8 @@ fn assign_cons_exp<'global>(
             Span::default()
         ),
         &Span::default()
-    ));
-    let ctx = back!(assign_exp(arena, ctx, exp_head, *value_head));
+    );
+    let ctx = backtrack!(assign_exp(arena, ctx, exp_head, *value_head));
     assign_exp(arena, ctx, exp_tail, value_tail)
 }
 
@@ -230,9 +230,9 @@ fn assign_iter_exp<'global>(
     let span = &exp.span;
     match iter {
         ast::Iter::Opt => {
-            let value_inner = back!(Backtrack::from_result(get::opt(arena, &value), span));
+            let value_inner = backtrack_from_result!(get::opt(arena, &value), span);
             let mut ctx = match value_inner {
-                Some(value) => back!(assign_exp(arena, ctx, exp_inner, value)),
+                Some(value) => backtrack!(assign_exp(arena, ctx, exp_inner, value)),
                 None => ctx,
             };
             for var in vars {
@@ -240,28 +240,33 @@ fn assign_iter_exp<'global>(
                 iters.push(ast::Iter::Opt);
                 let typ = typ::make::iterate(var.typ.clone(), &iters);
                 let value_sub = if value_inner.is_some() {
-                    let value = back!(Backtrack::from_result(
+                    let value = backtrack_from_result!(
                         ctx.find_value(&Variable::new(var.id.clone(), var.iters.clone())),
                         &var.id.span
-                    ));
+                    );
                     Some(*value)
                 } else {
                     None
                 };
-                let value_sub = back!(Backtrack::from_result(
+                let value_sub = backtrack_from_result!(
                     make::opt(arena, typ.node.into(), value_sub, Span::default()),
                     span
-                ));
+                );
                 ctx.add_value(Variable::new(var.id.clone(), iters), value_sub);
             }
             Backtrack::Ok(ctx)
         }
         ast::Iter::List => {
-            let values = back!(Backtrack::from_result(get::list(arena, &value), span)).to_vec();
+            let values = backtrack_from_result!(get::list(arena, &value), span).to_vec();
             let ctx_sub = ctx.wipe();
             let mut ctxs = Vec::with_capacity(values.len());
             for value in values {
-                ctxs.push(back!(assign_exp(arena, ctx_sub.clone(), exp_inner, value)));
+                ctxs.push(backtrack!(assign_exp(
+                    arena,
+                    ctx_sub.clone(),
+                    exp_inner,
+                    value
+                )));
             }
             for var in vars {
                 let mut iters = var.iters.clone();
@@ -269,16 +274,16 @@ fn assign_iter_exp<'global>(
                 let typ = typ::make::iterate(var.typ.clone(), &iters);
                 let mut values = Vec::with_capacity(ctxs.len());
                 for ctx_sub in &ctxs {
-                    let value = back!(Backtrack::from_result(
+                    let value = backtrack_from_result!(
                         ctx_sub.find_value(&Variable::new(var.id.clone(), var.iters.clone())),
                         &var.id.span
-                    ));
+                    );
                     values.push(*value);
                 }
-                let value_sub = back!(Backtrack::from_result(
+                let value_sub = backtrack_from_result!(
                     make::list(arena, typ.node.into(), values, Span::default()),
                     span
-                ));
+                );
                 ctx.add_value(Variable::new(var.id.clone(), iters), value_sub);
             }
             Backtrack::Ok(ctx)
@@ -319,7 +324,7 @@ pub fn assign_args<'global>(
     }
     let mut ctx = ctx_callee;
     for (arg, value) in args.iter().zip(values.iter()) {
-        ctx = back!(assign_arg(arena, ctx_caller, ctx, arg, *value));
+        ctx = backtrack!(assign_arg(arena, ctx_caller, ctx, arg, *value));
     }
     Backtrack::Ok(ctx)
 }
@@ -353,13 +358,7 @@ fn assign_def_arg<'global>(
             }),
         );
     };
-    let (_, func) = back!(Backtrack::from_result(
-        ctx_caller.find_func(id_func),
-        &id_func.span
-    ));
-    back!(Backtrack::from_result(
-        ctx_callee.add_func(id.clone(), Rc::clone(func)),
-        &id.span
-    ));
+    let (_, func) = backtrack_from_result!(ctx_caller.find_func(id_func), &id_func.span);
+    backtrack_from_result!(ctx_callee.add_func(id.clone(), Rc::clone(func)), &id.span);
     Backtrack::Ok(ctx_callee)
 }

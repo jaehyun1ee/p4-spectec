@@ -29,7 +29,7 @@ use crate::{
 
 use super::{
     Al,
-    backtrack::{Backtrack, back},
+    backtrack::{Backtrack, backtrack, backtrack_from_result},
     error::{EntityKind, Error, ErrorKind},
 };
 
@@ -271,10 +271,7 @@ impl<'global> Context<'global> {
         vars: &[ast::Var],
         mut eval: impl FnMut(&mut RunnerContext<'_, Al, I, E>, &Self) -> Backtrack<Value>,
     ) -> Backtrack<Vec<Value>> {
-        let rows = back!(Backtrack::from_result(
-            self.list_values(runner.arena(), vars),
-            span
-        ));
+        let rows = backtrack_from_result!(self.list_values(runner.arena(), vars), span);
         // Copy handles before the callback can allocate in the arena
         let rows: Vec<_> = rows.into_iter().map(<[Value]>::to_vec).collect();
         let width = rows.first().map_or(0, Vec::len);
@@ -288,7 +285,7 @@ impl<'global> Context<'global> {
             for (var, row) in vars.iter().zip(&rows) {
                 ctx_sub.add_value(var.clone(), row[column]);
             }
-            values.push(back!(eval(runner, &ctx_sub)));
+            values.push(backtrack!(eval(runner, &ctx_sub)));
         }
         Backtrack::Ok(values)
     }
@@ -300,10 +297,7 @@ impl<'global> Context<'global> {
         vars: &[ast::Var],
         mut eval: impl FnMut(&mut RunnerContext<'_, Al, I, E>, &Self) -> Backtrack<Value>,
     ) -> Backtrack<Option<Value>> {
-        let values = back!(Backtrack::from_result(
-            self.opt_values(runner.arena(), vars),
-            span
-        ));
+        let values = backtrack_from_result!(self.opt_values(runner.arena(), vars), span);
         let Some(values) = values else {
             return Backtrack::Ok(None);
         };
@@ -311,7 +305,7 @@ impl<'global> Context<'global> {
         for (var, value) in vars.iter().zip(values) {
             ctx_sub.add_value(Variable::new(var.id.clone(), var.iters.clone()), value);
         }
-        Backtrack::Ok(Some(back!(eval(runner, &ctx_sub))))
+        Backtrack::Ok(Some(backtrack!(eval(runner, &ctx_sub))))
     }
 
     // - Premise bindings
@@ -324,10 +318,7 @@ impl<'global> Context<'global> {
         vars_bind: &[ast::Var],
         mut eval: impl FnMut(&mut RunnerContext<'_, Al, I, E>, Self) -> Backtrack<Self>,
     ) -> Backtrack<Self> {
-        let rows = back!(Backtrack::from_result(
-            self.list_values(runner.arena(), vars_bound),
-            span
-        ));
+        let rows = backtrack_from_result!(self.list_values(runner.arena(), vars_bound), span);
         let rows: Vec<_> = rows.into_iter().map(<[Value]>::to_vec).collect();
         let width = rows.first().map_or(0, Vec::len);
         let vars: Vec<_> = vars_bound
@@ -341,10 +332,10 @@ impl<'global> Context<'global> {
                 ctx_sub.add_value(var.clone(), row[column]);
             }
             // Keep callback writes out of the reusable input context
-            let ctx_post = back!(eval(runner, ctx_sub.clone()));
-            back!(ctx_post.collect_bindings(vars_bind, &mut values_bind));
+            let ctx_post = backtrack!(eval(runner, ctx_sub.clone()));
+            backtrack!(ctx_post.collect_bindings(vars_bind, &mut values_bind));
         }
-        back!(self.bind_iter(runner.arena_mut(), vars_bind, ast::Iter::List, values_bind));
+        backtrack!(self.bind_iter(runner.arena_mut(), vars_bind, ast::Iter::List, values_bind));
         Backtrack::Ok(self)
     }
 
@@ -356,20 +347,17 @@ impl<'global> Context<'global> {
         vars_bind: &[ast::Var],
         mut eval: impl FnMut(&mut RunnerContext<'_, Al, I, E>, Self) -> Backtrack<Self>,
     ) -> Backtrack<Self> {
-        let values = back!(Backtrack::from_result(
-            self.opt_values(runner.arena(), vars_bound),
-            span
-        ));
+        let values = backtrack_from_result!(self.opt_values(runner.arena(), vars_bound), span);
         let mut values_bind = vec![Vec::new(); vars_bind.len()];
         if let Some(values) = values {
             let mut ctx_sub = self.clone();
             for (var, value) in vars_bound.iter().zip(values) {
                 ctx_sub.add_value(Variable::new(var.id.clone(), var.iters.clone()), value);
             }
-            let ctx_post = back!(eval(runner, ctx_sub));
-            back!(ctx_post.collect_bindings(vars_bind, &mut values_bind));
+            let ctx_post = backtrack!(eval(runner, ctx_sub));
+            backtrack!(ctx_post.collect_bindings(vars_bind, &mut values_bind));
         }
-        back!(self.bind_iter(runner.arena_mut(), vars_bind, ast::Iter::Opt, values_bind));
+        backtrack!(self.bind_iter(runner.arena_mut(), vars_bind, ast::Iter::Opt, values_bind));
         Backtrack::Ok(self)
     }
 
@@ -438,10 +426,10 @@ impl<'global> Context<'global> {
     fn collect_bindings(&self, vars: &[ast::Var], values_bind: &mut [Vec<Value>]) -> Backtrack<()> {
         for (var, values) in vars.iter().zip(values_bind) {
             let var_bound = Variable::new(var.id.clone(), var.iters.clone());
-            values.push(*back!(Backtrack::from_result(
+            values.push(*backtrack_from_result!(
                 self.find_value(&var_bound),
                 &var.id.span
-            )));
+            ));
         }
         Backtrack::Ok(())
     }
@@ -466,7 +454,7 @@ impl<'global> Context<'global> {
                 ),
                 ast::Iter::List => make::list(arena, typ.node.into(), values, Span::default()),
             };
-            let value = back!(Backtrack::from_result(value, &Span::default()));
+            let value = backtrack_from_result!(value, &Span::default());
             self.add_value(Variable::new(var.id.clone(), iters), value);
         }
         Backtrack::Ok(())

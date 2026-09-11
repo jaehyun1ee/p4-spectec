@@ -11,7 +11,7 @@ use crate::{
 
 use super::super::{
     Al,
-    backtrack::{Backtrack, back},
+    backtrack::{Backtrack, backtrack, backtrack_from_result},
     context::Context,
 };
 use super::expr::eval_exp;
@@ -34,7 +34,7 @@ pub(super) fn eval_args<I: Interface, E: Extern>(
 ) -> Backtrack<Vec<Value>> {
     let mut values = Vec::with_capacity(args.len());
     for arg in args {
-        values.push(back!(eval_arg(runner, ctx, arg)));
+        values.push(backtrack!(eval_arg(runner, ctx, arg)));
     }
     Backtrack::Ok(values)
 }
@@ -47,8 +47,8 @@ fn eval_def_arg(
     id: &ast::Id,
     span: &Span,
 ) -> Backtrack<Value> {
-    let typ_func = back!(Backtrack::from_result(ctx.find_func_typ(id), span));
-    let value = back!(Backtrack::from_result(
+    let typ_func = backtrack_from_result!(ctx.find_func_typ(id), span);
+    let value = backtrack_from_result!(
         make::func(
             arena,
             id.clone(),
@@ -58,6 +58,6 @@ fn eval_def_arg(
             Span::default()
         ),
         span
-    ));
+    );
     Backtrack::Ok(value)
 }

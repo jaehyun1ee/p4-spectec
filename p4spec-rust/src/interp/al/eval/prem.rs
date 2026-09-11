@@ -2,7 +2,7 @@
 
 use super::super::{
     Al,
-    backtrack::{Backtrack, back},
+    backtrack::{Backtrack, backtrack, backtrack_from_result},
     context::Context,
     error::ErrorKind,
 };
@@ -37,7 +37,7 @@ pub fn eval_prems<'global, I: Interface, E: Extern>(
     prems: &[ast::Prem],
 ) -> Backtrack<Context<'global>> {
     for prem in prems {
-        ctx = back!(eval_prem(runner, ctx, prem));
+        ctx = backtrack!(eval_prem(runner, ctx, prem));
     }
     Backtrack::Ok(ctx)
 }
@@ -50,12 +50,10 @@ fn eval_rule_prem<'global, I: Interface, E: Extern>(
     prem: &ast::RulePrem,
 ) -> Backtrack<Context<'global>> {
     let exps = prem.not_exp.args();
-    let (exps_input, exps_output) = back!(Backtrack::from_result(
-        input::split(&prem.input_hint, exps),
-        &prem.id.span
-    ));
-    let values_input = back!(expr::eval_exps(runner, &ctx, &exps_input));
-    let values_output = back!(invoke_rel(runner, &ctx, &prem.id, &values_input));
+    let (exps_input, exps_output) =
+        backtrack_from_result!(input::split(&prem.input_hint, exps), &prem.id.span);
+    let values_input = backtrack!(expr::eval_exps(runner, &ctx, &exps_input));
+    let values_output = backtrack!(invoke_rel(runner, &ctx, &prem.id, &values_input));
     assign::assign_exps(runner.arena_mut(), ctx, &exps_output, &values_output)
 }
 
@@ -66,11 +64,8 @@ fn eval_if_prem<'global, I: Interface, E: Extern>(
     ctx: Context<'global>,
     prem: &ast::IfPrem,
 ) -> Backtrack<Context<'global>> {
-    let value = back!(expr::eval_exp(runner, &ctx, &prem.exp));
-    if back!(Backtrack::from_result(
-        get::bool(runner.arena(), &value),
-        &prem.exp.span
-    )) {
+    let value = backtrack!(expr::eval_exp(runner, &ctx, &prem.exp));
+    if backtrack_from_result!(get::bool(runner.arena(), &value), &prem.exp.span) {
         Backtrack::Ok(ctx)
     } else {
         Backtrack::unmatch(
@@ -90,7 +85,7 @@ fn eval_if_hold_prem<'global, I: Interface, E: Extern>(
     prem: &ast::IfHoldPrem,
 ) -> Backtrack<Context<'global>> {
     let exps: Vec<_> = prem.not_exp.args();
-    let values = back!(expr::eval_exps(runner, &ctx, &exps));
+    let values = backtrack!(expr::eval_exps(runner, &ctx, &exps));
     match invoke_rel(runner, &ctx, &prem.id, &values) {
         Backtrack::Ok(_) => Backtrack::Ok(ctx),
         Backtrack::Err(errors) => Backtrack::Err(errors),
@@ -110,7 +105,7 @@ fn eval_if_not_hold_prem<'global, I: Interface, E: Extern>(
     prem: &ast::IfNotHoldPrem,
 ) -> Backtrack<Context<'global>> {
     let exps: Vec<_> = prem.not_exp.args();
-    let values = back!(expr::eval_exps(runner, &ctx, &exps));
+    let values = backtrack!(expr::eval_exps(runner, &ctx, &exps));
     match invoke_rel(runner, &ctx, &prem.id, &values) {
         Backtrack::Ok(_) => Backtrack::unmatch(
             prem.id.span.clone(),
@@ -130,7 +125,7 @@ fn eval_let_prem<'global, I: Interface, E: Extern>(
     ctx: Context<'global>,
     prem: &ast::LetPrem,
 ) -> Backtrack<Context<'global>> {
-    let value = back!(expr::eval_exp(runner, &ctx, &prem.exp_r));
+    let value = backtrack!(expr::eval_exp(runner, &ctx, &prem.exp_r));
     assign::assign_exp(runner.arena_mut(), ctx, &prem.exp_l, value)
 }
 
@@ -167,7 +162,7 @@ fn eval_debug_prem<'global, I: Interface, E: Extern>(
     ctx: Context<'global>,
     prem: &ast::DebugPrem,
 ) -> Backtrack<Context<'global>> {
-    let value = back!(expr::eval_exp(runner, &ctx, &prem.exp));
+    let value = backtrack!(expr::eval_exp(runner, &ctx, &prem.exp));
     let exp_text = Print::to_string(&prem.exp);
     println!("{}: {}", prem.exp.span, exp_text);
     let span_text = runner.arena().span(&value).to_string();

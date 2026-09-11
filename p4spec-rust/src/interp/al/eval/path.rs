@@ -11,7 +11,7 @@ use crate::{
 
 use super::super::{
     Al,
-    backtrack::{Backtrack, back},
+    backtrack::{Backtrack, backtrack, backtrack_from_result},
     context::Context,
 };
 use super::{expr::eval_exp, ops};
@@ -45,8 +45,8 @@ fn eval_access_idx_path<I: Interface, E: Extern>(
     path: &ast::Path,
     exp_idx: &ast::Exp,
 ) -> Backtrack<Value> {
-    let value = back!(eval_access_path(runner, ctx, value_base, path));
-    let value_idx = back!(eval_exp(runner, ctx, exp_idx));
+    let value = backtrack!(eval_access_path(runner, ctx, value_base, path));
+    let value_idx = backtrack!(eval_exp(runner, ctx, exp_idx));
     ops::access_index(
         runner.arena_mut(),
         &value,
@@ -67,9 +67,9 @@ fn eval_access_slice_path<I: Interface, E: Extern>(
     exp_len: &ast::Exp,
 ) -> Backtrack<Value> {
     let typ = &path.note;
-    let value = back!(eval_access_path(runner, ctx, value_base, path));
-    let value_idx = back!(eval_exp(runner, ctx, exp_idx));
-    let value_len = back!(eval_exp(runner, ctx, exp_len));
+    let value = backtrack!(eval_access_path(runner, ctx, value_base, path));
+    let value_idx = backtrack!(eval_exp(runner, ctx, exp_idx));
+    let value_len = backtrack!(eval_exp(runner, ctx, exp_len));
     ops::access_slice(
         runner.arena_mut(),
         &value,
@@ -93,7 +93,7 @@ fn eval_access_dot_path<I: Interface, E: Extern>(
     path: &ast::Path,
     atom: &ast::Atom,
 ) -> Backtrack<Value> {
-    let value = back!(eval_access_path(runner, ctx, value_base, path));
+    let value = backtrack!(eval_access_path(runner, ctx, value_base, path));
     ops::access_dot(runner.arena(), &value, atom, &path.span)
 }
 
@@ -131,9 +131,9 @@ fn eval_update_idx_path<I: Interface, E: Extern>(
     value_upd: Value,
 ) -> Backtrack<Value> {
     let typ = crate::phrase!(node: path.note.clone(), span: path.span.clone());
-    let value = back!(eval_access_path(runner, ctx, value_base, path));
-    let value_idx = back!(eval_exp(runner, ctx, exp_idx));
-    let value = back!(ops::update_index(
+    let value = backtrack!(eval_access_path(runner, ctx, value_base, path));
+    let value_idx = backtrack!(eval_exp(runner, ctx, exp_idx));
+    let value = backtrack!(ops::update_index(
         runner.arena_mut(),
         &value,
         &value_idx,
@@ -157,10 +157,10 @@ fn eval_update_slice_path<I: Interface, E: Extern>(
     value_upd: Value,
 ) -> Backtrack<Value> {
     let typ = crate::phrase!(node: path.note.clone(), span: path.span.clone());
-    let value = back!(eval_access_path(runner, ctx, value_base, path));
-    let value_idx = back!(eval_exp(runner, ctx, exp_idx));
-    let value_len = back!(eval_exp(runner, ctx, exp_len));
-    let value = back!(ops::update_slice(
+    let value = backtrack!(eval_access_path(runner, ctx, value_base, path));
+    let value_idx = backtrack!(eval_exp(runner, ctx, exp_idx));
+    let value_len = backtrack!(eval_exp(runner, ctx, exp_len));
+    let value = backtrack!(ops::update_slice(
         runner.arena_mut(),
         &value,
         &value_idx,
@@ -185,11 +185,8 @@ fn eval_update_dot_path<I: Interface, E: Extern>(
     value_upd: Value,
 ) -> Backtrack<Value> {
     let typ = crate::phrase!(node: path.note.clone(), span: path.span.clone());
-    let value = back!(eval_access_path(runner, ctx, value_base, path));
-    let value_fields = back!(Backtrack::from_result(
-        get::structure(runner.arena(), &value),
-        &path.span
-    ));
+    let value = backtrack!(eval_access_path(runner, ctx, value_base, path));
+    let value_fields = backtrack_from_result!(get::structure(runner.arena(), &value), &path.span);
     let value_fields = value_fields
         .iter()
         .map(|(field, value)| {
@@ -203,7 +200,7 @@ fn eval_update_dot_path<I: Interface, E: Extern>(
             )
         })
         .collect();
-    let value = back!(Backtrack::from_result(
+    let value = backtrack_from_result!(
         make::structure(
             runner.arena_mut(),
             typ.node.clone(),
@@ -211,6 +208,6 @@ fn eval_update_dot_path<I: Interface, E: Extern>(
             Span::default()
         ),
         &Span::default()
-    ));
+    );
     eval_update_path(runner, ctx, value_base, path, value)
 }
