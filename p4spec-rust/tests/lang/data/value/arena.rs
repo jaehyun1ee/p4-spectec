@@ -540,3 +540,26 @@ fn test_default_span_interning_preserves_nondefault_positions() {
         assert_eq!(arena.update_span(value, span).unwrap(), value_located);
     }
 }
+
+#[test]
+fn test_primitive_constructors_reuse_type_allocations() {
+    use p4spec_rust::lang::data::value::Value;
+
+    fn primitives(arena: &mut ValueArena) -> [Value; 4] {
+        [
+            make::bool(arena, true, Span::default()).unwrap(),
+            make::nat(arena, Natural::from(1_u64), Span::default()).unwrap(),
+            make::int(arena, BigInt::from(-1), Span::default()).unwrap(),
+            make::text(arena, "text".to_owned(), Span::default()).unwrap(),
+        ]
+    }
+
+    let mut arena = ValueArena::new();
+    let values = primitives(&mut arena);
+    for _ in 0..16 {
+        for (value, value_again) in values.iter().zip(primitives(&mut arena)) {
+            assert_eq!(value.note, value_again.note);
+            assert!(Rc::ptr_eq(arena.typ(value), arena.typ(&value_again)));
+        }
+    }
+}

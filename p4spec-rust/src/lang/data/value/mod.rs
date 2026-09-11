@@ -49,13 +49,20 @@ pub mod make {
     // - Primitives
 
     pub fn bool(arena: &mut ValueArena, value: bool, span: Span) -> Result<Value, ValueError> {
-        new(arena, ValueKind::Bool(value), arena.typ_bool.clone(), span)
+        thread_local! {
+            static TYP: Rc<TypKind> = Rc::new(TypKind::Bool);
+        }
+        TYP.with(|typ| new(arena, ValueKind::Bool(value), typ.clone(), span))
     }
 
     pub fn num(arena: &mut ValueArena, value: Number, span: Span) -> Result<Value, ValueError> {
+        thread_local! {
+            static TYP_NAT: Rc<TypKind> = Rc::new(TypKind::Num(num::Typ::Nat));
+            static TYP_INT: Rc<TypKind> = Rc::new(TypKind::Num(num::Typ::Int));
+        }
         let typ = match num::to_typ(&value) {
-            num::Typ::Nat => arena.typ_nat.clone(),
-            num::Typ::Int => arena.typ_int.clone(),
+            num::Typ::Nat => TYP_NAT.with(Rc::clone),
+            num::Typ::Int => TYP_INT.with(Rc::clone),
         };
         new(arena, ValueKind::Num(value), typ, span)
     }
@@ -77,7 +84,10 @@ pub mod make {
     }
 
     pub fn text(arena: &mut ValueArena, value: String, span: Span) -> Result<Value, ValueError> {
-        new(arena, ValueKind::Text(value), arena.typ_text.clone(), span)
+        thread_local! {
+            static TYP: Rc<TypKind> = Rc::new(TypKind::Text);
+        }
+        TYP.with(|typ| new(arena, ValueKind::Text(value), typ.clone(), span))
     }
 
     // - Structures

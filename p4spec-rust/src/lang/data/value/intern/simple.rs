@@ -28,6 +28,7 @@ pub struct Interner<T> {
     items: Vec<T>,
     table: HashTable<Entry>,
     hasher: RandomState,
+    id_default: Option<Interned<T>>,
 }
 
 // - Construction
@@ -38,6 +39,7 @@ impl<T> Default for Interner<T> {
             items: Vec::new(),
             table: HashTable::new(),
             hasher: RandomState::new(),
+            id_default: None,
         }
     }
 }
@@ -58,8 +60,26 @@ impl<T> Interner<T> {
 // - Interning
 
 impl<T: Eq + Hash> Interner<T> {
+    /// Registers the default value for reuse without hashing on later lookups
+    pub fn intern_default(&mut self) -> Result<Interned<T>, TryFromIntError>
+    where
+        T: Default,
+    {
+        if let Some(id) = self.id_default {
+            return Ok(id);
+        }
+        let id = self.intern(T::default())?;
+        self.id_default = Some(id);
+        Ok(id)
+    }
+
     /// Reuses an equal item or stores a new one, checking index overflow first
     pub fn intern(&mut self, item: T) -> Result<Interned<T>, TryFromIntError> {
+        if let Some(id) = self.id_default
+            && self.get(id) == &item
+        {
+            return Ok(id);
+        }
         let hash = self.hasher.hash_one(&item);
         if let Some(id) = self.find(&item, hash) {
             return Ok(id);
@@ -72,6 +92,11 @@ impl<T: Eq + Hash> Interner<T> {
     where
         T: Clone,
     {
+        if let Some(id) = self.id_default
+            && self.get(id) == item
+        {
+            return Ok(id);
+        }
         let hash = self.hasher.hash_one(item);
         if let Some(id) = self.find(item, hash) {
             return Ok(id);

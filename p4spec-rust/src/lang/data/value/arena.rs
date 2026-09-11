@@ -5,13 +5,12 @@
 use std::rc::Rc;
 
 use super::{
-    intern::{CanonId, CanonInterner, Interned, Interner, RcInterner},
+    intern::{CanonId, CanonInterner, Interner, RcInterner},
     value::{Value, ValueError, ValueKind, ValueRef},
 };
 use crate::lang::{
     common::source::{NotePhrase, Span},
     data::typ::TypKind,
-    xl::num,
 };
 
 // = Arena storage
@@ -21,12 +20,6 @@ pub struct ValueArena {
     values: CanonInterner<ValueKind>,
     types: RcInterner<TypKind>,
     spans: Interner<Span>,
-    span_empty: Interned<Span>,
-    // Reuse scalar type allocations because RcInterner keys by address
-    pub(super) typ_bool: Rc<TypKind>,
-    pub(super) typ_nat: Rc<TypKind>,
-    pub(super) typ_int: Rc<TypKind>,
-    pub(super) typ_text: Rc<TypKind>,
 }
 
 impl Default for ValueArena {
@@ -40,18 +33,13 @@ impl ValueArena {
 
     pub fn new() -> Self {
         let mut spans = Interner::new();
-        let span_empty = spans
-            .intern(Span::default())
+        spans
+            .intern_default()
             .expect("the first span fits in an interner index");
         Self {
             values: CanonInterner::new(),
             types: RcInterner::new(),
             spans,
-            span_empty,
-            typ_bool: Rc::new(TypKind::Bool),
-            typ_nat: Rc::new(TypKind::Num(num::Typ::Nat)),
-            typ_int: Rc::new(TypKind::Num(num::Typ::Int)),
-            typ_text: Rc::new(TypKind::Text),
         }
     }
 
@@ -65,15 +53,8 @@ impl ValueArena {
     ) -> Result<Value, ValueError> {
         let node = self.values.intern(kind)?;
         let note = self.types.intern(typ)?;
-        let span = self.intern_span(span)?;
+        let span = self.spans.intern(span)?;
         Ok(NotePhrase { node, note, span })
-    }
-
-    fn intern_span(&mut self, span: Span) -> Result<Interned<Span>, ValueError> {
-        if span == *self.spans.get(self.span_empty) {
-            return Ok(self.span_empty);
-        }
-        Ok(self.spans.intern(span)?)
     }
 
     // - Lookup
@@ -107,7 +88,7 @@ impl ValueArena {
     }
 
     pub fn update_span(&mut self, value: Value, span: Span) -> Result<Value, ValueError> {
-        let span = self.intern_span(span)?;
+        let span = self.spans.intern(span)?;
         Ok(Value { span, ..value })
     }
 

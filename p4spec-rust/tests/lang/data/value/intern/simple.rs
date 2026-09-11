@@ -9,10 +9,11 @@ use p4spec_rust::lang::data::value::Interner;
 
 use super::Collision;
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 struct Counted {
     value: u32,
     clones: Rc<Cell<usize>>,
+    hashes: Rc<Cell<usize>>,
 }
 
 impl Clone for Counted {
@@ -21,6 +22,7 @@ impl Clone for Counted {
         Self {
             value: self.value,
             clones: self.clones.clone(),
+            hashes: self.hashes.clone(),
         }
     }
 }
@@ -35,6 +37,7 @@ impl Eq for Counted {}
 
 impl Hash for Counted {
     fn hash<H: Hasher>(&self, hasher: &mut H) {
+        self.hashes.set(self.hashes.get() + 1);
         0_u32.hash(hasher);
     }
 }
@@ -46,10 +49,12 @@ fn test_intern_ref_clones_only_missing_items_despite_collisions() {
     let item_l = Counted {
         value: 0,
         clones: clones.clone(),
+        hashes: Rc::default(),
     };
     let item_r = Counted {
         value: 1,
         clones: clones.clone(),
+        hashes: Rc::default(),
     };
 
     let id_l = interner.intern_ref(&item_l).unwrap();
@@ -62,6 +67,7 @@ fn test_intern_ref_clones_only_missing_items_despite_collisions() {
     let item_r = Counted {
         value: 1,
         clones: clones.clone(),
+        hashes: Rc::default(),
     };
     assert_eq!(interner.intern_ref(&item_r).unwrap(), id_r);
     assert_eq!(interner.intern(item_l).unwrap(), id_l);
@@ -99,4 +105,47 @@ fn test_intern_preserves_values_and_handles_through_growth() {
         assert_eq!(interner.get(handle), &value);
         assert_eq!(interner.intern(value).unwrap(), handle);
     }
+}
+
+#[test]
+fn test_intern_default_reuses_existing_handles_through_growth() {
+    let mut interner = Interner::new();
+    let id_other = interner.intern(7_u32).unwrap();
+    let id_default = interner.intern_ref(&0).unwrap();
+    assert_ne!(id_default, id_other);
+    assert_eq!(interner.intern_default().unwrap(), id_default);
+    for value in 1..512 {
+        let id = interner.intern(value).unwrap();
+        assert_ne!(id, id_default);
+        assert_eq!(*interner.get(id), value);
+    }
+    assert_eq!(interner.intern_default().unwrap(), id_default);
+    assert_eq!(interner.intern(0).unwrap(), id_default);
+    assert_eq!(interner.intern_ref(&0).unwrap(), id_default);
+    assert_eq!(interner.intern(7).unwrap(), id_other);
+}
+
+#[test]
+fn test_registered_default_skips_hashing_and_cloning() {
+    let mut interner = Interner::<Counted>::new();
+    let id_default = interner.intern_default().unwrap();
+    let item = interner.get(id_default).clone();
+    let clones = item.clones.clone();
+    let hashes = item.hashes.clone();
+    clones.set(0);
+    hashes.set(0);
+    assert_eq!(interner.intern_ref(&item).unwrap(), id_default);
+    assert_eq!(interner.intern(item).unwrap(), id_default);
+    assert_eq!(interner.intern_default().unwrap(), id_default);
+    assert_eq!(clones.get(), 0);
+    assert_eq!(hashes.get(), 0);
+    let id_other = interner
+        .intern(Counted {
+            value: 1,
+            ..Counted::default()
+        })
+        .unwrap();
+    assert_ne!(id_other, id_default);
+    assert_eq!(interner.get(id_default).value, 0);
+    assert_eq!(interner.get(id_other).value, 1);
 }
