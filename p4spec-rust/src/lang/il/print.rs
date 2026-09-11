@@ -573,18 +573,18 @@ impl Print for Prem {
                 printer.write_str(" does not hold")
             }
             PremKind::Iter(IterPrem {
-                prem: inner,
+                prem: prem_inner,
                 prem_iter,
-            }) if matches!(inner.node, PremKind::Iter(_)) => {
-                inner.print(printer)?;
+            }) if matches!(prem_inner.node, PremKind::Iter(_)) => {
+                prem_inner.print(printer)?;
                 prem_iter.print(printer)
             }
             PremKind::Iter(IterPrem {
-                prem: inner,
+                prem: prem_inner,
                 prem_iter,
             }) => {
                 printer.write_char('(')?;
-                inner.print(printer)?;
+                prem_inner.print(printer)?;
                 printer.write_char(')')?;
                 prem_iter.print(printer)
             }
@@ -882,11 +882,11 @@ impl Print for Def {
 
 impl Print for [Def] {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        for (index, definition) in self.iter().enumerate() {
+        for (index, def) in self.iter().enumerate() {
             if index != 0 {
                 printer.write_str("\n\n")?;
             }
-            definition.print(printer)?;
+            def.print(printer)?;
         }
         Ok(())
     }

@@ -159,8 +159,8 @@ fn escaped(text: &str) -> String {
 impl Print for UnOp {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         match self {
-            Self::Bool(operator) => operator.print(printer),
-            Self::Num(operator) => operator.print(printer),
+            Self::Bool(op) => op.print(printer),
+            Self::Num(op) => op.print(printer),
         }
     }
 }
@@ -168,8 +168,8 @@ impl Print for UnOp {
 impl Print for BinOp {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         match self {
-            Self::Bool(operator) => operator.print(printer),
-            Self::Num(operator) => operator.print(printer),
+            Self::Bool(op) => op.print(printer),
+            Self::Num(op) => op.print(printer),
         }
     }
 }
@@ -177,8 +177,8 @@ impl Print for BinOp {
 impl Print for CmpOp {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         match self {
-            Self::Bool(operator) => operator.print(printer),
-            Self::Num(operator) => operator.print(printer),
+            Self::Bool(op) => op.print(printer),
+            Self::Num(op) => op.print(printer),
         }
     }
 }
@@ -189,32 +189,32 @@ impl Print for Exp {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         match &self.node {
             ExpKind::Bool(value) => write!(printer, "{value}"),
-            ExpKind::Num(NumOp::Dec, num::Number::Nat(number)) => write!(printer, "{number}"),
-            ExpKind::Num(NumOp::Hex, num::Number::Nat(number)) => {
+            ExpKind::Num(NumOp::Dec, num::Number::Nat(num)) => write!(printer, "{num}"),
+            ExpKind::Num(NumOp::Hex, num::Number::Nat(num)) => {
                 write!(
                     printer,
                     "0x{}",
-                    number.as_bigint().to_str_radix(16).to_uppercase()
+                    num.as_bigint().to_str_radix(16).to_uppercase()
                 )
             }
-            ExpKind::Num(_, number) => number.print(printer),
+            ExpKind::Num(_, num) => num.print(printer),
             ExpKind::Text(text) => write!(printer, "\"{}\"", escaped(text)),
             ExpKind::Var(id) => printer.write_str(&id.node),
-            ExpKind::Un(operator, exp) => {
-                operator.print(printer)?;
+            ExpKind::Un(op, exp) => {
+                op.print(printer)?;
                 exp.print(printer)
             }
-            ExpKind::Bin(exp_l, operator, exp_r) => {
+            ExpKind::Bin(exp_l, op, exp_r) => {
                 exp_l.print(printer)?;
                 printer.write_char(' ')?;
-                operator.print(printer)?;
+                op.print(printer)?;
                 printer.write_char(' ')?;
                 exp_r.print(printer)
             }
-            ExpKind::Cmp(exp_l, operator, exp_r) => {
+            ExpKind::Cmp(exp_l, op, exp_r) => {
                 exp_l.print(printer)?;
                 printer.write_char(' ')?;
-                operator.print(printer)?;
+                op.print(printer)?;
                 printer.write_char(' ')?;
                 exp_r.print(printer)
             }
@@ -333,7 +333,7 @@ impl Print for Exp {
                 exp.print(printer)?;
                 atom_r.print(printer)
             }
-            ExpKind::Hole(Hole::Num(number)) => write!(printer, "%{number}"),
+            ExpKind::Hole(Hole::Num(num)) => write!(printer, "%{num}"),
             ExpKind::Hole(Hole::Next) => printer.write_char('%'),
             ExpKind::Hole(Hole::Rest) => printer.write_str("%%"),
             ExpKind::Hole(Hole::None) => printer.write_str("!%"),
@@ -748,8 +748,8 @@ impl Print for Def {
 
 impl Print for Spec {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        for definition in self {
-            definition.print(printer)?;
+        for def in self {
+            def.print(printer)?;
             printer.write_char('\n')?;
         }
         Ok(())

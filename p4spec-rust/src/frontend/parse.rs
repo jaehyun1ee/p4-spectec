@@ -60,32 +60,27 @@ pub fn parse_mixop(source: &str) -> Result<Mixop, FrontendError> {
         }
     }
 
-    let context = Context::default();
-    let lexer = Lexer::new(Rc::from(""), source, |id| context.find_id(id));
-    let tokens = parser_tokens(&context, lexer);
-    let result = parser::CheckTypParser::new().parse(&context, tokens);
-    let typ = result.map_err(|error| parse_error(&context, error))?;
+    let ctx = Context::default();
+    let lexer = Lexer::new(Rc::from(""), source, |id| ctx.find_id(id));
+    let tokens = parser_tokens(&ctx, lexer);
+    let result = parser::CheckTypParser::new().parse(&ctx, tokens);
+    let typ = result.map_err(|error| parse_error(&ctx, error))?;
     let mixop = from_typ(&typ);
     Ok(mixop)
 }
 
-fn parse_source(name: Rc<str>, source: &str, context: &Context) -> Result<Spec, FrontendError> {
-    let lexer = Lexer::new(name, source, |id| context.find_id(id));
-    let tokens = parser_tokens(context, lexer);
-    let result = parser::SpecParser::new().parse(context, tokens);
-    result.map_err(|error| parse_error(context, error))
+fn parse_source(name: Rc<str>, source: &str, ctx: &Context) -> Result<Spec, FrontendError> {
+    let lexer = Lexer::new(name, source, |id| ctx.find_id(id));
+    let tokens = parser_tokens(ctx, lexer);
+    let result = parser::SpecParser::new().parse(ctx, tokens);
+    result.map_err(|error| parse_error(ctx, error))
 }
 
-fn parse_error(
-    context: &Context,
-    error: ParseError<Location, Token, FrontendError>,
-) -> FrontendError {
+fn parse_error(ctx: &Context, error: ParseError<Location, Token, FrontendError>) -> FrontendError {
     let (kind, left, right) = match error {
-        ParseError::InvalidToken { location } => {
-            (SyntaxErrorKind::InvalidToken, location, location)
-        }
-        ParseError::UnrecognizedEof { location, .. } => {
-            (SyntaxErrorKind::UnexpectedEndOfInput, location, location)
+        ParseError::InvalidToken { location: loc } => (SyntaxErrorKind::InvalidToken, loc, loc),
+        ParseError::UnrecognizedEof { location: loc, .. } => {
+            (SyntaxErrorKind::UnexpectedEndOfInput, loc, loc)
         }
         ParseError::UnrecognizedToken {
             token: (left, _, right),
@@ -98,7 +93,7 @@ fn parse_error(
     };
     crate::phrase! {
         node: kind,
-        span: context.span(left, right),
+        span: ctx.span(left, right),
     }
     .into()
 }
@@ -108,7 +103,7 @@ pub fn parse_file(path: impl AsRef<Path>) -> Result<Spec, FrontendError> {
     parse_file_with_context(path.as_ref(), &Context::default())
 }
 
-fn parse_file_with_context(path: &Path, context: &Context) -> Result<Spec, FrontendError> {
+fn parse_file_with_context(path: &Path, ctx: &Context) -> Result<Spec, FrontendError> {
     let name = Rc::<str>::from(path.to_string_lossy().into_owned());
     let position = Position::new(Rc::clone(&name), 0, 0);
     let file_span = Span::new(position.clone(), position);
@@ -124,7 +119,7 @@ fn parse_file_with_context(path: &Path, context: &Context) -> Result<Spec, Front
             span: invalid_utf8_span(Rc::clone(&name), &bytes, &source),
         })
     })?;
-    parse_source(name, source, context)
+    parse_source(name, source, ctx)
 }
 
 fn invalid_utf8_span(name: Rc<str>, bytes: &[u8], error: &str::Utf8Error) -> Span {
@@ -159,9 +154,9 @@ where
     let bindings = Rc::new(Bindings::default());
     let mut spec = Vec::new();
     for file in files {
-        let context = Context::with_bindings(Rc::clone(&bindings));
-        let definitions = parse_file_with_context(&file, &context)?;
-        spec.extend(definitions);
+        let ctx = Context::with_bindings(Rc::clone(&bindings));
+        let defs = parse_file_with_context(&file, &ctx)?;
+        spec.extend(defs);
     }
     Ok(spec)
 }

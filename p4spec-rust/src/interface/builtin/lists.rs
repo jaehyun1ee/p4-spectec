@@ -1,6 +1,6 @@
 //! List builtins in specification order.
 //!
-//! Each builtin first extracts its type and value arguments, performs the list
+//! Each builtin first extracts its type and value args, performs the list
 //! operation, and returns the newly constructed runtime value. For
 //! example, `rev_` turns `[a, b]` into `[b, a]` while preserving the element
 //! type supplied by the specification.
@@ -29,8 +29,8 @@ fn list_of_value<'a>(arena: &'a ValueArena, value: &Value) -> Result<&'a [Value]
 }
 
 fn bigint_of_value<'a>(arena: &'a ValueArena, value: &Value) -> Result<&'a BigInt, BuiltinError> {
-    let number = get::num(arena, value).map_err(|error| BuiltinError::new(error.to_string()))?;
-    Ok(num::to_int(number))
+    let num = get::num(arena, value).map_err(|error| BuiltinError::new(error.to_string()))?;
+    Ok(num::to_int(num))
 }
 
 // dec $rev_<X>(X*) : X*

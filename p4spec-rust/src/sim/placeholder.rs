@@ -18,7 +18,7 @@ pub struct Placeholder;
 impl Extern for Placeholder {
     fn eval_rel<S, I>(
         &self,
-        context: &mut RunnerContext<'_, S, I, Self>,
+        ctx: &mut RunnerContext<'_, S, I, Self>,
         name: &str,
         values: &[Value],
     ) -> Result<(Vec<Value>, bool), S::Error>
@@ -38,15 +38,14 @@ impl Extern for Placeholder {
             )
             .into());
         };
-        let name_func = crate::lang::data::value::get::text(context.arena(), value_name)
+        let name_func = crate::lang::data::value::get::text(ctx.arena(), value_name)
             .map_err(|error| S::Error::from(ExternError::Failure(error.to_string())))?;
-        let values_name_param =
-            crate::lang::data::value::get::list(context.arena(), value_names_param)
-                .map_err(|error| S::Error::from(ExternError::Failure(error.to_string())))?;
+        let values_name_param = crate::lang::data::value::get::list(ctx.arena(), value_names_param)
+            .map_err(|error| S::Error::from(ExternError::Failure(error.to_string())))?;
         let names_param = values_name_param
             .iter()
             .map(|value| {
-                crate::lang::data::value::get::text(context.arena(), value)
+                crate::lang::data::value::get::text(ctx.arena(), value)
                     .map_err(|error| S::Error::from(ExternError::Failure(error.to_string())))
             })
             .collect::<Result<Vec<_>, _>>()?;
@@ -61,13 +60,13 @@ impl Extern for Placeholder {
                 .into());
             }
         };
-        let value = core::func::static_assert(context, value_ctx, has_message)?;
+        let value = core::func::static_assert(ctx, value_ctx, has_message)?;
         Ok((vec![value], false))
     }
 
     fn eval_func<S, I>(
         &self,
-        context: &mut RunnerContext<'_, S, I, Self>,
+        ctx: &mut RunnerContext<'_, S, I, Self>,
         name: &str,
         _targs: &[Typ],
         _values: &[Value],
@@ -84,7 +83,7 @@ impl Extern for Placeholder {
                 );
                 let typ = make_typ::var(id, Vec::new());
                 let value = make_value::external(
-                    context.arena_mut(),
+                    ctx.arena_mut(),
                     typ.node.into(),
                     ExternalData::Null,
                     Span::default(),

@@ -1,4 +1,4 @@
-//! Natural-number aggregation builtins in specification order.
+//! Natural-num aggregation builtins in specification order.
 
 use num_bigint::BigInt;
 use num_traits::Zero;
@@ -14,8 +14,8 @@ use super::{BuiltinError, extract};
 // == Conversion between meta-numerics and Rust numerics
 
 fn bigint_of_value<'a>(arena: &'a ValueArena, value: &Value) -> Result<&'a BigInt, BuiltinError> {
-    let number = get::num(arena, value).map_err(|error| BuiltinError::new(error.to_string()))?;
-    Ok(num::to_int(number))
+    let num = get::num(arena, value).map_err(|error| BuiltinError::new(error.to_string()))?;
+    Ok(num::to_int(num))
 }
 
 fn value_of_bigint(arena: &mut ValueArena, value: BigInt) -> Result<Value, BuiltinError> {

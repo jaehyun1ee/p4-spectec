@@ -991,31 +991,31 @@ fn decode_extern_func(value: &Value) -> Result<ast::ExternFunc, DecodeError> {
         _ => Err(DecodeError::Expected("PL function quadruple")),
     }
 }
-fn encode_extern_func(function: &ast::ExternFunc) -> Value {
+fn encode_extern_func(func: &ast::ExternFunc) -> Value {
     json!([
-        il::encode_id(&function.id),
-        il::encode_list(&function.tparams, il::encode_tparam),
-        il::encode_list(&function.params, encode_param),
-        il::encode_typ(&function.typ)
+        il::encode_id(&func.id),
+        il::encode_list(&func.tparams, il::encode_tparam),
+        il::encode_list(&func.params, encode_param),
+        il::encode_typ(&func.typ)
     ])
 }
 
 fn decode_builtin_func(value: &Value) -> Result<ast::BuiltinFunc, DecodeError> {
-    let function = decode_extern_func(value)?;
+    let func = decode_extern_func(value)?;
     Ok(ast::BuiltinFunc {
-        id: function.id,
-        tparams: function.tparams,
-        params: function.params,
-        typ: function.typ,
+        id: func.id,
+        tparams: func.tparams,
+        params: func.params,
+        typ: func.typ,
     })
 }
 
-fn encode_builtin_func(function: &ast::BuiltinFunc) -> Value {
+fn encode_builtin_func(func: &ast::BuiltinFunc) -> Value {
     json!([
-        il::encode_id(&function.id),
-        il::encode_list(&function.tparams, il::encode_tparam),
-        il::encode_list(&function.params, encode_param),
-        il::encode_typ(&function.typ)
+        il::encode_id(&func.id),
+        il::encode_list(&func.tparams, il::encode_tparam),
+        il::encode_list(&func.params, encode_param),
+        il::encode_typ(&func.typ)
     ])
 }
 
@@ -1048,12 +1048,12 @@ fn decode_table_func(value: &Value) -> Result<ast::TableFunc, DecodeError> {
         _ => Err(DecodeError::Expected("PL table function quadruple")),
     }
 }
-fn encode_table_func(function: &ast::TableFunc) -> Value {
+fn encode_table_func(func: &ast::TableFunc) -> Value {
     json!([
-        il::encode_id(&function.id),
-        il::encode_list(&function.params, encode_param),
-        il::encode_typ(&function.typ),
-        il::encode_list(&function.rows, encode_table_row)
+        il::encode_id(&func.id),
+        il::encode_list(&func.params, encode_param),
+        il::encode_typ(&func.typ),
+        il::encode_list(&func.rows, encode_table_row)
     ])
 }
 
@@ -1072,14 +1072,14 @@ fn decode_defined_func(value: &Value) -> Result<ast::DefinedFunc, DecodeError> {
         _ => Err(DecodeError::Expected("PL defined function sextuple")),
     }
 }
-fn encode_defined_func(function: &ast::DefinedFunc) -> Value {
+fn encode_defined_func(func: &ast::DefinedFunc) -> Value {
     json!([
-        il::encode_id(&function.id),
-        il::encode_list(&function.tparams, il::encode_tparam),
-        il::encode_list(&function.params, encode_param),
-        il::encode_typ(&function.typ),
-        encode_block(&function.block, encode_instr_group),
-        encode_option(function.block_else_opt.as_ref(), |block| encode_block(
+        il::encode_id(&func.id),
+        il::encode_list(&func.tparams, il::encode_tparam),
+        il::encode_list(&func.params, encode_param),
+        il::encode_typ(&func.typ),
+        encode_block(&func.block, encode_instr_group),
+        encode_option(func.block_else_opt.as_ref(), |block| encode_block(
             block,
             encode_instr_group
         ))
@@ -1131,12 +1131,12 @@ fn decode_def(value: &Value) -> Result<ast::Def, DecodeError> {
             (unknown, _) => Err(DecodeError::UnknownVariant(unknown.to_owned())),
         }
     })?;
-    let mut definition = crate::annotated! {
+    let mut def = crate::annotated! {
         node: def.node,
         span: def,
     };
-    definition.hints = decode_hints(field(value, "hints")?)?;
-    Ok(definition)
+    def.hints = decode_hints(field(value, "hints")?)?;
+    Ok(def)
 }
 
 fn encode_typ_def(typ_def_pl: &TypDef) -> Value {

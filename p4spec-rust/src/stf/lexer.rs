@@ -258,9 +258,9 @@ impl<'source> Lexer<'source> {
             let error = StfErrorKind::UnterminatedQuotedIdentifier;
             return Err(self.error(error, pos_l));
         }
-        let identifier = self.source[start..self.index].to_owned();
+        let id = self.source[start..self.index].to_owned();
         self.bump();
-        Ok(Token::Id(identifier))
+        Ok(Token::Id(id))
     }
 
     fn lex_number(&mut self, pos_l: Position) -> Result<Token, StfError> {
@@ -297,14 +297,14 @@ impl<'source> Lexer<'source> {
     }
 
     fn lex_identifier(&mut self) -> Token {
-        let identifier = self.take_while(|character| {
+        let id = self.take_while(|character| {
             character == '$' || character == '_' || character.is_ascii_alphanumeric()
         });
-        self.classify_identifier(identifier)
+        self.classify_identifier(id)
     }
 
-    fn classify_identifier(&mut self, identifier: &str) -> Token {
-        match identifier {
+    fn classify_identifier(&mut self, id: &str) -> Token {
+        match id {
             "add" => Token::Add,
             "all" => Token::All,
             "bytes" => Token::Bytes,
@@ -331,7 +331,7 @@ impl<'source> Lexer<'source> {
             "register_read" => Token::RegisterRead,
             "register_write" => Token::RegisterWrite,
             "register_reset" => Token::RegisterReset,
-            _ => Token::Id(identifier.to_owned()),
+            _ => Token::Id(id.to_owned()),
         }
     }
 

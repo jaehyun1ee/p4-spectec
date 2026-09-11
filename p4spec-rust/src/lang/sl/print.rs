@@ -535,21 +535,21 @@ impl Print for DefinedFunc {
 impl Print for MetaFuncDef {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         match self {
-            Self::Extern(function) => {
+            Self::Extern(func) => {
                 printer.write_str("extern def ")?;
-                function.print(printer)
+                func.print(printer)
             }
-            Self::Builtin(function) => {
+            Self::Builtin(func) => {
                 printer.write_str("builtin def ")?;
-                function.print(printer)
+                func.print(printer)
             }
-            Self::Table(function) => {
+            Self::Table(func) => {
                 printer.write_str("tbl def ")?;
-                function.print(printer)
+                func.print(printer)
             }
-            Self::Defined(function) => {
+            Self::Defined(func) => {
                 printer.write_str("def ")?;
-                function.print(printer)
+                func.print(printer)
             }
         }
     }
@@ -575,11 +575,11 @@ impl Print for Def {
 
 impl Print for [Def] {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        for (index, definition) in self.iter().enumerate() {
+        for (index, def) in self.iter().enumerate() {
             if index != 0 {
                 printer.write_str("\n\n")?;
             }
-            definition.print(printer)?;
+            def.print(printer)?;
         }
         Ok(())
     }

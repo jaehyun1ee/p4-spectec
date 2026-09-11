@@ -2,8 +2,8 @@
 //!
 //! `Runner<S, I, E>` owns one interpreter stage, builtin interface, and extern
 //! implementation. Each evaluation splits those components into a short-lived
-//! context. For example, a function call may dispatch to an extern, which can
-//! call another specification function through that same context before
+//! ctx. For example, a func call may dispatch to an extern, which can
+//! call another specification func through that same ctx before
 //! returning its value and side-effect flag.
 
 mod context;
@@ -79,13 +79,13 @@ where
     // - Evaluation
 
     pub fn eval_program(&mut self, name: &str, program: Value) -> Result<Vec<Value>, S::Error> {
-        let mut context = self.context();
-        context.call_program(name, program)
+        let mut ctx = self.context();
+        ctx.call_program(name, program)
     }
 
     pub fn eval_rel(&mut self, name: &str, values: &[Value]) -> Result<Vec<Value>, S::Error> {
-        let mut context = self.context();
-        context.call_rel(name, values)
+        let mut ctx = self.context();
+        ctx.call_rel(name, values)
     }
 
     pub fn eval_func(
@@ -94,8 +94,8 @@ where
         targs: &[Typ],
         values: &[Value],
     ) -> Result<Value, S::Error> {
-        let mut context = self.context();
-        context.call_func(name, targs, values)
+        let mut ctx = self.context();
+        ctx.call_func(name, targs, values)
     }
 
     // - Lifecycle

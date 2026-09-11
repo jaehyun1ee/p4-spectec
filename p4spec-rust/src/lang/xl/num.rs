@@ -31,18 +31,18 @@ pub enum Typ {
 }
 
 /// Converts to typ
-pub fn to_typ(number: &Number) -> Typ {
-    match number {
+pub fn to_typ(num: &Number) -> Typ {
+    match num {
         Number::Nat(_) => Typ::Nat,
         Number::Int(_) => Typ::Int,
     }
 }
 
 /// Converts to int
-pub fn to_int(number: &Number) -> &BigInt {
-    match number {
-        Number::Nat(natural) => natural.as_bigint(),
-        Number::Int(integer) => integer,
+pub fn to_int(num: &Number) -> &BigInt {
+    match num {
+        Number::Nat(nat) => nat.as_bigint(),
+        Number::Int(int) => int,
     }
 }
 
@@ -98,18 +98,18 @@ impl Natural {
 impl TryFrom<BigInt> for Natural {
     type Error = NumericError;
 
-    fn try_from(integer: BigInt) -> Result<Self, Self::Error> {
-        if integer.is_negative() {
-            Err(NumericError::NegativeNatural(integer))
+    fn try_from(int: BigInt) -> Result<Self, Self::Error> {
+        if int.is_negative() {
+            Err(NumericError::NegativeNatural(int))
         } else {
-            Ok(Self(integer))
+            Ok(Self(int))
         }
     }
 }
 
 impl From<u64> for Natural {
-    fn from(integer: u64) -> Self {
-        Self(integer.into())
+    fn from(int: u64) -> Self {
+        Self(int.into())
     }
 }
 
@@ -165,10 +165,10 @@ pub fn sub(type_a: Typ, type_b: Typ) -> bool {
 impl Print for Number {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         match self {
-            Self::Nat(natural) => printer.write_fmt(format_args!("{natural}")),
-            Self::Int(integer) => {
-                let sign = if integer.is_negative() { "-" } else { "+" };
-                printer.write_fmt(format_args!("{sign}{}", integer.abs()))
+            Self::Nat(nat) => printer.write_fmt(format_args!("{nat}")),
+            Self::Int(int) => {
+                let sign = if int.is_negative() { "-" } else { "+" };
+                printer.write_fmt(format_args!("{sign}{}", int.abs()))
             }
         }
     }
@@ -219,10 +219,10 @@ impl Print for CmpOp {
 // Unary
 
 /// Applies un
-pub fn un(unop: UnOp, number: &Number) -> Number {
+pub fn un(unop: UnOp, num: &Number) -> Number {
     match unop {
-        UnOp::Plus => number.clone(),
-        UnOp::Minus => Number::Int(-to_int(number)),
+        UnOp::Plus => num.clone(),
+        UnOp::Minus => Number::Int(-to_int(num)),
     }
 }
 

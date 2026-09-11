@@ -380,15 +380,15 @@ fn decode_external(value: &Value) -> ExternalData {
     match value {
         Value::Null => ExternalData::Null,
         Value::Bool(value) => ExternalData::Bool(*value),
-        Value::Number(number) => {
-            if let Some(integer) = number.as_i64() {
-                ExternalData::Int(integer)
-            } else if number.is_u64() {
-                ExternalData::Intlit(number.to_string())
-            } else if let Some(float) = number.as_f64() {
+        Value::Number(num) => {
+            if let Some(int) = num.as_i64() {
+                ExternalData::Int(int)
+            } else if num.is_u64() {
+                ExternalData::Intlit(num.to_string())
+            } else if let Some(float) = num.as_f64() {
                 ExternalData::Float(float)
             } else {
-                ExternalData::Intlit(number.to_string())
+                ExternalData::Intlit(num.to_string())
             }
         }
         Value::String(value) => ExternalData::String(value.clone()),
@@ -412,10 +412,10 @@ fn encode_external(value: &ExternalData) -> Result<Value, EncodeError> {
         ExternalData::Bool(value) => Ok(Value::Bool(*value)),
         ExternalData::Int(value) => Ok(Value::Number(Number::from(*value))),
         ExternalData::Intlit(value) => match serde_json::from_str(value) {
-            Ok(Value::Number(number))
-                if !value.contains(['.', 'e', 'E']) && number.to_string() == *value =>
+            Ok(Value::Number(num))
+                if !value.contains(['.', 'e', 'E']) && num.to_string() == *value =>
             {
-                Ok(Value::Number(number))
+                Ok(Value::Number(num))
             }
             _ => Err(unsupported_external(format!(
                 "integer literal `{value}` is not representable by serde_json"

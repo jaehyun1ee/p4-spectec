@@ -401,23 +401,23 @@ fn decode_extern_func(value: &Value) -> Result<ast::ExternFunc, DecodeError> {
     }
 }
 
-fn encode_extern_func(function: &ast::ExternFunc) -> Value {
+fn encode_extern_func(func: &ast::ExternFunc) -> Value {
     json!([
-        il::encode_id(&function.id),
-        il::encode_list(&function.tparams, il::encode_tparam),
-        il::encode_list(&function.params, encode_param),
-        il::encode_typ(&function.typ),
-        il::encode_list(&function.hints, el::encode_hint)
+        il::encode_id(&func.id),
+        il::encode_list(&func.tparams, il::encode_tparam),
+        il::encode_list(&func.params, encode_param),
+        il::encode_typ(&func.typ),
+        il::encode_list(&func.hints, el::encode_hint)
     ])
 }
 
-fn encode_builtin_func(function: &ast::BuiltinFunc) -> Value {
+fn encode_builtin_func(func: &ast::BuiltinFunc) -> Value {
     json!([
-        il::encode_id(&function.id),
-        il::encode_list(&function.tparams, il::encode_tparam),
-        il::encode_list(&function.params, encode_param),
-        il::encode_typ(&function.typ),
-        il::encode_list(&function.hints, el::encode_hint)
+        il::encode_id(&func.id),
+        il::encode_list(&func.tparams, il::encode_tparam),
+        il::encode_list(&func.params, encode_param),
+        il::encode_typ(&func.typ),
+        il::encode_list(&func.hints, el::encode_hint)
     ])
 }
 
@@ -453,13 +453,13 @@ fn decode_table_func(value: &Value) -> Result<ast::TableFunc, DecodeError> {
     }
 }
 
-fn encode_table_func(function: &ast::TableFunc) -> Value {
+fn encode_table_func(func: &ast::TableFunc) -> Value {
     json!([
-        il::encode_id(&function.id),
-        il::encode_list(&function.params, encode_param),
-        il::encode_typ(&function.typ),
-        il::encode_list(&function.table_rows, encode_table_row),
-        il::encode_list(&function.hints, el::encode_hint)
+        il::encode_id(&func.id),
+        il::encode_list(&func.params, encode_param),
+        il::encode_typ(&func.typ),
+        il::encode_list(&func.table_rows, encode_table_row),
+        il::encode_list(&func.hints, el::encode_hint)
     ])
 }
 
@@ -478,15 +478,15 @@ fn decode_defined_func(value: &Value) -> Result<ast::DefinedFunc, DecodeError> {
     }
 }
 
-fn encode_defined_func(function: &ast::DefinedFunc) -> Value {
+fn encode_defined_func(func: &ast::DefinedFunc) -> Value {
     json!([
-        il::encode_id(&function.id),
-        il::encode_list(&function.tparams, il::encode_tparam),
-        il::encode_list(&function.params, encode_param),
-        il::encode_typ(&function.typ),
-        encode_block(&function.block),
-        encode_option(function.else_block.as_ref(), encode_block),
-        il::encode_list(&function.hints, el::encode_hint)
+        il::encode_id(&func.id),
+        il::encode_list(&func.tparams, il::encode_tparam),
+        il::encode_list(&func.params, encode_param),
+        il::encode_typ(&func.typ),
+        encode_block(&func.block),
+        encode_option(func.else_block.as_ref(), encode_block),
+        il::encode_list(&func.hints, el::encode_hint)
     ])
 }
 

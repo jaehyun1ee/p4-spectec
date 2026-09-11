@@ -67,7 +67,7 @@ pub fn assign_exp<'global>(
         _ => Backtrack::err(
             exp.span.clone(),
             ErrorKind::Assign(AssignErrorKind::Mismatch {
-                expression: Print::to_string(exp),
+                exp: Print::to_string(exp),
                 value: arena.to_string(&value),
             }),
         ),
@@ -163,7 +163,7 @@ fn assign_opt_exp<'global>(
         _ => Backtrack::err(
             exp.span.clone(),
             ErrorKind::Assign(AssignErrorKind::Mismatch {
-                expression: Print::to_string(exp),
+                exp: Print::to_string(exp),
                 value: arena.to_string(value),
             }),
         ),
@@ -354,7 +354,7 @@ fn assign_def_arg<'global>(
             id.span.clone(),
             ErrorKind::Assign(AssignErrorKind::DefinitionMismatch {
                 value: arena.to_string(&value),
-                definition: id.node.clone(),
+                def: id.node.clone(),
             }),
         );
     };

@@ -314,8 +314,8 @@ fn elab_def_typ(
             phrase!(node: def_typ_kind_il, span: def_typ.span.clone())
         }
     };
-    let type_def = TypeDef::Defined(tparams.to_vec(), Box::new(def_typ_il.clone()));
-    Ok((type_def, def_typ_il))
+    let typdef = TypeDef::Defined(tparams.to_vec(), Box::new(def_typ_il.clone()));
+    Ok((typdef, def_typ_il))
 }
 
 // == Elaboration helpers
@@ -2271,12 +2271,12 @@ fn elab_typ_def(ctx: &mut Context, def: el::TypDef) -> Result<il::DefKind, ElabE
             }
         }
     }
-    let (type_def, def_typ_il) = {
+    let (typdef, def_typ_il) = {
         let mut ctx_local = ctx.clone();
         ctx_local.add_tparams(&def.tparams)?;
         elab_def_typ(&ctx_local, &def.id, &def.tparams, &def.def_typ)?
     };
-    ctx.update_typdef(&def.id, type_def)?;
+    ctx.update_typdef(&def.id, typdef)?;
     let defined_typ_il = il::DefinedTyp {
         id: def.id,
         tparams: def.tparams,

@@ -64,13 +64,13 @@ impl Context {
 
     pub(crate) fn location(&self, position: Position) -> Location {
         let mut positions = self.positions.borrow_mut();
-        let location = Location(positions.len());
+        let loc = Location(positions.len());
         positions.push(position);
-        location
+        loc
     }
 
-    pub(crate) fn position(&self, location: Location) -> Position {
-        self.positions.borrow()[location.0].clone()
+    pub(crate) fn position(&self, loc: Location) -> Position {
+        self.positions.borrow()[loc.0].clone()
     }
 
     pub(crate) fn span(&self, left: Location, right: Location) -> Span {
@@ -84,35 +84,31 @@ impl Context {
     }
 
     pub(crate) fn exit_scope(&self) {
-        let identifiers = self
+        let ids = self
             .scopes
             .borrow_mut()
             .pop()
             .expect("parser scope actions are balanced");
         let mut variables = self.bindings.variables.borrow_mut();
-        for identifier in identifiers {
-            variables.remove(&identifier);
+        for id in ids {
+            variables.remove(&id);
         }
     }
 
-    pub(crate) fn add_id(&self, identifier: &str) {
-        let identifier = identifier.to_owned();
-        if self
-            .bindings
-            .variables
-            .borrow_mut()
-            .insert(identifier.clone())
+    pub(crate) fn add_id(&self, id: &str) {
+        let id = id.to_owned();
+        if self.bindings.variables.borrow_mut().insert(id.clone())
             && let Some(scope) = self.scopes.borrow_mut().last_mut()
         {
-            scope.push(identifier);
+            scope.push(id);
         }
     }
 
-    pub(crate) fn find_id(&self, identifier: &str) -> bool {
+    pub(crate) fn find_id(&self, id: &str) -> bool {
         self.bindings
             .variables
             .borrow()
-            .contains(xl::var::strip_var_suffix_name(identifier))
+            .contains(xl::var::strip_var_suffix_name(id))
     }
 
     // - Parser modes

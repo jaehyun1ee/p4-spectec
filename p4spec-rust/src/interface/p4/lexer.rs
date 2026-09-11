@@ -1,15 +1,15 @@
-//! Lazy context-sensitive tokenization for preprocessed P4
+//! Lazy ctx-sensitive tokenization for preprocessed P4
 //!
 //! `Iterator::next` asks `Lexer::lex` for one token. `Lexer::tokenize` first
 //! skips ordinary whitespace and comments, constructs literal values, and
 //! recognizes fixed tokens by maximal munch. `lex` emits a name first and its
-//! context-sensitive identifier/type-name classification on the following
+//! ctx-sensitive identifier/type-name classification on the following
 //! iteration, then distinguishes template angles.
 //!
 //! The two-part name token is a parser synchronization point: an LR parser may
 //! request one token of lookahead before reducing the preceding declaration.
 //! Emitting the spelling first lets that reduction update the name-resolution
-//! context before the lexer classifies the same spelling.
+//! ctx before the lexer classifies the same spelling.
 //!
 //! The grammar needs a few one-token lookahead distinctions to remain
 //! deterministic. `Lexer::classify_name` distinguishes type names that start
@@ -192,14 +192,14 @@ enum LexerState {
 
 // == Lexer
 
-/// A lazy P4 token stream sharing the parser's name-resolution context
+/// A lazy P4 token stream sharing the parser's name-resolution ctx
 pub struct Lexer<'source, 'arena> {
     source: &'source str,
     index: usize,
     file: Rc<str>,
     line: i64,
     column: i64,
-    context: Rc<Context<'arena>>,
+    ctx: Rc<Context<'arena>>,
     state: LexerState,
     pending: VecDeque<Phrase<Token>>,
     deferred_classification: Option<(Value, Span, LexerState)>,
@@ -210,15 +210,15 @@ pub struct Lexer<'source, 'arena> {
 // - Construction
 
 impl<'source, 'arena> Lexer<'source, 'arena> {
-    /// Tokenizes preprocessed `source` using context-sensitive name classes
-    pub fn new(file: Rc<str>, source: &'source str, context: Rc<Context<'arena>>) -> Self {
+    /// Tokenizes preprocessed `source` using ctx-sensitive name classes
+    pub fn new(file: Rc<str>, source: &'source str, ctx: Rc<Context<'arena>>) -> Self {
         Self {
             source,
             index: 0,
             file,
             line: 1,
             column: 0,
-            context,
+            ctx,
             state: LexerState::Regular,
             pending: VecDeque::new(),
             deferred_classification: None,
@@ -399,12 +399,12 @@ impl<'source, 'arena> Lexer<'source, 'arena> {
     }
 
     fn classify_name(&mut self, value: &Value, span: &Span, next: LexerState) -> Phrase<Token> {
-        let arena = self.context.arena();
+        let arena = self.ctx.arena();
         let name = match arena.kind(value) {
             crate::lang::data::value::ValueKind::Text(name) => name,
             _ => return phrase!(node: Token::Identifier, span: span.clone()),
         };
-        let (token, template_expected) = match self.context.ident_kind(name) {
+        let (token, template_expected) = match self.ctx.ident_kind(name) {
             IdentKind::TypeName { has_params, .. } => {
                 let token = if self.type_name_starts_expression() {
                     Token::TypeNameExpression
@@ -532,7 +532,7 @@ impl<'source, 'arena> Lexer<'source, 'arena> {
                 let token = match keyword(text) {
                     Some(token) => token,
                     None => match make::text(
-                        &mut self.context.arena_mut(),
+                        &mut self.ctx.arena_mut(),
                         text.to_owned(),
                         span.clone(),
                     ) {
@@ -553,7 +553,7 @@ impl<'source, 'arena> Lexer<'source, 'arena> {
 
             let text = self.bump().expect("source is not empty").to_string();
             let span = self.span_from(pos_l);
-            let value = match make::text(&mut self.context.arena_mut(), text, span.clone()) {
+            let value = match make::text(&mut self.ctx.arena_mut(), text, span.clone()) {
                 Ok(value) => value,
                 Err(error) => return Some(Err(P4Error::new(error, span))),
             };
@@ -603,7 +603,7 @@ impl<'source, 'arena> Lexer<'source, 'arena> {
                 character => text.push(character),
             }
         };
-        let value = make::text(&mut self.context.arena_mut(), text, self.span_from(pos_l))?;
+        let value = make::text(&mut self.ctx.arena_mut(), text, self.span_from(pos_l))?;
         let token = Token::StringLiteral(value);
         let span = self.span_from(pos_quote);
         Ok(phrase!(node: token, span: span))
@@ -652,8 +652,8 @@ impl<'source, 'arena> Lexer<'source, 'arena> {
                     )
                 })?;
                 let value_width =
-                    make::nat(&mut self.context.arena_mut(), nat_width, span.clone())?;
-                let value_int = make::int(&mut self.context.arena_mut(), int, span.clone())?;
+                    make::nat(&mut self.ctx.arena_mut(), nat_width, span.clone())?;
+                let value_int = make::int(&mut self.ctx.arena_mut(), int, span.clone())?;
                 let atom = phrase!(
                     node: Atom::Keyword(sign.to_ascii_uppercase().to_string()),
                     span: span.clone()
@@ -665,7 +665,7 @@ impl<'source, 'arena> Lexer<'source, 'arena> {
                 ]);
                 let id_typ = phrase!(node: "integerLiteral".to_owned(), span: Span::default());
                 let value = make::case(
-                    &mut self.context.arena_mut(),
+                    &mut self.ctx.arena_mut(),
                     (typ::make::var(id_typ, vec![])).node.into(),
                     value_case,
                     span,
@@ -681,7 +681,7 @@ impl<'source, 'arena> Lexer<'source, 'arena> {
                 })?;
                 let span = self.span_from(pos_l.clone());
                 (
-                    make::int(&mut self.context.arena_mut(), int, span)?,
+                    make::int(&mut self.ctx.arena_mut(), int, span)?,
                     spelling.to_owned(),
                 )
             }

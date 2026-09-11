@@ -85,7 +85,7 @@ pub(in crate::interp::al) fn check_func_inputs(
         &typ.typs_params,
         values,
         GuardErrorKind::FunctionInputMismatch {
-            function: id.node.clone(),
+            func: id.node.clone(),
         },
     )
 }
@@ -131,7 +131,7 @@ fn check_func_output(
         &[typ],
         std::slice::from_ref(value),
         GuardErrorKind::FunctionOutputMismatch {
-            function: id.node.clone(),
+            func: id.node.clone(),
         },
     )
 }
@@ -358,8 +358,8 @@ pub fn invoke_func<I: Interface, E: Extern>(
     }
     result.nest(id.span.clone(), || {
         ErrorKind::Trace(TraceErrorKind::FunctionInvocation {
-            function: id.node.clone(),
-            type_arguments: if targs.is_empty() {
+            func: id.node.clone(),
+            targs: if targs.is_empty() {
                 String::new()
             } else {
                 format!(
@@ -484,8 +484,8 @@ fn eval_table_row<I: Interface, E: Extern>(
     })();
     result.nest(id.span.clone(), || {
         ErrorKind::Trace(TraceErrorKind::TableRowApplication {
-            function: id.node.clone(),
-            arguments: Print::to_string(table_row.node.args.as_slice()),
+            func: id.node.clone(),
+            args: Print::to_string(table_row.node.args.as_slice()),
         })
     })
 }
@@ -532,8 +532,8 @@ fn eval_clause<I: Interface, E: Extern>(
     })();
     result.nest(defined_func.id.span.clone(), || {
         ErrorKind::Trace(TraceErrorKind::ClauseApplication {
-            function: defined_func.id.node.clone(),
-            arguments: Print::to_string(clause.node.args.as_slice()),
+            func: defined_func.id.node.clone(),
+            args: Print::to_string(clause.node.args.as_slice()),
         })
     })
 }
@@ -588,7 +588,7 @@ fn invoke_defined_func<I: Interface, E: Extern>(
         Backtrack::Nondet(idx_a, idx_b) => Backtrack::err(
             defined_func.id.span.clone(),
             ErrorKind::Call(CallErrorKind::FunctionNondeterminism {
-                function: defined_func.id.node.clone(),
+                func: defined_func.id.node.clone(),
                 first: idx_a,
                 second: idx_b,
             }),

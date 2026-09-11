@@ -12,8 +12,8 @@ pub(super) fn decode_num(value: &Value) -> Result<num::Number, DecodeError> {
     let decode_bigint = |value: &Value| {
         let decimal = if let Some(decimal) = value.as_str() {
             decimal.to_owned()
-        } else if let Some(integer) = value.as_i64() {
-            integer.to_string()
+        } else if let Some(int) = value.as_i64() {
+            int.to_string()
         } else {
             return Err(DecodeError::Expected("decimal bigint string or integer"));
         };
@@ -21,11 +21,11 @@ pub(super) fn decode_num(value: &Value) -> Result<num::Number, DecodeError> {
     };
 
     match (tag, fields) {
-        ("Nat", [integer]) => Ok(num::Number::Nat(
-            num::Natural::try_from(decode_bigint(integer)?)
+        ("Nat", [int]) => Ok(num::Number::Nat(
+            num::Natural::try_from(decode_bigint(int)?)
                 .map_err(|_| DecodeError::Expected("non-negative natural number"))?,
         )),
-        ("Int", [integer]) => Ok(num::Number::Int(decode_bigint(integer)?)),
+        ("Int", [int]) => Ok(num::Number::Int(decode_bigint(int)?)),
         ("Nat" | "Int", _) => Err(DecodeError::Expected("valid number arity")),
         (unknown, _) => Err(DecodeError::UnknownVariant(unknown.to_owned())),
     }
@@ -33,8 +33,8 @@ pub(super) fn decode_num(value: &Value) -> Result<num::Number, DecodeError> {
 
 pub(super) fn encode_num(num: &num::Number) -> Value {
     match num {
-        num::Number::Nat(integer) => json!(["Nat", integer.to_string()]),
-        num::Number::Int(integer) => json!(["Int", integer.to_string()]),
+        num::Number::Nat(int) => json!(["Nat", int.to_string()]),
+        num::Number::Int(int) => json!(["Int", int.to_string()]),
     }
 }
 

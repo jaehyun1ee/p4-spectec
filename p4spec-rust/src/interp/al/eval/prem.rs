@@ -71,7 +71,7 @@ fn eval_if_prem<'global, I: Interface, E: Extern>(
         Backtrack::unmatch(
             prem.exp.span.clone(),
             ErrorKind::Prem(PremErrorKind::ConditionNotMet {
-                expression: Print::to_string(&prem.exp),
+                exp: Print::to_string(&prem.exp),
             }),
         )
     }

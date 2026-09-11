@@ -443,11 +443,11 @@ impl Print for Def {
 // - Specifications
 impl Print for Spec {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        for (index, definition) in self.iter().enumerate() {
+        for (index, def) in self.iter().enumerate() {
             if index != 0 {
                 printer.write_str("\n\n")?;
             }
-            definition.print(printer)?;
+            def.print(printer)?;
         }
         Ok(())
     }

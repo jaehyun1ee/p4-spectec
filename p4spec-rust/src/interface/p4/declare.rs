@@ -14,53 +14,50 @@ use super::{
 
 // == Individual names
 
-pub(super) fn typ(context: &Context, value: &Value, has_params: bool) {
-    let id = extract::id_name(&context.arena(), value).expect("P4 declaration name");
-    context
-        .declare_typ(id, has_params)
-        .expect("P4 parser scope");
+pub(super) fn typ(ctx: &Context, value: &Value, has_params: bool) {
+    let id = extract::id_name(&ctx.arena(), value).expect("P4 declaration name");
+    ctx.declare_typ(id, has_params).expect("P4 parser scope");
 }
 
-pub(super) fn var(context: &Context, value: &Value, has_params: bool, type_ref: Option<&Value>) {
-    let id = extract::id_name(&context.arena(), value).expect("P4 declaration name");
+pub(super) fn var(ctx: &Context, value: &Value, has_params: bool, type_ref: Option<&Value>) {
+    let id = extract::id_name(&ctx.arena(), value).expect("P4 declaration name");
     let type_id = match type_ref {
         Some(type_ref) => {
-            extract::type_id_type_ref(&context.arena(), type_ref).expect("P4 type reference")
+            extract::type_id_type_ref(&ctx.arena(), type_ref).expect("P4 type reference")
         }
         None => TypeId::Empty,
     };
-    context
-        .declare_var(id, has_params, type_id)
+    ctx.declare_var(id, has_params, type_id)
         .expect("P4 parser scope");
 }
 
 // == Name lists
 
-pub(super) fn vars(context: &Context, value: &Value) {
-    get::matches! { &context.arena(),
+pub(super) fn vars(ctx: &Context, value: &Value) {
+    get::matches! { &ctx.arena(),
         value,
         "nameList ',' name" => |values| {
-            vars(context, values[0]);
-            var(context, values[1], false, None);
+            vars(ctx, values[0]);
+            var(ctx, values[1], false, None);
         },
-        _ => var(context, value, false, None),
+        _ => var(ctx, value, false, None),
     }
 }
 
-pub(super) fn typs(context: &Context, value: &Value) {
-    get::matches! { &context.arena(),
+pub(super) fn typs(ctx: &Context, value: &Value) {
+    get::matches! { &ctx.arena(),
         value,
         "typeParameterList ',' typeParameter" => |values| {
-            typs(context, values[0]);
-            typ(context, values[1], false);
+            typs(ctx, values[0]);
+            typ(ctx, values[1], false);
         },
-        _ => typ(context, value, false),
+        _ => typ(ctx, value, false),
     }
 }
 
 // == Type namespaces
 
-pub(super) fn type_namespace(context: &Context, value: &Value, namespace: Namespace) {
-    let id = extract::id_name(&context.arena(), value).expect("P4 type name");
-    context.namespace_set_typ(&id, namespace);
+pub(super) fn type_namespace(ctx: &Context, value: &Value, namespace: Namespace) {
+    let id = extract::id_name(&ctx.arena(), value).expect("P4 type name");
+    ctx.namespace_set_typ(&id, namespace);
 }

@@ -34,15 +34,15 @@ enum Precedence {
 }
 
 pub(crate) struct BinaryExpressionPart {
-    operator: BinaryOperator,
+    op: BinaryOperator,
     span: Span,
     rhs: Value,
 }
 
 impl BinaryExpressionPart {
-    pub(crate) fn new(operator: BinaryOperator, span: Span, rhs: Value) -> Self {
+    pub(crate) fn new(op: BinaryOperator, span: Span, rhs: Value) -> Self {
         Self {
-            operator,
+            op,
             span,
             rhs,
         }
@@ -50,7 +50,7 @@ impl BinaryExpressionPart {
 }
 
 struct StackedOperator {
-    operator: BinaryOperator,
+    op: BinaryOperator,
     precedence: Precedence,
     span: Span,
 }
@@ -96,14 +96,14 @@ fn reduce(
     values: &mut Vec<Value>,
     operators: &mut Vec<StackedOperator>,
 ) -> Result<(), P4Error> {
-    let operator = operators.pop().expect("binary operator");
+    let op = operators.pop().expect("binary op");
     let rhs = values.pop().expect("binary right operand");
     let lhs = values.pop().expect("binary left operand");
     let value_operator = make::case_shaped! { arena: arena,
-        shape: operator.operator.shape(),
+        shape: op.op.shape(),
         args: vec![],
         typ: "binop",
-        span: operator.span,
+        span: op.span,
     }?;
     let span = Span::new(
         arena.span(&lhs).left.clone(),
@@ -129,13 +129,13 @@ pub(crate) fn fold(
     for part in parts {
         while operators
             .last()
-            .is_some_and(|operator| operator.precedence >= part.operator.incoming_precedence())
+            .is_some_and(|op| op.precedence >= part.op.incoming_precedence())
         {
             reduce(arena, &mut values, &mut operators)?;
         }
         operators.push(StackedOperator {
-            operator: part.operator,
-            precedence: part.operator.precedence(),
+            op: part.op,
+            precedence: part.op.precedence(),
             span: part.span,
         });
         values.push(part.rhs);

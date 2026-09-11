@@ -119,21 +119,21 @@ StatementNode: Statement = {
             check: CounterCheck {
                 kind: None,
                 condition: Condition::Eq,
-                number: "0".to_owned(),
+                num: "0".to_owned(),
             },
         }
     },
 
     // StatementNode ::= CHECK_COUNTER ID "(" IdOrIndexRule ")" CounterKindRule ConditionRule Number
     "CHECK_COUNTER" <id:"ID"> "(" <target:IdOrIndexRule> ")"
-        <kind:CounterKindRule> <condition:ConditionRule> <number:Number> => {
+        <kind:CounterKindRule> <condition:ConditionRule> <num:Number> => {
             Statement::CheckCounter {
                 counter: id,
                 target,
                 check: CounterCheck {
                     kind: Some(kind),
                     condition,
-                    number,
+                    num,
                 },
             }
         },
@@ -315,13 +315,13 @@ ActionRule: Action = {
 
 Argument: Argument = {
     // Argument ::= ADD ":" Number
-    "ADD" ":" <number:Number> => Argument {
+    "ADD" ":" <num:Number> => Argument {
         id: "add".to_owned(),
-        number,
+        num,
     },
 
     // Argument ::= ID ":" Number
-    <id:"ID"> ":" <number:Number> => Argument { id, number },
+    <id:"ID"> ":" <num:Number> => Argument { id, num },
 };
 
 Comma<T>: Vec<T> = {

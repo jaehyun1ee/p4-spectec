@@ -48,7 +48,7 @@ fn test_parses_commands_in_source_order() {
                 name: "set_nhop".into(),
                 args: vec![Argument {
                     id: "port".into(),
-                    number: "3".into(),
+                    num: "3".into(),
                 }],
             },
             id: Some("entry0".into()),
@@ -62,7 +62,7 @@ fn test_parses_commands_in_source_order() {
             check: CounterCheck {
                 kind: Some(CounterKind::Packets),
                 condition: Condition::Ge,
-                number: "0x10".into(),
+                num: "0x10".into(),
             },
         }
     );

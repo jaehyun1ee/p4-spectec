@@ -25,7 +25,7 @@ pub type Program = Vec<Phrase<Statement>>;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Argument {
     pub id: Id,
-    pub number: Number,
+    pub num: Number,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -72,7 +72,7 @@ pub enum CounterKind {
 pub struct CounterCheck {
     pub kind: Option<CounterKind>,
     pub condition: Condition,
-    pub number: Number,
+    pub num: Number,
 }
 
 // == Statements

@@ -27,7 +27,7 @@ impl Print for Action {
                 printer.write(",")?;
             }
             write_quoted(printer, &argument.id)?;
-            printer.write_fmt(format_args!(":{}", argument.number))?;
+            printer.write_fmt(format_args!(":{}", argument.num))?;
         }
         printer.write(")")
     }
@@ -36,7 +36,7 @@ impl Print for Action {
 impl Print for MatchKind {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         match self {
-            Self::Number(number) => printer.write(number),
+            Self::Number(num) => printer.write(num),
             Self::Slash(number_l, number_r) => {
                 printer.write_fmt(format_args!("{number_l}/{number_r}"))
             }
@@ -48,7 +48,7 @@ impl Print for CounterTarget {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         match self {
             Self::Id(id) => printer.write(id),
-            Self::Index(number) => printer.write(number),
+            Self::Index(num) => printer.write(num),
         }
     }
 }
@@ -153,7 +153,7 @@ impl Print for Statement {
                 }
                 printer.write(" ")?;
                 check.condition.print(printer)?;
-                printer.write_fmt(format_args!(" {}", check.number))
+                printer.write_fmt(format_args!(" {}", check.num))
             }
             Self::MirroringAdd { session, port } => {
                 printer.write_fmt(format_args!("mirroring_add {session} {port}"))

@@ -50,8 +50,8 @@ fn value_of_bits(arena: &mut ValueArena, bits: Vec<bool>) -> Result<Value, Built
 // == Conversion between meta-numerics and runtime numerics
 
 fn bigint_of_value<'a>(arena: &'a ValueArena, value: &Value) -> Result<&'a BigInt, BuiltinError> {
-    let number = get::num(arena, value).map_err(|error| BuiltinError::new(error.to_string()))?;
-    Ok(num::to_int(number))
+    let num = get::num(arena, value).map_err(|error| BuiltinError::new(error.to_string()))?;
+    Ok(num::to_int(num))
 }
 
 fn value_of_bigint(arena: &mut ValueArena, value: BigInt) -> Result<Value, BuiltinError> {

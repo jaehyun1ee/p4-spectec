@@ -346,19 +346,19 @@ impl Free for FuncDef {
 impl Free for DefKind {
     fn free_into(&self, free: &mut IdSet) {
         match self {
-            Self::ExternSyntax(definition) => definition.free_into(free),
-            Self::Syntax(definition) => definition.free_into(free),
-            Self::Typ(definition) => definition.free_into(free),
-            Self::Var(definition) => definition.free_into(free),
-            Self::ExternRel(definition) => definition.free_into(free),
-            Self::Rel(definition) => definition.free_into(free),
-            Self::RuleGroup(definition) => definition.free_into(free),
-            Self::ExternDec(definition) => definition.free_into(free),
-            Self::BuiltinDec(definition) => definition.free_into(free),
-            Self::TableDec(definition) => definition.free_into(free),
-            Self::FuncDec(definition) => definition.free_into(free),
-            Self::TableDef(definition) => definition.free_into(free),
-            Self::FuncDef(definition) => definition.free_into(free),
+            Self::ExternSyntax(def) => def.free_into(free),
+            Self::Syntax(def) => def.free_into(free),
+            Self::Typ(def) => def.free_into(free),
+            Self::Var(def) => def.free_into(free),
+            Self::ExternRel(def) => def.free_into(free),
+            Self::Rel(def) => def.free_into(free),
+            Self::RuleGroup(def) => def.free_into(free),
+            Self::ExternDec(def) => def.free_into(free),
+            Self::BuiltinDec(def) => def.free_into(free),
+            Self::TableDec(def) => def.free_into(free),
+            Self::FuncDec(def) => def.free_into(free),
+            Self::TableDef(def) => def.free_into(free),
+            Self::FuncDef(def) => def.free_into(free),
             Self::Sep => {}
         }
     }

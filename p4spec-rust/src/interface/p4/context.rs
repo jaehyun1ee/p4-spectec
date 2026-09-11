@@ -225,25 +225,25 @@ impl<'a> Context<'a> {
 
     pub(crate) fn location_add(&self, position: Position, previous: Option<Location>) -> Location {
         let mut positions = self.positions.borrow_mut();
-        let location = Location {
+        let loc = Location {
             position: positions.len(),
-            previous: previous.map_or(positions.len(), |location| location.position),
+            previous: previous.map_or(positions.len(), |loc| loc.position),
         };
         positions.push(position);
-        location
+        loc
     }
 
-    pub(crate) fn location_get(&self, location: Location) -> Position {
-        self.positions.borrow()[location.position].clone()
+    pub(crate) fn location_get(&self, loc: Location) -> Position {
+        self.positions.borrow()[loc.position].clone()
     }
 
-    pub(crate) fn location_span(&self, location_l: Location, location_r: Location) -> Span {
-        if location_l == location_r {
+    pub(crate) fn location_span(&self, loc_l: Location, loc_r: Location) -> Span {
+        if loc_l == loc_r {
             // Menhir locates epsilon at the preceding token's end
-            let position = self.positions.borrow()[location_l.previous].clone();
+            let position = self.positions.borrow()[loc_l.previous].clone();
             Span::new(position.clone(), position)
         } else {
-            Span::new(self.location_get(location_l), self.location_get(location_r))
+            Span::new(self.location_get(loc_l), self.location_get(loc_r))
         }
     }
 }
