@@ -231,8 +231,7 @@ pub enum ParamKind {
     Def(Id, Vec<TParam>, Vec<Param>, PlainTyp),
 }
 
-pub type TParam = Phrase<TParamKind>;
-pub type TParamKind = String;
+pub type TParam = Phrase<String>;
 
 pub type Prem = Phrase<PremKind>;
 

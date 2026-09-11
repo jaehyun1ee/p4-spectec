@@ -85,7 +85,6 @@ pub type ParamKind = il::ast::ParamKind;
 // Type parameters
 
 pub type TParam = il::ast::TParam;
-pub type TParamKind = il::ast::TParamKind;
 
 // Arguments
 

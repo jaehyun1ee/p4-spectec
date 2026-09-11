@@ -84,7 +84,6 @@ pub type PathKind = il::ast::PathKind;
 // Type parameters
 
 pub type TParam = il::ast::TParam;
-pub type TParamKind = il::ast::TParamKind;
 
 // Parameters
 

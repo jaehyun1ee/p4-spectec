@@ -219,7 +219,6 @@ pub enum ParamKind {
 // Type parameters
 
 pub type TParam = common::TId;
-pub type TParamKind = String;
 
 // Arguments
 

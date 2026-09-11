@@ -1,3 +1,8 @@
+//! Exact interning into stable handles
+//!
+//! Interning "x", "y", then "x" stores two strings and returns the first handle
+//! again for the final "x". Entries remain available until the interner drops.
+
 use std::{
     collections::hash_map::RandomState,
     hash::{BuildHasher, Hash},

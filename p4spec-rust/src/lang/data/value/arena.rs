@@ -22,7 +22,7 @@ pub struct ValueArena {
     types: RcInterner<TypKind>,
     spans: Interner<Span>,
     span_empty: Interned<Span>,
-    // Intrinsic constructor types have stable allocation identities
+    // Reuse scalar type allocations because RcInterner keys by address
     pub(super) typ_bool: Rc<TypKind>,
     pub(super) typ_nat: Rc<TypKind>,
     pub(super) typ_int: Rc<TypKind>,

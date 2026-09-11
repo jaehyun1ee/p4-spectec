@@ -1,3 +1,9 @@
+//! Exact storage with a second, canonical identity
+//!
+//! First, exactly equal items share a stored entry. Then a supplied comparison
+//! groups entries by meaning: ("x", span_a) and ("x", span_b) keep distinct
+//! handles but share a canonical ID when that comparison ignores spans.
+
 use std::{
     collections::hash_map::RandomState,
     fmt,

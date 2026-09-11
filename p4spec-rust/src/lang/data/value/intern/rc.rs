@@ -1,3 +1,9 @@
+//! Interning by Rc allocation identity
+//!
+//! An Rc and its clone share a handle; a fresh Rc with equal contents gets a
+//! distinct handle. Retaining each allocation prevents its address from being
+//! reused while the interner is alive.
+
 use std::{
     collections::{HashMap, hash_map::Entry},
     marker::PhantomData,
