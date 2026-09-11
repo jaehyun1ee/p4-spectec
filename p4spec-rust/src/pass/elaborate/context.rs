@@ -499,6 +499,36 @@ impl Context {
         Ok(())
     }
 
+    // == Definition extraction
+
+    // - Relations
+
+    pub(super) fn take_defined_rel(&mut self, id: &Id) -> Result<ast::DefinedRel, ElabError> {
+        self.find_defined_rel(id)?;
+        let Some(ast::RelDef::Defined(defined_rel_il)) = self.renv.remove(id) else {
+            unreachable!("checked defined relation")
+        };
+        Ok(*defined_rel_il)
+    }
+
+    // - Functions
+
+    pub(super) fn take_table_func(&mut self, id: &Id) -> Result<ast::TableFunc, ElabError> {
+        self.find_table_func(id)?;
+        let Some(ast::MetaFuncDef::Table(table_func_il)) = self.fenv.remove(id) else {
+            unreachable!("checked table function")
+        };
+        Ok(table_func_il)
+    }
+
+    pub(super) fn take_defined_func(&mut self, id: &Id) -> Result<ast::DefinedFunc, ElabError> {
+        self.find_defined_func(id)?;
+        let Some(ast::MetaFuncDef::Defined(defined_func_il)) = self.fenv.remove(id) else {
+            unreachable!("checked defined function")
+        };
+        Ok(*defined_func_il)
+    }
+
     // == Updaters
 
     // - Type definitions

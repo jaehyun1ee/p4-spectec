@@ -2592,7 +2592,7 @@ fn elab_func_def(ctx: &mut Context, def: &Phrase<&el::FuncDef>) -> Result<(), El
 // - Definition population
 
 fn populate_rel(
-    ctx: &Context,
+    ctx: &mut Context,
     rel_def_il: il::RelDef,
     span: &Span,
 ) -> Result<il::RelDef, ElabError> {
@@ -2606,16 +2606,16 @@ fn populate_rel(
                     "relation was already populated",
                 ));
             }
-            let defined_rel_stored_il = ctx.find_defined_rel(&defined_rel_il.id)?;
-            defined_rel_il.rule_groups = defined_rel_stored_il.rule_groups.clone();
-            defined_rel_il.else_group = defined_rel_stored_il.else_group.clone();
+            let defined_rel_stored_il = ctx.take_defined_rel(&defined_rel_il.id)?;
+            defined_rel_il.rule_groups = defined_rel_stored_il.rule_groups;
+            defined_rel_il.else_group = defined_rel_stored_il.else_group;
             Ok(il::RelDef::Defined(defined_rel_il))
         }
     }
 }
 
 fn populate_meta_func(
-    ctx: &Context,
+    ctx: &mut Context,
     meta_func_def_il: il::MetaFuncDef,
     span: &Span,
 ) -> Result<il::MetaFuncDef, ElabError> {
@@ -2630,8 +2630,8 @@ fn populate_meta_func(
                     "table was already populated",
                 ));
             }
-            let table_func_stored_il = ctx.find_table_func(&table_func_il.id)?;
-            table_func_il.rows = table_func_stored_il.rows.clone();
+            let table_func_stored_il = ctx.take_table_func(&table_func_il.id)?;
+            table_func_il.rows = table_func_stored_il.rows;
             Ok(il::MetaFuncDef::Table(table_func_il))
         }
         il::MetaFuncDef::Defined(mut defined_func_il) => {
@@ -2642,25 +2642,25 @@ fn populate_meta_func(
                     "function was already populated",
                 ));
             }
-            let defined_func_stored_il = ctx.find_defined_func(&defined_func_il.id)?;
-            defined_func_il.clauses = defined_func_stored_il.clauses.clone();
-            defined_func_il.else_clause = defined_func_stored_il.else_clause.clone();
+            let defined_func_stored_il = ctx.take_defined_func(&defined_func_il.id)?;
+            defined_func_il.clauses = defined_func_stored_il.clauses;
+            defined_func_il.else_clause = defined_func_stored_il.else_clause;
             Ok(il::MetaFuncDef::Defined(defined_func_il))
         }
     }
 }
 
-fn populate_defs(ctx: &Context, defs_il: il::Spec) -> Result<il::Spec, ElabError> {
+fn populate_defs(mut ctx: Context, defs_il: il::Spec) -> Result<il::Spec, ElabError> {
     defs_il
         .into_iter()
         .map(|def_il| {
             let def_il_kind = match def_il.node {
                 il::DefKind::Rel(rel_def_il) => {
-                    il::DefKind::Rel(populate_rel(ctx, rel_def_il, &def_il.span)?)
+                    il::DefKind::Rel(populate_rel(&mut ctx, rel_def_il, &def_il.span)?)
                 }
-                il::DefKind::MetaFunc(meta_func_def_il) => {
-                    il::DefKind::MetaFunc(populate_meta_func(ctx, meta_func_def_il, &def_il.span)?)
-                }
+                il::DefKind::MetaFunc(meta_func_def_il) => il::DefKind::MetaFunc(
+                    populate_meta_func(&mut ctx, meta_func_def_il, &def_il.span)?,
+                ),
                 def_il_kind => def_il_kind,
             };
             let def_il = phrase!(node: def_il_kind, span: def_il.span);
@@ -2679,7 +2679,7 @@ pub(super) fn elaborate(spec_el: el::Spec) -> Result<il::Spec, ElabError> {
             defs_il.push(def_il);
         }
     }
-    let mut defs_il = populate_defs(&ctx, defs_il)?;
+    let mut defs_il = populate_defs(ctx, defs_il)?;
     dimension::analyze_spec(&mut defs_il)?;
     Ok(defs_il)
 }
