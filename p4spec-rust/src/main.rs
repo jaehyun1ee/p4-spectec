@@ -84,6 +84,9 @@ struct RunArgs {
     /// Include directories for the P4 program
     #[arg(short = 'i', value_name = "DIR")]
     includes: Vec<PathBuf>,
+    /// Disable AL call caching
+    #[arg(long)]
+    no_cache: bool,
     /// Check deterministic execution
     #[arg(long)]
     det: bool,
@@ -102,19 +105,19 @@ fn run_command(args: RunArgs) -> ExitCode {
         Ok(global) => global,
         Err(error) => return command_error(error),
     };
-    let program = match parse_file(&args.includes, args.program) {
+    let mut runner = Runner::<Al, _, _>::new(
+        global,
+        Config::new(!args.no_cache, args.det, args.guard),
+        BuiltinInterface::new(unparser),
+        Placeholder,
+    );
+    let program = match parse_file(runner.arena_mut(), &args.includes, args.program) {
         Ok(program) => program,
         Err(error) => {
             eprintln!("syntax error: {error}");
             return ExitCode::FAILURE;
         }
     };
-    let mut runner = Runner::<Al, _, _>::new(
-        global,
-        Config::new(args.det, args.guard),
-        BuiltinInterface::new(unparser),
-        Placeholder,
-    );
     match runner.eval_program(&args.relation, program) {
         Ok(_) => {
             println!("passed");

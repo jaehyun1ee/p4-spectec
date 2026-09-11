@@ -467,6 +467,7 @@ name = "p4spec-rust"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "hashbrown 0.17.1",
  "imbl",
  "lalrpop",
  "lalrpop-util",

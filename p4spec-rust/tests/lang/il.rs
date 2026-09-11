@@ -118,8 +118,6 @@ fn assert_iterated_exp(exp: &ast::Exp, dim: bool, id_span: &Span, typ_span: &Spa
     }
 }
 
-#[path = "il/eq.rs"]
-mod eq;
 #[path = "il/free.rs"]
 mod free;
 #[path = "il/fresh.rs"]

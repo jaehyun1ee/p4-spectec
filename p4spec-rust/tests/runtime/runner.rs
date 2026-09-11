@@ -1,4 +1,4 @@
-use std::{cell::Cell, rc::Rc, sync::Mutex};
+use std::{cell::Cell, sync::Mutex};
 
 use p4spec_rust::{
     interface::{
@@ -8,7 +8,7 @@ use p4spec_rust::{
     lang::common::source::Span,
     lang::data::{
         typ,
-        value::{self, Value, get},
+        value::{self, Value, ValueArena, get},
     },
     lang::il::ast::Typ,
     phrase,
@@ -45,13 +45,16 @@ where
 {
     type Spec = ();
     type Config = FixtureConfig;
+    type State = ();
     type Error = FixtureError;
+
+    fn clear(_state: &mut Self::State) {}
 
     fn eval_program(
         _context: &mut RunnerContext<'_, Self, I, E>,
         name: &str,
-        program: Rc<Value>,
-    ) -> Result<Vec<Rc<Value>>, Self::Error> {
+        program: Value,
+    ) -> Result<Vec<Value>, Self::Error> {
         match name {
             "identity" => Ok(vec![program]),
             _ => Err(FixtureError::Unknown(name.to_owned())),
@@ -62,10 +65,15 @@ where
         context: &mut RunnerContext<'_, Self, I, E>,
         name: &str,
         targs: &[Typ],
-        values: &[Rc<Value>],
-    ) -> Result<Rc<Value>, Self::Error> {
+        values: &[Value],
+    ) -> Result<Value, Self::Error> {
         match name {
-            "done" => Ok(value::make::text("done".to_owned(), Span::default())),
+            "done" => {
+                Ok(
+                    value::make::text(context.arena_mut(), "done".to_owned(), Span::default())
+                        .unwrap(),
+                )
+            }
             "outer" => {
                 let (value, _) = context.call_extern_func("first", targs, values)?;
                 Ok(value)
@@ -76,20 +84,20 @@ where
             }
             "pure_effect" => {
                 let (_, side_effected) = context.call_extern_func("pure", targs, values)?;
-                Ok(value::make::bool(side_effected, Span::default()))
+                Ok(value::make::bool(context.arena_mut(), side_effected, Span::default()).unwrap())
             }
             "impure_effect" => {
                 let (_, side_effected) = context.call_extern_func("impure", targs, values)?;
-                Ok(value::make::bool(side_effected, Span::default()))
+                Ok(value::make::bool(context.arena_mut(), side_effected, Span::default()).unwrap())
             }
             "extern" => {
                 let (value, _) = context.call_extern_func("missing", targs, values)?;
                 Ok(value)
             }
-            "config" => Ok(value::make::text(
-                context.config().label.clone(),
-                Span::default(),
-            )),
+            "config" => {
+                let label = context.config().label.clone();
+                Ok(value::make::text(context.arena_mut(), label, Span::default()).unwrap())
+            }
             "next_extern" => {
                 let (value, _) = context.call_extern_func("next", targs, values)?;
                 Ok(value)
@@ -106,8 +114,8 @@ where
     fn eval_rel(
         _context: &mut RunnerContext<'_, Self, I, E>,
         name: &str,
-        _values: &[Rc<Value>],
-    ) -> Result<Vec<Rc<Value>>, Self::Error> {
+        _values: &[Value],
+    ) -> Result<Vec<Value>, Self::Error> {
         Err(FixtureError::Unknown(name.to_owned()))
     }
 }
@@ -123,8 +131,8 @@ impl Extern for FixtureExtern {
         context: &mut RunnerContext<'_, S, I, Self>,
         name: &str,
         targs: &[Typ],
-        values: &[Rc<Value>],
-    ) -> Result<(Rc<Value>, bool), S::Error>
+        values: &[Value],
+    ) -> Result<(Value, bool), S::Error>
     where
         I: Interface,
         S: Interpreter<I, Self>,
@@ -139,17 +147,19 @@ impl Extern for FixtureExtern {
                 Ok((value, false))
             }
             "pure" => {
-                let value = value::make::bool(false, Span::default());
+                let value = value::make::bool(context.arena_mut(), false, Span::default()).unwrap();
                 Ok((value, false))
             }
             "impure" => {
-                let value = value::make::bool(true, Span::default());
+                let value = value::make::bool(context.arena_mut(), true, Span::default()).unwrap();
                 Ok((value, true))
             }
             "next" => {
                 let next = self.next.get();
                 self.next.set(next + 1);
-                let value = value::make::text(next.to_string(), Span::default());
+                let value =
+                    value::make::text(context.arena_mut(), next.to_string(), Span::default())
+                        .unwrap();
                 Ok((value, true))
             }
             _ => {
@@ -163,8 +173,8 @@ impl Extern for FixtureExtern {
         &self,
         _context: &mut RunnerContext<'_, S, I, Self>,
         name: &str,
-        _values: &[Rc<Value>],
-    ) -> Result<(Vec<Rc<Value>>, bool), S::Error>
+        _values: &[Value],
+    ) -> Result<(Vec<Value>, bool), S::Error>
     where
         I: Interface,
         S: Interpreter<I, Self>,
@@ -184,8 +194,9 @@ fn id(name: &str) -> p4spec_rust::lang::il::ast::Id {
 
 #[test]
 fn test_null_interface_reports_configuration_failure() {
+    let mut arena = ValueArena::new();
     let error = NullInterface
-        .call_builtin(&id("sum_int"), &[], &[])
+        .call_builtin(&mut arena, &id("sum_int"), &[], &[])
         .unwrap_err();
 
     assert!(matches!(error, InterfaceError::NotConfigured));
@@ -193,28 +204,30 @@ fn test_null_interface_reports_configuration_failure() {
 
 #[test]
 fn test_builtin_interface_reports_side_effects_and_clears() {
+    let mut arena = ValueArena::new();
     let _guard = FRESH_BUILTIN.lock().unwrap();
     let mut interface = BuiltinInterface::new(P4Unparser::new());
     interface.clear();
     let (value, side_effected) = interface
-        .call_builtin(&id("fresh_typeId"), &[], &[])
+        .call_builtin(&mut arena, &id("fresh_typeId"), &[], &[])
         .unwrap();
 
-    assert_eq!(get::text(&value), Ok("FRESH__0"));
+    assert_eq!(get::text(&arena, &value), Ok("FRESH__0"));
     assert!(side_effected);
 
     interface.clear();
     let (value, side_effected) = interface
-        .call_builtin(&id("fresh_typeId"), &[], &[])
+        .call_builtin(&mut arena, &id("fresh_typeId"), &[], &[])
         .unwrap();
-    assert_eq!(get::text(&value), Ok("FRESH__0"));
+    assert_eq!(get::text(&arena, &value), Ok("FRESH__0"));
     assert!(side_effected);
 }
 
 #[test]
 fn test_builtin_interface_preserves_builtin_failures() {
+    let mut arena = ValueArena::new();
     let error = BuiltinInterface::new(P4Unparser::new())
-        .call_builtin(&id("sum_int"), &[], &[])
+        .call_builtin(&mut arena, &id("sum_int"), &[], &[])
         .unwrap_err();
 
     assert!(matches!(
@@ -226,28 +239,30 @@ fn test_builtin_interface_preserves_builtin_failures() {
 
 #[test]
 fn test_builtin_interface_prints_p4_values_without_side_effects() {
-    let value = value::make::text("a\n\"b".to_owned(), Span::default());
+    let mut arena = ValueArena::new();
+    let value = value::make::text(&mut arena, "a\n\"b".to_owned(), Span::default()).unwrap();
     let (printed, side_effected) = BuiltinInterface::new(P4Unparser::new())
-        .call_builtin(&id("print_"), &[typ::make::text()], &[value])
+        .call_builtin(&mut arena, &id("print_"), &[typ::make::text()], &[value])
         .unwrap();
 
-    assert_eq!(get::text(&printed), Ok("a\\n\\\"b"));
+    assert_eq!(get::text(&arena, &printed), Ok("a\\n\\\"b"));
     assert!(!side_effected);
 }
 
 #[test]
 fn test_builtin_interface_print_validates_both_arities() {
+    let mut arena = ValueArena::new();
     let mut interface = BuiltinInterface::new(P4Unparser::new());
     let typ = typ::make::text();
-    let value = value::make::text("value".to_owned(), Span::default());
+    let value = value::make::text(&mut arena, "value".to_owned(), Span::default()).unwrap();
     for (targs, values, actual) in [
-        (vec![], vec![value.clone()], 0),
-        (vec![typ.clone(), typ.clone()], vec![value.clone()], 2),
+        (vec![], vec![value], 0),
+        (vec![typ.clone(), typ.clone()], vec![value], 2),
         (vec![typ.clone()], vec![], 0),
-        (vec![typ], vec![value.clone(), value], 2),
+        (vec![typ], vec![value, value], 2),
     ] {
         let error = interface
-            .call_builtin(&id("print_"), &targs, &values)
+            .call_builtin(&mut arena, &id("print_"), &targs, &values)
             .unwrap_err();
         assert!(matches!(
             error,
@@ -259,10 +274,17 @@ fn test_builtin_interface_print_validates_both_arities() {
 
 #[test]
 fn test_builtin_interface_print_preserves_unparse_failures() {
+    let mut arena = ValueArena::new();
     let typ = typ::make::bool();
-    let value = value::make::structure(&typ, Vec::new(), Span::default());
+    let value = value::make::structure(
+        &mut arena,
+        typ.node.clone().into(),
+        Vec::new(),
+        Span::default(),
+    )
+    .unwrap();
     let error = BuiltinInterface::new(P4Unparser::new())
-        .call_builtin(&id("print_"), &[typ], &[value])
+        .call_builtin(&mut arena, &id("print_"), &[typ], &[value])
         .unwrap_err();
     assert!(matches!(
         error,
@@ -273,6 +295,7 @@ fn test_builtin_interface_print_preserves_unparse_failures() {
 
 #[test]
 fn test_builtin_interface_print_preserves_spec_hints_after_clear() {
+    let mut arena = ValueArena::new();
     use p4spec_rust::lang::{
         al::ast,
         common::notation::{atom::Atom, mixfix::Mixfix},
@@ -303,25 +326,25 @@ fn test_builtin_interface_print_preserves_spec_hints_after_clear() {
     let def = ast::DefKind::Typ(ast::TypDef::Defined(Box::new(defined_typ)));
     let spec = vec![phrase!(node: def, span: span.clone())];
     let typ = typ::make::var(id("Wrapper"), Vec::new());
-    let value = value::make::case_(
-        &typ,
-        Mixfix::Seq(vec![
+    let value = {
+        let values = Mixfix::Seq(vec![
             Mixfix::Atom(atom),
-            Mixfix::Arg(value::make::text("payload".to_owned(), span.clone())),
-        ]),
-        span,
-    );
+            Mixfix::Arg(value::make::text(&mut arena, "payload".to_owned(), span.clone()).unwrap()),
+        ]);
+        value::make::case(&mut arena, typ.node.clone().into(), values, span).unwrap()
+    };
     let _guard = FRESH_BUILTIN.lock().unwrap();
     let mut interface = BuiltinInterface::new(P4Unparser::from_al_spec(&spec));
     for _ in 0..2 {
         let (printed, side_effected) = interface
             .call_builtin(
+                &mut arena,
                 &id("print_"),
                 std::slice::from_ref(&typ),
                 std::slice::from_ref(&value),
             )
             .unwrap();
-        assert_eq!(get::text(&printed), Ok("shown payload"));
+        assert_eq!(get::text(&arena, &printed), Ok("shown payload"));
         assert!(!side_effected);
         interface.clear();
     }
@@ -338,7 +361,7 @@ fn test_runner_statically_composes_its_components() {
 
     let value = runner.eval_func("done", &[], &[]).unwrap();
 
-    assert_eq!(get::text(&value), Ok("done"));
+    assert_eq!(get::text(runner.arena(), &value), Ok("done"));
 }
 
 #[test]
@@ -352,7 +375,7 @@ fn test_extern_can_reenter_the_interpreter() {
 
     let value = runner.eval_func("outer", &[], &[]).unwrap();
 
-    assert_eq!(get::text(&value), Ok("done"));
+    assert_eq!(get::text(runner.arena(), &value), Ok("done"));
 }
 
 #[test]
@@ -367,8 +390,8 @@ fn test_extern_reports_side_effects_with_each_result() {
     let value_pure = runner.eval_func("pure_effect", &[], &[]).unwrap();
     let value_impure = runner.eval_func("impure_effect", &[], &[]).unwrap();
 
-    assert_eq!(get::bool(&value_pure), Ok(false));
-    assert_eq!(get::bool(&value_impure), Ok(true));
+    assert_eq!(get::bool(runner.arena(), &value_pure), Ok(false));
+    assert_eq!(get::bool(runner.arena(), &value_impure), Ok(true));
 }
 
 #[test]
@@ -407,7 +430,11 @@ fn test_runner_clear_resets_host_state_and_preserves_config() {
     assert_eq!(eval_text(&mut runner, "next_builtin"), "FRESH__0");
     assert_eq!(eval_text(&mut runner, "next_builtin"), "FRESH__1");
 
+    let value_config = runner.eval_func("config", &[], &[]).unwrap();
     runner.clear();
+    let value_new = value::make::bool(runner.arena_mut(), true, Span::default()).unwrap();
+    assert_eq!(get::bool(runner.arena(), &value_new), Ok(true));
+    assert_eq!(get::text(runner.arena(), &value_config), Ok("configured"));
 
     assert_eq!(eval_text(&mut runner, "config"), "configured");
     assert_eq!(eval_text(&mut runner, "next_extern"), "0");
@@ -419,7 +446,7 @@ fn eval_text(
     name: &str,
 ) -> String {
     let value = runner.eval_func(name, &[], &[]).unwrap();
-    get::text(&value).unwrap().to_owned()
+    get::text(runner.arena(), &value).unwrap().to_owned()
 }
 
 #[test]
@@ -430,10 +457,11 @@ fn test_runner_dispatches_program_entry_and_errors() {
         NullInterface,
         NullExtern,
     );
-    let program = value::make::text("program".to_owned(), Span::default());
-    let values = runner.eval_program("identity", program.clone()).unwrap();
+    let program =
+        value::make::text(runner.arena_mut(), "program".to_owned(), Span::default()).unwrap();
+    let values = runner.eval_program("identity", program).unwrap();
     assert_eq!(values.len(), 1);
-    assert!(Rc::ptr_eq(&values[0], &program));
+    assert!((values[0] == program));
     let error = runner.eval_program("missing", program).unwrap_err();
     assert!(matches!(error, FixtureError::Unknown(name) if name == "missing"));
 }

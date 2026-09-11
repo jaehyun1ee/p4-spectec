@@ -24,3 +24,6 @@ mod notation;
 
 #[path = "common/var.rs"]
 mod var;
+
+#[path = "common/source.rs"]
+mod source;

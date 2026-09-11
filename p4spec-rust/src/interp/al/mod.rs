@@ -1,6 +1,7 @@
 //! Algorithmic-language execution over the composed runner
 
 pub mod backtrack;
+pub mod cache;
 pub mod context;
 pub mod error;
 
@@ -13,44 +14,50 @@ use crate::{
 };
 use context::{Context, Global};
 use error::Error;
-use std::rc::Rc;
 
 pub struct Al;
 
 /// Configuration for the AL interpreter
 pub struct Config {
+    cache: bool,
     det: bool,
     guard: bool,
 }
 
 impl Config {
-    pub fn new(det: bool, guard: bool) -> Self {
-        Self { det, guard }
+    pub fn new(cache: bool, det: bool, guard: bool) -> Self {
+        Self { cache, det, guard }
     }
 }
 
 impl<I: Interface, E: Extern> Interpreter<I, E> for Al {
     type Spec = Global;
     type Config = Config;
+    type State = cache::Cache;
     type Error = Error;
+
+    fn clear(state: &mut Self::State) {
+        state.clear();
+    }
 
     fn eval_program(
         runner: &mut RunnerContext<'_, Self, I, E>,
         name: &str,
-        program: Rc<Value>,
-    ) -> Result<Vec<Rc<Value>>, Error> {
+        program: Value,
+    ) -> Result<Vec<Value>, Error> {
         runner.call_rel(name, &[program])
     }
 
     fn eval_rel(
         runner: &mut RunnerContext<'_, Self, I, E>,
         name: &str,
-        values: &[Rc<Value>],
-    ) -> Result<Vec<Rc<Value>>, Error> {
+        values: &[Value],
+    ) -> Result<Vec<Value>, Error> {
+        runner.state_mut().clear();
         let id = crate::phrase!(node: name.to_owned(), span: Span::default());
         let ctx = Context::new(runner.spec());
-        if runner.config().guard {
-            eval::call::check_rel_inputs(&ctx, &id, values)
+        if runner.config().guard && !eval::call::cache_rel(runner, &ctx, &id) {
+            eval::call::check_rel_inputs(runner.arena(), &ctx, &id, values)
                 .guard()
                 .finish()?;
         }
@@ -60,12 +67,13 @@ impl<I: Interface, E: Extern> Interpreter<I, E> for Al {
         runner: &mut RunnerContext<'_, Self, I, E>,
         name: &str,
         targs: &[ast::Typ],
-        values: &[Rc<Value>],
-    ) -> Result<Rc<Value>, Error> {
+        values: &[Value],
+    ) -> Result<Value, Error> {
+        runner.state_mut().clear();
         let id = crate::phrase!(node: name.to_owned(), span: Span::default());
         let ctx = Context::new(runner.spec());
-        if runner.config().guard {
-            eval::call::check_func_inputs(&ctx, &id, targs, values)
+        if runner.config().guard && !eval::call::cache_func(runner, &ctx, &id, values) {
+            eval::call::check_func_inputs(runner.arena(), &ctx, &id, targs, values)
                 .guard()
                 .finish()?;
         }

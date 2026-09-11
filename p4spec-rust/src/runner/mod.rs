@@ -11,9 +11,10 @@ mod externs;
 mod interface;
 mod interpreter;
 
-use std::rc::Rc;
-
-use crate::lang::{data::value::Value, il::ast::Typ};
+use crate::lang::{
+    data::value::{Value, ValueArena},
+    il::ast::Typ,
+};
 
 pub use context::RunnerContext;
 pub use externs::{Extern, ExternError, NullExtern};
@@ -32,8 +33,10 @@ where
 {
     spec: S::Spec,
     config: S::Config,
+    state: S::State,
     interface: I,
     externs: E,
+    arena: ValueArena,
 }
 
 impl<S, I, E> Runner<S, I, E>
@@ -46,32 +49,41 @@ where
         Self {
             spec,
             config,
+            state: S::State::default(),
             interface,
             externs,
+            arena: ValueArena::new(),
         }
     }
 
     /// Borrows the assembled components for a stage-specific evaluation entry
     pub fn context(&mut self) -> RunnerContext<'_, S, I, E> {
-        RunnerContext::new(&self.spec, &self.config, &mut self.interface, &self.externs)
+        RunnerContext::new(
+            &self.spec,
+            &self.config,
+            &mut self.state,
+            &mut self.interface,
+            &self.externs,
+            &mut self.arena,
+        )
+    }
+
+    pub fn arena(&self) -> &ValueArena {
+        &self.arena
+    }
+
+    pub fn arena_mut(&mut self) -> &mut ValueArena {
+        &mut self.arena
     }
 
     // - Evaluation
 
-    pub fn eval_program(
-        &mut self,
-        name: &str,
-        program: Rc<Value>,
-    ) -> Result<Vec<Rc<Value>>, S::Error> {
+    pub fn eval_program(&mut self, name: &str, program: Value) -> Result<Vec<Value>, S::Error> {
         let mut context = self.context();
         context.call_program(name, program)
     }
 
-    pub fn eval_rel(
-        &mut self,
-        name: &str,
-        values: &[Rc<Value>],
-    ) -> Result<Vec<Rc<Value>>, S::Error> {
+    pub fn eval_rel(&mut self, name: &str, values: &[Value]) -> Result<Vec<Value>, S::Error> {
         let mut context = self.context();
         context.call_rel(name, values)
     }
@@ -80,16 +92,17 @@ where
         &mut self,
         name: &str,
         targs: &[Typ],
-        values: &[Rc<Value>],
-    ) -> Result<Rc<Value>, S::Error> {
+        values: &[Value],
+    ) -> Result<Value, S::Error> {
         let mut context = self.context();
         context.call_func(name, targs, values)
     }
 
     // - Lifecycle
 
-    /// Resets the builtin interface and extern implementation.
+    /// Clears execution state and resets the builtin interface and externs
     pub fn clear(&mut self) {
+        S::clear(&mut self.state);
         self.externs.clear();
         self.interface.clear();
     }

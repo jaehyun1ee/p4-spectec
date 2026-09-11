@@ -57,7 +57,14 @@ pub(crate) fn try_encode<T, E>(
 
 pub(crate) fn decode<T>(
     value: &Value,
-    decode_arg: impl Copy + Fn(&Value) -> Result<T, DecodeError>,
+    mut decode_arg: impl FnMut(&Value) -> Result<T, DecodeError>,
+) -> Result<Mixfix<T>, DecodeError> {
+    decode_inner(value, &mut decode_arg)
+}
+
+fn decode_inner<T>(
+    value: &Value,
+    decode_arg: &mut impl FnMut(&Value) -> Result<T, DecodeError>,
 ) -> Result<Mixfix<T>, DecodeError> {
     let (tag, fields) = variant(value)?;
     match (tag, fields) {
@@ -65,18 +72,18 @@ pub(crate) fn decode<T>(
         ("Atom", [atom]) => Ok(Mixfix::Atom(AtomPhraseCodec::decode(atom)?)),
         ("Brack", [left, body, right]) => Ok(Mixfix::Brack(
             AtomPhraseCodec::decode(left)?,
-            Box::new(decode(body, decode_arg)?),
+            Box::new(decode_inner(body, decode_arg)?),
             AtomPhraseCodec::decode(right)?,
         )),
         ("Infix", [left, atom, right]) => Ok(Mixfix::Infix(
-            Box::new(decode(left, decode_arg)?),
+            Box::new(decode_inner(left, decode_arg)?),
             AtomPhraseCodec::decode(atom)?,
-            Box::new(decode(right, decode_arg)?),
+            Box::new(decode_inner(right, decode_arg)?),
         )),
         ("Seq", [items]) => Ok(Mixfix::Seq(
             array(items)?
                 .iter()
-                .map(|item| decode(item, decode_arg))
+                .map(|item| decode_inner(item, decode_arg))
                 .collect::<Result<_, _>>()?,
         )),
         ("Arg" | "Atom" | "Brack" | "Infix" | "Seq", _) => {

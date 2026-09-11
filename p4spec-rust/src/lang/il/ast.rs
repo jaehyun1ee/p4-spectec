@@ -24,7 +24,6 @@ pub type Text = String;
 // Identifiers
 
 pub type Id = common::Id;
-pub type IdKind = common::IdKind;
 
 // Atoms
 
@@ -220,7 +219,6 @@ pub enum ParamKind {
 // Type parameters
 
 pub type TParam = common::TId;
-pub type TParamKind = IdKind;
 
 // Arguments
 

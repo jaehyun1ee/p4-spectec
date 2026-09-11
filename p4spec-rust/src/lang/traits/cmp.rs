@@ -42,7 +42,7 @@ impl SyntaxCmp for String {
     }
 }
 
-impl<T: SyntaxCmp, N> SyntaxCmp for NotePhrase<T, N> {
+impl<T: SyntaxCmp, N, S> SyntaxCmp for NotePhrase<T, N, S> {
     fn syntax_cmp(&self, other: &Self) -> Ordering {
         self.node.syntax_cmp(&other.node)
     }

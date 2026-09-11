@@ -16,7 +16,6 @@ pub type Text = String;
 // Identifiers
 
 pub type Id = common::Id;
-pub type IdKind = common::IdKind;
 
 // Atoms
 
@@ -232,8 +231,7 @@ pub enum ParamKind {
     Def(Id, Vec<TParam>, Vec<Param>, PlainTyp),
 }
 
-pub type TParam = Phrase<TParamKind>;
-pub type TParamKind = IdKind;
+pub type TParam = Phrase<String>;
 
 pub type Prem = Phrase<PremKind>;
 

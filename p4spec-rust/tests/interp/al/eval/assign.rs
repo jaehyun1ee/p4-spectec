@@ -1,5 +1,7 @@
 use std::rc::Rc;
 
+use p4spec_rust::lang::data::value::ValueArena;
+
 use p4spec_rust::{
     interp::al::{
         backtrack::Backtrack,
@@ -43,8 +45,8 @@ fn var(name: &str, iters: Vec<ast::Iter>) -> ast::Var {
         iters,
     }
 }
-fn value(value: bool) -> Rc<Value> {
-    make::bool(value, span(8))
+fn value(arena: &mut ValueArena, value: bool) -> Value {
+    make::bool(arena, value, span(8)).unwrap()
 }
 fn ok<T: std::fmt::Debug>(result: Backtrack<T>) -> T {
     match result {
@@ -52,21 +54,34 @@ fn ok<T: std::fmt::Debug>(result: Backtrack<T>) -> T {
         other => panic!("{other:?}"),
     }
 }
-fn binding(ctx: &Context<'_>, name: &str, iters: Vec<ast::Iter>) -> Rc<Value> {
-    Rc::clone(ctx.find_value(&Variable::new(id(name), iters)).unwrap())
+fn binding(ctx: &Context<'_>, name: &str, iters: Vec<ast::Iter>) -> Value {
+    *(ctx.find_value(&Variable::new(id(name), iters)).unwrap())
 }
 fn iter(exp_inner: ast::Exp, iter: ast::Iter, vars: Vec<ast::Var>) -> ast::Exp {
     exp(ast::ExpKind::Iter(Box::new(exp_inner), (iter, vars)))
 }
-fn tuple(values: Vec<Rc<Value>>) -> Rc<Value> {
-    make::tuple(&typ::make::bool(), values, span(8))
+fn tuple(arena: &mut ValueArena, values: Vec<Value>) -> Value {
+    make::tuple(
+        arena,
+        (typ::make::bool()).node.clone().into(),
+        values,
+        span(8),
+    )
+    .unwrap()
 }
-fn list(values: Vec<Rc<Value>>) -> Rc<Value> {
-    make::list(&typ::make::list(typ::make::bool()), values, span(8))
+fn list(arena: &mut ValueArena, values: Vec<Value>) -> Value {
+    make::list(
+        arena,
+        (typ::make::list(typ::make::bool())).node.clone().into(),
+        values,
+        span(8),
+    )
+    .unwrap()
 }
 
 #[test]
 fn test_iterated_variable_fast_path_preserves_identity_and_path() {
+    let mut arena = ValueArena::new();
     let global = Global::load(vec![]).unwrap();
     let exp_inner = iter(var_exp("x"), ast::Iter::Opt, vec![var("x", vec![])]);
     let exp = iter(
@@ -78,12 +93,9 @@ fn test_iterated_variable_fast_path_preserves_identity_and_path() {
         is_iter_var_exp(&exp).unwrap().iters,
         vec![ast::Iter::Opt, ast::Iter::List]
     );
-    let value = list(vec![]);
-    let ctx = ok(assign_exp(&Context::new(&global), &exp, Rc::clone(&value)));
-    assert!(Rc::ptr_eq(
-        &value,
-        &binding(&ctx, "x", vec![ast::Iter::Opt, ast::Iter::List])
-    ));
+    let value = list(&mut arena, vec![]);
+    let ctx = ok(assign_exp(&mut arena, Context::new(&global), &exp, value));
+    assert!((value == binding(&ctx, "x", vec![ast::Iter::Opt, ast::Iter::List])));
     assert!(
         ctx.find_value_opt(&Variable::new(id("x"), vec![]))
             .is_none()
@@ -93,43 +105,52 @@ fn test_iterated_variable_fast_path_preserves_identity_and_path() {
 
 #[test]
 fn test_list_assignment_collects_rows_without_leaking_scalar_bindings() {
+    let mut arena = ValueArena::new();
     let global = Global::load(vec![]).unwrap();
     let mut ctx = Context::new(&global);
-    ctx.add_value(Variable::new(id("x"), vec![]), value(false));
+    ctx.add_value(Variable::new(id("x"), vec![]), value(&mut arena, false));
     let exp = iter(
         exp(ast::ExpKind::Tuple(vec![var_exp("x"), var_exp("y")])),
         ast::Iter::List,
         vec![var("x", vec![]), var("y", vec![])],
     );
-    let ctx_result = ok(assign_exp(
-        &ctx,
-        &exp,
-        list(vec![
-            tuple(vec![value(true), value(false)]),
-            tuple(vec![value(false), value(true)]),
-        ]),
-    ));
+    let ctx_result = ok({
+        let value = {
+            let values = vec![
+                {
+                    let values = vec![value(&mut arena, true), value(&mut arena, false)];
+                    tuple(&mut arena, values)
+                },
+                {
+                    let values = vec![value(&mut arena, false), value(&mut arena, true)];
+                    tuple(&mut arena, values)
+                },
+            ];
+            list(&mut arena, values)
+        };
+        assign_exp(&mut arena, ctx.clone(), &exp, value)
+    });
     let xs = binding(&ctx_result, "x", vec![ast::Iter::List]);
     let ys = binding(&ctx_result, "y", vec![ast::Iter::List]);
-    assert_eq!(xs.span, Span::default());
-    assert_eq!(ys.span, Span::default());
+    assert_eq!(arena.span(&xs).clone(), Span::default());
+    assert_eq!(arena.span(&ys).clone(), Span::default());
     assert_eq!(
-        get::list(&xs)
+        get::list(&arena, &xs)
             .unwrap()
             .iter()
-            .map(|v| get::bool(v).unwrap())
+            .map(|v| get::bool(&arena, v).unwrap())
             .collect::<Vec<_>>(),
         vec![true, false]
     );
     assert_eq!(
-        get::list(&ys)
+        get::list(&arena, &ys)
             .unwrap()
             .iter()
-            .map(|v| get::bool(v).unwrap())
+            .map(|v| get::bool(&arena, v).unwrap())
             .collect::<Vec<_>>(),
         vec![false, true]
     );
-    assert!(!get::bool(&binding(&ctx_result, "x", vec![])).unwrap());
+    assert!(!get::bool(&arena, &binding(&ctx_result, "x", vec![])).unwrap());
     assert!(
         ctx_result
             .find_value_opt(&Variable::new(id("y"), vec![]))
@@ -143,16 +164,28 @@ fn test_list_assignment_collects_rows_without_leaking_scalar_bindings() {
 
 #[test]
 fn test_list_rows_cannot_collect_unassigned_outer_values() {
+    let mut arena = ValueArena::new();
     let global = Global::load(vec![]).unwrap();
     let mut ctx = Context::new(&global);
-    ctx.add_value(Variable::new(id("missing"), vec![]), value(true));
+    ctx.add_value(
+        Variable::new(id("missing"), vec![]),
+        value(&mut arena, true),
+    );
     let exp = iter(
         exp(ast::ExpKind::Tuple(vec![var_exp("x")])),
         ast::Iter::List,
         vec![var("missing", vec![])],
     );
-    let Backtrack::Err(traces) = assign_exp(&ctx, &exp, list(vec![tuple(vec![value(false)])]))
-    else {
+    let Backtrack::Err(traces) = ({
+        let value = {
+            let values = vec![{
+                let values = vec![value(&mut arena, false)];
+                tuple(&mut arena, values)
+            }];
+            list(&mut arena, values)
+        };
+        assign_exp(&mut arena, ctx, &exp, value)
+    }) else {
         panic!("expected missing row binding")
     };
     assert_eq!(traces[0].span, span(3));
@@ -160,6 +193,7 @@ fn test_list_rows_cannot_collect_unassigned_outer_values() {
 
 #[test]
 fn test_optional_assignment_retains_inner_bindings_and_collects_none() {
+    let mut arena = ValueArena::new();
     let global = Global::load(vec![]).unwrap();
     let exp = iter(
         exp(ast::ExpKind::Tuple(vec![var_exp("x")])),
@@ -167,112 +201,150 @@ fn test_optional_assignment_retains_inner_bindings_and_collects_none() {
         vec![var("x", vec![])],
     );
     let typ = typ::make::opt(typ::make::bool());
-    let ctx = ok(assign_exp(
-        &Context::new(&global),
-        &exp,
-        make::opt(&typ, Some(tuple(vec![value(true)])), span(8)),
-    ));
-    assert!(get::bool(&binding(&ctx, "x", vec![])).unwrap());
+    let ctx = ok({
+        let value = {
+            let value = Some({
+                let values = vec![value(&mut arena, true)];
+                tuple(&mut arena, values)
+            });
+            make::opt(&mut arena, typ.node.clone().into(), value, span(8))
+        }
+        .unwrap();
+        assign_exp(&mut arena, Context::new(&global), &exp, value)
+    });
+    assert!(get::bool(&arena, &binding(&ctx, "x", vec![])).unwrap());
     assert!(
         get::bool(
-            get::opt(&binding(&ctx, "x", vec![ast::Iter::Opt]))
+            &arena,
+            &get::opt(&arena, &binding(&ctx, "x", vec![ast::Iter::Opt]))
                 .unwrap()
                 .unwrap()
         )
         .unwrap()
     );
     assert_eq!(
-        binding(&ctx, "x", vec![ast::Iter::Opt]).span,
+        arena
+            .span(&binding(&ctx, "x", vec![ast::Iter::Opt]))
+            .clone(),
         Span::default()
     );
-    let ctx = ok(assign_exp(&ctx, &exp, make::opt(&typ, None, span(8))));
+    let ctx = ok({
+        let value = make::opt(&mut arena, typ.node.clone().into(), None, span(8)).unwrap();
+        assign_exp(&mut arena, ctx, &exp, value)
+    });
     assert_eq!(
-        binding(&ctx, "x", vec![ast::Iter::Opt]).span,
+        arena
+            .span(&binding(&ctx, "x", vec![ast::Iter::Opt]))
+            .clone(),
         Span::default()
     );
     assert!(
-        get::opt(&binding(&ctx, "x", vec![ast::Iter::Opt]))
+        get::opt(&arena, &binding(&ctx, "x", vec![ast::Iter::Opt]))
             .unwrap()
             .is_none()
     );
-    assert!(get::bool(&binding(&ctx, "x", vec![])).unwrap());
+    assert!(get::bool(&arena, &binding(&ctx, "x", vec![])).unwrap());
 }
 
 #[test]
 fn test_cons_tail_preserves_value_type_with_default_span() {
+    let mut arena = ValueArena::new();
     let global = Global::load(vec![]).unwrap();
     let exp = exp(ast::ExpKind::Cons(
         Box::new(var_exp("h")),
         Box::new(var_exp("t")),
     ));
-    let value = list(vec![value(true), value(false)]);
-    let ctx = ok(assign_exp(&Context::new(&global), &exp, Rc::clone(&value)));
+    let value = {
+        let values = vec![value(&mut arena, true), value(&mut arena, false)];
+        list(&mut arena, values)
+    };
+    let ctx = ok(assign_exp(&mut arena, Context::new(&global), &exp, value));
     let tail = binding(&ctx, "t", vec![]);
     assert_eq!(tail.note, value.note);
-    assert_eq!(tail.span, Span::default());
-    assert!(Rc::ptr_eq(
-        &binding(&ctx, "h", vec![]),
-        &get::list(&value).unwrap()[0]
-    ));
-    assert!(!get::bool(&get::list(&tail).unwrap()[0]).unwrap());
+    assert_eq!(arena.span(&tail).clone(), Span::default());
+    assert!((binding(&ctx, "h", vec![]) == get::list(&arena, &value).unwrap()[0]));
+    assert!(!get::bool(&arena, &get::list(&arena, &tail).unwrap()[0]).unwrap());
     assert!(matches!(
-        assign_exp(&ctx, &exp, list(vec![])),
+        {
+            let value = list(&mut arena, vec![]);
+            assign_exp(&mut arena, ctx, &exp, value)
+        },
         Backtrack::Err(_)
     ));
 }
 
 #[test]
 fn test_assignment_errors_are_fatal_and_located() {
+    let mut arena = ValueArena::new();
     let global = Global::load(vec![]).unwrap();
     let exps = vec![
         var_exp("x"),
         note_phrase!(node: ast::ExpKind::Var(id("y")), note: typ::make::bool().node, span: span(9)),
     ];
-    let Backtrack::Err(traces) = assign_exps(&Context::new(&global), &exps, &[]) else {
+    let Backtrack::Err(traces) = assign_exps(&mut arena, Context::new(&global), &exps, &[]) else {
         panic!("expected arity error")
     };
     assert_eq!(traces[0].span, Span::over(&[span(4), span(9)]));
     let exp = exp(ast::ExpKind::Opt(None));
-    let Backtrack::Err(traces) = assign_exp(
-        &Context::new(&global),
-        &exp,
-        make::opt(
-            &typ::make::opt(typ::make::bool()),
-            Some(value(true)),
-            span(8),
-        ),
-    ) else {
+    let Backtrack::Err(traces) = ({
+        let value = {
+            let value = Some(value(&mut arena, true));
+            make::opt(
+                &mut arena,
+                (typ::make::opt(typ::make::bool())).node.clone().into(),
+                value,
+                span(8),
+            )
+        }
+        .unwrap();
+        assign_exp(&mut arena, Context::new(&global), &exp, value)
+    }) else {
         panic!("expected optionality error")
     };
     assert_eq!(traces[0].span, exp.span);
 }
 
 #[test]
-fn test_function_argument_copies_caller_definition_without_caller_values() {
+fn test_function_argument_shares_caller_definition_without_caller_values() {
+    let mut arena = ValueArena::new();
     let global = Global::load(vec![]).unwrap();
-    let func = ast::MetaFuncDef::Extern(ast::ExternFunc {
+    let func = Rc::new(ast::MetaFuncDef::Extern(ast::ExternFunc {
         id: id("f"),
         tparams: vec![],
         params: vec![],
         typ: typ::make::bool(),
         hints: vec![],
-    });
+    }));
     let callee = {
         let global_caller = Global::load(vec![]).unwrap();
         let mut caller = Context::new(&global_caller);
         caller.add_func(id("f"), func.clone()).unwrap();
-        caller.add_value(Variable::new(id("secret"), vec![]), value(true));
+        caller.add_value(Variable::new(id("secret"), vec![]), value(&mut arena, true));
         let arg = phrase!(node: ast::ArgKind::Def(id("alias")), span: span(4));
-        let func_value = make::func(id("f"), vec![], vec![], typ::make::bool(), span(8));
+        let func_value = make::func(
+            &mut arena,
+            id("f"),
+            vec![],
+            vec![],
+            typ::make::bool(),
+            span(8),
+        )
+        .unwrap();
         let callee = ok(assign_args(
+            &mut arena,
             &caller,
-            &Context::new(&global),
+            Context::new(&global),
             &[arg],
             &[func_value],
+        ));
+        assert!(Rc::ptr_eq(
+            caller.find_func(&id("f")).unwrap().1,
+            callee.find_func(&id("alias")).unwrap().1,
         ));
         assert!(caller.find_func_opt(&id("alias")).is_none());
         callee
     };
+    assert!(Rc::ptr_eq(&func, callee.find_func(&id("alias")).unwrap().1));
     assert_eq!(
         callee.find_func(&id("alias")).unwrap(),
         (Scope::Local, &func)
@@ -286,6 +358,7 @@ fn test_function_argument_copies_caller_definition_without_caller_values() {
 
 #[test]
 fn test_case_and_struct_assignments_follow_argument_order() {
+    let mut arena = ValueArena::new();
     let global = Global::load(vec![]).unwrap();
     use p4spec_rust::lang::common::notation::{atom::Atom, mixfix::Mixfix};
     let atom = |name: &str| phrase!(node: Atom::keyword(name), span: span(3));
@@ -294,43 +367,60 @@ fn test_case_and_struct_assignments_follow_argument_order() {
         Mixfix::Arg(var_exp("x")),
         Mixfix::Arg(var_exp("y")),
     ]))));
-    let case_value = make::case_(
-        &typ::make::bool(),
-        Mixfix::Seq(vec![
+    let case_value = {
+        let value_case = Mixfix::Seq(vec![
             Mixfix::Atom(atom("RIGHT")),
-            Mixfix::Arg(value(true)),
-            Mixfix::Arg(value(false)),
-        ]),
-        span(8),
-    );
+            Mixfix::Arg(value(&mut arena, true)),
+            Mixfix::Arg(value(&mut arena, false)),
+        ]);
+        make::case(
+            &mut arena,
+            (typ::make::bool()).node.clone().into(),
+            value_case,
+            span(8),
+        )
+    }
+    .unwrap();
     let struct_exp = exp(ast::ExpKind::Str(vec![
         (atom("a"), var_exp("x")),
         (atom("b"), var_exp("y")),
     ]));
-    let struct_value = make::structure(
-        &typ::make::bool(),
-        vec![(atom("b"), value(true)), (atom("a"), value(false))],
-        span(8),
-    );
+    let struct_value = {
+        let fields = vec![
+            (atom("b"), value(&mut arena, true)),
+            (atom("a"), value(&mut arena, false)),
+        ];
+        make::structure(
+            &mut arena,
+            (typ::make::bool()).node.clone().into(),
+            fields,
+            span(8),
+        )
+    }
+    .unwrap();
     for (exp, value) in [(case_exp, case_value), (struct_exp, struct_value)] {
-        let ctx = ok(assign_exp(&Context::new(&global), &exp, value));
-        assert!(get::bool(&binding(&ctx, "x", vec![])).unwrap());
-        assert!(!get::bool(&binding(&ctx, "y", vec![])).unwrap());
+        let ctx = ok(assign_exp(&mut arena, Context::new(&global), &exp, value));
+        assert!(get::bool(&arena, &binding(&ctx, "x", vec![])).unwrap());
+        assert!(!get::bool(&arena, &binding(&ctx, "y", vec![])).unwrap());
     }
 }
 
 #[test]
 fn test_empty_iteration_creates_empty_collections_for_every_binding() {
+    let mut arena = ValueArena::new();
     let global = Global::load(vec![]).unwrap();
     let exp = iter(
         exp(ast::ExpKind::Tuple(vec![var_exp("x"), var_exp("y")])),
         ast::Iter::List,
         vec![var("x", vec![]), var("y", vec![])],
     );
-    let ctx = ok(assign_exp(&Context::new(&global), &exp, list(vec![])));
+    let ctx = ok({
+        let value = list(&mut arena, vec![]);
+        assign_exp(&mut arena, Context::new(&global), &exp, value)
+    });
     for name in ["x", "y"] {
         assert!(
-            get::list(&binding(&ctx, name, vec![ast::Iter::List]))
+            get::list(&arena, &binding(&ctx, name, vec![ast::Iter::List]))
                 .unwrap()
                 .is_empty()
         );

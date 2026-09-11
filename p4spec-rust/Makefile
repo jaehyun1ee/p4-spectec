@@ -61,5 +61,7 @@ test-algo-diff:
 test-run-al-diff:
 	$(CARGO) test --locked --release --test runtime interp::al::compare::test_run_al_corpus_matches_ocaml -- --ignored --exact --nocapture
 	$(CARGO) test --locked --release --test runtime interp::al::compare::test_run_al_det_corpus_matches_ocaml -- --ignored --exact --nocapture
+	$(CARGO) test --locked --release --test runtime interp::al::compare::test_run_al_cached_corpus_matches_ocaml -- --ignored --exact --nocapture
+	$(CARGO) test --locked --release --test runtime interp::al::compare::test_run_al_cached_det_corpus_matches_ocaml -- --ignored --exact --nocapture
 
 test-diff: test-frontend-diff test-elab-diff test-algo-diff test-run-al-diff

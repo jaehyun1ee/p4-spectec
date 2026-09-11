@@ -5,10 +5,10 @@
 //! to its mixfix shape. For example, a case carrying an infix `+` hint renders
 //! its two arguments as `left + right`.
 
-use std::{collections::HashMap, fmt::Write, rc::Rc};
+use std::{collections::HashMap, fmt::Write};
 
 use crate::{
-    lang::data::value::{Value, ValueKind},
+    lang::data::value::{Value, ValueArena, ValueCase, ValueKind},
     lang::{
         al,
         common::notation::{atom::Atom, mixfix::Mixfix, mixop::Mixop},
@@ -99,21 +99,21 @@ impl P4Unparser {
 
     // - Rendering
 
-    pub fn render(&self, value: &Value) -> Result<String, P4UnparseError> {
-        match &value.node {
+    pub fn render(&self, arena: &ValueArena, value: &Value) -> Result<String, P4UnparseError> {
+        match arena.kind(value) {
             ValueKind::Bool(value) => Ok(value.to_string()),
             ValueKind::Num(Number::Nat(value)) => Ok(value.to_string()),
             ValueKind::Num(Number::Int(value)) => Ok(value.to_string()),
             ValueKind::Text(value) => Ok(Self::escape_text(value)),
             ValueKind::Struct(_) => Err(P4UnparseError::UnsupportedValue("Struct")),
-            ValueKind::Case(value_case) => self.render_case(&value.note, value_case),
+            ValueKind::Case(value_case) => self.render_case(arena, arena.typ(value), value_case),
             ValueKind::Tuple(values) => {
-                let rendered = self.render_values(values, ", ")?;
+                let rendered = self.render_values(arena, values, ", ")?;
                 Ok(format!("({rendered})"))
             }
-            ValueKind::Opt(Some(value)) => self.render(value),
+            ValueKind::Opt(Some(value)) => self.render(arena, value),
             ValueKind::Opt(None) => Ok(String::new()),
-            ValueKind::List(values) => self.render_values(values, " "),
+            ValueKind::List(values) => self.render_values(arena, values, " "),
             ValueKind::Func(_) => Err(P4UnparseError::UnsupportedValue("Func")),
             ValueKind::Extern(_) => Err(P4UnparseError::UnsupportedValue("Extern")),
         }
@@ -121,26 +121,28 @@ impl P4Unparser {
 
     fn render_case(
         &self,
+        arena: &ValueArena,
         typ: &TypKind,
-        value_case: &Mixfix<Rc<Value>>,
+        value_case: &ValueCase,
     ) -> Result<String, P4UnparseError> {
         let (mixop, values) = value_case.split();
         if let TypKind::Var(type_id, _) = typ
             && let Some(hint) = self.hints.get(&(type_id.node.clone(), mixop))
         {
-            return self.render_hint(hint, &values);
+            return self.render_hint(arena, hint, &values);
         }
         let mut rendered = Vec::new();
-        self.render_mixfix(value_case, &mut rendered)?;
+        self.render_mixfix(arena, value_case, &mut rendered)?;
         Ok(rendered.join(" "))
     }
 
     fn render_hint(
         &self,
+        arena: &ValueArena,
         hint: &AlterationHint,
-        values: &[&Rc<Value>],
+        values: &[&Value],
     ) -> Result<String, P4UnparseError> {
-        let rendered = alter::alternate(hint, values, &ValueRenderer(self));
+        let rendered = alter::alternate(hint, values, &ValueRenderer(self, arena));
         match rendered {
             Ok(rendered) => rendered,
             Err(error) => Err(error.into()),
@@ -149,12 +151,13 @@ impl P4Unparser {
 
     fn render_values(
         &self,
-        values: &[Rc<Value>],
+        arena: &ValueArena,
+        values: &[Value],
         separator: &str,
     ) -> Result<String, P4UnparseError> {
         let rendered = values
             .iter()
-            .map(|value| self.render(value))
+            .map(|value| self.render(arena, value))
             .collect::<Result<Vec<_>, _>>()?;
         Ok(rendered.join(separator))
     }
@@ -175,69 +178,8 @@ impl P4Unparser {
         })
     }
 
-    fn render_mixfix(
-        &self,
-        mixfix: &Mixfix<Rc<Value>>,
-        rendered: &mut Vec<String>,
-    ) -> Result<(), P4UnparseError> {
-        let renderer = ValueRenderer(self);
-        match mixfix {
-            Mixfix::Arg(value) => {
-                let value = self.render(value)?;
-                rendered.push(value);
-            }
-            Mixfix::Atom(atom) => {
-                let rendered_atom = renderer.atom(atom)?;
-                if !rendered_atom.is_empty() {
-                    rendered.push(rendered_atom);
-                }
-            }
-            Mixfix::Brack(atom_l, mixfix, atom_r) => {
-                let rendered_atom_l = renderer.atom(atom_l)?;
-                if !rendered_atom_l.is_empty() {
-                    rendered.push(rendered_atom_l);
-                }
-                self.render_mixfix(mixfix, rendered)?;
-                let rendered_atom_r = renderer.atom(atom_r)?;
-                if !rendered_atom_r.is_empty() {
-                    rendered.push(rendered_atom_r);
-                }
-            }
-            Mixfix::Infix(mixfix_l, atom, mixfix_r) => {
-                self.render_mixfix(mixfix_l, rendered)?;
-                let rendered_atom = renderer.atom(atom)?;
-                if !rendered_atom.is_empty() {
-                    rendered.push(rendered_atom);
-                }
-                self.render_mixfix(mixfix_r, rendered)?;
-            }
-            Mixfix::Seq(mixfixes) => {
-                for mixfix in mixfixes {
-                    self.render_mixfix(mixfix, rendered)?;
-                }
-            }
-        }
-        Ok(())
-    }
-}
-
-// == Print-hint rendering
-
-struct ValueRenderer<'a>(&'a P4Unparser);
-
-impl Renderer<&Rc<Value>> for ValueRenderer<'_> {
-    type Output = Result<String, P4UnparseError>;
-
-    fn empty(&self) -> Self::Output {
-        Ok(String::new())
-    }
-
-    fn text(&self, text: &str) -> Option<Self::Output> {
-        (!text.is_empty()).then(|| Ok(text.to_owned()))
-    }
-
-    fn atom(&self, atom: &crate::lang::el::ast::Atom) -> Self::Output {
-        Ok(match &atom.node {
+    fn render_atom(atom: &Atom) -> String {
+        match atom {
             Atom::Tag(_) => String::new(),
             Atom::Operator(operator) => operator.to_ascii_lowercase(),
             Atom::LAngle => "<".to_owned(),
@@ -249,7 +191,72 @@ impl Renderer<&Rc<Value>> for ValueRenderer<'_> {
             Atom::LBrace => "{".to_owned(),
             Atom::RBrace => "}".to_owned(),
             atom => Print::to_string(atom).to_ascii_lowercase(),
-        })
+        }
+    }
+
+    fn render_mixfix(
+        &self,
+        arena: &ValueArena,
+        mixfix: &ValueCase,
+        rendered: &mut Vec<String>,
+    ) -> Result<(), P4UnparseError> {
+        match mixfix {
+            Mixfix::Arg(value) => {
+                let value = self.render(arena, value)?;
+                rendered.push(value);
+            }
+            Mixfix::Atom(atom) => {
+                let rendered_atom = Self::render_atom(&atom.node);
+                if !rendered_atom.is_empty() {
+                    rendered.push(rendered_atom);
+                }
+            }
+            Mixfix::Brack(atom_l, mixfix, atom_r) => {
+                let rendered_atom_l = Self::render_atom(&atom_l.node);
+                if !rendered_atom_l.is_empty() {
+                    rendered.push(rendered_atom_l);
+                }
+                self.render_mixfix(arena, mixfix, rendered)?;
+                let rendered_atom_r = Self::render_atom(&atom_r.node);
+                if !rendered_atom_r.is_empty() {
+                    rendered.push(rendered_atom_r);
+                }
+            }
+            Mixfix::Infix(mixfix_l, atom, mixfix_r) => {
+                self.render_mixfix(arena, mixfix_l, rendered)?;
+                let rendered_atom = Self::render_atom(&atom.node);
+                if !rendered_atom.is_empty() {
+                    rendered.push(rendered_atom);
+                }
+                self.render_mixfix(arena, mixfix_r, rendered)?;
+            }
+            Mixfix::Seq(mixfixes) => {
+                for mixfix in mixfixes {
+                    self.render_mixfix(arena, mixfix, rendered)?;
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+// == Print-hint rendering
+
+struct ValueRenderer<'a>(&'a P4Unparser, &'a ValueArena);
+
+impl Renderer<&Value> for ValueRenderer<'_> {
+    type Output = Result<String, P4UnparseError>;
+
+    fn empty(&self) -> Self::Output {
+        Ok(String::new())
+    }
+
+    fn text(&self, text: &str) -> Option<Self::Output> {
+        (!text.is_empty()).then(|| Ok(text.to_owned()))
+    }
+
+    fn atom(&self, atom: &crate::lang::el::ast::Atom) -> Self::Output {
+        Ok(P4Unparser::render_atom(&atom.node))
     }
 
     fn join(&self, items: Vec<Self::Output>) -> Self::Output {
@@ -271,7 +278,7 @@ impl Renderer<&Rc<Value>> for ValueRenderer<'_> {
         Ok(Print::to_string(exp))
     }
 
-    fn item(&self, item: &&Rc<Value>) -> Self::Output {
-        self.0.render(item)
+    fn item(&self, item: &&Value) -> Self::Output {
+        self.0.render(self.1, item)
     }
 }

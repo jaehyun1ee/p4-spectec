@@ -51,7 +51,7 @@ impl<T> Backtrack<T> {
 
 // = Propagation
 
-macro_rules! back {
+macro_rules! backtrack {
     ($result:expr) => {
         match $result {
             $crate::interp::al::backtrack::Backtrack::Ok(value) => value,
@@ -67,7 +67,16 @@ macro_rules! back {
         }
     };
 }
-pub(super) use back;
+pub(super) use backtrack;
+
+macro_rules! backtrack_from_result {
+    ($result:expr, $span:expr $(,)?) => {
+        $crate::interp::al::backtrack::backtrack!(
+            $crate::interp::al::backtrack::Backtrack::from_result($result, $span)
+        )
+    };
+}
+pub(super) use backtrack_from_result;
 
 // Guard checks escape directly instead of acquiring backtracking traces
 fn is_guard(errors: &[Error]) -> bool {

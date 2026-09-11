@@ -122,7 +122,7 @@ fn analyze_exps_as_bind(
         &venv.domain(),
         &mut renv_partial,
         &mut iter_ctx_exp,
-        &exps_al,
+        exps_al,
     )?;
     update_venv_partial(&mut venv, &renv_partial);
     let mut prems_al = partial::gen_prems(ctx, iter_ctx, &renv_partial)?;
@@ -171,7 +171,7 @@ fn analyze_args_as_bind(
         &venv.domain(),
         &mut renv_partial,
         &mut iter_ctx_arg,
-        &args_al,
+        args_al,
     )?;
     update_venv_partial(&mut venv, &renv_partial);
     let mut prems_al = partial::gen_prems(ctx, &ICtx::new(), &renv_partial)?;
@@ -215,7 +215,7 @@ fn analyze_args_as_bind_shallow(
         &venv.domain(),
         &mut renv_partial,
         &mut iter_ctx_arg,
-        &args_al,
+        args_al,
     )?;
     update_venv_partial(&mut venv, &renv_partial);
     let prems_al = partial::gen_prems(ctx, &ICtx::new(), &renv_partial)?;
@@ -451,7 +451,7 @@ fn analyze_let_prem(
         &venv.domain(),
         &mut renv_partial,
         &mut iter_ctx_exp,
-        &exp_l_al,
+        exp_l_al,
     )?;
     update_venv_partial(&mut venv, &renv_partial);
     let mut prems_al = partial::gen_prems(ctx, &iter_ctx, &renv_partial)?;

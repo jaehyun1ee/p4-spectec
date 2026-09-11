@@ -148,7 +148,7 @@ fn test_partial_binding_preserves_expression_and_premise_iteration_dimensions() 
         &ids_bind,
         &mut renames,
         &mut iter_ctx,
-        &iterated,
+        iterated,
     )
     .expect("partial binding rename");
     let premises =
@@ -241,7 +241,7 @@ fn test_partial_binding_preserves_nested_iteration_order_and_dimensions() {
         &ids_bind,
         &mut renames,
         &mut iter_ctx,
-        &iterated,
+        iterated,
     )
     .expect("nested partial binding rename");
     let premises = partial::gen_prems(&context, &ICtx::new(), &renames)
@@ -323,7 +323,7 @@ fn test_partial_case_and_list_bindings_generate_match_then_bind_premises_in_sour
     let mut renames = partial::RenameEnv::new();
     let mut iter_ctx = ICtx::new();
 
-    let renamed = partial::rename_exp(&mut context, &ids_bind, &mut renames, &mut iter_ctx, &tuple)
+    let renamed = partial::rename_exp(&mut context, &ids_bind, &mut renames, &mut iter_ctx, tuple)
         .expect("partial binding rename");
     let premises =
         partial::gen_prems(&context, &ICtx::new(), &renames).expect("partial binding premises");
@@ -417,14 +417,8 @@ fn test_partial_upcast_binding_checks_subtype_before_binding_the_downcast_value(
     let mut renames = partial::RenameEnv::new();
     let mut iter_ctx = ICtx::new();
 
-    partial::rename_exp(
-        &mut context,
-        &ids_bind,
-        &mut renames,
-        &mut iter_ctx,
-        &upcast,
-    )
-    .expect("partial binding rename");
+    partial::rename_exp(&mut context, &ids_bind, &mut renames, &mut iter_ctx, upcast)
+        .expect("partial binding rename");
     let premises =
         partial::gen_prems(&context, &ICtx::new(), &renames).expect("partial binding premises");
 

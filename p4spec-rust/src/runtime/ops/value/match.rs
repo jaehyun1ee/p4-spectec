@@ -1,14 +1,12 @@
 //! Runtime type membership for executable values
 
-use std::rc::Rc;
-
 use num_traits::Signed;
 use thiserror::Error;
 
 use crate::{
     lang::{
         common::source::Span,
-        data::value::{Value, ValueKind},
+        data::value::{Value, ValueArena, ValueKind},
         il::ast::{DefTypKind, FuncTyp, Iter, Subcheck, Typ, TypKind},
         xl::num::{Number, Typ as NumTyp},
     },
@@ -45,19 +43,25 @@ pub enum MatchError {
 
 // == Type membership
 
-pub fn sub<F>(tdenv: &TDEnv, find_func: &F, typ: &Typ, value: &Value) -> Result<bool, MatchError>
+pub fn sub<F>(
+    arena: &ValueArena,
+    tdenv: &TDEnv,
+    find_func: &F,
+    typ: &Typ,
+    value: &Value,
+) -> Result<bool, MatchError>
 where
     F: Fn(&str) -> Option<FuncTyp>,
 {
     match &typ.node {
-        TypKind::Bool => Ok(matches!(value.node, ValueKind::Bool(_))),
-        TypKind::Num(NumTyp::Nat) => Ok(match &value.node {
+        TypKind::Bool => Ok(matches!(arena.kind(value), ValueKind::Bool(_))),
+        TypKind::Num(NumTyp::Nat) => Ok(match arena.kind(value) {
             ValueKind::Num(Number::Nat(_)) => true,
             ValueKind::Num(Number::Int(integer)) => !integer.is_negative(),
             _ => false,
         }),
-        TypKind::Num(NumTyp::Int) => Ok(matches!(value.node, ValueKind::Num(_))),
-        TypKind::Text => Ok(matches!(value.node, ValueKind::Text(_))),
+        TypKind::Num(NumTyp::Int) => Ok(matches!(arena.kind(value), ValueKind::Num(_))),
+        TypKind::Text => Ok(matches!(arena.kind(value), ValueKind::Text(_))),
         TypKind::Var(id, targs) => {
             let type_def = tdenv.get(id).ok_or_else(|| MatchError::UndefinedType {
                 name: id.node.clone(),
@@ -69,7 +73,7 @@ where
                         span: typ.span.clone(),
                     })
                 }
-                TypeDef::Extern => Ok(matches!(value.node, ValueKind::Extern(_))),
+                TypeDef::Extern => Ok(matches!(arena.kind(value), ValueKind::Extern(_))),
                 TypeDef::Defined(tparams, def_typ) => {
                     let theta = Theta::from_lists(tparams, targs);
                     let theta = theta.map_err(|mismatch| MatchError::TypeArgumentMismatch {
@@ -77,10 +81,10 @@ where
                         actual: mismatch.actual,
                         span: typ.span.clone(),
                     })?;
-                    match (&def_typ.node, &value.node) {
+                    match (&def_typ.node, arena.kind(value)) {
                         (DefTypKind::Plain(typ), _) => {
                             let typ = subst_typ(&theta, typ)?;
-                            sub(tdenv, find_func, &typ, value)
+                            sub(arena, tdenv, find_func, &typ, value)
                         }
                         (DefTypKind::Struct(typ_fields), ValueKind::Struct(value_fields)) => {
                             if typ_fields.len() != value_fields.len() {
@@ -93,7 +97,7 @@ where
                                     return Ok(false);
                                 }
                                 let typ = subst_typ(&theta, typ)?;
-                                if !sub(tdenv, find_func, &typ, value)? {
+                                if !sub(arena, tdenv, find_func, &typ, value)? {
                                     return Ok(false);
                                 }
                             }
@@ -101,17 +105,18 @@ where
                         }
                         (DefTypKind::Variant(typ_cases), ValueKind::Case(value_case)) => {
                             for (not_typ, _, _) in typ_cases {
-                                if not_typ.node.to_mixop() != value_case.to_mixop() {
+                                if !not_typ.node.eq_shape(value_case) {
                                     continue;
                                 }
                                 let not_typ = subst_not_typ(&theta, not_typ)?;
                                 let typs = not_typ.node.args();
                                 let values = value_case.args();
                                 if subs_inner(
+                                    arena,
                                     tdenv,
                                     find_func,
                                     typs.into_iter(),
-                                    values.into_iter().map(AsRef::as_ref),
+                                    values.into_iter(),
                                 )? {
                                     return Ok(true);
                                 }
@@ -123,26 +128,23 @@ where
                 }
             }
         }
-        TypKind::Tuple(typs) => match &value.node {
-            ValueKind::Tuple(values) => subs_inner(
-                tdenv,
-                find_func,
-                typs.iter(),
-                values.iter().map(AsRef::as_ref),
-            ),
+        TypKind::Tuple(typs) => match arena.kind(value) {
+            ValueKind::Tuple(values) => {
+                subs_inner(arena, tdenv, find_func, typs.iter(), values.iter())
+            }
             _ => Ok(false),
         },
         TypKind::Iter(typ_inner, Iter::Opt) => {
-            if let ValueKind::Opt(Some(value)) = &value.node {
-                sub(tdenv, find_func, typ_inner, value)
+            if let ValueKind::Opt(Some(value)) = arena.kind(value) {
+                sub(arena, tdenv, find_func, typ_inner, value)
             } else {
                 Ok(true)
             }
         }
-        TypKind::Iter(typ_inner, Iter::List) => match &value.node {
+        TypKind::Iter(typ_inner, Iter::List) => match arena.kind(value) {
             ValueKind::List(values) => {
                 for value in values {
-                    if !sub(tdenv, find_func, typ_inner, value)? {
+                    if !sub(arena, tdenv, find_func, typ_inner, value)? {
                         return Ok(false);
                     }
                 }
@@ -150,7 +152,7 @@ where
             }
             _ => Ok(false),
         },
-        TypKind::Func(func_typ) => match &value.node {
+        TypKind::Func(func_typ) => match arena.kind(value) {
             ValueKind::Func(id) => {
                 let func_typ_actual =
                     find_func(&id.node).ok_or_else(|| MatchError::UndefinedFunction {
@@ -166,23 +168,20 @@ where
 }
 
 pub fn subs<F>(
+    arena: &ValueArena,
     tdenv: &TDEnv,
     find_func: &F,
     typs: &[Typ],
-    values: &[Rc<Value>],
+    values: &[Value],
 ) -> Result<bool, MatchError>
 where
     F: Fn(&str) -> Option<FuncTyp>,
 {
-    subs_inner(
-        tdenv,
-        find_func,
-        typs.iter(),
-        values.iter().map(AsRef::as_ref),
-    )
+    subs_inner(arena, tdenv, find_func, typs.iter(), values.iter())
 }
 
 fn subs_inner<'typ, 'value, F, T, V>(
+    arena: &ValueArena,
     tdenv: &TDEnv,
     find_func: &F,
     typs: T,
@@ -197,7 +196,7 @@ where
         return Ok(false);
     }
     for (typ, value) in typs.zip(values) {
-        if !sub(tdenv, find_func, typ, value)? {
+        if !sub(arena, tdenv, find_func, typ, value)? {
             return Ok(false);
         }
     }
@@ -207,6 +206,7 @@ where
 // == Subtype-check execution
 
 pub fn check<F>(
+    arena: &ValueArena,
     tdenv: &TDEnv,
     find_func: &F,
     subcheck: &Subcheck,
@@ -215,17 +215,17 @@ pub fn check<F>(
 where
     F: Fn(&str) -> Option<FuncTyp>,
 {
-    match (subcheck, &value.node) {
+    match (subcheck, arena.kind(value)) {
         (Subcheck::Skip, _) => Ok(true),
         (Subcheck::Mixop(mixops), ValueKind::Case(value_case)) => {
-            Ok(mixops.iter().any(|mixop| mixop == &value_case.to_mixop()))
+            Ok(mixops.iter().any(|mixop| mixop.eq_shape(value_case)))
         }
         (Subcheck::Tuple(subchecks), ValueKind::Tuple(values)) => {
             if subchecks.len() != values.len() {
                 return Ok(false);
             }
             for (subcheck, value) in subchecks.iter().zip(values) {
-                if !check(tdenv, find_func, subcheck, value)? {
+                if !check(arena, tdenv, find_func, subcheck, value)? {
                     return Ok(false);
                 }
             }
@@ -233,17 +233,17 @@ where
         }
         (Subcheck::Iter(Iter::Opt, _), ValueKind::Opt(None)) => Ok(true),
         (Subcheck::Iter(Iter::Opt, subcheck), ValueKind::Opt(Some(value))) => {
-            check(tdenv, find_func, subcheck, value)
+            check(arena, tdenv, find_func, subcheck, value)
         }
         (Subcheck::Iter(Iter::List, subcheck), ValueKind::List(values)) => {
             for value in values {
-                if !check(tdenv, find_func, subcheck, value)? {
+                if !check(arena, tdenv, find_func, subcheck, value)? {
                     return Ok(false);
                 }
             }
             Ok(true)
         }
-        (Subcheck::Recurse(typ), _) => sub(tdenv, find_func, typ, value),
+        (Subcheck::Recurse(typ), _) => sub(arena, tdenv, find_func, typ, value),
         _ => Ok(false),
     }
 }

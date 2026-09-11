@@ -1,7 +1,5 @@
 //! AL path access and update evaluation
 
-use std::rc::Rc;
-
 use crate::{
     lang::{
         al::ast,
@@ -13,7 +11,7 @@ use crate::{
 
 use super::super::{
     Al,
-    backtrack::{Backtrack, back},
+    backtrack::{Backtrack, backtrack, backtrack_from_result},
     context::Context,
 };
 use super::{expr::eval_exp, ops};
@@ -23,11 +21,11 @@ use super::{expr::eval_exp, ops};
 fn eval_access_path<I: Interface, E: Extern>(
     runner: &mut RunnerContext<'_, Al, I, E>,
     ctx: &Context<'_>,
-    value_base: &Rc<Value>,
+    value_base: &Value,
     path: &ast::Path,
-) -> Backtrack<Rc<Value>> {
+) -> Backtrack<Value> {
     match &path.node {
-        ast::PathKind::Root => Backtrack::Ok(value_base.clone()),
+        ast::PathKind::Root => Backtrack::Ok(*value_base),
         ast::PathKind::Idx(path, exp_idx) => {
             eval_access_idx_path(runner, ctx, value_base, path, exp_idx)
         }
@@ -43,13 +41,19 @@ fn eval_access_path<I: Interface, E: Extern>(
 fn eval_access_idx_path<I: Interface, E: Extern>(
     runner: &mut RunnerContext<'_, Al, I, E>,
     ctx: &Context<'_>,
-    value_base: &Rc<Value>,
+    value_base: &Value,
     path: &ast::Path,
     exp_idx: &ast::Exp,
-) -> Backtrack<Rc<Value>> {
-    let value = back!(eval_access_path(runner, ctx, value_base, path));
-    let value_idx = back!(eval_exp(runner, ctx, exp_idx));
-    ops::access_index(&value, &value_idx, &path.span, &exp_idx.span)
+) -> Backtrack<Value> {
+    let value = backtrack!(eval_access_path(runner, ctx, value_base, path));
+    let value_idx = backtrack!(eval_exp(runner, ctx, exp_idx));
+    ops::access_index(
+        runner.arena_mut(),
+        &value,
+        &value_idx,
+        &path.span,
+        &exp_idx.span,
+    )
 }
 
 // - Slice access path
@@ -57,20 +61,22 @@ fn eval_access_idx_path<I: Interface, E: Extern>(
 fn eval_access_slice_path<I: Interface, E: Extern>(
     runner: &mut RunnerContext<'_, Al, I, E>,
     ctx: &Context<'_>,
-    value_base: &Rc<Value>,
+    value_base: &Value,
     path: &ast::Path,
     exp_idx: &ast::Exp,
     exp_len: &ast::Exp,
-) -> Backtrack<Rc<Value>> {
-    let typ = crate::phrase!(node: path.note.as_ref().clone(), span: path.span.clone());
-    let value = back!(eval_access_path(runner, ctx, value_base, path));
-    let value_idx = back!(eval_exp(runner, ctx, exp_idx));
-    let value_len = back!(eval_exp(runner, ctx, exp_len));
+) -> Backtrack<Value> {
+    let typ = &path.note;
+    let value = backtrack!(eval_access_path(runner, ctx, value_base, path));
+    let value_idx = backtrack!(eval_exp(runner, ctx, exp_idx));
+    let value_len = backtrack!(eval_exp(runner, ctx, exp_len));
     ops::access_slice(
+        runner.arena_mut(),
         &value,
         &value_idx,
         &value_len,
-        &typ,
+        typ,
+        &path.span,
         &path.span,
         &exp_idx.span,
         &exp_len.span,
@@ -83,12 +89,12 @@ fn eval_access_slice_path<I: Interface, E: Extern>(
 fn eval_access_dot_path<I: Interface, E: Extern>(
     runner: &mut RunnerContext<'_, Al, I, E>,
     ctx: &Context<'_>,
-    value_base: &Rc<Value>,
+    value_base: &Value,
     path: &ast::Path,
     atom: &ast::Atom,
-) -> Backtrack<Rc<Value>> {
-    let value = back!(eval_access_path(runner, ctx, value_base, path));
-    ops::access_dot(&value, atom, &path.span)
+) -> Backtrack<Value> {
+    let value = backtrack!(eval_access_path(runner, ctx, value_base, path));
+    ops::access_dot(runner.arena(), &value, atom, &path.span)
 }
 
 // - Update
@@ -96,10 +102,10 @@ fn eval_access_dot_path<I: Interface, E: Extern>(
 pub(super) fn eval_update_path<I: Interface, E: Extern>(
     runner: &mut RunnerContext<'_, Al, I, E>,
     ctx: &Context<'_>,
-    value_base: &Rc<Value>,
+    value_base: &Value,
     path: &ast::Path,
-    value_upd: Rc<Value>,
-) -> Backtrack<Rc<Value>> {
+    value_upd: Value,
+) -> Backtrack<Value> {
     match &path.node {
         ast::PathKind::Root => Backtrack::Ok(value_upd),
         ast::PathKind::Idx(path, exp_idx) => {
@@ -119,15 +125,16 @@ pub(super) fn eval_update_path<I: Interface, E: Extern>(
 fn eval_update_idx_path<I: Interface, E: Extern>(
     runner: &mut RunnerContext<'_, Al, I, E>,
     ctx: &Context<'_>,
-    value_base: &Rc<Value>,
+    value_base: &Value,
     path: &ast::Path,
     exp_idx: &ast::Exp,
-    value_upd: Rc<Value>,
-) -> Backtrack<Rc<Value>> {
-    let typ = crate::phrase!(node: path.note.as_ref().clone(), span: path.span.clone());
-    let value = back!(eval_access_path(runner, ctx, value_base, path));
-    let value_idx = back!(eval_exp(runner, ctx, exp_idx));
-    let value = back!(ops::update_index(
+    value_upd: Value,
+) -> Backtrack<Value> {
+    let typ = crate::phrase!(node: path.note.clone(), span: path.span.clone());
+    let value = backtrack!(eval_access_path(runner, ctx, value_base, path));
+    let value_idx = backtrack!(eval_exp(runner, ctx, exp_idx));
+    let value = backtrack!(ops::update_index(
+        runner.arena_mut(),
         &value,
         &value_idx,
         value_upd,
@@ -143,17 +150,18 @@ fn eval_update_idx_path<I: Interface, E: Extern>(
 fn eval_update_slice_path<I: Interface, E: Extern>(
     runner: &mut RunnerContext<'_, Al, I, E>,
     ctx: &Context<'_>,
-    value_base: &Rc<Value>,
+    value_base: &Value,
     path: &ast::Path,
     exp_idx: &ast::Exp,
     exp_len: &ast::Exp,
-    value_upd: Rc<Value>,
-) -> Backtrack<Rc<Value>> {
-    let typ = crate::phrase!(node: path.note.as_ref().clone(), span: path.span.clone());
-    let value = back!(eval_access_path(runner, ctx, value_base, path));
-    let value_idx = back!(eval_exp(runner, ctx, exp_idx));
-    let value_len = back!(eval_exp(runner, ctx, exp_len));
-    let value = back!(ops::update_slice(
+    value_upd: Value,
+) -> Backtrack<Value> {
+    let typ = crate::phrase!(node: path.note.clone(), span: path.span.clone());
+    let value = backtrack!(eval_access_path(runner, ctx, value_base, path));
+    let value_idx = backtrack!(eval_exp(runner, ctx, exp_idx));
+    let value_len = backtrack!(eval_exp(runner, ctx, exp_len));
+    let value = backtrack!(ops::update_slice(
+        runner.arena_mut(),
         &value,
         &value_idx,
         &value_len,
@@ -171,27 +179,35 @@ fn eval_update_slice_path<I: Interface, E: Extern>(
 fn eval_update_dot_path<I: Interface, E: Extern>(
     runner: &mut RunnerContext<'_, Al, I, E>,
     ctx: &Context<'_>,
-    value_base: &Rc<Value>,
+    value_base: &Value,
     path: &ast::Path,
     atom: &ast::Atom,
-    value_upd: Rc<Value>,
-) -> Backtrack<Rc<Value>> {
-    let typ = crate::phrase!(node: path.note.as_ref().clone(), span: path.span.clone());
-    let value = back!(eval_access_path(runner, ctx, value_base, path));
-    let value_fields = back!(Backtrack::from_result(get::structure(&value), &path.span));
+    value_upd: Value,
+) -> Backtrack<Value> {
+    let typ = crate::phrase!(node: path.note.clone(), span: path.span.clone());
+    let value = backtrack!(eval_access_path(runner, ctx, value_base, path));
+    let value_fields = backtrack_from_result!(get::structure(runner.arena(), &value), &path.span);
     let value_fields = value_fields
         .iter()
         .map(|(field, value)| {
             (
                 field.clone(),
                 if field.node == atom.node {
-                    value_upd.clone()
+                    value_upd
                 } else {
-                    value.clone()
+                    *value
                 },
             )
         })
         .collect();
-    let value = make::structure(&typ, value_fields, Span::default());
+    let value = backtrack_from_result!(
+        make::structure(
+            runner.arena_mut(),
+            typ.node.clone(),
+            value_fields,
+            Span::default()
+        ),
+        &Span::default()
+    );
     eval_update_path(runner, ctx, value_base, path, value)
 }

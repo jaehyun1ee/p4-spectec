@@ -1,13 +1,10 @@
 //! Stateful fresh-type-id builtin.
 
-use std::{
-    rc::Rc,
-    sync::atomic::{AtomicU64, Ordering},
-};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::{
     lang::common::source::Span,
-    lang::data::value::{Value, make},
+    lang::data::value::{Value, ValueArena, make},
     lang::il::ast::Typ,
 };
 
@@ -21,11 +18,15 @@ pub fn init() {
 
 // dec $fresh_typeId() : typeId
 
-pub fn fresh_type_id(targs: &[Typ], values: &[Rc<Value>]) -> Result<Rc<Value>, BuiltinError> {
+pub fn fresh_type_id(
+    arena: &mut ValueArena,
+    targs: &[Typ],
+    values: &[Value],
+) -> Result<Value, BuiltinError> {
     extract::zero(targs)?;
     extract::zero(values)?;
     let counter = COUNTER.fetch_add(1, Ordering::Relaxed);
     let type_id = format!("FRESH__{counter}");
-    let value = make::text(type_id, Span::default());
+    let value = make::text(arena, type_id, Span::default())?;
     Ok(value)
 }

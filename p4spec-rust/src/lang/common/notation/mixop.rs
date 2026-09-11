@@ -1,4 +1,6 @@
-use std::{error::Error, fmt};
+use std::{cell::RefCell, collections::HashMap, error::Error, fmt, rc::Rc};
+
+use crate::frontend;
 
 use crate::lang::{
     common::ds::set::IdSet,
@@ -32,6 +34,28 @@ impl Free for () {
     fn free(&self) -> IdSet {
         IdSet::new()
     }
+}
+
+// = Shape parsing
+
+thread_local! {
+    static SHAPE_CACHE: RefCell<HashMap<Rc<str>, Rc<Mixop>>> = RefCell::new(HashMap::new());
+}
+
+pub(crate) fn shape(shape_text: &str) -> Rc<Mixop> {
+    SHAPE_CACHE.with(|cache| {
+        if let Some(mixop) = cache.borrow().get(shape_text).cloned() {
+            return mixop;
+        }
+
+        let mixop = frontend::parse::parse_mixop(shape_text)
+            .expect("value constructor contains a valid SpecTec mixop");
+        let mixop = Rc::new(mixop);
+        cache
+            .borrow_mut()
+            .insert(Rc::from(shape_text), Rc::clone(&mixop));
+        mixop
+    })
 }
 
 // == Converting a mixfix to a mixop

@@ -30,10 +30,20 @@ impl fmt::Display for Position {
 }
 
 /// A source span between two positions
-#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Span {
     pub left: Position,
     pub right: Position,
+}
+
+impl Default for Span {
+    fn default() -> Self {
+        thread_local! {
+            // Reuse the empty file names in generated source annotations
+            static SPAN_EMPTY: Span = Span::new(Position::default(), Position::default());
+        }
+        SPAN_EMPTY.with(Clone::clone)
+    }
 }
 
 impl Span {
@@ -74,23 +84,26 @@ impl fmt::Display for Span {
 }
 
 /// A syntax node paired with semantic and source annotations
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct NotePhrase<T, N = ()> {
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct NotePhrase<T, N = (), S = Span> {
     pub node: T,
     pub note: N,
-    pub span: Span,
+    pub span: S,
 }
 
 /// A syntax node paired with its source span
 pub type Phrase<T> = NotePhrase<T>;
 
-impl<T: fmt::Display, N> fmt::Display for NotePhrase<T, N> {
+impl<T: fmt::Display, N, S: fmt::Display> fmt::Display for NotePhrase<T, N, S> {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(fmt, "{} at {}", self.node, self.span)
     }
 }
 
-impl<T: std::error::Error, N: fmt::Debug> std::error::Error for NotePhrase<T, N> {}
+impl<T: std::error::Error, N: fmt::Debug, S: fmt::Debug + fmt::Display> std::error::Error
+    for NotePhrase<T, N, S>
+{
+}
 
 /// Builds a syntax node with an explicit source span
 #[macro_export]

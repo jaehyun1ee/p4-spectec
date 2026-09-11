@@ -11,18 +11,18 @@ use crate::lang::data::value::Value;
 
 // == Value cache
 
-pub type ValueCache<V> = HashMap<Rc<Value>, V>;
+pub type ValueCache<V> = HashMap<Value, V>;
 
 // == Call cache
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct CallKey {
     pub id: Rc<str>,
-    pub values: Rc<[Rc<Value>]>,
+    pub values: Rc<[Value]>,
 }
 
 impl CallKey {
-    pub fn new(id: impl Into<Rc<str>>, values: impl Into<Rc<[Rc<Value>]>>) -> Self {
+    pub fn new(id: impl Into<Rc<str>>, values: impl Into<Rc<[Value]>>) -> Self {
         Self {
             id: id.into(),
             values: values.into(),

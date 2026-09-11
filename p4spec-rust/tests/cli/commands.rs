@@ -289,6 +289,7 @@ fn test_run_al_det_and_guard_controls_change_execution() {
         );
         let output = run_command(relation, "cli/run/empty.p4")
             .arg(flag)
+            .arg("--no-cache")
             .output()
             .unwrap();
         assert_eq!(output.status.code(), Some(1));
@@ -320,15 +321,7 @@ fn test_run_al_requires_flags_and_rejects_unsupported_options() {
         assert_eq!(output.status.code(), Some(2));
         assert!(String::from_utf8_lossy(&output.stderr).contains("Usage:"));
     }
-    for flag in [
-        "--no-cache",
-        "--trace",
-        "--profile",
-        "--unknown",
-        "-i",
-        "--rel",
-        "-p",
-    ] {
+    for flag in ["--trace", "--profile", "--unknown", "-i", "--rel", "-p"] {
         let output = run_command("Pass", "cli/run/empty.p4")
             .arg(flag)
             .output()
@@ -357,10 +350,28 @@ fn test_run_help_lists_only_implemented_controls() {
     assert!(output.status.success());
     assert!(output.stderr.is_empty());
     let usage = String::from_utf8(output.stdout).unwrap();
-    for flag in ["--al", "--rel", "--det", "--guard"] {
+    for flag in ["--al", "--rel", "--det", "--guard", "--no-cache"] {
         assert!(usage.contains(flag));
     }
-    for flag in ["--no-cache", "--trace", "--profile"] {
+    for flag in ["--trace", "--profile"] {
         assert!(!usage.contains(flag));
+    }
+}
+
+#[test]
+fn test_run_al_cache_flag_controls_public_input_guards() {
+    for cache in [false, true] {
+        let mut command = run_command("Unchecked", "cli/run/empty.p4");
+        command.arg("--guard");
+        if !cache {
+            command.arg("--no-cache");
+        }
+        let output = command.output().unwrap();
+        assert_eq!(output.status.success(), cache);
+        if cache {
+            assert_eq!(output.stdout, b"passed\n");
+        } else {
+            assert!(String::from_utf8_lossy(&output.stderr).contains("relation input"));
+        }
     }
 }

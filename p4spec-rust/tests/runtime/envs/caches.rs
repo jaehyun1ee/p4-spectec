@@ -1,3 +1,4 @@
+use p4spec_rust::lang::data::value::ValueArena;
 use p4spec_rust::{
     lang::{
         common::source::{Position, Span},
@@ -8,11 +9,14 @@ use p4spec_rust::{
 
 #[test]
 fn test_call_cache_uses_structural_value_keys() {
-    let value_a = make::bool(true, Span::default());
+    let mut arena = ValueArena::new();
+    let value_a = make::bool(&mut arena, true, Span::default()).unwrap();
     let value_b = make::bool(
+        &mut arena,
         true,
         Span::new(Position::new("other", 4, 0), Position::new("other", 4, 1)),
-    );
+    )
+    .unwrap();
     let mut cache: CallCache<&str> = CallCache::new();
     let key_a = CallKey::new("f", vec![value_a]);
     let key_b = CallKey::new("f", vec![value_b]);

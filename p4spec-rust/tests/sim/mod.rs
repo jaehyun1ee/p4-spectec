@@ -1,4 +1,5 @@
-use std::{path::Path, rc::Rc};
+use p4spec_rust::lang::data::value::ValueArena;
+use std::path::Path;
 
 use p4spec_rust::{
     frontend::parse::parse_files,
@@ -33,7 +34,7 @@ fn runner_from_spec<E: Extern>(spec: &Path, externs: E) -> Runner<Al, BuiltinInt
     let unparser = P4Unparser::from_al_spec(&spec_al);
     Runner::new(
         Global::load(spec_al).unwrap(),
-        Config::new(false, false),
+        Config::new(false, false, false),
         BuiltinInterface::new(unparser),
         externs,
     )
@@ -50,6 +51,6 @@ fn has_extern_failure(error: &Error, expected: &str) -> bool {
         .any(|error| has_extern_failure(error, expected))
 }
 
-fn parse_program(path: &Path) -> Rc<Value> {
-    parse_file(&[repo().join("p4c/p4include")], path).expect("native P4 parsing")
+fn parse_program(arena: &mut ValueArena, path: &Path) -> Value {
+    parse_file(arena, &[repo().join("p4c/p4include")], path).expect("native P4 parsing")
 }

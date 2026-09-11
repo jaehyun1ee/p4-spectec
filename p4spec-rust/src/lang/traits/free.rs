@@ -25,7 +25,7 @@ impl Free for String {
     }
 }
 
-impl<T: Free, N> Free for NotePhrase<T, N> {
+impl<T: Free, N, S> Free for NotePhrase<T, N, S> {
     fn free_into(&self, free: &mut IdSet) {
         self.node.free_into(free);
     }

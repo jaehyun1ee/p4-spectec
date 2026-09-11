@@ -1,7 +1,8 @@
 //! AL expression evaluation
 
+use std::{borrow::Borrow, rc::Rc};
+
 use crate::interp::al::error::ExprErrorKind;
-use std::rc::Rc;
 
 use crate::{
     lang::{
@@ -18,7 +19,7 @@ use crate::{
 
 use super::super::{
     Al,
-    backtrack::{Backtrack, back},
+    backtrack::{Backtrack, backtrack, backtrack_from_result},
     context::Context,
     error::ErrorKind,
     util::is_iter_var_exp,
@@ -31,68 +32,77 @@ pub(super) fn eval_exp<I: Interface, E: Extern>(
     runner: &mut RunnerContext<'_, Al, I, E>,
     ctx: &Context<'_>,
     exp: &ast::Exp,
-) -> Backtrack<Rc<Value>> {
+) -> Backtrack<Value> {
     let span = &exp.span;
-    let typ = crate::phrase!(node: exp.note.as_ref().clone(), span: span.clone());
+    let typ = &exp.note;
     match &exp.node {
-        ast::ExpKind::Bool(value) => Backtrack::Ok(make::bool(*value, Span::default())),
-        ast::ExpKind::Num(value) => Backtrack::Ok(make::num(value.clone(), Span::default())),
-        ast::ExpKind::Text(value) => Backtrack::Ok(make::text(value.clone(), Span::default())),
-        ast::ExpKind::Var(id) => eval_var_exp(ctx, id, span),
-        ast::ExpKind::Un(op, _, exp_inner) => eval_un_exp(runner, ctx, op, exp_inner, span),
-        ast::ExpKind::Bin(op, _, exp_l, exp_r) => eval_bin_exp(runner, ctx, op, exp_l, exp_r, span),
-        ast::ExpKind::Cmp(op, _, exp_l, exp_r) => eval_cmp_exp(runner, ctx, op, exp_l, exp_r, span),
+        ast::ExpKind::Bool(value) => Backtrack::Ok(backtrack_from_result!(
+            make::bool(runner.arena_mut(), *value, Span::default()),
+            span
+        )),
+        ast::ExpKind::Num(value) => Backtrack::Ok(backtrack_from_result!(
+            make::num(runner.arena_mut(), value.clone(), Span::default()),
+            span
+        )),
+        ast::ExpKind::Text(value) => Backtrack::Ok(backtrack_from_result!(
+            make::text(runner.arena_mut(), value.clone(), Span::default()),
+            span
+        )),
+        ast::ExpKind::Var(id) => eval_var_exp(ctx, span, id),
+        ast::ExpKind::Un(op, _, exp_inner) => eval_un_exp(runner, ctx, span, op, exp_inner),
+        ast::ExpKind::Bin(op, _, exp_l, exp_r) => eval_bin_exp(runner, ctx, span, op, exp_l, exp_r),
+        ast::ExpKind::Cmp(op, _, exp_l, exp_r) => eval_cmp_exp(runner, ctx, span, op, exp_l, exp_r),
         ast::ExpKind::UpCast(typ, exp_inner) => eval_upcast_exp(runner, ctx, typ, exp_inner),
         ast::ExpKind::DownCast(typ, exp_inner) => eval_downcast_exp(runner, ctx, typ, exp_inner),
         ast::ExpKind::Sub(exp_inner, _, subcheck) => {
-            eval_sub_exp(runner, ctx, exp_inner, subcheck, span)
+            eval_sub_exp(runner, ctx, span, exp_inner, subcheck)
         }
         ast::ExpKind::Match(exp_inner, pattern) => eval_match_exp(runner, ctx, exp_inner, pattern),
-        ast::ExpKind::Tuple(exps) => eval_tuple_exp(runner, ctx, exps, &typ),
-        ast::ExpKind::Case(not_exp) => eval_case_exp(runner, ctx, not_exp, &typ, span),
-        ast::ExpKind::Str(exp_fields) => eval_str_exp(runner, ctx, exp_fields, &typ),
-        ast::ExpKind::Opt(exp) => eval_opt_exp(runner, ctx, exp, &typ),
-        ast::ExpKind::List(exps) => eval_list_exp(runner, ctx, exps, &typ),
+        ast::ExpKind::Tuple(exps) => eval_tuple_exp(runner, ctx, span, typ, exps),
+        ast::ExpKind::Case(not_exp) => eval_case_exp(runner, ctx, span, typ, not_exp),
+        ast::ExpKind::Str(exp_fields) => eval_str_exp(runner, ctx, span, typ, exp_fields),
+        ast::ExpKind::Opt(exp) => eval_opt_exp(runner, ctx, span, typ, exp),
+        ast::ExpKind::List(exps) => eval_list_exp(runner, ctx, span, typ, exps),
         ast::ExpKind::Cons(exp_head, exp_tail) => {
-            eval_cons_exp(runner, ctx, exp_head, exp_tail, &typ, span)
+            eval_cons_exp(runner, ctx, span, typ, exp_head, exp_tail)
         }
-        ast::ExpKind::Cat(exp_l, exp_r) => eval_cat_exp(runner, ctx, exp_l, exp_r, &typ),
+        ast::ExpKind::Cat(exp_l, exp_r) => eval_cat_exp(runner, ctx, span, typ, exp_l, exp_r),
         ast::ExpKind::Mem(exp_elem, exp_list) => {
-            eval_mem_exp(runner, ctx, exp_elem, exp_list, span)
+            eval_mem_exp(runner, ctx, span, exp_elem, exp_list)
         }
         ast::ExpKind::Len(exp_inner) => eval_len_exp(runner, ctx, exp_inner),
-        ast::ExpKind::Dot(exp_base, atom) => eval_dot_exp(runner, ctx, exp_base, atom, span),
+        ast::ExpKind::Dot(exp_base, atom) => eval_dot_exp(runner, ctx, span, exp_base, atom),
         ast::ExpKind::Idx(exp_base, exp_idx) => eval_idx_exp(runner, ctx, exp_base, exp_idx),
         ast::ExpKind::Slice(exp_base, exp_idx, exp_len) => {
-            eval_slice_exp(runner, ctx, exp_base, exp_idx, exp_len, &typ)
+            eval_slice_exp(runner, ctx, span, typ, exp_base, exp_idx, exp_len)
         }
         ast::ExpKind::Upd(exp_base, path, exp_upd) => {
             eval_upd_exp(runner, ctx, exp_base, path, exp_upd)
         }
         ast::ExpKind::Call(id, targs, args) => eval_call_exp(runner, ctx, id, targs, args),
         ast::ExpKind::Iter(exp_inner, (iter, vars)) => {
-            eval_iter_exp(runner, ctx, exp, exp_inner, iter, vars, &typ)
+            eval_iter_exp(runner, ctx, span, typ, exp, exp_inner, iter, vars)
         }
     }
 }
 
-pub(super) fn eval_exps<I: Interface, E: Extern>(
+pub(super) fn eval_exps<T: Borrow<ast::Exp>, I: Interface, E: Extern>(
     runner: &mut RunnerContext<'_, Al, I, E>,
     ctx: &Context<'_>,
-    exps: &[ast::Exp],
-) -> Backtrack<Vec<Rc<Value>>> {
+    exps: &[T],
+) -> Backtrack<Vec<Value>> {
     let mut values = Vec::with_capacity(exps.len());
     for exp in exps {
-        values.push(back!(eval_exp(runner, ctx, exp)));
+        values.push(backtrack!(eval_exp(runner, ctx, exp.borrow())));
     }
     Backtrack::Ok(values)
 }
 
 // - Variable expression
 
-fn eval_var_exp(ctx: &Context<'_>, id: &ast::Id, span: &Span) -> Backtrack<Rc<Value>> {
+fn eval_var_exp(ctx: &Context<'_>, span: &Span, id: &ast::Id) -> Backtrack<Value> {
     let var = Variable::new(id.clone(), Vec::new());
-    let value = back!(Backtrack::from_result(ctx.find_value(&var), span)).clone();
+    let value = *backtrack_from_result!(ctx.find_value(&var), span);
     Backtrack::Ok(value)
 }
 
@@ -101,19 +111,20 @@ fn eval_var_exp(ctx: &Context<'_>, id: &ast::Id, span: &Span) -> Backtrack<Rc<Va
 fn eval_un_exp<I: Interface, E: Extern>(
     runner: &mut RunnerContext<'_, Al, I, E>,
     ctx: &Context<'_>,
+    span: &Span,
     op: &ast::UnOp,
     exp_inner: &ast::Exp,
-    span: &Span,
-) -> Backtrack<Rc<Value>> {
-    let value = back!(eval_exp(runner, ctx, exp_inner));
+) -> Backtrack<Value> {
+    let value = backtrack!(eval_exp(runner, ctx, exp_inner));
     let value = match op {
-        ast::UnOp::Bool(boolean::UnOp::Not) => make::bool(
-            !back!(Backtrack::from_result(get::bool(&value), span)),
-            Span::default(),
-        ),
+        ast::UnOp::Bool(boolean::UnOp::Not) => {
+            let bool = !backtrack_from_result!(get::bool(runner.arena(), &value), span);
+            backtrack_from_result!(make::bool(runner.arena_mut(), bool, Span::default()), span)
+        }
         ast::UnOp::Num(op) => {
-            let num = back!(Backtrack::from_result(get::num(&value), span));
-            make::num(num::un(*op, num), Span::default())
+            let num = backtrack_from_result!(get::num(runner.arena(), &value), span);
+            let num = num::un(*op, num);
+            backtrack_from_result!(make::num(runner.arena_mut(), num, Span::default()), span)
         }
     };
     Backtrack::Ok(value)
@@ -124,30 +135,33 @@ fn eval_un_exp<I: Interface, E: Extern>(
 fn eval_bin_exp<I: Interface, E: Extern>(
     runner: &mut RunnerContext<'_, Al, I, E>,
     ctx: &Context<'_>,
+    span: &Span,
     op: &ast::BinOp,
     exp_l: &ast::Exp,
     exp_r: &ast::Exp,
-    span: &Span,
-) -> Backtrack<Rc<Value>> {
-    let value_l = back!(eval_exp(runner, ctx, exp_l));
-    let value_r = back!(eval_exp(runner, ctx, exp_r));
+) -> Backtrack<Value> {
+    let value_l = backtrack!(eval_exp(runner, ctx, exp_l));
+    let value_r = backtrack!(eval_exp(runner, ctx, exp_r));
     let value = match op {
         ast::BinOp::Bool(op) => {
-            let bool_l = back!(Backtrack::from_result(get::bool(&value_l), span));
-            let bool_r = back!(Backtrack::from_result(get::bool(&value_r), span));
+            let bool_l = backtrack_from_result!(get::bool(runner.arena(), &value_l), span);
+            let bool_r = backtrack_from_result!(get::bool(runner.arena(), &value_r), span);
             let result = match op {
                 boolean::BinOp::And => bool_l && bool_r,
                 boolean::BinOp::Or => bool_l || bool_r,
                 boolean::BinOp::Impl => !bool_l || bool_r,
                 boolean::BinOp::Equiv => bool_l == bool_r,
             };
-            make::bool(result, Span::default())
+            backtrack_from_result!(
+                make::bool(runner.arena_mut(), result, Span::default()),
+                span
+            )
         }
         ast::BinOp::Num(op) => {
-            let num_l = back!(Backtrack::from_result(get::num(&value_l), span));
-            let num_r = back!(Backtrack::from_result(get::num(&value_r), span));
-            let num = back!(Backtrack::from_result(num::bin(*op, num_l, num_r), span));
-            make::num(num, Span::default())
+            let num_l = backtrack_from_result!(get::num(runner.arena(), &value_l), span);
+            let num_r = backtrack_from_result!(get::num(runner.arena(), &value_r), span);
+            let num = backtrack_from_result!(num::bin(*op, num_l, num_r), span);
+            backtrack_from_result!(make::num(runner.arena_mut(), num, Span::default()), span)
         }
     };
     Backtrack::Ok(value)
@@ -158,23 +172,32 @@ fn eval_bin_exp<I: Interface, E: Extern>(
 fn eval_cmp_exp<I: Interface, E: Extern>(
     runner: &mut RunnerContext<'_, Al, I, E>,
     ctx: &Context<'_>,
+    span: &Span,
     op: &ast::CmpOp,
     exp_l: &ast::Exp,
     exp_r: &ast::Exp,
-    span: &Span,
-) -> Backtrack<Rc<Value>> {
-    let value_l = back!(eval_exp(runner, ctx, exp_l));
-    let value_r = back!(eval_exp(runner, ctx, exp_r));
+) -> Backtrack<Value> {
+    let value_l = backtrack!(eval_exp(runner, ctx, exp_l));
+    let value_r = backtrack!(eval_exp(runner, ctx, exp_r));
     let result = match op {
-        ast::CmpOp::Bool(boolean::CmpOp::Eq) => value_l.syntax_eq(&value_r),
-        ast::CmpOp::Bool(boolean::CmpOp::Ne) => !value_l.syntax_eq(&value_r),
+        ast::CmpOp::Bool(boolean::CmpOp::Eq) => runner
+            .arena()
+            .view(value_l)
+            .syntax_eq(&runner.arena().view(value_r)),
+        ast::CmpOp::Bool(boolean::CmpOp::Ne) => !runner
+            .arena()
+            .view(value_l)
+            .syntax_eq(&runner.arena().view(value_r)),
         ast::CmpOp::Num(op) => {
-            let num_l = back!(Backtrack::from_result(get::num(&value_l), span));
-            let num_r = back!(Backtrack::from_result(get::num(&value_r), span));
-            back!(Backtrack::from_result(num::cmp(*op, num_l, num_r), span))
+            let num_l = backtrack_from_result!(get::num(runner.arena(), &value_l), span);
+            let num_r = backtrack_from_result!(get::num(runner.arena(), &value_r), span);
+            backtrack_from_result!(num::cmp(*op, num_l, num_r), span)
         }
     };
-    let value = make::bool(result, Span::default());
+    let value = backtrack_from_result!(
+        make::bool(runner.arena_mut(), result, Span::default()),
+        span
+    );
     Backtrack::Ok(value)
 }
 
@@ -185,9 +208,9 @@ fn eval_upcast_exp<I: Interface, E: Extern>(
     ctx: &Context<'_>,
     typ: &ast::Typ,
     exp_inner: &ast::Exp,
-) -> Backtrack<Rc<Value>> {
-    let value = back!(eval_exp(runner, ctx, exp_inner));
-    ops::cast_up(ctx, typ, value)
+) -> Backtrack<Value> {
+    let value = backtrack!(eval_exp(runner, ctx, exp_inner));
+    ops::cast_up(runner.arena_mut(), ctx, typ, value)
 }
 
 // - Downcast expression
@@ -197,9 +220,9 @@ fn eval_downcast_exp<I: Interface, E: Extern>(
     ctx: &Context<'_>,
     typ: &ast::Typ,
     exp_inner: &ast::Exp,
-) -> Backtrack<Rc<Value>> {
-    let value = back!(eval_exp(runner, ctx, exp_inner));
-    ops::cast_down(ctx, typ, value)
+) -> Backtrack<Value> {
+    let value = backtrack!(eval_exp(runner, ctx, exp_inner));
+    ops::cast_down(runner.arena_mut(), ctx, typ, value)
 }
 
 // - Subtype check expression
@@ -207,21 +230,24 @@ fn eval_downcast_exp<I: Interface, E: Extern>(
 fn eval_sub_exp<I: Interface, E: Extern>(
     runner: &mut RunnerContext<'_, Al, I, E>,
     ctx: &Context<'_>,
+    span: &Span,
     exp_inner: &ast::Exp,
     subcheck: &ast::Subcheck,
-    span: &Span,
-) -> Backtrack<Rc<Value>> {
-    let value = back!(eval_exp(runner, ctx, exp_inner));
+) -> Backtrack<Value> {
+    let value = backtrack!(eval_exp(runner, ctx, exp_inner));
     let tdenv = ctx.tdenv();
     let find_func = |name: &str| {
         let id = crate::phrase!(node: name.to_owned(), span: span.clone());
         ctx.find_func_typ(&id).ok()
     };
-    let matches = back!(Backtrack::from_result(
-        value::check(&tdenv, &find_func, subcheck, &value),
+    let matches = backtrack_from_result!(
+        value::check(runner.arena(), &tdenv, &find_func, subcheck, &value),
         span
-    ));
-    let value = make::bool(matches, Span::default());
+    );
+    let value = backtrack_from_result!(
+        make::bool(runner.arena_mut(), matches, Span::default()),
+        span
+    );
     Backtrack::Ok(value)
 }
 
@@ -232,9 +258,9 @@ fn eval_match_exp<I: Interface, E: Extern>(
     ctx: &Context<'_>,
     exp_inner: &ast::Exp,
     pattern: &ast::Pattern,
-) -> Backtrack<Rc<Value>> {
-    let value = back!(eval_exp(runner, ctx, exp_inner));
-    let matches = match (pattern, &value.node) {
+) -> Backtrack<Value> {
+    let value = backtrack!(eval_exp(runner, ctx, exp_inner));
+    let matches = match (pattern, runner.arena().kind(&value)) {
         (ast::Pattern::Case(mixop), ValueKind::Case(value)) => value.eq_shape(mixop.as_ref()),
         (ast::Pattern::List(pattern), ValueKind::List(values)) => match pattern {
             ListPattern::Cons => !values.is_empty(),
@@ -245,7 +271,10 @@ fn eval_match_exp<I: Interface, E: Extern>(
         | (ast::Pattern::Opt(OptPattern::None), ValueKind::Opt(None)) => true,
         _ => false,
     };
-    let value = make::bool(matches, Span::default());
+    let value = backtrack_from_result!(
+        make::bool(runner.arena_mut(), matches, Span::default()),
+        &Span::default()
+    );
     Backtrack::Ok(value)
 }
 
@@ -254,11 +283,15 @@ fn eval_match_exp<I: Interface, E: Extern>(
 fn eval_tuple_exp<I: Interface, E: Extern>(
     runner: &mut RunnerContext<'_, Al, I, E>,
     ctx: &Context<'_>,
+    span: &Span,
+    typ: &Rc<ast::TypKind>,
     exps: &[ast::Exp],
-    typ: &ast::Typ,
-) -> Backtrack<Rc<Value>> {
-    let values = back!(eval_exps(runner, ctx, exps));
-    let value = make::tuple(typ, values, Span::default());
+) -> Backtrack<Value> {
+    let values = backtrack!(eval_exps(runner, ctx, exps));
+    let value = backtrack_from_result!(
+        make::tuple(runner.arena_mut(), typ.clone(), values, Span::default()),
+        span
+    );
     Backtrack::Ok(value)
 }
 
@@ -267,19 +300,20 @@ fn eval_tuple_exp<I: Interface, E: Extern>(
 fn eval_case_exp<I: Interface, E: Extern>(
     runner: &mut RunnerContext<'_, Al, I, E>,
     ctx: &Context<'_>,
-    not_exp: &ast::NotExp,
-    typ: &ast::Typ,
     span: &Span,
-) -> Backtrack<Rc<Value>> {
+    typ: &Rc<ast::TypKind>,
+    not_exp: &ast::NotExp,
+) -> Backtrack<Value> {
     let mut values = Vec::new();
     for exp in not_exp.args() {
-        values.push(back!(eval_exp(runner, ctx, exp)));
+        values.push(backtrack!(eval_exp(runner, ctx, exp)));
     }
-    let case = back!(Backtrack::from_result(
-        ast::Mixop::fill(&not_exp.to_mixop(), values),
+    let mut values = values.into_iter();
+    let case = not_exp.map(|_| values.next().expect("each argument has an evaluated value"));
+    let value = backtrack_from_result!(
+        make::case(runner.arena_mut(), typ.clone(), case, Span::default()),
         span
-    ));
-    let value = make::case_(typ, case, Span::default());
+    );
     Backtrack::Ok(value)
 }
 
@@ -288,14 +322,23 @@ fn eval_case_exp<I: Interface, E: Extern>(
 fn eval_str_exp<I: Interface, E: Extern>(
     runner: &mut RunnerContext<'_, Al, I, E>,
     ctx: &Context<'_>,
+    span: &Span,
+    typ: &Rc<ast::TypKind>,
     exp_fields: &[ast::ExpField],
-    typ: &ast::Typ,
-) -> Backtrack<Rc<Value>> {
+) -> Backtrack<Value> {
     let mut value_fields = Vec::with_capacity(exp_fields.len());
     for (atom, exp) in exp_fields {
-        value_fields.push((atom.clone(), back!(eval_exp(runner, ctx, exp))));
+        value_fields.push((atom.clone(), backtrack!(eval_exp(runner, ctx, exp))));
     }
-    let value = make::structure(typ, value_fields, Span::default());
+    let value = backtrack_from_result!(
+        make::structure(
+            runner.arena_mut(),
+            typ.clone(),
+            value_fields,
+            Span::default()
+        ),
+        span
+    );
     Backtrack::Ok(value)
 }
 
@@ -304,14 +347,18 @@ fn eval_str_exp<I: Interface, E: Extern>(
 fn eval_opt_exp<I: Interface, E: Extern>(
     runner: &mut RunnerContext<'_, Al, I, E>,
     ctx: &Context<'_>,
+    span: &Span,
+    typ: &Rc<ast::TypKind>,
     exp: &Option<Box<ast::Exp>>,
-    typ: &ast::Typ,
-) -> Backtrack<Rc<Value>> {
+) -> Backtrack<Value> {
     let value = match exp {
-        Some(exp) => Some(back!(eval_exp(runner, ctx, exp))),
+        Some(exp) => Some(backtrack!(eval_exp(runner, ctx, exp))),
         None => None,
     };
-    let value = make::opt(typ, value, Span::default());
+    let value = backtrack_from_result!(
+        make::opt(runner.arena_mut(), typ.clone(), value, Span::default()),
+        span
+    );
     Backtrack::Ok(value)
 }
 
@@ -320,11 +367,15 @@ fn eval_opt_exp<I: Interface, E: Extern>(
 fn eval_list_exp<I: Interface, E: Extern>(
     runner: &mut RunnerContext<'_, Al, I, E>,
     ctx: &Context<'_>,
+    span: &Span,
+    typ: &Rc<ast::TypKind>,
     exps: &[ast::Exp],
-    typ: &ast::Typ,
-) -> Backtrack<Rc<Value>> {
-    let values = back!(eval_exps(runner, ctx, exps));
-    let value = make::list(typ, values, Span::default());
+) -> Backtrack<Value> {
+    let values = backtrack!(eval_exps(runner, ctx, exps));
+    let value = backtrack_from_result!(
+        make::list(runner.arena_mut(), typ.clone(), values, Span::default()),
+        span
+    );
     Backtrack::Ok(value)
 }
 
@@ -333,18 +384,21 @@ fn eval_list_exp<I: Interface, E: Extern>(
 fn eval_cons_exp<I: Interface, E: Extern>(
     runner: &mut RunnerContext<'_, Al, I, E>,
     ctx: &Context<'_>,
+    span: &Span,
+    typ: &Rc<ast::TypKind>,
     exp_head: &ast::Exp,
     exp_tail: &ast::Exp,
-    typ: &ast::Typ,
-    span: &Span,
-) -> Backtrack<Rc<Value>> {
-    let value_head = back!(eval_exp(runner, ctx, exp_head));
-    let value_tail = back!(eval_exp(runner, ctx, exp_tail));
-    let values_tail = back!(Backtrack::from_result(get::list(&value_tail), span));
+) -> Backtrack<Value> {
+    let value_head = backtrack!(eval_exp(runner, ctx, exp_head));
+    let value_tail = backtrack!(eval_exp(runner, ctx, exp_tail));
+    let values_tail = backtrack_from_result!(get::list(runner.arena(), &value_tail), span);
     let mut values = Vec::with_capacity(values_tail.len() + 1);
     values.push(value_head);
     values.extend_from_slice(values_tail);
-    let value = make::list(typ, values, Span::default());
+    let value = backtrack_from_result!(
+        make::list(runner.arena_mut(), typ.clone(), values, Span::default()),
+        span
+    );
     Backtrack::Ok(value)
 }
 
@@ -353,20 +407,25 @@ fn eval_cons_exp<I: Interface, E: Extern>(
 fn eval_cat_exp<I: Interface, E: Extern>(
     runner: &mut RunnerContext<'_, Al, I, E>,
     ctx: &Context<'_>,
+    span: &Span,
+    typ: &Rc<ast::TypKind>,
     exp_l: &ast::Exp,
     exp_r: &ast::Exp,
-    typ: &ast::Typ,
-) -> Backtrack<Rc<Value>> {
-    let value_l = back!(eval_exp(runner, ctx, exp_l));
-    let value_r = back!(eval_exp(runner, ctx, exp_r));
-    let value = match (&value_l.node, &value_r.node) {
+) -> Backtrack<Value> {
+    let value_l = backtrack!(eval_exp(runner, ctx, exp_l));
+    let value_r = backtrack!(eval_exp(runner, ctx, exp_r));
+    let value = match (runner.arena().kind(&value_l), runner.arena().kind(&value_r)) {
         (ValueKind::Text(text_l), ValueKind::Text(text_r)) => {
-            make::text(format!("{text_l}{text_r}"), Span::default())
+            let text = format!("{text_l}{text_r}");
+            backtrack_from_result!(make::text(runner.arena_mut(), text, Span::default()), span)
         }
         (ValueKind::List(values_l), ValueKind::List(values_r)) => {
             let mut values = values_l.clone();
             values.extend_from_slice(values_r);
-            make::list(typ, values, Span::default())
+            backtrack_from_result!(
+                make::list(runner.arena_mut(), typ.clone(), values, Span::default()),
+                span
+            )
         }
         _ => {
             return Backtrack::err(
@@ -383,16 +442,22 @@ fn eval_cat_exp<I: Interface, E: Extern>(
 fn eval_mem_exp<I: Interface, E: Extern>(
     runner: &mut RunnerContext<'_, Al, I, E>,
     ctx: &Context<'_>,
+    span: &Span,
     exp_elem: &ast::Exp,
     exp_list: &ast::Exp,
-    span: &Span,
-) -> Backtrack<Rc<Value>> {
-    let value_elem = back!(eval_exp(runner, ctx, exp_elem));
-    let value_list = back!(eval_exp(runner, ctx, exp_list));
-    let values = back!(Backtrack::from_result(get::list(&value_list), span));
-    let value = make::bool(
-        values.iter().any(|value| value.syntax_eq(&value_elem)),
-        Span::default(),
+) -> Backtrack<Value> {
+    let value_elem = backtrack!(eval_exp(runner, ctx, exp_elem));
+    let value_list = backtrack!(eval_exp(runner, ctx, exp_list));
+    let values = backtrack_from_result!(get::list(runner.arena(), &value_list), span);
+    let contains = values.iter().any(|value| {
+        runner
+            .arena()
+            .view(*value)
+            .syntax_eq(&runner.arena().view(value_elem))
+    });
+    let value = backtrack_from_result!(
+        make::bool(runner.arena_mut(), contains, Span::default()),
+        span
     );
     Backtrack::Ok(value)
 }
@@ -403,9 +468,9 @@ fn eval_len_exp<I: Interface, E: Extern>(
     runner: &mut RunnerContext<'_, Al, I, E>,
     ctx: &Context<'_>,
     exp_inner: &ast::Exp,
-) -> Backtrack<Rc<Value>> {
-    let value = back!(eval_exp(runner, ctx, exp_inner));
-    let len = match &value.node {
+) -> Backtrack<Value> {
+    let value = backtrack!(eval_exp(runner, ctx, exp_inner));
+    let len = match runner.arena().kind(&value) {
         ValueKind::Text(text) => text.len(),
         ValueKind::List(values) => values.len(),
         _ => {
@@ -415,7 +480,10 @@ fn eval_len_exp<I: Interface, E: Extern>(
             );
         }
     };
-    let value = make::nat((len as u64).into(), Span::default());
+    let value = backtrack_from_result!(
+        make::nat(runner.arena_mut(), (len as u64).into(), Span::default()),
+        &Span::default()
+    );
     Backtrack::Ok(value)
 }
 
@@ -424,12 +492,12 @@ fn eval_len_exp<I: Interface, E: Extern>(
 fn eval_dot_exp<I: Interface, E: Extern>(
     runner: &mut RunnerContext<'_, Al, I, E>,
     ctx: &Context<'_>,
+    span: &Span,
     exp_base: &ast::Exp,
     atom: &ast::Atom,
-    span: &Span,
-) -> Backtrack<Rc<Value>> {
-    let value = back!(eval_exp(runner, ctx, exp_base));
-    ops::access_dot(&value, atom, span)
+) -> Backtrack<Value> {
+    let value = backtrack!(eval_exp(runner, ctx, exp_base));
+    ops::access_dot(runner.arena(), &value, atom, span)
 }
 
 // - Index expression
@@ -439,10 +507,16 @@ fn eval_idx_exp<I: Interface, E: Extern>(
     ctx: &Context<'_>,
     exp_base: &ast::Exp,
     exp_idx: &ast::Exp,
-) -> Backtrack<Rc<Value>> {
-    let value = back!(eval_exp(runner, ctx, exp_base));
-    let value_idx = back!(eval_exp(runner, ctx, exp_idx));
-    ops::access_index(&value, &value_idx, &exp_base.span, &exp_idx.span)
+) -> Backtrack<Value> {
+    let value = backtrack!(eval_exp(runner, ctx, exp_base));
+    let value_idx = backtrack!(eval_exp(runner, ctx, exp_idx));
+    ops::access_index(
+        runner.arena_mut(),
+        &value,
+        &value_idx,
+        &exp_base.span,
+        &exp_idx.span,
+    )
 }
 
 // - Slice expression
@@ -450,24 +524,27 @@ fn eval_idx_exp<I: Interface, E: Extern>(
 fn eval_slice_exp<I: Interface, E: Extern>(
     runner: &mut RunnerContext<'_, Al, I, E>,
     ctx: &Context<'_>,
+    span: &Span,
+    typ: &Rc<ast::TypKind>,
     exp_base: &ast::Exp,
     exp_idx: &ast::Exp,
     exp_len: &ast::Exp,
-    typ: &ast::Typ,
-) -> Backtrack<Rc<Value>> {
-    let value = back!(eval_exp(runner, ctx, exp_base));
-    let value_idx = back!(eval_exp(runner, ctx, exp_idx));
-    let value_len = back!(eval_exp(runner, ctx, exp_len));
-    let span_bounds = if matches!(value.node, ValueKind::Text(_)) {
+) -> Backtrack<Value> {
+    let value = backtrack!(eval_exp(runner, ctx, exp_base));
+    let value_idx = backtrack!(eval_exp(runner, ctx, exp_idx));
+    let value_len = backtrack!(eval_exp(runner, ctx, exp_len));
+    let span_bounds = if matches!(runner.arena().kind(&value), ValueKind::Text(_)) {
         &exp_idx.span
     } else {
         &exp_len.span
     };
     ops::access_slice(
+        runner.arena_mut(),
         &value,
         &value_idx,
         &value_len,
         typ,
+        span,
         &exp_base.span,
         &exp_idx.span,
         &exp_len.span,
@@ -483,9 +560,9 @@ fn eval_upd_exp<I: Interface, E: Extern>(
     exp_base: &ast::Exp,
     path: &ast::Path,
     exp_upd: &ast::Exp,
-) -> Backtrack<Rc<Value>> {
-    let value_base = back!(eval_exp(runner, ctx, exp_base));
-    let value_upd = back!(eval_exp(runner, ctx, exp_upd));
+) -> Backtrack<Value> {
+    let value_base = backtrack!(eval_exp(runner, ctx, exp_base));
+    let value_upd = backtrack!(eval_exp(runner, ctx, exp_upd));
     eval_update_path(runner, ctx, &value_base, path, value_upd)
 }
 
@@ -497,16 +574,13 @@ fn eval_call_exp<I: Interface, E: Extern>(
     id: &ast::Id,
     targs: &[ast::Typ],
     args: &[ast::Arg],
-) -> Backtrack<Rc<Value>> {
+) -> Backtrack<Value> {
     let theta = ctx.theta_local();
     let mut targs_subst = Vec::with_capacity(targs.len());
     for targ in targs {
-        targs_subst.push(back!(Backtrack::from_result(
-            subst_typ(&theta, targ),
-            &targ.span
-        )));
+        targs_subst.push(backtrack_from_result!(subst_typ(&theta, targ), &targ.span));
     }
-    let values = back!(eval_args(runner, ctx, args));
+    let values = backtrack!(eval_args(runner, ctx, args));
     invoke_func(runner, ctx, id, &targs_subst, &values)
 }
 
@@ -515,32 +589,34 @@ fn eval_call_exp<I: Interface, E: Extern>(
 fn eval_iter_exp<I: Interface, E: Extern>(
     runner: &mut RunnerContext<'_, Al, I, E>,
     ctx: &Context<'_>,
+    span: &Span,
+    typ: &Rc<ast::TypKind>,
     exp: &ast::Exp,
     exp_inner: &ast::Exp,
     iter: &ast::Iter,
     vars: &[ast::Var],
-    typ: &ast::Typ,
-) -> Backtrack<Rc<Value>> {
-    let span = &exp.span;
+) -> Backtrack<Value> {
     if let Some(var) = is_iter_var_exp(exp) {
-        return Backtrack::Ok(back!(Backtrack::from_result(ctx.find_value(&var), span)).clone());
+        return Backtrack::Ok(*backtrack_from_result!(ctx.find_value(&var), span));
     }
     let value = match iter {
         ast::Iter::Opt => {
-            let ctx_sub = back!(Backtrack::from_result(ctx.sub_opt(vars), span));
-            let value = match ctx_sub {
-                Some(ctx_sub) => Some(back!(eval_exp(runner, &ctx_sub, exp_inner))),
-                None => None,
-            };
-            make::opt(typ, value, Span::default())
+            let value = backtrack!(ctx.map_opt(runner, span, vars, |runner, ctx_sub| {
+                eval_exp(runner, ctx_sub, exp_inner)
+            }));
+            backtrack_from_result!(
+                make::opt(runner.arena_mut(), typ.clone(), value, Span::default()),
+                span
+            )
         }
         ast::Iter::List => {
-            let ctxs_sub = back!(Backtrack::from_result(ctx.sub_list(vars), span));
-            let mut values = Vec::with_capacity(ctxs_sub.len());
-            for ctx_sub in ctxs_sub {
-                values.push(back!(eval_exp(runner, &ctx_sub, exp_inner)));
-            }
-            make::list(typ, values, Span::default())
+            let values = backtrack!(ctx.map_list(runner, span, vars, |runner, ctx_sub| {
+                eval_exp(runner, ctx_sub, exp_inner)
+            }));
+            backtrack_from_result!(
+                make::list(runner.arena_mut(), typ.clone(), values, Span::default()),
+                span
+            )
         }
     };
     Backtrack::Ok(value)
