@@ -85,8 +85,8 @@ fn rule(head: &str, prems: Vec<ast::Prem>) -> ast::Rule {
 fn clause(arg_name: &str, body: &str, prem_name: &str) -> ast::Clause {
     p4spec_rust::phrase! { node: ast::ClauseKind {
         args: vec![arg(ast::ArgKind::Exp(Box::new(variable(arg_name))))],
-        expression: variable(body),
-        premises: vec![prem(ast::PremKind::Debug(ast::DebugPrem {
+        exp: variable(body),
+        prems: vec![prem(ast::PremKind::Debug(ast::DebugPrem {
             exp: variable(prem_name),
         }))],
     }, span: span() }

@@ -248,8 +248,8 @@ fn infer_rule(rule: &ast::Rule) -> Result<DimContext, ElabError> {
 fn infer_clause(clause: &ast::Clause) -> Result<DimContext, ElabError> {
     let mut dim_ctx = DimContext::default();
     infer_args(&mut dim_ctx, &clause.node.args, &[]);
-    infer_prems(&mut dim_ctx, &clause.node.premises)?;
-    infer_exp(&mut dim_ctx, &clause.node.expression, &[]);
+    infer_prems(&mut dim_ctx, &clause.node.prems)?;
+    infer_exp(&mut dim_ctx, &clause.node.exp, &[]);
     Ok(dim_ctx)
 }
 
@@ -893,8 +893,8 @@ fn analyze_else_group(group: &mut ast::ElseGroup) -> Result<(), ElabError> {
 fn analyze_clause(clause: &mut ast::Clause) -> Result<(), ElabError> {
     let bounds = infer_clause(clause)?.into_bounds()?;
     annotate_args(&bounds, &mut clause.node.args)?;
-    annotate_prems(&bounds, &mut clause.node.premises)?;
-    annotate_exp(&bounds, &mut clause.node.expression)?;
+    annotate_prems(&bounds, &mut clause.node.prems)?;
+    annotate_exp(&bounds, &mut clause.node.exp)?;
     Ok(())
 }
 

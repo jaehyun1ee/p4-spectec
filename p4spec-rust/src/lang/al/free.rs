@@ -109,8 +109,8 @@ impl Free for ClauseKind {
         self.args
             .as_slice()
             .free()
-            .union(self.expression.free())
-            .union(self.premises.as_slice().free())
+            .union(self.exp.free())
+            .union(self.prems.as_slice().free())
     }
 }
 

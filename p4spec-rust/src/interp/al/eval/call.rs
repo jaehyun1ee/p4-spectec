@@ -527,8 +527,8 @@ fn eval_clause<I: Interface, E: Extern>(
             &clause.node.args,
             values
         ));
-        let ctx = backtrack!(eval_prems(runner, ctx, &clause.node.premises));
-        expr::eval_exp(runner, &ctx, &clause.node.expression)
+        let ctx = backtrack!(eval_prems(runner, ctx, &clause.node.prems));
+        expr::eval_exp(runner, &ctx, &clause.node.exp)
     })();
     result.nest(defined_func.id.span.clone(), || {
         ErrorKind::Trace(TraceErrorKind::ClauseApplication {

@@ -73,7 +73,7 @@ fn test_conversion_preserves_binding_match_and_cast_guards_before_bindings() {
         panic!("expected defined function");
     };
     let [match_guard, list_binding, subtype_guard, cast_binding] =
-        defined_func_al.clauses[0].node.premises.as_slice()
+        defined_func_al.clauses[0].node.prems.as_slice()
     else {
         panic!("expected match/bind and subtype/downcast pairs");
     };

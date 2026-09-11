@@ -134,8 +134,8 @@ fn test_clause_analysis_orders_partial_then_repeated_then_source_premises() {
     let clause = crate::phrase! { node:
     ast::ClauseKind {
         args: vec![crate::phrase! { node: ast::ArgKind::Exp(Box::new(tuple)), span:  span(2) }],
-        expression: var_exp("x", 5),
-        premises: vec![crate::phrase! { node:
+        exp: var_exp("x", 5),
+        prems: vec![crate::phrase! { node:
             ast::PremKind::Debug(ast::DebugPrem {
                 exp: exp(ast::ExpKind::Bool(false), ast::TypKind::Bool, 6),
             }), span:
@@ -162,7 +162,7 @@ fn test_clause_analysis_orders_partial_then_repeated_then_source_premises() {
     let ast_al::MetaFuncDef::Defined(defined_func_al) = meta_func_def_al else {
         panic!("expected defined function");
     };
-    let prems = &defined_func_al.clauses[0].node.premises;
+    let prems = &defined_func_al.clauses[0].node.prems;
     assert_eq!(prems.len(), 3);
     assert!(matches!(
         &prems[0].node,
@@ -199,8 +199,8 @@ fn test_otherwise_clauses_and_rules_reject_impure_premises_at_the_branch_span() 
         args: vec![crate::phrase! { node:
             ast::ArgKind::Exp(Box::new(var_exp("x", 10))), span:
             span(10) }],
-        expression: var_exp("x", 10),
-        premises: vec![impure_premise(11)],
+        exp: var_exp("x", 10),
+        prems: vec![impure_premise(11)],
     }, span:
     span(10) };
     let function_spec = vec![crate::phrase! { node:
@@ -346,8 +346,8 @@ fn test_conversion_preserves_definition_clause_and_table_row_order() {
             args: vec![crate::phrase! { node:
                 ast::ArgKind::Exp(Box::new(var_exp(name, line))), span:
                 span(line) }],
-            expression: var_exp(name, line),
-            premises: vec![],
+            exp: var_exp(name, line),
+            prems: vec![],
         }, span:
         span(line) }
     };

@@ -271,8 +271,8 @@ impl Free for ElseGroupKind {
 impl Free for ClauseKind {
     fn free_into(&self, free: &mut IdSet) {
         self.args.as_slice().free_into(free);
-        self.expression.free_into(free);
-        self.premises.as_slice().free_into(free);
+        self.exp.free_into(free);
+        self.prems.as_slice().free_into(free);
     }
 }
 

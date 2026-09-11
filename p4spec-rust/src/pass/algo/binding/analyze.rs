@@ -673,8 +673,8 @@ fn analyze_clause(
     let span = clause_il.span;
     let ast::ClauseKind {
         args: args_il,
-        expression: exp_il,
-        premises: prems_il,
+        exp: exp_il,
+        prems: prems_il,
     } = clause_il.node;
     let (venv, args_al, prem_sideconditions_al) = analyze_args_as_bind(&mut ctx, &args_il)?;
     ctx.add_bounds(&venv);
@@ -688,8 +688,8 @@ fn analyze_clause(
     let clause_al = phrase! {
         node: al::ast::ClauseKind {
             args: args_al,
-            expression: exp_il,
-            premises: prems_all_al,
+            exp: exp_il,
+            prems: prems_all_al,
         },
         span: span,
     };

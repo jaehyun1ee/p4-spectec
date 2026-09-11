@@ -1536,8 +1536,8 @@ pub(super) fn decode_clause(value: &Value) -> Result<ast::Clause, DecodeError> {
     source::decode_phrase(value, |value| match array(value)? {
         [args, exp, prems] => Ok(ast::ClauseKind {
             args: decode_list(args, decode_arg)?,
-            expression: decode_exp(exp)?,
-            premises: decode_list(prems, decode_prem)?,
+            exp: decode_exp(exp)?,
+            prems: decode_list(prems, decode_prem)?,
         }),
         _ => Err(DecodeError::Expected("IL clause triple")),
     })
@@ -1547,8 +1547,8 @@ pub(super) fn encode_clause(clause: &ast::Clause) -> Value {
     source::encode_phrase(clause, |clause| {
         json!([
             encode_list(&clause.args, encode_arg),
-            encode_exp(&clause.expression),
-            encode_list(&clause.premises, encode_prem)
+            encode_exp(&clause.exp),
+            encode_list(&clause.prems, encode_prem)
         ])
     })
 }

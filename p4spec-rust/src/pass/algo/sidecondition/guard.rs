@@ -692,18 +692,18 @@ fn insert_else_group(mut else_group_al: ast::ElseGroup) -> ast::ElseGroup {
 
 fn insert_clause(mut clause_al: ast::Clause) -> ast::Clause {
     let prems_args = collect_args(&clause_al.node.args);
-    let prems_clause_al = std::mem::take(&mut clause_al.node.premises);
+    let prems_clause_al = std::mem::take(&mut clause_al.node.prems);
     let prems_clause = insert_prems(&[&prems_args], prems_clause_al);
-    clause_al.node.premises = prems_clause.output;
+    clause_al.node.prems = prems_clause.output;
 
-    let prems_output = collect_exp(&clause_al.node.expression);
+    let prems_output = collect_exp(&clause_al.node.exp);
     let prems_output = filter_prems_insert(
         &[&prems_args],
         &prems_clause.derived,
-        &clause_al.node.premises,
+        &clause_al.node.prems,
         prems_output,
     );
-    clause_al.node.premises.extend(prems_output);
+    clause_al.node.prems.extend(prems_output);
     clause_al
 }
 

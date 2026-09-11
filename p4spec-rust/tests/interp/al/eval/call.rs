@@ -79,7 +79,7 @@ fn test_table_rows_remain_sequential_in_deterministic_mode() {
         .map(|clause| {
             phrase!(node: ast::TableRowKind {
             exps_signature: vec![], args: clause.node.args,
-            exp: clause.node.expression, prems: clause.node.premises,
+            exp: clause.node.exp, prems: clause.node.prems,
         }, span: clause.span)
         })
         .collect();
@@ -295,9 +295,9 @@ def $fallback(n*) = n*
         };
         // Force a branch-local overwrite before failure to expose scope leakage
         let prem = phrase!(node: ast::PremKind::Let(ast::LetPrem {
-            exp_l: exp_l.as_ref().clone(), exp_r: clause.node.expression.clone(),
+            exp_l: exp_l.as_ref().clone(), exp_r: clause.node.exp.clone(),
         }), span: clause.span.clone());
-        clause.node.premises.insert(1, prem);
+        clause.node.prems.insert(1, prem);
     }
     let mut runner = make_runner(spec_al, false);
     for values in [
@@ -529,7 +529,7 @@ def $not_hold(n) = false
                 continue;
             };
             let negate = func.id.node == "not_hold";
-            let prem = &mut func.clauses[0].node.premises[0];
+            let prem = &mut func.clauses[0].node.prems[0];
             let (id, not_exp) = match &prem.node {
                 ast::PremKind::Rule(prem) => (prem.id.clone(), prem.not_exp.clone()),
                 ast::PremKind::IfHold(prem) => (prem.id.clone(), prem.not_exp.clone()),
@@ -1171,7 +1171,7 @@ fn test_uncached_input_guards_are_limited_to_public_entries() {
             _ => None,
         })
         .unwrap();
-    let ast::ExpKind::Call(_, _, args) = &mut func.clauses[0].node.expression.node else {
+    let ast::ExpKind::Call(_, _, args) = &mut func.clauses[0].node.exp.node else {
         panic!("call")
     };
     let ast::ArgKind::Exp(exp) = &mut args[0].node else {
@@ -1214,7 +1214,7 @@ fn test_guard_failure_keeps_its_source_span_through_extern_reentry() {
             _ => None,
         })
         .unwrap();
-    let ast::ExpKind::Call(id, _, _) = &func.clauses[0].node.expression.node else {
+    let ast::ExpKind::Call(id, _, _) = &func.clauses[0].node.exp.node else {
         panic!("call")
     };
     let span = id.span.clone();

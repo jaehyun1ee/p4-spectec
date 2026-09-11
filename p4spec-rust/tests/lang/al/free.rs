@@ -243,8 +243,8 @@ fn test_free_al_shapes_and_definition_arms_are_exhaustive() {
     }, span: span("else") };
     let clause: al::ast::Clause = p4spec_rust::phrase! { node: al::ast::ClauseKind {
         args: vec![arg_exp("a")],
-        expression: variable("c"),
-        premises: vec![premise()],
+        exp: variable("c"),
+        prems: vec![premise()],
     }, span: span("clause") };
     let table: al::ast::TableRow = p4spec_rust::phrase! { node: al::ast::TableRowKind {
         exps_signature: vec![variable("signature")],

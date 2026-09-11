@@ -2097,8 +2097,8 @@ fn elab_clause(
     let exp_il = finish(elab_exp(&mut ctx_local, &typ_ret_il, &def.exp))?;
     let clause_kind_il = il::ClauseKind {
         args: args_il,
-        expression: exp_il,
-        premises: prems_il,
+        exp: exp_il,
+        prems: prems_il,
     };
     let clause_il = phrase!(node: clause_kind_il, span: span.clone());
     Ok((clause_il, is_else))

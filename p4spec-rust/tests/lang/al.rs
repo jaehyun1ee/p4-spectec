@@ -199,15 +199,15 @@ fn composite_spec(metadata: &str, extern_inputs: Vec<i64>) -> al::ast::Spec {
     }, span: span(metadata) };
     let function_clause = p4spec_rust::phrase! { node: al::ast::ClauseKind {
         args: vec![arg_exp("argument")],
-        expression: text_expression("quoted\"\\"),
-        premises: vec![premise(al::ast::PremKind::If(al::ast::IfPrem {
+        exp: text_expression("quoted\"\\"),
+        prems: vec![premise(al::ast::PremKind::If(al::ast::IfPrem {
             exp: variable("ready"),
         }))],
     }, span: span(metadata) };
     let else_clause = p4spec_rust::phrase! { node: al::ast::ClauseKind {
         args: vec![arg_exp("fallback")],
-        expression: expr(il::ast::ExpKind::Bool(false)),
-        premises: Vec::new(),
+        exp: expr(il::ast::ExpKind::Bool(false)),
+        prems: Vec::new(),
     }, span: span(metadata) };
     let def_type = p4spec_rust::phrase! {
         node: il::ast::DefTypKind::Plain(typ()),

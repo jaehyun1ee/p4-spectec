@@ -89,18 +89,18 @@ fn as_if_prem_al(prem_il: &ast::Prem) -> ast_al::Prem {
 fn function_spec(
     params: Vec<ast::Typ>,
     args: Vec<ast::Exp>,
-    expression: ast::Exp,
-    premises: Vec<ast::Prem>,
+    exp: ast::Exp,
+    prems: Vec<ast::Prem>,
 ) -> ast::Spec {
     let typ = crate::phrase! {
-        node: expression.note.as_ref().clone(),
-        span: expression.span.clone(),
+        node: exp.note.as_ref().clone(),
+        span: exp.span.clone(),
     };
     let clause = crate::phrase! { node:
     ast::ClauseKind {
         args: args.into_iter().map(exp_arg).collect(),
-        expression,
-        premises,
+        exp,
+        prems,
     }, span:
     span(1) };
     let params = params
