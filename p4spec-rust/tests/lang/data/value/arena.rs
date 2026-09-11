@@ -5,7 +5,7 @@ use num_bigint::BigInt;
 use p4spec_rust::lang::traits::{cmp::SyntaxCmp, eq::SyntaxEq};
 use p4spec_rust::{
     lang::{
-        common::source::Span,
+        common::source::{Position, Span},
         data::{
             typ,
             value::{ValueArena, ValueError, ValueTag, get, make},
@@ -14,29 +14,64 @@ use p4spec_rust::{
     },
     yojson::ExternalData,
 };
+use std::rc::Rc;
+
+#[test]
+fn test_type_allocation_identity_preserves_annotations_and_value_syntax() {
+    let mut arena = ValueArena::new();
+    let typ_l = Rc::new(
+        typ::make::var(
+            p4spec_rust::phrase!(node: "T".to_owned(), span: span("type.spec", 3)),
+            vec![typ::make::bool()],
+        )
+        .node,
+    );
+    let typ_r = Rc::new(typ_l.as_ref().clone());
+    let child = make::bool(&mut arena, true, Span::default()).unwrap();
+    let value_l = make::list(&mut arena, typ_l.clone(), vec![child], Span::default()).unwrap();
+    let value_r = make::list(&mut arena, typ_r.clone(), vec![child], Span::default()).unwrap();
+    assert_ne!(value_l.note, value_r.note);
+    assert_eq!(arena.update_typ(value_l, typ_l.clone()).unwrap(), value_l);
+    assert!(Rc::ptr_eq(arena.typ(&value_l), &typ_l));
+    assert!(Rc::ptr_eq(arena.typ(&value_r), &typ_r));
+    assert_eq!(arena.typ(&value_l), arena.typ(&value_r));
+
+    let parent_l = make::list(&mut arena, typ_l.clone(), vec![value_l], Span::default()).unwrap();
+    let parent_r = make::list(&mut arena, typ_l, vec![value_r], Span::default()).unwrap();
+    assert_ne!(parent_l.node, parent_r.node);
+    assert!(arena.view(parent_l).syntax_eq(&arena.view(parent_r)));
+    assert_eq!(arena.canon_id(&parent_l), arena.canon_id(&parent_r));
+}
 
 #[test]
 fn test_interned_bodies_preserve_outer_and_child_annotations() {
     let mut arena = ValueArena::new();
     let child = make::bool(&mut arena, true, span("child.p4", 11)).unwrap();
     let child_relocated = arena.update_span(child, span("child.p4", 13)).unwrap();
-    let child_annotated = arena.update_typ(child, typ::make::text().node).unwrap();
+    let child_annotated = arena
+        .update_typ(child, typ::make::text().node.clone().into())
+        .unwrap();
     assert_eq!(child.node, child_relocated.node);
     assert_eq!(child.node, child_annotated.node);
     assert_ne!(child.span, child_relocated.span);
     assert_ne!(child.note, child_annotated.note);
 
     let typ = typ::make::tuple(vec![typ::make::bool()]).node;
-    let tuple = make::tuple(&mut arena, typ.clone(), vec![child], Span::default()).unwrap();
+    let tuple = make::tuple(&mut arena, typ.clone().into(), vec![child], Span::default()).unwrap();
     let tuple_relocated = make::tuple(
         &mut arena,
-        typ.clone(),
+        typ.clone().into(),
         vec![child_relocated],
         Span::default(),
     )
     .unwrap();
-    let tuple_annotated =
-        make::tuple(&mut arena, typ, vec![child_annotated], Span::default()).unwrap();
+    let tuple_annotated = make::tuple(
+        &mut arena,
+        typ.clone().into(),
+        vec![child_annotated],
+        Span::default(),
+    )
+    .unwrap();
     assert_ne!(tuple.node, tuple_relocated.node);
     assert_ne!(tuple.node, tuple_annotated.node);
     assert!(arena.view(tuple).syntax_eq(&arena.view(tuple_relocated)));
@@ -56,7 +91,7 @@ fn test_interned_bodies_preserve_outer_and_child_annotations() {
     let children = get::tuple(&arena, &tuple).unwrap();
     assert!(get::bool(&arena, &children[0]).unwrap());
     assert_eq!(arena.span(&children[0]), &span("child.p4", 11));
-    assert_eq!(arena.typ(&children[0]), &typ::TypKind::Bool);
+    assert_eq!(arena.typ(&children[0]).as_ref(), &typ::TypKind::Bool);
     assert_eq!(
         get::bool(&arena, &tuple),
         Err(ValueError::UnexpectedKind {
@@ -87,7 +122,7 @@ fn test_interned_case_preserves_atom_locations_and_children() {
     );
     let value = make::case(
         &mut arena,
-        typ::TypKind::Bool,
+        typ::TypKind::Bool.into(),
         case.clone(),
         Span::default(),
     )
@@ -102,7 +137,7 @@ fn test_interned_case_preserves_atom_locations_and_children() {
         });
         let value_relocated = make::case(
             &mut arena,
-            typ::TypKind::Bool,
+            typ::TypKind::Bool.into(),
             case_relocated,
             Span::default(),
         )
@@ -126,14 +161,14 @@ fn test_label_bodies_are_shared_across_outer_locations() {
     let atom = p4spec_rust::phrase!(node: Atom::keyword("field"), span: span("field.p4", 3));
     let value = make::structure(
         &mut arena,
-        typ::TypKind::Bool,
+        typ::TypKind::Bool.into(),
         vec![(atom.clone(), child)],
         span("field.p4", 7),
     )
     .unwrap();
     let value_relocated = make::structure(
         &mut arena,
-        typ::TypKind::Bool,
+        typ::TypKind::Bool.into(),
         vec![(atom.clone(), child)],
         span("field.p4", 9),
     )
@@ -170,9 +205,20 @@ fn test_arena_growth_preserves_children_and_value_order() {
     let value_high = make::nat(&mut arena, Natural::from(99_u64), Span::default()).unwrap();
     let value_low = make::nat(&mut arena, Natural::from(1_u64), Span::default()).unwrap();
     let typ = typ::make::tuple(vec![typ::make::nat()]).node;
-    let tuple_high =
-        make::tuple(&mut arena, typ.clone(), vec![value_high], Span::default()).unwrap();
-    let tuple_low = make::tuple(&mut arena, typ, vec![value_low], Span::default()).unwrap();
+    let tuple_high = make::tuple(
+        &mut arena,
+        typ.clone().into(),
+        vec![value_high],
+        Span::default(),
+    )
+    .unwrap();
+    let tuple_low = make::tuple(
+        &mut arena,
+        typ.clone().into(),
+        vec![value_low],
+        Span::default(),
+    )
+    .unwrap();
     for line in 0..512 {
         make::text(&mut arena, format!("text-{line}"), span("growth.p4", line)).unwrap();
     }
@@ -246,17 +292,17 @@ fn test_function_values_are_ordered_by_name() {
 #[test]
 fn test_external_float_order_normalizes_signed_zero() {
     let mut arena = ValueArena::new();
-    let typ = typ::make::text();
+    let typ = Rc::new(typ::make::text().node);
     let negative_zero = make::external(
         &mut arena,
-        typ.node.clone(),
+        typ.clone(),
         ExternalData::Float(-0.0),
         Span::default(),
     )
     .unwrap();
     let positive_zero = make::external(
         &mut arena,
-        typ.node.clone(),
+        typ.clone(),
         ExternalData::Float(0.0),
         Span::default(),
     )
@@ -307,28 +353,28 @@ fn test_syntax_equality_distinguishes_nested_payloads_and_variants() {
     let atom = p4spec_rust::phrase!(node: p4spec_rust::lang::common::notation::atom::Atom::keyword("field"), span: Span::default());
     let value_l = make::structure(
         &mut arena,
-        typ::TypKind::Bool,
+        typ::TypKind::Bool.into(),
         vec![(atom.clone(), value_true)],
         Span::default(),
     )
     .unwrap();
     let value_r = make::structure(
         &mut arena,
-        typ::TypKind::Bool,
+        typ::TypKind::Bool.into(),
         vec![(atom, value_false)],
         Span::default(),
     )
     .unwrap();
     let value_l = make::list(
         &mut arena,
-        typ::TypKind::Bool,
+        typ::TypKind::Bool.into(),
         vec![value_l],
         Span::default(),
     )
     .unwrap();
     let value_r = make::list(
         &mut arena,
-        typ::TypKind::Bool,
+        typ::TypKind::Bool.into(),
         vec![value_r],
         Span::default(),
     )
@@ -347,14 +393,14 @@ fn test_canonical_identity_preserves_nested_locations_through_growth() {
     for line in 0..128 {
         value_l = make::list(
             &mut arena,
-            typ::TypKind::Bool,
+            typ::TypKind::Bool.into(),
             vec![value_l],
             span("left.p4", line),
         )
         .unwrap();
         value_r = make::list(
             &mut arena,
-            typ::TypKind::Text,
+            typ::TypKind::Text.into(),
             vec![value_r],
             span("right.p4", line),
         )
@@ -370,7 +416,7 @@ fn test_canonical_identity_preserves_nested_locations_through_growth() {
     let value_false = make::bool(&mut arena, false, Span::default()).unwrap();
     let value_false = make::list(
         &mut arena,
-        typ::TypKind::Bool,
+        typ::TypKind::Bool.into(),
         vec![value_false],
         Span::default(),
     )
@@ -395,7 +441,7 @@ fn test_canonical_identities_ignore_all_locations_but_distinguish_contents() {
             atom.clone(),
             Box::new(Mixfix::Arg(value_false)),
         );
-        let value_case = make::case(arena, typ::TypKind::Bool, case, span.clone()).unwrap();
+        let value_case = make::case(arena, typ::TypKind::Bool.into(), case, span.clone()).unwrap();
         let atom_case = get::case(arena, &value_case).unwrap().atoms()[0];
         assert_eq!(atom_case.span, value_true.span);
         let mut values = vec![value_case];
@@ -415,7 +461,7 @@ fn test_canonical_identities_ignore_all_locations_but_distinguish_contents() {
             ValueKind::Func(id),
             ValueKind::Extern(ExternalData::Float(f64::NAN)),
         ] {
-            values.push(make::new(arena, kind, typ::TypKind::Bool, span.clone()).unwrap());
+            values.push(make::new(arena, kind, typ::TypKind::Bool.into(), span.clone()).unwrap());
         }
         values
     }
@@ -450,4 +496,29 @@ fn test_canonical_identities_ignore_all_locations_but_distinguish_contents() {
         get::func(&arena, &values_r[13]).unwrap().span,
         span("values.spec", 2)
     );
+}
+
+#[test]
+fn test_default_span_interning_preserves_nondefault_positions() {
+    let mut arena = ValueArena::new();
+    let span_empty = arena.intern_span(Span::default()).unwrap();
+    assert_eq!(
+        span_empty,
+        arena
+            .intern_span(Span::new(Position::new("", 0, 0), Position::new("", 0, 0)))
+            .unwrap()
+    );
+    for span in [
+        Span::new(Position::new("", 1, 0), Position::new("", 1, 0)),
+        Span::new(Position::new("", 0, 0), Position::new("", 0, 1)),
+        Span::new(
+            Position::new("program.p4", 0, 0),
+            Position::new("program.p4", 0, 0),
+        ),
+    ] {
+        let span_id = arena.intern_span(span.clone()).unwrap();
+        assert_ne!(span_id, span_empty);
+        assert_eq!(arena.get_span(span_id), &span);
+        assert_eq!(arena.intern_span(span).unwrap(), span_id);
+    }
 }

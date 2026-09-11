@@ -66,7 +66,7 @@ fn eval_access_slice_path<I: Interface, E: Extern>(
     exp_idx: &ast::Exp,
     exp_len: &ast::Exp,
 ) -> Backtrack<Value> {
-    let typ = crate::phrase!(node: path.note.as_ref().clone(), span: path.span.clone());
+    let typ = &path.note;
     let value = back!(eval_access_path(runner, ctx, value_base, path));
     let value_idx = back!(eval_exp(runner, ctx, exp_idx));
     let value_len = back!(eval_exp(runner, ctx, exp_len));
@@ -75,7 +75,8 @@ fn eval_access_slice_path<I: Interface, E: Extern>(
         &value,
         &value_idx,
         &value_len,
-        &typ,
+        typ,
+        &path.span,
         &path.span,
         &exp_idx.span,
         &exp_len.span,
@@ -129,7 +130,7 @@ fn eval_update_idx_path<I: Interface, E: Extern>(
     exp_idx: &ast::Exp,
     value_upd: Value,
 ) -> Backtrack<Value> {
-    let typ = crate::phrase!(node: path.note.as_ref().clone(), span: path.span.clone());
+    let typ = crate::phrase!(node: path.note.clone(), span: path.span.clone());
     let value = back!(eval_access_path(runner, ctx, value_base, path));
     let value_idx = back!(eval_exp(runner, ctx, exp_idx));
     let value = back!(ops::update_index(
@@ -155,7 +156,7 @@ fn eval_update_slice_path<I: Interface, E: Extern>(
     exp_len: &ast::Exp,
     value_upd: Value,
 ) -> Backtrack<Value> {
-    let typ = crate::phrase!(node: path.note.as_ref().clone(), span: path.span.clone());
+    let typ = crate::phrase!(node: path.note.clone(), span: path.span.clone());
     let value = back!(eval_access_path(runner, ctx, value_base, path));
     let value_idx = back!(eval_exp(runner, ctx, exp_idx));
     let value_len = back!(eval_exp(runner, ctx, exp_len));
@@ -183,7 +184,7 @@ fn eval_update_dot_path<I: Interface, E: Extern>(
     atom: &ast::Atom,
     value_upd: Value,
 ) -> Backtrack<Value> {
-    let typ = crate::phrase!(node: path.note.as_ref().clone(), span: path.span.clone());
+    let typ = crate::phrase!(node: path.note.clone(), span: path.span.clone());
     let value = back!(eval_access_path(runner, ctx, value_base, path));
     let value_fields = back!(Backtrack::from_result(
         get::structure(runner.arena(), &value),

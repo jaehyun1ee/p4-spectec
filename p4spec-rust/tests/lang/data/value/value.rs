@@ -21,7 +21,7 @@ fn test_value_equality_includes_type_and_source() {
     let different_type = make::new(
         &mut arena,
         ValueKind::Bool(true),
-        typ::make::text().node,
+        typ::make::text().node.clone().into(),
         span("a.p4", 1),
     )
     .unwrap();
@@ -66,24 +66,26 @@ fn test_value_views_resolve_nested_handles_in_each_arena() {
     let child_l = make::bool(&mut arena_l, true, span("left.p4", 1)).unwrap();
     let child_r_false = make::bool(&mut arena_r, false, span("right.p4", 2)).unwrap();
     let child_r = make::bool(&mut arena_r, true, span("right.p4", 3)).unwrap();
-    let child_r = arena_r.update_typ(child_r, typ::TypKind::Text).unwrap();
+    let child_r = arena_r
+        .update_typ(child_r, typ::TypKind::Text.into())
+        .unwrap();
     let value_l = make::tuple(
         &mut arena_l,
-        typ::TypKind::Bool,
+        typ::TypKind::Bool.into(),
         vec![child_l],
         span("left.p4", 4),
     )
     .unwrap();
     let value_r_false = make::tuple(
         &mut arena_r,
-        typ::TypKind::Bool,
+        typ::TypKind::Bool.into(),
         vec![child_r_false],
         span("right.p4", 5),
     )
     .unwrap();
     let value_r = make::tuple(
         &mut arena_r,
-        typ::TypKind::Text,
+        typ::TypKind::Text.into(),
         vec![child_r],
         span("right.p4", 6),
     )

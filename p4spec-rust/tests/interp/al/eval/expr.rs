@@ -77,6 +77,24 @@ fn numbers(arena: &ValueArena, value: &Value) -> Vec<String> {
         .collect()
 }
 
+#[test]
+fn test_repeated_evaluation_reuses_the_expression_type_allocation_without_call_caching() {
+    let expression = list(vec![int(1), int(2)]);
+    let typ = expression.note.clone();
+    let global = Global::load(vec![function("test", expression)]).unwrap();
+    let mut runner = Runner::<Al, _, _>::new(
+        global,
+        Config::new(false, false, false),
+        NullInterface,
+        NullExtern,
+    );
+    for _ in 0..2 {
+        let value = runner.eval_func("test", &[], &[]).unwrap();
+        assert!(Rc::ptr_eq(runner.arena().typ(&value), &typ));
+        assert_eq!(numbers(runner.arena(), &value), ["1", "2"]);
+    }
+}
+
 fn path(kind: ast::PathKind, typ: ast::Typ) -> ast::Path {
     p4spec_rust::note_phrase!(node: kind, note: Rc::new(typ.node), span: typ.span)
 }
@@ -452,7 +470,7 @@ fn test_iteration_evaluates_each_bound_element_and_preserves_empty_options() {
                     ];
                     make::list(
                         runner.arena_mut(),
-                        typ_iter.node.clone(),
+                        typ_iter.node.clone().into(),
                         values,
                         Span::default(),
                     )
@@ -469,7 +487,7 @@ fn test_iteration_evaluates_each_bound_element_and_preserves_empty_options() {
             ast::Iter::Opt => {
                 let input = make::opt(
                     runner.arena_mut(),
-                    typ_iter.node.clone(),
+                    typ_iter.node.clone().into(),
                     Some(input),
                     Span::default(),
                 )
@@ -482,7 +500,7 @@ fn test_iteration_evaluates_each_bound_element_and_preserves_empty_options() {
                 );
                 let input = make::opt(
                     runner.arena_mut(),
-                    typ_iter.node.clone(),
+                    typ_iter.node.clone().into(),
                     None,
                     Span::default(),
                 )
@@ -497,6 +515,94 @@ fn test_iteration_evaluates_each_bound_element_and_preserves_empty_options() {
                 );
             }
         }
+    }
+}
+
+#[test]
+fn test_list_iteration_zips_values_without_rebinding_the_parent() {
+    let typ_int = typ::make::int();
+    let typ_list = typ::make::list(typ_int.clone());
+    let vars: Vec<_> = ["x", "y"]
+        .into_iter()
+        .map(|name| ast::Var {
+            id: id(name),
+            typ: typ_int.clone(),
+            iters: vec![],
+        })
+        .collect();
+    let mut signatures: Vec<_> = vars
+        .iter()
+        .map(|var| {
+            exp(
+                ast::ExpKind::Iter(
+                    Box::new(exp(ast::ExpKind::Var(var.id.clone()), typ_int.clone())),
+                    (ast::Iter::List, vec![var.clone()]),
+                ),
+                typ_list.clone(),
+            )
+        })
+        .collect();
+    signatures.push(exp(ast::ExpKind::Var(id("x")), typ_int.clone()));
+    let exp_inner = exp(
+        ast::ExpKind::Bin(
+            ast::BinOp::Num(num::BinOp::Add),
+            ast::OpTyp::Int,
+            Box::new(exp(ast::ExpKind::Var(id("x")), typ_int.clone())),
+            Box::new(exp(ast::ExpKind::Var(id("y")), typ_int.clone())),
+        ),
+        typ_int.clone(),
+    );
+    let expression = exp(
+        ast::ExpKind::Tuple(vec![
+            exp(
+                ast::ExpKind::Iter(Box::new(exp_inner), (ast::Iter::List, vars)),
+                typ_list.clone(),
+            ),
+            exp(ast::ExpKind::Var(id("x")), typ_int.clone()),
+        ]),
+        typ::make::tuple(vec![typ_list.clone(), typ_int.clone()]),
+    );
+    let mut def = function("test", expression);
+    if let ast::DefKind::MetaFunc(ast::MetaFuncDef::Defined(func)) = &mut def.node {
+        func.params = [typ_list.clone(), typ_list.clone(), typ_int]
+            .into_iter()
+            .map(|typ| p4spec_rust::phrase!(node: ast::ParamKind::Exp(typ), span: Span::default()))
+            .collect();
+        func.clauses[0].node.args = signatures.into_iter()
+            .map(|exp| p4spec_rust::phrase!(node: ast::ArgKind::Exp(Box::new(exp)), span: Span::default()))
+            .collect();
+    }
+    let mut runner = Runner::<Al, _, _>::new(
+        Global::load(vec![def]).unwrap(),
+        Config::new(false, false, false),
+        NullInterface,
+        NullExtern,
+    );
+    for width in [3, 0] {
+        let mut inputs = Vec::new();
+        for factor in [1, 10] {
+            let values = (1..=width)
+                .map(|value| {
+                    make::int(runner.arena_mut(), (value * factor).into(), Span::default()).unwrap()
+                })
+                .collect();
+            inputs.push(
+                make::list(
+                    runner.arena_mut(),
+                    typ_list.node.clone().into(),
+                    values,
+                    Span::default(),
+                )
+                .unwrap(),
+            );
+        }
+        let value_parent = make::int(runner.arena_mut(), 99.into(), Span::default()).unwrap();
+        inputs.push(value_parent);
+        let value = runner.eval_func("test", &[], &inputs).unwrap();
+        let values = get::tuple(runner.arena(), &value).unwrap();
+        let expected: Vec<_> = (1..=width).map(|value| (value * 11).to_string()).collect();
+        assert_eq!(numbers(runner.arena(), &values[0]), expected);
+        assert_eq!(values[1], value_parent);
     }
 }
 
@@ -667,7 +773,7 @@ def $first(ns) = ns[0]
     assert!((identity == input));
     let inputs = make::list(
         runner.arena_mut(),
-        (typ::make::list(typ::make::nat())).node.clone(),
+        (typ::make::list(typ::make::nat())).node.clone().into(),
         vec![input],
         Span::default(),
     )

@@ -37,11 +37,11 @@ fn test_value_wire_expands_shared_bodies_with_distinct_annotations() {
         )),
         phrase!(node: Atom::RParen, span: span(29)),
     );
-    let value = make::case(&mut arena, typ::TypKind::Bool, case, span(31)).unwrap();
+    let value = make::case(&mut arena, typ::TypKind::Bool.into(), case, span(31)).unwrap();
     let field = phrase!(node: Atom::keyword("field"), span: span(37));
     let structure = make::structure(
         &mut arena,
-        typ::TypKind::Bool,
+        typ::TypKind::Bool.into(),
         vec![(field, value)],
         span(41),
     )
@@ -50,7 +50,7 @@ fn test_value_wire_expands_shared_bodies_with_distinct_annotations() {
     let func = make::func(&mut arena, id, vec![], vec![], typ::make::bool(), span(47)).unwrap();
     let tuple = make::tuple(
         &mut arena,
-        typ::make::tuple(vec![]).node,
+        typ::make::tuple(vec![]).node.clone().into(),
         vec![structure, func],
         span(53),
     )
@@ -85,9 +85,14 @@ fn test_value_wire_expands_shared_bodies_with_distinct_annotations() {
         "payload": json_located,
     }))
     .unwrap();
+    let tuple_envelope = ValueEnvelopeCodec::decode(&mut arena, &envelope_located).unwrap();
     assert_eq!(
-        ValueEnvelopeCodec::decode(&mut arena, &envelope_located).unwrap(),
-        tuple_located
+        arena.canon_id(&tuple_envelope),
+        arena.canon_id(&tuple_located)
+    );
+    assert_eq!(
+        ValueCodec::encode(&arena, &tuple_envelope).unwrap(),
+        ValueCodec::encode(&arena, &tuple_located).unwrap()
     );
     let envelope = ValueEnvelopeCodec::encode(&arena, &tuple).unwrap();
     let mut arena_decoded = ValueArena::new();

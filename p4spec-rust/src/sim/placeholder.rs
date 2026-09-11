@@ -85,7 +85,7 @@ impl Extern for Placeholder {
                 let typ = make_typ::var(id, Vec::new());
                 let value = make_value::external(
                     context.arena_mut(),
-                    typ.node.clone(),
+                    typ.node.into(),
                     ExternalData::Null,
                     Span::default(),
                 )

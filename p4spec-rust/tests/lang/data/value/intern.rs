@@ -1,5 +1,7 @@
 #[path = "intern/canon.rs"]
 mod canon;
+#[path = "intern/rc.rs"]
+mod rc;
 #[path = "intern/simple.rs"]
 mod simple;
 

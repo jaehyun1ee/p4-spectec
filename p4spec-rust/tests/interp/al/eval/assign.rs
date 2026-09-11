@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use p4spec_rust::lang::data::value::ValueArena;
 
 use p4spec_rust::{
@@ -59,12 +61,18 @@ fn iter(exp_inner: ast::Exp, iter: ast::Iter, vars: Vec<ast::Var>) -> ast::Exp {
     exp(ast::ExpKind::Iter(Box::new(exp_inner), (iter, vars)))
 }
 fn tuple(arena: &mut ValueArena, values: Vec<Value>) -> Value {
-    make::tuple(arena, (typ::make::bool()).node.clone(), values, span(8)).unwrap()
+    make::tuple(
+        arena,
+        (typ::make::bool()).node.clone().into(),
+        values,
+        span(8),
+    )
+    .unwrap()
 }
 fn list(arena: &mut ValueArena, values: Vec<Value>) -> Value {
     make::list(
         arena,
-        (typ::make::list(typ::make::bool())).node.clone(),
+        (typ::make::list(typ::make::bool())).node.clone().into(),
         values,
         span(8),
     )
@@ -86,7 +94,7 @@ fn test_iterated_variable_fast_path_preserves_identity_and_path() {
         vec![ast::Iter::Opt, ast::Iter::List]
     );
     let value = list(&mut arena, vec![]);
-    let ctx = ok(assign_exp(&mut arena, &Context::new(&global), &exp, value));
+    let ctx = ok(assign_exp(&mut arena, Context::new(&global), &exp, value));
     assert!((value == binding(&ctx, "x", vec![ast::Iter::Opt, ast::Iter::List])));
     assert!(
         ctx.find_value_opt(&Variable::new(id("x"), vec![]))
@@ -120,7 +128,7 @@ fn test_list_assignment_collects_rows_without_leaking_scalar_bindings() {
             ];
             list(&mut arena, values)
         };
-        assign_exp(&mut arena, &ctx, &exp, value)
+        assign_exp(&mut arena, ctx.clone(), &exp, value)
     });
     let xs = binding(&ctx_result, "x", vec![ast::Iter::List]);
     let ys = binding(&ctx_result, "y", vec![ast::Iter::List]);
@@ -176,7 +184,7 @@ fn test_list_rows_cannot_collect_unassigned_outer_values() {
             }];
             list(&mut arena, values)
         };
-        assign_exp(&mut arena, &ctx, &exp, value)
+        assign_exp(&mut arena, ctx, &exp, value)
     }) else {
         panic!("expected missing row binding")
     };
@@ -199,10 +207,10 @@ fn test_optional_assignment_retains_inner_bindings_and_collects_none() {
                 let values = vec![value(&mut arena, true)];
                 tuple(&mut arena, values)
             });
-            make::opt(&mut arena, typ.node.clone(), value, span(8))
+            make::opt(&mut arena, typ.node.clone().into(), value, span(8))
         }
         .unwrap();
-        assign_exp(&mut arena, &Context::new(&global), &exp, value)
+        assign_exp(&mut arena, Context::new(&global), &exp, value)
     });
     assert!(get::bool(&arena, &binding(&ctx, "x", vec![])).unwrap());
     assert!(
@@ -221,8 +229,8 @@ fn test_optional_assignment_retains_inner_bindings_and_collects_none() {
         Span::default()
     );
     let ctx = ok({
-        let value = make::opt(&mut arena, typ.node.clone(), None, span(8)).unwrap();
-        assign_exp(&mut arena, &ctx, &exp, value)
+        let value = make::opt(&mut arena, typ.node.clone().into(), None, span(8)).unwrap();
+        assign_exp(&mut arena, ctx, &exp, value)
     });
     assert_eq!(
         arena
@@ -250,7 +258,7 @@ fn test_cons_tail_preserves_value_type_with_default_span() {
         let values = vec![value(&mut arena, true), value(&mut arena, false)];
         list(&mut arena, values)
     };
-    let ctx = ok(assign_exp(&mut arena, &Context::new(&global), &exp, value));
+    let ctx = ok(assign_exp(&mut arena, Context::new(&global), &exp, value));
     let tail = binding(&ctx, "t", vec![]);
     assert_eq!(tail.note, value.note);
     assert_eq!(arena.span(&tail).clone(), Span::default());
@@ -259,7 +267,7 @@ fn test_cons_tail_preserves_value_type_with_default_span() {
     assert!(matches!(
         {
             let value = list(&mut arena, vec![]);
-            assign_exp(&mut arena, &ctx, &exp, value)
+            assign_exp(&mut arena, ctx, &exp, value)
         },
         Backtrack::Err(_)
     ));
@@ -273,7 +281,7 @@ fn test_assignment_errors_are_fatal_and_located() {
         var_exp("x"),
         note_phrase!(node: ast::ExpKind::Var(id("y")), note: typ::make::bool().node, span: span(9)),
     ];
-    let Backtrack::Err(traces) = assign_exps(&mut arena, &Context::new(&global), &exps, &[]) else {
+    let Backtrack::Err(traces) = assign_exps(&mut arena, Context::new(&global), &exps, &[]) else {
         panic!("expected arity error")
     };
     assert_eq!(traces[0].span, Span::over(&[span(4), span(9)]));
@@ -283,13 +291,13 @@ fn test_assignment_errors_are_fatal_and_located() {
             let value = Some(value(&mut arena, true));
             make::opt(
                 &mut arena,
-                (typ::make::opt(typ::make::bool())).node.clone(),
+                (typ::make::opt(typ::make::bool())).node.clone().into(),
                 value,
                 span(8),
             )
         }
         .unwrap();
-        assign_exp(&mut arena, &Context::new(&global), &exp, value)
+        assign_exp(&mut arena, Context::new(&global), &exp, value)
     }) else {
         panic!("expected optionality error")
     };
@@ -297,16 +305,16 @@ fn test_assignment_errors_are_fatal_and_located() {
 }
 
 #[test]
-fn test_function_argument_copies_caller_definition_without_caller_values() {
+fn test_function_argument_shares_caller_definition_without_caller_values() {
     let mut arena = ValueArena::new();
     let global = Global::load(vec![]).unwrap();
-    let func = ast::MetaFuncDef::Extern(ast::ExternFunc {
+    let func = Rc::new(ast::MetaFuncDef::Extern(ast::ExternFunc {
         id: id("f"),
         tparams: vec![],
         params: vec![],
         typ: typ::make::bool(),
         hints: vec![],
-    });
+    }));
     let callee = {
         let global_caller = Global::load(vec![]).unwrap();
         let mut caller = Context::new(&global_caller);
@@ -325,13 +333,18 @@ fn test_function_argument_copies_caller_definition_without_caller_values() {
         let callee = ok(assign_args(
             &mut arena,
             &caller,
-            &Context::new(&global),
+            Context::new(&global),
             &[arg],
             &[func_value],
+        ));
+        assert!(Rc::ptr_eq(
+            caller.find_func(&id("f")).unwrap().1,
+            callee.find_func(&id("alias")).unwrap().1,
         ));
         assert!(caller.find_func_opt(&id("alias")).is_none());
         callee
     };
+    assert!(Rc::ptr_eq(&func, callee.find_func(&id("alias")).unwrap().1));
     assert_eq!(
         callee.find_func(&id("alias")).unwrap(),
         (Scope::Local, &func)
@@ -362,7 +375,7 @@ fn test_case_and_struct_assignments_follow_argument_order() {
         ]);
         make::case(
             &mut arena,
-            (typ::make::bool()).node.clone(),
+            (typ::make::bool()).node.clone().into(),
             value_case,
             span(8),
         )
@@ -379,14 +392,14 @@ fn test_case_and_struct_assignments_follow_argument_order() {
         ];
         make::structure(
             &mut arena,
-            (typ::make::bool()).node.clone(),
+            (typ::make::bool()).node.clone().into(),
             fields,
             span(8),
         )
     }
     .unwrap();
     for (exp, value) in [(case_exp, case_value), (struct_exp, struct_value)] {
-        let ctx = ok(assign_exp(&mut arena, &Context::new(&global), &exp, value));
+        let ctx = ok(assign_exp(&mut arena, Context::new(&global), &exp, value));
         assert!(get::bool(&arena, &binding(&ctx, "x", vec![])).unwrap());
         assert!(!get::bool(&arena, &binding(&ctx, "y", vec![])).unwrap());
     }
@@ -403,7 +416,7 @@ fn test_empty_iteration_creates_empty_collections_for_every_binding() {
     );
     let ctx = ok({
         let value = list(&mut arena, vec![]);
-        assign_exp(&mut arena, &Context::new(&global), &exp, value)
+        assign_exp(&mut arena, Context::new(&global), &exp, value)
     });
     for name in ["x", "y"] {
         assert!(

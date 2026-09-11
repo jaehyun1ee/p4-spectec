@@ -2,29 +2,57 @@
 //!
 //! Handles belong to one arena; annotation changes preserve the stored body
 
+use std::rc::Rc;
+
 use super::{
-    intern::{CanonId, CanonInterner, Interned, Interner},
+    intern::{CanonId, CanonInterner, Interned, Interner, RcInterner},
     value::{Value, ValueError, ValueKind, ValueRef},
 };
 use crate::lang::{
     common::source::{NotePhrase, Span},
     data::typ::TypKind,
+    xl::num,
 };
 
 // = Arena storage
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct ValueArena {
     values: CanonInterner<ValueKind>,
-    types: Interner<TypKind>,
+    types: RcInterner<TypKind>,
     spans: Interner<Span>,
+    span_empty: Interned<Span>,
+    // Intrinsic constructor types have stable allocation identities
+    pub(super) typ_bool: Rc<TypKind>,
+    pub(super) typ_nat: Rc<TypKind>,
+    pub(super) typ_int: Rc<TypKind>,
+    pub(super) typ_text: Rc<TypKind>,
+}
+
+impl Default for ValueArena {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ValueArena {
     // - Construction
 
     pub fn new() -> Self {
-        Self::default()
+        let mut spans = Interner::new();
+        let span_empty = spans
+            .intern(Span::default())
+            .expect("the first span fits in an interner index");
+        Self {
+            values: CanonInterner::new(),
+            types: RcInterner::new(),
+            spans,
+            span_empty,
+            typ_bool: Rc::new(TypKind::Bool),
+            typ_nat: Rc::new(TypKind::Num(num::Typ::Nat)),
+            typ_int: Rc::new(TypKind::Num(num::Typ::Int)),
+            typ_text: Rc::new(TypKind::Text),
+        }
     }
 
     // - Interning
@@ -32,18 +60,21 @@ impl ValueArena {
     pub(super) fn alloc(
         &mut self,
         kind: ValueKind,
-        typ: TypKind,
+        typ: Rc<TypKind>,
         span: Span,
     ) -> Result<Value, ValueError> {
         let node = self
             .values
             .intern(kind, ValueKind::hash_canon, ValueKind::eq_canon)?;
         let note = self.types.intern(typ)?;
-        let span = self.spans.intern(span)?;
+        let span = self.intern_span(span)?;
         Ok(NotePhrase { node, note, span })
     }
 
     pub fn intern_span(&mut self, span: Span) -> Result<Interned<Span>, ValueError> {
+        if span == *self.spans.get(self.span_empty) {
+            return Ok(self.span_empty);
+        }
         Ok(self.spans.intern(span)?)
     }
 
@@ -57,7 +88,7 @@ impl ValueArena {
         self.values.canon_id(value.node)
     }
 
-    pub fn typ(&self, value: &Value) -> &TypKind {
+    pub fn typ(&self, value: &Value) -> &Rc<TypKind> {
         self.types.get(value.note)
     }
 
@@ -76,13 +107,13 @@ impl ValueArena {
 
     // - Annotations
 
-    pub fn update_typ(&mut self, value: Value, typ: TypKind) -> Result<Value, ValueError> {
+    pub fn update_typ(&mut self, value: Value, typ: Rc<TypKind>) -> Result<Value, ValueError> {
         let note = self.types.intern(typ)?;
         Ok(Value { note, ..value })
     }
 
     pub fn update_span(&mut self, value: Value, span: Span) -> Result<Value, ValueError> {
-        let span = self.spans.intern(span)?;
+        let span = self.intern_span(span)?;
         Ok(Value { span, ..value })
     }
 

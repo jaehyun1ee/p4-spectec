@@ -66,7 +66,7 @@ fn make_pair(
         .expect("the pair mixop has exactly two arguments");
     Ok(make::case(
         arena,
-        typ.node.clone(),
+        typ.node.into(),
         value_case,
         Span::default(),
     )?)
@@ -128,13 +128,13 @@ fn value_of_map(
     let pair_id = crate::phrase!(node: "pair".to_owned(), span: Span::default());
     let typ_pair = typ::make::var(pair_id, vec![typ_key.clone(), typ_value.clone()]);
     let typ_pairs = typ::make::list(typ_pair);
-    let value_pairs = make::list(arena, typ_pairs.node.clone(), map, Span::default())?;
+    let value_pairs = make::list(arena, typ_pairs.node.into(), map, Span::default())?;
     let map_id = crate::phrase!(node: "map".to_owned(), span: Span::default());
     let typ = typ::make::var(map_id, vec![typ_key.clone(), typ_value.clone()]);
     let map_mixop = map_mixop();
     let value_case =
         Mixop::fill(&map_mixop, [value_pairs]).expect("the map mixop has exactly one argument");
-    let value = make::case(arena, typ.node.clone(), value_case, Span::default())?;
+    let value = make::case(arena, typ.node.into(), value_case, Span::default())?;
     Ok(value)
 }
 
@@ -152,7 +152,7 @@ pub fn find_map(
     let map = map_of_value(arena, value_map)?;
     let typ_opt = typ::make::opt(typ_value.clone());
     let value_opt = map_find_opt(arena, value_key, &map);
-    let value = make::opt(arena, typ_opt.node.clone(), value_opt, Span::default())?;
+    let value = make::opt(arena, typ_opt.node.into(), value_opt, Span::default())?;
     Ok(value)
 }
 
@@ -175,7 +175,7 @@ pub fn find_maps(
         }
     }
     let typ_opt = typ::make::opt(typ_value.clone());
-    let value = make::opt(arena, typ_opt.node.clone(), value_opt, Span::default())?;
+    let value = make::opt(arena, typ_opt.node.into(), value_opt, Span::default())?;
     Ok(value)
 }
 

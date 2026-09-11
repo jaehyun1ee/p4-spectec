@@ -12,7 +12,7 @@ use p4spec_rust::{
 };
 
 fn first_binary<'a>(arena: &'a ValueArena, value: &'a Value) -> Option<&'a Value> {
-    if let TypKind::Var(id, _) = arena.typ(value)
+    if let TypKind::Var(id, _) = arena.typ(value).as_ref()
         && id.node == "binaryExpression"
     {
         return Some(value);
@@ -384,7 +384,7 @@ fn test_empty_productions_use_previous_token_end_across_whitespace() {
         data::{typ::TypKind, value::Value},
     };
     fn spans<'a>(arena: &'a ValueArena, value: &'a Value, name: &str, output: &mut Vec<Span>) {
-        if let TypKind::Var(id, _) = arena.typ(value)
+        if let TypKind::Var(id, _) = arena.typ(value).as_ref()
             && id.node == name
         {
             output.push(arena.span(value).clone());
@@ -430,7 +430,7 @@ fn test_initial_empty_production_precedes_whitespace_and_line_directives() {
         data::{typ::TypKind, value::Value},
     };
     fn initial_annotation<'a>(arena: &'a ValueArena, value: &'a Value) -> Option<&'a Value> {
-        if let TypKind::Var(id, _) = arena.typ(value)
+        if let TypKind::Var(id, _) = arena.typ(value).as_ref()
             && id.node == "annotationList"
         {
             return Some(value);

@@ -1,5 +1,7 @@
 //! Destructuring assignments preserve iteration paths and isolate list rows
 
+use std::{borrow::Borrow, rc::Rc};
+
 use crate::interp::al::error::AssignErrorKind;
 
 use crate::{
@@ -26,7 +28,7 @@ use super::super::{
 
 pub fn assign_exp<'global>(
     arena: &mut ValueArena,
-    ctx: &Context<'global>,
+    ctx: Context<'global>,
     exp: &ast::Exp,
     value: Value,
 ) -> Backtrack<Context<'global>> {
@@ -72,24 +74,28 @@ pub fn assign_exp<'global>(
     }
 }
 
-pub fn assign_exps<'global>(
+pub fn assign_exps<'global, T: Borrow<ast::Exp>>(
     arena: &mut ValueArena,
-    ctx: &Context<'global>,
-    exps: &[ast::Exp],
+    mut ctx: Context<'global>,
+    exps: &[T],
     values: &[Value],
 ) -> Backtrack<Context<'global>> {
     if exps.len() != values.len() {
         return Backtrack::err(
-            Span::over(&exps.iter().map(|exp| exp.span.clone()).collect::<Vec<_>>()),
+            Span::over(
+                &exps
+                    .iter()
+                    .map(|exp| exp.borrow().span.clone())
+                    .collect::<Vec<_>>(),
+            ),
             ErrorKind::Assign(AssignErrorKind::ExpressionArityMismatch {
                 expected: exps.len(),
                 actual: values.len(),
             }),
         );
     }
-    let mut ctx = ctx.clone();
     for (exp, value) in exps.iter().zip(values) {
-        ctx = back!(assign_exp(arena, &ctx, exp, *value));
+        ctx = back!(assign_exp(arena, ctx, exp.borrow(), *value));
     }
     Backtrack::Ok(ctx)
 }
@@ -98,11 +104,10 @@ pub fn assign_exps<'global>(
 
 fn assign_var_exp<'global>(
     _arena: &mut ValueArena,
-    ctx: &Context<'global>,
+    mut ctx: Context<'global>,
     id: &ast::Id,
     value: Value,
 ) -> Backtrack<Context<'global>> {
-    let mut ctx = ctx.clone();
     ctx.add_value(Variable::new(id.clone(), vec![]), value);
     Backtrack::Ok(ctx)
 }
@@ -111,7 +116,7 @@ fn assign_var_exp<'global>(
 
 fn assign_tuple_exp<'global>(
     arena: &mut ValueArena,
-    ctx: &Context<'global>,
+    ctx: Context<'global>,
     exps: &[ast::Exp],
     values: &[Value],
 ) -> Backtrack<Context<'global>> {
@@ -122,11 +127,11 @@ fn assign_tuple_exp<'global>(
 
 fn assign_case_exp<'global>(
     arena: &mut ValueArena,
-    ctx: &Context<'global>,
+    ctx: Context<'global>,
     not_exp: &ast::NotExp,
     values: &[Value],
 ) -> Backtrack<Context<'global>> {
-    let exps = not_exp.args().into_iter().cloned().collect::<Vec<_>>();
+    let exps = not_exp.args();
     assign_exps(arena, ctx, &exps, values)
 }
 
@@ -134,14 +139,11 @@ fn assign_case_exp<'global>(
 
 fn assign_str_exp<'global>(
     arena: &mut ValueArena,
-    ctx: &Context<'global>,
+    ctx: Context<'global>,
     exp_fields: &[ast::ExpField],
     values: &[Value],
 ) -> Backtrack<Context<'global>> {
-    let exps = exp_fields
-        .iter()
-        .map(|(_, exp)| exp.clone())
-        .collect::<Vec<_>>();
+    let exps = exp_fields.iter().map(|(_, exp)| exp).collect::<Vec<_>>();
     assign_exps(arena, ctx, &exps, values)
 }
 
@@ -149,7 +151,7 @@ fn assign_str_exp<'global>(
 
 fn assign_opt_exp<'global>(
     arena: &mut ValueArena,
-    ctx: &Context<'global>,
+    ctx: Context<'global>,
     exp: &ast::Exp,
     exp_opt: &Option<Box<ast::Exp>>,
     value: &Value,
@@ -157,7 +159,7 @@ fn assign_opt_exp<'global>(
 ) -> Backtrack<Context<'global>> {
     match (exp_opt, value_opt) {
         (Some(exp), Some(value)) => assign_exp(arena, ctx, exp, *value),
-        (None, None) => Backtrack::Ok(ctx.clone()),
+        (None, None) => Backtrack::Ok(ctx),
         _ => Backtrack::err(
             exp.span.clone(),
             ErrorKind::Assign(AssignErrorKind::Mismatch {
@@ -172,7 +174,7 @@ fn assign_opt_exp<'global>(
 
 fn assign_list_exp<'global>(
     arena: &mut ValueArena,
-    ctx: &Context<'global>,
+    ctx: Context<'global>,
     exps: &[ast::Exp],
     values: &[Value],
 ) -> Backtrack<Context<'global>> {
@@ -183,7 +185,7 @@ fn assign_list_exp<'global>(
 
 fn assign_cons_exp<'global>(
     arena: &mut ValueArena,
-    ctx: &Context<'global>,
+    ctx: Context<'global>,
     exp: &ast::Exp,
     exp_head: &ast::Exp,
     exp_tail: &ast::Exp,
@@ -207,14 +209,14 @@ fn assign_cons_exp<'global>(
         &Span::default()
     ));
     let ctx = back!(assign_exp(arena, ctx, exp_head, *value_head));
-    assign_exp(arena, &ctx, exp_tail, value_tail)
+    assign_exp(arena, ctx, exp_tail, value_tail)
 }
 
 // - Iteration expression
 
 fn assign_iter_exp<'global>(
     arena: &mut ValueArena,
-    ctx: &Context<'global>,
+    mut ctx: Context<'global>,
     exp: &ast::Exp,
     exp_inner: &ast::Exp,
     iter: &ast::Iter,
@@ -222,7 +224,6 @@ fn assign_iter_exp<'global>(
     value: Value,
 ) -> Backtrack<Context<'global>> {
     if let Some(var) = is_iter_var_exp(exp) {
-        let mut ctx = ctx.clone();
         ctx.add_value(var, value);
         return Backtrack::Ok(ctx);
     }
@@ -232,7 +233,7 @@ fn assign_iter_exp<'global>(
             let value_inner = back!(Backtrack::from_result(get::opt(arena, &value), span));
             let mut ctx = match value_inner {
                 Some(value) => back!(assign_exp(arena, ctx, exp_inner, value)),
-                None => ctx.clone(),
+                None => ctx,
             };
             for var in vars {
                 let mut iters = var.iters.clone();
@@ -248,7 +249,7 @@ fn assign_iter_exp<'global>(
                     None
                 };
                 let value_sub = back!(Backtrack::from_result(
-                    make::opt(arena, typ.node.clone(), value_sub, Span::default()),
+                    make::opt(arena, typ.node.into(), value_sub, Span::default()),
                     span
                 ));
                 ctx.add_value(Variable::new(var.id.clone(), iters), value_sub);
@@ -260,9 +261,8 @@ fn assign_iter_exp<'global>(
             let ctx_sub = ctx.wipe();
             let mut ctxs = Vec::with_capacity(values.len());
             for value in values {
-                ctxs.push(back!(assign_exp(arena, &ctx_sub, exp_inner, value)));
+                ctxs.push(back!(assign_exp(arena, ctx_sub.clone(), exp_inner, value)));
             }
-            let mut ctx = ctx.clone();
             for var in vars {
                 let mut iters = var.iters.clone();
                 iters.push(ast::Iter::List);
@@ -276,7 +276,7 @@ fn assign_iter_exp<'global>(
                     values.push(*value);
                 }
                 let value_sub = back!(Backtrack::from_result(
-                    make::list(arena, typ.node.clone(), values, Span::default()),
+                    make::list(arena, typ.node.into(), values, Span::default()),
                     span
                 ));
                 ctx.add_value(Variable::new(var.id.clone(), iters), value_sub);
@@ -291,7 +291,7 @@ fn assign_iter_exp<'global>(
 pub fn assign_arg<'global>(
     arena: &mut ValueArena,
     ctx_caller: &Context<'_>,
-    ctx_callee: &Context<'global>,
+    ctx_callee: Context<'global>,
     arg: &ast::Arg,
     value: Value,
 ) -> Backtrack<Context<'global>> {
@@ -304,7 +304,7 @@ pub fn assign_arg<'global>(
 pub fn assign_args<'global>(
     arena: &mut ValueArena,
     ctx_caller: &Context<'_>,
-    ctx_callee: &Context<'global>,
+    ctx_callee: Context<'global>,
     args: &[ast::Arg],
     values: &[Value],
 ) -> Backtrack<Context<'global>> {
@@ -317,9 +317,9 @@ pub fn assign_args<'global>(
             }),
         );
     }
-    let mut ctx = ctx_callee.clone();
+    let mut ctx = ctx_callee;
     for (arg, value) in args.iter().zip(values.iter()) {
-        ctx = back!(assign_arg(arena, ctx_caller, &ctx, arg, *value));
+        ctx = back!(assign_arg(arena, ctx_caller, ctx, arg, *value));
     }
     Backtrack::Ok(ctx)
 }
@@ -328,7 +328,7 @@ pub fn assign_args<'global>(
 
 fn assign_exp_arg<'global>(
     arena: &mut ValueArena,
-    ctx: &Context<'global>,
+    ctx: Context<'global>,
     exp: &ast::Exp,
     value: Value,
 ) -> Backtrack<Context<'global>> {
@@ -340,7 +340,7 @@ fn assign_exp_arg<'global>(
 fn assign_def_arg<'global>(
     arena: &mut ValueArena,
     ctx_caller: &Context<'_>,
-    ctx_callee: &Context<'global>,
+    mut ctx_callee: Context<'global>,
     id: &ast::Id,
     value: Value,
 ) -> Backtrack<Context<'global>> {
@@ -357,9 +357,8 @@ fn assign_def_arg<'global>(
         ctx_caller.find_func(id_func),
         &id_func.span
     ));
-    let mut ctx_callee = ctx_callee.clone();
     back!(Backtrack::from_result(
-        ctx_callee.add_func(id.clone(), func.clone()),
+        ctx_callee.add_func(id.clone(), Rc::clone(func)),
         &id.span
     ));
     Backtrack::Ok(ctx_callee)

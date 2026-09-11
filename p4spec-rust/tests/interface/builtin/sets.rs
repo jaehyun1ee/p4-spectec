@@ -22,7 +22,7 @@ fn test_set_union_retains_notation() {
     let typ_sets = typ::make::list(typ_set);
     let sets = make::list(
         &mut arena,
-        typ_sets.node.clone(),
+        typ_sets.node.clone().into(),
         Vec::new(),
         Span::default(),
     )
@@ -43,12 +43,12 @@ fn test_set_union_deduplicates_annotated_elements_in_syntax_order() {
     span.left.line = 17;
     let value_true_updated = arena.update_span(value_true, span).unwrap();
     let value_true_updated = arena
-        .update_typ(value_true_updated, typ::TypKind::Text)
+        .update_typ(value_true_updated, typ::TypKind::Text.into())
         .unwrap();
     let value_false = make::bool(&mut arena, false, Span::default()).unwrap();
     let values = make::list(
         &mut arena,
-        typ::make::list(typ::make::bool()).node,
+        typ::make::list(typ::make::bool()).node.clone().into(),
         vec![value_true, value_true_updated, value_false],
         Span::default(),
     )
@@ -56,7 +56,10 @@ fn test_set_union_deduplicates_annotated_elements_in_syntax_order() {
     let shape = parse_mixop("`{ k `}").unwrap();
     let value_set = make::case(
         &mut arena,
-        typ::make::var(super::id("set"), vec![typ::make::bool()]).node,
+        typ::make::var(super::id("set"), vec![typ::make::bool()])
+            .node
+            .clone()
+            .into(),
         Mixop::fill(&shape, [values]).unwrap(),
         Span::default(),
     )

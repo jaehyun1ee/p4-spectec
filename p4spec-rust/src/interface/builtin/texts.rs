@@ -105,7 +105,7 @@ pub fn split_text(
         .map(|part| make::text(arena, part, Span::default()))
         .collect::<Result<Vec<_>, _>>()?;
     let typ_list = typ::make::list(typ::make::bool());
-    let value = make::list(arena, typ_list.node.clone(), parts, Span::default())?;
+    let value = make::list(arena, typ_list.node.into(), parts, Span::default())?;
     Ok(value)
 }
 

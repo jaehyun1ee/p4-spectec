@@ -155,7 +155,7 @@ pub(in crate::interp::al) fn cache_func<I: Interface, E: Extern>(
 ) -> bool {
     runner.config().cache
         && matches!(ctx.find_func(id), Ok((Scope::Global, func))
-            if !matches!(func, ast::MetaFuncDef::Extern(_)))
+            if !matches!(func.as_ref(), ast::MetaFuncDef::Extern(_)))
         && !values
             .iter()
             .any(|value| matches!(runner.arena().kind(value), ValueKind::Func(_)))
@@ -248,12 +248,12 @@ fn eval_rule_path<I: Interface, E: Extern>(
     ));
     let ctx = back!(assign::assign_exps(
         runner.arena_mut(),
-        &ctx.localize(),
+        ctx.localize(),
         &rule_match.exps_input,
         values
     ));
-    let ctx = back!(eval_prems(runner, &ctx, &rule_match.prems));
-    let ctx = back!(eval_prems(runner, &ctx, &path.prems));
+    let ctx = back!(eval_prems(runner, ctx, &rule_match.prems));
+    let ctx = back!(eval_prems(runner, ctx, &path.prems));
     expr::eval_exps(runner, &ctx, &path.exps_output)
 }
 
@@ -340,7 +340,7 @@ pub fn invoke_func<I: Interface, E: Extern>(
     runner.state_mut().begin();
     let result = stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
         let (_, func) = back!(Backtrack::from_result(ctx.find_func(id), &id.span));
-        match func {
+        match func.as_ref() {
             ast::MetaFuncDef::Extern(func) => {
                 invoke_extern_func(runner, ctx, id, func, targs, values)
             }
@@ -476,11 +476,11 @@ fn eval_table_row<I: Interface, E: Extern>(
         let ctx = back!(assign::assign_args(
             runner.arena_mut(),
             ctx,
-            &ctx.localize(),
+            ctx.localize(),
             &table_row.node.args,
             values
         ));
-        let ctx = back!(eval_prems(runner, &ctx, &table_row.node.prems));
+        let ctx = back!(eval_prems(runner, ctx, &table_row.node.prems));
         expr::eval_exp(runner, &ctx, &table_row.node.exp)
     })();
     result.nest(id.span.clone(), || {
@@ -524,11 +524,11 @@ fn eval_clause<I: Interface, E: Extern>(
         let ctx = back!(assign::assign_args(
             runner.arena_mut(),
             ctx_caller,
-            ctx_callee,
+            ctx_callee.clone(),
             &clause.node.args,
             values
         ));
-        let ctx = back!(eval_prems(runner, &ctx, &clause.node.premises));
+        let ctx = back!(eval_prems(runner, ctx, &clause.node.premises));
         expr::eval_exp(runner, &ctx, &clause.node.expression)
     })();
     result.nest(defined_func.id.span.clone(), || {

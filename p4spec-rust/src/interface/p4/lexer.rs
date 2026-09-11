@@ -666,7 +666,7 @@ impl<'source, 'arena> Lexer<'source, 'arena> {
                 let id_typ = phrase!(node: "integerLiteral".to_owned(), span: Span::default());
                 let value = make::case(
                     &mut self.context.arena_mut(),
-                    (typ::make::var(id_typ, vec![])).node,
+                    (typ::make::var(id_typ, vec![])).node.into(),
                     value_case,
                     span,
                 )?;

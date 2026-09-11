@@ -67,7 +67,7 @@ fn wrapped_text(arena: &mut ValueArena) -> Value {
     ]);
     make::case(
         arena,
-        (wrapper_type).node.clone(),
+        (wrapper_type).node.clone().into(),
         value_case,
         Span::default(),
     )
@@ -110,7 +110,7 @@ fn test_unparses_scalar_and_container_values() {
             make::bool(&mut arena, false, span.clone()).unwrap(),
             make::nat(&mut arena, 7_u64.into(), span.clone()).unwrap(),
         ];
-        make::tuple(&mut arena, (tuple_type).node.clone(), values, span).unwrap()
+        make::tuple(&mut arena, (tuple_type).node.clone().into(), values, span).unwrap()
     };
     assert_eq!(unparser.render(&arena, &tuple).unwrap(), "(false, 7)");
 }
@@ -135,7 +135,7 @@ fn test_unsupported_values_return_typed_errors() {
     let mut arena = ValueArena::new();
     let structure = make::structure(
         &mut arena,
-        (typ::make::bool()).node.clone(),
+        (typ::make::bool()).node.clone().into(),
         Vec::new(),
         Span::default(),
     )

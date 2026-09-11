@@ -21,7 +21,7 @@ fn case(arena: &mut ValueArena, shape: &str, args: Vec<Value>, typ: &str) -> Val
         p4spec_rust::phrase!(node: typ.to_owned(), span: Span::default()),
         Vec::new(),
     );
-    make::case(arena, typ.node.clone(), value_case, Span::default()).unwrap()
+    make::case(arena, typ.node.clone().into(), value_case, Span::default()).unwrap()
 }
 
 fn run_static_assert(names_param: &[&str]) -> (Value, Value) {
@@ -53,7 +53,7 @@ fn run_static_assert(names_param: &[&str]) -> (Value, Value) {
         .collect();
     let value_names = make::list(
         runner.arena_mut(),
-        typ_names.node.clone(),
+        typ_names.node.clone().into(),
         values_name,
         Span::default(),
     )

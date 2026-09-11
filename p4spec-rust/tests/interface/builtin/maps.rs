@@ -23,11 +23,17 @@ fn test_map_update_retains_notation() {
     let typ_pair = typ::make::var(super::id("pair"), vec![typ_key.clone(), typ_value.clone()]);
     let typ_pairs = typ::make::list(typ_pair);
     let typ_map = typ::make::var(super::id("map"), vec![typ_key.clone(), typ_value.clone()]);
-    let pairs = make::list(&mut arena, typ_pairs.node.clone(), Vec::new(), span.clone()).unwrap();
+    let pairs = make::list(
+        &mut arena,
+        typ_pairs.node.clone().into(),
+        Vec::new(),
+        span.clone(),
+    )
+    .unwrap();
     let shape = parse_mixop("`{ k `}").unwrap();
     let map = make::case(
         &mut arena,
-        typ_map.node.clone(),
+        typ_map.node.clone().into(),
         Mixop::fill(&shape, [pairs]).unwrap(),
         span.clone(),
     )

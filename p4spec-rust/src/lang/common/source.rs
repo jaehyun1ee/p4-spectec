@@ -30,10 +30,20 @@ impl fmt::Display for Position {
 }
 
 /// A source span between two positions
-#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Span {
     pub left: Position,
     pub right: Position,
+}
+
+impl Default for Span {
+    fn default() -> Self {
+        thread_local! {
+            // Reuse the empty file names in generated source annotations
+            static SPAN_EMPTY: Span = Span::new(Position::default(), Position::default());
+        }
+        SPAN_EMPTY.with(Clone::clone)
+    }
 }
 
 impl Span {

@@ -276,8 +276,13 @@ fn test_builtin_interface_print_validates_both_arities() {
 fn test_builtin_interface_print_preserves_unparse_failures() {
     let mut arena = ValueArena::new();
     let typ = typ::make::bool();
-    let value =
-        value::make::structure(&mut arena, typ.node.clone(), Vec::new(), Span::default()).unwrap();
+    let value = value::make::structure(
+        &mut arena,
+        typ.node.clone().into(),
+        Vec::new(),
+        Span::default(),
+    )
+    .unwrap();
     let error = BuiltinInterface::new(P4Unparser::new())
         .call_builtin(&mut arena, &id("print_"), &[typ], &[value])
         .unwrap_err();
@@ -326,7 +331,7 @@ fn test_builtin_interface_print_preserves_spec_hints_after_clear() {
             Mixfix::Atom(atom),
             Mixfix::Arg(value::make::text(&mut arena, "payload".to_owned(), span.clone()).unwrap()),
         ]);
-        value::make::case(&mut arena, typ.node.clone(), values, span).unwrap()
+        value::make::case(&mut arena, typ.node.clone().into(), values, span).unwrap()
     };
     let _guard = FRESH_BUILTIN.lock().unwrap();
     let mut interface = BuiltinInterface::new(P4Unparser::from_al_spec(&spec));

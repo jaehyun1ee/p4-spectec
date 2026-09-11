@@ -63,18 +63,13 @@ fn value_of_set(
 ) -> Result<Value, BuiltinError> {
     let values_element = set.into_iter().collect();
     let typ_list = typ::make::list(typ_key.clone());
-    let value_elements = make::list(
-        arena,
-        typ_list.node.clone(),
-        values_element,
-        Span::default(),
-    )?;
+    let value_elements = make::list(arena, typ_list.node.into(), values_element, Span::default())?;
     let set_id = crate::phrase!(node: "set".to_owned(), span: Span::default());
     let typ = typ::make::var(set_id, vec![typ_key.clone()]);
     let set_mixop = set_mixop();
     let value_case =
         Mixop::fill(&set_mixop, [value_elements]).expect("the set mixop has exactly one argument");
-    let value = make::case(arena, typ.node.clone(), value_case, Span::default())?;
+    let value = make::case(arena, typ.node.into(), value_case, Span::default())?;
     Ok(value)
 }
 

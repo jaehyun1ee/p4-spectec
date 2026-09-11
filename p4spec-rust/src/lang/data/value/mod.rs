@@ -1,5 +1,7 @@
 //! Shared value types, arena storage, constructors, and projections
 
+use std::rc::Rc;
+
 mod arena;
 mod intern;
 #[allow(
@@ -9,7 +11,7 @@ mod intern;
 mod value;
 
 pub use arena::ValueArena;
-pub use intern::{CanonId, CanonInterner, Interned, Interner};
+pub use intern::{CanonId, CanonInterner, Interned, Interner, RcInterner};
 pub use value::*;
 
 use crate::{
@@ -38,7 +40,7 @@ pub mod make {
     pub fn new(
         arena: &mut ValueArena,
         kind: ValueKind,
-        typ: TypKind,
+        typ: Rc<TypKind>,
         span: Span,
     ) -> Result<Value, ValueError> {
         arena.alloc(kind, typ, span)
@@ -47,11 +49,14 @@ pub mod make {
     // - Primitives
 
     pub fn bool(arena: &mut ValueArena, value: bool, span: Span) -> Result<Value, ValueError> {
-        new(arena, ValueKind::Bool(value), TypKind::Bool, span)
+        new(arena, ValueKind::Bool(value), arena.typ_bool.clone(), span)
     }
 
     pub fn num(arena: &mut ValueArena, value: Number, span: Span) -> Result<Value, ValueError> {
-        let typ = TypKind::Num(num::to_typ(&value));
+        let typ = match num::to_typ(&value) {
+            num::Typ::Nat => arena.typ_nat.clone(),
+            num::Typ::Int => arena.typ_int.clone(),
+        };
         new(arena, ValueKind::Num(value), typ, span)
     }
 
@@ -72,14 +77,14 @@ pub mod make {
     }
 
     pub fn text(arena: &mut ValueArena, value: String, span: Span) -> Result<Value, ValueError> {
-        new(arena, ValueKind::Text(value), TypKind::Text, span)
+        new(arena, ValueKind::Text(value), arena.typ_text.clone(), span)
     }
 
     // - Structures
 
     pub fn structure(
         arena: &mut ValueArena,
-        typ: TypKind,
+        typ: Rc<TypKind>,
         fields: Vec<ValueField>,
         span: Span,
     ) -> Result<Value, ValueError> {
@@ -90,7 +95,7 @@ pub mod make {
 
     pub fn case(
         arena: &mut ValueArena,
-        typ: TypKind,
+        typ: Rc<TypKind>,
         value_case: Mixfix<Value>,
         span: Span,
     ) -> Result<Value, ValueError> {
@@ -126,7 +131,7 @@ pub mod make {
             span: Span::default(),
         };
         let typ = typ::make::var(id, Vec::new());
-        case(arena, typ.node, value_case, span)
+        case(arena, Rc::new(typ.node), value_case, span)
     }
 
     pub(crate) use case_shaped;
@@ -135,7 +140,7 @@ pub mod make {
 
     pub fn tuple(
         arena: &mut ValueArena,
-        typ: TypKind,
+        typ: Rc<TypKind>,
         values: Vec<Value>,
         span: Span,
     ) -> Result<Value, ValueError> {
@@ -144,7 +149,7 @@ pub mod make {
 
     pub fn opt(
         arena: &mut ValueArena,
-        typ: TypKind,
+        typ: Rc<TypKind>,
         value: Option<Value>,
         span: Span,
     ) -> Result<Value, ValueError> {
@@ -153,7 +158,7 @@ pub mod make {
 
     pub fn list(
         arena: &mut ValueArena,
-        typ: TypKind,
+        typ: Rc<TypKind>,
         values: Vec<Value>,
         span: Span,
     ) -> Result<Value, ValueError> {
@@ -171,14 +176,14 @@ pub mod make {
         span: Span,
     ) -> Result<Value, ValueError> {
         let typ = typ::make::func(tparams, typs_params, typ_ret).node;
-        new(arena, ValueKind::Func(id), typ, span)
+        new(arena, ValueKind::Func(id), Rc::new(typ), span)
     }
 
     // - Externals
 
     pub fn external(
         arena: &mut ValueArena,
-        typ: TypKind,
+        typ: Rc<TypKind>,
         value: ExternalData,
         span: Span,
     ) -> Result<Value, ValueError> {

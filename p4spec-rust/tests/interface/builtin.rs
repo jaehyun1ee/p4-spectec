@@ -51,7 +51,13 @@ fn test_numeric_builtin_returns_value_without_side_effect() {
             make::int(&mut arena, BigInt::from(2), Span::default()).unwrap(),
             make::int(&mut arena, BigInt::from(5), Span::default()).unwrap(),
         ];
-        make::list(&mut arena, typ_list.node.clone(), values, Span::default()).unwrap()
+        make::list(
+            &mut arena,
+            typ_list.node.clone().into(),
+            values,
+            Span::default(),
+        )
+        .unwrap()
     };
 
     let (result, side_effected) =
@@ -113,7 +119,13 @@ fn test_list_and_text_builtins_preserve_ocaml_results() {
             make::text(&mut arena, "a".to_owned(), Span::default()).unwrap(),
             make::text(&mut arena, "a".to_owned(), Span::default()).unwrap(),
         ];
-        make::list(&mut arena, typ_list.node.clone(), values, Span::default()).unwrap()
+        make::list(
+            &mut arena,
+            typ_list.node.clone().into(),
+            values,
+            Span::default(),
+        )
+        .unwrap()
     };
     let (distinct, _) = invoke_with_types(
         &mut arena,

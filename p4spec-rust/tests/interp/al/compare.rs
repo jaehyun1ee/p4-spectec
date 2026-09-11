@@ -876,12 +876,22 @@ fn test_semantic_frames_detect_nested_value_changes() {
     let typ_list = typ::make::list(typ::make::nat());
     let original = {
         let values = vec![make::nat(&mut arena, Natural::from(1_u64), Span::default()).unwrap()];
-        make::list(&mut arena, typ_list.node.clone(), values, Span::default())
+        make::list(
+            &mut arena,
+            typ_list.node.clone().into(),
+            values,
+            Span::default(),
+        )
     }
     .unwrap();
     let mutated = {
         let values = vec![make::nat(&mut arena, Natural::from(2_u64), Span::default()).unwrap()];
-        make::list(&mut arena, typ_list.node.clone(), values, Span::default())
+        make::list(
+            &mut arena,
+            typ_list.node.clone().into(),
+            values,
+            Span::default(),
+        )
     }
     .unwrap();
     assert_ne!(
@@ -900,14 +910,14 @@ fn test_semantic_frames_detect_list_order_changes() {
     let second = make::nat(&mut arena, Natural::from(2_u64), Span::default()).unwrap();
     let original = make::list(
         &mut arena,
-        typ_list.node.clone(),
+        typ_list.node.clone().into(),
         vec![first, second],
         Span::default(),
     )
     .unwrap();
     let reordered = make::list(
         &mut arena,
-        typ_list.node.clone(),
+        typ_list.node.clone().into(),
         vec![second, first],
         Span::default(),
     )
@@ -932,7 +942,7 @@ fn test_semantic_frames_detect_case_atom_changes() {
     let case = |arena: &mut ValueArena, name: &str| {
         make::case(
             arena,
-            (typ::make::bool()).node.clone(),
+            (typ::make::bool()).node.clone().into(),
             Mixfix::Atom(phrase! {
                 node: Atom::Keyword(name.to_owned()),
                 span: Span::default(),
@@ -967,7 +977,7 @@ fn test_semantic_frames_distinguish_mixfix_atom_constructors() {
     let value = |arena: &mut ValueArena, atom| {
         make::case(
             arena,
-            (typ::make::bool()).node.clone(),
+            (typ::make::bool()).node.clone().into(),
             Mixfix::Atom(phrase! {
                 node: atom,
                 span: Span::default(),
@@ -997,7 +1007,7 @@ fn test_semantic_frames_distinguish_struct_field_atom_constructors() {
         let value_bool = make::bool(arena, true, Span::default()).unwrap();
         make::structure(
             arena,
-            (typ::make::bool()).node.clone(),
+            (typ::make::bool()).node.clone().into(),
             vec![(
                 p4spec_rust::phrase!(node: atom, span: Span::default()),
                 value_bool,
@@ -1026,7 +1036,7 @@ fn test_semantic_frames_detect_external_payload_and_order_changes() {
     let external = |arena: &mut ValueArena, fields| {
         make::external(
             arena,
-            (typ::make::bool()).node.clone(),
+            (typ::make::bool()).node.clone().into(),
             ExternalData::Assoc(fields),
             Span::default(),
         )
@@ -1066,14 +1076,14 @@ fn test_semantic_frames_detect_type_changes() {
     let bool_value = make::new(
         &mut arena,
         ValueKind::Bool(true),
-        TypKind::Bool,
+        TypKind::Bool.into(),
         Span::default(),
     )
     .unwrap();
     let text_typed = make::new(
         &mut arena,
         ValueKind::Bool(true),
-        TypKind::Text,
+        TypKind::Text.into(),
         Span::default(),
     )
     .unwrap();

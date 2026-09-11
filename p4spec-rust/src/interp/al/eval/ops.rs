@@ -2,10 +2,12 @@
 
 use num_traits::ToPrimitive;
 
+use std::rc::Rc;
+
 use crate::{
     lang::{
         al::ast,
-        common::source::Span,
+        common::source::{Phrase, Span},
         data::value::{Value, ValueArena, ValueKind, get, make},
         xl::num,
     },
@@ -74,7 +76,7 @@ pub(super) fn cast_up(
                 values_cast.push(back!(cast_up(arena, ctx, typ, value)));
             }
             back!(Backtrack::from_result(
-                make::tuple(arena, typ.node.clone(), values_cast, Span::default()),
+                make::tuple(arena, typ.node.clone().into(), values_cast, Span::default()),
                 span
             ))
         }
@@ -85,7 +87,7 @@ pub(super) fn cast_up(
                 None => None,
             };
             back!(Backtrack::from_result(
-                make::opt(arena, typ_inner.node.clone(), value, Span::default()),
+                make::opt(arena, typ_inner.node.clone().into(), value, Span::default()),
                 span
             ))
         }
@@ -96,7 +98,12 @@ pub(super) fn cast_up(
                 values_cast.push(back!(cast_up(arena, ctx, typ_inner, value)));
             }
             back!(Backtrack::from_result(
-                make::list(arena, typ_inner.node.clone(), values_cast, Span::default()),
+                make::list(
+                    arena,
+                    typ_inner.node.clone().into(),
+                    values_cast,
+                    Span::default()
+                ),
                 span
             ))
         }
@@ -162,7 +169,7 @@ pub(super) fn cast_down(
                 values_cast.push(back!(cast_down(arena, ctx, typ, value)));
             }
             back!(Backtrack::from_result(
-                make::tuple(arena, typ.node.clone(), values_cast, Span::default()),
+                make::tuple(arena, typ.node.clone().into(), values_cast, Span::default()),
                 span
             ))
         }
@@ -173,7 +180,7 @@ pub(super) fn cast_down(
                 None => None,
             };
             back!(Backtrack::from_result(
-                make::opt(arena, typ_inner.node.clone(), value, Span::default()),
+                make::opt(arena, typ_inner.node.clone().into(), value, Span::default()),
                 span
             ))
         }
@@ -184,7 +191,12 @@ pub(super) fn cast_down(
                 values_cast.push(back!(cast_down(arena, ctx, typ_inner, value)));
             }
             back!(Backtrack::from_result(
-                make::list(arena, typ_inner.node.clone(), values_cast, Span::default()),
+                make::list(
+                    arena,
+                    typ_inner.node.clone().into(),
+                    values_cast,
+                    Span::default()
+                ),
                 span
             ))
         }
@@ -259,8 +271,8 @@ pub(super) fn access_index(
                 span_idx
             ));
             access_slice(
-                arena, value_base, value_idx, &value_len, &typ, span_base, span_idx, span_idx,
-                span_idx,
+                arena, value_base, value_idx, &value_len, &typ.node, &typ.span, span_base,
+                span_idx, span_idx, span_idx,
             )
         }
         ValueKind::List(values) => Backtrack::Ok(values[idx as usize]),
@@ -279,7 +291,8 @@ pub(super) fn access_slice(
     value_base: &Value,
     value_idx: &Value,
     value_len: &Value,
-    typ: &ast::Typ,
+    typ: &Rc<ast::TypKind>,
+    span_typ: &Span,
     span_base: &Span,
     span_idx: &Span,
     span_len: &Span,
@@ -319,7 +332,7 @@ pub(super) fn access_slice(
             match text.get(idx as usize..end as usize) {
                 Some(text) => {
                     let text = text.to_owned();
-                    Backtrack::from_result(make::text(arena, text, Span::default()), &typ.span)
+                    Backtrack::from_result(make::text(arena, text, Span::default()), span_typ)
                 }
                 None => Backtrack::err(
                     span_bounds.clone(),
@@ -335,8 +348,8 @@ pub(super) fn access_slice(
                 .map(|(_, value_base)| *value_base)
                 .collect();
             Backtrack::Ok(back!(Backtrack::from_result(
-                make::list(arena, typ.node.clone(), values, Span::default()),
-                &typ.span
+                make::list(arena, typ.clone(), values, Span::default()),
+                span_typ
             )))
         }
         _ => unreachable!(),
@@ -350,7 +363,7 @@ pub(super) fn update_index(
     value_base: &Value,
     value_idx: &Value,
     value_upd: Value,
-    typ: &ast::Typ,
+    typ: &Phrase<Rc<ast::TypKind>>,
     span_base: &Span,
     span_idx: &Span,
 ) -> Backtrack<Value> {
@@ -385,7 +398,8 @@ pub(super) fn update_index(
                 value_base,
                 &value_l_idx,
                 &value_l_len,
-                typ,
+                &typ.node,
+                &typ.span,
                 span_base,
                 span_idx,
                 span_idx,
@@ -404,7 +418,8 @@ pub(super) fn update_index(
                 value_base,
                 &value_r_idx,
                 &value_r_len,
-                typ,
+                &typ.node,
+                &typ.span,
                 span_base,
                 span_idx,
                 span_idx,
@@ -442,7 +457,7 @@ pub(super) fn update_slice(
     value_idx: &Value,
     value_len: &Value,
     value_upd: Value,
-    typ: &ast::Typ,
+    typ: &Phrase<Rc<ast::TypKind>>,
     span_base: &Span,
     span_idx: &Span,
     span_len: &Span,
@@ -500,7 +515,8 @@ pub(super) fn update_slice(
                 value_base,
                 &value_l_idx,
                 &value_l_len,
-                typ,
+                &typ.node,
+                &typ.span,
                 span_base,
                 span_len,
                 span_len,
@@ -519,7 +535,8 @@ pub(super) fn update_slice(
                 value_base,
                 &value_r_idx,
                 &value_r_len,
-                typ,
+                &typ.node,
+                &typ.span,
                 span_base,
                 span_len,
                 span_len,

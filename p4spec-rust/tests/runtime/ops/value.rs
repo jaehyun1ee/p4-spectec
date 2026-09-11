@@ -63,7 +63,7 @@ fn test_extern_type_membership_uses_shared_type_environment() {
     let extern_typ = typ::make::var(extern_id, vec![]);
     let value = make::external(
         &mut arena,
-        (extern_typ).node.clone(),
+        (extern_typ).node.clone().into(),
         p4spec_rust::yojson::ExternalData::Null,
         Span::default(),
     )
@@ -121,7 +121,7 @@ fn test_recursive_subchecks_walk_tuple_and_list_values() {
         let values = vec![make::bool(&mut arena, false, Span::default()).unwrap()];
         make::list(
             &mut arena,
-            (typ::make::list(bool_typ.clone())).node.clone(),
+            (typ::make::list(bool_typ.clone())).node.clone().into(),
             values,
             Span::default(),
         )
@@ -129,7 +129,7 @@ fn test_recursive_subchecks_walk_tuple_and_list_values() {
     };
     let tuple_value = make::tuple(
         &mut arena,
-        (tuple_typ).node.clone(),
+        (tuple_typ).node.clone().into(),
         vec![bool_value, list_value],
         Span::default(),
     )

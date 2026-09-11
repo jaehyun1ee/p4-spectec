@@ -5,6 +5,8 @@
 //! example, `rev_` turns `[a, b]` into `[b, a]` while preserving the element
 //! type supplied by the specification.
 
+use std::rc::Rc;
+
 use num_bigint::BigInt;
 
 use crate::lang::{
@@ -43,7 +45,7 @@ pub fn rev_(
     let value_list = extract::one(values)?;
     let mut values = list_of_value(arena, value_list)?.to_vec();
     values.reverse();
-    let value = make::list(arena, typ_list.node.clone(), values, Span::default())?;
+    let value = make::list(arena, typ_list.node.into(), values, Span::default())?;
     Ok(value)
 }
 
@@ -63,7 +65,7 @@ pub fn concat_(
         let values = list_of_value(arena, value_list)?;
         concatenated.extend(values.iter().cloned());
     }
-    let value = make::list(arena, typ_list.node.clone(), concatenated, Span::default())?;
+    let value = make::list(arena, typ_list.node.into(), concatenated, Span::default())?;
     Ok(value)
 }
 
@@ -94,7 +96,7 @@ pub fn partition_(
     values: &[Value],
 ) -> Result<Value, BuiltinError> {
     let typ = extract::one(targs)?;
-    let typ_list = typ::make::list(typ.clone());
+    let typ_list = Rc::new(typ::make::list(typ.clone()).node);
     let (value_list, value_len) = extract::two(values)?;
     let values = list_of_value(arena, value_list)?;
     let len = bigint_of_value(arena, value_len)?;
@@ -105,20 +107,20 @@ pub fn partition_(
         .partition(|(index, _)| BigInt::from(*index) < *len);
     let value_left = make::list(
         arena,
-        typ_list.node.clone(),
+        typ_list.clone(),
         values_left.into_iter().map(|(_, value)| value).collect(),
         Span::default(),
     )?;
     let value_right = make::list(
         arena,
-        typ_list.node.clone(),
+        typ_list.clone(),
         values_right.into_iter().map(|(_, value)| value).collect(),
         Span::default(),
     )?;
     let typ_tuple = typ::make::tuple(vec![typ.clone(), typ.clone()]);
     let value = make::tuple(
         arena,
-        typ_tuple.node.clone(),
+        typ_tuple.node.into(),
         vec![value_left, value_right],
         Span::default(),
     )?;
@@ -147,7 +149,7 @@ pub fn assoc_(
         }
     }
     let typ_opt = typ::make::opt(typ_value.clone());
-    let value = make::opt(arena, typ_opt.node.clone(), found, Span::default())?;
+    let value = make::opt(arena, typ_opt.node.into(), found, Span::default())?;
     Ok(value)
 }
 
@@ -176,7 +178,7 @@ pub fn sort_(
     }
     keyed.sort_by(|(key_a, _), (key_b, _)| key_a.cmp(key_b));
     let values = keyed.into_iter().map(|(_, value)| value).collect();
-    let value = make::list(arena, typ_list.node.clone(), values, Span::default())?;
+    let value = make::list(arena, typ_list.node.into(), values, Span::default())?;
     Ok(value)
 }
 
@@ -190,6 +192,7 @@ pub fn transpose_(
     let typ = extract::one(targs)?;
     let typ_list = typ::make::list(typ.clone());
     let typ_matrix = typ::make::list(typ_list.clone());
+    let typ_list = Rc::new(typ_list.node);
     let value_matrix = extract::one(values)?;
     let rows = list_of_value(arena, value_matrix)?;
     let width = match rows.first() {
@@ -211,9 +214,9 @@ pub fn transpose_(
     }
     let mut value_rows = Vec::with_capacity(columns.len());
     for column in columns {
-        let value_row = make::list(arena, typ_list.node.clone(), column, Span::default())?;
+        let value_row = make::list(arena, typ_list.clone(), column, Span::default())?;
         value_rows.push(value_row);
     }
-    let value = make::list(arena, typ_matrix.node.clone(), value_rows, Span::default())?;
+    let value = make::list(arena, typ_matrix.node.into(), value_rows, Span::default())?;
     Ok(value)
 }

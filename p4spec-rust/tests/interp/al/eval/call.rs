@@ -308,7 +308,8 @@ def $fallback(n*) = n*
             runner.arena_mut(),
             (typ::make::iter(typ::make::nat(), p4spec_rust::lang::common::Iter::List))
                 .node
-                .clone(),
+                .clone()
+                .into(),
             values.clone(),
             Span::default(),
         )
@@ -337,6 +338,140 @@ def $fallback(n*) = n*
 }
 
 #[test]
+fn test_iterated_premise_rows_read_parent_bindings_independently() {
+    use p4spec_rust::{
+        interp::al::{backtrack::Backtrack, context::Context, eval::prem::eval_prem},
+        lang::{common::Variable, xl::num},
+        note_phrase,
+    };
+
+    let id = |name: &str| phrase!(node: name.to_owned(), span: Span::default());
+    let exp_var = |name: &str| {
+        note_phrase!(
+            node: ast::ExpKind::Var(id(name)),
+            note: Rc::new(typ::make::nat().node),
+            span: Span::default()
+        )
+    };
+    let var = |name: &str| ast::Var {
+        id: id(name),
+        typ: typ::make::nat(),
+        iters: vec![],
+    };
+    let prem_inner = phrase!(node: ast::PremKind::Let(ast::LetPrem {
+        exp_l: exp_var("n_result"),
+        exp_r: note_phrase!(
+            node: ast::ExpKind::Bin(
+                ast::BinOp::Num(num::BinOp::Add), ast::OpTyp::Nat,
+                Box::new(exp_var("n_result")), Box::new(exp_var("n")),
+            ),
+            note: Rc::new(typ::make::nat().node), span: Span::default()
+        ),
+    }), span: Span::default());
+    let prem = phrase!(node: ast::PremKind::Iter(ast::IterPrem {
+        prem: Box::new(prem_inner),
+        prem_iter: ast::PremIter {
+            iter: ast::Iter::List,
+            vars_bound: vec![var("n")], vars_bind: vec![var("n_result")],
+        },
+    }), span: Span::default());
+    let mut runner = make_runner(vec![], false);
+    let mut runner = runner.context();
+    let mut ctx = Context::new(runner.spec());
+    let value_parent = nat(runner.arena_mut(), 100);
+    ctx.add_value(Variable::new(id("n_result"), vec![]), value_parent);
+    let values = (1..=3).map(|n| nat(runner.arena_mut(), n)).collect();
+    let value = make::list(
+        runner.arena_mut(),
+        typ::make::list(typ::make::nat()).node.into(),
+        values,
+        Span::default(),
+    )
+    .unwrap();
+    ctx.add_value(Variable::new(id("n"), vec![ast::Iter::List]), value);
+    let Backtrack::Ok(ctx_post) = eval_prem(&mut runner, ctx.clone(), &prem) else {
+        panic!("iterated premise failed");
+    };
+    let var_result = Variable::new(id("n_result"), vec![ast::Iter::List]);
+    let value = ctx_post.find_value(&var_result).unwrap();
+    let values: Vec<_> = get::list(runner.arena(), value)
+        .unwrap()
+        .iter()
+        .map(|value| number(runner.arena(), value))
+        .collect();
+    assert_eq!(values, ["101", "102", "103"]);
+    assert_eq!(
+        ctx_post
+            .find_value(&Variable::new(id("n_result"), vec![]))
+            .unwrap(),
+        &value_parent
+    );
+    assert!(
+        ctx_post
+            .find_value_opt(&Variable::new(id("n"), vec![]))
+            .is_none()
+    );
+    assert!(ctx.find_value_opt(&var_result).is_none());
+
+    let mut var_bound = var("n");
+    var_bound.iters.push(ast::Iter::List);
+    let mut var_bind = var("n_result");
+    var_bind.iters.push(ast::Iter::List);
+    let prem = phrase!(node: ast::PremKind::Iter(ast::IterPrem {
+        prem: Box::new(prem),
+        prem_iter: ast::PremIter {
+            iter: ast::Iter::List,
+            vars_bound: vec![var_bound], vars_bind: vec![var_bind],
+        },
+    }), span: Span::default());
+    let rows = [vec![1, 2], vec![], vec![3]]
+        .into_iter()
+        .map(|row| {
+            let values = row
+                .into_iter()
+                .map(|n| nat(runner.arena_mut(), n))
+                .collect();
+            make::list(
+                runner.arena_mut(),
+                typ::make::list(typ::make::nat()).node.into(),
+                values,
+                Span::default(),
+            )
+            .unwrap()
+        })
+        .collect();
+    let value = make::list(
+        runner.arena_mut(),
+        typ::make::list(typ::make::list(typ::make::nat()))
+            .node
+            .into(),
+        rows,
+        Span::default(),
+    )
+    .unwrap();
+    ctx.add_value(Variable::new(id("n"), vec![ast::Iter::List; 2]), value);
+    let Backtrack::Ok(ctx_post) = eval_prem(&mut runner, ctx.clone(), &prem) else {
+        panic!("nested iterated premise failed");
+    };
+    let var_result_nested = Variable::new(id("n_result"), vec![ast::Iter::List; 2]);
+    let value = ctx_post.find_value(&var_result_nested).unwrap();
+    let rows: Vec<Vec<_>> = get::list(runner.arena(), value)
+        .unwrap()
+        .iter()
+        .map(|value| {
+            get::list(runner.arena(), value)
+                .unwrap()
+                .iter()
+                .map(|value| number(runner.arena(), value))
+                .collect()
+        })
+        .collect();
+    assert_eq!(rows, [vec!["101", "102"], vec![], vec!["103"]]);
+    assert!(ctx_post.find_value_opt(&var_result).is_none());
+    assert!(ctx.find_value_opt(&var_result_nested).is_none());
+}
+
+#[test]
 fn test_optional_premises_collect_present_and_absent_bindings() {
     let source = r#"
 var n : nat
@@ -349,7 +484,7 @@ def $map_opt(n?) = n_result?
         let present = input.is_some();
         let value = make::opt(
             runner.arena_mut(),
-            (typ::make::opt(typ::make::nat())).node.clone(),
+            (typ::make::opt(typ::make::nat())).node.clone().into(),
             input,
             Span::default(),
         )
@@ -1228,17 +1363,23 @@ def $pair(ns_1, ns_2) = ($pure(ns_1), $pure(ns_2))
     let value_r = runner.arena_mut().update_span(value_l, span).unwrap();
     let value_r = runner
         .arena_mut()
-        .update_typ(value_r, typ::make::int().node)
+        .update_typ(value_r, typ::make::int().node.clone().into())
         .unwrap();
     let typ = typ::make::iter(typ::make::nat(), p4spec_rust::lang::common::Iter::List).node;
     let value_l = make::list(
         runner.arena_mut(),
-        typ.clone(),
+        typ.clone().into(),
         vec![value_l],
         Span::default(),
     )
     .unwrap();
-    let value_r = make::list(runner.arena_mut(), typ, vec![value_r], Span::default()).unwrap();
+    let value_r = make::list(
+        runner.arena_mut(),
+        typ.clone().into(),
+        vec![value_r],
+        Span::default(),
+    )
+    .unwrap();
     assert_ne!(value_l.node, value_r.node);
     for expected in [1, 2] {
         let value = runner.eval_func("pair", &[], &[value_l, value_r]).unwrap();

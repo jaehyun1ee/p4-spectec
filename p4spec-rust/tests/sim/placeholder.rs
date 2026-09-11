@@ -13,7 +13,7 @@ use super::{has_extern_failure, parse_program, repo, runner, runner_from_spec};
 
 fn contains_null_object_state(arena: &ValueArena, value: &Value) -> bool {
     let is_null_object_state = matches!(
-        (arena.typ(value), arena.kind(value)),
+        (arena.typ(value).as_ref(), arena.kind(value)),
         (TypKind::Var(id, targs), ValueKind::Extern(ExternalData::Null))
             if id.node == "objectState" && targs.is_empty()
     );
@@ -91,7 +91,7 @@ fn test_unsupported_extern_fails() {
             .collect();
         make::list(
             runner.arena_mut(),
-            typ_names.node.clone(),
+            typ_names.node.clone().into(),
             values,
             Span::default(),
         )

@@ -21,7 +21,7 @@ fn test_constructors_preserve_runtime_type_and_span() {
     .unwrap();
 
     assert_eq!(arena.span(&value), &value_span);
-    assert_eq!(arena.typ(&value), &typ::make::nat().node);
+    assert_eq!(arena.typ(&value).as_ref(), &typ::make::nat().node);
     assert_eq!(
         get::num(&arena, &value),
         Ok(&Number::Nat(Natural::from(7_u64)))

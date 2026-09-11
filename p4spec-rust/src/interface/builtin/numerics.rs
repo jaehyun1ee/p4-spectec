@@ -43,7 +43,7 @@ fn value_of_bits(arena: &mut ValueArena, bits: Vec<bool>) -> Result<Value, Built
         let bit_value = make::bool(arena, bit, Span::default())?;
         bit_values.push(bit_value);
     }
-    let value = make::list(arena, typ.node.clone(), bit_values, Span::default())?;
+    let value = make::list(arena, typ.node.into(), bit_values, Span::default())?;
     Ok(value)
 }
 

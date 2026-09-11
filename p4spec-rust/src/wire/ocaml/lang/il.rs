@@ -604,7 +604,7 @@ fn decode_yojson_value(
     let node = decode_yojson_value_kind(arena, yojson_field(fields, "it")?)?;
     let typ = decode_vnote(&standard_json(yojson_field(fields, "note")?)?)?;
     let span = source::decode_region(&standard_json(yojson_field(fields, "at")?)?)?;
-    Ok(make::new(arena, node, typ, span)?)
+    Ok(make::new(arena, node, typ.into(), span)?)
 }
 
 fn decode_yojson_value_kind(
@@ -664,7 +664,7 @@ fn decode_value(arena: &mut ValueArena, value: &Value) -> Result<ast::Value, Dec
     let node = decode_value_kind(arena, field(object, "it")?)?;
     let typ = decode_vnote(field(object, "note")?)?;
     let span = source::decode_region(field(object, "at")?)?;
-    Ok(make::new(arena, node, typ, span)?)
+    Ok(make::new(arena, node, typ.into(), span)?)
 }
 
 fn decode_value_kind(arena: &mut ValueArena, value: &Value) -> Result<ValueKind, DecodeError> {
