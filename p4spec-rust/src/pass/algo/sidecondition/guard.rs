@@ -416,48 +416,48 @@ fn collect_exp(exp_al: &ast::Exp) -> Vec<ast::Prem> {
         | ast::ExpKind::Match(exp_inner_al, _)
         | ast::ExpKind::Len(exp_inner_al)
         | ast::ExpKind::Dot(exp_inner_al, _) => collect_exp(exp_inner_al),
-        ast::ExpKind::Bin(_, _, exp_l, exp_r)
-        | ast::ExpKind::Cmp(_, _, exp_l, exp_r)
-        | ast::ExpKind::Cons(exp_l, exp_r)
-        | ast::ExpKind::Cat(exp_l, exp_r)
-        | ast::ExpKind::Mem(exp_l, exp_r) => {
-            let mut prems_insert = collect_exp(exp_l);
-            let prems_r_insert = collect_exp(exp_r);
+        ast::ExpKind::Bin(_, _, exp_l_al, exp_r_al)
+        | ast::ExpKind::Cmp(_, _, exp_l_al, exp_r_al)
+        | ast::ExpKind::Cons(exp_l_al, exp_r_al)
+        | ast::ExpKind::Cat(exp_l_al, exp_r_al)
+        | ast::ExpKind::Mem(exp_l_al, exp_r_al) => {
+            let mut prems_insert = collect_exp(exp_l_al);
+            let prems_r_insert = collect_exp(exp_r_al);
             prems_insert.extend(prems_r_insert);
             prems_insert
         }
-        ast::ExpKind::Tuple(exps) | ast::ExpKind::List(exps) => collect_exps(exps.iter()),
+        ast::ExpKind::Tuple(exps_al) | ast::ExpKind::List(exps_al) => collect_exps(exps_al.iter()),
         ast::ExpKind::Case(not_exp) => collect_exps(not_exp.args()),
         ast::ExpKind::Str(fields) => collect_exps(fields.iter().map(|(_, exp)| exp)),
         ast::ExpKind::Opt(Some(exp_inner_al)) => collect_exp(exp_inner_al),
         ast::ExpKind::Opt(None) => vec![],
-        ast::ExpKind::Idx(exp_base, exp_idx) => {
-            let mut prems_insert = collect_exp(exp_base);
-            let prems_idx_insert = collect_exp(exp_idx);
-            let prems_guard = gen_index_guard(exp_al, exp_base, exp_idx);
+        ast::ExpKind::Idx(exp_base_al, exp_idx_al) => {
+            let mut prems_insert = collect_exp(exp_base_al);
+            let prems_idx_insert = collect_exp(exp_idx_al);
+            let prems_guard = gen_index_guard(exp_al, exp_base_al, exp_idx_al);
             prems_insert.extend(prems_idx_insert);
             prems_insert.extend(prems_guard);
             prems_insert
         }
-        ast::ExpKind::Slice(exp_base, exp_idx, exp_len) => {
-            let mut prems_insert = collect_exp(exp_base);
-            let prems_idx_insert = collect_exp(exp_idx);
-            let prems_len_insert = collect_exp(exp_len);
+        ast::ExpKind::Slice(exp_base_al, exp_idx_al, exp_len_al) => {
+            let mut prems_insert = collect_exp(exp_base_al);
+            let prems_idx_insert = collect_exp(exp_idx_al);
+            let prems_len_insert = collect_exp(exp_len_al);
             prems_insert.extend(prems_idx_insert);
             prems_insert.extend(prems_len_insert);
             prems_insert
         }
-        ast::ExpKind::Upd(exp_base, path, exp_field) => {
-            let mut prems_insert = collect_exp(exp_base);
-            let prems_path_insert = collect_path(path);
-            let prems_field_insert = collect_exp(exp_field);
+        ast::ExpKind::Upd(exp_base_al, path_al, exp_field_al) => {
+            let mut prems_insert = collect_exp(exp_base_al);
+            let prems_path_insert = collect_path(path_al);
+            let prems_field_insert = collect_exp(exp_field_al);
             prems_insert.extend(prems_path_insert);
             prems_insert.extend(prems_field_insert);
             prems_insert
         }
         ast::ExpKind::Call(_, _, args) => collect_args(args),
-        ast::ExpKind::Iter(exp_inner, iter_exp) => {
-            let prems_inner_insert = collect_exp(exp_inner);
+        ast::ExpKind::Iter(exp_inner_al, iter_exp) => {
+            let prems_inner_insert = collect_exp(exp_inner_al);
             let mut prems_insert = iterate_prems(iter_exp.0, &iter_exp.1, prems_inner_insert);
             let prems_guard = gen_iter_guard(iter_exp);
             prems_insert.extend(prems_guard);
@@ -477,24 +477,24 @@ fn collect_exps<'a>(exps: impl IntoIterator<Item = &'a ast::Exp>) -> Vec<ast::Pr
 
 // - Paths
 
-fn collect_path(path: &ast::Path) -> Vec<ast::Prem> {
-    match &path.node {
+fn collect_path(path_al: &ast::Path) -> Vec<ast::Prem> {
+    match &path_al.node {
         ast::PathKind::Root => vec![],
-        ast::PathKind::Idx(path, exp_al) => {
-            let mut prems_insert = collect_path(path);
+        ast::PathKind::Idx(path_al, exp_al) => {
+            let mut prems_insert = collect_path(path_al);
             let prems_exp_insert = collect_exp(exp_al);
             prems_insert.extend(prems_exp_insert);
             prems_insert
         }
-        ast::PathKind::Slice(path, exp_idx, exp_len) => {
-            let mut prems_insert = collect_path(path);
-            let prems_idx_insert = collect_exp(exp_idx);
-            let prems_len_insert = collect_exp(exp_len);
+        ast::PathKind::Slice(path_al, exp_idx_al, exp_len_al) => {
+            let mut prems_insert = collect_path(path_al);
+            let prems_idx_insert = collect_exp(exp_idx_al);
+            let prems_len_insert = collect_exp(exp_len_al);
             prems_insert.extend(prems_idx_insert);
             prems_insert.extend(prems_len_insert);
             prems_insert
         }
-        ast::PathKind::Dot(path, _) => collect_path(path),
+        ast::PathKind::Dot(path_al, _) => collect_path(path_al),
     }
 }
 
