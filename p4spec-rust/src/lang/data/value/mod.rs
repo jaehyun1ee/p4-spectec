@@ -99,7 +99,6 @@ pub mod make {
         value_case: Mixfix<Value>,
         span: Span,
     ) -> Result<Value, ValueError> {
-        let value_case = value_case.try_map_span(|span| arena.intern_span(span))?;
         new(arena, ValueKind::Case(value_case), typ, span)
     }
 

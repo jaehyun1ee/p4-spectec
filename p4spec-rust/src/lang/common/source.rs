@@ -92,18 +92,7 @@ pub struct NotePhrase<T, N = (), S = Span> {
 }
 
 /// A syntax node paired with its source span
-pub type Phrase<T, S = Span> = NotePhrase<T, (), S>;
-
-impl<T, N, S> NotePhrase<T, N, S> {
-    /// Converts the source annotation while preserving the node and semantic note
-    pub fn map_span<R>(self, map_span: impl FnOnce(S) -> R) -> NotePhrase<T, N, R> {
-        NotePhrase {
-            node: self.node,
-            note: self.note,
-            span: map_span(self.span),
-        }
-    }
-}
+pub type Phrase<T> = NotePhrase<T>;
 
 impl<T: fmt::Display, N, S: fmt::Display> fmt::Display for NotePhrase<T, N, S> {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {

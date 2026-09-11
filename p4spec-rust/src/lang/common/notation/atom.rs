@@ -134,7 +134,7 @@ impl Print for Atom {
     }
 }
 
-impl<S> Print for Phrase<Atom, S> {
+impl Print for Phrase<Atom> {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         self.node.print(printer)
     }

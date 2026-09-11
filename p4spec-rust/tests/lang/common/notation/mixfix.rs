@@ -30,7 +30,7 @@ fn hash(value: &impl Hash) -> u64 {
 }
 
 #[test]
-fn test_map_span_preserves_nested_labels_arguments_and_locations() {
+fn test_map_preserves_nested_labels_arguments_and_locations() {
     let arg_l: NotePhrase<u32, u8, u8> = note_phrase!(node: 17, note: 3_u8, span: 7_u8);
     let arg_r: NotePhrase<u32, u8, u8> = note_phrase!(node: 29, note: 5_u8, span: 9_u8);
     let mixfix = Mixfix::Brack(
@@ -45,25 +45,7 @@ fn test_map_span_preserves_nested_labels_arguments_and_locations() {
         )),
         phrase!(node: Atom::RParen, span: span(19)),
     );
-    let mut spans = Vec::new();
-    let mixfix_tokens: Mixfix<_, u8> = mixfix.map_span(|span| {
-        let index = u8::try_from(spans.len()).unwrap();
-        spans.push(span);
-        index
-    });
-
-    assert_eq!(spans, vec![span(11), span(13), span(17), span(19)]);
-    assert_eq!(mixfix_tokens.args(), vec![&arg_l, &arg_r]);
-    assert_eq!(
-        mixfix_tokens
-            .atoms()
-            .into_iter()
-            .map(|atom| atom.span)
-            .collect::<Vec<_>>(),
-        vec![0, 1, 2, 3],
-    );
-
-    let mixfix_restored = mixfix_tokens.map_span(|index| spans[usize::from(index)].clone());
+    let mixfix_restored = mixfix.map(|arg| *arg);
     assert!(matches!(&mixfix_restored, Mixfix::Brack(_, mixfix, _)
         if matches!(mixfix.as_ref(), Mixfix::Infix(_, _, mixfix)
             if matches!(mixfix.as_ref(), Mixfix::Seq(_)))));
@@ -84,29 +66,31 @@ fn test_map_span_preserves_nested_labels_arguments_and_locations() {
 }
 
 #[test]
-fn test_span_mapping_preserves_syntax_comparisons_and_hashing() {
+fn test_syntax_comparisons_and_hashing_ignore_atom_spans() {
     let mixfix = Mixfix::Infix(
         Box::new(Mixfix::Arg(17)),
         phrase!(node: Atom::Arrow, span: span(11)),
         Box::new(Mixfix::Arg(29)),
     );
-    let mixfix_relocated = mixfix.clone().map_span(|_| span(37));
-    let mixfix_tokens = mixfix.clone().map_span(|_| 3_u8);
+    let mixfix_relocated = Mixfix::Infix(
+        Box::new(Mixfix::Arg(17)),
+        phrase!(node: Atom::Arrow, span: span(37)),
+        Box::new(Mixfix::Arg(29)),
+    );
 
     assert_eq!(mixfix, mixfix_relocated);
     assert_eq!(mixfix.cmp(&mixfix_relocated), Ordering::Equal);
     assert_eq!(hash(&mixfix), hash(&mixfix_relocated));
-    assert_eq!(hash(&mixfix), hash(&mixfix_tokens));
-    assert!(mixfix.eq_shape(&mixfix_tokens));
-    assert!(mixfix.eq_by(&mixfix_tokens, PartialEq::eq));
-    assert_eq!(mixfix.cmp_by(&mixfix_tokens, Ord::cmp), Ordering::Equal);
+    assert!(mixfix.eq_shape(&mixfix_relocated));
+    assert!(mixfix.eq_by(&mixfix_relocated, PartialEq::eq));
+    assert_eq!(mixfix.cmp_by(&mixfix_relocated, Ord::cmp), Ordering::Equal);
 
-    let (mixop, args) = mixfix_tokens.split();
+    let (mixop, args) = mixfix_relocated.split();
     let mixfix_filled = Mixop::fill(&mixop, args.into_iter().copied()).unwrap();
-    assert_eq!(mixfix_filled, mixfix_tokens);
-    assert_eq!(mixfix_filled.atoms()[0].span, 3);
+    assert_eq!(mixfix_filled, mixfix_relocated);
+    assert_eq!(mixfix_filled.atoms()[0].span, span(37));
 
-    let mixfix_changed = mixfix_tokens.map(|arg| arg + 1);
+    let mixfix_changed = mixfix_relocated.map(|arg| arg + 1);
     assert!(!mixfix.eq_by(&mixfix_changed, PartialEq::eq));
     assert_eq!(mixfix.cmp_by(&mixfix_changed, Ord::cmp), Ordering::Less);
 }

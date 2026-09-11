@@ -71,7 +71,7 @@ impl ValueArena {
         Ok(NotePhrase { node, note, span })
     }
 
-    pub fn intern_span(&mut self, span: Span) -> Result<Interned<Span>, ValueError> {
+    fn intern_span(&mut self, span: Span) -> Result<Interned<Span>, ValueError> {
         if span == *self.spans.get(self.span_empty) {
             return Ok(self.span_empty);
         }
@@ -94,10 +94,6 @@ impl ValueArena {
 
     pub fn span(&self, value: &Value) -> &Span {
         self.spans.get(value.span)
-    }
-
-    pub fn get_span(&self, span: Interned<Span>) -> &Span {
-        self.spans.get(span)
     }
 
     /// Borrows a value issued by this arena for syntax comparisons

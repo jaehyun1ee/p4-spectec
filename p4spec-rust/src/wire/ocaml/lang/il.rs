@@ -4,12 +4,9 @@ use std::{cell::Cell, collections::HashSet};
 use serde_json::{Map, Number, Value, json};
 use thiserror::Error;
 
-use crate::lang::data::value::{Interned, ValueArena, make};
+use crate::lang::data::value::{ValueArena, make};
 use crate::lang::{
-    common::{
-        notation::mixfix::{AtomPhrase, Mixfix},
-        source::Span,
-    },
+    common::notation::mixfix::Mixfix,
     il::ast::{self, *},
     xl::{bool, num},
 };
@@ -628,12 +625,7 @@ fn decode_yojson_value_kind(
                 })
                 .collect::<Result<_, _>>()?,
         )),
-        ("CaseV", [case]) => {
-            let case = decode_yojson_mixfix(arena, case)?;
-            Ok(ValueKind::Case(
-                case.try_map_span(|span| arena.intern_span(span))?,
-            ))
-        }
+        ("CaseV", [case]) => Ok(ValueKind::Case(decode_yojson_mixfix(arena, case)?)),
         ("TupleV", [values]) => Ok(ValueKind::Tuple(
             yojson_list(values)?
                 .iter()
@@ -680,12 +672,9 @@ fn decode_value_kind(arena: &mut ValueArena, value: &Value) -> Result<ValueKind,
                 _ => Err(DecodeError::Expected("IL value field pair")),
             },
         )?)),
-        ("CaseV", [case]) => {
-            let case = mixfix::decode(case, |value| decode_value(arena, value))?;
-            Ok(ValueKind::Case(
-                case.try_map_span(|span| arena.intern_span(span))?,
-            ))
-        }
+        ("CaseV", [case]) => Ok(ValueKind::Case(mixfix::decode(case, |value| {
+            decode_value(arena, value)
+        })?)),
         ("TupleV", [values]) => Ok(ValueKind::Tuple(decode_list(values, |value| {
             decode_value(arena, value)
         })?)),
@@ -707,12 +696,6 @@ fn decode_value_kind(arena: &mut ValueArena, value: &Value) -> Result<ValueKind,
 }
 
 impl ValueEncoder<'_> {
-    fn encode_atom(&self, atom: &AtomPhrase<Interned<Span>>) -> Value {
-        AtomPhraseCodec::encode(
-            &crate::phrase!(node: atom.node.clone(), span: self.arena.get_span(atom.span).clone()),
-        )
-    }
-
     fn encode_yojson_mixfix(&self, value: &ast::ValueCase) -> yojson::Value {
         match value {
             Mixfix::Arg(value) => yojson::Value::List(vec![
@@ -721,18 +704,18 @@ impl ValueEncoder<'_> {
             ]),
             Mixfix::Atom(atom) => yojson::Value::List(vec![
                 yojson::Value::String("Atom".to_owned()),
-                yojson::from_serde_json(&self.encode_atom(atom)),
+                yojson::from_serde_json(&AtomPhraseCodec::encode(atom)),
             ]),
             Mixfix::Brack(left, body, right) => yojson::Value::List(vec![
                 yojson::Value::String("Brack".to_owned()),
-                yojson::from_serde_json(&self.encode_atom(left)),
+                yojson::from_serde_json(&AtomPhraseCodec::encode(left)),
                 self.encode_yojson_mixfix(body),
-                yojson::from_serde_json(&self.encode_atom(right)),
+                yojson::from_serde_json(&AtomPhraseCodec::encode(right)),
             ]),
             Mixfix::Infix(left, atom, right) => yojson::Value::List(vec![
                 yojson::Value::String("Infix".to_owned()),
                 self.encode_yojson_mixfix(left),
-                yojson::from_serde_json(&self.encode_atom(atom)),
+                yojson::from_serde_json(&AtomPhraseCodec::encode(atom)),
                 self.encode_yojson_mixfix(right),
             ]),
             Mixfix::Seq(items) => yojson::Value::List(vec![
@@ -858,11 +841,7 @@ impl ValueEncoder<'_> {
             ValueKind::Case(case) => {
                 json!([
                     "CaseV",
-                    mixfix::try_encode_with_atom(
-                        case,
-                        |atom| self.encode_atom(atom),
-                        |value| self.encode_value(value)
-                    )?
+                    mixfix::try_encode(case, |value| self.encode_value(value))?
                 ])
             }
             ValueKind::Tuple(values) => json!([

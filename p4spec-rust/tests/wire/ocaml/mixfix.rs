@@ -32,14 +32,7 @@ fn test_mixop_span_round_trip_preserves_ocaml_wire_layout() {
         atom(json!(["RParen"]), 19),
     ]);
     let mixop = MixopCodec::decode(&json).unwrap();
-    let mut spans = Vec::new();
-    let mixop_tokens = mixop.map_span(|span| {
-        let index = u8::try_from(spans.len()).unwrap();
-        spans.push(span);
-        index
-    });
-    let mixop_restored = mixop_tokens.map_span(|index| spans[usize::from(index)].clone());
 
-    assert_eq!(mixop_restored.arity(), 2);
-    assert_eq!(MixopCodec::encode(&mixop_restored), json);
+    assert_eq!(mixop.arity(), 2);
+    assert_eq!(MixopCodec::encode(&mixop), json);
 }

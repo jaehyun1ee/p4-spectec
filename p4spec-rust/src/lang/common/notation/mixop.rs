@@ -3,7 +3,7 @@ use std::{cell::RefCell, collections::HashMap, error::Error, fmt, rc::Rc};
 use crate::frontend;
 
 use crate::lang::{
-    common::{ds::set::IdSet, source::Span},
+    common::ds::set::IdSet,
     traits::{
         eq::SyntaxEq,
         free::Free,
@@ -14,9 +14,9 @@ use crate::lang::{
 use super::mixfix::Mixfix;
 
 /// A mixfix shape with unfilled argument positions
-pub type Mixop<S = Span> = Mixfix<(), S>;
+pub type Mixop = Mixfix<()>;
 
-impl<S> Print for Mixop<S> {
+impl Print for Mixop {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         self.print_with(printer, |(), printer| printer.write("%"))
     }
@@ -60,14 +60,14 @@ pub(crate) fn shape(shape_text: &str) -> Rc<Mixop> {
 
 // == Converting a mixfix to a mixop
 
-impl<T, S: Clone> Mixfix<T, S> {
+impl<T> Mixfix<T> {
     /// Replaces every argument with an unfilled mixop position
-    pub fn to_mixop(&self) -> Mixop<S> {
+    pub fn to_mixop(&self) -> Mixop {
         self.map(|_| ())
     }
 
     /// Separates the mixop shape from its arguments
-    pub fn split(&self) -> (Mixop<S>, Vec<&T>) {
+    pub fn split(&self) -> (Mixop, Vec<&T>) {
         (self.to_mixop(), self.args())
     }
 }
@@ -94,12 +94,12 @@ impl fmt::Display for ArityMismatch {
 
 impl Error for ArityMismatch {}
 
-impl<S: Clone> Mixop<S> {
+impl Mixop {
     /// Fills a mixfix operator with arguments
     pub fn fill<T>(
         mixop: &Self,
         args: impl IntoIterator<Item = T>,
-    ) -> Result<Mixfix<T, S>, ArityMismatch> {
+    ) -> Result<Mixfix<T>, ArityMismatch> {
         let mut args = args.into_iter();
         let mixfix = mixop.fill_inner(&mut args)?;
         if args.next().is_some() {
@@ -112,7 +112,7 @@ impl<S: Clone> Mixop<S> {
     fn fill_inner<T>(
         &self,
         args: &mut impl Iterator<Item = T>,
-    ) -> Result<Mixfix<T, S>, ArityMismatch> {
+    ) -> Result<Mixfix<T>, ArityMismatch> {
         match self {
             Self::Arg(()) => args.next().map(Mixfix::Arg).ok_or(ArityMismatch::TooFew),
             Self::Atom(atom) => Ok(Mixfix::Atom(atom.clone())),

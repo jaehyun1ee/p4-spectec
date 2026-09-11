@@ -30,7 +30,7 @@ use crate::{
 
 pub type Value = NotePhrase<Interned<ValueKind>, Interned<TypKind>, Interned<Span>>;
 pub type ValueField = (Phrase<Atom>, Value);
-pub type ValueCase = Mixfix<Value, Interned<Span>>;
+pub type ValueCase = Mixfix<Value>;
 
 // - Borrowed views
 

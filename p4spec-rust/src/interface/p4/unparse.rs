@@ -126,7 +126,6 @@ impl P4Unparser {
         value_case: &ValueCase,
     ) -> Result<String, P4UnparseError> {
         let (mixop, values) = value_case.split();
-        let mixop = mixop.map_span(|_| crate::lang::common::source::Span::default());
         if let TypKind::Var(type_id, _) = typ
             && let Some(hint) = self.hints.get(&(type_id.node.clone(), mixop))
         {

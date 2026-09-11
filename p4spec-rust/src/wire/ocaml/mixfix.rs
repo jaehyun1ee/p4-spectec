@@ -26,31 +26,30 @@ impl MixopCodec {
     }
 }
 
-pub(crate) fn try_encode_with_atom<T, S, E>(
-    mixfix: &Mixfix<T, S>,
-    encode_atom: impl Copy + Fn(&crate::lang::common::notation::mixfix::AtomPhrase<S>) -> Value,
+pub(crate) fn try_encode<T, E>(
+    mixfix: &Mixfix<T>,
     encode_arg: impl Copy + Fn(&T) -> Result<Value, E>,
 ) -> Result<Value, E> {
     Ok(match mixfix {
         Mixfix::Arg(arg) => json!(["Arg", encode_arg(arg)?]),
-        Mixfix::Atom(atom) => json!(["Atom", encode_atom(atom)]),
+        Mixfix::Atom(atom) => json!(["Atom", AtomPhraseCodec::encode(atom)]),
         Mixfix::Brack(left, body, right) => json!([
             "Brack",
-            encode_atom(left),
-            try_encode_with_atom(body, encode_atom, encode_arg)?,
-            encode_atom(right)
+            AtomPhraseCodec::encode(left),
+            try_encode(body, encode_arg)?,
+            AtomPhraseCodec::encode(right)
         ]),
         Mixfix::Infix(left, atom, right) => json!([
             "Infix",
-            try_encode_with_atom(left, encode_atom, encode_arg)?,
-            encode_atom(atom),
-            try_encode_with_atom(right, encode_atom, encode_arg)?
+            try_encode(left, encode_arg)?,
+            AtomPhraseCodec::encode(atom),
+            try_encode(right, encode_arg)?
         ]),
         Mixfix::Seq(items) => json!([
             "Seq",
             items
                 .iter()
-                .map(|item| try_encode_with_atom(item, encode_atom, encode_arg))
+                .map(|item| try_encode(item, encode_arg))
                 .collect::<Result<Vec<_>, _>>()?
         ]),
     })
