@@ -353,15 +353,13 @@ fn infer_exp(ctx: &mut Context, exp: &el::Exp) -> Attempt<il::Exp> {
         el::ExpKind::List(exps) => infer_list_exp(ctx, &exp.span, exps),
         el::ExpKind::Cons(exp_head, exp_tail) => infer_cons_exp(ctx, &exp.span, exp_head, exp_tail),
         el::ExpKind::Cat(exp_l, exp_r) => infer_cat_exp(ctx, &exp.span, exp_l, exp_r),
-        el::ExpKind::Idx(exp_base, exp_index) => infer_idx_exp(ctx, &exp.span, exp_base, exp_index),
-        el::ExpKind::Slice(exp_base, exp_index, exp_length) => {
-            infer_slice_exp(ctx, &exp.span, exp_base, exp_index, exp_length)
+        el::ExpKind::Idx(exp_base, exp_idx) => infer_idx_exp(ctx, &exp.span, exp_base, exp_idx),
+        el::ExpKind::Slice(exp_base, exp_idx, exp_len) => {
+            infer_slice_exp(ctx, &exp.span, exp_base, exp_idx, exp_len)
         }
         el::ExpKind::Tuple(exps) => infer_tuple_exp(ctx, &exp.span, exps),
         el::ExpKind::Len(exp_inner) => infer_len_exp(ctx, &exp.span, exp_inner),
-        el::ExpKind::Mem(exp_element, exp_set) => {
-            infer_mem_exp(ctx, &exp.span, exp_element, exp_set)
-        }
+        el::ExpKind::Mem(exp_elem, exp_set) => infer_mem_exp(ctx, &exp.span, exp_elem, exp_set),
         el::ExpKind::Dot(exp_inner, atom) => infer_dot_exp(ctx, &exp.span, exp_inner, atom),
         el::ExpKind::Upd(exp_base, path, exp_field) => {
             infer_upd_exp(ctx, &exp.span, exp_base, path, exp_field)
@@ -762,22 +760,22 @@ fn infer_len_exp(ctx: &mut Context, span: &Span, exp: &el::Exp) -> Attempt<il::E
 fn infer_mem_exp(
     ctx: &mut Context,
     span: &Span,
-    exp_element: &el::Exp,
+    exp_elem: &el::Exp,
     exp_set: &el::Exp,
 ) -> Attempt<il::Exp> {
     choose_sequential(
         ctx,
         |ctx| {
-            let exp_il_element = infer_exp(ctx, exp_element)?;
-            let typ_il_element = phrase! {
-                node: exp_il_element.note.as_ref().clone(),
-                span: exp_il_element.span.clone(),
+            let exp_il_elem = infer_exp(ctx, exp_elem)?;
+            let typ_il_elem = phrase! {
+                node: exp_il_elem.note.as_ref().clone(),
+                span: exp_il_elem.span.clone(),
             };
-            let typ_il_list_kind = il::TypKind::Iter(Box::new(typ_il_element), il::Iter::List);
+            let typ_il_list_kind = il::TypKind::Iter(Box::new(typ_il_elem), il::Iter::List);
             let typ_il_list = phrase!(node: typ_il_list_kind, span: exp_set.span.clone());
             let exp_il_set = elab_exp(ctx, &typ_il_list, exp_set)?;
             let exp_il = note_phrase! {
-                node: il::ExpKind::Mem(Box::new(exp_il_element), Box::new(exp_il_set)),
+                node: il::ExpKind::Mem(Box::new(exp_il_elem), Box::new(exp_il_set)),
                 note: il::TypKind::Bool,
                 span: span.clone(),
             };
@@ -787,10 +785,10 @@ fn infer_mem_exp(
             let exp_il_set = infer_exp(ctx, exp_set)?;
             let typ_il_set =
                 phrase!(node: exp_il_set.note.as_ref().clone(), span: exp_il_set.span.clone());
-            let typ_il_element = as_list_typ(ctx, &typ_il_set)?;
-            let exp_il_element = elab_exp(ctx, &typ_il_element, exp_element)?;
+            let typ_il_elem = as_list_typ(ctx, &typ_il_set)?;
+            let exp_il_elem = elab_exp(ctx, &typ_il_elem, exp_elem)?;
             let exp_il = note_phrase! {
-                node: il::ExpKind::Mem(Box::new(exp_il_element), Box::new(exp_il_set)),
+                node: il::ExpKind::Mem(Box::new(exp_il_elem), Box::new(exp_il_set)),
                 note: il::TypKind::Bool,
                 span: span.clone(),
             };
@@ -805,7 +803,7 @@ fn infer_idx_exp(
     ctx: &mut Context,
     span: &Span,
     exp_base: &el::Exp,
-    exp_index: &el::Exp,
+    exp_idx: &el::Exp,
 ) -> Attempt<il::Exp> {
     choose_sequential(
         ctx,
@@ -813,12 +811,12 @@ fn infer_idx_exp(
             let exp_il_base = infer_exp(ctx, exp_base)?;
             let typ_il_base =
                 phrase!(node: exp_il_base.note.as_ref().clone(), span: exp_il_base.span.clone());
-            let typ_il_element = as_list_typ(ctx, &typ_il_base)?;
-            let typ_il_nat = typ_at(il::TypKind::Num(xl::num::Typ::Nat), &exp_index.span);
-            let exp_il_index = elab_exp(ctx, &typ_il_nat, exp_index)?;
+            let typ_il_elem = as_list_typ(ctx, &typ_il_base)?;
+            let typ_il_nat = typ_at(il::TypKind::Num(xl::num::Typ::Nat), &exp_idx.span);
+            let exp_il_idx = elab_exp(ctx, &typ_il_nat, exp_idx)?;
             let exp_il = note_phrase! {
-                node: il::ExpKind::Idx(Box::new(exp_il_base), Box::new(exp_il_index)),
-                note: typ_il_element.node,
+                node: il::ExpKind::Idx(Box::new(exp_il_base), Box::new(exp_il_idx)),
+                note: typ_il_elem.node,
                 span: span.clone(),
             };
             Ok(exp_il)
@@ -826,10 +824,10 @@ fn infer_idx_exp(
         |ctx| {
             let typ_il_text = typ_at(il::TypKind::Text, &exp_base.span);
             let exp_il_base = elab_exp(ctx, &typ_il_text, exp_base)?;
-            let typ_il_nat = typ_at(il::TypKind::Num(xl::num::Typ::Nat), &exp_index.span);
-            let exp_il_index = elab_exp(ctx, &typ_il_nat, exp_index)?;
+            let typ_il_nat = typ_at(il::TypKind::Num(xl::num::Typ::Nat), &exp_idx.span);
+            let exp_il_idx = elab_exp(ctx, &typ_il_nat, exp_idx)?;
             let exp_il = note_phrase! {
-                node: il::ExpKind::Idx(Box::new(exp_il_base), Box::new(exp_il_index)),
+                node: il::ExpKind::Idx(Box::new(exp_il_base), Box::new(exp_il_idx)),
                 note: il::TypKind::Text,
                 span: span.clone(),
             };
@@ -844,8 +842,8 @@ fn infer_slice_exp(
     ctx: &mut Context,
     span: &Span,
     exp_base: &el::Exp,
-    exp_index: &el::Exp,
-    exp_length: &el::Exp,
+    exp_idx: &el::Exp,
+    exp_len: &el::Exp,
 ) -> Attempt<il::Exp> {
     choose_sequential(
         ctx,
@@ -854,28 +852,28 @@ fn infer_slice_exp(
             let typ_il_base =
                 phrase!(node: exp_il_base.note.as_ref().clone(), span: exp_il_base.span.clone());
             as_list_typ(ctx, &typ_il_base)?;
-            let typ_il_nat = typ_at(il::TypKind::Num(xl::num::Typ::Nat), &exp_index.span);
-            let exp_il_index = elab_exp(ctx, &typ_il_nat, exp_index)?;
-            let typ_il_nat = typ_at(il::TypKind::Num(xl::num::Typ::Nat), &exp_length.span);
-            let exp_il_length = elab_exp(ctx, &typ_il_nat, exp_length)?;
+            let typ_il_nat = typ_at(il::TypKind::Num(xl::num::Typ::Nat), &exp_idx.span);
+            let exp_il_idx = elab_exp(ctx, &typ_il_nat, exp_idx)?;
+            let typ_il_nat = typ_at(il::TypKind::Num(xl::num::Typ::Nat), &exp_len.span);
+            let exp_il_len = elab_exp(ctx, &typ_il_nat, exp_len)?;
             let exp_il = note_phrase! { node: il::ExpKind::Slice(
                 Box::new(exp_il_base),
-                Box::new(exp_il_index),
-                Box::new(exp_il_length),
+                Box::new(exp_il_idx),
+                Box::new(exp_il_len),
             ), note: typ_il_base.node, span: span.clone() };
             Ok(exp_il)
         },
         |ctx| {
             let typ_il_text = typ_at(il::TypKind::Text, &exp_base.span);
             let exp_il_base = elab_exp(ctx, &typ_il_text, exp_base)?;
-            let typ_il_nat = typ_at(il::TypKind::Num(xl::num::Typ::Nat), &exp_index.span);
-            let exp_il_index = elab_exp(ctx, &typ_il_nat, exp_index)?;
-            let typ_il_nat = typ_at(il::TypKind::Num(xl::num::Typ::Nat), &exp_length.span);
-            let exp_il_length = elab_exp(ctx, &typ_il_nat, exp_length)?;
+            let typ_il_nat = typ_at(il::TypKind::Num(xl::num::Typ::Nat), &exp_idx.span);
+            let exp_il_idx = elab_exp(ctx, &typ_il_nat, exp_idx)?;
+            let typ_il_nat = typ_at(il::TypKind::Num(xl::num::Typ::Nat), &exp_len.span);
+            let exp_il_len = elab_exp(ctx, &typ_il_nat, exp_len)?;
             let exp_il = note_phrase! { node: il::ExpKind::Slice(
                 Box::new(exp_il_base),
-                Box::new(exp_il_index),
-                Box::new(exp_il_length),
+                Box::new(exp_il_idx),
+                Box::new(exp_il_len),
             ), note: il::TypKind::Text, span: span.clone() };
             Ok(exp_il)
         },
@@ -1529,17 +1527,12 @@ fn elab_variant_exp(
 fn elab_path(ctx: &mut Context, typ_il_expect: &il::Typ, path: &el::Path) -> Attempt<il::Path> {
     match &path.node {
         el::PathKind::Root => Ok(elab_root_path(&path.span, typ_il_expect)),
-        el::PathKind::Idx(path_inner, exp_index) => {
-            elab_idx_path(ctx, &path.span, typ_il_expect, path_inner, exp_index)
+        el::PathKind::Idx(path_inner, exp_idx) => {
+            elab_idx_path(ctx, &path.span, typ_il_expect, path_inner, exp_idx)
         }
-        el::PathKind::Slice(path_inner, exp_index, exp_length) => elab_slice_path(
-            ctx,
-            &path.span,
-            typ_il_expect,
-            path_inner,
-            exp_index,
-            exp_length,
-        ),
+        el::PathKind::Slice(path_inner, exp_idx, exp_len) => {
+            elab_slice_path(ctx, &path.span, typ_il_expect, path_inner, exp_idx, exp_len)
+        }
         el::PathKind::Dot(path_inner, atom) => {
             elab_dot_path(ctx, &path.span, typ_il_expect, path_inner, atom)
         }
@@ -1563,20 +1556,20 @@ fn elab_idx_path(
     span: &Span,
     typ_il_expect: &il::Typ,
     path_inner: &el::Path,
-    exp_index: &el::Exp,
+    exp_idx: &el::Exp,
 ) -> Attempt<il::Path> {
     choose_sequential(
         ctx,
         |ctx| {
             let path_il_inner = elab_path(ctx, typ_il_expect, path_inner)?;
             let typ_il_inner = typ_at(path_il_inner.note.as_ref().clone(), &path_il_inner.span);
-            let typ_il_element = as_list_typ(ctx, &typ_il_inner)?;
-            let typ_il_nat = typ_at(il::TypKind::Num(xl::num::Typ::Nat), &exp_index.span);
-            let exp_il_index = elab_exp(ctx, &typ_il_nat, exp_index)?;
-            let path_il_kind = il::PathKind::Idx(Box::new(path_il_inner), Box::new(exp_il_index));
+            let typ_il_elem = as_list_typ(ctx, &typ_il_inner)?;
+            let typ_il_nat = typ_at(il::TypKind::Num(xl::num::Typ::Nat), &exp_idx.span);
+            let exp_il_idx = elab_exp(ctx, &typ_il_nat, exp_idx)?;
+            let path_il_kind = il::PathKind::Idx(Box::new(path_il_inner), Box::new(exp_il_idx));
             Ok(note_phrase! {
                 node: path_il_kind,
-                note: typ_il_element.node,
+                note: typ_il_elem.node,
                 span: span.clone(),
             })
         },
@@ -1584,9 +1577,9 @@ fn elab_idx_path(
             let path_il_inner = elab_path(ctx, typ_il_expect, path_inner)?;
             let typ_il_inner = typ_at(path_il_inner.note.as_ref().clone(), &path_il_inner.span);
             as_text_typ(ctx, &typ_il_inner)?;
-            let typ_il_nat = typ_at(il::TypKind::Num(xl::num::Typ::Nat), &exp_index.span);
-            let exp_il_index = elab_exp(ctx, &typ_il_nat, exp_index)?;
-            let path_il_kind = il::PathKind::Idx(Box::new(path_il_inner), Box::new(exp_il_index));
+            let typ_il_nat = typ_at(il::TypKind::Num(xl::num::Typ::Nat), &exp_idx.span);
+            let exp_il_idx = elab_exp(ctx, &typ_il_nat, exp_idx)?;
+            let path_il_kind = il::PathKind::Idx(Box::new(path_il_inner), Box::new(exp_il_idx));
             Ok(note_phrase! {
                 node: path_il_kind,
                 note: typ_il_inner.node,
@@ -1603,8 +1596,8 @@ fn elab_slice_path(
     span: &Span,
     typ_il_expect: &il::Typ,
     path_inner: &el::Path,
-    exp_index: &el::Exp,
-    exp_length: &el::Exp,
+    exp_idx: &el::Exp,
+    exp_len: &el::Exp,
 ) -> Attempt<il::Path> {
     let path_il_inner = elab_path(ctx, typ_il_expect, path_inner)?;
     let typ_il_inner = typ_at(path_il_inner.note.as_ref().clone(), &path_il_inner.span);
@@ -1617,14 +1610,14 @@ fn elab_slice_path(
             "slice path requires a list or text",
         );
     }
-    let typ_il_nat = typ_at(il::TypKind::Num(xl::num::Typ::Nat), &exp_index.span);
-    let exp_il_index = elab_exp(ctx, &typ_il_nat, exp_index)?;
-    let typ_il_nat = typ_at(il::TypKind::Num(xl::num::Typ::Nat), &exp_length.span);
-    let exp_il_length = elab_exp(ctx, &typ_il_nat, exp_length)?;
+    let typ_il_nat = typ_at(il::TypKind::Num(xl::num::Typ::Nat), &exp_idx.span);
+    let exp_il_idx = elab_exp(ctx, &typ_il_nat, exp_idx)?;
+    let typ_il_nat = typ_at(il::TypKind::Num(xl::num::Typ::Nat), &exp_len.span);
+    let exp_il_len = elab_exp(ctx, &typ_il_nat, exp_len)?;
     let path_il_kind = il::PathKind::Slice(
         Box::new(path_il_inner),
-        Box::new(exp_il_index),
-        Box::new(exp_il_length),
+        Box::new(exp_il_idx),
+        Box::new(exp_il_len),
     );
     Ok(note_phrase! {
         node: path_il_kind,

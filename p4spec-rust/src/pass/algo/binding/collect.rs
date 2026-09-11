@@ -110,18 +110,18 @@ pub fn collect_exp(ctx: &Context, exp: &ast::Exp) -> Result<BEnv, AlgoError> {
             let benv = collect_exp(ctx, exp_inner)?;
             reject_noninvertible(exp_inner.span.clone(), "dot operator", benv)
         }
-        ast::ExpKind::Idx(exp_base, exp_index) => {
+        ast::ExpKind::Idx(exp_base, exp_idx) => {
             let benv_base = collect_exp(ctx, exp_base)?;
-            let benv_index = collect_exp(ctx, exp_index)?;
-            let benv = benv_base.union(benv_index)?;
+            let benv_idx = collect_exp(ctx, exp_idx)?;
+            let benv = benv_base.union(benv_idx)?;
             reject_noninvertible(exp.span.clone(), "indexing operator", benv)
         }
-        ast::ExpKind::Slice(exp_base, exp_l, exp_h) => {
+        ast::ExpKind::Slice(exp_base, exp_idx, exp_len) => {
             let benv_base = collect_exp(ctx, exp_base)?;
-            let benv_l = collect_exp(ctx, exp_l)?;
-            let benv_h = collect_exp(ctx, exp_h)?;
-            let benv = benv_base.union(benv_l)?;
-            let benv = benv.union(benv_h)?;
+            let benv_idx = collect_exp(ctx, exp_idx)?;
+            let benv_len = collect_exp(ctx, exp_len)?;
+            let benv = benv_base.union(benv_idx)?;
+            let benv = benv.union(benv_len)?;
             reject_noninvertible(exp.span.clone(), "slicing operator", benv)
         }
         ast::ExpKind::Upd(exp_base, path, exp_field) => {
@@ -172,12 +172,12 @@ pub fn collect_path(ctx: &Context, path: &ast::Path) -> Result<BEnv, AlgoError> 
             let benv_exp = collect_exp(ctx, exp)?;
             benv_path.union(benv_exp)
         }
-        ast::PathKind::Slice(path, exp_l, exp_h) => {
+        ast::PathKind::Slice(path, exp_idx, exp_len) => {
             let benv_path = collect_path(ctx, path)?;
-            let benv_l = collect_exp(ctx, exp_l)?;
-            let benv_h = collect_exp(ctx, exp_h)?;
-            let benv = benv_path.union(benv_l)?;
-            benv.union(benv_h)
+            let benv_idx = collect_exp(ctx, exp_idx)?;
+            let benv_len = collect_exp(ctx, exp_len)?;
+            let benv = benv_path.union(benv_idx)?;
+            benv.union(benv_len)
         }
         ast::PathKind::Dot(path, _) => collect_path(ctx, path),
     }

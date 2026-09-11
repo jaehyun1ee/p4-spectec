@@ -239,18 +239,18 @@ impl Print for Exp {
                 printer.write_str(" ++ ")?;
                 exp_r.print(printer)
             }
-            ExpKind::Idx(exp_base, exp_index) => {
+            ExpKind::Idx(exp_base, exp_idx) => {
                 exp_base.print(printer)?;
                 printer.write_char('[')?;
-                exp_index.print(printer)?;
+                exp_idx.print(printer)?;
                 printer.write_char(']')
             }
-            ExpKind::Slice(exp_base, exp_l, exp_r) => {
+            ExpKind::Slice(exp_base, exp_idx, exp_len) => {
                 exp_base.print(printer)?;
                 printer.write_char('[')?;
-                exp_l.print(printer)?;
+                exp_idx.print(printer)?;
                 printer.write_str(" : ")?;
-                exp_r.print(printer)?;
+                exp_len.print(printer)?;
                 printer.write_char(']')
             }
             ExpKind::Len(exp) => {
@@ -363,18 +363,18 @@ impl Print for Path {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         match &self.node {
             PathKind::Root => Ok(()),
-            PathKind::Idx(path, exp_index) => {
+            PathKind::Idx(path, exp_idx) => {
                 path.print(printer)?;
                 printer.write_char('[')?;
-                exp_index.print(printer)?;
+                exp_idx.print(printer)?;
                 printer.write_char(']')
             }
-            PathKind::Slice(path, exp_l, exp_r) => {
+            PathKind::Slice(path, exp_idx, exp_len) => {
                 path.print(printer)?;
                 printer.write_char('[')?;
-                exp_l.print(printer)?;
+                exp_idx.print(printer)?;
                 printer.write_str(" : ")?;
-                exp_r.print(printer)?;
+                exp_len.print(printer)?;
                 printer.write_char(']')
             }
             PathKind::Dot(path, atom) if matches!(path.node, PathKind::Root) => atom.print(printer),

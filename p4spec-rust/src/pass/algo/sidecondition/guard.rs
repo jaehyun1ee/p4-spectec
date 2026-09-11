@@ -431,20 +431,20 @@ fn collect_exp(exp_al: &ast::Exp) -> Vec<ast::Prem> {
         ast::ExpKind::Str(fields) => collect_exps(fields.iter().map(|(_, exp)| exp)),
         ast::ExpKind::Opt(Some(exp_inner_al)) => collect_exp(exp_inner_al),
         ast::ExpKind::Opt(None) => vec![],
-        ast::ExpKind::Idx(exp_base, exp_index) => {
+        ast::ExpKind::Idx(exp_base, exp_idx) => {
             let mut prems_insert = collect_exp(exp_base);
-            let prems_index_insert = collect_exp(exp_index);
-            let prems_guard = gen_index_guard(exp_al, exp_base, exp_index);
-            prems_insert.extend(prems_index_insert);
+            let prems_idx_insert = collect_exp(exp_idx);
+            let prems_guard = gen_index_guard(exp_al, exp_base, exp_idx);
+            prems_insert.extend(prems_idx_insert);
             prems_insert.extend(prems_guard);
             prems_insert
         }
-        ast::ExpKind::Slice(exp_base, exp_l, exp_h) => {
+        ast::ExpKind::Slice(exp_base, exp_idx, exp_len) => {
             let mut prems_insert = collect_exp(exp_base);
-            let prems_l_insert = collect_exp(exp_l);
-            let prems_h_insert = collect_exp(exp_h);
-            prems_insert.extend(prems_l_insert);
-            prems_insert.extend(prems_h_insert);
+            let prems_idx_insert = collect_exp(exp_idx);
+            let prems_len_insert = collect_exp(exp_len);
+            prems_insert.extend(prems_idx_insert);
+            prems_insert.extend(prems_len_insert);
             prems_insert
         }
         ast::ExpKind::Upd(exp_base, path, exp_field) => {
@@ -486,12 +486,12 @@ fn collect_path(path: &ast::Path) -> Vec<ast::Prem> {
             prems_insert.extend(prems_exp_insert);
             prems_insert
         }
-        ast::PathKind::Slice(path, exp_l, exp_h) => {
+        ast::PathKind::Slice(path, exp_idx, exp_len) => {
             let mut prems_insert = collect_path(path);
-            let prems_l_insert = collect_exp(exp_l);
-            let prems_h_insert = collect_exp(exp_h);
-            prems_insert.extend(prems_l_insert);
-            prems_insert.extend(prems_h_insert);
+            let prems_idx_insert = collect_exp(exp_idx);
+            let prems_len_insert = collect_exp(exp_len);
+            prems_insert.extend(prems_idx_insert);
+            prems_insert.extend(prems_len_insert);
             prems_insert
         }
         ast::PathKind::Dot(path, _) => collect_path(path),

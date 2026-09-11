@@ -64,10 +64,10 @@ fn infer_exp_inner(venv: &mut VEnv, exp: &ast::Exp, iters: &[ast::Iter]) {
         }
         ast::ExpKind::Opt(Some(exp)) => infer_exp_inner(venv, exp, iters),
         ast::ExpKind::Opt(None) => {}
-        ast::ExpKind::Slice(exp_base, exp_l, exp_h) => {
+        ast::ExpKind::Slice(exp_base, exp_idx, exp_len) => {
             infer_exp_inner(venv, exp_base, iters);
-            infer_exp_inner(venv, exp_l, iters);
-            infer_exp_inner(venv, exp_h, iters);
+            infer_exp_inner(venv, exp_idx, iters);
+            infer_exp_inner(venv, exp_len, iters);
         }
         ast::ExpKind::Upd(exp_base, path, exp_field) => {
             infer_exp_inner(venv, exp_base, iters);
@@ -105,10 +105,10 @@ fn infer_path_inner(venv: &mut VEnv, path: &ast::Path, iters: &[ast::Iter]) {
             infer_path_inner(venv, path, iters);
             infer_exp_inner(venv, exp, iters);
         }
-        ast::PathKind::Slice(path, exp_l, exp_h) => {
+        ast::PathKind::Slice(path, exp_idx, exp_len) => {
             infer_path_inner(venv, path, iters);
-            infer_exp_inner(venv, exp_l, iters);
-            infer_exp_inner(venv, exp_h, iters);
+            infer_exp_inner(venv, exp_idx, iters);
+            infer_exp_inner(venv, exp_len, iters);
         }
         ast::PathKind::Dot(path, _) => infer_path_inner(venv, path, iters),
     }

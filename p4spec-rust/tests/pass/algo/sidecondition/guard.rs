@@ -277,7 +277,7 @@ fn test_conversion_preserves_numeric_and_slice_checks_before_output_guards() {
         11,
     );
     let exp_base_for_len = iterated_var_exp("xs", &typ_nat, ast::Iter::List, 12);
-    let exp_length = exp(
+    let exp_len = exp(
         ast::ExpKind::Len(Box::new(exp_base_for_len)),
         ast::TypKind::Num(xl::num::Typ::Nat),
         12,
@@ -287,13 +287,13 @@ fn test_conversion_preserves_numeric_and_slice_checks_before_output_guards() {
             ast::CmpOp::Num(xl::num::CmpOp::Le),
             ast::OpTyp::Bool,
             Box::new(exp_end),
-            Box::new(exp_length),
+            Box::new(exp_len),
         ),
         ast::TypKind::Bool,
         12,
     );
     let prem_slice_bound = if_prem(exp_slice_bound);
-    let exp_index = exp(
+    let exp_idx = exp(
         ast::ExpKind::Idx(
             Box::new(iterated_var_exp("xs", &typ_nat, ast::Iter::List, 20)),
             Box::new(typed_var_exp("index", &typ_nat, 21)),
@@ -305,7 +305,7 @@ fn test_conversion_preserves_numeric_and_slice_checks_before_output_guards() {
         ast::ExpKind::Bin(
             ast::BinOp::Num(xl::num::BinOp::Div),
             ast::OpTyp::Nat,
-            Box::new(exp_index),
+            Box::new(exp_idx),
             Box::new(typed_var_exp("d", &typ_nat, 23)),
         ),
         ast::TypKind::Num(xl::num::Typ::Nat),
