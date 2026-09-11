@@ -136,18 +136,18 @@ where
 
         if self.previous_token.as_ref().is_some_and(ends_sequence) && starts_sequence(&lexeme.node)
         {
-            let loc_l = self
+            let pos_l = self
                 .previous_right
                 .clone()
                 .expect("previous token position");
-            let loc_r = lexeme.span.left.clone();
+            let pos_r = lexeme.span.left.clone();
             self.pending = Some(lexeme);
             self.previous_token = Some(Token::Sequence);
-            self.previous_right = Some(loc_r.clone());
+            self.previous_right = Some(pos_r.clone());
             return Some(Ok((
-                self.ctx.location(loc_l),
+                self.ctx.location(pos_l),
                 Token::Sequence,
-                self.ctx.location(loc_r),
+                self.ctx.location(pos_r),
             )));
         }
 

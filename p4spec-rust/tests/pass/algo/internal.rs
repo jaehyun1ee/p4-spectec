@@ -196,12 +196,12 @@ fn literal_index_exp(value: bool, line: i64) -> ast::Exp {
         typ::make::list(typ_bool).node,
         line,
     );
-    let index = exp(
+    let exp_idx = exp(
         ast::ExpKind::Num(ast::Num::Nat(0_u64.into())),
         ast::TypKind::Num(xl::num::Typ::Nat),
         line,
     );
-    indexed_exp(base, index, ast::TypKind::Bool, line)
+    indexed_exp(base, exp_idx, ast::TypKind::Bool, line)
 }
 
 fn assert_index_guard_span(prem: &ast_al::Prem, expected_span: Span) {

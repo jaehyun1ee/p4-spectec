@@ -34,8 +34,8 @@ fn test_failure_rendering_retains_branch_order_and_locations() {
 #[test]
 fn test_failure_rendering_bounds_deep_traces_and_keeps_root_and_leaf() {
     let mut nested = trace("leaf", vec![]);
-    for index in (0..15).rev() {
-        nested = trace(&format!("frame {index}"), vec![nested]);
+    for idx in (0..15).rev() {
+        nested = trace(&format!("frame {idx}"), vec![nested]);
     }
     let message = Error::execution(vec![nested]).to_string();
     assert!(message.starts_with(

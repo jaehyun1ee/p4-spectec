@@ -757,11 +757,11 @@ fn write_instr_group_tier_with(
             if !short {
                 let indent = "  ".repeat(level);
                 output.write_str("\n\n")?;
-                for (arm_index, arm) in blocks.iter().enumerate() {
-                    if arm_index != 0 {
+                for (arm_idx, arm) in blocks.iter().enumerate() {
+                    if arm_idx != 0 {
                         output.write_str("\n\n")?;
                     }
-                    write!(output, "{indent}Arm {}:\n\n", arm_index + 1)?;
+                    write!(output, "{indent}Arm {}:\n\n", arm_idx + 1)?;
                     write_block_group_with(output, arm, level + 1, 0)?;
                 }
             }
@@ -828,11 +828,11 @@ fn write_instr_dispatch_tier_with(
             if !short {
                 let indent = "  ".repeat(level);
                 output.write_str("\n\n")?;
-                for (arm_index, arm) in blocks.iter().enumerate() {
-                    if arm_index != 0 {
+                for (arm_idx, arm) in blocks.iter().enumerate() {
+                    if arm_idx != 0 {
                         output.write_str("\n\n")?;
                     }
-                    write!(output, "{indent}Arm {}:\n\n", arm_index + 1)?;
+                    write!(output, "{indent}Arm {}:\n\n", arm_idx + 1)?;
                     write_block_dispatch_with(output, arm, level + 1, 0)?;
                 }
             }

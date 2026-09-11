@@ -145,10 +145,10 @@ pub fn combine<Item>(
 ) -> Result<Vec<Item>, InputError> {
     let input_actual = items_input.len();
     let output_actual = items_output.len();
-    let length = input_actual + output_actual;
-    validate(hint, length)?;
+    let items_len = input_actual + output_actual;
+    validate(hint, items_len)?;
     let input_expected = hint.indices.len();
-    let output_expected = length - input_expected;
+    let output_expected = items_len - input_expected;
     if input_actual != input_expected {
         return Err(InputError::InputCountMismatch {
             expected: input_expected,
@@ -164,9 +164,9 @@ pub fn combine<Item>(
 
     let mut items_input = items_input.into_iter();
     let mut items_output = items_output.into_iter();
-    let mut items = Vec::with_capacity(length);
-    for index in 0..length {
-        let item = if hint.indices.contains(&(index as i64)) {
+    let mut items = Vec::with_capacity(items_len);
+    for idx in 0..items_len {
+        let item = if hint.indices.contains(&(idx as i64)) {
             items_input.next().ok_or(InputError::InputCountMismatch {
                 expected: input_expected,
                 actual: input_actual,

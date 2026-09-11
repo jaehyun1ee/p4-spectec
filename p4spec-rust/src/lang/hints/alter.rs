@@ -152,9 +152,9 @@ pub fn realign(
     all.extend(&outputs);
     all.sort();
     let mut pairs = Vec::new();
-    for index in all {
-        if outputs.contains(&index) {
-            pairs.push((index, pairs.len() as i64));
+    for idx in all {
+        if outputs.contains(&idx) {
+            pairs.push((idx, pairs.len() as i64));
         }
     }
     fn realign_inner(

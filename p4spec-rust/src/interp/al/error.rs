@@ -212,8 +212,8 @@ pub enum CallErrorKind {
 pub enum TraceErrorKind {
     #[error("execution failed")]
     Execution,
-    #[error("invocation of relation {relation} failed")]
-    RelationInvocation { relation: String },
+    #[error("invocation of relation {rel} failed")]
+    RelationInvocation { rel: String },
     #[error("application of rule {relation}/{group}/{path} failed")]
     RuleApplication {
         relation: String,

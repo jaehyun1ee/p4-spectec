@@ -186,7 +186,7 @@ pub fn invoke_rel<I: Interface, E: Extern>(
     }
     result.nest(id.span.clone(), || {
         ErrorKind::Trace(TraceErrorKind::RelationInvocation {
-            relation: id.node.clone(),
+            rel: id.node.clone(),
         })
     })
 }

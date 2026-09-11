@@ -277,15 +277,15 @@ fn overlap_exps_group(
     ids_free: &mut IdSet,
     exps_group: &[Vec<ast::Exp>],
 ) -> Result<(UnifierIds, Vec<ast::Exp>), AlgoError> {
-    let Some(exps_first) = exps_group.first() else {
+    let Some(exps_head) = exps_group.first() else {
         let ids_unifier = UnifierIds::new();
         let exps_template = Vec::new();
         return Ok((ids_unifier, exps_template));
     };
     for exps in &exps_group[1..] {
-        if exps.len() != exps_first.len() {
+        if exps.len() != exps_head.len() {
             let kind = AlgoErrorKind::ExpressionArityMismatch {
-                expected: exps_first.len(),
+                expected: exps_head.len(),
                 actual: exps.len(),
             };
             let error = AlgoError::new(kind, Span::default());
@@ -294,16 +294,16 @@ fn overlap_exps_group(
     }
     if exps_group.len() == 1 {
         let ids_unifier = UnifierIds::new();
-        let exps_template = exps_first.clone();
+        let exps_template = exps_head.clone();
         return Ok((ids_unifier, exps_template));
     }
 
     let mut ids_unifier = UnifierIds::new();
-    let mut exps_template = Vec::with_capacity(exps_first.len());
-    for index in 0..exps_first.len() {
+    let mut exps_template = Vec::with_capacity(exps_head.len());
+    for idx in 0..exps_head.len() {
         let exps_column = exps_group
             .iter()
-            .map(|exps| exps[index].clone())
+            .map(|exps| exps[idx].clone())
             .collect::<Vec<_>>();
         let (ids_unifier_column, exp_template) =
             overlap_exp_group(tdenv, menv, ids_free, &exps_column)?;
