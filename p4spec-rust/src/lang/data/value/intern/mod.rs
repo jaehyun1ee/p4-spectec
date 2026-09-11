@@ -9,7 +9,7 @@ mod simple;
 
 // = Public interface
 
-pub use canon::{CanonId, CanonInterner};
+pub use canon::{CanonEq, CanonHash, CanonId, CanonInterner};
 pub use idx::Interned;
 pub use rc::RcInterner;
 pub use simple::Interner;

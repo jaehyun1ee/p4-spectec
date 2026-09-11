@@ -1,6 +1,6 @@
 //! Exact storage with a second, canonical identity
 //!
-//! First, exactly equal items share a stored entry. Then a supplied comparison
+//! First, exactly equal items share a stored entry. Then canonical comparison
 //! groups entries by meaning: ("x", span_a) and ("x", span_b) keep distinct
 //! handles but share a canonical ID when that comparison ignores spans.
 
@@ -14,6 +14,18 @@ use std::{
 use hashbrown::HashTable;
 
 use super::{idx::Interned, simple::Interner};
+
+// = Canonical comparison
+
+/// Compares canonical meaning using identities of already-interned children
+pub trait CanonEq: Sized {
+    fn canon_eq(&self, interner: &CanonInterner<Self>, other: &Self) -> bool;
+}
+
+/// Hashes canonical meaning; canonically equal items must have equal hashes
+pub trait CanonHash: Sized {
+    fn canon_hash<H: Hasher>(&self, interner: &CanonInterner<Self>, hasher: &mut H);
+}
 
 // = Canonical identities
 
@@ -105,29 +117,22 @@ impl<T> CanonInterner<T> {
 
 // - Interning
 
-impl<T: Eq + Hash> CanonInterner<T> {
-    /// Use consistent hash/equality rules across insertions
-    ///
+impl<T: Eq + Hash + CanonEq + CanonHash> CanonInterner<T> {
     /// Exact equality must imply canonical equality; referenced children must
     /// already have canonical identities in this interner
-    pub fn intern(
-        &mut self,
-        item: T,
-        hash_canon: impl FnOnce(&T, &Self, &mut <RandomState as BuildHasher>::Hasher),
-        eq_canon: impl Fn(&T, &T, &Self) -> bool,
-    ) -> Result<Interned<T>, TryFromIntError> {
+    pub fn intern(&mut self, item: T) -> Result<Interned<T>, TryFromIntError> {
         let id = self.storage.intern(item)?;
         if (id.index as usize) < self.canon.len() {
             return Ok(id);
         }
         let item = self.storage.get(id);
         let mut hasher = self.canon_hasher.build_hasher();
-        hash_canon(item, self, &mut hasher);
+        item.canon_hash(self, &mut hasher);
         let hash = hasher.finish();
         let id_canon = self
             .canon_table
             .find(hash, |entry| {
-                entry.hash == hash && eq_canon(item, self.get(entry.representative), self)
+                entry.hash == hash && item.canon_eq(self, self.get(entry.representative))
             })
             .map(|entry| CanonId(entry.representative));
         self.canon.push(id_canon.unwrap_or(CanonId(id)));

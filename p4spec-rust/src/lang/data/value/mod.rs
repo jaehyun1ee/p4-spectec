@@ -11,7 +11,7 @@ mod intern;
 mod value;
 
 pub use arena::ValueArena;
-pub use intern::{CanonId, CanonInterner, Interned, Interner, RcInterner};
+pub use intern::{CanonEq, CanonHash, CanonId, CanonInterner, Interned, Interner, RcInterner};
 pub use value::*;
 
 use crate::{
@@ -85,10 +85,10 @@ pub mod make {
     pub fn structure(
         arena: &mut ValueArena,
         typ: Rc<TypKind>,
-        fields: Vec<ValueField>,
+        value_fields: Vec<ValueField>,
         span: Span,
     ) -> Result<Value, ValueError> {
-        new(arena, ValueKind::Struct(fields), typ, span)
+        new(arena, ValueKind::Struct(value_fields), typ, span)
     }
 
     // - Cases
@@ -234,7 +234,7 @@ pub mod get {
         value: &Value,
     ) -> Result<&'a [ValueField], ValueError> {
         match arena.kind(value) {
-            ValueKind::Struct(fields) => Ok(fields),
+            ValueKind::Struct(value_fields) => Ok(value_fields),
             _ => Err(unexpected(arena, value, ValueTag::Struct)),
         }
     }

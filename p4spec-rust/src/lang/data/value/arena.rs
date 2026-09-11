@@ -63,9 +63,7 @@ impl ValueArena {
         typ: Rc<TypKind>,
         span: Span,
     ) -> Result<Value, ValueError> {
-        let node = self
-            .values
-            .intern(kind, ValueKind::hash_canon, ValueKind::eq_canon)?;
+        let node = self.values.intern(kind)?;
         let note = self.types.intern(typ)?;
         let span = self.intern_span(span)?;
         Ok(NotePhrase { node, note, span })
