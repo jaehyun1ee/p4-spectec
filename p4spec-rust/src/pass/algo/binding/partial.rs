@@ -556,11 +556,11 @@ fn rename_exp_bind(
             let exp = rename_exp_bind_match(ctx, renv, iter_ctx, pattern, exp_from);
             Ok(exp)
         }
-        ast::ExpKind::Cons(exp_h, exp_t) => {
-            let exp_h = rename_exp(ctx, binds, renv, iter_ctx, *exp_h)?;
-            let exp_t = rename_exp(ctx, binds, renv, iter_ctx, *exp_t)?;
+        ast::ExpKind::Cons(exp_head, exp_tail) => {
+            let exp_head = rename_exp(ctx, binds, renv, iter_ctx, *exp_head)?;
+            let exp_tail = rename_exp(ctx, binds, renv, iter_ctx, *exp_tail)?;
             let exp_from = note_phrase! {
-                node: ast::ExpKind::Cons(Box::new(exp_h), Box::new(exp_t)),
+                node: ast::ExpKind::Cons(Box::new(exp_head), Box::new(exp_tail)),
                 note: note,
                 span: span,
             };

@@ -104,15 +104,15 @@ impl Free for ExpKind {
                 }
             }
             Self::Opt(exp) => exp.free_into(free),
-            Self::Slice(exp_b, exp_i, exp_n) => {
-                exp_b.free_into(free);
-                exp_i.free_into(free);
-                exp_n.free_into(free);
+            Self::Slice(exp_base, exp_idx, exp_len) => {
+                exp_base.free_into(free);
+                exp_idx.free_into(free);
+                exp_len.free_into(free);
             }
-            Self::Upd(exp_b, path, exp_f) => {
-                exp_b.free_into(free);
+            Self::Upd(exp_base, path, exp_field) => {
+                exp_base.free_into(free);
                 path.free_into(free);
-                exp_f.free_into(free);
+                exp_field.free_into(free);
             }
             Self::Call(_, _, args) => args.as_slice().free_into(free),
         }
@@ -151,14 +151,14 @@ impl Free for PathKind {
     fn free_into(&self, free: &mut IdSet) {
         match self {
             Self::Root => {}
-            Self::Idx(path, exp_i) => {
+            Self::Idx(path, exp_idx) => {
                 path.free_into(free);
-                exp_i.free_into(free);
+                exp_idx.free_into(free);
             }
-            Self::Slice(path, exp_i, exp_n) => {
+            Self::Slice(path, exp_idx, exp_len) => {
                 path.free_into(free);
-                exp_i.free_into(free);
-                exp_n.free_into(free);
+                exp_idx.free_into(free);
+                exp_len.free_into(free);
             }
             Self::Dot(path, _) => path.free_into(free),
         }

@@ -17,14 +17,14 @@ fn test_conversion_inserts_index_guards_at_evaluation_sites_in_source_order() {
         let ast::ExpKind::Cmp(
             ast::CmpOp::Num(xl::num::CmpOp::Lt),
             ast::OpTyp::Bool,
-            exp_i,
+            exp_idx,
             exp_len,
         ) = &if_prem.exp.node
         else {
             panic!("expected strict index bound");
         };
-        assert_eq!(exp_i.span, index_span);
-        assert!(matches!(&exp_i.node, ast::ExpKind::Var(id) if id.node == index_name));
+        assert_eq!(exp_idx.span, index_span);
+        assert!(matches!(&exp_idx.node, ast::ExpKind::Var(id) if id.node == index_name));
         assert_eq!(exp_len.span, guard_span);
         let ast::ExpKind::Len(exp_base) = &exp_len.node else {
             panic!("expected indexed-base length");
