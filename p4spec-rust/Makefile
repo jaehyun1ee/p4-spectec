@@ -65,3 +65,21 @@ test-run-al-diff:
 	$(CARGO) test --locked --release --test runtime interp::al::compare::test_run_al_cached_det_corpus_matches_ocaml -- --ignored --exact --nocapture
 
 test-diff: test-frontend-diff test-elab-diff test-algo-diff test-run-al-diff
+
+# Standalone expected driver; product unit tests remain in tests/
+.PHONY: test-expected test-elab-expected test-algo-expected test-run-al-expected test-driver
+DRIVER = $(CARGO) run --locked --release --manifest-path test-driver/Cargo.toml --target-dir target --
+
+test-elab-expected:
+	$(DRIVER) elab
+
+test-algo-expected:
+	$(DRIVER) algo
+
+test-run-al-expected:
+	$(DRIVER) run-al
+
+test-expected: test-elab-expected test-algo-expected test-run-al-expected
+
+test-driver:
+	$(CARGO) test --locked --manifest-path test-driver/Cargo.toml --target-dir target

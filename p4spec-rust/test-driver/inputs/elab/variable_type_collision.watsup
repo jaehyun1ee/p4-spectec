@@ -1,0 +1,2 @@
+syntax item = bool
+var item : bool
