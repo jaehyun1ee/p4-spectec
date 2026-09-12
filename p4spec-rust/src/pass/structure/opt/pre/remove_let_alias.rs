@@ -95,19 +95,18 @@ fn remove_let_instr(instr_ol: LetInstr, span: Span) -> Result<Block, StructureEr
     }
     if let (Some((id_l, iter_l)), Some((id_r, iter_r))) =
         (iterated_var(&exp_l), iterated_var(&exp_r))
+        && iter_l.syntax_eq(iter_r)
     {
-        if iter_l.syntax_eq(iter_r) {
-            let renamer = Renamer::singleton(id_l.clone(), id_r.clone());
-            let block = renamer.rename_instrs(block)?;
-            return remove_block(block);
-        }
+        let renamer = Renamer::singleton(id_l.clone(), id_r.clone());
+        let block = renamer.rename_instrs(block)?;
+        return remove_block(block);
     }
-    if let ExpKind::Var(id_l) = &exp_l.node {
-        if iterated_var(&exp_r).is_some() {
-            let replacer = Replacer::singleton(id_l.clone(), exp_r);
-            let block = replacer.replace_instrs(block)?;
-            return remove_block(block);
-        }
+    if let ExpKind::Var(id_l) = &exp_l.node
+        && iterated_var(&exp_r).is_some()
+    {
+        let replacer = Replacer::singleton(id_l.clone(), exp_r);
+        let block = replacer.replace_instrs(block)?;
+        return remove_block(block);
     }
     let block = remove_block(block)?;
     Ok(vec![

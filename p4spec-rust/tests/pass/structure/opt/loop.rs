@@ -46,7 +46,7 @@ mod merge_binding;
 #[path = "loop/merge_hold.rs"]
 mod merge_hold;
 
-#[path = "loop/merge_if.rs"]
-mod merge_if;
 #[path = "loop/casify.rs"]
 mod casify;
+#[path = "loop/merge_if.rs"]
+mod merge_if;
