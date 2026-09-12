@@ -4,3 +4,6 @@ mod algo;
 mod elaborate;
 #[path = "support/spec.rs"]
 mod spec_fixture;
+
+#[path = "pass/structure.rs"]
+mod structure;
