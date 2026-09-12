@@ -262,7 +262,7 @@ fn test_rule_else_participates_and_preserves_its_bindings() {
     let group = antiunify_rule_match_group(
         exp_else.free(),
         &[vec![boolean(true, 1)]],
-        Some(&[exp_else.clone()]),
+        Some(std::slice::from_ref(&exp_else)),
     )
     .unwrap();
     assert_eq!(let_prem(&group.prems_else.unwrap()[0]).exp_l, exp_else);

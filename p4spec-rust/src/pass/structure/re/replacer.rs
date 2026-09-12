@@ -100,7 +100,7 @@ impl Replacer {
                 self.replace_slice_exp(exp_base, exp_idx, exp_len)
             }
             ExpKind::Upd(exp_base, path, exp_field) => {
-                self.replace_upd_exp(exp_base, path, exp_field)
+                self.replace_upd_exp(exp_base, *path, exp_field)
             }
             ExpKind::Call(id, targs, args) => self.replace_call_exp(id, targs, args),
             ExpKind::Iter(exp, iter_exp) => self.replace_iter_exp(exp, iter_exp),
@@ -223,10 +223,10 @@ impl Replacer {
             Box::new(self.replace_exp(*exp_len)),
         )
     }
-    fn replace_upd_exp(&self, exp_base: Box<Exp>, path: Box<Path>, exp_field: Box<Exp>) -> ExpKind {
+    fn replace_upd_exp(&self, exp_base: Box<Exp>, path: Path, exp_field: Box<Exp>) -> ExpKind {
         ExpKind::Upd(
             Box::new(self.replace_exp(*exp_base)),
-            Box::new(self.replace_path(*path)),
+            Box::new(self.replace_path(path)),
             Box::new(self.replace_exp(*exp_field)),
         )
     }
@@ -266,11 +266,11 @@ impl Replacer {
         } = path;
         let path_kind = match path_kind {
             PathKind::Root => PathKind::Root,
-            PathKind::Idx(path, exp) => self.replace_idx_path(path, exp),
+            PathKind::Idx(path, exp) => self.replace_idx_path(*path, exp),
             PathKind::Slice(path, exp_idx, exp_len) => {
-                self.replace_slice_path(path, exp_idx, exp_len)
+                self.replace_slice_path(*path, exp_idx, exp_len)
             }
-            PathKind::Dot(path, atom) => self.replace_dot_path(path, atom),
+            PathKind::Dot(path, atom) => self.replace_dot_path(*path, atom),
         };
         NotePhrase {
             node: path_kind,
@@ -278,26 +278,21 @@ impl Replacer {
             span,
         }
     }
-    fn replace_idx_path(&self, path: Box<Path>, exp: Box<Exp>) -> PathKind {
+    fn replace_idx_path(&self, path: Path, exp: Box<Exp>) -> PathKind {
         PathKind::Idx(
-            Box::new(self.replace_path(*path)),
+            Box::new(self.replace_path(path)),
             Box::new(self.replace_exp(*exp)),
         )
     }
-    fn replace_slice_path(
-        &self,
-        path: Box<Path>,
-        exp_idx: Box<Exp>,
-        exp_len: Box<Exp>,
-    ) -> PathKind {
+    fn replace_slice_path(&self, path: Path, exp_idx: Box<Exp>, exp_len: Box<Exp>) -> PathKind {
         PathKind::Slice(
-            Box::new(self.replace_path(*path)),
+            Box::new(self.replace_path(path)),
             Box::new(self.replace_exp(*exp_idx)),
             Box::new(self.replace_exp(*exp_len)),
         )
     }
-    fn replace_dot_path(&self, path: Box<Path>, atom: Atom) -> PathKind {
-        PathKind::Dot(Box::new(self.replace_path(*path)), atom)
+    fn replace_dot_path(&self, path: Path, atom: Atom) -> PathKind {
+        PathKind::Dot(Box::new(self.replace_path(path)), atom)
     }
     pub(crate) fn replace_arg(&self, arg: Arg) -> Arg {
         let NotePhrase {

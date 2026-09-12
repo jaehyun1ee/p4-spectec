@@ -106,7 +106,7 @@ impl Renamer {
                 self.rename_slice_exp(exp_base, exp_idx, exp_len)
             }
             ExpKind::Upd(exp_base, path, exp_field) => {
-                self.rename_upd_exp(exp_base, path, exp_field)
+                self.rename_upd_exp(exp_base, *path, exp_field)
             }
             ExpKind::Call(id, targs, args) => self.rename_call_exp(id, targs, args),
             ExpKind::Iter(exp, iter_exp) => self.rename_iter_exp(exp, iter_exp),
@@ -220,10 +220,10 @@ impl Renamer {
             Box::new(self.rename_exp(*exp_len)),
         )
     }
-    fn rename_upd_exp(&self, exp_base: Box<Exp>, path: Box<Path>, exp_field: Box<Exp>) -> ExpKind {
+    fn rename_upd_exp(&self, exp_base: Box<Exp>, path: Path, exp_field: Box<Exp>) -> ExpKind {
         ExpKind::Upd(
             Box::new(self.rename_exp(*exp_base)),
-            Box::new(self.rename_path(*path)),
+            Box::new(self.rename_path(path)),
             Box::new(self.rename_exp(*exp_field)),
         )
     }
@@ -268,11 +268,11 @@ impl Renamer {
         } = path;
         let path_kind = match path_kind {
             PathKind::Root => PathKind::Root,
-            PathKind::Idx(path, exp) => self.rename_idx_path(path, exp),
+            PathKind::Idx(path, exp) => self.rename_idx_path(*path, exp),
             PathKind::Slice(path, exp_idx, exp_len) => {
-                self.rename_slice_path(path, exp_idx, exp_len)
+                self.rename_slice_path(*path, exp_idx, exp_len)
             }
-            PathKind::Dot(path, atom) => self.rename_dot_path(path, atom),
+            PathKind::Dot(path, atom) => self.rename_dot_path(*path, atom),
         };
         NotePhrase {
             node: path_kind,
@@ -280,21 +280,21 @@ impl Renamer {
             span,
         }
     }
-    fn rename_idx_path(&self, path: Box<Path>, exp: Box<Exp>) -> PathKind {
+    fn rename_idx_path(&self, path: Path, exp: Box<Exp>) -> PathKind {
         PathKind::Idx(
-            Box::new(self.rename_path(*path)),
+            Box::new(self.rename_path(path)),
             Box::new(self.rename_exp(*exp)),
         )
     }
-    fn rename_slice_path(&self, path: Box<Path>, exp_idx: Box<Exp>, exp_len: Box<Exp>) -> PathKind {
+    fn rename_slice_path(&self, path: Path, exp_idx: Box<Exp>, exp_len: Box<Exp>) -> PathKind {
         PathKind::Slice(
-            Box::new(self.rename_path(*path)),
+            Box::new(self.rename_path(path)),
             Box::new(self.rename_exp(*exp_idx)),
             Box::new(self.rename_exp(*exp_len)),
         )
     }
-    fn rename_dot_path(&self, path: Box<Path>, atom: Atom) -> PathKind {
-        PathKind::Dot(Box::new(self.rename_path(*path)), atom)
+    fn rename_dot_path(&self, path: Path, atom: Atom) -> PathKind {
+        PathKind::Dot(Box::new(self.rename_path(path)), atom)
     }
     pub(crate) fn rename_arg(&self, arg: Arg) -> Arg {
         let NotePhrase {

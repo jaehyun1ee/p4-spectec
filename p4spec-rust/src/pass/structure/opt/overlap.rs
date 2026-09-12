@@ -358,23 +358,23 @@ pub(crate) fn overlap_exp(
     if exp_a.syntax_eq(exp_b) {
         return Ok(Overlap::Identical);
     }
-    if let ExpKind::Un(UnOp::Bool(boolop::UnOp::Not), _, exp_inner) = &exp_a.node {
-        if exp_inner.as_ref().syntax_eq(exp_b) {
-            return Ok(Overlap::Partition {
-                exp: exp_inner.as_ref().clone(),
-                guard_a: Guard::Bool(false),
-                guard_b: Guard::Bool(true),
-            });
-        }
+    if let ExpKind::Un(UnOp::Bool(boolop::UnOp::Not), _, exp_inner) = &exp_a.node
+        && exp_inner.as_ref().syntax_eq(exp_b)
+    {
+        return Ok(Overlap::Partition {
+            exp: exp_inner.as_ref().clone(),
+            guard_a: Guard::Bool(false),
+            guard_b: Guard::Bool(true),
+        });
     }
-    if let ExpKind::Un(UnOp::Bool(boolop::UnOp::Not), _, exp_inner) = &exp_b.node {
-        if exp_a.syntax_eq(exp_inner.as_ref()) {
-            return Ok(Overlap::Partition {
-                exp: exp_inner.as_ref().clone(),
-                guard_a: Guard::Bool(true),
-                guard_b: Guard::Bool(false),
-            });
-        }
+    if let ExpKind::Un(UnOp::Bool(boolop::UnOp::Not), _, exp_inner) = &exp_b.node
+        && exp_a.syntax_eq(exp_inner.as_ref())
+    {
+        return Ok(Overlap::Partition {
+            exp: exp_inner.as_ref().clone(),
+            guard_a: Guard::Bool(true),
+            guard_b: Guard::Bool(false),
+        });
     }
     match (&exp_a.node, &exp_b.node) {
         (ExpKind::Cmp(_, _, _, _), ExpKind::Cmp(_, _, _, _)) => overlap_cmp_exp(exp_a, exp_b),

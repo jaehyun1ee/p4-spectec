@@ -31,32 +31,26 @@ fn signature() -> RelSignature {
         input_hint: InputHint::new(vec![0]),
     }
 }
-#[path = "ol.rs"]
-mod ol;
-#[path = "context.rs"]
-mod context;
-
-#[path = "re.rs"]
-mod re;
-
-#[path = "merge.rs"]
-mod merge;
 
 #[path = "antiunify.rs"]
 mod antiunify;
-
-#[path = "opt.rs"]
-mod opt;
-
-#[path = "pretty.rs"]
-mod pretty;
-#[path = "prettify.rs"]
-mod prettify;
-
-#[path = "totalize.rs"]
-mod totalize;
+#[path = "context.rs"]
+mod context;
 #[path = "dangle.rs"]
 mod dangle;
-
+#[path = "merge.rs"]
+mod merge;
+#[path = "ol.rs"]
+mod ol;
+#[path = "opt.rs"]
+mod opt;
 #[path = "optimize.rs"]
 mod optimize;
+#[path = "prettify.rs"]
+mod prettify;
+#[path = "pretty.rs"]
+mod pretty;
+#[path = "re.rs"]
+mod re;
+#[path = "totalize.rs"]
+mod totalize;
