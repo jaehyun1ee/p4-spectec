@@ -22,10 +22,7 @@ use p4spec_rust::{
         BuiltinInterface, Extern, ExternError, Interface, Interpreter, NullExtern, Runner,
         RunnerContext,
     },
-    wire::ocaml::{
-        lang::il::{ValueCodec, ValueEnvelopeCodec},
-        yojson,
-    },
+    wire::ocaml::lang::il::{ValueCodec, ValueEnvelopeCodec},
 };
 use serde_json::{Value as Json, json};
 
@@ -160,31 +157,23 @@ fn category(message: &str) -> &'static str {
     }
 }
 
-fn describe(value: &yojson::Value) -> String {
+fn describe(value: &Json) -> String {
     match value {
-        yojson::Value::Assoc(fields) => format!("object with {} fields", fields.len()),
-        yojson::Value::List(values) => format!("list of length {}", values.len()),
-        yojson::Value::Tuple(values) => format!("tuple of length {}", values.len()),
-        yojson::Value::Variant(tag, _) => format!("variant {tag}"),
-        yojson::Value::String(value) if value.len() > 160 => {
+        Json::Object(fields) => format!("object with {} fields", fields.len()),
+        Json::Array(values) => format!("list of length {}", values.len()),
+        Json::String(value) if value.len() > 160 => {
             format!("{:?}…", value.chars().take(160).collect::<String>())
         }
         value => format!("{value:?}"),
     }
 }
 
-fn first_difference(
-    expected: &yojson::Value,
-    actual: &yojson::Value,
-    path: &str,
-) -> Option<String> {
+fn first_difference(expected: &Json, actual: &Json, path: &str) -> Option<String> {
     if expected == actual {
         return None;
     }
     match (expected, actual) {
-        (yojson::Value::Assoc(expected), yojson::Value::Assoc(actual))
-            if expected.len() == actual.len() =>
-        {
+        (Json::Object(expected), Json::Object(actual)) if expected.len() == actual.len() => {
             expected.iter().zip(actual).find_map(
                 |((key_expected, expected), (key_actual, actual))| {
                     if key_expected != key_actual {
@@ -200,29 +189,13 @@ fn first_difference(
                 },
             )
         }
-        (yojson::Value::List(expected), yojson::Value::List(actual)) if matches!(expected.first(), Some(yojson::Value::String(tag)) if tag == "ExternV") => {
-            Some(format!(
-                "{path}: external payload differs: {expected:?} != {actual:?}"
-            ))
-        }
-        (yojson::Value::List(expected), yojson::Value::List(actual))
-        | (yojson::Value::Tuple(expected), yojson::Value::Tuple(actual))
-            if expected.len() == actual.len() =>
-        {
-            expected
-                .iter()
-                .zip(actual)
-                .enumerate()
-                .find_map(|(index, (expected, actual))| {
-                    first_difference(expected, actual, &format!("{path}/{index}"))
-                })
-        }
-        (
-            yojson::Value::Variant(tag_expected, Some(expected)),
-            yojson::Value::Variant(tag_actual, Some(actual)),
-        ) if tag_expected == tag_actual => {
-            first_difference(expected, actual, &format!("{path}/{tag_expected}"))
-        }
+        (Json::Array(expected), Json::Array(actual)) if expected.len() == actual.len() => expected
+            .iter()
+            .zip(actual)
+            .enumerate()
+            .find_map(|(index, (expected, actual))| {
+                first_difference(expected, actual, &format!("{path}/{index}"))
+            }),
         _ => Some(format!(
             "{path}: OCaml {}, Rust {}",
             describe(expected),
@@ -254,12 +227,8 @@ fn compare(expected: Json, actual: Json, label: &str) {
             let actual =
                 ValueEnvelopeCodec::decode(&mut arena, actual.as_str().unwrap().as_bytes())
                     .unwrap();
-            let expected =
-                yojson::Value::from_slice(&ValueEnvelopeCodec::encode(&arena, &expected).unwrap())
-                    .unwrap();
-            let actual =
-                yojson::Value::from_slice(&ValueEnvelopeCodec::encode(&arena, &actual).unwrap())
-                    .unwrap();
+            let expected = ValueCodec::encode(&arena, &expected).unwrap();
+            let actual = ValueCodec::encode(&arena, &actual).unwrap();
             if let Some(difference) = first_difference(&expected, &actual, "") {
                 panic!("{label}: output {index}, first difference {difference}");
             }
@@ -442,20 +411,13 @@ fn test_oracle_cache_flag_controls_public_input_guard() {
 
 #[test]
 fn test_semantic_comparison_ignores_spans_but_preserves_values_and_order() {
-    let expected = yojson::Value::from_slice(br#"{"at":{"column":1},"it":[1,2]}"#).unwrap();
-    let relocated = yojson::Value::from_slice(br#"{"at":{"column":9},"it":[1,2]}"#).unwrap();
-    let reordered = yojson::Value::from_slice(br#"{"at":{"column":9},"it":[2,1]}"#).unwrap();
+    let expected = serde_json::from_slice::<Json>(br#"{"at":{"column":1},"it":[1,2]}"#).unwrap();
+    let relocated = serde_json::from_slice::<Json>(br#"{"at":{"column":9},"it":[1,2]}"#).unwrap();
+    let reordered = serde_json::from_slice::<Json>(br#"{"at":{"column":9},"it":[2,1]}"#).unwrap();
     assert!(first_difference(&expected, &relocated, "").is_none());
     assert!(
         first_difference(&expected, &reordered, "")
             .unwrap()
             .contains("/it/0")
     );
-}
-
-#[test]
-fn test_semantic_comparison_preserves_external_at_fields() {
-    let expected = yojson::Value::from_slice(br#"["ExternV",{"it":0,"at":1}]"#).unwrap();
-    let actual = yojson::Value::from_slice(br#"["ExternV",{"it":0,"at":2}]"#).unwrap();
-    assert!(first_difference(&expected, &actual, "").is_some());
 }

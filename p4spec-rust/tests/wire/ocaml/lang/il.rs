@@ -131,3 +131,125 @@ fn test_value_wire_expands_shared_bodies_with_distinct_annotations() {
         "function"
     );
 }
+
+#[test]
+#[should_panic(expected = "extern payloads are not supported by OCaml wire")]
+fn test_value_wire_rejects_extern_encoding() {
+    let mut arena = ValueArena::new();
+    let value = make::external(
+        &mut arena,
+        typ::TypKind::Bool.into(),
+        p4spec_rust::yojson::ExternalData::Null,
+        Span::default(),
+    )
+    .unwrap();
+    let _ = ValueCodec::encode(&arena, &value);
+}
+
+#[test]
+#[should_panic(expected = "extern payloads are not supported by OCaml wire")]
+fn test_value_wire_rejects_extern_decoding() {
+    let mut arena = ValueArena::new();
+    let value = make::bool(&mut arena, true, Span::default()).unwrap();
+    let mut json = ValueCodec::encode(&arena, &value).unwrap();
+    json["it"] = serde_json::json!(["ExternV", null]);
+    let _ = ValueCodec::decode(&mut arena, &json);
+}
+
+#[test]
+fn test_value_envelope_rejects_lossy_or_extended_json() {
+    let mut arena = ValueArena::new();
+    let value = make::bool(&mut arena, true, Span::default()).unwrap();
+    let payload = ValueCodec::encode(&arena, &value).unwrap();
+    for text in [
+        "null",
+        "NaN",
+        "Infinity",
+        "-Infinity",
+        "(1,2)",
+        "<\"Tag\":1>",
+        "18446744073709551616",
+        "-9223372036854775809",
+        "1e400",
+        "1.5",
+        r#"{"key":1,"key":2}"#,
+        r#"{"key":1,"\u006bey":2}"#,
+    ] {
+        let input = format!(
+            r#"{{"schema":"p4spectec.value.v1","kind":"value","payload":{payload},"extra":{text}}}"#
+        );
+        // Null is valid even in an unused field; unsupported tokens must not be ignored
+        if text == "null" {
+            assert!(ValueEnvelopeCodec::decode(&mut arena, input.as_bytes()).is_ok());
+        } else {
+            assert!(
+                ValueEnvelopeCodec::decode(&mut arena, input.as_bytes()).is_err(),
+                "{text}"
+            );
+        }
+    }
+    for input in [
+        format!(
+            r#"{{"schema":"p4spectec.value.v1","schema":"p4spectec.value.v1","kind":"value","payload":{payload}}}"#
+        ),
+        format!(r#"{{"schema":"unknown","kind":"value","payload":{payload}}}"#),
+        format!(r#"{{"schema":"p4spectec.value.v1","kind":"sl","payload":{payload}}}"#),
+        format!(r#"{{"schema":"p4spectec.value.v1","kind":"value","payload":{payload}}} null"#),
+    ] {
+        assert!(
+            ValueEnvelopeCodec::decode(&mut arena, input.as_bytes()).is_err(),
+            "{input}"
+        );
+    }
+}
+
+#[test]
+#[should_panic(expected = "extern payloads are not supported by OCaml wire")]
+fn test_value_envelope_rejects_nested_extern_encoding() {
+    let mut arena = ValueArena::new();
+    let value = make::external(
+        &mut arena,
+        typ::TypKind::Bool.into(),
+        p4spec_rust::yojson::ExternalData::Null,
+        Span::default(),
+    )
+    .unwrap();
+    let value = make::list(
+        &mut arena,
+        typ::TypKind::Bool.into(),
+        vec![value],
+        Span::default(),
+    )
+    .unwrap();
+    let _ = ValueEnvelopeCodec::encode(&arena, &value);
+}
+
+#[test]
+#[should_panic(expected = "extern payloads are not supported by OCaml wire")]
+fn test_value_envelope_rejects_extern_decoding() {
+    let mut arena = ValueArena::new();
+    let value = make::bool(&mut arena, true, Span::default()).unwrap();
+    let mut payload = ValueCodec::encode(&arena, &value).unwrap();
+    payload["it"] = serde_json::json!(["ExternV", {"state": 1}]);
+    let input = serde_json::to_vec(&serde_json::json!({
+        "schema": "p4spectec.value.v1", "kind": "value", "payload": payload,
+    }))
+    .unwrap();
+    let _ = ValueEnvelopeCodec::decode(&mut arena, &input);
+}
+
+#[test]
+fn test_value_envelope_preserves_large_language_integers() {
+    use num_bigint::BigInt;
+    let mut arena = ValueArena::new();
+    let int = BigInt::from(1_u8) << 256;
+    let value = make::int(&mut arena, int, span(7)).unwrap();
+    let input = ValueEnvelopeCodec::encode(&arena, &value).unwrap();
+    let mut arena_decoded = ValueArena::new();
+    let value_decoded = ValueEnvelopeCodec::decode(&mut arena_decoded, &input).unwrap();
+    assert_eq!(
+        get::num(&arena_decoded, &value_decoded).unwrap(),
+        get::num(&arena, &value).unwrap()
+    );
+    assert_eq!(arena_decoded.span(&value_decoded), &span(7));
+}
