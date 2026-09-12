@@ -102,8 +102,8 @@ pub enum HostErrorKind {
 
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum AssignErrorKind {
-    #[error("match failed {expression} <- {value}")]
-    Mismatch { expression: String, value: String },
+    #[error("match failed {exp} <- {value}")]
+    Mismatch { exp: String, value: String },
     #[error(
         "mismatch in number of expressions and values while assigning, expected {expected} value(s) but got {actual}"
     )]
@@ -114,8 +114,8 @@ pub enum AssignErrorKind {
     ArgumentArityMismatch { expected: usize, actual: usize },
     #[error("cannot assign an empty list to a cons expression")]
     EmptyCons,
-    #[error("cannot assign a value {value} to a definition {definition}")]
-    DefinitionMismatch { value: String, definition: String },
+    #[error("cannot assign a value {value} to a definition {def}")]
+    DefinitionMismatch { value: String, def: String },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
@@ -158,8 +158,8 @@ pub enum ExprErrorKind {
 
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum PremErrorKind {
-    #[error("condition {expression} was not met")]
-    ConditionNotMet { expression: String },
+    #[error("condition {exp} was not met")]
+    ConditionNotMet { exp: String },
     #[error("condition hold {relation} was not met")]
     HoldConditionNotMet { relation: String },
     #[error("condition not-hold {relation} was not met")]
@@ -172,10 +172,10 @@ pub enum GuardErrorKind {
     RelationInputMismatch { relation: String },
     #[error("relation output of {relation} does not match the expected type")]
     RelationOutputMismatch { relation: String },
-    #[error("function argument of {function} does not match the parameter type")]
-    FunctionInputMismatch { function: String },
-    #[error("return value of function {function} does not match the expected type")]
-    FunctionOutputMismatch { function: String },
+    #[error("function argument of {func} does not match the parameter type")]
+    FunctionInputMismatch { func: String },
+    #[error("return value of function {func} does not match the expected type")]
+    FunctionOutputMismatch { func: String },
     #[error(transparent)]
     Validation(Box<ErrorKind>),
 }
@@ -200,9 +200,9 @@ pub enum CallErrorKind {
         group_b: String,
         path_b: String,
     },
-    #[error("non-deterministic application of function {function}: {first}, {second}")]
+    #[error("non-deterministic application of function {func}: {first}, {second}")]
     FunctionNondeterminism {
-        function: String,
+        func: String,
         first: usize,
         second: usize,
     },
@@ -212,23 +212,20 @@ pub enum CallErrorKind {
 pub enum TraceErrorKind {
     #[error("execution failed")]
     Execution,
-    #[error("invocation of relation {relation} failed")]
-    RelationInvocation { relation: String },
+    #[error("invocation of relation {rel} failed")]
+    RelationInvocation { rel: String },
     #[error("application of rule {relation}/{group}/{path} failed")]
     RuleApplication {
         relation: String,
         group: String,
         path: String,
     },
-    #[error("application of table row {function}{arguments} failed")]
-    TableRowApplication { function: String, arguments: String },
-    #[error("invocation of function ${function}{type_arguments} failed")]
-    FunctionInvocation {
-        function: String,
-        type_arguments: String,
-    },
-    #[error("application of clause {function}{arguments} failed")]
-    ClauseApplication { function: String, arguments: String },
+    #[error("application of table row {func}{args} failed")]
+    TableRowApplication { func: String, args: String },
+    #[error("invocation of function ${func}{targs} failed")]
+    FunctionInvocation { func: String, targs: String },
+    #[error("application of clause {func}{args} failed")]
+    ClauseApplication { func: String, args: String },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

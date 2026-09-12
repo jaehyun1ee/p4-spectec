@@ -44,61 +44,56 @@ pub fn parse_mixop(source: &str) -> Result<Mixop, FrontendError> {
                     let mixfixes = types.iter().map(from_typ).collect();
                     Mixfix::Seq(mixfixes)
                 }
-                ast::NotTypKind::Infix(left, atom, right) => {
-                    let left = Box::new(from_typ(left));
+                ast::NotTypKind::Infix(typ_l, atom, typ_r) => {
+                    let typ_l = Box::new(from_typ(typ_l));
                     let atom = atom.clone();
-                    let right = Box::new(from_typ(right));
-                    Mixfix::Infix(left, atom, right)
+                    let typ_r = Box::new(from_typ(typ_r));
+                    Mixfix::Infix(typ_l, atom, typ_r)
                 }
-                ast::NotTypKind::Brack(left, inner, right) => {
-                    let left = left.clone();
-                    let inner = Box::new(from_typ(inner));
-                    let right = right.clone();
-                    Mixfix::Brack(left, inner, right)
+                ast::NotTypKind::Brack(atom_l, typ_inner, atom_r) => {
+                    let atom_l = atom_l.clone();
+                    let typ_inner = Box::new(from_typ(typ_inner));
+                    let atom_r = atom_r.clone();
+                    Mixfix::Brack(atom_l, typ_inner, atom_r)
                 }
             },
         }
     }
 
-    let context = Context::default();
-    let lexer = Lexer::new(Rc::from(""), source, |id| context.find_id(id));
-    let tokens = parser_tokens(&context, lexer);
-    let result = parser::CheckTypParser::new().parse(&context, tokens);
-    let typ = result.map_err(|error| parse_error(&context, error))?;
+    let ctx = Context::default();
+    let lexer = Lexer::new(Rc::from(""), source, |id| ctx.find_id(id));
+    let tokens = parser_tokens(&ctx, lexer);
+    let result = parser::CheckTypParser::new().parse(&ctx, tokens);
+    let typ = result.map_err(|error| parse_error(&ctx, error))?;
     let mixop = from_typ(&typ);
     Ok(mixop)
 }
 
-fn parse_source(name: Rc<str>, source: &str, context: &Context) -> Result<Spec, FrontendError> {
-    let lexer = Lexer::new(name, source, |id| context.find_id(id));
-    let tokens = parser_tokens(context, lexer);
-    let result = parser::SpecParser::new().parse(context, tokens);
-    result.map_err(|error| parse_error(context, error))
+fn parse_source(name: Rc<str>, source: &str, ctx: &Context) -> Result<Spec, FrontendError> {
+    let lexer = Lexer::new(name, source, |id| ctx.find_id(id));
+    let tokens = parser_tokens(ctx, lexer);
+    let result = parser::SpecParser::new().parse(ctx, tokens);
+    result.map_err(|error| parse_error(ctx, error))
 }
 
-fn parse_error(
-    context: &Context,
-    error: ParseError<Location, Token, FrontendError>,
-) -> FrontendError {
-    let (kind, left, right) = match error {
-        ParseError::InvalidToken { location } => {
-            (SyntaxErrorKind::InvalidToken, location, location)
-        }
-        ParseError::UnrecognizedEof { location, .. } => {
-            (SyntaxErrorKind::UnexpectedEndOfInput, location, location)
+fn parse_error(ctx: &Context, error: ParseError<Location, Token, FrontendError>) -> FrontendError {
+    let (kind, loc_l, loc_r) = match error {
+        ParseError::InvalidToken { location: loc } => (SyntaxErrorKind::InvalidToken, loc, loc),
+        ParseError::UnrecognizedEof { location: loc, .. } => {
+            (SyntaxErrorKind::UnexpectedEndOfInput, loc, loc)
         }
         ParseError::UnrecognizedToken {
-            token: (left, _, right),
+            token: (loc_l, _, loc_r),
             ..
-        } => (SyntaxErrorKind::UnexpectedToken, left, right),
+        } => (SyntaxErrorKind::UnexpectedToken, loc_l, loc_r),
         ParseError::ExtraToken {
-            token: (left, _, right),
-        } => (SyntaxErrorKind::ExtraToken, left, right),
+            token: (loc_l, _, loc_r),
+        } => (SyntaxErrorKind::ExtraToken, loc_l, loc_r),
         ParseError::User { error } => return error,
     };
     crate::phrase! {
         node: kind,
-        span: context.span(left, right),
+        span: ctx.span(loc_l, loc_r),
     }
     .into()
 }
@@ -108,7 +103,7 @@ pub fn parse_file(path: impl AsRef<Path>) -> Result<Spec, FrontendError> {
     parse_file_with_context(path.as_ref(), &Context::default())
 }
 
-fn parse_file_with_context(path: &Path, context: &Context) -> Result<Spec, FrontendError> {
+fn parse_file_with_context(path: &Path, ctx: &Context) -> Result<Spec, FrontendError> {
     let name = Rc::<str>::from(path.to_string_lossy().into_owned());
     let position = Position::new(Rc::clone(&name), 0, 0);
     let file_span = Span::new(position.clone(), position);
@@ -124,7 +119,7 @@ fn parse_file_with_context(path: &Path, context: &Context) -> Result<Spec, Front
             span: invalid_utf8_span(Rc::clone(&name), &bytes, &source),
         })
     })?;
-    parse_source(name, source, context)
+    parse_source(name, source, ctx)
 }
 
 fn invalid_utf8_span(name: Rc<str>, bytes: &[u8], error: &str::Utf8Error) -> Span {
@@ -139,9 +134,9 @@ fn invalid_utf8_span(name: Rc<str>, bytes: &[u8], error: &str::Utf8Error) -> Spa
     let invalid_length = error
         .error_len()
         .unwrap_or_else(|| bytes.len().saturating_sub(offset)) as i64;
-    let left = Position::new(Rc::clone(&name), line, column);
-    let right = Position::new(name, line, column + invalid_length);
-    Span::new(left, right)
+    let pos_l = Position::new(Rc::clone(&name), line, column);
+    let pos_r = Position::new(name, line, column + invalid_length);
+    Span::new(pos_l, pos_r)
 }
 
 /// Parses files and directories in order, recursively expanding `.watsup` files
@@ -159,9 +154,9 @@ where
     let bindings = Rc::new(Bindings::default());
     let mut spec = Vec::new();
     for file in files {
-        let context = Context::with_bindings(Rc::clone(&bindings));
-        let definitions = parse_file_with_context(&file, &context)?;
-        spec.extend(definitions);
+        let ctx = Context::with_bindings(Rc::clone(&bindings));
+        let defs = parse_file_with_context(&file, &ctx)?;
+        spec.extend(defs);
     }
     Ok(spec)
 }

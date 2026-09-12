@@ -476,19 +476,19 @@ fn semantic_mixfix_frames(arena: &ValueArena, value: &ValueCase, emit: &mut impl
         Mixfix::Atom(atom) => {
             emit(json!(["Mixfix", "Atom", semantic_atom(&atom.node)]));
         }
-        Mixfix::Brack(left, body, right) => {
+        Mixfix::Brack(atom_l, mixfix_inner, atom_r) => {
             emit(json!([
                 "Mixfix",
                 "Brack",
-                semantic_atom(&left.node),
-                semantic_atom(&right.node)
+                semantic_atom(&atom_l.node),
+                semantic_atom(&atom_r.node)
             ]));
-            semantic_mixfix_frames(arena, body, emit);
+            semantic_mixfix_frames(arena, mixfix_inner, emit);
         }
-        Mixfix::Infix(left, atom, right) => {
+        Mixfix::Infix(mixfix_l, atom, mixfix_r) => {
             emit(json!(["Mixfix", "Infix", semantic_atom(&atom.node)]));
-            semantic_mixfix_frames(arena, left, emit);
-            semantic_mixfix_frames(arena, right, emit);
+            semantic_mixfix_frames(arena, mixfix_l, emit);
+            semantic_mixfix_frames(arena, mixfix_r, emit);
         }
         Mixfix::Seq(values) => {
             emit(json!(["Mixfix", "Seq", values.len()]));
@@ -590,7 +590,7 @@ struct Bridge;
 impl Extern for Bridge {
     fn eval_func<S, I>(
         &self,
-        context: &mut RunnerContext<'_, S, I, Self>,
+        ctx: &mut RunnerContext<'_, S, I, Self>,
         name: &str,
         targs: &[Typ],
         values: &[Value],
@@ -600,14 +600,14 @@ impl Extern for Bridge {
         S: Interpreter<I, Self>,
     {
         let value = match name {
-            "bridge" => context.call_func("inner", targs, values)?,
+            "bridge" => ctx.call_func("inner", targs, values)?,
             "bridge_bad" => {
                 let (name, targs, values) = (
                     "ignore",
                     &[],
-                    &[make::bool(context.arena_mut(), true, Span::default()).unwrap()],
+                    &[make::bool(ctx.arena_mut(), true, Span::default()).unwrap()],
                 );
-                context.call_func(name, targs, values)
+                ctx.call_func(name, targs, values)
             }?,
             _ => return Err(ExternError::Failure("unknown bridge function".to_owned()).into()),
         };

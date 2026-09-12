@@ -46,26 +46,30 @@ struct Diagnostic {
     span: Span,
 }
 
-fn first_difference(left: &Value, right: &Value, path: &str) -> Option<(String, String, String)> {
-    if left == right {
+fn first_difference(
+    value_l: &Value,
+    value_r: &Value,
+    path: &str,
+) -> Option<(String, String, String)> {
+    if value_l == value_r {
         return None;
     }
-    match (left, right) {
-        (Value::Array(left), Value::Array(right)) if left.len() == right.len() => left
+    match (value_l, value_r) {
+        (Value::Array(value_l), Value::Array(value_r)) if value_l.len() == value_r.len() => value_l
             .iter()
-            .zip(right)
+            .zip(value_r)
             .enumerate()
-            .find_map(|(index, (left, right))| {
-                first_difference(left, right, &format!("{path}[{index}]"))
+            .find_map(|(index, (value_l, value_r))| {
+                first_difference(value_l, value_r, &format!("{path}[{index}]"))
             }),
-        (Value::Object(left), Value::Object(right)) if left.len() == right.len() => {
-            left.iter().find_map(|(key, left)| {
-                right
-                    .get(key)
-                    .and_then(|right| first_difference(left, right, &format!("{path}.{key}")))
+        (Value::Object(value_l), Value::Object(value_r)) if value_l.len() == value_r.len() => {
+            value_l.iter().find_map(|(key, value_l)| {
+                value_r.get(key).and_then(|value_r| {
+                    first_difference(value_l, value_r, &format!("{path}.{key}"))
+                })
             })
         }
-        _ => Some((path.to_owned(), left.to_string(), right.to_string())),
+        _ => Some((path.to_owned(), value_l.to_string(), value_r.to_string())),
     }
 }
 
@@ -123,7 +127,7 @@ fn ocaml_diagnostic(path: &Path, stderr: &[u8]) -> Diagnostic {
     let (range, message) = diagnostic
         .split_once(": ")
         .expect("OCaml diagnostic contains a source range and message");
-    let (left, right) = range.split_once('-').unwrap_or((range, range));
+    let (col_l, col_r) = range.split_once('-').unwrap_or((range, range));
     let kind = match message {
         "unclosed text literal" => DiagnosticKind::Lexical(LexErrorKind::UnclosedTextLiteral),
         "illegal escape" => DiagnosticKind::Lexical(LexErrorKind::IllegalEscape),
@@ -148,7 +152,7 @@ fn ocaml_diagnostic(path: &Path, stderr: &[u8]) -> Diagnostic {
     };
     Diagnostic {
         kind,
-        span: Span::new(position(file, left), position(file, right)),
+        span: Span::new(position(file, col_l), position(file, col_r)),
     }
 }
 

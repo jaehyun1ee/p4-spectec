@@ -284,7 +284,7 @@ pub struct DefinedRel {
     pub rel_signature: RelSignature,
     pub exps_input: Vec<Exp>,
     pub block: Block,
-    pub else_block: Option<ElseBlock>,
+    pub block_else: Option<ElseBlock>,
     pub hints: Vec<Hint>,
 }
 
@@ -348,7 +348,7 @@ pub struct DefinedFunc {
     pub params: Vec<Param>,
     pub typ: Typ,
     pub block: Block,
-    pub else_block: Option<ElseBlock>,
+    pub block_else: Option<ElseBlock>,
     pub hints: Vec<Hint>,
 }
 

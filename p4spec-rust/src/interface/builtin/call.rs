@@ -30,7 +30,7 @@ enum BuiltinEntry {
 // == Builtin registry
 
 pub struct Builtins {
-    functions: HashMap<String, BuiltinEntry>,
+    funcs: HashMap<String, BuiltinEntry>,
 }
 
 impl Default for Builtins {
@@ -45,7 +45,7 @@ impl Builtins {
     }
 
     pub fn with_extensions<const N: usize>(entries: [(&str, BuiltinImpl); N]) -> Self {
-        let mut functions = HashMap::from([
+        let mut funcs = HashMap::from([
             // Nats
             ("sum_nat".to_owned(), BuiltinEntry::Pure(nats::sum_nat)),
             ("max_nat".to_owned(), BuiltinEntry::Pure(nats::max_nat)),
@@ -164,9 +164,9 @@ impl Builtins {
         ]);
         // Extension entries are merged last, allowing interface-specific overrides.
         for (name, builtin_impl) in entries {
-            functions.insert(name.to_owned(), BuiltinEntry::Pure(builtin_impl));
+            funcs.insert(name.to_owned(), BuiltinEntry::Pure(builtin_impl));
         }
-        Self { functions }
+        Self { funcs }
     }
 
     // Initializer
@@ -185,7 +185,7 @@ impl Builtins {
         values: &[Value],
     ) -> Result<(Value, bool), BuiltinError> {
         let entry = self
-            .functions
+            .funcs
             .get(&id.node)
             .copied()
             .ok_or_else(|| BuiltinError {

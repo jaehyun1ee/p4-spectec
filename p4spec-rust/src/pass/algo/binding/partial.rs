@@ -541,26 +541,26 @@ fn rename_exp_bind(
         }
         ast::ExpKind::List(exps) => {
             let exps = rename_exps(ctx, binds, renv, iter_ctx, exps)?;
-            let length = i64::try_from(exps.len()).expect("expression list length fits i64");
+            let exps_len = i64::try_from(exps.len()).expect("expression list length fits i64");
             let exp_from = note_phrase! {
                 node: ast::ExpKind::List(exps),
                 note: note,
                 span: span.clone(),
             };
-            let pattern = if length == 0 {
+            let pattern = if exps_len == 0 {
                 ast::ListPattern::Nil
             } else {
-                ast::ListPattern::Fixed(length)
+                ast::ListPattern::Fixed(exps_len)
             };
             let pattern = ast::Pattern::List(pattern);
             let exp = rename_exp_bind_match(ctx, renv, iter_ctx, pattern, exp_from);
             Ok(exp)
         }
-        ast::ExpKind::Cons(exp_h, exp_t) => {
-            let exp_h = rename_exp(ctx, binds, renv, iter_ctx, *exp_h)?;
-            let exp_t = rename_exp(ctx, binds, renv, iter_ctx, *exp_t)?;
+        ast::ExpKind::Cons(exp_head, exp_tail) => {
+            let exp_head = rename_exp(ctx, binds, renv, iter_ctx, *exp_head)?;
+            let exp_tail = rename_exp(ctx, binds, renv, iter_ctx, *exp_tail)?;
             let exp_from = note_phrase! {
-                node: ast::ExpKind::Cons(Box::new(exp_h), Box::new(exp_t)),
+                node: ast::ExpKind::Cons(Box::new(exp_head), Box::new(exp_tail)),
                 note: note,
                 span: span,
             };

@@ -111,30 +111,30 @@ impl<'a> EquivalenceTable<'a> {
         }
     }
 
-    fn union(&mut self, kind: ClassKind, condition_a: &'a ast::Exp, condition_b: &'a ast::Exp) {
-        let index_a = self.find(kind, condition_a);
-        let index_b = self.find(kind, condition_b);
-        match (index_a, index_b) {
-            (Some(index_a), Some(index_b)) if index_a == index_b => {}
-            (Some(index_a), Some(index_b)) => {
-                let index_high = index_a.max(index_b);
-                let index_low = index_a.min(index_b);
-                let conditions_high = self.take_conditions(kind, index_high);
-                let conditions_low = self.take_conditions(kind, index_low);
-                let (mut conditions_a, mut conditions_b) = if index_a == index_low {
+    fn union(&mut self, kind: ClassKind, condition_l: &'a ast::Exp, condition_r: &'a ast::Exp) {
+        let idx_l = self.find(kind, condition_l);
+        let idx_r = self.find(kind, condition_r);
+        match (idx_l, idx_r) {
+            (Some(idx_l), Some(idx_r)) if idx_l == idx_r => {}
+            (Some(idx_l), Some(idx_r)) => {
+                let idx_high = idx_l.max(idx_r);
+                let idx_low = idx_l.min(idx_r);
+                let conditions_high = self.take_conditions(kind, idx_high);
+                let conditions_low = self.take_conditions(kind, idx_low);
+                let (mut conditions_l, mut conditions_r) = if idx_l == idx_low {
                     (conditions_low, conditions_high)
                 } else {
                     (conditions_high, conditions_low)
                 };
-                conditions_a.append(&mut conditions_b);
-                let class = Class::new(kind, conditions_a);
+                conditions_l.append(&mut conditions_r);
+                let class = Class::new(kind, conditions_l);
                 self.classes.insert(0, class);
             }
             (Some(index), None) | (None, Some(index)) => {
-                let condition_new = if index_a.is_some() {
-                    condition_b
+                let condition_new = if idx_l.is_some() {
+                    condition_r
                 } else {
-                    condition_a
+                    condition_l
                 };
                 let mut conditions = self.take_conditions(kind, index);
                 conditions.insert(0, condition_new);
@@ -142,18 +142,18 @@ impl<'a> EquivalenceTable<'a> {
                 self.classes.insert(0, class);
             }
             (None, None) => {
-                let conditions = vec![condition_a, condition_b];
+                let conditions = vec![condition_l, condition_r];
                 let class = Class::new(kind, conditions);
                 self.classes.insert(0, class);
             }
         }
     }
 
-    fn contains(&self, kind: ClassKind, condition_a: &ast::Exp, condition_b: &ast::Exp) -> bool {
-        if condition_a.syntax_eq(condition_b) {
+    fn contains(&self, kind: ClassKind, condition_l: &ast::Exp, condition_r: &ast::Exp) -> bool {
+        if condition_l.syntax_eq(condition_r) {
             return true;
         }
-        let Some(index) = self.find(kind, condition_a) else {
+        let Some(index) = self.find(kind, condition_l) else {
             return false;
         };
         let Some(conditions) = self.classes[index].conditions(kind) else {
@@ -161,7 +161,7 @@ impl<'a> EquivalenceTable<'a> {
         };
         conditions
             .iter()
-            .any(|condition| condition.syntax_eq(condition_b))
+            .any(|condition| condition.syntax_eq(condition_r))
     }
 
     fn implies_exp(&self, exp: &ast::Exp) -> bool {
@@ -281,7 +281,7 @@ fn iterate_collected(
 fn gen_index_guard(
     exp_al: &ast::Exp,
     exp_base_al: &ast::Exp,
-    exp_index_al: &ast::Exp,
+    exp_idx_al: &ast::Exp,
 ) -> Vec<ast::Prem> {
     let span = exp_al.span.clone();
     let exp_len_al = note_phrase! {
@@ -293,7 +293,7 @@ fn gen_index_guard(
         node: ast::ExpKind::Cmp(
             ast::CmpOp::Num(xl::num::CmpOp::Lt),
             ast::OpTyp::Bool,
-            Box::new(exp_index_al.clone()),
+            Box::new(exp_idx_al.clone()),
             Box::new(exp_len_al),
         ),
         note: ast::TypKind::Bool,
@@ -416,48 +416,48 @@ fn collect_exp(exp_al: &ast::Exp) -> Vec<ast::Prem> {
         | ast::ExpKind::Match(exp_inner_al, _)
         | ast::ExpKind::Len(exp_inner_al)
         | ast::ExpKind::Dot(exp_inner_al, _) => collect_exp(exp_inner_al),
-        ast::ExpKind::Bin(_, _, exp_l, exp_r)
-        | ast::ExpKind::Cmp(_, _, exp_l, exp_r)
-        | ast::ExpKind::Cons(exp_l, exp_r)
-        | ast::ExpKind::Cat(exp_l, exp_r)
-        | ast::ExpKind::Mem(exp_l, exp_r) => {
-            let mut prems_insert = collect_exp(exp_l);
-            let prems_r_insert = collect_exp(exp_r);
+        ast::ExpKind::Bin(_, _, exp_l_al, exp_r_al)
+        | ast::ExpKind::Cmp(_, _, exp_l_al, exp_r_al)
+        | ast::ExpKind::Cons(exp_l_al, exp_r_al)
+        | ast::ExpKind::Cat(exp_l_al, exp_r_al)
+        | ast::ExpKind::Mem(exp_l_al, exp_r_al) => {
+            let mut prems_insert = collect_exp(exp_l_al);
+            let prems_r_insert = collect_exp(exp_r_al);
             prems_insert.extend(prems_r_insert);
             prems_insert
         }
-        ast::ExpKind::Tuple(exps) | ast::ExpKind::List(exps) => collect_exps(exps.iter()),
+        ast::ExpKind::Tuple(exps_al) | ast::ExpKind::List(exps_al) => collect_exps(exps_al.iter()),
         ast::ExpKind::Case(not_exp) => collect_exps(not_exp.args()),
         ast::ExpKind::Str(fields) => collect_exps(fields.iter().map(|(_, exp)| exp)),
         ast::ExpKind::Opt(Some(exp_inner_al)) => collect_exp(exp_inner_al),
         ast::ExpKind::Opt(None) => vec![],
-        ast::ExpKind::Idx(exp_base, exp_index) => {
-            let mut prems_insert = collect_exp(exp_base);
-            let prems_index_insert = collect_exp(exp_index);
-            let prems_guard = gen_index_guard(exp_al, exp_base, exp_index);
-            prems_insert.extend(prems_index_insert);
+        ast::ExpKind::Idx(exp_base_al, exp_idx_al) => {
+            let mut prems_insert = collect_exp(exp_base_al);
+            let prems_idx_insert = collect_exp(exp_idx_al);
+            let prems_guard = gen_index_guard(exp_al, exp_base_al, exp_idx_al);
+            prems_insert.extend(prems_idx_insert);
             prems_insert.extend(prems_guard);
             prems_insert
         }
-        ast::ExpKind::Slice(exp_base, exp_l, exp_h) => {
-            let mut prems_insert = collect_exp(exp_base);
-            let prems_l_insert = collect_exp(exp_l);
-            let prems_h_insert = collect_exp(exp_h);
-            prems_insert.extend(prems_l_insert);
-            prems_insert.extend(prems_h_insert);
+        ast::ExpKind::Slice(exp_base_al, exp_idx_al, exp_len_al) => {
+            let mut prems_insert = collect_exp(exp_base_al);
+            let prems_idx_insert = collect_exp(exp_idx_al);
+            let prems_len_insert = collect_exp(exp_len_al);
+            prems_insert.extend(prems_idx_insert);
+            prems_insert.extend(prems_len_insert);
             prems_insert
         }
-        ast::ExpKind::Upd(exp_base, path, exp_field) => {
-            let mut prems_insert = collect_exp(exp_base);
-            let prems_path_insert = collect_path(path);
-            let prems_field_insert = collect_exp(exp_field);
+        ast::ExpKind::Upd(exp_base_al, path_al, exp_field_al) => {
+            let mut prems_insert = collect_exp(exp_base_al);
+            let prems_path_insert = collect_path(path_al);
+            let prems_field_insert = collect_exp(exp_field_al);
             prems_insert.extend(prems_path_insert);
             prems_insert.extend(prems_field_insert);
             prems_insert
         }
         ast::ExpKind::Call(_, _, args) => collect_args(args),
-        ast::ExpKind::Iter(exp_inner, iter_exp) => {
-            let prems_inner_insert = collect_exp(exp_inner);
+        ast::ExpKind::Iter(exp_inner_al, iter_exp) => {
+            let prems_inner_insert = collect_exp(exp_inner_al);
             let mut prems_insert = iterate_prems(iter_exp.0, &iter_exp.1, prems_inner_insert);
             let prems_guard = gen_iter_guard(iter_exp);
             prems_insert.extend(prems_guard);
@@ -477,24 +477,24 @@ fn collect_exps<'a>(exps: impl IntoIterator<Item = &'a ast::Exp>) -> Vec<ast::Pr
 
 // - Paths
 
-fn collect_path(path: &ast::Path) -> Vec<ast::Prem> {
-    match &path.node {
+fn collect_path(path_al: &ast::Path) -> Vec<ast::Prem> {
+    match &path_al.node {
         ast::PathKind::Root => vec![],
-        ast::PathKind::Idx(path, exp_al) => {
-            let mut prems_insert = collect_path(path);
+        ast::PathKind::Idx(path_al, exp_al) => {
+            let mut prems_insert = collect_path(path_al);
             let prems_exp_insert = collect_exp(exp_al);
             prems_insert.extend(prems_exp_insert);
             prems_insert
         }
-        ast::PathKind::Slice(path, exp_l, exp_h) => {
-            let mut prems_insert = collect_path(path);
-            let prems_l_insert = collect_exp(exp_l);
-            let prems_h_insert = collect_exp(exp_h);
-            prems_insert.extend(prems_l_insert);
-            prems_insert.extend(prems_h_insert);
+        ast::PathKind::Slice(path_al, exp_idx_al, exp_len_al) => {
+            let mut prems_insert = collect_path(path_al);
+            let prems_idx_insert = collect_exp(exp_idx_al);
+            let prems_len_insert = collect_exp(exp_len_al);
+            prems_insert.extend(prems_idx_insert);
+            prems_insert.extend(prems_len_insert);
             prems_insert
         }
-        ast::PathKind::Dot(path, _) => collect_path(path),
+        ast::PathKind::Dot(path_al, _) => collect_path(path_al),
     }
 }
 
@@ -692,18 +692,18 @@ fn insert_else_group(mut else_group_al: ast::ElseGroup) -> ast::ElseGroup {
 
 fn insert_clause(mut clause_al: ast::Clause) -> ast::Clause {
     let prems_args = collect_args(&clause_al.node.args);
-    let prems_clause_al = std::mem::take(&mut clause_al.node.premises);
+    let prems_clause_al = std::mem::take(&mut clause_al.node.prems);
     let prems_clause = insert_prems(&[&prems_args], prems_clause_al);
-    clause_al.node.premises = prems_clause.output;
+    clause_al.node.prems = prems_clause.output;
 
-    let prems_output = collect_exp(&clause_al.node.expression);
+    let prems_output = collect_exp(&clause_al.node.exp);
     let prems_output = filter_prems_insert(
         &[&prems_args],
         &prems_clause.derived,
-        &clause_al.node.premises,
+        &clause_al.node.prems,
         prems_output,
     );
-    clause_al.node.premises.extend(prems_output);
+    clause_al.node.prems.extend(prems_output);
     clause_al
 }
 

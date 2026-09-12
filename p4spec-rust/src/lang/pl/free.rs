@@ -35,10 +35,12 @@ impl Free for ExpKind {
                 .iter()
                 .fold(IdSet::new(), |free, (_, exp)| free.union(exp.free())),
             Self::Opt(exp) => exp.free(),
-            Self::Slice(exp_b, exp_i, exp_n) => {
-                exp_b.free().union(exp_i.free()).union(exp_n.free())
+            Self::Slice(exp_base, exp_idx, exp_len) => {
+                exp_base.free().union(exp_idx.free()).union(exp_len.free())
             }
-            Self::Upd(exp_b, path, exp_f) => exp_b.free().union(path.free()).union(exp_f.free()),
+            Self::Upd(exp_base, path, exp_field) => {
+                exp_base.free().union(path.free()).union(exp_field.free())
+            }
             Self::Call(_, _, args) => args.as_slice().free(),
         }
     }
@@ -52,8 +54,10 @@ impl Free for PathKind {
     fn free(&self) -> IdSet {
         match self {
             Self::Root => IdSet::new(),
-            Self::Idx(path, exp_i) => path.free().union(exp_i.free()),
-            Self::Slice(path, exp_i, exp_n) => path.free().union(exp_i.free()).union(exp_n.free()),
+            Self::Idx(path, exp_idx) => path.free().union(exp_idx.free()),
+            Self::Slice(path, exp_idx, exp_len) => {
+                path.free().union(exp_idx.free()).union(exp_len.free())
+            }
             Self::Dot(path, _) => path.free(),
         }
     }

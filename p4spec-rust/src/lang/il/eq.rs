@@ -131,19 +131,24 @@ impl SyntaxEq for ExpKind {
             (ExpKind::Dot(exp_l, atom_l), ExpKind::Dot(exp_r, atom_r)) => {
                 exp_l.syntax_eq(exp_r) && atom_l.syntax_eq(atom_r)
             }
-            (ExpKind::Idx(exp_b_l, exp_i_l), ExpKind::Idx(exp_b_r, exp_i_r)) => {
-                exp_b_l.syntax_eq(exp_b_r) && exp_i_l.syntax_eq(exp_i_r)
+            (ExpKind::Idx(exp_base_l, exp_idx_l), ExpKind::Idx(exp_base_r, exp_idx_r)) => {
+                exp_base_l.syntax_eq(exp_base_r) && exp_idx_l.syntax_eq(exp_idx_r)
             }
             (
-                ExpKind::Slice(exp_b_l, exp_i_l, exp_n_l),
-                ExpKind::Slice(exp_b_r, exp_i_r, exp_n_r),
+                ExpKind::Slice(exp_base_l, exp_idx_l, exp_len_l),
+                ExpKind::Slice(exp_base_r, exp_idx_r, exp_len_r),
             ) => {
-                exp_b_l.syntax_eq(exp_b_r)
-                    && exp_i_l.syntax_eq(exp_i_r)
-                    && exp_n_l.syntax_eq(exp_n_r)
+                exp_base_l.syntax_eq(exp_base_r)
+                    && exp_idx_l.syntax_eq(exp_idx_r)
+                    && exp_len_l.syntax_eq(exp_len_r)
             }
-            (ExpKind::Upd(exp_b_l, path_l, exp_f_l), ExpKind::Upd(exp_b_r, path_r, exp_f_r)) => {
-                exp_b_l.syntax_eq(exp_b_r) && path_l.syntax_eq(path_r) && exp_f_l.syntax_eq(exp_f_r)
+            (
+                ExpKind::Upd(exp_base_l, path_l, exp_field_l),
+                ExpKind::Upd(exp_base_r, path_r, exp_field_r),
+            ) => {
+                exp_base_l.syntax_eq(exp_base_r)
+                    && path_l.syntax_eq(path_r)
+                    && exp_field_l.syntax_eq(exp_field_r)
             }
             (ExpKind::Call(id_l, targs_l, args_l), ExpKind::Call(id_r, targs_r, args_r)) => {
                 id_l.syntax_eq(id_r) && targs_l.syntax_eq(targs_r) && args_l.syntax_eq(args_r)
@@ -185,10 +190,12 @@ impl SyntaxEq for PathKind {
                 path_l.syntax_eq(path_r) && exp_l.syntax_eq(exp_r)
             }
             (
-                PathKind::Slice(path_l, exp_i_l, exp_n_l),
-                PathKind::Slice(path_r, exp_i_r, exp_n_r),
+                PathKind::Slice(path_l, exp_idx_l, exp_len_l),
+                PathKind::Slice(path_r, exp_idx_r, exp_len_r),
             ) => {
-                path_l.syntax_eq(path_r) && exp_i_l.syntax_eq(exp_i_r) && exp_n_l.syntax_eq(exp_n_r)
+                path_l.syntax_eq(path_r)
+                    && exp_idx_l.syntax_eq(exp_idx_r)
+                    && exp_len_l.syntax_eq(exp_len_r)
             }
             (PathKind::Dot(path_l, atom_l), PathKind::Dot(path_r, atom_r)) => {
                 path_l.syntax_eq(path_r) && atom_l.syntax_eq(atom_r)
@@ -383,8 +390,8 @@ impl SyntaxEq for ElseGroupKind {
 impl SyntaxEq for ClauseKind {
     fn syntax_eq(&self, other: &Self) -> bool {
         self.args.syntax_eq(&other.args)
-            && self.expression.syntax_eq(&other.expression)
-            && self.premises.syntax_eq(&other.premises)
+            && self.exp.syntax_eq(&other.exp)
+            && self.prems.syntax_eq(&other.prems)
     }
 }
 

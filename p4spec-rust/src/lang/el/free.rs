@@ -78,20 +78,20 @@ impl Free for ExpKind {
             Self::List(exps) | Self::Tuple(exps) | Self::Seq(exps) => {
                 exps.as_slice().free_into(free);
             }
-            Self::Slice(exp_b, exp_i, exp_n) => {
-                exp_b.free_into(free);
-                exp_i.free_into(free);
-                exp_n.free_into(free);
+            Self::Slice(exp_base, exp_idx, exp_len) => {
+                exp_base.free_into(free);
+                exp_idx.free_into(free);
+                exp_len.free_into(free);
             }
             Self::Str(fields) => {
                 for (_, exp) in fields {
                     exp.free_into(free);
                 }
             }
-            Self::Upd(exp_b, path, exp_f) => {
-                exp_b.free_into(free);
+            Self::Upd(exp_base, path, exp_field) => {
+                exp_base.free_into(free);
                 path.free_into(free);
-                exp_f.free_into(free);
+                exp_field.free_into(free);
             }
             Self::Call(_, _, args) => args.as_slice().free_into(free),
         }
@@ -114,10 +114,10 @@ impl Free for PathKind {
                 path.free_into(free);
                 exp.free_into(free);
             }
-            Self::Slice(path, exp_i, exp_n) => {
+            Self::Slice(path, exp_idx, exp_len) => {
                 path.free_into(free);
-                exp_i.free_into(free);
-                exp_n.free_into(free);
+                exp_idx.free_into(free);
+                exp_len.free_into(free);
             }
             Self::Dot(path, _) => path.free_into(free),
         }
@@ -346,19 +346,19 @@ impl Free for FuncDef {
 impl Free for DefKind {
     fn free_into(&self, free: &mut IdSet) {
         match self {
-            Self::ExternSyntax(definition) => definition.free_into(free),
-            Self::Syntax(definition) => definition.free_into(free),
-            Self::Typ(definition) => definition.free_into(free),
-            Self::Var(definition) => definition.free_into(free),
-            Self::ExternRel(definition) => definition.free_into(free),
-            Self::Rel(definition) => definition.free_into(free),
-            Self::RuleGroup(definition) => definition.free_into(free),
-            Self::ExternDec(definition) => definition.free_into(free),
-            Self::BuiltinDec(definition) => definition.free_into(free),
-            Self::TableDec(definition) => definition.free_into(free),
-            Self::FuncDec(definition) => definition.free_into(free),
-            Self::TableDef(definition) => definition.free_into(free),
-            Self::FuncDef(definition) => definition.free_into(free),
+            Self::ExternSyntax(def) => def.free_into(free),
+            Self::Syntax(def) => def.free_into(free),
+            Self::Typ(def) => def.free_into(free),
+            Self::Var(def) => def.free_into(free),
+            Self::ExternRel(def) => def.free_into(free),
+            Self::Rel(def) => def.free_into(free),
+            Self::RuleGroup(def) => def.free_into(free),
+            Self::ExternDec(def) => def.free_into(free),
+            Self::BuiltinDec(def) => def.free_into(free),
+            Self::TableDec(def) => def.free_into(free),
+            Self::FuncDec(def) => def.free_into(free),
+            Self::TableDef(def) => def.free_into(free),
+            Self::FuncDef(def) => def.free_into(free),
             Self::Sep => {}
         }
     }

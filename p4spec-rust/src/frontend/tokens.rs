@@ -27,12 +27,12 @@ use super::{
     lexer::Token,
 };
 
-pub(crate) fn parser_tokens<I>(context: &Context, lexemes: I) -> ParserTokens<'_, I>
+pub(crate) fn parser_tokens<I>(ctx: &Context, lexemes: I) -> ParserTokens<'_, I>
 where
     I: Iterator,
 {
     ParserTokens {
-        context,
+        ctx,
         lexemes,
         previous_right: None,
         previous_token: None,
@@ -40,8 +40,8 @@ where
     }
 }
 
-pub(crate) struct ParserTokens<'context, I: Iterator> {
-    context: &'context Context,
+pub(crate) struct ParserTokens<'ctx, I: Iterator> {
+    ctx: &'ctx Context,
     lexemes: I,
     previous_right: Option<Position>,
     previous_token: Option<Token>,
@@ -130,31 +130,31 @@ where
             },
         };
 
-        if lexeme.node == Token::Star && !self.context.in_arith() {
+        if lexeme.node == Token::Star && !self.ctx.in_arith() {
             lexeme.node = Token::IterStar;
         }
 
         if self.previous_token.as_ref().is_some_and(ends_sequence) && starts_sequence(&lexeme.node)
         {
-            let left_position = self
+            let pos_l = self
                 .previous_right
                 .clone()
                 .expect("previous token position");
-            let right_position = lexeme.span.left.clone();
+            let pos_r = lexeme.span.left.clone();
             self.pending = Some(lexeme);
             self.previous_token = Some(Token::Sequence);
-            self.previous_right = Some(right_position.clone());
+            self.previous_right = Some(pos_r.clone());
             return Some(Ok((
-                self.context.location(left_position),
+                self.ctx.location(pos_l),
                 Token::Sequence,
-                self.context.location(right_position),
+                self.ctx.location(pos_r),
             )));
         }
 
-        let left = self.context.location(lexeme.span.left);
+        let loc_l = self.ctx.location(lexeme.span.left);
         self.previous_right = Some(lexeme.span.right.clone());
-        let right = self.context.location(lexeme.span.right);
+        let loc_r = self.ctx.location(lexeme.span.right);
         self.previous_token = Some(lexeme.node.clone());
-        Some(Ok((left, lexeme.node, right)))
+        Some(Ok((loc_l, lexeme.node, loc_r)))
     }
 }

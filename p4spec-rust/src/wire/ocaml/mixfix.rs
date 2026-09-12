@@ -33,17 +33,17 @@ pub(crate) fn try_encode<T, E>(
     Ok(match mixfix {
         Mixfix::Arg(arg) => json!(["Arg", encode_arg(arg)?]),
         Mixfix::Atom(atom) => json!(["Atom", AtomPhraseCodec::encode(atom)]),
-        Mixfix::Brack(left, body, right) => json!([
+        Mixfix::Brack(atom_l, mixfix_inner, atom_r) => json!([
             "Brack",
-            AtomPhraseCodec::encode(left),
-            try_encode(body, encode_arg)?,
-            AtomPhraseCodec::encode(right)
+            AtomPhraseCodec::encode(atom_l),
+            try_encode(mixfix_inner, encode_arg)?,
+            AtomPhraseCodec::encode(atom_r)
         ]),
-        Mixfix::Infix(left, atom, right) => json!([
+        Mixfix::Infix(mixfix_l, atom, mixfix_r) => json!([
             "Infix",
-            try_encode(left, encode_arg)?,
+            try_encode(mixfix_l, encode_arg)?,
             AtomPhraseCodec::encode(atom),
-            try_encode(right, encode_arg)?
+            try_encode(mixfix_r, encode_arg)?
         ]),
         Mixfix::Seq(items) => json!([
             "Seq",
@@ -70,15 +70,15 @@ fn decode_inner<T>(
     match (tag, fields) {
         ("Arg", [arg]) => Ok(Mixfix::Arg(decode_arg(arg)?)),
         ("Atom", [atom]) => Ok(Mixfix::Atom(AtomPhraseCodec::decode(atom)?)),
-        ("Brack", [left, body, right]) => Ok(Mixfix::Brack(
-            AtomPhraseCodec::decode(left)?,
-            Box::new(decode_inner(body, decode_arg)?),
-            AtomPhraseCodec::decode(right)?,
+        ("Brack", [atom_l, mixfix_inner, atom_r]) => Ok(Mixfix::Brack(
+            AtomPhraseCodec::decode(atom_l)?,
+            Box::new(decode_inner(mixfix_inner, decode_arg)?),
+            AtomPhraseCodec::decode(atom_r)?,
         )),
-        ("Infix", [left, atom, right]) => Ok(Mixfix::Infix(
-            Box::new(decode_inner(left, decode_arg)?),
+        ("Infix", [mixfix_l, atom, mixfix_r]) => Ok(Mixfix::Infix(
+            Box::new(decode_inner(mixfix_l, decode_arg)?),
             AtomPhraseCodec::decode(atom)?,
-            Box::new(decode_inner(right, decode_arg)?),
+            Box::new(decode_inner(mixfix_r, decode_arg)?),
         )),
         ("Seq", [items]) => Ok(Mixfix::Seq(
             array(items)?
@@ -97,17 +97,17 @@ pub(crate) fn encode<T>(mixfix: &Mixfix<T>, encode_arg: impl Copy + Fn(&T) -> Va
     match mixfix {
         Mixfix::Arg(arg) => json!(["Arg", encode_arg(arg)]),
         Mixfix::Atom(atom) => json!(["Atom", AtomPhraseCodec::encode(atom)]),
-        Mixfix::Brack(left, body, right) => json!([
+        Mixfix::Brack(atom_l, mixfix_inner, atom_r) => json!([
             "Brack",
-            AtomPhraseCodec::encode(left),
-            encode(body, encode_arg),
-            AtomPhraseCodec::encode(right)
+            AtomPhraseCodec::encode(atom_l),
+            encode(mixfix_inner, encode_arg),
+            AtomPhraseCodec::encode(atom_r)
         ]),
-        Mixfix::Infix(left, atom, right) => json!([
+        Mixfix::Infix(mixfix_l, atom, mixfix_r) => json!([
             "Infix",
-            encode(left, encode_arg),
+            encode(mixfix_l, encode_arg),
             AtomPhraseCodec::encode(atom),
-            encode(right, encode_arg)
+            encode(mixfix_r, encode_arg)
         ]),
         Mixfix::Seq(items) => {
             json!([

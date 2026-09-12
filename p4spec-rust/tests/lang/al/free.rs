@@ -3,7 +3,7 @@ use super::*;
 #[test]
 fn test_free_expression_path_argument_and_premise_variants_collect_identifier_text() {
     let x = || Box::new(variable("x"));
-    let expressions = vec![
+    let exps = vec![
         (expr(il::ast::ExpKind::Bool(true)), ids(&[])),
         (
             expr(il::ast::ExpKind::Num(num::Number::Nat(0.into()))),
@@ -105,8 +105,8 @@ fn test_free_expression_path_argument_and_premise_variants_collect_identifier_te
             ids(&["x"]),
         ),
     ];
-    for (expression, expected) in expressions {
-        assert_eq!(expression.free(), expected);
+    for (exp, expected) in exps {
+        assert_eq!(exp.free(), expected);
     }
 
     let paths = vec![
@@ -149,7 +149,7 @@ fn test_free_expression_path_argument_and_premise_variants_collect_identifier_te
         .free(),
         ids(&[])
     );
-    let premises = vec![
+    let prems = vec![
         (
             al::ast::PremKind::Rule(al::ast::RulePrem {
                 id: id("r"),
@@ -202,10 +202,10 @@ fn test_free_expression_path_argument_and_premise_variants_collect_identifier_te
             ids(&["x"]),
         ),
     ];
-    for (premise, expected) in premises {
+    for (prem, expected) in prems {
         assert_eq!(
             p4spec_rust::phrase! {
-                node: premise,
+                node: prem,
                 span: span("premise"),
             }
             .free(),
@@ -215,7 +215,7 @@ fn test_free_expression_path_argument_and_premise_variants_collect_identifier_te
 }
 #[test]
 fn test_free_al_shapes_and_definition_arms_are_exhaustive() {
-    let premise = || {
+    let prem = || {
         p4spec_rust::phrase! {
             node: al::ast::PremKind::If(al::ast::IfPrem { exp: variable("p") }),
             span: span("premise"),
@@ -224,11 +224,11 @@ fn test_free_al_shapes_and_definition_arms_are_exhaustive() {
     let rule_match = al::ast::RuleMatch {
         exps_signature: vec![variable("s")],
         exps_input: vec![variable("i")],
-        prems: vec![premise()],
+        prems: vec![prem()],
     };
     let rule_path = al::ast::RulePath {
         id: id("rule"),
-        prems: vec![premise()],
+        prems: vec![prem()],
         exps_output: vec![variable("o")],
     };
     let group: al::ast::RuleGroup = p4spec_rust::phrase! { node: al::ast::RuleGroupKind {
@@ -243,14 +243,14 @@ fn test_free_al_shapes_and_definition_arms_are_exhaustive() {
     }, span: span("else") };
     let clause: al::ast::Clause = p4spec_rust::phrase! { node: al::ast::ClauseKind {
         args: vec![arg_exp("a")],
-        expression: variable("c"),
-        premises: vec![premise()],
+        exp: variable("c"),
+        prems: vec![prem()],
     }, span: span("clause") };
     let table: al::ast::TableRow = p4spec_rust::phrase! { node: al::ast::TableRowKind {
         exps_signature: vec![variable("signature")],
         args: vec![arg_exp("a")],
         exp: variable("t"),
-        prems: vec![premise()],
+        prems: vec![prem()],
     }, span: span("table") };
 
     assert_eq!(rule_match.free(), ids(&["s", "i", "p"]));
@@ -260,11 +260,11 @@ fn test_free_al_shapes_and_definition_arms_are_exhaustive() {
     assert_eq!(clause.free(), ids(&["a", "c", "p"]));
     assert_eq!(table.free(), ids(&["a", "t", "p"]));
 
-    let def_type = p4spec_rust::phrase! {
+    let def_typ = p4spec_rust::phrase! {
         node: il::ast::DefTypKind::Plain(typ()),
         span: span("def-type"),
     };
-    let definitions: Vec<(al::ast::Def, IdSet)> = vec![
+    let defs: Vec<(al::ast::Def, IdSet)> = vec![
         (
             p4spec_rust::phrase! { node: al::ast::DefKind::Typ(al::ast::TypDef::Extern(al::ast::ExternTyp {
                 id: id("e"),
@@ -276,7 +276,7 @@ fn test_free_al_shapes_and_definition_arms_are_exhaustive() {
             p4spec_rust::phrase! { node: al::ast::DefKind::Typ(al::ast::TypDef::Defined(Box::new(al::ast::DefinedTyp {
                 id: id("t"),
                 tparams: Vec::new(),
-                def_typ: def_type,
+                def_typ,
                 hints: Vec::new(),
             }))), span: span("def") },
             ids(&[]),
@@ -352,7 +352,7 @@ fn test_free_al_shapes_and_definition_arms_are_exhaustive() {
             ids(&["a", "c", "p"]),
         ),
     ];
-    for (definition, expected) in definitions {
-        assert_eq!(definition.free(), expected);
+    for (def, expected) in defs {
+        assert_eq!(def.free(), expected);
     }
 }

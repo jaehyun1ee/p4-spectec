@@ -26,12 +26,12 @@ fn test_numeric_membership_preserves_nat_subtyping() {
     let mut arena = ValueArena::new();
     let tdenv = TDEnv::new();
     let find_func = |_: &str| None::<FuncTyp>;
-    let natural = make::nat(&mut arena, Natural::from(3_u64), Span::default()).unwrap();
+    let nat = make::nat(&mut arena, Natural::from(3_u64), Span::default()).unwrap();
     let nonnegative_int = make::int(&mut arena, BigInt::from(3), Span::default()).unwrap();
     let negative_int = make::int(&mut arena, BigInt::from(-1), Span::default()).unwrap();
 
     assert_eq!(
-        sub(&arena, &tdenv, &find_func, &typ::make::nat(), &natural),
+        sub(&arena, &tdenv, &find_func, &typ::make::nat(), &nat),
         Ok(true)
     );
     assert_eq!(
@@ -49,7 +49,7 @@ fn test_numeric_membership_preserves_nat_subtyping() {
         Ok(false)
     );
     assert_eq!(
-        sub(&arena, &tdenv, &find_func, &typ::make::int(), &natural),
+        sub(&arena, &tdenv, &find_func, &typ::make::int(), &nat),
         Ok(true)
     );
 }

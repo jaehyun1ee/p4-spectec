@@ -38,10 +38,10 @@ fn insert_case_hints(
         return;
     };
     for (notation, _, case_hints) in cases {
-        let Some((_, expression)) = case_hints.iter().find(|(id, _)| id.node == "print") else {
+        let Some((_, exp)) = case_hints.iter().find(|(id, _)| id.node == "print") else {
             continue;
         };
-        let Some(hint) = alter::init(expression) else {
+        let Some(hint) = alter::init(exp) else {
             continue;
         };
         hints.insert((type_id.to_owned(), notation.node.to_mixop()), hint);
@@ -181,7 +181,7 @@ impl P4Unparser {
     fn render_atom(atom: &Atom) -> String {
         match atom {
             Atom::Tag(_) => String::new(),
-            Atom::Operator(operator) => operator.to_ascii_lowercase(),
+            Atom::Operator(op) => op.to_ascii_lowercase(),
             Atom::LAngle => "<".to_owned(),
             Atom::RAngle => ">".to_owned(),
             Atom::LParen => "(".to_owned(),

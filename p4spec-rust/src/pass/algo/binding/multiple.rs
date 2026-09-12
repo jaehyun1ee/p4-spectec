@@ -134,10 +134,10 @@ pub fn rename_exp(ctx: &mut Context, renv: &mut RenameEnv, exp: &ast::Exp) -> as
         }
         ast::ExpKind::Opt(None) => return exp.clone(),
         ast::ExpKind::List(exps) => ast::ExpKind::List(rename_exps(ctx, renv, exps)),
-        ast::ExpKind::Cons(exp_h, exp_t) => {
-            let exp_h = rename_exp(ctx, renv, exp_h);
-            let exp_t = rename_exp(ctx, renv, exp_t);
-            ast::ExpKind::Cons(Box::new(exp_h), Box::new(exp_t))
+        ast::ExpKind::Cons(exp_head, exp_tail) => {
+            let exp_head = rename_exp(ctx, renv, exp_head);
+            let exp_tail = rename_exp(ctx, renv, exp_tail);
+            ast::ExpKind::Cons(Box::new(exp_head), Box::new(exp_tail))
         }
         ast::ExpKind::Iter(exp_inner, (iter, vars)) => {
             let exp_inner = rename_exp(ctx, renv, exp_inner);

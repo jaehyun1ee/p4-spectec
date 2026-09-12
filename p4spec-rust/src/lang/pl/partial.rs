@@ -25,11 +25,11 @@ pub fn is_partial_exp(exp: &Exp) -> bool {
         ExpKind::Case(not_exp) => not_exp.args().into_iter().any(is_partial_exp),
         ExpKind::Str(fields) => fields.iter().any(|(_, exp)| is_partial_exp(exp)),
         ExpKind::Opt(exp) => exp.as_deref().is_some_and(is_partial_exp),
-        ExpKind::Slice(exp_b, exp_i, exp_n) => {
-            is_partial_exp(exp_b) || is_partial_exp(exp_i) || is_partial_exp(exp_n)
+        ExpKind::Slice(exp_base, exp_idx, exp_len) => {
+            is_partial_exp(exp_base) || is_partial_exp(exp_idx) || is_partial_exp(exp_len)
         }
-        ExpKind::Upd(exp_b, path, exp_f) => {
-            is_partial_exp(exp_b) || is_partial_path(path) || is_partial_exp(exp_f)
+        ExpKind::Upd(exp_base, path, exp_field) => {
+            is_partial_exp(exp_base) || is_partial_path(path) || is_partial_exp(exp_field)
         }
         ExpKind::Call(..) => true,
     }
@@ -39,9 +39,9 @@ pub fn is_partial_exp(exp: &Exp) -> bool {
 pub fn is_partial_path(path: &Path) -> bool {
     match &path.node {
         PathKind::Root => false,
-        PathKind::Idx(path, exp_i) => is_partial_path(path) || is_partial_exp(exp_i),
-        PathKind::Slice(path, exp_i, exp_n) => {
-            is_partial_path(path) || is_partial_exp(exp_i) || is_partial_exp(exp_n)
+        PathKind::Idx(path, exp_idx) => is_partial_path(path) || is_partial_exp(exp_idx),
+        PathKind::Slice(path, exp_idx, exp_len) => {
+            is_partial_path(path) || is_partial_exp(exp_idx) || is_partial_exp(exp_len)
         }
         PathKind::Dot(path, _) => is_partial_path(path),
     }

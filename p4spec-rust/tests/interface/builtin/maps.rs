@@ -56,11 +56,11 @@ fn test_map_update_retains_notation() {
         &[result, key_updated, value_updated],
     )
     .unwrap();
-    let Mixfix::Brack(left, inner, right) = get::case(&arena, &result).unwrap() else {
+    let Mixfix::Brack(atom_l, inner, atom_r) = get::case(&arena, &result).unwrap() else {
         panic!("expected map notation");
     };
-    assert_eq!(left.node, Atom::LBrace);
-    assert_eq!(right.node, Atom::RBrace);
+    assert_eq!(atom_l.node, Atom::LBrace);
+    assert_eq!(atom_r.node, Atom::RBrace);
     let Mixfix::Arg(pairs) = inner.as_ref() else {
         panic!("expected map entries")
     };

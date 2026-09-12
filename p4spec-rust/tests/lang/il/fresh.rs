@@ -159,13 +159,13 @@ fn test_fresh_exact_edges_preserve_aliases_regions_and_full_dimension_shapes() {
         ) }
     );
     assert_eq!(inside_iter.iters, vec![ast::Iter::List]);
-    let base_typ = p4spec_rust::phrase! { node: ast::TypKind::Bool, span: Span::new(
+    let typ_base = p4spec_rust::phrase! { node: ast::TypKind::Bool, span: Span::new(
         Position::new("base_type", 0, 0),
         Position::new("base_type", 0, 0),
     ) };
     let nested = p4spec_rust::phrase! { node: ast::TypKind::Iter(
         Box::new(p4spec_rust::phrase! {
-            node: ast::TypKind::Iter(Box::new(base_typ.clone()), ast::Iter::Opt),
+            node: ast::TypKind::Iter(Box::new(typ_base.clone()), ast::Iter::Opt),
             span: Span::new(
                 Position::new("nested_inner", 0, 0),
                 Position::new("nested_inner", 0, 0),
@@ -177,10 +177,9 @@ fn test_fresh_exact_edges_preserve_aliases_regions_and_full_dimension_shapes() {
         Position::new("nested_type", 0, 0),
     ) };
     for dim in [false, true] {
-        let (ids, expression) =
-            fresh_impl::exp_from_typ(dim, &IdMap::new(), &IdSet::new(), &nested);
+        let (ids, exp) = fresh_impl::exp_from_typ(dim, &IdMap::new(), &IdSet::new(), &nested);
         assert_eq!(ids, names(&["bool"]));
-        assert_iterated_exp(&expression, dim, &nested.span, &base_typ.span);
+        assert_iterated_exp(&exp, dim, &nested.span, &typ_base.span);
     }
 }
 
@@ -234,16 +233,16 @@ fn test_fresh_names_combine_aliases_collisions_wildcards_and_nested_dimensions()
     let (generated_ids, generated) =
         fresh_impl::exp_from_typ(true, &aliases, &sourced_names(&["bool"]), &nested);
     assert_eq!(generated_ids, sourced_names(&["bool", "bool'"]));
-    let ast::ExpKind::Iter(inner, (ast::Iter::List, outer_binders)) = generated.node else {
+    let ast::ExpKind::Iter(inner, (ast::Iter::List, vars_outer)) = generated.node else {
         panic!("outer iteration")
     };
-    let ast::ExpKind::Iter(_, (ast::Iter::Opt, inner_binders)) = inner.node else {
+    let ast::ExpKind::Iter(_, (ast::Iter::Opt, vars_inner)) = inner.node else {
         panic!("inner iteration")
     };
-    assert_eq!(inner_binders.len(), 1);
-    assert_eq!(outer_binders.len(), 1);
-    assert!(inner_binders[0].iters.is_empty());
-    assert_eq!(outer_binders[0].iters, vec![ast::Iter::Opt]);
+    assert_eq!(vars_inner.len(), 1);
+    assert_eq!(vars_outer.len(), 1);
+    assert!(vars_inner[0].iters.is_empty());
+    assert_eq!(vars_outer[0].iters, vec![ast::Iter::Opt]);
 }
 
 #[test]

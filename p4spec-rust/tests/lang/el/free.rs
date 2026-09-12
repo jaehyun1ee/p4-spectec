@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn test_free_expression_ids_ignore_source_spans_and_render_in_source_order() {
-    let expression = exp(
+    let exp_bin = exp(
         ExpKind::Bin(
             Box::new(exp(ExpKind::Var(id("left", "left.watsup")), "left.watsup")),
             BinOp::Num(p4spec_rust::lang::xl::num::BinOp::Add),
@@ -14,8 +14,8 @@ fn test_free_expression_ids_ignore_source_spans_and_render_in_source_order() {
         "root.watsup",
     );
 
-    assert_eq!(expression.free(), ids(&["left", "right"]));
-    assert_eq!(Print::to_string(&expression), "left + right");
+    assert_eq!(exp_bin.free(), ids(&["left", "right"]));
+    assert_eq!(Print::to_string(&exp_bin), "left + right");
 }
 #[test]
 fn test_free_collection_covers_paths_calls_premises_and_definition_bodies() {
@@ -57,7 +57,7 @@ fn test_free_collection_covers_paths_calls_premises_and_definition_bodies() {
         ),
         "call.watsup",
     );
-    let expression = exp(
+    let exp_upd = exp(
         ExpKind::Upd(Box::new(call), path, Box::new(variable("field"))),
         "update.watsup",
     );
@@ -71,7 +71,7 @@ fn test_free_collection_covers_paths_calls_premises_and_definition_bodies() {
     let rule = p4spec_rust::phrase! { node: (
         id("relation", "rule.watsup"),
         id("", "rule.watsup"),
-        expression.clone(),
+        exp_upd.clone(),
         vec![
             iteration,
             prem(ast::PremKind::If(ast::IfPrem {
@@ -79,7 +79,7 @@ fn test_free_collection_covers_paths_calls_premises_and_definition_bodies() {
             })),
         ],
     ), span: span("rule.watsup") };
-    let function = definition(ast::DefKind::FuncDef(ast::FuncDef {
+    let def_func = definition(ast::DefKind::FuncDef(ast::FuncDef {
         id: id("function", "def.watsup"),
         tparams: vec![p4spec_rust::phrase! {
             node: "T".to_owned(),
@@ -106,5 +106,5 @@ fn test_free_collection_covers_paths_calls_premises_and_definition_bodies() {
             "argument", "bound", "field", "guard", "high", "index", "low"
         ])
     );
-    assert_eq!(function.free(), ids(&["argument", "body", "debug"]));
+    assert_eq!(def_func.free(), ids(&["argument", "body", "debug"]));
 }

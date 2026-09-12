@@ -108,8 +108,8 @@ impl SyntaxEq for ElseGroupKind {
 impl SyntaxEq for ClauseKind {
     fn syntax_eq(&self, other: &Self) -> bool {
         self.args.syntax_eq(&other.args)
-            && self.expression.syntax_eq(&other.expression)
-            && self.premises.syntax_eq(&other.premises)
+            && self.exp.syntax_eq(&other.exp)
+            && self.prems.syntax_eq(&other.prems)
     }
 }
 

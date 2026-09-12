@@ -556,9 +556,9 @@ where
         if matches!(self.cursor_offset(end), Some(b'(' | b'<')) {
             return None;
         }
-        let identifier = self.source[id_start..end].to_owned();
+        let id = self.source[id_start..end].to_owned();
         self.advance_to(end);
-        Some(self.lexeme(Token::TagUpperId(identifier), start))
+        Some(self.lexeme(Token::TagUpperId(id), start))
     }
 
     fn scan_dot_identifier(&mut self, start: Cursor) -> Option<Phrase<Token>> {
@@ -574,13 +574,13 @@ where
             return None;
         }
 
-        let identifier = self.source[id_start..end].to_owned();
+        let id = self.source[id_start..end].to_owned();
         self.advance_to(end);
-        Some(self.lexeme(Token::DotId(identifier), start))
+        Some(self.lexeme(Token::DotId(id), start))
     }
 
-    fn keyword(identifier: &str) -> Option<Token> {
-        Some(match identifier {
+    fn keyword(id: &str) -> Option<Token> {
+        Some(match id {
             "bool" => Token::Bool,
             "nat" => Token::Nat,
             "int" => Token::Int,
@@ -613,39 +613,39 @@ where
 
         let is_uppercase = first.is_ascii_uppercase();
         let end = self.find_identifier_end(self.cursor.offset);
-        let identifier = self.source[self.cursor.offset..end].to_owned();
+        let id = self.source[self.cursor.offset..end].to_owned();
         let suffix = self.cursor_offset(end);
-        if identifier == "hint" && suffix == Some(b'(') {
+        if id == "hint" && suffix == Some(b'(') {
             self.advance_to(end + 1);
             return Some(self.lexeme(Token::HintLeftParen, start));
         }
 
-        let uppercase_variable = is_uppercase && (self.classify_uppercase)(&identifier);
+        let uppercase_variable = is_uppercase && (self.classify_uppercase)(&id);
         let token = match suffix {
             Some(b'(') => {
                 self.advance_to(end + 1);
                 if is_uppercase && !uppercase_variable {
-                    Token::UpperIdLeftParen(identifier)
+                    Token::UpperIdLeftParen(id)
                 } else {
-                    Token::LowerIdLeftParen(identifier)
+                    Token::LowerIdLeftParen(id)
                 }
             }
             Some(b'<') => {
                 self.advance_to(end + 1);
                 if is_uppercase && !uppercase_variable {
-                    Token::UpperIdLeftAngle(identifier)
+                    Token::UpperIdLeftAngle(id)
                 } else {
-                    Token::LowerIdLeftAngle(identifier)
+                    Token::LowerIdLeftAngle(id)
                 }
             }
             _ => {
                 self.advance_to(end);
-                if let Some(keyword) = Self::keyword(&identifier) {
+                if let Some(keyword) = Self::keyword(&id) {
                     keyword
                 } else if is_uppercase && !uppercase_variable {
-                    Token::UpperId(identifier)
+                    Token::UpperId(id)
                 } else {
-                    Token::LowerId(identifier)
+                    Token::LowerId(id)
                 }
             }
         };
@@ -668,18 +668,17 @@ where
         let end = self.find_separated_digits_end(self.cursor.offset + 1, Self::is_digit);
         let digits = Self::strip_underscores(&self.source[self.cursor.offset + 1..end]);
         self.advance_to(end);
-        let number = digits
+        let num = digits
             .parse::<i64>()
             .map_err(|_| self.error(LexErrorKind::HoleNumberOutOfRange, start))?;
-        Ok(Some(self.lexeme(Token::NumberedHole(number), start)))
+        Ok(Some(self.lexeme(Token::NumberedHole(num), start)))
     }
 
     // - Token-state Numbers
 
     fn parse_natural(digits: &str, radix: u32) -> Natural {
-        let integer =
-            BigInt::parse_bytes(digits.as_bytes(), radix).expect("nonempty digit sequence");
-        Natural::try_from(integer).expect("digit sequence is non-negative")
+        let int = BigInt::parse_bytes(digits.as_bytes(), radix).expect("nonempty digit sequence");
+        Natural::try_from(int).expect("digit sequence is non-negative")
     }
 
     fn scan_number(&mut self, start: Cursor) -> Option<Phrase<Token>> {
@@ -694,16 +693,16 @@ where
         {
             let end = self.find_separated_digits_end(self.cursor.offset + 2, Self::is_hex_digit);
             let digits = Self::strip_underscores(&self.source[self.cursor.offset + 2..end]);
-            let natural = Self::parse_natural(&digits, 16);
+            let nat = Self::parse_natural(&digits, 16);
             self.advance_to(end);
-            return Some(self.lexeme(Token::HexLiteral(natural), start));
+            return Some(self.lexeme(Token::HexLiteral(nat), start));
         }
 
         let end = self.find_separated_digits_end(self.cursor.offset, Self::is_digit);
         let digits = Self::strip_underscores(&self.source[self.cursor.offset..end]);
-        let natural = Self::parse_natural(&digits, 10);
+        let nat = Self::parse_natural(&digits, 10);
         self.advance_to(end);
-        Some(self.lexeme(Token::NaturalLiteral(natural), start))
+        Some(self.lexeme(Token::NaturalLiteral(nat), start))
     }
 
     // - Token-state fixed rules
@@ -828,9 +827,9 @@ where
         let mut end = content_start;
         while let Some(byte) = self.cursor_offset(end) {
             if byte == b'\'' {
-                let operator = self.source[content_start..end].to_owned();
+                let op = self.source[content_start..end].to_owned();
                 self.advance_to(end + 1);
-                return Ok(self.lexeme(Token::Operator(operator), start));
+                return Ok(self.lexeme(Token::Operator(op), start));
             }
             if byte == b'\n' {
                 break;

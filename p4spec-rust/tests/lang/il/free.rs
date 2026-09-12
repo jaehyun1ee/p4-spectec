@@ -85,8 +85,8 @@ fn rule(head: &str, prems: Vec<ast::Prem>) -> ast::Rule {
 fn clause(arg_name: &str, body: &str, prem_name: &str) -> ast::Clause {
     p4spec_rust::phrase! { node: ast::ClauseKind {
         args: vec![arg(ast::ArgKind::Exp(Box::new(variable(arg_name))))],
-        expression: variable(body),
-        premises: vec![prem(ast::PremKind::Debug(ast::DebugPrem {
+        exp: variable(body),
+        prems: vec![prem(ast::PremKind::Debug(ast::DebugPrem {
             exp: variable(prem_name),
         }))],
     }, span: span() }
@@ -310,8 +310,8 @@ fn test_free_expression_variants_follow_the_oracle() {
             names(&["iterated"]),
         ),
     ];
-    for (case, expression, expected) in cases {
-        assert_eq!(expression.free(), expected, "{case}");
+    for (case, exp_case, expected) in cases {
+        assert_eq!(exp_case.free(), expected, "{case}");
     }
     assert_eq!(
         [variable("many_a"), variable("many_b")].free(),
@@ -367,8 +367,8 @@ fn test_free_path_argument_and_premise_variants_follow_the_oracle() {
     let args = vec![
         (
             "expression",
-            arg(ast::ArgKind::Exp(Box::new(variable("arg")))),
-            names(&["arg"]),
+            arg(ast::ArgKind::Exp(Box::new(variable("argument")))),
+            names(&["argument"]),
         ),
         (
             "definition",
@@ -381,7 +381,7 @@ fn test_free_path_argument_and_premise_variants_follow_the_oracle() {
             .map(|(_, argument, _)| argument.clone())
             .collect::<Vec<_>>()
             .free(),
-        names(&["arg"])
+        names(&["argument"])
     );
     for (case, argument, expected) in args {
         assert_eq!(argument.free(), expected, "argument {case}");
@@ -453,13 +453,13 @@ fn test_free_path_argument_and_premise_variants_follow_the_oracle() {
     assert_eq!(
         prems
             .iter()
-            .map(|(_, premise, _)| premise.clone())
+            .map(|(_, prem_case, _)| prem_case.clone())
             .collect::<Vec<_>>()
             .free(),
         names(&["debug", "holds", "if", "nested", "not_holds", "rule"])
     );
-    for (case, premise, expected) in prems {
-        assert_eq!(premise.free(), expected, "premise {case}");
+    for (case, prem_case, expected) in prems {
+        assert_eq!(prem_case.free(), expected, "premise {case}");
     }
 }
 
@@ -616,8 +616,8 @@ fn test_free_aggregates_and_definition_omissions_follow_the_oracle() {
             names(&[]),
         ),
     ];
-    for (case, definition, expected) in defs {
-        assert_eq!(definition.free(), expected, "definition {case}");
+    for (case, def, expected) in defs {
+        assert_eq!(def.free(), expected, "definition {case}");
     }
 }
 
@@ -714,7 +714,7 @@ fn test_as_exp_preserves_empty_one_and_two_level_shapes_and_spans() {
                 iters: vec![ast::Iter::Opt, ast::Iter::List],
             },
         );
-        let ast::ExpKind::Iter(inner, (ast::Iter::List, outer_binders)) = &two.node else {
+        let ast::ExpKind::Iter(exp_inner, (ast::Iter::List, vars_outer)) = &two.node else {
             panic!("expected outer iteration")
         };
         assert_eq!(&two.span, &id.span);
@@ -727,21 +727,21 @@ fn test_as_exp_preserves_empty_one_and_two_level_shapes_and_spans() {
         };
         assert_eq!(first_inner_typ.node, ast::TypKind::Bool);
         assert_eq!(first_inner_typ.span, id.span);
-        let ast::ExpKind::Iter(base, (ast::Iter::Opt, inner_binders)) = &inner.node else {
+        let ast::ExpKind::Iter(exp_base, (ast::Iter::Opt, vars_inner)) = &exp_inner.node else {
             panic!("expected inner iteration")
         };
-        assert_eq!(&inner.span, &id.span);
+        assert_eq!(&exp_inner.span, &id.span);
         assert_iter_type(
             &p4spec_rust::phrase! {
-                node: inner.note.as_ref().clone(),
+                node: exp_inner.note.as_ref().clone(),
                 span: typ.span.clone(),
             },
             ast::Iter::Opt,
             ast::TypKind::Bool,
             &id.span,
         );
-        assert_var(base, &id, ast::TypKind::Bool);
-        match (dim, inner_binders.as_slice(), outer_binders.as_slice()) {
+        assert_var(exp_base, &id, ast::TypKind::Bool);
+        match (dim, vars_inner.as_slice(), vars_outer.as_slice()) {
             (false, [], []) => {}
             (true, [inner], [outer]) => {
                 assert_eq!(&inner.id, &id);

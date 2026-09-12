@@ -9,8 +9,8 @@ use p4spec_rust::{
     lang::data::value::get,
 };
 
-fn tokens(source: &str, context: Rc<Context>) -> Vec<Token> {
-    Lexer::new(Rc::from("input.p4"), source, Rc::clone(&context))
+fn tokens(source: &str, ctx: Rc<Context>) -> Vec<Token> {
+    Lexer::new(Rc::from("input.p4"), source, Rc::clone(&ctx))
         .map(|token| token.unwrap().node)
         .collect()
 }
@@ -18,12 +18,12 @@ fn tokens(source: &str, context: Rc<Context>) -> Vec<Token> {
 #[test]
 fn test_identifiers_are_followed_by_context_sensitive_classification() {
     let mut arena = ValueArena::new();
-    let context = Rc::new(Context::new(&mut arena));
-    context.declare_typ("Header", true).unwrap();
-    let tokens = tokens("Header<bit<8>> value", Rc::clone(&context));
+    let ctx = Rc::new(Context::new(&mut arena));
+    ctx.declare_typ("Header", true).unwrap();
+    let tokens = tokens("Header<bit<8>> value", Rc::clone(&ctx));
 
     assert!(
-        matches!(&tokens[0], Token::Name(value) if get::text(&context.arena(), value) == Ok("Header"))
+        matches!(&tokens[0], Token::Name(value) if get::text(&ctx.arena(), value) == Ok("Header"))
     );
     assert_eq!(tokens[1], Token::TypeName);
     assert_eq!(tokens[2], Token::LeftAngleArgs);
@@ -33,7 +33,7 @@ fn test_identifiers_are_followed_by_context_sensitive_classification() {
     assert_eq!(tokens[6], Token::RightAngle);
     assert_eq!(tokens[7], Token::RightAngleShift);
     assert!(
-        matches!(&tokens[8], Token::Name(value) if get::text(&context.arena(), value) == Ok("value"))
+        matches!(&tokens[8], Token::Name(value) if get::text(&ctx.arena(), value) == Ok("value"))
     );
     assert_eq!(tokens[9], Token::Identifier);
     assert_eq!(tokens[10], Token::End);
@@ -42,16 +42,16 @@ fn test_identifiers_are_followed_by_context_sensitive_classification() {
 #[test]
 fn test_lexer_preserves_string_escapes_and_preprocessor_locations() {
     let mut arena = ValueArena::new();
-    let context = Rc::new(Context::new(&mut arena));
+    let ctx = Rc::new(Context::new(&mut arena));
     let mut lexer = Lexer::new(
         Rc::from("preprocessed.p4"),
         "# 42 \"original.p4\"\n\"a\\n\\\"b\"",
-        Rc::clone(&context),
+        Rc::clone(&ctx),
     );
     let token = lexer.next().unwrap().unwrap();
 
     assert!(
-        matches!(&token.node, Token::StringLiteral(value) if get::text(&context.arena(), value) == Ok("a\n\"b"))
+        matches!(&token.node, Token::StringLiteral(value) if get::text(&ctx.arena(), value) == Ok("a\n\"b"))
     );
     assert_eq!(token.span.left.file.as_ref(), "original.p4");
     assert_eq!(token.span.left.line, 42);
@@ -60,11 +60,11 @@ fn test_lexer_preserves_string_escapes_and_preprocessor_locations() {
 #[test]
 fn test_preprocessor_preserves_paths_containing_spaces() {
     let mut arena = ValueArena::new();
-    let context = Rc::new(Context::new(&mut arena));
+    let ctx = Rc::new(Context::new(&mut arena));
     let token = Lexer::new(
         Rc::from("preprocessed.p4"),
         "# 42 \"dir/my file.p4\" 2\ntrue",
-        Rc::clone(&context),
+        Rc::clone(&ctx),
     )
     .next()
     .unwrap()
@@ -78,16 +78,13 @@ fn test_preprocessor_preserves_paths_containing_spaces() {
 #[test]
 fn test_comments_are_skipped_and_unsupported_escapes_are_located_errors() {
     let mut arena = ValueArena::new();
-    let context = Rc::new(Context::new(&mut arena));
+    let ctx = Rc::new(Context::new(&mut arena));
     assert_eq!(
-        tokens(
-            "/* block\n comment */ true // tail\nfalse",
-            Rc::clone(&context)
-        ),
+        tokens("/* block\n comment */ true // tail\nfalse", Rc::clone(&ctx)),
         [Token::True, Token::False, Token::End]
     );
 
-    let error = Lexer::new(Rc::from("bad.p4"), "\"\\t\"", Rc::clone(&context))
+    let error = Lexer::new(Rc::from("bad.p4"), "\"\\t\"", Rc::clone(&ctx))
         .next()
         .unwrap()
         .unwrap_err();
@@ -101,10 +98,10 @@ fn test_comments_are_skipped_and_unsupported_escapes_are_located_errors() {
 #[test]
 fn test_shift_and_type_constructor_angles_are_distinct() {
     let mut arena = ValueArena::new();
-    let context = Rc::new(Context::new(&mut arena));
-    context.declare_typ("Header", true).unwrap();
+    let ctx = Rc::new(Context::new(&mut arena));
+    ctx.declare_typ("Header", true).unwrap();
 
-    let tokens = tokens("Header<bit<8>>(x); x >> 1", Rc::clone(&context));
+    let tokens = tokens("Header<bit<8>>(x); x >> 1", Rc::clone(&ctx));
 
     assert_eq!(tokens[1], Token::TypeNameExpression);
     assert_eq!(tokens[7], Token::RightAngleShift);
@@ -131,19 +128,19 @@ fn test_right_shift_uses_source_two_token_stream() {
 #[test]
 fn test_numbers_end_at_their_lexical_boundary() {
     let mut arena = ValueArena::new();
-    let context = Rc::new(Context::new(&mut arena));
-    let tokens = tokens("123abc 0b102 8w3foo", Rc::clone(&context));
+    let ctx = Rc::new(Context::new(&mut arena));
+    let tokens = tokens("123abc 0b102 8w3foo", Rc::clone(&ctx));
 
     assert!(matches!(&tokens[0], Token::NumberInt(_, lexeme) if lexeme == "123"));
     assert!(
-        matches!(&tokens[1], Token::Name(value) if get::text(&context.arena(), value) == Ok("abc"))
+        matches!(&tokens[1], Token::Name(value) if get::text(&ctx.arena(), value) == Ok("abc"))
     );
     assert_eq!(tokens[2], Token::Identifier);
     assert!(matches!(&tokens[3], Token::NumberInt(_, lexeme) if lexeme == "0b10"));
     assert!(matches!(&tokens[4], Token::NumberInt(_, lexeme) if lexeme == "2"));
     assert!(matches!(&tokens[5], Token::Number(_, lexeme) if lexeme == "3"));
     assert!(
-        matches!(&tokens[6], Token::Name(value) if get::text(&context.arena(), value) == Ok("foo"))
+        matches!(&tokens[6], Token::Name(value) if get::text(&ctx.arena(), value) == Ok("foo"))
     );
     assert_eq!(tokens[7], Token::Identifier);
     assert_eq!(tokens[8], Token::End);
@@ -152,8 +149,8 @@ fn test_numbers_end_at_their_lexical_boundary() {
 #[test]
 fn test_fixed_tokens_use_maximal_munch_in_grammar_order() {
     let mut arena = ValueArena::new();
-    let context = Rc::new(Context::new(&mut arena));
-    let tokens = tokens("+ += |+| |+|= . .. ... > >= >>= >>", Rc::clone(&context));
+    let ctx = Rc::new(Context::new(&mut arena));
+    let tokens = tokens("+ += |+| |+|= . .. ... > >= >>= >>", Rc::clone(&ctx));
 
     assert_eq!(
         tokens,

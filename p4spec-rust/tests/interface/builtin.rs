@@ -151,13 +151,13 @@ fn test_list_and_text_builtins_preserve_ocaml_results() {
 #[test]
 fn test_int_to_text_preserves_the_explicit_integer_sign() {
     let mut arena = ValueArena::new();
-    let integer = make::int(&mut arena, 7.into(), Span::default()).unwrap();
-    let natural = make::nat(&mut arena, 7_u64.into(), Span::default()).unwrap();
+    let int = make::int(&mut arena, 7.into(), Span::default()).unwrap();
+    let nat = make::nat(&mut arena, 7_u64.into(), Span::default()).unwrap();
 
     let (integer_text, _) =
-        invoke(&mut arena, &mut Builtins::new(), "int_to_text", &[integer]).unwrap();
+        invoke(&mut arena, &mut Builtins::new(), "int_to_text", &[int]).unwrap();
     let (natural_text, _) =
-        invoke(&mut arena, &mut Builtins::new(), "int_to_text", &[natural]).unwrap();
+        invoke(&mut arena, &mut Builtins::new(), "int_to_text", &[nat]).unwrap();
 
     assert_eq!(get::text(&arena, &integer_text), Ok("+7"));
     assert_eq!(get::text(&arena, &natural_text), Ok("7"));

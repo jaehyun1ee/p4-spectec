@@ -28,7 +28,7 @@ fn test_prose_nodes_collect_free_identifiers_through_annotations() {
         },
         hints: pl::annot::Hints::default(),
     };
-    let expression: pl::ast::Exp = pl::annot::Annotated {
+    let exp_bin: pl::ast::Exp = pl::annot::Annotated {
         node: p4spec_rust::note_phrase! { node: pl::ast::ExpKind::Bin(
         il::ast::BinOp::Bool(p4spec_rust::lang::xl::bool::BinOp::And),
         il::ast::OpTyp::Bool,
@@ -38,7 +38,7 @@ fn test_prose_nodes_collect_free_identifiers_through_annotations() {
         hints: pl::annot::Hints::default(),
     };
 
-    assert_eq!(expression.free(), IdSet::from([id("left"), id("right")]));
+    assert_eq!(exp_bin.free(), IdSet::from([id("left"), id("right")]));
 }
 
 fn id(name: &str) -> il::ast::Id {

@@ -51,18 +51,15 @@ fn test_binary_operations_report_zero_divisors() {
 }
 #[test]
 fn test_numeric_operations_report_mismatched_kinds() {
-    let natural = natural(1);
-    let integer = Number::Int(1.into());
+    let nat = natural(1);
+    let int = Number::Int(1.into());
     let error = NumericError::MismatchedKinds {
         typ_l: Typ::Nat,
         typ_r: Typ::Int,
     };
 
-    assert_eq!(
-        num_impl::bin(BinOp::Add, &natural, &integer),
-        Err(error.clone())
-    );
-    assert_eq!(num_impl::cmp(CmpOp::Lt, &natural, &integer), Err(error));
+    assert_eq!(num_impl::bin(BinOp::Add, &nat, &int), Err(error.clone()));
+    assert_eq!(num_impl::cmp(CmpOp::Lt, &nat, &int), Err(error));
 }
 #[test]
 fn test_unsupported_binary_operations_return_errors() {

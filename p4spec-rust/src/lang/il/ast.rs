@@ -324,8 +324,8 @@ pub type Clause = Phrase<ClauseKind>;
 #[derive(Clone, Debug, PartialEq)]
 pub struct ClauseKind {
     pub args: Vec<Arg>,
-    pub expression: Exp,
-    pub premises: Vec<Prem>,
+    pub exp: Exp,
+    pub prems: Vec<Prem>,
 }
 
 pub type ElseClause = Clause;

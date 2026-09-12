@@ -187,7 +187,7 @@ impl Free for DefinedRel {
             .as_slice()
             .free()
             .union(self.block.free())
-            .union(self.else_block.free())
+            .union(self.block_else.free())
     }
 }
 
@@ -239,7 +239,7 @@ impl Free for DefinedFunc {
             .as_slice()
             .free()
             .union(self.block.free())
-            .union(self.else_block.free())
+            .union(self.block_else.free())
     }
 }
 

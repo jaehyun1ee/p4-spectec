@@ -16,28 +16,32 @@ use serde_json::Value;
 
 static OCAML_ORACLE_LOCK: Mutex<()> = Mutex::new(());
 
-fn first_difference(left: &Value, right: &Value, path: &str) -> Option<(String, String, String)> {
-    if left == right {
+fn first_difference(
+    value_l: &Value,
+    value_r: &Value,
+    path: &str,
+) -> Option<(String, String, String)> {
+    if value_l == value_r {
         return None;
     }
-    match (left, right) {
-        (Value::Array(left), Value::Array(right)) if left.len() == right.len() => left
+    match (value_l, value_r) {
+        (Value::Array(value_l), Value::Array(value_r)) if value_l.len() == value_r.len() => value_l
             .iter()
-            .zip(right)
+            .zip(value_r)
             .enumerate()
-            .find_map(|(index, (left, right))| {
-                first_difference(left, right, &format!("{path}[{index}]"))
+            .find_map(|(index, (value_l, value_r))| {
+                first_difference(value_l, value_r, &format!("{path}[{index}]"))
             }),
-        (Value::Object(left), Value::Object(right)) if left.len() == right.len() => {
-            left.iter().find_map(|(key, left)| {
+        (Value::Object(value_l), Value::Object(value_r)) if value_l.len() == value_r.len() => {
+            value_l.iter().find_map(|(key, value_l)| {
                 let path = format!("{path}.{key}");
-                match right.get(key) {
-                    Some(right) => first_difference(left, right, &path),
-                    None => Some((path, left.to_string(), "<missing>".to_owned())),
+                match value_r.get(key) {
+                    Some(value_r) => first_difference(value_l, value_r, &path),
+                    None => Some((path, value_l.to_string(), "<missing>".to_owned())),
                 }
             })
         }
-        _ => Some((path.to_owned(), left.to_string(), right.to_string())),
+        _ => Some((path.to_owned(), value_l.to_string(), value_r.to_string())),
     }
 }
 
@@ -181,10 +185,11 @@ fn test_rejected_elaboration_matches_ocaml_category_and_span() {
 
 #[test]
 fn test_exact_comparison_detects_different_object_keys() {
-    let left = serde_json::json!({"left": 1});
-    let right = serde_json::json!({"right": 1});
+    let value_l = serde_json::json!({"left": 1});
+    let value_r = serde_json::json!({"right": 1});
 
-    let difference = first_difference(&left, &right, "payload").expect("different object keys");
+    let difference =
+        first_difference(&value_l, &value_r, "payload").expect("different object keys");
 
     assert_eq!(difference.0, "payload.left");
     assert_eq!(difference.2, "<missing>");

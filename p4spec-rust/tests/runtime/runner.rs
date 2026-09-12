@@ -62,49 +62,46 @@ where
     }
 
     fn eval_func(
-        context: &mut RunnerContext<'_, Self, I, E>,
+        ctx: &mut RunnerContext<'_, Self, I, E>,
         name: &str,
         targs: &[Typ],
         values: &[Value],
     ) -> Result<Value, Self::Error> {
         match name {
             "done" => {
-                Ok(
-                    value::make::text(context.arena_mut(), "done".to_owned(), Span::default())
-                        .unwrap(),
-                )
+                Ok(value::make::text(ctx.arena_mut(), "done".to_owned(), Span::default()).unwrap())
             }
             "outer" => {
-                let (value, _) = context.call_extern_func("first", targs, values)?;
+                let (value, _) = ctx.call_extern_func("first", targs, values)?;
                 Ok(value)
             }
             "inner" => {
-                let (value, _) = context.call_extern_func("second", targs, values)?;
+                let (value, _) = ctx.call_extern_func("second", targs, values)?;
                 Ok(value)
             }
             "pure_effect" => {
-                let (_, side_effected) = context.call_extern_func("pure", targs, values)?;
-                Ok(value::make::bool(context.arena_mut(), side_effected, Span::default()).unwrap())
+                let (_, side_effected) = ctx.call_extern_func("pure", targs, values)?;
+                Ok(value::make::bool(ctx.arena_mut(), side_effected, Span::default()).unwrap())
             }
             "impure_effect" => {
-                let (_, side_effected) = context.call_extern_func("impure", targs, values)?;
-                Ok(value::make::bool(context.arena_mut(), side_effected, Span::default()).unwrap())
+                let (_, side_effected) = ctx.call_extern_func("impure", targs, values)?;
+                Ok(value::make::bool(ctx.arena_mut(), side_effected, Span::default()).unwrap())
             }
             "extern" => {
-                let (value, _) = context.call_extern_func("missing", targs, values)?;
+                let (value, _) = ctx.call_extern_func("missing", targs, values)?;
                 Ok(value)
             }
             "config" => {
-                let label = context.config().label.clone();
-                Ok(value::make::text(context.arena_mut(), label, Span::default()).unwrap())
+                let label = ctx.config().label.clone();
+                Ok(value::make::text(ctx.arena_mut(), label, Span::default()).unwrap())
             }
             "next_extern" => {
-                let (value, _) = context.call_extern_func("next", targs, values)?;
+                let (value, _) = ctx.call_extern_func("next", targs, values)?;
                 Ok(value)
             }
             "next_builtin" => {
                 let id = id("fresh_typeId");
-                let (value, _) = context.call_builtin(&id, targs, values)?;
+                let (value, _) = ctx.call_builtin(&id, targs, values)?;
                 Ok(value)
             }
             _ => Err(FixtureError::Unknown(name.to_owned())),
@@ -128,7 +125,7 @@ struct FixtureExtern {
 impl Extern for FixtureExtern {
     fn eval_func<S, I>(
         &self,
-        context: &mut RunnerContext<'_, S, I, Self>,
+        ctx: &mut RunnerContext<'_, S, I, Self>,
         name: &str,
         targs: &[Typ],
         values: &[Value],
@@ -139,27 +136,26 @@ impl Extern for FixtureExtern {
     {
         match name {
             "first" => {
-                let value = context.call_func("inner", targs, values)?;
+                let value = ctx.call_func("inner", targs, values)?;
                 Ok((value, false))
             }
             "second" => {
-                let value = context.call_func("done", targs, values)?;
+                let value = ctx.call_func("done", targs, values)?;
                 Ok((value, false))
             }
             "pure" => {
-                let value = value::make::bool(context.arena_mut(), false, Span::default()).unwrap();
+                let value = value::make::bool(ctx.arena_mut(), false, Span::default()).unwrap();
                 Ok((value, false))
             }
             "impure" => {
-                let value = value::make::bool(context.arena_mut(), true, Span::default()).unwrap();
+                let value = value::make::bool(ctx.arena_mut(), true, Span::default()).unwrap();
                 Ok((value, true))
             }
             "next" => {
                 let next = self.next.get();
                 self.next.set(next + 1);
                 let value =
-                    value::make::text(context.arena_mut(), next.to_string(), Span::default())
-                        .unwrap();
+                    value::make::text(ctx.arena_mut(), next.to_string(), Span::default()).unwrap();
                 Ok((value, true))
             }
             _ => {

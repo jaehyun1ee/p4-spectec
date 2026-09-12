@@ -29,7 +29,7 @@ pub enum ExternError {
 pub trait Extern: Sized {
     fn eval_rel<S, I>(
         &self,
-        context: &mut RunnerContext<'_, S, I, Self>,
+        ctx: &mut RunnerContext<'_, S, I, Self>,
         name: &str,
         values: &[Value],
     ) -> Result<(Vec<Value>, bool), S::Error>
@@ -39,7 +39,7 @@ pub trait Extern: Sized {
 
     fn eval_func<S, I>(
         &self,
-        context: &mut RunnerContext<'_, S, I, Self>,
+        ctx: &mut RunnerContext<'_, S, I, Self>,
         name: &str,
         targs: &[Typ],
         values: &[Value],
@@ -58,7 +58,7 @@ pub struct NullExtern;
 impl Extern for NullExtern {
     fn eval_rel<S, I>(
         &self,
-        _context: &mut RunnerContext<'_, S, I, Self>,
+        _ctx: &mut RunnerContext<'_, S, I, Self>,
         _name: &str,
         _values: &[Value],
     ) -> Result<(Vec<Value>, bool), S::Error>
@@ -72,7 +72,7 @@ impl Extern for NullExtern {
 
     fn eval_func<S, I>(
         &self,
-        _context: &mut RunnerContext<'_, S, I, Self>,
+        _ctx: &mut RunnerContext<'_, S, I, Self>,
         _name: &str,
         _targs: &[Typ],
         _values: &[Value],

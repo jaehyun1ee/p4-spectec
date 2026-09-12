@@ -44,9 +44,9 @@ impl Location {
     }
 }
 
-pub(crate) fn location_span(file: &Rc<str>, location_l: Location, location_r: Location) -> Span {
-    let pos_l = location_l.into_position(Rc::clone(file));
-    let pos_r = location_r.into_position(Rc::clone(file));
+pub(crate) fn location_span(file: &Rc<str>, loc_l: Location, loc_r: Location) -> Span {
+    let pos_l = loc_l.into_position(Rc::clone(file));
+    let pos_r = loc_r.into_position(Rc::clone(file));
     Span::new(pos_l, pos_r)
 }
 
@@ -57,9 +57,9 @@ where
     tokens.map(|token| {
         token.map(|token| {
             let span = token.span;
-            let location_l = Location::from_position(span.left);
-            let location_r = Location::from_position(span.right);
-            (location_l, token.node, location_r)
+            let loc_l = Location::from_position(span.left);
+            let loc_r = Location::from_position(span.right);
+            (loc_l, token.node, loc_r)
         })
     })
 }
@@ -69,27 +69,24 @@ fn translate_lalrpop_error(
     error: ParseError<Location, Token, StfError>,
 ) -> StfError {
     let (kind, span) = match error {
-        ParseError::InvalidToken { location } => {
-            let span = location_span(file, location, location);
+        ParseError::InvalidToken { location: loc } => {
+            let span = location_span(file, loc, loc);
             (StfErrorKind::InvalidToken, span)
         }
-        ParseError::UnrecognizedEof { location, .. } => {
-            let span = location_span(file, location, location);
+        ParseError::UnrecognizedEof { location: loc, .. } => {
+            let span = location_span(file, loc, loc);
             (StfErrorKind::UnexpectedEndOfInput, span)
         }
         ParseError::UnrecognizedToken {
-            token: (location_l, _, location_r),
+            token: (loc_l, _, loc_r),
             ..
         } => (
             StfErrorKind::UnexpectedToken,
-            location_span(file, location_l, location_r),
+            location_span(file, loc_l, loc_r),
         ),
         ParseError::ExtraToken {
-            token: (location_l, _, location_r),
-        } => (
-            StfErrorKind::ExtraToken,
-            location_span(file, location_l, location_r),
-        ),
+            token: (loc_l, _, loc_r),
+        } => (StfErrorKind::ExtraToken, location_span(file, loc_l, loc_r)),
         ParseError::User { error } => return error,
     };
     StfError::new(kind, span)

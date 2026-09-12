@@ -131,10 +131,10 @@ fn infer_exp(dim_ctx: &mut DimContext, exp: &ast::Exp, iters: &[ast::Iter]) {
                 infer_exp(dim_ctx, exp_inner, iters);
             }
         }
-        ast::ExpKind::Slice(exp_base, exp_l, exp_h) => {
+        ast::ExpKind::Slice(exp_base, exp_idx, exp_len) => {
             infer_exp(dim_ctx, exp_base, iters);
-            infer_exp(dim_ctx, exp_l, iters);
-            infer_exp(dim_ctx, exp_h, iters);
+            infer_exp(dim_ctx, exp_idx, iters);
+            infer_exp(dim_ctx, exp_len, iters);
         }
         ast::ExpKind::Upd(exp_base, path, exp_field) => {
             infer_exp(dim_ctx, exp_base, iters);
@@ -172,10 +172,10 @@ fn infer_path(dim_ctx: &mut DimContext, path: &ast::Path, iters: &[ast::Iter]) {
             infer_path(dim_ctx, path_inner, iters);
             infer_exp(dim_ctx, exp, iters);
         }
-        ast::PathKind::Slice(path_inner, exp_l, exp_h) => {
+        ast::PathKind::Slice(path_inner, exp_idx, exp_len) => {
             infer_path(dim_ctx, path_inner, iters);
-            infer_exp(dim_ctx, exp_l, iters);
-            infer_exp(dim_ctx, exp_h, iters);
+            infer_exp(dim_ctx, exp_idx, iters);
+            infer_exp(dim_ctx, exp_len, iters);
         }
         ast::PathKind::Dot(path_inner, _) => infer_path(dim_ctx, path_inner, iters),
     }
@@ -248,8 +248,8 @@ fn infer_rule(rule: &ast::Rule) -> Result<DimContext, ElabError> {
 fn infer_clause(clause: &ast::Clause) -> Result<DimContext, ElabError> {
     let mut dim_ctx = DimContext::default();
     infer_args(&mut dim_ctx, &clause.node.args, &[]);
-    infer_prems(&mut dim_ctx, &clause.node.premises)?;
-    infer_exp(&mut dim_ctx, &clause.node.expression, &[]);
+    infer_prems(&mut dim_ctx, &clause.node.prems)?;
+    infer_exp(&mut dim_ctx, &clause.node.exp, &[]);
     Ok(dim_ctx)
 }
 
@@ -369,8 +369,8 @@ fn annotate_exp(bounds: &VEnv, exp: &mut ast::Exp) -> Result<Occurrences, ElabEr
         ast::ExpKind::Len(exp_inner) => annotate_len_exp(bounds, exp_inner),
         ast::ExpKind::Dot(exp_inner, _) => annotate_dot_exp(bounds, exp_inner),
         ast::ExpKind::Idx(exp_l, exp_r) => annotate_idx_exp(bounds, exp_l, exp_r),
-        ast::ExpKind::Slice(exp_base, exp_l, exp_h) => {
-            annotate_slice_exp(bounds, exp_base, exp_l, exp_h)
+        ast::ExpKind::Slice(exp_base, exp_idx, exp_len) => {
+            annotate_slice_exp(bounds, exp_base, exp_idx, exp_len)
         }
         ast::ExpKind::Upd(exp_base, path, exp_field) => {
             annotate_upd_exp(bounds, exp_base, path, exp_field)
@@ -579,14 +579,14 @@ fn annotate_idx_exp(
 fn annotate_slice_exp(
     bounds: &VEnv,
     exp_base: &mut ast::Exp,
-    exp_l: &mut ast::Exp,
-    exp_h: &mut ast::Exp,
+    exp_idx: &mut ast::Exp,
+    exp_len: &mut ast::Exp,
 ) -> Result<Occurrences, ElabError> {
     let occurs_base = annotate_exp(bounds, exp_base)?;
-    let occurs_l = annotate_exp(bounds, exp_l)?;
-    let occurs_h = annotate_exp(bounds, exp_h)?;
-    let occurs = occurs_base.union(occurs_l)?;
-    occurs.union(occurs_h)
+    let occurs_idx = annotate_exp(bounds, exp_idx)?;
+    let occurs_len = annotate_exp(bounds, exp_len)?;
+    let occurs = occurs_base.union(occurs_idx)?;
+    occurs.union(occurs_len)
 }
 
 // - Update expressions
@@ -707,8 +707,8 @@ fn annotate_path(bounds: &VEnv, path: &mut ast::Path) -> Result<Occurrences, Ela
     match &mut path.node {
         ast::PathKind::Root => Ok(annotate_root_path()),
         ast::PathKind::Idx(path_inner, exp) => annotate_idx_path(bounds, path_inner, exp),
-        ast::PathKind::Slice(path_inner, exp_l, exp_h) => {
-            annotate_slice_path(bounds, path_inner, exp_l, exp_h)
+        ast::PathKind::Slice(path_inner, exp_idx, exp_len) => {
+            annotate_slice_path(bounds, path_inner, exp_idx, exp_len)
         }
         ast::PathKind::Dot(path_inner, _) => annotate_dot_path(bounds, path_inner),
     }
@@ -737,14 +737,14 @@ fn annotate_idx_path(
 fn annotate_slice_path(
     bounds: &VEnv,
     path_inner: &mut ast::Path,
-    exp_l: &mut ast::Exp,
-    exp_h: &mut ast::Exp,
+    exp_idx: &mut ast::Exp,
+    exp_len: &mut ast::Exp,
 ) -> Result<Occurrences, ElabError> {
     let occurs_path = annotate_path(bounds, path_inner)?;
-    let occurs_l = annotate_exp(bounds, exp_l)?;
-    let occurs_h = annotate_exp(bounds, exp_h)?;
-    let occurs = occurs_path.union(occurs_l)?;
-    occurs.union(occurs_h)
+    let occurs_idx = annotate_exp(bounds, exp_idx)?;
+    let occurs_len = annotate_exp(bounds, exp_len)?;
+    let occurs = occurs_path.union(occurs_idx)?;
+    occurs.union(occurs_len)
 }
 
 // - Field paths
@@ -893,8 +893,8 @@ fn analyze_else_group(group: &mut ast::ElseGroup) -> Result<(), ElabError> {
 fn analyze_clause(clause: &mut ast::Clause) -> Result<(), ElabError> {
     let bounds = infer_clause(clause)?.into_bounds()?;
     annotate_args(&bounds, &mut clause.node.args)?;
-    annotate_prems(&bounds, &mut clause.node.premises)?;
-    annotate_exp(&bounds, &mut clause.node.expression)?;
+    annotate_prems(&bounds, &mut clause.node.prems)?;
+    annotate_exp(&bounds, &mut clause.node.exp)?;
     Ok(())
 }
 

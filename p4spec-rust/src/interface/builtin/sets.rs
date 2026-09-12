@@ -48,9 +48,8 @@ fn set_of_value(arena: &ValueArena, value: &Value) -> Result<ValueSet, BuiltinEr
         return Err(BuiltinError::new("expected a set"));
     }
     let args = value_case.args();
-    let value_elements = extract::one(&args)?;
-    let values =
-        get::list(arena, value_elements).map_err(|_| BuiltinError::new("expected a set"))?;
+    let value_set = extract::one(&args)?;
+    let values = get::list(arena, value_set).map_err(|_| BuiltinError::new("expected a set"))?;
     let mut set = values.to_vec();
     sort_set(arena, &mut set);
     Ok(set)
@@ -61,14 +60,14 @@ fn value_of_set(
     typ_key: &Typ,
     set: ValueSet,
 ) -> Result<Value, BuiltinError> {
-    let values_element = set.into_iter().collect();
+    let values_elem = set.into_iter().collect();
     let typ_list = typ::make::list(typ_key.clone());
-    let value_elements = make::list(arena, typ_list.node.into(), values_element, Span::default())?;
+    let value_set = make::list(arena, typ_list.node.into(), values_elem, Span::default())?;
     let set_id = crate::phrase!(node: "set".to_owned(), span: Span::default());
     let typ = typ::make::var(set_id, vec![typ_key.clone()]);
     let set_mixop = set_mixop();
     let value_case =
-        Mixop::fill(&set_mixop, [value_elements]).expect("the set mixop has exactly one argument");
+        Mixop::fill(&set_mixop, [value_set]).expect("the set mixop has exactly one argument");
     let value = make::case(arena, typ.node.into(), value_case, Span::default())?;
     Ok(value)
 }
@@ -83,12 +82,12 @@ pub fn intersect_set(
     values: &[Value],
 ) -> Result<Value, BuiltinError> {
     let typ_key = extract::one(targs)?;
-    let (value_set_a, value_set_b) = extract::two(values)?;
-    let set_a = set_of_value(arena, value_set_a)?;
-    let set_b = set_of_value(arena, value_set_b)?;
-    let intersection = set_a
+    let (value_set_l, value_set_r) = extract::two(values)?;
+    let set_l = set_of_value(arena, value_set_l)?;
+    let set_r = set_of_value(arena, value_set_r)?;
+    let intersection = set_l
         .into_iter()
-        .filter(|value| contains(arena, &set_b, value))
+        .filter(|value| contains(arena, &set_r, value))
         .collect();
     value_of_set(arena, typ_key, intersection)
 }
@@ -101,11 +100,11 @@ pub fn union_set(
     values: &[Value],
 ) -> Result<Value, BuiltinError> {
     let typ_key = extract::one(targs)?;
-    let (value_set_a, value_set_b) = extract::two(values)?;
-    let set_a = set_of_value(arena, value_set_a)?;
-    let set_b = set_of_value(arena, value_set_b)?;
-    let mut union = set_a;
-    union.extend(set_b);
+    let (value_set_l, value_set_r) = extract::two(values)?;
+    let set_l = set_of_value(arena, value_set_l)?;
+    let set_r = set_of_value(arena, value_set_r)?;
+    let mut union = set_l;
+    union.extend(set_r);
     sort_set(arena, &mut union);
     value_of_set(arena, typ_key, union)
 }
@@ -138,12 +137,12 @@ pub fn diff_set(
     values: &[Value],
 ) -> Result<Value, BuiltinError> {
     let typ_key = extract::one(targs)?;
-    let (value_set_a, value_set_b) = extract::two(values)?;
-    let set_a = set_of_value(arena, value_set_a)?;
-    let set_b = set_of_value(arena, value_set_b)?;
-    let difference = set_a
+    let (value_set_l, value_set_r) = extract::two(values)?;
+    let set_l = set_of_value(arena, value_set_l)?;
+    let set_r = set_of_value(arena, value_set_r)?;
+    let difference = set_l
         .into_iter()
-        .filter(|value| !contains(arena, &set_b, value))
+        .filter(|value| !contains(arena, &set_r, value))
         .collect();
     value_of_set(arena, typ_key, difference)
 }
@@ -156,10 +155,10 @@ pub fn sub_set(
     values: &[Value],
 ) -> Result<Value, BuiltinError> {
     let _typ_key = extract::one(targs)?;
-    let (value_set_a, value_set_b) = extract::two(values)?;
-    let set_a = set_of_value(arena, value_set_a)?;
-    let set_b = set_of_value(arena, value_set_b)?;
-    let is_subset = set_a.iter().all(|value| contains(arena, &set_b, value));
+    let (value_set_l, value_set_r) = extract::two(values)?;
+    let set_l = set_of_value(arena, value_set_l)?;
+    let set_r = set_of_value(arena, value_set_r)?;
+    let is_subset = set_l.iter().all(|value| contains(arena, &set_r, value));
     let value = make::bool(arena, is_subset, Span::default())?;
     Ok(value)
 }
@@ -172,13 +171,13 @@ pub fn eq_set(
     values: &[Value],
 ) -> Result<Value, BuiltinError> {
     let _typ_key = extract::one(targs)?;
-    let (value_set_a, value_set_b) = extract::two(values)?;
-    let set_a = set_of_value(arena, value_set_a)?;
-    let set_b = set_of_value(arena, value_set_b)?;
-    let equal = set_a.len() == set_b.len()
-        && set_a
+    let (value_set_l, value_set_r) = extract::two(values)?;
+    let set_l = set_of_value(arena, value_set_l)?;
+    let set_r = set_of_value(arena, value_set_r)?;
+    let equal = set_l.len() == set_r.len()
+        && set_l
             .iter()
-            .zip(&set_b)
+            .zip(&set_r)
             .all(|(value_a, value_b)| arena.view(*value_a).syntax_eq(&arena.view(*value_b)));
     let value = make::bool(arena, equal, Span::default())?;
     Ok(value)

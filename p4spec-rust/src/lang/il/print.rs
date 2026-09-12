@@ -319,20 +319,20 @@ impl Print for Exp {
                 printer.separated(exps, ", ")?;
                 printer.write_char(']')
             }
-            ExpKind::Cons(head, tail) => {
-                head.print(printer)?;
+            ExpKind::Cons(exp_head, exp_tail) => {
+                exp_head.print(printer)?;
                 printer.write_str(" :: ")?;
-                tail.print(printer)
+                exp_tail.print(printer)
             }
             ExpKind::Cat(exp_l, exp_r) => {
                 exp_l.print(printer)?;
                 printer.write_str(" ++ ")?;
                 exp_r.print(printer)
             }
-            ExpKind::Mem(exp_e, exp_s) => {
-                exp_e.print(printer)?;
+            ExpKind::Mem(exp_elem, exp_set) => {
+                exp_elem.print(printer)?;
                 printer.write_str(" <- ")?;
-                exp_s.print(printer)
+                exp_set.print(printer)
             }
             ExpKind::Len(exp) => {
                 printer.write_char('|')?;
@@ -344,26 +344,26 @@ impl Print for Exp {
                 printer.write_char('.')?;
                 atom.print(printer)
             }
-            ExpKind::Idx(exp_b, exp_i) => {
-                exp_b.print(printer)?;
+            ExpKind::Idx(exp_base, exp_idx) => {
+                exp_base.print(printer)?;
                 printer.write_char('[')?;
-                exp_i.print(printer)?;
+                exp_idx.print(printer)?;
                 printer.write_char(']')
             }
-            ExpKind::Slice(exp_b, exp_i, exp_n) => {
-                exp_b.print(printer)?;
+            ExpKind::Slice(exp_base, exp_idx, exp_len) => {
+                exp_base.print(printer)?;
                 printer.write_char('[')?;
-                exp_i.print(printer)?;
+                exp_idx.print(printer)?;
                 printer.write_str(" : ")?;
-                exp_n.print(printer)?;
+                exp_len.print(printer)?;
                 printer.write_char(']')
             }
-            ExpKind::Upd(exp_b, path, exp_f) => {
-                exp_b.print(printer)?;
+            ExpKind::Upd(exp_base, path, exp_field) => {
+                exp_base.print(printer)?;
                 printer.write_char('[')?;
                 path.print(printer)?;
                 printer.write_str(" = ")?;
-                exp_f.print(printer)?;
+                exp_field.print(printer)?;
                 printer.write_char(']')
             }
             ExpKind::Call(id, targs, args) => {
@@ -444,18 +444,18 @@ impl Print for Path {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         match &self.node {
             PathKind::Root => Ok(()),
-            PathKind::Idx(path, exp_i) => {
+            PathKind::Idx(path, exp_idx) => {
                 path.print(printer)?;
                 printer.write_char('[')?;
-                exp_i.print(printer)?;
+                exp_idx.print(printer)?;
                 printer.write_char(']')
             }
-            PathKind::Slice(path, exp_i, exp_n) => {
+            PathKind::Slice(path, exp_idx, exp_len) => {
                 path.print(printer)?;
                 printer.write_char('[')?;
-                exp_i.print(printer)?;
+                exp_idx.print(printer)?;
                 printer.write_str(" : ")?;
-                exp_n.print(printer)?;
+                exp_len.print(printer)?;
                 printer.write_char(']')
             }
             PathKind::Dot(path, atom) if matches!(path.node, PathKind::Root) => atom.print(printer),
@@ -573,18 +573,18 @@ impl Print for Prem {
                 printer.write_str(" does not hold")
             }
             PremKind::Iter(IterPrem {
-                prem: inner,
+                prem: prem_inner,
                 prem_iter,
-            }) if matches!(inner.node, PremKind::Iter(_)) => {
-                inner.print(printer)?;
+            }) if matches!(prem_inner.node, PremKind::Iter(_)) => {
+                prem_inner.print(printer)?;
                 prem_iter.print(printer)
             }
             PremKind::Iter(IterPrem {
-                prem: inner,
+                prem: prem_inner,
                 prem_iter,
             }) => {
                 printer.write_char('(')?;
-                inner.print(printer)?;
+                prem_inner.print(printer)?;
                 printer.write_char(')')?;
                 prem_iter.print(printer)
             }
@@ -753,8 +753,8 @@ impl Print for Clause {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         self.node.args.print(printer)?;
         printer.write_str(" = ")?;
-        self.node.expression.print(printer)?;
-        write_prems_with(printer, 1, &self.node.premises)
+        self.node.exp.print(printer)?;
+        write_prems_with(printer, 1, &self.node.prems)
     }
 }
 
@@ -882,11 +882,11 @@ impl Print for Def {
 
 impl Print for [Def] {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        for (index, definition) in self.iter().enumerate() {
+        for (index, def) in self.iter().enumerate() {
             if index != 0 {
                 printer.write_str("\n\n")?;
             }
-            definition.print(printer)?;
+            def.print(printer)?;
         }
         Ok(())
     }

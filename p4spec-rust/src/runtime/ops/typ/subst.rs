@@ -202,10 +202,10 @@ pub(crate) fn subst_not_typ_inner<'a>(
     }
     let mixop = not_typ.node.to_mixop();
     let typs_subst = typs_subst.into_iter().map(Cow::into_owned);
-    let not_typ_node = Mixop::fill(&mixop, typs_subst);
-    let not_typ_node =
-        not_typ_node.expect("arguments obtained from the same mixfix must match its arity");
-    let not_typ_subst = phrase!(node: not_typ_node, span: not_typ.span.clone());
+    let not_typ_kind = Mixop::fill(&mixop, typs_subst);
+    let not_typ_kind =
+        not_typ_kind.expect("arguments obtained from the same mixfix must match its arity");
+    let not_typ_subst = phrase!(node: not_typ_kind, span: not_typ.span.clone());
     Ok(Cow::Owned(not_typ_subst))
 }
 

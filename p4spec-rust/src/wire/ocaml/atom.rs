@@ -19,9 +19,9 @@ impl AtomPhraseCodec {
 fn decode_atom(value: &Value) -> Result<Atom, DecodeError> {
     let (tag, fields) = variant(value)?;
     match (tag, fields) {
-        ("Keyword", [identifier]) => Ok(Atom::Keyword(string(identifier)?.to_owned())),
-        ("Tag", [identifier]) => Ok(Atom::Tag(string(identifier)?.to_owned())),
-        ("Operator", [operator]) => Ok(Atom::Operator(string(operator)?.to_owned())),
+        ("Keyword", [id]) => Ok(Atom::Keyword(string(id)?.to_owned())),
+        ("Tag", [id]) => Ok(Atom::Tag(string(id)?.to_owned())),
+        ("Operator", [op]) => Ok(Atom::Operator(string(op)?.to_owned())),
         ("Sub", []) => Ok(Atom::Sub),
         ("Sup", []) => Ok(Atom::Sup),
         ("Turnstile", []) => Ok(Atom::Turnstile),
@@ -90,9 +90,9 @@ fn is_known_variant(tag: &str) -> bool {
 
 fn encode_atom(atom: &Atom) -> Value {
     match atom {
-        Atom::Keyword(identifier) => json!(["Keyword", identifier]),
-        Atom::Tag(identifier) => json!(["Tag", identifier]),
-        Atom::Operator(operator) => json!(["Operator", operator]),
+        Atom::Keyword(id) => json!(["Keyword", id]),
+        Atom::Tag(id) => json!(["Tag", id]),
+        Atom::Operator(op) => json!(["Operator", op]),
         Atom::Sub => json!(["Sub"]),
         Atom::Sup => json!(["Sup"]),
         Atom::Turnstile => json!(["Turnstile"]),

@@ -75,7 +75,10 @@ fn encode_param(param: &ast::Param) -> Value {
 fn decode_hold_case(value: &Value) -> Result<HoldCase, DecodeError> {
     let (tag, fields) = variant(value)?;
     match (tag, fields) {
-        ("BothH", [left, right]) => Ok(HoldCase::Both(decode_block(left)?, decode_block(right)?)),
+        ("BothH", [block_hold, block_not_hold]) => Ok(HoldCase::Both(
+            decode_block(block_hold)?,
+            decode_block(block_not_hold)?,
+        )),
         ("HoldH", [block, dangle]) => Ok(HoldCase::Hold(decode_block(block)?, boolean(dangle)?)),
         ("NotHoldH", [block, dangle]) => {
             Ok(HoldCase::NotHold(decode_block(block)?, boolean(dangle)?))
@@ -89,8 +92,12 @@ fn decode_hold_case(value: &Value) -> Result<HoldCase, DecodeError> {
 
 fn encode_hold_case(case: &HoldCase) -> Value {
     match case {
-        HoldCase::Both(left, right) => {
-            json!(["BothH", encode_block(left), encode_block(right)])
+        HoldCase::Both(block_hold, block_not_hold) => {
+            json!([
+                "BothH",
+                encode_block(block_hold),
+                encode_block(block_not_hold)
+            ])
         }
         HoldCase::Hold(block, dangle) => {
             json!(["HoldH", encode_block(block), dangle])
@@ -365,12 +372,12 @@ fn encode_extern_rel(relation: &ast::ExternRel) -> Value {
 
 fn decode_defined_rel(value: &Value) -> Result<ast::DefinedRel, DecodeError> {
     match array(value)? {
-        [id, rel_signature, exps_input, block, else_block, hints] => Ok(ast::DefinedRel {
+        [id, rel_signature, exps_input, block, block_else, hints] => Ok(ast::DefinedRel {
             id: il::decode_id(id)?,
             rel_signature: decode_rel_signature(rel_signature)?,
             exps_input: il::decode_list(exps_input, il::decode_exp)?,
             block: decode_block(block)?,
-            else_block: decode_option(else_block, decode_block)?,
+            block_else: decode_option(block_else, decode_block)?,
             hints: il::decode_list(hints, el::decode_hint)?,
         }),
         _ => Err(DecodeError::Expected("SL relation tuple")),
@@ -383,7 +390,7 @@ fn encode_defined_rel(relation: &ast::DefinedRel) -> Value {
         encode_rel_signature(&relation.rel_signature),
         il::encode_list(&relation.exps_input, il::encode_exp),
         encode_block(&relation.block),
-        encode_option(relation.else_block.as_ref(), encode_block),
+        encode_option(relation.block_else.as_ref(), encode_block),
         il::encode_list(&relation.hints, el::encode_hint)
     ])
 }
@@ -401,23 +408,23 @@ fn decode_extern_func(value: &Value) -> Result<ast::ExternFunc, DecodeError> {
     }
 }
 
-fn encode_extern_func(function: &ast::ExternFunc) -> Value {
+fn encode_extern_func(func: &ast::ExternFunc) -> Value {
     json!([
-        il::encode_id(&function.id),
-        il::encode_list(&function.tparams, il::encode_tparam),
-        il::encode_list(&function.params, encode_param),
-        il::encode_typ(&function.typ),
-        il::encode_list(&function.hints, el::encode_hint)
+        il::encode_id(&func.id),
+        il::encode_list(&func.tparams, il::encode_tparam),
+        il::encode_list(&func.params, encode_param),
+        il::encode_typ(&func.typ),
+        il::encode_list(&func.hints, el::encode_hint)
     ])
 }
 
-fn encode_builtin_func(function: &ast::BuiltinFunc) -> Value {
+fn encode_builtin_func(func: &ast::BuiltinFunc) -> Value {
     json!([
-        il::encode_id(&function.id),
-        il::encode_list(&function.tparams, il::encode_tparam),
-        il::encode_list(&function.params, encode_param),
-        il::encode_typ(&function.typ),
-        il::encode_list(&function.hints, el::encode_hint)
+        il::encode_id(&func.id),
+        il::encode_list(&func.tparams, il::encode_tparam),
+        il::encode_list(&func.params, encode_param),
+        il::encode_typ(&func.typ),
+        il::encode_list(&func.hints, el::encode_hint)
     ])
 }
 
@@ -453,40 +460,40 @@ fn decode_table_func(value: &Value) -> Result<ast::TableFunc, DecodeError> {
     }
 }
 
-fn encode_table_func(function: &ast::TableFunc) -> Value {
+fn encode_table_func(func: &ast::TableFunc) -> Value {
     json!([
-        il::encode_id(&function.id),
-        il::encode_list(&function.params, encode_param),
-        il::encode_typ(&function.typ),
-        il::encode_list(&function.table_rows, encode_table_row),
-        il::encode_list(&function.hints, el::encode_hint)
+        il::encode_id(&func.id),
+        il::encode_list(&func.params, encode_param),
+        il::encode_typ(&func.typ),
+        il::encode_list(&func.table_rows, encode_table_row),
+        il::encode_list(&func.hints, el::encode_hint)
     ])
 }
 
 fn decode_defined_func(value: &Value) -> Result<ast::DefinedFunc, DecodeError> {
     match array(value)? {
-        [id, tparams, params, typ, block, else_block, hints] => Ok(ast::DefinedFunc {
+        [id, tparams, params, typ, block, block_else, hints] => Ok(ast::DefinedFunc {
             id: il::decode_id(id)?,
             tparams: il::decode_list(tparams, il::decode_tparam)?,
             params: il::decode_list(params, decode_param)?,
             typ: il::decode_typ(typ)?,
             block: decode_block(block)?,
-            else_block: decode_option(else_block, decode_block)?,
+            block_else: decode_option(block_else, decode_block)?,
             hints: il::decode_list(hints, el::decode_hint)?,
         }),
         _ => Err(DecodeError::Expected("SL defined function tuple")),
     }
 }
 
-fn encode_defined_func(function: &ast::DefinedFunc) -> Value {
+fn encode_defined_func(func: &ast::DefinedFunc) -> Value {
     json!([
-        il::encode_id(&function.id),
-        il::encode_list(&function.tparams, il::encode_tparam),
-        il::encode_list(&function.params, encode_param),
-        il::encode_typ(&function.typ),
-        encode_block(&function.block),
-        encode_option(function.else_block.as_ref(), encode_block),
-        il::encode_list(&function.hints, el::encode_hint)
+        il::encode_id(&func.id),
+        il::encode_list(&func.tparams, il::encode_tparam),
+        il::encode_list(&func.params, encode_param),
+        il::encode_typ(&func.typ),
+        encode_block(&func.block),
+        encode_option(func.block_else.as_ref(), encode_block),
+        il::encode_list(&func.hints, el::encode_hint)
     ])
 }
 

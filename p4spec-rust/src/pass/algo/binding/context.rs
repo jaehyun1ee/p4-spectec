@@ -95,11 +95,11 @@ impl Context {
                 self.tdenv.insert(extern_typ_al.id.clone(), TypeDef::Extern);
             }
             ast::TypDef::Defined(defined_typ_al) => {
-                let type_def = TypeDef::Defined(
+                let typdef = TypeDef::Defined(
                     defined_typ_al.tparams.clone(),
                     Box::new(defined_typ_al.def_typ.clone()),
                 );
-                self.tdenv.insert(defined_typ_al.id.clone(), type_def);
+                self.tdenv.insert(defined_typ_al.id.clone(), typdef);
             }
         }
     }

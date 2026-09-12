@@ -78,25 +78,25 @@ fn dispatch_instr(
 
 #[test]
 fn test_group_printer_escapes_text_and_omits_annotations_and_fallthrough() {
-    let mut first = group_instr(pl::ast::InstrKind::Tier(pl::ast::TierInstr {
+    let mut instr_a = group_instr(pl::ast::InstrKind::Tier(pl::ast::TierInstr {
         tier: pl::ast::InstrGroup::Return(pl::ast::ReturnGroupInstr {
             exp: text("line\n\"\\"),
         }),
     }));
-    first.node.note = Some(pl::ast::Fallthrough::FallNext);
-    first.hints.prose = Some(alter::AlterationHint::Text("first prose".to_owned()));
+    instr_a.node.note = Some(pl::ast::Fallthrough::FallNext);
+    instr_a.hints.prose = Some(alter::AlterationHint::Text("first prose".to_owned()));
 
-    let mut second = first.clone();
-    second.node.note = Some(pl::ast::Fallthrough::FallFail);
-    second.node.span = span("other-source");
-    second.hints.prose = Some(alter::AlterationHint::Text("other prose".to_owned()));
+    let mut instr_b = instr_a.clone();
+    instr_b.node.note = Some(pl::ast::Fallthrough::FallFail);
+    instr_b.node.span = span("other-source");
+    instr_b.hints.prose = Some(alter::AlterationHint::Text("other prose".to_owned()));
 
     assert_eq!(
-        Print::to_string(&vec![first]),
+        Print::to_string(&vec![instr_a]),
         "1. Return \"line\\n\\\"\\\\\""
     );
     assert_eq!(
-        Print::to_string(&vec![second]),
+        Print::to_string(&vec![instr_b]),
         "1. Return \"line\\n\\\"\\\\\""
     );
 }

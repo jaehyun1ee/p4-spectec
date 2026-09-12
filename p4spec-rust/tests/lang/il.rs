@@ -72,46 +72,46 @@ fn hint() -> ast::Hint {
     )
 }
 
-fn assert_iterated_exp(exp: &ast::Exp, dim: bool, id_span: &Span, typ_span: &Span) {
-    let ast::ExpKind::Iter(inner, (ast::Iter::List, outer_binders)) = &exp.node else {
+fn assert_iterated_exp(exp: &ast::Exp, dim: bool, span_id: &Span, span_typ: &Span) {
+    let ast::ExpKind::Iter(inner, (ast::Iter::List, vars_outer)) = &exp.node else {
         panic!("outer iteration")
     };
-    assert_eq!(&exp.span, id_span);
-    let ast::TypKind::Iter(outer_typ, ast::Iter::List) = exp.note.as_ref() else {
+    assert_eq!(&exp.span, span_id);
+    let ast::TypKind::Iter(typ_outer, ast::Iter::List) = exp.note.as_ref() else {
         panic!("outer type")
     };
-    assert_eq!(&outer_typ.span, id_span);
-    let ast::TypKind::Iter(base_typ, ast::Iter::Opt) = &outer_typ.node else {
+    assert_eq!(&typ_outer.span, span_id);
+    let ast::TypKind::Iter(typ_base, ast::Iter::Opt) = &typ_outer.node else {
         panic!("inner type")
     };
-    assert_eq!(base_typ.node, ast::TypKind::Bool);
-    assert_eq!(&base_typ.span, id_span);
-    let ast::ExpKind::Iter(base, (ast::Iter::Opt, inner_binders)) = &inner.node else {
+    assert_eq!(typ_base.node, ast::TypKind::Bool);
+    assert_eq!(&typ_base.span, span_id);
+    let ast::ExpKind::Iter(base, (ast::Iter::Opt, vars_inner)) = &inner.node else {
         panic!("inner iteration")
     };
-    assert_eq!(&inner.span, id_span);
+    assert_eq!(&inner.span, span_id);
     assert!(
-        matches!(inner.note.as_ref(), ast::TypKind::Iter(typ, ast::Iter::Opt) if typ.node == ast::TypKind::Bool && typ.span == *id_span)
+        matches!(inner.note.as_ref(), ast::TypKind::Iter(typ, ast::Iter::Opt) if typ.node == ast::TypKind::Bool && typ.span == *span_id)
     );
     assert!(matches!(base.node, ast::ExpKind::Var(_)));
-    assert_eq!(base.span, *id_span);
+    assert_eq!(base.span, *span_id);
     assert_eq!(base.note.as_ref(), &ast::TypKind::Bool);
-    match (dim, inner_binders.as_slice(), outer_binders.as_slice()) {
+    match (dim, vars_inner.as_slice(), vars_outer.as_slice()) {
         (false, [], []) => {}
         (true, [inner], [outer]) => {
-            assert_eq!(&inner.id.span, id_span);
+            assert_eq!(&inner.id.span, span_id);
             assert_eq!(inner.id.node, "bool");
-            assert_eq!(&inner.typ.span, typ_span);
+            assert_eq!(&inner.typ.span, span_typ);
             assert!(inner.iters.is_empty());
             assert!(
-                matches!(inner.typ.node, ast::TypKind::Iter(ref typ, ast::Iter::Opt) if typ.node == ast::TypKind::Bool && typ.span == *id_span)
+                matches!(inner.typ.node, ast::TypKind::Iter(ref typ, ast::Iter::Opt) if typ.node == ast::TypKind::Bool && typ.span == *span_id)
             );
-            assert_eq!(&outer.id.span, id_span);
+            assert_eq!(&outer.id.span, span_id);
             assert_eq!(outer.id.node, "bool");
-            assert_eq!(&outer.typ.span, typ_span);
+            assert_eq!(&outer.typ.span, span_typ);
             assert_eq!(outer.iters, vec![ast::Iter::Opt]);
             assert!(
-                matches!(outer.typ.node, ast::TypKind::Iter(ref typ, ast::Iter::List) if matches!(typ.node, ast::TypKind::Iter(ref base, ast::Iter::Opt) if base.node == ast::TypKind::Bool && base.span == *id_span) && typ.span == *id_span)
+                matches!(outer.typ.node, ast::TypKind::Iter(ref typ, ast::Iter::List) if matches!(typ.node, ast::TypKind::Iter(ref base, ast::Iter::Opt) if base.node == ast::TypKind::Bool && base.span == *span_id) && typ.span == *span_id)
             );
         }
         _ => panic!("binder shape"),

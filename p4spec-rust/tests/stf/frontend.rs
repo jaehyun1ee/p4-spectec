@@ -48,7 +48,7 @@ fn test_parses_commands_in_source_order() {
                 name: "set_nhop".into(),
                 args: vec![Argument {
                     id: "port".into(),
-                    number: "3".into(),
+                    num: "3".into(),
                 }],
             },
             id: Some("entry0".into()),
@@ -62,7 +62,7 @@ fn test_parses_commands_in_source_order() {
             check: CounterCheck {
                 kind: Some(CounterKind::Packets),
                 condition: Condition::Ge,
-                number: "0x10".into(),
+                num: "0x10".into(),
             },
         }
     );
@@ -110,13 +110,13 @@ fn test_rejects_priorities_outside_the_ocaml_integer_range() {
 
 #[test]
 fn test_rejects_digits_outside_the_selected_radix() {
-    for number in ["0b102", "12b", "0x0g"] {
-        let source = format!("register_read r {number}\n");
-        let error = parse::parse_str("number.stf", &source).expect_err(number);
+    for num in ["0b102", "12b", "0x0g"] {
+        let source = format!("register_read r {num}\n");
+        let error = parse::parse_str("number.stf", &source).expect_err(num);
         assert!(matches!(
             error.kind,
             p4spec_rust::stf::error::StfErrorKind::InvalidNumber(ref spelling)
-                if spelling == number
+                if spelling == num
         ));
         assert_eq!(error.span.left.file.as_ref(), "number.stf");
         assert_eq!(error.span.left.line, 1);

@@ -57,17 +57,17 @@ where
         TypKind::Bool => Ok(matches!(arena.kind(value), ValueKind::Bool(_))),
         TypKind::Num(NumTyp::Nat) => Ok(match arena.kind(value) {
             ValueKind::Num(Number::Nat(_)) => true,
-            ValueKind::Num(Number::Int(integer)) => !integer.is_negative(),
+            ValueKind::Num(Number::Int(int)) => !int.is_negative(),
             _ => false,
         }),
         TypKind::Num(NumTyp::Int) => Ok(matches!(arena.kind(value), ValueKind::Num(_))),
         TypKind::Text => Ok(matches!(arena.kind(value), ValueKind::Text(_))),
         TypKind::Var(id, targs) => {
-            let type_def = tdenv.get(id).ok_or_else(|| MatchError::UndefinedType {
+            let typdef = tdenv.get(id).ok_or_else(|| MatchError::UndefinedType {
                 name: id.node.clone(),
                 span: typ.span.clone(),
             })?;
-            match type_def {
+            match typdef {
                 TypeDef::Parameter | TypeDef::Defining(_) => {
                     Err(MatchError::UnexpectedTypeVariable {
                         span: typ.span.clone(),

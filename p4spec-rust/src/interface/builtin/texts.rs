@@ -25,8 +25,8 @@ fn text_of_value<'a>(arena: &'a ValueArena, value: &Value) -> Result<&'a str, Bu
 }
 
 fn numeric_text(arena: &ValueArena, value: &Value) -> Result<String, BuiltinError> {
-    let number = get::num(arena, value).map_err(|error| BuiltinError::new(error.to_string()))?;
-    Ok(Print::to_string(number))
+    let num = get::num(arena, value).map_err(|error| BuiltinError::new(error.to_string()))?;
+    Ok(Print::to_string(num))
 }
 
 // == Built-in implementations
@@ -61,12 +61,12 @@ pub fn text_to_int(
     } else {
         (10, unsigned)
     };
-    let mut integer = BigInt::parse_bytes(digits.as_bytes(), radix)
+    let mut int = BigInt::parse_bytes(digits.as_bytes(), radix)
         .ok_or_else(|| BuiltinError::new("invalid digit found in string"))?;
     if negative {
-        integer = -integer;
+        int = -int;
     }
-    let value = make::int(arena, integer, Span::default())?;
+    let value = make::int(arena, int, Span::default())?;
     Ok(value)
 }
 

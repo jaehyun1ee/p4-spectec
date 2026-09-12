@@ -143,38 +143,38 @@ pub fn combine<Item>(
     items_input: Vec<Item>,
     items_output: Vec<Item>,
 ) -> Result<Vec<Item>, InputError> {
-    let actual_input = items_input.len();
-    let actual_output = items_output.len();
-    let length = actual_input + actual_output;
-    validate(hint, length)?;
-    let expected_input = hint.indices.len();
-    let expected_output = length - expected_input;
-    if actual_input != expected_input {
+    let input_actual = items_input.len();
+    let output_actual = items_output.len();
+    let items_len = input_actual + output_actual;
+    validate(hint, items_len)?;
+    let input_expected = hint.indices.len();
+    let output_expected = items_len - input_expected;
+    if input_actual != input_expected {
         return Err(InputError::InputCountMismatch {
-            expected: expected_input,
-            actual: actual_input,
+            expected: input_expected,
+            actual: input_actual,
         });
     }
-    if actual_output != expected_output {
+    if output_actual != output_expected {
         return Err(InputError::OutputCountMismatch {
-            expected: expected_output,
-            actual: actual_output,
+            expected: output_expected,
+            actual: output_actual,
         });
     }
 
     let mut items_input = items_input.into_iter();
     let mut items_output = items_output.into_iter();
-    let mut items = Vec::with_capacity(length);
-    for index in 0..length {
-        let item = if hint.indices.contains(&(index as i64)) {
+    let mut items = Vec::with_capacity(items_len);
+    for idx in 0..items_len {
+        let item = if hint.indices.contains(&(idx as i64)) {
             items_input.next().ok_or(InputError::InputCountMismatch {
-                expected: expected_input,
-                actual: actual_input,
+                expected: input_expected,
+                actual: input_actual,
             })?
         } else {
             items_output.next().ok_or(InputError::OutputCountMismatch {
-                expected: expected_output,
-                actual: actual_output,
+                expected: output_expected,
+                actual: output_actual,
             })?
         };
         items.push(item);

@@ -27,9 +27,9 @@ fn exp(kind: ast::ExpKind, typ: ast::Typ) -> ast::Exp {
     p4spec_rust::note_phrase!(node: kind, note: Rc::new(typ.node), span: typ.span)
 }
 
-fn int(number: i64) -> ast::Exp {
+fn int(num: i64) -> ast::Exp {
     exp(
-        ast::ExpKind::Num(num::Number::Int(number.into())),
+        ast::ExpKind::Num(num::Number::Int(num.into())),
         typ::make::int(),
     )
 }
@@ -50,7 +50,7 @@ fn function(name: &str, expression: ast::Exp) -> ast::Def {
         p4spec_rust::phrase!(node: expression.note.as_ref().clone(), span: expression.span.clone());
     p4spec_rust::phrase!(node: ast::DefKind::MetaFunc(ast::MetaFuncDef::Defined(Box::new(ast::DefinedFunc {
         id: id(name), tparams: vec![], params: vec![], typ,
-        clauses: vec![p4spec_rust::phrase!(node: ast::ClauseKind { args: vec![], expression, premises: vec![] }, span: Span::default())],
+        clauses: vec![p4spec_rust::phrase!(node: ast::ClauseKind { args: vec![], exp: expression, prems: vec![] }, span: Span::default())],
         else_clause: None, hints: vec![],
     }))), span: Span::default())
 }
@@ -399,7 +399,7 @@ fn test_numeric_errors_are_fatal_before_else_fallback() {
     let mut def = function("test", divide);
     if let ast::DefKind::MetaFunc(ast::MetaFuncDef::Defined(func)) = &mut def.node {
         func.else_clause = Some(
-            p4spec_rust::phrase!(node: ast::ClauseKind { args: vec![], expression: int(42), premises: vec![] }, span: Span::default()),
+            p4spec_rust::phrase!(node: ast::ClauseKind { args: vec![], exp: int(42), prems: vec![] }, span: Span::default()),
         );
     }
     let mut runner = Runner::<Al, _, _>::new(
