@@ -19,7 +19,8 @@ fn merge_identical_if(
         ..
     } = instr_target;
     for (idx, instr) in block.iter().enumerate() {
-        let InstrKind::If(instr_if) = &instr.node else {
+        let instr_kind = &instr.node;
+        let InstrKind::If(instr_if) = instr_kind else {
             break;
         };
         let IfInstr { exp, iter_exps, .. } = instr_if;
@@ -39,7 +40,8 @@ fn merge_if_instr(
 ) -> Result<Block, StructureError> {
     if let Some(idx) = merge_identical_if(tdenv, &instr_if, &block_tail)? {
         let instr_match = block_tail.remove(idx);
-        let InstrKind::If(instr_match) = instr_match.node else {
+        let instr_kind_match = instr_match.node;
+        let InstrKind::If(instr_match) = instr_kind_match else {
             unreachable!()
         };
         let IfInstr {

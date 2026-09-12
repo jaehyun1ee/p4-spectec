@@ -258,7 +258,8 @@ fn casify_from_if(
         return Ok(None);
     }
     for (idx, instr) in block.iter().enumerate() {
-        let instr_case = match &instr.node {
+        let instr_kind = &instr.node;
+        let instr_case = match instr_kind {
             InstrKind::If(instr_if) if instr_if.iter_exps.is_empty() => {
                 casify_if_if(tdenv, instr_target, instr_if)?
             }
@@ -282,7 +283,8 @@ fn casify_from_case(
     block: &Block,
 ) -> Result<Option<(usize, CaseInstr)>, StructureError> {
     for (idx, instr) in block.iter().enumerate() {
-        let instr_case = match &instr.node {
+        let instr_kind = &instr.node;
+        let instr_case = match instr_kind {
             InstrKind::If(instr_if) if instr_if.iter_exps.is_empty() => {
                 casify_case_if(tdenv, instr_target, instr_if, span_target)?
             }
