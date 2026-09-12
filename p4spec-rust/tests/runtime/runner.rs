@@ -446,6 +446,44 @@ fn eval_text(
 }
 
 #[test]
+fn test_runner_reset_releases_program_arena_and_resets_hosts() {
+    let _guard = FRESH_BUILTIN.lock().unwrap();
+    let mut runner = Runner::<FixtureInterpreter, BuiltinInterface, FixtureExtern>::new(
+        (),
+        FixtureConfig {
+            label: "configured".to_owned(),
+        },
+        BuiltinInterface::new(P4Unparser::new()),
+        FixtureExtern::default(),
+    );
+    let typ = std::rc::Rc::new(p4spec_rust::lang::data::typ::TypKind::Text);
+    let typ_weak = std::rc::Rc::downgrade(&typ);
+    let value = value::make::new(
+        runner.arena_mut(),
+        value::ValueKind::Text("previous program".to_owned()),
+        typ,
+        Span::default(),
+    )
+    .unwrap();
+    assert!(runner.eval_program("missing", value).is_err());
+    assert_eq!(eval_text(&mut runner, "next_extern"), "0");
+    assert_ne!(
+        eval_text(&mut runner, "next_builtin"),
+        eval_text(&mut runner, "next_builtin")
+    );
+    runner.reset();
+    assert!(
+        typ_weak.upgrade().is_none(),
+        "previous program types must be released"
+    );
+    assert_eq!(eval_text(&mut runner, "config"), "configured");
+    assert_eq!(eval_text(&mut runner, "next_extern"), "0");
+    let text = eval_text(&mut runner, "next_builtin");
+    runner.reset();
+    assert_eq!(eval_text(&mut runner, "next_builtin"), text);
+}
+
+#[test]
 fn test_runner_dispatches_program_entry_and_errors() {
     let mut runner = Runner::<FixtureInterpreter, NullInterface, NullExtern>::new(
         (),

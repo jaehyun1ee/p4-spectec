@@ -1572,6 +1572,45 @@ def $pair() = ($pure<nat>(7), $pure<bool>(7))
 }
 
 #[test]
+fn test_program_reset_isolates_cached_values_between_arenas() {
+    let source = "var n : nat\nbuiltin dec $pure(nat) : nat\ndec $pair(nat) : (nat, nat)\ndef $pair(n) = ($pure(n), $pure(n))";
+    let host = CacheHost::default();
+    let mut runner = Runner::<Al, _, _>::new(
+        Global::load(spec(source)).unwrap(),
+        Config::new(true, false, false),
+        host.clone(),
+        NullExtern,
+    );
+    let id = phrase!(node: "pair".to_owned(), span: Span::default());
+    for num in [7, 9, 7] {
+        runner.reset();
+        let value = nat(runner.arena_mut(), num);
+        let value_pair = {
+            let mut ctx_runner = runner.context();
+            let ctx = p4spec_rust::interp::al::context::Context::new(ctx_runner.spec());
+            p4spec_rust::interp::al::eval::call::invoke_func(
+                &mut ctx_runner,
+                &ctx,
+                &id,
+                &[],
+                &[value],
+            )
+            .finish()
+            .unwrap()
+        };
+        assert_eq!(
+            get::tuple(runner.arena(), &value_pair).unwrap(),
+            &[value, value]
+        );
+        assert_eq!(
+            host.count("pure"),
+            1,
+            "one cached call within each independent program"
+        );
+    }
+}
+
+#[test]
 fn test_cache_distinguishes_call_names_and_argument_order() {
     let source = r#"
 var n : nat

@@ -106,4 +106,15 @@ where
         self.externs.clear();
         self.interface.clear();
     }
+
+    /// Starts an independent program while retaining definitions and configuration
+    ///
+    /// All previously returned arena handles become invalid. Call this before
+    /// parsing the next program, after discarding the preceding program's values
+    pub fn reset(&mut self) {
+        self.state = S::State::default();
+        self.externs.clear();
+        self.interface.clear();
+        self.arena = ValueArena::new();
+    }
 }

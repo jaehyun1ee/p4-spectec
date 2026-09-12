@@ -120,7 +120,7 @@ impl<'a> Context<'a> {
 
     // - Identifier lookup
 
-    fn ident_find(&self, id: &str) -> Option<IdentKind> {
+    pub(super) fn ident_find(&self, id: &str) -> Option<IdentKind> {
         self.scopes
             .borrow()
             .iter()

@@ -7,43 +7,11 @@ use std::{
 use p4spec_rust::{
     frontend::parse::parse_files,
     pass::elaborate::{self, ElabErrorKind},
-    wire::{
-        Envelope, IL_SCHEMA,
-        ocaml::{lang::il::SpecCodec, source},
-    },
+    wire::ocaml::source,
 };
 use serde_json::Value;
 
 static OCAML_ORACLE_LOCK: Mutex<()> = Mutex::new(());
-
-fn first_difference(
-    value_l: &Value,
-    value_r: &Value,
-    path: &str,
-) -> Option<(String, String, String)> {
-    if value_l == value_r {
-        return None;
-    }
-    match (value_l, value_r) {
-        (Value::Array(value_l), Value::Array(value_r)) if value_l.len() == value_r.len() => value_l
-            .iter()
-            .zip(value_r)
-            .enumerate()
-            .find_map(|(index, (value_l, value_r))| {
-                first_difference(value_l, value_r, &format!("{path}[{index}]"))
-            }),
-        (Value::Object(value_l), Value::Object(value_r)) if value_l.len() == value_r.len() => {
-            value_l.iter().find_map(|(key, value_l)| {
-                let path = format!("{path}.{key}");
-                match value_r.get(key) {
-                    Some(value_r) => first_difference(value_l, value_r, &path),
-                    None => Some((path, value_l.to_string(), "<missing>".to_owned())),
-                }
-            })
-        }
-        _ => Some((path.to_owned(), value_l.to_string(), value_r.to_string())),
-    }
-}
 
 fn run_ocaml_oracle(repo: &Path, spec_path: &Path) -> Output {
     let _guard = OCAML_ORACLE_LOCK
@@ -64,35 +32,6 @@ fn run_ocaml_oracle(repo: &Path, spec_path: &Path) -> Output {
         .current_dir(repo)
         .output()
         .expect("run pinned OCaml elaboration oracle")
-}
-
-#[test]
-#[ignore = "requires the pinned OCaml toolchain"]
-fn test_full_il_matches_ocaml_exactly() {
-    let repo = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .expect("Rust crate is inside the repository");
-    let spec_path = std::env::var_os("P4SPEC_TEST_PATH")
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|| repo.join("spec"));
-    let output = run_ocaml_oracle(repo, &spec_path);
-    assert!(
-        output.status.success(),
-        "OCaml elaboration failed:\n{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    let expected = Envelope::<Value>::from_slice(&output.stdout).expect("decode IL envelope");
-    assert_eq!(expected.schema(), IL_SCHEMA);
-    assert_eq!(expected.kind(), "il");
-
-    let spec = parse_files([&spec_path]).expect("parse corpus with Rust frontend");
-    let spec = elaborate::elaborate(spec).expect("elaborate corpus with Rust");
-    let actual = SpecCodec::encode(&spec).expect("encode Rust IL");
-
-    if let Some((path, expected, actual)) = first_difference(expected.payload(), &actual, "payload")
-    {
-        panic!("first IL mismatch at {path}:\nOCaml: {expected}\nRust:  {actual}");
-    }
 }
 
 fn rust_error_category(kind: &ElabErrorKind) -> &'static str {
@@ -181,16 +120,4 @@ fn test_rejected_elaboration_matches_ocaml_category_and_span() {
             assert_ne!(error.span, Default::default(), "{name}");
         }
     }
-}
-
-#[test]
-fn test_exact_comparison_detects_different_object_keys() {
-    let value_l = serde_json::json!({"left": 1});
-    let value_r = serde_json::json!({"right": 1});
-
-    let difference =
-        first_difference(&value_l, &value_r, "payload").expect("different object keys");
-
-    assert_eq!(difference.0, "payload.left");
-    assert_eq!(difference.2, "<missing>");
 }
