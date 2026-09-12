@@ -1,4 +1,6 @@
+mod algo;
 mod corpus;
+mod elab;
 mod p4parse;
 mod run;
 mod snapshot;
@@ -41,8 +43,8 @@ fn execute(command: Command) -> Result<()> {
     std::env::set_current_dir(&root)?;
     match command {
         Command::P4parse => p4parse::run(),
-        Command::Elab => snapshot::run(false),
-        Command::Algo => snapshot::run(true),
+        Command::Elab => elab::run(),
+        Command::Algo => algo::run(),
         Command::RunAl => run::run(),
     }
 }
