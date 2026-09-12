@@ -10,43 +10,84 @@ use crate::{
 
 use super::span;
 
-fn id_at(text: &str, line: i64) -> ast::Id {
-    crate::phrase! { node: text.to_owned(), span: span(line) }
+fn id_at(text: &str, num_line: i64) -> ast::Id {
+    crate::phrase! { node: text.to_owned(), span: span(num_line) }
 }
 
-fn typ_at(typ_kind: TypKind, line: i64) -> ast::Typ {
-    crate::phrase! { node: typ_kind, span: span(line) }
+fn typ_at(typ_kind: TypKind, num_line: i64) -> ast::Typ {
+    crate::phrase! { node: typ_kind, span: span(num_line) }
 }
 
-fn typ_var_at(text: &str, line: i64) -> ast::Typ {
-    typ_at(TypKind::Var(id_at(text, line), vec![]), line)
+fn typ_var_at(text: &str, num_line: i64) -> ast::Typ {
+    typ_at(TypKind::Var(id_at(text, num_line), vec![]), num_line)
 }
 
-fn def_typ_at(def_typ_kind: DefTypKind, line: i64) -> ast::DefTyp {
-    crate::phrase! { node: def_typ_kind, span: span(line) }
+fn def_typ_at(def_typ_kind: DefTypKind, num_line: i64) -> ast::DefTyp {
+    crate::phrase! { node: def_typ_kind, span: span(num_line) }
 }
 
-fn defined_typ(text: &str, line: i64, tparams: Vec<ast::TParam>, def_typ: ast::DefTyp) -> ast::Def {
+fn defined_typ(
+    text: &str,
+    num_line: i64,
+    tparams: Vec<ast::TParam>,
+    def_typ: ast::DefTyp,
+) -> ast::Def {
     crate::phrase! {
         node: ast::DefKind::Typ(ast::TypDef::Defined(Box::new(ast::DefinedTyp {
-            id: id_at(text, line),
+            id: id_at(text, num_line),
             tparams,
             def_typ,
             hints: vec![],
         }))),
-        span: span(line),
+        span: span(num_line),
     }
 }
 
-fn var_def(text: &str, line: i64, typ: ast::Typ) -> ast::Def {
+fn extern_typ(text: &str, num_line: i64) -> ast::Def {
+    crate::phrase! {
+        node: ast::DefKind::Typ(ast::TypDef::Extern(ast::ExternTyp {
+            id: id_at(text, num_line),
+            hints: vec![],
+        })),
+        span: span(num_line),
+    }
+}
+
+fn var_def(text: &str, num_line: i64, typ: ast::Typ) -> ast::Def {
     crate::phrase! {
         node: ast::DefKind::Var(ast::VarDef {
-            id: id_at(text, line),
+            id: id_at(text, num_line),
             typ,
             hints: vec![],
         }),
-        span: span(line),
+        span: span(num_line),
     }
+}
+
+#[test]
+fn test_load_registers_extern_type_in_both_environments_with_declaration_span() {
+    let ctx = Context::load(&vec![extern_typ("External", 5)]).expect("load extern type");
+    let id_lookup = id_at("External", 99);
+
+    assert_eq!(ctx.find_typdef(&id_lookup), Ok(&TypeDef::Extern));
+    let typ_external = ctx.find_metavar(&id_lookup).expect("find extern type");
+    let TypKind::Var(id_external, targs) = &typ_external.node else {
+        panic!("extern type should register its named type")
+    };
+    assert!(targs.is_empty());
+    assert_eq!(id_external.span, span(5));
+    let (id_stored, _) = ctx
+        .tdenv
+        .iter()
+        .find(|(id, _)| id.node == "External")
+        .expect("stored extern type key");
+    assert_eq!(id_stored.span, span(5));
+    let (id_stored, _) = ctx
+        .menv
+        .iter()
+        .find(|(id, _)| id.node == "External")
+        .expect("stored extern metavariable key");
+    assert_eq!(id_stored.span, span(5));
 }
 
 #[test]
@@ -119,12 +160,12 @@ fn test_loaded_alias_expands_to_its_variant_definition() {
         node: Mixfix::Arg(typ_at(TypKind::Bool, 50)),
         span: span(50),
     };
-    let origin = crate::phrase! {
+    let typ_origin = crate::phrase! {
         node: (id_at("Origin", 50), vec![]),
         span: span(50),
     };
     let def_typ_variant = def_typ_at(
-        DefTypKind::Variant(vec![(not_typ_case, origin, vec![])]),
+        DefTypKind::Variant(vec![(not_typ_case, typ_origin, vec![])]),
         50,
     );
     let def_typ_alias = def_typ_at(DefTypKind::Plain(typ_var_at("Choice", 51)), 51);

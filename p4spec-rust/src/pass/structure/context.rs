@@ -34,13 +34,13 @@ impl Context {
 
     fn init() -> Self {
         let mut menv = MEnv::new();
-        for (name, typ) in [
+        for (text_name, typ) in [
             ("bool", typ::make::bool()),
             ("nat", typ::make::nat()),
             ("int", typ::make::int()),
             ("text", typ::make::text()),
         ] {
-            let id = phrase!(node: name.to_owned(), span: Span::default());
+            let id = phrase!(node: text_name.to_owned(), span: Span::default());
             menv.insert(id, typ);
         }
         Self {
@@ -97,28 +97,40 @@ impl Context {
 
     fn load_def(&mut self, def_al: &ast::Def) -> Result<(), StructureError> {
         match &def_al.node {
-            ast::DefKind::Typ(ast::TypDef::Extern(extern_typ_al)) => {
-                let id = extern_typ_al.id.clone();
-                let typ = typ::make::var(id.clone(), vec![]);
-                self.add_metavar(id.clone(), typ)?;
-                self.add_typdef(id, TypeDef::Extern)
-            }
-            ast::DefKind::Typ(ast::TypDef::Defined(defined_typ_al)) => {
-                let id = defined_typ_al.id.clone();
-                if defined_typ_al.tparams.is_empty() {
-                    let typ = typ::make::var(id.clone(), vec![]);
-                    self.add_metavar(id.clone(), typ)?;
-                }
-                let typdef = TypeDef::Defined(
-                    defined_typ_al.tparams.clone(),
-                    Box::new(defined_typ_al.def_typ.clone()),
-                );
-                self.add_typdef(id, typdef)
-            }
-            ast::DefKind::Var(var_def_al) => {
-                self.add_metavar(var_def_al.id.clone(), var_def_al.typ.clone())
-            }
+            ast::DefKind::Typ(typ_def_al) => self.load_typ_def(typ_def_al),
+            ast::DefKind::Var(def_var_al) => self.load_var_def(def_var_al),
             _ => Ok(()),
         }
+    }
+
+    fn load_typ_def(&mut self, typ_def_al: &ast::TypDef) -> Result<(), StructureError> {
+        match typ_def_al {
+            ast::TypDef::Extern(extern_typ_al) => self.load_extern_typ(extern_typ_al),
+            ast::TypDef::Defined(defined_typ_al) => self.load_defined_typ(defined_typ_al),
+        }
+    }
+
+    fn load_extern_typ(&mut self, extern_typ_al: &ast::ExternTyp) -> Result<(), StructureError> {
+        let id = extern_typ_al.id.clone();
+        let typ = typ::make::var(id.clone(), vec![]);
+        self.add_metavar(id.clone(), typ)?;
+        self.add_typdef(id, TypeDef::Extern)
+    }
+
+    fn load_defined_typ(&mut self, defined_typ_al: &ast::DefinedTyp) -> Result<(), StructureError> {
+        let id = defined_typ_al.id.clone();
+        if defined_typ_al.tparams.is_empty() {
+            let typ = typ::make::var(id.clone(), vec![]);
+            self.add_metavar(id.clone(), typ)?;
+        }
+        let typdef = TypeDef::Defined(
+            defined_typ_al.tparams.clone(),
+            Box::new(defined_typ_al.def_typ.clone()),
+        );
+        self.add_typdef(id, typdef)
+    }
+
+    fn load_var_def(&mut self, def_var_al: &ast::VarDef) -> Result<(), StructureError> {
+        self.add_metavar(def_var_al.id.clone(), def_var_al.typ.clone())
     }
 }
