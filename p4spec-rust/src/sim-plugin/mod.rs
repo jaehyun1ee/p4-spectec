@@ -1,3 +1,3 @@
 mod core;
-pub mod placeholder;
+pub mod dummy;
 mod spec_impl;

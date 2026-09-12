@@ -12,9 +12,9 @@ use crate::{
 
 use super::core;
 
-pub struct Placeholder;
+pub struct Dummy;
 
-impl Extern for Placeholder {
+impl Extern for Dummy {
     fn eval_rel<Interp, Iface>(
         &self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Self>,

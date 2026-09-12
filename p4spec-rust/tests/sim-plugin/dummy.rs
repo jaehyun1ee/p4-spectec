@@ -5,7 +5,7 @@ use p4spec_rust::{
         typ::TypKind,
         value::{Value, ValueKind, make},
     },
-    sim_plugin::placeholder::Placeholder,
+    sim_plugin::dummy::Dummy,
     util::json::json,
 };
 
@@ -35,8 +35,8 @@ fn contains_null_object_state(arena: &ValueArena, value: &Value) -> bool {
 }
 
 #[test]
-fn test_program_inst_initializes_placeholder_object() {
-    let mut runner = runner(Placeholder);
+fn test_program_inst_initializes_dummy_object() {
+    let mut runner = runner(Dummy);
     let program = parse_program(
         runner.arena_mut(),
         &repo()
@@ -56,7 +56,7 @@ fn test_program_inst_initializes_placeholder_object() {
 #[test]
 fn test_unsupported_extern_fails() {
     let spec = repo().join("p4spec-rust/tests/fixtures/sim-plugin/unsupported-extern.watsup");
-    let mut runner = runner_from_spec(&spec, Placeholder);
+    let mut runner = runner_from_spec(&spec, Dummy);
 
     let error = {
         let (name, values) = (

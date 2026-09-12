@@ -16,8 +16,8 @@ use p4spec_rust::{
 
 #[path = "core/mod.rs"]
 mod core;
-#[path = "placeholder.rs"]
-mod placeholder;
+#[path = "dummy.rs"]
+mod dummy;
 
 fn repo() -> &'static Path {
     Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap()

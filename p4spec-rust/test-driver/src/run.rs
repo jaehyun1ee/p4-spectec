@@ -10,7 +10,7 @@ use p4spec_rust::{
     interp::al::{AlInterp, Config, context::Global},
     pass::{algo, elaborate},
     runner::{BuiltinInterface, Runner},
-    sim_plugin::placeholder::Placeholder,
+    sim_plugin::dummy::Dummy,
 };
 use std::{
     fs,
@@ -53,7 +53,7 @@ pub fn run() -> Result<()> {
         global,
         AlInterp::new(Config::new(true, false, false)),
         BuiltinInterface::new(unparser),
-        Placeholder,
+        Dummy,
     );
     let includes = vec![PathBuf::from("p4c/p4include")];
     fs::read_dir(&includes[0])?;

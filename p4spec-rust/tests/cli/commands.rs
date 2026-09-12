@@ -221,7 +221,7 @@ fn test_run_al_native_success_and_multiple_spec_paths() {
 }
 
 #[test]
-fn test_run_al_initializes_placeholder_extern_objects() {
+fn test_run_al_initializes_dummy_extern_objects() {
     let repo = repo();
     let output = binary()
         .args(["run", "--al"])

@@ -9,7 +9,7 @@ use p4spec_rust::{
             value::{Value, make},
         },
     },
-    sim_plugin::placeholder::Placeholder,
+    sim_plugin::dummy::Dummy,
 };
 
 use super::super::{has_extern_failure, parse_program, repo, runner};
@@ -26,7 +26,7 @@ fn case(arena: &mut ValueArena, shape: &str, args: Vec<Value>, typ: &str) -> Val
 
 fn run_static_assert(names_param: &[&str]) -> (Value, Value) {
     let spec = repo().join("p4spec-rust/tests/fixtures/sim-plugin/unsupported-extern.watsup");
-    let mut runner = super::super::runner_from_spec(&spec, Placeholder);
+    let mut runner = super::super::runner_from_spec(&spec, Dummy);
     let value_check = {
         let value_2 = vec![make::bool(runner.arena_mut(), true, Span::default()).unwrap()];
         case(runner.arena_mut(), "_B bool", value_2, "value")
@@ -82,7 +82,7 @@ fn test_static_assert_returns_true() {
         assert!((value_check == value_result));
     }
 
-    let mut runner = runner(Placeholder);
+    let mut runner = runner(Dummy);
     let program = parse_program(
         runner.arena_mut(),
         &repo().join("p4spec-rust/tests/fixtures/sim-plugin/static-assert-true.p4"),
@@ -93,7 +93,7 @@ fn test_static_assert_returns_true() {
 
 #[test]
 fn test_static_assert_false_default_message() {
-    let mut runner = runner(Placeholder);
+    let mut runner = runner(Dummy);
     let program = parse_program(
         runner.arena_mut(),
         &repo().join("p4spec-rust/tests/fixtures/sim-plugin/static-assert-false-default.p4"),
@@ -106,7 +106,7 @@ fn test_static_assert_false_default_message() {
 
 #[test]
 fn test_static_assert_false_custom_message() {
-    let mut runner = runner(Placeholder);
+    let mut runner = runner(Dummy);
     let program = parse_program(
         runner.arena_mut(),
         &repo().join("p4spec-rust/tests/fixtures/sim-plugin/static-assert-false-custom.p4"),

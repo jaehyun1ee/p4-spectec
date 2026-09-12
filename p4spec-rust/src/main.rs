@@ -9,7 +9,7 @@ use p4spec_rust::{
     lang::{al, il, traits::print::Print},
     pass::{algo, elaborate},
     runner::{BuiltinInterface, Runner},
-    sim_plugin::placeholder::Placeholder,
+    sim_plugin::dummy::Dummy,
 };
 
 // = Helpers
@@ -109,7 +109,7 @@ fn run_command(args: RunArgs) -> ExitCode {
         global,
         AlInterp::new(Config::new(!args.no_cache, args.det, args.guard)),
         BuiltinInterface::new(unparser),
-        Placeholder,
+        Dummy,
     );
     let program = match parse_file(runner.arena_mut(), &args.includes, args.program) {
         Ok(program) => program,
