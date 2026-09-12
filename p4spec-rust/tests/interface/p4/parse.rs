@@ -117,7 +117,6 @@ fn test_binary_expression_span_preserves_mapped_token_order() {
 }
 
 use std::{
-    collections::{BTreeMap, BTreeSet},
     fs,
     path::{Path, PathBuf},
 };
@@ -125,19 +124,6 @@ use std::{
 /// Draw a single-line progress bar to stderr. libtest only captures the
 /// `print!`/`eprint!` macros, so a direct `io::stderr()` write stays visible
 /// while the oracle grinds through the p4c corpus (run with `--nocapture`).
-fn report_progress(label: &str, done: usize, total: usize) {
-    use std::io::Write;
-    const WIDTH: usize = 24;
-    let filled = (done * WIDTH).checked_div(total).unwrap_or(WIDTH);
-    let bar = format!("{}{}", "#".repeat(filled), "-".repeat(WIDTH - filled));
-    let mut stderr = std::io::stderr();
-    let _ = write!(stderr, "\r{label} [{bar}] {done}/{total}");
-    let _ = stderr.flush();
-    if done == total {
-        let _ = writeln!(stderr);
-    }
-}
-
 #[test]
 fn test_parses_empty_and_declaration_programs() {
     let mut arena = ValueArena::new();
@@ -277,118 +263,6 @@ fn test_rejects_the_negative_p4_parse_corpus() {
         "invalid P4 programs were accepted:\n{}",
         accepted.join("\n")
     );
-}
-
-#[test]
-fn test_matches_the_positive_parser_oracle() {
-    let root = repository_root();
-    assert_matches_parser_oracle(
-        &root,
-        "parser_pos.expected",
-        &[
-            root.join("p4c/testdata/p4_16_samples"),
-            root.join("testdata/custom"),
-        ],
-    );
-}
-
-#[test]
-fn test_matches_the_negative_parser_oracle() {
-    let root = repository_root();
-    assert_matches_parser_oracle(
-        &root,
-        "parser_neg.expected",
-        &[root.join("p4c/testdata/p4_16_errors")],
-    );
-}
-
-fn repository_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .expect("p4spec-rust must be inside the repository")
-        .to_path_buf()
-}
-
-fn assert_matches_parser_oracle(root: &Path, oracle_name: &str, directories: &[PathBuf]) {
-    let mut arena = ValueArena::new();
-    let oracle_dir = root.join("p4spec/test/parse");
-    let oracle = parser_oracle(&oracle_dir, oracle_name);
-    let oracle_files = oracle.keys().cloned().collect::<BTreeSet<_>>();
-
-    let mut corpus_files = Vec::new();
-    for directory in directories {
-        collect_parser_files(directory, &mut corpus_files);
-    }
-    let corpus_files = corpus_files.into_iter().collect::<BTreeSet<_>>();
-    assert_eq!(corpus_files, oracle_files, "P4 parser corpus changed");
-
-    let includes = [root.join("p4c/p4include")];
-    let total = oracle.len();
-    let mut mismatches = Vec::new();
-    for (index, (file, should_parse)) in oracle.into_iter().enumerate() {
-        report_progress(&format!("p4 parser {oracle_name}"), index + 1, total);
-        let result = parse_file(&mut arena, &includes, &file);
-        if result.is_ok() != should_parse {
-            mismatches.push(match result {
-                Ok(_) => format!("{}: unexpectedly parsed", file.display()),
-                Err(error) => format!("{}: {error}", file.display()),
-            });
-        }
-    }
-    assert!(
-        mismatches.is_empty(),
-        "P4 parse expectation mismatches:\n{}",
-        mismatches.join("\n")
-    );
-}
-
-fn parser_oracle(oracle_dir: &Path, oracle_name: &str) -> BTreeMap<PathBuf, bool> {
-    let output = fs::read_to_string(oracle_dir.join(oracle_name)).expect("read parser oracle");
-    let prefix = ">>> Running parser test on ";
-    let mut oracle = output
-        .lines()
-        .filter_map(|line| line.strip_prefix(prefix))
-        .map(|path| {
-            let path = oracle_dir.join(path);
-            (
-                path.canonicalize()
-                    .expect("canonicalize parser corpus path"),
-                true,
-            )
-        })
-        .collect::<BTreeMap<_, _>>();
-    for path in output
-        .lines()
-        .filter_map(|line| line.strip_prefix("Error parsing file: "))
-    {
-        let path = oracle_dir
-            .join(path)
-            .canonicalize()
-            .expect("canonicalize rejected parser corpus path");
-        *oracle
-            .get_mut(&path)
-            .expect("rejected file must be in corpus") = false;
-    }
-    oracle
-}
-
-fn collect_parser_files(directory: &Path, files: &mut Vec<PathBuf>) {
-    let mut entries = fs::read_dir(directory)
-        .expect("read P4 parser corpus directory")
-        .collect::<Result<Vec<_>, _>>()
-        .expect("read P4 parser corpus entry");
-    entries.sort_by_key(fs::DirEntry::file_name);
-    for entry in entries {
-        let path = entry.path();
-        if path.is_dir() && entry.file_name() != "include" {
-            collect_parser_files(&path, files);
-        } else if path.extension().is_some_and(|extension| extension == "p4") {
-            files.push(
-                path.canonicalize()
-                    .expect("canonicalize parser corpus file"),
-            );
-        }
-    }
 }
 
 fn collect_p4_files(directory: &Path, files: &mut Vec<PathBuf>) {

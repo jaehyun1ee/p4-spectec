@@ -1,4 +1,5 @@
 mod corpus;
+mod p4parse;
 mod run;
 mod snapshot;
 
@@ -23,6 +24,8 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    /// Compare P4 parse/unparse/parse roundtrips with stored file results
+    P4parse,
     /// Compare the elaborated P4 specification with expected output
     Elab,
     /// Compare the algorithmic P4 specification with expected output
@@ -37,6 +40,7 @@ fn execute(command: Command) -> Result<()> {
         .canonicalize()?;
     std::env::set_current_dir(&root)?;
     match command {
+        Command::P4parse => p4parse::run(),
         Command::Elab => snapshot::run(false),
         Command::Algo => snapshot::run(true),
         Command::RunAl => run::run(),

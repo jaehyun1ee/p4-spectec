@@ -9,6 +9,9 @@ use std::{
 pub enum Outcome {
     Pass,
     Fail,
+    ParseFail,
+    ReparseFail,
+    RoundtripFail,
     Exclude,
 }
 
@@ -21,6 +24,9 @@ pub fn parse_expected(text: &str) -> Result<BTreeMap<PathBuf, Outcome>> {
         let outcome = match status {
             "pass" => Outcome::Pass,
             "fail" => Outcome::Fail,
+            "parse-fail" => Outcome::ParseFail,
+            "reparse-fail" => Outcome::ReparseFail,
+            "roundtrip-fail" => Outcome::RoundtripFail,
             "exclude" => Outcome::Exclude,
             _ => {
                 return Err(Error::Invalid(format!(
