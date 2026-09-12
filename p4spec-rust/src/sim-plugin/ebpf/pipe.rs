@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use super::{
     super::{
         core::{func as core_func, object::PacketIn},
-        externs::{self as external, FuncName, RelName},
+        externs as external,
         io::Transmission,
         spec_impl::{func, pgm, rel, unpack},
         state::{SimState, install_result},
@@ -61,9 +61,9 @@ impl Extern for Ebpf {
         Iface: Interface,
         Interp: Interpreter<Iface, Self>,
     {
-        let value = match external::func_name(name)? {
-            FuncName::InitArch => external::state_value(ctx.arena_mut(), "archState", json::Null)?,
-            FuncName::InitObject => {
+        let value = match name {
+            "init_archState" => external::state_value(ctx.arena_mut(), "archState", json::Null)?,
+            "init_objectState" => {
                 let [value_name, _value_targs, value_ids, value_args] = values else {
                     return Err(ExternError::Failure(
                         "unexpected number of arguments to extern init".to_owned(),
@@ -77,6 +77,11 @@ impl Extern for Ebpf {
                 } else {
                     external::state_value(ctx.arena_mut(), "objectState", json::Null)?
                 }
+            }
+            _ => {
+                return Err(
+                    ExternError::Failure(format!("unimplemented extern function: {name}")).into(),
+                );
             }
         };
         Ok((value, false))
@@ -92,10 +97,15 @@ impl Extern for Ebpf {
         Iface: Interface,
         Interp: Interpreter<Iface, Self>,
     {
-        let values = match external::rel_name(name)? {
-            RelName::FuncLctk => external::eval_func_lctk(ctx, values)?,
-            RelName::Func => eval_func(ctx, values)?,
-            RelName::Method => eval_method(ctx, values)?,
+        let values = match name {
+            "ExternFunctionCall_eval_lctk" => external::eval_func_lctk(ctx, values)?,
+            "ExternFunctionCall_eval" => eval_func(ctx, values)?,
+            "ExternMethodCall_eval" => eval_method(ctx, values)?,
+            _ => {
+                return Err(
+                    ExternError::Failure(format!("unimplemented extern relation: {name}")).into(),
+                );
+            }
         };
         Ok((values, false))
     }

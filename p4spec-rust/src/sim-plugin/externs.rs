@@ -12,37 +12,6 @@ use crate::{
     util::json::json,
 };
 
-pub(crate) enum FuncName {
-    InitObject,
-    InitArch,
-}
-pub(crate) enum RelName {
-    FuncLctk,
-    Func,
-    Method,
-}
-
-pub(crate) fn func_name(name: &str) -> Result<FuncName, ExternError> {
-    match name {
-        "init_objectState" => Ok(FuncName::InitObject),
-        "init_archState" => Ok(FuncName::InitArch),
-        _ => Err(ExternError::Failure(format!(
-            "unimplemented extern function: {name}"
-        ))),
-    }
-}
-
-pub(crate) fn rel_name(name: &str) -> Result<RelName, ExternError> {
-    match name {
-        "ExternFunctionCall_eval_lctk" => Ok(RelName::FuncLctk),
-        "ExternFunctionCall_eval" => Ok(RelName::Func),
-        "ExternMethodCall_eval" => Ok(RelName::Method),
-        _ => Err(ExternError::Failure(format!(
-            "unimplemented extern relation: {name}"
-        ))),
-    }
-}
-
 impl From<DecodeError> for ExternError {
     fn from(error: DecodeError) -> Self {
         match error {
