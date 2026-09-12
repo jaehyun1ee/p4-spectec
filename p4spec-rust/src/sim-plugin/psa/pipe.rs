@@ -5,12 +5,8 @@ use super::super::{
     },
     externs::{self as external, FuncName, RelName},
     io::Transmission,
-    spec_impl::{
-        func, pack, pgm,
-        rel::{self, CallResult},
-        unpack,
-    },
-    state::SimState,
+    spec_impl::{func, pack, pgm, rel, unpack},
+    state::{SimState, install_result},
 };
 use super::{
     arch::Arch,
@@ -600,11 +596,6 @@ where
     })
 }
 
-fn install_result(state: &mut SimState, result: CallResult) {
-    state.value_ctx = result.value_ctx;
-    state.value_arch = result.value_arch;
-}
-
 fn metadata_bool<Interp, Iface, Exn>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
     state: &SimState,
@@ -1023,7 +1014,7 @@ where
     Interp: Interpreter<Iface, Exn>,
 {
     let result = rel::psa_ingress_parser(ctx, state.value_ctx, state.value_arch)?;
-    install_result(state, result);
+    install_result!(state, result);
     let value_error = get::matches! { ctx.arena(), &result.value_call_result,
         "REJECT errorValue" => |values| Some(*get::one(&values.into_iter().copied().collect::<Vec<_>>()).map_err(ExternError::from)?),
         _ => None,
@@ -1039,10 +1030,10 @@ where
         )?;
     }
     let result = rel::psa_ingress(ctx, state.value_ctx, state.value_arch)?;
-    install_result(state, result);
+    install_result!(state, result);
     reset_packet_out(ctx, state, "ingress_packet_out")?;
     let result = rel::psa_ingress_deparser(ctx, state.value_ctx, state.value_arch)?;
-    install_result(state, result);
+    install_result!(state, result);
     Ok(())
 }
 
@@ -1057,7 +1048,7 @@ where
     Interp: Interpreter<Iface, Exn>,
 {
     let result = rel::psa_egress_parser(ctx, state.value_ctx, state.value_arch)?;
-    install_result(state, result);
+    install_result!(state, result);
     let value_error = get::matches! { ctx.arena(), &result.value_call_result,
         "REJECT errorValue" => |values| Some(*get::one(&values.into_iter().copied().collect::<Vec<_>>()).map_err(ExternError::from)?),
         _ => None,
@@ -1073,10 +1064,10 @@ where
         )?;
     }
     let result = rel::psa_egress(ctx, state.value_ctx, state.value_arch)?;
-    install_result(state, result);
+    install_result!(state, result);
     reset_packet_out(ctx, state, "egress_packet_out")?;
     let result = rel::psa_egress_deparser(ctx, state.value_ctx, state.value_arch)?;
-    install_result(state, result);
+    install_result!(state, result);
     Ok(())
 }
 
@@ -1130,22 +1121,18 @@ where
     let value_packet = pkt.to_value(ctx.arena_mut())?;
     let result =
         rel::psa_ingress_init_packet_in(ctx, state.value_ctx, state.value_arch, value_packet)?;
-    state.value_ctx = result.value_ctx;
-    state.value_arch = result.value_arch;
+    install_result!(state, result);
     let result =
         rel::psa_egress_init_packet_in(ctx, state.value_ctx, state.value_arch, value_packet)?;
-    state.value_ctx = result.value_ctx;
-    state.value_arch = result.value_arch;
+    install_result!(state, result);
     // Set up packet_out objects
     let value_packet = ObjectState::PacketOut(PacketOut::default()).to_value(ctx.arena_mut())?;
     let result =
         rel::psa_ingress_init_packet_out(ctx, state.value_ctx, state.value_arch, value_packet)?;
-    state.value_ctx = result.value_ctx;
-    state.value_arch = result.value_arch;
+    install_result!(state, result);
     let result =
         rel::psa_egress_init_packet_out(ctx, state.value_ctx, state.value_arch, value_packet)?;
-    state.value_ctx = result.value_ctx;
-    state.value_arch = result.value_arch;
+    install_result!(state, result);
     // Set up global variables
     state.value_ctx =
         rel::psa_ingress_init_globals(ctx, state.value_ctx, state.value_arch, rx.port)?;

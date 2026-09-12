@@ -14,12 +14,8 @@ use super::{
         core::{func as core_func, object::PacketIn},
         externs::{self as external, FuncName, RelName},
         io::Transmission,
-        spec_impl::{
-            func, pgm,
-            rel::{self, CallResult},
-            unpack,
-        },
-        state::SimState,
+        spec_impl::{func, pgm, rel, unpack},
+        state::{SimState, install_result},
     },
     object::CounterArray,
 };
@@ -257,11 +253,6 @@ where
     })
 }
 
-fn install_result(state: &mut SimState, result: CallResult) {
-    state.value_ctx = result.value_ctx;
-    state.value_arch = result.value_arch;
-}
-
 /// Pipeline driver
 pub fn drive_pipe<Interp, Iface, Exn>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
@@ -278,13 +269,12 @@ where
     let pkt = ExternObject::PacketIn(PacketIn::init(&rx.packet)?);
     let value_packet = pkt.to_value(ctx.arena_mut())?;
     let result = rel::ebpf_init_packet_in(ctx, state.value_ctx, state.value_arch, value_packet)?;
-    state.value_ctx = result.value_ctx;
-    state.value_arch = result.value_arch;
+    install_result!(state, result);
     // Setup global variables
     state.value_ctx = rel::ebpf_init_globals(ctx, state.value_ctx, state.value_arch)?;
     // Parse block
     let result = rel::ebpf_parse(ctx, state.value_ctx, state.value_arch)?;
-    install_result(state, result);
+    install_result!(state, result);
     let rejected = get::matches! { ctx.arena(), &result.value_call_result,
         "REJECT errorValue" => |_values| true,
         _ => false,
@@ -294,7 +284,7 @@ where
     }
     // Filter block
     let result = rel::ebpf_filter(ctx, state.value_ctx, state.value_arch)?;
-    install_result(state, result);
+    install_result!(state, result);
     // Check if packet is accepted
     let value_accept =
         rel::lvalue_read_var_global(ctx, state.value_ctx, state.value_arch, "accept")?;

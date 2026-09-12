@@ -11,3 +11,13 @@ pub struct SimState {
     pub value_arch: Value,
     pub txs: Vec<Transmission>,
 }
+
+// Both relation result types carry these fields; keep the call result available
+macro_rules! install_result {
+    ($state:ident, $result:ident $(,)?) => {{
+        $state.value_ctx = $result.value_ctx;
+        $state.value_arch = $result.value_arch;
+    }};
+}
+
+pub(super) use install_result;
