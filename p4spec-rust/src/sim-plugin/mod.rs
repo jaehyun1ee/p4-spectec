@@ -8,3 +8,4 @@ pub mod psa;
 pub mod spec_impl;
 pub mod state;
 pub mod table;
+pub mod v1model;

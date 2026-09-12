@@ -71,3 +71,6 @@ mod ebpf;
 
 #[path = "psa/mod.rs"]
 mod psa;
+
+#[path = "v1model/mod.rs"]
+mod v1model;
