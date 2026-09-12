@@ -7,8 +7,8 @@ use crate::lang::{
     sl::ast::*,
 };
 use crate::pass::structure::ol::ast as ast_ol;
-fn span(line: i64) -> Span {
-    let pos = Position::new("structure.watsup", line, 0);
+fn span(int_line: i64) -> Span {
+    let pos = Position::new("structure.watsup", int_line, 0);
     Span::new(pos.clone(), pos)
 }
 fn id(text: &str) -> Id {
