@@ -1,5 +1,4 @@
 use num_bigint::BigInt;
-use num_traits::{One, Zero};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -11,67 +10,16 @@ use crate::{
     util::json::json,
 };
 
-use super::super::spec_impl::{
+use crate::sim_plugin::spec_impl::{
     func, pack,
     rel::{self, CallResult},
     unpack,
 };
 
-// Bit manipulation
-
-pub fn string_to_bits(text: &str) -> Result<Vec<bool>, ExternError> {
-    let mut bits = Vec::with_capacity(text.len().saturating_mul(4));
-    for char in text.chars() {
-        let int = char.to_digit(16).ok_or_else(|| {
-            ExternError::Failure(format!("invalid hexadecimal packet digit: {char}"))
-        })?;
-        for idx in (0..4).rev() {
-            bits.push(int & (1 << idx) != 0);
-        }
-    }
-    Ok(bits)
-}
-
-pub fn bits_to_string(bits: &[bool]) -> String {
-    bits.chunks(4)
-        .map(|bits| {
-            let int = bits
-                .iter()
-                .fold(0_u8, |int, bit| (int << 1) | u8::from(*bit))
-                << (4 - bits.len());
-            char::from(b"0123456789ABCDEF"[usize::from(int)])
-        })
-        .collect()
-}
-
-pub fn bits_to_int_unsigned(bits: &[bool]) -> BigInt {
-    bits.iter()
-        .fold(BigInt::zero(), |int, bit| (int << 1) + u8::from(*bit))
-}
-
-pub fn bits_to_int_signed(bits: &[bool]) -> Result<BigInt, ExternError> {
-    let sign = bits
-        .first()
-        .ok_or_else(|| ExternError::Failure("empty signed bit string".to_owned()))?;
-    let int = bits_to_int_unsigned(bits);
-    Ok(if *sign {
-        int - (BigInt::one() << bits.len())
-    } else {
-        int
-    })
-}
-
-pub fn int_to_bits_unsigned(int: &BigInt, size: usize) -> Vec<bool> {
-    (0..size)
-        .rev()
-        .map(|idx| (int & (BigInt::one() << idx)) > BigInt::zero())
-        .collect()
-}
-
-pub fn int_to_bits_signed(int: &BigInt, size: usize) -> Vec<bool> {
-    let int = int & ((BigInt::one() << size) - BigInt::one());
-    int_to_bits_unsigned(&int, size)
-}
+use super::{
+    PacketResult,
+    bits::{bits_to_int_unsigned, string_to_bits},
+};
 
 /// Input packet data and its extraction cursor
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -80,19 +28,6 @@ pub struct PacketIn {
     pub bits: Vec<bool>,
     pub idx: usize,
     pub len: usize,
-}
-
-/// Output packet data accumulated by emission
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct PacketOut {
-    pub bits: Vec<bool>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct PacketResult<Pkt> {
-    pub pkt: Pkt,
-    pub result: CallResult,
 }
 
 impl PacketIn {
@@ -387,54 +322,4 @@ impl PacketIn {
             },
         })
     }
-}
-
-impl PacketOut {
-    /// Appends the header's bits to the output packet
-    ///
-    /// ```text
-    /// void emit<T>(in T hdr);
-    /// ```
-    pub fn emit<Interp, Iface, Exn>(
-        &self,
-        ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
-        value_ctx: Value,
-        value_arch: Value,
-    ) -> Result<PacketResult<Self>, Interp::Error>
-    where
-        Iface: Interface,
-        Exn: Extern,
-        Interp: Interpreter<Iface, Exn>,
-    {
-        let value_hdr = func::find_var_e_local(ctx, value_ctx, "hdr")?;
-        let value_bits = func::write_bits_from_value(ctx, value_hdr)?;
-        let bits = get::list(ctx.arena(), &value_bits)
-            .map_err(ExternError::from)?
-            .iter()
-            .map(|value| get::bool(ctx.arena(), value))
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(ExternError::from)?;
-        let pkt = Self {
-            bits: self.bits.iter().copied().chain(bits).collect(),
-        };
-        let value_call_result = pack::return_result(ctx.arena_mut(), None)?;
-        Ok(PacketResult {
-            pkt,
-            result: CallResult {
-                value_ctx,
-                value_arch,
-                value_call_result,
-            },
-        })
-    }
-}
-
-pub fn packet_to_string(pkt_in: &PacketIn, pkt_out: &PacketOut) -> Result<String, ExternError> {
-    let bits: Vec<_> = pkt_out
-        .bits
-        .iter()
-        .copied()
-        .chain(pkt_in.payload()?.iter().copied())
-        .collect();
-    Ok(bits_to_string(&bits))
 }

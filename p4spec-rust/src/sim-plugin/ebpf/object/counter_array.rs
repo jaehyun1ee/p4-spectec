@@ -1,4 +1,4 @@
-use super::super::spec_impl::{func, pack, rel::CallResult, unpack};
+use crate::sim_plugin::spec_impl::{func, pack, rel::CallResult, unpack};
 use crate::{
     lang::data::value::{Value, ValueArena},
     runner::{Extern, ExternError, Interface, Interpreter, RunnerContext},
