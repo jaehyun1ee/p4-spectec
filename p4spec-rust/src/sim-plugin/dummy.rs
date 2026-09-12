@@ -75,9 +75,14 @@ impl Extern for Dummy {
         Interp: Interpreter<Iface, Self>,
     {
         match name {
-            "init_objectState" => {
+            "init_objectState" | "init_archState" => {
+                let name_typ = if name == "init_archState" {
+                    "archState"
+                } else {
+                    "objectState"
+                };
                 let id = crate::phrase!(
-                    node: "objectState".to_owned(),
+                    node: name_typ.to_owned(),
                     span: Span::default(),
                 );
                 let typ = make_typ::var(id, Vec::new());

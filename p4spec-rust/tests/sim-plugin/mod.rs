@@ -39,7 +39,7 @@ fn runner_from_spec<Exn: Extern>(
     let unparser = P4Unparser::from_al_spec(&spec_al);
     Runner::new(
         Global::load(spec_al).unwrap(),
-        AlInterp::new(Config::new(false, false, false)),
+        AlInterp::new(Config::new(true, false, false)),
         BuiltinInterface::new(unparser),
         external,
     )

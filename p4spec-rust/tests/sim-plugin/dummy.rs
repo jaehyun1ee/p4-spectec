@@ -3,7 +3,7 @@ use p4spec_rust::{
     lang::common::source::Span,
     lang::data::{
         typ::TypKind,
-        value::{Value, ValueKind, make},
+        value::{Value, ValueKind, get, make},
     },
     sim_plugin::dummy::Dummy,
     util::json::json,
@@ -108,4 +108,18 @@ fn test_unsupported_extern_fails() {
         &error,
         "unsupported local compile-time known extern function call: static_assert(message, check)"
     ));
+}
+
+#[test]
+fn test_dummy_initializes_null_architecture_state_without_effects() {
+    let mut runner = runner(Dummy);
+    let (value, effected) = runner
+        .context()
+        .call_extern_func("init_archState", &[], &[])
+        .unwrap();
+    assert_eq!(get::external(runner.arena(), &value).unwrap(), &json::Null);
+    assert!(
+        matches!(runner.arena().typ(&value).as_ref(), TypKind::Var(id, _) if id.node == "archState")
+    );
+    assert!(!effected);
 }

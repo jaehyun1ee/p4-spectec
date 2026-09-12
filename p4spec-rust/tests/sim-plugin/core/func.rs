@@ -6,7 +6,7 @@ use p4spec_rust::{
         common::source::Span,
         data::{
             typ::make as make_typ,
-            value::{Value, make},
+            value::{Value, get, make},
         },
     },
     sim_plugin::dummy::Dummy,
@@ -115,4 +115,66 @@ fn test_static_assert_false_custom_message() {
     let error = runner.eval_program("Program_ok", program).unwrap_err();
 
     assert!(has_extern_failure(&error, "custom assertion failure"));
+}
+
+#[test]
+fn test_verify_reads_both_arguments_even_when_true() {
+    let (mut runner, value_ctx, value_arch) = super::packet_runner(0, 0);
+    let value_signal =
+        make::text(runner.arena_mut(), "signal".to_owned(), Span::default()).unwrap();
+    runner
+        .context()
+        .interp_mut()
+        .values_var
+        .insert("toSignal".to_owned(), value_signal);
+    for check in [true, false] {
+        let value_bool = make::bool(runner.arena_mut(), check, Span::default()).unwrap();
+        let mixop = p4spec_rust::frontend::parse::parse_mixop("_B bool").unwrap();
+        let value_case =
+            p4spec_rust::lang::common::notation::mixop::Mixop::fill(&mixop, vec![value_bool])
+                .unwrap();
+        let value_check = make::case(
+            runner.arena_mut(),
+            make_typ::bool().node.into(),
+            value_case,
+            Span::default(),
+        )
+        .unwrap();
+        runner
+            .context()
+            .interp_mut()
+            .values_var
+            .insert("check".to_owned(), value_check);
+        runner.context().interp_mut().calls.clear();
+        let output = p4spec_rust::sim_plugin::core::func::verify(
+            &mut runner.context(),
+            value_ctx,
+            value_arch,
+        )
+        .unwrap();
+        assert_eq!(output.value_ctx, value_ctx);
+        assert_eq!(output.value_arch, value_arch);
+        let ctx = runner.context();
+        let names: Vec<_> = ctx
+            .interp()
+            .calls
+            .iter()
+            .map(|(_, values)| {
+                get::text(
+                    ctx.arena(),
+                    get::case(ctx.arena(), &values[0]).unwrap().args()[0],
+                )
+                .unwrap()
+            })
+            .collect();
+        assert_eq!(names, ["check", "toSignal"]);
+        if !check {
+            assert_eq!(
+                *get::case(ctx.arena(), &output.value_call_result)
+                    .unwrap()
+                    .args()[0],
+                value_signal
+            );
+        }
+    }
 }
