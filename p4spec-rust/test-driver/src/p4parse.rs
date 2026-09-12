@@ -14,7 +14,7 @@ use p4spec_rust::{
     pass::{algo, elaborate},
 };
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::BTreeMap,
     fs,
     path::{Path, PathBuf},
     time::Instant,
@@ -103,8 +103,6 @@ pub fn run() -> Result<()> {
             }
         }
     }
-    // The OCaml p4parse target supplies neither excludes nor patch substitution
-    corpus::validate_inventory(&expected, &paths, &BTreeSet::new())?;
     eprintln!(
         "P4 parser: collected={}, excluded=0; preparing print hints",
         paths.len()

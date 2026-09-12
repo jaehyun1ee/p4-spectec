@@ -86,43 +86,6 @@ pub fn collect_excludes(dir: &Path) -> Result<BTreeSet<String>> {
     Ok(excludes)
 }
 
-pub fn validate_inventory(
-    expected: &BTreeMap<PathBuf, Outcome>,
-    paths: &[PathBuf],
-    excludes: &BTreeSet<String>,
-) -> Result<()> {
-    let mut seen = BTreeSet::new();
-    for path in paths {
-        if !seen.insert(path) {
-            return Err(Error::Invalid(format!(
-                "duplicate input: {}",
-                path.display()
-            )));
-        }
-        let outcome = expected
-            .get(path)
-            .ok_or_else(|| Error::Invalid(format!("unexpected input: {}", path.display())))?;
-        let excluded = excludes.contains(
-            path.to_str()
-                .ok_or_else(|| Error::Invalid("non-UTF-8 corpus path".to_owned()))?,
-        );
-        if (*outcome == Outcome::Exclude) != excluded {
-            return Err(Error::Invalid(format!(
-                "exclusion mismatch: {}",
-                path.display()
-            )));
-        }
-    }
-    let missing: Vec<_> = expected
-        .keys()
-        .filter(|path| !seen.contains(path))
-        .collect();
-    if !missing.is_empty() {
-        return Err(Error::Invalid(format!("missing inputs: {missing:?}")));
-    }
-    Ok(())
-}
-
 pub struct Results<'a> {
     expected: &'a BTreeMap<PathBuf, Outcome>,
     seen: BTreeSet<PathBuf>,

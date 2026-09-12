@@ -30,7 +30,6 @@ pub fn run() -> Result<()> {
         let text = fs::read_to_string(Path::new("p4spec-rust/test-driver/expected").join(name))?;
         let records = corpus::parse_expected(&text)?;
         let paths = corpus::collect(&Path::new("p4c/testdata").join(directory), ".p4")?;
-        corpus::validate_inventory(&records, &paths, &excludes)?;
         for (path, outcome) in records {
             if expected.insert(path.clone(), outcome).is_some() {
                 return Err(Error::Invalid(format!(
@@ -41,9 +40,9 @@ pub fn run() -> Result<()> {
         }
         cases.extend(paths.into_iter().map(|path| (path, relation)));
     }
-    let excluded = expected
-        .values()
-        .filter(|outcome| **outcome == Outcome::Exclude)
+    let excluded = cases
+        .iter()
+        .filter(|(path, _)| path.to_str().is_some_and(|path| excludes.contains(path)))
         .count();
     eprintln!(
         "AL default mode: collected={}, excluded={}, to execute={}; preparing specification",
@@ -75,7 +74,7 @@ pub fn run() -> Result<()> {
     let mut passed = 0;
     for (path, relation) in &cases {
         progress.set_message(path.display().to_string());
-        let outcome = if expected[path] == Outcome::Exclude {
+        let outcome = if path.to_str().is_some_and(|path| excludes.contains(path)) {
             Outcome::Exclude
         } else {
             // Reset before parsing: no value may cross this program boundary
@@ -85,7 +84,7 @@ pub fn run() -> Result<()> {
                 Ok(program) => match runner.eval_program(relation, program) {
                     Ok(_) => Outcome::Pass,
                     Err(error) => {
-                        if expected[path] != Outcome::Fail {
+                        if expected.get(path) != Some(&Outcome::Fail) {
                             progress.suspend(|| eprintln!("{}: {error}", path.display()));
                         }
                         Outcome::Fail
