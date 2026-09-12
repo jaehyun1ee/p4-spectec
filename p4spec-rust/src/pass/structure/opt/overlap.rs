@@ -136,15 +136,7 @@ fn disjoint_exp_literal(exp_a: &Exp, exp_b: &Exp) -> Result<bool, StructureError
             disjoint_notexp_literal(notexp_a, notexp_b, &exp_a.span)
         }
         (ExpKind::List(exps_a), ExpKind::List(exps_b)) => {
-            if exps_a.len() != exps_b.len() {
-                Ok(true)
-            } else {
-                disjoint_exps_literal(
-                    &exps_a.iter().collect::<Vec<_>>(),
-                    &exps_b.iter().collect::<Vec<_>>(),
-                    &exp_a.span,
-                )
-            }
+            disjoint_list_exp_literal(exps_a, exps_b, &exp_a.span)
         }
         _ => Ok(false),
     }
@@ -181,6 +173,22 @@ fn disjoint_notexp_literal(
         return Ok(true);
     }
     disjoint_exps_literal(&notexp_a.args(), &notexp_b.args(), span)
+}
+
+fn disjoint_list_exp_literal(
+    exps_a: &[Exp],
+    exps_b: &[Exp],
+    span: &Span,
+) -> Result<bool, StructureError> {
+    if exps_a.len() != exps_b.len() {
+        Ok(true)
+    } else {
+        disjoint_exps_literal(
+            &exps_a.iter().collect::<Vec<_>>(),
+            &exps_b.iter().collect::<Vec<_>>(),
+            span,
+        )
+    }
 }
 
 fn overlap_typ(
