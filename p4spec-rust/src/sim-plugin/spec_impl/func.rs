@@ -1,3 +1,5 @@
+//! Helpers for invoking functions in the spec
+
 use crate::{
     lang::{
         common::source::Span,
@@ -424,4 +426,42 @@ where
     get::opt(ctx.arena(), &value_opt)
         .map_err(ExternError::from)?
         .ok_or_else(|| ExternError::Failure("object state not found".to_owned()).into())
+}
+
+pub fn cast_op<Interp, Iface, Exn>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+    value_typ: Value,
+    value: Value,
+) -> Result<Value, Interp::Error>
+where
+    Iface: Interface,
+    Exn: Extern,
+    Interp: Interpreter<Iface, Exn>,
+{
+    ctx.call_func("cast_op", &[], &[value_typ, value])
+}
+
+pub fn find_arch_state_e<Interp, Iface, Exn>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+    value_arch: Value,
+) -> Result<Value, Interp::Error>
+where
+    Iface: Interface,
+    Exn: Extern,
+    Interp: Interpreter<Iface, Exn>,
+{
+    ctx.call_func("find_archState_e", &[], &[value_arch])
+}
+
+pub fn update_arch_state_e<Interp, Iface, Exn>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+    value_arch: Value,
+    value_state: Value,
+) -> Result<Value, Interp::Error>
+where
+    Iface: Interface,
+    Exn: Extern,
+    Interp: Interpreter<Iface, Exn>,
+{
+    ctx.call_func("update_archState_e", &[], &[value_arch, value_state])
 }

@@ -1,3 +1,5 @@
+pub(super) use crate::lang::data::serialize::typ::*;
+
 /// OCaml-compatible JSON codecs for IL data
 use std::cell::Cell;
 
@@ -159,31 +161,6 @@ pub(super) fn encode_option<T>(value: Option<&T>, encode: impl FnOnce(&T) -> jso
     value.map_or(json::Null, encode)
 }
 
-pub(super) fn decode_id(json: &json) -> Result<ast::Id, DecodeError> {
-    source::decode_phrase(json, |json| Ok(string(json)?.to_owned()))
-}
-
-pub(super) fn encode_id(id: &ast::Id) -> json {
-    source::encode_phrase(id, |id| json!(id))
-}
-
-pub(super) fn decode_iter(json: &json) -> Result<Iter, DecodeError> {
-    let (tag, fields) = variant(json)?;
-    match (tag, fields) {
-        ("Opt", []) => Ok(Iter::Opt),
-        ("List", []) => Ok(Iter::List),
-        ("Opt" | "List", _) => Err(DecodeError::Expected("valid IL iterator arity")),
-        (unknown, _) => Err(DecodeError::UnknownVariant(unknown.to_owned())),
-    }
-}
-
-pub(super) fn encode_iter(iter: Iter) -> json {
-    match iter {
-        Iter::Opt => json!(["Opt"]),
-        Iter::List => json!(["List"]),
-    }
-}
-
 pub(super) fn decode_var(json: &json) -> Result<ast::Var, DecodeError> {
     match array(json)? {
         [id, typ, iters] => Ok(ast::Var {
@@ -201,83 +178,6 @@ pub(super) fn encode_var(variable: &ast::Var) -> json {
         encode_typ(&variable.typ),
         encode_list(&variable.iters, |iter| encode_iter(*iter))
     ])
-}
-
-pub(super) fn decode_typ(json: &json) -> Result<ast::Typ, DecodeError> {
-    source::decode_phrase(json, decode_typ_kind)
-}
-
-pub(super) fn encode_typ(typ: &ast::Typ) -> json {
-    source::encode_phrase(typ, encode_typ_kind)
-}
-
-pub(super) fn decode_targ(json: &json) -> Result<ast::Targ, DecodeError> {
-    source::decode_phrase(json, decode_typ_kind)
-}
-
-pub(super) fn encode_targ(targ: &ast::Targ) -> json {
-    source::encode_phrase(targ, encode_typ_kind)
-}
-
-pub(super) fn decode_tparam(json: &json) -> Result<ast::TParam, DecodeError> {
-    source::decode_phrase(json, |json| Ok(string(json)?.to_owned()))
-}
-
-pub(super) fn encode_tparam(tparam: &ast::TParam) -> json {
-    source::encode_phrase(tparam, |tparam| json!(tparam))
-}
-
-pub(super) fn decode_typ_kind(json: &json) -> Result<TypKind, DecodeError> {
-    let (tag, fields) = variant(json)?;
-    match (tag, fields) {
-        ("BoolT", []) => Ok(TypKind::Bool),
-        ("NumT", [typ]) => Ok(TypKind::Num(xl::decode_num_typ(typ)?)),
-        ("TextT", []) => Ok(TypKind::Text),
-        ("VarT", [id, targs]) => Ok(TypKind::Var(
-            decode_id(id)?,
-            decode_list(targs, decode_targ)?,
-        )),
-        ("TupleT", [types]) => Ok(TypKind::Tuple(decode_list(types, decode_typ)?)),
-        ("IterT", [typ, iter]) => Ok(TypKind::Iter(
-            Box::new(decode_typ(typ)?),
-            decode_iter(iter)?,
-        )),
-        ("FuncT", [tparams, params, result]) => {
-            let tparams = decode_list(tparams, decode_tparam)?;
-            let typs_params = decode_list(params, decode_typ)?;
-            let typ_ret = decode_typ(result)?;
-            let typ_ret = Box::new(typ_ret);
-            let func_typ = ast::FuncTyp {
-                tparams,
-                typs_params,
-                typ_ret,
-            };
-            Ok(TypKind::Func(func_typ))
-        }
-        ("BoolT" | "NumT" | "TextT" | "VarT" | "TupleT" | "IterT" | "FuncT", _) => {
-            Err(DecodeError::Expected("valid IL type arity"))
-        }
-        (unknown, _) => Err(DecodeError::UnknownVariant(unknown.to_owned())),
-    }
-}
-
-pub(super) fn encode_typ_kind(typ: &TypKind) -> json {
-    match typ {
-        TypKind::Bool => json!(["BoolT"]),
-        TypKind::Num(typ) => json!(["NumT", xl::encode_num_typ(*typ)]),
-        TypKind::Text => json!(["TextT"]),
-        TypKind::Var(id, targs) => {
-            json!(["VarT", encode_id(id), encode_list(targs, encode_targ)])
-        }
-        TypKind::Tuple(types) => json!(["TupleT", encode_list(types, encode_typ)]),
-        TypKind::Iter(typ, iter) => json!(["IterT", encode_typ(typ), encode_iter(*iter)]),
-        TypKind::Func(func_typ) => json!([
-            "FuncT",
-            encode_list(&func_typ.tparams, encode_tparam),
-            encode_list(&func_typ.typs_params, encode_typ),
-            encode_typ(&func_typ.typ_ret)
-        ]),
-    }
 }
 
 pub(super) fn decode_not_typ(json: &json) -> Result<ast::NotTyp, DecodeError> {

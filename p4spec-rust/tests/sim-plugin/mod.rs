@@ -68,3 +68,6 @@ mod table;
 
 #[path = "ebpf/mod.rs"]
 mod ebpf;
+
+#[path = "psa/mod.rs"]
+mod psa;

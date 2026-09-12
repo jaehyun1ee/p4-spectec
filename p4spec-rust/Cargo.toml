@@ -9,7 +9,7 @@ clap = { version = "4.6.6", features = ["derive"] }
 hashbrown = { version = "=0.17.1", default-features = false }
 imbl = { version = "7.0.1", default-features = false }
 lalrpop-util = { version = "0.23.1", default-features = false }
-num-bigint = "0.4.6"
+num-bigint = { version = "0.4.6", features = ["serde"] }
 num-traits = "0.2.19"
 serde = { version = "1.0.210", features = ["derive"] }
 serde_json = { version = "1.0.128", features = ["unbounded_depth"] }

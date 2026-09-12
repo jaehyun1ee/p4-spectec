@@ -1,3 +1,5 @@
+//! Packs an IL value representing a P4 value from a Rust type
+
 use num_bigint::BigInt;
 
 use crate::{
@@ -11,6 +13,7 @@ use crate::{
     runner::ExternError,
 };
 
+/// `D int`
 pub fn p4_arbitrary_int(arena: &mut ValueArena, int: BigInt) -> Result<Value, ExternError> {
     let value_int = make::int(arena, int, Span::default())?;
     Ok(make::case_shaped_(
@@ -22,6 +25,7 @@ pub fn p4_arbitrary_int(arena: &mut ValueArena, int: BigInt) -> Result<Value, Ex
     )?)
 }
 
+/// `nat W int`
 pub fn p4_fixed_bit(
     arena: &mut ValueArena,
     width: BigInt,
@@ -72,6 +76,19 @@ pub fn reject_transition(arena: &mut ValueArena, name: &str) -> Result<Value, Ex
         "REJECT errorValue",
         vec![value_err],
         "rejectTransitionResult",
+        Span::default(),
+    )?)
+}
+
+/// `tid . id`
+pub fn p4_enum(arena: &mut ValueArena, id_enum: &str, id: &str) -> Result<Value, ExternError> {
+    let value_enum = make::text(arena, id_enum.to_owned(), Span::default())?;
+    let value_id = make::text(arena, id.to_owned(), Span::default())?;
+    Ok(make::case_shaped_(
+        arena,
+        "tid '.' id",
+        vec![value_enum, value_id],
+        "value",
         Span::default(),
     )?)
 }

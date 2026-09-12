@@ -41,6 +41,30 @@ pub fn p4_string(arena: &ValueArena, value: &Value) -> Result<String, ExternErro
     }
 }
 
+pub fn p4_enum(arena: &ValueArena, value: &Value) -> Result<(String, String), ExternError> {
+    get::matches! { arena, value,
+        "tid '.' id" => |values| {
+            let [value_enum, value_id] = values.as_slice() else {
+                return Err(ValueError::ExpectedCount { expected: 2, actual: values.len() }.into());
+            };
+            Ok((get::text(arena, value_enum)?.to_owned(), get::text(arena, value_id)?.to_owned()))
+        },
+        _ => Err(ExternError::Failure("expected P4 enum value".to_owned())),
+    }
+}
+
+pub fn p4_tuple(arena: &ValueArena, value: &Value) -> Result<Vec<Value>, ExternError> {
+    get::matches! { arena, value,
+        "TUPLE `( value* `)" => |values| {
+            let [value_list] = values.as_slice() else {
+                return Err(ValueError::ExpectedCount { expected: 1, actual: values.len() }.into());
+            };
+            Ok(get::list(arena, value_list)?.to_vec())
+        },
+        _ => Err(ExternError::Failure("expected P4 tuple value".to_owned())),
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PrecisionNumber {
     pub width: BigInt,
@@ -137,4 +161,40 @@ pub fn signed_int(int: &BigInt) -> Result<i64, ExternError> {
     int.to_i64()
         .filter(|int| (-(1_i64 << 62)..(1_i64 << 62)).contains(int))
         .ok_or_else(|| ExternError::Failure(format!("integer outside OCaml int range: {int}")))
+}
+
+pub fn parse_signed_int(text: &str) -> Result<i64, ExternError> {
+    let invalid = || ExternError::Failure(format!("invalid integer: {text}"));
+    let (negative, digits) = match text.as_bytes().first() {
+        Some(b'-') => (true, &text[1..]),
+        Some(b'+') => (false, &text[1..]),
+        _ => (false, text),
+    };
+    let (radix, unsigned, digits) = if digits.as_bytes().first() == Some(&b'0') {
+        match digits.as_bytes().get(1).map(u8::to_ascii_lowercase) {
+            Some(b'x') => (16, true, &digits[2..]),
+            Some(b'o') => (8, true, &digits[2..]),
+            Some(b'b') => (2, true, &digits[2..]),
+            Some(b'u') => (10, true, &digits[2..]),
+            _ => (10, false, digits),
+        }
+    } else {
+        (10, false, digits)
+    };
+    if !digits
+        .chars()
+        .next()
+        .is_some_and(|digit| digit.is_ascii() && digit.is_digit(radix))
+    {
+        return Err(invalid());
+    }
+    let digits = digits.replace('_', "");
+    let int = BigInt::parse_bytes(digits.as_bytes(), radix).ok_or_else(invalid)?;
+    if unsigned {
+        let int = int.to_i64().filter(|int| *int >= 0).ok_or_else(invalid)?;
+        let int = if negative { int.wrapping_neg() } else { int };
+        Ok(int.wrapping_shl(1) >> 1)
+    } else {
+        signed_int(&if negative { -int } else { int }).map_err(|_| invalid())
+    }
 }

@@ -3,6 +3,7 @@ use crate::{
     lang::{
         common::source::Span,
         data::{
+            serialize::DecodeError,
             typ,
             value::{Value, ValueArena, get, make},
         },
@@ -39,6 +40,15 @@ pub(crate) fn rel_name(name: &str) -> Result<RelName, ExternError> {
         _ => Err(ExternError::Failure(format!(
             "unimplemented extern relation: {name}"
         ))),
+    }
+}
+
+impl From<DecodeError> for ExternError {
+    fn from(error: DecodeError) -> Self {
+        match error {
+            DecodeError::Value(error) => Self::Value(error),
+            error => Self::Failure(error.to_string()),
+        }
     }
 }
 
