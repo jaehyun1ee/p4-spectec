@@ -52,3 +52,8 @@ mod opt;
 mod pretty;
 #[path = "prettify.rs"]
 mod prettify;
+
+#[path = "totalize.rs"]
+mod totalize;
+#[path = "dangle.rs"]
+mod dangle;

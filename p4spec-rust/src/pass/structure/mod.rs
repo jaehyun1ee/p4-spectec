@@ -13,3 +13,6 @@ mod tests;
 
 mod pretty;
 mod prettify;
+
+mod totalize;
+mod dangle;
