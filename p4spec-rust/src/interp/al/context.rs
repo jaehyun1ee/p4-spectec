@@ -28,7 +28,7 @@ use crate::{
 };
 
 use super::{
-    Al,
+    AlInterp,
     backtrack::{Backtrack, backtrack, backtrack_from_result},
     error::{EntityKind, Error, ErrorKind},
 };
@@ -264,12 +264,12 @@ impl<'global> Context<'global> {
 
     // - Expression mapping
 
-    pub fn map_list<I: Interface, E: Extern>(
+    pub fn map_list<Iface: Interface, Exn: Extern>(
         &self,
-        runner: &mut RunnerContext<'_, Al, I, E>,
+        runner: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
         span: &Span,
         vars: &[ast::Var],
-        mut eval: impl FnMut(&mut RunnerContext<'_, Al, I, E>, &Self) -> Backtrack<Value>,
+        mut eval: impl FnMut(&mut RunnerContext<'_, AlInterp, Iface, Exn>, &Self) -> Backtrack<Value>,
     ) -> Backtrack<Vec<Value>> {
         let rows = backtrack_from_result!(self.list_values(runner.arena(), vars), span);
         // Copy handles before the callback can allocate in the arena
@@ -290,12 +290,12 @@ impl<'global> Context<'global> {
         Backtrack::Ok(values)
     }
 
-    pub fn map_opt<I: Interface, E: Extern>(
+    pub fn map_opt<Iface: Interface, Exn: Extern>(
         &self,
-        runner: &mut RunnerContext<'_, Al, I, E>,
+        runner: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
         span: &Span,
         vars: &[ast::Var],
-        mut eval: impl FnMut(&mut RunnerContext<'_, Al, I, E>, &Self) -> Backtrack<Value>,
+        mut eval: impl FnMut(&mut RunnerContext<'_, AlInterp, Iface, Exn>, &Self) -> Backtrack<Value>,
     ) -> Backtrack<Option<Value>> {
         let values = backtrack_from_result!(self.opt_values(runner.arena(), vars), span);
         let Some(values) = values else {
@@ -310,13 +310,13 @@ impl<'global> Context<'global> {
 
     // - Premise bindings
 
-    pub fn yield_list<I: Interface, E: Extern>(
+    pub fn yield_list<Iface: Interface, Exn: Extern>(
         mut self,
-        runner: &mut RunnerContext<'_, Al, I, E>,
+        runner: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
         span: &Span,
         vars_bound: &[ast::Var],
         vars_bind: &[ast::Var],
-        mut eval: impl FnMut(&mut RunnerContext<'_, Al, I, E>, Self) -> Backtrack<Self>,
+        mut eval: impl FnMut(&mut RunnerContext<'_, AlInterp, Iface, Exn>, Self) -> Backtrack<Self>,
     ) -> Backtrack<Self> {
         let rows = backtrack_from_result!(self.list_values(runner.arena(), vars_bound), span);
         let rows: Vec<_> = rows.into_iter().map(<[Value]>::to_vec).collect();
@@ -339,13 +339,13 @@ impl<'global> Context<'global> {
         Backtrack::Ok(self)
     }
 
-    pub fn yield_opt<I: Interface, E: Extern>(
+    pub fn yield_opt<Iface: Interface, Exn: Extern>(
         mut self,
-        runner: &mut RunnerContext<'_, Al, I, E>,
+        runner: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
         span: &Span,
         vars_bound: &[ast::Var],
         vars_bind: &[ast::Var],
-        mut eval: impl FnMut(&mut RunnerContext<'_, Al, I, E>, Self) -> Backtrack<Self>,
+        mut eval: impl FnMut(&mut RunnerContext<'_, AlInterp, Iface, Exn>, Self) -> Backtrack<Self>,
     ) -> Backtrack<Self> {
         let values = backtrack_from_result!(self.opt_values(runner.arena(), vars_bound), span);
         let mut values_bind = vec![Vec::new(); vars_bind.len()];

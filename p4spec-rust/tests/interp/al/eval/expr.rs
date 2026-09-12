@@ -2,7 +2,7 @@ use p4spec_rust::interp::al::error::{HostErrorKind, TraceErrorKind};
 use std::{cell::RefCell, rc::Rc};
 
 use p4spec_rust::{
-    interp::al::{Al, Config, context::Global},
+    interp::al::{AlInterp, Config, context::Global},
     lang::{
         al::ast,
         common::{
@@ -59,9 +59,9 @@ fn eval(
     expression: ast::Exp,
 ) -> Result<(ValueArena, Value), p4spec_rust::interp::al::error::Error> {
     let global = Global::load(vec![function("test", expression)]).unwrap();
-    let mut runner = Runner::<Al, _, _>::new(
+    let mut runner = Runner::<AlInterp, _, _>::new(
         global,
-        Config::new(false, false, false),
+        AlInterp::new(Config::new(false, false, false)),
         NullInterface,
         NullExtern,
     );
@@ -82,9 +82,9 @@ fn test_repeated_evaluation_reuses_the_expression_type_allocation_without_call_c
     let expression = list(vec![int(1), int(2)]);
     let typ = expression.note.clone();
     let global = Global::load(vec![function("test", expression)]).unwrap();
-    let mut runner = Runner::<Al, _, _>::new(
+    let mut runner = Runner::<AlInterp, _, _>::new(
         global,
-        Config::new(false, false, false),
+        AlInterp::new(Config::new(false, false, false)),
         NullInterface,
         NullExtern,
     );
@@ -369,9 +369,9 @@ fn test_boolean_operators_evaluate_both_operands_in_order() {
         defs.push(p4spec_rust::phrase!(node: ast::DefKind::MetaFunc(ast::MetaFuncDef::Builtin(ast::BuiltinFunc { id: id(name), tparams: vec![], params: vec![], typ: typ::make::bool(), hints: vec![] })), span: Span::default()));
     }
     let calls = Rc::new(RefCell::new(vec![]));
-    let mut runner = Runner::<Al, _, _>::new(
+    let mut runner = Runner::<AlInterp, _, _>::new(
         Global::load(defs).unwrap(),
-        Config::new(false, false, false),
+        AlInterp::new(Config::new(false, false, false)),
         RecordingInterface(calls.clone()),
         NullExtern,
     );
@@ -402,9 +402,9 @@ fn test_numeric_errors_are_fatal_before_else_fallback() {
             p4spec_rust::phrase!(node: ast::ClauseKind { args: vec![], exp: int(42), prems: vec![] }, span: Span::default()),
         );
     }
-    let mut runner = Runner::<Al, _, _>::new(
+    let mut runner = Runner::<AlInterp, _, _>::new(
         Global::load(vec![def]).unwrap(),
-        Config::new(false, false, false),
+        AlInterp::new(Config::new(false, false, false)),
         NullInterface,
         NullExtern,
     );
@@ -454,9 +454,9 @@ fn test_iteration_evaluates_each_bound_element_and_preserves_empty_options() {
                 p4spec_rust::phrase!(node: ast::ArgKind::Exp(Box::new(signature)), span: Span::default()),
             ];
         }
-        let mut runner = Runner::<Al, _, _>::new(
+        let mut runner = Runner::<AlInterp, _, _>::new(
             Global::load(vec![def]).unwrap(),
-            Config::new(false, false, false),
+            AlInterp::new(Config::new(false, false, false)),
             NullInterface,
             NullExtern,
         );
@@ -572,9 +572,9 @@ fn test_list_iteration_zips_values_without_rebinding_the_parent() {
             .map(|exp| p4spec_rust::phrase!(node: ast::ArgKind::Exp(Box::new(exp)), span: Span::default()))
             .collect();
     }
-    let mut runner = Runner::<Al, _, _>::new(
+    let mut runner = Runner::<AlInterp, _, _>::new(
         Global::load(vec![def]).unwrap(),
-        Config::new(false, false, false),
+        AlInterp::new(Config::new(false, false, false)),
         NullInterface,
         NullExtern,
     );
@@ -648,9 +648,9 @@ fn test_call_arguments_substitute_local_types_and_pass_function_values() {
         typ: typ_func, hints: vec![],
     })), span: Span::default());
     let seen = Rc::new(RefCell::new(vec![]));
-    let mut runner = Runner::<Al, _, _>::new(
+    let mut runner = Runner::<AlInterp, _, _>::new(
         Global::load(vec![outer, capture, function("answer", int(42))]).unwrap(),
-        Config::new(false, false, false),
+        AlInterp::new(Config::new(false, false, false)),
         TypeInterface(seen.clone()),
         NullExtern,
     );
@@ -710,9 +710,9 @@ def $destructure() = $sum_pair(($updated())[0])
     let spec_el = parse_string(source).unwrap();
     let spec_il = elaborate::elaborate(spec_el).unwrap();
     let spec_al = algo::convert(spec_il).unwrap();
-    let mut runner = Runner::<Al, _, _>::new(
+    let mut runner = Runner::<AlInterp, _, _>::new(
         Global::load(spec_al).unwrap(),
-        Config::new(false, false, false),
+        AlInterp::new(Config::new(false, false, false)),
         NullInterface,
         NullExtern,
     );
@@ -749,9 +749,9 @@ def $first(ns) = ns[0]
     let spec_el = parse_string(source).unwrap();
     let spec_il = elaborate::elaborate(spec_el).unwrap();
     let spec_al = algo::convert(spec_il).unwrap();
-    let mut runner = Runner::<Al, _, _>::new(
+    let mut runner = Runner::<AlInterp, _, _>::new(
         Global::load(spec_al).unwrap(),
-        Config::new(false, false, false),
+        AlInterp::new(Config::new(false, false, false)),
         NullInterface,
         NullExtern,
     );
@@ -806,9 +806,9 @@ fn test_builtin_failure_remains_typed_in_public_error_tree() {
         ast::ExpKind::Call(id("missing_builtin"), vec![], vec![]),
         typ::make::int(),
     );
-    let mut runner = Runner::<Al, _, _>::new(
+    let mut runner = Runner::<AlInterp, _, _>::new(
         Global::load(vec![function("test", call), builtin]).unwrap(),
-        Config::new(false, false, false),
+        AlInterp::new(Config::new(false, false, false)),
         BuiltinInterface::new(p4spec_rust::interface::p4::unparse::P4Unparser::new()),
         NullExtern,
     );

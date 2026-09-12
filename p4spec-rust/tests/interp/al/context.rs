@@ -3,7 +3,7 @@ use p4spec_rust::lang::data::value::ValueArena;
 
 use p4spec_rust::{
     interp::al::{
-        Al, Config,
+        AlInterp, Config,
         backtrack::Backtrack,
         context::{Context, Global, Scope},
         error::{EntityKind, ErrorKind},
@@ -210,9 +210,9 @@ fn test_missing_value_reports_iterator_path_and_lookup_span() {
 
 #[test]
 fn test_map_opt_requires_agreement_and_preserves_parent() {
-    let mut runner = Runner::<Al, _, _>::new(
+    let mut runner = Runner::<AlInterp, _, _>::new(
         Global::load(vec![]).unwrap(),
-        Config::new(false, false, false),
+        AlInterp::new(Config::new(false, false, false)),
         NullInterface,
         NullExtern,
     );
@@ -297,9 +297,9 @@ fn test_map_opt_requires_agreement_and_preserves_parent() {
 
 #[test]
 fn test_map_list_transposes_in_order_without_leaking_bindings() {
-    let mut runner = Runner::<Al, _, _>::new(
+    let mut runner = Runner::<AlInterp, _, _>::new(
         Global::load(vec![]).unwrap(),
-        Config::new(false, false, false),
+        AlInterp::new(Config::new(false, false, false)),
         NullInterface,
         NullExtern,
     );
@@ -387,9 +387,9 @@ fn test_map_list_transposes_in_order_without_leaking_bindings() {
 
 #[test]
 fn test_iteration_rejects_wrong_value_kind_at_variable_span() {
-    let mut runner = Runner::<Al, _, _>::new(
+    let mut runner = Runner::<AlInterp, _, _>::new(
         Global::load(vec![]).unwrap(),
-        Config::new(false, false, false),
+        AlInterp::new(Config::new(false, false, false)),
         NullInterface,
         NullExtern,
     );

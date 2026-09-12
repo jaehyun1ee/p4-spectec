@@ -1,5 +1,7 @@
 //! Types shared by the intermediate language representations
 
+use serde_derive_state::{DeserializeState, SerializeState};
+
 use std::cmp::Ordering;
 
 use crate::lang::{
@@ -14,7 +16,9 @@ use crate::phrase;
 
 pub type Typ = Phrase<TypKind>;
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, SerializeState, DeserializeState)]
+#[serde(serialize_state = "State", ser_parameters = "State")]
+#[serde(deserialize_state = "State", de_parameters = "State")]
 pub enum TypKind {
     /// `bool`
     Bool,
@@ -23,19 +27,24 @@ pub enum TypKind {
     /// `text`
     Text,
     /// `id (`<` list(targ, `,`) `>`)?`
-    Var(Id, Vec<Typ>),
+    Var(#[serde(state)] Id, #[serde(state)] Vec<Typ>),
     /// `(` list(typ, `,`) `)`
-    Tuple(Vec<Typ>),
+    Tuple(#[serde(state)] Vec<Typ>),
     /// `typ iter`
-    Iter(Box<Typ>, Iter),
+    Iter(#[serde(state)] Box<Typ>, Iter),
     /// `<` list(tparam, `,`) `>` `(` list(typ, `,`) `)` `:` typ
-    Func(FuncTyp),
+    Func(#[serde(state)] FuncTyp),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, SerializeState, DeserializeState)]
+#[serde(serialize_state = "State", ser_parameters = "State")]
+#[serde(deserialize_state = "State", de_parameters = "State")]
 pub struct FuncTyp {
+    #[serde(state)]
     pub tparams: Vec<TId>,
+    #[serde(state)]
     pub typs_params: Vec<Typ>,
+    #[serde(state)]
     pub typ_ret: Box<Typ>,
 }
 

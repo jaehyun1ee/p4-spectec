@@ -221,7 +221,7 @@ fn test_run_al_native_success_and_multiple_spec_paths() {
 }
 
 #[test]
-fn test_run_al_initializes_placeholder_extern_objects() {
+fn test_run_al_initializes_dummy_extern_objects() {
     let repo = repo();
     let output = binary()
         .args(["run", "--al"])
@@ -353,7 +353,7 @@ fn test_run_help_lists_only_implemented_controls() {
     for flag in ["--al", "--rel", "--det", "--guard", "--no-cache"] {
         assert!(usage.contains(flag));
     }
-    for flag in ["--trace", "--profile"] {
+    for flag in ["--trace", "--profile", "--arch"] {
         assert!(!usage.contains(flag));
     }
 }
@@ -373,5 +373,177 @@ fn test_run_al_cache_flag_controls_public_input_guards() {
         } else {
             assert!(String::from_utf8_lossy(&output.stderr).contains("relation input"));
         }
+    }
+}
+
+fn sim_command(arch: &str) -> Command {
+    let repo = repo();
+    let path = repo.join("p4spec/test/micro").join(format!("sim-{arch}"));
+    let mut command = binary();
+    command
+        .args(["sim", "--al"])
+        .arg(repo.join("spec"))
+        .args(["--arch", arch, "-p"])
+        .arg(path.join(format!("{arch}.p4")))
+        .arg("-i")
+        .arg(repo.join("p4c/p4include"));
+    command
+}
+
+#[test]
+fn test_sim_help_lists_native_controls_without_processing_inputs() {
+    let output = binary()
+        .args(["sim", "missing.watsup", "--help"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    assert!(output.stderr.is_empty());
+    let usage = String::from_utf8(output.stdout).unwrap();
+    for flag in [
+        "<PATH>",
+        "--al",
+        "--arch",
+        "-p",
+        "--stf",
+        "-i",
+        "--no-cache",
+        "--det",
+        "--guard",
+    ] {
+        assert!(usage.contains(flag), "{flag}: {usage}");
+    }
+    for flag in ["--rel", "--sl", "--pl", "--trace", "--profile"] {
+        assert!(!usage.contains(flag), "{flag}: {usage}");
+    }
+}
+
+#[test]
+fn test_sim_al_requires_flags() {
+    let args = [
+        "sim",
+        "--al",
+        "spec",
+        "--arch",
+        "ebpf",
+        "-p",
+        "empty.p4",
+        "--stf",
+        "input.stf",
+    ];
+    for (idx, len) in [(1, 1), (2, 1), (3, 2), (5, 2), (7, 2)] {
+        let output = binary()
+            .args(&args[..idx])
+            .args(&args[idx + len..])
+            .output()
+            .unwrap();
+        assert_eq!(output.status.code(), Some(2), "missing {}", args[idx]);
+        assert!(output.stdout.is_empty());
+        assert!(String::from_utf8_lossy(&output.stderr).contains("Usage:"));
+    }
+}
+
+#[test]
+fn test_sim_al_rejects_unknown_architectures() {
+    let output = binary()
+        .args(["sim", "--al"])
+        .arg(fixture("cli/simple.watsup"))
+        .args(["--arch", "unknown", "-p", "empty.p4", "--stf", "input.stf"])
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stdout.is_empty());
+    let error = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        error.contains("architecture") && error.contains("unknown"),
+        "{error}"
+    );
+}
+
+#[test]
+fn test_sim_al_runs_all_native_architectures() {
+    for arch in ["ebpf", "psa", "v1model"] {
+        let output = sim_command(arch)
+            .arg("--stf")
+            .arg(repo().join(format!("p4spec/test/micro/sim-{arch}/{arch}.stf")))
+            .arg("-i")
+            .arg(fixture("cli/run/first"))
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{arch}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(output.stderr.is_empty());
+        let stdout = String::from_utf8(output.stdout).unwrap();
+        let expected = std::fs::read_to_string(
+            repo().join(format!("p4spec/test/micro/micro_sim_{arch}_al.expected")),
+        )
+        .unwrap();
+        let mut lines: Vec<_> = expected
+            .lines()
+            .filter(|line| line.starts_with("[PASS] Transmitted "))
+            .collect();
+        lines.push("passed");
+        assert_eq!(stdout, format!("{}\n", lines.join("\n")), "{arch}");
+    }
+}
+
+#[test]
+fn test_sim_al_distinguishes_p4_syntax_and_runtime_failures() {
+    for (program, category) in [
+        ("cli/run/invalid.p4", "syntax error:"),
+        ("cli/run/empty.p4", "runtime error:"),
+    ] {
+        let output = binary()
+            .args(["sim", "--al"])
+            .arg(fixture("cli/run/types.watsup"))
+            .arg(fixture("cli/run/relations.watsup"))
+            .args(["--arch", "ebpf", "-p"])
+            .arg(fixture(program))
+            .args(["--stf", "missing.stf"])
+            .output()
+            .unwrap();
+        assert_eq!(output.status.code(), Some(1));
+        assert!(output.stdout.is_empty());
+        let error = String::from_utf8(output.stderr).unwrap();
+        assert!(error.starts_with(category), "{error}");
+    }
+}
+
+#[test]
+fn test_sim_al_reports_stf_failures_and_preserves_prior_matches() {
+    let text = std::fs::read_to_string(repo().join("p4spec/test/micro/sim-ebpf/ebpf.stf")).unwrap();
+    let packet = text
+        .lines()
+        .rfind(|line| line.starts_with("packet "))
+        .unwrap();
+    let text_mismatch = format!("{text}\n{packet}\nexpect 0 FF\n");
+    for (name, text, detail, matches) in [
+        ("syntax", "@\n", "invalid character '@'", 0),
+        (
+            "mismatch",
+            text_mismatch.as_str(),
+            "expected (0) FF but got (0)",
+            2,
+        ),
+    ] {
+        let path =
+            std::env::temp_dir().join(format!("p4spec-cli-sim-{name}-{}.stf", std::process::id()));
+        std::fs::write(&path, text).unwrap();
+        let output = sim_command("ebpf").arg("--stf").arg(&path).output();
+        std::fs::remove_file(&path).unwrap();
+        let output = output.unwrap();
+        assert_eq!(output.status.code(), Some(1), "{name}");
+        let error = String::from_utf8(output.stderr).unwrap();
+        assert!(error.starts_with("runtime error:"), "{name}: {error}");
+        assert!(error.contains(detail), "{name}: {error}");
+        let stdout = String::from_utf8(output.stdout).unwrap();
+        assert_eq!(stdout.lines().count(), matches, "{name}: {stdout}");
+        assert!(
+            stdout
+                .lines()
+                .all(|line| line.starts_with("[PASS] Transmitted "))
+        );
     }
 }

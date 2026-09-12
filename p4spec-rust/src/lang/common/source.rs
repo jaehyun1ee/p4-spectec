@@ -1,7 +1,9 @@
+use serde::{Deserialize, Serialize};
+use serde_derive_state::{DeserializeState, SerializeState};
 use std::{fmt, rc::Rc};
 
 /// A source position
-#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct Position {
     pub file: Rc<str>,
     pub line: i64,
@@ -30,7 +32,9 @@ impl fmt::Display for Position {
 }
 
 /// A source span between two positions
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, SerializeState, DeserializeState)]
+#[serde(serialize_state = "State", ser_parameters = "State")]
+#[serde(deserialize_state = "State", de_parameters = "State")]
 pub struct Span {
     pub left: Position,
     pub right: Position,
@@ -84,10 +88,20 @@ impl fmt::Display for Span {
 }
 
 /// A syntax node paired with semantic and source annotations
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, SerializeState, DeserializeState,
+)]
+#[serde(serialize_state = "State", ser_parameters = "State")]
+#[serde(deserialize_state = "State", de_parameters = "State")]
+#[serde(bound(
+    deserialize = "T: serde_state::DeserializeState<'de, State>, N: serde_state::DeserializeState<'de, State>, S: serde_state::DeserializeState<'de, State>"
+))]
 pub struct NotePhrase<T, N = (), S = Span> {
+    #[serde(state)]
     pub node: T,
+    #[serde(state)]
     pub note: N,
+    #[serde(state)]
     pub span: S,
 }
 

@@ -36,22 +36,24 @@ struct FixtureConfig {
     label: String,
 }
 
-struct FixtureInterpreter;
+struct FixtureInterpreter {
+    config: FixtureConfig,
+}
 
-impl<I, E> Interpreter<I, E> for FixtureInterpreter
+impl<Iface, Exn> Interpreter<Iface, Exn> for FixtureInterpreter
 where
-    I: Interface,
-    E: Extern,
+    Iface: Interface,
+    Exn: Extern,
 {
     type Spec = ();
-    type Config = FixtureConfig;
-    type State = ();
     type Error = FixtureError;
 
-    fn clear(_state: &mut Self::State) {}
+    fn clear(&mut self) {}
+
+    fn reset(&mut self) {}
 
     fn eval_program(
-        _context: &mut RunnerContext<'_, Self, I, E>,
+        _ctx: &mut RunnerContext<'_, Self, Iface, Exn>,
         name: &str,
         program: Value,
     ) -> Result<Vec<Value>, Self::Error> {
@@ -62,7 +64,7 @@ where
     }
 
     fn eval_func(
-        ctx: &mut RunnerContext<'_, Self, I, E>,
+        ctx: &mut RunnerContext<'_, Self, Iface, Exn>,
         name: &str,
         targs: &[Typ],
         values: &[Value],
@@ -92,7 +94,7 @@ where
                 Ok(value)
             }
             "config" => {
-                let label = ctx.config().label.clone();
+                let label = ctx.interp().config.label.clone();
                 Ok(value::make::text(ctx.arena_mut(), label, Span::default()).unwrap())
             }
             "next_extern" => {
@@ -109,7 +111,7 @@ where
     }
 
     fn eval_rel(
-        _context: &mut RunnerContext<'_, Self, I, E>,
+        _ctx: &mut RunnerContext<'_, Self, Iface, Exn>,
         name: &str,
         _values: &[Value],
     ) -> Result<Vec<Value>, Self::Error> {
@@ -123,16 +125,16 @@ struct FixtureExtern {
 }
 
 impl Extern for FixtureExtern {
-    fn eval_func<S, I>(
+    fn eval_func<Interp, Iface>(
         &self,
-        ctx: &mut RunnerContext<'_, S, I, Self>,
+        ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
         name: &str,
         targs: &[Typ],
         values: &[Value],
-    ) -> Result<(Value, bool), S::Error>
+    ) -> Result<(Value, bool), Interp::Error>
     where
-        I: Interface,
-        S: Interpreter<I, Self>,
+        Iface: Interface,
+        Interp: Interpreter<Iface, Self>,
     {
         match name {
             "first" => {
@@ -165,15 +167,15 @@ impl Extern for FixtureExtern {
         }
     }
 
-    fn eval_rel<S, I>(
+    fn eval_rel<Interp, Iface>(
         &self,
-        _context: &mut RunnerContext<'_, S, I, Self>,
+        _ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
         name: &str,
         _values: &[Value],
-    ) -> Result<(Vec<Value>, bool), S::Error>
+    ) -> Result<(Vec<Value>, bool), Interp::Error>
     where
-        I: Interface,
-        S: Interpreter<I, Self>,
+        Iface: Interface,
+        Interp: Interpreter<Iface, Self>,
     {
         let error = ExternError::Failure(name.to_owned());
         Err(error.into())
@@ -350,7 +352,9 @@ fn test_builtin_interface_print_preserves_spec_hints_after_clear() {
 fn test_runner_statically_composes_its_components() {
     let mut runner = Runner::<FixtureInterpreter, NullInterface, NullExtern>::new(
         (),
-        FixtureConfig::default(),
+        FixtureInterpreter {
+            config: FixtureConfig::default(),
+        },
         NullInterface,
         NullExtern,
     );
@@ -364,7 +368,9 @@ fn test_runner_statically_composes_its_components() {
 fn test_extern_can_reenter_the_interpreter() {
     let mut runner = Runner::<FixtureInterpreter, NullInterface, FixtureExtern>::new(
         (),
-        FixtureConfig::default(),
+        FixtureInterpreter {
+            config: FixtureConfig::default(),
+        },
         NullInterface,
         FixtureExtern::default(),
     );
@@ -378,7 +384,9 @@ fn test_extern_can_reenter_the_interpreter() {
 fn test_extern_reports_side_effects_with_each_result() {
     let mut runner = Runner::<FixtureInterpreter, NullInterface, FixtureExtern>::new(
         (),
-        FixtureConfig::default(),
+        FixtureInterpreter {
+            config: FixtureConfig::default(),
+        },
         NullInterface,
         FixtureExtern::default(),
     );
@@ -394,7 +402,9 @@ fn test_extern_reports_side_effects_with_each_result() {
 fn test_null_extern_reports_configuration_failure() {
     let mut runner = Runner::<FixtureInterpreter, NullInterface, NullExtern>::new(
         (),
-        FixtureConfig::default(),
+        FixtureInterpreter {
+            config: FixtureConfig::default(),
+        },
         NullInterface,
         NullExtern,
     );
@@ -412,8 +422,10 @@ fn test_runner_clear_resets_host_state_and_preserves_config() {
     let _guard = FRESH_BUILTIN.lock().unwrap();
     let mut runner = Runner::<FixtureInterpreter, BuiltinInterface, FixtureExtern>::new(
         (),
-        FixtureConfig {
-            label: "configured".to_owned(),
+        FixtureInterpreter {
+            config: FixtureConfig {
+                label: "configured".to_owned(),
+            },
         },
         BuiltinInterface::new(P4Unparser::new()),
         FixtureExtern::default(),
@@ -450,8 +462,10 @@ fn test_runner_reset_releases_program_arena_and_resets_hosts() {
     let _guard = FRESH_BUILTIN.lock().unwrap();
     let mut runner = Runner::<FixtureInterpreter, BuiltinInterface, FixtureExtern>::new(
         (),
-        FixtureConfig {
-            label: "configured".to_owned(),
+        FixtureInterpreter {
+            config: FixtureConfig {
+                label: "configured".to_owned(),
+            },
         },
         BuiltinInterface::new(P4Unparser::new()),
         FixtureExtern::default(),
@@ -487,7 +501,9 @@ fn test_runner_reset_releases_program_arena_and_resets_hosts() {
 fn test_runner_dispatches_program_entry_and_errors() {
     let mut runner = Runner::<FixtureInterpreter, NullInterface, NullExtern>::new(
         (),
-        FixtureConfig::default(),
+        FixtureInterpreter {
+            config: FixtureConfig::default(),
+        },
         NullInterface,
         NullExtern,
     );

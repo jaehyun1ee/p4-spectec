@@ -10,7 +10,7 @@ use crate::{
 };
 
 use super::super::{
-    Al,
+    AlInterp,
     backtrack::{Backtrack, backtrack, backtrack_from_result},
     context::Context,
 };
@@ -18,8 +18,8 @@ use super::{expr::eval_exp, ops};
 
 // - Access
 
-fn eval_access_path<I: Interface, E: Extern>(
-    runner: &mut RunnerContext<'_, Al, I, E>,
+fn eval_access_path<Iface: Interface, Exn: Extern>(
+    runner: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
     ctx: &Context<'_>,
     value_base: &Value,
     path: &ast::Path,
@@ -38,8 +38,8 @@ fn eval_access_path<I: Interface, E: Extern>(
 
 // - Index access path
 
-fn eval_access_idx_path<I: Interface, E: Extern>(
-    runner: &mut RunnerContext<'_, Al, I, E>,
+fn eval_access_idx_path<Iface: Interface, Exn: Extern>(
+    runner: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
     ctx: &Context<'_>,
     value_base: &Value,
     path: &ast::Path,
@@ -58,8 +58,8 @@ fn eval_access_idx_path<I: Interface, E: Extern>(
 
 // - Slice access path
 
-fn eval_access_slice_path<I: Interface, E: Extern>(
-    runner: &mut RunnerContext<'_, Al, I, E>,
+fn eval_access_slice_path<Iface: Interface, Exn: Extern>(
+    runner: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
     ctx: &Context<'_>,
     value_base: &Value,
     path: &ast::Path,
@@ -86,8 +86,8 @@ fn eval_access_slice_path<I: Interface, E: Extern>(
 
 // - Field access path
 
-fn eval_access_dot_path<I: Interface, E: Extern>(
-    runner: &mut RunnerContext<'_, Al, I, E>,
+fn eval_access_dot_path<Iface: Interface, Exn: Extern>(
+    runner: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
     ctx: &Context<'_>,
     value_base: &Value,
     path: &ast::Path,
@@ -99,8 +99,8 @@ fn eval_access_dot_path<I: Interface, E: Extern>(
 
 // - Update
 
-pub(super) fn eval_update_path<I: Interface, E: Extern>(
-    runner: &mut RunnerContext<'_, Al, I, E>,
+pub(super) fn eval_update_path<Iface: Interface, Exn: Extern>(
+    runner: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
     ctx: &Context<'_>,
     value_base: &Value,
     path: &ast::Path,
@@ -122,8 +122,8 @@ pub(super) fn eval_update_path<I: Interface, E: Extern>(
 
 // - Index update path
 
-fn eval_update_idx_path<I: Interface, E: Extern>(
-    runner: &mut RunnerContext<'_, Al, I, E>,
+fn eval_update_idx_path<Iface: Interface, Exn: Extern>(
+    runner: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
     ctx: &Context<'_>,
     value_base: &Value,
     path: &ast::Path,
@@ -147,8 +147,8 @@ fn eval_update_idx_path<I: Interface, E: Extern>(
 
 // - Slice update path
 
-fn eval_update_slice_path<I: Interface, E: Extern>(
-    runner: &mut RunnerContext<'_, Al, I, E>,
+fn eval_update_slice_path<Iface: Interface, Exn: Extern>(
+    runner: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
     ctx: &Context<'_>,
     value_base: &Value,
     path: &ast::Path,
@@ -176,8 +176,8 @@ fn eval_update_slice_path<I: Interface, E: Extern>(
 
 // - Field update path
 
-fn eval_update_dot_path<I: Interface, E: Extern>(
-    runner: &mut RunnerContext<'_, Al, I, E>,
+fn eval_update_dot_path<Iface: Interface, Exn: Extern>(
+    runner: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
     ctx: &Context<'_>,
     value_base: &Value,
     path: &ast::Path,

@@ -4,6 +4,7 @@ use std::rc::Rc;
 
 mod arena;
 mod intern;
+pub mod serde;
 #[allow(
     clippy::module_inception,
     reason = "separate facade and implementation"
@@ -194,7 +195,7 @@ pub mod make {
         json: json,
         span: Span,
     ) -> Result<Value, ValueError> {
-        new(arena, ValueKind::Extern(json), typ, span)
+        new(arena, ValueKind::Extern(Rc::new(json)), typ, span)
     }
 }
 
@@ -332,6 +333,13 @@ pub mod get {
     // - Externals
 
     pub fn external<'a>(arena: &'a ValueArena, value: &Value) -> Result<&'a json, ValueError> {
+        external_shared(arena, value).map(Rc::as_ref)
+    }
+
+    pub(super) fn external_shared<'a>(
+        arena: &'a ValueArena,
+        value: &Value,
+    ) -> Result<&'a Rc<json>, ValueError> {
         match arena.kind(value) {
             ValueKind::Extern(json) => Ok(json),
             _ => Err(unexpected(arena, value, ValueTag::Extern)),

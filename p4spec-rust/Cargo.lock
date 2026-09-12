@@ -427,6 +427,7 @@ checksum = "c89e69e7e0f03bea5ef08013795c25018e101932225a656383bd384495ecc367"
 dependencies = [
  "num-integer",
  "num-traits",
+ "serde",
 ]
 
 [[package]]
@@ -474,8 +475,10 @@ dependencies = [
  "num-bigint",
  "num-traits",
  "serde",
+ "serde_derive_state",
  "serde_json",
  "serde_stacker",
+ "serde_state",
  "stacker",
  "thiserror",
 ]
@@ -665,6 +668,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde_derive_state"
+version = "0.4.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5cfae0fce9081be53c3e84fb75e1e048eb739f97056880ab8c9f7c64b4150fbd"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
+]
+
+[[package]]
 name = "serde_json"
 version = "1.0.151"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -686,6 +700,15 @@ dependencies = [
  "serde",
  "serde_core",
  "stacker",
+]
+
+[[package]]
+name = "serde_state"
+version = "0.4.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "52749763cf3f437612bc65263e328148df45ebc3c1ed349fba2c64875d541f60"
+dependencies = [
+ "serde",
 ]
 
 [[package]]
@@ -746,6 +769,17 @@ name = "strsim"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
+
+[[package]]
+name = "syn"
+version = "1.0.109"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "72b64191b275b66ffe2469e8af2c1cfe3bafa67b529ead792a6d0160888b4237"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "unicode-ident",
+]
 
 [[package]]
 name = "syn"
