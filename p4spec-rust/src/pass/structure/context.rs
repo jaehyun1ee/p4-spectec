@@ -53,23 +53,12 @@ impl Context {
         self.tdenv.get(id)
     }
 
-    pub fn find_typdef(&self, id: &Id) -> Result<&TypeDef, StructureError> {
-        self.find_typdef_opt(id)
-            .ok_or_else(|| StructureError::new(StructureErrorKind::UndefinedType, id.span.clone()))
-    }
-
     pub fn bound_typdef(&self, id: &Id) -> bool {
         self.find_typdef_opt(id).is_some()
     }
 
     pub fn find_metavar_opt(&self, id: &Id) -> Option<&ast::Typ> {
         self.menv.get(id)
-    }
-
-    pub fn find_metavar(&self, id: &Id) -> Result<&ast::Typ, StructureError> {
-        self.find_metavar_opt(id).ok_or_else(|| {
-            StructureError::new(StructureErrorKind::UndefinedMetavariable, id.span.clone())
-        })
     }
 
     pub fn bound_metavar(&self, id: &Id) -> bool {
@@ -96,7 +85,8 @@ impl Context {
     }
 
     fn load_def(&mut self, def_al: &ast::Def) -> Result<(), StructureError> {
-        match &def_al.node {
+        let def_kind_al = &def_al.node;
+        match def_kind_al {
             ast::DefKind::Typ(typ_def_al) => self.load_typ_def(typ_def_al),
             ast::DefKind::Var(def_var_al) => self.load_var_def(def_var_al),
             _ => Ok(()),

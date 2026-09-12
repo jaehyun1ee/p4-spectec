@@ -69,8 +69,8 @@ fn test_load_registers_extern_type_in_both_environments_with_declaration_span() 
     let ctx = Context::load(&vec![extern_typ("External", 5)]).expect("load extern type");
     let id_lookup = id_at("External", 99);
 
-    assert_eq!(ctx.find_typdef(&id_lookup), Ok(&TypeDef::Extern));
-    let typ_external = ctx.find_metavar(&id_lookup).expect("find extern type");
+    assert_eq!(ctx.find_typdef_opt(&id_lookup), Some(&TypeDef::Extern));
+    let typ_external = ctx.find_metavar_opt(&id_lookup).expect("find extern type");
     let TypKind::Var(id_external, targs) = &typ_external.node else {
         panic!("extern type should register its named type")
     };
@@ -121,21 +121,6 @@ fn test_load_rejects_duplicate_types_at_new_span() {
 }
 
 #[test]
-fn test_checked_lookups_report_the_use_span() {
-    let ctx = Context::load(&vec![]).expect("load empty context");
-    let id_type = id_at("MissingType", 30);
-    let id_metavar = id_at("missing_value", 31);
-
-    let error = ctx.find_typdef(&id_type).unwrap_err();
-    assert_eq!(error.kind, StructureErrorKind::UndefinedType);
-    assert_eq!(error.span, id_type.span);
-
-    let error = ctx.find_metavar(&id_metavar).unwrap_err();
-    assert_eq!(error.kind, StructureErrorKind::UndefinedMetavariable);
-    assert_eq!(error.span, id_metavar.span);
-}
-
-#[test]
 fn test_load_preserves_type_keys_and_only_registers_nullary_type_metavariables() {
     let def_typ = def_typ_at(DefTypKind::Plain(typ_at(TypKind::Bool, 40)), 40);
     let spec_al = vec![
@@ -176,7 +161,7 @@ fn test_loaded_alias_expands_to_its_variant_definition() {
     let ctx = Context::load(&spec_al).expect("load alias and variant");
 
     let typ_alias = ctx
-        .find_metavar(&id_at("Alias", 60))
+        .find_metavar_opt(&id_at("Alias", 60))
         .expect("find alias metavariable");
     let typ_expanded = expand_typ(&ctx.tdenv, typ_alias).expect("expand alias");
     let TypKind::Var(id_variant, targs) = &typ_expanded.node else {
@@ -185,7 +170,7 @@ fn test_loaded_alias_expands_to_its_variant_definition() {
     assert!(targs.is_empty());
     assert_eq!(id_variant.node, "Choice");
     assert_eq!(
-        ctx.find_typdef(id_variant)
+        ctx.find_typdef_opt(id_variant)
             .expect("find variant definition"),
         &TypeDef::Defined(vec![], Box::new(def_typ_variant))
     );
