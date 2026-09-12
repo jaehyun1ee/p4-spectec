@@ -12,23 +12,23 @@ use crate::{
         antiunify::{antiunify_clauses, antiunify_rule_match_group},
     },
 };
-fn span(line: i64) -> Span {
-    let pos = Position::new("antiunify.watsup", line, 0);
+fn span(int_line: i64) -> Span {
+    let pos = Position::new("antiunify.watsup", int_line, 0);
     Span::new(pos.clone(), pos)
 }
-fn variable(text: &str, line: i64) -> Exp {
-    let id = crate::phrase! {node: text.to_owned(), span: span(line)};
-    crate::note_phrase! {node: ExpKind::Var(id), note: TypKind::Bool, span: span(line)}
+fn variable(text: &str, int_line: i64) -> Exp {
+    let id = crate::phrase! {node: text.to_owned(), span: span(int_line)};
+    crate::note_phrase! {node: ExpKind::Var(id), note: TypKind::Bool, span: span(int_line)}
 }
-fn boolean(value: bool, line: i64) -> Exp {
-    crate::note_phrase! {node: ExpKind::Bool(value), note: TypKind::Bool, span: span(line)}
+fn boolean(value: bool, int_line: i64) -> Exp {
+    crate::note_phrase! {node: ExpKind::Bool(value), note: TypKind::Bool, span: span(int_line)}
 }
-fn tuple(exps: Vec<Exp>, line: i64) -> Exp {
-    crate::note_phrase! {node: ExpKind::Tuple(exps), note: TypKind::Bool, span: span(line)}
+fn tuple(exps: Vec<Exp>, int_line: i64) -> Exp {
+    crate::note_phrase! {node: ExpKind::Tuple(exps), note: TypKind::Bool, span: span(int_line)}
 }
-fn clause(exp_input: Exp, exp_output: Exp, prems: Vec<Prem>, line: i64) -> Clause {
-    let arg = crate::phrase! {node: ArgKind::Exp(Box::new(exp_input)), span: span(line)};
-    crate::phrase! {node: ClauseKind {args: vec![arg], exp: exp_output, prems}, span: span(line)}
+fn clause(exp_input: Exp, exp_output: Exp, prems: Vec<Prem>, int_line: i64) -> Clause {
+    let arg = crate::phrase! {node: ArgKind::Exp(Box::new(exp_input)), span: span(int_line)};
+    crate::phrase! {node: ClauseKind {args: vec![arg], exp: exp_output, prems}, span: span(int_line)}
 }
 fn let_prem(prem: &Prem) -> &LetPrem {
     let prem_kind = &prem.node;
@@ -138,15 +138,15 @@ fn test_incompatible_definition_arguments_are_typed() {
     assert_eq!(error.span, span(9));
 }
 
-fn record(exp: Exp, line: i64) -> Exp {
-    let atom = crate::phrase! {node: crate::lang::common::notation::atom::Atom::Keyword("field".to_owned()), span: span(line)};
-    crate::note_phrase! {node: ExpKind::Str(vec![(atom, exp)]), note: TypKind::Bool, span: span(line)}
+fn record(exp: Exp, int_line: i64) -> Exp {
+    let atom = crate::phrase! {node: crate::lang::common::notation::atom::Atom::Keyword("field".to_owned()), span: span(int_line)};
+    crate::note_phrase! {node: ExpKind::Str(vec![(atom, exp)]), note: TypKind::Bool, span: span(int_line)}
 }
-fn case(exp: Exp, line: i64) -> Exp {
+fn case(exp: Exp, int_line: i64) -> Exp {
     use crate::lang::common::notation::mixfix::Mixfix;
-    let atom = crate::phrase! {node: crate::lang::common::notation::atom::Atom::Keyword("TAG".to_owned()), span: span(line)};
+    let atom = crate::phrase! {node: crate::lang::common::notation::atom::Atom::Keyword("TAG".to_owned()), span: span(int_line)};
     let not_exp = Mixfix::Seq(vec![Mixfix::Atom(atom), Mixfix::Arg(exp)]);
-    crate::note_phrase! {node: ExpKind::Case(Box::new(not_exp)), note: TypKind::Bool, span: span(line)}
+    crate::note_phrase! {node: ExpKind::Case(Box::new(not_exp)), note: TypKind::Bool, span: span(int_line)}
 }
 #[test]
 fn test_structured_templates_populate_in_source_order() {
