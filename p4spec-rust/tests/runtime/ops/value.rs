@@ -64,7 +64,7 @@ fn test_extern_type_membership_uses_shared_type_environment() {
     let value = make::external(
         &mut arena,
         (extern_typ).node.clone().into(),
-        p4spec_rust::yojson::ExternalData::Null,
+        serde_json::Value::Null,
         Span::default(),
     )
     .unwrap();

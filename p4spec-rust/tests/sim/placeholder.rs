@@ -1,5 +1,4 @@
 use p4spec_rust::lang::data::value::ValueArena;
-use p4spec_rust::yojson::ExternalData;
 use p4spec_rust::{
     lang::common::source::Span,
     lang::data::{
@@ -14,7 +13,7 @@ use super::{has_extern_failure, parse_program, repo, runner, runner_from_spec};
 fn contains_null_object_state(arena: &ValueArena, value: &Value) -> bool {
     let is_null_object_state = matches!(
         (arena.typ(value).as_ref(), arena.kind(value)),
-        (TypKind::Var(id, targs), ValueKind::Extern(ExternalData::Null))
+        (TypKind::Var(id, targs), ValueKind::Extern(serde_json::Value::Null))
             if id.node == "objectState" && targs.is_empty()
     );
     is_null_object_state

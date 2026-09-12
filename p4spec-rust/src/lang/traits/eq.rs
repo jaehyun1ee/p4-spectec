@@ -2,7 +2,7 @@
 
 use std::rc::Rc;
 
-use crate::{lang::common::source::NotePhrase, yojson::ExternalData};
+use crate::lang::common::source::NotePhrase;
 
 /// Compares syntax while ignoring source and analysis metadata
 pub trait SyntaxEq<Rhs: ?Sized = Self> {
@@ -47,11 +47,5 @@ impl<T: SyntaxEq, N, S> SyntaxEq for NotePhrase<T, N, S> {
 impl<T: SyntaxEq + ?Sized> SyntaxEq for Rc<T> {
     fn syntax_eq(&self, other: &Self) -> bool {
         self.as_ref().syntax_eq(other.as_ref())
-    }
-}
-
-impl SyntaxEq for ExternalData {
-    fn syntax_eq(&self, other: &Self) -> bool {
-        self == other
     }
 }

@@ -1636,3 +1636,61 @@ def $use(n_1, n_2) = ($pure(n_1, n_2), $pure(n_2, n_1), $pure(n_1, n_2), $other(
     assert_eq!(host.count("pure"), 2);
     assert_eq!(host.count("other"), 1);
 }
+
+#[test]
+fn test_cache_keys_follow_serde_external_payload_equality() {
+    use serde_json::{Value as Json, json};
+    let source = r#"
+extern syntax state
+var s : state
+builtin dec $pure(state) : state
+dec $pair(state, state) : (state, state)
+def $pair(s_1, s_2) = ($pure(s_1), $pure(s_2))
+"#;
+    let mut fields_a = serde_json::Map::new();
+    fields_a.insert("a".to_owned(), json!(1));
+    fields_a.insert("b".to_owned(), json!([1, 2]));
+    let mut fields_b = serde_json::Map::new();
+    fields_b.insert("b".to_owned(), json!([1, 2]));
+    fields_b.insert("a".to_owned(), json!(1));
+    for (json_a, json_b, count) in [
+        (Json::Object(fields_a), Json::Object(fields_b), 1),
+        (json!(-0.0), json!(0.0), 1),
+        (json!(1_i64), json!(1_u64), 1),
+        (json!(0), json!(0.0), 2),
+        (json!(1), json!(1.0), 2),
+        (json!([1, 2]), json!([2, 1]), 2),
+        (
+            json!(9_007_199_254_740_992_u64),
+            json!(9_007_199_254_740_993_u64),
+            2,
+        ),
+        (json!(i64::MAX), json!(i64::MAX as u64 + 1), 2),
+        (json!(u64::MAX - 1), json!(u64::MAX), 2),
+    ] {
+        let host = CacheHost::default();
+        let mut runner = Runner::<Al, _, _>::new(
+            Global::load(spec(source)).unwrap(),
+            Config::new(true, false, false),
+            host.clone(),
+            NullExtern,
+        );
+        let id = phrase!(node: "state".to_owned(), span: Span::default());
+        let typ = typ::make::var(id, vec![]).node;
+        let typ = std::rc::Rc::new(typ);
+        let value_a =
+            make::external(runner.arena_mut(), typ.clone(), json_a, Span::default()).unwrap();
+        let span_b = Span::new(
+            p4spec_rust::lang::common::source::Position::new("state.p4", 7, 0),
+            p4spec_rust::lang::common::source::Position::new("state.p4", 7, 1),
+        );
+        let value_b = make::external(runner.arena_mut(), typ, json_b, span_b).unwrap();
+        let value = runner.eval_func("pair", &[], &[value_a, value_b]).unwrap();
+        let values = get::tuple(runner.arena(), &value).unwrap();
+        assert_eq!(host.count("pure"), count);
+        assert_eq!(
+            values,
+            &[value_a, if count == 1 { value_a } else { value_b }]
+        );
+    }
+}

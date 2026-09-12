@@ -12,18 +12,15 @@ use super::{
 };
 use thiserror::Error;
 
-use crate::{
-    lang::{
-        common::{
-            Id,
-            notation::{atom::Atom, mixfix::Mixfix},
-            source::{NotePhrase, Phrase, Span},
-        },
-        data::typ::TypKind,
-        traits::{cmp::SyntaxCmp, eq::SyntaxEq},
-        xl::num::{self, Number},
+use crate::lang::{
+    common::{
+        Id,
+        notation::{atom::Atom, mixfix::Mixfix},
+        source::{NotePhrase, Phrase, Span},
     },
-    yojson::ExternalData,
+    data::typ::TypKind,
+    traits::{cmp::SyntaxCmp, eq::SyntaxEq},
+    xl::num::{self, Number},
 };
 
 // = Value types
@@ -53,7 +50,22 @@ pub enum ValueKind {
     Opt(Option<Value>),
     List(Vec<Value>),
     Func(Id),
-    Extern(ExternalData),
+    /// Caller-defined JSON state; its schema and invariants belong to the extern
+    ///
+    /// Equality and hashing follow serde JSON: object key order is ignored,
+    /// array order matters, integers differ from floats, and float signed zeros
+    /// are equal. Numbers use i64/u64 or finite f64 with the configured features
+    /// (`arbitrary_precision` is not enabled). Larger integers need an explicit
+    /// string or other caller-defined representation
+    ///
+    /// JSON cannot retain duplicate keys, Yojson tuples/variants or non-finite
+    /// numbers. Callers must validate non-finite floats before serialization:
+    /// serde_json::to_value maps those floats to null
+    ///
+    /// Syntax order is null, boolean, number, string, array, object. Integers
+    /// precede floats and compare exactly; arrays and sorted object entries
+    /// compare lexicographically. Extern payloads have no OCaml wire encoding
+    Extern(serde_json::Value),
 }
 
 // - Tags
@@ -349,7 +361,9 @@ impl SyntaxCmp for ValueRef<'_> {
                 (None, None) => Ordering::Equal,
             },
             (ValueKind::Func(id_l), ValueKind::Func(id_r)) => id_l.node.cmp(&id_r.node),
-            (ValueKind::Extern(value_l), ValueKind::Extern(value_r)) => value_l.cmp(value_r),
+            (ValueKind::Extern(value_l), ValueKind::Extern(value_r)) => {
+                super::json::compare(value_l, value_r)
+            }
             _ => kind_l.tag().cmp(&kind_r.tag()),
         }
     }

@@ -139,7 +139,7 @@ fn test_value_wire_rejects_extern_encoding() {
     let value = make::external(
         &mut arena,
         typ::TypKind::Bool.into(),
-        p4spec_rust::yojson::ExternalData::Null,
+        serde_json::Value::Null,
         Span::default(),
     )
     .unwrap();
@@ -210,7 +210,7 @@ fn test_value_envelope_rejects_nested_extern_encoding() {
     let value = make::external(
         &mut arena,
         typ::TypKind::Bool.into(),
-        p4spec_rust::yojson::ExternalData::Null,
+        serde_json::Value::Null,
         Span::default(),
     )
     .unwrap();

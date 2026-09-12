@@ -10,4 +10,3 @@ pub mod runtime;
 pub mod sim;
 pub mod stf;
 pub mod wire;
-pub mod yojson;

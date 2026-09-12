@@ -4,6 +4,7 @@ use std::rc::Rc;
 
 mod arena;
 mod intern;
+mod json;
 #[allow(
     clippy::module_inception,
     reason = "separate facade and implementation"
@@ -14,20 +15,17 @@ pub use arena::ValueArena;
 pub use intern::{CanonEq, CanonHash, CanonId, CanonInterner, Interned, Interner, RcInterner};
 pub use value::*;
 
-use crate::{
-    lang::{
-        common::{
-            Id, TId,
-            notation::{
-                mixfix::Mixfix,
-                mixop::{Mixop, shape},
-            },
-            source::Span,
+use crate::lang::{
+    common::{
+        Id, TId,
+        notation::{
+            mixfix::Mixfix,
+            mixop::{Mixop, shape},
         },
-        data::typ::{self, Typ, TypKind},
-        xl::num::{self, Number},
+        source::Span,
     },
-    yojson::ExternalData,
+    data::typ::{self, Typ, TypKind},
+    xl::num::{self, Number},
 };
 
 // = Smart constructors
@@ -190,10 +188,28 @@ pub mod make {
 
     // - Externals
 
+    /// Stores caller-defined serde JSON state without interpreting its schema
+    ///
+    /// Serialize state with [`serde_json::to_value`]. To update it, deserialize
+    /// the payload returned by [`get::external`], validate the state transition,
+    /// and allocate a new value. Existing arena values remain immutable
+    ///
+    /// ```
+    /// use p4spec_rust::lang::{common::source::Span, data::{typ, value::{ValueArena, make, get}}};
+    /// use serde::{Deserialize, Serialize};
+    /// #[derive(Serialize, Deserialize)]
+    /// struct State { count: u64 }
+    /// let mut arena = ValueArena::new();
+    /// let value = make::external(&mut arena, typ::TypKind::Text.into(),
+    ///     serde_json::to_value(State { count: 7 })?, Span::default())?;
+    /// let state: State = serde_json::from_value(get::external(&arena, &value)?.clone())?;
+    /// assert_eq!(state.count, 7);
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     pub fn external(
         arena: &mut ValueArena,
         typ: Rc<TypKind>,
-        value: ExternalData,
+        value: serde_json::Value,
         span: Span,
     ) -> Result<Value, ValueError> {
         new(arena, ValueKind::Extern(value), typ, span)
@@ -333,10 +349,11 @@ pub mod get {
 
     // - Externals
 
+    /// Borrows the JSON payload for direct deserialization with serde
     pub fn external<'a>(
         arena: &'a ValueArena,
         value: &Value,
-    ) -> Result<&'a ExternalData, ValueError> {
+    ) -> Result<&'a serde_json::Value, ValueError> {
         match arena.kind(value) {
             ValueKind::Extern(value) => Ok(value),
             _ => Err(unexpected(arena, value, ValueTag::Extern)),
