@@ -71,3 +71,31 @@ pub fn size(int: &BigInt) -> Result<usize, ExternError> {
         .and_then(|size| usize::try_from(size).ok())
         .ok_or_else(|| ExternError::Failure(format!("invalid packet size: {int}")))
 }
+
+pub fn p4_precision_number(
+    arena: &ValueArena,
+    value: &Value,
+) -> Result<PrecisionNumber, ExternError> {
+    get::matches! { arena, value,
+        "nat W int" | "nat S int" => |values| {
+            let [value_width, value_int] = values.as_slice() else {
+                return Err(ValueError::ExpectedCount { expected: 2, actual: values.len() }.into());
+            };
+            Ok(PrecisionNumber {
+                width: num::to_int(get::num(arena, value_width)?).clone(),
+                int: num::to_int(get::num(arena, value_int)?).clone(),
+            })
+        },
+        "nat '.' nat V int" => |values| {
+            let [value_width_max, value_width, value_int] = values.as_slice() else {
+                return Err(ValueError::ExpectedCount { expected: 3, actual: values.len() }.into());
+            };
+            get::num(arena, value_width_max)?;
+            Ok(PrecisionNumber {
+                width: num::to_int(get::num(arena, value_width)?).clone(),
+                int: num::to_int(get::num(arena, value_int)?).clone(),
+            })
+        },
+        _ => Err(ExternError::Failure("expected P4 precision number value".to_owned())),
+    }
+}

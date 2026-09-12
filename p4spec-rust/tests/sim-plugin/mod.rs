@@ -59,3 +59,6 @@ fn has_extern_failure(error: &Error, expected: &str) -> bool {
 fn parse_program(arena: &mut ValueArena, path: &Path) -> Value {
     parse_file(arena, &[repo().join("p4c/p4include")], path).expect("native P4 parsing")
 }
+
+#[path = "hash.rs"]
+mod hash;
