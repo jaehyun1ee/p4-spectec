@@ -418,7 +418,7 @@ impl<'source, 'arena> Lexer<'source, 'arena> {
             }
             IdentKind::Ident { has_params, .. } => (
                 Token::Identifier,
-                has_params || self.adjacent_template_arguments_follow(),
+                has_params || self.call_type_arguments_follow(),
             ),
         };
         self.state = if template_expected {
@@ -436,26 +436,46 @@ impl<'source, 'arena> Lexer<'source, 'arena> {
 
     fn template_arguments_follow(&self) -> bool {
         angle_suffix(self.remaining_significant())
-            .is_some_and(|suffix| suffix.trim_start().starts_with('('))
+            .is_some_and(|suffix| significant(suffix).starts_with('('))
     }
 
-    fn adjacent_template_arguments_follow(&self) -> bool {
-        angle_suffix(&self.source[self.index..])
-            .is_some_and(|suffix| suffix.trim_start().starts_with('('))
+    fn call_type_arguments_follow(&self) -> bool {
+        if !self.template_arguments_follow() {
+            return false;
+        }
+        if self.source[self.index..].starts_with('<') {
+            return true;
+        }
+        let rest = significant(&self.remaining_significant()[1..]);
+        let len = rest
+            .bytes()
+            .take_while(|byte| byte.is_ascii_alphanumeric() || *byte == b'_')
+            .count();
+        let name = &rest[..len];
+        // A real type argument cannot be the RHS of a relational expression
+        if significant(&rest[len..]).starts_with('.') {
+            return false;
+        }
+        matches!(
+            keyword(name),
+            Some(
+                Token::Bool
+                    | Token::Bit
+                    | Token::Int
+                    | Token::Varbit
+                    | Token::String
+                    | Token::Error
+                    | Token::MatchKind
+                    | Token::List
+                    | Token::Tuple
+                    | Token::Void
+                    | Token::DontCare
+            )
+        ) || matches!(self.ctx.ident_find(name), Some(IdentKind::TypeName { .. }))
     }
 
     fn remaining_significant(&self) -> &str {
-        let mut rest = &self.source[self.index..];
-        loop {
-            rest = rest.trim_start();
-            if let Some(after) = rest.strip_prefix("//") {
-                rest = after.find('\n').map_or("", |index| &after[index + 1..]);
-            } else if let Some(after) = rest.strip_prefix("/*") {
-                rest = after.find("*/").map_or("", |index| &after[index + 2..]);
-            } else {
-                return rest;
-            }
-        }
+        significant(&self.source[self.index..])
     }
 
     // - Raw scanning
@@ -724,6 +744,19 @@ impl<'source, 'arena> Lexer<'source, 'arena> {
 }
 
 // == Token lookahead
+
+fn significant(mut rest: &str) -> &str {
+    loop {
+        rest = rest.trim_start();
+        if let Some(after) = rest.strip_prefix("//") {
+            rest = after.find('\n').map_or("", |idx| &after[idx + 1..]);
+        } else if let Some(after) = rest.strip_prefix("/*") {
+            rest = after.find("*/").map_or("", |idx| &after[idx + 2..]);
+        } else {
+            return rest;
+        }
+    }
+}
 
 fn angle_suffix(rest: &str) -> Option<&str> {
     if !rest.starts_with('<') {

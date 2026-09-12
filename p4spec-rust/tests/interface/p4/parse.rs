@@ -185,6 +185,30 @@ control C() {
 }
 
 #[test]
+fn test_type_argument_calls_preserve_bodies_across_whitespace_and_comments() {
+    for (text_a, text_b) in [
+        (
+            "obj.f<bit<8>>(0);",
+            "obj.f /* call */ < /* type */ bit<8> > /* args */ (0);",
+        ),
+        ("f<E>();", "f < E > ();"),
+        ("f<int, bool>();", "f < int, bool > ();"),
+        ("bool x = a < b > (c);", "bool x = a /* lhs */ < b > (c);"),
+        (
+            "bool x = a < E.A > (c);",
+            "bool x = a /* lhs */ < E.A > (c);",
+        ),
+    ] {
+        let mut arena = ValueArena::new();
+        let text_a = format!("enum E {{ A }} control C() {{ apply {{ {text_a} }} }}");
+        let text_b = format!("enum E {{ A }} control C() {{ apply {{ {text_b} }} }}");
+        let value_a = parse_string(&mut arena, "calls.p4", &text_a).unwrap();
+        let value_b = parse_string(&mut arena, "calls.p4", &text_b).unwrap();
+        assert_eq!(arena.canon_id(&value_a), arena.canon_id(&value_b));
+    }
+}
+
+#[test]
 fn test_classifies_names_after_preceding_declarations_reduce() {
     let mut arena = ValueArena::new();
     let source = r#"
