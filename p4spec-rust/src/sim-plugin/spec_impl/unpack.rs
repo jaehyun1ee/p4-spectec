@@ -99,3 +99,42 @@ pub fn p4_precision_number(
         _ => Err(ExternError::Failure("expected P4 precision number value".to_owned())),
     }
 }
+
+#[derive(Clone, Debug)]
+pub struct ArgumentValue {
+    pub name: String,
+    pub value: Value,
+}
+
+pub fn assoc_args(
+    arena: &ValueArena,
+    value_ids: Value,
+    value_args: Value,
+) -> Result<Vec<ArgumentValue>, ExternError> {
+    let names = get::list(arena, &value_ids)?
+        .iter()
+        .map(|value_id| get::text(arena, value_id).map(str::to_owned))
+        .collect::<Result<Vec<_>, _>>()?;
+    let values = get::list(arena, &value_args)?;
+    if names.len() != values.len() {
+        return Err(ValueError::ExpectedCount {
+            expected: names.len(),
+            actual: values.len(),
+        }
+        .into());
+    }
+    Ok(names
+        .into_iter()
+        .zip(values)
+        .map(|(name, value)| ArgumentValue {
+            name,
+            value: *value,
+        })
+        .collect())
+}
+
+pub fn signed_int(int: &BigInt) -> Result<i64, ExternError> {
+    int.to_i64()
+        .filter(|int| (-(1_i64 << 62)..(1_i64 << 62)).contains(int))
+        .ok_or_else(|| ExternError::Failure(format!("integer outside OCaml int range: {int}")))
+}

@@ -1,0 +1,112 @@
+use super::super::spec_impl::{func, pack, rel::CallResult, unpack};
+use crate::{
+    lang::data::value::{Value, ValueArena},
+    runner::{Extern, ExternError, Interface, Interpreter, RunnerContext},
+};
+use serde::{Deserialize, Serialize};
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CounterArray {
+    pub counts: Vec<i64>,
+}
+
+#[derive(Debug)]
+pub struct CounterResult {
+    pub counter: CounterArray,
+    pub result: CallResult,
+}
+
+impl CounterArray {
+    pub fn init(
+        arena: &ValueArena,
+        value_ids: Value,
+        value_args: Value,
+    ) -> Result<Self, ExternError> {
+        let args = unpack::assoc_args(arena, value_ids, value_args)?;
+        let find_arg = |name: &str| {
+            args.iter()
+                .find(|arg| arg.name == name)
+                .map(|arg| arg.value)
+                .ok_or_else(|| ExternError::Failure(format!("argument not found: {name}")))
+        };
+        let value_max = find_arg("max_index")?;
+        let value_sparse = find_arg("sparse")?;
+        let num_max = unpack::p4_fixed_bit(arena, &value_max)?;
+        let idx_max = unpack::signed_int(&num_max.int)?;
+        unpack::p4_bool(arena, &value_sparse)?;
+        let len = usize::try_from(idx_max)
+            .map_err(|_| ExternError::Failure("negative counter array size".to_owned()))?;
+        let mut counts = Vec::new();
+        counts
+            .try_reserve_exact(len)
+            .map_err(|error| ExternError::Failure(error.to_string()))?;
+        counts.resize(len, 0);
+        Ok(Self { counts })
+    }
+
+    pub fn increment<Interp, Iface, Exn>(
+        self,
+        ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+        value_ctx: Value,
+        value_arch: Value,
+    ) -> Result<CounterResult, Interp::Error>
+    where
+        Iface: Interface,
+        Exn: Extern,
+        Interp: Interpreter<Iface, Exn>,
+    {
+        let value_idx = func::find_var_e_local(ctx, value_ctx, "index")?;
+        let num_idx = unpack::p4_fixed_bit(ctx.arena(), &value_idx)?;
+        let idx = unpack::signed_int(&num_idx.int)?;
+        self.update(ctx, value_ctx, value_arch, idx, 1)
+    }
+
+    pub fn add<Interp, Iface, Exn>(
+        self,
+        ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+        value_ctx: Value,
+        value_arch: Value,
+    ) -> Result<CounterResult, Interp::Error>
+    where
+        Iface: Interface,
+        Exn: Extern,
+        Interp: Interpreter<Iface, Exn>,
+    {
+        let value_idx = func::find_var_e_local(ctx, value_ctx, "index")?;
+        let num_idx = unpack::p4_fixed_bit(ctx.arena(), &value_idx)?;
+        let idx = unpack::signed_int(&num_idx.int)?;
+        let value_add = func::find_var_e_local(ctx, value_ctx, "value")?;
+        let num_add = unpack::p4_fixed_bit(ctx.arena(), &value_add)?;
+        let int = unpack::signed_int(&num_add.int)?;
+        self.update(ctx, value_ctx, value_arch, idx, int)
+    }
+
+    fn update<Interp, Iface, Exn>(
+        mut self,
+        ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+        value_ctx: Value,
+        value_arch: Value,
+        idx: i64,
+        int: i64,
+    ) -> Result<CounterResult, Interp::Error>
+    where
+        Iface: Interface,
+        Exn: Extern,
+        Interp: Interpreter<Iface, Exn>,
+    {
+        if let Ok(idx) = usize::try_from(idx)
+            && let Some(count) = self.counts.get_mut(idx)
+        {
+            *count = count.wrapping_add(int).wrapping_shl(1) >> 1;
+        }
+        let value_call_result = pack::return_result(ctx.arena_mut(), None)?;
+        Ok(CounterResult {
+            counter: self,
+            result: CallResult {
+                value_ctx,
+                value_arch,
+                value_call_result,
+            },
+        })
+    }
+}

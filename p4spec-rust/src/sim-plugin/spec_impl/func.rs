@@ -388,3 +388,40 @@ where
         &[value_arch, value_id, value_object],
     )
 }
+
+pub fn find_object_state_e<Interp, Iface, Exn>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+    value_arch: Value,
+    value_id: Value,
+) -> Result<Value, Interp::Error>
+where
+    Iface: Interface,
+    Exn: Extern,
+    Interp: Interpreter<Iface, Exn>,
+{
+    let value_opt = ctx.call_func("find_objectState_e", &[], &[value_arch, value_id])?;
+    get::opt(ctx.arena(), &value_opt)
+        .map_err(ExternError::from)?
+        .ok_or_else(|| ExternError::Failure("object state not found".to_owned()).into())
+}
+
+pub fn update_object_state_e<Interp, Iface, Exn>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+    value_arch: Value,
+    value_id: Value,
+    value_state: Value,
+) -> Result<Value, Interp::Error>
+where
+    Iface: Interface,
+    Exn: Extern,
+    Interp: Interpreter<Iface, Exn>,
+{
+    let value_opt = ctx.call_func(
+        "update_objectState_e",
+        &[],
+        &[value_arch, value_id, value_state],
+    )?;
+    get::opt(ctx.arena(), &value_opt)
+        .map_err(ExternError::from)?
+        .ok_or_else(|| ExternError::Failure("object state not found".to_owned()).into())
+}

@@ -65,3 +65,6 @@ mod hash;
 
 #[path = "table.rs"]
 mod table;
+
+#[path = "ebpf/mod.rs"]
+mod ebpf;
