@@ -10,6 +10,8 @@ use crate::{
 /// Stable semantic category of a structuring failure
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
 pub enum StructureErrorKind {
+    #[error("input hint operation failed: {0}")]
+    Input(crate::lang::hints::input::InputError),
     #[error("type definition is undefined")]
     UndefinedType,
     #[error("meta-variable is undefined")]
