@@ -1,0 +1,28 @@
+(executable
+ (name generate)
+ (modules generate))
+
+(rule
+ (target source_make.ml)
+ (deps ../../lib/backend-sim/make.ml)
+ (action
+  (with-stdout-to %{target}
+   (run ./generate.exe %{deps}))))
+
+(executable
+ (name sim_oracle)
+ (modules sim_oracle source_make semantic_frames)
+ (libraries p4spectec yojson unix))
+
+(rule
+ (target source_v1model_pipe.ml)
+ (deps ../../lib/backend-sim/v1model/pipe.ml)
+ (action
+  (with-stdout-to %{target}
+   (run ./generate.exe %{deps} v1model))))
+
+(executable
+ (name control_oracle)
+ (modules control_oracle source_v1model_pipe)
+ (libraries p4spectec yojson)
+ (preprocess (pps ppx_deriving_yojson)))

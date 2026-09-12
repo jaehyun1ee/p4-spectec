@@ -64,7 +64,8 @@ test-diff: test-frontend-diff test-elab-diff test-algo-diff test-run-al-diff
 
 # Standalone expected driver; product unit tests remain in tests/
 .PHONY: test-expected test-promote test-p4parse test-elab test-algo test-run-al
-DRIVER = $(CARGO) run --locked --release --manifest-path test-driver/Cargo.toml --target-dir target --
+DRIVER_TARGET_DIR ?= $(if $(CARGO_TARGET_DIR),$(CARGO_TARGET_DIR),target)
+DRIVER = $(CARGO) run --locked --release --manifest-path test-driver/Cargo.toml --target-dir $(DRIVER_TARGET_DIR) --
 
 test-p4parse:
 	env -u UPDATE_EXPECT $(DRIVER) p4parse
@@ -85,3 +86,19 @@ test-expected: test-p4parse test-elab test-algo test-run-al
 test-promote:
 	UPDATE_EXPECT=1 $(DRIVER) elab
 	UPDATE_EXPECT=1 $(DRIVER) algo
+
+# Native simulation uses source-derived expectations in both cached modes
+.PHONY: test-sim-al test-sim-al-diff
+
+test-sim-al:
+	env -u UPDATE_EXPECT $(DRIVER) sim-al
+	env -u UPDATE_EXPECT $(DRIVER) sim-al --det
+
+# Explicit development oracle; native simulation has no OCaml dependency
+SIM_ORACLE = ../_build/default/p4spec/test/sim-oracle/sim_oracle.exe
+
+test-sim-al-diff:
+	cd .. && opam exec -- dune build p4spec/test/sim-oracle/sim_oracle.exe p4spec/test/sim-oracle/control_oracle.exe
+	../_build/default/p4spec/test/sim-oracle/control_oracle.exe
+	env -u UPDATE_EXPECT $(DRIVER) sim-al --oracle $(abspath $(SIM_ORACLE))
+	env -u UPDATE_EXPECT $(DRIVER) sim-al --det --oracle $(abspath $(SIM_ORACLE))

@@ -584,7 +584,9 @@ dependencies = [
  "clap",
  "expect-test",
  "indicatif",
+ "num-bigint",
  "p4spec-rust",
+ "serde_json",
  "thiserror",
 ]
 
