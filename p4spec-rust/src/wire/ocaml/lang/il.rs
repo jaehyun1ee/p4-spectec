@@ -1,16 +1,16 @@
 /// OCaml-compatible JSON codecs for IL data
-use std::{cell::Cell, collections::HashSet};
+use std::cell::Cell;
 
-use serde_json::{Map, Number, Value, json};
+use serde_json::json;
+
+use crate::util::json::json;
 use thiserror::Error;
 
 use crate::lang::data::value::{ValueArena, make};
 use crate::lang::{
-    common::notation::mixfix::Mixfix,
     il::ast::{self, *},
     xl::{bool, num},
 };
-use crate::yojson::ExternalData;
 
 use super::{
     super::{
@@ -20,32 +20,35 @@ use super::{
     el, xl,
 };
 use crate::wire::VALUE_SCHEMA;
-use crate::wire::ocaml::{atom::AtomPhraseCodec, mixfix, source, yojson};
+use crate::wire::ocaml::{atom::AtomPhraseCodec, mixfix, reader, source};
 
 /// Codec for complete IL specifications
 pub struct SpecCodec;
 
 impl SpecCodec {
-    pub fn decode(value: &Value) -> Result<ast::Spec, DecodeError> {
-        on_codec_stack(|| decode_list(value, decode_def))
+    pub fn decode(json: &json) -> Result<ast::Spec, DecodeError> {
+        on_codec_stack(|| decode_list(json, decode_def))
     }
 
-    pub fn encode(spec: &ast::Spec) -> Result<Value, EncodeError> {
+    pub fn encode(spec: &ast::Spec) -> Result<json, EncodeError> {
         on_codec_stack(|| Ok(encode_list(spec, encode_def)))
     }
 }
 
 pub struct ValueCodec;
 
-/// Standard-JSON convenience codec for IL values
+/// Standard JSON codec for IL values
 ///
-/// Use [`ValueEnvelopeCodec`] for lossless OCaml `Yojson.Safe` transport
+/// # Panics
+///
+/// Encoding or decoding an extern payload panics, including nested payloads
+/// Native extern state has no OCaml wire representation
 impl ValueCodec {
-    pub fn decode(arena: &mut ValueArena, value: &Value) -> Result<ast::Value, DecodeError> {
-        on_codec_stack(|| decode_value(arena, value))
+    pub fn decode(arena: &mut ValueArena, json: &json) -> Result<ast::Value, DecodeError> {
+        on_codec_stack(|| decode_value(arena, json))
     }
 
-    pub fn encode(arena: &ValueArena, value: &ast::Value) -> Result<Value, EncodeError> {
+    pub fn encode(arena: &ValueArena, value: &ast::Value) -> Result<json, EncodeError> {
         on_codec_stack(|| {
             ValueEncoder {
                 arena,
@@ -56,7 +59,14 @@ impl ValueCodec {
     }
 }
 
-/// Lossless codec for the versioned OCaml IL value envelope
+/// Standard JSON codec for the versioned OCaml IL value envelope
+///
+/// Rejects duplicate keys, non-standard JSON and floating numeric tokens
+/// Language integers use decimal strings; annotation integers must fit i64
+///
+/// # Panics
+///
+/// Encoding or decoding an extern payload panics, including nested payloads
 pub struct ValueEnvelopeCodec;
 
 impl ValueEnvelopeCodec {
@@ -65,10 +75,10 @@ impl ValueEnvelopeCodec {
         input: &[u8],
     ) -> Result<ast::Value, ValueEnvelopeDecodeError> {
         on_codec_stack(|| {
-            let envelope = yojson::Value::from_slice(input)?;
-            let fields = yojson_assoc(&envelope)?;
-            let schema = yojson_string(yojson_field(fields, "schema")?)?;
-            let kind = yojson_string(yojson_field(fields, "kind")?)?;
+            let json_envelope = reader::from_slice(input)?;
+            let fields = object(&json_envelope)?;
+            let schema = string(field(fields, "schema")?)?;
+            let kind = string(field(fields, "kind")?)?;
 
             if schema != VALUE_SCHEMA {
                 return Err(ValueEnvelopeDecodeError::UnknownSchema(schema.to_owned()));
@@ -79,7 +89,7 @@ impl ValueEnvelopeCodec {
                 ));
             }
 
-            decode_yojson_value(arena, yojson_field(fields, "payload")?).map_err(Into::into)
+            decode_value(arena, field(fields, "payload")?).map_err(Into::into)
         })
     }
 
@@ -88,27 +98,21 @@ impl ValueEnvelopeCodec {
         value: &ast::Value,
     ) -> Result<Vec<u8>, ValueEnvelopeEncodeError> {
         on_codec_stack(|| {
-            let encoder = ValueEncoder {
-                arena,
-                next_vid: Cell::new(0),
-            };
-            let envelope = yojson::Value::Assoc(vec![
-                (
-                    "schema".to_owned(),
-                    yojson::Value::String(VALUE_SCHEMA.to_owned()),
-                ),
-                ("kind".to_owned(), yojson::Value::String("value".to_owned())),
-                ("payload".to_owned(), encoder.encode_yojson_value(value)),
-            ]);
-            envelope.to_vec().map_err(Into::into)
+            let json_payload = ValueCodec::encode(arena, value)?;
+            let json_envelope = json!({
+                "schema": VALUE_SCHEMA,
+                "kind": "value",
+                "payload": json_payload,
+            });
+            serde_json::to_vec(&json_envelope).map_err(Into::into)
         })
     }
 }
 
 #[derive(Debug, Error)]
 pub enum ValueEnvelopeDecodeError {
-    #[error("invalid Yojson value envelope: {0}")]
-    Parse(#[from] yojson::ParseError),
+    #[error("invalid JSON value envelope: {0}")]
+    Parse(#[from] serde_json::Error),
 
     #[error("invalid OCaml IL value: {0}")]
     Decode(#[from] DecodeError),
@@ -122,46 +126,49 @@ pub enum ValueEnvelopeDecodeError {
 
 #[derive(Debug, Error)]
 pub enum ValueEnvelopeEncodeError {
-    #[error("cannot write Yojson value envelope: {0}")]
-    Write(#[from] yojson::WriteError),
+    #[error(transparent)]
+    Encode(#[from] EncodeError),
+
+    #[error("cannot write JSON value envelope: {0}")]
+    Write(#[from] serde_json::Error),
 }
 
 pub(super) fn decode_list<T>(
-    value: &Value,
-    decode: impl FnMut(&Value) -> Result<T, DecodeError>,
+    json: &json,
+    decode: impl FnMut(&json) -> Result<T, DecodeError>,
 ) -> Result<Vec<T>, DecodeError> {
-    array(value)?.iter().map(decode).collect()
+    array(json)?.iter().map(decode).collect()
 }
 
-pub(super) fn encode_list<T>(values: &[T], encode: impl Fn(&T) -> Value) -> Value {
-    Value::Array(values.iter().map(encode).collect())
+pub(super) fn encode_list<T>(values: &[T], encode: impl Fn(&T) -> json) -> json {
+    json::Array(values.iter().map(encode).collect())
 }
 
 pub(super) fn decode_option<T>(
-    value: &Value,
-    decode: impl FnOnce(&Value) -> Result<T, DecodeError>,
+    json: &json,
+    decode: impl FnOnce(&json) -> Result<T, DecodeError>,
 ) -> Result<Option<T>, DecodeError> {
-    if value.is_null() {
+    if json.is_null() {
         Ok(None)
     } else {
-        Ok(Some(decode(value)?))
+        Ok(Some(decode(json)?))
     }
 }
 
-pub(super) fn encode_option<T>(value: Option<&T>, encode: impl FnOnce(&T) -> Value) -> Value {
-    value.map_or(Value::Null, encode)
+pub(super) fn encode_option<T>(value: Option<&T>, encode: impl FnOnce(&T) -> json) -> json {
+    value.map_or(json::Null, encode)
 }
 
-pub(super) fn decode_id(value: &Value) -> Result<ast::Id, DecodeError> {
-    source::decode_phrase(value, |value| Ok(string(value)?.to_owned()))
+pub(super) fn decode_id(json: &json) -> Result<ast::Id, DecodeError> {
+    source::decode_phrase(json, |json| Ok(string(json)?.to_owned()))
 }
 
-pub(super) fn encode_id(id: &ast::Id) -> Value {
+pub(super) fn encode_id(id: &ast::Id) -> json {
     source::encode_phrase(id, |id| json!(id))
 }
 
-pub(super) fn decode_iter(value: &Value) -> Result<Iter, DecodeError> {
-    let (tag, fields) = variant(value)?;
+pub(super) fn decode_iter(json: &json) -> Result<Iter, DecodeError> {
+    let (tag, fields) = variant(json)?;
     match (tag, fields) {
         ("Opt", []) => Ok(Iter::Opt),
         ("List", []) => Ok(Iter::List),
@@ -170,15 +177,15 @@ pub(super) fn decode_iter(value: &Value) -> Result<Iter, DecodeError> {
     }
 }
 
-pub(super) fn encode_iter(iter: Iter) -> Value {
+pub(super) fn encode_iter(iter: Iter) -> json {
     match iter {
         Iter::Opt => json!(["Opt"]),
         Iter::List => json!(["List"]),
     }
 }
 
-pub(super) fn decode_var(value: &Value) -> Result<ast::Var, DecodeError> {
-    match array(value)? {
+pub(super) fn decode_var(json: &json) -> Result<ast::Var, DecodeError> {
+    match array(json)? {
         [id, typ, iters] => Ok(ast::Var {
             id: decode_id(id)?,
             typ: decode_typ(typ)?,
@@ -188,7 +195,7 @@ pub(super) fn decode_var(value: &Value) -> Result<ast::Var, DecodeError> {
     }
 }
 
-pub(super) fn encode_var(variable: &ast::Var) -> Value {
+pub(super) fn encode_var(variable: &ast::Var) -> json {
     json!([
         encode_id(&variable.id),
         encode_typ(&variable.typ),
@@ -196,32 +203,32 @@ pub(super) fn encode_var(variable: &ast::Var) -> Value {
     ])
 }
 
-pub(super) fn decode_typ(value: &Value) -> Result<ast::Typ, DecodeError> {
-    source::decode_phrase(value, decode_typ_kind)
+pub(super) fn decode_typ(json: &json) -> Result<ast::Typ, DecodeError> {
+    source::decode_phrase(json, decode_typ_kind)
 }
 
-pub(super) fn encode_typ(typ: &ast::Typ) -> Value {
+pub(super) fn encode_typ(typ: &ast::Typ) -> json {
     source::encode_phrase(typ, encode_typ_kind)
 }
 
-pub(super) fn decode_targ(value: &Value) -> Result<ast::Targ, DecodeError> {
-    source::decode_phrase(value, decode_typ_kind)
+pub(super) fn decode_targ(json: &json) -> Result<ast::Targ, DecodeError> {
+    source::decode_phrase(json, decode_typ_kind)
 }
 
-pub(super) fn encode_targ(targ: &ast::Targ) -> Value {
+pub(super) fn encode_targ(targ: &ast::Targ) -> json {
     source::encode_phrase(targ, encode_typ_kind)
 }
 
-pub(super) fn decode_tparam(value: &Value) -> Result<ast::TParam, DecodeError> {
-    source::decode_phrase(value, |value| Ok(string(value)?.to_owned()))
+pub(super) fn decode_tparam(json: &json) -> Result<ast::TParam, DecodeError> {
+    source::decode_phrase(json, |json| Ok(string(json)?.to_owned()))
 }
 
-pub(super) fn encode_tparam(tparam: &ast::TParam) -> Value {
+pub(super) fn encode_tparam(tparam: &ast::TParam) -> json {
     source::encode_phrase(tparam, |tparam| json!(tparam))
 }
 
-pub(super) fn decode_typ_kind(value: &Value) -> Result<TypKind, DecodeError> {
-    let (tag, fields) = variant(value)?;
+pub(super) fn decode_typ_kind(json: &json) -> Result<TypKind, DecodeError> {
+    let (tag, fields) = variant(json)?;
     match (tag, fields) {
         ("BoolT", []) => Ok(TypKind::Bool),
         ("NumT", [typ]) => Ok(TypKind::Num(xl::decode_num_typ(typ)?)),
@@ -254,7 +261,7 @@ pub(super) fn decode_typ_kind(value: &Value) -> Result<TypKind, DecodeError> {
     }
 }
 
-pub(super) fn encode_typ_kind(typ: &TypKind) -> Value {
+pub(super) fn encode_typ_kind(typ: &TypKind) -> json {
     match typ {
         TypKind::Bool => json!(["BoolT"]),
         TypKind::Num(typ) => json!(["NumT", xl::encode_num_typ(*typ)]),
@@ -273,30 +280,30 @@ pub(super) fn encode_typ_kind(typ: &TypKind) -> Value {
     }
 }
 
-pub(super) fn decode_not_typ(value: &Value) -> Result<ast::NotTyp, DecodeError> {
-    source::decode_phrase(value, |value| mixfix::decode(value, decode_typ))
+pub(super) fn decode_not_typ(json: &json) -> Result<ast::NotTyp, DecodeError> {
+    source::decode_phrase(json, |json| mixfix::decode(json, decode_typ))
 }
 
-pub(super) fn encode_not_typ(typ: &ast::NotTyp) -> Value {
+pub(super) fn encode_not_typ(typ: &ast::NotTyp) -> json {
     source::encode_phrase(typ, |typ| mixfix::encode(typ, encode_typ))
 }
 
-fn decode_typ_origin(value: &Value) -> Result<ast::TypOrigin, DecodeError> {
-    source::decode_phrase(value, |value| match array(value)? {
+fn decode_typ_origin(json: &json) -> Result<ast::TypOrigin, DecodeError> {
+    source::decode_phrase(json, |json| match array(json)? {
         [id, targs] => Ok((decode_id(id)?, decode_list(targs, decode_targ)?)),
         _ => Err(DecodeError::Expected("IL type origin pair")),
     })
 }
 
-fn encode_typ_origin(origin: &ast::TypOrigin) -> Value {
+fn encode_typ_origin(origin: &ast::TypOrigin) -> json {
     source::encode_phrase(origin, |(id, targs)| {
         json!([encode_id(id), encode_list(targs, encode_targ)])
     })
 }
 
-pub(super) fn decode_def_typ(value: &Value) -> Result<ast::DefTyp, DecodeError> {
-    source::decode_phrase(value, |value| {
-        let (tag, fields) = variant(value)?;
+pub(super) fn decode_def_typ(json: &json) -> Result<ast::DefTyp, DecodeError> {
+    source::decode_phrase(json, |json| {
+        let (tag, fields) = variant(json)?;
         match (tag, fields) {
             ("PlainT", [typ]) => Ok(DefTypKind::Plain(decode_typ(typ)?)),
             ("StructT", [fields]) => Ok(DefTypKind::Struct(decode_list(
@@ -325,7 +332,7 @@ pub(super) fn decode_def_typ(value: &Value) -> Result<ast::DefTyp, DecodeError> 
     })
 }
 
-pub(super) fn encode_def_typ(typ: &ast::DefTyp) -> Value {
+pub(super) fn encode_def_typ(typ: &ast::DefTyp) -> json {
     source::encode_phrase(typ, |typ| match typ {
         DefTypKind::Plain(typ) => json!(["PlainT", encode_typ(typ)]),
         DefTypKind::Struct(fields) => json!([
@@ -349,8 +356,8 @@ pub(super) fn encode_def_typ(typ: &ast::DefTyp) -> Value {
     })
 }
 
-fn decode_vnote(value: &Value) -> Result<TypKind, DecodeError> {
-    let object = object(value)?;
+fn decode_vnote(json: &json) -> Result<TypKind, DecodeError> {
+    let object = object(json)?;
     integer(field(object, "vid")?)?;
     let typ = decode_typ_kind(field(object, "typ")?)?;
     integer(field(object, "vhash")?)?;
@@ -363,7 +370,7 @@ struct ValueEncoder<'a> {
 }
 
 impl ValueEncoder<'_> {
-    fn encode_vnote(&self, typ: &TypKind) -> Value {
+    fn encode_vnote(&self, typ: &TypKind) -> json {
         let vid = self.next_vid.get();
         self.next_vid.set(vid + 1);
 
@@ -376,316 +383,41 @@ impl ValueEncoder<'_> {
     }
 }
 
-fn decode_external(value: &Value) -> ExternalData {
-    match value {
-        Value::Null => ExternalData::Null,
-        Value::Bool(value) => ExternalData::Bool(*value),
-        Value::Number(num) => {
-            if let Some(int) = num.as_i64() {
-                ExternalData::Int(int)
-            } else if num.is_u64() {
-                ExternalData::Intlit(num.to_string())
-            } else if let Some(float) = num.as_f64() {
-                ExternalData::Float(float)
-            } else {
-                ExternalData::Intlit(num.to_string())
-            }
-        }
-        Value::String(value) => ExternalData::String(value.clone()),
-        Value::Array(values) => ExternalData::List(values.iter().map(decode_external).collect()),
-        Value::Object(fields) => ExternalData::Assoc(
-            fields
-                .iter()
-                .map(|(name, value)| (name.clone(), decode_external(value)))
-                .collect(),
-        ),
-    }
-}
-
-fn unsupported_external(reason: impl Into<String>) -> EncodeError {
-    EncodeError::UnsupportedExternalData(reason.into())
-}
-
-fn encode_external(value: &ExternalData) -> Result<Value, EncodeError> {
-    match value {
-        ExternalData::Null => Ok(Value::Null),
-        ExternalData::Bool(value) => Ok(Value::Bool(*value)),
-        ExternalData::Int(value) => Ok(Value::Number(Number::from(*value))),
-        ExternalData::Intlit(value) => match serde_json::from_str(value) {
-            Ok(Value::Number(num))
-                if !value.contains(['.', 'e', 'E']) && num.to_string() == *value =>
-            {
-                Ok(Value::Number(num))
-            }
-            _ => Err(unsupported_external(format!(
-                "integer literal `{value}` is not representable by serde_json"
-            ))),
-        },
-        ExternalData::Float(value) => Number::from_f64(*value)
-            .map(Value::Number)
-            .ok_or_else(|| unsupported_external("non-finite float")),
-        ExternalData::String(value) => Ok(Value::String(value.clone())),
-        ExternalData::Assoc(fields) => {
-            let mut names = HashSet::with_capacity(fields.len());
-            let mut object = Map::new();
-            for (name, value) in fields {
-                if !names.insert(name) {
-                    return Err(unsupported_external(format!(
-                        "duplicate object field `{name}`"
-                    )));
-                }
-                object.insert(name.clone(), encode_external(value)?);
-            }
-            Ok(Value::Object(object))
-        }
-        ExternalData::List(values) => Ok(Value::Array(
-            values
-                .iter()
-                .map(encode_external)
-                .collect::<Result<_, _>>()?,
-        )),
-        ExternalData::Tuple(_) => Err(unsupported_external("non-standard JSON tuple")),
-        ExternalData::Variant(_, _) => Err(unsupported_external("non-standard JSON variant")),
-    }
-}
-
-fn yojson_assoc(value: &yojson::Value) -> Result<&[(String, yojson::Value)], DecodeError> {
-    match value {
-        yojson::Value::Assoc(fields) => Ok(fields),
-        _ => Err(DecodeError::Expected("Yojson association")),
-    }
-}
-
-fn yojson_list(value: &yojson::Value) -> Result<&[yojson::Value], DecodeError> {
-    match value {
-        yojson::Value::List(values) => Ok(values),
-        _ => Err(DecodeError::Expected("Yojson list")),
-    }
-}
-
-fn yojson_string(value: &yojson::Value) -> Result<&str, DecodeError> {
-    match value {
-        yojson::Value::String(value) => Ok(value),
-        _ => Err(DecodeError::Expected("Yojson string")),
-    }
-}
-
-fn yojson_boolean(value: &yojson::Value) -> Result<bool, DecodeError> {
-    match value {
-        yojson::Value::Bool(value) => Ok(*value),
-        _ => Err(DecodeError::Expected("Yojson boolean")),
-    }
-}
-
-fn yojson_field<'a>(
-    fields: &'a [(String, yojson::Value)],
-    name: &'static str,
-) -> Result<&'a yojson::Value, DecodeError> {
-    let mut matches = fields.iter().filter(|(field, _)| field == name);
-    let value = matches
-        .next()
-        .map(|(_, value)| value)
-        .ok_or(DecodeError::MissingField(name))?;
-    if matches.next().is_some() {
-        return Err(DecodeError::Expected(
-            "OCaml record without duplicate fields",
-        ));
-    }
-    Ok(value)
-}
-
-fn yojson_variant(value: &yojson::Value) -> Result<(&str, &[yojson::Value]), DecodeError> {
-    let values = yojson_list(value)?;
-    let (tag, fields) = values
-        .split_first()
-        .ok_or(DecodeError::Expected("non-empty Yojson variant list"))?;
-    Ok((yojson_string(tag)?, fields))
-}
-
-fn standard_json(value: &yojson::Value) -> Result<Value, DecodeError> {
-    yojson::to_serde_json(value).map_err(DecodeError::Expected)
-}
-
-fn decode_yojson_external(value: &yojson::Value) -> ExternalData {
-    match value {
-        yojson::Value::Null => ExternalData::Null,
-        yojson::Value::Bool(value) => ExternalData::Bool(*value),
-        yojson::Value::Int(value) => ExternalData::Int(*value),
-        yojson::Value::Intlit(value) => ExternalData::Intlit(value.clone()),
-        yojson::Value::Float(value) => ExternalData::Float(*value),
-        yojson::Value::String(value) => ExternalData::String(value.clone()),
-        yojson::Value::Assoc(fields) => ExternalData::Assoc(
-            fields
-                .iter()
-                .map(|(name, value)| (name.clone(), decode_yojson_external(value)))
-                .collect(),
-        ),
-        yojson::Value::List(values) => {
-            ExternalData::List(values.iter().map(decode_yojson_external).collect())
-        }
-        yojson::Value::Tuple(values) => {
-            ExternalData::Tuple(values.iter().map(decode_yojson_external).collect())
-        }
-        yojson::Value::Variant(name, value) => ExternalData::Variant(
-            name.clone(),
-            value.as_deref().map(decode_yojson_external).map(Box::new),
-        ),
-    }
-}
-
-fn encode_yojson_external(value: &ExternalData) -> yojson::Value {
-    match value {
-        ExternalData::Null => yojson::Value::Null,
-        ExternalData::Bool(value) => yojson::Value::Bool(*value),
-        ExternalData::Int(value) => yojson::Value::Int(*value),
-        ExternalData::Intlit(value) => yojson::Value::Intlit(value.clone()),
-        ExternalData::Float(value) => yojson::Value::Float(*value),
-        ExternalData::String(value) => yojson::Value::String(value.clone()),
-        ExternalData::Assoc(fields) => yojson::Value::Assoc(
-            fields
-                .iter()
-                .map(|(name, value)| (name.clone(), encode_yojson_external(value)))
-                .collect(),
-        ),
-        ExternalData::List(values) => {
-            yojson::Value::List(values.iter().map(encode_yojson_external).collect())
-        }
-        ExternalData::Tuple(values) => {
-            yojson::Value::Tuple(values.iter().map(encode_yojson_external).collect())
-        }
-        ExternalData::Variant(name, value) => yojson::Value::Variant(
-            name.clone(),
-            value.as_deref().map(encode_yojson_external).map(Box::new),
-        ),
-    }
-}
-
-fn decode_yojson_mixfix(
-    arena: &mut ValueArena,
-    value: &yojson::Value,
-) -> Result<Mixfix<ast::Value>, DecodeError> {
-    let (tag, fields) = yojson_variant(value)?;
-    match (tag, fields) {
-        ("Arg", [arg]) => Ok(Mixfix::Arg(decode_yojson_value(arena, arg)?)),
-        ("Atom", [atom]) => Ok(Mixfix::Atom(AtomPhraseCodec::decode(&standard_json(
-            atom,
-        )?)?)),
-        ("Brack", [atom_l, mixfix_inner, atom_r]) => Ok(Mixfix::Brack(
-            AtomPhraseCodec::decode(&standard_json(atom_l)?)?,
-            Box::new(decode_yojson_mixfix(arena, mixfix_inner)?),
-            AtomPhraseCodec::decode(&standard_json(atom_r)?)?,
-        )),
-        ("Infix", [mixfix_l, atom, mixfix_r]) => Ok(Mixfix::Infix(
-            Box::new(decode_yojson_mixfix(arena, mixfix_l)?),
-            AtomPhraseCodec::decode(&standard_json(atom)?)?,
-            Box::new(decode_yojson_mixfix(arena, mixfix_r)?),
-        )),
-        ("Seq", [items]) => Ok(Mixfix::Seq(
-            yojson_list(items)?
-                .iter()
-                .map(|value| decode_yojson_mixfix(arena, value))
-                .collect::<Result<_, _>>()?,
-        )),
-        ("Arg" | "Atom" | "Brack" | "Infix" | "Seq", _) => {
-            Err(DecodeError::Expected("valid Yojson mixfix arity"))
-        }
-        (unknown, _) => Err(DecodeError::UnknownVariant(unknown.to_owned())),
-    }
-}
-
-fn decode_yojson_value(
-    arena: &mut ValueArena,
-    value: &yojson::Value,
-) -> Result<ast::Value, DecodeError> {
-    let fields = yojson_assoc(value)?;
-    let node = decode_yojson_value_kind(arena, yojson_field(fields, "it")?)?;
-    let typ = decode_vnote(&standard_json(yojson_field(fields, "note")?)?)?;
-    let span = source::decode_region(&standard_json(yojson_field(fields, "at")?)?)?;
-    Ok(make::new(arena, node, typ.into(), span)?)
-}
-
-fn decode_yojson_value_kind(
-    arena: &mut ValueArena,
-    value: &yojson::Value,
-) -> Result<ValueKind, DecodeError> {
-    let (tag, fields) = yojson_variant(value)?;
-    match (tag, fields) {
-        ("BoolV", [value]) => Ok(ValueKind::Bool(yojson_boolean(value)?)),
-        ("NumV", [num]) => Ok(ValueKind::Num(xl::decode_num(&standard_json(num)?)?)),
-        ("TextV", [text]) => Ok(ValueKind::Text(yojson_string(text)?.to_owned())),
-        ("StructV", [fields]) => Ok(ValueKind::Struct(
-            yojson_list(fields)?
-                .iter()
-                .map(|field| match yojson_list(field)? {
-                    [atom, value] => Ok((
-                        AtomPhraseCodec::decode(&standard_json(atom)?)?,
-                        decode_yojson_value(arena, value)?,
-                    )),
-                    _ => Err(DecodeError::Expected("IL value field pair")),
-                })
-                .collect::<Result<_, _>>()?,
-        )),
-        ("CaseV", [case]) => Ok(ValueKind::Case(decode_yojson_mixfix(arena, case)?)),
-        ("TupleV", [values]) => Ok(ValueKind::Tuple(
-            yojson_list(values)?
-                .iter()
-                .map(|value| decode_yojson_value(arena, value))
-                .collect::<Result<_, _>>()?,
-        )),
-        ("OptV", [yojson::Value::Null]) => Ok(ValueKind::Opt(None)),
-        ("OptV", [value]) => Ok(ValueKind::Opt(Some(decode_yojson_value(arena, value)?))),
-        ("ListV", [values]) => Ok(ValueKind::List(
-            yojson_list(values)?
-                .iter()
-                .map(|value| decode_yojson_value(arena, value))
-                .collect::<Result<_, _>>()?,
-        )),
-        ("FuncV", [id]) => Ok(ValueKind::Func(decode_id(&standard_json(id)?)?)),
-        ("ExternV", [value]) => Ok(ValueKind::Extern(decode_yojson_external(value))),
-        (
-            "BoolV" | "NumV" | "TextV" | "StructV" | "CaseV" | "TupleV" | "OptV" | "ListV"
-            | "FuncV" | "ExternV",
-            _,
-        ) => Err(DecodeError::Expected("valid IL value arity")),
-        (unknown, _) => Err(DecodeError::UnknownVariant(unknown.to_owned())),
-    }
-}
-
-fn decode_value(arena: &mut ValueArena, value: &Value) -> Result<ast::Value, DecodeError> {
-    let object = object(value)?;
+fn decode_value(arena: &mut ValueArena, json: &json) -> Result<ast::Value, DecodeError> {
+    let object = object(json)?;
     let node = decode_value_kind(arena, field(object, "it")?)?;
     let typ = decode_vnote(field(object, "note")?)?;
     let span = source::decode_region(field(object, "at")?)?;
     Ok(make::new(arena, node, typ.into(), span)?)
 }
 
-fn decode_value_kind(arena: &mut ValueArena, value: &Value) -> Result<ValueKind, DecodeError> {
-    let (tag, fields) = variant(value)?;
+fn decode_value_kind(arena: &mut ValueArena, json: &json) -> Result<ValueKind, DecodeError> {
+    let (tag, fields) = variant(json)?;
     match (tag, fields) {
-        ("BoolV", [value]) => Ok(ValueKind::Bool(boolean(value)?)),
+        ("BoolV", [json]) => Ok(ValueKind::Bool(boolean(json)?)),
         ("NumV", [num]) => Ok(ValueKind::Num(xl::decode_num(num)?)),
         ("TextV", [text]) => Ok(ValueKind::Text(string(text)?.to_owned())),
         ("StructV", [fields]) => Ok(ValueKind::Struct(decode_list(
             fields,
             |field| match array(field)? {
-                [atom, value] => Ok((AtomPhraseCodec::decode(atom)?, decode_value(arena, value)?)),
+                [atom, json] => Ok((AtomPhraseCodec::decode(atom)?, decode_value(arena, json)?)),
                 _ => Err(DecodeError::Expected("IL value field pair")),
             },
         )?)),
-        ("CaseV", [case]) => Ok(ValueKind::Case(mixfix::decode(case, |value| {
-            decode_value(arena, value)
+        ("CaseV", [case]) => Ok(ValueKind::Case(mixfix::decode(case, |json| {
+            decode_value(arena, json)
         })?)),
-        ("TupleV", [values]) => Ok(ValueKind::Tuple(decode_list(values, |value| {
-            decode_value(arena, value)
+        ("TupleV", [json]) => Ok(ValueKind::Tuple(decode_list(json, |json| {
+            decode_value(arena, json)
         })?)),
-        ("OptV", [value]) => Ok(ValueKind::Opt(decode_option(value, |value| {
-            decode_value(arena, value)
+        ("OptV", [json]) => Ok(ValueKind::Opt(decode_option(json, |json| {
+            decode_value(arena, json)
         })?)),
-        ("ListV", [values]) => Ok(ValueKind::List(decode_list(values, |value| {
-            decode_value(arena, value)
+        ("ListV", [json]) => Ok(ValueKind::List(decode_list(json, |json| {
+            decode_value(arena, json)
         })?)),
         ("FuncV", [id]) => Ok(ValueKind::Func(decode_id(id)?)),
-        ("ExternV", [value]) => Ok(ValueKind::Extern(decode_external(value))),
+        ("ExternV", [_]) => panic!("extern payloads are not supported by OCaml wire"),
         (
             "BoolV" | "NumV" | "TextV" | "StructV" | "CaseV" | "TupleV" | "OptV" | "ListV"
             | "FuncV" | "ExternV",
@@ -696,125 +428,7 @@ fn decode_value_kind(arena: &mut ValueArena, value: &Value) -> Result<ValueKind,
 }
 
 impl ValueEncoder<'_> {
-    fn encode_yojson_mixfix(&self, value: &ast::ValueCase) -> yojson::Value {
-        match value {
-            Mixfix::Arg(value) => yojson::Value::List(vec![
-                yojson::Value::String("Arg".to_owned()),
-                self.encode_yojson_value(value),
-            ]),
-            Mixfix::Atom(atom) => yojson::Value::List(vec![
-                yojson::Value::String("Atom".to_owned()),
-                yojson::from_serde_json(&AtomPhraseCodec::encode(atom)),
-            ]),
-            Mixfix::Brack(atom_l, mixfix_inner, atom_r) => yojson::Value::List(vec![
-                yojson::Value::String("Brack".to_owned()),
-                yojson::from_serde_json(&AtomPhraseCodec::encode(atom_l)),
-                self.encode_yojson_mixfix(mixfix_inner),
-                yojson::from_serde_json(&AtomPhraseCodec::encode(atom_r)),
-            ]),
-            Mixfix::Infix(mixfix_l, atom, mixfix_r) => yojson::Value::List(vec![
-                yojson::Value::String("Infix".to_owned()),
-                self.encode_yojson_mixfix(mixfix_l),
-                yojson::from_serde_json(&AtomPhraseCodec::encode(atom)),
-                self.encode_yojson_mixfix(mixfix_r),
-            ]),
-            Mixfix::Seq(items) => yojson::Value::List(vec![
-                yojson::Value::String("Seq".to_owned()),
-                yojson::Value::List(
-                    items
-                        .iter()
-                        .map(|item| self.encode_yojson_mixfix(item))
-                        .collect(),
-                ),
-            ]),
-        }
-    }
-
-    fn encode_yojson_value(&self, value: &ast::Value) -> yojson::Value {
-        let kind = self.encode_yojson_value_kind(self.arena.kind(value));
-        yojson::Value::Assoc(vec![
-            ("it".to_owned(), kind),
-            (
-                "note".to_owned(),
-                yojson::from_serde_json(&self.encode_vnote(self.arena.typ(value))),
-            ),
-            (
-                "at".to_owned(),
-                yojson::from_serde_json(&source::encode_region(self.arena.span(value))),
-            ),
-        ])
-    }
-
-    fn encode_yojson_value_kind(&self, value: &ValueKind) -> yojson::Value {
-        let fields = match value {
-            ValueKind::Bool(value) => vec![
-                yojson::Value::String("BoolV".to_owned()),
-                yojson::Value::Bool(*value),
-            ],
-            ValueKind::Num(num) => vec![
-                yojson::Value::String("NumV".to_owned()),
-                yojson::from_serde_json(&xl::encode_num(num)),
-            ],
-            ValueKind::Text(text) => vec![
-                yojson::Value::String("TextV".to_owned()),
-                yojson::Value::String(text.clone()),
-            ],
-            ValueKind::Struct(fields) => vec![
-                yojson::Value::String("StructV".to_owned()),
-                yojson::Value::List(
-                    fields
-                        .iter()
-                        .map(|(atom, value)| {
-                            yojson::Value::List(vec![
-                                yojson::from_serde_json(&AtomPhraseCodec::encode(atom)),
-                                self.encode_yojson_value(value),
-                            ])
-                        })
-                        .collect(),
-                ),
-            ],
-            ValueKind::Case(case) => vec![
-                yojson::Value::String("CaseV".to_owned()),
-                self.encode_yojson_mixfix(case),
-            ],
-            ValueKind::Tuple(values) => vec![
-                yojson::Value::String("TupleV".to_owned()),
-                yojson::Value::List(
-                    values
-                        .iter()
-                        .map(|value| self.encode_yojson_value(value))
-                        .collect(),
-                ),
-            ],
-            ValueKind::Opt(value) => vec![
-                yojson::Value::String("OptV".to_owned()),
-                value
-                    .as_ref()
-                    .map(|value| self.encode_yojson_value(value))
-                    .unwrap_or(yojson::Value::Null),
-            ],
-            ValueKind::List(values) => vec![
-                yojson::Value::String("ListV".to_owned()),
-                yojson::Value::List(
-                    values
-                        .iter()
-                        .map(|value| self.encode_yojson_value(value))
-                        .collect(),
-                ),
-            ],
-            ValueKind::Func(id) => vec![
-                yojson::Value::String("FuncV".to_owned()),
-                yojson::from_serde_json(&encode_id(id)),
-            ],
-            ValueKind::Extern(value) => vec![
-                yojson::Value::String("ExternV".to_owned()),
-                encode_yojson_external(value),
-            ],
-        };
-        yojson::Value::List(fields)
-    }
-
-    fn encode_value(&self, value: &ast::Value) -> Result<Value, EncodeError> {
+    fn encode_value(&self, value: &ast::Value) -> Result<json, EncodeError> {
         let kind = self.encode_value_kind(self.arena.kind(value))?;
         Ok(json!({
             "it": kind,
@@ -823,8 +437,8 @@ impl ValueEncoder<'_> {
         }))
     }
 
-    fn encode_value_kind(&self, value: &ValueKind) -> Result<Value, EncodeError> {
-        Ok(match value {
+    fn encode_value_kind(&self, value_kind: &ValueKind) -> Result<json, EncodeError> {
+        Ok(match value_kind {
             ValueKind::Bool(value) => json!(["BoolV", value]),
             ValueKind::Num(num) => json!(["NumV", xl::encode_num(num)]),
             ValueKind::Text(text) => json!(["TextV", text]),
@@ -855,7 +469,7 @@ impl ValueEncoder<'_> {
                 "OptV",
                 match value {
                     Some(value) => self.encode_value(value)?,
-                    None => Value::Null,
+                    None => json::Null,
                 }
             ]),
             ValueKind::List(values) => json!([
@@ -866,13 +480,13 @@ impl ValueEncoder<'_> {
                     .collect::<Result<Vec<_>, _>>()?
             ]),
             ValueKind::Func(id) => json!(["FuncV", encode_id(id)]),
-            ValueKind::Extern(value) => json!(["ExternV", encode_external(value)?]),
+            ValueKind::Extern(_) => panic!("extern payloads are not supported by OCaml wire"),
         })
     }
 }
 
-pub(super) fn decode_un_op(value: &Value) -> Result<UnOp, DecodeError> {
-    let (tag, fields) = variant(value)?;
+pub(super) fn decode_un_op(json: &json) -> Result<UnOp, DecodeError> {
+    let (tag, fields) = variant(json)?;
     match (tag, fields) {
         ("NotOp", []) => Ok(UnOp::Bool(bool::UnOp::Not)),
         ("PlusOp", []) => Ok(UnOp::Num(num::UnOp::Plus)),
@@ -884,7 +498,7 @@ pub(super) fn decode_un_op(value: &Value) -> Result<UnOp, DecodeError> {
     }
 }
 
-pub(super) fn encode_un_op(op: UnOp) -> Value {
+pub(super) fn encode_un_op(op: UnOp) -> json {
     match op {
         UnOp::Bool(bool::UnOp::Not) => json!(["NotOp"]),
         UnOp::Num(num::UnOp::Plus) => json!(["PlusOp"]),
@@ -892,8 +506,8 @@ pub(super) fn encode_un_op(op: UnOp) -> Value {
     }
 }
 
-pub(super) fn decode_bin_op(value: &Value) -> Result<BinOp, DecodeError> {
-    let (tag, fields) = variant(value)?;
+pub(super) fn decode_bin_op(json: &json) -> Result<BinOp, DecodeError> {
+    let (tag, fields) = variant(json)?;
     match (tag, fields) {
         ("AndOp", []) => Ok(BinOp::Bool(bool::BinOp::And)),
         ("OrOp", []) => Ok(BinOp::Bool(bool::BinOp::Or)),
@@ -914,7 +528,7 @@ pub(super) fn decode_bin_op(value: &Value) -> Result<BinOp, DecodeError> {
     }
 }
 
-pub(super) fn encode_bin_op(op: BinOp) -> Value {
+pub(super) fn encode_bin_op(op: BinOp) -> json {
     match op {
         BinOp::Bool(bool::BinOp::And) => json!(["AndOp"]),
         BinOp::Bool(bool::BinOp::Or) => json!(["OrOp"]),
@@ -929,8 +543,8 @@ pub(super) fn encode_bin_op(op: BinOp) -> Value {
     }
 }
 
-pub(super) fn decode_cmp_op(value: &Value) -> Result<CmpOp, DecodeError> {
-    let (tag, fields) = variant(value)?;
+pub(super) fn decode_cmp_op(json: &json) -> Result<CmpOp, DecodeError> {
+    let (tag, fields) = variant(json)?;
     match (tag, fields) {
         ("EqOp", []) => Ok(CmpOp::Bool(bool::CmpOp::Eq)),
         ("NeOp", []) => Ok(CmpOp::Bool(bool::CmpOp::Ne)),
@@ -945,7 +559,7 @@ pub(super) fn decode_cmp_op(value: &Value) -> Result<CmpOp, DecodeError> {
     }
 }
 
-pub(super) fn encode_cmp_op(op: CmpOp) -> Value {
+pub(super) fn encode_cmp_op(op: CmpOp) -> json {
     match op {
         CmpOp::Bool(bool::CmpOp::Eq) => json!(["EqOp"]),
         CmpOp::Bool(bool::CmpOp::Ne) => json!(["NeOp"]),
@@ -956,8 +570,8 @@ pub(super) fn encode_cmp_op(op: CmpOp) -> Value {
     }
 }
 
-pub(super) fn decode_op_typ(value: &Value) -> Result<OpTyp, DecodeError> {
-    let (tag, fields) = variant(value)?;
+pub(super) fn decode_op_typ(json: &json) -> Result<OpTyp, DecodeError> {
+    let (tag, fields) = variant(json)?;
     match (tag, fields) {
         ("BoolT", []) => Ok(OpTyp::Bool),
         ("NatT", []) => Ok(OpTyp::Nat),
@@ -969,7 +583,7 @@ pub(super) fn decode_op_typ(value: &Value) -> Result<OpTyp, DecodeError> {
     }
 }
 
-pub(super) fn encode_op_typ(typ: OpTyp) -> Value {
+pub(super) fn encode_op_typ(typ: OpTyp) -> json {
     match typ {
         OpTyp::Bool => json!(["BoolT"]),
         OpTyp::Nat => json!(["NatT"]),
@@ -977,8 +591,8 @@ pub(super) fn encode_op_typ(typ: OpTyp) -> Value {
     }
 }
 
-pub(super) fn decode_subcheck(value: &Value) -> Result<ast::Subcheck, DecodeError> {
-    let (tag, fields) = variant(value)?;
+pub(super) fn decode_subcheck(json: &json) -> Result<ast::Subcheck, DecodeError> {
+    let (tag, fields) = variant(json)?;
     match (tag, fields) {
         ("SkipSC", []) => Ok(ast::Subcheck::Skip),
         ("MixopSC", [mixops]) => Ok(ast::Subcheck::Mixop(decode_list(
@@ -1001,7 +615,7 @@ pub(super) fn decode_subcheck(value: &Value) -> Result<ast::Subcheck, DecodeErro
     }
 }
 
-pub(super) fn encode_subcheck(subcheck: &ast::Subcheck) -> Value {
+pub(super) fn encode_subcheck(subcheck: &ast::Subcheck) -> json {
     match subcheck {
         ast::Subcheck::Skip => json!(["SkipSC"]),
         ast::Subcheck::Mixop(mixops) => json!([
@@ -1018,20 +632,20 @@ pub(super) fn encode_subcheck(subcheck: &ast::Subcheck) -> Value {
     }
 }
 
-pub(super) fn decode_exp(value: &Value) -> Result<ast::Exp, DecodeError> {
-    source::decode_note_phrase(value, decode_exp_kind, |value| {
-        decode_typ_kind(value).map(Into::into)
+pub(super) fn decode_exp(json: &json) -> Result<ast::Exp, DecodeError> {
+    source::decode_note_phrase(json, decode_exp_kind, |json| {
+        decode_typ_kind(json).map(Into::into)
     })
 }
 
-pub(super) fn encode_exp(exp: &ast::Exp) -> Value {
+pub(super) fn encode_exp(exp: &ast::Exp) -> json {
     source::encode_note_phrase(exp, encode_exp_kind, |note| encode_typ_kind(note))
 }
 
-fn decode_exp_kind(value: &Value) -> Result<ExpKind, DecodeError> {
-    let (tag, fields) = variant(value)?;
+fn decode_exp_kind(json: &json) -> Result<ExpKind, DecodeError> {
+    let (tag, fields) = variant(json)?;
     match (tag, fields) {
-        ("BoolE", [value]) => Ok(ExpKind::Bool(boolean(value)?)),
+        ("BoolE", [json]) => Ok(ExpKind::Bool(boolean(json)?)),
         ("NumE", [num]) => Ok(ExpKind::Num(xl::decode_num(num)?)),
         ("TextE", [text]) => Ok(ExpKind::Text(string(text)?.to_owned())),
         ("VarE", [id]) => Ok(ExpKind::Var(decode_id(id)?)),
@@ -1129,7 +743,7 @@ fn decode_exp_kind(value: &Value) -> Result<ExpKind, DecodeError> {
     }
 }
 
-fn encode_exp_kind(exp: &ExpKind) -> Value {
+fn encode_exp_kind(exp: &ExpKind) -> json {
     match exp {
         ExpKind::Bool(value) => json!(["BoolE", value]),
         ExpKind::Num(num) => json!(["NumE", xl::encode_num(num)]),
@@ -1219,27 +833,27 @@ fn encode_exp_kind(exp: &ExpKind) -> Value {
     }
 }
 
-pub(super) fn decode_not_exp(value: &Value) -> Result<ast::NotExp, DecodeError> {
-    mixfix::decode(value, decode_exp)
+pub(super) fn decode_not_exp(json: &json) -> Result<ast::NotExp, DecodeError> {
+    mixfix::decode(json, decode_exp)
 }
 
-pub(super) fn encode_not_exp(exp: &ast::NotExp) -> Value {
+pub(super) fn encode_not_exp(exp: &ast::NotExp) -> json {
     mixfix::encode(exp, encode_exp)
 }
 
-pub(super) fn decode_iter_exp(value: &Value) -> Result<ast::ExpIter, DecodeError> {
-    match array(value)? {
+pub(super) fn decode_iter_exp(json: &json) -> Result<ast::ExpIter, DecodeError> {
+    match array(json)? {
         [iter, vars] => Ok((decode_iter(iter)?, decode_list(vars, decode_var)?)),
         _ => Err(DecodeError::Expected("IL expression iterator pair")),
     }
 }
 
-pub(super) fn encode_iter_exp((iter, vars): &ast::ExpIter) -> Value {
+pub(super) fn encode_iter_exp((iter, vars): &ast::ExpIter) -> json {
     json!([encode_iter(*iter), encode_list(vars, encode_var)])
 }
 
-pub(super) fn decode_pattern(value: &Value) -> Result<Pattern, DecodeError> {
-    let (tag, fields) = variant(value)?;
+pub(super) fn decode_pattern(json: &json) -> Result<Pattern, DecodeError> {
+    let (tag, fields) = variant(json)?;
     match (tag, fields) {
         ("CaseP", [mixop]) => Ok(Pattern::Case(Box::new(
             crate::wire::ocaml::mixfix::MixopCodec::decode(mixop)?,
@@ -1251,7 +865,7 @@ pub(super) fn decode_pattern(value: &Value) -> Result<Pattern, DecodeError> {
     }
 }
 
-pub(super) fn encode_pattern(pattern: &Pattern) -> Value {
+pub(super) fn encode_pattern(pattern: &Pattern) -> json {
     match pattern {
         Pattern::Case(mixop) => json!([
             "CaseP",
@@ -1262,8 +876,8 @@ pub(super) fn encode_pattern(pattern: &Pattern) -> Value {
     }
 }
 
-fn decode_list_pattern(value: &Value) -> Result<ListPattern, DecodeError> {
-    let (tag, fields) = variant(value)?;
+fn decode_list_pattern(json: &json) -> Result<ListPattern, DecodeError> {
+    let (tag, fields) = variant(json)?;
     match (tag, fields) {
         ("Cons", []) => Ok(ListPattern::Cons),
         ("Fixed", [length]) => Ok(ListPattern::Fixed(integer(length)?)),
@@ -1273,7 +887,7 @@ fn decode_list_pattern(value: &Value) -> Result<ListPattern, DecodeError> {
     }
 }
 
-fn encode_list_pattern(pattern: &ListPattern) -> Value {
+fn encode_list_pattern(pattern: &ListPattern) -> json {
     match pattern {
         ListPattern::Cons => json!(["Cons"]),
         ListPattern::Fixed(length) => json!(["Fixed", length]),
@@ -1281,8 +895,8 @@ fn encode_list_pattern(pattern: &ListPattern) -> Value {
     }
 }
 
-fn decode_opt_pattern(value: &Value) -> Result<OptPattern, DecodeError> {
-    let (tag, fields) = variant(value)?;
+fn decode_opt_pattern(json: &json) -> Result<OptPattern, DecodeError> {
+    let (tag, fields) = variant(json)?;
     match (tag, fields) {
         ("Some", []) => Ok(OptPattern::Some),
         ("None", []) => Ok(OptPattern::None),
@@ -1291,25 +905,25 @@ fn decode_opt_pattern(value: &Value) -> Result<OptPattern, DecodeError> {
     }
 }
 
-fn encode_opt_pattern(pattern: OptPattern) -> Value {
+fn encode_opt_pattern(pattern: OptPattern) -> json {
     match pattern {
         OptPattern::Some => json!(["Some"]),
         OptPattern::None => json!(["None"]),
     }
 }
 
-fn decode_path(value: &Value) -> Result<ast::Path, DecodeError> {
-    source::decode_note_phrase(value, decode_path_kind, |value| {
-        decode_typ_kind(value).map(Into::into)
+fn decode_path(json: &json) -> Result<ast::Path, DecodeError> {
+    source::decode_note_phrase(json, decode_path_kind, |json| {
+        decode_typ_kind(json).map(Into::into)
     })
 }
 
-fn encode_path(path: &ast::Path) -> Value {
+fn encode_path(path: &ast::Path) -> json {
     source::encode_note_phrase(path, encode_path_kind, |note| encode_typ_kind(note))
 }
 
-fn decode_path_kind(value: &Value) -> Result<PathKind, DecodeError> {
-    let (tag, fields) = variant(value)?;
+fn decode_path_kind(json: &json) -> Result<PathKind, DecodeError> {
+    let (tag, fields) = variant(json)?;
     match (tag, fields) {
         ("RootP", []) => Ok(PathKind::Root),
         ("IdxP", [path, exp]) => Ok(PathKind::Idx(
@@ -1332,7 +946,7 @@ fn decode_path_kind(value: &Value) -> Result<PathKind, DecodeError> {
     }
 }
 
-fn encode_path_kind(path: &PathKind) -> Value {
+fn encode_path_kind(path: &PathKind) -> json {
     match path {
         PathKind::Root => json!(["RootP"]),
         PathKind::Idx(path, exp) => json!(["IdxP", encode_path(path), encode_exp(exp)]),
@@ -1348,9 +962,9 @@ fn encode_path_kind(path: &PathKind) -> Value {
     }
 }
 
-pub(super) fn decode_param(value: &Value) -> Result<ast::Param, DecodeError> {
-    source::decode_phrase(value, |value| {
-        let (tag, fields) = variant(value)?;
+pub(super) fn decode_param(json: &json) -> Result<ast::Param, DecodeError> {
+    source::decode_phrase(json, |json| {
+        let (tag, fields) = variant(json)?;
         match (tag, fields) {
             ("ExpP", [typ]) => Ok(ParamKind::Exp(decode_typ(typ)?)),
             ("DefP", [id, tparams, params, typ]) => Ok(ParamKind::Def(
@@ -1365,7 +979,7 @@ pub(super) fn decode_param(value: &Value) -> Result<ast::Param, DecodeError> {
     })
 }
 
-pub(super) fn encode_param(param: &ast::Param) -> Value {
+pub(super) fn encode_param(param: &ast::Param) -> json {
     source::encode_phrase(param, |param| match param {
         ParamKind::Exp(typ) => json!(["ExpP", encode_typ(typ)]),
         ParamKind::Def(id, tparams, params, typ) => json!([
@@ -1378,9 +992,9 @@ pub(super) fn encode_param(param: &ast::Param) -> Value {
     })
 }
 
-pub(super) fn decode_arg(value: &Value) -> Result<ast::Arg, DecodeError> {
-    source::decode_phrase(value, |value| {
-        let (tag, fields) = variant(value)?;
+pub(super) fn decode_arg(json: &json) -> Result<ast::Arg, DecodeError> {
+    source::decode_phrase(json, |json| {
+        let (tag, fields) = variant(json)?;
         match (tag, fields) {
             ("ExpA", [exp]) => Ok(ArgKind::Exp(Box::new(decode_exp(exp)?))),
             ("DefA", [id]) => Ok(ArgKind::Def(decode_id(id)?)),
@@ -1390,7 +1004,7 @@ pub(super) fn decode_arg(value: &Value) -> Result<ast::Arg, DecodeError> {
     })
 }
 
-pub(super) fn encode_arg(arg: &ast::Arg) -> Value {
+pub(super) fn encode_arg(arg: &ast::Arg) -> json {
     source::encode_phrase(arg, |arg| match arg {
         ArgKind::Exp(exp) => json!(["ExpA", encode_exp(exp)]),
         ArgKind::Def(id) => json!(["DefA", encode_id(id)]),
@@ -1398,20 +1012,20 @@ pub(super) fn encode_arg(arg: &ast::Arg) -> Value {
 }
 
 pub(super) fn decode_input_hint(
-    value: &Value,
+    json: &json,
 ) -> Result<crate::lang::hints::input::InputHint, DecodeError> {
     Ok(crate::lang::hints::input::InputHint::new(decode_list(
-        value, integer,
+        json, integer,
     )?))
 }
 
-pub(super) fn encode_input_hint(hint: &crate::lang::hints::input::InputHint) -> Value {
+pub(super) fn encode_input_hint(hint: &crate::lang::hints::input::InputHint) -> json {
     encode_list(hint.indices(), |idx| json!(idx))
 }
 
-pub(super) fn decode_prem(value: &Value) -> Result<ast::Prem, DecodeError> {
-    source::decode_phrase(value, |value| {
-        let (tag, fields) = variant(value)?;
+pub(super) fn decode_prem(json: &json) -> Result<ast::Prem, DecodeError> {
+    source::decode_phrase(json, |json| {
+        let (tag, fields) = variant(json)?;
         match (tag, fields) {
             ("RulePr", [id, exp, hint]) => Ok(PremKind::Rule(RulePrem {
                 id: decode_id(id)?,
@@ -1444,7 +1058,7 @@ pub(super) fn decode_prem(value: &Value) -> Result<ast::Prem, DecodeError> {
     })
 }
 
-pub(super) fn encode_prem(prem: &ast::Prem) -> Value {
+pub(super) fn encode_prem(prem: &ast::Prem) -> json {
     source::encode_phrase(prem, |prem| match prem {
         PremKind::Rule(RulePrem {
             id,
@@ -1470,8 +1084,8 @@ pub(super) fn encode_prem(prem: &ast::Prem) -> Value {
     })
 }
 
-pub(super) fn decode_prem_iter(value: &Value) -> Result<ast::PremIter, DecodeError> {
-    match array(value)? {
+pub(super) fn decode_prem_iter(json: &json) -> Result<ast::PremIter, DecodeError> {
+    match array(json)? {
         [iter, vars_bound, vars_bind] => Ok(ast::PremIter {
             iter: decode_iter(iter)?,
             vars_bound: decode_list(vars_bound, decode_var)?,
@@ -1481,7 +1095,7 @@ pub(super) fn decode_prem_iter(value: &Value) -> Result<ast::PremIter, DecodeErr
     }
 }
 
-pub(super) fn encode_prem_iter(prem_iter: &ast::PremIter) -> Value {
+pub(super) fn encode_prem_iter(prem_iter: &ast::PremIter) -> json {
     json!([
         encode_iter(prem_iter.iter),
         encode_list(&prem_iter.vars_bound, encode_var),
@@ -1489,8 +1103,8 @@ pub(super) fn encode_prem_iter(prem_iter: &ast::PremIter) -> Value {
     ])
 }
 
-fn decode_rule(value: &Value) -> Result<ast::Rule, DecodeError> {
-    source::decode_phrase(value, |value| match array(value)? {
+fn decode_rule(json: &json) -> Result<ast::Rule, DecodeError> {
+    source::decode_phrase(json, |json| match array(json)? {
         [id, exp, prems] => Ok(ast::RuleKind {
             id: decode_id(id)?,
             not_exp: decode_not_exp(exp)?,
@@ -1500,7 +1114,7 @@ fn decode_rule(value: &Value) -> Result<ast::Rule, DecodeError> {
     })
 }
 
-fn encode_rule(rule: &ast::Rule) -> Value {
+fn encode_rule(rule: &ast::Rule) -> json {
     source::encode_phrase(rule, |rule| {
         json!([
             encode_id(&rule.id),
@@ -1510,34 +1124,34 @@ fn encode_rule(rule: &ast::Rule) -> Value {
     })
 }
 
-fn decode_rule_group(value: &Value) -> Result<ast::RuleGroup, DecodeError> {
-    source::decode_phrase(value, |value| match array(value)? {
+fn decode_rule_group(json: &json) -> Result<ast::RuleGroup, DecodeError> {
+    source::decode_phrase(json, |json| match array(json)? {
         [id, rules] => Ok((decode_id(id)?, decode_list(rules, decode_rule)?)),
         _ => Err(DecodeError::Expected("IL rule group pair")),
     })
 }
 
-fn encode_rule_group(group: &ast::RuleGroup) -> Value {
+fn encode_rule_group(group: &ast::RuleGroup) -> json {
     source::encode_phrase(group, |(id, rules)| {
         json!([encode_id(id), encode_list(rules, encode_rule)])
     })
 }
 
-fn decode_else_group(value: &Value) -> Result<ast::ElseGroup, DecodeError> {
-    source::decode_phrase(value, |value| match array(value)? {
+fn decode_else_group(json: &json) -> Result<ast::ElseGroup, DecodeError> {
+    source::decode_phrase(json, |json| match array(json)? {
         [id, rule] => Ok((decode_id(id)?, decode_rule(rule)?)),
         _ => Err(DecodeError::Expected("IL else group pair")),
     })
 }
 
-fn encode_else_group(group: &ast::ElseGroup) -> Value {
+fn encode_else_group(group: &ast::ElseGroup) -> json {
     source::encode_phrase(group, |(id, rule)| {
         json!([encode_id(id), encode_rule(rule)])
     })
 }
 
-pub(super) fn decode_clause(value: &Value) -> Result<ast::Clause, DecodeError> {
-    source::decode_phrase(value, |value| match array(value)? {
+pub(super) fn decode_clause(json: &json) -> Result<ast::Clause, DecodeError> {
+    source::decode_phrase(json, |json| match array(json)? {
         [args, exp, prems] => Ok(ast::ClauseKind {
             args: decode_list(args, decode_arg)?,
             exp: decode_exp(exp)?,
@@ -1547,7 +1161,7 @@ pub(super) fn decode_clause(value: &Value) -> Result<ast::Clause, DecodeError> {
     })
 }
 
-pub(super) fn encode_clause(clause: &ast::Clause) -> Value {
+pub(super) fn encode_clause(clause: &ast::Clause) -> json {
     source::encode_phrase(clause, |clause| {
         json!([
             encode_list(&clause.args, encode_arg),
@@ -1557,22 +1171,22 @@ pub(super) fn encode_clause(clause: &ast::Clause) -> Value {
     })
 }
 
-fn decode_table_row(value: &Value) -> Result<ast::TableRow, DecodeError> {
-    source::decode_phrase(value, |value| match array(value)? {
+fn decode_table_row(json: &json) -> Result<ast::TableRow, DecodeError> {
+    source::decode_phrase(json, |json| match array(json)? {
         [args, exp] => Ok((decode_list(args, decode_arg)?, decode_exp(exp)?)),
         _ => Err(DecodeError::Expected("IL table row pair")),
     })
 }
 
-fn encode_table_row(row: &ast::TableRow) -> Value {
+fn encode_table_row(row: &ast::TableRow) -> json {
     source::encode_phrase(row, |(args, exp)| {
         json!([encode_list(args, encode_arg), encode_exp(exp)])
     })
 }
 
-fn decode_def(value: &Value) -> Result<ast::Def, DecodeError> {
-    source::decode_phrase(value, |value| {
-        let (tag, fields) = variant(value)?;
+fn decode_def(json: &json) -> Result<ast::Def, DecodeError> {
+    source::decode_phrase(json, |json| {
+        let (tag, fields) = variant(json)?;
         match (tag, fields) {
             ("ExternTypD", [id, hints]) => Ok(DefKind::Typ(TypDef::Extern(ExternTyp {
                 id: decode_id(id)?,
@@ -1657,7 +1271,7 @@ fn decode_def(value: &Value) -> Result<ast::Def, DecodeError> {
     })
 }
 
-fn encode_typ_def(typ_def_il: &TypDef) -> Value {
+fn encode_typ_def(typ_def_il: &TypDef) -> json {
     match typ_def_il {
         TypDef::Extern(extern_typ_il) => json!([
             "ExternTypD",
@@ -1674,7 +1288,7 @@ fn encode_typ_def(typ_def_il: &TypDef) -> Value {
     }
 }
 
-fn encode_var_def(var_def_il: &VarDef) -> Value {
+fn encode_var_def(var_def_il: &VarDef) -> json {
     json!([
         "VarD",
         encode_id(&var_def_il.id),
@@ -1683,7 +1297,7 @@ fn encode_var_def(var_def_il: &VarDef) -> Value {
     ])
 }
 
-fn encode_rel_def(rel_def_il: &RelDef) -> Value {
+fn encode_rel_def(rel_def_il: &RelDef) -> json {
     match rel_def_il {
         RelDef::Extern(extern_rel_il) => json!([
             "ExternRelD",
@@ -1704,7 +1318,7 @@ fn encode_rel_def(rel_def_il: &RelDef) -> Value {
     }
 }
 
-fn encode_meta_func_def(meta_func_def_il: &MetaFuncDef) -> Value {
+fn encode_meta_func_def(meta_func_def_il: &MetaFuncDef) -> json {
     match meta_func_def_il {
         MetaFuncDef::Extern(extern_func_il) => json!([
             "ExternDecD",
@@ -1743,7 +1357,7 @@ fn encode_meta_func_def(meta_func_def_il: &MetaFuncDef) -> Value {
     }
 }
 
-fn encode_def(def_il: &ast::Def) -> Value {
+fn encode_def(def_il: &ast::Def) -> json {
     source::encode_phrase(def_il, |def_kind_il| match def_kind_il {
         DefKind::Typ(typ_def_il) => encode_typ_def(typ_def_il),
         DefKind::Var(var_def_il) => encode_var_def(var_def_il),

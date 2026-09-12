@@ -1,11 +1,13 @@
-use serde_json::{Value, json};
+use serde_json::json;
+
+use crate::util::json::json;
 
 use crate::lang::common::source::{NotePhrase, Phrase, Position, Span};
 
 use super::{DecodeError, field, integer, object};
 
-pub fn decode_position(value: &Value) -> Result<Position, DecodeError> {
-    let object = object(value)?;
+pub fn decode_position(json: &json) -> Result<Position, DecodeError> {
+    let object = object(json)?;
     Ok(Position::new(
         field(object, "file")?
             .as_str()
@@ -15,7 +17,7 @@ pub fn decode_position(value: &Value) -> Result<Position, DecodeError> {
     ))
 }
 
-pub fn encode_position(position: &Position) -> Value {
+pub fn encode_position(position: &Position) -> json {
     json!({
         "file": position.file.as_ref(),
         "line": position.line,
@@ -23,15 +25,15 @@ pub fn encode_position(position: &Position) -> Value {
     })
 }
 
-pub fn decode_region(value: &Value) -> Result<Span, DecodeError> {
-    let object = object(value)?;
+pub fn decode_region(json: &json) -> Result<Span, DecodeError> {
+    let object = object(json)?;
     Ok(Span::new(
         decode_position(field(object, "left")?)?,
         decode_position(field(object, "right")?)?,
     ))
 }
 
-pub fn encode_region(region: &Span) -> Value {
+pub fn encode_region(region: &Span) -> json {
     json!({
         "left": encode_position(&region.left),
         "right": encode_position(&region.right),
@@ -39,11 +41,11 @@ pub fn encode_region(region: &Span) -> Value {
 }
 
 pub fn decode_phrase<T>(
-    value: &Value,
-    decode_it: impl FnOnce(&Value) -> Result<T, DecodeError>,
+    json: &json,
+    decode_it: impl FnOnce(&json) -> Result<T, DecodeError>,
 ) -> Result<Phrase<T>, DecodeError> {
-    decode_note_phrase(value, decode_it, |value| {
-        if value.is_null() {
+    decode_note_phrase(json, decode_it, |json| {
+        if json.is_null() {
             Ok(())
         } else {
             Err(DecodeError::Expected("null unit note"))
@@ -51,16 +53,16 @@ pub fn decode_phrase<T>(
     })
 }
 
-pub fn encode_phrase<T>(phrase: &Phrase<T>, encode_it: impl FnOnce(&T) -> Value) -> Value {
-    encode_note_phrase(phrase, encode_it, |_| Value::Null)
+pub fn encode_phrase<T>(phrase: &Phrase<T>, encode_it: impl FnOnce(&T) -> json) -> json {
+    encode_note_phrase(phrase, encode_it, |_| json::Null)
 }
 
 pub(crate) fn decode_note_phrase<T, N>(
-    value: &Value,
-    decode_it: impl FnOnce(&Value) -> Result<T, DecodeError>,
-    decode_note: impl FnOnce(&Value) -> Result<N, DecodeError>,
+    json: &json,
+    decode_it: impl FnOnce(&json) -> Result<T, DecodeError>,
+    decode_note: impl FnOnce(&json) -> Result<N, DecodeError>,
 ) -> Result<NotePhrase<T, N>, DecodeError> {
-    let object = object(value)?;
+    let object = object(json)?;
     Ok(crate::note_phrase! {
         node: decode_it(field(object, "it")?)?,
         note: decode_note(field(object, "note")?)?,
@@ -70,9 +72,9 @@ pub(crate) fn decode_note_phrase<T, N>(
 
 pub(crate) fn encode_note_phrase<T, N>(
     phrase: &NotePhrase<T, N>,
-    encode_it: impl FnOnce(&T) -> Value,
-    encode_note: impl FnOnce(&N) -> Value,
-) -> Value {
+    encode_it: impl FnOnce(&T) -> json,
+    encode_note: impl FnOnce(&N) -> json,
+) -> json {
     json!({
         "it": encode_it(&phrase.node),
         "note": encode_note(&phrase.note),

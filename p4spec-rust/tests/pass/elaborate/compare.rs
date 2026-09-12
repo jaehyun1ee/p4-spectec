@@ -4,12 +4,12 @@ use std::{
     sync::Mutex,
 };
 
+use p4spec_rust::util::json::json;
 use p4spec_rust::{
     frontend::parse::parse_files,
     pass::elaborate::{self, ElabErrorKind},
     wire::ocaml::source,
 };
-use serde_json::Value;
 
 static OCAML_ORACLE_LOCK: Mutex<()> = Mutex::new(());
 
@@ -97,17 +97,18 @@ fn test_rejected_elaboration_matches_ocaml_category_and_span() {
         let fixture = fixtures.join(name);
         let output = run_ocaml_oracle(repo, &fixture);
         assert!(!output.status.success(), "OCaml accepted {name}");
-        let diagnostic: Value = serde_json::from_slice(&output.stdout).unwrap_or_else(|error| {
+        let json_diagnostic: json =
+            serde_json::from_slice(&output.stdout).unwrap_or_else(|error| {
             panic!(
                 "decode OCaml elaboration diagnostic for {name}: {error}\nstdout:\n{}\nstderr:\n{}",
                 String::from_utf8_lossy(&output.stdout),
                 String::from_utf8_lossy(&output.stderr),
             )
         });
-        let category = diagnostic["category"]
+        let category = json_diagnostic["category"]
             .as_str()
             .expect("diagnostic category");
-        let span = source::decode_region(&diagnostic["span"]).expect("diagnostic span");
+        let span = source::decode_region(&json_diagnostic["span"]).expect("diagnostic span");
 
         let spec = parse_files([&fixture]).expect("parse negative fixture with Rust frontend");
         let error = elaborate::elaborate(spec).expect_err("Rust rejects fixture");

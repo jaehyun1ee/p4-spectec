@@ -3,17 +3,15 @@
 use super::{hash, span};
 use num_bigint::BigInt;
 use p4spec_rust::lang::traits::{cmp::SyntaxCmp, eq::SyntaxEq};
-use p4spec_rust::{
-    lang::{
-        common::source::{Position, Span},
-        data::{
-            typ,
-            value::{ValueArena, ValueError, ValueTag, get, make},
-        },
-        xl::num::{Natural, Number},
+use p4spec_rust::lang::{
+    common::source::{Position, Span},
+    data::{
+        typ,
+        value::{ValueArena, ValueError, ValueTag, get, make},
     },
-    yojson::ExternalData,
+    xl::num::{Natural, Number},
 };
+use p4spec_rust::util::json::json;
 use std::rc::Rc;
 
 #[test]
@@ -313,14 +311,14 @@ fn test_external_float_order_normalizes_signed_zero() {
     let negative_zero = make::external(
         &mut arena,
         typ.clone(),
-        ExternalData::Float(-0.0),
+        serde_json::json!(-0.0),
         Span::default(),
     )
     .unwrap();
     let positive_zero = make::external(
         &mut arena,
         typ.clone(),
-        ExternalData::Float(0.0),
+        serde_json::json!(0.0),
         Span::default(),
     )
     .unwrap();
@@ -476,7 +474,7 @@ fn test_canonical_identities_ignore_all_locations_but_distinguish_contents() {
             ValueKind::List(vec![value_false, value_true]),
             ValueKind::List(vec![value_true]),
             ValueKind::Func(id),
-            ValueKind::Extern(ExternalData::Float(f64::NAN)),
+            ValueKind::Extern(json::Null),
         ] {
             values.push(make::new(arena, kind, typ::TypKind::Bool.into(), span.clone()).unwrap());
         }
@@ -562,4 +560,31 @@ fn test_primitive_constructors_reuse_type_allocations() {
             assert!(Rc::ptr_eq(arena.typ(value), arena.typ(&value_again)));
         }
     }
+}
+
+#[test]
+fn test_external_object_key_order_shares_canonical_identity() {
+    let mut arena = ValueArena::new();
+    let typ = std::rc::Rc::new(typ::TypKind::Bool);
+    let fields = vec![
+        ("a".to_owned(), serde_json::json!(1)),
+        ("b".to_owned(), serde_json::json!(2)),
+    ];
+    let value_a = make::external(
+        &mut arena,
+        typ.clone(),
+        json::Object(fields.clone().into_iter().collect()),
+        Span::default(),
+    )
+    .unwrap();
+    let value_b = make::external(
+        &mut arena,
+        typ,
+        json::Object(fields.into_iter().rev().collect()),
+        Span::default(),
+    )
+    .unwrap();
+    assert_eq!(arena.canon_id(&value_a), arena.canon_id(&value_b));
+    assert_eq!(hash(arena.kind(&value_a)), hash(arena.kind(&value_b)));
+    assert!(arena.view(value_a).syntax_cmp(&arena.view(value_b)).is_eq());
 }

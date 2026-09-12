@@ -5,6 +5,7 @@ use std::{
     sync::Mutex,
 };
 
+use p4spec_rust::util::json::json;
 use p4spec_rust::{
     frontend::{
         error::{FrontendError, LexErrorKind, SyntaxErrorKind},
@@ -13,7 +14,6 @@ use p4spec_rust::{
     lang::common::source::{Position, Span},
     wire::{EL_SCHEMA, Envelope, ocaml::lang::el::SpecCodec},
 };
-use serde_json::Value;
 
 static OCAML_EXPORTER: Mutex<()> = Mutex::new(());
 
@@ -46,30 +46,26 @@ struct Diagnostic {
     span: Span,
 }
 
-fn first_difference(
-    value_l: &Value,
-    value_r: &Value,
-    path: &str,
-) -> Option<(String, String, String)> {
-    if value_l == value_r {
+fn first_difference(json_l: &json, json_r: &json, path: &str) -> Option<(String, String, String)> {
+    if json_l == json_r {
         return None;
     }
-    match (value_l, value_r) {
-        (Value::Array(value_l), Value::Array(value_r)) if value_l.len() == value_r.len() => value_l
+    match (json_l, json_r) {
+        (json::Array(jsons_l), json::Array(jsons_r)) if jsons_l.len() == jsons_r.len() => jsons_l
             .iter()
-            .zip(value_r)
+            .zip(jsons_r)
             .enumerate()
-            .find_map(|(index, (value_l, value_r))| {
-                first_difference(value_l, value_r, &format!("{path}[{index}]"))
+            .find_map(|(index, (json_l, json_r))| {
+                first_difference(json_l, json_r, &format!("{path}[{index}]"))
             }),
-        (Value::Object(value_l), Value::Object(value_r)) if value_l.len() == value_r.len() => {
-            value_l.iter().find_map(|(key, value_l)| {
-                value_r.get(key).and_then(|value_r| {
-                    first_difference(value_l, value_r, &format!("{path}.{key}"))
-                })
+        (json::Object(fields_l), json::Object(fields_r)) if fields_l.len() == fields_r.len() => {
+            fields_l.iter().find_map(|(key, json_l)| {
+                fields_r
+                    .get(key)
+                    .and_then(|json_r| first_difference(json_l, json_r, &format!("{path}.{key}")))
             })
         }
-        _ => Some((path.to_owned(), value_l.to_string(), value_r.to_string())),
+        _ => Some((path.to_owned(), json_l.to_string(), json_r.to_string())),
     }
 }
 
@@ -195,7 +191,7 @@ fn test_positive_corpus_matches_ocaml_el_exactly() {
     let spec_path = repo.join("spec");
 
     let document = export_ocaml_el(repo, &spec_path);
-    let envelope = Envelope::<Value>::from_slice(&document).expect("decode EL envelope");
+    let envelope = Envelope::<json>::from_slice(&document).expect("decode EL envelope");
     assert_eq!(envelope.schema(), EL_SCHEMA);
     assert_eq!(envelope.kind(), "el");
     let expected = SpecCodec::decode(&envelope.into_payload()).expect("decode OCaml EL AST");

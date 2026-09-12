@@ -1,18 +1,20 @@
 use std::str::FromStr;
 
 use num_bigint::BigInt;
-use serde_json::{Value, json};
+use serde_json::json;
+
+use crate::util::json::json;
 
 use crate::lang::xl::num;
 
 use super::super::{DecodeError, variant};
 
-pub(super) fn decode_num(value: &Value) -> Result<num::Number, DecodeError> {
-    let (tag, fields) = variant(value)?;
-    let decode_bigint = |value: &Value| {
-        let decimal = if let Some(decimal) = value.as_str() {
+pub(super) fn decode_num(json: &json) -> Result<num::Number, DecodeError> {
+    let (tag, fields) = variant(json)?;
+    let decode_bigint = |json: &json| {
+        let decimal = if let Some(decimal) = json.as_str() {
             decimal.to_owned()
-        } else if let Some(int) = value.as_i64() {
+        } else if let Some(int) = json.as_i64() {
             int.to_string()
         } else {
             return Err(DecodeError::Expected("decimal bigint string or integer"));
@@ -31,15 +33,15 @@ pub(super) fn decode_num(value: &Value) -> Result<num::Number, DecodeError> {
     }
 }
 
-pub(super) fn encode_num(num: &num::Number) -> Value {
+pub(super) fn encode_num(num: &num::Number) -> json {
     match num {
         num::Number::Nat(int) => json!(["Nat", int.to_string()]),
         num::Number::Int(int) => json!(["Int", int.to_string()]),
     }
 }
 
-pub(super) fn decode_num_typ(value: &Value) -> Result<num::Typ, DecodeError> {
-    let (tag, fields) = variant(value)?;
+pub(super) fn decode_num_typ(json: &json) -> Result<num::Typ, DecodeError> {
+    let (tag, fields) = variant(json)?;
     match (tag, fields) {
         ("NatT", []) => Ok(num::Typ::Nat),
         ("IntT", []) => Ok(num::Typ::Int),
@@ -48,7 +50,7 @@ pub(super) fn decode_num_typ(value: &Value) -> Result<num::Typ, DecodeError> {
     }
 }
 
-pub(super) fn encode_num_typ(typ: num::Typ) -> Value {
+pub(super) fn encode_num_typ(typ: num::Typ) -> json {
     match typ {
         num::Typ::Nat => json!(["NatT"]),
         num::Typ::Int => json!(["IntT"]),

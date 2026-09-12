@@ -14,21 +14,19 @@ pub use arena::ValueArena;
 pub use intern::{CanonEq, CanonHash, CanonId, CanonInterner, Interned, Interner, RcInterner};
 pub use value::*;
 
-use crate::{
-    lang::{
-        common::{
-            Id, TId,
-            notation::{
-                mixfix::Mixfix,
-                mixop::{Mixop, shape},
-            },
-            source::Span,
+use crate::lang::{
+    common::{
+        Id, TId,
+        notation::{
+            mixfix::Mixfix,
+            mixop::{Mixop, shape},
         },
-        data::typ::{self, Typ, TypKind},
-        xl::num::{self, Number},
+        source::Span,
     },
-    yojson::ExternalData,
+    data::typ::{self, Typ, TypKind},
+    xl::num::{self, Number},
 };
+use crate::util::json::json;
 
 // = Smart constructors
 
@@ -193,10 +191,10 @@ pub mod make {
     pub fn external(
         arena: &mut ValueArena,
         typ: Rc<TypKind>,
-        value: ExternalData,
+        json: json,
         span: Span,
     ) -> Result<Value, ValueError> {
-        new(arena, ValueKind::Extern(value), typ, span)
+        new(arena, ValueKind::Extern(json), typ, span)
     }
 }
 
@@ -333,12 +331,9 @@ pub mod get {
 
     // - Externals
 
-    pub fn external<'a>(
-        arena: &'a ValueArena,
-        value: &Value,
-    ) -> Result<&'a ExternalData, ValueError> {
+    pub fn external<'a>(arena: &'a ValueArena, value: &Value) -> Result<&'a json, ValueError> {
         match arena.kind(value) {
-            ValueKind::Extern(value) => Ok(value),
+            ValueKind::Extern(json) => Ok(json),
             _ => Err(unexpected(arena, value, ValueTag::Extern)),
         }
     }

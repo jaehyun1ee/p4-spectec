@@ -1,4 +1,6 @@
-use serde_json::{Value, json};
+use serde_json::json;
+
+use crate::util::json::json;
 
 use crate::lang::el::ast::*;
 use crate::lang::el::ast::{
@@ -15,38 +17,38 @@ use super::{
 use crate::wire::ocaml::{atom::AtomPhraseCodec, source};
 
 fn decode_list<T>(
-    value: &Value,
-    decode: impl Fn(&Value) -> Result<T, DecodeError>,
+    json: &json,
+    decode: impl Fn(&json) -> Result<T, DecodeError>,
 ) -> Result<Vec<T>, DecodeError> {
-    array(value)?.iter().map(decode).collect()
+    array(json)?.iter().map(decode).collect()
 }
 
-fn encode_list<T>(values: &[T], encode: impl Fn(&T) -> Value) -> Value {
-    Value::Array(values.iter().map(encode).collect())
+fn encode_list<T>(values: &[T], encode: impl Fn(&T) -> json) -> json {
+    json::Array(values.iter().map(encode).collect())
 }
 
 pub struct SpecCodec;
 
 impl SpecCodec {
-    pub fn decode(value: &Value) -> Result<ast::Spec, DecodeError> {
-        on_codec_stack(|| decode_list(value, decode_def))
+    pub fn decode(json: &json) -> Result<ast::Spec, DecodeError> {
+        on_codec_stack(|| decode_list(json, decode_def))
     }
 
-    pub fn encode(spec: &ast::Spec) -> Result<Value, EncodeError> {
+    pub fn encode(spec: &ast::Spec) -> Result<json, EncodeError> {
         on_codec_stack(|| Ok(encode_list(spec, encode_def)))
     }
 }
 
-fn decode_id(value: &Value) -> Result<ast::Id, DecodeError> {
-    source::decode_phrase(value, |value| Ok(string(value)?.to_owned()))
+fn decode_id(json: &json) -> Result<ast::Id, DecodeError> {
+    source::decode_phrase(json, |json| Ok(string(json)?.to_owned()))
 }
 
-fn encode_id(id: &ast::Id) -> Value {
+fn encode_id(id: &ast::Id) -> json {
     source::encode_phrase(id, |id| json!(id))
 }
 
-fn decode_iter(value: &Value) -> Result<Iter, DecodeError> {
-    let (tag, fields) = variant(value)?;
+fn decode_iter(json: &json) -> Result<Iter, DecodeError> {
+    let (tag, fields) = variant(json)?;
     match (tag, fields) {
         ("Opt", []) => Ok(Iter::Opt),
         ("List", []) => Ok(Iter::List),
@@ -55,15 +57,15 @@ fn decode_iter(value: &Value) -> Result<Iter, DecodeError> {
     }
 }
 
-fn encode_iter(iter: Iter) -> Value {
+fn encode_iter(iter: Iter) -> json {
     match iter {
         Iter::Opt => json!(["Opt"]),
         Iter::List => json!(["List"]),
     }
 }
 
-fn decode_num_op(value: &Value) -> Result<NumOp, DecodeError> {
-    let (tag, fields) = variant(value)?;
+fn decode_num_op(json: &json) -> Result<NumOp, DecodeError> {
+    let (tag, fields) = variant(json)?;
     match (tag, fields) {
         ("DecOp", []) => Ok(NumOp::Dec),
         ("HexOp", []) => Ok(NumOp::Hex),
@@ -72,15 +74,15 @@ fn decode_num_op(value: &Value) -> Result<NumOp, DecodeError> {
     }
 }
 
-fn encode_num_op(op: NumOp) -> Value {
+fn encode_num_op(op: NumOp) -> json {
     match op {
         NumOp::Dec => json!(["DecOp"]),
         NumOp::Hex => json!(["HexOp"]),
     }
 }
 
-fn decode_un_op(value: &Value) -> Result<UnOp, DecodeError> {
-    let (tag, fields) = variant(value)?;
+fn decode_un_op(json: &json) -> Result<UnOp, DecodeError> {
+    let (tag, fields) = variant(json)?;
     match (tag, fields) {
         ("NotOp", []) => Ok(UnOp::Bool(crate::lang::xl::bool::UnOp::Not)),
         ("PlusOp", []) => Ok(UnOp::Num(crate::lang::xl::num::UnOp::Plus)),
@@ -92,7 +94,7 @@ fn decode_un_op(value: &Value) -> Result<UnOp, DecodeError> {
     }
 }
 
-fn encode_un_op(op: UnOp) -> Value {
+fn encode_un_op(op: UnOp) -> json {
     match op {
         UnOp::Bool(crate::lang::xl::bool::UnOp::Not) => json!(["NotOp"]),
         UnOp::Num(crate::lang::xl::num::UnOp::Plus) => json!(["PlusOp"]),
@@ -100,8 +102,8 @@ fn encode_un_op(op: UnOp) -> Value {
     }
 }
 
-fn decode_bin_op(value: &Value) -> Result<BinOp, DecodeError> {
-    let (tag, fields) = variant(value)?;
+fn decode_bin_op(json: &json) -> Result<BinOp, DecodeError> {
+    let (tag, fields) = variant(json)?;
     match (tag, fields) {
         ("AndOp", []) => Ok(BinOp::Bool(crate::lang::xl::bool::BinOp::And)),
         ("OrOp", []) => Ok(BinOp::Bool(crate::lang::xl::bool::BinOp::Or)),
@@ -122,7 +124,7 @@ fn decode_bin_op(value: &Value) -> Result<BinOp, DecodeError> {
     }
 }
 
-fn encode_bin_op(op: BinOp) -> Value {
+fn encode_bin_op(op: BinOp) -> json {
     match op {
         BinOp::Bool(crate::lang::xl::bool::BinOp::And) => json!(["AndOp"]),
         BinOp::Bool(crate::lang::xl::bool::BinOp::Or) => json!(["OrOp"]),
@@ -137,8 +139,8 @@ fn encode_bin_op(op: BinOp) -> Value {
     }
 }
 
-fn decode_cmp_op(value: &Value) -> Result<CmpOp, DecodeError> {
-    let (tag, fields) = variant(value)?;
+fn decode_cmp_op(json: &json) -> Result<CmpOp, DecodeError> {
+    let (tag, fields) = variant(json)?;
     match (tag, fields) {
         ("EqOp", []) => Ok(CmpOp::Bool(crate::lang::xl::bool::CmpOp::Eq)),
         ("NeOp", []) => Ok(CmpOp::Bool(crate::lang::xl::bool::CmpOp::Ne)),
@@ -153,7 +155,7 @@ fn decode_cmp_op(value: &Value) -> Result<CmpOp, DecodeError> {
     }
 }
 
-fn encode_cmp_op(op: CmpOp) -> Value {
+fn encode_cmp_op(op: CmpOp) -> json {
     match op {
         CmpOp::Bool(crate::lang::xl::bool::CmpOp::Eq) => json!(["EqOp"]),
         CmpOp::Bool(crate::lang::xl::bool::CmpOp::Ne) => json!(["NeOp"]),
@@ -164,24 +166,24 @@ fn encode_cmp_op(op: CmpOp) -> Value {
     }
 }
 
-fn decode_plain_typ(value: &Value) -> Result<ast::PlainTyp, DecodeError> {
-    source::decode_phrase(value, decode_plain_typ_kind)
+fn decode_plain_typ(json: &json) -> Result<ast::PlainTyp, DecodeError> {
+    source::decode_phrase(json, decode_plain_typ_kind)
 }
 
-fn encode_plain_typ(typ: &ast::PlainTyp) -> Value {
+fn encode_plain_typ(typ: &ast::PlainTyp) -> json {
     source::encode_phrase(typ, encode_plain_typ_kind)
 }
 
-fn decode_targ(value: &Value) -> Result<ast::Targ, DecodeError> {
-    source::decode_phrase(value, decode_plain_typ_kind)
+fn decode_targ(json: &json) -> Result<ast::Targ, DecodeError> {
+    source::decode_phrase(json, decode_plain_typ_kind)
 }
 
-fn encode_targ(targ: &ast::Targ) -> Value {
+fn encode_targ(targ: &ast::Targ) -> json {
     source::encode_phrase(targ, encode_plain_typ_kind)
 }
 
-fn decode_plain_typ_kind(value: &Value) -> Result<PlainTypKind, DecodeError> {
-    let (tag, fields) = variant(value)?;
+fn decode_plain_typ_kind(json: &json) -> Result<PlainTypKind, DecodeError> {
+    let (tag, fields) = variant(json)?;
     match (tag, fields) {
         ("BoolT", []) => Ok(PlainTypKind::Bool),
         ("NumT", [typ]) => Ok(PlainTypKind::Num(xl::decode_num_typ(typ)?)),
@@ -203,7 +205,7 @@ fn decode_plain_typ_kind(value: &Value) -> Result<PlainTypKind, DecodeError> {
     }
 }
 
-fn encode_plain_typ_kind(typ: &PlainTypKind) -> Value {
+fn encode_plain_typ_kind(typ: &PlainTypKind) -> json {
     match typ {
         PlainTypKind::Bool => json!(["BoolT"]),
         PlainTypKind::Num(typ) => json!(["NumT", xl::encode_num_typ(*typ)]),
@@ -221,16 +223,16 @@ fn encode_plain_typ_kind(typ: &PlainTypKind) -> Value {
     }
 }
 
-fn decode_path(value: &Value) -> Result<ast::Path, DecodeError> {
-    source::decode_phrase(value, decode_path_kind)
+fn decode_path(json: &json) -> Result<ast::Path, DecodeError> {
+    source::decode_phrase(json, decode_path_kind)
 }
 
-fn encode_path(path: &ast::Path) -> Value {
+fn encode_path(path: &ast::Path) -> json {
     source::encode_phrase(path, encode_path_kind)
 }
 
-fn decode_path_kind(value: &Value) -> Result<PathKind, DecodeError> {
-    let (tag, fields) = variant(value)?;
+fn decode_path_kind(json: &json) -> Result<PathKind, DecodeError> {
+    let (tag, fields) = variant(json)?;
     match (tag, fields) {
         ("RootP", []) => Ok(PathKind::Root),
         ("IdxP", [path, exp_idx]) => Ok(PathKind::Idx(
@@ -253,7 +255,7 @@ fn decode_path_kind(value: &Value) -> Result<PathKind, DecodeError> {
     }
 }
 
-fn encode_path_kind(path: &PathKind) -> Value {
+fn encode_path_kind(path: &PathKind) -> json {
     match path {
         PathKind::Root => json!(["RootP"]),
         PathKind::Idx(path, exp_idx) => json!(["IdxP", encode_path(path), encode_exp(exp_idx)]),
@@ -269,9 +271,9 @@ fn encode_path_kind(path: &PathKind) -> Value {
     }
 }
 
-fn decode_arg(value: &Value) -> Result<ast::Arg, DecodeError> {
-    source::decode_phrase(value, |value| {
-        let (tag, fields) = variant(value)?;
+fn decode_arg(json: &json) -> Result<ast::Arg, DecodeError> {
+    source::decode_phrase(json, |json| {
+        let (tag, fields) = variant(json)?;
         match (tag, fields) {
             ("ExpA", [exp]) => Ok(ArgKind::Exp(Box::new(decode_exp(exp)?))),
             ("DefA", [id]) => Ok(ArgKind::Def(decode_id(id)?)),
@@ -281,15 +283,15 @@ fn decode_arg(value: &Value) -> Result<ast::Arg, DecodeError> {
     })
 }
 
-fn encode_arg(arg: &ast::Arg) -> Value {
+fn encode_arg(arg: &ast::Arg) -> json {
     source::encode_phrase(arg, |arg| match arg {
         ArgKind::Exp(exp) => json!(["ExpA", encode_exp(exp)]),
         ArgKind::Def(id) => json!(["DefA", encode_id(id)]),
     })
 }
 
-fn decode_hole(value: &Value) -> Result<Hole, DecodeError> {
-    let (tag, fields) = variant(value)?;
+fn decode_hole(json: &json) -> Result<Hole, DecodeError> {
+    let (tag, fields) = variant(json)?;
     match (tag, fields) {
         ("Num", [num]) => Ok(Hole::Num(integer(num)?)),
         ("Next", []) => Ok(Hole::Next),
@@ -300,7 +302,7 @@ fn decode_hole(value: &Value) -> Result<Hole, DecodeError> {
     }
 }
 
-fn encode_hole(hole: &Hole) -> Value {
+fn encode_hole(hole: &Hole) -> json {
     match hole {
         Hole::Num(num) => json!(["Num", num]),
         Hole::Next => json!(["Next"]),
@@ -309,18 +311,18 @@ fn encode_hole(hole: &Hole) -> Value {
     }
 }
 
-pub(super) fn decode_exp(value: &Value) -> Result<ast::Exp, DecodeError> {
-    source::decode_phrase(value, decode_exp_kind)
+pub(super) fn decode_exp(json: &json) -> Result<ast::Exp, DecodeError> {
+    source::decode_phrase(json, decode_exp_kind)
 }
 
-pub(super) fn encode_exp(exp: &ast::Exp) -> Value {
+pub(super) fn encode_exp(exp: &ast::Exp) -> json {
     source::encode_phrase(exp, encode_exp_kind)
 }
 
-fn decode_exp_kind(value: &Value) -> Result<ExpKind, DecodeError> {
-    let (tag, fields) = variant(value)?;
+fn decode_exp_kind(json: &json) -> Result<ExpKind, DecodeError> {
+    let (tag, fields) = variant(json)?;
     match (tag, fields) {
-        ("BoolE", [value]) => Ok(ExpKind::Bool(super::super::boolean(value)?)),
+        ("BoolE", [json]) => Ok(ExpKind::Bool(super::super::boolean(json)?)),
         ("NumE", [op, num]) => Ok(ExpKind::Num(decode_num_op(op)?, xl::decode_num(num)?)),
         ("TextE", [text]) => Ok(ExpKind::Text(string(text)?.to_owned())),
         ("VarE", [id]) => Ok(ExpKind::Var(decode_id(id)?)),
@@ -420,7 +422,7 @@ fn decode_exp_kind(value: &Value) -> Result<ExpKind, DecodeError> {
     }
 }
 
-fn encode_exp_kind(exp: &ExpKind) -> Value {
+fn encode_exp_kind(exp: &ExpKind) -> json {
     match exp {
         ExpKind::Bool(value) => json!(["BoolE", value]),
         ExpKind::Num(op, num) => json!(["NumE", encode_num_op(*op), xl::encode_num(num)]),
@@ -510,23 +512,23 @@ fn encode_exp_kind(exp: &ExpKind) -> Value {
     }
 }
 
-pub(super) fn decode_hint(value: &Value) -> Result<ast::Hint, DecodeError> {
-    let object = object(value)?;
+pub(super) fn decode_hint(json: &json) -> Result<ast::Hint, DecodeError> {
+    let object = object(json)?;
     Ok((
         decode_id(field(object, "hintid")?)?,
         decode_exp(field(object, "hintexp")?)?,
     ))
 }
 
-pub(super) fn encode_hint(hint: &ast::Hint) -> Value {
+pub(super) fn encode_hint(hint: &ast::Hint) -> json {
     json!({
         "hintid": encode_id(&hint.0),
         "hintexp": encode_exp(&hint.1),
     })
 }
 
-fn decode_typ(value: &Value) -> Result<ast::Typ, DecodeError> {
-    let (tag, fields) = variant(value)?;
+fn decode_typ(json: &json) -> Result<ast::Typ, DecodeError> {
+    let (tag, fields) = variant(json)?;
     match (tag, fields) {
         ("PlainT", [typ]) => Ok(ast::Typ::Plain(decode_plain_typ(typ)?)),
         ("NotationT", [typ]) => Ok(ast::Typ::Notation(decode_not_typ(typ)?)),
@@ -535,16 +537,16 @@ fn decode_typ(value: &Value) -> Result<ast::Typ, DecodeError> {
     }
 }
 
-fn encode_typ(typ: &ast::Typ) -> Value {
+fn encode_typ(typ: &ast::Typ) -> json {
     match typ {
         ast::Typ::Plain(typ) => json!(["PlainT", encode_plain_typ(typ)]),
         ast::Typ::Notation(typ) => json!(["NotationT", encode_not_typ(typ)]),
     }
 }
 
-fn decode_not_typ(value: &Value) -> Result<ast::NotTyp, DecodeError> {
-    source::decode_phrase(value, |value| {
-        let (tag, fields) = variant(value)?;
+fn decode_not_typ(json: &json) -> Result<ast::NotTyp, DecodeError> {
+    source::decode_phrase(json, |json| {
+        let (tag, fields) = variant(json)?;
         match (tag, fields) {
             ("AtomT", [atom]) => Ok(NotTypKind::Atom(AtomPhraseCodec::decode(atom)?)),
             ("SeqT", [types]) => Ok(NotTypKind::Seq(decode_list(types, decode_typ)?)),
@@ -566,7 +568,7 @@ fn decode_not_typ(value: &Value) -> Result<ast::NotTyp, DecodeError> {
     })
 }
 
-fn encode_not_typ(typ: &ast::NotTyp) -> Value {
+fn encode_not_typ(typ: &ast::NotTyp) -> json {
     source::encode_phrase(typ, |typ| match typ {
         NotTypKind::Atom(atom) => json!(["AtomT", AtomPhraseCodec::encode(atom)]),
         NotTypKind::Seq(types) => json!(["SeqT", encode_list(types, encode_typ)]),
@@ -585,9 +587,9 @@ fn encode_not_typ(typ: &ast::NotTyp) -> Value {
     })
 }
 
-fn decode_def_typ(value: &Value) -> Result<ast::DefTyp, DecodeError> {
-    source::decode_phrase(value, |value| {
-        let (tag, fields) = variant(value)?;
+fn decode_def_typ(json: &json) -> Result<ast::DefTyp, DecodeError> {
+    source::decode_phrase(json, |json| {
+        let (tag, fields) = variant(json)?;
         match (tag, fields) {
             ("PlainTD", [typ]) => Ok(DefTypKind::Plain(decode_plain_typ(typ)?)),
             ("StructTD", [fields]) => {
@@ -602,7 +604,7 @@ fn decode_def_typ(value: &Value) -> Result<ast::DefTyp, DecodeError> {
     })
 }
 
-fn encode_def_typ(typ: &ast::DefTyp) -> Value {
+fn encode_def_typ(typ: &ast::DefTyp) -> json {
     source::encode_phrase(typ, |typ| match typ {
         DefTypKind::Plain(typ) => json!(["PlainTD", encode_plain_typ(typ)]),
         DefTypKind::Struct(fields) => json!(["StructTD", encode_list(fields, encode_typ_field)]),
@@ -610,8 +612,8 @@ fn encode_def_typ(typ: &ast::DefTyp) -> Value {
     })
 }
 
-fn decode_typ_field(value: &Value) -> Result<ast::TypField, DecodeError> {
-    match array(value)? {
+fn decode_typ_field(json: &json) -> Result<ast::TypField, DecodeError> {
+    match array(json)? {
         [atom, typ, hints] => Ok((
             AtomPhraseCodec::decode(atom)?,
             decode_plain_typ(typ)?,
@@ -621,7 +623,7 @@ fn decode_typ_field(value: &Value) -> Result<ast::TypField, DecodeError> {
     }
 }
 
-fn encode_typ_field(field: &ast::TypField) -> Value {
+fn encode_typ_field(field: &ast::TypField) -> json {
     json!([
         AtomPhraseCodec::encode(&field.0),
         encode_plain_typ(&field.1),
@@ -629,28 +631,28 @@ fn encode_typ_field(field: &ast::TypField) -> Value {
     ])
 }
 
-fn decode_typ_case(value: &Value) -> Result<ast::TypCase, DecodeError> {
-    match array(value)? {
+fn decode_typ_case(json: &json) -> Result<ast::TypCase, DecodeError> {
+    match array(json)? {
         [typ, hints] => Ok((decode_typ(typ)?, decode_list(hints, decode_hint)?)),
         _ => Err(DecodeError::Expected("EL type case pair")),
     }
 }
 
-fn encode_typ_case((typ, hints): &ast::TypCase) -> Value {
+fn encode_typ_case((typ, hints): &ast::TypCase) -> json {
     json!([encode_typ(typ), encode_list(hints, encode_hint)])
 }
 
-fn decode_tparam(value: &Value) -> Result<ast::TParam, DecodeError> {
-    source::decode_phrase(value, |value| Ok(string(value)?.to_owned()))
+fn decode_tparam(json: &json) -> Result<ast::TParam, DecodeError> {
+    source::decode_phrase(json, |json| Ok(string(json)?.to_owned()))
 }
 
-fn encode_tparam(param: &ast::TParam) -> Value {
+fn encode_tparam(param: &ast::TParam) -> json {
     source::encode_phrase(param, |param| json!(param))
 }
 
-fn decode_param(value: &Value) -> Result<ast::Param, DecodeError> {
-    source::decode_phrase(value, |value| {
-        let (tag, fields) = variant(value)?;
+fn decode_param(json: &json) -> Result<ast::Param, DecodeError> {
+    source::decode_phrase(json, |json| {
+        let (tag, fields) = variant(json)?;
         match (tag, fields) {
             ("ExpP", [typ]) => Ok(ParamKind::Exp(decode_plain_typ(typ)?)),
             ("DefP", [id, tparams, params, typ]) => Ok(ParamKind::Def(
@@ -665,7 +667,7 @@ fn decode_param(value: &Value) -> Result<ast::Param, DecodeError> {
     })
 }
 
-fn encode_param(param: &ast::Param) -> Value {
+fn encode_param(param: &ast::Param) -> json {
     source::encode_phrase(param, |param| match param {
         ParamKind::Exp(typ) => json!(["ExpP", encode_plain_typ(typ)]),
         ParamKind::Def(id, tparams, params, typ) => json!([
@@ -678,9 +680,9 @@ fn encode_param(param: &ast::Param) -> Value {
     })
 }
 
-fn decode_prem(value: &Value) -> Result<ast::Prem, DecodeError> {
-    source::decode_phrase(value, |value| {
-        let (tag, fields) = variant(value)?;
+fn decode_prem(json: &json) -> Result<ast::Prem, DecodeError> {
+    source::decode_phrase(json, |json| {
+        let (tag, fields) = variant(json)?;
         match (tag, fields) {
             ("VarPr", [id, typ]) => Ok(PremKind::Var(VarPrem {
                 id: decode_id(id)?,
@@ -713,7 +715,7 @@ fn decode_prem(value: &Value) -> Result<ast::Prem, DecodeError> {
     })
 }
 
-fn encode_prem(prem: &ast::Prem) -> Value {
+fn encode_prem(prem: &ast::Prem) -> json {
     source::encode_phrase(prem, |prem| match prem {
         PremKind::Var(VarPrem { id, plain_typ }) => {
             json!(["VarPr", encode_id(id), encode_plain_typ(plain_typ)])
@@ -731,8 +733,8 @@ fn encode_prem(prem: &ast::Prem) -> Value {
     })
 }
 
-fn decode_rule(value: &Value) -> Result<ast::Rule, DecodeError> {
-    source::decode_phrase(value, |value| match array(value)? {
+fn decode_rule(json: &json) -> Result<ast::Rule, DecodeError> {
+    source::decode_phrase(json, |json| match array(json)? {
         [rel, id, exp, prems] => Ok((
             decode_id(rel)?,
             decode_id(id)?,
@@ -743,7 +745,7 @@ fn decode_rule(value: &Value) -> Result<ast::Rule, DecodeError> {
     })
 }
 
-fn encode_rule(rule: &ast::Rule) -> Value {
+fn encode_rule(rule: &ast::Rule) -> json {
     source::encode_phrase(rule, |rule| {
         json!([
             encode_id(&rule.0),
@@ -754,29 +756,29 @@ fn encode_rule(rule: &ast::Rule) -> Value {
     })
 }
 
-fn decode_table_row(value: &Value) -> Result<ast::TableRow, DecodeError> {
-    source::decode_phrase(value, |value| match array(value)? {
+fn decode_table_row(json: &json) -> Result<ast::TableRow, DecodeError> {
+    source::decode_phrase(json, |json| match array(json)? {
         [exp_l, exp_r] => Ok((decode_exp(exp_l)?, decode_exp(exp_r)?)),
         _ => Err(DecodeError::Expected("EL table row pair")),
     })
 }
 
-fn encode_table_row(row: &ast::TableRow) -> Value {
+fn encode_table_row(row: &ast::TableRow) -> json {
     source::encode_phrase(row, |(exp_l, exp_r)| {
         json!([encode_exp(exp_l), encode_exp(exp_r)])
     })
 }
 
-fn decode_syn_entry(value: &Value) -> Result<(ast::Id, Vec<ast::TParam>), DecodeError> {
-    match array(value)? {
+fn decode_syn_entry(json: &json) -> Result<(ast::Id, Vec<ast::TParam>), DecodeError> {
+    match array(json)? {
         [id, params] => Ok((decode_id(id)?, decode_list(params, decode_tparam)?)),
         _ => Err(DecodeError::Expected("EL syntax entry pair")),
     }
 }
 
-fn decode_def(value: &Value) -> Result<ast::Def, DecodeError> {
-    source::decode_phrase(value, |value| {
-        let (tag, fields) = variant(value)?;
+fn decode_def(json: &json) -> Result<ast::Def, DecodeError> {
+    source::decode_phrase(json, |json| {
+        let (tag, fields) = variant(json)?;
         match (tag, fields) {
             ("ExternSynD", [id, hints]) => Ok(DefKind::ExternSyntax(ExternSyntaxDef {
                 id: decode_id(id)?,
@@ -868,7 +870,7 @@ fn decode_def(value: &Value) -> Result<ast::Def, DecodeError> {
     })
 }
 
-fn encode_def(def: &ast::Def) -> Value {
+fn encode_def(def: &ast::Def) -> json {
     source::encode_phrase(def, |def| match def {
         DefKind::ExternSyntax(ExternSyntaxDef { id, hints }) => {
             json!(["ExternSynD", encode_id(id), encode_list(hints, encode_hint)])

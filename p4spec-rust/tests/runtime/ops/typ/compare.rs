@@ -2,6 +2,7 @@
 
 use std::{path::Path, process::Command};
 
+use p4spec_rust::util::json::json;
 use p4spec_rust::{
     lang::{
         common::{notation::mixfix::Mixfix, source::Span},
@@ -15,7 +16,7 @@ use p4spec_rust::{
         typdef::TypeDef,
     },
 };
-use serde_json::{Value, json};
+use serde_json::json;
 
 fn id(name: &str) -> ast::Id {
     p4spec_rust::phrase! {
@@ -63,7 +64,7 @@ fn variant(typs: Vec<ast::Typ>) -> ast::DefTyp {
     ), span: Span::default() }
 }
 
-fn subcheck_name(subcheck: &Subcheck) -> Value {
+fn subcheck_name(subcheck: &Subcheck) -> json {
     match subcheck {
         Subcheck::Skip => json!({ "kind": "skip" }),
         Subcheck::Mixop(mixops) => json!({ "kind": "mixop", "count": mixops.len() }),
@@ -82,7 +83,7 @@ fn subcheck_name(subcheck: &Subcheck) -> Value {
     }
 }
 
-fn rust_results() -> Value {
+fn rust_results() -> json {
     let bool_type = typ(TypKind::Bool);
     let text_type = typ(TypKind::Text);
     let mut theta = Theta::new();
@@ -170,6 +171,7 @@ fn test_runtime_type_operations_match_ocaml() {
         "G04 oracle failed:\n{}",
         String::from_utf8_lossy(&output.stderr)
     );
-    let expected: Value = serde_json::from_slice(&output.stdout).expect("decode G04 oracle JSON");
-    assert_eq!(rust_results(), expected);
+    let json_expected: json =
+        serde_json::from_slice(&output.stdout).expect("decode G04 oracle JSON");
+    assert_eq!(rust_results(), json_expected);
 }

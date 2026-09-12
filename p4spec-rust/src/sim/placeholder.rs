@@ -8,7 +8,6 @@ use crate::{
         il::ast::Typ,
     },
     runner::{Extern, ExternError, Interface, Interpreter, RunnerContext},
-    yojson::ExternalData,
 };
 
 use super::core;
@@ -85,7 +84,7 @@ impl Extern for Placeholder {
                 let value = make_value::external(
                     ctx.arena_mut(),
                     typ.node.into(),
-                    ExternalData::Null,
+                    crate::util::json::json::Null,
                     Span::default(),
                 )
                 .map_err(ExternError::from)

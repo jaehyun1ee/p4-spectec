@@ -12,19 +12,17 @@ use super::{
 };
 use thiserror::Error;
 
-use crate::{
-    lang::{
-        common::{
-            Id,
-            notation::{atom::Atom, mixfix::Mixfix},
-            source::{NotePhrase, Phrase, Span},
-        },
-        data::typ::TypKind,
-        traits::{cmp::SyntaxCmp, eq::SyntaxEq},
-        xl::num::{self, Number},
+use crate::lang::{
+    common::{
+        Id,
+        notation::{atom::Atom, mixfix::Mixfix},
+        source::{NotePhrase, Phrase, Span},
     },
-    yojson::ExternalData,
+    data::typ::TypKind,
+    traits::{cmp::SyntaxCmp, eq::SyntaxEq},
+    xl::num::{self, Number},
 };
+use crate::util::json::json;
 
 // = Value types
 
@@ -53,7 +51,7 @@ pub enum ValueKind {
     Opt(Option<Value>),
     List(Vec<Value>),
     Func(Id),
-    Extern(ExternalData),
+    Extern(json),
 }
 
 // - Tags
@@ -140,7 +138,7 @@ impl PartialEq for ValueKind {
             | (Self::List(values_l), Self::List(values_r)) => values_l == values_r,
             (Self::Opt(value_l), Self::Opt(value_r)) => value_l == value_r,
             (Self::Func(id_l), Self::Func(id_r)) => id_l == id_r,
-            (Self::Extern(value_l), Self::Extern(value_r)) => value_l == value_r,
+            (Self::Extern(json_l), Self::Extern(json_r)) => json_l == json_r,
             _ => false,
         }
     }
@@ -184,7 +182,7 @@ impl Hash for ValueKind {
             Self::Tuple(values) | Self::List(values) => values.hash(hasher),
             Self::Opt(value) => value.hash(hasher),
             Self::Func(id) => id.hash(hasher),
-            Self::Extern(value) => value.hash(hasher),
+            Self::Extern(json) => json.hash(hasher),
         }
     }
 }
@@ -225,7 +223,7 @@ impl CanonEq for ValueKind {
                 _ => false,
             },
             (ValueKind::Func(id_l), ValueKind::Func(id_r)) => id_l.node == id_r.node,
-            (ValueKind::Extern(value_l), ValueKind::Extern(value_r)) => value_l == value_r,
+            (ValueKind::Extern(json_l), ValueKind::Extern(json_r)) => json_l == json_r,
             _ => false,
         }
     }
@@ -284,7 +282,7 @@ impl CanonHash for ValueKind {
                 .map(|value| interner.canon_id(value.node))
                 .hash(hasher),
             ValueKind::Func(id) => id.node.hash(hasher),
-            ValueKind::Extern(value) => value.hash(hasher),
+            ValueKind::Extern(json) => json.hash(hasher),
         }
     }
 }
@@ -349,7 +347,9 @@ impl SyntaxCmp for ValueRef<'_> {
                 (None, None) => Ordering::Equal,
             },
             (ValueKind::Func(id_l), ValueKind::Func(id_r)) => id_l.node.cmp(&id_r.node),
-            (ValueKind::Extern(value_l), ValueKind::Extern(value_r)) => value_l.cmp(value_r),
+            (ValueKind::Extern(json_l), ValueKind::Extern(json_r)) => {
+                crate::util::json::compare(json_l, json_r)
+            }
             _ => kind_l.tag().cmp(&kind_r.tag()),
         }
     }

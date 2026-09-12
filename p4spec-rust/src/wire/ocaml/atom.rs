@@ -1,4 +1,6 @@
-use serde_json::{Value, json};
+use serde_json::json;
+
+use crate::util::json::json;
 
 use crate::lang::common::notation::{atom::Atom, mixfix::AtomPhrase};
 
@@ -7,17 +9,17 @@ use super::{DecodeError, source, string, variant};
 pub struct AtomPhraseCodec;
 
 impl AtomPhraseCodec {
-    pub fn decode(value: &Value) -> Result<AtomPhrase, DecodeError> {
-        source::decode_phrase(value, decode_atom)
+    pub fn decode(json: &json) -> Result<AtomPhrase, DecodeError> {
+        source::decode_phrase(json, decode_atom)
     }
 
-    pub fn encode(atom: &AtomPhrase) -> Value {
+    pub fn encode(atom: &AtomPhrase) -> json {
         source::encode_phrase(atom, encode_atom)
     }
 }
 
-fn decode_atom(value: &Value) -> Result<Atom, DecodeError> {
-    let (tag, fields) = variant(value)?;
+fn decode_atom(json: &json) -> Result<Atom, DecodeError> {
+    let (tag, fields) = variant(json)?;
     match (tag, fields) {
         ("Keyword", [id]) => Ok(Atom::Keyword(string(id)?.to_owned())),
         ("Tag", [id]) => Ok(Atom::Tag(string(id)?.to_owned())),
@@ -88,7 +90,7 @@ fn is_known_variant(tag: &str) -> bool {
     )
 }
 
-fn encode_atom(atom: &Atom) -> Value {
+fn encode_atom(atom: &Atom) -> json {
     match atom {
         Atom::Keyword(id) => json!(["Keyword", id]),
         Atom::Tag(id) => json!(["Tag", id]),
