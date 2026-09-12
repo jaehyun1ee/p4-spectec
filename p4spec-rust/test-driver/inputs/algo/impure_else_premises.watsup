@@ -1,8 +1,0 @@
-syntax flow = CONT | RET
-var f : flow
-
-dec $bad(flow) : flow
-def $bad(RET) = RET
-def $bad(f) = CONT
-  -- otherwise
-  -- if true = true

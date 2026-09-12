@@ -2,13 +2,11 @@
 name = "p4spec-test-rust"
 version = "0.1.0"
 edition = "2024"
-autotests = false
 rust-version = "1.97.1"
 
 [dependencies]
 p4spec-rust = { path = ".." }
 clap = { version = "4.6.6", features = ["derive"] }
-serde_json = { version = "1.0.128", features = ["unbounded_depth"] }
 thiserror = "1.0.63"
 
 [lints.rust]

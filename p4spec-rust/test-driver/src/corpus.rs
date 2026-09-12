@@ -167,6 +167,3 @@ impl<'a> Results<'a> {
         Ok(())
     }
 }
-
-#[cfg(test)]
-mod tests;

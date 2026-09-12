@@ -24,9 +24,9 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Compare elaborated specification output and rejected inputs
+    /// Compare the elaborated P4 specification with expected output
     Elab,
-    /// Compare algorithmic specification output and rejected inputs
+    /// Compare the algorithmic P4 specification with expected output
     Algo,
     /// Compare the full P4 corpus with stored file results (cache on, det off)
     RunAl,

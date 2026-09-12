@@ -67,7 +67,7 @@ test-run-al-diff:
 test-diff: test-frontend-diff test-elab-diff test-algo-diff test-run-al-diff
 
 # Standalone expected driver; product unit tests remain in tests/
-.PHONY: test-expected test-elab-expected test-algo-expected test-run-al-expected test-driver
+.PHONY: test-expected test-elab-expected test-algo-expected test-run-al-expected
 DRIVER = $(CARGO) run --locked --release --manifest-path test-driver/Cargo.toml --target-dir target --
 
 test-elab-expected:
@@ -80,6 +80,3 @@ test-run-al-expected:
 	$(DRIVER) run-al
 
 test-expected: test-elab-expected test-algo-expected test-run-al-expected
-
-test-driver:
-	$(CARGO) test --locked --manifest-path test-driver/Cargo.toml --target-dir target

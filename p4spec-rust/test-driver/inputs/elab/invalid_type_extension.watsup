@@ -1,4 +1,0 @@
-syntax base = bool
-syntax derived =
-  | base
-  | DERIVED
