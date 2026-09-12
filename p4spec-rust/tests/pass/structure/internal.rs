@@ -57,3 +57,6 @@ mod prettify;
 mod totalize;
 #[path = "dangle.rs"]
 mod dangle;
+
+#[path = "optimize.rs"]
+mod optimize;

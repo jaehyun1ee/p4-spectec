@@ -6,3 +6,6 @@ mod overlap;
 
 #[path = "opt/loop.rs"]
 mod loop_rewrites;
+
+#[path = "opt/post.rs"]
+mod post;
