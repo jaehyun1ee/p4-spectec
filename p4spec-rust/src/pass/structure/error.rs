@@ -10,6 +10,16 @@ use crate::{
 /// Stable semantic category of a structuring failure
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
 pub enum StructureErrorKind {
+    #[error("cannot anti-unify expressions")]
+    Antiunification,
+    #[error("cannot populate anti-unified expressions")]
+    TemplatePopulation,
+    #[error("arity mismatch: expected {expected}, got {actual}")]
+    ArityMismatch { expected: usize, actual: usize },
+    #[error("incompatible anti-unification arguments")]
+    IncompatibleArguments,
+    #[error("identifier is unified in more than one input position")]
+    ConflictingUnification,
     #[error("input hint operation failed: {0}")]
     Input(crate::lang::hints::input::InputError),
     #[error("type definition is undefined")]

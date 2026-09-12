@@ -41,3 +41,6 @@ mod re;
 
 #[path = "merge.rs"]
 mod merge;
+
+#[path = "antiunify.rs"]
+mod antiunify;
