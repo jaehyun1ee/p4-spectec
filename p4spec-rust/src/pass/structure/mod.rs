@@ -16,3 +16,5 @@ mod prettify;
 
 mod totalize;
 mod dangle;
+
+mod optimize;
