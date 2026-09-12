@@ -47,3 +47,8 @@ mod antiunify;
 
 #[path = "opt.rs"]
 mod opt;
+
+#[path = "pretty.rs"]
+mod pretty;
+#[path = "prettify.rs"]
+mod prettify;

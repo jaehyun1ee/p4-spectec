@@ -10,3 +10,6 @@ pub use error::{StructureError, StructureErrorKind};
 #[cfg(test)]
 #[path = "../../../tests/pass/structure/internal.rs"]
 mod tests;
+
+mod pretty;
+mod prettify;
