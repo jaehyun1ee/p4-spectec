@@ -1,6 +1,7 @@
 mod context;
 mod error;
 mod ol;
+mod merge;
 mod re;
 
 pub use error::{StructureError, StructureErrorKind};

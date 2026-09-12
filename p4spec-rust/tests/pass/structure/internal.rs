@@ -38,3 +38,6 @@ mod context;
 
 #[path = "re.rs"]
 mod re;
+
+#[path = "merge.rs"]
+mod merge;
