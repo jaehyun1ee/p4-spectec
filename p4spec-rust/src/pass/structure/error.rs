@@ -10,6 +10,8 @@ use crate::{
 /// Stable semantic category of a structuring failure
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
 pub enum StructureErrorKind {
+    #[error("total case analysis has no remaining branches")]
+    EmptyTotalCase,
     #[error("cannot anti-unify expressions")]
     Antiunification,
     #[error("cannot populate anti-unified expressions")]
