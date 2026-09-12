@@ -17,6 +17,19 @@ pub struct CounterResult {
 }
 
 impl CounterArray {
+    /// A counter array is a dense or sparse array of unsigned 32-bit values,
+    /// visible to the control-plane as an EBPF map (array or hash).
+    /// Each counter is addressed by a 32-bit index.
+    /// Counters can only be incremented by the data-plane, but they can be read
+    /// or reset by the control-plane.
+    ///
+    /// Allocate an array of counters.
+    /// - `max_index`: Maximum counter index supported.
+    /// - `sparse`: The counter array is supposed to be sparse.
+    ///
+    /// ```p4
+    /// CounterArray(bit<32> max_index, bool sparse);
+    /// ```
     pub fn init(
         arena: &ValueArena,
         value_ids: Value,
@@ -44,6 +57,11 @@ impl CounterArray {
         Ok(Self { counts })
     }
 
+    /// Increment counter with specified index
+    ///
+    /// ```p4
+    /// void increment(in bit<32> index);
+    /// ```
     pub fn increment<Interp, Iface, Exn>(
         self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
@@ -55,12 +73,18 @@ impl CounterArray {
         Exn: Extern,
         Interp: Interpreter<Iface, Exn>,
     {
+        // Get "index"
         let value_idx = func::find_var_e_local(ctx, value_ctx, "index")?;
         let num_idx = unpack::p4_fixed_bit(ctx.arena(), &value_idx)?;
         let idx = unpack::signed_int(&num_idx.int)?;
         self.update(ctx, value_ctx, value_arch, idx, 1)
     }
 
+    /// Add value to counter with specified index
+    ///
+    /// ```p4
+    /// void add(in bit<32> index, in bit<32> value);
+    /// ```
     pub fn add<Interp, Iface, Exn>(
         self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
@@ -72,9 +96,11 @@ impl CounterArray {
         Exn: Extern,
         Interp: Interpreter<Iface, Exn>,
     {
+        // Get "index"
         let value_idx = func::find_var_e_local(ctx, value_ctx, "index")?;
         let num_idx = unpack::p4_fixed_bit(ctx.arena(), &value_idx)?;
         let idx = unpack::signed_int(&num_idx.int)?;
+        // Get "value"
         let value_add = func::find_var_e_local(ctx, value_ctx, "value")?;
         let num_add = unpack::p4_fixed_bit(ctx.arena(), &value_add)?;
         let int = unpack::signed_int(&num_add.int)?;
@@ -94,11 +120,13 @@ impl CounterArray {
         Exn: Extern,
         Interp: Interpreter<Iface, Exn>,
     {
+        // Update counter
         if let Ok(idx) = usize::try_from(idx)
             && let Some(count) = self.counts.get_mut(idx)
         {
             *count = count.wrapping_add(int).wrapping_shl(1) >> 1;
         }
+        // Create call result
         let value_call_result = pack::return_result(ctx.arena_mut(), None)?;
         Ok(CounterResult {
             counter: self,

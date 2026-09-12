@@ -91,6 +91,7 @@ pub fn compute_hash(
     bits: &PrecisionNumber,
 ) -> Result<BigInt, ExternError> {
     match algo {
+        // CRC16-ARC
         "crc16" => crc(bits, 0xA001, 0),
         "crc32" => crc(bits, 0xEDB88320, u32::MAX),
         "csum16" | "csum16_sub" => checksum(

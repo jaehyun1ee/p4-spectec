@@ -17,6 +17,8 @@ use super::super::spec_impl::{
     unpack,
 };
 
+// Bit manipulation
+
 pub fn string_to_bits(text: &str) -> Result<Vec<bool>, ExternError> {
     let mut bits = Vec::with_capacity(text.len().saturating_mul(4));
     for char in text.chars() {
@@ -71,6 +73,7 @@ pub fn int_to_bits_signed(int: &BigInt, size: usize) -> Vec<bool> {
     int_to_bits_unsigned(&int, size)
 }
 
+/// Input packet data and its extraction cursor
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PacketIn {
@@ -79,6 +82,7 @@ pub struct PacketIn {
     pub len: usize,
 }
 
+/// Output packet data accumulated by emission
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PacketOut {
@@ -150,6 +154,13 @@ impl PacketIn {
         Ok(pkt)
     }
 
+    /// Reads a fixed-size header into `hdr` and advances the packet cursor
+    ///
+    /// `T` must be a fixed-size header type. Extraction may trigger
+    /// `PacketTooShort` or `StackOutOfBounds`:
+    /// ```text
+    /// void extract<T>(out T hdr);
+    /// ```
     pub fn extract<Interp, Iface, Exn>(
         &self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
@@ -182,6 +193,12 @@ impl PacketIn {
         })
     }
 
+    /// Extracts a header with a variable-size field
+    ///
+    /// ```text
+    /// void extract<T>(out T variableSizeHeader,
+    ///                 in bit<32> variableFieldSizeInBits);
+    /// ```
     pub fn extract_varsize<Interp, Iface, Exn>(
         &self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
@@ -247,6 +264,11 @@ impl PacketIn {
         })
     }
 
+    /// Reads a value without advancing the packet cursor
+    ///
+    /// ```text
+    /// T lookahead<T>();
+    /// ```
     pub fn lookahead<Interp, Iface, Exn>(
         &self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
@@ -278,6 +300,11 @@ impl PacketIn {
         })
     }
 
+    /// Advances the packet cursor by the requested number of bits
+    ///
+    /// ```text
+    /// void advance(in bit<32> sizeInBits);
+    /// ```
     pub fn advance<Interp, Iface, Exn>(
         &self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
@@ -309,6 +336,11 @@ impl PacketIn {
         })
     }
 
+    /// Returns the total packet length in bytes
+    ///
+    /// ```text
+    /// bit<32> length();
+    /// ```
     pub fn length<Interp, Iface, Exn>(
         &self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
@@ -358,6 +390,11 @@ impl PacketIn {
 }
 
 impl PacketOut {
+    /// Appends the header's bits to the output packet
+    ///
+    /// ```text
+    /// void emit<T>(in T hdr);
+    /// ```
     pub fn emit<Interp, Iface, Exn>(
         &self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,

@@ -1,3 +1,5 @@
+//! Match-action table interface
+
 use crate::{
     lang::{
         common::source::Span,
@@ -105,7 +107,9 @@ where
     Exn: Extern,
     Interp: Interpreter<Iface, Exn>,
 {
+    // Lookup table object
     let value_table = find_table(ctx, value_arch, value_name)?;
+    // Add entry to table object
     let value_table = match func::table_object_add_entry(
         ctx,
         value_ctx,
@@ -116,6 +120,7 @@ where
     )? {
         Some(value_table) => value_table,
         None => {
+            // Replace keyset names with table key names, assuming fields are in order
             let keys = func::key_interface_of_table_object(ctx, value_table)?;
             let mut values_name = Vec::new();
             for key in keys {
@@ -178,6 +183,7 @@ where
             .ok_or_else(|| ExternError::Failure("table entry rejected".to_owned()))?
         }
     };
+    // Update arch with modified table object
     update_table(ctx, value_arch, value_name, value_table)
 }
 
@@ -193,8 +199,10 @@ where
     Exn: Extern,
     Interp: Interpreter<Iface, Exn>,
 {
+    // Lookup table object
     let value_table = find_table(ctx, value_arch, value_name)?;
     let value_table =
         func::table_object_add_default_action(ctx, value_ctx, value_table, value_action)?;
+    // Update arch with modified table object
     update_table(ctx, value_arch, value_name, value_table)
 }

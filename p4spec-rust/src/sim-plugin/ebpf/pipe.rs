@@ -26,6 +26,7 @@ use super::{
 
 pub struct Ebpf;
 
+// Extern objects
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ExternObject {
     PacketIn(PacketIn),
@@ -49,6 +50,8 @@ impl ExternObject {
         external::state_value(arena, "objectState", json)
     }
 }
+
+// Extern calls
 
 impl Extern for Ebpf {
     fn eval_func<Interp, Iface>(
@@ -214,6 +217,7 @@ fn unsupported_method(
     )))
 }
 
+/// STF transformation
 pub fn transform_stf_stmt(mut stmt: Statement) -> Statement {
     fn transform_name(name: Name) -> Name {
         name.replace_substring(&["pipe_c1_"], "main.filt.c1.")
@@ -235,6 +239,7 @@ pub fn transform_stf_stmt(mut stmt: Statement) -> Statement {
     stmt
 }
 
+/// Pipeline initializer
 pub fn init_pipe<Interp, Iface, Exn>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
     program: Value,
@@ -257,6 +262,7 @@ fn install_result(state: &mut SimState, result: CallResult) {
     state.value_arch = result.value_arch;
 }
 
+/// Pipeline driver
 pub fn drive_pipe<Interp, Iface, Exn>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
     state: &mut SimState,
@@ -268,12 +274,15 @@ where
     Interp: Interpreter<Iface, Exn>,
 {
     state.txs.clear();
+    // Setup packet_in extern
     let pkt = ExternObject::PacketIn(PacketIn::init(&rx.packet)?);
     let value_packet = pkt.to_value(ctx.arena_mut())?;
     let result = rel::ebpf_init_packet_in(ctx, state.value_ctx, state.value_arch, value_packet)?;
     state.value_ctx = result.value_ctx;
     state.value_arch = result.value_arch;
+    // Setup global variables
     state.value_ctx = rel::ebpf_init_globals(ctx, state.value_ctx, state.value_arch)?;
+    // Parse block
     let result = rel::ebpf_parse(ctx, state.value_ctx, state.value_arch)?;
     install_result(state, result);
     let rejected = get::matches! { ctx.arena(), &result.value_call_result,
@@ -283,8 +292,10 @@ where
     if rejected {
         return Ok(());
     }
+    // Filter block
     let result = rel::ebpf_filter(ctx, state.value_ctx, state.value_arch)?;
     install_result(state, result);
+    // Check if packet is accepted
     let value_accept =
         rel::lvalue_read_var_global(ctx, state.value_ctx, state.value_arch, "accept")?;
     if unpack::p4_bool(ctx.arena(), &value_accept)? {
