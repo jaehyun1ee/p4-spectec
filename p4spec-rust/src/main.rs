@@ -9,7 +9,8 @@ use p4spec_rust::{
     lang::{al, il, traits::print::Print},
     pass::{algo, elaborate},
     runner::{BuiltinInterface, Runner},
-    sim_plugin::dummy::Dummy,
+    sim_plugin::{build, dummy::Dummy, runner::Error as SimError},
+    stf,
 };
 
 // = Helpers
@@ -130,6 +131,74 @@ fn run_command(args: RunArgs) -> ExitCode {
     }
 }
 
+// = Sim command
+
+#[derive(Args)]
+struct SimArgs {
+    /// Execute the algorithmic representation
+    #[arg(long, required = true)]
+    al: bool,
+    /// Specification files in processing order
+    #[arg(required = true, value_name = "PATH")]
+    paths: Vec<PathBuf>,
+    /// Target architecture: ebpf, psa, or v1model
+    #[arg(long, value_name = "ARCH")]
+    arch: String,
+    /// P4 program to simulate
+    #[arg(short = 'p', value_name = "PROGRAM")]
+    program: PathBuf,
+    /// STF test to execute
+    #[arg(long, value_name = "STF")]
+    stf: PathBuf,
+    /// Include directories for the P4 program
+    #[arg(short = 'i', value_name = "DIR")]
+    includes: Vec<PathBuf>,
+    /// Disable AL call caching
+    #[arg(long)]
+    no_cache: bool,
+    /// Check deterministic execution
+    #[arg(long)]
+    det: bool,
+    /// Check interpreter guards
+    #[arg(long)]
+    guard: bool,
+}
+
+fn sim_command(args: SimArgs) -> ExitCode {
+    let spec_al = match algo(args.paths) {
+        Ok(spec) => spec,
+        Err(code) => return code,
+    };
+    let config = Config::new(!args.no_cache, args.det, args.guard);
+    let mut simulator = match build::build(spec_al, &args.arch, config) {
+        Ok(simulator) => simulator,
+        Err(error) => return command_error(error),
+    };
+    let mut run = match simulator.init_pipe(&args.includes, &args.program) {
+        Ok(run) => run,
+        Err(error) => return command_error(error),
+    };
+    let stmts = match stf::parse::parse_file(&args.stf) {
+        Ok(stmts) => stmts,
+        Err(error) => return command_error(SimError::from(error)),
+    };
+    for stmt in &stmts {
+        match simulator.step(&mut run, stmt) {
+            Ok(Some(tx)) => println!("[PASS] Transmitted {tx}"),
+            Ok(None) => {}
+            Err(error) => return command_error(error),
+        }
+    }
+    if let Err(failure) = run.finish() {
+        return command_error(SimError::Stf {
+            failure,
+            span: Default::default(),
+        });
+    }
+    println!("passed");
+    ExitCode::SUCCESS
+}
+
 // = Entry point
 
 /// Elaborate and convert P4 specifications
@@ -148,6 +217,8 @@ enum Command {
     Algo(AlgoArgs),
     /// Run a P4 program with the algorithmic interpreter
     Run(RunArgs),
+    /// Simulate a P4 program and STF test on a target architecture
+    Sim(SimArgs),
 }
 
 fn main() -> ExitCode {
@@ -156,5 +227,6 @@ fn main() -> ExitCode {
         Command::Elab(args) => elab_command(args),
         Command::Algo(args) => algo_command(args),
         Command::Run(args) => run_command(args),
+        Command::Sim(args) => sim_command(args),
     }
 }
