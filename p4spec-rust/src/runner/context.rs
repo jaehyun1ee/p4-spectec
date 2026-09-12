@@ -14,60 +14,53 @@ use crate::{
 
 // == Runner context
 
-pub struct RunnerContext<'runner, S, I, E>
+pub struct RunnerContext<'runner, Interp, Iface, Exn>
 where
-    S: Interpreter<I, E>,
-    I: Interface,
-    E: Extern,
+    Interp: Interpreter<Iface, Exn>,
+    Iface: Interface,
+    Exn: Extern,
 {
-    spec: &'runner S::Spec,
-    config: &'runner S::Config,
-    state: &'runner mut S::State,
-    interface: &'runner mut I,
-    externs: &'runner E,
     arena: &'runner mut ValueArena,
+    spec: &'runner Interp::Spec,
+    interp: &'runner mut Interp,
+    interface: &'runner mut Iface,
+    external: &'runner Exn,
 }
 
-impl<'runner, S, I, E> RunnerContext<'runner, S, I, E>
+impl<'runner, Interp, Iface, Exn> RunnerContext<'runner, Interp, Iface, Exn>
 where
-    S: Interpreter<I, E>,
-    I: Interface,
-    E: Extern,
+    Interp: Interpreter<Iface, Exn>,
+    Iface: Interface,
+    Exn: Extern,
 {
     pub(super) fn new(
-        spec: &'runner S::Spec,
-        config: &'runner S::Config,
-        state: &'runner mut S::State,
-        interface: &'runner mut I,
-        externs: &'runner E,
         arena: &'runner mut ValueArena,
+        spec: &'runner Interp::Spec,
+        interp: &'runner mut Interp,
+        interface: &'runner mut Iface,
+        external: &'runner Exn,
     ) -> Self {
         Self {
-            spec,
-            config,
-            state,
-            interface,
-            externs,
             arena,
+            spec,
+            interp,
+            interface,
+            external,
         }
     }
 
     // - Semantic components
 
-    pub fn spec(&self) -> &'runner S::Spec {
+    pub fn spec(&self) -> &'runner Interp::Spec {
         self.spec
     }
 
-    pub fn config(&self) -> &'runner S::Config {
-        self.config
+    pub fn interp(&self) -> &Interp {
+        self.interp
     }
 
-    pub fn state(&self) -> &S::State {
-        self.state
-    }
-
-    pub fn state_mut(&mut self) -> &mut S::State {
-        self.state
+    pub fn interp_mut(&mut self) -> &mut Interp {
+        self.interp
     }
 
     pub fn arena(&self) -> &ValueArena {
@@ -80,12 +73,16 @@ where
 
     // - Evaluation dispatch
 
-    pub fn call_program(&mut self, name: &str, program: Value) -> Result<Vec<Value>, S::Error> {
-        S::eval_program(self, name, program)
+    pub fn call_program(
+        &mut self,
+        name: &str,
+        program: Value,
+    ) -> Result<Vec<Value>, Interp::Error> {
+        Interp::eval_program(self, name, program)
     }
 
-    pub fn call_rel(&mut self, name: &str, values: &[Value]) -> Result<Vec<Value>, S::Error> {
-        S::eval_rel(self, name, values)
+    pub fn call_rel(&mut self, name: &str, values: &[Value]) -> Result<Vec<Value>, Interp::Error> {
+        Interp::eval_rel(self, name, values)
     }
 
     pub fn call_func(
@@ -93,8 +90,8 @@ where
         name: &str,
         targs: &[Typ],
         values: &[Value],
-    ) -> Result<Value, S::Error> {
-        S::eval_func(self, name, targs, values)
+    ) -> Result<Value, Interp::Error> {
+        Interp::eval_func(self, name, targs, values)
     }
 
     // - Host dispatch
@@ -104,7 +101,7 @@ where
         id: &Id,
         targs: &[Typ],
         values: &[Value],
-    ) -> Result<(Value, bool), S::Error> {
+    ) -> Result<(Value, bool), Interp::Error> {
         let result = self.interface.call_builtin(self.arena, id, targs, values)?;
         Ok(result)
     }
@@ -113,9 +110,9 @@ where
         &mut self,
         name: &str,
         values: &[Value],
-    ) -> Result<(Vec<Value>, bool), S::Error> {
-        let externs = self.externs;
-        externs.eval_rel(self, name, values)
+    ) -> Result<(Vec<Value>, bool), Interp::Error> {
+        let external = self.external;
+        external.eval_rel(self, name, values)
     }
 
     pub fn call_extern_func(
@@ -123,8 +120,8 @@ where
         name: &str,
         targs: &[Typ],
         values: &[Value],
-    ) -> Result<(Value, bool), S::Error> {
-        let externs = self.externs;
-        externs.eval_func(self, name, targs, values)
+    ) -> Result<(Value, bool), Interp::Error> {
+        let external = self.external;
+        external.eval_func(self, name, targs, values)
     }
 }

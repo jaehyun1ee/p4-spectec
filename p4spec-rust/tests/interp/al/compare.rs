@@ -12,7 +12,7 @@ use p4spec_rust::util::json::json;
 use p4spec_rust::{
     frontend::parse::parse_files,
     interface::p4::unparse::P4Unparser,
-    interp::al::{Al, Config, context::Global, error::Error},
+    interp::al::{AlInterp, Config, context::Global, error::Error},
     lang::il::ast::Typ,
     lang::{
         common::source::Span,
@@ -33,22 +33,22 @@ fn repo() -> &'static Path {
     Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap()
 }
 
-fn native<E: Extern>(
+fn native<Exn: Extern>(
     spec: &Path,
     cache: bool,
     det: bool,
     guard: bool,
-    extern_: E,
-) -> Runner<Al, BuiltinInterface, E> {
+    external: Exn,
+) -> Runner<AlInterp, BuiltinInterface, Exn> {
     let spec_el = parse_files([spec]).expect("native specification parsing");
     let spec_il = elaborate::elaborate(spec_el).expect("native elaboration");
     let spec_al = algo::convert(spec_il).expect("native algorithmic conversion");
     let unparser = P4Unparser::from_al_spec(&spec_al);
     Runner::new(
         Global::load(spec_al).unwrap(),
-        Config::new(cache, det, guard),
+        AlInterp::new(Config::new(cache, det, guard)),
         BuiltinInterface::new(unparser),
-        extern_,
+        external,
     )
 }
 
@@ -294,16 +294,16 @@ fn fixtures(cache: bool, det: bool) {
 struct Bridge;
 
 impl Extern for Bridge {
-    fn eval_func<S, I>(
+    fn eval_func<Interp, Iface>(
         &self,
-        ctx: &mut RunnerContext<'_, S, I, Self>,
+        ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
         name: &str,
         targs: &[Typ],
         values: &[Value],
-    ) -> Result<(Value, bool), S::Error>
+    ) -> Result<(Value, bool), Interp::Error>
     where
-        I: Interface,
-        S: Interpreter<I, Self>,
+        Iface: Interface,
+        Interp: Interpreter<Iface, Self>,
     {
         let value = match name {
             "bridge" => ctx.call_func("inner", targs, values)?,
@@ -320,15 +320,15 @@ impl Extern for Bridge {
         Ok((value, false))
     }
 
-    fn eval_rel<S, I>(
+    fn eval_rel<Interp, Iface>(
         &self,
-        _context: &mut RunnerContext<'_, S, I, Self>,
+        _ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
         _name: &str,
         _values: &[Value],
-    ) -> Result<(Vec<Value>, bool), S::Error>
+    ) -> Result<(Vec<Value>, bool), Interp::Error>
     where
-        I: Interface,
-        S: Interpreter<I, Self>,
+        Iface: Interface,
+        Interp: Interpreter<Iface, Self>,
     {
         Err(ExternError::Failure("unknown bridge relation".to_owned()).into())
     }

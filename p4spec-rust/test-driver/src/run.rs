@@ -7,7 +7,7 @@ use indicatif::{ProgressBar, ProgressStyle};
 use p4spec_rust::{
     frontend::parse::parse_files,
     interface::p4::{error::P4ErrorKind, parse::parse_file, unparse::P4Unparser},
-    interp::al::{Al, Config, context::Global},
+    interp::al::{AlInterp, Config, context::Global},
     pass::{algo, elaborate},
     runner::{BuiltinInterface, Runner},
     sim::placeholder::Placeholder,
@@ -49,9 +49,9 @@ pub fn run() -> Result<()> {
     let spec_al = algo::convert(spec_il).map_err(|error| Error::Invalid(error.to_string()))?;
     let unparser = P4Unparser::from_al_spec(&spec_al);
     let global = Global::load(spec_al).map_err(|error| Error::Invalid(error.to_string()))?;
-    let mut runner = Runner::<Al, _, _>::new(
+    let mut runner = Runner::<AlInterp, _, _>::new(
         global,
-        Config::new(true, false, false),
+        AlInterp::new(Config::new(true, false, false)),
         BuiltinInterface::new(unparser),
         Placeholder,
     );

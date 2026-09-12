@@ -5,7 +5,7 @@ use p4spec_rust::{
     frontend::parse::parse_files,
     interface::p4::{parse::parse_file, unparse::P4Unparser},
     interp::al::{
-        Al, Config,
+        AlInterp, Config,
         context::Global,
         error::{Error, ErrorKind, HostErrorKind},
     },
@@ -23,20 +23,23 @@ fn repo() -> &'static Path {
     Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap()
 }
 
-fn runner<E: Extern>(externs: E) -> Runner<Al, BuiltinInterface, E> {
-    runner_from_spec(&repo().join("spec"), externs)
+fn runner<Exn: Extern>(external: Exn) -> Runner<AlInterp, BuiltinInterface, Exn> {
+    runner_from_spec(&repo().join("spec"), external)
 }
 
-fn runner_from_spec<E: Extern>(spec: &Path, externs: E) -> Runner<Al, BuiltinInterface, E> {
+fn runner_from_spec<Exn: Extern>(
+    spec: &Path,
+    external: Exn,
+) -> Runner<AlInterp, BuiltinInterface, Exn> {
     let spec_el = parse_files([spec]).expect("native specification parsing");
     let spec_il = elaborate::elaborate(spec_el).expect("native elaboration");
     let spec_al = algo::convert(spec_il).expect("native algorithmic conversion");
     let unparser = P4Unparser::from_al_spec(&spec_al);
     Runner::new(
         Global::load(spec_al).unwrap(),
-        Config::new(false, false, false),
+        AlInterp::new(Config::new(false, false, false)),
         BuiltinInterface::new(unparser),
-        externs,
+        external,
     )
 }
 

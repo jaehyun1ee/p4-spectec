@@ -1,10 +1,9 @@
-//! Static assembly of the specification execution components.
+//! Static assembly of the specification execution components
 //!
-//! `Runner<S, I, E>` owns one interpreter stage, builtin interface, and extern
-//! implementation. Each evaluation splits those components into a short-lived
-//! ctx. For example, a func call may dispatch to an extern, which can
-//! call another specification func through that same ctx before
-//! returning its value and side-effect flag.
+//! `Runner<Interp, Iface, Exn>` owns the arena, specification, interpreter,
+//! builtin interface, and extern implementation. The interpreter owns its
+//! configuration and cache. Each evaluation borrows these components through
+//! a context that also supports extern-to-interpreter reentry.
 
 mod context;
 mod externs;
@@ -23,48 +22,44 @@ pub use interpreter::Interpreter;
 
 // == Runner assembly
 
-/// An interpreter, builtin interface, and extern implementation assembled as
-/// one stateful execution unit.
-pub struct Runner<S, I, E>
+/// An interpreter and its host components sharing one value arena
+pub struct Runner<Interp, Iface, Exn>
 where
-    S: Interpreter<I, E>,
-    I: Interface,
-    E: Extern,
+    Interp: Interpreter<Iface, Exn>,
+    Iface: Interface,
+    Exn: Extern,
 {
-    spec: S::Spec,
-    config: S::Config,
-    state: S::State,
-    interface: I,
-    externs: E,
     arena: ValueArena,
+    spec: Interp::Spec,
+    interp: Interp,
+    interface: Iface,
+    external: Exn,
 }
 
-impl<S, I, E> Runner<S, I, E>
+impl<Interp, Iface, Exn> Runner<Interp, Iface, Exn>
 where
-    S: Interpreter<I, E>,
-    I: Interface,
-    E: Extern,
+    Interp: Interpreter<Iface, Exn>,
+    Iface: Interface,
+    Exn: Extern,
 {
-    pub fn new(spec: S::Spec, config: S::Config, interface: I, externs: E) -> Self {
+    pub fn new(spec: Interp::Spec, interp: Interp, interface: Iface, external: Exn) -> Self {
         Self {
-            spec,
-            config,
-            state: S::State::default(),
-            interface,
-            externs,
             arena: ValueArena::new(),
+            spec,
+            interp,
+            interface,
+            external,
         }
     }
 
     /// Borrows the assembled components for a stage-specific evaluation entry
-    pub fn context(&mut self) -> RunnerContext<'_, S, I, E> {
+    pub fn context(&mut self) -> RunnerContext<'_, Interp, Iface, Exn> {
         RunnerContext::new(
-            &self.spec,
-            &self.config,
-            &mut self.state,
-            &mut self.interface,
-            &self.externs,
             &mut self.arena,
+            &self.spec,
+            &mut self.interp,
+            &mut self.interface,
+            &self.external,
         )
     }
 
@@ -78,12 +73,16 @@ where
 
     // - Evaluation
 
-    pub fn eval_program(&mut self, name: &str, program: Value) -> Result<Vec<Value>, S::Error> {
+    pub fn eval_program(
+        &mut self,
+        name: &str,
+        program: Value,
+    ) -> Result<Vec<Value>, Interp::Error> {
         let mut ctx = self.context();
         ctx.call_program(name, program)
     }
 
-    pub fn eval_rel(&mut self, name: &str, values: &[Value]) -> Result<Vec<Value>, S::Error> {
+    pub fn eval_rel(&mut self, name: &str, values: &[Value]) -> Result<Vec<Value>, Interp::Error> {
         let mut ctx = self.context();
         ctx.call_rel(name, values)
     }
@@ -93,17 +92,17 @@ where
         name: &str,
         targs: &[Typ],
         values: &[Value],
-    ) -> Result<Value, S::Error> {
+    ) -> Result<Value, Interp::Error> {
         let mut ctx = self.context();
         ctx.call_func(name, targs, values)
     }
 
     // - Lifecycle
 
-    /// Clears execution state and resets the builtin interface and externs
+    /// Clears the interpreter cache and resets the builtin interface and externs
     pub fn clear(&mut self) {
-        S::clear(&mut self.state);
-        self.externs.clear();
+        self.interp.clear();
+        self.external.clear();
         self.interface.clear();
     }
 
@@ -112,8 +111,8 @@ where
     /// All previously returned arena handles become invalid. Call this before
     /// parsing the next program, after discarding the preceding program's values
     pub fn reset(&mut self) {
-        self.state = S::State::default();
-        self.externs.clear();
+        self.interp.reset();
+        self.external.clear();
         self.interface.clear();
         self.arena = ValueArena::new();
     }

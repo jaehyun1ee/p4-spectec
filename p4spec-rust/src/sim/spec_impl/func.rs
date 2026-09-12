@@ -6,20 +6,20 @@ use crate::{
     runner::{Extern, ExternError, Interface, Interpreter, RunnerContext},
 };
 
-pub fn find_var_value_t<S, I, E>(
-    ctx: &mut RunnerContext<'_, S, I, E>,
+pub fn find_var_value_t<Interp, Iface, Exn>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
     value_cursor: &Value,
     value_ctx: &Value,
     name: &str,
-) -> Result<Value, S::Error>
+) -> Result<Value, Interp::Error>
 where
-    I: Interface,
-    E: Extern,
-    S: Interpreter<I, E>,
+    Iface: Interface,
+    Exn: Extern,
+    Interp: Interpreter<Iface, Exn>,
 {
     let value_name = make::text(ctx.arena_mut(), name.to_owned(), Span::default())
         .map_err(ExternError::from)
-        .map_err(S::Error::from)?;
+        .map_err(Interp::Error::from)?;
     let value_name = make::case_shaped_(
         ctx.arena_mut(),
         "_BARE nameIR",
@@ -28,7 +28,7 @@ where
         Span::default(),
     )
     .map_err(ExternError::from)
-    .map_err(S::Error::from)?;
+    .map_err(Interp::Error::from)?;
     ctx.call_func(
         "find_var_value_t",
         &[],
@@ -36,15 +36,15 @@ where
     )
 }
 
-pub fn find_var_value_t_local<S, I, E>(
-    ctx: &mut RunnerContext<'_, S, I, E>,
+pub fn find_var_value_t_local<Interp, Iface, Exn>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
     value_ctx: &Value,
     name: &str,
-) -> Result<Value, S::Error>
+) -> Result<Value, Interp::Error>
 where
-    I: Interface,
-    E: Extern,
-    S: Interpreter<I, E>,
+    Iface: Interface,
+    Exn: Extern,
+    Interp: Interpreter<Iface, Exn>,
 {
     let value_cursor = make::case_shaped_(
         ctx.arena_mut(),
@@ -54,6 +54,6 @@ where
         Span::default(),
     )
     .map_err(ExternError::from)
-    .map_err(S::Error::from)?;
+    .map_err(Interp::Error::from)?;
     find_var_value_t(ctx, &value_cursor, value_ctx, name)
 }

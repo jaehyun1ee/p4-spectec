@@ -5,7 +5,7 @@ use clap::{Args, Parser, Subcommand};
 use p4spec_rust::{
     frontend::parse::parse_files,
     interface::p4::{parse::parse_file, unparse::P4Unparser},
-    interp::al::{Al, Config, context::Global},
+    interp::al::{AlInterp, Config, context::Global},
     lang::{al, il, traits::print::Print},
     pass::{algo, elaborate},
     runner::{BuiltinInterface, Runner},
@@ -105,9 +105,9 @@ fn run_command(args: RunArgs) -> ExitCode {
         Ok(global) => global,
         Err(error) => return command_error(error),
     };
-    let mut runner = Runner::<Al, _, _>::new(
+    let mut runner = Runner::<AlInterp, _, _>::new(
         global,
-        Config::new(!args.no_cache, args.det, args.guard),
+        AlInterp::new(Config::new(!args.no_cache, args.det, args.guard)),
         BuiltinInterface::new(unparser),
         Placeholder,
     );

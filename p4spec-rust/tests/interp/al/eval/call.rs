@@ -5,7 +5,7 @@ use std::rc::Rc;
 use p4spec_rust::lang::traits::print::Print;
 use p4spec_rust::{
     frontend::parse::parse_string,
-    interp::al::{Al, Config, context::Global, error::ErrorKind},
+    interp::al::{AlInterp, Config, context::Global, error::ErrorKind},
     lang::{
         al::ast,
         common::source::Span,
@@ -25,10 +25,10 @@ fn spec(source: &str) -> ast::Spec {
     algo::convert(spec_il).expect("convert execution fixture")
 }
 
-fn make_runner(spec_al: ast::Spec, det: bool) -> Runner<Al, BuiltinInterface, NullExtern> {
+fn make_runner(spec_al: ast::Spec, det: bool) -> Runner<AlInterp, BuiltinInterface, NullExtern> {
     Runner::new(
         Global::load(spec_al).unwrap(),
-        Config::new(false, det, true),
+        AlInterp::new(Config::new(false, det, true)),
         BuiltinInterface::new(p4spec_rust::interface::p4::unparse::P4Unparser::new()),
         NullExtern,
     )
@@ -771,15 +771,15 @@ impl p4spec_rust::runner::Interface for Host {
 }
 
 impl p4spec_rust::runner::Extern for Host {
-    fn eval_rel<S, I>(
+    fn eval_rel<Interp, Iface>(
         &self,
-        ctx: &mut p4spec_rust::runner::RunnerContext<'_, S, I, Self>,
+        ctx: &mut p4spec_rust::runner::RunnerContext<'_, Interp, Iface, Self>,
         _name: &str,
         values: &[Value],
-    ) -> Result<(Vec<Value>, bool), S::Error>
+    ) -> Result<(Vec<Value>, bool), Interp::Error>
     where
-        I: p4spec_rust::runner::Interface,
-        S: p4spec_rust::runner::Interpreter<I, Self>,
+        Iface: p4spec_rust::runner::Interface,
+        Interp: p4spec_rust::runner::Interpreter<Iface, Self>,
     {
         self.calls.set(self.calls.get() + 1);
         let values = if self.reenter {
@@ -790,16 +790,16 @@ impl p4spec_rust::runner::Extern for Host {
         Ok((values, true))
     }
 
-    fn eval_func<S, I>(
+    fn eval_func<Interp, Iface>(
         &self,
-        ctx: &mut p4spec_rust::runner::RunnerContext<'_, S, I, Self>,
+        ctx: &mut p4spec_rust::runner::RunnerContext<'_, Interp, Iface, Self>,
         _name: &str,
         targs: &[ast::Typ],
         _values: &[Value],
-    ) -> Result<(Value, bool), S::Error>
+    ) -> Result<(Value, bool), Interp::Error>
     where
-        I: p4spec_rust::runner::Interface,
-        S: p4spec_rust::runner::Interpreter<I, Self>,
+        Iface: p4spec_rust::runner::Interface,
+        Interp: p4spec_rust::runner::Interpreter<Iface, Self>,
     {
         // The OCaml extern boundary erases type arguments
         assert!(targs.is_empty());
@@ -831,9 +831,9 @@ fn test_guards_toggle_input_checks_and_substitute_type_arguments() {
     let spec_al = spec("var n : nat\ndec $ignore<X>(X) : nat\ndef $ignore<X>(X) = 1");
     for det in [false, true] {
         for guard in [false, true] {
-            let mut runner = Runner::<Al, _, _>::new(
+            let mut runner = Runner::<AlInterp, _, _>::new(
                 Global::load(spec_al.clone()).unwrap(),
-                Config::new(false, det, guard),
+                AlInterp::new(Config::new(false, det, guard)),
                 BuiltinInterface::new(p4spec_rust::interface::p4::unparse::P4Unparser::new()),
                 NullExtern,
             );
@@ -938,9 +938,9 @@ def $pick<X>() = $external<X>()
                 false,
             );
             let calls = external.calls.clone();
-            let mut runner = Runner::<Al, _, _>::new(
+            let mut runner = Runner::<AlInterp, _, _>::new(
                 Global::load(spec_al.clone()).unwrap(),
-                Config::new(false, det, guard),
+                AlInterp::new(Config::new(false, det, guard)),
                 builtin,
                 external,
             );
@@ -998,9 +998,9 @@ fn test_extern_relation_output_guards_preserve_call_span() {
         }
     }
     for guard in [false, true] {
-        let mut runner = Runner::<Al, _, _>::new(
+        let mut runner = Runner::<AlInterp, _, _>::new(
             Global::load(spec_al.clone()).unwrap(),
-            Config::new(false, false, guard),
+            AlInterp::new(Config::new(false, false, guard)),
             BuiltinInterface::new(p4spec_rust::interface::p4::unparse::P4Unparser::new()),
             host(|arena| nat(arena, 4), false),
         );
@@ -1041,9 +1041,9 @@ def $ambiguous() = 2
     let external = host(|arena| nat(arena, 40), true);
     let calls_builtin = builtin.calls.clone();
     let calls_extern = external.calls.clone();
-    let mut runner = Runner::<Al, _, _>::new(
+    let mut runner = Runner::<AlInterp, _, _>::new(
         Global::load(spec(source)).unwrap(),
-        Config::new(false, true, true),
+        AlInterp::new(Config::new(false, true, true)),
         builtin,
         external,
     );
@@ -1105,9 +1105,9 @@ fn test_extern_reentry_uses_public_input_guards() {
     let source =
         "extern dec $bridge(nat) : nat\nvar n : nat\ndec $inner(nat) : nat\ndef $inner(n) = 7";
     for guard in [false, true] {
-        let mut runner = Runner::<Al, _, _>::new(
+        let mut runner = Runner::<AlInterp, _, _>::new(
             Global::load(spec(source)).unwrap(),
-            Config::new(false, false, guard),
+            AlInterp::new(Config::new(false, false, guard)),
             BuiltinInterface::new(p4spec_rust::interface::p4::unparse::P4Unparser::new()),
             host(
                 |arena| make::bool(arena, true, Span::default()).unwrap(),
@@ -1135,9 +1135,9 @@ fn test_extern_reentry_uses_public_input_guards() {
 fn test_output_guard_after_success_is_fatal_only_in_deterministic_choice() {
     let source = "builtin dec $bad() : nat\ndec $pick() : nat\ndef $pick() = 1\ndef $pick() = $bad()\ndef $pick() = 9\n  -- otherwise";
     for det in [false, true] {
-        let mut runner = Runner::<Al, _, _>::new(
+        let mut runner = Runner::<AlInterp, _, _>::new(
             Global::load(spec(source)).unwrap(),
-            Config::new(false, det, true),
+            AlInterp::new(Config::new(false, det, true)),
             host(
                 |arena| make::bool(arena, true, Span::default()).unwrap(),
                 false,
@@ -1218,9 +1218,9 @@ fn test_guard_failure_keeps_its_source_span_through_extern_reentry() {
         panic!("call")
     };
     let span = id.span.clone();
-    let mut runner = Runner::<Al, _, _>::new(
+    let mut runner = Runner::<AlInterp, _, _>::new(
         Global::load(spec_al).unwrap(),
-        Config::new(false, false, true),
+        AlInterp::new(Config::new(false, false, true)),
         host(
             |arena| make::bool(arena, true, Span::default()).unwrap(),
             false,
@@ -1240,9 +1240,9 @@ fn test_guard_failure_keeps_its_source_span_through_extern_reentry() {
 #[test]
 fn test_reentrant_public_guard_keeps_no_source_span() {
     let source = "extern dec $bridge(nat) : nat\nvar n : nat\ndec $inner(nat) : nat\ndef $inner(n) = 7\ndec $outer(nat) : nat\ndef $outer(n) = $bridge(n)";
-    let mut runner = Runner::<Al, _, _>::new(
+    let mut runner = Runner::<AlInterp, _, _>::new(
         Global::load(spec(source)).unwrap(),
-        Config::new(false, false, true),
+        AlInterp::new(Config::new(false, false, true)),
         BuiltinInterface::new(p4spec_rust::interface::p4::unparse::P4Unparser::new()),
         host(
             |arena| make::bool(arena, true, Span::default()).unwrap(),
@@ -1300,16 +1300,16 @@ impl p4spec_rust::runner::Interface for CacheHost {
 }
 
 impl p4spec_rust::runner::Extern for CacheHost {
-    fn eval_func<S, I>(
+    fn eval_func<Interp, Iface>(
         &self,
-        ctx: &mut p4spec_rust::runner::RunnerContext<'_, S, I, Self>,
+        ctx: &mut p4spec_rust::runner::RunnerContext<'_, Interp, Iface, Self>,
         name: &str,
         targs: &[ast::Typ],
         values: &[Value],
-    ) -> Result<(Value, bool), S::Error>
+    ) -> Result<(Value, bool), Interp::Error>
     where
-        I: p4spec_rust::runner::Interface,
-        S: p4spec_rust::runner::Interpreter<I, Self>,
+        Iface: p4spec_rust::runner::Interface,
+        Interp: p4spec_rust::runner::Interpreter<Iface, Self>,
     {
         assert!(targs.is_empty());
         self.record(name);
@@ -1321,15 +1321,15 @@ impl p4spec_rust::runner::Extern for CacheHost {
         Ok((value, false))
     }
 
-    fn eval_rel<S, I>(
+    fn eval_rel<Interp, Iface>(
         &self,
-        _context: &mut p4spec_rust::runner::RunnerContext<'_, S, I, Self>,
+        _ctx: &mut p4spec_rust::runner::RunnerContext<'_, Interp, Iface, Self>,
         name: &str,
         values: &[Value],
-    ) -> Result<(Vec<Value>, bool), S::Error>
+    ) -> Result<(Vec<Value>, bool), Interp::Error>
     where
-        I: p4spec_rust::runner::Interface,
-        S: p4spec_rust::runner::Interpreter<I, Self>,
+        Iface: p4spec_rust::runner::Interface,
+        Interp: p4spec_rust::runner::Interpreter<Iface, Self>,
     {
         self.record(name);
         Ok((values.to_vec(), false))
@@ -1349,9 +1349,9 @@ dec $pair(nat*, nat*) : (nat*, nat*)
 def $pair(ns_1, ns_2) = ($pure(ns_1), $pure(ns_2))
 "#;
     let host = CacheHost::default();
-    let mut runner = Runner::<Al, _, _>::new(
+    let mut runner = Runner::<AlInterp, _, _>::new(
         Global::load(spec(source)).unwrap(),
-        Config::new(true, false, false),
+        AlInterp::new(Config::new(true, false, false)),
         host.clone(),
         NullExtern,
     );
@@ -1413,9 +1413,9 @@ def $pair(n) = ($recover(n), $recover(n))
 "#
             );
             let host = CacheHost::default();
-            let mut runner = Runner::<Al, _, _>::new(
+            let mut runner = Runner::<AlInterp, _, _>::new(
                 Global::load(spec(&source)).unwrap(),
-                Config::new(true, det, false),
+                AlInterp::new(Config::new(true, det, false)),
                 host.clone(),
                 NullExtern,
             );
@@ -1456,9 +1456,9 @@ def $direct(n) = ($probe(n), $probe(n))
 "#;
     for cache in [false, true] {
         let host = CacheHost::default();
-        let mut runner = Runner::<Al, _, _>::new(
+        let mut runner = Runner::<AlInterp, _, _>::new(
             Global::load(spec(source)).unwrap(),
-            Config::new(cache, false, false),
+            AlInterp::new(Config::new(cache, false, false)),
             host.clone(),
             host.clone(),
         );
@@ -1492,9 +1492,9 @@ def $pair(n) = ($outer(n), $outer(n))
 "#
         );
         let host = CacheHost::default();
-        let mut runner = Runner::<Al, _, _>::new(
+        let mut runner = Runner::<AlInterp, _, _>::new(
             Global::load(spec(&source)).unwrap(),
-            Config::new(true, false, false),
+            AlInterp::new(Config::new(true, false, false)),
             host.clone(),
             host.clone(),
         );
@@ -1520,9 +1520,9 @@ dec $pair(nat) : ((nat, nat), (nat, nat))
 def $pair(n) = ($apply(n, def $forward), $apply(n, def $forward))
 "#;
     let host = CacheHost::default();
-    let mut runner = Runner::<Al, _, _>::new(
+    let mut runner = Runner::<AlInterp, _, _>::new(
         Global::load(spec(source)).unwrap(),
-        Config::new(true, false, false),
+        AlInterp::new(Config::new(true, false, false)),
         host.clone(),
         host.clone(),
     );
@@ -1539,9 +1539,9 @@ dec $pair() : (nat, nat)
 def $pair() = ($pure<nat>(7), $pure<bool>(7))
 "#;
     let host = CacheHost::default();
-    let mut runner = Runner::<Al, _, _>::new(
+    let mut runner = Runner::<AlInterp, _, _>::new(
         Global::load(spec(source)).unwrap(),
-        Config::new(true, false, true),
+        AlInterp::new(Config::new(true, false, true)),
         host.clone(),
         NullExtern,
     );
@@ -1575,9 +1575,9 @@ def $pair() = ($pure<nat>(7), $pure<bool>(7))
 fn test_program_reset_isolates_cached_values_between_arenas() {
     let source = "var n : nat\nbuiltin dec $pure(nat) : nat\ndec $pair(nat) : (nat, nat)\ndef $pair(n) = ($pure(n), $pure(n))";
     let host = CacheHost::default();
-    let mut runner = Runner::<Al, _, _>::new(
+    let mut runner = Runner::<AlInterp, _, _>::new(
         Global::load(spec(source)).unwrap(),
-        Config::new(true, false, false),
+        AlInterp::new(Config::new(true, false, false)),
         host.clone(),
         NullExtern,
     );
@@ -1620,9 +1620,9 @@ dec $use(nat, nat) : (nat, nat, nat, nat)
 def $use(n_1, n_2) = ($pure(n_1, n_2), $pure(n_2, n_1), $pure(n_1, n_2), $other(n_1, n_2))
 "#;
     let host = CacheHost::default();
-    let mut runner = Runner::<Al, _, _>::new(
+    let mut runner = Runner::<AlInterp, _, _>::new(
         Global::load(spec(source)).unwrap(),
-        Config::new(true, false, true),
+        AlInterp::new(Config::new(true, false, true)),
         host.clone(),
         NullExtern,
     );
@@ -1670,9 +1670,9 @@ def $pair(s_1, s_2) = ($pure(s_1), $pure(s_2))
         (json!(u64::MAX - 1), json!(u64::MAX), 2),
     ] {
         let host = CacheHost::default();
-        let mut runner = Runner::<Al, _, _>::new(
+        let mut runner = Runner::new(
             Global::load(spec(source)).unwrap(),
-            Config::new(true, false, false),
+            AlInterp::new(Config::new(true, false, false)),
             host.clone(),
             NullExtern,
         );
