@@ -6,7 +6,7 @@
 
 CARGO := cargo
 
-.PHONY: test test-frontend test-p4parse-unit test-elab-unit test-algo-unit test-lang test-wire \
+.PHONY: test test-frontend test-p4parse-unit test-elab-unit test-algo-unit test-structure-unit test-lang test-wire \
         test-runtime test-run-al-unit test-run-al-diff test-frontend-diff test-elab-diff test-algo-diff test-diff
 
 # Fast unit tests (no OCaml toolchain required)
@@ -29,6 +29,11 @@ test-elab-unit:
 test-algo-unit:
 	$(CARGO) test --lib pass::algo
 	$(CARGO) test --test pass algo::
+
+test-structure-unit:
+	$(CARGO) test --locked --lib pass::structure::
+	$(CARGO) test --locked --test pass structure::
+	$(CARGO) test --locked --test lang al::fresh::
 
 test-lang:
 	$(CARGO) test --test lang
@@ -63,7 +68,7 @@ test-run-al-diff:
 test-diff: test-frontend-diff test-elab-diff test-algo-diff test-run-al-diff
 
 # Standalone expected driver; product unit tests remain in tests/
-.PHONY: test-expected test-promote test-p4parse test-elab test-algo test-run-al
+.PHONY: test-expected test-promote test-p4parse test-elab test-algo test-structure test-run-al
 DRIVER = $(CARGO) run --locked --release --manifest-path test-driver/Cargo.toml --target-dir target --
 
 test-p4parse:
@@ -75,13 +80,16 @@ test-elab:
 test-algo:
 	env -u UPDATE_EXPECT $(DRIVER) algo
 
+test-structure:
+	env -u UPDATE_EXPECT $(DRIVER) structure
+
 test-run-al:
 	env -u UPDATE_EXPECT $(DRIVER) run-al
 
-test-expected: test-p4parse test-elab test-algo test-run-al
+test-expected: test-p4parse test-elab test-algo test-structure test-run-al
 
 # Rerun elab/algo and update snapshots; does not approve a previous run
-# P4 parser/AL expected and excludes are never promoted
+# P4 parser/structure/AL expected and excludes are never promoted
 test-promote:
 	UPDATE_EXPECT=1 $(DRIVER) elab
 	UPDATE_EXPECT=1 $(DRIVER) algo
