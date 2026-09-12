@@ -2,3 +2,6 @@
 mod algo;
 #[path = "pass/elaborate.rs"]
 mod elaborate;
+
+#[path = "pass/structure.rs"]
+mod structure;

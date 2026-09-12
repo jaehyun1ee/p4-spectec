@@ -10,6 +10,16 @@ use crate::{
 /// Stable semantic category of a structuring failure
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
 pub enum StructureErrorKind {
+    #[error("parameter and input argument do not match")]
+    IncompatibleParameterArgument,
+    #[error("an if premise should not have bindings")]
+    UnexpectedIfBindings,
+    #[error("an if holds premise should not have bindings")]
+    UnexpectedIfHoldBindings,
+    #[error("an if not holds premise should not have bindings")]
+    UnexpectedIfNotHoldBindings,
+    #[error("unsupported premise after iterator internalization")]
+    UnsupportedPremise,
     #[error("cannot totalize a non-variant type")]
     NonVariantTotalization,
     #[error("hold has no branches")]
