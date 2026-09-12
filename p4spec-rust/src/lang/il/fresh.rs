@@ -13,7 +13,7 @@ use super::{ast::*, var};
 
 type Metavars = IdMap<Typ>;
 
-fn id(ids: &IdSet, id: &Id) -> Id {
+pub(crate) fn id(ids: &IdSet, id: &Id) -> Id {
     let base = xl::var::strip_var_suffix(id).node;
     let ids = ids
         .iter()
