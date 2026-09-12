@@ -4,3 +4,4 @@ pub mod hash;
 pub mod io;
 pub mod spec_impl;
 pub mod state;
+pub mod table;

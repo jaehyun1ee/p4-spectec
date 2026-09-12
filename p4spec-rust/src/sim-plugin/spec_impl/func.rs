@@ -246,3 +246,145 @@ where
         &[value_target, value_varsize, value_bits],
     )
 }
+
+#[derive(Clone, Copy, Debug)]
+pub struct TableKeyInterface {
+    pub value_name: Value,
+    pub value_match_kind: Value,
+    pub value_typ: Value,
+}
+
+pub fn key_interface_of_table_object<Interp, Iface, Exn>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+    value_table: Value,
+) -> Result<Vec<TableKeyInterface>, Interp::Error>
+where
+    Iface: Interface,
+    Exn: Extern,
+    Interp: Interpreter<Iface, Exn>,
+{
+    let value_keys = ctx.call_func("key_interface_of_tableObject", &[], &[value_table])?;
+    get::list(ctx.arena(), &value_keys)
+        .map_err(ExternError::from)?
+        .iter()
+        .map(|value_key| {
+            let values = get::tuple(ctx.arena(), value_key).map_err(ExternError::from)?;
+            let (value_name, value_match_kind, value_typ) =
+                get::three(values).map_err(ExternError::from)?;
+            Ok(TableKeyInterface {
+                value_name: *value_name,
+                value_match_kind: *value_match_kind,
+                value_typ: *value_typ,
+            })
+        })
+        .collect()
+}
+
+pub fn table_object_add_entry<Interp, Iface, Exn>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+    value_ctx: Value,
+    value_table: Value,
+    value_priority: Value,
+    value_keys: Value,
+    value_action: Value,
+) -> Result<Option<Value>, Interp::Error>
+where
+    Iface: Interface,
+    Exn: Extern,
+    Interp: Interpreter<Iface, Exn>,
+{
+    let value_opt = ctx.call_func(
+        "tableObject_add_entry",
+        &[],
+        &[
+            value_ctx,
+            value_table,
+            value_priority,
+            value_keys,
+            value_action,
+        ],
+    )?;
+    Ok(get::opt(ctx.arena(), &value_opt).map_err(ExternError::from)?)
+}
+
+pub fn table_object_add_default_action<Interp, Iface, Exn>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+    value_ctx: Value,
+    value_table: Value,
+    value_action: Value,
+) -> Result<Value, Interp::Error>
+where
+    Iface: Interface,
+    Exn: Extern,
+    Interp: Interpreter<Iface, Exn>,
+{
+    ctx.call_func(
+        "tableObject_add_default_action",
+        &[],
+        &[value_ctx, value_table, value_action],
+    )
+}
+
+pub fn find_object_qualified_e<Interp, Iface, Exn>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+    value_arch: Value,
+    value_id: Value,
+) -> Result<Option<Value>, Interp::Error>
+where
+    Iface: Interface,
+    Exn: Extern,
+    Interp: Interpreter<Iface, Exn>,
+{
+    let value_opt = ctx.call_func("find_object_qualified_e", &[], &[value_arch, value_id])?;
+    Ok(get::opt(ctx.arena(), &value_opt).map_err(ExternError::from)?)
+}
+
+pub fn find_object_unqualified_e<Interp, Iface, Exn>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+    value_arch: Value,
+    value_id: Value,
+) -> Result<Option<Value>, Interp::Error>
+where
+    Iface: Interface,
+    Exn: Extern,
+    Interp: Interpreter<Iface, Exn>,
+{
+    let value_opt = ctx.call_func("find_object_unqualified_e", &[], &[value_arch, value_id])?;
+    Ok(get::opt(ctx.arena(), &value_opt).map_err(ExternError::from)?)
+}
+
+pub fn update_object_qualified_e<Interp, Iface, Exn>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+    value_arch: Value,
+    value_id: Value,
+    value_object: Value,
+) -> Result<Value, Interp::Error>
+where
+    Iface: Interface,
+    Exn: Extern,
+    Interp: Interpreter<Iface, Exn>,
+{
+    ctx.call_func(
+        "update_object_qualified_e",
+        &[],
+        &[value_arch, value_id, value_object],
+    )
+}
+
+pub fn update_object_unqualified_e<Interp, Iface, Exn>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+    value_arch: Value,
+    value_id: Value,
+    value_object: Value,
+) -> Result<Value, Interp::Error>
+where
+    Iface: Interface,
+    Exn: Extern,
+    Interp: Interpreter<Iface, Exn>,
+{
+    ctx.call_func(
+        "update_object_unqualified_e",
+        &[],
+        &[value_arch, value_id, value_object],
+    )
+}

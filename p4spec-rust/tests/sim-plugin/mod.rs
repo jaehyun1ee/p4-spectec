@@ -62,3 +62,6 @@ fn parse_program(arena: &mut ValueArena, path: &Path) -> Value {
 
 #[path = "hash.rs"]
 mod hash;
+
+#[path = "table.rs"]
+mod table;
