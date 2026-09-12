@@ -25,15 +25,39 @@ fn return_name(instr_body: &Instr) -> &str {
 #[test]
 fn test_equal_if_prefixes_merge_three_paths_and_preserve_first_span_and_tail_order() {
     let block_a = vec![
-        if_instr("outer", Iter::List, vec![ret("a")], 11),
+        if_instr(
+            "outer",
+            Iter::List,
+            vec![
+                if_instr("inner", Iter::Opt, vec![ret("a")], 111),
+                ret("inner_tail_a"),
+            ],
+            11,
+        ),
         ret("tail_a"),
     ];
     let block_b = vec![
-        if_instr("outer", Iter::List, vec![ret("b")], 22),
+        if_instr(
+            "outer",
+            Iter::List,
+            vec![
+                if_instr("inner", Iter::Opt, vec![ret("b")], 222),
+                ret("inner_tail_b"),
+            ],
+            22,
+        ),
         ret("tail_b"),
     ];
     let block_c = vec![
-        if_instr("outer", Iter::List, vec![ret("c")], 33),
+        if_instr(
+            "outer",
+            Iter::List,
+            vec![
+                if_instr("inner", Iter::Opt, vec![ret("c")], 333),
+                ret("inner_tail_c"),
+            ],
+            33,
+        ),
         ret("tail_c"),
     ];
 
@@ -44,9 +68,25 @@ fn test_equal_if_prefixes_merge_three_paths_and_preserve_first_span_and_tail_ord
     let InstrKind::If(instr_if) = &block[0].node else {
         panic!("expected merged if")
     };
+    assert_eq!(instr_if.block.len(), 4);
+    assert_eq!(instr_if.block[0].span, span(111));
+    let InstrKind::If(instr_if_inner) = &instr_if.block[0].node else {
+        panic!("expected merged inner if")
+    };
     assert_eq!(
-        instr_if.block.iter().map(return_name).collect::<Vec<_>>(),
+        instr_if_inner
+            .block
+            .iter()
+            .map(return_name)
+            .collect::<Vec<_>>(),
         ["a", "b", "c"]
+    );
+    assert_eq!(
+        instr_if.block[1..]
+            .iter()
+            .map(return_name)
+            .collect::<Vec<_>>(),
+        ["inner_tail_a", "inner_tail_b", "inner_tail_c"]
     );
     assert_eq!(
         block[1..].iter().map(return_name).collect::<Vec<_>>(),
