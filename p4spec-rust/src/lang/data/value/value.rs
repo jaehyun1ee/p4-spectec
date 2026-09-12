@@ -1,9 +1,12 @@
 //! Value bodies with full source locations and canonical syntax identities
 
+use serde_derive_state::{DeserializeState, SerializeState};
+
 use std::{
     cmp::Ordering,
     hash::{Hash, Hasher},
     num::TryFromIntError,
+    rc::Rc,
 };
 
 use super::{
@@ -40,18 +43,19 @@ pub struct ValueRef<'a> {
 
 // - Bodies
 
-#[derive(Debug)]
+#[derive(Debug, SerializeState, DeserializeState)]
+#[serde(serialize_state = "ValueArena", deserialize_state = "ValueArena")]
 pub enum ValueKind {
     Bool(bool),
     Num(Number),
     Text(String),
-    Struct(Vec<ValueField>),
-    Case(ValueCase),
-    Tuple(Vec<Value>),
-    Opt(Option<Value>),
-    List(Vec<Value>),
-    Func(Id),
-    Extern(json),
+    Struct(#[serde(state)] Vec<ValueField>),
+    Case(#[serde(state)] ValueCase),
+    Tuple(#[serde(state)] Vec<Value>),
+    Opt(#[serde(state)] Option<Value>),
+    List(#[serde(state)] Vec<Value>),
+    Func(#[serde(state)] Id),
+    Extern(Rc<json>),
 }
 
 // - Tags

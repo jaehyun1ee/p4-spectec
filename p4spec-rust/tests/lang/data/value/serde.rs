@@ -1,18 +1,14 @@
 use serde_json::json;
 
-use p4spec_rust::{
-    lang::{
-        common::{
-            notation::{atom::Atom, mixfix::Mixfix},
-            source::{Position, Span},
-        },
-        data::{
-            serialize::{DecodeError, value as payload},
-            typ,
-            value::{ValueArena, get, make},
-        },
+use p4spec_rust::lang::{
+    common::{
+        notation::{atom::Atom, mixfix::Mixfix},
+        source::{Position, Span},
     },
-    util::json::json,
+    data::{
+        typ,
+        value::{Value, ValueArena, get, make, serde as payload},
+    },
 };
 
 fn span_at(line: i64) -> Span {
@@ -77,10 +73,14 @@ fn test_native_payload_restores_annotated_context_in_fresh_arena() {
         span_at(10),
     )
     .unwrap();
-    let data_value = payload::encode(&arena, &value);
+    let data_value = payload::encode(&arena, &value).unwrap();
     let mut arena_decoded = ValueArena::new();
+    make::bool(&mut arena_decoded, false, Span::default()).unwrap();
     let value_decoded = payload::decode(&mut arena_decoded, &data_value).unwrap();
-    assert_eq!(payload::encode(&arena_decoded, &value_decoded), data_value);
+    assert_eq!(
+        payload::encode(&arena_decoded, &value_decoded).unwrap(),
+        data_value
+    );
     assert_eq!(arena_decoded.span(&value_decoded), &span_at(10));
     let fields = get::structure(&arena_decoded, &value_decoded).unwrap();
     assert_eq!(fields[0].0.span, span_at(9));
@@ -104,30 +104,29 @@ fn test_native_payload_rejects_missing_metadata_and_nested_constructor_arity() {
         span_at(2),
     )
     .unwrap();
-    let mut json_value = payload::encode(&arena, &value);
+    let mut json_value = payload::encode(&arena, &value).unwrap();
     let mut arena_decoded = ValueArena::new();
+    make::bool(&mut arena_decoded, false, Span::default()).unwrap();
     let mut json_missing = json_value.clone();
-    json_missing.as_object_mut().unwrap().remove("at");
-    assert_eq!(
-        payload::decode(&mut arena_decoded, &json_missing),
-        Err(DecodeError::MissingField("at"))
-    );
-    json_value["it"][1][0]["it"] = json!(["BoolV"]);
-    assert_eq!(
-        payload::decode(&mut arena_decoded, &json_value),
-        Err(DecodeError::Expected("valid IL value arity"))
-    );
+    json_missing.as_object_mut().unwrap().remove("span");
+    assert!(payload::decode::<Value>(&mut arena_decoded, &json_missing).is_err());
+    json_value["node"]["List"][0]["node"] = json!({"Bool": []});
+    assert!(payload::decode::<Value>(&mut arena_decoded, &json_value).is_err());
 }
 
 #[test]
 fn test_native_payload_preserves_wide_source_positions() {
     let mut arena = ValueArena::new();
     let value = make::bool(&mut arena, true, span_at(i64::MAX)).unwrap();
-    let json_value = payload::encode(&arena, &value);
-    let bytes = serde_json::to_vec(&json_value).unwrap();
-    let json_value: json = serde_json::from_slice(&bytes).unwrap();
+    use serde_state::{DeserializeState, SerializeState};
+    let mut bytes = Vec::new();
+    value
+        .serialize_state(&mut serde_json::Serializer::new(&mut bytes), &arena)
+        .unwrap();
     let mut arena_decoded = ValueArena::new();
-    let value_decoded = payload::decode(&mut arena_decoded, &json_value).unwrap();
+    let mut deserializer = serde_json::Deserializer::from_slice(&bytes);
+    let value_decoded = Value::deserialize_state(&mut arena_decoded, &mut deserializer).unwrap();
+    deserializer.end().unwrap();
     assert_eq!(arena_decoded.span(&value_decoded), &span_at(i64::MAX));
 }
 
@@ -160,9 +159,10 @@ fn test_native_payload_restores_wide_register_values_and_callable_metadata() {
         p4spec_rust::phrase!(node: arena.typ(value).as_ref().clone(), span: arena.span(value).clone())
     }).collect());
     let value = make::tuple(&mut arena, typ.node.into(), values.clone(), span_at(7)).unwrap();
-    let bytes = serde_json::to_vec(&payload::encode(&arena, &value)).unwrap();
+    let bytes = serde_json::to_vec(&payload::encode(&arena, &value).unwrap()).unwrap();
     let json_value = serde_json::from_slice(&bytes).unwrap();
     let mut arena_decoded = ValueArena::new();
+    make::bool(&mut arena_decoded, false, Span::default()).unwrap();
     let value_decoded = payload::decode(&mut arena_decoded, &json_value).unwrap();
     let values_decoded = get::tuple(&arena_decoded, &value_decoded).unwrap();
     assert_eq!(
@@ -183,4 +183,22 @@ fn test_native_payload_restores_wide_register_values_and_callable_metadata() {
         assert_eq!(arena.typ(value), arena_decoded.typ(value_decoded));
         assert_eq!(arena.span(value), arena_decoded.span(value_decoded));
     }
+}
+
+#[test]
+fn test_serde_rejects_negative_natural() {
+    use p4spec_rust::lang::xl::num::{Natural, Number};
+    let json_negative = serde_json::to_value(num_bigint::BigInt::from(-1)).unwrap();
+    assert!(serde_json::from_value::<Natural>(json_negative.clone()).is_err());
+    let mut arena = ValueArena::new();
+    let value = make::nat(&mut arena, Natural::from(1), Span::default()).unwrap();
+    let mut json_value = payload::encode(&arena, &value).unwrap();
+    json_value["node"]["Num"]["Nat"] = json_negative;
+    assert!(payload::decode::<Value>(&mut arena, &json_value).is_err());
+    let json_value = payload::encode(&arena, &value).unwrap();
+    let value: Value = payload::decode(&mut arena, &json_value).unwrap();
+    assert_eq!(
+        get::num(&arena, &value).unwrap(),
+        &Number::Nat(Natural::from(1))
+    );
 }

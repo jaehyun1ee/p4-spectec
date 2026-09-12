@@ -5,7 +5,8 @@
 use std::rc::Rc;
 
 use super::{
-    intern::{CanonId, CanonInterner, Interner, RcInterner},
+    intern::{CanonId, CanonInterner, Interned, Interner, RcInterner},
+    serde::ArenaStore,
     value::{Value, ValueError, ValueKind, ValueRef},
 };
 use crate::lang::{
@@ -100,5 +101,35 @@ impl ValueArena {
         crate::lang::il::print::print_value(self, value, &mut printer)
             .expect("writing to a String cannot fail");
         output
+    }
+}
+
+impl ArenaStore<ValueKind> for ValueArena {
+    fn lookup(&self, id: Interned<ValueKind>) -> &ValueKind {
+        self.values.get(id)
+    }
+
+    fn intern(&mut self, kind: ValueKind) -> Result<Interned<ValueKind>, ValueError> {
+        Ok(self.values.intern(kind)?)
+    }
+}
+
+impl ArenaStore<TypKind> for ValueArena {
+    fn lookup(&self, id: Interned<TypKind>) -> &TypKind {
+        self.types.get(id)
+    }
+
+    fn intern(&mut self, typ: TypKind) -> Result<Interned<TypKind>, ValueError> {
+        Ok(self.types.intern(Rc::new(typ))?)
+    }
+}
+
+impl ArenaStore<Span> for ValueArena {
+    fn lookup(&self, id: Interned<Span>) -> &Span {
+        self.spans.get(id)
+    }
+
+    fn intern(&mut self, span: Span) -> Result<Interned<Span>, ValueError> {
+        Ok(self.spans.intern(span)?)
     }
 }

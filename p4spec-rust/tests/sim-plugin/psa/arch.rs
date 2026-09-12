@@ -1,7 +1,10 @@
 use p4spec_rust::{
     lang::{
         common::source::Span,
-        data::value::{ValueArena, get, make},
+        data::value::{
+            ValueArena, get, make,
+            serde::{decode, encode},
+        },
     },
     sim_plugin::{
         core::object::PacketIn,
@@ -91,7 +94,11 @@ fn test_arch_queue_native_value_payload_roundtrip() {
     arch.multicast.group_create(5);
     arch.multicast.node_create(42, &[12, 3, 12]);
     arch.multicast.node_associate(5, 0);
-    let json = arch.to_json(&arena).unwrap();
+    let json = encode(&arena, &arch).unwrap();
+    assert_eq!(
+        json["queue"][0]["value_ctx"]["node"],
+        json!({"Text": "captured ingress context"})
+    );
     let mut arena_decoded = ValueArena::default();
     make::text(
         &mut arena_decoded,
@@ -99,8 +106,8 @@ fn test_arch_queue_native_value_payload_roundtrip() {
         Span::default(),
     )
     .unwrap();
-    let mut arch_decoded = Arch::from_json(&mut arena_decoded, &json).unwrap();
-    assert_eq!(arch_decoded.to_json(&arena_decoded).unwrap(), json);
+    let mut arch_decoded: Arch = decode(&mut arena_decoded, &json).unwrap();
+    assert_eq!(encode(&arena_decoded, &arch_decoded).unwrap(), json);
     assert_eq!(arch_decoded.mirrortable, arch.mirrortable);
     assert_eq!(arch_decoded.multicast, arch.multicast);
     for (entrypoint, text, pkt_expect) in [
@@ -137,9 +144,9 @@ fn test_arch_rejects_invalid_queued_packet_bounds() {
         packet_in: PacketIn::init("AB01").unwrap(),
         entrypoint: Entrypoint::Ingress,
     });
-    let mut json = arch.to_json(&arena).unwrap();
+    let mut json = encode(&arena, &arch).unwrap();
     json["queue"][0]["packet_in"]["idx"] = json!(17);
-    assert!(Arch::from_json(&mut arena, &json).is_err());
+    assert!(decode::<Arch>(&mut arena, &json).is_err());
     arch.queue[0].packet_in.idx = 17;
-    assert!(arch.to_json(&arena).is_err());
+    assert!(encode(&arena, &arch).is_err());
 }

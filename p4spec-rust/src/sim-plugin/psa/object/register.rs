@@ -1,27 +1,19 @@
 use super::{ObjectResult, finish, repeat};
-use crate::{
-    lang::data::serialize::value as value_data,
-    sim_plugin::spec_impl::{func, unpack},
-    util::json::json,
-};
+use crate::sim_plugin::spec_impl::{func, unpack};
 use crate::{
     lang::data::value::{Value, ValueArena},
     runner::{Extern, ExternError, Interface, Interpreter, RunnerContext},
 };
-use serde::{Deserialize, Serialize};
+use serde_derive_state::{DeserializeState, SerializeState};
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, SerializeState, DeserializeState)]
+#[serde(deny_unknown_fields, serialize_state = "ValueArena")]
+#[serde(deserialize_state = "ValueArena")]
 pub struct Register {
+    #[serde(state)]
     pub value_typ: Value,
+    #[serde(state)]
     pub values: Vec<Value>,
-}
-
-// Arena values are encoded structurally before serializing register state
-#[derive(Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct RegisterJson {
-    json_typ: json,
-    jsons: Vec<json>,
 }
 
 impl Register {
@@ -65,29 +57,6 @@ impl Register {
             value_typ,
             values: repeat(value_initial, size)?,
         })
-    }
-    pub fn to_json(&self, arena: &ValueArena) -> Result<json, ExternError> {
-        let reg = RegisterJson {
-            json_typ: value_data::encode(arena, &self.value_typ),
-            jsons: self
-                .values
-                .iter()
-                .map(|value| value_data::encode(arena, value))
-                .collect(),
-        };
-        serde_json::to_value(reg).map_err(|error| ExternError::Failure(error.to_string()))
-    }
-
-    pub fn from_json(arena: &mut ValueArena, json: &json) -> Result<Self, ExternError> {
-        let reg: RegisterJson = serde_json::from_value(json.clone())
-            .map_err(|error| ExternError::Failure(error.to_string()))?;
-        let value_typ = value_data::decode(arena, &reg.json_typ).map_err(ExternError::from)?;
-        let values = reg
-            .jsons
-            .iter()
-            .map(|json| value_data::decode(arena, json).map_err(ExternError::from))
-            .collect::<Result<Vec<_>, _>>()?;
-        Ok(Self { value_typ, values })
     }
 
     /// `T read(in S index);`

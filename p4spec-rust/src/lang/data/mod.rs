@@ -2,5 +2,3 @@
 
 pub mod typ;
 pub mod value;
-
-pub mod serialize;

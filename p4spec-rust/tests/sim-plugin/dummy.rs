@@ -14,8 +14,8 @@ use super::{has_extern_failure, parse_program, repo, runner, runner_from_spec};
 fn contains_null_object_state(arena: &ValueArena, value: &Value) -> bool {
     let is_null_object_state = matches!(
         (arena.typ(value).as_ref(), arena.kind(value)),
-        (TypKind::Var(id, targs), ValueKind::Extern(json::Null))
-            if id.node == "objectState" && targs.is_empty()
+        (TypKind::Var(id, targs), ValueKind::Extern(json))
+            if id.node == "objectState" && targs.is_empty() && json.is_null()
     );
     is_null_object_state
         || match arena.kind(value) {

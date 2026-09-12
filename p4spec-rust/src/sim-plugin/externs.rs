@@ -3,20 +3,19 @@ use crate::{
     lang::{
         common::source::Span,
         data::{
-            serialize::DecodeError,
             typ,
-            value::{Value, ValueArena, get, make},
+            value::{Value, ValueArena, get, make, serde::DecodeError as StateDecodeError},
         },
     },
     runner::{Extern, ExternError, Interface, Interpreter, RunnerContext},
     util::json::json,
 };
 
-impl From<DecodeError> for ExternError {
-    fn from(error: DecodeError) -> Self {
+impl From<StateDecodeError> for ExternError {
+    fn from(error: StateDecodeError) -> Self {
         match error {
-            DecodeError::Value(error) => Self::Value(error),
-            error => Self::Failure(error.to_string()),
+            StateDecodeError::Value(error) => Self::Value(error),
+            StateDecodeError::Json(error) => Self::Failure(error.to_string()),
         }
     }
 }

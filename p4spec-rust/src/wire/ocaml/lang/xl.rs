@@ -1,1 +1,1 @@
-pub(super) use crate::lang::data::serialize::num::*;
+pub(super) use crate::wire::ocaml::num::*;

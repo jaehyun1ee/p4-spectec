@@ -1,4 +1,4 @@
-pub(super) use crate::lang::data::serialize::typ::*;
+pub(super) use crate::wire::ocaml::typ::*;
 
 /// OCaml-compatible JSON codecs for IL data
 use std::cell::Cell;

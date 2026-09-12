@@ -474,7 +474,7 @@ fn test_canonical_identities_ignore_all_locations_but_distinguish_contents() {
             ValueKind::List(vec![value_false, value_true]),
             ValueKind::List(vec![value_true]),
             ValueKind::Func(id),
-            ValueKind::Extern(json::Null),
+            ValueKind::Extern(json::Null.into()),
         ] {
             values.push(make::new(arena, kind, typ::TypKind::Bool.into(), span.clone()).unwrap());
         }

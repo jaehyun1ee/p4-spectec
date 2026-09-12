@@ -1,5 +1,5 @@
 use num_bigint::BigInt;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::{
     lang::{
@@ -83,10 +83,24 @@ impl PacketIn {
     }
 
     pub fn from_json(json: &json) -> Result<Self, ExternError> {
-        let pkt: Self = serde_json::from_value(json.clone())
-            .map_err(|error| ExternError::Failure(error.to_string()))?;
-        pkt.check_bounds()?;
+        Self::deserialize_validated(json).map_err(|error| ExternError::Failure(error.to_string()))
+    }
+
+    pub(crate) fn deserialize_validated<'de, D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let pkt = Self::deserialize(deserializer)?;
+        pkt.check_bounds().map_err(serde::de::Error::custom)?;
         Ok(pkt)
+    }
+
+    pub(crate) fn serialize_validated<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        self.check_bounds().map_err(serde::ser::Error::custom)?;
+        self.serialize(serializer)
     }
 
     /// Reads a fixed-size header into `hdr` and advances the packet cursor

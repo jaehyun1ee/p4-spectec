@@ -25,18 +25,15 @@ pub struct Ebpf;
 // Extern objects
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ExternObject {
-    PacketIn(PacketIn),
+    PacketIn(#[serde(deserialize_with = "PacketIn::deserialize_validated")] PacketIn),
     CounterArray(CounterArray),
 }
 
 impl ExternObject {
     pub fn from_value(arena: &ValueArena, value: &Value) -> Result<Self, ExternError> {
         let json = get::external(arena, value)?;
-        let object: Self = serde_json::from_value(json.clone())
-            .map_err(|error| ExternError::Failure(error.to_string()))?;
-        if let Self::PacketIn(pkt) = &object {
-            pkt.payload()?;
-        }
+        let object: Self =
+            Self::deserialize(json).map_err(|error| ExternError::Failure(error.to_string()))?;
         Ok(object)
     }
 

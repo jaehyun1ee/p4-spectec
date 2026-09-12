@@ -6,6 +6,9 @@ use p4spec_rust::{
     stf::ast::Statement,
 };
 
+#[path = "pipe/serde.rs"]
+mod serde;
+
 #[test]
 fn test_native_psa_micro_fixture_packets() {
     let mut runner = super::super::runner(Psa);
@@ -220,8 +223,10 @@ fn test_clone_survives_ingress_drop() {
     let value_arch_restored =
         pipe::set_arch_state(&mut runner.context(), state.value_arch, &arch_original).unwrap();
     assert_eq!(
-        p4spec_rust::lang::data::serialize::value::encode(runner.arena(), &value_arch_restored),
-        p4spec_rust::lang::data::serialize::value::encode(runner.arena(), &value_arch_original)
+        p4spec_rust::lang::data::value::serde::encode(runner.arena(), &value_arch_restored)
+            .unwrap(),
+        p4spec_rust::lang::data::value::serde::encode(runner.arena(), &value_arch_original)
+            .unwrap()
     );
     state.txs.clear();
     scheduler::run_scheduler(&mut runner.context(), &mut state).unwrap();

@@ -1,3 +1,5 @@
+use serde_derive_state::{DeserializeState, SerializeState};
+
 use std::{
     cmp::Ordering,
     fmt,
@@ -21,18 +23,32 @@ pub type AtomPhrase = Phrase<Atom>;
 
 /// A mixfix expression: literal atoms interleaved with argument holes of type
 /// `T`. For example `_ + _` is infix with two holes and `[ _ ]` brackets one.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, SerializeState, DeserializeState)]
+#[serde(serialize_state = "State", ser_parameters = "State")]
+#[serde(deserialize_state = "State", de_parameters = "State")]
+#[serde(bound(
+    serialize = "T: serde_state::SerializeState<State>",
+    deserialize = "T: serde_state::DeserializeState<'de, State>"
+))]
 pub enum Mixfix<T> {
     /// Argument position
-    Arg(T),
+    Arg(#[serde(state)] T),
     /// Literal atom
-    Atom(AtomPhrase),
+    Atom(#[serde(state)] AtomPhrase),
     /// Bracketed expression
-    Brack(AtomPhrase, Box<Self>, AtomPhrase),
+    Brack(
+        #[serde(state)] AtomPhrase,
+        #[serde(state)] Box<Self>,
+        #[serde(state)] AtomPhrase,
+    ),
     /// Infix expression
-    Infix(Box<Self>, AtomPhrase, Box<Self>),
+    Infix(
+        #[serde(state)] Box<Self>,
+        #[serde(state)] AtomPhrase,
+        #[serde(state)] Box<Self>,
+    ),
     /// Sequence of expressions
-    Seq(Vec<Self>),
+    Seq(#[serde(state)] Vec<Self>),
 }
 
 // == Equality and comparison

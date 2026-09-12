@@ -18,7 +18,7 @@ use crate::{
         common::source::Span,
         data::{
             typ,
-            value::{Value, ValueArena, get, make},
+            value::{Value, ValueArena, get, make, serde},
         },
         il::ast::Typ,
     },
@@ -26,16 +26,19 @@ use crate::{
     stf::ast::Statement,
     util::json::json,
 };
+use serde_derive_state::{DeserializeState, SerializeState};
 
 pub struct Psa;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, SerializeState, DeserializeState)]
+#[serde(serialize_state = "ValueArena")]
+#[serde(deserialize_state = "ValueArena")]
 /// Core and PSA-specific extern objects
 pub enum ObjectState {
-    PacketIn(PacketIn),
+    PacketIn(#[serde(deserialize_with = "PacketIn::deserialize_validated")] PacketIn),
     PacketOut(PacketOut),
     Counter(Counter),
-    Register(Register),
+    Register(#[serde(state)] Register),
     Hash(HashExtern),
     InternetChecksum(InternetChecksum),
     Meter(Meter),
@@ -43,39 +46,13 @@ pub enum ObjectState {
 
 impl ObjectState {
     pub fn from_value(arena: &mut ValueArena, value: &Value) -> Result<Self, ExternError> {
-        let json = get::external(arena, value)?.clone();
-        let fields = json
-            .as_object()
-            .filter(|fields| fields.len() == 1)
-            .ok_or_else(|| ExternError::Failure("expected PSA object variant".to_owned()))?;
-        let (name, json) = fields.iter().next().expect("one object variant");
-        match name.as_str() {
-            "PacketIn" => Ok(Self::PacketIn(PacketIn::from_json(json)?)),
-            "PacketOut" => serde_json::from_value(json.clone()).map(Self::PacketOut),
-            "Counter" => serde_json::from_value(json.clone()).map(Self::Counter),
-            "Register" => return Register::from_json(arena, json).map(Self::Register),
-            "Hash" => serde_json::from_value(json.clone()).map(Self::Hash),
-            "InternetChecksum" => serde_json::from_value(json.clone()).map(Self::InternetChecksum),
-            "Meter" => serde_json::from_value(json.clone()).map(Self::Meter),
-            _ => return Err(ExternError::Failure(format!("unknown PSA object: {name}"))),
-        }
-        .map_err(|error| ExternError::Failure(error.to_string()))
+        serde::decode_external(arena, value).map_err(ExternError::from)
     }
 
     pub fn to_value(&self, arena: &mut ValueArena) -> Result<Value, ExternError> {
-        let (name, json) = match self {
-            Self::PacketIn(pkt) => ("PacketIn", serde_json::to_value(pkt)),
-            Self::PacketOut(pkt) => ("PacketOut", serde_json::to_value(pkt)),
-            Self::Counter(counter) => ("Counter", serde_json::to_value(counter)),
-            Self::Register(reg) => ("Register", Ok(reg.to_json(arena)?)),
-            Self::Hash(hash) => ("Hash", serde_json::to_value(hash)),
-            Self::InternetChecksum(checksum) => {
-                ("InternetChecksum", serde_json::to_value(checksum))
-            }
-            Self::Meter(meter) => ("Meter", serde_json::to_value(meter)),
-        };
-        let json = json.map_err(|error| ExternError::Failure(error.to_string()))?;
-        external::state_value(arena, "objectState", serde_json::json!({name: json}))
+        let json =
+            serde::encode(arena, self).map_err(|error| ExternError::Failure(error.to_string()))?;
+        external::state_value(arena, "objectState", json)
     }
 }
 
