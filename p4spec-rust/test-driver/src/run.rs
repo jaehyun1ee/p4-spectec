@@ -2,6 +2,7 @@ use crate::{
     Error, Result,
     corpus::{self, Outcome, Results},
 };
+use expect_test::expect_file;
 use indicatif::{ProgressBar, ProgressStyle};
 use p4spec_rust::{
     frontend::parse::parse_files,
@@ -12,7 +13,6 @@ use p4spec_rust::{
     sim::placeholder::Placeholder,
 };
 use std::{
-    collections::BTreeMap,
     fs,
     path::{Path, PathBuf},
     time::Instant,
@@ -21,34 +21,26 @@ use std::{
 pub fn run() -> Result<()> {
     let start = Instant::now();
     let excludes = corpus::collect_excludes(Path::new("excludes/static"))?;
-    let mut expected = BTreeMap::new();
-    let mut cases = Vec::new();
+    let mut suites = Vec::new();
     for (directory, relation, name) in [
         ("p4_16_samples", "Program_inst", "run-pos-al.expected"),
         ("p4_16_errors", "Program_ok", "run-neg-al.expected"),
     ] {
-        let text = fs::read_to_string(Path::new("p4spec-rust/test-driver/expected").join(name))?;
-        let records = corpus::parse_expected(&text)?;
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("expected")
+            .join(name);
         let paths = corpus::collect(&Path::new("p4c/testdata").join(directory), ".p4")?;
-        for (path, outcome) in records {
-            if expected.insert(path.clone(), outcome).is_some() {
-                return Err(Error::Invalid(format!(
-                    "duplicate suite input: {}",
-                    path.display()
-                )));
-            }
-        }
-        cases.extend(paths.into_iter().map(|path| (path, relation)));
+        suites.push((paths, relation, Results::new(expect_file![path])));
     }
-    let excluded = cases
+    let collected: usize = suites.iter().map(|(paths, _, _)| paths.len()).sum();
+    let excluded = suites
         .iter()
-        .filter(|(path, _)| path.to_str().is_some_and(|path| excludes.contains(path)))
+        .flat_map(|(paths, _, _)| paths)
+        .filter(|path| path.to_str().is_some_and(|path| excludes.contains(path)))
         .count();
     eprintln!(
-        "AL default mode: collected={}, excluded={}, to execute={}; preparing specification",
-        cases.len(),
-        excluded,
-        cases.len() - excluded
+        "AL default mode: collected={collected}, excluded={excluded}, to execute={}; preparing specification",
+        collected - excluded
     );
     let spec_el =
         parse_files([Path::new("spec")]).map_err(|error| Error::Invalid(error.to_string()))?;
@@ -65,66 +57,55 @@ pub fn run() -> Result<()> {
     );
     let includes = vec![PathBuf::from("p4c/p4include")];
     fs::read_dir(&includes[0])?;
-    let mut results = Results::new(&expected);
-    let progress = ProgressBar::new(cases.len() as u64).with_style(
+    let progress = ProgressBar::new(collected as u64).with_style(
         ProgressStyle::with_template("[{bar:24}] {pos}/{len} {elapsed_precise} {msg}")
             .map_err(|error| Error::Invalid(error.to_string()))?,
     );
     let mut executed = 0;
     let mut passed = 0;
-    for (path, relation) in &cases {
-        progress.set_message(path.display().to_string());
-        let outcome = if path.to_str().is_some_and(|path| excludes.contains(path)) {
-            Outcome::Exclude
-        } else {
-            // Reset before parsing: no value may cross this program boundary
-            runner.reset();
-            fs::File::open(path)?;
-            let outcome = match parse_file(runner.arena_mut(), &includes, path) {
-                Ok(program) => match runner.eval_program(relation, program) {
-                    Ok(_) => Outcome::Pass,
-                    Err(error) => {
-                        if expected.get(path) != Some(&Outcome::Fail) {
-                            progress.suspend(|| eprintln!("{}: {error}", path.display()));
+    for (paths, relation, results) in &mut suites {
+        for path in paths.iter() {
+            progress.set_message(path.display().to_string());
+            let outcome = if path.to_str().is_some_and(|path| excludes.contains(path)) {
+                Outcome::Exclude
+            } else {
+                // Reset before parsing: no value may cross this program boundary
+                runner.reset();
+                fs::File::open(path)?;
+                let outcome = match parse_file(runner.arena_mut(), &includes, path) {
+                    Ok(program) => match runner.eval_program(relation, program) {
+                        Ok(_) => Outcome::Pass,
+                        Err(_) => Outcome::Fail,
+                    },
+                    Err(error) => match error.kind {
+                        P4ErrorKind::Lex(_) | P4ErrorKind::Syntax => Outcome::Fail,
+                        _ => {
+                            return Err(Error::Invalid(format!(
+                                "{}: test execution error: {error}",
+                                path.display()
+                            )));
                         }
-                        Outcome::Fail
-                    }
-                },
-                Err(error) => match error.kind {
-                    P4ErrorKind::Lex(_) | P4ErrorKind::Syntax => Outcome::Fail,
-                    _ => {
-                        return Err(Error::Invalid(format!(
-                            "{}: test execution error: {error}",
-                            path.display()
-                        )));
-                    }
-                },
+                    },
+                };
+                executed += 1;
+                if outcome == Outcome::Pass {
+                    passed += 1;
+                }
+                outcome
             };
-            executed += 1;
-            if outcome == Outcome::Pass {
-                passed += 1;
-            }
-            outcome
-        };
-        if !results.record(path, outcome)? {
-            progress.suspend(|| {
-                eprintln!(
-                    "MISMATCH {}: expected {:?}, actual {outcome:?}",
-                    path.display(),
-                    expected[path]
-                );
-            });
+            results.record(path, outcome)?;
+            progress.inc(1);
         }
-        progress.inc(1);
     }
     progress.finish_with_message("complete");
     eprintln!(
-        "AL collected={} excluded={excluded} executed={executed} pass={passed} fail={} matched={} mismatched={} elapsed={:.3}s",
-        cases.len(),
+        "AL collected={collected} excluded={excluded} executed={executed} pass={passed} fail={} elapsed={:.3}s",
         executed - passed,
-        results.matched,
-        results.mismatched,
         start.elapsed().as_secs_f64()
     );
-    results.finish()
+    for (_, _, results) in suites {
+        results.check();
+    }
+    eprintln!("AL: all {collected} file results matched expected");
+    Ok(())
 }

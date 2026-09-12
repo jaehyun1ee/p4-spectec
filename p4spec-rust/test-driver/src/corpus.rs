@@ -1,4 +1,5 @@
 use crate::{Error, Result};
+use expect_test::ExpectFile;
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
@@ -13,45 +14,6 @@ pub enum Outcome {
     ReparseFail,
     RoundtripFail,
     Exclude,
-}
-
-pub fn parse_expected(text: &str) -> Result<BTreeMap<PathBuf, Outcome>> {
-    let mut records = BTreeMap::new();
-    for (idx, line) in text.lines().enumerate() {
-        let (status, path) = line
-            .split_once('\t')
-            .ok_or_else(|| Error::Invalid(format!("expected line {}: missing tab", idx + 1)))?;
-        let outcome = match status {
-            "pass" => Outcome::Pass,
-            "fail" => Outcome::Fail,
-            "parse-fail" => Outcome::ParseFail,
-            "reparse-fail" => Outcome::ReparseFail,
-            "roundtrip-fail" => Outcome::RoundtripFail,
-            "exclude" => Outcome::Exclude,
-            _ => {
-                return Err(Error::Invalid(format!(
-                    "expected line {}: invalid status {status}",
-                    idx + 1
-                )));
-            }
-        };
-        if !path.ends_with(".p4")
-            || path.contains(['\t', '\\'])
-            || path.split('/').any(|part| matches!(part, "" | "." | ".."))
-        {
-            return Err(Error::Invalid(format!(
-                "expected line {}: invalid relative path {path:?}",
-                idx + 1
-            )));
-        }
-        if records.insert(PathBuf::from(path), outcome).is_some() {
-            return Err(Error::Invalid(format!("duplicate expected path: {path}")));
-        }
-    }
-    if records.is_empty() {
-        return Err(Error::Invalid("empty expected file".to_owned()));
-    }
-    Ok(records)
 }
 
 pub fn collect(dir: &Path, suffix: &str) -> Result<Vec<PathBuf>> {
@@ -86,53 +48,54 @@ pub fn collect_excludes(dir: &Path) -> Result<BTreeSet<String>> {
     Ok(excludes)
 }
 
-pub struct Results<'a> {
-    expected: &'a BTreeMap<PathBuf, Outcome>,
-    seen: BTreeSet<PathBuf>,
-    pub matched: usize,
-    pub mismatched: usize,
+pub struct Results {
+    expected: ExpectFile,
+    records: BTreeMap<PathBuf, Outcome>,
 }
 
-impl<'a> Results<'a> {
-    pub fn new(expected: &'a BTreeMap<PathBuf, Outcome>) -> Self {
+impl Results {
+    pub fn new(expected: ExpectFile) -> Self {
         Self {
             expected,
-            seen: BTreeSet::new(),
-            matched: 0,
-            mismatched: 0,
+            records: BTreeMap::new(),
         }
     }
-    pub fn record(&mut self, path: &Path, outcome: Outcome) -> Result<bool> {
-        let expected = self
-            .expected
-            .get(path)
-            .ok_or_else(|| Error::Invalid(format!("unexpected result: {}", path.display())))?;
-        if !self.seen.insert(path.to_owned()) {
+
+    pub fn record(&mut self, path: &Path, outcome: Outcome) -> Result<()> {
+        if !path
+            .to_str()
+            .is_some_and(|path| !path.contains(['\t', '\r', '\n']))
+        {
+            return Err(Error::Invalid(format!(
+                "invalid result path: {}",
+                path.display()
+            )));
+        }
+        if self.records.insert(path.to_owned(), outcome).is_some() {
             return Err(Error::Invalid(format!(
                 "duplicate result: {}",
                 path.display()
             )));
         }
-        let matched = *expected == outcome;
-        if matched {
-            self.matched += 1;
-        } else {
-            self.mismatched += 1;
-        }
-        Ok(matched)
-    }
-    pub fn finish(&self) -> Result<()> {
-        let missing: Vec<_> = self
-            .expected
-            .keys()
-            .filter(|path| !self.seen.contains(*path))
-            .collect();
-        if !missing.is_empty() || self.mismatched != 0 {
-            return Err(Error::Invalid(format!(
-                "{} mismatches; missing results: {missing:?}",
-                self.mismatched
-            )));
-        }
         Ok(())
+    }
+
+    pub fn check(&self) {
+        let mut actual = String::new();
+        for (path, outcome) in &self.records {
+            let status = match outcome {
+                Outcome::Pass => "pass",
+                Outcome::Fail => "fail",
+                Outcome::ParseFail => "parse-fail",
+                Outcome::ReparseFail => "reparse-fail",
+                Outcome::RoundtripFail => "roundtrip-fail",
+                Outcome::Exclude => "exclude",
+            };
+            actual.push_str(status);
+            actual.push('\t');
+            actual.push_str(&path.to_string_lossy());
+            actual.push('\n');
+        }
+        self.expected.assert_eq(&actual);
     }
 }

@@ -37,6 +37,13 @@ enum Command {
 }
 
 fn execute(command: Command) -> Result<()> {
+    if matches!(command, Command::P4parse | Command::RunAl)
+        && std::env::var_os("UPDATE_EXPECT").is_some()
+    {
+        return Err(Error::Invalid(
+            "UPDATE_EXPECT is supported only for elab and algo".to_owned(),
+        ));
+    }
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
         .canonicalize()?;
