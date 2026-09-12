@@ -1,3 +1,5 @@
+pub mod architecture;
+pub mod build;
 pub mod core;
 pub mod dummy;
 pub mod ebpf;
@@ -5,6 +7,7 @@ mod externs;
 pub mod hash;
 pub mod io;
 pub mod psa;
+pub mod runner;
 pub mod spec_impl;
 pub mod state;
 pub mod table;
