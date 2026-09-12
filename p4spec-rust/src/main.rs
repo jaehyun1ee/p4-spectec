@@ -191,7 +191,7 @@ fn sim_command(args: SimArgs) -> ExitCode {
     }
     if let Err(failure) = run.finish() {
         return command_error(SimError::Stf {
-            failure,
+            failure: Box::new(failure),
             span: Default::default(),
         });
     }

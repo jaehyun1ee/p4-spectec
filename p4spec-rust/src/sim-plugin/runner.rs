@@ -35,7 +35,10 @@ pub enum Error {
     #[error("runtime error: {0}")]
     Runtime(#[from] InterpError),
     #[error("runtime error: {failure} at {span}")]
-    Stf { failure: StfFailure, span: Span },
+    Stf {
+        failure: Box<StfFailure>,
+        span: Span,
+    },
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -215,7 +218,7 @@ where
     Interp: Interpreter<Iface, Arch, Error = InterpError>,
 {
     let stf_error = |failure| Error::Stf {
-        failure,
+        failure: Box::new(failure),
         span: Span::default(),
     };
     let int = |text: &str| unpack::parse_signed_int(text).map_err(InterpError::from);
@@ -365,7 +368,7 @@ where
         step(runner, &mut run, stmt)?;
     }
     run.finish().map_err(|failure| Error::Stf {
-        failure,
+        failure: Box::new(failure),
         span: Span::default(),
     })?;
     Ok(run)

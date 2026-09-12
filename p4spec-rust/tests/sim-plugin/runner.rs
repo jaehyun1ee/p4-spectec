@@ -385,7 +385,7 @@ fn test_native_steps_clear_raw_outputs_without_flushing_pending_queues() {
     );
     assert_eq!(run.matches, vec![tx(1, "AAFF")]);
     assert!(
-        matches!(runner::step(&mut runner, &mut run, &stmts[3]), Err(Error::Stf { failure: StfFailure::Unsupported(_), span }) if span == stmts[3].span)
+        matches!(runner::step(&mut runner, &mut run, &stmts[3]), Err(Error::Stf { failure, span }) if matches!(*failure, StfFailure::Unsupported(_)) && span == stmts[3].span)
     );
     run.finish().unwrap();
 }
