@@ -2,3 +2,4 @@
 
 pub mod algo;
 pub mod elaborate;
+pub mod structure;

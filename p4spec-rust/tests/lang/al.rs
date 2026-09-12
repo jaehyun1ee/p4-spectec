@@ -293,5 +293,7 @@ fn composite_spec(metadata: &str, extern_inputs: Vec<i64>) -> al::ast::Spec {
 mod eq;
 #[path = "al/free.rs"]
 mod free;
+#[path = "al/fresh.rs"]
+mod fresh;
 #[path = "al/print.rs"]
 mod print;
