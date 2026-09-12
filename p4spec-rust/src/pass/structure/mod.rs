@@ -2,6 +2,7 @@ mod context;
 mod error;
 mod antiunify;
 mod ol;
+mod opt;
 mod merge;
 mod re;
 
