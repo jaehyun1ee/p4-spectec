@@ -303,7 +303,7 @@ impl Renamer {
             span,
         } = arg;
         let arg_kind = match arg_kind {
-            ArgKind::Exp(exp) => ArgKind::Exp(Box::new(self.rename_exp(*exp))),
+            ArgKind::Exp(exp) => self.rename_exp_arg(exp),
             ArgKind::Def(_) => arg_kind,
         };
         NotePhrase {
@@ -311,6 +311,9 @@ impl Renamer {
             note,
             span,
         }
+    }
+    fn rename_exp_arg(&self, exp: Box<Exp>) -> ArgKind {
+        ArgKind::Exp(Box::new(self.rename_exp(*exp)))
     }
     pub(crate) fn rename_args(&self, args: Vec<Arg>) -> Vec<Arg> {
         args.into_iter().map(|arg| self.rename_arg(arg)).collect()
@@ -333,9 +336,15 @@ impl Renamer {
     pub(crate) fn rename_guard(&self, guard: ol::Guard) -> ol::Guard {
         match guard {
             ol::Guard::Bool(_) | ol::Guard::Sub(..) | ol::Guard::Match(_) => guard,
-            ol::Guard::Cmp(op, op_typ, exp) => ol::Guard::Cmp(op, op_typ, self.rename_exp(exp)),
-            ol::Guard::Mem(exp) => ol::Guard::Mem(self.rename_exp(exp)),
+            ol::Guard::Cmp(op, op_typ, exp) => self.rename_cmp_guard(op, op_typ, exp),
+            ol::Guard::Mem(exp) => self.rename_mem_guard(exp),
         }
+    }
+    fn rename_cmp_guard(&self, op: CmpOp, op_typ: OpTyp, exp: Exp) -> ol::Guard {
+        ol::Guard::Cmp(op, op_typ, self.rename_exp(exp))
+    }
+    fn rename_mem_guard(&self, exp: Exp) -> ol::Guard {
+        ol::Guard::Mem(self.rename_exp(exp))
     }
     pub(crate) fn rename_instr(&self, instr_ol: ol::Instr) -> Result<ol::Instr, StructureError> {
         let NotePhrase {
