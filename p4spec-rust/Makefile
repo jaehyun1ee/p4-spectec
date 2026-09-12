@@ -2,7 +2,7 @@
 #
 # The default targets run the fast, pure-Rust unit tests. The OCaml-differential
 # tests are #[ignore]d and run only via the `*-diff` targets: they need the
-# pinned OCaml toolchain (opam/dune) and print a progress bar over the corpus.
+# pinned OCaml toolchain (opam/dune).
 
 CARGO := cargo
 
@@ -47,7 +47,8 @@ test-run-al:
 	$(CARGO) test --locked --test runtime interp::al::
 	$(CARGO) test --locked --test cli
 
-# OCaml-differential tests (need opam/dune; render a corpus progress bar)
+# OCaml investigation checks (need opam/dune)
+# Elab/algo compare rejected-input diagnostics; full spec uses test-expected
 
 test-frontend-diff:
 	$(CARGO) test --test frontend -- --ignored --nocapture
@@ -58,11 +59,9 @@ test-elab-diff:
 test-algo-diff:
 	$(CARGO) test --test pass algo:: -- --ignored --nocapture
 
+# Focused choice, guard and host-reentry oracle checks; full AL uses test-expected
 test-run-al-diff:
-	$(CARGO) test --locked --release --test runtime interp::al::compare::test_run_al_corpus_matches_ocaml -- --ignored --exact --nocapture
-	$(CARGO) test --locked --release --test runtime interp::al::compare::test_run_al_det_corpus_matches_ocaml -- --ignored --exact --nocapture
-	$(CARGO) test --locked --release --test runtime interp::al::compare::test_run_al_cached_corpus_matches_ocaml -- --ignored --exact --nocapture
-	$(CARGO) test --locked --release --test runtime interp::al::compare::test_run_al_cached_det_corpus_matches_ocaml -- --ignored --exact --nocapture
+	$(CARGO) test --locked --release --test runtime interp::al::compare:: -- --ignored --nocapture
 
 test-diff: test-frontend-diff test-elab-diff test-algo-diff test-run-al-diff
 
