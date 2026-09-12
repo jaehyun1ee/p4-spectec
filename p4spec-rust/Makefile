@@ -67,16 +67,22 @@ test-run-al-diff:
 test-diff: test-frontend-diff test-elab-diff test-algo-diff test-run-al-diff
 
 # Standalone expected driver; product unit tests remain in tests/
-.PHONY: test-expected test-elab-expected test-algo-expected test-run-al-expected
+.PHONY: test-expected test-promote test-elab-expected test-algo-expected test-run-al-expected
 DRIVER = $(CARGO) run --locked --release --manifest-path test-driver/Cargo.toml --target-dir target --
 
 test-elab-expected:
-	$(DRIVER) elab
+	env -u UPDATE_EXPECT $(DRIVER) elab
 
 test-algo-expected:
-	$(DRIVER) algo
+	env -u UPDATE_EXPECT $(DRIVER) algo
 
 test-run-al-expected:
-	$(DRIVER) run-al
+	env -u UPDATE_EXPECT $(DRIVER) run-al
 
 test-expected: test-elab-expected test-algo-expected test-run-al-expected
+
+# Rerun elab/algo and update snapshots; does not approve a previous run
+# AL expected and excludes are never promoted
+test-promote:
+	UPDATE_EXPECT=1 $(DRIVER) elab
+	UPDATE_EXPECT=1 $(DRIVER) algo

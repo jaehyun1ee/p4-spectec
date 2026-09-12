@@ -1,5 +1,4 @@
 mod corpus;
-mod progress;
 mod run;
 mod snapshot;
 
@@ -58,7 +57,7 @@ fn main() -> ExitCode {
                 ExitCode::FAILURE
             }
             Err(_) => {
-                eprintln!("test driver panicked; corpus execution is incomplete");
+                eprintln!("test driver panicked; expected validation failed");
                 ExitCode::FAILURE
             }
         },

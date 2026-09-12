@@ -1,8 +1,8 @@
 use crate::{
     Error, Result,
     corpus::{self, Outcome, Results},
-    progress::Progress,
 };
+use indicatif::{ProgressBar, ProgressStyle};
 use p4spec_rust::{
     frontend::parse::parse_files,
     interface::p4::{error::P4ErrorKind, parse::parse_file, unparse::P4Unparser},
@@ -67,11 +67,14 @@ pub fn run() -> Result<()> {
     let includes = vec![PathBuf::from("p4c/p4include")];
     fs::read_dir(&includes[0])?;
     let mut results = Results::new(&expected);
-    let progress = Progress::new(cases.len());
+    let progress = ProgressBar::new(cases.len() as u64).with_style(
+        ProgressStyle::with_template("[{bar:24}] {pos}/{len} {elapsed_precise} {msg}")
+            .map_err(|error| Error::Invalid(error.to_string()))?,
+    );
     let mut executed = 0;
     let mut passed = 0;
-    for (idx, (path, relation)) in cases.iter().enumerate() {
-        progress.show(idx, &path.display().to_string());
+    for (path, relation) in &cases {
+        progress.set_message(path.display().to_string());
         let outcome = if expected[path] == Outcome::Exclude {
             Outcome::Exclude
         } else {
@@ -83,7 +86,7 @@ pub fn run() -> Result<()> {
                     Ok(_) => Outcome::Pass,
                     Err(error) => {
                         if expected[path] != Outcome::Fail {
-                            eprintln!("{}: {error}", path.display());
+                            progress.suspend(|| eprintln!("{}: {error}", path.display()));
                         }
                         Outcome::Fail
                     }
@@ -105,14 +108,17 @@ pub fn run() -> Result<()> {
             outcome
         };
         if !results.record(path, outcome)? {
-            eprintln!(
-                "MISMATCH {}: expected {:?}, actual {outcome:?}",
-                path.display(),
-                expected[path]
-            );
+            progress.suspend(|| {
+                eprintln!(
+                    "MISMATCH {}: expected {:?}, actual {outcome:?}",
+                    path.display(),
+                    expected[path]
+                );
+            });
         }
+        progress.inc(1);
     }
-    progress.show(cases.len(), "complete");
+    progress.finish_with_message("complete");
     eprintln!(
         "AL collected={} excluded={excluded} executed={executed} pass={passed} fail={} matched={} mismatched={} elapsed={:.3}s",
         cases.len(),
