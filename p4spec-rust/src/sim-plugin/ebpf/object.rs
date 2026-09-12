@@ -36,14 +36,8 @@ impl CounterArray {
         value_args: Value,
     ) -> Result<Self, ExternError> {
         let args = unpack::assoc_args(arena, value_ids, value_args)?;
-        let find_arg = |name: &str| {
-            args.iter()
-                .find(|arg| arg.name == name)
-                .map(|arg| arg.value)
-                .ok_or_else(|| ExternError::Failure(format!("argument not found: {name}")))
-        };
-        let value_max = find_arg("max_index")?;
-        let value_sparse = find_arg("sparse")?;
+        let value_max = unpack::find_arg(&args, "max_index")?;
+        let value_sparse = unpack::find_arg(&args, "sparse")?;
         let num_max = unpack::p4_fixed_bit(arena, &value_max)?;
         let idx_max = unpack::signed_int(&num_max.int)?;
         unpack::p4_bool(arena, &value_sparse)?;

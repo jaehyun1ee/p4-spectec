@@ -130,6 +130,14 @@ pub struct ArgumentValue {
     pub value: Value,
 }
 
+/// Finds the first argument with the requested name
+pub fn find_arg(args: &[ArgumentValue], name: &str) -> Result<Value, ExternError> {
+    args.iter()
+        .find(|arg| arg.name == name)
+        .map(|arg| arg.value)
+        .ok_or_else(|| ExternError::Failure(format!("argument not found: {name}")))
+}
+
 pub fn assoc_args(
     arena: &ValueArena,
     value_ids: Value,

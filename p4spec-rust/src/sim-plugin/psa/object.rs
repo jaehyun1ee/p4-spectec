@@ -40,13 +40,6 @@ fn finish<Object>(
     })
 }
 
-fn find_arg(args: &[unpack::ArgumentValue], name: &str) -> Result<Value, ExternError> {
-    args.iter()
-        .find(|arg| arg.name == name)
-        .map(|arg| arg.value)
-        .ok_or_else(|| ExternError::Failure(format!("argument not found: {name}")))
-}
-
 fn repeat<Value: Clone>(value: Value, len: i64) -> Result<Vec<Value>, ExternError> {
     let len = usize::try_from(len)
         .map_err(|_| ExternError::Failure("negative object size".to_owned()))?;
@@ -80,8 +73,8 @@ impl Counter {
         value_args: Value,
     ) -> Result<Self, ExternError> {
         let args = unpack::assoc_args(arena, value_ids, value_args)?;
-        let value_size = find_arg(&args, "n_counters")?;
-        let value_type = find_arg(&args, "type")?;
+        let value_size = unpack::find_arg(&args, "n_counters")?;
+        let value_type = unpack::find_arg(&args, "type")?;
         let size = unpack::signed_int(&unpack::p4_fixed_bit(arena, &value_size)?.int)?;
         let (id_enum, id_type) = unpack::p4_enum(arena, &value_type)?;
         match (id_enum.as_str(), id_type.as_str()) {
@@ -153,8 +146,8 @@ impl Meter {
         value_args: Value,
     ) -> Result<Self, ExternError> {
         let args = unpack::assoc_args(arena, value_ids, value_args)?;
-        let value_size = find_arg(&args, "n_meters")?;
-        let value_type = find_arg(&args, "type")?;
+        let value_size = unpack::find_arg(&args, "n_meters")?;
+        let value_type = unpack::find_arg(&args, "type")?;
         let size = unpack::signed_int(&unpack::p4_fixed_bit(arena, &value_size)?.int)?;
         let (id_enum, id_type) = unpack::p4_enum(arena, &value_type)?;
         match (id_enum.as_str(), id_type.as_str()) {
@@ -257,7 +250,7 @@ impl Register {
         };
         let value_typ = *value_typ;
         let args = unpack::assoc_args(ctx.arena(), value_ids, value_args)?;
-        let value_size = find_arg(&args, "size")?;
+        let value_size = unpack::find_arg(&args, "size")?;
         let value_initial = match args.iter().find(|arg| arg.name == "initial_value") {
             Some(arg) => arg.value,
             None => func::default(ctx, value_typ)?,
@@ -361,7 +354,7 @@ impl HashExtern {
         value_args: Value,
     ) -> Result<Self, ExternError> {
         let args = unpack::assoc_args(arena, value_ids, value_args)?;
-        let value_algo = find_arg(&args, "algo")?;
+        let value_algo = unpack::find_arg(&args, "algo")?;
         let (id_enum, id_type) = unpack::p4_enum(arena, &value_algo)?;
         if id_enum != "PSA_HashAlgorithm_t" {
             return Err(ExternError::Failure(
