@@ -4,7 +4,6 @@ use std::rc::Rc;
 
 mod arena;
 mod intern;
-mod json;
 #[allow(
     clippy::module_inception,
     reason = "separate facade and implementation"
@@ -27,6 +26,7 @@ use crate::lang::{
     data::typ::{self, Typ, TypKind},
     xl::num::{self, Number},
 };
+use crate::util::json::json;
 
 // = Smart constructors
 
@@ -188,31 +188,13 @@ pub mod make {
 
     // - Externals
 
-    /// Stores caller-defined serde JSON state without interpreting its schema
-    ///
-    /// Serialize state with [`serde_json::to_value`]. To update it, deserialize
-    /// the payload returned by [`get::external`], validate the state transition,
-    /// and allocate a new value. Existing arena values remain immutable
-    ///
-    /// ```
-    /// use p4spec_rust::lang::{common::source::Span, data::{typ, value::{ValueArena, make, get}}};
-    /// use serde::{Deserialize, Serialize};
-    /// #[derive(Serialize, Deserialize)]
-    /// struct State { count: u64 }
-    /// let mut arena = ValueArena::new();
-    /// let value = make::external(&mut arena, typ::TypKind::Text.into(),
-    ///     serde_json::to_value(State { count: 7 })?, Span::default())?;
-    /// let state: State = serde_json::from_value(get::external(&arena, &value)?.clone())?;
-    /// assert_eq!(state.count, 7);
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
-    /// ```
     pub fn external(
         arena: &mut ValueArena,
         typ: Rc<TypKind>,
-        value: serde_json::Value,
+        json: json,
         span: Span,
     ) -> Result<Value, ValueError> {
-        new(arena, ValueKind::Extern(value), typ, span)
+        new(arena, ValueKind::Extern(json), typ, span)
     }
 }
 
@@ -349,13 +331,9 @@ pub mod get {
 
     // - Externals
 
-    /// Borrows the JSON payload for direct deserialization with serde
-    pub fn external<'a>(
-        arena: &'a ValueArena,
-        value: &Value,
-    ) -> Result<&'a serde_json::Value, ValueError> {
+    pub fn external<'a>(arena: &'a ValueArena, value: &Value) -> Result<&'a json, ValueError> {
         match arena.kind(value) {
-            ValueKind::Extern(value) => Ok(value),
+            ValueKind::Extern(json) => Ok(json),
             _ => Err(unexpected(arena, value, ValueTag::Extern)),
         }
     }

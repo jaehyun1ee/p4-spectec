@@ -1,9 +1,10 @@
+use p4spec_rust::util::json::json;
 use p4spec_rust::wire::ocaml::mixfix::MixopCodec;
-use serde_json::{Value, json};
+use serde_json::json;
 
-fn atom(node: Value, line: i64) -> Value {
+fn atom(json_node: json, line: i64) -> json {
     json!({
-        "it": node,
+        "it": json_node,
         "note": null,
         "at": {
             "left": {"file": "notation.spec", "line": line, "column": 2},

@@ -1,4 +1,6 @@
-use serde_json::{Value, json};
+use serde_json::json;
+
+use crate::util::json::json;
 
 use crate::lang::al::ast::{self, *};
 
@@ -11,20 +13,20 @@ use crate::wire::ocaml::source;
 pub struct SpecCodec;
 
 impl SpecCodec {
-    pub fn decode(value: &Value) -> Result<ast::Spec, DecodeError> {
-        on_codec_stack(|| il::decode_list(value, decode_def))
+    pub fn decode(json: &json) -> Result<ast::Spec, DecodeError> {
+        on_codec_stack(|| il::decode_list(json, decode_def))
     }
 
-    pub fn encode(spec: &ast::Spec) -> Result<Value, EncodeError> {
+    pub fn encode(spec: &ast::Spec) -> Result<json, EncodeError> {
         on_codec_stack(|| Ok(il::encode_list(spec, encode_def)))
     }
 }
 
 // == Premises
 
-fn decode_prem(value: &Value) -> Result<ast::Prem, DecodeError> {
-    source::decode_phrase(value, |value| {
-        let (tag, fields) = variant(value)?;
+fn decode_prem(json: &json) -> Result<ast::Prem, DecodeError> {
+    source::decode_phrase(json, |json| {
+        let (tag, fields) = variant(json)?;
         match (tag, fields) {
             ("RulePr", [id, exp, input_hint]) => Ok(PremKind::Rule(RulePrem {
                 id: il::decode_id(id)?,
@@ -62,7 +64,7 @@ fn decode_prem(value: &Value) -> Result<ast::Prem, DecodeError> {
     })
 }
 
-fn encode_prem(prem: &ast::Prem) -> Value {
+fn encode_prem(prem: &ast::Prem) -> json {
     source::encode_phrase(prem, |prem| match prem {
         PremKind::Rule(RulePrem {
             id,
@@ -97,8 +99,8 @@ fn encode_prem(prem: &ast::Prem) -> Value {
 
 // == Clauses
 
-fn decode_clause(value: &Value) -> Result<ast::Clause, DecodeError> {
-    source::decode_phrase(value, |value| match array(value)? {
+fn decode_clause(json: &json) -> Result<ast::Clause, DecodeError> {
+    source::decode_phrase(json, |json| match array(json)? {
         [args, exp, prems] => Ok(ast::ClauseKind {
             args: il::decode_list(args, il::decode_arg)?,
             exp: il::decode_exp(exp)?,
@@ -108,7 +110,7 @@ fn decode_clause(value: &Value) -> Result<ast::Clause, DecodeError> {
     })
 }
 
-fn encode_clause(clause: &ast::Clause) -> Value {
+fn encode_clause(clause: &ast::Clause) -> json {
     source::encode_phrase(clause, |clause| {
         json!([
             il::encode_list(&clause.args, il::encode_arg),
@@ -118,8 +120,8 @@ fn encode_clause(clause: &ast::Clause) -> Value {
     })
 }
 
-fn decode_rule_match(value: &Value) -> Result<ast::RuleMatch, DecodeError> {
-    match array(value)? {
+fn decode_rule_match(json: &json) -> Result<ast::RuleMatch, DecodeError> {
+    match array(json)? {
         [exps_signature, exps_input, prems] => Ok(ast::RuleMatch {
             exps_signature: il::decode_list(exps_signature, il::decode_exp)?,
             exps_input: il::decode_list(exps_input, il::decode_exp)?,
@@ -129,7 +131,7 @@ fn decode_rule_match(value: &Value) -> Result<ast::RuleMatch, DecodeError> {
     }
 }
 
-fn encode_rule_match(rule_match: &ast::RuleMatch) -> Value {
+fn encode_rule_match(rule_match: &ast::RuleMatch) -> json {
     json!([
         il::encode_list(&rule_match.exps_signature, il::encode_exp),
         il::encode_list(&rule_match.exps_input, il::encode_exp),
@@ -137,8 +139,8 @@ fn encode_rule_match(rule_match: &ast::RuleMatch) -> Value {
     ])
 }
 
-fn decode_rule_path(value: &Value) -> Result<ast::RulePath, DecodeError> {
-    match array(value)? {
+fn decode_rule_path(json: &json) -> Result<ast::RulePath, DecodeError> {
+    match array(json)? {
         [id, prems, exps_output] => Ok(ast::RulePath {
             id: il::decode_id(id)?,
             prems: il::decode_list(prems, decode_prem)?,
@@ -148,7 +150,7 @@ fn decode_rule_path(value: &Value) -> Result<ast::RulePath, DecodeError> {
     }
 }
 
-fn encode_rule_path(rule_path: &ast::RulePath) -> Value {
+fn encode_rule_path(rule_path: &ast::RulePath) -> json {
     json!([
         il::encode_id(&rule_path.id),
         il::encode_list(&rule_path.prems, encode_prem),
@@ -156,8 +158,8 @@ fn encode_rule_path(rule_path: &ast::RulePath) -> Value {
     ])
 }
 
-fn decode_rule_group(value: &Value) -> Result<ast::RuleGroup, DecodeError> {
-    source::decode_phrase(value, |value| match array(value)? {
+fn decode_rule_group(json: &json) -> Result<ast::RuleGroup, DecodeError> {
+    source::decode_phrase(json, |json| match array(json)? {
         [id, rule_match, rule_paths] => Ok(ast::RuleGroupKind {
             id: il::decode_id(id)?,
             rule_match: decode_rule_match(rule_match)?,
@@ -167,7 +169,7 @@ fn decode_rule_group(value: &Value) -> Result<ast::RuleGroup, DecodeError> {
     })
 }
 
-fn encode_rule_group(group: &ast::RuleGroup) -> Value {
+fn encode_rule_group(group: &ast::RuleGroup) -> json {
     source::encode_phrase(group, |group| {
         json!([
             il::encode_id(&group.id),
@@ -177,8 +179,8 @@ fn encode_rule_group(group: &ast::RuleGroup) -> Value {
     })
 }
 
-fn decode_else_group(value: &Value) -> Result<ast::ElseGroup, DecodeError> {
-    source::decode_phrase(value, |value| match array(value)? {
+fn decode_else_group(json: &json) -> Result<ast::ElseGroup, DecodeError> {
+    source::decode_phrase(json, |json| match array(json)? {
         [id, rule_match, rule_path] => Ok(ast::ElseGroupKind {
             id: il::decode_id(id)?,
             rule_match: decode_rule_match(rule_match)?,
@@ -188,7 +190,7 @@ fn decode_else_group(value: &Value) -> Result<ast::ElseGroup, DecodeError> {
     })
 }
 
-fn encode_else_group(group: &ast::ElseGroup) -> Value {
+fn encode_else_group(group: &ast::ElseGroup) -> json {
     source::encode_phrase(group, |group| {
         json!([
             il::encode_id(&group.id),
@@ -198,8 +200,8 @@ fn encode_else_group(group: &ast::ElseGroup) -> Value {
     })
 }
 
-fn decode_table_row(value: &Value) -> Result<ast::TableRow, DecodeError> {
-    source::decode_phrase(value, |value| match array(value)? {
+fn decode_table_row(json: &json) -> Result<ast::TableRow, DecodeError> {
+    source::decode_phrase(json, |json| match array(json)? {
         [exps_signature, args, exp, prems] => Ok(ast::TableRowKind {
             exps_signature: il::decode_list(exps_signature, il::decode_exp)?,
             args: il::decode_list(args, il::decode_arg)?,
@@ -210,7 +212,7 @@ fn decode_table_row(value: &Value) -> Result<ast::TableRow, DecodeError> {
     })
 }
 
-fn encode_table_row(row: &ast::TableRow) -> Value {
+fn encode_table_row(row: &ast::TableRow) -> json {
     source::encode_phrase(row, |row| {
         json!([
             il::encode_list(&row.exps_signature, il::encode_exp),
@@ -221,9 +223,9 @@ fn encode_table_row(row: &ast::TableRow) -> Value {
     })
 }
 
-fn decode_def(value: &Value) -> Result<ast::Def, DecodeError> {
-    source::decode_phrase(value, |value| {
-        let (tag, fields) = variant(value)?;
+fn decode_def(json: &json) -> Result<ast::Def, DecodeError> {
+    source::decode_phrase(json, |json| {
+        let (tag, fields) = variant(json)?;
         match (tag, fields) {
             ("ExternTypD", [id, hints]) => Ok(DefKind::Typ(TypDef::Extern(ExternTyp {
                 id: il::decode_id(id)?,
@@ -308,7 +310,7 @@ fn decode_def(value: &Value) -> Result<ast::Def, DecodeError> {
     })
 }
 
-fn encode_typ_def(typ_def_al: &TypDef) -> Value {
+fn encode_typ_def(typ_def_al: &TypDef) -> json {
     match typ_def_al {
         TypDef::Extern(extern_typ_al) => json!([
             "ExternTypD",
@@ -325,7 +327,7 @@ fn encode_typ_def(typ_def_al: &TypDef) -> Value {
     }
 }
 
-fn encode_var_def(var_def_al: &VarDef) -> Value {
+fn encode_var_def(var_def_al: &VarDef) -> json {
     json!([
         "VarD",
         il::encode_id(&var_def_al.id),
@@ -334,7 +336,7 @@ fn encode_var_def(var_def_al: &VarDef) -> Value {
     ])
 }
 
-fn encode_rel_def(rel_def_al: &RelDef) -> Value {
+fn encode_rel_def(rel_def_al: &RelDef) -> json {
     match rel_def_al {
         RelDef::Extern(extern_rel_al) => json!([
             "ExternRelD",
@@ -355,7 +357,7 @@ fn encode_rel_def(rel_def_al: &RelDef) -> Value {
     }
 }
 
-fn encode_meta_func_def(meta_func_def_al: &MetaFuncDef) -> Value {
+fn encode_meta_func_def(meta_func_def_al: &MetaFuncDef) -> json {
     match meta_func_def_al {
         MetaFuncDef::Extern(extern_func_al) => json!([
             "ExternDecD",
@@ -394,7 +396,7 @@ fn encode_meta_func_def(meta_func_def_al: &MetaFuncDef) -> Value {
     }
 }
 
-fn encode_def(def_al: &ast::Def) -> Value {
+fn encode_def(def_al: &ast::Def) -> json {
     source::encode_phrase(def_al, |def_kind_al| match def_kind_al {
         DefKind::Typ(typ_def_al) => encode_typ_def(typ_def_al),
         DefKind::Var(var_def_al) => encode_var_def(var_def_al),

@@ -84,7 +84,7 @@ impl Extern for Placeholder {
                 let value = make_value::external(
                     ctx.arena_mut(),
                     typ.node.into(),
-                    serde_json::Value::Null,
+                    crate::util::json::json::Null,
                     Span::default(),
                 )
                 .map_err(ExternError::from)

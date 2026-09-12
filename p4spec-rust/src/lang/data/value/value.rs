@@ -22,6 +22,7 @@ use crate::lang::{
     traits::{cmp::SyntaxCmp, eq::SyntaxEq},
     xl::num::{self, Number},
 };
+use crate::util::json::json;
 
 // = Value types
 
@@ -50,22 +51,7 @@ pub enum ValueKind {
     Opt(Option<Value>),
     List(Vec<Value>),
     Func(Id),
-    /// Caller-defined JSON state; its schema and invariants belong to the extern
-    ///
-    /// Equality and hashing follow serde JSON: object key order is ignored,
-    /// array order matters, integers differ from floats, and float signed zeros
-    /// are equal. Numbers use i64/u64 or finite f64 with the configured features
-    /// (`arbitrary_precision` is not enabled). Larger integers need an explicit
-    /// string or other caller-defined representation
-    ///
-    /// JSON cannot retain duplicate keys, Yojson tuples/variants or non-finite
-    /// numbers. Callers must validate non-finite floats before serialization:
-    /// serde_json::to_value maps those floats to null
-    ///
-    /// Syntax order is null, boolean, number, string, array, object. Integers
-    /// precede floats and compare exactly; arrays and sorted object entries
-    /// compare lexicographically. Extern payloads have no OCaml wire encoding
-    Extern(serde_json::Value),
+    Extern(json),
 }
 
 // - Tags
@@ -152,7 +138,7 @@ impl PartialEq for ValueKind {
             | (Self::List(values_l), Self::List(values_r)) => values_l == values_r,
             (Self::Opt(value_l), Self::Opt(value_r)) => value_l == value_r,
             (Self::Func(id_l), Self::Func(id_r)) => id_l == id_r,
-            (Self::Extern(value_l), Self::Extern(value_r)) => value_l == value_r,
+            (Self::Extern(json_l), Self::Extern(json_r)) => json_l == json_r,
             _ => false,
         }
     }
@@ -196,7 +182,7 @@ impl Hash for ValueKind {
             Self::Tuple(values) | Self::List(values) => values.hash(hasher),
             Self::Opt(value) => value.hash(hasher),
             Self::Func(id) => id.hash(hasher),
-            Self::Extern(value) => value.hash(hasher),
+            Self::Extern(json) => json.hash(hasher),
         }
     }
 }
@@ -237,7 +223,7 @@ impl CanonEq for ValueKind {
                 _ => false,
             },
             (ValueKind::Func(id_l), ValueKind::Func(id_r)) => id_l.node == id_r.node,
-            (ValueKind::Extern(value_l), ValueKind::Extern(value_r)) => value_l == value_r,
+            (ValueKind::Extern(json_l), ValueKind::Extern(json_r)) => json_l == json_r,
             _ => false,
         }
     }
@@ -296,7 +282,7 @@ impl CanonHash for ValueKind {
                 .map(|value| interner.canon_id(value.node))
                 .hash(hasher),
             ValueKind::Func(id) => id.node.hash(hasher),
-            ValueKind::Extern(value) => value.hash(hasher),
+            ValueKind::Extern(json) => json.hash(hasher),
         }
     }
 }
@@ -361,8 +347,8 @@ impl SyntaxCmp for ValueRef<'_> {
                 (None, None) => Ordering::Equal,
             },
             (ValueKind::Func(id_l), ValueKind::Func(id_r)) => id_l.node.cmp(&id_r.node),
-            (ValueKind::Extern(value_l), ValueKind::Extern(value_r)) => {
-                super::json::compare(value_l, value_r)
+            (ValueKind::Extern(json_l), ValueKind::Extern(json_r)) => {
+                crate::util::json::compare(json_l, json_r)
             }
             _ => kind_l.tag().cmp(&kind_r.tag()),
         }

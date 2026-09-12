@@ -9,4 +9,5 @@ pub mod runner;
 pub mod runtime;
 pub mod sim;
 pub mod stf;
+pub mod util;
 pub mod wire;

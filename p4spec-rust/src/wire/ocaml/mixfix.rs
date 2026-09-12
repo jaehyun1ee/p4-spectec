@@ -1,4 +1,6 @@
-use serde_json::{Value, json};
+use serde_json::json;
+
+use crate::util::json::json;
 
 use crate::lang::common::notation::{mixfix::Mixfix, mixop::Mixop};
 
@@ -9,9 +11,9 @@ use super::{DecodeError, array, atom::AtomPhraseCodec, on_codec_stack, variant};
 pub struct MixopCodec;
 
 impl MixopCodec {
-    pub fn decode(value: &Value) -> Result<Mixop, DecodeError> {
+    pub fn decode(json: &json) -> Result<Mixop, DecodeError> {
         on_codec_stack(|| {
-            decode(value, |unit| {
+            decode(json, |unit| {
                 if unit.is_null() {
                     Ok(())
                 } else {
@@ -21,15 +23,15 @@ impl MixopCodec {
         })
     }
 
-    pub fn encode(mixop: &Mixop) -> Value {
-        on_codec_stack(|| encode(mixop, |()| Value::Null))
+    pub fn encode(mixop: &Mixop) -> json {
+        on_codec_stack(|| encode(mixop, |()| json::Null))
     }
 }
 
 pub(crate) fn try_encode<T, E>(
     mixfix: &Mixfix<T>,
-    encode_arg: impl Copy + Fn(&T) -> Result<Value, E>,
-) -> Result<Value, E> {
+    encode_arg: impl Copy + Fn(&T) -> Result<json, E>,
+) -> Result<json, E> {
     Ok(match mixfix {
         Mixfix::Arg(arg) => json!(["Arg", encode_arg(arg)?]),
         Mixfix::Atom(atom) => json!(["Atom", AtomPhraseCodec::encode(atom)]),
@@ -56,17 +58,17 @@ pub(crate) fn try_encode<T, E>(
 }
 
 pub(crate) fn decode<T>(
-    value: &Value,
-    mut decode_arg: impl FnMut(&Value) -> Result<T, DecodeError>,
+    json: &json,
+    mut decode_arg: impl FnMut(&json) -> Result<T, DecodeError>,
 ) -> Result<Mixfix<T>, DecodeError> {
-    decode_inner(value, &mut decode_arg)
+    decode_inner(json, &mut decode_arg)
 }
 
 fn decode_inner<T>(
-    value: &Value,
-    decode_arg: &mut impl FnMut(&Value) -> Result<T, DecodeError>,
+    json: &json,
+    decode_arg: &mut impl FnMut(&json) -> Result<T, DecodeError>,
 ) -> Result<Mixfix<T>, DecodeError> {
-    let (tag, fields) = variant(value)?;
+    let (tag, fields) = variant(json)?;
     match (tag, fields) {
         ("Arg", [arg]) => Ok(Mixfix::Arg(decode_arg(arg)?)),
         ("Atom", [atom]) => Ok(Mixfix::Atom(AtomPhraseCodec::decode(atom)?)),
@@ -93,7 +95,7 @@ fn decode_inner<T>(
     }
 }
 
-pub(crate) fn encode<T>(mixfix: &Mixfix<T>, encode_arg: impl Copy + Fn(&T) -> Value) -> Value {
+pub(crate) fn encode<T>(mixfix: &Mixfix<T>, encode_arg: impl Copy + Fn(&T) -> json) -> json {
     match mixfix {
         Mixfix::Arg(arg) => json!(["Arg", encode_arg(arg)]),
         Mixfix::Atom(atom) => json!(["Atom", AtomPhraseCodec::encode(atom)]),

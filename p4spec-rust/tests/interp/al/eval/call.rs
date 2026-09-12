@@ -1639,7 +1639,8 @@ def $use(n_1, n_2) = ($pure(n_1, n_2), $pure(n_2, n_1), $pure(n_1, n_2), $other(
 
 #[test]
 fn test_cache_keys_follow_serde_external_payload_equality() {
-    use serde_json::{Value as Json, json};
+    use p4spec_rust::util::json::json;
+    use serde_json::json;
     let source = r#"
 extern syntax state
 var s : state
@@ -1654,7 +1655,7 @@ def $pair(s_1, s_2) = ($pure(s_1), $pure(s_2))
     fields_b.insert("b".to_owned(), json!([1, 2]));
     fields_b.insert("a".to_owned(), json!(1));
     for (json_a, json_b, count) in [
-        (Json::Object(fields_a), Json::Object(fields_b), 1),
+        (json::Object(fields_a), json::Object(fields_b), 1),
         (json!(-0.0), json!(0.0), 1),
         (json!(1_i64), json!(1_u64), 1),
         (json!(0), json!(0.0), 2),

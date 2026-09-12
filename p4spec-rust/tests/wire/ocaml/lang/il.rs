@@ -10,6 +10,7 @@ use p4spec_rust::{
         },
     },
     phrase,
+    util::json::json,
     wire::ocaml::lang::il::{ValueCodec, ValueEnvelopeCodec},
 };
 
@@ -139,7 +140,7 @@ fn test_value_wire_rejects_extern_encoding() {
     let value = make::external(
         &mut arena,
         typ::TypKind::Bool.into(),
-        serde_json::Value::Null,
+        json::Null,
         Span::default(),
     )
     .unwrap();
@@ -160,7 +161,7 @@ fn test_value_wire_rejects_extern_decoding() {
 fn test_value_envelope_rejects_lossy_or_extended_json() {
     let mut arena = ValueArena::new();
     let value = make::bool(&mut arena, true, Span::default()).unwrap();
-    let payload = ValueCodec::encode(&arena, &value).unwrap();
+    let json_payload = ValueCodec::encode(&arena, &value).unwrap();
     for text in [
         "null",
         "NaN",
@@ -176,7 +177,7 @@ fn test_value_envelope_rejects_lossy_or_extended_json() {
         r#"{"key":1,"\u006bey":2}"#,
     ] {
         let input = format!(
-            r#"{{"schema":"p4spectec.value.v1","kind":"value","payload":{payload},"extra":{text}}}"#
+            r#"{{"schema":"p4spectec.value.v1","kind":"value","payload":{json_payload},"extra":{text}}}"#
         );
         // Null is valid even in an unused field; unsupported tokens must not be ignored
         if text == "null" {
@@ -190,11 +191,13 @@ fn test_value_envelope_rejects_lossy_or_extended_json() {
     }
     for input in [
         format!(
-            r#"{{"schema":"p4spectec.value.v1","schema":"p4spectec.value.v1","kind":"value","payload":{payload}}}"#
+            r#"{{"schema":"p4spectec.value.v1","schema":"p4spectec.value.v1","kind":"value","payload":{json_payload}}}"#
         ),
-        format!(r#"{{"schema":"unknown","kind":"value","payload":{payload}}}"#),
-        format!(r#"{{"schema":"p4spectec.value.v1","kind":"sl","payload":{payload}}}"#),
-        format!(r#"{{"schema":"p4spectec.value.v1","kind":"value","payload":{payload}}} null"#),
+        format!(r#"{{"schema":"unknown","kind":"value","payload":{json_payload}}}"#),
+        format!(r#"{{"schema":"p4spectec.value.v1","kind":"sl","payload":{json_payload}}}"#),
+        format!(
+            r#"{{"schema":"p4spectec.value.v1","kind":"value","payload":{json_payload}}} null"#
+        ),
     ] {
         assert!(
             ValueEnvelopeCodec::decode(&mut arena, input.as_bytes()).is_err(),
@@ -210,7 +213,7 @@ fn test_value_envelope_rejects_nested_extern_encoding() {
     let value = make::external(
         &mut arena,
         typ::TypKind::Bool.into(),
-        serde_json::Value::Null,
+        json::Null,
         Span::default(),
     )
     .unwrap();

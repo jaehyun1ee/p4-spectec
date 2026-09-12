@@ -15,6 +15,7 @@ use p4spec_rust::{
         ops::value::{MatchError, check, sub, subs},
         typdef::TypeDef,
     },
+    util::json::json,
 };
 
 fn id(name: &str) -> p4spec_rust::lang::il::ast::Id {
@@ -64,7 +65,7 @@ fn test_extern_type_membership_uses_shared_type_environment() {
     let value = make::external(
         &mut arena,
         (extern_typ).node.clone().into(),
-        serde_json::Value::Null,
+        json::Null,
         Span::default(),
     )
     .unwrap();

@@ -1,17 +1,20 @@
-//! Total syntax order consistent with serde JSON equality and hashing
+//! Ordering for serde JSON values
 
 use std::cmp::Ordering;
 
-use serde_json::{Number, Value};
+use serde_json::Number;
 
-fn rank(value: &Value) -> u8 {
-    match value {
-        Value::Null => 0,
-        Value::Bool(_) => 1,
-        Value::Number(_) => 2,
-        Value::String(_) => 3,
-        Value::Array(_) => 4,
-        Value::Object(_) => 5,
+#[allow(non_camel_case_types)]
+pub type json = serde_json::Value;
+
+fn rank(json: &json) -> u8 {
+    match json {
+        json::Null => 0,
+        json::Bool(_) => 1,
+        json::Number(_) => 2,
+        json::String(_) => 3,
+        json::Array(_) => 4,
+        json::Object(_) => 5,
     }
 }
 
@@ -33,19 +36,19 @@ fn compare_num(num_l: &Number, num_r: &Number) -> Ordering {
     }
 }
 
-pub(super) fn compare(value_l: &Value, value_r: &Value) -> Ordering {
-    match (value_l, value_r) {
-        (Value::Null, Value::Null) => Ordering::Equal,
-        (Value::Bool(value_l), Value::Bool(value_r)) => value_l.cmp(value_r),
-        (Value::Number(num_l), Value::Number(num_r)) => compare_num(num_l, num_r),
-        (Value::String(text_l), Value::String(text_r)) => text_l.cmp(text_r),
-        (Value::Array(values_l), Value::Array(values_r)) => values_l
+pub(crate) fn compare(json_l: &json, json_r: &json) -> Ordering {
+    match (json_l, json_r) {
+        (json::Null, json::Null) => Ordering::Equal,
+        (json::Bool(bool_l), json::Bool(bool_r)) => bool_l.cmp(bool_r),
+        (json::Number(num_l), json::Number(num_r)) => compare_num(num_l, num_r),
+        (json::String(text_l), json::String(text_r)) => text_l.cmp(text_r),
+        (json::Array(jsons_l), json::Array(jsons_r)) => jsons_l
             .iter()
-            .zip(values_r)
-            .map(|(value_l, value_r)| compare(value_l, value_r))
+            .zip(jsons_r)
+            .map(|(json_l, json_r)| compare(json_l, json_r))
             .find(|order| !order.is_eq())
-            .unwrap_or_else(|| values_l.len().cmp(&values_r.len())),
-        (Value::Object(fields_l), Value::Object(fields_r)) => {
+            .unwrap_or_else(|| jsons_l.len().cmp(&jsons_r.len())),
+        (json::Object(fields_l), json::Object(fields_r)) => {
             // Also preserve key-order independence if serde's preserve_order is enabled
             let mut fields_l = fields_l.iter().collect::<Vec<_>>();
             let mut fields_r = fields_r.iter().collect::<Vec<_>>();
@@ -54,12 +57,12 @@ pub(super) fn compare(value_l: &Value, value_r: &Value) -> Ordering {
             fields_l
                 .iter()
                 .zip(&fields_r)
-                .map(|((name_l, value_l), (name_r, value_r))| {
-                    name_l.cmp(name_r).then_with(|| compare(value_l, value_r))
+                .map(|((name_l, json_l), (name_r, json_r))| {
+                    name_l.cmp(name_r).then_with(|| compare(json_l, json_r))
                 })
                 .find(|order| !order.is_eq())
                 .unwrap_or_else(|| fields_l.len().cmp(&fields_r.len()))
         }
-        _ => rank(value_l).cmp(&rank(value_r)),
+        _ => rank(json_l).cmp(&rank(json_r)),
     }
 }
