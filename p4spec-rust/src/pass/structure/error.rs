@@ -28,10 +28,6 @@ pub enum StructureErrorKind {
     ConflictingUnification,
     #[error("input hint operation failed: {0}")]
     Input(crate::lang::hints::input::InputError),
-    #[error("type definition is undefined")]
-    UndefinedType,
-    #[error("meta-variable is undefined")]
-    UndefinedMetavariable,
     #[error("type was already defined")]
     DuplicateType,
     #[error("meta-variable was already defined")]
