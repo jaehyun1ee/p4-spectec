@@ -2,7 +2,7 @@
 
 use crate::{
     lang::{
-        common::ds::set::IdSet,
+        common::{ds::set::IdSet, source::Span},
         il,
         traits::{eq::SyntaxEq, print::Print},
     },
@@ -27,20 +27,20 @@ fn find_alias(menv: &MEnv, typ: &Typ) -> Option<Var> {
     })
 }
 
-fn var_from_typ_inner(menv: &MEnv, typ: &Typ) -> Var {
+fn var_from_typ_inner(menv: &MEnv, span: &Span, typ: &Typ) -> Var {
     if let Some(var_alias) = find_alias(menv, typ) {
         return var_alias;
     }
     match &typ.node {
         TypKind::Iter(typ_inner, iter) => {
-            let mut var = var_from_typ_inner(menv, typ_inner);
+            let mut var = var_from_typ_inner(menv, span, typ_inner);
             var.iters.push(*iter);
             var
         }
         _ => Var {
             id: crate::phrase! {
                 node: Print::to_string(typ),
-                span: typ.span.clone(),
+                span: span.clone(),
             },
             typ: typ.clone(),
             iters: vec![],
@@ -49,7 +49,7 @@ fn var_from_typ_inner(menv: &MEnv, typ: &Typ) -> Var {
 }
 
 fn var_from_typ(menv: &MEnv, ids: &IdSet, typ: &Typ) -> Var {
-    let mut var = var_from_typ_inner(menv, typ);
+    let mut var = var_from_typ_inner(menv, &typ.span, typ);
     var.id = il::fresh::id(ids, &var.id);
     var
 }

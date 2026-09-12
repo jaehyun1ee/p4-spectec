@@ -115,3 +115,82 @@ fn test_alias_dimensions_preserve_declaration_and_wrapper_spans() {
     assert_eq!(vars_inner[0].typ.span, span_decl);
     assert_eq!(vars_outer[0].typ.span, span_decl);
 }
+
+fn assert_nested_fallback_uses_outer_span(menv: &MEnv) {
+    let span_base = sourced_span("use.watsup", 11);
+    let span_inner = sourced_span("use.watsup", 12);
+    let span_outer = sourced_span("use.watsup", 13);
+    let typ_base = p4spec_rust::phrase! {
+        node: al::ast::TypKind::Bool,
+        span: span_base.clone(),
+    };
+    let typ_inner = p4spec_rust::phrase! {
+        node: al::ast::TypKind::Iter(Box::new(typ_base), al::ast::Iter::Opt),
+        span: span_inner,
+    };
+    let typ_outer = p4spec_rust::phrase! {
+        node: al::ast::TypKind::Iter(Box::new(typ_inner), al::ast::Iter::List),
+        span: span_outer.clone(),
+    };
+
+    for is_dim in [false, true] {
+        let (ids_fresh, exp_outer) =
+            al::fresh::exp_from_typ(is_dim, menv, &IdSet::new(), &typ_outer);
+        let al::ast::ExpKind::Iter(exp_inner, (al::ast::Iter::List, vars_outer)) = &exp_outer.node
+        else {
+            panic!("outer iteration")
+        };
+        let al::ast::ExpKind::Iter(exp_base, (al::ast::Iter::Opt, vars_inner)) = &exp_inner.node
+        else {
+            panic!("inner iteration")
+        };
+        let al::ast::ExpKind::Var(id_fresh) = &exp_base.node else {
+            panic!("fresh variable")
+        };
+
+        assert_eq!(id_fresh.span, span_outer);
+        assert_eq!(exp_base.span, span_outer);
+        assert_eq!(exp_inner.span, span_outer);
+        assert_eq!(exp_outer.span, span_outer);
+        assert!(ids_fresh.contains(id_fresh));
+        assert!(matches!(exp_base.note.as_ref(), al::ast::TypKind::Bool));
+        let al::ast::TypKind::Iter(typ_base, al::ast::Iter::Opt) = exp_inner.note.as_ref() else {
+            panic!("inner type annotation")
+        };
+        assert!(matches!(typ_base.node, al::ast::TypKind::Bool));
+        let al::ast::TypKind::Iter(typ_inner, al::ast::Iter::List) = exp_outer.note.as_ref() else {
+            panic!("outer type annotation")
+        };
+        assert!(matches!(
+            typ_inner.node,
+            al::ast::TypKind::Iter(_, al::ast::Iter::Opt)
+        ));
+        assert_eq!(vars_inner.len(), usize::from(is_dim));
+        assert_eq!(vars_outer.len(), usize::from(is_dim));
+        if is_dim {
+            assert_eq!(vars_inner[0].id.span, span_outer);
+            assert_eq!(vars_outer[0].id.span, span_outer);
+            assert_eq!(vars_inner[0].typ.span, span_base);
+            assert_eq!(vars_outer[0].typ.span, span_base);
+            assert!(vars_inner[0].iters.is_empty());
+            assert_eq!(vars_outer[0].iters, vec![al::ast::Iter::Opt]);
+        }
+    }
+}
+
+#[test]
+fn test_nested_fallback_without_alias_uses_outer_span() {
+    assert_nested_fallback_uses_outer_span(&MEnv::new());
+}
+
+#[test]
+fn test_nested_fallback_with_ambiguous_aliases_uses_outer_span() {
+    let mut menv = MEnv::new();
+    for (text_id, int_line) in [("flag", 1), ("condition", 2)] {
+        menv.insert(
+            sourced_id(text_id, sourced_span("decl.watsup", int_line)),
+            typ::make::bool(),
+        );
+    }
+    assert_nested_fallback_uses_outer_span(&menv);
+}
