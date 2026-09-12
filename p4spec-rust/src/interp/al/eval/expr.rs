@@ -81,7 +81,7 @@ pub(super) fn eval_exp<I: Interface, E: Extern>(
         }
         ast::ExpKind::Call(id, targs, args) => eval_call_exp(runner, ctx, id, targs, args),
         ast::ExpKind::Iter(exp_inner, (iter, vars)) => {
-            eval_iter_exp(runner, ctx, span, typ, exp, exp_inner, iter, vars)
+            eval_iter_exp(runner, ctx, exp, exp_inner, iter, vars)
         }
     }
 }
@@ -589,13 +589,13 @@ fn eval_call_exp<I: Interface, E: Extern>(
 fn eval_iter_exp<I: Interface, E: Extern>(
     runner: &mut RunnerContext<'_, Al, I, E>,
     ctx: &Context<'_>,
-    span: &Span,
-    typ: &Rc<ast::TypKind>,
     exp: &ast::Exp,
     exp_inner: &ast::Exp,
     iter: &ast::Iter,
     vars: &[ast::Var],
 ) -> Backtrack<Value> {
+    let span = &exp.span;
+    let typ = &exp.note;
     if let Some(var) = is_iter_var_exp(exp) {
         return Backtrack::Ok(*backtrack_from_result!(ctx.find_value(&var), span));
     }
