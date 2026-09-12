@@ -10,6 +10,10 @@ use crate::{
 /// Stable semantic category of a structuring failure
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
 pub enum StructureErrorKind {
+    #[error("cannot totalize a non-variant type")]
+    NonVariantTotalization,
+    #[error("hold has no branches")]
+    EmptyHold,
     #[error("total case analysis has no remaining branches")]
     EmptyTotalCase,
     #[error("cannot anti-unify expressions")]
