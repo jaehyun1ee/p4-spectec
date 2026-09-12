@@ -9,7 +9,7 @@ use p4spec_rust::{
     lang::{al, il, traits::print::Print},
     pass::{algo, elaborate},
     runner::{BuiltinInterface, Runner},
-    sim::placeholder::Placeholder,
+    sim_plugin::placeholder::Placeholder,
 };
 
 // = Helpers

@@ -5,7 +5,7 @@ use p4spec_rust::{
         typ::TypKind,
         value::{Value, ValueKind, make},
     },
-    sim::placeholder::Placeholder,
+    sim_plugin::placeholder::Placeholder,
     util::json::json,
 };
 
@@ -55,7 +55,7 @@ fn test_program_inst_initializes_placeholder_object() {
 
 #[test]
 fn test_unsupported_extern_fails() {
-    let spec = repo().join("p4spec-rust/tests/fixtures/sim/unsupported-extern.watsup");
+    let spec = repo().join("p4spec-rust/tests/fixtures/sim-plugin/unsupported-extern.watsup");
     let mut runner = runner_from_spec(&spec, Placeholder);
 
     let error = {

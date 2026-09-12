@@ -10,7 +10,7 @@ use p4spec_rust::{
     interp::al::{AlInterp, Config, context::Global},
     pass::{algo, elaborate},
     runner::{BuiltinInterface, Runner},
-    sim::placeholder::Placeholder,
+    sim_plugin::placeholder::Placeholder,
 };
 use std::{
     fs,

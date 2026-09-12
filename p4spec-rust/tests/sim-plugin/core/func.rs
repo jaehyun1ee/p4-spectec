@@ -9,7 +9,7 @@ use p4spec_rust::{
             value::{Value, make},
         },
     },
-    sim::placeholder::Placeholder,
+    sim_plugin::placeholder::Placeholder,
 };
 
 use super::super::{has_extern_failure, parse_program, repo, runner};
@@ -25,7 +25,7 @@ fn case(arena: &mut ValueArena, shape: &str, args: Vec<Value>, typ: &str) -> Val
 }
 
 fn run_static_assert(names_param: &[&str]) -> (Value, Value) {
-    let spec = repo().join("p4spec-rust/tests/fixtures/sim/unsupported-extern.watsup");
+    let spec = repo().join("p4spec-rust/tests/fixtures/sim-plugin/unsupported-extern.watsup");
     let mut runner = super::super::runner_from_spec(&spec, Placeholder);
     let value_check = {
         let value_2 = vec![make::bool(runner.arena_mut(), true, Span::default()).unwrap()];
@@ -85,7 +85,7 @@ fn test_static_assert_returns_true() {
     let mut runner = runner(Placeholder);
     let program = parse_program(
         runner.arena_mut(),
-        &repo().join("p4spec-rust/tests/fixtures/sim/static-assert-true.p4"),
+        &repo().join("p4spec-rust/tests/fixtures/sim-plugin/static-assert-true.p4"),
     );
 
     runner.eval_program("Program_ok", program).unwrap();
@@ -96,7 +96,7 @@ fn test_static_assert_false_default_message() {
     let mut runner = runner(Placeholder);
     let program = parse_program(
         runner.arena_mut(),
-        &repo().join("p4spec-rust/tests/fixtures/sim/static-assert-false-default.p4"),
+        &repo().join("p4spec-rust/tests/fixtures/sim-plugin/static-assert-false-default.p4"),
     );
 
     let error = runner.eval_program("Program_ok", program).unwrap_err();
@@ -109,7 +109,7 @@ fn test_static_assert_false_custom_message() {
     let mut runner = runner(Placeholder);
     let program = parse_program(
         runner.arena_mut(),
-        &repo().join("p4spec-rust/tests/fixtures/sim/static-assert-false-custom.p4"),
+        &repo().join("p4spec-rust/tests/fixtures/sim-plugin/static-assert-false-custom.p4"),
     );
 
     let error = runner.eval_program("Program_ok", program).unwrap_err();
