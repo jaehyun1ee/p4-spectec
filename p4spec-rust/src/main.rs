@@ -6,8 +6,8 @@ use p4spec_rust::{
     frontend::parse::parse_files,
     interface::{self, p4::parse::parse_file},
     interp::al::{AlInterp, Config, context::Global},
-    lang::{al, data::value::external::Encoding, il, traits::print::Print},
-    pass::{algo, elaborate},
+    lang::{al, data::value::external::Encoding, il, sl, traits::print::Print},
+    pass::{algo, elaborate, structure},
     runner::Runner,
     sim_plugin::{self, dummy::Dummy, runner::Error as SimError},
     stf,
@@ -23,6 +23,12 @@ fn elab(paths: Vec<PathBuf>) -> Result<il::ast::Spec, ExitCode> {
 fn algo(paths: Vec<PathBuf>) -> Result<al::ast::Spec, ExitCode> {
     let spec_il = elab(paths)?;
     algo::convert(spec_il).map_err(command_error)
+}
+
+fn structure(paths: Vec<PathBuf>) -> Result<sl::ast::Spec, ExitCode> {
+    let spec_al = algo(paths)?;
+    let without_rule_groups = true;
+    structure::convert(spec_al, without_rule_groups).map_err(command_error)
 }
 
 // = Elab command
@@ -58,6 +64,24 @@ fn algo_command(args: AlgoArgs) -> ExitCode {
         Err(code) => return code,
     };
     println!("{}", Print::to_string(&spec_al));
+    ExitCode::SUCCESS
+}
+
+// = Struct command
+
+#[derive(Args)]
+struct StructArgs {
+    /// Specification files in processing order
+    #[arg(required = true, value_name = "PATH")]
+    paths: Vec<PathBuf>,
+}
+
+fn struct_command(args: StructArgs) -> ExitCode {
+    let spec_sl = match structure(args.paths) {
+        Ok(spec) => spec,
+        Err(code) => return code,
+    };
+    println!("{}", Print::to_string(&spec_sl));
     ExitCode::SUCCESS
 }
 
@@ -219,6 +243,8 @@ enum Command {
     Elab(ElabArgs),
     /// Convert specifications and print the algorithmic representation
     Algo(AlgoArgs),
+    /// Structure specifications and print the representation without rule groups
+    Struct(StructArgs),
     /// Run a P4 program with the algorithmic interpreter
     Run(RunArgs),
     /// Simulate a P4 program and STF test on a target architecture
@@ -230,6 +256,7 @@ fn main() -> ExitCode {
     match cli.command {
         Command::Elab(args) => elab_command(args),
         Command::Algo(args) => algo_command(args),
+        Command::Struct(args) => struct_command(args),
         Command::Run(args) => run_command(args),
         Command::Sim(args) => sim_command(args),
     }
