@@ -62,7 +62,7 @@ use p4spec_rust::{
         },
     },
     sim_plugin::{
-        psa::{arch::Arch, packet::Entrypoint, pipe, scheduler},
+        psa::{arch::Arch, packet::Entrypoint, pipe},
         spec_impl::{pack, rel, unpack},
         state::SimState,
     },
@@ -225,7 +225,7 @@ fn test_clone_survives_ingress_drop() {
     }
     let arch_original = pipe::get_arch_state(&mut runner.context(), value_arch_original).unwrap();
     let value_arch_restored =
-        pipe::set_arch_state(&mut runner.context(), state.value_arch, &arch_original).unwrap();
+        pipe::put_arch_state(&mut runner.context(), state.value_arch, &arch_original).unwrap();
     assert_eq!(
         p4spec_rust::lang::data::value::external::encode(runner.arena(), &value_arch_restored)
             .unwrap(),
@@ -233,7 +233,7 @@ fn test_clone_survives_ingress_drop() {
             .unwrap()
     );
     state.txs.clear();
-    scheduler::run_scheduler(&mut runner.context(), &mut state).unwrap();
+    pipe::run_scheduler(&mut runner.context(), &mut state).unwrap();
     assert_eq!(
         state.txs.iter().map(|tx| tx.port).collect::<Vec<_>>(),
         [12, 3]
@@ -244,7 +244,7 @@ fn test_clone_survives_ingress_drop() {
         .map(|tx| (tx.port, tx.packet.clone()))
         .collect();
     let value_ctx = state.value_ctx;
-    scheduler::run_scheduler(&mut runner.context(), &mut state).unwrap();
+    pipe::run_scheduler(&mut runner.context(), &mut state).unwrap();
     assert_eq!(
         state
             .txs
@@ -391,7 +391,7 @@ fn test_resubmit_and_recirculate_preserve_queue_order() {
     );
 
     state.value_arch =
-        pipe::set_arch_state(&mut runner.context(), state.value_arch, &Arch::default()).unwrap();
+        pipe::put_arch_state(&mut runner.context(), state.value_arch, &Arch::default()).unwrap();
     write_bool(
         &mut runner,
         &mut state,
@@ -477,7 +477,7 @@ fn test_empty_scheduler_retains_transmissions() {
     });
     let value_ctx = state.value_ctx;
     let value_arch = state.value_arch;
-    scheduler::run_scheduler(&mut runner.context(), &mut state).unwrap();
+    pipe::run_scheduler(&mut runner.context(), &mut state).unwrap();
     assert_eq!(state.value_ctx, value_ctx);
     assert_eq!(state.value_arch, value_arch);
     assert_eq!(state.txs.len(), 1);

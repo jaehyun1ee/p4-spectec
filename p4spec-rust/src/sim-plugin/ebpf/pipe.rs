@@ -1,3 +1,17 @@
+//! eBPF parses the packet, then filters it using the parsed headers
+//!
+//! ```text
+//! Rx -> Parser -> Filter -> accept = true -> Tx
+//!         |                  |
+//!       reject          accept = false
+//!         |                  |
+//!         v                  v
+//!        drop               drop
+//! ```
+//!
+//! Accepted packets keep their original bytes and input port
+//! There is no deparser
+
 use crate::lang::data::value::external::{
     DecodeContext, EncodeContext, Encoding, decode_with, encode_with,
 };

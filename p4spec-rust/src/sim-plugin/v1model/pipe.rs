@@ -1,3 +1,18 @@
+//! V1Model parses once, runs ingress and egress, then deparses for transmission
+//!
+//! ```text
+//! Rx -> Parser -> Verify checksum -> Ingress -> Egress
+//!                                                |
+//!                                                v
+//! Tx <- Deparser <- Update checksum <-------------+
+//! ```
+//!
+//! The scheduler runs queued ingress and egress packets, including clones and
+//! multicast copies; dropping a packet ends its path
+//!
+//! Resubmit returns the original packet to the parser; recirculate returns the
+//! deparsed packet to the parser
+
 use super::super::{
     core::{
         func as core_func,
@@ -43,6 +58,64 @@ impl V1Model {
     }
 }
 
+// == STF transformation
+
+pub fn transform_stf_stmt(mut stmt: Statement) -> Statement {
+    fn transform_name(name: crate::stf::ast::Name) -> crate::stf::ast::Name {
+        name.rewrite_substring(&["ingress", "preqos"], "main.ig")
+            .rewrite_substring(&["egress", "postqos", "c3"], "main.eg")
+    }
+    match &mut stmt {
+        Statement::Add {
+            table,
+            matches,
+            action,
+            ..
+        } => {
+            *table = transform_name(table.clone());
+            action.name = transform_name(action.name.clone());
+            for mtch in matches {
+                *mtch = mtch.clone().rewrite_valid();
+            }
+        }
+        Statement::SetDefault { table, action } => {
+            *table = transform_name(table.clone());
+            action.name = transform_name(action.name.clone());
+        }
+        _ => {}
+    }
+    stmt
+}
+
+// == Architectural state
+
+pub fn get_arch_state<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
+    value_arch: Value,
+) -> Result<Arch, Interp::Error>
+where
+    Iface: Interface,
+    Interp: Interpreter<Iface, V1Model>,
+{
+    let encoding = ctx.external().encoding;
+    let value_state = func::find_arch_state_e(ctx, value_arch)?;
+    Ok(Arch::from_value(ctx.arena_mut(), encoding, &value_state)?)
+}
+
+pub fn put_arch_state<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
+    value_arch: Value,
+    arch: &Arch,
+) -> Result<Value, Interp::Error>
+where
+    Iface: Interface,
+    Interp: Interpreter<Iface, V1Model>,
+{
+    let encoding = ctx.external().encoding;
+    let value_state = arch.to_value(ctx.arena_mut(), encoding)?;
+    func::update_arch_state_e(ctx, value_arch, value_state)
+}
+
 // == Extern objects
 
 /// Core and v1model-specific extern objects
@@ -81,6 +154,80 @@ impl ObjectState {
         let json = get::external(arena, value)?.clone();
         decode_with(arena, encoding, json.as_ref())
             .map_err(|error| ExternError::Failure(error.to_string()))
+    }
+}
+
+pub fn get_object_state<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
+    value_arch: Value,
+    value_id: Value,
+) -> Result<ObjectState, Interp::Error>
+where
+    Iface: Interface,
+    Interp: Interpreter<Iface, V1Model>,
+{
+    let encoding = ctx.external().encoding;
+    let value_object = func::find_object_state_e(ctx, value_arch, value_id)?;
+    Ok(ObjectState::from_value(
+        ctx.arena_mut(),
+        encoding,
+        &value_object,
+    )?)
+}
+
+fn get_packet_in<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
+    value_arch: Value,
+) -> Result<PacketIn, Interp::Error>
+where
+    Iface: Interface,
+    Interp: Interpreter<Iface, V1Model>,
+{
+    let value_name = make::text(ctx.arena_mut(), "packet_in".to_owned(), Span::default())
+        .map_err(ExternError::from)?;
+    let values_name = vec![value_name];
+    let typ_id = typ::make::list(typ::make::var(
+        crate::phrase!(node: "id".to_owned(), span: Span::default()),
+        vec![],
+    ));
+    let value_id = make::list(
+        ctx.arena_mut(),
+        typ_id.node.into(),
+        values_name,
+        Span::default(),
+    )
+    .map_err(ExternError::from)?;
+    match get_object_state(ctx, value_arch, value_id)? {
+        ObjectState::PacketIn(pkt) => Ok(pkt),
+        _ => Err(ExternError::Failure("packet_in extern not found".to_owned()).into()),
+    }
+}
+
+fn get_packet_out<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
+    value_arch: Value,
+) -> Result<PacketOut, Interp::Error>
+where
+    Iface: Interface,
+    Interp: Interpreter<Iface, V1Model>,
+{
+    let value_name = make::text(ctx.arena_mut(), "packet_out".to_owned(), Span::default())
+        .map_err(ExternError::from)?;
+    let values_name = vec![value_name];
+    let typ_id = typ::make::list(typ::make::var(
+        crate::phrase!(node: "id".to_owned(), span: Span::default()),
+        vec![],
+    ));
+    let value_id = make::list(
+        ctx.arena_mut(),
+        typ_id.node.into(),
+        values_name,
+        Span::default(),
+    )
+    .map_err(ExternError::from)?;
+    match get_object_state(ctx, value_arch, value_id)? {
+        ObjectState::PacketOut(pkt) => Ok(pkt),
+        _ => Err(ExternError::Failure("packet_out extern not found".to_owned()).into()),
     }
 }
 
@@ -185,11 +332,11 @@ impl external::Impl for V1Model {
                 v1model_func::log_msg_format(ctx, *value_ctx, *value_arch)?
             }
             ("verify_checksum_with_payload", ["condition", "data", "checksum", "algo"]) => {
-                let pkt = get_packet_in(ctx, *value_arch, "packet_in")?;
+                let pkt = get_packet_in(ctx, *value_arch)?;
                 v1model_func::verify_checksum_with_payload(ctx, *value_ctx, *value_arch, &pkt)?
             }
             ("update_checksum_with_payload", ["condition", "data", "checksum", "algo"]) => {
-                let pkt = get_packet_in(ctx, *value_arch, "packet_in")?;
+                let pkt = get_packet_in(ctx, *value_arch)?;
                 v1model_func::update_checksum_with_payload(ctx, *value_ctx, *value_arch, &pkt)?
             }
             _ => {
@@ -292,7 +439,7 @@ impl external::Impl for V1Model {
                     )
                 }
                 (ObjectState::Counter(object), "count", ["index"]) => {
-                    let pkt = get_packet_in(ctx, *value_arch, "packet_in")?;
+                    let pkt = get_packet_in(ctx, *value_arch)?;
                     let (object, value_ctx, value_arch, value_call_result) =
                         object.count(ctx, *value_ctx, *value_arch, &pkt)?;
                     (
@@ -323,7 +470,7 @@ impl external::Impl for V1Model {
                     )
                 }
                 (ObjectState::DirectCounter(object), "count", []) => {
-                    let pkt = get_packet_in(ctx, *value_arch, "packet_in")?;
+                    let pkt = get_packet_in(ctx, *value_arch)?;
                     let (object, value_ctx, value_arch, value_call_result) =
                         object.count(ctx, *value_ctx, *value_arch, &pkt)?;
                     (
@@ -334,7 +481,7 @@ impl external::Impl for V1Model {
                     )
                 }
                 (ObjectState::DirectMeter(object), "read", ["result"]) => {
-                    let pkt = get_packet_in(ctx, *value_arch, "packet_in")?;
+                    let pkt = get_packet_in(ctx, *value_arch)?;
                     let (object, value_ctx, value_arch, value_call_result) =
                         object.read(ctx, *value_ctx, *value_arch, &pkt)?;
                     (
@@ -373,121 +520,7 @@ impl external::Impl for V1Model {
     }
 }
 
-// == State access
-
-// - Object state
-
-fn object_id(arena: &mut ValueArena, name: &str) -> Result<Value, ExternError> {
-    let values = name
-        .split('.')
-        .map(|name| make::text(arena, name.to_owned(), Span::default()))
-        .collect::<Result<Vec<_>, _>>()?;
-    let typ = typ::make::list(typ::make::var(
-        crate::phrase!(node: "id".to_owned(), span: Span::default()),
-        vec![],
-    ));
-    Ok(make::list(arena, typ.node.into(), values, Span::default())?)
-}
-
-pub fn get_object_state<Interp, Iface>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
-    value_arch: Value,
-    value_id: Value,
-) -> Result<ObjectState, Interp::Error>
-where
-    Iface: Interface,
-    Interp: Interpreter<Iface, V1Model>,
-{
-    let encoding = ctx.external().encoding;
-    let value_object = func::find_object_state_e(ctx, value_arch, value_id)?;
-    Ok(ObjectState::from_value(
-        ctx.arena_mut(),
-        encoding,
-        &value_object,
-    )?)
-}
-
-fn put_object<Interp, Iface>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
-    value_arch: Value,
-    name: &str,
-    object: &ObjectState,
-) -> Result<Value, Interp::Error>
-where
-    Iface: Interface,
-    Interp: Interpreter<Iface, V1Model>,
-{
-    let encoding = ctx.external().encoding;
-    let value_id = object_id(ctx.arena_mut(), name)?;
-    let value_object = object.to_value(ctx.arena_mut(), encoding)?;
-    func::update_object_state_e(ctx, value_arch, value_id, value_object)
-}
-
-// - Packet objects
-
-fn get_packet_in<Interp, Iface>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
-    value_arch: Value,
-    name: &str,
-) -> Result<PacketIn, Interp::Error>
-where
-    Iface: Interface,
-    Interp: Interpreter<Iface, V1Model>,
-{
-    let value_id = object_id(ctx.arena_mut(), name)?;
-    match get_object_state(ctx, value_arch, value_id)? {
-        ObjectState::PacketIn(pkt) => Ok(pkt),
-        _ => Err(ExternError::Failure(format!("{name} extern not found")).into()),
-    }
-}
-
-fn get_packet_out<Interp, Iface>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
-    value_arch: Value,
-    name: &str,
-) -> Result<PacketOut, Interp::Error>
-where
-    Iface: Interface,
-    Interp: Interpreter<Iface, V1Model>,
-{
-    let value_id = object_id(ctx.arena_mut(), name)?;
-    match get_object_state(ctx, value_arch, value_id)? {
-        ObjectState::PacketOut(pkt) => Ok(pkt),
-        _ => Err(ExternError::Failure(format!("{name} extern not found")).into()),
-    }
-}
-
-// - Architecture state
-
-pub fn get_arch_state<Interp, Iface>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
-    value_arch: Value,
-) -> Result<Arch, Interp::Error>
-where
-    Iface: Interface,
-    Interp: Interpreter<Iface, V1Model>,
-{
-    let encoding = ctx.external().encoding;
-    let value_state = func::find_arch_state_e(ctx, value_arch)?;
-    Ok(Arch::from_value(ctx.arena_mut(), encoding, &value_state)?)
-}
-
-/// Update the queue, mirror table and multicast state in the architecture
-pub fn set_arch_state<Interp, Iface>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
-    value_arch: Value,
-    arch: &Arch,
-) -> Result<Value, Interp::Error>
-where
-    Iface: Interface,
-    Interp: Interpreter<Iface, V1Model>,
-{
-    let encoding = ctx.external().encoding;
-    let value_state = arch.to_value(ctx.arena_mut(), encoding)?;
-    func::update_arch_state_e(ctx, value_arch, value_state)
-}
-
-// == Mirror sessions
+// == Mirror table interface
 
 pub fn add_mirror_session<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
@@ -501,7 +534,7 @@ where
 {
     let mut arch = get_arch_state(ctx, value_arch)?;
     arch.mirrortable.insert(session, port);
-    set_arch_state(ctx, value_arch, &arch)
+    put_arch_state(ctx, value_arch, &arch)
 }
 
 pub fn add_mirror_session_mc<Interp, Iface>(
@@ -521,7 +554,7 @@ where
     .into())
 }
 
-// == Multicast groups
+// == Multicast interface
 
 pub fn mc_mgrp_create<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
@@ -534,7 +567,7 @@ where
 {
     let mut arch = get_arch_state(ctx, value_arch)?;
     arch.multicast.group_create(group);
-    set_arch_state(ctx, value_arch, &arch)
+    put_arch_state(ctx, value_arch, &arch)
 }
 
 pub fn mc_node_create<Interp, Iface>(
@@ -549,7 +582,7 @@ where
 {
     let mut arch = get_arch_state(ctx, value_arch)?;
     arch.multicast.node_create(instance, ports);
-    set_arch_state(ctx, value_arch, &arch)
+    put_arch_state(ctx, value_arch, &arch)
 }
 
 pub fn mc_node_associate<Interp, Iface>(
@@ -564,10 +597,10 @@ where
 {
     let mut arch = get_arch_state(ctx, value_arch)?;
     arch.multicast.node_associate(group, handle);
-    set_arch_state(ctx, value_arch, &arch)
+    put_arch_state(ctx, value_arch, &arch)
 }
 
-// == Registers
+// == Register interface
 
 pub fn register_read<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
@@ -620,39 +653,146 @@ where
     .into())
 }
 
-// == STF transformation
+// == Packet state
 
-/// Rewrite target-specific names and header validity matches
-pub fn transform_stf_stmt(mut stmt: Statement) -> Statement {
-    fn transform_name(name: crate::stf::ast::Name) -> crate::stf::ast::Name {
-        name.rewrite_substring(&["ingress", "preqos"], "main.ig")
-            .rewrite_substring(&["egress", "postqos", "c3"], "main.eg")
-    }
-    match &mut stmt {
-        Statement::Add {
-            table,
-            matches,
-            action,
-            ..
-        } => {
-            *table = transform_name(table.clone());
-            action.name = transform_name(action.name.clone());
-            for mtch in matches {
-                *mtch = mtch.clone().rewrite_valid();
-            }
-        }
-        Statement::SetDefault { table, action } => {
-            *table = transform_name(table.clone());
-            action.name = transform_name(action.name.clone());
-        }
-        _ => {}
-    }
-    stmt
+fn insert_packet<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
+    state: &mut SimState,
+    packet: Packet,
+) -> Result<(), Interp::Error>
+where
+    Iface: Interface,
+    Interp: Interpreter<Iface, V1Model>,
+{
+    state.value_arch = {
+        let value_name = make::text(ctx.arena_mut(), "packet_in".to_owned(), Span::default())
+            .map_err(ExternError::from)?;
+        let values_name = vec![value_name];
+        let typ_id = typ::make::list(typ::make::var(
+            crate::phrase!(node: "id".to_owned(), span: Span::default()),
+            vec![],
+        ));
+        let value_id = make::list(
+            ctx.arena_mut(),
+            typ_id.node.into(),
+            values_name,
+            Span::default(),
+        )
+        .map_err(ExternError::from)?;
+        let encoding = ctx.external().encoding;
+        let value_object =
+            ObjectState::PacketIn(packet.packet_in).to_value(ctx.arena_mut(), encoding)?;
+        func::update_object_state_e(ctx, state.value_arch, value_id, value_object)
+    }?;
+    state.value_ctx = packet.value_ctx;
+    Ok(())
 }
 
-// == Pipeline execution
+fn remove_packet_in<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
+    state: &mut SimState,
+) -> Result<(), Interp::Error>
+where
+    Iface: Interface,
+    Interp: Interpreter<Iface, V1Model>,
+{
+    let mut pkt = get_packet_in(ctx, state.value_arch)?;
+    pkt.reset();
+    state.value_arch = {
+        let value_name = make::text(ctx.arena_mut(), "packet_in".to_owned(), Span::default())
+            .map_err(ExternError::from)?;
+        let values_name = vec![value_name];
+        let typ_id = typ::make::list(typ::make::var(
+            crate::phrase!(node: "id".to_owned(), span: Span::default()),
+            vec![],
+        ));
+        let value_id = make::list(
+            ctx.arena_mut(),
+            typ_id.node.into(),
+            values_name,
+            Span::default(),
+        )
+        .map_err(ExternError::from)?;
+        let encoding = ctx.external().encoding;
+        let value_object = ObjectState::PacketIn(pkt).to_value(ctx.arena_mut(), encoding)?;
+        func::update_object_state_e(ctx, state.value_arch, value_id, value_object)
+    }?;
+    Ok(())
+}
 
-// - Initialization
+fn remove_packet_out<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
+    state: &mut SimState,
+) -> Result<(), Interp::Error>
+where
+    Iface: Interface,
+    Interp: Interpreter<Iface, V1Model>,
+{
+    state.value_arch = {
+        let value_name = make::text(ctx.arena_mut(), "packet_out".to_owned(), Span::default())
+            .map_err(ExternError::from)?;
+        let values_name = vec![value_name];
+        let typ_id = typ::make::list(typ::make::var(
+            crate::phrase!(node: "id".to_owned(), span: Span::default()),
+            vec![],
+        ));
+        let value_id = make::list(
+            ctx.arena_mut(),
+            typ_id.node.into(),
+            values_name,
+            Span::default(),
+        )
+        .map_err(ExternError::from)?;
+        let encoding = ctx.external().encoding;
+        let value_object =
+            ObjectState::PacketOut(PacketOut::default()).to_value(ctx.arena_mut(), encoding)?;
+        func::update_object_state_e(ctx, state.value_arch, value_id, value_object)
+    }?;
+    Ok(())
+}
+
+fn is_dropped<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
+    state: &SimState,
+) -> Result<bool, Interp::Error>
+where
+    Iface: Interface,
+    Interp: Interpreter<Iface, V1Model>,
+{
+    let value = rel::lvalue_read_dot_global(
+        ctx,
+        state.value_ctx,
+        state.value_arch,
+        "standard_metadata",
+        "egress_spec",
+    )?;
+    let (width, int) = unpack::p4_fixed_bit(ctx.arena(), &value)?;
+    Ok(width == 9.into() && int == 511.into())
+}
+
+fn get_mcast_grp<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
+    state: &mut SimState,
+) -> Result<i64, Interp::Error>
+where
+    Iface: Interface,
+    Interp: Interpreter<Iface, V1Model>,
+{
+    let group = {
+        let value = rel::lvalue_read_dot_global(
+            ctx,
+            state.value_ctx,
+            state.value_arch,
+            "standard_metadata",
+            "mcast_grp",
+        )?;
+        let (_, int) = unpack::p4_fixed_bit(ctx.arena(), &value)?;
+        unpack::signed_int(&int)
+    }?;
+    Ok(group)
+}
+
+// == Pipeline initializer
 
 pub fn init_pipe<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
@@ -669,6 +809,8 @@ where
         txs: vec![],
     })
 }
+
+// == Pipeline driver
 
 pub fn setup_rx<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
@@ -695,28 +837,9 @@ where
     Ok(())
 }
 
-// - Packet state
+// == Parser + Verify
 
-fn insert_packet<Interp, Iface>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
-    state: &mut SimState,
-    packet: Packet,
-) -> Result<(), Interp::Error>
-where
-    Iface: Interface,
-    Interp: Interpreter<Iface, V1Model>,
-{
-    state.value_arch = put_object(
-        ctx,
-        state.value_arch,
-        "packet_in",
-        &ObjectState::PacketIn(packet.packet_in),
-    )?;
-    state.value_ctx = packet.value_ctx;
-    Ok(())
-}
-
-fn remove_packet_in<Interp, Iface>(
+pub fn drive_p<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     state: &mut SimState,
 ) -> Result<(), Interp::Error>
@@ -724,18 +847,93 @@ where
     Iface: Interface,
     Interp: Interpreter<Iface, V1Model>,
 {
-    let mut pkt = get_packet_in(ctx, state.value_arch, "packet_in")?;
-    pkt.reset();
-    state.value_arch = put_object(
-        ctx,
-        state.value_arch,
-        "packet_in",
-        &ObjectState::PacketIn(pkt),
-    )?;
+    let (value_ctx, value_arch, value_call_result) =
+        rel::v1model_parser(ctx, state.value_ctx, state.value_arch)?;
+    (state.value_ctx, state.value_arch) = (value_ctx, value_arch);
+    let value_error = get::matches! { ctx.arena(), &value_call_result,
+        "REJECT errorValue" => |values| match values.as_slice() {
+            [value_error] => Some(**value_error),
+            _ => return Err(ExternError::from(ValueError::ExpectedCount {
+                expected: 1,
+                actual: values.len(),
+            }).into()),
+        },
+        _ => None,
+    };
+    if let Some(value_error) = value_error {
+        state.value_ctx = rel::lvalue_write_dot_global(
+            ctx,
+            state.value_ctx,
+            state.value_arch,
+            "standard_metadata",
+            "parser_error",
+            value_error,
+        )?;
+    }
     Ok(())
 }
 
-fn remove_packet_out<Interp, Iface>(
+pub fn drive_vr<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
+    state: &mut SimState,
+) -> Result<Value, Interp::Error>
+where
+    Iface: Interface,
+    Interp: Interpreter<Iface, V1Model>,
+{
+    let (value_ctx, value_arch, value_result) =
+        rel::v1model_verify(ctx, state.value_ctx, state.value_arch)?;
+    (state.value_ctx, state.value_arch) = (value_ctx, value_arch);
+    Ok(value_result)
+}
+
+pub fn drive_pipe_pre<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
+    state: &mut SimState,
+) -> Result<Value, Interp::Error>
+where
+    Iface: Interface,
+    Interp: Interpreter<Iface, V1Model>,
+{
+    let mut arch = get_arch_state(ctx, state.value_arch)?;
+    arch.reset();
+    state.value_arch = put_arch_state(ctx, state.value_arch, &arch)?;
+    remove_packet_in(ctx, state)?;
+    drive_p(ctx, state)?;
+    drive_vr(ctx, state)
+}
+
+// == Checksum + Deparser
+
+pub fn drive_ck<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
+    state: &mut SimState,
+) -> Result<Value, Interp::Error>
+where
+    Iface: Interface,
+    Interp: Interpreter<Iface, V1Model>,
+{
+    let (value_ctx, value_arch, value_result) =
+        rel::v1model_check(ctx, state.value_ctx, state.value_arch)?;
+    (state.value_ctx, state.value_arch) = (value_ctx, value_arch);
+    Ok(value_result)
+}
+
+pub fn drive_dep<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
+    state: &mut SimState,
+) -> Result<Value, Interp::Error>
+where
+    Iface: Interface,
+    Interp: Interpreter<Iface, V1Model>,
+{
+    let (value_ctx, value_arch, value_result) =
+        rel::v1model_deparse(ctx, state.value_ctx, state.value_arch)?;
+    (state.value_ctx, state.value_arch) = (value_ctx, value_arch);
+    Ok(value_result)
+}
+
+pub fn drive_pipe_post<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     state: &mut SimState,
 ) -> Result<(), Interp::Error>
@@ -743,96 +941,32 @@ where
     Iface: Interface,
     Interp: Interpreter<Iface, V1Model>,
 {
-    state.value_arch = put_object(
-        ctx,
-        state.value_arch,
-        "packet_out",
-        &ObjectState::PacketOut(PacketOut::default()),
-    )?;
+    drive_ck(ctx, state)?;
+    remove_packet_out(ctx, state)?;
+    drive_dep(ctx, state)?;
+    let port = {
+        let value = rel::lvalue_read_dot_global(
+            ctx,
+            state.value_ctx,
+            state.value_arch,
+            "standard_metadata",
+            "egress_spec",
+        )?;
+        let (_, int) = unpack::p4_fixed_bit(ctx.arena(), &value)?;
+        unpack::signed_int(&int)
+    }?;
+    let packet = {
+        let pkt_in = get_packet_in(ctx, state.value_arch)?;
+        let pkt_out = get_packet_out(ctx, state.value_arch)?;
+        core_packet::to_string(&pkt_in, &pkt_out)
+    }?;
+    state.txs.push(Tx { port, packet });
     Ok(())
 }
 
-fn packet_string<Interp, Iface>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
-    value_arch: Value,
-) -> Result<String, Interp::Error>
-where
-    Iface: Interface,
-    Interp: Interpreter<Iface, V1Model>,
-{
-    let pkt_in = get_packet_in(ctx, value_arch, "packet_in")?;
-    let pkt_out = get_packet_out(ctx, value_arch, "packet_out")?;
-    Ok(core_packet::to_string(&pkt_in, &pkt_out)?)
-}
+// == Prepare context for resubmit/clone/recirculate/multicast
 
-// - Metadata
-
-fn metadata_int<Interp, Iface>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
-    state: &SimState,
-    field: &str,
-) -> Result<i64, Interp::Error>
-where
-    Iface: Interface,
-    Interp: Interpreter<Iface, V1Model>,
-{
-    let value = rel::lvalue_read_dot_global(
-        ctx,
-        state.value_ctx,
-        state.value_arch,
-        "standard_metadata",
-        field,
-    )?;
-    Ok(unpack::signed_int(
-        &unpack::p4_fixed_bit(ctx.arena(), &value)?.1,
-    )?)
-}
-
-fn write_metadata<Interp, Iface>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
-    state: &mut SimState,
-    field: &str,
-    width: i64,
-    int: i64,
-) -> Result<(), Interp::Error>
-where
-    Iface: Interface,
-    Interp: Interpreter<Iface, V1Model>,
-{
-    let value = pack::p4_fixed_bit(ctx.arena_mut(), width.into(), int.into())?;
-    state.value_ctx = rel::lvalue_write_dot_global(
-        ctx,
-        state.value_ctx,
-        state.value_arch,
-        "standard_metadata",
-        field,
-        value,
-    )?;
-    Ok(())
-}
-
-fn is_dropped<Interp, Iface>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
-    state: &SimState,
-) -> Result<bool, Interp::Error>
-where
-    Iface: Interface,
-    Interp: Interpreter<Iface, V1Model>,
-{
-    let value = rel::lvalue_read_dot_global(
-        ctx,
-        state.value_ctx,
-        state.value_arch,
-        "standard_metadata",
-        "egress_spec",
-    )?;
-    let (width, int) = unpack::p4_fixed_bit(ctx.arena(), &value)?;
-    Ok(width == 9.into() && int == 511.into())
-}
-
-// - Context preparation
-
-fn prepare_preserved_fields<Interp, Iface>(
+fn prepare_resubmit_ctx<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     state: &mut SimState,
     idx: i64,
@@ -848,21 +982,17 @@ where
         state.value_arch,
         value_idx,
     )?;
-    Ok(())
-}
-
-fn prepare_resubmit_ctx<Interp, Iface>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
-    state: &mut SimState,
-    idx: i64,
-) -> Result<(), Interp::Error>
-where
-    Iface: Interface,
-    Interp: Interpreter<Iface, V1Model>,
-{
-    prepare_preserved_fields(ctx, state, idx)?;
     // PKT_INSTANCE_TYPE_RESUBMIT
-    write_metadata(ctx, state, "instance_type", 32, 6)
+    let value = pack::p4_fixed_bit(ctx.arena_mut(), 32.into(), 6.into())?;
+    state.value_ctx = rel::lvalue_write_dot_global(
+        ctx,
+        state.value_ctx,
+        state.value_arch,
+        "standard_metadata",
+        "instance_type",
+        value,
+    )?;
+    Ok(())
 }
 
 fn prepare_clone_ctx<Interp, Iface>(
@@ -876,13 +1006,36 @@ where
     Iface: Interface,
     Interp: Interpreter<Iface, V1Model>,
 {
-    prepare_preserved_fields(ctx, state, idx)?;
+    let value_idx = pack::p4_fixed_bit(ctx.arena_mut(), 8.into(), idx.into())?;
+    state.value_ctx = rel::v1model_setup_preserved_meta_fields(
+        ctx,
+        state.value_ctx,
+        state.value_arch,
+        value_idx,
+    )?;
     let instance = match clone_type {
         CloneType::I2E => 1,
         CloneType::E2E => 2,
     };
-    write_metadata(ctx, state, "instance_type", 32, instance)?;
-    write_metadata(ctx, state, "egress_spec", 9, port)
+    let value = pack::p4_fixed_bit(ctx.arena_mut(), 32.into(), instance.into())?;
+    state.value_ctx = rel::lvalue_write_dot_global(
+        ctx,
+        state.value_ctx,
+        state.value_arch,
+        "standard_metadata",
+        "instance_type",
+        value,
+    )?;
+    let value = pack::p4_fixed_bit(ctx.arena_mut(), 9.into(), port.into())?;
+    state.value_ctx = rel::lvalue_write_dot_global(
+        ctx,
+        state.value_ctx,
+        state.value_arch,
+        "standard_metadata",
+        "egress_spec",
+        value,
+    )?;
+    Ok(())
 }
 
 fn prepare_recirculate_ctx<Interp, Iface>(
@@ -894,9 +1047,24 @@ where
     Iface: Interface,
     Interp: Interpreter<Iface, V1Model>,
 {
-    prepare_preserved_fields(ctx, state, idx)?;
+    let value_idx = pack::p4_fixed_bit(ctx.arena_mut(), 8.into(), idx.into())?;
+    state.value_ctx = rel::v1model_setup_preserved_meta_fields(
+        ctx,
+        state.value_ctx,
+        state.value_arch,
+        value_idx,
+    )?;
     // PKT_INSTANCE_TYPE_RECIRC
-    write_metadata(ctx, state, "instance_type", 32, 4)
+    let value = pack::p4_fixed_bit(ctx.arena_mut(), 32.into(), 4.into())?;
+    state.value_ctx = rel::lvalue_write_dot_global(
+        ctx,
+        state.value_ctx,
+        state.value_arch,
+        "standard_metadata",
+        "instance_type",
+        value,
+    )?;
+    Ok(())
 }
 
 fn prepare_multicast_ctx<Interp, Iface>(
@@ -909,42 +1077,39 @@ where
     Iface: Interface,
     Interp: Interpreter<Iface, V1Model>,
 {
-    write_metadata(ctx, state, "egress_rid", 16, rid)?;
-    write_metadata(ctx, state, "egress_spec", 9, port)?;
-    // PKT_INSTANCE_TYPE_REPLICATION
-    write_metadata(ctx, state, "instance_type", 32, 5)
-}
-
-/// Assign egress_port to the destination port before egress processing
-fn prepare_egress_ctx<Interp, Iface>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
-    state: &mut SimState,
-) -> Result<(), Interp::Error>
-where
-    Iface: Interface,
-    Interp: Interpreter<Iface, V1Model>,
-{
-    let value_port = rel::lvalue_read_dot_global(
-        ctx,
-        state.value_ctx,
-        state.value_arch,
-        "standard_metadata",
-        "egress_spec",
-    )?;
+    let value = pack::p4_fixed_bit(ctx.arena_mut(), 16.into(), rid.into())?;
     state.value_ctx = rel::lvalue_write_dot_global(
         ctx,
         state.value_ctx,
         state.value_arch,
         "standard_metadata",
-        "egress_port",
-        value_port,
+        "egress_rid",
+        value,
+    )?;
+    let value = pack::p4_fixed_bit(ctx.arena_mut(), 9.into(), port.into())?;
+    state.value_ctx = rel::lvalue_write_dot_global(
+        ctx,
+        state.value_ctx,
+        state.value_arch,
+        "standard_metadata",
+        "egress_spec",
+        value,
+    )?;
+    // PKT_INSTANCE_TYPE_REPLICATION
+    let value = pack::p4_fixed_bit(ctx.arena_mut(), 32.into(), 5.into())?;
+    state.value_ctx = rel::lvalue_write_dot_global(
+        ctx,
+        state.value_ctx,
+        state.value_arch,
+        "standard_metadata",
+        "instance_type",
+        value,
     )?;
     Ok(())
 }
 
-// - Scheduling
+// == Schedule resubmit/clone/recirculate/multicast if needed
 
-/// Ingress reentry takes priority over queued egress packets
 pub fn schedule_packet<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     state: &mut SimState,
@@ -954,7 +1119,7 @@ where
     Iface: Interface,
     Interp: Interpreter<Iface, V1Model>,
 {
-    let packet_in = get_packet_in(ctx, state.value_arch, "packet_in")?;
+    let packet_in = get_packet_in(ctx, state.value_arch)?;
     let packet = Packet {
         value_ctx: state.value_ctx,
         packet_in,
@@ -965,7 +1130,7 @@ where
         Entrypoint::Ingress => arch.queue.push_front(packet),
         Entrypoint::Egress => arch.queue.push_back(packet),
     }
-    state.value_arch = set_arch_state(ctx, state.value_arch, &arch)?;
+    state.value_arch = put_arch_state(ctx, state.value_arch, &arch)?;
     Ok(())
 }
 
@@ -1032,9 +1197,31 @@ where
     drive_ck(ctx, state)?;
     remove_packet_out(ctx, state)?;
     drive_dep(ctx, state)?;
-    let packet = packet_string(ctx, state.value_arch)?;
+    let packet = {
+        let pkt_in = get_packet_in(ctx, state.value_arch)?;
+        let pkt_out = get_packet_out(ctx, state.value_arch)?;
+        core_packet::to_string(&pkt_in, &pkt_out)
+    }?;
     let pkt = ObjectState::PacketIn(PacketIn::init(&packet)?);
-    state.value_arch = put_object(ctx, state.value_arch, "packet_in", &pkt)?;
+    state.value_arch = {
+        let value_name = make::text(ctx.arena_mut(), "packet_in".to_owned(), Span::default())
+            .map_err(ExternError::from)?;
+        let values_name = vec![value_name];
+        let typ_id = typ::make::list(typ::make::var(
+            crate::phrase!(node: "id".to_owned(), span: Span::default()),
+            vec![],
+        ));
+        let value_id = make::list(
+            ctx.arena_mut(),
+            typ_id.node.into(),
+            values_name,
+            Span::default(),
+        )
+        .map_err(ExternError::from)?;
+        let encoding = ctx.external().encoding;
+        let value_object = pkt.to_value(ctx.arena_mut(), encoding)?;
+        func::update_object_state_e(ctx, state.value_arch, value_id, value_object)
+    }?;
     // Parser and verify run before the ingress packet enters the queue
     drive_pipe_pre(ctx, state)?;
     schedule_packet(ctx, state, Entrypoint::Ingress)?;
@@ -1042,7 +1229,6 @@ where
     Ok(true)
 }
 
-/// Preserve node handle order and each node's port order
 pub fn schedule_multicast<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     state: &mut SimState,
@@ -1067,82 +1253,59 @@ where
     Ok(true)
 }
 
-// - Pipeline stages
+// == Ingress + Handle clone, resubmit, drop
 
-/// Parser rejection records parser_error and still proceeds to verify
-pub fn drive_p<Interp, Iface>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
-    state: &mut SimState,
-) -> Result<(), Interp::Error>
-where
-    Iface: Interface,
-    Interp: Interpreter<Iface, V1Model>,
-{
-    let (value_ctx, value_arch, value_call_result) =
-        rel::v1model_parser(ctx, state.value_ctx, state.value_arch)?;
-    (state.value_ctx, state.value_arch) = (value_ctx, value_arch);
-    let value_error = get::matches! { ctx.arena(), &value_call_result,
-        "REJECT errorValue" => |values| match values.as_slice() {
-            [value_error] => Some(**value_error),
-            _ => return Err(ExternError::from(ValueError::ExpectedCount {
-                expected: 1,
-                actual: values.len(),
-            }).into()),
-        },
-        _ => None,
-    };
-    if let Some(value_error) = value_error {
-        state.value_ctx = rel::lvalue_write_dot_global(
-            ctx,
-            state.value_ctx,
-            state.value_arch,
-            "standard_metadata",
-            "parser_error",
-            value_error,
-        )?;
-    }
-    Ok(())
-}
-
-pub fn drive_vr<Interp, Iface>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
-    state: &mut SimState,
-) -> Result<(), Interp::Error>
-where
-    Iface: Interface,
-    Interp: Interpreter<Iface, V1Model>,
-{
-    let (value_ctx, value_arch, _) = rel::v1model_verify(ctx, state.value_ctx, state.value_arch)?;
-    (state.value_ctx, state.value_arch) = (value_ctx, value_arch);
-    Ok(())
-}
-
-/// Ingress schedules clones before resubmit, multicast or drop handling
 pub fn drive_ig<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     state: &mut SimState,
-) -> Result<(), Interp::Error>
+) -> Result<Value, Interp::Error>
 where
     Iface: Interface,
     Interp: Interpreter<Iface, V1Model>,
 {
-    let (value_ctx, value_arch, _) = rel::v1model_ingress(ctx, state.value_ctx, state.value_arch)?;
+    let (value_ctx, value_arch, value_result) =
+        rel::v1model_ingress(ctx, state.value_ctx, state.value_arch)?;
     (state.value_ctx, state.value_arch) = (value_ctx, value_arch);
     let arch = get_arch_state(ctx, state.value_arch)?;
     schedule_clone(ctx, state, &arch)?;
     if schedule_resubmit(ctx, state, &arch)? {
-        return Ok(());
+        return Ok(value_result);
     }
-    let group = metadata_int(ctx, state, "mcast_grp")?;
+    let group = get_mcast_grp(ctx, state)?;
     if group != 0 {
         schedule_multicast(ctx, state, &arch, group)?;
     } else if !is_dropped(ctx, state)? {
         schedule_packet(ctx, state, Entrypoint::Egress)?;
     }
+    Ok(value_result)
+}
+
+fn prepare_egress_ctx<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
+    state: &mut SimState,
+) -> Result<(), Interp::Error>
+where
+    Iface: Interface,
+    Interp: Interpreter<Iface, V1Model>,
+{
+    let value_port = rel::lvalue_read_dot_global(
+        ctx,
+        state.value_ctx,
+        state.value_arch,
+        "standard_metadata",
+        "egress_spec",
+    )?;
+    state.value_ctx = rel::lvalue_write_dot_global(
+        ctx,
+        state.value_ctx,
+        state.value_arch,
+        "standard_metadata",
+        "egress_port",
+        value_port,
+    )?;
     Ok(())
 }
 
-/// Egress may stop this packet without discarding scheduler state or clones
 pub fn drive_eg<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     state: &mut SimState,
@@ -1168,68 +1331,7 @@ where
     }
 }
 
-pub fn drive_ck<Interp, Iface>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
-    state: &mut SimState,
-) -> Result<(), Interp::Error>
-where
-    Iface: Interface,
-    Interp: Interpreter<Iface, V1Model>,
-{
-    let (value_ctx, value_arch, _) = rel::v1model_check(ctx, state.value_ctx, state.value_arch)?;
-    (state.value_ctx, state.value_arch) = (value_ctx, value_arch);
-    Ok(())
-}
-
-pub fn drive_dep<Interp, Iface>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
-    state: &mut SimState,
-) -> Result<(), Interp::Error>
-where
-    Iface: Interface,
-    Interp: Interpreter<Iface, V1Model>,
-{
-    let (value_ctx, value_arch, _) = rel::v1model_deparse(ctx, state.value_ctx, state.value_arch)?;
-    (state.value_ctx, state.value_arch) = (value_ctx, value_arch);
-    Ok(())
-}
-
-/// Reset packet actions and cursor, then execute parser and verify
-pub fn drive_pipe_pre<Interp, Iface>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
-    state: &mut SimState,
-) -> Result<(), Interp::Error>
-where
-    Iface: Interface,
-    Interp: Interpreter<Iface, V1Model>,
-{
-    let mut arch = get_arch_state(ctx, state.value_arch)?;
-    arch.reset();
-    state.value_arch = set_arch_state(ctx, state.value_arch, &arch)?;
-    remove_packet_in(ctx, state)?;
-    drive_p(ctx, state)?;
-    drive_vr(ctx, state)
-}
-
-/// Checksum and deparser output followed by the unconsumed input payload
-pub fn drive_pipe_post<Interp, Iface>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
-    state: &mut SimState,
-) -> Result<(), Interp::Error>
-where
-    Iface: Interface,
-    Interp: Interpreter<Iface, V1Model>,
-{
-    drive_ck(ctx, state)?;
-    remove_packet_out(ctx, state)?;
-    drive_dep(ctx, state)?;
-    let port = metadata_int(ctx, state, "egress_spec")?;
-    let packet = packet_string(ctx, state.value_arch)?;
-    state.txs.push(Tx { port, packet });
-    Ok(())
-}
-
-// - Execution
+// == Scheduling packets
 
 pub fn drive_packet<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
@@ -1243,7 +1345,10 @@ where
     let entrypoint = packet.entrypoint;
     insert_packet(ctx, state, packet)?;
     match entrypoint {
-        Entrypoint::Ingress => drive_ig(ctx, state),
+        Entrypoint::Ingress => {
+            drive_ig(ctx, state)?;
+            Ok(())
+        }
         Entrypoint::Egress => match drive_eg(ctx, state)? {
             Some(_) => drive_pipe_post(ctx, state),
             None => Ok(()),
@@ -1251,7 +1356,25 @@ where
     }
 }
 
-/// Process one received packet and record its transmissions in source order
+pub fn run_scheduler<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
+    state: &mut SimState,
+) -> Result<(), Interp::Error>
+where
+    Iface: Interface,
+    Interp: Interpreter<Iface, V1Model>,
+{
+    loop {
+        let mut arch = get_arch_state(ctx, state.value_arch)?;
+        let Some(packet) = arch.queue.pop_front() else {
+            return Ok(());
+        };
+        arch.reset();
+        state.value_arch = put_arch_state(ctx, state.value_arch, &arch)?;
+        drive_packet(ctx, state, packet)?;
+    }
+}
+
 pub fn drive_pipe<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     state: &mut SimState,
@@ -1265,5 +1388,5 @@ where
     setup_rx(ctx, state, rx)?;
     drive_pipe_pre(ctx, state)?;
     schedule_packet(ctx, state, Entrypoint::Ingress)?;
-    super::scheduler::run_scheduler(ctx, state)
+    run_scheduler(ctx, state)
 }

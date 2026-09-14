@@ -18,7 +18,6 @@ use p4spec_rust::{
             arch::Arch,
             packet::{Action, CloneType, Entrypoint, Packet},
             pipe::{self, ObjectState, V1Model},
-            scheduler,
         },
     },
 };
@@ -309,7 +308,7 @@ fn arch(runner: &mut TestRunner, state: &SimState) -> Arch {
 }
 
 fn save_arch(runner: &mut TestRunner, state: &mut SimState, arch: &Arch) {
-    state.value_arch = pipe::set_arch_state(&mut runner.context(), state.value_arch, arch).unwrap();
+    state.value_arch = pipe::put_arch_state(&mut runner.context(), state.value_arch, arch).unwrap();
 }
 
 fn enqueue(runner: &mut TestRunner, state: &mut SimState) {
@@ -320,7 +319,7 @@ fn enqueue(runner: &mut TestRunner, state: &mut SimState) {
 fn test_egress_drop_keeps_clone_and_skips_post() {
     let (mut runner, mut state) = setup(Scenario::CloneDrop);
     enqueue(&mut runner, &mut state);
-    scheduler::run_scheduler(&mut runner.context(), &mut state).unwrap();
+    pipe::run_scheduler(&mut runner.context(), &mut state).unwrap();
     assert_eq!(
         runner.context().interp().events,
         ["egress", "preserve", "egress", "check", "deparse"]
@@ -341,7 +340,7 @@ fn test_egress_drop_keeps_clone_and_skips_post() {
 fn test_recirculation_skips_post_and_runs_queued_packet() {
     let (mut runner, mut state) = setup(Scenario::Recirculate);
     enqueue(&mut runner, &mut state);
-    scheduler::run_scheduler(&mut runner.context(), &mut state).unwrap();
+    pipe::run_scheduler(&mut runner.context(), &mut state).unwrap();
     assert_eq!(
         runner.context().interp().events,
         [
@@ -374,7 +373,7 @@ fn test_scheduler_resets_packet_actions_and_retains_prior_transmissions() {
         port: 99,
         packet: "CD".to_owned(),
     });
-    scheduler::run_scheduler(&mut runner.context(), &mut state).unwrap();
+    pipe::run_scheduler(&mut runner.context(), &mut state).unwrap();
     assert_eq!(
         runner.context().interp().events,
         ["egress", "check", "deparse"]
@@ -426,7 +425,7 @@ fn test_multicast_order_and_ingress_queue_priority() {
         PacketIn::init("EF").unwrap()
     );
     save_arch(&mut runner, &mut state, &arch_state);
-    scheduler::run_scheduler(&mut runner.context(), &mut state).unwrap();
+    pipe::run_scheduler(&mut runner.context(), &mut state).unwrap();
     assert_eq!(
         state.txs.iter().map(|tx| tx.port).collect::<Vec<_>>(),
         [3, 9, 4, 2]

@@ -496,7 +496,7 @@ where
     let idx = packet::field_index(ctx.arena(), &value_idx)?;
     let mut arch = pipe::get_arch_state(ctx, value_arch)?;
     arch.action.resubmit_opt = Some(idx);
-    let value_arch = pipe::set_arch_state(ctx, value_arch, &arch)?;
+    let value_arch = pipe::put_arch_state(ctx, value_arch, &arch)?;
     let typ = typ::make::opt(typ::make::var(
         crate::phrase!(node: "value".to_owned(), span: Span::default()),
         Vec::new(),
@@ -549,7 +549,7 @@ where
     let idx = packet::field_index(ctx.arena(), &value_idx)?;
     let mut arch = pipe::get_arch_state(ctx, value_arch)?;
     arch.action.recirculate_opt = Some(idx);
-    let value_arch = pipe::set_arch_state(ctx, value_arch, &arch)?;
+    let value_arch = pipe::put_arch_state(ctx, value_arch, &arch)?;
     let typ = typ::make::opt(typ::make::var(
         crate::phrase!(node: "value".to_owned(), span: Span::default()),
         Vec::new(),
@@ -621,7 +621,7 @@ where
         &value_session,
         &value_idx,
     )?);
-    let value_arch = pipe::set_arch_state(ctx, value_arch, &arch)?;
+    let value_arch = pipe::put_arch_state(ctx, value_arch, &arch)?;
     let typ = typ::make::opt(typ::make::var(
         crate::phrase!(node: "value".to_owned(), span: Span::default()),
         Vec::new(),
