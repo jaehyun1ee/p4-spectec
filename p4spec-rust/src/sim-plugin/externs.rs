@@ -7,10 +7,116 @@ use crate::{
             typ,
             value::{Value, ValueArena, get, make},
         },
+        il::ast::Typ,
     },
     runner::{Extern, ExternError, Interface, Interpreter, RunnerContext},
 };
 use std::rc::Rc;
+
+// == Architecture extern operations
+
+pub(crate) trait Impl: Extern {
+    fn eval_extern_init<Interp, Iface>(
+        &self,
+        ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
+        values: &[Value],
+    ) -> Result<Value, Interp::Error>
+    where
+        Iface: Interface,
+        Interp: Interpreter<Iface, Self>;
+
+    fn eval_extern_func_lctk_call<Interp, Iface>(
+        &self,
+        ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
+        values: &[Value],
+    ) -> Result<Vec<Value>, Interp::Error>
+    where
+        Iface: Interface,
+        Interp: Interpreter<Iface, Self>,
+    {
+        eval_func_lctk(ctx, values)
+    }
+
+    fn eval_extern_func_call<Interp, Iface>(
+        &self,
+        ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
+        values: &[Value],
+    ) -> Result<Vec<Value>, Interp::Error>
+    where
+        Iface: Interface,
+        Interp: Interpreter<Iface, Self>;
+
+    fn eval_extern_method_call<Interp, Iface>(
+        &self,
+        ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
+        values: &[Value],
+    ) -> Result<Vec<Value>, Interp::Error>
+    where
+        Iface: Interface,
+        Interp: Interpreter<Iface, Self>;
+
+    fn init_arch_state<Interp, Iface>(
+        &self,
+        ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
+    ) -> Result<Value, Interp::Error>
+    where
+        Iface: Interface,
+        Interp: Interpreter<Iface, Self>;
+}
+
+// == Runner dispatch
+
+impl<Exn: Impl> Extern for Exn {
+    fn eval_rel<Interp, Iface>(
+        &self,
+        ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
+        name: &str,
+        values: &[Value],
+    ) -> Result<(Vec<Value>, bool), Interp::Error>
+    where
+        Iface: Interface,
+        Interp: Interpreter<Iface, Self>,
+    {
+        let values = match name {
+            "ExternFunctionCall_eval_lctk" => self.eval_extern_func_lctk_call(ctx, values)?,
+            "ExternFunctionCall_eval" => self.eval_extern_func_call(ctx, values)?,
+            "ExternMethodCall_eval" => self.eval_extern_method_call(ctx, values)?,
+            _ => {
+                return Err(
+                    ExternError::Failure(format!("unimplemented extern relation: {name}")).into(),
+                );
+            }
+        };
+        Ok((values, false))
+    }
+
+    fn eval_func<Interp, Iface>(
+        &self,
+        ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
+        name: &str,
+        _targs: &[Typ],
+        values: &[Value],
+    ) -> Result<(Value, bool), Interp::Error>
+    where
+        Iface: Interface,
+        Interp: Interpreter<Iface, Self>,
+    {
+        let value = match name {
+            "init_objectState" => self.eval_extern_init(ctx, values)?,
+            "init_archState" => self.init_arch_state(ctx)?,
+            _ => {
+                return Err(
+                    ExternError::Failure(format!("unimplemented extern function: {name}")).into(),
+                );
+            }
+        };
+        Ok((value, false))
+    }
+
+    fn clear(&mut self) {}
+}
+
+// == Native values
 
 pub(crate) fn state_value(
     arena: &mut ValueArena,
@@ -42,6 +148,8 @@ pub(crate) fn param_names(
         })
         .collect()
 }
+
+// == Compile-time extern calls
 
 pub(crate) fn eval_func_lctk<Interp, Iface, Exn>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,

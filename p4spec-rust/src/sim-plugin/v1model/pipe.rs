@@ -24,9 +24,8 @@ use crate::{
             typ,
             value::{Value, ValueArena, ValueError, get, make},
         },
-        il::ast::Typ,
     },
-    runner::{Extern, ExternError, Interface, Interpreter, RunnerContext},
+    runner::{ExternError, Interface, Interpreter, RunnerContext},
     stf::ast::Statement,
 };
 use serde_derive_state::{DeserializeState, SerializeState};
@@ -77,313 +76,293 @@ impl ObjectState {
     }
 }
 
-// Extern calls
+// == Extern calls
 
-impl Extern for V1Model {
-    fn eval_func<Interp, Iface>(
+impl external::Impl for V1Model {
+    fn eval_extern_init<Interp, Iface>(
         &self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
-        name: &str,
-        _targs: &[Typ],
         values: &[Value],
-    ) -> Result<(Value, bool), Interp::Error>
+    ) -> Result<Value, Interp::Error>
     where
         Iface: Interface,
         Interp: Interpreter<Iface, Self>,
     {
         let encoding = self.encoding;
-        let value = match name {
-            "init_archState" => Arch::default().to_value(ctx.arena_mut(), encoding)?,
-            "init_objectState" => {
-                let (value_name, value_targs, value_ids, value_args) =
-                    get::four(values).map_err(ExternError::from)?;
-                let name = get::text(ctx.arena(), value_name)
-                    .map_err(ExternError::from)?
-                    .to_owned();
-                let object = match name.as_str() {
-                    "counter" => Some(ObjectState::Counter(Counter::init(
-                        ctx.arena(),
-                        *value_targs,
-                        *value_ids,
-                        *value_args,
-                    )?)),
-                    "register" => Some(ObjectState::Register(Register::init(
-                        ctx,
-                        *value_targs,
-                        *value_ids,
-                        *value_args,
-                    )?)),
-                    "direct_counter" => Some(ObjectState::DirectCounter(DirectCounter::init(
-                        ctx.arena(),
-                        *value_targs,
-                        *value_ids,
-                        *value_args,
-                    )?)),
-                    "direct_meter" => Some(ObjectState::DirectMeter(DirectMeter::init(
-                        ctx.arena(),
-                        *value_targs,
-                        *value_ids,
-                        *value_args,
-                    )?)),
-                    _ => None,
-                };
-                match object {
-                    Some(object) => object.to_value(ctx.arena_mut(), encoding)?,
-                    None => {
-                        let payload = encode_with(ctx.arena(), encoding, &())
-                            .map_err(|error| ExternError::Failure(error.to_string()))?;
-                        external::state_value(ctx.arena_mut(), "objectState", payload.into())?
-                    }
-                }
-            }
-            _ => {
-                return Err(
-                    ExternError::Failure(format!("unimplemented extern function: {name}")).into(),
-                );
-            }
+        let (value_name, value_targs, value_ids, value_args) =
+            get::four(values).map_err(ExternError::from)?;
+        let name = get::text(ctx.arena(), value_name)
+            .map_err(ExternError::from)?
+            .to_owned();
+        let object = match name.as_str() {
+            "counter" => Some(ObjectState::Counter(Counter::init(
+                ctx.arena(),
+                *value_targs,
+                *value_ids,
+                *value_args,
+            )?)),
+            "register" => Some(ObjectState::Register(Register::init(
+                ctx,
+                *value_targs,
+                *value_ids,
+                *value_args,
+            )?)),
+            "direct_counter" => Some(ObjectState::DirectCounter(DirectCounter::init(
+                ctx.arena(),
+                *value_targs,
+                *value_ids,
+                *value_args,
+            )?)),
+            "direct_meter" => Some(ObjectState::DirectMeter(DirectMeter::init(
+                ctx.arena(),
+                *value_targs,
+                *value_ids,
+                *value_args,
+            )?)),
+            _ => None,
         };
-        Ok((value, false))
+        Ok(match object {
+            Some(object) => object.to_value(ctx.arena_mut(), encoding)?,
+            None => {
+                let payload = encode_with(ctx.arena(), encoding, &())
+                    .map_err(|error| ExternError::Failure(error.to_string()))?;
+                external::state_value(ctx.arena_mut(), "objectState", payload.into())?
+            }
+        })
     }
 
-    fn eval_rel<Interp, Iface>(
+    fn eval_extern_func_call<Interp, Iface>(
         &self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
-        name: &str,
         values: &[Value],
-    ) -> Result<(Vec<Value>, bool), Interp::Error>
+    ) -> Result<Vec<Value>, Interp::Error>
     where
         Iface: Interface,
         Interp: Interpreter<Iface, Self>,
     {
-        let values = match name {
-            "ExternFunctionCall_eval_lctk" => external::eval_func_lctk(ctx, values)?,
-            "ExternFunctionCall_eval" => eval_func(ctx, values)?,
-            "ExternMethodCall_eval" => eval_method(ctx, values)?,
-            _ => {
-                return Err(
-                    ExternError::Failure(format!("unimplemented extern relation: {name}")).into(),
-                );
+        let (value_ctx, value_arch, value_name, value_names) =
+            get::four(values).map_err(ExternError::from)?;
+        let name = get::text(ctx.arena(), value_name)
+            .map_err(ExternError::from)?
+            .to_owned();
+        let names = external::param_names(ctx.arena(), *value_names)?;
+        let names_ref: Vec<_> = names.iter().map(String::as_str).collect();
+        let (value_ctx, value_arch, value_call_result) = match (name.as_str(), names_ref.as_slice())
+        {
+            ("verify", ["check", "toSignal"]) => core_func::verify(ctx, *value_ctx, *value_arch)?,
+            ("digest", ["receiver", "data"]) => v1model_func::digest(ctx, *value_ctx, *value_arch)?,
+            ("mark_to_drop", ["standard_metadata"]) => {
+                v1model_func::mark_to_drop(ctx, *value_ctx, *value_arch)?
             }
-        };
-        Ok((values, false))
-    }
-
-    fn clear(&mut self) {}
-}
-
-fn eval_func<Interp, Iface>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
-    values: &[Value],
-) -> Result<Vec<Value>, Interp::Error>
-where
-    Iface: Interface,
-    Interp: Interpreter<Iface, V1Model>,
-{
-    let (value_ctx, value_arch, value_name, value_names) =
-        get::four(values).map_err(ExternError::from)?;
-    let name = get::text(ctx.arena(), value_name)
-        .map_err(ExternError::from)?
-        .to_owned();
-    let names = external::param_names(ctx.arena(), *value_names)?;
-    let names_ref: Vec<_> = names.iter().map(String::as_str).collect();
-    let (value_ctx, value_arch, value_call_result) = match (name.as_str(), names_ref.as_slice()) {
-        ("verify", ["check", "toSignal"]) => core_func::verify(ctx, *value_ctx, *value_arch)?,
-        ("digest", ["receiver", "data"]) => v1model_func::digest(ctx, *value_ctx, *value_arch)?,
-        ("mark_to_drop", ["standard_metadata"]) => {
-            v1model_func::mark_to_drop(ctx, *value_ctx, *value_arch)?
-        }
-        ("verify_checksum", ["condition", "data", "checksum", "algo"]) => {
-            v1model_func::verify_checksum(ctx, *value_ctx, *value_arch)?
-        }
-        ("update_checksum", ["condition", "data", "checksum", "algo"]) => {
-            v1model_func::update_checksum(ctx, *value_ctx, *value_arch)?
-        }
-        ("clone_preserving_field_list", ["type", "session", "index"]) => {
-            v1model_func::clone_preserving_field_list(ctx, *value_ctx, *value_arch)?
-        }
-        ("resubmit_preserving_field_list", ["index"]) => {
-            v1model_func::resubmit_preserving_field_list(ctx, *value_ctx, *value_arch)?
-        }
-        ("recirculate_preserving_field_list", ["index"]) => {
-            v1model_func::recirculate_preserving_field_list(ctx, *value_ctx, *value_arch)?
-        }
-        ("hash", ["result", "algo", "base", "data", "max"]) => {
-            v1model_func::hash(ctx, *value_ctx, *value_arch)?
-        }
-        ("log_msg", ["msg"]) => v1model_func::log_msg(ctx, *value_ctx, *value_arch)?,
-        ("log_msg", ["msg", "data"]) => v1model_func::log_msg_format(ctx, *value_ctx, *value_arch)?,
-        ("verify_checksum_with_payload", ["condition", "data", "checksum", "algo"]) => {
-            let pkt = get_packet_in(ctx, *value_arch, "packet_in")?;
-            v1model_func::verify_checksum_with_payload(ctx, *value_ctx, *value_arch, &pkt)?
-        }
-        ("update_checksum_with_payload", ["condition", "data", "checksum", "algo"]) => {
-            let pkt = get_packet_in(ctx, *value_arch, "packet_in")?;
-            v1model_func::update_checksum_with_payload(ctx, *value_ctx, *value_arch, &pkt)?
-        }
-        _ => {
-            return Err(ExternError::Failure(format!(
-                "unsupported extern function call: {name}({})",
-                names.join(", ")
-            ))
-            .into());
-        }
-    };
-    Ok(vec![value_ctx, value_arch, value_call_result])
-}
-
-fn eval_method<Interp, Iface>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
-    values: &[Value],
-) -> Result<Vec<Value>, Interp::Error>
-where
-    Iface: Interface,
-    Interp: Interpreter<Iface, V1Model>,
-{
-    let encoding = ctx.external().encoding;
-    let [value_ctx, value_arch, value_id, value_name, value_names] = values else {
-        return Err(ExternError::Failure(
-            "unexpected number of arguments to extern method call".to_owned(),
-        )
-        .into());
-    };
-    let object = get_object_state(ctx, *value_arch, *value_id)?;
-    let name = get::text(ctx.arena(), value_name)
-        .map_err(ExternError::from)?
-        .to_owned();
-    let names = external::param_names(ctx.arena(), *value_names)?;
-    let names_ref: Vec<_> = names.iter().map(String::as_str).collect();
-    let (object, value_ctx, value_arch, value_call_result) =
-        match (object, name.as_str(), names_ref.as_slice()) {
-            (ObjectState::PacketIn(object), "extract", ["hdr"]) => {
-                let (object, value_ctx, value_arch, value_call_result) =
-                    object.extract(ctx, *value_ctx, *value_arch)?;
-                (
-                    ObjectState::PacketIn(object),
-                    value_ctx,
-                    value_arch,
-                    value_call_result,
-                )
+            ("verify_checksum", ["condition", "data", "checksum", "algo"]) => {
+                v1model_func::verify_checksum(ctx, *value_ctx, *value_arch)?
             }
-            (
-                ObjectState::PacketIn(object),
-                "extract",
-                ["variableSizeHeader", "variableFieldSizeInBits"],
-            ) => {
-                let (object, value_ctx, value_arch, value_call_result) =
-                    object.extract_varsize(ctx, *value_ctx, *value_arch)?;
-                (
-                    ObjectState::PacketIn(object),
-                    value_ctx,
-                    value_arch,
-                    value_call_result,
-                )
+            ("update_checksum", ["condition", "data", "checksum", "algo"]) => {
+                v1model_func::update_checksum(ctx, *value_ctx, *value_arch)?
             }
-            (ObjectState::PacketIn(object), "lookahead", []) => {
-                let (object, value_ctx, value_arch, value_call_result) =
-                    object.lookahead(ctx, *value_ctx, *value_arch)?;
-                (
-                    ObjectState::PacketIn(object),
-                    value_ctx,
-                    value_arch,
-                    value_call_result,
-                )
+            ("clone_preserving_field_list", ["type", "session", "index"]) => {
+                v1model_func::clone_preserving_field_list(ctx, *value_ctx, *value_arch)?
             }
-            (ObjectState::PacketIn(object), "advance", ["sizeInBits"]) => {
-                let (object, value_ctx, value_arch, value_call_result) =
-                    object.advance(ctx, *value_ctx, *value_arch)?;
-                (
-                    ObjectState::PacketIn(object),
-                    value_ctx,
-                    value_arch,
-                    value_call_result,
-                )
+            ("resubmit_preserving_field_list", ["index"]) => {
+                v1model_func::resubmit_preserving_field_list(ctx, *value_ctx, *value_arch)?
             }
-            (ObjectState::PacketIn(object), "length", []) => {
-                let (object, value_ctx, value_arch, value_call_result) =
-                    object.length(ctx, *value_ctx, *value_arch)?;
-                (
-                    ObjectState::PacketIn(object),
-                    value_ctx,
-                    value_arch,
-                    value_call_result,
-                )
+            ("recirculate_preserving_field_list", ["index"]) => {
+                v1model_func::recirculate_preserving_field_list(ctx, *value_ctx, *value_arch)?
             }
-            (ObjectState::PacketOut(object), "emit", ["hdr"]) => {
-                let (object, value_ctx, value_arch, value_call_result) =
-                    object.emit(ctx, *value_ctx, *value_arch)?;
-                (
-                    ObjectState::PacketOut(object),
-                    value_ctx,
-                    value_arch,
-                    value_call_result,
-                )
+            ("hash", ["result", "algo", "base", "data", "max"]) => {
+                v1model_func::hash(ctx, *value_ctx, *value_arch)?
             }
-            (ObjectState::Counter(object), "count", ["index"]) => {
+            ("log_msg", ["msg"]) => v1model_func::log_msg(ctx, *value_ctx, *value_arch)?,
+            ("log_msg", ["msg", "data"]) => {
+                v1model_func::log_msg_format(ctx, *value_ctx, *value_arch)?
+            }
+            ("verify_checksum_with_payload", ["condition", "data", "checksum", "algo"]) => {
                 let pkt = get_packet_in(ctx, *value_arch, "packet_in")?;
-                let (object, value_ctx, value_arch, value_call_result) =
-                    object.count(ctx, *value_ctx, *value_arch, &pkt)?;
-                (
-                    ObjectState::Counter(object),
-                    value_ctx,
-                    value_arch,
-                    value_call_result,
-                )
+                v1model_func::verify_checksum_with_payload(ctx, *value_ctx, *value_arch, &pkt)?
             }
-            (ObjectState::Register(object), "read", ["result", "index"]) => {
-                let (object, value_ctx, value_arch, value_call_result) =
-                    object.read(ctx, *value_ctx, *value_arch)?;
-                (
-                    ObjectState::Register(object),
-                    value_ctx,
-                    value_arch,
-                    value_call_result,
-                )
-            }
-            (ObjectState::Register(object), "write", ["index", "value"]) => {
-                let (object, value_ctx, value_arch, value_call_result) =
-                    object.write(ctx, *value_ctx, *value_arch)?;
-                (
-                    ObjectState::Register(object),
-                    value_ctx,
-                    value_arch,
-                    value_call_result,
-                )
-            }
-            (ObjectState::DirectCounter(object), "count", []) => {
+            ("update_checksum_with_payload", ["condition", "data", "checksum", "algo"]) => {
                 let pkt = get_packet_in(ctx, *value_arch, "packet_in")?;
-                let (object, value_ctx, value_arch, value_call_result) =
-                    object.count(ctx, *value_ctx, *value_arch, &pkt)?;
-                (
-                    ObjectState::DirectCounter(object),
-                    value_ctx,
-                    value_arch,
-                    value_call_result,
-                )
-            }
-            (ObjectState::DirectMeter(object), "read", ["result"]) => {
-                let pkt = get_packet_in(ctx, *value_arch, "packet_in")?;
-                let (object, value_ctx, value_arch, value_call_result) =
-                    object.read(ctx, *value_ctx, *value_arch, &pkt)?;
-                (
-                    ObjectState::DirectMeter(object),
-                    value_ctx,
-                    value_arch,
-                    value_call_result,
-                )
+                v1model_func::update_checksum_with_payload(ctx, *value_ctx, *value_arch, &pkt)?
             }
             _ => {
-                let ids = external::param_names(ctx.arena(), *value_id)?;
                 return Err(ExternError::Failure(format!(
-                    "unsupported extern method call: {}.{name}({})",
-                    ids.join("."),
+                    "unsupported extern function call: {name}({})",
                     names.join(", ")
                 ))
                 .into());
             }
         };
-    let value_object = object.to_value(ctx.arena_mut(), encoding)?;
-    let value_arch = func::update_object_state_e(ctx, value_arch, *value_id, value_object)?;
-    Ok(vec![value_ctx, value_arch, value_call_result])
+        Ok(vec![value_ctx, value_arch, value_call_result])
+    }
+
+    fn eval_extern_method_call<Interp, Iface>(
+        &self,
+        ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
+        values: &[Value],
+    ) -> Result<Vec<Value>, Interp::Error>
+    where
+        Iface: Interface,
+        Interp: Interpreter<Iface, Self>,
+    {
+        let encoding = self.encoding;
+        let [value_ctx, value_arch, value_id, value_name, value_names] = values else {
+            return Err(ExternError::Failure(
+                "unexpected number of arguments to extern method call".to_owned(),
+            )
+            .into());
+        };
+        let object = get_object_state(ctx, *value_arch, *value_id)?;
+        let name = get::text(ctx.arena(), value_name)
+            .map_err(ExternError::from)?
+            .to_owned();
+        let names = external::param_names(ctx.arena(), *value_names)?;
+        let names_ref: Vec<_> = names.iter().map(String::as_str).collect();
+        let (object, value_ctx, value_arch, value_call_result) =
+            match (object, name.as_str(), names_ref.as_slice()) {
+                (ObjectState::PacketIn(object), "extract", ["hdr"]) => {
+                    let (object, value_ctx, value_arch, value_call_result) =
+                        object.extract(ctx, *value_ctx, *value_arch)?;
+                    (
+                        ObjectState::PacketIn(object),
+                        value_ctx,
+                        value_arch,
+                        value_call_result,
+                    )
+                }
+                (
+                    ObjectState::PacketIn(object),
+                    "extract",
+                    ["variableSizeHeader", "variableFieldSizeInBits"],
+                ) => {
+                    let (object, value_ctx, value_arch, value_call_result) =
+                        object.extract_varsize(ctx, *value_ctx, *value_arch)?;
+                    (
+                        ObjectState::PacketIn(object),
+                        value_ctx,
+                        value_arch,
+                        value_call_result,
+                    )
+                }
+                (ObjectState::PacketIn(object), "lookahead", []) => {
+                    let (object, value_ctx, value_arch, value_call_result) =
+                        object.lookahead(ctx, *value_ctx, *value_arch)?;
+                    (
+                        ObjectState::PacketIn(object),
+                        value_ctx,
+                        value_arch,
+                        value_call_result,
+                    )
+                }
+                (ObjectState::PacketIn(object), "advance", ["sizeInBits"]) => {
+                    let (object, value_ctx, value_arch, value_call_result) =
+                        object.advance(ctx, *value_ctx, *value_arch)?;
+                    (
+                        ObjectState::PacketIn(object),
+                        value_ctx,
+                        value_arch,
+                        value_call_result,
+                    )
+                }
+                (ObjectState::PacketIn(object), "length", []) => {
+                    let (object, value_ctx, value_arch, value_call_result) =
+                        object.length(ctx, *value_ctx, *value_arch)?;
+                    (
+                        ObjectState::PacketIn(object),
+                        value_ctx,
+                        value_arch,
+                        value_call_result,
+                    )
+                }
+                (ObjectState::PacketOut(object), "emit", ["hdr"]) => {
+                    let (object, value_ctx, value_arch, value_call_result) =
+                        object.emit(ctx, *value_ctx, *value_arch)?;
+                    (
+                        ObjectState::PacketOut(object),
+                        value_ctx,
+                        value_arch,
+                        value_call_result,
+                    )
+                }
+                (ObjectState::Counter(object), "count", ["index"]) => {
+                    let pkt = get_packet_in(ctx, *value_arch, "packet_in")?;
+                    let (object, value_ctx, value_arch, value_call_result) =
+                        object.count(ctx, *value_ctx, *value_arch, &pkt)?;
+                    (
+                        ObjectState::Counter(object),
+                        value_ctx,
+                        value_arch,
+                        value_call_result,
+                    )
+                }
+                (ObjectState::Register(object), "read", ["result", "index"]) => {
+                    let (object, value_ctx, value_arch, value_call_result) =
+                        object.read(ctx, *value_ctx, *value_arch)?;
+                    (
+                        ObjectState::Register(object),
+                        value_ctx,
+                        value_arch,
+                        value_call_result,
+                    )
+                }
+                (ObjectState::Register(object), "write", ["index", "value"]) => {
+                    let (object, value_ctx, value_arch, value_call_result) =
+                        object.write(ctx, *value_ctx, *value_arch)?;
+                    (
+                        ObjectState::Register(object),
+                        value_ctx,
+                        value_arch,
+                        value_call_result,
+                    )
+                }
+                (ObjectState::DirectCounter(object), "count", []) => {
+                    let pkt = get_packet_in(ctx, *value_arch, "packet_in")?;
+                    let (object, value_ctx, value_arch, value_call_result) =
+                        object.count(ctx, *value_ctx, *value_arch, &pkt)?;
+                    (
+                        ObjectState::DirectCounter(object),
+                        value_ctx,
+                        value_arch,
+                        value_call_result,
+                    )
+                }
+                (ObjectState::DirectMeter(object), "read", ["result"]) => {
+                    let pkt = get_packet_in(ctx, *value_arch, "packet_in")?;
+                    let (object, value_ctx, value_arch, value_call_result) =
+                        object.read(ctx, *value_ctx, *value_arch, &pkt)?;
+                    (
+                        ObjectState::DirectMeter(object),
+                        value_ctx,
+                        value_arch,
+                        value_call_result,
+                    )
+                }
+                _ => {
+                    let ids = external::param_names(ctx.arena(), *value_id)?;
+                    return Err(ExternError::Failure(format!(
+                        "unsupported extern method call: {}.{name}({})",
+                        ids.join("."),
+                        names.join(", ")
+                    ))
+                    .into());
+                }
+            };
+        let value_object = object.to_value(ctx.arena_mut(), encoding)?;
+        let value_arch = func::update_object_state_e(ctx, value_arch, *value_id, value_object)?;
+        Ok(vec![value_ctx, value_arch, value_call_result])
+    }
+
+    fn init_arch_state<Interp, Iface>(
+        &self,
+        ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
+    ) -> Result<Value, Interp::Error>
+    where
+        Iface: Interface,
+        Interp: Interpreter<Iface, Self>,
+    {
+        Arch::default()
+            .to_value(ctx.arena_mut(), self.encoding)
+            .map_err(Into::into)
+    }
 }
 
 fn object_id(arena: &mut ValueArena, name: &str) -> Result<Value, ExternError> {
