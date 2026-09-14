@@ -165,7 +165,7 @@ pub trait Architecture: Extern {
     }
 }
 
-macro_rules! pipe_ops {
+macro_rules! delegate_pipe {
     ($pipe:path) => {
         fn transform_stf_stmt(stmt: Statement) -> Statement {
             use $pipe as pipe;
@@ -199,10 +199,17 @@ macro_rules! pipe_ops {
     };
 }
 
-macro_rules! forward_op {
+macro_rules! delegate_method {
     ($pipe:path, $name:ident $(, $arg:ident: $typ:ty)*) => {
-        fn $name<Interp, Iface>(ctx: &mut RunnerContext<'_, Interp, Iface, Self>, value_arch: Value, $($arg: $typ),*) -> Result<Value, Interp::Error>
-        where Iface: Interface, Interp: Interpreter<Iface, Self> {
+        fn $name<Interp, Iface>(
+            ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
+            value_arch: Value,
+            $($arg: $typ),*
+        ) -> Result<Value, Interp::Error>
+        where
+            Iface: Interface,
+            Interp: Interpreter<Iface, Self>,
+        {
             use $pipe as pipe;
             pipe::$name(ctx, value_arch, $($arg),*)
         }
@@ -211,30 +218,35 @@ macro_rules! forward_op {
 
 impl Architecture for super::ebpf::Ebpf {
     const NAME: &'static str = "ebpf";
-    pipe_ops!(super::ebpf::pipe);
+
+    delegate_pipe!(super::ebpf::pipe);
 }
 
 impl Architecture for super::psa::Psa {
     const NAME: &'static str = "psa";
-    pipe_ops!(super::psa::pipe);
-    forward_op!(super::psa::pipe, add_mirror_session_mc, session: i64, group: i64);
-    forward_op!(super::psa::pipe, mc_mgrp_create, group: i64);
-    forward_op!(super::psa::pipe, mc_node_create, instance: i64, ports: &[i64]);
-    forward_op!(super::psa::pipe, mc_node_associate, group: i64, handle: i64);
-    forward_op!(super::psa::pipe, register_read, name: &str, idx: i64);
-    forward_op!(super::psa::pipe, register_write, name: &str, idx: i64, int: i64);
-    forward_op!(super::psa::pipe, register_reset, name: &str);
+
+    delegate_pipe!(super::psa::pipe);
+
+    delegate_method!(super::psa::pipe, add_mirror_session_mc, session: i64, group: i64);
+    delegate_method!(super::psa::pipe, mc_mgrp_create, group: i64);
+    delegate_method!(super::psa::pipe, mc_node_create, instance: i64, ports: &[i64]);
+    delegate_method!(super::psa::pipe, mc_node_associate, group: i64, handle: i64);
+    delegate_method!(super::psa::pipe, register_read, name: &str, idx: i64);
+    delegate_method!(super::psa::pipe, register_write, name: &str, idx: i64, int: i64);
+    delegate_method!(super::psa::pipe, register_reset, name: &str);
 }
 
 impl Architecture for super::v1model::V1Model {
     const NAME: &'static str = "v1model";
-    pipe_ops!(super::v1model::pipe);
-    forward_op!(super::v1model::pipe, add_mirror_session, session: i64, port: i64);
-    forward_op!(super::v1model::pipe, add_mirror_session_mc, session: i64, group: i64);
-    forward_op!(super::v1model::pipe, mc_mgrp_create, group: i64);
-    forward_op!(super::v1model::pipe, mc_node_create, instance: i64, ports: &[i64]);
-    forward_op!(super::v1model::pipe, mc_node_associate, group: i64, handle: i64);
-    forward_op!(super::v1model::pipe, register_read, name: &str, idx: i64);
-    forward_op!(super::v1model::pipe, register_write, name: &str, idx: i64, int: i64);
-    forward_op!(super::v1model::pipe, register_reset, name: &str);
+
+    delegate_pipe!(super::v1model::pipe);
+
+    delegate_method!(super::v1model::pipe, add_mirror_session, session: i64, port: i64);
+    delegate_method!(super::v1model::pipe, add_mirror_session_mc, session: i64, group: i64);
+    delegate_method!(super::v1model::pipe, mc_mgrp_create, group: i64);
+    delegate_method!(super::v1model::pipe, mc_node_create, instance: i64, ports: &[i64]);
+    delegate_method!(super::v1model::pipe, mc_node_associate, group: i64, handle: i64);
+    delegate_method!(super::v1model::pipe, register_read, name: &str, idx: i64);
+    delegate_method!(super::v1model::pipe, register_write, name: &str, idx: i64, int: i64);
+    delegate_method!(super::v1model::pipe, register_reset, name: &str);
 }

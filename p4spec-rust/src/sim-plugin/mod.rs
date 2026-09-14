@@ -1,4 +1,4 @@
-pub mod architecture;
+pub mod arch;
 pub mod build;
 pub mod core;
 pub mod dummy;

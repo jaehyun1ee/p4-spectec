@@ -1,7 +1,7 @@
 //! Executes transformed STF statements against one runner and per-run state
 
 use super::{
-    architecture::Architecture,
+    arch::Architecture,
     io::{self, Expectation, Rx, Tx},
     spec_impl::unpack,
     state::SimState,
