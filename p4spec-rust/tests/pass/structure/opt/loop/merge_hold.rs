@@ -114,3 +114,23 @@ fn test_each_outcome_merges_common_leading_conditions() {
         )]
     );
 }
+
+#[test]
+fn test_tail_merges_before_retrying_the_merged_head() {
+    fn branch(texts: &[&str]) -> Instr {
+        instr(InstrKind::If(IfInstr {
+            exp: variable("condition"),
+            iter_exps: vec![],
+            block: texts.iter().map(|text| ret(text)).collect(),
+        }))
+    }
+    assert_eq!(
+        apply(vec![
+            hold(vec![ret("a")], vec![]),
+            hold(vec![ret("b")], vec![]),
+            hold(vec![branch(&["c"])], vec![]),
+            hold(vec![branch(&["d"])], vec![]),
+        ]),
+        vec![hold(vec![ret("a"), ret("b"), branch(&["c", "d"])], vec![])]
+    );
+}
