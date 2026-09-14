@@ -2,6 +2,8 @@ use serde::{Deserialize, Serialize};
 use serde_derive_state::DeserializeState;
 use std::{fmt, rc::Rc};
 
+// == Positions
+
 /// A source position
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct Position {
@@ -31,36 +33,13 @@ impl fmt::Display for Position {
     }
 }
 
+// == Spans
+
 /// A source span between two positions
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct Span {
     pub left: Position,
     pub right: Position,
-}
-
-impl<State> serde_state::SerializeState<State> for Span {
-    fn serialize_state<Serializer>(
-        &self,
-        serializer: Serializer,
-        _state: &State,
-    ) -> Result<Serializer::Ok, Serializer::Error>
-    where
-        Serializer: serde::Serializer,
-    {
-        self.serialize(serializer)
-    }
-}
-
-impl<'de, State> serde_state::DeserializeState<'de, State> for Span {
-    fn deserialize_state<Deserializer>(
-        _state: &mut State,
-        deserializer: Deserializer,
-    ) -> Result<Self, Deserializer::Error>
-    where
-        Deserializer: serde::Deserializer<'de>,
-    {
-        Self::deserialize(deserializer)
-    }
 }
 
 impl Default for Span {
@@ -110,12 +89,113 @@ impl fmt::Display for Span {
     }
 }
 
+// == Phrases
+
 /// A syntax node paired with semantic and source annotations
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct NotePhrase<T, N = (), S = Span> {
     pub node: T,
     pub note: N,
     pub span: S,
+}
+
+/// A syntax node paired with its source span
+pub type Phrase<T> = NotePhrase<T>;
+
+impl<T: fmt::Display, N, S: fmt::Display> fmt::Display for NotePhrase<T, N, S> {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(fmt, "{} at {}", self.node, self.span)
+    }
+}
+
+impl<T: std::error::Error, N: fmt::Debug, S: fmt::Debug + fmt::Display> std::error::Error
+    for NotePhrase<T, N, S>
+{
+}
+
+// == Constructors
+
+/// Builds a syntax node with an explicit source span
+#[macro_export]
+macro_rules! phrase {
+    (node: $node:expr, span: $span:expr $(,)?) => {
+        $crate::lang::common::source::NotePhrase {
+            node: $node,
+            note: (),
+            span: $span,
+        }
+    };
+}
+
+/// Builds a syntax node with semantic and source annotations
+#[macro_export]
+macro_rules! note_phrase {
+    (node: $node:expr, note: $note:expr, span: $span:expr $(,)?) => {
+        $crate::lang::common::source::NotePhrase {
+            node: $node,
+            note: ($note).into(),
+            span: $span,
+        }
+    };
+}
+
+// == Serialization
+
+// - Encode
+
+impl<State> serde_state::SerializeState<State> for Span {
+    fn serialize_state<Serializer>(
+        &self,
+        serializer: Serializer,
+        _state: &State,
+    ) -> Result<Serializer::Ok, Serializer::Error>
+    where
+        Serializer: serde::Serializer,
+    {
+        self.serialize(serializer)
+    }
+}
+
+// Check the stack at every phrase before traversing recursive value/type nodes
+impl<T, N, S, State> serde_state::SerializeState<State> for NotePhrase<T, N, S>
+where
+    T: serde_state::SerializeState<State>,
+    N: serde_state::SerializeState<State>,
+    S: serde_state::SerializeState<State>,
+{
+    fn serialize_state<Serializer>(
+        &self,
+        serializer: Serializer,
+        state: &State,
+    ) -> Result<Serializer::Ok, Serializer::Error>
+    where
+        Serializer: serde::Serializer,
+    {
+        use serde_state::ser::Seeded;
+
+        stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
+            NotePhrase {
+                node: Seeded::new(state, &self.node),
+                note: Seeded::new(state, &self.note),
+                span: Seeded::new(state, &self.span),
+            }
+            .serialize(serializer)
+        })
+    }
+}
+
+// - Decode
+
+impl<'de, State> serde_state::DeserializeState<'de, State> for Span {
+    fn deserialize_state<Deserializer>(
+        _state: &mut State,
+        deserializer: Deserializer,
+    ) -> Result<Self, Deserializer::Error>
+    where
+        Deserializer: serde::Deserializer<'de>,
+    {
+        Self::deserialize(deserializer)
+    }
 }
 
 impl<'de, T, N, S, State> serde_state::DeserializeState<'de, State> for NotePhrase<T, N, S>
@@ -151,70 +231,4 @@ where
             NotePhraseState::deserialize_state(state, deserializer)?;
         Ok(Self { node, note, span })
     }
-}
-
-// Check the stack at every phrase before traversing recursive value/type nodes
-impl<T, N, S, State> serde_state::SerializeState<State> for NotePhrase<T, N, S>
-where
-    T: serde_state::SerializeState<State>,
-    N: serde_state::SerializeState<State>,
-    S: serde_state::SerializeState<State>,
-{
-    fn serialize_state<Serializer>(
-        &self,
-        serializer: Serializer,
-        state: &State,
-    ) -> Result<Serializer::Ok, Serializer::Error>
-    where
-        Serializer: serde::Serializer,
-    {
-        use serde_state::ser::Seeded;
-
-        stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
-            NotePhrase {
-                node: Seeded::new(state, &self.node),
-                note: Seeded::new(state, &self.note),
-                span: Seeded::new(state, &self.span),
-            }
-            .serialize(serializer)
-        })
-    }
-}
-
-/// A syntax node paired with its source span
-pub type Phrase<T> = NotePhrase<T>;
-
-impl<T: fmt::Display, N, S: fmt::Display> fmt::Display for NotePhrase<T, N, S> {
-    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(fmt, "{} at {}", self.node, self.span)
-    }
-}
-
-impl<T: std::error::Error, N: fmt::Debug, S: fmt::Debug + fmt::Display> std::error::Error
-    for NotePhrase<T, N, S>
-{
-}
-
-/// Builds a syntax node with an explicit source span
-#[macro_export]
-macro_rules! phrase {
-    (node: $node:expr, span: $span:expr $(,)?) => {
-        $crate::lang::common::source::NotePhrase {
-            node: $node,
-            note: (),
-            span: $span,
-        }
-    };
-}
-
-/// Builds a syntax node with semantic and source annotations
-#[macro_export]
-macro_rules! note_phrase {
-    (node: $node:expr, note: $note:expr, span: $span:expr $(,)?) => {
-        $crate::lang::common::source::NotePhrase {
-            node: $node,
-            note: ($note).into(),
-            span: $span,
-        }
-    };
 }

@@ -11,6 +11,8 @@ use crate::lang::{
     },
 };
 
+// == Types
+
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum Atom {
     /// Concrete object word such as `INT`
@@ -73,30 +75,7 @@ pub enum Atom {
     RBrace,
 }
 
-impl<State> serde_state::SerializeState<State> for Atom {
-    fn serialize_state<Serializer>(
-        &self,
-        serializer: Serializer,
-        _state: &State,
-    ) -> Result<Serializer::Ok, Serializer::Error>
-    where
-        Serializer: serde::Serializer,
-    {
-        self.serialize(serializer)
-    }
-}
-
-impl<'de, State> serde_state::DeserializeState<'de, State> for Atom {
-    fn deserialize_state<Deserializer>(
-        _state: &mut State,
-        deserializer: Deserializer,
-    ) -> Result<Self, Deserializer::Error>
-    where
-        Deserializer: serde::Deserializer<'de>,
-    {
-        Self::deserialize(deserializer)
-    }
-}
+// == Errors
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AtomError {
@@ -124,6 +103,8 @@ impl fmt::Display for AtomError {
 }
 
 impl Error for AtomError {}
+
+// == Printing
 
 impl Print for Atom {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
@@ -224,5 +205,36 @@ impl Atom {
         } else {
             Ok(Self::Operator(op))
         }
+    }
+}
+
+// == Serialization
+
+// - Encode
+
+impl<State> serde_state::SerializeState<State> for Atom {
+    fn serialize_state<Serializer>(
+        &self,
+        serializer: Serializer,
+        _state: &State,
+    ) -> Result<Serializer::Ok, Serializer::Error>
+    where
+        Serializer: serde::Serializer,
+    {
+        self.serialize(serializer)
+    }
+}
+
+// - Decode
+
+impl<'de, State> serde_state::DeserializeState<'de, State> for Atom {
+    fn deserialize_state<Deserializer>(
+        _state: &mut State,
+        deserializer: Deserializer,
+    ) -> Result<Self, Deserializer::Error>
+    where
+        Deserializer: serde::Deserializer<'de>,
+    {
+        Self::deserialize(deserializer)
     }
 }
