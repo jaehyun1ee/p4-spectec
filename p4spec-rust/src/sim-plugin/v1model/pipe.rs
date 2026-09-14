@@ -784,7 +784,7 @@ where
         field,
     )?;
     Ok(unpack::signed_int(
-        &unpack::p4_fixed_bit(ctx.arena(), &value)?.int,
+        &unpack::p4_fixed_bit(ctx.arena(), &value)?.1,
     )?)
 }
 
@@ -826,8 +826,8 @@ where
         "standard_metadata",
         "egress_spec",
     )?;
-    let num = unpack::p4_fixed_bit(ctx.arena(), &value)?;
-    Ok(num.width == 9.into() && num.int == 511.into())
+    let (width, int) = unpack::p4_fixed_bit(ctx.arena(), &value)?;
+    Ok(width == 9.into() && int == 511.into())
 }
 
 // - Context preparation
@@ -1143,32 +1143,28 @@ where
 }
 
 /// Egress may stop this packet without discarding scheduler state or clones
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum EgressOutcome {
-    RunPost,
-    SkipPost,
-}
 pub fn drive_eg<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     state: &mut SimState,
-) -> Result<EgressOutcome, Interp::Error>
+) -> Result<Option<Value>, Interp::Error>
 where
     Iface: Interface,
     Interp: Interpreter<Iface, V1Model>,
 {
     prepare_egress_ctx(ctx, state)?;
-    let (value_ctx, value_arch, _) = rel::v1model_egress(ctx, state.value_ctx, state.value_arch)?;
+    let (value_ctx, value_arch, value_result) =
+        rel::v1model_egress(ctx, state.value_ctx, state.value_arch)?;
     (state.value_ctx, state.value_arch) = (value_ctx, value_arch);
     let arch = get_arch_state(ctx, state.value_arch)?;
     schedule_clone(ctx, state, &arch)?;
     if is_dropped(ctx, state)? {
-        return Ok(EgressOutcome::SkipPost);
+        return Ok(None);
     }
     let arch = get_arch_state(ctx, state.value_arch)?;
     if schedule_recirculate(ctx, state, &arch)? {
-        Ok(EgressOutcome::SkipPost)
+        Ok(None)
     } else {
-        Ok(EgressOutcome::RunPost)
+        Ok(Some(value_result))
     }
 }
 
@@ -1249,8 +1245,8 @@ where
     match entrypoint {
         Entrypoint::Ingress => drive_ig(ctx, state),
         Entrypoint::Egress => match drive_eg(ctx, state)? {
-            EgressOutcome::RunPost => drive_pipe_post(ctx, state),
-            EgressOutcome::SkipPost => Ok(()),
+            Some(_) => drive_pipe_post(ctx, state),
+            None => Ok(()),
         },
     }
 }

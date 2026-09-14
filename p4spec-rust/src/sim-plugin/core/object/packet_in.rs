@@ -170,7 +170,7 @@ impl PacketIn {
         let value_hi = pack::p4_arbitrary_int(ctx.arena_mut(), 2.into())?;
         let value_lo = pack::p4_arbitrary_int(ctx.arena_mut(), 0.into())?;
         let value_alignment = func::bitacc_range_op(ctx, value_size, value_hi, value_lo)?;
-        let alignment = unpack::size(&unpack::p4_fixed_bit(ctx.arena(), &value_alignment)?.int)?;
+        let alignment = unpack::size(&unpack::p4_fixed_bit(ctx.arena(), &value_alignment)?.1)?;
         let values_size = get::case(ctx.arena(), &value_size)
             .map_err(ExternError::from)?
             .args();
@@ -374,7 +374,7 @@ impl PacketIn {
         Interp: Interpreter<Iface, Exn>,
     {
         let value_size = func::find_var_e_local(ctx, value_ctx, "sizeInBits")?;
-        let size = unpack::size(&unpack::p4_fixed_bit(ctx.arena(), &value_size)?.int)?;
+        let size = unpack::size(&unpack::p4_fixed_bit(ctx.arena(), &value_size)?.1)?;
         if !self.has_size(size)? {
             let value_name = make::text(
                 ctx.arena_mut(),

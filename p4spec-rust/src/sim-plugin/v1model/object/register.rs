@@ -63,8 +63,7 @@ impl Register {
         let args = unpack::assoc_args(ctx.arena(), value_ids, value_args)?;
         let value_size = unpack::find_arg(&args, "size")?;
         let value_initial = func::default(ctx, value_typ)?;
-        let size =
-            unpack::signed_int(&unpack::p4_fixed_bit(ctx.arena(), &value_size)?.int)? as usize;
+        let size = unpack::signed_int(&unpack::p4_fixed_bit(ctx.arena(), &value_size)?.1)? as usize;
         Ok(Self {
             value_typ,
             values: vec![value_initial; size],
@@ -97,7 +96,7 @@ impl Register {
         Interp: Interpreter<Iface, Exn>,
     {
         let value_idx = func::find_var_e_local(ctx, value_ctx, "index")?;
-        let idx = unpack::signed_int(&unpack::p4_fixed_bit(ctx.arena(), &value_idx)?.int)?;
+        let idx = unpack::signed_int(&unpack::p4_fixed_bit(ctx.arena(), &value_idx)?.1)?;
         let idx = usize::try_from(idx)
             .map_err(|_| ExternError::Failure("negative register index".to_owned()))?;
         let value = match self.values.get(idx) {
@@ -155,7 +154,7 @@ impl Register {
         Interp: Interpreter<Iface, Exn>,
     {
         let value_idx = func::find_var_e_local(ctx, value_ctx, "index")?;
-        let idx = unpack::signed_int(&unpack::p4_fixed_bit(ctx.arena(), &value_idx)?.int)?;
+        let idx = unpack::signed_int(&unpack::p4_fixed_bit(ctx.arena(), &value_idx)?.1)?;
         let value_target = func::find_var_e_local(ctx, value_ctx, "value")?;
         if let Ok(idx) = usize::try_from(idx)
             && let Some(value) = self.values.get_mut(idx)

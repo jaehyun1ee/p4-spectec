@@ -20,7 +20,7 @@ fn test_checksum_get_updates_state_and_incremental_operations() {
     assert_eq!(
         unpack::p4_fixed_bit(runner.arena(), &returned(runner.arena(), output.3))
             .unwrap()
-            .int,
+            .1,
         0xEDCB.into()
     );
     let checksum = output

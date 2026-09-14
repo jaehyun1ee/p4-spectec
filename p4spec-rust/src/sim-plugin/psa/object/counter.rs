@@ -37,7 +37,7 @@ impl Counter {
         let args = unpack::assoc_args(arena, value_ids, value_args)?;
         let value_size = unpack::find_arg(&args, "n_counters")?;
         let value_type = unpack::find_arg(&args, "type")?;
-        let size = unpack::signed_int(&unpack::p4_fixed_bit(arena, &value_size)?.int)? as usize;
+        let size = unpack::signed_int(&unpack::p4_fixed_bit(arena, &value_size)?.1)? as usize;
         let (id_enum, id_type) = unpack::p4_enum(arena, &value_type)?;
         match (id_enum.as_str(), id_type.as_str()) {
             ("PSA_CounterType_t", "PACKETS") => Ok(Self::Packets(vec![BigInt::zero(); size])),
@@ -67,7 +67,7 @@ impl Counter {
         Interp: Interpreter<Iface, Exn>,
     {
         let value_idx = func::find_var_e_local(ctx, value_ctx, "index")?;
-        let idx = unpack::signed_int(&unpack::p4_fixed_bit(ctx.arena(), &value_idx)?.int)?;
+        let idx = unpack::signed_int(&unpack::p4_fixed_bit(ctx.arena(), &value_idx)?.1)?;
         let Self::Packets(counts) = &mut self else {
             return Err(ExternError::Failure(
                 "Only enum value PACKETS of PSA_CounterType_t is supported".to_owned(),

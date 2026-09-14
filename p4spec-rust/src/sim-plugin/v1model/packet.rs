@@ -71,5 +71,5 @@ pub fn clone_info(
 
 pub fn field_index(arena: &ValueArena, value: &Value) -> Result<i64, crate::runner::ExternError> {
     use crate::sim_plugin::spec_impl::unpack;
-    unpack::signed_int(&unpack::p4_fixed_bit(arena, value)?.int)
+    unpack::signed_int(&unpack::p4_fixed_bit(arena, value)?.1)
 }

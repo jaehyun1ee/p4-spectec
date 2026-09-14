@@ -143,7 +143,7 @@ fn read_int(
         field,
     )
     .unwrap();
-    unpack::signed_int(&unpack::p4_fixed_bit(runner.arena(), &value).unwrap().int).unwrap()
+    unpack::signed_int(&unpack::p4_fixed_bit(runner.arena(), &value).unwrap().1).unwrap()
 }
 
 fn read_path(runner: &mut Runner, value_ctx: Value, value_arch: Value, metadata: &str) -> String {

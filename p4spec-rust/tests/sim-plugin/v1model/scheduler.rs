@@ -111,7 +111,7 @@ fn int(arena: &ValueArena, value_ctx: Value, name: &str) -> i64 {
     unpack::signed_int(
         &unpack::p4_fixed_bit(arena, &field(arena, value_ctx, name))
             .unwrap()
-            .int,
+            .1,
     )
     .unwrap()
 }

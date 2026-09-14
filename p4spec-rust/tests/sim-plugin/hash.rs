@@ -8,10 +8,7 @@ use p4spec_rust::{
             value::{Value, ValueArena, make},
         },
     },
-    sim_plugin::{
-        hash,
-        spec_impl::{pack, unpack::PrecisionNumber},
-    },
+    sim_plugin::{hash, spec_impl::pack},
 };
 
 #[test]
@@ -30,10 +27,7 @@ fn test_hashes_match_ocaml_vectors() {
         (32, 4294967295, 0, [37889, 4294967295, 0, 65535, 4294967295]),
         (16, 4660, 65280, [30477, 412718745, 61130, 4915, 4660]),
     ] {
-        let bits = PrecisionNumber {
-            width: width.into(),
-            int: int.into(),
-        };
+        let bits = (width.into(), int.into());
         for (algo, int_expect) in ["crc16", "crc32", "csum16", "csum16_sub", "identity"]
             .into_iter()
             .zip(ints_expect)
@@ -78,7 +72,7 @@ fn test_package_normalizes_signed_fields_and_pads_without_shifting() {
     let mut arena = ValueArena::new();
     let value_nibble = pack::p4_fixed_bit(&mut arena, 4.into(), 10.into()).unwrap();
     let bits = hash::package(&arena, &[value_nibble]).unwrap();
-    assert_eq!((bits.width, bits.int), (16.into(), 10.into()));
+    assert_eq!(bits, (16.into(), 10.into()));
     assert_eq!(
         hash::compute_checksum("crc16", None, &arena, &[value_nibble]).unwrap(),
         1920.into()
@@ -86,13 +80,13 @@ fn test_package_normalizes_signed_fields_and_pads_without_shifting() {
     let value_signed = precision(&mut arena, "nat S int", &[8, -1]);
     let value_var = precision(&mut arena, "nat '.' nat V int", &[32, 4, 5]);
     let bits = hash::package(&arena, &[value_nibble, value_signed, value_var]).unwrap();
-    assert_eq!((bits.width, bits.int), (16.into(), 0xAFF5.into()));
+    assert_eq!(bits, (16.into(), 0xAFF5.into()));
     let bits = hash::package(&arena, &[value_var, value_signed, value_nibble]).unwrap();
-    assert_eq!(bits.int, 0x5FFA.into());
+    assert_eq!(bits.1, 0x5FFA.into());
     let value_over = pack::p4_fixed_bit(&mut arena, 4.into(), 26.into()).unwrap();
-    assert_eq!(hash::package(&arena, &[value_over]).unwrap().int, 10.into());
+    assert_eq!(hash::package(&arena, &[value_over]).unwrap().1, 10.into());
     let bits = hash::package(&arena, &[]).unwrap();
-    assert_eq!((bits.width, bits.int), (0.into(), 0.into()));
+    assert_eq!(bits, (0.into(), 0.into()));
 }
 
 #[test]
@@ -124,10 +118,7 @@ fn test_hash_width_range_and_complement_boundaries() {
         6.into()
     );
     for (int_init, int_sum, int_sub) in [(-65537, 60876, 4661), (131072, 60874, 4659)] {
-        let bits = PrecisionNumber {
-            width: 16.into(),
-            int: 4660.into(),
-        };
+        let bits = (16.into(), 4660.into());
         assert_eq!(
             hash::compute_hash("csum16", Some(&int_init.into()), &bits).unwrap(),
             int_sum.into()
@@ -138,26 +129,10 @@ fn test_hash_width_range_and_complement_boundaries() {
         );
     }
     for algo in ["crc16", "crc32", "csum16", "csum16_sub"] {
-        assert!(
-            hash::compute_hash(
-                algo,
-                None,
-                &PrecisionNumber {
-                    width: 4.into(),
-                    int: 10.into()
-                }
-            )
-            .is_err()
-        );
+        assert!(hash::compute_hash(algo, None, &(4.into(), 10.into())).is_err());
     }
-    let bits = PrecisionNumber {
-        width: (-1).into(),
-        int: BigInt::from(123),
-    };
-    assert_eq!(
-        hash::compute_hash("identity", None, &bits).unwrap(),
-        bits.int
-    );
+    let bits = ((-1).into(), BigInt::from(123));
+    assert_eq!(hash::compute_hash("identity", None, &bits).unwrap(), bits.1);
     assert!(hash::compute_hash("unsupported", None, &bits).is_err());
     let mut arena = ValueArena::new();
     let value_bad = precision(&mut arena, "nat W int", &[4, 10]);

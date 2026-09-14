@@ -153,9 +153,9 @@ where
     Interp: Interpreter<Iface, Exn>,
 {
     let value_base = func::find_var_e_local(ctx, value_ctx, "base")?;
-    let int_base = unpack::p4_fixed_bit(ctx.arena(), &value_base)?.int;
+    let int_base = unpack::p4_fixed_bit(ctx.arena(), &value_base)?.1;
     let value_max = func::find_var_e_local(ctx, value_ctx, "max")?;
-    let int_max = unpack::p4_fixed_bit(ctx.arena(), &value_max)?.int;
+    let int_max = unpack::p4_fixed_bit(ctx.arena(), &value_max)?.1;
     let int = compute_checksum(ctx, value_ctx, None)?;
     // The source simulator uses max - base as the range divisor
     let int = checksum::adjust(&int_base, &int_max, &int)?;
@@ -244,7 +244,7 @@ where
         return Ok((value_ctx, value_arch, value_call_result));
     }
     let value_checksum = func::find_var_e_local(ctx, value_ctx, "checksum")?;
-    let int_expect = unpack::p4_fixed_bit(ctx.arena(), &value_checksum)?.int;
+    let int_expect = unpack::p4_fixed_bit(ctx.arena(), &value_checksum)?.1;
     let int_actual = compute_checksum(ctx, value_ctx, payload)?;
     let value_ctx = if int_expect == int_actual {
         value_ctx

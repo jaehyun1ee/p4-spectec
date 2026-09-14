@@ -13,12 +13,12 @@ use crate::{
 
 use super::spec_impl::func;
 
-struct TableName {
-    value_unqualified: Value,
-    value_qualified: Option<Value>,
-}
+// == Table names
 
-fn table_name(arena: &mut ValueArena, value_name: Value) -> Result<TableName, ExternError> {
+fn table_name(
+    arena: &mut ValueArena,
+    value_name: Value,
+) -> Result<(Value, Option<Value>), ExternError> {
     let name = get::text(arena, &value_name)?.to_owned();
     let names: Vec<_> = name.split('.').collect();
     let value_unqualified = make::text(
@@ -47,11 +47,10 @@ fn table_name(arena: &mut ValueArena, value_name: Value) -> Result<TableName, Ex
             Span::default(),
         )?)
     };
-    Ok(TableName {
-        value_unqualified,
-        value_qualified,
-    })
+    Ok((value_unqualified, value_qualified))
 }
+
+// == Table lookup and update
 
 pub fn find_table<Interp, Iface, Exn>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
@@ -63,13 +62,13 @@ where
     Exn: Extern,
     Interp: Interpreter<Iface, Exn>,
 {
-    let name = table_name(ctx.arena_mut(), value_name)?;
-    if let Some(value_id) = name.value_qualified
+    let (value_unqualified, value_qualified) = table_name(ctx.arena_mut(), value_name)?;
+    if let Some(value_id) = value_qualified
         && let Some(value_table) = func::find_object_qualified_e(ctx, value_arch, value_id)?
     {
         return Ok(value_table);
     }
-    func::find_object_unqualified_e(ctx, value_arch, name.value_unqualified)?
+    func::find_object_unqualified_e(ctx, value_arch, value_unqualified)?
         .ok_or_else(|| ExternError::Failure("table not found".to_owned()).into())
 }
 
@@ -84,14 +83,16 @@ where
     Exn: Extern,
     Interp: Interpreter<Iface, Exn>,
 {
-    let name = table_name(ctx.arena_mut(), value_name)?;
-    if let Some(value_id) = name.value_qualified
+    let (value_unqualified, value_qualified) = table_name(ctx.arena_mut(), value_name)?;
+    if let Some(value_id) = value_qualified
         && func::find_object_qualified_e(ctx, value_arch, value_id)?.is_some()
     {
         return func::update_object_qualified_e(ctx, value_arch, value_id, value_table);
     }
-    func::update_object_unqualified_e(ctx, value_arch, name.value_unqualified, value_table)
+    func::update_object_unqualified_e(ctx, value_arch, value_unqualified, value_table)
 }
+
+// == Table entries
 
 pub fn add_entry<Interp, Iface, Exn>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,

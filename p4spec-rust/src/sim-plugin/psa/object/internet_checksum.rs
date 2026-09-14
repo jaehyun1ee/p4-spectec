@@ -212,7 +212,7 @@ impl InternetChecksum {
         Interp: Interpreter<Iface, Exn>,
     {
         let value_state = func::find_var_e_local(ctx, value_ctx, "checksum_state")?;
-        self.int = unpack::p4_fixed_bit(ctx.arena(), &value_state)?.int;
+        self.int = unpack::p4_fixed_bit(ctx.arena(), &value_state)?.1;
         let typ = typ::make::opt(typ::make::var(
             crate::phrase!(node: "value".to_owned(), span: Span::default()),
             Vec::new(),

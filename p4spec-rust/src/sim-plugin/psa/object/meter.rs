@@ -40,7 +40,7 @@ impl Meter {
         let args = unpack::assoc_args(arena, value_ids, value_args)?;
         let value_size = unpack::find_arg(&args, "n_meters")?;
         let value_type = unpack::find_arg(&args, "type")?;
-        let size = unpack::signed_int(&unpack::p4_fixed_bit(arena, &value_size)?.int)? as usize;
+        let size = unpack::signed_int(&unpack::p4_fixed_bit(arena, &value_size)?.1)? as usize;
         let (id_enum, id_type) = unpack::p4_enum(arena, &value_type)?;
         match (id_enum.as_str(), id_type.as_str()) {
             ("PSA_MeterType_t", "PACKETS") => Ok(Self::Packets(vec![Color::Green; size])),

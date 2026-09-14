@@ -38,8 +38,8 @@ impl CounterArray {
         let args = unpack::assoc_args(arena, value_ids, value_args)?;
         let value_max = unpack::find_arg(&args, "max_index")?;
         let value_sparse = unpack::find_arg(&args, "sparse")?;
-        let num_max = unpack::p4_fixed_bit(arena, &value_max)?;
-        let idx_max = unpack::signed_int(&num_max.int)?;
+        let (_, int_max) = unpack::p4_fixed_bit(arena, &value_max)?;
+        let idx_max = unpack::signed_int(&int_max)?;
         unpack::p4_bool(arena, &value_sparse)?;
         let len = usize::try_from(idx_max)
             .map_err(|_| ExternError::Failure("negative counter array size".to_owned()))?;
@@ -69,8 +69,8 @@ impl CounterArray {
     {
         // Get "index"
         let value_idx = func::find_var_e_local(ctx, value_ctx, "index")?;
-        let num_idx = unpack::p4_fixed_bit(ctx.arena(), &value_idx)?;
-        let idx = unpack::signed_int(&num_idx.int)?;
+        let (_, int_idx) = unpack::p4_fixed_bit(ctx.arena(), &value_idx)?;
+        let idx = unpack::signed_int(&int_idx)?;
         self.update(ctx, value_ctx, value_arch, idx, 1)
     }
 
@@ -92,12 +92,12 @@ impl CounterArray {
     {
         // Get "index"
         let value_idx = func::find_var_e_local(ctx, value_ctx, "index")?;
-        let num_idx = unpack::p4_fixed_bit(ctx.arena(), &value_idx)?;
-        let idx = unpack::signed_int(&num_idx.int)?;
+        let (_, int_idx) = unpack::p4_fixed_bit(ctx.arena(), &value_idx)?;
+        let idx = unpack::signed_int(&int_idx)?;
         // Get "value"
         let value_add = func::find_var_e_local(ctx, value_ctx, "value")?;
-        let num_add = unpack::p4_fixed_bit(ctx.arena(), &value_add)?;
-        let int = unpack::signed_int(&num_add.int)?;
+        let (_, int_add) = unpack::p4_fixed_bit(ctx.arena(), &value_add)?;
+        let int = unpack::signed_int(&int_add)?;
         self.update(ctx, value_ctx, value_arch, idx, int)
     }
 

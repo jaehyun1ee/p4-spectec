@@ -69,13 +69,7 @@ pub fn p4_tuple(arena: &ValueArena, value: &Value) -> Result<Vec<Value>, ExternE
 
 // - Numbers
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct PrecisionNumber {
-    pub width: BigInt,
-    pub int: BigInt,
-}
-
-pub fn p4_fixed_bit(arena: &ValueArena, value: &Value) -> Result<PrecisionNumber, ExternError> {
+pub fn p4_fixed_bit(arena: &ValueArena, value: &Value) -> Result<(BigInt, BigInt), ExternError> {
     get::matches! { arena, value,
         "nat W int" => |values| {
             let [value_width, value_int] = values.as_slice() else {
@@ -84,10 +78,10 @@ pub fn p4_fixed_bit(arena: &ValueArena, value: &Value) -> Result<PrecisionNumber
                     actual: values.len(),
                 }.into());
             };
-            Ok(PrecisionNumber {
-                width: num::to_int(get::num(arena, value_width)?).clone(),
-                int: num::to_int(get::num(arena, value_int)?).clone(),
-            })
+            Ok((
+                num::to_int(get::num(arena, value_width)?).clone(),
+                num::to_int(get::num(arena, value_int)?).clone(),
+            ))
         },
         _ => Err(ExternError::Failure("expected P4 fixed-bit value".to_owned())),
     }
@@ -96,26 +90,26 @@ pub fn p4_fixed_bit(arena: &ValueArena, value: &Value) -> Result<PrecisionNumber
 pub fn p4_precision_number(
     arena: &ValueArena,
     value: &Value,
-) -> Result<PrecisionNumber, ExternError> {
+) -> Result<(BigInt, BigInt), ExternError> {
     get::matches! { arena, value,
         "nat W int" | "nat S int" => |values| {
             let [value_width, value_int] = values.as_slice() else {
                 return Err(ValueError::ExpectedCount { expected: 2, actual: values.len() }.into());
             };
-            Ok(PrecisionNumber {
-                width: num::to_int(get::num(arena, value_width)?).clone(),
-                int: num::to_int(get::num(arena, value_int)?).clone(),
-            })
+            Ok((
+                num::to_int(get::num(arena, value_width)?).clone(),
+                num::to_int(get::num(arena, value_int)?).clone(),
+            ))
         },
         "nat '.' nat V int" => |values| {
             let [value_width_max, value_width, value_int] = values.as_slice() else {
                 return Err(ValueError::ExpectedCount { expected: 3, actual: values.len() }.into());
             };
             get::num(arena, value_width_max)?;
-            Ok(PrecisionNumber {
-                width: num::to_int(get::num(arena, value_width)?).clone(),
-                int: num::to_int(get::num(arena, value_int)?).clone(),
-            })
+            Ok((
+                num::to_int(get::num(arena, value_width)?).clone(),
+                num::to_int(get::num(arena, value_int)?).clone(),
+            ))
         },
         _ => Err(ExternError::Failure("expected P4 precision number value".to_owned())),
     }
@@ -123,17 +117,11 @@ pub fn p4_precision_number(
 
 // == Arguments
 
-#[derive(Clone, Debug)]
-pub struct ArgumentValue {
-    pub name: String,
-    pub value: Value,
-}
-
 pub fn assoc_args(
     arena: &ValueArena,
     value_ids: Value,
     value_args: Value,
-) -> Result<Vec<ArgumentValue>, ExternError> {
+) -> Result<Vec<(String, Value)>, ExternError> {
     let names = get::list(arena, &value_ids)?
         .iter()
         .map(|value_id| get::text(arena, value_id).map(str::to_owned))
@@ -146,21 +134,14 @@ pub fn assoc_args(
         }
         .into());
     }
-    Ok(names
-        .into_iter()
-        .zip(values)
-        .map(|(name, value)| ArgumentValue {
-            name,
-            value: *value,
-        })
-        .collect())
+    Ok(names.into_iter().zip(values.iter().copied()).collect())
 }
 
 /// Finds the first argument with the requested name
-pub fn find_arg(args: &[ArgumentValue], name: &str) -> Result<Value, ExternError> {
+pub fn find_arg(args: &[(String, Value)], name: &str) -> Result<Value, ExternError> {
     args.iter()
-        .find(|arg| arg.name == name)
-        .map(|arg| arg.value)
+        .find(|(name_arg, _)| name_arg == name)
+        .map(|(_, value)| *value)
         .ok_or_else(|| ExternError::Failure(format!("argument not found: {name}")))
 }
 

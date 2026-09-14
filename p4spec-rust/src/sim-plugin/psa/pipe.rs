@@ -785,8 +785,8 @@ where
     Interp: Interpreter<Iface, Psa>,
 {
     let value = rel::lvalue_read_dot_global(ctx, state.value_ctx, state.value_arch, name, field)?;
-    let num = unpack::p4_fixed_bit(ctx.arena(), &value)?;
-    Ok(unpack::signed_int(&num.int)?)
+    let (_, int) = unpack::p4_fixed_bit(ctx.arena(), &value)?;
+    Ok(unpack::signed_int(&int)?)
 }
 
 // - Context preparation
@@ -1092,8 +1092,8 @@ where
         "egress_input_metadata",
         "egress_port",
     )?;
-    let num_port = unpack::p4_fixed_bit(ctx.arena(), &value_port)?;
-    if num_port.width == 32.into() && num_port.int == 0xfffffffa_i64.into() {
+    let (width_port, int_port) = unpack::p4_fixed_bit(ctx.arena(), &value_port)?;
+    if width_port == 32.into() && int_port == 0xfffffffa_i64.into() {
         schedule_recirculate(ctx, state)
     } else {
         transfer_packet(ctx, state)

@@ -93,9 +93,9 @@ impl HashExtern {
         Interp: Interpreter<Iface, Exn>,
     {
         let value_base = func::find_var_e_local(ctx, value_ctx, "base")?;
-        let base = unpack::p4_fixed_bit(ctx.arena(), &value_base)?.int;
+        let base = unpack::p4_fixed_bit(ctx.arena(), &value_base)?.1;
         let value_max = func::find_var_e_local(ctx, value_ctx, "max")?;
-        let max = unpack::p4_fixed_bit(ctx.arena(), &value_max)?.int;
+        let max = unpack::p4_fixed_bit(ctx.arena(), &value_max)?.1;
         let value_data = func::find_var_e_local(ctx, value_ctx, "data")?;
         let values = unpack::p4_tuple(ctx.arena(), &value_data)?;
         let int_hash = hash::compute_checksum(&self.algo, None, ctx.arena(), &values)?;

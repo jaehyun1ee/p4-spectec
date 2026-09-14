@@ -3,11 +3,13 @@
 use num_bigint::BigInt;
 use num_traits::{One, Signed, ToPrimitive, Zero};
 
-use super::spec_impl::unpack::{self, PrecisionNumber};
+use super::spec_impl::unpack;
 use crate::{
     lang::data::value::{Value, ValueArena},
     runner::ExternError,
 };
+
+// == Bit operations
 
 fn bit_width(width: &BigInt) -> Result<usize, ExternError> {
     width
@@ -35,8 +37,8 @@ pub fn bitwise_neg(int: &BigInt, width: &BigInt) -> Result<BigInt, ExternError> 
     Ok(int ^ ((BigInt::one() << width) - BigInt::one()))
 }
 
-fn aligned_width(bits: &PrecisionNumber, alignment: usize) -> Result<usize, ExternError> {
-    let width = bit_width(&bits.width)?;
+fn aligned_width(width: &BigInt, alignment: usize) -> Result<usize, ExternError> {
+    let width = bit_width(width)?;
     if !width.is_multiple_of(alignment) {
         return Err(ExternError::Failure(
             "bitslice x[y:z] must have y > z > 0".to_owned(),
@@ -45,11 +47,18 @@ fn aligned_width(bits: &PrecisionNumber, alignment: usize) -> Result<usize, Exte
     Ok(width)
 }
 
-fn crc(bits: &PrecisionNumber, polynomial: u32, int_init: u32) -> Result<BigInt, ExternError> {
-    let width = aligned_width(bits, 8)?;
+// == Hash algorithms
+
+fn crc(
+    width: &BigInt,
+    int: &BigInt,
+    polynomial: u32,
+    int_init: u32,
+) -> Result<BigInt, ExternError> {
+    let width = aligned_width(width, 8)?;
     let mut int_crc = int_init;
     for idx in (0..width).step_by(8).rev() {
-        let byte = ((&bits.int >> idx) & BigInt::from(255_u16))
+        let byte = ((int >> idx) & BigInt::from(255_u16))
             .to_u32()
             .ok_or_else(|| ExternError::Failure("invalid CRC byte".to_owned()))?;
         let mut entry = (int_crc ^ byte) & 255;
@@ -66,16 +75,17 @@ fn crc(bits: &PrecisionNumber, polynomial: u32, int_init: u32) -> Result<BigInt,
 }
 
 fn checksum(
-    bits: &PrecisionNumber,
+    width: &BigInt,
+    int: &BigInt,
     int_init: &BigInt,
     subtract: bool,
 ) -> Result<BigInt, ExternError> {
-    let width = aligned_width(bits, 16)?;
+    let width = aligned_width(width, 16)?;
     let int_threshold = BigInt::one() << 16;
     let mask = &int_threshold - BigInt::one();
     let mut int_hash = int_init.clone();
     for idx in (0..width).step_by(16).rev() {
-        let int_word = (&bits.int >> idx) & &mask;
+        let int_word = (int >> idx) & &mask;
         let int_word = if subtract { int_word ^ &mask } else { int_word };
         let int_sum = int_hash + int_word;
         let carry = u8::from(int_sum >= int_threshold);
@@ -85,43 +95,44 @@ fn checksum(
     Ok(int_hash ^ mask)
 }
 
+// == Hash computation
+
 pub fn compute_hash(
     algo: &str,
     int_init: Option<&BigInt>,
-    bits: &PrecisionNumber,
+    (width, int): &(BigInt, BigInt),
 ) -> Result<BigInt, ExternError> {
     match algo {
         // CRC16-ARC
-        "crc16" => crc(bits, 0xA001, 0),
-        "crc32" => crc(bits, 0xEDB88320, u32::MAX),
+        "crc16" => crc(width, int, 0xA001, 0),
+        "crc32" => crc(width, int, 0xEDB88320, u32::MAX),
         "csum16" | "csum16_sub" => checksum(
-            bits,
+            width,
+            int,
             int_init.unwrap_or(&BigInt::zero()),
             algo == "csum16_sub",
         ),
-        "identity" => Ok(bits.int.clone()),
+        "identity" => Ok(int.clone()),
         _ => Err(ExternError::Failure(format!("(TODO: compute_hash) {algo}"))),
     }
 }
 
-pub fn package(arena: &ValueArena, values: &[Value]) -> Result<PrecisionNumber, ExternError> {
-    let mut bits = PrecisionNumber {
-        width: BigInt::zero(),
-        int: BigInt::zero(),
-    };
+pub fn package(arena: &ValueArena, values: &[Value]) -> Result<(BigInt, BigInt), ExternError> {
+    let mut width_pack = BigInt::zero();
+    let mut int_pack = BigInt::zero();
     for value in values {
-        let bits_field = unpack::p4_precision_number(arena, value)?;
-        let width = bit_width(&bits_field.width)?;
-        let int_modulus = BigInt::one() << width;
-        bits.width += bits_field.width;
-        bits.int = (bits.int << width) + remainder(&bits_field.int, &int_modulus);
+        let (width, int) = unpack::p4_precision_number(arena, value)?;
+        let width_bits = bit_width(&width)?;
+        let int_modulus = BigInt::one() << width_bits;
+        width_pack += width;
+        int_pack = (int_pack << width_bits) + remainder(&int, &int_modulus);
     }
-    let rem = &bits.width % 16_u8;
+    let rem = &width_pack % 16_u8;
     if !rem.is_zero() {
         // Source padding widens the capacity without shifting the packed bits
-        bits.width += BigInt::from(16_u8) - rem;
+        width_pack += BigInt::from(16_u8) - rem;
     }
-    Ok(bits)
+    Ok((width_pack, int_pack))
 }
 
 pub fn compute_checksum(
