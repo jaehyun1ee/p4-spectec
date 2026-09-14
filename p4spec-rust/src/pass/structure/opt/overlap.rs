@@ -169,7 +169,7 @@ fn disjoint_notexp_literal(
     notexp_b: &NotExp,
     span: &Span,
 ) -> Result<bool, StructureError> {
-    if !notexp_a.to_mixop().syntax_eq(&notexp_b.to_mixop()) {
+    if !notexp_a.eq_shape(notexp_b) {
         return Ok(true);
     }
     disjoint_exps_literal(&notexp_a.args(), &notexp_b.args(), span)

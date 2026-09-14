@@ -128,7 +128,7 @@ fn collapse_case_exp(
     not_exp: &NotExp,
     not_exp_target: &NotExp,
 ) -> Option<Renamer> {
-    if !not_exp.to_mixop().syntax_eq(&not_exp_target.to_mixop()) {
+    if !not_exp.eq_shape(not_exp_target) {
         return None;
     }
     collapse_exp_refs(renamer, not_exp.args(), not_exp_target.args())

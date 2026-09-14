@@ -1,7 +1,7 @@
 //! OL diagnostic layout follows the source printer, including Debug numbering
 use super::ast::*;
 use crate::lang::{
-    sl::ast::Mixop,
+    sl::print::{write_relinput, write_reloutput},
     traits::print::{Print, Printer},
 };
 use std::fmt::{self, Write};
@@ -193,51 +193,4 @@ impl Print for Block {
     fn print(&self, output: &mut Printer<'_>) -> fmt::Result {
         write_block(output, self, 0)
     }
-}
-
-fn write_relinput(
-    output: &mut Printer<'_>,
-    rel_signature: &RelSignature,
-    exps_input: &[Exp],
-) -> fmt::Result {
-    let not_typ = &rel_signature.not_typ;
-    let indices_input = rel_signature.input_hint.indices();
-    assert_eq!(indices_input.len(), exps_input.len());
-    let args = (0..not_typ.node.arity()).map(|index| {
-        indices_input
-            .iter()
-            .position(|index_input| *index_input == index as i64)
-            .map(|index_exp| &exps_input[index_exp])
-    });
-    let mixfix =
-        Mixop::fill(&not_typ.node.to_mixop(), args).expect("relation input arity matches notation");
-    mixfix.print_with(output, |exp, output| match exp {
-        Some(exp) => exp.print(output),
-        None => output.write("%"),
-    })
-}
-
-fn write_reloutput(
-    output: &mut Printer<'_>,
-    rel_signature: &RelSignature,
-    exps_output: &[Exp],
-) -> fmt::Result {
-    let not_typ = &rel_signature.not_typ;
-    let indices_input = rel_signature.input_hint.indices();
-    let indices_output = (0..not_typ.node.arity())
-        .filter(|index| !indices_input.contains(&(*index as i64)))
-        .collect::<Vec<_>>();
-    assert_eq!(indices_output.len(), exps_output.len());
-    let args = (0..not_typ.node.arity()).map(|index| {
-        indices_output
-            .iter()
-            .position(|index_output| *index_output == index)
-            .map(|index_exp| &exps_output[index_exp])
-    });
-    let mixfix = Mixop::fill(&not_typ.node.to_mixop(), args)
-        .expect("relation output arity matches notation");
-    mixfix.print_with(output, |exp, output| match exp {
-        Some(exp) => exp.print(output),
-        None => output.write("%"),
-    })
 }

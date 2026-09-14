@@ -7,13 +7,6 @@ use crate::lang::{
     il::ast::{Arg, Exp},
     traits::eq::SyntaxEq,
 };
-fn eq_else(block_a: &Option<Block>, block_b: &Option<Block>) -> bool {
-    match (block_a, block_b) {
-        (Some(block_a), Some(block_b)) => block_a.syntax_eq(block_b),
-        (None, None) => true,
-        _ => false,
-    }
-}
 
 pub(crate) fn pretty_rel(
     exps_match: Vec<Exp>,
@@ -30,7 +23,7 @@ pub(crate) fn pretty_rel(
         let body_pretty = rename_tick::apply_rel(body_pretty)?;
         if body.exps_match.syntax_eq(&body_pretty.exps_match)
             && body.block.syntax_eq(&body_pretty.block)
-            && eq_else(&body.block_else, &body_pretty.block_else)
+            && body.block_else.syntax_eq(&body_pretty.block_else)
         {
             // Stable syntax retains the previous source and proof metadata
             return Ok(body);
@@ -54,7 +47,7 @@ pub(crate) fn pretty_func(
         let body_pretty = rename_tick::apply_func(body_pretty)?;
         if body.args_input.syntax_eq(&body_pretty.args_input)
             && body.block.syntax_eq(&body_pretty.block)
-            && eq_else(&body.block_else, &body_pretty.block_else)
+            && body.block_else.syntax_eq(&body_pretty.block_else)
         {
             // Stable syntax retains the previous source and proof metadata
             return Ok(body);

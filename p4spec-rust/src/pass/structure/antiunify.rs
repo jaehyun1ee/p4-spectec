@@ -240,10 +240,10 @@ fn antiunify_case_exp(
     for (exp_template, exp) in exps_template.iter().zip(exps) {
         exps_unified.push(antiunify_exp(frees, uenv, exp_template, exp)?);
     }
-    let mut exp_idx = 0;
+    let mut num_idx = 0;
     let not_exp_template = not_exp_template.map(|_| {
-        let exp = exps_unified[exp_idx].clone();
-        exp_idx += 1;
+        let exp = exps_unified[num_idx].clone();
+        num_idx += 1;
         exp
     });
     Ok(ExpKind::Case(Box::new(not_exp_template)))
@@ -349,11 +349,11 @@ fn antiunify_exps_group(
     }
     let mut uenv_acc = UEnv::default();
     let mut exps_template = vec![];
-    for (exp_idx, exp_head) in exps_head.iter().enumerate() {
+    for (num_idx, exp_head) in exps_head.iter().enumerate() {
         let mut uenv = UEnv::default();
         let mut exp_template = exp_head.clone();
         for exps in exps_tail {
-            exp_template = antiunify_exp(&mut frees, &mut uenv, &exp_template, &exps[exp_idx])?;
+            exp_template = antiunify_exp(&mut frees, &mut uenv, &exp_template, &exps[num_idx])?;
         }
         uenv_acc.extend(uenv)?;
         exps_template.push(exp_template);
@@ -451,7 +451,7 @@ fn antiunify_args_group(
     }
     let mut uenv_acc = UEnv::default();
     let mut args_template = vec![];
-    for (arg_idx, arg_head) in args_head.iter().enumerate() {
+    for (num_idx, arg_head) in args_head.iter().enumerate() {
         let mut uenv = UEnv::default();
         let mut arg_template = arg_head.clone();
         for clause in clauses_tail {
@@ -459,7 +459,7 @@ fn antiunify_args_group(
                 &mut frees,
                 &mut uenv,
                 &arg_template,
-                &clause.node.args[arg_idx],
+                &clause.node.args[num_idx],
             )?;
         }
         uenv_acc.extend(uenv)?;
