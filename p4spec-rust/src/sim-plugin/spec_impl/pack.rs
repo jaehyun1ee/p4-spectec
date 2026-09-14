@@ -5,13 +5,12 @@ use num_bigint::BigInt;
 use crate::{
     lang::{
         common::source::Span,
-        data::{
-            typ,
-            value::{Value, ValueArena, make},
-        },
+        data::value::{Value, ValueArena, make},
     },
     runner::ExternError,
 };
+
+// == P4 values
 
 /// `D int`
 pub fn p4_arbitrary_int(arena: &mut ValueArena, int: BigInt) -> Result<Value, ExternError> {
@@ -47,20 +46,20 @@ pub fn p4_fixed_bit(
     )?)
 }
 
-pub fn return_result(arena: &mut ValueArena, value: Option<Value>) -> Result<Value, ExternError> {
-    let typ = typ::make::opt(typ::make::var(
-        crate::phrase!(node: "value".to_owned(), span: Span::default()),
-        Vec::new(),
-    ));
-    let value_opt = make::opt(arena, typ.node.into(), value, Span::default())?;
+/// `tid . id`
+pub fn p4_enum(arena: &mut ValueArena, id_enum: &str, id: &str) -> Result<Value, ExternError> {
+    let value_enum = make::text(arena, id_enum.to_owned(), Span::default())?;
+    let value_id = make::text(arena, id.to_owned(), Span::default())?;
     Ok(make::case_shaped_(
         arena,
-        "RETURN value?",
-        vec![value_opt],
-        "returnResult",
+        "tid '.' id",
+        vec![value_enum, value_id],
+        "value",
         Span::default(),
     )?)
 }
+
+// == Parser transitions
 
 pub fn reject_transition(arena: &mut ValueArena, name: &str) -> Result<Value, ExternError> {
     let value_name = make::text(arena, name.to_owned(), Span::default())?;
@@ -76,19 +75,6 @@ pub fn reject_transition(arena: &mut ValueArena, name: &str) -> Result<Value, Ex
         "REJECT errorValue",
         vec![value_err],
         "rejectTransitionResult",
-        Span::default(),
-    )?)
-}
-
-/// `tid . id`
-pub fn p4_enum(arena: &mut ValueArena, id_enum: &str, id: &str) -> Result<Value, ExternError> {
-    let value_enum = make::text(arena, id_enum.to_owned(), Span::default())?;
-    let value_id = make::text(arena, id.to_owned(), Span::default())?;
-    Ok(make::case_shaped_(
-        arena,
-        "tid '.' id",
-        vec![value_enum, value_id],
-        "value",
         Span::default(),
     )?)
 }

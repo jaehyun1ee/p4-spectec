@@ -5,29 +5,19 @@ use super::{packet, pipe};
 use crate::sim_plugin::{
     core::object::PacketIn,
     hash as checksum,
-    spec_impl::{
-        func, pack,
-        rel::{self, CallResult},
-        unpack,
-    },
+    spec_impl::{func, pack, rel, unpack},
 };
 use crate::{
-    lang::data::value::{Value, ValueArena},
+    lang::{
+        common::source::Span,
+        data::{
+            typ,
+            value::{Value, ValueArena, make},
+        },
+    },
     runner::{Extern, ExternError, Interface, Interpreter, RunnerContext},
 };
 use num_bigint::BigInt;
-
-fn finish(
-    arena: &mut ValueArena,
-    value_ctx: Value,
-    value_arch: Value,
-) -> Result<CallResult, ExternError> {
-    Ok(CallResult {
-        value_ctx,
-        value_arch,
-        value_call_result: pack::return_result(arena, None)?,
-    })
-}
 
 /// Calling digest causes a message containing the values specified in
 /// the data parameter to be sent to the control plane software.  It is
@@ -56,14 +46,28 @@ pub fn digest<Interp, Iface, Exn>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
     value_ctx: Value,
     value_arch: Value,
-) -> Result<CallResult, Interp::Error>
+) -> Result<(Value, Value, Value), Interp::Error>
 where
     Iface: Interface,
     Exn: Extern,
     Interp: Interpreter<Iface, Exn>,
 {
     // No-op in the source simulator
-    Ok(finish(ctx.arena_mut(), value_ctx, value_arch)?)
+    let typ = typ::make::opt(typ::make::var(
+        crate::phrase!(node: "value".to_owned(), span: Span::default()),
+        Vec::new(),
+    ));
+    let value_opt = make::opt(ctx.arena_mut(), typ.node.into(), None, Span::default())
+        .map_err(ExternError::from)?;
+    let value_call_result = make::case_shaped_(
+        ctx.arena_mut(),
+        "RETURN value?",
+        vec![value_opt],
+        "returnResult",
+        Span::default(),
+    )
+    .map_err(ExternError::from)?;
+    Ok((value_ctx, value_arch, value_call_result))
 }
 
 /// mark_to_drop(standard_metadata) is a primitive action that modifies
@@ -80,7 +84,7 @@ pub fn mark_to_drop<Interp, Iface, Exn>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
     value_ctx: Value,
     value_arch: Value,
-) -> Result<CallResult, Interp::Error>
+) -> Result<(Value, Value, Value), Interp::Error>
 where
     Iface: Interface,
     Exn: Extern,
@@ -104,7 +108,21 @@ where
         "mcast_grp",
         value_mcast_grp,
     )?;
-    Ok(finish(ctx.arena_mut(), value_ctx, value_arch)?)
+    let typ = typ::make::opt(typ::make::var(
+        crate::phrase!(node: "value".to_owned(), span: Span::default()),
+        Vec::new(),
+    ));
+    let value_opt = make::opt(ctx.arena_mut(), typ.node.into(), None, Span::default())
+        .map_err(ExternError::from)?;
+    let value_call_result = make::case_shaped_(
+        ctx.arena_mut(),
+        "RETURN value?",
+        vec![value_opt],
+        "returnResult",
+        Span::default(),
+    )
+    .map_err(ExternError::from)?;
+    Ok((value_ctx, value_arch, value_call_result))
 }
 
 /// Calculate a hash function of the value specified by the data
@@ -128,7 +146,7 @@ pub fn hash<Interp, Iface, Exn>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
     value_ctx: Value,
     value_arch: Value,
-) -> Result<CallResult, Interp::Error>
+) -> Result<(Value, Value, Value), Interp::Error>
 where
     Iface: Interface,
     Exn: Extern,
@@ -146,7 +164,21 @@ where
     let value_result = func::cast_op(ctx, value_typ, value_result)?;
     let value_ctx =
         rel::lvalue_write_var_local(ctx, value_ctx, value_arch, "result", value_result)?;
-    Ok(finish(ctx.arena_mut(), value_ctx, value_arch)?)
+    let typ = typ::make::opt(typ::make::var(
+        crate::phrase!(node: "value".to_owned(), span: Span::default()),
+        Vec::new(),
+    ));
+    let value_opt = make::opt(ctx.arena_mut(), typ.node.into(), None, Span::default())
+        .map_err(ExternError::from)?;
+    let value_call_result = make::case_shaped_(
+        ctx.arena_mut(),
+        "RETURN value?",
+        vec![value_opt],
+        "returnResult",
+        Span::default(),
+    )
+    .map_err(ExternError::from)?;
+    Ok((value_ctx, value_arch, value_call_result))
 }
 
 fn compute_checksum<Interp, Iface, Exn>(
@@ -187,7 +219,7 @@ fn do_verify_checksum<Interp, Iface, Exn>(
     value_ctx: Value,
     value_arch: Value,
     payload: Option<&PacketIn>,
-) -> Result<CallResult, Interp::Error>
+) -> Result<(Value, Value, Value), Interp::Error>
 where
     Iface: Interface,
     Exn: Extern,
@@ -195,7 +227,21 @@ where
 {
     let value_condition = func::find_var_e_local(ctx, value_ctx, "condition")?;
     if !unpack::p4_bool(ctx.arena(), &value_condition)? {
-        return Ok(finish(ctx.arena_mut(), value_ctx, value_arch)?);
+        let typ = typ::make::opt(typ::make::var(
+            crate::phrase!(node: "value".to_owned(), span: Span::default()),
+            Vec::new(),
+        ));
+        let value_opt = make::opt(ctx.arena_mut(), typ.node.into(), None, Span::default())
+            .map_err(ExternError::from)?;
+        let value_call_result = make::case_shaped_(
+            ctx.arena_mut(),
+            "RETURN value?",
+            vec![value_opt],
+            "returnResult",
+            Span::default(),
+        )
+        .map_err(ExternError::from)?;
+        return Ok((value_ctx, value_arch, value_call_result));
     }
     let value_checksum = func::find_var_e_local(ctx, value_ctx, "checksum")?;
     let int_expect = unpack::p4_fixed_bit(ctx.arena(), &value_checksum)?.int;
@@ -213,7 +259,21 @@ where
             value_error,
         )?
     };
-    Ok(finish(ctx.arena_mut(), value_ctx, value_arch)?)
+    let typ = typ::make::opt(typ::make::var(
+        crate::phrase!(node: "value".to_owned(), span: Span::default()),
+        Vec::new(),
+    ));
+    let value_opt = make::opt(ctx.arena_mut(), typ.node.into(), None, Span::default())
+        .map_err(ExternError::from)?;
+    let value_call_result = make::case_shaped_(
+        ctx.arena_mut(),
+        "RETURN value?",
+        vec![value_opt],
+        "returnResult",
+        Span::default(),
+    )
+    .map_err(ExternError::from)?;
+    Ok((value_ctx, value_arch, value_call_result))
 }
 
 /// Verifies the checksum of the supplied data.  If this method detects
@@ -254,7 +314,7 @@ pub fn verify_checksum<Interp, Iface, Exn>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
     value_ctx: Value,
     value_arch: Value,
-) -> Result<CallResult, Interp::Error>
+) -> Result<(Value, Value, Value), Interp::Error>
 where
     Iface: Interface,
     Exn: Extern,
@@ -268,7 +328,7 @@ pub fn verify_checksum_with_payload<Interp, Iface, Exn>(
     value_ctx: Value,
     value_arch: Value,
     packet_in: &PacketIn,
-) -> Result<CallResult, Interp::Error>
+) -> Result<(Value, Value, Value), Interp::Error>
 where
     Iface: Interface,
     Exn: Extern,
@@ -282,7 +342,7 @@ fn do_update_checksum<Interp, Iface, Exn>(
     value_ctx: Value,
     value_arch: Value,
     payload: Option<&PacketIn>,
-) -> Result<CallResult, Interp::Error>
+) -> Result<(Value, Value, Value), Interp::Error>
 where
     Iface: Interface,
     Exn: Extern,
@@ -290,7 +350,21 @@ where
 {
     let value_condition = func::find_var_e_local(ctx, value_ctx, "condition")?;
     if !unpack::p4_bool(ctx.arena(), &value_condition)? {
-        return Ok(finish(ctx.arena_mut(), value_ctx, value_arch)?);
+        let typ = typ::make::opt(typ::make::var(
+            crate::phrase!(node: "value".to_owned(), span: Span::default()),
+            Vec::new(),
+        ));
+        let value_opt = make::opt(ctx.arena_mut(), typ.node.into(), None, Span::default())
+            .map_err(ExternError::from)?;
+        let value_call_result = make::case_shaped_(
+            ctx.arena_mut(),
+            "RETURN value?",
+            vec![value_opt],
+            "returnResult",
+            Span::default(),
+        )
+        .map_err(ExternError::from)?;
+        return Ok((value_ctx, value_arch, value_call_result));
     }
     let int = compute_checksum(ctx, value_ctx, payload)?;
     let value_typ = func::find_type_e_local(ctx, value_ctx, "O")?;
@@ -298,7 +372,21 @@ where
     let value_checksum = func::cast_op(ctx, value_typ, value_checksum)?;
     let value_ctx =
         rel::lvalue_write_var_local(ctx, value_ctx, value_arch, "checksum", value_checksum)?;
-    Ok(finish(ctx.arena_mut(), value_ctx, value_arch)?)
+    let typ = typ::make::opt(typ::make::var(
+        crate::phrase!(node: "value".to_owned(), span: Span::default()),
+        Vec::new(),
+    ));
+    let value_opt = make::opt(ctx.arena_mut(), typ.node.into(), None, Span::default())
+        .map_err(ExternError::from)?;
+    let value_call_result = make::case_shaped_(
+        ctx.arena_mut(),
+        "RETURN value?",
+        vec![value_opt],
+        "returnResult",
+        Span::default(),
+    )
+    .map_err(ExternError::from)?;
+    Ok((value_ctx, value_arch, value_call_result))
 }
 
 /// Computes the checksum of the supplied data and writes it to the
@@ -336,7 +424,7 @@ pub fn update_checksum<Interp, Iface, Exn>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
     value_ctx: Value,
     value_arch: Value,
-) -> Result<CallResult, Interp::Error>
+) -> Result<(Value, Value, Value), Interp::Error>
 where
     Iface: Interface,
     Exn: Extern,
@@ -350,7 +438,7 @@ pub fn update_checksum_with_payload<Interp, Iface, Exn>(
     value_ctx: Value,
     value_arch: Value,
     packet_in: &PacketIn,
-) -> Result<CallResult, Interp::Error>
+) -> Result<(Value, Value, Value), Interp::Error>
 where
     Iface: Interface,
     Exn: Extern,
@@ -399,7 +487,7 @@ pub fn resubmit_preserving_field_list<Interp, Iface, Exn>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
     value_ctx: Value,
     value_arch: Value,
-) -> Result<CallResult, Interp::Error>
+) -> Result<(Value, Value, Value), Interp::Error>
 where
     Iface: Interface,
     Exn: Extern,
@@ -410,7 +498,21 @@ where
     let mut arch = pipe::get_arch_state(ctx, value_arch)?;
     arch.action.resubmit_opt = Some(idx);
     let value_arch = pipe::set_arch_state(ctx, value_arch, &arch)?;
-    Ok(finish(ctx.arena_mut(), value_ctx, value_arch)?)
+    let typ = typ::make::opt(typ::make::var(
+        crate::phrase!(node: "value".to_owned(), span: Span::default()),
+        Vec::new(),
+    ));
+    let value_opt = make::opt(ctx.arena_mut(), typ.node.into(), None, Span::default())
+        .map_err(ExternError::from)?;
+    let value_call_result = make::case_shaped_(
+        ctx.arena_mut(),
+        "RETURN value?",
+        vec![value_opt],
+        "returnResult",
+        Span::default(),
+    )
+    .map_err(ExternError::from)?;
+    Ok((value_ctx, value_arch, value_call_result))
 }
 
 /// Calling recirculate_preserving_field_list during execution of the
@@ -439,7 +541,7 @@ pub fn recirculate_preserving_field_list<Interp, Iface, Exn>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
     value_ctx: Value,
     value_arch: Value,
-) -> Result<CallResult, Interp::Error>
+) -> Result<(Value, Value, Value), Interp::Error>
 where
     Iface: Interface,
     Exn: Extern,
@@ -450,7 +552,21 @@ where
     let mut arch = pipe::get_arch_state(ctx, value_arch)?;
     arch.action.recirculate_opt = Some(idx);
     let value_arch = pipe::set_arch_state(ctx, value_arch, &arch)?;
-    Ok(finish(ctx.arena_mut(), value_ctx, value_arch)?)
+    let typ = typ::make::opt(typ::make::var(
+        crate::phrase!(node: "value".to_owned(), span: Span::default()),
+        Vec::new(),
+    ));
+    let value_opt = make::opt(ctx.arena_mut(), typ.node.into(), None, Span::default())
+        .map_err(ExternError::from)?;
+    let value_call_result = make::case_shaped_(
+        ctx.arena_mut(),
+        "RETURN value?",
+        vec![value_opt],
+        "returnResult",
+        Span::default(),
+    )
+    .map_err(ExternError::from)?;
+    Ok((value_ctx, value_arch, value_call_result))
 }
 
 /// Calling clone_preserving_field_list during execution of the ingress
@@ -492,7 +608,7 @@ pub fn clone_preserving_field_list<Interp, Iface, Exn>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
     value_ctx: Value,
     value_arch: Value,
-) -> Result<CallResult, Interp::Error>
+) -> Result<(Value, Value, Value), Interp::Error>
 where
     Iface: Interface,
     Exn: Extern,
@@ -509,7 +625,21 @@ where
         &value_idx,
     )?);
     let value_arch = pipe::set_arch_state(ctx, value_arch, &arch)?;
-    Ok(finish(ctx.arena_mut(), value_ctx, value_arch)?)
+    let typ = typ::make::opt(typ::make::var(
+        crate::phrase!(node: "value".to_owned(), span: Span::default()),
+        Vec::new(),
+    ));
+    let value_opt = make::opt(ctx.arena_mut(), typ.node.into(), None, Span::default())
+        .map_err(ExternError::from)?;
+    let value_call_result = make::case_shaped_(
+        ctx.arena_mut(),
+        "RETURN value?",
+        vec![value_opt],
+        "returnResult",
+        Span::default(),
+    )
+    .map_err(ExternError::from)?;
+    Ok((value_ctx, value_arch, value_call_result))
 }
 
 /// Log user defined messages
@@ -522,7 +652,7 @@ pub fn log_msg<Interp, Iface, Exn>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
     value_ctx: Value,
     value_arch: Value,
-) -> Result<CallResult, Interp::Error>
+) -> Result<(Value, Value, Value), Interp::Error>
 where
     Iface: Interface,
     Exn: Extern,
@@ -531,7 +661,21 @@ where
     let value_msg = func::find_var_e_local(ctx, value_ctx, "msg")?;
     let msg = unpack::p4_string(ctx.arena(), &value_msg)?;
     println!("{msg}");
-    Ok(finish(ctx.arena_mut(), value_ctx, value_arch)?)
+    let typ = typ::make::opt(typ::make::var(
+        crate::phrase!(node: "value".to_owned(), span: Span::default()),
+        Vec::new(),
+    ));
+    let value_opt = make::opt(ctx.arena_mut(), typ.node.into(), None, Span::default())
+        .map_err(ExternError::from)?;
+    let value_call_result = make::case_shaped_(
+        ctx.arena_mut(),
+        "RETURN value?",
+        vec![value_opt],
+        "returnResult",
+        Span::default(),
+    )
+    .map_err(ExternError::from)?;
+    Ok((value_ctx, value_arch, value_call_result))
 }
 
 pub fn format_braces(arena: &ValueArena, fmt: &str, args: &[Value]) -> Result<String, ExternError> {
@@ -568,7 +712,7 @@ pub fn log_msg_format<Interp, Iface, Exn>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
     value_ctx: Value,
     value_arch: Value,
-) -> Result<CallResult, Interp::Error>
+) -> Result<(Value, Value, Value), Interp::Error>
 where
     Iface: Interface,
     Exn: Extern,
@@ -580,5 +724,19 @@ where
     let values = unpack::p4_tuple(ctx.arena(), &value_data)?;
     let text = format_braces(ctx.arena(), &msg, &values)?;
     println!("{text}");
-    Ok(finish(ctx.arena_mut(), value_ctx, value_arch)?)
+    let typ = typ::make::opt(typ::make::var(
+        crate::phrase!(node: "value".to_owned(), span: Span::default()),
+        Vec::new(),
+    ));
+    let value_opt = make::opt(ctx.arena_mut(), typ.node.into(), None, Span::default())
+        .map_err(ExternError::from)?;
+    let value_call_result = make::case_shaped_(
+        ctx.arena_mut(),
+        "RETURN value?",
+        vec![value_opt],
+        "returnResult",
+        Span::default(),
+    )
+    .map_err(ExternError::from)?;
+    Ok((value_ctx, value_arch, value_call_result))
 }

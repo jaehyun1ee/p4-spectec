@@ -14,13 +14,9 @@ fn test_meter_returns_green_without_reading_inputs() {
             .execute_color_blind(&mut runner.context(), value_ctx, value_arch)
             .unwrap(),
     ] {
-        assert_eq!(output.object, meter);
+        assert_eq!(output.0, meter);
         assert_eq!(
-            unpack::p4_enum(
-                runner.arena(),
-                &returned(runner.arena(), output.result.value_call_result)
-            )
-            .unwrap(),
+            unpack::p4_enum(runner.arena(), &returned(runner.arena(), output.3)).unwrap(),
             ("PSA_MeterColor_t".to_owned(), "GREEN".to_owned())
         );
     }

@@ -7,31 +7,25 @@ fn test_successive_extracts_and_short_rejection_preserve_state() {
     let output_a = pkt
         .extract(&mut runner.context(), value_ctx, value_arch)
         .unwrap();
-    assert_eq!(output_a.object.idx, 4);
+    assert_eq!(output_a.0.idx, 4);
     assert_eq!(
-        bits(runner.arena(), &output_a.result.value_ctx),
+        bits(runner.arena(), &output_a.1),
         [true, false, true, false]
     );
     let output_b = output_a
-        .object
-        .extract(&mut runner.context(), output_a.result.value_ctx, value_arch)
+        .0
+        .extract(&mut runner.context(), output_a.1, value_arch)
         .unwrap();
-    assert_eq!(output_b.object.idx, 8);
-    assert_eq!(
-        bits(runner.arena(), &output_b.result.value_ctx),
-        [true, false, true, true]
-    );
+    assert_eq!(output_b.0.idx, 8);
+    assert_eq!(bits(runner.arena(), &output_b.1), [true, false, true, true]);
     let output_c = output_b
-        .object
-        .extract(&mut runner.context(), output_b.result.value_ctx, value_arch)
+        .0
+        .extract(&mut runner.context(), output_b.1, value_arch)
         .unwrap();
-    assert_eq!(output_c.object, output_b.object);
-    assert_eq!(output_c.result.value_ctx, output_b.result.value_ctx);
-    assert_eq!(output_c.result.value_arch, value_arch);
-    assert_eq!(
-        reject(runner.arena(), &output_c.result.value_call_result),
-        "PacketTooShort"
-    );
+    assert_eq!(output_c.0, output_b.0);
+    assert_eq!(output_c.1, output_b.1);
+    assert_eq!(output_c.2, value_arch);
+    assert_eq!(reject(runner.arena(), &output_c.3), "PacketTooShort");
     let ctx = runner.context();
     let calls = &ctx.interp().calls;
     let (_, values) = calls
@@ -54,10 +48,8 @@ fn test_lookahead_keeps_cursor_and_defaults_before_short_check() {
     let output = pkt
         .lookahead(&mut runner.context(), value_ctx, value_arch)
         .unwrap();
-    assert_eq!(output.object, pkt);
-    let value_opt = *get::case(runner.arena(), &output.result.value_call_result)
-        .unwrap()
-        .args()[0];
+    assert_eq!(output.0, pkt);
+    let value_opt = *get::case(runner.arena(), &output.3).unwrap().args()[0];
     let value_hdr = get::opt(runner.arena(), &value_opt).unwrap().unwrap();
     assert_eq!(bits(runner.arena(), &value_hdr), [true, false, true, false]);
     runner.context().interp_mut().calls.clear();
@@ -65,10 +57,7 @@ fn test_lookahead_keeps_cursor_and_defaults_before_short_check() {
     let output = pkt
         .lookahead(&mut runner.context(), value_ctx, value_arch)
         .unwrap();
-    assert_eq!(
-        reject(runner.arena(), &output.result.value_call_result),
-        "PacketTooShort"
-    );
+    assert_eq!(reject(runner.arena(), &output.3), "PacketTooShort");
     let names: Vec<_> = runner
         .context()
         .interp()
@@ -106,19 +95,16 @@ fn test_variable_extract_checks_alignment_then_packet_then_header() {
         let output = pkt
             .extract_varsize(&mut runner.context(), value_ctx, value_arch)
             .unwrap();
-        assert_eq!(output.object, pkt);
-        assert_eq!(output.result.value_ctx, value_ctx);
-        assert_eq!(
-            reject(runner.arena(), &output.result.value_call_result),
-            signal
-        );
+        assert_eq!(output.0, pkt);
+        assert_eq!(output.1, value_ctx);
+        assert_eq!(reject(runner.arena(), &output.3), signal);
     }
     runner.context().interp_mut().size_max = 8;
     let output = PacketIn::init("AB")
         .unwrap()
         .extract_varsize(&mut runner.context(), value_ctx, value_arch)
         .unwrap();
-    assert_eq!(output.object.idx, 8);
+    assert_eq!(output.0.idx, 8);
     let ctx = runner.context();
     let (_, values) = ctx
         .interp()

@@ -1,10 +1,15 @@
-use crate::sim_plugin::spec_impl::rel::{ObjectResult, finish};
 use crate::sim_plugin::{
     hash,
     spec_impl::{func, pack, unpack},
 };
 use crate::{
-    lang::data::value::{Value, ValueArena},
+    lang::{
+        common::source::Span,
+        data::{
+            typ,
+            value::{Value, ValueArena, make},
+        },
+    },
     runner::{Extern, ExternError, Interface, Interpreter, RunnerContext},
 };
 use num_bigint::BigInt;
@@ -54,7 +59,7 @@ impl HashExtern {
         ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
         value_ctx: Value,
         value_arch: Value,
-    ) -> Result<ObjectResult<Self>, Interp::Error>
+    ) -> Result<(Self, Value, Value, Value), Interp::Error>
     where
         Iface: Interface,
         Exn: Extern,
@@ -81,7 +86,7 @@ impl HashExtern {
         ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
         value_ctx: Value,
         value_arch: Value,
-    ) -> Result<ObjectResult<Self>, Interp::Error>
+    ) -> Result<(Self, Value, Value, Value), Interp::Error>
     where
         Iface: Interface,
         Exn: Extern,
@@ -107,7 +112,7 @@ impl HashExtern {
         value_ctx: Value,
         value_arch: Value,
         int_hash: BigInt,
-    ) -> Result<ObjectResult<Self>, Interp::Error>
+    ) -> Result<(Self, Value, Value, Value), Interp::Error>
     where
         Iface: Interface,
         Exn: Extern,
@@ -116,12 +121,25 @@ impl HashExtern {
         let value_typ = func::find_type_e_local(ctx, value_ctx, "O")?;
         let value_result = pack::p4_arbitrary_int(ctx.arena_mut(), int_hash)?;
         let value_result = func::cast_op(ctx, value_typ, value_result)?;
-        Ok(finish(
+        let typ = typ::make::opt(typ::make::var(
+            crate::phrase!(node: "value".to_owned(), span: Span::default()),
+            Vec::new(),
+        ));
+        let value_opt = make::opt(
             ctx.arena_mut(),
-            self,
-            value_ctx,
-            value_arch,
+            typ.node.into(),
             Some(value_result),
-        )?)
+            Span::default(),
+        )
+        .map_err(ExternError::from)?;
+        let value_call_result = make::case_shaped_(
+            ctx.arena_mut(),
+            "RETURN value?",
+            vec![value_opt],
+            "returnResult",
+            Span::default(),
+        )
+        .map_err(ExternError::from)?;
+        Ok((self, value_ctx, value_arch, value_call_result))
     }
 }

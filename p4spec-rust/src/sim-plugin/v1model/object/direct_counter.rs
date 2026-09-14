@@ -1,7 +1,12 @@
-use crate::sim_plugin::spec_impl::rel::{ObjectResult, finish};
 use crate::sim_plugin::{core::object::PacketIn, spec_impl::unpack};
 use crate::{
-    lang::data::value::{Value, ValueArena},
+    lang::{
+        common::source::Span,
+        data::{
+            typ,
+            value::{Value, ValueArena, make},
+        },
+    },
     runner::{Extern, ExternError, Interface, Interpreter, RunnerContext},
 };
 use num_bigint::BigInt;
@@ -72,7 +77,7 @@ impl DirectCounter {
         value_ctx: Value,
         value_arch: Value,
         packet_in: &PacketIn,
-    ) -> Result<ObjectResult<Self>, Interp::Error>
+    ) -> Result<(Self, Value, Value, Value), Interp::Error>
     where
         Iface: Interface,
         Exn: Extern,
@@ -86,6 +91,20 @@ impl DirectCounter {
                 *count_bytes += BigInt::from(packet_in.len);
             }
         }
-        Ok(finish(ctx.arena_mut(), self, value_ctx, value_arch, None)?)
+        let typ = typ::make::opt(typ::make::var(
+            crate::phrase!(node: "value".to_owned(), span: Span::default()),
+            Vec::new(),
+        ));
+        let value_opt = make::opt(ctx.arena_mut(), typ.node.into(), None, Span::default())
+            .map_err(ExternError::from)?;
+        let value_call_result = make::case_shaped_(
+            ctx.arena_mut(),
+            "RETURN value?",
+            vec![value_opt],
+            "returnResult",
+            Span::default(),
+        )
+        .map_err(ExternError::from)?;
+        Ok((self, value_ctx, value_arch, value_call_result))
     }
 }

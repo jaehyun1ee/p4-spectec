@@ -1,3 +1,3 @@
 pub mod counter_array;
 
-pub use counter_array::{CounterArray, CounterResult};
+pub use counter_array::CounterArray;

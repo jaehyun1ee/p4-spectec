@@ -1,11 +1,16 @@
-use crate::sim_plugin::spec_impl::rel::{ObjectResult, finish};
 use crate::sim_plugin::{
     hash,
     spec_impl::{func, pack, unpack},
 };
 use crate::{
-    lang::data::value::Value,
-    runner::{Extern, Interface, Interpreter, RunnerContext},
+    lang::{
+        common::source::Span,
+        data::{
+            typ,
+            value::{Value, make},
+        },
+    },
+    runner::{Extern, ExternError, Interface, Interpreter, RunnerContext},
 };
 use num_bigint::BigInt;
 use num_traits::Zero;
@@ -44,19 +49,27 @@ impl InternetChecksum {
         ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
         value_ctx: Value,
         value_arch: Value,
-    ) -> Result<ObjectResult<Self>, Interp::Error>
+    ) -> Result<(Self, Value, Value, Value), Interp::Error>
     where
         Iface: Interface,
         Exn: Extern,
         Interp: Interpreter<Iface, Exn>,
     {
-        Ok(finish(
+        let typ = typ::make::opt(typ::make::var(
+            crate::phrase!(node: "value".to_owned(), span: Span::default()),
+            Vec::new(),
+        ));
+        let value_opt = make::opt(ctx.arena_mut(), typ.node.into(), None, Span::default())
+            .map_err(ExternError::from)?;
+        let value_call_result = make::case_shaped_(
             ctx.arena_mut(),
-            Self::init(),
-            value_ctx,
-            value_arch,
-            None,
-        )?)
+            "RETURN value?",
+            vec![value_opt],
+            "returnResult",
+            Span::default(),
+        )
+        .map_err(ExternError::from)?;
+        Ok((Self::init(), value_ctx, value_arch, value_call_result))
     }
 
     /// Add data to the checksum; `data` must be a multiple of 16 bits long
@@ -67,7 +80,7 @@ impl InternetChecksum {
         ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
         value_ctx: Value,
         value_arch: Value,
-    ) -> Result<ObjectResult<Self>, Interp::Error>
+    ) -> Result<(Self, Value, Value, Value), Interp::Error>
     where
         Iface: Interface,
         Exn: Extern,
@@ -85,7 +98,7 @@ impl InternetChecksum {
         ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
         value_ctx: Value,
         value_arch: Value,
-    ) -> Result<ObjectResult<Self>, Interp::Error>
+    ) -> Result<(Self, Value, Value, Value), Interp::Error>
     where
         Iface: Interface,
         Exn: Extern,
@@ -100,7 +113,7 @@ impl InternetChecksum {
         value_ctx: Value,
         value_arch: Value,
         algo: &str,
-    ) -> Result<ObjectResult<Self>, Interp::Error>
+    ) -> Result<(Self, Value, Value, Value), Interp::Error>
     where
         Iface: Interface,
         Exn: Extern,
@@ -110,7 +123,21 @@ impl InternetChecksum {
         let values = unpack::p4_tuple(ctx.arena(), &value_data)?;
         let int = hash::compute_checksum(algo, Some(&self.int), ctx.arena(), &values)?;
         self.int = hash::bitwise_neg(&int, &16.into())?;
-        Ok(finish(ctx.arena_mut(), self, value_ctx, value_arch, None)?)
+        let typ = typ::make::opt(typ::make::var(
+            crate::phrase!(node: "value".to_owned(), span: Span::default()),
+            Vec::new(),
+        ));
+        let value_opt = make::opt(ctx.arena_mut(), typ.node.into(), None, Span::default())
+            .map_err(ExternError::from)?;
+        let value_call_result = make::case_shaped_(
+            ctx.arena_mut(),
+            "RETURN value?",
+            vec![value_opt],
+            "returnResult",
+            Span::default(),
+        )
+        .map_err(ExternError::from)?;
+        Ok((self, value_ctx, value_arch, value_call_result))
     }
 
     /// Get the checksum for data added and not removed since the last clear
@@ -121,7 +148,7 @@ impl InternetChecksum {
         ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
         value_ctx: Value,
         value_arch: Value,
-    ) -> Result<ObjectResult<Self>, Interp::Error>
+    ) -> Result<(Self, Value, Value, Value), Interp::Error>
     where
         Iface: Interface,
         Exn: Extern,
@@ -140,20 +167,33 @@ impl InternetChecksum {
         ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
         value_ctx: Value,
         value_arch: Value,
-    ) -> Result<ObjectResult<Self>, Interp::Error>
+    ) -> Result<(Self, Value, Value, Value), Interp::Error>
     where
         Iface: Interface,
         Exn: Extern,
         Interp: Interpreter<Iface, Exn>,
     {
         let value_checksum = pack::p4_fixed_bit(ctx.arena_mut(), 16.into(), self.int.clone())?;
-        Ok(finish(
+        let typ = typ::make::opt(typ::make::var(
+            crate::phrase!(node: "value".to_owned(), span: Span::default()),
+            Vec::new(),
+        ));
+        let value_opt = make::opt(
             ctx.arena_mut(),
-            self,
-            value_ctx,
-            value_arch,
+            typ.node.into(),
             Some(value_checksum),
-        )?)
+            Span::default(),
+        )
+        .map_err(ExternError::from)?;
+        let value_call_result = make::case_shaped_(
+            ctx.arena_mut(),
+            "RETURN value?",
+            vec![value_opt],
+            "returnResult",
+            Span::default(),
+        )
+        .map_err(ExternError::from)?;
+        Ok((self, value_ctx, value_arch, value_call_result))
     }
 
     /// Restore state returned by an earlier `get_state` call on this
@@ -165,7 +205,7 @@ impl InternetChecksum {
         ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
         value_ctx: Value,
         value_arch: Value,
-    ) -> Result<ObjectResult<Self>, Interp::Error>
+    ) -> Result<(Self, Value, Value, Value), Interp::Error>
     where
         Iface: Interface,
         Exn: Extern,
@@ -173,6 +213,20 @@ impl InternetChecksum {
     {
         let value_state = func::find_var_e_local(ctx, value_ctx, "checksum_state")?;
         self.int = unpack::p4_fixed_bit(ctx.arena(), &value_state)?.int;
-        Ok(finish(ctx.arena_mut(), self, value_ctx, value_arch, None)?)
+        let typ = typ::make::opt(typ::make::var(
+            crate::phrase!(node: "value".to_owned(), span: Span::default()),
+            Vec::new(),
+        ));
+        let value_opt = make::opt(ctx.arena_mut(), typ.node.into(), None, Span::default())
+            .map_err(ExternError::from)?;
+        let value_call_result = make::case_shaped_(
+            ctx.arena_mut(),
+            "RETURN value?",
+            vec![value_opt],
+            "returnResult",
+            Span::default(),
+        )
+        .map_err(ExternError::from)?;
+        Ok((self, value_ctx, value_arch, value_call_result))
     }
 }

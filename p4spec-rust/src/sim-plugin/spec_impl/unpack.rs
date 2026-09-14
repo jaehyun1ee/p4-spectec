@@ -9,6 +9,8 @@ use crate::{
     runner::ExternError,
 };
 
+// == P4 values
+
 pub fn p4_bool(arena: &ValueArena, value: &Value) -> Result<bool, ExternError> {
     get::matches! { arena,
         value,
@@ -65,6 +67,8 @@ pub fn p4_tuple(arena: &ValueArena, value: &Value) -> Result<Vec<Value>, ExternE
     }
 }
 
+// - Numbers
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PrecisionNumber {
     pub width: BigInt,
@@ -87,13 +91,6 @@ pub fn p4_fixed_bit(arena: &ValueArena, value: &Value) -> Result<PrecisionNumber
         },
         _ => Err(ExternError::Failure("expected P4 fixed-bit value".to_owned())),
     }
-}
-
-pub fn size(int: &BigInt) -> Result<usize, ExternError> {
-    int.to_u64()
-        .filter(|size_packet| *size_packet <= ((1_u64 << 62) - 1))
-        .and_then(|size_packet| usize::try_from(size_packet).ok())
-        .ok_or_else(|| ExternError::Failure(format!("invalid packet size: {int}")))
 }
 
 pub fn p4_precision_number(
@@ -124,18 +121,12 @@ pub fn p4_precision_number(
     }
 }
 
+// == Arguments
+
 #[derive(Clone, Debug)]
 pub struct ArgumentValue {
     pub name: String,
     pub value: Value,
-}
-
-/// Finds the first argument with the requested name
-pub fn find_arg(args: &[ArgumentValue], name: &str) -> Result<Value, ExternError> {
-    args.iter()
-        .find(|arg| arg.name == name)
-        .map(|arg| arg.value)
-        .ok_or_else(|| ExternError::Failure(format!("argument not found: {name}")))
 }
 
 pub fn assoc_args(
@@ -164,6 +155,16 @@ pub fn assoc_args(
         })
         .collect())
 }
+
+/// Finds the first argument with the requested name
+pub fn find_arg(args: &[ArgumentValue], name: &str) -> Result<Value, ExternError> {
+    args.iter()
+        .find(|arg| arg.name == name)
+        .map(|arg| arg.value)
+        .ok_or_else(|| ExternError::Failure(format!("argument not found: {name}")))
+}
+
+// == Integers
 
 pub fn signed_int(int: &BigInt) -> Result<i64, ExternError> {
     int.to_i64()
@@ -205,4 +206,11 @@ pub fn parse_signed_int(text: &str) -> Result<i64, ExternError> {
     } else {
         signed_int(&if negative { -int } else { int }).map_err(|_| invalid())
     }
+}
+
+pub fn size(int: &BigInt) -> Result<usize, ExternError> {
+    int.to_u64()
+        .filter(|size_packet| *size_packet <= ((1_u64 << 62) - 1))
+        .and_then(|size_packet| usize::try_from(size_packet).ok())
+        .ok_or_else(|| ExternError::Failure(format!("invalid packet size: {int}")))
 }

@@ -220,7 +220,29 @@ impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for TraceInterp {
                 value_arch = update(ctx.arena_mut(), value_arch, "STATE", value_arch_state);
                 let effects = int(ctx.arena(), value_arch, "effects") + 1;
                 value_arch = write_int(ctx.arena_mut(), value_arch, "effects", 32, effects);
-                let value_result = pack::return_result(ctx.arena_mut(), None)?;
+                let typ = typ::make::opt(typ::make::var(
+                    p4spec_rust::phrase!(node: "value".to_owned(), span: Span::default()),
+                    Vec::new(),
+                ));
+                let value_opt = make::opt(ctx.arena_mut(), typ.node.into(), None, Span::default())
+                    .map_err(ExternError::from)?;
+                let mixop = p4spec_rust::frontend::parse::parse_mixop("RETURN value?").unwrap();
+                let value_case = p4spec_rust::lang::common::notation::mixop::Mixop::fill(
+                    &mixop,
+                    vec![value_opt],
+                )
+                .unwrap();
+                let typ = typ::make::var(
+                    p4spec_rust::phrase!(node: "returnResult".to_owned(), span: Span::default()),
+                    Vec::new(),
+                );
+                let value_result = make::case(
+                    ctx.arena_mut(),
+                    typ.node.into(),
+                    value_case,
+                    Span::default(),
+                )
+                .map_err(ExternError::from)?;
                 Ok(vec![value_ctx, value_arch, value_result])
             }
             _ => panic!("unexpected relation {name}"),

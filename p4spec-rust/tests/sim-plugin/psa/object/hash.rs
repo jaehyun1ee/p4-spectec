@@ -13,7 +13,7 @@ fn test_hash_adjust_uses_max_not_range_and_preserves_call_order() {
         .clone()
         .get_hash(&mut runner.context(), value_ctx, value_arch)
         .unwrap();
-    let value = returned(runner.arena(), output.result.value_call_result);
+    let value = returned(runner.arena(), output.3);
     let value_int = *get::case(runner.arena(), &value).unwrap().args()[0];
     assert_eq!(
         p4spec_rust::lang::xl::num::to_int(get::num(runner.arena(), &value_int).unwrap()),
@@ -28,7 +28,7 @@ fn test_hash_adjust_uses_max_not_range_and_preserves_call_order() {
         .clone()
         .get_hash_adjust(&mut runner.context(), value_ctx, value_arch)
         .unwrap();
-    let value = returned(runner.arena(), output.result.value_call_result);
+    let value = returned(runner.arena(), output.3);
     let value_int = *get::case(runner.arena(), &value).unwrap().args()[0];
     assert_eq!(
         p4spec_rust::lang::xl::num::to_int(get::num(runner.arena(), &value_int).unwrap()),

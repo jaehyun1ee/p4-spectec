@@ -13,15 +13,13 @@ fn test_advance_length_emit_and_payload_keep_bit_order() {
     let output = pkt
         .advance(&mut runner.context(), value_ctx, value_arch)
         .unwrap();
-    assert_eq!(output.object.idx, 3);
-    assert_eq!(output.object.payload_bytes().unwrap(), [BigInt::from(94)]);
+    assert_eq!(output.0.idx, 3);
+    assert_eq!(output.0.payload_bytes().unwrap(), [BigInt::from(94)]);
     let output_len = output
-        .object
+        .0
         .length(&mut runner.context(), value_ctx, value_arch)
         .unwrap();
-    let value_opt = *get::case(runner.arena(), &output_len.result.value_call_result)
-        .unwrap()
-        .args()[0];
+    let value_opt = *get::case(runner.arena(), &output_len.3).unwrap().args()[0];
     let value_len = get::opt(runner.arena(), &value_opt).unwrap().unwrap();
     let values = get::case(runner.arena(), &value_len).unwrap().args();
     assert_eq!(
@@ -48,11 +46,11 @@ fn test_advance_length_emit_and_payload_keep_bit_order() {
         .emit(&mut runner.context(), value_ctx, value_arch)
         .unwrap();
     assert_eq!(
-        object::packet::to_string(&output.object, &output_emit.object).unwrap(),
+        object::packet::to_string(&output.0, &output_emit.0).unwrap(),
         "578"
     );
-    assert_eq!(output_emit.result.value_ctx, value_ctx);
-    assert_eq!(output_emit.result.value_arch, value_arch);
+    assert_eq!(output_emit.1, value_ctx);
+    assert_eq!(output_emit.2, value_arch);
     let value_size = pack::p4_fixed_bit(runner.arena_mut(), 32.into(), 10.into()).unwrap();
     runner
         .context()
@@ -60,12 +58,9 @@ fn test_advance_length_emit_and_payload_keep_bit_order() {
         .values_var
         .insert("sizeInBits".to_owned(), value_size);
     let output_short = output
-        .object
+        .0
         .advance(&mut runner.context(), value_ctx, value_arch)
         .unwrap();
-    assert_eq!(output_short.object, output.object);
-    assert_eq!(
-        reject(runner.arena(), &output_short.result.value_call_result),
-        "PacketTooShort"
-    );
+    assert_eq!(output_short.0, output.0);
+    assert_eq!(reject(runner.arena(), &output_short.3), "PacketTooShort");
 }

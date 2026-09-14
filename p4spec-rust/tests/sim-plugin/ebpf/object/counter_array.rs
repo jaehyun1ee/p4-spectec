@@ -50,33 +50,48 @@ fn test_counter_operations_preserve_state_and_wrap_at_source_integer_width() {
     let result = counter
         .increment(&mut runner.context(), value_ctx, value_arch)
         .unwrap();
-    assert_eq!(
-        result.counter.counts,
-        vec![-(1_i64 << 62), (1_i64 << 32) - 1]
+    assert_eq!(result.0.counts, vec![-(1_i64 << 62), (1_i64 << 32) - 1]);
+    assert_eq!(result.1, value_ctx);
+    assert_eq!(result.2, value_arch);
+    let typ = typ::make::opt(typ::make::var(
+        p4spec_rust::phrase!(node: "value".to_owned(), span: Span::default()),
+        Vec::new(),
+    ));
+    let value_opt = make::opt(runner.arena_mut(), typ.node.into(), None, Span::default()).unwrap();
+    let mixop = p4spec_rust::frontend::parse::parse_mixop("RETURN value?").unwrap();
+    let value_case =
+        p4spec_rust::lang::common::notation::mixop::Mixop::fill(&mixop, vec![value_opt]).unwrap();
+    let typ = typ::make::var(
+        p4spec_rust::phrase!(node: "returnResult".to_owned(), span: Span::default()),
+        Vec::new(),
     );
-    assert_eq!(result.result.value_ctx, value_ctx);
-    assert_eq!(result.result.value_arch, value_arch);
-    let value_return = pack::return_result(runner.arena_mut(), None).unwrap();
+    let value_return = make::case(
+        runner.arena_mut(),
+        typ.node.into(),
+        value_case,
+        Span::default(),
+    )
+    .unwrap();
     assert_eq!(
-        runner.arena().canon_id(&result.result.value_call_result),
+        runner.arena().canon_id(&result.3),
         runner.arena().canon_id(&value_return)
     );
     assert_eq!(
-        runner.arena().typ(&result.result.value_call_result),
+        runner.arena().typ(&result.3),
         runner.arena().typ(&value_return)
     );
-    counter = result.counter;
+    counter = result.0;
     local(&mut runner, "value", -1);
     counter = counter
         .add(&mut runner.context(), value_ctx, value_arch)
         .unwrap()
-        .counter;
+        .0;
     assert_eq!(counter.counts[0], (1_i64 << 62) - 1);
     local(&mut runner, "index", 1);
     counter = counter
         .increment(&mut runner.context(), value_ctx, value_arch)
         .unwrap()
-        .counter;
+        .0;
     assert_eq!(counter.counts[1], 1_i64 << 32);
     for idx in [-1, 2] {
         local(&mut runner, "index", idx);
@@ -84,7 +99,7 @@ fn test_counter_operations_preserve_state_and_wrap_at_source_integer_width() {
         counter = counter
             .add(&mut runner.context(), value_ctx, value_arch)
             .unwrap()
-            .counter;
+            .0;
         assert_eq!(counter.counts, counts);
     }
     assert_eq!(

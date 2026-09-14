@@ -1,8 +1,13 @@
 use super::repeat;
-use crate::sim_plugin::spec_impl::rel::{ObjectResult, finish};
 use crate::sim_plugin::spec_impl::{pack, unpack};
 use crate::{
-    lang::data::value::{Value, ValueArena},
+    lang::{
+        common::source::Span,
+        data::{
+            typ,
+            value::{Value, ValueArena, make},
+        },
+    },
     runner::{Extern, ExternError, Interface, Interpreter, RunnerContext},
 };
 use serde::{Deserialize, Serialize};
@@ -58,7 +63,7 @@ impl Meter {
         ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
         value_ctx: Value,
         value_arch: Value,
-    ) -> Result<ObjectResult<Self>, Interp::Error>
+    ) -> Result<(Self, Value, Value, Value), Interp::Error>
     where
         Iface: Interface,
         Exn: Extern,
@@ -66,13 +71,26 @@ impl Meter {
     {
         // NOTE: returning GREEN for now
         let value_color = pack::p4_enum(ctx.arena_mut(), "PSA_MeterColor_t", "GREEN")?;
-        Ok(finish(
+        let typ = typ::make::opt(typ::make::var(
+            crate::phrase!(node: "value".to_owned(), span: Span::default()),
+            Vec::new(),
+        ));
+        let value_opt = make::opt(
             ctx.arena_mut(),
-            self,
-            value_ctx,
-            value_arch,
+            typ.node.into(),
             Some(value_color),
-        )?)
+            Span::default(),
+        )
+        .map_err(ExternError::from)?;
+        let value_call_result = make::case_shaped_(
+            ctx.arena_mut(),
+            "RETURN value?",
+            vec![value_opt],
+            "returnResult",
+            Span::default(),
+        )
+        .map_err(ExternError::from)?;
+        Ok((self, value_ctx, value_arch, value_call_result))
     }
 
     /// Perform a color blind meter update (see RFC 2698). This may call
@@ -84,7 +102,7 @@ impl Meter {
         ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
         value_ctx: Value,
         value_arch: Value,
-    ) -> Result<ObjectResult<Self>, Interp::Error>
+    ) -> Result<(Self, Value, Value, Value), Interp::Error>
     where
         Iface: Interface,
         Exn: Extern,

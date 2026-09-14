@@ -123,11 +123,11 @@ where
             // Replace keyset names with table key names, assuming fields are in order
             let keys = func::key_interface_of_table_object(ctx, value_table)?;
             let mut values_name = Vec::new();
-            for key in keys {
-                if get::text(ctx.arena(), &key.value_match_kind).map_err(ExternError::from)?
+            for (value_name, value_match_kind, _) in keys {
+                if get::text(ctx.arena(), &value_match_kind).map_err(ExternError::from)?
                     != "selector"
                 {
-                    values_name.push(key.value_name);
+                    values_name.push(value_name);
                 }
             }
             let values_key = get::list(ctx.arena(), &value_keys)

@@ -25,8 +25,8 @@ fn test_counter_source_variants_bigints_and_packets_only_count() {
         let result = counter.count(&mut runner.context(), value_ctx, value_arch);
         if id == "PACKETS" {
             let output = result.unwrap();
-            assert_eq!(output.object, Counter::Packets(vec![0.into(), 1.into()]));
-            assert_eq!(output.result.value_arch, value_arch);
+            assert_eq!(output.0, Counter::Packets(vec![0.into(), 1.into()]));
+            assert_eq!(output.2, value_arch);
         } else {
             assert!(result.is_err());
         }
@@ -39,7 +39,7 @@ fn test_counter_source_variants_bigints_and_packets_only_count() {
             .clone()
             .count(&mut runner.context(), value_ctx, value_arch)
             .unwrap()
-            .object,
+            .0,
         counter
     );
     let json = serde_json::to_value(&counter).unwrap();

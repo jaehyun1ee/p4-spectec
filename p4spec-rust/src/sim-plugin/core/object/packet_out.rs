@@ -1,10 +1,13 @@
 use crate::{
-    lang::data::value::{Value, get},
-    runner::{Extern, ExternError, Interface, Interpreter, RunnerContext},
-    sim_plugin::spec_impl::{
-        func,
-        rel::{ObjectResult, finish},
+    lang::{
+        common::source::Span,
+        data::{
+            typ,
+            value::{Value, get, make},
+        },
     },
+    runner::{Extern, ExternError, Interface, Interpreter, RunnerContext},
+    sim_plugin::spec_impl::func,
 };
 use serde::{Deserialize, Serialize};
 
@@ -26,7 +29,7 @@ impl PacketOut {
         ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
         value_ctx: Value,
         value_arch: Value,
-    ) -> Result<ObjectResult<Self>, Interp::Error>
+    ) -> Result<(Self, Value, Value, Value), Interp::Error>
     where
         Iface: Interface,
         Exn: Extern,
@@ -43,6 +46,20 @@ impl PacketOut {
         let pkt = Self {
             bits: self.bits.iter().copied().chain(bits).collect(),
         };
-        Ok(finish(ctx.arena_mut(), pkt, value_ctx, value_arch, None)?)
+        let typ = typ::make::opt(typ::make::var(
+            crate::phrase!(node: "value".to_owned(), span: Span::default()),
+            Vec::new(),
+        ));
+        let value_opt = make::opt(ctx.arena_mut(), typ.node.into(), None, Span::default())
+            .map_err(ExternError::from)?;
+        let value_call_result = make::case_shaped_(
+            ctx.arena_mut(),
+            "RETURN value?",
+            vec![value_opt],
+            "returnResult",
+            Span::default(),
+        )
+        .map_err(ExternError::from)?;
+        Ok((pkt, value_ctx, value_arch, value_call_result))
     }
 }

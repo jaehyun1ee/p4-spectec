@@ -35,10 +35,7 @@ fn test_register_default_order_read_bounds_and_write_noop() {
         .clone()
         .read(&mut runner.context(), value_ctx, value_arch)
         .unwrap();
-    assert_eq!(
-        returned(runner.arena(), output.result.value_call_result),
-        value_ctx
-    );
+    assert_eq!(returned(runner.arena(), output.3), value_ctx);
     runner
         .context()
         .interp_mut()
@@ -48,14 +45,14 @@ fn test_register_default_order_read_bounds_and_write_noop() {
         reg.clone()
             .write(&mut runner.context(), value_ctx, value_arch)
             .unwrap()
-            .object,
+            .0,
         reg
     );
     local(&mut runner, "index", 1);
     let reg = reg
         .write(&mut runner.context(), value_ctx, value_arch)
         .unwrap()
-        .object;
+        .0;
     assert_eq!(reg.values, [value_ctx, value_arch]);
     let json = encode(runner.arena(), &reg).unwrap();
     let reg_decoded: Register = decode(runner.arena_mut(), &json).unwrap();

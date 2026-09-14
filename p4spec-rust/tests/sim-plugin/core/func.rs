@@ -152,8 +152,8 @@ fn test_verify_reads_both_arguments_even_when_true() {
             value_arch,
         )
         .unwrap();
-        assert_eq!(output.value_ctx, value_ctx);
-        assert_eq!(output.value_arch, value_arch);
+        assert_eq!(output.0, value_ctx);
+        assert_eq!(output.1, value_arch);
         let ctx = runner.context();
         let names: Vec<_> = ctx
             .interp()
@@ -170,9 +170,7 @@ fn test_verify_reads_both_arguments_even_when_true() {
         assert_eq!(names, ["check", "toSignal"]);
         if !check {
             assert_eq!(
-                *get::case(ctx.arena(), &output.value_call_result)
-                    .unwrap()
-                    .args()[0],
+                *get::case(ctx.arena(), &output.2).unwrap().args()[0],
                 value_signal
             );
         }

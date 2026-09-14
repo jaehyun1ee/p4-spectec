@@ -1,6 +1,12 @@
-use crate::sim_plugin::spec_impl::{func, pack, rel::CallResult, unpack};
+use crate::sim_plugin::spec_impl::{func, unpack};
 use crate::{
-    lang::data::value::{Value, ValueArena},
+    lang::{
+        common::source::Span,
+        data::{
+            typ,
+            value::{Value, ValueArena, make},
+        },
+    },
     runner::{Extern, ExternError, Interface, Interpreter, RunnerContext},
 };
 use serde::{Deserialize, Serialize};
@@ -8,12 +14,6 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CounterArray {
     pub counts: Vec<i64>,
-}
-
-#[derive(Debug)]
-pub struct CounterResult {
-    pub counter: CounterArray,
-    pub result: CallResult,
 }
 
 impl CounterArray {
@@ -61,7 +61,7 @@ impl CounterArray {
         ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
         value_ctx: Value,
         value_arch: Value,
-    ) -> Result<CounterResult, Interp::Error>
+    ) -> Result<(Self, Value, Value, Value), Interp::Error>
     where
         Iface: Interface,
         Exn: Extern,
@@ -84,7 +84,7 @@ impl CounterArray {
         ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
         value_ctx: Value,
         value_arch: Value,
-    ) -> Result<CounterResult, Interp::Error>
+    ) -> Result<(Self, Value, Value, Value), Interp::Error>
     where
         Iface: Interface,
         Exn: Extern,
@@ -108,7 +108,7 @@ impl CounterArray {
         value_arch: Value,
         idx: i64,
         int: i64,
-    ) -> Result<CounterResult, Interp::Error>
+    ) -> Result<(Self, Value, Value, Value), Interp::Error>
     where
         Iface: Interface,
         Exn: Extern,
@@ -121,14 +121,20 @@ impl CounterArray {
             *count = count.wrapping_add(int).wrapping_shl(1) >> 1;
         }
         // Create call result
-        let value_call_result = pack::return_result(ctx.arena_mut(), None)?;
-        Ok(CounterResult {
-            counter: self,
-            result: CallResult {
-                value_ctx,
-                value_arch,
-                value_call_result,
-            },
-        })
+        let typ = typ::make::opt(typ::make::var(
+            crate::phrase!(node: "value".to_owned(), span: Span::default()),
+            Vec::new(),
+        ));
+        let value_opt = make::opt(ctx.arena_mut(), typ.node.into(), None, Span::default())
+            .map_err(ExternError::from)?;
+        let value_call_result = make::case_shaped_(
+            ctx.arena_mut(),
+            "RETURN value?",
+            vec![value_opt],
+            "returnResult",
+            Span::default(),
+        )
+        .map_err(ExternError::from)?;
+        Ok((self, value_ctx, value_arch, value_call_result))
     }
 }

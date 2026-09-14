@@ -17,7 +17,7 @@ use super::{
         externs as external,
         io::{Rx, Tx},
         spec_impl::{func, pgm, rel, unpack},
-        state::{SimState, install_result},
+        state::SimState,
     },
     object::CounterArray,
 };
@@ -146,20 +146,17 @@ where
         .map_err(ExternError::from)?
         .to_owned();
     let names = external::param_names(ctx.arena(), *value_names)?;
-    let result = if name == "verify" && names == ["check", "toSignal"] {
-        core_func::verify(ctx, *value_ctx, *value_arch)?
-    } else {
-        return Err(ExternError::Failure(format!(
-            "unsupported extern function call: {name}({})",
-            names.join(", ")
-        ))
-        .into());
-    };
-    Ok(vec![
-        result.value_ctx,
-        result.value_arch,
-        result.value_call_result,
-    ])
+    let (value_ctx, value_arch, value_call_result) =
+        if name == "verify" && names == ["check", "toSignal"] {
+            core_func::verify(ctx, *value_ctx, *value_arch)?
+        } else {
+            return Err(ExternError::Failure(format!(
+                "unsupported extern function call: {name}({})",
+                names.join(", ")
+            ))
+            .into());
+        };
+    Ok(vec![value_ctx, value_arch, value_call_result])
 }
 
 fn eval_method<Interp, Iface>(
@@ -183,9 +180,9 @@ where
         .map_err(ExternError::from)?
         .to_owned();
     let names = external::param_names(ctx.arena(), *value_names)?;
-    let (object, result) = match object {
+    let (object, value_ctx, value_arch, value_call_result) = match object {
         ExternObject::PacketIn(pkt) => {
-            let output = match (
+            let (object, value_ctx, value_arch, value_call_result) = match (
                 name.as_str(),
                 names
                     .iter()
@@ -202,10 +199,15 @@ where
                 ("length", []) => pkt.length(ctx, *value_ctx, *value_arch)?,
                 _ => return Err(unsupported_method(ctx.arena(), *value_id, &name, &names)?.into()),
             };
-            (ExternObject::PacketIn(output.object), output.result)
+            (
+                ExternObject::PacketIn(object),
+                value_ctx,
+                value_arch,
+                value_call_result,
+            )
         }
         ExternObject::CounterArray(counter) => {
-            let output = match (
+            let (object, value_ctx, value_arch, value_call_result) = match (
                 name.as_str(),
                 names
                     .iter()
@@ -217,12 +219,17 @@ where
                 ("add", ["index", "value"]) => counter.add(ctx, *value_ctx, *value_arch)?,
                 _ => return Err(unsupported_method(ctx.arena(), *value_id, &name, &names)?.into()),
             };
-            (ExternObject::CounterArray(output.counter), output.result)
+            (
+                ExternObject::CounterArray(object),
+                value_ctx,
+                value_arch,
+                value_call_result,
+            )
         }
     };
     let value_state = object.to_value(ctx.arena_mut(), encoding)?;
-    let value_arch = func::update_object_state_e(ctx, result.value_arch, *value_id, value_state)?;
-    Ok(vec![result.value_ctx, value_arch, result.value_call_result])
+    let value_arch = func::update_object_state_e(ctx, value_arch, *value_id, value_state)?;
+    Ok(vec![value_ctx, value_arch, value_call_result])
 }
 
 fn unsupported_method(
@@ -271,10 +278,10 @@ where
     Exn: Extern,
     Interp: Interpreter<Iface, Exn>,
 {
-    let result = pgm::ebpf_init(ctx, program)?;
+    let (value_ctx, value_arch) = pgm::ebpf_init(ctx, program)?;
     Ok(SimState {
-        value_ctx: result.value_ctx,
-        value_arch: result.value_arch,
+        value_ctx,
+        value_arch,
         txs: vec![],
     })
 }
@@ -295,14 +302,16 @@ where
     // Setup packet_in extern
     let pkt = ExternObject::PacketIn(PacketIn::init(&rx.packet)?);
     let value_packet = pkt.to_value(ctx.arena_mut(), encoding)?;
-    let result = rel::ebpf_init_packet_in(ctx, state.value_ctx, state.value_arch, value_packet)?;
-    install_result!(state, result);
+    let (value_ctx, value_arch) =
+        rel::ebpf_init_packet_in(ctx, state.value_ctx, state.value_arch, value_packet)?;
+    (state.value_ctx, state.value_arch) = (value_ctx, value_arch);
     // Setup global variables
     state.value_ctx = rel::ebpf_init_globals(ctx, state.value_ctx, state.value_arch)?;
     // Parse block
-    let result = rel::ebpf_parse(ctx, state.value_ctx, state.value_arch)?;
-    install_result!(state, result);
-    let rejected = get::matches! { ctx.arena(), &result.value_call_result,
+    let (value_ctx, value_arch, value_call_result) =
+        rel::ebpf_parse(ctx, state.value_ctx, state.value_arch)?;
+    (state.value_ctx, state.value_arch) = (value_ctx, value_arch);
+    let rejected = get::matches! { ctx.arena(), &value_call_result,
         "REJECT errorValue" => |_values| true,
         _ => false,
     };
@@ -310,8 +319,8 @@ where
         return Ok(());
     }
     // Filter block
-    let result = rel::ebpf_filter(ctx, state.value_ctx, state.value_arch)?;
-    install_result!(state, result);
+    let (value_ctx, value_arch, _) = rel::ebpf_filter(ctx, state.value_ctx, state.value_arch)?;
+    (state.value_ctx, state.value_arch) = (value_ctx, value_arch);
     // Check if packet is accepted
     let value_accept =
         rel::lvalue_read_var_global(ctx, state.value_ctx, state.value_arch, "accept")?;

@@ -6,7 +6,7 @@ use super::super::{
     externs as external,
     io::{Rx, Tx},
     spec_impl::{func, pack, pgm, rel, unpack},
-    state::{SimState, install_result},
+    state::SimState,
 };
 use super::{
     arch::Arch,
@@ -185,7 +185,7 @@ where
         .to_owned();
     let names = external::param_names(ctx.arena(), *value_names)?;
     let names_ref: Vec<_> = names.iter().map(String::as_str).collect();
-    let result = match (name.as_str(), names_ref.as_slice()) {
+    let (value_ctx, value_arch, value_call_result) = match (name.as_str(), names_ref.as_slice()) {
         ("verify", ["check", "toSignal"]) => core_func::verify(ctx, *value_ctx, *value_arch)?,
         ("digest", ["receiver", "data"]) => v1model_func::digest(ctx, *value_ctx, *value_arch)?,
         ("mark_to_drop", ["standard_metadata"]) => {
@@ -227,11 +227,7 @@ where
             .into());
         }
     };
-    Ok(vec![
-        result.value_ctx,
-        result.value_arch,
-        result.value_call_result,
-    ])
+    Ok(vec![value_ctx, value_arch, value_call_result])
 }
 
 fn eval_method<Interp, Iface>(
@@ -255,71 +251,138 @@ where
         .to_owned();
     let names = external::param_names(ctx.arena(), *value_names)?;
     let names_ref: Vec<_> = names.iter().map(String::as_str).collect();
-    let (object, result) = match (object, name.as_str(), names_ref.as_slice()) {
-        (ObjectState::PacketIn(object), "extract", ["hdr"]) => {
-            let output = object.extract(ctx, *value_ctx, *value_arch)?;
-            (ObjectState::PacketIn(output.object), output.result)
-        }
-        (
-            ObjectState::PacketIn(object),
-            "extract",
-            ["variableSizeHeader", "variableFieldSizeInBits"],
-        ) => {
-            let output = object.extract_varsize(ctx, *value_ctx, *value_arch)?;
-            (ObjectState::PacketIn(output.object), output.result)
-        }
-        (ObjectState::PacketIn(object), "lookahead", []) => {
-            let output = object.lookahead(ctx, *value_ctx, *value_arch)?;
-            (ObjectState::PacketIn(output.object), output.result)
-        }
-        (ObjectState::PacketIn(object), "advance", ["sizeInBits"]) => {
-            let output = object.advance(ctx, *value_ctx, *value_arch)?;
-            (ObjectState::PacketIn(output.object), output.result)
-        }
-        (ObjectState::PacketIn(object), "length", []) => {
-            let output = object.length(ctx, *value_ctx, *value_arch)?;
-            (ObjectState::PacketIn(output.object), output.result)
-        }
-        (ObjectState::PacketOut(object), "emit", ["hdr"]) => {
-            let output = object.emit(ctx, *value_ctx, *value_arch)?;
-            (ObjectState::PacketOut(output.object), output.result)
-        }
-        (ObjectState::Counter(object), "count", ["index"]) => {
-            let pkt = get_packet_in(ctx, *value_arch, "packet_in")?;
-            let output = object.count(ctx, *value_ctx, *value_arch, &pkt)?;
-            (ObjectState::Counter(output.object), output.result)
-        }
-        (ObjectState::Register(object), "read", ["result", "index"]) => {
-            let output = object.read(ctx, *value_ctx, *value_arch)?;
-            (ObjectState::Register(output.object), output.result)
-        }
-        (ObjectState::Register(object), "write", ["index", "value"]) => {
-            let output = object.write(ctx, *value_ctx, *value_arch)?;
-            (ObjectState::Register(output.object), output.result)
-        }
-        (ObjectState::DirectCounter(object), "count", []) => {
-            let pkt = get_packet_in(ctx, *value_arch, "packet_in")?;
-            let output = object.count(ctx, *value_ctx, *value_arch, &pkt)?;
-            (ObjectState::DirectCounter(output.object), output.result)
-        }
-        (ObjectState::DirectMeter(object), "read", ["result"]) => {
-            let pkt = get_packet_in(ctx, *value_arch, "packet_in")?;
-            let output = object.read(ctx, *value_ctx, *value_arch, &pkt)?;
-            (ObjectState::DirectMeter(output.object), output.result)
-        }
-        _ => {
-            let ids = external::param_names(ctx.arena(), *value_id)?;
-            return Err(ExternError::Failure(format!(
-                "unsupported extern method call: {}.{name}({})",
-                ids.join("."),
-                names.join(", ")
-            ))
-            .into());
-        }
-    };
+    let (object, value_ctx, value_arch, value_call_result) =
+        match (object, name.as_str(), names_ref.as_slice()) {
+            (ObjectState::PacketIn(object), "extract", ["hdr"]) => {
+                let (object, value_ctx, value_arch, value_call_result) =
+                    object.extract(ctx, *value_ctx, *value_arch)?;
+                (
+                    ObjectState::PacketIn(object),
+                    value_ctx,
+                    value_arch,
+                    value_call_result,
+                )
+            }
+            (
+                ObjectState::PacketIn(object),
+                "extract",
+                ["variableSizeHeader", "variableFieldSizeInBits"],
+            ) => {
+                let (object, value_ctx, value_arch, value_call_result) =
+                    object.extract_varsize(ctx, *value_ctx, *value_arch)?;
+                (
+                    ObjectState::PacketIn(object),
+                    value_ctx,
+                    value_arch,
+                    value_call_result,
+                )
+            }
+            (ObjectState::PacketIn(object), "lookahead", []) => {
+                let (object, value_ctx, value_arch, value_call_result) =
+                    object.lookahead(ctx, *value_ctx, *value_arch)?;
+                (
+                    ObjectState::PacketIn(object),
+                    value_ctx,
+                    value_arch,
+                    value_call_result,
+                )
+            }
+            (ObjectState::PacketIn(object), "advance", ["sizeInBits"]) => {
+                let (object, value_ctx, value_arch, value_call_result) =
+                    object.advance(ctx, *value_ctx, *value_arch)?;
+                (
+                    ObjectState::PacketIn(object),
+                    value_ctx,
+                    value_arch,
+                    value_call_result,
+                )
+            }
+            (ObjectState::PacketIn(object), "length", []) => {
+                let (object, value_ctx, value_arch, value_call_result) =
+                    object.length(ctx, *value_ctx, *value_arch)?;
+                (
+                    ObjectState::PacketIn(object),
+                    value_ctx,
+                    value_arch,
+                    value_call_result,
+                )
+            }
+            (ObjectState::PacketOut(object), "emit", ["hdr"]) => {
+                let (object, value_ctx, value_arch, value_call_result) =
+                    object.emit(ctx, *value_ctx, *value_arch)?;
+                (
+                    ObjectState::PacketOut(object),
+                    value_ctx,
+                    value_arch,
+                    value_call_result,
+                )
+            }
+            (ObjectState::Counter(object), "count", ["index"]) => {
+                let pkt = get_packet_in(ctx, *value_arch, "packet_in")?;
+                let (object, value_ctx, value_arch, value_call_result) =
+                    object.count(ctx, *value_ctx, *value_arch, &pkt)?;
+                (
+                    ObjectState::Counter(object),
+                    value_ctx,
+                    value_arch,
+                    value_call_result,
+                )
+            }
+            (ObjectState::Register(object), "read", ["result", "index"]) => {
+                let (object, value_ctx, value_arch, value_call_result) =
+                    object.read(ctx, *value_ctx, *value_arch)?;
+                (
+                    ObjectState::Register(object),
+                    value_ctx,
+                    value_arch,
+                    value_call_result,
+                )
+            }
+            (ObjectState::Register(object), "write", ["index", "value"]) => {
+                let (object, value_ctx, value_arch, value_call_result) =
+                    object.write(ctx, *value_ctx, *value_arch)?;
+                (
+                    ObjectState::Register(object),
+                    value_ctx,
+                    value_arch,
+                    value_call_result,
+                )
+            }
+            (ObjectState::DirectCounter(object), "count", []) => {
+                let pkt = get_packet_in(ctx, *value_arch, "packet_in")?;
+                let (object, value_ctx, value_arch, value_call_result) =
+                    object.count(ctx, *value_ctx, *value_arch, &pkt)?;
+                (
+                    ObjectState::DirectCounter(object),
+                    value_ctx,
+                    value_arch,
+                    value_call_result,
+                )
+            }
+            (ObjectState::DirectMeter(object), "read", ["result"]) => {
+                let pkt = get_packet_in(ctx, *value_arch, "packet_in")?;
+                let (object, value_ctx, value_arch, value_call_result) =
+                    object.read(ctx, *value_ctx, *value_arch, &pkt)?;
+                (
+                    ObjectState::DirectMeter(object),
+                    value_ctx,
+                    value_arch,
+                    value_call_result,
+                )
+            }
+            _ => {
+                let ids = external::param_names(ctx.arena(), *value_id)?;
+                return Err(ExternError::Failure(format!(
+                    "unsupported extern method call: {}.{name}({})",
+                    ids.join("."),
+                    names.join(", ")
+                ))
+                .into());
+            }
+        };
     let value_object = object.to_value(ctx.arena_mut(), encoding)?;
-    let value_arch = func::update_object_state_e(ctx, result.value_arch, *value_id, value_object)?;
-    Ok(vec![result.value_ctx, value_arch, result.value_call_result])
+    let value_arch = func::update_object_state_e(ctx, value_arch, *value_id, value_object)?;
+    Ok(vec![value_ctx, value_arch, value_call_result])
 }
 
 fn object_id(arena: &mut ValueArena, name: &str) -> Result<Value, ExternError> {
@@ -610,10 +673,10 @@ where
     Exn: Extern,
     Interp: Interpreter<Iface, Exn>,
 {
-    let result = pgm::v1model_init(ctx, program)?;
+    let (value_ctx, value_arch) = pgm::v1model_init(ctx, program)?;
     Ok(SimState {
-        value_ctx: result.value_ctx,
-        value_arch: result.value_arch,
+        value_ctx,
+        value_arch,
         txs: vec![],
     })
 }
@@ -770,13 +833,14 @@ where
     // Setup packet input, output and global variables in source order
     let value_packet =
         ObjectState::PacketIn(PacketIn::init(&rx.packet)?).to_value(ctx.arena_mut(), encoding)?;
-    let result = rel::v1model_init_packet_in(ctx, state.value_ctx, state.value_arch, value_packet)?;
-    install_result!(state, result);
+    let (value_ctx, value_arch) =
+        rel::v1model_init_packet_in(ctx, state.value_ctx, state.value_arch, value_packet)?;
+    (state.value_ctx, state.value_arch) = (value_ctx, value_arch);
     let value_packet =
         ObjectState::PacketOut(PacketOut::default()).to_value(ctx.arena_mut(), encoding)?;
-    let result =
+    let (value_ctx, value_arch) =
         rel::v1model_init_packet_out(ctx, state.value_ctx, state.value_arch, value_packet)?;
-    install_result!(state, result);
+    (state.value_ctx, state.value_arch) = (value_ctx, value_arch);
     state.value_ctx = rel::v1model_init_globals(ctx, state.value_ctx, state.value_arch, rx.port)?;
     Ok(())
 }
@@ -791,9 +855,10 @@ where
     Exn: Extern,
     Interp: Interpreter<Iface, Exn>,
 {
-    let result = rel::v1model_parser(ctx, state.value_ctx, state.value_arch)?;
-    install_result!(state, result);
-    let value_error = get::matches! { ctx.arena(), &result.value_call_result,
+    let (value_ctx, value_arch, value_call_result) =
+        rel::v1model_parser(ctx, state.value_ctx, state.value_arch)?;
+    (state.value_ctx, state.value_arch) = (value_ctx, value_arch);
+    let value_error = get::matches! { ctx.arena(), &value_call_result,
         "REJECT errorValue" => |values| match values.as_slice() {
             [value_error] => Some(**value_error),
             _ => return Err(ExternError::from(ValueError::ExpectedCount {
@@ -825,8 +890,8 @@ where
     Exn: Extern,
     Interp: Interpreter<Iface, Exn>,
 {
-    let result = rel::v1model_verify(ctx, state.value_ctx, state.value_arch)?;
-    install_result!(state, result);
+    let (value_ctx, value_arch, _) = rel::v1model_verify(ctx, state.value_ctx, state.value_arch)?;
+    (state.value_ctx, state.value_arch) = (value_ctx, value_arch);
     Ok(())
 }
 
@@ -839,8 +904,8 @@ where
     Exn: Extern,
     Interp: Interpreter<Iface, Exn>,
 {
-    let result = rel::v1model_check(ctx, state.value_ctx, state.value_arch)?;
-    install_result!(state, result);
+    let (value_ctx, value_arch, _) = rel::v1model_check(ctx, state.value_ctx, state.value_arch)?;
+    (state.value_ctx, state.value_arch) = (value_ctx, value_arch);
     Ok(())
 }
 
@@ -853,8 +918,8 @@ where
     Exn: Extern,
     Interp: Interpreter<Iface, Exn>,
 {
-    let result = rel::v1model_deparse(ctx, state.value_ctx, state.value_arch)?;
-    install_result!(state, result);
+    let (value_ctx, value_arch, _) = rel::v1model_deparse(ctx, state.value_ctx, state.value_arch)?;
+    (state.value_ctx, state.value_arch) = (value_ctx, value_arch);
     Ok(())
 }
 
@@ -1121,8 +1186,8 @@ where
     Exn: Extern,
     Interp: Interpreter<Iface, Exn>,
 {
-    let result = rel::v1model_ingress(ctx, state.value_ctx, state.value_arch)?;
-    install_result!(state, result);
+    let (value_ctx, value_arch, _) = rel::v1model_ingress(ctx, state.value_ctx, state.value_arch)?;
+    (state.value_ctx, state.value_arch) = (value_ctx, value_arch);
     let arch = get_arch_state(ctx, state.value_arch)?;
     schedule_clone(ctx, state, &arch)?;
     if schedule_resubmit(ctx, state, &arch)? {
@@ -1182,8 +1247,8 @@ where
     Interp: Interpreter<Iface, Exn>,
 {
     prepare_egress_ctx(ctx, state)?;
-    let result = rel::v1model_egress(ctx, state.value_ctx, state.value_arch)?;
-    install_result!(state, result);
+    let (value_ctx, value_arch, _) = rel::v1model_egress(ctx, state.value_ctx, state.value_arch)?;
+    (state.value_ctx, state.value_arch) = (value_ctx, value_arch);
     let arch = get_arch_state(ctx, state.value_arch)?;
     schedule_clone(ctx, state, &arch)?;
     if is_dropped(ctx, state)? {

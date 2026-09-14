@@ -3,17 +3,17 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     lang::{
-        data::value::{Value, get},
+        common::source::Span,
+        data::{
+            typ,
+            value::{Value, get, make},
+        },
         xl::num,
     },
     runner::{Extern, ExternError, Interface, Interpreter, RunnerContext},
 };
 
-use crate::sim_plugin::spec_impl::{
-    func, pack,
-    rel::{self, CallResult, ObjectResult, finish},
-    unpack,
-};
+use crate::sim_plugin::spec_impl::{func, pack, rel, unpack};
 
 use super::bits::{bits_to_int_unsigned, string_to_bits};
 
@@ -90,7 +90,7 @@ impl PacketIn {
         ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
         value_ctx: Value,
         value_arch: Value,
-    ) -> Result<ObjectResult<Self>, Interp::Error>
+    ) -> Result<(Self, Value, Value, Value), Interp::Error>
     where
         Iface: Interface,
         Exn: Extern,
@@ -106,7 +106,21 @@ impl PacketIn {
         let value_hdr = func::find_var_e_local(ctx, value_ctx, "hdr")?;
         let value_hdr = func::write_value_from_bits(ctx, value_hdr, 0, &bits)?;
         let value_ctx = rel::lvalue_write_var_local(ctx, value_ctx, value_arch, "hdr", value_hdr)?;
-        Ok(finish(ctx.arena_mut(), pkt, value_ctx, value_arch, None)?)
+        let typ = typ::make::opt(typ::make::var(
+            crate::phrase!(node: "value".to_owned(), span: Span::default()),
+            Vec::new(),
+        ));
+        let value_opt = make::opt(ctx.arena_mut(), typ.node.into(), None, Span::default())
+            .map_err(ExternError::from)?;
+        let value_call_result = make::case_shaped_(
+            ctx.arena_mut(),
+            "RETURN value?",
+            vec![value_opt],
+            "returnResult",
+            Span::default(),
+        )
+        .map_err(ExternError::from)?;
+        Ok((pkt, value_ctx, value_arch, value_call_result))
     }
 
     /// Extracts a header with a variable-size field
@@ -120,7 +134,7 @@ impl PacketIn {
         ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
         value_ctx: Value,
         value_arch: Value,
-    ) -> Result<ObjectResult<Self>, Interp::Error>
+    ) -> Result<(Self, Value, Value, Value), Interp::Error>
     where
         Iface: Interface,
         Exn: Extern,
@@ -169,7 +183,21 @@ impl PacketIn {
             "variableSizeHeader",
             value_hdr,
         )?;
-        Ok(finish(ctx.arena_mut(), pkt, value_ctx, value_arch, None)?)
+        let typ = typ::make::opt(typ::make::var(
+            crate::phrase!(node: "value".to_owned(), span: Span::default()),
+            Vec::new(),
+        ));
+        let value_opt = make::opt(ctx.arena_mut(), typ.node.into(), None, Span::default())
+            .map_err(ExternError::from)?;
+        let value_call_result = make::case_shaped_(
+            ctx.arena_mut(),
+            "RETURN value?",
+            vec![value_opt],
+            "returnResult",
+            Span::default(),
+        )
+        .map_err(ExternError::from)?;
+        Ok((pkt, value_ctx, value_arch, value_call_result))
     }
 
     /// Reads a value without advancing the packet cursor
@@ -182,7 +210,7 @@ impl PacketIn {
         ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
         value_ctx: Value,
         value_arch: Value,
-    ) -> Result<ObjectResult<Self>, Interp::Error>
+    ) -> Result<(Self, Value, Value, Value), Interp::Error>
     where
         Iface: Interface,
         Exn: Extern,
@@ -197,13 +225,26 @@ impl PacketIn {
         }
         let bits = &self.bits[self.idx..self.idx + size];
         let value_hdr = func::write_value_from_bits(ctx, value_hdr, 0, bits)?;
-        Ok(finish(
+        let typ = typ::make::opt(typ::make::var(
+            crate::phrase!(node: "value".to_owned(), span: Span::default()),
+            Vec::new(),
+        ));
+        let value_opt = make::opt(
             ctx.arena_mut(),
-            self.clone(),
-            value_ctx,
-            value_arch,
+            typ.node.into(),
             Some(value_hdr),
-        )?)
+            Span::default(),
+        )
+        .map_err(ExternError::from)?;
+        let value_call_result = make::case_shaped_(
+            ctx.arena_mut(),
+            "RETURN value?",
+            vec![value_opt],
+            "returnResult",
+            Span::default(),
+        )
+        .map_err(ExternError::from)?;
+        Ok((self.clone(), value_ctx, value_arch, value_call_result))
     }
 
     /// Advances the packet cursor by the requested number of bits
@@ -216,7 +257,7 @@ impl PacketIn {
         ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
         value_ctx: Value,
         value_arch: Value,
-    ) -> Result<ObjectResult<Self>, Interp::Error>
+    ) -> Result<(Self, Value, Value, Value), Interp::Error>
     where
         Iface: Interface,
         Exn: Extern,
@@ -231,7 +272,21 @@ impl PacketIn {
             idx: self.idx + size,
             ..self.clone()
         };
-        Ok(finish(ctx.arena_mut(), pkt, value_ctx, value_arch, None)?)
+        let typ = typ::make::opt(typ::make::var(
+            crate::phrase!(node: "value".to_owned(), span: Span::default()),
+            Vec::new(),
+        ));
+        let value_opt = make::opt(ctx.arena_mut(), typ.node.into(), None, Span::default())
+            .map_err(ExternError::from)?;
+        let value_call_result = make::case_shaped_(
+            ctx.arena_mut(),
+            "RETURN value?",
+            vec![value_opt],
+            "returnResult",
+            Span::default(),
+        )
+        .map_err(ExternError::from)?;
+        Ok((pkt, value_ctx, value_arch, value_call_result))
     }
 
     /// Returns the total packet length in bytes
@@ -244,7 +299,7 @@ impl PacketIn {
         ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
         value_ctx: Value,
         value_arch: Value,
-    ) -> Result<ObjectResult<Self>, Interp::Error>
+    ) -> Result<(Self, Value, Value, Value), Interp::Error>
     where
         Iface: Interface,
         Exn: Extern,
@@ -252,13 +307,26 @@ impl PacketIn {
     {
         let value_len =
             pack::p4_fixed_bit(ctx.arena_mut(), 32.into(), self.len.div_ceil(8).into())?;
-        Ok(finish(
+        let typ = typ::make::opt(typ::make::var(
+            crate::phrase!(node: "value".to_owned(), span: Span::default()),
+            Vec::new(),
+        ));
+        let value_opt = make::opt(
             ctx.arena_mut(),
-            self.clone(),
-            value_ctx,
-            value_arch,
+            typ.node.into(),
             Some(value_len),
-        )?)
+            Span::default(),
+        )
+        .map_err(ExternError::from)?;
+        let value_call_result = make::case_shaped_(
+            ctx.arena_mut(),
+            "RETURN value?",
+            vec![value_opt],
+            "returnResult",
+            Span::default(),
+        )
+        .map_err(ExternError::from)?;
+        Ok((self.clone(), value_ctx, value_arch, value_call_result))
     }
 
     fn reject<Interp, Iface, Exn>(
@@ -267,20 +335,13 @@ impl PacketIn {
         value_ctx: Value,
         value_arch: Value,
         name: &str,
-    ) -> Result<ObjectResult<Self>, Interp::Error>
+    ) -> Result<(Self, Value, Value, Value), Interp::Error>
     where
         Iface: Interface,
         Exn: Extern,
         Interp: Interpreter<Iface, Exn>,
     {
         let value_call_result = pack::reject_transition(ctx.arena_mut(), name)?;
-        Ok(ObjectResult {
-            object: self.clone(),
-            result: CallResult {
-                value_ctx,
-                value_arch,
-                value_call_result,
-            },
-        })
+        Ok((self.clone(), value_ctx, value_arch, value_call_result))
     }
 }
