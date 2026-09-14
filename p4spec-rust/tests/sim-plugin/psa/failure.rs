@@ -181,7 +181,7 @@ impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for FailureInterp {
 
 #[test]
 fn test_clone_restoration_failure_preserves_queued_clones_and_completed_state() {
-    let mut runner = Runner::new((), FailureInterp::default(), NullInterface, Psa);
+    let mut runner = Runner::new((), FailureInterp::default(), NullInterface, Psa::default());
     let value_ctx = make::text(
         runner.arena_mut(),
         "original context".to_owned(),
@@ -203,7 +203,7 @@ fn test_clone_restoration_failure_preserves_queued_clones_and_completed_state() 
         packet_in: PacketIn::init("CD").unwrap(),
         entrypoint: Entrypoint::Egress,
     });
-    let encoding = runner.encoding();
+    let encoding = runner.external().encoding();
     let value_state = arch.to_value(runner.arena_mut(), encoding).unwrap();
     let mut pkt_in = PacketIn::init("AB").unwrap();
     pkt_in.idx = 4;

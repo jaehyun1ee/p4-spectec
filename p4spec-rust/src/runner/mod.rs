@@ -11,7 +11,7 @@ mod interface;
 mod interpreter;
 
 use crate::lang::{
-    data::value::{Value, ValueArena, external::Encoding},
+    data::value::{Value, ValueArena},
     il::ast::Typ,
 };
 
@@ -30,7 +30,6 @@ where
     Exn: Extern,
 {
     arena: ValueArena,
-    encoding: Encoding,
     spec: Interp::Spec,
     interp: Interp,
     interface: Iface,
@@ -46,7 +45,6 @@ where
     pub fn new(spec: Interp::Spec, interp: Interp, interface: Iface, external: Exn) -> Self {
         Self {
             arena: ValueArena::new(),
-            encoding: Encoding::ArenaIndependent,
             spec,
             interp,
             interface,
@@ -54,16 +52,10 @@ where
         }
     }
 
-    pub fn with_encoding(mut self, encoding: Encoding) -> Self {
-        self.encoding = encoding;
-        self
-    }
-
     /// Borrows the assembled components for a stage-specific evaluation entry
     pub fn context(&mut self) -> RunnerContext<'_, Interp, Iface, Exn> {
         RunnerContext::new(
             &mut self.arena,
-            self.encoding,
             &self.spec,
             &mut self.interp,
             &mut self.interface,
@@ -79,8 +71,8 @@ where
         &mut self.arena
     }
 
-    pub fn encoding(&self) -> Encoding {
-        self.encoding
+    pub fn external(&self) -> &Exn {
+        &self.external
     }
 
     // - Evaluation

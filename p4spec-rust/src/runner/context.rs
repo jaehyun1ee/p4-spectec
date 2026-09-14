@@ -6,7 +6,7 @@
 
 use crate::{
     lang::{
-        data::value::{Value, ValueArena, external::Encoding},
+        data::value::{Value, ValueArena},
         il::ast::{Id, Typ},
     },
     runner::{Extern, Interface, Interpreter},
@@ -21,7 +21,6 @@ where
     Exn: Extern,
 {
     arena: &'runner mut ValueArena,
-    encoding: Encoding,
     spec: &'runner Interp::Spec,
     interp: &'runner mut Interp,
     interface: &'runner mut Iface,
@@ -36,7 +35,6 @@ where
 {
     pub(super) fn new(
         arena: &'runner mut ValueArena,
-        encoding: Encoding,
         spec: &'runner Interp::Spec,
         interp: &'runner mut Interp,
         interface: &'runner mut Iface,
@@ -44,7 +42,6 @@ where
     ) -> Self {
         Self {
             arena,
-            encoding,
             spec,
             interp,
             interface,
@@ -74,8 +71,8 @@ where
         self.arena
     }
 
-    pub fn encoding(&self) -> Encoding {
-        self.encoding
+    pub fn external(&self) -> &'runner Exn {
+        self.external
     }
 
     // - Evaluation dispatch

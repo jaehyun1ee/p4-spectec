@@ -11,37 +11,41 @@ mod serde;
 
 #[test]
 fn test_native_psa_micro_fixture_packets() {
-    let mut runner = super::super::runner(Psa);
-    let path = super::super::repo().join("p4spec/test/micro/sim-psa/psa.p4");
-    let program = super::super::parse_program(runner.arena_mut(), &path);
-    let mut state = psa::init_pipe(&mut runner.context(), program).unwrap();
-    let program_stf = p4spec_rust::stf::parse::parse_file(path.with_extension("stf")).unwrap();
-    let mut txs = Vec::new();
-    let mut txs_expect = Vec::new();
-    for stmt in program_stf {
-        match stmt.node {
-            Statement::Packet { port, packet } => {
-                psa::drive_pipe(
-                    &mut runner.context(),
-                    &mut state,
-                    &Rx {
-                        port: port.parse().unwrap(),
-                        packet,
-                    },
-                )
-                .unwrap();
-                txs.extend(state.txs.iter().map(|tx| (tx.port, tx.packet.clone())));
+    use p4spec_rust::lang::data::value::external::Encoding;
+
+    for encoding in [Encoding::ArenaRelative, Encoding::ArenaIndependent] {
+        let mut runner = super::super::runner(Psa::new(encoding));
+        let path = super::super::repo().join("p4spec/test/micro/sim-psa/psa.p4");
+        let program = super::super::parse_program(runner.arena_mut(), &path);
+        let mut state = psa::init_pipe(&mut runner.context(), program).unwrap();
+        let program_stf = p4spec_rust::stf::parse::parse_file(path.with_extension("stf")).unwrap();
+        let mut txs = Vec::new();
+        let mut txs_expect = Vec::new();
+        for stmt in program_stf {
+            match stmt.node {
+                Statement::Packet { port, packet } => {
+                    psa::drive_pipe(
+                        &mut runner.context(),
+                        &mut state,
+                        &Rx {
+                            port: port.parse().unwrap(),
+                            packet,
+                        },
+                    )
+                    .unwrap();
+                    txs.extend(state.txs.iter().map(|tx| (tx.port, tx.packet.clone())));
+                }
+                Statement::Expect {
+                    port,
+                    packet_expected: Some(packet),
+                    ..
+                } => txs_expect.push((port.parse::<i64>().unwrap(), packet.to_ascii_uppercase())),
+                _ => panic!("micro fixture contains packet and expectation statements"),
             }
-            Statement::Expect {
-                port,
-                packet_expected: Some(packet),
-                ..
-            } => txs_expect.push((port.parse::<i64>().unwrap(), packet.to_ascii_uppercase())),
-            _ => panic!("micro fixture contains packet and expectation statements"),
         }
+        assert_eq!(txs.len(), 4);
+        assert_eq!(txs, txs_expect);
     }
-    assert_eq!(txs.len(), 4);
-    assert_eq!(txs, txs_expect);
 }
 
 type Runner = p4spec_rust::runner::Runner<
@@ -65,7 +69,7 @@ use p4spec_rust::{
 };
 
 fn pipeline() -> (Runner, SimState) {
-    let mut runner = super::super::runner(Psa);
+    let mut runner = super::super::runner(Psa::default());
     let path = super::super::repo().join("p4spec/test/micro/sim-psa/psa.p4");
     let program = super::super::parse_program(runner.arena_mut(), &path);
     let mut state = psa::init_pipe(&mut runner.context(), program).unwrap();
@@ -463,7 +467,7 @@ fn test_multicast_restores_context_without_losing_effects() {
 
 #[test]
 fn test_empty_scheduler_retains_transmissions() {
-    let mut runner = super::super::runner(Psa);
+    let mut runner = super::super::runner(Psa::default());
     let path = super::super::repo().join("p4spec/test/micro/sim-psa/psa.p4");
     let program = super::super::parse_program(runner.arena_mut(), &path);
     let mut state = psa::init_pipe(&mut runner.context(), program).unwrap();
@@ -502,7 +506,7 @@ fn counter_count(runner: &mut Runner, state: &SimState) -> i64 {
 
 #[test]
 fn test_native_replication_fixture_order_and_persistent_counter() {
-    let mut runner = super::super::runner(Psa);
+    let mut runner = super::super::runner(Psa::default());
     let path =
         super::super::repo().join("p4spec-rust/tests/fixtures/sim-plugin/psa/replication.p4");
     let program = super::super::parse_program(runner.arena_mut(), &path);

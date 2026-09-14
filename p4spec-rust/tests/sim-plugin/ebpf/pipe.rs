@@ -104,7 +104,7 @@ fn runner(name_bad: &'static str) -> Runner<PhaseInterp, NullInterface, Ebpf> {
             values: vec![],
         },
         NullInterface,
-        Ebpf,
+        Ebpf::default(),
     );
     let mut values = Vec::new();
     for name in ["original", "packet", "globals", "parsed", "filtered"] {

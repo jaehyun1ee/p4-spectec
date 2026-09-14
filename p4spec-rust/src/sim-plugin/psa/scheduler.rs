@@ -1,16 +1,15 @@
 use super::super::state::SimState;
-use super::pipe;
-use crate::runner::{Extern, Interface, Interpreter, RunnerContext};
+use super::{Psa, pipe};
+use crate::runner::{Interface, Interpreter, RunnerContext};
 
 /// Schedule queued packets in FIFO order
-pub fn run_scheduler<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn run_scheduler<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
 ) -> Result<(), Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Interp: Interpreter<Iface, Psa>,
 {
     loop {
         let mut arch = pipe::get_arch_state(ctx, state.value_arch)?;

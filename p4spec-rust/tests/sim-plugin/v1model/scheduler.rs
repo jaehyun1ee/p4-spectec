@@ -7,8 +7,7 @@ use p4spec_rust::{
         },
     },
     runner::{
-        Extern, ExternError, Interface, InterfaceError, Interpreter, NullInterface, Runner,
-        RunnerContext,
+        ExternError, Interface, InterfaceError, Interpreter, NullInterface, Runner, RunnerContext,
     },
     sim_plugin::{
         core::object::{PacketIn, PacketOut},
@@ -122,7 +121,7 @@ fn write_int(arena: &mut ValueArena, value_ctx: Value, name: &str, width: i64, i
     update(arena, value_ctx, name, value)
 }
 
-impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for TraceInterp {
+impl<Iface: Interface> Interpreter<Iface, V1Model> for TraceInterp {
     type Spec = ();
     type Error = TestError;
 
@@ -131,7 +130,7 @@ impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for TraceInterp {
     fn reset(&mut self) {}
 
     fn eval_program(
-        _: &mut RunnerContext<'_, Self, Iface, Exn>,
+        _: &mut RunnerContext<'_, Self, Iface, V1Model>,
         _: &str,
         _: Value,
     ) -> Result<Vec<Value>, TestError> {
@@ -139,7 +138,7 @@ impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for TraceInterp {
     }
 
     fn eval_func(
-        ctx: &mut RunnerContext<'_, Self, Iface, Exn>,
+        ctx: &mut RunnerContext<'_, Self, Iface, V1Model>,
         name: &str,
         _: &[Typ],
         values: &[Value],
@@ -162,7 +161,7 @@ impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for TraceInterp {
     }
 
     fn eval_rel(
-        ctx: &mut RunnerContext<'_, Self, Iface, Exn>,
+        ctx: &mut RunnerContext<'_, Self, Iface, V1Model>,
         name: &str,
         values: &[Value],
     ) -> Result<Vec<Value>, TestError> {
@@ -193,7 +192,7 @@ impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for TraceInterp {
                 let mut value_ctx = values[0];
                 let mut value_arch = values[1];
                 let value_arch_state = field(ctx.arena(), value_arch, "STATE");
-                let encoding = ctx.encoding();
+                let encoding = ctx.external().encoding();
                 let mut arch = Arch::from_value(ctx.arena_mut(), encoding, &value_arch_state)?;
                 if matches!(phase, "ingress" | "egress") {
                     assert_eq!(arch.action, Action::default());
@@ -259,7 +258,7 @@ fn setup(scenario: Scenario) -> (TestRunner, SimState) {
             egress_count: 0,
         },
         NullInterface,
-        V1Model,
+        V1Model::default(),
     );
     let mut fields = Vec::new();
     for (name, width, int) in [
@@ -277,7 +276,7 @@ fn setup(scenario: Scenario) -> (TestRunner, SimState) {
     let value_ctx = record(runner.arena_mut(), fields);
     let mut arch = Arch::default();
     arch.mirrortable.insert(1, 7);
-    let encoding = runner.encoding();
+    let encoding = runner.external().encoding();
     let value_arch_state = arch.to_value(runner.arena_mut(), encoding).unwrap();
     let value_in = ObjectState::PacketIn(PacketIn::init("AB").unwrap())
         .to_value(runner.arena_mut(), encoding)

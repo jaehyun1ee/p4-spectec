@@ -30,7 +30,20 @@ use crate::{
 };
 use serde_derive_state::{DeserializeState, SerializeState};
 
-pub struct Psa;
+#[derive(Default)]
+pub struct Psa {
+    encoding: Encoding,
+}
+
+impl Psa {
+    pub fn new(encoding: Encoding) -> Self {
+        Self { encoding }
+    }
+
+    pub fn encoding(&self) -> Encoding {
+        self.encoding
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Eq, SerializeState, DeserializeState)]
 #[serde(serialize_state = "EncodeContext<'arena>", ser_parameters = "'arena")]
@@ -82,7 +95,7 @@ impl Extern for Psa {
         Iface: Interface,
         Interp: Interpreter<Iface, Self>,
     {
-        let encoding = ctx.encoding();
+        let encoding = self.encoding;
         let value = match name {
             "init_archState" => Arch::default().to_value(ctx.arena_mut(), encoding)?,
             "init_objectState" => {
@@ -207,7 +220,7 @@ where
     Iface: Interface,
     Interp: Interpreter<Iface, Psa>,
 {
-    let encoding = ctx.encoding();
+    let encoding = ctx.external().encoding;
     let [value_ctx, value_arch, value_id, value_name, value_names] = values else {
         return Err(ExternError::Failure(
             "unexpected number of arguments to extern method call".to_owned(),
@@ -443,17 +456,16 @@ fn object_id(arena: &mut ValueArena, name: &str) -> Result<Value, ExternError> {
     Ok(make::list(arena, typ.node.into(), values, Span::default())?)
 }
 
-pub fn get_object_state<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn get_object_state<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     value_arch: Value,
     value_id: Value,
 ) -> Result<ObjectState, Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Interp: Interpreter<Iface, Psa>,
 {
-    let encoding = ctx.encoding();
+    let encoding = ctx.external().encoding;
     let value_object = func::find_object_state_e(ctx, value_arch, value_id)?;
     Ok(ObjectState::from_value(
         ctx.arena_mut(),
@@ -463,62 +475,58 @@ where
 }
 
 /// Architectural state
-pub fn get_arch_state<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn get_arch_state<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     value_arch: Value,
 ) -> Result<Arch, Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Interp: Interpreter<Iface, Psa>,
 {
-    let encoding = ctx.encoding();
+    let encoding = ctx.external().encoding;
     let value_state = func::find_arch_state_e(ctx, value_arch)?;
     Ok(Arch::from_value(ctx.arena_mut(), encoding, &value_state)?)
 }
 
 /// Update the queue, mirror table and multicast state in the architecture
-pub fn set_arch_state<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn set_arch_state<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     value_arch: Value,
     arch: &Arch,
 ) -> Result<Value, Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Interp: Interpreter<Iface, Psa>,
 {
-    let encoding = ctx.encoding();
+    let encoding = ctx.external().encoding;
     let value_state = arch.to_value(ctx.arena_mut(), encoding)?;
     func::update_arch_state_e(ctx, value_arch, value_state)
 }
 
-fn put_object<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+fn put_object<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     value_arch: Value,
     name: &str,
     object: &ObjectState,
 ) -> Result<Value, Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Interp: Interpreter<Iface, Psa>,
 {
-    let encoding = ctx.encoding();
+    let encoding = ctx.external().encoding;
     let value_id = object_id(ctx.arena_mut(), name)?;
     let value_object = object.to_value(ctx.arena_mut(), encoding)?;
     func::update_object_state_e(ctx, value_arch, value_id, value_object)
 }
 
-fn get_packet_in<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+fn get_packet_in<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     value_arch: Value,
     name: &str,
 ) -> Result<PacketIn, Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Interp: Interpreter<Iface, Psa>,
 {
     let value_id = object_id(ctx.arena_mut(), name)?;
     match get_object_state(ctx, value_arch, value_id)? {
@@ -527,15 +535,14 @@ where
     }
 }
 
-fn get_packet_out<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+fn get_packet_out<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     value_arch: Value,
     name: &str,
 ) -> Result<PacketOut, Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Interp: Interpreter<Iface, Psa>,
 {
     let value_id = object_id(ctx.arena_mut(), name)?;
     match get_object_state(ctx, value_arch, value_id)? {
@@ -545,16 +552,15 @@ where
 }
 
 /// Mirror session interface
-pub fn add_mirror_session_mc<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn add_mirror_session_mc<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     value_arch: Value,
     session: i64,
     group: i64,
 ) -> Result<Value, Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Interp: Interpreter<Iface, Psa>,
 {
     let mut arch = get_arch_state(ctx, value_arch)?;
     arch.mirrortable.insert(session, group);
@@ -562,47 +568,44 @@ where
 }
 
 /// Multicast interface
-pub fn mc_mgrp_create<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn mc_mgrp_create<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     value_arch: Value,
     group: i64,
 ) -> Result<Value, Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Interp: Interpreter<Iface, Psa>,
 {
     let mut arch = get_arch_state(ctx, value_arch)?;
     arch.multicast.group_create(group);
     set_arch_state(ctx, value_arch, &arch)
 }
 
-pub fn mc_node_create<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn mc_node_create<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     value_arch: Value,
     instance: i64,
     ports: &[i64],
 ) -> Result<Value, Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Interp: Interpreter<Iface, Psa>,
 {
     let mut arch = get_arch_state(ctx, value_arch)?;
     arch.multicast.node_create(instance, ports);
     set_arch_state(ctx, value_arch, &arch)
 }
 
-pub fn mc_node_associate<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn mc_node_associate<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     value_arch: Value,
     group: i64,
     handle: i64,
 ) -> Result<Value, Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Interp: Interpreter<Iface, Psa>,
 {
     let mut arch = get_arch_state(ctx, value_arch)?;
     arch.multicast.node_associate(group, handle);
@@ -611,15 +614,14 @@ where
 
 // Register interface
 
-fn get_register<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+fn get_register<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     value_arch: Value,
     name: &str,
 ) -> Result<Register, Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Interp: Interpreter<Iface, Psa>,
 {
     let value_id = object_id(ctx.arena_mut(), name)?;
     match get_object_state(ctx, value_arch, value_id)? {
@@ -628,16 +630,15 @@ where
     }
 }
 
-pub fn register_read<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn register_read<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     value_arch: Value,
     name: &str,
     idx: i64,
 ) -> Result<Value, Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Interp: Interpreter<Iface, Psa>,
 {
     let reg = get_register(ctx, value_arch, name)?;
     // Evaluate the register read; printing is disabled in the source
@@ -653,8 +654,8 @@ where
     Ok(value_arch)
 }
 
-pub fn register_write<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn register_write<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     value_arch: Value,
     name: &str,
     idx: i64,
@@ -662,8 +663,7 @@ pub fn register_write<Interp, Iface, Exn>(
 ) -> Result<Value, Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Interp: Interpreter<Iface, Psa>,
 {
     let mut reg = get_register(ctx, value_arch, name)?;
     let value = pack::p4_arbitrary_int(ctx.arena_mut(), int.into())?;
@@ -676,15 +676,14 @@ where
     put_object(ctx, value_arch, name, &ObjectState::Register(reg))
 }
 
-pub fn register_reset<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn register_reset<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     value_arch: Value,
     name: &str,
 ) -> Result<Value, Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Interp: Interpreter<Iface, Psa>,
 {
     let mut reg = get_register(ctx, value_arch, name)?;
     let value = func::default(ctx, reg.value_typ)?;
@@ -706,14 +705,13 @@ pub fn transform_stf_stmt(mut stmt: Statement) -> Statement {
 }
 
 /// Pipeline initializer
-pub fn init_pipe<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn init_pipe<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     program: Value,
 ) -> Result<SimState, Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Interp: Interpreter<Iface, Psa>,
 {
     let (value_ctx, value_arch) = pgm::psa_init(ctx, program)?;
     Ok(SimState {
@@ -723,31 +721,29 @@ where
     })
 }
 
-fn metadata_bool<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+fn metadata_bool<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &SimState,
     name: &str,
     field: &str,
 ) -> Result<bool, Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Interp: Interpreter<Iface, Psa>,
 {
     let value = rel::lvalue_read_dot_global(ctx, state.value_ctx, state.value_arch, name, field)?;
     Ok(unpack::p4_bool(ctx.arena(), &value)?)
 }
 
-fn metadata_int<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+fn metadata_int<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &SimState,
     name: &str,
     field: &str,
 ) -> Result<i64, Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Interp: Interpreter<Iface, Psa>,
 {
     let value = rel::lvalue_read_dot_global(ctx, state.value_ctx, state.value_arch, name, field)?;
     let num = unpack::p4_fixed_bit(ctx.arena(), &value)?;
@@ -756,8 +752,8 @@ where
 
 // Prepare egress context
 
-fn prepare_egress<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+fn prepare_egress<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
     port: i64,
     path: &str,
@@ -766,8 +762,7 @@ fn prepare_egress<Interp, Iface, Exn>(
 ) -> Result<(), Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Interp: Interpreter<Iface, Psa>,
 {
     // Prepare class of service
     let cos = metadata_int(ctx, state, metadata, "class_of_service")?;
@@ -786,14 +781,13 @@ where
 
 // Packet state
 
-fn reset_ingress_packet<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+fn reset_ingress_packet<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
 ) -> Result<(), Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Interp: Interpreter<Iface, Psa>,
 {
     let mut pkt = get_packet_in(ctx, state.value_arch, "ingress_packet_in")?;
     pkt.reset();
@@ -806,15 +800,14 @@ where
     Ok(())
 }
 
-fn reset_packet_out<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+fn reset_packet_out<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
     name: &str,
 ) -> Result<(), Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Interp: Interpreter<Iface, Psa>,
 {
     state.value_arch = put_object(
         ctx,
@@ -825,16 +818,15 @@ where
     Ok(())
 }
 
-fn packet_string<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+fn packet_string<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     value_arch: Value,
     name_in: &str,
     name_out: &str,
 ) -> Result<String, Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Interp: Interpreter<Iface, Psa>,
 {
     let pkt_in = get_packet_in(ctx, value_arch, name_in)?;
     let pkt_out = get_packet_out(ctx, value_arch, name_out)?;
@@ -842,15 +834,14 @@ where
 }
 
 /// Schedule a packet with its processing context
-pub fn schedule_packet<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn schedule_packet<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
     entrypoint: Entrypoint,
 ) -> Result<(), Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Interp: Interpreter<Iface, Psa>,
 {
     let name = match entrypoint {
         Entrypoint::Ingress => "ingress_packet_in",
@@ -868,14 +859,13 @@ where
     Ok(())
 }
 
-fn schedule_unicast<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+fn schedule_unicast<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
 ) -> Result<(), Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Interp: Interpreter<Iface, Psa>,
 {
     let packet = packet_string(
         ctx,
@@ -898,15 +888,14 @@ where
 }
 
 /// Prepare and schedule multicast packets
-pub fn schedule_multicast<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn schedule_multicast<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
     group: i64,
 ) -> Result<(), Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Interp: Interpreter<Iface, Psa>,
 {
     let arch = get_arch_state(ctx, state.value_arch)?;
     let Some(handles) = arch.multicast.groups.get(&group).cloned() else {
@@ -941,16 +930,15 @@ where
     Ok(())
 }
 
-fn schedule_clone<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+fn schedule_clone<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
     session: i64,
     origin: Entrypoint,
 ) -> Result<(), Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Interp: Interpreter<Iface, Psa>,
 {
     let arch = get_arch_state(ctx, state.value_arch)?;
     let Some(group) = arch.mirrortable.get(&session) else {
@@ -1004,14 +992,13 @@ where
 }
 
 /// Prepare ingress metadata and resubmit the original ingress packet
-pub fn schedule_resubmit<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn schedule_resubmit<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
 ) -> Result<(), Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Interp: Interpreter<Iface, Psa>,
 {
     let port = metadata_int(ctx, state, "ingress_input_metadata", "ingress_port")?;
     state.value_ctx =
@@ -1021,14 +1008,13 @@ where
 }
 
 /// Prepare and schedule an ingress packet from egress output
-pub fn schedule_recirculate<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn schedule_recirculate<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
 ) -> Result<(), Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Interp: Interpreter<Iface, Psa>,
 {
     let packet = packet_string(
         ctx,
@@ -1050,14 +1036,13 @@ where
 
 // Transfer the packet to its egress port
 
-fn transfer_packet<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+fn transfer_packet<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
 ) -> Result<(), Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Interp: Interpreter<Iface, Psa>,
 {
     let port = metadata_int(ctx, state, "egress_input_metadata", "egress_port")?;
     let packet = packet_string(
@@ -1071,14 +1056,13 @@ where
 }
 
 /// Packet replication engine
-pub fn run_pre<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn run_pre<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
 ) -> Result<(), Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Interp: Interpreter<Iface, Psa>,
 {
     if metadata_bool(ctx, state, "ingress_output_metadata", "clone")? {
         let session = metadata_int(ctx, state, "ingress_output_metadata", "clone_session_id")?;
@@ -1099,14 +1083,13 @@ where
 }
 
 /// Buffering queueing engine
-pub fn run_bqe<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn run_bqe<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
 ) -> Result<(), Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Interp: Interpreter<Iface, Psa>,
 {
     if metadata_bool(ctx, state, "egress_output_metadata", "clone")? {
         let session = metadata_int(ctx, state, "egress_output_metadata", "clone_session_id")?;
@@ -1131,14 +1114,13 @@ where
 }
 
 /// Ingress pipeline driver
-pub fn drive_ingress_pipe<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn drive_ingress_pipe<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
 ) -> Result<(), Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Interp: Interpreter<Iface, Psa>,
 {
     let (value_ctx, value_arch, value_call_result) =
         rel::psa_ingress_parser(ctx, state.value_ctx, state.value_arch)?;
@@ -1173,14 +1155,13 @@ where
 }
 
 /// Egress pipeline driver
-pub fn drive_egress_pipe<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn drive_egress_pipe<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
 ) -> Result<(), Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Interp: Interpreter<Iface, Psa>,
 {
     let (value_ctx, value_arch, value_call_result) =
         rel::psa_egress_parser(ctx, state.value_ctx, state.value_arch)?;
@@ -1214,15 +1195,14 @@ where
     Ok(())
 }
 
-pub fn drive_packet<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn drive_packet<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
     packet: Packet,
 ) -> Result<(), Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Interp: Interpreter<Iface, Psa>,
 {
     let name = match packet.entrypoint {
         Entrypoint::Ingress => "ingress_packet_in",
@@ -1248,17 +1228,16 @@ where
 }
 
 /// Set up packets and globals, then schedule packets
-pub fn drive_pipe<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn drive_pipe<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
     rx: &Rx,
 ) -> Result<(), Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Interp: Interpreter<Iface, Psa>,
 {
-    let encoding = ctx.encoding();
+    let encoding = ctx.external().encoding;
     state.txs.clear();
     let pkt = ObjectState::PacketIn(PacketIn::init(&rx.packet)?);
     // Set up packet_in objects

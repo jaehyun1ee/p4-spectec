@@ -22,7 +22,20 @@ use super::{
     object::CounterArray,
 };
 
-pub struct Ebpf;
+#[derive(Default)]
+pub struct Ebpf {
+    encoding: Encoding,
+}
+
+impl Ebpf {
+    pub fn new(encoding: Encoding) -> Self {
+        Self { encoding }
+    }
+
+    pub fn encoding(&self) -> Encoding {
+        self.encoding
+    }
+}
 
 // Extern objects
 #[derive(Clone, Debug, PartialEq, Eq, SerializeState, DeserializeState)]
@@ -69,7 +82,7 @@ impl Extern for Ebpf {
         Iface: Interface,
         Interp: Interpreter<Iface, Self>,
     {
-        let encoding = ctx.encoding();
+        let encoding = self.encoding;
         let value = match name {
             "init_archState" => {
                 let payload = encode_with(ctx.arena(), encoding, &())
@@ -167,7 +180,7 @@ where
     Iface: Interface,
     Interp: Interpreter<Iface, Ebpf>,
 {
-    let encoding = ctx.encoding();
+    let encoding = ctx.external().encoding;
     let [value_ctx, value_arch, value_id, value_name, value_names] = values else {
         return Err(ExternError::Failure(
             "unexpected number of arguments to extern method call".to_owned(),
@@ -269,14 +282,13 @@ pub fn transform_stf_stmt(mut stmt: Statement) -> Statement {
 }
 
 /// Pipeline initializer
-pub fn init_pipe<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn init_pipe<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Ebpf>,
     program: Value,
 ) -> Result<SimState, Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Interp: Interpreter<Iface, Ebpf>,
 {
     let (value_ctx, value_arch) = pgm::ebpf_init(ctx, program)?;
     Ok(SimState {
@@ -287,17 +299,16 @@ where
 }
 
 /// Pipeline driver
-pub fn drive_pipe<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn drive_pipe<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Ebpf>,
     state: &mut SimState,
     rx: &Rx,
 ) -> Result<(), Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Interp: Interpreter<Iface, Ebpf>,
 {
-    let encoding = ctx.encoding();
+    let encoding = ctx.external().encoding;
     state.txs.clear();
     // Setup packet_in extern
     let pkt = ExternObject::PacketIn(PacketIn::init(&rx.packet)?);

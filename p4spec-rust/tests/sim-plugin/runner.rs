@@ -238,8 +238,8 @@ impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for StfInterp {
     }
 }
 
-fn stf_runner() -> (Runner<StfInterp, NullInterface, Ebpf>, Run) {
-    let mut runner = Runner::new((), StfInterp::default(), NullInterface, Ebpf);
+fn stf_runner(external: Ebpf) -> (Runner<StfInterp, NullInterface, Ebpf>, Run) {
+    let mut runner = Runner::new((), StfInterp::default(), NullInterface, external);
     let value = make::bool(runner.arena_mut(), false, Span::default()).unwrap();
     let run_case = Run::new(SimState {
         value_ctx: value,
@@ -255,7 +255,7 @@ fn statement(stmt: Statement) -> p4spec_rust::lang::common::source::Phrase<State
 
 #[test]
 fn test_ordered_table_encoding_and_register_failure() {
-    let (mut runner, mut run_case) = stf_runner();
+    let (mut runner, mut run_case) = stf_runner(Ebpf::default());
     let action = Action {
         name: "pipe_act".into(),
         args: vec![
@@ -389,7 +389,7 @@ fn test_ordered_table_encoding_and_register_failure() {
 
 #[test]
 fn test_native_steps_clear_raw_outputs_without_flushing_pending_queues() {
-    let (mut runner, mut run_case) = stf_runner();
+    let (mut runner, mut run_case) = stf_runner(Ebpf::default());
     run_case.state.txs = vec![tx(1, "AAFF")];
     run_case.on_tx_output().unwrap();
     let stmts = stf::parse::parse_str(
@@ -414,7 +414,7 @@ fn test_native_steps_clear_raw_outputs_without_flushing_pending_queues() {
 
 #[test]
 fn test_integer_failure_is_located_and_precedes_pipeline_dispatch() {
-    let (mut runner, mut run_case) = stf_runner();
+    let (mut runner, mut run_case) = stf_runner(Ebpf::default());
     for source in [
         "packet 4611686018427387904 AA",
         "expect 4611686018427387904 AA",
@@ -430,7 +430,7 @@ fn test_integer_failure_is_located_and_precedes_pipeline_dispatch() {
 
 #[test]
 fn test_fresh_run_resets_interpreter_state_and_queues() {
-    let (mut runner, _) = stf_runner();
+    let (mut runner, _) = stf_runner(Ebpf::default());
     let path = std::env::temp_dir().join(format!("p4spec-stf-reset-{}.p4", std::process::id()));
     std::fs::write(&path, "").unwrap();
     let mut run_case = runner::init_pipe(&mut runner, &[], &path).unwrap();
@@ -452,21 +452,20 @@ fn test_native_codec_configuration_survives_context_and_reset() {
     use p4spec_rust::sim_plugin::{core::object::PacketIn, ebpf::pipe::ExternObject};
 
     for encoding in [Encoding::ArenaRelative, Encoding::ArenaIndependent] {
-        let (runner, _) = stf_runner();
-        let mut runner = runner.with_encoding(encoding);
+        let (mut runner, _) = stf_runner(Ebpf::new(encoding));
         for _ in 0..2 {
             let object = ExternObject::PacketIn(PacketIn::init("AB").unwrap());
             let value_object = object.to_value(runner.arena_mut(), encoding).unwrap();
             assert_eq!(
                 {
                     let mut ctx = runner.context();
-                    let encoding = ctx.encoding();
+                    let encoding = ctx.external().encoding();
                     ExternObject::from_value(ctx.arena_mut(), encoding, &value_object).unwrap()
                 },
                 object,
             );
-            assert_eq!(runner.encoding(), encoding);
-            assert_eq!(runner.context().encoding(), encoding);
+            assert_eq!(runner.external().encoding(), encoding);
+            assert_eq!(runner.context().external().encoding(), encoding);
             let (value_arch, _) = runner
                 .context()
                 .call_extern_func("init_archState", &[], &[])
@@ -483,7 +482,7 @@ fn test_native_codec_configuration_survives_context_and_reset() {
                 ExternObject::from_value(runner.arena_mut(), encoding, &value_object).unwrap(),
                 object_after,
             );
-            assert_eq!(runner.context().encoding(), encoding);
+            assert_eq!(runner.context().external().encoding(), encoding);
             if encoding == Encoding::ArenaIndependent {
                 assert_eq!(
                     external::decode_with::<ExternObject>(runner.arena_mut(), encoding, &json)
@@ -496,18 +495,27 @@ fn test_native_codec_configuration_survives_context_and_reset() {
 }
 
 #[test]
-fn test_runner_defaults_to_independent_native_payloads() {
+fn test_extern_defaults_to_relative_native_payloads() {
     use p4spec_rust::sim_plugin::{core::object::PacketIn, ebpf::pipe::ExternObject};
 
-    let (mut runner, _) = stf_runner();
-    let encoding = runner.encoding();
+    let mut runner = Runner::new((), StfInterp::default(), NullInterface, Ebpf::default());
+    let encoding = runner.external().encoding();
+    assert_eq!(encoding, Encoding::ArenaRelative);
+    assert_eq!(
+        p4spec_rust::sim_plugin::psa::Psa::default().encoding(),
+        encoding
+    );
+    assert_eq!(
+        p4spec_rust::sim_plugin::v1model::V1Model::default().encoding(),
+        encoding
+    );
     let object = ExternObject::PacketIn(PacketIn::init("AB").unwrap());
     let value_object = object.to_value(runner.arena_mut(), encoding).unwrap();
     assert_eq!(
         get::external(runner.arena(), &value_object)
             .unwrap()
             .as_ref(),
-        &p4spec_rust::lang::data::value::external::encode(runner.arena(), &object).unwrap(),
+        &external::encode_with(runner.arena(), Encoding::ArenaRelative, &object).unwrap(),
     );
 }
 
@@ -527,8 +535,7 @@ fn test_runner_codec_preserves_immutable_nested_register_snapshots_in_each_mode(
     };
 
     for encoding in [Encoding::ArenaRelative, Encoding::ArenaIndependent] {
-        let (runner, _) = stf_runner();
-        let mut runner = runner.with_encoding(encoding);
+        let (mut runner, _) = stf_runner(Ebpf::new(encoding));
         let value_typ =
             make::text(runner.arena_mut(), "register type".into(), Span::default()).unwrap();
         let value = make::int(runner.arena_mut(), 0xcafe.into(), Span::default()).unwrap();
@@ -548,12 +555,12 @@ fn test_runner_codec_preserves_immutable_nested_register_snapshots_in_each_mode(
         };
         let value_arch = {
             let mut ctx = runner.context();
-            let encoding = ctx.encoding();
+            let encoding = ctx.external().encoding();
             arch.to_value(ctx.arena_mut(), encoding).unwrap()
         };
         let json = get::external(runner.arena(), &value_arch).unwrap().clone();
         let mut ctx = runner.context();
-        let encoding = ctx.encoding();
+        let encoding = ctx.external().encoding();
         let ObjectState::Register(mut object_changed) =
             ObjectState::from_value(ctx.arena_mut(), encoding, &value_object).unwrap()
         else {
@@ -650,9 +657,8 @@ fn test_runner_codec_imports_independent_nested_native_state() {
     }
 
     let (json_arch, json_outer, json_inner) = {
-        let (runner, _) = stf_runner();
-        let mut runner = runner.with_encoding(Encoding::ArenaIndependent);
-        let encoding = runner.encoding();
+        let (mut runner, _) = stf_runner(Ebpf::new(Encoding::ArenaIndependent));
+        let encoding = runner.external().encoding();
         let value_typ = make::text(runner.arena_mut(), "T".into(), span_at(1)).unwrap();
         let value = make::int(runner.arena_mut(), 0xcafe.into(), span_at(2)).unwrap();
         let object_inner = ObjectState::Register(Register {
@@ -695,9 +701,8 @@ fn test_runner_codec_imports_independent_nested_native_state() {
     };
 
     // The source arena is gone; each native layer retains independent encoding
-    let (runner, _) = stf_runner();
-    let mut runner = runner.with_encoding(Encoding::ArenaIndependent);
-    let encoding = runner.encoding();
+    let (mut runner, _) = stf_runner(Ebpf::new(Encoding::ArenaIndependent));
+    let encoding = runner.external().encoding();
     let value_arch: Value = decode(runner.arena_mut(), &json_arch).unwrap();
     let arch = Arch::from_value(runner.arena_mut(), encoding, &value_arch).unwrap();
     let value_outer = arch.queue[0].value_ctx;
@@ -824,7 +829,7 @@ fn test_native_stf_encoding_modes_preserve_outputs_and_state() {
             let Simulator::Psa(runner) = &mut simulator else {
                 panic!("expected PSA simulator");
             };
-            assert_eq!(runner.encoding(), encoding);
+            assert_eq!(runner.external().encoding(), encoding);
             let mut run_case = simulator.init_pipe(&includes, &path).unwrap();
             let Simulator::Psa(runner) = &mut simulator else {
                 panic!("expected PSA simulator");

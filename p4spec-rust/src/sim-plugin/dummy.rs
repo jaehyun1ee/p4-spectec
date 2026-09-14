@@ -1,4 +1,4 @@
-use crate::lang::data::value::external::encode_with;
+use crate::lang::data::value::external::encode;
 use crate::{
     lang::{data::value::Value, il::ast::Typ},
     runner::{Extern, ExternError, Interface, Interpreter, RunnerContext},
@@ -36,7 +36,6 @@ impl Extern for Dummy {
         Iface: Interface,
         Interp: Interpreter<Iface, Self>,
     {
-        let encoding = ctx.encoding();
         match name {
             "init_objectState" | "init_archState" => {
                 let name_typ = if name == "init_archState" {
@@ -44,7 +43,7 @@ impl Extern for Dummy {
                 } else {
                     "objectState"
                 };
-                let payload = encode_with(ctx.arena(), encoding, &())
+                let payload = encode(ctx.arena(), &())
                     .map_err(|error| ExternError::Failure(error.to_string()))?;
                 let value = super::externs::state_value(ctx.arena_mut(), name_typ, payload.into())?;
                 Ok((value, false))

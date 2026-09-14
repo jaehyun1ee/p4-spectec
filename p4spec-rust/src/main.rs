@@ -145,7 +145,7 @@ struct SimArgs {
     #[arg(long, value_name = "ARCH")]
     arch: String,
     /// Native plugin state encoding: arena-relative or arena-independent
-    #[arg(long, default_value = "arena-relative", value_name = "ENCODING")]
+    #[arg(long, default_value_t = Encoding::default(), value_name = "ENCODING")]
     plugin_encoding: Encoding,
     /// P4 program to simulate
     #[arg(short = 'p', value_name = "PROGRAM")]

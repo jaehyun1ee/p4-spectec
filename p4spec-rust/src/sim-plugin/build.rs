@@ -35,7 +35,7 @@ pub enum Simulator {
 }
 
 pub fn build(spec: Spec, arch: &str, config: Config) -> Result<Simulator, BuildError> {
-    build_with_encoding(spec, arch, config, Encoding::ArenaRelative)
+    build_with_encoding(spec, arch, config, Encoding::default())
 }
 
 pub fn build_with_encoding(
@@ -52,15 +52,24 @@ pub fn build_with_encoding(
     let interp = AlInterp::new(config);
     let interface = BuiltinInterface::new(unparser);
     Ok(match arch {
-        "ebpf" => Simulator::Ebpf(Box::new(
-            Runner::new(global, interp, interface, Ebpf).with_encoding(encoding),
-        )),
-        "psa" => Simulator::Psa(Box::new(
-            Runner::new(global, interp, interface, Psa).with_encoding(encoding),
-        )),
-        "v1model" => Simulator::V1Model(Box::new(
-            Runner::new(global, interp, interface, V1Model).with_encoding(encoding),
-        )),
+        "ebpf" => Simulator::Ebpf(Box::new(Runner::new(
+            global,
+            interp,
+            interface,
+            Ebpf::new(encoding),
+        ))),
+        "psa" => Simulator::Psa(Box::new(Runner::new(
+            global,
+            interp,
+            interface,
+            Psa::new(encoding),
+        ))),
+        "v1model" => Simulator::V1Model(Box::new(Runner::new(
+            global,
+            interp,
+            interface,
+            V1Model::new(encoding),
+        ))),
         _ => unreachable!("architecture checked before specification loading"),
     })
 }

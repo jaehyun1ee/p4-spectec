@@ -35,7 +35,7 @@ fn counter_counts(
         make::list(runner.arena_mut(), typ.node.into(), values, Span::default()).unwrap();
     let value_state =
         func::find_object_state_e(&mut runner.context(), value_arch, value_id).unwrap();
-    let encoding = runner.encoding();
+    let encoding = runner.external().encoding();
     let ExternObject::CounterArray(counter) =
         ExternObject::from_value(runner.arena_mut(), encoding, &value_state).unwrap()
     else {
@@ -52,7 +52,7 @@ fn pipeline() -> (
     >,
     p4spec_rust::sim_plugin::state::SimState,
 ) {
-    let mut runner = super::runner(Ebpf);
+    let mut runner = super::runner(Ebpf::default());
     let program = super::parse_program(
         runner.arena_mut(),
         &super::repo().join("p4spec-rust/tests/fixtures/sim-plugin/ebpf/counter.p4"),
@@ -135,37 +135,41 @@ fn test_counter_state_persists_across_packets() {
 
 #[test]
 fn test_native_ebpf_micro_fixture_packets() {
-    let mut runner = super::runner(Ebpf);
-    let path = super::repo().join("p4spec/test/micro/sim-ebpf/ebpf.p4");
-    let program = super::parse_program(runner.arena_mut(), &path);
-    let mut state = ebpf::init_pipe(&mut runner.context(), program).unwrap();
-    let program_stf = p4spec_rust::stf::parse::parse_file(path.with_extension("stf")).unwrap();
-    let mut txs = Vec::new();
-    let mut txs_expect = Vec::new();
-    for stmt in program_stf {
-        match stmt.node {
-            Statement::Packet { port, packet } => {
-                ebpf::drive_pipe(
-                    &mut runner.context(),
-                    &mut state,
-                    &Rx {
-                        port: port.parse().unwrap(),
-                        packet,
-                    },
-                )
-                .unwrap();
-                txs.extend(state.txs.iter().map(|tx| (tx.port, tx.packet.clone())));
+    use p4spec_rust::lang::data::value::external::Encoding;
+
+    for encoding in [Encoding::ArenaRelative, Encoding::ArenaIndependent] {
+        let mut runner = super::runner(Ebpf::new(encoding));
+        let path = super::repo().join("p4spec/test/micro/sim-ebpf/ebpf.p4");
+        let program = super::parse_program(runner.arena_mut(), &path);
+        let mut state = ebpf::init_pipe(&mut runner.context(), program).unwrap();
+        let program_stf = p4spec_rust::stf::parse::parse_file(path.with_extension("stf")).unwrap();
+        let mut txs = Vec::new();
+        let mut txs_expect = Vec::new();
+        for stmt in program_stf {
+            match stmt.node {
+                Statement::Packet { port, packet } => {
+                    ebpf::drive_pipe(
+                        &mut runner.context(),
+                        &mut state,
+                        &Rx {
+                            port: port.parse().unwrap(),
+                            packet,
+                        },
+                    )
+                    .unwrap();
+                    txs.extend(state.txs.iter().map(|tx| (tx.port, tx.packet.clone())));
+                }
+                Statement::Expect {
+                    port,
+                    packet_expected: Some(packet),
+                    exact: _,
+                } => txs_expect.push((port.parse::<i64>().unwrap(), packet)),
+                _ => panic!("micro fixture contains packet and expectation statements"),
             }
-            Statement::Expect {
-                port,
-                packet_expected: Some(packet),
-                exact: _,
-            } => txs_expect.push((port.parse::<i64>().unwrap(), packet)),
-            _ => panic!("micro fixture contains packet and expectation statements"),
         }
+        assert_eq!(txs.len(), 2);
+        assert_eq!(txs, txs_expect);
     }
-    assert_eq!(txs.len(), 2);
-    assert_eq!(txs, txs_expect);
 }
 
 #[test]

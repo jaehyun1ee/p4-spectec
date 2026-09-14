@@ -16,8 +16,8 @@ use crate::util::json::json;
 /// Relative payloads belong to one live arena; independent payloads carry contents
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Encoding {
-    ArenaRelative,
     #[default]
+    ArenaRelative,
     ArenaIndependent,
 }
 

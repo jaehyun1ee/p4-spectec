@@ -1,7 +1,7 @@
 //! v1model extern functions; random, clone, truncate, assert, and assume
 //! retain the source simulator's explicit unsupported dispatch failures
 
-use super::{packet, pipe};
+use super::{V1Model, packet, pipe};
 use crate::sim_plugin::{
     core::object::PacketIn,
     hash as checksum,
@@ -483,15 +483,14 @@ where
 /// resubmit_preserving_field_list(2) will only preserve field y.
 ///
 /// extern void resubmit_preserving_field_list(bit<8> index);
-pub fn resubmit_preserving_field_list<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn resubmit_preserving_field_list<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     value_ctx: Value,
     value_arch: Value,
 ) -> Result<(Value, Value, Value), Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Interp: Interpreter<Iface, V1Model>,
 {
     let value_idx = func::find_var_e_local(ctx, value_ctx, "index")?;
     let idx = packet::field_index(ctx.arena(), &value_idx)?;
@@ -537,15 +536,14 @@ where
 /// for more details.
 ///
 /// extern void recirculate_preserving_field_list(bit<8> index);
-pub fn recirculate_preserving_field_list<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn recirculate_preserving_field_list<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     value_ctx: Value,
     value_arch: Value,
 ) -> Result<(Value, Value, Value), Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Interp: Interpreter<Iface, V1Model>,
 {
     let value_idx = func::find_var_e_local(ctx, value_ctx, "index")?;
     let idx = packet::field_index(ctx.arena(), &value_idx)?;
@@ -604,15 +602,14 @@ where
 ///
 /// extern void clone_preserving_field_list(in CloneType type,
 ///                                         in bit<32> session, bit<8> index);
-pub fn clone_preserving_field_list<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn clone_preserving_field_list<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     value_ctx: Value,
     value_arch: Value,
 ) -> Result<(Value, Value, Value), Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Interp: Interpreter<Iface, V1Model>,
 {
     let mut arch = pipe::get_arch_state(ctx, value_arch)?;
     let value_type = func::find_var_e_local(ctx, value_ctx, "type")?;
