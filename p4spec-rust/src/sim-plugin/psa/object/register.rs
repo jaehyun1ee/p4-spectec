@@ -1,4 +1,3 @@
-use super::repeat;
 use crate::lang::data::value::external::{DecodeContext, EncodeContext};
 use crate::sim_plugin::spec_impl::{func, unpack};
 use crate::{
@@ -63,10 +62,11 @@ impl Register {
             Some(arg) => arg.value,
             None => func::default(ctx, value_typ)?,
         };
-        let size = unpack::signed_int(&unpack::p4_fixed_bit(ctx.arena(), &value_size)?.int)?;
+        let size =
+            unpack::signed_int(&unpack::p4_fixed_bit(ctx.arena(), &value_size)?.int)? as usize;
         Ok(Self {
             value_typ,
-            values: repeat(value_initial, size)?,
+            values: vec![value_initial; size],
         })
     }
 

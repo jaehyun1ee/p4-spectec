@@ -1,4 +1,3 @@
-use super::repeat;
 use crate::sim_plugin::{
     core::object::PacketIn,
     spec_impl::{func, unpack},
@@ -49,15 +48,17 @@ impl Counter {
         let args = unpack::assoc_args(arena, value_ids, value_args)?;
         let value_size = unpack::find_arg(&args, "size")?;
         let value_type = unpack::find_arg(&args, "type")?;
-        let size = unpack::signed_int(&unpack::p4_fixed_bit(arena, &value_size)?.int)?;
+        let size = unpack::signed_int(&unpack::p4_fixed_bit(arena, &value_size)?.int)? as usize;
         let (id_enum, id_type) = unpack::p4_enum(arena, &value_type)?;
         match (id_enum.as_str(), id_type.as_str()) {
-            ("CounterType", "packets") => Ok(Self::Packets(repeat(BigInt::zero(), size)?)),
-            ("CounterType", "bytes") => Ok(Self::Bytes(repeat(BigInt::zero(), size)?)),
-            ("CounterType", "packets_and_bytes") => Ok(Self::PacketsAndBytes(repeat(
-                (BigInt::zero(), BigInt::zero()),
-                size,
-            )?)),
+            ("CounterType", "packets") => Ok(Self::Packets(vec![BigInt::zero(); size])),
+            ("CounterType", "bytes") => Ok(Self::Bytes(vec![BigInt::zero(); size])),
+            ("CounterType", "packets_and_bytes") => {
+                Ok(Self::PacketsAndBytes(vec![
+                    (BigInt::zero(), BigInt::zero());
+                    size
+                ]))
+            }
             _ => Err(ExternError::Failure(format!(
                 "invalid CounterType enum value: {id_enum}.{id_type}"
             ))),
