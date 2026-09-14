@@ -1,7 +1,7 @@
 //! Helpers for invoking relations in the spec
 
 use crate::{
-    lang::data::value::{Value, get},
+    lang::data::value::{Value, ValueArena, get},
     runner::{Extern, ExternError, Interface, Interpreter, RunnerContext},
 };
 
@@ -10,6 +10,30 @@ pub struct CallResult {
     pub value_ctx: Value,
     pub value_arch: Value,
     pub value_call_result: Value,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ObjectResult<Object> {
+    pub object: Object,
+    pub result: CallResult,
+}
+
+pub fn finish<Object>(
+    arena: &mut ValueArena,
+    object: Object,
+    value_ctx: Value,
+    value_arch: Value,
+    value: Option<Value>,
+) -> Result<ObjectResult<Object>, ExternError> {
+    let value_call_result = super::pack::return_result(arena, value)?;
+    Ok(ObjectResult {
+        object,
+        result: CallResult {
+            value_ctx,
+            value_arch,
+            value_call_result,
+        },
+    })
 }
 
 pub fn lvalue_write_var_local<Interp, Iface, Exn>(
@@ -752,7 +776,7 @@ pub fn v1model_setup_preserved_meta_fields<Interp, Iface, Exn>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
     value_ctx: Value,
     value_arch: Value,
-    value_index: Value,
+    value_idx: Value,
 ) -> Result<Value, Interp::Error>
 where
     Iface: Interface,
@@ -761,7 +785,7 @@ where
 {
     let values = ctx.call_rel(
         "V1Model_setup_preserved_meta_fields",
-        &[value_ctx, value_arch, value_index],
+        &[value_ctx, value_arch, value_idx],
     )?;
     Ok(*get::one(&values).map_err(ExternError::from)?)
 }

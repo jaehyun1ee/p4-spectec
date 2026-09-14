@@ -3,8 +3,8 @@
 use std::rc::Rc;
 
 mod arena;
+pub mod external;
 mod intern;
-pub mod serde;
 #[allow(
     clippy::module_inception,
     reason = "separate facade and implementation"
@@ -195,7 +195,16 @@ pub mod make {
         json: json,
         span: Span,
     ) -> Result<Value, ValueError> {
-        new(arena, ValueKind::Extern(Rc::new(json)), typ, span)
+        let payload = Rc::new(json);
+        external_payload(arena, typ, payload, span)
+    }
+    pub fn external_payload(
+        arena: &mut ValueArena,
+        typ: Rc<TypKind>,
+        payload: Rc<json>,
+        span: Span,
+    ) -> Result<Value, ValueError> {
+        new(arena, ValueKind::Extern(payload), typ, span)
     }
 }
 
@@ -336,7 +345,7 @@ pub mod get {
         external_shared(arena, value).map(Rc::as_ref)
     }
 
-    pub(super) fn external_shared<'a>(
+    pub(crate) fn external_shared<'a>(
         arena: &'a ValueArena,
         value: &Value,
     ) -> Result<&'a Rc<json>, ValueError> {

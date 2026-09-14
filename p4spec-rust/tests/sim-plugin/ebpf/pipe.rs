@@ -13,7 +13,7 @@ use p4spec_rust::{
     },
     sim_plugin::{
         ebpf::{self, Ebpf},
-        io::Transmission,
+        io::{Rx, Tx},
         state::SimState,
     },
 };
@@ -141,7 +141,7 @@ fn test_phase_arity_failure_retains_only_completed_phase_state() {
         let mut state = SimState {
             value_ctx: value,
             value_arch: value,
-            txs: vec![Transmission {
+            txs: vec![Tx {
                 port: 0,
                 packet: "prior packet".to_owned(),
             }],
@@ -149,7 +149,7 @@ fn test_phase_arity_failure_retains_only_completed_phase_state() {
         let error = ebpf::drive_pipe(
             &mut runner_phase.context(),
             &mut state,
-            &Transmission {
+            &Rx {
                 port: 1,
                 packet: "aB".to_owned(),
             },
@@ -192,7 +192,7 @@ fn test_initialization_requires_two_outputs_and_filter_result_is_ignored() {
     ebpf::drive_pipe(
         &mut runner_phase.context(),
         &mut state,
-        &Transmission {
+        &Rx {
             port: 3,
             packet: "aB".to_owned(),
         },

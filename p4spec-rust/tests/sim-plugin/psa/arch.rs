@@ -2,8 +2,9 @@ use p4spec_rust::{
     lang::{
         common::source::Span,
         data::value::{
-            ValueArena, get, make,
-            serde::{decode, encode},
+            ValueArena,
+            external::{decode, encode},
+            get, make,
         },
     },
     sim_plugin::{

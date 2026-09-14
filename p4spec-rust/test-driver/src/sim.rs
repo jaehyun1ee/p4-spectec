@@ -1,10 +1,11 @@
 use crate::{Error, Result, corpus, frames};
 use expect_test::{ExpectFile, expect_file};
 use indicatif::{ProgressBar, ProgressStyle};
-use p4spec_rust::sim_plugin::io::Transmission;
+use p4spec_rust::sim_plugin::io::Tx;
 use p4spec_rust::{
     frontend::parse::parse_files,
     interp::al::Config,
+    lang::data::value::external::Encoding,
     pass::{algo, elaborate},
     sim_plugin::{build, runner::Error as SimError},
     stf,
@@ -179,7 +180,7 @@ impl Results {
         }
     }
 
-    fn record(&mut self, pair: &Pair, status: &str, txs: &[Transmission]) -> Result<()> {
+    fn record(&mut self, pair: &Pair, status: &str, txs: &[Tx]) -> Result<()> {
         for path in [&pair.path_p4, &pair.path_stf] {
             if !path
                 .to_str()
@@ -270,8 +271,17 @@ pub fn run(det: bool, oracle: Option<&Path>) -> Result<()> {
             })
             .count();
         let patched_arch = pairs_arch.filter(|pair| pair.patched).count();
-        let mut simulator = build::build(spec_al.clone(), arch, Config::new(true, det, false))
-            .map_err(|error| Error::Invalid(error.to_string()))?;
+        let mut simulator = if oracle.is_some() {
+            build::build_with_encoding(
+                spec_al.clone(),
+                arch,
+                Config::new(true, det, false),
+                Encoding::ArenaIndependent,
+            )
+        } else {
+            build::build(spec_al.clone(), arch, Config::new(true, det, false))
+        }
+        .map_err(|error| Error::Invalid(error.to_string()))?;
         let mut worker = oracle
             .map(|path| frames::Worker::spawn(path, Path::new("spec"), arch, det))
             .transpose()?;
@@ -301,10 +311,17 @@ pub fn run(det: bool, oracle: Option<&Path>) -> Result<()> {
                 if let Some(worker) = &mut worker {
                     worker.begin_case(&id, &pair.path_p4, &pair.path_stf, &includes)?;
                 }
-                let mut run = checked(simulator.init_pipe(&includes, &pair.path_p4), &mut worker)
-                    .map_err(|error| Error::Invalid(format!("{id}: {error}")))?;
+                let mut run_case =
+                    checked(simulator.init_pipe(&includes, &pair.path_p4), &mut worker)
+                        .map_err(|error| Error::Invalid(format!("{id}: {error}")))?;
                 if let Some(worker) = &mut worker {
-                    worker.compare_state("init", 0, simulator.arena(), &run, &run.state.txs)?;
+                    worker.compare_state(
+                        "init",
+                        0,
+                        simulator.arena(),
+                        &run_case,
+                        &run_case.state.txs,
+                    )?;
                 }
                 let stmts_stf = checked(
                     stf::parse::parse_file(&pair.path_stf).map_err(SimError::from),
@@ -312,25 +329,31 @@ pub fn run(det: bool, oracle: Option<&Path>) -> Result<()> {
                 )
                 .map_err(|error| Error::Invalid(format!("{id}: {error}")))?;
                 for (idx, stmt_stf) in stmts_stf.iter().enumerate() {
-                    checked(simulator.step(&mut run, stmt_stf), &mut worker).map_err(|error| {
-                        Error::Invalid(format!("{id}: command {}: {error}", idx + 1))
-                    })?;
+                    checked(simulator.step(&mut run_case, stmt_stf), &mut worker).map_err(
+                        |error| Error::Invalid(format!("{id}: command {}: {error}", idx + 1)),
+                    )?;
                     if let Some(worker) = &mut worker {
                         worker.compare_state(
                             "command",
                             idx + 1,
                             simulator.arena(),
-                            &run,
-                            &run.state.txs,
+                            &run_case,
+                            &run_case.state.txs,
                         )?;
                     }
                     commands += 1;
                 }
                 if let Some(worker) = &mut worker {
-                    worker.compare_state("end", stmts_stf.len(), simulator.arena(), &run, &[])?;
+                    worker.compare_state(
+                        "end",
+                        stmts_stf.len(),
+                        simulator.arena(),
+                        &run_case,
+                        &[],
+                    )?;
                 }
                 checked(
-                    run.finish().map_err(|failure| SimError::Stf {
+                    run_case.finish().map_err(|failure| SimError::Stf {
                         failure: Box::new(failure),
                         span: Default::default(),
                     }),
@@ -342,8 +365,8 @@ pub fn run(det: bool, oracle: Option<&Path>) -> Result<()> {
                     frames += counts.frames;
                     states += counts.states;
                 }
-                matched += run.matches.len();
-                results.record(pair, "pass", &run.matches)?;
+                matched += run_case.matches.len();
+                results.record(pair, "pass", &run_case.matches)?;
                 executed += 1;
                 progress.inc(1);
             }

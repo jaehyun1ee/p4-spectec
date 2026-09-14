@@ -1,4 +1,4 @@
-use serde_derive_state::{DeserializeState, SerializeState};
+use serde::{Deserialize, Serialize};
 
 use std::{error::Error, fmt};
 
@@ -11,9 +11,7 @@ use crate::lang::{
     },
 };
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, SerializeState, DeserializeState)]
-#[serde(serialize_state = "State", ser_parameters = "State")]
-#[serde(deserialize_state = "State", de_parameters = "State")]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum Atom {
     /// Concrete object word such as `INT`
     Keyword(String),
@@ -73,6 +71,31 @@ pub enum Atom {
     LBrace,
     /// `` `} ``
     RBrace,
+}
+
+impl<State> serde_state::SerializeState<State> for Atom {
+    fn serialize_state<Serializer>(
+        &self,
+        serializer: Serializer,
+        _state: &State,
+    ) -> Result<Serializer::Ok, Serializer::Error>
+    where
+        Serializer: serde::Serializer,
+    {
+        self.serialize(serializer)
+    }
+}
+
+impl<'de, State> serde_state::DeserializeState<'de, State> for Atom {
+    fn deserialize_state<Deserializer>(
+        _state: &mut State,
+        deserializer: Deserializer,
+    ) -> Result<Self, Deserializer::Error>
+    where
+        Deserializer: serde::Deserializer<'de>,
+    {
+        Self::deserialize(deserializer)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

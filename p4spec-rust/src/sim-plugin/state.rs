@@ -1,6 +1,6 @@
 use crate::lang::data::value::Value;
 
-use super::io::Transmission;
+use super::io::Tx;
 
 /// Mutable pipeline state, held outside the runner
 ///
@@ -9,7 +9,7 @@ use super::io::Transmission;
 pub struct SimState {
     pub value_ctx: Value,
     pub value_arch: Value,
-    pub txs: Vec<Transmission>,
+    pub txs: Vec<Tx>,
 }
 
 // Both relation result types carry these fields; keep the call result available

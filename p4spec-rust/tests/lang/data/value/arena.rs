@@ -588,3 +588,51 @@ fn test_external_object_key_order_shares_canonical_identity() {
     assert_eq!(hash(arena.kind(&value_a)), hash(arena.kind(&value_b)));
     assert!(arena.view(value_a).syntax_cmp(&arena.view(value_b)).is_eq());
 }
+
+#[test]
+fn test_external_canonical_equality_stops_at_json() {
+    use p4spec_rust::lang::data::value::external::{Encoding, encode_with};
+    let mut arena = ValueArena::new();
+    let value = make::bool(&mut arena, true, span("value.p4", 1)).unwrap();
+    let value_relocated = arena.update_span(value, span("value.p4", 2)).unwrap();
+    let value_retyped = arena.update_typ(value, typ::TypKind::Text.into()).unwrap();
+    for encoding in [Encoding::ArenaRelative, Encoding::ArenaIndependent] {
+        let mut values_external = Vec::new();
+        for value in [value, value_relocated, value_retyped, value] {
+            let payload = Rc::new(encode_with(&arena, encoding, &vec![value]).unwrap());
+            values_external.push(
+                make::external_payload(
+                    &mut arena,
+                    typ::TypKind::Bool.into(),
+                    payload,
+                    Span::default(),
+                )
+                .unwrap(),
+            );
+        }
+        for value_external in &values_external[1..3] {
+            assert_ne!(
+                get::external(&arena, &values_external[0]).unwrap(),
+                get::external(&arena, value_external).unwrap()
+            );
+            assert_ne!(
+                arena.canon_id(&values_external[0]),
+                arena.canon_id(value_external)
+            );
+            assert!(
+                !arena
+                    .view(values_external[0])
+                    .syntax_eq(&arena.view(*value_external))
+            );
+        }
+        assert_eq!(values_external[0].node, values_external[3].node);
+        assert_eq!(
+            arena.canon_id(&values_external[0]),
+            arena.canon_id(&values_external[3])
+        );
+        assert_eq!(
+            hash(arena.kind(&values_external[0])),
+            hash(arena.kind(&values_external[3]))
+        );
+    }
+}

@@ -1,4 +1,5 @@
-use super::{ObjectResult, finish, repeat};
+use super::repeat;
+use crate::sim_plugin::spec_impl::rel::{ObjectResult, finish};
 use crate::sim_plugin::{
     core::object::PacketIn,
     spec_impl::{func, unpack},

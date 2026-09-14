@@ -1,15 +1,16 @@
 use super::core;
+use crate::util::json::json;
 use crate::{
     lang::{
         common::source::Span,
         data::{
             typ,
-            value::{Value, ValueArena, get, make, serde::DecodeError as StateDecodeError},
+            value::{Value, ValueArena, external::DecodeError as StateDecodeError, get, make},
         },
     },
     runner::{Extern, ExternError, Interface, Interpreter, RunnerContext},
-    util::json::json,
 };
+use std::rc::Rc;
 
 impl From<StateDecodeError> for ExternError {
     fn from(error: StateDecodeError) -> Self {
@@ -23,16 +24,16 @@ impl From<StateDecodeError> for ExternError {
 pub(crate) fn state_value(
     arena: &mut ValueArena,
     name: &str,
-    json: json,
+    payload: Rc<json>,
 ) -> Result<Value, ExternError> {
     let typ = typ::make::var(
         crate::phrase!(node: name.to_owned(), span: Span::default()),
         vec![],
     );
-    Ok(make::external(
+    Ok(make::external_payload(
         arena,
         typ.node.into(),
-        json,
+        payload,
         Span::default(),
     )?)
 }

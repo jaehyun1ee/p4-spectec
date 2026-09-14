@@ -12,14 +12,11 @@ use crate::{
 
 use crate::sim_plugin::spec_impl::{
     func, pack,
-    rel::{self, CallResult},
+    rel::{self, CallResult, ObjectResult, finish},
     unpack,
 };
 
-use super::{
-    PacketResult,
-    bits::{bits_to_int_unsigned, string_to_bits},
-};
+use super::bits::{bits_to_int_unsigned, string_to_bits};
 
 /// Input packet data and its extraction cursor
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -115,7 +112,7 @@ impl PacketIn {
         ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
         value_ctx: Value,
         value_arch: Value,
-    ) -> Result<PacketResult<Self>, Interp::Error>
+    ) -> Result<ObjectResult<Self>, Interp::Error>
     where
         Iface: Interface,
         Exn: Extern,
@@ -131,15 +128,7 @@ impl PacketIn {
         let value_hdr = func::find_var_e_local(ctx, value_ctx, "hdr")?;
         let value_hdr = func::write_value_from_bits(ctx, value_hdr, 0, &bits)?;
         let value_ctx = rel::lvalue_write_var_local(ctx, value_ctx, value_arch, "hdr", value_hdr)?;
-        let value_call_result = pack::return_result(ctx.arena_mut(), None)?;
-        Ok(PacketResult {
-            pkt,
-            result: CallResult {
-                value_ctx,
-                value_arch,
-                value_call_result,
-            },
-        })
+        Ok(finish(ctx.arena_mut(), pkt, value_ctx, value_arch, None)?)
     }
 
     /// Extracts a header with a variable-size field
@@ -153,7 +142,7 @@ impl PacketIn {
         ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
         value_ctx: Value,
         value_arch: Value,
-    ) -> Result<PacketResult<Self>, Interp::Error>
+    ) -> Result<ObjectResult<Self>, Interp::Error>
     where
         Iface: Interface,
         Exn: Extern,
@@ -202,15 +191,7 @@ impl PacketIn {
             "variableSizeHeader",
             value_hdr,
         )?;
-        let value_call_result = pack::return_result(ctx.arena_mut(), None)?;
-        Ok(PacketResult {
-            pkt,
-            result: CallResult {
-                value_ctx,
-                value_arch,
-                value_call_result,
-            },
-        })
+        Ok(finish(ctx.arena_mut(), pkt, value_ctx, value_arch, None)?)
     }
 
     /// Reads a value without advancing the packet cursor
@@ -223,7 +204,7 @@ impl PacketIn {
         ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
         value_ctx: Value,
         value_arch: Value,
-    ) -> Result<PacketResult<Self>, Interp::Error>
+    ) -> Result<ObjectResult<Self>, Interp::Error>
     where
         Iface: Interface,
         Exn: Extern,
@@ -236,17 +217,15 @@ impl PacketIn {
         if !self.has_size(size)? {
             return self.reject(ctx, value_ctx, value_arch, "PacketTooShort");
         }
-        let (_, bits) = self.parse(size)?;
-        let value_hdr = func::write_value_from_bits(ctx, value_hdr, 0, &bits)?;
-        let value_call_result = pack::return_result(ctx.arena_mut(), Some(value_hdr))?;
-        Ok(PacketResult {
-            pkt: self.clone(),
-            result: CallResult {
-                value_ctx,
-                value_arch,
-                value_call_result,
-            },
-        })
+        let bits = &self.bits[self.idx..self.idx + size];
+        let value_hdr = func::write_value_from_bits(ctx, value_hdr, 0, bits)?;
+        Ok(finish(
+            ctx.arena_mut(),
+            self.clone(),
+            value_ctx,
+            value_arch,
+            Some(value_hdr),
+        )?)
     }
 
     /// Advances the packet cursor by the requested number of bits
@@ -259,7 +238,7 @@ impl PacketIn {
         ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
         value_ctx: Value,
         value_arch: Value,
-    ) -> Result<PacketResult<Self>, Interp::Error>
+    ) -> Result<ObjectResult<Self>, Interp::Error>
     where
         Iface: Interface,
         Exn: Extern,
@@ -274,15 +253,7 @@ impl PacketIn {
             idx: self.idx + size,
             ..self.clone()
         };
-        let value_call_result = pack::return_result(ctx.arena_mut(), None)?;
-        Ok(PacketResult {
-            pkt,
-            result: CallResult {
-                value_ctx,
-                value_arch,
-                value_call_result,
-            },
-        })
+        Ok(finish(ctx.arena_mut(), pkt, value_ctx, value_arch, None)?)
     }
 
     /// Returns the total packet length in bytes
@@ -295,7 +266,7 @@ impl PacketIn {
         ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
         value_ctx: Value,
         value_arch: Value,
-    ) -> Result<PacketResult<Self>, Interp::Error>
+    ) -> Result<ObjectResult<Self>, Interp::Error>
     where
         Iface: Interface,
         Exn: Extern,
@@ -303,15 +274,13 @@ impl PacketIn {
     {
         let value_len =
             pack::p4_fixed_bit(ctx.arena_mut(), 32.into(), self.len.div_ceil(8).into())?;
-        let value_call_result = pack::return_result(ctx.arena_mut(), Some(value_len))?;
-        Ok(PacketResult {
-            pkt: self.clone(),
-            result: CallResult {
-                value_ctx,
-                value_arch,
-                value_call_result,
-            },
-        })
+        Ok(finish(
+            ctx.arena_mut(),
+            self.clone(),
+            value_ctx,
+            value_arch,
+            Some(value_len),
+        )?)
     }
 
     fn reject<Interp, Iface, Exn>(
@@ -320,15 +289,15 @@ impl PacketIn {
         value_ctx: Value,
         value_arch: Value,
         name: &str,
-    ) -> Result<PacketResult<Self>, Interp::Error>
+    ) -> Result<ObjectResult<Self>, Interp::Error>
     where
         Iface: Interface,
         Exn: Extern,
         Interp: Interpreter<Iface, Exn>,
     {
         let value_call_result = pack::reject_transition(ctx.arena_mut(), name)?;
-        Ok(PacketResult {
-            pkt: self.clone(),
+        Ok(ObjectResult {
+            object: self.clone(),
             result: CallResult {
                 value_ctx,
                 value_arch,

@@ -2,8 +2,9 @@ use p4spec_rust::{
     lang::{
         common::source::Span,
         data::value::{
-            ValueArena, ValueError, get, make,
-            serde::{decode, encode},
+            ValueArena, ValueError,
+            external::{Encoding, decode, encode, encode_with},
+            get, make,
         },
     },
     runner::ExternError,
@@ -49,8 +50,15 @@ fn test_derived_register_object_preserves_payload_and_annotations() {
     );
     assert_eq!(arena_decoded.typ(&reg.values[0]), arena.typ(&value));
     assert_eq!(arena_decoded.span(&reg.values[0]), &span);
-    let value_object = object.to_value(&mut arena_decoded).unwrap();
-    let object_decoded = ObjectState::from_value(&mut arena_decoded, &value_object).unwrap();
+    let value_object = object
+        .to_value(&mut arena_decoded, Encoding::ArenaIndependent)
+        .unwrap();
+    let object_decoded = ObjectState::from_value(
+        &mut arena_decoded,
+        Encoding::ArenaIndependent,
+        &value_object,
+    )
+    .unwrap();
     assert_eq!(encode(&arena_decoded, &object_decoded).unwrap(), json);
     json["Register"]["extra"] = json!(true);
     assert!(decode::<ObjectState>(&mut arena_decoded, &json).is_err());
@@ -64,8 +72,12 @@ fn test_object_packet_bounds_are_checked_when_reading_state() {
     let object = ObjectState::PacketIn(pkt);
     let json = encode(&arena, &object).unwrap();
     assert!(decode::<ObjectState>(&mut arena, &json).is_err());
-    let value_object = object.to_value(&mut arena).unwrap();
-    assert!(ObjectState::from_value(&mut arena, &value_object).is_err());
+    let value_object = object
+        .to_value(&mut arena, Encoding::ArenaIndependent)
+        .unwrap();
+    assert!(
+        ObjectState::from_value(&mut arena, Encoding::ArenaIndependent, &value_object).is_err()
+    );
 }
 
 #[test]
@@ -99,8 +111,11 @@ fn test_object_restores_nested_register_values_from_its_arena() {
         value_typ,
         values: vec![value],
     });
-    let value_object = object.to_value(&mut arena).unwrap();
-    let object = ObjectState::from_value(&mut arena, &value_object).unwrap();
+    let value_object = object
+        .to_value(&mut arena, Encoding::ArenaIndependent)
+        .unwrap();
+    let object =
+        ObjectState::from_value(&mut arena, Encoding::ArenaIndependent, &value_object).unwrap();
     let ObjectState::Register(reg) = object else {
         panic!("expected register");
     };
@@ -110,8 +125,71 @@ fn test_object_restores_nested_register_values_from_its_arena() {
     }
     assert!(get::bool(&arena, &value).unwrap());
     assert!(matches!(
-        ObjectState::from_value(&mut arena, &value_typ),
+        ObjectState::from_value(&mut arena, Encoding::ArenaIndependent, &value_typ),
         Err(ExternError::Value(ValueError::UnexpectedKind { .. }))
     ));
     stacker::grow(32 * 1024 * 1024, || drop(arena));
+}
+
+#[test]
+fn test_architecture_codec_preserves_nested_registers_in_each_mode() {
+    use p4spec_rust::sim_plugin::psa::{
+        arch::Arch,
+        packet::{Entrypoint, Packet},
+    };
+
+    for encoding in [Encoding::ArenaRelative, Encoding::ArenaIndependent] {
+        let mut arena = ValueArena::new();
+        let value_typ =
+            make::text(&mut arena, "register type".to_owned(), Span::default()).unwrap();
+        let value = make::int(&mut arena, 42.into(), Span::default()).unwrap();
+        let object = ObjectState::Register(Register {
+            value_typ,
+            values: vec![value],
+        });
+        let value_object = object.to_value(&mut arena, encoding).unwrap();
+        let arch = Arch {
+            queue: [Packet {
+                value_ctx: value_object,
+                packet_in: PacketIn::init("AB").unwrap(),
+                entrypoint: Entrypoint::Ingress,
+            }]
+            .into(),
+            ..Arch::default()
+        };
+        let value_arch = arch.to_value(&mut arena, encoding).unwrap();
+        let arch_decoded = Arch::from_value(&mut arena, encoding, &value_arch).unwrap();
+        if encoding == Encoding::ArenaRelative {
+            assert_eq!(arch_decoded, arch);
+        }
+        assert_eq!(
+            &encode_with(&arena, encoding, &arch_decoded).unwrap(),
+            get::external(&arena, &value_arch).unwrap()
+        );
+        let object_decoded =
+            ObjectState::from_value(&mut arena, encoding, &arch_decoded.queue[0].value_ctx)
+                .unwrap();
+        assert_eq!(
+            encode(&arena, &object_decoded).unwrap(),
+            encode(&arena, &object).unwrap()
+        );
+        if encoding == Encoding::ArenaRelative {
+            continue;
+        }
+        let json = encode(&arena, &value_arch).unwrap();
+        let mut arena_decoded = ValueArena::new();
+        let value_arch = decode(&mut arena_decoded, &json).unwrap();
+        let arch_decoded =
+            Arch::from_value(&mut arena_decoded, Encoding::ArenaIndependent, &value_arch).unwrap();
+        let object_decoded = ObjectState::from_value(
+            &mut arena_decoded,
+            Encoding::ArenaIndependent,
+            &arch_decoded.queue[0].value_ctx,
+        )
+        .unwrap();
+        assert_eq!(
+            encode(&arena_decoded, &object_decoded).unwrap(),
+            encode(&arena, &object).unwrap()
+        );
+    }
 }

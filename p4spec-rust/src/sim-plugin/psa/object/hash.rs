@@ -1,4 +1,4 @@
-use super::{ObjectResult, finish};
+use crate::sim_plugin::spec_impl::rel::{ObjectResult, finish};
 use crate::sim_plugin::{
     hash,
     spec_impl::{func, pack, unpack},

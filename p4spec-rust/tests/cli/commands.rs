@@ -403,6 +403,7 @@ fn test_sim_help_lists_native_controls_without_processing_inputs() {
         "<PATH>",
         "--al",
         "--arch",
+        "--plugin-encoding",
         "-p",
         "--stf",
         "-i",
@@ -413,7 +414,10 @@ fn test_sim_help_lists_native_controls_without_processing_inputs() {
         assert!(usage.contains(flag), "{flag}: {usage}");
     }
     for flag in ["--rel", "--sl", "--pl", "--trace", "--profile"] {
-        assert!(!usage.contains(flag), "{flag}: {usage}");
+        assert!(
+            !usage.split_whitespace().any(|word| word == flag),
+            "{flag}: {usage}"
+        );
     }
 }
 
@@ -443,6 +447,20 @@ fn test_sim_al_requires_flags() {
 }
 
 #[test]
+fn test_sim_rejects_unknown_plugin_encoding() {
+    let output = sim_command("psa")
+        .args(["--stf", "input.stf", "--plugin-encoding", "unknown"])
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(2));
+    assert!(output.stdout.is_empty());
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("expected arena-relative or arena-independent")
+    );
+}
+
+#[test]
 fn test_sim_al_rejects_unknown_architectures() {
     let output = binary()
         .args(["sim", "--al"])
@@ -462,30 +480,36 @@ fn test_sim_al_rejects_unknown_architectures() {
 #[test]
 fn test_sim_al_runs_all_native_architectures() {
     for arch in ["ebpf", "psa", "v1model"] {
-        let output = sim_command(arch)
-            .arg("--stf")
-            .arg(repo().join(format!("p4spec/test/micro/sim-{arch}/{arch}.stf")))
-            .arg("-i")
-            .arg(fixture("cli/run/first"))
-            .output()
+        for encoding in [None, Some("arena-relative"), Some("arena-independent")] {
+            let mut command = sim_command(arch);
+            if let Some(encoding) = encoding {
+                command.args(["--plugin-encoding", encoding]);
+            }
+            let output = command
+                .arg("--stf")
+                .arg(repo().join(format!("p4spec/test/micro/sim-{arch}/{arch}.stf")))
+                .arg("-i")
+                .arg(fixture("cli/run/first"))
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{arch}: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            assert!(output.stderr.is_empty());
+            let stdout = String::from_utf8(output.stdout).unwrap();
+            let expected = std::fs::read_to_string(
+                repo().join(format!("p4spec/test/micro/micro_sim_{arch}_al.expected")),
+            )
             .unwrap();
-        assert!(
-            output.status.success(),
-            "{arch}: {}",
-            String::from_utf8_lossy(&output.stderr)
-        );
-        assert!(output.stderr.is_empty());
-        let stdout = String::from_utf8(output.stdout).unwrap();
-        let expected = std::fs::read_to_string(
-            repo().join(format!("p4spec/test/micro/micro_sim_{arch}_al.expected")),
-        )
-        .unwrap();
-        let mut lines: Vec<_> = expected
-            .lines()
-            .filter(|line| line.starts_with("[PASS] Transmitted "))
-            .collect();
-        lines.push("passed");
-        assert_eq!(stdout, format!("{}\n", lines.join("\n")), "{arch}");
+            let mut lines: Vec<_> = expected
+                .lines()
+                .filter(|line| line.starts_with("[PASS] Transmitted "))
+                .collect();
+            lines.push("passed");
+            assert_eq!(stdout, format!("{}\n", lines.join("\n")), "{arch}");
+        }
     }
 }
 

@@ -1,14 +1,20 @@
-use super::{ObjectResult, finish, repeat};
+use super::repeat;
+use crate::lang::data::value::external::{DecodeContext, EncodeContext};
+use crate::sim_plugin::spec_impl::rel::{ObjectResult, finish};
 use crate::sim_plugin::spec_impl::{func, rel, unpack};
 use crate::{
-    lang::data::value::{Value, ValueArena},
+    lang::data::value::Value,
     runner::{Extern, ExternError, Interface, Interpreter, RunnerContext},
 };
 use serde_derive_state::{DeserializeState, SerializeState};
 
 #[derive(Clone, Debug, PartialEq, Eq, SerializeState, DeserializeState)]
-#[serde(deny_unknown_fields, serialize_state = "ValueArena")]
-#[serde(deserialize_state = "ValueArena")]
+#[serde(
+    deny_unknown_fields,
+    serialize_state = "EncodeContext<'arena>",
+    ser_parameters = "'arena"
+)]
+#[serde(deserialize_state = "DecodeContext<'de>")]
 pub struct Register {
     #[serde(state)]
     pub value_typ: Value,

@@ -1,6 +1,6 @@
 //! Architecture operations used by native STF execution
 
-use super::{io::Transmission, state::SimState};
+use super::{io::Rx, state::SimState};
 use crate::{
     lang::data::value::Value,
     runner::{Extern, ExternError, Interface, Interpreter, RunnerContext},
@@ -20,7 +20,7 @@ pub trait Architecture: Extern {
     fn drive_pipe<Interp, Iface>(
         ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
         state: &mut SimState,
-        rx: &Transmission,
+        rx: &Rx,
     ) -> Result<(), Interp::Error>
     where
         Iface: Interface,
@@ -174,7 +174,7 @@ macro_rules! pipe_ops {
         fn drive_pipe<Interp, Iface>(
             ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
             state: &mut SimState,
-            rx: &Transmission,
+            rx: &Rx,
         ) -> Result<(), Interp::Error>
         where
             Iface: Interface,

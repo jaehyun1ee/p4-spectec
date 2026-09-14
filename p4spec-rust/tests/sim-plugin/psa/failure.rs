@@ -15,7 +15,7 @@ use p4spec_rust::{
     },
     sim_plugin::{
         core::object::PacketIn,
-        io::Transmission,
+        io::Tx,
         psa::{
             arch::Arch,
             multicast::Node,
@@ -198,14 +198,15 @@ fn test_clone_restoration_failure_preserves_queued_clones_and_completed_state() 
         packet_in: PacketIn::init("CD").unwrap(),
         entrypoint: Entrypoint::Egress,
     });
-    let value_state = arch.to_value(runner.arena_mut()).unwrap();
+    let encoding = runner.encoding();
+    let value_state = arch.to_value(runner.arena_mut(), encoding).unwrap();
     let mut pkt_in = PacketIn::init("AB").unwrap();
     pkt_in.idx = 4;
     let value_in = ObjectState::PacketIn(pkt_in)
-        .to_value(runner.arena_mut())
+        .to_value(runner.arena_mut(), encoding)
         .unwrap();
     let value_egress = ObjectState::PacketIn(PacketIn::init("CD").unwrap())
-        .to_value(runner.arena_mut())
+        .to_value(runner.arena_mut(), encoding)
         .unwrap();
     let fields = [
         ("STATE", value_state),
@@ -227,7 +228,7 @@ fn test_clone_restoration_failure_preserves_queued_clones_and_completed_state() 
         Span::default(),
     )
     .unwrap();
-    let tx = Transmission {
+    let tx = Tx {
         port: 99,
         packet: "prior output".to_owned(),
     };
@@ -259,7 +260,7 @@ fn test_clone_restoration_failure_preserves_queued_clones_and_completed_state() 
     );
     let value_in = field(runner.arena(), state.value_arch, "ingress_packet_in");
     assert_eq!(
-        ObjectState::from_value(runner.arena_mut(), &value_in).unwrap(),
+        ObjectState::from_value(runner.arena_mut(), encoding, &value_in).unwrap(),
         ObjectState::PacketIn(PacketIn::init("AB").unwrap())
     );
 }

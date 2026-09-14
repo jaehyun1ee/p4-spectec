@@ -1,12 +1,6 @@
+use crate::lang::data::value::external::encode_with;
 use crate::{
-    lang::{
-        common::source::Span,
-        data::{
-            typ::make as make_typ,
-            value::{Value, make as make_value},
-        },
-        il::ast::Typ,
-    },
+    lang::{data::value::Value, il::ast::Typ},
     runner::{Extern, ExternError, Interface, Interpreter, RunnerContext},
 };
 
@@ -42,6 +36,7 @@ impl Extern for Dummy {
         Iface: Interface,
         Interp: Interpreter<Iface, Self>,
     {
+        let encoding = ctx.encoding();
         match name {
             "init_objectState" | "init_archState" => {
                 let name_typ = if name == "init_archState" {
@@ -49,19 +44,9 @@ impl Extern for Dummy {
                 } else {
                     "objectState"
                 };
-                let id = crate::phrase!(
-                    node: name_typ.to_owned(),
-                    span: Span::default(),
-                );
-                let typ = make_typ::var(id, Vec::new());
-                let value = make_value::external(
-                    ctx.arena_mut(),
-                    typ.node.into(),
-                    crate::util::json::json::Null,
-                    Span::default(),
-                )
-                .map_err(ExternError::from)
-                .map_err(Interp::Error::from)?;
+                let payload = encode_with(ctx.arena(), encoding, &())
+                    .map_err(|error| ExternError::Failure(error.to_string()))?;
+                let value = super::externs::state_value(ctx.arena_mut(), name_typ, payload.into())?;
                 Ok((value, false))
             }
             _ => Err(ExternError::Failure(format!("unimplemented extern function: {name}")).into()),

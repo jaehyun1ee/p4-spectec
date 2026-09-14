@@ -12,7 +12,7 @@ use p4spec_rust::{
     },
     sim_plugin::{
         core::object::{PacketIn, PacketOut},
-        io::Transmission,
+        io::{Rx, Tx},
         spec_impl::{pack, unpack},
         state::SimState,
         v1model::{
@@ -156,6 +156,12 @@ impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for TraceInterp {
         values: &[Value],
     ) -> Result<Vec<Value>, TestError> {
         match name {
+            "V1Model_init_packet_in" | "V1Model_init_packet_out" => {
+                let name_field = name.strip_prefix("V1Model_init_").unwrap();
+                let value_arch = update(ctx.arena_mut(), values[1], name_field, values[2]);
+                Ok(vec![values[0], value_arch])
+            }
+            "V1Model_init_globals" => Ok(vec![values[0]]),
             "Lvalue_read" | "Lvalue_write" => {
                 let value_name = *get::case(ctx.arena(), &values[3]).unwrap().args()[1];
                 let name_field = get::text(ctx.arena(), &value_name).unwrap().to_owned();
@@ -176,7 +182,8 @@ impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for TraceInterp {
                 let mut value_ctx = values[0];
                 let mut value_arch = values[1];
                 let value_arch_state = field(ctx.arena(), value_arch, "STATE");
-                let mut arch = Arch::from_value(ctx.arena_mut(), &value_arch_state)?;
+                let encoding = ctx.encoding();
+                let mut arch = Arch::from_value(ctx.arena_mut(), encoding, &value_arch_state)?;
                 if matches!(phase, "ingress" | "egress") {
                     assert_eq!(arch.action, Action::default());
                 }
@@ -198,7 +205,7 @@ impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for TraceInterp {
                         }
                     }
                 }
-                let value_arch_state = arch.to_value(ctx.arena_mut())?;
+                let value_arch_state = arch.to_value(ctx.arena_mut(), encoding)?;
                 value_arch = update(ctx.arena_mut(), value_arch, "STATE", value_arch_state);
                 let effects = int(ctx.arena(), value_arch, "effects") + 1;
                 value_arch = write_int(ctx.arena_mut(), value_arch, "effects", 32, effects);
@@ -237,12 +244,13 @@ fn setup(scenario: Scenario) -> (TestRunner, SimState) {
     let value_ctx = record(runner.arena_mut(), fields);
     let mut arch = Arch::default();
     arch.mirrortable.insert(1, 7);
-    let value_arch_state = arch.to_value(runner.arena_mut()).unwrap();
+    let encoding = runner.encoding();
+    let value_arch_state = arch.to_value(runner.arena_mut(), encoding).unwrap();
     let value_in = ObjectState::PacketIn(PacketIn::init("AB").unwrap())
-        .to_value(runner.arena_mut())
+        .to_value(runner.arena_mut(), encoding)
         .unwrap();
     let value_out = ObjectState::PacketOut(PacketOut::default())
-        .to_value(runner.arena_mut())
+        .to_value(runner.arena_mut(), encoding)
         .unwrap();
     let value_effects = pack::p4_fixed_bit(runner.arena_mut(), 32.into(), 0.into()).unwrap();
     let value_arch = record(
@@ -327,7 +335,7 @@ fn test_scheduler_resets_packet_actions_and_retains_prior_transmissions() {
     arch_state.action.resubmit_opt = Some(1);
     arch_state.action.recirculate_opt = Some(2);
     save_arch(&mut runner, &mut state, &arch_state);
-    state.txs.push(Transmission {
+    state.txs.push(Tx {
         port: 99,
         packet: "CD".to_owned(),
     });
@@ -388,4 +396,46 @@ fn test_multicast_order_and_ingress_queue_priority() {
         state.txs.iter().map(|tx| tx.port).collect::<Vec<_>>(),
         [3, 9, 4, 2]
     );
+}
+
+#[test]
+fn test_drive_pipe_clears_prior_transmissions_for_forwarded_and_dropped_inputs() {
+    for drop in [false, true] {
+        let (mut runner, mut state) = setup(Scenario::Normal);
+        let rx = Rx {
+            port: 1,
+            packet: "AB".to_owned(),
+        };
+        pipe::drive_pipe(&mut runner.context(), &mut state, &rx).unwrap();
+        assert_eq!(
+            state.txs,
+            [Tx {
+                port: 3,
+                packet: "AB".to_owned(),
+            }]
+        );
+
+        if drop {
+            state.value_ctx = write_int(runner.arena_mut(), state.value_ctx, "egress_spec", 9, 511);
+        }
+        let rx = Rx {
+            port: 2,
+            packet: "CD".to_owned(),
+        };
+        pipe::drive_pipe(&mut runner.context(), &mut state, &rx).unwrap();
+        if drop {
+            assert!(
+                state.txs.is_empty(),
+                "dropped input retained prior transmissions"
+            );
+        } else {
+            assert_eq!(
+                state.txs,
+                [Tx {
+                    port: 3,
+                    packet: "CD".to_owned(),
+                }]
+            );
+        }
+    }
 }

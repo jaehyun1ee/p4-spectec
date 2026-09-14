@@ -8,7 +8,7 @@ use p4spec_rust::{
     },
     sim_plugin::{
         ebpf::{self, Ebpf, pipe::ExternObject},
-        io::Transmission,
+        io::{Rx, Tx},
         spec_impl::func,
     },
     stf::ast::Statement,
@@ -35,8 +35,9 @@ fn counter_counts(
         make::list(runner.arena_mut(), typ.node.into(), values, Span::default()).unwrap();
     let value_state =
         func::find_object_state_e(&mut runner.context(), value_arch, value_id).unwrap();
+    let encoding = runner.encoding();
     let ExternObject::CounterArray(counter) =
-        ExternObject::from_value(runner.arena(), &value_state).unwrap()
+        ExternObject::from_value(runner.arena_mut(), encoding, &value_state).unwrap()
     else {
         panic!("counter object")
     };
@@ -63,14 +64,14 @@ fn pipeline() -> (
 #[test]
 fn test_parser_reject_preserves_state() {
     let (mut runner, mut state) = pipeline();
-    state.txs.push(Transmission {
+    state.txs.push(Tx {
         port: 9,
         packet: "old".to_owned(),
     });
     ebpf::drive_pipe(
         &mut runner.context(),
         &mut state,
-        &Transmission {
+        &Rx {
             port: 2,
             packet: "0000".to_owned(),
         },
@@ -94,7 +95,7 @@ fn test_filter_accept_controls_transmission() {
         ebpf::drive_pipe(
             &mut runner.context(),
             &mut state,
-            &Transmission {
+            &Rx {
                 port: 7,
                 packet: packet.to_owned(),
             },
@@ -115,7 +116,7 @@ fn test_counter_state_persists_across_packets() {
         ebpf::drive_pipe(
             &mut runner.context(),
             &mut state,
-            &Transmission {
+            &Rx {
                 port: 0,
                 packet: packet.to_owned(),
             },
@@ -147,7 +148,7 @@ fn test_native_ebpf_micro_fixture_packets() {
                 ebpf::drive_pipe(
                     &mut runner.context(),
                     &mut state,
-                    &Transmission {
+                    &Rx {
                         port: port.parse().unwrap(),
                         packet,
                     },

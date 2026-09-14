@@ -9,13 +9,7 @@ pub use bits::{
 pub use packet_in::PacketIn;
 pub use packet_out::PacketOut;
 
-use crate::{runner::ExternError, sim_plugin::spec_impl::rel::CallResult};
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct PacketResult<Pkt> {
-    pub pkt: Pkt,
-    pub result: CallResult,
-}
+use crate::runner::ExternError;
 
 pub fn packet_to_string(pkt_in: &PacketIn, pkt_out: &PacketOut) -> Result<String, ExternError> {
     let bits: Vec<_> = pkt_out

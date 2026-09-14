@@ -1,6 +1,6 @@
 use p4spec_rust::{
     sim_plugin::{
-        io::Transmission,
+        io::{Rx, Tx},
         psa::{self, Psa},
     },
     stf::ast::Statement,
@@ -24,7 +24,7 @@ fn test_native_psa_micro_fixture_packets() {
                 psa::drive_pipe(
                     &mut runner.context(),
                     &mut state,
-                    &Transmission {
+                    &Rx {
                         port: port.parse().unwrap(),
                         packet,
                     },
@@ -72,7 +72,7 @@ fn pipeline() -> (Runner, SimState) {
     psa::drive_pipe(
         &mut runner.context(),
         &mut state,
-        &Transmission {
+        &Rx {
             port: 4,
             packet: "000000000001000000000000FFFF".to_owned(),
         },
@@ -223,9 +223,9 @@ fn test_clone_survives_ingress_drop() {
     let value_arch_restored =
         pipe::set_arch_state(&mut runner.context(), state.value_arch, &arch_original).unwrap();
     assert_eq!(
-        p4spec_rust::lang::data::value::serde::encode(runner.arena(), &value_arch_restored)
+        p4spec_rust::lang::data::value::external::encode(runner.arena(), &value_arch_restored)
             .unwrap(),
-        p4spec_rust::lang::data::value::serde::encode(runner.arena(), &value_arch_original)
+        p4spec_rust::lang::data::value::external::encode(runner.arena(), &value_arch_original)
             .unwrap()
     );
     state.txs.clear();
@@ -467,7 +467,7 @@ fn test_empty_scheduler_retains_transmissions() {
     let path = super::super::repo().join("p4spec/test/micro/sim-psa/psa.p4");
     let program = super::super::parse_program(runner.arena_mut(), &path);
     let mut state = psa::init_pipe(&mut runner.context(), program).unwrap();
-    state.txs.push(Transmission {
+    state.txs.push(Tx {
         port: 9,
         packet: "AB".to_owned(),
     });
@@ -565,7 +565,7 @@ fn test_native_replication_fixture_order_and_persistent_counter() {
                 psa::drive_pipe(
                     &mut runner.context(),
                     &mut state,
-                    &Transmission {
+                    &Rx {
                         port: unpack::parse_signed_int(&port).unwrap(),
                         packet,
                     },

@@ -1,8 +1,10 @@
-use super::PacketResult;
 use crate::{
     lang::data::value::{Value, get},
     runner::{Extern, ExternError, Interface, Interpreter, RunnerContext},
-    sim_plugin::spec_impl::{func, pack, rel::CallResult},
+    sim_plugin::spec_impl::{
+        func,
+        rel::{ObjectResult, finish},
+    },
 };
 use serde::{Deserialize, Serialize};
 
@@ -24,7 +26,7 @@ impl PacketOut {
         ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
         value_ctx: Value,
         value_arch: Value,
-    ) -> Result<PacketResult<Self>, Interp::Error>
+    ) -> Result<ObjectResult<Self>, Interp::Error>
     where
         Iface: Interface,
         Exn: Extern,
@@ -41,14 +43,6 @@ impl PacketOut {
         let pkt = Self {
             bits: self.bits.iter().copied().chain(bits).collect(),
         };
-        let value_call_result = pack::return_result(ctx.arena_mut(), None)?;
-        Ok(PacketResult {
-            pkt,
-            result: CallResult {
-                value_ctx,
-                value_arch,
-                value_call_result,
-            },
-        })
+        Ok(finish(ctx.arena_mut(), pkt, value_ctx, value_arch, None)?)
     }
 }

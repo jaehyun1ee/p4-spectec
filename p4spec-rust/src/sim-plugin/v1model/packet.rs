@@ -1,4 +1,5 @@
 use super::super::core::object::PacketIn;
+use crate::lang::data::value::external::{DecodeContext, EncodeContext};
 use crate::lang::data::value::{Value, ValueArena};
 use serde::{Deserialize, Serialize};
 use serde_derive_state::{DeserializeState, SerializeState};
@@ -10,8 +11,12 @@ pub enum Entrypoint {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, SerializeState, DeserializeState)]
-#[serde(deny_unknown_fields, serialize_state = "ValueArena")]
-#[serde(deserialize_state = "ValueArena")]
+#[serde(
+    deny_unknown_fields,
+    serialize_state = "EncodeContext<'arena>",
+    ser_parameters = "'arena"
+)]
+#[serde(deserialize_state = "DecodeContext<'de>")]
 /// Processing context per packet
 pub struct Packet {
     /// Evaluation context
@@ -48,7 +53,7 @@ pub fn clone_info(
     arena: &ValueArena,
     value_type: &Value,
     value_session: &Value,
-    value_index: &Value,
+    value_idx: &Value,
 ) -> Result<CloneInfo, crate::runner::ExternError> {
     use crate::sim_plugin::spec_impl::unpack;
     let (_, name) = unpack::p4_enum(arena, value_type)?;
@@ -64,7 +69,7 @@ pub fn clone_info(
     Ok((
         clone_type,
         field_index(arena, value_session)?,
-        field_index(arena, value_index)?,
+        field_index(arena, value_idx)?,
     ))
 }
 

@@ -1,4 +1,5 @@
-use serde_derive_state::{DeserializeState, SerializeState};
+use serde::{Deserialize, Serialize};
+use serde_derive_state::DeserializeState;
 
 use std::{
     cmp::Ordering,
@@ -23,32 +24,107 @@ pub type AtomPhrase = Phrase<Atom>;
 
 /// A mixfix expression: literal atoms interleaved with argument holes of type
 /// `T`. For example `_ + _` is infix with two holes and `[ _ ]` brackets one.
-#[derive(Clone, Debug, SerializeState, DeserializeState)]
-#[serde(serialize_state = "State", ser_parameters = "State")]
-#[serde(deserialize_state = "State", de_parameters = "State")]
-#[serde(bound(
-    serialize = "T: serde_state::SerializeState<State>",
-    deserialize = "T: serde_state::DeserializeState<'de, State>"
-))]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Mixfix<T> {
     /// Argument position
-    Arg(#[serde(state)] T),
+    Arg(T),
     /// Literal atom
-    Atom(#[serde(state)] AtomPhrase),
+    Atom(AtomPhrase),
     /// Bracketed expression
-    Brack(
-        #[serde(state)] AtomPhrase,
-        #[serde(state)] Box<Self>,
-        #[serde(state)] AtomPhrase,
-    ),
+    Brack(AtomPhrase, Box<Self>, AtomPhrase),
     /// Infix expression
-    Infix(
-        #[serde(state)] Box<Self>,
-        #[serde(state)] AtomPhrase,
-        #[serde(state)] Box<Self>,
-    ),
+    Infix(Box<Self>, AtomPhrase, Box<Self>),
     /// Sequence of expressions
-    Seq(#[serde(state)] Vec<Self>),
+    Seq(Vec<Self>),
+}
+
+impl<'de, T, State> serde_state::DeserializeState<'de, State> for Mixfix<T>
+where
+    T: serde_state::DeserializeState<'de, State>,
+{
+    fn deserialize_state<Deserializer>(
+        state: &mut State,
+        deserializer: Deserializer,
+    ) -> Result<Self, Deserializer::Error>
+    where
+        Deserializer: serde::Deserializer<'de>,
+    {
+        // Recursive children use Mixfix so only this level needs conversion
+        #[derive(DeserializeState)]
+        #[serde(rename = "Mixfix")]
+        #[serde(deserialize_state = "State", de_parameters = "State")]
+        #[serde(bound(deserialize = "T: serde_state::DeserializeState<'de, State>"))]
+        enum MixfixState<T> {
+            Arg(#[serde(state)] T),
+            Atom(#[serde(state)] AtomPhrase),
+            Brack(
+                #[serde(state)] AtomPhrase,
+                #[serde(state)] Box<Mixfix<T>>,
+                #[serde(state)] AtomPhrase,
+            ),
+            Infix(
+                #[serde(state)] Box<Mixfix<T>>,
+                #[serde(state)] AtomPhrase,
+                #[serde(state)] Box<Mixfix<T>>,
+            ),
+            Seq(#[serde(state)] Vec<Mixfix<T>>),
+        }
+
+        Ok(match MixfixState::deserialize_state(state, deserializer)? {
+            MixfixState::Arg(arg) => Self::Arg(arg),
+            MixfixState::Atom(atom) => Self::Atom(atom),
+            MixfixState::Brack(atom_l, mixfix, atom_r) => Self::Brack(atom_l, mixfix, atom_r),
+            MixfixState::Infix(mixfix_l, atom, mixfix_r) => Self::Infix(mixfix_l, atom, mixfix_r),
+            MixfixState::Seq(mixfixes) => Self::Seq(mixfixes),
+        })
+    }
+}
+
+// Recursive mixfix boxes are not separated by phrase nodes
+impl<T, State> serde_state::SerializeState<State> for Mixfix<T>
+where
+    T: serde_state::SerializeState<State>,
+{
+    fn serialize_state<Serializer>(
+        &self,
+        serializer: Serializer,
+        state: &State,
+    ) -> Result<Serializer::Ok, Serializer::Error>
+    where
+        Serializer: serde::Serializer,
+    {
+        use serde::ser::SerializeTupleVariant;
+        use serde_state::ser::Seeded;
+
+        stacker::maybe_grow(64 * 1024, 1024 * 1024, || match self {
+            Self::Arg(arg) => {
+                serializer.serialize_newtype_variant("Mixfix", 0, "Arg", &Seeded::new(state, arg))
+            }
+            Self::Atom(atom) => {
+                serializer.serialize_newtype_variant("Mixfix", 1, "Atom", &Seeded::new(state, atom))
+            }
+            Self::Brack(atom_l, mixfix, atom_r) => {
+                let mut fields = serializer.serialize_tuple_variant("Mixfix", 2, "Brack", 3)?;
+                fields.serialize_field(&Seeded::new(state, atom_l))?;
+                fields.serialize_field(&Seeded::new(state, mixfix))?;
+                fields.serialize_field(&Seeded::new(state, atom_r))?;
+                fields.end()
+            }
+            Self::Infix(mixfix_l, atom, mixfix_r) => {
+                let mut fields = serializer.serialize_tuple_variant("Mixfix", 3, "Infix", 3)?;
+                fields.serialize_field(&Seeded::new(state, mixfix_l))?;
+                fields.serialize_field(&Seeded::new(state, atom))?;
+                fields.serialize_field(&Seeded::new(state, mixfix_r))?;
+                fields.end()
+            }
+            Self::Seq(mixfixes) => serializer.serialize_newtype_variant(
+                "Mixfix",
+                4,
+                "Seq",
+                &Seeded::new(state, mixfixes),
+            ),
+        })
+    }
 }
 
 // == Equality and comparison

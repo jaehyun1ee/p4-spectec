@@ -1,13 +1,13 @@
-use p4spec_rust::sim_plugin::io::{Expectation, Transmission, matches};
+use p4spec_rust::sim_plugin::io::{Expectation, Tx, matches};
 
 #[test]
 fn test_packet_match_exact_prefix_and_wildcard() {
-    let tx = Transmission {
+    let tx = Tx {
         port: 1,
         packet: "ABCD".to_owned(),
     };
     let mut expect = Expectation {
-        tx: Transmission {
+        tx: Tx {
             port: 1,
             packet: "A*".to_owned(),
         },
@@ -27,12 +27,12 @@ fn test_packet_match_exact_prefix_and_wildcard() {
 
 #[test]
 fn test_packet_match_port_empty_and_short_output() {
-    let mut tx = Transmission {
+    let mut tx = Tx {
         port: 1,
         packet: "A".to_owned(),
     };
     let mut expect = Expectation {
-        tx: Transmission {
+        tx: Tx {
             port: 1,
             packet: "AB".to_owned(),
         },

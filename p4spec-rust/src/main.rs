@@ -6,7 +6,7 @@ use p4spec_rust::{
     frontend::parse::parse_files,
     interface::p4::{parse::parse_file, unparse::P4Unparser},
     interp::al::{AlInterp, Config, context::Global},
-    lang::{al, il, traits::print::Print},
+    lang::{al, data::value::external::Encoding, il, traits::print::Print},
     pass::{algo, elaborate},
     runner::{BuiltinInterface, Runner},
     sim_plugin::{build, dummy::Dummy, runner::Error as SimError},
@@ -144,6 +144,9 @@ struct SimArgs {
     /// Target architecture: ebpf, psa, or v1model
     #[arg(long, value_name = "ARCH")]
     arch: String,
+    /// Native plugin state encoding: arena-relative or arena-independent
+    #[arg(long, default_value = "arena-relative", value_name = "ENCODING")]
+    plugin_encoding: Encoding,
     /// P4 program to simulate
     #[arg(short = 'p', value_name = "PROGRAM")]
     program: PathBuf,
@@ -170,10 +173,11 @@ fn sim_command(args: SimArgs) -> ExitCode {
         Err(code) => return code,
     };
     let config = Config::new(!args.no_cache, args.det, args.guard);
-    let mut simulator = match build::build(spec_al, &args.arch, config) {
-        Ok(simulator) => simulator,
-        Err(error) => return command_error(error),
-    };
+    let mut simulator =
+        match build::build_with_encoding(spec_al, &args.arch, config, args.plugin_encoding) {
+            Ok(simulator) => simulator,
+            Err(error) => return command_error(error),
+        };
     let mut run = match simulator.init_pipe(&args.includes, &args.program) {
         Ok(run) => run,
         Err(error) => return command_error(error),

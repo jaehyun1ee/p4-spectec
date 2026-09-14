@@ -4,7 +4,7 @@ use super::super::{
         object::{self as core_object, PacketIn, PacketOut},
     },
     externs as external,
-    io::Transmission,
+    io::{Rx, Tx},
     spec_impl::{func, pack, pgm, rel, unpack},
     state::{SimState, install_result},
 };
@@ -13,26 +13,28 @@ use super::{
     object::{Counter, HashExtern, InternetChecksum, Meter, Register},
     packet::{Entrypoint, Packet},
 };
+use crate::lang::data::value::external::{
+    DecodeContext, EncodeContext, Encoding, decode_with, encode_with,
+};
 use crate::{
     lang::{
         common::source::Span,
         data::{
             typ,
-            value::{Value, ValueArena, get, make, serde},
+            value::{Value, ValueArena, ValueError, get, make},
         },
         il::ast::Typ,
     },
     runner::{Extern, ExternError, Interface, Interpreter, RunnerContext},
     stf::ast::Statement,
-    util::json::json,
 };
 use serde_derive_state::{DeserializeState, SerializeState};
 
 pub struct Psa;
 
 #[derive(Clone, Debug, PartialEq, Eq, SerializeState, DeserializeState)]
-#[serde(serialize_state = "ValueArena")]
-#[serde(deserialize_state = "ValueArena")]
+#[serde(serialize_state = "EncodeContext<'arena>", ser_parameters = "'arena")]
+#[serde(deserialize_state = "DecodeContext<'de>")]
 /// Core and PSA-specific extern objects
 pub enum ObjectState {
     PacketIn(#[serde(deserialize_with = "PacketIn::deserialize_validated")] PacketIn),
@@ -45,14 +47,24 @@ pub enum ObjectState {
 }
 
 impl ObjectState {
-    pub fn from_value(arena: &mut ValueArena, value: &Value) -> Result<Self, ExternError> {
-        serde::decode_external(arena, value).map_err(ExternError::from)
+    pub fn from_value(
+        arena: &mut ValueArena,
+        encoding: Encoding,
+        value: &Value,
+    ) -> Result<Self, ExternError> {
+        let json = get::external_shared(arena, value)?.clone();
+        decode_with(arena, encoding, json.as_ref())
+            .map_err(|error| ExternError::Failure(error.to_string()))
     }
 
-    pub fn to_value(&self, arena: &mut ValueArena) -> Result<Value, ExternError> {
-        let json =
-            serde::encode(arena, self).map_err(|error| ExternError::Failure(error.to_string()))?;
-        external::state_value(arena, "objectState", json)
+    pub fn to_value(
+        &self,
+        arena: &mut ValueArena,
+        encoding: Encoding,
+    ) -> Result<Value, ExternError> {
+        let payload = encode_with(arena, encoding, self)
+            .map_err(|error| ExternError::Failure(error.to_string()))?;
+        external::state_value(arena, "objectState", payload.into())
     }
 }
 
@@ -70,8 +82,9 @@ impl Extern for Psa {
         Iface: Interface,
         Interp: Interpreter<Iface, Self>,
     {
+        let encoding = ctx.encoding();
         let value = match name {
-            "init_archState" => Arch::default().to_value(ctx.arena_mut())?,
+            "init_archState" => Arch::default().to_value(ctx.arena_mut(), encoding)?,
             "init_objectState" => {
                 let [value_name, value_targs, value_ids, value_args] = values else {
                     return Err(ExternError::Failure(
@@ -113,8 +126,12 @@ impl Extern for Psa {
                     _ => None,
                 };
                 match object {
-                    Some(object) => object.to_value(ctx.arena_mut())?,
-                    None => external::state_value(ctx.arena_mut(), "objectState", json::Null)?,
+                    Some(object) => object.to_value(ctx.arena_mut(), encoding)?,
+                    None => {
+                        let payload = encode_with(ctx.arena(), encoding, &())
+                            .map_err(|error| ExternError::Failure(error.to_string()))?;
+                        external::state_value(ctx.arena_mut(), "objectState", payload.into())?
+                    }
                 }
             }
             _ => {
@@ -191,6 +208,7 @@ where
     Iface: Interface,
     Interp: Interpreter<Iface, Psa>,
 {
+    let encoding = ctx.encoding();
     let [value_ctx, value_arch, value_id, value_name, value_names] = values else {
         return Err(ExternError::Failure(
             "unexpected number of arguments to extern method call".to_owned(),
@@ -206,7 +224,7 @@ where
     let (object, result) = match (object, name.as_str(), names_ref.as_slice()) {
         (ObjectState::PacketIn(object), "extract", ["hdr"]) => {
             let output = object.extract(ctx, *value_ctx, *value_arch)?;
-            (ObjectState::PacketIn(output.pkt), output.result)
+            (ObjectState::PacketIn(output.object), output.result)
         }
         (
             ObjectState::PacketIn(object),
@@ -214,23 +232,23 @@ where
             ["variableSizeHeader", "variableFieldSizeInBits"],
         ) => {
             let output = object.extract_varsize(ctx, *value_ctx, *value_arch)?;
-            (ObjectState::PacketIn(output.pkt), output.result)
+            (ObjectState::PacketIn(output.object), output.result)
         }
         (ObjectState::PacketIn(object), "lookahead", []) => {
             let output = object.lookahead(ctx, *value_ctx, *value_arch)?;
-            (ObjectState::PacketIn(output.pkt), output.result)
+            (ObjectState::PacketIn(output.object), output.result)
         }
         (ObjectState::PacketIn(object), "advance", ["sizeInBits"]) => {
             let output = object.advance(ctx, *value_ctx, *value_arch)?;
-            (ObjectState::PacketIn(output.pkt), output.result)
+            (ObjectState::PacketIn(output.object), output.result)
         }
         (ObjectState::PacketIn(object), "length", []) => {
             let output = object.length(ctx, *value_ctx, *value_arch)?;
-            (ObjectState::PacketIn(output.pkt), output.result)
+            (ObjectState::PacketIn(output.object), output.result)
         }
         (ObjectState::PacketOut(object), "emit", ["hdr"]) => {
             let output = object.emit(ctx, *value_ctx, *value_arch)?;
-            (ObjectState::PacketOut(output.pkt), output.result)
+            (ObjectState::PacketOut(output.object), output.result)
         }
         (ObjectState::Counter(object), "count", ["index"]) => {
             let output = object.count(ctx, *value_ctx, *value_arch)?;
@@ -294,7 +312,7 @@ where
             .into());
         }
     };
-    let value_object = object.to_value(ctx.arena_mut())?;
+    let value_object = object.to_value(ctx.arena_mut(), encoding)?;
     let value_arch = func::update_object_state_e(ctx, result.value_arch, *value_id, value_object)?;
     Ok(vec![result.value_ctx, value_arch, result.value_call_result])
 }
@@ -321,8 +339,13 @@ where
     Exn: Extern,
     Interp: Interpreter<Iface, Exn>,
 {
+    let encoding = ctx.encoding();
     let value_object = func::find_object_state_e(ctx, value_arch, value_id)?;
-    Ok(ObjectState::from_value(ctx.arena_mut(), &value_object)?)
+    Ok(ObjectState::from_value(
+        ctx.arena_mut(),
+        encoding,
+        &value_object,
+    )?)
 }
 
 /// Architectural state
@@ -335,8 +358,9 @@ where
     Exn: Extern,
     Interp: Interpreter<Iface, Exn>,
 {
+    let encoding = ctx.encoding();
     let value_state = func::find_arch_state_e(ctx, value_arch)?;
-    Ok(Arch::from_value(ctx.arena_mut(), &value_state)?)
+    Ok(Arch::from_value(ctx.arena_mut(), encoding, &value_state)?)
 }
 
 /// Update the queue, mirror table and multicast state in the architecture
@@ -350,7 +374,8 @@ where
     Exn: Extern,
     Interp: Interpreter<Iface, Exn>,
 {
-    let value_state = arch.to_value(ctx.arena_mut())?;
+    let encoding = ctx.encoding();
+    let value_state = arch.to_value(ctx.arena_mut(), encoding)?;
     func::update_arch_state_e(ctx, value_arch, value_state)
 }
 
@@ -365,8 +390,9 @@ where
     Exn: Extern,
     Interp: Interpreter<Iface, Exn>,
 {
+    let encoding = ctx.encoding();
     let value_id = object_id(ctx.arena_mut(), name)?;
-    let value_object = object.to_value(ctx.arena_mut())?;
+    let value_object = object.to_value(ctx.arena_mut(), encoding)?;
     func::update_object_state_e(ctx, value_arch, value_id, value_object)
 }
 
@@ -926,7 +952,7 @@ where
         "egress_packet_in",
         "egress_packet_out",
     )?;
-    state.txs.push(Transmission { port, packet });
+    state.txs.push(Tx { port, packet });
     Ok(())
 }
 
@@ -1003,7 +1029,13 @@ where
     let result = rel::psa_ingress_parser(ctx, state.value_ctx, state.value_arch)?;
     install_result!(state, result);
     let value_error = get::matches! { ctx.arena(), &result.value_call_result,
-        "REJECT errorValue" => |values| Some(*get::one(&values.into_iter().copied().collect::<Vec<_>>()).map_err(ExternError::from)?),
+        "REJECT errorValue" => |values| match values.as_slice() {
+            [value_error] => Some(**value_error),
+            _ => return Err(ExternError::from(ValueError::ExpectedCount {
+                expected: 1,
+                actual: values.len(),
+            }).into()),
+        },
         _ => None,
     };
     if let Some(value_error) = value_error {
@@ -1037,7 +1069,13 @@ where
     let result = rel::psa_egress_parser(ctx, state.value_ctx, state.value_arch)?;
     install_result!(state, result);
     let value_error = get::matches! { ctx.arena(), &result.value_call_result,
-        "REJECT errorValue" => |values| Some(*get::one(&values.into_iter().copied().collect::<Vec<_>>()).map_err(ExternError::from)?),
+        "REJECT errorValue" => |values| match values.as_slice() {
+            [value_error] => Some(**value_error),
+            _ => return Err(ExternError::from(ValueError::ExpectedCount {
+                expected: 1,
+                actual: values.len(),
+            }).into()),
+        },
         _ => None,
     };
     if let Some(value_error) = value_error {
@@ -1095,17 +1133,18 @@ where
 pub fn drive_pipe<Interp, Iface, Exn>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
     state: &mut SimState,
-    rx: &Transmission,
+    rx: &Rx,
 ) -> Result<(), Interp::Error>
 where
     Iface: Interface,
     Exn: Extern,
     Interp: Interpreter<Iface, Exn>,
 {
+    let encoding = ctx.encoding();
     state.txs.clear();
     let pkt = ObjectState::PacketIn(PacketIn::init(&rx.packet)?);
     // Set up packet_in objects
-    let value_packet = pkt.to_value(ctx.arena_mut())?;
+    let value_packet = pkt.to_value(ctx.arena_mut(), encoding)?;
     let result =
         rel::psa_ingress_init_packet_in(ctx, state.value_ctx, state.value_arch, value_packet)?;
     install_result!(state, result);
@@ -1113,7 +1152,8 @@ where
         rel::psa_egress_init_packet_in(ctx, state.value_ctx, state.value_arch, value_packet)?;
     install_result!(state, result);
     // Set up packet_out objects
-    let value_packet = ObjectState::PacketOut(PacketOut::default()).to_value(ctx.arena_mut())?;
+    let value_packet =
+        ObjectState::PacketOut(PacketOut::default()).to_value(ctx.arena_mut(), encoding)?;
     let result =
         rel::psa_ingress_init_packet_out(ctx, state.value_ctx, state.value_arch, value_packet)?;
     install_result!(state, result);

@@ -15,11 +15,11 @@ use p4spec_rust::{
         },
         data::{
             typ::TypKind,
-            value::{Value, ValueArena, ValueKind, serde},
+            value::{Value, ValueArena, ValueKind, external},
         },
         xl::num::{self, Number},
     },
-    sim_plugin::{io::Transmission, runner::Run},
+    sim_plugin::{io::Tx, runner::Run},
 };
 use serde_json::{Value as Json, json};
 use thiserror::Error;
@@ -130,7 +130,7 @@ impl Worker {
         command: usize,
         arena: &ValueArena,
         run: &Run,
-        txs: &[Transmission],
+        txs: &[Tx],
     ) -> Result<(), Error> {
         let Run {
             state,
@@ -232,7 +232,7 @@ impl Worker {
         Ok(())
     }
 
-    fn tx(&mut self, tx: &Transmission) -> Result<(), Error> {
+    fn tx(&mut self, tx: &Tx) -> Result<(), Error> {
         self.compare(json!(["Tx", tx.port, tx.packet]))
     }
 
@@ -279,7 +279,8 @@ impl Worker {
                 self.compare(json!(["Value", "Case", typ]))?;
                 self.mixfix(arena, mixfix)
             }
-            ValueKind::Extern(json) => {
+            ValueKind::Extern(payload) => {
+                let json = payload.as_ref();
                 self.compare(json!(["Value", "Extern", typ]))?;
                 let route = match arena.typ(value).as_ref() {
                     TypKind::Var(id, targs)
@@ -333,7 +334,7 @@ impl Worker {
         match route {
             "value" => {
                 let mut arena = ValueArena::new();
-                let value: Value = serde::decode(&mut arena, data)?;
+                let value: Value = external::decode(&mut arena, data)?;
                 return self.value(&arena, &value);
             }
             "object" if data.is_object() => {
@@ -543,8 +544,8 @@ fn bounded(text: &str) -> String {
     text.chars().take(512).collect()
 }
 
-fn semantic_typ(typ: &TypKind) -> Json {
-    match typ {
+fn semantic_typ(typ_kind: &TypKind) -> Json {
+    match typ_kind {
         TypKind::Bool => json!(["BoolT"]),
         TypKind::Num(num::Typ::Nat) => json!(["NumT", "NatT"]),
         TypKind::Num(num::Typ::Int) => json!(["NumT", "IntT"]),
@@ -571,20 +572,25 @@ fn semantic_typ(typ: &TypKind) -> Json {
                 Iter::List => "List",
             }
         ]),
-        TypKind::Func(typ) => json!([
+        TypKind::Func(typ_func) => json!([
             "FuncT",
-            typ.tparams.iter().map(|id| &id.node).collect::<Vec<_>>(),
-            typ.typs_params
+            typ_func
+                .tparams
+                .iter()
+                .map(|id| &id.node)
+                .collect::<Vec<_>>(),
+            typ_func
+                .typs_params
                 .iter()
                 .map(|typ| semantic_typ(&typ.node))
                 .collect::<Vec<_>>(),
-            semantic_typ(&typ.typ_ret.node)
+            semantic_typ(&typ_func.typ_ret.node)
         ]),
     }
 }
 
-fn atom_frame(atom: &Atom) -> Json {
-    match atom {
+fn atom_frame(atom_kind: &Atom) -> Json {
+    match atom_kind {
         Atom::Keyword(text) => json!(["Keyword", text]),
         Atom::Tag(text) => json!(["Tag", text]),
         Atom::Operator(text) => json!(["Operator", text]),

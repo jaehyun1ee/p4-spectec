@@ -13,10 +13,10 @@ fn test_advance_length_emit_and_payload_keep_bit_order() {
     let output = pkt
         .advance(&mut runner.context(), value_ctx, value_arch)
         .unwrap();
-    assert_eq!(output.pkt.idx, 3);
-    assert_eq!(output.pkt.payload_bytes().unwrap(), [BigInt::from(94)]);
+    assert_eq!(output.object.idx, 3);
+    assert_eq!(output.object.payload_bytes().unwrap(), [BigInt::from(94)]);
     let output_len = output
-        .pkt
+        .object
         .length(&mut runner.context(), value_ctx, value_arch)
         .unwrap();
     let value_opt = *get::case(runner.arena(), &output_len.result.value_call_result)
@@ -48,7 +48,7 @@ fn test_advance_length_emit_and_payload_keep_bit_order() {
         .emit(&mut runner.context(), value_ctx, value_arch)
         .unwrap();
     assert_eq!(
-        object::packet_to_string(&output.pkt, &output_emit.pkt).unwrap(),
+        object::packet_to_string(&output.object, &output_emit.object).unwrap(),
         "578"
     );
     assert_eq!(output_emit.result.value_ctx, value_ctx);
@@ -60,10 +60,10 @@ fn test_advance_length_emit_and_payload_keep_bit_order() {
         .values_var
         .insert("sizeInBits".to_owned(), value_size);
     let output_short = output
-        .pkt
+        .object
         .advance(&mut runner.context(), value_ctx, value_arch)
         .unwrap();
-    assert_eq!(output_short.pkt, output.pkt);
+    assert_eq!(output_short.object, output.object);
     assert_eq!(
         reject(runner.arena(), &output_short.result.value_call_result),
         "PacketTooShort"

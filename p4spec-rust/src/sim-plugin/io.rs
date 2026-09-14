@@ -6,14 +6,17 @@ pub struct Transmission {
     pub packet: String,
 }
 
+pub type Rx = Transmission;
+pub type Tx = Transmission;
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Expectation {
-    pub tx: Transmission,
+    pub tx: Tx,
     pub exact: bool,
 }
 
 /// Compares ASCII packets case-sensitively, with `*` matching one nibble
-pub fn matches(tx: &Transmission, expect: &Expectation) -> bool {
+pub fn matches(tx: &Tx, expect: &Expectation) -> bool {
     if tx.port != expect.tx.port || (expect.exact && tx.packet.len() != expect.tx.packet.len()) {
         return false;
     }

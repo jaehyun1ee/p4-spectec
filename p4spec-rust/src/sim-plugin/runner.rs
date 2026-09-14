@@ -2,7 +2,7 @@
 
 use super::{
     architecture::Architecture,
-    io::{self, Expectation, Transmission},
+    io::{self, Expectation, Rx, Tx},
     spec_impl::unpack,
     state::SimState,
     table,
@@ -44,20 +44,17 @@ pub enum Error {
 #[derive(Debug, thiserror::Error)]
 pub enum StfFailure {
     #[error("expected {expect} but got {tx}")]
-    Mismatch {
-        expect: Transmission,
-        tx: Transmission,
-    },
+    Mismatch { expect: Tx, tx: Tx },
     #[error("not yet supported: {0}")]
     Unsupported(String),
     #[error("{}{}", remaining_outputs(.txs), remaining_expects(.expects))]
     Remaining {
-        txs: Vec<Transmission>,
+        txs: Vec<Tx>,
         expects: Vec<Expectation>,
     },
 }
 
-fn remaining_outputs(txs: &[Transmission]) -> String {
+fn remaining_outputs(txs: &[Tx]) -> String {
     if txs.is_empty() {
         String::new()
     } else {
@@ -89,10 +86,10 @@ fn remaining_expects(expects: &[Expectation]) -> String {
 /// Pipeline values and STF queues belong to one independent input program
 pub struct Run {
     pub state: SimState,
-    pub tx_output_queue: Vec<Transmission>,
+    pub tx_output_queue: Vec<Tx>,
     pub expect_queue: Vec<Expectation>,
     /// Source PASS payloads, in statement order
-    pub matches: Vec<Transmission>,
+    pub matches: Vec<Tx>,
 }
 
 impl Run {
@@ -106,7 +103,7 @@ impl Run {
     }
 
     /// Only the first new transmission can consume a pending expectation
-    pub fn on_tx_output(&mut self) -> Result<Option<Transmission>, StfFailure> {
+    pub fn on_tx_output(&mut self) -> Result<Option<Tx>, StfFailure> {
         let Some(tx) = self.state.txs.first() else {
             return Ok(None);
         };
@@ -130,10 +127,7 @@ impl Run {
         Ok(Some(expect.tx))
     }
 
-    pub fn on_tx_expect(
-        &mut self,
-        expect: Expectation,
-    ) -> Result<Option<Transmission>, StfFailure> {
+    pub fn on_tx_expect(&mut self, expect: Expectation) -> Result<Option<Tx>, StfFailure> {
         let Some(idx) = self
             .tx_output_queue
             .iter()
@@ -184,7 +178,7 @@ pub fn step<Interp, Iface, Arch>(
     runner: &mut Runner<Interp, Iface, Arch>,
     run: &mut Run,
     stmt: &Phrase<Statement>,
-) -> Result<Option<Transmission>, Error>
+) -> Result<Option<Tx>, Error>
 where
     Iface: Interface,
     Arch: Architecture,
@@ -211,7 +205,7 @@ fn step_transformed<Interp, Iface, Arch>(
     runner: &mut Runner<Interp, Iface, Arch>,
     run: &mut Run,
     stmt: Statement,
-) -> Result<Option<Transmission>, Error>
+) -> Result<Option<Tx>, Error>
 where
     Iface: Interface,
     Arch: Architecture,
@@ -226,7 +220,7 @@ where
     let state = &mut run.state;
     match stmt {
         Statement::Packet { port, packet } => {
-            let rx = Transmission {
+            let rx = Rx {
                 port: int(&port)?,
                 packet: packet.to_ascii_uppercase(),
             };
@@ -239,7 +233,7 @@ where
             exact,
         } => {
             let expect = Expectation {
-                tx: Transmission {
+                tx: Tx {
                     port: int(&port)?,
                     packet: packet_expected.unwrap_or_default().to_ascii_uppercase(),
                 },

@@ -1,5 +1,5 @@
 use super::*;
-use p4spec_rust::lang::data::value::serde::{decode, encode};
+use p4spec_rust::lang::data::value::external::{decode, encode};
 
 #[test]
 fn test_register_default_order_read_bounds_and_write_noop() {

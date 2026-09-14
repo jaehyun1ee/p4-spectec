@@ -1,4 +1,5 @@
-use super::{ObjectResult, finish, repeat};
+use super::repeat;
+use crate::sim_plugin::spec_impl::rel::{ObjectResult, finish};
 use crate::sim_plugin::spec_impl::{func, unpack};
 use crate::{
     lang::data::value::{Value, ValueArena},

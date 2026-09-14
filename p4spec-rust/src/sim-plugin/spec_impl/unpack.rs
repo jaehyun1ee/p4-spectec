@@ -91,8 +91,8 @@ pub fn p4_fixed_bit(arena: &ValueArena, value: &Value) -> Result<PrecisionNumber
 
 pub fn size(int: &BigInt) -> Result<usize, ExternError> {
     int.to_u64()
-        .filter(|size| *size <= ((1_u64 << 62) - 1))
-        .and_then(|size| usize::try_from(size).ok())
+        .filter(|size_packet| *size_packet <= ((1_u64 << 62) - 1))
+        .and_then(|size_packet| usize::try_from(size_packet).ok())
         .ok_or_else(|| ExternError::Failure(format!("invalid packet size: {int}")))
 }
 

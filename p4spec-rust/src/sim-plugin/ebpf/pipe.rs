@@ -1,3 +1,6 @@
+use crate::lang::data::value::external::{
+    DecodeContext, EncodeContext, Encoding, decode_with, encode_with,
+};
 use crate::{
     lang::{
         data::value::{Value, ValueArena, get},
@@ -5,15 +8,14 @@ use crate::{
     },
     runner::{Extern, ExternError, Interface, Interpreter, RunnerContext},
     stf::ast::{Name, Statement},
-    util::json::json,
 };
-use serde::{Deserialize, Serialize};
+use serde_derive_state::{DeserializeState, SerializeState};
 
 use super::{
     super::{
         core::{func as core_func, object::PacketIn},
         externs as external,
-        io::Transmission,
+        io::{Rx, Tx},
         spec_impl::{func, pgm, rel, unpack},
         state::{SimState, install_result},
     },
@@ -23,24 +25,33 @@ use super::{
 pub struct Ebpf;
 
 // Extern objects
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, SerializeState, DeserializeState)]
+#[serde(serialize_state = "EncodeContext<'arena>", ser_parameters = "'arena")]
+#[serde(deserialize_state = "DecodeContext<'de>")]
 pub enum ExternObject {
     PacketIn(#[serde(deserialize_with = "PacketIn::deserialize_validated")] PacketIn),
     CounterArray(CounterArray),
 }
 
 impl ExternObject {
-    pub fn from_value(arena: &ValueArena, value: &Value) -> Result<Self, ExternError> {
-        let json = get::external(arena, value)?;
-        let object: Self =
-            Self::deserialize(json).map_err(|error| ExternError::Failure(error.to_string()))?;
-        Ok(object)
+    pub fn from_value(
+        arena: &mut ValueArena,
+        encoding: Encoding,
+        value: &Value,
+    ) -> Result<Self, ExternError> {
+        let json = get::external_shared(arena, value)?.clone();
+        decode_with(arena, encoding, json.as_ref())
+            .map_err(|error| ExternError::Failure(error.to_string()))
     }
 
-    pub fn to_value(&self, arena: &mut ValueArena) -> Result<Value, ExternError> {
-        let json =
-            serde_json::to_value(self).map_err(|error| ExternError::Failure(error.to_string()))?;
-        external::state_value(arena, "objectState", json)
+    pub fn to_value(
+        &self,
+        arena: &mut ValueArena,
+        encoding: Encoding,
+    ) -> Result<Value, ExternError> {
+        let payload = encode_with(arena, encoding, self)
+            .map_err(|error| ExternError::Failure(error.to_string()))?;
+        external::state_value(arena, "objectState", payload.into())
     }
 }
 
@@ -58,8 +69,13 @@ impl Extern for Ebpf {
         Iface: Interface,
         Interp: Interpreter<Iface, Self>,
     {
+        let encoding = ctx.encoding();
         let value = match name {
-            "init_archState" => external::state_value(ctx.arena_mut(), "archState", json::Null)?,
+            "init_archState" => {
+                let payload = encode_with(ctx.arena(), encoding, &())
+                    .map_err(|error| ExternError::Failure(error.to_string()))?;
+                external::state_value(ctx.arena_mut(), "archState", payload.into())?
+            }
             "init_objectState" => {
                 let [value_name, _value_targs, value_ids, value_args] = values else {
                     return Err(ExternError::Failure(
@@ -70,9 +86,11 @@ impl Extern for Ebpf {
                 let name = get::text(ctx.arena(), value_name).map_err(ExternError::from)?;
                 if name == "CounterArray" {
                     let counter = CounterArray::init(ctx.arena(), *value_ids, *value_args)?;
-                    ExternObject::CounterArray(counter).to_value(ctx.arena_mut())?
+                    ExternObject::CounterArray(counter).to_value(ctx.arena_mut(), encoding)?
                 } else {
-                    external::state_value(ctx.arena_mut(), "objectState", json::Null)?
+                    let payload = encode_with(ctx.arena(), encoding, &())
+                        .map_err(|error| ExternError::Failure(error.to_string()))?;
+                    external::state_value(ctx.arena_mut(), "objectState", payload.into())?
                 }
             }
             _ => {
@@ -152,6 +170,7 @@ where
     Iface: Interface,
     Interp: Interpreter<Iface, Ebpf>,
 {
+    let encoding = ctx.encoding();
     let [value_ctx, value_arch, value_id, value_name, value_names] = values else {
         return Err(ExternError::Failure(
             "unexpected number of arguments to extern method call".to_owned(),
@@ -159,7 +178,7 @@ where
         .into());
     };
     let value_state = func::find_object_state_e(ctx, *value_arch, *value_id)?;
-    let object = ExternObject::from_value(ctx.arena(), &value_state)?;
+    let object = ExternObject::from_value(ctx.arena_mut(), encoding, &value_state)?;
     let name = get::text(ctx.arena(), value_name)
         .map_err(ExternError::from)?
         .to_owned();
@@ -183,7 +202,7 @@ where
                 ("length", []) => pkt.length(ctx, *value_ctx, *value_arch)?,
                 _ => return Err(unsupported_method(ctx.arena(), *value_id, &name, &names)?.into()),
             };
-            (ExternObject::PacketIn(output.pkt), output.result)
+            (ExternObject::PacketIn(output.object), output.result)
         }
         ExternObject::CounterArray(counter) => {
             let output = match (
@@ -201,7 +220,7 @@ where
             (ExternObject::CounterArray(output.counter), output.result)
         }
     };
-    let value_state = object.to_value(ctx.arena_mut())?;
+    let value_state = object.to_value(ctx.arena_mut(), encoding)?;
     let value_arch = func::update_object_state_e(ctx, result.value_arch, *value_id, value_state)?;
     Ok(vec![result.value_ctx, value_arch, result.value_call_result])
 }
@@ -264,17 +283,18 @@ where
 pub fn drive_pipe<Interp, Iface, Exn>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
     state: &mut SimState,
-    rx: &Transmission,
+    rx: &Rx,
 ) -> Result<(), Interp::Error>
 where
     Iface: Interface,
     Exn: Extern,
     Interp: Interpreter<Iface, Exn>,
 {
+    let encoding = ctx.encoding();
     state.txs.clear();
     // Setup packet_in extern
     let pkt = ExternObject::PacketIn(PacketIn::init(&rx.packet)?);
-    let value_packet = pkt.to_value(ctx.arena_mut())?;
+    let value_packet = pkt.to_value(ctx.arena_mut(), encoding)?;
     let result = rel::ebpf_init_packet_in(ctx, state.value_ctx, state.value_arch, value_packet)?;
     install_result!(state, result);
     // Setup global variables
@@ -296,7 +316,7 @@ where
     let value_accept =
         rel::lvalue_read_var_global(ctx, state.value_ctx, state.value_arch, "accept")?;
     if unpack::p4_bool(ctx.arena(), &value_accept)? {
-        state.txs.push(Transmission {
+        state.txs.push(Tx {
             port: rx.port,
             packet: rx.packet.clone(),
         });

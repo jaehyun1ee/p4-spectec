@@ -1,6 +1,6 @@
 //! Types shared by the intermediate language representations
 
-use serde_derive_state::{DeserializeState, SerializeState};
+use serde::{Deserialize, Serialize};
 
 use std::cmp::Ordering;
 
@@ -16,9 +16,7 @@ use crate::phrase;
 
 pub type Typ = Phrase<TypKind>;
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, SerializeState, DeserializeState)]
-#[serde(serialize_state = "State", ser_parameters = "State")]
-#[serde(deserialize_state = "State", de_parameters = "State")]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum TypKind {
     /// `bool`
     Bool,
@@ -27,25 +25,72 @@ pub enum TypKind {
     /// `text`
     Text,
     /// `id (`<` list(targ, `,`) `>`)?`
-    Var(#[serde(state)] Id, #[serde(state)] Vec<Typ>),
+    Var(Id, Vec<Typ>),
     /// `(` list(typ, `,`) `)`
-    Tuple(#[serde(state)] Vec<Typ>),
+    Tuple(Vec<Typ>),
     /// `typ iter`
-    Iter(#[serde(state)] Box<Typ>, Iter),
+    Iter(Box<Typ>, Iter),
     /// `<` list(tparam, `,`) `>` `(` list(typ, `,`) `)` `:` typ
-    Func(#[serde(state)] FuncTyp),
+    Func(FuncTyp),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, SerializeState, DeserializeState)]
-#[serde(serialize_state = "State", ser_parameters = "State")]
-#[serde(deserialize_state = "State", de_parameters = "State")]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct FuncTyp {
-    #[serde(state)]
     pub tparams: Vec<TId>,
-    #[serde(state)]
     pub typs_params: Vec<Typ>,
-    #[serde(state)]
     pub typ_ret: Box<Typ>,
+}
+
+impl<State> serde_state::SerializeState<State> for TypKind {
+    fn serialize_state<Serializer>(
+        &self,
+        serializer: Serializer,
+        _state: &State,
+    ) -> Result<Serializer::Ok, Serializer::Error>
+    where
+        Serializer: serde::Serializer,
+    {
+        // Ordinary derives traverse the type subtree without phrase stack checks
+        stacker::grow(32 * 1024 * 1024, || self.serialize(serializer))
+    }
+}
+
+impl<State> serde_state::SerializeState<State> for FuncTyp {
+    fn serialize_state<Serializer>(
+        &self,
+        serializer: Serializer,
+        _state: &State,
+    ) -> Result<Serializer::Ok, Serializer::Error>
+    where
+        Serializer: serde::Serializer,
+    {
+        // Ordinary derives traverse the type subtree without phrase stack checks
+        stacker::grow(32 * 1024 * 1024, || self.serialize(serializer))
+    }
+}
+
+impl<'de, State> serde_state::DeserializeState<'de, State> for TypKind {
+    fn deserialize_state<Deserializer>(
+        _state: &mut State,
+        deserializer: Deserializer,
+    ) -> Result<Self, Deserializer::Error>
+    where
+        Deserializer: serde::Deserializer<'de>,
+    {
+        Self::deserialize(deserializer)
+    }
+}
+
+impl<'de, State> serde_state::DeserializeState<'de, State> for FuncTyp {
+    fn deserialize_state<Deserializer>(
+        _state: &mut State,
+        deserializer: Deserializer,
+    ) -> Result<Self, Deserializer::Error>
+    where
+        Deserializer: serde::Deserializer<'de>,
+    {
+        Self::deserialize(deserializer)
+    }
 }
 
 // == Comparison

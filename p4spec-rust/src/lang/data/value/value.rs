@@ -1,5 +1,6 @@
 //! Value bodies with full source locations and canonical syntax identities
 
+use crate::util::json::json;
 use serde_derive_state::{DeserializeState, SerializeState};
 
 use std::{
@@ -25,7 +26,6 @@ use crate::lang::{
     traits::{cmp::SyntaxCmp, eq::SyntaxEq},
     xl::num::{self, Number},
 };
-use crate::util::json::json;
 
 // = Value types
 
@@ -44,7 +44,11 @@ pub struct ValueRef<'a> {
 // - Bodies
 
 #[derive(Debug, SerializeState, DeserializeState)]
-#[serde(serialize_state = "ValueArena", deserialize_state = "ValueArena")]
+#[serde(
+    serialize_state = "super::external::EncodeContext<'arena>",
+    ser_parameters = "'arena"
+)]
+#[serde(deserialize_state = "super::external::DecodeContext<'de>")]
 pub enum ValueKind {
     Bool(bool),
     Num(Number),

@@ -5,22 +5,18 @@
 use std::rc::Rc;
 
 use super::{
-    intern::{CanonId, CanonInterner, Interned, Interner, RcInterner},
-    serde::ArenaStore,
+    intern::{CanonId, CanonInterner, Interner, RcInterner},
     value::{Value, ValueError, ValueKind, ValueRef},
 };
-use crate::lang::{
-    common::source::{NotePhrase, Span},
-    data::typ::TypKind,
-};
+use crate::lang::{common::source::Span, data::typ::TypKind};
 
 // = Arena storage
 
 #[derive(Debug)]
 pub struct ValueArena {
-    values: CanonInterner<ValueKind>,
-    types: RcInterner<TypKind>,
-    spans: Interner<Span>,
+    pub(super) values: CanonInterner<ValueKind>,
+    pub(super) types: RcInterner<TypKind>,
+    pub(super) spans: Interner<Span>,
 }
 
 impl Default for ValueArena {
@@ -55,7 +51,7 @@ impl ValueArena {
         let node = self.values.intern(kind)?;
         let note = self.types.intern(typ)?;
         let span = self.spans.intern(span)?;
-        Ok(NotePhrase { node, note, span })
+        Ok(Value { node, note, span })
     }
 
     // - Lookup
@@ -101,35 +97,5 @@ impl ValueArena {
         crate::lang::il::print::print_value(self, value, &mut printer)
             .expect("writing to a String cannot fail");
         output
-    }
-}
-
-impl ArenaStore<ValueKind> for ValueArena {
-    fn lookup(&self, id: Interned<ValueKind>) -> &ValueKind {
-        self.values.get(id)
-    }
-
-    fn intern(&mut self, kind: ValueKind) -> Result<Interned<ValueKind>, ValueError> {
-        Ok(self.values.intern(kind)?)
-    }
-}
-
-impl ArenaStore<TypKind> for ValueArena {
-    fn lookup(&self, id: Interned<TypKind>) -> &TypKind {
-        self.types.get(id)
-    }
-
-    fn intern(&mut self, typ: TypKind) -> Result<Interned<TypKind>, ValueError> {
-        Ok(self.types.intern(Rc::new(typ))?)
-    }
-}
-
-impl ArenaStore<Span> for ValueArena {
-    fn lookup(&self, id: Interned<Span>) -> &Span {
-        self.spans.get(id)
-    }
-
-    fn intern(&mut self, span: Span) -> Result<Interned<Span>, ValueError> {
-        Ok(self.spans.intern(span)?)
     }
 }

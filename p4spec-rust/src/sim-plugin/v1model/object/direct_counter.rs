@@ -1,4 +1,4 @@
-use super::{ObjectResult, finish};
+use crate::sim_plugin::spec_impl::rel::{ObjectResult, finish};
 use crate::sim_plugin::{core::object::PacketIn, spec_impl::unpack};
 use crate::{
     lang::data::value::{Value, ValueArena},
