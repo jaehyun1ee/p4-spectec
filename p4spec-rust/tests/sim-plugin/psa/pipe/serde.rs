@@ -3,7 +3,7 @@ use p4spec_rust::{
         common::source::Span,
         data::value::{
             ValueArena, ValueError,
-            external::{Encoding, decode, encode, encode_with},
+            external::{Encoding, decode_with, encode, encode_with},
             get, make,
         },
     },
@@ -36,7 +36,8 @@ fn test_derived_register_object_preserves_payload_and_annotations() {
     );
     let mut arena_decoded = ValueArena::new();
     make::bool(&mut arena_decoded, false, span.clone()).unwrap();
-    let object: ObjectState = decode(&mut arena_decoded, &json).unwrap();
+    let object: ObjectState =
+        decode_with(&mut arena_decoded, Encoding::ArenaIndependent, &json).unwrap();
     let ObjectState::Register(reg) = &object else {
         panic!("expected register");
     };
@@ -61,7 +62,9 @@ fn test_derived_register_object_preserves_payload_and_annotations() {
     .unwrap();
     assert_eq!(encode(&arena_decoded, &object_decoded).unwrap(), json);
     json["Register"]["extra"] = json!(true);
-    assert!(decode::<ObjectState>(&mut arena_decoded, &json).is_err());
+    assert!(
+        decode_with::<ObjectState>(&mut arena_decoded, Encoding::ArenaIndependent, &json).is_err()
+    );
 }
 
 #[test]
@@ -71,7 +74,10 @@ fn test_object_packet_state_preserves_cursor_without_validation() {
     pkt.idx = 9;
     let object = ObjectState::PacketIn(pkt);
     let json = encode(&arena, &object).unwrap();
-    assert_eq!(decode::<ObjectState>(&mut arena, &json).unwrap(), object);
+    assert_eq!(
+        decode_with::<ObjectState>(&mut arena, Encoding::ArenaIndependent, &json).unwrap(),
+        object
+    );
     for encoding in [Encoding::ArenaRelative, Encoding::ArenaIndependent] {
         let value_object = object.to_value(&mut arena, encoding).unwrap();
         assert_eq!(
@@ -89,7 +95,7 @@ fn test_object_codec_rejects_malformed_variant_and_register_records() {
         json!({"Register": {"values": []}}),
         json!({"Unknown": {}}),
     ] {
-        assert!(decode::<ObjectState>(&mut arena, &json).is_err());
+        assert!(decode_with::<ObjectState>(&mut arena, Encoding::ArenaIndependent, &json).is_err());
     }
 }
 
@@ -179,7 +185,8 @@ fn test_architecture_codec_preserves_nested_registers_in_each_mode() {
         }
         let json = encode(&arena, &value_arch).unwrap();
         let mut arena_decoded = ValueArena::new();
-        let value_arch = decode(&mut arena_decoded, &json).unwrap();
+        let value_arch =
+            decode_with(&mut arena_decoded, Encoding::ArenaIndependent, &json).unwrap();
         let arch_decoded =
             Arch::from_value(&mut arena_decoded, Encoding::ArenaIndependent, &value_arch).unwrap();
         let object_decoded = ObjectState::from_value(

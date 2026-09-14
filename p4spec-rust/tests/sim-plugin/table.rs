@@ -441,7 +441,7 @@ fn field(arena: &ValueArena, value: Value, name: &str) -> Value {
     get::structure(arena, &value)
         .unwrap()
         .iter()
-        .find(|(atom, _)| atom.node == Atom::keyword(name))
+        .find(|(atom, _)| atom.node == Atom::Keyword(name.to_owned()))
         .unwrap()
         .1
 }
@@ -483,11 +483,11 @@ fn test_native_table_entries_append_priorities_and_default_changes_are_isolated(
         typ_named("arch").node.into(),
         vec![
             (
-                p4spec_rust::phrase!(node: Atom::keyword("STATE"), span: Span::default()),
+                p4spec_rust::phrase!(node: Atom::Keyword("STATE".to_owned()), span: Span::default()),
                 value_state,
             ),
             (
-                p4spec_rust::phrase!(node: Atom::keyword("STORE"), span: Span::default()),
+                p4spec_rust::phrase!(node: Atom::Keyword("STORE".to_owned()), span: Span::default()),
                 value_store,
             ),
         ],

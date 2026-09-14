@@ -31,10 +31,6 @@ impl Ebpf {
     pub fn new(encoding: Encoding) -> Self {
         Self { encoding }
     }
-
-    pub fn encoding(&self) -> Encoding {
-        self.encoding
-    }
 }
 
 // Extern objects

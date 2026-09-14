@@ -321,15 +321,6 @@ pub mod get {
         }
     }
 
-    // - Functions
-
-    pub fn func<'a>(arena: &'a ValueArena, value: &Value) -> Result<&'a Id, ValueError> {
-        match arena.kind(value) {
-            ValueKind::Func(id) => Ok(id),
-            _ => Err(unexpected(arena, value, ValueTag::Func)),
-        }
-    }
-
     // - Externals
 
     pub fn external<'a>(arena: &'a ValueArena, value: &Value) -> Result<&'a Rc<json>, ValueError> {

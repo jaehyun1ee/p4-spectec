@@ -57,7 +57,7 @@ fn field(arena: &ValueArena, value: Value, name: &str) -> Value {
     get::structure(arena, &value)
         .unwrap()
         .iter()
-        .find(|(atom, _)| atom.node == Atom::keyword(name))
+        .find(|(atom, _)| atom.node == Atom::Keyword(name.to_owned()))
         .unwrap()
         .1
 }
@@ -67,7 +67,7 @@ fn record(arena: &mut ValueArena, fields: Vec<(&str, Value)>) -> Value {
         .into_iter()
         .map(|(name, value)| {
             (
-                p4spec_rust::phrase!(node: Atom::keyword(name), span: Span::default()),
+                p4spec_rust::phrase!(node: Atom::Keyword(name.to_owned()), span: Span::default()),
                 value,
             )
         })
@@ -85,7 +85,7 @@ fn update(arena: &mut ValueArena, value: Value, name: &str, value_field: Value) 
     let mut fields = get::structure(arena, &value).unwrap().to_vec();
     fields
         .iter_mut()
-        .find(|(atom, _)| atom.node == Atom::keyword(name))
+        .find(|(atom, _)| atom.node == Atom::Keyword(name.to_owned()))
         .unwrap()
         .1 = value_field;
     make::structure(
@@ -192,7 +192,7 @@ impl<Iface: Interface> Interpreter<Iface, V1Model> for TraceInterp {
                 let mut value_ctx = values[0];
                 let mut value_arch = values[1];
                 let value_arch_state = field(ctx.arena(), value_arch, "STATE");
-                let encoding = ctx.external().encoding();
+                let encoding = p4spec_rust::lang::data::value::external::Encoding::ArenaRelative;
                 let mut arch = Arch::from_value(ctx.arena_mut(), encoding, &value_arch_state)?;
                 if matches!(phase, "ingress" | "egress") {
                     assert_eq!(arch.action, Action::default());
@@ -276,7 +276,7 @@ fn setup(scenario: Scenario) -> (TestRunner, SimState) {
     let value_ctx = record(runner.arena_mut(), fields);
     let mut arch = Arch::default();
     arch.mirrortable.insert(1, 7);
-    let encoding = runner.external().encoding();
+    let encoding = p4spec_rust::lang::data::value::external::Encoding::ArenaRelative;
     let value_arch_state = arch.to_value(runner.arena_mut(), encoding).unwrap();
     let value_in = ObjectState::PacketIn(PacketIn::init("AB").unwrap())
         .to_value(runner.arena_mut(), encoding)

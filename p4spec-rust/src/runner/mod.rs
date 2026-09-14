@@ -10,10 +10,7 @@ mod externs;
 mod interface;
 mod interpreter;
 
-use crate::lang::{
-    data::value::{Value, ValueArena},
-    il::ast::Typ,
-};
+use crate::lang::data::value::{Value, ValueArena};
 
 pub use context::RunnerContext;
 pub use externs::{Extern, ExternError, NullExtern};
@@ -71,10 +68,6 @@ where
         &mut self.arena
     }
 
-    pub fn external(&self) -> &Exn {
-        &self.external
-    }
-
     // - Evaluation
 
     pub fn eval_program(
@@ -86,29 +79,7 @@ where
         ctx.call_program(name, program)
     }
 
-    pub fn eval_rel(&mut self, name: &str, values: &[Value]) -> Result<Vec<Value>, Interp::Error> {
-        let mut ctx = self.context();
-        ctx.call_rel(name, values)
-    }
-
-    pub fn eval_func(
-        &mut self,
-        name: &str,
-        targs: &[Typ],
-        values: &[Value],
-    ) -> Result<Value, Interp::Error> {
-        let mut ctx = self.context();
-        ctx.call_func(name, targs, values)
-    }
-
     // - Lifecycle
-
-    /// Clears the interpreter cache and resets the builtin interface and externs
-    pub fn clear(&mut self) {
-        self.interp.clear();
-        self.external.clear();
-        self.interface.clear();
-    }
 
     /// Starts an independent program while retaining definitions and configuration
     ///

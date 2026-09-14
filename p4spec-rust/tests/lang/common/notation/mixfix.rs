@@ -49,19 +49,7 @@ fn test_map_preserves_nested_labels_arguments_and_locations() {
     assert!(matches!(&mixfix_restored, Mixfix::Brack(_, mixfix, _)
         if matches!(mixfix.as_ref(), Mixfix::Infix(_, _, mixfix)
             if matches!(mixfix.as_ref(), Mixfix::Seq(_)))));
-    assert_eq!(
-        mixfix_restored
-            .atoms()
-            .into_iter()
-            .map(|atom| (&atom.node, &atom.span))
-            .collect::<Vec<_>>(),
-        vec![
-            (&Atom::LParen, &span(11)),
-            (&Atom::Arrow, &span(13)),
-            (&Atom::Keyword("tail".to_owned()), &span(17)),
-            (&Atom::RParen, &span(19)),
-        ],
-    );
+
     assert_eq!(mixfix_restored.into_args(), vec![arg_l, arg_r]);
 }
 
@@ -88,7 +76,6 @@ fn test_syntax_comparisons_and_hashing_ignore_atom_spans() {
     let (mixop, args) = mixfix_relocated.split();
     let mixfix_filled = Mixop::fill(&mixop, args.into_iter().copied()).unwrap();
     assert_eq!(mixfix_filled, mixfix_relocated);
-    assert_eq!(mixfix_filled.atoms()[0].span, span(37));
 
     let mixfix_changed = mixfix_relocated.map(|arg| arg + 1);
     assert!(!mixfix.eq_by(&mixfix_changed, PartialEq::eq));

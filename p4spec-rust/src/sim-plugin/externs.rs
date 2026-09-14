@@ -5,21 +5,12 @@ use crate::{
         common::source::Span,
         data::{
             typ,
-            value::{Value, ValueArena, external::DecodeError as StateDecodeError, get, make},
+            value::{Value, ValueArena, get, make},
         },
     },
     runner::{Extern, ExternError, Interface, Interpreter, RunnerContext},
 };
 use std::rc::Rc;
-
-impl From<StateDecodeError> for ExternError {
-    fn from(error: StateDecodeError) -> Self {
-        match error {
-            StateDecodeError::Value(error) => Self::Value(error),
-            StateDecodeError::Json(error) => Self::Failure(error.to_string()),
-        }
-    }
-}
 
 pub(crate) fn state_value(
     arena: &mut ValueArena,

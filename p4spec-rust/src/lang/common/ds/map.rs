@@ -61,16 +61,6 @@ impl<K: SyntaxCmp, V> PhraseMap<K, V> {
         self.entries.is_empty()
     }
 
-    /// Returns the number of bindings
-    pub fn len(&self) -> usize {
-        self.entries.len()
-    }
-
-    /// Removes all bindings
-    pub fn clear(&mut self) {
-        self.entries.clear();
-    }
-
     /// Inserts a binding and returns the previous value
     pub fn insert(&mut self, key: K, value: V) -> Option<V>
     where
@@ -88,11 +78,6 @@ impl<K: SyntaxCmp, V> PhraseMap<K, V> {
     /// Iterates over keys in collection order
     pub fn keys(&self) -> impl Iterator<Item = &K> {
         self.entries.keys().map(|key| &key.0)
-    }
-
-    /// Iterates over values in collection order
-    pub fn values(&self) -> impl Iterator<Item = &V> {
-        self.entries.values()
     }
 
     /// Returns the set of stored keys
@@ -146,37 +131,6 @@ impl<V> PhraseMap<Variable, V> {
     /// Returns the value for an equivalent key
     pub fn get(&self, key: &Variable) -> Option<&V> {
         self.entries.get(key)
-    }
-
-    /// Returns the mutable value for an equivalent key
-    pub fn get_mut(&mut self, key: &Variable) -> Option<&mut V>
-    where
-        V: Clone,
-    {
-        self.entries.get_mut(key)
-    }
-
-    /// Returns whether an equivalent key is present
-    pub fn contains_key(&self, key: &Variable) -> bool {
-        self.entries.contains_key(key)
-    }
-
-    /// Removes and returns the value for an equivalent key
-    pub fn remove(&mut self, key: &Variable) -> Option<V>
-    where
-        V: Clone,
-    {
-        self.entries.remove(key)
-    }
-
-    /// Removes and returns the stored key and value for an equivalent key
-    pub fn remove_entry(&mut self, key: &Variable) -> Option<(Variable, V)>
-    where
-        V: Clone,
-    {
-        self.entries
-            .remove_with_key(key)
-            .map(|(key, value)| (key.0, value))
     }
 }
 

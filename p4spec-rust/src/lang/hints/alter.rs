@@ -1,10 +1,6 @@
 //! Alteration hints for prose rendering
 
-use crate::lang::{
-    el::ast::{Atom, Exp, ExpKind, Hole as ElHole, Text},
-    hints::input,
-    traits::print::Print,
-};
+use crate::lang::el::ast::{Atom, Exp, ExpKind, Hole as ElHole, Text};
 use thiserror::Error;
 
 // Alternation hints
@@ -35,32 +31,8 @@ pub enum AlterationHint {
 pub enum AlterationError {
     #[error("alteration hint index {index} is out of bounds for {item_count} items")]
     IndexOutOfBounds { index: i64, item_count: usize },
-
-    #[error("alteration hint index {0} is missing from the realignment")]
-    MissingIndex(i64),
 }
 
-/// Converts to string
-pub fn to_string(hint: &AlterationHint) -> String {
-    format!("hint(alter {})", string(hint))
-}
-fn string(hint: &AlterationHint) -> String {
-    match hint {
-        AlterationHint::Text(text) => text.clone(),
-        AlterationHint::Atom(atom) => Print::to_string(atom),
-        AlterationHint::Seq(hints) => hints.iter().map(string).collect::<Vec<_>>().join(" "),
-        AlterationHint::Brack(atom_l, hint, atom_r) => format!(
-            "{} {} {}",
-            Print::to_string(atom_l),
-            string(hint),
-            Print::to_string(atom_r)
-        ),
-        AlterationHint::Hole(Hole::Next) => "%".into(),
-        AlterationHint::Hole(Hole::Num(index)) => format!("%{index}"),
-        AlterationHint::Fuse(hint_l, hint_r) => format!("{}#{}", string(hint_l), string(hint_r)),
-        AlterationHint::Other(exp) => Print::to_string(exp),
-    }
-}
 // Creating hints
 
 /// Initializes the value
@@ -80,115 +52,7 @@ pub fn init(exp: &Exp) -> Option<AlterationHint> {
         _ => AlterationHint::Other(exp.clone()),
     })
 }
-// Validating hints
 
-/// Validates every hole against `items`
-pub fn validate<Item>(hint: &AlterationHint, items: &[Item]) -> Result<(), AlterationError> {
-    validate_at(hint, items, 0).map(|_| ())
-}
-fn validate_at<Item>(
-    hint: &AlterationHint,
-    items: &[Item],
-    cursor: usize,
-) -> Result<usize, AlterationError> {
-    match hint {
-        AlterationHint::Text(_) | AlterationHint::Atom(_) | AlterationHint::Other(_) => Ok(cursor),
-        AlterationHint::Seq(hints) => hints
-            .iter()
-            .try_fold(cursor, |cursor, hint| validate_at(hint, items, cursor)),
-        AlterationHint::Brack(_, hint, _) => validate_at(hint, items, cursor),
-        AlterationHint::Hole(Hole::Next) if cursor < items.len() => Ok(cursor + 1),
-        AlterationHint::Hole(Hole::Next) => Err(AlterationError::IndexOutOfBounds {
-            index: i64::try_from(cursor).unwrap_or(i64::MAX),
-            item_count: items.len(),
-        }),
-        AlterationHint::Hole(Hole::Num(index))
-            if *index >= 0 && (*index as usize) < items.len() =>
-        {
-            Ok(cursor)
-        }
-        AlterationHint::Hole(Hole::Num(index)) => Err(AlterationError::IndexOutOfBounds {
-            index: *index,
-            item_count: items.len(),
-        }),
-        AlterationHint::Fuse(hint_l, hint_r) => {
-            validate_at(hint_r, items, validate_at(hint_l, items, cursor)?)
-        }
-    }
-}
-// Re-alignment of alternation indices
-
-/// Applies collect
-pub fn collect(hint: &AlterationHint) -> Vec<i64> {
-    fn collect_inner(hint: &AlterationHint, indices: &mut Vec<i64>) {
-        match hint {
-            AlterationHint::Hole(Hole::Num(index)) => indices.insert(0, *index),
-            AlterationHint::Seq(hints) => {
-                for hint in hints {
-                    collect_inner(hint, indices)
-                }
-            }
-            AlterationHint::Brack(_, hint, _) => collect_inner(hint, indices),
-            AlterationHint::Fuse(hint_l, hint_r) => {
-                collect_inner(hint_l, indices);
-                collect_inner(hint_r, indices)
-            }
-            _ => {}
-        }
-    }
-    let mut indices = Vec::new();
-    collect_inner(hint, &mut indices);
-    indices
-}
-/// Renumbers output holes after relation input positions
-///
-/// Returns an error when a referenced output position is absent
-pub fn realign(
-    hint: &AlterationHint,
-    inputs: &input::InputHint,
-) -> Result<AlterationHint, AlterationError> {
-    let outputs = collect(hint);
-    let mut all = inputs.indices().to_vec();
-    all.extend(&outputs);
-    all.sort();
-    let mut pairs = Vec::new();
-    for idx in all {
-        if outputs.contains(&idx) {
-            pairs.push((idx, pairs.len() as i64));
-        }
-    }
-    fn realign_inner(
-        hint: &AlterationHint,
-        index_pairs: &[(i64, i64)],
-    ) -> Result<AlterationHint, AlterationError> {
-        Ok(match hint {
-            AlterationHint::Seq(hints) => AlterationHint::Seq(
-                hints
-                    .iter()
-                    .map(|hint| realign_inner(hint, index_pairs))
-                    .collect::<Result<_, _>>()?,
-            ),
-            AlterationHint::Brack(atom_l, hint, atom_r) => AlterationHint::Brack(
-                atom_l.clone(),
-                Box::new(realign_inner(hint, index_pairs)?),
-                atom_r.clone(),
-            ),
-            AlterationHint::Hole(Hole::Num(index)) => AlterationHint::Hole(Hole::Num(
-                index_pairs
-                    .iter()
-                    .find(|(index_old, _)| index_old == index)
-                    .ok_or(AlterationError::MissingIndex(*index))?
-                    .1,
-            )),
-            AlterationHint::Fuse(hint_l, hint_r) => AlterationHint::Fuse(
-                Box::new(realign_inner(hint_l, index_pairs)?),
-                Box::new(realign_inner(hint_r, index_pairs)?),
-            ),
-            _ => hint.clone(),
-        })
-    }
-    realign_inner(hint, &pairs)
-}
 // Alternation
 
 /// Renders alteration pieces into a caller-defined output
@@ -203,7 +67,7 @@ pub trait Renderer<Item> {
     fn item(&self, item: &Item) -> Self::Output;
 }
 
-/// Renders a validated alteration hint
+/// Renders an alteration hint
 ///
 /// Returns an error when a hole cannot select an item
 pub fn alternate<Item, R: Renderer<Item>>(

@@ -4,7 +4,6 @@ pub mod atom;
 pub mod lang;
 pub mod mixfix;
 pub(crate) mod num;
-mod reader;
 pub mod source;
 pub(crate) mod typ;
 

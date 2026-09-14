@@ -173,15 +173,6 @@ fn test_packet_json_preserves_fields_and_payload() {
     let (mut pkt, _) = pkt.parse(2).unwrap();
     pkt.reset();
     assert_eq!(pkt.idx, 0);
-    assert_eq!(
-        object::bits_to_int_signed(&[true, false, true]).unwrap(),
-        BigInt::from(-3)
-    );
-    assert_eq!(
-        object::int_to_bits_signed(&BigInt::from(-3), 3),
-        [true, false, true]
-    );
-    assert!(object::bits_to_int_signed(&[]).is_err());
 }
 
 #[test]

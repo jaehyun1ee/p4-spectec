@@ -1,6 +1,6 @@
 use crate::runner::ExternError;
 use num_bigint::BigInt;
-use num_traits::{One, Zero};
+use num_traits::Zero;
 
 // Bit manipulation
 
@@ -32,28 +32,4 @@ pub fn bits_to_string(bits: &[bool]) -> String {
 pub fn bits_to_int_unsigned(bits: &[bool]) -> BigInt {
     bits.iter()
         .fold(BigInt::zero(), |int, bit| (int << 1) + u8::from(*bit))
-}
-
-pub fn bits_to_int_signed(bits: &[bool]) -> Result<BigInt, ExternError> {
-    let sign = bits
-        .first()
-        .ok_or_else(|| ExternError::Failure("empty signed bit string".to_owned()))?;
-    let int = bits_to_int_unsigned(bits);
-    Ok(if *sign {
-        int - (BigInt::one() << bits.len())
-    } else {
-        int
-    })
-}
-
-pub fn int_to_bits_unsigned(int: &BigInt, size: usize) -> Vec<bool> {
-    (0..size)
-        .rev()
-        .map(|idx| (int & (BigInt::one() << idx)) > BigInt::zero())
-        .collect()
-}
-
-pub fn int_to_bits_signed(int: &BigInt, size: usize) -> Vec<bool> {
-    let int = int & ((BigInt::one() << size) - BigInt::one());
-    int_to_bits_unsigned(&int, size)
 }

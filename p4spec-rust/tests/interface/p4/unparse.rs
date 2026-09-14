@@ -12,7 +12,7 @@ use p4spec_rust::{
             typ,
             value::{Value, make},
         },
-        el, il, pl, sl,
+        el, il,
         xl::num::Natural,
     },
 };
@@ -77,7 +77,7 @@ fn wrapped_text(arena: &mut ValueArena) -> Value {
 #[test]
 fn test_unparses_scalar_and_container_values() {
     let mut arena = ValueArena::new();
-    let unparser = P4Unparser::new();
+    let unparser = P4Unparser::default();
     let span = Span::default();
     assert_eq!(
         {
@@ -125,7 +125,7 @@ fn test_unparses_non_ascii_text_as_decimal_bytes() {
     )
     .unwrap();
     assert_eq!(
-        P4Unparser::new().render(&arena, &value).unwrap(),
+        P4Unparser::default().render(&arena, &value).unwrap(),
         "prefix\\226\\151\\149\\226\\128\\191\\226\\151\\149\\240\\159\\152\\128\\227\\131\\132simple_table_1"
     );
 }
@@ -141,13 +141,13 @@ fn test_unsupported_values_return_typed_errors() {
     )
     .unwrap();
     assert_eq!(
-        P4Unparser::new().render(&arena, &structure),
+        P4Unparser::default().render(&arena, &structure),
         Err(P4UnparseError::UnsupportedValue("Struct"))
     );
 }
 
 #[test]
-fn test_print_hints_are_loaded_from_all_runtime_stages() {
+fn test_print_hints_are_loaded_from_al() {
     let mut arena = ValueArena::new();
     let al_spec = vec![p4spec_rust::phrase! {
         node: al::ast::DefKind::Typ(al::ast::TypDef::Defined(Box::new(al::ast::DefinedTyp {
@@ -158,35 +158,10 @@ fn test_print_hints_are_loaded_from_all_runtime_stages() {
         }))),
         span: Span::default(),
     }];
-    let sl_spec = vec![p4spec_rust::phrase! {
-        node: sl::ast::DefKind::Typ(sl::ast::TypDef::Defined(Box::new(sl::ast::DefinedTyp {
-            id: id("Wrapper"),
-            tparams: Vec::new(),
-            def_typ: hinted_def_type(),
-            hints: Vec::new(),
-        }))),
-        span: Span::default(),
-    }];
-    let pl_spec = vec![pl::annot::Annotated::new(p4spec_rust::phrase! {
-        node: pl::ast::DefKind::Typ(pl::ast::TypDef::Defined(Box::new(pl::ast::DefinedTyp {
-            id: id("Wrapper"),
-            tparams: Vec::new(),
-            def_typ: hinted_def_type(),
-        }))),
-        span: Span::default(),
-    })];
     let value = wrapped_text(&mut arena);
 
     assert_eq!(
         P4Unparser::from_al_spec(&al_spec).render(&arena, &value),
-        Ok("show payload".to_owned())
-    );
-    assert_eq!(
-        P4Unparser::from_sl_spec(&sl_spec).render(&arena, &value),
-        Ok("show payload".to_owned())
-    );
-    assert_eq!(
-        P4Unparser::from_pl_spec(&pl_spec).render(&arena, &value),
         Ok("show payload".to_owned())
     );
 }

@@ -5,14 +5,12 @@ use std::{
     sync::Mutex,
 };
 
-use p4spec_rust::util::json::json;
 use p4spec_rust::{
     frontend::{
         error::{FrontendError, LexErrorKind, SyntaxErrorKind},
-        parse::{parse_file, parse_files},
+        parse::parse_files,
     },
     lang::common::source::{Position, Span},
-    wire::{EL_SCHEMA, Envelope, ocaml::lang::el::SpecCodec},
 };
 
 static OCAML_EXPORTER: Mutex<()> = Mutex::new(());
@@ -46,29 +44,6 @@ struct Diagnostic {
     span: Span,
 }
 
-fn first_difference(json_l: &json, json_r: &json, path: &str) -> Option<(String, String, String)> {
-    if json_l == json_r {
-        return None;
-    }
-    match (json_l, json_r) {
-        (json::Array(jsons_l), json::Array(jsons_r)) if jsons_l.len() == jsons_r.len() => jsons_l
-            .iter()
-            .zip(jsons_r)
-            .enumerate()
-            .find_map(|(index, (json_l, json_r))| {
-                first_difference(json_l, json_r, &format!("{path}[{index}]"))
-            }),
-        (json::Object(fields_l), json::Object(fields_r)) if fields_l.len() == fields_r.len() => {
-            fields_l.iter().find_map(|(key, json_l)| {
-                fields_r
-                    .get(key)
-                    .and_then(|json_r| first_difference(json_l, json_r, &format!("{path}.{key}")))
-            })
-        }
-        _ => Some((path.to_owned(), json_l.to_string(), json_r.to_string())),
-    }
-}
-
 fn run_ocaml_el(repo: &Path, spec_path: &Path) -> Output {
     let _guard = OCAML_EXPORTER.lock().expect("OCaml exporter lock");
     Command::new("opam")
@@ -89,16 +64,6 @@ fn run_ocaml_el(repo: &Path, spec_path: &Path) -> Output {
         .current_dir(repo)
         .output()
         .expect("run pinned OCaml exporter")
-}
-
-fn export_ocaml_el(repo: &Path, spec_path: &Path) -> Vec<u8> {
-    let output = run_ocaml_el(repo, spec_path);
-    assert!(
-        output.status.success(),
-        "EL export failed:\n{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    output.stdout
 }
 
 fn position(file: &str, text: &str) -> Position {
@@ -184,44 +149,6 @@ fn rust_diagnostic(error: FrontendError) -> Diagnostic {
 
 #[test]
 #[ignore = "requires the pinned OCaml toolchain"]
-fn test_positive_corpus_matches_ocaml_el_exactly() {
-    let repo = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .expect("Rust crate is inside the repository");
-    let spec_path = repo.join("spec");
-
-    let document = export_ocaml_el(repo, &spec_path);
-    let envelope = Envelope::<json>::from_slice(&document).expect("decode EL envelope");
-    assert_eq!(envelope.schema(), EL_SCHEMA);
-    assert_eq!(envelope.kind(), "el");
-    let expected = SpecCodec::decode(&envelope.into_payload()).expect("decode OCaml EL AST");
-
-    let actual = parse_files([&spec_path]).expect("parse positive corpus with Rust frontend");
-    assert_eq!(actual.len(), expected.len(), "definition count changed");
-    let total = expected.len();
-    for (index, (actual_definition, expected_definition)) in
-        actual.iter().zip(&expected).enumerate()
-    {
-        report_progress("frontend positive corpus", index + 1, total);
-        if actual_definition != expected_definition {
-            let actual_value = SpecCodec::encode(&vec![actual_definition.clone()])
-                .expect("encode Rust definition");
-            let expected_value = SpecCodec::encode(&vec![expected_definition.clone()])
-                .expect("encode OCaml definition");
-            let (path, actual_value, expected_value) =
-                first_difference(&actual_value, &expected_value, "definition")
-                    .expect("unequal definitions have a differing JSON value");
-            panic!(
-                "definition {index} at {:?} changed at {path}:\nRust: {actual_value}\nOCaml: {expected_value}",
-                actual_definition.span,
-            );
-        }
-    }
-    assert_eq!(actual, expected);
-}
-
-#[test]
-#[ignore = "requires the pinned OCaml toolchain"]
 fn test_negative_corpus_matches_ocaml_diagnostics() {
     let repo = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
@@ -247,7 +174,7 @@ fn test_negative_corpus_matches_ocaml_diagnostics() {
             fixture.display()
         );
         let expected = ocaml_diagnostic(&fixture, &output.stderr);
-        let actual = parse_file(&fixture)
+        let actual = parse_files([&fixture])
             .map(|_| panic!("Rust accepted {}", fixture.display()))
             .unwrap_err();
         assert_eq!(

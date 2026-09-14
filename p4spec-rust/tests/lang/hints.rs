@@ -7,11 +7,9 @@ use p4spec_rust::{
             alter::{
                 self as alter_impl, AlterationError, AlterationHint, Hole as AlterHole, Renderer,
             },
-            fields::{self as fields_impl, FieldError, FieldHint},
-            flag as flag_impl, hint as hint_impl,
             input::{self as input_impl, InputError, InputHint},
         },
-        traits::{eq::SyntaxEq, print::Print},
+        traits::print::Print,
     },
 };
 
@@ -28,12 +26,6 @@ fn exp(node: ExpKind) -> ast::Exp {
     p4spec_rust::phrase! {
         node: node,
         span: span("exp"),
-    }
-}
-fn id(name: &str, source: &str) -> ast::Id {
-    p4spec_rust::phrase! {
-        node: name.to_owned(),
-        span: span(source),
     }
 }
 
@@ -61,7 +53,7 @@ impl Renderer<&str> for StringRenderer {
         format!("{left}{}{right}", self.fuse)
     }
     fn other(&self, exp: &ast::Exp) -> String {
-        hint_impl::to_string(exp)
+        Print::to_string(exp)
     }
     fn item(&self, item: &&str) -> String {
         (*item).into()
@@ -70,11 +62,5 @@ impl Renderer<&str> for StringRenderer {
 
 #[path = "hints/alter.rs"]
 mod alter;
-#[path = "hints/fields.rs"]
-mod fields;
-#[path = "hints/flag.rs"]
-mod flag;
-#[path = "hints/hint.rs"]
-mod hint;
 #[path = "hints/input.rs"]
 mod input;

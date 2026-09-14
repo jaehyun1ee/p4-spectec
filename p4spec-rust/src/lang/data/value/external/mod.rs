@@ -3,11 +3,10 @@
 
 use ::serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_state::{DeserializeState, SerializeState};
-use thiserror::Error;
 
 pub mod indep;
 
-use super::{Interned, Value, ValueArena, ValueError, ValueKind, get};
+use super::{Interned, ValueArena, ValueKind};
 use crate::lang::{common::source::Span, data::typ::TypKind};
 use crate::util::json::json;
 
@@ -148,24 +147,7 @@ impl SerializeState<EncodeContext<'_>> for Interned<Span> {
 
 // = Decode
 
-// - Errors
-
-#[derive(Debug, Error)]
-pub enum DecodeError {
-    #[error(transparent)]
-    Value(#[from] ValueError),
-    #[error(transparent)]
-    Json(#[from] serde_json::Error),
-}
-
 // - Entry points
-
-pub fn decode<'de, T>(arena: &'de mut ValueArena, json: &'de json) -> Result<T, serde_json::Error>
-where
-    T: DeserializeState<'de, DecodeContext<'de>>,
-{
-    decode_with(arena, Encoding::ArenaIndependent, json)
-}
 
 pub fn decode_with<'de, T>(
     arena: &'de mut ValueArena,
@@ -184,14 +166,6 @@ where
             stacker::grow(32 * 1024 * 1024, || T::deserialize_state(&mut ctx, json))
         }
     }
-}
-
-pub fn decode_external<T>(arena: &mut ValueArena, value: &Value) -> Result<T, DecodeError>
-where
-    T: for<'de> DeserializeState<'de, DecodeContext<'de>>,
-{
-    let payload = get::external(arena, value)?.clone();
-    Ok(decode(arena, payload.as_ref())?)
 }
 
 // - Interned values

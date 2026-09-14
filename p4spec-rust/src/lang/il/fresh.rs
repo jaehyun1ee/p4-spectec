@@ -9,7 +9,7 @@ use crate::lang::{
     xl,
 };
 
-use super::{ast::*, var};
+use super::ast::*;
 
 type Metavars = IdMap<Typ>;
 
@@ -80,12 +80,4 @@ pub fn var_from_typ_wildcard(metavars: &Metavars, ids: &IdSet, span: Span, typ: 
     var.id.node.insert(0, '_');
     var.id = id(ids, &var.id);
     var
-}
-
-/// Constructs a fresh variable expression for `typ`
-pub fn exp_from_typ(is_dim: bool, metavars: &Metavars, ids: &IdSet, typ: &Typ) -> (IdSet, Exp) {
-    let var = var_from_typ(metavars, ids, typ.span.clone(), typ);
-    let mut ids = ids.clone();
-    ids.insert(var.id.clone());
-    (ids, var::as_exp(is_dim, &var))
 }

@@ -295,35 +295,6 @@ impl<T> Mixfix<T> {
 
     // - Atoms and args
 
-    /// Collects atoms in left-to-right tree order
-    pub fn atoms(&self) -> Vec<&AtomPhrase> {
-        let mut atoms = Vec::new();
-        self.collect_atoms(&mut atoms);
-        atoms
-    }
-
-    fn collect_atoms<'a>(&'a self, atoms: &mut Vec<&'a AtomPhrase>) {
-        match self {
-            Self::Arg(_) => {}
-            Self::Atom(atom) => atoms.push(atom),
-            Self::Brack(atom_l, mixfix, atom_r) => {
-                atoms.push(atom_l);
-                mixfix.collect_atoms(atoms);
-                atoms.push(atom_r);
-            }
-            Self::Infix(mixfix_l, atom, mixfix_r) => {
-                mixfix_l.collect_atoms(atoms);
-                atoms.push(atom);
-                mixfix_r.collect_atoms(atoms);
-            }
-            Self::Seq(mixfixes) => {
-                for mixfix in mixfixes {
-                    mixfix.collect_atoms(atoms);
-                }
-            }
-        }
-    }
-
     /// Collects arguments in left-to-right tree order
     pub fn args(&self) -> Vec<&T> {
         let mut args = Vec::with_capacity(self.arity());

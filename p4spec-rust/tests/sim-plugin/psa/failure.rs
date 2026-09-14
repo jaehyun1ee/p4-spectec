@@ -52,7 +52,7 @@ fn field(arena: &ValueArena, value: Value, name: &str) -> Value {
     get::structure(arena, &value)
         .unwrap()
         .iter()
-        .find(|(atom, _)| atom.node == Atom::keyword(name))
+        .find(|(atom, _)| atom.node == Atom::Keyword(name.to_owned()))
         .unwrap()
         .1
 }
@@ -61,7 +61,7 @@ fn update_field(arena: &mut ValueArena, value: Value, name: &str, value_field: V
     let mut fields = get::structure(arena, &value).unwrap().to_vec();
     fields
         .iter_mut()
-        .find(|(atom, _)| atom.node == Atom::keyword(name))
+        .find(|(atom, _)| atom.node == Atom::Keyword(name.to_owned()))
         .unwrap()
         .1 = value_field;
     make::structure(
@@ -203,7 +203,7 @@ fn test_clone_restoration_failure_preserves_queued_clones_and_completed_state() 
         packet_in: PacketIn::init("CD").unwrap(),
         entrypoint: Entrypoint::Egress,
     });
-    let encoding = runner.external().encoding();
+    let encoding = p4spec_rust::lang::data::value::external::Encoding::ArenaRelative;
     let value_state = arch.to_value(runner.arena_mut(), encoding).unwrap();
     let mut pkt_in = PacketIn::init("AB").unwrap();
     pkt_in.idx = 4;
@@ -221,7 +221,7 @@ fn test_clone_restoration_failure_preserves_queued_clones_and_completed_state() 
     .into_iter()
     .map(|(name, value)| {
         (
-            p4spec_rust::phrase!(node: Atom::keyword(name), span: Span::default()),
+            p4spec_rust::phrase!(node: Atom::Keyword(name.to_owned()), span: Span::default()),
             value,
         )
     })

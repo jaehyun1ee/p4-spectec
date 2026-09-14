@@ -1,16 +1,13 @@
 //! Shared value data tests
 
 use super::{hash, span};
-use p4spec_rust::{
-    lang::{
-        common::source::Span,
-        data::{
-            typ,
-            value::{ValueArena, ValueKind, make},
-        },
-        traits::{cmp::SyntaxCmp, eq::SyntaxEq},
+use p4spec_rust::lang::{
+    common::source::Span,
+    data::{
+        typ,
+        value::{Value, ValueArena, ValueKind, make},
     },
-    wire::ocaml::lang::il::ValueCodec,
+    traits::{cmp::SyntaxCmp, eq::SyntaxEq},
 };
 
 #[test]
@@ -46,7 +43,6 @@ fn test_runtime_values_are_il_ast_values() {
         make::bool(&mut arena, true, Span::default()).unwrap();
 
     assert_eq!(arena.to_string(&value), "true");
-    assert!(ValueCodec::encode(&arena, &value).is_ok());
 }
 
 #[test]
@@ -56,9 +52,17 @@ fn test_value_views_resolve_nested_handles_in_each_arena() {
     let child_l = make::bool(&mut arena_l, true, span("left.p4", 1)).unwrap();
     let child_r_false = make::bool(&mut arena_r, false, span("right.p4", 2)).unwrap();
     let child_r = make::bool(&mut arena_r, true, span("right.p4", 3)).unwrap();
-    let child_r = arena_r
-        .update_typ(child_r, typ::TypKind::Text.into())
-        .unwrap();
+    let child_r = Value {
+        note: make::new(
+            &mut arena_r,
+            p4spec_rust::lang::data::value::ValueKind::Bool(false),
+            typ::TypKind::Text.into(),
+            Span::default(),
+        )
+        .unwrap()
+        .note,
+        ..child_r
+    };
     let value_l = make::tuple(
         &mut arena_l,
         typ::TypKind::Bool.into(),

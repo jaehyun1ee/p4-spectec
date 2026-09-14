@@ -66,7 +66,8 @@ fn run_static_assert(names_param: &[&str]) -> (Value, Value) {
     .unwrap();
 
     let values = runner
-        .eval_rel(
+        .context()
+        .call_rel(
             "ExternFunctionCall_eval_lctk",
             &[value_ctx, value_name, value_names],
         )

@@ -87,23 +87,6 @@ impl<T: Eq + Hash> Interner<T> {
         self.insert(item, hash)
     }
 
-    /// Clones a borrowed item only when it is not already stored
-    pub fn intern_ref(&mut self, item: &T) -> Result<Interned<T>, TryFromIntError>
-    where
-        T: Clone,
-    {
-        if let Some(id) = self.id_default
-            && self.get(id) == item
-        {
-            return Ok(id);
-        }
-        let hash = self.hasher.hash_one(item);
-        if let Some(id) = self.find(item, hash) {
-            return Ok(id);
-        }
-        self.insert(item.clone(), hash)
-    }
-
     // - Table operations
 
     fn find(&self, item: &T, hash: u64) -> Option<Interned<T>> {

@@ -41,7 +41,7 @@ fn test_value_environment_iterates_deterministically_and_replaces_equivalent_key
         .map(|variable| variable.id.node.as_str())
         .collect::<Vec<_>>();
     assert_eq!(names, ["a", "z"]);
-    assert_eq!(venv.len(), 2);
+    assert_eq!(venv.iter().count(), 2);
 }
 
 #[test]

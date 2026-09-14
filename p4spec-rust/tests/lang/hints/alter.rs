@@ -1,35 +1,6 @@
 use super::*;
 
 #[test]
-fn test_alter_models_validates_collects_and_realigns() {
-    let hint = AlterationHint::Seq(vec![
-        AlterationHint::Text("x".into()),
-        AlterationHint::Hole(AlterHole::Next),
-        AlterationHint::Brack(
-            atom("L"),
-            Box::new(AlterationHint::Fuse(
-                Box::new(AlterationHint::Hole(AlterHole::Num(3))),
-                Box::new(AlterationHint::Hole(AlterHole::Num(1))),
-            )),
-            atom("R"),
-        ),
-    ]);
-    assert_eq!(alter_impl::to_string(&hint), "hint(alter x % L %3#%1 R)");
-    assert_eq!(alter_impl::validate(&hint, &["a", "b", "c", "d"]), Ok(()));
-    assert_eq!(
-        alter_impl::validate(&AlterationHint::Hole(AlterHole::Num(4)), &["a"]),
-        Err(AlterationError::IndexOutOfBounds {
-            index: 4,
-            item_count: 1,
-        })
-    );
-    assert_eq!(alter_impl::collect(&hint), vec![1, 3]);
-    assert_eq!(
-        alter_impl::to_string(&alter_impl::realign(&hint, &InputHint::new(vec![0, 2])).unwrap()),
-        "hint(alter x % L %1#%0 R)"
-    );
-}
-#[test]
 fn test_alter_alternates_with_omission_defaults_fuse_brackets_and_other() {
     let hint = AlterationHint::Seq(vec![
         AlterationHint::Text("omit".into()),
@@ -94,15 +65,6 @@ fn test_alter_edge_cases_cover_init_omission_duplicates_and_next_cursor() {
             atom("R"),
         )]))
     );
-    let duplicate = AlterationHint::Seq(vec![
-        AlterationHint::Hole(AlterHole::Num(2)),
-        AlterationHint::Hole(AlterHole::Num(2)),
-    ]);
-    assert_eq!(alter_impl::collect(&duplicate), vec![2, 2]);
-    assert_eq!(
-        alter_impl::to_string(&alter_impl::realign(&duplicate, &InputHint::new(vec![0])).unwrap()),
-        "hint(alter %0 %0)"
-    );
     let omitted = AlterationHint::Brack(
         atom("L"),
         Box::new(AlterationHint::Text("omit".into())),
@@ -123,13 +85,7 @@ fn test_alter_edge_cases_cover_init_omission_duplicates_and_next_cursor() {
         AlterationHint::Hole(AlterHole::Next),
         AlterationHint::Hole(AlterHole::Next),
     ]);
-    assert_eq!(
-        alter_impl::validate(&nexts, &["a"]),
-        Err(AlterationError::IndexOutOfBounds {
-            index: 1,
-            item_count: 1,
-        })
-    );
+
     assert_eq!(
         alter_impl::alternate(
             &nexts,

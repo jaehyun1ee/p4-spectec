@@ -361,7 +361,7 @@ fn test_case_and_struct_assignments_follow_argument_order() {
     let mut arena = ValueArena::new();
     let global = Global::load(vec![]).unwrap();
     use p4spec_rust::lang::common::notation::{atom::Atom, mixfix::Mixfix};
-    let atom = |name: &str| phrase!(node: Atom::keyword(name), span: span(3));
+    let atom = |name: &str| phrase!(node: Atom::Keyword(name.to_owned()), span: span(3));
     let case_exp = exp(ast::ExpKind::Case(Box::new(Mixfix::Seq(vec![
         Mixfix::Atom(atom("LEFT")),
         Mixfix::Arg(var_exp("x")),

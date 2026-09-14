@@ -1,5 +1,6 @@
 use super::*;
-use p4spec_rust::lang::data::value::external::{decode, encode};
+use p4spec_rust::lang::data::value::external::Encoding;
+use p4spec_rust::lang::data::value::external::{decode_with, encode};
 
 #[test]
 fn test_register_default_order_read_bounds_and_write_noop() {
@@ -55,7 +56,8 @@ fn test_register_default_order_read_bounds_and_write_noop() {
         .0;
     assert_eq!(reg.values, [value_ctx, value_arch]);
     let json = encode(runner.arena(), &reg).unwrap();
-    let reg_decoded: Register = decode(runner.arena_mut(), &json).unwrap();
+    let reg_decoded: Register =
+        decode_with(runner.arena_mut(), Encoding::ArenaIndependent, &json).unwrap();
     assert_eq!(encode(runner.arena(), &reg_decoded).unwrap(), json);
     assert_eq!(
         runner.arena().typ(&reg_decoded.value_typ),
@@ -73,6 +75,7 @@ fn test_register_default_order_read_bounds_and_write_noop() {
         );
     }
     let mut arena_decoded = ValueArena::new();
-    let reg_decoded: Register = decode(&mut arena_decoded, &json).unwrap();
+    let reg_decoded: Register =
+        decode_with(&mut arena_decoded, Encoding::ArenaIndependent, &json).unwrap();
     assert_eq!(encode(&arena_decoded, &reg_decoded).unwrap(), json);
 }

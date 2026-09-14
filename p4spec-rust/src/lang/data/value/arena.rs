@@ -77,18 +77,6 @@ impl ValueArena {
         ValueRef { arena: self, value }
     }
 
-    // - Annotations
-
-    pub fn update_typ(&mut self, value: Value, typ: Rc<TypKind>) -> Result<Value, ValueError> {
-        let note = self.types.intern(typ)?;
-        Ok(Value { note, ..value })
-    }
-
-    pub fn update_span(&mut self, value: Value, span: Span) -> Result<Value, ValueError> {
-        let span = self.spans.intern(span)?;
-        Ok(Value { span, ..value })
-    }
-
     // - Printing
 
     pub fn to_string(&self, value: &Value) -> String {

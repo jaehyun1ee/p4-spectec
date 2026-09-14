@@ -35,7 +35,7 @@ fn counter_counts(
         make::list(runner.arena_mut(), typ.node.into(), values, Span::default()).unwrap();
     let value_state =
         func::find_object_state_e(&mut runner.context(), value_arch, value_id).unwrap();
-    let encoding = runner.external().encoding();
+    let encoding = p4spec_rust::lang::data::value::external::Encoding::ArenaRelative;
     let ExternObject::CounterArray(counter) =
         ExternObject::from_value(runner.arena_mut(), encoding, &value_state).unwrap()
     else {

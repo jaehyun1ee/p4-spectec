@@ -63,7 +63,7 @@ fn test_unsupported_extern_fails() {
             "Unsupported",
             &[make::bool(runner.arena_mut(), true, Span::default()).unwrap()],
         );
-        runner.eval_rel(name, values)
+        runner.context().call_rel(name, values)
     }
     .unwrap_err();
 
@@ -98,7 +98,8 @@ fn test_unsupported_extern_fails() {
     }
     .unwrap();
     let error = runner
-        .eval_rel(
+        .context()
+        .call_rel(
             "ExternFunctionCall_eval_lctk",
             &[value_ctx, value_name, value_names],
         )

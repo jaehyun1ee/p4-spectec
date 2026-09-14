@@ -1,3 +1,4 @@
+use p4spec_rust::lang::data::value::Value;
 use p4spec_rust::lang::data::value::ValueArena;
 use p4spec_rust::{
     frontend::parse::parse_mixop,
@@ -41,10 +42,21 @@ fn test_set_union_deduplicates_annotated_elements_in_syntax_order() {
     let value_true = make::bool(&mut arena, true, Span::default()).unwrap();
     let mut span = Span::default();
     span.left.line = 17;
-    let value_true_updated = arena.update_span(value_true, span).unwrap();
-    let value_true_updated = arena
-        .update_typ(value_true_updated, typ::TypKind::Text.into())
-        .unwrap();
+    let value_true_updated = Value {
+        span: make::bool(&mut arena, false, span).unwrap().span,
+        ..value_true
+    };
+    let value_true_updated = Value {
+        note: make::new(
+            &mut arena,
+            p4spec_rust::lang::data::value::ValueKind::Bool(false),
+            typ::TypKind::Text.into(),
+            Span::default(),
+        )
+        .unwrap()
+        .note,
+        ..value_true_updated
+    };
     let value_false = make::bool(&mut arena, false, Span::default()).unwrap();
     let values = make::list(
         &mut arena,

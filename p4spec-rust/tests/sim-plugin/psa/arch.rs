@@ -1,9 +1,10 @@
+use p4spec_rust::lang::data::value::external::Encoding;
 use p4spec_rust::{
     lang::{
         common::source::Span,
         data::value::{
             ValueArena,
-            external::{decode, encode},
+            external::{decode_with, encode},
             get, make,
         },
     },
@@ -107,7 +108,8 @@ fn test_arch_queue_native_value_payload_roundtrip() {
         Span::default(),
     )
     .unwrap();
-    let mut arch_decoded: Arch = decode(&mut arena_decoded, &json).unwrap();
+    let mut arch_decoded: Arch =
+        decode_with(&mut arena_decoded, Encoding::ArenaIndependent, &json).unwrap();
     assert_eq!(encode(&arena_decoded, &arch_decoded).unwrap(), json);
     assert_eq!(arch_decoded.mirrortable, arch.mirrortable);
     assert_eq!(arch_decoded.multicast, arch.multicast);
@@ -147,7 +149,7 @@ fn test_arch_preserves_queued_packet_cursor_without_validation() {
     });
     let mut json = encode(&arena, &arch).unwrap();
     json["queue"][0]["packet_in"]["idx"] = json!(17);
-    let arch_decoded: Arch = decode(&mut arena, &json).unwrap();
+    let arch_decoded: Arch = decode_with(&mut arena, Encoding::ArenaIndependent, &json).unwrap();
     assert_eq!(arch_decoded.queue[0].packet_in.idx, 17);
     arch.queue[0].packet_in.idx = 17;
     assert_eq!(encode(&arena, &arch).unwrap(), json);

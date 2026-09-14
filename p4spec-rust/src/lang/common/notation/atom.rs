@@ -167,11 +167,6 @@ impl Free for Atom {
 impl Atom {
     // - Keyword
 
-    /// Constructs a keyword atom from an identifier
-    pub fn keyword(id: impl Into<String>) -> Self {
-        Self::Keyword(id.into())
-    }
-
     // - Tag
 
     fn is_upid(id: &str) -> bool {

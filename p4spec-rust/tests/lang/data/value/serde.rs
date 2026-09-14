@@ -41,7 +41,10 @@ fn test_independent_restores_contents_and_annotations_after_source_arena_drop() 
         span_at(2),
     )
     .unwrap();
-    let value_external_relocated = arena.update_span(value_external, span_at(3)).unwrap();
+    let value_external_relocated = Value {
+        span: make::bool(&mut arena, false, span_at(3)).unwrap().span,
+        ..value_external
+    };
     let value_case = Mixfix::Brack(
         p4spec_rust::phrase!(node: Atom::LParen, span: span_at(4)),
         Box::new(Mixfix::Infix(
@@ -69,7 +72,7 @@ fn test_independent_restores_contents_and_annotations_after_source_arena_drop() 
         &mut arena,
         typ::TypKind::Text.into(),
         vec![(
-            p4spec_rust::phrase!(node: Atom::keyword("context"), span: span_at(9)),
+            p4spec_rust::phrase!(node: Atom::Keyword("context".to_owned()), span: span_at(9)),
             value_some,
         )],
         span_at(10),
@@ -80,7 +83,12 @@ fn test_independent_restores_contents_and_annotations_after_source_arena_drop() 
     drop(arena);
     let mut arena_decoded = ValueArena::new();
     make::bool(&mut arena_decoded, false, Span::default()).unwrap();
-    let value_decoded = payload::decode(&mut arena_decoded, &data_value).unwrap();
+    let value_decoded = payload::decode_with(
+        &mut arena_decoded,
+        payload::Encoding::ArenaIndependent,
+        &data_value,
+    )
+    .unwrap();
     assert_eq!(
         payload::encode(&arena_decoded, &value_decoded).unwrap(),
         data_value
@@ -109,8 +117,21 @@ fn test_relative_preserves_full_handles_without_interning() {
     use payload::Encoding::ArenaRelative;
     let mut arena = ValueArena::new();
     let value = make::text(&mut arena, "shared".into(), span_at(41)).unwrap();
-    let value_retyped = arena.update_typ(value, typ::TypKind::Bool.into()).unwrap();
-    let value_relocated = arena.update_span(value, span_at(42)).unwrap();
+    let value_retyped = Value {
+        note: make::new(
+            &mut arena,
+            p4spec_rust::lang::data::value::ValueKind::Bool(false),
+            typ::TypKind::Bool.into(),
+            Span::default(),
+        )
+        .unwrap()
+        .note,
+        ..value
+    };
+    let value_relocated = Value {
+        span: make::bool(&mut arena, false, span_at(42)).unwrap().span,
+        ..value
+    };
     let values = vec![value, value_retyped, value_relocated];
     let json_values = payload::encode_with(&arena, ArenaRelative, &values).unwrap();
     let text_arena = format!("{arena:?}");
@@ -228,7 +249,9 @@ fn test_independent_native_payload_survives_source_arena_drop() {
         span_at(52),
     )
     .unwrap();
-    let register: Register = payload::decode_external(&mut arena, &value).unwrap();
+    let json = get::external(&arena, &value).unwrap().clone();
+    let register: Register =
+        payload::decode_with(&mut arena, payload::Encoding::ArenaIndependent, &json).unwrap();
     assert_eq!(get::text(&arena, &register.value_typ).unwrap(), "T");
     assert_eq!(arena.typ(&register.value_typ).as_ref(), &typ::TypKind::Text);
     assert_eq!(arena.span(&register.value_typ), &span_at(50));
@@ -271,7 +294,12 @@ fn test_independent_export_preserves_stored_relative_extern_json() {
     assert_eq!(json_outer["values"][0]["node"]["Extern"], json_native);
     drop(arena);
     let mut arena_decoded = ValueArena::new();
-    let value_decoded: Value = payload::decode(&mut arena_decoded, &json_value).unwrap();
+    let value_decoded: Value = payload::decode_with(
+        &mut arena_decoded,
+        payload::Encoding::ArenaIndependent,
+        &json_value,
+    )
+    .unwrap();
     assert_eq!(
         get::external(&arena_decoded, &value_decoded)
             .unwrap()
@@ -360,8 +388,21 @@ fn test_relative_native_canonical_equality_retains_nested_value_handles() {
     let mut arena = ValueArena::new();
     let value_typ = make::text(&mut arena, "T".into(), span_at(70)).unwrap();
     let value = make::bool(&mut arena, true, span_at(71)).unwrap();
-    let value_retyped = arena.update_typ(value, typ::TypKind::Text.into()).unwrap();
-    let value_relocated = arena.update_span(value, span_at(72)).unwrap();
+    let value_retyped = Value {
+        note: make::new(
+            &mut arena,
+            p4spec_rust::lang::data::value::ValueKind::Bool(false),
+            typ::TypKind::Text.into(),
+            Span::default(),
+        )
+        .unwrap()
+        .note,
+        ..value
+    };
+    let value_relocated = Value {
+        span: make::bool(&mut arena, false, span_at(72)).unwrap().span,
+        ..value
+    };
     let mut values_external = Vec::new();
     for value in [value, value_retyped, value_relocated] {
         let value_list = make::list(
@@ -413,7 +454,10 @@ fn test_relative_native_order_uses_json_handles_and_annotations() {
     let mut arena = ValueArena::new();
     let value_large = make::int(&mut arena, 20.into(), span_at(1)).unwrap();
     let value_small = make::int(&mut arena, 3.into(), span_at(2)).unwrap();
-    let value_relocated = arena.update_span(value_small, span_at(3)).unwrap();
+    let value_relocated = Value {
+        span: make::bool(&mut arena, false, span_at(3)).unwrap().span,
+        ..value_small
+    };
     let mut values = Vec::new();
     for value in [value_large, value_small, value_relocated] {
         let native = Rc::new(payload::encode_with(&arena, ArenaRelative, &vec![value]).unwrap());
@@ -447,7 +491,10 @@ fn test_relative_native_equality_retains_nested_extern_handles() {
     use payload::Encoding::ArenaRelative;
     let mut arena = ValueArena::new();
     let value = make::bool(&mut arena, true, span_at(1)).unwrap();
-    let value_relocated = arena.update_span(value, span_at(2)).unwrap();
+    let value_relocated = Value {
+        span: make::bool(&mut arena, false, span_at(2)).unwrap().span,
+        ..value
+    };
     let mut values = Vec::new();
     for mut value in [value, value_relocated] {
         for _ in 0..3 {
@@ -479,8 +526,21 @@ fn test_independent_native_equality_retains_value_annotations() {
     use payload::Encoding::ArenaIndependent;
     let mut arena = ValueArena::new();
     let value = make::bool(&mut arena, true, span_at(74)).unwrap();
-    let value_retyped = arena.update_typ(value, typ::TypKind::Text.into()).unwrap();
-    let value_relocated = arena.update_span(value, span_at(75)).unwrap();
+    let value_retyped = Value {
+        note: make::new(
+            &mut arena,
+            p4spec_rust::lang::data::value::ValueKind::Bool(false),
+            typ::TypKind::Text.into(),
+            Span::default(),
+        )
+        .unwrap()
+        .note,
+        ..value
+    };
+    let value_relocated = Value {
+        span: make::bool(&mut arena, false, span_at(75)).unwrap().span,
+        ..value
+    };
     let native = Rc::new(payload::encode_with(&arena, ArenaIndependent, &vec![value]).unwrap());
     let value_external = make::external(
         &mut arena,
@@ -653,7 +713,12 @@ fn test_nested_external_json_is_opaque_in_both_modes() {
         assert_eq!(json_value["node"]["Extern"], json_opaque);
         drop(arena);
         let mut arena_decoded = ValueArena::new();
-        let value_decoded: Value = payload::decode(&mut arena_decoded, &json_value).unwrap();
+        let value_decoded: Value = payload::decode_with(
+            &mut arena_decoded,
+            payload::Encoding::ArenaIndependent,
+            &json_value,
+        )
+        .unwrap();
         assert_eq!(
             get::external(&arena_decoded, &value_decoded)
                 .unwrap()
@@ -736,9 +801,23 @@ fn test_native_payload_rejects_missing_metadata_and_nested_constructor_arity() {
     make::bool(&mut arena_decoded, false, Span::default()).unwrap();
     let mut json_missing = json_value.clone();
     json_missing.as_object_mut().unwrap().remove("span");
-    assert!(payload::decode::<Value>(&mut arena_decoded, &json_missing).is_err());
+    assert!(
+        payload::decode_with::<Value>(
+            &mut arena_decoded,
+            payload::Encoding::ArenaIndependent,
+            &json_missing
+        )
+        .is_err()
+    );
     json_value["node"]["List"][0]["node"] = json!({"Bool": []});
-    assert!(payload::decode::<Value>(&mut arena_decoded, &json_value).is_err());
+    assert!(
+        payload::decode_with::<Value>(
+            &mut arena_decoded,
+            payload::Encoding::ArenaIndependent,
+            &json_value
+        )
+        .is_err()
+    );
 }
 
 #[test]
@@ -797,7 +876,12 @@ fn test_native_payload_restores_wide_register_values_and_callable_metadata() {
     let json_value = serde_json::from_slice(&bytes).unwrap();
     let mut arena_decoded = ValueArena::new();
     make::bool(&mut arena_decoded, false, Span::default()).unwrap();
-    let value_decoded = payload::decode(&mut arena_decoded, &json_value).unwrap();
+    let value_decoded = payload::decode_with(
+        &mut arena_decoded,
+        payload::Encoding::ArenaIndependent,
+        &json_value,
+    )
+    .unwrap();
     let values_decoded = get::tuple(&arena_decoded, &value_decoded).unwrap();
     assert_eq!(
         get::num(&arena_decoded, &values_decoded[0]),
@@ -812,7 +896,13 @@ fn test_native_payload_restores_wide_register_values_and_callable_metadata() {
         "saved register"
     );
     assert_eq!(get::opt(&arena_decoded, &values_decoded[3]).unwrap(), None);
-    assert_eq!(get::func(&arena_decoded, &values_decoded[4]).unwrap(), &id);
+    assert_eq!(
+        (match arena_decoded.kind(&values_decoded[4]) {
+            p4spec_rust::lang::data::value::ValueKind::Func(id) => id,
+            _ => panic!("expected function"),
+        }),
+        &id
+    );
     for (value, value_decoded) in values.iter().zip(values_decoded) {
         assert_eq!(arena.typ(value), arena_decoded.typ(value_decoded));
         assert_eq!(arena.span(value), arena_decoded.span(value_decoded));
@@ -828,9 +918,13 @@ fn test_serde_rejects_negative_natural() {
     let value = make::nat(&mut arena, Natural::from(1), Span::default()).unwrap();
     let mut json_value = payload::encode(&arena, &value).unwrap();
     json_value["node"]["Num"]["Nat"] = json_negative;
-    assert!(payload::decode::<Value>(&mut arena, &json_value).is_err());
+    assert!(
+        payload::decode_with::<Value>(&mut arena, payload::Encoding::ArenaIndependent, &json_value)
+            .is_err()
+    );
     let json_value = payload::encode(&arena, &value).unwrap();
-    let value: Value = payload::decode(&mut arena, &json_value).unwrap();
+    let value: Value =
+        payload::decode_with(&mut arena, payload::Encoding::ArenaIndependent, &json_value).unwrap();
     assert_eq!(
         get::num(&arena, &value).unwrap(),
         &Number::Nat(Natural::from(1))
@@ -855,8 +949,12 @@ fn test_native_payload_restores_nested_values_on_small_stack() {
             }
             let json_value = payload::encode(&arena, &value).unwrap();
             let mut arena_decoded = ValueArena::new();
-            let mut value_decoded: Value =
-                payload::decode(&mut arena_decoded, &json_value).unwrap();
+            let mut value_decoded: Value = payload::decode_with(
+                &mut arena_decoded,
+                payload::Encoding::ArenaIndependent,
+                &json_value,
+            )
+            .unwrap();
             for _ in 0..256 {
                 value_decoded = get::opt(&arena_decoded, &value_decoded).unwrap().unwrap();
             }
@@ -992,10 +1090,18 @@ fn test_native_payload_restores_opaque_objects_and_interned_cases_on_small_stack
                 });
                 let json_value = payload::encode(&arena, &value).unwrap();
                 let mut arena_decoded = ValueArena::new();
-                let value_decoded: Value =
-                    payload::decode(&mut arena_decoded, &json_value).unwrap();
-                let value_repeated: Value =
-                    payload::decode(&mut arena_decoded, &json_value).unwrap();
+                let value_decoded: Value = payload::decode_with(
+                    &mut arena_decoded,
+                    payload::Encoding::ArenaIndependent,
+                    &json_value,
+                )
+                .unwrap();
+                let value_repeated: Value = payload::decode_with(
+                    &mut arena_decoded,
+                    payload::Encoding::ArenaIndependent,
+                    &json_value,
+                )
+                .unwrap();
                 assert_eq!(value_decoded.node, value_repeated.node);
                 if opaque {
                     let mut json_inner = get::external(&arena_decoded, &value_decoded)

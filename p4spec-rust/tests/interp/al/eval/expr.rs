@@ -65,7 +65,7 @@ fn eval(
         NullInterface,
         NullExtern,
     );
-    let value = runner.eval_func("test", &[], &[])?;
+    let value = runner.context().call_func("test", &[], &[])?;
     Ok((std::mem::take(runner.arena_mut()), value))
 }
 
@@ -89,7 +89,7 @@ fn test_repeated_evaluation_reuses_the_expression_type_allocation_without_call_c
         NullExtern,
     );
     for _ in 0..2 {
-        let value = runner.eval_func("test", &[], &[]).unwrap();
+        let value = runner.context().call_func("test", &[], &[]).unwrap();
         assert!(Rc::ptr_eq(runner.arena().typ(&value), &typ));
         assert_eq!(numbers(runner.arena(), &value), ["1", "2"]);
     }
@@ -378,7 +378,7 @@ fn test_boolean_operators_evaluate_both_operands_in_order() {
     );
     assert!(
         !{
-            let value = &runner.eval_func("test", &[], &[]).unwrap();
+            let value = &runner.context().call_func("test", &[], &[]).unwrap();
             get::bool(runner.arena(), value)
         }
         .unwrap()
@@ -411,7 +411,8 @@ fn test_numeric_errors_are_fatal_before_else_fallback() {
     );
     assert!(
         runner
-            .eval_func("test", &[], &[])
+            .context()
+            .call_func("test", &[], &[])
             .unwrap_err()
             .to_string()
             .contains("zero divisor")
@@ -479,7 +480,7 @@ fn test_iteration_evaluates_each_bound_element_and_preserves_empty_options() {
                 };
                 assert_eq!(
                     {
-                        let value = runner.eval_func("test", &[], &[input]).unwrap();
+                        let value = runner.context().call_func("test", &[], &[input]).unwrap();
                         numbers(runner.arena(), &value)
                     },
                     ["12", "14"]
@@ -493,7 +494,7 @@ fn test_iteration_evaluates_each_bound_element_and_preserves_empty_options() {
                     Span::default(),
                 )
                 .unwrap();
-                let value = runner.eval_func("test", &[], &[input]).unwrap();
+                let value = runner.context().call_func("test", &[], &[input]).unwrap();
                 let value_inner = get::opt(runner.arena(), &value).unwrap().unwrap();
                 assert_eq!(
                     num::to_int(get::num(runner.arena(), &value_inner).unwrap()).to_string(),
@@ -508,7 +509,7 @@ fn test_iteration_evaluates_each_bound_element_and_preserves_empty_options() {
                 .unwrap();
                 assert!(
                     {
-                        let value = &runner.eval_func("test", &[], &[input]).unwrap();
+                        let value = &runner.context().call_func("test", &[], &[input]).unwrap();
                         get::opt(runner.arena(), value)
                     }
                     .unwrap()
@@ -599,7 +600,7 @@ fn test_list_iteration_zips_values_without_rebinding_the_parent() {
         }
         let value_parent = make::int(runner.arena_mut(), 99.into(), Span::default()).unwrap();
         inputs.push(value_parent);
-        let value = runner.eval_func("test", &[], &inputs).unwrap();
+        let value = runner.context().call_func("test", &[], &inputs).unwrap();
         let values = get::tuple(runner.arena(), &value).unwrap();
         let expected: Vec<_> = (1..=width).map(|value| (value * 11).to_string()).collect();
         assert_eq!(numbers(runner.arena(), &values[0]), expected);
@@ -656,8 +657,18 @@ fn test_call_arguments_substitute_local_types_and_pass_function_values() {
         TypeInterface(seen.clone()),
         NullExtern,
     );
-    let value = runner.eval_func("test", &[typ::make::nat()], &[]).unwrap();
-    assert_eq!(get::func(runner.arena(), &value).unwrap().node, "answer");
+    let value = runner
+        .context()
+        .call_func("test", &[typ::make::nat()], &[])
+        .unwrap();
+    assert_eq!(
+        (match (runner.arena()).kind(&value) {
+            p4spec_rust::lang::data::value::ValueKind::Func(id) => id,
+            _ => panic!("expected function"),
+        })
+        .node,
+        "answer"
+    );
     assert!(matches!(
         seen.borrow()[0].node,
         ast::TypKind::Num(num::Typ::Nat)
@@ -692,10 +703,7 @@ fn test_index_failures_retain_the_index_expression_span() {
 
 #[test]
 fn test_native_nested_update_and_list_destructuring() {
-    use p4spec_rust::{
-        frontend::parse::parse_string,
-        pass::{algo, elaborate},
-    };
+    use p4spec_rust::pass::{algo, elaborate};
 
     let source = r#"
 var n : nat
@@ -710,7 +718,7 @@ def $updated() = $update([[1, 2], [3, 4]])
 dec $destructure() : nat
 def $destructure() = $sum_pair(($updated())[0])
 "#;
-    let spec_el = parse_string(source).unwrap();
+    let spec_el = crate::spec_fixture::parse(source).unwrap();
     let spec_il = elaborate::elaborate(spec_el).unwrap();
     let spec_al = algo::convert(spec_il).unwrap();
     let mut runner = Runner::<AlInterp, _, _>::new(
@@ -719,11 +727,11 @@ def $destructure() = $sum_pair(($updated())[0])
         NullInterface,
         NullExtern,
     );
-    let value = runner.eval_func("updated", &[], &[]).unwrap();
+    let value = runner.context().call_func("updated", &[], &[]).unwrap();
     let rows = get::list(runner.arena(), &value).unwrap();
     assert_eq!(numbers(runner.arena(), &rows[0]), ["1", "9"]);
     assert_eq!(numbers(runner.arena(), &rows[1]), ["3", "4"]);
-    let value = runner.eval_func("destructure", &[], &[]).unwrap();
+    let value = runner.context().call_func("destructure", &[], &[]).unwrap();
     assert_eq!(
         num::to_int(get::num(runner.arena(), &value).unwrap()).to_string(),
         "10"
@@ -732,10 +740,7 @@ def $destructure() = $sum_pair(($updated())[0])
 
 #[test]
 fn test_generated_values_have_default_spans_and_access_preserves_input_spans() {
-    use p4spec_rust::{
-        frontend::parse::parse_string,
-        pass::{algo, elaborate},
-    };
+    use p4spec_rust::pass::{algo, elaborate};
 
     let source = r#"
 var n : nat
@@ -749,7 +754,7 @@ def $identity(n) = n
 dec $first(nat*) : nat
 def $first(ns) = ns[0]
 "#;
-    let spec_el = parse_string(source).unwrap();
+    let spec_el = crate::spec_fixture::parse(source).unwrap();
     let spec_il = elaborate::elaborate(spec_el).unwrap();
     let spec_al = algo::convert(spec_il).unwrap();
     let mut runner = Runner::<AlInterp, _, _>::new(
@@ -763,14 +768,16 @@ def $first(ns) = ns[0]
         Position::new("input.watsup", 3, 5),
     );
     let input = make::nat(runner.arena_mut(), 7u64.into(), span.clone()).unwrap();
-    let literal = runner.eval_func("literal", &[], &[]).unwrap();
+    let literal = runner.context().call_func("literal", &[], &[]).unwrap();
     assert_eq!(runner.arena().span(&literal).clone(), Span::default());
     let increment = runner
-        .eval_func("increment", &[], std::slice::from_ref(&input))
+        .context()
+        .call_func("increment", &[], std::slice::from_ref(&input))
         .unwrap();
     assert_eq!(runner.arena().span(&increment).clone(), Span::default());
     let identity = runner
-        .eval_func("identity", &[], std::slice::from_ref(&input))
+        .context()
+        .call_func("identity", &[], std::slice::from_ref(&input))
         .unwrap();
     assert_eq!(runner.arena().span(&identity).clone(), span);
     assert!((identity == input));
@@ -781,7 +788,7 @@ def $first(ns) = ns[0]
         Span::default(),
     )
     .unwrap();
-    let first = runner.eval_func("first", &[], &[inputs]).unwrap();
+    let first = runner.context().call_func("first", &[], &[inputs]).unwrap();
     assert_eq!(runner.arena().span(&first).clone(), span);
     assert!((first == input));
 }
@@ -813,10 +820,10 @@ fn test_builtin_failure_remains_typed_in_public_error_tree() {
     let mut runner = Runner::<AlInterp, _, _>::new(
         Global::load(vec![function("test", call), builtin]).unwrap(),
         AlInterp::new(Config::new(false, false, false)),
-        BuiltinInterface::new(p4spec_rust::interface::p4::unparse::P4Unparser::new()),
+        BuiltinInterface::new(p4spec_rust::interface::p4::unparse::P4Unparser::default()),
         NullExtern,
     );
-    let error = runner.eval_func("test", &[], &[]).unwrap_err();
+    let error = runner.context().call_func("test", &[], &[]).unwrap_err();
     assert_eq!(
         find_builtin(&error),
         Some(&BuiltinErrorKind::MissingImplementation(
