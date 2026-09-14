@@ -9,6 +9,3 @@ mod error;
 
 #[path = "eval/mod.rs"]
 mod eval;
-
-#[path = "compare.rs"]
-mod compare;

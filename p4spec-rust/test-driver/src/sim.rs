@@ -1,13 +1,12 @@
-use crate::{Error, Result, corpus, frames};
+use crate::{Error, Result, corpus};
 use expect_test::{ExpectFile, expect_file};
 use indicatif::{ProgressBar, ProgressStyle};
 use p4spec_rust::sim_plugin::io::Tx;
 use p4spec_rust::{
     frontend::parse::parse_files,
     interp::al::Config,
-    lang::data::value::external::Encoding,
     pass::{algo, elaborate},
-    sim_plugin::{build, runner::Error as SimError},
+    sim_plugin::build,
     stf,
 };
 use std::time::Instant;
@@ -220,8 +219,8 @@ impl Results {
     }
 }
 
-/// Runs the source AL simulation suites; an oracle is selected only explicitly
-pub fn run(det: bool, oracle: Option<&Path>) -> Result<()> {
+/// Runs the AL simulation suites against stored expected results
+pub fn run(det: bool) -> Result<()> {
     let start = Instant::now();
     let mut excludes = corpus::collect_excludes(Path::new("excludes/static"))?;
     excludes.extend(corpus::collect_excludes(Path::new("excludes/dynamic"))?);
@@ -255,8 +254,6 @@ pub fn run(det: bool, oracle: Option<&Path>) -> Result<()> {
     let mut matched = 0;
     let mut commands = 0;
     let mut patched = 0;
-    let mut frames = 0;
-    let mut states = 0;
     for arch in ["v1model", "ebpf", "psa"] {
         let pairs_arch = suites
             .iter()
@@ -271,20 +268,8 @@ pub fn run(det: bool, oracle: Option<&Path>) -> Result<()> {
             })
             .count();
         let patched_arch = pairs_arch.filter(|pair| pair.patched).count();
-        let mut simulator = if oracle.is_some() {
-            build::build_with_encoding(
-                spec_al.clone(),
-                arch,
-                Config::new(true, det, false),
-                Encoding::ArenaIndependent,
-            )
-        } else {
-            build::build(spec_al.clone(), arch, Config::new(true, det, false))
-        }
-        .map_err(|error| Error::Invalid(error.to_string()))?;
-        let mut worker = oracle
-            .map(|path| frames::Worker::spawn(path, Path::new("spec"), arch, det))
-            .transpose()?;
+        let mut simulator = build::build(spec_al.clone(), arch, Config::new(true, det, false))
+            .map_err(|error| Error::Invalid(error.to_string()))?;
         for (suite, pairs) in suites.iter().filter(|(suite, _)| suite.arch == arch) {
             let mut results = Results::new(suite.name);
             for pair in pairs {
@@ -308,72 +293,26 @@ pub fn run(det: bool, oracle: Option<&Path>) -> Result<()> {
                 // File access failures are execution errors, never expected exclusions
                 fs::File::open(&pair.path_p4)?;
                 fs::File::open(&pair.path_stf)?;
-                if let Some(worker) = &mut worker {
-                    worker.begin_case(&id, &pair.path_p4, &pair.path_stf, &includes)?;
-                }
-                let mut run_case =
-                    checked(simulator.init_pipe(&includes, &pair.path_p4), &mut worker)
-                        .map_err(|error| Error::Invalid(format!("{id}: {error}")))?;
-                if let Some(worker) = &mut worker {
-                    worker.compare_state(
-                        "init",
-                        0,
-                        simulator.arena(),
-                        &run_case,
-                        &run_case.state.txs,
-                    )?;
-                }
-                let stmts_stf = checked(
-                    stf::parse::parse_file(&pair.path_stf).map_err(SimError::from),
-                    &mut worker,
-                )
-                .map_err(|error| Error::Invalid(format!("{id}: {error}")))?;
+                let mut run_case = simulator
+                    .init_pipe(&includes, &pair.path_p4)
+                    .map_err(|error| Error::Invalid(format!("{id}: {error}")))?;
+                let stmts_stf = stf::parse::parse_file(&pair.path_stf)
+                    .map_err(|error| Error::Invalid(format!("{id}: {error}")))?;
                 for (idx, stmt_stf) in stmts_stf.iter().enumerate() {
-                    checked(simulator.step(&mut run_case, stmt_stf), &mut worker).map_err(
-                        |error| Error::Invalid(format!("{id}: command {}: {error}", idx + 1)),
-                    )?;
-                    if let Some(worker) = &mut worker {
-                        worker.compare_state(
-                            "command",
-                            idx + 1,
-                            simulator.arena(),
-                            &run_case,
-                            &run_case.state.txs,
-                        )?;
-                    }
+                    simulator.step(&mut run_case, stmt_stf).map_err(|error| {
+                        Error::Invalid(format!("{id}: command {}: {error}", idx + 1))
+                    })?;
                     commands += 1;
                 }
-                if let Some(worker) = &mut worker {
-                    worker.compare_state(
-                        "end",
-                        stmts_stf.len(),
-                        simulator.arena(),
-                        &run_case,
-                        &[],
-                    )?;
-                }
-                checked(
-                    run_case.finish().map_err(|failure| SimError::Stf {
-                        failure: Box::new(failure),
-                        span: Default::default(),
-                    }),
-                    &mut worker,
-                )
-                .map_err(|error| Error::Invalid(format!("{id}: {error}")))?;
-                if let Some(worker) = &mut worker {
-                    let counts = worker.end_case("pass")?;
-                    frames += counts.frames;
-                    states += counts.states;
-                }
+                run_case
+                    .finish()
+                    .map_err(|error| Error::Invalid(format!("{id}: {error}")))?;
                 matched += run_case.matches.len();
                 results.record(pair, "pass", &run_case.matches)?;
                 executed += 1;
                 progress.inc(1);
             }
             results.check();
-        }
-        if let Some(worker) = &mut worker {
-            worker.finish()?;
         }
         eprintln!(
             "Simulation {arch} cache=on det={det}: collected={collected_arch} excluded={excluded_arch} executed={} patched={patched_arch}",
@@ -382,27 +321,8 @@ pub fn run(det: bool, oracle: Option<&Path>) -> Result<()> {
     }
     progress.finish_with_message("complete");
     eprintln!(
-        "Simulation cache=on det={det}: collected={collected} excluded={excluded} executed={executed} patched={patched} commands={commands} states={states} frames={frames} matches={matched} elapsed={:.3}s; all expected records matched",
+        "Simulation cache=on det={det}: collected={collected} excluded={excluded} executed={executed} patched={patched} commands={commands} matches={matched} elapsed={:.3}s; all expected records matched",
         start.elapsed().as_secs_f64()
     );
     Ok(())
-}
-
-fn checked<T>(
-    result: std::result::Result<T, SimError>,
-    worker: &mut Option<frames::Worker>,
-) -> Result<T> {
-    match result {
-        Ok(value) => Ok(value),
-        Err(error) => {
-            if let Some(worker) = worker {
-                let status = match &error {
-                    SimError::P4Syntax(_) => "syntax",
-                    _ => "runtime",
-                };
-                worker.end_case(status)?;
-            }
-            Err(Error::Invalid(error.to_string()))
-        }
-    }
 }

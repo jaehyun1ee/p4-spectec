@@ -1,7 +1,6 @@
 mod algo;
 mod corpus;
 mod elab;
-mod frames;
 mod p4parse;
 mod run;
 mod sim;
@@ -14,8 +13,6 @@ use std::{path::PathBuf, process::ExitCode};
 enum Error {
     #[error(transparent)]
     Io(#[from] std::io::Error),
-    #[error(transparent)]
-    Frames(#[from] frames::Error),
     #[error("{0}")]
     Invalid(String),
 }
@@ -42,9 +39,6 @@ enum Command {
     SimAl {
         #[arg(long)]
         det: bool,
-        /// Compare command states with this explicitly selected OCaml worker
-        #[arg(long)]
-        oracle: Option<PathBuf>,
     },
 }
 
@@ -61,20 +55,13 @@ fn execute(command: Command) -> Result<()> {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
         .canonicalize()?;
-    let command = match command {
-        Command::SimAl { det, oracle } => Command::SimAl {
-            det,
-            oracle: oracle.map(std::fs::canonicalize).transpose()?,
-        },
-        command => command,
-    };
     std::env::set_current_dir(&root)?;
     match command {
         Command::P4parse => p4parse::run(),
         Command::Elab => elab::run(),
         Command::Algo => algo::run(),
         Command::RunAl => run::run(),
-        Command::SimAl { det, oracle } => sim::run(det, oracle.as_deref()),
+        Command::SimAl { det } => sim::run(det),
     }
 }
 
