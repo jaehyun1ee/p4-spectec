@@ -135,6 +135,8 @@ pub(crate) fn state_value(
     )?)
 }
 
+// == Extern call arguments
+
 pub(crate) fn param_names(
     arena: &ValueArena,
     value_names: Value,

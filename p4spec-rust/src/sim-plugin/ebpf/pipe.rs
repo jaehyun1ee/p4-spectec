@@ -19,6 +19,8 @@ use super::{
     object::CounterArray,
 };
 
+// == Configuration
+
 #[derive(Default)]
 pub struct Ebpf {
     encoding: Encoding,
@@ -30,7 +32,7 @@ impl Ebpf {
     }
 }
 
-// Extern objects
+// == Extern objects
 #[derive(Clone, Debug, PartialEq, Eq, SerializeState, DeserializeState)]
 #[serde(serialize_state = "EncodeContext<'arena>", ser_parameters = "'arena")]
 #[serde(deserialize_state = "DecodeContext<'de>")]
@@ -40,15 +42,7 @@ pub enum ExternObject {
 }
 
 impl ExternObject {
-    pub fn from_value(
-        arena: &mut ValueArena,
-        encoding: Encoding,
-        value: &Value,
-    ) -> Result<Self, ExternError> {
-        let json = get::external(arena, value)?.clone();
-        decode_with(arena, encoding, json.as_ref())
-            .map_err(|error| ExternError::Failure(error.to_string()))
-    }
+    // - Encoding
 
     pub fn to_value(
         &self,
@@ -58,6 +52,18 @@ impl ExternObject {
         let payload = encode_with(arena, encoding, self)
             .map_err(|error| ExternError::Failure(error.to_string()))?;
         external::state_value(arena, "objectState", payload.into())
+    }
+
+    // - Decoding
+
+    pub fn from_value(
+        arena: &mut ValueArena,
+        encoding: Encoding,
+        value: &Value,
+    ) -> Result<Self, ExternError> {
+        let json = get::external(arena, value)?.clone();
+        decode_with(arena, encoding, json.as_ref())
+            .map_err(|error| ExternError::Failure(error.to_string()))
     }
 }
 
@@ -215,6 +221,8 @@ impl external::Impl for Ebpf {
     }
 }
 
+// == Extern call errors
+
 fn unsupported_method(
     arena: &ValueArena,
     value_id: Value,
@@ -229,7 +237,8 @@ fn unsupported_method(
     )))
 }
 
-/// STF transformation
+// == STF transformation
+
 pub fn transform_stf_stmt(mut stmt: Statement) -> Statement {
     fn transform_name(name: Name) -> Name {
         name.replace_substring(&["pipe_c1_"], "main.filt.c1.")
@@ -251,7 +260,10 @@ pub fn transform_stf_stmt(mut stmt: Statement) -> Statement {
     stmt
 }
 
-/// Pipeline initializer
+// == Pipeline execution
+
+// - Initialization
+
 pub fn init_pipe<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ebpf>,
     program: Value,
@@ -268,7 +280,8 @@ where
     })
 }
 
-/// Pipeline driver
+// - Execution
+
 pub fn drive_pipe<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ebpf>,
     state: &mut SimState,

@@ -29,6 +29,8 @@ use crate::{
 };
 use serde_derive_state::{DeserializeState, SerializeState};
 
+// == Configuration
+
 #[derive(Default)]
 pub struct Psa {
     encoding: Encoding,
@@ -40,10 +42,12 @@ impl Psa {
     }
 }
 
+// == Extern objects
+
+/// Core and PSA-specific extern objects
 #[derive(Clone, Debug, PartialEq, Eq, SerializeState, DeserializeState)]
 #[serde(serialize_state = "EncodeContext<'arena>", ser_parameters = "'arena")]
 #[serde(deserialize_state = "DecodeContext<'de>")]
-/// Core and PSA-specific extern objects
 pub enum ObjectState {
     PacketIn(PacketIn),
     PacketOut(PacketOut),
@@ -55,15 +59,7 @@ pub enum ObjectState {
 }
 
 impl ObjectState {
-    pub fn from_value(
-        arena: &mut ValueArena,
-        encoding: Encoding,
-        value: &Value,
-    ) -> Result<Self, ExternError> {
-        let json = get::external(arena, value)?.clone();
-        decode_with(arena, encoding, json.as_ref())
-            .map_err(|error| ExternError::Failure(error.to_string()))
-    }
+    // - Encoding
 
     pub fn to_value(
         &self,
@@ -73,6 +69,18 @@ impl ObjectState {
         let payload = encode_with(arena, encoding, self)
             .map_err(|error| ExternError::Failure(error.to_string()))?;
         external::state_value(arena, "objectState", payload.into())
+    }
+
+    // - Decoding
+
+    pub fn from_value(
+        arena: &mut ValueArena,
+        encoding: Encoding,
+        value: &Value,
+    ) -> Result<Self, ExternError> {
+        let json = get::external(arena, value)?.clone();
+        decode_with(arena, encoding, json.as_ref())
+            .map_err(|error| ExternError::Failure(error.to_string()))
     }
 }
 
@@ -406,6 +414,10 @@ impl external::Impl for Psa {
     }
 }
 
+// == State access
+
+// - Object state
+
 fn object_id(arena: &mut ValueArena, name: &str) -> Result<Value, ExternError> {
     let values = name
         .split('.')
@@ -436,35 +448,6 @@ where
     )?)
 }
 
-/// Architectural state
-pub fn get_arch_state<Interp, Iface>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
-    value_arch: Value,
-) -> Result<Arch, Interp::Error>
-where
-    Iface: Interface,
-    Interp: Interpreter<Iface, Psa>,
-{
-    let encoding = ctx.external().encoding;
-    let value_state = func::find_arch_state_e(ctx, value_arch)?;
-    Ok(Arch::from_value(ctx.arena_mut(), encoding, &value_state)?)
-}
-
-/// Update the queue, mirror table and multicast state in the architecture
-pub fn set_arch_state<Interp, Iface>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
-    value_arch: Value,
-    arch: &Arch,
-) -> Result<Value, Interp::Error>
-where
-    Iface: Interface,
-    Interp: Interpreter<Iface, Psa>,
-{
-    let encoding = ctx.external().encoding;
-    let value_state = arch.to_value(ctx.arena_mut(), encoding)?;
-    func::update_arch_state_e(ctx, value_arch, value_state)
-}
-
 fn put_object<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     value_arch: Value,
@@ -480,6 +463,8 @@ where
     let value_object = object.to_value(ctx.arena_mut(), encoding)?;
     func::update_object_state_e(ctx, value_arch, value_id, value_object)
 }
+
+// - Packet objects
 
 fn get_packet_in<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
@@ -513,7 +498,38 @@ where
     }
 }
 
-/// Mirror session interface
+// - Architecture state
+
+pub fn get_arch_state<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
+    value_arch: Value,
+) -> Result<Arch, Interp::Error>
+where
+    Iface: Interface,
+    Interp: Interpreter<Iface, Psa>,
+{
+    let encoding = ctx.external().encoding;
+    let value_state = func::find_arch_state_e(ctx, value_arch)?;
+    Ok(Arch::from_value(ctx.arena_mut(), encoding, &value_state)?)
+}
+
+/// Update the queue, mirror table and multicast state in the architecture
+pub fn set_arch_state<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
+    value_arch: Value,
+    arch: &Arch,
+) -> Result<Value, Interp::Error>
+where
+    Iface: Interface,
+    Interp: Interpreter<Iface, Psa>,
+{
+    let encoding = ctx.external().encoding;
+    let value_state = arch.to_value(ctx.arena_mut(), encoding)?;
+    func::update_arch_state_e(ctx, value_arch, value_state)
+}
+
+// == Mirror sessions
+
 pub fn add_mirror_session_mc<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     value_arch: Value,
@@ -529,7 +545,8 @@ where
     set_arch_state(ctx, value_arch, &arch)
 }
 
-/// Multicast interface
+// == Multicast groups
+
 pub fn mc_mgrp_create<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     value_arch: Value,
@@ -574,7 +591,7 @@ where
     set_arch_state(ctx, value_arch, &arch)
 }
 
-// Register interface
+// == Registers
 
 fn get_register<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
@@ -653,7 +670,8 @@ where
     put_object(ctx, value_arch, name, &ObjectState::Register(reg))
 }
 
-/// STF transformation
+// == STF transformation
+
 pub fn transform_stf_stmt(mut stmt: Statement) -> Statement {
     match &mut stmt {
         Statement::RegisterRead { name, .. }
@@ -666,7 +684,10 @@ pub fn transform_stf_stmt(mut stmt: Statement) -> Statement {
     stmt
 }
 
-/// Pipeline initializer
+// == Pipeline execution
+
+// - Initialization
+
 pub fn init_pipe<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     program: Value,
@@ -683,65 +704,7 @@ where
     })
 }
 
-fn metadata_bool<Interp, Iface>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
-    state: &SimState,
-    name: &str,
-    field: &str,
-) -> Result<bool, Interp::Error>
-where
-    Iface: Interface,
-    Interp: Interpreter<Iface, Psa>,
-{
-    let value = rel::lvalue_read_dot_global(ctx, state.value_ctx, state.value_arch, name, field)?;
-    Ok(unpack::p4_bool(ctx.arena(), &value)?)
-}
-
-fn metadata_int<Interp, Iface>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
-    state: &SimState,
-    name: &str,
-    field: &str,
-) -> Result<i64, Interp::Error>
-where
-    Iface: Interface,
-    Interp: Interpreter<Iface, Psa>,
-{
-    let value = rel::lvalue_read_dot_global(ctx, state.value_ctx, state.value_arch, name, field)?;
-    let num = unpack::p4_fixed_bit(ctx.arena(), &value)?;
-    Ok(unpack::signed_int(&num.int)?)
-}
-
-// Prepare egress context
-
-fn prepare_egress<Interp, Iface>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
-    state: &mut SimState,
-    port: i64,
-    path: &str,
-    instance: i64,
-    metadata: &str,
-) -> Result<(), Interp::Error>
-where
-    Iface: Interface,
-    Interp: Interpreter<Iface, Psa>,
-{
-    // Prepare class of service
-    let cos = metadata_int(ctx, state, metadata, "class_of_service")?;
-    // Initialize egress metadata
-    state.value_ctx = rel::psa_egress_init_metadata(
-        ctx,
-        state.value_ctx,
-        state.value_arch,
-        port,
-        path,
-        cos,
-        instance,
-    )?;
-    Ok(())
-}
-
-// Packet state
+// - Packet state
 
 fn reset_ingress_packet<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
@@ -794,6 +757,68 @@ where
     let pkt_out = get_packet_out(ctx, value_arch, name_out)?;
     Ok(core_packet::to_string(&pkt_in, &pkt_out)?)
 }
+
+// - Metadata
+
+fn metadata_bool<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
+    state: &SimState,
+    name: &str,
+    field: &str,
+) -> Result<bool, Interp::Error>
+where
+    Iface: Interface,
+    Interp: Interpreter<Iface, Psa>,
+{
+    let value = rel::lvalue_read_dot_global(ctx, state.value_ctx, state.value_arch, name, field)?;
+    Ok(unpack::p4_bool(ctx.arena(), &value)?)
+}
+
+fn metadata_int<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
+    state: &SimState,
+    name: &str,
+    field: &str,
+) -> Result<i64, Interp::Error>
+where
+    Iface: Interface,
+    Interp: Interpreter<Iface, Psa>,
+{
+    let value = rel::lvalue_read_dot_global(ctx, state.value_ctx, state.value_arch, name, field)?;
+    let num = unpack::p4_fixed_bit(ctx.arena(), &value)?;
+    Ok(unpack::signed_int(&num.int)?)
+}
+
+// - Context preparation
+
+fn prepare_egress<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
+    state: &mut SimState,
+    port: i64,
+    path: &str,
+    instance: i64,
+    metadata: &str,
+) -> Result<(), Interp::Error>
+where
+    Iface: Interface,
+    Interp: Interpreter<Iface, Psa>,
+{
+    // Prepare class of service
+    let cos = metadata_int(ctx, state, metadata, "class_of_service")?;
+    // Initialize egress metadata
+    state.value_ctx = rel::psa_egress_init_metadata(
+        ctx,
+        state.value_ctx,
+        state.value_arch,
+        port,
+        path,
+        cos,
+        instance,
+    )?;
+    Ok(())
+}
+
+// - Scheduling
 
 /// Schedule a packet with its processing context
 pub fn schedule_packet<Interp, Iface>(
@@ -996,7 +1021,7 @@ where
     schedule_packet(ctx, state, Entrypoint::Ingress)
 }
 
-// Transfer the packet to its egress port
+// - Packet transfer and queues
 
 fn transfer_packet<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
@@ -1074,6 +1099,8 @@ where
         transfer_packet(ctx, state)
     }
 }
+
+// - Pipeline stages
 
 /// Ingress pipeline driver
 pub fn drive_ingress_pipe<Interp, Iface>(
@@ -1156,6 +1183,8 @@ where
     (state.value_ctx, state.value_arch) = (value_ctx, value_arch);
     Ok(())
 }
+
+// - Execution
 
 pub fn drive_packet<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
