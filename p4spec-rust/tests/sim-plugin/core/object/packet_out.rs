@@ -48,7 +48,7 @@ fn test_advance_length_emit_and_payload_keep_bit_order() {
         .emit(&mut runner.context(), value_ctx, value_arch)
         .unwrap();
     assert_eq!(
-        object::packet_to_string(&output.object, &output_emit.object).unwrap(),
+        object::packet::to_string(&output.object, &output_emit.object).unwrap(),
         "578"
     );
     assert_eq!(output_emit.result.value_ctx, value_ctx);

@@ -165,24 +165,22 @@ fn test_malformed_or_failed_write_does_not_install_partial_packet_or_context() {
 }
 
 #[test]
-fn test_packet_json_validates_cursor_and_preserves_payload() {
+fn test_packet_json_preserves_fields_and_payload() {
     let pkt = PacketIn::init("a").unwrap();
     let json = serde_json::to_value(&pkt).unwrap();
     let mut json_short = json.clone();
     json_short["len"] = 2.into();
-    let pkt_short = PacketIn::from_json(&json_short).unwrap();
+    let pkt_short: PacketIn = serde_json::from_value(json_short).unwrap();
     assert_eq!(pkt_short.bits.len(), 4);
     assert_eq!(pkt_short.payload().unwrap(), [true, false]);
-    for (name, json_bad) in [
-        ("idx", serde_json::json!(-1)),
-        ("idx", serde_json::json!(5)),
-        ("len", serde_json::json!(5)),
-        ("len", serde_json::json!(1_u64 << 62)),
-        ("bits", serde_json::json!([1])),
-    ] {
-        let mut json_invalid = json.clone();
-        json_invalid[name] = json_bad;
-        assert!(PacketIn::from_json(&json_invalid).is_err());
+    for (idx, len) in [(5, 4), (0, 5), (0, usize::MAX)] {
+        let pkt = PacketIn {
+            idx,
+            len,
+            ..pkt.clone()
+        };
+        let json = serde_json::to_value(&pkt).unwrap();
+        assert_eq!(serde_json::from_value::<PacketIn>(json).unwrap(), pkt);
     }
     assert!(PacketIn::init("G").is_err());
     assert_eq!(object::bits_to_string(&[true, false, true]), "A");

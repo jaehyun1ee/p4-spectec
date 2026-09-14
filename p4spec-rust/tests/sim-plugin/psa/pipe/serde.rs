@@ -65,19 +65,20 @@ fn test_derived_register_object_preserves_payload_and_annotations() {
 }
 
 #[test]
-fn test_object_packet_bounds_are_checked_when_reading_state() {
+fn test_object_packet_state_preserves_cursor_without_validation() {
     let mut arena = ValueArena::new();
     let mut pkt = PacketIn::init("AB").unwrap();
     pkt.idx = 9;
     let object = ObjectState::PacketIn(pkt);
     let json = encode(&arena, &object).unwrap();
-    assert!(decode::<ObjectState>(&mut arena, &json).is_err());
-    let value_object = object
-        .to_value(&mut arena, Encoding::ArenaIndependent)
-        .unwrap();
-    assert!(
-        ObjectState::from_value(&mut arena, Encoding::ArenaIndependent, &value_object).is_err()
-    );
+    assert_eq!(decode::<ObjectState>(&mut arena, &json).unwrap(), object);
+    for encoding in [Encoding::ArenaRelative, Encoding::ArenaIndependent] {
+        let value_object = object.to_value(&mut arena, encoding).unwrap();
+        assert_eq!(
+            ObjectState::from_value(&mut arena, encoding, &value_object).unwrap(),
+            object
+        );
+    }
 }
 
 #[test]

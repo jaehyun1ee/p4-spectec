@@ -23,10 +23,6 @@ pub struct Packet {
     #[serde(state)]
     pub value_ctx: Value,
     /// Packet input
-    #[serde(
-        serialize_with = "PacketIn::serialize_validated",
-        deserialize_with = "PacketIn::deserialize_validated"
-    )]
     pub packet_in: PacketIn,
     /// Block to resume after parser and verify have already run
     pub entrypoint: Entrypoint,

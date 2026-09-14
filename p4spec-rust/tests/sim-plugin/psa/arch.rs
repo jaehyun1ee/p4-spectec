@@ -136,7 +136,7 @@ fn test_arch_queue_native_value_payload_roundtrip() {
 }
 
 #[test]
-fn test_arch_rejects_invalid_queued_packet_bounds() {
+fn test_arch_preserves_queued_packet_cursor_without_validation() {
     let mut arena = ValueArena::default();
     let value_ctx = make::text(&mut arena, "context".to_owned(), Span::default()).unwrap();
     let mut arch = Arch::default();
@@ -147,7 +147,8 @@ fn test_arch_rejects_invalid_queued_packet_bounds() {
     });
     let mut json = encode(&arena, &arch).unwrap();
     json["queue"][0]["packet_in"]["idx"] = json!(17);
-    assert!(decode::<Arch>(&mut arena, &json).is_err());
+    let arch_decoded: Arch = decode(&mut arena, &json).unwrap();
+    assert_eq!(arch_decoded.queue[0].packet_in.idx, 17);
     arch.queue[0].packet_in.idx = 17;
-    assert!(encode(&arena, &arch).is_err());
+    assert_eq!(encode(&arena, &arch).unwrap(), json);
 }

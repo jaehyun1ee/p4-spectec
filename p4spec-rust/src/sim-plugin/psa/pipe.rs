@@ -1,7 +1,7 @@
 use super::super::{
     core::{
         func as core_func,
-        object::{self as core_object, PacketIn, PacketOut},
+        object::{PacketIn, PacketOut, packet as core_packet},
     },
     externs as external,
     io::{Rx, Tx},
@@ -37,7 +37,7 @@ pub struct Psa;
 #[serde(deserialize_state = "DecodeContext<'de>")]
 /// Core and PSA-specific extern objects
 pub enum ObjectState {
-    PacketIn(#[serde(deserialize_with = "PacketIn::deserialize_validated")] PacketIn),
+    PacketIn(PacketIn),
     PacketOut(PacketOut),
     Counter(Counter),
     Register(#[serde(state)] Register),
@@ -726,7 +726,7 @@ where
 {
     let pkt_in = get_packet_in(ctx, value_arch, name_in)?;
     let pkt_out = get_packet_out(ctx, value_arch, name_out)?;
-    Ok(core_object::packet_to_string(&pkt_in, &pkt_out)?)
+    Ok(core_packet::to_string(&pkt_in, &pkt_out)?)
 }
 
 /// Schedule a packet with its processing context

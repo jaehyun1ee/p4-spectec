@@ -1,4 +1,5 @@
 pub mod bits;
+pub mod packet;
 pub mod packet_in;
 pub mod packet_out;
 
@@ -8,15 +9,3 @@ pub use bits::{
 };
 pub use packet_in::PacketIn;
 pub use packet_out::PacketOut;
-
-use crate::runner::ExternError;
-
-pub fn packet_to_string(pkt_in: &PacketIn, pkt_out: &PacketOut) -> Result<String, ExternError> {
-    let bits: Vec<_> = pkt_out
-        .bits
-        .iter()
-        .copied()
-        .chain(pkt_in.payload()?.iter().copied())
-        .collect();
-    Ok(bits_to_string(&bits))
-}

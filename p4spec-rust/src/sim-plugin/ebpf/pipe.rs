@@ -29,7 +29,7 @@ pub struct Ebpf;
 #[serde(serialize_state = "EncodeContext<'arena>", ser_parameters = "'arena")]
 #[serde(deserialize_state = "DecodeContext<'de>")]
 pub enum ExternObject {
-    PacketIn(#[serde(deserialize_with = "PacketIn::deserialize_validated")] PacketIn),
+    PacketIn(PacketIn),
     CounterArray(CounterArray),
 }
 
