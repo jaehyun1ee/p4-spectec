@@ -9,7 +9,9 @@ use crate::{
 
 pub trait Architecture: Extern {
     const NAME: &'static str;
+
     fn transform_stf_stmt(stmt: Statement) -> Statement;
+
     fn init_pipe<Interp, Iface>(
         ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
         program: Value,
@@ -17,6 +19,7 @@ pub trait Architecture: Extern {
     where
         Iface: Interface,
         Interp: Interpreter<Iface, Self>;
+
     fn drive_pipe<Interp, Iface>(
         ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
         state: &mut SimState,
@@ -25,6 +28,7 @@ pub trait Architecture: Extern {
     where
         Iface: Interface,
         Interp: Interpreter<Iface, Self>;
+
     fn add_mirror_session<Interp, Iface>(
         _ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
         _value_arch: Value,
@@ -41,6 +45,7 @@ pub trait Architecture: Extern {
         ))
         .into())
     }
+
     fn add_mirror_session_mc<Interp, Iface>(
         _ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
         _value_arch: Value,
@@ -57,6 +62,7 @@ pub trait Architecture: Extern {
         ))
         .into())
     }
+
     fn mc_mgrp_create<Interp, Iface>(
         _ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
         _value_arch: Value,
@@ -72,6 +78,7 @@ pub trait Architecture: Extern {
         ))
         .into())
     }
+
     fn mc_node_create<Interp, Iface>(
         _ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
         _value_arch: Value,
@@ -88,6 +95,7 @@ pub trait Architecture: Extern {
         ))
         .into())
     }
+
     fn mc_node_associate<Interp, Iface>(
         _ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
         _value_arch: Value,
@@ -104,6 +112,7 @@ pub trait Architecture: Extern {
         ))
         .into())
     }
+
     fn register_read<Interp, Iface>(
         _ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
         _value_arch: Value,
@@ -120,6 +129,7 @@ pub trait Architecture: Extern {
         ))
         .into())
     }
+
     fn register_write<Interp, Iface>(
         _ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
         _value_arch: Value,
@@ -137,6 +147,7 @@ pub trait Architecture: Extern {
         ))
         .into())
     }
+
     fn register_reset<Interp, Iface>(
         _ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
         _value_arch: Value,
@@ -160,6 +171,7 @@ macro_rules! pipe_ops {
             use $pipe as pipe;
             pipe::transform_stf_stmt(stmt)
         }
+
         fn init_pipe<Interp, Iface>(
             ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
             program: Value,
@@ -171,6 +183,7 @@ macro_rules! pipe_ops {
             use $pipe as pipe;
             pipe::init_pipe(ctx, program)
         }
+
         fn drive_pipe<Interp, Iface>(
             ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
             state: &mut SimState,

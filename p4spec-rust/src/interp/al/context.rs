@@ -213,6 +213,7 @@ impl<'global> Context<'global> {
 
     pub fn find_func_typ(&self, id: &ast::Id) -> Result<crate::lang::il::ast::FuncTyp, Error> {
         use crate::lang::data::typ::{FuncTyp, make};
+
         fn param_typ(param: &ast::Param) -> ast::Typ {
             match &param.node {
                 ast::ParamKind::Exp(typ) => typ.clone(),

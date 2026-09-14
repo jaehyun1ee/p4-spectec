@@ -445,6 +445,7 @@ fn test_canonical_identities_ignore_all_locations_but_distinguish_contents() {
         lang::common::notation::{atom::Atom, mixfix::Mixfix},
         lang::data::value::{Value, ValueKind},
     };
+
     fn values(arena: &mut ValueArena, line: i64) -> Vec<Value> {
         let span = span("values.spec", line);
         let value_true = make::bool(arena, true, span.clone()).unwrap();

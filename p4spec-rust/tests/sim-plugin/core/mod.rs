@@ -44,8 +44,11 @@ struct PacketInterp {
 impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for PacketInterp {
     type Spec = ();
     type Error = TestError;
+
     fn clear(&mut self) {}
+
     fn reset(&mut self) {}
+
     fn eval_program(
         _ctx: &mut RunnerContext<'_, Self, Iface, Exn>,
         _name: &str,
@@ -53,6 +56,7 @@ impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for PacketInterp {
     ) -> Result<Vec<Value>, TestError> {
         unreachable!()
     }
+
     fn eval_func(
         ctx: &mut RunnerContext<'_, Self, Iface, Exn>,
         name: &str,
@@ -99,6 +103,7 @@ impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for PacketInterp {
         };
         Ok(value)
     }
+
     fn eval_rel(
         ctx: &mut RunnerContext<'_, Self, Iface, Exn>,
         name: &str,

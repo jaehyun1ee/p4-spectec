@@ -198,6 +198,7 @@ pub mod make {
         let payload = Rc::new(json);
         external_payload(arena, typ, payload, span)
     }
+
     pub fn external_payload(
         arena: &mut ValueArena,
         typ: Rc<TypKind>,

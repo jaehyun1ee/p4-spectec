@@ -54,6 +54,7 @@ impl<T> Interned<T> {
     pub(crate) fn index(self) -> u32 {
         self.index
     }
+
     pub(crate) fn from_index(index: u32) -> Self {
         Self {
             index,

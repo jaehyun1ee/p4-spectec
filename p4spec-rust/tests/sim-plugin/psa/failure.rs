@@ -91,8 +91,11 @@ fn name_of_id(arena: &ValueArena, value_id: &Value) -> String {
 impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for FailureInterp {
     type Spec = ();
     type Error = TestError;
+
     fn clear(&mut self) {}
+
     fn reset(&mut self) {}
+
     fn eval_program(
         _: &mut RunnerContext<'_, Self, Iface, Exn>,
         _: &str,
@@ -100,6 +103,7 @@ impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for FailureInterp {
     ) -> Result<Vec<Value>, TestError> {
         unreachable!()
     }
+
     fn eval_func(
         ctx: &mut RunnerContext<'_, Self, Iface, Exn>,
         name: &str,
@@ -131,6 +135,7 @@ impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for FailureInterp {
             _ => panic!("unexpected function {name}"),
         }
     }
+
     fn eval_rel(
         ctx: &mut RunnerContext<'_, Self, Iface, Exn>,
         name: &str,

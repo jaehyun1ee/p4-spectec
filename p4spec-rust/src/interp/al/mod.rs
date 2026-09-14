@@ -78,6 +78,7 @@ impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for AlInterp {
         }
         eval::call::invoke_rel(runner, &ctx, &id, values).finish()
     }
+
     fn eval_func(
         runner: &mut RunnerContext<'_, Self, Iface, Exn>,
         name: &str,

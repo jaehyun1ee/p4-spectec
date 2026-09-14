@@ -46,6 +46,7 @@ impl Meter {
             ))),
         }
     }
+
     /// Perform a color aware meter update (see RFC 2698). The `color`
     /// parameter specifies the packet's color before the method call
     ///
@@ -73,6 +74,7 @@ impl Meter {
             Some(value_color),
         )?)
     }
+
     /// Perform a color blind meter update (see RFC 2698). This may call
     /// `execute(index, MeterColor_t.GREEN)`, which has the same behavior
     ///

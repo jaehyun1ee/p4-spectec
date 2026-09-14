@@ -45,6 +45,7 @@ impl HashExtern {
         .to_owned();
         Ok(Self { algo })
     }
+
     /// Compute and return the hash for `data`
     ///
     /// `O get_hash<D>(in D data);`
@@ -64,6 +65,7 @@ impl HashExtern {
         let int_hash = hash::compute_checksum(&self.algo, None, ctx.arena(), &values)?;
         self.return_hash(ctx, value_ctx, value_arch, int_hash)
     }
+
     /// Compute the hash for `data`, reduce it modulo `max`, then add `base`
     ///
     /// `base` specifies the minimum return value. `max` is the hash modulus;
@@ -98,6 +100,7 @@ impl HashExtern {
         let int_hash = ((int_hash % &max) + &max) % &max + base;
         self.return_hash(ctx, value_ctx, value_arch, int_hash)
     }
+
     fn return_hash<Interp, Iface, Exn>(
         self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,

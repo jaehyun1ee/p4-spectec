@@ -983,6 +983,7 @@ fn test_extern_relation_output_guards_preserve_call_span() {
         panic!("relation premise")
     };
     let span = prem.id.span.clone();
+
     fn find_output(
         error: &p4spec_rust::interp::al::error::Error,
     ) -> Option<&p4spec_rust::interp::al::error::Error> {

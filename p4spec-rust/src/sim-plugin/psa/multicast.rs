@@ -24,6 +24,7 @@ impl State {
     pub fn group_create(&mut self, group: i64) {
         self.groups.insert(group, vec![]);
     }
+
     pub fn node_create(&mut self, instance: i64, ports: &[i64]) {
         let handle = self.handle_next;
         self.handle_next = handle.wrapping_add(1).wrapping_shl(1) >> 1;
@@ -38,6 +39,7 @@ impl State {
                 .collect(),
         );
     }
+
     pub fn node_associate(&mut self, group: i64, handle: i64) {
         if let Some(handles) = self.groups.get_mut(&group) {
             handles.push(handle);

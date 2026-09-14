@@ -142,6 +142,7 @@ impl Extern for Psa {
         };
         Ok((value, false))
     }
+
     fn eval_rel<Interp, Iface>(
         &self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
@@ -164,6 +165,7 @@ impl Extern for Psa {
         };
         Ok((values, false))
     }
+
     fn clear(&mut self) {}
 }
 

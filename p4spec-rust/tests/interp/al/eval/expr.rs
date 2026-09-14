@@ -342,6 +342,7 @@ impl Interface for RecordingInterface {
             true,
         ))
     }
+
     fn clear(&mut self) {
         self.0.borrow_mut().clear();
     }
@@ -619,6 +620,7 @@ impl Interface for TypeInterface {
         self.0.borrow_mut().extend_from_slice(targs);
         Ok((values[0], true))
     }
+
     fn clear(&mut self) {
         self.0.borrow_mut().clear();
     }
@@ -665,6 +667,7 @@ fn test_call_arguments_substitute_local_types_and_pass_function_values() {
 #[test]
 fn test_index_failures_retain_the_index_expression_span() {
     use p4spec_rust::interp::al::error::{Error, ErrorKind};
+
     fn contains_span(traces: &[Error], span: &Span) -> bool {
         traces
             .iter()
@@ -790,6 +793,7 @@ fn test_builtin_failure_remains_typed_in_public_error_tree() {
         interp::al::error::{Error, ErrorKind},
         runner::BuiltinInterface,
     };
+
     fn find_builtin(error: &Error) -> Option<&BuiltinErrorKind> {
         if let ErrorKind::Host(HostErrorKind::Interface(InterfaceError::Builtin(error))) =
             error.kind.as_ref()

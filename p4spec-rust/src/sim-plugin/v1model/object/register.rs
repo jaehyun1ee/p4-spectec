@@ -102,6 +102,7 @@ impl Register {
         let value_ctx = rel::lvalue_write_var_local(ctx, value_ctx, value_arch, "result", value)?;
         Ok(finish(ctx.arena_mut(), self, value_ctx, value_arch, None)?)
     }
+
     /// write() writes the state of the register array at the specified
     /// index, with the value provided by the value parameter.
     ///

@@ -93,6 +93,7 @@ impl Register {
             Some(value),
         )?)
     }
+
     /// `void write(in S index, in T value);`
     pub fn write<Interp, Iface, Exn>(
         mut self,

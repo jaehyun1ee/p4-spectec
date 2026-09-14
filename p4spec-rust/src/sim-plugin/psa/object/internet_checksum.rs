@@ -30,6 +30,7 @@ impl InternetChecksum {
             int: BigInt::zero(),
         }
     }
+
     /// Reset internal state and prepare the unit for computation
     ///
     /// Every InternetChecksum instance is automatically initialized as if
@@ -57,6 +58,7 @@ impl InternetChecksum {
             None,
         )?)
     }
+
     /// Add data to the checksum; `data` must be a multiple of 16 bits long
     ///
     /// `void add<T>(in T data);`
@@ -73,6 +75,7 @@ impl InternetChecksum {
     {
         self.update(ctx, value_ctx, value_arch, "csum16")
     }
+
     /// Subtract data from the existing checksum; `data` must be a multiple
     /// of 16 bits long
     ///
@@ -90,6 +93,7 @@ impl InternetChecksum {
     {
         self.update(ctx, value_ctx, value_arch, "csum16_sub")
     }
+
     fn update<Interp, Iface, Exn>(
         mut self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
@@ -108,6 +112,7 @@ impl InternetChecksum {
         self.int = hash::bitwise_neg(&int, &16.into())?;
         Ok(finish(ctx.arena_mut(), self, value_ctx, value_arch, None)?)
     }
+
     /// Get the checksum for data added and not removed since the last clear
     ///
     /// `bit<16> get();`
@@ -125,6 +130,7 @@ impl InternetChecksum {
         self.int = hash::bitwise_neg(&self.int, &16.into())?;
         self.get_state(ctx, value_ctx, value_arch)
     }
+
     /// Get the current checksum computation state. The return value is only
     /// intended for a future call to `set_state`
     ///
@@ -149,6 +155,7 @@ impl InternetChecksum {
             Some(value_checksum),
         )?)
     }
+
     /// Restore state returned by an earlier `get_state` call on this
     /// InternetChecksum instance or a different one
     ///

@@ -23,6 +23,7 @@ pub enum Encoding {
 
 impl std::str::FromStr for Encoding {
     type Err = String;
+
     fn from_str(text: &str) -> Result<Self, Self::Err> {
         match text {
             "arena-relative" => Ok(Self::ArenaRelative),

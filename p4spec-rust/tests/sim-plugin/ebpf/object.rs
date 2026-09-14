@@ -37,6 +37,7 @@ impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for CounterInterp {
     type Error = TestError;
 
     fn clear(&mut self) {}
+
     fn reset(&mut self) {}
 
     fn eval_program(

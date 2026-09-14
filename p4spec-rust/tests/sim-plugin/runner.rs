@@ -163,13 +163,16 @@ struct StfInterp {
 impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for StfInterp {
     type Spec = ();
     type Error = InterpError;
+
     fn clear(&mut self) {
         self.calls.clear();
     }
+
     fn reset(&mut self) {
         self.calls.clear();
         self.initialized = false;
     }
+
     fn eval_program(
         ctx: &mut RunnerContext<'_, Self, Iface, Exn>,
         name: &str,
@@ -184,6 +187,7 @@ impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for StfInterp {
         let value = make::bool(ctx.arena_mut(), false, Span::default())?;
         Ok(vec![value, value])
     }
+
     fn eval_rel(
         _ctx: &mut RunnerContext<'_, Self, Iface, Exn>,
         _name: &str,
@@ -191,6 +195,7 @@ impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for StfInterp {
     ) -> Result<Vec<Value>, InterpError> {
         unreachable!()
     }
+
     fn eval_func(
         ctx: &mut RunnerContext<'_, Self, Iface, Exn>,
         name: &str,

@@ -53,6 +53,7 @@ fn typ_named(name: &str) -> Typ {
         vec![],
     )
 }
+
 fn field(arena: &ValueArena, value: Value, name: &str) -> Value {
     get::structure(arena, &value)
         .unwrap()
@@ -61,6 +62,7 @@ fn field(arena: &ValueArena, value: Value, name: &str) -> Value {
         .unwrap()
         .1
 }
+
 fn record(arena: &mut ValueArena, fields: Vec<(&str, Value)>) -> Value {
     let fields = fields
         .into_iter()
@@ -79,6 +81,7 @@ fn record(arena: &mut ValueArena, fields: Vec<(&str, Value)>) -> Value {
     )
     .unwrap()
 }
+
 fn update(arena: &mut ValueArena, value: Value, name: &str, value_field: Value) -> Value {
     let mut fields = get::structure(arena, &value).unwrap().to_vec();
     fields
@@ -94,6 +97,7 @@ fn update(arena: &mut ValueArena, value: Value, name: &str, value_field: Value) 
     )
     .unwrap()
 }
+
 fn option(arena: &mut ValueArena, value: Value) -> Value {
     make::opt(
         arena,
@@ -103,6 +107,7 @@ fn option(arena: &mut ValueArena, value: Value) -> Value {
     )
     .unwrap()
 }
+
 fn int(arena: &ValueArena, value_ctx: Value, name: &str) -> i64 {
     unpack::signed_int(
         &unpack::p4_fixed_bit(arena, &field(arena, value_ctx, name))
@@ -111,6 +116,7 @@ fn int(arena: &ValueArena, value_ctx: Value, name: &str) -> i64 {
     )
     .unwrap()
 }
+
 fn write_int(arena: &mut ValueArena, value_ctx: Value, name: &str, width: i64, int: i64) -> Value {
     let value = pack::p4_fixed_bit(arena, width.into(), int.into()).unwrap();
     update(arena, value_ctx, name, value)
@@ -119,8 +125,11 @@ fn write_int(arena: &mut ValueArena, value_ctx: Value, name: &str, width: i64, i
 impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for TraceInterp {
     type Spec = ();
     type Error = TestError;
+
     fn clear(&mut self) {}
+
     fn reset(&mut self) {}
+
     fn eval_program(
         _: &mut RunnerContext<'_, Self, Iface, Exn>,
         _: &str,
@@ -128,6 +137,7 @@ impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for TraceInterp {
     ) -> Result<Vec<Value>, TestError> {
         unreachable!()
     }
+
     fn eval_func(
         ctx: &mut RunnerContext<'_, Self, Iface, Exn>,
         name: &str,
@@ -150,6 +160,7 @@ impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for TraceInterp {
             _ => panic!("unexpected function {name}"),
         }
     }
+
     fn eval_rel(
         ctx: &mut RunnerContext<'_, Self, Iface, Exn>,
         name: &str,
@@ -271,12 +282,15 @@ fn setup(scenario: Scenario) -> (TestRunner, SimState) {
         },
     )
 }
+
 fn arch(runner: &mut TestRunner, state: &SimState) -> Arch {
     pipe::get_arch_state(&mut runner.context(), state.value_arch).unwrap()
 }
+
 fn save_arch(runner: &mut TestRunner, state: &mut SimState, arch: &Arch) {
     state.value_arch = pipe::set_arch_state(&mut runner.context(), state.value_arch, arch).unwrap();
 }
+
 fn enqueue(runner: &mut TestRunner, state: &mut SimState) {
     pipe::schedule_packet(&mut runner.context(), state, Entrypoint::Egress).unwrap();
 }

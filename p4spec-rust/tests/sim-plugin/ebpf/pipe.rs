@@ -35,8 +35,11 @@ struct PhaseInterp {
 impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for PhaseInterp {
     type Spec = ();
     type Error = TestError;
+
     fn clear(&mut self) {}
+
     fn reset(&mut self) {}
+
     fn eval_program(
         ctx: &mut RunnerContext<'_, Self, Iface, Exn>,
         name: &str,
@@ -45,6 +48,7 @@ impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for PhaseInterp {
         assert_eq!(name, "EBPF_init");
         Ok(vec![ctx.interp().values[0]])
     }
+
     fn eval_func(
         _: &mut RunnerContext<'_, Self, Iface, Exn>,
         _: &str,
@@ -53,6 +57,7 @@ impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for PhaseInterp {
     ) -> Result<Value, TestError> {
         unreachable!()
     }
+
     fn eval_rel(
         ctx: &mut RunnerContext<'_, Self, Iface, Exn>,
         name: &str,
