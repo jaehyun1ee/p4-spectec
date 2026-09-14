@@ -20,13 +20,13 @@ where
     Exn: Extern,
     Interp: Interpreter<Iface, Exn>,
 {
-    let value_cursor = crate::lang::data::value::make::case_shaped_(
-        ctx.arena_mut(),
-        "GLOBAL",
-        vec![],
-        "cursor",
-        crate::lang::common::source::Span::default(),
-    )
+    let value_cursor = crate::lang::data::value::make::case_shaped! {
+        arena: ctx.arena_mut(),
+        shape: "GLOBAL",
+        args: vec![],
+        typ: "cursor",
+        span: crate::lang::common::source::Span::default(),
+    }
     .map_err(ExternError::from)?;
     let value_name = super::func::bare_name(ctx.arena_mut(), name)?;
     let values = ctx.call_rel(
@@ -49,19 +49,24 @@ where
     Interp: Interpreter<Iface, Exn>,
 {
     use crate::lang::{common::source::Span, data::value::make};
-    let value_cursor =
-        make::case_shaped_(ctx.arena_mut(), "GLOBAL", vec![], "cursor", Span::default())
-            .map_err(ExternError::from)?;
+    let value_cursor = make::case_shaped! {
+        arena: ctx.arena_mut(),
+        shape: "GLOBAL",
+        args: vec![],
+        typ: "cursor",
+        span: Span::default(),
+    }
+    .map_err(ExternError::from)?;
     let value_base = super::func::bare_name(ctx.arena_mut(), name)?;
     let value_member = make::text(ctx.arena_mut(), member.to_owned(), Span::default())
         .map_err(ExternError::from)?;
-    let value_ref = make::case_shaped_(
-        ctx.arena_mut(),
-        "storageReference '.' nameIR",
-        vec![value_base, value_member],
-        "storageReference",
-        Span::default(),
-    )
+    let value_ref = make::case_shaped! {
+        arena: ctx.arena_mut(),
+        shape: "storageReference '.' nameIR",
+        args: vec![value_base, value_member],
+        typ: "storageReference",
+        span: Span::default(),
+    }
     .map_err(ExternError::from)?;
     let values = ctx.call_rel(
         "Lvalue_read",
@@ -107,19 +112,24 @@ where
     Interp: Interpreter<Iface, Exn>,
 {
     use crate::lang::{common::source::Span, data::value::make};
-    let value_cursor =
-        make::case_shaped_(ctx.arena_mut(), "LOCAL", vec![], "cursor", Span::default())
-            .map_err(ExternError::from)?;
+    let value_cursor = make::case_shaped! {
+        arena: ctx.arena_mut(),
+        shape: "LOCAL",
+        args: vec![],
+        typ: "cursor",
+        span: Span::default(),
+    }
+    .map_err(ExternError::from)?;
     let value_base = super::func::bare_name(ctx.arena_mut(), name)?;
     let value_member = make::text(ctx.arena_mut(), member.to_owned(), Span::default())
         .map_err(ExternError::from)?;
-    let value_ref = make::case_shaped_(
-        ctx.arena_mut(),
-        "storageReference '.' nameIR",
-        vec![value_base, value_member],
-        "storageReference",
-        Span::default(),
-    )
+    let value_ref = make::case_shaped! {
+        arena: ctx.arena_mut(),
+        shape: "storageReference '.' nameIR",
+        args: vec![value_base, value_member],
+        typ: "storageReference",
+        span: Span::default(),
+    }
     .map_err(ExternError::from)?;
     let values = ctx.call_rel(
         "Lvalue_write",
@@ -142,19 +152,24 @@ where
     Interp: Interpreter<Iface, Exn>,
 {
     use crate::lang::{common::source::Span, data::value::make};
-    let value_cursor =
-        make::case_shaped_(ctx.arena_mut(), "GLOBAL", vec![], "cursor", Span::default())
-            .map_err(ExternError::from)?;
+    let value_cursor = make::case_shaped! {
+        arena: ctx.arena_mut(),
+        shape: "GLOBAL",
+        args: vec![],
+        typ: "cursor",
+        span: Span::default(),
+    }
+    .map_err(ExternError::from)?;
     let value_base = super::func::bare_name(ctx.arena_mut(), name)?;
     let value_member = make::text(ctx.arena_mut(), member.to_owned(), Span::default())
         .map_err(ExternError::from)?;
-    let value_ref = make::case_shaped_(
-        ctx.arena_mut(),
-        "storageReference '.' nameIR",
-        vec![value_base, value_member],
-        "storageReference",
-        Span::default(),
-    )
+    let value_ref = make::case_shaped! {
+        arena: ctx.arena_mut(),
+        shape: "storageReference '.' nameIR",
+        args: vec![value_base, value_member],
+        typ: "storageReference",
+        span: Span::default(),
+    }
     .map_err(ExternError::from)?;
     let values = ctx.call_rel(
         "Lvalue_write",

@@ -82,13 +82,13 @@ impl Meter {
             Span::default(),
         )
         .map_err(ExternError::from)?;
-        let value_call_result = make::case_shaped_(
-            ctx.arena_mut(),
-            "RETURN value?",
-            vec![value_opt],
-            "returnResult",
-            Span::default(),
-        )
+        let value_call_result = make::case_shaped! {
+            arena: ctx.arena_mut(),
+            shape: "RETURN value?",
+            args: vec![value_opt],
+            typ: "returnResult",
+            span: Span::default(),
+        }
         .map_err(ExternError::from)?;
         Ok((self, value_ctx, value_arch, value_call_result))
     }

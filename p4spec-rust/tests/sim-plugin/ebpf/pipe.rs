@@ -207,3 +207,30 @@ fn test_initialization_requires_two_outputs_and_filter_result_is_ignored() {
     assert_eq!(state.txs[0].port, 3);
     assert_eq!(state.txs[0].packet, "aB");
 }
+
+#[test]
+fn test_extern_init_and_function_report_argument_counts_before_dispatch() {
+    let mut runner_phase = runner("");
+    let value = runner_phase.context().interp().values[0];
+    for actual in [0, 3, 5] {
+        let values = vec![value; actual];
+        let error_init = runner_phase
+            .context()
+            .call_extern_func("init_objectState", &[], &values)
+            .unwrap_err();
+        let error_func = runner_phase
+            .context()
+            .call_extern_rel("ExternFunctionCall_eval", &values)
+            .unwrap_err();
+        for error in [error_init, error_func] {
+            assert!(matches!(
+                error,
+                TestError::Extern(ExternError::Value(ValueError::ExpectedCount {
+                    expected: 4,
+                    actual: count,
+                })) if count == actual
+            ));
+        }
+    }
+    assert!(runner_phase.context().interp().calls.is_empty());
+}

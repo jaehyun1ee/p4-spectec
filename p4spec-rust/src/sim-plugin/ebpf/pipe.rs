@@ -86,12 +86,8 @@ impl Extern for Ebpf {
                 external::state_value(ctx.arena_mut(), "archState", payload.into())?
             }
             "init_objectState" => {
-                let [value_name, _value_targs, value_ids, value_args] = values else {
-                    return Err(ExternError::Failure(
-                        "unexpected number of arguments to extern init".to_owned(),
-                    )
-                    .into());
-                };
+                let (value_name, _value_targs, value_ids, value_args) =
+                    get::four(values).map_err(ExternError::from)?;
                 let name = get::text(ctx.arena(), value_name).map_err(ExternError::from)?;
                 if name == "CounterArray" {
                     let counter = CounterArray::init(ctx.arena(), *value_ids, *value_args)?;
@@ -145,12 +141,8 @@ where
     Iface: Interface,
     Interp: Interpreter<Iface, Ebpf>,
 {
-    let [value_ctx, value_arch, value_name, value_names] = values else {
-        return Err(ExternError::Failure(
-            "unexpected number of arguments to extern function call".to_owned(),
-        )
-        .into());
-    };
+    let (value_ctx, value_arch, value_name, value_names) =
+        get::four(values).map_err(ExternError::from)?;
     let name = get::text(ctx.arena(), value_name)
         .map_err(ExternError::from)?
         .to_owned();

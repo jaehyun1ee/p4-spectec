@@ -15,13 +15,13 @@ use crate::{
 /// `D int`
 pub fn p4_arbitrary_int(arena: &mut ValueArena, int: BigInt) -> Result<Value, ExternError> {
     let value_int = make::int(arena, int, Span::default())?;
-    Ok(make::case_shaped_(
-        arena,
-        "D int",
-        vec![value_int],
-        "value",
-        Span::default(),
-    )?)
+    Ok(make::case_shaped! {
+        arena: arena,
+        shape: "D int",
+        args: vec![value_int],
+        typ: "value",
+        span: Span::default(),
+    }?)
 }
 
 /// `nat W int`
@@ -37,44 +37,24 @@ pub fn p4_fixed_bit(
         })?;
     let value_width = make::nat(arena, nat, Span::default())?;
     let value_int = make::int(arena, int, Span::default())?;
-    Ok(make::case_shaped_(
-        arena,
-        "nat W int",
-        vec![value_width, value_int],
-        "value",
-        Span::default(),
-    )?)
+    Ok(make::case_shaped! {
+        arena: arena,
+        shape: "nat W int",
+        args: vec![value_width, value_int],
+        typ: "value",
+        span: Span::default(),
+    }?)
 }
 
 /// `tid . id`
 pub fn p4_enum(arena: &mut ValueArena, id_enum: &str, id: &str) -> Result<Value, ExternError> {
     let value_enum = make::text(arena, id_enum.to_owned(), Span::default())?;
     let value_id = make::text(arena, id.to_owned(), Span::default())?;
-    Ok(make::case_shaped_(
-        arena,
-        "tid '.' id",
-        vec![value_enum, value_id],
-        "value",
-        Span::default(),
-    )?)
-}
-
-// == Parser transitions
-
-pub fn reject_transition(arena: &mut ValueArena, name: &str) -> Result<Value, ExternError> {
-    let value_name = make::text(arena, name.to_owned(), Span::default())?;
-    let value_err = make::case_shaped_(
-        arena,
-        "ERROR '.' nameIR",
-        vec![value_name],
-        "errorValue",
-        Span::default(),
-    )?;
-    Ok(make::case_shaped_(
-        arena,
-        "REJECT errorValue",
-        vec![value_err],
-        "rejectTransitionResult",
-        Span::default(),
-    )?)
+    Ok(make::case_shaped! {
+        arena: arena,
+        shape: "tid '.' id",
+        args: vec![value_enum, value_id],
+        typ: "value",
+        span: Span::default(),
+    }?)
 }

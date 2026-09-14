@@ -95,12 +95,8 @@ impl Extern for V1Model {
         let value = match name {
             "init_archState" => Arch::default().to_value(ctx.arena_mut(), encoding)?,
             "init_objectState" => {
-                let [value_name, value_targs, value_ids, value_args] = values else {
-                    return Err(ExternError::Failure(
-                        "unexpected number of arguments to extern init".to_owned(),
-                    )
-                    .into());
-                };
+                let (value_name, value_targs, value_ids, value_args) =
+                    get::four(values).map_err(ExternError::from)?;
                 let name = get::text(ctx.arena(), value_name)
                     .map_err(ExternError::from)?
                     .to_owned();
@@ -183,12 +179,8 @@ where
     Iface: Interface,
     Interp: Interpreter<Iface, V1Model>,
 {
-    let [value_ctx, value_arch, value_name, value_names] = values else {
-        return Err(ExternError::Failure(
-            "unexpected number of arguments to extern function call".to_owned(),
-        )
-        .into());
-    };
+    let (value_ctx, value_arch, value_name, value_names) =
+        get::four(values).map_err(ExternError::from)?;
     let name = get::text(ctx.arena(), value_name)
         .map_err(ExternError::from)?
         .to_owned();

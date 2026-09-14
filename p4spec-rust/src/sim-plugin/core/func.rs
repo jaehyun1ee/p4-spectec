@@ -80,22 +80,22 @@ where
         ));
         let value_opt = make::opt(ctx.arena_mut(), typ.node.into(), None, Span::default())
             .map_err(ExternError::from)?;
-        make::case_shaped_(
-            ctx.arena_mut(),
-            "RETURN value?",
-            vec![value_opt],
-            "returnResult",
-            Span::default(),
-        )
+        make::case_shaped! {
+            arena: ctx.arena_mut(),
+            shape: "RETURN value?",
+            args: vec![value_opt],
+            typ: "returnResult",
+            span: Span::default(),
+        }
         .map_err(ExternError::from)?
     } else {
-        make::case_shaped_(
-            ctx.arena_mut(),
-            "REJECT errorValue",
-            vec![value_signal],
-            "rejectResult",
-            Span::default(),
-        )
+        make::case_shaped! {
+            arena: ctx.arena_mut(),
+            shape: "REJECT errorValue",
+            args: vec![value_signal],
+            typ: "rejectResult",
+            span: Span::default(),
+        }
         .map_err(ExternError::from)?
     };
     Ok((value_ctx, value_arch, value_call_result))

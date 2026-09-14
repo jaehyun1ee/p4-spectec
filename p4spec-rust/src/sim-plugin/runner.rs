@@ -419,26 +419,26 @@ fn encode_keys(arena: &mut ValueArena, matches: &[TableMatch]) -> Result<Value, 
                     ("_DEC text", num.as_str())
                 };
                 let value_num = make::text(arena, num.to_owned(), Span::default())?;
-                make::case_shaped_(
-                    arena,
-                    shape,
-                    vec![value_num],
-                    "tableKeyValueInterface",
-                    Span::default(),
-                )?
+                make::case_shaped! {
+                    arena: arena,
+                    shape: shape,
+                    args: vec![value_num],
+                    typ: "tableKeyValueInterface",
+                    span: Span::default(),
+                }?
             }
             MatchKind::Slash(prefix, mask) => {
                 let value_prefix = make::text(arena, prefix.clone(), Span::default())?;
                 let mask = unpack::parse_signed_int(mask)?;
                 let nat = crate::lang::xl::num::Natural::try_from(num_bigint::BigInt::from(mask))?;
                 let value_mask = make::nat(arena, nat, Span::default())?;
-                make::case_shaped_(
-                    arena,
-                    "text _SLASH nat",
-                    vec![value_prefix, value_mask],
-                    "tableKeyValueInterface",
-                    Span::default(),
-                )?
+                make::case_shaped! {
+                    arena: arena,
+                    shape: "text _SLASH nat",
+                    args: vec![value_prefix, value_mask],
+                    typ: "tableKeyValueInterface",
+                    span: Span::default(),
+                }?
             }
         };
         values_key.push(make::tuple(
