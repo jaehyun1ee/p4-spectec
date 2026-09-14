@@ -117,7 +117,10 @@ fn test_dummy_initializes_null_architecture_state_without_effects() {
         .context()
         .call_extern_func("init_archState", &[], &[])
         .unwrap();
-    assert_eq!(get::external(runner.arena(), &value).unwrap(), &json::Null);
+    assert_eq!(
+        get::external(runner.arena(), &value).unwrap().as_ref(),
+        &json::Null
+    );
     assert!(
         matches!(runner.arena().typ(&value).as_ref(), TypKind::Var(id, _) if id.node == "archState")
     );

@@ -51,7 +51,7 @@ impl Arch {
         encoding: Encoding,
         value: &Value,
     ) -> Result<Self, ExternError> {
-        let json = get::external_shared(arena, value)?.clone();
+        let json = get::external(arena, value)?.clone();
         decode_with(arena, encoding, json.as_ref())
             .map_err(|error| ExternError::Failure(error.to_string()))
     }

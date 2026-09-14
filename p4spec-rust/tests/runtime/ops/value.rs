@@ -65,7 +65,7 @@ fn test_extern_type_membership_uses_shared_type_environment() {
     let value = make::external(
         &mut arena,
         (extern_typ).node.clone().into(),
-        json::Null,
+        json::Null.into(),
         Span::default(),
     )
     .unwrap();

@@ -153,13 +153,25 @@ fn test_external_json_order_agrees_with_identity_and_hash_across_arenas() {
     let values_a = payloads
         .iter()
         .map(|json| {
-            make::external(&mut arena_a, typ.clone(), json.clone(), Span::default()).unwrap()
+            make::external(
+                &mut arena_a,
+                typ.clone(),
+                json.clone().into(),
+                Span::default(),
+            )
+            .unwrap()
         })
         .collect::<Vec<_>>();
     let values_b = payloads
         .iter()
         .map(|json| {
-            make::external(&mut arena_b, typ.clone(), json.clone(), span("other.p4", 7)).unwrap()
+            make::external(
+                &mut arena_b,
+                typ.clone(),
+                json.clone().into(),
+                span("other.p4", 7),
+            )
+            .unwrap()
         })
         .collect::<Vec<_>>();
     for (idx_a, value_a) in values_a.iter().enumerate() {

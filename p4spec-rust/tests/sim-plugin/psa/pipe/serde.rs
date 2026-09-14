@@ -165,7 +165,7 @@ fn test_architecture_codec_preserves_nested_registers_in_each_mode() {
         }
         assert_eq!(
             &encode_with(&arena, encoding, &arch_decoded).unwrap(),
-            get::external(&arena, &value_arch).unwrap()
+            get::external(&arena, &value_arch).unwrap().as_ref()
         );
         let object_decoded =
             ObjectState::from_value(&mut arena, encoding, &arch_decoded.queue[0].value_ctx)

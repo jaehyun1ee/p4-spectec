@@ -30,7 +30,7 @@ pub(crate) fn state_value(
         crate::phrase!(node: name.to_owned(), span: Span::default()),
         vec![],
     );
-    Ok(make::external_payload(
+    Ok(make::external(
         arena,
         typ.node.into(),
         payload,

@@ -190,7 +190,7 @@ pub fn decode_external<T>(arena: &mut ValueArena, value: &Value) -> Result<T, De
 where
     T: for<'de> DeserializeState<'de, DecodeContext<'de>>,
 {
-    let payload = get::external_shared(arena, value)?.clone();
+    let payload = get::external(arena, value)?.clone();
     Ok(decode(arena, payload.as_ref())?)
 }
 

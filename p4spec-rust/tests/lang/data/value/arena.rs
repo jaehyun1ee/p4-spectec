@@ -311,14 +311,14 @@ fn test_external_float_order_normalizes_signed_zero() {
     let negative_zero = make::external(
         &mut arena,
         typ.clone(),
-        serde_json::json!(-0.0),
+        serde_json::json!(-0.0).into(),
         Span::default(),
     )
     .unwrap();
     let positive_zero = make::external(
         &mut arena,
         typ.clone(),
-        serde_json::json!(0.0),
+        serde_json::json!(0.0).into(),
         Span::default(),
     )
     .unwrap();
@@ -574,14 +574,14 @@ fn test_external_object_key_order_shares_canonical_identity() {
     let value_a = make::external(
         &mut arena,
         typ.clone(),
-        json::Object(fields.clone().into_iter().collect()),
+        json::Object(fields.clone().into_iter().collect()).into(),
         Span::default(),
     )
     .unwrap();
     let value_b = make::external(
         &mut arena,
         typ,
-        json::Object(fields.into_iter().rev().collect()),
+        json::Object(fields.into_iter().rev().collect()).into(),
         Span::default(),
     )
     .unwrap();
@@ -602,7 +602,7 @@ fn test_external_canonical_equality_stops_at_json() {
         for value in [value, value_relocated, value_retyped, value] {
             let payload = Rc::new(encode_with(&arena, encoding, &vec![value]).unwrap());
             values_external.push(
-                make::external_payload(
+                make::external(
                     &mut arena,
                     typ::TypKind::Bool.into(),
                     payload,

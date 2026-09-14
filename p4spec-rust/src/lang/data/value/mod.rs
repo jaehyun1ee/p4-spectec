@@ -192,20 +192,10 @@ pub mod make {
     pub fn external(
         arena: &mut ValueArena,
         typ: Rc<TypKind>,
-        json: json,
+        json: Rc<json>,
         span: Span,
     ) -> Result<Value, ValueError> {
-        let payload = Rc::new(json);
-        external_payload(arena, typ, payload, span)
-    }
-
-    pub fn external_payload(
-        arena: &mut ValueArena,
-        typ: Rc<TypKind>,
-        payload: Rc<json>,
-        span: Span,
-    ) -> Result<Value, ValueError> {
-        new(arena, ValueKind::Extern(payload), typ, span)
+        new(arena, ValueKind::Extern(json), typ, span)
     }
 }
 
@@ -342,14 +332,7 @@ pub mod get {
 
     // - Externals
 
-    pub fn external<'a>(arena: &'a ValueArena, value: &Value) -> Result<&'a json, ValueError> {
-        external_shared(arena, value).map(Rc::as_ref)
-    }
-
-    pub(crate) fn external_shared<'a>(
-        arena: &'a ValueArena,
-        value: &Value,
-    ) -> Result<&'a Rc<json>, ValueError> {
+    pub fn external<'a>(arena: &'a ValueArena, value: &Value) -> Result<&'a Rc<json>, ValueError> {
         match arena.kind(value) {
             ValueKind::Extern(json) => Ok(json),
             _ => Err(unexpected(arena, value, ValueTag::Extern)),

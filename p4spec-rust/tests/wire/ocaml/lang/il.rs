@@ -140,7 +140,7 @@ fn test_value_wire_rejects_extern_encoding() {
     let value = make::external(
         &mut arena,
         typ::TypKind::Bool.into(),
-        json::Null,
+        json::Null.into(),
         Span::default(),
     )
     .unwrap();
@@ -213,7 +213,7 @@ fn test_value_envelope_rejects_nested_extern_encoding() {
     let value = make::external(
         &mut arena,
         typ::TypKind::Bool.into(),
-        json::Null,
+        json::Null.into(),
         Span::default(),
     )
     .unwrap();

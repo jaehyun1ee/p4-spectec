@@ -504,7 +504,9 @@ fn test_runner_defaults_to_independent_native_payloads() {
     let object = ExternObject::PacketIn(PacketIn::init("AB").unwrap());
     let value_object = object.to_value(runner.arena_mut(), encoding).unwrap();
     assert_eq!(
-        get::external(runner.arena(), &value_object).unwrap(),
+        get::external(runner.arena(), &value_object)
+            .unwrap()
+            .as_ref(),
         &p4spec_rust::lang::data::value::external::encode(runner.arena(), &object).unwrap(),
     );
 }
@@ -583,7 +585,7 @@ fn test_runner_codec_preserves_immutable_nested_register_snapshots_in_each_mode(
         }
         assert_eq!(
             &external::encode_with(runner.arena(), encoding, &arch_decoded).unwrap(),
-            &json,
+            json.as_ref(),
         );
         let object_nested = ObjectState::from_value(
             runner.arena_mut(),

@@ -1680,13 +1680,18 @@ def $pair(s_1, s_2) = ($pure(s_1), $pure(s_2))
         let id = phrase!(node: "state".to_owned(), span: Span::default());
         let typ = typ::make::var(id, vec![]).node;
         let typ = std::rc::Rc::new(typ);
-        let value_a =
-            make::external(runner.arena_mut(), typ.clone(), json_a, Span::default()).unwrap();
+        let value_a = make::external(
+            runner.arena_mut(),
+            typ.clone(),
+            json_a.into(),
+            Span::default(),
+        )
+        .unwrap();
         let span_b = Span::new(
             p4spec_rust::lang::common::source::Position::new("state.p4", 7, 0),
             p4spec_rust::lang::common::source::Position::new("state.p4", 7, 1),
         );
-        let value_b = make::external(runner.arena_mut(), typ, json_b, span_b).unwrap();
+        let value_b = make::external(runner.arena_mut(), typ, json_b.into(), span_b).unwrap();
         let value = runner.eval_func("pair", &[], &[value_a, value_b]).unwrap();
         let values = get::tuple(runner.arena(), &value).unwrap();
         assert_eq!(host.count("pure"), count);
