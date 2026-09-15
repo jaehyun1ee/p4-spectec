@@ -17,7 +17,7 @@ use p4spec_rust::{
         state::SimState,
         v1model::{
             arch::Arch,
-            packet::{Action, CloneType, Entrypoint, Packet},
+            packet::{Action, CloneInfo, CloneType, Entrypoint, Packet},
             pipe::{self, ObjectState, V1Model},
         },
     },
@@ -205,7 +205,7 @@ impl<Iface: Interface> Interpreter<Iface, V1Model> for TraceInterp {
                     if ctx.interp().egress_count == 1 {
                         match ctx.interp().scenario {
                             Scenario::CloneDrop => {
-                                arch.action.clone_opt = Some((CloneType::E2E, 1, 0));
+                                arch.action.clone_opt = Some(CloneInfo(CloneType::E2E, 1, 0));
                                 value_ctx =
                                     write_int(ctx.arena_mut(), value_ctx, "egress_spec", 9, 511);
                             }
@@ -366,7 +366,7 @@ fn test_scheduler_resets_packet_actions_and_retains_prior_transmissions() {
     let (mut runner, mut state) = setup(Scenario::Normal);
     enqueue(&mut runner, &mut state);
     let mut arch_state = arch(&mut runner, &state);
-    arch_state.action.clone_opt = Some((CloneType::E2E, 1, 0));
+    arch_state.action.clone_opt = Some(CloneInfo(CloneType::E2E, 1, 0));
     arch_state.action.resubmit_opt = Some(1);
     arch_state.action.recirculate_opt = Some(2);
     save_arch(&mut runner, &mut state, &arch_state);

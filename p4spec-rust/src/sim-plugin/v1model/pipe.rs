@@ -27,7 +27,7 @@ use super::{
     arch::Arch,
     func as v1model_func,
     object::{Counter, DirectCounter, DirectMeter, Register},
-    packet::{CloneType, Entrypoint, Packet},
+    packet::{CloneInfo, CloneType, Entrypoint, Packet},
 };
 use crate::lang::data::value::external::{
     DecodeContext, EncodeContext, Encoding, decode_with, encode_with,
@@ -1166,7 +1166,7 @@ where
     Iface: Interface,
     Interp: Interpreter<Iface, V1Model>,
 {
-    let Some((clone_type, session, idx)) = arch.action.clone_opt else {
+    let Some(CloneInfo(clone_type, session, idx)) = arch.action.clone_opt else {
         return Ok(false);
     };
     let Some(&port) = arch.mirrortable.get(&session) else {

@@ -2,6 +2,29 @@
 mod scheduler;
 
 #[test]
+fn test_clone_info_preserves_tuple_json() {
+    use p4spec_rust::{
+        lang::data::value::ValueArena,
+        sim_plugin::{
+            spec_impl::pack,
+            v1model::packet::{CloneInfo, CloneType},
+        },
+    };
+
+    let mut arena = ValueArena::new();
+    let value_session = pack::p4_fixed_bit(&mut arena, 32.into(), 7.into()).unwrap();
+    let value_idx = pack::p4_fixed_bit(&mut arena, 8.into(), 3.into()).unwrap();
+    for (name, clone_type) in [("I2E", CloneType::I2E), ("E2E", CloneType::E2E)] {
+        let value_clone_type = pack::p4_enum(&mut arena, "CloneType", name).unwrap();
+        let info = CloneInfo::new(&arena, &value_clone_type, &value_session, &value_idx).unwrap();
+        assert_eq!(info, CloneInfo(clone_type, 7, 3));
+        let json = serde_json::json!([name, 7, 3]);
+        assert_eq!(serde_json::to_value(info).unwrap(), json);
+        assert_eq!(serde_json::from_value::<CloneInfo>(json).unwrap(), info);
+    }
+}
+
+#[test]
 fn test_native_v1model_micro_fixture() {
     use p4spec_rust::lang::data::value::external::Encoding;
     use p4spec_rust::{

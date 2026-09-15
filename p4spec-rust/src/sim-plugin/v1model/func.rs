@@ -1,7 +1,7 @@
 //! v1model extern functions; random, clone, truncate, assert, and assume
 //! retain the source simulator's explicit unsupported dispatch failures
 
-use super::{V1Model, packet, pipe};
+use super::{V1Model, packet::CloneInfo, pipe};
 use crate::sim_plugin::{
     core::object::PacketIn,
     hash as checksum,
@@ -19,7 +19,7 @@ use crate::{
     util::bigint::remainder,
 };
 use num_bigint::BigInt;
-use num_traits::Zero;
+use num_traits::{ToPrimitive, Zero};
 
 /// Calling digest causes a message containing the values specified in
 /// the data parameter to be sent to the control plane software.  It is
@@ -508,7 +508,10 @@ where
     Interp: Interpreter<Iface, V1Model>,
 {
     let value_idx = func::find_var_e_local(ctx, value_ctx, "index")?;
-    let idx = packet::field_index(ctx.arena(), &value_idx)?;
+    let idx = unpack::p4_fixed_bit(ctx.arena(), &value_idx)?
+        .1
+        .to_i64()
+        .ok_or_else(|| ExternError::Failure("integer outside i64 range".to_owned()))?;
     let mut arch = pipe::find_arch_state(ctx, value_arch)?;
     arch.action.resubmit_opt = Some(idx);
     let value_arch = pipe::update_arch_state(ctx, value_arch, &arch)?;
@@ -561,7 +564,10 @@ where
     Interp: Interpreter<Iface, V1Model>,
 {
     let value_idx = func::find_var_e_local(ctx, value_ctx, "index")?;
-    let idx = packet::field_index(ctx.arena(), &value_idx)?;
+    let idx = unpack::p4_fixed_bit(ctx.arena(), &value_idx)?
+        .1
+        .to_i64()
+        .ok_or_else(|| ExternError::Failure("integer outside i64 range".to_owned()))?;
     let mut arch = pipe::find_arch_state(ctx, value_arch)?;
     arch.action.recirculate_opt = Some(idx);
     let value_arch = pipe::update_arch_state(ctx, value_arch, &arch)?;
@@ -630,7 +636,7 @@ where
     let value_type = func::find_var_e_local(ctx, value_ctx, "type")?;
     let value_session = func::find_var_e_local(ctx, value_ctx, "session")?;
     let value_idx = func::find_var_e_local(ctx, value_ctx, "index")?;
-    arch.action.clone_opt = Some(packet::clone_info(
+    arch.action.clone_opt = Some(CloneInfo::new(
         ctx.arena(),
         &value_type,
         &value_session,

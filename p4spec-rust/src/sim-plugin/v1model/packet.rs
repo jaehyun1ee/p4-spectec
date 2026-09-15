@@ -1,43 +1,62 @@
-use super::super::core::object::PacketIn;
-use crate::lang::data::value::external::{DecodeContext, EncodeContext};
-use crate::lang::data::value::{Value, ValueArena};
-use crate::runner::ExternError;
+//! Packet clone requests, pending actions and processing contexts
+//! For example, an I2E clone records a mirror session and a field-list index
+
 use num_traits::ToPrimitive;
 use serde::{Deserialize, Serialize};
 use serde_derive_state::{DeserializeState, SerializeState};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum Entrypoint {
-    Ingress,
-    Egress,
-}
+use crate::{
+    lang::data::value::{
+        Value, ValueArena,
+        external::{DecodeContext, EncodeContext},
+    },
+    runner::ExternError,
+};
 
-#[derive(Clone, Debug, PartialEq, Eq, SerializeState, DeserializeState)]
-#[serde(
-    deny_unknown_fields,
-    serialize_state = "EncodeContext<'arena>",
-    ser_parameters = "'arena"
-)]
-#[serde(deserialize_state = "DecodeContext<'de>")]
-/// Processing context per packet
-pub struct Packet {
-    /// Evaluation context
-    #[serde(state)]
-    pub value_ctx: Value,
-    /// Packet input
-    pub packet_in: PacketIn,
-    /// Block to resume after parser and verify have already run
-    pub entrypoint: Entrypoint,
-}
+use super::super::{core::object::PacketIn, spec_impl::unpack};
 
-/// Packet clone direction, mirror session and preserved field-list index
-pub type CloneInfo = (CloneType, i64, i64);
+// == Packet clones
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CloneType {
     I2E,
     E2E,
 }
+
+/// Packet clone direction, mirror session and preserved field-list index
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CloneInfo(pub CloneType, pub i64, pub i64);
+
+impl CloneInfo {
+    pub fn new(
+        arena: &ValueArena,
+        value_clone_type: &Value,
+        value_session: &Value,
+        value_idx: &Value,
+    ) -> Result<Self, ExternError> {
+        let (_, name) = unpack::p4_enum(arena, value_clone_type)?;
+        let clone_type = match name.as_str() {
+            "I2E" => CloneType::I2E,
+            "E2E" => CloneType::E2E,
+            name => {
+                return Err(ExternError::Failure(format!(
+                    "Invalid enum value \"{name}\". Expected I2E or E2E"
+                )));
+            }
+        };
+        let session = unpack::p4_fixed_bit(arena, value_session)?
+            .1
+            .to_i64()
+            .ok_or_else(|| ExternError::Failure("integer outside i64 range".to_owned()))?;
+        let idx = unpack::p4_fixed_bit(arena, value_idx)?
+            .1
+            .to_i64()
+            .ok_or_else(|| ExternError::Failure("integer outside i64 range".to_owned()))?;
+        Ok(Self(clone_type, session, idx))
+    }
+}
+
+// == Actions on a packet
 
 /// Actions requested by extern calls for the current packet
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -47,33 +66,28 @@ pub struct Action {
     pub recirculate_opt: Option<i64>,
 }
 
-pub fn clone_info(
-    arena: &ValueArena,
-    value_type: &Value,
-    value_session: &Value,
-    value_idx: &Value,
-) -> Result<CloneInfo, crate::runner::ExternError> {
-    use crate::sim_plugin::spec_impl::unpack;
-    let (_, name) = unpack::p4_enum(arena, value_type)?;
-    let clone_type = match name.as_str() {
-        "I2E" => CloneType::I2E,
-        "E2E" => CloneType::E2E,
-        name => {
-            return Err(crate::runner::ExternError::Failure(format!(
-                "Invalid enum value \"{name}\". Expected I2E or E2E"
-            )));
-        }
-    };
-    Ok((
-        clone_type,
-        field_index(arena, value_session)?,
-        field_index(arena, value_idx)?,
-    ))
+// == Processing context per packet
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Entrypoint {
+    Ingress,
+    Egress,
 }
 
-pub fn field_index(arena: &ValueArena, value: &Value) -> Result<i64, crate::runner::ExternError> {
-    use crate::sim_plugin::spec_impl::unpack;
-    (unpack::p4_fixed_bit(arena, value)?.1)
-        .to_i64()
-        .ok_or_else(|| ExternError::Failure("integer outside i64 range".to_owned()))
+/// Processing context per packet
+#[derive(Clone, Debug, PartialEq, Eq, SerializeState, DeserializeState)]
+#[serde(
+    deny_unknown_fields,
+    serialize_state = "EncodeContext<'arena>",
+    ser_parameters = "'arena"
+)]
+#[serde(deserialize_state = "DecodeContext<'de>")]
+pub struct Packet {
+    /// Evaluation context
+    #[serde(state)]
+    pub value_ctx: Value,
+    /// Packet input
+    pub packet_in: PacketIn,
+    /// Block to resume after parser and verify have already run
+    pub entrypoint: Entrypoint,
 }
