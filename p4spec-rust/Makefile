@@ -7,7 +7,7 @@
 CARGO := cargo
 
 .PHONY: test test-frontend test-p4parse-unit test-elab-unit test-algo-unit test-structure-unit test-lang test-wire \
-        test-runtime test-run-al-unit test-frontend-diff test-algo-diff test-diff
+        test-runtime test-run-al-unit test-run-sl-unit test-frontend-diff test-algo-diff test-diff
 
 # Fast unit tests (no OCaml toolchain required)
 
@@ -49,6 +49,11 @@ test-run-al-unit:
 	$(CARGO) test --locked --test runtime interp::al::
 	$(CARGO) test --locked --test cli
 
+test-run-sl-unit:
+	$(CARGO) test --locked --test runtime interp::sl::
+	$(CARGO) test --locked --test runtime sim_plugin::ebpf::test_sl_counter_state
+	$(CARGO) test --locked --test cli
+
 # OCaml investigation checks (need opam/dune)
 # Algo compares rejected-input diagnostics; full spec uses test-expected
 
@@ -61,7 +66,7 @@ test-algo-diff:
 test-diff: test-frontend-diff test-algo-diff
 
 # Standalone expected driver; product unit tests remain in tests/
-.PHONY: test-expected test-promote test-p4parse test-elab test-algo test-structure test-run-al
+.PHONY: test-expected test-promote test-p4parse test-elab test-algo test-structure test-run-al test-run-sl
 DRIVER_TARGET_DIR ?= $(if $(CARGO_TARGET_DIR),$(CARGO_TARGET_DIR),target)
 DRIVER = $(CARGO) run --locked --release --manifest-path test-driver/Cargo.toml --target-dir $(DRIVER_TARGET_DIR) --
 
@@ -80,7 +85,11 @@ test-structure:
 test-run-al:
 	env -u UPDATE_EXPECT $(DRIVER) run-al
 
-test-expected: test-p4parse test-elab test-algo test-structure test-run-al
+test-run-sl:
+	env -u UPDATE_EXPECT $(DRIVER) run-sl
+	env -u UPDATE_EXPECT $(DRIVER) run-sl --det
+
+test-expected: test-p4parse test-elab test-algo test-structure test-run-al test-run-sl
 
 # Rerun elab/algo and update snapshots; does not approve a previous run
 # P4 parser/structure/AL expected and excludes are never promoted
@@ -89,8 +98,12 @@ test-promote:
 	UPDATE_EXPECT=1 $(DRIVER) algo
 
 # Native simulation uses source-derived expectations in both cached modes
-.PHONY: test-sim-al
+.PHONY: test-sim-al test-sim-sl
 
 test-sim-al:
 	env -u UPDATE_EXPECT $(DRIVER) sim-al
 	env -u UPDATE_EXPECT $(DRIVER) sim-al --det
+
+test-sim-sl:
+	env -u UPDATE_EXPECT $(DRIVER) sim-sl
+	env -u UPDATE_EXPECT $(DRIVER) sim-sl --det

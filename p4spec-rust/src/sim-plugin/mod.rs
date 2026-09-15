@@ -9,13 +9,17 @@ use self::{
 };
 use crate::{
     interface,
-    interp::al::{AlInterp, Config, context::Global, error::Error as InterpError},
+    interp::{
+        al::{AlInterp, Config, context::Global, error::Error as InterpError},
+        sl::{Config as SlConfig, SlInterp, context::Global as SlGlobal},
+    },
     lang::{
         al::ast::Spec,
         common::source::Phrase,
         data::value::{ValueArena, external::Encoding},
     },
-    runner::{BuiltinInterface, Runner},
+    pass::structure,
+    runner::{BuiltinInterface, Interpreter, Runner},
     stf::ast::Statement,
 };
 use std::path::{Path, PathBuf};
@@ -42,14 +46,30 @@ pub enum BuildError {
     UnsupportedArchitecture(String),
     #[error(transparent)]
     Spec(#[from] InterpError),
+    #[error(transparent)]
+    Structure(#[from] structure::StructureError),
 }
 
 // == Simulator
 
-pub enum Simulator {
-    Ebpf(Box<Runner<AlInterp, BuiltinInterface, Ebpf>>),
-    Psa(Box<Runner<AlInterp, BuiltinInterface, Psa>>),
-    V1Model(Box<Runner<AlInterp, BuiltinInterface, V1Model>>),
+pub trait SimulatorInterpreter:
+    Interpreter<BuiltinInterface, Ebpf, Error = InterpError>
+    + Interpreter<BuiltinInterface, Psa, Error = InterpError>
+    + Interpreter<BuiltinInterface, V1Model, Error = InterpError>
+{
+}
+
+impl<Interp> SimulatorInterpreter for Interp where
+    Interp: Interpreter<BuiltinInterface, Ebpf, Error = InterpError>
+        + Interpreter<BuiltinInterface, Psa, Error = InterpError>
+        + Interpreter<BuiltinInterface, V1Model, Error = InterpError>
+{
+}
+
+pub enum Simulator<Interp: SimulatorInterpreter = AlInterp> {
+    Ebpf(Box<Runner<Interp, BuiltinInterface, Ebpf>>),
+    Psa(Box<Runner<Interp, BuiltinInterface, Psa>>),
+    V1Model(Box<Runner<Interp, BuiltinInterface, V1Model>>),
 }
 
 macro_rules! dispatch {
@@ -62,7 +82,7 @@ macro_rules! dispatch {
     };
 }
 
-impl Simulator {
+impl<Interp: SimulatorInterpreter> Simulator<Interp> {
     pub fn arena(&self) -> &ValueArena {
         dispatch!(self, runner => runner.arena())
     }
@@ -115,6 +135,51 @@ pub fn build_with_encoding(
         "psa" => {
             Simulator::Psa(Box::new(Runner::new(global, interp, interface, Psa::new(encoding))))
         }
+        "v1model" => Simulator::V1Model(Box::new(Runner::new(
+            global,
+            interp,
+            interface,
+            V1Model::new(encoding),
+        ))),
+        _ => unreachable!("architecture checked before specification loading"),
+    })
+}
+
+pub fn build_sl(
+    spec_al: Spec,
+    arch: &str,
+    config: SlConfig,
+) -> Result<Simulator<SlInterp>, BuildError> {
+    build_sl_with_encoding(spec_al, arch, config, Encoding::default())
+}
+
+pub fn build_sl_with_encoding(
+    spec_al: Spec,
+    arch: &str,
+    config: SlConfig,
+    encoding: Encoding,
+) -> Result<Simulator<SlInterp>, BuildError> {
+    if !matches!(arch, "ebpf" | "psa" | "v1model") {
+        return Err(BuildError::UnsupportedArchitecture(arch.to_owned()));
+    }
+    let interface = interface::p4(&spec_al);
+    let without_rule_groups = true;
+    let spec_sl = structure::convert(spec_al, without_rule_groups)?;
+    let global = SlGlobal::load(spec_sl)?;
+    let interp = SlInterp::new(config);
+    Ok(match arch {
+        "ebpf" => Simulator::Ebpf(Box::new(Runner::new(
+            global,
+            interp,
+            interface,
+            Ebpf::new(encoding),
+        ))),
+        "psa" => Simulator::Psa(Box::new(Runner::new(
+            global,
+            interp,
+            interface,
+            Psa::new(encoding),
+        ))),
         "v1model" => Simulator::V1Model(Box::new(Runner::new(
             global,
             interp,

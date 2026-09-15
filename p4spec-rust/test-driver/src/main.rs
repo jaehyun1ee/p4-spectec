@@ -38,8 +38,18 @@ enum Command {
     Structure,
     /// Compare the full P4 corpus with stored file results (cache on, det off)
     RunAl,
+    /// Compare native SL outcomes with source-derived results (cache on)
+    RunSl {
+        #[arg(long)]
+        det: bool,
+    },
     /// Compare simulation outcomes and matched outputs (cache on)
     SimAl {
+        #[arg(long)]
+        det: bool,
+    },
+    /// Compare native SL simulation outcomes and matched outputs (cache on)
+    SimSl {
         #[arg(long)]
         det: bool,
     },
@@ -48,7 +58,12 @@ enum Command {
 fn execute(command: Command) -> Result<()> {
     if matches!(
         command,
-        Command::P4parse | Command::Structure | Command::RunAl | Command::SimAl { .. }
+        Command::P4parse
+            | Command::Structure
+            | Command::RunAl
+            | Command::RunSl { .. }
+            | Command::SimAl { .. }
+            | Command::SimSl { .. }
     ) && std::env::var_os("UPDATE_EXPECT").is_some()
     {
         return Err(Error::Invalid("UPDATE_EXPECT is supported only for elab and algo".to_owned()));
@@ -63,7 +78,9 @@ fn execute(command: Command) -> Result<()> {
         Command::Algo => algo::run(),
         Command::Structure => structure::run(),
         Command::RunAl => run::run(),
+        Command::RunSl { det } => run::run_sl(det),
         Command::SimAl { det } => sim::run(det),
+        Command::SimSl { det } => sim::run_sl(det),
     }
 }
 

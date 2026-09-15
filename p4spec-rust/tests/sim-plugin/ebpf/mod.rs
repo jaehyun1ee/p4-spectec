@@ -14,15 +14,15 @@ use p4spec_rust::{
     stf::ast::Statement,
 };
 
-fn counter_counts(
-    runner: &mut p4spec_rust::runner::Runner<
-        p4spec_rust::interp::al::AlInterp,
-        p4spec_rust::runner::BuiltinInterface,
-        Ebpf,
-    >,
+fn counter_counts<Interp>(
+    runner: &mut p4spec_rust::runner::Runner<Interp, p4spec_rust::runner::BuiltinInterface, Ebpf>,
     value_arch: Value,
     names: &[&str],
-) -> Vec<u32> {
+) -> Vec<u32>
+where
+    Interp: p4spec_rust::runner::Interpreter<p4spec_rust::runner::BuiltinInterface, Ebpf>,
+    Interp::Error: std::fmt::Debug,
+{
     let values = names
         .iter()
         .map(|name| make::text(runner.arena_mut(), (*name).to_owned(), Span::default()).unwrap())
@@ -103,6 +103,51 @@ fn test_counter_state_persists_across_packets() {
     }
     assert_eq!(counter_counts(&mut runner, state.value_arch, &["main", "prs", "parsed"]), [3, 0]);
     assert_eq!(counter_counts(&mut runner, state.value_arch, &["main", "filt", "counted"]), [6, 3]);
+}
+
+#[test]
+fn test_sl_counter_state_persists_across_packets_in_both_determinism_modes() {
+    use p4spec_rust::{
+        frontend::parse::parse_files,
+        interp::sl::Config,
+        pass::{algo, elaborate},
+        sim_plugin::{self, Simulator},
+    };
+
+    let spec_el = parse_files([super::repo().join("spec")]).unwrap();
+    let spec_il = elaborate::convert(spec_el).unwrap();
+    let spec_al = algo::convert(spec_il).unwrap();
+    for det in [false, true] {
+        let Simulator::Ebpf(mut runner) =
+            sim_plugin::build_sl(spec_al.clone(), "ebpf", Config::new(true, det, false)).unwrap()
+        else {
+            panic!("eBPF simulator")
+        };
+        let program = super::parse_program(
+            runner.arena_mut(),
+            &super::repo().join("p4spec-rust/tests/fixtures/sim-plugin/ebpf/counter.p4"),
+        );
+        let mut state = ebpf::init_pipe(&mut runner.context(), program).unwrap();
+        for packet in ["0100", "0101", "0200"] {
+            ebpf::drive_pipe(
+                &mut runner.context(),
+                &mut state,
+                &Rx {
+                    port: 0,
+                    packet: packet.to_owned(),
+                },
+            )
+            .unwrap();
+        }
+        assert_eq!(
+            counter_counts(&mut runner, state.value_arch, &["main", "prs", "parsed"]),
+            [3, 0]
+        );
+        assert_eq!(
+            counter_counts(&mut runner, state.value_arch, &["main", "filt", "counted"]),
+            [6, 3]
+        );
+    }
 }
 
 #[test]
