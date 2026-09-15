@@ -89,7 +89,7 @@ pub fn transform_stf_stmt(mut stmt: Statement) -> Statement {
 
 // == Architectural state
 
-pub fn get_arch_state<Interp, Iface>(
+pub fn find_arch_state<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     value_arch: Value,
 ) -> Result<Arch, Interp::Error>
@@ -102,7 +102,7 @@ where
     Ok(Arch::from_value(ctx.arena_mut(), encoding, &value_state)?)
 }
 
-pub fn put_arch_state<Interp, Iface>(
+pub fn update_arch_state<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     value_arch: Value,
     arch: &Arch,
@@ -157,7 +157,7 @@ impl ObjectState {
     }
 }
 
-pub fn get_object_state<Interp, Iface>(
+pub fn find_object_state<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     value_arch: Value,
     value_id: Value,
@@ -175,7 +175,7 @@ where
     )?)
 }
 
-fn get_packet_in<Interp, Iface>(
+fn find_packet_in<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     value_arch: Value,
 ) -> Result<PacketIn, Interp::Error>
@@ -197,13 +197,13 @@ where
         Span::default(),
     )
     .map_err(ExternError::from)?;
-    match get_object_state(ctx, value_arch, value_id)? {
+    match find_object_state(ctx, value_arch, value_id)? {
         ObjectState::PacketIn(pkt) => Ok(pkt),
         _ => Err(ExternError::Failure("packet_in extern not found".to_owned()).into()),
     }
 }
 
-fn get_packet_out<Interp, Iface>(
+fn find_packet_out<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     value_arch: Value,
 ) -> Result<PacketOut, Interp::Error>
@@ -225,7 +225,7 @@ where
         Span::default(),
     )
     .map_err(ExternError::from)?;
-    match get_object_state(ctx, value_arch, value_id)? {
+    match find_object_state(ctx, value_arch, value_id)? {
         ObjectState::PacketOut(pkt) => Ok(pkt),
         _ => Err(ExternError::Failure("packet_out extern not found".to_owned()).into()),
     }
@@ -332,11 +332,11 @@ impl external::Impl for V1Model {
                 v1model_func::log_msg_format(ctx, *value_ctx, *value_arch)?
             }
             ("verify_checksum_with_payload", ["condition", "data", "checksum", "algo"]) => {
-                let pkt = get_packet_in(ctx, *value_arch)?;
+                let pkt = find_packet_in(ctx, *value_arch)?;
                 v1model_func::verify_checksum_with_payload(ctx, *value_ctx, *value_arch, &pkt)?
             }
             ("update_checksum_with_payload", ["condition", "data", "checksum", "algo"]) => {
-                let pkt = get_packet_in(ctx, *value_arch)?;
+                let pkt = find_packet_in(ctx, *value_arch)?;
                 v1model_func::update_checksum_with_payload(ctx, *value_ctx, *value_arch, &pkt)?
             }
             _ => {
@@ -366,7 +366,7 @@ impl external::Impl for V1Model {
             )
             .into());
         };
-        let object = get_object_state(ctx, *value_arch, *value_id)?;
+        let object = find_object_state(ctx, *value_arch, *value_id)?;
         let name = get::text(ctx.arena(), value_name)
             .map_err(ExternError::from)?
             .to_owned();
@@ -439,7 +439,7 @@ impl external::Impl for V1Model {
                     )
                 }
                 (ObjectState::Counter(object), "count", ["index"]) => {
-                    let pkt = get_packet_in(ctx, *value_arch)?;
+                    let pkt = find_packet_in(ctx, *value_arch)?;
                     let (object, value_ctx, value_arch, value_call_result) =
                         object.count(ctx, *value_ctx, *value_arch, &pkt)?;
                     (
@@ -470,7 +470,7 @@ impl external::Impl for V1Model {
                     )
                 }
                 (ObjectState::DirectCounter(object), "count", []) => {
-                    let pkt = get_packet_in(ctx, *value_arch)?;
+                    let pkt = find_packet_in(ctx, *value_arch)?;
                     let (object, value_ctx, value_arch, value_call_result) =
                         object.count(ctx, *value_ctx, *value_arch, &pkt)?;
                     (
@@ -481,7 +481,7 @@ impl external::Impl for V1Model {
                     )
                 }
                 (ObjectState::DirectMeter(object), "read", ["result"]) => {
-                    let pkt = get_packet_in(ctx, *value_arch)?;
+                    let pkt = find_packet_in(ctx, *value_arch)?;
                     let (object, value_ctx, value_arch, value_call_result) =
                         object.read(ctx, *value_ctx, *value_arch, &pkt)?;
                     (
@@ -532,9 +532,9 @@ where
     Iface: Interface,
     Interp: Interpreter<Iface, V1Model>,
 {
-    let mut arch = get_arch_state(ctx, value_arch)?;
+    let mut arch = find_arch_state(ctx, value_arch)?;
     arch.mirrortable.insert(session, port);
-    put_arch_state(ctx, value_arch, &arch)
+    update_arch_state(ctx, value_arch, &arch)
 }
 
 pub fn add_mirror_session_mc<Interp, Iface>(
@@ -565,9 +565,9 @@ where
     Iface: Interface,
     Interp: Interpreter<Iface, V1Model>,
 {
-    let mut arch = get_arch_state(ctx, value_arch)?;
+    let mut arch = find_arch_state(ctx, value_arch)?;
     arch.multicast.group_create(group);
-    put_arch_state(ctx, value_arch, &arch)
+    update_arch_state(ctx, value_arch, &arch)
 }
 
 pub fn mc_node_create<Interp, Iface>(
@@ -580,9 +580,9 @@ where
     Iface: Interface,
     Interp: Interpreter<Iface, V1Model>,
 {
-    let mut arch = get_arch_state(ctx, value_arch)?;
+    let mut arch = find_arch_state(ctx, value_arch)?;
     arch.multicast.node_create(instance, ports);
-    put_arch_state(ctx, value_arch, &arch)
+    update_arch_state(ctx, value_arch, &arch)
 }
 
 pub fn mc_node_associate<Interp, Iface>(
@@ -595,9 +595,9 @@ where
     Iface: Interface,
     Interp: Interpreter<Iface, V1Model>,
 {
-    let mut arch = get_arch_state(ctx, value_arch)?;
+    let mut arch = find_arch_state(ctx, value_arch)?;
     arch.multicast.node_associate(group, handle);
-    put_arch_state(ctx, value_arch, &arch)
+    update_arch_state(ctx, value_arch, &arch)
 }
 
 // == Register interface
@@ -696,7 +696,7 @@ where
     Iface: Interface,
     Interp: Interpreter<Iface, V1Model>,
 {
-    let mut pkt = get_packet_in(ctx, state.value_arch)?;
+    let mut pkt = find_packet_in(ctx, state.value_arch)?;
     pkt.reset();
     state.value_arch = {
         let value_name = make::text(ctx.arena_mut(), "packet_in".to_owned(), Span::default())
@@ -895,9 +895,9 @@ where
     Iface: Interface,
     Interp: Interpreter<Iface, V1Model>,
 {
-    let mut arch = get_arch_state(ctx, state.value_arch)?;
+    let mut arch = find_arch_state(ctx, state.value_arch)?;
     arch.reset();
-    state.value_arch = put_arch_state(ctx, state.value_arch, &arch)?;
+    state.value_arch = update_arch_state(ctx, state.value_arch, &arch)?;
     remove_packet_in(ctx, state)?;
     drive_p(ctx, state)?;
     drive_vr(ctx, state)
@@ -956,8 +956,8 @@ where
         unpack::signed_int(&int)
     }?;
     let packet = {
-        let pkt_in = get_packet_in(ctx, state.value_arch)?;
-        let pkt_out = get_packet_out(ctx, state.value_arch)?;
+        let pkt_in = find_packet_in(ctx, state.value_arch)?;
+        let pkt_out = find_packet_out(ctx, state.value_arch)?;
         core_packet::to_string(&pkt_in, &pkt_out)
     }?;
     state.txs.push(Tx { port, packet });
@@ -1119,18 +1119,18 @@ where
     Iface: Interface,
     Interp: Interpreter<Iface, V1Model>,
 {
-    let packet_in = get_packet_in(ctx, state.value_arch)?;
+    let packet_in = find_packet_in(ctx, state.value_arch)?;
     let packet = Packet {
         value_ctx: state.value_ctx,
         packet_in,
         entrypoint,
     };
-    let mut arch = get_arch_state(ctx, state.value_arch)?;
+    let mut arch = find_arch_state(ctx, state.value_arch)?;
     match entrypoint {
         Entrypoint::Ingress => arch.queue.push_front(packet),
         Entrypoint::Egress => arch.queue.push_back(packet),
     }
-    state.value_arch = put_arch_state(ctx, state.value_arch, &arch)?;
+    state.value_arch = update_arch_state(ctx, state.value_arch, &arch)?;
     Ok(())
 }
 
@@ -1198,8 +1198,8 @@ where
     remove_packet_out(ctx, state)?;
     drive_dep(ctx, state)?;
     let packet = {
-        let pkt_in = get_packet_in(ctx, state.value_arch)?;
-        let pkt_out = get_packet_out(ctx, state.value_arch)?;
+        let pkt_in = find_packet_in(ctx, state.value_arch)?;
+        let pkt_out = find_packet_out(ctx, state.value_arch)?;
         core_packet::to_string(&pkt_in, &pkt_out)
     }?;
     let pkt = ObjectState::PacketIn(PacketIn::init(&packet)?);
@@ -1266,7 +1266,7 @@ where
     let (value_ctx, value_arch, value_result) =
         rel::v1model_ingress(ctx, state.value_ctx, state.value_arch)?;
     (state.value_ctx, state.value_arch) = (value_ctx, value_arch);
-    let arch = get_arch_state(ctx, state.value_arch)?;
+    let arch = find_arch_state(ctx, state.value_arch)?;
     schedule_clone(ctx, state, &arch)?;
     if schedule_resubmit(ctx, state, &arch)? {
         return Ok(value_result);
@@ -1318,12 +1318,12 @@ where
     let (value_ctx, value_arch, value_result) =
         rel::v1model_egress(ctx, state.value_ctx, state.value_arch)?;
     (state.value_ctx, state.value_arch) = (value_ctx, value_arch);
-    let arch = get_arch_state(ctx, state.value_arch)?;
+    let arch = find_arch_state(ctx, state.value_arch)?;
     schedule_clone(ctx, state, &arch)?;
     if is_dropped(ctx, state)? {
         return Ok(None);
     }
-    let arch = get_arch_state(ctx, state.value_arch)?;
+    let arch = find_arch_state(ctx, state.value_arch)?;
     if schedule_recirculate(ctx, state, &arch)? {
         Ok(None)
     } else {
@@ -1365,12 +1365,12 @@ where
     Interp: Interpreter<Iface, V1Model>,
 {
     loop {
-        let mut arch = get_arch_state(ctx, state.value_arch)?;
+        let mut arch = find_arch_state(ctx, state.value_arch)?;
         let Some(packet) = arch.queue.pop_front() else {
             return Ok(());
         };
         arch.reset();
-        state.value_arch = put_arch_state(ctx, state.value_arch, &arch)?;
+        state.value_arch = update_arch_state(ctx, state.value_arch, &arch)?;
         drive_packet(ctx, state, packet)?;
     }
 }

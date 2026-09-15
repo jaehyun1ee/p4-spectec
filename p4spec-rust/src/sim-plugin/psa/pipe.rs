@@ -78,7 +78,7 @@ pub fn transform_stf_stmt(mut stmt: Statement) -> Statement {
 
 // == Architectural state
 
-pub fn get_arch_state<Interp, Iface>(
+pub fn find_arch_state<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     value_arch: Value,
 ) -> Result<Arch, Interp::Error>
@@ -91,7 +91,7 @@ where
     Ok(Arch::from_value(ctx.arena_mut(), encoding, &value_state)?)
 }
 
-pub fn put_arch_state<Interp, Iface>(
+pub fn update_arch_state<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     value_arch: Value,
     arch: &Arch,
@@ -147,7 +147,7 @@ impl ObjectState {
     }
 }
 
-pub fn get_object_state<Interp, Iface>(
+pub fn find_object_state<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     value_arch: Value,
     value_id: Value,
@@ -165,7 +165,7 @@ where
     )?)
 }
 
-fn get_ingress_packet_in<Interp, Iface>(
+fn find_ingress_packet_in<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     value_arch: Value,
 ) -> Result<PacketIn, Interp::Error>
@@ -191,13 +191,13 @@ where
         Span::default(),
     )
     .map_err(ExternError::from)?;
-    match get_object_state(ctx, value_arch, value_id)? {
+    match find_object_state(ctx, value_arch, value_id)? {
         ObjectState::PacketIn(pkt) => Ok(pkt),
         _ => Err(ExternError::Failure("ingress_packet_in extern not found".to_owned()).into()),
     }
 }
 
-fn get_ingress_packet_out<Interp, Iface>(
+fn find_ingress_packet_out<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     value_arch: Value,
 ) -> Result<PacketOut, Interp::Error>
@@ -223,13 +223,13 @@ where
         Span::default(),
     )
     .map_err(ExternError::from)?;
-    match get_object_state(ctx, value_arch, value_id)? {
+    match find_object_state(ctx, value_arch, value_id)? {
         ObjectState::PacketOut(pkt) => Ok(pkt),
         _ => Err(ExternError::Failure("ingress_packet_out extern not found".to_owned()).into()),
     }
 }
 
-fn get_egress_packet_in<Interp, Iface>(
+fn find_egress_packet_in<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     value_arch: Value,
 ) -> Result<PacketIn, Interp::Error>
@@ -255,13 +255,13 @@ where
         Span::default(),
     )
     .map_err(ExternError::from)?;
-    match get_object_state(ctx, value_arch, value_id)? {
+    match find_object_state(ctx, value_arch, value_id)? {
         ObjectState::PacketIn(pkt) => Ok(pkt),
         _ => Err(ExternError::Failure("egress_packet_in extern not found".to_owned()).into()),
     }
 }
 
-fn get_egress_packet_out<Interp, Iface>(
+fn find_egress_packet_out<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     value_arch: Value,
 ) -> Result<PacketOut, Interp::Error>
@@ -287,13 +287,13 @@ where
         Span::default(),
     )
     .map_err(ExternError::from)?;
-    match get_object_state(ctx, value_arch, value_id)? {
+    match find_object_state(ctx, value_arch, value_id)? {
         ObjectState::PacketOut(pkt) => Ok(pkt),
         _ => Err(ExternError::Failure("egress_packet_out extern not found".to_owned()).into()),
     }
 }
 
-fn get_register<Interp, Iface>(
+fn find_register<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     value_arch: Value,
     name: &str,
@@ -318,13 +318,13 @@ where
         Span::default(),
     )
     .map_err(ExternError::from)?;
-    match get_object_state(ctx, value_arch, value_id)? {
+    match find_object_state(ctx, value_arch, value_id)? {
         ObjectState::Register(reg) => Ok(reg),
         _ => Err(ExternError::Failure(format!("Register extern {name} not found")).into()),
     }
 }
 
-fn put_register<Interp, Iface>(
+fn update_register<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     value_arch: Value,
     name: &str,
@@ -454,7 +454,7 @@ impl external::Impl for Psa {
             )
             .into());
         };
-        let object = get_object_state(ctx, *value_arch, *value_id)?;
+        let object = find_object_state(ctx, *value_arch, *value_id)?;
         let name = get::text(ctx.arena(), value_name)
             .map_err(ExternError::from)?
             .to_owned();
@@ -697,9 +697,9 @@ where
     Iface: Interface,
     Interp: Interpreter<Iface, Psa>,
 {
-    let mut arch = get_arch_state(ctx, value_arch)?;
+    let mut arch = find_arch_state(ctx, value_arch)?;
     arch.mirrortable.insert(session, group);
-    put_arch_state(ctx, value_arch, &arch)
+    update_arch_state(ctx, value_arch, &arch)
 }
 
 // == Multicast interface
@@ -713,9 +713,9 @@ where
     Iface: Interface,
     Interp: Interpreter<Iface, Psa>,
 {
-    let mut arch = get_arch_state(ctx, value_arch)?;
+    let mut arch = find_arch_state(ctx, value_arch)?;
     arch.multicast.group_create(group);
-    put_arch_state(ctx, value_arch, &arch)
+    update_arch_state(ctx, value_arch, &arch)
 }
 
 pub fn mc_node_create<Interp, Iface>(
@@ -728,9 +728,9 @@ where
     Iface: Interface,
     Interp: Interpreter<Iface, Psa>,
 {
-    let mut arch = get_arch_state(ctx, value_arch)?;
+    let mut arch = find_arch_state(ctx, value_arch)?;
     arch.multicast.node_create(instance, ports);
-    put_arch_state(ctx, value_arch, &arch)
+    update_arch_state(ctx, value_arch, &arch)
 }
 
 pub fn mc_node_associate<Interp, Iface>(
@@ -743,9 +743,9 @@ where
     Iface: Interface,
     Interp: Interpreter<Iface, Psa>,
 {
-    let mut arch = get_arch_state(ctx, value_arch)?;
+    let mut arch = find_arch_state(ctx, value_arch)?;
     arch.multicast.node_associate(group, handle);
-    put_arch_state(ctx, value_arch, &arch)
+    update_arch_state(ctx, value_arch, &arch)
 }
 
 // == Register interface
@@ -760,7 +760,7 @@ where
     Iface: Interface,
     Interp: Interpreter<Iface, Psa>,
 {
-    let reg = get_register(ctx, value_arch, name)?;
+    let reg = find_register(ctx, value_arch, name)?;
     // Evaluate the register read; printing is disabled in the source
     if idx < reg.values.len() as i64 {
         let idx = usize::try_from(idx)
@@ -785,7 +785,7 @@ where
     Iface: Interface,
     Interp: Interpreter<Iface, Psa>,
 {
-    let mut reg = get_register(ctx, value_arch, name)?;
+    let mut reg = find_register(ctx, value_arch, name)?;
     let value = pack::p4_arbitrary_int(ctx.arena_mut(), int.into())?;
     let value = func::cast_op(ctx, reg.value_typ, value)?;
     for (idx_reg, value_reg) in reg.values.iter_mut().enumerate() {
@@ -793,7 +793,7 @@ where
             *value_reg = value;
         }
     }
-    put_register(ctx, value_arch, name, reg)
+    update_register(ctx, value_arch, name, reg)
 }
 
 pub fn register_reset<Interp, Iface>(
@@ -805,10 +805,10 @@ where
     Iface: Interface,
     Interp: Interpreter<Iface, Psa>,
 {
-    let mut reg = get_register(ctx, value_arch, name)?;
+    let mut reg = find_register(ctx, value_arch, name)?;
     let value = func::default(ctx, reg.value_typ)?;
     reg.values.fill(value);
-    put_register(ctx, value_arch, name, reg)
+    update_register(ctx, value_arch, name, reg)
 }
 
 // == Packet state
@@ -858,7 +858,7 @@ where
     Iface: Interface,
     Interp: Interpreter<Iface, Psa>,
 {
-    let mut pkt = get_ingress_packet_in(ctx, state.value_arch)?;
+    let mut pkt = find_ingress_packet_in(ctx, state.value_arch)?;
     pkt.reset();
     state.value_arch = {
         let value_name = make::text(
@@ -1337,17 +1337,17 @@ where
     Interp: Interpreter<Iface, Psa>,
 {
     let packet_in = match entrypoint {
-        Entrypoint::Ingress => get_ingress_packet_in(ctx, state.value_arch)?,
-        Entrypoint::Egress => get_egress_packet_in(ctx, state.value_arch)?,
+        Entrypoint::Ingress => find_ingress_packet_in(ctx, state.value_arch)?,
+        Entrypoint::Egress => find_egress_packet_in(ctx, state.value_arch)?,
     };
     let packet = Packet {
         value_ctx: state.value_ctx,
         packet_in,
         entrypoint,
     };
-    let mut arch = get_arch_state(ctx, state.value_arch)?;
+    let mut arch = find_arch_state(ctx, state.value_arch)?;
     arch.queue.push_back(packet);
-    state.value_arch = put_arch_state(ctx, state.value_arch, &arch)?;
+    state.value_arch = update_arch_state(ctx, state.value_arch, &arch)?;
     Ok(())
 }
 
@@ -1360,8 +1360,8 @@ where
     Interp: Interpreter<Iface, Psa>,
 {
     let packet = {
-        let pkt_in = get_ingress_packet_in(ctx, state.value_arch)?;
-        let pkt_out = get_ingress_packet_out(ctx, state.value_arch)?;
+        let pkt_in = find_ingress_packet_in(ctx, state.value_arch)?;
+        let pkt_out = find_ingress_packet_out(ctx, state.value_arch)?;
         core_packet::to_string(&pkt_in, &pkt_out)
     }?;
     let pkt = ObjectState::PacketIn(PacketIn::init(&packet)?);
@@ -1401,13 +1401,13 @@ where
     Iface: Interface,
     Interp: Interpreter<Iface, Psa>,
 {
-    let arch = get_arch_state(ctx, state.value_arch)?;
+    let arch = find_arch_state(ctx, state.value_arch)?;
     let Some(handles) = arch.multicast.groups.get(&group).cloned() else {
         return Ok(());
     };
     let packet = {
-        let pkt_in = get_ingress_packet_in(ctx, state.value_arch)?;
-        let pkt_out = get_ingress_packet_out(ctx, state.value_arch)?;
+        let pkt_in = find_ingress_packet_in(ctx, state.value_arch)?;
+        let pkt_out = find_ingress_packet_out(ctx, state.value_arch)?;
         core_packet::to_string(&pkt_in, &pkt_out)
     }?;
     let pkt = ObjectState::PacketIn(PacketIn::init(&packet)?);
@@ -1434,7 +1434,7 @@ where
         let value_object = pkt.to_value(ctx.arena_mut(), encoding)?;
         func::update_object_state_e(ctx, state.value_arch, value_id, value_object)
     }?;
-    let arch = get_arch_state(ctx, state.value_arch)?;
+    let arch = find_arch_state(ctx, state.value_arch)?;
     for handle in handles {
         if let Some(nodes) = arch.multicast.nodes.get(&handle) {
             for node in nodes {
@@ -1457,7 +1457,7 @@ where
     Iface: Interface,
     Interp: Interpreter<Iface, Psa>,
 {
-    let arch = get_arch_state(ctx, state.value_arch)?;
+    let arch = find_arch_state(ctx, state.value_arch)?;
     let Some(group) = arch.mirrortable.get(&session) else {
         return Ok(());
     };
@@ -1467,7 +1467,7 @@ where
     // Preserve the original store for ingress packet_in
     let value_arch_original = state.value_arch;
     remove_ingress_packet_in(ctx, state)?;
-    let pkt = get_ingress_packet_in(ctx, state.value_arch)?;
+    let pkt = find_ingress_packet_in(ctx, state.value_arch)?;
     state.value_arch = {
         let value_name = make::text(
             ctx.arena_mut(),
@@ -1491,7 +1491,7 @@ where
         let value_object = ObjectState::PacketIn(pkt).to_value(ctx.arena_mut(), encoding)?;
         func::update_object_state_e(ctx, state.value_arch, value_id, value_object)
     }?;
-    let arch = get_arch_state(ctx, state.value_arch)?;
+    let arch = find_arch_state(ctx, state.value_arch)?;
     for handle in handles {
         if let Some(nodes) = arch.multicast.nodes.get(&handle) {
             for node in nodes {
@@ -1502,9 +1502,9 @@ where
             }
         }
     }
-    let arch = get_arch_state(ctx, state.value_arch)?;
+    let arch = find_arch_state(ctx, state.value_arch)?;
     // Restore the original store while retaining the current scheduler state
-    state.value_arch = put_arch_state(ctx, value_arch_original, &arch)?;
+    state.value_arch = update_arch_state(ctx, value_arch_original, &arch)?;
     Ok(())
 }
 
@@ -1517,7 +1517,7 @@ where
     Iface: Interface,
     Interp: Interpreter<Iface, Psa>,
 {
-    let arch = get_arch_state(ctx, state.value_arch)?;
+    let arch = find_arch_state(ctx, state.value_arch)?;
     let Some(group) = arch.mirrortable.get(&session) else {
         return Ok(());
     };
@@ -1527,8 +1527,8 @@ where
     // Preserve the original store for egress packet_in
     let value_arch_original = state.value_arch;
     let packet = {
-        let pkt_in = get_egress_packet_in(ctx, state.value_arch)?;
-        let pkt_out = get_egress_packet_out(ctx, state.value_arch)?;
+        let pkt_in = find_egress_packet_in(ctx, state.value_arch)?;
+        let pkt_out = find_egress_packet_out(ctx, state.value_arch)?;
         core_packet::to_string(&pkt_in, &pkt_out)
     }?;
     let pkt = PacketIn::init(&packet)?;
@@ -1555,7 +1555,7 @@ where
         let value_object = ObjectState::PacketIn(pkt).to_value(ctx.arena_mut(), encoding)?;
         func::update_object_state_e(ctx, state.value_arch, value_id, value_object)
     }?;
-    let arch = get_arch_state(ctx, state.value_arch)?;
+    let arch = find_arch_state(ctx, state.value_arch)?;
     for handle in handles {
         if let Some(nodes) = arch.multicast.nodes.get(&handle) {
             for node in nodes {
@@ -1566,9 +1566,9 @@ where
             }
         }
     }
-    let arch = get_arch_state(ctx, state.value_arch)?;
+    let arch = find_arch_state(ctx, state.value_arch)?;
     // Restore the original store while retaining the current scheduler state
-    state.value_arch = put_arch_state(ctx, value_arch_original, &arch)?;
+    state.value_arch = update_arch_state(ctx, value_arch_original, &arch)?;
     Ok(())
 }
 
@@ -1594,8 +1594,8 @@ where
     Interp: Interpreter<Iface, Psa>,
 {
     let packet = {
-        let pkt_in = get_egress_packet_in(ctx, state.value_arch)?;
-        let pkt_out = get_egress_packet_out(ctx, state.value_arch)?;
+        let pkt_in = find_egress_packet_in(ctx, state.value_arch)?;
+        let pkt_out = find_egress_packet_out(ctx, state.value_arch)?;
         core_packet::to_string(&pkt_in, &pkt_out)
     }?;
     let pkt = ObjectState::PacketIn(PacketIn::init(&packet)?);
@@ -1646,8 +1646,8 @@ where
         unpack::signed_int(&int)
     }?;
     let packet = {
-        let pkt_in = get_egress_packet_in(ctx, state.value_arch)?;
-        let pkt_out = get_egress_packet_out(ctx, state.value_arch)?;
+        let pkt_in = find_egress_packet_in(ctx, state.value_arch)?;
+        let pkt_out = find_egress_packet_out(ctx, state.value_arch)?;
         core_packet::to_string(&pkt_in, &pkt_out)
     }?;
     state.txs.push(Tx { port, packet });
@@ -1934,11 +1934,11 @@ where
     Interp: Interpreter<Iface, Psa>,
 {
     loop {
-        let mut arch = get_arch_state(ctx, state.value_arch)?;
+        let mut arch = find_arch_state(ctx, state.value_arch)?;
         let Some(packet) = arch.queue.pop_front() else {
             return Ok(());
         };
-        state.value_arch = put_arch_state(ctx, state.value_arch, &arch)?;
+        state.value_arch = update_arch_state(ctx, state.value_arch, &arch)?;
         drive_packet(ctx, state, packet)?;
     }
 }

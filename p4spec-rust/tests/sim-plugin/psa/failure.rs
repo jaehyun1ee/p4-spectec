@@ -255,7 +255,7 @@ fn test_clone_restoration_failure_preserves_queued_clones_and_completed_state() 
     assert_eq!(state.txs.len(), 1);
     assert_eq!(state.txs[0].port, 99);
     assert_eq!(state.txs[0].packet, "prior output");
-    let arch = pipe::get_arch_state(&mut runner.context(), state.value_arch).unwrap();
+    let arch = pipe::find_arch_state(&mut runner.context(), state.value_arch).unwrap();
     assert_eq!(arch.queue.len(), 2);
     assert_eq!(arch.queue[0].packet_in, PacketIn::init("CD").unwrap());
     assert_eq!(arch.queue[1].packet_in, PacketIn::init("AB").unwrap());

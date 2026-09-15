@@ -198,7 +198,7 @@ fn test_clone_survives_ingress_drop() {
     let value_arch_original = state.value_arch;
     pipe::run_pre(&mut runner.context(), &mut state).unwrap();
     assert_eq!(state.value_ctx, value_ctx_original);
-    let arch = pipe::get_arch_state(&mut runner.context(), state.value_arch).unwrap();
+    let arch = pipe::find_arch_state(&mut runner.context(), state.value_arch).unwrap();
     assert_eq!(arch.queue.len(), 2);
     for (packet, port) in arch.queue.iter().zip([12, 3]) {
         assert_eq!(packet.entrypoint, Entrypoint::Egress);
@@ -223,9 +223,9 @@ fn test_clone_survives_ingress_drop() {
             "CLONE_I2E"
         );
     }
-    let arch_original = pipe::get_arch_state(&mut runner.context(), value_arch_original).unwrap();
+    let arch_original = pipe::find_arch_state(&mut runner.context(), value_arch_original).unwrap();
     let value_arch_restored =
-        pipe::put_arch_state(&mut runner.context(), state.value_arch, &arch_original).unwrap();
+        pipe::update_arch_state(&mut runner.context(), state.value_arch, &arch_original).unwrap();
     assert_eq!(
         p4spec_rust::lang::data::value::external::encode(runner.arena(), &value_arch_restored)
             .unwrap(),
@@ -298,7 +298,7 @@ fn test_resubmit_and_recirculate_preserve_queue_order() {
         7,
     );
     pipe::run_pre(&mut runner.context(), &mut state).unwrap();
-    let arch = pipe::get_arch_state(&mut runner.context(), state.value_arch).unwrap();
+    let arch = pipe::find_arch_state(&mut runner.context(), state.value_arch).unwrap();
     assert_eq!(
         arch.queue
             .iter()
@@ -359,7 +359,7 @@ fn test_resubmit_and_recirculate_preserve_queue_order() {
         0xfffffffa,
     );
     pipe::run_bqe(&mut runner.context(), &mut state).unwrap();
-    let arch = pipe::get_arch_state(&mut runner.context(), state.value_arch).unwrap();
+    let arch = pipe::find_arch_state(&mut runner.context(), state.value_arch).unwrap();
     assert_eq!(arch.queue.len(), 6);
     assert_eq!(
         read_path(
@@ -391,7 +391,7 @@ fn test_resubmit_and_recirculate_preserve_queue_order() {
     );
 
     state.value_arch =
-        pipe::put_arch_state(&mut runner.context(), state.value_arch, &Arch::default()).unwrap();
+        pipe::update_arch_state(&mut runner.context(), state.value_arch, &Arch::default()).unwrap();
     write_bool(
         &mut runner,
         &mut state,
@@ -411,7 +411,7 @@ fn test_resubmit_and_recirculate_preserve_queue_order() {
     pipe::run_bqe(&mut runner.context(), &mut state).unwrap();
     assert_eq!(state.txs.len(), num_txs + 1);
     assert!(
-        pipe::get_arch_state(&mut runner.context(), state.value_arch)
+        pipe::find_arch_state(&mut runner.context(), state.value_arch)
             .unwrap()
             .queue
             .is_empty()
@@ -425,7 +425,7 @@ fn test_multicast_restores_context_without_losing_effects() {
     let value_ctx = state.value_ctx;
     pipe::schedule_multicast(&mut runner.context(), &mut state, 7).unwrap();
     assert_eq!(state.value_ctx, value_ctx);
-    let arch = pipe::get_arch_state(&mut runner.context(), state.value_arch).unwrap();
+    let arch = pipe::find_arch_state(&mut runner.context(), state.value_arch).unwrap();
     assert_eq!(arch.queue.len(), 2);
     for (packet, port) in arch.queue.iter().zip([12, 3]) {
         assert_eq!(
@@ -497,7 +497,7 @@ fn counter_count(runner: &mut Runner, state: &SimState) -> i64 {
     let value_id =
         make::list(runner.arena_mut(), typ.node.into(), values, Span::default()).unwrap();
     let pipe::ObjectState::Counter(psa::object::Counter::Packets(counts)) =
-        pipe::get_object_state(&mut runner.context(), state.value_arch, value_id).unwrap()
+        pipe::find_object_state(&mut runner.context(), state.value_arch, value_id).unwrap()
     else {
         panic!("packet counter")
     };
@@ -577,7 +577,7 @@ fn test_native_replication_fixture_order_and_persistent_counter() {
                 .unwrap();
                 txs.extend(state.txs.iter().map(|tx| (tx.port, tx.packet.clone())));
                 counts.push(counter_count(&mut runner, &state));
-                let arch = pipe::get_arch_state(&mut runner.context(), state.value_arch).unwrap();
+                let arch = pipe::find_arch_state(&mut runner.context(), state.value_arch).unwrap();
                 assert!(arch.queue.is_empty());
                 assert_eq!(arch.multicast.groups[&7], [0]);
                 assert_eq!(arch.mirrortable[&5], 7);

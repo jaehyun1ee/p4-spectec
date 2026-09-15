@@ -494,9 +494,9 @@ where
 {
     let value_idx = func::find_var_e_local(ctx, value_ctx, "index")?;
     let idx = packet::field_index(ctx.arena(), &value_idx)?;
-    let mut arch = pipe::get_arch_state(ctx, value_arch)?;
+    let mut arch = pipe::find_arch_state(ctx, value_arch)?;
     arch.action.resubmit_opt = Some(idx);
-    let value_arch = pipe::put_arch_state(ctx, value_arch, &arch)?;
+    let value_arch = pipe::update_arch_state(ctx, value_arch, &arch)?;
     let typ = typ::make::opt(typ::make::var(
         crate::phrase!(node: "value".to_owned(), span: Span::default()),
         Vec::new(),
@@ -547,9 +547,9 @@ where
 {
     let value_idx = func::find_var_e_local(ctx, value_ctx, "index")?;
     let idx = packet::field_index(ctx.arena(), &value_idx)?;
-    let mut arch = pipe::get_arch_state(ctx, value_arch)?;
+    let mut arch = pipe::find_arch_state(ctx, value_arch)?;
     arch.action.recirculate_opt = Some(idx);
-    let value_arch = pipe::put_arch_state(ctx, value_arch, &arch)?;
+    let value_arch = pipe::update_arch_state(ctx, value_arch, &arch)?;
     let typ = typ::make::opt(typ::make::var(
         crate::phrase!(node: "value".to_owned(), span: Span::default()),
         Vec::new(),
@@ -611,7 +611,7 @@ where
     Iface: Interface,
     Interp: Interpreter<Iface, V1Model>,
 {
-    let mut arch = pipe::get_arch_state(ctx, value_arch)?;
+    let mut arch = pipe::find_arch_state(ctx, value_arch)?;
     let value_type = func::find_var_e_local(ctx, value_ctx, "type")?;
     let value_session = func::find_var_e_local(ctx, value_ctx, "session")?;
     let value_idx = func::find_var_e_local(ctx, value_ctx, "index")?;
@@ -621,7 +621,7 @@ where
         &value_session,
         &value_idx,
     )?);
-    let value_arch = pipe::put_arch_state(ctx, value_arch, &arch)?;
+    let value_arch = pipe::update_arch_state(ctx, value_arch, &arch)?;
     let typ = typ::make::opt(typ::make::var(
         crate::phrase!(node: "value".to_owned(), span: Span::default()),
         Vec::new(),

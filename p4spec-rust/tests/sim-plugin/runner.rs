@@ -849,8 +849,8 @@ fn test_native_stf_encoding_modes_preserve_outputs_and_state() {
                     panic!("expected PSA simulator");
                 };
                 // Compare known native state; root trees contain opaque externs
-                let arch =
-                    pipe::get_arch_state(&mut runner.context(), run_case.state.value_arch).unwrap();
+                let arch = pipe::find_arch_state(&mut runner.context(), run_case.state.value_arch)
+                    .unwrap();
                 assert!(arch.queue.is_empty(), "{encoding} command {command}");
                 snapshot(
                     &snapshots.0,
@@ -859,7 +859,7 @@ fn test_native_stf_encoding_modes_preserve_outputs_and_state() {
                     "architecture",
                     encode(runner.arena(), &arch).unwrap(),
                 );
-                let object = pipe::get_object_state(
+                let object = pipe::find_object_state(
                     &mut runner.context(),
                     run_case.state.value_arch,
                     value_id,

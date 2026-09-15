@@ -44,7 +44,7 @@ fn test_native_v1model_micro_fixture() {
         }
         assert_eq!(txs, txs_expect);
         assert!(
-            v1model::pipe::get_arch_state(&mut runner.context(), state.value_arch)
+            v1model::pipe::find_arch_state(&mut runner.context(), state.value_arch)
                 .unwrap()
                 .queue
                 .is_empty()

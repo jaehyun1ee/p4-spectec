@@ -304,11 +304,12 @@ fn setup(scenario: Scenario) -> (TestRunner, SimState) {
 }
 
 fn arch(runner: &mut TestRunner, state: &SimState) -> Arch {
-    pipe::get_arch_state(&mut runner.context(), state.value_arch).unwrap()
+    pipe::find_arch_state(&mut runner.context(), state.value_arch).unwrap()
 }
 
 fn save_arch(runner: &mut TestRunner, state: &mut SimState, arch: &Arch) {
-    state.value_arch = pipe::put_arch_state(&mut runner.context(), state.value_arch, arch).unwrap();
+    state.value_arch =
+        pipe::update_arch_state(&mut runner.context(), state.value_arch, arch).unwrap();
 }
 
 fn enqueue(runner: &mut TestRunner, state: &mut SimState) {
