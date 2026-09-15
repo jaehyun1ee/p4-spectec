@@ -36,7 +36,8 @@ fn test_alias_expression_uses_stage_specific_span() {
     menv.insert(id_alias, typ_alias);
 
     let (_, exp_al) = al::fresh::exp_from_typ(true, &menv, &IdSet::new(), &typ_use);
-    let (_, exp_il) = il::fresh::exp_from_typ(true, &menv, &IdSet::new(), &typ_use);
+    let var_il = il::fresh::var_from_typ(&menv, &IdSet::new(), typ_use.span.clone(), &typ_use);
+    let exp_il = il::var::as_exp(true, &var_il);
 
     assert_eq!(exp_al.span, span_decl);
     assert_eq!(exp_il.span, span_use);

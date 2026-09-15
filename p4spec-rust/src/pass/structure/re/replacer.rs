@@ -44,8 +44,8 @@ impl Replacer {
     pub(crate) fn freshen_binders(&self, frees: &IdSet, block: &ol::Block) -> Renamer {
         let ids_codom = self
             .exps
-            .values()
-            .fold(IdSet::new(), |ids, exp| ids.union(exp.free()));
+            .iter()
+            .fold(IdSet::new(), |ids, (_, exp)| ids.union(exp.free()));
         let ids_collide: IdSet = frees
             .iter()
             .filter(|id| ids_codom.contains(id))

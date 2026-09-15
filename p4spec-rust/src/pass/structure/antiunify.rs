@@ -20,7 +20,9 @@ struct UEnv {
 
 impl UEnv {
     fn unified(&self, id: &Id) -> bool {
-        self.ids.values().any(|id_unified| id_unified.syntax_eq(id))
+        self.ids
+            .iter()
+            .any(|(_, id_unified)| id_unified.syntax_eq(id))
     }
 
     fn extend(&mut self, uenv: Self) -> Result<(), StructureError> {

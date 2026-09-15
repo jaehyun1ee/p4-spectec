@@ -23,7 +23,7 @@ impl Renamer {
         self.ids.domain()
     }
     pub(crate) fn values(&self) -> Vec<Id> {
-        self.ids.values().cloned().collect()
+        self.ids.iter().map(|(_, id)| id.clone()).collect()
     }
     pub(crate) fn singleton(id: Id, id_renamed: Id) -> Self {
         Self::of_list(vec![(id, id_renamed)])
