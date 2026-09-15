@@ -61,8 +61,8 @@ def $fallback(n*) = n_result*
 def $fallback(n*) = n*
   -- otherwise
 "#;
-    let mut spec_sl = spec_al(source);
-    for def in &mut spec_sl {
+    let mut spec_case_al = spec_al(source);
+    for def in &mut spec_case_al {
         let ast::DefKind::MetaFunc(ast::MetaFuncDef::Defined(func)) = &mut def.node else {
             continue;
         };
@@ -79,7 +79,7 @@ def $fallback(n*) = n*
         }), span: clause.span.clone());
         clause.node.prems.insert(1, prem);
     }
-    let mut runner = make_runner(structure::convert(spec_sl, false).unwrap(), false);
+    let mut runner = make_runner(structure::convert(spec_case_al, false).unwrap(), false);
     for values in [
         vec![],
         vec![nat(runner.arena_mut(), 2), nat(runner.arena_mut(), 4)],
@@ -107,7 +107,7 @@ def $fallback(n*) = n*
             get::list(runner.arena(), &mapped)
                 .unwrap()
                 .iter()
-                .map(|v| number(runner.arena(), v))
+                .map(|value| number(runner.arena(), value))
                 .collect::<Vec<_>>(),
             expected
         );
@@ -175,8 +175,8 @@ def $not_hold(n) = false
   -- otherwise
 "#
         );
-        let mut spec_sl = spec_al(&source);
-        for def in &mut spec_sl {
+        let mut spec_case_al = spec_al(&source);
+        for def in &mut spec_case_al {
             let ast::DefKind::MetaFunc(ast::MetaFuncDef::Defined(func)) = &mut def.node else {
                 continue;
             };
@@ -194,7 +194,10 @@ def $not_hold(n) = false
             };
         }
         for det in [false, true] {
-            let mut runner = make_runner(structure::convert(spec_sl.clone(), false).unwrap(), det);
+            let mut runner = make_runner(
+                structure::convert(spec_case_al.clone(), false).unwrap(),
+                det,
+            );
             for n in [0, 1] {
                 for (name, expected) in [("hold", n == 0), ("not_hold", n != 0)] {
                     let result = {

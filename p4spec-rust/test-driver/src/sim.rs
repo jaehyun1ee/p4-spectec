@@ -80,7 +80,7 @@ const SUITES: [Suite; 7] = [
         name: "v1model-regression-sl",
         dir_p4: "testdata/regression/sim",
         dir_stf: "testdata/regression/sim",
-        dir_patch: None,
+        dir_patch: Some("patches/v1model"),
         sl_only: true,
     },
 ];
@@ -374,7 +374,7 @@ mod tests {
             ("ebpf-p4c", 17, 0, None),
             ("ebpf-p4testgen", 144, 0, None),
             ("psa-p4c", 26, 0, None),
-            ("v1model-regression-sl", 20, 0, None),
+            ("v1model-regression-sl", 20, 0, Some("patches/v1model")),
         ]) {
             assert_eq!(suite.name, name_suite);
             assert_eq!(suite.dir_patch, dir_patch, "{name_suite}");
