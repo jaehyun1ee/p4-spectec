@@ -357,10 +357,10 @@ where
     Arch: Architecture,
     Interp: Interpreter<Iface, Arch, Error = InterpError>,
 {
-    // Add names use the same escaped spelling as P4 annotation names.
-    let name = P4Unparser::escape_text(&table.into_string());
+    // Add names use the same escaped spelling as P4 annotation names
+    let text_name = P4Unparser::escape_text(&table.into_string());
     let value_name =
-        make::text(ctx.arena_mut(), name, Span::default()).map_err(InterpError::from)?;
+        make::text(ctx.arena_mut(), text_name, Span::default()).map_err(InterpError::from)?;
     let value_priority = priority
         .map(|priority| make::int(ctx.arena_mut(), priority.into(), Span::default()))
         .transpose()

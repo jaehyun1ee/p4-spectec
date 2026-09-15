@@ -208,39 +208,42 @@ fn statement(stmt: Statement) -> p4spec_rust::lang::common::source::Phrase<State
 
 #[test]
 fn test_add_escapes_table_names_but_set_default_preserves_them() {
-    let name = "prefix◕‿◕😀ツ\"\\\n\tsimple_table_1";
-    let escaped = "prefix\\226\\151\\149\\226\\128\\191\\226\\151\\149\\240\\159\\152\\128\\227\\131\\132\\\"\\\\\\n\\tsimple_table_1";
+    let text_name = "prefix◕‿◕😀ツ\"\\\n\tsimple_table_1";
+    let text_escaped = "prefix\\226\\151\\149\\226\\128\\191\\226\\151\\149\\240\\159\\152\\128\\227\\131\\132\\\"\\\\\\n\\tsimple_table_1";
     let action = Action {
         name: "NoAction".into(),
         args: vec![],
     };
-    for (stmt, expected) in [
+    for (stmt, text_expect) in [
         (
             Statement::Add {
-                table: name.into(),
+                table: text_name.into(),
                 priority: None,
                 matches: vec![],
                 action: action.clone(),
                 id: None,
             },
-            escaped,
+            text_escaped,
         ),
         (
             Statement::SetDefault {
-                table: name.into(),
+                table: text_name.into(),
                 action,
             },
-            name,
+            text_name,
         ),
     ] {
         let (mut runner, mut run_case) = stf_runner(Ebpf::default());
         runner::run_stf_stmt(&mut runner, &mut run_case, &statement(stmt)).unwrap();
         let calls = runner.context().interp().calls.clone();
         assert_eq!(calls[0].0, "find_object_unqualified_e");
-        assert_eq!(get::text(runner.arena(), &calls[0].1[1]).unwrap(), expected);
+        assert_eq!(
+            get::text(runner.arena(), &calls[0].1[1]).unwrap(),
+            text_expect
+        );
         let call = calls.last().unwrap();
         assert_eq!(call.0, "update_object_unqualified_e");
-        assert_eq!(get::text(runner.arena(), &call.1[1]).unwrap(), expected);
+        assert_eq!(get::text(runner.arena(), &call.1[1]).unwrap(), text_expect);
     }
 }
 

@@ -80,7 +80,7 @@ const SUITES: [Suite; 7] = [
         name: "v1model-regression-sl",
         dir_p4: "testdata/regression/sim",
         dir_stf: "testdata/regression/sim",
-        dir_patch: Some("patches/v1model"),
+        dir_patch: None,
         sl_only: true,
     },
 ];
@@ -354,4 +354,37 @@ where
         start.elapsed().as_secs_f64()
     );
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_suite_collection_matches_source_policy() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .canonicalize()
+            .unwrap();
+        std::env::set_current_dir(root).unwrap();
+        for (suite, (name_suite, count_collected, count_patched, dir_patch)) in SUITES.iter().zip([
+            ("v1model-p4c", 204, 0, Some("patches/v1model")),
+            ("v1model-p4testgen", 1982, 2, Some("patches/v1model")),
+            ("v1model-custom", 5, 0, Some("patches/v1model")),
+            ("ebpf-p4c", 17, 0, None),
+            ("ebpf-p4testgen", 144, 0, None),
+            ("psa-p4c", 26, 0, None),
+            ("v1model-regression-sl", 20, 0, None),
+        ]) {
+            assert_eq!(suite.name, name_suite);
+            assert_eq!(suite.dir_patch, dir_patch, "{name_suite}");
+            let pairs = suite.collect().unwrap();
+            assert_eq!(pairs.len(), count_collected, "{name_suite}");
+            assert_eq!(
+                pairs.iter().filter(|pair| pair.patched).count(),
+                count_patched,
+                "{name_suite}"
+            );
+        }
+    }
 }

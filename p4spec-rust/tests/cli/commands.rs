@@ -425,19 +425,25 @@ fn test_run_help_lists_only_implemented_controls() {
 }
 
 #[test]
-fn test_run_al_cache_flag_controls_public_input_guards() {
-    for cache in [false, true] {
-        let mut command = run_command("Unchecked", "cli/run/empty.p4");
-        command.arg("--guard");
-        if !cache {
-            command.arg("--no-cache");
-        }
-        let output = command.output().unwrap();
-        assert_eq!(output.status.success(), cache);
-        if cache {
-            assert_eq!(output.stdout, b"passed\n");
-        } else {
-            assert!(String::from_utf8_lossy(&output.stderr).contains("relation input"));
+fn test_run_interpreters_cache_flag_controls_public_input_guards() {
+    for stage in ["--al", "--sl"] {
+        for cache in [false, true] {
+            let mut command = run_command_with(stage, "Unchecked", "cli/run/empty.p4");
+            command.arg("--guard");
+            if !cache {
+                command.arg("--no-cache");
+            }
+            let output = command.output().unwrap();
+            assert_eq!(output.status.success(), cache, "{stage}");
+            if cache {
+                assert_eq!(output.stdout, b"passed\n");
+            } else {
+                assert!(
+                    String::from_utf8_lossy(&output.stderr).contains("relation input"),
+                    "{stage}: {}",
+                    String::from_utf8_lossy(&output.stderr)
+                );
+            }
         }
     }
 }
