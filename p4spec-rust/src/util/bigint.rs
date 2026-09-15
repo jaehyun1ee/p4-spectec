@@ -21,9 +21,7 @@ pub(crate) fn remainder(int: &BigInt, int_modulus: &BigInt) -> BigInt {
 
 pub(crate) fn width_bit(width: &BigInt) -> Result<usize, ExternError> {
     width
-        .to_u64()
-        .filter(|width| *width <= ((1_u64 << 62) - 1))
-        .and_then(|width| usize::try_from(width).ok())
+        .to_usize()
         .ok_or_else(|| ExternError::Failure(format!("invalid hash bit width: {width}")))
 }
 

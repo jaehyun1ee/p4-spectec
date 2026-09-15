@@ -1,4 +1,5 @@
 use num_bigint::BigInt;
+use num_traits::ToPrimitive;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -98,7 +99,9 @@ impl PacketIn {
     {
         let value_typ = func::find_type_e_local(ctx, value_ctx, "T")?;
         let value_typ_subst = func::subst_type_e_local(ctx, value_ctx, value_typ)?;
-        let size = unpack::size(&func::sizeof_max_size_in_bits(ctx, value_typ_subst)?)?;
+        let size = (func::sizeof_max_size_in_bits(ctx, value_typ_subst)?)
+            .to_usize()
+            .ok_or_else(|| ExternError::Failure("invalid packet size".to_owned()))?;
         if !self.has_size(size)? {
             let value_name = make::text(
                 ctx.arena_mut(),
@@ -164,13 +167,19 @@ impl PacketIn {
     {
         let value_typ = func::find_type_e_local(ctx, value_ctx, "T")?;
         let value_typ_subst = func::subst_type_e_local(ctx, value_ctx, value_typ)?;
-        let size_min = unpack::size(&func::sizeof_min_size_in_bits(ctx, value_typ_subst)?)?;
-        let size_max = unpack::size(&func::sizeof_max_size_in_bits(ctx, value_typ_subst)?)?;
+        let size_min = (func::sizeof_min_size_in_bits(ctx, value_typ_subst)?)
+            .to_usize()
+            .ok_or_else(|| ExternError::Failure("invalid packet size".to_owned()))?;
+        let size_max = (func::sizeof_max_size_in_bits(ctx, value_typ_subst)?)
+            .to_usize()
+            .ok_or_else(|| ExternError::Failure("invalid packet size".to_owned()))?;
         let value_size = func::find_var_e_local(ctx, value_ctx, "variableFieldSizeInBits")?;
         let value_hi = pack::p4_arbitrary_int(ctx.arena_mut(), 2.into())?;
         let value_lo = pack::p4_arbitrary_int(ctx.arena_mut(), 0.into())?;
         let value_alignment = func::bitacc_range_op(ctx, value_size, value_hi, value_lo)?;
-        let alignment = unpack::size(&unpack::p4_fixed_bit(ctx.arena(), &value_alignment)?.1)?;
+        let alignment = (unpack::p4_fixed_bit(ctx.arena(), &value_alignment)?.1)
+            .to_usize()
+            .ok_or_else(|| ExternError::Failure("invalid packet size".to_owned()))?;
         let values_size = get::case(ctx.arena(), &value_size)
             .map_err(ExternError::from)?
             .args();
@@ -180,9 +189,10 @@ impl PacketIn {
                 len: values_size.len(),
             })
         })?;
-        let size_varsize = unpack::size(num::to_int(
-            get::num(ctx.arena(), value_varsize).map_err(ExternError::from)?,
-        ))?;
+        let size_varsize =
+            (num::to_int(get::num(ctx.arena(), value_varsize).map_err(ExternError::from)?))
+                .to_usize()
+                .ok_or_else(|| ExternError::Failure("invalid packet size".to_owned()))?;
         let size = size_min
             .checked_add(size_varsize)
             .ok_or_else(|| ExternError::Failure("packet size overflow".to_owned()))?;
@@ -306,7 +316,9 @@ impl PacketIn {
     {
         let value_typ = func::find_type_e_local(ctx, value_ctx, "T")?;
         let value_typ_subst = func::subst_type_e_local(ctx, value_ctx, value_typ)?;
-        let size = unpack::size(&func::sizeof_max_size_in_bits(ctx, value_typ_subst)?)?;
+        let size = (func::sizeof_max_size_in_bits(ctx, value_typ_subst)?)
+            .to_usize()
+            .ok_or_else(|| ExternError::Failure("invalid packet size".to_owned()))?;
         let value_hdr = func::default(ctx, value_typ)?;
         if !self.has_size(size)? {
             let value_name = make::text(
@@ -374,7 +386,9 @@ impl PacketIn {
         Interp: Interpreter<Iface, Exn>,
     {
         let value_size = func::find_var_e_local(ctx, value_ctx, "sizeInBits")?;
-        let size = unpack::size(&unpack::p4_fixed_bit(ctx.arena(), &value_size)?.1)?;
+        let size = (unpack::p4_fixed_bit(ctx.arena(), &value_size)?.1)
+            .to_usize()
+            .ok_or_else(|| ExternError::Failure("invalid packet size".to_owned()))?;
         if !self.has_size(size)? {
             let value_name = make::text(
                 ctx.arena_mut(),

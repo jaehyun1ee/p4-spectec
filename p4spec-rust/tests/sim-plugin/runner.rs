@@ -344,7 +344,7 @@ fn test_ordered_table_encoding_and_register_failure() {
     );
     assert_eq!(
         num::to_int(get::num(runner.arena(), &values_arg[0][1]).unwrap()),
-        &(-1).into()
+        &i64::MAX.into()
     );
     assert_eq!(
         get::text(runner.arena(), &values_arg[1][0]).unwrap(),
@@ -416,8 +416,8 @@ fn test_native_steps_clear_raw_outputs_without_flushing_pending_queues() {
 fn test_integer_failure_is_located_and_precedes_pipeline_dispatch() {
     let (mut runner, mut run_case) = stf_runner(Ebpf::default());
     for source in [
-        "packet 4611686018427387904 AA",
-        "expect 4611686018427387904 AA",
+        "packet 9223372036854775808 AA",
+        "expect 9223372036854775808 AA",
         "register_write r 0 0x****************",
     ] {
         let stmts = stf::parse::parse_str("overflow.stf", source).unwrap();

@@ -9,6 +9,7 @@ use crate::{
     },
     runner::{Extern, ExternError, Interface, Interpreter, RunnerContext},
 };
+use num_traits::ToPrimitive;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -39,7 +40,9 @@ impl CounterArray {
         let value_max = unpack::find_arg(&args, "max_index")?;
         let value_sparse = unpack::find_arg(&args, "sparse")?;
         let (_, int_max) = unpack::p4_fixed_bit(arena, &value_max)?;
-        let idx_max = unpack::signed_int(&int_max)?;
+        let idx_max = int_max
+            .to_i64()
+            .ok_or_else(|| ExternError::Failure("integer outside i64 range".to_owned()))?;
         unpack::p4_bool(arena, &value_sparse)?;
         let len = usize::try_from(idx_max)
             .map_err(|_| ExternError::Failure("negative counter array size".to_owned()))?;
@@ -70,7 +73,9 @@ impl CounterArray {
         // Get "index"
         let value_idx = func::find_var_e_local(ctx, value_ctx, "index")?;
         let (_, int_idx) = unpack::p4_fixed_bit(ctx.arena(), &value_idx)?;
-        let idx = unpack::signed_int(&int_idx)?;
+        let idx = int_idx
+            .to_i64()
+            .ok_or_else(|| ExternError::Failure("integer outside i64 range".to_owned()))?;
         self.update(ctx, value_ctx, value_arch, idx, 1)
     }
 
@@ -93,11 +98,15 @@ impl CounterArray {
         // Get "index"
         let value_idx = func::find_var_e_local(ctx, value_ctx, "index")?;
         let (_, int_idx) = unpack::p4_fixed_bit(ctx.arena(), &value_idx)?;
-        let idx = unpack::signed_int(&int_idx)?;
+        let idx = int_idx
+            .to_i64()
+            .ok_or_else(|| ExternError::Failure("integer outside i64 range".to_owned()))?;
         // Get "value"
         let value_add = func::find_var_e_local(ctx, value_ctx, "value")?;
         let (_, int_add) = unpack::p4_fixed_bit(ctx.arena(), &value_add)?;
-        let int = unpack::signed_int(&int_add)?;
+        let int = int_add
+            .to_i64()
+            .ok_or_else(|| ExternError::Failure("integer outside i64 range".to_owned()))?;
         self.update(ctx, value_ctx, value_arch, idx, int)
     }
 
@@ -118,7 +127,7 @@ impl CounterArray {
         if let Ok(idx) = usize::try_from(idx)
             && let Some(count) = self.counts.get_mut(idx)
         {
-            *count = count.wrapping_add(int).wrapping_shl(1) >> 1;
+            *count = count.wrapping_add(int);
         }
         // Create call result
         let typ = typ::make::opt(typ::make::var(

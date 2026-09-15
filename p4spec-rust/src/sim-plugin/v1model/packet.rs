@@ -1,6 +1,8 @@
 use super::super::core::object::PacketIn;
 use crate::lang::data::value::external::{DecodeContext, EncodeContext};
 use crate::lang::data::value::{Value, ValueArena};
+use crate::runner::ExternError;
+use num_traits::ToPrimitive;
 use serde::{Deserialize, Serialize};
 use serde_derive_state::{DeserializeState, SerializeState};
 
@@ -71,5 +73,7 @@ pub fn clone_info(
 
 pub fn field_index(arena: &ValueArena, value: &Value) -> Result<i64, crate::runner::ExternError> {
     use crate::sim_plugin::spec_impl::unpack;
-    unpack::signed_int(&unpack::p4_fixed_bit(arena, value)?.1)
+    (unpack::p4_fixed_bit(arena, value)?.1)
+        .to_i64()
+        .ok_or_else(|| ExternError::Failure("integer outside i64 range".to_owned()))
 }

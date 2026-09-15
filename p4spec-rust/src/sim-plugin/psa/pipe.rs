@@ -47,6 +47,7 @@ use crate::{
     runner::{ExternError, Interface, Interpreter, RunnerContext},
     stf::ast::Statement,
 };
+use num_traits::ToPrimitive;
 use serde_derive_state::{DeserializeState, SerializeState};
 
 // == Configuration
@@ -1026,7 +1027,9 @@ where
         "clone_session_id",
     )?;
     let (_, int) = unpack::p4_fixed_bit(ctx.arena(), &value)?;
-    Ok(unpack::signed_int(&int)?)
+    Ok(int
+        .to_i64()
+        .ok_or_else(|| ExternError::Failure("integer outside i64 range".to_owned()))?)
 }
 
 fn get_multicast_group<Interp, Iface>(
@@ -1045,7 +1048,9 @@ where
         "multicast_group",
     )?;
     let (_, int) = unpack::p4_fixed_bit(ctx.arena(), &value)?;
-    Ok(unpack::signed_int(&int)?)
+    Ok(int
+        .to_i64()
+        .ok_or_else(|| ExternError::Failure("integer outside i64 range".to_owned()))?)
 }
 
 fn is_egress_clone<Interp, Iface>(
@@ -1119,7 +1124,9 @@ where
         "clone_session_id",
     )?;
     let (_, int) = unpack::p4_fixed_bit(ctx.arena(), &value)?;
-    Ok(unpack::signed_int(&int)?)
+    Ok(int
+        .to_i64()
+        .ok_or_else(|| ExternError::Failure("integer outside i64 range".to_owned()))?)
 }
 
 // == Pipeline initializer
@@ -1159,7 +1166,8 @@ where
             "egress_port",
         )?;
         let (_, int) = unpack::p4_fixed_bit(ctx.arena(), &value)?;
-        unpack::signed_int(&int)
+        int.to_i64()
+            .ok_or_else(|| ExternError::Failure("integer outside i64 range".to_owned()))
     }?;
     let cos = {
         let value = rel::lvalue_read_dot_global(
@@ -1170,7 +1178,8 @@ where
             "class_of_service",
         )?;
         let (_, int) = unpack::p4_fixed_bit(ctx.arena(), &value)?;
-        unpack::signed_int(&int)
+        int.to_i64()
+            .ok_or_else(|| ExternError::Failure("integer outside i64 range".to_owned()))
     }?;
     state.value_ctx = rel::psa_egress_init_metadata(
         ctx,
@@ -1203,7 +1212,8 @@ where
             "class_of_service",
         )?;
         let (_, int) = unpack::p4_fixed_bit(ctx.arena(), &value)?;
-        unpack::signed_int(&int)
+        int.to_i64()
+            .ok_or_else(|| ExternError::Failure("integer outside i64 range".to_owned()))
     }?;
     state.value_ctx = rel::psa_egress_init_metadata(
         ctx,
@@ -1236,7 +1246,8 @@ where
             "class_of_service",
         )?;
         let (_, int) = unpack::p4_fixed_bit(ctx.arena(), &value)?;
-        unpack::signed_int(&int)
+        int.to_i64()
+            .ok_or_else(|| ExternError::Failure("integer outside i64 range".to_owned()))
     }?;
     state.value_ctx = rel::psa_egress_init_metadata(
         ctx,
@@ -1269,7 +1280,8 @@ where
             "class_of_service",
         )?;
         let (_, int) = unpack::p4_fixed_bit(ctx.arena(), &value)?;
-        unpack::signed_int(&int)
+        int.to_i64()
+            .ok_or_else(|| ExternError::Failure("integer outside i64 range".to_owned()))
     }?;
     state.value_ctx = rel::psa_egress_init_metadata(
         ctx,
@@ -1300,7 +1312,8 @@ where
             "ingress_port",
         )?;
         let (_, int) = unpack::p4_fixed_bit(ctx.arena(), &value)?;
-        unpack::signed_int(&int)
+        int.to_i64()
+            .ok_or_else(|| ExternError::Failure("integer outside i64 range".to_owned()))
     }?;
     state.value_ctx =
         rel::psa_ingress_init_metadata(ctx, state.value_ctx, state.value_arch, port, "RESUBMIT")?;
@@ -1643,7 +1656,8 @@ where
             "egress_port",
         )?;
         let (_, int) = unpack::p4_fixed_bit(ctx.arena(), &value)?;
-        unpack::signed_int(&int)
+        int.to_i64()
+            .ok_or_else(|| ExternError::Failure("integer outside i64 range".to_owned()))
     }?;
     let packet = {
         let pkt_in = find_egress_packet_in(ctx, state.value_arch)?;

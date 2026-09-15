@@ -176,10 +176,10 @@ fn test_packet_json_preserves_fields_and_payload() {
 }
 
 #[test]
-fn test_packet_size_conversion_rejects_negative_and_ocaml_overflow() {
+fn test_packet_size_conversion_uses_usize_range() {
     let (mut runner, value_ctx, value_arch) = packet_runner(0, 0);
     let pkt = PacketIn::init("A").unwrap();
-    for int in [BigInt::from(-1), BigInt::from(1) << 62] {
+    for int in [BigInt::from(-1), BigInt::from(usize::MAX) + 1] {
         let value_size = pack::p4_fixed_bit(runner.arena_mut(), 32.into(), int).unwrap();
         runner
             .context()
@@ -192,4 +192,16 @@ fn test_packet_size_conversion_rejects_negative_and_ocaml_overflow() {
         );
         assert_eq!(pkt.idx, 0);
     }
+    let value_size =
+        pack::p4_fixed_bit(runner.arena_mut(), 64.into(), BigInt::from(1) << 62).unwrap();
+    runner
+        .context()
+        .interp_mut()
+        .values_var
+        .insert("sizeInBits".to_owned(), value_size);
+    let output = pkt
+        .advance(&mut runner.context(), value_ctx, value_arch)
+        .unwrap();
+    assert_eq!(output.0, pkt);
+    assert_eq!(reject(runner.arena(), &output.3), "PacketTooShort");
 }

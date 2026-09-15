@@ -43,6 +43,7 @@ use crate::{
     runner::{ExternError, Interface, Interpreter, RunnerContext},
     stf::ast::Statement,
 };
+use num_traits::ToPrimitive;
 use serde_derive_state::{DeserializeState, SerializeState};
 
 // == Configuration
@@ -787,7 +788,8 @@ where
             "mcast_grp",
         )?;
         let (_, int) = unpack::p4_fixed_bit(ctx.arena(), &value)?;
-        unpack::signed_int(&int)
+        int.to_i64()
+            .ok_or_else(|| ExternError::Failure("integer outside i64 range".to_owned()))
     }?;
     Ok(group)
 }
@@ -953,7 +955,8 @@ where
             "egress_spec",
         )?;
         let (_, int) = unpack::p4_fixed_bit(ctx.arena(), &value)?;
-        unpack::signed_int(&int)
+        int.to_i64()
+            .ok_or_else(|| ExternError::Failure("integer outside i64 range".to_owned()))
     }?;
     let packet = {
         let pkt_in = find_packet_in(ctx, state.value_arch)?;

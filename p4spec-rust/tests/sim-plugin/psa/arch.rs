@@ -51,7 +51,10 @@ fn test_multicast_order_and_handle_wrap_roundtrip() {
     assert!(state.groups[&7].is_empty());
     state.handle_next = (1_i64 << 62) - 1;
     state.node_create(1, &[]);
-    assert_eq!(state.handle_next, -(1_i64 << 62));
+    assert_eq!(state.handle_next, 1_i64 << 62);
+    state.handle_next = i64::MAX;
+    state.node_create(1, &[]);
+    assert_eq!(state.handle_next, i64::MIN);
     let json = serde_json::to_value(&state).unwrap();
     assert_eq!(serde_json::from_value::<State>(json).unwrap(), state);
 }

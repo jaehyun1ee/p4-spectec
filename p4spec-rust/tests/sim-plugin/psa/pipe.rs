@@ -1,3 +1,4 @@
+use num_traits::ToPrimitive;
 use p4spec_rust::{
     sim_plugin::{
         io::{Rx, Tx},
@@ -143,7 +144,9 @@ fn read_int(
         field,
     )
     .unwrap();
-    unpack::signed_int(&unpack::p4_fixed_bit(runner.arena(), &value).unwrap().1).unwrap()
+    (unpack::p4_fixed_bit(runner.arena(), &value).unwrap().1)
+        .to_i64()
+        .unwrap()
 }
 
 fn read_path(runner: &mut Runner, value_ctx: Value, value_arch: Value, metadata: &str) -> String {
@@ -501,7 +504,7 @@ fn counter_count(runner: &mut Runner, state: &SimState) -> i64 {
     else {
         panic!("packet counter")
     };
-    unpack::signed_int(&counts[256]).unwrap()
+    counts[256].to_i64().unwrap()
 }
 
 #[test]
@@ -521,7 +524,7 @@ fn test_native_replication_fixture_order_and_persistent_counter() {
                 state.value_arch = pipe::mc_mgrp_create(
                     &mut runner.context(),
                     state.value_arch,
-                    unpack::parse_signed_int(&id_group).unwrap(),
+                    id_group.parse::<i64>().unwrap(),
                 )
                 .unwrap()
             }
@@ -531,12 +534,12 @@ fn test_native_replication_fixture_order_and_persistent_counter() {
             } => {
                 let ports = ports
                     .iter()
-                    .map(|port| unpack::parse_signed_int(port).unwrap())
+                    .map(|port| port.parse::<i64>().unwrap())
                     .collect::<Vec<_>>();
                 state.value_arch = pipe::mc_node_create(
                     &mut runner.context(),
                     state.value_arch,
-                    unpack::parse_signed_int(&id_replication).unwrap(),
+                    id_replication.parse::<i64>().unwrap(),
                     &ports,
                 )
                 .unwrap();
@@ -548,8 +551,8 @@ fn test_native_replication_fixture_order_and_persistent_counter() {
                 state.value_arch = pipe::mc_node_associate(
                     &mut runner.context(),
                     state.value_arch,
-                    unpack::parse_signed_int(&id_group).unwrap(),
-                    unpack::parse_signed_int(&handle).unwrap(),
+                    id_group.parse::<i64>().unwrap(),
+                    handle.parse::<i64>().unwrap(),
                 )
                 .unwrap()
             }
@@ -560,8 +563,8 @@ fn test_native_replication_fixture_order_and_persistent_counter() {
                 state.value_arch = pipe::add_mirror_session_mc(
                     &mut runner.context(),
                     state.value_arch,
-                    unpack::parse_signed_int(&session).unwrap(),
-                    unpack::parse_signed_int(&id_group).unwrap(),
+                    session.parse::<i64>().unwrap(),
+                    id_group.parse::<i64>().unwrap(),
                 )
                 .unwrap()
             }
@@ -570,7 +573,7 @@ fn test_native_replication_fixture_order_and_persistent_counter() {
                     &mut runner.context(),
                     &mut state,
                     &Rx {
-                        port: unpack::parse_signed_int(&port).unwrap(),
+                        port: port.parse::<i64>().unwrap(),
                         packet,
                     },
                 )
@@ -586,7 +589,7 @@ fn test_native_replication_fixture_order_and_persistent_counter() {
                 port,
                 packet_expected: Some(packet),
                 ..
-            } => txs_expect.push((unpack::parse_signed_int(&port).unwrap(), packet)),
+            } => txs_expect.push((port.parse::<i64>().unwrap(), packet)),
             _ => {
                 panic!("replication fixture contains only supported setup, packet and expectations")
             }

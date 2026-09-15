@@ -10,6 +10,7 @@ use crate::{
     runner::{Extern, ExternError, Interface, Interpreter, RunnerContext},
 };
 use num_bigint::BigInt;
+use num_traits::ToPrimitive;
 use num_traits::{One, Zero};
 use serde::{Deserialize, Serialize};
 
@@ -37,7 +38,10 @@ impl Counter {
         let args = unpack::assoc_args(arena, value_ids, value_args)?;
         let value_size = unpack::find_arg(&args, "n_counters")?;
         let value_type = unpack::find_arg(&args, "type")?;
-        let size = unpack::signed_int(&unpack::p4_fixed_bit(arena, &value_size)?.1)? as usize;
+        let size = (unpack::p4_fixed_bit(arena, &value_size)?.1)
+            .to_i64()
+            .ok_or_else(|| ExternError::Failure("integer outside i64 range".to_owned()))?
+            as usize;
         let (id_enum, id_type) = unpack::p4_enum(arena, &value_type)?;
         match (id_enum.as_str(), id_type.as_str()) {
             ("PSA_CounterType_t", "PACKETS") => Ok(Self::Packets(vec![BigInt::zero(); size])),
@@ -67,7 +71,9 @@ impl Counter {
         Interp: Interpreter<Iface, Exn>,
     {
         let value_idx = func::find_var_e_local(ctx, value_ctx, "index")?;
-        let idx = unpack::signed_int(&unpack::p4_fixed_bit(ctx.arena(), &value_idx)?.1)?;
+        let idx = (unpack::p4_fixed_bit(ctx.arena(), &value_idx)?.1)
+            .to_i64()
+            .ok_or_else(|| ExternError::Failure("integer outside i64 range".to_owned()))?;
         let Self::Packets(counts) = &mut self else {
             return Err(ExternError::Failure(
                 "Only enum value PACKETS of PSA_CounterType_t is supported".to_owned(),

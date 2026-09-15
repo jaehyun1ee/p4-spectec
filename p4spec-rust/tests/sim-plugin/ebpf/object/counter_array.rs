@@ -39,18 +39,18 @@ fn test_counter_init_uses_first_named_argument_and_exact_size() {
 }
 
 #[test]
-fn test_counter_operations_preserve_state_and_wrap_at_source_integer_width() {
+fn test_counter_operations_preserve_state_and_wrap_at_i64_width() {
     let mut runner = Runner::new((), CounterInterp::default(), NullInterface, Dummy);
     let value_ctx = make::text(runner.arena_mut(), "ctx".to_owned(), Span::default()).unwrap();
     let value_arch = make::text(runner.arena_mut(), "arch".to_owned(), Span::default()).unwrap();
     let mut counter = CounterArray {
-        counts: vec![(1_i64 << 62) - 1, (1_i64 << 32) - 1],
+        counts: vec![i64::MAX, (1_i64 << 32) - 1],
     };
     local(&mut runner, "index", 0);
     let result = counter
         .increment(&mut runner.context(), value_ctx, value_arch)
         .unwrap();
-    assert_eq!(result.0.counts, vec![-(1_i64 << 62), (1_i64 << 32) - 1]);
+    assert_eq!(result.0.counts, vec![i64::MIN, (1_i64 << 32) - 1]);
     assert_eq!(result.1, value_ctx);
     assert_eq!(result.2, value_arch);
     let typ = typ::make::opt(typ::make::var(
@@ -86,7 +86,7 @@ fn test_counter_operations_preserve_state_and_wrap_at_source_integer_width() {
         .add(&mut runner.context(), value_ctx, value_arch)
         .unwrap()
         .0;
-    assert_eq!(counter.counts[0], (1_i64 << 62) - 1);
+    assert_eq!(counter.counts[0], i64::MAX);
     local(&mut runner, "index", 1);
     counter = counter
         .increment(&mut runner.context(), value_ctx, value_arch)
@@ -125,17 +125,44 @@ fn test_counter_reentry_failure_and_host_integer_overflow_propagate() {
     );
     assert_eq!(runner.context().interp().calls, ["index", "value"]);
     local(&mut runner, "index", 1_i64 << 62);
-    assert!(
+    assert_eq!(
         counter
             .clone()
             .increment(&mut runner.context(), value_ctx, value_ctx)
-            .is_err()
+            .unwrap()
+            .0
+            .counts,
+        [0]
     );
     local(&mut runner, "index", 0);
     local(&mut runner, "value", 1_i64 << 62);
-    assert!(
+    assert_eq!(
         counter
+            .clone()
             .add(&mut runner.context(), value_ctx, value_ctx)
-            .is_err()
+            .unwrap()
+            .0
+            .counts,
+        [1_i64 << 62]
     );
+    for name in ["index", "value"] {
+        local(&mut runner, "index", 0);
+        let value = pack::p4_fixed_bit(
+            runner.arena_mut(),
+            64.into(),
+            num_bigint::BigInt::from(i64::MAX) + 1,
+        )
+        .unwrap();
+        runner
+            .context()
+            .interp_mut()
+            .values_var
+            .insert(name.to_owned(), value);
+        assert!(
+            counter
+                .clone()
+                .add(&mut runner.context(), value_ctx, value_ctx)
+                .is_err()
+        );
+    }
 }

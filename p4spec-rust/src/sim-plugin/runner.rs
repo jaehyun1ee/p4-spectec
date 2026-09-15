@@ -3,7 +3,6 @@
 use super::{
     arch::Architecture,
     io::{self, Expectation, Rx, Tx},
-    spec_impl::unpack,
     state::SimState,
     table,
 };
@@ -18,7 +17,7 @@ use crate::{
         },
         traits::print::Print,
     },
-    runner::{Interface, Interpreter, Runner},
+    runner::{ExternError, Interface, Interpreter, Runner},
     stf::{
         self,
         ast::{Action, MatchKind, Statement, TableMatch},
@@ -215,7 +214,7 @@ where
         failure: Box::new(failure),
         span: Span::default(),
     };
-    let int = |text: &str| unpack::parse_signed_int(text).map_err(InterpError::from);
+    let int = |text: &str| parse_int(text).map_err(InterpError::from);
     let mut ctx = runner.context();
     let state = &mut run.state;
     match stmt {
@@ -375,13 +374,26 @@ fn typ_named(name: &str) -> typ::Typ {
     )
 }
 
+fn parse_int(text: &str) -> Result<i64, ExternError> {
+    let (radix, digits) =
+        if let Some(digits) = text.strip_prefix("0x").or_else(|| text.strip_prefix("0X")) {
+            (16, digits)
+        } else if let Some(digits) = text.strip_prefix("0b").or_else(|| text.strip_prefix("0B")) {
+            (2, digits)
+        } else {
+            (10, text)
+        };
+    i64::from_str_radix(digits, radix)
+        .map_err(|_| ExternError::Failure(format!("invalid integer: {text}")))
+}
+
 fn encode_action(arena: &mut ValueArena, action: &Action) -> Result<Value, InterpError> {
     let value_name = make::text(arena, action.name.as_str().to_owned(), Span::default())?;
     let typ_arg = typ_named("tableActionArgumentInterface");
     let mut values_arg = Vec::new();
     for arg in &action.args {
         let value_name = make::text(arena, arg.id.clone(), Span::default())?;
-        let int = unpack::parse_signed_int(&arg.num)?;
+        let int = parse_int(&arg.num)?;
         let value_int = make::int(arena, int.into(), Span::default())?;
         values_arg.push(make::tuple(
             arena,
@@ -429,7 +441,7 @@ fn encode_keys(arena: &mut ValueArena, matches: &[TableMatch]) -> Result<Value, 
             }
             MatchKind::Slash(prefix, mask) => {
                 let value_prefix = make::text(arena, prefix.clone(), Span::default())?;
-                let mask = unpack::parse_signed_int(mask)?;
+                let mask = parse_int(mask)?;
                 let nat = crate::lang::xl::num::Natural::try_from(num_bigint::BigInt::from(mask))?;
                 let value_mask = make::nat(arena, nat, Span::default())?;
                 make::case_shaped! {

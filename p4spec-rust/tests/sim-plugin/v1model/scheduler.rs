@@ -1,3 +1,4 @@
+use num_traits::ToPrimitive;
 use p4spec_rust::{
     lang::{
         common::{notation::atom::Atom, source::Span},
@@ -107,12 +108,11 @@ fn option(arena: &mut ValueArena, value: Value) -> Value {
 }
 
 fn int(arena: &ValueArena, value_ctx: Value, name: &str) -> i64 {
-    unpack::signed_int(
-        &unpack::p4_fixed_bit(arena, &field(arena, value_ctx, name))
-            .unwrap()
-            .1,
-    )
-    .unwrap()
+    (unpack::p4_fixed_bit(arena, &field(arena, value_ctx, name))
+        .unwrap()
+        .1)
+        .to_i64()
+        .unwrap()
 }
 
 fn write_int(arena: &mut ValueArena, value_ctx: Value, name: &str, width: i64, int: i64) -> Value {

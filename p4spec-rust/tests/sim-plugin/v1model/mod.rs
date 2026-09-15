@@ -71,3 +71,18 @@ fn test_hash_adjust_range_boundaries() {
         6.into()
     );
 }
+
+#[test]
+fn test_multicast_handles_use_i64_range() {
+    use p4spec_rust::sim_plugin::v1model::multicast::State;
+
+    let mut state = State {
+        handle_next: (1_i64 << 62) - 1,
+        ..State::default()
+    };
+    state.node_create(1, &[]);
+    assert_eq!(state.handle_next, 1_i64 << 62);
+    state.handle_next = i64::MAX;
+    state.node_create(1, &[]);
+    assert_eq!(state.handle_next, i64::MIN);
+}
