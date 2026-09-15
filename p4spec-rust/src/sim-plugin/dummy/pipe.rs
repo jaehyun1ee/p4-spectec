@@ -1,0 +1,100 @@
+//! Dummy externs initialize empty states and support compile-time assertions
+//! Runtime extern function and method calls remain unsupported
+
+use crate::{
+    lang::{
+        common::source::Span,
+        data::{
+            typ,
+            value::{Value, external::encode, make},
+        },
+    },
+    runner::{ExternError, Interface, Interpreter, RunnerContext},
+};
+
+// == Configuration
+
+pub struct Dummy;
+
+// == Architectural state
+
+pub(super) fn init_arch_state<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Dummy>,
+) -> Result<Value, Interp::Error>
+where
+    Iface: Interface,
+    Interp: Interpreter<Iface, Dummy>,
+{
+    let payload =
+        encode(ctx.arena(), &()).map_err(|error| ExternError::Failure(error.to_string()))?;
+    let typ = typ::make::var(
+        crate::phrase!(node: "archState".to_owned(), span: Span::default()),
+        Vec::new(),
+    );
+    Ok(make::external(
+        ctx.arena_mut(),
+        typ.node.into(),
+        payload.into(),
+        Span::default(),
+    )
+    .map_err(ExternError::from)?)
+}
+
+// == Extern calls
+
+// - Initialization
+
+pub(super) fn eval_extern_init<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Dummy>,
+    _values: &[Value],
+) -> Result<Value, Interp::Error>
+where
+    Iface: Interface,
+    Interp: Interpreter<Iface, Dummy>,
+{
+    let payload =
+        encode(ctx.arena(), &()).map_err(|error| ExternError::Failure(error.to_string()))?;
+    let typ = typ::make::var(
+        crate::phrase!(node: "objectState".to_owned(), span: Span::default()),
+        Vec::new(),
+    );
+    Ok(make::external(
+        ctx.arena_mut(),
+        typ.node.into(),
+        payload.into(),
+        Span::default(),
+    )
+    .map_err(ExternError::from)?)
+}
+
+// - Function calls
+
+pub(super) fn eval_extern_func_call<Interp, Iface>(
+    _ctx: &mut RunnerContext<'_, Interp, Iface, Dummy>,
+    _values: &[Value],
+) -> Result<Vec<Value>, Interp::Error>
+where
+    Iface: Interface,
+    Interp: Interpreter<Iface, Dummy>,
+{
+    Err(
+        ExternError::Failure("unimplemented extern relation: ExternFunctionCall_eval".to_owned())
+            .into(),
+    )
+}
+
+// - Method calls
+
+pub(super) fn eval_extern_method_call<Interp, Iface>(
+    _ctx: &mut RunnerContext<'_, Interp, Iface, Dummy>,
+    _values: &[Value],
+) -> Result<Vec<Value>, Interp::Error>
+where
+    Iface: Interface,
+    Interp: Interpreter<Iface, Dummy>,
+{
+    Err(
+        ExternError::Failure("unimplemented extern relation: ExternMethodCall_eval".to_owned())
+            .into(),
+    )
+}

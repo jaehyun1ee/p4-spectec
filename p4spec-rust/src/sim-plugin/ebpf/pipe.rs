@@ -16,7 +16,13 @@ use crate::lang::data::value::external::{
     DecodeContext, EncodeContext, Encoding, decode_with, encode_with,
 };
 use crate::{
-    lang::data::value::{Value, ValueArena, get},
+    lang::{
+        common::source::Span,
+        data::{
+            typ,
+            value::{Value, ValueArena, get, make},
+        },
+    },
     runner::{ExternError, Interface, Interpreter, RunnerContext},
     stf::ast::{Name, Statement},
 };
@@ -25,7 +31,6 @@ use serde_derive_state::{DeserializeState, SerializeState};
 use super::{
     super::{
         core::{func as core_func, object::PacketIn},
-        externs as external,
         io::{Rx, Tx},
         spec::{func, pgm, rel, unpack},
         state::SimState,
@@ -66,7 +71,16 @@ impl ExternObject {
     ) -> Result<Value, ExternError> {
         let payload = encode_with(arena, encoding, self)
             .map_err(|error| ExternError::Failure(error.to_string()))?;
-        external::state_value(arena, "objectState", payload.into())
+        let typ = typ::make::var(
+            crate::phrase!(node: "objectState".to_owned(), span: Span::default()),
+            Vec::new(),
+        );
+        Ok(make::external(
+            arena,
+            typ.node.into(),
+            payload.into(),
+            Span::default(),
+        )?)
     }
 
     // - Decoding
@@ -117,11 +131,17 @@ where
     let encoding = ctx.external().encoding;
     let payload = encode_with(ctx.arena(), encoding, &())
         .map_err(|error| ExternError::Failure(error.to_string()))?;
-    Ok(external::state_value(
+    let typ = typ::make::var(
+        crate::phrase!(node: "archState".to_owned(), span: Span::default()),
+        Vec::new(),
+    );
+    Ok(make::external(
         ctx.arena_mut(),
-        "archState",
+        typ.node.into(),
         payload.into(),
-    )?)
+        Span::default(),
+    )
+    .map_err(ExternError::from)?)
 }
 
 // == Extern calls
@@ -146,7 +166,17 @@ where
     } else {
         let payload = encode_with(ctx.arena(), encoding, &())
             .map_err(|error| ExternError::Failure(error.to_string()))?;
-        external::state_value(ctx.arena_mut(), "objectState", payload.into())?
+        let typ = typ::make::var(
+            crate::phrase!(node: "objectState".to_owned(), span: Span::default()),
+            Vec::new(),
+        );
+        make::external(
+            ctx.arena_mut(),
+            typ.node.into(),
+            payload.into(),
+            Span::default(),
+        )
+        .map_err(ExternError::from)?
     })
 }
 
@@ -165,7 +195,12 @@ where
     let name = get::text(ctx.arena(), value_name)
         .map_err(ExternError::from)?
         .to_owned();
-    let names = external::param_names(ctx.arena(), *value_names)?;
+    let names = get::list(ctx.arena(), value_names)
+        .map_err(ExternError::from)?
+        .iter()
+        .map(|value| get::text(ctx.arena(), value).map(str::to_owned))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(ExternError::from)?;
     let (value_ctx, value_arch, value_call_result) =
         if name == "verify" && names == ["check", "toSignal"] {
             core_func::verify(ctx, *value_ctx, *value_arch)?
@@ -187,7 +222,12 @@ fn unsupported_method(
     name: &str,
     names: &[String],
 ) -> Result<ExternError, ExternError> {
-    let ids = external::param_names(arena, value_id)?;
+    let ids = get::list(arena, &value_id)
+        .map_err(ExternError::from)?
+        .iter()
+        .map(|value| get::text(arena, value).map(str::to_owned))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(ExternError::from)?;
     Ok(ExternError::Failure(format!(
         "unsupported extern method call: {}.{name}({})",
         ids.join("."),
@@ -215,7 +255,12 @@ where
     let name = get::text(ctx.arena(), value_name)
         .map_err(ExternError::from)?
         .to_owned();
-    let names = external::param_names(ctx.arena(), *value_names)?;
+    let names = get::list(ctx.arena(), value_names)
+        .map_err(ExternError::from)?
+        .iter()
+        .map(|value| get::text(ctx.arena(), value).map(str::to_owned))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(ExternError::from)?;
     let (object, value_ctx, value_arch, value_call_result) = match object {
         ExternObject::PacketIn(pkt) => {
             let (object, value_ctx, value_arch, value_call_result) = match (

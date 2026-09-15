@@ -1,4 +1,3 @@
-use super::super::externs;
 use super::{
     mirror, multicast,
     packet::{Action, Packet},
@@ -7,7 +6,13 @@ use crate::lang::data::value::external::{
     DecodeContext, EncodeContext, Encoding, decode_with, encode_with,
 };
 use crate::{
-    lang::data::value::{Value, ValueArena, get},
+    lang::{
+        common::source::Span,
+        data::{
+            typ,
+            value::{Value, ValueArena, get, make},
+        },
+    },
     runner::ExternError,
 };
 use serde_derive_state::{DeserializeState, SerializeState};
@@ -43,7 +48,16 @@ impl Arch {
     ) -> Result<Value, ExternError> {
         let payload = encode_with(arena, encoding, self)
             .map_err(|error| ExternError::Failure(error.to_string()))?;
-        externs::state_value(arena, "archState", payload.into())
+        let typ = typ::make::var(
+            crate::phrase!(node: "archState".to_owned(), span: Span::default()),
+            Vec::new(),
+        );
+        Ok(make::external(
+            arena,
+            typ.node.into(),
+            payload.into(),
+            Span::default(),
+        )?)
     }
 
     pub fn from_value(

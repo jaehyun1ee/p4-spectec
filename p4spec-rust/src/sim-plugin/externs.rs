@@ -1,17 +1,8 @@
 use super::core;
-use crate::util::json::json;
 use crate::{
-    lang::{
-        common::source::Span,
-        data::{
-            typ,
-            value::{Value, ValueArena, get, make},
-        },
-        il::ast::Typ,
-    },
+    lang::{data::value::Value, il::ast::Typ},
     runner::{Extern, ExternError, Interface, Interpreter, RunnerContext},
 };
-use std::rc::Rc;
 
 // == Architecture extern operations
 
@@ -114,41 +105,6 @@ impl<Exn: Impl> Extern for Exn {
     }
 
     fn clear(&mut self) {}
-}
-
-// == Native values
-
-pub(crate) fn state_value(
-    arena: &mut ValueArena,
-    name: &str,
-    payload: Rc<json>,
-) -> Result<Value, ExternError> {
-    let typ = typ::make::var(
-        crate::phrase!(node: name.to_owned(), span: Span::default()),
-        vec![],
-    );
-    Ok(make::external(
-        arena,
-        typ.node.into(),
-        payload,
-        Span::default(),
-    )?)
-}
-
-// == Extern call arguments
-
-pub(crate) fn param_names(
-    arena: &ValueArena,
-    value_names: Value,
-) -> Result<Vec<String>, ExternError> {
-    get::list(arena, &value_names)?
-        .iter()
-        .map(|value_name| {
-            get::text(arena, value_name)
-                .map(str::to_owned)
-                .map_err(ExternError::from)
-        })
-        .collect()
 }
 
 // == Compile-time extern calls

@@ -72,6 +72,14 @@ fn test_unsupported_extern_fails() {
         "unimplemented extern relation: Unsupported"
     ));
 
+    for name in ["ExternFunctionCall_eval", "ExternMethodCall_eval"] {
+        let error = runner.context().call_extern_rel(name, &[]).unwrap_err();
+        assert!(has_extern_failure(
+            &error,
+            &format!("unimplemented extern relation: {name}")
+        ));
+    }
+
     let value_ctx = make::bool(runner.arena_mut(), true, Span::default()).unwrap();
     let value_name = make::text(
         runner.arena_mut(),
