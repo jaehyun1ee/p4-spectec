@@ -1,22 +1,23 @@
 //! Value operations shared by AL expression and path evaluation
 
+use super::context::ValueContext;
+
 use num_bigint::BigInt;
 
 use std::rc::Rc;
 
 use crate::{
     lang::{
-        al::ast,
         common::source::{Phrase, Span},
         data::value::{Value, ValueArena, ValueKind, get, make},
+        il::ast,
         xl::num,
     },
     runtime::ops::typ::{Theta, subst_typ},
 };
 
-use super::super::{
+use crate::interp::al::{
     backtrack::{Backtrack, backtrack, backtrack_from_result},
-    context::Context,
     error::{ErrorKind, ExprErrorKind},
 };
 
@@ -24,9 +25,9 @@ use super::super::{
 
 // - Upcast
 
-pub(super) fn cast_up(
+pub(crate) fn cast_up(
     arena: &mut ValueArena,
-    ctx: &Context<'_>,
+    ctx: &impl ValueContext,
     typ: &ast::Typ,
     value: Value,
 ) -> Backtrack<Value> {
@@ -102,9 +103,9 @@ pub(super) fn cast_up(
 
 // - Downcast
 
-pub(super) fn cast_down(
+pub(crate) fn cast_down(
     arena: &mut ValueArena,
-    ctx: &Context<'_>,
+    ctx: &impl ValueContext,
     typ: &ast::Typ,
     value: Value,
 ) -> Backtrack<Value> {
@@ -180,7 +181,7 @@ pub(super) fn cast_down(
 
 // - Field access
 
-pub(super) fn access_dot(
+pub(crate) fn access_dot(
     arena: &ValueArena,
     value: &Value,
     atom: &ast::Atom,
@@ -205,7 +206,7 @@ fn get_int(arena: &ValueArena, value: &Value, span: &Span) -> Backtrack<BigInt> 
 
 // - Index access
 
-pub(super) fn access_index(
+pub(crate) fn access_index(
     arena: &mut ValueArena,
     value_base: &Value,
     value_idx: &Value,
@@ -246,8 +247,11 @@ pub(super) fn access_index(
 
 // - Slice access
 
-#[expect(clippy::too_many_arguments, reason = "operand and bounds spans remain explicit")]
-pub(super) fn access_slice(
+#[expect(
+    clippy::too_many_arguments,
+    reason = "operand and bounds spans remain explicit"
+)]
+pub(crate) fn access_slice(
     arena: &mut ValueArena,
     value_base: &Value,
     value_idx: &Value,
@@ -307,7 +311,7 @@ pub(super) fn access_slice(
 
 // - Index update
 
-pub(super) fn update_index(
+pub(crate) fn update_index(
     arena: &mut ValueArena,
     value_base: &Value,
     value_idx: &Value,
@@ -403,7 +407,7 @@ pub(super) fn update_index(
 // - Slice update
 
 #[expect(clippy::too_many_arguments, reason = "operand spans remain explicit")]
-pub(super) fn update_slice(
+pub(crate) fn update_slice(
     arena: &mut ValueArena,
     value_base: &Value,
     value_idx: &Value,

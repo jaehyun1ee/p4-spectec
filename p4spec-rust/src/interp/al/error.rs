@@ -177,6 +177,10 @@ pub enum GuardErrorKind {
 
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum CallErrorKind {
+    #[error("nondeterministic instruction evaluation")]
+    InstructionNondeterminism,
+    #[error("{message}")]
+    InvalidFlow { message: &'static str },
     #[error("arity mismatch in rule")]
     RuleArityMismatch { expected: usize, actual: usize },
     #[error("arity mismatch while matching table row")]
@@ -201,6 +205,10 @@ pub enum CallErrorKind {
 
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum TraceErrorKind {
+    #[error("{exp} failed")]
+    Expression { exp: String },
+    #[error("{instr} failed")]
+    Instruction { instr: String },
     #[error("execution failed")]
     Execution,
     #[error("invocation of relation {rel} failed")]
@@ -242,12 +250,18 @@ impl Error {
         self
     }
 
-    pub(super) fn undefined(kind: EntityKind, name: String, span: Span) -> Self {
-        Self::new(ErrorKind::Context(ContextErrorKind::Undefined { kind, name }), span)
+    pub(crate) fn undefined(kind: EntityKind, name: String, span: Span) -> Self {
+        Self::new(
+            ErrorKind::Context(ContextErrorKind::Undefined { kind, name }),
+            span,
+        )
     }
 
-    pub(super) fn duplicate(kind: EntityKind, name: String, span: Span) -> Self {
-        Self::new(ErrorKind::Context(ContextErrorKind::Duplicate { kind, name }), span)
+    pub(crate) fn duplicate(kind: EntityKind, name: String, span: Span) -> Self {
+        Self::new(
+            ErrorKind::Context(ContextErrorKind::Duplicate { kind, name }),
+            span,
+        )
     }
 }
 

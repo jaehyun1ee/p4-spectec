@@ -67,7 +67,7 @@ macro_rules! backtrack {
         }
     };
 }
-pub(super) use backtrack;
+pub(crate) use backtrack;
 
 macro_rules! backtrack_from_result {
     ($result:expr, $span:expr $(,)?) => {
@@ -76,7 +76,7 @@ macro_rules! backtrack_from_result {
         )
     };
 }
-pub(super) use backtrack_from_result;
+pub(crate) use backtrack_from_result;
 
 // Guard checks escape directly instead of acquiring backtracking traces
 fn is_guard(errors: &[Error]) -> bool {
@@ -84,7 +84,7 @@ fn is_guard(errors: &[Error]) -> bool {
 }
 
 impl<T> Backtrack<T> {
-    pub(in crate::interp::al) fn guard(self) -> Self {
+    pub(crate) fn guard(self) -> Self {
         match self {
             Self::Err(errors) => Self::Err(
                 errors

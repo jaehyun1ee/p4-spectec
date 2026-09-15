@@ -1,35 +1,34 @@
-//! AL argument evaluation
+//! Shared argument evaluation
+
+use super::context::{EvalContext, ValueContext};
 
 use crate::{
     lang::{
-        al::ast,
         common::source::Span,
         data::value::{Value, ValueArena, make},
+        il::ast,
     },
     runner::{Extern, Interface, RunnerContext},
 };
 
-use super::super::{
-    AlInterp,
-    backtrack::{Backtrack, backtrack, backtrack_from_result},
-    context::Context,
-};
 use super::expr::eval_exp;
+use crate::interp::al::backtrack::{Backtrack, backtrack, backtrack_from_result};
 
-fn eval_arg<Iface: Interface, Exn: Extern>(
-    runner: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
-    ctx: &Context<'_>,
+fn eval_arg<Ctx: EvalContext<Iface, Exn>, Iface: Interface, Exn: Extern>(
+    runner: &mut RunnerContext<'_, Ctx::Interp, Iface, Exn>,
+    ctx: &Ctx,
     arg: &ast::Arg,
 ) -> Backtrack<Value> {
-    match &arg.node {
+    let result = match &arg.node {
         ast::ArgKind::Exp(exp) => eval_exp(runner, ctx, exp),
         ast::ArgKind::Def(id) => eval_def_arg(runner.arena_mut(), ctx, id, &arg.span),
-    }
+    };
+    ctx.trace_arg(arg, result)
 }
 
-pub(super) fn eval_args<Iface: Interface, Exn: Extern>(
-    runner: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
-    ctx: &Context<'_>,
+pub(crate) fn eval_args<Ctx: EvalContext<Iface, Exn>, Iface: Interface, Exn: Extern>(
+    runner: &mut RunnerContext<'_, Ctx::Interp, Iface, Exn>,
+    ctx: &Ctx,
     args: &[ast::Arg],
 ) -> Backtrack<Vec<Value>> {
     let mut values = Vec::with_capacity(args.len());
@@ -41,9 +40,9 @@ pub(super) fn eval_args<Iface: Interface, Exn: Extern>(
 
 // - Function argument
 
-fn eval_def_arg(
+fn eval_def_arg<Ctx: ValueContext>(
     arena: &mut ValueArena,
-    ctx: &Context<'_>,
+    ctx: &Ctx,
     id: &ast::Id,
     span: &Span,
 ) -> Backtrack<Value> {

@@ -10,25 +10,25 @@ use crate::interp::al::error::ContextErrorKind;
 
 use crate::{
     lang::{
-        al::ast,
         common::{Variable, source::Span},
         data::{
             typ,
             value::{Value, ValueArena, get, make},
         },
+        sl::ast,
     },
     runner::{Extern, Interface, RunnerContext},
     runtime::{
         envs::{
             interp::VEnv,
-            interp_al::{FEnv, REnv, TDEnv},
+            interp_sl::{FEnv, REnv, TDEnv},
         },
         typdef::TypeDef,
     },
 };
 
-use super::{
-    AlInterp,
+use super::SlInterp;
+use crate::interp::al::{
     backtrack::{Backtrack, backtrack, backtrack_from_result},
     error::{EntityKind, Error, ErrorKind},
 };
@@ -48,14 +48,23 @@ pub struct Global {
 
 impl Global {
     pub fn load(spec: ast::Spec) -> Result<Self, Error> {
-        let mut loaded = Self { tdenv: TDEnv::new(), renv: REnv::new(), fenv: FEnv::new() };
+        let mut loaded = Self {
+            tdenv: TDEnv::new(),
+            renv: REnv::new(),
+            fenv: FEnv::new(),
+        };
         for def in spec {
             match def.node {
                 ast::DefKind::Typ(typdef) => {
                     let (id, typdef) = match typdef {
                         ast::TypDef::Extern(typdef) => (typdef.id, TypeDef::Extern),
                         ast::TypDef::Defined(typdef) => {
-                            let ast::DefinedTyp { id, tparams, def_typ, .. } = *typdef;
+                            let ast::DefinedTyp {
+                                id,
+                                tparams,
+                                def_typ,
+                                ..
+                            } = *typdef;
                             (id, TypeDef::Defined(tparams, Box::new(def_typ)))
                         }
                     };
@@ -118,7 +127,10 @@ impl<'global> Context<'global> {
     // == Constructors
 
     pub fn new(global: &'global Global) -> Self {
-        Self { global, local: Local::default() }
+        Self {
+            global,
+            local: Local::default(),
+        }
     }
 
     pub fn localize(&self) -> Self {
@@ -166,7 +178,11 @@ impl<'global> Context<'global> {
     ) -> Result<(&'a [ast::TParam], &'a ast::DefTyp), Error> {
         match self.find_typdef(id)? {
             TypeDef::Defined(tparams, def_typ) => Ok((tparams, def_typ)),
-            _ => Err(Error::undefined(EntityKind::DefinedType, id.node.clone(), id.span.clone())),
+            _ => Err(Error::undefined(
+                EntityKind::DefinedType,
+                id.node.clone(),
+                id.span.clone(),
+            )),
         }
     }
 
@@ -200,10 +216,12 @@ impl<'global> Context<'global> {
 
         fn param_typ(param: &ast::Param) -> ast::Typ {
             match &param.node {
-                ast::ParamKind::Exp(typ) => typ.clone(),
-                ast::ParamKind::Def(_, tparams, params, typ) => {
-                    make::func(tparams.clone(), params.iter().map(param_typ).collect(), typ.clone())
-                }
+                ast::ParamKind::Exp(typ, _) => typ.clone(),
+                ast::ParamKind::Def(_, tparams, params, typ) => make::func(
+                    tparams.clone(),
+                    params.iter().map(param_typ).collect(),
+                    typ.clone(),
+                ),
             }
         }
         let (_, func) = self.find_func(id)?;
@@ -225,6 +243,14 @@ impl<'global> Context<'global> {
 
     pub fn add_value(&mut self, var: Variable, value: Value) {
         self.local.venv.insert(var, value);
+    }
+
+    pub(crate) fn bind_tparam(&mut self, id: ast::Id, typdef: TypeDef) -> Result<(), Error> {
+        if self.local.tdenv.contains_key(&id) {
+            return Err(Error::duplicate(EntityKind::Type, id.node, id.span));
+        }
+        self.local.tdenv.insert(id, typdef);
+        Ok(())
     }
 
     pub fn add_typdef(&mut self, id: ast::Id, typdef: TypeDef) -> Result<(), Error> {
@@ -249,10 +275,10 @@ impl<'global> Context<'global> {
 
     pub fn map_list<Iface: Interface, Exn: Extern>(
         &self,
-        runner: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
+        runner: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
         span: &Span,
         vars: &[ast::Var],
-        mut eval: impl FnMut(&mut RunnerContext<'_, AlInterp, Iface, Exn>, &Self) -> Backtrack<Value>,
+        mut eval: impl FnMut(&mut RunnerContext<'_, SlInterp, Iface, Exn>, &Self) -> Backtrack<Value>,
     ) -> Backtrack<Vec<Value>> {
         let rows = backtrack_from_result!(self.list_values(runner.arena(), vars), span);
         // Copy handles before the callback can allocate in the arena
@@ -275,10 +301,10 @@ impl<'global> Context<'global> {
 
     pub fn map_opt<Iface: Interface, Exn: Extern>(
         &self,
-        runner: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
+        runner: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
         span: &Span,
         vars: &[ast::Var],
-        mut eval: impl FnMut(&mut RunnerContext<'_, AlInterp, Iface, Exn>, &Self) -> Backtrack<Value>,
+        mut eval: impl FnMut(&mut RunnerContext<'_, SlInterp, Iface, Exn>, &Self) -> Backtrack<Value>,
     ) -> Backtrack<Option<Value>> {
         let values = backtrack_from_result!(self.opt_values(runner.arena(), vars), span);
         let Some(values) = values else {
@@ -295,11 +321,11 @@ impl<'global> Context<'global> {
 
     pub fn yield_list<Iface: Interface, Exn: Extern>(
         mut self,
-        runner: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
+        runner: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
         span: &Span,
         vars_bound: &[ast::Var],
         vars_bind: &[ast::Var],
-        mut eval: impl FnMut(&mut RunnerContext<'_, AlInterp, Iface, Exn>, Self) -> Backtrack<Self>,
+        mut eval: impl FnMut(&mut RunnerContext<'_, SlInterp, Iface, Exn>, Self) -> Backtrack<Self>,
     ) -> Backtrack<Self> {
         let rows = backtrack_from_result!(self.list_values(runner.arena(), vars_bound), span);
         let rows: Vec<_> = rows.into_iter().map(<[Value]>::to_vec).collect();
@@ -324,11 +350,11 @@ impl<'global> Context<'global> {
 
     pub fn yield_opt<Iface: Interface, Exn: Extern>(
         mut self,
-        runner: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
+        runner: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
         span: &Span,
         vars_bound: &[ast::Var],
         vars_bind: &[ast::Var],
-        mut eval: impl FnMut(&mut RunnerContext<'_, AlInterp, Iface, Exn>, Self) -> Backtrack<Self>,
+        mut eval: impl FnMut(&mut RunnerContext<'_, SlInterp, Iface, Exn>, Self) -> Backtrack<Self>,
     ) -> Backtrack<Self> {
         let values = backtrack_from_result!(self.opt_values(runner.arena(), vars_bound), span);
         let mut values_bind = vec![Vec::new(); vars_bind.len()];
@@ -346,7 +372,7 @@ impl<'global> Context<'global> {
 
     // - Iteration inputs
 
-    fn opt_values(
+    pub(crate) fn opt_values(
         &self,
         arena: &ValueArena,
         vars: &[ast::Var],
@@ -372,7 +398,7 @@ impl<'global> Context<'global> {
         }
     }
 
-    fn list_values<'a>(
+    pub(crate) fn list_values<'a>(
         &self,
         arena: &'a ValueArena,
         vars: &[ast::Var],
@@ -409,7 +435,10 @@ impl<'global> Context<'global> {
     fn collect_bindings(&self, vars: &[ast::Var], values_bind: &mut [Vec<Value>]) -> Backtrack<()> {
         for (var, values) in vars.iter().zip(values_bind) {
             let var_bound = Variable::new(var.id.clone(), var.iters.clone());
-            values.push(*backtrack_from_result!(self.find_value(&var_bound), &var.id.span));
+            values.push(*backtrack_from_result!(
+                self.find_value(&var_bound),
+                &var.id.span
+            ));
         }
         Backtrack::Ok(())
     }
@@ -426,9 +455,12 @@ impl<'global> Context<'global> {
             iters.push(iter);
             let typ = typ::make::iterate(var.typ.clone(), &iters);
             let value = match iter {
-                ast::Iter::Opt => {
-                    make::opt(arena, typ.node.into(), values.into_iter().next(), Span::default())
-                }
+                ast::Iter::Opt => make::opt(
+                    arena,
+                    typ.node.into(),
+                    values.into_iter().next(),
+                    Span::default(),
+                ),
                 ast::Iter::List => make::list(arena, typ.node.into(), values, Span::default()),
             };
             let value = backtrack_from_result!(value, &Span::default());
@@ -499,31 +531,45 @@ impl crate::interp::shared::context::AssignContext for Context<'_> {
 impl<Iface: Interface, Exn: Extern> crate::interp::shared::context::EvalContext<Iface, Exn>
     for Context<'_>
 {
-    type Interp = AlInterp;
+    type Interp = SlInterp;
+    fn trace_exp(&self, exp: &ast::Exp, result: Backtrack<Value>) -> Backtrack<Value> {
+        result.nest(exp.span.clone(), || {
+            ErrorKind::Trace(crate::interp::al::error::TraceErrorKind::Expression {
+                exp: crate::lang::traits::print::Print::to_string(exp),
+            })
+        })
+    }
+    fn trace_arg(&self, arg: &ast::Arg, result: Backtrack<Value>) -> Backtrack<Value> {
+        result.nest(arg.span.clone(), || {
+            ErrorKind::Trace(crate::interp::al::error::TraceErrorKind::Expression {
+                exp: crate::lang::traits::print::Print::to_string(arg),
+            })
+        })
+    }
     fn invoke_func(
         &self,
-        runner: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
+        runner: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
         id: &ast::Id,
         targs: &[ast::Typ],
         values: &[Value],
     ) -> Backtrack<Value> {
-        crate::interp::al::eval::call::invoke_func(runner, self, id, targs, values)
+        crate::interp::sl::interpreter::invoke_func(runner, self, id, targs, values)
     }
     fn map_list(
         &self,
-        runner: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
+        runner: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
         span: &Span,
         vars: &[ast::Var],
-        eval: impl FnMut(&mut RunnerContext<'_, AlInterp, Iface, Exn>, &Self) -> Backtrack<Value>,
+        eval: impl FnMut(&mut RunnerContext<'_, SlInterp, Iface, Exn>, &Self) -> Backtrack<Value>,
     ) -> Backtrack<Vec<Value>> {
         self.map_list(runner, span, vars, eval)
     }
     fn map_opt(
         &self,
-        runner: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
+        runner: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
         span: &Span,
         vars: &[ast::Var],
-        eval: impl FnMut(&mut RunnerContext<'_, AlInterp, Iface, Exn>, &Self) -> Backtrack<Value>,
+        eval: impl FnMut(&mut RunnerContext<'_, SlInterp, Iface, Exn>, &Self) -> Backtrack<Value>,
     ) -> Backtrack<Option<Value>> {
         self.map_opt(runner, span, vars, eval)
     }
