@@ -27,7 +27,7 @@ use super::{
         core::{func as core_func, object::PacketIn},
         externs as external,
         io::{Rx, Tx},
-        spec_impl::{func, pgm, rel, unpack},
+        spec::{func, pgm, rel, unpack},
         state::SimState,
     },
     object::CounterArray,

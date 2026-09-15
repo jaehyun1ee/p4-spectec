@@ -1,6 +1,6 @@
 use crate::sim_plugin::{
     hash,
-    spec_impl::{args, func, pack, unpack},
+    spec::{args, func, pack, unpack},
 };
 use crate::{
     lang::{

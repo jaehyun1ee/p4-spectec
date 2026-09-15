@@ -13,7 +13,7 @@ use crate::{
     runner::ExternError,
 };
 
-use super::super::{core::object::PacketIn, spec_impl::unpack};
+use super::super::{core::object::PacketIn, spec::unpack};
 
 // == Packet clones
 

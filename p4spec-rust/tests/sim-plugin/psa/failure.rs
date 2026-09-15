@@ -22,7 +22,7 @@ use p4spec_rust::{
             packet::{Entrypoint, Packet},
             pipe::{self, ObjectState, Psa},
         },
-        spec_impl::pack,
+        spec::pack,
         state::SimState,
     },
 };

@@ -9,7 +9,7 @@ use crate::{
     runner::{Extern, ExternError, Interface, Interpreter, RunnerContext},
 };
 
-use super::super::spec_impl::{func, unpack};
+use super::super::spec::{func, unpack};
 
 /// Evaluates a boolean expression at compilation time and stops compilation
 /// with the supplied message when the expression is false

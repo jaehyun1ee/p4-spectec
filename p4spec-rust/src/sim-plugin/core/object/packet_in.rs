@@ -14,7 +14,7 @@ use crate::{
     runner::{Extern, ExternError, Interface, Interpreter, RunnerContext},
 };
 
-use crate::sim_plugin::spec_impl::{func, pack, rel, unpack};
+use crate::sim_plugin::spec::{func, pack, rel, unpack};
 
 use super::bits::{bits_to_int_unsigned, string_to_bits};
 

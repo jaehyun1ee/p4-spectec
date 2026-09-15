@@ -5,7 +5,7 @@ use super::{V1Model, packet::CloneInfo, pipe};
 use crate::sim_plugin::{
     core::object::PacketIn,
     hash as checksum,
-    spec_impl::{func, pack, rel, unpack},
+    spec::{func, pack, rel, unpack},
 };
 use crate::{
     lang::{

@@ -13,7 +13,7 @@ use p4spec_rust::{
     sim_plugin::{
         core::object::{PacketIn, PacketOut},
         io::{Rx, Tx},
-        spec_impl::{pack, unpack},
+        spec::{pack, unpack},
         state::SimState,
         v1model::{
             arch::Arch,

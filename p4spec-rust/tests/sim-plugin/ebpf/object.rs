@@ -15,7 +15,7 @@ use p4spec_rust::{
         Extern, ExternError, Interface, InterfaceError, Interpreter, NullInterface, Runner,
         RunnerContext,
     },
-    sim_plugin::{dummy::Dummy, ebpf::object::CounterArray, spec_impl::pack},
+    sim_plugin::{dummy::Dummy, ebpf::object::CounterArray, spec::pack},
 };
 
 #[derive(Debug, thiserror::Error)]

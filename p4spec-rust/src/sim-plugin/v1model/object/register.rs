@@ -1,5 +1,5 @@
 use crate::lang::data::value::external::{DecodeContext, EncodeContext};
-use crate::sim_plugin::spec_impl::{args, func, rel, unpack};
+use crate::sim_plugin::spec::{args, func, rel, unpack};
 use crate::{
     lang::{
         common::source::Span,

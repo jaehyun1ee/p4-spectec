@@ -29,7 +29,7 @@ pub mod hash;
 pub mod io;
 pub mod psa;
 pub mod runner;
-pub mod spec_impl;
+pub mod spec;
 pub mod state;
 pub mod table;
 pub mod v1model;

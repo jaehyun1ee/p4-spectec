@@ -8,7 +8,7 @@ use p4spec_rust::{
             value::{Value, ValueArena, make},
         },
     },
-    sim_plugin::{hash, spec_impl::pack},
+    sim_plugin::{hash, spec::pack},
     util::bigint,
 };
 

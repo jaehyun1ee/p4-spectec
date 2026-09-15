@@ -6,7 +6,7 @@ fn test_clone_info_preserves_tuple_json() {
     use p4spec_rust::{
         lang::data::value::ValueArena,
         sim_plugin::{
-            spec_impl::pack,
+            spec::pack,
             v1model::packet::{CloneInfo, CloneType},
         },
     };

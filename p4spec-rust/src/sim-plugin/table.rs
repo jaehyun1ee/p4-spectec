@@ -11,7 +11,7 @@ use crate::{
     runner::{Extern, ExternError, Interface, Interpreter, RunnerContext},
 };
 
-use super::spec_impl::func;
+use super::spec::func;
 
 // == Table names
 

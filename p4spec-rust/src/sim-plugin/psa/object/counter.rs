@@ -1,4 +1,4 @@
-use crate::sim_plugin::spec_impl::{args, func, unpack};
+use crate::sim_plugin::spec::{args, func, unpack};
 use crate::{
     lang::{
         common::source::Span,

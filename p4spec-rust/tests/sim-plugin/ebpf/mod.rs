@@ -9,7 +9,7 @@ use p4spec_rust::{
     sim_plugin::{
         ebpf::{self, Ebpf, pipe::ExternObject},
         io::{Rx, Tx},
-        spec_impl::func,
+        spec::func,
     },
     stf::ast::Statement,
 };

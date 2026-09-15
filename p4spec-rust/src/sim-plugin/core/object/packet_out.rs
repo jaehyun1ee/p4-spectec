@@ -7,7 +7,7 @@ use crate::{
         },
     },
     runner::{Extern, ExternError, Interface, Interpreter, RunnerContext},
-    sim_plugin::spec_impl::func,
+    sim_plugin::spec::func,
 };
 use serde::{Deserialize, Serialize};
 

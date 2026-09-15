@@ -1,6 +1,6 @@
 use crate::sim_plugin::{
     core::object::PacketIn,
-    spec_impl::{args, unpack},
+    spec::{args, unpack},
 };
 use crate::{
     lang::{

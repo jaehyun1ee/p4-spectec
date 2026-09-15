@@ -17,7 +17,7 @@ use p4spec_rust::{
     runner::ExternError,
     sim_plugin::{
         core::object::{self, PacketIn, PacketOut},
-        spec_impl::pack,
+        spec::pack,
     },
 };
 

@@ -20,7 +20,7 @@ use super::super::{
     },
     externs as external,
     io::{Rx, Tx},
-    spec_impl::{func, pack, pgm, rel, unpack},
+    spec::{func, pack, pgm, rel, unpack},
     state::SimState,
 };
 use super::{

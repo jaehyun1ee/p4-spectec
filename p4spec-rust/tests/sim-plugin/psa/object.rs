@@ -27,7 +27,7 @@ use p4spec_rust::{
     sim_plugin::{
         dummy::Dummy,
         psa::object::{Color, Counter, HashExtern, InternetChecksum, Meter, Register},
-        spec_impl::{pack, unpack},
+        spec::{pack, unpack},
     },
 };
 

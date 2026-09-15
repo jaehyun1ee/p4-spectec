@@ -64,7 +64,7 @@ use p4spec_rust::{
     },
     sim_plugin::{
         psa::{arch::Arch, packet::Entrypoint, pipe},
-        spec_impl::{pack, rel, unpack},
+        spec::{pack, rel, unpack},
         state::SimState,
     },
 };

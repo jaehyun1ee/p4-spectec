@@ -3,7 +3,7 @@
 use num_bigint::BigInt;
 use num_traits::{One, ToPrimitive, Zero};
 
-use super::spec_impl::unpack;
+use super::spec::unpack;
 use crate::{
     lang::data::value::{Value, ValueArena},
     runner::ExternError,
