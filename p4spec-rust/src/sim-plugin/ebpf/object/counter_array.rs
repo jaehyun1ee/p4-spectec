@@ -1,4 +1,4 @@
-use crate::sim_plugin::spec_impl::{func, unpack};
+use crate::sim_plugin::spec_impl::{args, func, unpack};
 use crate::{
     lang::{
         common::source::Span,
@@ -36,9 +36,9 @@ impl CounterArray {
         value_ids: Value,
         value_args: Value,
     ) -> Result<Self, ExternError> {
-        let args = unpack::assoc_args(arena, value_ids, value_args)?;
-        let value_max = unpack::find_arg(&args, "max_index")?;
-        let value_sparse = unpack::find_arg(&args, "sparse")?;
+        let args = args::assoc(arena, value_ids, value_args)?;
+        let value_max = args::find(&args, "max_index")?;
+        let value_sparse = args::find(&args, "sparse")?;
         let (_, int_max) = unpack::p4_fixed_bit(arena, &value_max)?;
         let idx_max = int_max
             .to_i64()

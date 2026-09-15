@@ -1,6 +1,6 @@
 use crate::sim_plugin::{
     hash,
-    spec_impl::{func, pack, unpack},
+    spec_impl::{args, func, pack, unpack},
 };
 use crate::{
     lang::{
@@ -32,8 +32,8 @@ impl HashExtern {
         value_ids: Value,
         value_args: Value,
     ) -> Result<Self, ExternError> {
-        let args = unpack::assoc_args(arena, value_ids, value_args)?;
-        let value_algo = unpack::find_arg(&args, "algo")?;
+        let args = args::assoc(arena, value_ids, value_args)?;
+        let value_algo = args::find(&args, "algo")?;
         let (id_enum, id_type) = unpack::p4_enum(arena, &value_algo)?;
         if id_enum != "PSA_HashAlgorithm_t" {
             return Err(ExternError::Failure(

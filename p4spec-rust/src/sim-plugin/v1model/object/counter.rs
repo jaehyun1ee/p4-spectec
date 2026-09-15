@@ -1,6 +1,6 @@
 use crate::sim_plugin::{
     core::object::PacketIn,
-    spec_impl::{func, unpack},
+    spec_impl::{args, func, unpack},
 };
 use crate::{
     lang::{
@@ -46,9 +46,9 @@ impl Counter {
         value_ids: Value,
         value_args: Value,
     ) -> Result<Self, ExternError> {
-        let args = unpack::assoc_args(arena, value_ids, value_args)?;
-        let value_size = unpack::find_arg(&args, "size")?;
-        let value_type = unpack::find_arg(&args, "type")?;
+        let args = args::assoc(arena, value_ids, value_args)?;
+        let value_size = args::find(&args, "size")?;
+        let value_type = args::find(&args, "type")?;
         let size = (unpack::p4_fixed_bit(arena, &value_size)?.1)
             .to_i64()
             .ok_or_else(|| ExternError::Failure("integer outside i64 range".to_owned()))?

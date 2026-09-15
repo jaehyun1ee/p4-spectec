@@ -1,5 +1,5 @@
 use crate::lang::data::value::external::{DecodeContext, EncodeContext};
-use crate::sim_plugin::spec_impl::{func, unpack};
+use crate::sim_plugin::spec_impl::{args, func, unpack};
 use crate::{
     lang::{
         common::source::Span,
@@ -57,8 +57,8 @@ impl Register {
             .into());
         };
         let value_typ = *value_typ;
-        let args = unpack::assoc_args(ctx.arena(), value_ids, value_args)?;
-        let value_size = unpack::find_arg(&args, "size")?;
+        let args = args::assoc(ctx.arena(), value_ids, value_args)?;
+        let value_size = args::find(&args, "size")?;
         let value_initial = match args.iter().find(|(name, _)| name == "initial_value") {
             Some((_, value)) => *value,
             None => func::default(ctx, value_typ)?,

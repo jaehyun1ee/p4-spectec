@@ -1,4 +1,7 @@
-use crate::sim_plugin::{core::object::PacketIn, spec_impl::unpack};
+use crate::sim_plugin::{
+    core::object::PacketIn,
+    spec_impl::{args, unpack},
+};
 use crate::{
     lang::{
         common::source::Span,
@@ -45,8 +48,8 @@ impl DirectCounter {
         value_ids: Value,
         value_args: Value,
     ) -> Result<Self, ExternError> {
-        let args = unpack::assoc_args(arena, value_ids, value_args)?;
-        let value_type = unpack::find_arg(&args, "type")?;
+        let args = args::assoc(arena, value_ids, value_args)?;
+        let value_type = args::find(&args, "type")?;
         let (id_enum, id_type) = unpack::p4_enum(arena, &value_type)?;
         match (id_enum.as_str(), id_type.as_str()) {
             ("CounterType", "packets") => Ok(Self::Packets(BigInt::zero())),
