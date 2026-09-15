@@ -9,6 +9,7 @@ use p4spec_rust::{
         },
     },
     sim_plugin::{hash, spec_impl::pack},
+    util::bigint,
 };
 
 #[test]
@@ -90,32 +91,18 @@ fn test_package_normalizes_signed_fields_and_pads_without_shifting() {
 }
 
 #[test]
-fn test_hash_width_range_and_complement_boundaries() {
+fn test_hash_width_and_complement_boundaries() {
     assert_eq!(
-        hash::bitwise_neg(&74565.into(), &8.into()).unwrap(),
+        bigint::bitwise_neg(&74565.into(), &8.into()).unwrap(),
         74682.into()
     );
     assert_eq!(
-        hash::bitwise_neg(&74565.into(), &0.into()).unwrap(),
+        bigint::bitwise_neg(&74565.into(), &0.into()).unwrap(),
         74565.into()
     );
     assert_eq!(
-        hash::bitwise_neg(&74565.into(), &(-1).into()).unwrap(),
+        bigint::bitwise_neg(&74565.into(), &(-1).into()).unwrap(),
         74565.into()
-    );
-    assert_eq!(
-        hash::adjust(&5.into(), &12.into(), &20.into()).unwrap(),
-        11.into()
-    );
-    assert_eq!(
-        hash::adjust(&5.into(), &0.into(), &20.into()).unwrap(),
-        5.into()
-    );
-    assert!(hash::adjust(&5.into(), &5.into(), &20.into()).is_err());
-    assert!(hash::adjust(&5.into(), &3.into(), &20.into()).is_err());
-    assert_eq!(
-        hash::adjust(&5.into(), &12.into(), &(-20).into()).unwrap(),
-        6.into()
     );
     for (int_init, int_sum, int_sub) in [(-65537, 60876, 4661), (131072, 60874, 4659)] {
         let bits = (16.into(), 4660.into());

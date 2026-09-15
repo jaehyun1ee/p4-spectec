@@ -1,44 +1,19 @@
 //! Packet field packing, reflected CRCs, and one's-complement checksums
 
 use num_bigint::BigInt;
-use num_traits::{One, Signed, ToPrimitive, Zero};
+use num_traits::{One, ToPrimitive, Zero};
 
 use super::spec_impl::unpack;
 use crate::{
     lang::data::value::{Value, ValueArena},
     runner::ExternError,
+    util::bigint::{remainder, width_bit},
 };
 
 // == Bit operations
 
-fn bit_width(width: &BigInt) -> Result<usize, ExternError> {
-    width
-        .to_u64()
-        .filter(|width| *width <= ((1_u64 << 62) - 1))
-        .and_then(|width| usize::try_from(width).ok())
-        .ok_or_else(|| ExternError::Failure(format!("invalid hash bit width: {width}")))
-}
-
-// Bigint's remainder is nonnegative and requires a positive divisor
-fn remainder(int: &BigInt, int_modulus: &BigInt) -> BigInt {
-    let int = int % int_modulus;
-    if int.is_negative() {
-        int + int_modulus
-    } else {
-        int
-    }
-}
-
-pub fn bitwise_neg(int: &BigInt, width: &BigInt) -> Result<BigInt, ExternError> {
-    if width <= &BigInt::zero() {
-        return Ok(int.clone());
-    }
-    let width = bit_width(width)?;
-    Ok(int ^ ((BigInt::one() << width) - BigInt::one()))
-}
-
-fn aligned_width(width: &BigInt, alignment: usize) -> Result<usize, ExternError> {
-    let width = bit_width(width)?;
+fn width_bit_aligned(width: &BigInt, alignment: usize) -> Result<usize, ExternError> {
+    let width = width_bit(width)?;
     if !width.is_multiple_of(alignment) {
         return Err(ExternError::Failure(
             "bitslice x[y:z] must have y > z > 0".to_owned(),
@@ -55,7 +30,7 @@ fn crc(
     polynomial: u32,
     int_init: u32,
 ) -> Result<BigInt, ExternError> {
-    let width = aligned_width(width, 8)?;
+    let width = width_bit_aligned(width, 8)?;
     let mut int_crc = int_init;
     for idx in (0..width).step_by(8).rev() {
         let byte = ((int >> idx) & BigInt::from(255_u16))
@@ -80,7 +55,7 @@ fn checksum(
     int_init: &BigInt,
     subtract: bool,
 ) -> Result<BigInt, ExternError> {
-    let width = aligned_width(width, 16)?;
+    let width = width_bit_aligned(width, 16)?;
     let int_threshold = BigInt::one() << 16;
     let mask = &int_threshold - BigInt::one();
     let mut int_hash = int_init.clone();
@@ -122,7 +97,7 @@ pub fn package(arena: &ValueArena, values: &[Value]) -> Result<(BigInt, BigInt),
     let mut int_pack = BigInt::zero();
     for value in values {
         let (width, int) = unpack::p4_precision_number(arena, value)?;
-        let width_bits = bit_width(&width)?;
+        let width_bits = width_bit(&width)?;
         let int_modulus = BigInt::one() << width_bits;
         width_pack += width;
         int_pack = (int_pack << width_bits) + remainder(&int, &int_modulus);
@@ -135,6 +110,8 @@ pub fn package(arena: &ValueArena, values: &[Value]) -> Result<(BigInt, BigInt),
     Ok((width_pack, int_pack))
 }
 
+// == Entry points
+
 pub fn compute_checksum(
     algo: &str,
     int_init: Option<&BigInt>,
@@ -143,17 +120,4 @@ pub fn compute_checksum(
 ) -> Result<BigInt, ExternError> {
     let bits = package(arena, values)?;
     compute_hash(algo, int_init, &bits)
-}
-
-pub fn adjust(base: &BigInt, rmax: &BigInt, int: &BigInt) -> Result<BigInt, ExternError> {
-    if rmax.is_zero() {
-        return Ok(base.clone());
-    }
-    let int_range = rmax - base;
-    if int_range <= BigInt::zero() {
-        return Err(ExternError::Failure(
-            "hash range divisor must be positive".to_owned(),
-        ));
-    }
-    Ok(remainder(int, &int_range) + base)
 }

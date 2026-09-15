@@ -16,8 +16,10 @@ use crate::{
         },
     },
     runner::{Extern, ExternError, Interface, Interpreter, RunnerContext},
+    util::bigint::remainder,
 };
 use num_bigint::BigInt;
+use num_traits::Zero;
 
 /// Calling digest causes a message containing the values specified in
 /// the data parameter to be sent to the control plane software.  It is
@@ -158,7 +160,7 @@ where
     let int_max = unpack::p4_fixed_bit(ctx.arena(), &value_max)?.1;
     let int = compute_checksum(ctx, value_ctx, None)?;
     // The source simulator uses max - base as the range divisor
-    let int = checksum::adjust(&int_base, &int_max, &int)?;
+    let int = adjust(&int_base, &int_max, &int)?;
     let value_typ = func::find_type_e_local(ctx, value_ctx, "O")?;
     let value_result = pack::p4_arbitrary_int(ctx.arena_mut(), int)?;
     let value_result = func::cast_op(ctx, value_typ, value_result)?;
@@ -179,6 +181,19 @@ where
     }
     .map_err(ExternError::from)?;
     Ok((value_ctx, value_arch, value_call_result))
+}
+
+pub fn adjust(base: &BigInt, rmax: &BigInt, int: &BigInt) -> Result<BigInt, ExternError> {
+    if rmax.is_zero() {
+        return Ok(base.clone());
+    }
+    let int_range = rmax - base;
+    if int_range <= BigInt::zero() {
+        return Err(ExternError::Failure(
+            "hash range divisor must be positive".to_owned(),
+        ));
+    }
+    Ok(remainder(int, &int_range) + base)
 }
 
 fn compute_checksum<Interp, Iface, Exn>(

@@ -51,3 +51,23 @@ fn test_native_v1model_micro_fixture() {
         );
     }
 }
+
+#[test]
+fn test_hash_adjust_range_boundaries() {
+    use p4spec_rust::sim_plugin::v1model::func;
+
+    assert_eq!(
+        func::adjust(&5.into(), &12.into(), &20.into()).unwrap(),
+        11.into()
+    );
+    assert_eq!(
+        func::adjust(&5.into(), &0.into(), &20.into()).unwrap(),
+        5.into()
+    );
+    assert!(func::adjust(&5.into(), &5.into(), &20.into()).is_err());
+    assert!(func::adjust(&5.into(), &3.into(), &20.into()).is_err());
+    assert_eq!(
+        func::adjust(&5.into(), &12.into(), &(-20).into()).unwrap(),
+        6.into()
+    );
+}

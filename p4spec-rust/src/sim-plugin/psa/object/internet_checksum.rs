@@ -11,6 +11,7 @@ use crate::{
         },
     },
     runner::{Extern, ExternError, Interface, Interpreter, RunnerContext},
+    util::bigint,
 };
 use num_bigint::BigInt;
 use num_traits::Zero;
@@ -122,7 +123,7 @@ impl InternetChecksum {
         let value_data = func::find_var_e_local(ctx, value_ctx, "data")?;
         let values = unpack::p4_tuple(ctx.arena(), &value_data)?;
         let int = hash::compute_checksum(algo, Some(&self.int), ctx.arena(), &values)?;
-        self.int = hash::bitwise_neg(&int, &16.into())?;
+        self.int = bigint::bitwise_neg(&int, &16.into())?;
         let typ = typ::make::opt(typ::make::var(
             crate::phrase!(node: "value".to_owned(), span: Span::default()),
             Vec::new(),
@@ -154,7 +155,7 @@ impl InternetChecksum {
         Exn: Extern,
         Interp: Interpreter<Iface, Exn>,
     {
-        self.int = hash::bitwise_neg(&self.int, &16.into())?;
+        self.int = bigint::bitwise_neg(&self.int, &16.into())?;
         self.get_state(ctx, value_ctx, value_arch)
     }
 
