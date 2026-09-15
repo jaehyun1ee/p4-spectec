@@ -6,6 +6,8 @@ mod get;
 mod intern;
 #[path = "value/make.rs"]
 mod make;
+#[path = "value/serde.rs"]
+mod serde;
 #[path = "value/value.rs"]
 #[allow(clippy::module_inception, reason = "mirror the value module layout")]
 mod value;

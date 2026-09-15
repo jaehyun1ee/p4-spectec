@@ -6,11 +6,14 @@ use expect_test::expect_file;
 use indicatif::{ProgressBar, ProgressStyle};
 use p4spec_rust::{
     frontend::parse::parse_files,
-    interface::p4::{error::P4ErrorKind, parse::parse_file, unparse::P4Unparser},
-    interp::al::{Al, Config, context::Global},
+    interface::{
+        self,
+        p4::{error::P4ErrorKind, parse::parse_file},
+    },
+    interp::al::{AlInterp, Config, context::Global},
     pass::{algo, elaborate},
-    runner::{BuiltinInterface, Runner},
-    sim::placeholder::Placeholder,
+    runner::Runner,
+    sim_plugin::dummy::Dummy,
 };
 use std::{
     fs,
@@ -47,13 +50,13 @@ pub fn run() -> Result<()> {
     let spec_il =
         elaborate::elaborate(spec_el).map_err(|error| Error::Invalid(error.to_string()))?;
     let spec_al = algo::convert(spec_il).map_err(|error| Error::Invalid(error.to_string()))?;
-    let unparser = P4Unparser::from_al_spec(&spec_al);
+    let interface = interface::p4(&spec_al);
     let global = Global::load(spec_al).map_err(|error| Error::Invalid(error.to_string()))?;
-    let mut runner = Runner::<Al, _, _>::new(
+    let mut runner = Runner::<AlInterp, _, _>::new(
         global,
-        Config::new(true, false, false),
-        BuiltinInterface::new(unparser),
-        Placeholder,
+        AlInterp::new(Config::new(true, false, false)),
+        interface,
+        Dummy,
     );
     let includes = vec![PathBuf::from("p4c/p4include")];
     fs::read_dir(&includes[0])?;

@@ -4,12 +4,13 @@ use clap::{Args, Parser, Subcommand};
 
 use p4spec_rust::{
     frontend::parse::parse_files,
-    interface::p4::{parse::parse_file, unparse::P4Unparser},
-    interp::al::{Al, Config, context::Global},
-    lang::{al, il, traits::print::Print},
+    interface::{self, p4::parse::parse_file},
+    interp::al::{AlInterp, Config, context::Global},
+    lang::{al, data::value::external::Encoding, il, traits::print::Print},
     pass::{algo, elaborate},
-    runner::{BuiltinInterface, Runner},
-    sim::placeholder::Placeholder,
+    runner::Runner,
+    sim_plugin::{self, dummy::Dummy, runner::Error as SimError},
+    stf,
 };
 
 // = Helpers
@@ -100,16 +101,16 @@ fn run_command(args: RunArgs) -> ExitCode {
         Ok(spec) => spec,
         Err(code) => return code,
     };
-    let unparser = P4Unparser::from_al_spec(&spec_al);
+    let interface = interface::p4(&spec_al);
     let global = match Global::load(spec_al) {
         Ok(global) => global,
         Err(error) => return command_error(error),
     };
-    let mut runner = Runner::<Al, _, _>::new(
+    let mut runner = Runner::<AlInterp, _, _>::new(
         global,
-        Config::new(!args.no_cache, args.det, args.guard),
-        BuiltinInterface::new(unparser),
-        Placeholder,
+        AlInterp::new(Config::new(!args.no_cache, args.det, args.guard)),
+        interface,
+        Dummy,
     );
     let program = match parse_file(runner.arena_mut(), &args.includes, args.program) {
         Ok(program) => program,
@@ -130,6 +131,78 @@ fn run_command(args: RunArgs) -> ExitCode {
     }
 }
 
+// = Sim command
+
+#[derive(Args)]
+struct SimArgs {
+    /// Execute the algorithmic representation
+    #[arg(long, required = true)]
+    al: bool,
+    /// Specification files in processing order
+    #[arg(required = true, value_name = "PATH")]
+    paths: Vec<PathBuf>,
+    /// Target architecture: ebpf, psa, or v1model
+    #[arg(long, value_name = "ARCH")]
+    arch: String,
+    /// Native plugin state encoding: arena-relative or arena-independent
+    #[arg(long, default_value_t = Encoding::default(), value_name = "ENCODING")]
+    plugin_encoding: Encoding,
+    /// P4 program to simulate
+    #[arg(short = 'p', value_name = "PROGRAM")]
+    program: PathBuf,
+    /// STF test to execute
+    #[arg(long, value_name = "STF")]
+    stf: PathBuf,
+    /// Include directories for the P4 program
+    #[arg(short = 'i', value_name = "DIR")]
+    includes: Vec<PathBuf>,
+    /// Disable AL call caching
+    #[arg(long)]
+    no_cache: bool,
+    /// Check deterministic execution
+    #[arg(long)]
+    det: bool,
+    /// Check interpreter guards
+    #[arg(long)]
+    guard: bool,
+}
+
+fn sim_command(args: SimArgs) -> ExitCode {
+    let spec_al = match algo(args.paths) {
+        Ok(spec) => spec,
+        Err(code) => return code,
+    };
+    let config = Config::new(!args.no_cache, args.det, args.guard);
+    let mut simulator =
+        match sim_plugin::build_with_encoding(spec_al, &args.arch, config, args.plugin_encoding) {
+            Ok(simulator) => simulator,
+            Err(error) => return command_error(error),
+        };
+    let mut run = match simulator.init_pipe(&args.includes, &args.program) {
+        Ok(run) => run,
+        Err(error) => return command_error(error),
+    };
+    let stmts = match stf::parse::parse_file(&args.stf) {
+        Ok(stmts) => stmts,
+        Err(error) => return command_error(SimError::from(error)),
+    };
+    for stmt in &stmts {
+        match simulator.run_stf_stmt(&mut run, stmt) {
+            Ok(Some(tx)) => println!("[PASS] Transmitted {tx}"),
+            Ok(None) => {}
+            Err(error) => return command_error(error),
+        }
+    }
+    if let Err(failure) = run.finish() {
+        return command_error(SimError::Stf {
+            failure: Box::new(failure),
+            span: Default::default(),
+        });
+    }
+    println!("passed");
+    ExitCode::SUCCESS
+}
+
 // = Entry point
 
 /// Elaborate and convert P4 specifications
@@ -148,6 +221,8 @@ enum Command {
     Algo(AlgoArgs),
     /// Run a P4 program with the algorithmic interpreter
     Run(RunArgs),
+    /// Simulate a P4 program and STF test on a target architecture
+    Sim(SimArgs),
 }
 
 fn main() -> ExitCode {
@@ -156,5 +231,6 @@ fn main() -> ExitCode {
         Command::Elab(args) => elab_command(args),
         Command::Algo(args) => algo_command(args),
         Command::Run(args) => run_command(args),
+        Command::Sim(args) => sim_command(args),
     }
 }

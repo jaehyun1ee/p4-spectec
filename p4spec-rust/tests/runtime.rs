@@ -6,9 +6,11 @@ mod envs;
 mod ops;
 #[path = "runtime/runner.rs"]
 mod runner;
+#[path = "support/spec.rs"]
+mod spec_fixture;
 
-#[path = "sim/mod.rs"]
-mod sim;
+#[path = "sim-plugin/mod.rs"]
+mod sim_plugin;
 
 #[path = "interp/mod.rs"]
 mod interp;

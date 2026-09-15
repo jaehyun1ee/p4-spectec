@@ -3,6 +3,7 @@
 use std::rc::Rc;
 
 mod arena;
+pub mod external;
 mod intern;
 #[allow(
     clippy::module_inception,
@@ -15,14 +16,7 @@ pub use intern::{CanonEq, CanonHash, CanonId, CanonInterner, Interned, Interner,
 pub use value::*;
 
 use crate::lang::{
-    common::{
-        Id, TId,
-        notation::{
-            mixfix::Mixfix,
-            mixop::{Mixop, shape},
-        },
-        source::Span,
-    },
+    common::{Id, TId, notation::mixfix::Mixfix, source::Span},
     data::typ::{self, Typ, TypKind},
     xl::num::{self, Number},
 };
@@ -118,27 +112,23 @@ pub mod make {
             typ: $typ:expr,
             span: $span:expr $(,)?
         ) => {{
-            let (shape, args, typ, span) = ($shape, $args, $typ, $span);
-            $crate::lang::data::value::make::case_shaped_($arena, shape, args, typ, span)
+            let (shape_text, args, typ_name, span) = ($shape, $args, $typ, $span);
+            let mixop = $crate::lang::common::notation::mixop::shape(shape_text);
+            let value_case =
+                $crate::lang::common::notation::mixop::Mixop::fill(mixop.as_ref(), args)
+                    .expect("mixop arity matches its value constructor");
+            let id = $crate::phrase! {
+                node: typ_name.to_owned(),
+                span: $crate::lang::common::source::Span::default(),
+            };
+            let typ = $crate::lang::data::typ::make::var(id, std::vec::Vec::new());
+            $crate::lang::data::value::make::case(
+                $arena,
+                std::rc::Rc::new(typ.node),
+                value_case,
+                span,
+            )
         }};
-    }
-
-    pub(crate) fn case_shaped_(
-        arena: &mut ValueArena,
-        shape_text: &str,
-        args: Vec<Value>,
-        typ_name: &str,
-        span: Span,
-    ) -> Result<Value, ValueError> {
-        let mixop = shape(shape_text);
-        let value_case =
-            Mixop::fill(mixop.as_ref(), args).expect("mixop arity matches its value constructor");
-        let id = crate::phrase! {
-            node: typ_name.to_owned(),
-            span: Span::default(),
-        };
-        let typ = typ::make::var(id, Vec::new());
-        case(arena, Rc::new(typ.node), value_case, span)
     }
 
     pub(crate) use case_shaped;
@@ -191,7 +181,7 @@ pub mod make {
     pub fn external(
         arena: &mut ValueArena,
         typ: Rc<TypKind>,
-        json: json,
+        json: Rc<json>,
         span: Span,
     ) -> Result<Value, ValueError> {
         new(arena, ValueKind::Extern(json), typ, span)
@@ -320,18 +310,9 @@ pub mod get {
         }
     }
 
-    // - Functions
-
-    pub fn func<'a>(arena: &'a ValueArena, value: &Value) -> Result<&'a Id, ValueError> {
-        match arena.kind(value) {
-            ValueKind::Func(id) => Ok(id),
-            _ => Err(unexpected(arena, value, ValueTag::Func)),
-        }
-    }
-
     // - Externals
 
-    pub fn external<'a>(arena: &'a ValueArena, value: &Value) -> Result<&'a json, ValueError> {
+    pub fn external<'a>(arena: &'a ValueArena, value: &Value) -> Result<&'a Rc<json>, ValueError> {
         match arena.kind(value) {
             ValueKind::Extern(json) => Ok(json),
             _ => Err(unexpected(arena, value, ValueTag::Extern)),
@@ -375,6 +356,17 @@ pub mod get {
             [value_a, value_b, value_c] => Ok((value_a, value_b, value_c)),
             _ => Err(ValueError::ExpectedCount {
                 expected: 3,
+                actual: values.len(),
+            }),
+        }
+    }
+
+    #[allow(clippy::type_complexity)]
+    pub fn four(values: &[Value]) -> Result<(&Value, &Value, &Value, &Value), ValueError> {
+        match values {
+            [value_a, value_b, value_c, value_d] => Ok((value_a, value_b, value_c, value_d)),
+            _ => Err(ValueError::ExpectedCount {
+                expected: 4,
                 actual: values.len(),
             }),
         }

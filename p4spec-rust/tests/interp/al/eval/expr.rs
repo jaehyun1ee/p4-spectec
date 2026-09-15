@@ -2,7 +2,7 @@ use p4spec_rust::interp::al::error::{HostErrorKind, TraceErrorKind};
 use std::{cell::RefCell, rc::Rc};
 
 use p4spec_rust::{
-    interp::al::{Al, Config, context::Global},
+    interp::al::{AlInterp, Config, context::Global},
     lang::{
         al::ast,
         common::{
@@ -59,13 +59,13 @@ fn eval(
     expression: ast::Exp,
 ) -> Result<(ValueArena, Value), p4spec_rust::interp::al::error::Error> {
     let global = Global::load(vec![function("test", expression)]).unwrap();
-    let mut runner = Runner::<Al, _, _>::new(
+    let mut runner = Runner::<AlInterp, _, _>::new(
         global,
-        Config::new(false, false, false),
+        AlInterp::new(Config::new(false, false, false)),
         NullInterface,
         NullExtern,
     );
-    let value = runner.eval_func("test", &[], &[])?;
+    let value = runner.context().call_func("test", &[], &[])?;
     Ok((std::mem::take(runner.arena_mut()), value))
 }
 
@@ -82,14 +82,14 @@ fn test_repeated_evaluation_reuses_the_expression_type_allocation_without_call_c
     let expression = list(vec![int(1), int(2)]);
     let typ = expression.note.clone();
     let global = Global::load(vec![function("test", expression)]).unwrap();
-    let mut runner = Runner::<Al, _, _>::new(
+    let mut runner = Runner::<AlInterp, _, _>::new(
         global,
-        Config::new(false, false, false),
+        AlInterp::new(Config::new(false, false, false)),
         NullInterface,
         NullExtern,
     );
     for _ in 0..2 {
-        let value = runner.eval_func("test", &[], &[]).unwrap();
+        let value = runner.context().call_func("test", &[], &[]).unwrap();
         assert!(Rc::ptr_eq(runner.arena().typ(&value), &typ));
         assert_eq!(numbers(runner.arena(), &value), ["1", "2"]);
     }
@@ -342,6 +342,7 @@ impl Interface for RecordingInterface {
             true,
         ))
     }
+
     fn clear(&mut self) {
         self.0.borrow_mut().clear();
     }
@@ -369,15 +370,15 @@ fn test_boolean_operators_evaluate_both_operands_in_order() {
         defs.push(p4spec_rust::phrase!(node: ast::DefKind::MetaFunc(ast::MetaFuncDef::Builtin(ast::BuiltinFunc { id: id(name), tparams: vec![], params: vec![], typ: typ::make::bool(), hints: vec![] })), span: Span::default()));
     }
     let calls = Rc::new(RefCell::new(vec![]));
-    let mut runner = Runner::<Al, _, _>::new(
+    let mut runner = Runner::<AlInterp, _, _>::new(
         Global::load(defs).unwrap(),
-        Config::new(false, false, false),
+        AlInterp::new(Config::new(false, false, false)),
         RecordingInterface(calls.clone()),
         NullExtern,
     );
     assert!(
         !{
-            let value = &runner.eval_func("test", &[], &[]).unwrap();
+            let value = &runner.context().call_func("test", &[], &[]).unwrap();
             get::bool(runner.arena(), value)
         }
         .unwrap()
@@ -402,15 +403,16 @@ fn test_numeric_errors_are_fatal_before_else_fallback() {
             p4spec_rust::phrase!(node: ast::ClauseKind { args: vec![], exp: int(42), prems: vec![] }, span: Span::default()),
         );
     }
-    let mut runner = Runner::<Al, _, _>::new(
+    let mut runner = Runner::<AlInterp, _, _>::new(
         Global::load(vec![def]).unwrap(),
-        Config::new(false, false, false),
+        AlInterp::new(Config::new(false, false, false)),
         NullInterface,
         NullExtern,
     );
     assert!(
         runner
-            .eval_func("test", &[], &[])
+            .context()
+            .call_func("test", &[], &[])
             .unwrap_err()
             .to_string()
             .contains("zero divisor")
@@ -454,9 +456,9 @@ fn test_iteration_evaluates_each_bound_element_and_preserves_empty_options() {
                 p4spec_rust::phrase!(node: ast::ArgKind::Exp(Box::new(signature)), span: Span::default()),
             ];
         }
-        let mut runner = Runner::<Al, _, _>::new(
+        let mut runner = Runner::<AlInterp, _, _>::new(
             Global::load(vec![def]).unwrap(),
-            Config::new(false, false, false),
+            AlInterp::new(Config::new(false, false, false)),
             NullInterface,
             NullExtern,
         );
@@ -478,7 +480,7 @@ fn test_iteration_evaluates_each_bound_element_and_preserves_empty_options() {
                 };
                 assert_eq!(
                     {
-                        let value = runner.eval_func("test", &[], &[input]).unwrap();
+                        let value = runner.context().call_func("test", &[], &[input]).unwrap();
                         numbers(runner.arena(), &value)
                     },
                     ["12", "14"]
@@ -492,7 +494,7 @@ fn test_iteration_evaluates_each_bound_element_and_preserves_empty_options() {
                     Span::default(),
                 )
                 .unwrap();
-                let value = runner.eval_func("test", &[], &[input]).unwrap();
+                let value = runner.context().call_func("test", &[], &[input]).unwrap();
                 let value_inner = get::opt(runner.arena(), &value).unwrap().unwrap();
                 assert_eq!(
                     num::to_int(get::num(runner.arena(), &value_inner).unwrap()).to_string(),
@@ -507,7 +509,7 @@ fn test_iteration_evaluates_each_bound_element_and_preserves_empty_options() {
                 .unwrap();
                 assert!(
                     {
-                        let value = &runner.eval_func("test", &[], &[input]).unwrap();
+                        let value = &runner.context().call_func("test", &[], &[input]).unwrap();
                         get::opt(runner.arena(), value)
                     }
                     .unwrap()
@@ -572,9 +574,9 @@ fn test_list_iteration_zips_values_without_rebinding_the_parent() {
             .map(|exp| p4spec_rust::phrase!(node: ast::ArgKind::Exp(Box::new(exp)), span: Span::default()))
             .collect();
     }
-    let mut runner = Runner::<Al, _, _>::new(
+    let mut runner = Runner::<AlInterp, _, _>::new(
         Global::load(vec![def]).unwrap(),
-        Config::new(false, false, false),
+        AlInterp::new(Config::new(false, false, false)),
         NullInterface,
         NullExtern,
     );
@@ -598,7 +600,7 @@ fn test_list_iteration_zips_values_without_rebinding_the_parent() {
         }
         let value_parent = make::int(runner.arena_mut(), 99.into(), Span::default()).unwrap();
         inputs.push(value_parent);
-        let value = runner.eval_func("test", &[], &inputs).unwrap();
+        let value = runner.context().call_func("test", &[], &inputs).unwrap();
         let values = get::tuple(runner.arena(), &value).unwrap();
         let expected: Vec<_> = (1..=width).map(|value| (value * 11).to_string()).collect();
         assert_eq!(numbers(runner.arena(), &values[0]), expected);
@@ -619,6 +621,7 @@ impl Interface for TypeInterface {
         self.0.borrow_mut().extend_from_slice(targs);
         Ok((values[0], true))
     }
+
     fn clear(&mut self) {
         self.0.borrow_mut().clear();
     }
@@ -648,14 +651,24 @@ fn test_call_arguments_substitute_local_types_and_pass_function_values() {
         typ: typ_func, hints: vec![],
     })), span: Span::default());
     let seen = Rc::new(RefCell::new(vec![]));
-    let mut runner = Runner::<Al, _, _>::new(
+    let mut runner = Runner::<AlInterp, _, _>::new(
         Global::load(vec![outer, capture, function("answer", int(42))]).unwrap(),
-        Config::new(false, false, false),
+        AlInterp::new(Config::new(false, false, false)),
         TypeInterface(seen.clone()),
         NullExtern,
     );
-    let value = runner.eval_func("test", &[typ::make::nat()], &[]).unwrap();
-    assert_eq!(get::func(runner.arena(), &value).unwrap().node, "answer");
+    let value = runner
+        .context()
+        .call_func("test", &[typ::make::nat()], &[])
+        .unwrap();
+    assert_eq!(
+        (match (runner.arena()).kind(&value) {
+            p4spec_rust::lang::data::value::ValueKind::Func(id) => id,
+            _ => panic!("expected function"),
+        })
+        .node,
+        "answer"
+    );
     assert!(matches!(
         seen.borrow()[0].node,
         ast::TypKind::Num(num::Typ::Nat)
@@ -665,6 +678,7 @@ fn test_call_arguments_substitute_local_types_and_pass_function_values() {
 #[test]
 fn test_index_failures_retain_the_index_expression_span() {
     use p4spec_rust::interp::al::error::{Error, ErrorKind};
+
     fn contains_span(traces: &[Error], span: &Span) -> bool {
         traces
             .iter()
@@ -689,10 +703,7 @@ fn test_index_failures_retain_the_index_expression_span() {
 
 #[test]
 fn test_native_nested_update_and_list_destructuring() {
-    use p4spec_rust::{
-        frontend::parse::parse_string,
-        pass::{algo, elaborate},
-    };
+    use p4spec_rust::pass::{algo, elaborate};
 
     let source = r#"
 var n : nat
@@ -707,20 +718,20 @@ def $updated() = $update([[1, 2], [3, 4]])
 dec $destructure() : nat
 def $destructure() = $sum_pair(($updated())[0])
 "#;
-    let spec_el = parse_string(source).unwrap();
+    let spec_el = crate::spec_fixture::parse(source).unwrap();
     let spec_il = elaborate::elaborate(spec_el).unwrap();
     let spec_al = algo::convert(spec_il).unwrap();
-    let mut runner = Runner::<Al, _, _>::new(
+    let mut runner = Runner::<AlInterp, _, _>::new(
         Global::load(spec_al).unwrap(),
-        Config::new(false, false, false),
+        AlInterp::new(Config::new(false, false, false)),
         NullInterface,
         NullExtern,
     );
-    let value = runner.eval_func("updated", &[], &[]).unwrap();
+    let value = runner.context().call_func("updated", &[], &[]).unwrap();
     let rows = get::list(runner.arena(), &value).unwrap();
     assert_eq!(numbers(runner.arena(), &rows[0]), ["1", "9"]);
     assert_eq!(numbers(runner.arena(), &rows[1]), ["3", "4"]);
-    let value = runner.eval_func("destructure", &[], &[]).unwrap();
+    let value = runner.context().call_func("destructure", &[], &[]).unwrap();
     assert_eq!(
         num::to_int(get::num(runner.arena(), &value).unwrap()).to_string(),
         "10"
@@ -729,10 +740,7 @@ def $destructure() = $sum_pair(($updated())[0])
 
 #[test]
 fn test_generated_values_have_default_spans_and_access_preserves_input_spans() {
-    use p4spec_rust::{
-        frontend::parse::parse_string,
-        pass::{algo, elaborate},
-    };
+    use p4spec_rust::pass::{algo, elaborate};
 
     let source = r#"
 var n : nat
@@ -746,12 +754,12 @@ def $identity(n) = n
 dec $first(nat*) : nat
 def $first(ns) = ns[0]
 "#;
-    let spec_el = parse_string(source).unwrap();
+    let spec_el = crate::spec_fixture::parse(source).unwrap();
     let spec_il = elaborate::elaborate(spec_el).unwrap();
     let spec_al = algo::convert(spec_il).unwrap();
-    let mut runner = Runner::<Al, _, _>::new(
+    let mut runner = Runner::<AlInterp, _, _>::new(
         Global::load(spec_al).unwrap(),
-        Config::new(false, false, false),
+        AlInterp::new(Config::new(false, false, false)),
         NullInterface,
         NullExtern,
     );
@@ -760,14 +768,16 @@ def $first(ns) = ns[0]
         Position::new("input.watsup", 3, 5),
     );
     let input = make::nat(runner.arena_mut(), 7u64.into(), span.clone()).unwrap();
-    let literal = runner.eval_func("literal", &[], &[]).unwrap();
+    let literal = runner.context().call_func("literal", &[], &[]).unwrap();
     assert_eq!(runner.arena().span(&literal).clone(), Span::default());
     let increment = runner
-        .eval_func("increment", &[], std::slice::from_ref(&input))
+        .context()
+        .call_func("increment", &[], std::slice::from_ref(&input))
         .unwrap();
     assert_eq!(runner.arena().span(&increment).clone(), Span::default());
     let identity = runner
-        .eval_func("identity", &[], std::slice::from_ref(&input))
+        .context()
+        .call_func("identity", &[], std::slice::from_ref(&input))
         .unwrap();
     assert_eq!(runner.arena().span(&identity).clone(), span);
     assert!((identity == input));
@@ -778,7 +788,7 @@ def $first(ns) = ns[0]
         Span::default(),
     )
     .unwrap();
-    let first = runner.eval_func("first", &[], &[inputs]).unwrap();
+    let first = runner.context().call_func("first", &[], &[inputs]).unwrap();
     assert_eq!(runner.arena().span(&first).clone(), span);
     assert!((first == input));
 }
@@ -788,8 +798,8 @@ fn test_builtin_failure_remains_typed_in_public_error_tree() {
     use p4spec_rust::{
         interface::builtin::error::BuiltinErrorKind,
         interp::al::error::{Error, ErrorKind},
-        runner::BuiltinInterface,
     };
+
     fn find_builtin(error: &Error) -> Option<&BuiltinErrorKind> {
         if let ErrorKind::Host(HostErrorKind::Interface(InterfaceError::Builtin(error))) =
             error.kind.as_ref()
@@ -806,13 +816,13 @@ fn test_builtin_failure_remains_typed_in_public_error_tree() {
         ast::ExpKind::Call(id("missing_builtin"), vec![], vec![]),
         typ::make::int(),
     );
-    let mut runner = Runner::<Al, _, _>::new(
+    let mut runner = Runner::<AlInterp, _, _>::new(
         Global::load(vec![function("test", call), builtin]).unwrap(),
-        Config::new(false, false, false),
-        BuiltinInterface::new(p4spec_rust::interface::p4::unparse::P4Unparser::new()),
+        AlInterp::new(Config::new(false, false, false)),
+        p4spec_rust::interface::p4(&Vec::new()),
         NullExtern,
     );
-    let error = runner.eval_func("test", &[], &[]).unwrap_err();
+    let error = runner.context().call_func("test", &[], &[]).unwrap_err();
     assert_eq!(
         find_builtin(&error),
         Some(&BuiltinErrorKind::MissingImplementation(

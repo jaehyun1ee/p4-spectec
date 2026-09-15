@@ -3,6 +3,7 @@ mod corpus;
 mod elab;
 mod p4parse;
 mod run;
+mod sim;
 mod snapshot;
 
 use clap::{Parser, Subcommand};
@@ -34,11 +35,18 @@ enum Command {
     Algo,
     /// Compare the full P4 corpus with stored file results (cache on, det off)
     RunAl,
+    /// Compare simulation outcomes and matched outputs (cache on)
+    SimAl {
+        #[arg(long)]
+        det: bool,
+    },
 }
 
 fn execute(command: Command) -> Result<()> {
-    if matches!(command, Command::P4parse | Command::RunAl)
-        && std::env::var_os("UPDATE_EXPECT").is_some()
+    if matches!(
+        command,
+        Command::P4parse | Command::RunAl | Command::SimAl { .. }
+    ) && std::env::var_os("UPDATE_EXPECT").is_some()
     {
         return Err(Error::Invalid(
             "UPDATE_EXPECT is supported only for elab and algo".to_owned(),
@@ -53,6 +61,7 @@ fn execute(command: Command) -> Result<()> {
         Command::Elab => elab::run(),
         Command::Algo => algo::run(),
         Command::RunAl => run::run(),
+        Command::SimAl { det } => sim::run(det),
     }
 }
 

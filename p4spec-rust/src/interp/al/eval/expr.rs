@@ -18,7 +18,7 @@ use crate::{
 };
 
 use super::super::{
-    Al,
+    AlInterp,
     backtrack::{Backtrack, backtrack, backtrack_from_result},
     context::Context,
     error::ErrorKind,
@@ -28,8 +28,8 @@ use super::{arg::eval_args, call::invoke_func, ops, path::eval_update_path};
 
 // = Expression evaluation
 
-pub(super) fn eval_exp<I: Interface, E: Extern>(
-    runner: &mut RunnerContext<'_, Al, I, E>,
+pub(super) fn eval_exp<Iface: Interface, Exn: Extern>(
+    runner: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
     ctx: &Context<'_>,
     exp: &ast::Exp,
 ) -> Backtrack<Value> {
@@ -86,8 +86,8 @@ pub(super) fn eval_exp<I: Interface, E: Extern>(
     }
 }
 
-pub(super) fn eval_exps<T: Borrow<ast::Exp>, I: Interface, E: Extern>(
-    runner: &mut RunnerContext<'_, Al, I, E>,
+pub(super) fn eval_exps<T: Borrow<ast::Exp>, Iface: Interface, Exn: Extern>(
+    runner: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
     ctx: &Context<'_>,
     exps: &[T],
 ) -> Backtrack<Vec<Value>> {
@@ -108,8 +108,8 @@ fn eval_var_exp(ctx: &Context<'_>, span: &Span, id: &ast::Id) -> Backtrack<Value
 
 // - Unary expression
 
-fn eval_un_exp<I: Interface, E: Extern>(
-    runner: &mut RunnerContext<'_, Al, I, E>,
+fn eval_un_exp<Iface: Interface, Exn: Extern>(
+    runner: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
     ctx: &Context<'_>,
     span: &Span,
     op: &ast::UnOp,
@@ -132,8 +132,8 @@ fn eval_un_exp<I: Interface, E: Extern>(
 
 // - Binary expression
 
-fn eval_bin_exp<I: Interface, E: Extern>(
-    runner: &mut RunnerContext<'_, Al, I, E>,
+fn eval_bin_exp<Iface: Interface, Exn: Extern>(
+    runner: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
     ctx: &Context<'_>,
     span: &Span,
     op: &ast::BinOp,
@@ -169,8 +169,8 @@ fn eval_bin_exp<I: Interface, E: Extern>(
 
 // - Comparison expression
 
-fn eval_cmp_exp<I: Interface, E: Extern>(
-    runner: &mut RunnerContext<'_, Al, I, E>,
+fn eval_cmp_exp<Iface: Interface, Exn: Extern>(
+    runner: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
     ctx: &Context<'_>,
     span: &Span,
     op: &ast::CmpOp,
@@ -203,8 +203,8 @@ fn eval_cmp_exp<I: Interface, E: Extern>(
 
 // - Upcast expression
 
-fn eval_upcast_exp<I: Interface, E: Extern>(
-    runner: &mut RunnerContext<'_, Al, I, E>,
+fn eval_upcast_exp<Iface: Interface, Exn: Extern>(
+    runner: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
     ctx: &Context<'_>,
     typ: &ast::Typ,
     exp_inner: &ast::Exp,
@@ -215,8 +215,8 @@ fn eval_upcast_exp<I: Interface, E: Extern>(
 
 // - Downcast expression
 
-fn eval_downcast_exp<I: Interface, E: Extern>(
-    runner: &mut RunnerContext<'_, Al, I, E>,
+fn eval_downcast_exp<Iface: Interface, Exn: Extern>(
+    runner: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
     ctx: &Context<'_>,
     typ: &ast::Typ,
     exp_inner: &ast::Exp,
@@ -227,8 +227,8 @@ fn eval_downcast_exp<I: Interface, E: Extern>(
 
 // - Subtype check expression
 
-fn eval_sub_exp<I: Interface, E: Extern>(
-    runner: &mut RunnerContext<'_, Al, I, E>,
+fn eval_sub_exp<Iface: Interface, Exn: Extern>(
+    runner: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
     ctx: &Context<'_>,
     span: &Span,
     exp_inner: &ast::Exp,
@@ -253,8 +253,8 @@ fn eval_sub_exp<I: Interface, E: Extern>(
 
 // - Match expression
 
-fn eval_match_exp<I: Interface, E: Extern>(
-    runner: &mut RunnerContext<'_, Al, I, E>,
+fn eval_match_exp<Iface: Interface, Exn: Extern>(
+    runner: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
     ctx: &Context<'_>,
     exp_inner: &ast::Exp,
     pattern: &ast::Pattern,
@@ -280,8 +280,8 @@ fn eval_match_exp<I: Interface, E: Extern>(
 
 // - Tuple expression
 
-fn eval_tuple_exp<I: Interface, E: Extern>(
-    runner: &mut RunnerContext<'_, Al, I, E>,
+fn eval_tuple_exp<Iface: Interface, Exn: Extern>(
+    runner: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
     ctx: &Context<'_>,
     span: &Span,
     typ: &Rc<ast::TypKind>,
@@ -297,8 +297,8 @@ fn eval_tuple_exp<I: Interface, E: Extern>(
 
 // - Case expression
 
-fn eval_case_exp<I: Interface, E: Extern>(
-    runner: &mut RunnerContext<'_, Al, I, E>,
+fn eval_case_exp<Iface: Interface, Exn: Extern>(
+    runner: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
     ctx: &Context<'_>,
     span: &Span,
     typ: &Rc<ast::TypKind>,
@@ -319,8 +319,8 @@ fn eval_case_exp<I: Interface, E: Extern>(
 
 // - Struct expression
 
-fn eval_str_exp<I: Interface, E: Extern>(
-    runner: &mut RunnerContext<'_, Al, I, E>,
+fn eval_str_exp<Iface: Interface, Exn: Extern>(
+    runner: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
     ctx: &Context<'_>,
     span: &Span,
     typ: &Rc<ast::TypKind>,
@@ -344,8 +344,8 @@ fn eval_str_exp<I: Interface, E: Extern>(
 
 // - Optional expression
 
-fn eval_opt_exp<I: Interface, E: Extern>(
-    runner: &mut RunnerContext<'_, Al, I, E>,
+fn eval_opt_exp<Iface: Interface, Exn: Extern>(
+    runner: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
     ctx: &Context<'_>,
     span: &Span,
     typ: &Rc<ast::TypKind>,
@@ -364,8 +364,8 @@ fn eval_opt_exp<I: Interface, E: Extern>(
 
 // - List expression
 
-fn eval_list_exp<I: Interface, E: Extern>(
-    runner: &mut RunnerContext<'_, Al, I, E>,
+fn eval_list_exp<Iface: Interface, Exn: Extern>(
+    runner: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
     ctx: &Context<'_>,
     span: &Span,
     typ: &Rc<ast::TypKind>,
@@ -381,8 +381,8 @@ fn eval_list_exp<I: Interface, E: Extern>(
 
 // - Cons expression
 
-fn eval_cons_exp<I: Interface, E: Extern>(
-    runner: &mut RunnerContext<'_, Al, I, E>,
+fn eval_cons_exp<Iface: Interface, Exn: Extern>(
+    runner: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
     ctx: &Context<'_>,
     span: &Span,
     typ: &Rc<ast::TypKind>,
@@ -404,8 +404,8 @@ fn eval_cons_exp<I: Interface, E: Extern>(
 
 // - Concatenation expression
 
-fn eval_cat_exp<I: Interface, E: Extern>(
-    runner: &mut RunnerContext<'_, Al, I, E>,
+fn eval_cat_exp<Iface: Interface, Exn: Extern>(
+    runner: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
     ctx: &Context<'_>,
     span: &Span,
     typ: &Rc<ast::TypKind>,
@@ -439,8 +439,8 @@ fn eval_cat_exp<I: Interface, E: Extern>(
 
 // - Membership expression
 
-fn eval_mem_exp<I: Interface, E: Extern>(
-    runner: &mut RunnerContext<'_, Al, I, E>,
+fn eval_mem_exp<Iface: Interface, Exn: Extern>(
+    runner: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
     ctx: &Context<'_>,
     span: &Span,
     exp_elem: &ast::Exp,
@@ -464,8 +464,8 @@ fn eval_mem_exp<I: Interface, E: Extern>(
 
 // - Length expression
 
-fn eval_len_exp<I: Interface, E: Extern>(
-    runner: &mut RunnerContext<'_, Al, I, E>,
+fn eval_len_exp<Iface: Interface, Exn: Extern>(
+    runner: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
     ctx: &Context<'_>,
     exp_inner: &ast::Exp,
 ) -> Backtrack<Value> {
@@ -489,8 +489,8 @@ fn eval_len_exp<I: Interface, E: Extern>(
 
 // - Field access expression
 
-fn eval_dot_exp<I: Interface, E: Extern>(
-    runner: &mut RunnerContext<'_, Al, I, E>,
+fn eval_dot_exp<Iface: Interface, Exn: Extern>(
+    runner: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
     ctx: &Context<'_>,
     span: &Span,
     exp_base: &ast::Exp,
@@ -502,8 +502,8 @@ fn eval_dot_exp<I: Interface, E: Extern>(
 
 // - Index expression
 
-fn eval_idx_exp<I: Interface, E: Extern>(
-    runner: &mut RunnerContext<'_, Al, I, E>,
+fn eval_idx_exp<Iface: Interface, Exn: Extern>(
+    runner: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
     ctx: &Context<'_>,
     exp_base: &ast::Exp,
     exp_idx: &ast::Exp,
@@ -521,8 +521,8 @@ fn eval_idx_exp<I: Interface, E: Extern>(
 
 // - Slice expression
 
-fn eval_slice_exp<I: Interface, E: Extern>(
-    runner: &mut RunnerContext<'_, Al, I, E>,
+fn eval_slice_exp<Iface: Interface, Exn: Extern>(
+    runner: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
     ctx: &Context<'_>,
     span: &Span,
     typ: &Rc<ast::TypKind>,
@@ -554,8 +554,8 @@ fn eval_slice_exp<I: Interface, E: Extern>(
 
 // - Update expression
 
-fn eval_upd_exp<I: Interface, E: Extern>(
-    runner: &mut RunnerContext<'_, Al, I, E>,
+fn eval_upd_exp<Iface: Interface, Exn: Extern>(
+    runner: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
     ctx: &Context<'_>,
     exp_base: &ast::Exp,
     path: &ast::Path,
@@ -568,8 +568,8 @@ fn eval_upd_exp<I: Interface, E: Extern>(
 
 // - Call expression
 
-fn eval_call_exp<I: Interface, E: Extern>(
-    runner: &mut RunnerContext<'_, Al, I, E>,
+fn eval_call_exp<Iface: Interface, Exn: Extern>(
+    runner: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
     ctx: &Context<'_>,
     id: &ast::Id,
     targs: &[ast::Typ],
@@ -586,8 +586,8 @@ fn eval_call_exp<I: Interface, E: Extern>(
 
 // - Iteration expression
 
-fn eval_iter_exp<I: Interface, E: Extern>(
-    runner: &mut RunnerContext<'_, Al, I, E>,
+fn eval_iter_exp<Iface: Interface, Exn: Extern>(
+    runner: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
     ctx: &Context<'_>,
     exp: &ast::Exp,
     exp_inner: &ast::Exp,

@@ -19,7 +19,8 @@ fn test_id_map_uses_identifier_text_as_its_key() {
 
     assert_eq!(ids.insert(id_first.clone(), 1), None);
     assert_eq!(ids.insert(id_second.clone(), 2), Some(1));
-    assert_eq!(ids.get(&id_second), Some(&2));
+    assert_eq!(ids.get(&id_first), Some(&2));
+
     assert_eq!(ids.keys().collect::<Vec<_>>(), vec![&id_second]);
 }
 
@@ -43,8 +44,8 @@ fn test_free_identifier_sets_preserve_source_spans() {
     };
 
     let ids: IdSet = exp.free();
-
-    assert_eq!(ids.get(&id_lookup), Some(&id_stored));
+    assert!(ids.contains(&id_lookup));
+    assert_eq!(ids.iter().next().unwrap().span, id_stored.span);
 }
 
 #[test]

@@ -7,7 +7,8 @@ pub mod lang;
 pub mod pass;
 pub mod runner;
 pub mod runtime;
-pub mod sim;
+#[path = "sim-plugin/mod.rs"]
+pub mod sim_plugin;
 pub mod stf;
 pub mod util;
 pub mod wire;

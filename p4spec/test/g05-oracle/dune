@@ -1,3 +1,0 @@
-(executable
- (name g05_oracle)
- (libraries p4spectec yojson))

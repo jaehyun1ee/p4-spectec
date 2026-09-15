@@ -175,7 +175,12 @@ fn test_fixed_tokens_use_maximal_munch_in_grammar_order() {
 #[test]
 fn test_string_token_uses_closing_quote_but_payload_spans_the_literal() {
     let mut arena = ValueArena::new();
-    for literal in ["\"\"", "\"text\"", "\"a\\\"b\\n\\\\\"", "\"a\nb\""] {
+    for (literal, line, column) in [
+        ("\"\"", 1, 3),
+        ("\"text\"", 1, 7),
+        ("\"a\\\"b\\n\\\\\"", 1, 11),
+        ("\"a\nb\"", 2, 1),
+    ] {
         let source = format!("  {literal}");
         let token = Lexer::new(
             Rc::from("string.p4"),
@@ -188,9 +193,10 @@ fn test_string_token_uses_closing_quote_but_payload_spans_the_literal() {
         let Token::StringLiteral(value) = token.node else {
             panic!("string literal")
         };
-        assert_eq!(token.span.left.line, 1);
-        assert_eq!(token.span.left.column, source.len() as i64 - 1);
-        assert_eq!(token.span.right.column, source.len() as i64);
+        assert_eq!(token.span.left.line, line);
+        assert_eq!(token.span.right.line, line);
+        assert_eq!(token.span.left.column, column);
+        assert_eq!(token.span.right.column, column + 1);
         assert_eq!(arena.span(&value).left.column, 2);
         assert_eq!(arena.span(&value).right, token.span.right);
     }

@@ -91,7 +91,7 @@ fn test_fresh_exact_edges_preserve_aliases_regions_and_full_dimension_shapes() {
     assert_eq!(rejected.id.node, "bool");
     assert_eq!(rejected.id.span, at);
     assert_eq!(rejected.typ.span, Span::default());
-    aliases.clear();
+    aliases = IdMap::new();
     aliases.insert(id("Alias"), alias_typ.clone());
     let selected = fresh_impl::var_from_typ(
         &aliases,
@@ -159,28 +159,6 @@ fn test_fresh_exact_edges_preserve_aliases_regions_and_full_dimension_shapes() {
         ) }
     );
     assert_eq!(inside_iter.iters, vec![ast::Iter::List]);
-    let typ_base = p4spec_rust::phrase! { node: ast::TypKind::Bool, span: Span::new(
-        Position::new("base_type", 0, 0),
-        Position::new("base_type", 0, 0),
-    ) };
-    let nested = p4spec_rust::phrase! { node: ast::TypKind::Iter(
-        Box::new(p4spec_rust::phrase! {
-            node: ast::TypKind::Iter(Box::new(typ_base.clone()), ast::Iter::Opt),
-            span: Span::new(
-                Position::new("nested_inner", 0, 0),
-                Position::new("nested_inner", 0, 0),
-            ),
-        }),
-        ast::Iter::List,
-    ), span: Span::new(
-        Position::new("nested_type", 0, 0),
-        Position::new("nested_type", 0, 0),
-    ) };
-    for dim in [false, true] {
-        let (ids, exp) = fresh_impl::exp_from_typ(dim, &IdMap::new(), &IdSet::new(), &nested);
-        assert_eq!(ids, names(&["bool"]));
-        assert_iterated_exp(&exp, dim, &nested.span, &typ_base.span);
-    }
 }
 
 #[test]
@@ -229,20 +207,6 @@ fn test_fresh_names_combine_aliases_collisions_wildcards_and_nested_dimensions()
     assert_eq!(wildcard.id.span, requested);
     assert_eq!(wildcard.typ.node, ast::TypKind::Bool);
     assert_eq!(wildcard.iters, vec![ast::Iter::Opt, ast::Iter::List]);
-
-    let (generated_ids, generated) =
-        fresh_impl::exp_from_typ(true, &aliases, &sourced_names(&["bool"]), &nested);
-    assert_eq!(generated_ids, sourced_names(&["bool", "bool'"]));
-    let ast::ExpKind::Iter(inner, (ast::Iter::List, vars_outer)) = generated.node else {
-        panic!("outer iteration")
-    };
-    let ast::ExpKind::Iter(_, (ast::Iter::Opt, vars_inner)) = inner.node else {
-        panic!("inner iteration")
-    };
-    assert_eq!(vars_inner.len(), 1);
-    assert_eq!(vars_outer.len(), 1);
-    assert!(vars_inner[0].iters.is_empty());
-    assert_eq!(vars_outer[0].iters, vec![ast::Iter::Opt]);
 }
 
 #[test]

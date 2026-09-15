@@ -10,14 +10,14 @@ use crate::{
 };
 
 use super::super::{
-    Al,
+    AlInterp,
     backtrack::{Backtrack, backtrack, backtrack_from_result},
     context::Context,
 };
 use super::expr::eval_exp;
 
-fn eval_arg<I: Interface, E: Extern>(
-    runner: &mut RunnerContext<'_, Al, I, E>,
+fn eval_arg<Iface: Interface, Exn: Extern>(
+    runner: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
     ctx: &Context<'_>,
     arg: &ast::Arg,
 ) -> Backtrack<Value> {
@@ -27,8 +27,8 @@ fn eval_arg<I: Interface, E: Extern>(
     }
 }
 
-pub(super) fn eval_args<I: Interface, E: Extern>(
-    runner: &mut RunnerContext<'_, Al, I, E>,
+pub(super) fn eval_args<Iface: Interface, Exn: Extern>(
+    runner: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
     ctx: &Context<'_>,
     args: &[ast::Arg],
 ) -> Backtrack<Vec<Value>> {

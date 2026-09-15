@@ -1,26 +1,19 @@
-/// OCaml-compatible JSON codecs for IL data
-use std::cell::Cell;
+pub(super) use crate::wire::ocaml::typ::*;
 
 use serde_json::json;
 
 use crate::util::json::json;
-use thiserror::Error;
 
-use crate::lang::data::value::{ValueArena, make};
 use crate::lang::{
     il::ast::{self, *},
     xl::{bool, num},
 };
 
 use super::{
-    super::{
-        DecodeError, EncodeError, array, boolean, field, integer, object, on_codec_stack, string,
-        variant,
-    },
+    super::{DecodeError, EncodeError, array, boolean, integer, on_codec_stack, string, variant},
     el, xl,
 };
-use crate::wire::VALUE_SCHEMA;
-use crate::wire::ocaml::{atom::AtomPhraseCodec, mixfix, reader, source};
+use crate::wire::ocaml::{atom::AtomPhraseCodec, mixfix, source};
 
 /// Codec for complete IL specifications
 pub struct SpecCodec;
@@ -33,104 +26,6 @@ impl SpecCodec {
     pub fn encode(spec: &ast::Spec) -> Result<json, EncodeError> {
         on_codec_stack(|| Ok(encode_list(spec, encode_def)))
     }
-}
-
-pub struct ValueCodec;
-
-/// Standard JSON codec for IL values
-///
-/// # Panics
-///
-/// Encoding or decoding an extern payload panics, including nested payloads
-/// Native extern state has no OCaml wire representation
-impl ValueCodec {
-    pub fn decode(arena: &mut ValueArena, json: &json) -> Result<ast::Value, DecodeError> {
-        on_codec_stack(|| decode_value(arena, json))
-    }
-
-    pub fn encode(arena: &ValueArena, value: &ast::Value) -> Result<json, EncodeError> {
-        on_codec_stack(|| {
-            ValueEncoder {
-                arena,
-                next_vid: Cell::new(0),
-            }
-            .encode_value(value)
-        })
-    }
-}
-
-/// Standard JSON codec for the versioned OCaml IL value envelope
-///
-/// Rejects duplicate keys, non-standard JSON and floating numeric tokens
-/// Language integers use decimal strings; annotation integers must fit i64
-///
-/// # Panics
-///
-/// Encoding or decoding an extern payload panics, including nested payloads
-pub struct ValueEnvelopeCodec;
-
-impl ValueEnvelopeCodec {
-    pub fn decode(
-        arena: &mut ValueArena,
-        input: &[u8],
-    ) -> Result<ast::Value, ValueEnvelopeDecodeError> {
-        on_codec_stack(|| {
-            let json_envelope = reader::from_slice(input)?;
-            let fields = object(&json_envelope)?;
-            let schema = string(field(fields, "schema")?)?;
-            let kind = string(field(fields, "kind")?)?;
-
-            if schema != VALUE_SCHEMA {
-                return Err(ValueEnvelopeDecodeError::UnknownSchema(schema.to_owned()));
-            }
-            if kind != "value" {
-                return Err(ValueEnvelopeDecodeError::SchemaKindMismatch(
-                    kind.to_owned(),
-                ));
-            }
-
-            decode_value(arena, field(fields, "payload")?).map_err(Into::into)
-        })
-    }
-
-    pub fn encode(
-        arena: &ValueArena,
-        value: &ast::Value,
-    ) -> Result<Vec<u8>, ValueEnvelopeEncodeError> {
-        on_codec_stack(|| {
-            let json_payload = ValueCodec::encode(arena, value)?;
-            let json_envelope = json!({
-                "schema": VALUE_SCHEMA,
-                "kind": "value",
-                "payload": json_payload,
-            });
-            serde_json::to_vec(&json_envelope).map_err(Into::into)
-        })
-    }
-}
-
-#[derive(Debug, Error)]
-pub enum ValueEnvelopeDecodeError {
-    #[error("invalid JSON value envelope: {0}")]
-    Parse(#[from] serde_json::Error),
-
-    #[error("invalid OCaml IL value: {0}")]
-    Decode(#[from] DecodeError),
-
-    #[error("unknown wire schema `{0}`")]
-    UnknownSchema(String),
-
-    #[error("schema `p4spectec.value.v1` requires kind `value`, but found `{0}`")]
-    SchemaKindMismatch(String),
-}
-
-#[derive(Debug, Error)]
-pub enum ValueEnvelopeEncodeError {
-    #[error(transparent)]
-    Encode(#[from] EncodeError),
-
-    #[error("cannot write JSON value envelope: {0}")]
-    Write(#[from] serde_json::Error),
 }
 
 pub(super) fn decode_list<T>(
@@ -159,31 +54,6 @@ pub(super) fn encode_option<T>(value: Option<&T>, encode: impl FnOnce(&T) -> jso
     value.map_or(json::Null, encode)
 }
 
-pub(super) fn decode_id(json: &json) -> Result<ast::Id, DecodeError> {
-    source::decode_phrase(json, |json| Ok(string(json)?.to_owned()))
-}
-
-pub(super) fn encode_id(id: &ast::Id) -> json {
-    source::encode_phrase(id, |id| json!(id))
-}
-
-pub(super) fn decode_iter(json: &json) -> Result<Iter, DecodeError> {
-    let (tag, fields) = variant(json)?;
-    match (tag, fields) {
-        ("Opt", []) => Ok(Iter::Opt),
-        ("List", []) => Ok(Iter::List),
-        ("Opt" | "List", _) => Err(DecodeError::Expected("valid IL iterator arity")),
-        (unknown, _) => Err(DecodeError::UnknownVariant(unknown.to_owned())),
-    }
-}
-
-pub(super) fn encode_iter(iter: Iter) -> json {
-    match iter {
-        Iter::Opt => json!(["Opt"]),
-        Iter::List => json!(["List"]),
-    }
-}
-
 pub(super) fn decode_var(json: &json) -> Result<ast::Var, DecodeError> {
     match array(json)? {
         [id, typ, iters] => Ok(ast::Var {
@@ -201,83 +71,6 @@ pub(super) fn encode_var(variable: &ast::Var) -> json {
         encode_typ(&variable.typ),
         encode_list(&variable.iters, |iter| encode_iter(*iter))
     ])
-}
-
-pub(super) fn decode_typ(json: &json) -> Result<ast::Typ, DecodeError> {
-    source::decode_phrase(json, decode_typ_kind)
-}
-
-pub(super) fn encode_typ(typ: &ast::Typ) -> json {
-    source::encode_phrase(typ, encode_typ_kind)
-}
-
-pub(super) fn decode_targ(json: &json) -> Result<ast::Targ, DecodeError> {
-    source::decode_phrase(json, decode_typ_kind)
-}
-
-pub(super) fn encode_targ(targ: &ast::Targ) -> json {
-    source::encode_phrase(targ, encode_typ_kind)
-}
-
-pub(super) fn decode_tparam(json: &json) -> Result<ast::TParam, DecodeError> {
-    source::decode_phrase(json, |json| Ok(string(json)?.to_owned()))
-}
-
-pub(super) fn encode_tparam(tparam: &ast::TParam) -> json {
-    source::encode_phrase(tparam, |tparam| json!(tparam))
-}
-
-pub(super) fn decode_typ_kind(json: &json) -> Result<TypKind, DecodeError> {
-    let (tag, fields) = variant(json)?;
-    match (tag, fields) {
-        ("BoolT", []) => Ok(TypKind::Bool),
-        ("NumT", [typ]) => Ok(TypKind::Num(xl::decode_num_typ(typ)?)),
-        ("TextT", []) => Ok(TypKind::Text),
-        ("VarT", [id, targs]) => Ok(TypKind::Var(
-            decode_id(id)?,
-            decode_list(targs, decode_targ)?,
-        )),
-        ("TupleT", [types]) => Ok(TypKind::Tuple(decode_list(types, decode_typ)?)),
-        ("IterT", [typ, iter]) => Ok(TypKind::Iter(
-            Box::new(decode_typ(typ)?),
-            decode_iter(iter)?,
-        )),
-        ("FuncT", [tparams, params, result]) => {
-            let tparams = decode_list(tparams, decode_tparam)?;
-            let typs_params = decode_list(params, decode_typ)?;
-            let typ_ret = decode_typ(result)?;
-            let typ_ret = Box::new(typ_ret);
-            let func_typ = ast::FuncTyp {
-                tparams,
-                typs_params,
-                typ_ret,
-            };
-            Ok(TypKind::Func(func_typ))
-        }
-        ("BoolT" | "NumT" | "TextT" | "VarT" | "TupleT" | "IterT" | "FuncT", _) => {
-            Err(DecodeError::Expected("valid IL type arity"))
-        }
-        (unknown, _) => Err(DecodeError::UnknownVariant(unknown.to_owned())),
-    }
-}
-
-pub(super) fn encode_typ_kind(typ: &TypKind) -> json {
-    match typ {
-        TypKind::Bool => json!(["BoolT"]),
-        TypKind::Num(typ) => json!(["NumT", xl::encode_num_typ(*typ)]),
-        TypKind::Text => json!(["TextT"]),
-        TypKind::Var(id, targs) => {
-            json!(["VarT", encode_id(id), encode_list(targs, encode_targ)])
-        }
-        TypKind::Tuple(types) => json!(["TupleT", encode_list(types, encode_typ)]),
-        TypKind::Iter(typ, iter) => json!(["IterT", encode_typ(typ), encode_iter(*iter)]),
-        TypKind::Func(func_typ) => json!([
-            "FuncT",
-            encode_list(&func_typ.tparams, encode_tparam),
-            encode_list(&func_typ.typs_params, encode_typ),
-            encode_typ(&func_typ.typ_ret)
-        ]),
-    }
 }
 
 pub(super) fn decode_not_typ(json: &json) -> Result<ast::NotTyp, DecodeError> {
@@ -354,135 +147,6 @@ pub(super) fn encode_def_typ(typ: &ast::DefTyp) -> json {
                 .collect::<Vec<_>>()
         ]),
     })
-}
-
-fn decode_vnote(json: &json) -> Result<TypKind, DecodeError> {
-    let object = object(json)?;
-    integer(field(object, "vid")?)?;
-    let typ = decode_typ_kind(field(object, "typ")?)?;
-    integer(field(object, "vhash")?)?;
-    Ok(typ)
-}
-
-struct ValueEncoder<'a> {
-    arena: &'a ValueArena,
-    next_vid: Cell<i64>,
-}
-
-impl ValueEncoder<'_> {
-    fn encode_vnote(&self, typ: &TypKind) -> json {
-        let vid = self.next_vid.get();
-        self.next_vid.set(vid + 1);
-
-        json!({
-            "vid": vid,
-            "typ": encode_typ_kind(typ),
-            // A constant hash preserves equality correctness but disables fast rejection
-            "vhash": 0,
-        })
-    }
-}
-
-fn decode_value(arena: &mut ValueArena, json: &json) -> Result<ast::Value, DecodeError> {
-    let object = object(json)?;
-    let node = decode_value_kind(arena, field(object, "it")?)?;
-    let typ = decode_vnote(field(object, "note")?)?;
-    let span = source::decode_region(field(object, "at")?)?;
-    Ok(make::new(arena, node, typ.into(), span)?)
-}
-
-fn decode_value_kind(arena: &mut ValueArena, json: &json) -> Result<ValueKind, DecodeError> {
-    let (tag, fields) = variant(json)?;
-    match (tag, fields) {
-        ("BoolV", [json]) => Ok(ValueKind::Bool(boolean(json)?)),
-        ("NumV", [num]) => Ok(ValueKind::Num(xl::decode_num(num)?)),
-        ("TextV", [text]) => Ok(ValueKind::Text(string(text)?.to_owned())),
-        ("StructV", [fields]) => Ok(ValueKind::Struct(decode_list(
-            fields,
-            |field| match array(field)? {
-                [atom, json] => Ok((AtomPhraseCodec::decode(atom)?, decode_value(arena, json)?)),
-                _ => Err(DecodeError::Expected("IL value field pair")),
-            },
-        )?)),
-        ("CaseV", [case]) => Ok(ValueKind::Case(mixfix::decode(case, |json| {
-            decode_value(arena, json)
-        })?)),
-        ("TupleV", [json]) => Ok(ValueKind::Tuple(decode_list(json, |json| {
-            decode_value(arena, json)
-        })?)),
-        ("OptV", [json]) => Ok(ValueKind::Opt(decode_option(json, |json| {
-            decode_value(arena, json)
-        })?)),
-        ("ListV", [json]) => Ok(ValueKind::List(decode_list(json, |json| {
-            decode_value(arena, json)
-        })?)),
-        ("FuncV", [id]) => Ok(ValueKind::Func(decode_id(id)?)),
-        ("ExternV", [_]) => panic!("extern payloads are not supported by OCaml wire"),
-        (
-            "BoolV" | "NumV" | "TextV" | "StructV" | "CaseV" | "TupleV" | "OptV" | "ListV"
-            | "FuncV" | "ExternV",
-            _,
-        ) => Err(DecodeError::Expected("valid IL value arity")),
-        (unknown, _) => Err(DecodeError::UnknownVariant(unknown.to_owned())),
-    }
-}
-
-impl ValueEncoder<'_> {
-    fn encode_value(&self, value: &ast::Value) -> Result<json, EncodeError> {
-        let kind = self.encode_value_kind(self.arena.kind(value))?;
-        Ok(json!({
-            "it": kind,
-            "note": self.encode_vnote(self.arena.typ(value)),
-            "at": source::encode_region(self.arena.span(value)),
-        }))
-    }
-
-    fn encode_value_kind(&self, value_kind: &ValueKind) -> Result<json, EncodeError> {
-        Ok(match value_kind {
-            ValueKind::Bool(value) => json!(["BoolV", value]),
-            ValueKind::Num(num) => json!(["NumV", xl::encode_num(num)]),
-            ValueKind::Text(text) => json!(["TextV", text]),
-            ValueKind::Struct(fields) => json!([
-                "StructV",
-                fields
-                    .iter()
-                    .map(|(atom, value)| Ok(json!([
-                        AtomPhraseCodec::encode(atom),
-                        self.encode_value(value)?
-                    ])))
-                    .collect::<Result<Vec<_>, EncodeError>>()?
-            ]),
-            ValueKind::Case(case) => {
-                json!([
-                    "CaseV",
-                    mixfix::try_encode(case, |value| self.encode_value(value))?
-                ])
-            }
-            ValueKind::Tuple(values) => json!([
-                "TupleV",
-                values
-                    .iter()
-                    .map(|value| self.encode_value(value))
-                    .collect::<Result<Vec<_>, _>>()?
-            ]),
-            ValueKind::Opt(value) => json!([
-                "OptV",
-                match value {
-                    Some(value) => self.encode_value(value)?,
-                    None => json::Null,
-                }
-            ]),
-            ValueKind::List(values) => json!([
-                "ListV",
-                values
-                    .iter()
-                    .map(|value| self.encode_value(value))
-                    .collect::<Result<Vec<_>, _>>()?
-            ]),
-            ValueKind::Func(id) => json!(["FuncV", encode_id(id)]),
-            ValueKind::Extern(_) => panic!("extern payloads are not supported by OCaml wire"),
-        })
-    }
 }
 
 pub(super) fn decode_un_op(json: &json) -> Result<UnOp, DecodeError> {

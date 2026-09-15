@@ -1,8 +1,8 @@
 //! Stage-specific evaluation contract used by a composed runner.
 //!
-//! An interpreter defines the specification, configuration, and execution state
-//! for one language stage. Evaluation receives the assembled runner context, so it
-//! can call builtins and externs without storing callbacks or global state.
+//! An interpreter owns its configuration and cache for one language stage.
+//! Evaluation receives the assembled runner context, including the interpreter,
+//! so extern calls can reenter without a second mutable interpreter borrow.
 
 use crate::{
     lang::{data::value::Value, il::ast::Typ},
@@ -13,34 +13,35 @@ use super::{Extern, Interface, RunnerContext};
 
 // == Interpreter contract
 
-pub trait Interpreter<I, E>: Sized
+pub trait Interpreter<Iface, Exn>: Sized
 where
-    I: Interface,
-    E: Extern,
+    Iface: Interface,
+    Exn: Extern,
 {
     type Spec;
-    type Config;
-    type State: Default;
     type Error: From<InterfaceError> + From<ExternError>;
 
-    /// Clears execution state without invalidating arena values
-    fn clear(state: &mut Self::State);
+    /// Clears cached results without invalidating arena values
+    fn clear(&mut self);
+
+    /// Resets program-owned execution state while retaining configuration
+    fn reset(&mut self);
 
     /// Evaluates an already parsed program through the selected entry
     fn eval_program(
-        ctx: &mut RunnerContext<'_, Self, I, E>,
+        ctx: &mut RunnerContext<'_, Self, Iface, Exn>,
         name: &str,
         program: Value,
     ) -> Result<Vec<Value>, Self::Error>;
 
     fn eval_rel(
-        ctx: &mut RunnerContext<'_, Self, I, E>,
+        ctx: &mut RunnerContext<'_, Self, Iface, Exn>,
         name: &str,
         values: &[Value],
     ) -> Result<Vec<Value>, Self::Error>;
 
     fn eval_func(
-        ctx: &mut RunnerContext<'_, Self, I, E>,
+        ctx: &mut RunnerContext<'_, Self, Iface, Exn>,
         name: &str,
         targs: &[Typ],
         values: &[Value],

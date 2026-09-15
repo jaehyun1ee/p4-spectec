@@ -27,26 +27,26 @@ pub enum ExternError {
 // == Extern contract
 
 pub trait Extern: Sized {
-    fn eval_rel<S, I>(
+    fn eval_rel<Interp, Iface>(
         &self,
-        ctx: &mut RunnerContext<'_, S, I, Self>,
+        ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
         name: &str,
         values: &[Value],
-    ) -> Result<(Vec<Value>, bool), S::Error>
+    ) -> Result<(Vec<Value>, bool), Interp::Error>
     where
-        I: Interface,
-        S: Interpreter<I, Self>;
+        Iface: Interface,
+        Interp: Interpreter<Iface, Self>;
 
-    fn eval_func<S, I>(
+    fn eval_func<Interp, Iface>(
         &self,
-        ctx: &mut RunnerContext<'_, S, I, Self>,
+        ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
         name: &str,
         targs: &[Typ],
         values: &[Value],
-    ) -> Result<(Value, bool), S::Error>
+    ) -> Result<(Value, bool), Interp::Error>
     where
-        I: Interface,
-        S: Interpreter<I, Self>;
+        Iface: Interface,
+        Interp: Interpreter<Iface, Self>;
 
     fn clear(&mut self);
 }
@@ -56,30 +56,30 @@ pub trait Extern: Sized {
 pub struct NullExtern;
 
 impl Extern for NullExtern {
-    fn eval_rel<S, I>(
+    fn eval_rel<Interp, Iface>(
         &self,
-        _ctx: &mut RunnerContext<'_, S, I, Self>,
+        _ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
         _name: &str,
         _values: &[Value],
-    ) -> Result<(Vec<Value>, bool), S::Error>
+    ) -> Result<(Vec<Value>, bool), Interp::Error>
     where
-        I: Interface,
-        S: Interpreter<I, Self>,
+        Iface: Interface,
+        Interp: Interpreter<Iface, Self>,
     {
         let error = ExternError::NotConfigured;
         Err(error.into())
     }
 
-    fn eval_func<S, I>(
+    fn eval_func<Interp, Iface>(
         &self,
-        _ctx: &mut RunnerContext<'_, S, I, Self>,
+        _ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
         _name: &str,
         _targs: &[Typ],
         _values: &[Value],
-    ) -> Result<(Value, bool), S::Error>
+    ) -> Result<(Value, bool), Interp::Error>
     where
-        I: Interface,
-        S: Interpreter<I, Self>,
+        Iface: Interface,
+        Interp: Interpreter<Iface, Self>,
     {
         let error = ExternError::NotConfigured;
         Err(error.into())

@@ -6,3 +6,5 @@ mod error;
 mod lexer;
 #[path = "frontend/parse.rs"]
 mod parse;
+#[path = "support/spec.rs"]
+mod spec_fixture;

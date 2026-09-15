@@ -1,3 +1,5 @@
+use serde::{Deserialize, Serialize};
+
 use std::{error::Error, fmt};
 
 use crate::lang::{
@@ -9,7 +11,9 @@ use crate::lang::{
     },
 };
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+// == Types
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum Atom {
     /// Concrete object word such as `INT`
     Keyword(String),
@@ -71,6 +75,8 @@ pub enum Atom {
     RBrace,
 }
 
+// == Errors
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AtomError {
     InvalidTag(String),
@@ -97,6 +103,8 @@ impl fmt::Display for AtomError {
 }
 
 impl Error for AtomError {}
+
+// == Printing
 
 impl Print for Atom {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
@@ -159,11 +167,6 @@ impl Free for Atom {
 impl Atom {
     // - Keyword
 
-    /// Constructs a keyword atom from an identifier
-    pub fn keyword(id: impl Into<String>) -> Self {
-        Self::Keyword(id.into())
-    }
-
     // - Tag
 
     fn is_upid(id: &str) -> bool {
@@ -197,5 +200,36 @@ impl Atom {
         } else {
             Ok(Self::Operator(op))
         }
+    }
+}
+
+// == Serialization
+
+// - Encode
+
+impl<State> serde_state::SerializeState<State> for Atom {
+    fn serialize_state<Serializer>(
+        &self,
+        serializer: Serializer,
+        _state: &State,
+    ) -> Result<Serializer::Ok, Serializer::Error>
+    where
+        Serializer: serde::Serializer,
+    {
+        self.serialize(serializer)
+    }
+}
+
+// - Decode
+
+impl<'de, State> serde_state::DeserializeState<'de, State> for Atom {
+    fn deserialize_state<Deserializer>(
+        _state: &mut State,
+        deserializer: Deserializer,
+    ) -> Result<Self, Deserializer::Error>
+    where
+        Deserializer: serde::Deserializer<'de>,
+    {
+        Self::deserialize(deserializer)
     }
 }

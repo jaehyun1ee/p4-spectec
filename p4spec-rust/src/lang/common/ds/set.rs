@@ -96,11 +96,6 @@ impl PhraseSet<Id> {
         self.entries.contains(&key.node)
     }
 
-    /// Returns the stored key equivalent to `key`
-    pub fn get(&self, key: &Id) -> Option<&Id> {
-        self.entries.get(&key.node).map(|key| &key.0)
-    }
-
     /// Removes and returns the stored key equivalent to `key`
     pub fn take(&mut self, key: &Id) -> Option<Id> {
         self.entries.remove(&key.node).map(|key| key.0)

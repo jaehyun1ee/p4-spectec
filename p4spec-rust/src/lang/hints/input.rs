@@ -51,17 +51,6 @@ impl InputHint {
     }
 }
 
-/// Converts to string
-pub fn to_string(hint: &InputHint) -> String {
-    format!(
-        "hint(input {})",
-        hint.indices
-            .iter()
-            .map(|index| format!("%{index}"))
-            .collect::<Vec<_>>()
-            .join(" ")
-    )
-}
 // Syntax equivalence of hints
 
 impl SyntaxEq for InputHint {

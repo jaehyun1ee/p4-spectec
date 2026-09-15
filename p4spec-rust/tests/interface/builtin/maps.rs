@@ -1,3 +1,4 @@
+use p4spec_rust::lang::data::value::Value;
 use p4spec_rust::lang::data::value::ValueArena;
 use p4spec_rust::{
     frontend::parse::parse_mixop,
@@ -48,7 +49,10 @@ fn test_map_update_retains_notation() {
     .unwrap();
     let mut span_key = Span::default();
     span_key.left.line = 17;
-    let key_updated = arena.update_span(key, span_key).unwrap();
+    let key_updated = Value {
+        span: make::bool(&mut arena, false, span_key).unwrap().span,
+        ..key
+    };
     let value_updated = make::bool(&mut arena, false, Span::default()).unwrap();
     let result = maps::add_map(
         &mut arena,

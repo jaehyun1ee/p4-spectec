@@ -1,4 +1,4 @@
-//! String and filesystem entry points for the SpecTec parser
+//! Filesystem and notation-shape entry points for the SpecTec parser
 
 use std::{
     fs, io,
@@ -24,11 +24,6 @@ use super::{
     parser,
     tokens::parser_tokens,
 };
-
-/// Parses a SpecTec string with no filesystem source name
-pub fn parse_string(source: &str) -> Result<Spec, FrontendError> {
-    parse_source(Rc::from(""), source, &Context::default())
-}
 
 /// Parses the notation shape syntax used by runtime case constructors.
 pub fn parse_mixop(source: &str) -> Result<Mixop, FrontendError> {
@@ -96,11 +91,6 @@ fn parse_error(ctx: &Context, error: ParseError<Location, Token, FrontendError>)
         span: ctx.span(loc_l, loc_r),
     }
     .into()
-}
-
-/// Reads and parses one SpecTec file
-pub fn parse_file(path: impl AsRef<Path>) -> Result<Spec, FrontendError> {
-    parse_file_with_context(path.as_ref(), &Context::default())
 }
 
 fn parse_file_with_context(path: &Path, ctx: &Context) -> Result<Spec, FrontendError> {

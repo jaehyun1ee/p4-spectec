@@ -1,0 +1,65 @@
+use crate::{
+    lang::{
+        common::source::Span,
+        data::{
+            typ,
+            value::{Value, get, make},
+        },
+    },
+    runner::{Extern, ExternError, Interface, Interpreter, RunnerContext},
+    sim_plugin::spec::func,
+};
+use serde::{Deserialize, Serialize};
+
+/// Output packet data accumulated by emission
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PacketOut {
+    pub bits: Vec<bool>,
+}
+
+impl PacketOut {
+    /// Appends the header's bits to the output packet
+    ///
+    /// ```text
+    /// void emit<T>(in T hdr);
+    /// ```
+    pub fn emit<Interp, Iface, Exn>(
+        &self,
+        ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+        value_ctx: Value,
+        value_arch: Value,
+    ) -> Result<(Self, Value, Value, Value), Interp::Error>
+    where
+        Iface: Interface,
+        Exn: Extern,
+        Interp: Interpreter<Iface, Exn>,
+    {
+        let value_hdr = func::find_var_e_local(ctx, value_ctx, "hdr")?;
+        let value_bits = func::write_bits_from_value(ctx, value_hdr)?;
+        let bits = get::list(ctx.arena(), &value_bits)
+            .map_err(ExternError::from)?
+            .iter()
+            .map(|value| get::bool(ctx.arena(), value))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(ExternError::from)?;
+        let pkt = Self {
+            bits: self.bits.iter().copied().chain(bits).collect(),
+        };
+        let typ = typ::make::opt(typ::make::var(
+            crate::phrase!(node: "value".to_owned(), span: Span::default()),
+            Vec::new(),
+        ));
+        let value_opt = make::opt(ctx.arena_mut(), typ.node.into(), None, Span::default())
+            .map_err(ExternError::from)?;
+        let value_call_result = make::case_shaped! {
+            arena: ctx.arena_mut(),
+            shape: "RETURN value?",
+            args: vec![value_opt],
+            typ: "returnResult",
+            span: Span::default(),
+        }
+        .map_err(ExternError::from)?;
+        Ok((pkt, value_ctx, value_arch, value_call_result))
+    }
+}

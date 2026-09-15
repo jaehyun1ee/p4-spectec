@@ -5,7 +5,7 @@ use std::{
 };
 
 use p4spec_rust::{
-    frontend::parse::{parse_files, parse_string},
+    frontend::parse::parse_files,
     pass::{
         algo::{self, AlgoErrorKind},
         elaborate,
@@ -119,7 +119,7 @@ tbl def $compat =
   | (typeIR_l, TYPEDEF _ typeIR_r) => true
   | (_, _) => false
 "#;
-    let spec_el = parse_string(source).expect("parse crossed alias table");
+    let spec_el = crate::spec_fixture::parse(source).expect("parse crossed alias table");
     let spec_il = elaborate::elaborate(spec_el).expect("elaborate crossed alias table");
 
     let error = algo::convert(spec_il).expect_err("crossed alias rows overlap by syntax");

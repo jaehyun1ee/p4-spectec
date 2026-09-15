@@ -28,35 +28,6 @@ impl MixopCodec {
     }
 }
 
-pub(crate) fn try_encode<T, E>(
-    mixfix: &Mixfix<T>,
-    encode_arg: impl Copy + Fn(&T) -> Result<json, E>,
-) -> Result<json, E> {
-    Ok(match mixfix {
-        Mixfix::Arg(arg) => json!(["Arg", encode_arg(arg)?]),
-        Mixfix::Atom(atom) => json!(["Atom", AtomPhraseCodec::encode(atom)]),
-        Mixfix::Brack(atom_l, mixfix_inner, atom_r) => json!([
-            "Brack",
-            AtomPhraseCodec::encode(atom_l),
-            try_encode(mixfix_inner, encode_arg)?,
-            AtomPhraseCodec::encode(atom_r)
-        ]),
-        Mixfix::Infix(mixfix_l, atom, mixfix_r) => json!([
-            "Infix",
-            try_encode(mixfix_l, encode_arg)?,
-            AtomPhraseCodec::encode(atom),
-            try_encode(mixfix_r, encode_arg)?
-        ]),
-        Mixfix::Seq(items) => json!([
-            "Seq",
-            items
-                .iter()
-                .map(|item| try_encode(item, encode_arg))
-                .collect::<Result<Vec<_>, _>>()?
-        ]),
-    })
-}
-
 pub(crate) fn decode<T>(
     json: &json,
     mut decode_arg: impl FnMut(&json) -> Result<T, DecodeError>,

@@ -1,16 +1,13 @@
 //! Shared value data tests
 
 use super::{hash, span};
-use p4spec_rust::{
-    lang::{
-        common::source::Span,
-        data::{
-            typ,
-            value::{ValueArena, ValueKind, make},
-        },
-        traits::{cmp::SyntaxCmp, eq::SyntaxEq},
+use p4spec_rust::lang::{
+    common::source::Span,
+    data::{
+        typ,
+        value::{Value, ValueArena, ValueKind, make},
     },
-    wire::ocaml::lang::il::ValueCodec,
+    traits::{cmp::SyntaxCmp, eq::SyntaxEq},
 };
 
 #[test]
@@ -46,7 +43,6 @@ fn test_runtime_values_are_il_ast_values() {
         make::bool(&mut arena, true, Span::default()).unwrap();
 
     assert_eq!(arena.to_string(&value), "true");
-    assert!(ValueCodec::encode(&arena, &value).is_ok());
 }
 
 #[test]
@@ -56,9 +52,17 @@ fn test_value_views_resolve_nested_handles_in_each_arena() {
     let child_l = make::bool(&mut arena_l, true, span("left.p4", 1)).unwrap();
     let child_r_false = make::bool(&mut arena_r, false, span("right.p4", 2)).unwrap();
     let child_r = make::bool(&mut arena_r, true, span("right.p4", 3)).unwrap();
-    let child_r = arena_r
-        .update_typ(child_r, typ::TypKind::Text.into())
-        .unwrap();
+    let child_r = Value {
+        note: make::new(
+            &mut arena_r,
+            p4spec_rust::lang::data::value::ValueKind::Bool(false),
+            typ::TypKind::Text.into(),
+            Span::default(),
+        )
+        .unwrap()
+        .note,
+        ..child_r
+    };
     let value_l = make::tuple(
         &mut arena_l,
         typ::TypKind::Bool.into(),
@@ -153,13 +157,25 @@ fn test_external_json_order_agrees_with_identity_and_hash_across_arenas() {
     let values_a = payloads
         .iter()
         .map(|json| {
-            make::external(&mut arena_a, typ.clone(), json.clone(), Span::default()).unwrap()
+            make::external(
+                &mut arena_a,
+                typ.clone(),
+                json.clone().into(),
+                Span::default(),
+            )
+            .unwrap()
         })
         .collect::<Vec<_>>();
     let values_b = payloads
         .iter()
         .map(|json| {
-            make::external(&mut arena_b, typ.clone(), json.clone(), span("other.p4", 7)).unwrap()
+            make::external(
+                &mut arena_b,
+                typ.clone(),
+                json.clone().into(),
+                span("other.p4", 7),
+            )
+            .unwrap()
         })
         .collect::<Vec<_>>();
     for (idx_a, value_a) in values_a.iter().enumerate() {

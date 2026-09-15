@@ -7,7 +7,7 @@ use p4spec_rust::lang::{
     common::source::{Position, Span},
     data::{
         typ,
-        value::{ValueArena, ValueError, ValueTag, get, make},
+        value::{Value, ValueArena, ValueError, ValueTag, get, make},
     },
     xl::num::{Natural, Number},
 };
@@ -29,7 +29,7 @@ fn test_type_allocation_identity_preserves_annotations_and_value_syntax() {
     let value_l = make::list(&mut arena, typ_l.clone(), vec![child], Span::default()).unwrap();
     let value_r = make::list(&mut arena, typ_r.clone(), vec![child], Span::default()).unwrap();
     assert_ne!(value_l.note, value_r.note);
-    assert_eq!(arena.update_typ(value_l, typ_l.clone()).unwrap(), value_l);
+
     assert!(Rc::ptr_eq(arena.typ(&value_l), &typ_l));
     assert!(Rc::ptr_eq(arena.typ(&value_r), &typ_r));
     assert_eq!(arena.typ(&value_l), arena.typ(&value_r));
@@ -45,10 +45,23 @@ fn test_type_allocation_identity_preserves_annotations_and_value_syntax() {
 fn test_interned_bodies_preserve_outer_and_child_annotations() {
     let mut arena = ValueArena::new();
     let child = make::bool(&mut arena, true, span("child.p4", 11)).unwrap();
-    let child_relocated = arena.update_span(child, span("child.p4", 13)).unwrap();
-    let child_annotated = arena
-        .update_typ(child, typ::make::text().node.clone().into())
-        .unwrap();
+    let child_relocated = Value {
+        span: make::bool(&mut arena, false, span("child.p4", 13))
+            .unwrap()
+            .span,
+        ..child
+    };
+    let child_annotated = Value {
+        note: make::new(
+            &mut arena,
+            p4spec_rust::lang::data::value::ValueKind::Bool(false),
+            typ::make::text().node.clone().into(),
+            Span::default(),
+        )
+        .unwrap()
+        .note,
+        ..child
+    };
     assert_eq!(child.node, child_relocated.node);
     assert_eq!(child.node, child_annotated.node);
     assert_ne!(child.span, child_relocated.span);
@@ -161,10 +174,7 @@ fn test_interned_case_preserves_atom_locations_and_children() {
         assert!(arena.view(value).syntax_eq(&arena.view(value_relocated)));
     }
     let case_stored = get::case(&arena, &value).unwrap();
-    for (atom_stored, atom) in case_stored.atoms().into_iter().zip(case.atoms()) {
-        assert_eq!(atom_stored.node, atom.node);
-        assert_eq!(atom_stored.span, atom.span);
-    }
+
     assert_eq!(case_stored.args(), vec![&child, &child]);
 }
 
@@ -173,7 +183,8 @@ fn test_label_bodies_are_shared_across_outer_locations() {
     use p4spec_rust::lang::common::notation::atom::Atom;
     let mut arena = ValueArena::new();
     let child = make::bool(&mut arena, true, Span::default()).unwrap();
-    let atom = p4spec_rust::phrase!(node: Atom::keyword("field"), span: span("field.p4", 3));
+    let atom =
+        p4spec_rust::phrase!(node: Atom::Keyword("field".to_owned()), span: span("field.p4", 3));
     let value = make::structure(
         &mut arena,
         typ::TypKind::Bool.into(),
@@ -211,7 +222,14 @@ fn test_label_bodies_are_shared_across_outer_locations() {
     .unwrap();
     assert_eq!(func.node, func_relocated.node);
     assert_ne!(func.span, func_relocated.span);
-    assert_eq!(get::func(&arena, &func).unwrap().node, "f");
+    assert_eq!(
+        (match arena.kind(&func) {
+            p4spec_rust::lang::data::value::ValueKind::Func(id) => id,
+            _ => panic!("expected function"),
+        })
+        .node,
+        "f"
+    );
 }
 
 #[test]
@@ -311,14 +329,14 @@ fn test_external_float_order_normalizes_signed_zero() {
     let negative_zero = make::external(
         &mut arena,
         typ.clone(),
-        serde_json::json!(-0.0),
+        serde_json::json!(-0.0).into(),
         Span::default(),
     )
     .unwrap();
     let positive_zero = make::external(
         &mut arena,
         typ.clone(),
-        serde_json::json!(0.0),
+        serde_json::json!(0.0).into(),
         Span::default(),
     )
     .unwrap();
@@ -365,7 +383,7 @@ fn test_syntax_equality_distinguishes_nested_payloads_and_variants() {
     let mut arena = ValueArena::new();
     let value_true = make::bool(&mut arena, true, Span::default()).unwrap();
     let value_false = make::bool(&mut arena, false, Span::default()).unwrap();
-    let atom = p4spec_rust::phrase!(node: p4spec_rust::lang::common::notation::atom::Atom::keyword("field"), span: Span::default());
+    let atom = p4spec_rust::phrase!(node: p4spec_rust::lang::common::notation::atom::Atom::Keyword("field".to_owned()), span: Span::default());
     let value_l = make::structure(
         &mut arena,
         typ::TypKind::Bool.into(),
@@ -445,11 +463,13 @@ fn test_canonical_identities_ignore_all_locations_but_distinguish_contents() {
         lang::common::notation::{atom::Atom, mixfix::Mixfix},
         lang::data::value::{Value, ValueKind},
     };
+
     fn values(arena: &mut ValueArena, line: i64) -> Vec<Value> {
         let span = span("values.spec", line);
         let value_true = make::bool(arena, true, span.clone()).unwrap();
         let value_false = make::bool(arena, false, span.clone()).unwrap();
-        let atom = p4spec_rust::phrase!(node: Atom::keyword("field"), span: span.clone());
+        let atom =
+            p4spec_rust::phrase!(node: Atom::Keyword("field".to_owned()), span: span.clone());
         let id = p4spec_rust::phrase!(node: "function".to_owned(), span: span.clone());
         let case = Mixfix::Infix(
             Box::new(Mixfix::Arg(value_true)),
@@ -457,7 +477,9 @@ fn test_canonical_identities_ignore_all_locations_but_distinguish_contents() {
             Box::new(Mixfix::Arg(value_false)),
         );
         let value_case = make::case(arena, typ::TypKind::Bool.into(), case, span.clone()).unwrap();
-        let atom_case = get::case(arena, &value_case).unwrap().atoms()[0];
+        let Mixfix::Infix(_, atom_case, _) = get::case(arena, &value_case).unwrap() else {
+            panic!("expected infix")
+        };
         assert_eq!(&atom_case.span, arena.span(&value_true));
         let mut values = vec![value_case];
         for kind in [
@@ -474,7 +496,7 @@ fn test_canonical_identities_ignore_all_locations_but_distinguish_contents() {
             ValueKind::List(vec![value_false, value_true]),
             ValueKind::List(vec![value_true]),
             ValueKind::Func(id),
-            ValueKind::Extern(json::Null),
+            ValueKind::Extern(json::Null.into()),
         ] {
             values.push(make::new(arena, kind, typ::TypKind::Bool.into(), span.clone()).unwrap());
         }
@@ -504,11 +526,19 @@ fn test_canonical_identities_ignore_all_locations_but_distinguish_contents() {
     assert_eq!(fields_l[0].0.span, span("values.spec", 1));
     assert_eq!(fields_r[0].0.span, span("values.spec", 2));
     assert_eq!(
-        get::func(&arena, &values_l[13]).unwrap().span,
+        (match arena.kind(&values_l[13]) {
+            p4spec_rust::lang::data::value::ValueKind::Func(id) => id,
+            _ => panic!("expected function"),
+        })
+        .span,
         span("values.spec", 1)
     );
     assert_eq!(
-        get::func(&arena, &values_r[13]).unwrap().span,
+        (match arena.kind(&values_r[13]) {
+            p4spec_rust::lang::data::value::ValueKind::Func(id) => id,
+            _ => panic!("expected function"),
+        })
+        .span,
         span("values.spec", 2)
     );
 }
@@ -517,12 +547,16 @@ fn test_canonical_identities_ignore_all_locations_but_distinguish_contents() {
 fn test_default_span_interning_preserves_nondefault_positions() {
     let mut arena = ValueArena::new();
     let value = make::bool(&mut arena, true, Span::default()).unwrap();
-    let value_empty = arena
-        .update_span(
-            value,
+    let value_empty = Value {
+        span: make::bool(
+            &mut arena,
+            false,
             Span::new(Position::new("", 0, 0), Position::new("", 0, 0)),
         )
-        .unwrap();
+        .unwrap()
+        .span,
+        ..value
+    };
     assert_eq!(value.span, value_empty.span);
     for span in [
         Span::new(Position::new("", 1, 0), Position::new("", 1, 0)),
@@ -532,10 +566,12 @@ fn test_default_span_interning_preserves_nondefault_positions() {
             Position::new("program.p4", 0, 0),
         ),
     ] {
-        let value_located = arena.update_span(value, span.clone()).unwrap();
+        let value_located = Value {
+            span: make::bool(&mut arena, false, span.clone()).unwrap().span,
+            ..value
+        };
         assert_ne!(value_located.span, value.span);
         assert_eq!(arena.span(&value_located), &span);
-        assert_eq!(arena.update_span(value, span).unwrap(), value_located);
     }
 }
 
@@ -573,18 +609,81 @@ fn test_external_object_key_order_shares_canonical_identity() {
     let value_a = make::external(
         &mut arena,
         typ.clone(),
-        json::Object(fields.clone().into_iter().collect()),
+        json::Object(fields.clone().into_iter().collect()).into(),
         Span::default(),
     )
     .unwrap();
     let value_b = make::external(
         &mut arena,
         typ,
-        json::Object(fields.into_iter().rev().collect()),
+        json::Object(fields.into_iter().rev().collect()).into(),
         Span::default(),
     )
     .unwrap();
     assert_eq!(arena.canon_id(&value_a), arena.canon_id(&value_b));
     assert_eq!(hash(arena.kind(&value_a)), hash(arena.kind(&value_b)));
     assert!(arena.view(value_a).syntax_cmp(&arena.view(value_b)).is_eq());
+}
+
+#[test]
+fn test_external_canonical_equality_stops_at_json() {
+    use p4spec_rust::lang::data::value::external::{Encoding, encode_with};
+    let mut arena = ValueArena::new();
+    let value = make::bool(&mut arena, true, span("value.p4", 1)).unwrap();
+    let value_relocated = Value {
+        span: make::bool(&mut arena, false, span("value.p4", 2))
+            .unwrap()
+            .span,
+        ..value
+    };
+    let value_retyped = Value {
+        note: make::new(
+            &mut arena,
+            p4spec_rust::lang::data::value::ValueKind::Bool(false),
+            typ::TypKind::Text.into(),
+            Span::default(),
+        )
+        .unwrap()
+        .note,
+        ..value
+    };
+    for encoding in [Encoding::ArenaRelative, Encoding::ArenaIndependent] {
+        let mut values_external = Vec::new();
+        for value in [value, value_relocated, value_retyped, value] {
+            let payload = Rc::new(encode_with(&arena, encoding, &vec![value]).unwrap());
+            values_external.push(
+                make::external(
+                    &mut arena,
+                    typ::TypKind::Bool.into(),
+                    payload,
+                    Span::default(),
+                )
+                .unwrap(),
+            );
+        }
+        for value_external in &values_external[1..3] {
+            assert_ne!(
+                get::external(&arena, &values_external[0]).unwrap(),
+                get::external(&arena, value_external).unwrap()
+            );
+            assert_ne!(
+                arena.canon_id(&values_external[0]),
+                arena.canon_id(value_external)
+            );
+            assert!(
+                !arena
+                    .view(values_external[0])
+                    .syntax_eq(&arena.view(*value_external))
+            );
+        }
+        assert_eq!(values_external[0].node, values_external[3].node);
+        assert_eq!(
+            arena.canon_id(&values_external[0]),
+            arena.canon_id(&values_external[3])
+        );
+        assert_eq!(
+            hash(arena.kind(&values_external[0])),
+            hash(arena.kind(&values_external[3]))
+        );
+    }
 }

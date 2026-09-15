@@ -4,8 +4,7 @@ use std::rc::Rc;
 
 use p4spec_rust::lang::traits::print::Print;
 use p4spec_rust::{
-    frontend::parse::parse_string,
-    interp::al::{Al, Config, context::Global, error::ErrorKind},
+    interp::al::{AlInterp, Config, context::Global, error::ErrorKind},
     lang::{
         al::ast,
         common::source::Span,
@@ -20,16 +19,16 @@ use p4spec_rust::{
 };
 
 fn spec(source: &str) -> ast::Spec {
-    let spec_el = parse_string(source).expect("parse execution fixture");
+    let spec_el = crate::spec_fixture::parse(source).expect("parse execution fixture");
     let spec_il = elaborate::elaborate(spec_el).expect("elaborate execution fixture");
     algo::convert(spec_il).expect("convert execution fixture")
 }
 
-fn make_runner(spec_al: ast::Spec, det: bool) -> Runner<Al, BuiltinInterface, NullExtern> {
+fn make_runner(spec_al: ast::Spec, det: bool) -> Runner<AlInterp, BuiltinInterface, NullExtern> {
     Runner::new(
         Global::load(spec_al).unwrap(),
-        Config::new(false, det, true),
-        BuiltinInterface::new(p4spec_rust::interface::p4::unparse::P4Unparser::new()),
+        AlInterp::new(Config::new(false, det, true)),
+        p4spec_rust::interface::p4(&Vec::new()),
         NullExtern,
     )
 }
@@ -52,13 +51,13 @@ fn test_function_choice_preserves_order_and_counts_equal_successes() {
         let mut runner = make_runner(spec_al.clone(), false);
         assert_eq!(
             {
-                let value = &runner.eval_func("pick", &[], &[]).unwrap();
+                let value = &runner.context().call_func("pick", &[], &[]).unwrap();
                 number(runner.arena(), value)
             },
             "1"
         );
         let mut runner = make_runner(spec_al, true);
-        let error = runner.eval_func("pick", &[], &[]).unwrap_err();
+        let error = runner.context().call_func("pick", &[], &[]).unwrap_err();
         assert!(matches!(
             *error.kind,
             ErrorKind::Trace(TraceErrorKind::Execution)
@@ -90,7 +89,7 @@ fn test_table_rows_remain_sequential_in_deterministic_mode() {
     let mut runner = make_runner(vec![def], true);
     assert_eq!(
         {
-            let value = &runner.eval_func("pick", &[], &[]).unwrap();
+            let value = &runner.context().call_func("pick", &[], &[]).unwrap();
             number(runner.arena(), value)
         },
         "1"
@@ -115,12 +114,12 @@ def $fatal() = +9
         let mut runner = make_runner(spec(source), det);
         assert_eq!(
             {
-                let value = &runner.eval_func("recover", &[], &[]).unwrap();
+                let value = &runner.context().call_func("recover", &[], &[]).unwrap();
                 number(runner.arena(), value)
             },
             "+7"
         );
-        let error = runner.eval_func("fatal", &[], &[]).unwrap_err();
+        let error = runner.context().call_func("fatal", &[], &[]).unwrap_err();
         assert!(matches!(
             *error.kind,
             ErrorKind::Trace(TraceErrorKind::Execution)
@@ -150,7 +149,7 @@ def $entry(n) = $forward(n, def $add)
         {
             let value = &{
                 let (name, targs, values) = ("entry", &[], &[nat(runner.arena_mut(), 4)]);
-                runner.eval_func(name, targs, values)
+                runner.context().call_func(name, targs, values)
             }
             .unwrap();
             number(runner.arena(), value)
@@ -187,7 +186,7 @@ def $use(n) = $(n_a * 10 + n_b)
             {
                 let value = &{
                     let (name, targs, values) = ("use", &[], &[nat(runner.arena_mut(), 0)]);
-                    runner.eval_func(name, targs, values)
+                    runner.context().call_func(name, targs, values)
                 }
                 .unwrap();
                 number(runner.arena(), value)
@@ -198,7 +197,7 @@ def $use(n) = $(n_a * 10 + n_b)
             {
                 let value = &{
                     let (name, targs, values) = ("use", &[], &[nat(runner.arena_mut(), 2)]);
-                    runner.eval_func(name, targs, values)
+                    runner.context().call_func(name, targs, values)
                 }
                 .unwrap();
                 number(runner.arena(), value)
@@ -214,7 +213,7 @@ fn test_relation_outputs_follow_notation_order_and_equal_paths_are_ambiguous() {
     let mut runner = make_runner(spec_al.clone(), false);
     let values = {
         let (name, values) = ("Step", &[nat(runner.arena_mut(), 5)]);
-        runner.eval_rel(name, values)
+        runner.context().call_rel(name, values)
     }
     .unwrap();
     assert_eq!(
@@ -227,7 +226,7 @@ fn test_relation_outputs_follow_notation_order_and_equal_paths_are_ambiguous() {
     let mut runner = make_runner(spec_al, true);
     let error = {
         let (name, values) = ("Step", &[nat(runner.arena_mut(), 5)]);
-        runner.eval_rel(name, values)
+        runner.context().call_rel(name, values)
     }
     .unwrap_err();
     assert!(matches!(
@@ -254,7 +253,7 @@ rule Recover/fallback: n ~> 9
         let mut runner = make_runner(spec(source), det);
         let error = {
             let (name, values) = ("Recover", &[nat(runner.arena_mut(), 1)]);
-            runner.eval_rel(name, values)
+            runner.context().call_rel(name, values)
         }
         .unwrap_err();
         assert!(matches!(
@@ -315,7 +314,8 @@ def $fallback(n*) = n*
         )
         .unwrap();
         let mapped = runner
-            .eval_func("map", &[], std::slice::from_ref(&value))
+            .context()
+            .call_func("map", &[], std::slice::from_ref(&value))
             .unwrap();
         let expected = if values.is_empty() {
             vec![]
@@ -331,7 +331,8 @@ def $fallback(n*) = n*
             expected
         );
         let fallback = runner
-            .eval_func("fallback", &[], std::slice::from_ref(&value))
+            .context()
+            .call_func("fallback", &[], std::slice::from_ref(&value))
             .unwrap();
         assert_eq!(fallback.node, value.node);
     }
@@ -489,7 +490,10 @@ def $map_opt(n?) = n_result?
             Span::default(),
         )
         .unwrap();
-        let output = runner.eval_func("map_opt", &[], &[value]).unwrap();
+        let output = runner
+            .context()
+            .call_func("map_opt", &[], &[value])
+            .unwrap();
         assert_eq!(
             get::opt(runner.arena(), &output)
                 .unwrap()
@@ -547,7 +551,7 @@ def $not_hold(n) = false
                 for (name, expected) in [("hold", n == 0), ("not_hold", n != 0)] {
                     let result = {
                         let (name, targs, values) = (name, &[], &[nat(runner.arena_mut(), n)]);
-                        runner.eval_func(name, targs, values)
+                        runner.context().call_func(name, targs, values)
                     };
                     if external {
                         let error = result.unwrap_err();
@@ -587,7 +591,7 @@ def $choose(n) = $inc(n)
         {
             let value = &{
                 let (name, targs, values) = ("choose", &[], &[nat(runner.arena_mut(), 4)]);
-                runner.eval_func(name, targs, values)
+                runner.context().call_func(name, targs, values)
             }
             .unwrap();
             number(runner.arena(), value)
@@ -636,19 +640,19 @@ def $none() = $select(C)
         let mut runner = make_runner(spec(source), det);
         assert!(
             {
-                let value = &runner.eval_func("first", &[], &[]).unwrap();
+                let value = &runner.context().call_func("first", &[], &[]).unwrap();
                 get::bool(runner.arena(), value)
             }
             .unwrap()
         );
         assert!(
             !{
-                let value = &runner.eval_func("later", &[], &[]).unwrap();
+                let value = &runner.context().call_func("later", &[], &[]).unwrap();
                 get::bool(runner.arena(), value)
             }
             .unwrap()
         );
-        let error = runner.eval_func("none", &[], &[]).unwrap_err();
+        let error = runner.context().call_func("none", &[], &[]).unwrap_err();
         assert!(matches!(
             *error.kind,
             ErrorKind::Trace(TraceErrorKind::Execution)
@@ -680,10 +684,10 @@ rule Choose/else: n ~> 9
     );
     for det in [false, true] {
         let mut runner = make_runner(spec_al.clone(), det);
-        let func = runner.eval_func("choose", &[], &[]);
+        let func = runner.context().call_func("choose", &[], &[]);
         let rel = {
             let (name, values) = ("Choose", &[nat(runner.arena_mut(), 0)]);
-            runner.eval_rel(name, values)
+            runner.context().call_rel(name, values)
         };
         if det {
             assert!(func.unwrap_err().to_string().contains("fail"));
@@ -719,7 +723,8 @@ def $pick<X>(b, X) = $identity<X>(X)
                 value,
             ];
             let output = runner
-                .eval_func("pick", &[typ::make::nat()], &values)
+                .context()
+                .call_func("pick", &[typ::make::nat()], &values)
                 .unwrap();
             assert!((output == value));
         }
@@ -738,7 +743,7 @@ fn test_public_guard_rejects_malformed_function_input() {
             &[],
             &[make::bool(runner.arena_mut(), true, Span::default()).unwrap()],
         );
-        runner.eval_func(name, targs, values)
+        runner.context().call_func(name, targs, values)
     }
     .unwrap_err();
     assert!(
@@ -771,15 +776,15 @@ impl p4spec_rust::runner::Interface for Host {
 }
 
 impl p4spec_rust::runner::Extern for Host {
-    fn eval_rel<S, I>(
+    fn eval_rel<Interp, Iface>(
         &self,
-        ctx: &mut p4spec_rust::runner::RunnerContext<'_, S, I, Self>,
+        ctx: &mut p4spec_rust::runner::RunnerContext<'_, Interp, Iface, Self>,
         _name: &str,
         values: &[Value],
-    ) -> Result<(Vec<Value>, bool), S::Error>
+    ) -> Result<(Vec<Value>, bool), Interp::Error>
     where
-        I: p4spec_rust::runner::Interface,
-        S: p4spec_rust::runner::Interpreter<I, Self>,
+        Iface: p4spec_rust::runner::Interface,
+        Interp: p4spec_rust::runner::Interpreter<Iface, Self>,
     {
         self.calls.set(self.calls.get() + 1);
         let values = if self.reenter {
@@ -790,16 +795,16 @@ impl p4spec_rust::runner::Extern for Host {
         Ok((values, true))
     }
 
-    fn eval_func<S, I>(
+    fn eval_func<Interp, Iface>(
         &self,
-        ctx: &mut p4spec_rust::runner::RunnerContext<'_, S, I, Self>,
+        ctx: &mut p4spec_rust::runner::RunnerContext<'_, Interp, Iface, Self>,
         _name: &str,
         targs: &[ast::Typ],
         _values: &[Value],
-    ) -> Result<(Value, bool), S::Error>
+    ) -> Result<(Value, bool), Interp::Error>
     where
-        I: p4spec_rust::runner::Interface,
-        S: p4spec_rust::runner::Interpreter<I, Self>,
+        Iface: p4spec_rust::runner::Interface,
+        Interp: p4spec_rust::runner::Interpreter<Iface, Self>,
     {
         // The OCaml extern boundary erases type arguments
         assert!(targs.is_empty());
@@ -831,14 +836,14 @@ fn test_guards_toggle_input_checks_and_substitute_type_arguments() {
     let spec_al = spec("var n : nat\ndec $ignore<X>(X) : nat\ndef $ignore<X>(X) = 1");
     for det in [false, true] {
         for guard in [false, true] {
-            let mut runner = Runner::<Al, _, _>::new(
+            let mut runner = Runner::<AlInterp, _, _>::new(
                 Global::load(spec_al.clone()).unwrap(),
-                Config::new(false, det, guard),
-                BuiltinInterface::new(p4spec_rust::interface::p4::unparse::P4Unparser::new()),
+                AlInterp::new(Config::new(false, det, guard)),
+                p4spec_rust::interface::p4(&Vec::new()),
                 NullExtern,
             );
             let invalid = make::bool(runner.arena_mut(), true, Span::default()).unwrap();
-            let result = runner.eval_func(
+            let result = runner.context().call_func(
                 "ignore",
                 &[typ::make::nat()],
                 std::slice::from_ref(&invalid),
@@ -853,7 +858,7 @@ fn test_guards_toggle_input_checks_and_substitute_type_arguments() {
                 assert!(
                     {
                         let (name, targs, values) = ("ignore", &[], &[nat(runner.arena_mut(), 1)]);
-                        runner.eval_func(name, targs, values)
+                        runner.context().call_func(name, targs, values)
                     }
                     .unwrap_err()
                     .to_string()
@@ -861,7 +866,8 @@ fn test_guards_toggle_input_checks_and_substitute_type_arguments() {
                 );
                 assert!(
                     runner
-                        .eval_func("ignore", &[typ::make::nat()], &[])
+                        .context()
+                        .call_func("ignore", &[typ::make::nat()], &[])
                         .unwrap_err()
                         .to_string()
                         .contains("function argument of ignore")
@@ -872,7 +878,8 @@ fn test_guards_toggle_input_checks_and_substitute_type_arguments() {
             assert_eq!(
                 {
                     let value = &runner
-                        .eval_func("ignore", &[typ::make::bool()], &[invalid])
+                        .context()
+                        .call_func("ignore", &[typ::make::bool()], &[invalid])
                         .unwrap();
                     number(runner.arena(), value)
                 },
@@ -901,7 +908,7 @@ fn test_relation_input_guards_use_hint_order() {
         {
             let value = &{
                 let (name, values) = ("Pick", &[boolean, nat(runner.arena_mut(), 1)]);
-                runner.eval_rel(name, values)
+                runner.context().call_rel(name, values)
             }
             .unwrap()[0];
             number(runner.arena(), value)
@@ -910,7 +917,7 @@ fn test_relation_input_guards_use_hint_order() {
     );
     let error = {
         let (name, values) = ("Pick", &[nat(runner.arena_mut(), 1), boolean]);
-        runner.eval_rel(name, values)
+        runner.context().call_rel(name, values)
     }
     .unwrap_err();
     assert!(error.to_string().contains("relation input of Pick"));
@@ -938,14 +945,14 @@ def $pick<X>() = $external<X>()
                 false,
             );
             let calls = external.calls.clone();
-            let mut runner = Runner::<Al, _, _>::new(
+            let mut runner = Runner::<AlInterp, _, _>::new(
                 Global::load(spec_al.clone()).unwrap(),
-                Config::new(false, det, guard),
+                AlInterp::new(Config::new(false, det, guard)),
                 builtin,
                 external,
             );
             for name in ["builtin", "external", "pick"] {
-                let result = runner.eval_func(name, &[typ::make::nat()], &[]);
+                let result = runner.context().call_func(name, &[typ::make::nat()], &[]);
                 if guard {
                     let error = result.unwrap_err();
                     assert!(
@@ -957,7 +964,10 @@ def $pick<X>() = $external<X>()
                 }
                 assert!(
                     {
-                        let value = &runner.eval_func(name, &[typ::make::bool()], &[]).unwrap();
+                        let value = &runner
+                            .context()
+                            .call_func(name, &[typ::make::bool()], &[])
+                            .unwrap();
                         get::bool(runner.arena(), value)
                     }
                     .is_ok()
@@ -983,6 +993,7 @@ fn test_extern_relation_output_guards_preserve_call_span() {
         panic!("relation premise")
     };
     let span = prem.id.span.clone();
+
     fn find_output(
         error: &p4spec_rust::interp::al::error::Error,
     ) -> Option<&p4spec_rust::interp::al::error::Error> {
@@ -998,15 +1009,15 @@ fn test_extern_relation_output_guards_preserve_call_span() {
         }
     }
     for guard in [false, true] {
-        let mut runner = Runner::<Al, _, _>::new(
+        let mut runner = Runner::<AlInterp, _, _>::new(
             Global::load(spec_al.clone()).unwrap(),
-            Config::new(false, false, guard),
-            BuiltinInterface::new(p4spec_rust::interface::p4::unparse::P4Unparser::new()),
+            AlInterp::new(Config::new(false, false, guard)),
+            p4spec_rust::interface::p4(&Vec::new()),
             host(|arena| nat(arena, 4), false),
         );
         let result = {
             let (name, values) = ("Entry", &[nat(runner.arena_mut(), 1)]);
-            runner.eval_rel(name, values)
+            runner.context().call_rel(name, values)
         };
         if guard {
             let error = result.unwrap_err();
@@ -1041,9 +1052,9 @@ def $ambiguous() = 2
     let external = host(|arena| nat(arena, 40), true);
     let calls_builtin = builtin.calls.clone();
     let calls_extern = external.calls.clone();
-    let mut runner = Runner::<Al, _, _>::new(
+    let mut runner = Runner::<AlInterp, _, _>::new(
         Global::load(spec(source)).unwrap(),
-        Config::new(false, true, true),
+        AlInterp::new(Config::new(false, true, true)),
         builtin,
         external,
     );
@@ -1053,7 +1064,7 @@ def $ambiguous() = 2
                 {
                     let value = &{
                         let (name, targs, values) = ("outer", &[], &[nat(runner.arena_mut(), 5)]);
-                        runner.eval_func(name, targs, values)
+                        runner.context().call_func(name, targs, values)
                     }
                     .unwrap();
                     number(runner.arena(), value)
@@ -1064,7 +1075,7 @@ def $ambiguous() = 2
                 {
                     let value = &{
                         let (name, values) = ("Relay", &[nat(runner.arena_mut(), 8)]);
-                        runner.eval_rel(name, values)
+                        runner.context().call_rel(name, values)
                     }
                     .unwrap()[0];
                     number(runner.arena(), value)
@@ -1081,7 +1092,7 @@ def $ambiguous() = 2
                     &[],
                     &[make::bool(runner.arena_mut(), true, Span::default()).unwrap()],
                 );
-                runner.eval_func(name, targs, values)
+                runner.context().call_func(name, targs, values)
             }
             .unwrap_err()
             .to_string()
@@ -1089,12 +1100,13 @@ def $ambiguous() = 2
         );
         assert!(
             runner
-                .eval_func("ambiguous", &[], &[])
+                .context()
+                .call_func("ambiguous", &[], &[])
                 .unwrap_err()
                 .to_string()
                 .contains("non-deterministic")
         );
-        runner.clear();
+        runner.reset();
         assert_eq!(calls_builtin.get(), 0);
         assert_eq!(calls_extern.get(), 0);
     }
@@ -1105,10 +1117,10 @@ fn test_extern_reentry_uses_public_input_guards() {
     let source =
         "extern dec $bridge(nat) : nat\nvar n : nat\ndec $inner(nat) : nat\ndef $inner(n) = 7";
     for guard in [false, true] {
-        let mut runner = Runner::<Al, _, _>::new(
+        let mut runner = Runner::<AlInterp, _, _>::new(
             Global::load(spec(source)).unwrap(),
-            Config::new(false, false, guard),
-            BuiltinInterface::new(p4spec_rust::interface::p4::unparse::P4Unparser::new()),
+            AlInterp::new(Config::new(false, false, guard)),
+            p4spec_rust::interface::p4(&Vec::new()),
             host(
                 |arena| make::bool(arena, true, Span::default()).unwrap(),
                 true,
@@ -1116,7 +1128,7 @@ fn test_extern_reentry_uses_public_input_guards() {
         );
         let result = {
             let (name, targs, values) = ("bridge", &[], &[nat(runner.arena_mut(), 1)]);
-            runner.eval_func(name, targs, values)
+            runner.context().call_func(name, targs, values)
         };
         if guard {
             assert!(
@@ -1135,16 +1147,16 @@ fn test_extern_reentry_uses_public_input_guards() {
 fn test_output_guard_after_success_is_fatal_only_in_deterministic_choice() {
     let source = "builtin dec $bad() : nat\ndec $pick() : nat\ndef $pick() = 1\ndef $pick() = $bad()\ndef $pick() = 9\n  -- otherwise";
     for det in [false, true] {
-        let mut runner = Runner::<Al, _, _>::new(
+        let mut runner = Runner::<AlInterp, _, _>::new(
             Global::load(spec(source)).unwrap(),
-            Config::new(false, det, true),
+            AlInterp::new(Config::new(false, det, true)),
             host(
                 |arena| make::bool(arena, true, Span::default()).unwrap(),
                 false,
             ),
             NullExtern,
         );
-        let result = runner.eval_func("pick", &[], &[]);
+        let result = runner.context().call_func("pick", &[], &[]);
         if det {
             assert!(
                 result
@@ -1183,7 +1195,7 @@ fn test_uncached_input_guards_are_limited_to_public_entries() {
     let mut runner = make_runner(spec_al, true);
     assert_eq!(
         {
-            let value = &runner.eval_func("entry", &[], &[]).unwrap();
+            let value = &runner.context().call_func("entry", &[], &[]).unwrap();
             number(runner.arena(), value)
         },
         "1"
@@ -1195,7 +1207,7 @@ fn test_uncached_input_guards_are_limited_to_public_entries() {
                 &[],
                 &[make::bool(runner.arena_mut(), true, Span::default()).unwrap()],
             );
-            runner.eval_func(name, targs, values)
+            runner.context().call_func(name, targs, values)
         }
         .unwrap_err()
         .to_string()
@@ -1218,9 +1230,9 @@ fn test_guard_failure_keeps_its_source_span_through_extern_reentry() {
         panic!("call")
     };
     let span = id.span.clone();
-    let mut runner = Runner::<Al, _, _>::new(
+    let mut runner = Runner::<AlInterp, _, _>::new(
         Global::load(spec_al).unwrap(),
-        Config::new(false, false, true),
+        AlInterp::new(Config::new(false, false, true)),
         host(
             |arena| make::bool(arena, true, Span::default()).unwrap(),
             false,
@@ -1229,7 +1241,7 @@ fn test_guard_failure_keeps_its_source_span_through_extern_reentry() {
     );
     let error = {
         let (name, targs, values) = ("bridge", &[], &[nat(runner.arena_mut(), 1)]);
-        runner.eval_func(name, targs, values)
+        runner.context().call_func(name, targs, values)
     }
     .unwrap_err();
     assert_eq!(error.span, span);
@@ -1240,10 +1252,10 @@ fn test_guard_failure_keeps_its_source_span_through_extern_reentry() {
 #[test]
 fn test_reentrant_public_guard_keeps_no_source_span() {
     let source = "extern dec $bridge(nat) : nat\nvar n : nat\ndec $inner(nat) : nat\ndef $inner(n) = 7\ndec $outer(nat) : nat\ndef $outer(n) = $bridge(n)";
-    let mut runner = Runner::<Al, _, _>::new(
+    let mut runner = Runner::<AlInterp, _, _>::new(
         Global::load(spec(source)).unwrap(),
-        Config::new(false, false, true),
-        BuiltinInterface::new(p4spec_rust::interface::p4::unparse::P4Unparser::new()),
+        AlInterp::new(Config::new(false, false, true)),
+        p4spec_rust::interface::p4(&Vec::new()),
         host(
             |arena| make::bool(arena, true, Span::default()).unwrap(),
             true,
@@ -1251,7 +1263,7 @@ fn test_reentrant_public_guard_keeps_no_source_span() {
     );
     let error = {
         let (name, targs, values) = ("outer", &[], &[nat(runner.arena_mut(), 1)]);
-        runner.eval_func(name, targs, values)
+        runner.context().call_func(name, targs, values)
     }
     .unwrap_err();
     assert!(error.to_string().contains("function argument of inner"));
@@ -1300,16 +1312,16 @@ impl p4spec_rust::runner::Interface for CacheHost {
 }
 
 impl p4spec_rust::runner::Extern for CacheHost {
-    fn eval_func<S, I>(
+    fn eval_func<Interp, Iface>(
         &self,
-        ctx: &mut p4spec_rust::runner::RunnerContext<'_, S, I, Self>,
+        ctx: &mut p4spec_rust::runner::RunnerContext<'_, Interp, Iface, Self>,
         name: &str,
         targs: &[ast::Typ],
         values: &[Value],
-    ) -> Result<(Value, bool), S::Error>
+    ) -> Result<(Value, bool), Interp::Error>
     where
-        I: p4spec_rust::runner::Interface,
-        S: p4spec_rust::runner::Interpreter<I, Self>,
+        Iface: p4spec_rust::runner::Interface,
+        Interp: p4spec_rust::runner::Interpreter<Iface, Self>,
     {
         assert!(targs.is_empty());
         self.record(name);
@@ -1321,15 +1333,15 @@ impl p4spec_rust::runner::Extern for CacheHost {
         Ok((value, false))
     }
 
-    fn eval_rel<S, I>(
+    fn eval_rel<Interp, Iface>(
         &self,
-        _context: &mut p4spec_rust::runner::RunnerContext<'_, S, I, Self>,
+        _ctx: &mut p4spec_rust::runner::RunnerContext<'_, Interp, Iface, Self>,
         name: &str,
         values: &[Value],
-    ) -> Result<(Vec<Value>, bool), S::Error>
+    ) -> Result<(Vec<Value>, bool), Interp::Error>
     where
-        I: p4spec_rust::runner::Interface,
-        S: p4spec_rust::runner::Interpreter<I, Self>,
+        Iface: p4spec_rust::runner::Interface,
+        Interp: p4spec_rust::runner::Interpreter<Iface, Self>,
     {
         self.record(name);
         Ok((values.to_vec(), false))
@@ -1349,9 +1361,9 @@ dec $pair(nat*, nat*) : (nat*, nat*)
 def $pair(ns_1, ns_2) = ($pure(ns_1), $pure(ns_2))
 "#;
     let host = CacheHost::default();
-    let mut runner = Runner::<Al, _, _>::new(
+    let mut runner = Runner::<AlInterp, _, _>::new(
         Global::load(spec(source)).unwrap(),
-        Config::new(true, false, false),
+        AlInterp::new(Config::new(true, false, false)),
         host.clone(),
         NullExtern,
     );
@@ -1360,11 +1372,21 @@ def $pair(ns_1, ns_2) = ($pure(ns_1), $pure(ns_2))
         p4spec_rust::lang::common::source::Position::new("right.p4", 50, 0),
         p4spec_rust::lang::common::source::Position::new("right.p4", 50, 2),
     );
-    let value_r = runner.arena_mut().update_span(value_l, span).unwrap();
-    let value_r = runner
-        .arena_mut()
-        .update_typ(value_r, typ::make::int().node.clone().into())
-        .unwrap();
+    let value_r = Value {
+        span: make::bool(runner.arena_mut(), false, span).unwrap().span,
+        ..value_l
+    };
+    let value_r = Value {
+        note: make::new(
+            runner.arena_mut(),
+            p4spec_rust::lang::data::value::ValueKind::Bool(false),
+            typ::make::int().node.clone().into(),
+            Span::default(),
+        )
+        .unwrap()
+        .note,
+        ..value_r
+    };
     let typ = typ::make::iter(typ::make::nat(), p4spec_rust::lang::common::Iter::List).node;
     let value_l = make::list(
         runner.arena_mut(),
@@ -1382,7 +1404,10 @@ def $pair(ns_1, ns_2) = ($pure(ns_1), $pure(ns_2))
     .unwrap();
     assert_ne!(value_l.node, value_r.node);
     for expected in [1, 2] {
-        let value = runner.eval_func("pair", &[], &[value_l, value_r]).unwrap();
+        let value = runner
+            .context()
+            .call_func("pair", &[], &[value_l, value_r])
+            .unwrap();
         assert_eq!(
             get::tuple(runner.arena(), &value).unwrap(),
             &[value_l, value_l]
@@ -1413,14 +1438,14 @@ def $pair(n) = ($recover(n), $recover(n))
 "#
             );
             let host = CacheHost::default();
-            let mut runner = Runner::<Al, _, _>::new(
+            let mut runner = Runner::<AlInterp, _, _>::new(
                 Global::load(spec(&source)).unwrap(),
-                Config::new(true, det, false),
+                AlInterp::new(Config::new(true, det, false)),
                 host.clone(),
                 NullExtern,
             );
             let value = nat(runner.arena_mut(), 5);
-            let result = runner.eval_func("pair", &[], &[value]).unwrap();
+            let result = runner.context().call_func("pair", &[], &[value]).unwrap();
             assert_eq!(
                 get::tuple(runner.arena(), &result).unwrap(),
                 &[value, value]
@@ -1456,20 +1481,20 @@ def $direct(n) = ($probe(n), $probe(n))
 "#;
     for cache in [false, true] {
         let host = CacheHost::default();
-        let mut runner = Runner::<Al, _, _>::new(
+        let mut runner = Runner::<AlInterp, _, _>::new(
             Global::load(spec(source)).unwrap(),
-            Config::new(cache, false, false),
+            AlInterp::new(Config::new(cache, false, false)),
             host.clone(),
             host.clone(),
         );
         let value = nat(runner.arena_mut(), 5);
-        let result = runner.eval_func("pair", &[], &[value]).unwrap();
+        let result = runner.context().call_func("pair", &[], &[value]).unwrap();
         assert_eq!(get::tuple(runner.arena(), &result).unwrap(), &[value; 4]);
         assert_eq!(host.count("probe"), if cache { 1 } else { 2 });
         assert_eq!(host.count("Probe"), 2);
-        runner.clear();
-        assert_eq!(number(runner.arena(), &value), "5");
-        runner.eval_func("direct", &[], &[value]).unwrap();
+        runner.reset();
+        let value = nat(runner.arena_mut(), 5);
+        runner.context().call_func("direct", &[], &[value]).unwrap();
         assert_eq!(host.count("probe"), 2);
     }
 }
@@ -1492,14 +1517,14 @@ def $pair(n) = ($outer(n), $outer(n))
 "#
         );
         let host = CacheHost::default();
-        let mut runner = Runner::<Al, _, _>::new(
+        let mut runner = Runner::<AlInterp, _, _>::new(
             Global::load(spec(&source)).unwrap(),
-            Config::new(true, false, false),
+            AlInterp::new(Config::new(true, false, false)),
             host.clone(),
             host.clone(),
         );
         let value = nat(runner.arena_mut(), 5);
-        runner.eval_func("pair", &[], &[value]).unwrap();
+        runner.context().call_func("pair", &[], &[value]).unwrap();
         let impure = operation == "impure";
         assert_eq!(host.count("bridge"), if impure { 2 } else { 1 });
         assert_eq!(host.count("pure"), if impure { 3 } else { 2 });
@@ -1520,28 +1545,28 @@ dec $pair(nat) : ((nat, nat), (nat, nat))
 def $pair(n) = ($apply(n, def $forward), $apply(n, def $forward))
 "#;
     let host = CacheHost::default();
-    let mut runner = Runner::<Al, _, _>::new(
+    let mut runner = Runner::<AlInterp, _, _>::new(
         Global::load(spec(source)).unwrap(),
-        Config::new(true, false, false),
+        AlInterp::new(Config::new(true, false, false)),
         host.clone(),
         host.clone(),
     );
     let value = nat(runner.arena_mut(), 5);
-    runner.eval_func("pair", &[], &[value]).unwrap();
+    runner.context().call_func("pair", &[], &[value]).unwrap();
     assert_eq!(host.count("probe"), 4);
 }
 
 #[test]
-fn test_cache_omits_type_arguments_and_runner_clear_discards_results() {
+fn test_cache_omits_type_arguments_and_runner_reset_discards_results() {
     let source = r#"
 builtin dec $pure<X>(nat) : nat
 dec $pair() : (nat, nat)
 def $pair() = ($pure<nat>(7), $pure<bool>(7))
 "#;
     let host = CacheHost::default();
-    let mut runner = Runner::<Al, _, _>::new(
+    let mut runner = Runner::<AlInterp, _, _>::new(
         Global::load(spec(source)).unwrap(),
-        Config::new(true, false, true),
+        AlInterp::new(Config::new(true, false, true)),
         host.clone(),
         NullExtern,
     );
@@ -1554,8 +1579,8 @@ def $pair() = ($pure<nat>(7), $pure<bool>(7))
             .unwrap()
     };
     assert_eq!(host.count("pure"), 1);
-    runner.clear();
     assert_eq!(get::tuple(runner.arena(), &value).unwrap().len(), 2);
+    runner.reset();
     let value_new = {
         let mut ctx_runner = runner.context();
         let ctx = p4spec_rust::interp::al::context::Context::new(ctx_runner.spec());
@@ -1563,11 +1588,11 @@ def $pair() = ($pure<nat>(7), $pure<bool>(7))
             .finish()
             .unwrap()
     };
-    assert_eq!(value, value_new);
+    assert_eq!(get::tuple(runner.arena(), &value_new).unwrap().len(), 2);
     assert_eq!(
         host.count("pure"),
         1,
-        "clear also discards internal call results"
+        "reset also discards internal call results"
     );
 }
 
@@ -1575,9 +1600,9 @@ def $pair() = ($pure<nat>(7), $pure<bool>(7))
 fn test_program_reset_isolates_cached_values_between_arenas() {
     let source = "var n : nat\nbuiltin dec $pure(nat) : nat\ndec $pair(nat) : (nat, nat)\ndef $pair(n) = ($pure(n), $pure(n))";
     let host = CacheHost::default();
-    let mut runner = Runner::<Al, _, _>::new(
+    let mut runner = Runner::<AlInterp, _, _>::new(
         Global::load(spec(source)).unwrap(),
-        Config::new(true, false, false),
+        AlInterp::new(Config::new(true, false, false)),
         host.clone(),
         NullExtern,
     );
@@ -1620,15 +1645,18 @@ dec $use(nat, nat) : (nat, nat, nat, nat)
 def $use(n_1, n_2) = ($pure(n_1, n_2), $pure(n_2, n_1), $pure(n_1, n_2), $other(n_1, n_2))
 "#;
     let host = CacheHost::default();
-    let mut runner = Runner::<Al, _, _>::new(
+    let mut runner = Runner::<AlInterp, _, _>::new(
         Global::load(spec(source)).unwrap(),
-        Config::new(true, false, true),
+        AlInterp::new(Config::new(true, false, true)),
         host.clone(),
         NullExtern,
     );
     let value_l = nat(runner.arena_mut(), 5);
     let value_r = nat(runner.arena_mut(), 7);
-    let value = runner.eval_func("use", &[], &[value_l, value_r]).unwrap();
+    let value = runner
+        .context()
+        .call_func("use", &[], &[value_l, value_r])
+        .unwrap();
     assert_eq!(
         get::tuple(runner.arena(), &value).unwrap(),
         &[value_l, value_r, value_l, value_l]
@@ -1670,23 +1698,31 @@ def $pair(s_1, s_2) = ($pure(s_1), $pure(s_2))
         (json!(u64::MAX - 1), json!(u64::MAX), 2),
     ] {
         let host = CacheHost::default();
-        let mut runner = Runner::<Al, _, _>::new(
+        let mut runner = Runner::new(
             Global::load(spec(source)).unwrap(),
-            Config::new(true, false, false),
+            AlInterp::new(Config::new(true, false, false)),
             host.clone(),
             NullExtern,
         );
         let id = phrase!(node: "state".to_owned(), span: Span::default());
         let typ = typ::make::var(id, vec![]).node;
         let typ = std::rc::Rc::new(typ);
-        let value_a =
-            make::external(runner.arena_mut(), typ.clone(), json_a, Span::default()).unwrap();
+        let value_a = make::external(
+            runner.arena_mut(),
+            typ.clone(),
+            json_a.into(),
+            Span::default(),
+        )
+        .unwrap();
         let span_b = Span::new(
             p4spec_rust::lang::common::source::Position::new("state.p4", 7, 0),
             p4spec_rust::lang::common::source::Position::new("state.p4", 7, 1),
         );
-        let value_b = make::external(runner.arena_mut(), typ, json_b, span_b).unwrap();
-        let value = runner.eval_func("pair", &[], &[value_a, value_b]).unwrap();
+        let value_b = make::external(runner.arena_mut(), typ, json_b.into(), span_b).unwrap();
+        let value = runner
+            .context()
+            .call_func("pair", &[], &[value_a, value_b])
+            .unwrap();
         let values = get::tuple(runner.arena(), &value).unwrap();
         assert_eq!(host.count("pure"), count);
         assert_eq!(

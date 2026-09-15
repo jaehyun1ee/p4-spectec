@@ -8,18 +8,15 @@ use super::{
     intern::{CanonId, CanonInterner, Interner, RcInterner},
     value::{Value, ValueError, ValueKind, ValueRef},
 };
-use crate::lang::{
-    common::source::{NotePhrase, Span},
-    data::typ::TypKind,
-};
+use crate::lang::{common::source::Span, data::typ::TypKind};
 
 // = Arena storage
 
 #[derive(Debug)]
 pub struct ValueArena {
-    values: CanonInterner<ValueKind>,
-    types: RcInterner<TypKind>,
-    spans: Interner<Span>,
+    pub(super) values: CanonInterner<ValueKind>,
+    pub(super) types: RcInterner<TypKind>,
+    pub(super) spans: Interner<Span>,
 }
 
 impl Default for ValueArena {
@@ -54,7 +51,7 @@ impl ValueArena {
         let node = self.values.intern(kind)?;
         let note = self.types.intern(typ)?;
         let span = self.spans.intern(span)?;
-        Ok(NotePhrase { node, note, span })
+        Ok(Value { node, note, span })
     }
 
     // - Lookup
@@ -78,18 +75,6 @@ impl ValueArena {
     /// Borrows a value issued by this arena for syntax comparisons
     pub fn view(&self, value: Value) -> ValueRef<'_> {
         ValueRef { arena: self, value }
-    }
-
-    // - Annotations
-
-    pub fn update_typ(&mut self, value: Value, typ: Rc<TypKind>) -> Result<Value, ValueError> {
-        let note = self.types.intern(typ)?;
-        Ok(Value { note, ..value })
-    }
-
-    pub fn update_span(&mut self, value: Value, span: Span) -> Result<Value, ValueError> {
-        let span = self.spans.intern(span)?;
-        Ok(Value { span, ..value })
     }
 
     // - Printing

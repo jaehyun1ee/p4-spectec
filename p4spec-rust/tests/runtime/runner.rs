@@ -2,8 +2,8 @@ use std::{cell::Cell, sync::Mutex};
 
 use p4spec_rust::{
     interface::{
-        builtin::BuiltinErrorKind,
-        p4::{error::P4UnparseError, unparse::P4Unparser},
+        builtin::{BuiltinErrorKind, call::Builtins, extract},
+        p4::error::P4UnparseError,
     },
     lang::common::source::Span,
     lang::data::{
@@ -36,22 +36,24 @@ struct FixtureConfig {
     label: String,
 }
 
-struct FixtureInterpreter;
+struct FixtureInterpreter {
+    config: FixtureConfig,
+}
 
-impl<I, E> Interpreter<I, E> for FixtureInterpreter
+impl<Iface, Exn> Interpreter<Iface, Exn> for FixtureInterpreter
 where
-    I: Interface,
-    E: Extern,
+    Iface: Interface,
+    Exn: Extern,
 {
     type Spec = ();
-    type Config = FixtureConfig;
-    type State = ();
     type Error = FixtureError;
 
-    fn clear(_state: &mut Self::State) {}
+    fn clear(&mut self) {}
+
+    fn reset(&mut self) {}
 
     fn eval_program(
-        _context: &mut RunnerContext<'_, Self, I, E>,
+        _ctx: &mut RunnerContext<'_, Self, Iface, Exn>,
         name: &str,
         program: Value,
     ) -> Result<Vec<Value>, Self::Error> {
@@ -62,7 +64,7 @@ where
     }
 
     fn eval_func(
-        ctx: &mut RunnerContext<'_, Self, I, E>,
+        ctx: &mut RunnerContext<'_, Self, Iface, Exn>,
         name: &str,
         targs: &[Typ],
         values: &[Value],
@@ -92,7 +94,7 @@ where
                 Ok(value)
             }
             "config" => {
-                let label = ctx.config().label.clone();
+                let label = ctx.interp().config.label.clone();
                 Ok(value::make::text(ctx.arena_mut(), label, Span::default()).unwrap())
             }
             "next_extern" => {
@@ -109,7 +111,7 @@ where
     }
 
     fn eval_rel(
-        _context: &mut RunnerContext<'_, Self, I, E>,
+        _ctx: &mut RunnerContext<'_, Self, Iface, Exn>,
         name: &str,
         _values: &[Value],
     ) -> Result<Vec<Value>, Self::Error> {
@@ -123,16 +125,16 @@ struct FixtureExtern {
 }
 
 impl Extern for FixtureExtern {
-    fn eval_func<S, I>(
+    fn eval_func<Interp, Iface>(
         &self,
-        ctx: &mut RunnerContext<'_, S, I, Self>,
+        ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
         name: &str,
         targs: &[Typ],
         values: &[Value],
-    ) -> Result<(Value, bool), S::Error>
+    ) -> Result<(Value, bool), Interp::Error>
     where
-        I: Interface,
-        S: Interpreter<I, Self>,
+        Iface: Interface,
+        Interp: Interpreter<Iface, Self>,
     {
         match name {
             "first" => {
@@ -165,15 +167,15 @@ impl Extern for FixtureExtern {
         }
     }
 
-    fn eval_rel<S, I>(
+    fn eval_rel<Interp, Iface>(
         &self,
-        _context: &mut RunnerContext<'_, S, I, Self>,
+        _ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
         name: &str,
         _values: &[Value],
-    ) -> Result<(Vec<Value>, bool), S::Error>
+    ) -> Result<(Vec<Value>, bool), Interp::Error>
     where
-        I: Interface,
-        S: Interpreter<I, Self>,
+        Iface: Interface,
+        Interp: Interpreter<Iface, Self>,
     {
         let error = ExternError::Failure(name.to_owned());
         Err(error.into())
@@ -199,10 +201,47 @@ fn test_null_interface_reports_configuration_failure() {
 }
 
 #[test]
+fn test_builtin_interface_registers_captured_extensions_and_overrides() {
+    let prefix = String::from("extra: ");
+    let suffix = String::from(" :override");
+    let builtins = Builtins::with_extensions([
+        (
+            "extra",
+            Box::new(move |arena, _targs, values| {
+                let value = extract::one(values)?;
+                let text = format!("{prefix}{}", get::text(arena, value)?);
+                Ok(value::make::text(arena, text, Span::default())?)
+            }),
+        ),
+        (
+            "strip_all_whitespace",
+            Box::new(move |arena, _targs, values| {
+                let value = extract::one(values)?;
+                let text = format!("{}{suffix}", get::text(arena, value)?);
+                Ok(value::make::text(arena, text, Span::default())?)
+            }),
+        ),
+    ]);
+    let mut interface = BuiltinInterface::new(builtins);
+    let mut arena = ValueArena::new();
+    let value = value::make::text(&mut arena, "a b".to_owned(), Span::default()).unwrap();
+    for (name, expected) in [
+        ("extra", "extra: a b"),
+        ("strip_all_whitespace", "a b :override"),
+    ] {
+        let (value, side_effected) = interface
+            .call_builtin(&mut arena, &id(name), &[], &[value])
+            .unwrap();
+        assert_eq!(get::text(&arena, &value), Ok(expected));
+        assert!(!side_effected);
+    }
+}
+
+#[test]
 fn test_builtin_interface_reports_side_effects_and_clears() {
     let mut arena = ValueArena::new();
     let _guard = FRESH_BUILTIN.lock().unwrap();
-    let mut interface = BuiltinInterface::new(P4Unparser::new());
+    let mut interface = p4spec_rust::interface::p4(&Vec::new());
     interface.clear();
     let (value, side_effected) = interface
         .call_builtin(&mut arena, &id("fresh_typeId"), &[], &[])
@@ -222,7 +261,7 @@ fn test_builtin_interface_reports_side_effects_and_clears() {
 #[test]
 fn test_builtin_interface_preserves_builtin_failures() {
     let mut arena = ValueArena::new();
-    let error = BuiltinInterface::new(P4Unparser::new())
+    let error = p4spec_rust::interface::p4(&Vec::new())
         .call_builtin(&mut arena, &id("sum_int"), &[], &[])
         .unwrap_err();
 
@@ -237,7 +276,7 @@ fn test_builtin_interface_preserves_builtin_failures() {
 fn test_builtin_interface_prints_p4_values_without_side_effects() {
     let mut arena = ValueArena::new();
     let value = value::make::text(&mut arena, "a\n\"b".to_owned(), Span::default()).unwrap();
-    let (printed, side_effected) = BuiltinInterface::new(P4Unparser::new())
+    let (printed, side_effected) = p4spec_rust::interface::p4(&Vec::new())
         .call_builtin(&mut arena, &id("print_"), &[typ::make::text()], &[value])
         .unwrap();
 
@@ -248,7 +287,7 @@ fn test_builtin_interface_prints_p4_values_without_side_effects() {
 #[test]
 fn test_builtin_interface_print_validates_both_arities() {
     let mut arena = ValueArena::new();
-    let mut interface = BuiltinInterface::new(P4Unparser::new());
+    let mut interface = p4spec_rust::interface::p4(&Vec::new());
     let typ = typ::make::text();
     let value = value::make::text(&mut arena, "value".to_owned(), Span::default()).unwrap();
     for (targs, values, actual) in [
@@ -279,7 +318,7 @@ fn test_builtin_interface_print_preserves_unparse_failures() {
         Span::default(),
     )
     .unwrap();
-    let error = BuiltinInterface::new(P4Unparser::new())
+    let error = p4spec_rust::interface::p4(&Vec::new())
         .call_builtin(&mut arena, &id("print_"), &[typ], &[value])
         .unwrap_err();
     assert!(matches!(
@@ -330,7 +369,7 @@ fn test_builtin_interface_print_preserves_spec_hints_after_clear() {
         value::make::case(&mut arena, typ.node.clone().into(), values, span).unwrap()
     };
     let _guard = FRESH_BUILTIN.lock().unwrap();
-    let mut interface = BuiltinInterface::new(P4Unparser::from_al_spec(&spec));
+    let mut interface = p4spec_rust::interface::p4(&spec);
     for _ in 0..2 {
         let (printed, side_effected) = interface
             .call_builtin(
@@ -350,12 +389,14 @@ fn test_builtin_interface_print_preserves_spec_hints_after_clear() {
 fn test_runner_statically_composes_its_components() {
     let mut runner = Runner::<FixtureInterpreter, NullInterface, NullExtern>::new(
         (),
-        FixtureConfig::default(),
+        FixtureInterpreter {
+            config: FixtureConfig::default(),
+        },
         NullInterface,
         NullExtern,
     );
 
-    let value = runner.eval_func("done", &[], &[]).unwrap();
+    let value = runner.context().call_func("done", &[], &[]).unwrap();
 
     assert_eq!(get::text(runner.arena(), &value), Ok("done"));
 }
@@ -364,12 +405,14 @@ fn test_runner_statically_composes_its_components() {
 fn test_extern_can_reenter_the_interpreter() {
     let mut runner = Runner::<FixtureInterpreter, NullInterface, FixtureExtern>::new(
         (),
-        FixtureConfig::default(),
+        FixtureInterpreter {
+            config: FixtureConfig::default(),
+        },
         NullInterface,
         FixtureExtern::default(),
     );
 
-    let value = runner.eval_func("outer", &[], &[]).unwrap();
+    let value = runner.context().call_func("outer", &[], &[]).unwrap();
 
     assert_eq!(get::text(runner.arena(), &value), Ok("done"));
 }
@@ -378,13 +421,18 @@ fn test_extern_can_reenter_the_interpreter() {
 fn test_extern_reports_side_effects_with_each_result() {
     let mut runner = Runner::<FixtureInterpreter, NullInterface, FixtureExtern>::new(
         (),
-        FixtureConfig::default(),
+        FixtureInterpreter {
+            config: FixtureConfig::default(),
+        },
         NullInterface,
         FixtureExtern::default(),
     );
 
-    let value_pure = runner.eval_func("pure_effect", &[], &[]).unwrap();
-    let value_impure = runner.eval_func("impure_effect", &[], &[]).unwrap();
+    let value_pure = runner.context().call_func("pure_effect", &[], &[]).unwrap();
+    let value_impure = runner
+        .context()
+        .call_func("impure_effect", &[], &[])
+        .unwrap();
 
     assert_eq!(get::bool(runner.arena(), &value_pure), Ok(false));
     assert_eq!(get::bool(runner.arena(), &value_impure), Ok(true));
@@ -394,12 +442,14 @@ fn test_extern_reports_side_effects_with_each_result() {
 fn test_null_extern_reports_configuration_failure() {
     let mut runner = Runner::<FixtureInterpreter, NullInterface, NullExtern>::new(
         (),
-        FixtureConfig::default(),
+        FixtureInterpreter {
+            config: FixtureConfig::default(),
+        },
         NullInterface,
         NullExtern,
     );
 
-    let error = runner.eval_func("extern", &[], &[]).unwrap_err();
+    let error = runner.context().call_func("extern", &[], &[]).unwrap_err();
 
     assert!(matches!(
         error,
@@ -407,41 +457,11 @@ fn test_null_extern_reports_configuration_failure() {
     ));
 }
 
-#[test]
-fn test_runner_clear_resets_host_state_and_preserves_config() {
-    let _guard = FRESH_BUILTIN.lock().unwrap();
-    let mut runner = Runner::<FixtureInterpreter, BuiltinInterface, FixtureExtern>::new(
-        (),
-        FixtureConfig {
-            label: "configured".to_owned(),
-        },
-        BuiltinInterface::new(P4Unparser::new()),
-        FixtureExtern::default(),
-    );
-    runner.clear();
-
-    assert_eq!(eval_text(&mut runner, "config"), "configured");
-    assert_eq!(eval_text(&mut runner, "next_extern"), "0");
-    assert_eq!(eval_text(&mut runner, "next_extern"), "1");
-    assert_eq!(eval_text(&mut runner, "next_builtin"), "FRESH__0");
-    assert_eq!(eval_text(&mut runner, "next_builtin"), "FRESH__1");
-
-    let value_config = runner.eval_func("config", &[], &[]).unwrap();
-    runner.clear();
-    let value_new = value::make::bool(runner.arena_mut(), true, Span::default()).unwrap();
-    assert_eq!(get::bool(runner.arena(), &value_new), Ok(true));
-    assert_eq!(get::text(runner.arena(), &value_config), Ok("configured"));
-
-    assert_eq!(eval_text(&mut runner, "config"), "configured");
-    assert_eq!(eval_text(&mut runner, "next_extern"), "0");
-    assert_eq!(eval_text(&mut runner, "next_builtin"), "FRESH__0");
-}
-
 fn eval_text(
     runner: &mut Runner<FixtureInterpreter, BuiltinInterface, FixtureExtern>,
     name: &str,
 ) -> String {
-    let value = runner.eval_func(name, &[], &[]).unwrap();
+    let value = runner.context().call_func(name, &[], &[]).unwrap();
     get::text(runner.arena(), &value).unwrap().to_owned()
 }
 
@@ -450,10 +470,12 @@ fn test_runner_reset_releases_program_arena_and_resets_hosts() {
     let _guard = FRESH_BUILTIN.lock().unwrap();
     let mut runner = Runner::<FixtureInterpreter, BuiltinInterface, FixtureExtern>::new(
         (),
-        FixtureConfig {
-            label: "configured".to_owned(),
+        FixtureInterpreter {
+            config: FixtureConfig {
+                label: "configured".to_owned(),
+            },
         },
-        BuiltinInterface::new(P4Unparser::new()),
+        p4spec_rust::interface::p4(&Vec::new()),
         FixtureExtern::default(),
     );
     let typ = std::rc::Rc::new(p4spec_rust::lang::data::typ::TypKind::Text);
@@ -487,7 +509,9 @@ fn test_runner_reset_releases_program_arena_and_resets_hosts() {
 fn test_runner_dispatches_program_entry_and_errors() {
     let mut runner = Runner::<FixtureInterpreter, NullInterface, NullExtern>::new(
         (),
-        FixtureConfig::default(),
+        FixtureInterpreter {
+            config: FixtureConfig::default(),
+        },
         NullInterface,
         NullExtern,
     );

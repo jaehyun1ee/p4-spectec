@@ -14,7 +14,6 @@ use crate::{
         common::notation::{atom::Atom, mixfix::Mixfix, mixop::Mixop},
         hints::alter::{self, AlterationHint, Renderer},
         il::ast::{DefTypKind, TypKind},
-        pl, sl,
         traits::print::Print,
         xl::num::Number,
     },
@@ -51,10 +50,6 @@ fn insert_case_hints(
 impl P4Unparser {
     // - Construction
 
-    pub fn new() -> Self {
-        Self::default()
-    }
-
     pub fn from_al_spec(spec_al: &[al::ast::Def]) -> Self {
         let mut hints = HashMap::new();
         for definition_al in spec_al {
@@ -65,34 +60,6 @@ impl P4Unparser {
                 continue;
             };
             insert_case_hints(&mut hints, &defined_typ_al.id.node, &defined_typ_al.def_typ);
-        }
-        Self { hints }
-    }
-
-    pub fn from_sl_spec(spec_sl: &[sl::ast::Def]) -> Self {
-        let mut hints = HashMap::new();
-        for definition_sl in spec_sl {
-            let sl::ast::DefKind::Typ(typ_def_sl) = &definition_sl.node else {
-                continue;
-            };
-            let sl::ast::TypDef::Defined(defined_typ_sl) = typ_def_sl else {
-                continue;
-            };
-            insert_case_hints(&mut hints, &defined_typ_sl.id.node, &defined_typ_sl.def_typ);
-        }
-        Self { hints }
-    }
-
-    pub fn from_pl_spec(spec_pl: &[pl::ast::Def]) -> Self {
-        let mut hints = HashMap::new();
-        for definition_pl in spec_pl {
-            let pl::ast::DefKind::Typ(typ_def_pl) = &definition_pl.node.node else {
-                continue;
-            };
-            let pl::ast::TypDef::Defined(defined_typ_pl) = typ_def_pl else {
-                continue;
-            };
-            insert_case_hints(&mut hints, &defined_typ_pl.id.node, &defined_typ_pl.def_typ);
         }
         Self { hints }
     }

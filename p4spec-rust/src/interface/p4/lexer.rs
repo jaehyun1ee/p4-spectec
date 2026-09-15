@@ -582,26 +582,18 @@ impl<'source, 'arena> Lexer<'source, 'arena> {
 
     // - String literals
 
-    fn bump_string(&mut self) -> Option<char> {
-        let character = self.source[self.index..].chars().next()?;
-        self.index += character.len_utf8();
-        // The recursive OCaml string scanner does not call Lexing.new_line
-        self.column += character.len_utf8() as i64;
-        Some(character)
-    }
-
     fn string_token(&mut self, pos_l: Position) -> Result<Phrase<Token>, P4Error> {
-        self.bump_string();
+        self.bump();
         let mut text = String::new();
         let pos_quote = loop {
             let pos_char = self.source_position();
-            let Some(character) = self.bump_string() else {
+            let Some(character) = self.bump() else {
                 return Err(self.error(LexErrorKind::UnterminatedString, pos_char));
             };
             match character {
                 '"' => break pos_char,
                 '\\' => {
-                    let Some(escaped) = self.bump_string() else {
+                    let Some(escaped) = self.bump() else {
                         return Err(
                             self.error(LexErrorKind::UnterminatedString, self.source_position())
                         );

@@ -34,7 +34,7 @@ fn binary_part<'a>(arena: &'a ValueArena, value: &'a Value, index: usize) -> &'a
 }
 
 fn operator<'a>(arena: &'a ValueArena, value: &'a Value) -> String {
-    P4Unparser::new()
+    P4Unparser::default()
         .render(arena, binary_part(arena, value, 1))
         .unwrap()
 }
