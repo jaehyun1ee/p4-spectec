@@ -232,17 +232,27 @@ fn assign_iter_exp<Ctx: AssignContext>(
     match iter {
         ast::Iter::Opt => {
             let value_inner = backtrack_from_result!(get::opt(arena, &value), span);
-            let mut ctx = match value_inner {
-                Some(value) => backtrack!(assign_exp(arena, ctx, exp_inner, value)),
-                None => ctx,
+            let ctx_sub = match value_inner {
+                Some(value) => Some(backtrack!(assign_exp(arena, ctx.clone(), exp_inner, value))),
+                None => None,
             };
+            if Ctx::RETAIN_OPTIONAL_SCALARS
+                && let Some(ctx_sub) = &ctx_sub
+            {
+                ctx = ctx_sub.clone();
+            }
             for var in vars {
                 let mut iters = var.iters.clone();
                 iters.push(ast::Iter::Opt);
                 let typ = typ::make::iterate(var.typ.clone(), &iters);
-                let value_sub = if value_inner.is_some() {
+                let value_sub = if let Some(ctx_sub) = &ctx_sub {
+                    let ctx_values = if Ctx::RETAIN_OPTIONAL_SCALARS {
+                        &ctx
+                    } else {
+                        ctx_sub
+                    };
                     let value = backtrack_from_result!(
-                        ctx.find_value(&Variable::new(var.id.clone(), var.iters.clone())),
+                        ctx_values.find_value(&Variable::new(var.id.clone(), var.iters.clone())),
                         &var.id.span
                     );
                     Some(*value)

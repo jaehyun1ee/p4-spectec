@@ -21,6 +21,8 @@ pub trait ValueContext: Clone {
 }
 
 pub trait AssignContext: ValueContext {
+    // AL keeps optional scalar assignments; SL exports only iterated bindings
+    const RETAIN_OPTIONAL_SCALARS: bool;
     type Func;
     fn add_value(&mut self, var: Variable, value: Value);
     fn wipe(&self) -> Self;

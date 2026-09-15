@@ -91,8 +91,9 @@ impl<T> Backtrack<T> {
                     .into_iter()
                     .map(|mut error| {
                         if !matches!(*error.kind, ErrorKind::Guard(_)) {
-                            error.kind =
-                                Box::new(ErrorKind::Guard(GuardErrorKind::Validation(error.kind)));
+                            error.kind = Box::new(ErrorKind::Guard(GuardErrorKind::Validation(
+                                error.kind.clone(),
+                            )));
                         }
                         error
                     })

@@ -297,6 +297,7 @@ fn invoke_rel_mode<Iface: Interface, Exn: Extern>(
 ) -> Backtrack<Vec<Value>> {
     let mut id = id.clone();
     let mut values = values.to_vec();
+    let mut pending = Vec::new();
     loop {
         let key =
             cache_rel(runner, ctx, &id).then(|| CallKey::new(runner.arena(), &id.node, &values));
@@ -342,11 +343,16 @@ fn invoke_rel_mode<Iface: Interface, Exn: Extern>(
             }
         });
         let pure = runner.interp_mut().cache.end();
-        let flow = backtrack!(result.nest(id.span.clone(), || ErrorKind::Trace(
-            TraceErrorKind::RelationInvocation {
-                rel: id.node.clone()
-            }
-        )));
+        let result = result.nest(id.span.clone(), || {
+            ErrorKind::Trace(TraceErrorKind::RelationInvocation {
+                rel: id.node.clone(),
+            })
+        });
+        let flow = match result {
+            Backtrack::Ok(flow) => flow,
+            Backtrack::Err(errors) => return nest_pending(Backtrack::Err(errors), pending),
+            Backtrack::Unmatch(errors) => return nest_pending(Backtrack::Unmatch(errors), pending),
+        };
         match flow {
             Flow::Result(values) => {
                 if pure && let Some(key) = key {
@@ -355,6 +361,7 @@ fn invoke_rel_mode<Iface: Interface, Exn: Extern>(
                 return Backtrack::Ok(values);
             }
             Flow::TailRel(id_tail, values_tail) => {
+                pending.push((id.span, TraceErrorKind::RelationInvocation { rel: id.node }));
                 id = id_tail;
                 values = values_tail;
             }
@@ -374,6 +381,7 @@ fn invoke_func_mode<Iface: Interface, Exn: Extern>(
     let mut id = id.clone();
     let mut targs = targs.to_vec();
     let mut values = values.to_vec();
+    let mut pending = Vec::new();
     loop {
         let key = cache_func(runner, ctx, &id, &values)
             .then(|| CallKey::new(runner.arena(), &id.node, &values));
@@ -464,23 +472,14 @@ fn invoke_func_mode<Iface: Interface, Exn: Extern>(
             }
         });
         let pure = runner.interp_mut().cache.end();
-        let flow = backtrack!(result.nest(id.span.clone(), || ErrorKind::Trace(
-            TraceErrorKind::FunctionInvocation {
-                func: id.node.clone(),
-                targs: if targs.is_empty() {
-                    String::new()
-                } else {
-                    format!(
-                        "<{}>",
-                        targs
-                            .iter()
-                            .map(Print::to_string)
-                            .collect::<Vec<_>>()
-                            .join(", ")
-                    )
-                },
-            }
-        )));
+        let result = result.nest(id.span.clone(), || {
+            ErrorKind::Trace(func_trace(&id, &targs))
+        });
+        let flow = match result {
+            Backtrack::Ok(flow) => flow,
+            Backtrack::Err(errors) => return nest_pending(Backtrack::Err(errors), pending),
+            Backtrack::Unmatch(errors) => return nest_pending(Backtrack::Unmatch(errors), pending),
+        };
         match flow {
             Flow::Return(value) => {
                 if pure && let Some(key) = key {
@@ -489,6 +488,8 @@ fn invoke_func_mode<Iface: Interface, Exn: Extern>(
                 return Backtrack::Ok(value);
             }
             Flow::TailFunc(id_tail, targs_tail, values_tail) => {
+                let trace = func_trace(&id, &targs);
+                pending.push((id.span, trace));
                 id = id_tail;
                 targs = targs_tail;
                 values = values_tail;
@@ -577,4 +578,32 @@ pub(crate) fn invoke_func_entry<Iface: Interface, Exn: Extern>(
     values: &[Value],
 ) -> Backtrack<Value> {
     invoke_func_mode(runner, ctx, id, targs, values, false)
+}
+
+fn nest_pending<T>(
+    mut result: Backtrack<T>,
+    pending: Vec<(crate::lang::common::source::Span, TraceErrorKind)>,
+) -> Backtrack<T> {
+    for (span, trace) in pending.into_iter().rev() {
+        result = result.nest(span, || ErrorKind::Trace(trace));
+    }
+    result
+}
+
+fn func_trace(id: &ast::Id, targs: &[ast::Typ]) -> TraceErrorKind {
+    TraceErrorKind::FunctionInvocation {
+        func: id.node.clone(),
+        targs: if targs.is_empty() {
+            String::new()
+        } else {
+            format!(
+                "<{}>",
+                targs
+                    .iter()
+                    .map(Print::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+        },
+    }
 }

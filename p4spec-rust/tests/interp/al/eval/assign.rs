@@ -366,3 +366,33 @@ fn test_empty_iteration_creates_empty_collections_for_every_binding() {
         );
     }
 }
+
+#[test]
+fn test_optional_destructuring_retains_al_scalar_rebindings() {
+    let mut arena = ValueArena::new();
+    let global = Global::load(vec![]).unwrap();
+    let mut ctx = Context::new(&global);
+    ctx.add_value(Variable::new(id("x"), vec![]), value(&mut arena, false));
+    let exp = iter(
+        exp(ast::ExpKind::Tuple(vec![var_exp("x"), var_exp("y")])),
+        ast::Iter::Opt,
+        vec![var("x", vec![]), var("y", vec![])],
+    );
+    let value_inner = value(&mut arena, true);
+    let value_tuple = tuple(&mut arena, vec![value_inner, value_inner]);
+    let value_opt = make::opt(
+        &mut arena,
+        typ::make::opt(typ::make::bool()).node.into(),
+        Some(value_tuple),
+        span(8),
+    )
+    .unwrap();
+    let ctx = ok(assign_exp(&mut arena, ctx, &exp, value_opt));
+    for name in ["x", "y"] {
+        assert_eq!(binding(&ctx, name, vec![]), value_inner);
+        assert_eq!(
+            get::opt(&arena, &binding(&ctx, name, vec![ast::Iter::Opt])).unwrap(),
+            Some(value_inner)
+        );
+    }
+}

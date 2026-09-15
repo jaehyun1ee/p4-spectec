@@ -1068,6 +1068,8 @@ fn public_tail_calls_recheck_target_inputs_while_internal_calls_skip_them() {
     );
     let error = runner.context().call_func("entry", &[], &[]).unwrap_err();
     assert!(error.to_string().contains("function argument of pure"));
+    assert!(matches!(*error.kind, ErrorKind::Guard(_)));
+    assert!(error.children.is_empty());
     assert_eq!(host.count("pure"), 0);
     let id = phrase!(node: "entry".to_owned(), span: Span::default());
     let mut ctx_runner = runner.context();

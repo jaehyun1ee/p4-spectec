@@ -482,6 +482,7 @@ impl crate::interp::shared::context::ValueContext for Context<'_> {
     }
 }
 impl crate::interp::shared::context::AssignContext for Context<'_> {
+    const RETAIN_OPTIONAL_SCALARS: bool = true;
     type Func = ast::MetaFuncDef;
     fn add_value(&mut self, var: Variable, value: Value) {
         self.add_value(var, value)

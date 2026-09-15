@@ -117,7 +117,9 @@ pub(crate) fn eval_sequential<Iface: Interface, Exn: Extern, Instr: Borrow<ast::
             tail && idx + 1 == block.len()
         )) {
             Flow::Cont(errors_post) => {
-                if errors_post.len() >= errors.len() {
+                if errors_post.iter().map(Error::depth).max().unwrap_or(0)
+                    >= errors.iter().map(Error::depth).max().unwrap_or(0)
+                {
                     errors = errors_post;
                 }
             }
@@ -128,6 +130,17 @@ pub(crate) fn eval_sequential<Iface: Interface, Exn: Extern, Instr: Borrow<ast::
 }
 
 pub fn eval_instr<Iface: Interface, Exn: Extern>(
+    runner: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
+    ctx: &Context<'_>,
+    instr: &ast::Instr,
+    tail: bool,
+) -> Backtrack<Flow> {
+    stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
+        eval_instr_inner(runner, ctx, instr, tail)
+    })
+}
+
+fn eval_instr_inner<Iface: Interface, Exn: Extern>(
     runner: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
     ctx: &Context<'_>,
     instr: &ast::Instr,
