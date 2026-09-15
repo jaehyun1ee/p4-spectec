@@ -293,7 +293,7 @@ fn test_ordered_table_encoding_and_register_failure() {
         action: action.clone(),
         id: Some("ignored".into()),
     });
-    runner::step(&mut runner, &mut run_case, &stmt).unwrap();
+    runner::run_stf_stmt(&mut runner, &mut run_case, &stmt).unwrap();
     let value_added = run_case.state.value_arch;
     let values = get::tuple(runner.arena(), &value_added).unwrap();
     let value_priority = get::opt(runner.arena(), &values[1]).unwrap().unwrap();
@@ -351,11 +351,8 @@ fn test_ordered_table_encoding_and_register_failure() {
         "first"
     );
     let calls = runner.context().interp().calls.clone();
-    assert_eq!(
-        get::text(runner.arena(), &calls[0].1[1]).unwrap(),
-        "tab\\\""
-    );
-    runner::step(
+    assert_eq!(get::text(runner.arena(), &calls[0].1[1]).unwrap(), "tab\"");
+    runner::run_stf_stmt(
         &mut runner,
         &mut run_case,
         &statement(Statement::SetDefault {
@@ -369,7 +366,7 @@ fn test_ordered_table_encoding_and_register_failure() {
     let calls = runner.context().interp().calls.clone();
     assert_eq!(get::text(runner.arena(), &calls[3].1[1]).unwrap(), "tab\"");
     let value_default = run_case.state.value_arch;
-    let error = runner::step(
+    let error = runner::run_stf_stmt(
         &mut runner,
         &mut run_case,
         &statement(Statement::RegisterWrite {
@@ -397,19 +394,45 @@ fn test_native_steps_clear_raw_outputs_without_flushing_pending_queues() {
         "wait\nmirroring_get 4611686018427387904\nexpect 1 aa*\nno_packet\n",
     )
     .unwrap();
-    runner::step(&mut runner, &mut run_case, &stmts[0]).unwrap();
+    runner::run_stf_stmt(&mut runner, &mut run_case, &stmts[0]).unwrap();
     assert!(run_case.state.txs.is_empty());
     assert_eq!(run_case.tx_output_queue, vec![tx(1, "AAFF")]);
-    runner::step(&mut runner, &mut run_case, &stmts[1]).unwrap();
+    runner::run_stf_stmt(&mut runner, &mut run_case, &stmts[1]).unwrap();
     assert_eq!(
-        runner::step(&mut runner, &mut run_case, &stmts[2]).unwrap(),
+        runner::run_stf_stmt(&mut runner, &mut run_case, &stmts[2]).unwrap(),
         Some(tx(1, "AAFF"))
     );
     assert_eq!(run_case.matches, vec![tx(1, "AAFF")]);
     assert!(
-        matches!(runner::step(&mut runner, &mut run_case, &stmts[3]), Err(Error::Stf { failure, span }) if matches!(*failure, StfFailure::Unsupported(_)) && span == stmts[3].span)
+        matches!(runner::run_stf_stmt(&mut runner, &mut run_case, &stmts[3]), Err(Error::Stf { failure, span }) if matches!(*failure, StfFailure::Unsupported(_)) && span == stmts[3].span)
     );
     run_case.finish().unwrap();
+}
+
+#[test]
+fn test_integer_parsing_preserves_i64_range_and_radix_prefixes() {
+    for (port, port_expect) in [
+        ("-9223372036854775808", i64::MIN),
+        ("-0x8000000000000000", i64::MIN),
+        ("9223372036854775807", i64::MAX),
+        ("0X7FFFFFFFFFFFFFFF", i64::MAX),
+        ("4611686018427387904", 1_i64 << 62),
+        ("0B10", 2),
+        ("00010", 10),
+    ] {
+        let (mut runner, mut run_case) = stf_runner(Ebpf::default());
+        let stmt = statement(Statement::Expect {
+            port: port.into(),
+            packet_expected: Some("AA".into()),
+            exact: true,
+        });
+        assert!(
+            runner::run_stf_stmt(&mut runner, &mut run_case, &stmt)
+                .unwrap()
+                .is_none()
+        );
+        assert_eq!(run_case.expect_queue[0].tx.port, port_expect);
+    }
 }
 
 #[test]
@@ -422,7 +445,7 @@ fn test_integer_failure_is_located_and_precedes_pipeline_dispatch() {
     ] {
         let stmts = stf::parse::parse_str("overflow.stf", source).unwrap();
         assert!(
-            matches!(runner::step(&mut runner, &mut run_case, &stmts[0]), Err(Error::Runtime(error)) if error.span == stmts[0].span)
+            matches!(runner::run_stf_stmt(&mut runner, &mut run_case, &stmts[0]), Err(Error::Runtime(error)) if error.span == stmts[0].span)
         );
     }
     assert!(runner.context().interp().calls.is_empty());
@@ -842,7 +865,7 @@ fn test_native_stf_encoding_modes_preserve_outputs_and_state() {
                     None
                 } else {
                     simulator
-                        .step(&mut run_case, &stmts[command - 1])
+                        .run_stf_stmt(&mut run_case, &stmts[command - 1])
                         .unwrap_or_else(|error| panic!("{encoding} command {command}: {error}"))
                 };
                 let Simulator::Psa(runner) = &mut simulator else {

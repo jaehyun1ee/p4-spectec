@@ -187,7 +187,7 @@ fn sim_command(args: SimArgs) -> ExitCode {
         Err(error) => return command_error(SimError::from(error)),
     };
     for stmt in &stmts {
-        match simulator.step(&mut run, stmt) {
+        match simulator.run_stf_stmt(&mut run, stmt) {
             Ok(Some(tx)) => println!("[PASS] Transmitted {tx}"),
             Ok(None) => {}
             Err(error) => return command_error(error),

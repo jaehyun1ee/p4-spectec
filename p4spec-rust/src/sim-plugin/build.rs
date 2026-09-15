@@ -94,8 +94,12 @@ impl Simulator {
         dispatch!(self, runner => runner::init_pipe(runner, includes, path))
     }
 
-    pub fn step(&mut self, run: &mut Run, stmt: &Phrase<Statement>) -> Result<Option<Tx>, Error> {
-        dispatch!(self, runner => runner::step(runner, run, stmt))
+    pub fn run_stf_stmt(
+        &mut self,
+        run: &mut Run,
+        stmt: &Phrase<Statement>,
+    ) -> Result<Option<Tx>, Error> {
+        dispatch!(self, runner => runner::run_stf_stmt(runner, run, stmt))
     }
 
     pub fn run_stf_test(

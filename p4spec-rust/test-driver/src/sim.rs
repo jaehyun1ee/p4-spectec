@@ -299,9 +299,11 @@ pub fn run(det: bool) -> Result<()> {
                 let stmts_stf = stf::parse::parse_file(&pair.path_stf)
                     .map_err(|error| Error::Invalid(format!("{id}: {error}")))?;
                 for (idx, stmt_stf) in stmts_stf.iter().enumerate() {
-                    simulator.step(&mut run_case, stmt_stf).map_err(|error| {
-                        Error::Invalid(format!("{id}: command {}: {error}", idx + 1))
-                    })?;
+                    simulator
+                        .run_stf_stmt(&mut run_case, stmt_stf)
+                        .map_err(|error| {
+                            Error::Invalid(format!("{id}: command {}: {error}", idx + 1))
+                        })?;
                     commands += 1;
                 }
                 run_case
