@@ -2,8 +2,8 @@ use std::{cell::Cell, sync::Mutex};
 
 use p4spec_rust::{
     interface::{
-        builtin::BuiltinErrorKind,
-        p4::{error::P4UnparseError, unparse::P4Unparser},
+        builtin::{BuiltinErrorKind, call::Builtins, extract},
+        p4::error::P4UnparseError,
     },
     lang::common::source::Span,
     lang::data::{
@@ -201,10 +201,47 @@ fn test_null_interface_reports_configuration_failure() {
 }
 
 #[test]
+fn test_builtin_interface_registers_captured_extensions_and_overrides() {
+    let prefix = String::from("extra: ");
+    let suffix = String::from(" :override");
+    let builtins = Builtins::with_extensions([
+        (
+            "extra",
+            Box::new(move |arena, _targs, values| {
+                let value = extract::one(values)?;
+                let text = format!("{prefix}{}", get::text(arena, value)?);
+                Ok(value::make::text(arena, text, Span::default())?)
+            }),
+        ),
+        (
+            "strip_all_whitespace",
+            Box::new(move |arena, _targs, values| {
+                let value = extract::one(values)?;
+                let text = format!("{}{suffix}", get::text(arena, value)?);
+                Ok(value::make::text(arena, text, Span::default())?)
+            }),
+        ),
+    ]);
+    let mut interface = BuiltinInterface::new(builtins);
+    let mut arena = ValueArena::new();
+    let value = value::make::text(&mut arena, "a b".to_owned(), Span::default()).unwrap();
+    for (name, expected) in [
+        ("extra", "extra: a b"),
+        ("strip_all_whitespace", "a b :override"),
+    ] {
+        let (value, side_effected) = interface
+            .call_builtin(&mut arena, &id(name), &[], &[value])
+            .unwrap();
+        assert_eq!(get::text(&arena, &value), Ok(expected));
+        assert!(!side_effected);
+    }
+}
+
+#[test]
 fn test_builtin_interface_reports_side_effects_and_clears() {
     let mut arena = ValueArena::new();
     let _guard = FRESH_BUILTIN.lock().unwrap();
-    let mut interface = BuiltinInterface::new(P4Unparser::default());
+    let mut interface = p4spec_rust::interface::p4(&Vec::new());
     interface.clear();
     let (value, side_effected) = interface
         .call_builtin(&mut arena, &id("fresh_typeId"), &[], &[])
@@ -224,7 +261,7 @@ fn test_builtin_interface_reports_side_effects_and_clears() {
 #[test]
 fn test_builtin_interface_preserves_builtin_failures() {
     let mut arena = ValueArena::new();
-    let error = BuiltinInterface::new(P4Unparser::default())
+    let error = p4spec_rust::interface::p4(&Vec::new())
         .call_builtin(&mut arena, &id("sum_int"), &[], &[])
         .unwrap_err();
 
@@ -239,7 +276,7 @@ fn test_builtin_interface_preserves_builtin_failures() {
 fn test_builtin_interface_prints_p4_values_without_side_effects() {
     let mut arena = ValueArena::new();
     let value = value::make::text(&mut arena, "a\n\"b".to_owned(), Span::default()).unwrap();
-    let (printed, side_effected) = BuiltinInterface::new(P4Unparser::default())
+    let (printed, side_effected) = p4spec_rust::interface::p4(&Vec::new())
         .call_builtin(&mut arena, &id("print_"), &[typ::make::text()], &[value])
         .unwrap();
 
@@ -250,7 +287,7 @@ fn test_builtin_interface_prints_p4_values_without_side_effects() {
 #[test]
 fn test_builtin_interface_print_validates_both_arities() {
     let mut arena = ValueArena::new();
-    let mut interface = BuiltinInterface::new(P4Unparser::default());
+    let mut interface = p4spec_rust::interface::p4(&Vec::new());
     let typ = typ::make::text();
     let value = value::make::text(&mut arena, "value".to_owned(), Span::default()).unwrap();
     for (targs, values, actual) in [
@@ -281,7 +318,7 @@ fn test_builtin_interface_print_preserves_unparse_failures() {
         Span::default(),
     )
     .unwrap();
-    let error = BuiltinInterface::new(P4Unparser::default())
+    let error = p4spec_rust::interface::p4(&Vec::new())
         .call_builtin(&mut arena, &id("print_"), &[typ], &[value])
         .unwrap_err();
     assert!(matches!(
@@ -332,7 +369,7 @@ fn test_builtin_interface_print_preserves_spec_hints_after_clear() {
         value::make::case(&mut arena, typ.node.clone().into(), values, span).unwrap()
     };
     let _guard = FRESH_BUILTIN.lock().unwrap();
-    let mut interface = BuiltinInterface::new(P4Unparser::from_al_spec(&spec));
+    let mut interface = p4spec_rust::interface::p4(&spec);
     for _ in 0..2 {
         let (printed, side_effected) = interface
             .call_builtin(
@@ -438,7 +475,7 @@ fn test_runner_reset_releases_program_arena_and_resets_hosts() {
                 label: "configured".to_owned(),
             },
         },
-        BuiltinInterface::new(P4Unparser::default()),
+        p4spec_rust::interface::p4(&Vec::new()),
         FixtureExtern::default(),
     );
     let typ = std::rc::Rc::new(p4spec_rust::lang::data::typ::TypKind::Text);

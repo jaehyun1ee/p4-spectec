@@ -6,8 +6,7 @@ use p4spec_rust::{
     frontend::parse::parse_files,
     interp::al::Config,
     pass::{algo, elaborate},
-    sim_plugin,
-    stf,
+    sim_plugin, stf,
 };
 use std::time::Instant;
 use std::{

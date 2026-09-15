@@ -28,7 +28,7 @@ fn make_runner(spec_al: ast::Spec, det: bool) -> Runner<AlInterp, BuiltinInterfa
     Runner::new(
         Global::load(spec_al).unwrap(),
         AlInterp::new(Config::new(false, det, true)),
-        BuiltinInterface::new(p4spec_rust::interface::p4::unparse::P4Unparser::default()),
+        p4spec_rust::interface::p4(&Vec::new()),
         NullExtern,
     )
 }
@@ -839,7 +839,7 @@ fn test_guards_toggle_input_checks_and_substitute_type_arguments() {
             let mut runner = Runner::<AlInterp, _, _>::new(
                 Global::load(spec_al.clone()).unwrap(),
                 AlInterp::new(Config::new(false, det, guard)),
-                BuiltinInterface::new(p4spec_rust::interface::p4::unparse::P4Unparser::default()),
+                p4spec_rust::interface::p4(&Vec::new()),
                 NullExtern,
             );
             let invalid = make::bool(runner.arena_mut(), true, Span::default()).unwrap();
@@ -1012,7 +1012,7 @@ fn test_extern_relation_output_guards_preserve_call_span() {
         let mut runner = Runner::<AlInterp, _, _>::new(
             Global::load(spec_al.clone()).unwrap(),
             AlInterp::new(Config::new(false, false, guard)),
-            BuiltinInterface::new(p4spec_rust::interface::p4::unparse::P4Unparser::default()),
+            p4spec_rust::interface::p4(&Vec::new()),
             host(|arena| nat(arena, 4), false),
         );
         let result = {
@@ -1120,7 +1120,7 @@ fn test_extern_reentry_uses_public_input_guards() {
         let mut runner = Runner::<AlInterp, _, _>::new(
             Global::load(spec(source)).unwrap(),
             AlInterp::new(Config::new(false, false, guard)),
-            BuiltinInterface::new(p4spec_rust::interface::p4::unparse::P4Unparser::default()),
+            p4spec_rust::interface::p4(&Vec::new()),
             host(
                 |arena| make::bool(arena, true, Span::default()).unwrap(),
                 true,
@@ -1255,7 +1255,7 @@ fn test_reentrant_public_guard_keeps_no_source_span() {
     let mut runner = Runner::<AlInterp, _, _>::new(
         Global::load(spec(source)).unwrap(),
         AlInterp::new(Config::new(false, false, true)),
-        BuiltinInterface::new(p4spec_rust::interface::p4::unparse::P4Unparser::default()),
+        p4spec_rust::interface::p4(&Vec::new()),
         host(
             |arena| make::bool(arena, true, Span::default()).unwrap(),
             true,

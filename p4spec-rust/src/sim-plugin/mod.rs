@@ -8,7 +8,7 @@ use self::{
     v1model::V1Model,
 };
 use crate::{
-    interface::p4::unparse::P4Unparser,
+    interface,
     interp::al::{AlInterp, Config, context::Global, error::Error as InterpError},
     lang::{
         al::ast::Spec,
@@ -105,10 +105,9 @@ pub fn build_with_encoding(
     if !matches!(arch, "ebpf" | "psa" | "v1model") {
         return Err(BuildError::UnsupportedArchitecture(arch.to_owned()));
     }
-    let unparser = P4Unparser::from_al_spec(&spec);
+    let interface = interface::p4(&spec);
     let global = Global::load(spec)?;
     let interp = AlInterp::new(config);
-    let interface = BuiltinInterface::new(unparser);
     Ok(match arch {
         "ebpf" => Simulator::Ebpf(Box::new(Runner::new(
             global,

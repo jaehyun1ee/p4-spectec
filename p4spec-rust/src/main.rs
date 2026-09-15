@@ -4,11 +4,11 @@ use clap::{Args, Parser, Subcommand};
 
 use p4spec_rust::{
     frontend::parse::parse_files,
-    interface::p4::{parse::parse_file, unparse::P4Unparser},
+    interface::{self, p4::parse::parse_file},
     interp::al::{AlInterp, Config, context::Global},
     lang::{al, data::value::external::Encoding, il, traits::print::Print},
     pass::{algo, elaborate},
-    runner::{BuiltinInterface, Runner},
+    runner::Runner,
     sim_plugin::{self, dummy::Dummy, runner::Error as SimError},
     stf,
 };
@@ -101,7 +101,7 @@ fn run_command(args: RunArgs) -> ExitCode {
         Ok(spec) => spec,
         Err(code) => return code,
     };
-    let unparser = P4Unparser::from_al_spec(&spec_al);
+    let interface = interface::p4(&spec_al);
     let global = match Global::load(spec_al) {
         Ok(global) => global,
         Err(error) => return command_error(error),
@@ -109,7 +109,7 @@ fn run_command(args: RunArgs) -> ExitCode {
     let mut runner = Runner::<AlInterp, _, _>::new(
         global,
         AlInterp::new(Config::new(!args.no_cache, args.det, args.guard)),
-        BuiltinInterface::new(unparser),
+        interface,
         Dummy,
     );
     let program = match parse_file(runner.arena_mut(), &args.includes, args.program) {

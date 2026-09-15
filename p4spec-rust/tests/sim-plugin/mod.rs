@@ -3,7 +3,7 @@ use std::path::Path;
 
 use p4spec_rust::{
     frontend::parse::parse_files,
-    interface::p4::{parse::parse_file, unparse::P4Unparser},
+    interface::{self, p4::parse::parse_file},
     interp::al::{
         AlInterp, Config,
         context::Global,
@@ -36,11 +36,11 @@ fn runner_from_spec<Exn: Extern>(
     let spec_el = parse_files([spec]).expect("native specification parsing");
     let spec_il = elaborate::elaborate(spec_el).expect("native elaboration");
     let spec_al = algo::convert(spec_il).expect("native algorithmic conversion");
-    let unparser = P4Unparser::from_al_spec(&spec_al);
+    let interface = interface::p4(&spec_al);
     Runner::new(
         Global::load(spec_al).unwrap(),
         AlInterp::new(Config::new(true, false, false)),
-        BuiltinInterface::new(unparser),
+        interface,
         external,
     )
 }

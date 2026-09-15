@@ -798,7 +798,6 @@ fn test_builtin_failure_remains_typed_in_public_error_tree() {
     use p4spec_rust::{
         interface::builtin::error::BuiltinErrorKind,
         interp::al::error::{Error, ErrorKind},
-        runner::BuiltinInterface,
     };
 
     fn find_builtin(error: &Error) -> Option<&BuiltinErrorKind> {
@@ -820,7 +819,7 @@ fn test_builtin_failure_remains_typed_in_public_error_tree() {
     let mut runner = Runner::<AlInterp, _, _>::new(
         Global::load(vec![function("test", call), builtin]).unwrap(),
         AlInterp::new(Config::new(false, false, false)),
-        BuiltinInterface::new(p4spec_rust::interface::p4::unparse::P4Unparser::default()),
+        p4spec_rust::interface::p4(&Vec::new()),
         NullExtern,
     );
     let error = runner.context().call_func("test", &[], &[]).unwrap_err();
