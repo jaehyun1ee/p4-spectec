@@ -1,6 +1,6 @@
 use p4spec_rust::{
     interp::al::Config,
-    sim_plugin::build::{BuildError, build},
+    sim_plugin::{BuildError, build},
 };
 
 #[test]

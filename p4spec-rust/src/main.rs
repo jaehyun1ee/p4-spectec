@@ -9,7 +9,7 @@ use p4spec_rust::{
     lang::{al, data::value::external::Encoding, il, traits::print::Print},
     pass::{algo, elaborate},
     runner::{BuiltinInterface, Runner},
-    sim_plugin::{build, dummy::Dummy, runner::Error as SimError},
+    sim_plugin::{self, dummy::Dummy, runner::Error as SimError},
     stf,
 };
 
@@ -174,7 +174,7 @@ fn sim_command(args: SimArgs) -> ExitCode {
     };
     let config = Config::new(!args.no_cache, args.det, args.guard);
     let mut simulator =
-        match build::build_with_encoding(spec_al, &args.arch, config, args.plugin_encoding) {
+        match sim_plugin::build_with_encoding(spec_al, &args.arch, config, args.plugin_encoding) {
             Ok(simulator) => simulator,
             Err(error) => return command_error(error),
         };

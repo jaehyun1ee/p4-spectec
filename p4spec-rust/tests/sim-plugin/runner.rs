@@ -761,10 +761,7 @@ fn test_native_stf_encoding_modes_preserve_outputs_and_state() {
         interp::al::Config,
         lang::data::value::external::encode,
         pass::{algo, elaborate},
-        sim_plugin::{
-            build::{Simulator, build_with_encoding},
-            psa::pipe,
-        },
+        sim_plugin::{Simulator, build_with_encoding, psa::pipe},
     };
     use std::{
         fs,

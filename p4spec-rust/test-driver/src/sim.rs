@@ -6,7 +6,7 @@ use p4spec_rust::{
     frontend::parse::parse_files,
     interp::al::Config,
     pass::{algo, elaborate},
-    sim_plugin::build,
+    sim_plugin,
     stf,
 };
 use std::time::Instant;
@@ -268,7 +268,7 @@ pub fn run(det: bool) -> Result<()> {
             })
             .count();
         let patched_arch = pairs_arch.filter(|pair| pair.patched).count();
-        let mut simulator = build::build(spec_al.clone(), arch, Config::new(true, det, false))
+        let mut simulator = sim_plugin::build(spec_al.clone(), arch, Config::new(true, det, false))
             .map_err(|error| Error::Invalid(error.to_string()))?;
         for (suite, pairs) in suites.iter().filter(|(suite, _)| suite.arch == arch) {
             let mut results = Results::new(suite.name);
