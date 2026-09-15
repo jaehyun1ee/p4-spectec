@@ -63,49 +63,6 @@ impl Psa {
     }
 }
 
-// == STF transformation
-
-pub fn transform_stf_stmt(mut stmt: Statement) -> Statement {
-    match &mut stmt {
-        Statement::RegisterRead { name, .. }
-        | Statement::RegisterWrite { name, .. }
-        | Statement::RegisterReset { name } => {
-            *name = name.clone().rewrite_substring(&["ingress"], "ip.ig");
-        }
-        _ => {}
-    }
-    stmt
-}
-
-// == Architectural state
-
-pub fn find_arch_state<Interp, Iface>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
-    value_arch: Value,
-) -> Result<Arch, Interp::Error>
-where
-    Iface: Interface,
-    Interp: Interpreter<Iface, Psa>,
-{
-    let encoding = ctx.external().encoding;
-    let value_state = func::find_arch_state_e(ctx, value_arch)?;
-    Ok(Arch::from_value(ctx.arena_mut(), encoding, &value_state)?)
-}
-
-pub fn update_arch_state<Interp, Iface>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
-    value_arch: Value,
-    arch: &Arch,
-) -> Result<Value, Interp::Error>
-where
-    Iface: Interface,
-    Interp: Interpreter<Iface, Psa>,
-{
-    let encoding = ctx.external().encoding;
-    let value_state = arch.to_value(ctx.arena_mut(), encoding)?;
-    func::update_arch_state_e(ctx, value_arch, value_state)
-}
-
 // == Extern objects
 
 /// Core and PSA-specific extern objects
@@ -147,6 +104,64 @@ impl ObjectState {
             .map_err(|error| ExternError::Failure(error.to_string()))
     }
 }
+
+// == STF transformation
+
+pub fn transform_stf_stmt(mut stmt: Statement) -> Statement {
+    match &mut stmt {
+        Statement::RegisterRead { name, .. }
+        | Statement::RegisterWrite { name, .. }
+        | Statement::RegisterReset { name } => {
+            *name = name.clone().rewrite_substring(&["ingress"], "ip.ig");
+        }
+        _ => {}
+    }
+    stmt
+}
+
+// == Architectural state
+
+pub(super) fn init_arch_state<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
+) -> Result<Value, Interp::Error>
+where
+    Iface: Interface,
+    Interp: Interpreter<Iface, Psa>,
+{
+    let encoding = ctx.external().encoding;
+    Arch::default()
+        .to_value(ctx.arena_mut(), encoding)
+        .map_err(Into::into)
+}
+
+pub fn find_arch_state<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
+    value_arch: Value,
+) -> Result<Arch, Interp::Error>
+where
+    Iface: Interface,
+    Interp: Interpreter<Iface, Psa>,
+{
+    let encoding = ctx.external().encoding;
+    let value_state = func::find_arch_state_e(ctx, value_arch)?;
+    Ok(Arch::from_value(ctx.arena_mut(), encoding, &value_state)?)
+}
+
+pub fn update_arch_state<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
+    value_arch: Value,
+    arch: &Arch,
+) -> Result<Value, Interp::Error>
+where
+    Iface: Interface,
+    Interp: Interpreter<Iface, Psa>,
+{
+    let encoding = ctx.external().encoding;
+    let value_state = arch.to_value(ctx.arena_mut(), encoding)?;
+    func::update_arch_state_e(ctx, value_arch, value_state)
+}
+
+// == Object state
 
 pub fn find_object_state<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
@@ -358,332 +373,320 @@ where
 
 // == Extern calls
 
-impl external::Impl for Psa {
-    fn eval_extern_init<Interp, Iface>(
-        &self,
-        ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
-        values: &[Value],
-    ) -> Result<Value, Interp::Error>
-    where
-        Iface: Interface,
-        Interp: Interpreter<Iface, Self>,
-    {
-        let encoding = self.encoding;
-        let (value_name, value_targs, value_ids, value_args) =
-            get::four(values).map_err(ExternError::from)?;
-        let name = get::text(ctx.arena(), value_name)
-            .map_err(ExternError::from)?
-            .to_owned();
-        let object = match name.as_str() {
-            "Counter" => Some(ObjectState::Counter(Counter::init(
-                ctx.arena(),
-                *value_targs,
-                *value_ids,
-                *value_args,
-            )?)),
-            "Register" => Some(ObjectState::Register(Register::init(
-                ctx,
-                *value_targs,
-                *value_ids,
-                *value_args,
-            )?)),
-            "Hash" => Some(ObjectState::Hash(HashExtern::init(
-                ctx.arena(),
-                *value_targs,
-                *value_ids,
-                *value_args,
-            )?)),
-            "InternetChecksum" => Some(ObjectState::InternetChecksum(InternetChecksum::init())),
-            "Meter" => Some(ObjectState::Meter(Meter::init(
-                ctx.arena(),
-                *value_targs,
-                *value_ids,
-                *value_args,
-            )?)),
-            _ => None,
-        };
-        Ok(match object {
-            Some(object) => object.to_value(ctx.arena_mut(), encoding)?,
-            None => {
-                let payload = encode_with(ctx.arena(), encoding, &())
-                    .map_err(|error| ExternError::Failure(error.to_string()))?;
-                external::state_value(ctx.arena_mut(), "objectState", payload.into())?
-            }
-        })
-    }
+// - Initialization
 
-    fn eval_extern_func_call<Interp, Iface>(
-        &self,
-        ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
-        values: &[Value],
-    ) -> Result<Vec<Value>, Interp::Error>
-    where
-        Iface: Interface,
-        Interp: Interpreter<Iface, Self>,
-    {
-        let (value_ctx, value_arch, value_name, value_names) =
-            get::four(values).map_err(ExternError::from)?;
-        let name = get::text(ctx.arena(), value_name)
-            .map_err(ExternError::from)?
-            .to_owned();
-        let names = external::param_names(ctx.arena(), *value_names)?;
-        if name != "verify" || names != ["check", "toSignal"] {
-            return Err(ExternError::Failure(format!(
-                "unsupported extern function call: {name}({})",
-                names.join(", ")
-            ))
-            .into());
+pub(super) fn eval_extern_init<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
+    values: &[Value],
+) -> Result<Value, Interp::Error>
+where
+    Iface: Interface,
+    Interp: Interpreter<Iface, Psa>,
+{
+    let encoding = ctx.external().encoding;
+    let (value_name, value_targs, value_ids, value_args) =
+        get::four(values).map_err(ExternError::from)?;
+    let name = get::text(ctx.arena(), value_name)
+        .map_err(ExternError::from)?
+        .to_owned();
+    let object = match name.as_str() {
+        "Counter" => Some(ObjectState::Counter(Counter::init(
+            ctx.arena(),
+            *value_targs,
+            *value_ids,
+            *value_args,
+        )?)),
+        "Register" => Some(ObjectState::Register(Register::init(
+            ctx,
+            *value_targs,
+            *value_ids,
+            *value_args,
+        )?)),
+        "Hash" => Some(ObjectState::Hash(HashExtern::init(
+            ctx.arena(),
+            *value_targs,
+            *value_ids,
+            *value_args,
+        )?)),
+        "InternetChecksum" => Some(ObjectState::InternetChecksum(InternetChecksum::init())),
+        "Meter" => Some(ObjectState::Meter(Meter::init(
+            ctx.arena(),
+            *value_targs,
+            *value_ids,
+            *value_args,
+        )?)),
+        _ => None,
+    };
+    Ok(match object {
+        Some(object) => object.to_value(ctx.arena_mut(), encoding)?,
+        None => {
+            let payload = encode_with(ctx.arena(), encoding, &())
+                .map_err(|error| ExternError::Failure(error.to_string()))?;
+            external::state_value(ctx.arena_mut(), "objectState", payload.into())?
         }
-        let (value_ctx, value_arch, value_call_result) =
-            core_func::verify(ctx, *value_ctx, *value_arch)?;
-        Ok(vec![value_ctx, value_arch, value_call_result])
-    }
+    })
+}
 
-    fn eval_extern_method_call<Interp, Iface>(
-        &self,
-        ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
-        values: &[Value],
-    ) -> Result<Vec<Value>, Interp::Error>
-    where
-        Iface: Interface,
-        Interp: Interpreter<Iface, Self>,
-    {
-        let encoding = self.encoding;
-        let [value_ctx, value_arch, value_id, value_name, value_names] = values else {
-            return Err(ExternError::Failure(
-                "unexpected number of arguments to extern method call".to_owned(),
-            )
-            .into());
-        };
-        let object = find_object_state(ctx, *value_arch, *value_id)?;
-        let name = get::text(ctx.arena(), value_name)
-            .map_err(ExternError::from)?
-            .to_owned();
-        let names = external::param_names(ctx.arena(), *value_names)?;
-        let names_ref: Vec<_> = names.iter().map(String::as_str).collect();
-        let (object, value_ctx, value_arch, value_call_result) =
-            match (object, name.as_str(), names_ref.as_slice()) {
-                (ObjectState::PacketIn(object), "extract", ["hdr"]) => {
-                    let (object, value_ctx, value_arch, value_call_result) =
-                        object.extract(ctx, *value_ctx, *value_arch)?;
-                    (
-                        ObjectState::PacketIn(object),
-                        value_ctx,
-                        value_arch,
-                        value_call_result,
-                    )
-                }
+// - Function calls
+
+pub(super) fn eval_extern_func_call<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
+    values: &[Value],
+) -> Result<Vec<Value>, Interp::Error>
+where
+    Iface: Interface,
+    Interp: Interpreter<Iface, Psa>,
+{
+    let (value_ctx, value_arch, value_name, value_names) =
+        get::four(values).map_err(ExternError::from)?;
+    let name = get::text(ctx.arena(), value_name)
+        .map_err(ExternError::from)?
+        .to_owned();
+    let names = external::param_names(ctx.arena(), *value_names)?;
+    if name != "verify" || names != ["check", "toSignal"] {
+        return Err(ExternError::Failure(format!(
+            "unsupported extern function call: {name}({})",
+            names.join(", ")
+        ))
+        .into());
+    }
+    let (value_ctx, value_arch, value_call_result) =
+        core_func::verify(ctx, *value_ctx, *value_arch)?;
+    Ok(vec![value_ctx, value_arch, value_call_result])
+}
+
+// - Method calls
+
+pub(super) fn eval_extern_method_call<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
+    values: &[Value],
+) -> Result<Vec<Value>, Interp::Error>
+where
+    Iface: Interface,
+    Interp: Interpreter<Iface, Psa>,
+{
+    let encoding = ctx.external().encoding;
+    let [value_ctx, value_arch, value_id, value_name, value_names] = values else {
+        return Err(ExternError::Failure(
+            "unexpected number of arguments to extern method call".to_owned(),
+        )
+        .into());
+    };
+    let object = find_object_state(ctx, *value_arch, *value_id)?;
+    let name = get::text(ctx.arena(), value_name)
+        .map_err(ExternError::from)?
+        .to_owned();
+    let names = external::param_names(ctx.arena(), *value_names)?;
+    let names_ref: Vec<_> = names.iter().map(String::as_str).collect();
+    let (object, value_ctx, value_arch, value_call_result) =
+        match (object, name.as_str(), names_ref.as_slice()) {
+            (ObjectState::PacketIn(object), "extract", ["hdr"]) => {
+                let (object, value_ctx, value_arch, value_call_result) =
+                    object.extract(ctx, *value_ctx, *value_arch)?;
                 (
                     ObjectState::PacketIn(object),
-                    "extract",
-                    ["variableSizeHeader", "variableFieldSizeInBits"],
-                ) => {
-                    let (object, value_ctx, value_arch, value_call_result) =
-                        object.extract_varsize(ctx, *value_ctx, *value_arch)?;
-                    (
-                        ObjectState::PacketIn(object),
-                        value_ctx,
-                        value_arch,
-                        value_call_result,
-                    )
-                }
-                (ObjectState::PacketIn(object), "lookahead", []) => {
-                    let (object, value_ctx, value_arch, value_call_result) =
-                        object.lookahead(ctx, *value_ctx, *value_arch)?;
-                    (
-                        ObjectState::PacketIn(object),
-                        value_ctx,
-                        value_arch,
-                        value_call_result,
-                    )
-                }
-                (ObjectState::PacketIn(object), "advance", ["sizeInBits"]) => {
-                    let (object, value_ctx, value_arch, value_call_result) =
-                        object.advance(ctx, *value_ctx, *value_arch)?;
-                    (
-                        ObjectState::PacketIn(object),
-                        value_ctx,
-                        value_arch,
-                        value_call_result,
-                    )
-                }
-                (ObjectState::PacketIn(object), "length", []) => {
-                    let (object, value_ctx, value_arch, value_call_result) =
-                        object.length(ctx, *value_ctx, *value_arch)?;
-                    (
-                        ObjectState::PacketIn(object),
-                        value_ctx,
-                        value_arch,
-                        value_call_result,
-                    )
-                }
-                (ObjectState::PacketOut(object), "emit", ["hdr"]) => {
-                    let (object, value_ctx, value_arch, value_call_result) =
-                        object.emit(ctx, *value_ctx, *value_arch)?;
-                    (
-                        ObjectState::PacketOut(object),
-                        value_ctx,
-                        value_arch,
-                        value_call_result,
-                    )
-                }
-                (ObjectState::Counter(object), "count", ["index"]) => {
-                    let (object, value_ctx, value_arch, value_call_result) =
-                        object.count(ctx, *value_ctx, *value_arch)?;
-                    (
-                        ObjectState::Counter(object),
-                        value_ctx,
-                        value_arch,
-                        value_call_result,
-                    )
-                }
-                (ObjectState::Register(object), "read", ["index"]) => {
-                    let (object, value_ctx, value_arch, value_call_result) =
-                        object.read(ctx, *value_ctx, *value_arch)?;
-                    (
-                        ObjectState::Register(object),
-                        value_ctx,
-                        value_arch,
-                        value_call_result,
-                    )
-                }
-                (ObjectState::Register(object), "write", ["index", "value"]) => {
-                    let (object, value_ctx, value_arch, value_call_result) =
-                        object.write(ctx, *value_ctx, *value_arch)?;
-                    (
-                        ObjectState::Register(object),
-                        value_ctx,
-                        value_arch,
-                        value_call_result,
-                    )
-                }
-                (ObjectState::Hash(object), "get_hash", ["data"]) => {
-                    let (object, value_ctx, value_arch, value_call_result) =
-                        object.get_hash(ctx, *value_ctx, *value_arch)?;
-                    (
-                        ObjectState::Hash(object),
-                        value_ctx,
-                        value_arch,
-                        value_call_result,
-                    )
-                }
-                (ObjectState::Hash(object), "get_hash", ["base", "data", "max"]) => {
-                    let (object, value_ctx, value_arch, value_call_result) =
-                        object.get_hash_adjust(ctx, *value_ctx, *value_arch)?;
-                    (
-                        ObjectState::Hash(object),
-                        value_ctx,
-                        value_arch,
-                        value_call_result,
-                    )
-                }
-                (ObjectState::InternetChecksum(object), "clear", []) => {
-                    let (object, value_ctx, value_arch, value_call_result) =
-                        object.clear(ctx, *value_ctx, *value_arch)?;
-                    (
-                        ObjectState::InternetChecksum(object),
-                        value_ctx,
-                        value_arch,
-                        value_call_result,
-                    )
-                }
-                (ObjectState::InternetChecksum(object), "add", ["data"]) => {
-                    let (object, value_ctx, value_arch, value_call_result) =
-                        object.add(ctx, *value_ctx, *value_arch)?;
-                    (
-                        ObjectState::InternetChecksum(object),
-                        value_ctx,
-                        value_arch,
-                        value_call_result,
-                    )
-                }
-                (ObjectState::InternetChecksum(object), "subtract", ["data"]) => {
-                    let (object, value_ctx, value_arch, value_call_result) =
-                        object.subtract(ctx, *value_ctx, *value_arch)?;
-                    (
-                        ObjectState::InternetChecksum(object),
-                        value_ctx,
-                        value_arch,
-                        value_call_result,
-                    )
-                }
-                (ObjectState::InternetChecksum(object), "get", []) => {
-                    let (object, value_ctx, value_arch, value_call_result) =
-                        object.get(ctx, *value_ctx, *value_arch)?;
-                    (
-                        ObjectState::InternetChecksum(object),
-                        value_ctx,
-                        value_arch,
-                        value_call_result,
-                    )
-                }
-                (ObjectState::InternetChecksum(object), "get_state", []) => {
-                    let (object, value_ctx, value_arch, value_call_result) =
-                        object.get_state(ctx, *value_ctx, *value_arch)?;
-                    (
-                        ObjectState::InternetChecksum(object),
-                        value_ctx,
-                        value_arch,
-                        value_call_result,
-                    )
-                }
-                (ObjectState::InternetChecksum(object), "set_state", ["checksum_state"]) => {
-                    let (object, value_ctx, value_arch, value_call_result) =
-                        object.set_state(ctx, *value_ctx, *value_arch)?;
-                    (
-                        ObjectState::InternetChecksum(object),
-                        value_ctx,
-                        value_arch,
-                        value_call_result,
-                    )
-                }
-                (ObjectState::Meter(object), "execute", ["index", "color"]) => {
-                    let (object, value_ctx, value_arch, value_call_result) =
-                        object.execute_color_aware(ctx, *value_ctx, *value_arch)?;
-                    (
-                        ObjectState::Meter(object),
-                        value_ctx,
-                        value_arch,
-                        value_call_result,
-                    )
-                }
-                (ObjectState::Meter(object), "execute", ["index"]) => {
-                    let (object, value_ctx, value_arch, value_call_result) =
-                        object.execute_color_blind(ctx, *value_ctx, *value_arch)?;
-                    (
-                        ObjectState::Meter(object),
-                        value_ctx,
-                        value_arch,
-                        value_call_result,
-                    )
-                }
-                _ => {
-                    let ids = external::param_names(ctx.arena(), *value_id)?;
-                    return Err(ExternError::Failure(format!(
-                        "unsupported extern method call: {}.{name}({})",
-                        ids.join("."),
-                        names.join(", ")
-                    ))
-                    .into());
-                }
-            };
-        let value_object = object.to_value(ctx.arena_mut(), encoding)?;
-        let value_arch = func::update_object_state_e(ctx, value_arch, *value_id, value_object)?;
-        Ok(vec![value_ctx, value_arch, value_call_result])
-    }
-
-    fn init_arch_state<Interp, Iface>(
-        &self,
-        ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
-    ) -> Result<Value, Interp::Error>
-    where
-        Iface: Interface,
-        Interp: Interpreter<Iface, Self>,
-    {
-        Arch::default()
-            .to_value(ctx.arena_mut(), self.encoding)
-            .map_err(Into::into)
-    }
+                    value_ctx,
+                    value_arch,
+                    value_call_result,
+                )
+            }
+            (
+                ObjectState::PacketIn(object),
+                "extract",
+                ["variableSizeHeader", "variableFieldSizeInBits"],
+            ) => {
+                let (object, value_ctx, value_arch, value_call_result) =
+                    object.extract_varsize(ctx, *value_ctx, *value_arch)?;
+                (
+                    ObjectState::PacketIn(object),
+                    value_ctx,
+                    value_arch,
+                    value_call_result,
+                )
+            }
+            (ObjectState::PacketIn(object), "lookahead", []) => {
+                let (object, value_ctx, value_arch, value_call_result) =
+                    object.lookahead(ctx, *value_ctx, *value_arch)?;
+                (
+                    ObjectState::PacketIn(object),
+                    value_ctx,
+                    value_arch,
+                    value_call_result,
+                )
+            }
+            (ObjectState::PacketIn(object), "advance", ["sizeInBits"]) => {
+                let (object, value_ctx, value_arch, value_call_result) =
+                    object.advance(ctx, *value_ctx, *value_arch)?;
+                (
+                    ObjectState::PacketIn(object),
+                    value_ctx,
+                    value_arch,
+                    value_call_result,
+                )
+            }
+            (ObjectState::PacketIn(object), "length", []) => {
+                let (object, value_ctx, value_arch, value_call_result) =
+                    object.length(ctx, *value_ctx, *value_arch)?;
+                (
+                    ObjectState::PacketIn(object),
+                    value_ctx,
+                    value_arch,
+                    value_call_result,
+                )
+            }
+            (ObjectState::PacketOut(object), "emit", ["hdr"]) => {
+                let (object, value_ctx, value_arch, value_call_result) =
+                    object.emit(ctx, *value_ctx, *value_arch)?;
+                (
+                    ObjectState::PacketOut(object),
+                    value_ctx,
+                    value_arch,
+                    value_call_result,
+                )
+            }
+            (ObjectState::Counter(object), "count", ["index"]) => {
+                let (object, value_ctx, value_arch, value_call_result) =
+                    object.count(ctx, *value_ctx, *value_arch)?;
+                (
+                    ObjectState::Counter(object),
+                    value_ctx,
+                    value_arch,
+                    value_call_result,
+                )
+            }
+            (ObjectState::Register(object), "read", ["index"]) => {
+                let (object, value_ctx, value_arch, value_call_result) =
+                    object.read(ctx, *value_ctx, *value_arch)?;
+                (
+                    ObjectState::Register(object),
+                    value_ctx,
+                    value_arch,
+                    value_call_result,
+                )
+            }
+            (ObjectState::Register(object), "write", ["index", "value"]) => {
+                let (object, value_ctx, value_arch, value_call_result) =
+                    object.write(ctx, *value_ctx, *value_arch)?;
+                (
+                    ObjectState::Register(object),
+                    value_ctx,
+                    value_arch,
+                    value_call_result,
+                )
+            }
+            (ObjectState::Hash(object), "get_hash", ["data"]) => {
+                let (object, value_ctx, value_arch, value_call_result) =
+                    object.get_hash(ctx, *value_ctx, *value_arch)?;
+                (
+                    ObjectState::Hash(object),
+                    value_ctx,
+                    value_arch,
+                    value_call_result,
+                )
+            }
+            (ObjectState::Hash(object), "get_hash", ["base", "data", "max"]) => {
+                let (object, value_ctx, value_arch, value_call_result) =
+                    object.get_hash_adjust(ctx, *value_ctx, *value_arch)?;
+                (
+                    ObjectState::Hash(object),
+                    value_ctx,
+                    value_arch,
+                    value_call_result,
+                )
+            }
+            (ObjectState::InternetChecksum(object), "clear", []) => {
+                let (object, value_ctx, value_arch, value_call_result) =
+                    object.clear(ctx, *value_ctx, *value_arch)?;
+                (
+                    ObjectState::InternetChecksum(object),
+                    value_ctx,
+                    value_arch,
+                    value_call_result,
+                )
+            }
+            (ObjectState::InternetChecksum(object), "add", ["data"]) => {
+                let (object, value_ctx, value_arch, value_call_result) =
+                    object.add(ctx, *value_ctx, *value_arch)?;
+                (
+                    ObjectState::InternetChecksum(object),
+                    value_ctx,
+                    value_arch,
+                    value_call_result,
+                )
+            }
+            (ObjectState::InternetChecksum(object), "subtract", ["data"]) => {
+                let (object, value_ctx, value_arch, value_call_result) =
+                    object.subtract(ctx, *value_ctx, *value_arch)?;
+                (
+                    ObjectState::InternetChecksum(object),
+                    value_ctx,
+                    value_arch,
+                    value_call_result,
+                )
+            }
+            (ObjectState::InternetChecksum(object), "get", []) => {
+                let (object, value_ctx, value_arch, value_call_result) =
+                    object.get(ctx, *value_ctx, *value_arch)?;
+                (
+                    ObjectState::InternetChecksum(object),
+                    value_ctx,
+                    value_arch,
+                    value_call_result,
+                )
+            }
+            (ObjectState::InternetChecksum(object), "get_state", []) => {
+                let (object, value_ctx, value_arch, value_call_result) =
+                    object.get_state(ctx, *value_ctx, *value_arch)?;
+                (
+                    ObjectState::InternetChecksum(object),
+                    value_ctx,
+                    value_arch,
+                    value_call_result,
+                )
+            }
+            (ObjectState::InternetChecksum(object), "set_state", ["checksum_state"]) => {
+                let (object, value_ctx, value_arch, value_call_result) =
+                    object.set_state(ctx, *value_ctx, *value_arch)?;
+                (
+                    ObjectState::InternetChecksum(object),
+                    value_ctx,
+                    value_arch,
+                    value_call_result,
+                )
+            }
+            (ObjectState::Meter(object), "execute", ["index", "color"]) => {
+                let (object, value_ctx, value_arch, value_call_result) =
+                    object.execute_color_aware(ctx, *value_ctx, *value_arch)?;
+                (
+                    ObjectState::Meter(object),
+                    value_ctx,
+                    value_arch,
+                    value_call_result,
+                )
+            }
+            (ObjectState::Meter(object), "execute", ["index"]) => {
+                let (object, value_ctx, value_arch, value_call_result) =
+                    object.execute_color_blind(ctx, *value_ctx, *value_arch)?;
+                (
+                    ObjectState::Meter(object),
+                    value_ctx,
+                    value_arch,
+                    value_call_result,
+                )
+            }
+            _ => {
+                let ids = external::param_names(ctx.arena(), *value_id)?;
+                return Err(ExternError::Failure(format!(
+                    "unsupported extern method call: {}.{name}({})",
+                    ids.join("."),
+                    names.join(", ")
+                ))
+                .into());
+            }
+        };
+    let value_object = object.to_value(ctx.arena_mut(), encoding)?;
+    let value_arch = func::update_object_state_e(ctx, value_arch, *value_id, value_object)?;
+    Ok(vec![value_ctx, value_arch, value_call_result])
 }
 
 // == Mirror session interface

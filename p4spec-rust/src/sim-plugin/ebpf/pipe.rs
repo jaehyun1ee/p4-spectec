@@ -47,6 +47,7 @@ impl Ebpf {
 }
 
 // == Extern objects
+
 #[derive(Clone, Debug, PartialEq, Eq, SerializeState, DeserializeState)]
 #[serde(serialize_state = "EncodeContext<'arena>", ser_parameters = "'arena")]
 #[serde(deserialize_state = "DecodeContext<'de>")]
@@ -81,176 +82,6 @@ impl ExternObject {
     }
 }
 
-// == Extern calls
-
-impl external::Impl for Ebpf {
-    fn eval_extern_init<Interp, Iface>(
-        &self,
-        ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
-        values: &[Value],
-    ) -> Result<Value, Interp::Error>
-    where
-        Iface: Interface,
-        Interp: Interpreter<Iface, Self>,
-    {
-        let encoding = self.encoding;
-        let (value_name, _value_targs, value_ids, value_args) =
-            get::four(values).map_err(ExternError::from)?;
-        let name = get::text(ctx.arena(), value_name).map_err(ExternError::from)?;
-        Ok(if name == "CounterArray" {
-            let counter = CounterArray::init(ctx.arena(), *value_ids, *value_args)?;
-            ExternObject::CounterArray(counter).to_value(ctx.arena_mut(), encoding)?
-        } else {
-            let payload = encode_with(ctx.arena(), encoding, &())
-                .map_err(|error| ExternError::Failure(error.to_string()))?;
-            external::state_value(ctx.arena_mut(), "objectState", payload.into())?
-        })
-    }
-
-    fn eval_extern_func_call<Interp, Iface>(
-        &self,
-        ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
-        values: &[Value],
-    ) -> Result<Vec<Value>, Interp::Error>
-    where
-        Iface: Interface,
-        Interp: Interpreter<Iface, Self>,
-    {
-        let (value_ctx, value_arch, value_name, value_names) =
-            get::four(values).map_err(ExternError::from)?;
-        let name = get::text(ctx.arena(), value_name)
-            .map_err(ExternError::from)?
-            .to_owned();
-        let names = external::param_names(ctx.arena(), *value_names)?;
-        let (value_ctx, value_arch, value_call_result) =
-            if name == "verify" && names == ["check", "toSignal"] {
-                core_func::verify(ctx, *value_ctx, *value_arch)?
-            } else {
-                return Err(ExternError::Failure(format!(
-                    "unsupported extern function call: {name}({})",
-                    names.join(", ")
-                ))
-                .into());
-            };
-        Ok(vec![value_ctx, value_arch, value_call_result])
-    }
-
-    fn eval_extern_method_call<Interp, Iface>(
-        &self,
-        ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
-        values: &[Value],
-    ) -> Result<Vec<Value>, Interp::Error>
-    where
-        Iface: Interface,
-        Interp: Interpreter<Iface, Self>,
-    {
-        let encoding = self.encoding;
-        let [value_ctx, value_arch, value_id, value_name, value_names] = values else {
-            return Err(ExternError::Failure(
-                "unexpected number of arguments to extern method call".to_owned(),
-            )
-            .into());
-        };
-        let value_state = func::find_object_state_e(ctx, *value_arch, *value_id)?;
-        let object = ExternObject::from_value(ctx.arena_mut(), encoding, &value_state)?;
-        let name = get::text(ctx.arena(), value_name)
-            .map_err(ExternError::from)?
-            .to_owned();
-        let names = external::param_names(ctx.arena(), *value_names)?;
-        let (object, value_ctx, value_arch, value_call_result) = match object {
-            ExternObject::PacketIn(pkt) => {
-                let (object, value_ctx, value_arch, value_call_result) = match (
-                    name.as_str(),
-                    names
-                        .iter()
-                        .map(String::as_str)
-                        .collect::<Vec<_>>()
-                        .as_slice(),
-                ) {
-                    ("extract", ["hdr"]) => pkt.extract(ctx, *value_ctx, *value_arch)?,
-                    ("extract", ["variableSizeHeader", "variableFieldSizeInBits"]) => {
-                        pkt.extract_varsize(ctx, *value_ctx, *value_arch)?
-                    }
-                    ("lookahead", []) => pkt.lookahead(ctx, *value_ctx, *value_arch)?,
-                    ("advance", ["sizeInBits"]) => pkt.advance(ctx, *value_ctx, *value_arch)?,
-                    ("length", []) => pkt.length(ctx, *value_ctx, *value_arch)?,
-                    _ => {
-                        return Err(
-                            unsupported_method(ctx.arena(), *value_id, &name, &names)?.into()
-                        );
-                    }
-                };
-                (
-                    ExternObject::PacketIn(object),
-                    value_ctx,
-                    value_arch,
-                    value_call_result,
-                )
-            }
-            ExternObject::CounterArray(counter) => {
-                let (object, value_ctx, value_arch, value_call_result) = match (
-                    name.as_str(),
-                    names
-                        .iter()
-                        .map(String::as_str)
-                        .collect::<Vec<_>>()
-                        .as_slice(),
-                ) {
-                    ("increment", ["index"]) => counter.increment(ctx, *value_ctx, *value_arch)?,
-                    ("add", ["index", "value"]) => counter.add(ctx, *value_ctx, *value_arch)?,
-                    _ => {
-                        return Err(
-                            unsupported_method(ctx.arena(), *value_id, &name, &names)?.into()
-                        );
-                    }
-                };
-                (
-                    ExternObject::CounterArray(object),
-                    value_ctx,
-                    value_arch,
-                    value_call_result,
-                )
-            }
-        };
-        let value_state = object.to_value(ctx.arena_mut(), encoding)?;
-        let value_arch = func::update_object_state_e(ctx, value_arch, *value_id, value_state)?;
-        Ok(vec![value_ctx, value_arch, value_call_result])
-    }
-
-    fn init_arch_state<Interp, Iface>(
-        &self,
-        ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
-    ) -> Result<Value, Interp::Error>
-    where
-        Iface: Interface,
-        Interp: Interpreter<Iface, Self>,
-    {
-        let payload = encode_with(ctx.arena(), self.encoding, &())
-            .map_err(|error| ExternError::Failure(error.to_string()))?;
-        Ok(external::state_value(
-            ctx.arena_mut(),
-            "archState",
-            payload.into(),
-        )?)
-    }
-}
-
-// == Extern call errors
-
-fn unsupported_method(
-    arena: &ValueArena,
-    value_id: Value,
-    name: &str,
-    names: &[String],
-) -> Result<ExternError, ExternError> {
-    let ids = external::param_names(arena, value_id)?;
-    Ok(ExternError::Failure(format!(
-        "unsupported extern method call: {}.{name}({})",
-        ids.join("."),
-        names.join(", ")
-    )))
-}
-
 // == STF transformation
 
 pub fn transform_stf_stmt(mut stmt: Statement) -> Statement {
@@ -272,6 +103,173 @@ pub fn transform_stf_stmt(mut stmt: Statement) -> Statement {
         _ => {}
     }
     stmt
+}
+
+// == Architectural state
+
+pub(super) fn init_arch_state<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Ebpf>,
+) -> Result<Value, Interp::Error>
+where
+    Iface: Interface,
+    Interp: Interpreter<Iface, Ebpf>,
+{
+    let encoding = ctx.external().encoding;
+    let payload = encode_with(ctx.arena(), encoding, &())
+        .map_err(|error| ExternError::Failure(error.to_string()))?;
+    Ok(external::state_value(
+        ctx.arena_mut(),
+        "archState",
+        payload.into(),
+    )?)
+}
+
+// == Extern calls
+
+// - Initialization
+
+pub(super) fn eval_extern_init<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Ebpf>,
+    values: &[Value],
+) -> Result<Value, Interp::Error>
+where
+    Iface: Interface,
+    Interp: Interpreter<Iface, Ebpf>,
+{
+    let encoding = ctx.external().encoding;
+    let (value_name, _value_targs, value_ids, value_args) =
+        get::four(values).map_err(ExternError::from)?;
+    let name = get::text(ctx.arena(), value_name).map_err(ExternError::from)?;
+    Ok(if name == "CounterArray" {
+        let counter = CounterArray::init(ctx.arena(), *value_ids, *value_args)?;
+        ExternObject::CounterArray(counter).to_value(ctx.arena_mut(), encoding)?
+    } else {
+        let payload = encode_with(ctx.arena(), encoding, &())
+            .map_err(|error| ExternError::Failure(error.to_string()))?;
+        external::state_value(ctx.arena_mut(), "objectState", payload.into())?
+    })
+}
+
+// - Function calls
+
+pub(super) fn eval_extern_func_call<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Ebpf>,
+    values: &[Value],
+) -> Result<Vec<Value>, Interp::Error>
+where
+    Iface: Interface,
+    Interp: Interpreter<Iface, Ebpf>,
+{
+    let (value_ctx, value_arch, value_name, value_names) =
+        get::four(values).map_err(ExternError::from)?;
+    let name = get::text(ctx.arena(), value_name)
+        .map_err(ExternError::from)?
+        .to_owned();
+    let names = external::param_names(ctx.arena(), *value_names)?;
+    let (value_ctx, value_arch, value_call_result) =
+        if name == "verify" && names == ["check", "toSignal"] {
+            core_func::verify(ctx, *value_ctx, *value_arch)?
+        } else {
+            return Err(ExternError::Failure(format!(
+                "unsupported extern function call: {name}({})",
+                names.join(", ")
+            ))
+            .into());
+        };
+    Ok(vec![value_ctx, value_arch, value_call_result])
+}
+
+// - Method calls
+
+fn unsupported_method(
+    arena: &ValueArena,
+    value_id: Value,
+    name: &str,
+    names: &[String],
+) -> Result<ExternError, ExternError> {
+    let ids = external::param_names(arena, value_id)?;
+    Ok(ExternError::Failure(format!(
+        "unsupported extern method call: {}.{name}({})",
+        ids.join("."),
+        names.join(", ")
+    )))
+}
+
+pub(super) fn eval_extern_method_call<Interp, Iface>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Ebpf>,
+    values: &[Value],
+) -> Result<Vec<Value>, Interp::Error>
+where
+    Iface: Interface,
+    Interp: Interpreter<Iface, Ebpf>,
+{
+    let encoding = ctx.external().encoding;
+    let [value_ctx, value_arch, value_id, value_name, value_names] = values else {
+        return Err(ExternError::Failure(
+            "unexpected number of arguments to extern method call".to_owned(),
+        )
+        .into());
+    };
+    let value_state = func::find_object_state_e(ctx, *value_arch, *value_id)?;
+    let object = ExternObject::from_value(ctx.arena_mut(), encoding, &value_state)?;
+    let name = get::text(ctx.arena(), value_name)
+        .map_err(ExternError::from)?
+        .to_owned();
+    let names = external::param_names(ctx.arena(), *value_names)?;
+    let (object, value_ctx, value_arch, value_call_result) = match object {
+        ExternObject::PacketIn(pkt) => {
+            let (object, value_ctx, value_arch, value_call_result) = match (
+                name.as_str(),
+                names
+                    .iter()
+                    .map(String::as_str)
+                    .collect::<Vec<_>>()
+                    .as_slice(),
+            ) {
+                ("extract", ["hdr"]) => pkt.extract(ctx, *value_ctx, *value_arch)?,
+                ("extract", ["variableSizeHeader", "variableFieldSizeInBits"]) => {
+                    pkt.extract_varsize(ctx, *value_ctx, *value_arch)?
+                }
+                ("lookahead", []) => pkt.lookahead(ctx, *value_ctx, *value_arch)?,
+                ("advance", ["sizeInBits"]) => pkt.advance(ctx, *value_ctx, *value_arch)?,
+                ("length", []) => pkt.length(ctx, *value_ctx, *value_arch)?,
+                _ => {
+                    return Err(unsupported_method(ctx.arena(), *value_id, &name, &names)?.into());
+                }
+            };
+            (
+                ExternObject::PacketIn(object),
+                value_ctx,
+                value_arch,
+                value_call_result,
+            )
+        }
+        ExternObject::CounterArray(counter) => {
+            let (object, value_ctx, value_arch, value_call_result) = match (
+                name.as_str(),
+                names
+                    .iter()
+                    .map(String::as_str)
+                    .collect::<Vec<_>>()
+                    .as_slice(),
+            ) {
+                ("increment", ["index"]) => counter.increment(ctx, *value_ctx, *value_arch)?,
+                ("add", ["index", "value"]) => counter.add(ctx, *value_ctx, *value_arch)?,
+                _ => {
+                    return Err(unsupported_method(ctx.arena(), *value_id, &name, &names)?.into());
+                }
+            };
+            (
+                ExternObject::CounterArray(object),
+                value_ctx,
+                value_arch,
+                value_call_result,
+            )
+        }
+    };
+    let value_state = object.to_value(ctx.arena_mut(), encoding)?;
+    let value_arch = func::update_object_state_e(ctx, value_arch, *value_id, value_state)?;
+    Ok(vec![value_ctx, value_arch, value_call_result])
 }
 
 // == Pipeline execution
