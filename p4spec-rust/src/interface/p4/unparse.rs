@@ -129,7 +129,7 @@ impl P4Unparser {
         Ok(rendered.join(separator))
     }
 
-    fn escape_text(text: &str) -> String {
+    pub(crate) fn escape_text(text: &str) -> String {
         text.bytes().fold(String::new(), |mut escaped, byte| {
             match byte {
                 b'\\' => escaped.push_str("\\\\"),

@@ -207,6 +207,44 @@ fn statement(stmt: Statement) -> p4spec_rust::lang::common::source::Phrase<State
 }
 
 #[test]
+fn test_add_escapes_table_names_but_set_default_preserves_them() {
+    let name = "prefix◕‿◕😀ツ\"\\\n\tsimple_table_1";
+    let escaped = "prefix\\226\\151\\149\\226\\128\\191\\226\\151\\149\\240\\159\\152\\128\\227\\131\\132\\\"\\\\\\n\\tsimple_table_1";
+    let action = Action {
+        name: "NoAction".into(),
+        args: vec![],
+    };
+    for (stmt, expected) in [
+        (
+            Statement::Add {
+                table: name.into(),
+                priority: None,
+                matches: vec![],
+                action: action.clone(),
+                id: None,
+            },
+            escaped,
+        ),
+        (
+            Statement::SetDefault {
+                table: name.into(),
+                action,
+            },
+            name,
+        ),
+    ] {
+        let (mut runner, mut run_case) = stf_runner(Ebpf::default());
+        runner::run_stf_stmt(&mut runner, &mut run_case, &statement(stmt)).unwrap();
+        let calls = runner.context().interp().calls.clone();
+        assert_eq!(calls[0].0, "find_object_unqualified_e");
+        assert_eq!(get::text(runner.arena(), &calls[0].1[1]).unwrap(), expected);
+        let call = calls.last().unwrap();
+        assert_eq!(call.0, "update_object_unqualified_e");
+        assert_eq!(get::text(runner.arena(), &call.1[1]).unwrap(), expected);
+    }
+}
+
+#[test]
 fn test_ordered_table_encoding_and_register_failure() {
     let (mut runner, mut run_case) = stf_runner(Ebpf::default());
     let action = Action {
@@ -271,7 +309,10 @@ fn test_ordered_table_encoding_and_register_failure() {
     assert_eq!(num::to_int(get::num(runner.arena(), &values_arg[0][1]).unwrap()), &i64::MAX.into());
     assert_eq!(get::text(runner.arena(), &values_arg[1][0]).unwrap(), "first");
     let calls = runner.context().interp().calls.clone();
-    assert_eq!(get::text(runner.arena(), &calls[0].1[1]).unwrap(), "tab\"");
+    assert_eq!(
+        get::text(runner.arena(), &calls[0].1[1]).unwrap(),
+        "tab\\\""
+    );
     runner::run_stf_stmt(
         &mut runner,
         &mut run_case,

@@ -7,7 +7,7 @@ use super::{
     table,
 };
 use crate::{
-    interface::p4::{error::P4Error, parse},
+    interface::p4::{error::P4Error, parse, unparse::P4Unparser},
     interp::al::error::Error as InterpError,
     lang::{
         common::source::{Phrase, Span},
@@ -357,8 +357,10 @@ where
     Arch: Architecture,
     Interp: Interpreter<Iface, Arch, Error = InterpError>,
 {
-    let value_name = make::text(ctx.arena_mut(), table.into_string(), Span::default())
-        .map_err(InterpError::from)?;
+    // Add names use the same escaped spelling as P4 annotation names.
+    let name = P4Unparser::escape_text(&table.into_string());
+    let value_name =
+        make::text(ctx.arena_mut(), name, Span::default()).map_err(InterpError::from)?;
     let value_priority = priority
         .map(|priority| make::int(ctx.arena_mut(), priority.into(), Span::default()))
         .transpose()
