@@ -11,9 +11,12 @@
 //! let x = source { return x; return x }
 //! ```
 //!
-//! Output patterns must agree after renaming, including their iterators
-//! The later body is renamed without capturing nested binders, then merged
-//! with the earlier body; a relation's input hint selects inputs and outputs
+//! Constructors and iterator metadata must match; variable pairs build a renaming
+//! `downstream_block` checks only the next sibling: for `let x = source`,
+//! a following `let y = source { return y }` yields `{ return x }`
+//! `upstream_block` merges that body into the current Let and retries,
+//! then rewrites the merged body; an intervening instruction stops merging
+//! A relation's input hint selects inputs and outputs
 
 use std::collections::VecDeque;
 
@@ -27,9 +30,30 @@ use crate::pass::structure::{
     StructureError, StructureErrorKind, ol::ast::*, opt::merge::merge_block, re::renamer::Renamer,
 };
 
+// == Bindings
+
+// Keep only iterator variables used by this expression: x with (x, y)* -> x with x*
 struct ExpUnit<'a> {
     exp: &'a Exp,
     iter_exps: Vec<ExpIter>,
+}
+
+impl<'a> ExpUnit<'a> {
+    fn new(exp: &'a Exp, iter_exps: &[ExpIter]) -> Self {
+        let ids = exp.free();
+        let iter_exps = iter_exps
+            .iter()
+            .map(|(iter, vars)| {
+                let vars = vars
+                    .iter()
+                    .filter(|var| ids.contains(&var.id))
+                    .cloned()
+                    .collect();
+                (*iter, vars)
+            })
+            .collect();
+        Self { exp, iter_exps }
+    }
 }
 
 impl SyntaxEq for ExpUnit<'_> {
@@ -37,201 +61,98 @@ impl SyntaxEq for ExpUnit<'_> {
         self.exp.syntax_eq(other.exp) && self.iter_exps.syntax_eq(&other.iter_exps)
     }
 }
+
 enum Bind<'a> {
     Let(ExpUnit<'a>, ExpUnit<'a>),
     Rule(&'a Id, Vec<ExpUnit<'a>>, Vec<ExpUnit<'a>>),
 }
 
-fn init_expunit<'a>(exp: &'a Exp, iter_exps: &[ExpIter]) -> ExpUnit<'a> {
-    let ids = exp.free();
-    let iter_exps = iter_exps
-        .iter()
-        .map(|(iter, vars)| {
-            let vars = vars
-                .iter()
-                .filter(|var| ids.contains(&var.id))
-                .cloned()
-                .collect();
-            (*iter, vars)
-        })
-        .collect();
-    ExpUnit { exp, iter_exps }
-}
-
-fn split_iterinstrs(iter_instrs: &[InstrIter]) -> (Vec<ExpIter>, Vec<ExpIter>) {
-    iter_instrs
-        .iter()
-        .map(|iter_instr| {
-            let InstrIter {
-                iter,
-                vars_bound,
-                vars_bind,
-            } = iter_instr;
-            ((*iter, vars_bound.clone()), (*iter, vars_bind.clone()))
-        })
-        .unzip()
-}
-
-fn init_let_bind(instr_let: &LetInstr) -> Bind<'_> {
-    let LetInstr {
-        exp_l,
-        exp_r,
-        iter_instrs,
-        ..
-    } = instr_let;
-    let (iter_exps_bound, iter_exps_bind) = split_iterinstrs(iter_instrs);
-    Bind::Let(
-        init_expunit(exp_l, &iter_exps_bind),
-        init_expunit(exp_r, &iter_exps_bound),
-    )
-}
-
-fn init_rule_bind<'a>(instr_rule: &'a RuleInstr, span: &Span) -> Result<Bind<'a>, StructureError> {
-    let RuleInstr {
-        id,
-        not_exp,
-        input_hint,
-        iter_instrs,
-        ..
-    } = instr_rule;
-    let (exps_input, exps_output) = input::split(input_hint, not_exp.args())
-        .map_err(|error| StructureError::new(StructureErrorKind::Input(error), span.clone()))?;
-    let (iter_exps_bound, iter_exps_bind) = split_iterinstrs(iter_instrs);
-    let expunits_input = exps_input
-        .into_iter()
-        .map(|exp| init_expunit(exp, &iter_exps_bound))
-        .collect();
-    let expunits_output = exps_output
-        .into_iter()
-        .map(|exp| init_expunit(exp, &iter_exps_bind))
-        .collect();
-    Ok(Bind::Rule(id, expunits_input, expunits_output))
-}
-
-fn collapse_exp(renamer: Renamer, exp: &Exp, exp_target: &Exp) -> Option<Renamer> {
-    let exp_kind = &exp.node;
-    let exp_kind_target = &exp_target.node;
-    match (exp_kind, exp_kind_target) {
-        (ExpKind::Var(id), ExpKind::Var(id_target)) => collapse_var_exp(renamer, id, id_target),
-        (ExpKind::Tuple(exps), ExpKind::Tuple(exps_target))
-        | (ExpKind::List(exps), ExpKind::List(exps_target)) => {
-            collapse_exps(renamer, exps, exps_target)
-        }
-        (ExpKind::Case(not_exp), ExpKind::Case(not_exp_target)) => {
-            collapse_case_exp(renamer, not_exp, not_exp_target)
-        }
-        (ExpKind::Str(exp_fields), ExpKind::Str(exp_fields_target)) => {
-            collapse_str_exp(renamer, exp_fields, exp_fields_target)
-        }
-        (ExpKind::Opt(exp), ExpKind::Opt(exp_target)) => {
-            collapse_opt_exp(renamer, exp.as_deref(), exp_target.as_deref())
-        }
-        (ExpKind::Cons(exp_head, exp_tail), ExpKind::Cons(exp_head_target, exp_tail_target)) => {
-            collapse_cons_exp(
-                renamer,
-                exp_head,
-                exp_tail,
-                exp_head_target,
-                exp_tail_target,
-            )
-        }
-        (ExpKind::Iter(exp, iter_exp), ExpKind::Iter(exp_target, iter_exp_target)) => {
-            collapse_iter_exp(renamer, exp, iter_exp, exp_target, iter_exp_target)
-        }
-        _ => None,
-    }
-}
-
-fn collapse_var_exp(mut renamer: Renamer, id: &Id, id_target: &Id) -> Option<Renamer> {
-    if !id.syntax_eq(id_target) {
-        renamer.add(id_target.clone(), id.clone());
-    }
-    Some(renamer)
-}
-
-fn collapse_case_exp(
-    renamer: Renamer,
-    not_exp: &NotExp,
-    not_exp_target: &NotExp,
-) -> Option<Renamer> {
-    if !not_exp.eq_shape(not_exp_target) {
-        return None;
-    }
-    collapse_exp_refs(renamer, not_exp.args(), not_exp_target.args())
-}
-
-fn collapse_str_exp(
-    renamer: Renamer,
-    exp_fields: &[ExpField],
-    exp_fields_target: &[ExpField],
-) -> Option<Renamer> {
-    if exp_fields.len() != exp_fields_target.len()
-        || !exp_fields
+impl<'a> Bind<'a> {
+    fn from_let(instr_let: &'a LetInstr) -> Self {
+        let LetInstr {
+            exp_l,
+            exp_r,
+            iter_instrs,
+            ..
+        } = instr_let;
+        let (iter_exps_bound, iter_exps_bind): (Vec<_>, Vec<_>) = iter_instrs
             .iter()
-            .zip(exp_fields_target)
-            .all(|((atom, _), (atom_target, _))| atom.syntax_eq(atom_target))
-    {
-        return None;
+            .map(|iter_instr| {
+                let iter_exp_bound = (iter_instr.iter, iter_instr.vars_bound.clone());
+                let iter_exp_bind = (iter_instr.iter, iter_instr.vars_bind.clone());
+                (iter_exp_bound, iter_exp_bind)
+            })
+            .unzip();
+        let expunit_l = ExpUnit::new(exp_l, &iter_exps_bind);
+        let expunit_r = ExpUnit::new(exp_r, &iter_exps_bound);
+        Self::Let(expunit_l, expunit_r)
     }
-    collapse_exp_refs(
-        renamer,
-        exp_fields.iter().map(|(_, exp)| exp).collect(),
-        exp_fields_target.iter().map(|(_, exp)| exp).collect(),
-    )
+
+    fn from_rule(instr_rule: &'a RuleInstr, span: &Span) -> Result<Self, StructureError> {
+        let RuleInstr {
+            id,
+            not_exp,
+            input_hint,
+            iter_instrs,
+            ..
+        } = instr_rule;
+        let exps = not_exp.args();
+        let (exps_input, exps_output) = input::split(input_hint, exps)
+            .map_err(|error| StructureError::new(StructureErrorKind::Input(error), span.clone()))?;
+        let (iter_exps_bound, iter_exps_bind): (Vec<_>, Vec<_>) = iter_instrs
+            .iter()
+            .map(|iter_instr| {
+                let iter_exp_bound = (iter_instr.iter, iter_instr.vars_bound.clone());
+                let iter_exp_bind = (iter_instr.iter, iter_instr.vars_bind.clone());
+                (iter_exp_bound, iter_exp_bind)
+            })
+            .unzip();
+        let expunits_input = exps_input
+            .into_iter()
+            .map(|exp| ExpUnit::new(exp, &iter_exps_bound))
+            .collect();
+        let expunits_output = exps_output
+            .into_iter()
+            .map(|exp| ExpUnit::new(exp, &iter_exps_bind))
+            .collect();
+        let bind = Self::Rule(id, expunits_input, expunits_output);
+        Ok(bind)
+    }
 }
 
-fn collapse_opt_exp(
-    renamer: Renamer,
-    exp: Option<&Exp>,
-    exp_target: Option<&Exp>,
-) -> Option<Renamer> {
-    match (exp, exp_target) {
-        (Some(exp), Some(exp_target)) => collapse_exp(renamer, exp, exp_target),
-        (None, None) => Some(renamer),
+// == Binding comparison
+
+// Find how to rename the later binding's outputs to the current binding's names
+// Let right-hand sides must match; Rules must have the same id and inputs
+// Input iterator metadata must also match before comparing output patterns
+//
+//   current: let (x, y) = source
+//   later:   let (a, b) = source
+//   result:  Some({a -> x, b -> y})
+//
+// Different inputs, pattern shapes, or incompatible output iterators yield None
+// This only builds a Renamer; downstream renames the body and upstream merges it
+
+fn collapse_bind(bind: &Bind<'_>, bind_target: &Bind<'_>) -> Option<Renamer> {
+    match (bind, bind_target) {
+        (Bind::Let(expunit_l, expunit_r), Bind::Let(expunit_target_l, expunit_target_r))
+            if expunit_r.syntax_eq(expunit_target_r) =>
+        {
+            collapse_expunit(Renamer::empty(), expunit_l, expunit_target_l)
+        }
+        (
+            Bind::Rule(id, expunits_input, expunits_output),
+            Bind::Rule(id_target, expunits_target_input, expunits_target_output),
+        ) if id.syntax_eq(id_target) && expunits_input.syntax_eq(expunits_target_input) => {
+            collapse_expunits(Renamer::empty(), expunits_output, expunits_target_output)
+        }
         _ => None,
     }
 }
 
-fn collapse_cons_exp(
-    renamer: Renamer,
-    exp_head: &Exp,
-    exp_tail: &Exp,
-    exp_head_target: &Exp,
-    exp_tail_target: &Exp,
-) -> Option<Renamer> {
-    let renamer = collapse_exp(renamer, exp_head, exp_head_target)?;
-    collapse_exp(renamer, exp_tail, exp_tail_target)
-}
-
-fn collapse_iter_exp(
-    renamer: Renamer,
-    exp: &Exp,
-    iter_exp: &ExpIter,
-    exp_target: &Exp,
-    iter_exp_target: &ExpIter,
-) -> Option<Renamer> {
-    let renamer = collapse_exp(renamer, exp, exp_target)?;
-    let iter_exp_target = renamer.rename_iterexp(iter_exp_target.clone());
-    iter_exp.syntax_eq(&iter_exp_target).then_some(renamer)
-}
-
-fn collapse_exps(renamer: Renamer, exps: &[Exp], exps_target: &[Exp]) -> Option<Renamer> {
-    collapse_exp_refs(renamer, exps.iter().collect(), exps_target.iter().collect())
-}
-
-fn collapse_exp_refs(
-    mut renamer: Renamer,
-    exps: Vec<&Exp>,
-    exps_target: Vec<&Exp>,
-) -> Option<Renamer> {
-    if exps.len() != exps_target.len() {
-        return None;
-    }
-    for (exp, exp_target) in exps.into_iter().zip(exps_target) {
-        renamer = collapse_exp(renamer, exp, exp_target)?;
-    }
-    Some(renamer)
-}
+// Compare the output pattern, then its iterators using the resulting renaming
+// For x with x* and y with y*, y -> x makes the iterator metadata agree
+// x* and y? still disagree after renaming, so the binding cannot be merged
 
 fn collapse_expunit(
     renamer: Renamer,
@@ -260,24 +181,124 @@ fn collapse_expunits(
     Some(renamer)
 }
 
-fn collapse_bind(bind: &Bind<'_>, bind_target: &Bind<'_>) -> Option<Renamer> {
-    match (bind, bind_target) {
-        (Bind::Let(expunit_l, expunit_r), Bind::Let(expunit_target_l, expunit_target_r))
-            if expunit_r.syntax_eq(expunit_target_r) =>
-        {
-            collapse_expunit(Renamer::empty(), expunit_l, expunit_target_l)
+// - Expressions
+
+// Walk both output patterns together and collect target-name -> current-name pairs
+// (x, [y]) against (a, [b]) records a -> x and b -> y; unequal shapes fail
+// Only the pattern forms below participate; even equal literals yield None
+// Repeated target names follow traversal order: (x, y) against (a, a) leaves a -> y
+
+fn collapse_exp(mut renamer: Renamer, exp: &Exp, exp_target: &Exp) -> Option<Renamer> {
+    match (&exp.node, &exp_target.node) {
+        (ExpKind::Var(id), ExpKind::Var(id_target)) => {
+            // Matching x against y records y -> x for the later body
+            if !id.syntax_eq(id_target) {
+                renamer.add(id_target.clone(), id.clone());
+            }
+            Some(renamer)
         }
-        (
-            Bind::Rule(id, expunits_input, expunits_output),
-            Bind::Rule(id_target, expunits_target_input, expunits_target_output),
-        ) if id.syntax_eq(id_target) && expunits_input.syntax_eq(expunits_target_input) => {
-            collapse_expunits(Renamer::empty(), expunits_output, expunits_target_output)
+        (ExpKind::Tuple(exps), ExpKind::Tuple(exps_target))
+        | (ExpKind::List(exps), ExpKind::List(exps_target)) => {
+            let exps = exps.iter().collect();
+            let exps_target = exps_target.iter().collect();
+            collapse_exps(renamer, exps, exps_target)
+        }
+        (ExpKind::Case(not_exp), ExpKind::Case(not_exp_target)) => {
+            collapse_case_exp(renamer, not_exp, not_exp_target)
+        }
+        (ExpKind::Str(exp_fields), ExpKind::Str(exp_fields_target)) => {
+            collapse_str_exp(renamer, exp_fields, exp_fields_target)
+        }
+        (ExpKind::Opt(exp), ExpKind::Opt(exp_target)) => match (exp, exp_target) {
+            (Some(exp), Some(exp_target)) => collapse_exp(renamer, exp, exp_target),
+            (None, None) => Some(renamer),
+            _ => None,
+        },
+        (ExpKind::Cons(exp_head, exp_tail), ExpKind::Cons(exp_head_target, exp_tail_target)) => {
+            let renamer = collapse_exp(renamer, exp_head, exp_head_target)?;
+            collapse_exp(renamer, exp_tail, exp_tail_target)
+        }
+        (ExpKind::Iter(exp, iter_exp), ExpKind::Iter(exp_target, iter_exp_target)) => {
+            collapse_iter_exp(renamer, exp, iter_exp, exp_target, iter_exp_target)
         }
         _ => None,
     }
 }
 
-fn downstream(
+fn collapse_exps(mut renamer: Renamer, exps: Vec<&Exp>, exps_target: Vec<&Exp>) -> Option<Renamer> {
+    if exps.len() != exps_target.len() {
+        return None;
+    }
+    for (exp, exp_target) in exps.into_iter().zip(exps_target) {
+        renamer = collapse_exp(renamer, exp, exp_target)?;
+    }
+    Some(renamer)
+}
+
+// - Case expression
+
+fn collapse_case_exp(
+    renamer: Renamer,
+    not_exp: &NotExp,
+    not_exp_target: &NotExp,
+) -> Option<Renamer> {
+    if !not_exp.eq_shape(not_exp_target) {
+        return None;
+    }
+    let exps = not_exp.args();
+    let exps_target = not_exp_target.args();
+    collapse_exps(renamer, exps, exps_target)
+}
+
+// - Record expression
+
+fn collapse_str_exp(
+    renamer: Renamer,
+    exp_fields: &[ExpField],
+    exp_fields_target: &[ExpField],
+) -> Option<Renamer> {
+    if exp_fields.len() != exp_fields_target.len()
+        || !exp_fields
+            .iter()
+            .zip(exp_fields_target)
+            .all(|((atom, _), (atom_target, _))| atom.syntax_eq(atom_target))
+    {
+        return None;
+    }
+    let exps = exp_fields.iter().map(|(_, exp)| exp).collect();
+    let exps_target = exp_fields_target.iter().map(|(_, exp)| exp).collect();
+    collapse_exps(renamer, exps, exps_target)
+}
+
+// - Iterated expression
+
+fn collapse_iter_exp(
+    renamer: Renamer,
+    exp: &Exp,
+    iter_exp: &ExpIter,
+    exp_target: &Exp,
+    iter_exp_target: &ExpIter,
+) -> Option<Renamer> {
+    // x* against y* must also have equal iterators after renaming y -> x
+    let renamer = collapse_exp(renamer, exp, exp_target)?;
+    let iter_exp_target = renamer.rename_iterexp(iter_exp_target.clone());
+    iter_exp.syntax_eq(&iter_exp_target).then_some(renamer)
+}
+
+// == Downstream search
+
+// Compare the current binding with only the next sibling
+//
+//   Current binding:    let x = source
+//   Following siblings: [let y = source { return y }; return z]
+//
+//   Returned body:      Some([return x])
+//   Remaining siblings: [return z]
+//
+// Upstream merges the returned body into the current binding's body
+// If the next sibling cannot be merged, return None and leave it in place
+
+fn downstream_block(
     bind: &Bind<'_>,
     block: &mut VecDeque<Instr>,
 ) -> Result<Option<Block>, StructureError> {
@@ -295,42 +316,42 @@ fn downstream(
     Ok(block_merge)
 }
 
+// - Let instruction
+
 fn downstream_let_instr(
     bind: &Bind<'_>,
     instr_let: &mut LetInstr,
 ) -> Result<Option<Block>, StructureError> {
-    let bind_target = init_let_bind(instr_let);
+    let bind_target = Bind::from_let(instr_let);
     let Some(renamer) = collapse_bind(bind, &bind_target) else {
         return Ok(None);
     };
     let LetInstr { block, .. } = instr_let;
-    let block = renamer.rename_block(std::mem::take(block))?;
+    let block = std::mem::take(block);
+    let block = renamer.rename_block(block)?;
     Ok(Some(block))
 }
+
+// - Rule instruction
 
 fn downstream_rule_instr(
     bind: &Bind<'_>,
     instr_rule: &mut RuleInstr,
     span: &Span,
 ) -> Result<Option<Block>, StructureError> {
-    let bind_target = init_rule_bind(instr_rule, span)?;
+    let bind_target = Bind::from_rule(instr_rule, span)?;
     let Some(renamer) = collapse_bind(bind, &bind_target) else {
         return Ok(None);
     };
     let RuleInstr { block, .. } = instr_rule;
-    let block = renamer.rename_block(std::mem::take(block))?;
+    let block = std::mem::take(block);
+    let block = renamer.rename_block(block)?;
     Ok(Some(block))
 }
 
-fn upstream(block: Block) -> Result<Block, StructureError> {
-    let mut instrs: VecDeque<_> = block.into();
-    let mut block = Vec::with_capacity(instrs.len());
-    while let Some(instr) = instrs.pop_front() {
-        let instr_kind = upstream_instr_kind(instr.node, &instr.span, &mut instrs)?;
-        block.push(crate::phrase!(node: instr_kind, span: instr.span));
-    }
-    Ok(block)
-}
+// == Upstream rewriting
+
+// Merge matching siblings into the current binding, then rewrite its body
 
 fn upstream_instr_kind(
     instr_kind: InstrKind,
@@ -348,19 +369,35 @@ fn upstream_instr_kind(
     }
 }
 
+fn upstream_block(block: Block) -> Result<Block, StructureError> {
+    let mut instrs: VecDeque<_> = block.into();
+    let mut block = Vec::with_capacity(instrs.len());
+    while let Some(instr) = instrs.pop_front() {
+        let instr_kind = upstream_instr_kind(instr.node, &instr.span, &mut instrs)?;
+        let instr = crate::phrase!(node: instr_kind, span: instr.span);
+        block.push(instr);
+    }
+    Ok(block)
+}
+
+// - If instruction
+
 fn upstream_if_instr(instr: IfInstr) -> Result<InstrKind, StructureError> {
     let IfInstr {
         exp,
         iter_exps,
         block,
     } = instr;
-    let block = upstream(block)?;
-    Ok(InstrKind::If(IfInstr {
+    let block = upstream_block(block)?;
+    let instr = IfInstr {
         exp,
         iter_exps,
         block,
-    }))
+    };
+    Ok(InstrKind::If(instr))
 }
+
+// - Hold instruction
 
 fn upstream_hold_instr(instr: HoldInstr) -> Result<InstrKind, StructureError> {
     let HoldInstr {
@@ -370,16 +407,19 @@ fn upstream_hold_instr(instr: HoldInstr) -> Result<InstrKind, StructureError> {
         block_hold,
         block_not_hold,
     } = instr;
-    let block_hold = upstream(block_hold)?;
-    let block_not_hold = upstream(block_not_hold)?;
-    Ok(InstrKind::Hold(HoldInstr {
+    let block_hold = upstream_block(block_hold)?;
+    let block_not_hold = upstream_block(block_not_hold)?;
+    let instr = HoldInstr {
         id,
         not_exp,
         iter_exps,
         block_hold,
         block_not_hold,
-    }))
+    };
+    Ok(InstrKind::Hold(instr))
 }
+
+// - Case instruction
 
 fn upstream_case_instr(instr: CaseInstr) -> Result<InstrKind, StructureError> {
     let CaseInstr { exp, cases, total } = instr;
@@ -387,12 +427,16 @@ fn upstream_case_instr(instr: CaseInstr) -> Result<InstrKind, StructureError> {
         .into_iter()
         .map(|case| {
             let Case { guard, block } = case;
-            let block = upstream(block)?;
-            Ok(Case { guard, block })
+            let block = upstream_block(block)?;
+            let case = Case { guard, block };
+            Ok(case)
         })
         .collect::<Result<_, StructureError>>()?;
-    Ok(InstrKind::Case(CaseInstr { exp, cases, total }))
+    let instr = CaseInstr { exp, cases, total };
+    Ok(InstrKind::Case(instr))
 }
+
+// - Group instruction
 
 fn upstream_group_instr(instr: GroupInstr) -> Result<InstrKind, StructureError> {
     let GroupInstr {
@@ -401,22 +445,25 @@ fn upstream_group_instr(instr: GroupInstr) -> Result<InstrKind, StructureError> 
         exps,
         block,
     } = instr;
-    let block = upstream(block)?;
-    Ok(InstrKind::Group(GroupInstr {
+    let block = upstream_block(block)?;
+    let instr = GroupInstr {
         id,
         rel_signature,
         exps,
         block,
-    }))
+    };
+    Ok(InstrKind::Group(instr))
 }
+
+// - Let instruction
 
 fn upstream_let_instr(
     mut instr: LetInstr,
     instrs: &mut VecDeque<Instr>,
 ) -> Result<InstrKind, StructureError> {
     loop {
-        let bind = init_let_bind(&instr);
-        let Some(block_merge) = downstream(&bind, instrs)? else {
+        let bind = Bind::from_let(&instr);
+        let Some(block_merge) = downstream_block(&bind, instrs)? else {
             break;
         };
         instr.block = merge_block(instr.block, block_merge);
@@ -427,14 +474,17 @@ fn upstream_let_instr(
         iter_instrs,
         block,
     } = instr;
-    let block = upstream(block)?;
-    Ok(InstrKind::Let(LetInstr {
+    let block = upstream_block(block)?;
+    let instr = LetInstr {
         exp_l,
         exp_r,
         iter_instrs,
         block,
-    }))
+    };
+    Ok(InstrKind::Let(instr))
 }
+
+// - Rule instruction
 
 fn upstream_rule_instr(
     mut instr: RuleInstr,
@@ -442,8 +492,8 @@ fn upstream_rule_instr(
     instrs: &mut VecDeque<Instr>,
 ) -> Result<InstrKind, StructureError> {
     loop {
-        let bind = init_rule_bind(&instr, span)?;
-        let Some(block_merge) = downstream(&bind, instrs)? else {
+        let bind = Bind::from_rule(&instr, span)?;
+        let Some(block_merge) = downstream_block(&bind, instrs)? else {
             break;
         };
         instr.block = merge_block(instr.block, block_merge);
@@ -455,16 +505,19 @@ fn upstream_rule_instr(
         iter_instrs,
         block,
     } = instr;
-    let block = upstream(block)?;
-    Ok(InstrKind::Rule(RuleInstr {
+    let block = upstream_block(block)?;
+    let instr = RuleInstr {
         id,
         not_exp,
         input_hint,
         iter_instrs,
         block,
-    }))
+    };
+    Ok(InstrKind::Rule(instr))
 }
 
+// == Entry point
+
 pub(crate) fn apply(block: Block) -> Result<Block, StructureError> {
-    upstream(block)
+    upstream_block(block)
 }
