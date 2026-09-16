@@ -253,3 +253,63 @@ fn test_nested_rule_shadows_rename_inside_let_iterator() {
     assert_eq!(var_id(return_exp(&instr_rule.block[1])), id_fresh);
     assert_eq!(var_id(return_exp(&instr_let.block[1])).node, "y");
 }
+
+#[test]
+fn test_empty_renaming_moves_notation_payloads() {
+    let exp = crate::note_phrase! {
+        node: ExpKind::Case(Box::new(Mixfix::Arg(variable("payload")))),
+        note: TypKind::Bool, span: span(3)
+    };
+    let ExpKind::Case(not_exp) = &exp.node else { unreachable!() };
+    let ptr = var_id(not_exp.args()[0]).node.as_ptr();
+    let exp_expect = exp.clone();
+    let exp = Renamer::empty().rename_exp(exp);
+    assert_eq!(exp, exp_expect);
+    let ExpKind::Case(not_exp) = &exp.node else { unreachable!() };
+    assert_eq!(var_id(not_exp.args()[0]).node.as_ptr(), ptr);
+
+    let instr_rule = instr(InstrKind::Rule(RuleInstr {
+        id: id("rel"),
+        not_exp: Mixfix::Arg(variable("input")),
+        input_hint: InputHint::new(vec![0]),
+        iter_instrs: vec![],
+        block: vec![binding("bound", vec![ret("bound")])],
+    }));
+    let InstrKind::Rule(instr_body) = &instr_rule.node else { unreachable!() };
+    let ptr = var_id(instr_body.not_exp.args()[0]).node.as_ptr();
+    let instr_expect = instr_rule.clone();
+    let instr_rule = Renamer::empty().rename_instr(instr_rule).unwrap();
+    assert_eq!(instr_rule, instr_expect);
+    let InstrKind::Rule(instr_body) = &instr_rule.node else { unreachable!() };
+    assert_eq!(var_id(instr_body.not_exp.args()[0]).node.as_ptr(), ptr);
+}
+
+#[test]
+fn test_empty_renaming_validates_debug_rules_before_later_siblings() {
+    use crate::lang::hints::input::InputError;
+    use crate::pass::structure::StructureErrorKind;
+    let mut instr_rule = instr(InstrKind::Rule(RuleInstr {
+        id: id("rel"),
+        not_exp: Mixfix::Arg(variable("input")),
+        input_hint: InputHint::new(vec![-1, -1]),
+        iter_instrs: vec![],
+        block: vec![],
+    }));
+    instr_rule.span = span(41);
+    let instr_debug =
+        instr(InstrKind::Debug(DebugInstr { exp: variable("debug"), instr: Box::new(instr_rule) }));
+    let mut instr_later = instr(InstrKind::Rule(RuleInstr {
+        id: id("later"),
+        not_exp: Mixfix::Arg(variable("input")),
+        input_hint: InputHint::new(vec![]),
+        iter_instrs: vec![],
+        block: vec![],
+    }));
+    instr_later.span = span(42);
+    let block = vec![binding("x", vec![instr_debug, instr_later])];
+    for renamer in [Renamer::empty(), Renamer::singleton(id("x"), id("y"))] {
+        let error = renamer.rename_block(block.clone()).unwrap_err();
+        assert_eq!(error.span, span(41));
+        assert_eq!(error.kind, StructureErrorKind::Input(InputError::DuplicateIndex(-1)));
+    }
+}
