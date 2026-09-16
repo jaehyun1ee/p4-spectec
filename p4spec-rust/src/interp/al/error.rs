@@ -1,6 +1,7 @@
 //! Located AL lookup, host, and execution failures
 
 use crate::runner::{ExternError, InterfaceError};
+use num_bigint::BigInt;
 use std::fmt;
 
 use crate::{
@@ -124,36 +125,30 @@ pub enum ExprErrorKind {
     ConcatenationOperandMismatch,
     #[error("length operation expects either a text or a list")]
     LengthOperandMismatch,
-    #[error("index does not fit a machine integer")]
-    IndexOverflow,
     #[error("undefined structure field")]
     UndefinedField,
     #[error("text byte slice is not on UTF-8 boundaries")]
     TextSliceBoundaryMismatch,
     #[error("indexing expects either a text or a list")]
     IndexOperandMismatch,
-    #[error("slice end overflows a machine integer")]
-    SliceEndOverflow,
     #[error("slicing expects either a text or a list")]
     SliceOperandMismatch,
-    #[error("text slice length is negative")]
-    NegativeTextSliceLength,
     #[error("updating a character requires a single-character text")]
     CharacterUpdateLengthMismatch,
     #[error("tuple cast arity mismatch")]
     TupleCastArityMismatch { expected: usize, actual: usize },
     #[error("index {idx} out of bounds [0, {len})")]
-    IndexOutOfBounds { idx: i64, len: usize },
+    IndexOutOfBounds { idx: BigInt, len: usize },
     #[error("slice [{idx}, {end}) out of bounds [0, {size})")]
-    SliceOutOfBounds { idx: i64, end: i64, size: usize },
+    SliceOutOfBounds { idx: BigInt, end: BigInt, size: usize },
     #[error(
         "updating a slice of length {len} requires a text of length {len}, but got length {actual}"
     )]
-    TextSliceUpdateLengthMismatch { len: i64, actual: usize },
+    TextSliceUpdateLengthMismatch { len: usize, actual: usize },
     #[error(
         "updating a slice of length {len} requires a list of length {len}, but got length {actual}"
     )]
-    ListSliceUpdateLengthMismatch { len: i64, actual: usize },
+    ListSliceUpdateLengthMismatch { len: usize, actual: usize },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
