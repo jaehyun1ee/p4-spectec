@@ -74,3 +74,43 @@ fn test_rule_output_renaming_keeps_input_and_locations() {
     assert_eq!(var_id(return_exp(&instr_rule.block[0])), var_id(exps[1]));
     assert_eq!(return_exp(&instr_rule.block[0]).span, span(1));
 }
+
+#[test]
+fn test_unticked_binding_keeps_notation_storage_and_input_spans() {
+    let exp_case = crate::note_phrase! {
+        node: crate::lang::il::ast::ExpKind::Case(Box::new(Mixfix::Arg(variable("payload")))),
+        note: crate::lang::il::ast::TypKind::Bool, span: span(31)
+    };
+    let crate::lang::il::ast::ExpKind::Case(not_exp) = &exp_case.node else { unreachable!() };
+    let ptr = var_id(not_exp.args()[0]).node.as_ptr();
+    let block = vec![binding(
+        "bound",
+        "source",
+        vec![instr(InstrKind::Return(ReturnInstr { exp: exp_case }))],
+    )];
+    let block_expect = block.clone();
+    let (_, block, _) = rename_tick::apply_rel((vec![variable("input")], block, None)).unwrap();
+    assert_eq!(block, block_expect);
+    let InstrKind::Let(instr_let) = &block[0].node else { unreachable!() };
+    let exp = return_exp(&instr_let.block[0]);
+    let crate::lang::il::ast::ExpKind::Case(not_exp) = &exp.node else { unreachable!() };
+    assert_eq!(var_id(not_exp.args()[0]).node.as_ptr(), ptr);
+}
+
+#[test]
+fn test_tick_gap_uses_whole_names_and_preserves_existing_binding() {
+    let (_, block, _) = rename_tick::apply_rel((
+        vec![variable("é"), variable("é'")],
+        vec![
+            binding("é''", "source", vec![ret("é''")]),
+            binding("z'''", "source", vec![ret("z'''"), ret("z"), ret("z''")]),
+        ],
+        None,
+    ))
+    .unwrap();
+    let InstrKind::Let(instr_a) = &block[0].node else { unreachable!() };
+    let InstrKind::Let(instr_b) = &block[1].node else { unreachable!() };
+    assert_eq!(var_id(&instr_a.exp_l).node, "é''");
+    assert_eq!(var_id(&instr_b.exp_l).node, "z'");
+    assert_eq!(var_id(return_exp(&instr_b.block[0])), var_id(&instr_b.exp_l));
+}

@@ -29,48 +29,28 @@ use crate::pass::structure::{
 
 // With {x, x'', x'''}, x''' becomes x'; its own spelling does not reserve a slot
 fn find_rename_ticks(frees: &IdSet, id: &Id) -> Option<Id> {
-    let mut id_rename = strip_trailing_ticks(id);
-    let counts: Vec<_> = frees
-        .iter()
-        .filter(|id_free| {
-            id_free.node != id.node && strip_trailing_ticks(id_free).node == id_rename.node
-        })
-        .map(count_trailing_ticks)
-        .collect();
-    let mut count = 0;
-    while counts.contains(&count) {
-        count += 1;
+    let mut id_rename = id.clone();
+    id_rename
+        .node
+        .truncate(id.node.trim_end_matches('\'').len());
+    while id_rename.node != id.node && frees.contains(&id_rename) {
+        id_rename.node.push('\'');
     }
-    id_rename.node.push_str(&"'".repeat(count));
     (id.node != id_rename.node).then_some(id_rename)
 }
 
-fn strip_trailing_ticks(id: &Id) -> Id {
-    let mut id_strip = id.clone();
-    id_strip
-        .node
-        .truncate(id.node.len() - count_trailing_ticks(id));
-    id_strip
-}
-
-fn count_trailing_ticks(id: &Id) -> usize {
-    id.node
-        .bytes()
-        .rev()
-        .take_while(|byte| *byte == b'\'')
-        .count()
-}
-
 // Reserve each choice before the next binding: (x'', x''') can become (x, x')
-fn binding_renamer(mut frees: IdSet, ids: &IdSet) -> Renamer {
+fn binding_renamer(frees: impl FnOnce() -> IdSet, ids: &IdSet) -> Renamer {
     let mut renamer = Renamer::empty();
-    for id in ids.iter() {
+    if !ids.iter().any(|id| id.node.ends_with('\'')) {
+        return renamer;
+    }
+    let mut frees = frees();
+    for id in ids.iter().filter(|id| id.node.ends_with('\'')) {
         if let Some(id_rename) = find_rename_ticks(&frees, id) {
             frees.take(id);
             frees.insert(id_rename.clone());
             renamer.add(id.clone(), id_rename);
-        } else {
-            frees.insert(id.clone());
         }
     }
     renamer
@@ -168,18 +148,20 @@ fn upstream_let_instr(
 ) -> Result<InstrKind, StructureError> {
     let LetInstr { exp_l, exp_r, iter_instrs, block } = instr_ol;
     let frees_l = exp_l.free();
-    let frees = frees_l
-        .clone()
-        .union(exp_r.free())
-        .union(block.free())
-        .union(frees_upstream.clone());
-    let renamer = binding_renamer(frees, &frees_l);
+    let frees_r = exp_r.free();
+    let renamer = binding_renamer(
+        || {
+            frees_l
+                .clone()
+                .union(frees_r.clone())
+                .union(block.free())
+                .union(frees_upstream.clone())
+        },
+        &frees_l,
+    );
     let exp_l = renamer.rename_exp(exp_l);
     let iter_instrs = renamer.rename_iterinstrs_bind(iter_instrs);
-    let frees = exp_l
-        .free()
-        .union(exp_r.free())
-        .union(frees_upstream.clone());
+    let frees = exp_l.free().union(frees_r).union(frees_upstream.clone());
     let block = renamer.rename_block(block)?;
     let block = upstream_block(&frees, block)?;
     let instr = LetInstr { exp_l, exp_r, iter_instrs, block };
@@ -198,18 +180,20 @@ fn upstream_rule_instr(
     let (exps_input, exps_output) = input::split(&input_hint, exps)
         .map_err(|error| StructureError::new(StructureErrorKind::Input(error), span.clone()))?;
     let frees_output = exps_output.as_slice().free();
-    let frees = exps_input
-        .as_slice()
-        .free()
-        .union(frees_output.clone())
-        .union(block.free())
-        .union(frees_upstream.clone());
-    let renamer = binding_renamer(frees, &frees_output);
+    let frees_input = exps_input.as_slice().free();
+    let renamer = binding_renamer(
+        || {
+            frees_input
+                .clone()
+                .union(frees_output.clone())
+                .union(block.free())
+                .union(frees_upstream.clone())
+        },
+        &frees_output,
+    );
     let exps_output = renamer.rename_exps(exps_output);
     let iter_instrs = renamer.rename_iterinstrs_bind(iter_instrs);
-    let frees = exps_input
-        .as_slice()
-        .free()
+    let frees = frees_input
         .union(exps_output.as_slice().free())
         .union(frees_upstream.clone());
     let exps = input::combine(&input_hint, exps_input, exps_output)
@@ -228,9 +212,12 @@ fn upstream_exps(
     (mut exps_match, mut block, mut block_else): (Vec<Exp>, Block, Option<Block>),
 ) -> Result<(Vec<Exp>, Block, Option<Block>), StructureError> {
     let ids = exps_match.as_slice().free();
+    if !ids.iter().any(|id| id.node.ends_with('\'')) {
+        return Ok((exps_match, block, block_else));
+    }
     let frees_else = block_else.as_ref().map(Free::free).unwrap_or_default();
     let mut frees = ids.clone().union(block.free()).union(frees_else);
-    for id in ids.iter() {
+    for id in ids.iter().filter(|id| id.node.ends_with('\'')) {
         if let Some(id_rename) = find_rename_ticks(&frees, id) {
             frees.take(id);
             frees.insert(id_rename.clone());
@@ -249,9 +236,12 @@ fn upstream_args(
     (mut args_input, mut block, mut block_else): (Vec<Arg>, Block, Option<Block>),
 ) -> Result<(Vec<Arg>, Block, Option<Block>), StructureError> {
     let ids = args_input.as_slice().free();
+    if !ids.iter().any(|id| id.node.ends_with('\'')) {
+        return Ok((args_input, block, block_else));
+    }
     let frees_else = block_else.as_ref().map(Free::free).unwrap_or_default();
     let mut frees = ids.clone().union(block.free()).union(frees_else);
-    for id in ids.iter() {
+    for id in ids.iter().filter(|id| id.node.ends_with('\'')) {
         if let Some(id_rename) = find_rename_ticks(&frees, id) {
             frees.take(id);
             frees.insert(id_rename.clone());
