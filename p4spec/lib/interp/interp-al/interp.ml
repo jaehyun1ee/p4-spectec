@@ -218,11 +218,11 @@ module Make (Interface : Run.INTERFACE) (Extern : Run.EXTERN) () :
       (value : value) : Ctx.t =
     match Value.Get.opt value with
     | Some inner_value ->
-        let ctx = assign_exp ctx exp inner_value in
+        let ctx_sub = assign_exp ctx exp inner_value in
         List.fold_left
           (fun ctx (id, typ, iters) ->
             let typ = Typ.Make.iterate typ (iters @ [ Opt ]) in
-            let inner_value = Ctx.find_value ctx (id, iters) in
+            let inner_value = Ctx.find_value ctx_sub (id, iters) in
             let value_sub = Value.Make.opt typ (Some inner_value) in
             Ctx.add_value ctx (id, iters @ [ Opt ]) value_sub)
           ctx vars

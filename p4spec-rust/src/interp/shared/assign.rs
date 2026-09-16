@@ -223,35 +223,27 @@ fn assign_iter_exp<Ctx: AssignContext>(
     let span = &exp.span;
     match iter {
         ast::Iter::Opt => {
-            let value_inner = backtrack_from_result!(get::opt(arena, &value), span);
-            let ctx_sub = match value_inner {
+            let value_opt = backtrack_from_result!(get::opt(arena, &value), span);
+            let ctx_sub = match value_opt {
                 Some(value) => Some(backtrack!(assign_exp(arena, ctx.clone(), exp_inner, value))),
                 None => None,
             };
-            if Ctx::RETAIN_OPTIONAL_SCALARS
-                && let Some(ctx_sub) = &ctx_sub
-            {
-                ctx = ctx_sub.clone();
-            }
             for var in vars {
                 let mut iters = var.iters.clone();
                 iters.push(ast::Iter::Opt);
                 let typ = typ::make::iterate(var.typ.clone(), &iters);
-                let value_sub = if let Some(ctx_sub) = &ctx_sub {
-                    let ctx_values = if Ctx::RETAIN_OPTIONAL_SCALARS { &ctx } else { ctx_sub };
-                    let value = backtrack_from_result!(
-                        ctx_values.find_value(&Variable::new(var.id.clone(), var.iters.clone())),
+                let value_opt = match &ctx_sub {
+                    Some(ctx_sub) => Some(*backtrack_from_result!(
+                        ctx_sub.find_value(&Variable::new(var.id.clone(), var.iters.clone())),
                         &var.id.span
-                    );
-                    Some(*value)
-                } else {
-                    None
+                    )),
+                    None => None,
                 };
-                let value_sub = backtrack_from_result!(
-                    make::opt(arena, typ.node.into(), value_sub, Span::default()),
+                let value = backtrack_from_result!(
+                    make::opt(arena, typ.node.into(), value_opt, Span::default()),
                     span
                 );
-                ctx.add_value(Variable::new(var.id.clone(), iters), value_sub);
+                ctx.add_value(Variable::new(var.id.clone(), iters), value);
             }
             Backtrack::Ok(ctx)
         }

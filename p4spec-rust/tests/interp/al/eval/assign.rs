@@ -166,7 +166,7 @@ fn test_list_rows_cannot_collect_unassigned_outer_values() {
 }
 
 #[test]
-fn test_optional_assignment_retains_inner_bindings_and_collects_none() {
+fn test_optional_assignment_exports_only_iterated_bindings() {
     let mut arena = ValueArena::new();
     let global = Global::load(vec![]).unwrap();
     let exp =
@@ -183,7 +183,10 @@ fn test_optional_assignment_retains_inner_bindings_and_collects_none() {
         .unwrap();
         assign_exp(&mut arena, Context::new(&global), &exp, value)
     });
-    assert!(get::bool(&arena, &binding(&ctx, "x", vec![])).unwrap());
+    assert!(
+        ctx.find_value_opt(&Variable::new(id("x"), vec![]))
+            .is_none()
+    );
     assert!(
         get::bool(
             &arena,
@@ -214,7 +217,10 @@ fn test_optional_assignment_retains_inner_bindings_and_collects_none() {
             .unwrap()
             .is_none()
     );
-    assert!(get::bool(&arena, &binding(&ctx, "x", vec![])).unwrap());
+    assert!(
+        ctx.find_value_opt(&Variable::new(id("x"), vec![]))
+            .is_none()
+    );
 }
 
 #[test]
@@ -367,7 +373,7 @@ fn test_empty_iteration_creates_empty_collections_for_every_binding() {
 }
 
 #[test]
-fn test_optional_destructuring_retains_al_scalar_rebindings() {
+fn test_optional_destructuring_preserves_outer_scalars() {
     let mut arena = ValueArena::new();
     let global = Global::load(vec![]).unwrap();
     let mut ctx = Context::new(&global);
@@ -387,8 +393,12 @@ fn test_optional_destructuring_retains_al_scalar_rebindings() {
     )
     .unwrap();
     let ctx = ok(assign_exp(&mut arena, ctx, &exp, value_opt));
+    assert!(!get::bool(&arena, &binding(&ctx, "x", vec![])).unwrap());
+    assert!(
+        ctx.find_value_opt(&Variable::new(id("y"), vec![]))
+            .is_none()
+    );
     for name in ["x", "y"] {
-        assert_eq!(binding(&ctx, name, vec![]), value_inner);
         assert_eq!(
             get::opt(&arena, &binding(&ctx, name, vec![ast::Iter::Opt])).unwrap(),
             Some(value_inner)
