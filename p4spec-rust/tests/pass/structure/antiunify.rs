@@ -9,7 +9,7 @@ use crate::{
     },
     pass::structure::{
         StructureErrorKind,
-        antiunify::{antiunify_clauses, antiunify_rule_match_group},
+        antiunify::{antiunify_clauses, antiunify_rule_matches},
     },
 };
 fn span(int_line: i64) -> Span {
@@ -49,7 +49,7 @@ fn test_variable_and_tuple_preserve_template_and_binding_spans() {
     let exp_b = tuple(vec![boolean(true, 8)], 8);
     let mut frees = exp_a.free();
     exp_b.free_into(&mut frees);
-    let (exps_template, prems_group, _) = antiunify_rule_match_group(
+    let (exps_template, prems_by_rule_group, _) = antiunify_rule_matches(
         frees.clone(),
         &[vec![exp_a.clone()], vec![exp_b.clone()]],
         None,
@@ -59,7 +59,7 @@ fn test_variable_and_tuple_preserve_template_and_binding_spans() {
     assert_eq!(exp_template.span, exp_a.span);
     assert_eq!(exp_template.note, exp_a.note);
     assert!(exp_template.free().iter().all(|id| !frees.contains(id)));
-    for (prems, exp) in prems_group.iter().zip([exp_a, exp_b]) {
+    for (prems, exp) in prems_by_rule_group.iter().zip([exp_a, exp_b]) {
         let prem_let = let_prem(&prems[0]);
         assert_eq!(prem_let.exp_l, exp);
         assert_eq!(prem_let.exp_r, *exp_template);
@@ -102,7 +102,7 @@ fn test_else_clause_participates_and_generated_premises_precede_originals() {
 
 #[test]
 fn test_incompatible_shapes_report_second_span() {
-    let error = antiunify_rule_match_group(
+    let error = antiunify_rule_matches(
         IdSet::new(),
         &[vec![boolean(true, 2)], vec![boolean(false, 9)]],
         None,
@@ -113,8 +113,8 @@ fn test_incompatible_shapes_report_second_span() {
 }
 
 #[test]
-fn test_group_arity_mismatch_is_located() {
-    let error = antiunify_rule_match_group(
+fn test_match_arity_mismatch_is_located() {
+    let error = antiunify_rule_matches(
         IdSet::new(),
         &[
             vec![boolean(true, 2)],
@@ -131,6 +131,17 @@ fn test_group_arity_mismatch_is_located() {
         }
     ));
     assert_eq!(error.span, Span::over(&[span(9), span(10)]));
+
+    let error =
+        antiunify_rule_matches(IdSet::new(), &[vec![boolean(true, 2)], vec![]], None).unwrap_err();
+    assert!(matches!(
+        error.kind,
+        StructureErrorKind::ArityMismatch {
+            expected: 1,
+            actual: 0
+        }
+    ));
+    assert_eq!(error.span, Span::default());
 }
 
 #[test]
@@ -166,12 +177,14 @@ fn test_structured_templates_populate_in_source_order() {
         vec![record(boolean(true, 8), 8), case(boolean(false, 9), 9)],
         7,
     );
-    let (exps_template, prems_group, _) =
-        antiunify_rule_match_group(exp_a.free(), &[vec![exp_a.clone()], vec![exp_b]], None)
-            .unwrap();
-    assert_eq!(prems_group[1].len(), 2);
-    assert_eq!(let_prem(&prems_group[1][0]).exp_l, boolean(true, 8));
-    assert_eq!(let_prem(&prems_group[1][1]).exp_l, boolean(false, 9));
+    let (exps_template, prems_by_rule_group, _) =
+        antiunify_rule_matches(exp_a.free(), &[vec![exp_a.clone()], vec![exp_b]], None).unwrap();
+    assert_eq!(prems_by_rule_group[1].len(), 2);
+    assert_eq!(let_prem(&prems_by_rule_group[1][0]).exp_l, boolean(true, 8));
+    assert_eq!(
+        let_prem(&prems_by_rule_group[1][1]).exp_l,
+        boolean(false, 9)
+    );
     let ExpKind::Tuple(exps_template) = &exps_template[0].node else {
         panic!("tuple template")
     };
@@ -180,16 +193,16 @@ fn test_structured_templates_populate_in_source_order() {
 }
 
 #[test]
-fn test_unified_identifier_is_retained_for_later_group_members() {
+fn test_unified_identifier_is_retained_for_later_matches() {
     let exp_a = variable("x", 1);
-    let (exps_template, prems_group, _) = antiunify_rule_match_group(
+    let (exps_template, prems_by_rule_group, _) = antiunify_rule_matches(
         exp_a.free(),
         &[vec![exp_a], vec![boolean(true, 4)], vec![boolean(false, 8)]],
         None,
     )
     .unwrap();
     let exp_template = &exps_template[0];
-    for prems in &prems_group {
+    for prems in &prems_by_rule_group {
         assert!(let_prem(&prems[0]).exp_r.syntax_eq(exp_template));
     }
 }
@@ -212,15 +225,15 @@ fn test_iterated_template_preserves_bound_and_binding_variables() {
     let exp_iter_b = crate::note_phrase! {node: ExpKind::Iter(Box::new(exp_b), (Iter::List, vec![var_b.clone()])), note: TypKind::Bool, span: span(7)};
     let mut frees = exp_iter_a.free();
     exp_iter_b.free_into(&mut frees);
-    let (exps_template, prems_group, _) =
-        antiunify_rule_match_group(frees, &[vec![exp_iter_a], vec![exp_iter_b]], None).unwrap();
+    let (exps_template, prems_by_rule_group, _) =
+        antiunify_rule_matches(frees, &[vec![exp_iter_a], vec![exp_iter_b]], None).unwrap();
     let ExpKind::Iter(exp_template, (iter, vars_template)) = &exps_template[0].node else {
         panic!("iter template")
     };
     assert_eq!(*iter, Iter::List);
     assert_eq!(vars_template.len(), 1);
     assert!(exp_template.free().contains(&vars_template[0].id));
-    for (prems, var) in prems_group.iter().zip([var_a, var_b]) {
+    for (prems, var) in prems_by_rule_group.iter().zip([var_a, var_b]) {
         let prem_kind = &prems[0].node;
         let PremKind::Iter(prem_iter) = prem_kind else {
             panic!("iterated binding")
@@ -239,7 +252,7 @@ fn test_nested_tuple_arity_is_located_at_second_tuple() {
     let exp_a = tuple(vec![boolean(true, 2)], 1);
     let exp_b = tuple(vec![], 9);
     let error =
-        antiunify_rule_match_group(IdSet::new(), &[vec![exp_a], vec![exp_b]], None).unwrap_err();
+        antiunify_rule_matches(IdSet::new(), &[vec![exp_a], vec![exp_b]], None).unwrap_err();
     assert_eq!(
         error.kind,
         StructureErrorKind::ArityMismatch {
@@ -270,14 +283,14 @@ fn test_empty_clause_arguments_report_clause_span() {
 #[test]
 fn test_rule_else_participates_and_preserves_its_bindings() {
     let exp_else = variable("x", 9);
-    let (exps_template, prems_group, prems_else) = antiunify_rule_match_group(
+    let (exps_template, prems_by_rule_group, prems_else) = antiunify_rule_matches(
         exp_else.free(),
         &[vec![boolean(true, 1)]],
         Some(std::slice::from_ref(&exp_else)),
     )
     .unwrap();
     assert_eq!(let_prem(&prems_else.unwrap()[0]).exp_l, exp_else);
-    assert_eq!(let_prem(&prems_group[0][0]).exp_l, boolean(true, 1));
+    assert_eq!(let_prem(&prems_by_rule_group[0][0]).exp_l, boolean(true, 1));
     assert_eq!(exps_template[0].span, span(1));
     let ExpKind::Var(id) = &exps_template[0].node else {
         panic!("variable template")
@@ -286,12 +299,12 @@ fn test_rule_else_participates_and_preserves_its_bindings() {
 }
 
 #[test]
-fn test_freshness_accumulates_across_input_columns() {
+fn test_freshness_accumulates_across_input_positions() {
     let exp_a = variable("x", 1);
     let exp_b = variable("x'", 2);
     let mut frees = exp_a.free();
     exp_b.free_into(&mut frees);
-    let (exps_template, _, _) = antiunify_rule_match_group(
+    let (exps_template, _, _) = antiunify_rule_matches(
         frees.clone(),
         &[
             vec![exp_a, exp_b],
@@ -312,9 +325,9 @@ fn test_freshness_accumulates_across_input_columns() {
 }
 
 #[test]
-fn test_conflicting_input_column_unifiers_are_typed() {
+fn test_conflicting_input_position_unifiers_are_typed() {
     let exp = variable("x", 1);
-    let error = antiunify_rule_match_group(
+    let error = antiunify_rule_matches(
         exp.free(),
         &[
             vec![exp.clone(), exp],
@@ -336,7 +349,7 @@ fn test_record_field_disagreement_is_located() {
     };
     expfields[0].0.node = crate::lang::common::notation::atom::Atom::Keyword("other".to_owned());
     let error =
-        antiunify_rule_match_group(exp_a.free(), &[vec![exp_a], vec![exp_b]], None).unwrap_err();
+        antiunify_rule_matches(exp_a.free(), &[vec![exp_a], vec![exp_b]], None).unwrap_err();
     assert_eq!(error.kind, StructureErrorKind::Antiunification);
     assert_eq!(error.span, span(9));
 }
@@ -345,11 +358,10 @@ fn test_record_field_disagreement_is_located() {
 fn test_equal_inputs_generate_no_premises_and_keep_original_annotations() {
     let exp_a = case(boolean(true, 2), 1);
     let exp_b = case(boolean(true, 8), 9);
-    let (exps_template, prems_group, _) =
-        antiunify_rule_match_group(IdSet::new(), &[vec![exp_a.clone()], vec![exp_b]], None)
-            .unwrap();
+    let (exps_template, prems_by_rule_group, _) =
+        antiunify_rule_matches(IdSet::new(), &[vec![exp_a.clone()], vec![exp_b]], None).unwrap();
     assert_eq!(exps_template, vec![exp_a]);
-    assert!(prems_group.iter().all(Vec::is_empty));
+    assert!(prems_by_rule_group.iter().all(Vec::is_empty));
 }
 
 #[test]
@@ -357,7 +369,7 @@ fn test_overwritten_unifier_cannot_silently_populate_an_old_template() {
     let exp_a = tuple(vec![variable("x", 2), variable("x", 3)], 1);
     let exp_b = tuple(vec![boolean(true, 8), boolean(false, 9)], 7);
     let error =
-        antiunify_rule_match_group(exp_a.free(), &[vec![exp_a], vec![exp_b]], None).unwrap_err();
+        antiunify_rule_matches(exp_a.free(), &[vec![exp_a], vec![exp_b]], None).unwrap_err();
     assert_eq!(error.kind, StructureErrorKind::TemplatePopulation);
     assert_eq!(error.span, span(2));
 }

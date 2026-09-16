@@ -714,25 +714,25 @@ fn struct_defined_rel_def(
         let error_kind = StructureErrorKind::Input(error);
         StructureError::new(error_kind, span.clone())
     })?;
-    let exps_match_group = rule_groups
+    let exps_match_by_rule_group = rule_groups
         .iter()
         .map(|rule_group| rule_group.node.rule_match.exps_input.clone())
         .collect::<Vec<_>>();
     let exps_match_else = else_group
         .as_ref()
         .map(|else_group| else_group.node.rule_match.exps_input.as_slice());
-    let (exps_template, prems_group, prems_else) = if rule_groups.is_empty() && else_group.is_none()
-    {
-        let exps_input = struct_rel_exps_input(ctx, &not_typ, &input_hint, span)?;
-        (exps_input, vec![], None)
-    } else {
-        antiunify::antiunify_rule_match_group(frees, &exps_match_group, exps_match_else)?
-    };
+    let (exps_template, prems_by_rule_group, prems_else) =
+        if rule_groups.is_empty() && else_group.is_none() {
+            let exps_input = struct_rel_exps_input(ctx, &not_typ, &input_hint, span)?;
+            (exps_input, vec![], None)
+        } else {
+            antiunify::antiunify_rule_matches(frees, &exps_match_by_rule_group, exps_match_else)?
+        };
     let rel_signature = sl::RelSignature {
         not_typ,
         input_hint,
     };
-    let blocks = prems_group
+    let blocks = prems_by_rule_group
         .into_iter()
         .zip(rule_groups)
         .map(|(prems, rule_group)| struct_rule_group(&rel_signature, prems, rule_group))
@@ -852,7 +852,7 @@ fn struct_table_dec_def(
         table_rows: table_rows_al,
         hints,
     } = def_func_al;
-    let (exps_signature_group, clauses): (Vec<_>, Vec<_>) = table_rows_al
+    let (exps_signature_by_table_row, clauses): (Vec<_>, Vec<_>) = table_rows_al
         .into_iter()
         .map(struct_table_row_clause)
         .unzip();
@@ -876,7 +876,7 @@ fn struct_table_dec_def(
         .into_iter()
         .map(dangle::instrument_without_else)
         .collect::<Result<Vec<_>, _>>()?;
-    let table_rows_sl = exps_signature_group
+    let table_rows_sl = exps_signature_by_table_row
         .into_iter()
         .zip(exps_output)
         .zip(blocks_sl)
