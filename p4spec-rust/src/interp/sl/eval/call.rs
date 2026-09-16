@@ -275,12 +275,11 @@ fn invoke_builtin_func<Iface: Interface, Exn: Extern>(
     }
 }
 
-fn invoke_rel_mode<Iface: Interface, Exn: Extern>(
+pub fn invoke_rel<Iface: Interface, Exn: Extern>(
     runner: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
     ctx: &Context<'_>,
     id: &ast::Id,
     values: &[Value],
-    internal: bool,
 ) -> Backtrack<Vec<Value>> {
     let mut id = Cow::Borrowed(id);
     let mut values = Cow::Borrowed(values);
@@ -293,9 +292,6 @@ fn invoke_rel_mode<Iface: Interface, Exn: Extern>(
             .and_then(|key| runner.interp().cache.rels.get(key))
         {
             return Backtrack::Ok(values.clone());
-        }
-        if !internal && runner.interp().config.guard && key.is_none() {
-            backtrack!(check_rel_inputs(runner.arena(), ctx, &id, &values).guard());
         }
         runner.interp_mut().cache.begin();
         let result = stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
@@ -359,13 +355,12 @@ fn invoke_rel_mode<Iface: Interface, Exn: Extern>(
     }
 }
 
-fn invoke_func_mode<Iface: Interface, Exn: Extern>(
+pub fn invoke_func<Iface: Interface, Exn: Extern>(
     runner: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
     ctx: &Context<'_>,
     id: &ast::Id,
     targs: &[ast::Typ],
     values: &[Value],
-    internal: bool,
 ) -> Backtrack<Value> {
     let mut id = Cow::Borrowed(id);
     let mut targs = Cow::Borrowed(targs);
@@ -379,9 +374,6 @@ fn invoke_func_mode<Iface: Interface, Exn: Extern>(
             .and_then(|key| runner.interp().cache.funcs.get(key))
         {
             return Backtrack::Ok(*value);
-        }
-        if !internal && runner.interp().config.guard && key.is_none() {
-            backtrack!(check_func_inputs(runner.arena(), ctx, &id, &targs, &values).guard());
         }
         runner.interp_mut().cache.begin();
         let result = stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
@@ -526,41 +518,6 @@ fn assign_params<'global>(
         }
     }
     Backtrack::Ok(ctx)
-}
-
-pub fn invoke_rel<Iface: Interface, Exn: Extern>(
-    runner: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
-    ctx: &Context<'_>,
-    id: &ast::Id,
-    values: &[Value],
-) -> Backtrack<Vec<Value>> {
-    invoke_rel_mode(runner, ctx, id, values, true)
-}
-pub(crate) fn invoke_rel_entry<Iface: Interface, Exn: Extern>(
-    runner: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
-    ctx: &Context<'_>,
-    id: &ast::Id,
-    values: &[Value],
-) -> Backtrack<Vec<Value>> {
-    invoke_rel_mode(runner, ctx, id, values, false)
-}
-pub fn invoke_func<Iface: Interface, Exn: Extern>(
-    runner: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
-    ctx: &Context<'_>,
-    id: &ast::Id,
-    targs: &[ast::Typ],
-    values: &[Value],
-) -> Backtrack<Value> {
-    invoke_func_mode(runner, ctx, id, targs, values, true)
-}
-pub(crate) fn invoke_func_entry<Iface: Interface, Exn: Extern>(
-    runner: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
-    ctx: &Context<'_>,
-    id: &ast::Id,
-    targs: &[ast::Typ],
-    values: &[Value],
-) -> Backtrack<Value> {
-    invoke_func_mode(runner, ctx, id, targs, values, false)
 }
 
 fn nest_pending<T>(

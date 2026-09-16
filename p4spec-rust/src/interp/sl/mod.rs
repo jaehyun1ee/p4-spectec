@@ -63,7 +63,12 @@ impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for SlInterp {
         runner.interp_mut().cache.clear();
         let id = crate::phrase!(node: name.to_owned(), span: Span::default());
         let ctx = Context::new(runner.spec());
-        eval::call::invoke_rel_entry(runner, &ctx, &id, values).finish()
+        if runner.interp().config.guard && !eval::call::cache_rel(runner, &ctx, &id) {
+            eval::call::check_rel_inputs(runner.arena(), &ctx, &id, values)
+                .guard()
+                .finish()?;
+        }
+        eval::call::invoke_rel(runner, &ctx, &id, values).finish()
     }
 
     fn eval_func(
@@ -75,6 +80,11 @@ impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for SlInterp {
         runner.interp_mut().cache.clear();
         let id = crate::phrase!(node: name.to_owned(), span: Span::default());
         let ctx = Context::new(runner.spec());
-        eval::call::invoke_func_entry(runner, &ctx, &id, targs, values).finish()
+        if runner.interp().config.guard && !eval::call::cache_func(runner, &ctx, &id, values) {
+            eval::call::check_func_inputs(runner.arena(), &ctx, &id, targs, values)
+                .guard()
+                .finish()?;
+        }
+        eval::call::invoke_func(runner, &ctx, &id, targs, values).finish()
     }
 }
