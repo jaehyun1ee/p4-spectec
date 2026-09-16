@@ -21,7 +21,7 @@ use crate::{
     },
     runner::{Extern, Interface, RunnerContext},
 };
-use std::borrow::{Borrow, Cow};
+use std::borrow::Cow;
 
 #[derive(Clone, Debug)]
 pub enum Flow {
@@ -65,7 +65,7 @@ fn eval_block_ctx<Iface: Interface, Exn: Extern>(
     tail: bool,
 ) -> Backtrack<Flow> {
     if !runner.interp().config.det {
-        return eval_sequential(runner, ctx, block, tail);
+        return eval_sequential(runner, ctx, block.iter(), tail);
     }
     let mut flow = Flow::Cont(vec![]);
     for instr in block {
@@ -113,23 +113,23 @@ fn eval_block_ctx<Iface: Interface, Exn: Extern>(
     Backtrack::Ok(flow)
 }
 
-pub(crate) fn eval_sequential<Iface: Interface, Exn: Extern, Instr: Borrow<ast::Instr>>(
+pub(crate) fn eval_sequential<'instr, Iface: Interface, Exn: Extern>(
     runner: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
     ctx: Cow<'_, Context<'_>>,
-    block: &[Instr],
+    mut instrs: impl DoubleEndedIterator<Item = &'instr ast::Instr>,
     tail: bool,
 ) -> Backtrack<Flow> {
-    let Some((instr_last, block)) = block.split_last() else {
+    let Some(instr_last) = instrs.next_back() else {
         return Backtrack::Ok(Flow::Cont(vec![]));
     };
     let mut errors = Vec::new();
-    for instr in block {
-        match backtrack!(eval_instr(runner, ctx.as_ref(), instr.borrow(), false)) {
+    for instr in instrs {
+        match backtrack!(eval_instr(runner, ctx.as_ref(), instr, false)) {
             Flow::Cont(errors_post) => retain_errors(&mut errors, errors_post),
             flow => return Backtrack::Ok(flow),
         }
     }
-    match backtrack!(eval_instr_ctx(runner, ctx, instr_last.borrow(), tail)) {
+    match backtrack!(eval_instr_ctx(runner, ctx, instr_last, tail)) {
         Flow::Cont(errors_post) => {
             retain_errors(&mut errors, errors_post);
             Backtrack::Ok(Flow::Cont(errors))
@@ -174,11 +174,11 @@ fn eval_instr_inner<Iface: Interface, Exn: Extern>(
 ) -> Backtrack<Flow> {
     let result = (|| match &instr.node {
         ast::InstrKind::If(instr) => {
-            let iters = instr.iter_exps.iter().rev().collect::<Vec<_>>();
             let cond = backtrack!(condition_iter(
                 runner,
                 ctx.as_ref(),
-                &iters,
+                &instr.iter_exps,
+                true,
                 &mut |runner, ctx| {
                     let value = backtrack!(eval_exp(runner, ctx, &instr.exp));
                     Backtrack::from_result(get::bool(runner.arena(), &value), &instr.exp.span)
@@ -196,11 +196,11 @@ fn eval_instr_inner<Iface: Interface, Exn: Extern>(
             }
         }
         ast::InstrKind::Hold(instr) => {
-            let iters = instr.iter_exps.iter().rev().collect::<Vec<_>>();
             let cond = backtrack!(condition_iter(
                 runner,
                 ctx.as_ref(),
-                &iters,
+                &instr.iter_exps,
+                true,
                 &mut |runner, ctx| {
                     let values = backtrack!(eval_exps(runner, ctx, &instr.not_exp.args()));
                     match invoke_rel(runner, ctx, &instr.id, &values) {
@@ -256,7 +256,7 @@ fn eval_instr_inner<Iface: Interface, Exn: Extern>(
             let ctx = backtrack!(binding_iter(
                 runner,
                 ctx.into_owned(),
-                &instr.iter_instrs.iter().rev().collect::<Vec<_>>(),
+                &instr.iter_instrs,
                 &mut |runner, ctx| {
                     let value = backtrack!(eval_exp(runner, &ctx, &instr.exp_r));
                     expression::assign_exp(runner.arena_mut(), ctx, &instr.exp_l, value)
@@ -287,7 +287,7 @@ fn eval_instr_inner<Iface: Interface, Exn: Extern>(
             let ctx = backtrack!(binding_iter(
                 runner,
                 ctx.into_owned(),
-                &instr.iter_instrs.iter().rev().collect::<Vec<_>>(),
+                &instr.iter_instrs,
                 &mut |runner, ctx| {
                     let values = backtrack!(eval_exps(runner, &ctx, &exps_input));
                     let values = backtrack!(invoke_rel(runner, &ctx, &instr.id, &values));
@@ -377,71 +377,66 @@ fn continuation(span: Span, error: PremErrorKind) -> Backtrack<Flow> {
 fn condition_iter<Iface: Interface, Exn: Extern>(
     runner: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
     ctx: &Context<'_>,
-    iters: &[&ast::ExpIter],
+    iters: &[ast::ExpIter],
+    reverse: bool,
     eval: &mut impl FnMut(&mut RunnerContext<'_, SlInterp, Iface, Exn>, &Context<'_>) -> Backtrack<bool>,
 ) -> Backtrack<bool> {
-    let Some(((iter, vars), iters_tail)) = iters.split_first() else {
+    let iter = if reverse {
+        iters.split_last()
+    } else {
+        iters.split_first()
+    };
+    let Some(((iter, vars), iters_tail)) = iter else {
         return eval(runner, ctx);
     };
-    let ctxs = backtrack!(subcontexts(runner.arena(), ctx, *iter, vars));
-    if *iter == ast::Iter::Opt && ctxs.is_empty() {
-        return Backtrack::Ok(false);
-    }
-    for ctx_sub in ctxs {
-        // The OCaml optional condition recurs through the outer-order entry
-        let iters_sub = if *iter == ast::Iter::Opt {
-            iters_tail.iter().copied().rev().collect::<Vec<_>>()
-        } else {
-            iters_tail.to_vec()
-        };
-        if !backtrack!(condition_iter(runner, &ctx_sub, &iters_sub, eval)) {
-            return Backtrack::Ok(false);
+    match iter {
+        ast::Iter::Opt => {
+            let values =
+                backtrack_from_result!(ctx.opt_values(runner.arena(), vars), &Span::default());
+            let Some(values) = values else {
+                return Backtrack::Ok(false);
+            };
+            let mut ctx_sub = ctx.clone();
+            for (var, value) in vars.iter().zip(values) {
+                ctx_sub.add_value(Variable::new(var.id.clone(), var.iters.clone()), value);
+            }
+            // The OCaml optional condition reverses the remaining iteration order
+            condition_iter(runner, &ctx_sub, iters_tail, !reverse, eval)
         }
-    }
-    Backtrack::Ok(true)
-}
-
-fn subcontexts<'global>(
-    arena: &crate::lang::data::value::ValueArena,
-    ctx: &Context<'global>,
-    iter: ast::Iter,
-    vars: &[ast::Var],
-) -> Backtrack<Vec<Context<'global>>> {
-    let batches = match iter {
-        ast::Iter::Opt => backtrack_from_result!(ctx.opt_values(arena, vars), &Span::default())
-            .into_iter()
-            .collect(),
         ast::Iter::List => {
-            let rows = backtrack_from_result!(ctx.list_values(arena, vars), &Span::default());
-            (0..rows.first().map_or(0, |row| row.len()))
-                .map(|idx| rows.iter().map(|row| row[idx]).collect::<Vec<_>>())
-                .collect::<Vec<_>>()
-        }
-    };
-    Backtrack::Ok(
-        batches
-            .into_iter()
-            .map(|values| {
-                let mut ctx = ctx.clone();
-                for (var, value) in vars.iter().zip(values) {
-                    ctx.add_value(Variable::new(var.id.clone(), var.iters.clone()), value);
+            let rows =
+                backtrack_from_result!(ctx.list_values(runner.arena(), vars), &Span::default());
+            // Copy handles before the callback can allocate in the arena
+            let rows: Vec<_> = rows.into_iter().map(<[Value]>::to_vec).collect();
+            let width = rows.first().map_or(0, Vec::len);
+            let vars: Vec<_> = vars
+                .iter()
+                .map(|var| Variable::new(var.id.clone(), var.iters.clone()))
+                .collect();
+            let mut ctx_sub = ctx.clone();
+            for column in 0..width {
+                for (var, row) in vars.iter().zip(&rows) {
+                    ctx_sub.add_value(var.clone(), row[column]);
                 }
-                ctx
-            })
-            .collect(),
-    )
+                if !backtrack!(condition_iter(runner, &ctx_sub, iters_tail, reverse, eval)) {
+                    return Backtrack::Ok(false);
+                }
+            }
+            Backtrack::Ok(true)
+        }
+    }
 }
 
 fn binding_iter<'global, Iface: Interface, Exn: Extern>(
     runner: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
     ctx: Context<'global>,
-    iters: &[&ast::InstrIter],
+    iters: &[ast::InstrIter],
     eval: &mut impl FnMut(
         &mut RunnerContext<'_, SlInterp, Iface, Exn>,
         Context<'global>,
     ) -> Backtrack<Context<'global>>,
 ) -> Backtrack<Context<'global>> {
-    let Some((iter, iters_tail)) = iters.split_first() else {
+    let Some((iter, iters_tail)) = iters.split_last() else {
         return eval(runner, ctx);
     };
     match iter.iter {

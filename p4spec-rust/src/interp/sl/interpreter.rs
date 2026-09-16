@@ -418,15 +418,11 @@ fn invoke_func_mode<Iface: Interface, Exn: Extern>(
                         &func.params,
                         &values
                     ));
-                    let instrs: Vec<_> = func
-                        .table_rows
-                        .iter()
-                        .flat_map(|row| row.block.iter())
-                        .collect();
+                    let instrs = func.table_rows.iter().flat_map(|row| row.block.iter());
                     let flow = backtrack!(instruction::eval_sequential(
                         runner,
                         Cow::Owned(ctx_local),
-                        &instrs,
+                        instrs,
                         true
                     ));
                     match flow {

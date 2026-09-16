@@ -288,3 +288,77 @@ fn case_guard_errors_keep_the_generated_expression_trace() {
     let error = runner.context().call_func("entry", &[], &[]).unwrap_err();
     assert!(error.to_string().contains("~case"), "{error}");
 }
+
+#[test]
+fn optional_condition_reverses_remaining_iterators_and_preserves_outer_bindings() {
+    use p4spec_rust::{
+        interp::sl::{
+            context::Context,
+            instruction::{Flow, eval_block},
+        },
+        lang::common::Variable,
+    };
+    for det in [false, true] {
+        for (cond, expected) in [(true, "5"), (false, "9")] {
+            let mut runner = with_block(vec![], det);
+            let global = Global::load(vec![]).unwrap();
+            let mut ctx = Context::new(&global);
+            let id = phrase!(node: "b".to_owned(), span: Span::default());
+            let value_outer = make::bool(runner.arena_mut(), false, Span::default()).unwrap();
+            ctx.add_value(Variable::new(id.clone(), vec![]), value_outer);
+            let value_true = make::bool(runner.arena_mut(), true, Span::default()).unwrap();
+            let value_cond = make::bool(runner.arena_mut(), cond, Span::default()).unwrap();
+            let typ_list = typ::make::list(typ::make::bool());
+            let mut values = Vec::new();
+            for value in [value_true, value_cond] {
+                values.push(
+                    make::list(
+                        runner.arena_mut(),
+                        typ_list.node.clone().into(),
+                        vec![value],
+                        Span::default(),
+                    )
+                    .unwrap(),
+                );
+            }
+            let value = make::list(
+                runner.arena_mut(),
+                typ::make::list(typ_list).node.into(),
+                values,
+                Span::default(),
+            )
+            .unwrap();
+            ctx.add_value(
+                Variable::new(id.clone(), vec![ast::Iter::List, ast::Iter::List]),
+                value,
+            );
+            let var = ast::Var {
+                id: id.clone(),
+                typ: typ::make::bool(),
+                iters: vec![],
+            };
+            let mut var_list = var.clone();
+            var_list.iters.push(ast::Iter::List);
+            let exp = note_phrase!(node: ast::ExpKind::Var(id.clone()), note: typ::make::bool().node, span: Span::default());
+            let block = vec![phrase!(node: ast::InstrKind::If(ast::IfInstr {
+                    exp, iter_exps: vec![(ast::Iter::List, vec![var_list]), (ast::Iter::List, vec![var]), (ast::Iter::Opt, vec![])],
+                    block: vec![instr(self::exp(5))], dangle: true,
+                }), span: Span::default())];
+            let flow = eval_block(&mut runner.context(), &ctx, &block, false)
+                .finish()
+                .unwrap();
+            match flow {
+                Flow::Return(value) => assert_eq!(
+                    get::num(runner.arena(), &value).unwrap().to_string(),
+                    expected
+                ),
+                Flow::Cont(_) => assert_eq!(expected, "9"),
+                flow => panic!("unexpected flow: {flow:?}"),
+            }
+            assert_eq!(
+                *ctx.find_value(&Variable::new(id, vec![])).unwrap(),
+                value_outer
+            );
+        }
+    }
+}
