@@ -19,6 +19,8 @@ fn cmp(exp_l: Exp, exp_r: Exp) -> Exp {
 
 #[test]
 fn test_boolean_partition_and_literal_disjointness() {
+    use crate::lang::sl::ast::Guard;
+
     let exp_target = exp(ExpKind::Var(
         crate::phrase!(node: "flag".into(), span: Default::default()),
     ));
@@ -28,12 +30,31 @@ fn test_boolean_partition_and_literal_disjointness() {
         overlap_exp(&TDEnv::new(), &exp_a, &exp_b).unwrap(),
         Overlap::Partition { .. }
     ));
-    let exp_a = cmp(exp_target.clone(), exp(ExpKind::Text("a".into())));
-    let exp_b = cmp(exp_target, exp(ExpKind::Text("b".into())));
-    assert!(matches!(
-        overlap_exp(&TDEnv::new(), &exp_a, &exp_b).unwrap(),
-        Overlap::Disjoint { .. }
-    ));
+    let exp_literal_a = exp(ExpKind::Text("a".into()));
+    let exp_literal_b = exp(ExpKind::Text("b".into()));
+    let exp_a = cmp(exp_target.clone(), exp_literal_a.clone());
+    for exp_b in [
+        cmp(exp_target.clone(), exp_literal_b.clone()),
+        cmp(exp_literal_b.clone(), exp_target.clone()),
+    ] {
+        let overlap = overlap_exp(&TDEnv::new(), &exp_a, &exp_b).unwrap();
+        assert_eq!(
+            overlap,
+            Overlap::Disjoint {
+                exp: exp_target.clone(),
+                guard_a: Guard::Cmp(
+                    CmpOp::Bool(boolop::CmpOp::Eq),
+                    OpTyp::Bool,
+                    exp_literal_a.clone(),
+                ),
+                guard_b: Guard::Cmp(
+                    CmpOp::Bool(boolop::CmpOp::Eq),
+                    OpTyp::Bool,
+                    exp_literal_b.clone(),
+                ),
+            }
+        );
+    }
 }
 
 #[test]
