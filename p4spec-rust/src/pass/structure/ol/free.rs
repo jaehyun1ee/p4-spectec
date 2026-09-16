@@ -1,12 +1,10 @@
-//! Collect expression identifiers, including patterns and both Hold paths
-use super::ast::*;
+//! Free identifiers in optimization-language data
+
 use crate::lang::{common::ds::set::IdSet, traits::free::Free};
 
-impl Free for Case {
-    fn free(&self) -> IdSet {
-        self.guard.free().union(self.block.free())
-    }
-}
+use super::ast::*;
+
+// == Free identifiers
 
 // - Instructions
 
@@ -86,10 +84,18 @@ impl Free for DebugInstr {
     }
 }
 
+// - Case analysis
+
+impl Free for Case {
+    fn free(&self) -> IdSet {
+        self.guard.free().union(self.block.free())
+    }
+}
+
+// - Blocks
+
 impl Free for Block {
     fn free(&self) -> IdSet {
         self.as_slice().free()
     }
 }
-
-// `ElseBlock` aliases `Block` and uses its implementation above

@@ -12,36 +12,7 @@ use super::ast::*;
 
 // == Printing
 
-// - Helpers
-
-fn indent(level: usize) -> String {
-    "  ".repeat(level)
-}
-
-fn write_notation(
-    output: &mut Printer<'_>,
-    not_typ: &NotTyp,
-    exps: Vec<Option<&Exp>>,
-) -> fmt::Result {
-    let (mixop, typs) = not_typ.node.split();
-    assert_eq!(typs.len(), exps.len());
-    Mixop::fill(&mixop, exps)
-        .expect("notation arguments came from the same split notation")
-        .print_with(output, |exp, output| match exp {
-            Some(exp) => exp.print(output),
-            None => output.write("%"),
-        })
-}
-
 // - Premises
-
-fn write_prems_with(output: &mut Printer<'_>, level: usize, prems: &[Prem]) -> fmt::Result {
-    for prem in prems {
-        write!(output, "\n{}-- ", indent(level))?;
-        prem.print(output)?;
-    }
-    Ok(())
-}
 
 impl Print for Prem {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
@@ -105,7 +76,119 @@ impl Print for [Prem] {
     }
 }
 
+fn write_prems_with(output: &mut Printer<'_>, level: usize, prems: &[Prem]) -> fmt::Result {
+    for prem in prems {
+        write!(output, "\n{}-- ", indent(level))?;
+        prem.print(output)?;
+    }
+    Ok(())
+}
+
 // - Rules
+
+fn write_rulegroups(
+    output: &mut Printer<'_>,
+    not_typ: &NotTyp,
+    input_hint: &InputHint,
+    rule_groups: &[RuleGroup],
+) -> fmt::Result {
+    for (index, rule_group) in rule_groups.iter().enumerate() {
+        if index != 0 {
+            output.write_str("\n\n")?;
+        }
+        write_rulegroup(output, not_typ, input_hint, rule_group)?;
+    }
+    Ok(())
+}
+
+fn write_rulegroup(
+    output: &mut Printer<'_>,
+    not_typ: &NotTyp,
+    input_hint: &InputHint,
+    rule_group: &RuleGroup,
+) -> fmt::Result {
+    write!(output, "{}rulegroup ", indent(1))?;
+    rule_group.node.id.print(output)?;
+    write!(output, "\n\n {}match\n\n", indent(1))?;
+    write_rulematch(output, not_typ, input_hint, &rule_group.node.rule_match)?;
+    write!(output, "\n\n {}paths\n\n", indent(1))?;
+    write_rulepaths(output, not_typ, input_hint, &rule_group.node.rule_paths)
+}
+
+fn write_elsegroup_opt(
+    output: &mut Printer<'_>,
+    not_typ: &NotTyp,
+    input_hint: &InputHint,
+    else_group: &Option<ElseGroup>,
+) -> fmt::Result {
+    if let Some(else_group) = else_group {
+        write!(output, "\n\n{}elsegroup\n\n", indent(1))?;
+        write_elsegroup(output, not_typ, input_hint, else_group)?;
+    }
+    Ok(())
+}
+
+fn write_elsegroup(
+    output: &mut Printer<'_>,
+    not_typ: &NotTyp,
+    input_hint: &InputHint,
+    else_group: &ElseGroup,
+) -> fmt::Result {
+    write!(output, "{}rulegroup ", indent(1))?;
+    else_group.node.id.print(output)?;
+    write!(output, "\n\n {}match\n\n", indent(1))?;
+    write_rulematch(output, not_typ, input_hint, &else_group.node.rule_match)?;
+    write!(output, "\n\n {}paths\n\n", indent(1))?;
+    write_rulepaths(
+        output,
+        not_typ,
+        input_hint,
+        std::slice::from_ref(&else_group.node.rule_path),
+    )
+}
+
+fn write_rulematch(
+    output: &mut Printer<'_>,
+    not_typ: &NotTyp,
+    input_hint: &InputHint,
+    rule_match: &RuleMatch,
+) -> fmt::Result {
+    write!(output, "{}(signature) ", indent(2))?;
+    write_ruleinput(output, not_typ, input_hint, &rule_match.exps_signature)?;
+    output.write_char('\n')?;
+    output.write_str(&indent(2))?;
+    write_ruleinput(output, not_typ, input_hint, &rule_match.exps_input)?;
+    write_prems_with(output, 2, &rule_match.prems)
+}
+
+fn write_rulepaths(
+    output: &mut Printer<'_>,
+    not_typ: &NotTyp,
+    input_hint: &InputHint,
+    rule_paths: &[RulePath],
+) -> fmt::Result {
+    for (index, rule_path) in rule_paths.iter().enumerate() {
+        if index != 0 {
+            output.write_str("\n\n")?;
+        }
+        write_rulepath(output, not_typ, input_hint, rule_path)?;
+    }
+    Ok(())
+}
+
+fn write_rulepath(
+    output: &mut Printer<'_>,
+    not_typ: &NotTyp,
+    input_hint: &InputHint,
+    rule_path: &RulePath,
+) -> fmt::Result {
+    write!(output, "{}rulepath ", indent(2))?;
+    rule_path.id.print(output)?;
+    write_prems_with(output, 2, &rule_path.prems)?;
+    output.write_char('\n')?;
+    output.write_str(&indent(2))?;
+    write_ruleoutput(output, not_typ, input_hint, &rule_path.exps_output)
+}
 
 fn write_ruleinput(
     output: &mut Printer<'_>,
@@ -155,110 +238,6 @@ fn write_ruleoutput(
     }
 }
 
-fn write_rulematch(
-    output: &mut Printer<'_>,
-    not_typ: &NotTyp,
-    input_hint: &InputHint,
-    rule_match: &RuleMatch,
-) -> fmt::Result {
-    write!(output, "{}(signature) ", indent(2))?;
-    write_ruleinput(output, not_typ, input_hint, &rule_match.exps_signature)?;
-    output.write_char('\n')?;
-    output.write_str(&indent(2))?;
-    write_ruleinput(output, not_typ, input_hint, &rule_match.exps_input)?;
-    write_prems_with(output, 2, &rule_match.prems)
-}
-
-fn write_rulepath(
-    output: &mut Printer<'_>,
-    not_typ: &NotTyp,
-    input_hint: &InputHint,
-    rule_path: &RulePath,
-) -> fmt::Result {
-    write!(output, "{}rulepath ", indent(2))?;
-    rule_path.id.print(output)?;
-    write_prems_with(output, 2, &rule_path.prems)?;
-    output.write_char('\n')?;
-    output.write_str(&indent(2))?;
-    write_ruleoutput(output, not_typ, input_hint, &rule_path.exps_output)
-}
-
-fn write_rulepaths(
-    output: &mut Printer<'_>,
-    not_typ: &NotTyp,
-    input_hint: &InputHint,
-    rule_paths: &[RulePath],
-) -> fmt::Result {
-    for (index, rule_path) in rule_paths.iter().enumerate() {
-        if index != 0 {
-            output.write_str("\n\n")?;
-        }
-        write_rulepath(output, not_typ, input_hint, rule_path)?;
-    }
-    Ok(())
-}
-
-fn write_rulegroup(
-    output: &mut Printer<'_>,
-    not_typ: &NotTyp,
-    input_hint: &InputHint,
-    rule_group: &RuleGroup,
-) -> fmt::Result {
-    write!(output, "{}rulegroup ", indent(1))?;
-    rule_group.node.id.print(output)?;
-    write!(output, "\n\n {}match\n\n", indent(1))?;
-    write_rulematch(output, not_typ, input_hint, &rule_group.node.rule_match)?;
-    write!(output, "\n\n {}paths\n\n", indent(1))?;
-    write_rulepaths(output, not_typ, input_hint, &rule_group.node.rule_paths)
-}
-
-fn write_rulegroups(
-    output: &mut Printer<'_>,
-    not_typ: &NotTyp,
-    input_hint: &InputHint,
-    rule_groups: &[RuleGroup],
-) -> fmt::Result {
-    for (index, rule_group) in rule_groups.iter().enumerate() {
-        if index != 0 {
-            output.write_str("\n\n")?;
-        }
-        write_rulegroup(output, not_typ, input_hint, rule_group)?;
-    }
-    Ok(())
-}
-
-fn write_elsegroup(
-    output: &mut Printer<'_>,
-    not_typ: &NotTyp,
-    input_hint: &InputHint,
-    else_group: &ElseGroup,
-) -> fmt::Result {
-    write!(output, "{}rulegroup ", indent(1))?;
-    else_group.node.id.print(output)?;
-    write!(output, "\n\n {}match\n\n", indent(1))?;
-    write_rulematch(output, not_typ, input_hint, &else_group.node.rule_match)?;
-    write!(output, "\n\n {}paths\n\n", indent(1))?;
-    write_rulepaths(
-        output,
-        not_typ,
-        input_hint,
-        std::slice::from_ref(&else_group.node.rule_path),
-    )
-}
-
-fn write_elsegroup_opt(
-    output: &mut Printer<'_>,
-    not_typ: &NotTyp,
-    input_hint: &InputHint,
-    else_group: &Option<ElseGroup>,
-) -> fmt::Result {
-    if let Some(else_group) = else_group {
-        write!(output, "\n\n{}elsegroup\n\n", indent(1))?;
-        write_elsegroup(output, not_typ, input_hint, else_group)?;
-    }
-    Ok(())
-}
-
 // - Clauses
 
 impl Print for Clause {
@@ -297,6 +276,24 @@ impl Print for [TableRow] {
             table_row.print(printer)?;
         }
         Ok(())
+    }
+}
+
+// - Definitions
+
+impl Print for Def {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        match &self.node {
+            DefKind::Typ(typ_def) => typ_def.print(printer),
+            DefKind::Var(var_def) => {
+                printer.write_str("var ")?;
+                var_def.id.print(printer)?;
+                printer.write_str(" : ")?;
+                var_def.typ.print(printer)
+            }
+            DefKind::Rel(rel_def) => rel_def.print(printer),
+            DefKind::MetaFunc(meta_func_def) => meta_func_def.print(printer),
+        }
     }
 }
 
@@ -422,25 +419,8 @@ impl Print for MetaFuncDef {
     }
 }
 
-// - Definitions
-
-impl Print for Def {
-    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        match &self.node {
-            DefKind::Typ(typ_def) => typ_def.print(printer),
-            DefKind::Var(var_def) => {
-                printer.write_str("var ")?;
-                var_def.id.print(printer)?;
-                printer.write_str(" : ")?;
-                var_def.typ.print(printer)
-            }
-            DefKind::Rel(rel_def) => rel_def.print(printer),
-            DefKind::MetaFunc(meta_func_def) => meta_func_def.print(printer),
-        }
-    }
-}
-
 // - Specifications
+
 impl Print for Spec {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         for (index, def) in self.iter().enumerate() {
@@ -451,4 +431,25 @@ impl Print for Spec {
         }
         Ok(())
     }
+}
+
+// - Helpers
+
+fn indent(level: usize) -> String {
+    "  ".repeat(level)
+}
+
+fn write_notation(
+    output: &mut Printer<'_>,
+    not_typ: &NotTyp,
+    exps: Vec<Option<&Exp>>,
+) -> fmt::Result {
+    let (mixop, typs) = not_typ.node.split();
+    assert_eq!(typs.len(), exps.len());
+    Mixop::fill(&mixop, exps)
+        .expect("notation arguments came from the same split notation")
+        .print_with(output, |exp, output| match exp {
+            Some(exp) => exp.print(output),
+            None => output.write("%"),
+        })
 }

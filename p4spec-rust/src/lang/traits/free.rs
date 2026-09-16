@@ -4,6 +4,8 @@ use std::rc::Rc;
 
 use crate::lang::common::{ds::set::IdSet, source::NotePhrase};
 
+// == Free identifiers
+
 /// Collects free term identifiers from syntax
 pub trait Free {
     /// Returns the free term identifiers contained in `self`
@@ -19,17 +21,23 @@ pub trait Free {
     }
 }
 
+// - Text
+
 impl Free for String {
     fn free(&self) -> IdSet {
         IdSet::new()
     }
 }
 
+// - Source annotations
+
 impl<T: Free, N, S> Free for NotePhrase<T, N, S> {
     fn free_into(&self, free: &mut IdSet) {
         self.node.free_into(free);
     }
 }
+
+// - Containers
 
 impl<T: Free + ?Sized> Free for Box<T> {
     fn free_into(&self, free: &mut IdSet) {

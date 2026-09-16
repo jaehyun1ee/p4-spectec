@@ -1,30 +1,31 @@
-//! Ordered syntax equality, ignoring spans and subtype proof strategies
-use super::ast::*;
+//! Syntax equality for optimization-language data
+//!
+//! Ignores source regions
+
 use crate::lang::traits::eq::SyntaxEq;
 
-impl SyntaxEq for Case {
-    fn syntax_eq(&self, other: &Self) -> bool {
-        self.guard.syntax_eq(&other.guard) && self.block.syntax_eq(&other.block)
-    }
-}
+use super::ast::*;
 
-impl SyntaxEq for Block {
-    fn syntax_eq(&self, other: &Self) -> bool {
-        self.as_slice().syntax_eq(other.as_slice())
-    }
-}
+// == Syntax equality
 
-impl SyntaxEq for Option<ElseBlock> {
+// - Instructions
+
+impl SyntaxEq for InstrKind {
     fn syntax_eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (Some(block_a), Some(block_b)) => block_a.syntax_eq(block_b),
-            (None, None) => true,
+            (InstrKind::If(instr_a), InstrKind::If(instr_b)) => instr_a.syntax_eq(instr_b),
+            (InstrKind::Hold(instr_a), InstrKind::Hold(instr_b)) => instr_a.syntax_eq(instr_b),
+            (InstrKind::Case(instr_a), InstrKind::Case(instr_b)) => instr_a.syntax_eq(instr_b),
+            (InstrKind::Group(instr_a), InstrKind::Group(instr_b)) => instr_a.syntax_eq(instr_b),
+            (InstrKind::Let(instr_a), InstrKind::Let(instr_b)) => instr_a.syntax_eq(instr_b),
+            (InstrKind::Rule(instr_a), InstrKind::Rule(instr_b)) => instr_a.syntax_eq(instr_b),
+            (InstrKind::Result(instr_a), InstrKind::Result(instr_b)) => instr_a.syntax_eq(instr_b),
+            (InstrKind::Return(instr_a), InstrKind::Return(instr_b)) => instr_a.syntax_eq(instr_b),
+            (InstrKind::Debug(instr_a), InstrKind::Debug(instr_b)) => instr_a.syntax_eq(instr_b),
             _ => false,
         }
     }
 }
-
-// - Instruction payloads
 
 impl SyntaxEq for IfInstr {
     fn syntax_eq(&self, other: &Self) -> bool {
@@ -98,18 +99,27 @@ impl SyntaxEq for DebugInstr {
     }
 }
 
-impl SyntaxEq for InstrKind {
+// - Case analysis
+
+impl SyntaxEq for Case {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.guard.syntax_eq(&other.guard) && self.block.syntax_eq(&other.block)
+    }
+}
+
+// - Blocks
+
+impl SyntaxEq for Block {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.as_slice().syntax_eq(other.as_slice())
+    }
+}
+
+impl SyntaxEq for Option<ElseBlock> {
     fn syntax_eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (InstrKind::If(instr_a), InstrKind::If(instr_b)) => instr_a.syntax_eq(instr_b),
-            (InstrKind::Hold(instr_a), InstrKind::Hold(instr_b)) => instr_a.syntax_eq(instr_b),
-            (InstrKind::Case(instr_a), InstrKind::Case(instr_b)) => instr_a.syntax_eq(instr_b),
-            (InstrKind::Group(instr_a), InstrKind::Group(instr_b)) => instr_a.syntax_eq(instr_b),
-            (InstrKind::Let(instr_a), InstrKind::Let(instr_b)) => instr_a.syntax_eq(instr_b),
-            (InstrKind::Rule(instr_a), InstrKind::Rule(instr_b)) => instr_a.syntax_eq(instr_b),
-            (InstrKind::Result(instr_a), InstrKind::Result(instr_b)) => instr_a.syntax_eq(instr_b),
-            (InstrKind::Return(instr_a), InstrKind::Return(instr_b)) => instr_a.syntax_eq(instr_b),
-            (InstrKind::Debug(instr_a), InstrKind::Debug(instr_b)) => instr_a.syntax_eq(instr_b),
+            (Some(block_a), Some(block_b)) => block_a.syntax_eq(block_b),
+            (None, None) => true,
             _ => false,
         }
     }

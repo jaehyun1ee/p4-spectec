@@ -8,7 +8,43 @@ use super::ast::*;
 
 // - Types
 
+impl Free for Typ {
+    fn free(&self) -> IdSet {
+        IdSet::new()
+    }
+}
+
+// - Plain types
+
 impl Free for PlainTypKind {
+    fn free(&self) -> IdSet {
+        IdSet::new()
+    }
+}
+
+// - Notation types
+
+impl Free for NotTypKind {
+    fn free(&self) -> IdSet {
+        IdSet::new()
+    }
+}
+
+// - Defined types
+
+impl Free for DefTypKind {
+    fn free(&self) -> IdSet {
+        IdSet::new()
+    }
+}
+
+impl Free for TypField {
+    fn free(&self) -> IdSet {
+        IdSet::new()
+    }
+}
+
+impl Free for TypCase {
     fn free(&self) -> IdSet {
         IdSet::new()
     }
@@ -124,6 +160,14 @@ impl Free for PathKind {
     }
 }
 
+// - Parameters
+
+impl Free for ParamKind {
+    fn free(&self) -> IdSet {
+        IdSet::new()
+    }
+}
+
 // - Arguments
 
 impl Free for ArgKind {
@@ -135,10 +179,6 @@ impl Free for ArgKind {
     }
 }
 
-// - Type arguments
-
-// `Targ` aliases `PlainTyp` and uses its implementation above.
-
 // - Hints
 
 impl Free for Hint {
@@ -147,47 +187,21 @@ impl Free for Hint {
     }
 }
 
-// - Notation types
+// - Premises
 
-impl Free for Typ {
-    fn free(&self) -> IdSet {
-        IdSet::new()
+impl Free for PremKind {
+    fn free_into(&self, free: &mut IdSet) {
+        match self {
+            Self::Var(prem) => prem.free_into(free),
+            Self::Rule(prem) => prem.free_into(free),
+            Self::RuleNot(prem) => prem.free_into(free),
+            Self::If(prem) => prem.free_into(free),
+            Self::Else => {}
+            Self::Iter(prem) => prem.free_into(free),
+            Self::Debug(prem) => prem.free_into(free),
+        }
     }
 }
-
-impl Free for NotTypKind {
-    fn free(&self) -> IdSet {
-        IdSet::new()
-    }
-}
-
-impl Free for DefTypKind {
-    fn free(&self) -> IdSet {
-        IdSet::new()
-    }
-}
-
-impl Free for TypField {
-    fn free(&self) -> IdSet {
-        IdSet::new()
-    }
-}
-
-impl Free for TypCase {
-    fn free(&self) -> IdSet {
-        IdSet::new()
-    }
-}
-
-// - Parameters and premises
-
-impl Free for ParamKind {
-    fn free(&self) -> IdSet {
-        IdSet::new()
-    }
-}
-
-// `TParam` aliases `Id` and uses its implementation above.
 
 impl Free for VarPrem {
     fn free_into(&self, free: &mut IdSet) {
@@ -225,21 +239,7 @@ impl Free for DebugPrem {
     }
 }
 
-impl Free for PremKind {
-    fn free_into(&self, free: &mut IdSet) {
-        match self {
-            Self::Var(prem) => prem.free_into(free),
-            Self::Rule(prem) => prem.free_into(free),
-            Self::RuleNot(prem) => prem.free_into(free),
-            Self::If(prem) => prem.free_into(free),
-            Self::Else => {}
-            Self::Iter(prem) => prem.free_into(free),
-            Self::Debug(prem) => prem.free_into(free),
-        }
-    }
-}
-
-// - Rules and tables
+// - Rules
 
 impl Free for RuleKind {
     fn free_into(&self, free: &mut IdSet) {
@@ -247,6 +247,8 @@ impl Free for RuleKind {
         self.3.as_slice().free_into(free);
     }
 }
+
+// - Table rows
 
 impl Free for TableRowKind {
     fn free_into(&self, free: &mut IdSet) {
@@ -256,6 +258,29 @@ impl Free for TableRowKind {
 }
 
 // - Definitions
+
+impl Free for DefKind {
+    fn free_into(&self, free: &mut IdSet) {
+        match self {
+            Self::ExternSyntax(def) => def.free_into(free),
+            Self::Syntax(def) => def.free_into(free),
+            Self::Typ(def) => def.free_into(free),
+            Self::Var(def) => def.free_into(free),
+            Self::ExternRel(def) => def.free_into(free),
+            Self::Rel(def) => def.free_into(free),
+            Self::RuleGroup(def) => def.free_into(free),
+            Self::ExternDec(def) => def.free_into(free),
+            Self::BuiltinDec(def) => def.free_into(free),
+            Self::TableDec(def) => def.free_into(free),
+            Self::FuncDec(def) => def.free_into(free),
+            Self::TableDef(def) => def.free_into(free),
+            Self::FuncDef(def) => def.free_into(free),
+            Self::Sep => {}
+        }
+    }
+}
+
+// - Syntax definitions
 
 impl Free for ExternSyntaxDef {
     fn free(&self) -> IdSet {
@@ -275,17 +300,23 @@ impl Free for SyntaxDefEntry {
     }
 }
 
+// - Type definitions
+
 impl Free for TypDef {
     fn free(&self) -> IdSet {
         IdSet::new()
     }
 }
 
+// - Meta-variables
+
 impl Free for VarDef {
     fn free(&self) -> IdSet {
         IdSet::new()
     }
 }
+
+// - Relations
 
 impl Free for ExternRelDef {
     fn free(&self) -> IdSet {
@@ -304,6 +335,8 @@ impl Free for RuleGroupDef {
         self.rules.as_slice().free_into(free);
     }
 }
+
+// - Meta-functions
 
 impl Free for ExternDecDef {
     fn free(&self) -> IdSet {
@@ -340,27 +373,6 @@ impl Free for FuncDef {
         self.args.as_slice().free_into(free);
         self.exp.free_into(free);
         self.prems.as_slice().free_into(free);
-    }
-}
-
-impl Free for DefKind {
-    fn free_into(&self, free: &mut IdSet) {
-        match self {
-            Self::ExternSyntax(def) => def.free_into(free),
-            Self::Syntax(def) => def.free_into(free),
-            Self::Typ(def) => def.free_into(free),
-            Self::Var(def) => def.free_into(free),
-            Self::ExternRel(def) => def.free_into(free),
-            Self::Rel(def) => def.free_into(free),
-            Self::RuleGroup(def) => def.free_into(free),
-            Self::ExternDec(def) => def.free_into(free),
-            Self::BuiltinDec(def) => def.free_into(free),
-            Self::TableDec(def) => def.free_into(free),
-            Self::FuncDec(def) => def.free_into(free),
-            Self::TableDef(def) => def.free_into(free),
-            Self::FuncDef(def) => def.free_into(free),
-            Self::Sep => {}
-        }
     }
 }
 

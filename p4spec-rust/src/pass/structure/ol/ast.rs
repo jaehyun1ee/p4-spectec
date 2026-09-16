@@ -1,13 +1,12 @@
-//! Intermediate structured instructions used during optimization
-pub use crate::lang::sl::ast::{Exp, ExpIter, Guard, Id, InstrIter, NotExp, RelSignature};
-use crate::lang::{common::source::Phrase, hints::input::InputHint};
-#[derive(Clone, Debug, PartialEq)]
-pub struct Case {
-    pub guard: Guard,
-    pub block: Block,
-}
+//! Optimization language model
 
-// Instructions
+use crate::lang::{common::source::Phrase, hints::input::InputHint};
+
+pub use crate::lang::sl::ast::{Exp, ExpIter, Guard, Id, InstrIter, NotExp, RelSignature};
+
+// == Syntax
+
+// - Instructions
 
 pub type Instr = Phrase<InstrKind>;
 
@@ -89,5 +88,15 @@ pub struct DebugInstr {
     pub instr: Box<Instr>,
 }
 
+// - Case analysis
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Case {
+    pub guard: Guard,
+    pub block: Block,
+}
+
+// - Blocks
+
 pub type Block = Vec<Instr>;
-pub type ElseBlock = Block;
+pub type ElseBlock = Vec<Instr>;

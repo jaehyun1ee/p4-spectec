@@ -1,82 +1,12 @@
 //! Syntax equality for structured-language data
 //!
-//! Ignores source regions;
-//! compares relation hints and instruction identifiers
+//! Ignores source regions; compares relation hints and instruction identifiers
 
 use crate::lang::traits::eq::SyntaxEq;
 
 use super::ast::*;
 
 // == Syntax equality
-
-// - Holding case analysis
-
-impl SyntaxEq for HoldCase {
-    fn syntax_eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (
-                HoldCase::Both(block_hold_l, block_not_hold_l),
-                HoldCase::Both(block_hold_r, block_not_hold_r),
-            ) => {
-                block_hold_l.syntax_eq(block_hold_r) && block_not_hold_l.syntax_eq(block_not_hold_r)
-            }
-            (HoldCase::Hold(block_l, dangle_l), HoldCase::Hold(block_r, dangle_r))
-            | (HoldCase::NotHold(block_l, dangle_l), HoldCase::NotHold(block_r, dangle_r)) => {
-                block_l.syntax_eq(block_r) && dangle_l == dangle_r
-            }
-            _ => false,
-        }
-    }
-}
-
-// - Case analysis
-
-impl SyntaxEq for Case {
-    fn syntax_eq(&self, other: &Self) -> bool {
-        self.guard.syntax_eq(&other.guard) && self.block.syntax_eq(&other.block)
-    }
-}
-
-impl SyntaxEq for Guard {
-    fn syntax_eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Guard::Bool(value_l), Guard::Bool(value_r)) => value_l == value_r,
-            (Guard::Cmp(op_l, typ_l, exp_l), Guard::Cmp(op_r, typ_r, exp_r)) => {
-                op_l == op_r && typ_l == typ_r && exp_l.syntax_eq(exp_r)
-            }
-            (Guard::Sub(typ_l, _), Guard::Sub(typ_r, _)) => typ_l.syntax_eq(typ_r),
-            (Guard::Match(pattern_l), Guard::Match(pattern_r)) => pattern_l.syntax_eq(pattern_r),
-            (Guard::Mem(exp_l), Guard::Mem(exp_r)) => exp_l.syntax_eq(exp_r),
-            _ => false,
-        }
-    }
-}
-
-// - Instructions
-
-impl SyntaxEq for Block {
-    fn syntax_eq(&self, other: &Self) -> bool {
-        self.as_slice().syntax_eq(other.as_slice())
-    }
-}
-
-impl SyntaxEq for Option<ElseBlock> {
-    fn syntax_eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Some(block_l), Some(block_r)) => block_l.syntax_eq(block_r),
-            (None, None) => true,
-            _ => false,
-        }
-    }
-}
-
-// - Relations
-
-impl SyntaxEq for RelSignature {
-    fn syntax_eq(&self, other: &Self) -> bool {
-        self.not_typ.syntax_eq(&other.not_typ) && self.input_hint.syntax_eq(&other.input_hint)
-    }
-}
 
 // - Parameters
 
@@ -100,7 +30,24 @@ impl SyntaxEq for ParamKind {
     }
 }
 
-// - Instruction payloads
+// - Instructions
+
+impl SyntaxEq for InstrKind {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (InstrKind::If(instr_l), InstrKind::If(instr_r)) => instr_l.syntax_eq(instr_r),
+            (InstrKind::Hold(instr_l), InstrKind::Hold(instr_r)) => instr_l.syntax_eq(instr_r),
+            (InstrKind::Case(instr_l), InstrKind::Case(instr_r)) => instr_l.syntax_eq(instr_r),
+            (InstrKind::Group(instr_l), InstrKind::Group(instr_r)) => instr_l.syntax_eq(instr_r),
+            (InstrKind::Let(instr_l), InstrKind::Let(instr_r)) => instr_l.syntax_eq(instr_r),
+            (InstrKind::Rule(instr_l), InstrKind::Rule(instr_r)) => instr_l.syntax_eq(instr_r),
+            (InstrKind::Result(instr_l), InstrKind::Result(instr_r)) => instr_l.syntax_eq(instr_r),
+            (InstrKind::Return(instr_l), InstrKind::Return(instr_r)) => instr_l.syntax_eq(instr_r),
+            (InstrKind::Debug(instr_l), InstrKind::Debug(instr_r)) => instr_l.syntax_eq(instr_r),
+            _ => false,
+        }
+    }
+}
 
 impl SyntaxEq for IfInstr {
     fn syntax_eq(&self, other: &Self) -> bool {
@@ -174,24 +121,108 @@ impl SyntaxEq for DebugInstr {
     }
 }
 
-impl SyntaxEq for InstrKind {
+// - Holding conditions
+
+impl SyntaxEq for HoldCase {
     fn syntax_eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (InstrKind::If(instr_l), InstrKind::If(instr_r)) => instr_l.syntax_eq(instr_r),
-            (InstrKind::Hold(instr_l), InstrKind::Hold(instr_r)) => instr_l.syntax_eq(instr_r),
-            (InstrKind::Case(instr_l), InstrKind::Case(instr_r)) => instr_l.syntax_eq(instr_r),
-            (InstrKind::Group(instr_l), InstrKind::Group(instr_r)) => instr_l.syntax_eq(instr_r),
-            (InstrKind::Let(instr_l), InstrKind::Let(instr_r)) => instr_l.syntax_eq(instr_r),
-            (InstrKind::Rule(instr_l), InstrKind::Rule(instr_r)) => instr_l.syntax_eq(instr_r),
-            (InstrKind::Result(instr_l), InstrKind::Result(instr_r)) => instr_l.syntax_eq(instr_r),
-            (InstrKind::Return(instr_l), InstrKind::Return(instr_r)) => instr_l.syntax_eq(instr_r),
-            (InstrKind::Debug(instr_l), InstrKind::Debug(instr_r)) => instr_l.syntax_eq(instr_r),
+            (
+                HoldCase::Both(block_hold_l, block_not_hold_l),
+                HoldCase::Both(block_hold_r, block_not_hold_r),
+            ) => {
+                block_hold_l.syntax_eq(block_hold_r) && block_not_hold_l.syntax_eq(block_not_hold_r)
+            }
+            (HoldCase::Hold(block_l, dangle_l), HoldCase::Hold(block_r, dangle_r))
+            | (HoldCase::NotHold(block_l, dangle_l), HoldCase::NotHold(block_r, dangle_r)) => {
+                block_l.syntax_eq(block_r) && dangle_l == dangle_r
+            }
+            _ => false,
+        }
+    }
+}
+
+// - Case analysis
+
+impl SyntaxEq for Guard {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Guard::Bool(value_l), Guard::Bool(value_r)) => value_l == value_r,
+            (Guard::Cmp(op_l, typ_l, exp_l), Guard::Cmp(op_r, typ_r, exp_r)) => {
+                op_l == op_r && typ_l == typ_r && exp_l.syntax_eq(exp_r)
+            }
+            (Guard::Sub(typ_l, _), Guard::Sub(typ_r, _)) => typ_l.syntax_eq(typ_r),
+            (Guard::Match(pattern_l), Guard::Match(pattern_r)) => pattern_l.syntax_eq(pattern_r),
+            (Guard::Mem(exp_l), Guard::Mem(exp_r)) => exp_l.syntax_eq(exp_r),
+            _ => false,
+        }
+    }
+}
+
+impl SyntaxEq for Case {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.guard.syntax_eq(&other.guard) && self.block.syntax_eq(&other.block)
+    }
+}
+
+// - Blocks
+
+impl SyntaxEq for Block {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.as_slice().syntax_eq(other.as_slice())
+    }
+}
+
+impl SyntaxEq for Option<ElseBlock> {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Some(block_l), Some(block_r)) => block_l.syntax_eq(block_r),
+            (None, None) => true,
+            _ => false,
+        }
+    }
+}
+
+// - Table rows
+
+impl SyntaxEq for TableRow {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.exps_input.syntax_eq(&other.exps_input)
+            && self.exp.syntax_eq(&other.exp)
+            && self.block.syntax_eq(&other.block)
+    }
+}
+
+// - Definitions
+
+impl SyntaxEq for DefKind {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (DefKind::Typ(typ_def_l), DefKind::Typ(typ_def_r)) => typ_def_l.syntax_eq(typ_def_r),
+            (DefKind::Var(var_def_l), DefKind::Var(var_def_r)) => var_def_l.syntax_eq(var_def_r),
+            (DefKind::Rel(rel_def_l), DefKind::Rel(rel_def_r)) => rel_def_l.syntax_eq(rel_def_r),
+            (DefKind::MetaFunc(meta_func_def_l), DefKind::MetaFunc(meta_func_def_r)) => {
+                meta_func_def_l.syntax_eq(meta_func_def_r)
+            }
             _ => false,
         }
     }
 }
 
 // - Type definitions
+
+impl SyntaxEq for TypDef {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Extern(extern_typ_l), Self::Extern(extern_typ_r)) => {
+                extern_typ_l.syntax_eq(extern_typ_r)
+            }
+            (Self::Defined(defined_typ_l), Self::Defined(defined_typ_r)) => {
+                defined_typ_l.syntax_eq(defined_typ_r)
+            }
+            _ => false,
+        }
+    }
+}
 
 impl SyntaxEq for ExternTyp {
     fn syntax_eq(&self, other: &Self) -> bool {
@@ -208,20 +239,6 @@ impl SyntaxEq for DefinedTyp {
     }
 }
 
-impl SyntaxEq for TypDef {
-    fn syntax_eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Self::Extern(extern_typ_l), Self::Extern(extern_typ_r)) => {
-                extern_typ_l.syntax_eq(extern_typ_r)
-            }
-            (Self::Defined(defined_typ_l), Self::Defined(defined_typ_r)) => {
-                defined_typ_l.syntax_eq(defined_typ_r)
-            }
-            _ => false,
-        }
-    }
-}
-
 // - Meta-variables
 
 impl SyntaxEq for VarDef {
@@ -233,6 +250,20 @@ impl SyntaxEq for VarDef {
 }
 
 // - Relations
+
+impl SyntaxEq for RelDef {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Extern(extern_rel_l), Self::Extern(extern_rel_r)) => {
+                extern_rel_l.syntax_eq(extern_rel_r)
+            }
+            (Self::Defined(defined_rel_l), Self::Defined(defined_rel_r)) => {
+                defined_rel_l.syntax_eq(defined_rel_r)
+            }
+            _ => false,
+        }
+    }
+}
 
 impl SyntaxEq for ExternRel {
     fn syntax_eq(&self, other: &Self) -> bool {
@@ -254,21 +285,33 @@ impl SyntaxEq for DefinedRel {
     }
 }
 
-impl SyntaxEq for RelDef {
+impl SyntaxEq for RelSignature {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.not_typ.syntax_eq(&other.not_typ) && self.input_hint.syntax_eq(&other.input_hint)
+    }
+}
+
+// - Meta-functions
+
+impl SyntaxEq for MetaFuncDef {
     fn syntax_eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (Self::Extern(extern_rel_l), Self::Extern(extern_rel_r)) => {
-                extern_rel_l.syntax_eq(extern_rel_r)
+            (Self::Extern(extern_func_l), Self::Extern(extern_func_r)) => {
+                extern_func_l.syntax_eq(extern_func_r)
             }
-            (Self::Defined(defined_rel_l), Self::Defined(defined_rel_r)) => {
-                defined_rel_l.syntax_eq(defined_rel_r)
+            (Self::Builtin(builtin_func_l), Self::Builtin(builtin_func_r)) => {
+                builtin_func_l.syntax_eq(builtin_func_r)
+            }
+            (Self::Table(table_func_l), Self::Table(table_func_r)) => {
+                table_func_l.syntax_eq(table_func_r)
+            }
+            (Self::Defined(defined_func_l), Self::Defined(defined_func_r)) => {
+                defined_func_l.syntax_eq(defined_func_r)
             }
             _ => false,
         }
     }
 }
-
-// - Meta-functions
 
 impl SyntaxEq for ExternFunc {
     fn syntax_eq(&self, other: &Self) -> bool {
@@ -287,14 +330,6 @@ impl SyntaxEq for BuiltinFunc {
             && self.params.syntax_eq(&other.params)
             && self.typ.syntax_eq(&other.typ)
             && self.hints.syntax_eq(&other.hints)
-    }
-}
-
-impl SyntaxEq for TableRow {
-    fn syntax_eq(&self, other: &Self) -> bool {
-        self.exps_input.syntax_eq(&other.exps_input)
-            && self.exp.syntax_eq(&other.exp)
-            && self.block.syntax_eq(&other.block)
     }
 }
 
@@ -317,42 +352,6 @@ impl SyntaxEq for DefinedFunc {
             && self.block.syntax_eq(&other.block)
             && self.block_else.syntax_eq(&other.block_else)
             && self.hints.syntax_eq(&other.hints)
-    }
-}
-
-impl SyntaxEq for MetaFuncDef {
-    fn syntax_eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Self::Extern(extern_func_l), Self::Extern(extern_func_r)) => {
-                extern_func_l.syntax_eq(extern_func_r)
-            }
-            (Self::Builtin(builtin_func_l), Self::Builtin(builtin_func_r)) => {
-                builtin_func_l.syntax_eq(builtin_func_r)
-            }
-            (Self::Table(table_func_l), Self::Table(table_func_r)) => {
-                table_func_l.syntax_eq(table_func_r)
-            }
-            (Self::Defined(defined_func_l), Self::Defined(defined_func_r)) => {
-                defined_func_l.syntax_eq(defined_func_r)
-            }
-            _ => false,
-        }
-    }
-}
-
-// - Definitions
-
-impl SyntaxEq for DefKind {
-    fn syntax_eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (DefKind::Typ(typ_def_l), DefKind::Typ(typ_def_r)) => typ_def_l.syntax_eq(typ_def_r),
-            (DefKind::Var(var_def_l), DefKind::Var(var_def_r)) => var_def_l.syntax_eq(var_def_r),
-            (DefKind::Rel(rel_def_l), DefKind::Rel(rel_def_r)) => rel_def_l.syntax_eq(rel_def_r),
-            (DefKind::MetaFunc(meta_func_def_l), DefKind::MetaFunc(meta_func_def_r)) => {
-                meta_func_def_l.syntax_eq(meta_func_def_r)
-            }
-            _ => false,
-        }
     }
 }
 

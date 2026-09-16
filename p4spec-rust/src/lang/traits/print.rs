@@ -2,6 +2,8 @@
 
 use std::fmt;
 
+// == Printing
+
 /// Renders syntax through a shared printer
 pub trait Print {
     /// Writes this value using the current printer context
@@ -18,6 +20,8 @@ pub trait Print {
         output
     }
 }
+
+// - Printer
 
 /// Maintains output and layout state while rendering syntax
 pub struct Printer<'a> {
@@ -66,6 +70,8 @@ impl<'a> Printer<'a> {
         Ok(())
     }
 }
+
+// - Output
 
 impl fmt::Write for Printer<'_> {
     fn write_str(&mut self, text: &str) -> fmt::Result {
