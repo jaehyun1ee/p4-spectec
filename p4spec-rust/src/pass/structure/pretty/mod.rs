@@ -19,8 +19,8 @@ pub(crate) fn pretty_rel(
     mut block_else: Option<Block>,
 ) -> Result<(Vec<Exp>, Block, Option<Block>), StructureError> {
     loop {
-        let body =
-            revive_underscore::apply_rel((exps_match.clone(), block.clone(), block_else.clone()))?;
+        let body = (exps_match.clone(), block.clone(), block_else.clone());
+        let body = revive_underscore::apply_rel(body)?;
         let (exps_pretty, block_pretty, block_else_pretty) = rename_tick::apply_rel(body)?;
         if exps_match.syntax_eq(&exps_pretty)
             && block.syntax_eq(&block_pretty)
@@ -40,8 +40,8 @@ pub(crate) fn pretty_func(
     mut block_else: Option<Block>,
 ) -> Result<(Vec<Arg>, Block, Option<Block>), StructureError> {
     loop {
-        let body =
-            revive_underscore::apply_func((args_input.clone(), block.clone(), block_else.clone()))?;
+        let body = (args_input.clone(), block.clone(), block_else.clone());
+        let body = revive_underscore::apply_func(body)?;
         let (args_pretty, block_pretty, block_else_pretty) = rename_tick::apply_func(body)?;
         if args_input.syntax_eq(&args_pretty)
             && block.syntax_eq(&block_pretty)
