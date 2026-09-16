@@ -17,6 +17,7 @@ fn test_dead_pure_bindings_disappear_but_live_and_calls_remain() {
         vec![instr_live, instr_call]
     );
 }
+
 #[test]
 fn test_downstream_shadowing_and_rule_input_output_roles() {
     let instr_rule = rule(vec![], InputHint::new(vec![0]));
@@ -38,6 +39,7 @@ fn test_downstream_shadowing_and_rule_input_output_roles() {
     );
     assert_eq!(apply(vec![instr_live.clone()]).unwrap(), vec![instr_live]);
 }
+
 #[test]
 fn test_debug_contributes_liveness_without_rewriting_its_instruction() {
     let instr_debug = instr(InstrKind::Debug(DebugInstr {
@@ -47,6 +49,7 @@ fn test_debug_contributes_liveness_without_rewriting_its_instruction() {
     let instr_live = binding(literal(), vec![instr_debug]);
     assert_eq!(apply(vec![instr_live.clone()]).unwrap(), vec![instr_live]);
 }
+
 #[test]
 fn test_invalid_downstream_rule_hint_retains_rule_span() {
     let mut instr_rule = rule(vec![], InputHint::new(vec![3]));
@@ -101,6 +104,7 @@ fn test_liveness_uses_each_container_expression_and_branch() {
         assert_eq!(apply(vec![instr_live.clone()]).unwrap(), vec![instr_live]);
     }
 }
+
 #[test]
 fn test_downstream_uses_are_computed_before_recursive_deletion() {
     let exp_tuple = crate::note_phrase!(node: ExpKind::Tuple(vec![variable("x")]), note: TypKind::Tuple(vec![]), span: span(8));
@@ -115,6 +119,7 @@ fn test_downstream_uses_are_computed_before_recursive_deletion() {
         vec![binding(literal(), vec![])]
     );
 }
+
 #[test]
 fn test_update_path_is_not_part_of_source_removability() {
     use crate::lang::il::ast::PathKind;

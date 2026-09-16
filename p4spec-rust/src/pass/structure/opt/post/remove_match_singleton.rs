@@ -7,19 +7,25 @@ use crate::{
     },
     runtime::envs::algo::TDEnv,
 };
+
+// == Singleton variants
+
 fn is_singleton_case(tdenv: &TDEnv, typ: &Typ) -> Result<bool, StructureError> {
     Ok(typ_as_variant(tdenv, typ)?.is_some_and(|mixops| mixops.len() == 1))
 }
+
 fn is_singleton_match(tdenv: &TDEnv, exp: &Exp) -> Result<bool, StructureError> {
     match &exp.node {
-        ExpKind::Match(exp, _) => is_singleton_match_exp(tdenv, exp),
+        ExpKind::Match(exp, _) => {
+            let typ = crate::phrase!(node: exp.note.as_ref().clone(), span: exp.span.clone());
+            is_singleton_case(tdenv, &typ)
+        }
         _ => Ok(false),
     }
 }
-fn is_singleton_match_exp(tdenv: &TDEnv, exp: &Exp) -> Result<bool, StructureError> {
-    let typ = crate::phrase!(node: exp.note.as_ref().clone(), span: exp.span.clone());
-    is_singleton_case(tdenv, &typ)
-}
+
+// == Match removal
+
 fn remove_instr(instr_ol: Instr, tdenv: &TDEnv) -> Result<Block, StructureError> {
     let NotePhrase {
         node: instr_kind_ol,
@@ -28,6 +34,7 @@ fn remove_instr(instr_ol: Instr, tdenv: &TDEnv) -> Result<Block, StructureError>
     } = instr_ol;
     remove_instr_kind(tdenv, instr_kind_ol, span)
 }
+
 fn remove_instr_kind(
     tdenv: &TDEnv,
     instr_kind_ol: InstrKind,
@@ -45,6 +52,9 @@ fn remove_instr_kind(
         }
     }
 }
+
+// - Instruction bodies
+
 fn remove_if_instr(tdenv: &TDEnv, instr_ol: IfInstr, span: Span) -> Result<Block, StructureError> {
     let IfInstr {
         exp,
@@ -59,6 +69,7 @@ fn remove_if_instr(tdenv: &TDEnv, instr_ol: IfInstr, span: Span) -> Result<Block
         crate::phrase!(node: InstrKind::If(IfInstr { exp, iter_exps, block }), span: span),
     ])
 }
+
 fn remove_hold_instr(
     tdenv: &TDEnv,
     instr_ol: HoldInstr,
@@ -77,6 +88,7 @@ fn remove_hold_instr(
         crate::phrase!(node: InstrKind::Hold(HoldInstr { id, not_exp, iter_exps, block_hold, block_not_hold }), span: span),
     ])
 }
+
 fn remove_case_instr(
     tdenv: &TDEnv,
     instr_ol: CaseInstr,
@@ -95,6 +107,7 @@ fn remove_case_instr(
         crate::phrase!(node: InstrKind::Case(CaseInstr { exp, cases, total }), span: span),
     ])
 }
+
 fn remove_group_instr(
     tdenv: &TDEnv,
     instr_ol: GroupInstr,
@@ -111,6 +124,7 @@ fn remove_group_instr(
         crate::phrase!(node: InstrKind::Group(GroupInstr { id, rel_signature, exps, block }), span: span),
     ])
 }
+
 fn remove_let_instr(
     tdenv: &TDEnv,
     instr_ol: LetInstr,
@@ -127,6 +141,7 @@ fn remove_let_instr(
         crate::phrase!(node: InstrKind::Let(LetInstr { exp_l, exp_r, iter_instrs, block }), span: span),
     ])
 }
+
 fn remove_rule_instr(
     tdenv: &TDEnv,
     instr_ol: RuleInstr,
@@ -144,6 +159,7 @@ fn remove_rule_instr(
         crate::phrase!(node: InstrKind::Rule(RuleInstr { id, not_exp, input_hint, iter_instrs, block }), span: span),
     ])
 }
+
 fn remove_block(tdenv: &TDEnv, block: Block) -> Result<Block, StructureError> {
     let mut block_rewritten = Vec::new();
     for instr_ol in block {
@@ -151,6 +167,9 @@ fn remove_block(tdenv: &TDEnv, block: Block) -> Result<Block, StructureError> {
     }
     Ok(block_rewritten)
 }
+
+// == Entry point
+
 pub(crate) fn apply(tdenv: &TDEnv, block: Block) -> Result<Block, StructureError> {
     remove_block(tdenv, block)
 }

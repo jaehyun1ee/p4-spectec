@@ -17,12 +17,9 @@ fn matchify_exp(exp: Exp) -> Exp {
         }
         _ => exp_kind,
     };
-    NotePhrase {
-        node: exp_kind,
-        note,
-        span,
-    }
+    crate::note_phrase!(node: exp_kind, note: note, span: span)
 }
+
 fn matchify_cmp_exp(
     op: CmpOp,
     op_typ: OpTyp,
@@ -53,15 +50,12 @@ fn matchify_cmp_exp(
     match op_bool {
         BoolCmpOp::Eq => exp_kind,
         BoolCmpOp::Ne => {
-            let exp = NotePhrase {
-                node: exp_kind,
-                note: note.clone(),
-                span: span.clone(),
-            };
+            let exp = crate::note_phrase!(node: exp_kind, note: note.clone(), span: span.clone());
             ExpKind::Un(UnOp::Bool(BoolUnOp::Not), OpTyp::Bool, Box::new(exp))
         }
     }
 }
+
 fn option_pattern(exp: &Exp, op: BoolCmpOp) -> Option<Pattern> {
     match &exp.node {
         ExpKind::Opt(None) => Some(Pattern::Opt(match op {
@@ -71,6 +65,7 @@ fn option_pattern(exp: &Exp, op: BoolCmpOp) -> Option<Pattern> {
         _ => None,
     }
 }
+
 fn list_pattern(exp: &Exp, op: BoolCmpOp) -> Option<Pattern> {
     match &exp.node {
         ExpKind::List(exps) if exps.is_empty() => Some(Pattern::List(match op {
@@ -80,6 +75,7 @@ fn list_pattern(exp: &Exp, op: BoolCmpOp) -> Option<Pattern> {
         _ => None,
     }
 }
+
 fn terminal_pattern(exp: &Exp) -> Option<Pattern> {
     match &exp.node {
         ExpKind::Case(not_exp) if not_exp.arity() == 0 => {
@@ -97,6 +93,7 @@ fn matchify_instr(instr_ol: Instr) -> Instr {
     } = instr_ol;
     matchify_instr_kind(instr_kind_ol, span)
 }
+
 fn matchify_instr_kind(instr_kind_ol: InstrKind, span: Span) -> Instr {
     match instr_kind_ol {
         InstrKind::If(instr_ol) => matchify_if_instr(instr_ol, span),
@@ -110,6 +107,7 @@ fn matchify_instr_kind(instr_kind_ol: InstrKind, span: Span) -> Instr {
         }
     }
 }
+
 fn matchify_if_instr(instr_ol: IfInstr, span: Span) -> Instr {
     let IfInstr {
         exp,
@@ -120,6 +118,7 @@ fn matchify_if_instr(instr_ol: IfInstr, span: Span) -> Instr {
     let block = matchify_block(block);
     crate::phrase! {node: InstrKind::If(IfInstr {exp, iter_exps, block}), span: span}
 }
+
 fn matchify_hold_instr(instr_ol: HoldInstr, span: Span) -> Instr {
     let HoldInstr {
         id,
@@ -132,6 +131,7 @@ fn matchify_hold_instr(instr_ol: HoldInstr, span: Span) -> Instr {
     let block_not_hold = matchify_block(block_not_hold);
     crate::phrase! {node: InstrKind::Hold(HoldInstr {id, not_exp, iter_exps, block_hold, block_not_hold}), span: span}
 }
+
 fn matchify_case_instr(instr_ol: CaseInstr, span: Span) -> Instr {
     let CaseInstr { exp, cases, total } = instr_ol;
     let cases = cases
@@ -144,6 +144,7 @@ fn matchify_case_instr(instr_ol: CaseInstr, span: Span) -> Instr {
         .collect::<Vec<_>>();
     crate::phrase! {node: InstrKind::Case(CaseInstr {exp, cases, total}), span: span}
 }
+
 fn matchify_group_instr(instr_ol: GroupInstr, span: Span) -> Instr {
     let GroupInstr {
         id,
@@ -154,6 +155,7 @@ fn matchify_group_instr(instr_ol: GroupInstr, span: Span) -> Instr {
     let block = matchify_block(block);
     crate::phrase! {node: InstrKind::Group(GroupInstr {id, rel_signature, exps, block}), span: span}
 }
+
 fn matchify_let_instr(instr_ol: LetInstr, span: Span) -> Instr {
     let LetInstr {
         exp_l,
@@ -164,6 +166,7 @@ fn matchify_let_instr(instr_ol: LetInstr, span: Span) -> Instr {
     let block = matchify_block(block);
     crate::phrase! {node: InstrKind::Let(LetInstr {exp_l, exp_r, iter_instrs, block}), span: span}
 }
+
 fn matchify_rule_instr(instr_ol: RuleInstr, span: Span) -> Instr {
     let RuleInstr {
         id,
@@ -175,9 +178,11 @@ fn matchify_rule_instr(instr_ol: RuleInstr, span: Span) -> Instr {
     let block = matchify_block(block);
     crate::phrase! {node: InstrKind::Rule(RuleInstr {id, not_exp, input_hint, iter_instrs, block}), span: span}
 }
+
 fn matchify_block(block: Block) -> Block {
     block.into_iter().map(matchify_instr).collect()
 }
+
 pub(crate) fn apply(block: Block) -> Block {
     matchify_block(block)
 }

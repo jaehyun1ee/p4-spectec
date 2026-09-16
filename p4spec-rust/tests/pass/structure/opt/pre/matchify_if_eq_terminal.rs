@@ -8,6 +8,7 @@ use crate::pass::structure::opt::pre::matchify_if_eq_terminal::apply;
 fn comparison(exp_l: Exp, exp_r: Exp, op: BoolCmpOp) -> Exp {
     crate::note_phrase! {node: ExpKind::Cmp(CmpOp::Bool(op), OpTyp::Bool, Box::new(exp_l), Box::new(exp_r)), note: TypKind::Bool, span: span(8)}
 }
+
 fn condition(exp: Exp) -> Instr {
     instr(InstrKind::If(IfInstr {
         exp,
@@ -15,6 +16,7 @@ fn condition(exp: Exp) -> Instr {
         block: vec![ret("body")],
     }))
 }
+
 #[test]
 fn test_empty_option_list_and_terminal_both_sides() {
     for (exp_kind, pattern_eq, pattern_ne) in [
@@ -52,6 +54,7 @@ fn test_empty_option_list_and_terminal_both_sides() {
         }
     }
 }
+
 #[test]
 fn test_terminal_case_inequality_and_nonterminal_counterexample() {
     let not_exp = Mixfix::Atom(
@@ -84,6 +87,7 @@ fn test_terminal_case_inequality_and_nonterminal_counterexample() {
     let instr_if = condition(comparison(variable("x"), exp_nonterminal, BoolCmpOp::Eq));
     assert_eq!(apply(vec![instr_if.clone()]), vec![instr_if]);
 }
+
 #[test]
 fn test_debug_and_nested_expression_are_not_traversed() {
     let exp_none =

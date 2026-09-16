@@ -25,6 +25,7 @@ fn variant(tdenv: &mut TDEnv, text: &str, texts: &[&str]) -> Typ {
     );
     typ
 }
+
 fn matching(typ: &Typ, block: Block) -> Instr {
     let exp =
         crate::note_phrase!(node: ExpKind::Var(id("value")), note: typ.node.clone(), span: span(7));
@@ -35,6 +36,7 @@ fn matching(typ: &Typ, block: Block) -> Instr {
         block,
     }))
 }
+
 #[test]
 fn test_singleton_alias_removes_match_but_multi_variant_and_primitive_do_not() {
     let mut tdenv = TDEnv::new();
@@ -70,6 +72,7 @@ fn test_singleton_alias_removes_match_but_multi_variant_and_primitive_do_not() {
         );
     }
 }
+
 #[test]
 fn test_nested_containers_rewrite_but_debug_remains_opaque() {
     let mut tdenv = TDEnv::new();
