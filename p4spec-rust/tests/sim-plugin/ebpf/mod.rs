@@ -22,7 +22,7 @@ fn counter_counts(
     >,
     value_arch: Value,
     names: &[&str],
-) -> Vec<i64> {
+) -> Vec<u32> {
     let values = names
         .iter()
         .map(|name| make::text(runner.arena_mut(), (*name).to_owned(), Span::default()).unwrap())
