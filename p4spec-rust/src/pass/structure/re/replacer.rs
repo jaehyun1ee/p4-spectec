@@ -1,9 +1,15 @@
-//! Capture-avoiding expression replacement for structured instructions
+//! Capture-avoiding expression replacement for OL instructions
+//!
+//! With `x -> y + z`, `let y = w { return x }` becomes
+//! `let y' = w { return y + z }`, assuming `y'` is fresh
+//! Renamer first moves the local binder away from the replacement's free names
+
 use super::super::{StructureError, StructureErrorKind, ol::ast as ol};
 use super::renamer::Renamer;
 use crate::lang::{
     common::{
         ds::{map::IdMap, set::IdSet},
+        notation::mixop::Mixop,
         source::{NotePhrase, Span},
     },
     hints::input,
@@ -51,6 +57,18 @@ impl Replacer {
 
     // == Capture avoidance
 
+    /// Builds fresh names for binders in `frees` that occur free in replacements
+    ///
+    /// ```text
+    /// Replace x -> y + z:
+    ///   before: let y = w { return (x, y) }
+    ///   after:  let y' = w { return (y + z, y') }
+    /// ```
+    ///
+    /// Returns `y -> y'`, assuming `y'` is fresh; the caller renames the binder
+    /// and its uses before replacing `x`, so the inserted `y` stays free
+    /// Fresh names avoid the binders, the block's free names, replacement keys
+    /// and free names, and names already chosen in this call
     pub(crate) fn freshen_binders(&self, frees: &IdSet, block: &ol::Block) -> Renamer {
         let ids_codom = self
             .exps
@@ -75,9 +93,15 @@ impl Replacer {
         renamer_fresh
     }
 
-    // == Replacement
+    // == Variables
 
-    // - Expressions
+    fn filter_vars(&self, vars: Vec<Var>) -> Vec<Var> {
+        vars.into_iter()
+            .filter(|var| !self.exps.contains_key(&var.id))
+            .collect()
+    }
+
+    // == Expressions
 
     pub(crate) fn replace_exp(&self, exp: Exp) -> Exp {
         let NotePhrase {
@@ -160,6 +184,12 @@ impl Replacer {
         note_phrase!(node: exp_kind, note: note, span: span)
     }
 
+    pub(crate) fn replace_exps(&self, exps: Vec<Exp>) -> Vec<Exp> {
+        exps.into_iter().map(|exp| self.replace_exp(exp)).collect()
+    }
+
+    // - Variable expression
+
     fn replace_var_exp(&self, id: Id, note: std::rc::Rc<TypKind>, span: Span) -> Exp {
         self.exps.get(&id).cloned().unwrap_or(note_phrase!(
             node: ExpKind::Var(id),
@@ -168,9 +198,7 @@ impl Replacer {
         ))
     }
 
-    pub(crate) fn replace_exps(&self, exps: Vec<Exp>) -> Vec<Exp> {
-        exps.into_iter().map(|exp| self.replace_exp(exp)).collect()
-    }
+    // == Expression iterators
 
     pub(crate) fn replace_iterexp(&self, iter_exp: ExpIter) -> ExpIter {
         let (iter, vars) = iter_exp;
@@ -184,13 +212,7 @@ impl Replacer {
             .collect()
     }
 
-    fn filter_vars(&self, vars: Vec<Var>) -> Vec<Var> {
-        vars.into_iter()
-            .filter(|var| !self.exps.contains_key(&var.id))
-            .collect()
-    }
-
-    // - Paths
+    // == Paths
 
     pub(crate) fn replace_path(&self, path: Path) -> Path {
         let NotePhrase {
@@ -214,7 +236,7 @@ impl Replacer {
         note_phrase!(node: path_kind, note: note, span: span)
     }
 
-    // - Arguments
+    // == Arguments
 
     pub(crate) fn replace_arg(&self, arg: Arg) -> Arg {
         let NotePhrase {
@@ -233,7 +255,7 @@ impl Replacer {
         args.into_iter().map(|arg| self.replace_arg(arg)).collect()
     }
 
-    // - Cases
+    // == Cases
 
     pub(crate) fn replace_case(&self, case: ol::Case) -> Result<ol::Case, StructureError> {
         let ol::Case { guard, block } = case;
@@ -252,6 +274,8 @@ impl Replacer {
             .collect()
     }
 
+    // - Guards
+
     pub(crate) fn replace_guard(&self, guard: ol::Guard) -> ol::Guard {
         match guard {
             ol::Guard::Bool(_) | ol::Guard::Sub(..) | ol::Guard::Match(_) => guard,
@@ -260,7 +284,7 @@ impl Replacer {
         }
     }
 
-    // - Instructions
+    // == Instructions
 
     pub(crate) fn replace_instr(&self, instr_ol: ol::Instr) -> Result<ol::Instr, StructureError> {
         let NotePhrase {
@@ -290,6 +314,18 @@ impl Replacer {
         }
     }
 
+    pub(crate) fn replace_instrs(
+        &self,
+        instrs_ol: Vec<ol::Instr>,
+    ) -> Result<Vec<ol::Instr>, StructureError> {
+        instrs_ol
+            .into_iter()
+            .map(|instr_ol| self.replace_instr(instr_ol))
+            .collect()
+    }
+
+    // - If instruction
+
     fn replace_if_instr(&self, instr_ol: ol::IfInstr) -> Result<ol::InstrKind, StructureError> {
         let ol::IfInstr {
             exp,
@@ -305,6 +341,8 @@ impl Replacer {
             block,
         }))
     }
+
+    // - Hold instruction
 
     fn replace_hold_instr(&self, instr_ol: ol::HoldInstr) -> Result<ol::InstrKind, StructureError> {
         let ol::HoldInstr {
@@ -327,12 +365,16 @@ impl Replacer {
         }))
     }
 
+    // - Case instruction
+
     fn replace_case_instr(&self, instr_ol: ol::CaseInstr) -> Result<ol::InstrKind, StructureError> {
         let ol::CaseInstr { exp, cases, total } = instr_ol;
         let exp = self.replace_exp(exp);
         let cases = self.replace_cases(cases)?;
         Ok(ol::InstrKind::Case(ol::CaseInstr { exp, cases, total }))
     }
+
+    // - Group instruction
 
     fn replace_group_instr(
         &self,
@@ -353,6 +395,8 @@ impl Replacer {
             block,
         }))
     }
+
+    // - Let instruction
 
     fn replace_let_instr(&self, instr_ol: ol::LetInstr) -> Result<ol::InstrKind, StructureError> {
         let ol::LetInstr {
@@ -378,6 +422,8 @@ impl Replacer {
         }))
     }
 
+    // - Rule instruction
+
     fn replace_rule_instr(
         &self,
         instr_ol: ol::RuleInstr,
@@ -402,13 +448,9 @@ impl Replacer {
         let block = renamer_fresh.rename_block(block)?;
         let exps = input::combine(&input_hint, exps_input, exps_output)
             .map_err(|error| StructureError::new(StructureErrorKind::Input(error), span.clone()))?;
-        // The original mixfix has exactly the validated argument count
-        let mut idx = 0;
-        let not_exp = not_exp.map(|_| {
-            let exp = exps[idx].clone();
-            idx += 1;
-            exp
-        });
+        let mixop = not_exp.to_mixop();
+        let not_exp =
+            Mixop::fill(&mixop, exps).expect("validated arguments preserve the mixfix arity");
         let iter_instrs = replacer.replace_iterinstrs_bound(iter_instrs);
         let block = replacer.replace_block(block)?;
         Ok(ol::InstrKind::Rule(ol::RuleInstr {
@@ -419,6 +461,8 @@ impl Replacer {
             block,
         }))
     }
+
+    // - Result instruction
 
     fn replace_result_instr(&self, instr_ol: ol::ResultInstr) -> ol::InstrKind {
         let ol::ResultInstr {
@@ -432,11 +476,15 @@ impl Replacer {
         })
     }
 
+    // - Return instruction
+
     fn replace_return_instr(&self, instr_ol: ol::ReturnInstr) -> ol::InstrKind {
         let ol::ReturnInstr { exp } = instr_ol;
         let exp = self.replace_exp(exp);
         ol::InstrKind::Return(ol::ReturnInstr { exp })
     }
+
+    // - Debug instruction
 
     fn replace_debug_instr(
         &self,
@@ -448,21 +496,13 @@ impl Replacer {
         Ok(ol::InstrKind::Debug(ol::DebugInstr { exp, instr }))
     }
 
-    pub(crate) fn replace_instrs(
-        &self,
-        instrs_ol: Vec<ol::Instr>,
-    ) -> Result<Vec<ol::Instr>, StructureError> {
-        instrs_ol
-            .into_iter()
-            .map(|instr_ol| self.replace_instr(instr_ol))
-            .collect()
-    }
+    // == Blocks
 
     pub(crate) fn replace_block(&self, block: ol::Block) -> Result<ol::Block, StructureError> {
         self.replace_instrs(block)
     }
 
-    // - Instruction iterators
+    // == Instruction iterators
 
     pub(crate) fn replace_iterinstr_bound(&self, iter_instr: ol::InstrIter) -> ol::InstrIter {
         let ol::InstrIter {
@@ -470,7 +510,6 @@ impl Replacer {
             vars_bound,
             vars_bind,
         } = iter_instr;
-        // The source replacement filters the third iterator component
         let vars_bind = self.filter_vars(vars_bind);
         ol::InstrIter {
             iter,
