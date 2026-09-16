@@ -68,10 +68,10 @@ fn test_hold_merge_exposes_bindings_for_a_later_loop_iteration() {
         }))
     };
     let block = vec![hold(vec![binding("x")]), hold(vec![binding("x")])];
-    let block_once = merge_binding::apply(block.clone()).unwrap();
-    let block_once = merge_if::apply(&tdenv, block_once).unwrap();
-    let block_once = merge_hold::apply(block_once);
-    let block_once = casify::apply(&tdenv, block_once).unwrap();
+    let block_once = merge_binding::apply(block.clone(), &mut false).unwrap();
+    let block_once = merge_if::apply(&tdenv, block_once, &mut false).unwrap();
+    let block_once = merge_hold::apply(block_once, &mut false);
+    let block_once = casify::apply(&tdenv, block_once, &mut false).unwrap();
     let block = optimize(&tdenv, block, true).unwrap();
     assert!(!block.syntax_eq(&block_once));
     let mut instr_expect = binding("x");
@@ -106,4 +106,28 @@ fn test_post_liveness_runs_once_after_the_rewrite_loop() {
     };
     let block = optimize(&TDEnv::new(), vec![instr_outer(vec![instr_inner])], true).unwrap();
     assert_eq!(block, vec![instr_outer(vec![])]);
+}
+
+#[test]
+fn test_fixed_point_moves_surviving_expression_payloads() {
+    let hold = |block| {
+        let instr_hold = HoldInstr {
+            id: id("relation"),
+            not_exp: Mixfix::Arg(variable("input")),
+            iter_exps: vec![],
+            block_hold: block,
+            block_not_hold: vec![],
+        };
+        instr(InstrKind::Hold(instr_hold))
+    };
+    let instr_return = ret("payload");
+    let InstrKind::Return(instr_body) = &instr_return.node else { unreachable!() };
+    let ExpKind::Var(id_body) = &instr_body.exp.node else { unreachable!() };
+    let ptr_body = id_body.node.as_ptr();
+    let block = vec![hold(vec![instr_return]), hold(vec![ret("tail")])];
+    let block = optimize(&TDEnv::new(), block, true).unwrap();
+    let InstrKind::Hold(instr_hold) = &block[0].node else { panic!("expected hold") };
+    let InstrKind::Return(instr_body) = &instr_hold.block_hold[0].node else { unreachable!() };
+    let ExpKind::Var(id_body) = &instr_body.exp.node else { unreachable!() };
+    assert_eq!(id_body.node.as_ptr(), ptr_body);
 }

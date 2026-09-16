@@ -346,23 +346,24 @@ fn upstream_instr_kind(
     instr_kind: InstrKind,
     span: &Span,
     instrs: &mut VecDeque<Instr>,
+    changed: &mut bool,
 ) -> Result<InstrKind, StructureError> {
     match instr_kind {
-        InstrKind::If(instr) => upstream_if_instr(instr),
-        InstrKind::Hold(instr) => upstream_hold_instr(instr),
-        InstrKind::Case(instr) => upstream_case_instr(instr),
-        InstrKind::Group(instr) => upstream_group_instr(instr),
-        InstrKind::Let(instr) => upstream_let_instr(instr, instrs),
-        InstrKind::Rule(instr) => upstream_rule_instr(instr, span, instrs),
+        InstrKind::If(instr) => upstream_if_instr(instr, changed),
+        InstrKind::Hold(instr) => upstream_hold_instr(instr, changed),
+        InstrKind::Case(instr) => upstream_case_instr(instr, changed),
+        InstrKind::Group(instr) => upstream_group_instr(instr, changed),
+        InstrKind::Let(instr) => upstream_let_instr(instr, instrs, changed),
+        InstrKind::Rule(instr) => upstream_rule_instr(instr, span, instrs, changed),
         instr_kind => Ok(instr_kind),
     }
 }
 
-fn upstream_block(block: Block) -> Result<Block, StructureError> {
+fn upstream_block(block: Block, changed: &mut bool) -> Result<Block, StructureError> {
     let mut instrs: VecDeque<_> = block.into();
     let mut block = Vec::with_capacity(instrs.len());
     while let Some(instr) = instrs.pop_front() {
-        let instr_kind = upstream_instr_kind(instr.node, &instr.span, &mut instrs)?;
+        let instr_kind = upstream_instr_kind(instr.node, &instr.span, &mut instrs, changed)?;
         let instr = crate::phrase!(node: instr_kind, span: instr.span);
         block.push(instr);
     }
@@ -371,32 +372,32 @@ fn upstream_block(block: Block) -> Result<Block, StructureError> {
 
 // - If instruction
 
-fn upstream_if_instr(instr: IfInstr) -> Result<InstrKind, StructureError> {
+fn upstream_if_instr(instr: IfInstr, changed: &mut bool) -> Result<InstrKind, StructureError> {
     let IfInstr { exp, iter_exps, block } = instr;
-    let block = upstream_block(block)?;
+    let block = upstream_block(block, changed)?;
     let instr = IfInstr { exp, iter_exps, block };
     Ok(InstrKind::If(instr))
 }
 
 // - Hold instruction
 
-fn upstream_hold_instr(instr: HoldInstr) -> Result<InstrKind, StructureError> {
+fn upstream_hold_instr(instr: HoldInstr, changed: &mut bool) -> Result<InstrKind, StructureError> {
     let HoldInstr { id, not_exp, iter_exps, block_hold, block_not_hold } = instr;
-    let block_hold = upstream_block(block_hold)?;
-    let block_not_hold = upstream_block(block_not_hold)?;
+    let block_hold = upstream_block(block_hold, changed)?;
+    let block_not_hold = upstream_block(block_not_hold, changed)?;
     let instr = HoldInstr { id, not_exp, iter_exps, block_hold, block_not_hold };
     Ok(InstrKind::Hold(instr))
 }
 
 // - Case instruction
 
-fn upstream_case_instr(instr: CaseInstr) -> Result<InstrKind, StructureError> {
+fn upstream_case_instr(instr: CaseInstr, changed: &mut bool) -> Result<InstrKind, StructureError> {
     let CaseInstr { exp, cases, total } = instr;
     let cases = cases
         .into_iter()
         .map(|case| {
             let Case { guard, block } = case;
-            let block = upstream_block(block)?;
+            let block = upstream_block(block, changed)?;
             let case = Case { guard, block };
             Ok(case)
         })
@@ -407,9 +408,12 @@ fn upstream_case_instr(instr: CaseInstr) -> Result<InstrKind, StructureError> {
 
 // - Group instruction
 
-fn upstream_group_instr(instr: GroupInstr) -> Result<InstrKind, StructureError> {
+fn upstream_group_instr(
+    instr: GroupInstr,
+    changed: &mut bool,
+) -> Result<InstrKind, StructureError> {
     let GroupInstr { id, rel_signature, exps, block } = instr;
-    let block = upstream_block(block)?;
+    let block = upstream_block(block, changed)?;
     let instr = GroupInstr { id, rel_signature, exps, block };
     Ok(InstrKind::Group(instr))
 }
@@ -419,16 +423,18 @@ fn upstream_group_instr(instr: GroupInstr) -> Result<InstrKind, StructureError> 
 fn upstream_let_instr(
     mut instr: LetInstr,
     instrs: &mut VecDeque<Instr>,
+    changed: &mut bool,
 ) -> Result<InstrKind, StructureError> {
     loop {
         let bind = Bind::from_let(&instr);
         let Some(block_merge) = downstream_block(&bind, instrs)? else {
             break;
         };
+        *changed = true;
         instr.block = merge_block(instr.block, block_merge);
     }
     let LetInstr { exp_l, exp_r, iter_instrs, block } = instr;
-    let block = upstream_block(block)?;
+    let block = upstream_block(block, changed)?;
     let instr = LetInstr { exp_l, exp_r, iter_instrs, block };
     Ok(InstrKind::Let(instr))
 }
@@ -439,22 +445,24 @@ fn upstream_rule_instr(
     mut instr: RuleInstr,
     span: &Span,
     instrs: &mut VecDeque<Instr>,
+    changed: &mut bool,
 ) -> Result<InstrKind, StructureError> {
     loop {
         let bind = Bind::from_rule(&instr, span)?;
         let Some(block_merge) = downstream_block(&bind, instrs)? else {
             break;
         };
+        *changed = true;
         instr.block = merge_block(instr.block, block_merge);
     }
     let RuleInstr { id, not_exp, input_hint, iter_instrs, block } = instr;
-    let block = upstream_block(block)?;
+    let block = upstream_block(block, changed)?;
     let instr = RuleInstr { id, not_exp, input_hint, iter_instrs, block };
     Ok(InstrKind::Rule(instr))
 }
 
 // == Entry point
 
-pub(crate) fn apply(block: Block) -> Result<Block, StructureError> {
-    upstream_block(block)
+pub(crate) fn apply(block: Block, changed: &mut bool) -> Result<Block, StructureError> {
+    upstream_block(block, changed)
 }

@@ -1,7 +1,7 @@
 //! Optimize OL blocks with pre-rewrites, repeated loop rewrites, then post-rewrites
 //!
 //! `let y = x { return y }` becomes `return x` during pre-rewrites
-//! Loop rewrites repeat until syntax equality; post-rewrites then run once
+//! Loop rewrites repeat until no merge succeeds; post-rewrites then run once
 
 pub(super) mod r#loop;
 pub(super) mod merge;

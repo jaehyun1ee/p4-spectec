@@ -28,9 +28,12 @@ fn test_identical_search_preserves_intervening_if_tail_and_target_span() {
     let instr_b = branch(var("q"), "b", 2);
     let instr_c = branch(var("p"), "c", 3);
     let instr_tail = ret("tail");
-    let block =
-        merge_if::apply(&TDEnv::new(), vec![instr_a, instr_b.clone(), instr_c, instr_tail.clone()])
-            .unwrap();
+    let block = merge_if::apply(
+        &TDEnv::new(),
+        vec![instr_a, instr_b.clone(), instr_c, instr_tail.clone()],
+        &mut false,
+    )
+    .unwrap();
     assert_eq!(block.len(), 3);
     assert_eq!(block[0].span, span(1));
     assert_eq!(block[1], instr_b);
@@ -42,13 +45,20 @@ fn test_identical_search_preserves_intervening_if_tail_and_target_span() {
 #[test]
 fn test_barrier_fuzzy_and_downstream_blocks() {
     let block_input = vec![branch(var("p"), "a", 1), ret("barrier"), branch(var("p"), "b", 2)];
-    assert_eq!(merge_if::apply(&TDEnv::new(), block_input.clone()).unwrap(), block_input);
+    assert_eq!(
+        merge_if::apply(&TDEnv::new(), block_input.clone(), &mut false).unwrap(),
+        block_input
+    );
     let block_input = vec![branch(var("p"), "a", 1), branch(var("q"), "b", 2)];
-    assert_eq!(merge_if::apply(&TDEnv::new(), block_input.clone()).unwrap(), block_input);
+    assert_eq!(
+        merge_if::apply(&TDEnv::new(), block_input.clone(), &mut false).unwrap(),
+        block_input
+    );
     let block_inner = vec![branch(var("p"), "a", 2), branch(var("p"), "b", 3)];
     let instr_outer = crate::phrase!(node: InstrKind::If(IfInstr { exp: var("outer"), iter_exps: vec![], block: block_inner.clone() }),span: span(1));
     let instr_debug = crate::phrase!(node: InstrKind::Debug(DebugInstr { exp: var("debug"), instr: Box::new(instr_outer.clone()) }),span: span(9));
-    let block = merge_if::apply(&TDEnv::new(), vec![instr_outer, instr_debug.clone()]).unwrap();
+    let block =
+        merge_if::apply(&TDEnv::new(), vec![instr_outer, instr_debug.clone()], &mut false).unwrap();
     let InstrKind::If(instr_if) = &block[0].node else { panic!("expected if") };
     assert_eq!(instr_if.block.len(), 1);
     assert_eq!(block[1], instr_debug);
@@ -69,14 +79,14 @@ fn nested(block: Block) -> Block {
 #[test]
 fn test_recursive_hold_case_group_let_rule_bodies() {
     let block = vec![branch(var("p"), "a", 1), branch(var("p"), "b", 2)];
-    let block_expect = merge_if::apply(&TDEnv::new(), block.clone()).unwrap();
+    let block_expect = merge_if::apply(&TDEnv::new(), block.clone(), &mut false).unwrap();
     assert_eq!(
-        merge_if::apply(&TDEnv::new(), nested(block.clone())).unwrap(),
+        merge_if::apply(&TDEnv::new(), nested(block.clone()), &mut false).unwrap(),
         nested(block_expect)
     );
     let instr_debug = crate::phrase!(node: InstrKind::Debug(DebugInstr {exp: var("debug"),instr: Box::new(super::binding("bound",block))}),span: span(9));
     assert_eq!(
-        merge_if::apply(&TDEnv::new(), vec![instr_debug.clone()]).unwrap(),
+        merge_if::apply(&TDEnv::new(), vec![instr_debug.clone()], &mut false).unwrap(),
         vec![instr_debug]
     );
 }
@@ -90,13 +100,33 @@ fn test_iterator_compatibility_and_partition_conditions_remain_separate() {
         instr_if.iter_exps = vec![(Iter::List, vec![])];
     }
     let block_input = vec![instr_a.clone(), instr_b.clone()];
-    assert_eq!(merge_if::apply(&TDEnv::new(), block_input.clone()).unwrap(), block_input);
+    assert_eq!(
+        merge_if::apply(&TDEnv::new(), block_input.clone(), &mut false).unwrap(),
+        block_input
+    );
     if let InstrKind::If(instr_if) = &mut instr_b.node {
         instr_if.iter_exps = vec![(Iter::List, vec![])];
     }
-    let block = merge_if::apply(&TDEnv::new(), vec![instr_a, instr_b]).unwrap();
+    let block = merge_if::apply(&TDEnv::new(), vec![instr_a, instr_b], &mut false).unwrap();
     assert_eq!(block.len(), 1);
     let exp_not = crate::note_phrase!(node: ExpKind::Un(UnOp::Bool(crate::lang::xl::bool::UnOp::Not),OpTyp::Bool,Box::new(var("p"))),note: TypKind::Bool,span: Default::default());
     let block_input = vec![branch(var("p"), "a", 1), branch(exp_not, "b", 2)];
-    assert_eq!(merge_if::apply(&TDEnv::new(), block_input.clone()).unwrap(), block_input);
+    assert_eq!(
+        merge_if::apply(&TDEnv::new(), block_input.clone(), &mut false).unwrap(),
+        block_input
+    );
+}
+
+#[test]
+fn test_nested_merges_report_progress_and_stable_blocks_do_not() {
+    let block = vec![branch(var("p"), "a", 1), branch(var("p"), "b", 2)];
+    let block = vec![super::hold(vec![], block)];
+    let mut changed = false;
+    let block = merge_if::apply(&TDEnv::new(), block, &mut changed).unwrap();
+    assert!(changed);
+    changed = false;
+    let block_expect = block.clone();
+    let block = merge_if::apply(&TDEnv::new(), block, &mut changed).unwrap();
+    assert!(!changed);
+    assert_eq!(block, block_expect);
 }

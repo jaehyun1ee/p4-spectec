@@ -9,7 +9,6 @@ pub(crate) mod merge_hold;
 pub(crate) mod merge_if;
 
 use crate::{
-    lang::traits::eq::SyntaxEq,
     pass::structure::{StructureError, ol::ast::Block},
     runtime::envs::algo::TDEnv,
 };
@@ -18,13 +17,14 @@ use crate::{
 
 pub(super) fn optimize(tdenv: &TDEnv, mut block: Block) -> Result<Block, StructureError> {
     loop {
-        let block_optimized = merge_binding::apply(block.clone())?;
-        let block_optimized = merge_if::apply(tdenv, block_optimized)?;
-        let block_optimized = merge_hold::apply(block_optimized);
-        let block_optimized = casify::apply(tdenv, block_optimized)?;
-        if block.syntax_eq(&block_optimized) {
+        let mut changed = false;
+        block = merge_binding::apply(block, &mut changed)?;
+        block = merge_if::apply(tdenv, block, &mut changed)?;
+        block = merge_hold::apply(block, &mut changed);
+        block = casify::apply(tdenv, block, &mut changed)?;
+        // Every successful rewrite consumes a sibling, including in nested blocks
+        if !changed {
             return Ok(block);
         }
-        block = block_optimized;
     }
 }

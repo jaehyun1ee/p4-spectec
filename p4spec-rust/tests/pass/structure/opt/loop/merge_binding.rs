@@ -8,8 +8,11 @@ fn test_adjacent_bindings_rename_and_preserve_tail_and_span() {
         let mut instr_expect = make("a", vec![ret("a"), ret("a"), ret("a")]);
         instr_expect.span = span(8);
         assert_eq!(
-            apply(vec![instr_a, make("b", vec![ret("b")]), make("c", vec![ret("c")]), ret("tail")])
-                .unwrap(),
+            apply(
+                vec![instr_a, make("b", vec![ret("b")]), make("c", vec![ret("c")]), ret("tail")],
+                &mut false
+            )
+            .unwrap(),
             vec![instr_expect, ret("tail")]
         );
     }
@@ -21,7 +24,8 @@ fn test_capture_avoidance_in_target_body() {
     if let InstrKind::Let(instr_let) = &mut instr_inner.node {
         instr_let.exp_r = variable("other");
     }
-    let block = apply(vec![binding("a", vec![]), binding("b", vec![instr_inner])]).unwrap();
+    let block =
+        apply(vec![binding("a", vec![]), binding("b", vec![instr_inner])], &mut false).unwrap();
     let InstrKind::Let(instr_outer) = &block[0].node else { panic!("expected let") };
     let InstrKind::Let(instr_inner) = &instr_outer.block[0].node else { panic!("expected let") };
     let ExpKind::Var(id_fresh) = &instr_inner.exp_l.node else { panic!("expected variable") };
@@ -50,11 +54,17 @@ fn test_iterator_filtering_binding_renaming_and_mismatch() {
     if let InstrKind::Let(instr_let) = &mut instr_expect.node {
         instr_let.block.push(ret("a"));
     }
-    assert_eq!(apply(vec![instr_a.clone(), instr_b.clone()]).unwrap(), vec![instr_expect]);
+    assert_eq!(
+        apply(vec![instr_a.clone(), instr_b.clone()], &mut false).unwrap(),
+        vec![instr_expect]
+    );
     if let InstrKind::Let(instr_let) = &mut instr_b.node {
         instr_let.iter_instrs[0].iter = Iter::Opt;
     }
-    assert_eq!(apply(vec![instr_a.clone(), instr_b.clone()]).unwrap(), vec![instr_a, instr_b]);
+    assert_eq!(
+        apply(vec![instr_a.clone(), instr_b.clone()], &mut false).unwrap(),
+        vec![instr_a, instr_b]
+    );
 }
 
 #[test]
@@ -73,15 +83,18 @@ fn test_hint_split_compatibility_and_intervening_instruction() {
     if let InstrKind::Rule(instr_rule) = &mut instr_expect.node {
         instr_rule.block.push(ret("b"));
     }
-    assert_eq!(apply(vec![instr_a.clone(), instr_b.clone()]).unwrap(), vec![instr_expect]);
+    assert_eq!(
+        apply(vec![instr_a.clone(), instr_b.clone()], &mut false).unwrap(),
+        vec![instr_expect]
+    );
     if let InstrKind::Rule(instr_rule) = &mut instr_b.node {
         instr_rule.not_exp =
             Mixfix::Seq(vec![Mixfix::Arg(variable("same")), Mixfix::Arg(variable("different"))]);
     }
     let block = vec![instr_a, instr_b];
-    assert_eq!(apply(block.clone()).unwrap(), block);
+    assert_eq!(apply(block.clone(), &mut false).unwrap(), block);
     let block = vec![binding("a", vec![]), ret("barrier"), binding("b", vec![])];
-    assert_eq!(apply(block.clone()).unwrap(), block);
+    assert_eq!(apply(block.clone(), &mut false).unwrap(), block);
 }
 
 #[test]
@@ -91,7 +104,7 @@ fn test_invalid_rule_hint_keeps_owning_span() {
     if let InstrKind::Rule(instr_rule) = &mut instr_ol.node {
         instr_rule.input_hint = InputHint::new(vec![9]);
     }
-    let error = apply(vec![instr_ol]).unwrap_err();
+    let error = apply(vec![instr_ol], &mut false).unwrap_err();
     assert_eq!(error.span, span(17));
     assert!(matches!(error.kind, crate::pass::structure::StructureErrorKind::Input(_)));
 }
@@ -133,7 +146,7 @@ fn test_structured_binding_patterns_and_shape_negatives() {
         if let InstrKind::Let(instr_let) = &mut instr_expect.node {
             instr_let.block = vec![ret(text_return)];
         }
-        assert_eq!(apply(vec![instr_a, instr_b]).unwrap(), vec![instr_expect]);
+        assert_eq!(apply(vec![instr_a, instr_b], &mut false).unwrap(), vec![instr_expect]);
     }
     for (exp_a, exp_b) in [
         (
@@ -161,7 +174,7 @@ fn test_structured_binding_patterns_and_shape_negatives() {
             instr_let.exp_l = exp_b;
         }
         let block = vec![instr_a, instr_b];
-        assert_eq!(apply(block.clone()).unwrap(), block);
+        assert_eq!(apply(block.clone(), &mut false).unwrap(), block);
     }
 }
 
@@ -179,7 +192,7 @@ fn test_repeated_pattern_variables_follow_source_mapping_order() {
     if let InstrKind::Let(instr_let) = &mut instr_expect.node {
         instr_let.block = vec![ret("b")];
     }
-    assert_eq!(apply(vec![instr_a, instr_b]).unwrap(), vec![instr_expect]);
+    assert_eq!(apply(vec![instr_a, instr_b], &mut false).unwrap(), vec![instr_expect]);
 }
 
 fn nested(block: Block) -> Block {
@@ -208,10 +221,24 @@ fn nested(block: Block) -> Block {
 fn test_nested_blocks_and_debug_barrier() {
     let block = vec![binding("a", vec![ret("a")]), binding("b", vec![ret("b")])];
     let block_expect = vec![binding("a", vec![ret("a"), ret("a")])];
-    assert_eq!(apply(nested(block.clone())).unwrap(), nested(block_expect));
+    assert_eq!(apply(nested(block.clone()), &mut false).unwrap(), nested(block_expect));
     let instr_debug = instr(InstrKind::Debug(DebugInstr {
         exp: variable("debug"),
         instr: Box::new(binding("outer", block)),
     }));
-    assert_eq!(apply(vec![instr_debug.clone()]).unwrap(), vec![instr_debug]);
+    assert_eq!(apply(vec![instr_debug.clone()], &mut false).unwrap(), vec![instr_debug]);
+}
+
+#[test]
+fn test_nested_merges_report_progress_and_stable_blocks_do_not() {
+    let block = vec![binding("a", vec![]), binding("b", vec![])];
+    let block = vec![hold(vec![], block)];
+    let mut changed = false;
+    let block = apply(block, &mut changed).unwrap();
+    assert!(changed);
+    changed = false;
+    let block_expect = block.clone();
+    let block = apply(block, &mut changed).unwrap();
+    assert!(!changed);
+    assert_eq!(block, block_expect);
 }

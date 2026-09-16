@@ -54,8 +54,8 @@ fn test_wide_flat_blocks_preserve_order_without_recursive_sibling_traversal() {
 
     let block: Block = (0..4096).map(|num_idx| ret(&num_idx.to_string())).collect();
     let tdenv = TDEnv::new();
-    assert_eq!(r#loop::merge_if::apply(&tdenv, block.clone()).unwrap(), block);
-    assert_eq!(r#loop::casify::apply(&tdenv, block.clone()).unwrap(), block);
-    assert_eq!(r#loop::merge_binding::apply(block.clone()).unwrap(), block);
-    assert_eq!(r#loop::merge_hold::apply(block.clone()), block);
+    assert_eq!(r#loop::merge_if::apply(&tdenv, block.clone(), &mut false).unwrap(), block);
+    assert_eq!(r#loop::casify::apply(&tdenv, block.clone(), &mut false).unwrap(), block);
+    assert_eq!(r#loop::merge_binding::apply(block.clone(), &mut false).unwrap(), block);
+    assert_eq!(r#loop::merge_hold::apply(block.clone(), &mut false), block);
 }

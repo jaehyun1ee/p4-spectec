@@ -32,6 +32,7 @@ fn test_partition_becomes_total_case_and_preserves_tail_span() {
     let block = casify::apply(
         &TDEnv::new(),
         vec![branch(var("p"), "a", 1), branch(neg(var("p")), "b", 2), instr_tail.clone()],
+        &mut false,
     )
     .unwrap();
     assert_eq!(block.len(), 2);
@@ -67,6 +68,7 @@ fn test_disjoint_partial_fuzzy_and_if_search_order() {
             branch(cmp("b"), "b", 3),
             instr_tail.clone(),
         ],
+        &mut false,
     )
     .unwrap();
     assert_eq!(block.len(), 3);
@@ -83,7 +85,7 @@ fn test_disjoint_partial_fuzzy_and_if_search_order() {
         vec![guard("a"), guard("b")]
     );
     let block_input = vec![branch(cmp("a"), "a", 1), ret("barrier"), branch(cmp("b"), "b", 2)];
-    assert_eq!(casify::apply(&TDEnv::new(), block_input.clone()).unwrap(), block_input);
+    assert_eq!(casify::apply(&TDEnv::new(), block_input.clone(), &mut false).unwrap(), block_input);
 }
 
 #[test]
@@ -95,6 +97,7 @@ fn test_if_case_and_case_if_preserve_source_identical_priority_and_flags() {
                 branch(cmp("b"), "target", 1),
                 case(&[("a", "skip"), ("b", "match"), ("c", "tail")], total, 2),
             ],
+            &mut false,
         )
         .unwrap();
         assert_eq!(block[0].span, span(1));
@@ -110,6 +113,7 @@ fn test_if_case_and_case_if_preserve_source_identical_priority_and_flags() {
                 case(&[("a", "skip"), ("b", "match"), ("c", "tail")], total, 1),
                 branch(cmp("b"), "target", 2),
             ],
+            &mut false,
         )
         .unwrap();
         let InstrKind::Case(instr_case) = &block[0].node else { panic!("expected case") };
@@ -125,7 +129,7 @@ fn test_partial_case_append_and_case_case_total_target() {
         vec![branch(cmp("b"), "b", 1), case(&[("a", "a")], false, 2)],
         vec![case(&[("a", "a")], false, 1), branch(cmp("b"), "b", 2)],
     ] {
-        let block = casify::apply(&TDEnv::new(), block_input).unwrap();
+        let block = casify::apply(&TDEnv::new(), block_input, &mut false).unwrap();
         let InstrKind::Case(instr_case) = &block[0].node else { panic!("expected case") };
         assert!(!instr_case.total);
         assert_eq!(
@@ -146,6 +150,7 @@ fn test_partial_case_append_and_case_case_total_target() {
                 case(&[("a", "c")], !total, 2),
                 instr_tail.clone(),
             ],
+            &mut false,
         )
         .unwrap();
         assert_eq!(block[1], instr_tail);
@@ -164,7 +169,7 @@ fn test_total_case_exhaustion_is_located_at_owning_case() {
         (vec![case(&[("a", "a")], true, 3), branch(cmp("b"), "b", 4)], span(3)),
         (vec![case(&[], true, 5), case(&[("a", "a")], false, 6)], span(5)),
     ] {
-        let error = casify::apply(&TDEnv::new(), block_input).unwrap_err();
+        let error = casify::apply(&TDEnv::new(), block_input, &mut false).unwrap_err();
         assert_eq!(error.kind, crate::pass::structure::error::StructureErrorKind::EmptyTotalCase);
         assert_eq!(error.span, span_expect);
     }
@@ -185,10 +190,16 @@ fn nested(block: Block) -> Block {
 #[test]
 fn test_recursive_hold_case_group_let_rule_bodies() {
     let block = vec![branch(var("p"), "a", 1), branch(neg(var("p")), "b", 2)];
-    let block_expect = casify::apply(&TDEnv::new(), block.clone()).unwrap();
-    assert_eq!(casify::apply(&TDEnv::new(), nested(block.clone())).unwrap(), nested(block_expect));
+    let block_expect = casify::apply(&TDEnv::new(), block.clone(), &mut false).unwrap();
+    assert_eq!(
+        casify::apply(&TDEnv::new(), nested(block.clone()), &mut false).unwrap(),
+        nested(block_expect)
+    );
     let instr_debug = crate::phrase!(node: InstrKind::Debug(DebugInstr {exp: var("debug"),instr: Box::new(super::binding("bound",block))}),span: span(9));
-    assert_eq!(casify::apply(&TDEnv::new(), vec![instr_debug.clone()]).unwrap(), vec![instr_debug]);
+    assert_eq!(
+        casify::apply(&TDEnv::new(), vec![instr_debug.clone()], &mut false).unwrap(),
+        vec![instr_debug]
+    );
 }
 
 #[test]
@@ -201,14 +212,17 @@ fn test_iteration_blocks_search_and_different_case_targets_stay_separate() {
         vec![branch(var("p"), "a", 1), instr_iter.clone(), branch(neg(var("p")), "b", 3)],
         vec![instr_iter, branch(var("p"), "b", 3)],
     ] {
-        assert_eq!(casify::apply(&TDEnv::new(), block_input.clone()).unwrap(), block_input);
+        assert_eq!(
+            casify::apply(&TDEnv::new(), block_input.clone(), &mut false).unwrap(),
+            block_input
+        );
     }
     let mut instr_b = case(&[("b", "b")], false, 2);
     if let InstrKind::Case(instr_case) = &mut instr_b.node {
         instr_case.exp = var("q");
     }
     let block_input = vec![case(&[("a", "a")], false, 1), instr_b];
-    assert_eq!(casify::apply(&TDEnv::new(), block_input.clone()).unwrap(), block_input);
+    assert_eq!(casify::apply(&TDEnv::new(), block_input.clone(), &mut false).unwrap(), block_input);
 }
 
 #[test]
@@ -222,7 +236,7 @@ fn test_identical_subtype_guard_retains_case_proof_and_expression_span() {
     let guard_if = Guard::Sub(typ, Box::new(Subcheck::Skip));
     let instr_if = branch(guard_as_exp(&exp_target, &guard_if), "a", 1);
     let instr_case = crate::phrase!(node: InstrKind::Case(CaseInstr {exp: exp_target.clone(), cases: vec![Case {guard: guard_case.clone(),block: vec![ret("b")]}],total: true}),span: span(2));
-    let block = casify::apply(&TDEnv::new(), vec![instr_if, instr_case]).unwrap();
+    let block = casify::apply(&TDEnv::new(), vec![instr_if, instr_case], &mut false).unwrap();
     let InstrKind::Case(instr_case) = &block[0].node else { panic!("expected case") };
     assert_eq!(instr_case.exp, exp_target);
     assert_eq!(instr_case.cases[0].guard, guard_case);
@@ -252,7 +266,7 @@ fn test_successful_merges_move_branch_payloads() {
             };
             ptrs.push(return_name_ptr(&block[0]));
         }
-        let block = casify::apply(&TDEnv::new(), block).unwrap();
+        let block = casify::apply(&TDEnv::new(), block, &mut false).unwrap();
         let InstrKind::Case(instr_case) = &block[0].node else { panic!("expected case") };
         let ptrs_output: Vec<_> = instr_case
             .cases
@@ -273,7 +287,7 @@ fn test_case_case_late_fuzzy_merge_keeps_both_original_bodies() {
         .cases
         .push(Case { guard: Guard::Mem(var("unknown")), block: vec![ret("fuzzy")] });
     let block = vec![instr_target, instr_case];
-    assert_eq!(casify::apply(&TDEnv::new(), block.clone()).unwrap(), block);
+    assert_eq!(casify::apply(&TDEnv::new(), block.clone(), &mut false).unwrap(), block);
 }
 
 #[test]
@@ -284,6 +298,7 @@ fn test_case_case_scan_tracks_appended_and_truncated_guards() {
             case(&[("a", "target_a"), ("b", "target_b")], false, 1),
             case(&[("c", "append_c"), ("b", "match_b"), ("c", "match_c")], false, 2),
         ],
+        &mut false,
     )
     .unwrap();
     let InstrKind::Case(instr_case) = &block[0].node else { panic!("expected case") };
@@ -291,4 +306,18 @@ fn test_case_case_scan_tracks_appended_and_truncated_guards() {
     assert_eq!(instr_case.cases[0].guard, guard("c"));
     assert_eq!(instr_case.cases[0].block, vec![ret("append_c"), ret("match_c")]);
     assert_eq!(block[0].span, span(1));
+}
+
+#[test]
+fn test_nested_merges_report_progress_and_stable_blocks_do_not() {
+    let block = vec![branch(cmp("a"), "a", 1), branch(cmp("b"), "b", 2)];
+    let block = vec![super::hold(vec![], block)];
+    let mut changed = false;
+    let block = casify::apply(&TDEnv::new(), block, &mut changed).unwrap();
+    assert!(changed);
+    changed = false;
+    let block_expect = block.clone();
+    let block = casify::apply(&TDEnv::new(), block, &mut changed).unwrap();
+    assert!(!changed);
+    assert_eq!(block, block_expect);
 }
