@@ -327,7 +327,7 @@ fn invoke_rel_mode<Iface: Interface, Exn: Extern>(
                     ));
                     let flow = backtrack!(instruction::eval_body(
                         runner,
-                        &ctx,
+                        ctx,
                         &rel.block,
                         rel.block_else.as_deref()
                     ));
@@ -424,7 +424,10 @@ fn invoke_func_mode<Iface: Interface, Exn: Extern>(
                         .flat_map(|row| row.block.iter())
                         .collect();
                     let flow = backtrack!(instruction::eval_sequential(
-                        runner, &ctx_local, &instrs, true
+                        runner,
+                        Cow::Owned(ctx_local),
+                        &instrs,
+                        true
                     ));
                     match flow {
                         Flow::Return(_) => Backtrack::Ok(flow),
@@ -460,7 +463,7 @@ fn invoke_func_mode<Iface: Interface, Exn: Extern>(
                     ));
                     let flow = backtrack!(instruction::eval_body(
                         runner,
-                        &ctx_local,
+                        ctx_local,
                         &func.block,
                         func.block_else.as_deref()
                     ));
