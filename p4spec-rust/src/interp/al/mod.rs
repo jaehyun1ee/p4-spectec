@@ -1,5 +1,6 @@
 //! Algorithmic-language execution over the composed runner
 
+pub mod backtrack;
 pub mod context;
 
 pub mod eval;

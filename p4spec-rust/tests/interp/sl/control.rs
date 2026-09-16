@@ -262,10 +262,7 @@ fn case_guard_errors_keep_the_generated_expression_trace() {
 #[test]
 fn optional_condition_reverses_remaining_iterators_and_preserves_outer_bindings() {
     use p4spec_rust::{
-        interp::sl::{
-            context::Context,
-            eval::instr::{Flow, eval_block},
-        },
+        interp::sl::{context::Context, eval::instr::eval_block, flow::Flow},
         lang::common::Variable,
     };
     for det in [false, true] {
@@ -307,9 +304,10 @@ fn optional_condition_reverses_remaining_iterators_and_preserves_outer_bindings(
                     exp, iter_exps: vec![(ast::Iter::List, vec![var_list]), (ast::Iter::List, vec![var]), (ast::Iter::Opt, vec![])],
                     block: vec![instr(self::exp(5))], dangle: true,
                 }), span: Span::default())];
-            let flow = eval_block(&mut runner.context(), &ctx, &block, false)
-                .finish()
-                .unwrap();
+            let flow =
+                eval_block(&mut runner.context(), std::borrow::Cow::Borrowed(&ctx), &block, false)
+                    .finish()
+                    .unwrap();
             match flow {
                 Flow::Return(value) => {
                     assert_eq!(get::num(runner.arena(), &value).unwrap().to_string(), expected)

@@ -12,30 +12,41 @@ use crate::{
 };
 use std::rc::Rc;
 
-pub trait ValueContext: Clone {
+// = Bindings
+
+/// Read access to value, type, and function bindings
+pub trait Context: Clone {
     fn find_value(&self, var: &Variable) -> Result<&Value, Error>;
     fn find_defined_typdef(&self, id: &ast::Id) -> Result<(&[ast::TParam], &ast::DefTyp), Error>;
-    fn find_func_typ(&self, id: &ast::Id) -> Result<crate::lang::il::ast::FuncTyp, Error>;
+    fn find_func_typ(&self, id: &ast::Id) -> Result<ast::FuncTyp, Error>;
     fn tdenv(&self) -> TDEnv;
     fn theta_local(&self) -> Theta;
 }
 
-pub trait AssignContext: ValueContext {
+// = Assignment
+
+pub trait AssignContext: Context {
     type Func;
+
     fn add_value(&mut self, var: Variable, value: Value);
     fn wipe(&self) -> Self;
     fn lookup_func(&self, id: &ast::Id) -> Result<Rc<Self::Func>, Error>;
     fn add_func(&mut self, id: ast::Id, func: Rc<Self::Func>) -> Result<(), Error>;
 }
 
-pub(crate) trait EvalContext<Iface: Interface, Exn: Extern>: ValueContext {
+// = Evaluation
+
+pub(crate) trait EvalContext<Iface: Interface, Exn: Extern>: Context {
     type Interp: Interpreter<Iface, Exn, Error = Error>;
+
     fn trace_exp(&self, _exp: &ast::Exp, result: Backtrack<Value>) -> Backtrack<Value> {
         result
     }
+
     fn trace_arg(&self, _arg: &ast::Arg, result: Backtrack<Value>) -> Backtrack<Value> {
         result
     }
+
     fn invoke_func(
         &self,
         runner: &mut RunnerContext<'_, Self::Interp, Iface, Exn>,

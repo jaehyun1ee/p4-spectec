@@ -223,6 +223,29 @@ pub enum TraceErrorKind {
     ClauseApplication { func: String, args: String },
 }
 
+impl TraceErrorKind {
+    pub(crate) fn function(
+        id: &crate::lang::il::ast::Id,
+        targs: &[crate::lang::il::ast::Typ],
+    ) -> Self {
+        TraceErrorKind::FunctionInvocation {
+            func: id.node.clone(),
+            targs: if targs.is_empty() {
+                String::new()
+            } else {
+                format!(
+                    "<{}>",
+                    targs
+                        .iter()
+                        .map(crate::lang::traits::print::Print::to_string)
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            },
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Error {
     pub kind: Box<ErrorKind>,

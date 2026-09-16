@@ -1,3 +1,6 @@
+#[path = "backtrack.rs"]
+mod backtrack;
+
 #[path = "context.rs"]
 mod context;
 

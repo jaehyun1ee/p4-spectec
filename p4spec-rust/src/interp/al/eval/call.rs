@@ -1,5 +1,7 @@
 //! AL invocation and ordered candidate selection
 
+use super::super::backtrack::{choose_deterministic, choose_sequential};
+
 use super::super::{
     AlInterp,
     context::{Context, Scope},
@@ -7,11 +9,9 @@ use super::super::{
 use super::{assign, expr, prem::eval_prems};
 use crate::interp::shared::error::{CallErrorKind, GuardErrorKind, HostErrorKind, TraceErrorKind};
 use crate::interp::shared::{
-    backtrack::{
-        Backtrack, backtrack, backtrack_from_result, choose_deterministic, choose_sequential,
-    },
+    backtrack::{Backtrack, backtrack, backtrack_from_result},
     cache::CallKey,
-    error::ErrorKind,
+    error::{Error, ErrorKind},
 };
 use crate::lang::data::value::{ValueArena, ValueKind};
 use crate::{
@@ -278,9 +278,20 @@ fn invoke_defined_rel<Iface: Interface, Exn: Extern>(
         })
     };
     let result = if det {
-        choose_deterministic(paths, &mut evaluate)
+        choose_deterministic(paths, &mut evaluate, |(group_a, path_a), (group_b, path_b)| {
+            Error::new(
+                ErrorKind::Call(CallErrorKind::RelationNondeterminism {
+                    relation: id.node.clone(),
+                    group_a: group_a.id.node.clone(),
+                    path_a: path_a.id.node.clone(),
+                    group_b: group_b.id.node.clone(),
+                    path_b: path_b.id.node.clone(),
+                }),
+                id.span.clone(),
+            )
+        })
     } else {
-        choose_sequential(paths, &mut evaluate).with_candidates()
+        choose_sequential(paths, &mut evaluate)
     };
     match result {
         Backtrack::Ok(values) => Backtrack::Ok(values),
@@ -298,16 +309,6 @@ fn invoke_defined_rel<Iface: Interface, Exn: Extern>(
             }
             None => Backtrack::Unmatch(errors),
         },
-        Backtrack::Nondet((group_a, path_a), (group_b, path_b)) => Backtrack::err(
-            id.span.clone(),
-            ErrorKind::Call(CallErrorKind::RelationNondeterminism {
-                relation: id.node.clone(),
-                group_a: group_a.id.node.clone(),
-                path_a: path_a.id.node.clone(),
-                group_b: group_b.id.node.clone(),
-                path_b: path_b.id.node.clone(),
-            }),
-        ),
     }
 }
 
@@ -348,23 +349,7 @@ pub fn invoke_func<Iface: Interface, Exn: Extern>(
     if pure && let (Some(key), Backtrack::Ok(value)) = (key, &result) {
         runner.interp_mut().cache.funcs.insert(key, *value);
     }
-    result.nest(id.span.clone(), || {
-        ErrorKind::Trace(TraceErrorKind::FunctionInvocation {
-            func: id.node.clone(),
-            targs: if targs.is_empty() {
-                String::new()
-            } else {
-                format!(
-                    "<{}>",
-                    targs
-                        .iter()
-                        .map(Print::to_string)
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                )
-            },
-        })
-    })
+    result.nest(id.span.clone(), || ErrorKind::Trace(TraceErrorKind::function(id, targs)))
 }
 
 // - Extern function
@@ -557,9 +542,18 @@ fn invoke_defined_func<Iface: Interface, Exn: Extern>(
         eval_clause(runner, ctx, &ctx_local, defined_func, &defined_func.clauses[*idx], values)
     };
     let result = if det {
-        choose_deterministic(0..defined_func.clauses.len(), &mut evaluate)
+        choose_deterministic(0..defined_func.clauses.len(), &mut evaluate, |idx_a, idx_b| {
+            Error::new(
+                ErrorKind::Call(CallErrorKind::FunctionNondeterminism {
+                    func: defined_func.id.node.clone(),
+                    first: idx_a,
+                    second: idx_b,
+                }),
+                defined_func.id.span.clone(),
+            )
+        })
     } else {
-        choose_sequential(0..defined_func.clauses.len(), &mut evaluate).with_candidates()
+        choose_sequential(0..defined_func.clauses.len(), &mut evaluate)
     };
     match result {
         Backtrack::Ok(value) => Backtrack::Ok(value),
@@ -568,13 +562,5 @@ fn invoke_defined_func<Iface: Interface, Exn: Extern>(
             Some(clause) => eval_clause(runner, ctx, &ctx_local, defined_func, clause, values),
             None => Backtrack::Unmatch(errors),
         },
-        Backtrack::Nondet(idx_a, idx_b) => Backtrack::err(
-            defined_func.id.span.clone(),
-            ErrorKind::Call(CallErrorKind::FunctionNondeterminism {
-                func: defined_func.id.node.clone(),
-                first: idx_a,
-                second: idx_b,
-            }),
-        ),
     }
 }

@@ -1,6 +1,6 @@
 //! Shared path access and update evaluation
 
-use super::context::EvalContext;
+use super::super::context::EvalContext;
 
 use crate::{
     lang::{

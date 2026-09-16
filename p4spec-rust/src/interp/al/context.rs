@@ -464,34 +464,45 @@ impl<'global> Context<'global> {
     }
 }
 
-impl crate::interp::shared::context::ValueContext for Context<'_> {
+// = Shared evaluation interfaces
+
+impl crate::interp::shared::context::Context for Context<'_> {
     fn find_value(&self, var: &Variable) -> Result<&Value, Error> {
         self.find_value(var)
     }
+
     fn find_defined_typdef(&self, id: &ast::Id) -> Result<(&[ast::TParam], &ast::DefTyp), Error> {
         self.find_defined_typdef(id)
     }
+
     fn find_func_typ(&self, id: &ast::Id) -> Result<crate::lang::il::ast::FuncTyp, Error> {
         self.find_func_typ(id)
     }
+
     fn tdenv(&self) -> TDEnv {
         self.tdenv()
     }
+
     fn theta_local(&self) -> crate::runtime::ops::typ::Theta {
         self.theta_local()
     }
 }
+
 impl crate::interp::shared::context::AssignContext for Context<'_> {
     type Func = ast::MetaFuncDef;
+
     fn add_value(&mut self, var: Variable, value: Value) {
         self.add_value(var, value)
     }
+
     fn wipe(&self) -> Self {
         self.wipe()
     }
+
     fn lookup_func(&self, id: &ast::Id) -> Result<Rc<Self::Func>, Error> {
         self.find_func(id).map(|(_, func)| Rc::clone(func))
     }
+
     fn add_func(&mut self, id: ast::Id, func: Rc<Self::Func>) -> Result<(), Error> {
         self.add_func(id, func)
     }
@@ -500,6 +511,7 @@ impl<Iface: Interface, Exn: Extern> crate::interp::shared::context::EvalContext<
     for Context<'_>
 {
     type Interp = AlInterp;
+
     fn invoke_func(
         &self,
         runner: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
@@ -509,6 +521,7 @@ impl<Iface: Interface, Exn: Extern> crate::interp::shared::context::EvalContext<
     ) -> Backtrack<Value> {
         crate::interp::al::eval::call::invoke_func(runner, self, id, targs, values)
     }
+
     fn map_list(
         &self,
         runner: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
@@ -518,6 +531,7 @@ impl<Iface: Interface, Exn: Extern> crate::interp::shared::context::EvalContext<
     ) -> Backtrack<Vec<Value>> {
         self.map_list(runner, span, vars, eval)
     }
+
     fn map_opt(
         &self,
         runner: &mut RunnerContext<'_, AlInterp, Iface, Exn>,

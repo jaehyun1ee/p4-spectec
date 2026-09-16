@@ -1,6 +1,6 @@
 //! Shared expression evaluation
 
-use super::context::{EvalContext, ValueContext};
+use super::super::context::{Context, EvalContext};
 
 use std::{borrow::Borrow, rc::Rc};
 
@@ -104,7 +104,7 @@ pub(crate) fn eval_exps<
 
 // - Variable expression
 
-fn eval_var_exp<Ctx: ValueContext>(ctx: &Ctx, span: &Span, id: &ast::Id) -> Backtrack<Value> {
+fn eval_var_exp<Ctx: Context>(ctx: &Ctx, span: &Span, id: &ast::Id) -> Backtrack<Value> {
     let var = Variable::new(id.clone(), Vec::new());
     let value = *backtrack_from_result!(ctx.find_value(&var), span);
     Backtrack::Ok(value)

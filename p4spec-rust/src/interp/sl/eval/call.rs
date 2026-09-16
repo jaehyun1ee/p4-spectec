@@ -3,32 +3,28 @@
 use super::super::{
     SlInterp,
     context::{Context, Scope},
+    flow::Flow,
 };
-use super::{
-    assign,
-    instr::{self, Flow},
-};
+use super::{assign, instr};
+use crate::lang::common::source::Span;
 use crate::{
     interp::shared::{
         backtrack::{Backtrack, backtrack, backtrack_from_result},
         cache::CallKey,
-        error::{
-            AssignErrorKind, CallErrorKind, ErrorKind, GuardErrorKind, HostErrorKind,
-            TraceErrorKind,
-        },
+        error::{CallErrorKind, ErrorKind, GuardErrorKind, HostErrorKind, TraceErrorKind},
     },
     lang::{
         data::value::{Value, ValueArena, ValueKind},
         sl::ast,
-        traits::print::Print,
     },
     runner::{Extern, Interface, InterfaceError, RunnerContext},
     runtime::typdef::TypeDef,
 };
-use std::{borrow::Cow, rc::Rc};
+use std::borrow::Cow;
+
 // = Input and output checks
 
-pub(crate) fn check_rel_inputs(
+pub(in crate::interp::sl) fn check_rel_inputs(
     arena: &ValueArena,
     ctx: &Context<'_>,
     id: &ast::Id,
@@ -56,7 +52,7 @@ pub(crate) fn check_rel_inputs(
     )
 }
 
-pub(crate) fn check_func_inputs(
+pub(in crate::interp::sl) fn check_func_inputs(
     arena: &ValueArena,
     ctx: &Context<'_>,
     id: &ast::Id,
@@ -137,7 +133,7 @@ fn check_func_output(
 
 // = Cache eligibility
 
-pub(crate) fn cache_rel<Iface: Interface, Exn: Extern>(
+pub(in crate::interp::sl) fn cache_rel<Iface: Interface, Exn: Extern>(
     runner: &RunnerContext<'_, SlInterp, Iface, Exn>,
     ctx: &Context<'_>,
     id: &ast::Id,
@@ -145,7 +141,7 @@ pub(crate) fn cache_rel<Iface: Interface, Exn: Extern>(
     runner.interp().config.cache && matches!(ctx.find_rel(id), Ok(ast::RelDef::Defined(_)))
 }
 
-pub(crate) fn cache_func<Iface: Interface, Exn: Extern>(
+pub(in crate::interp::sl) fn cache_func<Iface: Interface, Exn: Extern>(
     runner: &RunnerContext<'_, SlInterp, Iface, Exn>,
     ctx: &Context<'_>,
     id: &ast::Id,
@@ -158,6 +154,70 @@ pub(crate) fn cache_func<Iface: Interface, Exn: Extern>(
             .iter()
             .any(|value| matches!(runner.arena().kind(value), ValueKind::Func(_)))
 }
+
+// = Relation invocation
+
+pub fn invoke_rel<Iface: Interface, Exn: Extern>(
+    runner: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
+    ctx: &Context<'_>,
+    id: &ast::Id,
+    values: &[Value],
+) -> Backtrack<Vec<Value>> {
+    let mut id = Cow::Borrowed(id);
+    let mut values = Cow::Borrowed(values);
+    let mut traces_pending: Vec<(Span, TraceErrorKind)> = Vec::new();
+    loop {
+        let key =
+            cache_rel(runner, ctx, &id).then(|| CallKey::new(runner.arena(), &id.node, &values));
+        if let Some(values) = key
+            .as_ref()
+            .and_then(|key| runner.interp().cache.rels.get(key))
+        {
+            return Backtrack::Ok(values.clone());
+        }
+        runner.interp_mut().cache.begin();
+        let result = stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
+            let rel = backtrack_from_result!(ctx.find_rel(&id), &id.span);
+            match rel {
+                ast::RelDef::Extern(rel) => {
+                    let values = backtrack!(invoke_extern_rel(runner, ctx, &id, rel, &values));
+                    Backtrack::Ok(Flow::Result(values))
+                }
+                ast::RelDef::Defined(rel) => invoke_defined_rel(runner, ctx, &id, rel, &values),
+            }
+        });
+        let pure = runner.interp_mut().cache.end();
+        let mut result = result.nest(id.span.clone(), || {
+            ErrorKind::Trace(TraceErrorKind::RelationInvocation { rel: id.node.clone() })
+        });
+        if !matches!(result, Backtrack::Ok(_)) {
+            for (span, trace) in traces_pending.iter().rev() {
+                result = result.nest(span.clone(), || ErrorKind::Trace(trace.clone()));
+            }
+        }
+        let flow = backtrack!(result);
+        match flow {
+            Flow::Result(values) => {
+                if pure && let Some(key) = key {
+                    runner.interp_mut().cache.rels.insert(key, values.clone());
+                }
+                return Backtrack::Ok(values);
+            }
+            Flow::TailRel(id_tail, values_tail) => {
+                let id_caller = id.into_owned();
+                traces_pending.push((
+                    id_caller.span,
+                    TraceErrorKind::RelationInvocation { rel: id_caller.node },
+                ));
+                id = Cow::Owned(id_tail);
+                values = Cow::Owned(values_tail);
+            }
+            _ => unreachable!("relation dispatch validates its flow"),
+        }
+    }
+}
+
+// - Extern relation
 
 fn invoke_extern_rel<Iface: Interface, Exn: Extern>(
     runner: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
@@ -199,6 +259,109 @@ fn invoke_extern_rel<Iface: Interface, Exn: Extern>(
     }
     Backtrack::Ok(values)
 }
+
+// - Defined relation
+
+fn invoke_defined_rel<Iface: Interface, Exn: Extern>(
+    runner: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
+    ctx: &Context<'_>,
+    id: &ast::Id,
+    rel: &ast::DefinedRel,
+    values: &[Value],
+) -> Backtrack<Flow> {
+    let ctx = backtrack!(assign::assign_exps(
+        runner.arena_mut(),
+        ctx.localize(),
+        &rel.exps_input,
+        values
+    ));
+    let flow =
+        backtrack!(instr::eval_block_with_else(runner, ctx, &rel.block, rel.block_else.as_deref()));
+    match flow {
+        Flow::Result(_) | Flow::TailRel(..) => Backtrack::Ok(flow),
+        Flow::Cont(errors) => Backtrack::Unmatch(errors),
+        Flow::Return(_) => Backtrack::err(
+            id.span.clone(),
+            ErrorKind::Call(CallErrorKind::InvalidFlow {
+                message: "relation cannot return a value",
+            }),
+        ),
+        Flow::TailFunc(..) => Backtrack::err(
+            id.span.clone(),
+            ErrorKind::Call(CallErrorKind::InvalidFlow {
+                message: "unexpected function tailcall in relation body",
+            }),
+        ),
+    }
+}
+
+// = Function invocation
+
+pub fn invoke_func<Iface: Interface, Exn: Extern>(
+    runner: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
+    ctx: &Context<'_>,
+    id: &ast::Id,
+    targs: &[ast::Typ],
+    values: &[Value],
+) -> Backtrack<Value> {
+    let mut id = Cow::Borrowed(id);
+    let mut targs = Cow::Borrowed(targs);
+    let mut values = Cow::Borrowed(values);
+    let mut traces_pending: Vec<(Span, TraceErrorKind)> = Vec::new();
+    loop {
+        let key = cache_func(runner, ctx, &id, &values)
+            .then(|| CallKey::new(runner.arena(), &id.node, &values));
+        if let Some(value) = key
+            .as_ref()
+            .and_then(|key| runner.interp().cache.funcs.get(key))
+        {
+            return Backtrack::Ok(*value);
+        }
+        runner.interp_mut().cache.begin();
+        let result = stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
+            let (_, func) = backtrack_from_result!(ctx.find_func(&id), &id.span);
+            match func.as_ref() {
+                ast::MetaFuncDef::Extern(func) => Backtrack::Ok(Flow::Return(backtrack!(
+                    invoke_extern_func(runner, ctx, &id, func, &targs, &values)
+                ))),
+                ast::MetaFuncDef::Builtin(func) => Backtrack::Ok(Flow::Return(backtrack!(
+                    invoke_builtin_func(runner, ctx, &id, func, &targs, &values)
+                ))),
+                ast::MetaFuncDef::Table(func) => invoke_table_func(runner, ctx, &id, func, &values),
+                ast::MetaFuncDef::Defined(func) => {
+                    invoke_defined_func(runner, ctx, &id, func, &targs, &values)
+                }
+            }
+        });
+        let pure = runner.interp_mut().cache.end();
+        let mut result = result
+            .nest(id.span.clone(), || ErrorKind::Trace(TraceErrorKind::function(&id, &targs)));
+        if !matches!(result, Backtrack::Ok(_)) {
+            for (span, trace) in traces_pending.iter().rev() {
+                result = result.nest(span.clone(), || ErrorKind::Trace(trace.clone()));
+            }
+        }
+        let flow = backtrack!(result);
+        match flow {
+            Flow::Return(value) => {
+                if pure && let Some(key) = key {
+                    runner.interp_mut().cache.funcs.insert(key, value);
+                }
+                return Backtrack::Ok(value);
+            }
+            Flow::TailFunc(id_tail, targs_tail, values_tail) => {
+                let trace = TraceErrorKind::function(&id, &targs);
+                traces_pending.push((id.into_owned().span, trace));
+                id = Cow::Owned(id_tail);
+                targs = Cow::Owned(targs_tail);
+                values = Cow::Owned(values_tail);
+            }
+            _ => unreachable!("function dispatch validates its flow"),
+        }
+    }
+}
+
+// - Extern function
 
 fn invoke_extern_func<Iface: Interface, Exn: Extern>(
     runner: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
@@ -275,275 +438,83 @@ fn invoke_builtin_func<Iface: Interface, Exn: Extern>(
     }
 }
 
-pub fn invoke_rel<Iface: Interface, Exn: Extern>(
+// - Table function
+
+fn invoke_table_func<Iface: Interface, Exn: Extern>(
     runner: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
     ctx: &Context<'_>,
     id: &ast::Id,
+    func: &ast::TableFunc,
     values: &[Value],
-) -> Backtrack<Vec<Value>> {
-    let mut id = Cow::Borrowed(id);
-    let mut values = Cow::Borrowed(values);
-    let mut pending = Vec::new();
-    loop {
-        let key =
-            cache_rel(runner, ctx, &id).then(|| CallKey::new(runner.arena(), &id.node, &values));
-        if let Some(values) = key
-            .as_ref()
-            .and_then(|key| runner.interp().cache.rels.get(key))
-        {
-            return Backtrack::Ok(values.clone());
-        }
-        runner.interp_mut().cache.begin();
-        let result = stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
-            let rel = backtrack_from_result!(ctx.find_rel(&id), &id.span);
-            match rel {
-                ast::RelDef::Extern(rel) => {
-                    let values = backtrack!(invoke_extern_rel(runner, ctx, &id, rel, &values));
-                    Backtrack::Ok(Flow::Result(values))
-                }
-                ast::RelDef::Defined(rel) => {
-                    let ctx = backtrack!(assign::assign_exps(
-                        runner.arena_mut(),
-                        ctx.localize(),
-                        &rel.exps_input,
-                        &values
-                    ));
-                    let flow = backtrack!(instr::eval_body(
-                        runner,
-                        ctx,
-                        &rel.block,
-                        rel.block_else.as_deref()
-                    ));
-                    match flow {
-                        Flow::Result(_) | Flow::TailRel(..) => Backtrack::Ok(flow),
-                        Flow::Cont(errors) => Backtrack::Unmatch(errors),
-                        Flow::Return(_) => invalid_flow(&id, "relation cannot return a value"),
-                        Flow::TailFunc(..) => {
-                            invalid_flow(&id, "unexpected function tailcall in relation body")
-                        }
-                    }
-                }
-            }
-        });
-        let pure = runner.interp_mut().cache.end();
-        let result = result.nest(id.span.clone(), || {
-            ErrorKind::Trace(TraceErrorKind::RelationInvocation { rel: id.node.clone() })
-        });
-        let flow = match result {
-            Backtrack::Ok(flow) => flow,
-            Backtrack::Err(errors) => return nest_pending(Backtrack::Err(errors), pending),
-            Backtrack::Unmatch(errors) => return nest_pending(Backtrack::Unmatch(errors), pending),
-        };
-        match flow {
-            Flow::Result(values) => {
-                if pure && let Some(key) = key {
-                    runner.interp_mut().cache.rels.insert(key, values.clone());
-                }
-                return Backtrack::Ok(values);
-            }
-            Flow::TailRel(id_tail, values_tail) => {
-                let id_pending = id.into_owned();
-                pending.push((
-                    id_pending.span,
-                    TraceErrorKind::RelationInvocation { rel: id_pending.node },
-                ));
-                id = Cow::Owned(id_tail);
-                values = Cow::Owned(values_tail);
-            }
-            _ => unreachable!("relation dispatch validates its flow"),
-        }
+) -> Backtrack<Flow> {
+    let ctx_local = backtrack!(assign::assign_params(
+        runner.arena_mut(),
+        ctx,
+        ctx.localize(),
+        &func.params,
+        values
+    ));
+    let instrs = func.table_rows.iter().flat_map(|row| row.block.iter());
+    let flow =
+        backtrack!(instr::eval_block_sequential(runner, Cow::Owned(ctx_local), instrs, true));
+    match flow {
+        Flow::Return(_) => Backtrack::Ok(flow),
+        _ => Backtrack::err(
+            id.span.clone(),
+            ErrorKind::Call(CallErrorKind::InvalidFlow { message: "table did not return a value" }),
+        ),
     }
 }
 
-pub fn invoke_func<Iface: Interface, Exn: Extern>(
+// - Defined function
+
+fn invoke_defined_func<Iface: Interface, Exn: Extern>(
     runner: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
     ctx: &Context<'_>,
     id: &ast::Id,
+    func: &ast::DefinedFunc,
     targs: &[ast::Typ],
     values: &[Value],
-) -> Backtrack<Value> {
-    let mut id = Cow::Borrowed(id);
-    let mut targs = Cow::Borrowed(targs);
-    let mut values = Cow::Borrowed(values);
-    let mut pending = Vec::new();
-    loop {
-        let key = cache_func(runner, ctx, &id, &values)
-            .then(|| CallKey::new(runner.arena(), &id.node, &values));
-        if let Some(value) = key
-            .as_ref()
-            .and_then(|key| runner.interp().cache.funcs.get(key))
-        {
-            return Backtrack::Ok(*value);
-        }
-        runner.interp_mut().cache.begin();
-        let result = stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
-            let (_, func) = backtrack_from_result!(ctx.find_func(&id), &id.span);
-            match func.as_ref() {
-                ast::MetaFuncDef::Extern(func) => Backtrack::Ok(Flow::Return(backtrack!(
-                    invoke_extern_func(runner, ctx, &id, func, &targs, &values)
-                ))),
-                ast::MetaFuncDef::Builtin(func) => Backtrack::Ok(Flow::Return(backtrack!(
-                    invoke_builtin_func(runner, ctx, &id, func, &targs, &values)
-                ))),
-                ast::MetaFuncDef::Table(func) => {
-                    let ctx_local = backtrack!(assign_params(
-                        runner.arena_mut(),
-                        ctx,
-                        ctx.localize(),
-                        &func.params,
-                        &values
-                    ));
-                    let instrs = func.table_rows.iter().flat_map(|row| row.block.iter());
-                    let flow = backtrack!(instr::eval_sequential(
-                        runner,
-                        Cow::Owned(ctx_local),
-                        instrs,
-                        true
-                    ));
-                    match flow {
-                        Flow::Return(_) => Backtrack::Ok(flow),
-                        _ => invalid_flow(&id, "table did not return a value"),
-                    }
-                }
-                ast::MetaFuncDef::Defined(func) => {
-                    backtrack!(Backtrack::check(
-                        func.tparams.len() == targs.len(),
-                        id.span.clone(),
-                        ErrorKind::Call(CallErrorKind::TypeArgumentArityMismatch {
-                            expected: func.tparams.len(),
-                            actual: targs.len()
-                        })
-                    ));
-                    let mut ctx_local = ctx.localize();
-                    for (tparam, targ) in func.tparams.iter().zip(targs.iter()) {
-                        let def_typ = crate::phrase!(node: ast::DefTypKind::Plain(targ.clone()), span: targ.span.clone());
-                        backtrack_from_result!(
-                            ctx_local.bind_tparam(
-                                tparam.clone(),
-                                TypeDef::Defined(vec![], Box::new(def_typ))
-                            ),
-                            &tparam.span
-                        );
-                    }
-                    let ctx_local = backtrack!(assign_params(
-                        runner.arena_mut(),
-                        ctx,
-                        ctx_local,
-                        &func.params,
-                        &values
-                    ));
-                    let flow = backtrack!(instr::eval_body(
-                        runner,
-                        ctx_local,
-                        &func.block,
-                        func.block_else.as_deref()
-                    ));
-                    match flow {
-                        Flow::Return(_) | Flow::TailFunc(..) => Backtrack::Ok(flow),
-                        Flow::Cont(errors) => Backtrack::Unmatch(errors),
-                        Flow::Result(_) => {
-                            invalid_flow(&id, "function cannot produce a relation result")
-                        }
-                        Flow::TailRel(..) => {
-                            invalid_flow(&id, "function cannot produce a relation tail call")
-                        }
-                    }
-                }
-            }
-        });
-        let pure = runner.interp_mut().cache.end();
-        let result = result.nest(id.span.clone(), || ErrorKind::Trace(func_trace(&id, &targs)));
-        let flow = match result {
-            Backtrack::Ok(flow) => flow,
-            Backtrack::Err(errors) => return nest_pending(Backtrack::Err(errors), pending),
-            Backtrack::Unmatch(errors) => return nest_pending(Backtrack::Unmatch(errors), pending),
-        };
-        match flow {
-            Flow::Return(value) => {
-                if pure && let Some(key) = key {
-                    runner.interp_mut().cache.funcs.insert(key, value);
-                }
-                return Backtrack::Ok(value);
-            }
-            Flow::TailFunc(id_tail, targs_tail, values_tail) => {
-                let trace = func_trace(&id, &targs);
-                pending.push((id.into_owned().span, trace));
-                id = Cow::Owned(id_tail);
-                targs = Cow::Owned(targs_tail);
-                values = Cow::Owned(values_tail);
-            }
-            _ => unreachable!("function dispatch validates its flow"),
-        }
-    }
-}
-
-fn invalid_flow<T>(id: &ast::Id, message: &'static str) -> Backtrack<T> {
-    Backtrack::err(id.span.clone(), ErrorKind::Call(CallErrorKind::InvalidFlow { message }))
-}
-
-fn assign_params<'global>(
-    arena: &mut ValueArena,
-    ctx_caller: &Context<'_>,
-    mut ctx: Context<'global>,
-    params: &[ast::Param],
-    values: &[Value],
-) -> Backtrack<Context<'global>> {
+) -> Backtrack<Flow> {
     backtrack!(Backtrack::check(
-        params.len() == values.len(),
-        crate::lang::common::source::Span::default(),
-        ErrorKind::Assign(AssignErrorKind::ArgumentArityMismatch {
-            expected: params.len(),
-            actual: values.len()
+        func.tparams.len() == targs.len(),
+        id.span.clone(),
+        ErrorKind::Call(CallErrorKind::TypeArgumentArityMismatch {
+            expected: func.tparams.len(),
+            actual: targs.len()
         })
     ));
-    for (param, value) in params.iter().zip(values) {
-        match &param.node {
-            ast::ParamKind::Exp(_, exp) => {
-                ctx = backtrack!(assign::assign_exp(arena, ctx, exp, *value))
-            }
-            ast::ParamKind::Def(id, ..) => {
-                let ValueKind::Func(id_func) = arena.kind(value) else {
-                    return Backtrack::err(
-                        id.span.clone(),
-                        ErrorKind::Assign(AssignErrorKind::DefinitionMismatch {
-                            value: arena.to_string(value),
-                            def: id.node.clone(),
-                        }),
-                    );
-                };
-                let (_, func) =
-                    backtrack_from_result!(ctx_caller.find_func(id_func), &id_func.span);
-                backtrack_from_result!(ctx.add_func(id.clone(), Rc::clone(func)), &id.span);
-            }
-        }
+    let mut ctx_local = ctx.localize();
+    for (tparam, targ) in func.tparams.iter().zip(targs.iter()) {
+        let def_typ =
+            crate::phrase!(node: ast::DefTypKind::Plain(targ.clone()), span: targ.span.clone());
+        backtrack_from_result!(
+            ctx_local.bind_tparam(tparam.clone(), TypeDef::Defined(vec![], Box::new(def_typ))),
+            &tparam.span
+        );
     }
-    Backtrack::Ok(ctx)
-}
-
-fn nest_pending<T>(
-    mut result: Backtrack<T>,
-    pending: Vec<(crate::lang::common::source::Span, TraceErrorKind)>,
-) -> Backtrack<T> {
-    for (span, trace) in pending.into_iter().rev() {
-        result = result.nest(span, || ErrorKind::Trace(trace));
-    }
-    result
-}
-
-fn func_trace(id: &ast::Id, targs: &[ast::Typ]) -> TraceErrorKind {
-    TraceErrorKind::FunctionInvocation {
-        func: id.node.clone(),
-        targs: if targs.is_empty() {
-            String::new()
-        } else {
-            format!(
-                "<{}>",
-                targs
-                    .iter()
-                    .map(Print::to_string)
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            )
-        },
+    let ctx_local =
+        backtrack!(assign::assign_params(runner.arena_mut(), ctx, ctx_local, &func.params, values));
+    let flow = backtrack!(instr::eval_block_with_else(
+        runner,
+        ctx_local,
+        &func.block,
+        func.block_else.as_deref()
+    ));
+    match flow {
+        Flow::Return(_) | Flow::TailFunc(..) => Backtrack::Ok(flow),
+        Flow::Cont(errors) => Backtrack::Unmatch(errors),
+        Flow::Result(_) => Backtrack::err(
+            id.span.clone(),
+            ErrorKind::Call(CallErrorKind::InvalidFlow {
+                message: "function cannot produce a relation result",
+            }),
+        ),
+        Flow::TailRel(..) => Backtrack::err(
+            id.span.clone(),
+            ErrorKind::Call(CallErrorKind::InvalidFlow {
+                message: "function cannot produce a relation tail call",
+            }),
+        ),
     }
 }

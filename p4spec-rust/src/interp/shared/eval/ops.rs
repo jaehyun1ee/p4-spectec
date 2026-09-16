@@ -1,6 +1,6 @@
-//! Value operations shared by AL expression and path evaluation
+//! Value operations shared by expression and path evaluation
 
-use super::context::ValueContext;
+use super::super::context::Context;
 
 use num_bigint::BigInt;
 
@@ -28,7 +28,7 @@ use crate::interp::shared::{
 
 pub(crate) fn cast_up(
     arena: &mut ValueArena,
-    ctx: &impl ValueContext,
+    ctx: &impl Context,
     typ: &ast::Typ,
     value: Value,
 ) -> Backtrack<Value> {
@@ -106,7 +106,7 @@ pub(crate) fn cast_up(
 
 pub(crate) fn cast_down(
     arena: &mut ValueArena,
-    ctx: &impl ValueContext,
+    ctx: &impl Context,
     typ: &ast::Typ,
     value: Value,
 ) -> Backtrack<Value> {
@@ -544,7 +544,7 @@ pub(crate) fn compare(
 
 pub(crate) fn check_sub(
     arena: &ValueArena,
-    ctx: &impl ValueContext,
+    ctx: &impl Context,
     span: &Span,
     subcheck: &ast::Subcheck,
     value: Value,

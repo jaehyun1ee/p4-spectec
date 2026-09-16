@@ -1,6 +1,7 @@
 //! Structured-language execution over the composed runner
 
 pub mod context;
+pub mod flow;
 
 pub mod eval;
 

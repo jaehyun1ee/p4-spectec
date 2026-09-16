@@ -1,6 +1,6 @@
 //! Destructuring assignments preserve iteration paths and isolate list rows
 
-use super::context::AssignContext;
+use super::super::context::AssignContext;
 
 use std::borrow::Borrow;
 

@@ -1,6 +1,6 @@
 //! Shared argument evaluation
 
-use super::context::{EvalContext, ValueContext};
+use super::super::context::{Context, EvalContext};
 
 use crate::{
     lang::{
@@ -40,7 +40,7 @@ pub(crate) fn eval_args<Ctx: EvalContext<Iface, Exn>, Iface: Interface, Exn: Ext
 
 // - Function argument
 
-fn eval_def_arg<Ctx: ValueContext>(
+fn eval_def_arg<Ctx: Context>(
     arena: &mut ValueArena,
     ctx: &Ctx,
     id: &ast::Id,

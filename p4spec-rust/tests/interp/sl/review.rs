@@ -1,6 +1,6 @@
 use super::*;
 use p4spec_rust::{
-    interp::{shared::assign::assign_exp, shared::error::Error, sl::context::Context},
+    interp::{shared::error::Error, shared::eval::assign::assign_exp, sl::context::Context},
     lang::{
         common::{Variable, notation::mixfix::Mixfix},
         data::{typ, value::ValueArena},
