@@ -43,13 +43,6 @@ fn find_variant_case_analysis(
 
 // == Instructions
 
-fn totalize_case_analysis(tdenv: &TDEnv, block: Block) -> Result<Block, StructureError> {
-    block
-        .into_iter()
-        .map(|instr| totalize_instr(tdenv, instr))
-        .collect()
-}
-
 fn totalize_instr(tdenv: &TDEnv, instr: Instr) -> Result<Instr, StructureError> {
     let Phrase {
         node: instr_kind,
@@ -68,10 +61,11 @@ fn totalize_instr_kind(tdenv: &TDEnv, instr_kind: InstrKind) -> Result<InstrKind
         InstrKind::Group(instr) => totalize_group_instr(tdenv, instr),
         InstrKind::Let(instr) => totalize_let_instr(tdenv, instr),
         InstrKind::Rule(instr) => totalize_rule_instr(tdenv, instr),
-        // The source deliberately leaves Debug and its enclosed instruction alone
         instr_kind => Ok(instr_kind),
     }
 }
+
+// - If instruction
 
 fn totalize_if_instr(tdenv: &TDEnv, instr: IfInstr) -> Result<InstrKind, StructureError> {
     let IfInstr {
@@ -79,13 +73,15 @@ fn totalize_if_instr(tdenv: &TDEnv, instr: IfInstr) -> Result<InstrKind, Structu
         iter_exps,
         block,
     } = instr;
-    let block = totalize_case_analysis(tdenv, block)?;
+    let block = totalize_block(tdenv, block)?;
     Ok(InstrKind::If(IfInstr {
         exp,
         iter_exps,
         block,
     }))
 }
+
+// - Hold instruction
 
 fn totalize_hold_instr(tdenv: &TDEnv, instr: HoldInstr) -> Result<InstrKind, StructureError> {
     let HoldInstr {
@@ -95,8 +91,8 @@ fn totalize_hold_instr(tdenv: &TDEnv, instr: HoldInstr) -> Result<InstrKind, Str
         block_hold,
         block_not_hold,
     } = instr;
-    let block_hold = totalize_case_analysis(tdenv, block_hold)?;
-    let block_not_hold = totalize_case_analysis(tdenv, block_not_hold)?;
+    let block_hold = totalize_block(tdenv, block_hold)?;
+    let block_not_hold = totalize_block(tdenv, block_not_hold)?;
     Ok(InstrKind::Hold(HoldInstr {
         id,
         not_exp,
@@ -106,11 +102,19 @@ fn totalize_hold_instr(tdenv: &TDEnv, instr: HoldInstr) -> Result<InstrKind, Str
     }))
 }
 
+// - Case instruction
+
+fn totalize_case(tdenv: &TDEnv, case: Case) -> Result<Case, StructureError> {
+    let Case { guard, block } = case;
+    let block = totalize_block(tdenv, block)?;
+    Ok(Case { guard, block })
+}
+
 fn totalize_case_instr(tdenv: &TDEnv, instr: CaseInstr) -> Result<InstrKind, StructureError> {
     let CaseInstr { exp, cases, total } = instr;
     let cases = cases
         .into_iter()
-        .map(|case| totalize_case_block(tdenv, case))
+        .map(|case| totalize_case(tdenv, case))
         .collect::<Result<Vec<_>, _>>()?;
     let total = if let Some(mixops_case) = find_variant_case_analysis(tdenv, &cases)? {
         let typ = crate::phrase!(node: exp.note.as_ref().clone(), span: exp.span.clone());
@@ -126,11 +130,7 @@ fn totalize_case_instr(tdenv: &TDEnv, instr: CaseInstr) -> Result<InstrKind, Str
     Ok(InstrKind::Case(CaseInstr { exp, cases, total }))
 }
 
-fn totalize_case_block(tdenv: &TDEnv, case: Case) -> Result<Case, StructureError> {
-    let Case { guard, block } = case;
-    let block = totalize_case_analysis(tdenv, block)?;
-    Ok(Case { guard, block })
-}
+// - Group instruction
 
 fn totalize_group_instr(tdenv: &TDEnv, instr: GroupInstr) -> Result<InstrKind, StructureError> {
     let GroupInstr {
@@ -139,7 +139,7 @@ fn totalize_group_instr(tdenv: &TDEnv, instr: GroupInstr) -> Result<InstrKind, S
         exps,
         block,
     } = instr;
-    let block = totalize_case_analysis(tdenv, block)?;
+    let block = totalize_block(tdenv, block)?;
     Ok(InstrKind::Group(GroupInstr {
         id,
         rel_signature,
@@ -148,6 +148,8 @@ fn totalize_group_instr(tdenv: &TDEnv, instr: GroupInstr) -> Result<InstrKind, S
     }))
 }
 
+// - Let instruction
+
 fn totalize_let_instr(tdenv: &TDEnv, instr: LetInstr) -> Result<InstrKind, StructureError> {
     let LetInstr {
         exp_l,
@@ -155,7 +157,7 @@ fn totalize_let_instr(tdenv: &TDEnv, instr: LetInstr) -> Result<InstrKind, Struc
         iter_instrs,
         block,
     } = instr;
-    let block = totalize_case_analysis(tdenv, block)?;
+    let block = totalize_block(tdenv, block)?;
     Ok(InstrKind::Let(LetInstr {
         exp_l,
         exp_r,
@@ -163,6 +165,8 @@ fn totalize_let_instr(tdenv: &TDEnv, instr: LetInstr) -> Result<InstrKind, Struc
         block,
     }))
 }
+
+// - Rule instruction
 
 fn totalize_rule_instr(tdenv: &TDEnv, instr: RuleInstr) -> Result<InstrKind, StructureError> {
     let RuleInstr {
@@ -172,7 +176,7 @@ fn totalize_rule_instr(tdenv: &TDEnv, instr: RuleInstr) -> Result<InstrKind, Str
         iter_instrs,
         block,
     } = instr;
-    let block = totalize_case_analysis(tdenv, block)?;
+    let block = totalize_block(tdenv, block)?;
     Ok(InstrKind::Rule(RuleInstr {
         id,
         not_exp,
@@ -182,20 +186,17 @@ fn totalize_rule_instr(tdenv: &TDEnv, instr: RuleInstr) -> Result<InstrKind, Str
     }))
 }
 
-// == Entry points
+// == Entry point
 
-pub(crate) fn totalize(
-    tdenv: &TDEnv,
-    block: Block,
-    block_else: Option<Block>,
-) -> Result<(Block, Option<Block>), StructureError> {
-    let block = totalize_case_analysis(tdenv, block)?;
-    let block_else = block_else
-        .map(|block| totalize_case_analysis(tdenv, block))
-        .transpose()?;
-    Ok((block, block_else))
+fn totalize_block(tdenv: &TDEnv, block: Block) -> Result<Block, StructureError> {
+    block
+        .into_iter()
+        .map(|instr| totalize_instr(tdenv, instr))
+        .collect()
 }
 
-pub(crate) fn totalize_without_else(tdenv: &TDEnv, block: Block) -> Result<Block, StructureError> {
-    totalize_case_analysis(tdenv, block)
+// == Entry points
+
+pub(crate) fn totalize(tdenv: &TDEnv, block: Block) -> Result<Block, StructureError> {
+    totalize_block(tdenv, block)
 }

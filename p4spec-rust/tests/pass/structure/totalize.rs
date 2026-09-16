@@ -80,7 +80,7 @@ fn test_variant_coverage_duplicates_order_and_alias() {
             panic!()
         };
         instr_case_expect.total = total_expect;
-        let block = totalize_without_else(&tdenv, vec![instr_case]).unwrap();
+        let block = totalize(&tdenv, vec![instr_case]).unwrap();
         assert_eq!(block, vec![instr_expect]);
     }
 }
@@ -91,8 +91,7 @@ fn test_subtype_pattern_coverage_and_nonvariant_guard_short_circuit() {
     let typ = variant(&mut tdenv, "Choice", &["A", "B"]);
     let typ_a = variant(&mut tdenv, "Single", &["A"]);
     let guard = Guard::Sub(typ_a, Box::new(crate::lang::il::ast::Subcheck::Skip));
-    let block =
-        totalize_without_else(&tdenv, vec![case(&typ, vec![guard, pattern("B")], false)]).unwrap();
+    let block = totalize(&tdenv, vec![case(&typ, vec![guard, pattern("B")], false)]).unwrap();
     assert!(is_total(&block));
     let typ_bool = crate::phrase!(node: TypKind::Bool, span: span(12));
     for guard in [
@@ -112,7 +111,7 @@ fn test_subtype_pattern_coverage_and_nonvariant_guard_short_circuit() {
             true,
         );
         assert_eq!(
-            totalize_without_else(&tdenv, vec![instr_case.clone()]).unwrap(),
+            totalize(&tdenv, vec![instr_case.clone()]).unwrap(),
             vec![instr_case]
         );
     }
@@ -131,8 +130,7 @@ fn test_nonvariant_failures_are_located_and_debug_is_not_totalized() {
             span(12),
         ),
     ] {
-        let error =
-            totalize_without_else(&TDEnv::new(), vec![case(&typ, guards, false)]).unwrap_err();
+        let error = totalize(&TDEnv::new(), vec![case(&typ, guards, false)]).unwrap_err();
         assert_eq!(error.kind, StructureErrorKind::NonVariantTotalization);
         assert_eq!(error.span, span_expect);
     }
@@ -140,18 +138,12 @@ fn test_nonvariant_failures_are_located_and_debug_is_not_totalized() {
         exp: variable("debug"),
         instr: Box::new(case(&typ, vec![pattern("A")], false)),
     }));
-    let (block_result, block_else_result) = totalize(
-        &TDEnv::new(),
-        vec![instr_debug.clone()],
-        Some(vec![instr_debug.clone()]),
-    )
-    .unwrap();
-    assert_eq!(block_result, vec![instr_debug.clone()]);
-    assert_eq!(block_else_result, Some(vec![instr_debug]));
+    let block_result = totalize(&TDEnv::new(), vec![instr_debug.clone()]).unwrap();
+    assert_eq!(block_result, vec![instr_debug]);
 }
 
 #[test]
-fn test_totalization_descends_all_owning_blocks_and_else() {
+fn test_totalization_descends_all_owning_blocks() {
     let mut tdenv = TDEnv::new();
     let typ = variant(&mut tdenv, "Choice", &["A"]);
     let instr_case = case(&typ, vec![pattern("A")], false);
@@ -203,13 +195,6 @@ fn test_totalization_descends_all_owning_blocks_and_else() {
             })),
         ]
     };
-    let (block_result, block_else_result) =
-        totalize(&tdenv, wrap(instr_case.clone()), Some(wrap(instr_case))).unwrap();
-    assert_eq!(block_result, wrap(instr_expect.clone()));
-    assert_eq!(block_else_result, Some(wrap(instr_expect)));
-    assert_eq!(
-        totalize(&tdenv, vec![], Some(vec![])).unwrap().1,
-        Some(vec![])
-    );
-    assert!(totalize(&tdenv, vec![], None).unwrap().1.is_none());
+    let block_result = totalize(&tdenv, wrap(instr_case)).unwrap();
+    assert_eq!(block_result, wrap(instr_expect));
 }

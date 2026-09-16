@@ -749,7 +749,10 @@ fn struct_defined_rel_def(
     let block_else = block_else
         .map(|block_else| opt::optimize(&ctx.tdenv, block_else, without_rule_groups))
         .transpose()?;
-    let (block, block_else) = totalize::totalize(&ctx.tdenv, block, block_else)?;
+    let block = totalize::totalize(&ctx.tdenv, block)?;
+    let block_else = block_else
+        .map(|block_else| totalize::totalize(&ctx.tdenv, block_else))
+        .transpose()?;
     let (exps_input, block, block_else) = pretty::pretty_rel(exps_template, block, block_else)?;
     let (block, block_else) = dangle::instrument(block, block_else)?;
     let def_rel_sl = sl::DefinedRel {
@@ -867,7 +870,7 @@ fn struct_table_dec_def(
         .collect::<Result<Vec<_>, _>>()?;
     let blocks_ol = blocks_ol
         .into_iter()
-        .map(|block_ol| totalize::totalize_without_else(&ctx.tdenv, block_ol))
+        .map(|block_ol| totalize::totalize(&ctx.tdenv, block_ol))
         .collect::<Result<Vec<_>, _>>()?;
     let blocks_sl = blocks_ol
         .into_iter()
@@ -934,7 +937,10 @@ fn struct_func_dec_def(
     let block_else = block_else
         .map(|block_else| opt::optimize(&ctx.tdenv, block_else, without_rule_groups))
         .transpose()?;
-    let (block, block_else) = totalize::totalize(&ctx.tdenv, block, block_else)?;
+    let block = totalize::totalize(&ctx.tdenv, block)?;
+    let block_else = block_else
+        .map(|block_else| totalize::totalize(&ctx.tdenv, block_else))
+        .transpose()?;
     let (args_input, block, block_else) = pretty::pretty_func(args_template, block, block_else)?;
     let params_sl = struct_params_from_args(ctx, params_al, args_input, span)?;
     let (block, block_else) = dangle::instrument(block, block_else)?;
