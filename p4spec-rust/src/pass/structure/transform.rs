@@ -6,8 +6,8 @@
 //! AL -> OL -> optimize -> totalize -> prettify -> SL with fallthrough flags
 
 use super::{
-    StructureError, StructureErrorKind, antiunify, context::Context, dangle, merge, ol::ast as ol,
-    opt, pretty, totalize,
+    StructureError, StructureErrorKind, antiunify, context::Context, dangle, ol::ast as ol, opt,
+    pretty, totalize,
 };
 use crate::lang::{
     al::{ast as al, fresh},
@@ -478,7 +478,7 @@ fn struct_rule_group(
         .into_iter()
         .map(|rule_path| struct_rule_path(rel_signature, rule_path))
         .collect::<Result<_, _>>()?;
-    let block = merge::merge_blocks(blocks);
+    let block = opt::merge::merge_blocks(blocks);
     let span = id.span.clone();
     let instr_ol = ol::GroupInstr {
         id,
@@ -737,7 +737,7 @@ fn struct_defined_rel_def(
         .zip(rule_groups)
         .map(|(prems, rule_group)| struct_rule_group(&rel_signature, prems, rule_group))
         .collect::<Result<_, _>>()?;
-    let block = merge::merge_blocks(blocks);
+    let block = opt::merge::merge_blocks(blocks);
     let block_else = match (prems_else, else_group) {
         (Some(prems), Some(else_group)) => {
             let block_else = struct_else_group(&rel_signature, prems, else_group)?;
@@ -931,7 +931,7 @@ fn struct_func_dec_def(
         .into_iter()
         .map(struct_clause_path)
         .collect::<Result<_, _>>()?;
-    let block = merge::merge_blocks(blocks);
+    let block = opt::merge::merge_blocks(blocks);
     let block_else = path_else.map(struct_clause_path).transpose()?;
     let block = opt::optimize(&ctx.tdenv, block, without_rule_groups)?;
     let block_else = block_else

@@ -3,7 +3,7 @@
 //! `if p { A }` followed by `if p { B }` becomes `if p { A; B }`
 //! The merged condition retains the first instruction's source span
 
-use super::ol::ast::{Block, IfInstr, Instr, InstrKind};
+use super::super::ol::ast::{Block, IfInstr, Instr, InstrKind};
 use crate::lang::traits::eq::SyntaxEq;
 
 // == Block merging

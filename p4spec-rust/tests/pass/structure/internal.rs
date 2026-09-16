@@ -43,8 +43,6 @@ mod antiunify;
 mod context;
 #[path = "dangle.rs"]
 mod dangle;
-#[path = "merge.rs"]
-mod merge;
 #[path = "ol.rs"]
 mod ol;
 #[path = "opt.rs"]

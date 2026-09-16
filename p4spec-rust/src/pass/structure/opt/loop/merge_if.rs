@@ -19,7 +19,7 @@ use std::collections::VecDeque;
 use super::super::overlap::{Overlap, overlap_exp};
 use crate::{
     lang::{common::source::Phrase, traits::eq::SyntaxEq},
-    pass::structure::{StructureError, merge::merge_block, ol::ast::*},
+    pass::structure::{StructureError, ol::ast::*, opt::merge::merge_block},
     runtime::envs::algo::TDEnv,
 };
 

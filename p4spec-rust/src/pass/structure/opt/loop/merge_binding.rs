@@ -24,7 +24,7 @@ use crate::lang::{
     traits::{eq::SyntaxEq, free::Free},
 };
 use crate::pass::structure::{
-    StructureError, StructureErrorKind, merge::merge_block, ol::ast::*, re::renamer::Renamer,
+    StructureError, StructureErrorKind, ol::ast::*, opt::merge::merge_block, re::renamer::Renamer,
 };
 
 struct ExpUnit<'a> {

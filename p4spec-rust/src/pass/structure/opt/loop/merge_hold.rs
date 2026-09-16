@@ -18,7 +18,7 @@
 use std::collections::VecDeque;
 
 use crate::lang::{common::source::Phrase, traits::eq::SyntaxEq};
-use crate::pass::structure::{merge::merge_block, ol::ast::*};
+use crate::pass::structure::{ol::ast::*, opt::merge::merge_block};
 
 fn merge_identical_hold(
     instr_target: &HoldInstr,

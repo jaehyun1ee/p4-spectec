@@ -24,7 +24,7 @@ use crate::{
         common::source::{Phrase, Span},
         traits::eq::SyntaxEq,
     },
-    pass::structure::{StructureError, merge::merge_block, ol::ast::*},
+    pass::structure::{StructureError, ol::ast::*, opt::merge::merge_block},
     runtime::envs::algo::TDEnv,
 };
 

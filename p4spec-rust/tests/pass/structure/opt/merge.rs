@@ -1,6 +1,6 @@
 use super::{instr, ret, span, variable};
 use crate::lang::il::ast::Iter;
-use crate::pass::structure::{merge::merge_blocks, ol::ast::*};
+use crate::pass::structure::{ol::ast::*, opt::merge::merge_blocks};
 
 fn if_instr(text_cond: &str, iter: Iter, block: Block, num_line: i64) -> Instr {
     let mut instr_if = instr(InstrKind::If(IfInstr {

@@ -4,7 +4,6 @@ mod antiunify;
 mod context;
 mod dangle;
 mod error;
-mod merge;
 mod ol;
 mod opt;
 mod pretty;

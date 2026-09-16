@@ -1,5 +1,7 @@
 #[path = "opt/loop.rs"]
 mod loop_rewrites;
+#[path = "opt/merge.rs"]
+mod merge;
 #[path = "opt/overlap.rs"]
 mod overlap;
 #[path = "opt/post.rs"]

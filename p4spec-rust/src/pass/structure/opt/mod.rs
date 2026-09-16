@@ -4,6 +4,7 @@
 //! Loop rewrites repeat until syntax equality; post-rewrites then run once
 
 pub(super) mod r#loop;
+pub(super) mod merge;
 pub(super) mod overlap;
 pub(super) mod post;
 pub(super) mod pre;
