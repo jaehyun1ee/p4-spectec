@@ -15,27 +15,35 @@ fn span(int_line: i64) -> Span {
     let pos = Position::new("structure.watsup", int_line, 0);
     Span::new(pos.clone(), pos)
 }
+
 fn id(text: &str, int_line: i64) -> al::Id {
     p4spec_rust::phrase! {node: text.to_owned(), span: span(int_line)}
 }
+
 fn typ(int_line: i64) -> al::Typ {
     p4spec_rust::phrase! {node: al::TypKind::Bool, span: span(int_line)}
 }
+
 fn variable(text: &str, int_line: i64) -> al::Exp {
     p4spec_rust::note_phrase! {node: al::ExpKind::Var(id(text, int_line)), note: al::TypKind::Bool, span: span(int_line)}
 }
+
 fn boolean(value: bool, int_line: i64) -> al::Exp {
     p4spec_rust::note_phrase! {node: al::ExpKind::Bool(value), note: al::TypKind::Bool, span: span(int_line)}
 }
+
 fn param(int_line: i64) -> al::Param {
     p4spec_rust::phrase! {node: al::ParamKind::Exp(typ(int_line)), span: span(int_line)}
 }
+
 fn clause(prems: Vec<al::Prem>, int_line: i64) -> al::Clause {
     p4spec_rust::phrase! {node: al::ClauseKind {args: vec![p4spec_rust::phrase! {node: al::ArgKind::Exp(Box::new(variable("x", int_line))), span: span(int_line)}], exp: variable("x", int_line + 1), prems}, span: span(int_line)}
 }
+
 fn function(clauses: Vec<al::Clause>, else_clause: Option<al::Clause>) -> al::Def {
     p4spec_rust::phrase! {node: al::DefKind::MetaFunc(al::MetaFuncDef::Defined(Box::new(al::DefinedFunc {id: id("f", 1), tparams: vec![], params: vec![param(2)], typ: typ(3), clauses, else_clause, hints: vec![]}))), span: span(1)}
 }
+
 fn function_sl(def_sl: &sl::Def) -> &sl::DefinedFunc {
     let def_kind_sl = &def_sl.node;
     let sl::DefKind::MetaFunc(def_func_sl) = def_kind_sl else {
@@ -46,6 +54,7 @@ fn function_sl(def_sl: &sl::Def) -> &sl::DefinedFunc {
     };
     def_func_sl
 }
+
 fn if_prem(int_line: i64) -> al::Prem {
     p4spec_rust::phrase! {node: al::PremKind::If(al::IfPrem {exp: variable("x", int_line)}), span: span(int_line)}
 }
@@ -307,6 +316,7 @@ fn count_groups(block: &sl::Block) -> usize {
         .map(|instr| count_instr_groups(&instr.node))
         .sum()
 }
+
 fn count_instr_groups(instr_kind: &sl::InstrKind) -> usize {
     match instr_kind {
         sl::InstrKind::Group(instr) => 1 + count_groups(&instr.block),

@@ -9,6 +9,8 @@ use crate::lang::{
     sl::ast as sl,
 };
 
+// == Lowering instructions
+
 fn insert_dangle(block_ol: ol::Block) -> Result<sl::Block, StructureError> {
     insert_block(block_ol, true)
 }
@@ -36,19 +38,19 @@ fn insert_instr_kind(
     span: &Span,
 ) -> Result<sl::InstrKind, StructureError> {
     match instr_kind_ol {
-        ol::InstrKind::If(instr_ol) => insert_if(instr_ol, dangle),
-        ol::InstrKind::Hold(instr_ol) => insert_hold(instr_ol, dangle, span),
-        ol::InstrKind::Case(instr_ol) => insert_case(instr_ol, dangle),
-        ol::InstrKind::Group(instr_ol) => insert_group(instr_ol, dangle),
-        ol::InstrKind::Let(instr_ol) => insert_let(instr_ol, dangle),
-        ol::InstrKind::Rule(instr_ol) => insert_rule(instr_ol, dangle),
-        ol::InstrKind::Result(instr_ol) => Ok(insert_result(instr_ol)),
-        ol::InstrKind::Return(instr_ol) => Ok(insert_return(instr_ol)),
-        ol::InstrKind::Debug(instr_ol) => insert_debug(instr_ol, dangle),
+        ol::InstrKind::If(instr_ol) => insert_if_instr(instr_ol, dangle),
+        ol::InstrKind::Hold(instr_ol) => insert_hold_instr(instr_ol, dangle, span),
+        ol::InstrKind::Case(instr_ol) => insert_case_instr(instr_ol, dangle),
+        ol::InstrKind::Group(instr_ol) => insert_group_instr(instr_ol, dangle),
+        ol::InstrKind::Let(instr_ol) => insert_let_instr(instr_ol, dangle),
+        ol::InstrKind::Rule(instr_ol) => insert_rule_instr(instr_ol, dangle),
+        ol::InstrKind::Result(instr_ol) => Ok(insert_result_instr(instr_ol)),
+        ol::InstrKind::Return(instr_ol) => Ok(insert_return_instr(instr_ol)),
+        ol::InstrKind::Debug(instr_ol) => insert_debug_instr(instr_ol, dangle),
     }
 }
 
-fn insert_if(instr_ol: ol::IfInstr, dangle: bool) -> Result<sl::InstrKind, StructureError> {
+fn insert_if_instr(instr_ol: ol::IfInstr, dangle: bool) -> Result<sl::InstrKind, StructureError> {
     let ol::IfInstr {
         exp,
         iter_exps,
@@ -62,7 +64,8 @@ fn insert_if(instr_ol: ol::IfInstr, dangle: bool) -> Result<sl::InstrKind, Struc
         dangle,
     }))
 }
-fn insert_hold(
+
+fn insert_hold_instr(
     instr_ol: ol::HoldInstr,
     dangle: bool,
     span: &Span,
@@ -94,7 +97,11 @@ fn insert_hold(
         hold_case,
     }))
 }
-fn insert_case(instr_ol: ol::CaseInstr, dangle: bool) -> Result<sl::InstrKind, StructureError> {
+
+fn insert_case_instr(
+    instr_ol: ol::CaseInstr,
+    dangle: bool,
+) -> Result<sl::InstrKind, StructureError> {
     let ol::CaseInstr {
         exp,
         cases: cases_ol,
@@ -110,6 +117,7 @@ fn insert_case(instr_ol: ol::CaseInstr, dangle: bool) -> Result<sl::InstrKind, S
         dangle: dangle && !total,
     }))
 }
+
 fn insert_case_block(case_ol: ol::Case, dangle: bool) -> Result<sl::Case, StructureError> {
     let ol::Case {
         guard,
@@ -118,7 +126,11 @@ fn insert_case_block(case_ol: ol::Case, dangle: bool) -> Result<sl::Case, Struct
     let block = insert_block(block_ol, dangle)?;
     Ok(sl::Case { guard, block })
 }
-fn insert_group(instr_ol: ol::GroupInstr, dangle: bool) -> Result<sl::InstrKind, StructureError> {
+
+fn insert_group_instr(
+    instr_ol: ol::GroupInstr,
+    dangle: bool,
+) -> Result<sl::InstrKind, StructureError> {
     let ol::GroupInstr {
         id,
         rel_signature,
@@ -133,7 +145,8 @@ fn insert_group(instr_ol: ol::GroupInstr, dangle: bool) -> Result<sl::InstrKind,
         block,
     }))
 }
-fn insert_let(instr_ol: ol::LetInstr, dangle: bool) -> Result<sl::InstrKind, StructureError> {
+
+fn insert_let_instr(instr_ol: ol::LetInstr, dangle: bool) -> Result<sl::InstrKind, StructureError> {
     let ol::LetInstr {
         exp_l,
         exp_r,
@@ -148,7 +161,11 @@ fn insert_let(instr_ol: ol::LetInstr, dangle: bool) -> Result<sl::InstrKind, Str
         block,
     }))
 }
-fn insert_rule(instr_ol: ol::RuleInstr, dangle: bool) -> Result<sl::InstrKind, StructureError> {
+
+fn insert_rule_instr(
+    instr_ol: ol::RuleInstr,
+    dangle: bool,
+) -> Result<sl::InstrKind, StructureError> {
     let ol::RuleInstr {
         id,
         not_exp,
@@ -165,7 +182,8 @@ fn insert_rule(instr_ol: ol::RuleInstr, dangle: bool) -> Result<sl::InstrKind, S
         block,
     }))
 }
-fn insert_result(instr_ol: ol::ResultInstr) -> sl::InstrKind {
+
+fn insert_result_instr(instr_ol: ol::ResultInstr) -> sl::InstrKind {
     let ol::ResultInstr {
         rel_signature,
         exps,
@@ -175,11 +193,16 @@ fn insert_result(instr_ol: ol::ResultInstr) -> sl::InstrKind {
         exps,
     })
 }
-fn insert_return(instr_ol: ol::ReturnInstr) -> sl::InstrKind {
+
+fn insert_return_instr(instr_ol: ol::ReturnInstr) -> sl::InstrKind {
     let ol::ReturnInstr { exp } = instr_ol;
     sl::InstrKind::Return(sl::ReturnInstr { exp })
 }
-fn insert_debug(instr_ol: ol::DebugInstr, dangle: bool) -> Result<sl::InstrKind, StructureError> {
+
+fn insert_debug_instr(
+    instr_ol: ol::DebugInstr,
+    dangle: bool,
+) -> Result<sl::InstrKind, StructureError> {
     let ol::DebugInstr {
         exp,
         instr: instr_ol,
@@ -191,35 +214,25 @@ fn insert_debug(instr_ol: ol::DebugInstr, dangle: bool) -> Result<sl::InstrKind,
     }))
 }
 
+// == Fallback handling
+
 fn insert_nothing(block_ol: ol::Block) -> Result<sl::Block, StructureError> {
     insert_block(block_ol, false)
-}
-
-#[derive(Debug)]
-pub(crate) struct Blocks {
-    pub block: sl::Block,
-    pub block_else: Option<sl::Block>,
 }
 
 pub(crate) fn instrument(
     block_ol: ol::Block,
     block_else_ol: Option<ol::Block>,
-) -> Result<Blocks, StructureError> {
+) -> Result<(sl::Block, Option<sl::Block>), StructureError> {
     match block_else_ol {
         Some(block_else_ol) => {
             let block = insert_nothing(block_ol)?;
             let block_else = insert_nothing(block_else_ol)?;
-            Ok(Blocks {
-                block,
-                block_else: Some(block_else),
-            })
+            Ok((block, Some(block_else)))
         }
         None => {
             let block = insert_dangle(block_ol)?;
-            Ok(Blocks {
-                block,
-                block_else: None,
-            })
+            Ok((block, None))
         }
     }
 }

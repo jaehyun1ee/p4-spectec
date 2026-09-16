@@ -1,15 +1,16 @@
 //! Removes excess ticks while carrying enclosing names into nested bindings
 use super::super::{StructureError, StructureErrorKind, ol::ast::*, re::renamer::Renamer};
-use super::{FuncBody, RelBody};
 use crate::lang::{
     common::{
         ds::set::IdSet,
         source::{NotePhrase, Span},
     },
     hints::input,
-    il::ast::Exp,
+    il::ast::{Arg, Exp},
     traits::free::Free,
 };
+
+// == Candidate names
 
 fn count_trailing_ticks(id: &Id) -> usize {
     id.node
@@ -18,6 +19,7 @@ fn count_trailing_ticks(id: &Id) -> usize {
         .take_while(|byte| *byte == b'\'')
         .count()
 }
+
 fn strip_trailing_ticks(id: &Id) -> Id {
     let mut id_strip = id.clone();
     id_strip
@@ -25,6 +27,7 @@ fn strip_trailing_ticks(id: &Id) -> Id {
         .truncate(id.node.len() - count_trailing_ticks(id));
     id_strip
 }
+
 fn find_rename_ticks(frees: &IdSet, id: &Id) -> Option<Id> {
     let mut id_rename = strip_trailing_ticks(id);
     let counts: Vec<_> = frees
@@ -41,6 +44,7 @@ fn find_rename_ticks(frees: &IdSet, id: &Id) -> Option<Id> {
     id_rename.node.push_str(&"'".repeat(count));
     (id.node != id_rename.node).then_some(id_rename)
 }
+
 fn binding_renamer(mut frees: IdSet, ids: &IdSet) -> Renamer {
     let mut renamer = Renamer::empty();
     for id in ids.iter() {
@@ -54,18 +58,17 @@ fn binding_renamer(mut frees: IdSet, ids: &IdSet) -> Renamer {
     }
     renamer
 }
+
+// == Instructions
+
 fn upstream_instr(frees: &IdSet, instr_ol: Instr) -> Result<Instr, StructureError> {
     let NotePhrase {
         node: instr_kind_ol,
-        note,
+        note: (),
         span,
     } = instr_ol;
     let instr_kind_ol = upstream_instr_kind(frees, instr_kind_ol, &span)?;
-    Ok(NotePhrase {
-        node: instr_kind_ol,
-        note,
-        span,
-    })
+    Ok(crate::phrase!(node: instr_kind_ol, span: span))
 }
 
 fn upstream_instr_kind(
@@ -83,6 +86,7 @@ fn upstream_instr_kind(
         _ => Ok(instr_kind_ol),
     }
 }
+
 fn upstream_if_instr(frees: &IdSet, instr_ol: IfInstr) -> Result<InstrKind, StructureError> {
     let IfInstr {
         exp,
@@ -97,6 +101,7 @@ fn upstream_if_instr(frees: &IdSet, instr_ol: IfInstr) -> Result<InstrKind, Stru
         block,
     }))
 }
+
 fn upstream_hold_instr(frees: &IdSet, instr_ol: HoldInstr) -> Result<InstrKind, StructureError> {
     let HoldInstr {
         id,
@@ -105,8 +110,7 @@ fn upstream_hold_instr(frees: &IdSet, instr_ol: HoldInstr) -> Result<InstrKind, 
         block_hold,
         block_not_hold,
     } = instr_ol;
-    let exps: Vec<_> = not_exp.args().into_iter().cloned().collect();
-    let frees = exps.as_slice().free().union(frees.clone());
+    let frees = not_exp.free().union(frees.clone());
     let block_hold = upstream_block(&frees, block_hold)?;
     let block_not_hold = upstream_block(&frees, block_not_hold)?;
     Ok(InstrKind::Hold(HoldInstr {
@@ -117,6 +121,7 @@ fn upstream_hold_instr(frees: &IdSet, instr_ol: HoldInstr) -> Result<InstrKind, 
         block_not_hold,
     }))
 }
+
 fn upstream_case_instr(frees: &IdSet, instr_ol: CaseInstr) -> Result<InstrKind, StructureError> {
     let CaseInstr { exp, cases, total } = instr_ol;
     let frees = exp.free().union(frees.clone());
@@ -126,12 +131,14 @@ fn upstream_case_instr(frees: &IdSet, instr_ol: CaseInstr) -> Result<InstrKind, 
         .collect::<Result<_, _>>()?;
     Ok(InstrKind::Case(CaseInstr { exp, cases, total }))
 }
+
 fn upstream_case(frees: &IdSet, case: Case) -> Result<Case, StructureError> {
     let Case { guard, block } = case;
     let frees = guard.free().union(frees.clone());
     let block = upstream_block(&frees, block)?;
     Ok(Case { guard, block })
 }
+
 fn upstream_group_instr(frees: &IdSet, instr_ol: GroupInstr) -> Result<InstrKind, StructureError> {
     let GroupInstr {
         id,
@@ -148,6 +155,7 @@ fn upstream_group_instr(frees: &IdSet, instr_ol: GroupInstr) -> Result<InstrKind
         block,
     }))
 }
+
 fn upstream_let_instr(
     frees_upstream: &IdSet,
     instr_ol: LetInstr,
@@ -180,6 +188,7 @@ fn upstream_let_instr(
         block,
     }))
 }
+
 fn upstream_rule_instr(
     frees_upstream: &IdSet,
     instr_ol: RuleInstr,
@@ -192,7 +201,9 @@ fn upstream_rule_instr(
         iter_instrs,
         block,
     } = instr_ol;
-    let (exps_input, exps_output) = rule_exps(&not_exp, &input_hint, span)?;
+    let exps = not_exp.args().into_iter().cloned().collect();
+    let (exps_input, exps_output) = input::split(&input_hint, exps)
+        .map_err(|error| StructureError::new(StructureErrorKind::Input(error), span.clone()))?;
     let frees_output = exps_output.as_slice().free();
     let frees = exps_input
         .as_slice()
@@ -227,15 +238,6 @@ fn upstream_block(frees: &IdSet, block: Block) -> Result<Block, StructureError> 
         .collect()
 }
 
-fn rule_exps(
-    not_exp: &NotExp,
-    input_hint: &input::InputHint,
-    span: &Span,
-) -> Result<(Vec<Exp>, Vec<Exp>), StructureError> {
-    let exps = not_exp.args().into_iter().cloned().collect();
-    input::split(input_hint, exps)
-        .map_err(|error| StructureError::new(StructureErrorKind::Input(error), span.clone()))
-}
 fn fill_rule(
     not_exp: NotExp,
     input_hint: &input::InputHint,
@@ -253,66 +255,76 @@ fn fill_rule(
     }))
 }
 
-fn upstream_exps(mut body: RelBody) -> Result<RelBody, StructureError> {
-    let ids = body.exps_match.as_slice().free();
+// == Definition inputs
+
+fn upstream_exps(
+    (mut exps_match, mut block, mut block_else): (Vec<Exp>, Block, Option<Block>),
+) -> Result<(Vec<Exp>, Block, Option<Block>), StructureError> {
+    let ids = exps_match.as_slice().free();
     let mut frees = ids
         .clone()
-        .union(body.block.free())
-        .union(body.block_else.as_ref().map(Free::free).unwrap_or_default());
+        .union(block.free())
+        .union(block_else.as_ref().map(Free::free).unwrap_or_default());
     for id in ids.iter() {
         if let Some(id_rename) = find_rename_ticks(&frees, id) {
             frees.take(id);
             frees.insert(id_rename.clone());
             let renamer = Renamer::singleton(id.clone(), id_rename);
-            body.exps_match = renamer.rename_exps(body.exps_match);
-            body.block = renamer.rename_block(body.block)?;
-            body.block_else = body
-                .block_else
+            exps_match = renamer.rename_exps(exps_match);
+            block = renamer.rename_block(block)?;
+            block_else = block_else
                 .map(|block| renamer.rename_block(block))
                 .transpose()?;
         }
     }
-    Ok(body)
-}
-fn upstream_args(mut body: FuncBody) -> Result<FuncBody, StructureError> {
-    let ids = body.args_input.as_slice().free();
-    let mut frees = ids
-        .clone()
-        .union(body.block.free())
-        .union(body.block_else.as_ref().map(Free::free).unwrap_or_default());
-    for id in ids.iter() {
-        if let Some(id_rename) = find_rename_ticks(&frees, id) {
-            frees.take(id);
-            frees.insert(id_rename.clone());
-            let renamer = Renamer::singleton(id.clone(), id_rename);
-            body.args_input = renamer.rename_args(body.args_input);
-            body.block = renamer.rename_block(body.block)?;
-            body.block_else = body
-                .block_else
-                .map(|block| renamer.rename_block(block))
-                .transpose()?;
-        }
-    }
-    Ok(body)
-}
-pub(crate) fn apply_rel(body: RelBody) -> Result<RelBody, StructureError> {
-    let mut body = upstream_exps(body)?;
-    let frees = body.exps_match.as_slice().free();
-    body.block = upstream_block(&frees, body.block)?;
-    body.block_else = body
-        .block_else
-        .map(|block| upstream_block(&frees, block))
-        .transpose()?;
-    Ok(body)
+    Ok((exps_match, block, block_else))
 }
 
-pub(crate) fn apply_func(body: FuncBody) -> Result<FuncBody, StructureError> {
-    let mut body = upstream_args(body)?;
-    let frees = body.args_input.as_slice().free();
-    body.block = upstream_block(&frees, body.block)?;
-    body.block_else = body
-        .block_else
+fn upstream_args(
+    (mut args_input, mut block, mut block_else): (Vec<Arg>, Block, Option<Block>),
+) -> Result<(Vec<Arg>, Block, Option<Block>), StructureError> {
+    let ids = args_input.as_slice().free();
+    let mut frees = ids
+        .clone()
+        .union(block.free())
+        .union(block_else.as_ref().map(Free::free).unwrap_or_default());
+    for id in ids.iter() {
+        if let Some(id_rename) = find_rename_ticks(&frees, id) {
+            frees.take(id);
+            frees.insert(id_rename.clone());
+            let renamer = Renamer::singleton(id.clone(), id_rename);
+            args_input = renamer.rename_args(args_input);
+            block = renamer.rename_block(block)?;
+            block_else = block_else
+                .map(|block| renamer.rename_block(block))
+                .transpose()?;
+        }
+    }
+    Ok((args_input, block, block_else))
+}
+
+// == Entry points
+
+pub(crate) fn apply_rel(
+    body: (Vec<Exp>, Block, Option<Block>),
+) -> Result<(Vec<Exp>, Block, Option<Block>), StructureError> {
+    let (exps_match, mut block, mut block_else) = upstream_exps(body)?;
+    let frees = exps_match.as_slice().free();
+    block = upstream_block(&frees, block)?;
+    block_else = block_else
         .map(|block| upstream_block(&frees, block))
         .transpose()?;
-    Ok(body)
+    Ok((exps_match, block, block_else))
+}
+
+pub(crate) fn apply_func(
+    body: (Vec<Arg>, Block, Option<Block>),
+) -> Result<(Vec<Arg>, Block, Option<Block>), StructureError> {
+    let (args_input, mut block, mut block_else) = upstream_args(body)?;
+    let frees = args_input.as_slice().free();
+    block = upstream_block(&frees, block)?;
+    block_else = block_else
+        .map(|block| upstream_block(&frees, block))
+        .transpose()?;
+    Ok((args_input, block, block_else))
 }

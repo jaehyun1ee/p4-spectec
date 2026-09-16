@@ -7,6 +7,7 @@ fn conditional(text: &str, block: ast_ol::Block) -> ast_ol::Instr {
         block,
     }))
 }
+
 fn hold(block_hold: ast_ol::Block, block_not_hold: ast_ol::Block) -> ast_ol::Instr {
     instr(ast_ol::InstrKind::Hold(ast_ol::HoldInstr {
         id: id("R"),
@@ -16,6 +17,7 @@ fn hold(block_hold: ast_ol::Block, block_not_hold: ast_ol::Block) -> ast_ol::Ins
         block_not_hold,
     }))
 }
+
 fn block() -> ast_ol::Block {
     vec![
         conditional(
@@ -45,6 +47,7 @@ fn block() -> ast_ol::Block {
         })),
     ]
 }
+
 fn check(block_sl: &Block, dangle: bool) {
     assert_eq!(block_sl.len(), 8);
     for (instr_sl, text_outer, text_inner) in [
@@ -91,19 +94,21 @@ fn check(block_sl: &Block, dangle: bool) {
         matches!(&instr_debug_sl.instr.node, InstrKind::If(IfInstr {dangle: flag, ..}) if *flag == dangle)
     );
 }
+
 #[test]
 fn test_fallthrough_modes_and_reordered_nested_conditions() {
-    let blocks = instrument(block(), None).unwrap();
-    check(&blocks.block, true);
-    assert!(blocks.block_else.is_none());
-    let blocks = instrument(block(), Some(vec![])).unwrap();
-    check(&blocks.block, false);
-    assert_eq!(blocks.block_else, Some(vec![]));
-    let blocks = instrument(block(), Some(block())).unwrap();
-    check(&blocks.block, false);
-    check(&blocks.block_else.unwrap(), false);
+    let (block_result, block_else_result) = instrument(block(), None).unwrap();
+    check(&block_result, true);
+    assert!(block_else_result.is_none());
+    let (block_result, block_else_result) = instrument(block(), Some(vec![])).unwrap();
+    check(&block_result, false);
+    assert_eq!(block_else_result, Some(vec![]));
+    let (block_result, block_else_result) = instrument(block(), Some(block())).unwrap();
+    check(&block_result, false);
+    check(&block_else_result.unwrap(), false);
     check(&instrument_without_else(block()).unwrap(), false);
 }
+
 #[test]
 fn test_empty_hold_nested_in_debug_has_owning_span() {
     let mut instr_hold = hold(vec![], vec![]);
@@ -129,7 +134,7 @@ fn test_lowering_preserves_payloads_spans_and_nested_fallbacks() {
     exp.span = span(17);
     exp.note = std::rc::Rc::new(TypKind::Text);
     let block_ol = vec![conditional("nested", vec![ret("result")])];
-    let block_sl = instrument(block_ol.clone(), None).unwrap().block;
+    let block_sl = instrument(block_ol.clone(), None).unwrap().0;
     let not_exp = Mixfix::Arg(exp.clone());
     let guard = Guard::Sub(
         crate::phrase!(node: TypKind::Text, span: span(18)),
@@ -213,5 +218,5 @@ fn test_lowering_preserves_payloads_spans_and_nested_fallbacks() {
         .into_iter()
         .map(|instr_kind_sl| crate::phrase!(node: instr_kind_sl, span: span(19)))
         .collect();
-    assert_eq!(instrument(block_ol, None).unwrap().block, block_expect_sl);
+    assert_eq!(instrument(block_ol, None).unwrap().0, block_expect_sl);
 }

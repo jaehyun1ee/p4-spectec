@@ -1,57 +1,53 @@
 use super::{
     StructureError,
     ol::ast::Block,
-    pretty::{FuncBody, RelBody, rename_tick, revive_underscore},
+    pretty::{rename_tick, revive_underscore},
 };
 use crate::lang::{
     il::ast::{Arg, Exp},
     traits::eq::SyntaxEq,
 };
 
+// == Relations
+
 pub(crate) fn pretty_rel(
-    exps_match: Vec<Exp>,
-    block: Block,
-    block_else: Option<Block>,
-) -> Result<RelBody, StructureError> {
-    let mut body = RelBody {
-        exps_match,
-        block,
-        block_else,
-    };
+    mut exps_match: Vec<Exp>,
+    mut block: Block,
+    mut block_else: Option<Block>,
+) -> Result<(Vec<Exp>, Block, Option<Block>), StructureError> {
     loop {
-        let body_pretty = revive_underscore::apply_rel(body.clone())?;
-        let body_pretty = rename_tick::apply_rel(body_pretty)?;
-        if body.exps_match.syntax_eq(&body_pretty.exps_match)
-            && body.block.syntax_eq(&body_pretty.block)
-            && body.block_else.syntax_eq(&body_pretty.block_else)
+        let body =
+            revive_underscore::apply_rel((exps_match.clone(), block.clone(), block_else.clone()))?;
+        let (exps_pretty, block_pretty, block_else_pretty) = rename_tick::apply_rel(body)?;
+        if exps_match.syntax_eq(&exps_pretty)
+            && block.syntax_eq(&block_pretty)
+            && block_else.syntax_eq(&block_else_pretty)
         {
-            // Stable syntax retains the previous source and proof metadata
-            return Ok(body);
+            // Keep the original spans and proofs when only metadata differs
+            return Ok((exps_match, block, block_else));
         }
-        body = body_pretty;
+        (exps_match, block, block_else) = (exps_pretty, block_pretty, block_else_pretty);
     }
 }
 
+// == Functions
+
 pub(crate) fn pretty_func(
-    args_input: Vec<Arg>,
-    block: Block,
-    block_else: Option<Block>,
-) -> Result<FuncBody, StructureError> {
-    let mut body = FuncBody {
-        args_input,
-        block,
-        block_else,
-    };
+    mut args_input: Vec<Arg>,
+    mut block: Block,
+    mut block_else: Option<Block>,
+) -> Result<(Vec<Arg>, Block, Option<Block>), StructureError> {
     loop {
-        let body_pretty = revive_underscore::apply_func(body.clone())?;
-        let body_pretty = rename_tick::apply_func(body_pretty)?;
-        if body.args_input.syntax_eq(&body_pretty.args_input)
-            && body.block.syntax_eq(&body_pretty.block)
-            && body.block_else.syntax_eq(&body_pretty.block_else)
+        let body =
+            revive_underscore::apply_func((args_input.clone(), block.clone(), block_else.clone()))?;
+        let (args_pretty, block_pretty, block_else_pretty) = rename_tick::apply_func(body)?;
+        if args_input.syntax_eq(&args_pretty)
+            && block.syntax_eq(&block_pretty)
+            && block_else.syntax_eq(&block_else_pretty)
         {
-            // Stable syntax retains the previous source and proof metadata
-            return Ok(body);
+            // Keep the original spans and proofs when only metadata differs
+            return Ok((args_input, block, block_else));
         }
-        body = body_pretty;
+        (args_input, block, block_else) = (args_pretty, block_pretty, block_else_pretty);
     }
 }

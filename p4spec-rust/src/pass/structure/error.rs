@@ -18,8 +18,6 @@ pub enum StructureErrorKind {
     UnexpectedIfHoldBindings,
     #[error("an if not holds premise should not have bindings")]
     UnexpectedIfNotHoldBindings,
-    #[error("unsupported premise after iterator internalization")]
-    UnsupportedPremise,
     #[error("cannot totalize a non-variant type")]
     NonVariantTotalization,
     #[error("hold has no branches")]

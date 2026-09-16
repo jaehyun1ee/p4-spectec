@@ -1,18 +1,18 @@
 use super::super::{ret, variable};
 use crate::lang::traits::free::Free;
-use crate::pass::structure::pretty::{RelBody, rename_tick};
+use crate::pass::structure::pretty::rename_tick;
 #[test]
 fn test_ticks_fill_smallest_available_gap() {
-    let body = rename_tick::apply_rel(RelBody {
-        exps_match: vec![variable("x'''")],
-        block: vec![ret("x'''"), ret("x"), ret("x''")],
-        block_else: Some(vec![ret("x'''")]),
-    })
+    let (exps_match, block, block_else) = rename_tick::apply_rel((
+        vec![variable("x'''")],
+        vec![ret("x'''"), ret("x"), ret("x''")],
+        Some(vec![ret("x'''")]),
+    ))
     .unwrap();
-    let id = body.exps_match[0].free().iter().next().unwrap().clone();
+    let id = exps_match[0].free().iter().next().unwrap().clone();
     assert_eq!(id.node, "x'");
-    assert!(body.block[0].free().contains(&id));
-    assert!(body.block_else.unwrap()[0].free().contains(&id));
+    assert!(block[0].free().contains(&id));
+    assert!(block_else.unwrap()[0].free().contains(&id));
 }
 
 use super::super::{id, instr, span};
@@ -38,13 +38,9 @@ fn test_nested_bindings_avoid_upstream_guard_names_and_keep_iterator_roles() {
         }],
         total: false,
     }));
-    let body = rename_tick::apply_rel(RelBody {
-        exps_match: vec![variable("x'")],
-        block: vec![instr_case],
-        block_else: None,
-    })
-    .unwrap();
-    let InstrKind::Case(instr_case) = &body.block[0].node else {
+    let (_, block, _) =
+        rename_tick::apply_rel((vec![variable("x'")], vec![instr_case], None)).unwrap();
+    let InstrKind::Case(instr_case) = &block[0].node else {
         panic!("expected case")
     };
     let InstrKind::Let(instr_let) = &instr_case.cases[0].block[0].node else {
@@ -62,6 +58,7 @@ fn test_nested_bindings_avoid_upstream_guard_names_and_keep_iterator_roles() {
     assert_eq!(var_id(&instr_inner.exp_l).node, "x'''");
     assert_eq!(var_id(return_exp(&instr_inner.block[1])), id_bind);
 }
+
 #[test]
 fn test_rule_output_renaming_keeps_input_and_locations() {
     let mut exp_output = variable("out'''");
@@ -79,13 +76,8 @@ fn test_rule_output_renaming_keeps_input_and_locations() {
         iter_instrs: vec![iterator("input", "out'''")],
         block: vec![ret("out'''")],
     }));
-    let body = rename_tick::apply_rel(RelBody {
-        exps_match: vec![],
-        block: vec![instr_rule],
-        block_else: None,
-    })
-    .unwrap();
-    let InstrKind::Rule(instr_rule) = &body.block[0].node else {
+    let (_, block, _) = rename_tick::apply_rel((vec![], vec![instr_rule], None)).unwrap();
+    let InstrKind::Rule(instr_rule) = &block[0].node else {
         panic!("expected rule")
     };
     let exps = instr_rule.not_exp.args();

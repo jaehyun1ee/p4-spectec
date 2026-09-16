@@ -1,11 +1,7 @@
 //! Convert algorithmic definitions through ordered blocks to structured syntax
 
 use super::{
-    StructureError, StructureErrorKind,
-    antiunify::{self, ClausePath},
-    context::Context,
-    dangle, merge,
-    ol::ast as ol,
+    StructureError, StructureErrorKind, antiunify, context::Context, dangle, merge, ol::ast as ol,
     optimize, prettify, totalize,
 };
 use crate::lang::{
@@ -19,7 +15,7 @@ use crate::lang::{
     traits::{eq::SyntaxEq, free::Free},
 };
 
-// Parameters
+// == Parameters
 
 fn struct_param(ctx: &Context, frees: &mut IdSet, param_al: al::Param) -> sl::Param {
     let Phrase {
@@ -75,7 +71,15 @@ fn struct_params_from_args(
     args_input: Vec<al::Arg>,
     span: &Span,
 ) -> Result<Vec<sl::Param>, StructureError> {
-    check_arity(params_al.len(), args_input.len(), span)?;
+    if params_al.len() != args_input.len() {
+        return Err(StructureError::new(
+            StructureErrorKind::ArityMismatch {
+                expected: params_al.len(),
+                actual: args_input.len(),
+            },
+            span.clone(),
+        ));
+    }
     params_al
         .into_iter()
         .zip(args_input)
@@ -134,47 +138,36 @@ fn struct_def_param_from_arg(
     Ok(struct_def_param(ctx, id, tparams, params_al, typ))
 }
 
-// Premises
+// == Premises
 
-fn internalize_iter(
-    prem_al: al::Prem,
-    iter_prems: Vec<al::PremIter>,
-) -> (al::Prem, Vec<al::PremIter>) {
-    let Phrase {
-        node: prem_kind_al,
-        span,
-        ..
-    } = prem_al;
-    internalize_iter_kind(prem_kind_al, span, iter_prems)
-}
-
-fn internalize_iter_kind(
-    prem_kind_al: al::PremKind,
-    span: Span,
-    iter_prems: Vec<al::PremIter>,
-) -> (al::Prem, Vec<al::PremIter>) {
-    match prem_kind_al {
-        al::PremKind::Iter(prem_iter_al) => internalize_iter_prem(prem_iter_al, iter_prems),
-        prem_kind_al => (crate::phrase! {node: prem_kind_al, span: span}, iter_prems),
+fn internalize_iter(mut prem_al: al::Prem) -> (al::Prem, Vec<al::PremIter>) {
+    let mut iter_prems = vec![];
+    loop {
+        let Phrase {
+            node: prem_kind_al,
+            span,
+            ..
+        } = prem_al;
+        match prem_kind_al {
+            al::PremKind::Iter(prem_iter_al) => {
+                let al::IterPrem { prem, prem_iter } = prem_iter_al;
+                iter_prems.push(prem_iter);
+                prem_al = *prem;
+            }
+            prem_kind_al => {
+                // The innermost iterator becomes the first instruction iterator
+                iter_prems.reverse();
+                return (crate::phrase!(node: prem_kind_al, span: span), iter_prems);
+            }
+        }
     }
-}
-
-fn internalize_iter_prem(
-    prem_iter_al: al::IterPrem,
-    mut iter_prems: Vec<al::PremIter>,
-) -> (al::Prem, Vec<al::PremIter>) {
-    let al::IterPrem { prem, prem_iter } = prem_iter_al;
-    iter_prems.insert(0, prem_iter);
-    internalize_iter(*prem, iter_prems)
 }
 
 fn struct_prems(
     prems_al: Vec<al::Prem>,
     instr_ret: ol::Instr,
 ) -> Result<ol::Instr, StructureError> {
-    let mut prems_internalized = prems_al
-        .into_iter()
-        .map(|prem_al| internalize_iter(prem_al, vec![]));
+    let mut prems_internalized = prems_al.into_iter().map(internalize_iter);
     struct_prems_inner(&mut prems_internalized, instr_ret)
 }
 
@@ -222,10 +215,7 @@ fn struct_prem_kind(
         }
         al::PremKind::Let(prem_al) => struct_let_prem(prem_al, iter_prems, prems_tail, instr_ret),
         al::PremKind::Debug(prem_al) => struct_debug_prem(prem_al, prems_tail, instr_ret),
-        al::PremKind::Iter(_) => Err(StructureError::new(
-            StructureErrorKind::UnsupportedPremise,
-            span.clone(),
-        )),
+        al::PremKind::Iter(_) => unreachable!("iterators were internalized before structuring"),
     }
 }
 
@@ -367,9 +357,9 @@ fn struct_debug_prem(
     }))
 }
 
-// Rules
+// == Rules
 
-fn struct_rule_paths(
+fn struct_rule_path(
     rel_signature: &ol::RelSignature,
     rule_path: al::RulePath,
 ) -> Result<ol::Block, StructureError> {
@@ -421,7 +411,7 @@ fn struct_rule_group(
     prems_unified.extend(prems);
     let blocks = rule_paths
         .into_iter()
-        .map(|rule_path| struct_rule_paths(rel_signature, rule_path))
+        .map(|rule_path| struct_rule_path(rel_signature, rule_path))
         .collect::<Result<_, _>>()?;
     let block = merge::merge_blocks(blocks);
     let span = id.span.clone();
@@ -449,23 +439,22 @@ fn struct_else_group(
         ..
     } = rule_match;
     prems_unified.extend(prems);
-    let block = struct_rule_paths(rel_signature, rule_path)?;
+    let block = struct_rule_path(rel_signature, rule_path)?;
     let span = id.span.clone();
     let instr_group = crate::phrase! {node: ol::InstrKind::Group(ol::GroupInstr {id, rel_signature: rel_signature.clone(), exps: exps_signature, block}), span: span};
     Ok(vec![struct_prems(prems_unified, instr_group)?])
 }
 
-// Clauses and table rows
+// == Clauses
 
-fn struct_clause_path(path: ClausePath) -> Result<ol::Block, StructureError> {
-    let ClausePath { prems, exp } = path;
+fn struct_clause_path((prems, exp): (Vec<al::Prem>, al::Exp)) -> Result<ol::Block, StructureError> {
     let span = exp.span.clone();
     let instr_return =
         crate::phrase! {node: ol::InstrKind::Return(ol::ReturnInstr {exp}), span: span};
     Ok(vec![struct_prems(prems, instr_return)?])
 }
 
-// Definitions
+// == Definitions
 
 fn struct_def(
     ctx: &Context,
@@ -507,10 +496,12 @@ fn struct_typ_def(typdef_al: al::TypDef) -> sl::TypDef {
         }
     }
 }
+
 fn struct_extern_typ_def(typdef_al: al::ExternTyp) -> sl::ExternTyp {
     let al::ExternTyp { id, hints } = typdef_al;
     sl::ExternTyp { id, hints }
 }
+
 fn struct_defined_typ_def(typdef_al: al::DefinedTyp) -> sl::DefinedTyp {
     let al::DefinedTyp {
         id,
@@ -525,10 +516,12 @@ fn struct_defined_typ_def(typdef_al: al::DefinedTyp) -> sl::DefinedTyp {
         hints,
     }
 }
+
 fn struct_var_def(def_var_al: al::VarDef) -> sl::VarDef {
     let al::VarDef { id, typ, hints } = def_var_al;
     sl::VarDef { id, typ, hints }
 }
+
 fn struct_rel_def(
     ctx: &Context,
     def_rel_al: al::RelDef,
@@ -545,6 +538,7 @@ fn struct_rel_def(
         }
     }
 }
+
 fn struct_func_def(
     ctx: &Context,
     def_func_al: al::MetaFuncDef,
@@ -570,7 +564,7 @@ fn struct_func_def(
     }
 }
 
-// Relation definitions
+// - Relation definitions
 
 fn fresh_rel_inputs(
     ctx: &Context,
@@ -591,6 +585,7 @@ fn fresh_rel_inputs(
     }
     Ok(exps_input)
 }
+
 fn struct_extern_rel_def(
     ctx: &Context,
     def_rel_al: al::ExternRel,
@@ -614,6 +609,7 @@ fn struct_extern_rel_def(
         hints,
     })
 }
+
 fn struct_defined_rel_def(
     ctx: &Context,
     def_rel_al: al::DefinedRel,
@@ -638,12 +634,13 @@ fn struct_defined_rel_def(
     let exps_match_else = else_group
         .as_ref()
         .map(|else_group| else_group.node.rule_match.exps_input.as_slice());
-    let unified = if rule_groups.is_empty() && else_group.is_none() {
-        antiunify::RuleMatchGroup {
-            exps_template: fresh_rel_inputs(ctx, &not_typ, &input_hint, span)?,
-            prems_group: vec![],
-            prems_else: None,
-        }
+    let (exps_template, prems_group, prems_else) = if rule_groups.is_empty() && else_group.is_none()
+    {
+        (
+            fresh_rel_inputs(ctx, &not_typ, &input_hint, span)?,
+            vec![],
+            None,
+        )
     } else {
         antiunify::antiunify_rule_match_group(frees, &exps_match_group, exps_match_else)?
     };
@@ -651,34 +648,34 @@ fn struct_defined_rel_def(
         not_typ,
         input_hint,
     };
-    let blocks = unified
-        .prems_group
+    let blocks = prems_group
         .into_iter()
         .zip(rule_groups)
         .map(|(prems, rule_group)| struct_rule_group(&rel_signature, prems, rule_group))
         .collect::<Result<_, _>>()?;
     let block = merge::merge_blocks(blocks);
-    let block_else = match (unified.prems_else, else_group) {
+    let block_else = match (prems_else, else_group) {
         (Some(prems), Some(else_group)) => {
             Some(struct_else_group(&rel_signature, prems, else_group)?)
         }
         _ => None,
     };
-    let blocks = optimize::optimize_with_else(&ctx.tdenv, block, block_else, without_rule_groups)?;
-    let blocks = totalize::totalize(&ctx.tdenv, blocks.block, blocks.block_else)?;
-    let body = prettify::pretty_rel(unified.exps_template, blocks.block, blocks.block_else)?;
-    let blocks_sl = dangle::instrument(body.block, body.block_else)?;
+    let (block, block_else) =
+        optimize::optimize_with_else(&ctx.tdenv, block, block_else, without_rule_groups)?;
+    let (block, block_else) = totalize::totalize(&ctx.tdenv, block, block_else)?;
+    let (exps_input, block, block_else) = prettify::pretty_rel(exps_template, block, block_else)?;
+    let (block, block_else) = dangle::instrument(block, block_else)?;
     Ok(sl::DefinedRel {
         id,
         rel_signature,
-        exps_input: body.exps_match,
-        block: blocks_sl.block,
-        block_else: blocks_sl.block_else,
+        exps_input,
+        block,
+        block_else,
         hints,
     })
 }
 
-// Function definitions
+// - Function definitions
 
 fn struct_extern_dec_def(ctx: &Context, def_func_al: al::ExternFunc) -> sl::ExternFunc {
     let al::ExternFunc {
@@ -697,6 +694,7 @@ fn struct_extern_dec_def(ctx: &Context, def_func_al: al::ExternFunc) -> sl::Exte
         hints,
     }
 }
+
 fn struct_builtin_dec_def(ctx: &Context, def_func_al: al::BuiltinFunc) -> sl::BuiltinFunc {
     let al::BuiltinFunc {
         id,
@@ -714,6 +712,7 @@ fn struct_builtin_dec_def(ctx: &Context, def_func_al: al::BuiltinFunc) -> sl::Bu
         hints,
     }
 }
+
 fn struct_table_dec_def(
     ctx: &Context,
     def_func_al: al::TableFunc,
@@ -731,15 +730,10 @@ fn struct_table_dec_def(
         .into_iter()
         .map(struct_table_row_clause)
         .unzip();
-    let clauses = antiunify::antiunify_clauses(clauses, None)?;
-    let params_sl = struct_params_from_args(ctx, params_al, clauses.args_template, span)?;
-    let exps_output = clauses
-        .paths
-        .iter()
-        .map(|path| path.exp.clone())
-        .collect::<Vec<_>>();
-    let blocks_ol = clauses
-        .paths
+    let (args_template, paths, _) = antiunify::antiunify_clauses(clauses, None)?;
+    let params_sl = struct_params_from_args(ctx, params_al, args_template, span)?;
+    let exps_output = paths.iter().map(|(_, exp)| exp.clone()).collect::<Vec<_>>();
+    let blocks_ol = paths
         .into_iter()
         .map(struct_clause_path)
         .collect::<Result<Vec<_>, _>>()?;
@@ -774,6 +768,7 @@ fn struct_table_dec_def(
         hints,
     })
 }
+
 fn struct_table_row_clause(table_row_al: al::TableRow) -> (Vec<al::Exp>, al::Clause) {
     let Phrase {
         node: table_row_kind_al,
@@ -789,6 +784,7 @@ fn struct_table_row_clause(table_row_al: al::TableRow) -> (Vec<al::Exp>, al::Cla
     let clause = crate::phrase! {node: al::ClauseKind {args, exp, prems}, span: span};
     (exps_signature, clause)
 }
+
 fn struct_func_dec_def(
     ctx: &Context,
     def_func_al: al::DefinedFunc,
@@ -804,8 +800,8 @@ fn struct_func_dec_def(
         else_clause,
         hints,
     } = def_func_al;
-    let clauses = antiunify::antiunify_clauses(clauses, else_clause)?;
-    if clauses.paths.is_empty() && clauses.path_else.is_none() {
+    let (args_template, paths, path_else) = antiunify::antiunify_clauses(clauses, else_clause)?;
+    if paths.is_empty() && path_else.is_none() {
         let params_sl = struct_params(ctx, params_al);
         return Ok(sl::DefinedFunc {
             id,
@@ -817,40 +813,27 @@ fn struct_func_dec_def(
             hints,
         });
     }
-    let blocks = clauses
-        .paths
+    let blocks = paths
         .into_iter()
         .map(struct_clause_path)
         .collect::<Result<_, _>>()?;
     let block = merge::merge_blocks(blocks);
-    let block_else = clauses.path_else.map(struct_clause_path).transpose()?;
-    let blocks = optimize::optimize_with_else(&ctx.tdenv, block, block_else, without_rule_groups)?;
-    let blocks = totalize::totalize(&ctx.tdenv, blocks.block, blocks.block_else)?;
-    let body = prettify::pretty_func(clauses.args_template, blocks.block, blocks.block_else)?;
-    let params_sl = struct_params_from_args(ctx, params_al, body.args_input, span)?;
-    let blocks_sl = dangle::instrument(body.block, body.block_else)?;
+    let block_else = path_else.map(struct_clause_path).transpose()?;
+    let (block, block_else) =
+        optimize::optimize_with_else(&ctx.tdenv, block, block_else, without_rule_groups)?;
+    let (block, block_else) = totalize::totalize(&ctx.tdenv, block, block_else)?;
+    let (args_input, block, block_else) = prettify::pretty_func(args_template, block, block_else)?;
+    let params_sl = struct_params_from_args(ctx, params_al, args_input, span)?;
+    let (block, block_else) = dangle::instrument(block, block_else)?;
     Ok(sl::DefinedFunc {
         id,
         tparams,
         params: params_sl,
         typ,
-        block: blocks_sl.block,
-        block_else: blocks_sl.block_else,
+        block,
+        block_else,
         hints,
     })
-}
-
-fn check_arity(num_expect: usize, num_actual: usize, span: &Span) -> Result<(), StructureError> {
-    if num_expect != num_actual {
-        return Err(StructureError::new(
-            StructureErrorKind::ArityMismatch {
-                expected: num_expect,
-                actual: num_actual,
-            },
-            span.clone(),
-        ));
-    }
-    Ok(())
 }
 
 /// Converts algorithmic definitions, removing rule groups when requested

@@ -1,19 +1,19 @@
 use super::super::{ret, variable};
 use crate::lang::traits::free::Free;
-use crate::pass::structure::pretty::{RelBody, revive_underscore};
+use crate::pass::structure::pretty::revive_underscore;
 #[test]
 fn test_revival_avoids_free_capture_and_agrees_with_fallback() {
-    let body = revive_underscore::apply_rel(RelBody {
-        exps_match: vec![variable("_x")],
-        block: vec![ret("_x"), ret("x")],
-        block_else: Some(vec![ret("_x")]),
-    })
+    let (exps_match, block, block_else) = revive_underscore::apply_rel((
+        vec![variable("_x")],
+        vec![ret("_x"), ret("x")],
+        Some(vec![ret("_x")]),
+    ))
     .unwrap();
-    let id = body.exps_match[0].free().iter().next().unwrap().clone();
+    let id = exps_match[0].free().iter().next().unwrap().clone();
     assert_ne!(id.node, "_x");
     assert_ne!(id.node, "x");
-    assert!(body.block[0].free().contains(&id));
-    assert!(body.block_else.unwrap()[0].free().contains(&id));
+    assert!(block[0].free().contains(&id));
+    assert!(block_else.unwrap()[0].free().contains(&id));
 }
 
 use super::super::{id, instr, signature, span};
@@ -22,15 +22,15 @@ use crate::lang::{common::notation::mixfix::Mixfix, hints::input::InputHint};
 use crate::pass::structure::ol::ast::*;
 #[test]
 fn test_unused_inputs_stay_underscored_and_let_scope_shadows_input() {
-    let body = revive_underscore::apply_rel(RelBody {
-        exps_match: vec![variable("_unused"), variable("_x")],
-        block: vec![binding("_x", "_x", vec![ret("_x")])],
-        block_else: None,
-    })
+    let (exps_match, block, _) = revive_underscore::apply_rel((
+        vec![variable("_unused"), variable("_x")],
+        vec![binding("_x", "_x", vec![ret("_x")])],
+        None,
+    ))
     .unwrap();
-    assert_eq!(var_id(&body.exps_match[0]).node, "_unused");
-    let id_input = var_id(&body.exps_match[1]);
-    let InstrKind::Let(instr_let) = &body.block[0].node else {
+    assert_eq!(var_id(&exps_match[0]).node, "_unused");
+    let id_input = var_id(&exps_match[1]);
+    let InstrKind::Let(instr_let) = &block[0].node else {
         panic!("expected let")
     };
     assert_eq!(var_id(&instr_let.exp_r), id_input);
@@ -40,6 +40,7 @@ fn test_unused_inputs_stay_underscored_and_let_scope_shadows_input() {
         var_id(&instr_let.exp_l)
     );
 }
+
 #[test]
 fn test_rule_iterator_scopes_and_used_guard_survive_nested_branches() {
     let instr_rule = instr(InstrKind::Rule(RuleInstr {
@@ -73,14 +74,10 @@ fn test_rule_iterator_scopes_and_used_guard_survive_nested_branches() {
         exps: vec![variable("_input")],
         block: vec![instr_hold],
     }));
-    let body = revive_underscore::apply_rel(RelBody {
-        exps_match: vec![variable("_input")],
-        block: vec![instr_group],
-        block_else: None,
-    })
-    .unwrap();
-    let id_input = var_id(&body.exps_match[0]);
-    let InstrKind::Group(instr_group) = &body.block[0].node else {
+    let (exps_match, block, _) =
+        revive_underscore::apply_rel((vec![variable("_input")], vec![instr_group], None)).unwrap();
+    let id_input = var_id(&exps_match[0]);
+    let InstrKind::Group(instr_group) = &block[0].node else {
         panic!("expected group")
     };
     assert_eq!(var_id(&instr_group.exps[0]), id_input);
@@ -105,8 +102,9 @@ fn test_rule_iterator_scopes_and_used_guard_survive_nested_branches() {
     assert_eq!(&instr_rule.iter_instrs[0].vars_bind[0].id, id_output);
     assert_eq!(var_id(return_exp(&instr_rule.block[0])), id_output);
     assert_ne!(id_output.node, "_out");
-    assert_eq!(body.block[0].span, span(1));
+    assert_eq!(block[0].span, span(1));
 }
+
 #[test]
 fn test_input_hint_failure_keeps_rule_span() {
     let mut instr_rule = instr(InstrKind::Rule(RuleInstr {
@@ -117,12 +115,7 @@ fn test_input_hint_failure_keeps_rule_span() {
         block: vec![],
     }));
     instr_rule.span = span(17);
-    let error = revive_underscore::apply_rel(RelBody {
-        exps_match: vec![],
-        block: vec![instr_rule],
-        block_else: None,
-    })
-    .unwrap_err();
+    let error = revive_underscore::apply_rel((vec![], vec![instr_rule], None)).unwrap_err();
     assert_eq!(error.span, span(17));
     assert!(matches!(
         error.kind,
@@ -141,14 +134,10 @@ fn test_let_iterator_bound_and_binding_names_follow_separate_scopes() {
             binding("_nested", "_local", vec![ret("_nested")]),
         ],
     }));
-    let body = revive_underscore::apply_rel(RelBody {
-        exps_match: vec![variable("_input")],
-        block: vec![instr_let],
-        block_else: None,
-    })
-    .unwrap();
-    let id_input = var_id(&body.exps_match[0]);
-    let InstrKind::Let(instr_let) = &body.block[0].node else {
+    let (exps_match, block, _) =
+        revive_underscore::apply_rel((vec![variable("_input")], vec![instr_let], None)).unwrap();
+    let id_input = var_id(&exps_match[0]);
+    let InstrKind::Let(instr_let) = &block[0].node else {
         panic!("expected let")
     };
     let id_local = var_id(&instr_let.exp_l);

@@ -20,11 +20,12 @@ fn group(block: Block) -> Instr {
         block,
     }))
 }
+
 #[test]
 fn test_group_modes_and_independent_else_optimization() {
     let tdenv = TDEnv::new();
     for without_rule_groups in [true, false] {
-        let blocks = optimize_with_else(
+        let (block_result, block_else_result) = optimize_with_else(
             &tdenv,
             vec![group(vec![ret("main")])],
             Some(vec![group(vec![ret("else")])]),
@@ -41,8 +42,8 @@ fn test_group_modes_and_independent_else_optimization() {
         } else {
             vec![group(vec![ret("else")])]
         };
-        assert_eq!(blocks.block, block_main);
-        assert_eq!(blocks.block_else, Some(block_else));
+        assert_eq!(block_result, block_main);
+        assert_eq!(block_else_result, Some(block_else));
         assert_eq!(
             optimize_without_else(&tdenv, vec![group(vec![ret("main")])], without_rule_groups)
                 .unwrap(),
@@ -52,16 +53,17 @@ fn test_group_modes_and_independent_else_optimization() {
     assert_eq!(
         optimize_with_else(&tdenv, vec![], Some(vec![]), true)
             .unwrap()
-            .block_else,
+            .1,
         Some(vec![])
     );
     assert!(
         optimize_with_else(&tdenv, vec![], None, true)
             .unwrap()
-            .block_else
+            .1
             .is_none()
     );
 }
+
 #[test]
 fn test_hold_merge_exposes_bindings_for_a_later_loop_iteration() {
     let tdenv = TDEnv::new();
