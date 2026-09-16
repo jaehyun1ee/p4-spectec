@@ -466,7 +466,7 @@ fn decode_instr_note(json: &json) -> Result<Option<Fallthrough>, DecodeError> {
 }
 
 fn encode_instr_note(fallthrough: &Option<Fallthrough>) -> json {
-    // OCaml still requires an instruction identifier in its wire format.
+    // The wire format carries an instruction identifier that has no Rust counterpart
     json!({"iid": 0, "fallthrough": encode_option(fallthrough.as_ref(), encode_fallthrough)})
 }
 
