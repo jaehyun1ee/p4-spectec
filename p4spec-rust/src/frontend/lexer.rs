@@ -121,7 +121,7 @@ pub enum Token {
     Slash,
     Backslash,
     Hole,
-    NumberedHole(i64),
+    NumberedHole(usize),
     MultipleHole,
     EmptyHole,
     Equals,
@@ -661,7 +661,7 @@ where
         let digits = Self::strip_underscores(&self.source[self.cursor.offset + 1..end]);
         self.advance_to(end);
         let num = digits
-            .parse::<i64>()
+            .parse::<usize>()
             .map_err(|_| self.error(LexErrorKind::HoleNumberOutOfRange, start))?;
         Ok(Some(self.lexeme(Token::NumberedHole(num), start)))
     }

@@ -7,7 +7,7 @@ use crate::lang::el::ast::{
 };
 
 use super::{
-    super::{DecodeError, array, field, integer, object, string, variant},
+    super::{DecodeError, array, field, object, string, unsigned, variant},
     xl,
 };
 use crate::wire::ocaml::{atom::AtomPhraseCodec, source};
@@ -270,7 +270,7 @@ fn encode_arg(arg: &ast::Arg) -> json {
 fn decode_hole(json: &json) -> Result<Hole, DecodeError> {
     let (tag, fields) = variant(json)?;
     match (tag, fields) {
-        ("Num", [num]) => Ok(Hole::Num(integer(num)?)),
+        ("Num", [num]) => Ok(Hole::Num(unsigned(num)?)),
         ("Next", []) => Ok(Hole::Next),
         ("Rest", []) => Ok(Hole::Rest),
         ("None", []) => Ok(Hole::None),

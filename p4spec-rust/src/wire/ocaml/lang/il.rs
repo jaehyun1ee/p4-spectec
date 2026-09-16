@@ -10,7 +10,10 @@ use crate::lang::{
 };
 
 use super::{
-    super::{DecodeError, EncodeError, array, boolean, integer, on_codec_stack, string, variant},
+    super::{
+        DecodeError, EncodeError, array, boolean, integer, on_codec_stack, string, unsigned,
+        variant,
+    },
     el, xl,
 };
 use crate::wire::ocaml::{atom::AtomPhraseCodec, mixfix, source};
@@ -630,7 +633,7 @@ pub(super) fn encode_arg(arg: &ast::Arg) -> json {
 pub(super) fn decode_input_hint(
     json: &json,
 ) -> Result<crate::lang::hints::input::InputHint, DecodeError> {
-    Ok(crate::lang::hints::input::InputHint::new(decode_list(json, integer)?))
+    Ok(crate::lang::hints::input::InputHint::new(decode_list(json, unsigned)?))
 }
 
 pub(super) fn encode_input_hint(hint: &crate::lang::hints::input::InputHint) -> json {

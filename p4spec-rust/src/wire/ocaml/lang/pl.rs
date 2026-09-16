@@ -83,9 +83,9 @@ fn decode_alter(json: &json) -> Result<alter::AlterationHint, DecodeError> {
             let (tag, fields) = variant(hole)?;
             match (tag, fields) {
                 ("Next", []) => Ok(alter::AlterationHint::Hole(alter::Hole::Next)),
-                ("Num", [index]) => {
-                    Ok(alter::AlterationHint::Hole(alter::Hole::Num(super::super::integer(index)?)))
-                }
+                ("Num", [index]) => Ok(alter::AlterationHint::Hole(alter::Hole::Num(
+                    super::super::unsigned(index)?,
+                ))),
                 ("Next" | "Num", _) => Err(DecodeError::Expected("valid PL alter hole arity")),
                 (unknown, _) => Err(DecodeError::UnknownVariant(unknown.to_owned())),
             }

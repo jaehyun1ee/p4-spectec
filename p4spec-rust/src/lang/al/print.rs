@@ -195,7 +195,7 @@ fn write_ruleinput(
             input_indices
                 .iter()
                 .zip(exps_input)
-                .find_map(|(input, exp)| (*input == index as i64).then_some(exp))
+                .find_map(|(input, exp)| (*input == index).then_some(exp))
         })
         .collect();
     write_notation(output, not_typ, exps)
@@ -210,7 +210,7 @@ fn write_ruleoutput(
     let input_indices = input_hint.indices();
     let (_, typs) = not_typ.node.split();
     let outputs = (0..typs.len())
-        .filter(|index| !input_indices.contains(&(*index as i64)))
+        .filter(|index| !input_indices.contains(index))
         .collect::<Vec<_>>();
     assert_eq!(outputs.len(), exps_output.len());
     if exps_output.is_empty() {

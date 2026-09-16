@@ -402,7 +402,7 @@ fn write_relinput(
     let args = (0..not_typ.node.arity()).map(|index| {
         input_indices
             .iter()
-            .position(|input| *input == index as i64)
+            .position(|input| *input == index)
             .map(|position| &exps_input[position])
     });
     let mixfix =
@@ -421,7 +421,7 @@ fn write_reloutput(
     let not_typ = &rel_signature.not_typ;
     let input_indices = rel_signature.input_hint.indices();
     let outputs = (0..not_typ.node.arity())
-        .filter(|index| !input_indices.contains(&(*index as i64)))
+        .filter(|index| !input_indices.contains(index))
         .collect::<Vec<_>>();
     assert_eq!(outputs.len(), exps_output.len());
     let args = (0..not_typ.node.arity()).map(|index| {

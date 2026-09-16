@@ -9,7 +9,7 @@ use thiserror::Error;
 #[derive(Clone, Debug, PartialEq)]
 pub enum Hole {
     Next,
-    Num(i64),
+    Num(usize),
 }
 
 /// A prose rendering template
@@ -30,7 +30,7 @@ pub enum AlterationHint {
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
 pub enum AlterationError {
     #[error("alteration hint index {index} is out of bounds for {item_count} items")]
-    IndexOutOfBounds { index: i64, item_count: usize },
+    IndexOutOfBounds { index: usize, item_count: usize },
 }
 
 // Creating hints
@@ -105,19 +105,16 @@ pub fn alternate<Item, R: Renderer<Item>>(
             }
             AlterationHint::Hole(Hole::Next) => {
                 let item = items.get(cursor).ok_or(AlterationError::IndexOutOfBounds {
-                    index: i64::try_from(cursor).unwrap_or(i64::MAX),
+                    index: cursor,
                     item_count: items.len(),
                 })?;
                 (cursor + 1, Some(renderer.item(item)))
             }
             AlterationHint::Hole(Hole::Num(index)) => {
-                let item = usize::try_from(*index)
-                    .ok()
-                    .and_then(|index| items.get(index))
-                    .ok_or(AlterationError::IndexOutOfBounds {
-                        index: *index,
-                        item_count: items.len(),
-                    })?;
+                let item = items.get(*index).ok_or(AlterationError::IndexOutOfBounds {
+                    index: *index,
+                    item_count: items.len(),
+                })?;
                 (cursor, Some(renderer.item(item)))
             }
             AlterationHint::Fuse(hint_l, hint_r) => {

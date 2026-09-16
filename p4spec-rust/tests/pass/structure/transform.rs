@@ -341,11 +341,11 @@ fn test_empty_table_rejects_unmatched_parameters_at_definition_span() {
 
 #[test]
 fn test_rule_input_error_preserves_premise_span() {
-    let prem = p4spec_rust::phrase! {node: al::PremKind::Rule(al::RulePrem {id: id("r", 7), not_exp: Mixfix::Arg(variable("x", 7)), input_hint: InputHint::new(vec![-1])}), span: span(7)};
+    let prem = p4spec_rust::phrase! {node: al::PremKind::Rule(al::RulePrem {id: id("r", 7), not_exp: Mixfix::Arg(variable("x", 7)), input_hint: InputHint::new(vec![1])}), span: span(7)};
     let error = convert(vec![function(vec![clause(vec![prem], 5)], None)], true).unwrap_err();
     assert_eq!(
         error.kind,
-        StructureErrorKind::Input(InputError::IndexOutOfBounds { index: -1, arity: 1 })
+        StructureErrorKind::Input(InputError::IndexOutOfBounds { index: 1, arity: 1 })
     );
     assert_eq!(error.span, span(7));
 }

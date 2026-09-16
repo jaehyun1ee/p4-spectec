@@ -149,7 +149,7 @@ pub enum ExpKind {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Hole {
-    Num(i64),
+    Num(usize),
     Next,
     Rest,
     None,

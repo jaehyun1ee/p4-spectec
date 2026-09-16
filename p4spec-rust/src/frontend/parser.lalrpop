@@ -84,7 +84,7 @@ extern {
         "SLASH" => Token::Slash,
         "BACKSLASH" => Token::Backslash,
         "HOLE" => Token::Hole,
-        "HOLE_NUM" => Token::NumberedHole(<i64>),
+        "HOLE_NUM" => Token::NumberedHole(<usize>),
         "HOLE_MULTI" => Token::MultipleHole,
         "HOLE_NIL" => Token::EmptyHole,
         "EQ" => Token::Equals,

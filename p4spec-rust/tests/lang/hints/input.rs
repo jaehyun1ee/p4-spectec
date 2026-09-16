@@ -11,10 +11,6 @@ fn test_input_hints_validate_and_preserve_split_order() {
         Err(InputError::DuplicateIndex(1))
     );
     assert_eq!(
-        input_impl::validate(&InputHint::new(vec![-1]), 3),
-        Err(InputError::IndexOutOfBounds { index: -1, arity: 3 })
-    );
-    assert_eq!(
         input_impl::validate(&InputHint::new(vec![3]), 3),
         Err(InputError::IndexOutOfBounds { index: 3, arity: 3 })
     );

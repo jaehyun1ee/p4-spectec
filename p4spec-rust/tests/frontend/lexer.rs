@@ -152,7 +152,7 @@ fn test_byte_escapes_decode_valid_utf8_sequences() {
 }
 
 #[test]
-fn test_numbered_holes_accept_the_full_i64_range() {
+fn test_numbered_holes_accept_large_values() {
     assert_eq!(
         token_nodes("%4611686018427387904"),
         vec![Token::NumberedHole(4_611_686_018_427_387_904), Token::Eof]
