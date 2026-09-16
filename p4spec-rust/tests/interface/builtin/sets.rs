@@ -21,13 +21,8 @@ fn test_set_union_retains_notation() {
     let typ_key = typ::make::bool();
     let typ_set = typ::make::var(super::id("set"), vec![typ_key.clone()]);
     let typ_sets = typ::make::list(typ_set);
-    let sets = make::list(
-        &mut arena,
-        typ_sets.node.clone().into(),
-        Vec::new(),
-        Span::default(),
-    )
-    .unwrap();
+    let sets =
+        make::list(&mut arena, typ_sets.node.clone().into(), Vec::new(), Span::default()).unwrap();
     let result = sets::unions_set(&mut arena, &[typ_key], &[sets]).unwrap();
     let Mixfix::Brack(atom_l, _, atom_r) = get::case(&arena, &result).unwrap() else {
         panic!("expected set notation");
@@ -42,10 +37,8 @@ fn test_set_union_deduplicates_annotated_elements_in_syntax_order() {
     let value_true = make::bool(&mut arena, true, Span::default()).unwrap();
     let mut span = Span::default();
     span.left.line = 17;
-    let value_true_updated = Value {
-        span: make::bool(&mut arena, false, span).unwrap().span,
-        ..value_true
-    };
+    let value_true_updated =
+        Value { span: make::bool(&mut arena, false, span).unwrap().span, ..value_true };
     let value_true_updated = Value {
         note: make::new(
             &mut arena,

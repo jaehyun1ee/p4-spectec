@@ -56,12 +56,8 @@ fn test_conversion_preserves_binding_match_and_cast_guards_before_bindings() {
         ast::TypKind::Tuple(vec![typ_bool.clone(), child_typ.clone()]),
         12,
     );
-    let mut spec = function_spec(
-        vec![typ_list, parent_typ],
-        vec![exp_list, exp_upcast],
-        exp_output,
-        vec![],
-    );
+    let mut spec =
+        function_spec(vec![typ_list, parent_typ], vec![exp_list, exp_upcast], exp_output, vec![]);
     spec.insert(0, child_def);
     spec.insert(0, parent_def);
 
@@ -122,11 +118,7 @@ fn test_partial_binding_preserves_expression_and_premise_iteration_dimensions() 
             Box::new(tuple),
             (
                 ast::Iter::List,
-                vec![ast::Var {
-                    id: id("x", 1),
-                    typ: typ::make::bool(),
-                    iters: vec![],
-                }],
+                vec![ast::Var { id: id("x", 1), typ: typ::make::bool(), iters: vec![] }],
             ),
         ),
         ast::TypKind::Iter(
@@ -198,11 +190,7 @@ fn test_partial_binding_preserves_nested_iteration_order_and_dimensions() {
             Box::new(tuple),
             (
                 ast::Iter::Opt,
-                vec![ast::Var {
-                    id: id("x", 1),
-                    typ: typ::make::bool(),
-                    iters: vec![],
-                }],
+                vec![ast::Var { id: id("x", 1), typ: typ::make::bool(), iters: vec![] }],
             ),
         ),
         inner_typ.node.clone(),
@@ -294,11 +282,7 @@ fn test_partial_case_and_list_bindings_generate_match_then_bind_premises_in_sour
     let list_typ = crate::phrase! { node:
     ast::TypKind::Iter(Box::new(typ::make::bool()), ast::Iter::List), span:
     span(3) };
-    let list = exp(
-        ast::ExpKind::List(vec![var_exp("z", 3)]),
-        list_typ.node.clone(),
-        3,
-    );
+    let list = exp(ast::ExpKind::List(vec![var_exp("z", 3)]), list_typ.node.clone(), 3);
     let tuple = exp(
         ast::ExpKind::Tuple(vec![case, list]),
         ast::TypKind::Tuple(vec![choice_typ, list_typ]),
@@ -322,19 +306,13 @@ fn test_partial_case_and_list_bindings_generate_match_then_bind_premises_in_sour
     assert!(matches!(
         &prems[0].node,
         ast_al::PremKind::If(ast_al::IfPrem {
-            exp: NotePhrase {
-                node: ast::ExpKind::Match(_, ast::Pattern::Case(_)),
-                ..
-            }
+            exp: NotePhrase { node: ast::ExpKind::Match(_, ast::Pattern::Case(_)), .. }
         })
     ));
     assert!(matches!(
         &prems[1].node,
         ast_al::PremKind::Let(ast_al::LetPrem {
-            exp_l: NotePhrase {
-                node: ast::ExpKind::Case(_),
-                ..
-            },
+            exp_l: NotePhrase { node: ast::ExpKind::Case(_), .. },
             ..
         })
     ));
@@ -350,10 +328,7 @@ fn test_partial_case_and_list_bindings_generate_match_then_bind_premises_in_sour
     assert!(matches!(
         &prems[3].node,
         ast_al::PremKind::Let(ast_al::LetPrem {
-            exp_l: NotePhrase {
-                node: ast::ExpKind::List(_),
-                ..
-            },
+            exp_l: NotePhrase { node: ast::ExpKind::List(_), .. },
             ..
         })
     ));

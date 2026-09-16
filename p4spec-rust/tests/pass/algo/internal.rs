@@ -128,11 +128,7 @@ fn joint_iteration(names: &[(&str, i64)], iter: ast::Iter, line: i64) -> ast::Ex
         .collect::<Vec<_>>();
     let vars = names
         .iter()
-        .map(|(name, line)| ast::Var {
-            id: id(name, *line),
-            typ: typ_bool.clone(),
-            iters: vec![],
-        })
+        .map(|(name, line)| ast::Var { id: id(name, *line), typ: typ_bool.clone(), iters: vec![] })
         .collect::<Vec<_>>();
     let typ_tuple = crate::phrase! { node: ast::TypKind::Tuple(vec![typ_bool; names.len()]), span:  span(line) };
     let exp_inner = exp(ast::ExpKind::Tuple(exps), typ_tuple.node.clone(), line);
@@ -146,21 +142,13 @@ fn joint_iteration(names: &[(&str, i64)], iter: ast::Iter, line: i64) -> ast::Ex
 fn dimension_exp(name: &str, iter: ast::Iter, line: i64) -> ast::Exp {
     crate::lang::il::var::as_exp(
         true,
-        &ast::Var {
-            id: id(name, line),
-            typ: typ::make::bool(),
-            iters: vec![iter],
-        },
+        &ast::Var { id: id(name, line), typ: typ::make::bool(), iters: vec![iter] },
     )
 }
 
 fn len_exp(name: &str, line: i64) -> ast::Exp {
     let exp_inner = dimension_exp(name, ast::Iter::List, line);
-    exp(
-        ast::ExpKind::Len(Box::new(exp_inner)),
-        ast::TypKind::Num(xl::num::Typ::Nat),
-        line,
-    )
+    exp(ast::ExpKind::Len(Box::new(exp_inner)), ast::TypKind::Num(xl::num::Typ::Nat), line)
 }
 
 fn equality_prem(exp_l: ast::Exp, exp_r: ast::Exp, line: i64) -> ast::Prem {
@@ -178,21 +166,13 @@ fn equality_prem(exp_l: ast::Exp, exp_r: ast::Exp, line: i64) -> ast::Prem {
 }
 
 fn indexed_exp(base: ast::Exp, index: ast::Exp, note: ast::TypKind, line: i64) -> ast::Exp {
-    exp(
-        ast::ExpKind::Idx(Box::new(base), Box::new(index)),
-        note,
-        line,
-    )
+    exp(ast::ExpKind::Idx(Box::new(base), Box::new(index)), note, line)
 }
 
 fn literal_index_exp(value: bool, line: i64) -> ast::Exp {
     let typ_bool = typ::make::bool();
     let base = exp(
-        ast::ExpKind::List(vec![exp(
-            ast::ExpKind::Bool(value),
-            ast::TypKind::Bool,
-            line,
-        )]),
+        ast::ExpKind::List(vec![exp(ast::ExpKind::Bool(value), ast::TypKind::Bool, line)]),
         typ::make::list(typ_bool).node,
         line,
     );
@@ -217,11 +197,7 @@ fn assert_index_guard_span(prem: &ast_al::Prem, expected_span: Span) {
 }
 
 fn iteration_var(name: &str, typ: ast::Typ, line: i64) -> ast::Var {
-    ast::Var {
-        id: id(name, line),
-        typ,
-        iters: vec![],
-    }
+    ast::Var { id: id(name, line), typ, iters: vec![] }
 }
 
 fn function_clause(spec: &crate::lang::al::ast::Spec) -> &ast_al::Clause {

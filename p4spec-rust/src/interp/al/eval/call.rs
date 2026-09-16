@@ -32,10 +32,7 @@ pub(in crate::interp::al) fn check_rel_inputs(
         ast::RelDef::Defined(rel) => (&rel.not_typ, &rel.input_hint),
     };
     let typs = not_typ.node.args();
-    backtrack_from_result!(
-        crate::lang::hints::input::validate(inputs, typs.len()),
-        &id.span
-    );
+    backtrack_from_result!(crate::lang::hints::input::validate(inputs, typs.len()), &id.span);
     let typs = inputs
         .indices()
         .iter()
@@ -47,9 +44,7 @@ pub(in crate::interp::al) fn check_rel_inputs(
         id,
         &typs,
         values,
-        GuardErrorKind::RelationInputMismatch {
-            relation: id.node.clone(),
-        },
+        GuardErrorKind::RelationInputMismatch { relation: id.node.clone() },
     )
 }
 
@@ -84,9 +79,7 @@ pub(in crate::interp::al) fn check_func_inputs(
         id,
         &typ.typs_params,
         values,
-        GuardErrorKind::FunctionInputMismatch {
-            func: id.node.clone(),
-        },
+        GuardErrorKind::FunctionInputMismatch { func: id.node.clone() },
     )
 }
 
@@ -130,9 +123,7 @@ fn check_func_output(
         id,
         &[typ],
         std::slice::from_ref(value),
-        GuardErrorKind::FunctionOutputMismatch {
-            func: id.node.clone(),
-        },
+        GuardErrorKind::FunctionOutputMismatch { func: id.node.clone() },
     )
 }
 
@@ -188,9 +179,7 @@ pub fn invoke_rel<Iface: Interface, Exn: Extern>(
         runner.interp_mut().cache.rels.insert(key, values.clone());
     }
     result.nest(id.span.clone(), || {
-        ErrorKind::Trace(TraceErrorKind::RelationInvocation {
-            rel: id.node.clone(),
-        })
+        ErrorKind::Trace(TraceErrorKind::RelationInvocation { rel: id.node.clone() })
     })
 }
 
@@ -222,9 +211,7 @@ fn invoke_extern_rel<Iface: Interface, Exn: Extern>(
                 id,
                 &typs,
                 &values,
-                GuardErrorKind::RelationOutputMismatch {
-                    relation: id.node.clone()
-                }
+                GuardErrorKind::RelationOutputMismatch { relation: id.node.clone() }
             )
             .guard()
         );
@@ -297,20 +284,16 @@ fn invoke_defined_rel<Iface: Interface, Exn: Extern>(
         Backtrack::Ok(values) => Backtrack::Ok(values),
         Backtrack::Err(errors) => Backtrack::Err(errors),
         Backtrack::Unmatch(errors) => match &rel.else_group {
-            Some(group) => eval_rule_path(
-                runner,
-                ctx,
-                &group.node.rule_match,
-                &group.node.rule_path,
-                values,
-            )
-            .nest(id.span.clone(), || {
-                ErrorKind::Trace(TraceErrorKind::RuleApplication {
-                    relation: id.node.clone(),
-                    group: group.node.id.node.clone(),
-                    path: group.node.rule_path.id.node.clone(),
-                })
-            }),
+            Some(group) => {
+                eval_rule_path(runner, ctx, &group.node.rule_match, &group.node.rule_path, values)
+                    .nest(id.span.clone(), || {
+                        ErrorKind::Trace(TraceErrorKind::RuleApplication {
+                            relation: id.node.clone(),
+                            group: group.node.id.node.clone(),
+                            path: group.node.rule_path.id.node.clone(),
+                        })
+                    })
+            }
             None => Backtrack::Unmatch(errors),
         },
         Backtrack::Nondet((group_a, path_a), (group_b, path_b)) => Backtrack::err(
@@ -454,11 +437,7 @@ fn invoke_builtin_func<Iface: Interface, Exn: Extern>(
                 ErrorKind::Host(HostErrorKind::Interface(InterfaceError::Builtin(_)))
             );
             let error = error.at_if_missing(&id.span);
-            if recoverable {
-                Backtrack::Unmatch(vec![error])
-            } else {
-                Backtrack::Err(vec![error])
-            }
+            if recoverable { Backtrack::Unmatch(vec![error]) } else { Backtrack::Err(vec![error]) }
         }
     }
 }
@@ -573,14 +552,7 @@ fn invoke_defined_func<Iface: Interface, Exn: Extern>(
     }
     let det = runner.interp().config.det;
     let mut evaluate = |idx: &usize| {
-        eval_clause(
-            runner,
-            ctx,
-            &ctx_local,
-            defined_func,
-            &defined_func.clauses[*idx],
-            values,
-        )
+        eval_clause(runner, ctx, &ctx_local, defined_func, &defined_func.clauses[*idx], values)
     };
     let result = if det {
         choose_deterministic(0..defined_func.clauses.len(), &mut evaluate)

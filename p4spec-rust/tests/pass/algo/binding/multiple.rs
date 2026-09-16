@@ -4,11 +4,7 @@ use super::super::*;
 fn test_multiple_binding_renames_repetitions_and_compares_them_in_occurrence_order() {
     let tuple = exp(
         ast::ExpKind::Tuple(vec![var_exp("x", 1), var_exp("x", 2), var_exp("x", 3)]),
-        ast::TypKind::Tuple(vec![
-            typ::make::bool(),
-            typ::make::bool(),
-            typ::make::bool(),
-        ]),
+        ast::TypKind::Tuple(vec![typ::make::bool(), typ::make::bool(), typ::make::bool()]),
         1,
     );
     let benv = collect::collect_exp(&Context::new(), &tuple).expect("binding collection");

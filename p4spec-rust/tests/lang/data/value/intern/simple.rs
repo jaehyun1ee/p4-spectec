@@ -19,11 +19,7 @@ struct Counted {
 impl Clone for Counted {
     fn clone(&self) -> Self {
         self.clones.set(self.clones.get() + 1);
-        Self {
-            value: self.value,
-            clones: self.clones.clone(),
-            hashes: self.hashes.clone(),
-        }
+        Self { value: self.value, clones: self.clones.clone(), hashes: self.hashes.clone() }
     }
 }
 
@@ -105,10 +101,7 @@ fn test_registered_default_skips_hashing_and_cloning() {
     assert_eq!(clones.get(), 0);
     assert_eq!(hashes.get(), 0);
     let id_other = interner
-        .intern(Counted {
-            value: 1,
-            ..Counted::default()
-        })
+        .intern(Counted { value: 1, ..Counted::default() })
         .unwrap();
     assert_ne!(id_other, id_default);
     assert_eq!(interner.get(id_default).value, 0);

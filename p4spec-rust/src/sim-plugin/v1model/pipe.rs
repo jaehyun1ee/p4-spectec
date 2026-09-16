@@ -87,12 +87,7 @@ impl ObjectState {
             crate::phrase!(node: "objectState".to_owned(), span: Span::default()),
             Vec::new(),
         );
-        Ok(make::external(
-            arena,
-            typ.node.into(),
-            payload.into(),
-            Span::default(),
-        )?)
+        Ok(make::external(arena, typ.node.into(), payload.into(), Span::default())?)
     }
 
     // - Decoding
@@ -116,12 +111,7 @@ pub fn transform_stf_stmt(mut stmt: Statement) -> Statement {
             .rewrite_substring(&["egress", "postqos", "c3"], "main.eg")
     }
     match &mut stmt {
-        Statement::Add {
-            table,
-            matches,
-            action,
-            ..
-        } => {
+        Statement::Add { table, matches, action, .. } => {
             *table = transform_name(table.clone());
             action.name = transform_name(action.name.clone());
             for mtch in matches {
@@ -192,11 +182,7 @@ where
 {
     let encoding = ctx.external().encoding;
     let value_object = func::find_object_state_e(ctx, value_arch, value_id)?;
-    Ok(ObjectState::from_value(
-        ctx.arena_mut(),
-        encoding,
-        &value_object,
-    )?)
+    Ok(ObjectState::from_value(ctx.arena_mut(), encoding, &value_object)?)
 }
 
 fn find_packet_in<Interp, Iface>(
@@ -214,13 +200,8 @@ where
         crate::phrase!(node: "id".to_owned(), span: Span::default()),
         vec![],
     ));
-    let value_id = make::list(
-        ctx.arena_mut(),
-        typ_id.node.into(),
-        values_name,
-        Span::default(),
-    )
-    .map_err(ExternError::from)?;
+    let value_id = make::list(ctx.arena_mut(), typ_id.node.into(), values_name, Span::default())
+        .map_err(ExternError::from)?;
     match find_object_state(ctx, value_arch, value_id)? {
         ObjectState::PacketIn(pkt) => Ok(pkt),
         _ => Err(ExternError::Failure("packet_in extern not found".to_owned()).into()),
@@ -242,13 +223,8 @@ where
         crate::phrase!(node: "id".to_owned(), span: Span::default()),
         vec![],
     ));
-    let value_id = make::list(
-        ctx.arena_mut(),
-        typ_id.node.into(),
-        values_name,
-        Span::default(),
-    )
-    .map_err(ExternError::from)?;
+    let value_id = make::list(ctx.arena_mut(), typ_id.node.into(), values_name, Span::default())
+        .map_err(ExternError::from)?;
     match find_object_state(ctx, value_arch, value_id)? {
         ObjectState::PacketOut(pkt) => Ok(pkt),
         _ => Err(ExternError::Failure("packet_out extern not found".to_owned()).into()),
@@ -280,12 +256,9 @@ where
             *value_ids,
             *value_args,
         )?)),
-        "register" => Some(ObjectState::Register(Register::init(
-            ctx,
-            *value_targs,
-            *value_ids,
-            *value_args,
-        )?)),
+        "register" => {
+            Some(ObjectState::Register(Register::init(ctx, *value_targs, *value_ids, *value_args)?))
+        }
         "direct_counter" => Some(ObjectState::DirectCounter(DirectCounter::init(
             ctx.arena(),
             *value_targs,
@@ -309,13 +282,8 @@ where
                 crate::phrase!(node: "objectState".to_owned(), span: Span::default()),
                 Vec::new(),
             );
-            make::external(
-                ctx.arena_mut(),
-                typ.node.into(),
-                payload.into(),
-                Span::default(),
-            )
-            .map_err(ExternError::from)?
+            make::external(ctx.arena_mut(), typ.node.into(), payload.into(), Span::default())
+                .map_err(ExternError::from)?
         }
     })
 }
@@ -420,12 +388,7 @@ where
             (ObjectState::PacketIn(object), "extract", ["hdr"]) => {
                 let (object, value_ctx, value_arch, value_call_result) =
                     object.extract(ctx, *value_ctx, *value_arch)?;
-                (
-                    ObjectState::PacketIn(object),
-                    value_ctx,
-                    value_arch,
-                    value_call_result,
-                )
+                (ObjectState::PacketIn(object), value_ctx, value_arch, value_call_result)
             }
             (
                 ObjectState::PacketIn(object),
@@ -434,105 +397,55 @@ where
             ) => {
                 let (object, value_ctx, value_arch, value_call_result) =
                     object.extract_varsize(ctx, *value_ctx, *value_arch)?;
-                (
-                    ObjectState::PacketIn(object),
-                    value_ctx,
-                    value_arch,
-                    value_call_result,
-                )
+                (ObjectState::PacketIn(object), value_ctx, value_arch, value_call_result)
             }
             (ObjectState::PacketIn(object), "lookahead", []) => {
                 let (object, value_ctx, value_arch, value_call_result) =
                     object.lookahead(ctx, *value_ctx, *value_arch)?;
-                (
-                    ObjectState::PacketIn(object),
-                    value_ctx,
-                    value_arch,
-                    value_call_result,
-                )
+                (ObjectState::PacketIn(object), value_ctx, value_arch, value_call_result)
             }
             (ObjectState::PacketIn(object), "advance", ["sizeInBits"]) => {
                 let (object, value_ctx, value_arch, value_call_result) =
                     object.advance(ctx, *value_ctx, *value_arch)?;
-                (
-                    ObjectState::PacketIn(object),
-                    value_ctx,
-                    value_arch,
-                    value_call_result,
-                )
+                (ObjectState::PacketIn(object), value_ctx, value_arch, value_call_result)
             }
             (ObjectState::PacketIn(object), "length", []) => {
                 let (object, value_ctx, value_arch, value_call_result) =
                     object.length(ctx, *value_ctx, *value_arch)?;
-                (
-                    ObjectState::PacketIn(object),
-                    value_ctx,
-                    value_arch,
-                    value_call_result,
-                )
+                (ObjectState::PacketIn(object), value_ctx, value_arch, value_call_result)
             }
             (ObjectState::PacketOut(object), "emit", ["hdr"]) => {
                 let (object, value_ctx, value_arch, value_call_result) =
                     object.emit(ctx, *value_ctx, *value_arch)?;
-                (
-                    ObjectState::PacketOut(object),
-                    value_ctx,
-                    value_arch,
-                    value_call_result,
-                )
+                (ObjectState::PacketOut(object), value_ctx, value_arch, value_call_result)
             }
             (ObjectState::Counter(object), "count", ["index"]) => {
                 let pkt = find_packet_in(ctx, *value_arch)?;
                 let (object, value_ctx, value_arch, value_call_result) =
                     object.count(ctx, *value_ctx, *value_arch, &pkt)?;
-                (
-                    ObjectState::Counter(object),
-                    value_ctx,
-                    value_arch,
-                    value_call_result,
-                )
+                (ObjectState::Counter(object), value_ctx, value_arch, value_call_result)
             }
             (ObjectState::Register(object), "read", ["result", "index"]) => {
                 let (object, value_ctx, value_arch, value_call_result) =
                     object.read(ctx, *value_ctx, *value_arch)?;
-                (
-                    ObjectState::Register(object),
-                    value_ctx,
-                    value_arch,
-                    value_call_result,
-                )
+                (ObjectState::Register(object), value_ctx, value_arch, value_call_result)
             }
             (ObjectState::Register(object), "write", ["index", "value"]) => {
                 let (object, value_ctx, value_arch, value_call_result) =
                     object.write(ctx, *value_ctx, *value_arch)?;
-                (
-                    ObjectState::Register(object),
-                    value_ctx,
-                    value_arch,
-                    value_call_result,
-                )
+                (ObjectState::Register(object), value_ctx, value_arch, value_call_result)
             }
             (ObjectState::DirectCounter(object), "count", []) => {
                 let pkt = find_packet_in(ctx, *value_arch)?;
                 let (object, value_ctx, value_arch, value_call_result) =
                     object.count(ctx, *value_ctx, *value_arch, &pkt)?;
-                (
-                    ObjectState::DirectCounter(object),
-                    value_ctx,
-                    value_arch,
-                    value_call_result,
-                )
+                (ObjectState::DirectCounter(object), value_ctx, value_arch, value_call_result)
             }
             (ObjectState::DirectMeter(object), "read", ["result"]) => {
                 let pkt = find_packet_in(ctx, *value_arch)?;
                 let (object, value_ctx, value_arch, value_call_result) =
                     object.read(ctx, *value_ctx, *value_arch, &pkt)?;
-                (
-                    ObjectState::DirectMeter(object),
-                    value_ctx,
-                    value_arch,
-                    value_call_result,
-                )
+                (ObjectState::DirectMeter(object), value_ctx, value_arch, value_call_result)
             }
             _ => {
                 let ids = get::list(ctx.arena(), value_id)
@@ -706,13 +619,9 @@ where
             crate::phrase!(node: "id".to_owned(), span: Span::default()),
             vec![],
         ));
-        let value_id = make::list(
-            ctx.arena_mut(),
-            typ_id.node.into(),
-            values_name,
-            Span::default(),
-        )
-        .map_err(ExternError::from)?;
+        let value_id =
+            make::list(ctx.arena_mut(), typ_id.node.into(), values_name, Span::default())
+                .map_err(ExternError::from)?;
         let encoding = ctx.external().encoding;
         let value_object =
             ObjectState::PacketIn(packet.packet_in).to_value(ctx.arena_mut(), encoding)?;
@@ -740,13 +649,9 @@ where
             crate::phrase!(node: "id".to_owned(), span: Span::default()),
             vec![],
         ));
-        let value_id = make::list(
-            ctx.arena_mut(),
-            typ_id.node.into(),
-            values_name,
-            Span::default(),
-        )
-        .map_err(ExternError::from)?;
+        let value_id =
+            make::list(ctx.arena_mut(), typ_id.node.into(), values_name, Span::default())
+                .map_err(ExternError::from)?;
         let encoding = ctx.external().encoding;
         let value_object = ObjectState::PacketIn(pkt).to_value(ctx.arena_mut(), encoding)?;
         func::update_object_state_e(ctx, state.value_arch, value_id, value_object)
@@ -770,13 +675,9 @@ where
             crate::phrase!(node: "id".to_owned(), span: Span::default()),
             vec![],
         ));
-        let value_id = make::list(
-            ctx.arena_mut(),
-            typ_id.node.into(),
-            values_name,
-            Span::default(),
-        )
-        .map_err(ExternError::from)?;
+        let value_id =
+            make::list(ctx.arena_mut(), typ_id.node.into(), values_name, Span::default())
+                .map_err(ExternError::from)?;
         let encoding = ctx.external().encoding;
         let value_object =
             ObjectState::PacketOut(PacketOut::default()).to_value(ctx.arena_mut(), encoding)?;
@@ -838,11 +739,7 @@ where
     Interp: Interpreter<Iface, V1Model>,
 {
     let (value_ctx, value_arch) = pgm::v1model_init(ctx, program)?;
-    Ok(SimState {
-        value_ctx,
-        value_arch,
-        txs: vec![],
-    })
+    Ok(SimState { value_ctx, value_arch, txs: vec![] })
 }
 
 // == Pipeline driver
@@ -1156,11 +1053,7 @@ where
     Interp: Interpreter<Iface, V1Model>,
 {
     let packet_in = find_packet_in(ctx, state.value_arch)?;
-    let packet = Packet {
-        value_ctx: state.value_ctx,
-        packet_in,
-        entrypoint,
-    };
+    let packet = Packet { value_ctx: state.value_ctx, packet_in, entrypoint };
     let mut arch = find_arch_state(ctx, state.value_arch)?;
     match entrypoint {
         Entrypoint::Ingress => arch.queue.push_front(packet),
@@ -1247,13 +1140,9 @@ where
             crate::phrase!(node: "id".to_owned(), span: Span::default()),
             vec![],
         ));
-        let value_id = make::list(
-            ctx.arena_mut(),
-            typ_id.node.into(),
-            values_name,
-            Span::default(),
-        )
-        .map_err(ExternError::from)?;
+        let value_id =
+            make::list(ctx.arena_mut(), typ_id.node.into(), values_name, Span::default())
+                .map_err(ExternError::from)?;
         let encoding = ctx.external().encoding;
         let value_object = pkt.to_value(ctx.arena_mut(), encoding)?;
         func::update_object_state_e(ctx, state.value_arch, value_id, value_object)
@@ -1360,11 +1249,7 @@ where
         return Ok(None);
     }
     let arch = find_arch_state(ctx, state.value_arch)?;
-    if schedule_recirculate(ctx, state, &arch)? {
-        Ok(None)
-    } else {
-        Ok(Some(value_result))
-    }
+    if schedule_recirculate(ctx, state, &arch)? { Ok(None) } else { Ok(Some(value_result)) }
 }
 
 // == Scheduling packets

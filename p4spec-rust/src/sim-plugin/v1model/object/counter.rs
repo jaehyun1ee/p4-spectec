@@ -58,10 +58,7 @@ impl Counter {
             ("CounterType", "packets") => Ok(Self::Packets(vec![BigInt::zero(); size])),
             ("CounterType", "bytes") => Ok(Self::Bytes(vec![BigInt::zero(); size])),
             ("CounterType", "packets_and_bytes") => {
-                Ok(Self::PacketsAndBytes(vec![
-                    (BigInt::zero(), BigInt::zero());
-                    size
-                ]))
+                Ok(Self::PacketsAndBytes(vec![(BigInt::zero(), BigInt::zero()); size]))
             }
             _ => Err(ExternError::Failure(format!(
                 "invalid CounterType enum value: {id_enum}.{id_type}"

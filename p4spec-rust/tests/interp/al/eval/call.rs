@@ -58,10 +58,7 @@ fn test_function_choice_preserves_order_and_counts_equal_successes() {
         );
         let mut runner = make_runner(spec_al, true);
         let error = runner.context().call_func("pick", &[], &[]).unwrap_err();
-        assert!(matches!(
-            *error.kind,
-            ErrorKind::Trace(TraceErrorKind::Execution)
-        ));
+        assert!(matches!(*error.kind, ErrorKind::Trace(TraceErrorKind::Execution)));
         assert!(error.to_string().contains("non-deterministic"), "{error}");
     }
 }
@@ -120,10 +117,7 @@ def $fatal() = +9
             "+7"
         );
         let error = runner.context().call_func("fatal", &[], &[]).unwrap_err();
-        assert!(matches!(
-            *error.kind,
-            ErrorKind::Trace(TraceErrorKind::Execution)
-        ));
+        assert!(matches!(*error.kind, ErrorKind::Trace(TraceErrorKind::Execution)));
         let message = error.to_string();
         assert!(message.contains("unavailable"), "{message}");
         assert!(message.contains("fatal"), "{message}");
@@ -229,10 +223,7 @@ fn test_relation_outputs_follow_notation_order_and_equal_paths_are_ambiguous() {
         runner.context().call_rel(name, values)
     }
     .unwrap_err();
-    assert!(matches!(
-        *error.kind,
-        ErrorKind::Trace(TraceErrorKind::Execution)
-    ));
+    assert!(matches!(*error.kind, ErrorKind::Trace(TraceErrorKind::Execution)));
     assert!(error.to_string().contains("non-deterministic"), "{error}");
 }
 
@@ -256,10 +247,7 @@ rule Recover/fallback: n ~> 9
             runner.context().call_rel(name, values)
         }
         .unwrap_err();
-        assert!(matches!(
-            *error.kind,
-            ErrorKind::Trace(TraceErrorKind::Execution)
-        ));
+        assert!(matches!(*error.kind, ErrorKind::Trace(TraceErrorKind::Execution)));
         let message = error.to_string();
         assert!(message.contains("Broken"), "{message}");
         assert!(message.contains("Recover"), "{message}");
@@ -299,10 +287,7 @@ def $fallback(n*) = n*
         clause.node.prems.insert(1, prem);
     }
     let mut runner = make_runner(spec_al, false);
-    for values in [
-        vec![],
-        vec![nat(runner.arena_mut(), 2), nat(runner.arena_mut(), 4)],
-    ] {
+    for values in [vec![], vec![nat(runner.arena_mut(), 2), nat(runner.arena_mut(), 4)]] {
         let value = make::list(
             runner.arena_mut(),
             (typ::make::iter(typ::make::nat(), p4spec_rust::lang::common::Iter::List))
@@ -317,11 +302,7 @@ def $fallback(n*) = n*
             .context()
             .call_func("map", &[], std::slice::from_ref(&value))
             .unwrap();
-        let expected = if values.is_empty() {
-            vec![]
-        } else {
-            vec!["3", "5"]
-        };
+        let expected = if values.is_empty() { vec![] } else { vec!["3", "5"] };
         assert_eq!(
             get::list(runner.arena(), &mapped)
                 .unwrap()
@@ -354,11 +335,7 @@ fn test_iterated_premise_rows_read_parent_bindings_independently() {
             span: Span::default()
         )
     };
-    let var = |name: &str| ast::Var {
-        id: id(name),
-        typ: typ::make::nat(),
-        iters: vec![],
-    };
+    let var = |name: &str| ast::Var { id: id(name), typ: typ::make::nat(), iters: vec![] };
     let prem_inner = phrase!(node: ast::PremKind::Let(ast::LetPrem {
         exp_l: exp_var("n_result"),
         exp_r: note_phrase!(
@@ -555,16 +532,10 @@ def $not_hold(n) = false
                     };
                     if external {
                         let error = result.unwrap_err();
-                        assert!(matches!(
-                            *error.kind,
-                            ErrorKind::Trace(TraceErrorKind::Execution)
-                        ));
+                        assert!(matches!(*error.kind, ErrorKind::Trace(TraceErrorKind::Execution)));
                         assert!(error.to_string().contains("Check"), "{error}");
                     } else {
-                        assert_eq!(
-                            get::bool(runner.arena(), &result.unwrap()).unwrap(),
-                            expected
-                        );
+                        assert_eq!(get::bool(runner.arena(), &result.unwrap()).unwrap(), expected);
                     }
                 }
             }
@@ -653,10 +624,7 @@ def $none() = $select(C)
             .unwrap()
         );
         let error = runner.context().call_func("none", &[], &[]).unwrap_err();
-        assert!(matches!(
-            *error.kind,
-            ErrorKind::Trace(TraceErrorKind::Execution)
-        ));
+        assert!(matches!(*error.kind, ErrorKind::Trace(TraceErrorKind::Execution)));
         let message = error.to_string();
         assert!(message.contains("select"), "{message}");
         assert!(message.contains("reject"), "{message}");
@@ -718,10 +686,8 @@ def $pick<X>(b, X) = $identity<X>(X)
         let mut runner = make_runner(spec_al.clone(), det);
         for condition in [true, false] {
             let value = nat(runner.arena_mut(), 7);
-            let values = [
-                make::bool(runner.arena_mut(), condition, Span::default()).unwrap(),
-                value,
-            ];
+            let values =
+                [make::bool(runner.arena_mut(), condition, Span::default()).unwrap(), value];
             let output = runner
                 .context()
                 .call_func("pick", &[typ::make::nat()], &values)
@@ -733,23 +699,15 @@ def $pick<X>(b, X) = $identity<X>(X)
 
 #[test]
 fn test_public_guard_rejects_malformed_function_input() {
-    let mut runner = make_runner(
-        spec("var n : nat\ndec $ignore(nat) : nat\ndef $ignore(n) = 1"),
-        false,
-    );
+    let mut runner =
+        make_runner(spec("var n : nat\ndec $ignore(nat) : nat\ndef $ignore(n) = 1"), false);
     let error = {
-        let (name, targs, values) = (
-            "ignore",
-            &[],
-            &[make::bool(runner.arena_mut(), true, Span::default()).unwrap()],
-        );
+        let (name, targs, values) =
+            ("ignore", &[], &[make::bool(runner.arena_mut(), true, Span::default()).unwrap()]);
         runner.context().call_func(name, targs, values)
     }
     .unwrap_err();
-    assert!(
-        error.to_string().contains("function argument of ignore"),
-        "{error}"
-    );
+    assert!(error.to_string().contains("function argument of ignore"), "{error}");
 }
 
 struct Host {
@@ -824,11 +782,7 @@ impl p4spec_rust::runner::Extern for Host {
 }
 
 fn host(value: fn(&mut ValueArena) -> Value, reenter: bool) -> Host {
-    Host {
-        calls: Rc::new(std::cell::Cell::new(0)),
-        value,
-        reenter,
-    }
+    Host { calls: Rc::new(std::cell::Cell::new(0)), value, reenter }
 }
 
 #[test]
@@ -936,14 +890,8 @@ def $pick<X>() = $external<X>()
     let spec_al = spec(source);
     for det in [false, true] {
         for guard in [false, true] {
-            let builtin = host(
-                |arena| make::bool(arena, true, Span::default()).unwrap(),
-                false,
-            );
-            let external = host(
-                |arena| make::bool(arena, false, Span::default()).unwrap(),
-                false,
-            );
+            let builtin = host(|arena| make::bool(arena, true, Span::default()).unwrap(), false);
+            let external = host(|arena| make::bool(arena, false, Span::default()).unwrap(), false);
             let calls = external.calls.clone();
             let mut runner = Runner::<AlInterp, _, _>::new(
                 Global::load(spec_al.clone()).unwrap(),
@@ -955,10 +903,7 @@ def $pick<X>() = $external<X>()
                 let result = runner.context().call_func(name, &[typ::make::nat()], &[]);
                 if guard {
                     let error = result.unwrap_err();
-                    assert!(
-                        error.to_string().contains("return value of function"),
-                        "{error}"
-                    );
+                    assert!(error.to_string().contains("return value of function"), "{error}");
                 } else {
                     assert!(get::bool(runner.arena(), &result.unwrap()).is_ok());
                 }
@@ -1121,10 +1066,7 @@ fn test_extern_reentry_uses_public_input_guards() {
             Global::load(spec(source)).unwrap(),
             AlInterp::new(Config::new(false, false, guard)),
             p4spec_rust::interface::p4(&Vec::new()),
-            host(
-                |arena| make::bool(arena, true, Span::default()).unwrap(),
-                true,
-            ),
+            host(|arena| make::bool(arena, true, Span::default()).unwrap(), true),
         );
         let result = {
             let (name, targs, values) = ("bridge", &[], &[nat(runner.arena_mut(), 1)]);
@@ -1150,10 +1092,7 @@ fn test_output_guard_after_success_is_fatal_only_in_deterministic_choice() {
         let mut runner = Runner::<AlInterp, _, _>::new(
             Global::load(spec(source)).unwrap(),
             AlInterp::new(Config::new(false, det, true)),
-            host(
-                |arena| make::bool(arena, true, Span::default()).unwrap(),
-                false,
-            ),
+            host(|arena| make::bool(arena, true, Span::default()).unwrap(), false),
             NullExtern,
         );
         let result = runner.context().call_func("pick", &[], &[]);
@@ -1183,12 +1122,8 @@ fn test_uncached_input_guards_are_limited_to_public_entries() {
             _ => None,
         })
         .unwrap();
-    let ast::ExpKind::Call(_, _, args) = &mut func.clauses[0].node.exp.node else {
-        panic!("call")
-    };
-    let ast::ArgKind::Exp(exp) = &mut args[0].node else {
-        panic!("argument")
-    };
+    let ast::ExpKind::Call(_, _, args) = &mut func.clauses[0].node.exp.node else { panic!("call") };
+    let ast::ArgKind::Exp(exp) = &mut args[0].node else { panic!("argument") };
     // Ill-typed AL distinguishes public entry guards from recursive calls
     exp.node = ast::ExpKind::Bool(true);
     exp.note = Rc::new(ast::TypKind::Bool);
@@ -1202,11 +1137,8 @@ fn test_uncached_input_guards_are_limited_to_public_entries() {
     );
     assert!(
         {
-            let (name, targs, values) = (
-                "ignore",
-                &[],
-                &[make::bool(runner.arena_mut(), true, Span::default()).unwrap()],
-            );
+            let (name, targs, values) =
+                ("ignore", &[], &[make::bool(runner.arena_mut(), true, Span::default()).unwrap()]);
             runner.context().call_func(name, targs, values)
         }
         .unwrap_err()
@@ -1226,17 +1158,12 @@ fn test_guard_failure_keeps_its_source_span_through_extern_reentry() {
             _ => None,
         })
         .unwrap();
-    let ast::ExpKind::Call(id, _, _) = &func.clauses[0].node.exp.node else {
-        panic!("call")
-    };
+    let ast::ExpKind::Call(id, _, _) = &func.clauses[0].node.exp.node else { panic!("call") };
     let span = id.span.clone();
     let mut runner = Runner::<AlInterp, _, _>::new(
         Global::load(spec_al).unwrap(),
         AlInterp::new(Config::new(false, false, true)),
-        host(
-            |arena| make::bool(arena, true, Span::default()).unwrap(),
-            false,
-        ),
+        host(|arena| make::bool(arena, true, Span::default()).unwrap(), false),
         host(|arena| nat(arena, 3), true),
     );
     let error = {
@@ -1256,10 +1183,7 @@ fn test_reentrant_public_guard_keeps_no_source_span() {
         Global::load(spec(source)).unwrap(),
         AlInterp::new(Config::new(false, false, true)),
         p4spec_rust::interface::p4(&Vec::new()),
-        host(
-            |arena| make::bool(arena, true, Span::default()).unwrap(),
-            true,
-        ),
+        host(|arena| make::bool(arena, true, Span::default()).unwrap(), true),
     );
     let error = {
         let (name, targs, values) = ("outer", &[], &[nat(runner.arena_mut(), 1)]);
@@ -1297,10 +1221,9 @@ impl p4spec_rust::runner::Interface for CacheHost {
     ) -> Result<(Value, bool), p4spec_rust::runner::InterfaceError> {
         self.record(&id.node);
         if id.node == "fail" {
-            return Err(Box::new(p4spec_rust::interface::builtin::BuiltinError::new(
-                "failure",
-            ))
-            .into());
+            return Err(
+                Box::new(p4spec_rust::interface::builtin::BuiltinError::new("failure")).into()
+            );
         }
         let value = values.first().copied().unwrap_or_else(|| nat(arena, 7));
         Ok((value, id.node == "impure"))
@@ -1325,11 +1248,7 @@ impl p4spec_rust::runner::Extern for CacheHost {
     {
         assert!(targs.is_empty());
         self.record(name);
-        let value = if name == "bridge" {
-            ctx.call_func("inner", &[], values)?
-        } else {
-            values[0]
-        };
+        let value = if name == "bridge" { ctx.call_func("inner", &[], values)? } else { values[0] };
         Ok((value, false))
     }
 
@@ -1372,10 +1291,8 @@ def $pair(ns_1, ns_2) = ($pure(ns_1), $pure(ns_2))
         p4spec_rust::lang::common::source::Position::new("right.p4", 50, 0),
         p4spec_rust::lang::common::source::Position::new("right.p4", 50, 2),
     );
-    let value_r = Value {
-        span: make::bool(runner.arena_mut(), false, span).unwrap().span,
-        ..value_l
-    };
+    let value_r =
+        Value { span: make::bool(runner.arena_mut(), false, span).unwrap().span, ..value_l };
     let value_r = Value {
         note: make::new(
             runner.arena_mut(),
@@ -1388,35 +1305,18 @@ def $pair(ns_1, ns_2) = ($pure(ns_1), $pure(ns_2))
         ..value_r
     };
     let typ = typ::make::iter(typ::make::nat(), p4spec_rust::lang::common::Iter::List).node;
-    let value_l = make::list(
-        runner.arena_mut(),
-        typ.clone().into(),
-        vec![value_l],
-        Span::default(),
-    )
-    .unwrap();
-    let value_r = make::list(
-        runner.arena_mut(),
-        typ.clone().into(),
-        vec![value_r],
-        Span::default(),
-    )
-    .unwrap();
+    let value_l =
+        make::list(runner.arena_mut(), typ.clone().into(), vec![value_l], Span::default()).unwrap();
+    let value_r =
+        make::list(runner.arena_mut(), typ.clone().into(), vec![value_r], Span::default()).unwrap();
     assert_ne!(value_l.node, value_r.node);
     for expected in [1, 2] {
         let value = runner
             .context()
             .call_func("pair", &[], &[value_l, value_r])
             .unwrap();
-        assert_eq!(
-            get::tuple(runner.arena(), &value).unwrap(),
-            &[value_l, value_l]
-        );
-        assert_eq!(
-            host.count("pure"),
-            expected,
-            "public entry clears memo tables"
-        );
+        assert_eq!(get::tuple(runner.arena(), &value).unwrap(), &[value_l, value_l]);
+        assert_eq!(host.count("pure"), expected, "public entry clears memo tables");
     }
 }
 
@@ -1446,15 +1346,8 @@ def $pair(n) = ($recover(n), $recover(n))
             );
             let value = nat(runner.arena_mut(), 5);
             let result = runner.context().call_func("pair", &[], &[value]).unwrap();
-            assert_eq!(
-                get::tuple(runner.arena(), &result).unwrap(),
-                &[value, value]
-            );
-            assert_eq!(
-                host.count(operation),
-                2,
-                "tainted wrappers cannot be cached"
-            );
+            assert_eq!(get::tuple(runner.arena(), &result).unwrap(), &[value, value]);
+            assert_eq!(host.count(operation), 2, "tainted wrappers cannot be cached");
             assert_eq!(host.count("pure"), usize::from(operation == "fail"));
         }
     }
@@ -1589,11 +1482,7 @@ def $pair() = ($pure<nat>(7), $pure<bool>(7))
             .unwrap()
     };
     assert_eq!(get::tuple(runner.arena(), &value_new).unwrap().len(), 2);
-    assert_eq!(
-        host.count("pure"),
-        1,
-        "reset also discards internal call results"
-    );
+    assert_eq!(host.count("pure"), 1, "reset also discards internal call results");
 }
 
 #[test]
@@ -1623,15 +1512,8 @@ fn test_program_reset_isolates_cached_values_between_arenas() {
             .finish()
             .unwrap()
         };
-        assert_eq!(
-            get::tuple(runner.arena(), &value_pair).unwrap(),
-            &[value, value]
-        );
-        assert_eq!(
-            host.count("pure"),
-            1,
-            "one cached call within each independent program"
-        );
+        assert_eq!(get::tuple(runner.arena(), &value_pair).unwrap(), &[value, value]);
+        assert_eq!(host.count("pure"), 1, "one cached call within each independent program");
     }
 }
 
@@ -1657,10 +1539,7 @@ def $use(n_1, n_2) = ($pure(n_1, n_2), $pure(n_2, n_1), $pure(n_1, n_2), $other(
         .context()
         .call_func("use", &[], &[value_l, value_r])
         .unwrap();
-    assert_eq!(
-        get::tuple(runner.arena(), &value).unwrap(),
-        &[value_l, value_r, value_l, value_l]
-    );
+    assert_eq!(get::tuple(runner.arena(), &value).unwrap(), &[value_l, value_r, value_l, value_l]);
     assert_eq!(host.count("pure"), 2);
     assert_eq!(host.count("other"), 1);
 }
@@ -1689,11 +1568,7 @@ def $pair(s_1, s_2) = ($pure(s_1), $pure(s_2))
         (json!(0), json!(0.0), 2),
         (json!(1), json!(1.0), 2),
         (json!([1, 2]), json!([2, 1]), 2),
-        (
-            json!(9_007_199_254_740_992_u64),
-            json!(9_007_199_254_740_993_u64),
-            2,
-        ),
+        (json!(9_007_199_254_740_992_u64), json!(9_007_199_254_740_993_u64), 2),
         (json!(i64::MAX), json!(i64::MAX as u64 + 1), 2),
         (json!(u64::MAX - 1), json!(u64::MAX), 2),
     ] {
@@ -1707,13 +1582,9 @@ def $pair(s_1, s_2) = ($pure(s_1), $pure(s_2))
         let id = phrase!(node: "state".to_owned(), span: Span::default());
         let typ = typ::make::var(id, vec![]).node;
         let typ = std::rc::Rc::new(typ);
-        let value_a = make::external(
-            runner.arena_mut(),
-            typ.clone(),
-            json_a.into(),
-            Span::default(),
-        )
-        .unwrap();
+        let value_a =
+            make::external(runner.arena_mut(), typ.clone(), json_a.into(), Span::default())
+                .unwrap();
         let span_b = Span::new(
             p4spec_rust::lang::common::source::Position::new("state.p4", 7, 0),
             p4spec_rust::lang::common::source::Position::new("state.p4", 7, 1),
@@ -1725,9 +1596,6 @@ def $pair(s_1, s_2) = ($pure(s_1), $pure(s_2))
             .unwrap();
         let values = get::tuple(runner.arena(), &value).unwrap();
         assert_eq!(host.count("pure"), count);
-        assert_eq!(
-            values,
-            &[value_a, if count == 1 { value_a } else { value_b }]
-        );
+        assert_eq!(values, &[value_a, if count == 1 { value_a } else { value_b }]);
     }
 }

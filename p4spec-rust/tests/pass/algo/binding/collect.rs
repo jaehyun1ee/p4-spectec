@@ -21,10 +21,7 @@ fn test_conversion_propagates_located_binding_errors() {
 
     let error = algo::convert(spec).expect_err("binding below a unary operator");
 
-    assert_eq!(
-        error.kind,
-        AlgoErrorKind::NonInvertibleBinding("unary operator")
-    );
+    assert_eq!(error.kind, AlgoErrorKind::NonInvertibleBinding("unary operator"));
     assert_eq!(error.span, span(41));
 }
 
@@ -44,10 +41,7 @@ fn test_collection_rejects_a_binding_inside_a_noninvertible_operator() {
     let error =
         collect::collect_exp(&Context::new(), &negated).expect_err("binding under unary operator");
 
-    assert_eq!(
-        error.kind,
-        AlgoErrorKind::NonInvertibleBinding("unary operator")
-    );
+    assert_eq!(error.kind, AlgoErrorKind::NonInvertibleBinding("unary operator"));
     assert_eq!(error.span, span(7));
 }
 

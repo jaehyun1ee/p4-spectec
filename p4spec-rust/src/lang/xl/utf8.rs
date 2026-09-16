@@ -40,9 +40,5 @@ fn continuation(codepoint: i64) -> u8 {
 }
 
 fn validate_encodable_codepoint(codepoint: i64) -> Result<(), Utf8Error> {
-    if (0..0x110000).contains(&codepoint) {
-        Ok(())
-    } else {
-        Err(Utf8Error)
-    }
+    if (0..0x110000).contains(&codepoint) { Ok(()) } else { Err(Utf8Error) }
 }

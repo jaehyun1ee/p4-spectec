@@ -61,11 +61,7 @@ where
     }
     .map_err(ExternError::from)
     .map_err(Interp::Error::from)?;
-    ctx.call_func(
-        "find_var_value_t",
-        &[],
-        &[value_name, *value_cursor, *value_ctx],
-    )
+    ctx.call_func("find_var_value_t", &[], &[value_name, *value_cursor, *value_ctx])
 }
 
 pub fn find_var_value_t_local<Interp, Iface, Exn>(
@@ -162,12 +158,8 @@ where
     Interp: Interpreter<Iface, Exn>,
 {
     let value_size = ctx.call_func("sizeof_minSizeInBits'", &[], &[value_typ])?;
-    Ok(
-        crate::lang::xl::num::to_int(
-            get::num(ctx.arena(), &value_size).map_err(ExternError::from)?,
-        )
-        .clone(),
-    )
+    Ok(crate::lang::xl::num::to_int(get::num(ctx.arena(), &value_size).map_err(ExternError::from)?)
+        .clone())
 }
 
 pub fn sizeof_max_size_in_bits<Interp, Iface, Exn>(
@@ -180,12 +172,8 @@ where
     Interp: Interpreter<Iface, Exn>,
 {
     let value_size = ctx.call_func("sizeof_maxSizeInBits'", &[], &[value_typ])?;
-    Ok(
-        crate::lang::xl::num::to_int(
-            get::num(ctx.arena(), &value_size).map_err(ExternError::from)?,
-        )
-        .clone(),
-    )
+    Ok(crate::lang::xl::num::to_int(get::num(ctx.arena(), &value_size).map_err(ExternError::from)?)
+        .clone())
 }
 
 pub fn cast_op<Interp, Iface, Exn>(
@@ -242,18 +230,10 @@ where
         crate::phrase!(node: "bit".to_owned(), span: Span::default()),
         Vec::new(),
     ));
-    let value_bits = make::list(
-        ctx.arena_mut(),
-        typ_bits.node.into(),
-        values_bits,
-        Span::default(),
-    )
-    .map_err(ExternError::from)?;
-    ctx.call_func(
-        "write_value_from_bits",
-        &[],
-        &[value_target, value_varsize, value_bits],
-    )
+    let value_bits =
+        make::list(ctx.arena_mut(), typ_bits.node.into(), values_bits, Span::default())
+            .map_err(ExternError::from)?;
+    ctx.call_func("write_value_from_bits", &[], &[value_target, value_varsize, value_bits])
 }
 
 pub fn bitacc_range_op<Interp, Iface, Exn>(
@@ -310,13 +290,7 @@ where
     let value_opt = ctx.call_func(
         "tableObject_add_entry",
         &[],
-        &[
-            value_ctx,
-            value_table,
-            value_priority,
-            value_keys,
-            value_action,
-        ],
+        &[value_ctx, value_table, value_priority, value_keys, value_action],
     )?;
     Ok(get::opt(ctx.arena(), &value_opt).map_err(ExternError::from)?)
 }
@@ -332,11 +306,7 @@ where
     Exn: Extern,
     Interp: Interpreter<Iface, Exn>,
 {
-    ctx.call_func(
-        "tableObject_add_default_action",
-        &[],
-        &[value_ctx, value_table, value_action],
-    )
+    ctx.call_func("tableObject_add_default_action", &[], &[value_ctx, value_table, value_action])
 }
 
 // == Objects
@@ -384,11 +354,7 @@ where
     Exn: Extern,
     Interp: Interpreter<Iface, Exn>,
 {
-    ctx.call_func(
-        "update_object_qualified_e",
-        &[],
-        &[value_arch, value_id, value_object],
-    )
+    ctx.call_func("update_object_qualified_e", &[], &[value_arch, value_id, value_object])
 }
 
 pub fn update_object_unqualified_e<Interp, Iface, Exn>(
@@ -402,11 +368,7 @@ where
     Exn: Extern,
     Interp: Interpreter<Iface, Exn>,
 {
-    ctx.call_func(
-        "update_object_unqualified_e",
-        &[],
-        &[value_arch, value_id, value_object],
-    )
+    ctx.call_func("update_object_unqualified_e", &[], &[value_arch, value_id, value_object])
 }
 
 // == Object state
@@ -438,11 +400,8 @@ where
     Exn: Extern,
     Interp: Interpreter<Iface, Exn>,
 {
-    let value_opt = ctx.call_func(
-        "update_objectState_e",
-        &[],
-        &[value_arch, value_id, value_state],
-    )?;
+    let value_opt =
+        ctx.call_func("update_objectState_e", &[], &[value_arch, value_id, value_state])?;
     get::opt(ctx.arena(), &value_opt)
         .map_err(ExternError::from)?
         .ok_or_else(|| ExternError::Failure("object state not found".to_owned()).into())

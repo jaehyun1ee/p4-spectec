@@ -15,9 +15,7 @@ use crate::{
 fn width_bit_aligned(width: &BigInt, alignment: usize) -> Result<usize, ExternError> {
     let width = width_bit(width)?;
     if !width.is_multiple_of(alignment) {
-        return Err(ExternError::Failure(
-            "bitslice x[y:z] must have y > z > 0".to_owned(),
-        ));
+        return Err(ExternError::Failure("bitslice x[y:z] must have y > z > 0".to_owned()));
     }
     Ok(width)
 }
@@ -38,11 +36,7 @@ fn crc(
             .ok_or_else(|| ExternError::Failure("invalid CRC byte".to_owned()))?;
         let mut entry = (int_crc ^ byte) & 255;
         for _ in 0..8 {
-            entry = if entry & 1 == 0 {
-                entry >> 1
-            } else {
-                (entry >> 1) ^ polynomial
-            };
+            entry = if entry & 1 == 0 { entry >> 1 } else { (entry >> 1) ^ polynomial };
         }
         int_crc = (int_crc >> 8) ^ entry;
     }
@@ -81,12 +75,9 @@ pub fn compute_hash(
         // CRC16-ARC
         "crc16" => crc(width, int, 0xA001, 0),
         "crc32" => crc(width, int, 0xEDB88320, u32::MAX),
-        "csum16" | "csum16_sub" => checksum(
-            width,
-            int,
-            int_init.unwrap_or(&BigInt::zero()),
-            algo == "csum16_sub",
-        ),
+        "csum16" | "csum16_sub" => {
+            checksum(width, int, int_init.unwrap_or(&BigInt::zero()), algo == "csum16_sub")
+        }
         "identity" => Ok(int.clone()),
         _ => Err(ExternError::Failure(format!("(TODO: compute_hash) {algo}"))),
     }

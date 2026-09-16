@@ -72,14 +72,8 @@ fn test_guards_collect_only_embedded_expressions() {
             ),
             names(&["comparison"]),
         ),
-        (
-            sl::ast::Guard::Sub(typ(), Box::new(il::ast::Subcheck::Skip)),
-            names(&[]),
-        ),
-        (
-            sl::ast::Guard::Match(il::ast::Pattern::List(il::ast::ListPattern::Nil)),
-            names(&[]),
-        ),
+        (sl::ast::Guard::Sub(typ(), Box::new(il::ast::Subcheck::Skip)), names(&[])),
+        (sl::ast::Guard::Match(il::ast::Pattern::List(il::ast::ListPattern::Nil)), names(&[])),
         (sl::ast::Guard::Mem(variable("member")), names(&["member"])),
     ];
 
@@ -90,14 +84,9 @@ fn test_guards_collect_only_embedded_expressions() {
 
 #[test]
 fn test_instructions_collect_nested_expressions_and_omit_binding_metadata() {
-    let hidden = instr(sl::ast::InstrKind::Return(sl::ast::ReturnInstr {
-        exp: variable("hidden"),
-    }));
-    let binder = il::ast::Var {
-        id: id("binder"),
-        typ: typ(),
-        iters: Vec::new(),
-    };
+    let hidden =
+        instr(sl::ast::InstrKind::Return(sl::ast::ReturnInstr { exp: variable("hidden") }));
+    let binder = il::ast::Var { id: id("binder"), typ: typ(), iters: Vec::new() };
     let signature = sl::ast::RelSignature {
         not_typ: p4spec_rust::phrase! {
             node: Mixfix::Seq(Vec::new()),

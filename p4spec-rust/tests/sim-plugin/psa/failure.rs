@@ -42,10 +42,7 @@ struct FailureInterp {
 }
 
 fn typ_named(name: &str) -> Typ {
-    typ::make::var(
-        p4spec_rust::phrase!(node: name.to_owned(), span: Span::default()),
-        vec![],
-    )
+    typ::make::var(p4spec_rust::phrase!(node: name.to_owned(), span: Span::default()), vec![])
 }
 
 fn field(arena: &ValueArena, value: Value, name: &str) -> Value {
@@ -64,13 +61,7 @@ fn update_field(arena: &mut ValueArena, value: Value, name: &str, value_field: V
         .find(|(atom, _)| atom.node == Atom::Keyword(name.to_owned()))
         .unwrap()
         .1 = value_field;
-    make::structure(
-        arena,
-        typ_named("arch").node.into(),
-        fields,
-        Span::default(),
-    )
-    .unwrap()
+    make::structure(arena, typ_named("arch").node.into(), fields, Span::default()).unwrap()
 }
 
 fn option(arena: &mut ValueArena, value: Value) -> Value {
@@ -182,22 +173,14 @@ impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for FailureInterp {
 #[test]
 fn test_clone_restoration_failure_preserves_queued_clones_and_completed_state() {
     let mut runner = Runner::new((), FailureInterp::default(), NullInterface, Psa::default());
-    let value_ctx = make::text(
-        runner.arena_mut(),
-        "original context".to_owned(),
-        Span::default(),
-    )
-    .unwrap();
+    let value_ctx =
+        make::text(runner.arena_mut(), "original context".to_owned(), Span::default()).unwrap();
     let mut arch = Arch::default();
     arch.mirrortable.insert(1, 2);
     arch.multicast.groups.insert(2, vec![0]);
-    arch.multicast.nodes.insert(
-        0,
-        vec![Node {
-            port: 12,
-            instance: 4,
-        }],
-    );
+    arch.multicast
+        .nodes
+        .insert(0, vec![Node { port: 12, instance: 4 }]);
     arch.queue.push_back(Packet {
         value_ctx,
         packet_in: PacketIn::init("CD").unwrap(),
@@ -220,37 +203,20 @@ fn test_clone_restoration_failure_preserves_queued_clones_and_completed_state() 
     ]
     .into_iter()
     .map(|(name, value)| {
-        (
-            p4spec_rust::phrase!(node: Atom::Keyword(name.to_owned()), span: Span::default()),
-            value,
-        )
+        (p4spec_rust::phrase!(node: Atom::Keyword(name.to_owned()), span: Span::default()), value)
     })
     .collect();
-    let value_arch = make::structure(
-        runner.arena_mut(),
-        typ_named("arch").node.into(),
-        fields,
-        Span::default(),
-    )
-    .unwrap();
-    let tx = Tx {
-        port: 99,
-        packet: "prior output".to_owned(),
-    };
-    let mut state = SimState {
-        value_ctx,
-        value_arch,
-        txs: vec![tx],
-    };
+    let value_arch =
+        make::structure(runner.arena_mut(), typ_named("arch").node.into(), fields, Span::default())
+            .unwrap();
+    let tx = Tx { port: 99, packet: "prior output".to_owned() };
+    let mut state = SimState { value_ctx, value_arch, txs: vec![tx] };
 
     assert!(
         matches!(pipe::run_pre(&mut runner.context(), &mut state), Err(TestError::Extern(ExternError::Failure(msg))) if msg == "restore failed")
     );
     assert_eq!(runner.context().interp().updates_arch, 2);
-    assert_eq!(
-        Some(state.value_arch),
-        runner.context().interp().value_arch_completed
-    );
+    assert_eq!(Some(state.value_arch), runner.context().interp().value_arch_completed);
     assert_eq!(state.value_ctx, value_ctx);
     assert_eq!(state.txs.len(), 1);
     assert_eq!(state.txs[0].port, 99);
@@ -259,10 +225,7 @@ fn test_clone_restoration_failure_preserves_queued_clones_and_completed_state() 
     assert_eq!(arch.queue.len(), 2);
     assert_eq!(arch.queue[0].packet_in, PacketIn::init("CD").unwrap());
     assert_eq!(arch.queue[1].packet_in, PacketIn::init("AB").unwrap());
-    assert_eq!(
-        get::text(runner.arena(), &arch.queue[1].value_ctx),
-        Ok("clone context")
-    );
+    assert_eq!(get::text(runner.arena(), &arch.queue[1].value_ctx), Ok("clone context"));
     let value_in = field(runner.arena(), state.value_arch, "ingress_packet_in");
     assert_eq!(
         ObjectState::from_value(runner.arena_mut(), encoding, &value_in).unwrap(),

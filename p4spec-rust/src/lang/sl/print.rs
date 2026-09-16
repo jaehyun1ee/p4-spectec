@@ -64,19 +64,10 @@ fn write_instr_with(
 ) -> fmt::Result {
     let order = format!("{}{index}. ", "  ".repeat(level));
     let mut write_order = || {
-        if short {
-            Ok(())
-        } else {
-            output.write_str(&order)
-        }
+        if short { Ok(()) } else { output.write_str(&order) }
     };
     match &instr.node {
-        InstrKind::If(IfInstr {
-            exp,
-            iter_exps,
-            block,
-            dangle,
-        }) => {
+        InstrKind::If(IfInstr { exp, iter_exps, block, dangle }) => {
             write_order()?;
             output.write_str("If (")?;
             exp.print(output)?;
@@ -92,12 +83,7 @@ fn write_instr_with(
             }
             Ok(())
         }
-        InstrKind::Hold(HoldInstr {
-            id,
-            not_exp,
-            iter_exps,
-            hold_case,
-        }) => match hold_case {
+        InstrKind::Hold(HoldInstr { id, not_exp, iter_exps, hold_case }) => match hold_case {
             HoldCase::Both(block_hold, block_not_hold) => {
                 write_order()?;
                 output.write_str("If (")?;
@@ -153,12 +139,7 @@ fn write_instr_with(
             }
             Ok(())
         }
-        InstrKind::Group(GroupInstr {
-            id,
-            rel_signature,
-            exps,
-            block,
-        }) => {
+        InstrKind::Group(GroupInstr { id, rel_signature, exps, block }) => {
             write_order()?;
             output.write_str("Group ")?;
             id.print(output)?;
@@ -170,12 +151,7 @@ fn write_instr_with(
             }
             Ok(())
         }
-        InstrKind::Let(LetInstr {
-            exp_l,
-            exp_r,
-            iter_instrs,
-            block,
-        }) => {
+        InstrKind::Let(LetInstr { exp_l, exp_r, iter_instrs, block }) => {
             write_order()?;
             output.write_str("(Let ")?;
             exp_l.print(output)?;
@@ -189,13 +165,7 @@ fn write_instr_with(
             }
             Ok(())
         }
-        InstrKind::Rule(RuleInstr {
-            id,
-            not_exp,
-            iter_instrs,
-            block,
-            ..
-        }) => {
+        InstrKind::Rule(RuleInstr { id, not_exp, iter_instrs, block, .. }) => {
             write_order()?;
             output.write_char('(')?;
             id.print(output)?;
@@ -213,10 +183,7 @@ fn write_instr_with(
             write_order()?;
             output.write_str("The relation holds")
         }
-        InstrKind::Result(ResultInstr {
-            rel_signature,
-            exps,
-        }) => {
+        InstrKind::Result(ResultInstr { rel_signature, exps }) => {
             write_order()?;
             output.write_str("Result in: ")?;
             write_reloutput(output, rel_signature, exps)
@@ -335,12 +302,7 @@ fn write_elseblock_with(
     level: usize,
     index: usize,
 ) -> fmt::Result {
-    write!(
-        output,
-        "{}{next}. Otherwise,\n\n",
-        "  ".repeat(level),
-        next = index + 1
-    )?;
+    write!(output, "{}{next}. Otherwise,\n\n", "  ".repeat(level), next = index + 1)?;
     write_block_with(output, block, level + 1, 0)
 }
 

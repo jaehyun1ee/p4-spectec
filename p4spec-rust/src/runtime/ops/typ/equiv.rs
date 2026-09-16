@@ -162,11 +162,7 @@ pub fn equiv_func_typ(
     let typ_ret_r = subst_typ_inner(&mut fresh, &theta_r, &func_typ_r.typ_ret)?;
 
     let find_typdef_opt = |id: &ast::Id| {
-        if let Some(typdef) = tdenv_fresh.get(id) {
-            Some(typdef)
-        } else {
-            tdenv.get(id)
-        }
+        if let Some(typdef) = tdenv_fresh.get(id) { Some(typdef) } else { tdenv.get(id) }
     };
     if !equiv_typs_with(&find_typdef_opt, &typs_params_l, &typs_params_r)? {
         return Ok(false);

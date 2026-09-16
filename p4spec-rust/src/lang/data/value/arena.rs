@@ -33,11 +33,7 @@ impl ValueArena {
         spans
             .intern_default()
             .expect("the first span fits in an interner index");
-        Self {
-            values: CanonInterner::new(),
-            types: RcInterner::new(),
-            spans,
-        }
+        Self { values: CanonInterner::new(), types: RcInterner::new(), spans }
     }
 
     // - Interning

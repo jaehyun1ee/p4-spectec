@@ -31,13 +31,8 @@ where
         crate::phrase!(node: "archState".to_owned(), span: Span::default()),
         Vec::new(),
     );
-    Ok(make::external(
-        ctx.arena_mut(),
-        typ.node.into(),
-        payload.into(),
-        Span::default(),
-    )
-    .map_err(ExternError::from)?)
+    Ok(make::external(ctx.arena_mut(), typ.node.into(), payload.into(), Span::default())
+        .map_err(ExternError::from)?)
 }
 
 // == Extern calls
@@ -58,13 +53,8 @@ where
         crate::phrase!(node: "objectState".to_owned(), span: Span::default()),
         Vec::new(),
     );
-    Ok(make::external(
-        ctx.arena_mut(),
-        typ.node.into(),
-        payload.into(),
-        Span::default(),
-    )
-    .map_err(ExternError::from)?)
+    Ok(make::external(ctx.arena_mut(), typ.node.into(), payload.into(), Span::default())
+        .map_err(ExternError::from)?)
 }
 
 // - Function calls
@@ -77,10 +67,8 @@ where
     Iface: Interface,
     Interp: Interpreter<Iface, Dummy>,
 {
-    Err(
-        ExternError::Failure("unimplemented extern relation: ExternFunctionCall_eval".to_owned())
-            .into(),
-    )
+    Err(ExternError::Failure("unimplemented extern relation: ExternFunctionCall_eval".to_owned())
+        .into())
 }
 
 // - Method calls
@@ -93,8 +81,6 @@ where
     Iface: Interface,
     Interp: Interpreter<Iface, Dummy>,
 {
-    Err(
-        ExternError::Failure("unimplemented extern relation: ExternMethodCall_eval".to_owned())
-            .into(),
-    )
+    Err(ExternError::Failure("unimplemented extern relation: ExternMethodCall_eval".to_owned())
+        .into())
 }

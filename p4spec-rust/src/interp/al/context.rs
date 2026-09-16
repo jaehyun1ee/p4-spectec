@@ -48,23 +48,14 @@ pub struct Global {
 
 impl Global {
     pub fn load(spec: ast::Spec) -> Result<Self, Error> {
-        let mut loaded = Self {
-            tdenv: TDEnv::new(),
-            renv: REnv::new(),
-            fenv: FEnv::new(),
-        };
+        let mut loaded = Self { tdenv: TDEnv::new(), renv: REnv::new(), fenv: FEnv::new() };
         for def in spec {
             match def.node {
                 ast::DefKind::Typ(typdef) => {
                     let (id, typdef) = match typdef {
                         ast::TypDef::Extern(typdef) => (typdef.id, TypeDef::Extern),
                         ast::TypDef::Defined(typdef) => {
-                            let ast::DefinedTyp {
-                                id,
-                                tparams,
-                                def_typ,
-                                ..
-                            } = *typdef;
+                            let ast::DefinedTyp { id, tparams, def_typ, .. } = *typdef;
                             (id, TypeDef::Defined(tparams, Box::new(def_typ)))
                         }
                     };
@@ -127,10 +118,7 @@ impl<'global> Context<'global> {
     // == Constructors
 
     pub fn new(global: &'global Global) -> Self {
-        Self {
-            global,
-            local: Local::default(),
-        }
+        Self { global, local: Local::default() }
     }
 
     pub fn localize(&self) -> Self {
@@ -178,11 +166,7 @@ impl<'global> Context<'global> {
     ) -> Result<(&'a [ast::TParam], &'a ast::DefTyp), Error> {
         match self.find_typdef(id)? {
             TypeDef::Defined(tparams, def_typ) => Ok((tparams, def_typ)),
-            _ => Err(Error::undefined(
-                EntityKind::DefinedType,
-                id.node.clone(),
-                id.span.clone(),
-            )),
+            _ => Err(Error::undefined(EntityKind::DefinedType, id.node.clone(), id.span.clone())),
         }
     }
 
@@ -217,11 +201,9 @@ impl<'global> Context<'global> {
         fn param_typ(param: &ast::Param) -> ast::Typ {
             match &param.node {
                 ast::ParamKind::Exp(typ) => typ.clone(),
-                ast::ParamKind::Def(_, tparams, params, typ) => make::func(
-                    tparams.clone(),
-                    params.iter().map(param_typ).collect(),
-                    typ.clone(),
-                ),
+                ast::ParamKind::Def(_, tparams, params, typ) => {
+                    make::func(tparams.clone(), params.iter().map(param_typ).collect(), typ.clone())
+                }
             }
         }
         let (_, func) = self.find_func(id)?;
@@ -427,10 +409,7 @@ impl<'global> Context<'global> {
     fn collect_bindings(&self, vars: &[ast::Var], values_bind: &mut [Vec<Value>]) -> Backtrack<()> {
         for (var, values) in vars.iter().zip(values_bind) {
             let var_bound = Variable::new(var.id.clone(), var.iters.clone());
-            values.push(*backtrack_from_result!(
-                self.find_value(&var_bound),
-                &var.id.span
-            ));
+            values.push(*backtrack_from_result!(self.find_value(&var_bound), &var.id.span));
         }
         Backtrack::Ok(())
     }
@@ -447,12 +426,9 @@ impl<'global> Context<'global> {
             iters.push(iter);
             let typ = typ::make::iterate(var.typ.clone(), &iters);
             let value = match iter {
-                ast::Iter::Opt => make::opt(
-                    arena,
-                    typ.node.into(),
-                    values.into_iter().next(),
-                    Span::default(),
-                ),
+                ast::Iter::Opt => {
+                    make::opt(arena, typ.node.into(), values.into_iter().next(), Span::default())
+                }
                 ast::Iter::List => make::list(arena, typ.node.into(), values, Span::default()),
             };
             let value = backtrack_from_result!(value, &Span::default());

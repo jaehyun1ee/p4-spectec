@@ -9,21 +9,15 @@ fn exp(exp_kind: ExpKind) -> Exp {
 }
 
 fn cmp(exp_l: Exp, exp_r: Exp) -> Exp {
-    exp(ExpKind::Cmp(
-        CmpOp::Bool(boolop::CmpOp::Eq),
-        OpTyp::Bool,
-        Box::new(exp_l),
-        Box::new(exp_r),
-    ))
+    exp(ExpKind::Cmp(CmpOp::Bool(boolop::CmpOp::Eq), OpTyp::Bool, Box::new(exp_l), Box::new(exp_r)))
 }
 
 #[test]
 fn test_boolean_partition_and_literal_disjointness() {
     use crate::lang::sl::ast::Guard;
 
-    let exp_target = exp(ExpKind::Var(
-        crate::phrase!(node: "flag".into(), span: Default::default()),
-    ));
+    let exp_target =
+        exp(ExpKind::Var(crate::phrase!(node: "flag".into(), span: Default::default())));
     let exp_a = cmp(exp_target.clone(), exp(ExpKind::Bool(true)));
     let exp_b = cmp(exp_target.clone(), exp(ExpKind::Bool(false)));
     assert!(matches!(
@@ -59,9 +53,8 @@ fn test_boolean_partition_and_literal_disjointness() {
 
 #[test]
 fn test_comparison_order_negation_and_fuzzy() {
-    let exp_target = exp(ExpKind::Var(
-        crate::phrase!(node: "flag".into(), span: Default::default()),
-    ));
+    let exp_target =
+        exp(ExpKind::Var(crate::phrase!(node: "flag".into(), span: Default::default())));
     let exp_a = cmp(exp_target.clone(), exp(ExpKind::Bool(true)));
     let exp_b = cmp(exp(ExpKind::Bool(false)), exp_target.clone());
     assert!(matches!(
@@ -81,30 +74,15 @@ fn test_comparison_order_negation_and_fuzzy() {
             ..
         }
     ));
-    assert!(matches!(
-        overlap_exp(&TDEnv::new(), &exp_ne, &exp_a).unwrap(),
-        Overlap::Fuzzy
-    ));
-    let exp_not = exp(ExpKind::Un(
-        UnOp::Bool(boolop::UnOp::Not),
-        OpTyp::Bool,
-        Box::new(exp_target.clone()),
-    ));
+    assert!(matches!(overlap_exp(&TDEnv::new(), &exp_ne, &exp_a).unwrap(), Overlap::Fuzzy));
+    let exp_not =
+        exp(ExpKind::Un(UnOp::Bool(boolop::UnOp::Not), OpTyp::Bool, Box::new(exp_target.clone())));
     assert!(matches!(
         overlap_exp(&TDEnv::new(), &exp_not, &exp_target).unwrap(),
-        Overlap::Partition {
-            guard_a: crate::lang::sl::ast::Guard::Bool(false),
-            ..
-        }
+        Overlap::Partition { guard_a: crate::lang::sl::ast::Guard::Bool(false), .. }
     ));
-    assert!(matches!(
-        overlap_exp(&TDEnv::new(), &exp_a, &exp_a).unwrap(),
-        Overlap::Identical
-    ));
-    assert!(matches!(
-        overlap_exp(&TDEnv::new(), &exp_a, &exp_target).unwrap(),
-        Overlap::Fuzzy
-    ));
+    assert!(matches!(overlap_exp(&TDEnv::new(), &exp_a, &exp_a).unwrap(), Overlap::Identical));
+    assert!(matches!(overlap_exp(&TDEnv::new(), &exp_a, &exp_target).unwrap(), Overlap::Fuzzy));
 }
 
 #[test]
@@ -126,18 +104,11 @@ fn test_guards_preserve_annotations_and_subchecks() {
     assert_eq!(exp_as_guard(&exp_target, &exp_target), None);
     for guard in [
         Guard::Bool(false),
-        Guard::Cmp(
-            CmpOp::Bool(boolop::CmpOp::Ne),
-            OpTyp::Int,
-            exp(ExpKind::Bool(false)),
-        ),
+        Guard::Cmp(CmpOp::Bool(boolop::CmpOp::Ne), OpTyp::Int, exp(ExpKind::Bool(false))),
         Guard::Match(Pattern::Opt(OptPattern::Some)),
         Guard::Mem(exp(ExpKind::List(vec![]))),
     ] {
-        assert_eq!(
-            exp_as_guard(&exp_target, &guard_as_exp(&exp_target, &guard)),
-            Some(guard)
-        );
+        assert_eq!(exp_as_guard(&exp_target, &guard_as_exp(&exp_target, &guard)), Some(guard));
     }
 }
 
@@ -181,30 +152,20 @@ fn test_membership_nested_literals_and_malformed_tuples() {
         Box::new(typ),
         Box::new(exp(ExpKind::Tuple(vec![exp(ExpKind::Bool(true))]))),
     ));
-    let exp_a = exp(ExpKind::Mem(
-        Box::new(exp_target.clone()),
-        Box::new(exp(ExpKind::List(vec![exp_a]))),
-    ));
-    let exp_b = exp(ExpKind::Mem(
-        Box::new(exp_target.clone()),
-        Box::new(exp(ExpKind::List(vec![exp_b]))),
-    ));
+    let exp_a =
+        exp(ExpKind::Mem(Box::new(exp_target.clone()), Box::new(exp(ExpKind::List(vec![exp_a])))));
+    let exp_b =
+        exp(ExpKind::Mem(Box::new(exp_target.clone()), Box::new(exp(ExpKind::List(vec![exp_b])))));
     assert!(matches!(
         overlap_exp(&TDEnv::new(), &exp_a, &exp_b).unwrap(),
         Overlap::Disjoint { .. }
     ));
     let exp_a = cmp(exp_target.clone(), exp(ExpKind::Tuple(vec![])));
-    let exp_b = cmp(
-        exp_target,
-        exp(ExpKind::Tuple(vec![exp(ExpKind::Bool(true))])),
-    );
+    let exp_b = cmp(exp_target, exp(ExpKind::Tuple(vec![exp(ExpKind::Bool(true))])));
     let error = overlap_exp(&TDEnv::new(), &exp_a, &exp_b).unwrap_err();
     assert_eq!(
         error.kind,
-        crate::pass::structure::error::StructureErrorKind::ArityMismatch {
-            expected: 0,
-            actual: 1
-        }
+        crate::pass::structure::error::StructureErrorKind::ArityMismatch { expected: 0, actual: 1 }
     );
 }
 
@@ -225,10 +186,7 @@ fn test_variant_alias_overlap_and_type_errors() {
     let mixop_a = crate::frontend::parse::parse_mixop("A").unwrap();
     let mixop_b = crate::frontend::parse::parse_mixop("B").unwrap();
     let mut tdenv = TDEnv::new();
-    for (id, mixop) in [
-        (id_a.clone(), mixop_a.clone()),
-        (id_b.clone(), mixop_b.clone()),
-    ] {
+    for (id, mixop) in [(id_a.clone(), mixop_a.clone()), (id_b.clone(), mixop_b.clone())] {
         let nottyp: Mixfix<Typ> =
             mixop.map(|_| crate::phrase!(node: TypKind::Bool, span: Default::default()));
         let typcase = (
@@ -247,10 +205,7 @@ fn test_variant_alias_overlap_and_type_errors() {
             ),
         ),
     );
-    assert_eq!(
-        typ_as_variant(&tdenv, &typ_alias).unwrap(),
-        Some(vec![mixop_a])
-    );
+    assert_eq!(typ_as_variant(&tdenv, &typ_alias).unwrap(), Some(vec![mixop_a]));
     let guard_a = Guard::Sub(typ_alias, Box::new(Subcheck::Tuple(vec![Subcheck::Skip])));
     let guard_b = Guard::Sub(typ_b, Box::new(Subcheck::Skip));
     let exp_target = exp(ExpKind::Bool(true));
@@ -260,10 +215,7 @@ fn test_variant_alias_overlap_and_type_errors() {
     let guard_pattern = Guard::Match(Pattern::Case(Box::new(mixop_b)));
     assert!(matches!(
         overlap_guard(&tdenv, &exp_target, &guard_pattern, &guard_a).unwrap(),
-        Overlap::Disjoint {
-            guard_a: Guard::Match(_),
-            ..
-        }
+        Overlap::Disjoint { guard_a: Guard::Match(_), .. }
     ));
     assert!(matches!(
         overlap_guard(
@@ -294,14 +246,8 @@ fn test_numeric_list_and_case_literals_are_disjoint() {
     let notexp_b = Mixop::fill(&mixop, vec![exp_num_b.clone()]).unwrap();
     for (exp_a, exp_b) in [
         (exp_num_a, exp_num_b),
-        (
-            exp(ExpKind::List(vec![])),
-            exp(ExpKind::List(vec![exp(ExpKind::Bool(true))])),
-        ),
-        (
-            exp(ExpKind::Case(Box::new(notexp_a))),
-            exp(ExpKind::Case(Box::new(notexp_b))),
-        ),
+        (exp(ExpKind::List(vec![])), exp(ExpKind::List(vec![exp(ExpKind::Bool(true))]))),
+        (exp(ExpKind::Case(Box::new(notexp_a))), exp(ExpKind::Case(Box::new(notexp_b)))),
     ] {
         let exp_a = cmp(exp_target.clone(), exp_a);
         let exp_b = cmp(exp_target.clone(), exp_b);

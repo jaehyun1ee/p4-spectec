@@ -44,10 +44,7 @@ pub struct ValueRef<'a> {
 // - Bodies
 
 #[derive(Debug, SerializeState, DeserializeState)]
-#[serde(
-    serialize_state = "super::external::EncodeContext<'arena>",
-    ser_parameters = "'arena"
-)]
+#[serde(serialize_state = "super::external::EncodeContext<'arena>", ser_parameters = "'arena")]
 #[serde(deserialize_state = "super::external::DecodeContext<'de>")]
 pub enum ValueKind {
     Bool(bool),
@@ -370,10 +367,7 @@ pub enum ValueError {
     #[error("value arena index overflow")]
     IndexOverflow,
     #[error("expected {expected:?} value, got {actual:?}")]
-    UnexpectedKind {
-        expected: ValueTag,
-        actual: ValueTag,
-    },
+    UnexpectedKind { expected: ValueTag, actual: ValueTag },
     #[error("value index {index} is out of bounds for length {len}")]
     IndexOutOfBounds { index: usize, len: usize },
     #[error("expected exactly {expected} values, got {actual}")]

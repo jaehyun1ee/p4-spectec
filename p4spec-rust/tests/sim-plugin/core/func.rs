@@ -51,26 +51,15 @@ fn run_static_assert(names_param: &[&str]) -> (Value, Value) {
         .iter()
         .map(|name| make::text(runner.arena_mut(), (*name).to_owned(), Span::default()).unwrap())
         .collect();
-    let value_names = make::list(
-        runner.arena_mut(),
-        typ_names.node.clone().into(),
-        values_name,
-        Span::default(),
-    )
-    .unwrap();
-    let value_name = make::text(
-        runner.arena_mut(),
-        "static_assert".to_owned(),
-        Span::default(),
-    )
-    .unwrap();
+    let value_names =
+        make::list(runner.arena_mut(), typ_names.node.clone().into(), values_name, Span::default())
+            .unwrap();
+    let value_name =
+        make::text(runner.arena_mut(), "static_assert".to_owned(), Span::default()).unwrap();
 
     let values = runner
         .context()
-        .call_rel(
-            "ExternFunctionCall_eval_lctk",
-            &[value_ctx, value_name, value_names],
-        )
+        .call_rel("ExternFunctionCall_eval_lctk", &[value_ctx, value_name, value_names])
         .unwrap();
 
     (value_check, values[0])
@@ -161,19 +150,13 @@ fn test_verify_reads_both_arguments_even_when_true() {
             .calls
             .iter()
             .map(|(_, values)| {
-                get::text(
-                    ctx.arena(),
-                    get::case(ctx.arena(), &values[0]).unwrap().args()[0],
-                )
-                .unwrap()
+                get::text(ctx.arena(), get::case(ctx.arena(), &values[0]).unwrap().args()[0])
+                    .unwrap()
             })
             .collect();
         assert_eq!(names, ["check", "toSignal"]);
         if !check {
-            assert_eq!(
-                *get::case(ctx.arena(), &output.2).unwrap().args()[0],
-                value_signal
-            );
+            assert_eq!(*get::case(ctx.arena(), &output.2).unwrap().args()[0], value_signal);
         }
     }
 }

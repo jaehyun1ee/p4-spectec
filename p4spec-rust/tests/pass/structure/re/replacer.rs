@@ -7,9 +7,7 @@ use crate::lang::{
 use crate::pass::structure::{ol::ast::*, re::replacer::Replacer};
 
 fn var_id(exp: &Exp) -> &Id {
-    let ExpKind::Var(id) = &exp.node else {
-        panic!("expected variable")
-    };
+    let ExpKind::Var(id) = &exp.node else { panic!("expected variable") };
     id
 }
 
@@ -23,9 +21,7 @@ fn binding(text: &str, block: Block) -> Instr {
 }
 
 fn return_exp(instr_body: &Instr) -> &Exp {
-    let InstrKind::Return(instr_body) = &instr_body.node else {
-        panic!("expected return")
-    };
+    let InstrKind::Return(instr_body) = &instr_body.node else { panic!("expected return") };
     &instr_body.exp
 }
 
@@ -43,17 +39,13 @@ fn test_capture_avoidance_and_shadowed_rhs() {
             ret("x"),
         ])
         .unwrap();
-    let InstrKind::Let(instr_body) = &block[0].node else {
-        panic!("expected let")
-    };
+    let InstrKind::Let(instr_body) = &block[0].node else { panic!("expected let") };
     let id_fresh = var_id(&instr_body.exp_l);
     assert_ne!(id_fresh.node, "y");
     assert_eq!(&instr_body.exp_r, &exp_target);
     assert_eq!(return_exp(&instr_body.block[0]), &exp_target);
     assert_eq!(var_id(return_exp(&instr_body.block[1])), id_fresh);
-    let InstrKind::Let(instr_shadow) = &block[1].node else {
-        panic!("expected let")
-    };
+    let InstrKind::Let(instr_shadow) = &block[1].node else { panic!("expected let") };
     assert_eq!(var_id(&instr_shadow.exp_r).node, "x");
     assert_eq!(var_id(return_exp(&instr_shadow.block[0])).node, "x");
     assert_eq!(return_exp(&block[2]), &exp_target);
@@ -65,11 +57,7 @@ fn iterator() -> InstrIter {
         typ: crate::phrase! {node: TypKind::Bool, span: span(2)},
         iters: vec![],
     };
-    InstrIter {
-        iter: Iter::List,
-        vars_bound: vec![var.clone()],
-        vars_bind: vec![var],
-    }
+    InstrIter { iter: Iter::List, vars_bound: vec![var.clone()], vars_bind: vec![var] }
 }
 
 #[test]
@@ -86,14 +74,10 @@ fn test_iterator_filters_third_component_and_preserves_scope() {
             .is_empty()
     );
     let mut instr_let = binding("x", vec![ret("x")]);
-    let InstrKind::Let(instr_body) = &mut instr_let.node else {
-        panic!("expected let")
-    };
+    let InstrKind::Let(instr_body) = &mut instr_let.node else { panic!("expected let") };
     instr_body.iter_instrs = vec![iterator()];
     let block = replacer.replace_block(vec![instr_let, ret("x")]).unwrap();
-    let InstrKind::Let(instr_body) = &block[0].node else {
-        panic!("expected let")
-    };
+    let InstrKind::Let(instr_body) = &block[0].node else { panic!("expected let") };
     assert_eq!(instr_body.iter_instrs[0].vars_bind.len(), 1);
     assert_eq!(var_id(return_exp(&block[1])).node, "z");
 }
@@ -110,9 +94,7 @@ fn test_rule_inputs_precede_output_shadowing_and_freshening() {
     let mut replacer = Replacer::singleton(id("x"), variable("y"));
     replacer.add(id("y"), variable("z"));
     let instr_rule = replacer.replace_instr(instr_rule).unwrap();
-    let InstrKind::Rule(instr_rule) = instr_rule.node else {
-        panic!("expected rule")
-    };
+    let InstrKind::Rule(instr_rule) = instr_rule.node else { panic!("expected rule") };
     let exps = instr_rule.not_exp.args();
     assert_eq!(var_id(exps[0]).node, "y");
     let id_fresh = var_id(exps[1]);
@@ -128,9 +110,7 @@ fn test_rule_inputs_precede_output_shadowing_and_freshening() {
         block: vec![ret("x")],
     }));
     let instr_rule = replacer.replace_instr(instr_rule).unwrap();
-    let InstrKind::Rule(instr_rule) = instr_rule.node else {
-        panic!("expected rule")
-    };
+    let InstrKind::Rule(instr_rule) = instr_rule.node else { panic!("expected rule") };
     assert_eq!(var_id(instr_rule.not_exp.args()[0]).node, "y");
     assert_eq!(var_id(instr_rule.not_exp.args()[1]).node, "x");
     assert_eq!(var_id(return_exp(&instr_rule.block[0])).node, "x");
@@ -185,42 +165,27 @@ fn test_expression_paths_arguments_and_iterator_annotations() {
     replacer.add(id("y"), variable("r"));
     let exp = replacer.replace_exp(exp);
     assert_eq!(exp.span, span(10));
-    let ExpKind::Call(id_func, targs, args) = exp.node else {
-        panic!("expected call")
-    };
+    let ExpKind::Call(id_func, targs, args) = exp.node else { panic!("expected call") };
     assert_eq!(id_func.node, "x");
     assert_eq!(targs, vec![typ.clone()]);
     assert_eq!(args[0].span, span(8));
     assert_eq!(args[1].span, span(9));
-    let ArgKind::Def(id_def) = &args[1].node else {
-        panic!("expected def")
-    };
+    let ArgKind::Def(id_def) = &args[1].node else { panic!("expected def") };
     assert_eq!(id_def.node, "x");
-    let ArgKind::Exp(exp) = &args[0].node else {
-        panic!("expected exp")
-    };
+    let ArgKind::Exp(exp) = &args[0].node else { panic!("expected exp") };
     assert_eq!(exp.span, span(2));
-    let ExpKind::Iter(exp, (_, vars)) = &exp.node else {
-        panic!("expected iter")
-    };
+    let ExpKind::Iter(exp, (_, vars)) = &exp.node else { panic!("expected iter") };
     assert!(vars.is_empty());
     assert_eq!(exp.span, span(3));
-    let ExpKind::Upd(exp_base, path, exp_field) = &exp.node else {
-        panic!("expected update")
-    };
+    let ExpKind::Upd(exp_base, path, exp_field) = &exp.node else { panic!("expected update") };
     assert_eq!(var_id(exp_base).node, "q");
     assert_eq!(var_id(exp_field).node, "z");
     assert_eq!(path.span, span(6));
-    let PathKind::Slice(path, exp_idx, exp_len) = &path.node else {
-        panic!("expected slice")
-    };
+    let PathKind::Slice(path, exp_idx, exp_len) = &path.node else { panic!("expected slice") };
     assert_eq!(path.span, span(5));
     assert_eq!(var_id(exp_idx).node, "q");
     assert_eq!(var_id(exp_len).node, "z");
-    let guard = Guard::Sub(
-        typ,
-        Box::new(Subcheck::Iter(Iter::List, Box::new(Subcheck::Skip))),
-    );
+    let guard = Guard::Sub(typ, Box::new(Subcheck::Iter(Iter::List, Box::new(Subcheck::Skip))));
     assert_eq!(replacer.replace_guard(guard.clone()), guard);
 }
 
@@ -245,21 +210,14 @@ fn test_rule_outputs_freshen_under_hold_and_case() {
     }));
     let instr_case = instr(InstrKind::Case(CaseInstr {
         exp: variable("x"),
-        cases: vec![Case {
-            guard: Guard::Mem(variable("x")),
-            block: vec![instr_hold],
-        }],
+        cases: vec![Case { guard: Guard::Mem(variable("x")), block: vec![instr_hold] }],
         total: true,
     }));
     let block = Replacer::singleton(id("x"), variable("y"))
         .replace_block(vec![instr_case])
         .unwrap();
-    let InstrKind::Case(instr_case) = &block[0].node else {
-        panic!("expected case")
-    };
-    let Guard::Mem(exp) = &instr_case.cases[0].guard else {
-        panic!("expected membership")
-    };
+    let InstrKind::Case(instr_case) = &block[0].node else { panic!("expected case") };
+    let Guard::Mem(exp) = &instr_case.cases[0].guard else { panic!("expected membership") };
     assert_eq!(var_id(exp).node, "y");
     let InstrKind::Hold(instr_hold) = &instr_case.cases[0].block[0].node else {
         panic!("expected hold")
@@ -289,9 +247,7 @@ fn test_compound_codomain_and_freshness_avoid_all_names() {
     let block = replacer
         .replace_block(vec![binding("y", vec![ret("y'''"), ret("x"), ret("y")])])
         .unwrap();
-    let InstrKind::Let(instr_body) = &block[0].node else {
-        panic!("expected let")
-    };
+    let InstrKind::Let(instr_body) = &block[0].node else { panic!("expected let") };
     let id_fresh = var_id(&instr_body.exp_l);
     for text in ["y", "y'", "y''", "y'''"] {
         assert_ne!(id_fresh.node, text);

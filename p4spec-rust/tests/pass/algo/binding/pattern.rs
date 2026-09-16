@@ -34,13 +34,7 @@ fn test_pattern_arity_errors_use_the_owning_source_span() {
     let error = pattern::has_overlap(&owner_span, &pattern_sets_l, &pattern_sets_r)
         .expect_err("different pattern arities");
 
-    assert_eq!(
-        error.kind,
-        AlgoErrorKind::PatternArityMismatch {
-            expected: 1,
-            actual: 2,
-        }
-    );
+    assert_eq!(error.kind, AlgoErrorKind::PatternArityMismatch { expected: 1, actual: 2 });
     assert_eq!(error.span, owner_span);
 }
 

@@ -36,10 +36,7 @@ pub struct StfError {
 
 impl StfError {
     pub fn new(kind: impl Into<StfErrorKind>, span: Span) -> Self {
-        Self {
-            kind: kind.into(),
-            span,
-        }
+        Self { kind: kind.into(), span }
     }
 }
 

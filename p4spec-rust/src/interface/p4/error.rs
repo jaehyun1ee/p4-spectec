@@ -56,10 +56,7 @@ pub struct P4Error {
 
 impl P4Error {
     pub fn new(kind: impl Into<P4ErrorKind>, span: Span) -> Self {
-        Self {
-            kind: kind.into(),
-            span,
-        }
+        Self { kind: kind.into(), span }
     }
 }
 

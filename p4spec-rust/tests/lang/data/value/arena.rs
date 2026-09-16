@@ -69,20 +69,12 @@ fn test_interned_bodies_preserve_outer_and_child_annotations() {
 
     let typ = typ::make::tuple(vec![typ::make::bool()]).node;
     let tuple = make::tuple(&mut arena, typ.clone().into(), vec![child], Span::default()).unwrap();
-    let tuple_relocated = make::tuple(
-        &mut arena,
-        typ.clone().into(),
-        vec![child_relocated],
-        Span::default(),
-    )
-    .unwrap();
-    let tuple_annotated = make::tuple(
-        &mut arena,
-        typ.clone().into(),
-        vec![child_annotated],
-        Span::default(),
-    )
-    .unwrap();
+    let tuple_relocated =
+        make::tuple(&mut arena, typ.clone().into(), vec![child_relocated], Span::default())
+            .unwrap();
+    let tuple_annotated =
+        make::tuple(&mut arena, typ.clone().into(), vec![child_annotated], Span::default())
+            .unwrap();
     assert_ne!(tuple.node, tuple_relocated.node);
     assert_ne!(tuple.node, tuple_annotated.node);
     assert!(arena.view(tuple).syntax_eq(&arena.view(tuple_relocated)));
@@ -105,10 +97,7 @@ fn test_interned_bodies_preserve_outer_and_child_annotations() {
     assert_eq!(arena.typ(&children[0]).as_ref(), &typ::TypKind::Bool);
     assert_eq!(
         get::bool(&arena, &tuple),
-        Err(ValueError::UnexpectedKind {
-            expected: ValueTag::Bool,
-            actual: ValueTag::Tuple,
-        })
+        Err(ValueError::UnexpectedKind { expected: ValueTag::Bool, actual: ValueTag::Tuple })
     );
 }
 
@@ -119,14 +108,7 @@ fn test_interned_case_preserves_atom_locations_and_children() {
     let child = make::bool(&mut arena, true, span("child.p4", 11)).unwrap();
     let make_case = |line_relocated: Option<i64>| {
         let span_atom = |line| {
-            span(
-                if Some(line) == line_relocated {
-                    "other.spec"
-                } else {
-                    "label.spec"
-                },
-                line,
-            )
+            span(if Some(line) == line_relocated { "other.spec" } else { "label.spec" }, line)
         };
         Mixfix::Brack(
             p4spec_rust::phrase!(node: Atom::LParen, span: span_atom(1)),
@@ -144,30 +126,17 @@ fn test_interned_case_preserves_atom_locations_and_children() {
         )
     };
     let case = make_case(None);
-    let value = make::case(
-        &mut arena,
-        typ::TypKind::Bool.into(),
-        case.clone(),
-        Span::default(),
-    )
-    .unwrap();
-    let value_same = make::case(
-        &mut arena,
-        typ::TypKind::Bool.into(),
-        make_case(None),
-        Span::default(),
-    )
-    .unwrap();
+    let value =
+        make::case(&mut arena, typ::TypKind::Bool.into(), case.clone(), Span::default()).unwrap();
+    let value_same =
+        make::case(&mut arena, typ::TypKind::Bool.into(), make_case(None), Span::default())
+            .unwrap();
     assert_eq!(value.node, value_same.node);
     for line in 1..=4 {
         let case_relocated = make_case(Some(line));
-        let value_relocated = make::case(
-            &mut arena,
-            typ::TypKind::Bool.into(),
-            case_relocated,
-            Span::default(),
-        )
-        .unwrap();
+        let value_relocated =
+            make::case(&mut arena, typ::TypKind::Bool.into(), case_relocated, Span::default())
+                .unwrap();
         assert_ne!(value.node, value_relocated.node);
         assert_ne!(hash(arena.kind(&value)), hash(arena.kind(&value_relocated)));
         assert_eq!(arena.canon_id(&value), arena.canon_id(&value_relocated));
@@ -238,32 +207,16 @@ fn test_arena_growth_preserves_children_and_value_order() {
     let value_high = make::nat(&mut arena, Natural::from(99_u64), Span::default()).unwrap();
     let value_low = make::nat(&mut arena, Natural::from(1_u64), Span::default()).unwrap();
     let typ = typ::make::tuple(vec![typ::make::nat()]).node;
-    let tuple_high = make::tuple(
-        &mut arena,
-        typ.clone().into(),
-        vec![value_high],
-        Span::default(),
-    )
-    .unwrap();
-    let tuple_low = make::tuple(
-        &mut arena,
-        typ.clone().into(),
-        vec![value_low],
-        Span::default(),
-    )
-    .unwrap();
+    let tuple_high =
+        make::tuple(&mut arena, typ.clone().into(), vec![value_high], Span::default()).unwrap();
+    let tuple_low =
+        make::tuple(&mut arena, typ.clone().into(), vec![value_low], Span::default()).unwrap();
     for line in 0..512 {
         make::text(&mut arena, format!("text-{line}"), span("growth.p4", line)).unwrap();
     }
-    assert_eq!(
-        arena.view(tuple_low).syntax_cmp(&arena.view(tuple_high)),
-        std::cmp::Ordering::Less
-    );
+    assert_eq!(arena.view(tuple_low).syntax_cmp(&arena.view(tuple_high)), std::cmp::Ordering::Less);
     assert_eq!(get::tuple(&arena, &tuple_high).unwrap(), &[value_high]);
-    assert_eq!(
-        get::num(&arena, &value_high).unwrap(),
-        &Number::Nat(Natural::from(99_u64))
-    );
+    assert_eq!(get::num(&arena, &value_high).unwrap(), &Number::Nat(Natural::from(99_u64)));
 }
 
 #[test]
@@ -299,24 +252,12 @@ fn test_function_values_are_ordered_by_name() {
     let mut arena = ValueArena::new();
     let id_a = p4spec_rust::phrase!(node: "a".to_owned(), span: Span::default());
     let id_b = p4spec_rust::phrase!(node: "b".to_owned(), span: Span::default());
-    let func_a = make::func(
-        &mut arena,
-        id_a,
-        Vec::new(),
-        Vec::new(),
-        typ::make::bool(),
-        Span::default(),
-    )
-    .unwrap();
-    let func_b = make::func(
-        &mut arena,
-        id_b,
-        Vec::new(),
-        Vec::new(),
-        typ::make::bool(),
-        Span::default(),
-    )
-    .unwrap();
+    let func_a =
+        make::func(&mut arena, id_a, Vec::new(), Vec::new(), typ::make::bool(), Span::default())
+            .unwrap();
+    let func_b =
+        make::func(&mut arena, id_b, Vec::new(), Vec::new(), typ::make::bool(), Span::default())
+            .unwrap();
 
     assert!(arena.view(func_a).syntax_cmp(&arena.view(func_b)).is_lt());
     assert_ne!(func_a, func_b);
@@ -326,20 +267,12 @@ fn test_function_values_are_ordered_by_name() {
 fn test_external_float_order_normalizes_signed_zero() {
     let mut arena = ValueArena::new();
     let typ = Rc::new(typ::make::text().node);
-    let negative_zero = make::external(
-        &mut arena,
-        typ.clone(),
-        serde_json::json!(-0.0).into(),
-        Span::default(),
-    )
-    .unwrap();
-    let positive_zero = make::external(
-        &mut arena,
-        typ.clone(),
-        serde_json::json!(0.0).into(),
-        Span::default(),
-    )
-    .unwrap();
+    let negative_zero =
+        make::external(&mut arena, typ.clone(), serde_json::json!(-0.0).into(), Span::default())
+            .unwrap();
+    let positive_zero =
+        make::external(&mut arena, typ.clone(), serde_json::json!(0.0).into(), Span::default())
+            .unwrap();
 
     assert_eq!(negative_zero, positive_zero);
     assert_eq!(hash(&negative_zero), hash(&positive_zero));
@@ -398,20 +331,10 @@ fn test_syntax_equality_distinguishes_nested_payloads_and_variants() {
         Span::default(),
     )
     .unwrap();
-    let value_l = make::list(
-        &mut arena,
-        typ::TypKind::Bool.into(),
-        vec![value_l],
-        Span::default(),
-    )
-    .unwrap();
-    let value_r = make::list(
-        &mut arena,
-        typ::TypKind::Bool.into(),
-        vec![value_r],
-        Span::default(),
-    )
-    .unwrap();
+    let value_l =
+        make::list(&mut arena, typ::TypKind::Bool.into(), vec![value_l], Span::default()).unwrap();
+    let value_r =
+        make::list(&mut arena, typ::TypKind::Bool.into(), vec![value_r], Span::default()).unwrap();
     let value_text = make::text(&mut arena, "true".to_owned(), Span::default()).unwrap();
 
     assert!(!arena.view(value_l).syntax_eq(&arena.view(value_r)));
@@ -424,13 +347,9 @@ fn test_canonical_identity_preserves_nested_locations_through_growth() {
     let mut value_l = make::bool(&mut arena, true, span("left.p4", 1)).unwrap();
     let mut value_r = make::bool(&mut arena, true, span("right.p4", 2)).unwrap();
     for line in 0..128 {
-        value_l = make::list(
-            &mut arena,
-            typ::TypKind::Bool.into(),
-            vec![value_l],
-            span("left.p4", line),
-        )
-        .unwrap();
+        value_l =
+            make::list(&mut arena, typ::TypKind::Bool.into(), vec![value_l], span("left.p4", line))
+                .unwrap();
         value_r = make::list(
             &mut arena,
             typ::TypKind::Text.into(),
@@ -447,13 +366,9 @@ fn test_canonical_identity_preserves_nested_locations_through_growth() {
     assert_eq!(arena.span(&child_l), &span("left.p4", 126));
     assert_eq!(arena.span(&child_r), &span("right.p4", 126));
     let value_false = make::bool(&mut arena, false, Span::default()).unwrap();
-    let value_false = make::list(
-        &mut arena,
-        typ::TypKind::Bool.into(),
-        vec![value_false],
-        Span::default(),
-    )
-    .unwrap();
+    let value_false =
+        make::list(&mut arena, typ::TypKind::Bool.into(), vec![value_false], Span::default())
+            .unwrap();
     assert_ne!(arena.canon_id(&value_l), arena.canon_id(&value_false));
 }
 
@@ -561,15 +476,10 @@ fn test_default_span_interning_preserves_nondefault_positions() {
     for span in [
         Span::new(Position::new("", 1, 0), Position::new("", 1, 0)),
         Span::new(Position::new("", 0, 0), Position::new("", 0, 1)),
-        Span::new(
-            Position::new("program.p4", 0, 0),
-            Position::new("program.p4", 0, 0),
-        ),
+        Span::new(Position::new("program.p4", 0, 0), Position::new("program.p4", 0, 0)),
     ] {
-        let value_located = Value {
-            span: make::bool(&mut arena, false, span.clone()).unwrap().span,
-            ..value
-        };
+        let value_located =
+            Value { span: make::bool(&mut arena, false, span.clone()).unwrap().span, ..value };
         assert_ne!(value_located.span, value.span);
         assert_eq!(arena.span(&value_located), &span);
     }
@@ -602,10 +512,8 @@ fn test_primitive_constructors_reuse_type_allocations() {
 fn test_external_object_key_order_shares_canonical_identity() {
     let mut arena = ValueArena::new();
     let typ = std::rc::Rc::new(typ::TypKind::Bool);
-    let fields = vec![
-        ("a".to_owned(), serde_json::json!(1)),
-        ("b".to_owned(), serde_json::json!(2)),
-    ];
+    let fields =
+        vec![("a".to_owned(), serde_json::json!(1)), ("b".to_owned(), serde_json::json!(2))];
     let value_a = make::external(
         &mut arena,
         typ.clone(),
@@ -652,13 +560,8 @@ fn test_external_canonical_equality_stops_at_json() {
         for value in [value, value_relocated, value_retyped, value] {
             let payload = Rc::new(encode_with(&arena, encoding, &vec![value]).unwrap());
             values_external.push(
-                make::external(
-                    &mut arena,
-                    typ::TypKind::Bool.into(),
-                    payload,
-                    Span::default(),
-                )
-                .unwrap(),
+                make::external(&mut arena, typ::TypKind::Bool.into(), payload, Span::default())
+                    .unwrap(),
             );
         }
         for value_external in &values_external[1..3] {
@@ -666,10 +569,7 @@ fn test_external_canonical_equality_stops_at_json() {
                 get::external(&arena, &values_external[0]).unwrap(),
                 get::external(&arena, value_external).unwrap()
             );
-            assert_ne!(
-                arena.canon_id(&values_external[0]),
-                arena.canon_id(value_external)
-            );
+            assert_ne!(arena.canon_id(&values_external[0]), arena.canon_id(value_external));
             assert!(
                 !arena
                     .view(values_external[0])
@@ -677,13 +577,7 @@ fn test_external_canonical_equality_stops_at_json() {
             );
         }
         assert_eq!(values_external[0].node, values_external[3].node);
-        assert_eq!(
-            arena.canon_id(&values_external[0]),
-            arena.canon_id(&values_external[3])
-        );
-        assert_eq!(
-            hash(arena.kind(&values_external[0])),
-            hash(arena.kind(&values_external[3]))
-        );
+        assert_eq!(arena.canon_id(&values_external[0]), arena.canon_id(&values_external[3]));
+        assert_eq!(hash(arena.kind(&values_external[0])), hash(arena.kind(&values_external[3])));
     }
 }

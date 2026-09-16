@@ -28,10 +28,8 @@ impl State {
     pub fn node_create(&mut self, rid: i64, ports: &[i64]) {
         let handle = self.handle_next;
         self.handle_next = handle.wrapping_add(1);
-        self.nodes.insert(
-            handle,
-            ports.iter().map(|port| Node { port: *port, rid }).collect(),
-        );
+        self.nodes
+            .insert(handle, ports.iter().map(|port| Node { port: *port, rid }).collect());
     }
 
     pub fn node_associate(&mut self, group: i64, handle: i64) {

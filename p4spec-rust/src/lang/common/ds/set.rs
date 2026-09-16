@@ -17,9 +17,7 @@ pub struct PhraseSet<K: SyntaxCmp> {
 impl<K: SyntaxCmp> PhraseSet<K> {
     /// Constructs an empty set
     pub fn new() -> Self {
-        Self {
-            entries: PersistentOrdSet::new(),
-        }
+        Self { entries: PersistentOrdSet::new() }
     }
 
     /// Returns whether the set contains no keys
@@ -38,11 +36,7 @@ impl<K: SyntaxCmp> PhraseSet<K> {
         K: Clone,
     {
         let key = ByKey(key);
-        if self.entries.contains(&key) {
-            false
-        } else {
-            self.entries.insert(key).is_none()
-        }
+        if self.entries.contains(&key) { false } else { self.entries.insert(key).is_none() }
     }
 
     /// Moves every key from `set_other` into this set

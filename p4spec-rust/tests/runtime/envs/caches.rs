@@ -18,14 +18,8 @@ fn test_call_cache_uses_structural_value_keys() {
     )
     .unwrap();
     let mut cache: CallCache<&str> = CallCache::new();
-    let key_a = CallKey {
-        id: "f".into(),
-        values: vec![value_a].into(),
-    };
-    let key_b = CallKey {
-        id: "f".into(),
-        values: vec![value_b].into(),
-    };
+    let key_a = CallKey { id: "f".into(), values: vec![value_a].into() };
+    let key_b = CallKey { id: "f".into(), values: vec![value_b].into() };
 
     assert_eq!(cache.insert(key_a, "initial"), None);
     assert_eq!(cache.insert(key_b.clone(), "replacement"), None);

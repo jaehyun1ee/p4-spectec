@@ -59,34 +59,22 @@ fn test_unsupported_extern_fails() {
     let mut runner = runner_from_spec(&spec, Dummy);
 
     let error = {
-        let (name, values) = (
-            "Unsupported",
-            &[make::bool(runner.arena_mut(), true, Span::default()).unwrap()],
-        );
+        let (name, values) =
+            ("Unsupported", &[make::bool(runner.arena_mut(), true, Span::default()).unwrap()]);
         runner.context().call_rel(name, values)
     }
     .unwrap_err();
 
-    assert!(has_extern_failure(
-        &error,
-        "unimplemented extern relation: Unsupported"
-    ));
+    assert!(has_extern_failure(&error, "unimplemented extern relation: Unsupported"));
 
     for name in ["ExternFunctionCall_eval", "ExternMethodCall_eval"] {
         let error = runner.context().call_extern_rel(name, &[]).unwrap_err();
-        assert!(has_extern_failure(
-            &error,
-            &format!("unimplemented extern relation: {name}")
-        ));
+        assert!(has_extern_failure(&error, &format!("unimplemented extern relation: {name}")));
     }
 
     let value_ctx = make::bool(runner.arena_mut(), true, Span::default()).unwrap();
-    let value_name = make::text(
-        runner.arena_mut(),
-        "static_assert".to_owned(),
-        Span::default(),
-    )
-    .unwrap();
+    let value_name =
+        make::text(runner.arena_mut(), "static_assert".to_owned(), Span::default()).unwrap();
     let typ_name = p4spec_rust::lang::data::typ::make::var(
         p4spec_rust::phrase!(node: "nameIR".to_owned(), span: Span::default()),
         Vec::new(),
@@ -97,20 +85,12 @@ fn test_unsupported_extern_fails() {
             .into_iter()
             .map(|name| make::text(runner.arena_mut(), name.to_owned(), Span::default()).unwrap())
             .collect();
-        make::list(
-            runner.arena_mut(),
-            typ_names.node.clone().into(),
-            values,
-            Span::default(),
-        )
+        make::list(runner.arena_mut(), typ_names.node.clone().into(), values, Span::default())
     }
     .unwrap();
     let error = runner
         .context()
-        .call_rel(
-            "ExternFunctionCall_eval_lctk",
-            &[value_ctx, value_name, value_names],
-        )
+        .call_rel("ExternFunctionCall_eval_lctk", &[value_ctx, value_name, value_names])
         .unwrap_err();
 
     assert!(has_extern_failure(
@@ -126,10 +106,7 @@ fn test_dummy_initializes_null_architecture_state_without_effects() {
         .context()
         .call_extern_func("init_archState", &[], &[])
         .unwrap();
-    assert_eq!(
-        get::external(runner.arena(), &value).unwrap().as_ref(),
-        &json::Null
-    );
+    assert_eq!(get::external(runner.arena(), &value).unwrap().as_ref(), &json::Null);
     assert!(
         matches!(runner.arena().typ(&value).as_ref(), TypKind::Var(id, _) if id.node == "archState")
     );

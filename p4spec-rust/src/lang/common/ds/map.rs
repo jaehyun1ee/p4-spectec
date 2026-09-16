@@ -36,9 +36,7 @@ pub struct PhraseMap<K: SyntaxCmp, V> {
 impl<K: SyntaxCmp, V> PhraseMap<K, V> {
     /// Constructs an empty map
     pub fn new() -> Self {
-        Self {
-            entries: PersistentOrdMap::new(),
-        }
+        Self { entries: PersistentOrdMap::new() }
     }
 
     /// Constructs a map from equally sized key and value lists

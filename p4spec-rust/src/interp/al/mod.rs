@@ -36,10 +36,7 @@ pub struct AlInterp {
 
 impl AlInterp {
     pub fn new(config: Config) -> Self {
-        Self {
-            config,
-            cache: Cache::default(),
-        }
+        Self { config, cache: Cache::default() }
     }
 }
 

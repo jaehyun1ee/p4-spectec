@@ -55,10 +55,7 @@ pub struct Results {
 
 impl Results {
     pub fn new(expected: ExpectFile) -> Self {
-        Self {
-            expected,
-            records: BTreeMap::new(),
-        }
+        Self { expected, records: BTreeMap::new() }
     }
 
     pub fn record(&mut self, path: &Path, outcome: Outcome) -> Result<()> {
@@ -66,16 +63,10 @@ impl Results {
             .to_str()
             .is_some_and(|path| !path.contains(['\t', '\r', '\n']))
         {
-            return Err(Error::Invalid(format!(
-                "invalid result path: {}",
-                path.display()
-            )));
+            return Err(Error::Invalid(format!("invalid result path: {}", path.display())));
         }
         if self.records.insert(path.to_owned(), outcome).is_some() {
-            return Err(Error::Invalid(format!(
-                "duplicate result: {}",
-                path.display()
-            )));
+            return Err(Error::Invalid(format!("duplicate result: {}", path.display())));
         }
         Ok(())
     }

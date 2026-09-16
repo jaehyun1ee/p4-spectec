@@ -88,18 +88,9 @@ fn is_upcast_terminal(exp: &ast::Exp) -> bool {
 #[derive(Debug)]
 #[allow(clippy::large_enum_variant)]
 enum Source {
-    Bound {
-        exp_from: ast::Exp,
-    },
-    BindMatch {
-        pattern: ast::Pattern,
-        exp_from: ast::Exp,
-    },
-    BindSub {
-        typ_sub: ast::Typ,
-        exp_sub: ast::Exp,
-        exp_from: ast::Exp,
-    },
+    Bound { exp_from: ast::Exp },
+    BindMatch { pattern: ast::Pattern, exp_from: ast::Exp },
+    BindSub { typ_sub: ast::Typ, exp_sub: ast::Exp, exp_from: ast::Exp },
 }
 
 #[derive(Debug)]
@@ -116,9 +107,7 @@ pub struct RenameEnv {
 
 impl RenameEnv {
     pub fn new() -> Self {
-        Self {
-            renames: Vec::new(),
-        }
+        Self { renames: Vec::new() }
     }
 
     fn prepend(&mut self, rename: Rename) {
@@ -144,10 +133,7 @@ fn gen_prem_bound(
         ast::ExpKind::Case(not_exp)
             if not_exp.arity() == 0 && !is_singleton_case(ctx, &typ_from)? =>
         {
-            ast::ExpKind::Match(
-                Box::new(exp_l),
-                ast::Pattern::Case(Box::new(not_exp.to_mixop())),
-            )
+            ast::ExpKind::Match(Box::new(exp_l), ast::Pattern::Case(Box::new(not_exp.to_mixop())))
         }
         ast::ExpKind::Opt(Some(_)) => {
             ast::ExpKind::Match(Box::new(exp_l), ast::Pattern::Opt(ast::OptPattern::Some))
@@ -211,11 +197,7 @@ fn gen_prem_bind_match(
         iter_ctx
             .as_slice()
             .iter()
-            .map(|entry| Iteration {
-                iter: entry.iter,
-                vars_bound: vec![],
-                vars_bind: vec![],
-            })
+            .map(|entry| Iteration { iter: entry.iter, vars_bound: vec![], vars_bind: vec![] })
             .collect(),
     );
     iter_ctx_match.add_var_bound(
@@ -235,11 +217,7 @@ fn gen_prem_bind_match(
         iter_ctx
             .as_slice()
             .iter()
-            .map(|entry| Iteration {
-                iter: entry.iter,
-                vars_bound: vec![],
-                vars_bind: vec![],
-            })
+            .map(|entry| Iteration { iter: entry.iter, vars_bound: vec![], vars_bind: vec![] })
             .collect(),
     );
     iter_ctx_bind.add_vars_bind(dimension::infer_exp(exp_from));
@@ -281,11 +259,7 @@ fn gen_prem_bind_sub(
         iter_ctx
             .as_slice()
             .iter()
-            .map(|entry| Iteration {
-                iter: entry.iter,
-                vars_bound: vec![],
-                vars_bind: vec![],
-            })
+            .map(|entry| Iteration { iter: entry.iter, vars_bound: vec![], vars_bind: vec![] })
             .collect(),
     );
     iter_ctx_sub.add_var_bound(
@@ -310,11 +284,7 @@ fn gen_prem_bind_sub(
         iter_ctx
             .as_slice()
             .iter()
-            .map(|entry| Iteration {
-                iter: entry.iter,
-                vars_bound: vec![],
-                vars_bind: vec![],
-            })
+            .map(|entry| Iteration { iter: entry.iter, vars_bound: vec![], vars_bind: vec![] })
             .collect(),
     );
     iter_ctx_bind.add_vars_bind(dimension::infer_exp(exp_from));
@@ -345,18 +315,9 @@ fn gen_prem(
             let prems = gen_prem_bind_match(&rename.destination, pattern, exp_from, &iter_ctx);
             Ok(prems)
         }
-        Source::BindSub {
-            typ_sub,
-            exp_sub,
-            exp_from,
-        } => gen_prem_bind_sub(
-            ctx,
-            &rename.destination,
-            typ_sub,
-            exp_sub,
-            exp_from,
-            &iter_ctx,
-        ),
+        Source::BindSub { typ_sub, exp_sub, exp_from } => {
+            gen_prem_bind_sub(ctx, &rename.destination, typ_sub, exp_sub, exp_from, &iter_ctx)
+        }
     }
 }
 
@@ -413,11 +374,7 @@ fn rename_exp_bind_sub(
     let bounds = exp_from.free();
     renv.prepend(Rename {
         destination: destination.clone(),
-        source: Source::BindSub {
-            typ_sub,
-            exp_sub,
-            exp_from,
-        },
+        source: Source::BindSub { typ_sub, exp_sub, exp_from },
         iter_ctx: iter_ctx.clone(),
     });
     iter_ctx.filter_bound(|var| !bounds.contains(&var.id));
@@ -569,11 +526,7 @@ fn rename_exp_bind(
             Ok(exp)
         }
         ast::ExpKind::Iter(exp_inner, (iter, vars)) => {
-            let iteration = Iteration {
-                iter,
-                vars_bound: vars,
-                vars_bind: vec![],
-            };
+            let iteration = Iteration { iter, vars_bound: vars, vars_bind: vec![] };
             let mut iter_scope = iter_ctx.scope(iteration);
             let exp_inner = rename_exp(ctx, binds, renv, &mut iter_scope, *exp_inner)?;
             let iteration = iter_scope.finish();

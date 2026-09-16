@@ -23,10 +23,8 @@ fn test_meter_returns_green_without_reading_inputs() {
     assert!(runner.context().interp().calls.is_empty());
     let value_size = pack::p4_fixed_bit(runner.arena_mut(), 32.into(), 2.into()).unwrap();
     let value_type = pack::p4_enum(runner.arena_mut(), "PSA_MeterType_t", "PACKETS").unwrap();
-    let (value_ids, value_args) = arguments(
-        runner.arena_mut(),
-        &[("n_meters", value_size), ("type", value_type)],
-    );
+    let (value_ids, value_args) =
+        arguments(runner.arena_mut(), &[("n_meters", value_size), ("type", value_type)]);
     assert_eq!(
         Meter::init(runner.arena(), value_ctx, value_ids, value_args).unwrap(),
         Meter::Packets(vec![Color::Green; 2])

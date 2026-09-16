@@ -47,10 +47,7 @@ struct TraceInterp {
 type TestRunner = Runner<TraceInterp, NullInterface, V1Model>;
 
 fn typ_named(name: &str) -> Typ {
-    typ::make::var(
-        p4spec_rust::phrase!(node: name.to_owned(), span: Span::default()),
-        vec![],
-    )
+    typ::make::var(p4spec_rust::phrase!(node: name.to_owned(), span: Span::default()), vec![])
 }
 
 fn field(arena: &ValueArena, value: Value, name: &str) -> Value {
@@ -72,13 +69,7 @@ fn record(arena: &mut ValueArena, fields: Vec<(&str, Value)>) -> Value {
             )
         })
         .collect();
-    make::structure(
-        arena,
-        typ_named("test").node.into(),
-        fields,
-        Span::default(),
-    )
-    .unwrap()
+    make::structure(arena, typ_named("test").node.into(), fields, Span::default()).unwrap()
 }
 
 fn update(arena: &mut ValueArena, value: Value, name: &str, value_field: Value) -> Value {
@@ -88,23 +79,11 @@ fn update(arena: &mut ValueArena, value: Value, name: &str, value_field: Value) 
         .find(|(atom, _)| atom.node == Atom::Keyword(name.to_owned()))
         .unwrap()
         .1 = value_field;
-    make::structure(
-        arena,
-        typ_named("test").node.into(),
-        fields,
-        Span::default(),
-    )
-    .unwrap()
+    make::structure(arena, typ_named("test").node.into(), fields, Span::default()).unwrap()
 }
 
 fn option(arena: &mut ValueArena, value: Value) -> Value {
-    make::opt(
-        arena,
-        typ_named("test").node.into(),
-        Some(value),
-        Span::default(),
-    )
-    .unwrap()
+    make::opt(arena, typ_named("test").node.into(), Some(value), Span::default()).unwrap()
 }
 
 fn int(arena: &ValueArena, value_ctx: Value, name: &str) -> i64 {
@@ -234,13 +213,9 @@ impl<Iface: Interface> Interpreter<Iface, V1Model> for TraceInterp {
                     p4spec_rust::phrase!(node: "returnResult".to_owned(), span: Span::default()),
                     Vec::new(),
                 );
-                let value_result = make::case(
-                    ctx.arena_mut(),
-                    typ.node.into(),
-                    value_case,
-                    Span::default(),
-                )
-                .map_err(ExternError::from)?;
+                let value_result =
+                    make::case(ctx.arena_mut(), typ.node.into(), value_case, Span::default())
+                        .map_err(ExternError::from)?;
                 Ok(vec![value_ctx, value_arch, value_result])
             }
             _ => panic!("unexpected relation {name}"),
@@ -251,11 +226,7 @@ impl<Iface: Interface> Interpreter<Iface, V1Model> for TraceInterp {
 fn setup(scenario: Scenario) -> (TestRunner, SimState) {
     let mut runner = Runner::new(
         (),
-        TraceInterp {
-            scenario,
-            events: vec![],
-            egress_count: 0,
-        },
+        TraceInterp { scenario, events: vec![], egress_count: 0 },
         NullInterface,
         V1Model::default(),
     );
@@ -293,14 +264,7 @@ fn setup(scenario: Scenario) -> (TestRunner, SimState) {
             ("effects", value_effects),
         ],
     );
-    (
-        runner,
-        SimState {
-            value_ctx,
-            value_arch,
-            txs: vec![],
-        },
-    )
+    (runner, SimState { value_ctx, value_arch, txs: vec![] })
 }
 
 fn arch(runner: &mut TestRunner, state: &SimState) -> Arch {
@@ -370,19 +334,10 @@ fn test_scheduler_resets_packet_actions_and_retains_prior_transmissions() {
     arch_state.action.resubmit_opt = Some(1);
     arch_state.action.recirculate_opt = Some(2);
     save_arch(&mut runner, &mut state, &arch_state);
-    state.txs.push(Tx {
-        port: 99,
-        packet: "CD".to_owned(),
-    });
+    state.txs.push(Tx { port: 99, packet: "CD".to_owned() });
     pipe::run_scheduler(&mut runner.context(), &mut state).unwrap();
-    assert_eq!(
-        runner.context().interp().events,
-        ["egress", "check", "deparse"]
-    );
-    assert_eq!(
-        state.txs.iter().map(|tx| tx.port).collect::<Vec<_>>(),
-        [99, 3]
-    );
+    assert_eq!(runner.context().interp().events, ["egress", "check", "deparse"]);
+    assert_eq!(state.txs.iter().map(|tx| tx.port).collect::<Vec<_>>(), [99, 3]);
     assert_eq!(arch(&mut runner, &state).action, Action::default());
 }
 
@@ -417,60 +372,30 @@ fn test_multicast_order_and_ingress_queue_priority() {
     save_arch(&mut runner, &mut state, &arch_state);
     pipe::schedule_packet(&mut runner.context(), &mut state, Entrypoint::Ingress).unwrap();
     let mut arch_state = arch(&mut runner, &state);
-    assert_eq!(
-        arch_state.queue.pop_front().unwrap().packet_in,
-        PacketIn::init("AB").unwrap()
-    );
-    assert_eq!(
-        arch_state.queue.pop_front().unwrap().packet_in,
-        PacketIn::init("EF").unwrap()
-    );
+    assert_eq!(arch_state.queue.pop_front().unwrap().packet_in, PacketIn::init("AB").unwrap());
+    assert_eq!(arch_state.queue.pop_front().unwrap().packet_in, PacketIn::init("EF").unwrap());
     save_arch(&mut runner, &mut state, &arch_state);
     pipe::run_scheduler(&mut runner.context(), &mut state).unwrap();
-    assert_eq!(
-        state.txs.iter().map(|tx| tx.port).collect::<Vec<_>>(),
-        [3, 9, 4, 2]
-    );
+    assert_eq!(state.txs.iter().map(|tx| tx.port).collect::<Vec<_>>(), [3, 9, 4, 2]);
 }
 
 #[test]
 fn test_drive_pipe_clears_prior_transmissions_for_forwarded_and_dropped_inputs() {
     for drop in [false, true] {
         let (mut runner, mut state) = setup(Scenario::Normal);
-        let rx = Rx {
-            port: 1,
-            packet: "AB".to_owned(),
-        };
+        let rx = Rx { port: 1, packet: "AB".to_owned() };
         pipe::drive_pipe(&mut runner.context(), &mut state, &rx).unwrap();
-        assert_eq!(
-            state.txs,
-            [Tx {
-                port: 3,
-                packet: "AB".to_owned(),
-            }]
-        );
+        assert_eq!(state.txs, [Tx { port: 3, packet: "AB".to_owned() }]);
 
         if drop {
             state.value_ctx = write_int(runner.arena_mut(), state.value_ctx, "egress_spec", 9, 511);
         }
-        let rx = Rx {
-            port: 2,
-            packet: "CD".to_owned(),
-        };
+        let rx = Rx { port: 2, packet: "CD".to_owned() };
         pipe::drive_pipe(&mut runner.context(), &mut state, &rx).unwrap();
         if drop {
-            assert!(
-                state.txs.is_empty(),
-                "dropped input retained prior transmissions"
-            );
+            assert!(state.txs.is_empty(), "dropped input retained prior transmissions");
         } else {
-            assert_eq!(
-                state.txs,
-                [Tx {
-                    port: 3,
-                    packet: "CD".to_owned(),
-                }]
-            );
+            assert_eq!(state.txs, [Tx { port: 3, packet: "CD".to_owned() }]);
         }
     }
 }

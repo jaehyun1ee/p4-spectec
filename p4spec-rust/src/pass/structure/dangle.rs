@@ -38,18 +38,9 @@ fn insert_instr_kind(
 // - If instruction
 
 fn insert_if_instr(instr_ol: ol::IfInstr, dangle: bool) -> Result<sl::InstrKind, StructureError> {
-    let ol::IfInstr {
-        exp,
-        iter_exps,
-        block: block_ol,
-    } = instr_ol;
+    let ol::IfInstr { exp, iter_exps, block: block_ol } = instr_ol;
     let block = insert_block(block_ol, dangle)?;
-    Ok(sl::InstrKind::If(sl::IfInstr {
-        exp,
-        iter_exps,
-        block,
-        dangle,
-    }))
+    Ok(sl::InstrKind::If(sl::IfInstr { exp, iter_exps, block, dangle }))
 }
 
 // - Hold instruction
@@ -70,30 +61,19 @@ fn insert_hold_instr(
     let block_not_hold_sl = insert_block(block_not_hold_ol, dangle)?;
     let hold_case = match (block_hold_sl.is_empty(), block_not_hold_sl.is_empty()) {
         (true, true) => {
-            return Err(StructureError::new(
-                StructureErrorKind::EmptyHold,
-                span.clone(),
-            ));
+            return Err(StructureError::new(StructureErrorKind::EmptyHold, span.clone()));
         }
         (false, true) => sl::HoldCase::Hold(block_hold_sl, dangle),
         (true, false) => sl::HoldCase::NotHold(block_not_hold_sl, dangle),
         (false, false) => sl::HoldCase::Both(block_hold_sl, block_not_hold_sl),
     };
-    Ok(sl::InstrKind::Hold(sl::HoldInstr {
-        id,
-        not_exp,
-        iter_exps,
-        hold_case,
-    }))
+    Ok(sl::InstrKind::Hold(sl::HoldInstr { id, not_exp, iter_exps, hold_case }))
 }
 
 // - Case instruction
 
 fn insert_case(case_ol: ol::Case, dangle: bool) -> Result<sl::Case, StructureError> {
-    let ol::Case {
-        guard,
-        block: block_ol,
-    } = case_ol;
+    let ol::Case { guard, block: block_ol } = case_ol;
     let block = insert_block(block_ol, dangle)?;
     Ok(sl::Case { guard, block })
 }
@@ -102,20 +82,12 @@ fn insert_case_instr(
     instr_ol: ol::CaseInstr,
     dangle: bool,
 ) -> Result<sl::InstrKind, StructureError> {
-    let ol::CaseInstr {
-        exp,
-        cases: cases_ol,
-        total,
-    } = instr_ol;
+    let ol::CaseInstr { exp, cases: cases_ol, total } = instr_ol;
     let cases = cases_ol
         .into_iter()
         .map(|case_ol| insert_case(case_ol, dangle))
         .collect::<Result<_, _>>()?;
-    Ok(sl::InstrKind::Case(sl::CaseInstr {
-        exp,
-        cases,
-        dangle: dangle && !total,
-    }))
+    Ok(sl::InstrKind::Case(sl::CaseInstr { exp, cases, dangle: dangle && !total }))
 }
 
 // - Group instruction
@@ -124,37 +96,17 @@ fn insert_group_instr(
     instr_ol: ol::GroupInstr,
     dangle: bool,
 ) -> Result<sl::InstrKind, StructureError> {
-    let ol::GroupInstr {
-        id,
-        rel_signature,
-        exps,
-        block: block_ol,
-    } = instr_ol;
+    let ol::GroupInstr { id, rel_signature, exps, block: block_ol } = instr_ol;
     let block = insert_block(block_ol, dangle)?;
-    Ok(sl::InstrKind::Group(sl::GroupInstr {
-        id,
-        rel_signature,
-        exps,
-        block,
-    }))
+    Ok(sl::InstrKind::Group(sl::GroupInstr { id, rel_signature, exps, block }))
 }
 
 // - Let instruction
 
 fn insert_let_instr(instr_ol: ol::LetInstr, dangle: bool) -> Result<sl::InstrKind, StructureError> {
-    let ol::LetInstr {
-        exp_l,
-        exp_r,
-        iter_instrs,
-        block: block_ol,
-    } = instr_ol;
+    let ol::LetInstr { exp_l, exp_r, iter_instrs, block: block_ol } = instr_ol;
     let block = insert_block(block_ol, dangle)?;
-    Ok(sl::InstrKind::Let(sl::LetInstr {
-        exp_l,
-        exp_r,
-        iter_instrs,
-        block,
-    }))
+    Ok(sl::InstrKind::Let(sl::LetInstr { exp_l, exp_r, iter_instrs, block }))
 }
 
 // - Rule instruction
@@ -163,34 +115,16 @@ fn insert_rule_instr(
     instr_ol: ol::RuleInstr,
     dangle: bool,
 ) -> Result<sl::InstrKind, StructureError> {
-    let ol::RuleInstr {
-        id,
-        not_exp,
-        input_hint,
-        iter_instrs,
-        block: block_ol,
-    } = instr_ol;
+    let ol::RuleInstr { id, not_exp, input_hint, iter_instrs, block: block_ol } = instr_ol;
     let block = insert_block(block_ol, dangle)?;
-    Ok(sl::InstrKind::Rule(sl::RuleInstr {
-        id,
-        not_exp,
-        input_hint,
-        iter_instrs,
-        block,
-    }))
+    Ok(sl::InstrKind::Rule(sl::RuleInstr { id, not_exp, input_hint, iter_instrs, block }))
 }
 
 // - Result instruction
 
 fn insert_result_instr(instr_ol: ol::ResultInstr) -> sl::InstrKind {
-    let ol::ResultInstr {
-        rel_signature,
-        exps,
-    } = instr_ol;
-    sl::InstrKind::Result(sl::ResultInstr {
-        rel_signature,
-        exps,
-    })
+    let ol::ResultInstr { rel_signature, exps } = instr_ol;
+    sl::InstrKind::Result(sl::ResultInstr { rel_signature, exps })
 }
 
 // - Return instruction
@@ -206,15 +140,9 @@ fn insert_debug_instr(
     instr_ol: ol::DebugInstr,
     dangle: bool,
 ) -> Result<sl::InstrKind, StructureError> {
-    let ol::DebugInstr {
-        exp,
-        instr: instr_ol,
-    } = instr_ol;
+    let ol::DebugInstr { exp, instr: instr_ol } = instr_ol;
     let instr_sl = insert_instr(*instr_ol, dangle)?;
-    Ok(sl::InstrKind::Debug(sl::DebugInstr {
-        exp,
-        instr: Box::new(instr_sl),
-    }))
+    Ok(sl::InstrKind::Debug(sl::DebugInstr { exp, instr: Box::new(instr_sl) }))
 }
 
 // == Blocks

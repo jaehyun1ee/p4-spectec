@@ -111,18 +111,14 @@ fn ocaml_diagnostic(path: &Path, stderr: &[u8]) -> Diagnostic {
         }
         message => panic!("unmapped OCaml diagnostic category: {message}"),
     };
-    Diagnostic {
-        kind,
-        span: Span::new(position(file, col_l), position(file, col_r)),
-    }
+    Diagnostic { kind, span: Span::new(position(file, col_l), position(file, col_r)) }
 }
 
 fn rust_diagnostic(error: FrontendError) -> Diagnostic {
     match error {
-        FrontendError::Lexical(error) => Diagnostic {
-            kind: DiagnosticKind::Lexical(error.node),
-            span: error.span,
-        },
+        FrontendError::Lexical(error) => {
+            Diagnostic { kind: DiagnosticKind::Lexical(error.node), span: error.span }
+        }
         FrontendError::Syntax(error) => {
             let kind = match error.node {
                 SyntaxErrorKind::ExpectedNotationType
@@ -136,10 +132,7 @@ fn rust_diagnostic(error: FrontendError) -> Diagnostic {
                 | SyntaxErrorKind::UnexpectedToken
                 | SyntaxErrorKind::ExtraToken => DiagnosticKind::Syntax,
             };
-            Diagnostic {
-                kind,
-                span: error.span,
-            }
+            Diagnostic { kind, span: error.span }
         }
         FrontendError::Io(_) | FrontendError::InvalidUtf8(_) => {
             panic!("negative source fixture must reach lexing or parsing")
@@ -168,11 +161,7 @@ fn test_negative_corpus_matches_ocaml_diagnostics() {
     let total = fixtures.len();
     for (index, fixture) in fixtures.into_iter().enumerate() {
         let output = run_ocaml_el(repo, &fixture);
-        assert!(
-            !output.status.success(),
-            "OCaml accepted {}",
-            fixture.display()
-        );
+        assert!(!output.status.success(), "OCaml accepted {}", fixture.display());
         let expected = ocaml_diagnostic(&fixture, &output.stderr);
         let actual = parse_files([&fixture])
             .map(|_| panic!("Rust accepted {}", fixture.display()))

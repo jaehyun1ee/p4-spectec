@@ -93,11 +93,7 @@ fn test_rejected_conversion_matches_ocaml_category_and_span() {
     let spec_il = elaborate::convert(spec_el).expect("elaborate negative fixture with Rust");
     let error = algo::convert(spec_il).expect_err("Rust rejects fixture");
 
-    assert_eq!(
-        Some(rust_error_category(&error.kind)),
-        ocaml_error_category(message),
-        "{name}"
-    );
+    assert_eq!(Some(rust_error_category(&error.kind)), ocaml_error_category(message), "{name}");
     assert_eq!(error.span.to_string(), span, "{name}");
 }
 

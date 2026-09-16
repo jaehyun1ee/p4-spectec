@@ -12,10 +12,8 @@ use p4spec_rust::{
 };
 
 fn id(name: &str, line: i64) -> p4spec_rust::lang::il::ast::Id {
-    let span = Span::new(
-        Position::new("vars.watsup", line, 0),
-        Position::new("vars.watsup", line, 1),
-    );
+    let span =
+        Span::new(Position::new("vars.watsup", line, 0), Position::new("vars.watsup", line, 1));
     phrase!(node: name.to_owned(), span: span)
 }
 
@@ -49,10 +47,7 @@ fn test_value_environment_clone_keeps_independent_bindings() {
     let mut arena = ValueArena::new();
     let var = Variable::new(id("a", 1), vec![]);
     let mut venv = VEnv::new();
-    venv.insert(
-        var.clone(),
-        make::bool(&mut arena, false, Span::default()).unwrap(),
-    );
+    venv.insert(var.clone(), make::bool(&mut arena, false, Span::default()).unwrap());
     let mut venv_local = venv.clone();
     venv_local.insert(
         Variable::new(id("a", 2), vec![]),

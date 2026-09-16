@@ -47,10 +47,7 @@ impl<N: Free> Free for Annotated<N> {
 impl<N> Annotated<N> {
     /// Builds a node with no prose hints
     pub fn new(node: N) -> Self {
-        Self {
-            node,
-            hints: Hints::default(),
-        }
+        Self { node, hints: Hints::default() }
     }
 }
 

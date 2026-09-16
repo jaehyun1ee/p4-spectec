@@ -14,11 +14,7 @@ use num_traits::ToPrimitive;
 use serde_derive_state::{DeserializeState, SerializeState};
 
 #[derive(Clone, Debug, PartialEq, Eq, SerializeState, DeserializeState)]
-#[serde(
-    deny_unknown_fields,
-    serialize_state = "EncodeContext<'arena>",
-    ser_parameters = "'arena"
-)]
+#[serde(deny_unknown_fields, serialize_state = "EncodeContext<'arena>", ser_parameters = "'arena")]
 #[serde(deserialize_state = "DecodeContext<'de>")]
 pub struct Register {
     #[serde(state)]
@@ -68,10 +64,7 @@ impl Register {
             .to_i64()
             .ok_or_else(|| ExternError::Failure("integer outside i64 range".to_owned()))?
             as usize;
-        Ok(Self {
-            value_typ,
-            values: vec![value_initial; size],
-        })
+        Ok(Self { value_typ, values: vec![value_initial; size] })
     }
 
     /// read() reads the state of the register array stored at the

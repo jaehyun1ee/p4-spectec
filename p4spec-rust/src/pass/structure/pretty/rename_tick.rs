@@ -113,41 +113,21 @@ fn upstream_block(frees: &IdSet, block: Block) -> Result<Block, StructureError> 
 // - If instruction
 
 fn upstream_if_instr(frees: &IdSet, instr_ol: IfInstr) -> Result<InstrKind, StructureError> {
-    let IfInstr {
-        exp,
-        iter_exps,
-        block,
-    } = instr_ol;
+    let IfInstr { exp, iter_exps, block } = instr_ol;
     let frees = exp.free().union(frees.clone());
     let block = upstream_block(&frees, block)?;
-    let instr = IfInstr {
-        exp,
-        iter_exps,
-        block,
-    };
+    let instr = IfInstr { exp, iter_exps, block };
     Ok(InstrKind::If(instr))
 }
 
 // - Hold instruction
 
 fn upstream_hold_instr(frees: &IdSet, instr_ol: HoldInstr) -> Result<InstrKind, StructureError> {
-    let HoldInstr {
-        id,
-        not_exp,
-        iter_exps,
-        block_hold,
-        block_not_hold,
-    } = instr_ol;
+    let HoldInstr { id, not_exp, iter_exps, block_hold, block_not_hold } = instr_ol;
     let frees = not_exp.free().union(frees.clone());
     let block_hold = upstream_block(&frees, block_hold)?;
     let block_not_hold = upstream_block(&frees, block_not_hold)?;
-    let instr = HoldInstr {
-        id,
-        not_exp,
-        iter_exps,
-        block_hold,
-        block_not_hold,
-    };
+    let instr = HoldInstr { id, not_exp, iter_exps, block_hold, block_not_hold };
     Ok(InstrKind::Hold(instr))
 }
 
@@ -173,20 +153,10 @@ fn upstream_case_instr(frees: &IdSet, instr_ol: CaseInstr) -> Result<InstrKind, 
 // - Group instruction
 
 fn upstream_group_instr(frees: &IdSet, instr_ol: GroupInstr) -> Result<InstrKind, StructureError> {
-    let GroupInstr {
-        id,
-        rel_signature,
-        exps,
-        block,
-    } = instr_ol;
+    let GroupInstr { id, rel_signature, exps, block } = instr_ol;
     let frees = exps.as_slice().free().union(frees.clone());
     let block = upstream_block(&frees, block)?;
-    let instr = GroupInstr {
-        id,
-        rel_signature,
-        exps,
-        block,
-    };
+    let instr = GroupInstr { id, rel_signature, exps, block };
     Ok(InstrKind::Group(instr))
 }
 
@@ -196,12 +166,7 @@ fn upstream_let_instr(
     frees_upstream: &IdSet,
     instr_ol: LetInstr,
 ) -> Result<InstrKind, StructureError> {
-    let LetInstr {
-        exp_l,
-        exp_r,
-        iter_instrs,
-        block,
-    } = instr_ol;
+    let LetInstr { exp_l, exp_r, iter_instrs, block } = instr_ol;
     let frees_l = exp_l.free();
     let frees = frees_l
         .clone()
@@ -217,12 +182,7 @@ fn upstream_let_instr(
         .union(frees_upstream.clone());
     let block = renamer.rename_block(block)?;
     let block = upstream_block(&frees, block)?;
-    let instr = LetInstr {
-        exp_l,
-        exp_r,
-        iter_instrs,
-        block,
-    };
+    let instr = LetInstr { exp_l, exp_r, iter_instrs, block };
     Ok(InstrKind::Let(instr))
 }
 
@@ -233,13 +193,7 @@ fn upstream_rule_instr(
     instr_ol: RuleInstr,
     span: &Span,
 ) -> Result<InstrKind, StructureError> {
-    let RuleInstr {
-        id,
-        not_exp,
-        input_hint,
-        iter_instrs,
-        block,
-    } = instr_ol;
+    let RuleInstr { id, not_exp, input_hint, iter_instrs, block } = instr_ol;
     let exps = not_exp.args().into_iter().cloned().collect();
     let (exps_input, exps_output) = input::split(&input_hint, exps)
         .map_err(|error| StructureError::new(StructureErrorKind::Input(error), span.clone()))?;
@@ -264,13 +218,7 @@ fn upstream_rule_instr(
     let not_exp = Mixop::fill(&mixop, exps).expect("validated arguments preserve the mixfix arity");
     let block = renamer.rename_block(block)?;
     let block = upstream_block(&frees, block)?;
-    let instr = RuleInstr {
-        id,
-        not_exp,
-        input_hint,
-        iter_instrs,
-        block,
-    };
+    let instr = RuleInstr { id, not_exp, input_hint, iter_instrs, block };
     Ok(InstrKind::Rule(instr))
 }
 

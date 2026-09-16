@@ -6,9 +6,7 @@ fn test_hash_adjust_uses_max_not_range_and_preserves_call_order() {
     tuple_data(&mut runner, 20);
     local(&mut runner, "base", 5);
     local(&mut runner, "max", 12);
-    let hash = HashExtern {
-        algo: "identity".to_owned(),
-    };
+    let hash = HashExtern { algo: "identity".to_owned() };
     let output = hash
         .clone()
         .get_hash(&mut runner.context(), value_ctx, value_arch)
@@ -19,10 +17,7 @@ fn test_hash_adjust_uses_max_not_range_and_preserves_call_order() {
         p4spec_rust::lang::xl::num::to_int(get::num(runner.arena(), &value_int).unwrap()),
         &20.into()
     );
-    assert_eq!(
-        runner.context().interp().calls,
-        ["data", "find_type_e", "cast_op"]
-    );
+    assert_eq!(runner.context().interp().calls, ["data", "find_type_e", "cast_op"]);
     runner.context().interp_mut().calls.clear();
     let output = hash
         .clone()
@@ -34,10 +29,7 @@ fn test_hash_adjust_uses_max_not_range_and_preserves_call_order() {
         p4spec_rust::lang::xl::num::to_int(get::num(runner.arena(), &value_int).unwrap()),
         &13.into()
     );
-    assert_eq!(
-        runner.context().interp().calls,
-        ["base", "max", "data", "find_type_e", "cast_op"]
-    );
+    assert_eq!(runner.context().interp().calls, ["base", "max", "data", "find_type_e", "cast_op"]);
     local(&mut runner, "max", 0);
     runner.context().interp_mut().calls.clear();
     assert!(

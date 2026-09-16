@@ -28,11 +28,7 @@ pub enum MatchError {
     UnexpectedTypeVariable { span: Span },
 
     #[error("expected {expected} type arguments, got {actual} at {span}")]
-    TypeArgumentMismatch {
-        expected: usize,
-        actual: usize,
-        span: Span,
-    },
+    TypeArgumentMismatch { expected: usize, actual: usize, span: Span },
 
     #[error("undefined function {name} at {span}")]
     UndefinedFunction { name: String, span: Span },
@@ -69,9 +65,7 @@ where
             })?;
             match typdef {
                 TypeDef::Parameter | TypeDef::Defining(_) => {
-                    Err(MatchError::UnexpectedTypeVariable {
-                        span: typ.span.clone(),
-                    })
+                    Err(MatchError::UnexpectedTypeVariable { span: typ.span.clone() })
                 }
                 TypeDef::Extern => Ok(matches!(arena.kind(value), ValueKind::Extern(_))),
                 TypeDef::Defined(tparams, def_typ) => {
@@ -154,11 +148,9 @@ where
         },
         TypKind::Func(func_typ) => match arena.kind(value) {
             ValueKind::Func(id) => {
-                let func_typ_actual =
-                    find_func(&id.node).ok_or_else(|| MatchError::UndefinedFunction {
-                        name: id.node.clone(),
-                        span: id.span.clone(),
-                    })?;
+                let func_typ_actual = find_func(&id.node).ok_or_else(|| {
+                    MatchError::UndefinedFunction { name: id.node.clone(), span: id.span.clone() }
+                })?;
                 let equivalent = equiv_func_typ(tdenv, &typ.span, func_typ, &func_typ_actual)?;
                 Ok(equivalent)
             }

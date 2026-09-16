@@ -30,22 +30,16 @@ pub struct BuiltinError {
 
 impl BuiltinError {
     pub fn new(message: impl Into<String>) -> Self {
-        Self {
-            kind: BuiltinErrorKind::InvalidArgument(message.into()),
-        }
+        Self { kind: BuiltinErrorKind::InvalidArgument(message.into()) }
     }
 
     pub fn arity(expected: usize, actual: usize) -> Self {
-        Self {
-            kind: BuiltinErrorKind::ArityMismatch { expected, actual },
-        }
+        Self { kind: BuiltinErrorKind::ArityMismatch { expected, actual } }
     }
 }
 
 impl From<ValueError> for BuiltinError {
     fn from(error: ValueError) -> Self {
-        Self {
-            kind: BuiltinErrorKind::Value(error),
-        }
+        Self { kind: BuiltinErrorKind::Value(error) }
     }
 }

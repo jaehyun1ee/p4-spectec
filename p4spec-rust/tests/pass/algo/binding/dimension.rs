@@ -9,11 +9,7 @@ fn test_dimension_inference_keeps_the_minimal_occurrence() {
         3,
     );
     let direct = var_exp("x", 4);
-    let tuple = exp(
-        ast::ExpKind::Tuple(vec![iterated, direct]),
-        ast::TypKind::Tuple(vec![]),
-        1,
-    );
+    let tuple = exp(ast::ExpKind::Tuple(vec![iterated, direct]), ast::TypKind::Tuple(vec![]), 1);
 
     let dimensions = dimension::infer_exp(&tuple);
     let (stored_id, actual) = dimensions.iter().next().expect("inferred variable");

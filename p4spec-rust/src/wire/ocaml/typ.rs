@@ -61,25 +61,15 @@ pub(crate) fn decode_typ_kind(json: &json) -> Result<TypKind, DecodeError> {
         ("BoolT", []) => Ok(TypKind::Bool),
         ("NumT", [typ]) => Ok(TypKind::Num(num_codec::decode_num_typ(typ)?)),
         ("TextT", []) => Ok(TypKind::Text),
-        ("VarT", [id, targs]) => Ok(TypKind::Var(
-            decode_id(id)?,
-            decode_list(targs, decode_targ)?,
-        )),
+        ("VarT", [id, targs]) => Ok(TypKind::Var(decode_id(id)?, decode_list(targs, decode_targ)?)),
         ("TupleT", [typs]) => Ok(TypKind::Tuple(decode_list(typs, decode_typ)?)),
-        ("IterT", [typ, iter]) => Ok(TypKind::Iter(
-            Box::new(decode_typ(typ)?),
-            decode_iter(iter)?,
-        )),
+        ("IterT", [typ, iter]) => Ok(TypKind::Iter(Box::new(decode_typ(typ)?), decode_iter(iter)?)),
         ("FuncT", [tparams, params, result]) => {
             let tparams = decode_list(tparams, decode_tparam)?;
             let typs_params = decode_list(params, decode_typ)?;
             let typ_ret = decode_typ(result)?;
             let typ_ret = Box::new(typ_ret);
-            let typ_func = FuncTyp {
-                tparams,
-                typs_params,
-                typ_ret,
-            };
+            let typ_func = FuncTyp { tparams, typs_params, typ_ret };
             Ok(TypKind::Func(typ_func))
         }
         ("BoolT" | "NumT" | "TextT" | "VarT" | "TupleT" | "IterT" | "FuncT", _) => {

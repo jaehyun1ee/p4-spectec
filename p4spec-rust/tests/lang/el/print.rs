@@ -4,10 +4,7 @@ use super::*;
 fn test_printer_preserves_el_delimiters_precedence_hints_and_definition_separators() {
     let hint = (
         id("ignored", "hint.watsup"),
-        exp(
-            ExpKind::Var(id("also_ignored", "hint.watsup")),
-            "hint.watsup",
-        ),
+        exp(ExpKind::Var(id("also_ignored", "hint.watsup")), "hint.watsup"),
     );
     let nested = exp(
         ExpKind::Bin(
@@ -24,10 +21,7 @@ fn test_printer_preserves_el_delimiters_precedence_hints_and_definition_separato
             )),
             ast::BinOp::Num(p4spec_rust::lang::xl::num::BinOp::Mul),
             Box::new(exp(
-                ExpKind::Iter(
-                    Box::new(exp(ExpKind::Var(id("c", "c")), "c")),
-                    ast::Iter::Opt,
-                ),
+                ExpKind::Iter(Box::new(exp(ExpKind::Var(id("c", "c")), "c")), ast::Iter::Opt),
                 "outer",
             )),
         ),
@@ -159,42 +153,27 @@ fn test_printer_matches_ocaml_byte_escaping_and_public_collection_helpers() {
         Print::to_string(&exp(ExpKind::Latex(escaped.into()), "latex")),
         "latex(\\\"\\\\'\\n\\r\\t\\b\\012\\001\\195\\169)"
     );
-    assert_eq!(
-        Print::to_string(&ast::UnOp::Num(p4spec_rust::lang::xl::num::UnOp::Minus)),
-        "-"
-    );
+    assert_eq!(Print::to_string(&ast::UnOp::Num(p4spec_rust::lang::xl::num::UnOp::Minus)), "-");
     assert_eq!(
         Print::to_string(&ast::BinOp::Bool(p4spec_rust::lang::xl::bool::BinOp::Equiv,)),
         "<=>"
     );
-    assert_eq!(
-        Print::to_string(&ast::CmpOp::Bool(p4spec_rust::lang::xl::bool::CmpOp::Ne)),
-        "=/="
-    );
+    assert_eq!(Print::to_string(&ast::CmpOp::Bool(p4spec_rust::lang::xl::bool::CmpOp::Ne)), "=/=");
     let atom_type = p4spec_rust::phrase! {
         node: ast::NotTypKind::Atom(atom("A")),
         span: span("type"),
     };
-    assert_eq!(
-        Print::to_string(&[atom_type.clone(), atom_type][..]),
-        "A, A"
-    );
+    assert_eq!(Print::to_string(&[atom_type.clone(), atom_type][..]), "A, A");
     let row = p4spec_rust::phrase! {
         node: (exp(ExpKind::Eps, "row"), exp(ExpKind::Eps, "row")),
         span: span("row"),
     };
-    assert_eq!(
-        Print::to_string(&[row.clone(), row][..]),
-        "eps => eps\n  | eps => eps"
-    );
+    assert_eq!(Print::to_string(&[row.clone(), row][..]), "eps => eps\n  | eps => eps");
     let rule = p4spec_rust::phrase! { node: (
         id("r", "rule"),
         id("", "rule"),
         exp(ExpKind::Eps, "rule"),
         vec![],
     ), span: span("rule") };
-    assert_eq!(
-        Print::to_string(&[rule.clone(), rule][..]),
-        "rule r:\n  eps\nrule r:\n  eps"
-    );
+    assert_eq!(Print::to_string(&[rule.clone(), rule][..]), "rule r:\n  eps\nrule r:\n  eps");
 }

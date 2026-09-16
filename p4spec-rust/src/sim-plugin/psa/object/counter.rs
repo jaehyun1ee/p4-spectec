@@ -47,10 +47,7 @@ impl Counter {
             ("PSA_CounterType_t", "PACKETS") => Ok(Self::Packets(vec![BigInt::zero(); size])),
             ("PSA_CounterType_t", "BYTES") => Ok(Self::Bytes(vec![BigInt::zero(); size])),
             ("PSA_CounterType_t", "PACKETS_AND_BYTES") => {
-                Ok(Self::PacketsAndBytes(vec![
-                    (BigInt::zero(), BigInt::zero());
-                    size
-                ]))
+                Ok(Self::PacketsAndBytes(vec![(BigInt::zero(), BigInt::zero()); size]))
             }
             _ => Err(ExternError::Failure(format!(
                 "invalid PSA_CounterType_t enum value: {id_enum}.{id_type}"

@@ -40,13 +40,7 @@ where
     Exn: Extern,
 {
     pub fn new(spec: Interp::Spec, interp: Interp, interface: Iface, external: Exn) -> Self {
-        Self {
-            arena: ValueArena::new(),
-            spec,
-            interp,
-            interface,
-            external,
-        }
+        Self { arena: ValueArena::new(), spec, interp, interface, external }
     }
 
     /// Borrows the assembled components for a stage-specific evaluation entry

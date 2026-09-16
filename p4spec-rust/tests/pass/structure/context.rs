@@ -149,10 +149,8 @@ fn test_loaded_alias_expands_to_its_variant_definition() {
         node: (id_at("Origin", 50), vec![]),
         span: span(50),
     };
-    let def_typ_variant = def_typ_at(
-        DefTypKind::Variant(vec![(not_typ_case, typ_origin, vec![])]),
-        50,
-    );
+    let def_typ_variant =
+        def_typ_at(DefTypKind::Variant(vec![(not_typ_case, typ_origin, vec![])]), 50);
     let def_typ_alias = def_typ_at(DefTypKind::Plain(typ_var_at("Choice", 51)), 51);
     let spec_al = vec![
         defined_typ("Choice", 50, vec![], def_typ_variant.clone()),

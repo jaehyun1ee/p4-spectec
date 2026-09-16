@@ -46,12 +46,8 @@ fn function(clauses: Vec<al::Clause>, else_clause: Option<al::Clause>) -> al::De
 
 fn function_sl(def_sl: &sl::Def) -> &sl::DefinedFunc {
     let def_kind_sl = &def_sl.node;
-    let sl::DefKind::MetaFunc(def_func_sl) = def_kind_sl else {
-        panic!("function")
-    };
-    let sl::MetaFuncDef::Defined(def_func_sl) = def_func_sl else {
-        panic!("defined function")
-    };
+    let sl::DefKind::MetaFunc(def_func_sl) = def_kind_sl else { panic!("function") };
+    let sl::MetaFuncDef::Defined(def_func_sl) = def_func_sl else { panic!("defined function") };
     def_func_sl
 }
 
@@ -63,24 +59,16 @@ fn if_prem(int_line: i64) -> al::Prem {
 fn test_empty_function_generates_distinct_inputs_and_preserves_spans() {
     let mut def_al = function(vec![], None);
     let def_kind_al = &mut def_al.node;
-    let al::DefKind::MetaFunc(def_func_kind_al) = def_kind_al else {
-        unreachable!()
-    };
-    let al::MetaFuncDef::Defined(def_func_al) = def_func_kind_al else {
-        unreachable!()
-    };
+    let al::DefKind::MetaFunc(def_func_kind_al) = def_kind_al else { unreachable!() };
+    let al::MetaFuncDef::Defined(def_func_al) = def_func_kind_al else { unreachable!() };
     def_func_al.params.push(param(4));
     let spec_sl = convert(vec![def_al], true).unwrap();
     let def_func_sl = function_sl(&spec_sl[0]);
     assert_eq!(spec_sl[0].span, span(1));
     assert!(def_func_sl.block.is_empty());
     assert_eq!(def_func_sl.block_else, None);
-    let sl::ParamKind::Exp(_, exp_a) = &def_func_sl.params[0].node else {
-        panic!("input")
-    };
-    let sl::ParamKind::Exp(_, exp_b) = &def_func_sl.params[1].node else {
-        panic!("input")
-    };
+    let sl::ParamKind::Exp(_, exp_a) = &def_func_sl.params[0].node else { panic!("input") };
+    let sl::ParamKind::Exp(_, exp_b) = &def_func_sl.params[1].node else { panic!("input") };
     assert_ne!(exp_a.node, exp_b.node);
     assert_eq!(exp_a.span, span(2));
     assert_eq!(exp_b.span, span(4));
@@ -89,15 +77,11 @@ fn test_empty_function_generates_distinct_inputs_and_preserves_spans() {
 #[test]
 fn test_explicit_fallback_changes_main_fallthrough_and_preserves_return() {
     for with_else in [false, true] {
-        let def_al = function(
-            vec![clause(vec![if_prem(7)], 5)],
-            with_else.then(|| clause(vec![], 9)),
-        );
+        let def_al =
+            function(vec![clause(vec![if_prem(7)], 5)], with_else.then(|| clause(vec![], 9)));
         let spec_sl = convert(vec![def_al], true).unwrap();
         let def_func_sl = function_sl(&spec_sl[0]);
-        let sl::InstrKind::If(instr_if) = &def_func_sl.block[0].node else {
-            panic!("if")
-        };
+        let sl::InstrKind::If(instr_if) = &def_func_sl.block[0].node else { panic!("if") };
         assert_eq!(instr_if.dangle, !with_else);
         assert_eq!(def_func_sl.block[0].span, span(7));
         assert_eq!(instr_if.block[0].span, span(6));
@@ -120,27 +104,18 @@ fn test_invalid_relation_inputs_report_definition_span() {
 fn test_parameter_argument_mismatch_reports_parameter_span() {
     let mut def_al = function(vec![clause(vec![], 5)], None);
     let def_kind_al = &mut def_al.node;
-    let al::DefKind::MetaFunc(def_func_kind_al) = def_kind_al else {
-        unreachable!()
-    };
-    let al::MetaFuncDef::Defined(def_func_al) = def_func_kind_al else {
-        unreachable!()
-    };
+    let al::DefKind::MetaFunc(def_func_kind_al) = def_kind_al else { unreachable!() };
+    let al::MetaFuncDef::Defined(def_func_al) = def_func_kind_al else { unreachable!() };
     def_func_al.params[0].node = al::ParamKind::Def(id("g", 2), vec![], vec![], typ(2));
     let error = convert(vec![def_al], true).unwrap_err();
-    assert_eq!(
-        error.kind,
-        StructureErrorKind::IncompatibleParameterArgument
-    );
+    assert_eq!(error.kind, StructureErrorKind::IncompatibleParameterArgument);
     assert_eq!(error.span, span(2));
 }
 
 #[test]
 fn test_conditional_iterator_bindings_report_inner_premise_span() {
     let prems_kind = [
-        al::PremKind::If(al::IfPrem {
-            exp: variable("x", 7),
-        }),
+        al::PremKind::If(al::IfPrem { exp: variable("x", 7) }),
         al::PremKind::IfHold(al::IfHoldPrem {
             id: id("r", 7),
             not_exp: Mixfix::Arg(variable("x", 7)),
@@ -160,11 +135,7 @@ fn test_conditional_iterator_bindings_report_inner_premise_span() {
         let prem_iter = al::PremIter {
             iter: al::Iter::List,
             vars_bound: vec![],
-            vars_bind: vec![al::Var {
-                id: id("y", 8),
-                typ: typ(8),
-                iters: vec![],
-            }],
+            vars_bind: vec![al::Var { id: id("y", 8), typ: typ(8), iters: vec![] }],
         };
         let prem = p4spec_rust::phrase! {node: al::PremKind::Iter(al::IterPrem {prem: Box::new(prem), prem_iter}), span: span(8)};
         let error = convert(vec![function(vec![clause(vec![prem], 5)], None)], true).unwrap_err();
@@ -182,23 +153,16 @@ fn test_relation_groups_and_result_signatures_follow_group_mode() {
         exps_input: vec![exp_input],
         prems: vec![],
     };
-    let rule_path = al::RulePath {
-        id: id("path", 7),
-        prems: vec![],
-        exps_output: vec![exp_output.clone()],
-    };
+    let rule_path =
+        al::RulePath { id: id("path", 7), prems: vec![], exps_output: vec![exp_output.clone()] };
     let rule_group = p4spec_rust::phrase! {node: al::RuleGroupKind {id: id("group", 4), rule_match, rule_paths: vec![rule_path]}, span: span(4)};
     let not_typ = p4spec_rust::phrase! {node: Mixfix::Seq(vec![Mixfix::Arg(typ(2)), Mixfix::Arg(typ(2))]), span: span(2)};
     let def_al = p4spec_rust::phrase! {node: al::DefKind::Rel(al::RelDef::Defined(Box::new(al::DefinedRel {id: id("r", 1), not_typ: not_typ.clone(), input_hint: InputHint::new(vec![0]), rule_groups: vec![rule_group], else_group: None, hints: vec![]}))), span: span(1)};
     for without_rule_groups in [false, true] {
         let spec_sl = convert(vec![def_al.clone()], without_rule_groups).unwrap();
         let def_kind_sl = &spec_sl[0].node;
-        let sl::DefKind::Rel(def_rel_kind_sl) = def_kind_sl else {
-            panic!("relation")
-        };
-        let sl::RelDef::Defined(def_rel_sl) = def_rel_kind_sl else {
-            panic!("defined relation")
-        };
+        let sl::DefKind::Rel(def_rel_kind_sl) = def_kind_sl else { panic!("relation") };
+        let sl::RelDef::Defined(def_rel_sl) = def_rel_kind_sl else { panic!("defined relation") };
         let instr_result = if without_rule_groups {
             &def_rel_sl.block[0]
         } else {
@@ -209,9 +173,7 @@ fn test_relation_groups_and_result_signatures_follow_group_mode() {
             assert_eq!(def_rel_sl.block[0].span, span(4));
             &instr_group.block[0]
         };
-        let sl::InstrKind::Result(instr_result_kind) = &instr_result.node else {
-            panic!("result")
-        };
+        let sl::InstrKind::Result(instr_result_kind) = &instr_result.node else { panic!("result") };
         assert_eq!(instr_result_kind.exps, vec![exp_output.clone()]);
         assert_eq!(instr_result_kind.rel_signature.not_typ, not_typ);
         assert_eq!(instr_result.span, span(8));
@@ -225,13 +187,8 @@ fn test_nested_iterators_are_internalized_inside_out() {
     let prem = p4spec_rust::phrase! {node: al::PremKind::Iter(al::IterPrem {prem: Box::new(prem), prem_iter: al::PremIter {iter: al::Iter::List, vars_bound: vec![], vars_bind: vec![]}}), span: span(9)};
     let spec_sl = convert(vec![function(vec![clause(vec![prem], 5)], None)], true).unwrap();
     let def_func_sl = function_sl(&spec_sl[0]);
-    let sl::InstrKind::If(instr_if) = &def_func_sl.block[0].node else {
-        panic!("if")
-    };
-    assert_eq!(
-        instr_if.iter_exps,
-        vec![(al::Iter::Opt, vec![]), (al::Iter::List, vec![])]
-    );
+    let sl::InstrKind::If(instr_if) = &def_func_sl.block[0].node else { panic!("if") };
+    assert_eq!(instr_if.iter_exps, vec![(al::Iter::Opt, vec![]), (al::Iter::List, vec![])]);
     assert_eq!(def_func_sl.block[0].span, span(7));
 }
 
@@ -246,23 +203,14 @@ fn test_table_rows_keep_signature_output_pairing_and_disable_fallthrough() {
     let def_al = p4spec_rust::phrase! {node: al::DefKind::MetaFunc(al::MetaFuncDef::Table(al::TableFunc {id: id("t", 1), params: vec![param(2)], typ: typ(3), table_rows, hints: vec![]})), span: span(1)};
     let spec_sl = convert(vec![def_al], true).unwrap();
     let def_kind_sl = &spec_sl[0].node;
-    let sl::DefKind::MetaFunc(def_func_kind_sl) = def_kind_sl else {
-        panic!("function")
-    };
-    let sl::MetaFuncDef::Table(def_table_sl) = def_func_kind_sl else {
-        panic!("table")
-    };
+    let sl::DefKind::MetaFunc(def_func_kind_sl) = def_kind_sl else { panic!("function") };
+    let sl::MetaFuncDef::Table(def_table_sl) = def_func_kind_sl else { panic!("table") };
     assert_eq!(def_table_sl.table_rows.len(), 2);
     for (idx, value) in [true, false].into_iter().enumerate() {
         let table_row_sl = &def_table_sl.table_rows[idx];
-        assert_eq!(
-            table_row_sl.exps_input,
-            vec![boolean(value, 10 + idx as i64)]
-        );
+        assert_eq!(table_row_sl.exps_input, vec![boolean(value, 10 + idx as i64)]);
         assert_eq!(table_row_sl.exp, boolean(!value, 10 + idx as i64));
-        let sl::InstrKind::If(instr_if) = &table_row_sl.block[0].node else {
-            panic!("if")
-        };
+        let sl::InstrKind::If(instr_if) = &table_row_sl.block[0].node else { panic!("if") };
         assert!(!instr_if.dangle);
     }
 }
@@ -348,12 +296,8 @@ fn test_external_relation_fresh_inputs_follow_unsorted_hint_order() {
     let def_al = p4spec_rust::phrase! {node: al::DefKind::Rel(al::RelDef::Extern(Box::new(al::ExternRel {id: id("r", 1), not_typ, input_hint: InputHint::new(vec![1, 0]), hints: vec![]}))), span: span(1)};
     let spec_sl = convert(vec![def_al], true).unwrap();
     let def_kind_sl = &spec_sl[0].node;
-    let sl::DefKind::Rel(def_rel_sl) = def_kind_sl else {
-        panic!("relation")
-    };
-    let sl::RelDef::Extern(def_rel_sl) = def_rel_sl else {
-        panic!("extern relation")
-    };
+    let sl::DefKind::Rel(def_rel_sl) = def_kind_sl else { panic!("relation") };
+    let sl::RelDef::Extern(def_rel_sl) = def_rel_sl else { panic!("extern relation") };
     assert_eq!(*def_rel_sl.exps_input[0].note, al::TypKind::Text);
     assert_eq!(*def_rel_sl.exps_input[1].note, al::TypKind::Bool);
     assert_eq!(def_rel_sl.exps_input[0].span, span(3));
@@ -364,31 +308,19 @@ fn test_external_relation_fresh_inputs_follow_unsorted_hint_order() {
 fn test_higher_order_parameters_have_independent_freshness_scope() {
     let mut def_al = function(vec![], None);
     let def_kind_al = &mut def_al.node;
-    let al::DefKind::MetaFunc(def_func_kind_al) = def_kind_al else {
-        unreachable!()
-    };
-    let al::MetaFuncDef::Defined(def_func_al) = def_func_kind_al else {
-        unreachable!()
-    };
+    let al::DefKind::MetaFunc(def_func_kind_al) = def_kind_al else { unreachable!() };
+    let al::MetaFuncDef::Defined(def_func_al) = def_func_kind_al else { unreachable!() };
     let param_def = p4spec_rust::phrase! {node: al::ParamKind::Def(id("g", 4), vec![id("T", 4)], vec![param(5), param(6)], typ(4)), span: span(4)};
     def_func_al.params.extend([param_def, param(7)]);
     let spec_sl = convert(vec![def_al], true).unwrap();
     let def_func_sl = function_sl(&spec_sl[0]);
-    let sl::ParamKind::Exp(_, exp_a) = &def_func_sl.params[0].node else {
-        panic!("input")
-    };
+    let sl::ParamKind::Exp(_, exp_a) = &def_func_sl.params[0].node else { panic!("input") };
     let sl::ParamKind::Def(id_def, tparams, params_inner, _) = &def_func_sl.params[1].node else {
         panic!("higher-order input")
     };
-    let sl::ParamKind::Exp(_, exp_b) = &def_func_sl.params[2].node else {
-        panic!("input")
-    };
-    let sl::ParamKind::Exp(_, exp_inner_a) = &params_inner[0].node else {
-        panic!("input")
-    };
-    let sl::ParamKind::Exp(_, exp_inner_b) = &params_inner[1].node else {
-        panic!("input")
-    };
+    let sl::ParamKind::Exp(_, exp_b) = &def_func_sl.params[2].node else { panic!("input") };
+    let sl::ParamKind::Exp(_, exp_inner_a) = &params_inner[0].node else { panic!("input") };
+    let sl::ParamKind::Exp(_, exp_inner_b) = &params_inner[1].node else { panic!("input") };
     use p4spec_rust::lang::traits::eq::SyntaxEq;
     assert!(exp_a.syntax_eq(exp_inner_a));
     assert!(exp_b.syntax_eq(exp_inner_b));
@@ -403,13 +335,7 @@ fn test_higher_order_parameters_have_independent_freshness_scope() {
 fn test_empty_table_rejects_unmatched_parameters_at_definition_span() {
     let def_al = p4spec_rust::phrase! {node: al::DefKind::MetaFunc(al::MetaFuncDef::Table(al::TableFunc {id: id("t", 1), params: vec![param(2)], typ: typ(3), table_rows: vec![], hints: vec![]})), span: span(1)};
     let error = convert(vec![def_al], true).unwrap_err();
-    assert_eq!(
-        error.kind,
-        StructureErrorKind::ArityMismatch {
-            expected: 1,
-            actual: 0
-        }
-    );
+    assert_eq!(error.kind, StructureErrorKind::ArityMismatch { expected: 1, actual: 0 });
     assert_eq!(error.span, span(1));
 }
 
@@ -419,10 +345,7 @@ fn test_rule_input_error_preserves_premise_span() {
     let error = convert(vec![function(vec![clause(vec![prem], 5)], None)], true).unwrap_err();
     assert_eq!(
         error.kind,
-        StructureErrorKind::Input(InputError::IndexOutOfBounds {
-            index: -1,
-            arity: 1
-        })
+        StructureErrorKind::Input(InputError::IndexOutOfBounds { index: -1, arity: 1 })
     );
     assert_eq!(error.span, span(7));
 }
@@ -435,12 +358,8 @@ fn test_higher_order_argument_identity_is_checked_ignoring_spans() {
             vec![p4spec_rust::phrase! {node: al::ArgKind::Def(id(text_arg, 6)), span: span(6)}];
         let mut def_al = function(vec![clause_al], None);
         let def_kind_al = &mut def_al.node;
-        let al::DefKind::MetaFunc(def_func_kind_al) = def_kind_al else {
-            unreachable!()
-        };
-        let al::MetaFuncDef::Defined(def_func_al) = def_func_kind_al else {
-            unreachable!()
-        };
+        let al::DefKind::MetaFunc(def_func_kind_al) = def_kind_al else { unreachable!() };
+        let al::MetaFuncDef::Defined(def_func_al) = def_func_kind_al else { unreachable!() };
         def_func_al.params = vec![
             p4spec_rust::phrase! {node: al::ParamKind::Def(id("g", 2), vec![], vec![param(3)], typ(2)), span: span(2)},
         ];
@@ -455,10 +374,7 @@ fn test_higher_order_argument_identity_is_checked_ignoring_spans() {
             assert_eq!(params[0].span, span(3));
         } else {
             let error = result.unwrap_err();
-            assert_eq!(
-                error.kind,
-                StructureErrorKind::IncompatibleParameterArgument
-            );
+            assert_eq!(error.kind, StructureErrorKind::IncompatibleParameterArgument);
             assert_eq!(error.span, span(2));
         }
     }
@@ -468,9 +384,8 @@ fn test_higher_order_argument_identity_is_checked_ignoring_spans() {
 fn test_table_internalizes_all_rows_before_optimizing_any_row() {
     let mut exp_invalid = variable("x", 11);
     exp_invalid.note = al::TypKind::Var(id("Missing", 11), vec![]).into();
-    let pattern = al::Pattern::Case(Box::new(
-        p4spec_rust::frontend::parse::parse_mixop("A").unwrap(),
-    ));
+    let pattern =
+        al::Pattern::Case(Box::new(p4spec_rust::frontend::parse::parse_mixop("A").unwrap()));
     let exp_cond = p4spec_rust::note_phrase! {node: al::ExpKind::Match(Box::new(exp_invalid), pattern), note: al::TypKind::Bool, span: span(11)};
     let prem_a =
         p4spec_rust::phrase! {node: al::PremKind::If(al::IfPrem {exp: exp_cond}), span: span(11)};
@@ -490,16 +405,8 @@ fn test_table_internalizes_all_rows_before_optimizing_any_row() {
 fn test_debug_continuation_preserves_binding_rule_and_hold_payloads() {
     let prem_iter = al::PremIter {
         iter: al::Iter::List,
-        vars_bound: vec![al::Var {
-            id: id("x", 8),
-            typ: typ(8),
-            iters: vec![],
-        }],
-        vars_bind: vec![al::Var {
-            id: id("y", 8),
-            typ: typ(8),
-            iters: vec![],
-        }],
+        vars_bound: vec![al::Var { id: id("x", 8), typ: typ(8), iters: vec![] }],
+        vars_bind: vec![al::Var { id: id("y", 8), typ: typ(8), iters: vec![] }],
     };
     let prem_let = p4spec_rust::phrase! {node: al::PremKind::Let(al::LetPrem {exp_l: variable("y", 8), exp_r: variable("x", 8)}), span: span(8)};
     let prem_let = p4spec_rust::phrase! {node: al::PremKind::Iter(al::IterPrem {prem: Box::new(prem_let), prem_iter: prem_iter.clone()}), span: span(9)};
@@ -512,32 +419,22 @@ fn test_debug_continuation_preserves_binding_rule_and_hold_payloads() {
     ];
     let spec_sl = convert(vec![function(vec![clause(prems, 5)], None)], true).unwrap();
     let def_func_sl = function_sl(&spec_sl[0]);
-    let sl::InstrKind::Debug(instr_debug) = &def_func_sl.block[0].node else {
-        panic!("debug")
-    };
+    let sl::InstrKind::Debug(instr_debug) = &def_func_sl.block[0].node else { panic!("debug") };
     assert_eq!(instr_debug.exp, boolean(true, 7));
     assert_eq!(instr_debug.instr.span, span(8));
-    let sl::InstrKind::Let(instr_let) = &instr_debug.instr.node else {
-        panic!("let")
-    };
+    let sl::InstrKind::Let(instr_let) = &instr_debug.instr.node else { panic!("let") };
     assert_eq!(instr_let.iter_instrs, vec![prem_iter]);
     assert_eq!(instr_let.exp_l, variable("y", 8));
     assert_eq!(instr_let.exp_r, variable("x", 8));
-    let sl::InstrKind::Rule(instr_rule) = &instr_let.block[0].node else {
-        panic!("rule")
-    };
+    let sl::InstrKind::Rule(instr_rule) = &instr_let.block[0].node else { panic!("rule") };
     assert_eq!(instr_rule.id, id("r", 10));
     assert_eq!(instr_rule.input_hint, InputHint::new(vec![0]));
-    let sl::InstrKind::Hold(instr_hold) = &instr_rule.block[0].node else {
-        panic!("hold")
-    };
+    let sl::InstrKind::Hold(instr_hold) = &instr_rule.block[0].node else { panic!("hold") };
     let sl::HoldCase::Hold(block_hold, dangle) = &instr_hold.hold_case else {
         panic!("hold branch")
     };
     assert!(*dangle);
-    let sl::InstrKind::Hold(instr_not_hold) = &block_hold[0].node else {
-        panic!("not hold")
-    };
+    let sl::InstrKind::Hold(instr_not_hold) = &block_hold[0].node else { panic!("not hold") };
     let sl::HoldCase::NotHold(block_not_hold, dangle) = &instr_not_hold.hold_case else {
         panic!("not-hold branch")
     };

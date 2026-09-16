@@ -94,10 +94,7 @@ pub fn validate(hint: &InputHint, arity: usize) -> Result<(), InputError> {
         .iter()
         .find(|index| **index < 0 || usize::try_from(**index).map_or(true, |index| index >= arity))
     {
-        return Err(InputError::IndexOutOfBounds {
-            index: *index,
-            arity,
-        });
+        return Err(InputError::IndexOutOfBounds { index: *index, arity });
     }
     Ok(())
 }

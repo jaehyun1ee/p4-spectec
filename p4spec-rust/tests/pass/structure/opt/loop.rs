@@ -17,10 +17,7 @@ fn binding(text: &str, block: Block) -> Instr {
 fn rule(text: &str, block: Block) -> Instr {
     instr(InstrKind::Rule(RuleInstr {
         id: id("relation"),
-        not_exp: Mixfix::Seq(vec![
-            Mixfix::Arg(variable("input")),
-            Mixfix::Arg(variable(text)),
-        ]),
+        not_exp: Mixfix::Seq(vec![Mixfix::Arg(variable("input")), Mixfix::Arg(variable(text))]),
         input_hint: InputHint::new(vec![0]),
         iter_instrs: vec![],
         block,
@@ -38,11 +35,7 @@ fn hold(block_hold: Block, block_not_hold: Block) -> Instr {
 }
 
 fn var(text: &str) -> Var {
-    Var {
-        id: id(text),
-        typ: crate::phrase! {node:TypKind::Bool,span:span(2)},
-        iters: vec![],
-    }
+    Var { id: id(text), typ: crate::phrase! {node:TypKind::Bool,span:span(2)}, iters: vec![] }
 }
 
 #[path = "loop/merge_binding.rs"]
@@ -61,10 +54,7 @@ fn test_wide_flat_blocks_preserve_order_without_recursive_sibling_traversal() {
 
     let block: Block = (0..4096).map(|num_idx| ret(&num_idx.to_string())).collect();
     let tdenv = TDEnv::new();
-    assert_eq!(
-        r#loop::merge_if::apply(&tdenv, block.clone()).unwrap(),
-        block
-    );
+    assert_eq!(r#loop::merge_if::apply(&tdenv, block.clone()).unwrap(), block);
     assert_eq!(r#loop::casify::apply(&tdenv, block.clone()).unwrap(), block);
     assert_eq!(r#loop::merge_binding::apply(block.clone()).unwrap(), block);
     assert_eq!(r#loop::merge_hold::apply(block.clone()), block);

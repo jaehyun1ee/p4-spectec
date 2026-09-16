@@ -17,10 +17,7 @@ fn test_numeric_operations_preserve_kinds_and_signed_rendering() {
     let negative_three = Number::Int(BigInt::from(-3));
 
     assert_eq!(num_impl::bin(BinOp::Add, &two, &three), Ok(natural(5)));
-    assert_eq!(
-        num_impl::bin(BinOp::Sub, &two, &three),
-        Ok(Number::Int((-1).into()))
-    );
+    assert_eq!(num_impl::bin(BinOp::Sub, &two, &three), Ok(Number::Int((-1).into())));
     assert_eq!(num_impl::un(UnOp::Minus, &two), Number::Int((-2).into()));
     assert_eq!(num_impl::cmp(CmpOp::Lt, &two, &three), Ok(true));
     assert_eq!(Print::to_string(&Number::Int(3.into())), "+3");
@@ -35,10 +32,7 @@ fn test_natural_numbers_reject_negative_payloads() {
 }
 #[test]
 fn test_binary_operations_report_zero_divisors() {
-    let operands = [
-        (natural(5), natural(0)),
-        (Number::Int(5.into()), Number::Int(0.into())),
-    ];
+    let operands = [(natural(5), natural(0)), (Number::Int(5.into()), Number::Int(0.into()))];
 
     for (number_l, number_r) in operands {
         for operation in [BinOp::Div, BinOp::Mod] {
@@ -53,10 +47,7 @@ fn test_binary_operations_report_zero_divisors() {
 fn test_numeric_operations_report_mismatched_kinds() {
     let nat = natural(1);
     let int = Number::Int(1.into());
-    let error = NumericError::MismatchedKinds {
-        typ_l: Typ::Nat,
-        typ_r: Typ::Int,
-    };
+    let error = NumericError::MismatchedKinds { typ_l: Typ::Nat, typ_r: Typ::Int };
 
     assert_eq!(num_impl::bin(BinOp::Add, &nat, &int), Err(error.clone()));
     assert_eq!(num_impl::cmp(CmpOp::Lt, &nat, &int), Err(error));

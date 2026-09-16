@@ -4,16 +4,8 @@ use super::*;
 fn test_printer_renders_nested_premises_and_definition_spec_goldens() {
     let prem_iter = ast::PremIter {
         iter: ast::Iter::List,
-        vars_bound: vec![ast::Var {
-            id: id("bound"),
-            typ: typ(),
-            iters: vec![],
-        }],
-        vars_bind: vec![ast::Var {
-            id: id("output"),
-            typ: typ(),
-            iters: vec![ast::Iter::Opt],
-        }],
+        vars_bound: vec![ast::Var { id: id("bound"), typ: typ(), iters: vec![] }],
+        vars_bind: vec![ast::Var { id: id("output"), typ: typ(), iters: vec![ast::Iter::Opt] }],
     };
     let nested = prem(ast::PremKind::Iter(ast::IterPrem {
         prem: Box::new(prem(ast::PremKind::Iter(ast::IterPrem {
@@ -162,13 +154,11 @@ fn test_printer_renders_nested_premises_and_definition_spec_goldens() {
     assert_eq!(Print::to_string(&defs), rendered);
     assert_eq!(Print::to_string(&[hint()][..]), " hint(meta payload)");
     assert_eq!(
-        Print::to_string(
-            &p4spec_rust::phrase! { node: ast::DefKind::Var(ast::VarDef {
-                id: id("hidden_metadata"),
-                typ: typ(),
-                hints: vec![hint()],
-            }), span: Span::default() }
-        ),
+        Print::to_string(&p4spec_rust::phrase! { node: ast::DefKind::Var(ast::VarDef {
+            id: id("hidden_metadata"),
+            typ: typ(),
+            hints: vec![hint()],
+        }), span: Span::default() }),
         "var hidden_metadata : bool"
     );
 }

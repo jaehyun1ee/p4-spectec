@@ -12,16 +12,7 @@ fn test_getters_report_expected_and_actual_kinds() {
 
     assert_eq!(
         get::bool(&arena, &value),
-        Err(ValueError::UnexpectedKind {
-            expected: ValueTag::Bool,
-            actual: ValueTag::Text,
-        })
+        Err(ValueError::UnexpectedKind { expected: ValueTag::Bool, actual: ValueTag::Text })
     );
-    assert_eq!(
-        get::one(&[]),
-        Err(ValueError::ExpectedCount {
-            expected: 1,
-            actual: 0,
-        })
-    );
+    assert_eq!(get::one(&[]), Err(ValueError::ExpectedCount { expected: 1, actual: 0 }));
 }

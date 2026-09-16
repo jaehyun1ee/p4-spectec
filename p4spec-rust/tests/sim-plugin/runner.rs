@@ -11,76 +11,48 @@ use p4spec_rust::{
 };
 
 fn tx(port: i64, packet: &str) -> Tx {
-    Tx {
-        port,
-        packet: packet.to_owned(),
-    }
+    Tx { port, packet: packet.to_owned() }
 }
 
 fn run() -> Run {
     let mut arena = ValueArena::new();
     let value = make::bool(&mut arena, false, Span::default()).unwrap();
-    Run::new(SimState {
-        value_ctx: value,
-        value_arch: value,
-        txs: vec![],
-    })
+    Run::new(SimState { value_ctx: value, value_arch: value, txs: vec![] })
 }
 
 #[test]
 fn test_output_matches_only_first_transmission() {
     let mut run_case = run();
     run_case
-        .on_tx_expect(Expectation {
-            tx: tx(1, "AA"),
-            exact: false,
-        })
+        .on_tx_expect(Expectation { tx: tx(1, "AA"), exact: false })
         .unwrap();
     run_case
-        .on_tx_expect(Expectation {
-            tx: tx(2, "BB"),
-            exact: true,
-        })
+        .on_tx_expect(Expectation { tx: tx(2, "BB"), exact: true })
         .unwrap();
     run_case.state.txs = vec![tx(1, "AACC"), tx(2, "BB")];
     assert_eq!(run_case.on_tx_output().unwrap(), Some(tx(1, "AA")));
     assert_eq!(run_case.tx_output_queue, vec![tx(2, "BB")]);
     assert_eq!(run_case.expect_queue.len(), 1);
-    assert!(matches!(
-        run_case.finish(),
-        Err(StfFailure::Remaining { .. })
-    ));
+    assert!(matches!(run_case.finish(), Err(StfFailure::Remaining { .. })));
 }
 
 #[test]
 fn test_first_same_port_mismatch_preserves_queues() {
     let mut run_case = run();
     run_case
-        .on_tx_expect(Expectation {
-            tx: tx(1, "BB"),
-            exact: true,
-        })
+        .on_tx_expect(Expectation { tx: tx(1, "BB"), exact: true })
         .unwrap();
     run_case
-        .on_tx_expect(Expectation {
-            tx: tx(1, "AA"),
-            exact: true,
-        })
+        .on_tx_expect(Expectation { tx: tx(1, "AA"), exact: true })
         .unwrap();
     run_case.state.txs = vec![tx(1, "AA")];
-    assert!(matches!(
-        run_case.on_tx_output(),
-        Err(StfFailure::Mismatch { .. })
-    ));
+    assert!(matches!(run_case.on_tx_output(), Err(StfFailure::Mismatch { .. })));
     assert_eq!(run_case.expect_queue.len(), 2);
     let mut run_case = run();
     run_case.state.txs = vec![tx(1, "BB"), tx(1, "AA")];
     run_case.on_tx_output().unwrap();
     assert!(matches!(
-        run_case.on_tx_expect(Expectation {
-            tx: tx(1, "AA"),
-            exact: true
-        }),
+        run_case.on_tx_expect(Expectation { tx: tx(1, "AA"), exact: true }),
         Err(StfFailure::Mismatch { .. })
     ));
     assert_eq!(run_case.tx_output_queue.len(), 2);
@@ -93,20 +65,14 @@ fn test_output_before_expect_logs_actual_and_preserves_other_ports() {
     assert_eq!(run_case.on_tx_output().unwrap(), None);
     assert_eq!(
         run_case
-            .on_tx_expect(Expectation {
-                tx: tx(1, "A*"),
-                exact: false
-            })
+            .on_tx_expect(Expectation { tx: tx(1, "A*"), exact: false })
             .unwrap(),
         Some(tx(1, "AACC"))
     );
     assert_eq!(run_case.tx_output_queue, vec![tx(2, "BB")]);
     assert_eq!(
         run_case
-            .on_tx_expect(Expectation {
-                tx: tx(2, ""),
-                exact: false
-            })
+            .on_tx_expect(Expectation { tx: tx(2, ""), exact: false })
             .unwrap(),
         Some(tx(2, "BB"))
     );
@@ -117,16 +83,10 @@ fn test_output_before_expect_logs_actual_and_preserves_other_ports() {
 fn test_dropped_packet_retains_expectation() {
     let mut run_case = run();
     run_case
-        .on_tx_expect(Expectation {
-            tx: tx(1, ""),
-            exact: false,
-        })
+        .on_tx_expect(Expectation { tx: tx(1, ""), exact: false })
         .unwrap();
     assert_eq!(run_case.on_tx_output().unwrap(), None);
-    assert!(matches!(
-        run_case.finish(),
-        Err(StfFailure::Remaining { .. })
-    ));
+    assert!(matches!(run_case.finish(), Err(StfFailure::Remaining { .. })));
 }
 
 use p4spec_rust::{
@@ -179,10 +139,7 @@ impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for StfInterp {
         _program: Value,
     ) -> Result<Vec<Value>, InterpError> {
         assert_eq!(name, "EBPF_init");
-        assert!(
-            !ctx.interp().initialized,
-            "previous run's interpreter state was not reset"
-        );
+        assert!(!ctx.interp().initialized, "previous run's interpreter state was not reset");
         ctx.interp_mut().initialized = true;
         let value = make::bool(ctx.arena_mut(), false, Span::default())?;
         Ok(vec![value, value])
@@ -241,11 +198,7 @@ impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for StfInterp {
 fn stf_runner(external: Ebpf) -> (Runner<StfInterp, NullInterface, Ebpf>, Run) {
     let mut runner = Runner::new((), StfInterp::default(), NullInterface, external);
     let value = make::bool(runner.arena_mut(), false, Span::default()).unwrap();
-    let run_case = Run::new(SimState {
-        value_ctx: value,
-        value_arch: value,
-        txs: vec![],
-    });
+    let run_case = Run::new(SimState { value_ctx: value, value_arch: value, txs: vec![] });
     (runner, run_case)
 }
 
@@ -259,32 +212,17 @@ fn test_ordered_table_encoding_and_register_failure() {
     let action = Action {
         name: "pipe_act".into(),
         args: vec![
-            Argument {
-                id: "second".into(),
-                num: "0x7fffffffffffffff".into(),
-            },
-            Argument {
-                id: "first".into(),
-                num: "0b10".into(),
-            },
+            Argument { id: "second".into(), num: "0x7fffffffffffffff".into() },
+            Argument { id: "first".into(), num: "0b10".into() },
         ],
     };
     let stmt = statement(Statement::Add {
         table: "tab\"".into(),
         priority: Some(7),
         matches: vec![
-            TableMatch {
-                name: "hdr$12.field$0".into(),
-                kind: MatchKind::Number("0xF*".into()),
-            },
-            TableMatch {
-                name: "bin".into(),
-                kind: MatchKind::Number("0b10".into()),
-            },
-            TableMatch {
-                name: "upper".into(),
-                kind: MatchKind::Number("0XFF".into()),
-            },
+            TableMatch { name: "hdr$12.field$0".into(), kind: MatchKind::Number("0xF*".into()) },
+            TableMatch { name: "bin".into(), kind: MatchKind::Number("0b10".into()) },
+            TableMatch { name: "upper".into(), kind: MatchKind::Number("0XFF".into()) },
             TableMatch {
                 name: "prefix".into(),
                 kind: MatchKind::Slash("0xAB".into(), "0b1000".into()),
@@ -297,19 +235,13 @@ fn test_ordered_table_encoding_and_register_failure() {
     let value_added = run_case.state.value_arch;
     let values = get::tuple(runner.arena(), &value_added).unwrap();
     let value_priority = get::opt(runner.arena(), &values[1]).unwrap().unwrap();
-    assert_eq!(
-        num::to_int(get::num(runner.arena(), &value_priority).unwrap()),
-        &7.into()
-    );
+    assert_eq!(num::to_int(get::num(runner.arena(), &value_priority).unwrap()), &7.into());
     let values_key = get::list(runner.arena(), &values[2]).unwrap();
     let values_key = values_key
         .iter()
         .map(|value| get::tuple(runner.arena(), value).unwrap())
         .collect::<Vec<_>>();
-    assert_eq!(
-        get::text(runner.arena(), &values_key[0][0]).unwrap(),
-        "hdr[12].field[0]"
-    );
+    assert_eq!(get::text(runner.arena(), &values_key[0][0]).unwrap(), "hdr[12].field[0]");
     for (values, shape, text) in values_key[..3]
         .iter()
         .zip(["_HEX text", "_BIN text", "_DEC text"])
@@ -326,10 +258,7 @@ fn test_ordered_table_encoding_and_register_failure() {
     assert!(case.eq_shape(&shape));
     let values = case.args();
     assert_eq!(get::text(runner.arena(), values[0]).unwrap(), "0xAB");
-    assert_eq!(
-        num::to_int(get::num(runner.arena(), values[1]).unwrap()),
-        &8.into()
-    );
+    assert_eq!(num::to_int(get::num(runner.arena(), values[1]).unwrap()), &8.into());
     let values = get::tuple(runner.arena(), &value_added).unwrap();
     let values_action = get::tuple(runner.arena(), &values[3]).unwrap();
     assert_eq!(get::text(runner.arena(), &values_action[0]).unwrap(), "act");
@@ -338,27 +267,15 @@ fn test_ordered_table_encoding_and_register_failure() {
         .iter()
         .map(|value| get::tuple(runner.arena(), value).unwrap())
         .collect::<Vec<_>>();
-    assert_eq!(
-        get::text(runner.arena(), &values_arg[0][0]).unwrap(),
-        "second"
-    );
-    assert_eq!(
-        num::to_int(get::num(runner.arena(), &values_arg[0][1]).unwrap()),
-        &i64::MAX.into()
-    );
-    assert_eq!(
-        get::text(runner.arena(), &values_arg[1][0]).unwrap(),
-        "first"
-    );
+    assert_eq!(get::text(runner.arena(), &values_arg[0][0]).unwrap(), "second");
+    assert_eq!(num::to_int(get::num(runner.arena(), &values_arg[0][1]).unwrap()), &i64::MAX.into());
+    assert_eq!(get::text(runner.arena(), &values_arg[1][0]).unwrap(), "first");
     let calls = runner.context().interp().calls.clone();
     assert_eq!(get::text(runner.arena(), &calls[0].1[1]).unwrap(), "tab\"");
     runner::run_stf_stmt(
         &mut runner,
         &mut run_case,
-        &statement(Statement::SetDefault {
-            table: "tab\"".into(),
-            action,
-        }),
+        &statement(Statement::SetDefault { table: "tab\"".into(), action }),
     )
     .unwrap();
     let values = get::tuple(runner.arena(), &run_case.state.value_arch).unwrap();
@@ -458,10 +375,7 @@ fn test_fresh_run_resets_interpreter_state_and_queues() {
     std::fs::write(&path, "").unwrap();
     let mut run_case = runner::init_pipe(&mut runner, &[], &path).unwrap();
     run_case
-        .on_tx_expect(Expectation {
-            tx: tx(1, "AA"),
-            exact: true,
-        })
+        .on_tx_expect(Expectation { tx: tx(1, "AA"), exact: true })
         .unwrap();
     let run_case = runner::init_pipe(&mut runner, &[], &path).unwrap();
     std::fs::remove_file(path).unwrap();
@@ -552,10 +466,7 @@ fn test_runner_codec_preserves_immutable_nested_register_snapshots_in_each_mode(
         let value_typ =
             make::text(runner.arena_mut(), "register type".into(), Span::default()).unwrap();
         let value = make::int(runner.arena_mut(), 0xcafe.into(), Span::default()).unwrap();
-        let object = ObjectState::Register(Register {
-            value_typ,
-            values: vec![value; 6],
-        });
+        let object = ObjectState::Register(Register { value_typ, values: vec![value; 6] });
         let value_object = object.to_value(runner.arena_mut(), encoding).unwrap();
         let arch = Arch {
             queue: [Packet {
@@ -605,12 +516,9 @@ fn test_runner_codec_preserves_immutable_nested_register_snapshots_in_each_mode(
             &external::encode_with(runner.arena(), encoding, &arch_decoded).unwrap(),
             json.as_ref(),
         );
-        let object_nested = ObjectState::from_value(
-            runner.arena_mut(),
-            encoding,
-            &arch_decoded.queue[0].value_ctx,
-        )
-        .unwrap();
+        let object_nested =
+            ObjectState::from_value(runner.arena_mut(), encoding, &arch_decoded.queue[0].value_ctx)
+                .unwrap();
         assert_eq!(
             encode(runner.arena(), &object_nested).unwrap(),
             encode(runner.arena(), &object).unwrap(),
@@ -626,12 +534,9 @@ fn test_runner_codec_preserves_immutable_nested_register_snapshots_in_each_mode(
         );
         let arch_decoded =
             Arch::from_value(runner.arena_mut(), encoding, &value_arch_changed).unwrap();
-        let object_nested = ObjectState::from_value(
-            runner.arena_mut(),
-            encoding,
-            &arch_decoded.queue[0].value_ctx,
-        )
-        .unwrap();
+        let object_nested =
+            ObjectState::from_value(runner.arena_mut(), encoding, &arch_decoded.queue[0].value_ctx)
+                .unwrap();
         assert_eq!(
             encode(runner.arena(), &object_nested).unwrap(),
             encode(runner.arena(), &object_changed).unwrap(),
@@ -672,10 +577,7 @@ fn test_runner_codec_imports_independent_nested_native_state() {
         let encoding = Encoding::ArenaIndependent;
         let value_typ = make::text(runner.arena_mut(), "T".into(), span_at(1)).unwrap();
         let value = make::int(runner.arena_mut(), 0xcafe.into(), span_at(2)).unwrap();
-        let object_inner = ObjectState::Register(Register {
-            value_typ,
-            values: vec![value; 2],
-        });
+        let object_inner = ObjectState::Register(Register { value_typ, values: vec![value; 2] });
         let value_inner = object_inner.to_value(runner.arena_mut(), encoding).unwrap();
         let value_inner = Value {
             span: make::bool(runner.arena_mut(), false, span_at(3))
@@ -683,10 +585,8 @@ fn test_runner_codec_imports_independent_nested_native_state() {
                 .span,
             ..value_inner
         };
-        let object_outer = ObjectState::Register(Register {
-            value_typ,
-            values: vec![value_inner; 2],
-        });
+        let object_outer =
+            ObjectState::Register(Register { value_typ, values: vec![value_inner; 2] });
         let value_outer = object_outer.to_value(runner.arena_mut(), encoding).unwrap();
         let value_outer = Value {
             span: make::bool(runner.arena_mut(), false, span_at(4))
@@ -742,11 +642,9 @@ fn test_runner_codec_imports_independent_nested_native_state() {
             encode(runner.arena(), &object_inner).unwrap(),
         );
     }
-    for (value, json, line) in [
-        (value_arch, &json_arch, 5),
-        (value_outer, &json_outer, 4),
-        (value_inner, &json_inner, 3),
-    ] {
+    for (value, json, line) in
+        [(value_arch, &json_arch, 5), (value_outer, &json_outer, 4), (value_inner, &json_inner, 3)]
+    {
         assert_eq!(runner.arena().span(&value), &span_at(line));
         assert_eq!(&encode(runner.arena(), &value).unwrap(), json);
     }
@@ -806,15 +704,8 @@ fn test_native_stf_encoding_modes_preserve_outputs_and_state() {
     stacker::grow(32 * 1024 * 1024, || {
         let path =
             super::repo().join("p4c/testdata/p4_16_samples/psa-register-read-write-2-bmv2.p4");
-        assert!(
-            path.is_file(),
-            "missing original P4 fixture: {}",
-            path.display()
-        );
-        assert!(
-            path.with_extension("stf").is_file(),
-            "missing original STF fixture"
-        );
+        assert!(path.is_file(), "missing original P4 fixture: {}", path.display());
+        assert!(path.with_extension("stf").is_file(), "missing original STF fixture");
         let includes = [super::repo().join("p4c/p4include")];
         let stmts = stf::parse::parse_file(path.with_extension("stf")).unwrap();
         assert_eq!(stmts.len(), 62, "original fixture command count");

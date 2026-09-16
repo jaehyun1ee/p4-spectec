@@ -92,10 +92,7 @@ fn update_venv_partial(venv: &mut VEnv, renv: &partial::RenameEnv) {
     for rename in &renv.renames {
         let mut iters = rename.destination.iters.clone();
         iters.extend(rename.iter_ctx.iters());
-        venv.insert(
-            rename.destination.id.clone(),
-            Dim::new(rename.destination.typ.clone(), iters),
-        );
+        venv.insert(rename.destination.id.clone(), Dim::new(rename.destination.typ.clone(), iters));
     }
 }
 
@@ -117,13 +114,8 @@ fn analyze_exps_as_bind(
 
     let mut renv_partial = partial::RenameEnv::new();
     let mut iter_ctx_exp = ICtx::new();
-    let exps_al = partial::rename_exps(
-        ctx,
-        &venv.domain(),
-        &mut renv_partial,
-        &mut iter_ctx_exp,
-        exps_al,
-    )?;
+    let exps_al =
+        partial::rename_exps(ctx, &venv.domain(), &mut renv_partial, &mut iter_ctx_exp, exps_al)?;
     update_venv_partial(&mut venv, &renv_partial);
     let mut prems_al = partial::gen_prems(ctx, iter_ctx, &renv_partial)?;
     prems_al.extend(prem_sideconditions_multiple_al);
@@ -135,10 +127,7 @@ fn analyze_exp_as_bound(ctx: &Context, exp: &ast::Exp) -> Result<(), AlgoError> 
     if benv.is_empty() {
         Ok(())
     } else {
-        Err(AlgoError::new(
-            AlgoErrorKind::FreeBindings,
-            exp.span.clone(),
-        ))
+        Err(AlgoError::new(AlgoErrorKind::FreeBindings, exp.span.clone()))
     }
 }
 
@@ -166,13 +155,8 @@ fn analyze_args_as_bind(
 
     let mut renv_partial = partial::RenameEnv::new();
     let mut iter_ctx_arg = ICtx::new();
-    let args_al = partial::rename_args(
-        ctx,
-        &venv.domain(),
-        &mut renv_partial,
-        &mut iter_ctx_arg,
-        args_al,
-    )?;
+    let args_al =
+        partial::rename_args(ctx, &venv.domain(), &mut renv_partial, &mut iter_ctx_arg, args_al)?;
     update_venv_partial(&mut venv, &renv_partial);
     let mut prems_al = partial::gen_prems(ctx, &ICtx::new(), &renv_partial)?;
     prems_al.extend(prem_sideconditions_multiple_al);
@@ -210,13 +194,8 @@ fn analyze_args_as_bind_shallow(
 
     let mut renv_partial = partial::RenameEnv::new();
     let mut iter_ctx_arg = ICtx::new();
-    let args_al = partial::rename_args(
-        ctx,
-        &venv.domain(),
-        &mut renv_partial,
-        &mut iter_ctx_arg,
-        args_al,
-    )?;
+    let args_al =
+        partial::rename_args(ctx, &venv.domain(), &mut renv_partial, &mut iter_ctx_arg, args_al)?;
     update_venv_partial(&mut venv, &renv_partial);
     let prems_al = partial::gen_prems(ctx, &ICtx::new(), &renv_partial)?;
     Ok((venv, args_al, prems_al))
@@ -225,17 +204,11 @@ fn analyze_args_as_bind_shallow(
 fn analyze_args_as_bound_shallow(ctx: &Context, args: &[ast::Arg]) -> Result<(), AlgoError> {
     for arg in args {
         if !shallow::check_arg(arg) {
-            return Err(AlgoError::new(
-                AlgoErrorKind::BindingsNotShallow,
-                arg.span.clone(),
-            ));
+            return Err(AlgoError::new(AlgoErrorKind::BindingsNotShallow, arg.span.clone()));
         }
         let benv = collect::collect_arg(ctx, arg)?;
         if !benv.is_empty() {
-            return Err(AlgoError::new(
-                AlgoErrorKind::FreeBindings,
-                arg.span.clone(),
-            ));
+            return Err(AlgoError::new(AlgoErrorKind::FreeBindings, arg.span.clone()));
         }
     }
     Ok(())
@@ -249,10 +222,7 @@ fn check_prems_in_else(span: &Span, prems: &[al::ast::Prem]) -> Result<(), AlgoE
     if prems.iter().all(|prem| !al::partial::is_partial_prem(prem)) {
         Ok(())
     } else {
-        Err(AlgoError::new(
-            AlgoErrorKind::ImpureElsePremises,
-            span.clone(),
-        ))
+        Err(AlgoError::new(AlgoErrorKind::ImpureElsePremises, span.clone()))
     }
 }
 
@@ -303,12 +273,9 @@ fn analyze_rule_prem(
     analyze_exps_as_bound(ctx, &exps_input_il)?;
     let (venv, exps_output_al, prem_sideconditions_al) =
         analyze_exps_as_bind(ctx, &iter_ctx, &exps_output_il)?;
-    let exps_al = input::combine(
-        &rule_prem_il.input_hint,
-        exps_input_il.clone(),
-        exps_output_al.clone(),
-    )
-    .map_err(|error| input_error(error, span.clone()))?;
+    let exps_al =
+        input::combine(&rule_prem_il.input_hint, exps_input_il.clone(), exps_output_al.clone())
+            .map_err(|error| input_error(error, span.clone()))?;
     let not_exp_al = Mixop::fill(&mixop, exps_al)
         .expect("arguments obtained from the same mixfix must match its arity");
     let prem_al = phrase! {
@@ -446,13 +413,8 @@ fn analyze_let_prem(
 
     let mut renv_partial = partial::RenameEnv::new();
     let mut iter_ctx_exp = ICtx::new();
-    let exp_l_al = partial::rename_exp(
-        ctx,
-        &venv.domain(),
-        &mut renv_partial,
-        &mut iter_ctx_exp,
-        exp_l_al,
-    )?;
+    let exp_l_al =
+        partial::rename_exp(ctx, &venv.domain(), &mut renv_partial, &mut iter_ctx_exp, exp_l_al)?;
     update_venv_partial(&mut venv, &renv_partial);
     let mut prems_al = partial::gen_prems(ctx, &iter_ctx, &renv_partial)?;
     prems_al.extend(prem_sideconditions_multiple_al);
@@ -487,10 +449,7 @@ fn analyze_iter_prem(
     iter_prem_il: &ast::IterPrem,
 ) -> Result<(VEnv, al::ast::Prem, Vec<al::ast::Prem>), AlgoError> {
     if !iter_prem_il.prem_iter.vars_bind.is_empty() {
-        return Err(AlgoError::new(
-            AlgoErrorKind::UnexpectedIterationBindings,
-            span.clone(),
-        ));
+        return Err(AlgoError::new(AlgoErrorKind::UnexpectedIterationBindings, span.clone()));
     }
     let mut iterations = vec![Iteration {
         iter: iter_prem_il.prem_iter.iter,
@@ -572,11 +531,7 @@ fn analyze_rule_path(
         check_prems_in_else(&id.span, &prems_all_al)?;
     }
     analyze_exps_as_bound(ctx, &exps_output_il)?;
-    Ok(al::ast::RulePath {
-        id,
-        prems: prems_all_al,
-        exps_output: exps_output_il,
-    })
+    Ok(al::ast::RulePath { id, prems: prems_all_al, exps_output: exps_output_il })
 }
 
 fn analyze_rule_group(
@@ -671,11 +626,7 @@ fn analyze_clause(
     let mut ctx = ctx.clone();
     ctx.add_frees(&clause_il.free());
     let span = clause_il.span;
-    let ast::ClauseKind {
-        args: args_il,
-        exp: exp_il,
-        prems: prems_il,
-    } = clause_il.node;
+    let ast::ClauseKind { args: args_il, exp: exp_il, prems: prems_il } = clause_il.node;
     let (venv, args_al, prem_sideconditions_al) = analyze_args_as_bind(&mut ctx, &args_il)?;
     ctx.add_bounds(&venv);
     let prems_al = analyze_prems(&mut ctx, prems_il)?;
@@ -700,22 +651,13 @@ fn analyze_clause(
 
 fn pattern_set_covered_by_typ(ctx: &Context, typ: &ast::Typ) -> Result<PatternSet, AlgoError> {
     let ast::TypKind::Var(id, _) = &typ.node else {
-        return Err(AlgoError::new(
-            AlgoErrorKind::NonVariantPatternType,
-            typ.span.clone(),
-        ));
+        return Err(AlgoError::new(AlgoErrorKind::NonVariantPatternType, typ.span.clone()));
     };
     let TypeDef::Defined(_, def_typ) = ctx.find_typdef(id)? else {
-        return Err(AlgoError::new(
-            AlgoErrorKind::NonVariantPatternType,
-            typ.span.clone(),
-        ));
+        return Err(AlgoError::new(AlgoErrorKind::NonVariantPatternType, typ.span.clone()));
     };
     let ast::DefTypKind::Variant(cases) = &def_typ.node else {
-        return Err(AlgoError::new(
-            AlgoErrorKind::NonVariantPatternType,
-            typ.span.clone(),
-        ));
+        return Err(AlgoError::new(AlgoErrorKind::NonVariantPatternType, typ.span.clone()));
     };
     let pattern_set = cases
         .iter()
@@ -747,10 +689,7 @@ fn pattern_set_covered_by_exp(ctx: &Context, exp_al: &ast::Exp) -> Result<Patter
             let pattern_set = [not_typ].into_iter().collect();
             Ok(pattern_set)
         }
-        _ => Err(AlgoError::new(
-            AlgoErrorKind::InvalidTablePattern,
-            exp_al.span.clone(),
-        )),
+        _ => Err(AlgoError::new(AlgoErrorKind::InvalidTablePattern, exp_al.span.clone())),
     }
 }
 
@@ -768,11 +707,7 @@ fn check_valid_table_rows(
         } else {
             false
         };
-    let rows_pattern_al = if has_closer {
-        &rows_al[..rows_al.len() - 1]
-    } else {
-        rows_al
-    };
+    let rows_pattern_al = if has_closer { &rows_al[..rows_al.len() - 1] } else { rows_al };
     let mut pattern_sets_by_row = Vec::with_capacity(rows_pattern_al.len());
     for row_al in rows_pattern_al {
         let mut pattern_sets = Vec::with_capacity(row_al.node.exps_signature.len());
@@ -785,10 +720,7 @@ fn check_valid_table_rows(
     }
     let pattern_sets_overlap = pattern::find_overlap(span, &pattern_sets_by_row)?;
     if pattern_sets_overlap.is_some() {
-        return Err(AlgoError::new(
-            AlgoErrorKind::OverlappingTablePatterns,
-            span.clone(),
-        ));
+        return Err(AlgoError::new(AlgoErrorKind::OverlappingTablePatterns, span.clone()));
     }
     let mut pattern_sets_total = Vec::with_capacity(typs_match_il.len());
     for typ_il in typs_match_il {
@@ -799,10 +731,7 @@ fn check_valid_table_rows(
     let pattern_sets_rows_missing =
         pattern::find_missing(span, &pattern_sets_total, &pattern_sets_by_row)?;
     if !has_closer && !pattern_sets_rows_missing.is_empty() {
-        return Err(AlgoError::new(
-            AlgoErrorKind::MissingTablePatterns,
-            span.clone(),
-        ));
+        return Err(AlgoError::new(AlgoErrorKind::MissingTablePatterns, span.clone()));
     }
     Ok(())
 }
@@ -821,10 +750,7 @@ fn analyze_table_row(
     let mut exps_signature_al = Vec::with_capacity(args_il.len());
     for arg_il in args_il {
         let ast::ArgKind::Exp(exp_il) = arg_il.node else {
-            return Err(AlgoError::new(
-                AlgoErrorKind::InvalidTablePattern,
-                arg_il.span,
-            ));
+            return Err(AlgoError::new(AlgoErrorKind::InvalidTablePattern, arg_il.span));
         };
         exps_signature_al.push(*exp_il);
     }
@@ -880,10 +806,7 @@ fn analyze_typ_def(typ_def_il: ast::TypDef) -> al::ast::TypDef {
 }
 
 fn analyze_extern_typ(extern_typ_il: ast::ExternTyp) -> al::ast::ExternTyp {
-    al::ast::ExternTyp {
-        id: extern_typ_il.id,
-        hints: extern_typ_il.hints,
-    }
+    al::ast::ExternTyp { id: extern_typ_il.id, hints: extern_typ_il.hints }
 }
 
 fn analyze_defined_typ(defined_typ_il: ast::DefinedTyp) -> al::ast::DefinedTyp {
@@ -898,11 +821,7 @@ fn analyze_defined_typ(defined_typ_il: ast::DefinedTyp) -> al::ast::DefinedTyp {
 // - Meta-variables
 
 fn analyze_var_def(var_def_il: ast::VarDef) -> al::ast::VarDef {
-    al::ast::VarDef {
-        id: var_def_il.id,
-        typ: var_def_il.typ,
-        hints: var_def_il.hints,
-    }
+    al::ast::VarDef { id: var_def_il.id, typ: var_def_il.typ, hints: var_def_il.hints }
 }
 
 // - Relations
@@ -936,14 +855,8 @@ fn analyze_defined_rel(
     ctx: &mut Context,
     defined_rel_il: ast::DefinedRel,
 ) -> Result<al::ast::DefinedRel, AlgoError> {
-    let ast::DefinedRel {
-        id,
-        not_typ,
-        input_hint,
-        rule_groups,
-        else_group,
-        hints,
-    } = defined_rel_il;
+    let ast::DefinedRel { id, not_typ, input_hint, rule_groups, else_group, hints } =
+        defined_rel_il;
     let mut rule_groups_al = Vec::with_capacity(rule_groups.len());
     for rule_group_il in rule_groups {
         let span = rule_group_il.span.clone();
@@ -972,15 +885,15 @@ fn analyze_meta_func_def(
     span: &Span,
 ) -> Result<al::ast::MetaFuncDef, AlgoError> {
     match meta_func_def_il {
-        ast::MetaFuncDef::Extern(extern_func_il) => Ok(al::ast::MetaFuncDef::Extern(
-            analyze_extern_func(extern_func_il),
-        )),
-        ast::MetaFuncDef::Builtin(builtin_func_il) => Ok(al::ast::MetaFuncDef::Builtin(
-            analyze_builtin_func(builtin_func_il),
-        )),
-        ast::MetaFuncDef::Table(table_func_il) => Ok(al::ast::MetaFuncDef::Table(
-            analyze_table_func(ctx, table_func_il, span)?,
-        )),
+        ast::MetaFuncDef::Extern(extern_func_il) => {
+            Ok(al::ast::MetaFuncDef::Extern(analyze_extern_func(extern_func_il)))
+        }
+        ast::MetaFuncDef::Builtin(builtin_func_il) => {
+            Ok(al::ast::MetaFuncDef::Builtin(analyze_builtin_func(builtin_func_il)))
+        }
+        ast::MetaFuncDef::Table(table_func_il) => {
+            Ok(al::ast::MetaFuncDef::Table(analyze_table_func(ctx, table_func_il, span)?))
+        }
         ast::MetaFuncDef::Defined(defined_func_il) => {
             let defined_func_al = analyze_defined_func(ctx, *defined_func_il)?;
             Ok(al::ast::MetaFuncDef::Defined(Box::new(defined_func_al)))

@@ -41,11 +41,8 @@ fn test_group_modes_preserve_or_remove_group_instructions() {
     for without_rule_groups in [true, false] {
         let block = vec![group(vec![ret("main")])];
         let block = optimize(&tdenv, block, without_rule_groups).unwrap();
-        let block_expect = if without_rule_groups {
-            vec![ret("main")]
-        } else {
-            vec![group(vec![ret("main")])]
-        };
+        let block_expect =
+            if without_rule_groups { vec![ret("main")] } else { vec![group(vec![ret("main")])] };
         assert_eq!(block, block_expect);
     }
 }
@@ -78,9 +75,7 @@ fn test_hold_merge_exposes_bindings_for_a_later_loop_iteration() {
     let block = optimize(&tdenv, block, true).unwrap();
     assert!(!block.syntax_eq(&block_once));
     let mut instr_expect = binding("x");
-    let InstrKind::Let(instr_let) = &mut instr_expect.node else {
-        panic!()
-    };
+    let InstrKind::Let(instr_let) = &mut instr_expect.node else { panic!() };
     instr_let.block.push(ret("x"));
     assert_eq!(block, vec![hold(vec![instr_expect])]);
     assert!(

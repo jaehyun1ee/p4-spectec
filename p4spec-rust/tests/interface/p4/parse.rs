@@ -173,17 +173,11 @@ control C() {
 #[test]
 fn test_type_argument_calls_preserve_bodies_across_whitespace_and_comments() {
     for (text_a, text_b) in [
-        (
-            "obj.f<bit<8>>(0);",
-            "obj.f /* call */ < /* type */ bit<8> > /* args */ (0);",
-        ),
+        ("obj.f<bit<8>>(0);", "obj.f /* call */ < /* type */ bit<8> > /* args */ (0);"),
         ("f<E>();", "f < E > ();"),
         ("f<int, bool>();", "f < int, bool > ();"),
         ("bool x = a < b > (c);", "bool x = a /* lhs */ < b > (c);"),
-        (
-            "bool x = a < E.A > (c);",
-            "bool x = a /* lhs */ < E.A > (c);",
-        ),
+        ("bool x = a < E.A > (c);", "bool x = a /* lhs */ < E.A > (c);"),
     ] {
         let mut arena = ValueArena::new();
         let text_a = format!("enum E {{ A }} control C() {{ apply {{ {text_a} }} }}");
@@ -214,14 +208,9 @@ fn test_parses_the_positive_p4_corpus() {
     let corpus = manifest.join("../p4spec/test/micro");
     let includes = [manifest.join("../p4c/p4include")];
     let mut files = Vec::new();
-    for directory in [
-        "programs",
-        "programs-boot",
-        "programs-neg",
-        "sim-ebpf",
-        "sim-psa",
-        "sim-v1model",
-    ] {
+    for directory in
+        ["programs", "programs-boot", "programs-neg", "sim-ebpf", "sim-psa", "sim-v1model"]
+    {
         collect_p4_files(&corpus.join(directory), &mut files);
     }
     files.sort();
@@ -235,11 +224,7 @@ fn test_parses_the_positive_p4_corpus() {
                 .map(|error| format!("{}: {error}", file.display()))
         })
         .collect();
-    assert!(
-        failures.is_empty(),
-        "P4 parse failures:\n{}",
-        failures.join("\n")
-    );
+    assert!(failures.is_empty(), "P4 parse failures:\n{}", failures.join("\n"));
 }
 
 #[test]
@@ -258,11 +243,7 @@ fn test_rejects_the_negative_p4_parse_corpus() {
         .filter(|file| parse_file(&mut arena, &includes, file).is_ok())
         .map(|file| file.display().to_string())
         .collect();
-    assert!(
-        accepted.is_empty(),
-        "invalid P4 programs were accepted:\n{}",
-        accepted.join("\n")
-    );
+    assert!(accepted.is_empty(), "invalid P4 programs were accepted:\n{}", accepted.join("\n"));
 }
 
 fn collect_p4_files(directory: &Path, files: &mut Vec<PathBuf>) {
@@ -298,10 +279,7 @@ fn test_empty_productions_use_previous_token_end_across_whitespace() {
     let mut directions = Vec::new();
     spans(&arena, &value, "direction", &mut directions);
     assert_eq!(directions.len(), 1);
-    assert_eq!(
-        (directions[0].left.line, directions[0].left.column),
-        (2, 11)
-    );
+    assert_eq!((directions[0].left.line, directions[0].left.column), (2, 11));
     assert_eq!(directions[0].left, directions[0].right);
     let mut annotations = Vec::new();
     spans(&arena, &value, "annotationList", &mut annotations);
@@ -345,10 +323,7 @@ fn test_initial_empty_production_precedes_whitespace_and_line_directives() {
         let source = format!("{prefix}control C() {{ apply {{ }} }}");
         let value = parse_string(&mut arena, "initial.p4", &source).unwrap();
         let annotation = initial_annotation(&arena, &value).unwrap();
-        assert_eq!(
-            arena.span(annotation).left,
-            Position::new("initial.p4", 1, 0)
-        );
+        assert_eq!(arena.span(annotation).left, Position::new("initial.p4", 1, 0));
         assert_eq!(arena.span(annotation).right, arena.span(annotation).left);
     }
 }
@@ -360,8 +335,5 @@ fn test_syntax_error_after_whitespace_uses_offending_token_span() {
     let error = parse_string(&mut arena, "syntax.p4", source).unwrap_err();
     let column = source.lines().nth(1).unwrap().find(';').unwrap() as i64;
     assert_eq!((error.span.left.line, error.span.left.column), (2, column));
-    assert_eq!(
-        (error.span.right.line, error.span.right.column),
-        (2, column + 1)
-    );
+    assert_eq!((error.span.right.line, error.span.right.column), (2, column + 1));
 }

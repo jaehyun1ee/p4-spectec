@@ -144,9 +144,7 @@ fn composite_spec(metadata: &str, extern_inputs: Vec<i64>) -> al::ast::Spec {
     let evaluate_match = al::ast::RuleMatch {
         exps_signature: vec![variable("signature")],
         exps_input: vec![text_expression("line\n\"\\")],
-        prems: vec![premise(al::ast::PremKind::If(al::ast::IfPrem {
-            exp: variable("ready"),
-        }))],
+        prems: vec![premise(al::ast::PremKind::If(al::ast::IfPrem { exp: variable("ready") }))],
     };
     let evaluate_path = al::ast::RulePath {
         id: id("success"),

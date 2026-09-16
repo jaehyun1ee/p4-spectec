@@ -43,11 +43,7 @@ fn test_fresh_uses_aliases_collisions_wildcards_and_dimensions_deterministically
     aliases.insert(id("B"), typ());
     let alias = fresh_impl::var_from_typ(&aliases, &IdSet::new(), at.clone(), &typ());
     assert_eq!(
-        (
-            alias.id.node.as_str(),
-            alias.typ.node.clone(),
-            alias.iters.as_slice()
-        ),
+        (alias.id.node.as_str(), alias.typ.node.clone(), alias.iters.as_slice()),
         ("B", ast::TypKind::Bool, &[] as &[ast::Iter])
     );
     aliases.insert(id("C"), typ());
@@ -77,10 +73,7 @@ fn test_fresh_uses_aliases_collisions_wildcards_and_dimensions_deterministically
 }
 #[test]
 fn test_fresh_exact_edges_preserve_aliases_regions_and_full_dimension_shapes() {
-    let at = Span::new(
-        Position::new("requested", 0, 0),
-        Position::new("requested", 0, 0),
-    );
+    let at = Span::new(Position::new("requested", 0, 0), Position::new("requested", 0, 0));
     let alias_typ = p4spec_rust::phrase! { node: ast::TypKind::Bool, span: Span::new(
         Position::new("alias_type", 0, 0),
         Position::new("alias_type", 0, 0),
@@ -96,19 +89,13 @@ fn test_fresh_exact_edges_preserve_aliases_regions_and_full_dimension_shapes() {
     let selected = fresh_impl::var_from_typ(
         &aliases,
         &IdSet::new(),
-        Span::new(
-            Position::new("requested_alias", 0, 0),
-            Position::new("requested_alias", 0, 0),
-        ),
+        Span::new(Position::new("requested_alias", 0, 0), Position::new("requested_alias", 0, 0)),
         &typ(),
     );
     assert_eq!(selected.id.node, "Alias");
     assert_eq!(
         selected.id.span,
-        Span::new(
-            Position::new("requested_alias", 0, 0),
-            Position::new("requested_alias", 0, 0)
-        )
+        Span::new(Position::new("requested_alias", 0, 0), Position::new("requested_alias", 0, 0))
     );
     assert_eq!(selected.typ, alias_typ);
     assert!(selected.iters.is_empty());
@@ -116,19 +103,13 @@ fn test_fresh_exact_edges_preserve_aliases_regions_and_full_dimension_shapes() {
     let wildcard = fresh_impl::var_from_typ_wildcard(
         &IdMap::new(),
         &collision_ids,
-        Span::new(
-            Position::new("wildcard", 0, 0),
-            Position::new("wildcard", 0, 0),
-        ),
+        Span::new(Position::new("wildcard", 0, 0), Position::new("wildcard", 0, 0)),
         &typ(),
     );
     assert_eq!(wildcard.id.node, "_bool''");
     assert_eq!(
         wildcard.id.span,
-        Span::new(
-            Position::new("wildcard", 0, 0),
-            Position::new("wildcard", 0, 0)
-        )
+        Span::new(Position::new("wildcard", 0, 0), Position::new("wildcard", 0, 0))
     );
     let iter_bool = p4spec_rust::phrase! { node: ast::TypKind::Iter(Box::new(typ()), ast::Iter::List), span: Span::new(
         Position::new("iter_type", 0, 0),
@@ -137,19 +118,13 @@ fn test_fresh_exact_edges_preserve_aliases_regions_and_full_dimension_shapes() {
     let inside_iter = fresh_impl::var_from_typ(
         &aliases,
         &IdSet::new(),
-        Span::new(
-            Position::new("inside_iter", 0, 0),
-            Position::new("inside_iter", 0, 0),
-        ),
+        Span::new(Position::new("inside_iter", 0, 0), Position::new("inside_iter", 0, 0)),
         &iter_bool,
     );
     assert_eq!(inside_iter.id.node, "Alias");
     assert_eq!(
         inside_iter.id.span,
-        Span::new(
-            Position::new("inside_iter", 0, 0),
-            Position::new("inside_iter", 0, 0)
-        )
+        Span::new(Position::new("inside_iter", 0, 0), Position::new("inside_iter", 0, 0))
     );
     assert_eq!(
         inside_iter.typ,
@@ -211,10 +186,8 @@ fn test_fresh_names_combine_aliases_collisions_wildcards_and_nested_dimensions()
 
 #[test]
 fn test_fresh_variables_lookup_aliases_by_identifier_text() {
-    let span_requested = Span::new(
-        Position::new("requested", 0, 0),
-        Position::new("requested", 0, 0),
-    );
+    let span_requested =
+        Span::new(Position::new("requested", 0, 0), Position::new("requested", 0, 0));
     let typ = p4spec_rust::phrase! {
         node: ast::TypKind::Bool,
         span: Span::default(),

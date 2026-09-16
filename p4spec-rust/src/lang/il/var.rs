@@ -26,11 +26,8 @@ pub fn as_exp(is_dim: bool, var: &Var) -> Exp {
             ),
             span: var.typ.span.clone(),
         };
-        let var_binder = Var {
-            id: var.id.clone(),
-            typ: typ_iter.clone(),
-            iters: iters_prior.clone(),
-        };
+        let var_binder =
+            Var { id: var.id.clone(), typ: typ_iter.clone(), iters: iters_prior.clone() };
         let span = exp.span.clone();
         exp = crate::note_phrase! {
             node: ExpKind::Iter(

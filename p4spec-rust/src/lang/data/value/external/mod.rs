@@ -91,10 +91,8 @@ where
 {
     let ctx = EncodeContext::new(arena, encoding);
     match encoding {
-        Encoding::ArenaRelative => data.serialize_state(
-            serde_stacker::Serializer::new(serde_json::value::Serializer),
-            &ctx,
-        ),
+        Encoding::ArenaRelative => data
+            .serialize_state(serde_stacker::Serializer::new(serde_json::value::Serializer), &ctx),
         // Tree conversion, serde, and destruction all traverse recursive contents
         Encoding::ArenaIndependent => stacker::grow(32 * 1024 * 1024, || {
             data.serialize_state(serde_json::value::Serializer, &ctx)

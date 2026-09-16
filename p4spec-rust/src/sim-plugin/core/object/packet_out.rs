@@ -43,9 +43,7 @@ impl PacketOut {
             .map(|value| get::bool(ctx.arena(), value))
             .collect::<Result<Vec<_>, _>>()
             .map_err(ExternError::from)?;
-        let pkt = Self {
-            bits: self.bits.iter().copied().chain(bits).collect(),
-        };
+        let pkt = Self { bits: self.bits.iter().copied().chain(bits).collect() };
         let typ = typ::make::opt(typ::make::var(
             crate::phrase!(node: "value".to_owned(), span: Span::default()),
             Vec::new(),

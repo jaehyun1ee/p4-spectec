@@ -118,12 +118,8 @@ pub fn partition_(
         Span::default(),
     )?;
     let typ_tuple = typ::make::tuple(vec![typ.clone(), typ.clone()]);
-    let value = make::tuple(
-        arena,
-        typ_tuple.node.into(),
-        vec![value_left, value_right],
-        Span::default(),
-    )?;
+    let value =
+        make::tuple(arena, typ_tuple.node.into(), vec![value_left, value_right], Span::default())?;
     Ok(value)
 }
 

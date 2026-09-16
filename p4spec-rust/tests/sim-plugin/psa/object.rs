@@ -118,13 +118,8 @@ fn setup() -> (ObjectRunner, Value, Value) {
 }
 
 fn list(arena: &mut ValueArena, values: Vec<Value>) -> Value {
-    make::list(
-        arena,
-        typ::make::list(typ::make::text()).node.into(),
-        values,
-        Span::default(),
-    )
-    .unwrap()
+    make::list(arena, typ::make::list(typ::make::text()).node.into(), values, Span::default())
+        .unwrap()
 }
 
 fn arguments(arena: &mut ValueArena, args: &[(&str, Value)]) -> (Value, Value) {
@@ -162,13 +157,8 @@ fn tuple_data(runner: &mut ObjectRunner, int: i64) {
         p4spec_rust::phrase!(node: "value".to_owned(), span: Span::default()),
         vec![],
     );
-    let value = make::case(
-        runner.arena_mut(),
-        typ_value.node.into(),
-        mixfix,
-        Span::default(),
-    )
-    .unwrap();
+    let value =
+        make::case(runner.arena_mut(), typ_value.node.into(), mixfix, Span::default()).unwrap();
     runner
         .context()
         .interp_mut()

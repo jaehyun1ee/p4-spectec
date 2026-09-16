@@ -103,19 +103,10 @@ fn overlap_exp_kind(
             ast::ExpKind::UpCast(typ_template, exp_template_inner),
             ast::ExpKind::UpCast(typ, exp_inner),
         ) if typ_template.syntax_eq(typ) => {
-            let exp_template_inner = overlap_exp(
-                tdenv,
-                menv,
-                ids_free,
-                ids_unifier,
-                exp_template_inner,
-                exp_inner,
-            )?;
+            let exp_template_inner =
+                overlap_exp(tdenv, menv, ids_free, ids_unifier, exp_template_inner, exp_inner)?;
             let exp_template_inner = Box::new(exp_template_inner);
-            Ok(ast::ExpKind::UpCast(
-                typ_template.clone(),
-                exp_template_inner,
-            ))
+            Ok(ast::ExpKind::UpCast(typ_template.clone(), exp_template_inner))
         }
         (ast::ExpKind::Tuple(exps_template), ast::ExpKind::Tuple(exps)) => {
             let exps_template = overlap_exps(
@@ -131,14 +122,7 @@ fn overlap_exp_kind(
         (ast::ExpKind::Case(not_exp_template), ast::ExpKind::Case(not_exp))
             if not_exp_template.eq_shape(not_exp) =>
         {
-            overlap_case_exp(
-                tdenv,
-                menv,
-                ids_free,
-                ids_unifier,
-                not_exp_template,
-                not_exp,
-            )
+            overlap_case_exp(tdenv, menv, ids_free, ids_unifier, not_exp_template, not_exp)
         }
         (ast::ExpKind::Str(expfields_template), ast::ExpKind::Str(expfields))
             if expfields_template.len() == expfields.len()
@@ -147,14 +131,7 @@ fn overlap_exp_kind(
                     .zip(expfields)
                     .all(|((atom_template, _), (atom, _))| atom_template.syntax_eq(atom)) =>
         {
-            overlap_str_exp(
-                tdenv,
-                menv,
-                ids_free,
-                ids_unifier,
-                expfields_template,
-                expfields,
-            )
+            overlap_str_exp(tdenv, menv, ids_free, ids_unifier, expfields_template, expfields)
         }
         _ => {
             let error = AlgoError::new(AlgoErrorKind::AntiUnification, exp.span.clone());

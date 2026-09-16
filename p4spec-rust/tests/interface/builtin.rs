@@ -51,13 +51,7 @@ fn test_numeric_builtin_returns_value_without_side_effect() {
             make::int(&mut arena, BigInt::from(2), Span::default()).unwrap(),
             make::int(&mut arena, BigInt::from(5), Span::default()).unwrap(),
         ];
-        make::list(
-            &mut arena,
-            typ_list.node.clone().into(),
-            values,
-            Span::default(),
-        )
-        .unwrap()
+        make::list(&mut arena, typ_list.node.clone().into(), values, Span::default()).unwrap()
     };
 
     let (result, side_effected) =
@@ -101,13 +95,7 @@ fn test_missing_builtin_and_wrong_arity_are_typed_failures() {
     ));
 
     let arity = invoke(&mut arena, &mut Builtins::new(), "sum_int", &[]).unwrap_err();
-    assert!(matches!(
-        arity.kind,
-        BuiltinErrorKind::ArityMismatch {
-            expected: 1,
-            actual: 0
-        }
-    ));
+    assert!(matches!(arity.kind, BuiltinErrorKind::ArityMismatch { expected: 1, actual: 0 }));
 }
 
 #[test]
@@ -119,13 +107,7 @@ fn test_list_and_text_builtins_preserve_ocaml_results() {
             make::text(&mut arena, "a".to_owned(), Span::default()).unwrap(),
             make::text(&mut arena, "a".to_owned(), Span::default()).unwrap(),
         ];
-        make::list(
-            &mut arena,
-            typ_list.node.clone().into(),
-            values,
-            Span::default(),
-        )
-        .unwrap()
+        make::list(&mut arena, typ_list.node.clone().into(), values, Span::default()).unwrap()
     };
     let (distinct, _) = invoke_with_types(
         &mut arena,
@@ -138,13 +120,8 @@ fn test_list_and_text_builtins_preserve_ocaml_results() {
     assert_eq!(get::bool(&arena, &distinct), Ok(false));
 
     let text = make::text(&mut arena, "  a\n b\t".to_owned(), Span::default()).unwrap();
-    let (stripped, _) = invoke(
-        &mut arena,
-        &mut Builtins::new(),
-        "strip_all_whitespace",
-        &[text],
-    )
-    .unwrap();
+    let (stripped, _) =
+        invoke(&mut arena, &mut Builtins::new(), "strip_all_whitespace", &[text]).unwrap();
     assert_eq!(get::text(&arena, &stripped), Ok("a\nb\t"));
 }
 
@@ -173,11 +150,7 @@ fn test_zero_and_negative_bit_widths_match_ocaml() {
                 make::int(&mut arena, 17.into(), Span::default()).unwrap(),
             ];
             let (result, _) = invoke(&mut arena, &mut Builtins::new(), name, &values).unwrap();
-            assert_eq!(
-                get::num(&arena, &result).unwrap().to_string(),
-                "+0",
-                "{name}"
-            );
+            assert_eq!(get::num(&arena, &result).unwrap().to_string(), "+0", "{name}");
         }
     }
 }

@@ -2,10 +2,7 @@ use super::*;
 use crate::pass::structure::{StructureErrorKind, opt::post::remove_let_dead::apply};
 #[test]
 fn test_dead_pure_bindings_disappear_but_live_and_calls_remain() {
-    assert_eq!(
-        apply(vec![binding(literal(), vec![ret("other")])]).unwrap(),
-        vec![ret("other")]
-    );
+    assert_eq!(apply(vec![binding(literal(), vec![ret("other")])]).unwrap(), vec![ret("other")]);
     let instr_live = binding(literal(), vec![ret("x")]);
     let exp_call = crate::note_phrase!(node: ExpKind::Call(id("effect"), vec![], vec![]), note: TypKind::Bool, span: span(8));
     let instr_call = binding(
@@ -33,10 +30,7 @@ fn test_downstream_shadowing_and_rule_input_output_roles() {
         apply(vec![binding(literal(), vec![instr_nested, ret("x")])]).unwrap(),
         vec![ret("other"), ret("x")]
     );
-    let instr_live = binding(
-        literal(),
-        vec![rule(vec![ret("x")], InputHint::new(vec![0]))],
-    );
+    let instr_live = binding(literal(), vec![rule(vec![ret("x")], InputHint::new(vec![0]))]);
     assert_eq!(apply(vec![instr_live.clone()]).unwrap(), vec![instr_live]);
 }
 
@@ -82,10 +76,7 @@ fn test_liveness_uses_each_container_expression_and_branch() {
         }))],
         vec![instr(InstrKind::Case(CaseInstr {
             exp: variable("other"),
-            cases: vec![Case {
-                guard: Guard::Mem(variable("x")),
-                block: vec![],
-            }],
+            cases: vec![Case { guard: Guard::Mem(variable("x")), block: vec![] }],
             total: false,
         }))],
         vec![instr(InstrKind::Group(GroupInstr {
@@ -127,8 +118,5 @@ fn test_update_path_is_not_part_of_source_removability() {
     let path_root = crate::note_phrase!(node: PathKind::Root, note: TypKind::Bool, span: span(9));
     let path = crate::note_phrase!(node: PathKind::Idx(Box::new(path_root), Box::new(exp_call)), note: TypKind::Bool, span: span(10));
     let exp_update = crate::note_phrase!(node: ExpKind::Upd(Box::new(variable("base")), Box::new(path), Box::new(literal())), note: TypKind::Bool, span: span(11));
-    assert_eq!(
-        apply(vec![binding(exp_update, vec![ret("other")])]).unwrap(),
-        vec![ret("other")]
-    );
+    assert_eq!(apply(vec![binding(exp_update, vec![ret("other")])]).unwrap(), vec![ret("other")]);
 }

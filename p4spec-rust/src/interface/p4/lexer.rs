@@ -351,11 +351,8 @@ impl<'source, 'arena> Lexer<'source, 'arena> {
                 (Token::RightAngle, span)
             }
             Token::ShiftRight => {
-                let pos_middle = Position::new(
-                    Rc::clone(&span.left.file),
-                    span.left.line,
-                    span.left.column + 1,
-                );
+                let pos_middle =
+                    Position::new(Rc::clone(&span.left.file), span.left.line, span.left.column + 1);
                 let token_r = if self.template_depth > 1 {
                     self.template_depth -= 2;
                     Token::RightAngleShift
@@ -416,16 +413,11 @@ impl<'source, 'arena> Lexer<'source, 'arena> {
                     || self.template_arguments_follow();
                 (token, template_expected)
             }
-            IdentKind::Ident { has_params, .. } => (
-                Token::Identifier,
-                has_params || self.call_type_arguments_follow(),
-            ),
+            IdentKind::Ident { has_params, .. } => {
+                (Token::Identifier, has_params || self.call_type_arguments_follow())
+            }
         };
-        self.state = if template_expected {
-            LexerState::Template
-        } else {
-            next
-        };
+        self.state = if template_expected { LexerState::Template } else { next };
         phrase!(node: token, span: span.clone())
     }
 
@@ -640,26 +632,17 @@ impl<'source, 'arena> Lexer<'source, 'arena> {
                 let sign = spelling.as_bytes()[index] as char;
                 let digits = &spelling[index + 1..];
                 let int = parse_integer(digits).ok_or_else(|| {
-                    self.error(
-                        LexErrorKind::InvalidInteger(spelling.to_owned()),
-                        pos_l.clone(),
-                    )
+                    self.error(LexErrorKind::InvalidInteger(spelling.to_owned()), pos_l.clone())
                 })?;
                 let int_width = parse_integer(width).ok_or_else(|| {
-                    self.error(
-                        LexErrorKind::InvalidInteger(spelling.to_owned()),
-                        pos_l.clone(),
-                    )
+                    self.error(LexErrorKind::InvalidInteger(spelling.to_owned()), pos_l.clone())
                 })?;
                 if sign == 's' && int_width < BigInt::from(2) {
                     return Err(self.error(LexErrorKind::SignedWidth, pos_l));
                 }
                 let span = self.span_from(pos_l.clone());
                 let nat_width = Natural::try_from(int_width).map_err(|_| {
-                    self.error(
-                        LexErrorKind::InvalidInteger(spelling.to_owned()),
-                        pos_l.clone(),
-                    )
+                    self.error(LexErrorKind::InvalidInteger(spelling.to_owned()), pos_l.clone())
                 })?;
                 let value_width = make::nat(&mut self.ctx.arena_mut(), nat_width, span.clone())?;
                 let value_int = make::int(&mut self.ctx.arena_mut(), int, span.clone())?;
@@ -683,16 +666,10 @@ impl<'source, 'arena> Lexer<'source, 'arena> {
             }
             _ => {
                 let int = parse_integer(spelling).ok_or_else(|| {
-                    self.error(
-                        LexErrorKind::InvalidInteger(spelling.to_owned()),
-                        pos_l.clone(),
-                    )
+                    self.error(LexErrorKind::InvalidInteger(spelling.to_owned()), pos_l.clone())
                 })?;
                 let span = self.span_from(pos_l.clone());
-                (
-                    make::int(&mut self.ctx.arena_mut(), int, span)?,
-                    spelling.to_owned(),
-                )
+                (make::int(&mut self.ctx.arena_mut(), int, span)?, spelling.to_owned())
             }
         };
         let span = self.span_from(pos_l);

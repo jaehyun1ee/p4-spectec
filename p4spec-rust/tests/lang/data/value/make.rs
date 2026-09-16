@@ -13,19 +13,12 @@ use p4spec_rust::lang::{
 fn test_constructors_preserve_runtime_type_and_span() {
     let mut arena = ValueArena::new();
     let value_span = span("program.p4", 4);
-    let value = make::num(
-        &mut arena,
-        Number::Nat(Natural::from(7_u64)),
-        value_span.clone(),
-    )
-    .unwrap();
+    let value =
+        make::num(&mut arena, Number::Nat(Natural::from(7_u64)), value_span.clone()).unwrap();
 
     assert_eq!(arena.span(&value), &value_span);
     assert_eq!(arena.typ(&value).as_ref(), &typ::make::nat().node);
-    assert_eq!(
-        get::num(&arena, &value),
-        Ok(&Number::Nat(Natural::from(7_u64)))
-    );
+    assert_eq!(get::num(&arena, &value), Ok(&Number::Nat(Natural::from(7_u64))));
 }
 
 #[test]
@@ -47,10 +40,7 @@ fn test_external_serde_state_roundtrip_and_replacement_preserve_annotations() {
     let mut arena = ValueArena::new();
     let typ = std::rc::Rc::new(typ::TypKind::Text);
     let span_state = span("state.p4", 17);
-    let state = State {
-        count: u64::MAX - 1,
-        status: Status::Active,
-    };
+    let state = State { count: u64::MAX - 1, status: Status::Active };
     let value = make::external(
         &mut arena,
         typ.clone(),
@@ -60,13 +50,7 @@ fn test_external_serde_state_roundtrip_and_replacement_preserve_annotations() {
     .unwrap();
     let mut state: State =
         serde_json::from_value(get::external(&arena, &value).unwrap().as_ref().clone()).unwrap();
-    assert_eq!(
-        state,
-        State {
-            count: u64::MAX - 1,
-            status: Status::Active
-        }
-    );
+    assert_eq!(state, State { count: u64::MAX - 1, status: Status::Active });
     state.count += 1;
     state.status = Status::Paused;
     let value_updated = make::external(

@@ -15,10 +15,8 @@ fn test_register_default_order_read_bounds_and_write_noop() {
     let reg = Register::init(&mut runner.context(), value_targs, value_ids, value_args).unwrap();
     assert_eq!(reg.values, [value_ctx, value_ctx]);
     runner.context().interp_mut().calls.clear();
-    let (value_ids, value_args) = arguments(
-        runner.arena_mut(),
-        &[("size", value_size), ("initial_value", value_arch)],
-    );
+    let (value_ids, value_args) =
+        arguments(runner.arena_mut(), &[("size", value_size), ("initial_value", value_arch)]);
     let reg_initial =
         Register::init(&mut runner.context(), value_targs, value_ids, value_args).unwrap();
     assert_eq!(reg_initial.values, [value_arch, value_arch]);
@@ -59,20 +57,11 @@ fn test_register_default_order_read_bounds_and_write_noop() {
     let reg_decoded: Register =
         decode_with(runner.arena_mut(), Encoding::ArenaIndependent, &json).unwrap();
     assert_eq!(encode(runner.arena(), &reg_decoded).unwrap(), json);
-    assert_eq!(
-        runner.arena().typ(&reg_decoded.value_typ),
-        runner.arena().typ(&reg.value_typ)
-    );
+    assert_eq!(runner.arena().typ(&reg_decoded.value_typ), runner.arena().typ(&reg.value_typ));
     for (value_decoded, value) in reg_decoded.values.iter().zip(&reg.values) {
         assert_eq!(runner.arena().typ(value_decoded), runner.arena().typ(value));
-        assert_eq!(
-            runner.arena().span(value_decoded),
-            runner.arena().span(value)
-        );
-        assert_eq!(
-            get::text(runner.arena(), value_decoded),
-            get::text(runner.arena(), value)
-        );
+        assert_eq!(runner.arena().span(value_decoded), runner.arena().span(value));
+        assert_eq!(get::text(runner.arena(), value_decoded), get::text(runner.arena(), value));
     }
     let mut arena_decoded = ValueArena::new();
     let reg_decoded: Register =

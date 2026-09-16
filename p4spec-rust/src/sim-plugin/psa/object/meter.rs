@@ -78,13 +78,9 @@ impl Meter {
             crate::phrase!(node: "value".to_owned(), span: Span::default()),
             Vec::new(),
         ));
-        let value_opt = make::opt(
-            ctx.arena_mut(),
-            typ.node.into(),
-            Some(value_color),
-            Span::default(),
-        )
-        .map_err(ExternError::from)?;
+        let value_opt =
+            make::opt(ctx.arena_mut(), typ.node.into(), Some(value_color), Span::default())
+                .map_err(ExternError::from)?;
         let value_call_result = make::case_shaped! {
             arena: ctx.arena_mut(),
             shape: "RETURN value?",

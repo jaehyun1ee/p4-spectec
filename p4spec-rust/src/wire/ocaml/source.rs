@@ -45,11 +45,7 @@ pub fn decode_phrase<T>(
     decode_it: impl FnOnce(&json) -> Result<T, DecodeError>,
 ) -> Result<Phrase<T>, DecodeError> {
     decode_note_phrase(json, decode_it, |json| {
-        if json.is_null() {
-            Ok(())
-        } else {
-            Err(DecodeError::Expected("null unit note"))
-        }
+        if json.is_null() { Ok(()) } else { Err(DecodeError::Expected("null unit note")) }
     })
 }
 

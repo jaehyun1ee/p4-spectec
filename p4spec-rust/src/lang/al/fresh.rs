@@ -34,11 +34,7 @@ fn var_from_typ(menv: &MEnv, span: &Span, typ: &Typ) -> Var {
         typ.syntax_eq(typ_alias) && typ_name.as_str() != id_alias.node.as_str()
     });
     if let (Some((id_alias, typ_alias)), None) = (vars_alias.next(), vars_alias.next()) {
-        return Var {
-            id: id_alias.clone(),
-            typ: typ_alias.clone(),
-            iters: vec![],
-        };
+        return Var { id: id_alias.clone(), typ: typ_alias.clone(), iters: vec![] };
     }
 
     match &typ.node {

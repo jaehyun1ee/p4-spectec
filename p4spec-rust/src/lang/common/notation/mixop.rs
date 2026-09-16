@@ -102,11 +102,7 @@ impl Mixop {
     ) -> Result<Mixfix<T>, ArityMismatch> {
         let mut args = args.into_iter();
         let mixfix = mixop.fill_inner(&mut args)?;
-        if args.next().is_some() {
-            Err(ArityMismatch::TooMany)
-        } else {
-            Ok(mixfix)
-        }
+        if args.next().is_some() { Err(ArityMismatch::TooMany) } else { Ok(mixfix) }
     }
 
     fn fill_inner<T>(

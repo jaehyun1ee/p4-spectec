@@ -225,10 +225,7 @@ fn test_builtin_interface_registers_captured_extensions_and_overrides() {
     let mut interface = BuiltinInterface::new(builtins);
     let mut arena = ValueArena::new();
     let value = value::make::text(&mut arena, "a b".to_owned(), Span::default()).unwrap();
-    for (name, expected) in [
-        ("extra", "extra: a b"),
-        ("strip_all_whitespace", "a b :override"),
-    ] {
+    for (name, expected) in [("extra", "extra: a b"), ("strip_all_whitespace", "a b :override")] {
         let (value, side_effected) = interface
             .call_builtin(&mut arena, &id(name), &[], &[value])
             .unwrap();
@@ -311,13 +308,9 @@ fn test_builtin_interface_print_validates_both_arities() {
 fn test_builtin_interface_print_preserves_unparse_failures() {
     let mut arena = ValueArena::new();
     let typ = typ::make::bool();
-    let value = value::make::structure(
-        &mut arena,
-        typ.node.clone().into(),
-        Vec::new(),
-        Span::default(),
-    )
-    .unwrap();
+    let value =
+        value::make::structure(&mut arena, typ.node.clone().into(), Vec::new(), Span::default())
+            .unwrap();
     let error = p4spec_rust::interface::p4(&Vec::new())
         .call_builtin(&mut arena, &id("print_"), &[typ], &[value])
         .unwrap_err();
@@ -339,10 +332,7 @@ fn test_builtin_interface_print_preserves_spec_hints_after_clear() {
 
     let span = Span::default();
     let atom = phrase!(node: Atom::Keyword("WRAP".to_owned()), span: span.clone());
-    let notation = Mixfix::Seq(vec![
-        Mixfix::Atom(atom.clone()),
-        Mixfix::Arg(typ::make::text()),
-    ]);
+    let notation = Mixfix::Seq(vec![Mixfix::Atom(atom.clone()), Mixfix::Arg(typ::make::text())]);
     let hint = phrase!(node: el::ast::ExpKind::Seq(vec![
         phrase!(node: el::ast::ExpKind::Text("shown".to_owned()), span: span.clone()),
         phrase!(node: el::ast::ExpKind::Hole(el::ast::Hole::Next), span: span.clone()),
@@ -352,12 +342,8 @@ fn test_builtin_interface_print_preserves_spec_hints_after_clear() {
         phrase!(node: (id("Origin"), Vec::new()), span: span.clone()),
         vec![(id("print"), hint)],
     )]), span: span.clone());
-    let defined_typ = ast::DefinedTyp {
-        id: id("Wrapper"),
-        tparams: Vec::new(),
-        def_typ,
-        hints: Vec::new(),
-    };
+    let defined_typ =
+        ast::DefinedTyp { id: id("Wrapper"), tparams: Vec::new(), def_typ, hints: Vec::new() };
     let def = ast::DefKind::Typ(ast::TypDef::Defined(Box::new(defined_typ)));
     let spec = vec![phrase!(node: def, span: span.clone())];
     let typ = typ::make::var(id("Wrapper"), Vec::new());
@@ -389,9 +375,7 @@ fn test_builtin_interface_print_preserves_spec_hints_after_clear() {
 fn test_runner_statically_composes_its_components() {
     let mut runner = Runner::<FixtureInterpreter, NullInterface, NullExtern>::new(
         (),
-        FixtureInterpreter {
-            config: FixtureConfig::default(),
-        },
+        FixtureInterpreter { config: FixtureConfig::default() },
         NullInterface,
         NullExtern,
     );
@@ -405,9 +389,7 @@ fn test_runner_statically_composes_its_components() {
 fn test_extern_can_reenter_the_interpreter() {
     let mut runner = Runner::<FixtureInterpreter, NullInterface, FixtureExtern>::new(
         (),
-        FixtureInterpreter {
-            config: FixtureConfig::default(),
-        },
+        FixtureInterpreter { config: FixtureConfig::default() },
         NullInterface,
         FixtureExtern::default(),
     );
@@ -421,9 +403,7 @@ fn test_extern_can_reenter_the_interpreter() {
 fn test_extern_reports_side_effects_with_each_result() {
     let mut runner = Runner::<FixtureInterpreter, NullInterface, FixtureExtern>::new(
         (),
-        FixtureInterpreter {
-            config: FixtureConfig::default(),
-        },
+        FixtureInterpreter { config: FixtureConfig::default() },
         NullInterface,
         FixtureExtern::default(),
     );
@@ -442,19 +422,14 @@ fn test_extern_reports_side_effects_with_each_result() {
 fn test_null_extern_reports_configuration_failure() {
     let mut runner = Runner::<FixtureInterpreter, NullInterface, NullExtern>::new(
         (),
-        FixtureInterpreter {
-            config: FixtureConfig::default(),
-        },
+        FixtureInterpreter { config: FixtureConfig::default() },
         NullInterface,
         NullExtern,
     );
 
     let error = runner.context().call_func("extern", &[], &[]).unwrap_err();
 
-    assert!(matches!(
-        error,
-        FixtureError::Extern(ExternError::NotConfigured)
-    ));
+    assert!(matches!(error, FixtureError::Extern(ExternError::NotConfigured)));
 }
 
 fn eval_text(
@@ -470,11 +445,7 @@ fn test_runner_reset_releases_program_arena_and_resets_hosts() {
     let _guard = FRESH_BUILTIN.lock().unwrap();
     let mut runner = Runner::<FixtureInterpreter, BuiltinInterface, FixtureExtern>::new(
         (),
-        FixtureInterpreter {
-            config: FixtureConfig {
-                label: "configured".to_owned(),
-            },
-        },
+        FixtureInterpreter { config: FixtureConfig { label: "configured".to_owned() } },
         p4spec_rust::interface::p4(&Vec::new()),
         FixtureExtern::default(),
     );
@@ -489,15 +460,9 @@ fn test_runner_reset_releases_program_arena_and_resets_hosts() {
     .unwrap();
     assert!(runner.eval_program("missing", value).is_err());
     assert_eq!(eval_text(&mut runner, "next_extern"), "0");
-    assert_ne!(
-        eval_text(&mut runner, "next_builtin"),
-        eval_text(&mut runner, "next_builtin")
-    );
+    assert_ne!(eval_text(&mut runner, "next_builtin"), eval_text(&mut runner, "next_builtin"));
     runner.reset();
-    assert!(
-        typ_weak.upgrade().is_none(),
-        "previous program types must be released"
-    );
+    assert!(typ_weak.upgrade().is_none(), "previous program types must be released");
     assert_eq!(eval_text(&mut runner, "config"), "configured");
     assert_eq!(eval_text(&mut runner, "next_extern"), "0");
     let text = eval_text(&mut runner, "next_builtin");
@@ -509,9 +474,7 @@ fn test_runner_reset_releases_program_arena_and_resets_hosts() {
 fn test_runner_dispatches_program_entry_and_errors() {
     let mut runner = Runner::<FixtureInterpreter, NullInterface, NullExtern>::new(
         (),
-        FixtureInterpreter {
-            config: FixtureConfig::default(),
-        },
+        FixtureInterpreter { config: FixtureConfig::default() },
         NullInterface,
         NullExtern,
     );

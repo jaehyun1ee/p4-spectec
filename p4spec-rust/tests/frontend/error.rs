@@ -28,8 +28,5 @@ fn test_lexical_errors_convert_without_losing_category_or_span() {
         FrontendError::Lexical(error)
             if error.node == LexErrorKind::MalformedToken && error.span == expected_span
     ));
-    assert_eq!(
-        error.to_string(),
-        "malformed token at source.watsup:1.1-1.2"
-    );
+    assert_eq!(error.to_string(), "malformed token at source.watsup:1.1-1.2");
 }

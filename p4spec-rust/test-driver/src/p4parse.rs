@@ -57,10 +57,7 @@ pub fn run() -> Result<()> {
     let start = Instant::now();
     let mut suites = Vec::new();
     for (name, dirs) in [
-        (
-            "p4parse-pos.expected",
-            &["p4c/testdata/p4_16_samples", "testdata/custom"][..],
-        ),
+        ("p4parse-pos.expected", &["p4c/testdata/p4_16_samples", "testdata/custom"][..]),
         ("p4parse-neg.expected", &["p4c/testdata/p4_16_errors"][..]),
     ] {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))

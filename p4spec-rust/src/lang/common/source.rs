@@ -15,11 +15,7 @@ pub struct Position {
 impl Position {
     /// Constructs a source position
     pub fn new(file: impl Into<Rc<str>>, line: i64, column: i64) -> Self {
-        Self {
-            file: file.into(),
-            line,
-            column,
-        }
+        Self { file: file.into(), line, column }
     }
 }
 
@@ -119,11 +115,7 @@ impl<T: std::error::Error, N: fmt::Debug, S: fmt::Debug + fmt::Display> std::err
 #[macro_export]
 macro_rules! phrase {
     (node: $node:expr, span: $span:expr $(,)?) => {
-        $crate::lang::common::source::NotePhrase {
-            node: $node,
-            note: (),
-            span: $span,
-        }
+        $crate::lang::common::source::NotePhrase { node: $node, note: (), span: $span }
     };
 }
 
@@ -131,11 +123,7 @@ macro_rules! phrase {
 #[macro_export]
 macro_rules! note_phrase {
     (node: $node:expr, note: $note:expr, span: $span:expr $(,)?) => {
-        $crate::lang::common::source::NotePhrase {
-            node: $node,
-            note: ($note).into(),
-            span: $span,
-        }
+        $crate::lang::common::source::NotePhrase { node: $node, note: ($note).into(), span: $span }
     };
 }
 

@@ -110,16 +110,12 @@ impl<T, C> Backtrack<T, C> {
         match self {
             Self::Ok(value) => Self::Ok(value),
             Self::Err(children) if is_guard(&children) => Self::Err(children),
-            Self::Err(children) => Self::Err(vec![Error {
-                kind: Box::new(kind()),
-                span,
-                children,
-            }]),
-            Self::Unmatch(children) => Self::Unmatch(vec![Error {
-                kind: Box::new(kind()),
-                span,
-                children,
-            }]),
+            Self::Err(children) => {
+                Self::Err(vec![Error { kind: Box::new(kind()), span, children }])
+            }
+            Self::Unmatch(children) => {
+                Self::Unmatch(vec![Error { kind: Box::new(kind()), span, children }])
+            }
             Self::Nondet(first, second) => Self::Nondet(first, second),
         }
     }
@@ -129,11 +125,7 @@ impl<T, C> Backtrack<T, C> {
 
 impl Backtrack<()> {
     pub fn check(condition: bool, span: Span, kind: ErrorKind) -> Self {
-        if condition {
-            Self::Ok(())
-        } else {
-            Self::err(span, kind)
-        }
+        if condition { Self::Ok(()) } else { Self::err(span, kind) }
     }
 }
 

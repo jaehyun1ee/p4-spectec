@@ -33,10 +33,7 @@ pub(crate) struct Location {
 
 impl Location {
     fn from_position(position: Position) -> Self {
-        Self {
-            line: position.line,
-            column: position.column,
-        }
+        Self { line: position.line, column: position.column }
     }
 
     fn into_position(self, file: Rc<str>) -> Position {
@@ -77,16 +74,12 @@ fn translate_lalrpop_error(
             let span = location_span(file, loc, loc);
             (StfErrorKind::UnexpectedEndOfInput, span)
         }
-        ParseError::UnrecognizedToken {
-            token: (loc_l, _, loc_r),
-            ..
-        } => (
-            StfErrorKind::UnexpectedToken,
-            location_span(file, loc_l, loc_r),
-        ),
-        ParseError::ExtraToken {
-            token: (loc_l, _, loc_r),
-        } => (StfErrorKind::ExtraToken, location_span(file, loc_l, loc_r)),
+        ParseError::UnrecognizedToken { token: (loc_l, _, loc_r), .. } => {
+            (StfErrorKind::UnexpectedToken, location_span(file, loc_l, loc_r))
+        }
+        ParseError::ExtraToken { token: (loc_l, _, loc_r) } => {
+            (StfErrorKind::ExtraToken, location_span(file, loc_l, loc_r))
+        }
         ParseError::User { error } => return error,
     };
     StfError::new(kind, span)
@@ -122,10 +115,7 @@ pub fn parse_file(path: impl AsRef<Path>) -> Result<Program, StfError> {
     let file = Rc::<str>::from(path.to_string_lossy().into_owned());
     let source = fs::read_to_string(path).map_err(|error| {
         let position = Position::new(Rc::clone(&file), 0, 0);
-        StfError::new(
-            StfErrorKind::Io(error),
-            Span::new(position.clone(), position),
-        )
+        StfError::new(StfErrorKind::Io(error), Span::new(position.clone(), position))
     })?;
     parse_str(file, &source)
 }

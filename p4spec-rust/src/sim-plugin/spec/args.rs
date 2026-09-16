@@ -16,11 +16,9 @@ pub fn assoc(
         .collect::<Result<Vec<_>, _>>()?;
     let values = get::list(arena, &value_args)?;
     if names.len() != values.len() {
-        return Err(ValueError::ExpectedCount {
-            expected: names.len(),
-            actual: values.len(),
-        }
-        .into());
+        return Err(
+            ValueError::ExpectedCount { expected: names.len(), actual: values.len() }.into()
+        );
     }
     Ok(names.into_iter().zip(values.iter().copied()).collect())
 }

@@ -33,18 +33,9 @@ fn test_multicast_order_and_handle_wrap_roundtrip() {
     assert_eq!(
         state.nodes[&0],
         [
-            Node {
-                port: 12,
-                instance: 42
-            },
-            Node {
-                port: 3,
-                instance: 42
-            },
-            Node {
-                port: 12,
-                instance: 42
-            }
+            Node { port: 12, instance: 42 },
+            Node { port: 3, instance: 42 },
+            Node { port: 12, instance: 42 }
         ]
     );
     state.group_create(7);
@@ -63,33 +54,22 @@ fn test_multicast_order_and_handle_wrap_roundtrip() {
 fn test_mirror_table_native_roundtrip() {
     let table = mirror::Table::from([(-1, 1), (2, 22), (10, 10)]);
     let json = serde_json::to_value(&table).unwrap();
-    assert_eq!(
-        serde_json::from_value::<mirror::Table>(json).unwrap(),
-        table
-    );
+    assert_eq!(serde_json::from_value::<mirror::Table>(json).unwrap(), table);
 }
 
 #[test]
 fn test_arch_queue_native_value_payload_roundtrip() {
     let mut arena = ValueArena::default();
-    let value_ctx = make::text(
-        &mut arena,
-        "captured ingress context".to_owned(),
-        Span::default(),
-    )
-    .unwrap();
+    let value_ctx =
+        make::text(&mut arena, "captured ingress context".to_owned(), Span::default()).unwrap();
     let mut arch = Arch::default();
     arch.queue.push_back(Packet {
         value_ctx,
         packet_in: PacketIn::init("aB01").unwrap().parse(4).unwrap().0,
         entrypoint: Entrypoint::Ingress,
     });
-    let value_ctx = make::text(
-        &mut arena,
-        "captured egress context".to_owned(),
-        Span::default(),
-    )
-    .unwrap();
+    let value_ctx =
+        make::text(&mut arena, "captured egress context".to_owned(), Span::default()).unwrap();
     arch.queue.push_back(Packet {
         value_ctx,
         packet_in: PacketIn::init("Cd02").unwrap(),
@@ -100,42 +80,23 @@ fn test_arch_queue_native_value_payload_roundtrip() {
     arch.multicast.node_create(42, &[12, 3, 12]);
     arch.multicast.node_associate(5, 0);
     let json = encode(&arena, &arch).unwrap();
-    assert_eq!(
-        json["queue"][0]["value_ctx"]["node"],
-        json!({"Text": "captured ingress context"})
-    );
+    assert_eq!(json["queue"][0]["value_ctx"]["node"], json!({"Text": "captured ingress context"}));
     let mut arena_decoded = ValueArena::default();
-    make::text(
-        &mut arena_decoded,
-        "unrelated arena value".to_owned(),
-        Span::default(),
-    )
-    .unwrap();
+    make::text(&mut arena_decoded, "unrelated arena value".to_owned(), Span::default()).unwrap();
     let mut arch_decoded: Arch =
         decode_with(&mut arena_decoded, Encoding::ArenaIndependent, &json).unwrap();
     assert_eq!(encode(&arena_decoded, &arch_decoded).unwrap(), json);
     assert_eq!(arch_decoded.mirrortable, arch.mirrortable);
     assert_eq!(arch_decoded.multicast, arch.multicast);
     for (entrypoint, text, pkt_expect) in [
-        (
-            Entrypoint::Ingress,
-            "captured ingress context",
-            &arch.queue[0].packet_in,
-        ),
-        (
-            Entrypoint::Egress,
-            "captured egress context",
-            &arch.queue[1].packet_in,
-        ),
+        (Entrypoint::Ingress, "captured ingress context", &arch.queue[0].packet_in),
+        (Entrypoint::Egress, "captured egress context", &arch.queue[1].packet_in),
     ] {
         let pkt = arch_decoded.queue.pop_front().unwrap();
         assert_eq!(pkt.entrypoint, entrypoint);
         assert_eq!(get::text(&arena_decoded, &pkt.value_ctx).unwrap(), text);
         assert_eq!(&pkt.packet_in, pkt_expect);
-        assert_eq!(
-            pkt.packet_in.payload().unwrap(),
-            pkt_expect.payload().unwrap()
-        );
+        assert_eq!(pkt.packet_in.payload().unwrap(), pkt_expect.payload().unwrap());
     }
     assert!(arch_decoded.queue.is_empty());
 }

@@ -8,17 +8,11 @@ use p4spec_rust::{
 };
 
 fn undefined(name: impl Into<String>) -> ErrorKind {
-    ErrorKind::Context(ContextErrorKind::Undefined {
-        kind: EntityKind::Value,
-        name: name.into(),
-    })
+    ErrorKind::Context(ContextErrorKind::Undefined { kind: EntityKind::Value, name: name.into() })
 }
 
 fn span(line: i64) -> Span {
-    Span::new(
-        Position::new("choice.watsup", line, 0),
-        Position::new("choice.watsup", line, 1),
-    )
+    Span::new(Position::new("choice.watsup", line, 0), Position::new("choice.watsup", line, 1))
 }
 
 #[test]
@@ -34,11 +28,8 @@ fn test_sequential_choice_stops_at_first_success_or_fatal_error() {
             }
         });
         assert_eq!(visited, [0, 1]);
-        let expected = if fatal {
-            Backtrack::err(span(2), undefined("fatal"))
-        } else {
-            Backtrack::Ok(42)
-        };
+        let expected =
+            if fatal { Backtrack::err(span(2), undefined("fatal")) } else { Backtrack::Ok(42) };
         assert_eq!(result, expected);
     }
 }
@@ -51,16 +42,8 @@ fn test_all_unmatched_candidates_keep_trace_order() {
     assert_eq!(
         result,
         Backtrack::Unmatch(vec![
-            Error {
-                span: span(1),
-                kind: Box::new(undefined("candidate 1")),
-                children: vec![]
-            },
-            Error {
-                span: span(2),
-                kind: Box::new(undefined("candidate 2")),
-                children: vec![]
-            },
+            Error { span: span(1), kind: Box::new(undefined("candidate 1")), children: vec![] },
+            Error { span: span(2), kind: Box::new(undefined("candidate 2")), children: vec![] },
         ])
     );
     let empty: Backtrack<()> = choose_sequential([], |_: &()| panic!("empty choice evaluated"));
@@ -85,14 +68,7 @@ fn test_nesting_keeps_failure_class_locations_and_children() {
                 children: vec![],
             }],
         }];
-        assert_eq!(
-            result,
-            if fatal {
-                Backtrack::Err(traces)
-            } else {
-                Backtrack::Unmatch(traces)
-            }
-        );
+        assert_eq!(result, if fatal { Backtrack::Err(traces) } else { Backtrack::Unmatch(traces) });
     }
     assert_eq!(
         Backtrack::<_>::Ok(7).nest(span(1), || panic!("success formatted a failure")),
@@ -114,10 +90,7 @@ fn test_check_classifies_failure_as_fatal() {
         Backtrack::check(false, span(1), undefined("failed")),
         Backtrack::err(span(1), undefined("failed"))
     );
-    assert_eq!(
-        Backtrack::check(true, span(1), undefined("failed")),
-        Backtrack::Ok(())
-    );
+    assert_eq!(Backtrack::check(true, span(1), undefined("failed")), Backtrack::Ok(()));
 }
 
 #[test]
@@ -125,11 +98,7 @@ fn test_deterministic_choice_reports_second_success_even_for_equal_values() {
     let mut visited = Vec::new();
     let result = choose_deterministic(["unmatch", "first", "second", "later"], |id| {
         visited.push(*id);
-        if *id == "unmatch" {
-            Backtrack::Unmatch(vec![])
-        } else {
-            Backtrack::Ok(42)
-        }
+        if *id == "unmatch" { Backtrack::Unmatch(vec![]) } else { Backtrack::Ok(42) }
     });
     assert_eq!(visited, ["unmatch", "first", "second"]);
     assert_eq!(result, Backtrack::Nondet("first", "second"));
@@ -174,9 +143,8 @@ fn test_unique_success_survives_later_unmatches() {
 
 #[test]
 fn test_no_success_preserves_unmatch_order_and_fatal_precedence() {
-    let result: Backtrack<(), _> = choose_deterministic(["a", "b"], |id| {
-        Backtrack::unmatch(Span::default(), undefined(*id))
-    });
+    let result: Backtrack<(), _> =
+        choose_deterministic(["a", "b"], |id| Backtrack::unmatch(Span::default(), undefined(*id)));
     let traces: Vec<_> = ["a", "b"]
         .into_iter()
         .map(|message| Error {
@@ -233,8 +201,7 @@ fn test_from_result_locates_unlocated_runtime_errors() {
 
 #[test]
 fn test_nondeterminism_does_not_create_error_context() {
-    let result = Backtrack::<(), usize>::Nondet(2, 4).nest(span(1), || {
-        panic!("nondeterministic outcome created an error")
-    });
+    let result = Backtrack::<(), usize>::Nondet(2, 4)
+        .nest(span(1), || panic!("nondeterministic outcome created an error"));
     assert_eq!(result, Backtrack::<(), usize>::Nondet(2, 4));
 }

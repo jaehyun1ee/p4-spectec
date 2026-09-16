@@ -33,9 +33,7 @@ fn decode_prem(json: &json) -> Result<ast::Prem, DecodeError> {
                 not_exp: il::decode_not_exp(exp)?,
                 input_hint: il::decode_input_hint(input_hint)?,
             })),
-            ("IfPr", [exp]) => Ok(PremKind::If(IfPrem {
-                exp: il::decode_exp(exp)?,
-            })),
+            ("IfPr", [exp]) => Ok(PremKind::If(IfPrem { exp: il::decode_exp(exp)? })),
             ("IfHoldPr", [id, exp]) => Ok(PremKind::IfHold(IfHoldPrem {
                 id: il::decode_id(id)?,
                 not_exp: il::decode_not_exp(exp)?,
@@ -52,9 +50,7 @@ fn decode_prem(json: &json) -> Result<ast::Prem, DecodeError> {
                 prem: Box::new(decode_prem(prem)?),
                 prem_iter: il::decode_prem_iter(prem_iter)?,
             })),
-            ("DebugPr", [exp]) => Ok(PremKind::Debug(DebugPrem {
-                exp: il::decode_exp(exp)?,
-            })),
+            ("DebugPr", [exp]) => Ok(PremKind::Debug(DebugPrem { exp: il::decode_exp(exp)? })),
             (
                 "RulePr" | "IfPr" | "IfHoldPr" | "IfNotHoldPr" | "LetPr" | "IterPr" | "DebugPr",
                 _,
@@ -66,11 +62,7 @@ fn decode_prem(json: &json) -> Result<ast::Prem, DecodeError> {
 
 fn encode_prem(prem: &ast::Prem) -> json {
     source::encode_phrase(prem, |prem| match prem {
-        PremKind::Rule(RulePrem {
-            id,
-            not_exp,
-            input_hint,
-        }) => json!([
+        PremKind::Rule(RulePrem { id, not_exp, input_hint }) => json!([
             "RulePr",
             il::encode_id(id),
             il::encode_not_exp(not_exp),
@@ -81,11 +73,7 @@ fn encode_prem(prem: &ast::Prem) -> json {
             json!(["IfHoldPr", il::encode_id(id), il::encode_not_exp(not_exp)])
         }
         PremKind::IfNotHold(IfNotHoldPrem { id, not_exp }) => {
-            json!([
-                "IfNotHoldPr",
-                il::encode_id(id),
-                il::encode_not_exp(not_exp)
-            ])
+            json!(["IfNotHoldPr", il::encode_id(id), il::encode_not_exp(not_exp)])
         }
         PremKind::Let(LetPrem { exp_l, exp_r }) => {
             json!(["LetPr", il::encode_exp(exp_l), il::encode_exp(exp_r)])
@@ -289,8 +277,8 @@ fn decode_def(json: &json) -> Result<ast::Def, DecodeError> {
                     hints: il::decode_list(hints, el::decode_hint)?,
                 })))
             }
-            ("FuncDecD", [id, tparams, params, typ, clauses, else_clause, hints]) => Ok(
-                DefKind::MetaFunc(MetaFuncDef::Defined(Box::new(DefinedFunc {
+            ("FuncDecD", [id, tparams, params, typ, clauses, else_clause, hints]) => {
+                Ok(DefKind::MetaFunc(MetaFuncDef::Defined(Box::new(DefinedFunc {
                     id: il::decode_id(id)?,
                     tparams: il::decode_list(tparams, il::decode_tparam)?,
                     params: il::decode_list(params, il::decode_param)?,
@@ -298,8 +286,8 @@ fn decode_def(json: &json) -> Result<ast::Def, DecodeError> {
                     clauses: il::decode_list(clauses, decode_clause)?,
                     else_clause: il::decode_option(else_clause, decode_clause)?,
                     hints: il::decode_list(hints, el::decode_hint)?,
-                }))),
-            ),
+                }))))
+            }
             (
                 "ExternTypD" | "TypD" | "VarD" | "ExternRelD" | "RelD" | "ExternDecD"
                 | "BuiltinDecD" | "TableDecD" | "FuncDecD",

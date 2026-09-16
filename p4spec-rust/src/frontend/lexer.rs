@@ -198,11 +198,7 @@ where
         Self {
             file: file.into(),
             source,
-            cursor: Cursor {
-                offset: 0,
-                line: 1,
-                line_start: 0,
-            },
+            cursor: Cursor { offset: 0, line: 1, line_start: 0 },
             finished: false,
             classify_uppercase,
         }
@@ -298,11 +294,7 @@ where
     // - Source locations and results
 
     fn position(&self, cursor: Cursor) -> Position {
-        Position::new(
-            self.file.clone(),
-            cursor.line,
-            (cursor.offset - cursor.line_start) as i64,
-        )
+        Position::new(self.file.clone(), cursor.line, (cursor.offset - cursor.line_start) as i64)
     }
 
     fn span(&self, cursor_start: Cursor) -> Span {
@@ -886,10 +878,7 @@ where
     fn scan_escape(&mut self, start: Cursor, bytes: &mut Vec<u8>) -> Result<(), LexError> {
         let escape_start = self.cursor.offset;
         let Some(escape) = self.cursor_offset(escape_start + 1) else {
-            self.cursor = Cursor {
-                offset: start.offset + 1,
-                ..start
-            };
+            self.cursor = Cursor { offset: start.offset + 1, ..start };
             return Err(self.error(LexErrorKind::MalformedToken, start));
         };
 

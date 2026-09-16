@@ -35,22 +35,13 @@ fn test_runtime_mixop_punctuation_preserves_string_source_positions() {
     let Mixfix::Atom(colon) = &items[1] else {
         panic!("expected colon");
     };
-    assert_eq!(
-        colon.span,
-        Span::new(Position::new("", 1, 2), Position::new("", 1, 5))
-    );
+    assert_eq!(colon.span, Span::new(Position::new("", 1, 2), Position::new("", 1, 5)));
 
     let Mixfix::Brack(atom_l, _, atom_r) = parse_mixop("`{ k `}").unwrap() else {
         panic!("expected bracket notation");
     };
-    assert_eq!(
-        atom_l.span,
-        Span::new(Position::new("", 1, 0), Position::new("", 1, 2))
-    );
-    assert_eq!(
-        atom_r.span,
-        Span::new(Position::new("", 1, 5), Position::new("", 1, 7))
-    );
+    assert_eq!(atom_l.span, Span::new(Position::new("", 1, 0), Position::new("", 1, 2)));
+    assert_eq!(atom_r.span, Span::new(Position::new("", 1, 5), Position::new("", 1, 7)));
 }
 
 struct TempDirectory {
@@ -60,10 +51,8 @@ struct TempDirectory {
 impl TempDirectory {
     fn new() -> Self {
         let id = TEMP_DIRECTORY_ID.fetch_add(1, Ordering::Relaxed);
-        let path = std::env::temp_dir().join(format!(
-            "p4spec-rust-frontend-parse-{}-{id}",
-            std::process::id()
-        ));
+        let path = std::env::temp_dir()
+            .join(format!("p4spec-rust-frontend-parse-{}-{id}", std::process::id()));
         fs::create_dir(&path).expect("create isolated test directory");
         Self { path }
     }
@@ -84,10 +73,7 @@ fn test_empty_trailing_syntax_does_not_extend_a_definition_span() {
     let spec = crate::spec_fixture::parse("var b : bool\n\nvar i : int")
         .expect("parse adjacent definitions");
 
-    assert_eq!(
-        (spec[0].span.right.line, spec[0].span.right.column),
-        (1, 12)
-    );
+    assert_eq!((spec[0].span.right.line, spec[0].span.right.column), (1, 12));
 }
 
 #[test]
@@ -99,10 +85,7 @@ fn test_trailing_hint_sets_the_definition_span() {
     );
     let spec = crate::spec_fixture::parse(source).expect("parse a declaration with a hint");
 
-    assert_eq!(
-        (spec[0].span.right.line, spec[0].span.right.column),
-        (2, 42)
-    );
+    assert_eq!((spec[0].span.right.line, spec[0].span.right.column), (2, 42));
 }
 
 #[test]
@@ -110,10 +93,7 @@ fn test_bracketed_type_syntax_sets_the_definition_span() {
     let spec = crate::spec_fixture::parse("syntax set<K> = `{ K* `}")
         .expect("parse a bracketed notation type");
 
-    assert_eq!(
-        (spec[0].span.right.line, spec[0].span.right.column),
-        (1, 24)
-    );
+    assert_eq!((spec[0].span.right.line, spec[0].span.right.column), (1, 24));
 }
 
 #[test]
@@ -125,10 +105,7 @@ fn test_parse_file_uses_the_path_in_source_locations() {
     let spec = parse_files([&path]).expect("parse SpecTec file");
 
     assert_eq!(spec[0].span.left.file.as_ref(), path.to_string_lossy());
-    assert!(Rc::ptr_eq(
-        &spec[0].span.left.file,
-        &spec[0].span.right.file
-    ));
+    assert!(Rc::ptr_eq(&spec[0].span.left.file, &spec[0].span.right.file));
     let span = spec[0].span.clone();
     assert!(Rc::ptr_eq(&spec[0].span.left.file, &span.left.file));
     assert!(matches!(&spec[0].node, DefKind::Var(def) if def.id.node == "one"));
@@ -188,15 +165,10 @@ fn test_parse_file_reports_invalid_utf8_at_the_invalid_byte() {
     fs::write(&path, b"var x : nat\n\xff").expect("write invalid UTF-8 file");
 
     let error = parse_files([&path]).expect_err("reject invalid UTF-8");
-    let FrontendError::InvalidUtf8(error) = error else {
-        panic!("expected invalid UTF-8 error")
-    };
+    let FrontendError::InvalidUtf8(error) = error else { panic!("expected invalid UTF-8 error") };
 
     assert_eq!(error.span.left, Position::new(path.to_string_lossy(), 2, 0));
-    assert_eq!(
-        error.span.right,
-        Position::new(path.to_string_lossy(), 2, 1)
-    );
+    assert_eq!(error.span.right, Position::new(path.to_string_lossy(), 2, 1));
 }
 
 #[test]
@@ -206,10 +178,7 @@ fn test_parse_file_reports_io_and_syntax_failures_with_file_spans() {
     let FrontendError::Io(error) = parse_files([&missing]).expect_err("report missing file") else {
         panic!("expected I/O error")
     };
-    assert_eq!(
-        error.span.left,
-        Position::new(missing.to_string_lossy(), 0, 0)
-    );
+    assert_eq!(error.span.left, Position::new(missing.to_string_lossy(), 0, 0));
 
     let invalid = directory.path("syntax.watsup");
     fs::write(&invalid, "def").expect("write invalid SpecTec file");
@@ -218,12 +187,6 @@ fn test_parse_file_reports_io_and_syntax_failures_with_file_spans() {
         panic!("expected syntax error")
     };
     assert_eq!(error.node, SyntaxErrorKind::UnexpectedToken);
-    assert_eq!(
-        error.span.left,
-        Position::new(invalid.to_string_lossy(), 1, 3)
-    );
-    assert_eq!(
-        error.span.right,
-        Position::new(invalid.to_string_lossy(), 1, 3)
-    );
+    assert_eq!(error.span.left, Position::new(invalid.to_string_lossy(), 1, 3));
+    assert_eq!(error.span.right, Position::new(invalid.to_string_lossy(), 1, 3));
 }

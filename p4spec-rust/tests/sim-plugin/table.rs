@@ -69,10 +69,7 @@ impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for TableInterp {
         assert_eq!(name, call_expect.name);
         assert_eq!(values.len(), call_expect.args.len());
         for (value_actual, value_expect) in values.iter().zip(&call_expect.args) {
-            assert_eq!(
-                ctx.arena().canon_id(value_actual),
-                ctx.arena().canon_id(value_expect)
-            );
+            assert_eq!(ctx.arena().canon_id(value_actual), ctx.arena().canon_id(value_expect));
             assert_eq!(ctx.arena().typ(value_actual), ctx.arena().typ(value_expect));
         }
         Ok(call_expect.value)
@@ -86,10 +83,7 @@ fn scripted_runner() -> TableRunner {
 }
 
 fn typ_named(name: &str) -> Typ {
-    typ::make::var(
-        p4spec_rust::phrase!(node: name.to_owned(), span: Span::default()),
-        vec![],
-    )
+    typ::make::var(p4spec_rust::phrase!(node: name.to_owned(), span: Span::default()), vec![])
 }
 
 fn text(arena: &mut ValueArena, name: &str) -> Value {
@@ -101,31 +95,21 @@ fn tuple(arena: &mut ValueArena, name: &str, values: Vec<Value>) -> Value {
 }
 
 fn list(arena: &mut ValueArena, name: &str, values: Vec<Value>) -> Value {
-    make::list(
-        arena,
-        typ::make::list(typ_named(name)).node.into(),
-        values,
-        Span::default(),
-    )
-    .unwrap()
+    make::list(arena, typ::make::list(typ_named(name)).node.into(), values, Span::default())
+        .unwrap()
 }
 
 fn opt(arena: &mut ValueArena, value: Option<Value>) -> Value {
-    make::opt(
-        arena,
-        typ::make::opt(typ_named("object")).node.into(),
-        value,
-        Span::default(),
-    )
-    .unwrap()
+    make::opt(arena, typ::make::opt(typ_named("object")).node.into(), value, Span::default())
+        .unwrap()
 }
 
 fn call(runner: &mut TableRunner, name: &'static str, args: &[Value], value: Value) {
-    runner.context().interp_mut().calls.push_back(Call {
-        name,
-        args: args.to_vec(),
-        value,
-    });
+    runner
+        .context()
+        .interp_mut()
+        .calls
+        .push_back(Call { name, args: args.to_vec(), value });
 }
 
 #[test]
@@ -150,12 +134,7 @@ fn test_qualified_precedence_and_repeated_lookup_for_update() {
             if qualified { value_some } else { value_none },
         );
         if !qualified {
-            call(
-                &mut runner,
-                "find_object_unqualified_e",
-                &[value_arch, value_short],
-                value_some,
-            );
+            call(&mut runner, "find_object_unqualified_e", &[value_arch, value_short], value_some);
         }
         call(
             &mut runner,
@@ -163,12 +142,7 @@ fn test_qualified_precedence_and_repeated_lookup_for_update() {
             &[value_ctx, value_table, value_ctx],
             value_updated,
         );
-        call(
-            &mut runner,
-            "find_object_qualified_e",
-            &[value_arch, value_id],
-            value_some,
-        );
+        call(&mut runner, "find_object_qualified_e", &[value_arch, value_id], value_some);
         call(
             &mut runner,
             "update_object_qualified_e",
@@ -199,12 +173,7 @@ fn test_unqualified_update_fallback_and_missing_table() {
     let value_short = text(runner.arena_mut(), "table");
     let value_id = list(runner.arena_mut(), "nameIR", vec![value_pipe, value_short]);
     let value_none = opt(runner.arena_mut(), None);
-    call(
-        &mut runner,
-        "find_object_qualified_e",
-        &[value_arch, value_id],
-        value_none,
-    );
+    call(&mut runner, "find_object_qualified_e", &[value_arch, value_id], value_none);
     call(
         &mut runner,
         "update_object_unqualified_e",
@@ -215,12 +184,7 @@ fn test_unqualified_update_fallback_and_missing_table() {
         table::update_table(&mut runner.context(), value_arch, value_name, value_name).unwrap(),
         value_name
     );
-    call(
-        &mut runner,
-        "find_object_unqualified_e",
-        &[value_arch, value_short],
-        value_none,
-    );
+    call(&mut runner, "find_object_unqualified_e", &[value_arch, value_short], value_none);
     assert!(table::find_table(&mut runner.context(), value_arch, value_short).is_err());
     assert!(runner.context().interp().calls.is_empty());
 }
@@ -237,78 +201,28 @@ fn test_key_retry_preserves_order_omits_selector_and_accepts_extra_tuple_fields(
     let value_b = text(runner.arena_mut(), "a");
     let value_exact = text(runner.arena_mut(), "exact");
     let value_selector = text(runner.arena_mut(), "selector");
-    let value_key_a = tuple(
-        runner.arena_mut(),
-        "key",
-        vec![value_a, value_exact, value_ctx],
-    );
-    let value_key_selector = tuple(
-        runner.arena_mut(),
-        "key",
-        vec![value_ctx, value_selector, value_ctx],
-    );
-    let value_key_b = tuple(
-        runner.arena_mut(),
-        "key",
-        vec![value_b, value_exact, value_ctx],
-    );
-    let value_interface = list(
-        runner.arena_mut(),
-        "key",
-        vec![value_key_a, value_key_selector, value_key_b],
-    );
-    let value_key_a = tuple(
-        runner.arena_mut(),
-        "tableKeyInterface",
-        vec![value_ctx, value_a, value_b],
-    );
-    let value_key_b = tuple(
-        runner.arena_mut(),
-        "tableKeyInterface",
-        vec![value_ctx, value_b],
-    );
-    let value_keys = list(
-        runner.arena_mut(),
-        "tableKeyInterface",
-        vec![value_key_a, value_key_b],
-    );
-    let value_key_a = tuple(
-        runner.arena_mut(),
-        "tableKeyInterface",
-        vec![value_a, value_a],
-    );
-    let value_key_b = tuple(
-        runner.arena_mut(),
-        "tableKeyInterface",
-        vec![value_b, value_b],
-    );
-    let value_retry = list(
-        runner.arena_mut(),
-        "tableKeyInterface",
-        vec![value_key_a, value_key_b],
-    );
-    assert!(matches!(
-        runner.arena().typ(&value_retry).as_ref(),
-        TypKind::Iter(_, _)
-    ));
-    call(
-        &mut runner,
-        "find_object_unqualified_e",
-        &[value_arch, value_name],
-        value_some,
-    );
+    let value_key_a = tuple(runner.arena_mut(), "key", vec![value_a, value_exact, value_ctx]);
+    let value_key_selector =
+        tuple(runner.arena_mut(), "key", vec![value_ctx, value_selector, value_ctx]);
+    let value_key_b = tuple(runner.arena_mut(), "key", vec![value_b, value_exact, value_ctx]);
+    let value_interface =
+        list(runner.arena_mut(), "key", vec![value_key_a, value_key_selector, value_key_b]);
+    let value_key_a =
+        tuple(runner.arena_mut(), "tableKeyInterface", vec![value_ctx, value_a, value_b]);
+    let value_key_b = tuple(runner.arena_mut(), "tableKeyInterface", vec![value_ctx, value_b]);
+    let value_keys = list(runner.arena_mut(), "tableKeyInterface", vec![value_key_a, value_key_b]);
+    let value_key_a = tuple(runner.arena_mut(), "tableKeyInterface", vec![value_a, value_a]);
+    let value_key_b = tuple(runner.arena_mut(), "tableKeyInterface", vec![value_b, value_b]);
+    let value_retry = list(runner.arena_mut(), "tableKeyInterface", vec![value_key_a, value_key_b]);
+    assert!(matches!(runner.arena().typ(&value_retry).as_ref(), TypKind::Iter(_, _)));
+    call(&mut runner, "find_object_unqualified_e", &[value_arch, value_name], value_some);
     call(
         &mut runner,
         "tableObject_add_entry",
         &[value_ctx, value_name, value_ctx, value_keys, value_ctx],
         value_none,
     );
-    call(
-        &mut runner,
-        "key_interface_of_tableObject",
-        &[value_name],
-        value_interface,
-    );
+    call(&mut runner, "key_interface_of_tableObject", &[value_name], value_interface);
     call(
         &mut runner,
         "tableObject_add_entry",
@@ -339,14 +253,9 @@ fn test_key_retry_preserves_order_omits_selector_and_accepts_extra_tuple_fields(
 
 #[test]
 fn test_retry_shape_count_and_second_failure_never_update_architecture() {
-    for invalid in [
-        "arity",
-        "match kind",
-        "key arity",
-        "tuple projection",
-        "key count",
-        "second failure",
-    ] {
+    for invalid in
+        ["arity", "match kind", "key arity", "tuple projection", "key count", "second failure"]
+    {
         let mut runner = scripted_runner();
         let value_arch = text(runner.arena_mut(), "arch");
         let value_name = text(runner.arena_mut(), "table");
@@ -356,11 +265,7 @@ fn test_retry_shape_count_and_second_failure_never_update_architecture() {
         let value_none = opt(runner.arena_mut(), None);
         let mut values_key = vec![
             value_name,
-            if invalid == "match kind" {
-                value_bad
-            } else {
-                value_exact
-            },
+            if invalid == "match kind" { value_bad } else { value_exact },
             value_name,
         ];
         if invalid == "arity" {
@@ -388,24 +293,14 @@ fn test_retry_shape_count_and_second_failure_never_update_architecture() {
                 vec![value_key]
             },
         );
-        call(
-            &mut runner,
-            "find_object_unqualified_e",
-            &[value_arch, value_name],
-            value_some,
-        );
+        call(&mut runner, "find_object_unqualified_e", &[value_arch, value_name], value_some);
         call(
             &mut runner,
             "tableObject_add_entry",
             &[value_arch, value_name, value_arch, value_keys, value_arch],
             value_none,
         );
-        call(
-            &mut runner,
-            "key_interface_of_tableObject",
-            &[value_name],
-            value_interface,
-        );
+        call(&mut runner, "key_interface_of_tableObject", &[value_name], value_interface);
         if invalid == "second failure" {
             call(
                 &mut runner,
@@ -469,9 +364,7 @@ fn test_native_table_entries_append_priorities_and_default_changes_are_isolated(
     let values = runner
         .eval_program("Program_init", program)
         .unwrap_or_else(|error| panic!("{error}"));
-    let [value_ctx, value_store] = values.as_slice() else {
-        panic!("initialization outputs")
-    };
+    let [value_ctx, value_store] = values.as_slice() else { panic!("initialization outputs") };
     let value_ctx = *value_ctx;
     let value_store = *value_store;
     let (value_state, _) = runner
@@ -504,16 +397,10 @@ fn test_native_table_entries_append_priorities_and_default_changes_are_isolated(
     let value_args = list(runner.arena_mut(), "tableActionArgumentInterface", vec![]);
     let value_a = text(runner.arena_mut(), "a");
     let value_b = text(runner.arena_mut(), "b");
-    let value_action_a = tuple(
-        runner.arena_mut(),
-        "tableActionInterface",
-        vec![value_a, value_args],
-    );
-    let value_action_b = tuple(
-        runner.arena_mut(),
-        "tableActionInterface",
-        vec![value_b, value_args],
-    );
+    let value_action_a =
+        tuple(runner.arena_mut(), "tableActionInterface", vec![value_a, value_args]);
+    let value_action_b =
+        tuple(runner.arena_mut(), "tableActionInterface", vec![value_b, value_args]);
     let mut value_arch_updated = value_arch;
     for priority in [3, 17] {
         let value_priority =

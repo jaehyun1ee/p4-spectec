@@ -55,13 +55,10 @@ fn translate_lalrpop_error(ctx: &Context, error: ParseError<Location, Token, P4E
             let position = ctx.location_get(location);
             Span::new(position.clone(), position)
         }
-        ParseError::UnrecognizedToken {
-            token: (location_l, _, location_r),
-            ..
+        ParseError::UnrecognizedToken { token: (location_l, _, location_r), .. }
+        | ParseError::ExtraToken { token: (location_l, _, location_r) } => {
+            ctx.location_span(location_l, location_r)
         }
-        | ParseError::ExtraToken {
-            token: (location_l, _, location_r),
-        } => ctx.location_span(location_l, location_r),
         ParseError::User { error } => return error,
     };
     P4Error::new(P4ErrorKind::Syntax, span)

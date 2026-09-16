@@ -169,11 +169,7 @@ pub mod make {
 
     pub fn func(tparams: Vec<TId>, typs_params: Vec<Typ>, typ_ret: Typ) -> Typ {
         let typ_ret = Box::new(typ_ret);
-        let func_typ = FuncTyp {
-            tparams,
-            typs_params,
-            typ_ret,
-        };
+        let func_typ = FuncTyp { tparams, typs_params, typ_ret };
         let typ_kind = TypKind::Func(func_typ);
         phrase!(node: typ_kind, span: Span::default())
     }

@@ -31,28 +31,10 @@ fn test_numeric_membership_preserves_nat_subtyping() {
     let nonnegative_int = make::int(&mut arena, BigInt::from(3), Span::default()).unwrap();
     let negative_int = make::int(&mut arena, BigInt::from(-1), Span::default()).unwrap();
 
-    assert_eq!(
-        sub(&arena, &tdenv, &find_func, &typ::make::nat(), &nat),
-        Ok(true)
-    );
-    assert_eq!(
-        sub(
-            &arena,
-            &tdenv,
-            &find_func,
-            &typ::make::nat(),
-            &nonnegative_int
-        ),
-        Ok(true)
-    );
-    assert_eq!(
-        sub(&arena, &tdenv, &find_func, &typ::make::nat(), &negative_int),
-        Ok(false)
-    );
-    assert_eq!(
-        sub(&arena, &tdenv, &find_func, &typ::make::int(), &nat),
-        Ok(true)
-    );
+    assert_eq!(sub(&arena, &tdenv, &find_func, &typ::make::nat(), &nat), Ok(true));
+    assert_eq!(sub(&arena, &tdenv, &find_func, &typ::make::nat(), &nonnegative_int), Ok(true));
+    assert_eq!(sub(&arena, &tdenv, &find_func, &typ::make::nat(), &negative_int), Ok(false));
+    assert_eq!(sub(&arena, &tdenv, &find_func, &typ::make::int(), &nat), Ok(true));
 }
 
 #[test]
@@ -71,10 +53,7 @@ fn test_extern_type_membership_uses_shared_type_environment() {
     .unwrap();
     let find_func = |_: &str| None::<FuncTyp>;
 
-    assert_eq!(
-        sub(&arena, &tdenv, &find_func, &extern_typ, &value),
-        Ok(true)
-    );
+    assert_eq!(sub(&arena, &tdenv, &find_func, &extern_typ, &value), Ok(true));
 }
 
 #[test]
@@ -83,14 +62,8 @@ fn test_undefined_names_return_located_typed_errors() {
     let missing_typ = typ::make::var(id("missing"), vec![]);
     let value = make::bool(&mut arena, true, Span::default()).unwrap();
 
-    let error = sub(
-        &arena,
-        &TDEnv::new(),
-        &|_: &str| None::<FuncTyp>,
-        &missing_typ,
-        &value,
-    )
-    .unwrap_err();
+    let error =
+        sub(&arena, &TDEnv::new(), &|_: &str| None::<FuncTyp>, &missing_typ, &value).unwrap_err();
 
     assert!(matches!(error, MatchError::UndefinedType { ref name, .. } if name == "missing"));
 
@@ -141,13 +114,7 @@ fn test_recursive_subchecks_walk_tuple_and_list_values() {
     ]);
 
     assert_eq!(
-        check(
-            &arena,
-            &TDEnv::new(),
-            &|_: &str| None::<FuncTyp>,
-            &subcheck,
-            &tuple_value
-        ),
+        check(&arena, &TDEnv::new(), &|_: &str| None::<FuncTyp>, &subcheck, &tuple_value),
         Ok(true)
     );
 }
@@ -156,11 +123,8 @@ fn test_recursive_subchecks_walk_tuple_and_list_values() {
 fn test_list_membership_rejects_arity_mismatch() {
     let mut arena = ValueArena::new();
     let values = vec![make::bool(&mut arena, true, Span::default()).unwrap()];
-    let func_typ = FuncTyp {
-        tparams: vec![],
-        typs_params: vec![],
-        typ_ret: Box::new(typ::make::bool()),
-    };
+    let func_typ =
+        FuncTyp { tparams: vec![], typs_params: vec![], typ_ret: Box::new(typ::make::bool()) };
 
     assert_eq!(
         subs(

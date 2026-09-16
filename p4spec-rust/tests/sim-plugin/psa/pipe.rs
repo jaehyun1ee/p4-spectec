@@ -28,19 +28,14 @@ fn test_native_psa_micro_fixture_packets() {
                     psa::drive_pipe(
                         &mut runner.context(),
                         &mut state,
-                        &Rx {
-                            port: port.parse().unwrap(),
-                            packet,
-                        },
+                        &Rx { port: port.parse().unwrap(), packet },
                     )
                     .unwrap();
                     txs.extend(state.txs.iter().map(|tx| (tx.port, tx.packet.clone())));
                 }
-                Statement::Expect {
-                    port,
-                    packet_expected: Some(packet),
-                    ..
-                } => txs_expect.push((port.parse::<i64>().unwrap(), packet.to_ascii_uppercase())),
+                Statement::Expect { port, packet_expected: Some(packet), .. } => {
+                    txs_expect.push((port.parse::<i64>().unwrap(), packet.to_ascii_uppercase()))
+                }
                 _ => panic!("micro fixture contains packet and expectation statements"),
             }
         }
@@ -77,10 +72,7 @@ fn pipeline() -> (Runner, SimState) {
     psa::drive_pipe(
         &mut runner.context(),
         &mut state,
-        &Rx {
-            port: 4,
-            packet: "000000000001000000000000FFFF".to_owned(),
-        },
+        &Rx { port: 4, packet: "000000000001000000000000FFFF".to_owned() },
     )
     .unwrap();
     (runner, state)
@@ -136,14 +128,9 @@ fn read_int(
     metadata: &str,
     field: &str,
 ) -> i64 {
-    let value = rel::lvalue_read_dot_global(
-        &mut runner.context(),
-        value_ctx,
-        value_arch,
-        metadata,
-        field,
-    )
-    .unwrap();
+    let value =
+        rel::lvalue_read_dot_global(&mut runner.context(), value_ctx, value_arch, metadata, field)
+            .unwrap();
     (unpack::p4_fixed_bit(runner.arena(), &value).unwrap().1)
         .to_i64()
         .unwrap()
@@ -175,28 +162,9 @@ fn configure_mirror(runner: &mut Runner, state: &mut SimState) {
 fn test_clone_survives_ingress_drop() {
     let (mut runner, mut state) = pipeline();
     configure_mirror(&mut runner, &mut state);
-    write_bool(
-        &mut runner,
-        &mut state,
-        "ingress_output_metadata",
-        "clone",
-        true,
-    );
-    write_int(
-        &mut runner,
-        &mut state,
-        "ingress_output_metadata",
-        "clone_session_id",
-        16,
-        5,
-    );
-    write_bool(
-        &mut runner,
-        &mut state,
-        "ingress_output_metadata",
-        "drop",
-        true,
-    );
+    write_bool(&mut runner, &mut state, "ingress_output_metadata", "clone", true);
+    write_int(&mut runner, &mut state, "ingress_output_metadata", "clone_session_id", 16, 5);
+    write_bool(&mut runner, &mut state, "ingress_output_metadata", "drop", true);
     let value_ctx_original = state.value_ctx;
     let value_arch_original = state.value_arch;
     pipe::run_pre(&mut runner.context(), &mut state).unwrap();
@@ -217,12 +185,7 @@ fn test_clone_survives_ingress_drop() {
             port
         );
         assert_eq!(
-            read_path(
-                &mut runner,
-                packet.value_ctx,
-                state.value_arch,
-                "egress_input_metadata"
-            ),
+            read_path(&mut runner, packet.value_ctx, state.value_arch, "egress_input_metadata"),
             "CLONE_I2E"
         );
     }
@@ -237,10 +200,7 @@ fn test_clone_survives_ingress_drop() {
     );
     state.txs.clear();
     pipe::run_scheduler(&mut runner.context(), &mut state).unwrap();
-    assert_eq!(
-        state.txs.iter().map(|tx| tx.port).collect::<Vec<_>>(),
-        [12, 3]
-    );
+    assert_eq!(state.txs.iter().map(|tx| tx.port).collect::<Vec<_>>(), [12, 3]);
     let txs: Vec<_> = state
         .txs
         .iter()
@@ -263,43 +223,11 @@ fn test_clone_survives_ingress_drop() {
 fn test_resubmit_and_recirculate_preserve_queue_order() {
     let (mut runner, mut state) = pipeline();
     configure_mirror(&mut runner, &mut state);
-    write_bool(
-        &mut runner,
-        &mut state,
-        "ingress_output_metadata",
-        "clone",
-        true,
-    );
-    write_int(
-        &mut runner,
-        &mut state,
-        "ingress_output_metadata",
-        "clone_session_id",
-        16,
-        5,
-    );
-    write_bool(
-        &mut runner,
-        &mut state,
-        "ingress_output_metadata",
-        "drop",
-        false,
-    );
-    write_bool(
-        &mut runner,
-        &mut state,
-        "ingress_output_metadata",
-        "resubmit",
-        true,
-    );
-    write_int(
-        &mut runner,
-        &mut state,
-        "ingress_output_metadata",
-        "multicast_group",
-        16,
-        7,
-    );
+    write_bool(&mut runner, &mut state, "ingress_output_metadata", "clone", true);
+    write_int(&mut runner, &mut state, "ingress_output_metadata", "clone_session_id", 16, 5);
+    write_bool(&mut runner, &mut state, "ingress_output_metadata", "drop", false);
+    write_bool(&mut runner, &mut state, "ingress_output_metadata", "resubmit", true);
+    write_int(&mut runner, &mut state, "ingress_output_metadata", "multicast_group", 16, 7);
     pipe::run_pre(&mut runner.context(), &mut state).unwrap();
     let arch = pipe::find_arch_state(&mut runner.context(), state.value_arch).unwrap();
     assert_eq!(
@@ -311,12 +239,7 @@ fn test_resubmit_and_recirculate_preserve_queue_order() {
     );
     let packet = &arch.queue[2];
     assert_eq!(
-        read_path(
-            &mut runner,
-            packet.value_ctx,
-            state.value_arch,
-            "ingress_input_metadata"
-        ),
+        read_path(&mut runner, packet.value_ctx, state.value_arch, "ingress_input_metadata"),
         "RESUBMIT"
     );
     assert_eq!(
@@ -331,55 +254,19 @@ fn test_resubmit_and_recirculate_preserve_queue_order() {
     );
     assert_eq!(packet.packet_in.idx, 0);
 
-    write_bool(
-        &mut runner,
-        &mut state,
-        "egress_output_metadata",
-        "clone",
-        true,
-    );
-    write_int(
-        &mut runner,
-        &mut state,
-        "egress_output_metadata",
-        "clone_session_id",
-        16,
-        5,
-    );
-    write_bool(
-        &mut runner,
-        &mut state,
-        "egress_output_metadata",
-        "drop",
-        false,
-    );
-    write_int(
-        &mut runner,
-        &mut state,
-        "egress_input_metadata",
-        "egress_port",
-        32,
-        0xfffffffa,
-    );
+    write_bool(&mut runner, &mut state, "egress_output_metadata", "clone", true);
+    write_int(&mut runner, &mut state, "egress_output_metadata", "clone_session_id", 16, 5);
+    write_bool(&mut runner, &mut state, "egress_output_metadata", "drop", false);
+    write_int(&mut runner, &mut state, "egress_input_metadata", "egress_port", 32, 0xfffffffa);
     pipe::run_bqe(&mut runner.context(), &mut state).unwrap();
     let arch = pipe::find_arch_state(&mut runner.context(), state.value_arch).unwrap();
     assert_eq!(arch.queue.len(), 6);
     assert_eq!(
-        read_path(
-            &mut runner,
-            arch.queue[3].value_ctx,
-            state.value_arch,
-            "egress_input_metadata"
-        ),
+        read_path(&mut runner, arch.queue[3].value_ctx, state.value_arch, "egress_input_metadata"),
         "CLONE_E2E"
     );
     assert_eq!(
-        read_path(
-            &mut runner,
-            arch.queue[5].value_ctx,
-            state.value_arch,
-            "ingress_input_metadata"
-        ),
+        read_path(&mut runner, arch.queue[5].value_ctx, state.value_arch, "ingress_input_metadata"),
         "RECIRCULATE"
     );
     assert_eq!(
@@ -395,21 +282,8 @@ fn test_resubmit_and_recirculate_preserve_queue_order() {
 
     state.value_arch =
         pipe::update_arch_state(&mut runner.context(), state.value_arch, &Arch::default()).unwrap();
-    write_bool(
-        &mut runner,
-        &mut state,
-        "egress_output_metadata",
-        "clone",
-        false,
-    );
-    write_int(
-        &mut runner,
-        &mut state,
-        "egress_input_metadata",
-        "egress_port",
-        33,
-        0xfffffffa,
-    );
+    write_bool(&mut runner, &mut state, "egress_output_metadata", "clone", false);
+    write_int(&mut runner, &mut state, "egress_input_metadata", "egress_port", 33, 0xfffffffa);
     let num_txs = state.txs.len();
     pipe::run_bqe(&mut runner.context(), &mut state).unwrap();
     assert_eq!(state.txs.len(), num_txs + 1);
@@ -432,12 +306,7 @@ fn test_multicast_restores_context_without_losing_effects() {
     assert_eq!(arch.queue.len(), 2);
     for (packet, port) in arch.queue.iter().zip([12, 3]) {
         assert_eq!(
-            read_path(
-                &mut runner,
-                packet.value_ctx,
-                state.value_arch,
-                "egress_input_metadata"
-            ),
+            read_path(&mut runner, packet.value_ctx, state.value_arch, "egress_input_metadata"),
             "NORMAL_MULTICAST"
         );
         assert_eq!(
@@ -474,10 +343,7 @@ fn test_empty_scheduler_retains_transmissions() {
     let path = super::super::repo().join("p4spec/test/micro/sim-psa/psa.p4");
     let program = super::super::parse_program(runner.arena_mut(), &path);
     let mut state = psa::init_pipe(&mut runner.context(), program).unwrap();
-    state.txs.push(Tx {
-        port: 9,
-        packet: "AB".to_owned(),
-    });
+    state.txs.push(Tx { port: 9, packet: "AB".to_owned() });
     let value_ctx = state.value_ctx;
     let value_arch = state.value_arch;
     pipe::run_scheduler(&mut runner.context(), &mut state).unwrap();
@@ -528,10 +394,7 @@ fn test_native_replication_fixture_order_and_persistent_counter() {
                 )
                 .unwrap()
             }
-            Statement::McNodeCreate {
-                replication_id: id_replication,
-                ports,
-            } => {
+            Statement::McNodeCreate { replication_id: id_replication, ports } => {
                 let ports = ports
                     .iter()
                     .map(|port| port.parse::<i64>().unwrap())
@@ -544,10 +407,7 @@ fn test_native_replication_fixture_order_and_persistent_counter() {
                 )
                 .unwrap();
             }
-            Statement::McNodeAssociate {
-                group_id: id_group,
-                handle,
-            } => {
+            Statement::McNodeAssociate { group_id: id_group, handle } => {
                 state.value_arch = pipe::mc_node_associate(
                     &mut runner.context(),
                     state.value_arch,
@@ -556,10 +416,7 @@ fn test_native_replication_fixture_order_and_persistent_counter() {
                 )
                 .unwrap()
             }
-            Statement::MirroringAddMc {
-                session,
-                group_id: id_group,
-            } => {
+            Statement::MirroringAddMc { session, group_id: id_group } => {
                 state.value_arch = pipe::add_mirror_session_mc(
                     &mut runner.context(),
                     state.value_arch,
@@ -572,10 +429,7 @@ fn test_native_replication_fixture_order_and_persistent_counter() {
                 psa::drive_pipe(
                     &mut runner.context(),
                     &mut state,
-                    &Rx {
-                        port: port.parse::<i64>().unwrap(),
-                        packet,
-                    },
+                    &Rx { port: port.parse::<i64>().unwrap(), packet },
                 )
                 .unwrap();
                 txs.extend(state.txs.iter().map(|tx| (tx.port, tx.packet.clone())));
@@ -585,11 +439,9 @@ fn test_native_replication_fixture_order_and_persistent_counter() {
                 assert_eq!(arch.multicast.groups[&7], [0]);
                 assert_eq!(arch.mirrortable[&5], 7);
             }
-            Statement::Expect {
-                port,
-                packet_expected: Some(packet),
-                ..
-            } => txs_expect.push((port.parse::<i64>().unwrap(), packet)),
+            Statement::Expect { port, packet_expected: Some(packet), .. } => {
+                txs_expect.push((port.parse::<i64>().unwrap(), packet))
+            }
             _ => {
                 panic!("replication fixture contains only supported setup, packet and expectations")
             }

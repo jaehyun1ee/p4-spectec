@@ -99,22 +99,10 @@ fn test_conversion_preserves_rule_paths_and_populates_antiunified_inputs_in_orde
             })
             .collect::<Vec<_>>()
     };
-    assert_eq!(
-        compared_values(&rule_group.node.rule_paths[0].prems),
-        vec![true, false]
-    );
-    assert_eq!(
-        compared_values(&rule_group.node.rule_paths[1].prems),
-        vec![false, true]
-    );
-    assert!(matches!(
-        rule_group.node.rule_paths[0].exps_output[0].node,
-        ast::ExpKind::Bool(true)
-    ));
-    assert!(matches!(
-        rule_group.node.rule_paths[1].exps_output[0].node,
-        ast::ExpKind::Bool(false)
-    ));
+    assert_eq!(compared_values(&rule_group.node.rule_paths[0].prems), vec![true, false]);
+    assert_eq!(compared_values(&rule_group.node.rule_paths[1].prems), vec![false, true]);
+    assert!(matches!(rule_group.node.rule_paths[0].exps_output[0].node, ast::ExpKind::Bool(true)));
+    assert!(matches!(rule_group.node.rule_paths[1].exps_output[0].node, ast::ExpKind::Bool(false)));
 }
 
 #[test]
@@ -287,11 +275,8 @@ fn test_conversion_rejects_overlapping_and_missing_variant_table_patterns() {
     };
     let case_pattern = |name: &str, line: i64| {
         let keyword = crate::phrase! { node: Atom::Keyword(name.to_owned()), span:  span(line) };
-        let case = exp(
-            ast::ExpKind::Case(Box::new(Mixfix::Atom(keyword))),
-            choice_typ.node.clone(),
-            line,
-        );
+        let case =
+            exp(ast::ExpKind::Case(Box::new(Mixfix::Atom(keyword))), choice_typ.node.clone(), line);
         exp(
             ast::ExpKind::UpCast(Box::new(choice_typ.clone()), Box::new(case)),
             choice_typ.node.clone(),
@@ -300,13 +285,7 @@ fn test_conversion_rejects_overlapping_and_missing_variant_table_patterns() {
     };
     let overlap_spec = vec![
         choice_def.clone(),
-        table(
-            vec![
-                row(case_pattern("A", 10), 10),
-                row(case_pattern("A", 11), 11),
-            ],
-            9,
-        ),
+        table(vec![row(case_pattern("A", 10), 10), row(case_pattern("A", 11), 11)], 9),
     ];
 
     let overlap_error =
@@ -363,11 +342,7 @@ fn test_conversion_preserves_definition_clause_and_table_row_order() {
     }))), span:
     span(3) };
     let row = |name: &str, value: bool, line: i64| {
-        let pattern = exp(
-            ast::ExpKind::Var(id(name, line)),
-            choice_typ.node.clone(),
-            line,
-        );
+        let pattern = exp(ast::ExpKind::Var(id(name, line)), choice_typ.node.clone(), line);
         crate::phrase! { node:
         (
             vec![crate::phrase! { node:

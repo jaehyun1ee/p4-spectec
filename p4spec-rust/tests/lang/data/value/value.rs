@@ -63,13 +63,9 @@ fn test_value_views_resolve_nested_handles_in_each_arena() {
         .note,
         ..child_r
     };
-    let value_l = make::tuple(
-        &mut arena_l,
-        typ::TypKind::Bool.into(),
-        vec![child_l],
-        span("left.p4", 4),
-    )
-    .unwrap();
+    let value_l =
+        make::tuple(&mut arena_l, typ::TypKind::Bool.into(), vec![child_l], span("left.p4", 4))
+            .unwrap();
     let value_r_false = make::tuple(
         &mut arena_r,
         typ::TypKind::Bool.into(),
@@ -77,13 +73,9 @@ fn test_value_views_resolve_nested_handles_in_each_arena() {
         span("right.p4", 5),
     )
     .unwrap();
-    let value_r = make::tuple(
-        &mut arena_r,
-        typ::TypKind::Text.into(),
-        vec![child_r],
-        span("right.p4", 6),
-    )
-    .unwrap();
+    let value_r =
+        make::tuple(&mut arena_r, typ::TypKind::Text.into(), vec![child_r], span("right.p4", 6))
+            .unwrap();
 
     assert!(arena_l.view(value_l).syntax_eq(&arena_r.view(value_r)));
     assert!(
@@ -157,25 +149,14 @@ fn test_external_json_order_agrees_with_identity_and_hash_across_arenas() {
     let values_a = payloads
         .iter()
         .map(|json| {
-            make::external(
-                &mut arena_a,
-                typ.clone(),
-                json.clone().into(),
-                Span::default(),
-            )
-            .unwrap()
+            make::external(&mut arena_a, typ.clone(), json.clone().into(), Span::default()).unwrap()
         })
         .collect::<Vec<_>>();
     let values_b = payloads
         .iter()
         .map(|json| {
-            make::external(
-                &mut arena_b,
-                typ.clone(),
-                json.clone().into(),
-                span("other.p4", 7),
-            )
-            .unwrap()
+            make::external(&mut arena_b, typ.clone(), json.clone().into(), span("other.p4", 7))
+                .unwrap()
         })
         .collect::<Vec<_>>();
     for (idx_a, value_a) in values_a.iter().enumerate() {
@@ -190,14 +171,8 @@ fn test_external_json_order_agrees_with_identity_and_hash_across_arenas() {
                 order,
                 "{idx_a}, {idx_b}"
             );
-            assert_eq!(
-                arena_b.view(*value_b).syntax_cmp(&arena_a.view(*value_a)),
-                order.reverse()
-            );
-            assert_eq!(
-                arena_a.view(*value_a).syntax_eq(&arena_b.view(*value_b)),
-                order.is_eq()
-            );
+            assert_eq!(arena_b.view(*value_b).syntax_cmp(&arena_a.view(*value_a)), order.reverse());
+            assert_eq!(arena_a.view(*value_a).syntax_eq(&arena_b.view(*value_b)), order.is_eq());
             assert_eq!(
                 arena_a.canon_id(value_a) == arena_a.canon_id(&values_a[idx_b]),
                 order.is_eq()

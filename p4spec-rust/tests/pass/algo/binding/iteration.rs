@@ -7,11 +7,7 @@ fn test_iteration_context_commits_a_successful_iteration_scope() {
         vars_bound: vec![],
         vars_bind: vec![],
     }]);
-    let iteration = Iteration {
-        iter: ast::Iter::List,
-        vars_bound: vec![],
-        vars_bind: vec![],
-    };
+    let iteration = Iteration { iter: ast::Iter::List, vars_bound: vec![], vars_bind: vec![] };
 
     let mut iter_scope = iter_ctx.scope(iteration);
     iter_scope.add_var_bound(id("x", 1), typ::make::bool(), vec![]);
@@ -34,11 +30,7 @@ fn test_iteration_context_rolls_back_a_failed_iteration_scope() {
         vars_bind: vec![],
     }]);
     let original = iter_ctx.clone();
-    let iteration = Iteration {
-        iter: ast::Iter::List,
-        vars_bound: vec![],
-        vars_bind: vec![],
-    };
+    let iteration = Iteration { iter: ast::Iter::List, vars_bound: vec![], vars_bind: vec![] };
 
     {
         let mut iter_scope = iter_ctx.scope(iteration);

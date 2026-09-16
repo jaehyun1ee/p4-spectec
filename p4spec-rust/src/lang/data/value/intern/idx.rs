@@ -56,9 +56,6 @@ impl<T> Interned<T> {
     }
 
     pub(crate) fn from_index(index: u32) -> Self {
-        Self {
-            index,
-            marker: PhantomData,
-        }
+        Self { index, marker: PhantomData }
     }
 }

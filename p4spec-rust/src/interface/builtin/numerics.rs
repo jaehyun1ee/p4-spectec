@@ -192,9 +192,8 @@ pub fn int_to_bitstr(
 // dec $bits_to_int_unsigned(bool*) : int
 
 fn bits_to_int_unsigned_value(bits: &[bool]) -> BigInt {
-    bits.iter().fold(BigInt::zero(), |value, bit| {
-        (value << 1) + usize::from(*bit)
-    })
+    bits.iter()
+        .fold(BigInt::zero(), |value, bit| (value << 1) + usize::from(*bit))
 }
 
 pub fn bits_to_int_unsigned(

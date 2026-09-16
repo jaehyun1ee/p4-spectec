@@ -84,11 +84,7 @@ impl Print for Statement {
         match self {
             Self::Wait => printer.write("wait"),
             Self::RemoveAll => printer.write("remove_all"),
-            Self::Expect {
-                port,
-                packet_expected,
-                exact,
-            } => {
+            Self::Expect { port, packet_expected, exact } => {
                 printer.write_fmt(format_args!("expect {port}"))?;
                 if packet_expected.is_some() || *exact {
                     printer.write(" ")?;
@@ -105,13 +101,7 @@ impl Print for Statement {
                 printer.write_fmt(format_args!("packet {port} {packet}"))
             }
             Self::NoPacket => printer.write("no_packet"),
-            Self::Add {
-                table,
-                priority,
-                matches,
-                action,
-                id,
-            } => {
+            Self::Add { table, priority, matches, action, id } => {
                 printer.write("add ")?;
                 write_quoted(printer, table.as_str())?;
                 if let Some(priority) = priority {
@@ -137,11 +127,7 @@ impl Print for Statement {
                 printer.write(" ")?;
                 action.print(printer)
             }
-            Self::CheckCounter {
-                counter,
-                target,
-                check,
-            } => {
+            Self::CheckCounter { counter, target, check } => {
                 printer.write("check_counter ")?;
                 write_quoted(printer, counter)?;
                 printer.write("(")?;
@@ -167,10 +153,7 @@ impl Print for Statement {
             Self::McGroupCreate { group_id } => {
                 printer.write_fmt(format_args!("mc_mgrp_create {group_id}"))
             }
-            Self::McNodeCreate {
-                replication_id,
-                ports,
-            } => {
+            Self::McNodeCreate { replication_id, ports } => {
                 printer.write_fmt(format_args!("mc_node_create {replication_id} "))?;
                 for (index, port) in ports.iter().enumerate() {
                     if index != 0 {

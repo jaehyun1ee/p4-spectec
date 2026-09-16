@@ -17,10 +17,7 @@ fn atom(node: Atom) -> p4spec_rust::lang::common::notation::mixfix::AtomPhrase {
 }
 
 fn span(line: i64) -> Span {
-    Span::new(
-        Position::new("notation.spec", line, 2),
-        Position::new("notation.spec", line, 5),
-    )
+    Span::new(Position::new("notation.spec", line, 2), Position::new("notation.spec", line, 5))
 }
 
 fn hash(value: &impl Hash) -> u64 {
@@ -85,11 +82,7 @@ fn test_syntax_comparisons_and_hashing_ignore_atom_spans() {
 #[test]
 fn test_into_args_preserves_nested_argument_order() {
     let mixfix = Mixfix::Seq(vec![
-        Mixfix::Brack(
-            atom(Atom::LParen),
-            Box::new(Mixfix::Arg(1)),
-            atom(Atom::RParen),
-        ),
+        Mixfix::Brack(atom(Atom::LParen), Box::new(Mixfix::Arg(1)), atom(Atom::RParen)),
         Mixfix::Infix(
             Box::new(Mixfix::Arg(2)),
             atom(Atom::Arrow),
@@ -107,11 +100,7 @@ fn test_eq_shape_borrows_nested_mixfixes_and_ignores_arguments() {
     let left = Mixfix::Infix(
         Box::new(Mixfix::Arg(1)),
         atom(Atom::Arrow),
-        Box::new(Mixfix::Brack(
-            atom(Atom::LParen),
-            Box::new(Mixfix::Arg(2)),
-            atom(Atom::RParen),
-        )),
+        Box::new(Mixfix::Brack(atom(Atom::LParen), Box::new(Mixfix::Arg(2)), atom(Atom::RParen))),
     );
     let right = Mixfix::Infix(
         Box::new(Mixfix::Arg("left")),

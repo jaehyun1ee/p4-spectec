@@ -84,10 +84,7 @@ impl ICtx {
     pub fn scope(&mut self, iteration: Iteration) -> IterationScope<'_> {
         let original = self.clone();
         self.0.insert(0, iteration);
-        IterationScope {
-            iter_ctx: self,
-            original: Some(original),
-        }
+        IterationScope { iter_ctx: self, original: Some(original) }
     }
 
     // == Adders
@@ -164,10 +161,7 @@ impl ICtx {
                 vars_bound: entry.vars_bound.clone(),
                 vars_bind: entry.vars_bind.clone(),
             };
-            let iter_prem = al::ast::IterPrem {
-                prem: Box::new(prem),
-                prem_iter,
-            };
+            let iter_prem = al::ast::IterPrem { prem: Box::new(prem), prem_iter };
             prem = phrase!(node: al::ast::PremKind::Iter(iter_prem), span: span);
         }
         prem

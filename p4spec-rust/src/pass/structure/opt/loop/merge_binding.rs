@@ -69,12 +69,7 @@ enum Bind<'a> {
 
 impl<'a> Bind<'a> {
     fn from_let(instr_let: &'a LetInstr) -> Self {
-        let LetInstr {
-            exp_l,
-            exp_r,
-            iter_instrs,
-            ..
-        } = instr_let;
+        let LetInstr { exp_l, exp_r, iter_instrs, .. } = instr_let;
         let (iter_exps_bound, iter_exps_bind): (Vec<_>, Vec<_>) = iter_instrs
             .iter()
             .map(|iter_instr| {
@@ -89,13 +84,7 @@ impl<'a> Bind<'a> {
     }
 
     fn from_rule(instr_rule: &'a RuleInstr, span: &Span) -> Result<Self, StructureError> {
-        let RuleInstr {
-            id,
-            not_exp,
-            input_hint,
-            iter_instrs,
-            ..
-        } = instr_rule;
+        let RuleInstr { id, not_exp, input_hint, iter_instrs, .. } = instr_rule;
         let exps = not_exp.args();
         let (exps_input, exps_output) = input::split(input_hint, exps)
             .map_err(|error| StructureError::new(StructureErrorKind::Input(error), span.clone()))?;
@@ -383,39 +372,19 @@ fn upstream_block(block: Block) -> Result<Block, StructureError> {
 // - If instruction
 
 fn upstream_if_instr(instr: IfInstr) -> Result<InstrKind, StructureError> {
-    let IfInstr {
-        exp,
-        iter_exps,
-        block,
-    } = instr;
+    let IfInstr { exp, iter_exps, block } = instr;
     let block = upstream_block(block)?;
-    let instr = IfInstr {
-        exp,
-        iter_exps,
-        block,
-    };
+    let instr = IfInstr { exp, iter_exps, block };
     Ok(InstrKind::If(instr))
 }
 
 // - Hold instruction
 
 fn upstream_hold_instr(instr: HoldInstr) -> Result<InstrKind, StructureError> {
-    let HoldInstr {
-        id,
-        not_exp,
-        iter_exps,
-        block_hold,
-        block_not_hold,
-    } = instr;
+    let HoldInstr { id, not_exp, iter_exps, block_hold, block_not_hold } = instr;
     let block_hold = upstream_block(block_hold)?;
     let block_not_hold = upstream_block(block_not_hold)?;
-    let instr = HoldInstr {
-        id,
-        not_exp,
-        iter_exps,
-        block_hold,
-        block_not_hold,
-    };
+    let instr = HoldInstr { id, not_exp, iter_exps, block_hold, block_not_hold };
     Ok(InstrKind::Hold(instr))
 }
 
@@ -439,19 +408,9 @@ fn upstream_case_instr(instr: CaseInstr) -> Result<InstrKind, StructureError> {
 // - Group instruction
 
 fn upstream_group_instr(instr: GroupInstr) -> Result<InstrKind, StructureError> {
-    let GroupInstr {
-        id,
-        rel_signature,
-        exps,
-        block,
-    } = instr;
+    let GroupInstr { id, rel_signature, exps, block } = instr;
     let block = upstream_block(block)?;
-    let instr = GroupInstr {
-        id,
-        rel_signature,
-        exps,
-        block,
-    };
+    let instr = GroupInstr { id, rel_signature, exps, block };
     Ok(InstrKind::Group(instr))
 }
 
@@ -468,19 +427,9 @@ fn upstream_let_instr(
         };
         instr.block = merge_block(instr.block, block_merge);
     }
-    let LetInstr {
-        exp_l,
-        exp_r,
-        iter_instrs,
-        block,
-    } = instr;
+    let LetInstr { exp_l, exp_r, iter_instrs, block } = instr;
     let block = upstream_block(block)?;
-    let instr = LetInstr {
-        exp_l,
-        exp_r,
-        iter_instrs,
-        block,
-    };
+    let instr = LetInstr { exp_l, exp_r, iter_instrs, block };
     Ok(InstrKind::Let(instr))
 }
 
@@ -498,21 +447,9 @@ fn upstream_rule_instr(
         };
         instr.block = merge_block(instr.block, block_merge);
     }
-    let RuleInstr {
-        id,
-        not_exp,
-        input_hint,
-        iter_instrs,
-        block,
-    } = instr;
+    let RuleInstr { id, not_exp, input_hint, iter_instrs, block } = instr;
     let block = upstream_block(block)?;
-    let instr = RuleInstr {
-        id,
-        not_exp,
-        input_hint,
-        iter_instrs,
-        block,
-    };
+    let instr = RuleInstr { id, not_exp, input_hint, iter_instrs, block };
     Ok(InstrKind::Rule(instr))
 }
 

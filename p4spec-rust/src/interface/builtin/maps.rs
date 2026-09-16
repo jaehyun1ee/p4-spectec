@@ -64,12 +64,7 @@ fn make_pair(
     let pair_mixop = pair_mixop();
     let value_case = Mixop::fill(&pair_mixop, [value_key, value_value])
         .expect("the pair mixop has exactly two arguments");
-    Ok(make::case(
-        arena,
-        typ.node.into(),
-        value_case,
-        Span::default(),
-    )?)
+    Ok(make::case(arena, typ.node.into(), value_case, Span::default())?)
 }
 
 fn map_update(
@@ -210,9 +205,7 @@ pub fn adds_map(
         .map_err(|error| BuiltinError::new(error.to_string()))?
         .to_vec();
     if values_key.len() != values_value.len() {
-        return Err(BuiltinError::new(
-            "map key and value lists must have the same length",
-        ));
+        return Err(BuiltinError::new("map key and value lists must have the same length"));
     }
     for (value_key, value_value) in values_key.iter().zip(&values_value) {
         map = map_update(arena, typ_key, typ_value, value_key, value_value, &map)?;

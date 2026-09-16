@@ -133,12 +133,7 @@ fn downstream_hold_instr(
     ids_defined: &IdSet,
     instr_ol: &HoldInstr,
 ) -> Result<IdSet, StructureError> {
-    let HoldInstr {
-        not_exp,
-        block_hold,
-        block_not_hold,
-        ..
-    } = instr_ol;
+    let HoldInstr { not_exp, block_hold, block_not_hold, .. } = instr_ol;
     let ids_used = not_exp.free().intersection(ids_defined);
     let ids_used_hold = downstream_block(ids_defined, block_hold)?;
     let ids_used_not_hold = downstream_block(ids_defined, block_not_hold)?;
@@ -191,12 +186,7 @@ fn downstream_rule_instr(
     instr_ol: &RuleInstr,
     span: &Span,
 ) -> Result<IdSet, StructureError> {
-    let RuleInstr {
-        not_exp,
-        input_hint,
-        block,
-        ..
-    } = instr_ol;
+    let RuleInstr { not_exp, input_hint, block, .. } = instr_ol;
     let exps = not_exp.args();
     let (exps_input, _) = input::split(input_hint, exps)
         .map_err(|error| StructureError::new(StructureErrorKind::Input(error), span.clone()))?;
@@ -256,17 +246,9 @@ fn upstream_block(block: Block) -> Result<Block, StructureError> {
 // - If instruction
 
 fn upstream_if_instr(instr_ol: IfInstr, span: Span) -> Result<Block, StructureError> {
-    let IfInstr {
-        exp,
-        iter_exps,
-        block,
-    } = instr_ol;
+    let IfInstr { exp, iter_exps, block } = instr_ol;
     let block = upstream_block(block)?;
-    let instr = IfInstr {
-        exp,
-        iter_exps,
-        block,
-    };
+    let instr = IfInstr { exp, iter_exps, block };
     let instr = crate::phrase!(node: InstrKind::If(instr), span: span);
     Ok(vec![instr])
 }
@@ -274,22 +256,10 @@ fn upstream_if_instr(instr_ol: IfInstr, span: Span) -> Result<Block, StructureEr
 // - Hold instruction
 
 fn upstream_hold_instr(instr_ol: HoldInstr, span: Span) -> Result<Block, StructureError> {
-    let HoldInstr {
-        id,
-        not_exp,
-        iter_exps,
-        block_hold,
-        block_not_hold,
-    } = instr_ol;
+    let HoldInstr { id, not_exp, iter_exps, block_hold, block_not_hold } = instr_ol;
     let block_hold = upstream_block(block_hold)?;
     let block_not_hold = upstream_block(block_not_hold)?;
-    let instr = HoldInstr {
-        id,
-        not_exp,
-        iter_exps,
-        block_hold,
-        block_not_hold,
-    };
+    let instr = HoldInstr { id, not_exp, iter_exps, block_hold, block_not_hold };
     let instr = crate::phrase!(node: InstrKind::Hold(instr), span: span);
     Ok(vec![instr])
 }
@@ -315,19 +285,9 @@ fn upstream_case_instr(instr_ol: CaseInstr, span: Span) -> Result<Block, Structu
 // - Group instruction
 
 fn upstream_group_instr(instr_ol: GroupInstr, span: Span) -> Result<Block, StructureError> {
-    let GroupInstr {
-        id,
-        rel_signature,
-        exps,
-        block,
-    } = instr_ol;
+    let GroupInstr { id, rel_signature, exps, block } = instr_ol;
     let block = upstream_block(block)?;
-    let instr = GroupInstr {
-        id,
-        rel_signature,
-        exps,
-        block,
-    };
+    let instr = GroupInstr { id, rel_signature, exps, block };
     let instr = crate::phrase!(node: InstrKind::Group(instr), span: span);
     Ok(vec![instr])
 }
@@ -335,12 +295,7 @@ fn upstream_group_instr(instr_ol: GroupInstr, span: Span) -> Result<Block, Struc
 // - Let instruction
 
 fn upstream_let_instr(instr_ol: LetInstr, span: Span) -> Result<Block, StructureError> {
-    let LetInstr {
-        exp_l,
-        exp_r,
-        iter_instrs,
-        block,
-    } = instr_ol;
+    let LetInstr { exp_l, exp_r, iter_instrs, block } = instr_ol;
     // Inspect uses before deleting inner Lets: `let x = 1 { let y = (x,) {} }`
     // becomes `let x = 1 {}`; the outer Let is not revisited in this pass
     if removable_let(&exp_r) {
@@ -351,12 +306,7 @@ fn upstream_let_instr(instr_ol: LetInstr, span: Span) -> Result<Block, Structure
         }
     }
     let block = upstream_block(block)?;
-    let instr = LetInstr {
-        exp_l,
-        exp_r,
-        iter_instrs,
-        block,
-    };
+    let instr = LetInstr { exp_l, exp_r, iter_instrs, block };
     let instr = crate::phrase!(node: InstrKind::Let(instr), span: span);
     Ok(vec![instr])
 }
@@ -364,21 +314,9 @@ fn upstream_let_instr(instr_ol: LetInstr, span: Span) -> Result<Block, Structure
 // - Rule instruction
 
 fn upstream_rule_instr(instr_ol: RuleInstr, span: Span) -> Result<Block, StructureError> {
-    let RuleInstr {
-        id,
-        not_exp,
-        input_hint,
-        iter_instrs,
-        block,
-    } = instr_ol;
+    let RuleInstr { id, not_exp, input_hint, iter_instrs, block } = instr_ol;
     let block = upstream_block(block)?;
-    let instr = RuleInstr {
-        id,
-        not_exp,
-        input_hint,
-        iter_instrs,
-        block,
-    };
+    let instr = RuleInstr { id, not_exp, input_hint, iter_instrs, block };
     let instr = crate::phrase!(node: InstrKind::Rule(instr), span: span);
     Ok(vec![instr])
 }

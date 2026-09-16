@@ -115,10 +115,7 @@ fn test_conversion_inserts_list_and_optional_iteration_guards_in_source_order() 
         let ast::ExpKind::Len(exp_r) = &exp_r.node else {
             panic!("expected right length");
         };
-        (
-            dimension_name(exp_l, ast::Iter::List),
-            dimension_name(exp_r, ast::Iter::List),
-        )
+        (dimension_name(exp_l, ast::Iter::List), dimension_name(exp_r, ast::Iter::List))
     }
 
     fn optional_name(exp: &ast::Exp) -> &str {
@@ -173,11 +170,7 @@ fn test_conversion_inserts_list_and_optional_iteration_guards_in_source_order() 
         span: exp_optional.span.clone(),
     };
     let typ_output = ast::TypKind::Tuple(vec![typ_list, typ_optional]);
-    let exp_output = exp(
-        ast::ExpKind::Tuple(vec![exp_list, exp_optional]),
-        typ_output,
-        22,
-    );
+    let exp_output = exp(ast::ExpKind::Tuple(vec![exp_list, exp_optional]), typ_output, 22);
     let spec = function_spec(params, args, exp_output, vec![]);
 
     let converted = algo::convert(spec).expect("guarded joint iterations");
@@ -381,10 +374,7 @@ fn test_conversion_distinguishes_let_must_guards_from_insert_guards() {
     let prem_equality = equality_prem(exp_l, exp_r, 30);
     let exp_output = joint_iteration(&[("bound_l", 20), ("bound_r", 21)], ast::Iter::List, 40);
     let spec = function_spec(
-        vec![
-            typ::make::list(typ_bool.clone()),
-            typ::make::list(typ_bool.clone()),
-        ],
+        vec![typ::make::list(typ_bool.clone()), typ::make::list(typ_bool.clone())],
         vec![
             iterated_var_exp("input_l", &typ_bool, ast::Iter::List, 2),
             iterated_var_exp("input_r", &typ_bool, ast::Iter::List, 3),
@@ -437,10 +427,7 @@ fn test_conversion_distinguishes_iterated_must_guards_from_insert_guards() {
     }), span:
     span(15) };
     let insert_spec = function_spec(
-        vec![
-            typ::make::list(typ_bool.clone()),
-            typ::make::list(typ_bool.clone()),
-        ],
+        vec![typ::make::list(typ_bool.clone()), typ::make::list(typ_bool.clone())],
         vec![
             iterated_var_exp("left", &typ_bool, ast::Iter::List, 2),
             iterated_var_exp("right", &typ_bool, ast::Iter::List, 3),
@@ -528,13 +515,8 @@ fn test_conversion_traverses_relation_matches_paths_and_else_without_sibling_lea
         }), span:
         span(line) }
     };
-    let match_rule = rule(
-        "match_path",
-        literal_index_exp(true, 10),
-        literal_index_exp(true, 11),
-        vec![],
-        10,
-    );
+    let match_rule =
+        rule("match_path", literal_index_exp(true, 10), literal_index_exp(true, 11), vec![], 10);
     let first_sibling = rule(
         "first_sibling",
         exp(ast::ExpKind::Bool(true), ast::TypKind::Bool, 20),

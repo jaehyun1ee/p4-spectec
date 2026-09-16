@@ -46,11 +46,7 @@ fn def(node: ast::DefKind) -> ast::Def {
 }
 
 fn var(name: &str, iters: Vec<ast::Iter>) -> ast::Var {
-    ast::Var {
-        id: id(name, 1),
-        typ: typ::make::bool(),
-        iters,
-    }
+    ast::Var { id: id(name, 1), typ: typ::make::bool(), iters }
 }
 
 fn variable(var: &ast::Var) -> Variable {
@@ -81,10 +77,7 @@ fn test_duplicate_global_definition_uses_second_identifier_span() {
         assert_eq!(error.span, id("x", 9).span);
         assert_eq!(
             *error.kind,
-            ErrorKind::Context(ContextErrorKind::Duplicate {
-                kind,
-                name: "x".into()
-            })
+            ErrorKind::Context(ContextErrorKind::Duplicate { kind, name: "x".into() })
         );
     }
 }
@@ -100,10 +93,7 @@ fn test_localize_discards_locals_and_retains_global_lookup() {
         .unwrap();
     ctx.add_typdef(id("T", 3), TypeDef::Extern).unwrap();
     let var = variable(&var("x", vec![]));
-    ctx.add_value(
-        var.clone(),
-        make::bool(&mut arena, true, Span::default()).unwrap(),
-    );
+    ctx.add_value(var.clone(), make::bool(&mut arena, true, Span::default()).unwrap());
     assert_eq!(
         ctx.find_func(&id("local", 8))
             .map(|(scope, func)| (scope, func.as_ref()))
@@ -139,10 +129,7 @@ fn test_local_definition_duplicates_do_not_replace_bindings() {
         *ctx.add_func(id("f", 7), func("f", 7).into())
             .unwrap_err()
             .kind,
-        ErrorKind::Context(ContextErrorKind::Duplicate {
-            kind: EntityKind::Function,
-            ..
-        })
+        ErrorKind::Context(ContextErrorKind::Duplicate { kind: EntityKind::Function, .. })
     ));
     assert_eq!(
         ctx.add_typdef(id("T", 7), TypeDef::Parameter)
@@ -155,10 +142,7 @@ fn test_local_definition_duplicates_do_not_replace_bindings() {
     assert!(ctx.add_typdef(id("U", 7), TypeDef::Parameter).is_err());
     assert!(ctx.add_func(id("g", 7), func("g", 7).into()).is_err());
     assert_eq!(ctx.find_typdef(&id("U", 8)).unwrap(), &TypeDef::Extern);
-    assert_eq!(
-        ctx.find_func(&id("g", 8)).unwrap().1.as_ref(),
-        &func("g", 2)
-    );
+    assert_eq!(ctx.find_func(&id("g", 8)).unwrap().1.as_ref(), &func("g", 2));
 }
 
 #[test]
@@ -167,10 +151,7 @@ fn test_sibling_contexts_isolate_rebinding_and_iterator_paths() {
     let global = Global::load(vec![]).unwrap();
     let mut ctx = Context::new(&global);
     let var = variable(&var("x", vec![]));
-    ctx.add_value(
-        var.clone(),
-        make::bool(&mut arena, false, Span::default()).unwrap(),
-    );
+    ctx.add_value(var.clone(), make::bool(&mut arena, false, Span::default()).unwrap());
     let mut ctx_a = ctx.clone();
     let ctx_b = ctx.clone();
     ctx_a.add_value(
@@ -193,10 +174,7 @@ fn test_sibling_contexts_isolate_rebinding_and_iterator_paths() {
 fn test_missing_value_reports_iterator_path_and_lookup_span() {
     let global = Global::load(vec![]).unwrap();
     let error = Context::new(&global)
-        .find_value(&Variable::new(
-            id("x", 9),
-            vec![ast::Iter::List, ast::Iter::Opt],
-        ))
+        .find_value(&Variable::new(id("x", 9), vec![ast::Iter::List, ast::Iter::Opt]))
         .unwrap_err();
     assert_eq!(error.span, id("x", 9).span);
     assert_eq!(
@@ -227,13 +205,8 @@ fn test_map_opt_requires_agreement_and_preserves_parent() {
         iters.push(ast::Iter::Opt);
         ctx.add_value(
             Variable::new(var.id.clone(), iters),
-            make::opt(
-                runner.arena_mut(),
-                typ.node.clone().into(),
-                Some(value),
-                Span::default(),
-            )
-            .unwrap(),
+            make::opt(runner.arena_mut(), typ.node.clone().into(), Some(value), Span::default())
+                .unwrap(),
         );
     }
     let value_opt = ctx
@@ -253,33 +226,18 @@ fn test_map_opt_requires_agreement_and_preserves_parent() {
     }
     ctx.add_value(
         Variable::new(vars[1].id.clone(), vec![ast::Iter::Opt]),
-        make::opt(
-            runner.arena_mut(),
-            typ.node.clone().into(),
-            None,
-            Span::default(),
-        )
-        .unwrap(),
+        make::opt(runner.arena_mut(), typ.node.clone().into(), None, Span::default()).unwrap(),
     );
-    let Backtrack::Err(errors) = ctx.map_opt(&mut runner, &span, &vars, |_, _| {
-        panic!("mixed optionality")
-    }) else {
+    let Backtrack::Err(errors) =
+        ctx.map_opt(&mut runner, &span, &vars, |_, _| panic!("mixed optionality"))
+    else {
         panic!("expected optionality mismatch");
     };
-    assert_eq!(
-        *errors[0].kind,
-        ErrorKind::Context(ContextErrorKind::OptionalityMismatch)
-    );
+    assert_eq!(*errors[0].kind, ErrorKind::Context(ContextErrorKind::OptionalityMismatch));
     assert_eq!(errors[0].span, span);
     ctx.add_value(
         Variable::new(vars[0].id.clone(), vec![ast::Iter::List, ast::Iter::Opt]),
-        make::opt(
-            runner.arena_mut(),
-            typ.node.clone().into(),
-            None,
-            Span::default(),
-        )
-        .unwrap(),
+        make::opt(runner.arena_mut(), typ.node.clone().into(), None, Span::default()).unwrap(),
     );
     assert!(
         ctx.map_opt(&mut runner, &span, &vars, |_, _| panic!("absent inputs"))
@@ -314,13 +272,8 @@ fn test_map_list_transposes_in_order_without_leaking_bindings() {
             .collect();
         ctx.add_value(
             Variable::new(var.id.clone(), vec![ast::Iter::List]),
-            make::list(
-                runner.arena_mut(),
-                typ::make::bool().node.into(),
-                values,
-                Span::default(),
-            )
-            .unwrap(),
+            make::list(runner.arena_mut(), typ::make::bool().node.into(), values, Span::default())
+                .unwrap(),
         );
     }
     let mut rows = Vec::new();
@@ -356,13 +309,8 @@ fn test_map_list_transposes_in_order_without_leaking_bindings() {
     assert_eq!(count, 1);
     ctx.add_value(
         Variable::new(vars[1].id.clone(), vec![ast::Iter::List]),
-        make::list(
-            runner.arena_mut(),
-            typ::make::bool().node.into(),
-            vec![],
-            Span::default(),
-        )
-        .unwrap(),
+        make::list(runner.arena_mut(), typ::make::bool().node.into(), vec![], Span::default())
+            .unwrap(),
     );
     let Backtrack::Err(errors) =
         ctx.map_list(&mut runner, &span, &vars, |_, _| panic!("unequal lengths"))
@@ -371,10 +319,7 @@ fn test_map_list_transposes_in_order_without_leaking_bindings() {
     };
     assert!(matches!(
         *errors[0].kind,
-        ErrorKind::Context(ContextErrorKind::IterationLengthMismatch {
-            expected: 2,
-            actual: 0
-        })
+        ErrorKind::Context(ContextErrorKind::IterationLengthMismatch { expected: 2, actual: 0 })
     ));
     assert_eq!(errors[0].span, span);
     assert!(
@@ -400,19 +345,15 @@ fn test_iteration_rejects_wrong_value_kind_at_variable_span() {
         Variable::new(var.id.clone(), vec![ast::Iter::Opt]),
         make::bool(runner.arena_mut(), true, Span::default()).unwrap(),
     );
-    let Backtrack::Err(errors) = ctx.map_opt(
-        &mut runner,
-        &id("iteration", 9).span,
-        std::slice::from_ref(&var),
-        |_, _| panic!("wrong input kind"),
-    ) else {
+    let Backtrack::Err(errors) =
+        ctx.map_opt(&mut runner, &id("iteration", 9).span, std::slice::from_ref(&var), |_, _| {
+            panic!("wrong input kind")
+        })
+    else {
         panic!("expected value kind error");
     };
     assert_eq!(errors[0].span, var.id.span);
-    assert!(matches!(
-        *errors[0].kind,
-        ErrorKind::Runtime(RuntimeErrorKind::Value(_))
-    ));
+    assert!(matches!(*errors[0].kind, ErrorKind::Runtime(RuntimeErrorKind::Value(_))));
     let value = ctx
         .find_value(&Variable::new(var.id.clone(), vec![ast::Iter::Opt]))
         .unwrap();
@@ -462,14 +403,8 @@ fn test_loaded_native_spec_preserves_definition_bodies_and_locations() {
                 };
                 let (scope, func_global) = ctx.find_func(id).unwrap();
                 assert_eq!((scope, func_global.as_ref()), (Scope::Global, func));
-                assert!(std::rc::Rc::ptr_eq(
-                    func_global,
-                    ctx_clone.find_func(id).unwrap().1
-                ));
-                assert!(std::rc::Rc::ptr_eq(
-                    func_global,
-                    ctx_local.find_func(id).unwrap().1
-                ));
+                assert!(std::rc::Rc::ptr_eq(func_global, ctx_clone.find_func(id).unwrap().1));
+                assert!(std::rc::Rc::ptr_eq(func_global, ctx_local.find_func(id).unwrap().1));
             }
             ast::DefKind::Var(var) => {
                 assert!(
@@ -499,11 +434,9 @@ fn test_duplicate_relations_share_namespace_and_report_second_span() {
         else_group: None,
         hints: vec![],
     }));
-    let error = Global::load(vec![
-        def(ast::DefKind::Rel(rel)),
-        def(ast::DefKind::Rel(rel_duplicate)),
-    ])
-    .unwrap_err();
+    let error =
+        Global::load(vec![def(ast::DefKind::Rel(rel)), def(ast::DefKind::Rel(rel_duplicate))])
+            .unwrap_err();
     assert_eq!(error.span, id("r", 9).span);
     assert_eq!(
         *error.kind,
@@ -527,10 +460,7 @@ fn test_definition_lookup_errors_and_local_type_isolation() {
         assert_eq!(error.span, id.span);
         assert_eq!(
             *error.kind,
-            ErrorKind::Context(ContextErrorKind::Undefined {
-                kind,
-                name: id.node.clone()
-            })
+            ErrorKind::Context(ContextErrorKind::Undefined { kind, name: id.node.clone() })
         );
     }
     let mut ctx_child = ctx.clone();

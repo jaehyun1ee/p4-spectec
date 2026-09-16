@@ -8,10 +8,7 @@ fn test_counter_init_uses_first_named_argument_and_exact_size() {
         let value_max = pack::p4_fixed_bit(&mut arena, 32.into(), 2.into()).unwrap();
         let value_sparse = boolean(&mut arena, sparse);
         let value_later = pack::p4_fixed_bit(&mut arena, 32.into(), 4.into()).unwrap();
-        let value_args = list(
-            &mut arena,
-            vec![value_max, value_sparse, value_later, value_ids],
-        );
+        let value_args = list(&mut arena, vec![value_max, value_sparse, value_later, value_ids]);
         let counter = CounterArray::init(&arena, value_ids, value_args).unwrap();
         assert_eq!(counter.counts, vec![0, 0]);
     }
@@ -43,9 +40,7 @@ fn test_counter_operations_preserve_state_and_wrap_at_i64_width() {
     let mut runner = Runner::new((), CounterInterp::default(), NullInterface, Dummy);
     let value_ctx = make::text(runner.arena_mut(), "ctx".to_owned(), Span::default()).unwrap();
     let value_arch = make::text(runner.arena_mut(), "arch".to_owned(), Span::default()).unwrap();
-    let mut counter = CounterArray {
-        counts: vec![i64::MAX, (1_i64 << 32) - 1],
-    };
+    let mut counter = CounterArray { counts: vec![i64::MAX, (1_i64 << 32) - 1] };
     local(&mut runner, "index", 0);
     let result = counter
         .increment(&mut runner.context(), value_ctx, value_arch)
@@ -65,21 +60,10 @@ fn test_counter_operations_preserve_state_and_wrap_at_i64_width() {
         p4spec_rust::phrase!(node: "returnResult".to_owned(), span: Span::default()),
         Vec::new(),
     );
-    let value_return = make::case(
-        runner.arena_mut(),
-        typ.node.into(),
-        value_case,
-        Span::default(),
-    )
-    .unwrap();
-    assert_eq!(
-        runner.arena().canon_id(&result.3),
-        runner.arena().canon_id(&value_return)
-    );
-    assert_eq!(
-        runner.arena().typ(&result.3),
-        runner.arena().typ(&value_return)
-    );
+    let value_return =
+        make::case(runner.arena_mut(), typ.node.into(), value_case, Span::default()).unwrap();
+    assert_eq!(runner.arena().canon_id(&result.3), runner.arena().canon_id(&value_return));
+    assert_eq!(runner.arena().typ(&result.3), runner.arena().typ(&value_return));
     counter = result.0;
     local(&mut runner, "value", -1);
     counter = counter
@@ -104,9 +88,7 @@ fn test_counter_operations_preserve_state_and_wrap_at_i64_width() {
     }
     assert_eq!(
         runner.context().interp().calls,
-        [
-            "index", "index", "value", "index", "index", "value", "index", "value"
-        ]
+        ["index", "index", "value", "index", "index", "value", "index", "value"]
     );
 }
 

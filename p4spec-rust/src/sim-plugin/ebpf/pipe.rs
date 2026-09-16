@@ -75,12 +75,7 @@ impl ExternObject {
             crate::phrase!(node: "objectState".to_owned(), span: Span::default()),
             Vec::new(),
         );
-        Ok(make::external(
-            arena,
-            typ.node.into(),
-            payload.into(),
-            Span::default(),
-        )?)
+        Ok(make::external(arena, typ.node.into(), payload.into(), Span::default())?)
     }
 
     // - Decoding
@@ -135,13 +130,8 @@ where
         crate::phrase!(node: "archState".to_owned(), span: Span::default()),
         Vec::new(),
     );
-    Ok(make::external(
-        ctx.arena_mut(),
-        typ.node.into(),
-        payload.into(),
-        Span::default(),
-    )
-    .map_err(ExternError::from)?)
+    Ok(make::external(ctx.arena_mut(), typ.node.into(), payload.into(), Span::default())
+        .map_err(ExternError::from)?)
 }
 
 // == Extern calls
@@ -170,13 +160,8 @@ where
             crate::phrase!(node: "objectState".to_owned(), span: Span::default()),
             Vec::new(),
         );
-        make::external(
-            ctx.arena_mut(),
-            typ.node.into(),
-            payload.into(),
-            Span::default(),
-        )
-        .map_err(ExternError::from)?
+        make::external(ctx.arena_mut(), typ.node.into(), payload.into(), Span::default())
+            .map_err(ExternError::from)?
     })
 }
 
@@ -282,12 +267,7 @@ where
                     return Err(unsupported_method(ctx.arena(), *value_id, &name, &names)?.into());
                 }
             };
-            (
-                ExternObject::PacketIn(object),
-                value_ctx,
-                value_arch,
-                value_call_result,
-            )
+            (ExternObject::PacketIn(object), value_ctx, value_arch, value_call_result)
         }
         ExternObject::CounterArray(counter) => {
             let (object, value_ctx, value_arch, value_call_result) = match (
@@ -304,12 +284,7 @@ where
                     return Err(unsupported_method(ctx.arena(), *value_id, &name, &names)?.into());
                 }
             };
-            (
-                ExternObject::CounterArray(object),
-                value_ctx,
-                value_arch,
-                value_call_result,
-            )
+            (ExternObject::CounterArray(object), value_ctx, value_arch, value_call_result)
         }
     };
     let value_state = object.to_value(ctx.arena_mut(), encoding)?;
@@ -330,11 +305,7 @@ where
     Interp: Interpreter<Iface, Ebpf>,
 {
     let (value_ctx, value_arch) = pgm::ebpf_init(ctx, program)?;
-    Ok(SimState {
-        value_ctx,
-        value_arch,
-        txs: vec![],
-    })
+    Ok(SimState { value_ctx, value_arch, txs: vec![] })
 }
 
 // - Execution
@@ -376,10 +347,9 @@ where
     let value_accept =
         rel::lvalue_read_var_global(ctx, state.value_ctx, state.value_arch, "accept")?;
     if unpack::p4_bool(ctx.arena(), &value_accept)? {
-        state.txs.push(Tx {
-            port: rx.port,
-            packet: rx.packet.clone(),
-        });
+        state
+            .txs
+            .push(Tx { port: rx.port, packet: rx.packet.clone() });
     }
     Ok(())
 }

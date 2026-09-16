@@ -79,9 +79,7 @@ fn dispatch_instr(
 #[test]
 fn test_group_printer_escapes_text_and_omits_annotations_and_fallthrough() {
     let mut instr_a = group_instr(pl::ast::InstrKind::Tier(pl::ast::TierInstr {
-        tier: pl::ast::InstrGroup::Return(pl::ast::ReturnGroupInstr {
-            exp: text("line\n\"\\"),
-        }),
+        tier: pl::ast::InstrGroup::Return(pl::ast::ReturnGroupInstr { exp: text("line\n\"\\") }),
     }));
     instr_a.node.note = Some(pl::ast::Fallthrough::FallNext);
     instr_a.hints.prose = Some(alter::AlterationHint::Text("first prose".to_owned()));
@@ -91,14 +89,8 @@ fn test_group_printer_escapes_text_and_omits_annotations_and_fallthrough() {
     instr_b.node.span = span("other-source");
     instr_b.hints.prose = Some(alter::AlterationHint::Text("other prose".to_owned()));
 
-    assert_eq!(
-        Print::to_string(&vec![instr_a]),
-        "1. Return \"line\\n\\\"\\\\\""
-    );
-    assert_eq!(
-        Print::to_string(&vec![instr_b]),
-        "1. Return \"line\\n\\\"\\\\\""
-    );
+    assert_eq!(Print::to_string(&vec![instr_a]), "1. Return \"line\\n\\\"\\\\\"");
+    assert_eq!(Print::to_string(&vec![instr_b]), "1. Return \"line\\n\\\"\\\\\"");
 }
 
 #[test]
@@ -107,19 +99,13 @@ fn test_shared_control_flow_renders_group_tier_at_nested_level() {
         exp: variable("condition"),
         iter_exps: Vec::new(),
         block: vec![group_instr(pl::ast::InstrKind::Tier(pl::ast::TierInstr {
-            tier: pl::ast::InstrGroup::Return(pl::ast::ReturnGroupInstr {
-                exp: variable("value"),
-            }),
+            tier: pl::ast::InstrGroup::Return(pl::ast::ReturnGroupInstr { exp: variable("value") }),
         }))],
         dangle: true,
     }));
     assert_eq!(
         Print::to_string(&vec![branch]),
-        concat!(
-            "1. If (condition), then\n\n",
-            "  1. Return value\n\n",
-            "1. Else Dangling",
-        )
+        concat!("1. If (condition), then\n\n", "  1. Return value\n\n", "1. Else Dangling",)
     );
 }
 
@@ -143,30 +129,24 @@ fn test_group_and_dispatch_backtracking_preserve_arm_order() {
     }));
     assert_eq!(
         Print::to_string(&vec![backtrack]),
-        concat!(
-            "1. Block (2 arms)\n\n",
-            "Arm 1:\n\n  1. Return a\n\n",
-            "Arm 2:\n\n  1. Return b",
-        )
+        concat!("1. Block (2 arms)\n\n", "Arm 1:\n\n  1. Return a\n\n", "Arm 2:\n\n  1. Return b",)
     );
 
     let group = |name: &str| {
-        vec![dispatch_instr(pl::ast::InstrKind::Tier(
-            pl::ast::TierInstr {
-                tier: pl::ast::InstrDispatch::Group(pl::ast::GroupDispatchInstr {
-                    id_rel: id("relation"),
-                    id_group: id(name),
-                    rel_signature: signature(),
-                    exps_input: vec![variable(name)],
-                    block: vec![group_instr(pl::ast::InstrKind::Tier(pl::ast::TierInstr {
-                        tier: pl::ast::InstrGroup::Result(pl::ast::ResultGroupInstr {
-                            rel_signature: signature(),
-                            exps_output: Vec::new(),
-                        }),
-                    }))],
-                }),
-            },
-        ))]
+        vec![dispatch_instr(pl::ast::InstrKind::Tier(pl::ast::TierInstr {
+            tier: pl::ast::InstrDispatch::Group(pl::ast::GroupDispatchInstr {
+                id_rel: id("relation"),
+                id_group: id(name),
+                rel_signature: signature(),
+                exps_input: vec![variable(name)],
+                block: vec![group_instr(pl::ast::InstrKind::Tier(pl::ast::TierInstr {
+                    tier: pl::ast::InstrGroup::Result(pl::ast::ResultGroupInstr {
+                        rel_signature: signature(),
+                        exps_output: Vec::new(),
+                    }),
+                }))],
+            }),
+        }))]
     };
     let route = dispatch_instr(pl::ast::InstrKind::Tier(pl::ast::TierInstr {
         tier: pl::ast::InstrDispatch::Route(pl::ast::RouteDispatchInstr {

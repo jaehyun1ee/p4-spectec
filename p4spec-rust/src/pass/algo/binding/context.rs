@@ -37,12 +37,7 @@ impl Context {
             let id = phrase!(node: name.to_owned(), span: Span::default());
             menv.insert(id, typ);
         }
-        Self {
-            frees: IdSet::new(),
-            venv: VEnv::new(),
-            tdenv: TDEnv::new(),
-            menv,
-        }
+        Self { frees: IdSet::new(), venv: VEnv::new(), tdenv: TDEnv::new(), menv }
     }
 
     // - Adders

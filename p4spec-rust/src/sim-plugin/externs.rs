@@ -74,7 +74,7 @@ impl<Exn: Impl> Extern for Exn {
             "ExternMethodCall_eval" => self.eval_extern_method_call(ctx, values)?,
             _ => {
                 return Err(
-                    ExternError::Failure(format!("unimplemented extern relation: {name}")).into(),
+                    ExternError::Failure(format!("unimplemented extern relation: {name}")).into()
                 );
             }
         };
@@ -97,7 +97,7 @@ impl<Exn: Impl> Extern for Exn {
             "init_archState" => self.init_arch_state(ctx)?,
             _ => {
                 return Err(
-                    ExternError::Failure(format!("unimplemented extern function: {name}")).into(),
+                    ExternError::Failure(format!("unimplemented extern function: {name}")).into()
                 );
             }
         };

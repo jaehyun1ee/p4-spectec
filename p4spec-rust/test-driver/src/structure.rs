@@ -20,10 +20,9 @@ pub fn run() -> Result<()> {
     let spec_il = elaborate::convert(spec_el).map_err(|error| Error::Invalid(error.to_string()))?;
     let spec_al = algo::convert(spec_il).map_err(|error| Error::Invalid(error.to_string()))?;
     let num_defs = spec_al.len();
-    for (spec_al, without_rule_groups, text_mode) in [
-        (spec_al.clone(), true, "without-rule-groups"),
-        (spec_al, false, "with-rule-groups"),
-    ] {
+    for (spec_al, without_rule_groups, text_mode) in
+        [(spec_al.clone(), true, "without-rule-groups"), (spec_al, false, "with-rule-groups")]
+    {
         progress.set_message(format!("structure: {text_mode}"));
         let spec_sl = structure::convert(spec_al, without_rule_groups)
             .map_err(|error| Error::Invalid(error.to_string()))?;

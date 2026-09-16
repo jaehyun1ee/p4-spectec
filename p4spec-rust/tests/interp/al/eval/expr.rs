@@ -28,10 +28,7 @@ fn exp(kind: ast::ExpKind, typ: ast::Typ) -> ast::Exp {
 }
 
 fn int(num: i64) -> ast::Exp {
-    exp(
-        ast::ExpKind::Num(num::Number::Int(num.into())),
-        typ::make::int(),
-    )
+    exp(ast::ExpKind::Num(num::Number::Int(num.into())), typ::make::int())
 }
 
 fn text(value: &str) -> ast::Exp {
@@ -39,10 +36,7 @@ fn text(value: &str) -> ast::Exp {
 }
 
 fn list(values: Vec<ast::Exp>) -> ast::Exp {
-    exp(
-        ast::ExpKind::List(values),
-        typ::make::list(typ::make::int()),
-    )
+    exp(ast::ExpKind::List(values), typ::make::list(typ::make::int()))
 }
 
 fn function(name: &str, expression: ast::Exp) -> ast::Def {
@@ -109,26 +103,13 @@ fn test_nested_updates_preserve_the_original_and_surrounding_fields() {
         typ_struct.clone(),
     );
     let root = path(ast::PathKind::Root, typ_struct);
-    let field = path(
-        ast::PathKind::Dot(Box::new(root), atom.clone()),
-        typ_list.clone(),
-    );
-    let index = path(
-        ast::PathKind::Idx(Box::new(field), Box::new(int(1))),
-        typ::make::int(),
-    );
+    let field = path(ast::PathKind::Dot(Box::new(root), atom.clone()), typ_list.clone());
+    let index = path(ast::PathKind::Idx(Box::new(field), Box::new(int(1))), typ::make::int());
     let updated = exp(
-        ast::ExpKind::Upd(
-            Box::new(original.clone()),
-            Box::new(index),
-            Box::new(int(9)),
-        ),
+        ast::ExpKind::Upd(Box::new(original.clone()), Box::new(index), Box::new(int(9))),
         typ::make::var(id("record"), vec![]),
     );
-    let updated = exp(
-        ast::ExpKind::Dot(Box::new(updated), atom.clone()),
-        typ_list.clone(),
-    );
+    let updated = exp(ast::ExpKind::Dot(Box::new(updated), atom.clone()), typ_list.clone());
     let original = exp(ast::ExpKind::Dot(Box::new(original), atom), typ_list);
     let (arena, value_eval_1) = eval(updated).unwrap();
     assert_eq!(numbers(&arena, &value_eval_1), ["1", "9", "3"]);
@@ -167,16 +148,10 @@ fn test_slice_updates_require_equal_lengths_and_support_text() {
 #[test]
 fn test_negative_list_slice_lengths_are_empty_but_text_lengths_fail() {
     let slice = |base, typ| {
-        exp(
-            ast::ExpKind::Slice(Box::new(base), Box::new(int(2)), Box::new(int(-3))),
-            typ,
-        )
+        exp(ast::ExpKind::Slice(Box::new(base), Box::new(int(2)), Box::new(int(-3))), typ)
     };
-    let (arena, value_eval_1) = eval(slice(
-        list(vec![int(1), int(2), int(3)]),
-        typ::make::list(typ::make::int()),
-    ))
-    .unwrap();
+    let (arena, value_eval_1) =
+        eval(slice(list(vec![int(1), int(2), int(3)]), typ::make::list(typ::make::int()))).unwrap();
     assert!(get::list(&arena, &value_eval_1).unwrap().is_empty());
     assert!(
         eval(slice(text("abc"), typ::make::text()))
@@ -190,20 +165,14 @@ fn test_negative_list_slice_lengths_are_empty_but_text_lengths_fail() {
 fn test_text_operations_use_byte_lengths_and_reject_split_utf8() {
     let length = exp(ast::ExpKind::Len(Box::new(text("é"))), typ::make::nat());
     let (arena, value_eval_1) = eval(length).unwrap();
-    assert_eq!(
-        num::to_int(get::num(&arena, &value_eval_1).unwrap()).to_string(),
-        "2"
-    );
+    assert_eq!(num::to_int(get::num(&arena, &value_eval_1).unwrap()).to_string(), "2");
     let slice = exp(
         ast::ExpKind::Slice(Box::new(text("éa")), Box::new(int(0)), Box::new(int(2))),
         typ::make::text(),
     );
     let (arena, value_eval_2) = eval(slice).unwrap();
     assert_eq!(get::text(&arena, &value_eval_2).unwrap(), "é");
-    let index = exp(
-        ast::ExpKind::Idx(Box::new(text("é")), Box::new(int(0))),
-        typ::make::text(),
-    );
+    let index = exp(ast::ExpKind::Idx(Box::new(text("é")), Box::new(int(0))), typ::make::text());
     assert!(
         eval(index)
             .unwrap_err()
@@ -218,16 +187,8 @@ fn test_structural_equality_ignores_nested_spans_and_type_notes() {
     let mut right = list(vec![int(3)]);
     if let ast::ExpKind::List(exps) = &mut right.node {
         exps[0].span = Span {
-            left: Position {
-                file: "other".into(),
-                line: 4,
-                column: 2,
-            },
-            right: Position {
-                file: "other".into(),
-                line: 4,
-                column: 3,
-            },
+            left: Position { file: "other".into(), line: 4, column: 2 },
+            right: Position { file: "other".into(), line: 4, column: 3 },
         };
     }
     let equal = exp(
@@ -241,10 +202,8 @@ fn test_structural_equality_ignores_nested_spans_and_type_notes() {
     );
     let (arena, value_eval_1) = eval(equal).unwrap();
     assert!(get::bool(&arena, &value_eval_1).unwrap());
-    let membership = exp(
-        ast::ExpKind::Mem(Box::new(left), Box::new(list(vec![right]))),
-        typ::make::bool(),
-    );
+    let membership =
+        exp(ast::ExpKind::Mem(Box::new(left), Box::new(list(vec![right]))), typ::make::bool());
     let (arena, value_eval_2) = eval(membership).unwrap();
     assert!(get::bool(&arena, &value_eval_2).unwrap());
 }
@@ -254,10 +213,7 @@ fn test_recursive_casts_and_subtype_checks() {
     let nat = typ::make::nat();
     let cast = exp(
         ast::ExpKind::DownCast(
-            Box::new(typ::make::tuple(vec![
-                nat.clone(),
-                typ::make::list(nat.clone()),
-            ])),
+            Box::new(typ::make::tuple(vec![nat.clone(), typ::make::list(nat.clone())])),
             Box::new(exp(
                 ast::ExpKind::Tuple(vec![int(3), list(vec![int(4)])]),
                 typ::make::tuple(vec![typ::make::int(), typ::make::list(typ::make::int())]),
@@ -267,10 +223,7 @@ fn test_recursive_casts_and_subtype_checks() {
     );
     let (arena, value) = eval(cast).unwrap();
     let values = get::tuple(&arena, &value).unwrap();
-    assert!(matches!(
-        get::num(&arena, &values[0]).unwrap(),
-        num::Number::Nat(_)
-    ));
+    assert!(matches!(get::num(&arena, &values[0]).unwrap(), num::Number::Nat(_)));
     assert!(matches!(
         get::num(&arena, &get::list(&arena, &values[1]).unwrap()[0]).unwrap(),
         num::Number::Nat(_)
@@ -292,23 +245,14 @@ fn test_case_and_container_patterns() {
     let atom = p4spec_rust::phrase!(node: Atom::Keyword("SomeCase".into()), span: Span::default());
     let case = Mixfix::Seq(vec![Mixfix::Atom(atom), Mixfix::Arg(int(5))]);
     let pattern = ast::Pattern::Case(Box::new(case.to_mixop()));
-    let case = exp(
-        ast::ExpKind::Case(Box::new(case)),
-        typ::make::var(id("case"), vec![]),
-    );
+    let case = exp(ast::ExpKind::Case(Box::new(case)), typ::make::var(id("case"), vec![]));
     let cases = [
         (case, pattern),
         (list(vec![int(1)]), ast::Pattern::List(ListPattern::Cons)),
-        (
-            list(vec![int(1), int(2)]),
-            ast::Pattern::List(ListPattern::Fixed(2)),
-        ),
+        (list(vec![int(1), int(2)]), ast::Pattern::List(ListPattern::Fixed(2))),
         (list(vec![]), ast::Pattern::List(ListPattern::Nil)),
         (
-            exp(
-                ast::ExpKind::Opt(Some(Box::new(int(1)))),
-                typ::make::opt(typ::make::int()),
-            ),
+            exp(ast::ExpKind::Opt(Some(Box::new(int(1)))), typ::make::opt(typ::make::int())),
             ast::Pattern::Opt(OptPattern::Some),
         ),
         (
@@ -317,10 +261,7 @@ fn test_case_and_container_patterns() {
         ),
     ];
     for (value, pattern) in cases {
-        let matches = exp(
-            ast::ExpKind::Match(Box::new(value), pattern),
-            typ::make::bool(),
-        );
+        let matches = exp(ast::ExpKind::Match(Box::new(value), pattern), typ::make::bool());
         let (arena, value_eval_1) = eval(matches).unwrap();
         assert!(get::bool(&arena, &value_eval_1).unwrap());
     }
@@ -337,10 +278,7 @@ impl Interface for RecordingInterface {
         _values: &[Value],
     ) -> Result<(Value, bool), InterfaceError> {
         self.0.borrow_mut().push(id.node.clone());
-        Ok((
-            make::bool(arena, id.node == "right", Span::default()).unwrap(),
-            true,
-        ))
+        Ok((make::bool(arena, id.node == "right", Span::default()).unwrap(), true))
     }
 
     fn clear(&mut self) {
@@ -350,12 +288,7 @@ impl Interface for RecordingInterface {
 
 #[test]
 fn test_boolean_operators_evaluate_both_operands_in_order() {
-    let call = |name| {
-        exp(
-            ast::ExpKind::Call(id(name), vec![], vec![]),
-            typ::make::bool(),
-        )
-    };
+    let call = |name| exp(ast::ExpKind::Call(id(name), vec![], vec![]), typ::make::bool());
     let expression = exp(
         ast::ExpKind::Bin(
             ast::BinOp::Bool(boolean::BinOp::And),
@@ -424,11 +357,7 @@ fn test_iteration_evaluates_each_bound_element_and_preserves_empty_options() {
     for iter in [ast::Iter::List, ast::Iter::Opt] {
         let typ_int = typ::make::int();
         let typ_iter = typ::make::iter(typ_int.clone(), iter);
-        let var = ast::Var {
-            id: id("x"),
-            typ: typ_int.clone(),
-            iters: vec![],
-        };
+        let var = ast::Var { id: id("x"), typ: typ_int.clone(), iters: vec![] };
         let exp_var = exp(ast::ExpKind::Var(id("x")), typ_int.clone());
         let signature = exp(
             ast::ExpKind::Iter(Box::new(exp_var.clone()), (iter, vec![var.clone()])),
@@ -443,10 +372,8 @@ fn test_iteration_evaluates_each_bound_element_and_preserves_empty_options() {
             ),
             typ_int,
         );
-        let expression = exp(
-            ast::ExpKind::Iter(Box::new(add), (iter, vec![var])),
-            typ_iter.clone(),
-        );
+        let expression =
+            exp(ast::ExpKind::Iter(Box::new(add), (iter, vec![var])), typ_iter.clone());
         let mut def = function("test", expression);
         if let ast::DefKind::MetaFunc(ast::MetaFuncDef::Defined(func)) = &mut def.node {
             func.params = vec![
@@ -526,11 +453,7 @@ fn test_list_iteration_zips_values_without_rebinding_the_parent() {
     let typ_list = typ::make::list(typ_int.clone());
     let vars: Vec<_> = ["x", "y"]
         .into_iter()
-        .map(|name| ast::Var {
-            id: id(name),
-            typ: typ_int.clone(),
-            iters: vec![],
-        })
+        .map(|name| ast::Var { id: id(name), typ: typ_int.clone(), iters: vec![] })
         .collect();
     let mut signatures: Vec<_> = vars
         .iter()
@@ -556,10 +479,7 @@ fn test_list_iteration_zips_values_without_rebinding_the_parent() {
     );
     let expression = exp(
         ast::ExpKind::Tuple(vec![
-            exp(
-                ast::ExpKind::Iter(Box::new(exp_inner), (ast::Iter::List, vars)),
-                typ_list.clone(),
-            ),
+            exp(ast::ExpKind::Iter(Box::new(exp_inner), (ast::Iter::List, vars)), typ_list.clone()),
             exp(ast::ExpKind::Var(id("x")), typ_int.clone()),
         ]),
         typ::make::tuple(vec![typ_list.clone(), typ_int.clone()]),
@@ -669,10 +589,7 @@ fn test_call_arguments_substitute_local_types_and_pass_function_values() {
         .node,
         "answer"
     );
-    assert!(matches!(
-        seen.borrow()[0].node,
-        ast::TypKind::Num(num::Typ::Nat)
-    ));
+    assert!(matches!(seen.borrow()[0].node, ast::TypKind::Num(num::Typ::Nat)));
 }
 
 #[test]
@@ -685,15 +602,11 @@ fn test_index_failures_retain_the_index_expression_span() {
             .any(|trace| &trace.span == span || contains_span(&trace.children, span))
     }
     let mut index = int(3);
-    index.span = Span::new(
-        Position::new("index.watsup", 7, 8),
-        Position::new("index.watsup", 7, 9),
-    );
+    index.span =
+        Span::new(Position::new("index.watsup", 7, 8), Position::new("index.watsup", 7, 9));
     let span = index.span.clone();
-    let expression = exp(
-        ast::ExpKind::Idx(Box::new(list(vec![int(1)])), Box::new(index)),
-        typ::make::int(),
-    );
+    let expression =
+        exp(ast::ExpKind::Idx(Box::new(list(vec![int(1)])), Box::new(index)), typ::make::int());
     let error = eval(expression).unwrap_err();
     let ErrorKind::Trace(TraceErrorKind::Execution) = *error.kind else {
         panic!("expected execution traces");
@@ -732,10 +645,7 @@ def $destructure() = $sum_pair(($updated())[0])
     assert_eq!(numbers(runner.arena(), &rows[0]), ["1", "9"]);
     assert_eq!(numbers(runner.arena(), &rows[1]), ["3", "4"]);
     let value = runner.context().call_func("destructure", &[], &[]).unwrap();
-    assert_eq!(
-        num::to_int(get::num(runner.arena(), &value).unwrap()).to_string(),
-        "10"
-    );
+    assert_eq!(num::to_int(get::num(runner.arena(), &value).unwrap()).to_string(), "10");
 }
 
 #[test]
@@ -763,10 +673,7 @@ def $first(ns) = ns[0]
         NullInterface,
         NullExtern,
     );
-    let span = Span::new(
-        Position::new("input.watsup", 3, 4),
-        Position::new("input.watsup", 3, 5),
-    );
+    let span = Span::new(Position::new("input.watsup", 3, 4), Position::new("input.watsup", 3, 5));
     let input = make::nat(runner.arena_mut(), 7u64.into(), span.clone()).unwrap();
     let literal = runner.context().call_func("literal", &[], &[]).unwrap();
     assert_eq!(runner.arena().span(&literal).clone(), Span::default());
@@ -812,10 +719,7 @@ fn test_builtin_failure_remains_typed_in_public_error_tree() {
         id: id("missing_builtin"), tparams: vec![], params: vec![],
         typ: typ::make::int(), hints: vec![],
     })), span: Span::default());
-    let call = exp(
-        ast::ExpKind::Call(id("missing_builtin"), vec![], vec![]),
-        typ::make::int(),
-    );
+    let call = exp(ast::ExpKind::Call(id("missing_builtin"), vec![], vec![]), typ::make::int());
     let mut runner = Runner::<AlInterp, _, _>::new(
         Global::load(vec![function("test", call), builtin]).unwrap(),
         AlInterp::new(Config::new(false, false, false)),
@@ -825,8 +729,6 @@ fn test_builtin_failure_remains_typed_in_public_error_tree() {
     let error = runner.context().call_func("test", &[], &[]).unwrap_err();
     assert_eq!(
         find_builtin(&error),
-        Some(&BuiltinErrorKind::MissingImplementation(
-            "missing_builtin".into()
-        ))
+        Some(&BuiltinErrorKind::MissingImplementation("missing_builtin".into()))
     );
 }

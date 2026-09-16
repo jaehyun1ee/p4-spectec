@@ -25,24 +25,16 @@ fn test_nested_bindings_avoid_upstream_guard_names_and_keep_iterator_roles() {
         exp_l: variable("x'''"),
         exp_r: variable("source"),
         iter_instrs: vec![iterator("x'''", "x'''")],
-        block: vec![
-            ret("x'''"),
-            binding("x''''", "x'''", vec![ret("x''''"), ret("x'''")]),
-        ],
+        block: vec![ret("x'''"), binding("x''''", "x'''", vec![ret("x''''"), ret("x'''")])],
     }));
     let instr_case = instr(InstrKind::Case(CaseInstr {
         exp: variable("case"),
-        cases: vec![Case {
-            guard: Guard::Mem(variable("x")),
-            block: vec![instr_let],
-        }],
+        cases: vec![Case { guard: Guard::Mem(variable("x")), block: vec![instr_let] }],
         total: false,
     }));
     let (_, block, _) =
         rename_tick::apply_rel((vec![variable("x'")], vec![instr_case], None)).unwrap();
-    let InstrKind::Case(instr_case) = &block[0].node else {
-        panic!("expected case")
-    };
+    let InstrKind::Case(instr_case) = &block[0].node else { panic!("expected case") };
     let InstrKind::Let(instr_let) = &instr_case.cases[0].block[0].node else {
         panic!("expected let")
     };
@@ -68,18 +60,13 @@ fn test_rule_output_renaming_keeps_input_and_locations() {
     id_output.span = span(23);
     let instr_rule = instr(InstrKind::Rule(RuleInstr {
         id: id("rel"),
-        not_exp: Mixfix::Seq(vec![
-            Mixfix::Arg(variable("input")),
-            Mixfix::Arg(exp_output),
-        ]),
+        not_exp: Mixfix::Seq(vec![Mixfix::Arg(variable("input")), Mixfix::Arg(exp_output)]),
         input_hint: InputHint::new(vec![0]),
         iter_instrs: vec![iterator("input", "out'''")],
         block: vec![ret("out'''")],
     }));
     let (_, block, _) = rename_tick::apply_rel((vec![], vec![instr_rule], None)).unwrap();
-    let InstrKind::Rule(instr_rule) = &block[0].node else {
-        panic!("expected rule")
-    };
+    let InstrKind::Rule(instr_rule) = &block[0].node else { panic!("expected rule") };
     let exps = instr_rule.not_exp.args();
     assert_eq!(var_id(exps[0]).node, "input");
     assert_eq!(var_id(exps[1]).node, "out");

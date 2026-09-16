@@ -122,10 +122,7 @@ fn populate_exps_templates<'a>(
 
 fn populate_var_exp_template(exp_template: &Exp, exp: &Exp) -> Prem {
     let span = Span::over(&[exp.span.clone(), exp_template.span.clone()]);
-    let prem = LetPrem {
-        exp_l: exp.clone(),
-        exp_r: exp_template.clone(),
-    };
+    let prem = LetPrem { exp_l: exp.clone(), exp_r: exp_template.clone() };
     let prem_kind = PremKind::Let(prem);
     crate::phrase! {node: prem_kind, span: span}
 }
@@ -184,14 +181,7 @@ fn antiunify_exp(
         (ExpKind::Iter(exp_body_template, iter_template), ExpKind::Iter(exp_body, iter))
             if iter_template.0.syntax_eq(&iter.0) =>
         {
-            antiunify_iter_exp(
-                frees,
-                uenv,
-                exp_body_template,
-                iter_template,
-                exp_body,
-                iter,
-            )?
+            antiunify_iter_exp(frees, uenv, exp_body_template, iter_template, exp_body, iter)?
         }
         _ => {
             let error_kind = StructureErrorKind::Antiunification;
@@ -307,11 +297,8 @@ fn antiunify_iter_exp(
     for var in vars_template.iter().chain(vars) {
         let Var { id, typ, iters } = var;
         if let Some(id_unified) = uenv.ids.get(id) {
-            let var_unified = Var {
-                id: id_unified.clone(),
-                typ: typ.clone(),
-                iters: iters.clone(),
-            };
+            let var_unified =
+                Var { id: id_unified.clone(), typ: typ.clone(), iters: iters.clone() };
             if !vars_unified
                 .iter()
                 .any(|var: &Var| var.syntax_eq(&var_unified))
@@ -441,12 +428,8 @@ fn antiunify_args_across_clauses(
         let mut uenv = UEnv::default();
         let mut arg_template = arg_head.clone();
         for clause in clauses_tail {
-            arg_template = antiunify_arg(
-                &mut frees,
-                &mut uenv,
-                &arg_template,
-                &clause.node.args[num_idx],
-            )?;
+            arg_template =
+                antiunify_arg(&mut frees, &mut uenv, &arg_template, &clause.node.args[num_idx])?;
         }
         uenv_acc.extend(uenv)?;
         args_template.push(arg_template);

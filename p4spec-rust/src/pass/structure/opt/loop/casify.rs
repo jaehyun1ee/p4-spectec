@@ -76,39 +76,19 @@ fn casify_if_instr(
         instrs.remove(idx);
         return casify_case_instr(tdenv, instr_case, span, instrs);
     }
-    let IfInstr {
-        exp,
-        iter_exps,
-        block,
-    } = instr_if;
+    let IfInstr { exp, iter_exps, block } = instr_if;
     let block = casify_block(tdenv, block)?;
-    let instr = IfInstr {
-        exp,
-        iter_exps,
-        block,
-    };
+    let instr = IfInstr { exp, iter_exps, block };
     Ok(InstrKind::If(instr))
 }
 
 // - Hold instruction
 
 fn casify_hold_instr(tdenv: &TDEnv, instr: HoldInstr) -> Result<InstrKind, StructureError> {
-    let HoldInstr {
-        id,
-        not_exp,
-        iter_exps,
-        block_hold,
-        block_not_hold,
-    } = instr;
+    let HoldInstr { id, not_exp, iter_exps, block_hold, block_not_hold } = instr;
     let block_hold = casify_block(tdenv, block_hold)?;
     let block_not_hold = casify_block(tdenv, block_not_hold)?;
-    let instr = HoldInstr {
-        id,
-        not_exp,
-        iter_exps,
-        block_hold,
-        block_not_hold,
-    };
+    let instr = HoldInstr { id, not_exp, iter_exps, block_hold, block_not_hold };
     Ok(InstrKind::Hold(instr))
 }
 
@@ -141,59 +121,27 @@ fn casify_case_instr(
 // - Group instruction
 
 fn casify_group_instr(tdenv: &TDEnv, instr: GroupInstr) -> Result<InstrKind, StructureError> {
-    let GroupInstr {
-        id,
-        rel_signature,
-        exps,
-        block,
-    } = instr;
+    let GroupInstr { id, rel_signature, exps, block } = instr;
     let block = casify_block(tdenv, block)?;
-    let instr = GroupInstr {
-        id,
-        rel_signature,
-        exps,
-        block,
-    };
+    let instr = GroupInstr { id, rel_signature, exps, block };
     Ok(InstrKind::Group(instr))
 }
 
 // - Let instruction
 
 fn casify_let_instr(tdenv: &TDEnv, instr: LetInstr) -> Result<InstrKind, StructureError> {
-    let LetInstr {
-        exp_l,
-        exp_r,
-        iter_instrs,
-        block,
-    } = instr;
+    let LetInstr { exp_l, exp_r, iter_instrs, block } = instr;
     let block = casify_block(tdenv, block)?;
-    let instr = LetInstr {
-        exp_l,
-        exp_r,
-        iter_instrs,
-        block,
-    };
+    let instr = LetInstr { exp_l, exp_r, iter_instrs, block };
     Ok(InstrKind::Let(instr))
 }
 
 // - Rule instruction
 
 fn casify_rule_instr(tdenv: &TDEnv, instr: RuleInstr) -> Result<InstrKind, StructureError> {
-    let RuleInstr {
-        id,
-        not_exp,
-        input_hint,
-        iter_instrs,
-        block,
-    } = instr;
+    let RuleInstr { id, not_exp, input_hint, iter_instrs, block } = instr;
     let block = casify_block(tdenv, block)?;
-    let instr = RuleInstr {
-        id,
-        not_exp,
-        input_hint,
-        iter_instrs,
-        block,
-    };
+    let instr = RuleInstr { id, not_exp, input_hint, iter_instrs, block };
     Ok(InstrKind::Rule(instr))
 }
 
@@ -261,27 +209,13 @@ fn casify_if_then_if(
     let overlap = overlap_exp(tdenv, &instr_target.exp, &instr_if.exp)?;
     let (exp, guard_a, guard_b, total) = match overlap {
         // x = 1 and x = 2 leave other integer values uncovered
-        Overlap::Disjoint {
-            exp,
-            guard_a,
-            guard_b,
-        } => (exp, guard_a, guard_b, false),
+        Overlap::Disjoint { exp, guard_a, guard_b } => (exp, guard_a, guard_b, false),
         // x = true and x = false cover both boolean values
-        Overlap::Partition {
-            exp,
-            guard_a,
-            guard_b,
-        } => (exp, guard_a, guard_b, true),
+        Overlap::Partition { exp, guard_a, guard_b } => (exp, guard_a, guard_b, true),
         Overlap::Identical | Overlap::Fuzzy => return Ok(None),
     };
-    let case_a = Case {
-        guard: guard_a,
-        block: instr_target.block.clone(),
-    };
-    let case_b = Case {
-        guard: guard_b,
-        block: instr_if.block.clone(),
-    };
+    let case_a = Case { guard: guard_a, block: instr_target.block.clone() };
+    let case_b = Case { guard: guard_b, block: instr_if.block.clone() };
     let cases = vec![case_a, case_b];
     let instr = CaseInstr { exp, cases, total };
     Ok(Some(instr))
@@ -295,11 +229,7 @@ fn casify_if_then_case(
     instr_case: &CaseInstr,
     span_case: &Span,
 ) -> Result<Option<CaseInstr>, StructureError> {
-    let IfInstr {
-        exp: exp_cond_target,
-        block: block_target,
-        ..
-    } = instr_target;
+    let IfInstr { exp: exp_cond_target, block: block_target, .. } = instr_target;
     let CaseInstr { exp, cases, total } = instr_case;
     let Some(guard_target) = exp_as_guard(exp, exp_cond_target) else {
         return Ok(None);
@@ -312,11 +242,7 @@ fn casify_if_then_case(
                 // if x = 2 before cases [1, 2, 3] keeps cases [2, 3]
                 let mut cases = cases[idx..].to_vec();
                 cases[0].block = merge_block(block_target.clone(), block.clone());
-                let instr = CaseInstr {
-                    exp: exp.clone(),
-                    cases,
-                    total: *total,
-                };
+                let instr = CaseInstr { exp: exp.clone(), cases, total: *total };
                 return Ok(Some(instr));
             }
             Overlap::Disjoint { .. } | Overlap::Partition { .. } => {}
@@ -324,22 +250,12 @@ fn casify_if_then_case(
         }
     }
     if *total {
-        return Err(StructureError::new(
-            StructureErrorKind::EmptyTotalCase,
-            span_case.clone(),
-        ));
+        return Err(StructureError::new(StructureErrorKind::EmptyTotalCase, span_case.clone()));
     }
     let mut cases = cases.clone();
-    let case = Case {
-        guard: guard_target,
-        block: block_target.clone(),
-    };
+    let case = Case { guard: guard_target, block: block_target.clone() };
     cases.push(case);
-    let instr = CaseInstr {
-        exp: exp.clone(),
-        cases,
-        total: *total,
-    };
+    let instr = CaseInstr { exp: exp.clone(), cases, total: *total };
     Ok(Some(instr))
 }
 
@@ -352,11 +268,7 @@ fn casify_case_then_if(
     span_target: &Span,
 ) -> Result<Option<CaseInstr>, StructureError> {
     let CaseInstr { exp, cases, total } = instr_target;
-    let IfInstr {
-        exp: exp_cond,
-        block,
-        ..
-    } = instr_if;
+    let IfInstr { exp: exp_cond, block, .. } = instr_if;
     let Some(guard) = exp_as_guard(exp, exp_cond) else {
         return Ok(None);
     };
@@ -365,11 +277,7 @@ fn casify_case_then_if(
         return Ok(None);
     };
     // Case followed by If becomes partial, even when the Case was total
-    let instr = CaseInstr {
-        exp: exp.clone(),
-        cases,
-        total: false,
-    };
+    let instr = CaseInstr { exp: exp.clone(), cases, total: false };
     Ok(Some(instr))
 }
 
@@ -381,11 +289,7 @@ fn casify_case_then_case(
     instr_case: &CaseInstr,
     span_target: &Span,
 ) -> Result<Option<CaseInstr>, StructureError> {
-    let CaseInstr {
-        exp: exp_target,
-        cases: cases_target,
-        total: total_target,
-    } = instr_target;
+    let CaseInstr { exp: exp_target, cases: cases_target, total: total_target } = instr_target;
     let CaseInstr { exp, cases, .. } = instr_case;
     if !exp_target.syntax_eq(exp) {
         return Ok(None);
@@ -407,11 +311,7 @@ fn casify_case_then_case(
         };
         cases_target = cases;
     }
-    let instr = CaseInstr {
-        exp: exp_target.clone(),
-        cases: cases_target,
-        total: *total_target,
-    };
+    let instr = CaseInstr { exp: exp_target.clone(), cases: cases_target, total: *total_target };
     Ok(Some(instr))
 }
 
@@ -427,10 +327,7 @@ fn merge_case_and_guard(
     span_target: &Span,
 ) -> Result<Option<Vec<Case>>, StructureError> {
     for (idx, case_target) in cases_target.iter().enumerate() {
-        let Case {
-            guard: guard_target,
-            block: block_target,
-        } = case_target;
+        let Case { guard: guard_target, block: block_target } = case_target;
         let overlap = overlap_guard(tdenv, exp_target, guard_target, guard)?;
         match overlap {
             Overlap::Identical => {
@@ -444,16 +341,10 @@ fn merge_case_and_guard(
         }
     }
     if total_target {
-        return Err(StructureError::new(
-            StructureErrorKind::EmptyTotalCase,
-            span_target.clone(),
-        ));
+        return Err(StructureError::new(StructureErrorKind::EmptyTotalCase, span_target.clone()));
     }
     let mut cases = cases_target.to_vec();
-    let case = Case {
-        guard: guard.clone(),
-        block: block.clone(),
-    };
+    let case = Case { guard: guard.clone(), block: block.clone() };
     cases.push(case);
     Ok(Some(cases))
 }

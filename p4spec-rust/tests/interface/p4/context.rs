@@ -12,13 +12,7 @@ fn test_scopes_shadow_and_restore_identifier_kinds() {
 
     assert!(matches!(ctx.ident_kind("T"), IdentKind::Ident { .. }));
     ctx.scope_pop().unwrap();
-    assert!(matches!(
-        ctx.ident_kind("T"),
-        IdentKind::TypeName {
-            has_params: false,
-            ..
-        }
-    ));
+    assert!(matches!(ctx.ident_kind("T"), IdentKind::TypeName { has_params: false, .. }));
 }
 
 #[test]
@@ -35,18 +29,9 @@ fn test_parent_namespace_classifies_members_without_global_state() {
 
     ctx.ident_kind("header");
     ctx.namespace_set_parent();
-    assert!(matches!(
-        ctx.ident_kind("FieldType"),
-        IdentKind::TypeName {
-            has_params: true,
-            ..
-        }
-    ));
+    assert!(matches!(ctx.ident_kind("FieldType"), IdentKind::TypeName { has_params: true, .. }));
     ctx.namespace_clear_parent();
-    assert!(matches!(
-        ctx.ident_kind("FieldType"),
-        IdentKind::Ident { .. }
-    ));
+    assert!(matches!(ctx.ident_kind("FieldType"), IdentKind::Ident { .. }));
 }
 
 #[test]
@@ -73,12 +58,6 @@ fn test_go_local_discards_scopes_created_while_locals_are_suspended() {
 
     ctx.scope_to_local();
 
-    assert!(matches!(
-        ctx.ident_kind("Local"),
-        IdentKind::TypeName { .. }
-    ));
-    assert!(matches!(
-        ctx.ident_kind("Temporary"),
-        IdentKind::Ident { .. }
-    ));
+    assert!(matches!(ctx.ident_kind("Local"), IdentKind::TypeName { .. }));
+    assert!(matches!(ctx.ident_kind("Temporary"), IdentKind::Ident { .. }));
 }

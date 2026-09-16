@@ -53,12 +53,7 @@ pub(super) struct Backtrack {
 
 impl Backtrack {
     pub(super) fn nest(self, error: ElabError) -> Self {
-        Self {
-            traces: vec![ElabTrace {
-                error,
-                children: self.traces,
-            }],
-        }
+        Self { traces: vec![ElabTrace { error, children: self.traces }] }
     }
 
     pub(super) fn merge(mut self, mut other: Self) -> Self {
@@ -102,9 +97,7 @@ impl Backtrack {
 
 impl From<ElabError> for Backtrack {
     fn from(error: ElabError) -> Self {
-        Self {
-            traces: vec![ElabTrace::leaf(error)],
-        }
+        Self { traces: vec![ElabTrace::leaf(error)] }
     }
 }
 

@@ -77,13 +77,12 @@ fn parse_error(ctx: &Context, error: ParseError<Location, Token, FrontendError>)
         ParseError::UnrecognizedEof { location: loc, .. } => {
             (SyntaxErrorKind::UnexpectedEndOfInput, loc, loc)
         }
-        ParseError::UnrecognizedToken {
-            token: (loc_l, _, loc_r),
-            ..
-        } => (SyntaxErrorKind::UnexpectedToken, loc_l, loc_r),
-        ParseError::ExtraToken {
-            token: (loc_l, _, loc_r),
-        } => (SyntaxErrorKind::ExtraToken, loc_l, loc_r),
+        ParseError::UnrecognizedToken { token: (loc_l, _, loc_r), .. } => {
+            (SyntaxErrorKind::UnexpectedToken, loc_l, loc_r)
+        }
+        ParseError::ExtraToken { token: (loc_l, _, loc_r) } => {
+            (SyntaxErrorKind::ExtraToken, loc_l, loc_r)
+        }
         ParseError::User { error } => return error,
     };
     crate::phrase! {

@@ -19,12 +19,7 @@ fn test_hashes_match_ocaml_vectors() {
         (0, 0_u64, 0, [0_u64, 0, 65535, 65535, 0]),
         (16, 10, 0, [1920, 2701982689, 65525, 10, 10]),
         (16, 4660, 0, [30477, 412718745, 60875, 4660, 4660]),
-        (
-            32,
-            305419896,
-            0,
-            [13435, 1242107544, 38739, 26796, 305419896],
-        ),
+        (32, 305419896, 0, [13435, 1242107544, 38739, 26796, 305419896]),
         (32, 4294967295, 0, [37889, 4294967295, 0, 65535, 4294967295]),
         (16, 4660, 65280, [30477, 412718745, 61130, 4915, 4660]),
     ] {
@@ -48,12 +43,7 @@ fn precision(arena: &mut ValueArena, shape: &str, ints: &[i64]) -> Value {
         .enumerate()
         .map(|(idx, int)| {
             if idx + 1 < ints.len() {
-                make::nat(
-                    arena,
-                    BigInt::from(*int).try_into().unwrap(),
-                    Span::default(),
-                )
-                .unwrap()
+                make::nat(arena, BigInt::from(*int).try_into().unwrap(), Span::default()).unwrap()
             } else {
                 make::int(arena, (*int).into(), Span::default()).unwrap()
             }
@@ -92,18 +82,9 @@ fn test_package_normalizes_signed_fields_and_pads_without_shifting() {
 
 #[test]
 fn test_hash_width_and_complement_boundaries() {
-    assert_eq!(
-        bigint::bitwise_neg(&74565.into(), &8.into()).unwrap(),
-        74682.into()
-    );
-    assert_eq!(
-        bigint::bitwise_neg(&74565.into(), &0.into()).unwrap(),
-        74565.into()
-    );
-    assert_eq!(
-        bigint::bitwise_neg(&74565.into(), &(-1).into()).unwrap(),
-        74565.into()
-    );
+    assert_eq!(bigint::bitwise_neg(&74565.into(), &8.into()).unwrap(), 74682.into());
+    assert_eq!(bigint::bitwise_neg(&74565.into(), &0.into()).unwrap(), 74565.into());
+    assert_eq!(bigint::bitwise_neg(&74565.into(), &(-1).into()).unwrap(), 74565.into());
     for (int_init, int_sum, int_sub) in [(-65537, 60876, 4661), (131072, 60874, 4659)] {
         let bits = (16.into(), 4660.into());
         assert_eq!(

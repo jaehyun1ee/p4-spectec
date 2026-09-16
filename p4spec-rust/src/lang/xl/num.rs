@@ -102,11 +102,7 @@ impl TryFrom<BigInt> for Natural {
     type Error = NumericError;
 
     fn try_from(int: BigInt) -> Result<Self, Self::Error> {
-        if int.is_negative() {
-            Err(NumericError::NegativeNatural(int))
-        } else {
-            Ok(Self(int))
-        }
+        if int.is_negative() { Err(NumericError::NegativeNatural(int)) } else { Ok(Self(int)) }
     }
 }
 
@@ -281,10 +277,9 @@ pub fn bin(binop: BinOp, number_l: &Number, number_r: &Number) -> Result<Number,
         | (BinOp::Pow, Number::Int(_), Number::Int(_)) => {
             Err(NumericError::UnsupportedBinaryOperation(binop))
         }
-        (_, number_l, number_r) => Err(NumericError::MismatchedKinds {
-            typ_l: to_typ(number_l),
-            typ_r: to_typ(number_r),
-        }),
+        (_, number_l, number_r) => {
+            Err(NumericError::MismatchedKinds { typ_l: to_typ(number_l), typ_r: to_typ(number_r) })
+        }
     }
 }
 
@@ -311,9 +306,8 @@ pub fn cmp(cmpop: CmpOp, number_l: &Number, number_r: &Number) -> Result<bool, N
             Ok(natural_l.0 >= natural_r.0)
         }
         (CmpOp::Ge, Number::Int(integer_l), Number::Int(integer_r)) => Ok(integer_l >= integer_r),
-        (_, number_l, number_r) => Err(NumericError::MismatchedKinds {
-            typ_l: to_typ(number_l),
-            typ_r: to_typ(number_r),
-        }),
+        (_, number_l, number_r) => {
+            Err(NumericError::MismatchedKinds { typ_l: to_typ(number_l), typ_r: to_typ(number_r) })
+        }
     }
 }

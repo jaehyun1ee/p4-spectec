@@ -5,10 +5,7 @@ fn test_free_expression_path_argument_and_premise_variants_collect_identifier_te
     let x = || Box::new(variable("x"));
     let exps = vec![
         (expr(il::ast::ExpKind::Bool(true)), ids(&[])),
-        (
-            expr(il::ast::ExpKind::Num(num::Number::Nat(0.into()))),
-            ids(&[]),
-        ),
+        (expr(il::ast::ExpKind::Num(num::Number::Nat(0.into()))), ids(&[])),
         (expr(il::ast::ExpKind::Text("text".to_owned())), ids(&[])),
         (variable("x"), ids(&["x"])),
         (
@@ -37,47 +34,22 @@ fn test_free_expression_path_argument_and_premise_variants_collect_identifier_te
             )),
             ids(&["x"]),
         ),
+        (expr(il::ast::ExpKind::UpCast(Box::new(typ()), x())), ids(&["x"])),
+        (expr(il::ast::ExpKind::DownCast(Box::new(typ()), x())), ids(&["x"])),
         (
-            expr(il::ast::ExpKind::UpCast(Box::new(typ()), x())),
+            expr(il::ast::ExpKind::Sub(x(), Box::new(typ()), Box::new(il::ast::Subcheck::Skip))),
             ids(&["x"]),
         ),
         (
-            expr(il::ast::ExpKind::DownCast(Box::new(typ()), x())),
+            expr(il::ast::ExpKind::Match(x(), il::ast::Pattern::List(il::ast::ListPattern::Nil))),
             ids(&["x"]),
         ),
-        (
-            expr(il::ast::ExpKind::Sub(
-                x(),
-                Box::new(typ()),
-                Box::new(il::ast::Subcheck::Skip),
-            )),
-            ids(&["x"]),
-        ),
-        (
-            expr(il::ast::ExpKind::Match(
-                x(),
-                il::ast::Pattern::List(il::ast::ListPattern::Nil),
-            )),
-            ids(&["x"]),
-        ),
-        (
-            expr(il::ast::ExpKind::Tuple(vec![variable("x")])),
-            ids(&["x"]),
-        ),
-        (
-            expr(il::ast::ExpKind::Case(Box::new(not_exp("x")))),
-            ids(&["x"]),
-        ),
-        (
-            expr(il::ast::ExpKind::Str(vec![(atom(), variable("x"))])),
-            ids(&["x"]),
-        ),
+        (expr(il::ast::ExpKind::Tuple(vec![variable("x")])), ids(&["x"])),
+        (expr(il::ast::ExpKind::Case(Box::new(not_exp("x")))), ids(&["x"])),
+        (expr(il::ast::ExpKind::Str(vec![(atom(), variable("x"))])), ids(&["x"])),
         (expr(il::ast::ExpKind::Opt(Some(x()))), ids(&["x"])),
         (expr(il::ast::ExpKind::Opt(None)), ids(&[])),
-        (
-            expr(il::ast::ExpKind::List(vec![variable("x")])),
-            ids(&["x"]),
-        ),
+        (expr(il::ast::ExpKind::List(vec![variable("x")])), ids(&["x"])),
         (expr(il::ast::ExpKind::Cons(x(), x())), ids(&["x"])),
         (expr(il::ast::ExpKind::Cat(x(), x())), ids(&["x"])),
         (expr(il::ast::ExpKind::Mem(x(), x())), ids(&["x"])),
@@ -85,25 +57,9 @@ fn test_free_expression_path_argument_and_premise_variants_collect_identifier_te
         (expr(il::ast::ExpKind::Dot(x(), atom())), ids(&["x"])),
         (expr(il::ast::ExpKind::Idx(x(), x())), ids(&["x"])),
         (expr(il::ast::ExpKind::Slice(x(), x(), x())), ids(&["x"])),
-        (
-            expr(il::ast::ExpKind::Upd(x(), Box::new(path_with("x")), x())),
-            ids(&["x"]),
-        ),
-        (
-            expr(il::ast::ExpKind::Call(
-                id("call"),
-                Vec::new(),
-                vec![arg_exp("x")],
-            )),
-            ids(&["x"]),
-        ),
-        (
-            expr(il::ast::ExpKind::Iter(
-                x(),
-                (il::ast::Iter::List, Vec::new()),
-            )),
-            ids(&["x"]),
-        ),
+        (expr(il::ast::ExpKind::Upd(x(), Box::new(path_with("x")), x())), ids(&["x"])),
+        (expr(il::ast::ExpKind::Call(id("call"), Vec::new(), vec![arg_exp("x")])), ids(&["x"])),
+        (expr(il::ast::ExpKind::Iter(x(), (il::ast::Iter::List, Vec::new()))), ids(&["x"])),
     ];
     for (exp, expected) in exps {
         assert_eq!(exp.free(), expected);
@@ -158,15 +114,9 @@ fn test_free_expression_path_argument_and_premise_variants_collect_identifier_te
             }),
             ids(&["x"]),
         ),
+        (al::ast::PremKind::If(al::ast::IfPrem { exp: variable("x") }), ids(&["x"])),
         (
-            al::ast::PremKind::If(al::ast::IfPrem { exp: variable("x") }),
-            ids(&["x"]),
-        ),
-        (
-            al::ast::PremKind::IfHold(al::ast::IfHoldPrem {
-                id: id("r"),
-                not_exp: not_exp("x"),
-            }),
+            al::ast::PremKind::IfHold(al::ast::IfHoldPrem { id: id("r"), not_exp: not_exp("x") }),
             ids(&["x"]),
         ),
         (
@@ -177,10 +127,7 @@ fn test_free_expression_path_argument_and_premise_variants_collect_identifier_te
             ids(&["x"]),
         ),
         (
-            al::ast::PremKind::Let(al::ast::LetPrem {
-                exp_l: variable("x"),
-                exp_r: variable("y"),
-            }),
+            al::ast::PremKind::Let(al::ast::LetPrem { exp_l: variable("x"), exp_r: variable("y") }),
             ids(&["x", "y"]),
         ),
         (
@@ -197,10 +144,7 @@ fn test_free_expression_path_argument_and_premise_variants_collect_identifier_te
             }),
             ids(&["x"]),
         ),
-        (
-            al::ast::PremKind::Debug(al::ast::DebugPrem { exp: variable("x") }),
-            ids(&["x"]),
-        ),
+        (al::ast::PremKind::Debug(al::ast::DebugPrem { exp: variable("x") }), ids(&["x"])),
     ];
     for (prem, expected) in prems {
         assert_eq!(
@@ -226,11 +170,8 @@ fn test_free_al_shapes_and_definition_arms_are_exhaustive() {
         exps_input: vec![variable("i")],
         prems: vec![prem()],
     };
-    let rule_path = al::ast::RulePath {
-        id: id("rule"),
-        prems: vec![prem()],
-        exps_output: vec![variable("o")],
-    };
+    let rule_path =
+        al::ast::RulePath { id: id("rule"), prems: vec![prem()], exps_output: vec![variable("o")] };
     let group: al::ast::RuleGroup = p4spec_rust::phrase! { node: al::ast::RuleGroupKind {
         id: id("group"),
         rule_match: rule_match.clone(),

@@ -43,11 +43,7 @@ pub(super) fn decode_option<T>(
     json: &json,
     decode: impl FnOnce(&json) -> Result<T, DecodeError>,
 ) -> Result<Option<T>, DecodeError> {
-    if json.is_null() {
-        Ok(None)
-    } else {
-        Ok(Some(decode(json)?))
-    }
+    if json.is_null() { Ok(None) } else { Ok(Some(decode(json)?)) }
 }
 
 pub(super) fn encode_option<T>(value: Option<&T>, encode: impl FnOnce(&T) -> json) -> json {
@@ -99,24 +95,22 @@ pub(super) fn decode_def_typ(json: &json) -> Result<ast::DefTyp, DecodeError> {
         let (tag, fields) = variant(json)?;
         match (tag, fields) {
             ("PlainT", [typ]) => Ok(DefTypKind::Plain(decode_typ(typ)?)),
-            ("StructT", [fields]) => Ok(DefTypKind::Struct(decode_list(
-                fields,
-                |field| match array(field)? {
+            ("StructT", [fields]) => {
+                Ok(DefTypKind::Struct(decode_list(fields, |field| match array(field)? {
                     [atom, typ] => Ok((AtomPhraseCodec::decode(atom)?, decode_typ(typ)?)),
                     _ => Err(DecodeError::Expected("IL type field pair")),
-                },
-            )?)),
-            ("VariantT", [cases]) => Ok(DefTypKind::Variant(decode_list(
-                cases,
-                |case| match array(case)? {
+                })?))
+            }
+            ("VariantT", [cases]) => {
+                Ok(DefTypKind::Variant(decode_list(cases, |case| match array(case)? {
                     [not_typ, typ_origin, hints] => Ok((
                         decode_not_typ(not_typ)?,
                         decode_typ_origin(typ_origin)?,
                         decode_list(hints, el::decode_hint)?,
                     )),
                     _ => Err(DecodeError::Expected("IL type case triple")),
-                },
-            )?)),
+                })?))
+            }
             ("PlainT" | "StructT" | "VariantT", _) => {
                 Err(DecodeError::Expected("valid IL defined type arity"))
             }
@@ -263,14 +257,12 @@ pub(super) fn decode_subcheck(json: &json) -> Result<ast::Subcheck, DecodeError>
             mixops,
             crate::wire::ocaml::mixfix::MixopCodec::decode,
         )?)),
-        ("TupleSC", [subchecks]) => Ok(ast::Subcheck::Tuple(decode_list(
-            subchecks,
-            decode_subcheck,
-        )?)),
-        ("IterSC", [iter, subcheck]) => Ok(ast::Subcheck::Iter(
-            decode_iter(iter)?,
-            Box::new(decode_subcheck(subcheck)?),
-        )),
+        ("TupleSC", [subchecks]) => {
+            Ok(ast::Subcheck::Tuple(decode_list(subchecks, decode_subcheck)?))
+        }
+        ("IterSC", [iter, subcheck]) => {
+            Ok(ast::Subcheck::Iter(decode_iter(iter)?, Box::new(decode_subcheck(subcheck)?)))
+        }
         ("RecurseSC", [typ]) => Ok(ast::Subcheck::Recurse(decode_typ(typ)?)),
         ("SkipSC" | "MixopSC" | "TupleSC" | "IterSC" | "RecurseSC", _) => {
             Err(DecodeError::Expected("valid IL subtype check arity"))
@@ -282,10 +274,9 @@ pub(super) fn decode_subcheck(json: &json) -> Result<ast::Subcheck, DecodeError>
 pub(super) fn encode_subcheck(subcheck: &ast::Subcheck) -> json {
     match subcheck {
         ast::Subcheck::Skip => json!(["SkipSC"]),
-        ast::Subcheck::Mixop(mixops) => json!([
-            "MixopSC",
-            encode_list(mixops, crate::wire::ocaml::mixfix::MixopCodec::encode)
-        ]),
+        ast::Subcheck::Mixop(mixops) => {
+            json!(["MixopSC", encode_list(mixops, crate::wire::ocaml::mixfix::MixopCodec::encode)])
+        }
         ast::Subcheck::Tuple(subchecks) => {
             json!(["TupleSC", encode_list(subchecks, encode_subcheck)])
         }
@@ -297,9 +288,7 @@ pub(super) fn encode_subcheck(subcheck: &ast::Subcheck) -> json {
 }
 
 pub(super) fn decode_exp(json: &json) -> Result<ast::Exp, DecodeError> {
-    source::decode_note_phrase(json, decode_exp_kind, |json| {
-        decode_typ_kind(json).map(Into::into)
-    })
+    source::decode_note_phrase(json, decode_exp_kind, |json| decode_typ_kind(json).map(Into::into))
 }
 
 pub(super) fn encode_exp(exp: &ast::Exp) -> json {
@@ -313,11 +302,9 @@ fn decode_exp_kind(json: &json) -> Result<ExpKind, DecodeError> {
         ("NumE", [num]) => Ok(ExpKind::Num(xl::decode_num(num)?)),
         ("TextE", [text]) => Ok(ExpKind::Text(string(text)?.to_owned())),
         ("VarE", [id]) => Ok(ExpKind::Var(decode_id(id)?)),
-        ("UnE", [op, typ, exp]) => Ok(ExpKind::Un(
-            decode_un_op(op)?,
-            decode_op_typ(typ)?,
-            Box::new(decode_exp(exp)?),
-        )),
+        ("UnE", [op, typ, exp]) => {
+            Ok(ExpKind::Un(decode_un_op(op)?, decode_op_typ(typ)?, Box::new(decode_exp(exp)?)))
+        }
         ("BinE", [op, typ, exp_l, exp_r]) => Ok(ExpKind::Bin(
             decode_bin_op(op)?,
             decode_op_typ(typ)?,
@@ -330,54 +317,44 @@ fn decode_exp_kind(json: &json) -> Result<ExpKind, DecodeError> {
             Box::new(decode_exp(exp_l)?),
             Box::new(decode_exp(exp_r)?),
         )),
-        ("UpCastE", [typ, exp]) => Ok(ExpKind::UpCast(
-            Box::new(decode_typ(typ)?),
-            Box::new(decode_exp(exp)?),
-        )),
-        ("DownCastE", [typ, exp]) => Ok(ExpKind::DownCast(
-            Box::new(decode_typ(typ)?),
-            Box::new(decode_exp(exp)?),
-        )),
+        ("UpCastE", [typ, exp]) => {
+            Ok(ExpKind::UpCast(Box::new(decode_typ(typ)?), Box::new(decode_exp(exp)?)))
+        }
+        ("DownCastE", [typ, exp]) => {
+            Ok(ExpKind::DownCast(Box::new(decode_typ(typ)?), Box::new(decode_exp(exp)?)))
+        }
         ("SubE", [exp, typ, subcheck]) => Ok(ExpKind::Sub(
             Box::new(decode_exp(exp)?),
             Box::new(decode_typ(typ)?),
             Box::new(decode_subcheck(subcheck)?),
         )),
-        ("MatchE", [exp, pattern]) => Ok(ExpKind::Match(
-            Box::new(decode_exp(exp)?),
-            decode_pattern(pattern)?,
-        )),
+        ("MatchE", [exp, pattern]) => {
+            Ok(ExpKind::Match(Box::new(decode_exp(exp)?), decode_pattern(pattern)?))
+        }
         ("TupleE", [exps]) => Ok(ExpKind::Tuple(decode_list(exps, decode_exp)?)),
         ("CaseE", [exp]) => Ok(ExpKind::Case(Box::new(decode_not_exp(exp)?))),
-        ("StrE", [fields]) => Ok(ExpKind::Str(decode_list(fields, |field| {
-            match array(field)? {
-                [atom, exp] => Ok((AtomPhraseCodec::decode(atom)?, decode_exp(exp)?)),
-                _ => Err(DecodeError::Expected("IL expression field pair")),
-            }
+        ("StrE", [fields]) => Ok(ExpKind::Str(decode_list(fields, |field| match array(field)? {
+            [atom, exp] => Ok((AtomPhraseCodec::decode(atom)?, decode_exp(exp)?)),
+            _ => Err(DecodeError::Expected("IL expression field pair")),
         })?)),
         ("OptE", [exp]) => Ok(ExpKind::Opt(decode_option(exp, decode_exp)?.map(Box::new))),
         ("ListE", [exps]) => Ok(ExpKind::List(decode_list(exps, decode_exp)?)),
-        ("ConsE", [exp_head, exp_tail]) => Ok(ExpKind::Cons(
-            Box::new(decode_exp(exp_head)?),
-            Box::new(decode_exp(exp_tail)?),
-        )),
-        ("CatE", [exp_l, exp_r]) => Ok(ExpKind::Cat(
-            Box::new(decode_exp(exp_l)?),
-            Box::new(decode_exp(exp_r)?),
-        )),
-        ("MemE", [exp_l, exp_r]) => Ok(ExpKind::Mem(
-            Box::new(decode_exp(exp_l)?),
-            Box::new(decode_exp(exp_r)?),
-        )),
+        ("ConsE", [exp_head, exp_tail]) => {
+            Ok(ExpKind::Cons(Box::new(decode_exp(exp_head)?), Box::new(decode_exp(exp_tail)?)))
+        }
+        ("CatE", [exp_l, exp_r]) => {
+            Ok(ExpKind::Cat(Box::new(decode_exp(exp_l)?), Box::new(decode_exp(exp_r)?)))
+        }
+        ("MemE", [exp_l, exp_r]) => {
+            Ok(ExpKind::Mem(Box::new(decode_exp(exp_l)?), Box::new(decode_exp(exp_r)?)))
+        }
         ("LenE", [exp]) => Ok(ExpKind::Len(Box::new(decode_exp(exp)?))),
-        ("DotE", [exp, atom]) => Ok(ExpKind::Dot(
-            Box::new(decode_exp(exp)?),
-            AtomPhraseCodec::decode(atom)?,
-        )),
-        ("IdxE", [exp_base, exp_idx]) => Ok(ExpKind::Idx(
-            Box::new(decode_exp(exp_base)?),
-            Box::new(decode_exp(exp_idx)?),
-        )),
+        ("DotE", [exp, atom]) => {
+            Ok(ExpKind::Dot(Box::new(decode_exp(exp)?), AtomPhraseCodec::decode(atom)?))
+        }
+        ("IdxE", [exp_base, exp_idx]) => {
+            Ok(ExpKind::Idx(Box::new(decode_exp(exp_base)?), Box::new(decode_exp(exp_idx)?)))
+        }
         ("SliceE", [exp_base, exp_idx, exp_len]) => Ok(ExpKind::Slice(
             Box::new(decode_exp(exp_base)?),
             Box::new(decode_exp(exp_idx)?),
@@ -393,10 +370,9 @@ fn decode_exp_kind(json: &json) -> Result<ExpKind, DecodeError> {
             decode_list(targs, decode_targ)?,
             decode_list(args, decode_arg)?,
         )),
-        ("IterE", [exp, iter]) => Ok(ExpKind::Iter(
-            Box::new(decode_exp(exp)?),
-            decode_iter_exp(iter)?,
-        )),
+        ("IterE", [exp, iter]) => {
+            Ok(ExpKind::Iter(Box::new(decode_exp(exp)?), decode_iter_exp(iter)?))
+        }
         (
             "BoolE" | "NumE" | "TextE" | "VarE" | "UnE" | "BinE" | "CmpE" | "UpCastE" | "DownCastE"
             | "SubE" | "MatchE" | "TupleE" | "CaseE" | "StrE" | "OptE" | "ListE" | "ConsE" | "CatE"
@@ -414,12 +390,7 @@ fn encode_exp_kind(exp: &ExpKind) -> json {
         ExpKind::Text(text) => json!(["TextE", text]),
         ExpKind::Var(id) => json!(["VarE", encode_id(id)]),
         ExpKind::Un(op, typ, exp) => {
-            json!([
-                "UnE",
-                encode_un_op(*op),
-                encode_op_typ(*typ),
-                encode_exp(exp)
-            ])
+            json!(["UnE", encode_un_op(*op), encode_op_typ(*typ), encode_exp(exp)])
         }
         ExpKind::Bin(op, typ, exp_l, exp_r) => json!([
             "BinE",
@@ -439,12 +410,9 @@ fn encode_exp_kind(exp: &ExpKind) -> json {
         ExpKind::DownCast(typ, exp) => {
             json!(["DownCastE", encode_typ(typ), encode_exp(exp)])
         }
-        ExpKind::Sub(exp, typ, subcheck) => json!([
-            "SubE",
-            encode_exp(exp),
-            encode_typ(typ),
-            encode_subcheck(subcheck)
-        ]),
+        ExpKind::Sub(exp, typ, subcheck) => {
+            json!(["SubE", encode_exp(exp), encode_typ(typ), encode_subcheck(subcheck)])
+        }
         ExpKind::Match(exp, pattern) => {
             json!(["MatchE", encode_exp(exp), encode_pattern(pattern)])
         }
@@ -471,19 +439,11 @@ fn encode_exp_kind(exp: &ExpKind) -> json {
         ExpKind::Idx(exp_base, exp_idx) => {
             json!(["IdxE", encode_exp(exp_base), encode_exp(exp_idx)])
         }
-        ExpKind::Slice(exp_base, exp_idx, exp_len) => json!([
-            "SliceE",
-            encode_exp(exp_base),
-            encode_exp(exp_idx),
-            encode_exp(exp_len)
-        ]),
+        ExpKind::Slice(exp_base, exp_idx, exp_len) => {
+            json!(["SliceE", encode_exp(exp_base), encode_exp(exp_idx), encode_exp(exp_len)])
+        }
         ExpKind::Upd(exp_base, path, exp_field) => {
-            json!([
-                "UpdE",
-                encode_exp(exp_base),
-                encode_path(path),
-                encode_exp(exp_field)
-            ])
+            json!(["UpdE", encode_exp(exp_base), encode_path(path), encode_exp(exp_field)])
         }
         ExpKind::Call(id, targs, args) => json!([
             "CallE",
@@ -519,9 +479,9 @@ pub(super) fn encode_iter_exp((iter, vars): &ast::ExpIter) -> json {
 pub(super) fn decode_pattern(json: &json) -> Result<Pattern, DecodeError> {
     let (tag, fields) = variant(json)?;
     match (tag, fields) {
-        ("CaseP", [mixop]) => Ok(Pattern::Case(Box::new(
-            crate::wire::ocaml::mixfix::MixopCodec::decode(mixop)?,
-        ))),
+        ("CaseP", [mixop]) => {
+            Ok(Pattern::Case(Box::new(crate::wire::ocaml::mixfix::MixopCodec::decode(mixop)?)))
+        }
         ("ListP", [pattern]) => Ok(Pattern::List(decode_list_pattern(pattern)?)),
         ("OptP", [pattern]) => Ok(Pattern::Opt(decode_opt_pattern(pattern)?)),
         ("CaseP" | "ListP" | "OptP", _) => Err(DecodeError::Expected("valid IL pattern arity")),
@@ -531,10 +491,9 @@ pub(super) fn decode_pattern(json: &json) -> Result<Pattern, DecodeError> {
 
 pub(super) fn encode_pattern(pattern: &Pattern) -> json {
     match pattern {
-        Pattern::Case(mixop) => json!([
-            "CaseP",
-            crate::wire::ocaml::mixfix::MixopCodec::encode(mixop)
-        ]),
+        Pattern::Case(mixop) => {
+            json!(["CaseP", crate::wire::ocaml::mixfix::MixopCodec::encode(mixop)])
+        }
         Pattern::List(pattern) => json!(["ListP", encode_list_pattern(pattern)]),
         Pattern::Opt(pattern) => json!(["OptP", encode_opt_pattern(*pattern)]),
     }
@@ -577,9 +536,7 @@ fn encode_opt_pattern(pattern: OptPattern) -> json {
 }
 
 fn decode_path(json: &json) -> Result<ast::Path, DecodeError> {
-    source::decode_note_phrase(json, decode_path_kind, |json| {
-        decode_typ_kind(json).map(Into::into)
-    })
+    source::decode_note_phrase(json, decode_path_kind, |json| decode_typ_kind(json).map(Into::into))
 }
 
 fn encode_path(path: &ast::Path) -> json {
@@ -590,19 +547,17 @@ fn decode_path_kind(json: &json) -> Result<PathKind, DecodeError> {
     let (tag, fields) = variant(json)?;
     match (tag, fields) {
         ("RootP", []) => Ok(PathKind::Root),
-        ("IdxP", [path, exp]) => Ok(PathKind::Idx(
-            Box::new(decode_path(path)?),
-            Box::new(decode_exp(exp)?),
-        )),
+        ("IdxP", [path, exp]) => {
+            Ok(PathKind::Idx(Box::new(decode_path(path)?), Box::new(decode_exp(exp)?)))
+        }
         ("SliceP", [path, exp_idx, exp_len]) => Ok(PathKind::Slice(
             Box::new(decode_path(path)?),
             Box::new(decode_exp(exp_idx)?),
             Box::new(decode_exp(exp_len)?),
         )),
-        ("DotP", [path, atom]) => Ok(PathKind::Dot(
-            Box::new(decode_path(path)?),
-            AtomPhraseCodec::decode(atom)?,
-        )),
+        ("DotP", [path, atom]) => {
+            Ok(PathKind::Dot(Box::new(decode_path(path)?), AtomPhraseCodec::decode(atom)?))
+        }
         ("RootP" | "IdxP" | "SliceP" | "DotP", _) => {
             Err(DecodeError::Expected("valid IL path arity"))
         }
@@ -614,12 +569,9 @@ fn encode_path_kind(path: &PathKind) -> json {
     match path {
         PathKind::Root => json!(["RootP"]),
         PathKind::Idx(path, exp) => json!(["IdxP", encode_path(path), encode_exp(exp)]),
-        PathKind::Slice(path, exp_idx, exp_len) => json!([
-            "SliceP",
-            encode_path(path),
-            encode_exp(exp_idx),
-            encode_exp(exp_len)
-        ]),
+        PathKind::Slice(path, exp_idx, exp_len) => {
+            json!(["SliceP", encode_path(path), encode_exp(exp_idx), encode_exp(exp_len)])
+        }
         PathKind::Dot(path, atom) => {
             json!(["DotP", encode_path(path), AtomPhraseCodec::encode(atom)])
         }
@@ -678,9 +630,7 @@ pub(super) fn encode_arg(arg: &ast::Arg) -> json {
 pub(super) fn decode_input_hint(
     json: &json,
 ) -> Result<crate::lang::hints::input::InputHint, DecodeError> {
-    Ok(crate::lang::hints::input::InputHint::new(decode_list(
-        json, integer,
-    )?))
+    Ok(crate::lang::hints::input::InputHint::new(decode_list(json, integer)?))
 }
 
 pub(super) fn encode_input_hint(hint: &crate::lang::hints::input::InputHint) -> json {
@@ -696,9 +646,7 @@ pub(super) fn decode_prem(json: &json) -> Result<ast::Prem, DecodeError> {
                 not_exp: decode_not_exp(exp)?,
                 input_hint: decode_input_hint(hint)?,
             })),
-            ("IfPr", [exp]) => Ok(PremKind::If(IfPrem {
-                exp: decode_exp(exp)?,
-            })),
+            ("IfPr", [exp]) => Ok(PremKind::If(IfPrem { exp: decode_exp(exp)? })),
             ("IfHoldPr", [id, exp]) => Ok(PremKind::IfHold(IfHoldPrem {
                 id: decode_id(id)?,
                 not_exp: decode_not_exp(exp)?,
@@ -711,9 +659,7 @@ pub(super) fn decode_prem(json: &json) -> Result<ast::Prem, DecodeError> {
                 prem: Box::new(decode_prem(prem)?),
                 prem_iter: decode_prem_iter(prem_iter)?,
             })),
-            ("DebugPr", [exp]) => Ok(PremKind::Debug(DebugPrem {
-                exp: decode_exp(exp)?,
-            })),
+            ("DebugPr", [exp]) => Ok(PremKind::Debug(DebugPrem { exp: decode_exp(exp)? })),
             ("RulePr" | "IfPr" | "IfHoldPr" | "IfNotHoldPr" | "IterPr" | "DebugPr", _) => {
                 Err(DecodeError::Expected("valid IL premise arity"))
             }
@@ -724,16 +670,9 @@ pub(super) fn decode_prem(json: &json) -> Result<ast::Prem, DecodeError> {
 
 pub(super) fn encode_prem(prem: &ast::Prem) -> json {
     source::encode_phrase(prem, |prem| match prem {
-        PremKind::Rule(RulePrem {
-            id,
-            not_exp,
-            input_hint: hint,
-        }) => json!([
-            "RulePr",
-            encode_id(id),
-            encode_not_exp(not_exp),
-            encode_input_hint(hint)
-        ]),
+        PremKind::Rule(RulePrem { id, not_exp, input_hint: hint }) => {
+            json!(["RulePr", encode_id(id), encode_not_exp(not_exp), encode_input_hint(hint)])
+        }
         PremKind::If(IfPrem { exp }) => json!(["IfPr", encode_exp(exp)]),
         PremKind::IfHold(IfHoldPrem { id, not_exp }) => {
             json!(["IfHoldPr", encode_id(id), encode_not_exp(not_exp)])
@@ -809,9 +748,7 @@ fn decode_else_group(json: &json) -> Result<ast::ElseGroup, DecodeError> {
 }
 
 fn encode_else_group(group: &ast::ElseGroup) -> json {
-    source::encode_phrase(group, |(id, rule)| {
-        json!([encode_id(id), encode_rule(rule)])
-    })
+    source::encode_phrase(group, |(id, rule)| json!([encode_id(id), encode_rule(rule)]))
 }
 
 pub(super) fn decode_clause(json: &json) -> Result<ast::Clause, DecodeError> {
@@ -914,8 +851,8 @@ fn decode_def(json: &json) -> Result<ast::Def, DecodeError> {
                     hints: decode_list(hints, el::decode_hint)?,
                 })))
             }
-            ("FuncDecD", [id, tparams, params, typ, clauses, else_clause, hints]) => Ok(
-                DefKind::MetaFunc(MetaFuncDef::Defined(Box::new(DefinedFunc {
+            ("FuncDecD", [id, tparams, params, typ, clauses, else_clause, hints]) => {
+                Ok(DefKind::MetaFunc(MetaFuncDef::Defined(Box::new(DefinedFunc {
                     id: decode_id(id)?,
                     tparams: decode_list(tparams, decode_tparam)?,
                     params: decode_list(params, decode_param)?,
@@ -923,8 +860,8 @@ fn decode_def(json: &json) -> Result<ast::Def, DecodeError> {
                     clauses: decode_list(clauses, decode_clause)?,
                     else_clause: decode_option(else_clause, decode_clause)?,
                     hints: decode_list(hints, el::decode_hint)?,
-                }))),
-            ),
+                }))))
+            }
             (
                 "ExternTypD" | "TypD" | "VarD" | "ExternRelD" | "RelD" | "ExternDecD"
                 | "BuiltinDecD" | "TableDecD" | "FuncDecD",

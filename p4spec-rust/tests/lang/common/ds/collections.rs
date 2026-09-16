@@ -66,10 +66,7 @@ fn test_free_into_extends_one_ordered_set_without_duplicates() {
 
     exp.free_into(&mut ids);
 
-    assert_eq!(
-        ids,
-        IdSet::from([id("seed", "seed"), id("x", "x"), id("y", "y")])
-    );
+    assert_eq!(ids, IdSet::from([id("seed", "seed"), id("x", "x"), id("y", "y")]));
 }
 
 #[test]

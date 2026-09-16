@@ -87,16 +87,10 @@ impl fmt::Display for AtomError {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::InvalidTag(id) => {
-                write!(
-                    fmt,
-                    "invalid tag identifier {id:?}: expected an uppercase identifier"
-                )
+                write!(fmt, "invalid tag identifier {id:?}: expected an uppercase identifier")
             }
             Self::InvalidOperator(op) => {
-                write!(
-                    fmt,
-                    "invalid operator {op:?}: must not contain a quote or newline"
-                )
+                write!(fmt, "invalid operator {op:?}: must not contain a quote or newline")
             }
         }
     }
@@ -183,11 +177,7 @@ impl Atom {
     /// Constructs a tag atom when the identifier is a valid upper identifier
     pub fn tag(id: impl Into<String>) -> Result<Self, AtomError> {
         let id = id.into();
-        if Self::is_upid(&id) {
-            Ok(Self::Tag(id))
-        } else {
-            Err(AtomError::InvalidTag(id))
-        }
+        if Self::is_upid(&id) { Ok(Self::Tag(id)) } else { Err(AtomError::InvalidTag(id)) }
     }
 
     // - Operator

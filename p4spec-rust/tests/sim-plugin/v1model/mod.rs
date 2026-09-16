@@ -49,19 +49,14 @@ fn test_native_v1model_micro_fixture() {
                     v1model::drive_pipe(
                         &mut runner.context(),
                         &mut state,
-                        &Rx {
-                            port: port.parse().unwrap(),
-                            packet,
-                        },
+                        &Rx { port: port.parse().unwrap(), packet },
                     )
                     .unwrap();
                     txs.extend(state.txs.iter().map(|tx| (tx.port, tx.packet.clone())));
                 }
-                Statement::Expect {
-                    port,
-                    packet_expected: Some(packet),
-                    ..
-                } => txs_expect.push((port.parse::<i64>().unwrap(), packet.to_ascii_uppercase())),
+                Statement::Expect { port, packet_expected: Some(packet), .. } => {
+                    txs_expect.push((port.parse::<i64>().unwrap(), packet.to_ascii_uppercase()))
+                }
                 _ => panic!("micro fixture contains only packet/expect commands"),
             }
         }
@@ -79,30 +74,18 @@ fn test_native_v1model_micro_fixture() {
 fn test_hash_adjust_range_boundaries() {
     use p4spec_rust::sim_plugin::v1model::func;
 
-    assert_eq!(
-        func::adjust(&5.into(), &12.into(), &20.into()).unwrap(),
-        11.into()
-    );
-    assert_eq!(
-        func::adjust(&5.into(), &0.into(), &20.into()).unwrap(),
-        5.into()
-    );
+    assert_eq!(func::adjust(&5.into(), &12.into(), &20.into()).unwrap(), 11.into());
+    assert_eq!(func::adjust(&5.into(), &0.into(), &20.into()).unwrap(), 5.into());
     assert!(func::adjust(&5.into(), &5.into(), &20.into()).is_err());
     assert!(func::adjust(&5.into(), &3.into(), &20.into()).is_err());
-    assert_eq!(
-        func::adjust(&5.into(), &12.into(), &(-20).into()).unwrap(),
-        6.into()
-    );
+    assert_eq!(func::adjust(&5.into(), &12.into(), &(-20).into()).unwrap(), 6.into());
 }
 
 #[test]
 fn test_multicast_handles_use_i64_range() {
     use p4spec_rust::sim_plugin::v1model::multicast::State;
 
-    let mut state = State {
-        handle_next: (1_i64 << 62) - 1,
-        ..State::default()
-    };
+    let mut state = State { handle_next: (1_i64 << 62) - 1, ..State::default() };
     state.node_create(1, &[]);
     assert_eq!(state.handle_next, 1_i64 << 62);
     state.handle_next = i64::MAX;

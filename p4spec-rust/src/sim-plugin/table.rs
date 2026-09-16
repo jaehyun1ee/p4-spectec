@@ -40,12 +40,7 @@ fn table_name(
             crate::phrase!(node: "nameIR".to_owned(), span: Span::default()),
             Vec::new(),
         ));
-        Some(make::list(
-            arena,
-            typ_id.node.into(),
-            values_name,
-            Span::default(),
-        )?)
+        Some(make::list(arena, typ_id.node.into(), values_name, Span::default())?)
     };
     Ok((value_unqualified, value_qualified))
 }

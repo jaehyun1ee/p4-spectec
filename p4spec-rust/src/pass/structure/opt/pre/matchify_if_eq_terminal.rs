@@ -117,40 +117,20 @@ fn matchify_block(block: Block) -> Block {
 // - If instruction
 
 fn matchify_if_instr(instr_ol: IfInstr, span: Span) -> Instr {
-    let IfInstr {
-        exp,
-        iter_exps,
-        block,
-    } = instr_ol;
+    let IfInstr { exp, iter_exps, block } = instr_ol;
     let exp = matchify_exp(exp);
     let block = matchify_block(block);
-    let instr = IfInstr {
-        exp,
-        iter_exps,
-        block,
-    };
+    let instr = IfInstr { exp, iter_exps, block };
     crate::phrase! {node: InstrKind::If(instr), span: span}
 }
 
 // - Hold instruction
 
 fn matchify_hold_instr(instr_ol: HoldInstr, span: Span) -> Instr {
-    let HoldInstr {
-        id,
-        not_exp,
-        iter_exps,
-        block_hold,
-        block_not_hold,
-    } = instr_ol;
+    let HoldInstr { id, not_exp, iter_exps, block_hold, block_not_hold } = instr_ol;
     let block_hold = matchify_block(block_hold);
     let block_not_hold = matchify_block(block_not_hold);
-    let instr = HoldInstr {
-        id,
-        not_exp,
-        iter_exps,
-        block_hold,
-        block_not_hold,
-    };
+    let instr = HoldInstr { id, not_exp, iter_exps, block_hold, block_not_hold };
     crate::phrase! {node: InstrKind::Hold(instr), span: span}
 }
 
@@ -173,59 +153,27 @@ fn matchify_case_instr(instr_ol: CaseInstr, span: Span) -> Instr {
 // - Group instruction
 
 fn matchify_group_instr(instr_ol: GroupInstr, span: Span) -> Instr {
-    let GroupInstr {
-        id,
-        rel_signature,
-        exps,
-        block,
-    } = instr_ol;
+    let GroupInstr { id, rel_signature, exps, block } = instr_ol;
     let block = matchify_block(block);
-    let instr = GroupInstr {
-        id,
-        rel_signature,
-        exps,
-        block,
-    };
+    let instr = GroupInstr { id, rel_signature, exps, block };
     crate::phrase! {node: InstrKind::Group(instr), span: span}
 }
 
 // - Let instruction
 
 fn matchify_let_instr(instr_ol: LetInstr, span: Span) -> Instr {
-    let LetInstr {
-        exp_l,
-        exp_r,
-        iter_instrs,
-        block,
-    } = instr_ol;
+    let LetInstr { exp_l, exp_r, iter_instrs, block } = instr_ol;
     let block = matchify_block(block);
-    let instr = LetInstr {
-        exp_l,
-        exp_r,
-        iter_instrs,
-        block,
-    };
+    let instr = LetInstr { exp_l, exp_r, iter_instrs, block };
     crate::phrase! {node: InstrKind::Let(instr), span: span}
 }
 
 // - Rule instruction
 
 fn matchify_rule_instr(instr_ol: RuleInstr, span: Span) -> Instr {
-    let RuleInstr {
-        id,
-        not_exp,
-        input_hint,
-        iter_instrs,
-        block,
-    } = instr_ol;
+    let RuleInstr { id, not_exp, input_hint, iter_instrs, block } = instr_ol;
     let block = matchify_block(block);
-    let instr = RuleInstr {
-        id,
-        not_exp,
-        input_hint,
-        iter_instrs,
-        block,
-    };
+    let instr = RuleInstr { id, not_exp, input_hint, iter_instrs, block };
     crate::phrase! {node: InstrKind::Rule(instr), span: span}
 }
 

@@ -10,11 +10,7 @@ use crate::runner::ExternError;
 /// Return a nonnegative remainder; requires a positive modulus
 pub(crate) fn remainder(int: &BigInt, int_modulus: &BigInt) -> BigInt {
     let int = int % int_modulus;
-    if int.is_negative() {
-        int + int_modulus
-    } else {
-        int
-    }
+    if int.is_negative() { int + int_modulus } else { int }
 }
 
 // == Bit operations

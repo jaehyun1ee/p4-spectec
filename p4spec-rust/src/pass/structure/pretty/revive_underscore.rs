@@ -119,19 +119,11 @@ fn downstream_if_instr(
     ids_revive: &mut IdSet,
     instr_ol: IfInstr,
 ) -> Result<InstrKind, StructureError> {
-    let IfInstr {
-        exp,
-        iter_exps,
-        block,
-    } = instr_ol;
+    let IfInstr { exp, iter_exps, block } = instr_ol;
     let exp = downstream_exp(renamer, ids_revive, exp);
     let iter_exps = renamer.rename_iterexps(iter_exps);
     let block = downstream_block(renamer, ids_revive, block)?;
-    let instr = IfInstr {
-        exp,
-        iter_exps,
-        block,
-    };
+    let instr = IfInstr { exp, iter_exps, block };
     Ok(InstrKind::If(instr))
 }
 
@@ -142,24 +134,12 @@ fn downstream_hold_instr(
     ids_revive: &mut IdSet,
     instr_ol: HoldInstr,
 ) -> Result<InstrKind, StructureError> {
-    let HoldInstr {
-        id,
-        not_exp,
-        iter_exps,
-        block_hold,
-        block_not_hold,
-    } = instr_ol;
+    let HoldInstr { id, not_exp, iter_exps, block_hold, block_not_hold } = instr_ol;
     let not_exp = not_exp.map(|exp| downstream_exp(renamer, ids_revive, exp.clone()));
     let iter_exps = renamer.rename_iterexps(iter_exps);
     let block_hold = downstream_block(renamer, ids_revive, block_hold)?;
     let block_not_hold = downstream_block(renamer, ids_revive, block_not_hold)?;
-    let instr = HoldInstr {
-        id,
-        not_exp,
-        iter_exps,
-        block_hold,
-        block_not_hold,
-    };
+    let instr = HoldInstr { id, not_exp, iter_exps, block_hold, block_not_hold };
     Ok(InstrKind::Hold(instr))
 }
 
@@ -195,20 +175,10 @@ fn downstream_group_instr(
     ids_revive: &mut IdSet,
     instr_ol: GroupInstr,
 ) -> Result<InstrKind, StructureError> {
-    let GroupInstr {
-        id,
-        rel_signature,
-        exps,
-        block,
-    } = instr_ol;
+    let GroupInstr { id, rel_signature, exps, block } = instr_ol;
     let exps = downstream_exps(renamer, ids_revive, exps);
     let block = downstream_block(renamer, ids_revive, block)?;
-    let instr = GroupInstr {
-        id,
-        rel_signature,
-        exps,
-        block,
-    };
+    let instr = GroupInstr { id, rel_signature, exps, block };
     Ok(InstrKind::Group(instr))
 }
 
@@ -219,24 +189,14 @@ fn downstream_let_instr(
     ids_revive: &mut IdSet,
     instr_ol: LetInstr,
 ) -> Result<InstrKind, StructureError> {
-    let LetInstr {
-        exp_l,
-        exp_r,
-        iter_instrs,
-        block,
-    } = instr_ol;
+    let LetInstr { exp_l, exp_r, iter_instrs, block } = instr_ol;
     let exp_r = downstream_exp(renamer, ids_revive, exp_r);
     let iter_instrs = renamer.rename_iterinstrs_bound(iter_instrs);
     // The RHS uses the outer _x; the body uses the newly bound _x
     let ids_bound = underscores(exp_l.free());
     let renamer = renamer.filter(|id, _| !ids_bound.contains(id));
     let block = downstream_block(&renamer, ids_revive, block)?;
-    let instr = LetInstr {
-        exp_l,
-        exp_r,
-        iter_instrs,
-        block,
-    };
+    let instr = LetInstr { exp_l, exp_r, iter_instrs, block };
     Ok(InstrKind::Let(instr))
 }
 
@@ -248,13 +208,7 @@ fn downstream_rule_instr(
     instr_ol: RuleInstr,
     span: &Span,
 ) -> Result<InstrKind, StructureError> {
-    let RuleInstr {
-        id,
-        not_exp,
-        input_hint,
-        iter_instrs,
-        block,
-    } = instr_ol;
+    let RuleInstr { id, not_exp, input_hint, iter_instrs, block } = instr_ol;
     let exps = not_exp.args().into_iter().cloned().collect();
     let (exps_input, exps_output) = input::split(&input_hint, exps)
         .map_err(|error| StructureError::new(StructureErrorKind::Input(error), span.clone()))?;
@@ -267,13 +221,7 @@ fn downstream_rule_instr(
     let iter_instrs = renamer.rename_iterinstrs_bound(iter_instrs);
     let renamer = renamer.filter(|id, _| !ids_bound.contains(id));
     let block = downstream_block(&renamer, ids_revive, block)?;
-    let instr = RuleInstr {
-        id,
-        not_exp,
-        input_hint,
-        iter_instrs,
-        block,
-    };
+    let instr = RuleInstr { id, not_exp, input_hint, iter_instrs, block };
     Ok(InstrKind::Rule(instr))
 }
 
@@ -284,15 +232,9 @@ fn downstream_result_instr(
     ids_revive: &mut IdSet,
     instr_ol: ResultInstr,
 ) -> Result<InstrKind, StructureError> {
-    let ResultInstr {
-        rel_signature,
-        exps,
-    } = instr_ol;
+    let ResultInstr { rel_signature, exps } = instr_ol;
     let exps = downstream_exps(renamer, ids_revive, exps);
-    let instr = ResultInstr {
-        rel_signature,
-        exps,
-    };
+    let instr = ResultInstr { rel_signature, exps };
     Ok(InstrKind::Result(instr))
 }
 
@@ -362,39 +304,19 @@ fn upstream_block(frees: &IdSet, block: Block) -> Result<Block, StructureError> 
 // - If instruction
 
 fn upstream_if_instr(frees: &IdSet, instr_ol: IfInstr) -> Result<InstrKind, StructureError> {
-    let IfInstr {
-        exp,
-        iter_exps,
-        block,
-    } = instr_ol;
+    let IfInstr { exp, iter_exps, block } = instr_ol;
     let block = upstream_block(frees, block)?;
-    let instr = IfInstr {
-        exp,
-        iter_exps,
-        block,
-    };
+    let instr = IfInstr { exp, iter_exps, block };
     Ok(InstrKind::If(instr))
 }
 
 // - Hold instruction
 
 fn upstream_hold_instr(frees: &IdSet, instr_ol: HoldInstr) -> Result<InstrKind, StructureError> {
-    let HoldInstr {
-        id,
-        not_exp,
-        iter_exps,
-        block_hold,
-        block_not_hold,
-    } = instr_ol;
+    let HoldInstr { id, not_exp, iter_exps, block_hold, block_not_hold } = instr_ol;
     let block_hold = upstream_block(frees, block_hold)?;
     let block_not_hold = upstream_block(frees, block_not_hold)?;
-    let instr = HoldInstr {
-        id,
-        not_exp,
-        iter_exps,
-        block_hold,
-        block_not_hold,
-    };
+    let instr = HoldInstr { id, not_exp, iter_exps, block_hold, block_not_hold };
     Ok(InstrKind::Hold(instr))
 }
 
@@ -418,31 +340,16 @@ fn upstream_case_instr(frees: &IdSet, instr_ol: CaseInstr) -> Result<InstrKind, 
 // - Group instruction
 
 fn upstream_group_instr(frees: &IdSet, instr_ol: GroupInstr) -> Result<InstrKind, StructureError> {
-    let GroupInstr {
-        id,
-        rel_signature,
-        exps,
-        block,
-    } = instr_ol;
+    let GroupInstr { id, rel_signature, exps, block } = instr_ol;
     let block = upstream_block(frees, block)?;
-    let instr = GroupInstr {
-        id,
-        rel_signature,
-        exps,
-        block,
-    };
+    let instr = GroupInstr { id, rel_signature, exps, block };
     Ok(InstrKind::Group(instr))
 }
 
 // - Let instruction
 
 fn upstream_let_instr(frees: &IdSet, instr_ol: LetInstr) -> Result<InstrKind, StructureError> {
-    let LetInstr {
-        exp_l,
-        exp_r,
-        iter_instrs,
-        block,
-    } = instr_ol;
+    let LetInstr { exp_l, exp_r, iter_instrs, block } = instr_ol;
     let ids_bound = underscores(exp_l.free());
     let (_, renamer) = candid_renamer(frees.clone(), &ids_bound);
     let mut ids_revive = IdSet::new();
@@ -451,12 +358,7 @@ fn upstream_let_instr(frees: &IdSet, instr_ol: LetInstr) -> Result<InstrKind, St
     let exp_l = renamer.rename_exp(exp_l);
     let iter_instrs = renamer.rename_iterinstrs_bind(iter_instrs);
     let block = renamer.rename_block(block)?;
-    let instr = LetInstr {
-        exp_l,
-        exp_r,
-        iter_instrs,
-        block,
-    };
+    let instr = LetInstr { exp_l, exp_r, iter_instrs, block };
     Ok(InstrKind::Let(instr))
 }
 
@@ -467,13 +369,7 @@ fn upstream_rule_instr(
     instr_ol: RuleInstr,
     span: &Span,
 ) -> Result<InstrKind, StructureError> {
-    let RuleInstr {
-        id,
-        not_exp,
-        input_hint,
-        iter_instrs,
-        block,
-    } = instr_ol;
+    let RuleInstr { id, not_exp, input_hint, iter_instrs, block } = instr_ol;
     let exps = not_exp.args().into_iter().cloned().collect();
     let (exps_input, exps_output) = input::split(&input_hint, exps)
         .map_err(|error| StructureError::new(StructureErrorKind::Input(error), span.clone()))?;
@@ -488,13 +384,7 @@ fn upstream_rule_instr(
     let mixop = not_exp.to_mixop();
     let not_exp = Mixop::fill(&mixop, exps).expect("validated arguments preserve the mixfix arity");
     let iter_instrs = renamer.rename_iterinstrs_bind(iter_instrs);
-    let instr = RuleInstr {
-        id,
-        not_exp,
-        input_hint,
-        iter_instrs,
-        block,
-    };
+    let instr = RuleInstr { id, not_exp, input_hint, iter_instrs, block };
     Ok(InstrKind::Rule(instr))
 }
 

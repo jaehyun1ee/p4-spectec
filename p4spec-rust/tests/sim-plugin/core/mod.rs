@@ -126,12 +126,7 @@ type PacketRunner = Runner<PacketInterp, NullInterface, Dummy>;
 fn packet_runner(size_min: usize, size_max: usize) -> (PacketRunner, Value, Value) {
     let mut runner = Runner::new(
         (),
-        PacketInterp {
-            size_min,
-            size_max,
-            arity_rel: 1,
-            ..PacketInterp::default()
-        },
+        PacketInterp { size_min, size_max, arity_rel: 1, ..PacketInterp::default() },
         NullInterface,
         Dummy,
     );

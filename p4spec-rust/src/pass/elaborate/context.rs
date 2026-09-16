@@ -161,24 +161,18 @@ impl Context {
         id: &Id,
     ) -> Option<(&[ast::TParam], &[ast::Param], &ast::Typ)> {
         match self.fenv.get(id)? {
-            ast::MetaFuncDef::Extern(extern_func_il) => Some((
-                &extern_func_il.tparams,
-                &extern_func_il.params,
-                &extern_func_il.typ,
-            )),
-            ast::MetaFuncDef::Builtin(builtin_func_il) => Some((
-                &builtin_func_il.tparams,
-                &builtin_func_il.params,
-                &builtin_func_il.typ,
-            )),
+            ast::MetaFuncDef::Extern(extern_func_il) => {
+                Some((&extern_func_il.tparams, &extern_func_il.params, &extern_func_il.typ))
+            }
+            ast::MetaFuncDef::Builtin(builtin_func_il) => {
+                Some((&builtin_func_il.tparams, &builtin_func_il.params, &builtin_func_il.typ))
+            }
             ast::MetaFuncDef::Table(table_func_il) => {
                 Some((&[], &table_func_il.params, &table_func_il.typ))
             }
-            ast::MetaFuncDef::Defined(defined_func_il) => Some((
-                &defined_func_il.tparams,
-                &defined_func_il.params,
-                &defined_func_il.typ,
-            )),
+            ast::MetaFuncDef::Defined(defined_func_il) => {
+                Some((&defined_func_il.tparams, &defined_func_il.params, &defined_func_il.typ))
+            }
         }
     }
 
@@ -216,11 +210,7 @@ impl Context {
 
     pub(super) fn add_metavar(&mut self, id: Id, typ: ast::Typ) -> Result<(), ElabError> {
         if self.bound_metavar(&id) {
-            return Err(ElabError::duplicate(
-                EntityKind::MetaVariable,
-                &id.node,
-                id.span,
-            ));
+            return Err(ElabError::duplicate(EntityKind::MetaVariable, &id.node, id.span));
         }
         self.menv.insert(id, typ);
         Ok(())
@@ -238,18 +228,10 @@ impl Context {
 
     pub(super) fn add_tparam(&mut self, tparam: ast::TParam) -> Result<(), ElabError> {
         if self.bound_typdef(&tparam) {
-            return Err(ElabError::duplicate(
-                EntityKind::Type,
-                &tparam.node,
-                tparam.span,
-            ));
+            return Err(ElabError::duplicate(EntityKind::Type, &tparam.node, tparam.span));
         }
         if self.bound_metavar(&tparam) {
-            return Err(ElabError::duplicate(
-                EntityKind::MetaVariable,
-                &tparam.node,
-                tparam.span,
-            ));
+            return Err(ElabError::duplicate(EntityKind::MetaVariable, &tparam.node, tparam.span));
         }
         let typ = typ::make::var(tparam.clone(), vec![]);
         self.add_typdef(tparam.clone(), TypeDef::Parameter)?;
@@ -271,11 +253,7 @@ impl Context {
     ) -> Result<(), ElabError> {
         let id = extern_rel_il.id.clone();
         if self.bound_rel(&id) {
-            return Err(ElabError::duplicate(
-                EntityKind::Relation,
-                &id.node,
-                id.span,
-            ));
+            return Err(ElabError::duplicate(EntityKind::Relation, &id.node, id.span));
         }
         self.renv
             .insert(id, ast::RelDef::Extern(Box::new(extern_rel_il)));
@@ -288,11 +266,7 @@ impl Context {
     ) -> Result<(), ElabError> {
         let id = defined_rel_il.id.clone();
         if self.bound_rel(&id) {
-            return Err(ElabError::duplicate(
-                EntityKind::Relation,
-                &id.node,
-                id.span,
-            ));
+            return Err(ElabError::duplicate(EntityKind::Relation, &id.node, id.span));
         }
         self.renv
             .insert(id, ast::RelDef::Defined(Box::new(defined_rel_il)));
@@ -354,11 +328,7 @@ impl Context {
             unreachable!("checked defined relation")
         };
         if defined_rel_il.else_group.is_some() {
-            return Err(ElabError::duplicate(
-                EntityKind::ElseGroup,
-                &relid.node,
-                else_group.span,
-            ));
+            return Err(ElabError::duplicate(EntityKind::ElseGroup, &relid.node, else_group.span));
         }
         defined_rel_il.else_group = Some(else_group);
         Ok(())
@@ -411,11 +381,7 @@ impl Context {
 
     fn ensure_func_unbound(&self, id: &Id) -> Result<(), ElabError> {
         if self.bound_func(id) {
-            return Err(ElabError::duplicate(
-                EntityKind::Function,
-                &id.node,
-                id.span.clone(),
-            ));
+            return Err(ElabError::duplicate(EntityKind::Function, &id.node, id.span.clone()));
         }
         Ok(())
     }
@@ -429,11 +395,7 @@ impl Context {
             let span = table_rows
                 .first()
                 .map_or_else(|| id.span.clone(), |row| row.span.clone());
-            return Err(ElabError::undefined(
-                EntityKind::TableFunction,
-                &id.node,
-                span,
-            ));
+            return Err(ElabError::undefined(EntityKind::TableFunction, &id.node, span));
         };
         if let Some(row) = table_func_il.rows.first() {
             return Err(ElabError::duplicate(
@@ -456,11 +418,7 @@ impl Context {
         clause: ast::Clause,
     ) -> Result<(), ElabError> {
         if self.find_defined_func_opt(id).is_none() {
-            return Err(ElabError::undefined(
-                EntityKind::Function,
-                &id.node,
-                clause.span,
-            ));
+            return Err(ElabError::undefined(EntityKind::Function, &id.node, clause.span));
         }
         let ast::MetaFuncDef::Defined(defined_func_il) =
             self.fenv.get_mut(id).expect("defined function")
@@ -477,11 +435,7 @@ impl Context {
         else_clause: ast::ElseClause,
     ) -> Result<(), ElabError> {
         if self.find_defined_func_opt(id).is_none() {
-            return Err(ElabError::undefined(
-                EntityKind::Function,
-                &id.node,
-                else_clause.span,
-            ));
+            return Err(ElabError::undefined(EntityKind::Function, &id.node, else_clause.span));
         }
         let ast::MetaFuncDef::Defined(defined_func_il) =
             self.fenv.get_mut(id).expect("defined function")
@@ -489,11 +443,7 @@ impl Context {
             unreachable!("checked defined function")
         };
         if defined_func_il.else_clause.is_some() {
-            return Err(ElabError::duplicate(
-                EntityKind::ElseClause,
-                &id.node,
-                else_clause.span,
-            ));
+            return Err(ElabError::duplicate(EntityKind::ElseClause, &id.node, else_clause.span));
         }
         defined_func_il.else_clause = Some(else_clause);
         Ok(())
@@ -535,11 +485,7 @@ impl Context {
 
     pub(super) fn update_typdef(&mut self, id: &Id, typdef: TypeDef) -> Result<(), ElabError> {
         if !self.bound_typdef(id) {
-            return Err(ElabError::undefined(
-                EntityKind::Type,
-                &id.node,
-                id.span.clone(),
-            ));
+            return Err(ElabError::undefined(EntityKind::Type, &id.node, id.span.clone()));
         }
         self.tdenv.insert(id.clone(), typdef);
         Ok(())

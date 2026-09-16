@@ -10,11 +10,7 @@ fn variant(tdenv: &mut TDEnv, text: &str, texts: &[&str]) -> Typ {
         .map(|text_case| {
             let mixop = crate::frontend::parse::parse_mixop(text_case).unwrap();
             let not_typ = crate::phrase!(node: mixop.map(|_| typ.clone()), span: span(3));
-            (
-                not_typ,
-                crate::phrase!(node: (id(text), vec![]), span: span(4)),
-                vec![],
-            )
+            (not_typ, crate::phrase!(node: (id(text), vec![]), span: span(4)), vec![])
         })
         .collect();
     tdenv.insert(
@@ -28,9 +24,7 @@ fn variant(tdenv: &mut TDEnv, text: &str, texts: &[&str]) -> Typ {
 }
 
 fn pattern(text: &str) -> Guard {
-    Guard::Match(Pattern::Case(Box::new(
-        crate::frontend::parse::parse_mixop(text).unwrap(),
-    )))
+    Guard::Match(Pattern::Case(Box::new(crate::frontend::parse::parse_mixop(text).unwrap())))
 }
 
 fn case(typ: &Typ, guards: Vec<Guard>, total: bool) -> ast_ol::Instr {
@@ -41,19 +35,14 @@ fn case(typ: &Typ, guards: Vec<Guard>, total: bool) -> ast_ol::Instr {
         cases: guards
             .into_iter()
             .enumerate()
-            .map(|(idx, guard)| ast_ol::Case {
-                guard,
-                block: vec![ret(&idx.to_string())],
-            })
+            .map(|(idx, guard)| ast_ol::Case { guard, block: vec![ret(&idx.to_string())] })
             .collect(),
         total,
     }))
 }
 
 fn is_total(block: &ast_ol::Block) -> bool {
-    let ast_ol::InstrKind::Case(instr_case) = &block[0].node else {
-        panic!()
-    };
+    let ast_ol::InstrKind::Case(instr_case) = &block[0].node else { panic!() };
     instr_case.total
 }
 
@@ -76,9 +65,7 @@ fn test_variant_coverage_duplicates_order_and_alias() {
     ] {
         let instr_case = case(&typ_alias, guards, !total_expect);
         let mut instr_expect = instr_case.clone();
-        let ast_ol::InstrKind::Case(instr_case_expect) = &mut instr_expect.node else {
-            panic!()
-        };
+        let ast_ol::InstrKind::Case(instr_case_expect) = &mut instr_expect.node else { panic!() };
         instr_case_expect.total = total_expect;
         let block = totalize(&tdenv, vec![instr_case]).unwrap();
         assert_eq!(block, vec![instr_expect]);
@@ -103,17 +90,11 @@ fn test_subtype_pattern_coverage_and_nonvariant_guard_short_circuit() {
             &typ_bool,
             vec![
                 guard,
-                Guard::Sub(
-                    typ_bool.clone(),
-                    Box::new(crate::lang::il::ast::Subcheck::Skip),
-                ),
+                Guard::Sub(typ_bool.clone(), Box::new(crate::lang::il::ast::Subcheck::Skip)),
             ],
             true,
         );
-        assert_eq!(
-            totalize(&tdenv, vec![instr_case.clone()]).unwrap(),
-            vec![instr_case]
-        );
+        assert_eq!(totalize(&tdenv, vec![instr_case.clone()]).unwrap(), vec![instr_case]);
     }
 }
 
@@ -122,13 +103,7 @@ fn test_nonvariant_failures_are_located_and_debug_is_not_totalized() {
     let typ = crate::phrase!(node: TypKind::Bool, span: span(12));
     for (guards, span_expect) in [
         (vec![pattern("A")], span(7)),
-        (
-            vec![Guard::Sub(
-                typ.clone(),
-                Box::new(crate::lang::il::ast::Subcheck::Skip),
-            )],
-            span(12),
-        ),
+        (vec![Guard::Sub(typ.clone(), Box::new(crate::lang::il::ast::Subcheck::Skip))], span(12)),
     ] {
         let error = totalize(&TDEnv::new(), vec![case(&typ, guards, false)]).unwrap_err();
         assert_eq!(error.kind, StructureErrorKind::NonVariantTotalization);
@@ -148,9 +123,7 @@ fn test_totalization_descends_all_owning_blocks() {
     let typ = variant(&mut tdenv, "Choice", &["A"]);
     let instr_case = case(&typ, vec![pattern("A")], false);
     let mut instr_expect = instr_case.clone();
-    let ast_ol::InstrKind::Case(instr_case_expect) = &mut instr_expect.node else {
-        panic!()
-    };
+    let ast_ol::InstrKind::Case(instr_case_expect) = &mut instr_expect.node else { panic!() };
     instr_case_expect.total = true;
     let wrap = |instr_inner: ast_ol::Instr| {
         vec![
@@ -187,10 +160,7 @@ fn test_totalization_descends_all_owning_blocks() {
             })),
             instr(ast_ol::InstrKind::Case(ast_ol::CaseInstr {
                 exp: variable("bool"),
-                cases: vec![ast_ol::Case {
-                    guard: Guard::Bool(true),
-                    block: vec![instr_inner],
-                }],
+                cases: vec![ast_ol::Case { guard: Guard::Bool(true), block: vec![instr_inner] }],
                 total: false,
             })),
         ]

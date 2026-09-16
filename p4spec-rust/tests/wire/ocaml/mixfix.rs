@@ -22,13 +22,7 @@ fn test_mixop_span_round_trip_preserves_ocaml_wire_layout() {
             "Infix",
             ["Arg", null],
             atom(json!(["Arrow"]), 13),
-            [
-                "Seq",
-                [
-                    ["Atom", atom(json!(["Keyword", "tail"]), 17)],
-                    ["Arg", null],
-                ],
-            ],
+            ["Seq", [["Atom", atom(json!(["Keyword", "tail"]), 17)], ["Arg", null],],],
         ],
         atom(json!(["RParen"]), 19),
     ]);

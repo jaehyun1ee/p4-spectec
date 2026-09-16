@@ -53,11 +53,7 @@ fn test_struct_command_prints_control_flow_without_rule_groups() {
         .output()
         .expect("run struct command");
 
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
     assert!(output.stderr.is_empty());
     let stdout = String::from_utf8(output.stdout).unwrap();
     assert!(stdout.contains("Return CONT"), "{stdout}");
@@ -69,18 +65,9 @@ fn test_struct_command_prints_control_flow_without_rule_groups() {
 #[test]
 fn test_struct_command_reports_pipeline_errors_on_stderr() {
     for (path, message) in [
-        (
-            "frontend/negative/malformed-token.watsup",
-            "malformed token",
-        ),
-        (
-            "elaboration/operator_not_defined.watsup",
-            "operator is not defined",
-        ),
-        (
-            "algorithmic/impure_else_premises.watsup",
-            "otherwise branch contains an impure premise",
-        ),
+        ("frontend/negative/malformed-token.watsup", "malformed token"),
+        ("elaboration/operator_not_defined.watsup", "operator is not defined"),
+        ("algorithmic/impure_else_premises.watsup", "otherwise branch contains an impure premise"),
     ] {
         let output = binary().arg("struct").arg(fixture(path)).output().unwrap();
         assert_eq!(output.status.code(), Some(1));
@@ -223,10 +210,7 @@ fn test_commands_preserve_multiple_input_order() {
             .expect("run multiple inputs");
         assert!(output.status.success());
         assert!(output.stderr.is_empty());
-        assert_eq!(
-            String::from_utf8(output.stdout).unwrap(),
-            "var y : nat\n\nvar x : nat\n"
-        );
+        assert_eq!(String::from_utf8(output.stdout).unwrap(), "var y : nat\n\nvar x : nat\n");
     }
 }
 
@@ -258,11 +242,7 @@ fn run_command(relation: &str, program: &str) -> Command {
 #[test]
 fn test_run_al_native_success_and_multiple_spec_paths() {
     let output = run_command("Pass", "cli/run/empty.p4").output().unwrap();
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
     assert_eq!(output.stdout, b"passed\n");
     assert!(output.stderr.is_empty());
 }
@@ -280,11 +260,7 @@ fn test_run_al_initializes_dummy_extern_objects() {
         .output()
         .unwrap();
 
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
     assert_eq!(output.stdout, b"passed\n");
     assert!(output.stderr.is_empty());
 }
@@ -317,11 +293,7 @@ fn test_run_al_repeated_include_directories() {
         .arg(fixture("cli/run/second"))
         .output()
         .unwrap();
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
     assert_eq!(output.stdout, b"passed\n");
 }
 
@@ -329,11 +301,7 @@ fn test_run_al_repeated_include_directories() {
 fn test_run_al_det_and_guard_controls_change_execution() {
     for (relation, flag) in [("Ambiguous", "--det"), ("Unchecked", "--guard")] {
         let output = run_command(relation, "cli/run/empty.p4").output().unwrap();
-        assert!(
-            output.status.success(),
-            "{}",
-            String::from_utf8_lossy(&output.stderr)
-        );
+        assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
         let output = run_command(relation, "cli/run/empty.p4")
             .arg(flag)
             .arg("--no-cache")
@@ -346,11 +314,7 @@ fn test_run_al_det_and_guard_controls_change_execution() {
         .args(["--det", "--guard"])
         .output()
         .unwrap();
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
 }
 
 #[test]
@@ -461,26 +425,13 @@ fn test_sim_help_lists_native_controls_without_processing_inputs() {
         assert!(usage.contains(flag), "{flag}: {usage}");
     }
     for flag in ["--rel", "--sl", "--pl", "--trace", "--profile"] {
-        assert!(
-            !usage.split_whitespace().any(|word| word == flag),
-            "{flag}: {usage}"
-        );
+        assert!(!usage.split_whitespace().any(|word| word == flag), "{flag}: {usage}");
     }
 }
 
 #[test]
 fn test_sim_al_requires_flags() {
-    let args = [
-        "sim",
-        "--al",
-        "spec",
-        "--arch",
-        "ebpf",
-        "-p",
-        "empty.p4",
-        "--stf",
-        "input.stf",
-    ];
+    let args = ["sim", "--al", "spec", "--arch", "ebpf", "-p", "empty.p4", "--stf", "input.stf"];
     for (idx, len) in [(1, 1), (2, 1), (3, 2), (5, 2), (7, 2)] {
         let output = binary()
             .args(&args[..idx])
@@ -518,10 +469,7 @@ fn test_sim_al_rejects_unknown_architectures() {
     assert_eq!(output.status.code(), Some(1));
     assert!(output.stdout.is_empty());
     let error = String::from_utf8(output.stderr).unwrap();
-    assert!(
-        error.contains("architecture") && error.contains("unknown"),
-        "{error}"
-    );
+    assert!(error.contains("architecture") && error.contains("unknown"), "{error}");
 }
 
 #[test]
@@ -539,11 +487,7 @@ fn test_sim_al_runs_all_native_architectures() {
                 .arg(fixture("cli/run/first"))
                 .output()
                 .unwrap();
-            assert!(
-                output.status.success(),
-                "{arch}: {}",
-                String::from_utf8_lossy(&output.stderr)
-            );
+            assert!(output.status.success(), "{arch}: {}", String::from_utf8_lossy(&output.stderr));
             assert!(output.stderr.is_empty());
             let stdout = String::from_utf8(output.stdout).unwrap();
             let expected = std::fs::read_to_string(
@@ -562,10 +506,9 @@ fn test_sim_al_runs_all_native_architectures() {
 
 #[test]
 fn test_sim_al_distinguishes_p4_syntax_and_runtime_failures() {
-    for (program, category) in [
-        ("cli/run/invalid.p4", "syntax error:"),
-        ("cli/run/empty.p4", "runtime error:"),
-    ] {
+    for (program, category) in
+        [("cli/run/invalid.p4", "syntax error:"), ("cli/run/empty.p4", "runtime error:")]
+    {
         let output = binary()
             .args(["sim", "--al"])
             .arg(fixture("cli/run/types.watsup"))
@@ -592,12 +535,7 @@ fn test_sim_al_reports_stf_failures_and_preserves_prior_matches() {
     let text_mismatch = format!("{text}\n{packet}\nexpect 0 FF\n");
     for (name, text, detail, matches) in [
         ("syntax", "@\n", "invalid character '@'", 0),
-        (
-            "mismatch",
-            text_mismatch.as_str(),
-            "expected (0) FF but got (0)",
-            2,
-        ),
+        ("mismatch", text_mismatch.as_str(), "expected (0) FF but got (0)", 2),
     ] {
         let path =
             std::env::temp_dir().join(format!("p4spec-cli-sim-{name}-{}.stf", std::process::id()));

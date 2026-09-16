@@ -112,11 +112,7 @@ fn test_free_expression_variants_follow_the_oracle() {
     ), note: ast::TypKind::Bool, span: span() };
     let cases = vec![
         ("bool", exp(ast::ExpKind::Bool(true)), names(&[])),
-        (
-            "num",
-            exp(ast::ExpKind::Num(ast::Num::Nat(1.into()))),
-            names(&[]),
-        ),
+        ("num", exp(ast::ExpKind::Num(ast::Num::Nat(1.into()))), names(&[])),
         ("text", exp(ast::ExpKind::Text("text".into())), names(&[])),
         ("var", variable("var"), names(&["var"])),
         (
@@ -150,18 +146,12 @@ fn test_free_expression_variants_follow_the_oracle() {
         ),
         (
             "upcast",
-            exp(ast::ExpKind::UpCast(
-                Box::new(typ()),
-                Box::new(variable("cast")),
-            )),
+            exp(ast::ExpKind::UpCast(Box::new(typ()), Box::new(variable("cast")))),
             names(&["cast"]),
         ),
         (
             "downcast",
-            exp(ast::ExpKind::DownCast(
-                Box::new(typ()),
-                Box::new(variable("cast")),
-            )),
+            exp(ast::ExpKind::DownCast(Box::new(typ()), Box::new(variable("cast")))),
             names(&["cast"]),
         ),
         (
@@ -183,82 +173,46 @@ fn test_free_expression_variants_follow_the_oracle() {
         ),
         (
             "tuple",
-            exp(ast::ExpKind::Tuple(vec![
-                variable("tuple_a"),
-                variable("tuple_b"),
-            ])),
+            exp(ast::ExpKind::Tuple(vec![variable("tuple_a"), variable("tuple_b")])),
             names(&["tuple_a", "tuple_b"]),
         ),
-        (
-            "case",
-            exp(ast::ExpKind::Case(Box::new(notexp("case")))),
-            names(&["case"]),
-        ),
+        ("case", exp(ast::ExpKind::Case(Box::new(notexp("case")))), names(&["case"])),
         (
             "struct",
-            exp(ast::ExpKind::Str(vec![(
-                atom("field"),
-                variable("field_value"),
-            )])),
+            exp(ast::ExpKind::Str(vec![(atom("field"), variable("field_value"))])),
             names(&["field_value"]),
         ),
-        (
-            "option_some",
-            exp(ast::ExpKind::Opt(Some(Box::new(variable("some"))))),
-            names(&["some"]),
-        ),
+        ("option_some", exp(ast::ExpKind::Opt(Some(Box::new(variable("some"))))), names(&["some"])),
         ("option_none", exp(ast::ExpKind::Opt(None)), names(&[])),
         (
             "list",
-            exp(ast::ExpKind::List(vec![
-                variable("list_a"),
-                variable("list_b"),
-            ])),
+            exp(ast::ExpKind::List(vec![variable("list_a"), variable("list_b")])),
             names(&["list_a", "list_b"]),
         ),
         (
             "cons",
-            exp(ast::ExpKind::Cons(
-                Box::new(variable("head")),
-                Box::new(variable("tail")),
-            )),
+            exp(ast::ExpKind::Cons(Box::new(variable("head")), Box::new(variable("tail")))),
             names(&["head", "tail"]),
         ),
         (
             "concatenate",
-            exp(ast::ExpKind::Cat(
-                Box::new(variable("left")),
-                Box::new(variable("right")),
-            )),
+            exp(ast::ExpKind::Cat(Box::new(variable("left")), Box::new(variable("right")))),
             names(&["left", "right"]),
         ),
         (
             "membership",
-            exp(ast::ExpKind::Mem(
-                Box::new(variable("element")),
-                Box::new(variable("set")),
-            )),
+            exp(ast::ExpKind::Mem(Box::new(variable("element")), Box::new(variable("set")))),
             names(&["element", "set"]),
         ),
-        (
-            "length",
-            exp(ast::ExpKind::Len(Box::new(variable("length")))),
-            names(&["length"]),
-        ),
+        ("length", exp(ast::ExpKind::Len(Box::new(variable("length")))), names(&["length"])),
         (
             "dot",
-            exp(ast::ExpKind::Dot(
-                Box::new(variable("record")),
-                atom("field"),
-            )),
+            exp(ast::ExpKind::Dot(Box::new(variable("record")), atom("field"))),
             names(&["record"]),
         ),
         (
             "index",
-            exp(ast::ExpKind::Idx(
-                Box::new(variable("base")),
-                Box::new(variable("index")),
-            )),
+            exp(ast::ExpKind::Idx(Box::new(variable("base")), Box::new(variable("index")))),
             names(&["base", "index"]),
         ),
         (
@@ -298,14 +252,7 @@ fn test_free_expression_variants_follow_the_oracle() {
             "iteration_omits_binders",
             exp(ast::ExpKind::Iter(
                 Box::new(variable("iterated")),
-                (
-                    ast::Iter::List,
-                    vec![ast::Var {
-                        id: id("binder"),
-                        typ: typ(),
-                        iters: vec![],
-                    }],
-                ),
+                (ast::Iter::List, vec![ast::Var { id: id("binder"), typ: typ(), iters: vec![] }]),
             )),
             names(&["iterated"]),
         ),
@@ -313,10 +260,7 @@ fn test_free_expression_variants_follow_the_oracle() {
     for (case, exp_case, expected) in cases {
         assert_eq!(exp_case.free(), expected, "{case}");
     }
-    assert_eq!(
-        [variable("many_a"), variable("many_b")].free(),
-        names(&["many_a", "many_b"])
-    );
+    assert_eq!([variable("many_a"), variable("many_b")].free(), names(&["many_a", "many_b"]));
 }
 
 #[test]
@@ -370,11 +314,7 @@ fn test_free_path_argument_and_premise_variants_follow_the_oracle() {
             arg(ast::ArgKind::Exp(Box::new(variable("argument")))),
             names(&["argument"]),
         ),
-        (
-            "definition",
-            arg(ast::ArgKind::Def(id("definition"))),
-            names(&[]),
-        ),
+        ("definition", arg(ast::ArgKind::Def(id("definition"))), names(&[])),
     ];
     assert_eq!(
         args.iter()
@@ -386,9 +326,7 @@ fn test_free_path_argument_and_premise_variants_follow_the_oracle() {
     for (case, argument, expected) in args {
         assert_eq!(argument.free(), expected, "argument {case}");
     }
-    let nested = prem(ast::PremKind::If(ast::IfPrem {
-        exp: variable("nested"),
-    }));
+    let nested = prem(ast::PremKind::If(ast::IfPrem { exp: variable("nested") }));
     let prems = vec![
         (
             "rule",
@@ -399,13 +337,7 @@ fn test_free_path_argument_and_premise_variants_follow_the_oracle() {
             })),
             names(&["rule"]),
         ),
-        (
-            "if",
-            prem(ast::PremKind::If(ast::IfPrem {
-                exp: variable("if"),
-            })),
-            names(&["if"]),
-        ),
+        ("if", prem(ast::PremKind::If(ast::IfPrem { exp: variable("if") })), names(&["if"])),
         (
             "if_holds",
             prem(ast::PremKind::IfHold(ast::IfHoldPrem {
@@ -428,25 +360,15 @@ fn test_free_path_argument_and_premise_variants_follow_the_oracle() {
                 prem: Box::new(nested),
                 prem_iter: ast::PremIter {
                     iter: ast::Iter::List,
-                    vars_bound: vec![ast::Var {
-                        id: id("input"),
-                        typ: typ(),
-                        iters: vec![],
-                    }],
-                    vars_bind: vec![ast::Var {
-                        id: id("output"),
-                        typ: typ(),
-                        iters: vec![],
-                    }],
+                    vars_bound: vec![ast::Var { id: id("input"), typ: typ(), iters: vec![] }],
+                    vars_bind: vec![ast::Var { id: id("output"), typ: typ(), iters: vec![] }],
                 },
             })),
             names(&["nested"]),
         ),
         (
             "debug",
-            prem(ast::PremKind::Debug(ast::DebugPrem {
-                exp: variable("debug"),
-            })),
+            prem(ast::PremKind::Debug(ast::DebugPrem { exp: variable("debug") })),
             names(&["debug"]),
         ),
     ];
@@ -465,26 +387,16 @@ fn test_free_path_argument_and_premise_variants_follow_the_oracle() {
 
 #[test]
 fn test_free_aggregates_and_definition_omissions_follow_the_oracle() {
-    let rule = rule(
-        "head",
-        vec![prem(ast::PremKind::If(ast::IfPrem {
-            exp: variable("premise"),
-        }))],
-    );
+    let rule =
+        rule("head", vec![prem(ast::PremKind::If(ast::IfPrem { exp: variable("premise") }))]);
     assert_eq!(rule.free(), names(&["head", "premise"]));
-    assert_eq!(
-        std::slice::from_ref(&rule).free(),
-        names(&["head", "premise"])
-    );
+    assert_eq!(std::slice::from_ref(&rule).free(), names(&["head", "premise"]));
     let group = p4spec_rust::phrase! {
         node: (id("group"), vec![rule.clone()]),
         span: span(),
     };
     assert_eq!(group.free(), names(&["head", "premise"]));
-    assert_eq!(
-        std::slice::from_ref(&group).free(),
-        names(&["head", "premise"])
-    );
+    assert_eq!(std::slice::from_ref(&group).free(), names(&["head", "premise"]));
     let else_group = p4spec_rust::phrase! {
         node: (id("else"), rule.clone()),
         span: span(),
@@ -494,16 +406,10 @@ fn test_free_aggregates_and_definition_omissions_follow_the_oracle() {
     assert_eq!(Some(else_group.clone()).free(), names(&["head", "premise"]));
     let clause = clause("argument", "body", "premise");
     assert_eq!(clause.free(), names(&["argument", "body", "premise"]));
-    assert_eq!(
-        std::slice::from_ref(&clause).free(),
-        names(&["argument", "body", "premise"])
-    );
+    assert_eq!(std::slice::from_ref(&clause).free(), names(&["argument", "body", "premise"]));
     assert_eq!(clause.free(), names(&["argument", "body", "premise"]));
     assert_eq!(Option::<ast::ElseClause>::None.free(), names(&[]));
-    assert_eq!(
-        Some(clause.clone()).free(),
-        names(&["argument", "body", "premise"])
-    );
+    assert_eq!(Some(clause.clone()).free(), names(&["argument", "body", "premise"]));
     let row = p4spec_rust::phrase! { node: (
         vec![arg(ast::ArgKind::Exp(Box::new(variable("key"))))],
         variable("value"),
@@ -622,9 +528,7 @@ fn test_free_aggregates_and_definition_omissions_follow_the_oracle() {
 }
 
 fn assert_var(exp: &ast::Exp, expected_id: &ast::Id, expected_ty: ast::TypKind) {
-    let ast::ExpKind::Var(id) = &exp.node else {
-        panic!("expected variable expression")
-    };
+    let ast::ExpKind::Var(id) = &exp.node else { panic!("expected variable expression") };
     assert_eq!(id, expected_id);
     assert_eq!(exp.note.as_ref(), &expected_ty);
     assert_eq!(exp.span, expected_id.span);
@@ -643,23 +547,12 @@ fn test_as_exp_preserves_empty_one_and_two_level_shapes_and_spans() {
     let id = id_at("x", "identifier");
     let typ = typ_at("type");
     for dim in [false, true] {
-        let empty = var::as_exp(
-            dim,
-            &ast::Var {
-                id: id.clone(),
-                typ: typ.clone(),
-                iters: vec![],
-            },
-        );
+        let empty = var::as_exp(dim, &ast::Var { id: id.clone(), typ: typ.clone(), iters: vec![] });
         assert_var(&empty, &id, ast::TypKind::Bool);
     }
     let one_false = var::as_exp(
         false,
-        &ast::Var {
-            id: id.clone(),
-            typ: typ.clone(),
-            iters: vec![ast::Iter::Opt],
-        },
+        &ast::Var { id: id.clone(), typ: typ.clone(), iters: vec![ast::Iter::Opt] },
     );
     let ast::ExpKind::Iter(inner, (ast::Iter::Opt, binders)) = &one_false.node else {
         panic!("expected one false iteration")
@@ -678,18 +571,12 @@ fn test_as_exp_preserves_empty_one_and_two_level_shapes_and_spans() {
     assert_var(inner, &id, ast::TypKind::Bool);
     let one_true = var::as_exp(
         true,
-        &ast::Var {
-            id: id.clone(),
-            typ: typ.clone(),
-            iters: vec![ast::Iter::Opt],
-        },
+        &ast::Var { id: id.clone(), typ: typ.clone(), iters: vec![ast::Iter::Opt] },
     );
     let ast::ExpKind::Iter(inner, (ast::Iter::Opt, binders)) = &one_true.node else {
         panic!("expected one true iteration")
     };
-    let [binder] = binders.as_slice() else {
-        panic!("expected one binder")
-    };
+    let [binder] = binders.as_slice() else { panic!("expected one binder") };
     assert_eq!(&binder.id, &id);
     assert_eq!(binder.typ.span, typ.span);
     assert!(binder.iters.is_empty());

@@ -2,17 +2,8 @@ use p4spec_rust::sim_plugin::io::{Expectation, Tx, matches};
 
 #[test]
 fn test_packet_match_exact_prefix_and_wildcard() {
-    let tx = Tx {
-        port: 1,
-        packet: "ABCD".to_owned(),
-    };
-    let mut expect = Expectation {
-        tx: Tx {
-            port: 1,
-            packet: "A*".to_owned(),
-        },
-        exact: false,
-    };
+    let tx = Tx { port: 1, packet: "ABCD".to_owned() };
+    let mut expect = Expectation { tx: Tx { port: 1, packet: "A*".to_owned() }, exact: false };
     assert!(matches(&tx, &expect));
     expect.exact = true;
     assert!(!matches(&tx, &expect));
@@ -27,17 +18,8 @@ fn test_packet_match_exact_prefix_and_wildcard() {
 
 #[test]
 fn test_packet_match_port_empty_and_short_output() {
-    let mut tx = Tx {
-        port: 1,
-        packet: "A".to_owned(),
-    };
-    let mut expect = Expectation {
-        tx: Tx {
-            port: 1,
-            packet: "AB".to_owned(),
-        },
-        exact: false,
-    };
+    let mut tx = Tx { port: 1, packet: "A".to_owned() };
+    let mut expect = Expectation { tx: Tx { port: 1, packet: "AB".to_owned() }, exact: false };
     assert!(!matches(&tx, &expect));
     expect.exact = true;
     assert!(!matches(&tx, &expect));

@@ -1,11 +1,7 @@
 use super::*;
 use crate::pass::structure::{StructureErrorKind, dangle::*};
 fn conditional(text: &str, block: ast_ol::Block) -> ast_ol::Instr {
-    instr(ast_ol::InstrKind::If(ast_ol::IfInstr {
-        exp: variable(text),
-        iter_exps: vec![],
-        block,
-    }))
+    instr(ast_ol::InstrKind::If(ast_ol::IfInstr { exp: variable(text), iter_exps: vec![], block }))
 }
 
 fn hold(block_hold: ast_ol::Block, block_not_hold: ast_ol::Block) -> ast_ol::Instr {
@@ -20,14 +16,8 @@ fn hold(block_hold: ast_ol::Block, block_not_hold: ast_ol::Block) -> ast_ol::Ins
 
 fn block() -> ast_ol::Block {
     vec![
-        conditional(
-            "j_nonnegative",
-            vec![conditional("i_nonnegative", vec![ret("positive")])],
-        ),
-        conditional(
-            "i_negative",
-            vec![conditional("j_nonnegative", vec![ret("negative")])],
-        ),
+        conditional("j_nonnegative", vec![conditional("i_nonnegative", vec![ret("positive")])]),
+        conditional("i_negative", vec![conditional("j_nonnegative", vec![ret("negative")])]),
         hold(vec![ret("hold")], vec![]),
         hold(vec![], vec![ret("not_hold")]),
         hold(vec![ret("hold")], vec![ret("not_hold")]),
@@ -54,14 +44,10 @@ fn check(block_sl: &Block, dangle: bool) {
         (&block_sl[0], "j_nonnegative", "i_nonnegative"),
         (&block_sl[1], "i_negative", "j_nonnegative"),
     ] {
-        let InstrKind::If(instr_if_sl) = &instr_sl.node else {
-            panic!()
-        };
+        let InstrKind::If(instr_if_sl) = &instr_sl.node else { panic!() };
         assert_eq!(instr_if_sl.dangle, dangle);
         assert_eq!(instr_if_sl.exp, variable(text_outer));
-        let InstrKind::If(instr_inner_sl) = &instr_if_sl.block[0].node else {
-            panic!()
-        };
+        let InstrKind::If(instr_inner_sl) = &instr_if_sl.block[0].node else { panic!() };
         assert_eq!(instr_inner_sl.dangle, dangle);
         assert_eq!(instr_inner_sl.exp, variable(text_inner));
         assert_eq!(instr_sl.span, span(1));
@@ -74,21 +60,13 @@ fn check(block_sl: &Block, dangle: bool) {
     );
     assert!(matches!(
         &block_sl[4].node,
-        InstrKind::Hold(HoldInstr {
-            hold_case: HoldCase::Both(_, _),
-            ..
-        })
+        InstrKind::Hold(HoldInstr { hold_case: HoldCase::Both(_, _), .. })
     ));
     assert!(
         matches!(&block_sl[5].node, InstrKind::Case(CaseInstr {dangle: flag, ..}) if *flag == dangle)
     );
-    assert!(matches!(
-        &block_sl[6].node,
-        InstrKind::Case(CaseInstr { dangle: false, .. })
-    ));
-    let InstrKind::Debug(instr_debug_sl) = &block_sl[7].node else {
-        panic!()
-    };
+    assert!(matches!(&block_sl[6].node, InstrKind::Case(CaseInstr { dangle: false, .. })));
+    let InstrKind::Debug(instr_debug_sl) = &block_sl[7].node else { panic!() };
     assert_eq!(instr_debug_sl.exp, variable("debug"));
     assert!(
         matches!(&instr_debug_sl.instr.node, InstrKind::If(IfInstr {dangle: flag, ..}) if *flag == dangle)
@@ -122,10 +100,7 @@ fn test_empty_hold_nested_in_debug_has_owning_span() {
         assert_eq!(error.kind, StructureErrorKind::EmptyHold);
         assert_eq!(error.span, span(42));
     }
-    assert_eq!(
-        instrument_without_else(vec![instr_debug]).unwrap_err().span,
-        span(42)
-    );
+    assert_eq!(instrument_without_else(vec![instr_debug]).unwrap_err().span, span(42));
 }
 
 #[test]
@@ -138,9 +113,7 @@ fn test_lowering_preserves_payloads_spans_and_nested_fallbacks() {
     let not_exp = Mixfix::Arg(exp.clone());
     let guard = Guard::Sub(
         crate::phrase!(node: TypKind::Text, span: span(18)),
-        Box::new(crate::lang::il::ast::Subcheck::Tuple(vec![
-            crate::lang::il::ast::Subcheck::Skip,
-        ])),
+        Box::new(crate::lang::il::ast::Subcheck::Tuple(vec![crate::lang::il::ast::Subcheck::Skip])),
     );
     let instrs_ol = vec![
         ast_ol::InstrKind::Group(ast_ol::GroupInstr {
@@ -164,10 +137,7 @@ fn test_lowering_preserves_payloads_spans_and_nested_fallbacks() {
         }),
         ast_ol::InstrKind::Case(ast_ol::CaseInstr {
             exp: exp.clone(),
-            cases: vec![ast_ol::Case {
-                guard: guard.clone(),
-                block: block_ol,
-            }],
+            cases: vec![ast_ol::Case { guard: guard.clone(), block: block_ol }],
             total: false,
         }),
         ast_ol::InstrKind::Result(ast_ol::ResultInstr {
@@ -198,16 +168,10 @@ fn test_lowering_preserves_payloads_spans_and_nested_fallbacks() {
         }),
         InstrKind::Case(CaseInstr {
             exp: exp.clone(),
-            cases: vec![Case {
-                guard,
-                block: block_sl,
-            }],
+            cases: vec![Case { guard, block: block_sl }],
             dangle: true,
         }),
-        InstrKind::Result(ResultInstr {
-            rel_signature: signature(),
-            exps: vec![exp.clone()],
-        }),
+        InstrKind::Result(ResultInstr { rel_signature: signature(), exps: vec![exp.clone()] }),
         InstrKind::Return(ReturnInstr { exp }),
     ];
     let block_ol = instrs_ol

@@ -9,11 +9,7 @@ fn test_alias_chain_and_shadowing() {
         binding(
             variable("y"),
             variable("x"),
-            vec![binding(
-                variable("z"),
-                variable("y"),
-                vec![ret("z"), instr_shadow.clone()],
-            )],
+            vec![binding(variable("z"), variable("y"), vec![ret("z"), instr_shadow.clone()])],
         ),
         ret("y"),
     ])
@@ -24,12 +20,8 @@ fn test_alias_chain_and_shadowing() {
 #[test]
 fn test_iterated_aliases_and_replacement_capture() {
     for iter in [Iter::List, Iter::Opt] {
-        let block = apply(vec![binding(
-            iterated("y", iter),
-            iterated("x", iter),
-            vec![ret("y")],
-        )])
-        .unwrap();
+        let block =
+            apply(vec![binding(iterated("y", iter), iterated("x", iter), vec![ret("y")])]).unwrap();
         assert_eq!(block, vec![ret("x")]);
     }
     let exp_target = iterated("x", Iter::List);
@@ -38,19 +30,11 @@ fn test_iterated_aliases_and_replacement_capture() {
     let block = apply(vec![binding(
         variable("y"),
         exp_target.clone(),
-        vec![binding(
-            variable("x"),
-            exp_literal,
-            vec![ret("y"), ret("x")],
-        )],
+        vec![binding(variable("x"), exp_literal, vec![ret("y"), ret("x")])],
     )])
     .unwrap();
-    let InstrKind::Let(instr_let) = &block[0].node else {
-        panic!("expected let")
-    };
-    let ExpKind::Var(id_fresh) = &instr_let.exp_l.node else {
-        panic!("expected variable")
-    };
+    let InstrKind::Let(instr_let) = &block[0].node else { panic!("expected let") };
+    let ExpKind::Var(id_fresh) = &instr_let.exp_l.node else { panic!("expected variable") };
     assert_ne!(id_fresh.node, "x");
     let InstrKind::Return(instr_return) = &instr_let.block[0].node else {
         panic!("expected return")
@@ -59,19 +43,13 @@ fn test_iterated_aliases_and_replacement_capture() {
     let InstrKind::Return(instr_return) = &instr_let.block[1].node else {
         panic!("expected return")
     };
-    let ExpKind::Var(id_return) = &instr_return.exp.node else {
-        panic!("expected variable")
-    };
+    let ExpKind::Var(id_return) = &instr_return.exp.node else { panic!("expected variable") };
     assert_eq!(id_return, id_fresh);
 }
 
 #[test]
 fn test_unequal_iterators_and_debug_barrier() {
-    let instr_let = binding(
-        iterated("y", Iter::Opt),
-        iterated("x", Iter::List),
-        vec![ret("y")],
-    );
+    let instr_let = binding(iterated("y", Iter::Opt), iterated("x", Iter::List), vec![ret("y")]);
     let instr_debug = instr(InstrKind::Debug(DebugInstr {
         exp: variable("y"),
         instr: Box::new(binding(variable("y"), variable("x"), vec![ret("y")])),
@@ -80,15 +58,8 @@ fn test_unequal_iterators_and_debug_barrier() {
         apply(vec![instr_let.clone(), instr_debug.clone()]).unwrap(),
         vec![instr_let, instr_debug.clone()]
     );
-    let block = apply(vec![binding(
-        variable("y"),
-        variable("z"),
-        vec![instr_debug],
-    )])
-    .unwrap();
-    let InstrKind::Debug(instr_debug) = &block[0].node else {
-        panic!("expected debug")
-    };
+    let block = apply(vec![binding(variable("y"), variable("z"), vec![instr_debug])]).unwrap();
+    let InstrKind::Debug(instr_debug) = &block[0].node else { panic!("expected debug") };
     assert_eq!(instr_debug.exp, variable("z"));
     assert!(matches!(instr_debug.instr.node, InstrKind::Let(_)));
 }

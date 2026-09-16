@@ -329,11 +329,7 @@ fn collect_iter_vars(bounds: &VEnv, occurs: &Occurrences, iter: ast::Iter) -> Ve
                 .get(id)
                 .expect("occurring variable has inferred bound");
             if dim.clone().add_iter(iter).sub(dim_bound) {
-                Some(ast::Var {
-                    id: id.clone(),
-                    typ: dim.typ.clone(),
-                    iters: dim.iters.clone(),
-                })
+                Some(ast::Var { id: id.clone(), typ: dim.typ.clone(), iters: dim.iters.clone() })
             } else {
                 None
             }

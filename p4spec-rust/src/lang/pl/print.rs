@@ -280,20 +280,11 @@ fn write_instr_with<Tier>(
 ) -> fmt::Result {
     let order = format!("{}{index}. ", "  ".repeat(level));
     let write_order = |output: &mut Printer<'_>| {
-        if short {
-            Ok(())
-        } else {
-            output.write_str(&order)
-        }
+        if short { Ok(()) } else { output.write_str(&order) }
     };
 
     match &instr.node.node {
-        InstrKind::If(IfInstr {
-            exp,
-            iter_exps,
-            block,
-            dangle,
-        }) => {
+        InstrKind::If(IfInstr { exp, iter_exps, block, dangle }) => {
             write_order(output)?;
             output.write_str("If (")?;
             exp.print(output)?;
@@ -309,12 +300,7 @@ fn write_instr_with<Tier>(
             }
             Ok(())
         }
-        InstrKind::Hold(HoldInstr {
-            id,
-            not_exp,
-            iter_exps,
-            hold_case,
-        }) => {
+        InstrKind::Hold(HoldInstr { id, not_exp, iter_exps, hold_case }) => {
             let write_holding = |output: &mut Printer<'_>, negative: bool| {
                 output.write_str("If (")?;
                 id.print(output)?;
@@ -365,11 +351,7 @@ fn write_instr_with<Tier>(
             }
             Ok(())
         }
-        InstrKind::Let(LetInstr {
-            exp_l,
-            exp_r,
-            iter_instrs,
-        }) => {
+        InstrKind::Let(LetInstr { exp_l, exp_r, iter_instrs }) => {
             write_order(output)?;
             output.write_str("(Let ")?;
             exp_l.print(output)?;
@@ -383,10 +365,7 @@ fn write_instr_with<Tier>(
             output.write_str("Debug: ")?;
             exp.print(output)
         }
-        InstrKind::Destruct(DestructInstr {
-            bindings: fields,
-            exp: exp_r,
-        }) => {
+        InstrKind::Destruct(DestructInstr { bindings: fields, exp: exp_r }) => {
             write_order(output)?;
             output.write_str("(Destruct (")?;
             for (index, (_, exp)) in fields.iter().enumerate() {
@@ -399,13 +378,7 @@ fn write_instr_with<Tier>(
             exp_r.print(output)?;
             output.write_char(')')
         }
-        InstrKind::CheckLetSub(CheckLetSubInstr {
-            typ,
-            exp_l,
-            exp_r,
-            block,
-            ..
-        }) => {
+        InstrKind::CheckLetSub(CheckLetSubInstr { typ, exp_l, exp_r, block, .. }) => {
             write_order(output)?;
             output.write_str("(Let ")?;
             exp_l.print(output)?;
@@ -422,12 +395,7 @@ fn write_instr_with<Tier>(
             }
             Ok(())
         }
-        InstrKind::CheckLetMatch(CheckLetMatchInstr {
-            pattern,
-            exp_l,
-            exp_r,
-            block,
-        }) => {
+        InstrKind::CheckLetMatch(CheckLetMatchInstr { pattern, exp_l, exp_r, block }) => {
             write_order(output)?;
             output.write_str("(Let ")?;
             exp_l.print(output)?;
@@ -444,11 +412,7 @@ fn write_instr_with<Tier>(
             }
             Ok(())
         }
-        InstrKind::OptionGet(OptionGetInstr {
-            exp_l,
-            exp_r,
-            block,
-        }) => {
+        InstrKind::OptionGet(OptionGetInstr { exp_l, exp_r, block }) => {
             write_order(output)?;
             output.write_str("(Let ")?;
             exp_l.print(output)?;
@@ -489,10 +453,7 @@ fn write_instr_group_tier_with(
         InstrGroup::Result(ResultGroupInstr { exps_output, .. }) if exps_output.is_empty() => {
             output.write_str("The relation holds")
         }
-        InstrGroup::Result(ResultGroupInstr {
-            rel_signature,
-            exps_output,
-        }) => {
+        InstrGroup::Result(ResultGroupInstr { rel_signature, exps_output }) => {
             output.write_str("Result in: ")?;
             write_reloutput(output, rel_signature, exps_output)
         }
@@ -500,12 +461,7 @@ fn write_instr_group_tier_with(
             output.write_str("Return ")?;
             exp.print(output)
         }
-        InstrGroup::Rule(RuleGroupInstr {
-            id,
-            not_exp,
-            iter_instrs,
-            ..
-        }) => {
+        InstrGroup::Rule(RuleGroupInstr { id, not_exp, iter_instrs, .. }) => {
             output.write_char('(')?;
             id.print(output)?;
             output.write_str(": ")?;
@@ -704,14 +660,7 @@ fn write_block_with<Tier>(
         if offset != 0 {
             output.write_str("\n\n")?;
         }
-        write_instr_with(
-            output,
-            instr,
-            tier_printer,
-            false,
-            level,
-            index + offset + 1,
-        )?;
+        write_instr_with(output, instr, tier_printer, false, level, index + offset + 1)?;
     }
     Ok(())
 }
@@ -724,12 +673,7 @@ fn write_elseblock_opt_with<Tier>(
     index: usize,
 ) -> fmt::Result {
     if let Some(block) = block {
-        write!(
-            output,
-            "\n\n{}{next}. Otherwise,\n\n",
-            "  ".repeat(level),
-            next = index + 1
-        )?;
+        write!(output, "\n\n{}{next}. Otherwise,\n\n", "  ".repeat(level), next = index + 1)?;
         write_block_with(output, block, tier_printer, level + 1, 0)?;
     }
     Ok(())

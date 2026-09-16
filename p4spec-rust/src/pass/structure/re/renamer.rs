@@ -150,10 +150,9 @@ impl Renamer {
                 Box::new(self.rename_exp(*exp_head)),
                 Box::new(self.rename_exp(*exp_tail)),
             ),
-            ExpKind::Cat(exp_l, exp_r) => ExpKind::Cat(
-                Box::new(self.rename_exp(*exp_l)),
-                Box::new(self.rename_exp(*exp_r)),
-            ),
+            ExpKind::Cat(exp_l, exp_r) => {
+                ExpKind::Cat(Box::new(self.rename_exp(*exp_l)), Box::new(self.rename_exp(*exp_r)))
+            }
             ExpKind::Mem(exp_elem, exp_set) => ExpKind::Mem(
                 Box::new(self.rename_exp(*exp_elem)),
                 Box::new(self.rename_exp(*exp_set)),
@@ -175,10 +174,9 @@ impl Renamer {
                 Box::new(self.rename_exp(*exp_field)),
             ),
             ExpKind::Call(id, targs, args) => ExpKind::Call(id, targs, self.rename_args(args)),
-            ExpKind::Iter(exp, iter_exp) => ExpKind::Iter(
-                Box::new(self.rename_exp(*exp)),
-                self.rename_iterexp(iter_exp),
-            ),
+            ExpKind::Iter(exp, iter_exp) => {
+                ExpKind::Iter(Box::new(self.rename_exp(*exp)), self.rename_iterexp(iter_exp))
+            }
         };
         note_phrase!(node: exp_kind, note: exp.note, span: exp.span)
     }
@@ -206,10 +204,9 @@ impl Renamer {
     pub(crate) fn rename_path(&self, path: Path) -> Path {
         let path_kind = match path.node {
             PathKind::Root => PathKind::Root,
-            PathKind::Idx(path, exp) => PathKind::Idx(
-                Box::new(self.rename_path(*path)),
-                Box::new(self.rename_exp(*exp)),
-            ),
+            PathKind::Idx(path, exp) => {
+                PathKind::Idx(Box::new(self.rename_path(*path)), Box::new(self.rename_exp(*exp)))
+            }
             PathKind::Slice(path, exp_idx, exp_len) => PathKind::Slice(
                 Box::new(self.rename_path(*path)),
                 Box::new(self.rename_exp(*exp_idx)),
@@ -301,31 +298,17 @@ impl Renamer {
     // - If instruction
 
     fn rename_if_instr(&self, instr_ol: ol::IfInstr) -> Result<ol::InstrKind, StructureError> {
-        let ol::IfInstr {
-            exp,
-            iter_exps,
-            block,
-        } = instr_ol;
+        let ol::IfInstr { exp, iter_exps, block } = instr_ol;
         let exp = self.rename_exp(exp);
         let iter_exps = self.rename_iterexps(iter_exps);
         let block = self.rename_block(block)?;
-        Ok(ol::InstrKind::If(ol::IfInstr {
-            exp,
-            iter_exps,
-            block,
-        }))
+        Ok(ol::InstrKind::If(ol::IfInstr { exp, iter_exps, block }))
     }
 
     // - Hold instruction
 
     fn rename_hold_instr(&self, instr_ol: ol::HoldInstr) -> Result<ol::InstrKind, StructureError> {
-        let ol::HoldInstr {
-            id,
-            not_exp,
-            iter_exps,
-            block_hold,
-            block_not_hold,
-        } = instr_ol;
+        let ol::HoldInstr { id, not_exp, iter_exps, block_hold, block_not_hold } = instr_ol;
         let not_exp = not_exp.map(|exp| self.rename_exp(exp.clone()));
         let iter_exps = self.rename_iterexps(iter_exps);
         let block_hold = self.rename_block(block_hold)?;
@@ -354,31 +337,16 @@ impl Renamer {
         &self,
         instr_ol: ol::GroupInstr,
     ) -> Result<ol::InstrKind, StructureError> {
-        let ol::GroupInstr {
-            id,
-            rel_signature,
-            exps,
-            block,
-        } = instr_ol;
+        let ol::GroupInstr { id, rel_signature, exps, block } = instr_ol;
         let exps = self.rename_exps(exps);
         let block = self.rename_block(block)?;
-        Ok(ol::InstrKind::Group(ol::GroupInstr {
-            id,
-            rel_signature,
-            exps,
-            block,
-        }))
+        Ok(ol::InstrKind::Group(ol::GroupInstr { id, rel_signature, exps, block }))
     }
 
     // - Let instruction
 
     fn rename_let_instr(&self, instr_ol: ol::LetInstr) -> Result<ol::InstrKind, StructureError> {
-        let ol::LetInstr {
-            exp_l,
-            exp_r,
-            iter_instrs,
-            block,
-        } = instr_ol;
+        let ol::LetInstr { exp_l, exp_r, iter_instrs, block } = instr_ol;
         let exp_r = self.rename_exp(exp_r);
         let frees_l = exp_l.free();
         let mut renamer = self.filter(|id, _| !frees_l.contains(id));
@@ -392,12 +360,7 @@ impl Renamer {
         );
         let iter_instrs = renamer.rename_iterinstrs_bound(iter_instrs);
         let block = renamer.rename_block(block)?;
-        Ok(ol::InstrKind::Let(ol::LetInstr {
-            exp_l,
-            exp_r,
-            iter_instrs,
-            block,
-        }))
+        Ok(ol::InstrKind::Let(ol::LetInstr { exp_l, exp_r, iter_instrs, block }))
     }
 
     // - Rule instruction
@@ -407,13 +370,7 @@ impl Renamer {
         instr_ol: ol::RuleInstr,
         span: &Span,
     ) -> Result<ol::InstrKind, StructureError> {
-        let ol::RuleInstr {
-            id,
-            not_exp,
-            input_hint,
-            iter_instrs,
-            block,
-        } = instr_ol;
+        let ol::RuleInstr { id, not_exp, input_hint, iter_instrs, block } = instr_ol;
         let exps = not_exp.args().into_iter().cloned().collect();
         let (exps_input, exps_output) = input::split(&input_hint, exps)
             .map_err(|error| StructureError::new(StructureErrorKind::Input(error), span.clone()))?;
@@ -435,27 +392,15 @@ impl Renamer {
             Mixop::fill(&mixop, exps).expect("validated arguments preserve the mixfix arity");
         let iter_instrs = renamer.rename_iterinstrs_bound(iter_instrs);
         let block = renamer.rename_block(block)?;
-        Ok(ol::InstrKind::Rule(ol::RuleInstr {
-            id,
-            not_exp,
-            input_hint,
-            iter_instrs,
-            block,
-        }))
+        Ok(ol::InstrKind::Rule(ol::RuleInstr { id, not_exp, input_hint, iter_instrs, block }))
     }
 
     // - Result instruction
 
     fn rename_result_instr(&self, instr_ol: ol::ResultInstr) -> ol::InstrKind {
-        let ol::ResultInstr {
-            rel_signature,
-            exps,
-        } = instr_ol;
+        let ol::ResultInstr { rel_signature, exps } = instr_ol;
         let exps = self.rename_exps(exps);
-        ol::InstrKind::Result(ol::ResultInstr {
-            rel_signature,
-            exps,
-        })
+        ol::InstrKind::Result(ol::ResultInstr { rel_signature, exps })
     }
 
     // - Return instruction
@@ -489,17 +434,9 @@ impl Renamer {
     // - Bound variables
 
     pub(crate) fn rename_iterinstr_bound(&self, iter_instr: ol::InstrIter) -> ol::InstrIter {
-        let ol::InstrIter {
-            iter,
-            vars_bound,
-            vars_bind,
-        } = iter_instr;
+        let ol::InstrIter { iter, vars_bound, vars_bind } = iter_instr;
         let vars_bound = self.rename_vars(vars_bound);
-        ol::InstrIter {
-            iter,
-            vars_bound,
-            vars_bind,
-        }
+        ol::InstrIter { iter, vars_bound, vars_bind }
     }
 
     pub(crate) fn rename_iterinstrs_bound(
@@ -515,17 +452,9 @@ impl Renamer {
     // - Binding variables
 
     pub(crate) fn rename_iterinstr_bind(&self, iter_instr: ol::InstrIter) -> ol::InstrIter {
-        let ol::InstrIter {
-            iter,
-            vars_bound,
-            vars_bind,
-        } = iter_instr;
+        let ol::InstrIter { iter, vars_bound, vars_bind } = iter_instr;
         let vars_bind = self.rename_vars(vars_bind);
-        ol::InstrIter {
-            iter,
-            vars_bound,
-            vars_bind,
-        }
+        ol::InstrIter { iter, vars_bound, vars_bind }
     }
 
     pub(crate) fn rename_iterinstrs_bind(

@@ -106,10 +106,7 @@ pub(super) struct ElabTrace {
 
 impl ElabTrace {
     pub(super) fn leaf(error: ElabError) -> Self {
-        Self {
-            error,
-            children: vec![],
-        }
+        Self { error, children: vec![] }
     }
 
     fn fmt(&self, f: &mut fmt::Formatter<'_>, depth: usize, first: &mut bool) -> fmt::Result {
@@ -142,12 +139,7 @@ pub struct ElabError {
 
 impl ElabError {
     pub(crate) fn new(kind: ElabErrorKind, span: Span, diagnostic: impl Into<String>) -> Self {
-        Self {
-            kind,
-            span,
-            diagnostic: diagnostic.into(),
-            traces: vec![],
-        }
+        Self { kind, span, diagnostic: diagnostic.into(), traces: vec![] }
     }
 
     pub(super) fn with_traces(mut self, traces: Vec<ElabTrace>) -> Self {
@@ -156,11 +148,7 @@ impl ElabError {
     }
 
     pub(crate) fn undefined(entity: EntityKind, name: &str, span: Span) -> Self {
-        Self::new(
-            ElabErrorKind::Undefined(entity),
-            span,
-            format!("{entity} `{name}` is undefined"),
-        )
+        Self::new(ElabErrorKind::Undefined(entity), span, format!("{entity} `{name}` is undefined"))
     }
 
     pub(crate) fn duplicate(entity: EntityKind, name: &str, span: Span) -> Self {

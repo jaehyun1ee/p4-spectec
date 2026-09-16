@@ -17,11 +17,7 @@ fn test_alter_alternates_with_omission_defaults_fuse_brackets_and_other() {
     let result = alter_impl::alternate(
         &hint,
         &["zero", "one"],
-        &StringRenderer {
-            empty: "_",
-            separator: " ",
-            fuse: "#",
-        },
+        &StringRenderer { empty: "_", separator: " ", fuse: "#" },
     )
     .unwrap();
     assert_eq!(result, "_ L zero R one#\"other\"");
@@ -29,17 +25,10 @@ fn test_alter_alternates_with_omission_defaults_fuse_brackets_and_other() {
         alter_impl::alternate(
             &AlterationHint::Hole(AlterHole::Num(2)),
             &["zero"],
-            &StringRenderer {
-                empty: "",
-                separator: "",
-                fuse: ""
-            }
+            &StringRenderer { empty: "", separator: "", fuse: "" }
         )
         .unwrap_err(),
-        AlterationError::IndexOutOfBounds {
-            index: 2,
-            item_count: 1,
-        }
+        AlterationError::IndexOutOfBounds { index: 2, item_count: 1 }
     );
 }
 #[test]
@@ -65,19 +54,12 @@ fn test_alter_edge_cases_cover_init_omission_duplicates_and_next_cursor() {
             atom("R"),
         )]))
     );
-    let omitted = AlterationHint::Brack(
-        atom("L"),
-        Box::new(AlterationHint::Text("omit".into())),
-        atom("R"),
-    );
+    let omitted =
+        AlterationHint::Brack(atom("L"), Box::new(AlterationHint::Text("omit".into())), atom("R"));
     let rendered = alter_impl::alternate(
         &omitted,
         &[] as &[&str],
-        &StringRenderer {
-            empty: "EMPTY",
-            separator: "|",
-            fuse: "",
-        },
+        &StringRenderer { empty: "EMPTY", separator: "|", fuse: "" },
     )
     .unwrap();
     assert_eq!(rendered, "L|R");
@@ -90,16 +72,9 @@ fn test_alter_edge_cases_cover_init_omission_duplicates_and_next_cursor() {
         alter_impl::alternate(
             &nexts,
             &["a"],
-            &StringRenderer {
-                empty: "",
-                separator: "",
-                fuse: ""
-            }
+            &StringRenderer { empty: "", separator: "", fuse: "" }
         )
         .unwrap_err(),
-        AlterationError::IndexOutOfBounds {
-            index: 1,
-            item_count: 1,
-        }
+        AlterationError::IndexOutOfBounds { index: 1, item_count: 1 }
     );
 }

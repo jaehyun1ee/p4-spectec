@@ -66,10 +66,7 @@ fn check_arity(
     if expected == actual {
         return Ok(());
     }
-    Err(AlgoError::new(
-        AlgoErrorKind::PatternArityMismatch { expected, actual },
-        span.clone(),
-    ))
+    Err(AlgoError::new(AlgoErrorKind::PatternArityMismatch { expected, actual }, span.clone()))
 }
 
 pub fn has_overlap(

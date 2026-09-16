@@ -13,9 +13,7 @@ fn if_instr(text_cond: &str, iter: Iter, block: Block, num_line: i64) -> Instr {
 }
 
 fn return_name(instr_body: &Instr) -> &str {
-    let InstrKind::Return(instr_return) = &instr_body.node else {
-        panic!("expected return")
-    };
+    let InstrKind::Return(instr_return) = &instr_body.node else { panic!("expected return") };
     let crate::lang::il::ast::ExpKind::Var(id_return) = &instr_return.exp.node else {
         panic!("expected variable")
     };
@@ -28,10 +26,7 @@ fn test_equal_if_prefixes_merge_three_paths_and_preserve_first_span_and_tail_ord
         if_instr(
             "outer",
             Iter::List,
-            vec![
-                if_instr("inner", Iter::Opt, vec![ret("a")], 111),
-                ret("inner_tail_a"),
-            ],
+            vec![if_instr("inner", Iter::Opt, vec![ret("a")], 111), ret("inner_tail_a")],
             11,
         ),
         ret("tail_a"),
@@ -40,10 +35,7 @@ fn test_equal_if_prefixes_merge_three_paths_and_preserve_first_span_and_tail_ord
         if_instr(
             "outer",
             Iter::List,
-            vec![
-                if_instr("inner", Iter::Opt, vec![ret("b")], 222),
-                ret("inner_tail_b"),
-            ],
+            vec![if_instr("inner", Iter::Opt, vec![ret("b")], 222), ret("inner_tail_b")],
             22,
         ),
         ret("tail_b"),
@@ -52,10 +44,7 @@ fn test_equal_if_prefixes_merge_three_paths_and_preserve_first_span_and_tail_ord
         if_instr(
             "outer",
             Iter::List,
-            vec![
-                if_instr("inner", Iter::Opt, vec![ret("c")], 333),
-                ret("inner_tail_c"),
-            ],
+            vec![if_instr("inner", Iter::Opt, vec![ret("c")], 333), ret("inner_tail_c")],
             33,
         ),
         ret("tail_c"),
@@ -65,9 +54,7 @@ fn test_equal_if_prefixes_merge_three_paths_and_preserve_first_span_and_tail_ord
 
     assert_eq!(block.len(), 4);
     assert_eq!(block[0].span, span(11));
-    let InstrKind::If(instr_if) = &block[0].node else {
-        panic!("expected merged if")
-    };
+    let InstrKind::If(instr_if) = &block[0].node else { panic!("expected merged if") };
     assert_eq!(instr_if.block.len(), 4);
     assert_eq!(instr_if.block[0].span, span(111));
     let InstrKind::If(instr_if_inner) = &instr_if.block[0].node else {

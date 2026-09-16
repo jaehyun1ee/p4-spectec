@@ -70,20 +70,12 @@ fn remove_block(tdenv: &TDEnv, block: Block) -> Result<Block, StructureError> {
 // - If instruction
 
 fn remove_if_instr(tdenv: &TDEnv, instr_ol: IfInstr, span: Span) -> Result<Block, StructureError> {
-    let IfInstr {
-        exp,
-        iter_exps,
-        block,
-    } = instr_ol;
+    let IfInstr { exp, iter_exps, block } = instr_ol;
     if is_singleton_match(tdenv, &exp)? {
         return remove_block(tdenv, block);
     }
     let block = remove_block(tdenv, block)?;
-    let instr = IfInstr {
-        exp,
-        iter_exps,
-        block,
-    };
+    let instr = IfInstr { exp, iter_exps, block };
     let instr = crate::phrase!(node: InstrKind::If(instr), span: span);
     Ok(vec![instr])
 }
@@ -95,22 +87,10 @@ fn remove_hold_instr(
     instr_ol: HoldInstr,
     span: Span,
 ) -> Result<Block, StructureError> {
-    let HoldInstr {
-        id,
-        not_exp,
-        iter_exps,
-        block_hold,
-        block_not_hold,
-    } = instr_ol;
+    let HoldInstr { id, not_exp, iter_exps, block_hold, block_not_hold } = instr_ol;
     let block_hold = remove_block(tdenv, block_hold)?;
     let block_not_hold = remove_block(tdenv, block_not_hold)?;
-    let instr = HoldInstr {
-        id,
-        not_exp,
-        iter_exps,
-        block_hold,
-        block_not_hold,
-    };
+    let instr = HoldInstr { id, not_exp, iter_exps, block_hold, block_not_hold };
     let instr = crate::phrase!(node: InstrKind::Hold(instr), span: span);
     Ok(vec![instr])
 }
@@ -144,19 +124,9 @@ fn remove_group_instr(
     instr_ol: GroupInstr,
     span: Span,
 ) -> Result<Block, StructureError> {
-    let GroupInstr {
-        id,
-        rel_signature,
-        exps,
-        block,
-    } = instr_ol;
+    let GroupInstr { id, rel_signature, exps, block } = instr_ol;
     let block = remove_block(tdenv, block)?;
-    let instr = GroupInstr {
-        id,
-        rel_signature,
-        exps,
-        block,
-    };
+    let instr = GroupInstr { id, rel_signature, exps, block };
     let instr = crate::phrase!(node: InstrKind::Group(instr), span: span);
     Ok(vec![instr])
 }
@@ -168,19 +138,9 @@ fn remove_let_instr(
     instr_ol: LetInstr,
     span: Span,
 ) -> Result<Block, StructureError> {
-    let LetInstr {
-        exp_l,
-        exp_r,
-        iter_instrs,
-        block,
-    } = instr_ol;
+    let LetInstr { exp_l, exp_r, iter_instrs, block } = instr_ol;
     let block = remove_block(tdenv, block)?;
-    let instr = LetInstr {
-        exp_l,
-        exp_r,
-        iter_instrs,
-        block,
-    };
+    let instr = LetInstr { exp_l, exp_r, iter_instrs, block };
     let instr = crate::phrase!(node: InstrKind::Let(instr), span: span);
     Ok(vec![instr])
 }
@@ -192,21 +152,9 @@ fn remove_rule_instr(
     instr_ol: RuleInstr,
     span: Span,
 ) -> Result<Block, StructureError> {
-    let RuleInstr {
-        id,
-        not_exp,
-        input_hint,
-        iter_instrs,
-        block,
-    } = instr_ol;
+    let RuleInstr { id, not_exp, input_hint, iter_instrs, block } = instr_ol;
     let block = remove_block(tdenv, block)?;
-    let instr = RuleInstr {
-        id,
-        not_exp,
-        input_hint,
-        iter_instrs,
-        block,
-    };
+    let instr = RuleInstr { id, not_exp, input_hint, iter_instrs, block };
     let instr = crate::phrase!(node: InstrKind::Rule(instr), span: span);
     Ok(vec![instr])
 }

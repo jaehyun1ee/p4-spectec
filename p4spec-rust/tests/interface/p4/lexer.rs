@@ -61,14 +61,11 @@ fn test_lexer_preserves_string_escapes_and_preprocessor_locations() {
 fn test_preprocessor_preserves_paths_containing_spaces() {
     let mut arena = ValueArena::new();
     let ctx = Rc::new(Context::new(&mut arena));
-    let token = Lexer::new(
-        Rc::from("preprocessed.p4"),
-        "# 42 \"dir/my file.p4\" 2\ntrue",
-        Rc::clone(&ctx),
-    )
-    .next()
-    .unwrap()
-    .unwrap();
+    let token =
+        Lexer::new(Rc::from("preprocessed.p4"), "# 42 \"dir/my file.p4\" 2\ntrue", Rc::clone(&ctx))
+            .next()
+            .unwrap()
+            .unwrap();
 
     assert_eq!(token.node, Token::True);
     assert_eq!(token.span.left.file.as_ref(), "dir/my file.p4");
@@ -89,10 +86,7 @@ fn test_comments_are_skipped_and_unsupported_escapes_are_located_errors() {
         .unwrap()
         .unwrap_err();
     assert_eq!(error.span.left.file.as_ref(), "bad.p4");
-    assert!(matches!(
-        error.kind,
-        p4spec_rust::interface::p4::error::P4ErrorKind::Lex(_)
-    ));
+    assert!(matches!(error.kind, p4spec_rust::interface::p4::error::P4ErrorKind::Lex(_)));
 }
 
 #[test]
@@ -175,24 +169,15 @@ fn test_fixed_tokens_use_maximal_munch_in_grammar_order() {
 #[test]
 fn test_string_token_uses_closing_quote_but_payload_spans_the_literal() {
     let mut arena = ValueArena::new();
-    for (literal, line, column) in [
-        ("\"\"", 1, 3),
-        ("\"text\"", 1, 7),
-        ("\"a\\\"b\\n\\\\\"", 1, 11),
-        ("\"a\nb\"", 2, 1),
-    ] {
+    for (literal, line, column) in
+        [("\"\"", 1, 3), ("\"text\"", 1, 7), ("\"a\\\"b\\n\\\\\"", 1, 11), ("\"a\nb\"", 2, 1)]
+    {
         let source = format!("  {literal}");
-        let token = Lexer::new(
-            Rc::from("string.p4"),
-            &source,
-            Rc::new(Context::new(&mut arena)),
-        )
-        .next()
-        .unwrap()
-        .unwrap();
-        let Token::StringLiteral(value) = token.node else {
-            panic!("string literal")
-        };
+        let token = Lexer::new(Rc::from("string.p4"), &source, Rc::new(Context::new(&mut arena)))
+            .next()
+            .unwrap()
+            .unwrap();
+        let Token::StringLiteral(value) = token.node else { panic!("string literal") };
         assert_eq!(token.span.left.line, line);
         assert_eq!(token.span.right.line, line);
         assert_eq!(token.span.left.column, column);
@@ -206,14 +191,10 @@ fn test_string_token_uses_closing_quote_but_payload_spans_the_literal() {
 fn test_string_failures_locate_the_escape_or_end_of_input() {
     let mut arena = ValueArena::new();
     for (source, left, right) in [("\"ab\\t\"", 3, 5), ("\"ab", 3, 3), ("\"ab\\", 4, 4)] {
-        let error = Lexer::new(
-            Rc::from("string.p4"),
-            source,
-            Rc::new(Context::new(&mut arena)),
-        )
-        .next()
-        .unwrap()
-        .unwrap_err();
+        let error = Lexer::new(Rc::from("string.p4"), source, Rc::new(Context::new(&mut arena)))
+            .next()
+            .unwrap()
+            .unwrap_err();
         assert_eq!((error.span.left.line, error.span.left.column), (1, left));
         assert_eq!((error.span.right.line, error.span.right.column), (1, right));
     }

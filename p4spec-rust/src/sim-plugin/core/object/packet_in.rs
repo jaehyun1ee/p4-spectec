@@ -40,9 +40,7 @@ impl PacketIn {
 
     fn check_bounds(&self) -> Result<(), ExternError> {
         if self.idx > self.len || self.len > self.bits.len() {
-            return Err(ExternError::Failure(
-                "invalid packet cursor or length".to_owned(),
-            ));
+            return Err(ExternError::Failure("invalid packet cursor or length".to_owned()));
         }
         Ok(())
     }
@@ -54,15 +52,10 @@ impl PacketIn {
 
     pub fn parse(&self, size: usize) -> Result<(Self, Vec<bool>), ExternError> {
         if !self.has_size(size)? {
-            return Err(ExternError::Failure(
-                "packet parse exceeds available bits".to_owned(),
-            ));
+            return Err(ExternError::Failure("packet parse exceeds available bits".to_owned()));
         }
         let bits = self.bits[self.idx..self.idx + size].to_vec();
-        let pkt = Self {
-            idx: self.idx + size,
-            ..self.clone()
-        };
+        let pkt = Self { idx: self.idx + size, ..self.clone() };
         Ok((pkt, bits))
     }
 
@@ -103,12 +96,9 @@ impl PacketIn {
             .to_usize()
             .ok_or_else(|| ExternError::Failure("invalid packet size".to_owned()))?;
         if !self.has_size(size)? {
-            let value_name = make::text(
-                ctx.arena_mut(),
-                "PacketTooShort".to_owned(),
-                Span::default(),
-            )
-            .map_err(ExternError::from)?;
+            let value_name =
+                make::text(ctx.arena_mut(), "PacketTooShort".to_owned(), Span::default())
+                    .map_err(ExternError::from)?;
             let value_err = make::case_shaped! {
                 arena: ctx.arena_mut(),
                 shape: "ERROR '.' nameIR",
@@ -197,12 +187,9 @@ impl PacketIn {
             .checked_add(size_varsize)
             .ok_or_else(|| ExternError::Failure("packet size overflow".to_owned()))?;
         if alignment != 0 {
-            let value_name = make::text(
-                ctx.arena_mut(),
-                "ParserInvalidArgument".to_owned(),
-                Span::default(),
-            )
-            .map_err(ExternError::from)?;
+            let value_name =
+                make::text(ctx.arena_mut(), "ParserInvalidArgument".to_owned(), Span::default())
+                    .map_err(ExternError::from)?;
             let value_err = make::case_shaped! {
                 arena: ctx.arena_mut(),
                 shape: "ERROR '.' nameIR",
@@ -222,12 +209,9 @@ impl PacketIn {
             return Ok((self.clone(), value_ctx, value_arch, value_call_result));
         }
         if !self.has_size(size)? {
-            let value_name = make::text(
-                ctx.arena_mut(),
-                "PacketTooShort".to_owned(),
-                Span::default(),
-            )
-            .map_err(ExternError::from)?;
+            let value_name =
+                make::text(ctx.arena_mut(), "PacketTooShort".to_owned(), Span::default())
+                    .map_err(ExternError::from)?;
             let value_err = make::case_shaped! {
                 arena: ctx.arena_mut(),
                 shape: "ERROR '.' nameIR",
@@ -247,12 +231,9 @@ impl PacketIn {
             return Ok((self.clone(), value_ctx, value_arch, value_call_result));
         }
         if size > size_max {
-            let value_name = make::text(
-                ctx.arena_mut(),
-                "HeaderTooShort".to_owned(),
-                Span::default(),
-            )
-            .map_err(ExternError::from)?;
+            let value_name =
+                make::text(ctx.arena_mut(), "HeaderTooShort".to_owned(), Span::default())
+                    .map_err(ExternError::from)?;
             let value_err = make::case_shaped! {
                 arena: ctx.arena_mut(),
                 shape: "ERROR '.' nameIR",
@@ -321,12 +302,9 @@ impl PacketIn {
             .ok_or_else(|| ExternError::Failure("invalid packet size".to_owned()))?;
         let value_hdr = func::default(ctx, value_typ)?;
         if !self.has_size(size)? {
-            let value_name = make::text(
-                ctx.arena_mut(),
-                "PacketTooShort".to_owned(),
-                Span::default(),
-            )
-            .map_err(ExternError::from)?;
+            let value_name =
+                make::text(ctx.arena_mut(), "PacketTooShort".to_owned(), Span::default())
+                    .map_err(ExternError::from)?;
             let value_err = make::case_shaped! {
                 arena: ctx.arena_mut(),
                 shape: "ERROR '.' nameIR",
@@ -351,13 +329,9 @@ impl PacketIn {
             crate::phrase!(node: "value".to_owned(), span: Span::default()),
             Vec::new(),
         ));
-        let value_opt = make::opt(
-            ctx.arena_mut(),
-            typ.node.into(),
-            Some(value_hdr),
-            Span::default(),
-        )
-        .map_err(ExternError::from)?;
+        let value_opt =
+            make::opt(ctx.arena_mut(), typ.node.into(), Some(value_hdr), Span::default())
+                .map_err(ExternError::from)?;
         let value_call_result = make::case_shaped! {
             arena: ctx.arena_mut(),
             shape: "RETURN value?",
@@ -390,12 +364,9 @@ impl PacketIn {
             .to_usize()
             .ok_or_else(|| ExternError::Failure("invalid packet size".to_owned()))?;
         if !self.has_size(size)? {
-            let value_name = make::text(
-                ctx.arena_mut(),
-                "PacketTooShort".to_owned(),
-                Span::default(),
-            )
-            .map_err(ExternError::from)?;
+            let value_name =
+                make::text(ctx.arena_mut(), "PacketTooShort".to_owned(), Span::default())
+                    .map_err(ExternError::from)?;
             let value_err = make::case_shaped! {
                 arena: ctx.arena_mut(),
                 shape: "ERROR '.' nameIR",
@@ -414,10 +385,7 @@ impl PacketIn {
             .map_err(ExternError::from)?;
             return Ok((self.clone(), value_ctx, value_arch, value_call_result));
         }
-        let pkt = Self {
-            idx: self.idx + size,
-            ..self.clone()
-        };
+        let pkt = Self { idx: self.idx + size, ..self.clone() };
         let typ = typ::make::opt(typ::make::var(
             crate::phrase!(node: "value".to_owned(), span: Span::default()),
             Vec::new(),
@@ -457,13 +425,9 @@ impl PacketIn {
             crate::phrase!(node: "value".to_owned(), span: Span::default()),
             Vec::new(),
         ));
-        let value_opt = make::opt(
-            ctx.arena_mut(),
-            typ.node.into(),
-            Some(value_len),
-            Span::default(),
-        )
-        .map_err(ExternError::from)?;
+        let value_opt =
+            make::opt(ctx.arena_mut(), typ.node.into(), Some(value_len), Span::default())
+                .map_err(ExternError::from)?;
         let value_call_result = make::case_shaped! {
             arena: ctx.arena_mut(),
             shape: "RETURN value?",

@@ -52,10 +52,7 @@ impl RenameEnv {
             renames.insert(id.clone(), Vec::new());
             dimensions.insert(id.clone(), dim.clone());
         }
-        Self {
-            renames,
-            dimensions,
-        }
+        Self { renames, dimensions }
     }
 
     pub fn iter(&self) -> impl Iterator<Item = (&Id, &Vec<Id>)> {
@@ -95,11 +92,7 @@ fn rename_var(ctx: &mut Context, renv: &mut RenameEnv, exp: &ast::Exp, id: &Id) 
     let Some(ids_rename) = renv.get_mut(id) else {
         return exp.clone();
     };
-    let id_rename = if ids_rename.is_empty() {
-        id.clone()
-    } else {
-        fresh_id(&ctx.frees, id)
-    };
+    let id_rename = if ids_rename.is_empty() { id.clone() } else { fresh_id(&ctx.frees, id) };
     ctx.add_free(id_rename.clone());
     ids_rename.push(id_rename.clone());
     note_phrase! {
@@ -243,11 +236,7 @@ fn generate_side_condition(
     let mut iter_ctx_side = ICtx::from_iterations(
         iterations
             .into_iter()
-            .map(|iter| Iteration {
-                iter,
-                vars_bound: vec![],
-                vars_bind: vec![],
-            })
+            .map(|iter| Iteration { iter, vars_bound: vec![], vars_bind: vec![] })
             .collect(),
     );
     let venv = std::iter::once(&id_condition)

@@ -35,10 +35,7 @@ impl Context {
             let id = phrase!(node: text_name.to_owned(), span: Span::default());
             menv.insert(id, typ);
         }
-        Self {
-            tdenv: TDEnv::new(),
-            menv,
-        }
+        Self { tdenv: TDEnv::new(), menv }
     }
 
     // - Adders

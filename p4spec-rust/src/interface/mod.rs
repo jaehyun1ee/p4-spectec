@@ -25,9 +25,7 @@ pub fn p4(spec: &Spec) -> BuiltinInterface {
             let value = extract::one(values)?;
             let text = unparser
                 .render(arena, value)
-                .map_err(|error| BuiltinError {
-                    kind: BuiltinErrorKind::P4Unparse(error),
-                })?;
+                .map_err(|error| BuiltinError { kind: BuiltinErrorKind::P4Unparse(error) })?;
             Ok(value::make::text(arena, text, Span::default())?)
         }),
     )]);

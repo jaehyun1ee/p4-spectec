@@ -30,11 +30,7 @@ fn matching(typ: &Typ, block: Block) -> Instr {
     let exp =
         crate::note_phrase!(node: ExpKind::Var(id("value")), note: typ.node.clone(), span: span(7));
     let exp = crate::note_phrase!(node: ExpKind::Match(Box::new(exp), Pattern::Case(Box::new(crate::frontend::parse::parse_mixop("A").unwrap()))), note: TypKind::Bool, span: span(8));
-    instr(InstrKind::If(IfInstr {
-        exp,
-        iter_exps: vec![(Iter::Opt, vec![])],
-        block,
-    }))
+    instr(InstrKind::If(IfInstr { exp, iter_exps: vec![(Iter::Opt, vec![])], block }))
 }
 
 #[test]
@@ -51,25 +47,13 @@ fn test_singleton_alias_removes_match_but_multi_variant_and_primitive_do_not() {
     );
     let typ_alias = crate::phrase!(node: TypKind::Var(id("Alias"), vec![]), span: span(9));
     assert_eq!(
-        apply(
-            &tdenv,
-            vec![matching(
-                &typ_alias,
-                vec![matching(&typ_single, vec![ret("result")])]
-            )]
-        )
-        .unwrap(),
+        apply(&tdenv, vec![matching(&typ_alias, vec![matching(&typ_single, vec![ret("result")])])])
+            .unwrap(),
         vec![ret("result")]
     );
-    for typ in [
-        typ_multi,
-        crate::phrase!(node: TypKind::Bool, span: span(10)),
-    ] {
+    for typ in [typ_multi, crate::phrase!(node: TypKind::Bool, span: span(10))] {
         let instr_match = matching(&typ, vec![ret("result")]);
-        assert_eq!(
-            apply(&tdenv, vec![instr_match.clone()]).unwrap(),
-            vec![instr_match]
-        );
+        assert_eq!(apply(&tdenv, vec![instr_match.clone()]).unwrap(), vec![instr_match]);
     }
 }
 
@@ -88,10 +72,7 @@ fn test_nested_containers_rewrite_but_debug_remains_opaque() {
             })),
             instr(InstrKind::Case(CaseInstr {
                 exp: variable("cond"),
-                cases: vec![Case {
-                    guard: Guard::Bool(true),
-                    block: vec![instr_inner.clone()],
-                }],
+                cases: vec![Case { guard: Guard::Bool(true), block: vec![instr_inner.clone()] }],
                 total: false,
             })),
             instr(InstrKind::Group(GroupInstr {
@@ -112,8 +93,5 @@ fn test_nested_containers_rewrite_but_debug_remains_opaque() {
         exp: variable("debug"),
         instr: Box::new(matching(&typ, vec![ret("result")])),
     }));
-    assert_eq!(
-        apply(&tdenv, vec![instr_debug.clone()]).unwrap(),
-        vec![instr_debug]
-    );
+    assert_eq!(apply(&tdenv, vec![instr_debug.clone()]).unwrap(), vec![instr_debug]);
 }

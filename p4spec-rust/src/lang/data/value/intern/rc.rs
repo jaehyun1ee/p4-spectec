@@ -26,10 +26,7 @@ pub struct RcInterner<T> {
 
 impl<T> Default for RcInterner<T> {
     fn default() -> Self {
-        Self {
-            items: Vec::new(),
-            table: HashMap::new(),
-        }
+        Self { items: Vec::new(), table: HashMap::new() }
     }
 }
 
@@ -52,10 +49,7 @@ impl<T> RcInterner<T> {
             Entry::Occupied(entry) => Ok(*entry.get()),
             Entry::Vacant(entry) => {
                 let index = u32::try_from(self.items.len())?;
-                let id = Interned {
-                    index,
-                    marker: PhantomData,
-                };
+                let id = Interned { index, marker: PhantomData };
                 self.items.push(item);
                 entry.insert(id);
                 Ok(id)

@@ -139,10 +139,7 @@ impl<T: Eq + Hash + CanonEq + CanonHash> CanonInterner<T> {
         if id_canon.is_none() {
             self.canon_table.insert_unique(
                 hash,
-                CanonEntry {
-                    hash,
-                    representative: id,
-                },
+                CanonEntry { hash, representative: id },
                 |entry| entry.hash,
             );
         }

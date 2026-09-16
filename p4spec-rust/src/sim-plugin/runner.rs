@@ -36,10 +36,7 @@ pub enum Error {
     #[error("runtime error: {0}")]
     Runtime(#[from] InterpError),
     #[error("runtime error: {failure} at {span}")]
-    Stf {
-        failure: Box<StfFailure>,
-        span: Span,
-    },
+    Stf { failure: Box<StfFailure>, span: Span },
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -49,10 +46,7 @@ pub enum StfFailure {
     #[error("not yet supported: {0}")]
     Unsupported(String),
     #[error("{}{}", remaining_outputs(.txs), remaining_expects(.expects))]
-    Remaining {
-        txs: Vec<Tx>,
-        expects: Vec<Expectation>,
-    },
+    Remaining { txs: Vec<Tx>, expects: Vec<Expectation> },
 }
 
 fn remaining_outputs(txs: &[Tx]) -> String {
@@ -121,12 +115,7 @@ pub struct Run {
 
 impl Run {
     pub fn new(state: SimState) -> Self {
-        Self {
-            state,
-            tx_output_queue: vec![],
-            expect_queue: vec![],
-            matches: vec![],
-        }
+        Self { state, tx_output_queue: vec![], expect_queue: vec![], matches: vec![] }
     }
 
     /// Only the first new transmission can consume a pending expectation
@@ -144,10 +133,7 @@ impl Run {
         };
         let expect = &self.expect_queue[idx];
         if !io::matches(tx, expect) {
-            return Err(StfFailure::Mismatch {
-                expect: expect.tx.clone(),
-                tx: tx.clone(),
-            });
+            return Err(StfFailure::Mismatch { expect: expect.tx.clone(), tx: tx.clone() });
         }
         let expect = self.expect_queue.remove(idx);
         self.tx_output_queue.extend_from_slice(&self.state.txs[1..]);
@@ -165,10 +151,7 @@ impl Run {
         };
         let tx = &self.tx_output_queue[idx];
         if !io::matches(tx, &expect) {
-            return Err(StfFailure::Mismatch {
-                expect: expect.tx,
-                tx: tx.clone(),
-            });
+            return Err(StfFailure::Mismatch { expect: expect.tx, tx: tx.clone() });
         }
         Ok(Some(self.tx_output_queue.remove(idx)))
     }
@@ -220,18 +203,12 @@ where
     let mut ctx = runner.context();
     let result = match stmt_kind {
         Statement::Packet { port, packet } => run_stf_packet_stmt(&mut ctx, run, port, packet),
-        Statement::Expect {
-            port,
-            packet_expected,
-            exact,
-        } => run_stf_expect_stmt(run, port, packet_expected, exact),
-        Statement::Add {
-            table,
-            priority,
-            matches,
-            action,
-            ..
-        } => run_stf_add_stmt(&mut ctx, &mut run.state, table, priority, matches, action),
+        Statement::Expect { port, packet_expected, exact } => {
+            run_stf_expect_stmt(run, port, packet_expected, exact)
+        }
+        Statement::Add { table, priority, matches, action, .. } => {
+            run_stf_add_stmt(&mut ctx, &mut run.state, table, priority, matches, action)
+        }
         Statement::SetDefault { table, action } => {
             run_stf_set_default_stmt(&mut ctx, &mut run.state, table, action)
         }
@@ -244,10 +221,9 @@ where
         Statement::McGroupCreate { group_id } => {
             run_stf_mc_group_create_stmt(&mut ctx, &mut run.state, group_id)
         }
-        Statement::McNodeCreate {
-            replication_id,
-            ports,
-        } => run_stf_mc_node_create_stmt(&mut ctx, &mut run.state, replication_id, ports),
+        Statement::McNodeCreate { replication_id, ports } => {
+            run_stf_mc_node_create_stmt(&mut ctx, &mut run.state, replication_id, ports)
+        }
         Statement::McNodeAssociate { group_id, handle } => {
             run_stf_mc_node_associate_stmt(&mut ctx, &mut run.state, group_id, handle)
         }
@@ -268,10 +244,7 @@ where
     };
     let tx = result.map_err(|error| match error {
         Error::Runtime(error) => Error::Runtime(error.at_if_missing(&stmt.span)),
-        Error::Stf { failure, .. } => Error::Stf {
-            failure,
-            span: stmt.span.clone(),
-        },
+        Error::Stf { failure, .. } => Error::Stf { failure, span: stmt.span.clone() },
         error => error,
     })?;
     if let Some(tx) = &tx {
@@ -293,15 +266,10 @@ where
     Arch: Architecture,
     Interp: Interpreter<Iface, Arch, Error = InterpError>,
 {
-    let rx = Rx {
-        port: parse_int(&port)?,
-        packet: packet.to_ascii_uppercase(),
-    };
+    let rx = Rx { port: parse_int(&port)?, packet: packet.to_ascii_uppercase() };
     Arch::drive_pipe(ctx, &mut run.state, &rx)?;
-    run.on_tx_output().map_err(|failure| Error::Stf {
-        failure: Box::new(failure),
-        span: Span::default(),
-    })
+    run.on_tx_output()
+        .map_err(|failure| Error::Stf { failure: Box::new(failure), span: Span::default() })
 }
 
 fn run_stf_expect_stmt(
@@ -317,10 +285,8 @@ fn run_stf_expect_stmt(
         },
         exact,
     };
-    run.on_tx_expect(expect).map_err(|failure| Error::Stf {
-        failure: Box::new(failure),
-        span: Span::default(),
-    })
+    run.on_tx_expect(expect)
+        .map_err(|failure| Error::Stf { failure: Box::new(failure), span: Span::default() })
 }
 
 // - Match-action table updates
@@ -332,11 +298,8 @@ fn encode_table_keys(arena: &mut ValueArena, matches: &[TableMatch]) -> Result<V
     );
     let mut values_key = Vec::new();
     for key in matches {
-        let value_name = make::text(
-            arena,
-            convert_dollar_to_brackets(key.name.as_str()),
-            Span::default(),
-        )?;
+        let value_name =
+            make::text(arena, convert_dollar_to_brackets(key.name.as_str()), Span::default())?;
         let value_key = match &key.kind {
             MatchKind::Number(num) => {
                 let (shape, num) = if let Some(num) = num.strip_prefix("0x") {
@@ -376,12 +339,7 @@ fn encode_table_keys(arena: &mut ValueArena, matches: &[TableMatch]) -> Result<V
             Span::default(),
         )?);
     }
-    Ok(make::list(
-        arena,
-        typ::make::list(typ_key).node.into(),
-        values_key,
-        Span::default(),
-    )?)
+    Ok(make::list(arena, typ::make::list(typ_key).node.into(), values_key, Span::default())?)
 }
 
 fn run_stf_add_stmt<Interp, Iface, Arch>(
@@ -442,12 +400,8 @@ fn encode_table_action(arena: &mut ValueArena, action: &Action) -> Result<Value,
             Span::default(),
         )?);
     }
-    let value_args = make::list(
-        arena,
-        typ::make::list(typ_arg).node.into(),
-        values_arg,
-        Span::default(),
-    )?;
+    let value_args =
+        make::list(arena, typ::make::list(typ_arg).node.into(), values_arg, Span::default())?;
     Ok(make::tuple(
         arena,
         typ::make::var(
@@ -498,12 +452,8 @@ where
     Arch: Architecture,
     Interp: Interpreter<Iface, Arch, Error = InterpError>,
 {
-    state.value_arch = Arch::add_mirror_session(
-        ctx,
-        state.value_arch,
-        parse_int(&session)?,
-        parse_int(&port)?,
-    )?;
+    state.value_arch =
+        Arch::add_mirror_session(ctx, state.value_arch, parse_int(&session)?, parse_int(&port)?)?;
     Ok(None)
 }
 
@@ -574,12 +524,8 @@ where
     Arch: Architecture,
     Interp: Interpreter<Iface, Arch, Error = InterpError>,
 {
-    state.value_arch = Arch::mc_node_associate(
-        ctx,
-        state.value_arch,
-        parse_int(&id_group)?,
-        parse_int(&handle)?,
-    )?;
+    state.value_arch =
+        Arch::mc_node_associate(ctx, state.value_arch, parse_int(&id_group)?, parse_int(&handle)?)?;
     Ok(None)
 }
 
@@ -654,9 +600,7 @@ where
     for stmt in &stmts {
         run_stf_stmt(runner, &mut run, stmt)?;
     }
-    run.finish().map_err(|failure| Error::Stf {
-        failure: Box::new(failure),
-        span: Span::default(),
-    })?;
+    run.finish()
+        .map_err(|failure| Error::Stf { failure: Box::new(failure), span: Span::default() })?;
     Ok(run)
 }

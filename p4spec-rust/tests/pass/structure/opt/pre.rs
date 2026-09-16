@@ -11,12 +11,7 @@ fn group(block: Block) -> Instr {
 }
 
 fn binding(exp_l: Exp, exp_r: Exp, block: Block) -> Instr {
-    instr(InstrKind::Let(LetInstr {
-        exp_l,
-        exp_r,
-        iter_instrs: vec![],
-        block,
-    }))
+    instr(InstrKind::Let(LetInstr { exp_l, exp_r, iter_instrs: vec![], block }))
 }
 
 fn iterated(text: &str, iter: Iter) -> Exp {
@@ -63,14 +58,8 @@ fn containers(block: Block) -> Block {
         instr(InstrKind::Case(CaseInstr {
             exp: variable("case"),
             cases: vec![
-                Case {
-                    guard: Guard::Bool(true),
-                    block: block.clone(),
-                },
-                Case {
-                    guard: Guard::Bool(false),
-                    block: block.clone(),
-                },
+                Case { guard: Guard::Bool(true), block: block.clone() },
+                Case { guard: Guard::Bool(false), block: block.clone() },
             ],
             total: true,
         })),

@@ -47,10 +47,7 @@ fn test_context_loads_type_and_metavariable_definitions() {
     ctx.load(&spec);
 
     assert_eq!(ctx.tdenv.get(&extern_id), Some(&TypeDef::Extern));
-    assert_eq!(
-        ctx.tdenv.get(&defined_id),
-        Some(&TypeDef::Defined(vec![], Box::new(def_typ)))
-    );
+    assert_eq!(ctx.tdenv.get(&defined_id), Some(&TypeDef::Defined(vec![], Box::new(def_typ))));
     assert_eq!(ctx.menv.get(&variable_id), Some(&bool_typ));
     assert!(ctx.menv.contains_key(&id("bool", 99)));
 }

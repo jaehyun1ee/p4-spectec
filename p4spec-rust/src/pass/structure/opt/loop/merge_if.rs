@@ -67,11 +67,7 @@ fn find_identical_if(
     instr_target: &IfInstr,
     instrs: &VecDeque<Instr>,
 ) -> Result<Option<usize>, StructureError> {
-    let IfInstr {
-        exp: exp_target,
-        iter_exps: iter_exps_target,
-        ..
-    } = instr_target;
+    let IfInstr { exp: exp_target, iter_exps: iter_exps_target, .. } = instr_target;
     for (idx, instr) in instrs.iter().enumerate() {
         let InstrKind::If(instr_if) = &instr.node else {
             break;
@@ -93,47 +89,23 @@ fn merge_if_instr(
 ) -> Result<InstrKind, StructureError> {
     while let Some(idx) = find_identical_if(tdenv, &instr_if, instrs)? {
         let instr_match = instrs.remove(idx).expect("matching instruction exists");
-        let InstrKind::If(instr_match) = instr_match.node else {
-            unreachable!()
-        };
-        let IfInstr {
-            block: block_match, ..
-        } = instr_match;
+        let InstrKind::If(instr_match) = instr_match.node else { unreachable!() };
+        let IfInstr { block: block_match, .. } = instr_match;
         instr_if.block = merge::merge_block(instr_if.block, block_match);
     }
-    let IfInstr {
-        exp,
-        iter_exps,
-        block,
-    } = instr_if;
+    let IfInstr { exp, iter_exps, block } = instr_if;
     let block = merge_block(tdenv, block)?;
-    let instr = IfInstr {
-        exp,
-        iter_exps,
-        block,
-    };
+    let instr = IfInstr { exp, iter_exps, block };
     Ok(InstrKind::If(instr))
 }
 
 // - Hold instruction
 
 fn merge_hold_instr(tdenv: &TDEnv, instr: HoldInstr) -> Result<InstrKind, StructureError> {
-    let HoldInstr {
-        id,
-        not_exp,
-        iter_exps,
-        block_hold,
-        block_not_hold,
-    } = instr;
+    let HoldInstr { id, not_exp, iter_exps, block_hold, block_not_hold } = instr;
     let block_hold = merge_block(tdenv, block_hold)?;
     let block_not_hold = merge_block(tdenv, block_not_hold)?;
-    let instr = HoldInstr {
-        id,
-        not_exp,
-        iter_exps,
-        block_hold,
-        block_not_hold,
-    };
+    let instr = HoldInstr { id, not_exp, iter_exps, block_hold, block_not_hold };
     Ok(InstrKind::Hold(instr))
 }
 
@@ -157,59 +129,27 @@ fn merge_case_instr(tdenv: &TDEnv, instr: CaseInstr) -> Result<InstrKind, Struct
 // - Group instruction
 
 fn merge_group_instr(tdenv: &TDEnv, instr: GroupInstr) -> Result<InstrKind, StructureError> {
-    let GroupInstr {
-        id,
-        rel_signature,
-        exps,
-        block,
-    } = instr;
+    let GroupInstr { id, rel_signature, exps, block } = instr;
     let block = merge_block(tdenv, block)?;
-    let instr = GroupInstr {
-        id,
-        rel_signature,
-        exps,
-        block,
-    };
+    let instr = GroupInstr { id, rel_signature, exps, block };
     Ok(InstrKind::Group(instr))
 }
 
 // - Let instruction
 
 fn merge_let_instr(tdenv: &TDEnv, instr: LetInstr) -> Result<InstrKind, StructureError> {
-    let LetInstr {
-        exp_l,
-        exp_r,
-        iter_instrs,
-        block,
-    } = instr;
+    let LetInstr { exp_l, exp_r, iter_instrs, block } = instr;
     let block = merge_block(tdenv, block)?;
-    let instr = LetInstr {
-        exp_l,
-        exp_r,
-        iter_instrs,
-        block,
-    };
+    let instr = LetInstr { exp_l, exp_r, iter_instrs, block };
     Ok(InstrKind::Let(instr))
 }
 
 // - Rule instruction
 
 fn merge_rule_instr(tdenv: &TDEnv, instr: RuleInstr) -> Result<InstrKind, StructureError> {
-    let RuleInstr {
-        id,
-        not_exp,
-        input_hint,
-        iter_instrs,
-        block,
-    } = instr;
+    let RuleInstr { id, not_exp, input_hint, iter_instrs, block } = instr;
     let block = merge_block(tdenv, block)?;
-    let instr = RuleInstr {
-        id,
-        not_exp,
-        input_hint,
-        iter_instrs,
-        block,
-    };
+    let instr = RuleInstr { id, not_exp, input_hint, iter_instrs, block };
     Ok(InstrKind::Rule(instr))
 }
 

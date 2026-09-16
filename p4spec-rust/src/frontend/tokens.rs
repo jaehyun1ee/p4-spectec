@@ -31,13 +31,7 @@ pub(crate) fn parser_tokens<I>(ctx: &Context, lexemes: I) -> ParserTokens<'_, I>
 where
     I: Iterator,
 {
-    ParserTokens {
-        ctx,
-        lexemes,
-        previous_right: None,
-        previous_token: None,
-        pending: None,
-    }
+    ParserTokens { ctx, lexemes, previous_right: None, previous_token: None, pending: None }
 }
 
 pub(crate) struct ParserTokens<'ctx, I: Iterator> {
@@ -144,11 +138,7 @@ where
             self.pending = Some(lexeme);
             self.previous_token = Some(Token::Sequence);
             self.previous_right = Some(pos_r.clone());
-            return Some(Ok((
-                self.ctx.location(pos_l),
-                Token::Sequence,
-                self.ctx.location(pos_r),
-            )));
+            return Some(Ok((self.ctx.location(pos_l), Token::Sequence, self.ctx.location(pos_r))));
         }
 
         let loc_l = self.ctx.location(lexeme.span.left);

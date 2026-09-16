@@ -47,13 +47,7 @@ fn eval_access_idx_path<Iface: Interface, Exn: Extern>(
 ) -> Backtrack<Value> {
     let value = backtrack!(eval_access_path(runner, ctx, value_base, path));
     let value_idx = backtrack!(eval_exp(runner, ctx, exp_idx));
-    ops::access_index(
-        runner.arena_mut(),
-        &value,
-        &value_idx,
-        &path.span,
-        &exp_idx.span,
-    )
+    ops::access_index(runner.arena_mut(), &value, &value_idx, &path.span, &exp_idx.span)
 }
 
 // - Slice access path
@@ -190,23 +184,11 @@ fn eval_update_dot_path<Iface: Interface, Exn: Extern>(
     let value_fields = value_fields
         .iter()
         .map(|(field, value)| {
-            (
-                field.clone(),
-                if field.node == atom.node {
-                    value_upd
-                } else {
-                    *value
-                },
-            )
+            (field.clone(), if field.node == atom.node { value_upd } else { *value })
         })
         .collect();
     let value = backtrack_from_result!(
-        make::structure(
-            runner.arena_mut(),
-            typ.node.clone(),
-            value_fields,
-            Span::default()
-        ),
+        make::structure(runner.arena_mut(), typ.node.clone(), value_fields, Span::default()),
         &Span::default()
     );
     eval_update_path(runner, ctx, value_base, path, value)

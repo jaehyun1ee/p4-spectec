@@ -22,10 +22,7 @@ fn test_parses_commands_in_source_order() {
     assert_eq!(statements.len(), 5);
     assert_eq!(
         statements[0].node,
-        Statement::Packet {
-            port: "1".into(),
-            packet: "001122aB".into(),
-        }
+        Statement::Packet { port: "1".into(), packet: "001122aB".into() }
     );
     assert_eq!(
         statements[1].node,
@@ -46,10 +43,7 @@ fn test_parses_commands_in_source_order() {
             }],
             action: Action {
                 name: "set_nhop".into(),
-                args: vec![Argument {
-                    id: "port".into(),
-                    num: "3".into(),
-                }],
+                args: vec![Argument { id: "port".into(), num: "3".into() }],
             },
             id: Some("entry0".into()),
         }
@@ -102,10 +96,7 @@ fn test_rejects_priorities_outside_the_ocaml_integer_range() {
 
     let error = parse::parse_str("priority.stf", source).expect_err("priority overflow");
 
-    assert!(matches!(
-        error.kind,
-        p4spec_rust::stf::error::StfErrorKind::InvalidPriority(_)
-    ));
+    assert!(matches!(error.kind, p4spec_rust::stf::error::StfErrorKind::InvalidPriority(_)));
 }
 
 #[test]
@@ -131,19 +122,14 @@ fn test_transforms_names_matches_and_actions() {
     let name = Name::from("foo.MyIngress.bar").replace_substring(&["myingress"], "ingress");
     assert_eq!(name.as_str(), "foo.ingress.bar");
 
-    let table_match = TableMatch {
-        name: "hdr.$valid$".into(),
-        kind: MatchKind::Number("1".into()),
-    }
-    .rewrite_valid();
+    let table_match =
+        TableMatch { name: "hdr.$valid$".into(), kind: MatchKind::Number("1".into()) }
+            .rewrite_valid();
     assert_eq!(table_match.name.as_str(), "hdr.isValid()");
 
-    let action = Action {
-        name: "MyIngress.ipv4.set_port".into(),
-        args: vec![],
-    }
-    .replace_substring(&["myingress"], "ingress")
-    .into_unqualified();
+    let action = Action { name: "MyIngress.ipv4.set_port".into(), args: vec![] }
+        .replace_substring(&["myingress"], "ingress")
+        .into_unqualified();
     assert_eq!(action.name.as_str(), "set_port");
 }
 
@@ -152,18 +138,9 @@ fn test_compares_wildcard_packets_and_prints_statements() {
     assert!(r#match::matches("a01f", "a**f"));
     assert!(!r#match::matches("a01f", "a*f"));
 
-    let action = Action {
-        name: "drop".into(),
-        args: vec![],
-    };
-    let statement = Statement::SetDefault {
-        table: "ingress.tbl".into(),
-        action: action.clone(),
-    };
-    assert_eq!(
-        Print::to_string(&statement),
-        "setdefault \"ingress.tbl\" \"drop\"()"
-    );
+    let action = Action { name: "drop".into(), args: vec![] };
+    let statement = Statement::SetDefault { table: "ingress.tbl".into(), action: action.clone() };
+    assert_eq!(Print::to_string(&statement), "setdefault \"ingress.tbl\" \"drop\"()");
     assert_eq!(Print::to_string(&action), "\"drop\"()");
     let program = parse::parse_str("print.stf", "wait\nno_packet\n").unwrap();
     assert_eq!(Print::to_string(&program), "wait\nno_packet");
@@ -171,10 +148,7 @@ fn test_compares_wildcard_packets_and_prints_statements() {
 
 #[test]
 fn test_prints_empty_node_port_list_with_trailing_separator() {
-    let statement = Statement::McNodeCreate {
-        replication_id: "1".into(),
-        ports: vec![],
-    };
+    let statement = Statement::McNodeCreate { replication_id: "1".into(), ports: vec![] };
 
     assert_eq!(Print::to_string(&statement), "mc_node_create 1 ");
 }

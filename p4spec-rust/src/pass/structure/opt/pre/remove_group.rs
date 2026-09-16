@@ -43,17 +43,9 @@ fn remove_block(block: Block) -> Block {
 // - If instruction
 
 fn remove_if_instr(instr_ol: IfInstr, span: Span) -> Block {
-    let IfInstr {
-        exp,
-        iter_exps,
-        block,
-    } = instr_ol;
+    let IfInstr { exp, iter_exps, block } = instr_ol;
     let block = remove_block(block);
-    let instr = IfInstr {
-        exp,
-        iter_exps,
-        block,
-    };
+    let instr = IfInstr { exp, iter_exps, block };
     let instr = crate::phrase! {node: InstrKind::If(instr), span: span};
     vec![instr]
 }
@@ -61,22 +53,10 @@ fn remove_if_instr(instr_ol: IfInstr, span: Span) -> Block {
 // - Hold instruction
 
 fn remove_hold_instr(instr_ol: HoldInstr, span: Span) -> Block {
-    let HoldInstr {
-        id,
-        not_exp,
-        iter_exps,
-        block_hold,
-        block_not_hold,
-    } = instr_ol;
+    let HoldInstr { id, not_exp, iter_exps, block_hold, block_not_hold } = instr_ol;
     let block_hold = remove_block(block_hold);
     let block_not_hold = remove_block(block_not_hold);
-    let instr = HoldInstr {
-        id,
-        not_exp,
-        iter_exps,
-        block_hold,
-        block_not_hold,
-    };
+    let instr = HoldInstr { id, not_exp, iter_exps, block_hold, block_not_hold };
     let instr = crate::phrase! {node: InstrKind::Hold(instr), span: span};
     vec![instr]
 }
@@ -108,19 +88,9 @@ fn remove_group_instr(instr_ol: GroupInstr) -> Block {
 // - Let instruction
 
 fn remove_let_instr(instr_ol: LetInstr, span: Span) -> Block {
-    let LetInstr {
-        exp_l,
-        exp_r,
-        iter_instrs,
-        block,
-    } = instr_ol;
+    let LetInstr { exp_l, exp_r, iter_instrs, block } = instr_ol;
     let block = remove_block(block);
-    let instr = LetInstr {
-        exp_l,
-        exp_r,
-        iter_instrs,
-        block,
-    };
+    let instr = LetInstr { exp_l, exp_r, iter_instrs, block };
     let instr = crate::phrase! {node: InstrKind::Let(instr), span: span};
     vec![instr]
 }
@@ -128,21 +98,9 @@ fn remove_let_instr(instr_ol: LetInstr, span: Span) -> Block {
 // - Rule instruction
 
 fn remove_rule_instr(instr_ol: RuleInstr, span: Span) -> Block {
-    let RuleInstr {
-        id,
-        not_exp,
-        input_hint,
-        iter_instrs,
-        block,
-    } = instr_ol;
+    let RuleInstr { id, not_exp, input_hint, iter_instrs, block } = instr_ol;
     let block = remove_block(block);
-    let instr = RuleInstr {
-        id,
-        not_exp,
-        input_hint,
-        iter_instrs,
-        block,
-    };
+    let instr = RuleInstr { id, not_exp, input_hint, iter_instrs, block };
     let instr = crate::phrase! {node: InstrKind::Rule(instr), span: span};
     vec![instr]
 }

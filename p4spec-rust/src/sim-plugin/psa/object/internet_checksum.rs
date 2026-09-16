@@ -32,9 +32,7 @@ impl InternetChecksum {
     /// InternetChecksum();
     /// ```
     pub fn init() -> Self {
-        Self {
-            int: BigInt::zero(),
-        }
+        Self { int: BigInt::zero() }
     }
 
     /// Reset internal state and prepare the unit for computation
@@ -179,13 +177,9 @@ impl InternetChecksum {
             crate::phrase!(node: "value".to_owned(), span: Span::default()),
             Vec::new(),
         ));
-        let value_opt = make::opt(
-            ctx.arena_mut(),
-            typ.node.into(),
-            Some(value_checksum),
-            Span::default(),
-        )
-        .map_err(ExternError::from)?;
+        let value_opt =
+            make::opt(ctx.arena_mut(), typ.node.into(), Some(value_checksum), Span::default())
+                .map_err(ExternError::from)?;
         let value_call_result = make::case_shaped! {
             arena: ctx.arena_mut(),
             shape: "RETURN value?",

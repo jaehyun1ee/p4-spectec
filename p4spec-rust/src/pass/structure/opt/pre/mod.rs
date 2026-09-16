@@ -11,11 +11,7 @@ use crate::pass::structure::{StructureError, ol::ast::Block};
 // == Optimization
 
 pub(super) fn optimize(block: Block, without_rule_groups: bool) -> Result<Block, StructureError> {
-    let block = if without_rule_groups {
-        remove_group::apply(block)
-    } else {
-        block
-    };
+    let block = if without_rule_groups { remove_group::apply(block) } else { block };
     let block = remove_let_alias::apply(block)?;
     let block = matchify_if_eq_terminal::apply(block);
     Ok(block)

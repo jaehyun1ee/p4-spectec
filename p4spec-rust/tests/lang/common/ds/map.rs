@@ -26,8 +26,5 @@ fn test_var_map_replaces_equivalent_keys_and_orders_iterator_paths() {
     map.insert(var_plain.clone(), 2);
     assert_eq!(map.insert(var_list_other, 3), Some(1));
     assert_eq!(map.keys().collect::<Vec<_>>(), [&var_plain, &var_list]);
-    assert_eq!(
-        map.iter().map(|(_, value)| *value).collect::<Vec<_>>(),
-        [2, 3]
-    );
+    assert_eq!(map.iter().map(|(_, value)| *value).collect::<Vec<_>>(), [2, 3]);
 }

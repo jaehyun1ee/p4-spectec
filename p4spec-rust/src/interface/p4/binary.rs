@@ -79,11 +79,7 @@ impl BinaryOperator {
     }
 
     fn incoming_precedence(self) -> Precedence {
-        if matches!(self, Self::ShiftRight) {
-            Precedence::Comparison
-        } else {
-            self.precedence()
-        }
+        if matches!(self, Self::ShiftRight) { Precedence::Comparison } else { self.precedence() }
     }
 }
 
@@ -101,10 +97,7 @@ fn reduce(
         typ: "binop",
         span: op.span,
     }?;
-    let span = Span::new(
-        arena.span(&value_l).left.clone(),
-        arena.span(&value_r).right.clone(),
-    );
+    let span = Span::new(arena.span(&value_l).left.clone(), arena.span(&value_r).right.clone());
     values.push(make::case_shaped! { arena: arena,
         shape: "expression binop expression",
         args: vec![value_l, value_operator, value_r],

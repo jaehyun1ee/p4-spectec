@@ -78,13 +78,8 @@ impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for CounterInterp {
 type CounterRunner = Runner<CounterInterp, NullInterface, Dummy>;
 
 fn list(arena: &mut ValueArena, values: Vec<Value>) -> Value {
-    make::list(
-        arena,
-        typ::make::list(typ::make::text()).node.into(),
-        values,
-        Span::default(),
-    )
-    .unwrap()
+    make::list(arena, typ::make::list(typ::make::text()).node.into(), values, Span::default())
+        .unwrap()
 }
 
 fn names(arena: &mut ValueArena, names_param: &[&str]) -> Value {

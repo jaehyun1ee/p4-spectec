@@ -189,9 +189,7 @@ pub fn adjust(base: &BigInt, rmax: &BigInt, int: &BigInt) -> Result<BigInt, Exte
     }
     let int_range = rmax - base;
     if int_range <= BigInt::zero() {
-        return Err(ExternError::Failure(
-            "hash range divisor must be positive".to_owned(),
-        ));
+        return Err(ExternError::Failure("hash range divisor must be positive".to_owned()));
     }
     Ok(remainder(int, &int_range) + base)
 }
@@ -221,12 +219,7 @@ where
         ))
         .into());
     }
-    Ok(checksum::compute_checksum(
-        &id_field,
-        None,
-        ctx.arena(),
-        &values,
-    )?)
+    Ok(checksum::compute_checksum(&id_field, None, ctx.arena(), &values)?)
 }
 
 fn do_verify_checksum<Interp, Iface, Exn>(
@@ -636,12 +629,8 @@ where
     let value_type = func::find_var_e_local(ctx, value_ctx, "type")?;
     let value_session = func::find_var_e_local(ctx, value_ctx, "session")?;
     let value_idx = func::find_var_e_local(ctx, value_ctx, "index")?;
-    arch.action.clone_opt = Some(CloneInfo::new(
-        ctx.arena(),
-        &value_type,
-        &value_session,
-        &value_idx,
-    )?);
+    arch.action.clone_opt =
+        Some(CloneInfo::new(ctx.arena(), &value_type, &value_session, &value_idx)?);
     let value_arch = pipe::update_arch_state(ctx, value_arch, &arch)?;
     let typ = typ::make::opt(typ::make::var(
         crate::phrase!(node: "value".to_owned(), span: Span::default()),

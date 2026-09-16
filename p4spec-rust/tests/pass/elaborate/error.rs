@@ -31,10 +31,7 @@ fn test_runtime_type_failure_keeps_its_category_and_source_span() {
 
     let error = ElabError::from(type_error);
 
-    assert_eq!(
-        error.kind,
-        ElabErrorKind::Type(TypeErrorKind::UndefinedType("Missing".to_owned()))
-    );
+    assert_eq!(error.kind, ElabErrorKind::Type(TypeErrorKind::UndefinedType("Missing".to_owned())));
     assert_eq!(error.span, span);
 }
 

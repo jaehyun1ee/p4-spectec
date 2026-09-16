@@ -36,9 +36,7 @@ impl HashExtern {
         let value_algo = args::find(&args, "algo")?;
         let (id_enum, id_type) = unpack::p4_enum(arena, &value_algo)?;
         if id_enum != "PSA_HashAlgorithm_t" {
-            return Err(ExternError::Failure(
-                "invalid PSA hash algorithm enum type".to_owned(),
-            ));
+            return Err(ExternError::Failure("invalid PSA hash algorithm enum type".to_owned()));
         }
         let algo = match id_type.as_str() {
             "IDENTITY" => "identity",
@@ -125,13 +123,9 @@ impl HashExtern {
             crate::phrase!(node: "value".to_owned(), span: Span::default()),
             Vec::new(),
         ));
-        let value_opt = make::opt(
-            ctx.arena_mut(),
-            typ.node.into(),
-            Some(value_result),
-            Span::default(),
-        )
-        .map_err(ExternError::from)?;
+        let value_opt =
+            make::opt(ctx.arena_mut(), typ.node.into(), Some(value_result), Span::default())
+                .map_err(ExternError::from)?;
         let value_call_result = make::case_shaped! {
             arena: ctx.arena_mut(),
             shape: "RETURN value?",

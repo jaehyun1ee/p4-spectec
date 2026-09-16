@@ -172,16 +172,14 @@ fn decode_plain_typ_kind(json: &json) -> Result<PlainTypKind, DecodeError> {
         ("BoolT", []) => Ok(PlainTypKind::Bool),
         ("NumT", [typ]) => Ok(PlainTypKind::Num(xl::decode_num_typ(typ)?)),
         ("TextT", []) => Ok(PlainTypKind::Text),
-        ("VarT", [id, targs]) => Ok(PlainTypKind::Var(
-            decode_id(id)?,
-            decode_list(targs, decode_targ)?,
-        )),
+        ("VarT", [id, targs]) => {
+            Ok(PlainTypKind::Var(decode_id(id)?, decode_list(targs, decode_targ)?))
+        }
         ("ParenT", [typ]) => Ok(PlainTypKind::Paren(Box::new(decode_plain_typ(typ)?))),
         ("TupleT", [types]) => Ok(PlainTypKind::Tuple(decode_list(types, decode_plain_typ)?)),
-        ("IterT", [typ, iter]) => Ok(PlainTypKind::Iter(
-            Box::new(decode_plain_typ(typ)?),
-            decode_iter(iter)?,
-        )),
+        ("IterT", [typ, iter]) => {
+            Ok(PlainTypKind::Iter(Box::new(decode_plain_typ(typ)?), decode_iter(iter)?))
+        }
         ("BoolT" | "NumT" | "TextT" | "VarT" | "ParenT" | "TupleT" | "IterT", _) => {
             Err(DecodeError::Expected("valid EL plain type arity"))
         }
@@ -219,19 +217,17 @@ fn decode_path_kind(json: &json) -> Result<PathKind, DecodeError> {
     let (tag, fields) = variant(json)?;
     match (tag, fields) {
         ("RootP", []) => Ok(PathKind::Root),
-        ("IdxP", [path, exp_idx]) => Ok(PathKind::Idx(
-            Box::new(decode_path(path)?),
-            Box::new(decode_exp(exp_idx)?),
-        )),
+        ("IdxP", [path, exp_idx]) => {
+            Ok(PathKind::Idx(Box::new(decode_path(path)?), Box::new(decode_exp(exp_idx)?)))
+        }
         ("SliceP", [path, exp_idx, exp_len]) => Ok(PathKind::Slice(
             Box::new(decode_path(path)?),
             Box::new(decode_exp(exp_idx)?),
             Box::new(decode_exp(exp_len)?),
         )),
-        ("DotP", [path, atom]) => Ok(PathKind::Dot(
-            Box::new(decode_path(path)?),
-            AtomPhraseCodec::decode(atom)?,
-        )),
+        ("DotP", [path, atom]) => {
+            Ok(PathKind::Dot(Box::new(decode_path(path)?), AtomPhraseCodec::decode(atom)?))
+        }
         ("RootP" | "IdxP" | "SliceP" | "DotP", _) => {
             Err(DecodeError::Expected("valid EL path arity"))
         }
@@ -243,12 +239,9 @@ fn encode_path_kind(path: &PathKind) -> json {
     match path {
         PathKind::Root => json!(["RootP"]),
         PathKind::Idx(path, exp_idx) => json!(["IdxP", encode_path(path), encode_exp(exp_idx)]),
-        PathKind::Slice(path, exp_idx, exp_len) => json!([
-            "SliceP",
-            encode_path(path),
-            encode_exp(exp_idx),
-            encode_exp(exp_len)
-        ]),
+        PathKind::Slice(path, exp_idx, exp_len) => {
+            json!(["SliceP", encode_path(path), encode_exp(exp_idx), encode_exp(exp_len)])
+        }
         PathKind::Dot(path, atom) => {
             json!(["DotP", encode_path(path), AtomPhraseCodec::encode(atom)])
         }
@@ -324,38 +317,31 @@ fn decode_exp_kind(json: &json) -> Result<ExpKind, DecodeError> {
         ("ArithE", [exp]) => Ok(ExpKind::Arith(Box::new(decode_exp(exp)?))),
         ("EpsE", []) => Ok(ExpKind::Eps),
         ("ListE", [exps]) => Ok(ExpKind::List(decode_list(exps, decode_exp)?)),
-        ("ConsE", [exp_head, exp_tail]) => Ok(ExpKind::Cons(
-            Box::new(decode_exp(exp_head)?),
-            Box::new(decode_exp(exp_tail)?),
-        )),
-        ("CatE", [exp_l, exp_r]) => Ok(ExpKind::Cat(
-            Box::new(decode_exp(exp_l)?),
-            Box::new(decode_exp(exp_r)?),
-        )),
-        ("IdxE", [exp_base, exp_idx]) => Ok(ExpKind::Idx(
-            Box::new(decode_exp(exp_base)?),
-            Box::new(decode_exp(exp_idx)?),
-        )),
+        ("ConsE", [exp_head, exp_tail]) => {
+            Ok(ExpKind::Cons(Box::new(decode_exp(exp_head)?), Box::new(decode_exp(exp_tail)?)))
+        }
+        ("CatE", [exp_l, exp_r]) => {
+            Ok(ExpKind::Cat(Box::new(decode_exp(exp_l)?), Box::new(decode_exp(exp_r)?)))
+        }
+        ("IdxE", [exp_base, exp_idx]) => {
+            Ok(ExpKind::Idx(Box::new(decode_exp(exp_base)?), Box::new(decode_exp(exp_idx)?)))
+        }
         ("SliceE", [exp_base, exp_idx, exp_len]) => Ok(ExpKind::Slice(
             Box::new(decode_exp(exp_base)?),
             Box::new(decode_exp(exp_idx)?),
             Box::new(decode_exp(exp_len)?),
         )),
         ("LenE", [exp]) => Ok(ExpKind::Len(Box::new(decode_exp(exp)?))),
-        ("MemE", [exp_l, exp_r]) => Ok(ExpKind::Mem(
-            Box::new(decode_exp(exp_l)?),
-            Box::new(decode_exp(exp_r)?),
-        )),
-        ("StrE", [fields]) => Ok(ExpKind::Str(decode_list(fields, |field| {
-            match array(field)? {
-                [atom, exp] => Ok((AtomPhraseCodec::decode(atom)?, decode_exp(exp)?)),
-                _ => Err(DecodeError::Expected("EL structure field pair")),
-            }
+        ("MemE", [exp_l, exp_r]) => {
+            Ok(ExpKind::Mem(Box::new(decode_exp(exp_l)?), Box::new(decode_exp(exp_r)?)))
+        }
+        ("StrE", [fields]) => Ok(ExpKind::Str(decode_list(fields, |field| match array(field)? {
+            [atom, exp] => Ok((AtomPhraseCodec::decode(atom)?, decode_exp(exp)?)),
+            _ => Err(DecodeError::Expected("EL structure field pair")),
         })?)),
-        ("DotE", [exp, atom]) => Ok(ExpKind::Dot(
-            Box::new(decode_exp(exp)?),
-            AtomPhraseCodec::decode(atom)?,
-        )),
+        ("DotE", [exp, atom]) => {
+            Ok(ExpKind::Dot(Box::new(decode_exp(exp)?), AtomPhraseCodec::decode(atom)?))
+        }
         ("UpdE", [exp_base, path, exp_field]) => Ok(ExpKind::Upd(
             Box::new(decode_exp(exp_base)?),
             decode_path(path)?,
@@ -368,14 +354,10 @@ fn decode_exp_kind(json: &json) -> Result<ExpKind, DecodeError> {
             decode_list(targs, decode_targ)?,
             decode_list(args, decode_arg)?,
         )),
-        ("IterE", [exp, iter]) => Ok(ExpKind::Iter(
-            Box::new(decode_exp(exp)?),
-            decode_iter(iter)?,
-        )),
-        ("SubE", [exp, typ]) => Ok(ExpKind::Sub(
-            Box::new(decode_exp(exp)?),
-            decode_plain_typ(typ)?,
-        )),
+        ("IterE", [exp, iter]) => Ok(ExpKind::Iter(Box::new(decode_exp(exp)?), decode_iter(iter)?)),
+        ("SubE", [exp, typ]) => {
+            Ok(ExpKind::Sub(Box::new(decode_exp(exp)?), decode_plain_typ(typ)?))
+        }
         ("AtomE", [atom]) => Ok(ExpKind::Atom(AtomPhraseCodec::decode(atom)?)),
         ("SeqE", [exps]) => Ok(ExpKind::Seq(decode_list(exps, decode_exp)?)),
         ("InfixE", [exp_l, atom, exp_r]) => Ok(ExpKind::Infix(
@@ -389,10 +371,9 @@ fn decode_exp_kind(json: &json) -> Result<ExpKind, DecodeError> {
             AtomPhraseCodec::decode(atom_r)?,
         )),
         ("HoleE", [hole]) => Ok(ExpKind::Hole(decode_hole(hole)?)),
-        ("FuseE", [exp_l, exp_r]) => Ok(ExpKind::Fuse(
-            Box::new(decode_exp(exp_l)?),
-            Box::new(decode_exp(exp_r)?),
-        )),
+        ("FuseE", [exp_l, exp_r]) => {
+            Ok(ExpKind::Fuse(Box::new(decode_exp(exp_l)?), Box::new(decode_exp(exp_r)?)))
+        }
         ("UnparenE", [exp]) => Ok(ExpKind::Unparen(Box::new(decode_exp(exp)?))),
         ("LatexE", [latex]) => Ok(ExpKind::Latex(string(latex)?.to_owned())),
         (
@@ -414,20 +395,10 @@ fn encode_exp_kind(exp: &ExpKind) -> json {
         ExpKind::Var(id) => json!(["VarE", encode_id(id)]),
         ExpKind::Un(op, exp) => json!(["UnE", encode_un_op(*op), encode_exp(exp)]),
         ExpKind::Bin(exp_l, op, exp_r) => {
-            json!([
-                "BinE",
-                encode_exp(exp_l),
-                encode_bin_op(*op),
-                encode_exp(exp_r)
-            ])
+            json!(["BinE", encode_exp(exp_l), encode_bin_op(*op), encode_exp(exp_r)])
         }
         ExpKind::Cmp(exp_l, op, exp_r) => {
-            json!([
-                "CmpE",
-                encode_exp(exp_l),
-                encode_cmp_op(*op),
-                encode_exp(exp_r)
-            ])
+            json!(["CmpE", encode_exp(exp_l), encode_cmp_op(*op), encode_exp(exp_r)])
         }
         ExpKind::Arith(exp) => json!(["ArithE", encode_exp(exp)]),
         ExpKind::Eps => json!(["EpsE"]),
@@ -439,12 +410,9 @@ fn encode_exp_kind(exp: &ExpKind) -> json {
         ExpKind::Idx(exp_base, exp_idx) => {
             json!(["IdxE", encode_exp(exp_base), encode_exp(exp_idx)])
         }
-        ExpKind::Slice(exp_base, exp_idx, exp_len) => json!([
-            "SliceE",
-            encode_exp(exp_base),
-            encode_exp(exp_idx),
-            encode_exp(exp_len)
-        ]),
+        ExpKind::Slice(exp_base, exp_idx, exp_len) => {
+            json!(["SliceE", encode_exp(exp_base), encode_exp(exp_idx), encode_exp(exp_len)])
+        }
         ExpKind::Len(exp) => json!(["LenE", encode_exp(exp)]),
         ExpKind::Mem(exp_l, exp_r) => json!(["MemE", encode_exp(exp_l), encode_exp(exp_r)]),
         ExpKind::Str(fields) => json!([
@@ -458,12 +426,7 @@ fn encode_exp_kind(exp: &ExpKind) -> json {
             json!(["DotE", encode_exp(exp), AtomPhraseCodec::encode(atom)])
         }
         ExpKind::Upd(exp_base, path, exp_field) => {
-            json!([
-                "UpdE",
-                encode_exp(exp_base),
-                encode_path(path),
-                encode_exp(exp_field)
-            ])
+            json!(["UpdE", encode_exp(exp_base), encode_path(path), encode_exp(exp_field)])
         }
         ExpKind::Paren(exp) => json!(["ParenE", encode_exp(exp)]),
         ExpKind::Tuple(exps) => json!(["TupleE", encode_list(exps, encode_exp)]),
@@ -477,12 +440,9 @@ fn encode_exp_kind(exp: &ExpKind) -> json {
         ExpKind::Sub(exp, typ) => json!(["SubE", encode_exp(exp), encode_plain_typ(typ)]),
         ExpKind::Atom(atom) => json!(["AtomE", AtomPhraseCodec::encode(atom)]),
         ExpKind::Seq(exps) => json!(["SeqE", encode_list(exps, encode_exp)]),
-        ExpKind::Infix(exp_l, atom, exp_r) => json!([
-            "InfixE",
-            encode_exp(exp_l),
-            AtomPhraseCodec::encode(atom),
-            encode_exp(exp_r)
-        ]),
+        ExpKind::Infix(exp_l, atom, exp_r) => {
+            json!(["InfixE", encode_exp(exp_l), AtomPhraseCodec::encode(atom), encode_exp(exp_r)])
+        }
         ExpKind::Brack(atom_l, exp_inner, atom_r) => json!([
             "BrackE",
             AtomPhraseCodec::encode(atom_l),
@@ -498,10 +458,7 @@ fn encode_exp_kind(exp: &ExpKind) -> json {
 
 pub(super) fn decode_hint(json: &json) -> Result<ast::Hint, DecodeError> {
     let object = object(json)?;
-    Ok((
-        decode_id(field(object, "hintid")?)?,
-        decode_exp(field(object, "hintexp")?)?,
-    ))
+    Ok((decode_id(field(object, "hintid")?)?, decode_exp(field(object, "hintexp")?)?))
 }
 
 pub(super) fn encode_hint(hint: &ast::Hint) -> json {

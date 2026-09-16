@@ -40,13 +40,7 @@ where
         interface: &'runner mut Iface,
         external: &'runner Exn,
     ) -> Self {
-        Self {
-            arena,
-            spec,
-            interp,
-            interface,
-            external,
-        }
+        Self { arena, spec, interp, interface, external }
     }
 
     // - Semantic components

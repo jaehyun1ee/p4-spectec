@@ -92,12 +92,7 @@ impl ObjectState {
             crate::phrase!(node: "objectState".to_owned(), span: Span::default()),
             Vec::new(),
         );
-        Ok(make::external(
-            arena,
-            typ.node.into(),
-            payload.into(),
-            Span::default(),
-        )?)
+        Ok(make::external(arena, typ.node.into(), payload.into(), Span::default())?)
     }
 
     // - Decoding
@@ -182,11 +177,7 @@ where
 {
     let encoding = ctx.external().encoding;
     let value_object = func::find_object_state_e(ctx, value_arch, value_id)?;
-    Ok(ObjectState::from_value(
-        ctx.arena_mut(),
-        encoding,
-        &value_object,
-    )?)
+    Ok(ObjectState::from_value(ctx.arena_mut(), encoding, &value_object)?)
 }
 
 fn find_ingress_packet_in<Interp, Iface>(
@@ -197,24 +188,15 @@ where
     Iface: Interface,
     Interp: Interpreter<Iface, Psa>,
 {
-    let value_name = make::text(
-        ctx.arena_mut(),
-        "ingress_packet_in".to_owned(),
-        Span::default(),
-    )
-    .map_err(ExternError::from)?;
+    let value_name = make::text(ctx.arena_mut(), "ingress_packet_in".to_owned(), Span::default())
+        .map_err(ExternError::from)?;
     let values_name = vec![value_name];
     let typ_id = typ::make::list(typ::make::var(
         crate::phrase!(node: "id".to_owned(), span: Span::default()),
         vec![],
     ));
-    let value_id = make::list(
-        ctx.arena_mut(),
-        typ_id.node.into(),
-        values_name,
-        Span::default(),
-    )
-    .map_err(ExternError::from)?;
+    let value_id = make::list(ctx.arena_mut(), typ_id.node.into(), values_name, Span::default())
+        .map_err(ExternError::from)?;
     match find_object_state(ctx, value_arch, value_id)? {
         ObjectState::PacketIn(pkt) => Ok(pkt),
         _ => Err(ExternError::Failure("ingress_packet_in extern not found".to_owned()).into()),
@@ -229,24 +211,15 @@ where
     Iface: Interface,
     Interp: Interpreter<Iface, Psa>,
 {
-    let value_name = make::text(
-        ctx.arena_mut(),
-        "ingress_packet_out".to_owned(),
-        Span::default(),
-    )
-    .map_err(ExternError::from)?;
+    let value_name = make::text(ctx.arena_mut(), "ingress_packet_out".to_owned(), Span::default())
+        .map_err(ExternError::from)?;
     let values_name = vec![value_name];
     let typ_id = typ::make::list(typ::make::var(
         crate::phrase!(node: "id".to_owned(), span: Span::default()),
         vec![],
     ));
-    let value_id = make::list(
-        ctx.arena_mut(),
-        typ_id.node.into(),
-        values_name,
-        Span::default(),
-    )
-    .map_err(ExternError::from)?;
+    let value_id = make::list(ctx.arena_mut(), typ_id.node.into(), values_name, Span::default())
+        .map_err(ExternError::from)?;
     match find_object_state(ctx, value_arch, value_id)? {
         ObjectState::PacketOut(pkt) => Ok(pkt),
         _ => Err(ExternError::Failure("ingress_packet_out extern not found".to_owned()).into()),
@@ -261,24 +234,15 @@ where
     Iface: Interface,
     Interp: Interpreter<Iface, Psa>,
 {
-    let value_name = make::text(
-        ctx.arena_mut(),
-        "egress_packet_in".to_owned(),
-        Span::default(),
-    )
-    .map_err(ExternError::from)?;
+    let value_name = make::text(ctx.arena_mut(), "egress_packet_in".to_owned(), Span::default())
+        .map_err(ExternError::from)?;
     let values_name = vec![value_name];
     let typ_id = typ::make::list(typ::make::var(
         crate::phrase!(node: "id".to_owned(), span: Span::default()),
         vec![],
     ));
-    let value_id = make::list(
-        ctx.arena_mut(),
-        typ_id.node.into(),
-        values_name,
-        Span::default(),
-    )
-    .map_err(ExternError::from)?;
+    let value_id = make::list(ctx.arena_mut(), typ_id.node.into(), values_name, Span::default())
+        .map_err(ExternError::from)?;
     match find_object_state(ctx, value_arch, value_id)? {
         ObjectState::PacketIn(pkt) => Ok(pkt),
         _ => Err(ExternError::Failure("egress_packet_in extern not found".to_owned()).into()),
@@ -293,24 +257,15 @@ where
     Iface: Interface,
     Interp: Interpreter<Iface, Psa>,
 {
-    let value_name = make::text(
-        ctx.arena_mut(),
-        "egress_packet_out".to_owned(),
-        Span::default(),
-    )
-    .map_err(ExternError::from)?;
+    let value_name = make::text(ctx.arena_mut(), "egress_packet_out".to_owned(), Span::default())
+        .map_err(ExternError::from)?;
     let values_name = vec![value_name];
     let typ_id = typ::make::list(typ::make::var(
         crate::phrase!(node: "id".to_owned(), span: Span::default()),
         vec![],
     ));
-    let value_id = make::list(
-        ctx.arena_mut(),
-        typ_id.node.into(),
-        values_name,
-        Span::default(),
-    )
-    .map_err(ExternError::from)?;
+    let value_id = make::list(ctx.arena_mut(), typ_id.node.into(), values_name, Span::default())
+        .map_err(ExternError::from)?;
     match find_object_state(ctx, value_arch, value_id)? {
         ObjectState::PacketOut(pkt) => Ok(pkt),
         _ => Err(ExternError::Failure("egress_packet_out extern not found".to_owned()).into()),
@@ -335,13 +290,8 @@ where
         crate::phrase!(node: "id".to_owned(), span: Span::default()),
         vec![],
     ));
-    let value_id = make::list(
-        ctx.arena_mut(),
-        typ_id.node.into(),
-        values_name,
-        Span::default(),
-    )
-    .map_err(ExternError::from)?;
+    let value_id = make::list(ctx.arena_mut(), typ_id.node.into(), values_name, Span::default())
+        .map_err(ExternError::from)?;
     match find_object_state(ctx, value_arch, value_id)? {
         ObjectState::Register(reg) => Ok(reg),
         _ => Err(ExternError::Failure(format!("Register extern {name} not found")).into()),
@@ -367,13 +317,8 @@ where
         crate::phrase!(node: "id".to_owned(), span: Span::default()),
         vec![],
     ));
-    let value_id = make::list(
-        ctx.arena_mut(),
-        typ_id.node.into(),
-        values_name,
-        Span::default(),
-    )
-    .map_err(ExternError::from)?;
+    let value_id = make::list(ctx.arena_mut(), typ_id.node.into(), values_name, Span::default())
+        .map_err(ExternError::from)?;
     let encoding = ctx.external().encoding;
     let value_reg = ObjectState::Register(reg).to_value(ctx.arena_mut(), encoding)?;
     func::update_object_state_e(ctx, value_arch, value_id, value_reg)
@@ -404,12 +349,9 @@ where
             *value_ids,
             *value_args,
         )?)),
-        "Register" => Some(ObjectState::Register(Register::init(
-            ctx,
-            *value_targs,
-            *value_ids,
-            *value_args,
-        )?)),
+        "Register" => {
+            Some(ObjectState::Register(Register::init(ctx, *value_targs, *value_ids, *value_args)?))
+        }
         "Hash" => Some(ObjectState::Hash(HashExtern::init(
             ctx.arena(),
             *value_targs,
@@ -434,13 +376,8 @@ where
                 crate::phrase!(node: "objectState".to_owned(), span: Span::default()),
                 Vec::new(),
             );
-            make::external(
-                ctx.arena_mut(),
-                typ.node.into(),
-                payload.into(),
-                Span::default(),
-            )
-            .map_err(ExternError::from)?
+            make::external(ctx.arena_mut(), typ.node.into(), payload.into(), Span::default())
+                .map_err(ExternError::from)?
         }
     })
 }
@@ -511,12 +448,7 @@ where
             (ObjectState::PacketIn(object), "extract", ["hdr"]) => {
                 let (object, value_ctx, value_arch, value_call_result) =
                     object.extract(ctx, *value_ctx, *value_arch)?;
-                (
-                    ObjectState::PacketIn(object),
-                    value_ctx,
-                    value_arch,
-                    value_call_result,
-                )
+                (ObjectState::PacketIn(object), value_ctx, value_arch, value_call_result)
             }
             (
                 ObjectState::PacketIn(object),
@@ -525,182 +457,92 @@ where
             ) => {
                 let (object, value_ctx, value_arch, value_call_result) =
                     object.extract_varsize(ctx, *value_ctx, *value_arch)?;
-                (
-                    ObjectState::PacketIn(object),
-                    value_ctx,
-                    value_arch,
-                    value_call_result,
-                )
+                (ObjectState::PacketIn(object), value_ctx, value_arch, value_call_result)
             }
             (ObjectState::PacketIn(object), "lookahead", []) => {
                 let (object, value_ctx, value_arch, value_call_result) =
                     object.lookahead(ctx, *value_ctx, *value_arch)?;
-                (
-                    ObjectState::PacketIn(object),
-                    value_ctx,
-                    value_arch,
-                    value_call_result,
-                )
+                (ObjectState::PacketIn(object), value_ctx, value_arch, value_call_result)
             }
             (ObjectState::PacketIn(object), "advance", ["sizeInBits"]) => {
                 let (object, value_ctx, value_arch, value_call_result) =
                     object.advance(ctx, *value_ctx, *value_arch)?;
-                (
-                    ObjectState::PacketIn(object),
-                    value_ctx,
-                    value_arch,
-                    value_call_result,
-                )
+                (ObjectState::PacketIn(object), value_ctx, value_arch, value_call_result)
             }
             (ObjectState::PacketIn(object), "length", []) => {
                 let (object, value_ctx, value_arch, value_call_result) =
                     object.length(ctx, *value_ctx, *value_arch)?;
-                (
-                    ObjectState::PacketIn(object),
-                    value_ctx,
-                    value_arch,
-                    value_call_result,
-                )
+                (ObjectState::PacketIn(object), value_ctx, value_arch, value_call_result)
             }
             (ObjectState::PacketOut(object), "emit", ["hdr"]) => {
                 let (object, value_ctx, value_arch, value_call_result) =
                     object.emit(ctx, *value_ctx, *value_arch)?;
-                (
-                    ObjectState::PacketOut(object),
-                    value_ctx,
-                    value_arch,
-                    value_call_result,
-                )
+                (ObjectState::PacketOut(object), value_ctx, value_arch, value_call_result)
             }
             (ObjectState::Counter(object), "count", ["index"]) => {
                 let (object, value_ctx, value_arch, value_call_result) =
                     object.count(ctx, *value_ctx, *value_arch)?;
-                (
-                    ObjectState::Counter(object),
-                    value_ctx,
-                    value_arch,
-                    value_call_result,
-                )
+                (ObjectState::Counter(object), value_ctx, value_arch, value_call_result)
             }
             (ObjectState::Register(object), "read", ["index"]) => {
                 let (object, value_ctx, value_arch, value_call_result) =
                     object.read(ctx, *value_ctx, *value_arch)?;
-                (
-                    ObjectState::Register(object),
-                    value_ctx,
-                    value_arch,
-                    value_call_result,
-                )
+                (ObjectState::Register(object), value_ctx, value_arch, value_call_result)
             }
             (ObjectState::Register(object), "write", ["index", "value"]) => {
                 let (object, value_ctx, value_arch, value_call_result) =
                     object.write(ctx, *value_ctx, *value_arch)?;
-                (
-                    ObjectState::Register(object),
-                    value_ctx,
-                    value_arch,
-                    value_call_result,
-                )
+                (ObjectState::Register(object), value_ctx, value_arch, value_call_result)
             }
             (ObjectState::Hash(object), "get_hash", ["data"]) => {
                 let (object, value_ctx, value_arch, value_call_result) =
                     object.get_hash(ctx, *value_ctx, *value_arch)?;
-                (
-                    ObjectState::Hash(object),
-                    value_ctx,
-                    value_arch,
-                    value_call_result,
-                )
+                (ObjectState::Hash(object), value_ctx, value_arch, value_call_result)
             }
             (ObjectState::Hash(object), "get_hash", ["base", "data", "max"]) => {
                 let (object, value_ctx, value_arch, value_call_result) =
                     object.get_hash_adjust(ctx, *value_ctx, *value_arch)?;
-                (
-                    ObjectState::Hash(object),
-                    value_ctx,
-                    value_arch,
-                    value_call_result,
-                )
+                (ObjectState::Hash(object), value_ctx, value_arch, value_call_result)
             }
             (ObjectState::InternetChecksum(object), "clear", []) => {
                 let (object, value_ctx, value_arch, value_call_result) =
                     object.clear(ctx, *value_ctx, *value_arch)?;
-                (
-                    ObjectState::InternetChecksum(object),
-                    value_ctx,
-                    value_arch,
-                    value_call_result,
-                )
+                (ObjectState::InternetChecksum(object), value_ctx, value_arch, value_call_result)
             }
             (ObjectState::InternetChecksum(object), "add", ["data"]) => {
                 let (object, value_ctx, value_arch, value_call_result) =
                     object.add(ctx, *value_ctx, *value_arch)?;
-                (
-                    ObjectState::InternetChecksum(object),
-                    value_ctx,
-                    value_arch,
-                    value_call_result,
-                )
+                (ObjectState::InternetChecksum(object), value_ctx, value_arch, value_call_result)
             }
             (ObjectState::InternetChecksum(object), "subtract", ["data"]) => {
                 let (object, value_ctx, value_arch, value_call_result) =
                     object.subtract(ctx, *value_ctx, *value_arch)?;
-                (
-                    ObjectState::InternetChecksum(object),
-                    value_ctx,
-                    value_arch,
-                    value_call_result,
-                )
+                (ObjectState::InternetChecksum(object), value_ctx, value_arch, value_call_result)
             }
             (ObjectState::InternetChecksum(object), "get", []) => {
                 let (object, value_ctx, value_arch, value_call_result) =
                     object.get(ctx, *value_ctx, *value_arch)?;
-                (
-                    ObjectState::InternetChecksum(object),
-                    value_ctx,
-                    value_arch,
-                    value_call_result,
-                )
+                (ObjectState::InternetChecksum(object), value_ctx, value_arch, value_call_result)
             }
             (ObjectState::InternetChecksum(object), "get_state", []) => {
                 let (object, value_ctx, value_arch, value_call_result) =
                     object.get_state(ctx, *value_ctx, *value_arch)?;
-                (
-                    ObjectState::InternetChecksum(object),
-                    value_ctx,
-                    value_arch,
-                    value_call_result,
-                )
+                (ObjectState::InternetChecksum(object), value_ctx, value_arch, value_call_result)
             }
             (ObjectState::InternetChecksum(object), "set_state", ["checksum_state"]) => {
                 let (object, value_ctx, value_arch, value_call_result) =
                     object.set_state(ctx, *value_ctx, *value_arch)?;
-                (
-                    ObjectState::InternetChecksum(object),
-                    value_ctx,
-                    value_arch,
-                    value_call_result,
-                )
+                (ObjectState::InternetChecksum(object), value_ctx, value_arch, value_call_result)
             }
             (ObjectState::Meter(object), "execute", ["index", "color"]) => {
                 let (object, value_ctx, value_arch, value_call_result) =
                     object.execute_color_aware(ctx, *value_ctx, *value_arch)?;
-                (
-                    ObjectState::Meter(object),
-                    value_ctx,
-                    value_arch,
-                    value_call_result,
-                )
+                (ObjectState::Meter(object), value_ctx, value_arch, value_call_result)
             }
             (ObjectState::Meter(object), "execute", ["index"]) => {
                 let (object, value_ctx, value_arch, value_call_result) =
                     object.execute_color_blind(ctx, *value_ctx, *value_arch)?;
-                (
-                    ObjectState::Meter(object),
-                    value_ctx,
-                    value_arch,
-                    value_call_result,
-                )
+                (ObjectState::Meter(object), value_ctx, value_arch, value_call_result)
             }
             _ => {
                 let ids = get::list(ctx.arena(), value_id)
@@ -871,13 +713,9 @@ where
             crate::phrase!(node: "id".to_owned(), span: Span::default()),
             vec![],
         ));
-        let value_id = make::list(
-            ctx.arena_mut(),
-            typ_id.node.into(),
-            values_name,
-            Span::default(),
-        )
-        .map_err(ExternError::from)?;
+        let value_id =
+            make::list(ctx.arena_mut(), typ_id.node.into(), values_name, Span::default())
+                .map_err(ExternError::from)?;
         let encoding = ctx.external().encoding;
         let value_object =
             ObjectState::PacketIn(packet.packet_in).to_value(ctx.arena_mut(), encoding)?;
@@ -898,24 +736,17 @@ where
     let mut pkt = find_ingress_packet_in(ctx, state.value_arch)?;
     pkt.reset();
     state.value_arch = {
-        let value_name = make::text(
-            ctx.arena_mut(),
-            "ingress_packet_in".to_owned(),
-            Span::default(),
-        )
-        .map_err(ExternError::from)?;
+        let value_name =
+            make::text(ctx.arena_mut(), "ingress_packet_in".to_owned(), Span::default())
+                .map_err(ExternError::from)?;
         let values_name = vec![value_name];
         let typ_id = typ::make::list(typ::make::var(
             crate::phrase!(node: "id".to_owned(), span: Span::default()),
             vec![],
         ));
-        let value_id = make::list(
-            ctx.arena_mut(),
-            typ_id.node.into(),
-            values_name,
-            Span::default(),
-        )
-        .map_err(ExternError::from)?;
+        let value_id =
+            make::list(ctx.arena_mut(), typ_id.node.into(), values_name, Span::default())
+                .map_err(ExternError::from)?;
         let encoding = ctx.external().encoding;
         let value_object = ObjectState::PacketIn(pkt).to_value(ctx.arena_mut(), encoding)?;
         func::update_object_state_e(ctx, state.value_arch, value_id, value_object)
@@ -932,24 +763,17 @@ where
     Interp: Interpreter<Iface, Psa>,
 {
     state.value_arch = {
-        let value_name = make::text(
-            ctx.arena_mut(),
-            "ingress_packet_out".to_owned(),
-            Span::default(),
-        )
-        .map_err(ExternError::from)?;
+        let value_name =
+            make::text(ctx.arena_mut(), "ingress_packet_out".to_owned(), Span::default())
+                .map_err(ExternError::from)?;
         let values_name = vec![value_name];
         let typ_id = typ::make::list(typ::make::var(
             crate::phrase!(node: "id".to_owned(), span: Span::default()),
             vec![],
         ));
-        let value_id = make::list(
-            ctx.arena_mut(),
-            typ_id.node.into(),
-            values_name,
-            Span::default(),
-        )
-        .map_err(ExternError::from)?;
+        let value_id =
+            make::list(ctx.arena_mut(), typ_id.node.into(), values_name, Span::default())
+                .map_err(ExternError::from)?;
         let encoding = ctx.external().encoding;
         let value_object =
             ObjectState::PacketOut(PacketOut::default()).to_value(ctx.arena_mut(), encoding)?;
@@ -967,24 +791,17 @@ where
     Interp: Interpreter<Iface, Psa>,
 {
     state.value_arch = {
-        let value_name = make::text(
-            ctx.arena_mut(),
-            "egress_packet_out".to_owned(),
-            Span::default(),
-        )
-        .map_err(ExternError::from)?;
+        let value_name =
+            make::text(ctx.arena_mut(), "egress_packet_out".to_owned(), Span::default())
+                .map_err(ExternError::from)?;
         let values_name = vec![value_name];
         let typ_id = typ::make::list(typ::make::var(
             crate::phrase!(node: "id".to_owned(), span: Span::default()),
             vec![],
         ));
-        let value_id = make::list(
-            ctx.arena_mut(),
-            typ_id.node.into(),
-            values_name,
-            Span::default(),
-        )
-        .map_err(ExternError::from)?;
+        let value_id =
+            make::list(ctx.arena_mut(), typ_id.node.into(), values_name, Span::default())
+                .map_err(ExternError::from)?;
         let encoding = ctx.external().encoding;
         let value_object =
             ObjectState::PacketOut(PacketOut::default()).to_value(ctx.arena_mut(), encoding)?;
@@ -1176,11 +993,7 @@ where
     Interp: Interpreter<Iface, Psa>,
 {
     let (value_ctx, value_arch) = pgm::psa_init(ctx, program)?;
-    Ok(SimState {
-        value_ctx,
-        value_arch,
-        txs: vec![],
-    })
+    Ok(SimState { value_ctx, value_arch, txs: vec![] })
 }
 
 // == Prepare context
@@ -1389,11 +1202,7 @@ where
         Entrypoint::Ingress => find_ingress_packet_in(ctx, state.value_arch)?,
         Entrypoint::Egress => find_egress_packet_in(ctx, state.value_arch)?,
     };
-    let packet = Packet {
-        value_ctx: state.value_ctx,
-        packet_in,
-        entrypoint,
-    };
+    let packet = Packet { value_ctx: state.value_ctx, packet_in, entrypoint };
     let mut arch = find_arch_state(ctx, state.value_arch)?;
     arch.queue.push_back(packet);
     state.value_arch = update_arch_state(ctx, state.value_arch, &arch)?;
@@ -1415,24 +1224,17 @@ where
     }?;
     let pkt = ObjectState::PacketIn(PacketIn::init(&packet)?);
     state.value_arch = {
-        let value_name = make::text(
-            ctx.arena_mut(),
-            "egress_packet_in".to_owned(),
-            Span::default(),
-        )
-        .map_err(ExternError::from)?;
+        let value_name =
+            make::text(ctx.arena_mut(), "egress_packet_in".to_owned(), Span::default())
+                .map_err(ExternError::from)?;
         let values_name = vec![value_name];
         let typ_id = typ::make::list(typ::make::var(
             crate::phrase!(node: "id".to_owned(), span: Span::default()),
             vec![],
         ));
-        let value_id = make::list(
-            ctx.arena_mut(),
-            typ_id.node.into(),
-            values_name,
-            Span::default(),
-        )
-        .map_err(ExternError::from)?;
+        let value_id =
+            make::list(ctx.arena_mut(), typ_id.node.into(), values_name, Span::default())
+                .map_err(ExternError::from)?;
         let encoding = ctx.external().encoding;
         let value_object = pkt.to_value(ctx.arena_mut(), encoding)?;
         func::update_object_state_e(ctx, state.value_arch, value_id, value_object)
@@ -1461,24 +1263,17 @@ where
     }?;
     let pkt = ObjectState::PacketIn(PacketIn::init(&packet)?);
     state.value_arch = {
-        let value_name = make::text(
-            ctx.arena_mut(),
-            "egress_packet_in".to_owned(),
-            Span::default(),
-        )
-        .map_err(ExternError::from)?;
+        let value_name =
+            make::text(ctx.arena_mut(), "egress_packet_in".to_owned(), Span::default())
+                .map_err(ExternError::from)?;
         let values_name = vec![value_name];
         let typ_id = typ::make::list(typ::make::var(
             crate::phrase!(node: "id".to_owned(), span: Span::default()),
             vec![],
         ));
-        let value_id = make::list(
-            ctx.arena_mut(),
-            typ_id.node.into(),
-            values_name,
-            Span::default(),
-        )
-        .map_err(ExternError::from)?;
+        let value_id =
+            make::list(ctx.arena_mut(), typ_id.node.into(), values_name, Span::default())
+                .map_err(ExternError::from)?;
         let encoding = ctx.external().encoding;
         let value_object = pkt.to_value(ctx.arena_mut(), encoding)?;
         func::update_object_state_e(ctx, state.value_arch, value_id, value_object)
@@ -1518,24 +1313,17 @@ where
     remove_ingress_packet_in(ctx, state)?;
     let pkt = find_ingress_packet_in(ctx, state.value_arch)?;
     state.value_arch = {
-        let value_name = make::text(
-            ctx.arena_mut(),
-            "egress_packet_in".to_owned(),
-            Span::default(),
-        )
-        .map_err(ExternError::from)?;
+        let value_name =
+            make::text(ctx.arena_mut(), "egress_packet_in".to_owned(), Span::default())
+                .map_err(ExternError::from)?;
         let values_name = vec![value_name];
         let typ_id = typ::make::list(typ::make::var(
             crate::phrase!(node: "id".to_owned(), span: Span::default()),
             vec![],
         ));
-        let value_id = make::list(
-            ctx.arena_mut(),
-            typ_id.node.into(),
-            values_name,
-            Span::default(),
-        )
-        .map_err(ExternError::from)?;
+        let value_id =
+            make::list(ctx.arena_mut(), typ_id.node.into(), values_name, Span::default())
+                .map_err(ExternError::from)?;
         let encoding = ctx.external().encoding;
         let value_object = ObjectState::PacketIn(pkt).to_value(ctx.arena_mut(), encoding)?;
         func::update_object_state_e(ctx, state.value_arch, value_id, value_object)
@@ -1582,24 +1370,17 @@ where
     }?;
     let pkt = PacketIn::init(&packet)?;
     state.value_arch = {
-        let value_name = make::text(
-            ctx.arena_mut(),
-            "egress_packet_in".to_owned(),
-            Span::default(),
-        )
-        .map_err(ExternError::from)?;
+        let value_name =
+            make::text(ctx.arena_mut(), "egress_packet_in".to_owned(), Span::default())
+                .map_err(ExternError::from)?;
         let values_name = vec![value_name];
         let typ_id = typ::make::list(typ::make::var(
             crate::phrase!(node: "id".to_owned(), span: Span::default()),
             vec![],
         ));
-        let value_id = make::list(
-            ctx.arena_mut(),
-            typ_id.node.into(),
-            values_name,
-            Span::default(),
-        )
-        .map_err(ExternError::from)?;
+        let value_id =
+            make::list(ctx.arena_mut(), typ_id.node.into(), values_name, Span::default())
+                .map_err(ExternError::from)?;
         let encoding = ctx.external().encoding;
         let value_object = ObjectState::PacketIn(pkt).to_value(ctx.arena_mut(), encoding)?;
         func::update_object_state_e(ctx, state.value_arch, value_id, value_object)
@@ -1649,24 +1430,17 @@ where
     }?;
     let pkt = ObjectState::PacketIn(PacketIn::init(&packet)?);
     state.value_arch = {
-        let value_name = make::text(
-            ctx.arena_mut(),
-            "ingress_packet_in".to_owned(),
-            Span::default(),
-        )
-        .map_err(ExternError::from)?;
+        let value_name =
+            make::text(ctx.arena_mut(), "ingress_packet_in".to_owned(), Span::default())
+                .map_err(ExternError::from)?;
         let values_name = vec![value_name];
         let typ_id = typ::make::list(typ::make::var(
             crate::phrase!(node: "id".to_owned(), span: Span::default()),
             vec![],
         ));
-        let value_id = make::list(
-            ctx.arena_mut(),
-            typ_id.node.into(),
-            values_name,
-            Span::default(),
-        )
-        .map_err(ExternError::from)?;
+        let value_id =
+            make::list(ctx.arena_mut(), typ_id.node.into(), values_name, Span::default())
+                .map_err(ExternError::from)?;
         let encoding = ctx.external().encoding;
         let value_object = pkt.to_value(ctx.arena_mut(), encoding)?;
         func::update_object_state_e(ctx, state.value_arch, value_id, value_object)
@@ -1841,11 +1615,7 @@ where
         return schedule_resubmit(ctx, state);
     }
     let group = get_multicast_group(ctx, state)?;
-    if group != 0 {
-        schedule_multicast(ctx, state, group)
-    } else {
-        schedule_unicast(ctx, state)
-    }
+    if group != 0 { schedule_multicast(ctx, state, group) } else { schedule_unicast(ctx, state) }
 }
 
 // == Egress pipeline driver

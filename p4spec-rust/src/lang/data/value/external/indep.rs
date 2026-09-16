@@ -129,11 +129,9 @@ impl ValueKind {
         Ok(match mixfix {
             Mixfix::Arg(value) => Mixfix::Arg(into_arena(arena, *value)?),
             Mixfix::Atom(atom) => Mixfix::Atom(atom),
-            Mixfix::Brack(atom_l, mixfix, atom_r) => Mixfix::Brack(
-                atom_l,
-                Box::new(Self::into_arena_case(arena, *mixfix)?),
-                atom_r,
-            ),
+            Mixfix::Brack(atom_l, mixfix, atom_r) => {
+                Mixfix::Brack(atom_l, Box::new(Self::into_arena_case(arena, *mixfix)?), atom_r)
+            }
             Mixfix::Infix(mixfix_l, atom, mixfix_r) => Mixfix::Infix(
                 Box::new(Self::into_arena_case(arena, *mixfix_l)?),
                 atom,

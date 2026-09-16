@@ -42,11 +42,7 @@ impl fmt::Display for TypeArityMismatch {
             Self::TypeParameter(mismatch) => ("type parameter counts differ", mismatch),
             Self::Parameter(mismatch) => ("parameter counts differ", mismatch),
         };
-        write!(
-            formatter,
-            "{description}: expected {}, got {}",
-            mismatch.expected, mismatch.actual
-        )
+        write!(formatter, "{description}: expected {}, got {}", mismatch.expected, mismatch.actual)
     }
 }
 

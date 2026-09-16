@@ -46,17 +46,13 @@ impl Print for Prem {
                 printer.write_str(" = ")?;
                 exp_r.print(printer)
             }
-            PremKind::Iter(IterPrem {
-                prem: prem_inner,
-                prem_iter,
-            }) if matches!(prem_inner.node, PremKind::Iter(_)) => {
+            PremKind::Iter(IterPrem { prem: prem_inner, prem_iter })
+                if matches!(prem_inner.node, PremKind::Iter(_)) =>
+            {
                 prem_inner.print(printer)?;
                 prem_iter.print(printer)
             }
-            PremKind::Iter(IterPrem {
-                prem: prem_inner,
-                prem_iter,
-            }) => {
+            PremKind::Iter(IterPrem { prem: prem_inner, prem_iter }) => {
                 printer.write_char('(')?;
                 prem_inner.print(printer)?;
                 printer.write_char(')')?;
@@ -139,12 +135,7 @@ fn write_elsegroup(
     write!(output, "\n\n {}match\n\n", indent(1))?;
     write_rulematch(output, not_typ, input_hint, &else_group.node.rule_match)?;
     write!(output, "\n\n {}paths\n\n", indent(1))?;
-    write_rulepaths(
-        output,
-        not_typ,
-        input_hint,
-        std::slice::from_ref(&else_group.node.rule_path),
-    )
+    write_rulepaths(output, not_typ, input_hint, std::slice::from_ref(&else_group.node.rule_path))
 }
 
 fn write_rulematch(

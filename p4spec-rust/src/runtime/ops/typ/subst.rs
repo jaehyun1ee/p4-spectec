@@ -122,11 +122,7 @@ fn subst_typ_cow_inner<'a>(
             let typ_ret = subst_typ_inner(fresh, &theta_fresh, &func_typ.typ_ret)?;
             let typ_ret = subst_typ_inner(fresh, theta, &typ_ret)?;
             let typ_ret = Box::new(typ_ret);
-            let func_typ = ast::FuncTyp {
-                tparams,
-                typs_params,
-                typ_ret,
-            };
+            let func_typ = ast::FuncTyp { tparams, typs_params, typ_ret };
             let typ_kind = TypKind::Func(func_typ);
             let typ_subst = phrase!(node: typ_kind, span: typ.span.clone());
             Ok(Cow::Owned(typ_subst))

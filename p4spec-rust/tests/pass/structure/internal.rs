@@ -25,9 +25,7 @@ fn instr(instr_kind: ast_ol::InstrKind) -> ast_ol::Instr {
 }
 
 fn ret(text: &str) -> ast_ol::Instr {
-    instr(ast_ol::InstrKind::Return(ast_ol::ReturnInstr {
-        exp: variable(text),
-    }))
+    instr(ast_ol::InstrKind::Return(ast_ol::ReturnInstr { exp: variable(text) }))
 }
 
 fn signature() -> RelSignature {

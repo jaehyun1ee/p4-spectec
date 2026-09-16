@@ -14,16 +14,12 @@ use crate::pass::structure::{
 };
 
 fn var_id(exp: &Exp) -> &Id {
-    let ExpKind::Var(id) = &exp.node else {
-        panic!("expected variable")
-    };
+    let ExpKind::Var(id) = &exp.node else { panic!("expected variable") };
     id
 }
 
 fn return_exp(instr_ol: &Instr) -> &Exp {
-    let InstrKind::Return(instr_return) = &instr_ol.node else {
-        panic!("expected return")
-    };
+    let InstrKind::Return(instr_return) = &instr_ol.node else { panic!("expected return") };
     &instr_return.exp
 }
 
@@ -51,17 +47,10 @@ fn iterator(text_bound: &str, text_bind: &str) -> InstrIter {
 
 #[test]
 fn test_prettification_reaches_fixed_point() {
-    let (exps_match, block, block_else) = pretty_rel(
-        vec![variable("_x'''")],
-        vec![ret("_x'''")],
-        Some(vec![ret("_x'''")]),
-    )
-    .unwrap();
+    let (exps_match, block, block_else) =
+        pretty_rel(vec![variable("_x'''")], vec![ret("_x'''")], Some(vec![ret("_x'''")])).unwrap();
     let body_again = pretty_rel(exps_match.clone(), block.clone(), block_else.clone()).unwrap();
-    assert_eq!(
-        (exps_match.clone(), block.clone(), block_else.clone()),
-        body_again
-    );
+    assert_eq!((exps_match.clone(), block.clone(), block_else.clone()), body_again);
     assert_eq!(exps_match[0], variable("x"));
 }
 
@@ -93,14 +82,10 @@ fn test_function_inputs_main_and_else_share_names_and_preserve_def_arguments() {
 #[test]
 fn test_fixed_point_retains_distinct_identifier_use_spans() {
     let mut exp_input = variable("x");
-    let ExpKind::Var(id_input) = &mut exp_input.node else {
-        unreachable!()
-    };
+    let ExpKind::Var(id_input) = &mut exp_input.node else { unreachable!() };
     id_input.span = span(31);
     let mut exp_body = variable("x");
-    let ExpKind::Var(id_body) = &mut exp_body.node else {
-        unreachable!()
-    };
+    let ExpKind::Var(id_body) = &mut exp_body.node else { unreachable!() };
     id_body.span = span(37);
     let block_expect = vec![instr(InstrKind::Return(ReturnInstr { exp: exp_body }))];
     let (exps_match, block, block_else) =

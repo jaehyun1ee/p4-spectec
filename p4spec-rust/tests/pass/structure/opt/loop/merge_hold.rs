@@ -14,10 +14,7 @@ fn test_both_outcomes_merge_in_order_and_adopt_target_condition_metadata() {
         instr_hold.block_hold = vec![ret("a"), ret("b")];
         instr_hold.block_not_hold = vec![ret("not_a"), ret("not_b")];
     }
-    assert_eq!(
-        apply(vec![instr_a, instr_b, ret("tail")]),
-        vec![instr_expect, ret("tail")]
-    );
+    assert_eq!(apply(vec![instr_a, instr_b, ret("tail")]), vec![instr_expect, ret("tail")]);
 }
 
 #[test]
@@ -37,9 +34,7 @@ fn test_condition_iterator_and_barrier_mismatch() {
     let instr_a = hold(vec![ret("a")], vec![]);
     for idx in 0..3 {
         let mut instr_b = hold(vec![ret("b")], vec![]);
-        let InstrKind::Hold(instr_hold) = &mut instr_b.node else {
-            unreachable!()
-        };
+        let InstrKind::Hold(instr_hold) = &mut instr_b.node else { unreachable!() };
         match idx {
             0 => instr_hold.id = id("other"),
             1 => instr_hold.not_exp = Mixfix::Arg(variable("other")),
@@ -63,10 +58,7 @@ fn nested(block: Block) -> Block {
     }))];
     let block = vec![instr(InstrKind::Case(CaseInstr {
         exp: variable("case"),
-        cases: vec![Case {
-            guard: Guard::Bool(true),
-            block,
-        }],
+        cases: vec![Case { guard: Guard::Bool(true), block }],
         total: false,
     }))];
     let block = vec![hold(block.clone(), block)];
@@ -107,14 +99,8 @@ fn test_each_outcome_merges_common_leading_conditions() {
         }))]
     }
     assert_eq!(
-        apply(vec![
-            hold(branch("a"), branch("not_a")),
-            hold(branch("b"), branch("not_b"))
-        ]),
-        vec![hold(
-            branch_merged("a", "b"),
-            branch_merged("not_a", "not_b")
-        )]
+        apply(vec![hold(branch("a"), branch("not_a")), hold(branch("b"), branch("not_b"))]),
+        vec![hold(branch_merged("a", "b"), branch_merged("not_a", "not_b"))]
     );
 }
 

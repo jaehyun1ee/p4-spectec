@@ -148,10 +148,7 @@ fn test_literals_and_identifiers_preserve_payloads() {
 
 #[test]
 fn test_byte_escapes_decode_valid_utf8_sequences() {
-    assert_eq!(
-        token_nodes("\"\\C3\\A9\""),
-        vec![Token::TextLiteral("é".to_owned()), Token::Eof]
-    );
+    assert_eq!(token_nodes("\"\\C3\\A9\""), vec![Token::TextLiteral("é".to_owned()), Token::Eof]);
 }
 
 #[test]
@@ -171,10 +168,7 @@ fn test_byte_escapes_reject_non_utf8_text() {
             .expect_err("byte-only text");
 
         assert_eq!(error.node, LexErrorKind::InvalidTextEncoding);
-        assert_eq!(
-            error.span.left,
-            Position::new("unicode-policy.watsup", 1, 0)
-        );
+        assert_eq!(error.span.left, Position::new("unicode-policy.watsup", 1, 0));
         assert_eq!(
             error.span.right,
             Position::new("unicode-policy.watsup", 1, source.len() as i64)
@@ -280,22 +274,12 @@ fn test_lexical_failures_report_typed_kinds_and_precise_spans() {
         ("\"abc\\", LexErrorKind::MalformedToken, 0, 1),
         ("\"bad\\q\"", LexErrorKind::IllegalEscape, 6, 6),
         ("\"bad\u{7}\"", LexErrorKind::IllegalControlCharacter, 0, 5),
-        (
-            "\"unterminated\nnext",
-            LexErrorKind::UnclosedTextLiteral,
-            0,
-            14,
-        ),
+        ("\"unterminated\nnext", LexErrorKind::UnclosedTextLiteral, 0, 14),
         ("(; unclosed", LexErrorKind::UnclosedComment, 0, 11),
         ("@", LexErrorKind::MalformedToken, 0, 1),
         ("é", LexErrorKind::MisplacedUnicodeCharacter, 0, 2),
         ("\u{7}", LexErrorKind::MisplacedControlCharacter, 0, 1),
-        (
-            "%999999999999999999999999",
-            LexErrorKind::HoleNumberOutOfRange,
-            0,
-            25,
-        ),
+        ("%999999999999999999999999", LexErrorKind::HoleNumberOutOfRange, 0, 25),
     ];
 
     for (source, kind, left_column, right_column) in fixtures {
@@ -305,10 +289,7 @@ fn test_lexical_failures_report_typed_kinds_and_precise_spans() {
             .expect_err("invalid source");
 
         assert_eq!(error.node, kind, "source: {source:?}");
-        assert_eq!(
-            error.span.left,
-            Position::new("error.watsup", 1, left_column)
-        );
+        assert_eq!(error.span.left, Position::new("error.watsup", 1, left_column));
         assert_eq!(
             error.span.right,
             Position::new("error.watsup", 1, right_column),

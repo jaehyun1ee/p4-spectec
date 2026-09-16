@@ -32,10 +32,7 @@ impl State {
             handle,
             ports
                 .iter()
-                .map(|port| Node {
-                    port: *port,
-                    instance,
-                })
+                .map(|port| Node { port: *port, instance })
                 .collect(),
         );
     }

@@ -176,11 +176,7 @@ impl Print for Exp {
             ExpKind::Bool(value) => write!(printer, "{value}"),
             ExpKind::Num(NumOp::Dec, num::Number::Nat(num)) => write!(printer, "{num}"),
             ExpKind::Num(NumOp::Hex, num::Number::Nat(num)) => {
-                write!(
-                    printer,
-                    "0x{}",
-                    num.as_bigint().to_str_radix(16).to_uppercase()
-                )
+                write!(printer, "0x{}", num.as_bigint().to_str_radix(16).to_uppercase())
             }
             ExpKind::Num(_, num) => num.print(printer),
             ExpKind::Text(text) => write!(printer, "\"{}\"", escaped(text)),
@@ -571,12 +567,7 @@ impl Print for Def {
                 }
                 Ok(())
             }
-            DefKind::Typ(TypDef {
-                id,
-                tparams,
-                def_typ,
-                ..
-            }) => {
+            DefKind::Typ(TypDef { id, tparams, def_typ, .. }) => {
                 printer.write_str("syntax ")?;
                 id.print(printer)?;
                 if !tparams.is_empty() {
@@ -605,11 +596,7 @@ impl Print for Def {
                 printer.write_str(": ")?;
                 not_typ.print(printer)
             }
-            DefKind::RuleGroup(RuleGroupDef {
-                relid,
-                groupid,
-                rules,
-            }) => {
+            DefKind::RuleGroup(RuleGroupDef { relid, groupid, rules }) => {
                 printer.write_str("rulegroup ")?;
                 relid.print(printer)?;
                 if !groupid.node.is_empty() {
@@ -625,13 +612,7 @@ impl Print for Def {
                 }
                 Ok(())
             }
-            DefKind::ExternDec(ExternDecDef {
-                id,
-                tparams,
-                params,
-                plain_typ,
-                ..
-            }) => {
+            DefKind::ExternDec(ExternDecDef { id, tparams, params, plain_typ, .. }) => {
                 printer.write_str("extern dec $")?;
                 id.print(printer)?;
                 if !tparams.is_empty() {
@@ -643,13 +624,7 @@ impl Print for Def {
                 printer.write_str(" : ")?;
                 plain_typ.print(printer)
             }
-            DefKind::BuiltinDec(BuiltinDecDef {
-                id,
-                tparams,
-                params,
-                plain_typ,
-                ..
-            }) => {
+            DefKind::BuiltinDec(BuiltinDecDef { id, tparams, params, plain_typ, .. }) => {
                 printer.write_str("builtin dec $")?;
                 id.print(printer)?;
                 if !tparams.is_empty() {
@@ -661,25 +636,14 @@ impl Print for Def {
                 printer.write_str(" : ")?;
                 plain_typ.print(printer)
             }
-            DefKind::TableDec(TableDecDef {
-                id,
-                params,
-                plain_typ,
-                ..
-            }) => {
+            DefKind::TableDec(TableDecDef { id, params, plain_typ, .. }) => {
                 printer.write_str("tbl dec $")?;
                 id.print(printer)?;
                 params.print(printer)?;
                 printer.write_str(" : ")?;
                 plain_typ.print(printer)
             }
-            DefKind::FuncDec(FuncDecDef {
-                id,
-                tparams,
-                params,
-                plain_typ,
-                ..
-            }) => {
+            DefKind::FuncDec(FuncDecDef { id, tparams, params, plain_typ, .. }) => {
                 printer.write_str("dec $")?;
                 id.print(printer)?;
                 if !tparams.is_empty() {
@@ -705,13 +669,7 @@ impl Print for Def {
                 }
                 Ok(())
             }
-            DefKind::FuncDef(FuncDef {
-                id,
-                tparams,
-                args,
-                exp,
-                prems,
-            }) => {
+            DefKind::FuncDef(FuncDef { id, tparams, args, exp, prems }) => {
                 printer.write_str("def $")?;
                 id.print(printer)?;
                 if !tparams.is_empty() {

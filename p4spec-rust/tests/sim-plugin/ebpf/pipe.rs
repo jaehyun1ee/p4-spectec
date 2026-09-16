@@ -98,11 +98,7 @@ impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for PhaseInterp {
 fn runner(name_bad: &'static str) -> Runner<PhaseInterp, NullInterface, Ebpf> {
     let mut runner_phase = Runner::new(
         (),
-        PhaseInterp {
-            name_bad,
-            calls: vec![],
-            values: vec![],
-        },
+        PhaseInterp { name_bad, calls: vec![], values: vec![] },
         NullInterface,
         Ebpf::default(),
     );
@@ -120,13 +116,7 @@ fn runner(name_bad: &'static str) -> Runner<PhaseInterp, NullInterface, Ebpf> {
         vec![],
     );
     values.push(
-        make::case(
-            runner_phase.arena_mut(),
-            typ.node.into(),
-            mixfix,
-            Span::default(),
-        )
-        .unwrap(),
+        make::case(runner_phase.arena_mut(), typ.node.into(), mixfix, Span::default()).unwrap(),
     );
     runner_phase.context().interp_mut().values = values;
     runner_phase
@@ -146,31 +136,19 @@ fn test_phase_arity_failure_retains_only_completed_phase_state() {
         let mut state = SimState {
             value_ctx: value,
             value_arch: value,
-            txs: vec![Tx {
-                port: 0,
-                packet: "prior packet".to_owned(),
-            }],
+            txs: vec![Tx { port: 0, packet: "prior packet".to_owned() }],
         };
         let error = ebpf::drive_pipe(
             &mut runner_phase.context(),
             &mut state,
-            &Rx {
-                port: 1,
-                packet: "aB".to_owned(),
-            },
+            &Rx { port: 1, packet: "aB".to_owned() },
         )
         .unwrap_err();
         assert!(
             matches!(error, TestError::Extern(ExternError::Value(ValueError::ExpectedCount { expected: count_expected, actual: count_actual })) if count_expected == expected && count_actual == actual)
         );
-        assert_eq!(
-            get::text(runner_phase.arena(), &state.value_ctx).unwrap(),
-            name_ctx
-        );
-        assert_eq!(
-            get::text(runner_phase.arena(), &state.value_arch).unwrap(),
-            name_arch
-        );
+        assert_eq!(get::text(runner_phase.arena(), &state.value_ctx).unwrap(), name_ctx);
+        assert_eq!(get::text(runner_phase.arena(), &state.value_arch).unwrap(), name_arch);
         assert!(state.txs.is_empty());
         assert_eq!(runner_phase.context().interp().calls.last().unwrap(), name);
     }
@@ -182,25 +160,16 @@ fn test_initialization_requires_two_outputs_and_filter_result_is_ignored() {
     let value = runner_phase.context().interp().values[0];
     assert!(matches!(
         ebpf::init_pipe(&mut runner_phase.context(), value),
-        Err(TestError::Extern(ExternError::Value(
-            ValueError::ExpectedCount {
-                expected: 2,
-                actual: 1
-            }
-        )))
+        Err(TestError::Extern(ExternError::Value(ValueError::ExpectedCount {
+            expected: 2,
+            actual: 1
+        })))
     ));
-    let mut state = SimState {
-        value_ctx: value,
-        value_arch: value,
-        txs: vec![],
-    };
+    let mut state = SimState { value_ctx: value, value_arch: value, txs: vec![] };
     ebpf::drive_pipe(
         &mut runner_phase.context(),
         &mut state,
-        &Rx {
-            port: 3,
-            packet: "aB".to_owned(),
-        },
+        &Rx { port: 3, packet: "aB".to_owned() },
     )
     .unwrap();
     assert_eq!(state.txs.len(), 1);

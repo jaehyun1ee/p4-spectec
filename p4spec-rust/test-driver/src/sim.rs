@@ -85,11 +85,7 @@ fn collect(dir: &str, suffix: &str) -> Result<Vec<Input>> {
                 .strip_prefix(dir)
                 .map_err(|error| Error::Invalid(error.to_string()))?
                 .to_owned();
-            Ok(Input {
-                dir: dir.to_owned(),
-                path,
-                patched: false,
-            })
+            Ok(Input { dir: dir.to_owned(), path, patched: false })
         })
         .collect()
 }
@@ -121,10 +117,7 @@ impl Suite {
             "ebpf" => "ebpf_model.p4",
             "psa" => "bmv2/psa.p4",
             _ => {
-                return Err(Error::Invalid(format!(
-                    "unknown architecture {}",
-                    self.arch
-                )));
+                return Err(Error::Invalid(format!("unknown architecture {}", self.arch)));
             }
         };
         let mut inputs_arch = Vec::new();
@@ -172,10 +165,7 @@ impl Results {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("expected")
             .join(format!("sim-{name}.expected"));
-        Self {
-            expected: expect_file![path],
-            records: BTreeMap::new(),
-        }
+        Self { expected: expect_file![path], records: BTreeMap::new() }
     }
 
     fn record(&mut self, pair: &Pair, status: &str, txs: &[Tx]) -> Result<()> {
@@ -190,11 +180,8 @@ impl Results {
                 )));
             }
         }
-        let mut text = format!(
-            "{status}\t{}\t{}\n",
-            pair.path_p4.display(),
-            pair.path_stf.display()
-        );
+        let mut text =
+            format!("{status}\t{}\t{}\n", pair.path_p4.display(), pair.path_stf.display());
         for tx in txs {
             text.push_str(&format!("tx\t{}\t{}\n", tx.port, tx.packet));
         }

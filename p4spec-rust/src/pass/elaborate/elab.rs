@@ -495,12 +495,9 @@ fn infer_bin_exp(
     let exp_l_il = infer_exp(ctx, exp_l)?;
     let exp_r_il = infer_exp(ctx, exp_r)?;
     let candidates_il = match op {
-        el::BinOp::Bool(_) => vec![(
-            il::OpTyp::Bool,
-            il::TypKind::Bool,
-            il::TypKind::Bool,
-            il::TypKind::Bool,
-        )],
+        el::BinOp::Bool(_) => {
+            vec![(il::OpTyp::Bool, il::TypKind::Bool, il::TypKind::Bool, il::TypKind::Bool)]
+        }
         el::BinOp::Num(xl::num::BinOp::Sub) => vec![
             (
                 il::OpTyp::Int,
@@ -963,11 +960,7 @@ fn infer_call_exp(
     let theta = match Theta::from_lists(&tparams_il, &targs_il) {
         Ok(theta) => theta,
         Err(mismatch) => {
-            return fail(arity_error(
-                mismatch.expected,
-                mismatch.actual,
-                id.span.clone(),
-            ));
+            return fail(arity_error(mismatch.expected, mismatch.actual, id.span.clone()));
         }
     };
     let params_il = subst_params(&theta, &params_il)?;
@@ -1272,10 +1265,7 @@ fn elab_cons_exp(
     let typ_tail_kind_il = il::TypKind::Iter(Box::new(typ_base_il), iter_expect_il);
     let typ_tail_il = phrase!(node: typ_tail_kind_il, span: typ_expect_il.span.clone());
     let exp_tail_il = elab_exp(ctx, &typ_tail_il, exp_tail)?;
-    Ok(il::ExpKind::Cons(
-        Box::new(exp_head_il),
-        Box::new(exp_tail_il),
-    ))
+    Ok(il::ExpKind::Cons(Box::new(exp_head_il), Box::new(exp_tail_il)))
 }
 
 // - Concatenation expression elaboration
@@ -1401,11 +1391,7 @@ fn elab_not_exp(ctx: &mut Context, not_typ_il: &il::NotTyp, exp: &el::Exp) -> At
                 phrase!(node: (**not_typ_r_il).clone(), span: not_typ_il.span.clone());
             let not_exp_l_il = elab_not_exp(ctx, &not_typ_l_il, exp_l)?;
             let not_exp_r_il = elab_not_exp(ctx, &not_typ_r_il, exp_r)?;
-            Ok(Mixfix::Infix(
-                Box::new(not_exp_l_il),
-                atom_expect.clone(),
-                Box::new(not_exp_r_il),
-            ))
+            Ok(Mixfix::Infix(Box::new(not_exp_l_il), atom_expect.clone(), Box::new(not_exp_r_il)))
         }
         (
             Mixfix::Brack(atom_expect_l, not_typ_inner_il, atom_expect_r),
@@ -1614,11 +1600,8 @@ fn elab_slice_path(
     let exp_idx_il = elab_exp(ctx, &typ_nat_il, exp_idx)?;
     let typ_nat_il = typ_at(il::TypKind::Num(xl::num::Typ::Nat), &exp_len.span);
     let exp_len_il = elab_exp(ctx, &typ_nat_il, exp_len)?;
-    let path_kind_il = il::PathKind::Slice(
-        Box::new(path_inner_il),
-        Box::new(exp_idx_il),
-        Box::new(exp_len_il),
-    );
+    let path_kind_il =
+        il::PathKind::Slice(Box::new(path_inner_il), Box::new(exp_idx_il), Box::new(exp_len_il));
     Ok(note_phrase! {
         node: path_kind_il,
         note: typ_inner_il.node,
@@ -1906,10 +1889,7 @@ fn elab_rule_prem(ctx: &mut Context, prem: &el::RulePrem) -> Attempt<il::PremKin
         }
     };
     if conditional {
-        Ok(il::PremKind::IfHold(il::IfHoldPrem {
-            id: prem.id.clone(),
-            not_exp: not_exp_il,
-        }))
+        Ok(il::PremKind::IfHold(il::IfHoldPrem { id: prem.id.clone(), not_exp: not_exp_il }))
     } else {
         Ok(il::PremKind::Rule(il::RulePrem {
             id: prem.id.clone(),
@@ -1945,10 +1925,7 @@ fn elab_rule_not_prem(ctx: &mut Context, prem: &el::RuleNotPrem) -> Attempt<il::
             "negated rule premise takes outputs",
         );
     }
-    Ok(il::PremKind::IfNotHold(il::IfNotHoldPrem {
-        id: prem.id.clone(),
-        not_exp: not_exp_il,
-    }))
+    Ok(il::PremKind::IfNotHold(il::IfNotHoldPrem { id: prem.id.clone(), not_exp: not_exp_il }))
 }
 
 // - Conditional premise elaboration
@@ -1970,15 +1947,8 @@ fn elab_iter_prem(ctx: &mut Context, prem: &el::IterPrem) -> Attempt<il::PremKin
             "cannot iterate variable or otherwise premise",
         );
     };
-    let prem_iter_il = il::PremIter {
-        iter: prem.iter,
-        vars_bound: vec![],
-        vars_bind: vec![],
-    };
-    Ok(il::PremKind::Iter(il::IterPrem {
-        prem: Box::new(prem_inner_il),
-        prem_iter: prem_iter_il,
-    }))
+    let prem_iter_il = il::PremIter { iter: prem.iter, vars_bound: vec![], vars_bind: vec![] };
+    Ok(il::PremKind::Iter(il::IterPrem { prem: Box::new(prem_inner_il), prem_iter: prem_iter_il }))
 }
 
 // - Debug premise elaboration
@@ -2012,11 +1982,7 @@ fn elab_rule(
     ctx_local.add_frees(&frees);
     let not_exp_il = finish(elab_not_exp(&mut ctx_local, not_typ_il, exp))?;
     let (prems_il, is_else) = finish(elab_prems(&mut ctx_local, prems, &id_rule.span))?;
-    let rule_kind_il = il::RuleKind {
-        id: id_rule.clone(),
-        not_exp: not_exp_il,
-        prems: prems_il,
-    };
+    let rule_kind_il = il::RuleKind { id: id_rule.clone(), not_exp: not_exp_il, prems: prems_il };
     let rule_il = phrase!(node: rule_kind_il, span: rule.span.clone());
     Ok((rule_il, is_else))
 }
@@ -2066,12 +2032,8 @@ fn elab_clause(
 ) -> Result<(il::Clause, bool), ElabError> {
     let span = &def.span;
     let def = def.node;
-    let il::DefinedFunc {
-        tparams: tparams_expect_il,
-        params: params_il,
-        typ: typ_ret_il,
-        ..
-    } = ctx.find_defined_func(&def.id)?;
+    let il::DefinedFunc { tparams: tparams_expect_il, params: params_il, typ: typ_ret_il, .. } =
+        ctx.find_defined_func(&def.id)?;
     if def.tparams.len() != tparams_expect_il.len()
         || def
             .tparams
@@ -2095,11 +2057,7 @@ fn elab_clause(
     let args_il = finish(elab_args(&mut ctx_local, &params_il, &def.args, true, span))?;
     let (prems_il, is_else) = finish(elab_prems(&mut ctx_local, &def.prems, span))?;
     let exp_il = finish(elab_exp(&mut ctx_local, &typ_ret_il, &def.exp))?;
-    let clause_kind_il = il::ClauseKind {
-        args: args_il,
-        exp: exp_il,
-        prems: prems_il,
-    };
+    let clause_kind_il = il::ClauseKind { args: args_il, exp: exp_il, prems: prems_il };
     let clause_il = phrase!(node: clause_kind_il, span: span.clone());
     Ok((clause_il, is_else))
 }
@@ -2203,10 +2161,7 @@ fn elab_extern_syntax_def(
     let typ_kind_il = il::TypKind::Var(def.id.clone(), vec![]);
     let typ_il = phrase!(node: typ_kind_il, span: def.id.span.clone());
     ctx.add_metavar(def.id.clone(), typ_il)?;
-    let extern_typ_il = il::ExternTyp {
-        id: def.id,
-        hints: def.hints,
-    };
+    let extern_typ_il = il::ExternTyp { id: def.id, hints: def.hints };
     Ok(il::DefKind::Typ(il::TypDef::Extern(extern_typ_il)))
 }
 
@@ -2277,15 +2232,9 @@ fn elab_typ_def(ctx: &mut Context, def: el::TypDef) -> Result<il::DefKind, ElabE
         elab_def_typ(&ctx_local, &def.id, &def.tparams, &def.def_typ)?
     };
     ctx.update_typdef(&def.id, typdef)?;
-    let defined_typ_il = il::DefinedTyp {
-        id: def.id,
-        tparams: def.tparams,
-        def_typ: def_typ_il,
-        hints: def.hints,
-    };
-    Ok(il::DefKind::Typ(il::TypDef::Defined(Box::new(
-        defined_typ_il,
-    ))))
+    let defined_typ_il =
+        il::DefinedTyp { id: def.id, tparams: def.tparams, def_typ: def_typ_il, hints: def.hints };
+    Ok(il::DefKind::Typ(il::TypDef::Defined(Box::new(defined_typ_il))))
 }
 
 // - Variable definitions
@@ -2307,11 +2256,7 @@ fn elab_var_def(ctx: &mut Context, def: el::VarDef) -> Result<il::DefKind, ElabE
     }
     let typ_il = elab_plain_typ(ctx, &def.plain_typ)?;
     ctx.add_metavar(def.id.clone(), typ_il.clone())?;
-    let var_def_il = il::VarDef {
-        id: def.id,
-        typ: typ_il,
-        hints: def.hints,
-    };
+    let var_def_il = il::VarDef { id: def.id, typ: typ_il, hints: def.hints };
     Ok(il::DefKind::Var(var_def_il))
 }
 
@@ -2334,11 +2279,7 @@ fn fetch_input_hint(
         ));
     };
     input::validate(&input_hint, arity).map_err(|error| {
-        ElabError::new(
-            ElabErrorKind::InvalidInputHint,
-            span.clone(),
-            error.to_string(),
-        )
+        ElabError::new(ElabErrorKind::InvalidInputHint, span.clone(), error.to_string())
     })?;
     Ok(input_hint)
 }
@@ -2353,16 +2294,10 @@ fn elab_extern_rel_def(
     let typ = el::Typ::Notation(def.not_typ.clone());
     let not_typ_il = elab_not_typ(ctx, &typ)?;
     let input_hint = fetch_input_hint(span, &not_typ_il, &def.hints)?;
-    let extern_rel_il = il::ExternRel {
-        id: def.id,
-        not_typ: not_typ_il,
-        input_hint,
-        hints: def.hints,
-    };
+    let extern_rel_il =
+        il::ExternRel { id: def.id, not_typ: not_typ_il, input_hint, hints: def.hints };
     ctx.add_extern_rel(extern_rel_il.clone())?;
-    Ok(il::DefKind::Rel(il::RelDef::Extern(Box::new(
-        extern_rel_il,
-    ))))
+    Ok(il::DefKind::Rel(il::RelDef::Extern(Box::new(extern_rel_il))))
 }
 
 fn elab_rel_def(ctx: &mut Context, def: el::RelDef, span: &Span) -> Result<il::DefKind, ElabError> {
@@ -2378,9 +2313,7 @@ fn elab_rel_def(ctx: &mut Context, def: el::RelDef, span: &Span) -> Result<il::D
         hints: def.hints,
     };
     ctx.add_defined_rel(defined_rel_il.clone())?;
-    Ok(il::DefKind::Rel(il::RelDef::Defined(Box::new(
-        defined_rel_il,
-    ))))
+    Ok(il::DefKind::Rel(il::RelDef::Defined(Box::new(defined_rel_il))))
 }
 
 // - Rule group definitions
@@ -2423,9 +2356,7 @@ fn elab_extern_dec_def(ctx: &mut Context, def: el::ExternDecDef) -> Result<il::D
         hints: def.hints,
     };
     ctx.add_extern_func(extern_func_il.clone())?;
-    Ok(il::DefKind::MetaFunc(il::MetaFuncDef::Extern(
-        extern_func_il,
-    )))
+    Ok(il::DefKind::MetaFunc(il::MetaFuncDef::Extern(extern_func_il)))
 }
 
 fn elab_builtin_dec_def(
@@ -2452,9 +2383,7 @@ fn elab_builtin_dec_def(
         hints: def.hints,
     };
     ctx.add_builtin_func(builtin_func_il.clone())?;
-    Ok(il::DefKind::MetaFunc(il::MetaFuncDef::Builtin(
-        builtin_func_il,
-    )))
+    Ok(il::DefKind::MetaFunc(il::MetaFuncDef::Builtin(builtin_func_il)))
 }
 
 fn elab_table_dec_def(
@@ -2519,9 +2448,7 @@ fn elab_func_dec_def(ctx: &mut Context, def: el::FuncDecDef) -> Result<il::DefKi
         hints: def.hints,
     };
     ctx.add_defined_func(defined_func_il.clone())?;
-    Ok(il::DefKind::MetaFunc(il::MetaFuncDef::Defined(Box::new(
-        defined_func_il,
-    ))))
+    Ok(il::DefKind::MetaFunc(il::MetaFuncDef::Defined(Box::new(defined_func_il))))
 }
 
 // - Table function definitions
@@ -2550,13 +2477,7 @@ fn elab_table_def(ctx: &mut Context, def: &el::TableDef) -> Result<(), ElabError
             ctx_local.reset_frees();
             let frees = row.free();
             ctx_local.add_frees(&frees);
-            let args_il = finish(elab_args(
-                &mut ctx_local,
-                &params_il,
-                &args,
-                true,
-                &row.span,
-            ))?;
+            let args_il = finish(elab_args(&mut ctx_local, &params_il, &args, true, &row.span))?;
             let exp_body_il = finish(elab_exp(&mut ctx_local, &typ_il, exp_body))?;
             (args_il, exp_body_il)
         };

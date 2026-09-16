@@ -8,10 +8,8 @@ use p4spec_rust::{
 };
 
 fn id(name: &str, line: i64) -> p4spec_rust::lang::il::ast::Id {
-    let span = Span::new(
-        Position::new("vars.watsup", line, 0),
-        Position::new("vars.watsup", line, 1),
-    );
+    let span =
+        Span::new(Position::new("vars.watsup", line, 0), Position::new("vars.watsup", line, 1));
     phrase!(node: name.to_owned(), span: span)
 }
 

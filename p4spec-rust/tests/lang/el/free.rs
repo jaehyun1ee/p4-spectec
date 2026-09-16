@@ -6,10 +6,7 @@ fn test_free_expression_ids_ignore_source_spans_and_render_in_source_order() {
         ExpKind::Bin(
             Box::new(exp(ExpKind::Var(id("left", "left.watsup")), "left.watsup")),
             BinOp::Num(p4spec_rust::lang::xl::num::BinOp::Add),
-            Box::new(exp(
-                ExpKind::Var(id("right", "right.watsup")),
-                "right.watsup",
-            )),
+            Box::new(exp(ExpKind::Var(id("right", "right.watsup")), "right.watsup")),
         ),
         "root.watsup",
     );
@@ -19,12 +16,7 @@ fn test_free_expression_ids_ignore_source_spans_and_render_in_source_order() {
 }
 #[test]
 fn test_free_collection_covers_paths_calls_premises_and_definition_bodies() {
-    let variable = |name| {
-        exp(
-            ExpKind::Var(id(name, "different-source.watsup")),
-            "expr.watsup",
-        )
-    };
+    let variable = |name| exp(ExpKind::Var(id(name, "different-source.watsup")), "expr.watsup");
     let path = p4spec_rust::phrase! { node: ast::PathKind::Slice(
         Box::new(p4spec_rust::phrase! {
             node:
@@ -57,10 +49,8 @@ fn test_free_collection_covers_paths_calls_premises_and_definition_bodies() {
         ),
         "call.watsup",
     );
-    let exp_upd = exp(
-        ExpKind::Upd(Box::new(call), path, Box::new(variable("field"))),
-        "update.watsup",
-    );
+    let exp_upd =
+        exp(ExpKind::Upd(Box::new(call), path, Box::new(variable("field"))), "update.watsup");
     let iteration = prem(ast::PremKind::Iter(ast::IterPrem {
         prem: Box::new(prem(ast::PremKind::Var(ast::VarPrem {
             id: id("bound", "prem.watsup"),
@@ -90,9 +80,7 @@ fn test_free_collection_covers_paths_calls_premises_and_definition_bodies() {
             span: span("def.watsup"),
         }],
         exp: variable("body"),
-        prems: vec![prem(ast::PremKind::Debug(ast::DebugPrem {
-            exp: variable("debug"),
-        }))],
+        prems: vec![prem(ast::PremKind::Debug(ast::DebugPrem { exp: variable("debug") }))],
     }));
 
     assert_eq!(
@@ -102,9 +90,7 @@ fn test_free_collection_covers_paths_calls_premises_and_definition_bodies() {
             rules: vec![rule],
         }))
         .free(),
-        ids(&[
-            "argument", "bound", "field", "guard", "high", "index", "low"
-        ])
+        ids(&["argument", "bound", "field", "guard", "high", "index", "low"])
     );
     assert_eq!(def_func.free(), ids(&["argument", "body", "debug"]));
 }

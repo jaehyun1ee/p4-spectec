@@ -131,11 +131,7 @@ impl<'a> EquivalenceTable<'a> {
                 self.classes.insert(0, class);
             }
             (Some(index), None) | (None, Some(index)) => {
-                let condition_new = if idx_l.is_some() {
-                    condition_r
-                } else {
-                    condition_l
-                };
+                let condition_new = if idx_l.is_some() { condition_r } else { condition_l };
                 let mut conditions = self.take_conditions(kind, index);
                 conditions.insert(0, condition_new);
                 let class = Class::new(kind, conditions);
@@ -244,15 +240,8 @@ fn iterate_prem(iter: ast::Iter, vars: &[ast::Var], prem_al: ast::Prem) -> Optio
         return None;
     }
     let span = prem_al.span.clone();
-    let prem_iter = ast::PremIter {
-        iter,
-        vars_bound,
-        vars_bind: vec![],
-    };
-    let prem_kind = ast::PremKind::Iter(ast::IterPrem {
-        prem: Box::new(prem_al),
-        prem_iter,
-    });
+    let prem_iter = ast::PremIter { iter, vars_bound, vars_bind: vec![] };
+    let prem_kind = ast::PremKind::Iter(ast::IterPrem { prem: Box::new(prem_al), prem_iter });
     let prem_al = phrase!(node: prem_kind, span: span);
     Some(prem_al)
 }
@@ -532,43 +521,28 @@ fn collect_prem(prem_al: &ast::Prem) -> Collected {
 
 fn collect_rule_prem(rule_prem: &ast::RulePrem) -> Collected {
     let prems_insert = collect_exps(rule_prem.not_exp.args());
-    Collected {
-        prems_must: vec![],
-        prems_insert,
-    }
+    Collected { prems_must: vec![], prems_insert }
 }
 
 fn collect_if_prem(if_prem: &ast::IfPrem) -> Collected {
     let prems_insert = collect_exp(&if_prem.exp);
-    Collected {
-        prems_must: vec![],
-        prems_insert,
-    }
+    Collected { prems_must: vec![], prems_insert }
 }
 
 fn collect_if_hold_prem(if_prem: &ast::IfHoldPrem) -> Collected {
     let prems_insert = collect_exps(if_prem.not_exp.args());
-    Collected {
-        prems_must: vec![],
-        prems_insert,
-    }
+    Collected { prems_must: vec![], prems_insert }
 }
 
 fn collect_if_not_hold_prem(if_prem: &ast::IfNotHoldPrem) -> Collected {
     let prems_insert = collect_exps(if_prem.not_exp.args());
-    Collected {
-        prems_must: vec![],
-        prems_insert,
-    }
+    Collected { prems_must: vec![], prems_insert }
 }
 
 fn collect_let_prem(let_prem: &ast::LetPrem) -> Collected {
     let prems_must = collect_exp(&let_prem.exp_l);
     let prems_insert = collect_exp(&let_prem.exp_r);
-    Collected {
-        prems_must,
-        prems_insert,
-    }
+    Collected { prems_must, prems_insert }
 }
 
 fn collect_iter_prem(iter_prem: &ast::IterPrem) -> Collected {
@@ -587,10 +561,7 @@ fn collect_iter_prem(iter_prem: &ast::IterPrem) -> Collected {
 
 fn collect_debug_prem(debug_prem: &ast::DebugPrem) -> Collected {
     let prems_insert = collect_exp(&debug_prem.exp);
-    Collected {
-        prems_must: vec![],
-        prems_insert,
-    }
+    Collected { prems_must: vec![], prems_insert }
 }
 
 // == Guard insertion
@@ -609,12 +580,8 @@ fn insert_prem(
     prem_al: ast::Prem,
 ) {
     let collected = collect_prem(&prem_al);
-    let mut prems_insert = filter_prems_insert(
-        prems_base,
-        prems_derived,
-        prems_output,
-        collected.prems_insert,
-    );
+    let mut prems_insert =
+        filter_prems_insert(prems_base, prems_derived, prems_output, collected.prems_insert);
     prems_insert.push(prem_al);
     prems_derived.extend(collected.prems_must);
     prems_output.extend(prems_insert);
@@ -626,10 +593,7 @@ fn insert_prems(prems_base: &[&[ast::Prem]], prems_al: Vec<ast::Prem>) -> Insert
     for prem_al in prems_al {
         insert_prem(prems_base, &mut prems_derived, &mut prems_output, prem_al);
     }
-    InsertedPrems {
-        derived: prems_derived,
-        output: prems_output,
-    }
+    InsertedPrems { derived: prems_derived, output: prems_output }
 }
 
 // - Rule groups

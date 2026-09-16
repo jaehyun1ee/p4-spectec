@@ -8,10 +8,7 @@ fn test_successive_extracts_and_short_rejection_preserve_state() {
         .extract(&mut runner.context(), value_ctx, value_arch)
         .unwrap();
     assert_eq!(output_a.0.idx, 4);
-    assert_eq!(
-        bits(runner.arena(), &output_a.1),
-        [true, false, true, false]
-    );
+    assert_eq!(bits(runner.arena(), &output_a.1), [true, false, true, false]);
     let output_b = output_a
         .0
         .extract(&mut runner.context(), output_a.1, value_arch)
@@ -32,10 +29,7 @@ fn test_successive_extracts_and_short_rejection_preserve_state() {
         .iter()
         .find(|(name, _)| name == "write_value_from_bits")
         .unwrap();
-    assert_eq!(
-        num::to_int(get::num(ctx.arena(), &values[1]).unwrap()).to_string(),
-        "0"
-    );
+    assert_eq!(num::to_int(get::num(ctx.arena(), &values[1]).unwrap()).to_string(), "0");
     assert!(
         matches!(ctx.arena().typ(&values[2]).as_ref(), TypKind::Iter(typ, _) if matches!(&typ.node, TypKind::Var(id, _) if id.node == "bit"))
     );
@@ -65,15 +59,7 @@ fn test_lookahead_keeps_cursor_and_defaults_before_short_check() {
         .iter()
         .map(|(name, _)| name.clone())
         .collect();
-    assert_eq!(
-        names,
-        [
-            "find_type_e",
-            "subst_type_e",
-            "sizeof_maxSizeInBits'",
-            "default"
-        ]
-    );
+    assert_eq!(names, ["find_type_e", "subst_type_e", "sizeof_maxSizeInBits'", "default"]);
 }
 
 #[test]
@@ -85,11 +71,9 @@ fn test_variable_extract_checks_alignment_then_packet_then_header() {
         .interp_mut()
         .values_var
         .insert("variableFieldSizeInBits".to_owned(), value_size);
-    for (alignment, packet, signal) in [
-        (1, "A", "ParserInvalidArgument"),
-        (0, "A", "PacketTooShort"),
-        (0, "AB", "HeaderTooShort"),
-    ] {
+    for (alignment, packet, signal) in
+        [(1, "A", "ParserInvalidArgument"), (0, "A", "PacketTooShort"), (0, "AB", "HeaderTooShort")]
+    {
         runner.context().interp_mut().alignment = alignment;
         let pkt = PacketIn::init(packet).unwrap();
         let output = pkt
@@ -113,10 +97,7 @@ fn test_variable_extract_checks_alignment_then_packet_then_header() {
         .rev()
         .find(|(name, _)| name == "write_value_from_bits")
         .unwrap();
-    assert_eq!(
-        num::to_int(get::num(ctx.arena(), &values[1]).unwrap()).to_string(),
-        "8"
-    );
+    assert_eq!(num::to_int(get::num(ctx.arena(), &values[1]).unwrap()).to_string(), "8");
 }
 
 #[test]
@@ -129,10 +110,7 @@ fn test_malformed_or_failed_write_does_not_install_partial_packet_or_context() {
         .unwrap_err();
     assert!(matches!(
         error,
-        TestError::Extern(ExternError::Value(ValueError::ExpectedCount {
-            expected: 1,
-            actual: 2
-        }))
+        TestError::Extern(ExternError::Value(ValueError::ExpectedCount { expected: 1, actual: 2 }))
     ));
     assert_eq!(pkt.idx, 0);
     assert_eq!(get::text(runner.arena(), &value_ctx), Ok("ctx"));
@@ -160,11 +138,7 @@ fn test_packet_json_preserves_fields_and_payload() {
     assert_eq!(pkt_short.bits.len(), 4);
     assert_eq!(pkt_short.payload().unwrap(), [true, false]);
     for (idx, len) in [(5, 4), (0, 5), (0, usize::MAX)] {
-        let pkt = PacketIn {
-            idx,
-            len,
-            ..pkt.clone()
-        };
+        let pkt = PacketIn { idx, len, ..pkt.clone() };
         let json = serde_json::to_value(&pkt).unwrap();
         assert_eq!(serde_json::from_value::<PacketIn>(json).unwrap(), pkt);
     }

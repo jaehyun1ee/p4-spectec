@@ -28,10 +28,7 @@ pub fn preprocess(includes: &[PathBuf], path: impl AsRef<Path>) -> Result<String
     command.arg(path);
     let output = command.output();
     let output = output.map_err(|error| {
-        let kind = P4ErrorKind::Preprocessor {
-            status: None,
-            stderr: error.to_string(),
-        };
+        let kind = P4ErrorKind::Preprocessor { status: None, stderr: error.to_string() };
         P4Error::new(kind, span_file(path))
     })?;
     if !output.status.success() {
@@ -43,10 +40,8 @@ pub fn preprocess(includes: &[PathBuf], path: impl AsRef<Path>) -> Result<String
     }
     let source = String::from_utf8(output.stdout);
     source.map_err(|error| {
-        let kind = P4ErrorKind::Preprocessor {
-            status: output.status.code(),
-            stderr: error.to_string(),
-        };
+        let kind =
+            P4ErrorKind::Preprocessor { status: output.status.code(), stderr: error.to_string() };
         P4Error::new(kind, span_file(path))
     })
 }

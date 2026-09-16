@@ -23,16 +23,8 @@ use crate::{
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum Overlap {
     Identical,
-    Disjoint {
-        exp: Exp,
-        guard_a: Guard,
-        guard_b: Guard,
-    },
-    Partition {
-        exp: Exp,
-        guard_a: Guard,
-        guard_b: Guard,
-    },
+    Disjoint { exp: Exp, guard_a: Guard, guard_b: Guard },
+    Partition { exp: Exp, guard_a: Guard, guard_b: Guard },
     Fuzzy,
 }
 
@@ -77,22 +69,15 @@ pub(crate) fn exp_as_guard(exp_target: &Exp, exp_cond: &Exp) -> Option<Guard> {
 pub(crate) fn guard_as_exp(exp_target: &Exp, guard: &Guard) -> Exp {
     let exp_kind = match guard {
         Guard::Bool(true) => return exp_target.clone(),
-        Guard::Bool(false) => ExpKind::Un(
-            UnOp::Bool(boolop::UnOp::Not),
-            OpTyp::Bool,
-            Box::new(exp_target.clone()),
-        ),
-        Guard::Cmp(op, optyp, exp) => ExpKind::Cmp(
-            *op,
-            *optyp,
-            Box::new(exp_target.clone()),
-            Box::new(exp.clone()),
-        ),
-        Guard::Sub(typ, subcheck) => ExpKind::Sub(
-            Box::new(exp_target.clone()),
-            Box::new(typ.clone()),
-            subcheck.clone(),
-        ),
+        Guard::Bool(false) => {
+            ExpKind::Un(UnOp::Bool(boolop::UnOp::Not), OpTyp::Bool, Box::new(exp_target.clone()))
+        }
+        Guard::Cmp(op, optyp, exp) => {
+            ExpKind::Cmp(*op, *optyp, Box::new(exp_target.clone()), Box::new(exp.clone()))
+        }
+        Guard::Sub(typ, subcheck) => {
+            ExpKind::Sub(Box::new(exp_target.clone()), Box::new(typ.clone()), subcheck.clone())
+        }
         Guard::Match(pattern) => ExpKind::Match(Box::new(exp_target.clone()), pattern.clone()),
         Guard::Mem(exp) => ExpKind::Mem(Box::new(exp_target.clone()), Box::new(exp.clone())),
     };
@@ -348,44 +333,26 @@ fn overlap_match_exp(exp: &Exp, pattern_a: &Pattern, pattern_b: &Pattern) -> Ove
     let guard_b = Guard::Match(pattern_b.clone());
     match (pattern_a, pattern_b) {
         // A vs B -> Disjoint
-        (Pattern::Case(_), Pattern::Case(_)) => Overlap::Disjoint {
-            exp: exp.clone(),
-            guard_a,
-            guard_b,
-        },
+        (Pattern::Case(_), Pattern::Case(_)) => {
+            Overlap::Disjoint { exp: exp.clone(), guard_a, guard_b }
+        }
         // Cons vs Fixed(0) -> Partition; Cons vs Fixed(2) -> Disjoint
         (Pattern::List(ListPattern::Cons), Pattern::List(ListPattern::Fixed(num)))
         | (Pattern::List(ListPattern::Fixed(num)), Pattern::List(ListPattern::Cons)) => {
             if *num == 0 {
-                Overlap::Partition {
-                    exp: exp.clone(),
-                    guard_a,
-                    guard_b,
-                }
+                Overlap::Partition { exp: exp.clone(), guard_a, guard_b }
             } else {
-                Overlap::Disjoint {
-                    exp: exp.clone(),
-                    guard_a,
-                    guard_b,
-                }
+                Overlap::Disjoint { exp: exp.clone(), guard_a, guard_b }
             }
         }
         // Cons vs Nil -> Partition
         (Pattern::List(ListPattern::Cons), Pattern::List(ListPattern::Nil))
         | (Pattern::List(ListPattern::Nil), Pattern::List(ListPattern::Cons)) => {
-            Overlap::Partition {
-                exp: exp.clone(),
-                guard_a,
-                guard_b,
-            }
+            Overlap::Partition { exp: exp.clone(), guard_a, guard_b }
         }
         // Fixed(1) vs Fixed(2) -> Disjoint
         (Pattern::List(ListPattern::Fixed(_)), Pattern::List(ListPattern::Fixed(_))) => {
-            Overlap::Disjoint {
-                exp: exp.clone(),
-                guard_a,
-                guard_b,
-            }
+            Overlap::Disjoint { exp: exp.clone(), guard_a, guard_b }
         }
         // Fixed(0) vs Nil -> Identical; Fixed(2) vs Nil -> Disjoint
         (Pattern::List(ListPattern::Fixed(num)), Pattern::List(ListPattern::Nil))
@@ -393,20 +360,14 @@ fn overlap_match_exp(exp: &Exp, pattern_a: &Pattern, pattern_b: &Pattern) -> Ove
             if *num == 0 {
                 Overlap::Identical
             } else {
-                Overlap::Disjoint {
-                    exp: exp.clone(),
-                    guard_a,
-                    guard_b,
-                }
+                Overlap::Disjoint { exp: exp.clone(), guard_a, guard_b }
             }
         }
         // Some vs None -> Partition
         (Pattern::Opt(OptPattern::Some), Pattern::Opt(OptPattern::None))
-        | (Pattern::Opt(OptPattern::None), Pattern::Opt(OptPattern::Some)) => Overlap::Partition {
-            exp: exp.clone(),
-            guard_a,
-            guard_b,
-        },
+        | (Pattern::Opt(OptPattern::None), Pattern::Opt(OptPattern::Some)) => {
+            Overlap::Partition { exp: exp.clone(), guard_a, guard_b }
+        }
         // Case(A) vs Opt(Some) -> Fuzzy
         _ => Overlap::Fuzzy,
     }
@@ -454,15 +415,9 @@ fn overlap_match_sub_exp(
     // x matches C vs x <: T keeps Match first and Sub second
     let overlap = overlap_sub_match_exp(tdenv, exp, typ, subcheck, pattern)?;
     Ok(match overlap {
-        Overlap::Disjoint {
-            exp,
-            guard_a,
-            guard_b,
-        } => Overlap::Disjoint {
-            exp,
-            guard_a: guard_b,
-            guard_b: guard_a,
-        },
+        Overlap::Disjoint { exp, guard_a, guard_b } => {
+            Overlap::Disjoint { exp, guard_a: guard_b, guard_b: guard_a }
+        }
         overlap => overlap,
     })
 }
@@ -527,10 +482,7 @@ fn disjoint_exps_literal(
 ) -> Result<bool, StructureError> {
     if exps_a.len() != exps_b.len() {
         return Err(StructureError::new(
-            StructureErrorKind::ArityMismatch {
-                expected: exps_a.len(),
-                actual: exps_b.len(),
-            },
+            StructureErrorKind::ArityMismatch { expected: exps_a.len(), actual: exps_b.len() },
             span.clone(),
         ));
     }

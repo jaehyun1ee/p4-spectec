@@ -76,11 +76,7 @@ pub enum Entrypoint {
 
 /// Processing context per packet
 #[derive(Clone, Debug, PartialEq, Eq, SerializeState, DeserializeState)]
-#[serde(
-    deny_unknown_fields,
-    serialize_state = "EncodeContext<'arena>",
-    ser_parameters = "'arena"
-)]
+#[serde(deny_unknown_fields, serialize_state = "EncodeContext<'arena>", ser_parameters = "'arena")]
 #[serde(deserialize_state = "DecodeContext<'de>")]
 pub struct Packet {
     /// Evaluation context

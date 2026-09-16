@@ -258,11 +258,9 @@ impl<T> Mixfix<T> {
         match self {
             Self::Arg(arg) => Mixfix::Arg(map_arg(arg)),
             Self::Atom(atom) => Mixfix::Atom(atom.clone()),
-            Self::Brack(atom_l, mixfix, atom_r) => Mixfix::Brack(
-                atom_l.clone(),
-                Box::new(mixfix.map_inner(map_arg)),
-                atom_r.clone(),
-            ),
+            Self::Brack(atom_l, mixfix, atom_r) => {
+                Mixfix::Brack(atom_l.clone(), Box::new(mixfix.map_inner(map_arg)), atom_r.clone())
+            }
             Self::Infix(mixfix_l, atom, mixfix_r) => Mixfix::Infix(
                 Box::new(mixfix_l.map_inner(map_arg)),
                 atom.clone(),

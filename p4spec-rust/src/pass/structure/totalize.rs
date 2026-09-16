@@ -60,38 +60,18 @@ fn totalize_instr_kind(tdenv: &TDEnv, instr_kind: InstrKind) -> Result<InstrKind
 // - If instruction
 
 fn totalize_if_instr(tdenv: &TDEnv, instr: IfInstr) -> Result<InstrKind, StructureError> {
-    let IfInstr {
-        exp,
-        iter_exps,
-        block,
-    } = instr;
+    let IfInstr { exp, iter_exps, block } = instr;
     let block = totalize_block(tdenv, block)?;
-    Ok(InstrKind::If(IfInstr {
-        exp,
-        iter_exps,
-        block,
-    }))
+    Ok(InstrKind::If(IfInstr { exp, iter_exps, block }))
 }
 
 // - Hold instruction
 
 fn totalize_hold_instr(tdenv: &TDEnv, instr: HoldInstr) -> Result<InstrKind, StructureError> {
-    let HoldInstr {
-        id,
-        not_exp,
-        iter_exps,
-        block_hold,
-        block_not_hold,
-    } = instr;
+    let HoldInstr { id, not_exp, iter_exps, block_hold, block_not_hold } = instr;
     let block_hold = totalize_block(tdenv, block_hold)?;
     let block_not_hold = totalize_block(tdenv, block_not_hold)?;
-    Ok(InstrKind::Hold(HoldInstr {
-        id,
-        not_exp,
-        iter_exps,
-        block_hold,
-        block_not_hold,
-    }))
+    Ok(InstrKind::Hold(HoldInstr { id, not_exp, iter_exps, block_hold, block_not_hold }))
 }
 
 // - Case instruction
@@ -125,57 +105,25 @@ fn totalize_case_instr(tdenv: &TDEnv, instr: CaseInstr) -> Result<InstrKind, Str
 // - Group instruction
 
 fn totalize_group_instr(tdenv: &TDEnv, instr: GroupInstr) -> Result<InstrKind, StructureError> {
-    let GroupInstr {
-        id,
-        rel_signature,
-        exps,
-        block,
-    } = instr;
+    let GroupInstr { id, rel_signature, exps, block } = instr;
     let block = totalize_block(tdenv, block)?;
-    Ok(InstrKind::Group(GroupInstr {
-        id,
-        rel_signature,
-        exps,
-        block,
-    }))
+    Ok(InstrKind::Group(GroupInstr { id, rel_signature, exps, block }))
 }
 
 // - Let instruction
 
 fn totalize_let_instr(tdenv: &TDEnv, instr: LetInstr) -> Result<InstrKind, StructureError> {
-    let LetInstr {
-        exp_l,
-        exp_r,
-        iter_instrs,
-        block,
-    } = instr;
+    let LetInstr { exp_l, exp_r, iter_instrs, block } = instr;
     let block = totalize_block(tdenv, block)?;
-    Ok(InstrKind::Let(LetInstr {
-        exp_l,
-        exp_r,
-        iter_instrs,
-        block,
-    }))
+    Ok(InstrKind::Let(LetInstr { exp_l, exp_r, iter_instrs, block }))
 }
 
 // - Rule instruction
 
 fn totalize_rule_instr(tdenv: &TDEnv, instr: RuleInstr) -> Result<InstrKind, StructureError> {
-    let RuleInstr {
-        id,
-        not_exp,
-        input_hint,
-        iter_instrs,
-        block,
-    } = instr;
+    let RuleInstr { id, not_exp, input_hint, iter_instrs, block } = instr;
     let block = totalize_block(tdenv, block)?;
-    Ok(InstrKind::Rule(RuleInstr {
-        id,
-        not_exp,
-        input_hint,
-        iter_instrs,
-        block,
-    }))
+    Ok(InstrKind::Rule(RuleInstr { id, not_exp, input_hint, iter_instrs, block }))
 }
 
 // == Entry point

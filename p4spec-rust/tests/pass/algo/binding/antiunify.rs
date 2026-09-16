@@ -127,16 +127,8 @@ fn test_failed_antiunification_preserves_free_identifiers() {
     };
     let typ_kind_a = ast::TypKind::Tuple(vec![typ::make::bool(), typ::make::bool()]);
     let typ_kind_b = ast::TypKind::Tuple(vec![typ::make::bool(), typ_nat]);
-    let exp_tuple_a = exp(
-        ast::ExpKind::Tuple(vec![exp_bool_a.clone(), exp_bool_a]),
-        typ_kind_a,
-        1,
-    );
-    let exp_tuple_b = exp(
-        ast::ExpKind::Tuple(vec![exp_bool_b, exp_nat]),
-        typ_kind_b,
-        5,
-    );
+    let exp_tuple_a = exp(ast::ExpKind::Tuple(vec![exp_bool_a.clone(), exp_bool_a]), typ_kind_a, 1);
+    let exp_tuple_b = exp(ast::ExpKind::Tuple(vec![exp_bool_b, exp_nat]), typ_kind_b, 5);
     let mut ctx = Context::new();
     ctx.add_free(id("reserved", 1));
     let ids_free = ctx.frees.clone();
@@ -164,16 +156,8 @@ fn test_nested_type_error_keeps_its_category_and_span() {
     let exp_bool = exp(ast::ExpKind::Bool(true), ast::TypKind::Bool, 7);
     let typ_kind_a = ast::TypKind::Tuple(vec![typ::make::bool(), typ_missing]);
     let typ_kind_b = ast::TypKind::Tuple(vec![typ::make::bool(), typ::make::bool()]);
-    let exp_tuple_a = exp(
-        ast::ExpKind::Tuple(vec![exp_bool_a, exp_missing]),
-        typ_kind_a,
-        1,
-    );
-    let exp_tuple_b = exp(
-        ast::ExpKind::Tuple(vec![exp_bool_b, exp_bool]),
-        typ_kind_b,
-        5,
-    );
+    let exp_tuple_a = exp(ast::ExpKind::Tuple(vec![exp_bool_a, exp_missing]), typ_kind_a, 1);
+    let exp_tuple_b = exp(ast::ExpKind::Tuple(vec![exp_bool_b, exp_bool]), typ_kind_b, 5);
     let mut ctx = Context::new();
     let ids_free = ctx.frees.clone();
 

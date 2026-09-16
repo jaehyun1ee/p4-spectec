@@ -93,21 +93,11 @@ fn test_syntax_equality_distinguishes_recursive_operands_variants_and_collection
         vars_bound,
         vars_bind,
     };
-    let var_x = il::ast::Var {
-        id: id("x"),
-        typ: typ(),
-        iters: Vec::new(),
-    };
-    let var_y = il::ast::Var {
-        id: id("y"),
-        typ: typ(),
-        iters: Vec::new(),
-    };
+    let var_x = il::ast::Var { id: id("x"), typ: typ(), iters: Vec::new() };
+    let var_y = il::ast::Var { id: id("y"), typ: typ(), iters: Vec::new() };
     assert!(
-        prem_iter(vec![var_x.clone(), var_y.clone()], vec![var_x.clone()]).syntax_eq(&prem_iter(
-            vec![var_y.clone(), var_x.clone()],
-            vec![var_x.clone()]
-        ))
+        prem_iter(vec![var_x.clone(), var_y.clone()], vec![var_x.clone()])
+            .syntax_eq(&prem_iter(vec![var_y.clone(), var_x.clone()], vec![var_x.clone()]))
     );
     assert!(
         !prem_iter(vec![var_x.clone()], vec![var_x.clone()])

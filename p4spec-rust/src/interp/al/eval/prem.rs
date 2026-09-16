@@ -70,9 +70,7 @@ fn eval_if_prem<'global, Iface: Interface, Exn: Extern>(
     } else {
         Backtrack::unmatch(
             prem.exp.span.clone(),
-            ErrorKind::Prem(PremErrorKind::ConditionNotMet {
-                exp: Print::to_string(&prem.exp),
-            }),
+            ErrorKind::Prem(PremErrorKind::ConditionNotMet { exp: Print::to_string(&prem.exp) }),
         )
     }
 }
@@ -90,9 +88,7 @@ fn eval_if_hold_prem<'global, Iface: Interface, Exn: Extern>(
         Backtrack::Ok(_) => Backtrack::Ok(ctx),
         Backtrack::Err(errors) => Backtrack::Err(errors),
         Backtrack::Unmatch(errors) => Backtrack::Unmatch(errors).nest(prem.id.span.clone(), || {
-            ErrorKind::Prem(PremErrorKind::HoldConditionNotMet {
-                relation: prem.id.node.clone(),
-            })
+            ErrorKind::Prem(PremErrorKind::HoldConditionNotMet { relation: prem.id.node.clone() })
         }),
     }
 }

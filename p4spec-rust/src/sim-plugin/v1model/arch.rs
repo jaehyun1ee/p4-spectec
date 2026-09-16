@@ -19,11 +19,7 @@ use serde_derive_state::{DeserializeState, SerializeState};
 use std::collections::VecDeque;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, SerializeState, DeserializeState)]
-#[serde(
-    deny_unknown_fields,
-    serialize_state = "EncodeContext<'arena>",
-    ser_parameters = "'arena"
-)]
+#[serde(deny_unknown_fields, serialize_state = "EncodeContext<'arena>", ser_parameters = "'arena")]
 #[serde(deserialize_state = "DecodeContext<'de>")]
 /// Architectural state with an empty-state default constructor
 pub struct Arch {
@@ -52,12 +48,7 @@ impl Arch {
             crate::phrase!(node: "archState".to_owned(), span: Span::default()),
             Vec::new(),
         );
-        Ok(make::external(
-            arena,
-            typ.node.into(),
-            payload.into(),
-            Span::default(),
-        )?)
+        Ok(make::external(arena, typ.node.into(), payload.into(), Span::default())?)
     }
 
     pub fn from_value(

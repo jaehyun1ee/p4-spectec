@@ -36,14 +36,8 @@ pub enum TypeId {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum IdentKind {
-    TypeName {
-        has_params: bool,
-        namespace: Namespace,
-    },
-    Ident {
-        has_params: bool,
-        type_id: TypeId,
-    },
+    TypeName { has_params: bool, namespace: Namespace },
+    Ident { has_params: bool, type_id: TypeId },
 }
 
 pub struct Context<'a> {
@@ -94,13 +88,7 @@ impl<'a> Context<'a> {
     }
 
     pub fn declare_typ(&self, id: impl Into<String>, has_params: bool) -> Result<(), ContextError> {
-        self.declare(
-            id,
-            IdentKind::TypeName {
-                has_params,
-                namespace: Namespace::new(),
-            },
-        )
+        self.declare(id, IdentKind::TypeName { has_params, namespace: Namespace::new() })
     }
 
     pub fn declare_var(
@@ -109,13 +97,7 @@ impl<'a> Context<'a> {
         has_params: bool,
         type_id: TypeId,
     ) -> Result<(), ContextError> {
-        self.declare(
-            id,
-            IdentKind::Ident {
-                has_params,
-                type_id,
-            },
-        )
+        self.declare(id, IdentKind::Ident { has_params, type_id })
     }
 
     // - Identifier lookup
@@ -133,10 +115,7 @@ impl<'a> Context<'a> {
             Some(namespace) => namespace.get(id).cloned(),
             None => self.ident_find(id),
         }
-        .unwrap_or(IdentKind::Ident {
-            has_params: false,
-            type_id: TypeId::Empty,
-        });
+        .unwrap_or(IdentKind::Ident { has_params: false, type_id: TypeId::Empty });
         *self.id_prev.borrow_mut() = Some(id.to_owned());
         kind
     }
@@ -176,10 +155,8 @@ impl<'a> Context<'a> {
     pub fn namespace_set_typ(&self, id: &str, namespace: Namespace) {
         let mut scopes = self.scopes.borrow_mut();
         for scope in scopes.iter_mut().rev() {
-            if let Some(IdentKind::TypeName {
-                has_params,
-                namespace: old_namespace,
-            }) = scope.get_mut(id)
+            if let Some(IdentKind::TypeName { has_params, namespace: old_namespace }) =
+                scope.get_mut(id)
             {
                 let _ = has_params;
                 *old_namespace = namespace;

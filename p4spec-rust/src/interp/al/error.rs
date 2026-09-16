@@ -201,11 +201,7 @@ pub enum CallErrorKind {
         path_b: String,
     },
     #[error("non-deterministic application of function {func}: {first}, {second}")]
-    FunctionNondeterminism {
-        func: String,
-        first: usize,
-        second: usize,
-    },
+    FunctionNondeterminism { func: String, first: usize, second: usize },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
@@ -215,11 +211,7 @@ pub enum TraceErrorKind {
     #[error("invocation of relation {rel} failed")]
     RelationInvocation { rel: String },
     #[error("application of rule {relation}/{group}/{path} failed")]
-    RuleApplication {
-        relation: String,
-        group: String,
-        path: String,
-    },
+    RuleApplication { relation: String, group: String, path: String },
     #[error("application of table row {func}{args} failed")]
     TableRowApplication { func: String, args: String },
     #[error("invocation of function ${func}{targs} failed")]
@@ -237,11 +229,7 @@ pub struct Error {
 
 impl Error {
     pub fn new(kind: ErrorKind, span: Span) -> Self {
-        Self {
-            kind: Box::new(kind),
-            span,
-            children: Vec::new(),
-        }
+        Self { kind: Box::new(kind), span, children: Vec::new() }
     }
 
     pub fn execution(children: Vec<Error>) -> Self {
@@ -260,17 +248,11 @@ impl Error {
     }
 
     pub(super) fn undefined(kind: EntityKind, name: String, span: Span) -> Self {
-        Self::new(
-            ErrorKind::Context(ContextErrorKind::Undefined { kind, name }),
-            span,
-        )
+        Self::new(ErrorKind::Context(ContextErrorKind::Undefined { kind, name }), span)
     }
 
     pub(super) fn duplicate(kind: EntityKind, name: String, span: Span) -> Self {
-        Self::new(
-            ErrorKind::Context(ContextErrorKind::Duplicate { kind, name }),
-            span,
-        )
+        Self::new(ErrorKind::Context(ContextErrorKind::Duplicate { kind, name }), span)
     }
 }
 
@@ -284,10 +266,7 @@ macro_rules! from_error {
     ($error:ty, $category:ident, $kind:ident, $variant:ident) => {
         impl From<$error> for Error {
             fn from(error: $error) -> Self {
-                Self::new(
-                    ErrorKind::$category($kind::$variant(error)),
-                    Span::default(),
-                )
+                Self::new(ErrorKind::$category($kind::$variant(error)), Span::default())
             }
         }
     };
@@ -302,10 +281,7 @@ from_error!(MixopArityMismatch, Runtime, RuntimeErrorKind, MixopArity);
 
 impl From<TypeError> for Error {
     fn from(error: TypeError) -> Self {
-        Self::new(
-            ErrorKind::Runtime(RuntimeErrorKind::Type(error.kind)),
-            error.span,
-        )
+        Self::new(ErrorKind::Runtime(RuntimeErrorKind::Type(error.kind)), error.span)
     }
 }
 
@@ -330,12 +306,9 @@ impl fmt::Display for MatchDisplay<'_> {
             MatchError::UnexpectedTypeVariable { .. } => {
                 formatter.write_str("unexpected type variable")
             }
-            MatchError::TypeArgumentMismatch {
-                expected, actual, ..
-            } => write!(
-                formatter,
-                "expected {expected} type arguments, got {actual}"
-            ),
+            MatchError::TypeArgumentMismatch { expected, actual, .. } => {
+                write!(formatter, "expected {expected} type arguments, got {actual}")
+            }
             MatchError::UndefinedFunction { name, .. } => {
                 write!(formatter, "undefined function {name}")
             }

@@ -29,10 +29,7 @@ fn atom(name: &str) -> il::ast::Atom {
 }
 
 fn hinted_def_type() -> il::ast::DefTyp {
-    let notation = Mixfix::Seq(vec![
-        Mixfix::Atom(atom("WRAP")),
-        Mixfix::Arg(typ::make::text()),
-    ]);
+    let notation = Mixfix::Seq(vec![Mixfix::Atom(atom("WRAP")), Mixfix::Arg(typ::make::text())]);
     let hint = p4spec_rust::phrase! {
         node: el::ast::ExpKind::Seq(vec![
             p4spec_rust::phrase! {
@@ -65,13 +62,7 @@ fn wrapped_text(arena: &mut ValueArena) -> Value {
         Mixfix::Atom(atom("WRAP")),
         Mixfix::Arg(make::text(arena, "payload".to_owned(), Span::default()).unwrap()),
     ]);
-    make::case(
-        arena,
-        (wrapper_type).node.clone().into(),
-        value_case,
-        Span::default(),
-    )
-    .unwrap()
+    make::case(arena, (wrapper_type).node.clone().into(), value_case, Span::default()).unwrap()
 }
 
 #[test]
@@ -118,12 +109,8 @@ fn test_unparses_scalar_and_container_values() {
 #[test]
 fn test_unparses_non_ascii_text_as_decimal_bytes() {
     let mut arena = ValueArena::new();
-    let value = make::text(
-        &mut arena,
-        "prefix◕‿◕😀ツsimple_table_1".to_owned(),
-        Span::default(),
-    )
-    .unwrap();
+    let value =
+        make::text(&mut arena, "prefix◕‿◕😀ツsimple_table_1".to_owned(), Span::default()).unwrap();
     assert_eq!(
         P4Unparser::default().render(&arena, &value).unwrap(),
         "prefix\\226\\151\\149\\226\\128\\191\\226\\151\\149\\240\\159\\152\\128\\227\\131\\132simple_table_1"

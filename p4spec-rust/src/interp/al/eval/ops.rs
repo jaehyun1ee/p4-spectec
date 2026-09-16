@@ -91,12 +91,7 @@ pub(super) fn cast_up(
                 values_cast.push(backtrack!(cast_up(arena, ctx, typ_inner, value)));
             }
             backtrack_from_result!(
-                make::list(
-                    arena,
-                    typ_inner.node.clone().into(),
-                    values_cast,
-                    Span::default()
-                ),
+                make::list(arena, typ_inner.node.clone().into(), values_cast, Span::default()),
                 span
             )
         }
@@ -174,12 +169,7 @@ pub(super) fn cast_down(
                 values_cast.push(backtrack!(cast_down(arena, ctx, typ_inner, value)));
             }
             backtrack_from_result!(
-                make::list(
-                    arena,
-                    typ_inner.node.clone().into(),
-                    values_cast,
-                    Span::default()
-                ),
+                make::list(arena, typ_inner.node.clone().into(), values_cast, Span::default()),
                 span
             )
         }
@@ -202,10 +192,7 @@ pub(super) fn access_dot(
         .find(|(field, _)| field.node == atom.node)
     {
         Some((_, value)) => Backtrack::Ok(*value),
-        None => Backtrack::err(
-            atom.span.clone(),
-            ErrorKind::Expr(ExprErrorKind::UndefinedField),
-        ),
+        None => Backtrack::err(atom.span.clone(), ErrorKind::Expr(ExprErrorKind::UndefinedField)),
     }
 }
 
@@ -214,10 +201,7 @@ pub(super) fn access_dot(
 fn get_index(arena: &ValueArena, value: &Value, span: &Span) -> Backtrack<i64> {
     let num = backtrack_from_result!(get::num(arena, value), span);
     let idx = num::to_int(num).to_i64();
-    Backtrack::from_result(
-        idx.ok_or(ErrorKind::Expr(ExprErrorKind::IndexOverflow)),
-        span,
-    )
+    Backtrack::from_result(idx.ok_or(ErrorKind::Expr(ExprErrorKind::IndexOverflow)), span)
 }
 
 // - Index access
@@ -263,10 +247,7 @@ pub(super) fn access_index(
 
 // - Slice access
 
-#[expect(
-    clippy::too_many_arguments,
-    reason = "operand and bounds spans remain explicit"
-)]
+#[expect(clippy::too_many_arguments, reason = "operand and bounds spans remain explicit")]
 pub(super) fn access_slice(
     arena: &mut ValueArena,
     value_base: &Value,
@@ -349,9 +330,7 @@ pub(super) fn update_index(
     span_idx: &Span,
 ) -> Backtrack<Value> {
     let idx = backtrack!(get_index(arena, value_idx, span_idx));
-    backtrack!(access_index(
-        arena, value_base, value_idx, span_base, span_idx
-    ));
+    backtrack!(access_index(arena, value_base, value_idx, span_base, span_idx));
     let value = match arena.kind(value_base) {
         ValueKind::Text(text) => {
             let size = text.len() as i64;

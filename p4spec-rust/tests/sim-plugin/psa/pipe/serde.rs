@@ -21,15 +21,9 @@ fn test_derived_register_object_preserves_payload_and_annotations() {
     let span = Span::default();
     let value_typ = make::text(&mut arena, "register type".to_owned(), span.clone()).unwrap();
     let value = make::int(&mut arena, (-123).into(), span.clone()).unwrap();
-    let object = ObjectState::Register(Register {
-        value_typ,
-        values: vec![value],
-    });
+    let object = ObjectState::Register(Register { value_typ, values: vec![value] });
     let mut json = encode(&arena, &object).unwrap();
-    assert_eq!(
-        json["Register"]["value_typ"]["node"],
-        json!({"Text": "register type"})
-    );
+    assert_eq!(json["Register"]["value_typ"]["node"], json!({"Text": "register type"}));
     assert_eq!(
         json["Register"]["values"][0]["node"],
         json!({"Num": {"Int": serde_json::to_value(num_bigint::BigInt::from(-123)).unwrap()}})
@@ -41,25 +35,16 @@ fn test_derived_register_object_preserves_payload_and_annotations() {
     let ObjectState::Register(reg) = &object else {
         panic!("expected register");
     };
-    assert_eq!(
-        get::text(&arena_decoded, &reg.value_typ).unwrap(),
-        "register type"
-    );
-    assert_eq!(
-        get::num(&arena_decoded, &reg.values[0]),
-        get::num(&arena, &value)
-    );
+    assert_eq!(get::text(&arena_decoded, &reg.value_typ).unwrap(), "register type");
+    assert_eq!(get::num(&arena_decoded, &reg.values[0]), get::num(&arena, &value));
     assert_eq!(arena_decoded.typ(&reg.values[0]), arena.typ(&value));
     assert_eq!(arena_decoded.span(&reg.values[0]), &span);
     let value_object = object
         .to_value(&mut arena_decoded, Encoding::ArenaIndependent)
         .unwrap();
-    let object_decoded = ObjectState::from_value(
-        &mut arena_decoded,
-        Encoding::ArenaIndependent,
-        &value_object,
-    )
-    .unwrap();
+    let object_decoded =
+        ObjectState::from_value(&mut arena_decoded, Encoding::ArenaIndependent, &value_object)
+            .unwrap();
     assert_eq!(encode(&arena_decoded, &object_decoded).unwrap(), json);
     json["Register"]["extra"] = json!(true);
     assert!(
@@ -80,10 +65,7 @@ fn test_object_packet_state_preserves_cursor_without_validation() {
     );
     for encoding in [Encoding::ArenaRelative, Encoding::ArenaIndependent] {
         let value_object = object.to_value(&mut arena, encoding).unwrap();
-        assert_eq!(
-            ObjectState::from_value(&mut arena, encoding, &value_object).unwrap(),
-            object
-        );
+        assert_eq!(ObjectState::from_value(&mut arena, encoding, &value_object).unwrap(), object);
     }
 }
 
@@ -114,10 +96,7 @@ fn test_object_restores_nested_register_values_from_its_arena() {
         )
         .unwrap();
     }
-    let object = ObjectState::Register(Register {
-        value_typ,
-        values: vec![value],
-    });
+    let object = ObjectState::Register(Register { value_typ, values: vec![value] });
     let value_object = object
         .to_value(&mut arena, Encoding::ArenaIndependent)
         .unwrap();
@@ -150,10 +129,7 @@ fn test_architecture_codec_preserves_nested_registers_in_each_mode() {
         let value_typ =
             make::text(&mut arena, "register type".to_owned(), Span::default()).unwrap();
         let value = make::int(&mut arena, 42.into(), Span::default()).unwrap();
-        let object = ObjectState::Register(Register {
-            value_typ,
-            values: vec![value],
-        });
+        let object = ObjectState::Register(Register { value_typ, values: vec![value] });
         let value_object = object.to_value(&mut arena, encoding).unwrap();
         let arch = Arch {
             queue: [Packet {
@@ -176,10 +152,7 @@ fn test_architecture_codec_preserves_nested_registers_in_each_mode() {
         let object_decoded =
             ObjectState::from_value(&mut arena, encoding, &arch_decoded.queue[0].value_ctx)
                 .unwrap();
-        assert_eq!(
-            encode(&arena, &object_decoded).unwrap(),
-            encode(&arena, &object).unwrap()
-        );
+        assert_eq!(encode(&arena, &object_decoded).unwrap(), encode(&arena, &object).unwrap());
         if encoding == Encoding::ArenaRelative {
             continue;
         }
