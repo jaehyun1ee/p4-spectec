@@ -69,8 +69,8 @@ fn test_load_registers_extern_type_in_both_environments_with_declaration_span() 
     let ctx = Context::load(&vec![extern_typ("External", 5)]).expect("load extern type");
     let id_lookup = id_at("External", 99);
 
-    assert_eq!(ctx.find_typdef_opt(&id_lookup), Some(&TypeDef::Extern));
-    let typ_external = ctx.find_metavar_opt(&id_lookup).expect("find extern type");
+    assert_eq!(ctx.tdenv.get(&id_lookup), Some(&TypeDef::Extern));
+    let typ_external = ctx.menv.get(&id_lookup).expect("find extern type");
     let TypKind::Var(id_external, targs) = &typ_external.node else {
         panic!("extern type should register its named type")
     };
@@ -129,8 +129,8 @@ fn test_load_preserves_type_keys_and_only_registers_nullary_type_metavariables()
     ];
 
     let ctx = Context::load(&spec_al).expect("load type definitions");
-    assert!(ctx.bound_metavar(&id_at("Alias", 99)));
-    assert!(!ctx.bound_metavar(&id_at("Generic", 99)));
+    assert!(ctx.menv.contains_key(&id_at("Alias", 99)));
+    assert!(!ctx.menv.contains_key(&id_at("Generic", 99)));
     let (id_alias, _) = ctx
         .tdenv
         .iter()
@@ -161,7 +161,8 @@ fn test_loaded_alias_expands_to_its_variant_definition() {
     let ctx = Context::load(&spec_al).expect("load alias and variant");
 
     let typ_alias = ctx
-        .find_metavar_opt(&id_at("Alias", 60))
+        .menv
+        .get(&id_at("Alias", 60))
         .expect("find alias metavariable");
     let typ_expanded = expand_typ(&ctx.tdenv, typ_alias).expect("expand alias");
     let TypKind::Var(id_variant, targs) = &typ_expanded.node else {
@@ -170,8 +171,7 @@ fn test_loaded_alias_expands_to_its_variant_definition() {
     assert!(targs.is_empty());
     assert_eq!(id_variant.node, "Choice");
     assert_eq!(
-        ctx.find_typdef_opt(id_variant)
-            .expect("find variant definition"),
+        ctx.tdenv.get(id_variant).expect("find variant definition"),
         &TypeDef::Defined(vec![], Box::new(def_typ_variant))
     );
 }

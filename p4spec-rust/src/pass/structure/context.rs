@@ -15,6 +15,8 @@ use crate::{
 
 use super::{StructureError, StructureErrorKind};
 
+// == Definition environments
+
 /// Definition environments collected from an algorithmic specification
 #[derive(Clone, Debug)]
 pub struct Context {
@@ -49,24 +51,10 @@ impl Context {
         }
     }
 
-    pub fn find_typdef_opt(&self, id: &Id) -> Option<&TypeDef> {
-        self.tdenv.get(id)
-    }
-
-    pub fn bound_typdef(&self, id: &Id) -> bool {
-        self.find_typdef_opt(id).is_some()
-    }
-
-    pub fn find_metavar_opt(&self, id: &Id) -> Option<&ast::Typ> {
-        self.menv.get(id)
-    }
-
-    pub fn bound_metavar(&self, id: &Id) -> bool {
-        self.find_metavar_opt(id).is_some()
-    }
+    // - Duplicate-checked insertion
 
     fn add_typdef(&mut self, id: Id, typdef: TypeDef) -> Result<(), StructureError> {
-        if self.bound_typdef(&id) {
+        if self.tdenv.contains_key(&id) {
             let error = StructureError::new(StructureErrorKind::DuplicateType, id.span.clone());
             return Err(error);
         }
@@ -75,7 +63,7 @@ impl Context {
     }
 
     fn add_metavar(&mut self, id: Id, typ: ast::Typ) -> Result<(), StructureError> {
-        if self.bound_metavar(&id) {
+        if self.menv.contains_key(&id) {
             let error =
                 StructureError::new(StructureErrorKind::DuplicateMetavariable, id.span.clone());
             return Err(error);
@@ -83,6 +71,8 @@ impl Context {
         self.menv.insert(id, typ);
         Ok(())
     }
+
+    // - Source-order definition loading
 
     fn load_def(&mut self, def_al: &ast::Def) -> Result<(), StructureError> {
         let def_kind_al = &def_al.node;
