@@ -49,8 +49,6 @@ mod merge;
 mod ol;
 #[path = "opt.rs"]
 mod opt;
-#[path = "optimize.rs"]
-mod optimize;
 #[path = "prettify.rs"]
 mod prettify;
 #[path = "pretty.rs"]

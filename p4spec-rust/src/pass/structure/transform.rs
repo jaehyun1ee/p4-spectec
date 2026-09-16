@@ -7,7 +7,7 @@
 
 use super::{
     StructureError, StructureErrorKind, antiunify, context::Context, dangle, merge, ol::ast as ol,
-    optimize, prettify, totalize,
+    opt, prettify, totalize,
 };
 use crate::lang::{
     al::{ast as al, fresh},
@@ -745,8 +745,10 @@ fn struct_defined_rel_def(
         }
         _ => None,
     };
-    let (block, block_else) =
-        optimize::optimize_with_else(&ctx.tdenv, block, block_else, without_rule_groups)?;
+    let block = opt::optimize(&ctx.tdenv, block, without_rule_groups)?;
+    let block_else = block_else
+        .map(|block_else| opt::optimize(&ctx.tdenv, block_else, without_rule_groups))
+        .transpose()?;
     let (block, block_else) = totalize::totalize(&ctx.tdenv, block, block_else)?;
     let (exps_input, block, block_else) = prettify::pretty_rel(exps_template, block, block_else)?;
     let (block, block_else) = dangle::instrument(block, block_else)?;
@@ -861,7 +863,7 @@ fn struct_table_dec_def(
     // Finish each phase across all rows before entering the next phase
     let blocks_ol = blocks_ol
         .into_iter()
-        .map(|block_ol| optimize::optimize_without_else(&ctx.tdenv, block_ol, without_rule_groups))
+        .map(|block_ol| opt::optimize(&ctx.tdenv, block_ol, without_rule_groups))
         .collect::<Result<Vec<_>, _>>()?;
     let blocks_ol = blocks_ol
         .into_iter()
@@ -928,8 +930,10 @@ fn struct_func_dec_def(
         .collect::<Result<_, _>>()?;
     let block = merge::merge_blocks(blocks);
     let block_else = path_else.map(struct_clause_path).transpose()?;
-    let (block, block_else) =
-        optimize::optimize_with_else(&ctx.tdenv, block, block_else, without_rule_groups)?;
+    let block = opt::optimize(&ctx.tdenv, block, without_rule_groups)?;
+    let block_else = block_else
+        .map(|block_else| opt::optimize(&ctx.tdenv, block_else, without_rule_groups))
+        .transpose()?;
     let (block, block_else) = totalize::totalize(&ctx.tdenv, block, block_else)?;
     let (args_input, block, block_else) = prettify::pretty_func(args_template, block, block_else)?;
     let params_sl = struct_params_from_args(ctx, params_al, args_input, span)?;

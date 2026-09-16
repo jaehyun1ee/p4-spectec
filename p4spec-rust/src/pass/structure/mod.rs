@@ -7,7 +7,6 @@ mod error;
 mod merge;
 mod ol;
 mod opt;
-mod optimize;
 mod prettify;
 mod pretty;
 mod re;
