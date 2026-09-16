@@ -46,7 +46,7 @@ use crate::{
     runner::{ExternError, Interface, Interpreter, RunnerContext},
     stf::ast::Statement,
 };
-use num_traits::ToPrimitive;
+use num_bigint::BigInt;
 use serde_derive_state::{DeserializeState, SerializeState};
 
 // == Configuration
@@ -569,8 +569,8 @@ where
 pub fn add_mirror_session_mc<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     value_arch: Value,
-    session: i64,
-    group: i64,
+    session: usize,
+    group: usize,
 ) -> Result<Value, Interp::Error>
 where
     Iface: Interface,
@@ -586,7 +586,7 @@ where
 pub fn mc_mgrp_create<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     value_arch: Value,
-    group: i64,
+    group: usize,
 ) -> Result<Value, Interp::Error>
 where
     Iface: Interface,
@@ -600,8 +600,8 @@ where
 pub fn mc_node_create<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     value_arch: Value,
-    instance: i64,
-    ports: &[i64],
+    instance: usize,
+    ports: &[usize],
 ) -> Result<Value, Interp::Error>
 where
     Iface: Interface,
@@ -615,8 +615,8 @@ where
 pub fn mc_node_associate<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     value_arch: Value,
-    group: i64,
-    handle: i64,
+    group: usize,
+    handle: usize,
 ) -> Result<Value, Interp::Error>
 where
     Iface: Interface,
@@ -633,7 +633,7 @@ pub fn register_read<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     value_arch: Value,
     name: &str,
-    idx: i64,
+    idx: usize,
 ) -> Result<Value, Interp::Error>
 where
     Iface: Interface,
@@ -641,13 +641,7 @@ where
 {
     let reg = find_register(ctx, value_arch, name)?;
     // Evaluate the register read; printing is disabled in the source
-    if idx < reg.values.len() as i64 {
-        let idx = usize::try_from(idx)
-            .map_err(|_| ExternError::Failure("negative register index".to_owned()))?;
-        reg.values
-            .get(idx)
-            .ok_or_else(|| ExternError::Failure("register index out of bounds".to_owned()))?;
-    } else {
+    if idx >= reg.values.len() {
         func::default(ctx, reg.value_typ)?;
     }
     Ok(value_arch)
@@ -657,20 +651,18 @@ pub fn register_write<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     value_arch: Value,
     name: &str,
-    idx: i64,
-    int: i64,
+    idx: usize,
+    int: BigInt,
 ) -> Result<Value, Interp::Error>
 where
     Iface: Interface,
     Interp: Interpreter<Iface, Psa>,
 {
     let mut reg = find_register(ctx, value_arch, name)?;
-    let value = pack::p4_arbitrary_int(ctx.arena_mut(), int.into())?;
+    let value = pack::p4_arbitrary_int(ctx.arena_mut(), int)?;
     let value = func::cast_op(ctx, reg.value_typ, value)?;
-    for (idx_reg, value_reg) in reg.values.iter_mut().enumerate() {
-        if idx_reg as i64 == idx {
-            *value_reg = value;
-        }
+    if let Some(value_reg) = reg.values.get_mut(idx) {
+        *value_reg = value;
     }
     update_register(ctx, value_arch, name, reg)
 }
@@ -867,7 +859,7 @@ where
 fn get_ingress_clone_session_id<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
-) -> Result<i64, Interp::Error>
+) -> Result<usize, Interp::Error>
 where
     Iface: Interface,
     Interp: Interpreter<Iface, Psa>,
@@ -879,16 +871,13 @@ where
         "ingress_output_metadata",
         "clone_session_id",
     )?;
-    let (_, int) = unpack::p4_fixed_bit(ctx.arena(), &value)?;
-    Ok(int
-        .to_i64()
-        .ok_or_else(|| ExternError::Failure("integer outside i64 range".to_owned()))?)
+    Ok(usize::try_from(&unpack::p4_fixed_bit(ctx.arena(), &value)?.1).map_err(ExternError::from)?)
 }
 
 fn get_multicast_group<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
-) -> Result<i64, Interp::Error>
+) -> Result<usize, Interp::Error>
 where
     Iface: Interface,
     Interp: Interpreter<Iface, Psa>,
@@ -900,10 +889,7 @@ where
         "ingress_output_metadata",
         "multicast_group",
     )?;
-    let (_, int) = unpack::p4_fixed_bit(ctx.arena(), &value)?;
-    Ok(int
-        .to_i64()
-        .ok_or_else(|| ExternError::Failure("integer outside i64 range".to_owned()))?)
+    Ok(usize::try_from(&unpack::p4_fixed_bit(ctx.arena(), &value)?.1).map_err(ExternError::from)?)
 }
 
 fn is_egress_clone<Interp, Iface>(
@@ -958,13 +944,13 @@ where
         "egress_port",
     )?;
     let (width_port, int_port) = unpack::p4_fixed_bit(ctx.arena(), &value_port)?;
-    Ok(width_port == 32.into() && int_port == 0xfffffffa_i64.into())
+    Ok(width_port == 32.into() && int_port == 0xffff_fffa_u32.into())
 }
 
 fn get_egress_clone_session_id<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
-) -> Result<i64, Interp::Error>
+) -> Result<usize, Interp::Error>
 where
     Iface: Interface,
     Interp: Interpreter<Iface, Psa>,
@@ -976,10 +962,7 @@ where
         "egress_output_metadata",
         "clone_session_id",
     )?;
-    let (_, int) = unpack::p4_fixed_bit(ctx.arena(), &value)?;
-    Ok(int
-        .to_i64()
-        .ok_or_else(|| ExternError::Failure("integer outside i64 range".to_owned()))?)
+    Ok(usize::try_from(&unpack::p4_fixed_bit(ctx.arena(), &value)?.1).map_err(ExternError::from)?)
 }
 
 // == Pipeline initializer
@@ -1014,9 +997,7 @@ where
             "ingress_output_metadata",
             "egress_port",
         )?;
-        let (_, int) = unpack::p4_fixed_bit(ctx.arena(), &value)?;
-        int.to_i64()
-            .ok_or_else(|| ExternError::Failure("integer outside i64 range".to_owned()))
+        usize::try_from(&unpack::p4_fixed_bit(ctx.arena(), &value)?.1).map_err(ExternError::from)
     }?;
     let cos = {
         let value = rel::lvalue_read_dot_global(
@@ -1026,9 +1007,7 @@ where
             "ingress_output_metadata",
             "class_of_service",
         )?;
-        let (_, int) = unpack::p4_fixed_bit(ctx.arena(), &value)?;
-        int.to_i64()
-            .ok_or_else(|| ExternError::Failure("integer outside i64 range".to_owned()))
+        usize::try_from(&unpack::p4_fixed_bit(ctx.arena(), &value)?.1).map_err(ExternError::from)
     }?;
     state.value_ctx = rel::psa_egress_init_metadata(
         ctx,
@@ -1045,8 +1024,8 @@ where
 fn prepare_multicast_ctx<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
-    instance: i64,
-    port: i64,
+    instance: usize,
+    port: usize,
 ) -> Result<(), Interp::Error>
 where
     Iface: Interface,
@@ -1060,9 +1039,7 @@ where
             "ingress_output_metadata",
             "class_of_service",
         )?;
-        let (_, int) = unpack::p4_fixed_bit(ctx.arena(), &value)?;
-        int.to_i64()
-            .ok_or_else(|| ExternError::Failure("integer outside i64 range".to_owned()))
+        usize::try_from(&unpack::p4_fixed_bit(ctx.arena(), &value)?.1).map_err(ExternError::from)
     }?;
     state.value_ctx = rel::psa_egress_init_metadata(
         ctx,
@@ -1079,8 +1056,8 @@ where
 fn prepare_clone_i2e_ctx<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
-    instance: i64,
-    port: i64,
+    instance: usize,
+    port: usize,
 ) -> Result<(), Interp::Error>
 where
     Iface: Interface,
@@ -1094,9 +1071,7 @@ where
             "ingress_output_metadata",
             "class_of_service",
         )?;
-        let (_, int) = unpack::p4_fixed_bit(ctx.arena(), &value)?;
-        int.to_i64()
-            .ok_or_else(|| ExternError::Failure("integer outside i64 range".to_owned()))
+        usize::try_from(&unpack::p4_fixed_bit(ctx.arena(), &value)?.1).map_err(ExternError::from)
     }?;
     state.value_ctx = rel::psa_egress_init_metadata(
         ctx,
@@ -1113,8 +1088,8 @@ where
 fn prepare_clone_e2e_ctx<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
-    instance: i64,
-    port: i64,
+    instance: usize,
+    port: usize,
 ) -> Result<(), Interp::Error>
 where
     Iface: Interface,
@@ -1128,9 +1103,7 @@ where
             "egress_input_metadata",
             "class_of_service",
         )?;
-        let (_, int) = unpack::p4_fixed_bit(ctx.arena(), &value)?;
-        int.to_i64()
-            .ok_or_else(|| ExternError::Failure("integer outside i64 range".to_owned()))
+        usize::try_from(&unpack::p4_fixed_bit(ctx.arena(), &value)?.1).map_err(ExternError::from)
     }?;
     state.value_ctx = rel::psa_egress_init_metadata(
         ctx,
@@ -1160,9 +1133,7 @@ where
             "ingress_input_metadata",
             "ingress_port",
         )?;
-        let (_, int) = unpack::p4_fixed_bit(ctx.arena(), &value)?;
-        int.to_i64()
-            .ok_or_else(|| ExternError::Failure("integer outside i64 range".to_owned()))
+        usize::try_from(&unpack::p4_fixed_bit(ctx.arena(), &value)?.1).map_err(ExternError::from)
     }?;
     state.value_ctx =
         rel::psa_ingress_init_metadata(ctx, state.value_ctx, state.value_arch, port, "RESUBMIT")?;
@@ -1246,7 +1217,7 @@ where
 pub fn schedule_multicast<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
-    group: i64,
+    group: usize,
 ) -> Result<(), Interp::Error>
 where
     Iface: Interface,
@@ -1295,7 +1266,7 @@ where
 fn schedule_clone_i2e<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
-    session: i64,
+    session: usize,
 ) -> Result<(), Interp::Error>
 where
     Iface: Interface,
@@ -1348,7 +1319,7 @@ where
 fn schedule_clone_e2e<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
-    session: i64,
+    session: usize,
 ) -> Result<(), Interp::Error>
 where
     Iface: Interface,
@@ -1465,9 +1436,7 @@ where
             "egress_input_metadata",
             "egress_port",
         )?;
-        let (_, int) = unpack::p4_fixed_bit(ctx.arena(), &value)?;
-        int.to_i64()
-            .ok_or_else(|| ExternError::Failure("integer outside i64 range".to_owned()))
+        usize::try_from(&unpack::p4_fixed_bit(ctx.arena(), &value)?.1).map_err(ExternError::from)
     }?;
     let packet = {
         let pkt_in = find_egress_packet_in(ctx, state.value_arch)?;

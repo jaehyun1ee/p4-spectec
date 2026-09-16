@@ -34,7 +34,7 @@ fn test_native_psa_micro_fixture_packets() {
                     txs.extend(state.txs.iter().map(|tx| (tx.port, tx.packet.clone())));
                 }
                 Statement::Expect { port, packet_expected: Some(packet), .. } => {
-                    txs_expect.push((port.parse::<i64>().unwrap(), packet.to_ascii_uppercase()))
+                    txs_expect.push((port.parse::<usize>().unwrap(), packet.to_ascii_uppercase()))
                 }
                 _ => panic!("micro fixture contains packet and expectation statements"),
             }
@@ -390,19 +390,19 @@ fn test_native_replication_fixture_order_and_persistent_counter() {
                 state.value_arch = pipe::mc_mgrp_create(
                     &mut runner.context(),
                     state.value_arch,
-                    id_group.parse::<i64>().unwrap(),
+                    id_group.parse::<usize>().unwrap(),
                 )
                 .unwrap()
             }
             Statement::McNodeCreate { replication_id: id_replication, ports } => {
                 let ports = ports
                     .iter()
-                    .map(|port| port.parse::<i64>().unwrap())
+                    .map(|port| port.parse::<usize>().unwrap())
                     .collect::<Vec<_>>();
                 state.value_arch = pipe::mc_node_create(
                     &mut runner.context(),
                     state.value_arch,
-                    id_replication.parse::<i64>().unwrap(),
+                    id_replication.parse::<usize>().unwrap(),
                     &ports,
                 )
                 .unwrap();
@@ -411,8 +411,8 @@ fn test_native_replication_fixture_order_and_persistent_counter() {
                 state.value_arch = pipe::mc_node_associate(
                     &mut runner.context(),
                     state.value_arch,
-                    id_group.parse::<i64>().unwrap(),
-                    handle.parse::<i64>().unwrap(),
+                    id_group.parse::<usize>().unwrap(),
+                    handle.parse::<usize>().unwrap(),
                 )
                 .unwrap()
             }
@@ -420,8 +420,8 @@ fn test_native_replication_fixture_order_and_persistent_counter() {
                 state.value_arch = pipe::add_mirror_session_mc(
                     &mut runner.context(),
                     state.value_arch,
-                    session.parse::<i64>().unwrap(),
-                    id_group.parse::<i64>().unwrap(),
+                    session.parse::<usize>().unwrap(),
+                    id_group.parse::<usize>().unwrap(),
                 )
                 .unwrap()
             }
@@ -429,7 +429,7 @@ fn test_native_replication_fixture_order_and_persistent_counter() {
                 psa::drive_pipe(
                     &mut runner.context(),
                     &mut state,
-                    &Rx { port: port.parse::<i64>().unwrap(), packet },
+                    &Rx { port: port.parse::<usize>().unwrap(), packet },
                 )
                 .unwrap();
                 txs.extend(state.txs.iter().map(|tx| (tx.port, tx.packet.clone())));
@@ -440,7 +440,7 @@ fn test_native_replication_fixture_order_and_persistent_counter() {
                 assert_eq!(arch.mirrortable[&5], 7);
             }
             Statement::Expect { port, packet_expected: Some(packet), .. } => {
-                txs_expect.push((port.parse::<i64>().unwrap(), packet))
+                txs_expect.push((port.parse::<usize>().unwrap(), packet))
             }
             _ => {
                 panic!("replication fixture contains only supported setup, packet and expectations")

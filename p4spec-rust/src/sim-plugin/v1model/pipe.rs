@@ -42,7 +42,7 @@ use crate::{
     runner::{ExternError, Interface, Interpreter, RunnerContext},
     stf::ast::Statement,
 };
-use num_traits::ToPrimitive;
+use num_bigint::BigInt;
 use serde_derive_state::{DeserializeState, SerializeState};
 
 // == Configuration
@@ -472,8 +472,8 @@ where
 pub fn add_mirror_session<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     value_arch: Value,
-    session: i64,
-    port: i64,
+    session: usize,
+    port: usize,
 ) -> Result<Value, Interp::Error>
 where
     Iface: Interface,
@@ -487,8 +487,8 @@ where
 pub fn add_mirror_session_mc<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     _value_arch: Value,
-    _session: i64,
-    _group: i64,
+    _session: usize,
+    _group: usize,
 ) -> Result<Value, Interp::Error>
 where
     Iface: Interface,
@@ -506,7 +506,7 @@ where
 pub fn mc_mgrp_create<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     value_arch: Value,
-    group: i64,
+    group: usize,
 ) -> Result<Value, Interp::Error>
 where
     Iface: Interface,
@@ -520,8 +520,8 @@ where
 pub fn mc_node_create<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     value_arch: Value,
-    instance: i64,
-    ports: &[i64],
+    instance: usize,
+    ports: &[usize],
 ) -> Result<Value, Interp::Error>
 where
     Iface: Interface,
@@ -535,8 +535,8 @@ where
 pub fn mc_node_associate<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     value_arch: Value,
-    group: i64,
-    handle: i64,
+    group: usize,
+    handle: usize,
 ) -> Result<Value, Interp::Error>
 where
     Iface: Interface,
@@ -553,7 +553,7 @@ pub fn register_read<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     _value_arch: Value,
     _name: &str,
-    _idx: i64,
+    _idx: usize,
 ) -> Result<Value, Interp::Error>
 where
     Iface: Interface,
@@ -570,8 +570,8 @@ pub fn register_write<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     _value_arch: Value,
     _name: &str,
-    _idx: i64,
-    _int: i64,
+    _idx: usize,
+    _int: BigInt,
 ) -> Result<Value, Interp::Error>
 where
     Iface: Interface,
@@ -708,7 +708,7 @@ where
 fn get_mcast_grp<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     state: &mut SimState,
-) -> Result<i64, Interp::Error>
+) -> Result<usize, Interp::Error>
 where
     Iface: Interface,
     Interp: Interpreter<Iface, V1Model>,
@@ -721,9 +721,7 @@ where
             "standard_metadata",
             "mcast_grp",
         )?;
-        let (_, int) = unpack::p4_fixed_bit(ctx.arena(), &value)?;
-        int.to_i64()
-            .ok_or_else(|| ExternError::Failure("integer outside i64 range".to_owned()))
+        usize::try_from(&unpack::p4_fixed_bit(ctx.arena(), &value)?.1).map_err(ExternError::from)
     }?;
     Ok(group)
 }
@@ -884,9 +882,7 @@ where
             "standard_metadata",
             "egress_spec",
         )?;
-        let (_, int) = unpack::p4_fixed_bit(ctx.arena(), &value)?;
-        int.to_i64()
-            .ok_or_else(|| ExternError::Failure("integer outside i64 range".to_owned()))
+        usize::try_from(&unpack::p4_fixed_bit(ctx.arena(), &value)?.1).map_err(ExternError::from)
     }?;
     let packet = {
         let pkt_in = find_packet_in(ctx, state.value_arch)?;
@@ -902,7 +898,7 @@ where
 fn prepare_resubmit_ctx<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     state: &mut SimState,
-    idx: i64,
+    idx: usize,
 ) -> Result<(), Interp::Error>
 where
     Iface: Interface,
@@ -932,8 +928,8 @@ fn prepare_clone_ctx<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     state: &mut SimState,
     clone_type: CloneType,
-    port: i64,
-    idx: i64,
+    port: usize,
+    idx: usize,
 ) -> Result<(), Interp::Error>
 where
     Iface: Interface,
@@ -974,7 +970,7 @@ where
 fn prepare_recirculate_ctx<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     state: &mut SimState,
-    idx: i64,
+    idx: usize,
 ) -> Result<(), Interp::Error>
 where
     Iface: Interface,
@@ -1003,8 +999,8 @@ where
 fn prepare_multicast_ctx<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     state: &mut SimState,
-    rid: i64,
-    port: i64,
+    rid: usize,
+    port: usize,
 ) -> Result<(), Interp::Error>
 where
     Iface: Interface,
@@ -1158,7 +1154,7 @@ pub fn schedule_multicast<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     state: &mut SimState,
     arch: &Arch,
-    group: i64,
+    group: usize,
 ) -> Result<bool, Interp::Error>
 where
     Iface: Interface,

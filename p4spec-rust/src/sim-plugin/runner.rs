@@ -23,6 +23,7 @@ use crate::{
         ast::{Action, MatchKind, Name, Statement, TableMatch},
     },
 };
+use num_bigint::BigInt;
 use std::path::{Path, PathBuf};
 
 // == Errors
@@ -80,7 +81,8 @@ fn remaining_expects(expects: &[Expectation]) -> String {
 
 // == Helpers
 
-fn parse_int(text: &str) -> Result<i64, InterpError> {
+/// Parses an optionally signed integer with a `0x`, `0o` or `0b` radix prefix
+fn parse_int<Int: strtoint::StrToInt>(text: &str) -> Result<Int, InterpError> {
     strtoint::strtoint(&text.to_ascii_lowercase())
         .map_err(|_| ExternError::Failure(format!("invalid integer: {text}")).into())
 }
@@ -266,7 +268,7 @@ where
     Arch: Architecture,
     Interp: Interpreter<Iface, Arch, Error = InterpError>,
 {
-    let rx = Rx { port: parse_int(&port)?, packet: packet.to_ascii_uppercase() };
+    let rx = Rx { port: parse_int::<usize>(&port)?, packet: packet.to_ascii_uppercase() };
     Arch::drive_pipe(ctx, &mut run.state, &rx)?;
     run.on_tx_output()
         .map_err(|failure| Error::Stf { failure: Box::new(failure), span: Span::default() })
@@ -280,7 +282,7 @@ fn run_stf_expect_stmt(
 ) -> Result<Option<Tx>, Error> {
     let expect = Expectation {
         tx: Tx {
-            port: parse_int(&port)?,
+            port: parse_int::<usize>(&port)?,
             packet: packet_expected.unwrap_or_default().to_ascii_uppercase(),
         },
         exact,
@@ -320,8 +322,8 @@ fn encode_table_keys(arena: &mut ValueArena, matches: &[TableMatch]) -> Result<V
             }
             MatchKind::Slash(prefix, mask) => {
                 let value_prefix = make::text(arena, prefix.clone(), Span::default())?;
-                let mask = parse_int(mask)?;
-                let nat = crate::lang::xl::num::Natural::try_from(num_bigint::BigInt::from(mask))?;
+                let mask = BigInt::from(parse_int::<i128>(mask)?);
+                let nat = crate::lang::xl::num::Natural::try_from(mask)?;
                 let value_mask = make::nat(arena, nat, Span::default())?;
                 make::case_shaped! {
                     arena: arena,
@@ -391,8 +393,8 @@ fn encode_table_action(arena: &mut ValueArena, action: &Action) -> Result<Value,
     let mut values_arg = Vec::new();
     for arg in &action.args {
         let value_name = make::text(arena, arg.id.clone(), Span::default())?;
-        let int = parse_int(&arg.num)?;
-        let value_int = make::int(arena, int.into(), Span::default())?;
+        let int = BigInt::from(parse_int::<i128>(&arg.num)?);
+        let value_int = make::int(arena, int, Span::default())?;
         values_arg.push(make::tuple(
             arena,
             typ_arg.node.clone().into(),
@@ -452,8 +454,12 @@ where
     Arch: Architecture,
     Interp: Interpreter<Iface, Arch, Error = InterpError>,
 {
-    state.value_arch =
-        Arch::add_mirror_session(ctx, state.value_arch, parse_int(&session)?, parse_int(&port)?)?;
+    state.value_arch = Arch::add_mirror_session(
+        ctx,
+        state.value_arch,
+        parse_int::<usize>(&session)?,
+        parse_int::<usize>(&port)?,
+    )?;
     Ok(None)
 }
 
@@ -471,8 +477,8 @@ where
     state.value_arch = Arch::add_mirror_session_mc(
         ctx,
         state.value_arch,
-        parse_int(&session)?,
-        parse_int(&id_group)?,
+        parse_int::<usize>(&session)?,
+        parse_int::<usize>(&id_group)?,
     )?;
     Ok(None)
 }
@@ -489,7 +495,7 @@ where
     Arch: Architecture,
     Interp: Interpreter<Iface, Arch, Error = InterpError>,
 {
-    state.value_arch = Arch::mc_mgrp_create(ctx, state.value_arch, parse_int(&id_group)?)?;
+    state.value_arch = Arch::mc_mgrp_create(ctx, state.value_arch, parse_int::<usize>(&id_group)?)?;
     Ok(None)
 }
 
@@ -504,10 +510,10 @@ where
     Arch: Architecture,
     Interp: Interpreter<Iface, Arch, Error = InterpError>,
 {
-    let instance = parse_int(&id_replication)?;
+    let instance = parse_int::<usize>(&id_replication)?;
     let ports = ports
         .iter()
-        .map(|port| parse_int(port))
+        .map(|port| parse_int::<usize>(port))
         .collect::<Result<Vec<_>, _>>()?;
     state.value_arch = Arch::mc_node_create(ctx, state.value_arch, instance, &ports)?;
     Ok(None)
@@ -524,8 +530,12 @@ where
     Arch: Architecture,
     Interp: Interpreter<Iface, Arch, Error = InterpError>,
 {
-    state.value_arch =
-        Arch::mc_node_associate(ctx, state.value_arch, parse_int(&id_group)?, parse_int(&handle)?)?;
+    state.value_arch = Arch::mc_node_associate(
+        ctx,
+        state.value_arch,
+        parse_int::<usize>(&id_group)?,
+        parse_int::<usize>(&handle)?,
+    )?;
     Ok(None)
 }
 
@@ -542,7 +552,8 @@ where
     Arch: Architecture,
     Interp: Interpreter<Iface, Arch, Error = InterpError>,
 {
-    state.value_arch = Arch::register_read(ctx, state.value_arch, name.as_str(), parse_int(&idx)?)?;
+    state.value_arch =
+        Arch::register_read(ctx, state.value_arch, name.as_str(), parse_int::<usize>(&idx)?)?;
     Ok(None)
 }
 
@@ -562,8 +573,8 @@ where
         ctx,
         state.value_arch,
         name.as_str(),
-        parse_int(&idx)?,
-        parse_int(&value)?,
+        parse_int::<usize>(&idx)?,
+        BigInt::from(parse_int::<i128>(&value)?),
     )?;
     Ok(None)
 }

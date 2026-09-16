@@ -276,7 +276,7 @@ pub fn psa_ingress_init_globals<Interp, Iface, Exn>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
     value_ctx: Value,
     value_arch: Value,
-    port: i64,
+    port: usize,
 ) -> Result<Value, Interp::Error>
 where
     Iface: Interface,
@@ -297,7 +297,7 @@ pub fn psa_ingress_init_metadata<Interp, Iface, Exn>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
     value_ctx: Value,
     value_arch: Value,
-    port: i64,
+    port: usize,
     path: &str,
 ) -> Result<Value, Interp::Error>
 where
@@ -405,7 +405,7 @@ pub fn psa_egress_init_globals<Interp, Iface, Exn>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
     value_ctx: Value,
     value_arch: Value,
-    port: i64,
+    port: usize,
 ) -> Result<Value, Interp::Error>
 where
     Iface: Interface,
@@ -426,10 +426,10 @@ pub fn psa_egress_init_metadata<Interp, Iface, Exn>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
     value_ctx: Value,
     value_arch: Value,
-    port: i64,
+    port: usize,
     path: &str,
-    cos: i64,
-    instance: i64,
+    cos: usize,
+    instance: usize,
 ) -> Result<Value, Interp::Error>
 where
     Iface: Interface,
@@ -542,7 +542,7 @@ pub fn v1model_init_globals<Interp, Iface, Exn>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
     value_ctx: Value,
     value_arch: Value,
-    port: i64,
+    port: usize,
 ) -> Result<Value, Interp::Error>
 where
     Iface: Interface,
