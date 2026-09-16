@@ -7,7 +7,7 @@
 
 use super::{
     StructureError, StructureErrorKind, antiunify, context::Context, dangle, merge, ol::ast as ol,
-    opt, prettify, totalize,
+    opt, pretty, totalize,
 };
 use crate::lang::{
     al::{ast as al, fresh},
@@ -750,7 +750,7 @@ fn struct_defined_rel_def(
         .map(|block_else| opt::optimize(&ctx.tdenv, block_else, without_rule_groups))
         .transpose()?;
     let (block, block_else) = totalize::totalize(&ctx.tdenv, block, block_else)?;
-    let (exps_input, block, block_else) = prettify::pretty_rel(exps_template, block, block_else)?;
+    let (exps_input, block, block_else) = pretty::pretty_rel(exps_template, block, block_else)?;
     let (block, block_else) = dangle::instrument(block, block_else)?;
     let def_rel_sl = sl::DefinedRel {
         id,
@@ -935,7 +935,7 @@ fn struct_func_dec_def(
         .map(|block_else| opt::optimize(&ctx.tdenv, block_else, without_rule_groups))
         .transpose()?;
     let (block, block_else) = totalize::totalize(&ctx.tdenv, block, block_else)?;
-    let (args_input, block, block_else) = prettify::pretty_func(args_template, block, block_else)?;
+    let (args_input, block, block_else) = pretty::pretty_func(args_template, block, block_else)?;
     let params_sl = struct_params_from_args(ctx, params_al, args_input, span)?;
     let (block, block_else) = dangle::instrument(block, block_else)?;
     let def_func_sl = sl::DefinedFunc {

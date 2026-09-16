@@ -49,8 +49,6 @@ mod merge;
 mod ol;
 #[path = "opt.rs"]
 mod opt;
-#[path = "prettify.rs"]
-mod prettify;
 #[path = "pretty.rs"]
 mod pretty;
 #[path = "re.rs"]
