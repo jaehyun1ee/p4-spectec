@@ -1,7 +1,7 @@
 //! Preserve semantic fallthrough when lowering optimized instructions to SL
 //!
-//! With no fallback, `If(p, [A])` gets `dangle=true` so a failed p can
-//! continue to the next rule; an explicit fallback makes it false
+//! With no fallback, `If(p, [A])` gets `dangle=true`
+//! an explicit fallback makes it false
 //! A total Case also gets `dangle=false`
 
 use super::{
@@ -13,18 +13,7 @@ use crate::lang::{
     sl::ast as sl,
 };
 
-// == Lowering instructions
-
-fn insert_dangle(block_ol: ol::Block) -> Result<sl::Block, StructureError> {
-    insert_block(block_ol, true)
-}
-
-fn insert_block(block_ol: ol::Block, dangle: bool) -> Result<sl::Block, StructureError> {
-    block_ol
-        .into_iter()
-        .map(|instr_ol| insert_instr(instr_ol, dangle))
-        .collect()
-}
+// == Instructions
 
 fn insert_instr(instr_ol: ol::Instr, dangle: bool) -> Result<sl::Instr, StructureError> {
     let Phrase {
@@ -54,6 +43,8 @@ fn insert_instr_kind(
     }
 }
 
+// - If instruction
+
 fn insert_if_instr(instr_ol: ol::IfInstr, dangle: bool) -> Result<sl::InstrKind, StructureError> {
     let ol::IfInstr {
         exp,
@@ -68,6 +59,8 @@ fn insert_if_instr(instr_ol: ol::IfInstr, dangle: bool) -> Result<sl::InstrKind,
         dangle,
     }))
 }
+
+// - Hold instruction
 
 fn insert_hold_instr(
     instr_ol: ol::HoldInstr,
@@ -102,6 +95,17 @@ fn insert_hold_instr(
     }))
 }
 
+// - Case instruction
+
+fn insert_case(case_ol: ol::Case, dangle: bool) -> Result<sl::Case, StructureError> {
+    let ol::Case {
+        guard,
+        block: block_ol,
+    } = case_ol;
+    let block = insert_block(block_ol, dangle)?;
+    Ok(sl::Case { guard, block })
+}
+
 fn insert_case_instr(
     instr_ol: ol::CaseInstr,
     dangle: bool,
@@ -113,7 +117,7 @@ fn insert_case_instr(
     } = instr_ol;
     let cases = cases_ol
         .into_iter()
-        .map(|case_ol| insert_case_block(case_ol, dangle))
+        .map(|case_ol| insert_case(case_ol, dangle))
         .collect::<Result<_, _>>()?;
     Ok(sl::InstrKind::Case(sl::CaseInstr {
         exp,
@@ -122,14 +126,7 @@ fn insert_case_instr(
     }))
 }
 
-fn insert_case_block(case_ol: ol::Case, dangle: bool) -> Result<sl::Case, StructureError> {
-    let ol::Case {
-        guard,
-        block: block_ol,
-    } = case_ol;
-    let block = insert_block(block_ol, dangle)?;
-    Ok(sl::Case { guard, block })
-}
+// - Group instruction
 
 fn insert_group_instr(
     instr_ol: ol::GroupInstr,
@@ -150,6 +147,8 @@ fn insert_group_instr(
     }))
 }
 
+// - Let instruction
+
 fn insert_let_instr(instr_ol: ol::LetInstr, dangle: bool) -> Result<sl::InstrKind, StructureError> {
     let ol::LetInstr {
         exp_l,
@@ -165,6 +164,8 @@ fn insert_let_instr(instr_ol: ol::LetInstr, dangle: bool) -> Result<sl::InstrKin
         block,
     }))
 }
+
+// - Rule instruction
 
 fn insert_rule_instr(
     instr_ol: ol::RuleInstr,
@@ -187,6 +188,8 @@ fn insert_rule_instr(
     }))
 }
 
+// - Result instruction
+
 fn insert_result_instr(instr_ol: ol::ResultInstr) -> sl::InstrKind {
     let ol::ResultInstr {
         rel_signature,
@@ -198,10 +201,14 @@ fn insert_result_instr(instr_ol: ol::ResultInstr) -> sl::InstrKind {
     })
 }
 
+// - Return instruction
+
 fn insert_return_instr(instr_ol: ol::ReturnInstr) -> sl::InstrKind {
     let ol::ReturnInstr { exp } = instr_ol;
     sl::InstrKind::Return(sl::ReturnInstr { exp })
 }
+
+// - Debug instruction
 
 fn insert_debug_instr(
     instr_ol: ol::DebugInstr,
@@ -218,11 +225,26 @@ fn insert_debug_instr(
     }))
 }
 
-// == Fallback handling
+// == Blocks
+
+fn insert_block(block_ol: ol::Block, dangle: bool) -> Result<sl::Block, StructureError> {
+    block_ol
+        .into_iter()
+        .map(|instr_ol| insert_instr(instr_ol, dangle))
+        .collect()
+}
+
+// == Block insertion strategies
 
 fn insert_nothing(block_ol: ol::Block) -> Result<sl::Block, StructureError> {
     insert_block(block_ol, false)
 }
+
+fn insert_dangle(block_ol: ol::Block) -> Result<sl::Block, StructureError> {
+    insert_block(block_ol, true)
+}
+
+// == Fallback handling
 
 pub(crate) fn instrument(
     block_ol: ol::Block,
