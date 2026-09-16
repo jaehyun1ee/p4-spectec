@@ -6,6 +6,7 @@ use super::{
     expression::{self, eval_exp, eval_exps},
     interpreter::{invoke_func, invoke_rel},
 };
+use crate::interp::shared::ops;
 use crate::{
     interp::al::{
         backtrack::{Backtrack, backtrack, backtrack_from_result},
@@ -201,31 +202,7 @@ fn eval_instr_inner<Iface: Interface, Exn: Extern>(
             ctx_guard.add_value(Variable::new(id.clone(), vec![]), value);
             let exp = crate::note_phrase!(node: ast::ExpKind::Var(id), note: instr.exp.note.clone(), span: instr.exp.span.clone());
             for case in &instr.cases {
-                let exp_kind = match &case.guard {
-                    ast::Guard::Bool(true) => exp.node.clone(),
-                    ast::Guard::Bool(false) => ast::ExpKind::Un(
-                        ast::UnOp::Bool(boolean::UnOp::Not),
-                        ast::OpTyp::Bool,
-                        Box::new(exp.clone()),
-                    ),
-                    ast::Guard::Cmp(op, typ, exp_r) => {
-                        ast::ExpKind::Cmp(*op, *typ, Box::new(exp.clone()), Box::new(exp_r.clone()))
-                    }
-                    ast::Guard::Sub(typ, check) => ast::ExpKind::Sub(
-                        Box::new(exp.clone()),
-                        Box::new(typ.clone()),
-                        check.clone(),
-                    ),
-                    ast::Guard::Match(pattern) => {
-                        ast::ExpKind::Match(Box::new(exp.clone()), pattern.clone())
-                    }
-                    ast::Guard::Mem(exp_list) => {
-                        ast::ExpKind::Mem(Box::new(exp.clone()), Box::new(exp_list.clone()))
-                    }
-                };
-                let exp_cond = crate::note_phrase!(node: exp_kind, note: std::rc::Rc::new(ast::TypKind::Bool), span: instr.exp.span.clone());
-                let value_cond = backtrack!(eval_exp(runner, &ctx_guard, &exp_cond));
-                if backtrack_from_result!(get::bool(runner.arena(), &value_cond), &instr.exp.span) {
+                if backtrack!(eval_guard(runner, &ctx_guard, &exp, value, &case.guard)) {
                     return eval_block(runner, ctx, &case.block, tail);
                 }
             }
@@ -437,4 +414,59 @@ fn binding_iter<'global, Iface: Interface, Exn: Extern>(
             |runner, ctx| binding_iter(runner, ctx, iters_tail, eval),
         ),
     }
+}
+
+fn eval_guard<Iface: Interface, Exn: Extern>(
+    runner: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
+    ctx: &Context<'_>,
+    exp: &ast::Exp,
+    value: Value,
+    guard: &ast::Guard,
+) -> Backtrack<bool> {
+    if matches!(guard, ast::Guard::Bool(true)) {
+        return Backtrack::from_result(get::bool(runner.arena(), &value), &exp.span);
+    }
+    let result = (|| match guard {
+        ast::Guard::Bool(_) => Backtrack::Ok(!backtrack_from_result!(
+            get::bool(runner.arena(), &value),
+            &exp.span
+        )),
+        ast::Guard::Cmp(op, _, exp_r) => {
+            let value_r = backtrack!(eval_exp(runner, ctx, exp_r));
+            ops::compare(runner.arena(), &exp.span, op, value, value_r)
+        }
+        ast::Guard::Sub(_, check) => ops::check_sub(runner.arena(), ctx, &exp.span, check, value),
+        ast::Guard::Match(pattern) => Backtrack::Ok(ops::matches(runner.arena(), pattern, value)),
+        ast::Guard::Mem(exp_list) => {
+            let value_list = backtrack!(eval_exp(runner, ctx, exp_list));
+            ops::contains(runner.arena(), &exp.span, value, value_list)
+        }
+    })();
+    result.nest(exp.span.clone(), || {
+        let exp_kind = match guard {
+                    ast::Guard::Bool(true) => exp.node.clone(),
+                    ast::Guard::Bool(false) => ast::ExpKind::Un(
+                        ast::UnOp::Bool(boolean::UnOp::Not),
+                        ast::OpTyp::Bool,
+                        Box::new(exp.clone()),
+                    ),
+                    ast::Guard::Cmp(op, typ, exp_r) => {
+                        ast::ExpKind::Cmp(*op, *typ, Box::new(exp.clone()), Box::new(exp_r.clone()))
+                    }
+                    ast::Guard::Sub(typ, check) => ast::ExpKind::Sub(
+                        Box::new(exp.clone()),
+                        Box::new(typ.clone()),
+                        check.clone(),
+                    ),
+                    ast::Guard::Match(pattern) => {
+                        ast::ExpKind::Match(Box::new(exp.clone()), pattern.clone())
+                    }
+                    ast::Guard::Mem(exp_list) => {
+                        ast::ExpKind::Mem(Box::new(exp.clone()), Box::new(exp_list.clone()))
+                    }
+                };
+    let exp_cond = crate::note_phrase!(node: exp_kind, note: std::rc::Rc::new(ast::TypKind::Bool), span: exp.span.clone());
+
+        ErrorKind::Trace(TraceErrorKind::Expression { exp: Print::to_string(&exp_cond) })
+    })
 }

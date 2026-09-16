@@ -11,12 +11,10 @@ use crate::{
         common::{Variable, source::Span},
         data::value::{Value, ValueKind, get, make},
         il::ast,
-        il::ast::{ListPattern, OptPattern},
-        traits::eq::SyntaxEq,
         xl::{bool as boolean, num},
     },
     runner::{Extern, Interface, RunnerContext},
-    runtime::ops::{typ::subst_typ, value},
+    runtime::ops::typ::subst_typ,
 };
 
 use super::{arg::eval_args, ops, path::eval_update_path};
@@ -185,21 +183,7 @@ fn eval_cmp_exp<Ctx: EvalContext<Iface, Exn>, Iface: Interface, Exn: Extern>(
 ) -> Backtrack<Value> {
     let value_l = backtrack!(eval_exp(runner, ctx, exp_l));
     let value_r = backtrack!(eval_exp(runner, ctx, exp_r));
-    let result = match op {
-        ast::CmpOp::Bool(boolean::CmpOp::Eq) => runner
-            .arena()
-            .view(value_l)
-            .syntax_eq(&runner.arena().view(value_r)),
-        ast::CmpOp::Bool(boolean::CmpOp::Ne) => !runner
-            .arena()
-            .view(value_l)
-            .syntax_eq(&runner.arena().view(value_r)),
-        ast::CmpOp::Num(op) => {
-            let num_l = backtrack_from_result!(get::num(runner.arena(), &value_l), span);
-            let num_r = backtrack_from_result!(get::num(runner.arena(), &value_r), span);
-            backtrack_from_result!(num::cmp(*op, num_l, num_r), span)
-        }
-    };
+    let result = backtrack!(ops::compare(runner.arena(), span, op, value_l, value_r));
     let value = backtrack_from_result!(
         make::bool(runner.arena_mut(), result, Span::default()),
         span
@@ -241,15 +225,7 @@ fn eval_sub_exp<Ctx: EvalContext<Iface, Exn>, Iface: Interface, Exn: Extern>(
     subcheck: &ast::Subcheck,
 ) -> Backtrack<Value> {
     let value = backtrack!(eval_exp(runner, ctx, exp_inner));
-    let tdenv = ctx.tdenv();
-    let find_func = |name: &str| {
-        let id = crate::phrase!(node: name.to_owned(), span: span.clone());
-        ctx.find_func_typ(&id).ok()
-    };
-    let matches = backtrack_from_result!(
-        value::check(runner.arena(), &tdenv, &find_func, subcheck, &value),
-        span
-    );
+    let matches = backtrack!(ops::check_sub(runner.arena(), ctx, span, subcheck, value));
     let value = backtrack_from_result!(
         make::bool(runner.arena_mut(), matches, Span::default()),
         span
@@ -266,17 +242,7 @@ fn eval_match_exp<Ctx: EvalContext<Iface, Exn>, Iface: Interface, Exn: Extern>(
     pattern: &ast::Pattern,
 ) -> Backtrack<Value> {
     let value = backtrack!(eval_exp(runner, ctx, exp_inner));
-    let matches = match (pattern, runner.arena().kind(&value)) {
-        (ast::Pattern::Case(mixop), ValueKind::Case(value)) => value.eq_shape(mixop.as_ref()),
-        (ast::Pattern::List(pattern), ValueKind::List(values)) => match pattern {
-            ListPattern::Cons => !values.is_empty(),
-            ListPattern::Fixed(len) => values.len() == *len,
-            ListPattern::Nil => values.is_empty(),
-        },
-        (ast::Pattern::Opt(OptPattern::Some), ValueKind::Opt(Some(_)))
-        | (ast::Pattern::Opt(OptPattern::None), ValueKind::Opt(None)) => true,
-        _ => false,
-    };
+    let matches = ops::matches(runner.arena(), pattern, value);
     let value = backtrack_from_result!(
         make::bool(runner.arena_mut(), matches, Span::default()),
         &Span::default()
@@ -454,13 +420,7 @@ fn eval_mem_exp<Ctx: EvalContext<Iface, Exn>, Iface: Interface, Exn: Extern>(
 ) -> Backtrack<Value> {
     let value_elem = backtrack!(eval_exp(runner, ctx, exp_elem));
     let value_list = backtrack!(eval_exp(runner, ctx, exp_list));
-    let values = backtrack_from_result!(get::list(runner.arena(), &value_list), span);
-    let contains = values.iter().any(|value| {
-        runner
-            .arena()
-            .view(*value)
-            .syntax_eq(&runner.arena().view(value_elem))
-    });
+    let contains = backtrack!(ops::contains(runner.arena(), span, value_elem, value_list));
     let value = backtrack_from_result!(
         make::bool(runner.arena_mut(), contains, Span::default()),
         span

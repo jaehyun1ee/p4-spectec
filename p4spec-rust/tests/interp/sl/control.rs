@@ -253,3 +253,38 @@ fn type_arguments_shadow_global_type_definitions() {
         .unwrap();
     assert_eq!(get::num(runner.arena(), &value).unwrap().to_string(), "1");
 }
+
+#[test]
+fn case_comparison_rhs_observes_the_scrutinee_binding() {
+    use p4spec_rust::lang::xl::bool as bool_op;
+    let exp_r = note_phrase!(node: ast::ExpKind::Var(phrase!(node: "~case".to_owned(), span: Span::default())), note: typ::make::nat().node, span: Span::default());
+    let block = vec![phrase!(node: ast::InstrKind::Case(ast::CaseInstr {
+        exp: exp(7),
+        cases: vec![ast::Case {
+            guard: ast::Guard::Cmp(ast::CmpOp::Bool(bool_op::CmpOp::Eq), ast::OpTyp::Nat, exp_r),
+            block: vec![instr(exp(5))],
+        }],
+        dangle: false,
+    }), span: Span::default())];
+    for det in [false, true] {
+        let mut runner = with_block(block.clone(), det);
+        let value = runner.context().call_func("entry", &[], &[]).unwrap();
+        assert_eq!(get::num(runner.arena(), &value).unwrap().to_string(), "5");
+    }
+}
+
+#[test]
+fn case_guard_errors_keep_the_generated_expression_trace() {
+    use p4spec_rust::lang::xl::num;
+    let guard = ast::Guard::Cmp(
+        ast::CmpOp::Num(num::CmpOp::Lt),
+        ast::OpTyp::Nat,
+        boolean(true),
+    );
+    let block = vec![phrase!(node: ast::InstrKind::Case(ast::CaseInstr {
+        exp: exp(7), cases: vec![ast::Case { guard, block: vec![instr(exp(5))] }], dangle: false,
+    }), span: Span::default())];
+    let mut runner = with_block(block, false);
+    let error = runner.context().call_func("entry", &[], &[]).unwrap_err();
+    assert!(error.to_string().contains("~case"), "{error}");
+}

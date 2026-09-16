@@ -11,7 +11,8 @@ use crate::{
         common::source::{Phrase, Span},
         data::value::{Value, ValueArena, ValueKind, get, make},
         il::ast,
-        xl::num,
+        traits::eq::SyntaxEq,
+        xl::{bool as boolean, num},
     },
     runtime::ops::typ::{Theta, subst_typ},
 };
@@ -520,4 +521,72 @@ pub(crate) fn update_slice(
         _ => unreachable!(),
     };
     Backtrack::Ok(value)
+}
+
+// - Predicates over evaluated values
+
+pub(crate) fn compare(
+    arena: &ValueArena,
+    span: &Span,
+    op: &ast::CmpOp,
+    value_l: Value,
+    value_r: Value,
+) -> Backtrack<bool> {
+    Backtrack::Ok(match op {
+        ast::CmpOp::Bool(boolean::CmpOp::Eq) => arena.view(value_l).syntax_eq(&arena.view(value_r)),
+        ast::CmpOp::Bool(boolean::CmpOp::Ne) => {
+            !arena.view(value_l).syntax_eq(&arena.view(value_r))
+        }
+        ast::CmpOp::Num(op) => {
+            let num_l = backtrack_from_result!(get::num(arena, &value_l), span);
+            let num_r = backtrack_from_result!(get::num(arena, &value_r), span);
+            backtrack_from_result!(num::cmp(*op, num_l, num_r), span)
+        }
+    })
+}
+
+pub(crate) fn check_sub(
+    arena: &ValueArena,
+    ctx: &impl ValueContext,
+    span: &Span,
+    subcheck: &ast::Subcheck,
+    value: Value,
+) -> Backtrack<bool> {
+    let tdenv = ctx.tdenv();
+    let find_func = |name: &str| {
+        let id = crate::phrase!(node: name.to_owned(), span: span.clone());
+        ctx.find_func_typ(&id).ok()
+    };
+    Backtrack::from_result(
+        crate::runtime::ops::value::check(arena, &tdenv, &find_func, subcheck, &value),
+        span,
+    )
+}
+
+pub(crate) fn matches(arena: &ValueArena, pattern: &ast::Pattern, value: Value) -> bool {
+    match (pattern, arena.kind(&value)) {
+        (ast::Pattern::Case(mixop), ValueKind::Case(value)) => value.eq_shape(mixop.as_ref()),
+        (ast::Pattern::List(pattern), ValueKind::List(values)) => match pattern {
+            ast::ListPattern::Cons => !values.is_empty(),
+            ast::ListPattern::Fixed(len) => values.len() == *len,
+            ast::ListPattern::Nil => values.is_empty(),
+        },
+        (ast::Pattern::Opt(ast::OptPattern::Some), ValueKind::Opt(Some(_)))
+        | (ast::Pattern::Opt(ast::OptPattern::None), ValueKind::Opt(None)) => true,
+        _ => false,
+    }
+}
+
+pub(crate) fn contains(
+    arena: &ValueArena,
+    span: &Span,
+    value_elem: Value,
+    value_list: Value,
+) -> Backtrack<bool> {
+    let values = backtrack_from_result!(get::list(arena, &value_list), span);
+    Backtrack::Ok(
+        values
+            .iter()
+            .any(|value| arena.view(*value).syntax_eq(&arena.view(value_elem))),
+    )
 }
