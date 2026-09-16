@@ -46,6 +46,51 @@ fn test_algo_command_prints_the_algorithmic_spec() {
 }
 
 #[test]
+fn test_struct_command_prints_control_flow_without_rule_groups() {
+    let output = binary()
+        .arg("struct")
+        .arg(fixture("structure/definitions.watsup"))
+        .output()
+        .expect("run struct command");
+
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(output.stderr.is_empty());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("Return CONT"), "{stdout}");
+    assert!(stdout.contains("Otherwise,"), "{stdout}");
+    assert!(!stdout.contains("Group "), "{stdout}");
+    assert!(stdout.ends_with('\n'));
+}
+
+#[test]
+fn test_struct_command_reports_pipeline_errors_on_stderr() {
+    for (path, message) in [
+        (
+            "frontend/negative/malformed-token.watsup",
+            "malformed token",
+        ),
+        (
+            "elaboration/operator_not_defined.watsup",
+            "operator is not defined",
+        ),
+        (
+            "algorithmic/impure_else_premises.watsup",
+            "otherwise branch contains an impure premise",
+        ),
+    ] {
+        let output = binary().arg("struct").arg(fixture(path)).output().unwrap();
+        assert_eq!(output.status.code(), Some(1));
+        assert!(output.stdout.is_empty());
+        let stderr = String::from_utf8(output.stderr).unwrap();
+        assert!(stderr.contains(message), "{stderr}");
+    }
+}
+
+#[test]
 fn test_algo_command_reports_conversion_errors_on_stderr() {
     let output = binary()
         .arg("algo")
@@ -98,7 +143,7 @@ fn test_elab_command_reports_elaboration_errors_on_stderr() {
 
 #[test]
 fn test_commands_require_at_least_one_path() {
-    for command in ["elab", "algo"] {
+    for command in ["elab", "algo", "struct"] {
         let output = binary().arg(command).output().expect("run command");
         assert_eq!(output.status.code(), Some(2));
         assert!(output.stdout.is_empty());
@@ -118,12 +163,13 @@ fn test_help_prints_commands() {
         assert!(stdout.contains("Commands:"));
         assert!(stdout.contains("elab"));
         assert!(stdout.contains("algo"));
+        assert!(stdout.contains("struct"));
     }
 }
 
 #[test]
 fn test_subcommand_help_prints_paths_without_processing_inputs() {
-    for command in ["elab", "algo"] {
+    for command in ["elab", "algo", "struct"] {
         for flag in ["-h", "--help"] {
             let output = binary()
                 .args([command, "missing.watsup", flag])
@@ -157,6 +203,7 @@ fn test_invalid_arguments_report_usage_errors() {
         vec!["--unknown"],
         vec!["elab", "--unknown"],
         vec!["algo", "--unknown"],
+        vec!["struct", "--unknown"],
     ] {
         let output = binary().args(args).output().expect("run invalid arguments");
         assert_eq!(output.status.code(), Some(2));
@@ -167,7 +214,7 @@ fn test_invalid_arguments_report_usage_errors() {
 
 #[test]
 fn test_commands_preserve_multiple_input_order() {
-    for command in ["elab", "algo"] {
+    for command in ["elab", "algo", "struct"] {
         let output = binary()
             .arg(command)
             .arg(fixture("cli/second.watsup"))
@@ -185,7 +232,7 @@ fn test_commands_preserve_multiple_input_order() {
 
 #[test]
 fn test_commands_accept_hyphenated_paths_after_separator() {
-    for command in ["elab", "algo"] {
+    for command in ["elab", "algo", "struct"] {
         let output = binary()
             .current_dir(fixture("cli"))
             .args([command, "--", "-input.watsup"])

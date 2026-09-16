@@ -8,23 +8,6 @@ use super::ast::*;
 
 // == Printing
 
-// - Helpers
-
-fn escaped(text: &str) -> String {
-    text.bytes()
-        .map(|byte| match byte {
-            b'"' => "\\\"".into(),
-            b'\\' => "\\\\".into(),
-            8 => "\\b".into(),
-            9 => "\\t".into(),
-            10 => "\\n".into(),
-            13 => "\\r".into(),
-            32..=126 => char::from(byte).to_string(),
-            _ => format!("\\{byte:03}"),
-        })
-        .collect()
-}
-
 // - Expressions
 
 impl Print for Exp {
@@ -281,84 +264,11 @@ impl Print for [Arg] {
     }
 }
 
-// - Case analysis
+// - Instructions
+
+// Shared control flow parameterized by the tier
 
 type TierPrinter<Tier> = fn(&mut Printer<'_>, &Tier, bool, usize, usize) -> fmt::Result;
-
-fn write_case_with<Tier>(
-    output: &mut Printer<'_>,
-    case: &Case<Tier>,
-    tier_printer: TierPrinter<Tier>,
-    level: usize,
-    index: usize,
-) -> fmt::Result {
-    write!(output, "{}{index}. Case ", "  ".repeat(level))?;
-    case.guard.print(output)?;
-    output.write_str("\n\n")?;
-    write_block_with(output, &case.block, tier_printer, level + 1, 0)
-}
-
-fn write_cases_with<Tier>(
-    output: &mut Printer<'_>,
-    cases: &[Case<Tier>],
-    tier_printer: TierPrinter<Tier>,
-    level: usize,
-) -> fmt::Result {
-    for (index, case) in cases.iter().enumerate() {
-        if index != 0 {
-            output.write_str("\n\n")?;
-        }
-        write_case_with(output, case, tier_printer, level, index + 1)?;
-    }
-    Ok(())
-}
-
-impl Print for Guard {
-    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        match self {
-            Guard::Bool(value) => write!(printer, "{value}"),
-            Guard::Cmp(op, _, exp) => {
-                printer.write_str("(% ")?;
-                op.print(printer)?;
-                printer.write_char(' ')?;
-                exp.print(printer)?;
-                printer.write_char(')')
-            }
-            Guard::Sub(typ, _) => {
-                printer.write_str("(% has type ")?;
-                typ.print(printer)?;
-                printer.write_char(')')
-            }
-            Guard::Match(pattern) => {
-                printer.write_str("(% matches pattern ")?;
-                pattern.print(printer)?;
-                printer.write_char(')')
-            }
-            Guard::Mem(exp) => {
-                printer.write_str("(% is in ")?;
-                exp.print(printer)?;
-                printer.write_char(')')
-            }
-            Guard::CheckLetSub(typ, _, exp) => {
-                printer.write_str("(let ")?;
-                exp.print(printer)?;
-                printer.write_str(" be %, % has type ")?;
-                typ.print(printer)?;
-                printer.write_char(')')
-            }
-            Guard::CheckLetMatch(pattern, exp) => {
-                printer.write_str("(let ")?;
-                exp.print(printer)?;
-                printer.write_str(" be %, % matches pattern ")?;
-                pattern.print(printer)?;
-                printer.write_char(')')
-            }
-        }
-    }
-}
-
-// - Instructions
-// Shared control flow parameterized by the tier
 
 fn write_instr_with<Tier>(
     output: &mut Printer<'_>,
@@ -555,162 +465,13 @@ fn write_instr_with<Tier>(
     }
 }
 
-fn write_block_with<Tier>(
-    output: &mut Printer<'_>,
-    block: &Block<Tier>,
-    tier_printer: TierPrinter<Tier>,
-    level: usize,
-    index: usize,
-) -> fmt::Result {
-    for (offset, instr) in block.iter().enumerate() {
-        if offset != 0 {
-            output.write_str("\n\n")?;
-        }
-        write_instr_with(
-            output,
-            instr,
-            tier_printer,
-            false,
-            level,
-            index + offset + 1,
-        )?;
-    }
-    Ok(())
-}
-
-fn write_elseblock_opt_with<Tier>(
-    output: &mut Printer<'_>,
-    block: &Option<Block<Tier>>,
-    tier_printer: TierPrinter<Tier>,
-    level: usize,
-    index: usize,
-) -> fmt::Result {
-    if let Some(block) = block {
-        write!(
-            output,
-            "\n\n{}{next}. Otherwise,\n\n",
-            "  ".repeat(level),
-            next = index + 1
-        )?;
-        write_block_with(output, block, tier_printer, level + 1, 0)?;
-    }
-    Ok(())
-}
-
-// - Type definitions
-
-impl Print for TypDef {
-    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        match self {
-            Self::Extern(extern_typ) => {
-                printer.write_str("extern syntax ")?;
-                extern_typ.id.print(printer)
-            }
-            Self::Defined(defined_typ) => {
-                printer.write_str("syntax ")?;
-                defined_typ.id.print(printer)?;
-                if !defined_typ.tparams.is_empty() {
-                    printer.write_char('<')?;
-                    printer.separated(&defined_typ.tparams, ", ")?;
-                    printer.write_char('>')?;
-                }
-                printer.write_str(" = ")?;
-                defined_typ.def_typ.print(printer)
-            }
-        }
-    }
-}
-
-// - Relations
-
-fn write_relinput(
-    output: &mut Printer<'_>,
-    rel_signature: &RelSignature,
-    exps_input: &[Exp],
-) -> fmt::Result {
-    let not_typ = &rel_signature.not_typ;
-    let input_indices = rel_signature.input_hint.indices();
-    assert_eq!(input_indices.len(), exps_input.len());
-    let args = (0..not_typ.node.arity()).map(|index| {
-        input_indices
-            .iter()
-            .position(|input| *input == index as i64)
-            .map(|position| &exps_input[position])
-    });
-    let mixfix =
-        Mixop::fill(&not_typ.node.to_mixop(), args).expect("relation input arity matches notation");
-    mixfix.print_with(output, |exp, output| match exp {
-        Some(exp) => exp.print(output),
-        None => output.write("%"),
-    })
-}
-
-fn write_reloutput(
-    output: &mut Printer<'_>,
-    rel_signature: &RelSignature,
-    exps_output: &[Exp],
-) -> fmt::Result {
-    let not_typ = &rel_signature.not_typ;
-    let input_indices = rel_signature.input_hint.indices();
-    let outputs = (0..not_typ.node.arity())
-        .filter(|index| !input_indices.contains(&(*index as i64)))
-        .collect::<Vec<_>>();
-    assert_eq!(outputs.len(), exps_output.len());
-    let args = (0..not_typ.node.arity()).map(|index| {
-        outputs
-            .iter()
-            .position(|output| *output == index)
-            .map(|position| &exps_output[position])
-    });
-    let mixfix = Mixop::fill(&not_typ.node.to_mixop(), args)
-        .expect("relation output arity matches notation");
-    mixfix.print_with(output, |exp, output| match exp {
-        Some(exp) => exp.print(output),
-        None => output.write("%"),
-    })
-}
-
-impl Print for ExternRel {
-    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        self.id.print(printer)?;
-        printer.write_str(": ")?;
-        write_relinput(printer, &self.rel_signature, &self.exps_input)
-    }
-}
-
-impl Print for DefinedRel {
-    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        self.id.print(printer)?;
-        printer.write_str(": ")?;
-        write_relinput(printer, &self.rel_signature, &self.exps_input)?;
-        printer.write_str("\n\n")?;
-        self.block.print(printer)?;
-        write_elseblock_opt_with(
-            printer,
-            &self.block_else_opt,
-            write_instr_dispatch_tier_with,
-            0,
-            self.block.len(),
-        )
-    }
-}
-
-impl Print for RelDef {
-    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        match self {
-            Self::Extern(relation) => {
-                printer.write_str("extern relation ")?;
-                relation.print(printer)
-            }
-            Self::Defined(relation) => {
-                printer.write_str("relation ")?;
-                relation.print(printer)
-            }
-        }
-    }
-}
-
 // - Group-body tier
+
+impl Print for Instr<InstrGroup> {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        write_instr_with(printer, self, write_instr_group_tier_with, false, 0, 0)
+    }
+}
 
 fn write_instr_group_tier_with(
     output: &mut Printer<'_>,
@@ -770,6 +531,12 @@ fn write_instr_group_tier_with(
     }
 }
 
+impl Print for BlockGroup {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        write_block_group_with(printer, self, 0, 0)
+    }
+}
+
 fn write_block_group_with(
     output: &mut Printer<'_>,
     block: &BlockGroup,
@@ -779,19 +546,13 @@ fn write_block_group_with(
     write_block_with(output, block, write_instr_group_tier_with, level, index)
 }
 
-impl Print for Instr<InstrGroup> {
-    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        write_instr_with(printer, self, write_instr_group_tier_with, false, 0, 0)
-    }
-}
-
-impl Print for BlockGroup {
-    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        write_block_group_with(printer, self, 0, 0)
-    }
-}
-
 // - Dispatch tier
+
+impl Print for Instr<InstrDispatch> {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        write_instr_with(printer, self, write_instr_dispatch_tier_with, false, 0, 0)
+    }
+}
 
 fn write_instr_dispatch_tier_with(
     output: &mut Printer<'_>,
@@ -841,6 +602,12 @@ fn write_instr_dispatch_tier_with(
     }
 }
 
+impl Print for BlockDispatch {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        write_block_dispatch_with(printer, self, 0, 0)
+    }
+}
+
 fn write_block_dispatch_with(
     output: &mut Printer<'_>,
     block: &BlockDispatch,
@@ -850,19 +617,286 @@ fn write_block_dispatch_with(
     write_block_with(output, block, write_instr_dispatch_tier_with, level, index)
 }
 
-impl Print for Instr<InstrDispatch> {
+// - Case analysis
+
+impl Print for Guard {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        write_instr_with(printer, self, write_instr_dispatch_tier_with, false, 0, 0)
+        match self {
+            Guard::Bool(value) => write!(printer, "{value}"),
+            Guard::Cmp(op, _, exp) => {
+                printer.write_str("(% ")?;
+                op.print(printer)?;
+                printer.write_char(' ')?;
+                exp.print(printer)?;
+                printer.write_char(')')
+            }
+            Guard::Sub(typ, _) => {
+                printer.write_str("(% has type ")?;
+                typ.print(printer)?;
+                printer.write_char(')')
+            }
+            Guard::Match(pattern) => {
+                printer.write_str("(% matches pattern ")?;
+                pattern.print(printer)?;
+                printer.write_char(')')
+            }
+            Guard::Mem(exp) => {
+                printer.write_str("(% is in ")?;
+                exp.print(printer)?;
+                printer.write_char(')')
+            }
+            Guard::CheckLetSub(typ, _, exp) => {
+                printer.write_str("(let ")?;
+                exp.print(printer)?;
+                printer.write_str(" be %, % has type ")?;
+                typ.print(printer)?;
+                printer.write_char(')')
+            }
+            Guard::CheckLetMatch(pattern, exp) => {
+                printer.write_str("(let ")?;
+                exp.print(printer)?;
+                printer.write_str(" be %, % matches pattern ")?;
+                pattern.print(printer)?;
+                printer.write_char(')')
+            }
+        }
     }
 }
 
-impl Print for BlockDispatch {
+fn write_cases_with<Tier>(
+    output: &mut Printer<'_>,
+    cases: &[Case<Tier>],
+    tier_printer: TierPrinter<Tier>,
+    level: usize,
+) -> fmt::Result {
+    for (index, case) in cases.iter().enumerate() {
+        if index != 0 {
+            output.write_str("\n\n")?;
+        }
+        write_case_with(output, case, tier_printer, level, index + 1)?;
+    }
+    Ok(())
+}
+
+fn write_case_with<Tier>(
+    output: &mut Printer<'_>,
+    case: &Case<Tier>,
+    tier_printer: TierPrinter<Tier>,
+    level: usize,
+    index: usize,
+) -> fmt::Result {
+    write!(output, "{}{index}. Case ", "  ".repeat(level))?;
+    case.guard.print(output)?;
+    output.write_str("\n\n")?;
+    write_block_with(output, &case.block, tier_printer, level + 1, 0)
+}
+
+// - Blocks
+
+fn write_block_with<Tier>(
+    output: &mut Printer<'_>,
+    block: &Block<Tier>,
+    tier_printer: TierPrinter<Tier>,
+    level: usize,
+    index: usize,
+) -> fmt::Result {
+    for (offset, instr) in block.iter().enumerate() {
+        if offset != 0 {
+            output.write_str("\n\n")?;
+        }
+        write_instr_with(
+            output,
+            instr,
+            tier_printer,
+            false,
+            level,
+            index + offset + 1,
+        )?;
+    }
+    Ok(())
+}
+
+fn write_elseblock_opt_with<Tier>(
+    output: &mut Printer<'_>,
+    block: &Option<Block<Tier>>,
+    tier_printer: TierPrinter<Tier>,
+    level: usize,
+    index: usize,
+) -> fmt::Result {
+    if let Some(block) = block {
+        write!(
+            output,
+            "\n\n{}{next}. Otherwise,\n\n",
+            "  ".repeat(level),
+            next = index + 1
+        )?;
+        write_block_with(output, block, tier_printer, level + 1, 0)?;
+    }
+    Ok(())
+}
+
+// - Table rows
+
+impl Print for TableRow {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        write_block_dispatch_with(printer, self, 0, 0)
+        printer.write_str("\n  Row : ")?;
+        printer.separated(&self.exps_input, ", ")?;
+        printer.write_str(" -> ")?;
+        self.exp.print(printer)?;
+        printer.write_str(":\n\n")?;
+        write_block_group_with(printer, &self.block, 2, 0)
     }
 }
 
-// - Meta-functions
+impl Print for [TableRow] {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        for (index, table_row) in self.iter().enumerate() {
+            if index != 0 {
+                printer.write_char('\n')?;
+            }
+            table_row.print(printer)?;
+        }
+        Ok(())
+    }
+}
+
+// == Type definitions
+
+impl Print for TypDef {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        match self {
+            Self::Extern(extern_typ) => {
+                printer.write_str("extern syntax ")?;
+                extern_typ.id.print(printer)
+            }
+            Self::Defined(defined_typ) => {
+                printer.write_str("syntax ")?;
+                defined_typ.id.print(printer)?;
+                if !defined_typ.tparams.is_empty() {
+                    printer.write_char('<')?;
+                    printer.separated(&defined_typ.tparams, ", ")?;
+                    printer.write_char('>')?;
+                }
+                printer.write_str(" = ")?;
+                defined_typ.def_typ.print(printer)
+            }
+        }
+    }
+}
+
+// == Relation definitions
+
+impl Print for RelDef {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        match self {
+            Self::Extern(relation) => {
+                printer.write_str("extern relation ")?;
+                relation.print(printer)
+            }
+            Self::Defined(relation) => {
+                printer.write_str("relation ")?;
+                relation.print(printer)
+            }
+        }
+    }
+}
+
+impl Print for ExternRel {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        self.id.print(printer)?;
+        printer.write_str(": ")?;
+        write_relinput(printer, &self.rel_signature, &self.exps_input)
+    }
+}
+
+impl Print for DefinedRel {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        self.id.print(printer)?;
+        printer.write_str(": ")?;
+        write_relinput(printer, &self.rel_signature, &self.exps_input)?;
+        printer.write_str("\n\n")?;
+        self.block.print(printer)?;
+        write_elseblock_opt_with(
+            printer,
+            &self.block_else_opt,
+            write_instr_dispatch_tier_with,
+            0,
+            self.block.len(),
+        )
+    }
+}
+
+fn write_relinput(
+    output: &mut Printer<'_>,
+    rel_signature: &RelSignature,
+    exps_input: &[Exp],
+) -> fmt::Result {
+    let not_typ = &rel_signature.not_typ;
+    let input_indices = rel_signature.input_hint.indices();
+    assert_eq!(input_indices.len(), exps_input.len());
+    let args = (0..not_typ.node.arity()).map(|index| {
+        input_indices
+            .iter()
+            .position(|input| *input == index as i64)
+            .map(|position| &exps_input[position])
+    });
+    let mixfix =
+        Mixop::fill(&not_typ.node.to_mixop(), args).expect("relation input arity matches notation");
+    mixfix.print_with(output, |exp, output| match exp {
+        Some(exp) => exp.print(output),
+        None => output.write("%"),
+    })
+}
+
+fn write_reloutput(
+    output: &mut Printer<'_>,
+    rel_signature: &RelSignature,
+    exps_output: &[Exp],
+) -> fmt::Result {
+    let not_typ = &rel_signature.not_typ;
+    let input_indices = rel_signature.input_hint.indices();
+    let outputs = (0..not_typ.node.arity())
+        .filter(|index| !input_indices.contains(&(*index as i64)))
+        .collect::<Vec<_>>();
+    assert_eq!(outputs.len(), exps_output.len());
+    let args = (0..not_typ.node.arity()).map(|index| {
+        outputs
+            .iter()
+            .position(|output| *output == index)
+            .map(|position| &exps_output[position])
+    });
+    let mixfix = Mixop::fill(&not_typ.node.to_mixop(), args)
+        .expect("relation output arity matches notation");
+    mixfix.print_with(output, |exp, output| match exp {
+        Some(exp) => exp.print(output),
+        None => output.write("%"),
+    })
+}
+
+// == Meta-function definitions
+
+impl Print for MetaFuncDef {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        match self {
+            Self::Extern(func) => {
+                printer.write_str("extern def ")?;
+                func.print(printer)
+            }
+            Self::Builtin(func) => {
+                printer.write_str("builtin def ")?;
+                func.print(printer)
+            }
+            Self::Table(func) => {
+                printer.write_str("tbl def ")?;
+                func.print(printer)
+            }
+            Self::Defined(func) => {
+                printer.write_str("def ")?;
+                func.print(printer)
+            }
+        }
+    }
+}
 
 impl Print for ExternFunc {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
@@ -887,29 +921,6 @@ impl Print for BuiltinFunc {
             printer.write_char('>')?;
         }
         self.params.as_slice().print(printer)
-    }
-}
-
-impl Print for TableRow {
-    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        printer.write_str("\n  Row : ")?;
-        printer.separated(&self.exps_input, ", ")?;
-        printer.write_str(" -> ")?;
-        self.exp.print(printer)?;
-        printer.write_str(":\n\n")?;
-        write_block_group_with(printer, &self.block, 2, 0)
-    }
-}
-
-impl Print for [TableRow] {
-    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        for (index, table_row) in self.iter().enumerate() {
-            if index != 0 {
-                printer.write_char('\n')?;
-            }
-            table_row.print(printer)?;
-        }
-        Ok(())
     }
 }
 
@@ -945,30 +956,7 @@ impl Print for DefinedFunc {
     }
 }
 
-impl Print for MetaFuncDef {
-    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        match self {
-            Self::Extern(func) => {
-                printer.write_str("extern def ")?;
-                func.print(printer)
-            }
-            Self::Builtin(func) => {
-                printer.write_str("builtin def ")?;
-                func.print(printer)
-            }
-            Self::Table(func) => {
-                printer.write_str("tbl def ")?;
-                func.print(printer)
-            }
-            Self::Defined(func) => {
-                printer.write_str("def ")?;
-                func.print(printer)
-            }
-        }
-    }
-}
-
-// - Definitions
+// == Definitions
 
 impl Print for Def {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
@@ -998,10 +986,27 @@ impl Print for [Def] {
     }
 }
 
-// - Specifications
+// == Specifications
 
 impl Print for Spec {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         self.as_slice().print(printer)
     }
+}
+
+// == Helpers
+
+fn escaped(text: &str) -> String {
+    text.bytes()
+        .map(|byte| match byte {
+            b'"' => "\\\"".into(),
+            b'\\' => "\\\\".into(),
+            8 => "\\b".into(),
+            9 => "\\t".into(),
+            10 => "\\n".into(),
+            13 => "\\r".into(),
+            32..=126 => char::from(byte).to_string(),
+            _ => format!("\\{byte:03}"),
+        })
+        .collect()
 }

@@ -13,6 +13,8 @@ pub use error::*;
 
 use crate::lang::{al, il};
 
+// == Entry point
+
 /// Converts an IL specification to AL
 pub fn convert(spec_il: il::ast::Spec) -> Result<al::ast::Spec, AlgoError> {
     let spec_al = binding::analyze::analyze_spec(spec_il)?;

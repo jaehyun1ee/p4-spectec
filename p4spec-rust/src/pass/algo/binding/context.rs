@@ -15,7 +15,6 @@ use crate::{
 
 use super::super::{AlgoError, AlgoErrorKind};
 
-/// Environments and fresh state threaded through binding analysis
 #[derive(Clone, Debug)]
 pub struct Context {
     pub(crate) frees: IdSet,
@@ -25,7 +24,7 @@ pub struct Context {
 }
 
 impl Context {
-    // == Constructors
+    // - Constructor
 
     pub fn new() -> Self {
         let mut menv = MEnv::new();
@@ -46,7 +45,7 @@ impl Context {
         }
     }
 
-    // == Adders
+    // - Adders
 
     pub fn add_free(&mut self, id: Id) {
         self.frees.insert(id);
@@ -66,7 +65,7 @@ impl Context {
         }
     }
 
-    // == Finders
+    // - Finders
 
     pub fn find_typdef_opt(&self, id: &Id) -> Option<&TypeDef> {
         self.tdenv.get(id)
@@ -77,7 +76,7 @@ impl Context {
             .ok_or_else(|| AlgoError::new(AlgoErrorKind::UndefinedType, id.span.clone()))
     }
 
-    // == Definition loading
+    // - Definition loading
 
     pub fn load_def(&mut self, def_al: &ast::Def) {
         match &def_al.node {
@@ -104,7 +103,7 @@ impl Context {
         }
     }
 
-    pub fn load_spec(&mut self, spec_al: &ast::Spec) {
+    pub fn load(&mut self, spec_al: &ast::Spec) {
         for def_al in spec_al {
             self.load_def(def_al);
         }

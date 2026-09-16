@@ -4,6 +4,8 @@ use std::rc::Rc;
 
 use crate::lang::common::source::NotePhrase;
 
+// == Syntax equality
+
 /// Compares syntax while ignoring source and analysis metadata
 pub trait SyntaxEq<Rhs: ?Sized = Self> {
     /// Returns whether two nodes represent the same syntax
@@ -23,14 +25,7 @@ pub trait SyntaxEq<Rhs: ?Sized = Self> {
     }
 }
 
-impl<T, Rhs> SyntaxEq<[Rhs]> for [T]
-where
-    T: SyntaxEq<Rhs>,
-{
-    fn syntax_eq(&self, other: &[Rhs]) -> bool {
-        T::slice_syntax_eq(self, other)
-    }
-}
+// - Text
 
 impl SyntaxEq for String {
     fn syntax_eq(&self, other: &Self) -> bool {
@@ -38,9 +33,22 @@ impl SyntaxEq for String {
     }
 }
 
+// - Source annotations
+
 impl<T: SyntaxEq, N, S> SyntaxEq for NotePhrase<T, N, S> {
     fn syntax_eq(&self, other: &Self) -> bool {
         self.node.syntax_eq(&other.node)
+    }
+}
+
+// - Containers
+
+impl<T, Rhs> SyntaxEq<[Rhs]> for [T]
+where
+    T: SyntaxEq<Rhs>,
+{
+    fn syntax_eq(&self, other: &[Rhs]) -> bool {
+        T::slice_syntax_eq(self, other)
     }
 }
 

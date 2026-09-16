@@ -80,12 +80,12 @@ fn test_pattern_subtraction_preserves_cartesian_fragment_order() {
         .into_iter()
         .collect::<PatternSets>();
 
-    let pattern_sets_group_missing =
+    let pattern_sets_rows_missing =
         pattern::subtract(&owner_span, &pattern_sets_total, &pattern_sets_covered)
             .expect("matching arity");
 
     assert_eq!(
-        pattern_sets_group_missing,
+        pattern_sets_rows_missing,
         vec![
             [pattern_set(&["B"]), pattern_set(&["X", "Y"])]
                 .into_iter()

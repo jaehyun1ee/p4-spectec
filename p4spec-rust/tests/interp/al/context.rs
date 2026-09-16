@@ -427,7 +427,7 @@ fn test_loaded_native_spec_preserves_definition_bodies_and_locations() {
     };
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../spec");
     let spec_el = parse_files([path]).unwrap();
-    let spec_il = elaborate::elaborate(spec_el).unwrap();
+    let spec_il = elaborate::convert(spec_el).unwrap();
     let spec_al = algo::convert(spec_il).unwrap();
     let global = Global::load(spec_al.clone()).unwrap();
     let ctx = Context::new(&global);

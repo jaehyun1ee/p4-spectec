@@ -92,10 +92,10 @@ pub fn has_overlap(
 
 pub fn find_overlap<'a>(
     span: &Span,
-    pattern_sets_group: &'a [PatternSets],
+    pattern_sets_by_row: &'a [PatternSets],
 ) -> Result<Option<(&'a PatternSets, &'a PatternSets)>, AlgoError> {
-    for (index, pattern_sets) in pattern_sets_group.iter().enumerate() {
-        for pattern_sets_other in &pattern_sets_group[index + 1..] {
+    for (index, pattern_sets) in pattern_sets_by_row.iter().enumerate() {
+        for pattern_sets_other in &pattern_sets_by_row[index + 1..] {
             if has_overlap(span, pattern_sets, pattern_sets_other)? {
                 let overlap = (pattern_sets, pattern_sets_other);
                 return Ok(Some(overlap));
@@ -118,7 +118,7 @@ pub fn subtract(
     }
 
     // F × F' − W × W' = (F − W) × F' ∪ (F ∩ W) × (F' − W')
-    let mut pattern_sets_group_fragment = Vec::new();
+    let mut pattern_sets_rows_fragment = Vec::new();
     let pattern_sets_prefix = Vec::new();
     let mut pattern_sets_prefix = PatternSets(pattern_sets_prefix);
     for (index, (pattern_set_total, pattern_set)) in
@@ -134,7 +134,7 @@ pub fn subtract(
             pattern_sets_fragment
                 .0
                 .extend_from_slice(&pattern_sets_total.0[index + 1..]);
-            pattern_sets_group_fragment.push(pattern_sets_fragment);
+            pattern_sets_rows_fragment.push(pattern_sets_fragment);
         }
 
         // (F ∩ W) × (F' − W')
@@ -143,22 +143,22 @@ pub fn subtract(
         }
         pattern_sets_prefix.0.push(pattern_set_inter);
     }
-    Ok(pattern_sets_group_fragment)
+    Ok(pattern_sets_rows_fragment)
 }
 
 pub fn find_missing(
     span: &Span,
     pattern_sets_total: &PatternSets,
-    pattern_sets_group: &[PatternSets],
+    pattern_sets_by_row: &[PatternSets],
 ) -> Result<Vec<PatternSets>, AlgoError> {
-    let mut pattern_sets_group_missing = vec![pattern_sets_total.clone()];
-    for pattern_sets in pattern_sets_group {
-        let mut pattern_sets_group_remaining = Vec::new();
-        for pattern_sets_total in &pattern_sets_group_missing {
-            let pattern_sets_group_fragment = subtract(span, pattern_sets_total, pattern_sets)?;
-            pattern_sets_group_remaining.extend(pattern_sets_group_fragment);
+    let mut pattern_sets_rows_missing = vec![pattern_sets_total.clone()];
+    for pattern_sets in pattern_sets_by_row {
+        let mut pattern_sets_rows_remaining = Vec::new();
+        for pattern_sets_total in &pattern_sets_rows_missing {
+            let pattern_sets_rows_fragment = subtract(span, pattern_sets_total, pattern_sets)?;
+            pattern_sets_rows_remaining.extend(pattern_sets_rows_fragment);
         }
-        pattern_sets_group_missing = pattern_sets_group_remaining;
+        pattern_sets_rows_missing = pattern_sets_rows_remaining;
     }
-    Ok(pattern_sets_group_missing)
+    Ok(pattern_sets_rows_missing)
 }

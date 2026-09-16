@@ -5,6 +5,7 @@ mod p4parse;
 mod run;
 mod sim;
 mod snapshot;
+mod structure;
 
 use clap::{Parser, Subcommand};
 use std::{path::PathBuf, process::ExitCode};
@@ -33,6 +34,8 @@ enum Command {
     Elab,
     /// Compare the algorithmic P4 specification with expected output
     Algo,
+    /// Compare the structured P4 specification in both rule-group modes
+    Structure,
     /// Compare the full P4 corpus with stored file results (cache on, det off)
     RunAl,
     /// Compare simulation outcomes and matched outputs (cache on)
@@ -45,7 +48,7 @@ enum Command {
 fn execute(command: Command) -> Result<()> {
     if matches!(
         command,
-        Command::P4parse | Command::RunAl | Command::SimAl { .. }
+        Command::P4parse | Command::Structure | Command::RunAl | Command::SimAl { .. }
     ) && std::env::var_os("UPDATE_EXPECT").is_some()
     {
         return Err(Error::Invalid(
@@ -60,6 +63,7 @@ fn execute(command: Command) -> Result<()> {
         Command::P4parse => p4parse::run(),
         Command::Elab => elab::run(),
         Command::Algo => algo::run(),
+        Command::Structure => structure::run(),
         Command::RunAl => run::run(),
         Command::SimAl { det } => sim::run(det),
     }

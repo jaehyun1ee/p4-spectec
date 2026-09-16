@@ -6,12 +6,6 @@ use super::ast::*;
 
 // == Free identifiers
 
-// Numbers, text, identifiers, atoms, and operators alias EL nodes and use their implementations.
-
-// - Mixfix operators
-
-// `Mixop` uses the common implementation.
-
 // - Variables
 
 impl Free for Var {
@@ -23,14 +17,6 @@ impl Free for Var {
 // - Types
 
 impl Free for TypKind {
-    fn free(&self) -> IdSet {
-        IdSet::new()
-    }
-}
-
-// - Subtype checks
-
-impl Free for Subcheck {
     fn free(&self) -> IdSet {
         IdSet::new()
     }
@@ -57,6 +43,14 @@ impl Free for TypOriginKind {
 }
 
 impl Free for TypCase {
+    fn free(&self) -> IdSet {
+        IdSet::new()
+    }
+}
+
+// - Subtype checks
+
+impl Free for Subcheck {
     fn free(&self) -> IdSet {
         IdSet::new()
     }
@@ -173,8 +167,6 @@ impl Free for ParamKind {
     }
 }
 
-// Type parameters alias identifiers and use the EL identifier implementation.
-
 // - Arguments
 
 impl Free for ArgKind {
@@ -186,9 +178,20 @@ impl Free for ArgKind {
     }
 }
 
-// Type arguments alias types and use the type implementation above.
-
 // - Premises
+
+impl Free for PremKind {
+    fn free_into(&self, free: &mut IdSet) {
+        match self {
+            Self::Rule(prem) => prem.free_into(free),
+            Self::If(prem) => prem.free_into(free),
+            Self::IfHold(prem) => prem.free_into(free),
+            Self::IfNotHold(prem) => prem.free_into(free),
+            Self::Iter(prem) => prem.free_into(free),
+            Self::Debug(prem) => prem.free_into(free),
+        }
+    }
+}
 
 impl Free for RulePrem {
     fn free_into(&self, free: &mut IdSet) {
@@ -223,19 +226,6 @@ impl Free for IterPrem {
 impl Free for DebugPrem {
     fn free_into(&self, free: &mut IdSet) {
         self.exp.free_into(free);
-    }
-}
-
-impl Free for PremKind {
-    fn free_into(&self, free: &mut IdSet) {
-        match self {
-            Self::Rule(prem) => prem.free_into(free),
-            Self::If(prem) => prem.free_into(free),
-            Self::IfHold(prem) => prem.free_into(free),
-            Self::IfNotHold(prem) => prem.free_into(free),
-            Self::Iter(prem) => prem.free_into(free),
-            Self::Debug(prem) => prem.free_into(free),
-        }
     }
 }
 
@@ -276,8 +266,6 @@ impl Free for ClauseKind {
     }
 }
 
-// Else clauses alias clauses and use their implementations above.
-
 // - Table rows
 
 impl Free for TableRowKind {
@@ -287,9 +275,16 @@ impl Free for TableRowKind {
     }
 }
 
-// Hints alias EL hints and use their implementation.
+// == Type definitions
 
-// - Type definitions
+impl Free for TypDef {
+    fn free_into(&self, free: &mut IdSet) {
+        match self {
+            Self::Extern(extern_typ) => extern_typ.free_into(free),
+            Self::Defined(defined_typ) => defined_typ.free_into(free),
+        }
+    }
+}
 
 impl Free for ExternTyp {
     fn free(&self) -> IdSet {
@@ -303,16 +298,7 @@ impl Free for DefinedTyp {
     }
 }
 
-impl Free for TypDef {
-    fn free_into(&self, free: &mut IdSet) {
-        match self {
-            Self::Extern(extern_typ) => extern_typ.free_into(free),
-            Self::Defined(defined_typ) => defined_typ.free_into(free),
-        }
-    }
-}
-
-// - Meta-variables
+// == Meta-variable definitions
 
 impl Free for VarDef {
     fn free(&self) -> IdSet {
@@ -320,7 +306,16 @@ impl Free for VarDef {
     }
 }
 
-// - Relations
+// == Relation definitions
+
+impl Free for RelDef {
+    fn free_into(&self, free: &mut IdSet) {
+        match self {
+            Self::Extern(extern_rel) => extern_rel.free_into(free),
+            Self::Defined(defined_rel) => defined_rel.free_into(free),
+        }
+    }
+}
 
 impl Free for ExternRel {
     fn free(&self) -> IdSet {
@@ -335,16 +330,18 @@ impl Free for DefinedRel {
     }
 }
 
-impl Free for RelDef {
+// == Meta-function definitions
+
+impl Free for MetaFuncDef {
     fn free_into(&self, free: &mut IdSet) {
         match self {
-            Self::Extern(extern_rel) => extern_rel.free_into(free),
-            Self::Defined(defined_rel) => defined_rel.free_into(free),
+            Self::Extern(extern_func) => extern_func.free_into(free),
+            Self::Builtin(builtin_func) => builtin_func.free_into(free),
+            Self::Table(table_func) => table_func.free_into(free),
+            Self::Defined(defined_func) => defined_func.free_into(free),
         }
     }
 }
-
-// - Meta-functions
 
 impl Free for ExternFunc {
     fn free(&self) -> IdSet {
@@ -371,18 +368,7 @@ impl Free for DefinedFunc {
     }
 }
 
-impl Free for MetaFuncDef {
-    fn free_into(&self, free: &mut IdSet) {
-        match self {
-            Self::Extern(extern_func) => extern_func.free_into(free),
-            Self::Builtin(builtin_func) => builtin_func.free_into(free),
-            Self::Table(table_func) => table_func.free_into(free),
-            Self::Defined(defined_func) => defined_func.free_into(free),
-        }
-    }
-}
-
-// - Definitions
+// == Definitions
 
 impl Free for DefKind {
     fn free_into(&self, free: &mut IdSet) {
@@ -395,7 +381,7 @@ impl Free for DefKind {
     }
 }
 
-// - Specifications
+// == Specifications
 
 impl Free for Spec {
     fn free_into(&self, free: &mut IdSet) {

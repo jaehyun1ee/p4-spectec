@@ -34,7 +34,7 @@ fn runner_from_spec<Exn: Extern>(
     external: Exn,
 ) -> Runner<AlInterp, BuiltinInterface, Exn> {
     let spec_el = parse_files([spec]).expect("native specification parsing");
-    let spec_il = elaborate::elaborate(spec_el).expect("native elaboration");
+    let spec_il = elaborate::convert(spec_el).expect("native elaboration");
     let spec_al = algo::convert(spec_il).expect("native algorithmic conversion");
     let interface = interface::p4(&spec_al);
     Runner::new(

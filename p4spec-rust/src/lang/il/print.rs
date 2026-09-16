@@ -11,26 +11,6 @@ use super::ast::*;
 
 // == Printing
 
-// - Helpers
-
-fn indent(level: usize) -> String {
-    "  ".repeat(level)
-}
-fn escaped(text: &str) -> String {
-    text.bytes()
-        .map(|byte| match byte {
-            b'"' => "\\\"".into(),
-            b'\\' => "\\\\".into(),
-            8 => "\\b".into(),
-            9 => "\\t".into(),
-            10 => "\\n".into(),
-            13 => "\\r".into(),
-            32..=126 => char::from(byte).to_string(),
-            _ => format!("\\{byte:03}"),
-        })
-        .collect()
-}
-
 // - Variables
 
 impl Print for Var {
@@ -85,12 +65,16 @@ impl Print for Typ {
     }
 }
 
+// - Notation types
+
 impl Print for NotTyp {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         self.node
             .print_with(printer, |typ, printer| typ.print(printer))
     }
 }
+
+// - Defined types
 
 impl Print for DefTyp {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
@@ -154,6 +138,14 @@ impl Print for [TypCase] {
 }
 
 // - Values
+
+pub fn print_value(
+    arena: &crate::lang::data::value::ValueArena,
+    value: &Value,
+    printer: &mut Printer<'_>,
+) -> fmt::Result {
+    write_value_with(arena, printer, value, false, 0)
+}
 
 fn write_value_with(
     arena: &crate::lang::data::value::ValueArena,
@@ -233,14 +225,6 @@ fn write_notval_with(
     not_val.print_with(output, |value, output| {
         write_value_with(arena, output, value, false, level + 1)
     })
-}
-
-pub fn print_value(
-    arena: &crate::lang::data::value::ValueArena,
-    value: &Value,
-    printer: &mut Printer<'_>,
-) -> fmt::Result {
-    write_value_with(arena, printer, value, false, 0)
 }
 
 // - Expressions
@@ -536,15 +520,26 @@ impl Print for [Arg] {
     }
 }
 
-// - Premises
+// - Hints
 
-fn write_prems_with(output: &mut Printer<'_>, level: usize, prems: &[Prem]) -> fmt::Result {
-    for prem in prems {
-        write!(output, "\n{}-- ", indent(level))?;
-        prem.print(output)?;
+impl Print for Hint {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        write!(printer, " hint({} ", self.0.node)?;
+        self.1.print(printer)?;
+        printer.write_char(')')
     }
-    Ok(())
 }
+
+impl Print for [Hint] {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        for hint in self {
+            hint.print(printer)?;
+        }
+        Ok(())
+    }
+}
+
+// - Premises
 
 impl Print for Prem {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
@@ -602,6 +597,14 @@ impl Print for [Prem] {
     }
 }
 
+fn write_prems_with(output: &mut Printer<'_>, level: usize, prems: &[Prem]) -> fmt::Result {
+    for prem in prems {
+        write!(output, "\n{}-- ", indent(level))?;
+        prem.print(output)?;
+    }
+    Ok(())
+}
+
 impl Print for PremIter {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         self.iter.print(printer)?;
@@ -631,30 +634,6 @@ impl Print for [PremIter] {
             prem_iter.print(printer)?;
         }
         Ok(())
-    }
-}
-
-// - Type definitions
-
-impl Print for TypDef {
-    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        match self {
-            Self::Extern(extern_typ) => {
-                printer.write_str("extern syntax ")?;
-                extern_typ.id.print(printer)
-            }
-            Self::Defined(defined_typ) => {
-                printer.write_str("syntax ")?;
-                defined_typ.id.print(printer)?;
-                if !defined_typ.tparams.is_empty() {
-                    printer.write_char('<')?;
-                    printer.separated(&defined_typ.tparams, ", ")?;
-                    printer.write_char('>')?;
-                }
-                printer.write_str(" = ")?;
-                defined_typ.def_typ.print(printer)
-            }
-        }
     }
 }
 
@@ -723,30 +702,6 @@ impl Print for Option<ElseGroup> {
     }
 }
 
-// - Relations
-
-impl Print for RelDef {
-    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        match self {
-            Self::Extern(extern_rel) => {
-                printer.write_str("extern relation ")?;
-                extern_rel.id.print(printer)?;
-                printer.write_str(": ")?;
-                extern_rel.not_typ.print(printer)
-            }
-            Self::Defined(defined_rel) => {
-                printer.write_str("relation ")?;
-                defined_rel.id.print(printer)?;
-                printer.write_str(": ")?;
-                defined_rel.not_typ.print(printer)?;
-                printer.write_str("\n\n")?;
-                defined_rel.rule_groups.print(printer)?;
-                defined_rel.else_group.print(printer)
-            }
-        }
-    }
-}
-
 // - Clauses
 
 impl Print for Clause {
@@ -779,7 +734,55 @@ impl Print for [TableRow] {
     }
 }
 
-// - Meta-functions
+// == Type definitions
+
+impl Print for TypDef {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        match self {
+            Self::Extern(extern_typ) => {
+                printer.write_str("extern syntax ")?;
+                extern_typ.id.print(printer)
+            }
+            Self::Defined(defined_typ) => {
+                printer.write_str("syntax ")?;
+                defined_typ.id.print(printer)?;
+                if !defined_typ.tparams.is_empty() {
+                    printer.write_char('<')?;
+                    printer.separated(&defined_typ.tparams, ", ")?;
+                    printer.write_char('>')?;
+                }
+                printer.write_str(" = ")?;
+                defined_typ.def_typ.print(printer)
+            }
+        }
+    }
+}
+
+// == Relation definitions
+
+impl Print for RelDef {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        match self {
+            Self::Extern(extern_rel) => {
+                printer.write_str("extern relation ")?;
+                extern_rel.id.print(printer)?;
+                printer.write_str(": ")?;
+                extern_rel.not_typ.print(printer)
+            }
+            Self::Defined(defined_rel) => {
+                printer.write_str("relation ")?;
+                defined_rel.id.print(printer)?;
+                printer.write_str(": ")?;
+                defined_rel.not_typ.print(printer)?;
+                printer.write_str("\n\n")?;
+                defined_rel.rule_groups.print(printer)?;
+                defined_rel.else_group.print(printer)
+            }
+        }
+    }
+}
+
+// == Meta-function definitions
 
 impl Print for MetaFuncDef {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
@@ -843,26 +846,7 @@ impl Print for MetaFuncDef {
     }
 }
 
-// - Hints
-
-impl Print for Hint {
-    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        write!(printer, " hint({} ", self.0.node)?;
-        self.1.print(printer)?;
-        printer.write_char(')')
-    }
-}
-
-impl Print for [Hint] {
-    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        for hint in self {
-            hint.print(printer)?;
-        }
-        Ok(())
-    }
-}
-
-// - Definitions
+// == Definitions
 
 impl Print for Def {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
@@ -892,10 +876,31 @@ impl Print for [Def] {
     }
 }
 
-// - Specifications
+// == Specifications
 
 impl Print for Spec {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         self.as_slice().print(printer)
     }
+}
+
+// == Helpers
+
+fn indent(level: usize) -> String {
+    "  ".repeat(level)
+}
+
+fn escaped(text: &str) -> String {
+    text.bytes()
+        .map(|byte| match byte {
+            b'"' => "\\\"".into(),
+            b'\\' => "\\\\".into(),
+            8 => "\\b".into(),
+            9 => "\\t".into(),
+            10 => "\\n".into(),
+            13 => "\\r".into(),
+            32..=126 => char::from(byte).to_string(),
+            _ => format!("\\{byte:03}"),
+        })
+        .collect()
 }

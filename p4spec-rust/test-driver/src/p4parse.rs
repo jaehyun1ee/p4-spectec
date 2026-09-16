@@ -76,8 +76,7 @@ pub fn run() -> Result<()> {
     eprintln!("P4 parser: collected={collected}, excluded=0; preparing print hints");
     let spec_el =
         parse_files([Path::new("spec")]).map_err(|error| Error::Invalid(error.to_string()))?;
-    let spec_il =
-        elaborate::elaborate(spec_el).map_err(|error| Error::Invalid(error.to_string()))?;
+    let spec_il = elaborate::convert(spec_el).map_err(|error| Error::Invalid(error.to_string()))?;
     let spec_al = algo::convert(spec_il).map_err(|error| Error::Invalid(error.to_string()))?;
     let unparser = P4Unparser::from_al_spec(&spec_al);
     let includes = vec![PathBuf::from("p4c/p4include")];

@@ -47,61 +47,13 @@ impl Print for [Param] {
     }
 }
 
-// - Case analysis
-
-fn write_case_with(
-    output: &mut Printer<'_>,
-    case: &Case,
-    level: usize,
-    index: usize,
-) -> fmt::Result {
-    write!(output, "{}{index}. Case ", "  ".repeat(level))?;
-    case.guard.print(output)?;
-    output.write_str("\n\n")?;
-    write_block_with(output, &case.block, level + 1, 0)
-}
-
-fn write_cases_with(output: &mut Printer<'_>, cases: &[Case], level: usize) -> fmt::Result {
-    for (index, case) in cases.iter().enumerate() {
-        if index != 0 {
-            output.write_str("\n\n")?;
-        }
-        write_case_with(output, case, level, index + 1)?;
-    }
-    Ok(())
-}
-
-impl Print for Guard {
-    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        match self {
-            Guard::Bool(value) => write!(printer, "{value}"),
-            Guard::Cmp(op, _, exp) => {
-                printer.write_str("(% ")?;
-                op.print(printer)?;
-                printer.write_char(' ')?;
-                exp.print(printer)?;
-                printer.write_char(')')
-            }
-            Guard::Sub(typ, _) => {
-                printer.write_str("(% has type ")?;
-                typ.print(printer)?;
-                printer.write_char(')')
-            }
-            Guard::Match(pattern) => {
-                printer.write_str("(% matches pattern ")?;
-                pattern.print(printer)?;
-                printer.write_char(')')
-            }
-            Guard::Mem(exp) => {
-                printer.write_str("(% is in ")?;
-                exp.print(printer)?;
-                printer.write_char(')')
-            }
-        }
-    }
-}
-
 // - Instructions
+
+impl Print for Instr {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        write_instr_with(printer, self, false, 0, 0)
+    }
+}
 
 fn write_instr_with(
     output: &mut Printer<'_>,
@@ -287,6 +239,68 @@ fn write_instr_with(
     }
 }
 
+// - Case analysis
+
+impl Print for Guard {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        match self {
+            Guard::Bool(value) => write!(printer, "{value}"),
+            Guard::Cmp(op, _, exp) => {
+                printer.write_str("(% ")?;
+                op.print(printer)?;
+                printer.write_char(' ')?;
+                exp.print(printer)?;
+                printer.write_char(')')
+            }
+            Guard::Sub(typ, _) => {
+                printer.write_str("(% has type ")?;
+                typ.print(printer)?;
+                printer.write_char(')')
+            }
+            Guard::Match(pattern) => {
+                printer.write_str("(% matches pattern ")?;
+                pattern.print(printer)?;
+                printer.write_char(')')
+            }
+            Guard::Mem(exp) => {
+                printer.write_str("(% is in ")?;
+                exp.print(printer)?;
+                printer.write_char(')')
+            }
+        }
+    }
+}
+
+fn write_cases_with(output: &mut Printer<'_>, cases: &[Case], level: usize) -> fmt::Result {
+    for (index, case) in cases.iter().enumerate() {
+        if index != 0 {
+            output.write_str("\n\n")?;
+        }
+        write_case_with(output, case, level, index + 1)?;
+    }
+    Ok(())
+}
+
+fn write_case_with(
+    output: &mut Printer<'_>,
+    case: &Case,
+    level: usize,
+    index: usize,
+) -> fmt::Result {
+    write!(output, "{}{index}. Case ", "  ".repeat(level))?;
+    case.guard.print(output)?;
+    output.write_str("\n\n")?;
+    write_block_with(output, &case.block, level + 1, 0)
+}
+
+// - Blocks
+
+impl Print for Block {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        write_block_with(printer, self, 0, 0)
+    }
+}
+
 fn write_block_with(
     output: &mut Printer<'_>,
     block: &Block,
@@ -298,6 +312,19 @@ fn write_block_with(
             output.write_str("\n\n")?;
         }
         write_instr_with(output, instr, false, level, index + offset + 1)?;
+    }
+    Ok(())
+}
+
+fn write_elseblock_opt_with(
+    output: &mut Printer<'_>,
+    block: &Option<ElseBlock>,
+    level: usize,
+    index: usize,
+) -> fmt::Result {
+    if let Some(block) = block {
+        output.write_str("\n\n")?;
+        write_elseblock_with(output, block, level, index)?;
     }
     Ok(())
 }
@@ -317,32 +344,32 @@ fn write_elseblock_with(
     write_block_with(output, block, level + 1, 0)
 }
 
-fn write_elseblock_opt_with(
-    output: &mut Printer<'_>,
-    block: &Option<ElseBlock>,
-    level: usize,
-    index: usize,
-) -> fmt::Result {
-    if let Some(block) = block {
-        output.write_str("\n\n")?;
-        write_elseblock_with(output, block, level, index)?;
-    }
-    Ok(())
-}
+// - Table rows
 
-impl Print for Instr {
+impl Print for TableRow {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        write_instr_with(printer, self, false, 0, 0)
+        printer.write_str("\n  Row : ")?;
+        printer.separated(&self.exps_input, ", ")?;
+        printer.write_str(" -> ")?;
+        self.exp.print(printer)?;
+        printer.write_str(":\n\n")?;
+        write_block_with(printer, &self.block, 2, 0)
     }
 }
 
-impl Print for Block {
+impl Print for [TableRow] {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        write_block_with(printer, self, 0, 0)
+        for (index, table_row) in self.iter().enumerate() {
+            if index != 0 {
+                printer.write_char('\n')?;
+            }
+            table_row.print(printer)?;
+        }
+        Ok(())
     }
 }
 
-// - Type definitions
+// == Type definitions
 
 impl Print for TypDef {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
@@ -366,7 +393,41 @@ impl Print for TypDef {
     }
 }
 
-// - Relations
+// == Relation definitions
+
+impl Print for RelDef {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        match self {
+            Self::Extern(relation) => {
+                printer.write_str("extern relation ")?;
+                relation.print(printer)
+            }
+            Self::Defined(relation) => {
+                printer.write_str("relation ")?;
+                relation.print(printer)
+            }
+        }
+    }
+}
+
+impl Print for ExternRel {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        self.id.print(printer)?;
+        printer.write_str(": ")?;
+        write_relinput(printer, &self.rel_signature, &self.exps_input)
+    }
+}
+
+impl Print for DefinedRel {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        self.id.print(printer)?;
+        printer.write_str(": ")?;
+        write_relinput(printer, &self.rel_signature, &self.exps_input)?;
+        printer.write_str("\n\n")?;
+        write_block_with(printer, &self.block, 0, 0)?;
+        write_elseblock_opt_with(printer, &self.block_else, 0, self.block.len())
+    }
+}
 
 fn write_relinput(
     output: &mut Printer<'_>,
@@ -415,41 +476,30 @@ fn write_reloutput(
     })
 }
 
-impl Print for ExternRel {
-    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        self.id.print(printer)?;
-        printer.write_str(": ")?;
-        write_relinput(printer, &self.rel_signature, &self.exps_input)
-    }
-}
+// == Meta-function definitions
 
-impl Print for DefinedRel {
-    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        self.id.print(printer)?;
-        printer.write_str(": ")?;
-        write_relinput(printer, &self.rel_signature, &self.exps_input)?;
-        printer.write_str("\n\n")?;
-        write_block_with(printer, &self.block, 0, 0)?;
-        write_elseblock_opt_with(printer, &self.block_else, 0, self.block.len())
-    }
-}
-
-impl Print for RelDef {
+impl Print for MetaFuncDef {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         match self {
-            Self::Extern(relation) => {
-                printer.write_str("extern relation ")?;
-                relation.print(printer)
+            Self::Extern(func) => {
+                printer.write_str("extern def ")?;
+                func.print(printer)
             }
-            Self::Defined(relation) => {
-                printer.write_str("relation ")?;
-                relation.print(printer)
+            Self::Builtin(func) => {
+                printer.write_str("builtin def ")?;
+                func.print(printer)
+            }
+            Self::Table(func) => {
+                printer.write_str("tbl def ")?;
+                func.print(printer)
+            }
+            Self::Defined(func) => {
+                printer.write_str("def ")?;
+                func.print(printer)
             }
         }
     }
 }
-
-// - Meta-functions
 
 impl Print for ExternFunc {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
@@ -474,29 +524,6 @@ impl Print for BuiltinFunc {
             printer.write_char('>')?;
         }
         self.params.as_slice().print(printer)
-    }
-}
-
-impl Print for TableRow {
-    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        printer.write_str("\n  Row : ")?;
-        printer.separated(&self.exps_input, ", ")?;
-        printer.write_str(" -> ")?;
-        self.exp.print(printer)?;
-        printer.write_str(":\n\n")?;
-        write_block_with(printer, &self.block, 2, 0)
-    }
-}
-
-impl Print for [TableRow] {
-    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        for (index, table_row) in self.iter().enumerate() {
-            if index != 0 {
-                printer.write_char('\n')?;
-            }
-            table_row.print(printer)?;
-        }
-        Ok(())
     }
 }
 
@@ -532,30 +559,7 @@ impl Print for DefinedFunc {
     }
 }
 
-impl Print for MetaFuncDef {
-    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        match self {
-            Self::Extern(func) => {
-                printer.write_str("extern def ")?;
-                func.print(printer)
-            }
-            Self::Builtin(func) => {
-                printer.write_str("builtin def ")?;
-                func.print(printer)
-            }
-            Self::Table(func) => {
-                printer.write_str("tbl def ")?;
-                func.print(printer)
-            }
-            Self::Defined(func) => {
-                printer.write_str("def ")?;
-                func.print(printer)
-            }
-        }
-    }
-}
-
-// - Definitions
+// == Definitions
 
 impl Print for Def {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
@@ -585,7 +589,7 @@ impl Print for [Def] {
     }
 }
 
-// - Specifications
+// == Specifications
 
 impl Print for Spec {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
