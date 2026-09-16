@@ -111,3 +111,77 @@ fn test_antiunification_uses_runtime_equivalence_for_plain_type_aliases() {
     assert!(matches!(template[0].node, ast::ExpKind::Var(_)));
     assert_eq!(prems.iter().map(Vec::len).collect::<Vec<_>>(), vec![1, 1]);
 }
+
+#[test]
+fn test_failed_antiunification_preserves_free_identifiers() {
+    let exp_bool_a = exp(ast::ExpKind::Bool(true), ast::TypKind::Bool, 2);
+    let exp_bool_b = exp(ast::ExpKind::Bool(false), ast::TypKind::Bool, 6);
+    let exp_nat = exp(
+        ast::ExpKind::Num(ast::Num::Nat(0_u64.into())),
+        ast::TypKind::Num(xl::num::Typ::Nat),
+        7,
+    );
+    let typ_nat = crate::phrase! {
+        node: ast::TypKind::Num(xl::num::Typ::Nat),
+        span: span(7),
+    };
+    let typ_kind_a = ast::TypKind::Tuple(vec![typ::make::bool(), typ::make::bool()]);
+    let typ_kind_b = ast::TypKind::Tuple(vec![typ::make::bool(), typ_nat]);
+    let exp_tuple_a = exp(
+        ast::ExpKind::Tuple(vec![exp_bool_a.clone(), exp_bool_a]),
+        typ_kind_a,
+        1,
+    );
+    let exp_tuple_b = exp(
+        ast::ExpKind::Tuple(vec![exp_bool_b, exp_nat]),
+        typ_kind_b,
+        5,
+    );
+    let mut ctx = Context::new();
+    ctx.add_free(id("reserved", 1));
+    let ids_free = ctx.frees.clone();
+
+    // The first pair needs a fresh name; the second pair has incompatible types
+    let error =
+        antiunify::antiunify(&mut ctx, vec![vec![exp_tuple_a], vec![exp_tuple_b]]).unwrap_err();
+
+    assert_eq!(error.kind, AlgoErrorKind::AntiUnification);
+    assert_eq!(error.span, span(5));
+    assert_eq!(ctx.frees, ids_free);
+}
+
+#[test]
+fn test_nested_type_error_keeps_its_category_and_span() {
+    use crate::runtime::ops::typ::TypeErrorKind;
+
+    let typ_missing = crate::phrase! {
+        node: ast::TypKind::Var(id("Missing", 3), vec![]),
+        span: span(3),
+    };
+    let exp_bool_a = exp(ast::ExpKind::Bool(true), ast::TypKind::Bool, 2);
+    let exp_bool_b = exp(ast::ExpKind::Bool(false), ast::TypKind::Bool, 6);
+    let exp_missing = typed_var_exp("x", &typ_missing, 3);
+    let exp_bool = exp(ast::ExpKind::Bool(true), ast::TypKind::Bool, 7);
+    let typ_kind_a = ast::TypKind::Tuple(vec![typ::make::bool(), typ_missing]);
+    let typ_kind_b = ast::TypKind::Tuple(vec![typ::make::bool(), typ::make::bool()]);
+    let exp_tuple_a = exp(
+        ast::ExpKind::Tuple(vec![exp_bool_a, exp_missing]),
+        typ_kind_a,
+        1,
+    );
+    let exp_tuple_b = exp(
+        ast::ExpKind::Tuple(vec![exp_bool_b, exp_bool]),
+        typ_kind_b,
+        5,
+    );
+    let mut ctx = Context::new();
+    let ids_free = ctx.frees.clone();
+
+    let error =
+        antiunify::antiunify(&mut ctx, vec![vec![exp_tuple_a], vec![exp_tuple_b]]).unwrap_err();
+
+    let error_kind = TypeErrorKind::UndefinedType("Missing".to_owned());
+    assert_eq!(error.kind, AlgoErrorKind::Type(error_kind));
+    assert_eq!(error.span, span(3));
+    assert_eq!(ctx.frees, ids_free);
+}
