@@ -540,10 +540,10 @@ fn analyze_prems(
 #[allow(clippy::type_complexity)]
 fn analyze_rule_match(
     ctx: &mut Context,
-    exps_input_group_il: Vec<Vec<ast::Exp>>,
+    exps_input_by_rule_il: Vec<Vec<ast::Exp>>,
 ) -> Result<(al::ast::RuleMatch, Vec<Vec<ast::Prem>>), AlgoError> {
-    let (exps_signature_al, prems_unified_group_il) =
-        antiunify::antiunify(ctx, exps_input_group_il)?;
+    let (exps_signature_al, prems_unified_by_rule_il) =
+        antiunify::antiunify(ctx, exps_input_by_rule_il)?;
     let (venv, exps_input_al, prems_al) =
         analyze_exps_as_bind(ctx, &ICtx::new(), &exps_signature_al)?;
     ctx.add_bounds(&venv);
@@ -554,7 +554,7 @@ fn analyze_rule_match(
         exps_input: exps_input_al,
         prems: prems_al,
     };
-    Ok((rule_match_al, prems_unified_group_il))
+    Ok((rule_match_al, prems_unified_by_rule_il))
 }
 
 fn analyze_rule_path(
@@ -589,30 +589,30 @@ fn analyze_rule_group(
     let span = rule_group_il.span;
     let (id_group, rules_il) = rule_group_il.node;
     let mut ids = Vec::with_capacity(rules_il.len());
-    let mut prems_group_il = Vec::with_capacity(rules_il.len());
-    let mut exps_input_group_il = Vec::with_capacity(rules_il.len());
-    let mut exps_output_group_il = Vec::with_capacity(rules_il.len());
+    let mut prems_by_rule_il = Vec::with_capacity(rules_il.len());
+    let mut exps_input_by_rule_il = Vec::with_capacity(rules_il.len());
+    let mut exps_output_by_rule_il = Vec::with_capacity(rules_il.len());
     for rule_il in rules_il {
         ctx.add_frees(&rule_il.free());
         let rule_span = rule_il.span;
         let ast::RuleKind { id, not_exp, prems } = rule_il.node;
         ids.push(id);
-        prems_group_il.push(prems);
+        prems_by_rule_il.push(prems);
         let exps_il = not_exp.into_args();
         let (exps_input_il, exps_output_il) =
             input::split(inputs, exps_il).map_err(|error| input_error(error, rule_span))?;
-        exps_input_group_il.push(exps_input_il);
-        exps_output_group_il.push(exps_output_il);
+        exps_input_by_rule_il.push(exps_input_il);
+        exps_output_by_rule_il.push(exps_output_il);
     }
 
-    let (rule_match_al, prems_unified_group_il) =
-        analyze_rule_match(&mut ctx, exps_input_group_il)?;
-    let mut rule_paths_al = Vec::with_capacity(prems_group_il.len());
+    let (rule_match_al, prems_unified_by_rule_il) =
+        analyze_rule_match(&mut ctx, exps_input_by_rule_il)?;
+    let mut rule_paths_al = Vec::with_capacity(prems_by_rule_il.len());
     for (((id, prems_unified_il), prems_il), exps_output_il) in ids
         .into_iter()
-        .zip(prems_unified_group_il)
-        .zip(prems_group_il)
-        .zip(exps_output_group_il)
+        .zip(prems_unified_by_rule_il)
+        .zip(prems_by_rule_il)
+        .zip(exps_output_by_rule_il)
     {
         let mut ctx_local = ctx.clone();
         let prems_unified_al = analyze_prems(&mut ctx_local, prems_unified_il)?;
@@ -773,7 +773,7 @@ fn check_valid_table_rows(
     } else {
         rows_al
     };
-    let mut pattern_sets_group = Vec::with_capacity(rows_pattern_al.len());
+    let mut pattern_sets_by_row = Vec::with_capacity(rows_pattern_al.len());
     for row_al in rows_pattern_al {
         let mut pattern_sets = Vec::with_capacity(row_al.node.exps_signature.len());
         for exp_al in &row_al.node.exps_signature {
@@ -781,9 +781,9 @@ fn check_valid_table_rows(
             pattern_sets.push(pattern_set);
         }
         let pattern_sets = pattern_sets.into_iter().collect();
-        pattern_sets_group.push(pattern_sets);
+        pattern_sets_by_row.push(pattern_sets);
     }
-    let pattern_sets_overlap = pattern::find_overlap(span, &pattern_sets_group)?;
+    let pattern_sets_overlap = pattern::find_overlap(span, &pattern_sets_by_row)?;
     if pattern_sets_overlap.is_some() {
         return Err(AlgoError::new(
             AlgoErrorKind::OverlappingTablePatterns,
@@ -796,9 +796,9 @@ fn check_valid_table_rows(
         pattern_sets_total.push(pattern_set);
     }
     let pattern_sets_total = pattern_sets_total.into_iter().collect();
-    let pattern_sets_group_missing =
-        pattern::find_missing(span, &pattern_sets_total, &pattern_sets_group)?;
-    if !has_closer && !pattern_sets_group_missing.is_empty() {
+    let pattern_sets_rows_missing =
+        pattern::find_missing(span, &pattern_sets_total, &pattern_sets_by_row)?;
+    if !has_closer && !pattern_sets_rows_missing.is_empty() {
         return Err(AlgoError::new(
             AlgoErrorKind::MissingTablePatterns,
             span.clone(),

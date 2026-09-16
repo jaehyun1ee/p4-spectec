@@ -12,14 +12,14 @@ fn test_antiunification_populates_each_path_in_left_to_right_expression_order() 
             line,
         )
     };
-    let groups = vec![
+    let exps_by_rule = vec![
         vec![tuple(true, false, 1), var_exp("shared", 3)],
         vec![tuple(false, true, 5), var_exp("shared", 7)],
     ];
 
     let mut ctx = Context::new();
-    let (template, prems) =
-        antiunify::antiunify(&mut ctx, groups).expect("equivalent tuple inputs");
+    let (template, prems_by_rule) =
+        antiunify::antiunify(&mut ctx, exps_by_rule).expect("equivalent tuple inputs");
 
     assert_eq!(template.len(), 2);
     let ast::ExpKind::Tuple(items) = &template[0].node else {
@@ -37,8 +37,8 @@ fn test_antiunification_populates_each_path_in_left_to_right_expression_order() 
     assert!(ctx.frees.contains(template_ids[1]));
     assert!(matches!(&template[1].node, ast::ExpKind::Var(id) if id.node == "shared"));
 
-    let compared_values = |prems: &[ast::Prem]| {
-        prems
+    let compared_values = |prems_by_rule: &[ast::Prem]| {
+        prems_by_rule
             .iter()
             .map(|prem| {
                 let ast::PremKind::If(if_prem) = &prem.node else {
@@ -54,9 +54,9 @@ fn test_antiunification_populates_each_path_in_left_to_right_expression_order() 
             })
             .collect::<Vec<_>>()
     };
-    assert_eq!(prems.len(), 2);
-    assert_eq!(compared_values(&prems[0]), vec![true, false]);
-    assert_eq!(compared_values(&prems[1]), vec![false, true]);
+    assert_eq!(prems_by_rule.len(), 2);
+    assert_eq!(compared_values(&prems_by_rule[0]), vec![true, false]);
+    assert_eq!(compared_values(&prems_by_rule[1]), vec![false, true]);
 }
 
 #[test]

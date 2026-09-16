@@ -247,9 +247,9 @@ fn overlap_exps(
     Ok(exps_overlapped)
 }
 
-// - Expression groups
+// - Expressions across rules
 
-fn overlap_exp_group(
+fn overlap_exp_across_rules(
     tdenv: &TDEnv,
     menv: &MEnv,
     ids_free: &mut IdSet,
@@ -271,18 +271,18 @@ fn overlap_exp_group(
     Ok((ids_unifier, exp_template))
 }
 
-fn overlap_exps_group(
+fn overlap_exps_across_rules(
     tdenv: &TDEnv,
     menv: &MEnv,
     ids_free: &mut IdSet,
-    exps_group: &[Vec<ast::Exp>],
+    exps_by_rule: &[Vec<ast::Exp>],
 ) -> Result<(UnifierIds, Vec<ast::Exp>), AlgoError> {
-    let Some(exps_head) = exps_group.first() else {
+    let Some(exps_head) = exps_by_rule.first() else {
         let ids_unifier = UnifierIds::new();
         let exps_template = Vec::new();
         return Ok((ids_unifier, exps_template));
     };
-    for exps in &exps_group[1..] {
+    for exps in &exps_by_rule[1..] {
         if exps.len() != exps_head.len() {
             let kind = AlgoErrorKind::ExpressionArityMismatch {
                 expected: exps_head.len(),
@@ -292,7 +292,7 @@ fn overlap_exps_group(
             return Err(error);
         }
     }
-    if exps_group.len() == 1 {
+    if exps_by_rule.len() == 1 {
         let ids_unifier = UnifierIds::new();
         let exps_template = exps_head.clone();
         return Ok((ids_unifier, exps_template));
@@ -301,13 +301,13 @@ fn overlap_exps_group(
     let mut ids_unifier = UnifierIds::new();
     let mut exps_template = Vec::with_capacity(exps_head.len());
     for idx in 0..exps_head.len() {
-        let exps_column = exps_group
+        let exps_at_idx = exps_by_rule
             .iter()
             .map(|exps| exps[idx].clone())
             .collect::<Vec<_>>();
-        let (ids_unifier_column, exp_template) =
-            overlap_exp_group(tdenv, menv, ids_free, &exps_column)?;
-        ids_unifier.extend(&ids_unifier_column);
+        let (ids_unifier_exp, exp_template) =
+            overlap_exp_across_rules(tdenv, menv, ids_free, &exps_at_idx)?;
+        ids_unifier.extend(&ids_unifier_exp);
         exps_template.push(exp_template);
     }
     Ok((ids_unifier, exps_template))
@@ -397,14 +397,14 @@ fn populate_exp(
     }
 }
 
-// - Expression groups
+// - Expressions by rule
 
-fn populate_exps_group(
+fn populate_exps_by_rule(
     ids_unifier: &UnifierIds,
     exps_template: &[ast::Exp],
-    exps_group: &[Vec<ast::Exp>],
+    exps_by_rule: &[Vec<ast::Exp>],
 ) -> Vec<Vec<ast::Prem>> {
-    exps_group
+    exps_by_rule
         .iter()
         .map(|exps| populate_exps(ids_unifier, exps_template, exps))
         .collect()
@@ -416,12 +416,12 @@ fn populate_exps_group(
 #[allow(clippy::type_complexity)]
 pub fn antiunify(
     ctx: &mut Context,
-    exps_group: Vec<Vec<ast::Exp>>,
+    exps_by_rule: Vec<Vec<ast::Exp>>,
 ) -> Result<(Vec<ast::Exp>, Vec<Vec<ast::Prem>>), AlgoError> {
     let mut ids_free = ctx.frees.clone();
     let (ids_unifier, exps_template) =
-        overlap_exps_group(&ctx.tdenv, &ctx.menv, &mut ids_free, &exps_group)?;
-    let prems_group = populate_exps_group(&ids_unifier, &exps_template, &exps_group);
+        overlap_exps_across_rules(&ctx.tdenv, &ctx.menv, &mut ids_free, &exps_by_rule)?;
+    let prems_by_rule = populate_exps_by_rule(&ids_unifier, &exps_template, &exps_by_rule);
     ctx.add_frees(ids_unifier.as_ids());
-    Ok((exps_template, prems_group))
+    Ok((exps_template, prems_by_rule))
 }
