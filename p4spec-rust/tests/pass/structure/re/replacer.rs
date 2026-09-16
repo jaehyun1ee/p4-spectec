@@ -12,6 +12,7 @@ fn var_id(exp: &Exp) -> &Id {
     };
     id
 }
+
 fn binding(text: &str, block: Block) -> Instr {
     instr(InstrKind::Let(LetInstr {
         exp_l: variable(text),
@@ -20,12 +21,14 @@ fn binding(text: &str, block: Block) -> Instr {
         block,
     }))
 }
+
 fn return_exp(instr_body: &Instr) -> &Exp {
     let InstrKind::Return(instr_body) = &instr_body.node else {
         panic!("expected return")
     };
     &instr_body.exp
 }
+
 #[test]
 fn test_capture_avoidance_and_shadowed_rhs() {
     let mut exp_target = variable("y");
@@ -55,6 +58,7 @@ fn test_capture_avoidance_and_shadowed_rhs() {
     assert_eq!(var_id(return_exp(&instr_shadow.block[0])).node, "x");
     assert_eq!(return_exp(&block[2]), &exp_target);
 }
+
 fn iterator() -> InstrIter {
     let var = Var {
         id: id("x"),
@@ -67,6 +71,7 @@ fn iterator() -> InstrIter {
         vars_bind: vec![var],
     }
 }
+
 #[test]
 fn test_iterator_filters_third_component_and_preserves_scope() {
     let replacer = Replacer::singleton(id("x"), variable("z"));
@@ -92,6 +97,7 @@ fn test_iterator_filters_third_component_and_preserves_scope() {
     assert_eq!(instr_body.iter_instrs[0].vars_bind.len(), 1);
     assert_eq!(var_id(return_exp(&block[1])).node, "z");
 }
+
 #[test]
 fn test_rule_inputs_precede_output_shadowing_and_freshening() {
     let instr_rule = instr(InstrKind::Rule(RuleInstr {

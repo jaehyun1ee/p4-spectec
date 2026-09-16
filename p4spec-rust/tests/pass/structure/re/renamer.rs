@@ -12,6 +12,7 @@ fn var_id(exp: &Exp) -> &Id {
     };
     id
 }
+
 fn binding(text: &str, block: Block) -> Instr {
     instr(InstrKind::Let(LetInstr {
         exp_l: variable(text),
@@ -20,12 +21,14 @@ fn binding(text: &str, block: Block) -> Instr {
         block,
     }))
 }
+
 fn return_exp(instr_body: &Instr) -> &Exp {
     let InstrKind::Return(instr_body) = &instr_body.node else {
         panic!("expected return")
     };
     &instr_body.exp
 }
+
 #[test]
 fn test_capture_avoidance_and_shadowing_preserve_spans() {
     let mut id_target = id("y");
@@ -52,6 +55,7 @@ fn test_capture_avoidance_and_shadowing_preserve_spans() {
     };
     assert_eq!(var_id(return_exp(&instr_inner.block[0])).node, "x");
 }
+
 #[test]
 fn test_freshness_avoids_domain_codomain_and_block_names() {
     let renamer = Renamer::of_list(vec![
@@ -71,6 +75,7 @@ fn test_freshness_avoids_domain_codomain_and_block_names() {
     }
     assert_eq!(var_id(return_exp(&instr_body.block[2])), id_fresh);
 }
+
 fn iterator() -> InstrIter {
     let var = Var {
         id: id("y"),
@@ -83,6 +88,7 @@ fn iterator() -> InstrIter {
         vars_bind: vec![var],
     }
 }
+
 #[test]
 fn test_iterator_bound_and_binding_are_distinct() {
     let renamer = Renamer::singleton(id("y"), id("z"));
@@ -93,6 +99,7 @@ fn test_iterator_bound_and_binding_are_distinct() {
     assert_eq!(iter_bind.vars_bound[0].id.node, "y");
     assert_eq!(iter_bind.vars_bind[0].id.node, "z");
 }
+
 #[test]
 fn test_rule_outputs_freshen_under_hold_and_case() {
     let instr_rule = instr(InstrKind::Rule(RuleInstr {
