@@ -17,7 +17,7 @@ use p4spec_rust::{
 
 fn elab(paths: Vec<PathBuf>) -> Result<il::ast::Spec, ExitCode> {
     let spec_el = parse_files(paths).map_err(command_error)?;
-    elaborate::elaborate(spec_el).map_err(command_error)
+    elaborate::convert(spec_el).map_err(command_error)
 }
 
 fn algo(paths: Vec<PathBuf>) -> Result<al::ast::Spec, ExitCode> {

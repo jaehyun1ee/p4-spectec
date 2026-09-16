@@ -47,8 +47,7 @@ pub fn run() -> Result<()> {
     );
     let spec_el =
         parse_files([Path::new("spec")]).map_err(|error| Error::Invalid(error.to_string()))?;
-    let spec_il =
-        elaborate::elaborate(spec_el).map_err(|error| Error::Invalid(error.to_string()))?;
+    let spec_il = elaborate::convert(spec_el).map_err(|error| Error::Invalid(error.to_string()))?;
     let spec_al = algo::convert(spec_il).map_err(|error| Error::Invalid(error.to_string()))?;
     let interface = interface::p4(&spec_al);
     let global = Global::load(spec_al).map_err(|error| Error::Invalid(error.to_string()))?;

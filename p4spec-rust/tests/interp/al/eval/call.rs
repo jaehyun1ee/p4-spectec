@@ -20,7 +20,7 @@ use p4spec_rust::{
 
 fn spec(source: &str) -> ast::Spec {
     let spec_el = crate::spec_fixture::parse(source).expect("parse execution fixture");
-    let spec_il = elaborate::elaborate(spec_el).expect("elaborate execution fixture");
+    let spec_il = elaborate::convert(spec_el).expect("elaborate execution fixture");
     algo::convert(spec_il).expect("convert execution fixture")
 }
 

@@ -17,8 +17,7 @@ pub fn run() -> Result<()> {
     progress.set_message("algo: full specification");
     let spec_el =
         parse_files([Path::new("spec")]).map_err(|error| Error::Invalid(error.to_string()))?;
-    let spec_il =
-        elaborate::elaborate(spec_el).map_err(|error| Error::Invalid(error.to_string()))?;
+    let spec_il = elaborate::convert(spec_el).map_err(|error| Error::Invalid(error.to_string()))?;
     let spec_al = algo::convert(spec_il).map_err(|error| Error::Invalid(error.to_string()))?;
     let actual = Print::to_string(&spec_al) + "\n";
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("expected/algo.expected");

@@ -971,8 +971,10 @@ fn struct_def_kind(
 
 // - Entry point
 
-/// Converts algorithmic definitions, removing rule groups when requested
-pub fn convert(spec_al: al::Spec, without_rule_groups: bool) -> Result<sl::Spec, StructureError> {
+pub(super) fn r#struct(
+    spec_al: al::Spec,
+    without_rule_groups: bool,
+) -> Result<sl::Spec, StructureError> {
     let ctx = Context::load(&spec_al)?;
     spec_al
         .into_iter()

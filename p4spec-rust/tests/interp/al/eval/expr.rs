@@ -719,7 +719,7 @@ dec $destructure() : nat
 def $destructure() = $sum_pair(($updated())[0])
 "#;
     let spec_el = crate::spec_fixture::parse(source).unwrap();
-    let spec_il = elaborate::elaborate(spec_el).unwrap();
+    let spec_il = elaborate::convert(spec_el).unwrap();
     let spec_al = algo::convert(spec_il).unwrap();
     let mut runner = Runner::<AlInterp, _, _>::new(
         Global::load(spec_al).unwrap(),
@@ -755,7 +755,7 @@ dec $first(nat*) : nat
 def $first(ns) = ns[0]
 "#;
     let spec_el = crate::spec_fixture::parse(source).unwrap();
-    let spec_il = elaborate::elaborate(spec_el).unwrap();
+    let spec_il = elaborate::convert(spec_el).unwrap();
     let spec_al = algo::convert(spec_il).unwrap();
     let mut runner = Runner::<AlInterp, _, _>::new(
         Global::load(spec_al).unwrap(),

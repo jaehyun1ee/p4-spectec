@@ -5,7 +5,7 @@ fn test_function_clauses_are_populated_after_definition_traversal() {
     let spec_el = crate::spec_fixture::parse("dec $negate(bool) : bool\ndef $negate(true) = false")
         .expect("parse function declaration and clause");
 
-    let spec_il = elaborate::elaborate(spec_el).expect("elaborate function");
+    let spec_il = elaborate::convert(spec_el).expect("elaborate function");
 
     let ast::DefKind::MetaFunc(meta_func_def_il) = &spec_il[0].node else {
         panic!("expected function declaration");
@@ -27,7 +27,7 @@ fn test_parenthesized_variant_keeps_the_case_origin() {
     )
     .expect("parse variant alias and clause");
 
-    let spec_il = elaborate::elaborate(spec_el).expect("elaborate variant alias and clause");
+    let spec_il = elaborate::convert(spec_el).expect("elaborate variant alias and clause");
 
     let ast::DefKind::MetaFunc(meta_func_def_il) = &spec_il[2].node else {
         panic!("expected function declaration");
@@ -56,7 +56,7 @@ fn test_failed_variant_alternative_does_not_leak_wildcard_bindings() {
     )
     .expect("parse variant alternatives");
 
-    let spec_il = elaborate::elaborate(spec_el).expect("elaborate matching alternative");
+    let spec_il = elaborate::convert(spec_el).expect("elaborate matching alternative");
     let ast::DefKind::MetaFunc(meta_func_def_il) = &spec_il[1].node else {
         panic!("expected function declaration");
     };

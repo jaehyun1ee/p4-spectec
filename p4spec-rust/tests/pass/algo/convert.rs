@@ -90,7 +90,7 @@ fn test_rejected_conversion_matches_ocaml_category_and_span() {
         .expect("located OCaml diagnostic");
 
     let spec_el = parse_files([&fixture]).expect("parse negative fixture with Rust frontend");
-    let spec_il = elaborate::elaborate(spec_el).expect("elaborate negative fixture with Rust");
+    let spec_il = elaborate::convert(spec_el).expect("elaborate negative fixture with Rust");
     let error = algo::convert(spec_il).expect_err("Rust rejects fixture");
 
     assert_eq!(
@@ -120,7 +120,7 @@ tbl def $compat =
   | (_, _) => false
 "#;
     let spec_el = crate::spec_fixture::parse(source).expect("parse crossed alias table");
-    let spec_il = elaborate::elaborate(spec_el).expect("elaborate crossed alias table");
+    let spec_il = elaborate::convert(spec_el).expect("elaborate crossed alias table");
 
     let error = algo::convert(spec_il).expect_err("crossed alias rows overlap by syntax");
 

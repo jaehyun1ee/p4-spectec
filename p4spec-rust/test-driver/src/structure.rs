@@ -17,8 +17,7 @@ pub fn run() -> Result<()> {
     progress.set_message("structure: full specification");
     let spec_el =
         parse_files([Path::new("spec")]).map_err(|error| Error::Invalid(error.to_string()))?;
-    let spec_il =
-        elaborate::elaborate(spec_el).map_err(|error| Error::Invalid(error.to_string()))?;
+    let spec_il = elaborate::convert(spec_el).map_err(|error| Error::Invalid(error.to_string()))?;
     let spec_al = algo::convert(spec_il).map_err(|error| Error::Invalid(error.to_string()))?;
     let num_defs = spec_al.len();
     for (spec_al, without_rule_groups, text_mode) in [

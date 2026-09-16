@@ -277,7 +277,7 @@ fn test_native_pipeline_preserves_groups_fallbacks_and_repeatability() {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/structure/definitions.watsup");
     let spec_el = parse_files([&path]).unwrap();
-    let spec_il = elaborate::elaborate(spec_el).unwrap();
+    let spec_il = elaborate::convert(spec_el).unwrap();
     let spec_al = algo::convert(spec_il).unwrap();
     for without_rule_groups in [false, true] {
         let spec_sl = convert(spec_al.clone(), without_rule_groups).unwrap();

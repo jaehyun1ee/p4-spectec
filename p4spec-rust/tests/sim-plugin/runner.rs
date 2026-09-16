@@ -829,7 +829,7 @@ fn test_native_stf_encoding_modes_preserve_outputs_and_state() {
         fs::create_dir(&path_snapshots).unwrap();
         let snapshots = Snapshots(path_snapshots);
         let spec_el = parse_files([super::repo().join("spec")]).unwrap();
-        let spec_il = elaborate::elaborate(spec_el).unwrap();
+        let spec_il = elaborate::convert(spec_el).unwrap();
         let spec_al = algo::convert(spec_il).unwrap();
 
         // Drop each simulator before building the next; retain no state history
