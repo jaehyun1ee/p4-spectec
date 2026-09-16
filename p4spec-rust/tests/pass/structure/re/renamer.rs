@@ -83,6 +83,35 @@ fn test_iterator_bound_and_binding_are_distinct() {
 }
 
 #[test]
+fn test_change_tracking_follows_filtered_and_capture_avoiding_renamers() {
+    use crate::lang::traits::free::Free;
+    use std::{cell::Cell, rc::Rc};
+
+    let changed = Rc::new(Cell::new(false));
+    let renamer = Renamer::singleton(id("x"), id("y")).with_changes(&changed);
+    let renamer = renamer.filter(|_, _| true);
+    assert!(!changed.get());
+    renamer.rename_exp(variable("absent"));
+    assert!(!changed.get());
+    renamer.rename_exp(variable("x"));
+    assert!(changed.get());
+
+    changed.set(false);
+    let renamer_fresh = renamer.freshen_binders(&variable("y").free(), &vec![]);
+    assert!(!changed.get());
+    renamer_fresh.rename_exp(variable("y"));
+    assert!(changed.get());
+
+    changed.set(false);
+    let mut id_target = id("y");
+    id_target.span = span(77);
+    let renamer = Renamer::singleton(id("y"), id_target.clone()).with_changes(&changed);
+    let exp = renamer.rename_exp(variable("y"));
+    assert_eq!(var_id(&exp), &id_target);
+    assert!(!changed.get());
+}
+
+#[test]
 fn test_rule_outputs_freshen_under_hold_and_case() {
     let instr_rule = instr(InstrKind::Rule(RuleInstr {
         id: id("rel"),

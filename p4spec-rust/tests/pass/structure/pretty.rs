@@ -94,3 +94,84 @@ fn test_fixed_point_retains_distinct_identifier_use_spans() {
     assert_eq!(block, block_expect);
     assert_eq!(block_else, Some(vec![]));
 }
+
+#[test]
+fn test_prettification_moves_unchanged_expression_payloads() {
+    let instr_return = ret("payload");
+    let ptr_body = var_id(return_exp(&instr_return)).node.as_ptr();
+    let (_, block, _) =
+        pretty_rel(vec![variable("_x")], vec![ret("_x"), instr_return], None).unwrap();
+    assert_eq!(var_id(return_exp(&block[1])).node.as_ptr(), ptr_body);
+}
+
+#[test]
+fn test_prettification_matches_syntax_fixed_point_with_shadowing_and_iterators() {
+    use crate::lang::traits::eq::SyntaxEq;
+    use crate::pass::structure::pretty::{rename_tick, revive_underscore};
+
+    fn reference<T: Clone + SyntaxEq>(
+        mut body: (Vec<T>, Block, Option<Block>),
+        mut step: impl FnMut((Vec<T>, Block, Option<Block>)) -> (Vec<T>, Block, Option<Block>),
+    ) -> (Vec<T>, Block, Option<Block>) {
+        for _ in 0..32 {
+            let body_pretty = step(body.clone());
+            if body.0.syntax_eq(&body_pretty.0)
+                && body.1.syntax_eq(&body_pretty.1)
+                && body.2.syntax_eq(&body_pretty.2)
+            {
+                return body;
+            }
+            body = body_pretty;
+        }
+        panic!("prettification did not converge");
+    }
+
+    let texts = ["x", "x'", "x'''", "_x", "_x''", "__x", "_unused"];
+    for text_input in texts {
+        for text_bound in texts {
+            for text_used in texts {
+                let mut exp_input = variable(text_input);
+                let ExpKind::Var(id_input) = &mut exp_input.node else { unreachable!() };
+                id_input.span = span(31);
+                let mut instr_binding = binding(text_bound, text_input, vec![ret(text_used)]);
+                let InstrKind::Let(instr_let) = &mut instr_binding.node else { unreachable!() };
+                instr_let.iter_instrs = vec![iterator(text_input, text_bound)];
+                let instr_if = instr(InstrKind::If(IfInstr {
+                    exp: variable("condition"),
+                    iter_exps: vec![(Iter::List, iterator(text_input, text_bound).vars_bound)],
+                    block: vec![instr_binding],
+                }));
+                let block = vec![instr_if];
+                let block_else = Some(vec![instr(InstrKind::Debug(DebugInstr {
+                    exp: variable(text_used),
+                    instr: Box::new(ret(text_used)),
+                }))]);
+                let body = (vec![exp_input.clone()], block.clone(), block_else.clone());
+                let body_expect = reference(body.clone(), |body| {
+                    let changed = Default::default();
+                    let body = revive_underscore::apply_rel(body, &changed).unwrap();
+                    rename_tick::apply_rel(body, &changed).unwrap()
+                });
+                assert_eq!(
+                    pretty_rel(body.0, body.1, body.2).unwrap(),
+                    body_expect,
+                    "relation {text_input} {text_bound} {text_used}"
+                );
+                let arg_input = crate::phrase! {
+                    node: ArgKind::Exp(Box::new(exp_input)), span: span(39)
+                };
+                let body = (vec![arg_input], block, block_else);
+                let body_expect = reference(body.clone(), |body| {
+                    let changed = Default::default();
+                    let body = revive_underscore::apply_func(body, &changed).unwrap();
+                    rename_tick::apply_func(body, &changed).unwrap()
+                });
+                assert_eq!(
+                    pretty_func(body.0, body.1, body.2).unwrap(),
+                    body_expect,
+                    "function {text_input} {text_bound} {text_used}"
+                );
+            }
+        }
+    }
+}

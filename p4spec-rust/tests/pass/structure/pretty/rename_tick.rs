@@ -3,11 +3,10 @@ use crate::lang::traits::free::Free;
 use crate::pass::structure::pretty::rename_tick;
 #[test]
 fn test_ticks_fill_smallest_available_gap() {
-    let (exps_match, block, block_else) = rename_tick::apply_rel((
-        vec![variable("x'''")],
-        vec![ret("x'''"), ret("x"), ret("x''")],
-        Some(vec![ret("x'''")]),
-    ))
+    let (exps_match, block, block_else) = rename_tick::apply_rel(
+        (vec![variable("x'''")], vec![ret("x'''"), ret("x"), ret("x''")], Some(vec![ret("x'''")])),
+        &Default::default(),
+    )
     .unwrap();
     let id = exps_match[0].free().iter().next().unwrap().clone();
     assert_eq!(id.node, "x'");
@@ -33,7 +32,8 @@ fn test_nested_bindings_avoid_upstream_guard_names_and_keep_iterator_roles() {
         total: false,
     }));
     let (_, block, _) =
-        rename_tick::apply_rel((vec![variable("x'")], vec![instr_case], None)).unwrap();
+        rename_tick::apply_rel((vec![variable("x'")], vec![instr_case], None), &Default::default())
+            .unwrap();
     let InstrKind::Case(instr_case) = &block[0].node else { panic!("expected case") };
     let InstrKind::Let(instr_let) = &instr_case.cases[0].block[0].node else {
         panic!("expected let")
@@ -65,7 +65,8 @@ fn test_rule_output_renaming_keeps_input_and_locations() {
         iter_instrs: vec![iterator("input", "out'''")],
         block: vec![ret("out'''")],
     }));
-    let (_, block, _) = rename_tick::apply_rel((vec![], vec![instr_rule], None)).unwrap();
+    let (_, block, _) =
+        rename_tick::apply_rel((vec![], vec![instr_rule], None), &Default::default()).unwrap();
     let InstrKind::Rule(instr_rule) = &block[0].node else { panic!("expected rule") };
     let exps = instr_rule.not_exp.args();
     assert_eq!(var_id(exps[0]).node, "input");
@@ -89,7 +90,9 @@ fn test_unticked_binding_keeps_notation_storage_and_input_spans() {
         vec![instr(InstrKind::Return(ReturnInstr { exp: exp_case }))],
     )];
     let block_expect = block.clone();
-    let (_, block, _) = rename_tick::apply_rel((vec![variable("input")], block, None)).unwrap();
+    let (_, block, _) =
+        rename_tick::apply_rel((vec![variable("input")], block, None), &Default::default())
+            .unwrap();
     assert_eq!(block, block_expect);
     let InstrKind::Let(instr_let) = &block[0].node else { unreachable!() };
     let exp = return_exp(&instr_let.block[0]);
@@ -99,14 +102,17 @@ fn test_unticked_binding_keeps_notation_storage_and_input_spans() {
 
 #[test]
 fn test_tick_gap_uses_whole_names_and_preserves_existing_binding() {
-    let (_, block, _) = rename_tick::apply_rel((
-        vec![variable("é"), variable("é'")],
-        vec![
-            binding("é''", "source", vec![ret("é''")]),
-            binding("z'''", "source", vec![ret("z'''"), ret("z"), ret("z''")]),
-        ],
-        None,
-    ))
+    let (_, block, _) = rename_tick::apply_rel(
+        (
+            vec![variable("é"), variable("é'")],
+            vec![
+                binding("é''", "source", vec![ret("é''")]),
+                binding("z'''", "source", vec![ret("z'''"), ret("z"), ret("z''")]),
+            ],
+            None,
+        ),
+        &Default::default(),
+    )
     .unwrap();
     let InstrKind::Let(instr_a) = &block[0].node else { unreachable!() };
     let InstrKind::Let(instr_b) = &block[1].node else { unreachable!() };

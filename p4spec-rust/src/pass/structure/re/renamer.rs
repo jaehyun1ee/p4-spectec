@@ -4,6 +4,8 @@
 //! `let y' = z { return y }`, assuming `y'` is fresh
 //! The local binder is renamed so it does not capture the introduced `y`
 
+use std::{cell::Cell, rc::Rc};
+
 use super::super::{StructureError, StructureErrorKind, ol::ast as ol};
 use crate::lang::{
     common::{
@@ -22,6 +24,7 @@ use crate::{note_phrase, phrase};
 #[derive(Clone, Debug, Default)]
 pub(crate) struct Renamer {
     ids: IdMap<Id>,
+    changed: Option<Rc<Cell<bool>>>,
 }
 
 impl Renamer {
@@ -47,6 +50,11 @@ impl Renamer {
         self.ids.insert(id, id_renamed);
     }
 
+    pub(crate) fn with_changes(mut self, changed: &Rc<Cell<bool>>) -> Self {
+        self.changed = Some(Rc::clone(changed));
+        self
+    }
+
     pub(crate) fn filter(&self, mut predicate: impl FnMut(&Id, &Id) -> bool) -> Self {
         Self {
             ids: self
@@ -55,6 +63,7 @@ impl Renamer {
                 .filter(|(id, id_renamed)| predicate(id, id_renamed))
                 .map(|(id, id_renamed)| (id.clone(), id_renamed.clone()))
                 .collect(),
+            changed: self.changed.clone(),
         }
     }
 
@@ -86,7 +95,7 @@ impl Renamer {
             .union(block.free())
             .union(self.dom())
             .union(self.values().into_iter().collect());
-        let mut renamer_fresh = Self::empty();
+        let mut renamer_fresh = Self { changed: self.changed.clone(), ..Self::empty() };
         for id in ids_collide.iter() {
             let id_fresh = fresh::id(&ids_avoid, id);
             renamer_fresh.add(id.clone(), id_fresh.clone());
@@ -97,12 +106,22 @@ impl Renamer {
 
     // == Variables
 
+    fn rename_id(&self, id: Id) -> Id {
+        let Some(id_renamed) = self.ids.get(&id) else {
+            return id;
+        };
+        if let Some(changed) = &self.changed
+            && id.node != id_renamed.node
+        {
+            changed.set(true);
+        }
+        id_renamed.clone()
+    }
+
     fn rename_vars(&self, vars: Vec<Var>) -> Vec<Var> {
         vars.into_iter()
             .map(|mut var| {
-                if let Some(id) = self.ids.get(&var.id) {
-                    var.id = id.clone();
-                }
+                var.id = self.rename_id(var.id);
                 var
             })
             .collect()
@@ -116,7 +135,7 @@ impl Renamer {
         }
         let exp_kind = match exp.node {
             ExpKind::Bool(_) | ExpKind::Num(_) | ExpKind::Text(_) => exp.node,
-            ExpKind::Var(id) => ExpKind::Var(self.ids.get(&id).cloned().unwrap_or(id)),
+            ExpKind::Var(id) => ExpKind::Var(self.rename_id(id)),
             ExpKind::Un(op, op_typ, exp) => {
                 ExpKind::Un(op, op_typ, Box::new(self.rename_exp(*exp)))
             }
