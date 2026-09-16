@@ -15,9 +15,6 @@ use crate::{
 
 use super::{StructureError, StructureErrorKind};
 
-// == Definition environments
-
-/// Definition environments collected from an algorithmic specification
 #[derive(Clone, Debug)]
 pub struct Context {
     pub(crate) tdenv: TDEnv,
@@ -25,14 +22,7 @@ pub struct Context {
 }
 
 impl Context {
-    /// Loads type and metavariable definitions in source order
-    pub fn load(spec_al: &ast::Spec) -> Result<Self, StructureError> {
-        let mut ctx = Self::init();
-        for def_al in spec_al {
-            ctx.load_def(def_al)?;
-        }
-        Ok(ctx)
-    }
+    // - Constructor
 
     fn init() -> Self {
         let mut menv = MEnv::new();
@@ -51,7 +41,7 @@ impl Context {
         }
     }
 
-    // - Duplicate-checked insertion
+    // - Adders
 
     fn add_typdef(&mut self, id: Id, typdef: TypeDef) -> Result<(), StructureError> {
         if self.tdenv.contains_key(&id) {
@@ -72,7 +62,7 @@ impl Context {
         Ok(())
     }
 
-    // - Source-order definition loading
+    // - Definition loading
 
     fn load_def(&mut self, def_al: &ast::Def) -> Result<(), StructureError> {
         let def_kind_al = &def_al.node;
@@ -112,5 +102,13 @@ impl Context {
 
     fn load_var_def(&mut self, def_var_al: &ast::VarDef) -> Result<(), StructureError> {
         self.add_metavar(def_var_al.id.clone(), def_var_al.typ.clone())
+    }
+
+    pub fn load(spec_al: &ast::Spec) -> Result<Self, StructureError> {
+        let mut ctx = Self::init();
+        for def_al in spec_al {
+            ctx.load_def(def_al)?;
+        }
+        Ok(ctx)
     }
 }

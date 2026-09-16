@@ -44,7 +44,7 @@ fn test_context_loads_type_and_metavariable_definitions() {
     ];
 
     let mut ctx = Context::new();
-    ctx.load_spec(&spec);
+    ctx.load(&spec);
 
     assert_eq!(ctx.tdenv.get(&extern_id), Some(&TypeDef::Extern));
     assert_eq!(

@@ -1077,7 +1077,7 @@ fn analyze_def(ctx: &mut Context, def_il: ast::Def) -> Result<al::ast::Def, Algo
 /// Binding analysis of an IL specification
 pub(in crate::pass::algo) fn analyze_spec(spec_il: ast::Spec) -> Result<al::ast::Spec, AlgoError> {
     let mut ctx = Context::new();
-    ctx.load_spec(&spec_il);
+    ctx.load(&spec_il);
     let mut defs_al = Vec::with_capacity(spec_il.len());
     for def_il in spec_il {
         defs_al.push(analyze_def(&mut ctx, def_il)?);
