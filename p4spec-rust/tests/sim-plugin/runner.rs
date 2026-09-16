@@ -10,7 +10,7 @@ use p4spec_rust::{
     },
 };
 
-fn tx(port: i64, packet: &str) -> Tx {
+fn tx(port: usize, packet: &str) -> Tx {
     Tx { port, packet: packet.to_owned() }
 }
 
@@ -327,14 +327,14 @@ fn test_native_steps_clear_raw_outputs_without_flushing_pending_queues() {
 }
 
 #[test]
-fn test_integer_parsing_preserves_i64_range_and_radix_prefixes() {
+fn test_integer_parsing_preserves_word_range_and_radix_prefixes() {
     for (port, port_expect) in [
-        ("-9223372036854775808", i64::MIN),
-        ("-0x8000000000000000", i64::MIN),
-        ("9223372036854775807", i64::MAX),
-        ("0X7FFFFFFFFFFFFFFF", i64::MAX),
-        ("4611686018427387904", 1_i64 << 62),
+        ("18446744073709551615", usize::MAX),
+        ("0XFFFFFFFFFFFFFFFF", usize::MAX),
+        ("4611686018427387904", 1_usize << 62),
         ("0B10", 2),
+        ("0o17", 15),
+        ("1_000", 1000),
         ("00010", 10),
     ] {
         let (mut runner, mut run_case) = stf_runner(Ebpf::default());
@@ -356,8 +356,8 @@ fn test_integer_parsing_preserves_i64_range_and_radix_prefixes() {
 fn test_integer_failure_is_located_and_precedes_pipeline_dispatch() {
     let (mut runner, mut run_case) = stf_runner(Ebpf::default());
     for source in [
-        "packet 9223372036854775808 AA",
-        "expect 9223372036854775808 AA",
+        "packet 18446744073709551616 AA",
+        "expect 18446744073709551616 AA",
         "register_write r 0 0x****************",
     ] {
         let stmts = stf::parse::parse_str("overflow.stf", source).unwrap();
@@ -565,7 +565,7 @@ fn test_runner_codec_imports_independent_nested_native_state() {
         },
     };
 
-    fn span_at(line: i64) -> Span {
+    fn span_at(line: usize) -> Span {
         Span::new(
             Position::new("nested-import.p4", line, 2),
             Position::new("nested-import.p4", line, 8),

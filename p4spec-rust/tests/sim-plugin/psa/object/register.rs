@@ -22,19 +22,19 @@ fn test_register_default_order_read_bounds_and_write_noop() {
     assert_eq!(reg_initial.values, [value_arch, value_arch]);
     assert!(runner.context().interp().calls.is_empty());
     local(&mut runner, "index", -1);
-    runner.context().interp_mut().calls.clear();
     assert!(
         reg.clone()
             .read(&mut runner.context(), value_ctx, value_arch)
             .is_err()
     );
-    assert_eq!(runner.context().interp().calls, ["index"]);
     local(&mut runner, "index", 3);
+    runner.context().interp_mut().calls.clear();
     let output = reg
         .clone()
         .read(&mut runner.context(), value_ctx, value_arch)
         .unwrap();
     assert_eq!(returned(runner.arena(), output.3), value_ctx);
+    assert_eq!(runner.context().interp().calls, ["index", "default"]);
     runner
         .context()
         .interp_mut()

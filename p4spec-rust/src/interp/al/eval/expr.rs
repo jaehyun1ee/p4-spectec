@@ -257,7 +257,7 @@ fn eval_match_exp<Iface: Interface, Exn: Extern>(
         (ast::Pattern::Case(mixop), ValueKind::Case(value)) => value.eq_shape(mixop.as_ref()),
         (ast::Pattern::List(pattern), ValueKind::List(values)) => match pattern {
             ListPattern::Cons => !values.is_empty(),
-            ListPattern::Fixed(len) => i64::try_from(values.len()).ok() == Some(*len),
+            ListPattern::Fixed(len) => values.len() == *len,
             ListPattern::Nil => values.is_empty(),
         },
         (ast::Pattern::Opt(OptPattern::Some), ValueKind::Opt(Some(_)))

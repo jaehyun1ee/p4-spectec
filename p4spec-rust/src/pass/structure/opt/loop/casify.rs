@@ -16,7 +16,7 @@
 //! then `casify_block` retries the combined Case before entering its bodies
 //! When an existing Case has an equal guard, the scan drops preceding cases:
 //! `if x = 2 { A }; case x { 1 => B; 2 => C; 3 => D }`
-//! becomes `case x { 2 => A; C; 3 => D }`, matching the OCaml scan
+//! becomes `case x { 2 => A; C; 3 => D }`
 //! Iterated Ifs and instructions other than If or Case stop the search
 
 use std::collections::VecDeque;

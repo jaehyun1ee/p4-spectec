@@ -16,7 +16,7 @@ fn atom(node: Atom) -> p4spec_rust::lang::common::notation::mixfix::AtomPhrase {
     phrase!(node: node, span: Span::default())
 }
 
-fn span(line: i64) -> Span {
+fn span(line: usize) -> Span {
     Span::new(Position::new("notation.spec", line, 2), Position::new("notation.spec", line, 5))
 }
 

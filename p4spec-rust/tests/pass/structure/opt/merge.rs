@@ -2,7 +2,7 @@ use super::{instr, ret, span, variable};
 use crate::lang::il::ast::Iter;
 use crate::pass::structure::{ol::ast::*, opt::merge::merge_blocks};
 
-fn if_instr(text_cond: &str, iter: Iter, block: Block, num_line: i64) -> Instr {
+fn if_instr(text_cond: &str, iter: Iter, block: Block, num_line: usize) -> Instr {
     let mut instr_if = instr(InstrKind::If(IfInstr {
         exp: variable(text_cond),
         iter_exps: vec![(iter, vec![])],

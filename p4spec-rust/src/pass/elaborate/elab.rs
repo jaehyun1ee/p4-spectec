@@ -2269,7 +2269,7 @@ fn fetch_input_hint(
 ) -> Result<input::InputHint, ElabError> {
     let arity = not_typ_il.node.arity();
     let Some((_, hint_exp)) = hints.iter().find(|(id, _)| id.node == "input") else {
-        return Ok(input::InputHint::new((0..arity as i64).collect()));
+        return Ok(input::InputHint::new((0..arity).collect()));
     };
     let Some(input_hint) = input::init(hint_exp) else {
         return Err(ElabError::new(

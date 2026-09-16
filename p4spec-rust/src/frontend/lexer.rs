@@ -47,7 +47,7 @@ use num_bigint::BigInt;
 
 use crate::lang::{
     common::source::{Phrase, Position, Span},
-    xl::{num::Natural, utf8},
+    xl::num::Natural,
 };
 
 use super::error::{LexError, LexErrorKind};
@@ -121,7 +121,7 @@ pub enum Token {
     Slash,
     Backslash,
     Hole,
-    NumberedHole(i64),
+    NumberedHole(usize),
     MultipleHole,
     EmptyHole,
     Equals,
@@ -166,7 +166,7 @@ pub enum Token {
 #[derive(Clone, Copy)]
 struct Cursor {
     offset: usize,
-    line: i64,
+    line: usize,
     line_start: usize,
 }
 
@@ -294,7 +294,7 @@ where
     // - Source locations and results
 
     fn position(&self, cursor: Cursor) -> Position {
-        Position::new(self.file.clone(), cursor.line, (cursor.offset - cursor.line_start) as i64)
+        Position::new(self.file.clone(), cursor.line, cursor.offset - cursor.line_start)
     }
 
     fn span(&self, cursor_start: Cursor) -> Span {
@@ -661,7 +661,7 @@ where
         let digits = Self::strip_underscores(&self.source[self.cursor.offset + 1..end]);
         self.advance_to(end);
         let num = digits
-            .parse::<i64>()
+            .parse::<usize>()
             .map_err(|_| self.error(LexErrorKind::HoleNumberOutOfRange, start))?;
         Ok(Some(self.lexeme(Token::NumberedHole(num), start)))
     }
@@ -918,11 +918,12 @@ where
                 if self.cursor_offset(digits_end) == Some(b'}') {
                     let digits = Self::strip_underscores(&self.source[digits_start..digits_end]);
                     self.advance_to(digits_end + 1);
-                    let codepoint = i64::from_str_radix(&digits, 16)
-                        .map_err(|_| self.error(LexErrorKind::InvalidUnicodeEscape, start))?;
-                    let encoded = utf8::encode(&[codepoint])
-                        .map_err(|_| self.error(LexErrorKind::InvalidUnicodeEscape, start))?;
-                    bytes.extend(encoded);
+                    let character = u32::from_str_radix(&digits, 16)
+                        .ok()
+                        .and_then(char::from_u32)
+                        .ok_or_else(|| self.error(LexErrorKind::InvalidUnicodeEscape, start))?;
+                    let mut bytes_char = [0; 4];
+                    bytes.extend_from_slice(character.encode_utf8(&mut bytes_char).as_bytes());
                     return Ok(());
                 }
             }

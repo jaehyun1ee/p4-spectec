@@ -13,7 +13,7 @@ use thiserror::Error;
 /// operations such as `split` validate before consuming items
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct InputHint {
-    indices: Vec<i64>,
+    indices: Vec<usize>,
 }
 
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
@@ -22,10 +22,10 @@ pub enum InputError {
     Empty,
 
     #[error("input hint contains duplicate index {0}")]
-    DuplicateIndex(i64),
+    DuplicateIndex(usize),
 
     #[error("input hint index {index} is out of bounds for arity {arity}")]
-    IndexOutOfBounds { index: i64, arity: usize },
+    IndexOutOfBounds { index: usize, arity: usize },
 
     #[error("input hint expects {expected} input items, but got {actual}")]
     InputCountMismatch { expected: usize, actual: usize },
@@ -36,17 +36,17 @@ pub enum InputError {
 
 impl InputHint {
     /// Preserves indices without validation
-    pub fn new(indices: Vec<i64>) -> Self {
+    pub fn new(indices: Vec<usize>) -> Self {
         Self { indices }
     }
 
     /// Borrows positions in source order
-    pub fn indices(&self) -> &[i64] {
+    pub fn indices(&self) -> &[usize] {
         &self.indices
     }
 
     /// Returns positions in source order
-    pub fn into_indices(self) -> Vec<i64> {
+    pub fn into_indices(self) -> Vec<usize> {
         self.indices
     }
 }
@@ -89,11 +89,7 @@ pub fn validate(hint: &InputHint, arity: usize) -> Result<(), InputError> {
             return Err(InputError::DuplicateIndex(*index));
         }
     }
-    if let Some(index) = hint
-        .indices
-        .iter()
-        .find(|index| **index < 0 || usize::try_from(**index).map_or(true, |index| index >= arity))
-    {
+    if let Some(index) = hint.indices.iter().find(|index| **index >= arity) {
         return Err(InputError::IndexOutOfBounds { index: *index, arity });
     }
     Ok(())
@@ -112,7 +108,7 @@ pub fn split<Item>(
     let mut items_input = Vec::new();
     let mut items_output = Vec::new();
     for (index, item) in items.into_iter().enumerate() {
-        if hint.indices.contains(&(index as i64)) {
+        if hint.indices.contains(&index) {
             items_input.push(item);
         } else {
             items_output.push(item);
@@ -152,7 +148,7 @@ pub fn combine<Item>(
     let mut items_output = items_output.into_iter();
     let mut items = Vec::with_capacity(items_len);
     for idx in 0..items_len {
-        let item = if hint.indices.contains(&(idx as i64)) {
+        let item = if hint.indices.contains(&idx) {
             items_input.next().ok_or(InputError::InputCountMismatch {
                 expected: input_expected,
                 actual: input_actual,
@@ -178,5 +174,5 @@ pub fn is_conditional<Item>(hint: &InputHint, items: &[Item]) -> Result<bool, In
     Ok(items
         .iter()
         .enumerate()
-        .all(|(index, _)| hint.indices.contains(&(index as i64))))
+        .all(|(index, _)| hint.indices.contains(&index)))
 }

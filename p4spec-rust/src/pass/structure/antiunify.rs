@@ -441,7 +441,7 @@ fn antiunify_args_across_clauses(
 
 #[expect(
     clippy::type_complexity,
-    reason = "Keep the OCaml tuple result without a return-only wrapper type"
+    reason = "Destructured once per call site; a named result type would add no meaning"
 )]
 pub(super) fn antiunify_rule_matches(
     frees: IdSet,
@@ -488,7 +488,7 @@ fn populate_clause(
 
 #[expect(
     clippy::type_complexity,
-    reason = "Keep the OCaml tuple result without a return-only wrapper type"
+    reason = "Destructured once per call site; a named result type would add no meaning"
 )]
 pub(super) fn antiunify_clauses(
     clauses: Vec<Clause>,

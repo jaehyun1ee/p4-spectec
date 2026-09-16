@@ -18,7 +18,7 @@ use std::{
     hash::{Hash, Hasher},
 };
 
-fn span(file: &str, line: i64) -> Span {
+fn span(file: &str, line: usize) -> Span {
     Span::new(Position::new(file, line, 0), Position::new(file, line, 1))
 }
 

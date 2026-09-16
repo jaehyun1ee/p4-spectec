@@ -21,7 +21,7 @@ use p4spec_rust::{
 use serde_json::json;
 
 #[test]
-fn test_multicast_order_and_handle_wrap_roundtrip() {
+fn test_multicast_order_and_roundtrip() {
     let mut state = State::default();
     state.group_create(7);
     state.node_create(42, &[12, 3, 12]);
@@ -40,19 +40,13 @@ fn test_multicast_order_and_handle_wrap_roundtrip() {
     );
     state.group_create(7);
     assert!(state.groups[&7].is_empty());
-    state.handle_next = (1_i64 << 62) - 1;
-    state.node_create(1, &[]);
-    assert_eq!(state.handle_next, 1_i64 << 62);
-    state.handle_next = i64::MAX;
-    state.node_create(1, &[]);
-    assert_eq!(state.handle_next, i64::MIN);
     let json = serde_json::to_value(&state).unwrap();
     assert_eq!(serde_json::from_value::<State>(json).unwrap(), state);
 }
 
 #[test]
 fn test_mirror_table_native_roundtrip() {
-    let table = mirror::Table::from([(-1, 1), (2, 22), (10, 10)]);
+    let table = mirror::Table::from([(1, 1), (2, 22), (10, 10)]);
     let json = serde_json::to_value(&table).unwrap();
     assert_eq!(serde_json::from_value::<mirror::Table>(json).unwrap(), table);
 }

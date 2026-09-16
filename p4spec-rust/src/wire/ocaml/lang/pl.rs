@@ -83,9 +83,9 @@ fn decode_alter(json: &json) -> Result<alter::AlterationHint, DecodeError> {
             let (tag, fields) = variant(hole)?;
             match (tag, fields) {
                 ("Next", []) => Ok(alter::AlterationHint::Hole(alter::Hole::Next)),
-                ("Num", [index]) => {
-                    Ok(alter::AlterationHint::Hole(alter::Hole::Num(super::super::integer(index)?)))
-                }
+                ("Num", [index]) => Ok(alter::AlterationHint::Hole(alter::Hole::Num(
+                    super::super::unsigned(index)?,
+                ))),
                 ("Next" | "Num", _) => Err(DecodeError::Expected("valid PL alter hole arity")),
                 (unknown, _) => Err(DecodeError::UnknownVariant(unknown.to_owned())),
             }
@@ -466,7 +466,7 @@ fn decode_instr_note(json: &json) -> Result<Option<Fallthrough>, DecodeError> {
 }
 
 fn encode_instr_note(fallthrough: &Option<Fallthrough>) -> json {
-    // OCaml still requires an instruction identifier in its wire format.
+    // The wire format carries an instruction identifier that has no Rust counterpart
     json!({"iid": 0, "fallthrough": encode_option(fallthrough.as_ref(), encode_fallthrough)})
 }
 

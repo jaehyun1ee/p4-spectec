@@ -4,7 +4,7 @@ use crate::util::json::json;
 
 use crate::lang::common::source::{NotePhrase, Phrase, Position, Span};
 
-use super::{DecodeError, field, integer, object};
+use super::{DecodeError, field, object, unsigned};
 
 pub fn decode_position(json: &json) -> Result<Position, DecodeError> {
     let object = object(json)?;
@@ -12,8 +12,8 @@ pub fn decode_position(json: &json) -> Result<Position, DecodeError> {
         field(object, "file")?
             .as_str()
             .ok_or(DecodeError::Expected("position file string"))?,
-        integer(field(object, "line")?)?,
-        integer(field(object, "column")?)?,
+        unsigned(field(object, "line")?)?,
+        unsigned(field(object, "column")?)?,
     ))
 }
 

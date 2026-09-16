@@ -10,7 +10,6 @@ use crate::{
     },
     runner::{Extern, ExternError, Interface, Interpreter, RunnerContext},
 };
-use num_traits::ToPrimitive;
 use serde_derive_state::{DeserializeState, SerializeState};
 
 #[derive(Clone, Debug, PartialEq, Eq, SerializeState, DeserializeState)]
@@ -60,10 +59,8 @@ impl Register {
         let args = args::assoc(ctx.arena(), value_ids, value_args)?;
         let value_size = args::find(&args, "size")?;
         let value_initial = func::default(ctx, value_typ)?;
-        let size = (unpack::p4_fixed_bit(ctx.arena(), &value_size)?.1)
-            .to_i64()
-            .ok_or_else(|| ExternError::Failure("integer outside i64 range".to_owned()))?
-            as usize;
+        let size = usize::try_from(&unpack::p4_fixed_bit(ctx.arena(), &value_size)?.1)
+            .map_err(ExternError::from)?;
         Ok(Self { value_typ, values: vec![value_initial; size] })
     }
 
@@ -93,11 +90,8 @@ impl Register {
         Interp: Interpreter<Iface, Exn>,
     {
         let value_idx = func::find_var_e_local(ctx, value_ctx, "index")?;
-        let idx = (unpack::p4_fixed_bit(ctx.arena(), &value_idx)?.1)
-            .to_i64()
-            .ok_or_else(|| ExternError::Failure("integer outside i64 range".to_owned()))?;
-        let idx = usize::try_from(idx)
-            .map_err(|_| ExternError::Failure("negative register index".to_owned()))?;
+        let idx = usize::try_from(&unpack::p4_fixed_bit(ctx.arena(), &value_idx)?.1)
+            .map_err(ExternError::from)?;
         let value = match self.values.get(idx) {
             Some(value) => *value,
             None => func::default(ctx, self.value_typ)?,
@@ -153,13 +147,10 @@ impl Register {
         Interp: Interpreter<Iface, Exn>,
     {
         let value_idx = func::find_var_e_local(ctx, value_ctx, "index")?;
-        let idx = (unpack::p4_fixed_bit(ctx.arena(), &value_idx)?.1)
-            .to_i64()
-            .ok_or_else(|| ExternError::Failure("integer outside i64 range".to_owned()))?;
+        let idx = usize::try_from(&unpack::p4_fixed_bit(ctx.arena(), &value_idx)?.1)
+            .map_err(ExternError::from)?;
         let value_target = func::find_var_e_local(ctx, value_ctx, "value")?;
-        if let Ok(idx) = usize::try_from(idx)
-            && let Some(value) = self.values.get_mut(idx)
-        {
+        if let Some(value) = self.values.get_mut(idx) {
             *value = value_target;
         }
         let typ = typ::make::opt(typ::make::var(

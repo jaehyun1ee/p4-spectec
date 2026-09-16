@@ -11,7 +11,7 @@ use p4spec_rust::{
     runtime::envs::interp::VEnv,
 };
 
-fn id(name: &str, line: i64) -> p4spec_rust::lang::il::ast::Id {
+fn id(name: &str, line: usize) -> p4spec_rust::lang::il::ast::Id {
     let span =
         Span::new(Position::new("vars.watsup", line, 0), Position::new("vars.watsup", line, 1));
     phrase!(node: name.to_owned(), span: span)

@@ -10,7 +10,7 @@ fn var(text: &str) -> Exp {
     crate::note_phrase!(node: ExpKind::Var(crate::phrase!(node: text.into(), span: Default::default())), note: TypKind::Bool, span: Default::default())
 }
 
-fn span(int_line: i64) -> Span {
+fn span(int_line: usize) -> Span {
     Span::new(Position::new("conditions", int_line, 1), Position::new("conditions", int_line, 9))
 }
 
@@ -18,7 +18,7 @@ fn ret(text: &str) -> Instr {
     crate::phrase!(node: InstrKind::Return(ReturnInstr { exp: var(text) }), span: Default::default())
 }
 
-fn branch(exp: Exp, text: &str, int_line: i64) -> Instr {
+fn branch(exp: Exp, text: &str, int_line: usize) -> Instr {
     crate::phrase!(node: InstrKind::If(IfInstr { exp, iter_exps: vec![], block: vec![ret(text)] }), span: span(int_line))
 }
 
@@ -51,7 +51,7 @@ fn guard(text: &str) -> Guard {
     crate::pass::structure::opt::overlap::exp_as_guard(&var("p"), &cmp(text)).unwrap()
 }
 
-fn case(cases: &[(&str, &str)], total: bool, int_line: i64) -> Instr {
+fn case(cases: &[(&str, &str)], total: bool, int_line: usize) -> Instr {
     crate::phrase!(node: InstrKind::Case(CaseInstr { exp: var("p"), cases: cases.iter().map(|(text_guard,text_block)| Case { guard: guard(text_guard), block: vec![ret(text_block)] }).collect(), total }), span: span(int_line))
 }
 

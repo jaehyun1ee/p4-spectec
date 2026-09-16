@@ -81,8 +81,8 @@ pub struct Lexer<'source> {
     source: &'source str,
     file: Rc<str>,
     index: usize,
-    line: i64,
-    column: i64,
+    line: usize,
+    column: usize,
     mode: Mode,
     finished: bool,
 }
@@ -119,7 +119,7 @@ impl<'source> Lexer<'source> {
             self.line += 1;
             self.column = 0;
         } else {
-            self.column += character.len_utf8() as i64;
+            self.column += character.len_utf8();
         }
         Some(character)
     }
