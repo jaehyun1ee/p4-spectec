@@ -68,11 +68,11 @@ fn casify_instr_kind(
 
 fn casify_if_instr(
     tdenv: &TDEnv,
-    instr_if: IfInstr,
+    mut instr_if: IfInstr,
     span: &Span,
     instrs: &mut VecDeque<Instr>,
 ) -> Result<InstrKind, StructureError> {
-    if let Some((idx, instr_case)) = casify_from_if(tdenv, &instr_if, instrs)? {
+    if let Some((idx, instr_case)) = casify_from_if(tdenv, &mut instr_if, instrs)? {
         instrs.remove(idx);
         return casify_case_instr(tdenv, instr_case, span, instrs);
     }
@@ -100,7 +100,9 @@ fn casify_case_instr(
     span: &Span,
     instrs: &mut VecDeque<Instr>,
 ) -> Result<InstrKind, StructureError> {
-    while let Some((idx, instr_case_merged)) = casify_from_case(tdenv, &instr_case, span, instrs)? {
+    while let Some((idx, instr_case_merged)) =
+        casify_from_case(tdenv, &mut instr_case, span, instrs)?
+    {
         instrs.remove(idx);
         instr_case = instr_case_merged;
     }
@@ -151,14 +153,14 @@ fn casify_rule_instr(tdenv: &TDEnv, instr: RuleInstr) -> Result<InstrKind, Struc
 
 fn casify_from_if(
     tdenv: &TDEnv,
-    instr_target: &IfInstr,
-    instrs: &VecDeque<Instr>,
+    instr_target: &mut IfInstr,
+    instrs: &mut VecDeque<Instr>,
 ) -> Result<Option<(usize, CaseInstr)>, StructureError> {
     if !instr_target.iter_exps.is_empty() {
         return Ok(None);
     }
-    for (idx, instr) in instrs.iter().enumerate() {
-        let instr_case = match &instr.node {
+    for (idx, instr) in instrs.iter_mut().enumerate() {
+        let instr_case = match &mut instr.node {
             InstrKind::If(instr_if) if instr_if.iter_exps.is_empty() => {
                 casify_if_then_if(tdenv, instr_target, instr_if)?
             }
@@ -176,12 +178,12 @@ fn casify_from_if(
 
 fn casify_from_case(
     tdenv: &TDEnv,
-    instr_target: &CaseInstr,
+    instr_target: &mut CaseInstr,
     span_target: &Span,
-    instrs: &VecDeque<Instr>,
+    instrs: &mut VecDeque<Instr>,
 ) -> Result<Option<(usize, CaseInstr)>, StructureError> {
-    for (idx, instr) in instrs.iter().enumerate() {
-        let instr_case = match &instr.node {
+    for (idx, instr) in instrs.iter_mut().enumerate() {
+        let instr_case = match &mut instr.node {
             InstrKind::If(instr_if) if instr_if.iter_exps.is_empty() => {
                 casify_case_then_if(tdenv, instr_target, instr_if, span_target)?
             }
@@ -203,8 +205,8 @@ fn casify_from_case(
 
 fn casify_if_then_if(
     tdenv: &TDEnv,
-    instr_target: &IfInstr,
-    instr_if: &IfInstr,
+    instr_target: &mut IfInstr,
+    instr_if: &mut IfInstr,
 ) -> Result<Option<CaseInstr>, StructureError> {
     let overlap = overlap_exp(tdenv, &instr_target.exp, &instr_if.exp)?;
     let (exp, guard_a, guard_b, total) = match overlap {
@@ -214,8 +216,10 @@ fn casify_if_then_if(
         Overlap::Partition { exp, guard_a, guard_b } => (exp, guard_a, guard_b, true),
         Overlap::Identical | Overlap::Fuzzy => return Ok(None),
     };
-    let case_a = Case { guard: guard_a, block: instr_target.block.clone() };
-    let case_b = Case { guard: guard_b, block: instr_if.block.clone() };
+    let block_a = std::mem::take(&mut instr_target.block);
+    let case_a = Case { guard: guard_a, block: block_a };
+    let block_b = std::mem::take(&mut instr_if.block);
+    let case_b = Case { guard: guard_b, block: block_b };
     let cases = vec![case_a, case_b];
     let instr = CaseInstr { exp, cases, total };
     Ok(Some(instr))
@@ -225,8 +229,8 @@ fn casify_if_then_if(
 
 fn casify_if_then_case(
     tdenv: &TDEnv,
-    instr_target: &IfInstr,
-    instr_case: &CaseInstr,
+    instr_target: &mut IfInstr,
+    instr_case: &mut CaseInstr,
     span_case: &Span,
 ) -> Result<Option<CaseInstr>, StructureError> {
     let IfInstr { exp: exp_cond_target, block: block_target, .. } = instr_target;
@@ -234,14 +238,18 @@ fn casify_if_then_case(
     let Some(guard_target) = exp_as_guard(exp, exp_cond_target) else {
         return Ok(None);
     };
-    for (idx, case) in cases.iter().enumerate() {
+    for (idx, case) in cases.iter_mut().enumerate() {
         let Case { guard, block } = case;
         let overlap = overlap_guard(tdenv, exp, &guard_target, guard)?;
         match overlap {
             Overlap::Identical => {
                 // if x = 2 before cases [1, 2, 3] keeps cases [2, 3]
-                let mut cases = cases[idx..].to_vec();
-                cases[0].block = merge_block(block_target.clone(), block.clone());
+                let block_target = std::mem::take(block_target);
+                let block = std::mem::take(block);
+                let block = merge_block(block_target, block);
+                let mut cases = std::mem::take(cases);
+                cases.drain(..idx);
+                cases[0].block = block;
                 let instr = CaseInstr { exp: exp.clone(), cases, total: *total };
                 return Ok(Some(instr));
             }
@@ -252,8 +260,9 @@ fn casify_if_then_case(
     if *total {
         return Err(StructureError::new(StructureErrorKind::EmptyTotalCase, span_case.clone()));
     }
-    let mut cases = cases.clone();
-    let case = Case { guard: guard_target, block: block_target.clone() };
+    let mut cases = std::mem::take(cases);
+    let block = std::mem::take(block_target);
+    let case = Case { guard: guard_target, block };
     cases.push(case);
     let instr = CaseInstr { exp: exp.clone(), cases, total: *total };
     Ok(Some(instr))
@@ -263,8 +272,8 @@ fn casify_if_then_case(
 
 fn casify_case_then_if(
     tdenv: &TDEnv,
-    instr_target: &CaseInstr,
-    instr_if: &IfInstr,
+    instr_target: &mut CaseInstr,
+    instr_if: &mut IfInstr,
     span_target: &Span,
 ) -> Result<Option<CaseInstr>, StructureError> {
     let CaseInstr { exp, cases, total } = instr_target;
@@ -272,10 +281,21 @@ fn casify_case_then_if(
     let Some(guard) = exp_as_guard(exp, exp_cond) else {
         return Ok(None);
     };
-    let Some(cases) = merge_case_and_guard(tdenv, exp, cases, *total, &guard, block, span_target)?
+    let Some(merge) = find_case_merge(
+        tdenv,
+        exp,
+        cases.iter().map(|case| &case.guard),
+        *total,
+        &guard,
+        span_target,
+    )?
     else {
         return Ok(None);
     };
+    let mut cases = std::mem::take(cases);
+    let block = std::mem::take(block);
+    let case = Case { guard, block };
+    merge_case(&mut cases, case, merge);
     // Case followed by If becomes partial, even when the Case was total
     let instr = CaseInstr { exp: exp.clone(), cases, total: false };
     Ok(Some(instr))
@@ -285,8 +305,8 @@ fn casify_case_then_if(
 
 fn casify_case_then_case(
     tdenv: &TDEnv,
-    instr_target: &CaseInstr,
-    instr_case: &CaseInstr,
+    instr_target: &mut CaseInstr,
+    instr_case: &mut CaseInstr,
     span_target: &Span,
 ) -> Result<Option<CaseInstr>, StructureError> {
     let CaseInstr { exp: exp_target, cases: cases_target, total: total_target } = instr_target;
@@ -294,48 +314,57 @@ fn casify_case_then_case(
     if !exp_target.syntax_eq(exp) {
         return Ok(None);
     }
-    let mut cases_target = cases_target.clone();
-    for case in cases {
-        let Case { guard, block } = case;
-        let Some(cases) = merge_case_and_guard(
+    // A later fuzzy guard must leave both input bodies untouched
+    let mut guards: VecDeque<_> = cases_target.iter().map(|case| &case.guard).collect();
+    let mut merges = Vec::with_capacity(cases.len());
+    for case in cases.iter() {
+        let Some(merge) = find_case_merge(
             tdenv,
             exp_target,
-            &cases_target,
+            guards.iter().copied(),
             *total_target,
-            guard,
-            block,
+            &case.guard,
             span_target,
         )?
         else {
             return Ok(None);
         };
-        cases_target = cases;
+        match merge {
+            CaseMerge::Identical(idx) => {
+                guards.drain(..idx);
+            }
+            CaseMerge::Append => guards.push_back(&case.guard),
+        }
+        merges.push(merge);
+    }
+    let mut cases_target = std::mem::take(cases_target);
+    let cases = std::mem::take(cases);
+    for (case, merge) in cases.into_iter().zip(merges) {
+        merge_case(&mut cases_target, case, merge);
     }
     let instr = CaseInstr { exp: exp_target.clone(), cases: cases_target, total: *total_target };
     Ok(Some(instr))
 }
 
-// - Helper for merging case and guard
+// - Guard analysis and owned body merging
 
-fn merge_case_and_guard(
+#[derive(Clone, Copy)]
+enum CaseMerge {
+    Identical(usize),
+    Append,
+}
+
+fn find_case_merge<'a>(
     tdenv: &TDEnv,
     exp_target: &Exp,
-    cases_target: &[Case],
+    guards_target: impl Iterator<Item = &'a Guard>,
     total_target: bool,
     guard: &Guard,
-    block: &Block,
     span_target: &Span,
-) -> Result<Option<Vec<Case>>, StructureError> {
-    for (idx, case_target) in cases_target.iter().enumerate() {
-        let Case { guard: guard_target, block: block_target } = case_target;
-        let overlap = overlap_guard(tdenv, exp_target, guard_target, guard)?;
-        match overlap {
-            Overlap::Identical => {
-                // Cases [1, 2, 3] followed by guard 2 keep cases [2, 3]
-                let mut cases = cases_target[idx..].to_vec();
-                cases[0].block = merge_block(block_target.clone(), block.clone());
-                return Ok(Some(cases));
-            }
+) -> Result<Option<CaseMerge>, StructureError> {
+    for (idx, guard_target) in guards_target.enumerate() {
+        match overlap_guard(tdenv, exp_target, guard_target, guard)? {
+            Overlap::Identical => return Ok(Some(CaseMerge::Identical(idx))),
             Overlap::Disjoint { .. } | Overlap::Partition { .. } => {}
             Overlap::Fuzzy => return Ok(None),
         }
@@ -343,10 +372,19 @@ fn merge_case_and_guard(
     if total_target {
         return Err(StructureError::new(StructureErrorKind::EmptyTotalCase, span_target.clone()));
     }
-    let mut cases = cases_target.to_vec();
-    let case = Case { guard: guard.clone(), block: block.clone() };
-    cases.push(case);
-    Ok(Some(cases))
+    Ok(Some(CaseMerge::Append))
+}
+
+fn merge_case(cases: &mut Vec<Case>, case: Case, merge: CaseMerge) {
+    match merge {
+        CaseMerge::Identical(idx) => {
+            // Cases [1, 2, 3] followed by guard 2 keep cases [2, 3]
+            cases.drain(..idx);
+            let block_target = std::mem::take(&mut cases[0].block);
+            cases[0].block = merge_block(block_target, case.block);
+        }
+        CaseMerge::Append => cases.push(case),
+    }
 }
 
 // == Entry point
