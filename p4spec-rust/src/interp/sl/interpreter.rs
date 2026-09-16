@@ -23,7 +23,7 @@ use crate::{
     runner::{Extern, Interface, InterfaceError, RunnerContext},
     runtime::typdef::TypeDef,
 };
-use std::rc::Rc;
+use std::{borrow::Cow, rc::Rc};
 // = Input and output checks
 
 pub(crate) fn check_rel_inputs(
@@ -295,8 +295,8 @@ fn invoke_rel_mode<Iface: Interface, Exn: Extern>(
     values: &[Value],
     internal: bool,
 ) -> Backtrack<Vec<Value>> {
-    let mut id = id.clone();
-    let mut values = values.to_vec();
+    let mut id = Cow::Borrowed(id);
+    let mut values = Cow::Borrowed(values);
     let mut pending = Vec::new();
     loop {
         let key =
@@ -361,9 +361,15 @@ fn invoke_rel_mode<Iface: Interface, Exn: Extern>(
                 return Backtrack::Ok(values);
             }
             Flow::TailRel(id_tail, values_tail) => {
-                pending.push((id.span, TraceErrorKind::RelationInvocation { rel: id.node }));
-                id = id_tail;
-                values = values_tail;
+                let id_pending = id.into_owned();
+                pending.push((
+                    id_pending.span,
+                    TraceErrorKind::RelationInvocation {
+                        rel: id_pending.node,
+                    },
+                ));
+                id = Cow::Owned(id_tail);
+                values = Cow::Owned(values_tail);
             }
             _ => unreachable!("relation dispatch validates its flow"),
         }
@@ -378,9 +384,9 @@ fn invoke_func_mode<Iface: Interface, Exn: Extern>(
     values: &[Value],
     internal: bool,
 ) -> Backtrack<Value> {
-    let mut id = id.clone();
-    let mut targs = targs.to_vec();
-    let mut values = values.to_vec();
+    let mut id = Cow::Borrowed(id);
+    let mut targs = Cow::Borrowed(targs);
+    let mut values = Cow::Borrowed(values);
     let mut pending = Vec::new();
     loop {
         let key = cache_func(runner, ctx, &id, &values)
@@ -435,7 +441,7 @@ fn invoke_func_mode<Iface: Interface, Exn: Extern>(
                         })
                     ));
                     let mut ctx_local = ctx.localize();
-                    for (tparam, targ) in func.tparams.iter().zip(&targs) {
+                    for (tparam, targ) in func.tparams.iter().zip(targs.iter()) {
                         let def_typ = crate::phrase!(node: ast::DefTypKind::Plain(targ.clone()), span: targ.span.clone());
                         backtrack_from_result!(
                             ctx_local.bind_tparam(
@@ -489,10 +495,10 @@ fn invoke_func_mode<Iface: Interface, Exn: Extern>(
             }
             Flow::TailFunc(id_tail, targs_tail, values_tail) => {
                 let trace = func_trace(&id, &targs);
-                pending.push((id.span, trace));
-                id = id_tail;
-                targs = targs_tail;
-                values = values_tail;
+                pending.push((id.into_owned().span, trace));
+                id = Cow::Owned(id_tail);
+                targs = Cow::Owned(targs_tail);
+                values = Cow::Owned(values_tail);
             }
             _ => unreachable!("function dispatch validates its flow"),
         }
