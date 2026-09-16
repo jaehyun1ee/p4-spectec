@@ -15,6 +15,8 @@
 use crate::lang::common::source::Span;
 use crate::pass::structure::ol::ast::*;
 
+// == Instructions
+
 fn remove_instr(instr_ol: Instr) -> Block {
     remove_instr_kind(instr_ol.node, instr_ol.span)
 }
@@ -28,10 +30,17 @@ fn remove_instr_kind(instr_kind_ol: InstrKind, span: Span) -> Block {
         InstrKind::Let(instr_ol) => remove_let_instr(instr_ol, span),
         InstrKind::Rule(instr_ol) => remove_rule_instr(instr_ol, span),
         InstrKind::Result(_) | InstrKind::Return(_) | InstrKind::Debug(_) => {
-            vec![crate::phrase! {node: instr_kind_ol, span: span}]
+            let instr = crate::phrase! {node: instr_kind_ol, span: span};
+            vec![instr]
         }
     }
 }
+
+fn remove_block(block: Block) -> Block {
+    block.into_iter().flat_map(remove_instr).collect()
+}
+
+// - If instruction
 
 fn remove_if_instr(instr_ol: IfInstr, span: Span) -> Block {
     let IfInstr {
@@ -40,8 +49,16 @@ fn remove_if_instr(instr_ol: IfInstr, span: Span) -> Block {
         block,
     } = instr_ol;
     let block = remove_block(block);
-    vec![crate::phrase! {node: InstrKind::If(IfInstr {exp, iter_exps, block}), span: span}]
+    let instr = IfInstr {
+        exp,
+        iter_exps,
+        block,
+    };
+    let instr = crate::phrase! {node: InstrKind::If(instr), span: span};
+    vec![instr]
 }
+
+// - Hold instruction
 
 fn remove_hold_instr(instr_ol: HoldInstr, span: Span) -> Block {
     let HoldInstr {
@@ -53,10 +70,18 @@ fn remove_hold_instr(instr_ol: HoldInstr, span: Span) -> Block {
     } = instr_ol;
     let block_hold = remove_block(block_hold);
     let block_not_hold = remove_block(block_not_hold);
-    vec![
-        crate::phrase! {node: InstrKind::Hold(HoldInstr {id, not_exp, iter_exps, block_hold, block_not_hold}), span: span},
-    ]
+    let instr = HoldInstr {
+        id,
+        not_exp,
+        iter_exps,
+        block_hold,
+        block_not_hold,
+    };
+    let instr = crate::phrase! {node: InstrKind::Hold(instr), span: span};
+    vec![instr]
 }
+
+// - Case instruction
 
 fn remove_case_instr(instr_ol: CaseInstr, span: Span) -> Block {
     let CaseInstr { exp, cases, total } = instr_ol;
@@ -68,13 +93,19 @@ fn remove_case_instr(instr_ol: CaseInstr, span: Span) -> Block {
             Case { guard, block }
         })
         .collect::<Vec<_>>();
-    vec![crate::phrase! {node: InstrKind::Case(CaseInstr {exp, cases, total}), span: span}]
+    let instr = CaseInstr { exp, cases, total };
+    let instr = crate::phrase! {node: InstrKind::Case(instr), span: span};
+    vec![instr]
 }
+
+// - Group instruction
 
 fn remove_group_instr(instr_ol: GroupInstr) -> Block {
     let GroupInstr { block, .. } = instr_ol;
     remove_block(block)
 }
+
+// - Let instruction
 
 fn remove_let_instr(instr_ol: LetInstr, span: Span) -> Block {
     let LetInstr {
@@ -84,10 +115,17 @@ fn remove_let_instr(instr_ol: LetInstr, span: Span) -> Block {
         block,
     } = instr_ol;
     let block = remove_block(block);
-    vec![
-        crate::phrase! {node: InstrKind::Let(LetInstr {exp_l, exp_r, iter_instrs, block}), span: span},
-    ]
+    let instr = LetInstr {
+        exp_l,
+        exp_r,
+        iter_instrs,
+        block,
+    };
+    let instr = crate::phrase! {node: InstrKind::Let(instr), span: span};
+    vec![instr]
 }
+
+// - Rule instruction
 
 fn remove_rule_instr(instr_ol: RuleInstr, span: Span) -> Block {
     let RuleInstr {
@@ -98,14 +136,18 @@ fn remove_rule_instr(instr_ol: RuleInstr, span: Span) -> Block {
         block,
     } = instr_ol;
     let block = remove_block(block);
-    vec![
-        crate::phrase! {node: InstrKind::Rule(RuleInstr {id, not_exp, input_hint, iter_instrs, block}), span: span},
-    ]
+    let instr = RuleInstr {
+        id,
+        not_exp,
+        input_hint,
+        iter_instrs,
+        block,
+    };
+    let instr = crate::phrase! {node: InstrKind::Rule(instr), span: span};
+    vec![instr]
 }
 
-fn remove_block(block: Block) -> Block {
-    block.into_iter().flat_map(remove_instr).collect()
-}
+// == Entry point
 
 pub(crate) fn apply(block: Block) -> Block {
     remove_block(block)

@@ -1,7 +1,7 @@
 //! Replace equality and inequality tests in OL If conditions with matches
 //!
-//! `matchify_cmp_exp` recognizes empty options, empty lists, and constructors
-//! with no arguments, on either side of the comparison:
+//! Empty options, empty lists, and constructors with no arguments are
+//! recognized on either side of the comparison:
 //!
 //! ```text
 //! if xs != [] { return xs }
@@ -22,80 +22,75 @@ use crate::lang::{
 };
 use crate::pass::structure::ol::ast::*;
 
+// == Expressions
+
 fn matchify_exp(exp: Exp) -> Exp {
-    let exp_kind = match exp.node {
-        ExpKind::Cmp(op, op_typ, exp_l, exp_r) => {
-            matchify_cmp_exp(op, op_typ, exp_l, exp_r, &exp.note, &exp.span)
+    let ExpKind::Cmp(op, op_typ, exp_l, exp_r) = exp.node else {
+        return exp;
+    };
+    let exp_kind = match (op, &exp_l.node, &exp_r.node) {
+        // x == None or None == x -> x matches None
+        (CmpOp::Bool(BoolCmpOp::Eq), _, ExpKind::Opt(None)) => {
+            ExpKind::Match(exp_l, Pattern::Opt(OptPattern::None))
         }
-        _ => exp.node,
+        (CmpOp::Bool(BoolCmpOp::Eq), ExpKind::Opt(None), _) => {
+            ExpKind::Match(exp_r, Pattern::Opt(OptPattern::None))
+        }
+        // xs == [] or [] == xs -> xs matches Nil
+        (CmpOp::Bool(BoolCmpOp::Eq), _, ExpKind::List(exps)) if exps.is_empty() => {
+            ExpKind::Match(exp_l, Pattern::List(ListPattern::Nil))
+        }
+        (CmpOp::Bool(BoolCmpOp::Eq), ExpKind::List(exps), _) if exps.is_empty() => {
+            ExpKind::Match(exp_r, Pattern::List(ListPattern::Nil))
+        }
+        // x == STOP or STOP == x -> x matches STOP
+        (CmpOp::Bool(BoolCmpOp::Eq), _, ExpKind::Case(not_exp)) if not_exp.arity() == 0 => {
+            let mixop = not_exp.to_mixop();
+            let pattern = Pattern::Case(Box::new(mixop));
+            ExpKind::Match(exp_l, pattern)
+        }
+        (CmpOp::Bool(BoolCmpOp::Eq), ExpKind::Case(not_exp), _) if not_exp.arity() == 0 => {
+            let mixop = not_exp.to_mixop();
+            let pattern = Pattern::Case(Box::new(mixop));
+            ExpKind::Match(exp_r, pattern)
+        }
+        // x != None or None != x -> x matches Some
+        (CmpOp::Bool(BoolCmpOp::Ne), _, ExpKind::Opt(None)) => {
+            ExpKind::Match(exp_l, Pattern::Opt(OptPattern::Some))
+        }
+        (CmpOp::Bool(BoolCmpOp::Ne), ExpKind::Opt(None), _) => {
+            ExpKind::Match(exp_r, Pattern::Opt(OptPattern::Some))
+        }
+        // xs != [] or [] != xs -> xs matches Cons
+        (CmpOp::Bool(BoolCmpOp::Ne), _, ExpKind::List(exps)) if exps.is_empty() => {
+            ExpKind::Match(exp_l, Pattern::List(ListPattern::Cons))
+        }
+        (CmpOp::Bool(BoolCmpOp::Ne), ExpKind::List(exps), _) if exps.is_empty() => {
+            ExpKind::Match(exp_r, Pattern::List(ListPattern::Cons))
+        }
+        // x != STOP or STOP != x -> not (x matches STOP)
+        (CmpOp::Bool(BoolCmpOp::Ne), _, ExpKind::Case(not_exp)) if not_exp.arity() == 0 => {
+            let mixop = not_exp.to_mixop();
+            let pattern = Pattern::Case(Box::new(mixop));
+            let exp_kind = ExpKind::Match(exp_l, pattern);
+            let exp_match =
+                crate::note_phrase!(node: exp_kind, note: exp.note.clone(), span: exp.span.clone());
+            ExpKind::Un(UnOp::Bool(BoolUnOp::Not), OpTyp::Bool, Box::new(exp_match))
+        }
+        (CmpOp::Bool(BoolCmpOp::Ne), ExpKind::Case(not_exp), _) if not_exp.arity() == 0 => {
+            let mixop = not_exp.to_mixop();
+            let pattern = Pattern::Case(Box::new(mixop));
+            let exp_kind = ExpKind::Match(exp_r, pattern);
+            let exp_match =
+                crate::note_phrase!(node: exp_kind, note: exp.note.clone(), span: exp.span.clone());
+            ExpKind::Un(UnOp::Bool(BoolUnOp::Not), OpTyp::Bool, Box::new(exp_match))
+        }
+        _ => ExpKind::Cmp(op, op_typ, exp_l, exp_r),
     };
     crate::note_phrase!(node: exp_kind, note: exp.note, span: exp.span)
 }
 
-fn matchify_cmp_exp(
-    op: CmpOp,
-    op_typ: OpTyp,
-    exp_l: Box<Exp>,
-    exp_r: Box<Exp>,
-    note: &std::rc::Rc<crate::lang::il::ast::TypKind>,
-    span: &Span,
-) -> ExpKind {
-    let CmpOp::Bool(op_bool) = op else {
-        return ExpKind::Cmp(op, op_typ, exp_l, exp_r);
-    };
-    // Option and list rules precede terminal cases, including across operands
-    let pattern = option_pattern(&exp_r, op_bool)
-        .map(|pattern| (false, pattern))
-        .or_else(|| option_pattern(&exp_l, op_bool).map(|pattern| (true, pattern)))
-        .or_else(|| list_pattern(&exp_r, op_bool).map(|pattern| (false, pattern)))
-        .or_else(|| list_pattern(&exp_l, op_bool).map(|pattern| (true, pattern)));
-    if let Some((reversed, pattern)) = pattern {
-        return ExpKind::Match(if reversed { exp_r } else { exp_l }, pattern);
-    }
-    let pattern = terminal_pattern(&exp_r)
-        .map(|pattern| (false, pattern))
-        .or_else(|| terminal_pattern(&exp_l).map(|pattern| (true, pattern)));
-    let Some((reversed, pattern)) = pattern else {
-        return ExpKind::Cmp(op, op_typ, exp_l, exp_r);
-    };
-    let exp_kind = ExpKind::Match(if reversed { exp_r } else { exp_l }, pattern);
-    match op_bool {
-        BoolCmpOp::Eq => exp_kind,
-        BoolCmpOp::Ne => {
-            let exp = crate::note_phrase!(node: exp_kind, note: note.clone(), span: span.clone());
-            ExpKind::Un(UnOp::Bool(BoolUnOp::Not), OpTyp::Bool, Box::new(exp))
-        }
-    }
-}
-
-fn option_pattern(exp: &Exp, op: BoolCmpOp) -> Option<Pattern> {
-    match &exp.node {
-        ExpKind::Opt(None) => Some(Pattern::Opt(match op {
-            BoolCmpOp::Eq => OptPattern::None,
-            BoolCmpOp::Ne => OptPattern::Some,
-        })),
-        _ => None,
-    }
-}
-
-fn list_pattern(exp: &Exp, op: BoolCmpOp) -> Option<Pattern> {
-    match &exp.node {
-        ExpKind::List(exps) if exps.is_empty() => Some(Pattern::List(match op {
-            BoolCmpOp::Eq => ListPattern::Nil,
-            BoolCmpOp::Ne => ListPattern::Cons,
-        })),
-        _ => None,
-    }
-}
-
-fn terminal_pattern(exp: &Exp) -> Option<Pattern> {
-    match &exp.node {
-        ExpKind::Case(not_exp) if not_exp.arity() == 0 => {
-            Some(Pattern::Case(Box::new(not_exp.to_mixop())))
-        }
-        _ => None,
-    }
-}
+// == Instructions
 
 fn matchify_instr(instr_ol: Instr) -> Instr {
     matchify_instr_kind(instr_ol.node, instr_ol.span)
@@ -115,6 +110,12 @@ fn matchify_instr_kind(instr_kind_ol: InstrKind, span: Span) -> Instr {
     }
 }
 
+fn matchify_block(block: Block) -> Block {
+    block.into_iter().map(matchify_instr).collect()
+}
+
+// - If instruction
+
 fn matchify_if_instr(instr_ol: IfInstr, span: Span) -> Instr {
     let IfInstr {
         exp,
@@ -123,8 +124,15 @@ fn matchify_if_instr(instr_ol: IfInstr, span: Span) -> Instr {
     } = instr_ol;
     let exp = matchify_exp(exp);
     let block = matchify_block(block);
-    crate::phrase! {node: InstrKind::If(IfInstr {exp, iter_exps, block}), span: span}
+    let instr = IfInstr {
+        exp,
+        iter_exps,
+        block,
+    };
+    crate::phrase! {node: InstrKind::If(instr), span: span}
 }
+
+// - Hold instruction
 
 fn matchify_hold_instr(instr_ol: HoldInstr, span: Span) -> Instr {
     let HoldInstr {
@@ -136,8 +144,17 @@ fn matchify_hold_instr(instr_ol: HoldInstr, span: Span) -> Instr {
     } = instr_ol;
     let block_hold = matchify_block(block_hold);
     let block_not_hold = matchify_block(block_not_hold);
-    crate::phrase! {node: InstrKind::Hold(HoldInstr {id, not_exp, iter_exps, block_hold, block_not_hold}), span: span}
+    let instr = HoldInstr {
+        id,
+        not_exp,
+        iter_exps,
+        block_hold,
+        block_not_hold,
+    };
+    crate::phrase! {node: InstrKind::Hold(instr), span: span}
 }
+
+// - Case instruction
 
 fn matchify_case_instr(instr_ol: CaseInstr, span: Span) -> Instr {
     let CaseInstr { exp, cases, total } = instr_ol;
@@ -149,8 +166,11 @@ fn matchify_case_instr(instr_ol: CaseInstr, span: Span) -> Instr {
             Case { guard, block }
         })
         .collect::<Vec<_>>();
-    crate::phrase! {node: InstrKind::Case(CaseInstr {exp, cases, total}), span: span}
+    let instr = CaseInstr { exp, cases, total };
+    crate::phrase! {node: InstrKind::Case(instr), span: span}
 }
+
+// - Group instruction
 
 fn matchify_group_instr(instr_ol: GroupInstr, span: Span) -> Instr {
     let GroupInstr {
@@ -160,8 +180,16 @@ fn matchify_group_instr(instr_ol: GroupInstr, span: Span) -> Instr {
         block,
     } = instr_ol;
     let block = matchify_block(block);
-    crate::phrase! {node: InstrKind::Group(GroupInstr {id, rel_signature, exps, block}), span: span}
+    let instr = GroupInstr {
+        id,
+        rel_signature,
+        exps,
+        block,
+    };
+    crate::phrase! {node: InstrKind::Group(instr), span: span}
 }
+
+// - Let instruction
 
 fn matchify_let_instr(instr_ol: LetInstr, span: Span) -> Instr {
     let LetInstr {
@@ -171,8 +199,16 @@ fn matchify_let_instr(instr_ol: LetInstr, span: Span) -> Instr {
         block,
     } = instr_ol;
     let block = matchify_block(block);
-    crate::phrase! {node: InstrKind::Let(LetInstr {exp_l, exp_r, iter_instrs, block}), span: span}
+    let instr = LetInstr {
+        exp_l,
+        exp_r,
+        iter_instrs,
+        block,
+    };
+    crate::phrase! {node: InstrKind::Let(instr), span: span}
 }
+
+// - Rule instruction
 
 fn matchify_rule_instr(instr_ol: RuleInstr, span: Span) -> Instr {
     let RuleInstr {
@@ -183,12 +219,17 @@ fn matchify_rule_instr(instr_ol: RuleInstr, span: Span) -> Instr {
         block,
     } = instr_ol;
     let block = matchify_block(block);
-    crate::phrase! {node: InstrKind::Rule(RuleInstr {id, not_exp, input_hint, iter_instrs, block}), span: span}
+    let instr = RuleInstr {
+        id,
+        not_exp,
+        input_hint,
+        iter_instrs,
+        block,
+    };
+    crate::phrase! {node: InstrKind::Rule(instr), span: span}
 }
 
-fn matchify_block(block: Block) -> Block {
-    block.into_iter().map(matchify_instr).collect()
-}
+// == Entry point
 
 pub(crate) fn apply(block: Block) -> Block {
     matchify_block(block)
