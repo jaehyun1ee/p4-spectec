@@ -38,17 +38,13 @@ impl Renamer {
     }
 
     pub(crate) fn singleton(id: Id, id_renamed: Id) -> Self {
-        Self::of_list(vec![(id, id_renamed)])
+        let mut renamer = Self::empty();
+        renamer.add(id, id_renamed);
+        renamer
     }
 
     pub(crate) fn add(&mut self, id: Id, id_renamed: Id) {
         self.ids.insert(id, id_renamed);
-    }
-
-    pub(crate) fn of_list(pairs: Vec<(Id, Id)>) -> Self {
-        Self {
-            ids: pairs.into_iter().collect(),
-        }
     }
 
     pub(crate) fn filter(&self, mut predicate: impl FnMut(&Id, &Id) -> bool) -> Self {

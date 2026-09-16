@@ -58,11 +58,9 @@ fn test_capture_avoidance_and_shadowing_preserve_spans() {
 
 #[test]
 fn test_freshness_avoids_domain_codomain_and_block_names() {
-    let renamer = Renamer::of_list(vec![
-        (id("x"), id("y")),
-        (id("y'"), id("z")),
-        (id("q"), id("y''")),
-    ]);
+    let mut renamer = Renamer::singleton(id("x"), id("y"));
+    renamer.add(id("y'"), id("z"));
+    renamer.add(id("q"), id("y''"));
     let block = renamer
         .rename_block(vec![binding("y", vec![ret("y'''"), ret("x"), ret("y")])])
         .unwrap();
@@ -223,7 +221,8 @@ fn test_expression_paths_arguments_and_iterator_annotations() {
         ]),
         note: TypKind::Bool, span: span(10)
     };
-    let renamer = Renamer::of_list(vec![(id("x"), id("q")), (id("y"), id("r"))]);
+    let mut renamer = Renamer::singleton(id("x"), id("q"));
+    renamer.add(id("y"), id("r"));
     let exp = renamer.rename_exp(exp);
     assert_eq!(exp.span, span(10));
     let ExpKind::Call(id_func, targs, args) = exp.node else {
