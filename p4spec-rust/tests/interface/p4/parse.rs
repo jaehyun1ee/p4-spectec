@@ -333,7 +333,7 @@ fn test_syntax_error_after_whitespace_uses_offending_token_span() {
     let mut arena = ValueArena::new();
     let source = "\n const bit<8> x =   ;";
     let error = parse_string(&mut arena, "syntax.p4", source).unwrap_err();
-    let column = source.lines().nth(1).unwrap().find(';').unwrap() as i64;
+    let column = source.lines().nth(1).unwrap().find(';').unwrap();
     assert_eq!((error.span.left.line, error.span.left.column), (2, column));
     assert_eq!((error.span.right.line, error.span.right.column), (2, column + 1));
 }

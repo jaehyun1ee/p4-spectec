@@ -11,32 +11,32 @@ use p4spec_rust::{
     pass::structure::{StructureErrorKind, convert},
 };
 
-fn span(int_line: i64) -> Span {
+fn span(int_line: usize) -> Span {
     let pos = Position::new("structure.watsup", int_line, 0);
     Span::new(pos.clone(), pos)
 }
 
-fn id(text: &str, int_line: i64) -> al::Id {
+fn id(text: &str, int_line: usize) -> al::Id {
     p4spec_rust::phrase! {node: text.to_owned(), span: span(int_line)}
 }
 
-fn typ(int_line: i64) -> al::Typ {
+fn typ(int_line: usize) -> al::Typ {
     p4spec_rust::phrase! {node: al::TypKind::Bool, span: span(int_line)}
 }
 
-fn variable(text: &str, int_line: i64) -> al::Exp {
+fn variable(text: &str, int_line: usize) -> al::Exp {
     p4spec_rust::note_phrase! {node: al::ExpKind::Var(id(text, int_line)), note: al::TypKind::Bool, span: span(int_line)}
 }
 
-fn boolean(value: bool, int_line: i64) -> al::Exp {
+fn boolean(value: bool, int_line: usize) -> al::Exp {
     p4spec_rust::note_phrase! {node: al::ExpKind::Bool(value), note: al::TypKind::Bool, span: span(int_line)}
 }
 
-fn param(int_line: i64) -> al::Param {
+fn param(int_line: usize) -> al::Param {
     p4spec_rust::phrase! {node: al::ParamKind::Exp(typ(int_line)), span: span(int_line)}
 }
 
-fn clause(prems: Vec<al::Prem>, int_line: i64) -> al::Clause {
+fn clause(prems: Vec<al::Prem>, int_line: usize) -> al::Clause {
     p4spec_rust::phrase! {node: al::ClauseKind {args: vec![p4spec_rust::phrase! {node: al::ArgKind::Exp(Box::new(variable("x", int_line))), span: span(int_line)}], exp: variable("x", int_line + 1), prems}, span: span(int_line)}
 }
 
@@ -51,7 +51,7 @@ fn function_sl(def_sl: &sl::Def) -> &sl::DefinedFunc {
     def_func_sl
 }
 
-fn if_prem(int_line: i64) -> al::Prem {
+fn if_prem(int_line: usize) -> al::Prem {
     p4spec_rust::phrase! {node: al::PremKind::If(al::IfPrem {exp: variable("x", int_line)}), span: span(int_line)}
 }
 
@@ -195,7 +195,7 @@ fn test_nested_iterators_are_internalized_inside_out() {
 #[test]
 fn test_table_rows_keep_signature_output_pairing_and_disable_fallthrough() {
     let table_rows = [true, false].into_iter().enumerate().map(|(idx, value)| {
-        let int_line = 10 + idx as i64;
+        let int_line = 10 + idx;
         let clause_al = clause(vec![if_prem(7)], int_line);
         let al::ClauseKind {args, prems, ..} = clause_al.node;
         p4spec_rust::phrase! {node: al::TableRowKind {exps_signature: vec![boolean(value, int_line)], args, exp: boolean(!value, int_line), prems}, span: span(int_line)}
@@ -208,8 +208,8 @@ fn test_table_rows_keep_signature_output_pairing_and_disable_fallthrough() {
     assert_eq!(def_table_sl.table_rows.len(), 2);
     for (idx, value) in [true, false].into_iter().enumerate() {
         let table_row_sl = &def_table_sl.table_rows[idx];
-        assert_eq!(table_row_sl.exps_input, vec![boolean(value, 10 + idx as i64)]);
-        assert_eq!(table_row_sl.exp, boolean(!value, 10 + idx as i64));
+        assert_eq!(table_row_sl.exps_input, vec![boolean(value, 10 + idx)]);
+        assert_eq!(table_row_sl.exp, boolean(!value, 10 + idx));
         let sl::InstrKind::If(instr_if) = &table_row_sl.block[0].node else { panic!("if") };
         assert!(!instr_if.dangle);
     }

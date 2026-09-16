@@ -197,8 +197,8 @@ pub struct Lexer<'source, 'arena> {
     source: &'source str,
     index: usize,
     file: Rc<str>,
-    line: i64,
-    column: i64,
+    line: usize,
+    column: usize,
     ctx: Rc<Context<'arena>>,
     state: LexerState,
     pending: VecDeque<Phrase<Token>>,
@@ -248,7 +248,7 @@ impl<'source, 'arena> Lexer<'source, 'arena> {
             self.line += 1;
             self.column = 0;
         } else {
-            self.column += character.len_utf8() as i64;
+            self.column += character.len_utf8();
         }
         Some(character)
     }
@@ -694,7 +694,7 @@ impl<'source, 'arena> Lexer<'source, 'arena> {
             .map_or(text_directive, |(before, _)| before);
         let line = text_before_path
             .split(|character: char| !character.is_ascii_digit() && character != '_')
-            .filter_map(|text| text.replace('_', "").parse::<i64>().ok())
+            .filter_map(|text| text.replace('_', "").parse::<usize>().ok())
             .next_back();
         if let Some(line) = line {
             self.line = line;

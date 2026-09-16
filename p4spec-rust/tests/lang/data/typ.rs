@@ -9,19 +9,19 @@ use p4spec_rust::{
     phrase,
 };
 
-fn span(line: i64) -> Span {
+fn span(line: usize) -> Span {
     let position = Position::new("cmp", line, 0);
     Span::new(position.clone(), position)
 }
 
-fn id_at(name: &str, line: i64) -> p4spec_rust::lang::common::Id {
+fn id_at(name: &str, line: usize) -> p4spec_rust::lang::common::Id {
     phrase! {
         node: name.to_owned(),
         span: span(line),
     }
 }
 
-fn typ_at(kind: TypKind, line: i64) -> Typ {
+fn typ_at(kind: TypKind, line: usize) -> Typ {
     phrase! {
         node: kind,
         span: span(line),

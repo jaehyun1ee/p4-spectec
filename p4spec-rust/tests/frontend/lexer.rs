@@ -169,10 +169,7 @@ fn test_byte_escapes_reject_non_utf8_text() {
 
         assert_eq!(error.node, LexErrorKind::InvalidTextEncoding);
         assert_eq!(error.span.left, Position::new("unicode-policy.watsup", 1, 0));
-        assert_eq!(
-            error.span.right,
-            Position::new("unicode-policy.watsup", 1, source.len() as i64)
-        );
+        assert_eq!(error.span.right, Position::new("unicode-policy.watsup", 1, source.len()));
     }
 }
 

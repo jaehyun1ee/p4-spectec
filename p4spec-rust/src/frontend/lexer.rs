@@ -166,7 +166,7 @@ pub enum Token {
 #[derive(Clone, Copy)]
 struct Cursor {
     offset: usize,
-    line: i64,
+    line: usize,
     line_start: usize,
 }
 
@@ -294,7 +294,7 @@ where
     // - Source locations and results
 
     fn position(&self, cursor: Cursor) -> Position {
-        Position::new(self.file.clone(), cursor.line, (cursor.offset - cursor.line_start) as i64)
+        Position::new(self.file.clone(), cursor.line, cursor.offset - cursor.line_start)
     }
 
     fn span(&self, cursor_start: Cursor) -> Span {

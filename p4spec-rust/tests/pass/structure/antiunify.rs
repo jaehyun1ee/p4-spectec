@@ -12,25 +12,25 @@ use crate::{
         antiunify::{antiunify_clauses, antiunify_rule_matches},
     },
 };
-fn span(int_line: i64) -> Span {
+fn span(int_line: usize) -> Span {
     let pos = Position::new("antiunify.watsup", int_line, 0);
     Span::new(pos.clone(), pos)
 }
 
-fn variable(text: &str, int_line: i64) -> Exp {
+fn variable(text: &str, int_line: usize) -> Exp {
     let id = crate::phrase! {node: text.to_owned(), span: span(int_line)};
     crate::note_phrase! {node: ExpKind::Var(id), note: TypKind::Bool, span: span(int_line)}
 }
 
-fn boolean(value: bool, int_line: i64) -> Exp {
+fn boolean(value: bool, int_line: usize) -> Exp {
     crate::note_phrase! {node: ExpKind::Bool(value), note: TypKind::Bool, span: span(int_line)}
 }
 
-fn tuple(exps: Vec<Exp>, int_line: i64) -> Exp {
+fn tuple(exps: Vec<Exp>, int_line: usize) -> Exp {
     crate::note_phrase! {node: ExpKind::Tuple(exps), note: TypKind::Bool, span: span(int_line)}
 }
 
-fn clause(exp_input: Exp, exp_output: Exp, prems: Vec<Prem>, int_line: i64) -> Clause {
+fn clause(exp_input: Exp, exp_output: Exp, prems: Vec<Prem>, int_line: usize) -> Clause {
     let arg = crate::phrase! {node: ArgKind::Exp(Box::new(exp_input)), span: span(int_line)};
     crate::phrase! {node: ClauseKind {args: vec![arg], exp: exp_output, prems}, span: span(int_line)}
 }
@@ -122,12 +122,12 @@ fn test_incompatible_definition_arguments_are_typed() {
     assert_eq!(error.span, span(9));
 }
 
-fn record(exp: Exp, int_line: i64) -> Exp {
+fn record(exp: Exp, int_line: usize) -> Exp {
     let atom = crate::phrase! {node: crate::lang::common::notation::atom::Atom::Keyword("field".to_owned()), span: span(int_line)};
     crate::note_phrase! {node: ExpKind::Str(vec![(atom, exp)]), note: TypKind::Bool, span: span(int_line)}
 }
 
-fn case(exp: Exp, int_line: i64) -> Exp {
+fn case(exp: Exp, int_line: usize) -> Exp {
     use crate::lang::common::notation::mixfix::Mixfix;
     let atom = crate::phrase! {node: crate::lang::common::notation::atom::Atom::Keyword("TAG".to_owned()), span: span(int_line)};
     let not_exp = Mixfix::Seq(vec![Mixfix::Atom(atom), Mixfix::Arg(exp)]);

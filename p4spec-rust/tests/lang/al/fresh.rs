@@ -11,7 +11,7 @@ use p4spec_rust::{
     runtime::envs::algo::MEnv,
 };
 
-fn sourced_span(text_source: &str, int_line: i64) -> Span {
+fn sourced_span(text_source: &str, int_line: usize) -> Span {
     let pos = Position::new(text_source, int_line, 0);
     Span::new(pos.clone(), pos)
 }

@@ -7,7 +7,7 @@ use crate::lang::{
     sl::ast::*,
 };
 use crate::pass::structure::ol::ast as ast_ol;
-fn span(int_line: i64) -> Span {
+fn span(int_line: usize) -> Span {
     let pos = Position::new("structure.watsup", int_line, 0);
     Span::new(pos.clone(), pos)
 }

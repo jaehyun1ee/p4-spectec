@@ -23,7 +23,7 @@ use p4spec_rust::{
     note_phrase, phrase,
 };
 
-fn span(line: i64) -> Span {
+fn span(line: usize) -> Span {
     Span::new(
         Position::new("assignment.watsup", line, 0),
         Position::new("assignment.watsup", line, 1),

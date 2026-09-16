@@ -565,7 +565,7 @@ fn test_runner_codec_imports_independent_nested_native_state() {
         },
     };
 
-    fn span_at(line: i64) -> Span {
+    fn span_at(line: usize) -> Span {
         Span::new(
             Position::new("nested-import.p4", line, 2),
             Position::new("nested-import.p4", line, 8),

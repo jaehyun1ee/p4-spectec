@@ -11,7 +11,7 @@ fn undefined(name: impl Into<String>) -> ErrorKind {
     ErrorKind::Context(ContextErrorKind::Undefined { kind: EntityKind::Value, name: name.into() })
 }
 
-fn span(line: i64) -> Span {
+fn span(line: usize) -> Span {
     Span::new(Position::new("choice.watsup", line, 0), Position::new("choice.watsup", line, 1))
 }
 

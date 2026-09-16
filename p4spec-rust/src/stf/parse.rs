@@ -27,8 +27,8 @@ const MAX_PRIORITY: i64 = i64::MAX / 2;
 /// A copyable line and column within the source being parsed.
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct Location {
-    line: i64,
-    column: i64,
+    line: usize,
+    column: usize,
 }
 
 impl Location {

@@ -24,14 +24,14 @@ use p4spec_rust::{
     runtime::typdef::TypeDef,
 };
 
-fn id(name: &str, line: i64) -> ast::Id {
+fn id(name: &str, line: usize) -> ast::Id {
     phrase!(node: name.to_owned(), span: Span::new(
         Position::new("context.watsup", line, 0),
         Position::new("context.watsup", line, 1),
     ))
 }
 
-fn func(name: &str, line: i64) -> ast::MetaFuncDef {
+fn func(name: &str, line: usize) -> ast::MetaFuncDef {
     ast::MetaFuncDef::Extern(ast::ExternFunc {
         id: id(name, line),
         tparams: vec![],
