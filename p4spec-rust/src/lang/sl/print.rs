@@ -368,7 +368,7 @@ impl Print for TypDef {
 
 // - Relations
 
-pub(crate) fn write_relinput(
+fn write_relinput(
     output: &mut Printer<'_>,
     rel_signature: &RelSignature,
     exps_input: &[Exp],
@@ -390,7 +390,7 @@ pub(crate) fn write_relinput(
     })
 }
 
-pub(crate) fn write_reloutput(
+fn write_reloutput(
     output: &mut Printer<'_>,
     rel_signature: &RelSignature,
     exps_output: &[Exp],
