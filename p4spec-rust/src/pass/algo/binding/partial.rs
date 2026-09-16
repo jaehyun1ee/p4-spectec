@@ -498,7 +498,7 @@ fn rename_exp_bind(
         }
         ast::ExpKind::List(exps) => {
             let exps = rename_exps(ctx, binds, renv, iter_ctx, exps)?;
-            let exps_len = i64::try_from(exps.len()).expect("expression list length fits i64");
+            let exps_len = exps.len();
             let exp_from = note_phrase! {
                 node: ast::ExpKind::List(exps),
                 note: note,

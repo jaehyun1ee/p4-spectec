@@ -10,10 +10,7 @@ use crate::lang::{
 };
 
 use super::{
-    super::{
-        DecodeError, EncodeError, array, boolean, integer, on_codec_stack, string, unsigned,
-        variant,
-    },
+    super::{DecodeError, EncodeError, array, boolean, on_codec_stack, string, unsigned, variant},
     el, xl,
 };
 use crate::wire::ocaml::{atom::AtomPhraseCodec, mixfix, source};
@@ -506,7 +503,7 @@ fn decode_list_pattern(json: &json) -> Result<ListPattern, DecodeError> {
     let (tag, fields) = variant(json)?;
     match (tag, fields) {
         ("Cons", []) => Ok(ListPattern::Cons),
-        ("Fixed", [length]) => Ok(ListPattern::Fixed(integer(length)?)),
+        ("Fixed", [length]) => Ok(ListPattern::Fixed(unsigned(length)?)),
         ("Nil", []) => Ok(ListPattern::Nil),
         ("Cons" | "Fixed" | "Nil", _) => Err(DecodeError::Expected("valid IL list pattern arity")),
         (unknown, _) => Err(DecodeError::UnknownVariant(unknown.to_owned())),
