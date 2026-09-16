@@ -279,25 +279,7 @@ impl Print for [TableRow] {
     }
 }
 
-// - Definitions
-
-impl Print for Def {
-    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        match &self.node {
-            DefKind::Typ(typ_def) => typ_def.print(printer),
-            DefKind::Var(var_def) => {
-                printer.write_str("var ")?;
-                var_def.id.print(printer)?;
-                printer.write_str(" : ")?;
-                var_def.typ.print(printer)
-            }
-            DefKind::Rel(rel_def) => rel_def.print(printer),
-            DefKind::MetaFunc(meta_func_def) => meta_func_def.print(printer),
-        }
-    }
-}
-
-// - Type definitions
+// == Type definitions
 
 impl Print for TypDef {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
@@ -321,7 +303,7 @@ impl Print for TypDef {
     }
 }
 
-// - Relations
+// == Relation definitions
 
 impl Print for RelDef {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
@@ -355,7 +337,7 @@ impl Print for RelDef {
     }
 }
 
-// - Meta-functions
+// == Meta-function definitions
 
 impl Print for MetaFuncDef {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
@@ -419,7 +401,25 @@ impl Print for MetaFuncDef {
     }
 }
 
-// - Specifications
+// == Definitions
+
+impl Print for Def {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        match &self.node {
+            DefKind::Typ(typ_def) => typ_def.print(printer),
+            DefKind::Var(var_def) => {
+                printer.write_str("var ")?;
+                var_def.id.print(printer)?;
+                printer.write_str(" : ")?;
+                var_def.typ.print(printer)
+            }
+            DefKind::Rel(rel_def) => rel_def.print(printer),
+            DefKind::MetaFunc(meta_func_def) => meta_func_def.print(printer),
+        }
+    }
+}
+
+// == Specifications
 
 impl Print for Spec {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
@@ -433,7 +433,7 @@ impl Print for Spec {
     }
 }
 
-// - Helpers
+// == Helpers
 
 fn indent(level: usize) -> String {
     "  ".repeat(level)

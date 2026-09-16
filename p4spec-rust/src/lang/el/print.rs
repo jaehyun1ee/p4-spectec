@@ -547,7 +547,7 @@ impl Print for [TableRow] {
     }
 }
 
-// - Definitions
+// == Definitions
 
 impl Print for Def {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
@@ -729,7 +729,7 @@ impl Print for Def {
     }
 }
 
-// - Specifications
+// == Specifications
 
 impl Print for Spec {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
@@ -741,7 +741,7 @@ impl Print for Spec {
     }
 }
 
-// - Helpers
+// == Helpers
 
 fn escaped(text: &str) -> String {
     text.bytes()

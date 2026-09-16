@@ -287,20 +287,7 @@ impl Free for TableRow {
     }
 }
 
-// - Definitions
-
-impl Free for DefKind {
-    fn free(&self) -> IdSet {
-        match self {
-            Self::Typ(typ_def) => typ_def.free(),
-            Self::Var(var_def) => var_def.free(),
-            Self::Rel(rel_def) => rel_def.free(),
-            Self::MetaFunc(meta_func_def) => meta_func_def.free(),
-        }
-    }
-}
-
-// - Type definitions
+// == Type definitions
 
 impl Free for TypDef {
     fn free(&self) -> IdSet {
@@ -323,7 +310,7 @@ impl Free for DefinedTyp {
     }
 }
 
-// - Meta-variables
+// == Meta-variable definitions
 
 impl Free for VarDef {
     fn free(&self) -> IdSet {
@@ -331,7 +318,7 @@ impl Free for VarDef {
     }
 }
 
-// - Relations
+// == Relation definitions
 
 impl Free for RelDef {
     fn free(&self) -> IdSet {
@@ -358,7 +345,7 @@ impl Free for DefinedRel {
     }
 }
 
-// - Meta-functions
+// == Meta-function definitions
 
 impl Free for MetaFuncDef {
     fn free(&self) -> IdSet {
@@ -402,7 +389,20 @@ impl Free for DefinedFunc {
     }
 }
 
-// - Specifications
+// == Definitions
+
+impl Free for DefKind {
+    fn free(&self) -> IdSet {
+        match self {
+            Self::Typ(typ_def) => typ_def.free(),
+            Self::Var(var_def) => var_def.free(),
+            Self::Rel(rel_def) => rel_def.free(),
+            Self::MetaFunc(meta_func_def) => meta_func_def.free(),
+        }
+    }
+}
+
+// == Specifications
 
 impl Free for Spec {
     fn free(&self) -> IdSet {

@@ -257,30 +257,7 @@ impl Free for TableRowKind {
     }
 }
 
-// - Definitions
-
-impl Free for DefKind {
-    fn free_into(&self, free: &mut IdSet) {
-        match self {
-            Self::ExternSyntax(def) => def.free_into(free),
-            Self::Syntax(def) => def.free_into(free),
-            Self::Typ(def) => def.free_into(free),
-            Self::Var(def) => def.free_into(free),
-            Self::ExternRel(def) => def.free_into(free),
-            Self::Rel(def) => def.free_into(free),
-            Self::RuleGroup(def) => def.free_into(free),
-            Self::ExternDec(def) => def.free_into(free),
-            Self::BuiltinDec(def) => def.free_into(free),
-            Self::TableDec(def) => def.free_into(free),
-            Self::FuncDec(def) => def.free_into(free),
-            Self::TableDef(def) => def.free_into(free),
-            Self::FuncDef(def) => def.free_into(free),
-            Self::Sep => {}
-        }
-    }
-}
-
-// - Syntax definitions
+// == Syntax definitions
 
 impl Free for ExternSyntaxDef {
     fn free(&self) -> IdSet {
@@ -300,7 +277,7 @@ impl Free for SyntaxDefEntry {
     }
 }
 
-// - Type definitions
+// == Type definitions
 
 impl Free for TypDef {
     fn free(&self) -> IdSet {
@@ -308,7 +285,7 @@ impl Free for TypDef {
     }
 }
 
-// - Meta-variables
+// == Meta-variable definitions
 
 impl Free for VarDef {
     fn free(&self) -> IdSet {
@@ -316,7 +293,7 @@ impl Free for VarDef {
     }
 }
 
-// - Relations
+// == Relation definitions
 
 impl Free for ExternRelDef {
     fn free(&self) -> IdSet {
@@ -336,7 +313,7 @@ impl Free for RuleGroupDef {
     }
 }
 
-// - Meta-functions
+// == Meta-function definitions
 
 impl Free for ExternDecDef {
     fn free(&self) -> IdSet {
@@ -376,7 +353,30 @@ impl Free for FuncDef {
     }
 }
 
-// - Specifications
+// == Definitions
+
+impl Free for DefKind {
+    fn free_into(&self, free: &mut IdSet) {
+        match self {
+            Self::ExternSyntax(def) => def.free_into(free),
+            Self::Syntax(def) => def.free_into(free),
+            Self::Typ(def) => def.free_into(free),
+            Self::Var(def) => def.free_into(free),
+            Self::ExternRel(def) => def.free_into(free),
+            Self::Rel(def) => def.free_into(free),
+            Self::RuleGroup(def) => def.free_into(free),
+            Self::ExternDec(def) => def.free_into(free),
+            Self::BuiltinDec(def) => def.free_into(free),
+            Self::TableDec(def) => def.free_into(free),
+            Self::FuncDec(def) => def.free_into(free),
+            Self::TableDef(def) => def.free_into(free),
+            Self::FuncDef(def) => def.free_into(free),
+            Self::Sep => {}
+        }
+    }
+}
+
+// == Specifications
 
 impl Free for Spec {
     fn free_into(&self, free: &mut IdSet) {

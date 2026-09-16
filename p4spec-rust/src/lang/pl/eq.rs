@@ -450,23 +450,7 @@ impl SyntaxEq for TableRow {
     }
 }
 
-// - Definitions
-
-impl SyntaxEq for DefKind {
-    fn syntax_eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (DefKind::Typ(typ_def_l), DefKind::Typ(typ_def_r)) => typ_def_l.syntax_eq(typ_def_r),
-            (DefKind::Var(var_def_l), DefKind::Var(var_def_r)) => var_def_l.syntax_eq(var_def_r),
-            (DefKind::Rel(rel_def_l), DefKind::Rel(rel_def_r)) => rel_def_l.syntax_eq(rel_def_r),
-            (DefKind::MetaFunc(meta_func_def_l), DefKind::MetaFunc(meta_func_def_r)) => {
-                meta_func_def_l.syntax_eq(meta_func_def_r)
-            }
-            _ => false,
-        }
-    }
-}
-
-// - Type definitions
+// == Type definitions
 
 impl SyntaxEq for TypDef {
     fn syntax_eq(&self, other: &Self) -> bool {
@@ -496,7 +480,7 @@ impl SyntaxEq for DefinedTyp {
     }
 }
 
-// - Meta-variables
+// == Meta-variable definitions
 
 impl SyntaxEq for VarDef {
     fn syntax_eq(&self, other: &Self) -> bool {
@@ -504,7 +488,7 @@ impl SyntaxEq for VarDef {
     }
 }
 
-// - Relations
+// == Relation definitions
 
 impl SyntaxEq for RelDef {
     fn syntax_eq(&self, other: &Self) -> bool {
@@ -542,7 +526,7 @@ impl SyntaxEq for DefinedRel {
     }
 }
 
-// - Meta-functions
+// == Meta-function definitions
 
 impl SyntaxEq for MetaFuncDef {
     fn syntax_eq(&self, other: &Self) -> bool {
@@ -606,7 +590,23 @@ impl SyntaxEq for DefinedFunc {
     }
 }
 
-// - Specifications
+// == Definitions
+
+impl SyntaxEq for DefKind {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (DefKind::Typ(typ_def_l), DefKind::Typ(typ_def_r)) => typ_def_l.syntax_eq(typ_def_r),
+            (DefKind::Var(var_def_l), DefKind::Var(var_def_r)) => var_def_l.syntax_eq(var_def_r),
+            (DefKind::Rel(rel_def_l), DefKind::Rel(rel_def_r)) => rel_def_l.syntax_eq(rel_def_r),
+            (DefKind::MetaFunc(meta_func_def_l), DefKind::MetaFunc(meta_func_def_r)) => {
+                meta_func_def_l.syntax_eq(meta_func_def_r)
+            }
+            _ => false,
+        }
+    }
+}
+
+// == Specifications
 
 impl SyntaxEq for Spec {
     fn syntax_eq(&self, other: &Self) -> bool {
