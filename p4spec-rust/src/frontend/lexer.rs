@@ -47,7 +47,7 @@ use num_bigint::BigInt;
 
 use crate::lang::{
     common::source::{Phrase, Position, Span},
-    xl::{num::Natural, utf8},
+    xl::num::Natural,
 };
 
 use super::error::{LexError, LexErrorKind};
@@ -918,11 +918,12 @@ where
                 if self.cursor_offset(digits_end) == Some(b'}') {
                     let digits = Self::strip_underscores(&self.source[digits_start..digits_end]);
                     self.advance_to(digits_end + 1);
-                    let codepoint = i64::from_str_radix(&digits, 16)
-                        .map_err(|_| self.error(LexErrorKind::InvalidUnicodeEscape, start))?;
-                    let encoded = utf8::encode(&[codepoint])
-                        .map_err(|_| self.error(LexErrorKind::InvalidUnicodeEscape, start))?;
-                    bytes.extend(encoded);
+                    let character = u32::from_str_radix(&digits, 16)
+                        .ok()
+                        .and_then(char::from_u32)
+                        .ok_or_else(|| self.error(LexErrorKind::InvalidUnicodeEscape, start))?;
+                    let mut bytes_char = [0; 4];
+                    bytes.extend_from_slice(character.encode_utf8(&mut bytes_char).as_bytes());
                     return Ok(());
                 }
             }

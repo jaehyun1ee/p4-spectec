@@ -161,16 +161,27 @@ fn test_numbered_holes_accept_large_values() {
 
 #[test]
 fn test_byte_escapes_reject_non_utf8_text() {
-    for source in ["\"\\FF\"", "\"\\u{D800}\""] {
-        let error = Lexer::new("unicode-policy.watsup", source, |_| false)
-            .next()
-            .expect("lexer result")
-            .expect_err("byte-only text");
+    let source = "\"\\FF\"";
+    let error = Lexer::new("unicode-policy.watsup", source, |_| false)
+        .next()
+        .expect("lexer result")
+        .expect_err("byte-only text");
 
-        assert_eq!(error.node, LexErrorKind::InvalidTextEncoding);
-        assert_eq!(error.span.left, Position::new("unicode-policy.watsup", 1, 0));
-        assert_eq!(error.span.right, Position::new("unicode-policy.watsup", 1, source.len()));
-    }
+    assert_eq!(error.node, LexErrorKind::InvalidTextEncoding);
+    assert_eq!(error.span.left, Position::new("unicode-policy.watsup", 1, 0));
+    assert_eq!(error.span.right, Position::new("unicode-policy.watsup", 1, source.len()));
+}
+
+#[test]
+fn test_unicode_escapes_reject_surrogates() {
+    let error = Lexer::new("unicode-policy.watsup", "\"\\u{D800}\"", |_| false)
+        .next()
+        .expect("lexer result")
+        .expect_err("surrogate escape");
+
+    assert_eq!(error.node, LexErrorKind::InvalidUnicodeEscape);
+    assert_eq!(error.span.left, Position::new("unicode-policy.watsup", 1, 0));
+    assert_eq!(error.span.right, Position::new("unicode-policy.watsup", 1, 9));
 }
 
 #[test]
