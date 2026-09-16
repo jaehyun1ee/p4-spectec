@@ -22,6 +22,8 @@ use crate::lang::{
 
 // == Parameters
 
+// - Parameter
+
 fn struct_param(ctx: &Context, frees: &mut IdSet, param_al: al::Param) -> sl::Param {
     let Phrase {
         node: param_kind_al,
@@ -45,11 +47,24 @@ fn struct_param_kind(
     }
 }
 
+fn struct_params(ctx: &Context, params_al: Vec<al::Param>) -> Vec<sl::Param> {
+    let mut frees = IdSet::new();
+    params_al
+        .into_iter()
+        .map(|param_al| struct_param(ctx, &mut frees, param_al))
+        .collect()
+}
+
+// - Expression parameter
+
 fn struct_exp_param(ctx: &Context, frees: &mut IdSet, typ: al::Typ) -> sl::ParamKind {
     let (frees_next, exp_input) = fresh::exp_from_typ(true, &ctx.menv, frees, &typ);
     *frees = frees_next;
-    sl::ParamKind::Exp(typ, Box::new(exp_input))
+    let exp_input = Box::new(exp_input);
+    sl::ParamKind::Exp(typ, exp_input)
 }
+
+// - Definition parameter
 
 fn struct_def_param(
     ctx: &Context,
@@ -62,35 +77,9 @@ fn struct_def_param(
     sl::ParamKind::Def(id, tparams, params_sl, typ)
 }
 
-fn struct_params(ctx: &Context, params_al: Vec<al::Param>) -> Vec<sl::Param> {
-    let mut frees = IdSet::new();
-    params_al
-        .into_iter()
-        .map(|param_al| struct_param(ctx, &mut frees, param_al))
-        .collect()
-}
+// == Parameters from arguments
 
-fn struct_params_from_args(
-    ctx: &Context,
-    params_al: Vec<al::Param>,
-    args_input: Vec<al::Arg>,
-    span: &Span,
-) -> Result<Vec<sl::Param>, StructureError> {
-    if params_al.len() != args_input.len() {
-        return Err(StructureError::new(
-            StructureErrorKind::ArityMismatch {
-                expected: params_al.len(),
-                actual: args_input.len(),
-            },
-            span.clone(),
-        ));
-    }
-    params_al
-        .into_iter()
-        .zip(args_input)
-        .map(|(param_al, arg_input)| struct_param_from_arg(ctx, param_al, arg_input))
-        .collect()
-}
+// - Parameter from argument
 
 fn struct_param_from_arg(
     ctx: &Context,
@@ -104,7 +93,8 @@ fn struct_param_from_arg(
     } = param_al;
     let Phrase { node: arg_kind, .. } = arg_input;
     let param_kind_sl = struct_param_kind_from_arg(ctx, param_kind_al, arg_kind, &span)?;
-    Ok(crate::phrase! {node: param_kind_sl, span: span})
+    let param_sl = crate::phrase! {node: param_kind_sl, span: span};
+    Ok(param_sl)
 }
 
 fn struct_param_kind_from_arg(
@@ -114,16 +104,43 @@ fn struct_param_kind_from_arg(
     span: &Span,
 ) -> Result<sl::ParamKind, StructureError> {
     match (param_kind_al, arg_kind) {
-        (al::ParamKind::Exp(typ), al::ArgKind::Exp(exp)) => Ok(sl::ParamKind::Exp(typ, exp)),
+        (al::ParamKind::Exp(typ), al::ArgKind::Exp(exp)) => {
+            let param_kind_sl = sl::ParamKind::Exp(typ, exp);
+            Ok(param_kind_sl)
+        }
         (al::ParamKind::Def(id, tparams, params_al, typ), al::ArgKind::Def(id_arg)) => {
             struct_def_param_from_arg(ctx, id, tparams, params_al, typ, id_arg, span)
         }
-        _ => Err(StructureError::new(
-            StructureErrorKind::IncompatibleParameterArgument,
-            span.clone(),
-        )),
+        _ => {
+            let error_kind = StructureErrorKind::IncompatibleParameterArgument;
+            let error = StructureError::new(error_kind, span.clone());
+            Err(error)
+        }
     }
 }
+
+fn struct_params_from_args(
+    ctx: &Context,
+    params_al: Vec<al::Param>,
+    args_input: Vec<al::Arg>,
+    span: &Span,
+) -> Result<Vec<sl::Param>, StructureError> {
+    if params_al.len() != args_input.len() {
+        let error_kind = StructureErrorKind::ArityMismatch {
+            expected: params_al.len(),
+            actual: args_input.len(),
+        };
+        let error = StructureError::new(error_kind, span.clone());
+        return Err(error);
+    }
+    params_al
+        .into_iter()
+        .zip(args_input)
+        .map(|(param_al, arg_input)| struct_param_from_arg(ctx, param_al, arg_input))
+        .collect()
+}
+
+// - Definition parameter from argument
 
 fn struct_def_param_from_arg(
     ctx: &Context,
@@ -135,15 +152,33 @@ fn struct_def_param_from_arg(
     span: &Span,
 ) -> Result<sl::ParamKind, StructureError> {
     if !id.syntax_eq(&id_arg) {
-        return Err(StructureError::new(
-            StructureErrorKind::IncompatibleParameterArgument,
-            span.clone(),
-        ));
+        let error_kind = StructureErrorKind::IncompatibleParameterArgument;
+        let error = StructureError::new(error_kind, span.clone());
+        return Err(error);
     }
-    Ok(struct_def_param(ctx, id, tparams, params_al, typ))
+    let param_kind_sl = struct_def_param(ctx, id, tparams, params_al, typ);
+    Ok(param_kind_sl)
 }
 
 // == Premises
+
+// - Premise
+
+fn struct_prem(
+    prem_al: al::Prem,
+    prems_tail: &mut impl Iterator<Item = al::Prem>,
+    instr_ret: ol::Instr,
+) -> Result<ol::Instr, StructureError> {
+    let (prem_al, iter_prems) = internalize_iter(prem_al);
+    let Phrase {
+        node: prem_kind_al,
+        span,
+        ..
+    } = prem_al;
+    let instr_kind_ol = struct_prem_kind(prem_kind_al, &span, iter_prems, prems_tail, instr_ret)?;
+    let instr_ol = crate::phrase! {node: instr_kind_ol, span: span};
+    Ok(instr_ol)
+}
 
 fn internalize_iter(mut prem_al: al::Prem) -> (al::Prem, Vec<al::PremIter>) {
     let mut iter_prems = vec![];
@@ -162,47 +197,18 @@ fn internalize_iter(mut prem_al: al::Prem) -> (al::Prem, Vec<al::PremIter>) {
             prem_kind_al => {
                 // The innermost iterator becomes the first instruction iterator
                 iter_prems.reverse();
-                return (crate::phrase!(node: prem_kind_al, span: span), iter_prems);
+                let prem_al = crate::phrase!(node: prem_kind_al, span: span);
+                return (prem_al, iter_prems);
             }
         }
     }
-}
-
-fn struct_prems(
-    prems_al: Vec<al::Prem>,
-    instr_ret: ol::Instr,
-) -> Result<ol::Instr, StructureError> {
-    let mut prems_internalized = prems_al.into_iter().map(internalize_iter);
-    struct_prems_inner(&mut prems_internalized, instr_ret)
-}
-
-fn struct_prems_inner(
-    prems_internalized: &mut impl Iterator<Item = (al::Prem, Vec<al::PremIter>)>,
-    instr_ret: ol::Instr,
-) -> Result<ol::Instr, StructureError> {
-    let Some((prem_al, iter_prems)) = prems_internalized.next() else {
-        return Ok(instr_ret);
-    };
-    let Phrase {
-        node: prem_kind_al,
-        span,
-        ..
-    } = prem_al;
-    let instr_kind_ol = struct_prem_kind(
-        prem_kind_al,
-        &span,
-        iter_prems,
-        prems_internalized,
-        instr_ret,
-    )?;
-    Ok(crate::phrase! {node: instr_kind_ol, span: span})
 }
 
 fn struct_prem_kind(
     prem_kind_al: al::PremKind,
     span: &Span,
     iter_prems: Vec<al::PremIter>,
-    prems_tail: &mut impl Iterator<Item = (al::Prem, Vec<al::PremIter>)>,
+    prems_tail: &mut impl Iterator<Item = al::Prem>,
     instr_ret: ol::Instr,
 ) -> Result<ol::InstrKind, StructureError> {
     match prem_kind_al {
@@ -224,31 +230,19 @@ fn struct_prem_kind(
     }
 }
 
-fn struct_rule_prem(
-    prem_al: al::RulePrem,
-    span: &Span,
-    iter_instrs: Vec<al::PremIter>,
-    prems_tail: &mut impl Iterator<Item = (al::Prem, Vec<al::PremIter>)>,
+fn struct_prems(
+    prems_al: &mut impl Iterator<Item = al::Prem>,
     instr_ret: ol::Instr,
-) -> Result<ol::InstrKind, StructureError> {
-    let al::RulePrem {
-        id,
-        not_exp,
-        input_hint,
-    } = prem_al;
-    input::validate(&input_hint, not_exp.arity())
-        .map_err(|error| StructureError::new(StructureErrorKind::Input(error), span.clone()))?;
-    let instr_tail = struct_prems_inner(prems_tail, instr_ret)?;
-    Ok(ol::InstrKind::Rule(ol::RuleInstr {
-        id,
-        not_exp,
-        input_hint,
-        iter_instrs,
-        block: vec![instr_tail],
-    }))
+) -> Result<ol::Instr, StructureError> {
+    match prems_al.next() {
+        Some(prem_al) => struct_prem(prem_al, prems_al, instr_ret),
+        None => Ok(instr_ret),
+    }
 }
 
-fn iter_exps_without_bindings(
+// - Demoting premise iterators (with bindings) to expression iterators (without bindings)
+
+fn demote_iter_prems(
     iter_prems: Vec<al::PremIter>,
     error_kind: StructureErrorKind,
     span: &Span,
@@ -262,107 +256,165 @@ fn iter_exps_without_bindings(
                 vars_bind,
             } = prem_iter;
             if !vars_bind.is_empty() {
-                return Err(StructureError::new(error_kind.clone(), span.clone()));
+                let error = StructureError::new(error_kind.clone(), span.clone());
+                return Err(error);
             }
             Ok((iter, vars_bound))
         })
         .collect()
 }
 
+// - Rule premise
+
+fn struct_rule_prem(
+    prem_al: al::RulePrem,
+    span: &Span,
+    iter_instrs: Vec<al::PremIter>,
+    prems_tail: &mut impl Iterator<Item = al::Prem>,
+    instr_ret: ol::Instr,
+) -> Result<ol::InstrKind, StructureError> {
+    let al::RulePrem {
+        id,
+        not_exp,
+        input_hint,
+    } = prem_al;
+    input::validate(&input_hint, not_exp.arity()).map_err(|error| {
+        let error_kind = StructureErrorKind::Input(error);
+        StructureError::new(error_kind, span.clone())
+    })?;
+    let instr_tail = struct_prems(prems_tail, instr_ret)?;
+    let block = vec![instr_tail];
+    let instr_ol = ol::RuleInstr {
+        id,
+        not_exp,
+        input_hint,
+        iter_instrs,
+        block,
+    };
+    let instr_kind_ol = ol::InstrKind::Rule(instr_ol);
+    Ok(instr_kind_ol)
+}
+
+// - If premise
+
 fn struct_if_prem(
     prem_al: al::IfPrem,
     span: &Span,
     iter_prems: Vec<al::PremIter>,
-    prems_tail: &mut impl Iterator<Item = (al::Prem, Vec<al::PremIter>)>,
+    prems_tail: &mut impl Iterator<Item = al::Prem>,
     instr_ret: ol::Instr,
 ) -> Result<ol::InstrKind, StructureError> {
     let al::IfPrem { exp } = prem_al;
-    let iter_exps =
-        iter_exps_without_bindings(iter_prems, StructureErrorKind::UnexpectedIfBindings, span)?;
-    let instr_tail = struct_prems_inner(prems_tail, instr_ret)?;
-    Ok(ol::InstrKind::If(ol::IfInstr {
+    let iter_exps = demote_iter_prems(iter_prems, StructureErrorKind::UnexpectedIfBindings, span)?;
+    let instr_tail = struct_prems(prems_tail, instr_ret)?;
+    let block = vec![instr_tail];
+    let instr_ol = ol::IfInstr {
         exp,
         iter_exps,
-        block: vec![instr_tail],
-    }))
+        block,
+    };
+    let instr_kind_ol = ol::InstrKind::If(instr_ol);
+    Ok(instr_kind_ol)
 }
+
+// - If-hold premise
 
 fn struct_if_hold_prem(
     prem_al: al::IfHoldPrem,
     span: &Span,
     iter_prems: Vec<al::PremIter>,
-    prems_tail: &mut impl Iterator<Item = (al::Prem, Vec<al::PremIter>)>,
+    prems_tail: &mut impl Iterator<Item = al::Prem>,
     instr_ret: ol::Instr,
 ) -> Result<ol::InstrKind, StructureError> {
     let al::IfHoldPrem { id, not_exp } = prem_al;
-    let iter_exps = iter_exps_without_bindings(
+    let iter_exps = demote_iter_prems(
         iter_prems,
         StructureErrorKind::UnexpectedIfHoldBindings,
         span,
     )?;
-    let instr_tail = struct_prems_inner(prems_tail, instr_ret)?;
-    Ok(ol::InstrKind::Hold(ol::HoldInstr {
+    let instr_tail = struct_prems(prems_tail, instr_ret)?;
+    let block_hold = vec![instr_tail];
+    let instr_ol = ol::HoldInstr {
         id,
         not_exp,
         iter_exps,
-        block_hold: vec![instr_tail],
+        block_hold,
         block_not_hold: vec![],
-    }))
+    };
+    let instr_kind_ol = ol::InstrKind::Hold(instr_ol);
+    Ok(instr_kind_ol)
 }
+
+// - If-not-hold premise
 
 fn struct_if_not_hold_prem(
     prem_al: al::IfNotHoldPrem,
     span: &Span,
     iter_prems: Vec<al::PremIter>,
-    prems_tail: &mut impl Iterator<Item = (al::Prem, Vec<al::PremIter>)>,
+    prems_tail: &mut impl Iterator<Item = al::Prem>,
     instr_ret: ol::Instr,
 ) -> Result<ol::InstrKind, StructureError> {
     let al::IfNotHoldPrem { id, not_exp } = prem_al;
-    let iter_exps = iter_exps_without_bindings(
+    let iter_exps = demote_iter_prems(
         iter_prems,
         StructureErrorKind::UnexpectedIfNotHoldBindings,
         span,
     )?;
-    let instr_tail = struct_prems_inner(prems_tail, instr_ret)?;
-    Ok(ol::InstrKind::Hold(ol::HoldInstr {
+    let instr_tail = struct_prems(prems_tail, instr_ret)?;
+    let block_not_hold = vec![instr_tail];
+    let instr_ol = ol::HoldInstr {
         id,
         not_exp,
         iter_exps,
         block_hold: vec![],
-        block_not_hold: vec![instr_tail],
-    }))
+        block_not_hold,
+    };
+    let instr_kind_ol = ol::InstrKind::Hold(instr_ol);
+    Ok(instr_kind_ol)
 }
+
+// - Let premise
 
 fn struct_let_prem(
     prem_al: al::LetPrem,
     iter_instrs: Vec<al::PremIter>,
-    prems_tail: &mut impl Iterator<Item = (al::Prem, Vec<al::PremIter>)>,
+    prems_tail: &mut impl Iterator<Item = al::Prem>,
     instr_ret: ol::Instr,
 ) -> Result<ol::InstrKind, StructureError> {
     let al::LetPrem { exp_l, exp_r } = prem_al;
-    let instr_tail = struct_prems_inner(prems_tail, instr_ret)?;
-    Ok(ol::InstrKind::Let(ol::LetInstr {
+    let instr_tail = struct_prems(prems_tail, instr_ret)?;
+    let block = vec![instr_tail];
+    let instr_ol = ol::LetInstr {
         exp_l,
         exp_r,
         iter_instrs,
-        block: vec![instr_tail],
-    }))
+        block,
+    };
+    let instr_kind_ol = ol::InstrKind::Let(instr_ol);
+    Ok(instr_kind_ol)
 }
+
+// - Debug premise
 
 fn struct_debug_prem(
     prem_al: al::DebugPrem,
-    prems_tail: &mut impl Iterator<Item = (al::Prem, Vec<al::PremIter>)>,
+    prems_tail: &mut impl Iterator<Item = al::Prem>,
     instr_ret: ol::Instr,
 ) -> Result<ol::InstrKind, StructureError> {
     let al::DebugPrem { exp } = prem_al;
-    let instr_tail = struct_prems_inner(prems_tail, instr_ret)?;
-    Ok(ol::InstrKind::Debug(ol::DebugInstr {
+    let instr_tail = struct_prems(prems_tail, instr_ret)?;
+    let instr_tail = Box::new(instr_tail);
+    let instr_ol = ol::DebugInstr {
         exp,
-        instr: Box::new(instr_tail),
-    }))
+        instr: instr_tail,
+    };
+    let instr_kind_ol = ol::InstrKind::Debug(instr_ol);
+    Ok(instr_kind_ol)
 }
 
 // == Rules
+
+// - Rule path
 
 fn struct_rule_path(
     rel_signature: &ol::RelSignature,
@@ -375,24 +427,32 @@ fn struct_rule_path(
         if prems.is_empty() {
             rel_signature.not_typ.span.clone()
         } else {
-            Span::over(
-                &prems
-                    .iter()
-                    .map(|prem| prem.span.clone())
-                    .collect::<Vec<_>>(),
-            )
+            let spans = prems
+                .iter()
+                .map(|prem| prem.span.clone())
+                .collect::<Vec<_>>();
+            Span::over(&spans)
         }
     } else {
-        Span::over(
-            &exps_output
-                .iter()
-                .map(|exp| exp.span.clone())
-                .collect::<Vec<_>>(),
-        )
+        let spans = exps_output
+            .iter()
+            .map(|exp| exp.span.clone())
+            .collect::<Vec<_>>();
+        Span::over(&spans)
     };
-    let instr_result = crate::phrase! {node: ol::InstrKind::Result(ol::ResultInstr {rel_signature: rel_signature.clone(), exps: exps_output}), span: span};
-    Ok(vec![struct_prems(prems, instr_result)?])
+    let instr_ol = ol::ResultInstr {
+        rel_signature: rel_signature.clone(),
+        exps: exps_output,
+    };
+    let instr_kind_ol = ol::InstrKind::Result(instr_ol);
+    let instr_result = crate::phrase! {node: instr_kind_ol, span: span};
+    let mut prems_al = prems.into_iter();
+    let instr_ol = struct_prems(&mut prems_al, instr_result)?;
+    let block = vec![instr_ol];
+    Ok(block)
 }
+
+// - Rule group
 
 fn struct_rule_group(
     rel_signature: &ol::RelSignature,
@@ -420,9 +480,21 @@ fn struct_rule_group(
         .collect::<Result<_, _>>()?;
     let block = merge::merge_blocks(blocks);
     let span = id.span.clone();
-    let instr_group = crate::phrase! {node: ol::InstrKind::Group(ol::GroupInstr {id, rel_signature: rel_signature.clone(), exps: exps_signature, block}), span: span};
-    Ok(vec![struct_prems(prems_unified, instr_group)?])
+    let instr_ol = ol::GroupInstr {
+        id,
+        rel_signature: rel_signature.clone(),
+        exps: exps_signature,
+        block,
+    };
+    let instr_kind_ol = ol::InstrKind::Group(instr_ol);
+    let instr_group = crate::phrase! {node: instr_kind_ol, span: span};
+    let mut prems_al = prems_unified.into_iter();
+    let instr_ol = struct_prems(&mut prems_al, instr_group)?;
+    let block = vec![instr_ol];
+    Ok(block)
 }
+
+// - Else group
 
 fn struct_else_group(
     rel_signature: &ol::RelSignature,
@@ -446,66 +518,82 @@ fn struct_else_group(
     prems_unified.extend(prems);
     let block = struct_rule_path(rel_signature, rule_path)?;
     let span = id.span.clone();
-    let instr_group = crate::phrase! {node: ol::InstrKind::Group(ol::GroupInstr {id, rel_signature: rel_signature.clone(), exps: exps_signature, block}), span: span};
-    Ok(vec![struct_prems(prems_unified, instr_group)?])
+    let instr_ol = ol::GroupInstr {
+        id,
+        rel_signature: rel_signature.clone(),
+        exps: exps_signature,
+        block,
+    };
+    let instr_kind_ol = ol::InstrKind::Group(instr_ol);
+    let instr_group = crate::phrase! {node: instr_kind_ol, span: span};
+    let mut prems_al = prems_unified.into_iter();
+    let instr_ol = struct_prems(&mut prems_al, instr_group)?;
+    let block = vec![instr_ol];
+    Ok(block)
 }
 
 // == Clauses
 
+// - Clause path
+
 fn struct_clause_path((prems, exp): (Vec<al::Prem>, al::Exp)) -> Result<ol::Block, StructureError> {
     let span = exp.span.clone();
-    let instr_return =
-        crate::phrase! {node: ol::InstrKind::Return(ol::ReturnInstr {exp}), span: span};
-    Ok(vec![struct_prems(prems, instr_return)?])
+    let instr_ol = ol::ReturnInstr { exp };
+    let instr_kind_ol = ol::InstrKind::Return(instr_ol);
+    let instr_return = crate::phrase! {node: instr_kind_ol, span: span};
+    let mut prems_al = prems.into_iter();
+    let instr_ol = struct_prems(&mut prems_al, instr_return)?;
+    let block = vec![instr_ol];
+    Ok(block)
 }
 
-// == Definitions
+// == Table rows
 
-fn struct_def(
-    ctx: &Context,
-    def_al: al::Def,
-    without_rule_groups: bool,
-) -> Result<sl::Def, StructureError> {
+// - Table row clause
+
+fn struct_table_row_clause(table_row_al: al::TableRow) -> (Vec<al::Exp>, al::Clause) {
     let Phrase {
-        node: def_kind_al,
+        node: table_row_kind_al,
         span,
         ..
-    } = def_al;
-    let def_kind_sl = struct_def_kind(ctx, def_kind_al, &span, without_rule_groups)?;
-    Ok(crate::phrase! {node: def_kind_sl, span: span})
+    } = table_row_al;
+    let al::TableRowKind {
+        exps_signature,
+        args,
+        exp,
+        prems,
+    } = table_row_kind_al;
+    let clause_kind = al::ClauseKind { args, exp, prems };
+    let clause = crate::phrase! {node: clause_kind, span: span};
+    (exps_signature, clause)
 }
 
-fn struct_def_kind(
-    ctx: &Context,
-    def_kind_al: al::DefKind,
-    span: &Span,
-    without_rule_groups: bool,
-) -> Result<sl::DefKind, StructureError> {
-    match def_kind_al {
-        al::DefKind::Typ(typdef_al) => Ok(sl::DefKind::Typ(struct_typ_def(typdef_al))),
-        al::DefKind::Var(def_var_al) => Ok(sl::DefKind::Var(struct_var_def(def_var_al))),
-        al::DefKind::Rel(def_rel_al) => {
-            struct_rel_def(ctx, def_rel_al, span, without_rule_groups).map(sl::DefKind::Rel)
-        }
-        al::DefKind::MetaFunc(def_func_al) => {
-            struct_func_def(ctx, def_func_al, span, without_rule_groups).map(sl::DefKind::MetaFunc)
-        }
-    }
-}
+// == Type definitions
+
+// - Type definition
 
 fn struct_typ_def(typdef_al: al::TypDef) -> sl::TypDef {
     match typdef_al {
-        al::TypDef::Extern(typdef_al) => sl::TypDef::Extern(struct_extern_typ_def(typdef_al)),
+        al::TypDef::Extern(typdef_al) => {
+            let typdef_sl = struct_extern_typ_def(typdef_al);
+            sl::TypDef::Extern(typdef_sl)
+        }
         al::TypDef::Defined(typdef_al) => {
-            sl::TypDef::Defined(Box::new(struct_defined_typ_def(*typdef_al)))
+            let typdef_sl = struct_defined_typ_def(*typdef_al);
+            let typdef_sl = Box::new(typdef_sl);
+            sl::TypDef::Defined(typdef_sl)
         }
     }
 }
+
+// - External type definition
 
 fn struct_extern_typ_def(typdef_al: al::ExternTyp) -> sl::ExternTyp {
     let al::ExternTyp { id, hints } = typdef_al;
     sl::ExternTyp { id, hints }
 }
+
+// - Defined type definition
 
 fn struct_defined_typ_def(typdef_al: al::DefinedTyp) -> sl::DefinedTyp {
     let al::DefinedTyp {
@@ -522,10 +610,18 @@ fn struct_defined_typ_def(typdef_al: al::DefinedTyp) -> sl::DefinedTyp {
     }
 }
 
+// == Meta-variable definitions
+
+// - Meta-variable definition
+
 fn struct_var_def(def_var_al: al::VarDef) -> sl::VarDef {
     let al::VarDef { id, typ, hints } = def_var_al;
     sl::VarDef { id, typ, hints }
 }
+
+// == Relation definitions
+
+// - Relation definition
 
 fn struct_rel_def(
     ctx: &Context,
@@ -533,53 +629,32 @@ fn struct_rel_def(
     span: &Span,
     without_rule_groups: bool,
 ) -> Result<sl::RelDef, StructureError> {
-    match def_rel_al {
+    let def_rel_sl = match def_rel_al {
         al::RelDef::Extern(def_rel_al) => {
-            struct_extern_rel_def(ctx, *def_rel_al, span).map(sl::RelDef::Extern)
+            let def_rel_sl = struct_extern_rel_def(ctx, *def_rel_al, span)?;
+            sl::RelDef::Extern(def_rel_sl)
         }
         al::RelDef::Defined(def_rel_al) => {
-            struct_defined_rel_def(ctx, *def_rel_al, span, without_rule_groups)
-                .map(sl::RelDef::Defined)
+            let def_rel_sl = struct_defined_rel_def(ctx, *def_rel_al, span, without_rule_groups)?;
+            sl::RelDef::Defined(def_rel_sl)
         }
-    }
+    };
+    Ok(def_rel_sl)
 }
 
-fn struct_func_def(
-    ctx: &Context,
-    def_func_al: al::MetaFuncDef,
-    span: &Span,
-    without_rule_groups: bool,
-) -> Result<sl::MetaFuncDef, StructureError> {
-    match def_func_al {
-        al::MetaFuncDef::Extern(def_func_al) => Ok(sl::MetaFuncDef::Extern(struct_extern_dec_def(
-            ctx,
-            def_func_al,
-        ))),
-        al::MetaFuncDef::Builtin(def_func_al) => Ok(sl::MetaFuncDef::Builtin(
-            struct_builtin_dec_def(ctx, def_func_al),
-        )),
-        al::MetaFuncDef::Table(def_func_al) => {
-            struct_table_dec_def(ctx, def_func_al, span, without_rule_groups)
-                .map(sl::MetaFuncDef::Table)
-        }
-        al::MetaFuncDef::Defined(def_func_al) => {
-            struct_func_dec_def(ctx, *def_func_al, span, without_rule_groups)
-                .map(sl::MetaFuncDef::Defined)
-        }
-    }
-}
+// - Fresh relation inputs
 
-// - Relation definitions
-
-fn fresh_rel_inputs(
+fn struct_rel_exps_input(
     ctx: &Context,
     not_typ: &al::NotTyp,
     input_hint: &input::InputHint,
     span: &Span,
 ) -> Result<Vec<al::Exp>, StructureError> {
     let typs = not_typ.node.args();
-    input::validate(input_hint, typs.len())
-        .map_err(|error| StructureError::new(StructureErrorKind::Input(error), span.clone()))?;
+    input::validate(input_hint, typs.len()).map_err(|error| {
+        let error_kind = StructureErrorKind::Input(error);
+        StructureError::new(error_kind, span.clone())
+    })?;
     let mut frees = IdSet::new();
     let mut exps_input = vec![];
     for int_idx in input_hint.indices() {
@@ -590,6 +665,8 @@ fn fresh_rel_inputs(
     }
     Ok(exps_input)
 }
+
+// - External relation definition
 
 fn struct_extern_rel_def(
     ctx: &Context,
@@ -602,18 +679,21 @@ fn struct_extern_rel_def(
         input_hint,
         hints,
     } = def_rel_al;
-    let exps_input = fresh_rel_inputs(ctx, &not_typ, &input_hint, span)?;
+    let exps_input = struct_rel_exps_input(ctx, &not_typ, &input_hint, span)?;
     let rel_signature = sl::RelSignature {
         not_typ,
         input_hint,
     };
-    Ok(sl::ExternRel {
+    let def_rel_sl = sl::ExternRel {
         id,
         rel_signature,
         exps_input,
         hints,
-    })
+    };
+    Ok(def_rel_sl)
 }
+
+// - Defined relation definition
 
 fn struct_defined_rel_def(
     ctx: &Context,
@@ -630,8 +710,10 @@ fn struct_defined_rel_def(
         else_group,
         hints,
     } = def_rel_al;
-    input::validate(&input_hint, not_typ.node.arity())
-        .map_err(|error| StructureError::new(StructureErrorKind::Input(error), span.clone()))?;
+    input::validate(&input_hint, not_typ.node.arity()).map_err(|error| {
+        let error_kind = StructureErrorKind::Input(error);
+        StructureError::new(error_kind, span.clone())
+    })?;
     let exps_match_group = rule_groups
         .iter()
         .map(|rule_group| rule_group.node.rule_match.exps_input.clone())
@@ -641,11 +723,8 @@ fn struct_defined_rel_def(
         .map(|else_group| else_group.node.rule_match.exps_input.as_slice());
     let (exps_template, prems_group, prems_else) = if rule_groups.is_empty() && else_group.is_none()
     {
-        (
-            fresh_rel_inputs(ctx, &not_typ, &input_hint, span)?,
-            vec![],
-            None,
-        )
+        let exps_input = struct_rel_exps_input(ctx, &not_typ, &input_hint, span)?;
+        (exps_input, vec![], None)
     } else {
         antiunify::antiunify_rule_match_group(frees, &exps_match_group, exps_match_else)?
     };
@@ -661,7 +740,8 @@ fn struct_defined_rel_def(
     let block = merge::merge_blocks(blocks);
     let block_else = match (prems_else, else_group) {
         (Some(prems), Some(else_group)) => {
-            Some(struct_else_group(&rel_signature, prems, else_group)?)
+            let block_else = struct_else_group(&rel_signature, prems, else_group)?;
+            Some(block_else)
         }
         _ => None,
     };
@@ -670,17 +750,49 @@ fn struct_defined_rel_def(
     let (block, block_else) = totalize::totalize(&ctx.tdenv, block, block_else)?;
     let (exps_input, block, block_else) = prettify::pretty_rel(exps_template, block, block_else)?;
     let (block, block_else) = dangle::instrument(block, block_else)?;
-    Ok(sl::DefinedRel {
+    let def_rel_sl = sl::DefinedRel {
         id,
         rel_signature,
         exps_input,
         block,
         block_else,
         hints,
-    })
+    };
+    Ok(def_rel_sl)
 }
 
-// - Function definitions
+// == Meta-function definitions
+
+// - Meta-function definition
+
+fn struct_func_def(
+    ctx: &Context,
+    def_func_al: al::MetaFuncDef,
+    span: &Span,
+    without_rule_groups: bool,
+) -> Result<sl::MetaFuncDef, StructureError> {
+    let def_func_sl = match def_func_al {
+        al::MetaFuncDef::Extern(def_func_al) => {
+            let def_func_sl = struct_extern_dec_def(ctx, def_func_al);
+            sl::MetaFuncDef::Extern(def_func_sl)
+        }
+        al::MetaFuncDef::Builtin(def_func_al) => {
+            let def_func_sl = struct_builtin_dec_def(ctx, def_func_al);
+            sl::MetaFuncDef::Builtin(def_func_sl)
+        }
+        al::MetaFuncDef::Table(def_func_al) => {
+            let def_func_sl = struct_table_dec_def(ctx, def_func_al, span, without_rule_groups)?;
+            sl::MetaFuncDef::Table(def_func_sl)
+        }
+        al::MetaFuncDef::Defined(def_func_al) => {
+            let def_func_sl = struct_func_dec_def(ctx, *def_func_al, span, without_rule_groups)?;
+            sl::MetaFuncDef::Defined(def_func_sl)
+        }
+    };
+    Ok(def_func_sl)
+}
+
+// - External function declaration
 
 fn struct_extern_dec_def(ctx: &Context, def_func_al: al::ExternFunc) -> sl::ExternFunc {
     let al::ExternFunc {
@@ -700,6 +812,8 @@ fn struct_extern_dec_def(ctx: &Context, def_func_al: al::ExternFunc) -> sl::Exte
     }
 }
 
+// - Builtin function declaration
+
 fn struct_builtin_dec_def(ctx: &Context, def_func_al: al::BuiltinFunc) -> sl::BuiltinFunc {
     let al::BuiltinFunc {
         id,
@@ -717,6 +831,8 @@ fn struct_builtin_dec_def(ctx: &Context, def_func_al: al::BuiltinFunc) -> sl::Bu
         hints,
     }
 }
+
+// - Table function declaration
 
 fn struct_table_dec_def(
     ctx: &Context,
@@ -765,30 +881,17 @@ fn struct_table_dec_def(
             block,
         })
         .collect();
-    Ok(sl::TableFunc {
+    let def_func_sl = sl::TableFunc {
         id,
         params: params_sl,
         typ,
         table_rows: table_rows_sl,
         hints,
-    })
+    };
+    Ok(def_func_sl)
 }
 
-fn struct_table_row_clause(table_row_al: al::TableRow) -> (Vec<al::Exp>, al::Clause) {
-    let Phrase {
-        node: table_row_kind_al,
-        span,
-        ..
-    } = table_row_al;
-    let al::TableRowKind {
-        exps_signature,
-        args,
-        exp,
-        prems,
-    } = table_row_kind_al;
-    let clause = crate::phrase! {node: al::ClauseKind {args, exp, prems}, span: span};
-    (exps_signature, clause)
-}
+// - Function declaration
 
 fn struct_func_dec_def(
     ctx: &Context,
@@ -808,7 +911,7 @@ fn struct_func_dec_def(
     let (args_template, paths, path_else) = antiunify::antiunify_clauses(clauses, else_clause)?;
     if paths.is_empty() && path_else.is_none() {
         let params_sl = struct_params(ctx, params_al);
-        return Ok(sl::DefinedFunc {
+        let def_func_sl = sl::DefinedFunc {
             id,
             tparams,
             params: params_sl,
@@ -816,7 +919,8 @@ fn struct_func_dec_def(
             block: vec![],
             block_else: None,
             hints,
-        });
+        };
+        return Ok(def_func_sl);
     }
     let blocks = paths
         .into_iter()
@@ -830,7 +934,7 @@ fn struct_func_dec_def(
     let (args_input, block, block_else) = prettify::pretty_func(args_template, block, block_else)?;
     let params_sl = struct_params_from_args(ctx, params_al, args_input, span)?;
     let (block, block_else) = dangle::instrument(block, block_else)?;
-    Ok(sl::DefinedFunc {
+    let def_func_sl = sl::DefinedFunc {
         id,
         tparams,
         params: params_sl,
@@ -838,8 +942,59 @@ fn struct_func_dec_def(
         block,
         block_else,
         hints,
-    })
+    };
+    Ok(def_func_sl)
 }
+
+// == Definitions
+
+// - Definition
+
+fn struct_def(
+    ctx: &Context,
+    def_al: al::Def,
+    without_rule_groups: bool,
+) -> Result<sl::Def, StructureError> {
+    let Phrase {
+        node: def_kind_al,
+        span,
+        ..
+    } = def_al;
+    let def_kind_sl = struct_def_kind(ctx, def_kind_al, &span, without_rule_groups)?;
+    let def_sl = crate::phrase! {node: def_kind_sl, span: span};
+    Ok(def_sl)
+}
+
+fn struct_def_kind(
+    ctx: &Context,
+    def_kind_al: al::DefKind,
+    span: &Span,
+    without_rule_groups: bool,
+) -> Result<sl::DefKind, StructureError> {
+    let def_kind_sl = match def_kind_al {
+        al::DefKind::Typ(typdef_al) => {
+            let typdef_sl = struct_typ_def(typdef_al);
+            sl::DefKind::Typ(typdef_sl)
+        }
+        al::DefKind::Var(def_var_al) => {
+            let def_var_sl = struct_var_def(def_var_al);
+            sl::DefKind::Var(def_var_sl)
+        }
+        al::DefKind::Rel(def_rel_al) => {
+            let def_rel_sl = struct_rel_def(ctx, def_rel_al, span, without_rule_groups)?;
+            sl::DefKind::Rel(def_rel_sl)
+        }
+        al::DefKind::MetaFunc(def_func_al) => {
+            let def_func_sl = struct_func_def(ctx, def_func_al, span, without_rule_groups)?;
+            sl::DefKind::MetaFunc(def_func_sl)
+        }
+    };
+    Ok(def_kind_sl)
+}
+
+// == Specification
+
+// - Entry point
 
 /// Converts algorithmic definitions, removing rule groups when requested
 pub fn convert(spec_al: al::Spec, without_rule_groups: bool) -> Result<sl::Spec, StructureError> {
