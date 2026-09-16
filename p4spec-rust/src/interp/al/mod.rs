@@ -1,20 +1,15 @@
 //! Algorithmic-language execution over the composed runner
 
-pub mod backtrack;
-pub mod cache;
 pub mod context;
-pub mod error;
 
 pub mod eval;
-pub mod util;
 
+use crate::interp::shared::{cache::Cache, error::Error};
 use crate::{
     lang::{al::ast, common::source::Span, data::value::Value},
     runner::{Extern, Interface, Interpreter, RunnerContext},
 };
-use cache::Cache;
 use context::{Context, Global};
-use error::Error;
 
 /// Configuration for the AL interpreter
 pub struct Config {

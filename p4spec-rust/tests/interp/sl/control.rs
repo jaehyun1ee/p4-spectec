@@ -1,6 +1,6 @@
 use super::*;
 use p4spec_rust::{
-    interp::al::error::{CallErrorKind, ErrorKind},
+    interp::shared::error::{CallErrorKind, ErrorKind},
     lang::{data::typ, xl::num::Number},
     note_phrase, phrase,
 };
@@ -27,7 +27,7 @@ fn with_block(block: ast::Block, det: bool) -> Runner<SlInterp, BuiltinInterface
         NullExtern,
     )
 }
-fn message_has(error: &p4spec_rust::interp::al::error::Error, kind: &CallErrorKind) -> bool {
+fn message_has(error: &p4spec_rust::interp::shared::error::Error, kind: &CallErrorKind) -> bool {
     *error.kind == ErrorKind::Call(kind.clone())
         || error.children.iter().any(|error| message_has(error, kind))
 }
@@ -40,10 +40,7 @@ fn raw_blocks_preserve_order_and_reject_two_identical_successes() {
     assert_eq!(get::num(runner.arena(), &value).unwrap().to_string(), "1");
     let mut runner = with_block(block, true);
     let error = runner.context().call_func("entry", &[], &[]).unwrap_err();
-    assert!(message_has(
-        &error,
-        &CallErrorKind::InstructionNondeterminism
-    ));
+    assert!(message_has(&error, &CallErrorKind::InstructionNondeterminism));
 }
 
 #[test]
@@ -73,21 +70,8 @@ fn all_case_guard_forms_dispatch_through_expression_semantics() {
     };
     let cases = [
         (boolean(false), ast::Guard::Bool(false)),
-        (
-            exp(7),
-            ast::Guard::Cmp(
-                ast::CmpOp::Bool(bool_op::CmpOp::Eq),
-                ast::OpTyp::Nat,
-                exp(7),
-            ),
-        ),
-        (
-            exp(7),
-            ast::Guard::Sub(
-                typ::make::nat(),
-                Box::new(Subcheck::Recurse(typ::make::nat())),
-            ),
-        ),
+        (exp(7), ast::Guard::Cmp(ast::CmpOp::Bool(bool_op::CmpOp::Eq), ast::OpTyp::Nat, exp(7))),
+        (exp(7), ast::Guard::Sub(typ::make::nat(), Box::new(Subcheck::Recurse(typ::make::nat())))),
         (
             note_phrase!(node: ast::ExpKind::List(vec![]), note: typ::make::list(typ::make::nat()).node, span: Span::default()),
             ast::Guard::Match(ast::Pattern::List(ListPattern::Nil)),
@@ -135,10 +119,7 @@ rule Count/next: i ~> i_result
                 assert_eq!(get::num(runner.arena(), &value).unwrap().to_string(), "+0");
                 let value = make::int(runner.arena_mut(), 20_000.into(), Span::default()).unwrap();
                 let values = runner.context().call_rel("Count", &[value]).unwrap();
-                assert_eq!(
-                    get::num(runner.arena(), &values[0]).unwrap().to_string(),
-                    "+0"
-                );
+                assert_eq!(get::num(runner.arena(), &values[0]).unwrap().to_string(), "+0");
             })
             .unwrap()
             .join()
@@ -174,9 +155,7 @@ fn empty_body_and_wrong_terminal_flow_are_reported() {
     assert!(runner.context().call_func("entry", &[], &[]).is_err());
     let spec_sl =
         spec("var n : nat\nrelation Step: nat ~> nat\n  hint(input %0)\nrule Step/step: n ~> n");
-    let ast::DefKind::Rel(ast::RelDef::Defined(rel)) = &spec_sl[1].node else {
-        panic!("relation")
-    };
+    let ast::DefKind::Rel(ast::RelDef::Defined(rel)) = &spec_sl[1].node else { panic!("relation") };
     let mut runner = with_block(
         vec![
             phrase!(node: ast::InstrKind::Result(ast::ResultInstr { rel_signature: rel.rel_signature.clone(), exps: vec![exp(1)] }), span: Span::default()),
@@ -197,11 +176,7 @@ fn empty_body_and_wrong_terminal_flow_are_reported() {
 fn optional_and_list_conditions_preserve_empty_iteration_semantics() {
     for (iter, expected) in [(ast::Iter::Opt, "9"), (ast::Iter::List, "5")] {
         let id = phrase!(node: "n".to_owned(), span: Span::default());
-        let var = ast::Var {
-            id: id.clone(),
-            typ: typ::make::nat(),
-            iters: vec![],
-        };
+        let var = ast::Var { id: id.clone(), typ: typ::make::nat(), iters: vec![] };
         let exp_var = note_phrase!(node: ast::ExpKind::Var(id), note: typ::make::nat().node, span: Span::default());
         let exp_l = note_phrase!(node: ast::ExpKind::Iter(Box::new(exp_var), (iter, vec![var.clone()])), note: typ::make::iter(typ::make::nat(), iter).node, span: Span::default());
         let exp_r = note_phrase!(node: if iter == ast::Iter::Opt { ast::ExpKind::Opt(None) } else { ast::ExpKind::List(vec![]) }, note: typ::make::iter(typ::make::nat(), iter).node, span: Span::default());
@@ -211,10 +186,7 @@ fn optional_and_list_conditions_preserve_empty_iteration_semantics() {
         ];
         let mut runner = with_block(block, false);
         let value = runner.context().call_func("entry", &[], &[]).unwrap();
-        assert_eq!(
-            get::num(runner.arena(), &value).unwrap().to_string(),
-            expected
-        );
+        assert_eq!(get::num(runner.arena(), &value).unwrap().to_string(), expected);
     }
 }
 
@@ -230,7 +202,9 @@ fn loading_rejects_duplicate_execution_definitions() {
         spec_sl.push(def);
         assert!(matches!(
             *Global::load(spec_sl).unwrap_err().kind,
-            ErrorKind::Context(p4spec_rust::interp::al::error::ContextErrorKind::Duplicate { .. })
+            ErrorKind::Context(
+                p4spec_rust::interp::shared::error::ContextErrorKind::Duplicate { .. }
+            )
         ));
     }
 }
@@ -276,11 +250,7 @@ fn case_comparison_rhs_observes_the_scrutinee_binding() {
 #[test]
 fn case_guard_errors_keep_the_generated_expression_trace() {
     use p4spec_rust::lang::xl::num;
-    let guard = ast::Guard::Cmp(
-        ast::CmpOp::Num(num::CmpOp::Lt),
-        ast::OpTyp::Nat,
-        boolean(true),
-    );
+    let guard = ast::Guard::Cmp(ast::CmpOp::Num(num::CmpOp::Lt), ast::OpTyp::Nat, boolean(true));
     let block = vec![phrase!(node: ast::InstrKind::Case(ast::CaseInstr {
         exp: exp(7), cases: vec![ast::Case { guard, block: vec![instr(exp(5))] }], dangle: false,
     }), span: Span::default())];
@@ -294,7 +264,7 @@ fn optional_condition_reverses_remaining_iterators_and_preserves_outer_bindings(
     use p4spec_rust::{
         interp::sl::{
             context::Context,
-            instruction::{Flow, eval_block},
+            eval::instr::{Flow, eval_block},
         },
         lang::common::Variable,
     };
@@ -328,15 +298,8 @@ fn optional_condition_reverses_remaining_iterators_and_preserves_outer_bindings(
                 Span::default(),
             )
             .unwrap();
-            ctx.add_value(
-                Variable::new(id.clone(), vec![ast::Iter::List, ast::Iter::List]),
-                value,
-            );
-            let var = ast::Var {
-                id: id.clone(),
-                typ: typ::make::bool(),
-                iters: vec![],
-            };
+            ctx.add_value(Variable::new(id.clone(), vec![ast::Iter::List, ast::Iter::List]), value);
+            let var = ast::Var { id: id.clone(), typ: typ::make::bool(), iters: vec![] };
             let mut var_list = var.clone();
             var_list.iters.push(ast::Iter::List);
             let exp = note_phrase!(node: ast::ExpKind::Var(id.clone()), note: typ::make::bool().node, span: Span::default());
@@ -348,17 +311,13 @@ fn optional_condition_reverses_remaining_iterators_and_preserves_outer_bindings(
                 .finish()
                 .unwrap();
             match flow {
-                Flow::Return(value) => assert_eq!(
-                    get::num(runner.arena(), &value).unwrap().to_string(),
-                    expected
-                ),
+                Flow::Return(value) => {
+                    assert_eq!(get::num(runner.arena(), &value).unwrap().to_string(), expected)
+                }
                 Flow::Cont(_) => assert_eq!(expected, "9"),
                 flow => panic!("unexpected flow: {flow:?}"),
             }
-            assert_eq!(
-                *ctx.find_value(&Variable::new(id, vec![])).unwrap(),
-                value_outer
-            );
+            assert_eq!(*ctx.find_value(&Variable::new(id, vec![])).unwrap(), value_outer);
         }
     }
 }

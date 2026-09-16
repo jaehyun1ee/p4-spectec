@@ -1,13 +1,15 @@
 //! SL invocation, memoization and tail-call dispatch
 
-use super::{
+use super::super::{
     SlInterp,
     context::{Context, Scope},
-    expression,
-    instruction::{self, Flow},
+};
+use super::{
+    assign,
+    instr::{self, Flow},
 };
 use crate::{
-    interp::al::{
+    interp::shared::{
         backtrack::{Backtrack, backtrack, backtrack_from_result},
         cache::CallKey,
         error::{
@@ -38,10 +40,7 @@ pub(crate) fn check_rel_inputs(
         ast::RelDef::Defined(rel) => (&rel.rel_signature.not_typ, &rel.rel_signature.input_hint),
     };
     let typs = not_typ.node.args();
-    backtrack_from_result!(
-        crate::lang::hints::input::validate(inputs, typs.len()),
-        &id.span
-    );
+    backtrack_from_result!(crate::lang::hints::input::validate(inputs, typs.len()), &id.span);
     let typs = inputs
         .indices()
         .iter()
@@ -53,9 +52,7 @@ pub(crate) fn check_rel_inputs(
         id,
         &typs,
         values,
-        GuardErrorKind::RelationInputMismatch {
-            relation: id.node.clone(),
-        },
+        GuardErrorKind::RelationInputMismatch { relation: id.node.clone() },
     )
 }
 
@@ -90,9 +87,7 @@ pub(crate) fn check_func_inputs(
         id,
         &typ.typs_params,
         values,
-        GuardErrorKind::FunctionInputMismatch {
-            func: id.node.clone(),
-        },
+        GuardErrorKind::FunctionInputMismatch { func: id.node.clone() },
     )
 }
 
@@ -136,9 +131,7 @@ fn check_func_output(
         id,
         &[typ],
         std::slice::from_ref(value),
-        GuardErrorKind::FunctionOutputMismatch {
-            func: id.node.clone(),
-        },
+        GuardErrorKind::FunctionOutputMismatch { func: id.node.clone() },
     )
 }
 
@@ -199,9 +192,7 @@ fn invoke_extern_rel<Iface: Interface, Exn: Extern>(
                 id,
                 &typs,
                 &values,
-                GuardErrorKind::RelationOutputMismatch {
-                    relation: id.node.clone()
-                }
+                GuardErrorKind::RelationOutputMismatch { relation: id.node.clone() }
             )
             .guard()
         );
@@ -279,11 +270,7 @@ fn invoke_builtin_func<Iface: Interface, Exn: Extern>(
                 ErrorKind::Host(HostErrorKind::Interface(InterfaceError::Builtin(_)))
             );
             let error = error.at_if_missing(&id.span);
-            if recoverable {
-                Backtrack::Unmatch(vec![error])
-            } else {
-                Backtrack::Err(vec![error])
-            }
+            if recoverable { Backtrack::Unmatch(vec![error]) } else { Backtrack::Err(vec![error]) }
         }
     }
 }
@@ -319,13 +306,13 @@ fn invoke_rel_mode<Iface: Interface, Exn: Extern>(
                     Backtrack::Ok(Flow::Result(values))
                 }
                 ast::RelDef::Defined(rel) => {
-                    let ctx = backtrack!(expression::assign_exps(
+                    let ctx = backtrack!(assign::assign_exps(
                         runner.arena_mut(),
                         ctx.localize(),
                         &rel.exps_input,
                         &values
                     ));
-                    let flow = backtrack!(instruction::eval_body(
+                    let flow = backtrack!(instr::eval_body(
                         runner,
                         ctx,
                         &rel.block,
@@ -344,9 +331,7 @@ fn invoke_rel_mode<Iface: Interface, Exn: Extern>(
         });
         let pure = runner.interp_mut().cache.end();
         let result = result.nest(id.span.clone(), || {
-            ErrorKind::Trace(TraceErrorKind::RelationInvocation {
-                rel: id.node.clone(),
-            })
+            ErrorKind::Trace(TraceErrorKind::RelationInvocation { rel: id.node.clone() })
         });
         let flow = match result {
             Backtrack::Ok(flow) => flow,
@@ -364,9 +349,7 @@ fn invoke_rel_mode<Iface: Interface, Exn: Extern>(
                 let id_pending = id.into_owned();
                 pending.push((
                     id_pending.span,
-                    TraceErrorKind::RelationInvocation {
-                        rel: id_pending.node,
-                    },
+                    TraceErrorKind::RelationInvocation { rel: id_pending.node },
                 ));
                 id = Cow::Owned(id_tail);
                 values = Cow::Owned(values_tail);
@@ -419,7 +402,7 @@ fn invoke_func_mode<Iface: Interface, Exn: Extern>(
                         &values
                     ));
                     let instrs = func.table_rows.iter().flat_map(|row| row.block.iter());
-                    let flow = backtrack!(instruction::eval_sequential(
+                    let flow = backtrack!(instr::eval_sequential(
                         runner,
                         Cow::Owned(ctx_local),
                         instrs,
@@ -457,7 +440,7 @@ fn invoke_func_mode<Iface: Interface, Exn: Extern>(
                         &func.params,
                         &values
                     ));
-                    let flow = backtrack!(instruction::eval_body(
+                    let flow = backtrack!(instr::eval_body(
                         runner,
                         ctx_local,
                         &func.block,
@@ -477,9 +460,7 @@ fn invoke_func_mode<Iface: Interface, Exn: Extern>(
             }
         });
         let pure = runner.interp_mut().cache.end();
-        let result = result.nest(id.span.clone(), || {
-            ErrorKind::Trace(func_trace(&id, &targs))
-        });
+        let result = result.nest(id.span.clone(), || ErrorKind::Trace(func_trace(&id, &targs)));
         let flow = match result {
             Backtrack::Ok(flow) => flow,
             Backtrack::Err(errors) => return nest_pending(Backtrack::Err(errors), pending),
@@ -505,10 +486,7 @@ fn invoke_func_mode<Iface: Interface, Exn: Extern>(
 }
 
 fn invalid_flow<T>(id: &ast::Id, message: &'static str) -> Backtrack<T> {
-    Backtrack::err(
-        id.span.clone(),
-        ErrorKind::Call(CallErrorKind::InvalidFlow { message }),
-    )
+    Backtrack::err(id.span.clone(), ErrorKind::Call(CallErrorKind::InvalidFlow { message }))
 }
 
 fn assign_params<'global>(
@@ -529,7 +507,7 @@ fn assign_params<'global>(
     for (param, value) in params.iter().zip(values) {
         match &param.node {
             ast::ParamKind::Exp(_, exp) => {
-                ctx = backtrack!(expression::assign_exp(arena, ctx, exp, *value))
+                ctx = backtrack!(assign::assign_exp(arena, ctx, exp, *value))
             }
             ast::ParamKind::Def(id, ..) => {
                 let ValueKind::Func(id_func) = arena.kind(value) else {

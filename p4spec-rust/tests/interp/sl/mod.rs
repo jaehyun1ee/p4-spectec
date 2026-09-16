@@ -53,10 +53,7 @@ def $use(n) = n_result
         let mut runner = runner(source, det);
         for (num, expected) in [(0, "9"), (2, "3")] {
             let value = call(&mut runner, "use", num);
-            assert_eq!(
-                get::num(runner.arena(), &value).unwrap().to_string(),
-                expected
-            );
+            assert_eq!(get::num(runner.arena(), &value).unwrap().to_string(), expected);
         }
     }
 }

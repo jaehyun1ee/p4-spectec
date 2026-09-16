@@ -8,7 +8,7 @@ use super::{
 };
 use crate::{
     interface::p4::{error::P4Error, parse, unparse::P4Unparser},
-    interp::al::error::Error as InterpError,
+    interp::shared::error::Error as InterpError,
     lang::{
         common::source::{Phrase, Span},
         data::{

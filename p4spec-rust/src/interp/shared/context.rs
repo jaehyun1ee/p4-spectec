@@ -1,14 +1,14 @@
 //! Static bindings needed by the shared expression and assignment operations
 
 use crate::{
-    interp::al::{backtrack::Backtrack, error::Error},
+    interp::shared::{backtrack::Backtrack, error::Error},
     lang::{
         common::{Variable, source::Span},
         data::value::Value,
         il::ast,
     },
     runner::{Extern, Interface, Interpreter, RunnerContext},
-    runtime::{envs::interp_al::TDEnv, ops::typ::Theta},
+    runtime::{envs::interp::TDEnv, ops::typ::Theta},
 };
 use std::rc::Rc;
 

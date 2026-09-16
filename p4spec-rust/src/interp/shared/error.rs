@@ -1,4 +1,4 @@
-//! Located AL lookup, host, and execution failures
+//! Located interpreter lookup, host, and execution failures
 
 use crate::runner::{ExternError, InterfaceError};
 use num_bigint::BigInt;
@@ -261,17 +261,11 @@ impl Error {
     }
 
     pub(crate) fn undefined(kind: EntityKind, name: String, span: Span) -> Self {
-        Self::new(
-            ErrorKind::Context(ContextErrorKind::Undefined { kind, name }),
-            span,
-        )
+        Self::new(ErrorKind::Context(ContextErrorKind::Undefined { kind, name }), span)
     }
 
     pub(crate) fn duplicate(kind: EntityKind, name: String, span: Span) -> Self {
-        Self::new(
-            ErrorKind::Context(ContextErrorKind::Duplicate { kind, name }),
-            span,
-        )
+        Self::new(ErrorKind::Context(ContextErrorKind::Duplicate { kind, name }), span)
     }
 }
 
@@ -391,14 +385,7 @@ impl fmt::Display for TraceDisplay<'_> {
                         .enumerate()
                         .rev()
                         .map(|(idx, error_sub)| {
-                            (
-                                error_sub,
-                                idx,
-                                error.children.len(),
-                                indent.clone(),
-                                run + 1,
-                                false,
-                            )
+                            (error_sub, idx, error.children.len(), indent.clone(), run + 1, false)
                         }),
                 );
                 continue;
@@ -432,14 +419,7 @@ impl fmt::Display for TraceDisplay<'_> {
                     .enumerate()
                     .rev()
                     .map(|(idx, error_sub)| {
-                        (
-                            error_sub,
-                            idx,
-                            error.children.len(),
-                            indent_sub.clone(),
-                            0,
-                            false,
-                        )
+                        (error_sub, idx, error.children.len(), indent_sub.clone(), 0, false)
                     }),
             );
         }

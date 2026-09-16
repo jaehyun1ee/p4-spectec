@@ -2,15 +2,17 @@
 
 use super::super::{
     AlInterp,
+    context::{Context, Scope},
+};
+use super::{assign, expr, prem::eval_prems};
+use crate::interp::shared::error::{CallErrorKind, GuardErrorKind, HostErrorKind, TraceErrorKind};
+use crate::interp::shared::{
     backtrack::{
         Backtrack, backtrack, backtrack_from_result, choose_deterministic, choose_sequential,
     },
     cache::CallKey,
-    context::{Context, Scope},
     error::ErrorKind,
 };
-use super::{assign, expr, prem::eval_prems};
-use crate::interp::al::error::{CallErrorKind, GuardErrorKind, HostErrorKind, TraceErrorKind};
 use crate::lang::data::value::{ValueArena, ValueKind};
 use crate::{
     lang::{al::ast, data::value::Value, traits::print::Print},

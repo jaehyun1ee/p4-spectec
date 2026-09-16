@@ -6,7 +6,7 @@
 
 use std::rc::Rc;
 
-use crate::interp::al::error::ContextErrorKind;
+use crate::interp::shared::error::ContextErrorKind;
 
 use crate::{
     lang::{
@@ -27,8 +27,8 @@ use crate::{
     },
 };
 
-use super::{
-    AlInterp,
+use super::AlInterp;
+use crate::interp::shared::{
     backtrack::{Backtrack, backtrack, backtrack_from_result},
     error::{EntityKind, Error, ErrorKind},
 };

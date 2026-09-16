@@ -132,10 +132,7 @@ fn test_sl_counter_state_persists_across_packets_in_both_determinism_modes() {
             ebpf::drive_pipe(
                 &mut runner.context(),
                 &mut state,
-                &Rx {
-                    port: 0,
-                    packet: packet.to_owned(),
-                },
+                &Rx { port: 0, packet: packet.to_owned() },
             )
             .unwrap();
         }

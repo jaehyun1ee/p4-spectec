@@ -4,7 +4,7 @@ use super::context::AssignContext;
 
 use std::borrow::Borrow;
 
-use crate::interp::al::error::AssignErrorKind;
+use crate::interp::shared::error::AssignErrorKind;
 
 use crate::{
     lang::{
@@ -19,7 +19,7 @@ use crate::{
     phrase,
 };
 
-use crate::interp::al::{
+use crate::interp::shared::{
     backtrack::{Backtrack, backtrack, backtrack_from_result},
     error::ErrorKind,
     util::is_iter_var_exp,
@@ -194,19 +194,11 @@ fn assign_cons_exp<Ctx: AssignContext>(
     values: &[Value],
 ) -> Backtrack<Ctx> {
     let Some((value_head, values_tail)) = values.split_first() else {
-        return Backtrack::err(
-            exp.span.clone(),
-            ErrorKind::Assign(AssignErrorKind::EmptyCons),
-        );
+        return Backtrack::err(exp.span.clone(), ErrorKind::Assign(AssignErrorKind::EmptyCons));
     };
     let typ = phrase!(node: arena.typ(value).clone(), span: exp.span.clone());
     let value_tail = backtrack_from_result!(
-        make::list(
-            arena,
-            typ.node.clone(),
-            values_tail.to_vec(),
-            Span::default()
-        ),
+        make::list(arena, typ.node.clone(), values_tail.to_vec(), Span::default()),
         &Span::default()
     );
     let ctx = backtrack!(assign_exp(arena, ctx, exp_head, *value_head));
@@ -246,11 +238,7 @@ fn assign_iter_exp<Ctx: AssignContext>(
                 iters.push(ast::Iter::Opt);
                 let typ = typ::make::iterate(var.typ.clone(), &iters);
                 let value_sub = if let Some(ctx_sub) = &ctx_sub {
-                    let ctx_values = if Ctx::RETAIN_OPTIONAL_SCALARS {
-                        &ctx
-                    } else {
-                        ctx_sub
-                    };
+                    let ctx_values = if Ctx::RETAIN_OPTIONAL_SCALARS { &ctx } else { ctx_sub };
                     let value = backtrack_from_result!(
                         ctx_values.find_value(&Variable::new(var.id.clone(), var.iters.clone())),
                         &var.id.span
@@ -272,12 +260,7 @@ fn assign_iter_exp<Ctx: AssignContext>(
             let ctx_sub = ctx.wipe();
             let mut ctxs = Vec::with_capacity(values.len());
             for value in values {
-                ctxs.push(backtrack!(assign_exp(
-                    arena,
-                    ctx_sub.clone(),
-                    exp_inner,
-                    value
-                )));
+                ctxs.push(backtrack!(assign_exp(arena, ctx_sub.clone(), exp_inner, value)));
             }
             for var in vars {
                 let mut iters = var.iters.clone();

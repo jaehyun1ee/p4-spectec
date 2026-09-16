@@ -10,7 +10,8 @@ use self::{
 use crate::{
     interface,
     interp::{
-        al::{AlInterp, Config, context::Global, error::Error as InterpError},
+        al::{AlInterp, Config, context::Global},
+        shared::error::Error as InterpError,
         sl::{Config as SlConfig, SlInterp, context::Global as SlGlobal},
     },
     lang::{
@@ -168,18 +169,12 @@ pub fn build_sl_with_encoding(
     let global = SlGlobal::load(spec_sl)?;
     let interp = SlInterp::new(config);
     Ok(match arch {
-        "ebpf" => Simulator::Ebpf(Box::new(Runner::new(
-            global,
-            interp,
-            interface,
-            Ebpf::new(encoding),
-        ))),
-        "psa" => Simulator::Psa(Box::new(Runner::new(
-            global,
-            interp,
-            interface,
-            Psa::new(encoding),
-        ))),
+        "ebpf" => {
+            Simulator::Ebpf(Box::new(Runner::new(global, interp, interface, Ebpf::new(encoding))))
+        }
+        "psa" => {
+            Simulator::Psa(Box::new(Runner::new(global, interp, interface, Psa::new(encoding))))
+        }
         "v1model" => Simulator::V1Model(Box::new(Runner::new(
             global,
             interp,

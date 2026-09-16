@@ -4,7 +4,7 @@ use super::context::{EvalContext, ValueContext};
 
 use std::{borrow::Borrow, rc::Rc};
 
-use crate::interp::al::error::ExprErrorKind;
+use crate::interp::shared::error::ExprErrorKind;
 
 use crate::{
     lang::{
@@ -18,7 +18,7 @@ use crate::{
 };
 
 use super::{arg::eval_args, ops, path::eval_update_path};
-use crate::interp::al::{
+use crate::interp::shared::{
     backtrack::{Backtrack, backtrack, backtrack_from_result},
     error::ErrorKind,
     util::is_iter_var_exp,
@@ -156,10 +156,7 @@ fn eval_bin_exp<Ctx: EvalContext<Iface, Exn>, Iface: Interface, Exn: Extern>(
                 boolean::BinOp::Impl => !bool_l || bool_r,
                 boolean::BinOp::Equiv => bool_l == bool_r,
             };
-            backtrack_from_result!(
-                make::bool(runner.arena_mut(), result, Span::default()),
-                span
-            )
+            backtrack_from_result!(make::bool(runner.arena_mut(), result, Span::default()), span)
         }
         ast::BinOp::Num(op) => {
             let num_l = backtrack_from_result!(get::num(runner.arena(), &value_l), span);
@@ -184,10 +181,8 @@ fn eval_cmp_exp<Ctx: EvalContext<Iface, Exn>, Iface: Interface, Exn: Extern>(
     let value_l = backtrack!(eval_exp(runner, ctx, exp_l));
     let value_r = backtrack!(eval_exp(runner, ctx, exp_r));
     let result = backtrack!(ops::compare(runner.arena(), span, op, value_l, value_r));
-    let value = backtrack_from_result!(
-        make::bool(runner.arena_mut(), result, Span::default()),
-        span
-    );
+    let value =
+        backtrack_from_result!(make::bool(runner.arena_mut(), result, Span::default()), span);
     Backtrack::Ok(value)
 }
 
@@ -226,10 +221,8 @@ fn eval_sub_exp<Ctx: EvalContext<Iface, Exn>, Iface: Interface, Exn: Extern>(
 ) -> Backtrack<Value> {
     let value = backtrack!(eval_exp(runner, ctx, exp_inner));
     let matches = backtrack!(ops::check_sub(runner.arena(), ctx, span, subcheck, value));
-    let value = backtrack_from_result!(
-        make::bool(runner.arena_mut(), matches, Span::default()),
-        span
-    );
+    let value =
+        backtrack_from_result!(make::bool(runner.arena_mut(), matches, Span::default()), span);
     Backtrack::Ok(value)
 }
 
@@ -303,12 +296,7 @@ fn eval_str_exp<Ctx: EvalContext<Iface, Exn>, Iface: Interface, Exn: Extern>(
         value_fields.push((atom.clone(), backtrack!(eval_exp(runner, ctx, exp))));
     }
     let value = backtrack_from_result!(
-        make::structure(
-            runner.arena_mut(),
-            typ.clone(),
-            value_fields,
-            Span::default()
-        ),
+        make::structure(runner.arena_mut(), typ.clone(), value_fields, Span::default()),
         span
     );
     Backtrack::Ok(value)
@@ -421,10 +409,8 @@ fn eval_mem_exp<Ctx: EvalContext<Iface, Exn>, Iface: Interface, Exn: Extern>(
     let value_elem = backtrack!(eval_exp(runner, ctx, exp_elem));
     let value_list = backtrack!(eval_exp(runner, ctx, exp_list));
     let contains = backtrack!(ops::contains(runner.arena(), span, value_elem, value_list));
-    let value = backtrack_from_result!(
-        make::bool(runner.arena_mut(), contains, Span::default()),
-        span
-    );
+    let value =
+        backtrack_from_result!(make::bool(runner.arena_mut(), contains, Span::default()), span);
     Backtrack::Ok(value)
 }
 
@@ -476,13 +462,7 @@ fn eval_idx_exp<Ctx: EvalContext<Iface, Exn>, Iface: Interface, Exn: Extern>(
 ) -> Backtrack<Value> {
     let value = backtrack!(eval_exp(runner, ctx, exp_base));
     let value_idx = backtrack!(eval_exp(runner, ctx, exp_idx));
-    ops::access_index(
-        runner.arena_mut(),
-        &value,
-        &value_idx,
-        &exp_base.span,
-        &exp_idx.span,
-    )
+    ops::access_index(runner.arena_mut(), &value, &value_idx, &exp_base.span, &exp_idx.span)
 }
 
 // - Slice expression

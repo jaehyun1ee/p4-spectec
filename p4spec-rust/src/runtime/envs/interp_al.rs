@@ -2,11 +2,8 @@
 
 use std::rc::Rc;
 
-use crate::{
-    lang::{al::ast, common::ds::map::IdMap},
-    runtime::typdef::TypeDef,
-};
+use crate::lang::{al::ast, common::ds::map::IdMap};
 
-pub type TDEnv = IdMap<TypeDef>;
+pub use super::interp::TDEnv;
 pub type REnv = IdMap<ast::RelDef>;
 pub type FEnv = IdMap<Rc<ast::MetaFuncDef>>;

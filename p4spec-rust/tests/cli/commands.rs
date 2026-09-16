@@ -248,11 +248,7 @@ fn test_run_sl_native_success_and_multiple_spec_paths() {
     let output = run_command_with("--sl", "Pass", "cli/run/empty.p4")
         .output()
         .unwrap();
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
     assert_eq!(output.stdout, b"passed\n");
     assert!(output.stderr.is_empty());
 }
@@ -279,11 +275,7 @@ fn test_run_sl_honors_cache_det_and_guard_controls() {
         let output = run_command_with("--sl", relation, "cli/run/empty.p4")
             .output()
             .unwrap();
-        assert!(
-            output.status.success(),
-            "{}",
-            String::from_utf8_lossy(&output.stderr)
-        );
+        assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
         let output = run_command_with("--sl", relation, "cli/run/empty.p4")
             .arg(flag)
             .arg("--no-cache")
@@ -479,11 +471,7 @@ fn test_sim_sl_runs_all_native_architectures_and_plugin_encodings() {
                 .arg(repo().join(format!("p4spec/test/micro/sim-{arch}/{arch}.stf")))
                 .output()
                 .unwrap();
-            assert!(
-                output.status.success(),
-                "{arch}: {}",
-                String::from_utf8_lossy(&output.stderr)
-            );
+            assert!(output.status.success(), "{arch}: {}", String::from_utf8_lossy(&output.stderr));
             assert!(output.stderr.is_empty());
             let stdout = String::from_utf8(output.stdout).unwrap();
             let expected = std::fs::read_to_string(
@@ -507,20 +495,14 @@ fn test_sim_sl_preserves_host_state_across_stf_statements() {
         .arg(repo().join("p4spec/test/micro/sim-psa/psa.stf"))
         .output()
         .unwrap();
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
     assert!(String::from_utf8_lossy(&output.stdout).contains("[PASS] Transmitted"));
 }
 
 #[test]
 fn test_run_and_sim_require_exactly_one_interpreter_stage() {
     for args in [
-        vec![
-            "run", "--al", "--sl", "spec", "--rel", "Pass", "-p", "empty.p4",
-        ],
+        vec!["run", "--al", "--sl", "spec", "--rel", "Pass", "-p", "empty.p4"],
         vec![
             "sim",
             "--al",
@@ -565,10 +547,7 @@ fn test_sim_help_lists_native_controls_without_processing_inputs() {
         assert!(usage.contains(flag), "{flag}: {usage}");
     }
     for flag in ["--rel", "--pl", "--trace", "--profile"] {
-        assert!(
-            !usage.split_whitespace().any(|word| word == flag),
-            "{flag}: {usage}"
-        );
+        assert!(!usage.split_whitespace().any(|word| word == flag), "{flag}: {usage}");
     }
 }
 
@@ -650,10 +629,9 @@ fn test_sim_al_runs_all_native_architectures() {
 #[test]
 fn test_sim_interpreters_distinguish_p4_syntax_and_runtime_failures() {
     for stage in ["--al", "--sl"] {
-        for (program, category) in [
-            ("cli/run/invalid.p4", "syntax error:"),
-            ("cli/run/empty.p4", "runtime error:"),
-        ] {
+        for (program, category) in
+            [("cli/run/invalid.p4", "syntax error:"), ("cli/run/empty.p4", "runtime error:")]
+        {
             let output = binary()
                 .args(["sim", stage])
                 .arg(fixture("cli/run/types.watsup"))

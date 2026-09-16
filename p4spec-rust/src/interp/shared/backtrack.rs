@@ -1,4 +1,4 @@
-//! AL failure propagation and ordered candidate selection
+//! Interpreter failure propagation and ordered candidate selection
 //!
 //! Mismatches try the next candidate; fatal failures stop evaluation. A
 //! deterministic choice continues after one success and reports the first
@@ -54,15 +54,15 @@ impl<T> Backtrack<T> {
 macro_rules! backtrack {
     ($result:expr) => {
         match $result {
-            $crate::interp::al::backtrack::Backtrack::Ok(value) => value,
-            $crate::interp::al::backtrack::Backtrack::Err(traces) => {
-                return $crate::interp::al::backtrack::Backtrack::Err(traces)
+            $crate::interp::shared::backtrack::Backtrack::Ok(value) => value,
+            $crate::interp::shared::backtrack::Backtrack::Err(traces) => {
+                return $crate::interp::shared::backtrack::Backtrack::Err(traces)
             }
-            $crate::interp::al::backtrack::Backtrack::Nondet(first, second) => {
-                return $crate::interp::al::backtrack::Backtrack::Nondet(first, second)
+            $crate::interp::shared::backtrack::Backtrack::Nondet(first, second) => {
+                return $crate::interp::shared::backtrack::Backtrack::Nondet(first, second)
             }
-            $crate::interp::al::backtrack::Backtrack::Unmatch(traces) => {
-                return $crate::interp::al::backtrack::Backtrack::Unmatch(traces)
+            $crate::interp::shared::backtrack::Backtrack::Unmatch(traces) => {
+                return $crate::interp::shared::backtrack::Backtrack::Unmatch(traces)
             }
         }
     };
@@ -71,8 +71,8 @@ pub(crate) use backtrack;
 
 macro_rules! backtrack_from_result {
     ($result:expr, $span:expr $(,)?) => {
-        $crate::interp::al::backtrack::backtrack!(
-            $crate::interp::al::backtrack::Backtrack::from_result($result, $span)
+        $crate::interp::shared::backtrack::backtrack!(
+            $crate::interp::shared::backtrack::Backtrack::from_result($result, $span)
         )
     };
 }

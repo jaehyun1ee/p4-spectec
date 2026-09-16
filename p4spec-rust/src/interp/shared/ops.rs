@@ -17,7 +17,7 @@ use crate::{
     runtime::ops::typ::{Theta, subst_typ},
 };
 
-use crate::interp::al::{
+use crate::interp::shared::{
     backtrack::{Backtrack, backtrack, backtrack_from_result},
     error::{ErrorKind, ExprErrorKind},
 };
@@ -248,10 +248,7 @@ pub(crate) fn access_index(
 
 // - Slice access
 
-#[expect(
-    clippy::too_many_arguments,
-    reason = "operand and bounds spans remain explicit"
-)]
+#[expect(clippy::too_many_arguments, reason = "operand and bounds spans remain explicit")]
 pub(crate) fn access_slice(
     arena: &mut ValueArena,
     value_base: &Value,

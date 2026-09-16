@@ -1,4 +1,4 @@
-use p4spec_rust::interp::al::error::{HostErrorKind, TraceErrorKind};
+use p4spec_rust::interp::shared::error::{HostErrorKind, TraceErrorKind};
 use std::{cell::RefCell, rc::Rc};
 
 use p4spec_rust::{
@@ -51,7 +51,7 @@ fn function(name: &str, expression: ast::Exp) -> ast::Def {
 
 fn eval(
     expression: ast::Exp,
-) -> Result<(ValueArena, Value), p4spec_rust::interp::al::error::Error> {
+) -> Result<(ValueArena, Value), p4spec_rust::interp::shared::error::Error> {
     let global = Global::load(vec![function("test", expression)]).unwrap();
     let mut runner = Runner::<AlInterp, _, _>::new(
         global,
@@ -592,7 +592,7 @@ fn test_call_arguments_substitute_local_types_and_pass_function_values() {
 
 #[test]
 fn test_index_failures_retain_the_index_expression_span() {
-    use p4spec_rust::interp::al::error::{Error, ErrorKind};
+    use p4spec_rust::interp::shared::error::{Error, ErrorKind};
 
     fn contains_span(traces: &[Error], span: &Span) -> bool {
         traces
@@ -702,7 +702,7 @@ def $first(ns) = ns[0]
 fn test_builtin_failure_remains_typed_in_public_error_tree() {
     use p4spec_rust::{
         interface::builtin::error::BuiltinErrorKind,
-        interp::al::error::{Error, ErrorKind},
+        interp::shared::error::{Error, ErrorKind},
     };
 
     fn find_builtin(error: &Error) -> Option<&BuiltinErrorKind> {

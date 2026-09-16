@@ -1,10 +1,11 @@
-use p4spec_rust::interp::al::error::TraceErrorKind;
+use p4spec_rust::interp::shared::error::TraceErrorKind;
+use p4spec_rust::interp::shared::{backtrack::Backtrack, error::ErrorKind};
 use p4spec_rust::lang::data::value::ValueArena;
 use std::rc::Rc;
 
 use p4spec_rust::lang::traits::print::Print;
 use p4spec_rust::{
-    interp::al::{AlInterp, Config, context::Global, error::ErrorKind},
+    interp::al::{AlInterp, Config, context::Global},
     lang::{
         al::ast,
         common::source::Span,
@@ -322,7 +323,7 @@ def $fallback(n*) = n*
 #[test]
 fn test_iterated_premise_rows_read_parent_bindings_independently() {
     use p4spec_rust::{
-        interp::al::{backtrack::Backtrack, context::Context, eval::prem::eval_prem},
+        interp::al::{context::Context, eval::prem::eval_prem},
         lang::{common::Variable, xl::num},
         note_phrase,
     };
@@ -940,12 +941,12 @@ fn test_extern_relation_output_guards_preserve_call_span() {
     let span = prem.id.span.clone();
 
     fn find_output(
-        error: &p4spec_rust::interp::al::error::Error,
-    ) -> Option<&p4spec_rust::interp::al::error::Error> {
+        error: &p4spec_rust::interp::shared::error::Error,
+    ) -> Option<&p4spec_rust::interp::shared::error::Error> {
         if matches!(
             *error.kind,
             ErrorKind::Guard(
-                p4spec_rust::interp::al::error::GuardErrorKind::RelationOutputMismatch { .. }
+                p4spec_rust::interp::shared::error::GuardErrorKind::RelationOutputMismatch { .. }
             )
         ) {
             Some(error)

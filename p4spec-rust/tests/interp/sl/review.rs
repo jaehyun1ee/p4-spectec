@@ -1,6 +1,6 @@
 use super::*;
 use p4spec_rust::{
-    interp::{al::error::Error, shared::assign::assign_exp, sl::context::Context},
+    interp::{shared::assign::assign_exp, shared::error::Error, sl::context::Context},
     lang::{
         common::{Variable, notation::mixfix::Mixfix},
         data::{typ, value::ValueArena},
@@ -66,38 +66,22 @@ fn optional_destructuring_preserves_outer_scalars() {
     let typ_opt = typ::make::opt(typ_tuple.clone());
     let vars = ["n", "m"]
         .into_iter()
-        .map(|name| ast::Var {
-            id: id(name),
-            typ: typ::make::nat(),
-            iters: vec![],
-        })
+        .map(|name| ast::Var { id: id(name), typ: typ::make::nat(), iters: vec![] })
         .collect();
     let exp = note_phrase!(node: ast::ExpKind::Iter(Box::new(exp_tuple), (ast::Iter::Opt, vars)), note: typ_opt.node.clone(), span: Span::default());
     let values: Vec<_> = [7u64, 9]
         .into_iter()
         .map(|num| make::nat(&mut arena, num.into(), Span::default()).unwrap())
         .collect();
-    let value_tuple = make::tuple(
-        &mut arena,
-        typ_tuple.node.into(),
-        values.clone(),
-        Span::default(),
-    )
-    .unwrap();
-    let value_opt = make::opt(
-        &mut arena,
-        typ_opt.node.clone().into(),
-        Some(value_tuple),
-        Span::default(),
-    )
-    .unwrap();
+    let value_tuple =
+        make::tuple(&mut arena, typ_tuple.node.into(), values.clone(), Span::default()).unwrap();
+    let value_opt =
+        make::opt(&mut arena, typ_opt.node.clone().into(), Some(value_tuple), Span::default())
+            .unwrap();
     let ctx = assign_exp(&mut arena, ctx, &exp, value_opt)
         .finish()
         .unwrap();
-    assert_eq!(
-        *ctx.find_value(&Variable::new(id("n"), vec![])).unwrap(),
-        value_outer
-    );
+    assert_eq!(*ctx.find_value(&Variable::new(id("n"), vec![])).unwrap(), value_outer);
     assert!(
         ctx.find_value_opt(&Variable::new(id("m"), vec![]))
             .is_none()
@@ -112,10 +96,7 @@ fn optional_destructuring_preserves_outer_scalars() {
     let ctx = assign_exp(&mut arena, ctx, &exp, value_none)
         .finish()
         .unwrap();
-    assert_eq!(
-        *ctx.find_value(&Variable::new(id("n"), vec![])).unwrap(),
-        value_outer
-    );
+    assert_eq!(*ctx.find_value(&Variable::new(id("n"), vec![])).unwrap(), value_outer);
     assert!(
         ctx.find_value_opt(&Variable::new(id("m"), vec![]))
             .is_none()
@@ -161,10 +142,7 @@ fn relation_tail_failures_retain_every_invocation() {
 #[test]
 fn sequential_fallback_retains_the_deeper_failure_tree() {
     let error = evaluate(
-        vec![
-            func("entry", vec![call("deep"), fail()]),
-            func("deep", vec![fail()]),
-        ],
+        vec![func("entry", vec![call("deep"), fail()]), func("deep", vec![fail()])],
         false,
     );
     assert!(error.to_string().contains("function $deep"), "{error}");
@@ -175,21 +153,10 @@ fn sequential_fallback_prefers_the_later_failure_at_equal_depth() {
     use p4spec_rust::lang::common::source::Position;
     let mut instr_l = fail();
     let mut instr_r = fail();
-    let span_l = Span::new(
-        Position::new("branches", 1, 0),
-        Position::new("branches", 1, 1),
-    );
-    let span_r = Span::new(
-        Position::new("branches", 2, 0),
-        Position::new("branches", 2, 1),
-    );
-    for (instr, span) in [
-        (&mut instr_l, span_l.clone()),
-        (&mut instr_r, span_r.clone()),
-    ] {
-        let ast::InstrKind::If(instr_if) = &mut instr.node else {
-            unreachable!()
-        };
+    let span_l = Span::new(Position::new("branches", 1, 0), Position::new("branches", 1, 1));
+    let span_r = Span::new(Position::new("branches", 2, 0), Position::new("branches", 2, 1));
+    for (instr, span) in [(&mut instr_l, span_l.clone()), (&mut instr_r, span_r.clone())] {
+        let ast::InstrKind::If(instr_if) = &mut instr.node else { unreachable!() };
         instr_if.exp.span = span;
     }
     let error = evaluate(vec![func("entry", vec![instr_l, instr_r])], false);
@@ -211,26 +178,14 @@ fn long_tail_failures_render_and_drop_on_a_small_stack() {
             .spawn(move || {
                 let mut spec_sl = Vec::new();
                 for idx in 0..20_000 {
-                    let name = if idx == 0 {
-                        "entry".to_owned()
-                    } else {
-                        format!("step{idx}")
-                    };
+                    let name = if idx == 0 { "entry".to_owned() } else { format!("step{idx}") };
                     let block = if idx + 1 == 20_000 {
                         vec![fail()]
                     } else {
                         let name_tail = format!("step{}", idx + 1);
-                        vec![if relation {
-                            rel_call(&name_tail)
-                        } else {
-                            call(&name_tail)
-                        }]
+                        vec![if relation { rel_call(&name_tail) } else { call(&name_tail) }]
                     };
-                    spec_sl.push(if relation {
-                        rel(&name, block)
-                    } else {
-                        func(&name, block)
-                    });
+                    spec_sl.push(if relation { rel(&name, block) } else { func(&name, block) });
                 }
                 let error = evaluate(spec_sl, relation);
                 let mut errors = vec![&error];

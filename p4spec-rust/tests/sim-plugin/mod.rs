@@ -1,14 +1,11 @@
+use p4spec_rust::interp::shared::error::{Error, ErrorKind, HostErrorKind};
 use p4spec_rust::lang::data::value::ValueArena;
 use std::path::Path;
 
 use p4spec_rust::{
     frontend::parse::parse_files,
     interface::{self, p4::parse::parse_file},
-    interp::al::{
-        AlInterp, Config,
-        context::Global,
-        error::{Error, ErrorKind, HostErrorKind},
-    },
+    interp::al::{AlInterp, Config, context::Global},
     lang::data::value::Value,
     pass::{algo, elaborate},
     runner::{BuiltinInterface, Extern, ExternError, Runner},

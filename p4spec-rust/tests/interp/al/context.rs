@@ -1,12 +1,14 @@
-use p4spec_rust::interp::al::error::{ContextErrorKind, RuntimeErrorKind};
+use p4spec_rust::interp::shared::error::{ContextErrorKind, RuntimeErrorKind};
+use p4spec_rust::interp::shared::{
+    backtrack::Backtrack,
+    error::{EntityKind, ErrorKind},
+};
 use p4spec_rust::lang::data::value::ValueArena;
 
 use p4spec_rust::{
     interp::al::{
         AlInterp, Config,
-        backtrack::Backtrack,
         context::{Context, Global, Scope},
-        error::{EntityKind, ErrorKind},
     },
     lang::{
         al::ast,

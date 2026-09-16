@@ -90,7 +90,7 @@ fn test_dropped_packet_retains_expectation() {
 }
 
 use p4spec_rust::{
-    interp::al::error::Error as InterpError,
+    interp::shared::error::Error as InterpError,
     lang::{
         data::{
             typ,
@@ -210,10 +210,7 @@ fn statement(stmt: Statement) -> p4spec_rust::lang::common::source::Phrase<State
 fn test_add_escapes_table_names_but_set_default_preserves_them() {
     let text_name = "prefix◕‿◕😀ツ\"\\\n\tsimple_table_1";
     let text_escaped = "prefix\\226\\151\\149\\226\\128\\191\\226\\151\\149\\240\\159\\152\\128\\227\\131\\132\\\"\\\\\\n\\tsimple_table_1";
-    let action = Action {
-        name: "NoAction".into(),
-        args: vec![],
-    };
+    let action = Action { name: "NoAction".into(), args: vec![] };
     for (stmt, text_expect) in [
         (
             Statement::Add {
@@ -225,22 +222,13 @@ fn test_add_escapes_table_names_but_set_default_preserves_them() {
             },
             text_escaped,
         ),
-        (
-            Statement::SetDefault {
-                table: text_name.into(),
-                action,
-            },
-            text_name,
-        ),
+        (Statement::SetDefault { table: text_name.into(), action }, text_name),
     ] {
         let (mut runner, mut run_case) = stf_runner(Ebpf::default());
         runner::run_stf_stmt(&mut runner, &mut run_case, &statement(stmt)).unwrap();
         let calls = runner.context().interp().calls.clone();
         assert_eq!(calls[0].0, "find_object_unqualified_e");
-        assert_eq!(
-            get::text(runner.arena(), &calls[0].1[1]).unwrap(),
-            text_expect
-        );
+        assert_eq!(get::text(runner.arena(), &calls[0].1[1]).unwrap(), text_expect);
         let call = calls.last().unwrap();
         assert_eq!(call.0, "update_object_unqualified_e");
         assert_eq!(get::text(runner.arena(), &call.1[1]).unwrap(), text_expect);
@@ -312,10 +300,7 @@ fn test_ordered_table_encoding_and_register_failure() {
     assert_eq!(num::to_int(get::num(runner.arena(), &values_arg[0][1]).unwrap()), &i64::MAX.into());
     assert_eq!(get::text(runner.arena(), &values_arg[1][0]).unwrap(), "first");
     let calls = runner.context().interp().calls.clone();
-    assert_eq!(
-        get::text(runner.arena(), &calls[0].1[1]).unwrap(),
-        "tab\\\""
-    );
+    assert_eq!(get::text(runner.arena(), &calls[0].1[1]).unwrap(), "tab\\\"");
     runner::run_stf_stmt(
         &mut runner,
         &mut run_case,

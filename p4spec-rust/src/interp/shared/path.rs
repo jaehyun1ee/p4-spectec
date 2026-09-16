@@ -12,7 +12,7 @@ use crate::{
 };
 
 use super::{expr::eval_exp, ops};
-use crate::interp::al::backtrack::{Backtrack, backtrack, backtrack_from_result};
+use crate::interp::shared::backtrack::{Backtrack, backtrack, backtrack_from_result};
 
 // - Access
 

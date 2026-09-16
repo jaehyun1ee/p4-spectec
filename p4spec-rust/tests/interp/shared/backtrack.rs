@@ -1,6 +1,6 @@
-use p4spec_rust::interp::al::error::{ContextErrorKind, RuntimeErrorKind};
+use p4spec_rust::interp::shared::error::{ContextErrorKind, RuntimeErrorKind};
 use p4spec_rust::{
-    interp::al::{
+    interp::shared::{
         backtrack::{Backtrack, choose_deterministic, choose_sequential},
         error::{EntityKind, Error, ErrorKind},
     },

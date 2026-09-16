@@ -1,13 +1,12 @@
+use p4spec_rust::interp::shared::{backtrack::Backtrack, util::is_iter_var_exp};
 use std::rc::Rc;
 
 use p4spec_rust::lang::data::value::ValueArena;
 
 use p4spec_rust::{
     interp::al::{
-        backtrack::Backtrack,
         context::{Context, Global, Scope},
         eval::assign::{assign_args, assign_exp, assign_exps},
-        util::is_iter_var_exp,
     },
     lang::{
         al::ast,

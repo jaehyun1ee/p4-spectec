@@ -1,13 +1,12 @@
 //! AL premise evaluation and iterative bindings
 
-use super::super::{
-    AlInterp,
+use super::super::{AlInterp, context::Context};
+use super::{assign, call::invoke_rel, expr};
+use crate::interp::shared::error::PremErrorKind;
+use crate::interp::shared::{
     backtrack::{Backtrack, backtrack, backtrack_from_result},
-    context::Context,
     error::ErrorKind,
 };
-use super::{assign, call::invoke_rel, expr};
-use crate::interp::al::error::PremErrorKind;
 use crate::{
     lang::{al::ast, data::value::get, hints::input, traits::print::Print},
     runner::{Extern, Interface, RunnerContext},
