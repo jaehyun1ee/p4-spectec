@@ -20,10 +20,7 @@ use std::collections::VecDeque;
 
 use super::super::overlap::{Overlap, overlap_exp};
 use crate::{
-    lang::{
-        common::source::{Phrase, Span},
-        traits::eq::SyntaxEq,
-    },
+    lang::{common::source::Span, traits::eq::SyntaxEq},
     pass::structure::{StructureError, ol::ast::*, opt::merge::merge_block},
     runtime::envs::algo::TDEnv,
 };
@@ -445,13 +442,8 @@ fn casify(tdenv: &TDEnv, block: Block) -> Result<Block, StructureError> {
     let mut block_output = Vec::with_capacity(block.len());
     let mut instrs = VecDeque::from(block);
     while let Some(instr) = instrs.pop_front() {
-        let Phrase {
-            node: instr_kind,
-            span,
-            ..
-        } = instr;
-        let instr_kind = casify_instr_kind(tdenv, instr_kind, &span, &mut instrs)?;
-        block_output.push(crate::phrase!(node: instr_kind, span: span));
+        let instr_kind = casify_instr_kind(tdenv, instr.node, &instr.span, &mut instrs)?;
+        block_output.push(crate::phrase!(node: instr_kind, span: instr.span));
     }
     Ok(block_output)
 }

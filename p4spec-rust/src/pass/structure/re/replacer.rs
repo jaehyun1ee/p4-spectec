@@ -10,7 +10,7 @@ use crate::lang::{
     common::{
         ds::{map::IdMap, set::IdSet},
         notation::mixop::Mixop,
-        source::{NotePhrase, Span},
+        source::Span,
     },
     hints::input,
     il::{ast::*, fresh},
@@ -104,14 +104,9 @@ impl Replacer {
     // == Expressions
 
     pub(crate) fn replace_exp(&self, exp: Exp) -> Exp {
-        let NotePhrase {
-            node: exp_kind,
-            note,
-            span,
-        } = exp;
-        let exp_kind = match exp_kind {
-            ExpKind::Bool(_) | ExpKind::Num(_) | ExpKind::Text(_) => exp_kind,
-            ExpKind::Var(id) => return self.replace_var_exp(id, note, span),
+        let exp_kind = match exp.node {
+            ExpKind::Bool(_) | ExpKind::Num(_) | ExpKind::Text(_) => exp.node,
+            ExpKind::Var(id) => return self.replace_var_exp(id, exp.note, exp.span),
             ExpKind::Un(op, op_typ, exp) => {
                 ExpKind::Un(op, op_typ, Box::new(self.replace_exp(*exp)))
             }
@@ -181,7 +176,7 @@ impl Replacer {
                 self.replace_iterexp(iter_exp),
             ),
         };
-        note_phrase!(node: exp_kind, note: note, span: span)
+        note_phrase!(node: exp_kind, note: exp.note, span: exp.span)
     }
 
     pub(crate) fn replace_exps(&self, exps: Vec<Exp>) -> Vec<Exp> {
@@ -215,12 +210,7 @@ impl Replacer {
     // == Paths
 
     pub(crate) fn replace_path(&self, path: Path) -> Path {
-        let NotePhrase {
-            node: path_kind,
-            note,
-            span,
-        } = path;
-        let path_kind = match path_kind {
+        let path_kind = match path.node {
             PathKind::Root => PathKind::Root,
             PathKind::Idx(path, exp) => PathKind::Idx(
                 Box::new(self.replace_path(*path)),
@@ -233,22 +223,17 @@ impl Replacer {
             ),
             PathKind::Dot(path, atom) => PathKind::Dot(Box::new(self.replace_path(*path)), atom),
         };
-        note_phrase!(node: path_kind, note: note, span: span)
+        note_phrase!(node: path_kind, note: path.note, span: path.span)
     }
 
     // == Arguments
 
     pub(crate) fn replace_arg(&self, arg: Arg) -> Arg {
-        let NotePhrase {
-            node: arg_kind,
-            span,
-            ..
-        } = arg;
-        let arg_kind = match arg_kind {
+        let arg_kind = match arg.node {
             ArgKind::Exp(exp) => ArgKind::Exp(Box::new(self.replace_exp(*exp))),
-            ArgKind::Def(_) => arg_kind,
+            ArgKind::Def(_) => arg.node,
         };
-        phrase!(node: arg_kind, span: span)
+        phrase!(node: arg_kind, span: arg.span)
     }
 
     pub(crate) fn replace_args(&self, args: Vec<Arg>) -> Vec<Arg> {
@@ -287,13 +272,8 @@ impl Replacer {
     // == Instructions
 
     pub(crate) fn replace_instr(&self, instr_ol: ol::Instr) -> Result<ol::Instr, StructureError> {
-        let NotePhrase {
-            node: instr_kind_ol,
-            span,
-            ..
-        } = instr_ol;
-        let instr_kind_ol = self.replace_instr_kind(instr_kind_ol, &span)?;
-        Ok(phrase!(node: instr_kind_ol, span: span))
+        let instr_kind_ol = self.replace_instr_kind(instr_ol.node, &instr_ol.span)?;
+        Ok(phrase!(node: instr_kind_ol, span: instr_ol.span))
     }
 
     fn replace_instr_kind(

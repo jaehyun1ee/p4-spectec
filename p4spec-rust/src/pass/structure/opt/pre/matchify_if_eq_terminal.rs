@@ -15,7 +15,7 @@
 //! `x != STOP` becomes `not (x matches STOP)` when STOP has no arguments
 //! Only the outer comparison is rewritten; nested expressions are left alone
 
-use crate::lang::common::source::{NotePhrase, Span};
+use crate::lang::common::source::Span;
 use crate::lang::{
     il::ast::{CmpOp, ExpKind, ListPattern, OpTyp, OptPattern, Pattern, UnOp},
     xl::bool::{CmpOp as BoolCmpOp, UnOp as BoolUnOp},
@@ -23,18 +23,13 @@ use crate::lang::{
 use crate::pass::structure::ol::ast::*;
 
 fn matchify_exp(exp: Exp) -> Exp {
-    let NotePhrase {
-        node: exp_kind,
-        note,
-        span,
-    } = exp;
-    let exp_kind = match exp_kind {
+    let exp_kind = match exp.node {
         ExpKind::Cmp(op, op_typ, exp_l, exp_r) => {
-            matchify_cmp_exp(op, op_typ, exp_l, exp_r, &note, &span)
+            matchify_cmp_exp(op, op_typ, exp_l, exp_r, &exp.note, &exp.span)
         }
-        _ => exp_kind,
+        _ => exp.node,
     };
-    crate::note_phrase!(node: exp_kind, note: note, span: span)
+    crate::note_phrase!(node: exp_kind, note: exp.note, span: exp.span)
 }
 
 fn matchify_cmp_exp(
@@ -103,12 +98,7 @@ fn terminal_pattern(exp: &Exp) -> Option<Pattern> {
 }
 
 fn matchify_instr(instr_ol: Instr) -> Instr {
-    let NotePhrase {
-        node: instr_kind_ol,
-        note: (),
-        span,
-    } = instr_ol;
-    matchify_instr_kind(instr_kind_ol, span)
+    matchify_instr_kind(instr_ol.node, instr_ol.span)
 }
 
 fn matchify_instr_kind(instr_kind_ol: InstrKind, span: Span) -> Instr {

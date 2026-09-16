@@ -11,10 +11,7 @@ use super::{
 };
 use crate::lang::{
     al::{ast as al, fresh},
-    common::{
-        ds::set::IdSet,
-        source::{Phrase, Span},
-    },
+    common::{ds::set::IdSet, source::Span},
     hints::input,
     sl::ast as sl,
     traits::{eq::SyntaxEq, free::Free},
@@ -25,13 +22,8 @@ use crate::lang::{
 // - Parameter
 
 fn struct_param(ctx: &Context, frees: &mut IdSet, param_al: al::Param) -> sl::Param {
-    let Phrase {
-        node: param_kind_al,
-        span,
-        ..
-    } = param_al;
-    let param_kind_sl = struct_param_kind(ctx, frees, param_kind_al);
-    crate::phrase! {node: param_kind_sl, span: span}
+    let param_kind_sl = struct_param_kind(ctx, frees, param_al.node);
+    crate::phrase! {node: param_kind_sl, span: param_al.span}
 }
 
 fn struct_param_kind(
@@ -86,14 +78,9 @@ fn struct_param_from_arg(
     param_al: al::Param,
     arg_input: al::Arg,
 ) -> Result<sl::Param, StructureError> {
-    let Phrase {
-        node: param_kind_al,
-        span,
-        ..
-    } = param_al;
-    let Phrase { node: arg_kind, .. } = arg_input;
-    let param_kind_sl = struct_param_kind_from_arg(ctx, param_kind_al, arg_kind, &span)?;
-    let param_sl = crate::phrase! {node: param_kind_sl, span: span};
+    let param_kind_sl =
+        struct_param_kind_from_arg(ctx, param_al.node, arg_input.node, &param_al.span)?;
+    let param_sl = crate::phrase! {node: param_kind_sl, span: param_al.span};
     Ok(param_sl)
 }
 
@@ -170,25 +157,21 @@ fn struct_prem(
     instr_ret: ol::Instr,
 ) -> Result<ol::Instr, StructureError> {
     let (prem_al, iter_prems) = internalize_iter(prem_al);
-    let Phrase {
-        node: prem_kind_al,
-        span,
-        ..
-    } = prem_al;
-    let instr_kind_ol = struct_prem_kind(prem_kind_al, &span, iter_prems, prems_tail, instr_ret)?;
-    let instr_ol = crate::phrase! {node: instr_kind_ol, span: span};
+    let instr_kind_ol = struct_prem_kind(
+        prem_al.node,
+        &prem_al.span,
+        iter_prems,
+        prems_tail,
+        instr_ret,
+    )?;
+    let instr_ol = crate::phrase! {node: instr_kind_ol, span: prem_al.span};
     Ok(instr_ol)
 }
 
 fn internalize_iter(mut prem_al: al::Prem) -> (al::Prem, Vec<al::PremIter>) {
     let mut iter_prems = vec![];
     loop {
-        let Phrase {
-            node: prem_kind_al,
-            span,
-            ..
-        } = prem_al;
-        match prem_kind_al {
+        match prem_al.node {
             al::PremKind::Iter(prem_iter_al) => {
                 let al::IterPrem { prem, prem_iter } = prem_iter_al;
                 iter_prems.push(prem_iter);
@@ -197,7 +180,7 @@ fn internalize_iter(mut prem_al: al::Prem) -> (al::Prem, Vec<al::PremIter>) {
             prem_kind_al => {
                 // The innermost iterator becomes the first instruction iterator
                 iter_prems.reverse();
-                let prem_al = crate::phrase!(node: prem_kind_al, span: span);
+                let prem_al = crate::phrase!(node: prem_kind_al, span: prem_al.span);
                 return (prem_al, iter_prems);
             }
         }
@@ -459,15 +442,11 @@ fn struct_rule_group(
     mut prems_unified: Vec<al::Prem>,
     rule_group: al::RuleGroup,
 ) -> Result<ol::Block, StructureError> {
-    let Phrase {
-        node: rule_group_kind,
-        ..
-    } = rule_group;
     let al::RuleGroupKind {
         id,
         rule_match,
         rule_paths,
-    } = rule_group_kind;
+    } = rule_group.node;
     let al::RuleMatch {
         exps_signature,
         prems,
@@ -501,15 +480,11 @@ fn struct_else_group(
     mut prems_unified: Vec<al::Prem>,
     else_group: al::ElseGroup,
 ) -> Result<ol::Block, StructureError> {
-    let Phrase {
-        node: else_group_kind,
-        ..
-    } = else_group;
     let al::ElseGroupKind {
         id,
         rule_match,
         rule_path,
-    } = else_group_kind;
+    } = else_group.node;
     let al::RuleMatch {
         exps_signature,
         prems,
@@ -552,19 +527,14 @@ fn struct_clause_path((prems, exp): (Vec<al::Prem>, al::Exp)) -> Result<ol::Bloc
 // - Table row clause
 
 fn struct_table_row_clause(table_row_al: al::TableRow) -> (Vec<al::Exp>, al::Clause) {
-    let Phrase {
-        node: table_row_kind_al,
-        span,
-        ..
-    } = table_row_al;
     let al::TableRowKind {
         exps_signature,
         args,
         exp,
         prems,
-    } = table_row_kind_al;
+    } = table_row_al.node;
     let clause_kind = al::ClauseKind { args, exp, prems };
-    let clause = crate::phrase! {node: clause_kind, span: span};
+    let clause = crate::phrase! {node: clause_kind, span: table_row_al.span};
     (exps_signature, clause)
 }
 
@@ -965,13 +935,8 @@ fn struct_def(
     def_al: al::Def,
     without_rule_groups: bool,
 ) -> Result<sl::Def, StructureError> {
-    let Phrase {
-        node: def_kind_al,
-        span,
-        ..
-    } = def_al;
-    let def_kind_sl = struct_def_kind(ctx, def_kind_al, &span, without_rule_groups)?;
-    let def_sl = crate::phrase! {node: def_kind_sl, span: span};
+    let def_kind_sl = struct_def_kind(ctx, def_al.node, &def_al.span, without_rule_groups)?;
+    let def_sl = crate::phrase! {node: def_kind_sl, span: def_al.span};
     Ok(def_sl)
 }
 

@@ -18,7 +18,7 @@ use std::collections::VecDeque;
 
 use super::super::overlap::{Overlap, overlap_exp};
 use crate::{
-    lang::{common::source::Phrase, traits::eq::SyntaxEq},
+    lang::traits::eq::SyntaxEq,
     pass::structure::{StructureError, ol::ast::*, opt::merge::merge_block},
     runtime::envs::algo::TDEnv,
 };
@@ -165,13 +165,8 @@ fn merge_if(tdenv: &TDEnv, block: Block) -> Result<Block, StructureError> {
     let mut block_output = Vec::with_capacity(block.len());
     let mut instrs = VecDeque::from(block);
     while let Some(instr) = instrs.pop_front() {
-        let Phrase {
-            node: instr_kind,
-            span,
-            ..
-        } = instr;
-        let instr_kind = merge_if_instr_kind(tdenv, instr_kind, &mut instrs)?;
-        block_output.push(crate::phrase!(node: instr_kind, span: span));
+        let instr_kind = merge_if_instr_kind(tdenv, instr.node, &mut instrs)?;
+        block_output.push(crate::phrase!(node: instr_kind, span: instr.span));
     }
     Ok(block_output)
 }

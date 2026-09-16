@@ -17,7 +17,7 @@
 use crate::pass::structure::{StructureError, ol::ast::*, opt::overlap::typ_as_variant};
 use crate::{
     lang::{
-        common::source::{NotePhrase, Span},
+        common::source::Span,
         il::ast::{ExpKind, Typ},
     },
     runtime::envs::algo::TDEnv,
@@ -42,12 +42,7 @@ fn is_singleton_match(tdenv: &TDEnv, exp: &Exp) -> Result<bool, StructureError> 
 // == Match removal
 
 fn remove_instr(instr_ol: Instr, tdenv: &TDEnv) -> Result<Block, StructureError> {
-    let NotePhrase {
-        node: instr_kind_ol,
-        note: (),
-        span,
-    } = instr_ol;
-    remove_instr_kind(tdenv, instr_kind_ol, span)
+    remove_instr_kind(tdenv, instr_ol.node, instr_ol.span)
 }
 
 fn remove_instr_kind(

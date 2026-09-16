@@ -14,7 +14,7 @@
 //! A nested binder named `x` is renamed before substitution so that uses of
 //! `y` still refer to the outer `x`; iterated aliases need matching iterators
 
-use crate::lang::common::source::{NotePhrase, Span};
+use crate::lang::common::source::Span;
 use crate::lang::{
     il::ast::{ExpKind, Id, Iter},
     traits::eq::SyntaxEq,
@@ -26,12 +26,7 @@ use crate::pass::structure::{
 };
 
 fn remove_instr(instr_ol: Instr) -> Result<Block, StructureError> {
-    let NotePhrase {
-        node: instr_kind_ol,
-        note: (),
-        span,
-    } = instr_ol;
-    remove_instr_kind(instr_kind_ol, span)
+    remove_instr_kind(instr_ol.node, instr_ol.span)
 }
 
 fn remove_instr_kind(instr_kind_ol: InstrKind, span: Span) -> Result<Block, StructureError> {

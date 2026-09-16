@@ -17,10 +17,7 @@
 
 use super::super::{StructureError, StructureErrorKind, ol::ast::*, re::renamer::Renamer};
 use crate::lang::{
-    common::{
-        ds::set::IdSet,
-        source::{NotePhrase, Span},
-    },
+    common::{ds::set::IdSet, source::Span},
     hints::input,
     il::ast::{Arg, Exp},
     traits::free::Free,
@@ -78,13 +75,8 @@ fn binding_renamer(mut frees: IdSet, ids: &IdSet) -> Renamer {
 // == Instructions
 
 fn upstream_instr(frees: &IdSet, instr_ol: Instr) -> Result<Instr, StructureError> {
-    let NotePhrase {
-        node: instr_kind_ol,
-        note: (),
-        span,
-    } = instr_ol;
-    let instr_kind_ol = upstream_instr_kind(frees, instr_kind_ol, &span)?;
-    Ok(crate::phrase!(node: instr_kind_ol, span: span))
+    let instr_kind_ol = upstream_instr_kind(frees, instr_ol.node, &instr_ol.span)?;
+    Ok(crate::phrase!(node: instr_kind_ol, span: instr_ol.span))
 }
 
 fn upstream_instr_kind(

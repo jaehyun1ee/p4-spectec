@@ -8,21 +8,13 @@ use super::{
     error::{StructureError, StructureErrorKind},
     ol::ast as ol,
 };
-use crate::lang::{
-    common::source::{Phrase, Span},
-    sl::ast as sl,
-};
+use crate::lang::{common::source::Span, sl::ast as sl};
 
 // == Instructions
 
 fn insert_instr(instr_ol: ol::Instr, dangle: bool) -> Result<sl::Instr, StructureError> {
-    let Phrase {
-        node: instr_kind_ol,
-        span,
-        ..
-    } = instr_ol;
-    let instr_kind_sl = insert_instr_kind(instr_kind_ol, dangle, &span)?;
-    Ok(crate::phrase!(node: instr_kind_sl, span: span))
+    let instr_kind_sl = insert_instr_kind(instr_ol.node, dangle, &instr_ol.span)?;
+    Ok(crate::phrase!(node: instr_kind_sl, span: instr_ol.span))
 }
 
 fn insert_instr_kind(

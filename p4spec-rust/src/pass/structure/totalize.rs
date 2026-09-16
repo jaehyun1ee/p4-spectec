@@ -8,10 +8,7 @@ use super::{
     opt::overlap::typ_as_variant,
 };
 use crate::{
-    lang::{
-        common::source::Phrase,
-        il::ast::{Mixop, Pattern},
-    },
+    lang::il::ast::{Mixop, Pattern},
     runtime::envs::algo::TDEnv,
 };
 use std::collections::BTreeSet;
@@ -44,13 +41,8 @@ fn find_variant_case_analysis(
 // == Instructions
 
 fn totalize_instr(tdenv: &TDEnv, instr: Instr) -> Result<Instr, StructureError> {
-    let Phrase {
-        node: instr_kind,
-        span,
-        ..
-    } = instr;
-    let instr_kind = totalize_instr_kind(tdenv, instr_kind)?;
-    Ok(crate::phrase!(node: instr_kind, span: span))
+    let instr_kind = totalize_instr_kind(tdenv, instr.node)?;
+    Ok(crate::phrase!(node: instr_kind, span: instr.span))
 }
 
 fn totalize_instr_kind(tdenv: &TDEnv, instr_kind: InstrKind) -> Result<InstrKind, StructureError> {

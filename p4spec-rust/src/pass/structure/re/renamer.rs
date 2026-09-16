@@ -9,7 +9,7 @@ use crate::lang::{
     common::{
         ds::{map::IdMap, set::IdSet},
         notation::mixop::Mixop,
-        source::{NotePhrase, Span},
+        source::Span,
     },
     hints::input,
     il::{ast::*, fresh},
@@ -112,13 +112,8 @@ impl Renamer {
     // == Expressions
 
     pub(crate) fn rename_exp(&self, exp: Exp) -> Exp {
-        let NotePhrase {
-            node: exp_kind,
-            note,
-            span,
-        } = exp;
-        let exp_kind = match exp_kind {
-            ExpKind::Bool(_) | ExpKind::Num(_) | ExpKind::Text(_) => exp_kind,
+        let exp_kind = match exp.node {
+            ExpKind::Bool(_) | ExpKind::Num(_) | ExpKind::Text(_) => exp.node,
             ExpKind::Var(id) => ExpKind::Var(self.ids.get(&id).cloned().unwrap_or(id)),
             ExpKind::Un(op, op_typ, exp) => {
                 ExpKind::Un(op, op_typ, Box::new(self.rename_exp(*exp)))
@@ -189,7 +184,7 @@ impl Renamer {
                 self.rename_iterexp(iter_exp),
             ),
         };
-        note_phrase!(node: exp_kind, note: note, span: span)
+        note_phrase!(node: exp_kind, note: exp.note, span: exp.span)
     }
 
     pub(crate) fn rename_exps(&self, exps: Vec<Exp>) -> Vec<Exp> {
@@ -213,12 +208,7 @@ impl Renamer {
     // == Paths
 
     pub(crate) fn rename_path(&self, path: Path) -> Path {
-        let NotePhrase {
-            node: path_kind,
-            note,
-            span,
-        } = path;
-        let path_kind = match path_kind {
+        let path_kind = match path.node {
             PathKind::Root => PathKind::Root,
             PathKind::Idx(path, exp) => PathKind::Idx(
                 Box::new(self.rename_path(*path)),
@@ -231,22 +221,17 @@ impl Renamer {
             ),
             PathKind::Dot(path, atom) => PathKind::Dot(Box::new(self.rename_path(*path)), atom),
         };
-        note_phrase!(node: path_kind, note: note, span: span)
+        note_phrase!(node: path_kind, note: path.note, span: path.span)
     }
 
     // == Arguments
 
     pub(crate) fn rename_arg(&self, arg: Arg) -> Arg {
-        let NotePhrase {
-            node: arg_kind,
-            span,
-            ..
-        } = arg;
-        let arg_kind = match arg_kind {
+        let arg_kind = match arg.node {
             ArgKind::Exp(exp) => ArgKind::Exp(Box::new(self.rename_exp(*exp))),
-            ArgKind::Def(_) => arg_kind,
+            ArgKind::Def(_) => arg.node,
         };
-        phrase!(node: arg_kind, span: span)
+        phrase!(node: arg_kind, span: arg.span)
     }
 
     pub(crate) fn rename_args(&self, args: Vec<Arg>) -> Vec<Arg> {
@@ -285,13 +270,8 @@ impl Renamer {
     // == Instructions
 
     pub(crate) fn rename_instr(&self, instr_ol: ol::Instr) -> Result<ol::Instr, StructureError> {
-        let NotePhrase {
-            node: instr_kind_ol,
-            span,
-            ..
-        } = instr_ol;
-        let instr_kind_ol = self.rename_instr_kind(instr_kind_ol, &span)?;
-        Ok(phrase!(node: instr_kind_ol, span: span))
+        let instr_kind_ol = self.rename_instr_kind(instr_ol.node, &instr_ol.span)?;
+        Ok(phrase!(node: instr_kind_ol, span: instr_ol.span))
     }
 
     fn rename_instr_kind(

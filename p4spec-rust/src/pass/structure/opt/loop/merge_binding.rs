@@ -18,7 +18,7 @@
 use std::collections::VecDeque;
 
 use crate::lang::{
-    common::source::{Phrase, Span},
+    common::source::Span,
     hints::input,
     il::ast::{ExpField, ExpKind},
     traits::{eq::SyntaxEq, free::Free},
@@ -284,14 +284,9 @@ fn downstream(
     let Some(instr_head) = block.front_mut() else {
         return Ok(None);
     };
-    let Phrase {
-        node: instr_kind,
-        span,
-        ..
-    } = instr_head;
-    let block_merge = match instr_kind {
+    let block_merge = match &mut instr_head.node {
         InstrKind::Let(instr_let) => downstream_let_instr(bind, instr_let)?,
-        InstrKind::Rule(instr_rule) => downstream_rule_instr(bind, instr_rule, span)?,
+        InstrKind::Rule(instr_rule) => downstream_rule_instr(bind, instr_rule, &instr_head.span)?,
         _ => None,
     };
     if block_merge.is_some() {
@@ -331,13 +326,8 @@ fn upstream(block: Block) -> Result<Block, StructureError> {
     let mut instrs: VecDeque<_> = block.into();
     let mut block = Vec::with_capacity(instrs.len());
     while let Some(instr) = instrs.pop_front() {
-        let Phrase {
-            node: instr_kind,
-            span,
-            note: (),
-        } = instr;
-        let instr_kind = upstream_instr_kind(instr_kind, &span, &mut instrs)?;
-        block.push(crate::phrase!(node: instr_kind, span: span));
+        let instr_kind = upstream_instr_kind(instr.node, &instr.span, &mut instrs)?;
+        block.push(crate::phrase!(node: instr_kind, span: instr.span));
     }
     Ok(block)
 }

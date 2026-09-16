@@ -15,10 +15,7 @@
 //! Relation invocations also remain even when their outputs are unused
 
 use crate::lang::{
-    common::{
-        ds::set::IdSet,
-        source::{NotePhrase, Span},
-    },
+    common::{ds::set::IdSet, source::Span},
     hints::input,
     il::ast::ExpKind,
     traits::free::Free,
@@ -76,12 +73,7 @@ fn split_rule<'a>(
 // - Instruction uses
 
 fn downstream_instr(ids_defined: &IdSet, instr_ol: &Instr) -> Result<IdSet, StructureError> {
-    let NotePhrase {
-        node: instr_kind_ol,
-        span,
-        ..
-    } = instr_ol;
-    downstream_instr_kind(ids_defined, instr_kind_ol, span)
+    downstream_instr_kind(ids_defined, &instr_ol.node, &instr_ol.span)
 }
 
 fn downstream_instr_kind(
@@ -203,12 +195,7 @@ fn downstream_block(ids_defined: &IdSet, block: &Block) -> Result<IdSet, Structu
     let mut ids_used = IdSet::new();
     for instr_ol in block {
         ids_used.append(downstream_instr(&ids_defined, instr_ol)?);
-        let NotePhrase {
-            node: instr_kind_ol,
-            span,
-            ..
-        } = instr_ol;
-        ids_defined = exclude_defined(ids_defined, instr_kind_ol, span)?;
+        ids_defined = exclude_defined(ids_defined, &instr_ol.node, &instr_ol.span)?;
     }
     Ok(ids_used)
 }
@@ -248,12 +235,7 @@ fn exclude_rule_defined(
 // == Binding removal
 
 fn upstream_instr(instr_ol: Instr) -> Result<Block, StructureError> {
-    let NotePhrase {
-        node: instr_kind_ol,
-        note: (),
-        span,
-    } = instr_ol;
-    upstream_instr_kind(instr_kind_ol, span)
+    upstream_instr_kind(instr_ol.node, instr_ol.span)
 }
 
 fn upstream_instr_kind(instr_kind_ol: InstrKind, span: Span) -> Result<Block, StructureError> {

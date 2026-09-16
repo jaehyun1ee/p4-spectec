@@ -17,7 +17,7 @@
 
 use std::collections::VecDeque;
 
-use crate::lang::{common::source::Phrase, traits::eq::SyntaxEq};
+use crate::lang::traits::eq::SyntaxEq;
 use crate::pass::structure::{ol::ast::*, opt::merge::merge_block};
 
 fn merge_identical_hold(
@@ -36,10 +36,7 @@ fn merge_identical_hold(
         return None;
     }
     let instr_head = block.pop_front()?;
-    let Phrase {
-        node: instr_kind, ..
-    } = instr_head;
-    let InstrKind::Hold(instr_hold) = instr_kind else {
+    let InstrKind::Hold(instr_hold) = instr_head.node else {
         unreachable!()
     };
     Some(instr_hold)
@@ -51,13 +48,8 @@ fn merge_hold(block: Block) -> Block {
     let mut blocks_pending: Vec<(Block, Instr)> = Vec::new();
     loop {
         while let Some(instr) = instrs.pop_front() {
-            let Phrase {
-                node: instr_kind,
-                span,
-                note: (),
-            } = instr;
-            let (instr_kind, merged) = merge_instr_kind(instr_kind, &mut instrs);
-            let instr = crate::phrase!(node: instr_kind, span: span);
+            let (instr_kind, merged) = merge_instr_kind(instr.node, &mut instrs);
+            let instr = crate::phrase!(node: instr_kind, span: instr.span);
             if merged {
                 // Normalize the tail before retrying the merged source head
                 blocks_pending.push((std::mem::take(&mut block), instr));

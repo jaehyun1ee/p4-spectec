@@ -12,16 +12,11 @@
 //!
 //! Nested groups are removed too; their bodies stay in the same order
 
-use crate::lang::common::source::{NotePhrase, Span};
+use crate::lang::common::source::Span;
 use crate::pass::structure::ol::ast::*;
 
 fn remove_instr(instr_ol: Instr) -> Block {
-    let NotePhrase {
-        node: instr_kind_ol,
-        note: (),
-        span,
-    } = instr_ol;
-    remove_instr_kind(instr_kind_ol, span)
+    remove_instr_kind(instr_ol.node, instr_ol.span)
 }
 
 fn remove_instr_kind(instr_kind_ol: InstrKind, span: Span) -> Block {
