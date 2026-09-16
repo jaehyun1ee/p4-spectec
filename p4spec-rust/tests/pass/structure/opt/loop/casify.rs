@@ -9,21 +9,26 @@ use crate::{
 fn var(text: &str) -> Exp {
     crate::note_phrase!(node: ExpKind::Var(crate::phrase!(node: text.into(), span: Default::default())), note: TypKind::Bool, span: Default::default())
 }
+
 fn span(int_line: i64) -> Span {
     Span::new(
         Position::new("conditions", int_line, 1),
         Position::new("conditions", int_line, 9),
     )
 }
+
 fn ret(text: &str) -> Instr {
     crate::phrase!(node: InstrKind::Return(ReturnInstr { exp: var(text) }), span: Default::default())
 }
+
 fn branch(exp: Exp, text: &str, int_line: i64) -> Instr {
     crate::phrase!(node: InstrKind::If(IfInstr { exp, iter_exps: vec![], block: vec![ret(text)] }), span: span(int_line))
 }
+
 fn neg(exp: Exp) -> Exp {
     crate::note_phrase!(node: ExpKind::Un(crate::lang::il::ast::UnOp::Bool(crate::lang::xl::bool::UnOp::Not), crate::lang::il::ast::OpTyp::Bool, Box::new(exp)), note: TypKind::Bool, span: Default::default())
 }
+
 #[test]
 fn test_partition_becomes_total_case_and_preserves_tail_span() {
     let instr_tail = ret("tail");
@@ -50,12 +55,15 @@ fn test_partition_becomes_total_case_and_preserves_tail_span() {
 fn cmp(text: &str) -> Exp {
     crate::note_phrase!(node: ExpKind::Cmp(crate::lang::il::ast::CmpOp::Bool(crate::lang::xl::bool::CmpOp::Eq), crate::lang::il::ast::OpTyp::Bool, Box::new(var("p")), Box::new(crate::note_phrase!(node: ExpKind::Text(text.into()), note: TypKind::Text, span: Default::default()))), note: TypKind::Bool, span: Default::default())
 }
+
 fn guard(text: &str) -> Guard {
     crate::pass::structure::opt::overlap::exp_as_guard(&var("p"), &cmp(text)).unwrap()
 }
+
 fn case(cases: &[(&str, &str)], total: bool, int_line: i64) -> Instr {
     crate::phrase!(node: InstrKind::Case(CaseInstr { exp: var("p"), cases: cases.iter().map(|(text_guard,text_block)| Case { guard: guard(text_guard), block: vec![ret(text_block)] }).collect(), total }), span: span(int_line))
 }
+
 #[test]
 fn test_disjoint_partial_fuzzy_and_if_search_order() {
     let instr_fuzzy = branch(var("q"), "fuzzy", 2);
@@ -95,6 +103,7 @@ fn test_disjoint_partial_fuzzy_and_if_search_order() {
         block_input
     );
 }
+
 #[test]
 fn test_if_case_and_case_if_preserve_source_identical_priority_and_flags() {
     for total in [false, true] {
@@ -131,6 +140,7 @@ fn test_if_case_and_case_if_preserve_source_identical_priority_and_flags() {
         assert_eq!(instr_case.cases[0].block, vec![ret("match"), ret("target")]);
     }
 }
+
 #[test]
 fn test_partial_case_append_and_case_case_total_target() {
     for block_input in [
@@ -172,6 +182,7 @@ fn test_partial_case_append_and_case_case_total_target() {
         assert_eq!(instr_case.cases[1].block, vec![ret("b")]);
     }
 }
+
 #[test]
 fn test_total_case_exhaustion_is_located_at_owning_case() {
     for (block_input, span_expect) in [
@@ -205,6 +216,7 @@ fn nested(block: Block) -> Block {
     ];
     vec![super::hold(block.clone(), block)]
 }
+
 #[test]
 fn test_recursive_hold_case_group_let_rule_bodies() {
     let block = vec![branch(var("p"), "a", 1), branch(neg(var("p")), "b", 2)];
@@ -249,6 +261,7 @@ fn test_iteration_blocks_search_and_different_case_targets_stay_separate() {
         block_input
     );
 }
+
 #[test]
 fn test_identical_subtype_guard_retains_case_proof_and_expression_span() {
     use crate::lang::il::ast::Subcheck;

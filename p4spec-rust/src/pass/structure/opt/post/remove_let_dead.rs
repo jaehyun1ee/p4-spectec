@@ -1,4 +1,19 @@
-//! Remove unused pure bindings using source-ordered downstream uses
+//! Remove unused OL Let bindings based on downstream uses
+//!
+//! `downstream_block` finds uses of the bound names before recursive cleanup;
+//! `upstream_let_instr` drops a removable binding when none of them is used:
+//!
+//! ```text
+//! let x = 1 { return y }
+//!
+//! becomes
+//!
+//! return y
+//! ```
+//!
+//! `let x = f() { return y }` remains because its right-hand side is a call
+//! Relation invocations also remain even when their outputs are unused
+
 use crate::lang::{
     common::{
         ds::set::IdSet,

@@ -30,6 +30,7 @@ pub struct IfInstr {
     pub iter_exps: Vec<ExpIter>,
     pub block: Block,
 }
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct HoldInstr {
     pub id: Id,
@@ -38,12 +39,14 @@ pub struct HoldInstr {
     pub block_hold: Block,
     pub block_not_hold: Block,
 }
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct CaseInstr {
     pub exp: Exp,
     pub cases: Vec<Case>,
     pub total: bool,
 }
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct GroupInstr {
     pub id: Id,
@@ -51,6 +54,7 @@ pub struct GroupInstr {
     pub exps: Vec<Exp>,
     pub block: Block,
 }
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct LetInstr {
     pub exp_l: Exp,
@@ -58,6 +62,7 @@ pub struct LetInstr {
     pub iter_instrs: Vec<InstrIter>,
     pub block: Block,
 }
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct RuleInstr {
     pub id: Id,
@@ -66,15 +71,18 @@ pub struct RuleInstr {
     pub iter_instrs: Vec<InstrIter>,
     pub block: Block,
 }
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct ResultInstr {
     pub rel_signature: RelSignature,
     pub exps: Vec<Exp>,
 }
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct ReturnInstr {
     pub exp: Exp,
 }
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct DebugInstr {
     pub exp: Exp,

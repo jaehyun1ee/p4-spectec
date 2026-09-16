@@ -1,3 +1,21 @@
+//! Combine OL If and Case instructions into ordered case branches
+//!
+//! `casify_if_if` turns disjoint tests of the same value into a Case;
+//! complementary tests also mark the Case as total:
+//!
+//! ```text
+//! if x = true { return a }; if x = false { return b }
+//!
+//! becomes
+//!
+//! case x (total) { true => return a; false => return b }
+//! ```
+//!
+//! Tests `x = 1` and `x = 2` on an integer form a partial Case instead
+//! `casify_from_if` and `casify_from_case` also combine existing Cases,
+//! merging equal guards' bodies while preserving branch priority
+//! Iterated Ifs and instructions other than If or Case stop the search
+
 use std::collections::VecDeque;
 
 use super::super::overlap::{Overlap, overlap_exp};
@@ -15,7 +33,7 @@ use crate::pass::structure::{
     opt::overlap::{exp_as_guard, overlap_guard},
 };
 
-// [1] if-and-if to case analysis
+// == [1] if-and-if to case analysis
 fn casify_if_if(
     tdenv: &TDEnv,
     instr_target: &IfInstr,
@@ -50,6 +68,7 @@ fn casify_if_if(
         Overlap::Identical | Overlap::Fuzzy => Ok(None),
     }
 }
+
 fn case_from_ifs(
     exp: Exp,
     guard_a: Guard,
@@ -74,7 +93,7 @@ fn case_from_ifs(
     }
 }
 
-// [2] if-and-case to case analysis
+// == [2] if-and-case to case analysis
 fn merge_if_case(
     tdenv: &TDEnv,
     instr_target: &IfInstr,
@@ -115,6 +134,7 @@ fn merge_if_case(
     });
     Ok(Some(cases))
 }
+
 fn casify_if_case(
     tdenv: &TDEnv,
     instr_target: &IfInstr,
@@ -130,7 +150,7 @@ fn casify_if_case(
     )
 }
 
-// [3] case-and-if to case analysis
+// == [3] case-and-if to case analysis
 fn merge_case_if(
     tdenv: &TDEnv,
     instr_target: &CaseInstr,
@@ -148,6 +168,7 @@ fn merge_case_if(
     };
     merge_case_guard(tdenv, exp, cases, *total, &guard, block, span_target)
 }
+
 fn merge_case_guard(
     tdenv: &TDEnv,
     exp_target: &Exp,
@@ -185,6 +206,7 @@ fn merge_case_guard(
     });
     Ok(Some(cases))
 }
+
 fn casify_case_if(
     tdenv: &TDEnv,
     instr_target: &CaseInstr,
@@ -200,7 +222,7 @@ fn casify_case_if(
     )
 }
 
-// [4] case-and-case to case analysis
+// == [4] case-and-case to case analysis
 fn merge_case_case(
     tdenv: &TDEnv,
     instr_target: &CaseInstr,
@@ -235,6 +257,7 @@ fn merge_case_case(
     }
     Ok(Some(cases_target))
 }
+
 fn casify_case_case(
     tdenv: &TDEnv,
     instr_target: &CaseInstr,
@@ -250,7 +273,7 @@ fn casify_case_case(
     )
 }
 
-// [1/2] Casifying from an if statement
+// == [1/2] Casifying from an if statement
 fn casify_from_if(
     tdenv: &TDEnv,
     instr_target: &IfInstr,
@@ -277,7 +300,7 @@ fn casify_from_if(
     Ok(None)
 }
 
-// [3/4] Casifying from a case statement
+// == [3/4] Casifying from a case statement
 fn casify_from_case(
     tdenv: &TDEnv,
     instr_target: &CaseInstr,
@@ -301,6 +324,7 @@ fn casify_from_case(
     }
     Ok(None)
 }
+
 fn casify_if_instr(
     tdenv: &TDEnv,
     instr_if: IfInstr,
@@ -323,6 +347,7 @@ fn casify_if_instr(
         block,
     }))
 }
+
 fn casify_case_instr(
     tdenv: &TDEnv,
     mut instr_case: CaseInstr,
@@ -430,6 +455,7 @@ fn casify(tdenv: &TDEnv, block: Block) -> Result<Block, StructureError> {
     }
     Ok(block_output)
 }
+
 fn casify_instr_kind(
     tdenv: &TDEnv,
     instr_kind: InstrKind,
@@ -446,6 +472,7 @@ fn casify_instr_kind(
         InstrKind::Return(_) | InstrKind::Result(_) | InstrKind::Debug(_) => Ok(instr_kind),
     }
 }
+
 pub(crate) fn apply(tdenv: &TDEnv, block: Block) -> Result<Block, StructureError> {
     casify(tdenv, block)
 }

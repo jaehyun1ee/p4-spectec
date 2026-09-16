@@ -1,3 +1,20 @@
+//! Replace equality and inequality tests in OL If conditions with matches
+//!
+//! `matchify_cmp_exp` recognizes empty options, empty lists, and constructors
+//! with no arguments, on either side of the comparison:
+//!
+//! ```text
+//! if xs != [] { return xs }
+//!
+//! becomes
+//!
+//! if xs matches nonempty-list { return xs }
+//! ```
+//!
+//! Likewise, equality with an empty option becomes a `none` match, and
+//! `x != STOP` becomes `not (x matches STOP)` when STOP has no arguments
+//! Only the outer comparison is rewritten; nested expressions are left alone
+
 use crate::lang::common::source::{NotePhrase, Span};
 use crate::lang::{
     il::ast::{CmpOp, ExpKind, ListPattern, OpTyp, OptPattern, Pattern, UnOp},

@@ -1,3 +1,19 @@
+//! Merge equal conditions within runs of OL If instructions
+//!
+//! `merge_identical_if` finds a later equal condition, even across other Ifs;
+//! the two bodies are merged at the earlier instruction:
+//!
+//! ```text
+//! if p { return a }; if q { return b }; if p { return c }
+//!
+//! becomes
+//!
+//! if p { return a; return c }; if q { return b }
+//! ```
+//!
+//! The search stops at a non-If instruction and requires matching iterators
+//! Conditions with unknown overlap remain separate
+
 use std::collections::VecDeque;
 
 use super::super::overlap::{Overlap, overlap_exp};
@@ -31,6 +47,7 @@ fn merge_identical_if(
     }
     Ok(None)
 }
+
 fn merge_if_instr(
     tdenv: &TDEnv,
     mut instr_if: IfInstr,
@@ -158,6 +175,7 @@ fn merge_if(tdenv: &TDEnv, block: Block) -> Result<Block, StructureError> {
     }
     Ok(block_output)
 }
+
 fn merge_if_instr_kind(
     tdenv: &TDEnv,
     instr_kind: InstrKind,
@@ -173,6 +191,7 @@ fn merge_if_instr_kind(
         InstrKind::Return(_) | InstrKind::Result(_) | InstrKind::Debug(_) => Ok(instr_kind),
     }
 }
+
 pub(crate) fn apply(tdenv: &TDEnv, block: Block) -> Result<Block, StructureError> {
     merge_if(tdenv, block)
 }

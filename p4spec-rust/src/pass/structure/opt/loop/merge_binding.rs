@@ -1,4 +1,20 @@
-//! Collapse adjacent equivalent bindings with capture-avoiding body renaming
+//! Merge adjacent OL bindings with the same inputs and compatible outputs
+//!
+//! `collapse_bind` matches Let right-hand sides or relation ids and inputs,
+//! then maps the later output names onto the earlier ones:
+//!
+//! ```text
+//! let x = source { return x }; let y = source { return y }
+//!
+//! becomes
+//!
+//! let x = source { return x; return x }
+//! ```
+//!
+//! Output patterns must agree after renaming, including their iterators
+//! The later body is renamed without capturing nested binders, then merged
+//! with the earlier body; a relation's input hint selects inputs and outputs
+
 use std::collections::VecDeque;
 
 use crate::lang::{
@@ -15,6 +31,7 @@ struct ExpUnit<'a> {
     exp: &'a Exp,
     iter_exps: Vec<ExpIter>,
 }
+
 impl SyntaxEq for ExpUnit<'_> {
     fn syntax_eq(&self, other: &Self) -> bool {
         self.exp.syntax_eq(other.exp) && self.iter_exps.syntax_eq(&other.iter_exps)
@@ -24,6 +41,7 @@ enum Bind<'a> {
     Let(ExpUnit<'a>, ExpUnit<'a>),
     Rule(&'a Id, Vec<ExpUnit<'a>>, Vec<ExpUnit<'a>>),
 }
+
 fn init_expunit<'a>(exp: &'a Exp, iter_exps: &[ExpIter]) -> ExpUnit<'a> {
     let ids = exp.free();
     let iter_exps = iter_exps
@@ -39,6 +57,7 @@ fn init_expunit<'a>(exp: &'a Exp, iter_exps: &[ExpIter]) -> ExpUnit<'a> {
         .collect();
     ExpUnit { exp, iter_exps }
 }
+
 fn split_iterinstrs(iter_instrs: &[InstrIter]) -> (Vec<ExpIter>, Vec<ExpIter>) {
     iter_instrs
         .iter()
@@ -52,6 +71,7 @@ fn split_iterinstrs(iter_instrs: &[InstrIter]) -> (Vec<ExpIter>, Vec<ExpIter>) {
         })
         .unzip()
 }
+
 fn init_let_bind(instr_let: &LetInstr) -> Bind<'_> {
     let LetInstr {
         exp_l,
@@ -65,6 +85,7 @@ fn init_let_bind(instr_let: &LetInstr) -> Bind<'_> {
         init_expunit(exp_r, &iter_exps_bound),
     )
 }
+
 fn init_rule_bind<'a>(instr_rule: &'a RuleInstr, span: &Span) -> Result<Bind<'a>, StructureError> {
     let RuleInstr {
         id,
@@ -86,6 +107,7 @@ fn init_rule_bind<'a>(instr_rule: &'a RuleInstr, span: &Span) -> Result<Bind<'a>
         .collect();
     Ok(Bind::Rule(id, expunits_input, expunits_output))
 }
+
 fn collapse_exp(renamer: Renamer, exp: &Exp, exp_target: &Exp) -> Option<Renamer> {
     let exp_kind = &exp.node;
     let exp_kind_target = &exp_target.node;
@@ -119,12 +141,14 @@ fn collapse_exp(renamer: Renamer, exp: &Exp, exp_target: &Exp) -> Option<Renamer
         _ => None,
     }
 }
+
 fn collapse_var_exp(mut renamer: Renamer, id: &Id, id_target: &Id) -> Option<Renamer> {
     if !id.syntax_eq(id_target) {
         renamer.add(id_target.clone(), id.clone());
     }
     Some(renamer)
 }
+
 fn collapse_case_exp(
     renamer: Renamer,
     not_exp: &NotExp,
@@ -135,6 +159,7 @@ fn collapse_case_exp(
     }
     collapse_exp_refs(renamer, not_exp.args(), not_exp_target.args())
 }
+
 fn collapse_str_exp(
     renamer: Renamer,
     exp_fields: &[ExpField],
@@ -154,6 +179,7 @@ fn collapse_str_exp(
         exp_fields_target.iter().map(|(_, exp)| exp).collect(),
     )
 }
+
 fn collapse_opt_exp(
     renamer: Renamer,
     exp: Option<&Exp>,
@@ -165,6 +191,7 @@ fn collapse_opt_exp(
         _ => None,
     }
 }
+
 fn collapse_cons_exp(
     renamer: Renamer,
     exp_head: &Exp,
@@ -175,6 +202,7 @@ fn collapse_cons_exp(
     let renamer = collapse_exp(renamer, exp_head, exp_head_target)?;
     collapse_exp(renamer, exp_tail, exp_tail_target)
 }
+
 fn collapse_iter_exp(
     renamer: Renamer,
     exp: &Exp,
@@ -186,9 +214,11 @@ fn collapse_iter_exp(
     let iter_exp_target = renamer.rename_iterexp(iter_exp_target.clone());
     iter_exp.syntax_eq(&iter_exp_target).then_some(renamer)
 }
+
 fn collapse_exps(renamer: Renamer, exps: &[Exp], exps_target: &[Exp]) -> Option<Renamer> {
     collapse_exp_refs(renamer, exps.iter().collect(), exps_target.iter().collect())
 }
+
 fn collapse_exp_refs(
     mut renamer: Renamer,
     exps: Vec<&Exp>,
@@ -202,6 +232,7 @@ fn collapse_exp_refs(
     }
     Some(renamer)
 }
+
 fn collapse_expunit(
     renamer: Renamer,
     expunit: &ExpUnit<'_>,
@@ -214,6 +245,7 @@ fn collapse_expunit(
         .syntax_eq(&iter_exps_target)
         .then_some(renamer)
 }
+
 fn collapse_expunits(
     mut renamer: Renamer,
     expunits: &[ExpUnit<'_>],
@@ -227,6 +259,7 @@ fn collapse_expunits(
     }
     Some(renamer)
 }
+
 fn collapse_bind(bind: &Bind<'_>, bind_target: &Bind<'_>) -> Option<Renamer> {
     match (bind, bind_target) {
         (Bind::Let(expunit_l, expunit_r), Bind::Let(expunit_target_l, expunit_target_r))
@@ -243,6 +276,7 @@ fn collapse_bind(bind: &Bind<'_>, bind_target: &Bind<'_>) -> Option<Renamer> {
         _ => None,
     }
 }
+
 fn downstream(
     bind: &Bind<'_>,
     block: &mut VecDeque<Instr>,
@@ -265,6 +299,7 @@ fn downstream(
     }
     Ok(block_merge)
 }
+
 fn downstream_let_instr(
     bind: &Bind<'_>,
     instr_let: &mut LetInstr,
@@ -277,6 +312,7 @@ fn downstream_let_instr(
     let block = renamer.rename_block(std::mem::take(block))?;
     Ok(Some(block))
 }
+
 fn downstream_rule_instr(
     bind: &Bind<'_>,
     instr_rule: &mut RuleInstr,
@@ -290,6 +326,7 @@ fn downstream_rule_instr(
     let block = renamer.rename_block(std::mem::take(block))?;
     Ok(Some(block))
 }
+
 fn upstream(block: Block) -> Result<Block, StructureError> {
     let mut instrs: VecDeque<_> = block.into();
     let mut block = Vec::with_capacity(instrs.len());
@@ -304,6 +341,7 @@ fn upstream(block: Block) -> Result<Block, StructureError> {
     }
     Ok(block)
 }
+
 fn upstream_instr_kind(
     instr_kind: InstrKind,
     span: &Span,
@@ -319,6 +357,7 @@ fn upstream_instr_kind(
         instr_kind => Ok(instr_kind),
     }
 }
+
 fn upstream_if_instr(instr: IfInstr) -> Result<InstrKind, StructureError> {
     let IfInstr {
         exp,
@@ -332,6 +371,7 @@ fn upstream_if_instr(instr: IfInstr) -> Result<InstrKind, StructureError> {
         block,
     }))
 }
+
 fn upstream_hold_instr(instr: HoldInstr) -> Result<InstrKind, StructureError> {
     let HoldInstr {
         id,
@@ -350,6 +390,7 @@ fn upstream_hold_instr(instr: HoldInstr) -> Result<InstrKind, StructureError> {
         block_not_hold,
     }))
 }
+
 fn upstream_case_instr(instr: CaseInstr) -> Result<InstrKind, StructureError> {
     let CaseInstr { exp, cases, total } = instr;
     let cases = cases
@@ -362,6 +403,7 @@ fn upstream_case_instr(instr: CaseInstr) -> Result<InstrKind, StructureError> {
         .collect::<Result<_, StructureError>>()?;
     Ok(InstrKind::Case(CaseInstr { exp, cases, total }))
 }
+
 fn upstream_group_instr(instr: GroupInstr) -> Result<InstrKind, StructureError> {
     let GroupInstr {
         id,
@@ -377,6 +419,7 @@ fn upstream_group_instr(instr: GroupInstr) -> Result<InstrKind, StructureError> 
         block,
     }))
 }
+
 fn upstream_let_instr(
     mut instr: LetInstr,
     instrs: &mut VecDeque<Instr>,
@@ -402,6 +445,7 @@ fn upstream_let_instr(
         block,
     }))
 }
+
 fn upstream_rule_instr(
     mut instr: RuleInstr,
     span: &Span,
@@ -430,6 +474,7 @@ fn upstream_rule_instr(
         block,
     }))
 }
+
 pub(crate) fn apply(block: Block) -> Result<Block, StructureError> {
     upstream(block)
 }

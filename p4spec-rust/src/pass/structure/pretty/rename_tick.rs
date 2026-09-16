@@ -1,4 +1,20 @@
-//! Removes excess ticks while carrying enclosing names into nested bindings
+//! Shorten tick suffixes on definition inputs and OL binding names
+//!
+//! `find_rename_ticks` picks the smallest unused tick count for each base
+//! name; `upstream_block` carries enclosing names into nested bindings
+//! When `x` is already in use but `x'` is available:
+//!
+//! ```text
+//! let x''' = source { return (x''', x) }
+//!
+//! becomes
+//!
+//! let x' = source { return (x', x) }
+//! ```
+//!
+//! `apply_rel` and `apply_func` rename definition inputs consistently in
+//! both the main body and fallback, avoiding names already used there
+
 use super::super::{StructureError, StructureErrorKind, ol::ast::*, re::renamer::Renamer};
 use crate::lang::{
     common::{

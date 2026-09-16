@@ -1,3 +1,17 @@
+//! Remove rule-group wrappers and keep their instructions in source order
+//!
+//! `remove_block` splices each Group body into its enclosing OL block:
+//!
+//! ```text
+//! group rule_a { if p { return a }; if q { return b } }
+//!
+//! becomes
+//!
+//! if p { return a }; if q { return b }
+//! ```
+//!
+//! Nested groups are removed too; their bodies stay in the same order
+
 use crate::lang::common::source::{NotePhrase, Span};
 use crate::pass::structure::ol::ast::*;
 
@@ -9,6 +23,7 @@ fn remove_instr(instr_ol: Instr) -> Block {
     } = instr_ol;
     remove_instr_kind(instr_kind_ol, span)
 }
+
 fn remove_instr_kind(instr_kind_ol: InstrKind, span: Span) -> Block {
     match instr_kind_ol {
         InstrKind::If(instr_ol) => remove_if_instr(instr_ol, span),
@@ -22,6 +37,7 @@ fn remove_instr_kind(instr_kind_ol: InstrKind, span: Span) -> Block {
         }
     }
 }
+
 fn remove_if_instr(instr_ol: IfInstr, span: Span) -> Block {
     let IfInstr {
         exp,
@@ -31,6 +47,7 @@ fn remove_if_instr(instr_ol: IfInstr, span: Span) -> Block {
     let block = remove_block(block);
     vec![crate::phrase! {node: InstrKind::If(IfInstr {exp, iter_exps, block}), span: span}]
 }
+
 fn remove_hold_instr(instr_ol: HoldInstr, span: Span) -> Block {
     let HoldInstr {
         id,
@@ -45,6 +62,7 @@ fn remove_hold_instr(instr_ol: HoldInstr, span: Span) -> Block {
         crate::phrase! {node: InstrKind::Hold(HoldInstr {id, not_exp, iter_exps, block_hold, block_not_hold}), span: span},
     ]
 }
+
 fn remove_case_instr(instr_ol: CaseInstr, span: Span) -> Block {
     let CaseInstr { exp, cases, total } = instr_ol;
     let cases = cases
@@ -57,10 +75,12 @@ fn remove_case_instr(instr_ol: CaseInstr, span: Span) -> Block {
         .collect::<Vec<_>>();
     vec![crate::phrase! {node: InstrKind::Case(CaseInstr {exp, cases, total}), span: span}]
 }
+
 fn remove_group_instr(instr_ol: GroupInstr) -> Block {
     let GroupInstr { block, .. } = instr_ol;
     remove_block(block)
 }
+
 fn remove_let_instr(instr_ol: LetInstr, span: Span) -> Block {
     let LetInstr {
         exp_l,
@@ -73,6 +93,7 @@ fn remove_let_instr(instr_ol: LetInstr, span: Span) -> Block {
         crate::phrase! {node: InstrKind::Let(LetInstr {exp_l, exp_r, iter_instrs, block}), span: span},
     ]
 }
+
 fn remove_rule_instr(instr_ol: RuleInstr, span: Span) -> Block {
     let RuleInstr {
         id,
@@ -86,9 +107,11 @@ fn remove_rule_instr(instr_ol: RuleInstr, span: Span) -> Block {
         crate::phrase! {node: InstrKind::Rule(RuleInstr {id, not_exp, input_hint, iter_instrs, block}), span: span},
     ]
 }
+
 fn remove_block(block: Block) -> Block {
     block.into_iter().flat_map(remove_instr).collect()
 }
+
 pub(crate) fn apply(block: Block) -> Block {
     remove_block(block)
 }

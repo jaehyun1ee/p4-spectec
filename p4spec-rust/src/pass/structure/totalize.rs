@@ -1,4 +1,6 @@
 //! Mark variant case analyses whose guards cover exactly all constructors
+//!
+//! For a type `A | B`, branches matching A and B set `total=true`
 
 use super::{
     error::{StructureError, StructureErrorKind},

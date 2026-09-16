@@ -1,3 +1,19 @@
+//! Substitute variable aliases while avoiding capture by nested bindings
+//!
+//! `remove_let_instr` substitutes the alias throughout its OL body, then
+//! removes the Let wrapper:
+//!
+//! ```text
+//! let y = x { return y }
+//!
+//! becomes
+//!
+//! return x
+//! ```
+//!
+//! A nested binder named `x` is renamed before substitution so that uses of
+//! `y` still refer to the outer `x`; iterated aliases need matching iterators
+
 use crate::lang::common::source::{NotePhrase, Span};
 use crate::lang::{
     il::ast::{ExpKind, Id, Iter},
@@ -17,6 +33,7 @@ fn remove_instr(instr_ol: Instr) -> Result<Block, StructureError> {
     } = instr_ol;
     remove_instr_kind(instr_kind_ol, span)
 }
+
 fn remove_instr_kind(instr_kind_ol: InstrKind, span: Span) -> Result<Block, StructureError> {
     match instr_kind_ol {
         InstrKind::If(instr_ol) => remove_if_instr(instr_ol, span),
@@ -30,6 +47,7 @@ fn remove_instr_kind(instr_kind_ol: InstrKind, span: Span) -> Result<Block, Stru
         }
     }
 }
+
 fn remove_if_instr(instr_ol: IfInstr, span: Span) -> Result<Block, StructureError> {
     let IfInstr {
         exp,
@@ -41,6 +59,7 @@ fn remove_if_instr(instr_ol: IfInstr, span: Span) -> Result<Block, StructureErro
         crate::phrase! {node: InstrKind::If(IfInstr {exp, iter_exps, block}), span: span},
     ])
 }
+
 fn remove_hold_instr(instr_ol: HoldInstr, span: Span) -> Result<Block, StructureError> {
     let HoldInstr {
         id,
@@ -55,6 +74,7 @@ fn remove_hold_instr(instr_ol: HoldInstr, span: Span) -> Result<Block, Structure
         crate::phrase! {node: InstrKind::Hold(HoldInstr {id, not_exp, iter_exps, block_hold, block_not_hold}), span: span},
     ])
 }
+
 fn remove_case_instr(instr_ol: CaseInstr, span: Span) -> Result<Block, StructureError> {
     let CaseInstr { exp, cases, total } = instr_ol;
     let cases = cases
@@ -69,6 +89,7 @@ fn remove_case_instr(instr_ol: CaseInstr, span: Span) -> Result<Block, Structure
         crate::phrase! {node: InstrKind::Case(CaseInstr {exp, cases, total}), span: span},
     ])
 }
+
 fn remove_group_instr(instr_ol: GroupInstr, span: Span) -> Result<Block, StructureError> {
     let GroupInstr {
         id,
@@ -81,6 +102,7 @@ fn remove_group_instr(instr_ol: GroupInstr, span: Span) -> Result<Block, Structu
         crate::phrase! {node: InstrKind::Group(GroupInstr {id, rel_signature, exps, block}), span: span},
     ])
 }
+
 fn remove_let_instr(instr_ol: LetInstr, span: Span) -> Result<Block, StructureError> {
     let LetInstr {
         exp_l,
@@ -113,6 +135,7 @@ fn remove_let_instr(instr_ol: LetInstr, span: Span) -> Result<Block, StructureEr
         crate::phrase! {node: InstrKind::Let(LetInstr {exp_l, exp_r, iter_instrs, block}), span: span},
     ])
 }
+
 fn remove_rule_instr(instr_ol: RuleInstr, span: Span) -> Result<Block, StructureError> {
     let RuleInstr {
         id,
@@ -126,6 +149,7 @@ fn remove_rule_instr(instr_ol: RuleInstr, span: Span) -> Result<Block, Structure
         crate::phrase! {node: InstrKind::Rule(RuleInstr {id, not_exp, input_hint, iter_instrs, block}), span: span},
     ])
 }
+
 fn iterated_var(exp: &Exp) -> Option<(&Id, &Iter)> {
     let ExpKind::Iter(exp, (iter, _)) = &exp.node else {
         return None;
@@ -135,6 +159,7 @@ fn iterated_var(exp: &Exp) -> Option<(&Id, &Iter)> {
     };
     Some((id, iter))
 }
+
 fn remove_block(block: Block) -> Result<Block, StructureError> {
     let mut block_output = Vec::new();
     for instr_ol in block {
@@ -143,6 +168,7 @@ fn remove_block(block: Block) -> Result<Block, StructureError> {
     }
     Ok(block_output)
 }
+
 pub(crate) fn apply(block: Block) -> Result<Block, StructureError> {
     remove_block(block)
 }

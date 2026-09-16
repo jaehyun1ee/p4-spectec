@@ -12,12 +12,14 @@ fn var_id(exp: &Exp) -> &Id {
     };
     id
 }
+
 fn return_exp(instr_ol: &Instr) -> &Exp {
     let InstrKind::Return(instr_return) = &instr_ol.node else {
         panic!("expected return")
     };
     &instr_return.exp
 }
+
 fn binding(text_l: &str, text_r: &str, block: Block) -> Instr {
     instr(InstrKind::Let(LetInstr {
         exp_l: variable(text_l),
@@ -26,6 +28,7 @@ fn binding(text_l: &str, text_r: &str, block: Block) -> Instr {
         block,
     }))
 }
+
 fn iterator(text_bound: &str, text_bind: &str) -> InstrIter {
     let var = |text| Var {
         id: id(text),

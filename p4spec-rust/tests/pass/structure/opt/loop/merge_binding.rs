@@ -19,6 +19,7 @@ fn test_adjacent_bindings_rename_and_preserve_tail_and_span() {
         );
     }
 }
+
 #[test]
 fn test_capture_avoidance_in_target_body() {
     let mut instr_inner = binding("a", vec![ret("b"), ret("a")]);
@@ -45,6 +46,7 @@ fn test_capture_avoidance_in_target_body() {
     };
     assert_eq!(id_return, id_fresh);
 }
+
 #[test]
 fn test_iterator_filtering_binding_renaming_and_mismatch() {
     let mut instr_a = binding("a", vec![ret("a")]);
@@ -75,6 +77,7 @@ fn test_iterator_filtering_binding_renaming_and_mismatch() {
         vec![instr_a, instr_b]
     );
 }
+
 #[test]
 fn test_hint_split_compatibility_and_intervening_instruction() {
     let mut instr_a = rule("same", vec![ret("a")]);
@@ -110,6 +113,7 @@ fn test_hint_split_compatibility_and_intervening_instruction() {
     let block = vec![binding("a", vec![]), ret("barrier"), binding("b", vec![])];
     assert_eq!(apply(block.clone()).unwrap(), block);
 }
+
 #[test]
 fn test_invalid_rule_hint_keeps_owning_span() {
     let mut instr_ol = rule("a", vec![]);
@@ -128,9 +132,11 @@ fn test_invalid_rule_hint_keeps_owning_span() {
 fn pattern(exp_kind: ExpKind) -> Exp {
     crate::note_phrase! {node:exp_kind,note:TypKind::Bool,span:span(6)}
 }
+
 fn atom(text: &str) -> crate::lang::il::ast::Atom {
     crate::phrase! {node:crate::lang::common::notation::atom::Atom::Keyword(text.into()),span:span(5)}
 }
+
 fn patterns(text: &str) -> Vec<Exp> {
     vec![
         pattern(ExpKind::Tuple(vec![variable(text)])),
@@ -149,6 +155,7 @@ fn patterns(text: &str) -> Vec<Exp> {
         )),
     ]
 }
+
 #[test]
 fn test_structured_binding_patterns_and_shape_negatives() {
     for (exp_a, exp_b) in patterns("a").into_iter().zip(patterns("b")) {
@@ -208,6 +215,7 @@ fn test_structured_binding_patterns_and_shape_negatives() {
         assert_eq!(apply(block.clone()).unwrap(), block);
     }
 }
+
 #[test]
 fn test_repeated_pattern_variables_follow_source_mapping_order() {
     let mut instr_a = binding("a", vec![]);

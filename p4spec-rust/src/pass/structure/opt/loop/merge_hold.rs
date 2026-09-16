@@ -1,4 +1,20 @@
-//! Merge adjacent Hold conditions and recursively combine both outcomes
+//! Merge adjacent OL Hold instructions that test the same relation
+//!
+//! `merge_hold_instr` merges the holding bodies and the non-holding bodies
+//! separately, preserving their order:
+//!
+//! ```text
+//! hold R(x) { return a } else { return b }
+//! hold R(x) { return c } else { return d }
+//!
+//! becomes
+//!
+//! hold R(x) { return a; return c } else { return b; return d }
+//! ```
+//!
+//! The relation id, arguments, and iterators must match; intervening
+//! instructions prevent the merge
+
 use std::collections::VecDeque;
 
 use crate::lang::{common::source::Phrase, traits::eq::SyntaxEq};
@@ -57,6 +73,7 @@ fn merge_hold(block: Block) -> Block {
         block = block_prefix;
     }
 }
+
 fn merge_instr_kind(instr_kind: InstrKind, instrs: &mut VecDeque<Instr>) -> (InstrKind, bool) {
     match instr_kind {
         InstrKind::If(instr) => (merge_if_instr(instr), false),
@@ -68,6 +85,7 @@ fn merge_instr_kind(instr_kind: InstrKind, instrs: &mut VecDeque<Instr>) -> (Ins
         instr_kind => (instr_kind, false),
     }
 }
+
 fn merge_if_instr(instr: IfInstr) -> InstrKind {
     let IfInstr {
         exp,
@@ -81,6 +99,7 @@ fn merge_if_instr(instr: IfInstr) -> InstrKind {
         block,
     })
 }
+
 fn merge_hold_instr(instr: HoldInstr, instrs: &mut VecDeque<Instr>) -> (InstrKind, bool) {
     let instr_merge = merge_identical_hold(&instr, instrs);
     let HoldInstr {
@@ -126,6 +145,7 @@ fn merge_hold_instr(instr: HoldInstr, instrs: &mut VecDeque<Instr>) -> (InstrKin
         )
     }
 }
+
 fn merge_case_instr(instr: CaseInstr) -> InstrKind {
     let CaseInstr { exp, cases, total } = instr;
     let cases = cases
@@ -138,6 +158,7 @@ fn merge_case_instr(instr: CaseInstr) -> InstrKind {
         .collect();
     InstrKind::Case(CaseInstr { exp, cases, total })
 }
+
 fn merge_group_instr(instr: GroupInstr) -> InstrKind {
     let GroupInstr {
         id,
@@ -153,6 +174,7 @@ fn merge_group_instr(instr: GroupInstr) -> InstrKind {
         block,
     })
 }
+
 fn merge_let_instr(instr: LetInstr) -> InstrKind {
     let LetInstr {
         exp_l,
@@ -168,6 +190,7 @@ fn merge_let_instr(instr: LetInstr) -> InstrKind {
         block,
     })
 }
+
 fn merge_rule_instr(instr: RuleInstr) -> InstrKind {
     let RuleInstr {
         id,
@@ -185,6 +208,7 @@ fn merge_rule_instr(instr: RuleInstr) -> InstrKind {
         block,
     })
 }
+
 pub(crate) fn apply(block: Block) -> Block {
     merge_hold(block)
 }

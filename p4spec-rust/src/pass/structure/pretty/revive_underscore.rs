@@ -1,4 +1,21 @@
-//! Restores used underscore binders through downstream use tracking
+//! Give used underscore-prefixed inputs and OL binders ordinary names
+//!
+//! `candid_renamer` strips leading underscores and chooses fresh names;
+//! `downstream_block` records which candidates are actually used
+//! When `x` is available:
+//!
+//! ```text
+//! let _x = source { return _x }
+//!
+//! becomes
+//!
+//! let x = source { return x }
+//! ```
+//!
+//! An unused `_x` keeps its name; a conflicting `x` forces a fresh name
+//! `apply_rel` and `apply_func` also check uses of inputs in the fallback,
+//! while nested bindings of the same underscore name stop substitution
+
 use super::super::{StructureError, StructureErrorKind, ol::ast::*, re::renamer::Renamer};
 use crate::lang::{
     common::{

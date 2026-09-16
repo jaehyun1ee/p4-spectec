@@ -1,4 +1,19 @@
 //! Remove matches whose expanded variant type has exactly one constructor
+//!
+//! `remove_if_instr` replaces a singleton-variant test with its OL body
+//! For a value `x` whose type contains only constructor WRAP:
+//!
+//! ```text
+//! if x matches WRAP { return x }
+//!
+//! becomes
+//!
+//! return x
+//! ```
+//!
+//! Type aliases are expanded before counting constructors; tests on types
+//! with multiple constructors remain
+
 use crate::pass::structure::{StructureError, ol::ast::*, opt::overlap::typ_as_variant};
 use crate::{
     lang::{

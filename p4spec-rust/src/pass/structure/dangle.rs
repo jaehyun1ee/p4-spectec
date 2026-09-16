@@ -1,4 +1,8 @@
 //! Preserve semantic fallthrough when lowering optimized instructions to SL
+//!
+//! With no fallback, `If(p, [A])` gets `dangle=true` so a failed p can
+//! continue to the next rule; an explicit fallback makes it false
+//! A total Case also gets `dangle=false`
 
 use super::{
     error::{StructureError, StructureErrorKind},

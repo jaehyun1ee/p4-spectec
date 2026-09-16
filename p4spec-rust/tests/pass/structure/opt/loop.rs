@@ -13,6 +13,7 @@ fn binding(text: &str, block: Block) -> Instr {
         block,
     }))
 }
+
 fn rule(text: &str, block: Block) -> Instr {
     instr(InstrKind::Rule(RuleInstr {
         id: id("relation"),
@@ -25,6 +26,7 @@ fn rule(text: &str, block: Block) -> Instr {
         block,
     }))
 }
+
 fn hold(block_hold: Block, block_not_hold: Block) -> Instr {
     instr(InstrKind::Hold(HoldInstr {
         id: id("relation"),
@@ -34,6 +36,7 @@ fn hold(block_hold: Block, block_not_hold: Block) -> Instr {
         block_not_hold,
     }))
 }
+
 fn var(text: &str) -> Var {
     Var {
         id: id(text),
@@ -41,6 +44,7 @@ fn var(text: &str) -> Var {
         iters: vec![],
     }
 }
+
 #[path = "loop/merge_binding.rs"]
 mod merge_binding;
 #[path = "loop/merge_hold.rs"]

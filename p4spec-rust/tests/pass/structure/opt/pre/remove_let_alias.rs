@@ -20,6 +20,7 @@ fn test_alias_chain_and_shadowing() {
     .unwrap();
     assert_eq!(block, vec![ret("x"), instr_shadow, ret("y")]);
 }
+
 #[test]
 fn test_iterated_aliases_and_replacement_capture() {
     for iter in [Iter::List, Iter::Opt] {
@@ -63,6 +64,7 @@ fn test_iterated_aliases_and_replacement_capture() {
     };
     assert_eq!(id_return, id_fresh);
 }
+
 #[test]
 fn test_unequal_iterators_and_debug_barrier() {
     let instr_let = binding(

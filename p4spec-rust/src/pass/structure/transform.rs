@@ -1,4 +1,9 @@
-//! Convert algorithmic definitions through ordered blocks to structured syntax
+//! Convert AL premises to nested OL blocks, then optimize and lower them to SL
+//!
+//! `let y = x; if y > 0; return y` becomes `Let(y, x, [If(y > 0,
+//! [Return(y)])])` in OL and `If(x > 0, [Return(x)], dangle=true)` in SL
+//!
+//! AL -> OL -> optimize -> totalize -> prettify -> SL with fallthrough flags
 
 use super::{
     StructureError, StructureErrorKind, antiunify, context::Context, dangle, merge, ol::ast as ol,

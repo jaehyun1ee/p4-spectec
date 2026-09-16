@@ -10,6 +10,7 @@ use crate::{
 fn literal() -> Exp {
     crate::note_phrase!(node: ExpKind::Bool(true), note: TypKind::Bool, span: span(3))
 }
+
 fn binding(exp_r: Exp, block: Block) -> Instr {
     instr(InstrKind::Let(LetInstr {
         exp_l: variable("x"),
@@ -18,6 +19,7 @@ fn binding(exp_r: Exp, block: Block) -> Instr {
         block,
     }))
 }
+
 fn rule(block: Block, input_hint: InputHint) -> Instr {
     instr(InstrKind::Rule(RuleInstr {
         id: id("R"),
@@ -30,6 +32,7 @@ fn rule(block: Block, input_hint: InputHint) -> Instr {
         block,
     }))
 }
+
 #[path = "post/remove_let_dead.rs"]
 mod remove_let_dead;
 #[path = "post/remove_match_singleton.rs"]

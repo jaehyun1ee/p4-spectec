@@ -1,3 +1,7 @@
+//! Revive used underscore names and remove ticks until names stop changing
+//!
+//! An input `_x''` used by `Return(_x'')` becomes `x` and `Return(x)`
+
 use super::{
     StructureError,
     ol::ast::Block,

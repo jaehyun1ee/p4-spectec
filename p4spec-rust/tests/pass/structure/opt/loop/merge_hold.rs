@@ -19,6 +19,7 @@ fn test_both_outcomes_merge_in_order_and_adopt_target_condition_metadata() {
         vec![instr_expect, ret("tail")]
     );
 }
+
 #[test]
 fn test_three_holds_and_both_one_sided_outcomes() {
     assert_eq!(
@@ -30,6 +31,7 @@ fn test_three_holds_and_both_one_sided_outcomes() {
         vec![hold(vec![ret("a"), ret("c")], vec![ret("b")])]
     );
 }
+
 #[test]
 fn test_condition_iterator_and_barrier_mismatch() {
     let instr_a = hold(vec![ret("a")], vec![]);
@@ -96,6 +98,7 @@ fn test_each_outcome_merges_common_leading_conditions() {
             block: vec![ret(text)],
         }))]
     }
+
     fn branch_merged(text_a: &str, text_b: &str) -> Block {
         vec![instr(InstrKind::If(IfInstr {
             exp: variable("condition"),

@@ -1,3 +1,5 @@
+//! Structure AL definitions into SL through pass-local ordered instructions
+
 mod antiunify;
 mod context;
 mod dangle;

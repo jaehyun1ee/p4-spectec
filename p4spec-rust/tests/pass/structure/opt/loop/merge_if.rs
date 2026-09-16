@@ -9,18 +9,22 @@ use crate::{
 fn var(text: &str) -> Exp {
     crate::note_phrase!(node: ExpKind::Var(crate::phrase!(node: text.into(), span: Default::default())), note: TypKind::Bool, span: Default::default())
 }
+
 fn span(int_line: i64) -> Span {
     Span::new(
         Position::new("conditions", int_line, 1),
         Position::new("conditions", int_line, 9),
     )
 }
+
 fn ret(text: &str) -> Instr {
     crate::phrase!(node: InstrKind::Return(ReturnInstr { exp: var(text) }), span: Default::default())
 }
+
 fn branch(exp: Exp, text: &str, int_line: i64) -> Instr {
     crate::phrase!(node: InstrKind::If(IfInstr { exp, iter_exps: vec![], block: vec![ret(text)] }), span: span(int_line))
 }
+
 #[test]
 fn test_identical_search_preserves_intervening_if_tail_and_target_span() {
     let instr_a = branch(var("p"), "a", 1);
@@ -80,6 +84,7 @@ fn nested(block: Block) -> Block {
     ];
     vec![super::hold(block.clone(), block)]
 }
+
 #[test]
 fn test_recursive_hold_case_group_let_rule_bodies() {
     let block = vec![branch(var("p"), "a", 1), branch(var("p"), "b", 2)];

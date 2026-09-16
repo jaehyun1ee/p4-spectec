@@ -1,4 +1,7 @@
-//! Shared input templates and the premises that match each original input
+//! Find shared input templates, then bind each original input to its template
+//!
+//! Inputs `x` and `true` share a fresh `x'`: their paths start with
+//! `let x = x'` and `let true = x'`, respectively
 
 use crate::lang::{
     al::ast::*,

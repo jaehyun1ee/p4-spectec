@@ -32,6 +32,7 @@ fn test_equality_preserves_order_total_and_ignores_spans_and_subproofs() {
     instr_case.cases[0].block.reverse();
     assert!(!instr_a.syntax_eq(&instr_b));
 }
+
 #[test]
 fn test_case_branch_order_matters() {
     let case_a = ast_ol::Case {

@@ -9,6 +9,7 @@ fn group(block: Block) -> Instr {
         block,
     }))
 }
+
 fn binding(exp_l: Exp, exp_r: Exp, block: Block) -> Instr {
     instr(InstrKind::Let(LetInstr {
         exp_l,
@@ -17,9 +18,11 @@ fn binding(exp_l: Exp, exp_r: Exp, block: Block) -> Instr {
         block,
     }))
 }
+
 fn iterated(text: &str, iter: Iter) -> Exp {
     crate::note_phrase! {node: ExpKind::Iter(Box::new(variable(text)), (iter, vec![])), note: TypKind::Bool, span: span(4)}
 }
+
 #[path = "pre/matchify_if_eq_terminal.rs"]
 mod matchify_if_eq_terminal;
 #[path = "pre/remove_group.rs"]

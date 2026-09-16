@@ -7,6 +7,7 @@ use crate::{
 fn exp(exp_kind: ExpKind) -> Exp {
     note_phrase!(node: exp_kind, note: TypKind::Bool, span: Default::default())
 }
+
 fn cmp(exp_l: Exp, exp_r: Exp) -> Exp {
     exp(ExpKind::Cmp(
         CmpOp::Bool(boolop::CmpOp::Eq),
@@ -15,6 +16,7 @@ fn cmp(exp_l: Exp, exp_r: Exp) -> Exp {
         Box::new(exp_r),
     ))
 }
+
 #[test]
 fn test_boolean_partition_and_literal_disjointness() {
     let exp_target = exp(ExpKind::Var(
