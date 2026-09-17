@@ -5,7 +5,7 @@
 //! to its mixfix shape. For example, a case carrying an infix `+` hint renders
 //! its two arguments as `left + right`.
 
-use std::{collections::HashMap, fmt::Write};
+use std::collections::HashMap;
 
 use crate::{
     lang::data::value::{Value, ValueArena, ValueCase, ValueKind},
@@ -17,6 +17,7 @@ use crate::{
         traits::print::Print,
         xl::num::Number,
     },
+    util::text::escape_text,
 };
 
 use super::error::P4UnparseError;
@@ -71,7 +72,7 @@ impl P4Unparser {
             ValueKind::Bool(value) => Ok(value.to_string()),
             ValueKind::Num(Number::Nat(value)) => Ok(value.to_string()),
             ValueKind::Num(Number::Int(value)) => Ok(value.to_string()),
-            ValueKind::Text(value) => Ok(Self::escape_text(value)),
+            ValueKind::Text(value) => Ok(escape_text(value)),
             ValueKind::Struct(_) => Err(P4UnparseError::UnsupportedValue("Struct")),
             ValueKind::Case(value_case) => self.render_case(arena, arena.typ(value), value_case),
             ValueKind::Tuple(values) => {
@@ -127,22 +128,6 @@ impl P4Unparser {
             .map(|value| self.render(arena, value))
             .collect::<Result<Vec<_>, _>>()?;
         Ok(rendered.join(separator))
-    }
-
-    pub(crate) fn escape_text(text: &str) -> String {
-        text.bytes().fold(String::new(), |mut escaped, byte| {
-            match byte {
-                b'\\' => escaped.push_str("\\\\"),
-                b'"' => escaped.push_str("\\\""),
-                b'\n' => escaped.push_str("\\n"),
-                b'\r' => escaped.push_str("\\r"),
-                b'\t' => escaped.push_str("\\t"),
-                b'\x08' => escaped.push_str("\\b"),
-                32..=126 => escaped.push(char::from(byte)),
-                _ => write!(escaped, "\\{byte:03}").unwrap(),
-            }
-            escaped
-        })
     }
 
     fn render_atom(atom: &Atom) -> String {

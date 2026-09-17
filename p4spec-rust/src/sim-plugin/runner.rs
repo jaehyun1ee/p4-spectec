@@ -7,7 +7,7 @@ use super::{
     table,
 };
 use crate::{
-    interface::p4::{error::P4Error, parse, unparse::P4Unparser},
+    interface::p4::{error::P4Error, parse},
     interp::shared::error::Error as InterpError,
     lang::{
         common::source::{Phrase, Span},
@@ -22,6 +22,7 @@ use crate::{
         self,
         ast::{Action, MatchKind, Name, Statement, TableMatch},
     },
+    util::text::escape_text,
 };
 use num_bigint::BigInt;
 use std::path::{Path, PathBuf};
@@ -358,7 +359,7 @@ where
     Interp: Interpreter<Iface, Arch, Error = InterpError>,
 {
     // Add names use the same escaped spelling as P4 annotation names
-    let text_name = P4Unparser::escape_text(&table.into_string());
+    let text_name = escape_text(&table.into_string());
     let value_name =
         make::text(ctx.arena_mut(), text_name, Span::default()).map_err(InterpError::from)?;
     let value_priority = priority
