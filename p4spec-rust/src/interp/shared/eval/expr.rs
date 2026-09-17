@@ -13,7 +13,6 @@ use crate::{
         data::value::{Value, ValueKind, get, make},
         il::ast,
         traits::print::Print,
-        xl::{bool as boolean, num},
     },
     runner::{Extern, Interface, RunnerContext},
     runtime::{
@@ -138,18 +137,7 @@ fn eval_un_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Exte
     exp_inner: &ast::Exp,
 ) -> Backtrack<Value> {
     let value = backtrack!(eval_exp(runner_ctx, ctx, exp_inner));
-    let value = match op {
-        ast::UnOp::Bool(boolean::UnOp::Not) => {
-            let bool = !backtrack_from_result!(get::bool(runner_ctx.arena(), &value), span);
-            backtrack_from_result!(make::bool(runner_ctx.arena_mut(), bool, Span::default()), span)
-        }
-        ast::UnOp::Num(op) => {
-            let num = backtrack_from_result!(get::num(runner_ctx.arena(), &value), span);
-            let num = num::un(*op, num);
-            backtrack_from_result!(make::num(runner_ctx.arena_mut(), num, Span::default()), span)
-        }
-    };
-    Backtrack::Ok(value)
+    ops::unop(runner_ctx.arena_mut(), span, op, value)
 }
 
 // - Binary expression
@@ -164,29 +152,7 @@ fn eval_bin_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Ext
 ) -> Backtrack<Value> {
     let value_l = backtrack!(eval_exp(runner_ctx, ctx, exp_l));
     let value_r = backtrack!(eval_exp(runner_ctx, ctx, exp_r));
-    let value = match op {
-        ast::BinOp::Bool(op) => {
-            let bool_l = backtrack_from_result!(get::bool(runner_ctx.arena(), &value_l), span);
-            let bool_r = backtrack_from_result!(get::bool(runner_ctx.arena(), &value_r), span);
-            let result = match op {
-                boolean::BinOp::And => bool_l && bool_r,
-                boolean::BinOp::Or => bool_l || bool_r,
-                boolean::BinOp::Impl => !bool_l || bool_r,
-                boolean::BinOp::Equiv => bool_l == bool_r,
-            };
-            backtrack_from_result!(
-                make::bool(runner_ctx.arena_mut(), result, Span::default()),
-                span
-            )
-        }
-        ast::BinOp::Num(op) => {
-            let num_l = backtrack_from_result!(get::num(runner_ctx.arena(), &value_l), span);
-            let num_r = backtrack_from_result!(get::num(runner_ctx.arena(), &value_r), span);
-            let num = backtrack_from_result!(num::bin(*op, num_l, num_r), span);
-            backtrack_from_result!(make::num(runner_ctx.arena_mut(), num, Span::default()), span)
-        }
-    };
-    Backtrack::Ok(value)
+    ops::binop(runner_ctx.arena_mut(), span, op, value_l, value_r)
 }
 
 // - Comparison expression

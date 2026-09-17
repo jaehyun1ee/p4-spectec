@@ -1,4 +1,4 @@
-//! Value operations shared by expression and path evaluation
+//! Value operations shared by expression, guard, and path evaluation
 
 use super::super::context::ReadContext;
 
@@ -22,7 +22,138 @@ use crate::interp::shared::{
     error::{ErrorKind, ExprErrorKind},
 };
 
-// = Value operations
+// = Operators
+
+// - Unary operators
+
+pub(crate) fn unop(
+    arena: &mut ValueArena,
+    span: &Span,
+    op: &ast::UnOp,
+    value: Value,
+) -> Backtrack<Value> {
+    let value = match op {
+        ast::UnOp::Bool(boolean::UnOp::Not) => {
+            let bool = !backtrack_from_result!(get::bool(arena, &value), span);
+            backtrack_from_result!(make::bool(arena, bool, Span::default()), span)
+        }
+        ast::UnOp::Num(op) => {
+            let num = backtrack_from_result!(get::num(arena, &value), span);
+            let num = num::un(*op, num);
+            backtrack_from_result!(make::num(arena, num, Span::default()), span)
+        }
+    };
+    Backtrack::Ok(value)
+}
+
+// - Binary operators
+
+pub(crate) fn binop(
+    arena: &mut ValueArena,
+    span: &Span,
+    op: &ast::BinOp,
+    value_l: Value,
+    value_r: Value,
+) -> Backtrack<Value> {
+    let value = match op {
+        ast::BinOp::Bool(op) => {
+            let bool_l = backtrack_from_result!(get::bool(arena, &value_l), span);
+            let bool_r = backtrack_from_result!(get::bool(arena, &value_r), span);
+            let result = match op {
+                boolean::BinOp::And => bool_l && bool_r,
+                boolean::BinOp::Or => bool_l || bool_r,
+                boolean::BinOp::Impl => !bool_l || bool_r,
+                boolean::BinOp::Equiv => bool_l == bool_r,
+            };
+            backtrack_from_result!(make::bool(arena, result, Span::default()), span)
+        }
+        ast::BinOp::Num(op) => {
+            let num_l = backtrack_from_result!(get::num(arena, &value_l), span);
+            let num_r = backtrack_from_result!(get::num(arena, &value_r), span);
+            let num = backtrack_from_result!(num::bin(*op, num_l, num_r), span);
+            backtrack_from_result!(make::num(arena, num, Span::default()), span)
+        }
+    };
+    Backtrack::Ok(value)
+}
+
+// - Comparison operators
+
+pub(crate) fn compare(
+    arena: &ValueArena,
+    span: &Span,
+    op: &ast::CmpOp,
+    value_l: Value,
+    value_r: Value,
+) -> Backtrack<bool> {
+    Backtrack::Ok(match op {
+        ast::CmpOp::Bool(boolean::CmpOp::Eq) => arena.view(value_l).syntax_eq(&arena.view(value_r)),
+        ast::CmpOp::Bool(boolean::CmpOp::Ne) => {
+            !arena.view(value_l).syntax_eq(&arena.view(value_r))
+        }
+        ast::CmpOp::Num(op) => {
+            let num_l = backtrack_from_result!(get::num(arena, &value_l), span);
+            let num_r = backtrack_from_result!(get::num(arena, &value_r), span);
+            backtrack_from_result!(num::cmp(*op, num_l, num_r), span)
+        }
+    })
+}
+
+// = Predicates
+
+// - Subtype checks
+
+pub(crate) fn check_sub(
+    arena: &ValueArena,
+    ctx: &impl ReadContext,
+    span: &Span,
+    subcheck: &ast::Subcheck,
+    value: Value,
+) -> Backtrack<bool> {
+    let find_typdef_opt = |id: &ast::Id| ctx.find_typdef_opt(id);
+    let find_func = |name: &str| {
+        let id = crate::phrase!(node: name.to_owned(), span: span.clone());
+        ctx.find_func_typ(&id).ok()
+    };
+    Backtrack::from_result(
+        crate::runtime::ops::value::check(arena, &find_typdef_opt, &find_func, subcheck, &value),
+        span,
+    )
+}
+
+// - Pattern matching
+
+pub(crate) fn matches(arena: &ValueArena, pattern: &ast::Pattern, value: Value) -> bool {
+    match (pattern, arena.kind(&value)) {
+        (ast::Pattern::Case(mixop), ValueKind::Case(value)) => value.eq_shape(mixop.as_ref()),
+        (ast::Pattern::List(pattern), ValueKind::List(values)) => match pattern {
+            ast::ListPattern::Cons => !values.is_empty(),
+            ast::ListPattern::Fixed(len) => values.len() == *len,
+            ast::ListPattern::Nil => values.is_empty(),
+        },
+        (ast::Pattern::Opt(ast::OptPattern::Some), ValueKind::Opt(Some(_)))
+        | (ast::Pattern::Opt(ast::OptPattern::None), ValueKind::Opt(None)) => true,
+        _ => false,
+    }
+}
+
+// - Membership
+
+pub(crate) fn contains(
+    arena: &ValueArena,
+    span: &Span,
+    value_elem: Value,
+    value_list: Value,
+) -> Backtrack<bool> {
+    let values = backtrack_from_result!(get::list(arena, &value_list), span);
+    Backtrack::Ok(
+        values
+            .iter()
+            .any(|value| arena.view(*value).syntax_eq(&arena.view(value_elem))),
+    )
+}
+
+// = Casts
 
 // - Upcast
 
@@ -180,6 +311,8 @@ pub(crate) fn cast_down(
     Backtrack::Ok(result)
 }
 
+// = Access
+
 // - Field access
 
 pub(crate) fn access_dot(
@@ -197,8 +330,6 @@ pub(crate) fn access_dot(
         None => Backtrack::err(atom.span.clone(), ErrorKind::Expr(ExprErrorKind::UndefinedField)),
     }
 }
-
-// - Indices
 
 fn get_int(arena: &ValueArena, value: &Value, span: &Span) -> Backtrack<BigInt> {
     let num = backtrack_from_result!(get::num(arena, value), span);
@@ -306,6 +437,8 @@ pub(crate) fn access_slice(
         _ => unreachable!(),
     }
 }
+
+// = Updates
 
 // - Index update
 
@@ -518,72 +651,4 @@ pub(crate) fn update_slice(
         _ => unreachable!(),
     };
     Backtrack::Ok(value)
-}
-
-// - Predicates over evaluated values
-
-pub(crate) fn compare(
-    arena: &ValueArena,
-    span: &Span,
-    op: &ast::CmpOp,
-    value_l: Value,
-    value_r: Value,
-) -> Backtrack<bool> {
-    Backtrack::Ok(match op {
-        ast::CmpOp::Bool(boolean::CmpOp::Eq) => arena.view(value_l).syntax_eq(&arena.view(value_r)),
-        ast::CmpOp::Bool(boolean::CmpOp::Ne) => {
-            !arena.view(value_l).syntax_eq(&arena.view(value_r))
-        }
-        ast::CmpOp::Num(op) => {
-            let num_l = backtrack_from_result!(get::num(arena, &value_l), span);
-            let num_r = backtrack_from_result!(get::num(arena, &value_r), span);
-            backtrack_from_result!(num::cmp(*op, num_l, num_r), span)
-        }
-    })
-}
-
-pub(crate) fn check_sub(
-    arena: &ValueArena,
-    ctx: &impl ReadContext,
-    span: &Span,
-    subcheck: &ast::Subcheck,
-    value: Value,
-) -> Backtrack<bool> {
-    let find_typdef_opt = |id: &ast::Id| ctx.find_typdef_opt(id);
-    let find_func = |name: &str| {
-        let id = crate::phrase!(node: name.to_owned(), span: span.clone());
-        ctx.find_func_typ(&id).ok()
-    };
-    Backtrack::from_result(
-        crate::runtime::ops::value::check(arena, &find_typdef_opt, &find_func, subcheck, &value),
-        span,
-    )
-}
-
-pub(crate) fn matches(arena: &ValueArena, pattern: &ast::Pattern, value: Value) -> bool {
-    match (pattern, arena.kind(&value)) {
-        (ast::Pattern::Case(mixop), ValueKind::Case(value)) => value.eq_shape(mixop.as_ref()),
-        (ast::Pattern::List(pattern), ValueKind::List(values)) => match pattern {
-            ast::ListPattern::Cons => !values.is_empty(),
-            ast::ListPattern::Fixed(len) => values.len() == *len,
-            ast::ListPattern::Nil => values.is_empty(),
-        },
-        (ast::Pattern::Opt(ast::OptPattern::Some), ValueKind::Opt(Some(_)))
-        | (ast::Pattern::Opt(ast::OptPattern::None), ValueKind::Opt(None)) => true,
-        _ => false,
-    }
-}
-
-pub(crate) fn contains(
-    arena: &ValueArena,
-    span: &Span,
-    value_elem: Value,
-    value_list: Value,
-) -> Backtrack<bool> {
-    let values = backtrack_from_result!(get::list(arena, &value_list), span);
-    Backtrack::Ok(
-        values
-            .iter()
-            .any(|value| arena.view(*value).syntax_eq(&arena.view(value_elem))),
-    )
 }
