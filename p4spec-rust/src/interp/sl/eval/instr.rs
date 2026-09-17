@@ -153,16 +153,11 @@ fn eval_if_instr<Iface: Interface, Exn: Extern>(
     instr: &ast::IfInstr,
     tail: bool,
 ) -> Backtrack<Flow> {
-    let cond = backtrack!(eval_cond_iter(
-        runner,
-        ctx.as_ref(),
-        &instr.iter_exps,
-        true,
-        &mut |runner, ctx| {
+    let cond =
+        backtrack!(eval_cond_iter(runner, ctx.as_ref(), &instr.iter_exps, &mut |runner, ctx| {
             let value = backtrack!(eval_exp(runner, ctx, &instr.exp));
             Backtrack::from_result(get::bool(runner.arena(), &value), &instr.exp.span)
-        }
-    ));
+        }));
     if cond {
         eval_block(runner, ctx, &instr.block, tail)
     } else {
@@ -181,20 +176,15 @@ fn eval_hold_instr<Iface: Interface, Exn: Extern>(
     instr: &ast::HoldInstr,
     tail: bool,
 ) -> Backtrack<Flow> {
-    let cond = backtrack!(eval_cond_iter(
-        runner,
-        ctx.as_ref(),
-        &instr.iter_exps,
-        true,
-        &mut |runner, ctx| {
+    let cond =
+        backtrack!(eval_cond_iter(runner, ctx.as_ref(), &instr.iter_exps, &mut |runner, ctx| {
             let values = backtrack!(eval_exps(runner, ctx, &instr.not_exp.args()));
             match invoke_rel(runner, ctx, &instr.id, &values) {
                 Backtrack::Ok(_) => Backtrack::Ok(true),
                 Backtrack::Unmatch(_) => Backtrack::Ok(false),
                 Backtrack::Err(errors) => Backtrack::Err(errors),
             }
-        }
-    ));
+        }));
     match &instr.hold_case {
         ast::HoldCase::Both(block_hold, block_not) => {
             eval_block(runner, ctx, if cond { block_hold } else { block_not }, tail)
@@ -432,11 +422,9 @@ fn eval_cond_iter<Iface: Interface, Exn: Extern>(
     runner: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
     ctx: &Context<'_>,
     iters: &[ast::ExpIter],
-    reverse: bool,
     eval: &mut impl FnMut(&mut RunnerContext<'_, SlInterp, Iface, Exn>, &Context<'_>) -> Backtrack<bool>,
 ) -> Backtrack<bool> {
-    let iter = if reverse { iters.split_last() } else { iters.split_first() };
-    let Some(((iter, vars), iters_tail)) = iter else {
+    let Some(((iter, vars), iters_tail)) = iters.split_last() else {
         return eval(runner, ctx);
     };
     match iter {
@@ -450,8 +438,7 @@ fn eval_cond_iter<Iface: Interface, Exn: Extern>(
             for (var, value) in vars.iter().zip(values) {
                 ctx_sub.add_value(Variable::new(var.id.clone(), var.iters.clone()), value);
             }
-            // The OCaml optional condition reverses the remaining iteration order
-            eval_cond_iter(runner, &ctx_sub, iters_tail, !reverse, eval)
+            eval_cond_iter(runner, &ctx_sub, iters_tail, eval)
         }
         ast::Iter::List => {
             let rows =
@@ -468,7 +455,7 @@ fn eval_cond_iter<Iface: Interface, Exn: Extern>(
                 for (var, row) in vars.iter().zip(&rows) {
                     ctx_sub.add_value(var.clone(), row[column]);
                 }
-                if !backtrack!(eval_cond_iter(runner, &ctx_sub, iters_tail, reverse, eval)) {
+                if !backtrack!(eval_cond_iter(runner, &ctx_sub, iters_tail, eval)) {
                     return Backtrack::Ok(false);
                 }
             }

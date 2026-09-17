@@ -260,15 +260,18 @@ fn case_guard_errors_keep_the_generated_expression_trace() {
 }
 
 #[test]
-fn optional_condition_reverses_remaining_iterators_and_preserves_outer_bindings() {
+fn optional_condition_preserves_remaining_iterator_order_and_outer_bindings() {
     use p4spec_rust::{
         interp::sl::{context::Context, eval::instr::eval_block, flow::Flow},
-        lang::common::Variable,
+        lang::common::{Variable, notation::mixfix::Mixfix},
     };
     for det in [false, true] {
         for (cond, expected) in [(true, "5"), (false, "9")] {
             let mut runner = with_block(vec![], det);
-            let global = Global::load(vec![]).unwrap();
+            let global = Global::load(spec(
+                "var b : bool\nrelation True: bool ~> bool\n  hint(input %0)\nrule True/true: b ~> b\n  -- if b",
+            ))
+            .unwrap();
             let mut ctx = Context::new(&global);
             let id = phrase!(node: "b".to_owned(), span: Span::default());
             let value_outer = make::bool(runner.arena_mut(), false, Span::default()).unwrap();
@@ -300,22 +303,46 @@ fn optional_condition_reverses_remaining_iterators_and_preserves_outer_bindings(
             let mut var_list = var.clone();
             var_list.iters.push(ast::Iter::List);
             let exp = note_phrase!(node: ast::ExpKind::Var(id.clone()), note: typ::make::bool().node, span: Span::default());
-            let block = vec![phrase!(node: ast::InstrKind::If(ast::IfInstr {
-                    exp, iter_exps: vec![(ast::Iter::List, vec![var_list]), (ast::Iter::List, vec![var]), (ast::Iter::Opt, vec![])],
-                    block: vec![instr(self::exp(5))], dangle: true,
-                }), span: Span::default())];
-            let flow =
-                eval_block(&mut runner.context(), std::borrow::Cow::Borrowed(&ctx), &block, false)
-                    .finish()
-                    .unwrap();
-            match flow {
-                Flow::Return(value) => {
-                    assert_eq!(get::num(runner.arena(), &value).unwrap().to_string(), expected)
+            let iter_exps = vec![
+                (ast::Iter::List, vec![var]),
+                (ast::Iter::List, vec![var_list]),
+                (ast::Iter::Opt, vec![]),
+            ];
+            for instr_cond in [
+                ast::InstrKind::If(ast::IfInstr {
+                    exp: exp.clone(),
+                    iter_exps: iter_exps.clone(),
+                    block: vec![instr(self::exp(5))],
+                    dangle: true,
+                }),
+                ast::InstrKind::Hold(ast::HoldInstr {
+                    id: phrase!(node: "True".to_owned(), span: Span::default()),
+                    not_exp: Mixfix::Arg(exp),
+                    iter_exps,
+                    hold_case: ast::HoldCase::Hold(vec![instr(self::exp(5))], true),
+                }),
+            ] {
+                let block = vec![phrase!(node: instr_cond, span: Span::default())];
+                let flow = eval_block(
+                    &mut runner.context(),
+                    std::borrow::Cow::Borrowed(&ctx),
+                    &block,
+                    false,
+                )
+                .finish()
+                .unwrap();
+                match flow {
+                    Flow::Return(value) => {
+                        assert_eq!(get::num(runner.arena(), &value).unwrap().to_string(), expected)
+                    }
+                    Flow::Cont(_) => assert_eq!(expected, "9"),
+                    flow => panic!("unexpected flow: {flow:?}"),
                 }
-                Flow::Cont(_) => assert_eq!(expected, "9"),
-                flow => panic!("unexpected flow: {flow:?}"),
+                assert_eq!(
+                    *ctx.find_value(&Variable::new(id.clone(), vec![])).unwrap(),
+                    value_outer
+                );
             }
-            assert_eq!(*ctx.find_value(&Variable::new(id, vec![])).unwrap(), value_outer);
         }
     }
 }
