@@ -214,17 +214,14 @@ fn invoke_extern_rel<Iface: Interface, Ext: Extern>(
             crate::lang::hints::input::split(&rel.input_hint, typs),
             &id.span
         );
-        backtrack!(
-            check_values(
-                runner_ctx.arena(),
-                ctx,
-                id,
-                &typs,
-                &values,
-                GuardErrorKind::RelationOutputMismatch { relation: id.node.clone() }
-            )
-            .guard()
-        );
+        backtrack!(check_values(
+            runner_ctx.arena(),
+            ctx,
+            id,
+            &typs,
+            &values,
+            GuardErrorKind::RelationOutputMismatch { relation: id.node.clone() }
+        ));
     }
     Backtrack::Ok(values)
 }
@@ -383,18 +380,15 @@ fn invoke_extern_func<Iface: Interface, Ext: Extern>(
         .mark_effect(result.as_ref().map_or(true, |(_, effect)| *effect));
     let (value, _) = backtrack_from_result!(result, &id.span);
     if runner_ctx.interp().config.guard {
-        backtrack!(
-            check_func_output(
-                runner_ctx.arena(),
-                ctx,
-                id,
-                &extern_func.tparams,
-                &extern_func.typ,
-                targs,
-                &value
-            )
-            .guard()
-        );
+        backtrack!(check_func_output(
+            runner_ctx.arena(),
+            ctx,
+            id,
+            &extern_func.tparams,
+            &extern_func.typ,
+            targs,
+            &value
+        ));
     }
     Backtrack::Ok(value)
 }
@@ -417,18 +411,15 @@ fn invoke_builtin_func<Iface: Interface, Ext: Extern>(
     match result {
         Ok((value, _)) => {
             if runner_ctx.interp().config.guard {
-                backtrack!(
-                    check_func_output(
-                        runner_ctx.arena(),
-                        ctx,
-                        id,
-                        &builtin_func.tparams,
-                        &builtin_func.typ,
-                        targs,
-                        &value
-                    )
-                    .guard()
-                );
+                backtrack!(check_func_output(
+                    runner_ctx.arena(),
+                    ctx,
+                    id,
+                    &builtin_func.tparams,
+                    &builtin_func.typ,
+                    targs,
+                    &value
+                ));
             }
             Backtrack::Ok(value)
         }

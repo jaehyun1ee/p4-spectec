@@ -171,8 +171,6 @@ pub enum GuardErrorKind {
     FunctionInputMismatch { func: String },
     #[error("return value of function {func} does not match the expected type")]
     FunctionOutputMismatch { func: String },
-    #[error(transparent)]
-    Validation(Box<ErrorKind>),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]

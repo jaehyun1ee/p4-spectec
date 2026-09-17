@@ -968,7 +968,7 @@ fn test_extern_relation_output_guards_preserve_call_span() {
         if guard {
             let error = result.unwrap_err();
             assert_eq!(find_output(&error).expect("output guard error").span, span);
-            assert_eq!(error.span, span);
+            assert!(matches!(*error.kind, ErrorKind::Trace(TraceErrorKind::Execution)));
         } else {
             assert_eq!(number(runner.arena(), &result.unwrap()[0]), "4");
         }
@@ -1150,6 +1150,16 @@ fn test_uncached_input_guards_are_limited_to_public_entries() {
 
 #[test]
 fn test_guard_failure_keeps_its_source_span_through_extern_reentry() {
+    fn find_guard(
+        error: &p4spec_rust::interp::shared::error::Error,
+    ) -> Option<&p4spec_rust::interp::shared::error::Error> {
+        if matches!(*error.kind, ErrorKind::Guard(_)) {
+            Some(error)
+        } else {
+            error.children.iter().find_map(find_guard)
+        }
+    }
+
     let source = "builtin dec $bad() : nat\nextern dec $bridge(nat) : nat\nvar n : nat\ndec $inner(nat) : nat\ndef $inner(n) = $bad()";
     let spec_al = spec(source);
     let func = spec_al
@@ -1172,9 +1182,9 @@ fn test_guard_failure_keeps_its_source_span_through_extern_reentry() {
         runner.context().call_func(name, targs, values)
     }
     .unwrap_err();
-    assert_eq!(error.span, span);
-    assert!(matches!(*error.kind, ErrorKind::Guard(_)));
-    assert!(error.children.is_empty());
+    assert_eq!(find_guard(&error).expect("guard error").span, span);
+    assert!(matches!(*error.kind, ErrorKind::Trace(TraceErrorKind::Execution)));
+    assert!(!error.children.is_empty());
 }
 
 #[test]
