@@ -10,25 +10,25 @@ use crate::{
 
 use super::span;
 
-fn id_at(text: &str, num_line: i64) -> ast::Id {
+fn id_at(text: &str, num_line: usize) -> ast::Id {
     crate::phrase! { node: text.to_owned(), span: span(num_line) }
 }
 
-fn typ_at(typ_kind: TypKind, num_line: i64) -> ast::Typ {
+fn typ_at(typ_kind: TypKind, num_line: usize) -> ast::Typ {
     crate::phrase! { node: typ_kind, span: span(num_line) }
 }
 
-fn typ_var_at(text: &str, num_line: i64) -> ast::Typ {
+fn typ_var_at(text: &str, num_line: usize) -> ast::Typ {
     typ_at(TypKind::Var(id_at(text, num_line), vec![]), num_line)
 }
 
-fn def_typ_at(def_typ_kind: DefTypKind, num_line: i64) -> ast::DefTyp {
+fn def_typ_at(def_typ_kind: DefTypKind, num_line: usize) -> ast::DefTyp {
     crate::phrase! { node: def_typ_kind, span: span(num_line) }
 }
 
 fn defined_typ(
     text: &str,
-    num_line: i64,
+    num_line: usize,
     tparams: Vec<ast::TParam>,
     def_typ: ast::DefTyp,
 ) -> ast::Def {
@@ -43,7 +43,7 @@ fn defined_typ(
     }
 }
 
-fn extern_typ(text: &str, num_line: i64) -> ast::Def {
+fn extern_typ(text: &str, num_line: usize) -> ast::Def {
     crate::phrase! {
         node: ast::DefKind::Typ(ast::TypDef::Extern(ast::ExternTyp {
             id: id_at(text, num_line),
@@ -53,7 +53,7 @@ fn extern_typ(text: &str, num_line: i64) -> ast::Def {
     }
 }
 
-fn var_def(text: &str, num_line: i64, typ: ast::Typ) -> ast::Def {
+fn var_def(text: &str, num_line: usize, typ: ast::Typ) -> ast::Def {
     crate::phrase! {
         node: ast::DefKind::Var(ast::VarDef {
             id: id_at(text, num_line),

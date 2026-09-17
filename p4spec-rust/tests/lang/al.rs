@@ -133,7 +133,7 @@ fn metadata_hint(metadata: &str) -> al::ast::Hint {
     )
 }
 
-fn composite_spec(metadata: &str, extern_inputs: Vec<i64>) -> al::ast::Spec {
+fn composite_spec(metadata: &str, extern_inputs: Vec<usize>) -> al::ast::Spec {
     let hints = vec![metadata_hint(metadata)];
     let evaluate_notation = notation(vec![
         Mixfix::Atom(keyword("eval")),

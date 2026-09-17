@@ -9,12 +9,11 @@ use crate::{
     },
     runner::{Extern, ExternError, Interface, Interpreter, RunnerContext},
 };
-use num_traits::ToPrimitive;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CounterArray {
-    pub counts: Vec<i64>,
+    pub counts: Vec<u32>,
 }
 
 impl CounterArray {
@@ -39,13 +38,8 @@ impl CounterArray {
         let args = args::assoc(arena, value_ids, value_args)?;
         let value_max = args::find(&args, "max_index")?;
         let value_sparse = args::find(&args, "sparse")?;
-        let (_, int_max) = unpack::p4_fixed_bit(arena, &value_max)?;
-        let idx_max = int_max
-            .to_i64()
-            .ok_or_else(|| ExternError::Failure("integer outside i64 range".to_owned()))?;
+        let len = usize::try_from(&unpack::p4_fixed_bit(arena, &value_max)?.1)?;
         unpack::p4_bool(arena, &value_sparse)?;
-        let len = usize::try_from(idx_max)
-            .map_err(|_| ExternError::Failure("negative counter array size".to_owned()))?;
         let mut counts = Vec::new();
         counts
             .try_reserve_exact(len)
@@ -72,10 +66,8 @@ impl CounterArray {
     {
         // Get "index"
         let value_idx = func::find_var_e_local(ctx, value_ctx, "index")?;
-        let (_, int_idx) = unpack::p4_fixed_bit(ctx.arena(), &value_idx)?;
-        let idx = int_idx
-            .to_i64()
-            .ok_or_else(|| ExternError::Failure("integer outside i64 range".to_owned()))?;
+        let idx = usize::try_from(&unpack::p4_fixed_bit(ctx.arena(), &value_idx)?.1)
+            .map_err(ExternError::from)?;
         self.update(ctx, value_ctx, value_arch, idx, 1)
     }
 
@@ -97,16 +89,13 @@ impl CounterArray {
     {
         // Get "index"
         let value_idx = func::find_var_e_local(ctx, value_ctx, "index")?;
-        let (_, int_idx) = unpack::p4_fixed_bit(ctx.arena(), &value_idx)?;
-        let idx = int_idx
-            .to_i64()
-            .ok_or_else(|| ExternError::Failure("integer outside i64 range".to_owned()))?;
+        let idx = usize::try_from(&unpack::p4_fixed_bit(ctx.arena(), &value_idx)?.1)
+            .map_err(ExternError::from)?;
         // Get "value"
         let value_add = func::find_var_e_local(ctx, value_ctx, "value")?;
         let (_, int_add) = unpack::p4_fixed_bit(ctx.arena(), &value_add)?;
-        let int = int_add
-            .to_i64()
-            .ok_or_else(|| ExternError::Failure("integer outside i64 range".to_owned()))?;
+        let int = u32::try_from(&int_add)
+            .map_err(|_| ExternError::Failure("counter value exceeds 32 bits".to_owned()))?;
         self.update(ctx, value_ctx, value_arch, idx, int)
     }
 
@@ -115,8 +104,8 @@ impl CounterArray {
         ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
         value_ctx: Value,
         value_arch: Value,
-        idx: i64,
-        int: i64,
+        idx: usize,
+        int: u32,
     ) -> Result<(Self, Value, Value, Value), Interp::Error>
     where
         Iface: Interface,
@@ -124,9 +113,7 @@ impl CounterArray {
         Interp: Interpreter<Iface, Exn>,
     {
         // Update counter
-        if let Ok(idx) = usize::try_from(idx)
-            && let Some(count) = self.counts.get_mut(idx)
-        {
+        if let Some(count) = self.counts.get_mut(idx) {
             *count = count.wrapping_add(int);
         }
         // Create call result

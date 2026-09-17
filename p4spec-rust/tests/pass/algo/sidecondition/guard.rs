@@ -499,16 +499,17 @@ fn test_conversion_distinguishes_iterated_must_guards_from_insert_guards() {
 
 #[test]
 fn test_conversion_traverses_relation_matches_paths_and_else_without_sibling_leaks() {
-    let rule = |name: &str, input: ast::Exp, output: ast::Exp, prems: Vec<ast::Prem>, line: i64| {
-        crate::phrase! { node:
-        ast::RuleKind {
-            id: id(name, line),
-            not_exp: Mixfix::Seq(vec![Mixfix::Arg(input), Mixfix::Arg(output)]),
-            prems,
-        }, span:
-        span(line) }
-    };
-    let debug_index = |value: bool, line: i64| {
+    let rule =
+        |name: &str, input: ast::Exp, output: ast::Exp, prems: Vec<ast::Prem>, line: usize| {
+            crate::phrase! { node:
+            ast::RuleKind {
+                id: id(name, line),
+                not_exp: Mixfix::Seq(vec![Mixfix::Arg(input), Mixfix::Arg(output)]),
+                prems,
+            }, span:
+            span(line) }
+        };
+    let debug_index = |value: bool, line: usize| {
         crate::phrase! { node:
         ast::PremKind::Debug(ast::DebugPrem {
             exp: literal_index_exp(value, line),

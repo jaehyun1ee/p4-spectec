@@ -179,7 +179,7 @@ pub enum Pattern {
 #[derive(Clone, Debug, PartialEq)]
 pub enum ListPattern {
     Cons,
-    Fixed(i64),
+    Fixed(usize),
     Nil,
 }
 

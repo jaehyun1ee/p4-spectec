@@ -13,7 +13,6 @@ use crate::{
     runner::{Extern, ExternError, Interface, Interpreter, RunnerContext},
 };
 use num_bigint::BigInt;
-use num_traits::ToPrimitive;
 use num_traits::{One, Zero};
 use serde::{Deserialize, Serialize};
 
@@ -49,10 +48,7 @@ impl Counter {
         let args = args::assoc(arena, value_ids, value_args)?;
         let value_size = args::find(&args, "size")?;
         let value_type = args::find(&args, "type")?;
-        let size = (unpack::p4_fixed_bit(arena, &value_size)?.1)
-            .to_i64()
-            .ok_or_else(|| ExternError::Failure("integer outside i64 range".to_owned()))?
-            as usize;
+        let size = usize::try_from(&unpack::p4_fixed_bit(arena, &value_size)?.1)?;
         let (id_enum, id_type) = unpack::p4_enum(arena, &value_type)?;
         match (id_enum.as_str(), id_type.as_str()) {
             ("CounterType", "packets") => Ok(Self::Packets(vec![BigInt::zero(); size])),
@@ -91,26 +87,23 @@ impl Counter {
         Interp: Interpreter<Iface, Exn>,
     {
         let value_idx = func::find_var_e_local(ctx, value_ctx, "index")?;
-        let idx = (unpack::p4_fixed_bit(ctx.arena(), &value_idx)?.1)
-            .to_i64()
-            .ok_or_else(|| ExternError::Failure("integer outside i64 range".to_owned()))?;
-        if let Ok(idx) = usize::try_from(idx) {
-            match &mut self {
-                Self::Packets(counts) => {
-                    if let Some(count) = counts.get_mut(idx) {
-                        *count += BigInt::one();
-                    }
+        let idx = usize::try_from(&unpack::p4_fixed_bit(ctx.arena(), &value_idx)?.1)
+            .map_err(ExternError::from)?;
+        match &mut self {
+            Self::Packets(counts) => {
+                if let Some(count) = counts.get_mut(idx) {
+                    *count += BigInt::one();
                 }
-                Self::Bytes(counts) => {
-                    if let Some(count) = counts.get_mut(idx) {
-                        *count += BigInt::from(packet_in.len);
-                    }
+            }
+            Self::Bytes(counts) => {
+                if let Some(count) = counts.get_mut(idx) {
+                    *count += BigInt::from(packet_in.len);
                 }
-                Self::PacketsAndBytes(counts) => {
-                    if let Some((count_packets, count_bytes)) = counts.get_mut(idx) {
-                        *count_packets += BigInt::one();
-                        *count_bytes += BigInt::from(packet_in.len);
-                    }
+            }
+            Self::PacketsAndBytes(counts) => {
+                if let Some((count_packets, count_bytes)) = counts.get_mut(idx) {
+                    *count_packets += BigInt::one();
+                    *count_bytes += BigInt::from(packet_in.len);
                 }
             }
         }

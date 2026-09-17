@@ -106,7 +106,7 @@ fn test_interned_case_preserves_atom_locations_and_children() {
     use p4spec_rust::lang::common::notation::{atom::Atom, mixfix::Mixfix};
     let mut arena = ValueArena::new();
     let child = make::bool(&mut arena, true, span("child.p4", 11)).unwrap();
-    let make_case = |line_relocated: Option<i64>| {
+    let make_case = |line_relocated: Option<usize>| {
         let span_atom = |line| {
             span(if Some(line) == line_relocated { "other.spec" } else { "label.spec" }, line)
         };
@@ -379,7 +379,7 @@ fn test_canonical_identities_ignore_all_locations_but_distinguish_contents() {
         lang::data::value::{Value, ValueKind},
     };
 
-    fn values(arena: &mut ValueArena, line: i64) -> Vec<Value> {
+    fn values(arena: &mut ValueArena, line: usize) -> Vec<Value> {
         let span = span("values.spec", line);
         let value_true = make::bool(arena, true, span.clone()).unwrap();
         let value_false = make::bool(arena, false, span.clone()).unwrap();

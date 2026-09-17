@@ -13,7 +13,7 @@ use p4spec_rust::lang::{
     },
 };
 
-fn span_at(line: i64) -> Span {
+fn span_at(line: usize) -> Span {
     Span::new(Position::new("queued.p4", line, 2), Position::new("queued.p4", line, 9))
 }
 
@@ -658,7 +658,7 @@ fn test_native_payload_rejects_missing_metadata_and_nested_constructor_arity() {
 #[test]
 fn test_native_payload_preserves_wide_source_positions() {
     let mut arena = ValueArena::new();
-    let value = make::bool(&mut arena, true, span_at(i64::MAX)).unwrap();
+    let value = make::bool(&mut arena, true, span_at(usize::MAX)).unwrap();
     use serde_state::{DeserializeState, SerializeState};
     let mut bytes = Vec::new();
     value
@@ -675,7 +675,7 @@ fn test_native_payload_preserves_wide_source_positions() {
     )
     .unwrap();
     deserializer.end().unwrap();
-    assert_eq!(arena_decoded.span(&value_decoded), &span_at(i64::MAX));
+    assert_eq!(arena_decoded.span(&value_decoded), &span_at(usize::MAX));
 }
 
 #[test]

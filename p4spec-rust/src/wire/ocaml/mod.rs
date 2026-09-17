@@ -48,6 +48,12 @@ pub(crate) fn integer(json: &json) -> Result<i64, DecodeError> {
     json.as_i64().ok_or(DecodeError::Expected("integer"))
 }
 
+pub(crate) fn unsigned(json: &json) -> Result<usize, DecodeError> {
+    json.as_u64()
+        .and_then(|int| usize::try_from(int).ok())
+        .ok_or(DecodeError::Expected("non-negative integer"))
+}
+
 pub(crate) fn object(json: &json) -> Result<&Map<String, json>, DecodeError> {
     json.as_object().ok_or(DecodeError::Expected("object"))
 }

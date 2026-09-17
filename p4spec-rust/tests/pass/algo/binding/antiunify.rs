@@ -2,7 +2,7 @@ use super::super::*;
 
 #[test]
 fn test_antiunification_populates_each_path_in_left_to_right_expression_order() {
-    let tuple = |bool_l: bool, bool_r: bool, line: i64| {
+    let tuple = |bool_l: bool, bool_r: bool, line: usize| {
         exp(
             ast::ExpKind::Tuple(vec![
                 exp(ast::ExpKind::Bool(bool_l), ast::TypKind::Bool, line),

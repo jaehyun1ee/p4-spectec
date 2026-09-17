@@ -2,7 +2,7 @@
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Transmission {
-    pub port: i64,
+    pub port: usize,
     pub packet: String,
 }
 

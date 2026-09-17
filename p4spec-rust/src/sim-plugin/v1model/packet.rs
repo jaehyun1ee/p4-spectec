@@ -1,7 +1,6 @@
 //! Packet clone requests, pending actions and processing contexts
 //! For example, an I2E clone records a mirror session and a field-list index
 
-use num_traits::ToPrimitive;
 use serde::{Deserialize, Serialize};
 use serde_derive_state::{DeserializeState, SerializeState};
 
@@ -25,7 +24,7 @@ pub enum CloneType {
 
 /// Packet clone direction, mirror session and preserved field-list index
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct CloneInfo(pub CloneType, pub i64, pub i64);
+pub struct CloneInfo(pub CloneType, pub usize, pub usize);
 
 impl CloneInfo {
     pub fn new(
@@ -44,14 +43,8 @@ impl CloneInfo {
                 )));
             }
         };
-        let session = unpack::p4_fixed_bit(arena, value_session)?
-            .1
-            .to_i64()
-            .ok_or_else(|| ExternError::Failure("integer outside i64 range".to_owned()))?;
-        let idx = unpack::p4_fixed_bit(arena, value_idx)?
-            .1
-            .to_i64()
-            .ok_or_else(|| ExternError::Failure("integer outside i64 range".to_owned()))?;
+        let session = usize::try_from(&unpack::p4_fixed_bit(arena, value_session)?.1)?;
+        let idx = usize::try_from(&unpack::p4_fixed_bit(arena, value_idx)?.1)?;
         Ok(Self(clone_type, session, idx))
     }
 }
@@ -62,8 +55,8 @@ impl CloneInfo {
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Action {
     pub clone_opt: Option<CloneInfo>,
-    pub resubmit_opt: Option<i64>,
-    pub recirculate_opt: Option<i64>,
+    pub resubmit_opt: Option<usize>,
+    pub recirculate_opt: Option<usize>,
 }
 
 // == Processing context per packet

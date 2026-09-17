@@ -72,8 +72,8 @@ fn position(file: &str, text: &str) -> Position {
         .expect("OCaml diagnostic position contains line and column");
     Position::new(
         file,
-        line.parse::<i64>().expect("decimal line"),
-        column.parse::<i64>().expect("decimal column") - 1,
+        line.parse::<usize>().expect("decimal line"),
+        column.parse::<usize>().expect("decimal column") - 1,
     )
 }
 

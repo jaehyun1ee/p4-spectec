@@ -5,29 +5,29 @@ use std::collections::BTreeMap;
 #[serde(deny_unknown_fields)]
 /// Multicast node
 pub struct Node {
-    pub port: i64,
-    pub instance: i64,
+    pub port: usize,
+    pub instance: usize,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 /// Multicast state
 pub struct State {
-    pub handle_next: i64,
+    pub handle_next: usize,
     /// Multicast group id to ordered node handles
-    pub groups: BTreeMap<i64, Vec<i64>>,
+    pub groups: BTreeMap<usize, Vec<usize>>,
     /// Node handle to ordered multicast nodes
-    pub nodes: BTreeMap<i64, Vec<Node>>,
+    pub nodes: BTreeMap<usize, Vec<Node>>,
 }
 
 impl State {
-    pub fn group_create(&mut self, group: i64) {
+    pub fn group_create(&mut self, group: usize) {
         self.groups.insert(group, vec![]);
     }
 
-    pub fn node_create(&mut self, instance: i64, ports: &[i64]) {
+    pub fn node_create(&mut self, instance: usize, ports: &[usize]) {
         let handle = self.handle_next;
-        self.handle_next = handle.wrapping_add(1);
+        self.handle_next = handle + 1;
         self.nodes.insert(
             handle,
             ports
@@ -37,7 +37,7 @@ impl State {
         );
     }
 
-    pub fn node_associate(&mut self, group: i64, handle: i64) {
+    pub fn node_associate(&mut self, group: usize, handle: usize) {
         if let Some(handles) = self.groups.get_mut(&group) {
             handles.push(handle);
         }

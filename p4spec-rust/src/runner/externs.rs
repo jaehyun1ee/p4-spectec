@@ -22,6 +22,8 @@ pub enum ExternError {
     Value(#[from] crate::lang::data::value::ValueError),
     #[error("{0}")]
     Failure(String),
+    #[error("fixed-width value exceeds a machine word")]
+    MachineWord(#[from] num_bigint::TryFromBigIntError<()>),
 }
 
 // == Extern contract

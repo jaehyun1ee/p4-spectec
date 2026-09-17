@@ -1,2 +1,2 @@
 /// Mirror session ids mapped to output ports
-pub type Table = std::collections::BTreeMap<i64, i64>;
+pub type Table = std::collections::BTreeMap<usize, usize>;

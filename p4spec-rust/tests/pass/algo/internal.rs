@@ -30,12 +30,12 @@ use crate::{
     runtime::{dim::Dim, typdef::TypeDef},
 };
 
-fn span(line: i64) -> Span {
+fn span(line: usize) -> Span {
     let position = Position::new("algorithmic.watsup", line, 0);
     Span::new(position.clone(), position)
 }
 
-fn id(name: &str, line: i64) -> Id {
+fn id(name: &str, line: usize) -> Id {
     crate::phrase! { node: name.to_owned(), span:  span(line) }
 }
 
@@ -43,19 +43,19 @@ fn benv_domain(benv: &BEnv) -> IdSet {
     benv.iter().map(|(id, _)| id.clone()).collect()
 }
 
-fn exp(kind: ast::ExpKind, note: ast::TypKind, line: i64) -> ast::Exp {
+fn exp(kind: ast::ExpKind, note: ast::TypKind, line: usize) -> ast::Exp {
     crate::note_phrase! { node: kind, note:  note, span:  span(line) }
 }
 
-fn var_exp(name: &str, line: i64) -> ast::Exp {
+fn var_exp(name: &str, line: usize) -> ast::Exp {
     exp(ast::ExpKind::Var(id(name, line)), ast::TypKind::Bool, line)
 }
 
-fn typed_var_exp(name: &str, typ: &ast::Typ, line: i64) -> ast::Exp {
+fn typed_var_exp(name: &str, typ: &ast::Typ, line: usize) -> ast::Exp {
     exp(ast::ExpKind::Var(id(name, line)), typ.node.clone(), line)
 }
 
-fn iterated_var_exp(name: &str, typ: &ast::Typ, iter: ast::Iter, line: i64) -> ast::Exp {
+fn iterated_var_exp(name: &str, typ: &ast::Typ, iter: ast::Iter, line: usize) -> ast::Exp {
     let exp_inner = typed_var_exp(name, typ, line);
     exp(
         ast::ExpKind::Iter(Box::new(exp_inner), (iter, vec![])),
@@ -120,7 +120,7 @@ fn function_spec(
     span(1) }]
 }
 
-fn joint_iteration(names: &[(&str, i64)], iter: ast::Iter, line: i64) -> ast::Exp {
+fn joint_iteration(names: &[(&str, usize)], iter: ast::Iter, line: usize) -> ast::Exp {
     let typ_bool = typ::make::bool();
     let exps = names
         .iter()
@@ -139,19 +139,19 @@ fn joint_iteration(names: &[(&str, i64)], iter: ast::Iter, line: i64) -> ast::Ex
     )
 }
 
-fn dimension_exp(name: &str, iter: ast::Iter, line: i64) -> ast::Exp {
+fn dimension_exp(name: &str, iter: ast::Iter, line: usize) -> ast::Exp {
     crate::lang::il::var::as_exp(
         true,
         &ast::Var { id: id(name, line), typ: typ::make::bool(), iters: vec![iter] },
     )
 }
 
-fn len_exp(name: &str, line: i64) -> ast::Exp {
+fn len_exp(name: &str, line: usize) -> ast::Exp {
     let exp_inner = dimension_exp(name, ast::Iter::List, line);
     exp(ast::ExpKind::Len(Box::new(exp_inner)), ast::TypKind::Num(xl::num::Typ::Nat), line)
 }
 
-fn equality_prem(exp_l: ast::Exp, exp_r: ast::Exp, line: i64) -> ast::Prem {
+fn equality_prem(exp_l: ast::Exp, exp_r: ast::Exp, line: usize) -> ast::Prem {
     let condition = exp(
         ast::ExpKind::Cmp(
             ast::CmpOp::Bool(xl::bool::CmpOp::Eq),
@@ -165,11 +165,11 @@ fn equality_prem(exp_l: ast::Exp, exp_r: ast::Exp, line: i64) -> ast::Prem {
     if_prem(condition)
 }
 
-fn indexed_exp(base: ast::Exp, index: ast::Exp, note: ast::TypKind, line: i64) -> ast::Exp {
+fn indexed_exp(base: ast::Exp, index: ast::Exp, note: ast::TypKind, line: usize) -> ast::Exp {
     exp(ast::ExpKind::Idx(Box::new(base), Box::new(index)), note, line)
 }
 
-fn literal_index_exp(value: bool, line: i64) -> ast::Exp {
+fn literal_index_exp(value: bool, line: usize) -> ast::Exp {
     let typ_bool = typ::make::bool();
     let base = exp(
         ast::ExpKind::List(vec![exp(ast::ExpKind::Bool(value), ast::TypKind::Bool, line)]),
@@ -196,7 +196,7 @@ fn assert_index_guard_span(prem: &ast_al::Prem, expected_span: Span) {
     ));
 }
 
-fn iteration_var(name: &str, typ: ast::Typ, line: i64) -> ast::Var {
+fn iteration_var(name: &str, typ: ast::Typ, line: usize) -> ast::Var {
     ast::Var { id: id(name, line), typ, iters: vec![] }
 }
 
@@ -210,7 +210,7 @@ fn function_clause(spec: &crate::lang::al::ast::Spec) -> &ast_al::Clause {
     &defined_func_al.clauses[0]
 }
 
-fn not_typ(name: &str, line: i64) -> ast::NotTyp {
+fn not_typ(name: &str, line: usize) -> ast::NotTyp {
     let atom = crate::phrase! { node: Atom::Keyword(name.to_owned()), span:  span(line) };
     crate::phrase! { node: Mixfix::Atom(atom), span:  span(line) }
 }
@@ -219,7 +219,7 @@ fn pattern_set(names: &[&str]) -> PatternSet {
     names
         .iter()
         .enumerate()
-        .map(|(index, name)| not_typ(name, index as i64 + 1))
+        .map(|(index, name)| not_typ(name, index + 1))
         .collect()
 }
 

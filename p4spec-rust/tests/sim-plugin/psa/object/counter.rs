@@ -28,7 +28,7 @@ fn test_counter_source_variants_bigints_and_packets_only_count() {
     }
     let int = BigInt::from(1) << 100;
     let counter = Counter::Packets(vec![int]);
-    local(&mut runner, "index", -1);
+    local(&mut runner, "index", 1);
     assert_eq!(
         counter
             .clone()

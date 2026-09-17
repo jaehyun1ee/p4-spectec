@@ -146,19 +146,17 @@ fn test_slice_updates_require_equal_lengths_and_support_text() {
 }
 
 #[test]
-fn test_negative_list_slice_lengths_are_empty_but_text_lengths_fail() {
+fn test_negative_slice_lengths_are_out_of_bounds() {
     let slice = |base, typ| {
         exp(ast::ExpKind::Slice(Box::new(base), Box::new(int(2)), Box::new(int(-3))), typ)
     };
-    let (arena, value_eval_1) =
-        eval(slice(list(vec![int(1), int(2), int(3)]), typ::make::list(typ::make::int()))).unwrap();
-    assert!(get::list(&arena, &value_eval_1).unwrap().is_empty());
-    assert!(
-        eval(slice(text("abc"), typ::make::text()))
-            .unwrap_err()
-            .to_string()
-            .contains("negative")
-    );
+    for exp_slice in [
+        slice(list(vec![int(1), int(2), int(3)]), typ::make::list(typ::make::int())),
+        slice(text("abc"), typ::make::text()),
+    ] {
+        let error = eval(exp_slice).unwrap_err().to_string();
+        assert!(error.contains("slice [2, -1) out of bounds [0, 3)"), "{error}");
+    }
 }
 
 #[test]

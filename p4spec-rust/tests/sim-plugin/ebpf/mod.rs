@@ -22,7 +22,7 @@ fn counter_counts(
     >,
     value_arch: Value,
     names: &[&str],
-) -> Vec<i64> {
+) -> Vec<u32> {
     let values = names
         .iter()
         .map(|name| make::text(runner.arena_mut(), (*name).to_owned(), Span::default()).unwrap())
@@ -129,7 +129,7 @@ fn test_native_ebpf_micro_fixture_packets() {
                     txs.extend(state.txs.iter().map(|tx| (tx.port, tx.packet.clone())));
                 }
                 Statement::Expect { port, packet_expected: Some(packet), exact: _ } => {
-                    txs_expect.push((port.parse::<i64>().unwrap(), packet))
+                    txs_expect.push((port.parse::<usize>().unwrap(), packet))
                 }
                 _ => panic!("micro fixture contains packet and expectation statements"),
             }

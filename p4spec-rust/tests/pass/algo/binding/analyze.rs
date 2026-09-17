@@ -2,7 +2,7 @@ use super::super::*;
 
 #[test]
 fn test_conversion_preserves_rule_paths_and_populates_antiunified_inputs_in_order() {
-    let tuple = |bool_l: bool, bool_r: bool, line: i64| {
+    let tuple = |bool_l: bool, bool_r: bool, line: usize| {
         exp(
             ast::ExpKind::Tuple(vec![
                 exp(ast::ExpKind::Bool(bool_l), ast::TypKind::Bool, line),
@@ -20,7 +20,7 @@ fn test_conversion_preserves_rule_paths_and_populates_antiunified_inputs_in_orde
         Mixfix::Arg(typ::make::bool()),
     ]), span:
     span(1) };
-    let rule = |name: &str, input: ast::Exp, output: bool, line: i64| {
+    let rule = |name: &str, input: ast::Exp, output: bool, line: usize| {
         crate::phrase! { node:
         ast::RuleKind {
             id: id(name, line),
@@ -175,7 +175,7 @@ fn test_clause_analysis_orders_partial_then_repeated_then_source_premises() {
 
 #[test]
 fn test_otherwise_clauses_and_rules_reject_impure_premises_at_the_branch_span() {
-    let impure_premise = |line: i64| {
+    let impure_premise = |line: usize| {
         crate::phrase! { node:
         ast::PremKind::If(ast::IfPrem {
             exp: exp(ast::ExpKind::Bool(true), ast::TypKind::Bool, line),
@@ -250,7 +250,7 @@ fn test_conversion_rejects_overlapping_and_missing_variant_table_patterns() {
         hints: vec![],
     }))), span:
     span(1) };
-    let table = |rows: Vec<ast::TableRow>, line: i64| {
+    let table = |rows: Vec<ast::TableRow>, line: usize| {
         crate::phrase! { node:
         ast::DefKind::MetaFunc(ast::MetaFuncDef::Table(ast::TableFunc {
             id: id("table", line),
@@ -263,7 +263,7 @@ fn test_conversion_rejects_overlapping_and_missing_variant_table_patterns() {
         })), span:
         span(line - 1) }
     };
-    let row = |pattern: ast::Exp, line: i64| {
+    let row = |pattern: ast::Exp, line: usize| {
         crate::phrase! { node:
         (
             vec![crate::phrase! { node:
@@ -273,7 +273,7 @@ fn test_conversion_rejects_overlapping_and_missing_variant_table_patterns() {
         ), span:
         span(line) }
     };
-    let case_pattern = |name: &str, line: i64| {
+    let case_pattern = |name: &str, line: usize| {
         let keyword = crate::phrase! { node: Atom::Keyword(name.to_owned()), span:  span(line) };
         let case =
             exp(ast::ExpKind::Case(Box::new(Mixfix::Atom(keyword))), choice_typ.node.clone(), line);
@@ -319,7 +319,7 @@ fn test_conversion_preserves_definition_clause_and_table_row_order() {
         hints: vec![],
     }))), span:
     span(2) };
-    let clause = |name: &str, line: i64| {
+    let clause = |name: &str, line: usize| {
         crate::phrase! { node:
         ast::ClauseKind {
             args: vec![crate::phrase! { node:
@@ -341,7 +341,7 @@ fn test_conversion_preserves_definition_clause_and_table_row_order() {
         hints: vec![],
     }))), span:
     span(3) };
-    let row = |name: &str, value: bool, line: i64| {
+    let row = |name: &str, value: bool, line: usize| {
         let pattern = exp(ast::ExpKind::Var(id(name, line)), choice_typ.node.clone(), line);
         crate::phrase! { node:
         (

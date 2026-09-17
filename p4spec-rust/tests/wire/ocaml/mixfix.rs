@@ -2,7 +2,7 @@ use p4spec_rust::util::json::json;
 use p4spec_rust::wire::ocaml::mixfix::MixopCodec;
 use serde_json::json;
 
-fn atom(json_node: json, line: i64) -> json {
+fn atom(json_node: json, line: usize) -> json {
     json!({
         "it": json_node,
         "note": null,

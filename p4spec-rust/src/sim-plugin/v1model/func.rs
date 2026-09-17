@@ -19,7 +19,7 @@ use crate::{
     util::bigint::remainder,
 };
 use num_bigint::BigInt;
-use num_traits::{ToPrimitive, Zero};
+use num_traits::Zero;
 
 /// Calling digest causes a message containing the values specified in
 /// the data parameter to be sent to the control plane software.  It is
@@ -501,10 +501,8 @@ where
     Interp: Interpreter<Iface, V1Model>,
 {
     let value_idx = func::find_var_e_local(ctx, value_ctx, "index")?;
-    let idx = unpack::p4_fixed_bit(ctx.arena(), &value_idx)?
-        .1
-        .to_i64()
-        .ok_or_else(|| ExternError::Failure("integer outside i64 range".to_owned()))?;
+    let idx = usize::try_from(&unpack::p4_fixed_bit(ctx.arena(), &value_idx)?.1)
+        .map_err(ExternError::from)?;
     let mut arch = pipe::find_arch_state(ctx, value_arch)?;
     arch.action.resubmit_opt = Some(idx);
     let value_arch = pipe::update_arch_state(ctx, value_arch, &arch)?;
@@ -557,10 +555,8 @@ where
     Interp: Interpreter<Iface, V1Model>,
 {
     let value_idx = func::find_var_e_local(ctx, value_ctx, "index")?;
-    let idx = unpack::p4_fixed_bit(ctx.arena(), &value_idx)?
-        .1
-        .to_i64()
-        .ok_or_else(|| ExternError::Failure("integer outside i64 range".to_owned()))?;
+    let idx = usize::try_from(&unpack::p4_fixed_bit(ctx.arena(), &value_idx)?.1)
+        .map_err(ExternError::from)?;
     let mut arch = pipe::find_arch_state(ctx, value_arch)?;
     arch.action.recirculate_opt = Some(idx);
     let value_arch = pipe::update_arch_state(ctx, value_arch, &arch)?;

@@ -8,24 +8,20 @@ use std::{fmt, rc::Rc};
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct Position {
     pub file: Rc<str>,
-    pub line: i64,
-    pub column: i64,
+    pub line: usize,
+    pub column: usize,
 }
 
 impl Position {
     /// Constructs a source position
-    pub fn new(file: impl Into<Rc<str>>, line: i64, column: i64) -> Self {
+    pub fn new(file: impl Into<Rc<str>>, line: usize, column: usize) -> Self {
         Self { file: file.into(), line, column }
     }
 }
 
 impl fmt::Display for Position {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.line == -1 {
-            write!(fmt, "0x{:x}", self.column)
-        } else {
-            write!(fmt, "{}.{}", self.line, self.column + 1)
-        }
+        write!(fmt, "{}.{}", self.line, self.column + 1)
     }
 }
 

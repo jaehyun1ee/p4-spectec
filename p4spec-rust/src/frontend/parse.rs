@@ -114,15 +114,15 @@ fn parse_file_with_context(path: &Path, ctx: &Context) -> Result<Spec, FrontendE
 fn invalid_utf8_span(name: Rc<str>, bytes: &[u8], error: &str::Utf8Error) -> Span {
     let offset = error.valid_up_to();
     let valid_prefix = &bytes[..offset];
-    let line = valid_prefix.iter().filter(|byte| **byte == b'\n').count() as i64 + 1;
+    let line = valid_prefix.iter().filter(|byte| **byte == b'\n').count() + 1;
     let line_start = valid_prefix
         .iter()
         .rposition(|byte| *byte == b'\n')
         .map_or(0, |newline| newline + 1);
-    let column = (offset - line_start) as i64;
+    let column = offset - line_start;
     let invalid_length = error
         .error_len()
-        .unwrap_or_else(|| bytes.len().saturating_sub(offset)) as i64;
+        .unwrap_or_else(|| bytes.len().saturating_sub(offset));
     let pos_l = Position::new(Rc::clone(&name), line, column);
     let pos_r = Position::new(name, line, column + invalid_length);
     Span::new(pos_l, pos_r)
