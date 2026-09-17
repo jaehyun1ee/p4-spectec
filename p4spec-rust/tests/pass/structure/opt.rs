@@ -68,10 +68,10 @@ fn test_hold_merge_exposes_bindings_for_a_later_loop_iteration() {
         }))
     };
     let block = vec![hold(vec![binding("x")]), hold(vec![binding("x")])];
-    let block_once = merge_binding::apply(block.clone(), &mut false).unwrap();
-    let block_once = merge_if::apply(&tdenv, block_once, &mut false).unwrap();
-    let block_once = merge_hold::apply(block_once, &mut false);
-    let block_once = casify::apply(&tdenv, block_once, &mut false).unwrap();
+    let block_once = merge_binding::apply(&mut false, block.clone()).unwrap();
+    let block_once = merge_if::apply(&tdenv, &mut false, block_once).unwrap();
+    let block_once = merge_hold::apply(&mut false, block_once);
+    let block_once = casify::apply(&tdenv, &mut false, block_once).unwrap();
     let block = optimize(&tdenv, block, true).unwrap();
     assert!(!block.syntax_eq(&block_once));
     let mut instr_expect = binding("x");

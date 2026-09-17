@@ -24,8 +24,8 @@ pub(crate) fn pretty_rel(
     let mut body = (exps_match, block, block_else);
     loop {
         changed.set(false);
-        body = revive_underscore::apply_rel(body, &changed)?;
-        body = rename_tick::apply_rel(body, &changed)?;
+        body = revive_underscore::apply_rel(&changed, body)?;
+        body = rename_tick::apply_rel(&changed, body)?;
         if !changed.get() {
             return Ok(body);
         }
@@ -43,8 +43,8 @@ pub(crate) fn pretty_func(
     let mut body = (args_input, block, block_else);
     loop {
         changed.set(false);
-        body = revive_underscore::apply_func(body, &changed)?;
-        body = rename_tick::apply_func(body, &changed)?;
+        body = revive_underscore::apply_func(&changed, body)?;
+        body = rename_tick::apply_func(&changed, body)?;
         if !changed.get() {
             return Ok(body);
         }

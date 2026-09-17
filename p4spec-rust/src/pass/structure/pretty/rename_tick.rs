@@ -43,9 +43,9 @@ fn find_rename_ticks(frees: &IdSet, id: &Id) -> Option<Id> {
 
 // Reserve each choice before the next binding: (x'', x''') can become (x, x')
 fn binding_renamer(
+    changed: &Rc<Cell<bool>>,
     frees: impl FnOnce() -> IdSet,
     ids: &IdSet,
-    changed: &Rc<Cell<bool>>,
 ) -> Renamer {
     let mut renamer = Renamer::empty().with_changes(changed);
     if !ids.iter().any(|id| id.node.ends_with('\'')) {
@@ -68,53 +68,53 @@ fn binding_renamer(
 // Under `if x { ... }`, a binding x' can stay x' but cannot become x
 
 fn upstream_instr(
+    changed: &Rc<Cell<bool>>,
     frees: &IdSet,
     instr_ol: Instr,
-    changed: &Rc<Cell<bool>>,
 ) -> Result<Instr, StructureError> {
-    let instr_kind_ol = upstream_instr_kind(frees, instr_ol.node, &instr_ol.span, changed)?;
+    let instr_kind_ol = upstream_instr_kind(changed, frees, &instr_ol.span, instr_ol.node)?;
     let instr = crate::phrase!(node: instr_kind_ol, span: instr_ol.span);
     Ok(instr)
 }
 
 fn upstream_instr_kind(
-    frees: &IdSet,
-    instr_kind_ol: InstrKind,
-    span: &Span,
     changed: &Rc<Cell<bool>>,
+    frees: &IdSet,
+    span: &Span,
+    instr_kind_ol: InstrKind,
 ) -> Result<InstrKind, StructureError> {
     match instr_kind_ol {
-        InstrKind::If(instr_ol) => upstream_if_instr(frees, instr_ol, changed),
-        InstrKind::Hold(instr_ol) => upstream_hold_instr(frees, instr_ol, changed),
-        InstrKind::Case(instr_ol) => upstream_case_instr(frees, instr_ol, changed),
-        InstrKind::Group(instr_ol) => upstream_group_instr(frees, instr_ol, changed),
-        InstrKind::Let(instr_ol) => upstream_let_instr(frees, instr_ol, changed),
-        InstrKind::Rule(instr_ol) => upstream_rule_instr(frees, instr_ol, span, changed),
+        InstrKind::If(instr_ol) => upstream_if_instr(changed, frees, instr_ol),
+        InstrKind::Hold(instr_ol) => upstream_hold_instr(changed, frees, instr_ol),
+        InstrKind::Case(instr_ol) => upstream_case_instr(changed, frees, instr_ol),
+        InstrKind::Group(instr_ol) => upstream_group_instr(changed, frees, instr_ol),
+        InstrKind::Let(instr_ol) => upstream_let_instr(changed, frees, instr_ol),
+        InstrKind::Rule(instr_ol) => upstream_rule_instr(changed, frees, span, instr_ol),
         _ => Ok(instr_kind_ol),
     }
 }
 
 fn upstream_block(
+    changed: &Rc<Cell<bool>>,
     frees: &IdSet,
     block: Block,
-    changed: &Rc<Cell<bool>>,
 ) -> Result<Block, StructureError> {
     block
         .into_iter()
-        .map(|instr_ol| upstream_instr(frees, instr_ol, changed))
+        .map(|instr_ol| upstream_instr(changed, frees, instr_ol))
         .collect()
 }
 
 // - If instruction
 
 fn upstream_if_instr(
+    changed: &Rc<Cell<bool>>,
     frees: &IdSet,
     instr_ol: IfInstr,
-    changed: &Rc<Cell<bool>>,
 ) -> Result<InstrKind, StructureError> {
     let IfInstr { exp, iter_exps, block } = instr_ol;
     let frees = exp.free().union(frees.clone());
-    let block = upstream_block(&frees, block, changed)?;
+    let block = upstream_block(changed, &frees, block)?;
     let instr = IfInstr { exp, iter_exps, block };
     Ok(InstrKind::If(instr))
 }
@@ -122,14 +122,14 @@ fn upstream_if_instr(
 // - Hold instruction
 
 fn upstream_hold_instr(
+    changed: &Rc<Cell<bool>>,
     frees: &IdSet,
     instr_ol: HoldInstr,
-    changed: &Rc<Cell<bool>>,
 ) -> Result<InstrKind, StructureError> {
     let HoldInstr { id, not_exp, iter_exps, block_hold, block_not_hold } = instr_ol;
     let frees = not_exp.free().union(frees.clone());
-    let block_hold = upstream_block(&frees, block_hold, changed)?;
-    let block_not_hold = upstream_block(&frees, block_not_hold, changed)?;
+    let block_hold = upstream_block(changed, &frees, block_hold)?;
+    let block_not_hold = upstream_block(changed, &frees, block_not_hold)?;
     let instr = HoldInstr { id, not_exp, iter_exps, block_hold, block_not_hold };
     Ok(InstrKind::Hold(instr))
 }
@@ -137,9 +137,9 @@ fn upstream_hold_instr(
 // - Case instruction
 
 fn upstream_case_instr(
+    changed: &Rc<Cell<bool>>,
     frees: &IdSet,
     instr_ol: CaseInstr,
-    changed: &Rc<Cell<bool>>,
 ) -> Result<InstrKind, StructureError> {
     let CaseInstr { exp, cases, total } = instr_ol;
     let frees = exp.free().union(frees.clone());
@@ -148,7 +148,7 @@ fn upstream_case_instr(
         .map(|case| {
             let Case { guard, block } = case;
             let frees = guard.free().union(frees.clone());
-            let block = upstream_block(&frees, block, changed)?;
+            let block = upstream_block(changed, &frees, block)?;
             let case = Case { guard, block };
             Ok(case)
         })
@@ -160,13 +160,13 @@ fn upstream_case_instr(
 // - Group instruction
 
 fn upstream_group_instr(
+    changed: &Rc<Cell<bool>>,
     frees: &IdSet,
     instr_ol: GroupInstr,
-    changed: &Rc<Cell<bool>>,
 ) -> Result<InstrKind, StructureError> {
     let GroupInstr { id, rel_signature, exps, block } = instr_ol;
     let frees = exps.as_slice().free().union(frees.clone());
-    let block = upstream_block(&frees, block, changed)?;
+    let block = upstream_block(changed, &frees, block)?;
     let instr = GroupInstr { id, rel_signature, exps, block };
     Ok(InstrKind::Group(instr))
 }
@@ -174,14 +174,15 @@ fn upstream_group_instr(
 // - Let instruction
 
 fn upstream_let_instr(
+    changed: &Rc<Cell<bool>>,
     frees_upstream: &IdSet,
     instr_ol: LetInstr,
-    changed: &Rc<Cell<bool>>,
 ) -> Result<InstrKind, StructureError> {
     let LetInstr { exp_l, exp_r, iter_instrs, block } = instr_ol;
     let frees_l = exp_l.free();
     let frees_r = exp_r.free();
     let renamer = binding_renamer(
+        changed,
         || {
             frees_l
                 .clone()
@@ -190,13 +191,12 @@ fn upstream_let_instr(
                 .union(frees_upstream.clone())
         },
         &frees_l,
-        changed,
     );
     let exp_l = renamer.rename_exp(exp_l);
     let iter_instrs = renamer.rename_iterinstrs_bind(iter_instrs);
     let frees = exp_l.free().union(frees_r).union(frees_upstream.clone());
     let block = renamer.rename_block(block)?;
-    let block = upstream_block(&frees, block, changed)?;
+    let block = upstream_block(changed, &frees, block)?;
     let instr = LetInstr { exp_l, exp_r, iter_instrs, block };
     Ok(InstrKind::Let(instr))
 }
@@ -204,10 +204,10 @@ fn upstream_let_instr(
 // - Rule instruction
 
 fn upstream_rule_instr(
-    frees_upstream: &IdSet,
-    instr_ol: RuleInstr,
-    span: &Span,
     changed: &Rc<Cell<bool>>,
+    frees_upstream: &IdSet,
+    span: &Span,
+    instr_ol: RuleInstr,
 ) -> Result<InstrKind, StructureError> {
     let RuleInstr { id, not_exp, input_hint, iter_instrs, block } = instr_ol;
     let exps = not_exp.args().into_iter().cloned().collect();
@@ -216,6 +216,7 @@ fn upstream_rule_instr(
     let frees_output = exps_output.as_slice().free();
     let frees_input = exps_input.as_slice().free();
     let renamer = binding_renamer(
+        changed,
         || {
             frees_input
                 .clone()
@@ -224,7 +225,6 @@ fn upstream_rule_instr(
                 .union(frees_upstream.clone())
         },
         &frees_output,
-        changed,
     );
     let exps_output = renamer.rename_exps(exps_output);
     let iter_instrs = renamer.rename_iterinstrs_bind(iter_instrs);
@@ -236,7 +236,7 @@ fn upstream_rule_instr(
     let mixop = not_exp.to_mixop();
     let not_exp = Mixop::fill(&mixop, exps).expect("validated arguments preserve the mixfix arity");
     let block = renamer.rename_block(block)?;
-    let block = upstream_block(&frees, block, changed)?;
+    let block = upstream_block(changed, &frees, block)?;
     let instr = RuleInstr { id, not_exp, input_hint, iter_instrs, block };
     Ok(InstrKind::Rule(instr))
 }
@@ -244,8 +244,8 @@ fn upstream_rule_instr(
 // == Definition inputs
 
 fn upstream_exps(
-    (mut exps_match, mut block, mut block_else): (Vec<Exp>, Block, Option<Block>),
     changed: &Rc<Cell<bool>>,
+    (mut exps_match, mut block, mut block_else): (Vec<Exp>, Block, Option<Block>),
 ) -> Result<(Vec<Exp>, Block, Option<Block>), StructureError> {
     let ids = exps_match.as_slice().free();
     if !ids.iter().any(|id| id.node.ends_with('\'')) {
@@ -269,8 +269,8 @@ fn upstream_exps(
 }
 
 fn upstream_args(
-    (mut args_input, mut block, mut block_else): (Vec<Arg>, Block, Option<Block>),
     changed: &Rc<Cell<bool>>,
+    (mut args_input, mut block, mut block_else): (Vec<Arg>, Block, Option<Block>),
 ) -> Result<(Vec<Arg>, Block, Option<Block>), StructureError> {
     let ids = args_input.as_slice().free();
     if !ids.iter().any(|id| id.node.ends_with('\'')) {
@@ -296,27 +296,27 @@ fn upstream_args(
 // == Entry points
 
 pub(crate) fn apply_rel(
-    body: (Vec<Exp>, Block, Option<Block>),
     changed: &Rc<Cell<bool>>,
+    body: (Vec<Exp>, Block, Option<Block>),
 ) -> Result<(Vec<Exp>, Block, Option<Block>), StructureError> {
-    let (exps_match, mut block, mut block_else) = upstream_exps(body, changed)?;
+    let (exps_match, mut block, mut block_else) = upstream_exps(changed, body)?;
     let frees = exps_match.as_slice().free();
-    block = upstream_block(&frees, block, changed)?;
+    block = upstream_block(changed, &frees, block)?;
     block_else = block_else
-        .map(|block| upstream_block(&frees, block, changed))
+        .map(|block| upstream_block(changed, &frees, block))
         .transpose()?;
     Ok((exps_match, block, block_else))
 }
 
 pub(crate) fn apply_func(
-    body: (Vec<Arg>, Block, Option<Block>),
     changed: &Rc<Cell<bool>>,
+    body: (Vec<Arg>, Block, Option<Block>),
 ) -> Result<(Vec<Arg>, Block, Option<Block>), StructureError> {
-    let (args_input, mut block, mut block_else) = upstream_args(body, changed)?;
+    let (args_input, mut block, mut block_else) = upstream_args(changed, body)?;
     let frees = args_input.as_slice().free();
-    block = upstream_block(&frees, block, changed)?;
+    block = upstream_block(changed, &frees, block)?;
     block_else = block_else
-        .map(|block| upstream_block(&frees, block, changed))
+        .map(|block| upstream_block(changed, &frees, block))
         .transpose()?;
     Ok((args_input, block, block_else))
 }

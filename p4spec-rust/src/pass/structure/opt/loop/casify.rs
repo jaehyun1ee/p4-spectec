@@ -36,11 +36,11 @@ use crate::{
 
 // == Instructions
 
-fn casify_block(tdenv: &TDEnv, block: Block, changed: &mut bool) -> Result<Block, StructureError> {
+fn casify_block(tdenv: &TDEnv, changed: &mut bool, block: Block) -> Result<Block, StructureError> {
     let mut block_output = Vec::with_capacity(block.len());
     let mut instrs = VecDeque::from(block);
     while let Some(instr) = instrs.pop_front() {
-        let instr_kind = casify_instr_kind(tdenv, instr.node, &instr.span, &mut instrs, changed)?;
+        let instr_kind = casify_instr_kind(tdenv, changed, &instr.span, &mut instrs, instr.node)?;
         let instr = crate::phrase!(node: instr_kind, span: instr.span);
         block_output.push(instr);
     }
@@ -49,18 +49,18 @@ fn casify_block(tdenv: &TDEnv, block: Block, changed: &mut bool) -> Result<Block
 
 fn casify_instr_kind(
     tdenv: &TDEnv,
-    instr_kind: InstrKind,
+    changed: &mut bool,
     span: &Span,
     instrs: &mut VecDeque<Instr>,
-    changed: &mut bool,
+    instr_kind: InstrKind,
 ) -> Result<InstrKind, StructureError> {
     match instr_kind {
-        InstrKind::If(instr) => casify_if_instr(tdenv, instr, span, instrs, changed),
-        InstrKind::Hold(instr) => casify_hold_instr(tdenv, instr, changed),
-        InstrKind::Case(instr) => casify_case_instr(tdenv, instr, span, instrs, changed),
-        InstrKind::Group(instr) => casify_group_instr(tdenv, instr, changed),
-        InstrKind::Let(instr) => casify_let_instr(tdenv, instr, changed),
-        InstrKind::Rule(instr) => casify_rule_instr(tdenv, instr, changed),
+        InstrKind::If(instr) => casify_if_instr(tdenv, changed, span, instrs, instr),
+        InstrKind::Hold(instr) => casify_hold_instr(tdenv, changed, instr),
+        InstrKind::Case(instr) => casify_case_instr(tdenv, changed, span, instrs, instr),
+        InstrKind::Group(instr) => casify_group_instr(tdenv, changed, instr),
+        InstrKind::Let(instr) => casify_let_instr(tdenv, changed, instr),
+        InstrKind::Rule(instr) => casify_rule_instr(tdenv, changed, instr),
         InstrKind::Return(_) | InstrKind::Result(_) | InstrKind::Debug(_) => Ok(instr_kind),
     }
 }
@@ -69,18 +69,18 @@ fn casify_instr_kind(
 
 fn casify_if_instr(
     tdenv: &TDEnv,
-    mut instr_if: IfInstr,
+    changed: &mut bool,
     span: &Span,
     instrs: &mut VecDeque<Instr>,
-    changed: &mut bool,
+    mut instr_if: IfInstr,
 ) -> Result<InstrKind, StructureError> {
     if let Some((idx, instr_case)) = casify_from_if(tdenv, &mut instr_if, instrs)? {
         *changed = true;
         instrs.remove(idx);
-        return casify_case_instr(tdenv, instr_case, span, instrs, changed);
+        return casify_case_instr(tdenv, changed, span, instrs, instr_case);
     }
     let IfInstr { exp, iter_exps, block } = instr_if;
-    let block = casify_block(tdenv, block, changed)?;
+    let block = casify_block(tdenv, changed, block)?;
     let instr = IfInstr { exp, iter_exps, block };
     Ok(InstrKind::If(instr))
 }
@@ -89,12 +89,12 @@ fn casify_if_instr(
 
 fn casify_hold_instr(
     tdenv: &TDEnv,
-    instr: HoldInstr,
     changed: &mut bool,
+    instr: HoldInstr,
 ) -> Result<InstrKind, StructureError> {
     let HoldInstr { id, not_exp, iter_exps, block_hold, block_not_hold } = instr;
-    let block_hold = casify_block(tdenv, block_hold, changed)?;
-    let block_not_hold = casify_block(tdenv, block_not_hold, changed)?;
+    let block_hold = casify_block(tdenv, changed, block_hold)?;
+    let block_not_hold = casify_block(tdenv, changed, block_not_hold)?;
     let instr = HoldInstr { id, not_exp, iter_exps, block_hold, block_not_hold };
     Ok(InstrKind::Hold(instr))
 }
@@ -103,10 +103,10 @@ fn casify_hold_instr(
 
 fn casify_case_instr(
     tdenv: &TDEnv,
-    mut instr_case: CaseInstr,
+    changed: &mut bool,
     span: &Span,
     instrs: &mut VecDeque<Instr>,
-    changed: &mut bool,
+    mut instr_case: CaseInstr,
 ) -> Result<InstrKind, StructureError> {
     while let Some((idx, instr_case_merged)) =
         casify_from_case(tdenv, &mut instr_case, span, instrs)?
@@ -120,7 +120,7 @@ fn casify_case_instr(
         .into_iter()
         .map(|case| {
             let Case { guard, block } = case;
-            let block = casify_block(tdenv, block, changed)?;
+            let block = casify_block(tdenv, changed, block)?;
             let case = Case { guard, block };
             Ok(case)
         })
@@ -133,11 +133,11 @@ fn casify_case_instr(
 
 fn casify_group_instr(
     tdenv: &TDEnv,
-    instr: GroupInstr,
     changed: &mut bool,
+    instr: GroupInstr,
 ) -> Result<InstrKind, StructureError> {
     let GroupInstr { id, rel_signature, exps, block } = instr;
-    let block = casify_block(tdenv, block, changed)?;
+    let block = casify_block(tdenv, changed, block)?;
     let instr = GroupInstr { id, rel_signature, exps, block };
     Ok(InstrKind::Group(instr))
 }
@@ -146,11 +146,11 @@ fn casify_group_instr(
 
 fn casify_let_instr(
     tdenv: &TDEnv,
-    instr: LetInstr,
     changed: &mut bool,
+    instr: LetInstr,
 ) -> Result<InstrKind, StructureError> {
     let LetInstr { exp_l, exp_r, iter_instrs, block } = instr;
-    let block = casify_block(tdenv, block, changed)?;
+    let block = casify_block(tdenv, changed, block)?;
     let instr = LetInstr { exp_l, exp_r, iter_instrs, block };
     Ok(InstrKind::Let(instr))
 }
@@ -159,11 +159,11 @@ fn casify_let_instr(
 
 fn casify_rule_instr(
     tdenv: &TDEnv,
-    instr: RuleInstr,
     changed: &mut bool,
+    instr: RuleInstr,
 ) -> Result<InstrKind, StructureError> {
     let RuleInstr { id, not_exp, input_hint, iter_instrs, block } = instr;
-    let block = casify_block(tdenv, block, changed)?;
+    let block = casify_block(tdenv, changed, block)?;
     let instr = RuleInstr { id, not_exp, input_hint, iter_instrs, block };
     Ok(InstrKind::Rule(instr))
 }
@@ -406,8 +406,8 @@ fn apply_case_merge(idx: usize, case: Case, cases: &mut Vec<Case>) {
 
 pub(crate) fn apply(
     tdenv: &TDEnv,
-    block: Block,
     changed: &mut bool,
+    block: Block,
 ) -> Result<Block, StructureError> {
-    casify_block(tdenv, block, changed)
+    casify_block(tdenv, changed, block)
 }

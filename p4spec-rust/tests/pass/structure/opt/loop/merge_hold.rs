@@ -15,7 +15,7 @@ fn test_both_outcomes_merge_in_order_and_adopt_target_condition_metadata() {
         instr_hold.block_not_hold = vec![ret("not_a"), ret("not_b")];
     }
     assert_eq!(
-        apply(vec![instr_a, instr_b, ret("tail")], &mut false),
+        apply(&mut false, vec![instr_a, instr_b, ret("tail")]),
         vec![instr_expect, ret("tail")]
     );
 }
@@ -24,12 +24,12 @@ fn test_both_outcomes_merge_in_order_and_adopt_target_condition_metadata() {
 fn test_three_holds_and_both_one_sided_outcomes() {
     assert_eq!(
         apply(
+            &mut false,
             vec![
                 hold(vec![ret("a")], vec![]),
                 hold(vec![], vec![ret("b")]),
                 hold(vec![ret("c")], vec![])
-            ],
-            &mut false
+            ]
         ),
         vec![hold(vec![ret("a"), ret("c")], vec![ret("b")])]
     );
@@ -47,10 +47,10 @@ fn test_condition_iterator_and_barrier_mismatch() {
             _ => instr_hold.iter_exps = vec![(Iter::List, vec![])],
         };
         let block = vec![instr_a.clone(), instr_b];
-        assert_eq!(apply(block.clone(), &mut false), block);
+        assert_eq!(apply(&mut false, block.clone()), block);
     }
     let block = vec![instr_a.clone(), ret("barrier"), instr_a];
-    assert_eq!(apply(block.clone(), &mut false), block);
+    assert_eq!(apply(&mut false, block.clone()), block);
 }
 
 fn nested(block: Block) -> Block {
@@ -79,12 +79,12 @@ fn nested(block: Block) -> Block {
 fn test_nested_blocks_and_debug_barrier() {
     let block = vec![hold(vec![ret("a")], vec![]), hold(vec![], vec![ret("b")])];
     let block_expect = vec![hold(vec![ret("a")], vec![ret("b")])];
-    assert_eq!(apply(nested(block.clone()), &mut false), nested(block_expect));
+    assert_eq!(apply(&mut false, nested(block.clone())), nested(block_expect));
     let instr_debug = instr(InstrKind::Debug(DebugInstr {
         exp: variable("debug"),
         instr: Box::new(binding("outer", block)),
     }));
-    assert_eq!(apply(vec![instr_debug.clone()], &mut false), vec![instr_debug]);
+    assert_eq!(apply(&mut false, vec![instr_debug.clone()]), vec![instr_debug]);
 }
 
 #[test]
@@ -106,8 +106,8 @@ fn test_each_outcome_merges_common_leading_conditions() {
     }
     assert_eq!(
         apply(
-            vec![hold(branch("a"), branch("not_a")), hold(branch("b"), branch("not_b"))],
-            &mut false
+            &mut false,
+            vec![hold(branch("a"), branch("not_a")), hold(branch("b"), branch("not_b"))]
         ),
         vec![hold(branch_merged("a", "b"), branch_merged("not_a", "not_b"))]
     );
@@ -124,13 +124,13 @@ fn test_tail_merges_before_retrying_the_merged_head() {
     }
     assert_eq!(
         apply(
+            &mut false,
             vec![
                 hold(vec![ret("a")], vec![]),
                 hold(vec![ret("b")], vec![]),
                 hold(vec![branch(&["c"])], vec![]),
                 hold(vec![branch(&["d"])], vec![]),
-            ],
-            &mut false
+            ]
         ),
         vec![hold(vec![ret("a"), ret("b"), branch(&["c", "d"])], vec![])]
     );
@@ -141,11 +141,11 @@ fn test_nested_merges_report_progress_and_stable_blocks_do_not() {
     let block = vec![hold(vec![], vec![]), hold(vec![], vec![])];
     let block = vec![hold(vec![], block)];
     let mut changed = false;
-    let block = apply(block, &mut changed);
+    let block = apply(&mut changed, block);
     assert!(changed);
     changed = false;
     let block_expect = block.clone();
-    let block = apply(block, &mut changed);
+    let block = apply(&mut changed, block);
     assert!(!changed);
     assert_eq!(block, block_expect);
 }
