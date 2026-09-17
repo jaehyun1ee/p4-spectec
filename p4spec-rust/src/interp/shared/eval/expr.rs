@@ -167,7 +167,7 @@ fn eval_cmp_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Ext
 ) -> Backtrack<Value> {
     let value_l = backtrack!(eval_exp(runner_ctx, ctx, exp_l));
     let value_r = backtrack!(eval_exp(runner_ctx, ctx, exp_r));
-    let result = backtrack!(ops::compare(runner_ctx.arena(), span, op, value_l, value_r));
+    let result = backtrack!(ops::cmpop(runner_ctx.arena(), span, op, value_l, value_r));
     let value =
         backtrack_from_result!(make::bool(runner_ctx.arena_mut(), result, Span::default()), span);
     Backtrack::Ok(value)
@@ -207,7 +207,7 @@ fn eval_sub_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Ext
     subcheck: &ast::Subcheck,
 ) -> Backtrack<Value> {
     let value = backtrack!(eval_exp(runner_ctx, ctx, exp_inner));
-    let matches = backtrack!(ops::check_sub(runner_ctx.arena(), ctx, span, subcheck, value));
+    let matches = backtrack!(ops::sub(runner_ctx.arena(), ctx, span, subcheck, value));
     let value =
         backtrack_from_result!(make::bool(runner_ctx.arena_mut(), matches, Span::default()), span);
     Backtrack::Ok(value)
@@ -222,7 +222,7 @@ fn eval_match_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: E
     pattern: &ast::Pattern,
 ) -> Backtrack<Value> {
     let value = backtrack!(eval_exp(runner_ctx, ctx, exp_inner));
-    let matches = ops::matches(runner_ctx.arena(), pattern, value);
+    let matches = ops::r#match(runner_ctx.arena(), pattern, value);
     let value = backtrack_from_result!(
         make::bool(runner_ctx.arena_mut(), matches, Span::default()),
         &Span::default()
@@ -395,7 +395,7 @@ fn eval_mem_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Ext
 ) -> Backtrack<Value> {
     let value_elem = backtrack!(eval_exp(runner_ctx, ctx, exp_elem));
     let value_list = backtrack!(eval_exp(runner_ctx, ctx, exp_list));
-    let contains = backtrack!(ops::contains(runner_ctx.arena(), span, value_elem, value_list));
+    let contains = backtrack!(ops::mem(runner_ctx.arena(), span, value_elem, value_list));
     let value =
         backtrack_from_result!(make::bool(runner_ctx.arena_mut(), contains, Span::default()), span);
     Backtrack::Ok(value)

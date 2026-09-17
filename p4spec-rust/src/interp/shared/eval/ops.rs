@@ -79,7 +79,7 @@ pub(crate) fn binop(
 
 // - Comparison operators
 
-pub(crate) fn compare(
+pub(crate) fn cmpop(
     arena: &ValueArena,
     span: &Span,
     op: &ast::CmpOp,
@@ -103,7 +103,7 @@ pub(crate) fn compare(
 
 // - Subtype checks
 
-pub(crate) fn check_sub(
+pub(crate) fn sub(
     arena: &ValueArena,
     ctx: &impl ReadContext,
     span: &Span,
@@ -123,7 +123,7 @@ pub(crate) fn check_sub(
 
 // - Pattern matching
 
-pub(crate) fn matches(arena: &ValueArena, pattern: &ast::Pattern, value: Value) -> bool {
+pub(crate) fn r#match(arena: &ValueArena, pattern: &ast::Pattern, value: Value) -> bool {
     match (pattern, arena.kind(&value)) {
         (ast::Pattern::Case(mixop), ValueKind::Case(value)) => value.eq_shape(mixop.as_ref()),
         (ast::Pattern::List(pattern), ValueKind::List(values)) => match pattern {
@@ -139,7 +139,7 @@ pub(crate) fn matches(arena: &ValueArena, pattern: &ast::Pattern, value: Value) 
 
 // - Membership
 
-pub(crate) fn contains(
+pub(crate) fn mem(
     arena: &ValueArena,
     span: &Span,
     value_elem: Value,

@@ -250,17 +250,15 @@ fn eval_guard<Iface: Interface, Ext: Extern>(
         }
         ast::Guard::Cmp(op, _, exp_r) => {
             let value_r = backtrack!(eval_exp(runner_ctx, ctx, exp_r));
-            ops::compare(runner_ctx.arena(), &exp.span, op, value, value_r)
+            ops::cmpop(runner_ctx.arena(), &exp.span, op, value, value_r)
         }
-        ast::Guard::Sub(_, check) => {
-            ops::check_sub(runner_ctx.arena(), ctx, &exp.span, check, value)
-        }
+        ast::Guard::Sub(_, check) => ops::sub(runner_ctx.arena(), ctx, &exp.span, check, value),
         ast::Guard::Match(pattern) => {
-            Backtrack::Ok(ops::matches(runner_ctx.arena(), pattern, value))
+            Backtrack::Ok(ops::r#match(runner_ctx.arena(), pattern, value))
         }
         ast::Guard::Mem(exp_list) => {
             let value_list = backtrack!(eval_exp(runner_ctx, ctx, exp_list));
-            ops::contains(runner_ctx.arena(), &exp.span, value, value_list)
+            ops::mem(runner_ctx.arena(), &exp.span, value, value_list)
         }
     })();
     result.nest(exp.span.clone(), || {
