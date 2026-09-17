@@ -18,7 +18,7 @@ use crate::{
 };
 
 use crate::interp::shared::{
-    backtrack::{Backtrack, ok, unwrap, unwrap_from_result},
+    backtrack::{Backtrack, err, ok, unwrap, unwrap_from_result},
     error::{ErrorKind, ExprErrorKind},
 };
 
@@ -187,7 +187,7 @@ pub(crate) fn cast_up(
         ast::TypKind::Tuple(typs) => {
             let values = unwrap_from_result!(get::tuple(arena, &value), span).to_vec();
             if typs.len() != values.len() {
-                return Backtrack::err(
+                return err!(
                     span.clone(),
                     ErrorKind::Expr(ExprErrorKind::TupleCastArityMismatch {
                         expected: typs.len(),
@@ -265,7 +265,7 @@ pub(crate) fn cast_down(
         ast::TypKind::Tuple(typs) => {
             let values = unwrap_from_result!(get::tuple(arena, &value), span).to_vec();
             if typs.len() != values.len() {
-                return Backtrack::err(
+                return err!(
                     span.clone(),
                     ErrorKind::Expr(ExprErrorKind::TupleCastArityMismatch {
                         expected: typs.len(),
@@ -325,7 +325,7 @@ pub(crate) fn access_dot(
         .find(|(field, _)| field.node == atom.node)
     {
         Some((_, value)) => ok!(*value),
-        None => Backtrack::err(atom.span.clone(), ErrorKind::Expr(ExprErrorKind::UndefinedField)),
+        None => err!(atom.span.clone(), ErrorKind::Expr(ExprErrorKind::UndefinedField)),
     }
 }
 
@@ -348,14 +348,11 @@ pub(crate) fn access_index(
         ValueKind::Text(text) => text.len(),
         ValueKind::List(values) => values.len(),
         _ => {
-            return Backtrack::err(
-                span_base.clone(),
-                ErrorKind::Expr(ExprErrorKind::IndexOperandMismatch),
-            );
+            return err!(span_base.clone(), ErrorKind::Expr(ExprErrorKind::IndexOperandMismatch),);
         }
     };
     let Some(idx) = usize::try_from(&int_idx).ok().filter(|idx| *idx < len) else {
-        return Backtrack::err(
+        return err!(
             span_idx.clone(),
             ErrorKind::Expr(ExprErrorKind::IndexOutOfBounds { idx: int_idx, len }),
         );
@@ -396,10 +393,7 @@ pub(crate) fn access_slice(
         ValueKind::Text(text) => text.len(),
         ValueKind::List(values) => values.len(),
         _ => {
-            return Backtrack::err(
-                span_base.clone(),
-                ErrorKind::Expr(ExprErrorKind::SliceOperandMismatch),
-            );
+            return err!(span_base.clone(), ErrorKind::Expr(ExprErrorKind::SliceOperandMismatch),);
         }
     };
     let Some((idx, idx_end)) = usize::try_from(&int_idx)
@@ -409,7 +403,7 @@ pub(crate) fn access_slice(
         .filter(|(_, idx_end)| *idx_end <= size)
     else {
         let int_end = &int_idx + &int_len;
-        return Backtrack::err(
+        return err!(
             span_bounds.clone(),
             ErrorKind::Expr(ExprErrorKind::SliceOutOfBounds { idx: int_idx, end: int_end, size }),
         );
@@ -420,10 +414,9 @@ pub(crate) fn access_slice(
                 let text = text.to_owned();
                 Backtrack::from_result(make::text(arena, text, Span::default()), span_typ)
             }
-            None => Backtrack::err(
-                span_bounds.clone(),
-                ErrorKind::Expr(ExprErrorKind::TextSliceBoundaryMismatch),
-            ),
+            None => {
+                err!(span_bounds.clone(), ErrorKind::Expr(ExprErrorKind::TextSliceBoundaryMismatch),)
+            }
         },
         ValueKind::List(values) => {
             let values = values[idx..idx_end].to_vec();
@@ -454,14 +447,11 @@ pub(crate) fn update_index(
         ValueKind::Text(text) => text.len(),
         ValueKind::List(values) => values.len(),
         _ => {
-            return Backtrack::err(
-                span_base.clone(),
-                ErrorKind::Expr(ExprErrorKind::IndexOperandMismatch),
-            );
+            return err!(span_base.clone(), ErrorKind::Expr(ExprErrorKind::IndexOperandMismatch),);
         }
     };
     let Some(idx) = usize::try_from(&int_idx).ok().filter(|idx| *idx < len) else {
-        return Backtrack::err(
+        return err!(
             span_idx.clone(),
             ErrorKind::Expr(ExprErrorKind::IndexOutOfBounds { idx: int_idx, len }),
         );
@@ -471,7 +461,7 @@ pub(crate) fn update_index(
             let size = text.len();
             let text_upd = unwrap_from_result!(get::text(arena, &value_upd), span_idx);
             if text_upd.len() != 1 {
-                return Backtrack::err(
+                return err!(
                     span_idx.clone(),
                     ErrorKind::Expr(ExprErrorKind::CharacterUpdateLengthMismatch),
                 );
@@ -551,10 +541,7 @@ pub(crate) fn update_slice(
         ValueKind::Text(text) => text.len(),
         ValueKind::List(values) => values.len(),
         _ => {
-            return Backtrack::err(
-                span_base.clone(),
-                ErrorKind::Expr(ExprErrorKind::SliceOperandMismatch),
-            );
+            return err!(span_base.clone(), ErrorKind::Expr(ExprErrorKind::SliceOperandMismatch),);
         }
     };
     let Some((idx, idx_end)) = usize::try_from(&int_idx)
@@ -564,7 +551,7 @@ pub(crate) fn update_slice(
         .filter(|(_, idx_end)| *idx_end <= size)
     else {
         let int_end = &int_idx + &int_len;
-        return Backtrack::err(
+        return err!(
             span_len.clone(),
             ErrorKind::Expr(ExprErrorKind::SliceOutOfBounds { idx: int_idx, end: int_end, size }),
         );
@@ -574,7 +561,7 @@ pub(crate) fn update_slice(
             let size = text.len();
             let text_upd = unwrap_from_result!(get::text(arena, &value_upd), span_len);
             if text_upd.len() != idx_end - idx {
-                return Backtrack::err(
+                return err!(
                     span_len.clone(),
                     ErrorKind::Expr(ExprErrorKind::TextSliceUpdateLengthMismatch {
                         len: idx_end - idx,
@@ -627,7 +614,7 @@ pub(crate) fn update_slice(
         ValueKind::List(values) => {
             let values_upd = unwrap_from_result!(get::list(arena, &value_upd), span_len);
             if values_upd.len() != idx_end - idx {
-                return Backtrack::err(
+                return err!(
                     span_len.clone(),
                     ErrorKind::Expr(ExprErrorKind::ListSliceUpdateLengthMismatch {
                         len: idx_end - idx,

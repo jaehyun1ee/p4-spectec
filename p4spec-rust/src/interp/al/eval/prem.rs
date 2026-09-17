@@ -4,7 +4,7 @@ use super::super::{AlInterp, context::Context};
 use super::{assign, expr};
 use crate::interp::shared::error::{PremErrorKind, TraceErrorKind};
 use crate::interp::shared::{
-    backtrack::{Backtrack, err, ok, unwrap, unwrap_from_result},
+    backtrack::{Backtrack, err, ok, unmatch, unwrap, unwrap_from_result},
     error::ErrorKind,
     eval::{Invoker, iter},
 };
@@ -71,7 +71,7 @@ fn eval_if_prem<'global, Iface: Interface, Ext: Extern>(
     if unwrap_from_result!(get::bool(runner_ctx.arena(), &value), &prem.exp.span) {
         ok!(ctx)
     } else {
-        Backtrack::unmatch(
+        unmatch!(
             prem.exp.span.clone(),
             ErrorKind::Prem(PremErrorKind::ConditionNotMet { exp: Print::to_string(&prem.exp) }),
         )
@@ -90,7 +90,7 @@ fn eval_if_hold_prem<'global, Iface: Interface, Ext: Extern>(
     match AlInterp::invoke_rel(runner_ctx, &ctx, &prem.id, &values) {
         ok!(_) => ok!(ctx),
         err!(errors) => err!(errors),
-        Backtrack::Unmatch(errors) => Backtrack::Unmatch(errors).nest(prem.id.span.clone(), || {
+        unmatch!(errors) => unmatch!(errors).nest(prem.id.span.clone(), || {
             ErrorKind::Prem(PremErrorKind::HoldConditionNotMet { relation: prem.id.node.clone() })
         }),
     }
@@ -106,14 +106,14 @@ fn eval_if_not_hold_prem<'global, Iface: Interface, Ext: Extern>(
     let exps: Vec<_> = prem.not_exp.args();
     let values = unwrap!(expr::eval_exps(runner_ctx, &ctx, &exps));
     match AlInterp::invoke_rel(runner_ctx, &ctx, &prem.id, &values) {
-        ok!(_) => Backtrack::unmatch(
+        ok!(_) => unmatch!(
             prem.id.span.clone(),
             ErrorKind::Prem(PremErrorKind::NotHoldConditionNotMet {
                 relation: prem.id.node.clone(),
             }),
         ),
         err!(errors) => err!(errors),
-        Backtrack::Unmatch(_) => ok!(ctx),
+        unmatch!(_) => ok!(ctx),
     }
 }
 

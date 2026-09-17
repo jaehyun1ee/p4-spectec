@@ -1,7 +1,7 @@
 //! Ordered AL candidate selection and deterministic overlap checks
 
 use crate::interp::shared::{
-    backtrack::{Backtrack, err, ok},
+    backtrack::{Backtrack, err, ok, unmatch},
     error::Error,
 };
 
@@ -16,10 +16,10 @@ pub fn choose_sequential<C, T>(
         match evaluate(&candidate) {
             ok!(value) => return ok!(value),
             err!(errors) => return err!(errors),
-            Backtrack::Unmatch(mut candidate_errors) => errors.append(&mut candidate_errors),
+            unmatch!(mut candidate_errors) => errors.append(&mut candidate_errors),
         }
     }
-    Backtrack::Unmatch(errors)
+    unmatch!(errors)
 }
 
 // = Deterministic choice
@@ -41,7 +41,7 @@ pub fn choose_deterministic<C, T>(
                 errors.clear();
             }
             err!(errors) => return err!(errors),
-            Backtrack::Unmatch(mut candidate_errors) => {
+            unmatch!(mut candidate_errors) => {
                 if success.is_none() {
                     errors.append(&mut candidate_errors);
                 }
@@ -50,6 +50,6 @@ pub fn choose_deterministic<C, T>(
     }
     match success {
         Some((_, value)) => ok!(value),
-        None => Backtrack::Unmatch(errors),
+        None => unmatch!(errors),
     }
 }

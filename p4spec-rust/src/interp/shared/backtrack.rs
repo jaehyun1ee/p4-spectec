@@ -40,11 +40,24 @@ macro_rules! ok {
 pub(crate) use ok;
 
 macro_rules! err {
+    ($span:expr, $kind:expr $(,)?) => {
+        $crate::interp::shared::backtrack::Backtrack::err($span, $kind)
+    };
     ($($errors:tt)*) => {
         $crate::interp::shared::backtrack::Backtrack::Err($($errors)*)
     };
 }
 pub(crate) use err;
+
+macro_rules! unmatch {
+    ($span:expr, $kind:expr $(,)?) => {
+        $crate::interp::shared::backtrack::Backtrack::unmatch($span, $kind)
+    };
+    ($($errors:tt)*) => {
+        $crate::interp::shared::backtrack::Backtrack::Unmatch($($errors)*)
+    };
+}
+pub(crate) use unmatch;
 
 // = Finishing
 
@@ -52,7 +65,7 @@ impl<T> Backtrack<T> {
     pub fn finish(self) -> Result<T, Error> {
         match self {
             ok!(value) => Ok(value),
-            err!(traces) | Backtrack::Unmatch(traces) => Err(Error::execution(traces)),
+            err!(traces) | unmatch!(traces) => Err(Error::execution(traces)),
         }
     }
 }
@@ -66,8 +79,8 @@ macro_rules! unwrap {
             $crate::interp::shared::backtrack::err!(traces) => {
                 return $crate::interp::shared::backtrack::err!(traces)
             }
-            $crate::interp::shared::backtrack::Backtrack::Unmatch(traces) => {
-                return $crate::interp::shared::backtrack::Backtrack::Unmatch(traces)
+            $crate::interp::shared::backtrack::unmatch!(traces) => {
+                return $crate::interp::shared::backtrack::unmatch!(traces)
             }
         }
     };

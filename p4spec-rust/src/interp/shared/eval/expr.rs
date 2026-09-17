@@ -23,7 +23,7 @@ use crate::{
 
 use super::{arg::eval_args, iter, ops, path::eval_update_path};
 use crate::interp::shared::{
-    backtrack::{Backtrack, ok, unwrap, unwrap_from_result},
+    backtrack::{Backtrack, err, ok, unwrap, unwrap_from_result},
     error::ErrorKind,
     util::is_iter_var_exp,
 };
@@ -375,7 +375,7 @@ fn eval_cat_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Ext
             )
         }
         _ => {
-            return Backtrack::err(
+            return err!(
                 Span::over(&[exp_l.span.clone(), exp_r.span.clone()]),
                 ErrorKind::Expr(ExprErrorKind::ConcatenationOperandMismatch),
             );
@@ -413,7 +413,7 @@ fn eval_len_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Ext
         ValueKind::Text(text) => text.len(),
         ValueKind::List(values) => values.len(),
         _ => {
-            return Backtrack::err(
+            return err!(
                 exp_inner.span.clone(),
                 ErrorKind::Expr(ExprErrorKind::LengthOperandMismatch),
             );

@@ -9,7 +9,7 @@ use super::{assign, instr};
 use crate::lang::common::source::Span;
 use crate::{
     interp::shared::{
-        backtrack::{Backtrack, err, ok, unwrap, unwrap_from_result},
+        backtrack::{Backtrack, err, ok, unmatch, unwrap, unwrap_from_result},
         cache::CallKey,
         error::{CallErrorKind, ErrorKind, GuardErrorKind, HostErrorKind, TraceErrorKind},
     },
@@ -295,14 +295,14 @@ fn invoke_defined_rel<Iface: Interface, Ext: Extern>(
     match flow {
         Flow::Result(values) => ok!(RelResult::Result(values)),
         Flow::TailRel(id, values) => ok!(RelResult::TailCall(id, values)),
-        Flow::Cont(errors) => Backtrack::Unmatch(errors),
-        Flow::Return(_) => Backtrack::err(
+        Flow::Cont(errors) => unmatch!(errors),
+        Flow::Return(_) => err!(
             id.span.clone(),
             ErrorKind::Call(CallErrorKind::InvalidFlow {
                 message: "relation cannot return a value",
             }),
         ),
-        Flow::TailFunc(..) => Backtrack::err(
+        Flow::TailFunc(..) => err!(
             id.span.clone(),
             ErrorKind::Call(CallErrorKind::InvalidFlow {
                 message: "unexpected function tailcall in relation body",
@@ -444,7 +444,7 @@ fn invoke_builtin_func<Iface: Interface, Ext: Extern>(
                 ErrorKind::Host(HostErrorKind::Interface(InterfaceError::Builtin(_)))
             );
             let error = error.at_if_missing(&id.span);
-            if recoverable { Backtrack::Unmatch(vec![error]) } else { err!(vec![error]) }
+            if recoverable { unmatch!(vec![error]) } else { err!(vec![error]) }
         }
     }
 }
@@ -470,7 +470,7 @@ fn invoke_table_func<Iface: Interface, Ext: Extern>(
         unwrap!(instr::eval_block_sequential(runner_ctx, Cow::Owned(ctx_local), instrs, true));
     match flow {
         Flow::Return(value) => ok!(FuncResult::Return(value)),
-        _ => Backtrack::err(
+        _ => err!(
             id.span.clone(),
             ErrorKind::Call(CallErrorKind::InvalidFlow { message: "table did not return a value" }),
         ),
@@ -520,14 +520,14 @@ fn invoke_defined_func<Iface: Interface, Ext: Extern>(
     match flow {
         Flow::Return(value) => ok!(FuncResult::Return(value)),
         Flow::TailFunc(id, targs, values) => ok!(FuncResult::TailCall(id, targs, values)),
-        Flow::Cont(errors) => Backtrack::Unmatch(errors),
-        Flow::Result(_) => Backtrack::err(
+        Flow::Cont(errors) => unmatch!(errors),
+        Flow::Result(_) => err!(
             id.span.clone(),
             ErrorKind::Call(CallErrorKind::InvalidFlow {
                 message: "function cannot produce a relation result",
             }),
         ),
-        Flow::TailRel(..) => Backtrack::err(
+        Flow::TailRel(..) => err!(
             id.span.clone(),
             ErrorKind::Call(CallErrorKind::InvalidFlow {
                 message: "function cannot produce a relation tail call",

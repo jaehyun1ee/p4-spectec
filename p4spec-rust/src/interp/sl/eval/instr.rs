@@ -12,7 +12,7 @@ use super::{
 use crate::interp::shared::eval::{Invoker, iter, ops};
 use crate::{
     interp::shared::{
-        backtrack::{Backtrack, err, ok, unwrap, unwrap_from_result},
+        backtrack::{Backtrack, err, ok, unmatch, unwrap, unwrap_from_result},
         error::{ErrorKind, PremErrorKind, TraceErrorKind},
     },
     lang::{
@@ -180,7 +180,7 @@ fn eval_hold_instr<Iface: Interface, Ext: Extern>(
             let values = unwrap!(eval_exps(runner_ctx, ctx, &instr.not_exp.args()));
             match SlInterp::invoke_rel(runner_ctx, ctx, &instr.id, &values) {
                 ok!(_) => ok!(true),
-                Backtrack::Unmatch(_) => ok!(false),
+                unmatch!(_) => ok!(false),
                 err!(errors) => err!(errors),
             }
         }

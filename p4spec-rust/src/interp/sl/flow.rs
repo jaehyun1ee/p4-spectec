@@ -2,7 +2,7 @@
 
 use crate::{
     interp::shared::{
-        backtrack::{Backtrack, ok, unwrap},
+        backtrack::{Backtrack, err, ok, unmatch, unwrap},
         error::{CallErrorKind, Error, ErrorKind, PremErrorKind},
     },
     lang::{common::source::Span, data::value::Value, sl::ast},
@@ -26,7 +26,7 @@ impl Flow {
 
     pub(crate) fn cont_from_unmatch(result: Backtrack<Self>) -> Backtrack<Self> {
         match result {
-            Backtrack::Unmatch(errors) => ok!(Self::Cont(errors)),
+            unmatch!(errors) => ok!(Self::Cont(errors)),
             result => result,
         }
     }
@@ -77,10 +77,7 @@ fn combine_deterministic(flow: Flow, flow_post: Flow, span: &Span) -> Backtrack<
         (Flow::Return(_), Flow::Return(_))
         | (Flow::Result(_), Flow::Result(_))
         | (Flow::TailFunc(..) | Flow::TailRel(..), Flow::TailFunc(..) | Flow::TailRel(..)) => {
-            return Backtrack::err(
-                span.clone(),
-                ErrorKind::Call(CallErrorKind::InstructionNondeterminism),
-            );
+            return err!(span.clone(), ErrorKind::Call(CallErrorKind::InstructionNondeterminism),);
         }
         (flow_pre, flow_post) => {
             let message = match (flow_pre, flow_post) {
@@ -94,10 +91,7 @@ fn combine_deterministic(flow: Flow, flow_post: Flow, span: &Span) -> Backtrack<
                 (Flow::TailRel(..), _) => "cannot have both rel tail call and return",
                 (Flow::Cont(_), _) => unreachable!("continuations were combined above"),
             };
-            return Backtrack::err(
-                span.clone(),
-                ErrorKind::Call(CallErrorKind::InvalidFlow { message }),
-            );
+            return err!(span.clone(), ErrorKind::Call(CallErrorKind::InvalidFlow { message }),);
         }
     };
     ok!(flow)
@@ -112,7 +106,7 @@ pub(crate) fn choose_deterministic<C>(
     for candidate in candidates {
         let span = span_of(&candidate);
         let flow_post = match evaluate(candidate) {
-            Backtrack::Unmatch(_) => continue,
+            unmatch!(_) => continue,
             result => unwrap!(result),
         };
         flow = unwrap!(combine_deterministic(flow, flow_post, &span));

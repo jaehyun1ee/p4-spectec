@@ -20,7 +20,7 @@ use crate::{
 };
 
 use crate::interp::shared::{
-    backtrack::{Backtrack, ok, unwrap, unwrap_from_result},
+    backtrack::{Backtrack, err, ok, unwrap, unwrap_from_result},
     error::ErrorKind,
     util::is_iter_var_exp,
 };
@@ -65,7 +65,7 @@ pub fn assign_exp<Ctx: WriteContext>(
         (ast::ExpKind::Iter(exp_inner, (iter, vars)), _) => {
             assign_iter_exp(arena, ctx, exp, exp_inner, iter, vars, value)
         }
-        _ => Backtrack::err(
+        _ => err!(
             exp.span.clone(),
             ErrorKind::Assign(AssignErrorKind::Mismatch {
                 exp: Print::to_string(exp),
@@ -82,7 +82,7 @@ pub fn assign_exps<Ctx: WriteContext, T: Borrow<ast::Exp>>(
     values: &[Value],
 ) -> Backtrack<Ctx> {
     if exps.len() != values.len() {
-        return Backtrack::err(
+        return err!(
             Span::over(
                 &exps
                     .iter()
@@ -161,7 +161,7 @@ fn assign_opt_exp<Ctx: WriteContext>(
     match (exp_opt, value_opt) {
         (Some(exp), Some(value)) => assign_exp(arena, ctx, exp, *value),
         (None, None) => ok!(ctx),
-        _ => Backtrack::err(
+        _ => err!(
             exp.span.clone(),
             ErrorKind::Assign(AssignErrorKind::Mismatch {
                 exp: Print::to_string(exp),
@@ -194,7 +194,7 @@ fn assign_cons_exp<Ctx: WriteContext>(
     values: &[Value],
 ) -> Backtrack<Ctx> {
     let Some((value_head, values_tail)) = values.split_first() else {
-        return Backtrack::err(exp.span.clone(), ErrorKind::Assign(AssignErrorKind::EmptyCons));
+        return err!(exp.span.clone(), ErrorKind::Assign(AssignErrorKind::EmptyCons));
     };
     let typ = phrase!(node: arena.typ(value).clone(), span: exp.span.clone());
     let value_tail = unwrap_from_result!(
@@ -301,7 +301,7 @@ pub fn assign_args<Ctx: WriteContext>(
     values: &[Value],
 ) -> Backtrack<Ctx> {
     if args.len() != values.len() {
-        return Backtrack::err(
+        return err!(
             Span::over(&args.iter().map(|arg| arg.span.clone()).collect::<Vec<_>>()),
             ErrorKind::Assign(AssignErrorKind::ArgumentArityMismatch {
                 expected: args.len(),
@@ -337,7 +337,7 @@ pub fn assign_def<Ctx: WriteContext>(
     value: Value,
 ) -> Backtrack<Ctx> {
     let ValueKind::Func(id_func) = arena.kind(&value) else {
-        return Backtrack::err(
+        return err!(
             id.span.clone(),
             ErrorKind::Assign(AssignErrorKind::DefinitionMismatch {
                 value: arena.to_string(&value),

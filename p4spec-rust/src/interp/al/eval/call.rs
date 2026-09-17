@@ -9,7 +9,7 @@ use super::super::{
 use super::{assign, expr, prem::eval_prems};
 use crate::interp::shared::error::{CallErrorKind, GuardErrorKind, HostErrorKind, TraceErrorKind};
 use crate::interp::shared::{
-    backtrack::{Backtrack, err, ok, unwrap, unwrap_from_result},
+    backtrack::{Backtrack, err, ok, unmatch, unwrap, unwrap_from_result},
     cache::CallKey,
     error::{Error, ErrorKind},
 };
@@ -298,7 +298,7 @@ fn invoke_defined_rel<Iface: Interface, Ext: Extern>(
     match result {
         ok!(values) => ok!(values),
         err!(errors) => err!(errors),
-        Backtrack::Unmatch(errors) => match &rel.else_group {
+        unmatch!(errors) => match &rel.else_group {
             Some(group) => eval_rule_path(
                 runner_ctx,
                 ctx,
@@ -314,7 +314,7 @@ fn invoke_defined_rel<Iface: Interface, Ext: Extern>(
                     ),
                 })
             }),
-            None => Backtrack::Unmatch(errors),
+            None => unmatch!(errors),
         },
     }
 }
@@ -425,7 +425,7 @@ fn invoke_builtin_func<Iface: Interface, Ext: Extern>(
                 ErrorKind::Host(HostErrorKind::Interface(InterfaceError::Builtin(_)))
             );
             let error = error.at_if_missing(&id.span);
-            if recoverable { Backtrack::Unmatch(vec![error]) } else { err!(vec![error]) }
+            if recoverable { unmatch!(vec![error]) } else { err!(vec![error]) }
         }
     }
 }
@@ -550,9 +550,9 @@ fn invoke_defined_func<Iface: Interface, Ext: Extern>(
     match result {
         ok!(value) => ok!(value),
         err!(errors) => err!(errors),
-        Backtrack::Unmatch(errors) => match &defined_func.else_clause {
+        unmatch!(errors) => match &defined_func.else_clause {
             Some(clause) => eval_clause(runner_ctx, ctx, &ctx_local, clause, values),
-            None => Backtrack::Unmatch(errors),
+            None => unmatch!(errors),
         },
     }
 }
