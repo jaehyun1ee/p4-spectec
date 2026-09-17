@@ -126,6 +126,16 @@ pub fn equiv_func_typ(
     func_typ_l: &ast::FuncTyp,
     func_typ_r: &ast::FuncTyp,
 ) -> Result<bool, TypeError> {
+    equiv_func_typ_with(&|id| tdenv.get(id), span, func_typ_l, func_typ_r)
+}
+
+/// Tests alpha-equivalence using a type-definition lookup
+pub fn equiv_func_typ_with<'env>(
+    find_typdef_opt: &impl Fn(&ast::Id) -> Option<&'env TypeDef>,
+    span: &Span,
+    func_typ_l: &ast::FuncTyp,
+    func_typ_r: &ast::FuncTyp,
+) -> Result<bool, TypeError> {
     let tparams_l = &func_typ_l.tparams;
     let tparams_r = &func_typ_r.tparams;
     if tparams_l.len() != tparams_r.len() {
@@ -162,7 +172,7 @@ pub fn equiv_func_typ(
     let typ_ret_r = subst_typ_inner(&mut fresh, &theta_r, &func_typ_r.typ_ret)?;
 
     let find_typdef_opt = |id: &ast::Id| {
-        if let Some(typdef) = tdenv_fresh.get(id) { Some(typdef) } else { tdenv.get(id) }
+        if let Some(typdef) = tdenv_fresh.get(id) { Some(typdef) } else { find_typdef_opt(id) }
     };
     if !equiv_typs_with(&find_typdef_opt, &typs_params_l, &typs_params_r)? {
         return Ok(false);

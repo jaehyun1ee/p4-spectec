@@ -68,6 +68,40 @@ pub(crate) fn subst_typ_inner(
     Ok(subst_typ_cow_inner(fresh, theta, typ)?.into_owned())
 }
 
+/// Substitutes type variables using a lookup while freshening function binders
+pub fn subst_typ_with<'env>(
+    find_subst: &impl Fn(&ast::Id) -> Option<&'env ast::Typ>,
+    typ: &ast::Typ,
+) -> Result<ast::Typ, TypeError> {
+    // A lookup cannot report an empty map; avoid freshening an unchanged type
+    if !has_subst(find_subst, typ) {
+        return Ok(typ.clone());
+    }
+    let mut fresh = Fresh::default();
+    Ok(subst_typ_cow_with(&mut fresh, find_subst, typ)?.into_owned())
+}
+
+fn has_subst<'env>(
+    find_subst: &impl Fn(&ast::Id) -> Option<&'env ast::Typ>,
+    typ: &ast::Typ,
+) -> bool {
+    match &typ.node {
+        TypKind::Bool | TypKind::Num(_) | TypKind::Text => false,
+        TypKind::Var(id, targs) => {
+            find_subst(id).is_some() || targs.iter().any(|targ| has_subst(find_subst, targ))
+        }
+        TypKind::Tuple(typs) => typs.iter().any(|typ| has_subst(find_subst, typ)),
+        TypKind::Iter(typ, _) => has_subst(find_subst, typ),
+        TypKind::Func(func_typ) => {
+            func_typ
+                .typs_params
+                .iter()
+                .any(|typ| has_subst(find_subst, typ))
+                || has_subst(find_subst, &func_typ.typ_ret)
+        }
+    }
+}
+
 fn subst_typ_cow_inner<'a>(
     fresh: &mut Fresh,
     theta: &Theta,
@@ -76,9 +110,28 @@ fn subst_typ_cow_inner<'a>(
     if theta.is_empty() {
         return Ok(Cow::Borrowed(typ));
     }
+    subst_typ_cow_with(fresh, &|id| theta.get(id), typ)
+}
+
+fn subst_typs_cow_inner<'a>(
+    fresh: &mut Fresh,
+    theta: &Theta,
+    typs: &'a [ast::Typ],
+) -> Result<Cow<'a, [ast::Typ]>, TypeError> {
+    if theta.is_empty() {
+        return Ok(Cow::Borrowed(typs));
+    }
+    subst_typs_cow_with(fresh, &|id| theta.get(id), typs)
+}
+
+fn subst_typ_cow_with<'a, 'env>(
+    fresh: &mut Fresh,
+    find_subst: &impl Fn(&ast::Id) -> Option<&'env ast::Typ>,
+    typ: &'a ast::Typ,
+) -> Result<Cow<'a, ast::Typ>, TypeError> {
     match &typ.node {
         TypKind::Bool | TypKind::Num(_) | TypKind::Text => Ok(Cow::Borrowed(typ)),
-        TypKind::Var(id, targs) => match theta.get(id) {
+        TypKind::Var(id, targs) => match find_subst(id) {
             Some(_) if !targs.is_empty() => {
                 let error =
                     TypeError::new(TypeErrorKind::HigherOrderSubstitution, typ.span.clone());
@@ -86,7 +139,7 @@ fn subst_typ_cow_inner<'a>(
             }
             Some(typ_subst) => Ok(Cow::Owned(typ_subst.clone())),
             None => {
-                let targs = subst_typs_cow_inner(fresh, theta, targs)?;
+                let targs = subst_typs_cow_with(fresh, find_subst, targs)?;
                 let Cow::Owned(targs) = targs else {
                     return Ok(Cow::Borrowed(typ));
                 };
@@ -96,7 +149,7 @@ fn subst_typ_cow_inner<'a>(
             }
         },
         TypKind::Tuple(typs) => {
-            let typs = subst_typs_cow_inner(fresh, theta, typs)?;
+            let typs = subst_typs_cow_with(fresh, find_subst, typs)?;
             let Cow::Owned(typs) = typs else {
                 return Ok(Cow::Borrowed(typ));
             };
@@ -105,7 +158,7 @@ fn subst_typ_cow_inner<'a>(
             Ok(Cow::Owned(typ_subst))
         }
         TypKind::Iter(typ_inner, iter) => {
-            let typ_inner = subst_typ_cow_inner(fresh, theta, typ_inner)?;
+            let typ_inner = subst_typ_cow_with(fresh, find_subst, typ_inner)?;
             let Cow::Owned(typ_inner) = typ_inner else {
                 return Ok(Cow::Borrowed(typ));
             };
@@ -118,9 +171,9 @@ fn subst_typ_cow_inner<'a>(
         TypKind::Func(func_typ) => {
             let (theta_fresh, tparams) = freshen_tparams(fresh, &func_typ.tparams);
             let typs_params = subst_typs_inner(fresh, &theta_fresh, &func_typ.typs_params)?;
-            let typs_params = subst_typs_inner(fresh, theta, &typs_params)?;
+            let typs_params = subst_typs_cow_with(fresh, find_subst, &typs_params)?.into_owned();
             let typ_ret = subst_typ_inner(fresh, &theta_fresh, &func_typ.typ_ret)?;
-            let typ_ret = subst_typ_inner(fresh, theta, &typ_ret)?;
+            let typ_ret = subst_typ_cow_with(fresh, find_subst, &typ_ret)?.into_owned();
             let typ_ret = Box::new(typ_ret);
             let func_typ = ast::FuncTyp { tparams, typs_params, typ_ret };
             let typ_kind = TypKind::Func(func_typ);
@@ -130,14 +183,14 @@ fn subst_typ_cow_inner<'a>(
     }
 }
 
-fn subst_typs_cow_inner<'a>(
+fn subst_typs_cow_with<'a, 'env>(
     fresh: &mut Fresh,
-    theta: &Theta,
+    find_subst: &impl Fn(&ast::Id) -> Option<&'env ast::Typ>,
     typs: &'a [ast::Typ],
 ) -> Result<Cow<'a, [ast::Typ]>, TypeError> {
     let mut typs_subst: Option<Vec<ast::Typ>> = None;
     for (index, typ) in typs.iter().enumerate() {
-        match subst_typ_cow_inner(fresh, theta, typ)? {
+        match subst_typ_cow_with(fresh, find_subst, typ)? {
             Cow::Borrowed(_) => {
                 if let Some(typs_subst) = &mut typs_subst {
                     typs_subst.push(typ.clone());

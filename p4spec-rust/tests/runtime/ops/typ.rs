@@ -8,8 +8,9 @@ use p4spec_rust::{
     runtime::{
         envs::elab::TDEnv,
         ops::typ::{
-            Theta, TypeArityMismatch, TypeErrorKind, equiv_func_typ, equiv_not_typ, equiv_typ,
-            expand_typ, optimize_sub_typ, sub_typ, subst_not_typ, subst_typ,
+            Theta, TypeArityMismatch, TypeErrorKind, equiv_func_typ, equiv_func_typ_with,
+            equiv_not_typ, equiv_typ, expand_typ, optimize_sub_typ, sub_typ, subst_not_typ,
+            subst_typ, subst_typ_with,
         },
         typdef::TypeDef,
     },
@@ -253,4 +254,81 @@ fn test_subtype_optimization_emits_structural_checks_only_when_needed() {
         optimize_sub_typ(&env, &typ(TypKind::Bool), &typ(TypKind::Bool)).unwrap(),
         Subcheck::Skip
     );
+}
+
+#[test]
+fn lookup_substitution_is_simultaneous_and_preserves_free_variables() {
+    let typ_t = var("U", vec![]);
+    let typ_u = typ(TypKind::Bool);
+    let find_subst = |id: &ast::Id| match id.node.as_str() {
+        "T" => Some(&typ_t),
+        "U" => Some(&typ_u),
+        _ => None,
+    };
+    let typ_input = typ(TypKind::Tuple(vec![
+        var("T", vec![]),
+        var("U", vec![]),
+        var("Alias", vec![var("T", vec![])]),
+    ]));
+    let typ_output = subst_typ_with(&find_subst, &typ_input).unwrap();
+    assert_eq!(
+        typ_output,
+        typ(TypKind::Tuple(vec![
+            var("U", vec![]),
+            typ(TypKind::Bool),
+            var("Alias", vec![var("U", vec![])]),
+        ]))
+    );
+}
+
+#[test]
+fn lookup_substitution_freshens_binders_and_reports_higher_order_targets() {
+    let typ_t = typ(TypKind::Text);
+    let typ_u = var("T", vec![]);
+    let find_subst = |id: &ast::Id| match id.node.as_str() {
+        "T" => Some(&typ_t),
+        "U" => Some(&typ_u),
+        _ => None,
+    };
+    let typ_input = typ(TypKind::Func(func_typ(
+        vec![id("T")],
+        vec![var("T", vec![]), var("U", vec![])],
+        var("T", vec![]),
+    )));
+    let typ_output = subst_typ_with(&find_subst, &typ_input).unwrap();
+    let TypKind::Func(func_typ) = typ_output.node else { panic!("function type") };
+    assert_eq!(func_typ.tparams, vec![id("__FRESH0")]);
+    assert_eq!(func_typ.typs_params, vec![var("__FRESH0", vec![]), var("T", vec![])]);
+    assert_eq!(*func_typ.typ_ret, var("__FRESH0", vec![]));
+
+    let mut typ_input = var("U", vec![typ(TypKind::Bool)]);
+    typ_input.span = Span::new(
+        p4spec_rust::lang::common::source::Position::new("lookup", 3, 2),
+        p4spec_rust::lang::common::source::Position::new("lookup", 3, 8),
+    );
+    let error = subst_typ_with(&find_subst, &typ_input).unwrap_err();
+    assert_eq!(error.kind, TypeErrorKind::HigherOrderSubstitution);
+    assert_eq!(error.span, typ_input.span);
+}
+
+#[test]
+fn function_equivalence_looks_up_fresh_parameters_before_outer_definitions() {
+    let typdef = TypeDef::Defined(vec![], Box::new(plain(typ(TypKind::Bool))));
+    let find_typdef_opt = |id: &ast::Id| (id.node == "__FRESH0").then_some(&typdef);
+    let func_typ_l = func_typ(vec![id("T")], vec![var("T", vec![])], var("T", vec![]));
+    let func_typ_r = func_typ(vec![id("U")], vec![typ(TypKind::Bool)], var("U", vec![]));
+    assert!(
+        !equiv_func_typ_with(&find_typdef_opt, &Span::default(), &func_typ_l, &func_typ_r,)
+            .unwrap()
+    );
+}
+
+#[test]
+fn lookup_substitution_without_matching_variables_preserves_function_binders() {
+    let typ_input = typ(TypKind::Func(func_typ(
+        vec![id("T")],
+        vec![var("T", vec![])],
+        var("__FRESH0", vec![]),
+    )));
+    assert_eq!(subst_typ_with(&|_| None, &typ_input).unwrap(), typ_input);
 }
