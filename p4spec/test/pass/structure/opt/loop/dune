@@ -1,0 +1,3 @@
+(test
+ (name casify)
+ (libraries pass))

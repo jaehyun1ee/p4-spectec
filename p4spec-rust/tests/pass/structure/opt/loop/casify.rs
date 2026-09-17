@@ -89,7 +89,7 @@ fn test_disjoint_partial_fuzzy_and_if_search_order() {
 }
 
 #[test]
-fn test_if_case_and_case_if_preserve_source_identical_priority_and_flags() {
+fn test_if_case_and_case_if_preserve_disjoint_prefix_and_flags() {
     for total in [false, true] {
         let block = casify::apply(
             &TDEnv::new(),
@@ -103,10 +103,13 @@ fn test_if_case_and_case_if_preserve_source_identical_priority_and_flags() {
         assert_eq!(block[0].span, span(1));
         let InstrKind::Case(instr_case) = &block[0].node else { panic!("expected case") };
         assert_eq!(instr_case.total, total);
-        assert_eq!(instr_case.cases.len(), 2);
-        assert_eq!(instr_case.cases[0].guard, guard("b"));
-        assert_eq!(instr_case.cases[0].block, vec![ret("target"), ret("match")]);
-        assert_eq!(instr_case.cases[1].block, vec![ret("tail")]);
+        assert_eq!(instr_case.cases.len(), 3);
+        assert_eq!(instr_case.cases[0].guard, guard("a"));
+        assert_eq!(instr_case.cases[0].block, vec![ret("skip")]);
+        assert_eq!(instr_case.cases[1].guard, guard("b"));
+        assert_eq!(instr_case.cases[1].block, vec![ret("target"), ret("match")]);
+        assert_eq!(instr_case.cases[2].guard, guard("c"));
+        assert_eq!(instr_case.cases[2].block, vec![ret("tail")]);
         let block = casify::apply(
             &TDEnv::new(),
             &mut false,
@@ -118,8 +121,13 @@ fn test_if_case_and_case_if_preserve_source_identical_priority_and_flags() {
         .unwrap();
         let InstrKind::Case(instr_case) = &block[0].node else { panic!("expected case") };
         assert!(!instr_case.total);
-        assert_eq!(instr_case.cases.len(), 2);
-        assert_eq!(instr_case.cases[0].block, vec![ret("match"), ret("target")]);
+        assert_eq!(instr_case.cases.len(), 3);
+        assert_eq!(instr_case.cases[0].guard, guard("a"));
+        assert_eq!(instr_case.cases[0].block, vec![ret("skip")]);
+        assert_eq!(instr_case.cases[1].guard, guard("b"));
+        assert_eq!(instr_case.cases[1].block, vec![ret("match"), ret("target")]);
+        assert_eq!(instr_case.cases[2].guard, guard("c"));
+        assert_eq!(instr_case.cases[2].block, vec![ret("tail")]);
     }
 }
 
@@ -291,7 +299,7 @@ fn test_case_case_late_fuzzy_merge_keeps_both_original_bodies() {
 }
 
 #[test]
-fn test_case_case_scan_tracks_appended_and_truncated_guards() {
+fn test_case_case_scan_preserves_prefix_and_tracks_appended_guards() {
     let block = casify::apply(
         &TDEnv::new(),
         &mut false,
@@ -302,9 +310,13 @@ fn test_case_case_scan_tracks_appended_and_truncated_guards() {
     )
     .unwrap();
     let InstrKind::Case(instr_case) = &block[0].node else { panic!("expected case") };
-    assert_eq!(instr_case.cases.len(), 1);
-    assert_eq!(instr_case.cases[0].guard, guard("c"));
-    assert_eq!(instr_case.cases[0].block, vec![ret("append_c"), ret("match_c")]);
+    assert_eq!(instr_case.cases.len(), 3);
+    assert_eq!(instr_case.cases[0].guard, guard("a"));
+    assert_eq!(instr_case.cases[0].block, vec![ret("target_a")]);
+    assert_eq!(instr_case.cases[1].guard, guard("b"));
+    assert_eq!(instr_case.cases[1].block, vec![ret("target_b"), ret("match_b")]);
+    assert_eq!(instr_case.cases[2].guard, guard("c"));
+    assert_eq!(instr_case.cases[2].block, vec![ret("append_c"), ret("match_c")]);
     assert_eq!(block[0].span, span(1));
 }
 

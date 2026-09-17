@@ -14,9 +14,9 @@
 //! Tests `x = 1` and `x = 2` on an integer form a partial Case instead
 //! `casify_from_if` and `casify_from_case` also combine existing Cases,
 //! then `casify_block` retries the combined Case before entering its bodies
-//! When an existing Case has an equal guard, the scan drops preceding cases:
+//! Equal guards merge their bodies while preserving other branches:
 //! `if x = 2 { A }; case x { 1 => B; 2 => C; 3 => D }`
-//! becomes `case x { 2 => A; C; 3 => D }`, matching the OCaml scan
+//! becomes `case x { 1 => B; 2 => A; C; 3 => D }`
 //! Iterated Ifs and instructions other than If or Case stop the search
 
 use std::collections::VecDeque;
@@ -265,13 +265,11 @@ fn casify_if_then_case(
         let overlap = overlap_guard(tdenv, exp, &guard_target, guard)?;
         match overlap {
             Overlap::Identical => {
-                // if x = 2 before cases [1, 2, 3] keeps cases [2, 3]
                 let block_target = std::mem::take(block_target);
                 let block = std::mem::take(block);
                 let block = merge_block(block_target, block);
                 let mut cases = std::mem::take(cases);
-                cases.drain(..idx);
-                cases[0].block = block;
+                cases[idx].block = block;
                 let instr = CaseInstr { exp: exp.clone(), cases, total: *total };
                 return Ok(Some(instr));
             }
@@ -337,7 +335,7 @@ fn casify_case_then_case(
         return Ok(None);
     }
     // A later fuzzy guard must leave both input bodies untouched
-    let mut guards: VecDeque<_> = cases_target.iter().map(|case| &case.guard).collect();
+    let mut guards: Vec<_> = cases_target.iter().map(|case| &case.guard).collect();
     let mut idxs = Vec::with_capacity(cases.len());
     for case in cases.iter() {
         let Some(idx) = find_case_merge(
@@ -352,9 +350,7 @@ fn casify_case_then_case(
             return Ok(None);
         };
         if idx == guards.len() {
-            guards.push_back(&case.guard);
-        } else {
-            guards.drain(..idx);
+            guards.push(&case.guard);
         }
         idxs.push(idx);
     }
@@ -396,10 +392,8 @@ fn apply_case_merge(idx: usize, case: Case, cases: &mut Vec<Case>) {
     if idx == cases.len() {
         cases.push(case);
     } else {
-        // Cases [1, 2, 3] followed by guard 2 keep cases [2, 3]
-        cases.drain(..idx);
-        let block_target = std::mem::take(&mut cases[0].block);
-        cases[0].block = merge_block(block_target, case.block);
+        let block_target = std::mem::take(&mut cases[idx].block);
+        cases[idx].block = merge_block(block_target, case.block);
     }
 }
 

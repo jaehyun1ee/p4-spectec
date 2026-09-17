@@ -131,3 +131,46 @@ fn test_fixed_point_moves_surviving_expression_payloads() {
     let ExpKind::Var(id_body) = &instr_body.exp.node else { unreachable!() };
     assert_eq!(id_body.node.as_ptr(), ptr_body);
 }
+
+#[test]
+fn test_reversed_equality_preserves_reachable_case_prefix() {
+    use crate::lang::{
+        il::ast::{CmpOp, OpTyp},
+        xl::bool::CmpOp as BoolCmpOp,
+    };
+    let exp_target =
+        crate::note_phrase!(node: ExpKind::Var(id("x")), note: TypKind::Text, span: span(1));
+    let literal = |text: &str| crate::note_phrase!(node: ExpKind::Text(text.into()), note: TypKind::Text, span: span(1));
+    let equality = |exp_l, exp_r| {
+        let exp_kind =
+            ExpKind::Cmp(CmpOp::Bool(BoolCmpOp::Eq), OpTyp::Bool, Box::new(exp_l), Box::new(exp_r));
+        crate::note_phrase!(node: exp_kind, note: TypKind::Bool, span: span(1))
+    };
+    let output = |text| instr(InstrKind::Return(ReturnInstr { exp: literal(text) }));
+    let branch = |exp, text| {
+        let block = vec![output(text)];
+        instr(InstrKind::If(IfInstr { exp, iter_exps: vec![], block }))
+    };
+    let block = vec![
+        branch(equality(exp_target.clone(), literal("a")), "A"),
+        branch(equality(exp_target.clone(), literal("b")), "B"),
+        branch(equality(literal("b"), exp_target.clone()), "C"),
+    ];
+    for without_rule_groups in [false, true] {
+        let block = optimize(&TDEnv::new(), block.clone(), without_rule_groups).unwrap();
+        assert_eq!(block.len(), 1);
+        let InstrKind::Case(instr_case) = &block[0].node else { panic!("expected case") };
+        assert_eq!(instr_case.exp, exp_target);
+        assert_eq!(instr_case.cases.len(), 2);
+        assert_eq!(
+            instr_case.cases[0].guard,
+            Guard::Cmp(CmpOp::Bool(BoolCmpOp::Eq), OpTyp::Bool, literal("a"))
+        );
+        assert_eq!(instr_case.cases[0].block, vec![output("A")]);
+        assert_eq!(
+            instr_case.cases[1].guard,
+            Guard::Cmp(CmpOp::Bool(BoolCmpOp::Eq), OpTyp::Bool, literal("b"))
+        );
+        assert_eq!(instr_case.cases[1].block, vec![output("B"), output("C")]);
+    }
+}
