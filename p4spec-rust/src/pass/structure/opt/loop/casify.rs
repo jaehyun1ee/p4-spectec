@@ -302,7 +302,7 @@ fn casify_case_then_if(
     let Some(guard) = exp_as_guard(exp, exp_cond) else {
         return Ok(None);
     };
-    let Some(merge) = find_case_merge(
+    let Some(idx) = find_case_merge(
         tdenv,
         exp,
         cases.iter().map(|case| &case.guard),
@@ -316,7 +316,7 @@ fn casify_case_then_if(
     let mut cases = std::mem::take(cases);
     let block = std::mem::take(block);
     let case = Case { guard, block };
-    merge_case(&mut cases, case, merge);
+    apply_case_merge(idx, case, &mut cases);
     // Case followed by If becomes partial, even when the Case was total
     let instr = CaseInstr { exp: exp.clone(), cases, total: false };
     Ok(Some(instr))
@@ -337,9 +337,9 @@ fn casify_case_then_case(
     }
     // A later fuzzy guard must leave both input bodies untouched
     let mut guards: VecDeque<_> = cases_target.iter().map(|case| &case.guard).collect();
-    let mut merges = Vec::with_capacity(cases.len());
+    let mut idxs = Vec::with_capacity(cases.len());
     for case in cases.iter() {
-        let Some(merge) = find_case_merge(
+        let Some(idx) = find_case_merge(
             tdenv,
             exp_target,
             guards.iter().copied(),
@@ -350,18 +350,17 @@ fn casify_case_then_case(
         else {
             return Ok(None);
         };
-        match merge {
-            CaseMerge::Identical(idx) => {
-                guards.drain(..idx);
-            }
-            CaseMerge::Append => guards.push_back(&case.guard),
+        if idx == guards.len() {
+            guards.push_back(&case.guard);
+        } else {
+            guards.drain(..idx);
         }
-        merges.push(merge);
+        idxs.push(idx);
     }
     let mut cases_target = std::mem::take(cases_target);
     let cases = std::mem::take(cases);
-    for (case, merge) in cases.into_iter().zip(merges) {
-        merge_case(&mut cases_target, case, merge);
+    for (case, idx) in cases.into_iter().zip(idxs) {
+        apply_case_merge(idx, case, &mut cases_target);
     }
     let instr = CaseInstr { exp: exp_target.clone(), cases: cases_target, total: *total_target };
     Ok(Some(instr))
@@ -369,23 +368,19 @@ fn casify_case_then_case(
 
 // - Guard analysis and owned body merging
 
-#[derive(Clone, Copy)]
-enum CaseMerge {
-    Identical(usize),
-    Append,
-}
-
+// The index identifies an equal guard, or the end position for appending
 fn find_case_merge<'a>(
     tdenv: &TDEnv,
     exp_target: &Exp,
-    guards_target: impl Iterator<Item = &'a Guard>,
+    guards_target: impl ExactSizeIterator<Item = &'a Guard>,
     total_target: bool,
     guard: &Guard,
     span_target: &Span,
-) -> Result<Option<CaseMerge>, StructureError> {
+) -> Result<Option<usize>, StructureError> {
+    let guards_len = guards_target.len();
     for (idx, guard_target) in guards_target.enumerate() {
         match overlap_guard(tdenv, exp_target, guard_target, guard)? {
-            Overlap::Identical => return Ok(Some(CaseMerge::Identical(idx))),
+            Overlap::Identical => return Ok(Some(idx)),
             Overlap::Disjoint { .. } | Overlap::Partition { .. } => {}
             Overlap::Fuzzy => return Ok(None),
         }
@@ -393,18 +388,17 @@ fn find_case_merge<'a>(
     if total_target {
         return Err(StructureError::new(StructureErrorKind::EmptyTotalCase, span_target.clone()));
     }
-    Ok(Some(CaseMerge::Append))
+    Ok(Some(guards_len))
 }
 
-fn merge_case(cases: &mut Vec<Case>, case: Case, merge: CaseMerge) {
-    match merge {
-        CaseMerge::Identical(idx) => {
-            // Cases [1, 2, 3] followed by guard 2 keep cases [2, 3]
-            cases.drain(..idx);
-            let block_target = std::mem::take(&mut cases[0].block);
-            cases[0].block = merge_block(block_target, case.block);
-        }
-        CaseMerge::Append => cases.push(case),
+fn apply_case_merge(idx: usize, case: Case, cases: &mut Vec<Case>) {
+    if idx == cases.len() {
+        cases.push(case);
+    } else {
+        // Cases [1, 2, 3] followed by guard 2 keep cases [2, 3]
+        cases.drain(..idx);
+        let block_target = std::mem::take(&mut cases[0].block);
+        cases[0].block = merge_block(block_target, case.block);
     }
 }
 
