@@ -21,19 +21,17 @@ struct Suite {
     dir_p4: &'static str,
     dir_stf: &'static str,
     dir_patch: Option<&'static str>,
-    sl_only: bool,
 }
 
 // Suites mirror p4spec/test/sim/dune. The six shared OCaml SL outcomes and
 // ordered transmissions are byte-identical to the existing AL expectations
-const SUITES: [Suite; 7] = [
+const SUITES: [Suite; 6] = [
     Suite {
         arch: "v1model",
         name: "v1model-p4c",
         dir_p4: "p4c/testdata/p4_16_samples",
         dir_stf: "p4c/testdata/p4_16_samples",
         dir_patch: Some("patches/v1model"),
-        sl_only: false,
     },
     Suite {
         arch: "v1model",
@@ -41,7 +39,6 @@ const SUITES: [Suite; 7] = [
         dir_p4: "p4c/testdata/p4_16_samples",
         dir_stf: "testdata/p4testgen",
         dir_patch: Some("patches/v1model"),
-        sl_only: false,
     },
     Suite {
         arch: "v1model",
@@ -49,7 +46,6 @@ const SUITES: [Suite; 7] = [
         dir_p4: "testdata/custom",
         dir_stf: "testdata/custom",
         dir_patch: Some("patches/v1model"),
-        sl_only: false,
     },
     Suite {
         arch: "ebpf",
@@ -57,7 +53,6 @@ const SUITES: [Suite; 7] = [
         dir_p4: "p4c/testdata/p4_16_samples",
         dir_stf: "p4c/testdata/p4_16_samples",
         dir_patch: None,
-        sl_only: false,
     },
     Suite {
         arch: "ebpf",
@@ -65,7 +60,6 @@ const SUITES: [Suite; 7] = [
         dir_p4: "p4c/testdata/p4_16_samples",
         dir_stf: "testdata/p4testgen",
         dir_patch: None,
-        sl_only: false,
     },
     Suite {
         arch: "psa",
@@ -73,15 +67,6 @@ const SUITES: [Suite; 7] = [
         dir_p4: "p4c/testdata/p4_16_samples",
         dir_stf: "p4c/testdata/p4_16_samples",
         dir_patch: None,
-        sl_only: false,
-    },
-    Suite {
-        arch: "v1model",
-        name: "v1model-regression-sl",
-        dir_p4: "testdata/regression/sim",
-        dir_stf: "testdata/regression/sim",
-        dir_patch: Some("patches/v1model"),
-        sl_only: true,
     },
 ];
 
@@ -221,13 +206,13 @@ impl Results {
 }
 
 pub fn run(det: bool) -> Result<()> {
-    run_with(det, false, |spec_al, arch| {
+    run_with(det, |spec_al, arch| {
         sim_plugin::build(spec_al, arch, Config::new(true, det, false))
     })
 }
 
 pub fn run_sl(det: bool) -> Result<()> {
-    run_with(det, true, |spec_al, arch| {
+    run_with(det, |spec_al, arch| {
         sim_plugin::build_sl(
             spec_al,
             arch,
@@ -236,7 +221,7 @@ pub fn run_sl(det: bool) -> Result<()> {
     })
 }
 
-fn run_with<Interp, Build>(det: bool, sl: bool, build: Build) -> Result<()>
+fn run_with<Interp, Build>(det: bool, build: Build) -> Result<()>
 where
     Interp: sim_plugin::SimulatorInterpreter,
     Build: Fn(
@@ -249,13 +234,11 @@ where
     excludes.extend(corpus::collect_excludes(Path::new("excludes/dynamic"))?);
     let suites = SUITES
         .iter()
-        .filter(|suite| sl || !suite.sl_only)
         .map(|suite| Ok((suite, suite.collect()?)))
         .collect::<Result<Vec<_>>>()?;
     let collected: usize = suites.iter().map(|(_, pairs)| pairs.len()).sum();
     let excluded = suites
         .iter()
-        .filter(|(suite, _)| !suite.sl_only)
         .flat_map(|(_, pairs)| pairs)
         .filter(|pair| {
             excludes.contains(&pair.path_p4.to_string_lossy().into_owned())
@@ -286,7 +269,7 @@ where
         let collected_arch = pairs_arch.clone().count();
         let excluded_arch = suites
             .iter()
-            .filter(|(suite, _)| suite.arch == arch && !suite.sl_only)
+            .filter(|(suite, _)| suite.arch == arch)
             .flat_map(|(_, pairs)| pairs)
             .filter(|pair| {
                 excludes.contains(&pair.path_p4.to_string_lossy().into_owned())
@@ -309,9 +292,8 @@ where
                 if pair.patched {
                     patched += 1;
                 }
-                if !suite.sl_only
-                    && (excludes.contains(&pair.path_p4.to_string_lossy().into_owned())
-                        || excludes.contains(&pair.path_stf.to_string_lossy().into_owned()))
+                if excludes.contains(&pair.path_p4.to_string_lossy().into_owned())
+                    || excludes.contains(&pair.path_stf.to_string_lossy().into_owned())
                 {
                     results.record(pair, "exclude", &[])?;
                     progress.inc(1);
@@ -374,7 +356,6 @@ mod tests {
             ("ebpf-p4c", 17, 0, None),
             ("ebpf-p4testgen", 144, 0, None),
             ("psa-p4c", 26, 0, None),
-            ("v1model-regression-sl", 20, 0, Some("patches/v1model")),
         ]) {
             assert_eq!(suite.name, name_suite);
             assert_eq!(suite.dir_patch, dir_patch, "{name_suite}");

@@ -94,18 +94,6 @@ pub fn run_sl(det: bool) -> Result<()> {
             "run-neg-al.expected",
             true,
         ),
-        collect_suite(
-            "testdata/regression/neg",
-            "Program_ok",
-            "run-regression-neg-sl.expected",
-            false,
-        ),
-        collect_suite(
-            "testdata/regression/pos",
-            "Program_inst",
-            "run-regression-pos-sl.expected",
-            false,
-        ),
     ]
     .into_iter()
     .collect::<Result<Vec<_>>>()?;

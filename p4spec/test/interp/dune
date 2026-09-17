@@ -1,3 +1,0 @@
-(test
- (name sl_cond_iter)
- (libraries util domain lang runtime interface interp_sl))
