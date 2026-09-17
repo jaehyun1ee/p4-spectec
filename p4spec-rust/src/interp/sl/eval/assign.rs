@@ -3,7 +3,7 @@
 use super::super::context::Context;
 use crate::interp::shared::error::{AssignErrorKind, ErrorKind};
 use crate::{
-    interp::shared::backtrack::{Backtrack, backtrack},
+    interp::shared::backtrack::{Backtrack, unwrap},
     lang::{
         data::value::{Value, ValueArena},
         sl::ast,
@@ -34,7 +34,7 @@ pub(in crate::interp::sl) fn assign_params<'global>(
     params: &[ast::Param],
     values: &[Value],
 ) -> Backtrack<Context<'global>> {
-    backtrack!(Backtrack::check(
+    unwrap!(Backtrack::check(
         params.len() == values.len(),
         crate::lang::common::source::Span::default(),
         ErrorKind::Assign(AssignErrorKind::ArgumentArityMismatch {
@@ -43,7 +43,7 @@ pub(in crate::interp::sl) fn assign_params<'global>(
         })
     ));
     for (param, value) in params.iter().zip(values) {
-        ctx = backtrack!(assign_param(arena, ctx_caller, ctx, param, *value));
+        ctx = unwrap!(assign_param(arena, ctx_caller, ctx, param, *value));
     }
     Backtrack::Ok(ctx)
 }

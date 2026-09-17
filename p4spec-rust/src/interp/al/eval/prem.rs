@@ -4,7 +4,7 @@ use super::super::{AlInterp, context::Context};
 use super::{assign, expr};
 use crate::interp::shared::error::{PremErrorKind, TraceErrorKind};
 use crate::interp::shared::{
-    backtrack::{Backtrack, backtrack, backtrack_from_result},
+    backtrack::{Backtrack, unwrap, unwrap_from_result},
     error::ErrorKind,
     eval::{Invoker, iter},
 };
@@ -40,7 +40,7 @@ pub fn eval_prems<'global, Iface: Interface, Ext: Extern>(
     prems: &[ast::Prem],
 ) -> Backtrack<Context<'global>> {
     for prem in prems {
-        ctx = backtrack!(eval_prem(runner_ctx, ctx, prem));
+        ctx = unwrap!(eval_prem(runner_ctx, ctx, prem));
     }
     Backtrack::Ok(ctx)
 }
@@ -54,9 +54,9 @@ fn eval_rule_prem<'global, Iface: Interface, Ext: Extern>(
 ) -> Backtrack<Context<'global>> {
     let exps = prem.not_exp.args();
     let (exps_input, exps_output) =
-        backtrack_from_result!(input::split(&prem.input_hint, exps), &prem.id.span);
-    let values_input = backtrack!(expr::eval_exps(runner_ctx, &ctx, &exps_input));
-    let values_output = backtrack!(AlInterp::invoke_rel(runner_ctx, &ctx, &prem.id, &values_input));
+        unwrap_from_result!(input::split(&prem.input_hint, exps), &prem.id.span);
+    let values_input = unwrap!(expr::eval_exps(runner_ctx, &ctx, &exps_input));
+    let values_output = unwrap!(AlInterp::invoke_rel(runner_ctx, &ctx, &prem.id, &values_input));
     assign::assign_exps(runner_ctx.arena_mut(), ctx, &exps_output, &values_output)
 }
 
@@ -67,8 +67,8 @@ fn eval_if_prem<'global, Iface: Interface, Ext: Extern>(
     ctx: Context<'global>,
     prem: &ast::IfPrem,
 ) -> Backtrack<Context<'global>> {
-    let value = backtrack!(expr::eval_exp(runner_ctx, &ctx, &prem.exp));
-    if backtrack_from_result!(get::bool(runner_ctx.arena(), &value), &prem.exp.span) {
+    let value = unwrap!(expr::eval_exp(runner_ctx, &ctx, &prem.exp));
+    if unwrap_from_result!(get::bool(runner_ctx.arena(), &value), &prem.exp.span) {
         Backtrack::Ok(ctx)
     } else {
         Backtrack::unmatch(
@@ -86,7 +86,7 @@ fn eval_if_hold_prem<'global, Iface: Interface, Ext: Extern>(
     prem: &ast::IfHoldPrem,
 ) -> Backtrack<Context<'global>> {
     let exps: Vec<_> = prem.not_exp.args();
-    let values = backtrack!(expr::eval_exps(runner_ctx, &ctx, &exps));
+    let values = unwrap!(expr::eval_exps(runner_ctx, &ctx, &exps));
     match AlInterp::invoke_rel(runner_ctx, &ctx, &prem.id, &values) {
         Backtrack::Ok(_) => Backtrack::Ok(ctx),
         Backtrack::Err(errors) => Backtrack::Err(errors),
@@ -104,7 +104,7 @@ fn eval_if_not_hold_prem<'global, Iface: Interface, Ext: Extern>(
     prem: &ast::IfNotHoldPrem,
 ) -> Backtrack<Context<'global>> {
     let exps: Vec<_> = prem.not_exp.args();
-    let values = backtrack!(expr::eval_exps(runner_ctx, &ctx, &exps));
+    let values = unwrap!(expr::eval_exps(runner_ctx, &ctx, &exps));
     match AlInterp::invoke_rel(runner_ctx, &ctx, &prem.id, &values) {
         Backtrack::Ok(_) => Backtrack::unmatch(
             prem.id.span.clone(),
@@ -124,7 +124,7 @@ fn eval_let_prem<'global, Iface: Interface, Ext: Extern>(
     ctx: Context<'global>,
     prem: &ast::LetPrem,
 ) -> Backtrack<Context<'global>> {
-    let value = backtrack!(expr::eval_exp(runner_ctx, &ctx, &prem.exp_r));
+    let value = unwrap!(expr::eval_exp(runner_ctx, &ctx, &prem.exp_r));
     assign::assign_exp(runner_ctx.arena_mut(), ctx, &prem.exp_l, value)
 }
 
@@ -163,7 +163,7 @@ fn eval_debug_prem<'global, Iface: Interface, Ext: Extern>(
     ctx: Context<'global>,
     prem: &ast::DebugPrem,
 ) -> Backtrack<Context<'global>> {
-    let value = backtrack!(expr::eval_exp(runner_ctx, &ctx, &prem.exp));
+    let value = unwrap!(expr::eval_exp(runner_ctx, &ctx, &prem.exp));
     let exp_text = Print::to_string(&prem.exp);
     println!("{}: {}", prem.exp.span, exp_text);
     let span_text = runner_ctx.arena().span(&value).to_string();

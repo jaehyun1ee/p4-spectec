@@ -9,7 +9,7 @@ use super::{assign, instr};
 use crate::lang::common::source::Span;
 use crate::{
     interp::shared::{
-        backtrack::{Backtrack, backtrack, backtrack_from_result},
+        backtrack::{Backtrack, unwrap, unwrap_from_result},
         cache::CallKey,
         error::{CallErrorKind, ErrorKind, GuardErrorKind, HostErrorKind, TraceErrorKind},
     },
@@ -42,13 +42,13 @@ pub(in crate::interp::sl) fn check_rel_inputs(
     id: &ast::Id,
     values: &[Value],
 ) -> Backtrack<()> {
-    let rel = backtrack_from_result!(ctx.find_rel(id), &id.span);
+    let rel = unwrap_from_result!(ctx.find_rel(id), &id.span);
     let (not_typ, inputs) = match rel {
         ast::RelDef::Extern(rel) => (&rel.rel_signature.not_typ, &rel.rel_signature.input_hint),
         ast::RelDef::Defined(rel) => (&rel.rel_signature.not_typ, &rel.rel_signature.input_hint),
     };
     let typs = not_typ.node.args();
-    backtrack_from_result!(crate::lang::hints::input::validate(inputs, typs.len()), &id.span);
+    unwrap_from_result!(crate::lang::hints::input::validate(inputs, typs.len()), &id.span);
     let typs = inputs
         .indices()
         .iter()
@@ -71,8 +71,8 @@ pub(in crate::interp::sl) fn check_func_inputs(
     targs: &[ast::Typ],
     values: &[Value],
 ) -> Backtrack<()> {
-    let typ = backtrack_from_result!(ctx.find_func_typ(id), &id.span);
-    backtrack!(Backtrack::check(
+    let typ = unwrap_from_result!(ctx.find_func_typ(id), &id.span);
+    unwrap!(Backtrack::check(
         typ.tparams.len() == targs.len(),
         id.span.clone(),
         ErrorKind::Call(CallErrorKind::TypeArgumentArityMismatch {
@@ -84,7 +84,7 @@ pub(in crate::interp::sl) fn check_func_inputs(
     for (tparam, targ) in typ.tparams.iter().zip(targs) {
         let def_typ =
             crate::phrase!(node: ast::DefTypKind::Plain(targ.clone()), span: targ.span.clone());
-        backtrack_from_result!(
+        unwrap_from_result!(
             ctx_local.bind_tparam(tparam.clone(), TypeDef::Defined(vec![], Box::new(def_typ))),
             &tparam.span
         );
@@ -112,7 +112,7 @@ fn check_values(
         let id = crate::phrase!(node: name.to_owned(), span: id.span.clone());
         ctx.find_func_typ(&id).ok()
     };
-    let matches = backtrack_from_result!(
+    let matches = unwrap_from_result!(
         crate::runtime::ops::value::subs(arena, &find_typdef_opt, &find_func, typs, values),
         &id.span
     );
@@ -128,11 +128,9 @@ fn check_func_output(
     targs: &[ast::Typ],
     value: &Value,
 ) -> Backtrack<()> {
-    let theta = backtrack_from_result!(
-        crate::runtime::ops::typ::Theta::from_lists(tparams, targs),
-        &id.span
-    );
-    let typ = backtrack_from_result!(
+    let theta =
+        unwrap_from_result!(crate::runtime::ops::typ::Theta::from_lists(tparams, targs), &id.span);
+    let typ = unwrap_from_result!(
         crate::runtime::ops::typ::subst_typ(&|id| theta.get(id), typ),
         &id.span
     );
@@ -192,10 +190,10 @@ pub fn invoke_rel<Iface: Interface, Ext: Extern>(
         }
         runner_ctx.interp_mut().cache.begin();
         let result = stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
-            let rel = backtrack_from_result!(ctx.find_rel(&id), &id.span);
+            let rel = unwrap_from_result!(ctx.find_rel(&id), &id.span);
             match rel {
                 ast::RelDef::Extern(rel) => {
-                    let values = backtrack!(invoke_extern_rel(runner_ctx, ctx, &id, rel, &values));
+                    let values = unwrap!(invoke_extern_rel(runner_ctx, ctx, &id, rel, &values));
                     Backtrack::Ok(RelResult::Result(values))
                 }
                 ast::RelDef::Defined(rel) => invoke_defined_rel(runner_ctx, ctx, &id, rel, &values),
@@ -210,7 +208,7 @@ pub fn invoke_rel<Iface: Interface, Ext: Extern>(
                 result = result.nest(span.clone(), || ErrorKind::Trace(trace.clone()));
             }
         }
-        let result = backtrack!(result);
+        let result = unwrap!(result);
         match result {
             RelResult::Result(values) => {
                 if pure && let Some(key) = key {
@@ -247,7 +245,7 @@ fn invoke_extern_rel<Iface: Interface, Ext: Extern>(
         .interp_mut()
         .cache
         .mark_effect(result.as_ref().map_or(true, |(_, effect)| *effect));
-    let (values, _) = backtrack_from_result!(result, &id.span);
+    let (values, _) = unwrap_from_result!(result, &id.span);
     if runner_ctx.interp().config.guard {
         let typs = rel
             .rel_signature
@@ -257,11 +255,11 @@ fn invoke_extern_rel<Iface: Interface, Ext: Extern>(
             .into_iter()
             .cloned()
             .collect();
-        let (_, typs) = backtrack_from_result!(
+        let (_, typs) = unwrap_from_result!(
             crate::lang::hints::input::split(&rel.rel_signature.input_hint, typs),
             &id.span
         );
-        backtrack!(check_values(
+        unwrap!(check_values(
             runner_ctx.arena(),
             ctx,
             id,
@@ -282,13 +280,13 @@ fn invoke_defined_rel<Iface: Interface, Ext: Extern>(
     rel: &ast::DefinedRel,
     values: &[Value],
 ) -> Backtrack<RelResult> {
-    let ctx = backtrack!(assign::assign_exps(
+    let ctx = unwrap!(assign::assign_exps(
         runner_ctx.arena_mut(),
         ctx.localize(),
         &rel.exps_input,
         values
     ));
-    let flow = backtrack!(instr::eval_block_with_else(
+    let flow = unwrap!(instr::eval_block_with_else(
         runner_ctx,
         ctx,
         &rel.block,
@@ -337,12 +335,12 @@ pub fn invoke_func<Iface: Interface, Ext: Extern>(
         }
         runner_ctx.interp_mut().cache.begin();
         let result = stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
-            let (_, func) = backtrack_from_result!(ctx.find_func(&id), &id.span);
+            let (_, func) = unwrap_from_result!(ctx.find_func(&id), &id.span);
             match func.as_ref() {
-                ast::MetaFuncDef::Extern(func) => Backtrack::Ok(FuncResult::Return(backtrack!(
+                ast::MetaFuncDef::Extern(func) => Backtrack::Ok(FuncResult::Return(unwrap!(
                     invoke_extern_func(runner_ctx, ctx, &id, func, &targs, &values)
                 ))),
-                ast::MetaFuncDef::Builtin(func) => Backtrack::Ok(FuncResult::Return(backtrack!(
+                ast::MetaFuncDef::Builtin(func) => Backtrack::Ok(FuncResult::Return(unwrap!(
                     invoke_builtin_func(runner_ctx, ctx, &id, func, &targs, &values)
                 ))),
                 ast::MetaFuncDef::Table(func) => {
@@ -361,7 +359,7 @@ pub fn invoke_func<Iface: Interface, Ext: Extern>(
                 result = result.nest(span.clone(), || ErrorKind::Trace(trace.clone()));
             }
         }
-        let result = backtrack!(result);
+        let result = unwrap!(result);
         match result {
             FuncResult::Return(value) => {
                 if pure && let Some(key) = key {
@@ -395,9 +393,9 @@ fn invoke_extern_func<Iface: Interface, Ext: Extern>(
         .interp_mut()
         .cache
         .mark_effect(result.as_ref().map_or(true, |(_, effect)| *effect));
-    let (value, _) = backtrack_from_result!(result, &id.span);
+    let (value, _) = unwrap_from_result!(result, &id.span);
     if runner_ctx.interp().config.guard {
-        backtrack!(check_func_output(
+        unwrap!(check_func_output(
             runner_ctx.arena(),
             ctx,
             id,
@@ -428,7 +426,7 @@ fn invoke_builtin_func<Iface: Interface, Ext: Extern>(
     match result {
         Ok((value, _)) => {
             if runner_ctx.interp().config.guard {
-                backtrack!(check_func_output(
+                unwrap!(check_func_output(
                     runner_ctx.arena(),
                     ctx,
                     id,
@@ -460,7 +458,7 @@ fn invoke_table_func<Iface: Interface, Ext: Extern>(
     func: &ast::TableFunc,
     values: &[Value],
 ) -> Backtrack<FuncResult> {
-    let ctx_local = backtrack!(assign::assign_params(
+    let ctx_local = unwrap!(assign::assign_params(
         runner_ctx.arena_mut(),
         ctx,
         ctx.localize(),
@@ -469,7 +467,7 @@ fn invoke_table_func<Iface: Interface, Ext: Extern>(
     ));
     let instrs = func.table_rows.iter().flat_map(|row| row.block.iter());
     let flow =
-        backtrack!(instr::eval_block_sequential(runner_ctx, Cow::Owned(ctx_local), instrs, true));
+        unwrap!(instr::eval_block_sequential(runner_ctx, Cow::Owned(ctx_local), instrs, true));
     match flow {
         Flow::Return(value) => Backtrack::Ok(FuncResult::Return(value)),
         _ => Backtrack::err(
@@ -489,7 +487,7 @@ fn invoke_defined_func<Iface: Interface, Ext: Extern>(
     targs: &[ast::Typ],
     values: &[Value],
 ) -> Backtrack<FuncResult> {
-    backtrack!(Backtrack::check(
+    unwrap!(Backtrack::check(
         func.tparams.len() == targs.len(),
         id.span.clone(),
         ErrorKind::Call(CallErrorKind::TypeArgumentArityMismatch {
@@ -501,19 +499,19 @@ fn invoke_defined_func<Iface: Interface, Ext: Extern>(
     for (tparam, targ) in func.tparams.iter().zip(targs.iter()) {
         let def_typ =
             crate::phrase!(node: ast::DefTypKind::Plain(targ.clone()), span: targ.span.clone());
-        backtrack_from_result!(
+        unwrap_from_result!(
             ctx_local.bind_tparam(tparam.clone(), TypeDef::Defined(vec![], Box::new(def_typ))),
             &tparam.span
         );
     }
-    let ctx_local = backtrack!(assign::assign_params(
+    let ctx_local = unwrap!(assign::assign_params(
         runner_ctx.arena_mut(),
         ctx,
         ctx_local,
         &func.params,
         values
     ));
-    let flow = backtrack!(instr::eval_block_with_else(
+    let flow = unwrap!(instr::eval_block_with_else(
         runner_ctx,
         ctx_local,
         &func.block,

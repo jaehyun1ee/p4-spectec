@@ -3,7 +3,7 @@
 use super::super::{
     SlInterp,
     context::{Context, Scope},
-    flow::Flow,
+    flow::{self, Flow},
 };
 use super::{
     assign,
@@ -12,8 +12,8 @@ use super::{
 use crate::interp::shared::eval::{Invoker, iter, ops};
 use crate::{
     interp::shared::{
-        backtrack::{Backtrack, backtrack, backtrack_from_result},
-        error::{Error, ErrorKind, PremErrorKind, TraceErrorKind},
+        backtrack::{Backtrack, err, ok, unwrap, unwrap_from_result},
+        error::{ErrorKind, PremErrorKind, TraceErrorKind},
     },
     lang::{
         common::{Variable, source::Span},
@@ -41,56 +41,6 @@ pub fn eval_block<Iface: Interface, Ext: Extern>(
     }
 }
 
-fn eval_block_deterministic<Iface: Interface, Ext: Extern>(
-    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Ext>,
-    ctx: &Context<'_>,
-    block: &[ast::Instr],
-    tail: bool,
-) -> Backtrack<Flow> {
-    let mut flow = Flow::Cont(vec![]);
-    for instr in block {
-        let flow_post = match eval_instr(runner_ctx, Cow::Borrowed(ctx), instr, tail) {
-            Backtrack::Unmatch(_) => continue,
-            result => backtrack!(result),
-        };
-        flow = backtrack!(flow.merge(flow_post, &instr.span));
-    }
-    Backtrack::Ok(flow)
-}
-
-pub(crate) fn eval_block_sequential<'instr, Iface: Interface, Ext: Extern>(
-    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Ext>,
-    ctx: Cow<'_, Context<'_>>,
-    mut instrs: impl DoubleEndedIterator<Item = &'instr ast::Instr>,
-    tail: bool,
-) -> Backtrack<Flow> {
-    let Some(instr_last) = instrs.next_back() else {
-        return Backtrack::Ok(Flow::Cont(vec![]));
-    };
-    let mut errors = Vec::new();
-    for instr in instrs {
-        match backtrack!(eval_instr(runner_ctx, Cow::Borrowed(ctx.as_ref()), instr, false)) {
-            Flow::Cont(errors_post) => retain_deepest_errors(&mut errors, errors_post),
-            flow => return Backtrack::Ok(flow),
-        }
-    }
-    match backtrack!(eval_instr(runner_ctx, ctx, instr_last, tail)) {
-        Flow::Cont(errors_post) => {
-            retain_deepest_errors(&mut errors, errors_post);
-            Backtrack::Ok(Flow::Cont(errors))
-        }
-        flow => Backtrack::Ok(flow),
-    }
-}
-
-fn retain_deepest_errors(errors: &mut Vec<Error>, errors_post: Vec<Error>) {
-    if errors_post.iter().map(Error::depth).max().unwrap_or(0)
-        >= errors.iter().map(Error::depth).max().unwrap_or(0)
-    {
-        *errors = errors_post;
-    }
-}
-
 pub(crate) fn eval_block_with_else<Iface: Interface, Ext: Extern>(
     runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Ext>,
     ctx: Context<'_>,
@@ -100,12 +50,55 @@ pub(crate) fn eval_block_with_else<Iface: Interface, Ext: Extern>(
     let Some(block_else) = block_else else {
         return eval_block(runner_ctx, Cow::Owned(ctx), block, true);
     };
-    let flow = backtrack!(eval_block(runner_ctx, Cow::Borrowed(&ctx), block, false));
+    let flow = unwrap!(eval_block(runner_ctx, Cow::Borrowed(&ctx), block, false));
     if matches!(flow, Flow::Cont(_)) {
         eval_block(runner_ctx, Cow::Owned(ctx), block_else, true)
     } else {
-        Backtrack::Ok(flow)
+        ok!(flow)
     }
+}
+
+fn eval_block_deterministic<Iface: Interface, Ext: Extern>(
+    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Ext>,
+    ctx: &Context<'_>,
+    block: &[ast::Instr],
+    tail: bool,
+) -> Backtrack<Flow> {
+    flow::choose_deterministic(
+        block,
+        |instr| eval_instr(runner_ctx, Cow::Borrowed(ctx), instr, tail),
+        |instr| instr.span.clone(),
+    )
+}
+
+pub(crate) fn eval_block_sequential<'instr, Iface: Interface, Ext: Extern>(
+    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Ext>,
+    ctx: Cow<'_, Context<'_>>,
+    instrs: impl DoubleEndedIterator<Item = &'instr ast::Instr>,
+    tail: bool,
+) -> Backtrack<Flow> {
+    let mut ctx = Some(ctx);
+    flow::choose_sequential(instrs, |instr, is_last| {
+        if is_last {
+            eval_instr(
+                runner_ctx,
+                ctx.take().expect("last instruction evaluated once"),
+                instr,
+                tail,
+            )
+        } else {
+            eval_instr(
+                runner_ctx,
+                Cow::Borrowed(
+                    ctx.as_ref()
+                        .expect("last instruction not yet evaluated")
+                        .as_ref(),
+                ),
+                instr,
+                false,
+            )
+        }
+    })
 }
 
 // = Instruction evaluation
@@ -152,19 +145,19 @@ fn eval_if_instr<Iface: Interface, Ext: Extern>(
     instr: &ast::IfInstr,
     tail: bool,
 ) -> Backtrack<Flow> {
-    let cond = backtrack!(eval_cond_iter(
+    let cond = unwrap!(eval_cond_iter(
         runner_ctx,
         ctx.as_ref(),
         &instr.iter_exps,
         &mut |runner_ctx, ctx| {
-            let value = backtrack!(eval_exp(runner_ctx, ctx, &instr.exp));
+            let value = unwrap!(eval_exp(runner_ctx, ctx, &instr.exp));
             Backtrack::from_result(get::bool(runner_ctx.arena(), &value), &instr.exp.span)
         }
     ));
     if cond {
         eval_block(runner_ctx, ctx, &instr.block, tail)
     } else {
-        Backtrack::Ok(Flow::cont(
+        ok!(Flow::cont(
             instr.exp.span.clone(),
             PremErrorKind::ConditionNotMet { exp: Print::to_string(&instr.exp) },
         ))
@@ -179,16 +172,16 @@ fn eval_hold_instr<Iface: Interface, Ext: Extern>(
     instr: &ast::HoldInstr,
     tail: bool,
 ) -> Backtrack<Flow> {
-    let cond = backtrack!(eval_cond_iter(
+    let cond = unwrap!(eval_cond_iter(
         runner_ctx,
         ctx.as_ref(),
         &instr.iter_exps,
         &mut |runner_ctx, ctx| {
-            let values = backtrack!(eval_exps(runner_ctx, ctx, &instr.not_exp.args()));
+            let values = unwrap!(eval_exps(runner_ctx, ctx, &instr.not_exp.args()));
             match SlInterp::invoke_rel(runner_ctx, ctx, &instr.id, &values) {
-                Backtrack::Ok(_) => Backtrack::Ok(true),
-                Backtrack::Unmatch(_) => Backtrack::Ok(false),
-                Backtrack::Err(errors) => Backtrack::Err(errors),
+                ok!(_) => ok!(true),
+                Backtrack::Unmatch(_) => ok!(false),
+                err!(errors) => err!(errors),
             }
         }
     ));
@@ -198,11 +191,11 @@ fn eval_hold_instr<Iface: Interface, Ext: Extern>(
         }
         ast::HoldCase::Hold(block, _) if cond => eval_block(runner_ctx, ctx, block, tail),
         ast::HoldCase::NotHold(block, _) if !cond => eval_block(runner_ctx, ctx, block, tail),
-        ast::HoldCase::Hold(..) => Backtrack::Ok(Flow::cont(
+        ast::HoldCase::Hold(..) => ok!(Flow::cont(
             instr.id.span.clone(),
             PremErrorKind::HoldConditionNotMet { relation: instr.id.node.clone() },
         )),
-        ast::HoldCase::NotHold(..) => Backtrack::Ok(Flow::cont(
+        ast::HoldCase::NotHold(..) => ok!(Flow::cont(
             instr.id.span.clone(),
             PremErrorKind::NotHoldConditionNotMet { relation: instr.id.node.clone() },
         )),
@@ -217,18 +210,18 @@ fn eval_case_instr<Iface: Interface, Ext: Extern>(
     instr: &ast::CaseInstr,
     tail: bool,
 ) -> Backtrack<Flow> {
-    let value = backtrack!(eval_exp(runner_ctx, ctx.as_ref(), &instr.exp));
+    let value = unwrap!(eval_exp(runner_ctx, ctx.as_ref(), &instr.exp));
     let id = crate::phrase!(node: "~case".to_owned(), span: Span::default());
     let mut ctx_guard = ctx.as_ref().clone();
     ctx_guard.add_value(Variable::new(id.clone(), vec![]), value);
     let exp = crate::note_phrase!(node: ast::ExpKind::Var(id), note: instr.exp.note.clone(), span: instr.exp.span.clone());
     for case in &instr.cases {
-        if backtrack!(eval_guard(runner_ctx, &ctx_guard, &exp, value, &case.guard)) {
+        if unwrap!(eval_guard(runner_ctx, &ctx_guard, &exp, value, &case.guard)) {
             drop(ctx_guard);
             return eval_block(runner_ctx, ctx, &case.block, tail);
         }
     }
-    Backtrack::Ok(Flow::cont(
+    ok!(Flow::cont(
         instr.exp.span.clone(),
         PremErrorKind::ConditionNotMet { exp: format!("case {}", Print::to_string(&instr.exp)) },
     ))
@@ -246,18 +239,18 @@ fn eval_guard<Iface: Interface, Ext: Extern>(
     }
     let result = (|| match guard {
         ast::Guard::Bool(_) => {
-            Backtrack::Ok(!backtrack_from_result!(get::bool(runner_ctx.arena(), &value), &exp.span))
+            ok!(!unwrap_from_result!(get::bool(runner_ctx.arena(), &value), &exp.span))
         }
         ast::Guard::Cmp(op, _, exp_r) => {
-            let value_r = backtrack!(eval_exp(runner_ctx, ctx, exp_r));
+            let value_r = unwrap!(eval_exp(runner_ctx, ctx, exp_r));
             ops::cmpop(runner_ctx.arena(), &exp.span, op, value, value_r)
         }
         ast::Guard::Sub(_, check) => ops::sub(runner_ctx.arena(), ctx, &exp.span, check, value),
         ast::Guard::Match(pattern) => {
-            Backtrack::Ok(ops::r#match(runner_ctx.arena(), pattern, value))
+            ok!(ops::r#match(runner_ctx.arena(), pattern, value))
         }
         ast::Guard::Mem(exp_list) => {
-            let value_list = backtrack!(eval_exp(runner_ctx, ctx, exp_list));
+            let value_list = unwrap!(eval_exp(runner_ctx, ctx, exp_list));
             ops::mem(runner_ctx.arena(), &exp.span, value, value_list)
         }
     })();
@@ -310,12 +303,12 @@ fn eval_let_instr<Iface: Interface, Ext: Extern>(
     instr: &ast::LetInstr,
     tail: bool,
 ) -> Backtrack<Flow> {
-    let ctx = backtrack!(eval_instr_iter(
+    let ctx = unwrap!(eval_instr_iter(
         runner_ctx,
         ctx.into_owned(),
         &instr.iter_instrs,
         &mut |runner_ctx, ctx| {
-            let value = backtrack!(eval_exp(runner_ctx, &ctx, &instr.exp_r));
+            let value = unwrap!(eval_exp(runner_ctx, &ctx, &instr.exp_r));
             assign::assign_exp(runner_ctx.arena_mut(), ctx, &instr.exp_l, value)
         }
     ));
@@ -330,7 +323,7 @@ fn eval_rule_instr<Iface: Interface, Ext: Extern>(
     instr: &ast::RuleInstr,
     tail: bool,
 ) -> Backtrack<Flow> {
-    let (exps_input, exps_output) = backtrack_from_result!(
+    let (exps_input, exps_output) = unwrap_from_result!(
         crate::lang::hints::input::split(&instr.input_hint, instr.not_exp.args()),
         &instr.id.span
     );
@@ -344,18 +337,18 @@ fn eval_rule_instr<Iface: Interface, Ext: Extern>(
             .zip(&instr_result.exps)
             .all(|(exp_l, exp_r)| exp_l.syntax_eq(exp_r))
     {
-        return Backtrack::Ok(Flow::TailRel(
+        return ok!(Flow::TailRel(
             instr.id.clone(),
-            backtrack!(eval_exps(runner_ctx, ctx.as_ref(), &exps_input)),
+            unwrap!(eval_exps(runner_ctx, ctx.as_ref(), &exps_input)),
         ));
     }
-    let ctx = backtrack!(eval_instr_iter(
+    let ctx = unwrap!(eval_instr_iter(
         runner_ctx,
         ctx.into_owned(),
         &instr.iter_instrs,
         &mut |runner_ctx, ctx| {
-            let values = backtrack!(eval_exps(runner_ctx, &ctx, &exps_input));
-            let values = backtrack!(SlInterp::invoke_rel(runner_ctx, &ctx, &instr.id, &values));
+            let values = unwrap!(eval_exps(runner_ctx, &ctx, &exps_input));
+            let values = unwrap!(SlInterp::invoke_rel(runner_ctx, &ctx, &instr.id, &values));
             assign::assign_exps(runner_ctx.arena_mut(), ctx, &exps_output, &values)
         }
     ));
@@ -369,7 +362,7 @@ fn eval_result_instr<Iface: Interface, Ext: Extern>(
     ctx: Cow<'_, Context<'_>>,
     instr: &ast::ResultInstr,
 ) -> Backtrack<Flow> {
-    Backtrack::Ok(Flow::Result(backtrack!(eval_exps(runner_ctx, ctx.as_ref(), &instr.exps))))
+    ok!(Flow::Result(unwrap!(eval_exps(runner_ctx, ctx.as_ref(), &instr.exps))))
 }
 
 // - Return instruction
@@ -381,15 +374,15 @@ fn eval_return_instr<Iface: Interface, Ext: Extern>(
     tail: bool,
 ) -> Backtrack<Flow> {
     if tail && let ast::ExpKind::Call(id, targs, args) = &instr.exp.node {
-        let targs = backtrack_from_result!(expr::resolve_targs(ctx.as_ref(), targs), &id.span);
-        let values = backtrack!(expr::eval_args(runner_ctx, ctx.as_ref(), args));
-        let (scope, _) = backtrack_from_result!(ctx.find_func(id), &id.span);
+        let targs = unwrap_from_result!(expr::resolve_targs(ctx.as_ref(), targs), &id.span);
+        let values = unwrap!(expr::eval_args(runner_ctx, ctx.as_ref(), args));
+        let (scope, _) = unwrap_from_result!(ctx.find_func(id), &id.span);
         if scope == Scope::Local
             || values
                 .iter()
                 .any(|value| matches!(runner_ctx.arena().kind(value), ValueKind::Func(_)))
         {
-            Backtrack::Ok(Flow::Return(backtrack!(SlInterp::invoke_func(
+            ok!(Flow::Return(unwrap!(SlInterp::invoke_func(
                 runner_ctx,
                 ctx.as_ref(),
                 id,
@@ -397,10 +390,10 @@ fn eval_return_instr<Iface: Interface, Ext: Extern>(
                 &values
             ))))
         } else {
-            Backtrack::Ok(Flow::TailFunc(id.clone(), targs, values))
+            ok!(Flow::TailFunc(id.clone(), targs, values))
         }
     } else {
-        Backtrack::Ok(Flow::Return(backtrack!(eval_exp(runner_ctx, ctx.as_ref(), &instr.exp))))
+        ok!(Flow::Return(unwrap!(eval_exp(runner_ctx, ctx.as_ref(), &instr.exp))))
     }
 }
 
@@ -412,7 +405,7 @@ fn eval_debug_instr<Iface: Interface, Ext: Extern>(
     instr: &ast::DebugInstr,
     tail: bool,
 ) -> Backtrack<Flow> {
-    let value = backtrack!(eval_exp(runner_ctx, ctx.as_ref(), &instr.exp));
+    let value = unwrap!(eval_exp(runner_ctx, ctx.as_ref(), &instr.exp));
     println!("{}: {}", instr.exp.span, Print::to_string(&instr.exp));
     let span = runner_ctx.arena().span(&value).to_string();
     if span.is_empty() {
@@ -438,12 +431,12 @@ fn eval_cond_iter<Iface: Interface, Ext: Extern>(
     };
     match iter {
         ast::Iter::Opt => {
-            let values = backtrack_from_result!(
+            let values = unwrap_from_result!(
                 ctx.find_opt_values_by_var(runner_ctx.arena(), vars),
                 &Span::default()
             );
             let Some(values) = values else {
-                return Backtrack::Ok(false);
+                return ok!(false);
             };
             let mut ctx_sub = ctx.clone();
             for (var, value) in vars.iter().zip(values) {
@@ -452,7 +445,7 @@ fn eval_cond_iter<Iface: Interface, Ext: Extern>(
             eval_cond_iter(runner_ctx, &ctx_sub, iters_tail, eval)
         }
         ast::Iter::List => {
-            let values_by_var = backtrack_from_result!(
+            let values_by_var = unwrap_from_result!(
                 ctx.find_list_values_by_var(runner_ctx.arena(), vars),
                 &Span::default()
             );
@@ -468,11 +461,11 @@ fn eval_cond_iter<Iface: Interface, Ext: Extern>(
                 for (var, values) in vars.iter().zip(&values_by_var) {
                     ctx_sub.add_value(var.clone(), values[idx]);
                 }
-                if !backtrack!(eval_cond_iter(runner_ctx, &ctx_sub, iters_tail, eval)) {
-                    return Backtrack::Ok(false);
+                if !unwrap!(eval_cond_iter(runner_ctx, &ctx_sub, iters_tail, eval)) {
+                    return ok!(false);
                 }
             }
-            Backtrack::Ok(true)
+            ok!(true)
         }
     }
 }

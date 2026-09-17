@@ -27,7 +27,7 @@ use crate::{
 };
 
 use crate::interp::shared::{
-    backtrack::{Backtrack, backtrack_from_result},
+    backtrack::{Backtrack, unwrap_from_result},
     error::{EntityKind, Error, ErrorKind},
 };
 
@@ -315,7 +315,7 @@ impl<'global> Context<'global> {
     ) -> Backtrack<()> {
         for (var, values) in vars.iter().zip(values_by_var) {
             let var_bound = Variable::new(var.id.clone(), var.iters.clone());
-            values.push(*backtrack_from_result!(self.find_value(&var_bound), &var.id.span));
+            values.push(*unwrap_from_result!(self.find_value(&var_bound), &var.id.span));
         }
         Backtrack::Ok(())
     }
@@ -331,7 +331,7 @@ impl<'global> Context<'global> {
             iters.push(ast::Iter::List);
             let typ = typ::make::iterate(var.typ.clone(), &iters);
             let value = make::list(arena, typ.node.into(), values, Span::default());
-            let value = backtrack_from_result!(value, &Span::default());
+            let value = unwrap_from_result!(value, &Span::default());
             self.add_value(Variable::new(var.id.clone(), iters), value);
         }
         Backtrack::Ok(())
@@ -349,7 +349,7 @@ impl<'global> Context<'global> {
             let typ = typ::make::iterate(var.typ.clone(), &iters);
             let value =
                 make::opt(arena, typ.node.into(), values.into_iter().next(), Span::default());
-            let value = backtrack_from_result!(value, &Span::default());
+            let value = unwrap_from_result!(value, &Span::default());
             self.add_value(Variable::new(var.id.clone(), iters), value);
         }
         Backtrack::Ok(())

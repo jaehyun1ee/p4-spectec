@@ -18,7 +18,7 @@ use crate::{
 };
 
 use crate::interp::shared::{
-    backtrack::{Backtrack, backtrack, backtrack_from_result},
+    backtrack::{Backtrack, unwrap, unwrap_from_result},
     error::{ErrorKind, ExprErrorKind},
 };
 
@@ -34,13 +34,13 @@ pub(crate) fn unop(
 ) -> Backtrack<Value> {
     let value = match op {
         ast::UnOp::Bool(boolean::UnOp::Not) => {
-            let bool = !backtrack_from_result!(get::bool(arena, &value), span);
-            backtrack_from_result!(make::bool(arena, bool, Span::default()), span)
+            let bool = !unwrap_from_result!(get::bool(arena, &value), span);
+            unwrap_from_result!(make::bool(arena, bool, Span::default()), span)
         }
         ast::UnOp::Num(op) => {
-            let num = backtrack_from_result!(get::num(arena, &value), span);
+            let num = unwrap_from_result!(get::num(arena, &value), span);
             let num = num::un(*op, num);
-            backtrack_from_result!(make::num(arena, num, Span::default()), span)
+            unwrap_from_result!(make::num(arena, num, Span::default()), span)
         }
     };
     Backtrack::Ok(value)
@@ -57,21 +57,21 @@ pub(crate) fn binop(
 ) -> Backtrack<Value> {
     let value = match op {
         ast::BinOp::Bool(op) => {
-            let bool_l = backtrack_from_result!(get::bool(arena, &value_l), span);
-            let bool_r = backtrack_from_result!(get::bool(arena, &value_r), span);
+            let bool_l = unwrap_from_result!(get::bool(arena, &value_l), span);
+            let bool_r = unwrap_from_result!(get::bool(arena, &value_r), span);
             let result = match op {
                 boolean::BinOp::And => bool_l && bool_r,
                 boolean::BinOp::Or => bool_l || bool_r,
                 boolean::BinOp::Impl => !bool_l || bool_r,
                 boolean::BinOp::Equiv => bool_l == bool_r,
             };
-            backtrack_from_result!(make::bool(arena, result, Span::default()), span)
+            unwrap_from_result!(make::bool(arena, result, Span::default()), span)
         }
         ast::BinOp::Num(op) => {
-            let num_l = backtrack_from_result!(get::num(arena, &value_l), span);
-            let num_r = backtrack_from_result!(get::num(arena, &value_r), span);
-            let num = backtrack_from_result!(num::bin(*op, num_l, num_r), span);
-            backtrack_from_result!(make::num(arena, num, Span::default()), span)
+            let num_l = unwrap_from_result!(get::num(arena, &value_l), span);
+            let num_r = unwrap_from_result!(get::num(arena, &value_r), span);
+            let num = unwrap_from_result!(num::bin(*op, num_l, num_r), span);
+            unwrap_from_result!(make::num(arena, num, Span::default()), span)
         }
     };
     Backtrack::Ok(value)
@@ -92,9 +92,9 @@ pub(crate) fn cmpop(
             !arena.view(value_l).syntax_eq(&arena.view(value_r))
         }
         ast::CmpOp::Num(op) => {
-            let num_l = backtrack_from_result!(get::num(arena, &value_l), span);
-            let num_r = backtrack_from_result!(get::num(arena, &value_r), span);
-            backtrack_from_result!(num::cmp(*op, num_l, num_r), span)
+            let num_l = unwrap_from_result!(get::num(arena, &value_l), span);
+            let num_r = unwrap_from_result!(get::num(arena, &value_r), span);
+            unwrap_from_result!(num::cmp(*op, num_l, num_r), span)
         }
     })
 }
@@ -145,7 +145,7 @@ pub(crate) fn mem(
     value_elem: Value,
     value_list: Value,
 ) -> Backtrack<bool> {
-    let values = backtrack_from_result!(get::list(arena, &value_list), span);
+    let values = unwrap_from_result!(get::list(arena, &value_list), span);
     Backtrack::Ok(
         values
             .iter()
@@ -166,28 +166,28 @@ pub(crate) fn cast_up(
     let span = &typ.span;
     let result = match &typ.node {
         ast::TypKind::Num(num::Typ::Int) => {
-            let num = backtrack_from_result!(get::num(arena, &value), span);
+            let num = unwrap_from_result!(get::num(arena, &value), span);
             match num {
                 num::Number::Nat(num) => {
                     let num = num.as_bigint().clone();
-                    backtrack_from_result!(make::int(arena, num, Span::default()), span)
+                    unwrap_from_result!(make::int(arena, num, Span::default()), span)
                 }
                 num::Number::Int(_) => value,
             }
         }
         ast::TypKind::Var(id, targs) => {
-            let (tparams, def_typ) = backtrack_from_result!(ctx.find_defined_typdef(id), span);
-            let theta = backtrack_from_result!(Theta::from_lists(tparams, targs), span);
+            let (tparams, def_typ) = unwrap_from_result!(ctx.find_defined_typdef(id), span);
+            let theta = unwrap_from_result!(Theta::from_lists(tparams, targs), span);
             match &def_typ.node {
                 ast::DefTypKind::Plain(typ) => {
-                    let typ = backtrack_from_result!(subst_typ(&|id| theta.get(id), typ), span);
+                    let typ = unwrap_from_result!(subst_typ(&|id| theta.get(id), typ), span);
                     return cast_up(arena, ctx, &typ, value);
                 }
                 _ => value,
             }
         }
         ast::TypKind::Tuple(typs) => {
-            let values = backtrack_from_result!(get::tuple(arena, &value), span).to_vec();
+            let values = unwrap_from_result!(get::tuple(arena, &value), span).to_vec();
             if typs.len() != values.len() {
                 return Backtrack::err(
                     span.clone(),
@@ -199,31 +199,31 @@ pub(crate) fn cast_up(
             }
             let mut values_cast = Vec::with_capacity(values.len());
             for (typ, value) in typs.iter().zip(values) {
-                values_cast.push(backtrack!(cast_up(arena, ctx, typ, value)));
+                values_cast.push(unwrap!(cast_up(arena, ctx, typ, value)));
             }
-            backtrack_from_result!(
+            unwrap_from_result!(
                 make::tuple(arena, typ.node.clone().into(), values_cast, Span::default()),
                 span
             )
         }
         ast::TypKind::Iter(typ_inner, ast::Iter::Opt) => {
-            let value = backtrack_from_result!(get::opt(arena, &value), span);
+            let value = unwrap_from_result!(get::opt(arena, &value), span);
             let value = match value {
-                Some(value) => Some(backtrack!(cast_up(arena, ctx, typ_inner, value))),
+                Some(value) => Some(unwrap!(cast_up(arena, ctx, typ_inner, value))),
                 None => None,
             };
-            backtrack_from_result!(
+            unwrap_from_result!(
                 make::opt(arena, typ_inner.node.clone().into(), value, Span::default()),
                 span
             )
         }
         ast::TypKind::Iter(typ_inner, ast::Iter::List) => {
-            let values = backtrack_from_result!(get::list(arena, &value), span).to_vec();
+            let values = unwrap_from_result!(get::list(arena, &value), span).to_vec();
             let mut values_cast = Vec::with_capacity(values.len());
             for value in values {
-                values_cast.push(backtrack!(cast_up(arena, ctx, typ_inner, value)));
+                values_cast.push(unwrap!(cast_up(arena, ctx, typ_inner, value)));
             }
-            backtrack_from_result!(
+            unwrap_from_result!(
                 make::list(arena, typ_inner.node.clone().into(), values_cast, Span::default()),
                 span
             )
@@ -244,28 +244,28 @@ pub(crate) fn cast_down(
     let span = &typ.span;
     let result = match &typ.node {
         ast::TypKind::Num(num::Typ::Nat) => {
-            let num = backtrack_from_result!(get::num(arena, &value), span);
+            let num = unwrap_from_result!(get::num(arena, &value), span);
             match num {
                 num::Number::Nat(_) => value,
                 num::Number::Int(num) => {
-                    let num = backtrack_from_result!(num::Natural::try_from(num.clone()), span);
-                    backtrack_from_result!(make::nat(arena, num, Span::default()), span)
+                    let num = unwrap_from_result!(num::Natural::try_from(num.clone()), span);
+                    unwrap_from_result!(make::nat(arena, num, Span::default()), span)
                 }
             }
         }
         ast::TypKind::Var(id, targs) => {
-            let (tparams, def_typ) = backtrack_from_result!(ctx.find_defined_typdef(id), span);
-            let theta = backtrack_from_result!(Theta::from_lists(tparams, targs), span);
+            let (tparams, def_typ) = unwrap_from_result!(ctx.find_defined_typdef(id), span);
+            let theta = unwrap_from_result!(Theta::from_lists(tparams, targs), span);
             match &def_typ.node {
                 ast::DefTypKind::Plain(typ) => {
-                    let typ = backtrack_from_result!(subst_typ(&|id| theta.get(id), typ), span);
+                    let typ = unwrap_from_result!(subst_typ(&|id| theta.get(id), typ), span);
                     return cast_down(arena, ctx, &typ, value);
                 }
                 _ => value,
             }
         }
         ast::TypKind::Tuple(typs) => {
-            let values = backtrack_from_result!(get::tuple(arena, &value), span).to_vec();
+            let values = unwrap_from_result!(get::tuple(arena, &value), span).to_vec();
             if typs.len() != values.len() {
                 return Backtrack::err(
                     span.clone(),
@@ -277,31 +277,31 @@ pub(crate) fn cast_down(
             }
             let mut values_cast = Vec::with_capacity(values.len());
             for (typ, value) in typs.iter().zip(values) {
-                values_cast.push(backtrack!(cast_down(arena, ctx, typ, value)));
+                values_cast.push(unwrap!(cast_down(arena, ctx, typ, value)));
             }
-            backtrack_from_result!(
+            unwrap_from_result!(
                 make::tuple(arena, typ.node.clone().into(), values_cast, Span::default()),
                 span
             )
         }
         ast::TypKind::Iter(typ_inner, ast::Iter::Opt) => {
-            let value = backtrack_from_result!(get::opt(arena, &value), span);
+            let value = unwrap_from_result!(get::opt(arena, &value), span);
             let value = match value {
-                Some(value) => Some(backtrack!(cast_down(arena, ctx, typ_inner, value))),
+                Some(value) => Some(unwrap!(cast_down(arena, ctx, typ_inner, value))),
                 None => None,
             };
-            backtrack_from_result!(
+            unwrap_from_result!(
                 make::opt(arena, typ_inner.node.clone().into(), value, Span::default()),
                 span
             )
         }
         ast::TypKind::Iter(typ_inner, ast::Iter::List) => {
-            let values = backtrack_from_result!(get::list(arena, &value), span).to_vec();
+            let values = unwrap_from_result!(get::list(arena, &value), span).to_vec();
             let mut values_cast = Vec::with_capacity(values.len());
             for value in values {
-                values_cast.push(backtrack!(cast_down(arena, ctx, typ_inner, value)));
+                values_cast.push(unwrap!(cast_down(arena, ctx, typ_inner, value)));
             }
-            backtrack_from_result!(
+            unwrap_from_result!(
                 make::list(arena, typ_inner.node.clone().into(), values_cast, Span::default()),
                 span
             )
@@ -321,7 +321,7 @@ pub(crate) fn access_dot(
     atom: &ast::Atom,
     span: &Span,
 ) -> Backtrack<Value> {
-    let value_fields = backtrack_from_result!(get::structure(arena, value), span);
+    let value_fields = unwrap_from_result!(get::structure(arena, value), span);
     match value_fields
         .iter()
         .find(|(field, _)| field.node == atom.node)
@@ -332,7 +332,7 @@ pub(crate) fn access_dot(
 }
 
 fn get_int(arena: &ValueArena, value: &Value, span: &Span) -> Backtrack<BigInt> {
-    let num = backtrack_from_result!(get::num(arena, value), span);
+    let num = unwrap_from_result!(get::num(arena, value), span);
     Backtrack::Ok(num::to_int(num).clone())
 }
 
@@ -345,7 +345,7 @@ pub(crate) fn access_index(
     span_base: &Span,
     span_idx: &Span,
 ) -> Backtrack<Value> {
-    let int_idx = backtrack!(get_int(arena, value_idx, span_idx));
+    let int_idx = unwrap!(get_int(arena, value_idx, span_idx));
     let len = match arena.kind(value_base) {
         ValueKind::Text(text) => text.len(),
         ValueKind::List(values) => values.len(),
@@ -366,7 +366,7 @@ pub(crate) fn access_index(
         ValueKind::Text(_) => {
             let typ = crate::phrase!(node: arena.typ(value_base).clone(), span: arena.span(value_base).clone());
             let value_len =
-                backtrack_from_result!(make::nat(arena, 1u64.into(), Span::default()), span_idx);
+                unwrap_from_result!(make::nat(arena, 1u64.into(), Span::default()), span_idx);
             access_slice(
                 arena, value_base, value_idx, &value_len, &typ.node, &typ.span, span_base,
                 span_idx, span_idx, span_idx,
@@ -392,8 +392,8 @@ pub(crate) fn access_slice(
     span_len: &Span,
     span_bounds: &Span,
 ) -> Backtrack<Value> {
-    let int_idx = backtrack!(get_int(arena, value_idx, span_idx));
-    let int_len = backtrack!(get_int(arena, value_len, span_len));
+    let int_idx = unwrap!(get_int(arena, value_idx, span_idx));
+    let int_len = unwrap!(get_int(arena, value_len, span_len));
     let size = match arena.kind(value_base) {
         ValueKind::Text(text) => text.len(),
         ValueKind::List(values) => values.len(),
@@ -429,7 +429,7 @@ pub(crate) fn access_slice(
         },
         ValueKind::List(values) => {
             let values = values[idx..idx_end].to_vec();
-            Backtrack::Ok(backtrack_from_result!(
+            Backtrack::Ok(unwrap_from_result!(
                 make::list(arena, typ.clone(), values, Span::default()),
                 span_typ
             ))
@@ -451,7 +451,7 @@ pub(crate) fn update_index(
     span_base: &Span,
     span_idx: &Span,
 ) -> Backtrack<Value> {
-    let int_idx = backtrack!(get_int(arena, value_idx, span_idx));
+    let int_idx = unwrap!(get_int(arena, value_idx, span_idx));
     let len = match arena.kind(value_base) {
         ValueKind::Text(text) => text.len(),
         ValueKind::List(values) => values.len(),
@@ -471,7 +471,7 @@ pub(crate) fn update_index(
     let value = match arena.kind(value_base) {
         ValueKind::Text(text) => {
             let size = text.len();
-            let text_upd = backtrack_from_result!(get::text(arena, &value_upd), span_idx);
+            let text_upd = unwrap_from_result!(get::text(arena, &value_upd), span_idx);
             if text_upd.len() != 1 {
                 return Backtrack::err(
                     span_idx.clone(),
@@ -480,10 +480,10 @@ pub(crate) fn update_index(
             }
             let text_upd = text_upd.to_owned();
             let value_l_idx =
-                backtrack_from_result!(make::int(arena, (0).into(), Span::default()), &typ.span);
+                unwrap_from_result!(make::int(arena, (0).into(), Span::default()), &typ.span);
             let value_l_len =
-                backtrack_from_result!(make::int(arena, (idx).into(), Span::default()), &typ.span);
-            let value_l = backtrack!(access_slice(
+                unwrap_from_result!(make::int(arena, (idx).into(), Span::default()), &typ.span);
+            let value_l = unwrap!(access_slice(
                 arena,
                 value_base,
                 &value_l_idx,
@@ -495,15 +495,13 @@ pub(crate) fn update_index(
                 span_idx,
                 span_idx
             ));
-            let value_r_idx = backtrack_from_result!(
-                make::int(arena, (idx + 1).into(), Span::default()),
-                &typ.span
-            );
-            let value_r_len = backtrack_from_result!(
+            let value_r_idx =
+                unwrap_from_result!(make::int(arena, (idx + 1).into(), Span::default()), &typ.span);
+            let value_r_len = unwrap_from_result!(
                 make::int(arena, (size - (idx + 1)).into(), Span::default()),
                 &typ.span
             );
-            let value_r = backtrack!(access_slice(
+            let value_r = unwrap!(access_slice(
                 arena,
                 value_base,
                 &value_r_idx,
@@ -515,17 +513,17 @@ pub(crate) fn update_index(
                 span_idx,
                 span_idx
             ));
-            let text_l = backtrack_from_result!(get::text(arena, &value_l), span_idx);
-            let text_r = backtrack_from_result!(get::text(arena, &value_r), span_idx);
+            let text_l = unwrap_from_result!(get::text(arena, &value_l), span_idx);
+            let text_r = unwrap_from_result!(get::text(arena, &value_r), span_idx);
             {
                 let text = format!("{text_l}{text_upd}{text_r}");
-                backtrack_from_result!(make::text(arena, text, Span::default()), &typ.span)
+                unwrap_from_result!(make::text(arena, text, Span::default()), &typ.span)
             }
         }
         ValueKind::List(values) => {
             let mut values = values.clone();
             values[idx] = value_upd;
-            backtrack_from_result!(
+            unwrap_from_result!(
                 make::list(arena, typ.node.clone(), values, Span::default()),
                 &typ.span
             )
@@ -549,8 +547,8 @@ pub(crate) fn update_slice(
     span_idx: &Span,
     span_len: &Span,
 ) -> Backtrack<Value> {
-    let int_idx = backtrack!(get_int(arena, value_idx, span_idx));
-    let int_len = backtrack!(get_int(arena, value_len, span_len));
+    let int_idx = unwrap!(get_int(arena, value_idx, span_idx));
+    let int_len = unwrap!(get_int(arena, value_len, span_len));
     let size = match arena.kind(value_base) {
         ValueKind::Text(text) => text.len(),
         ValueKind::List(values) => values.len(),
@@ -576,7 +574,7 @@ pub(crate) fn update_slice(
     let value = match arena.kind(value_base) {
         ValueKind::Text(text) => {
             let size = text.len();
-            let text_upd = backtrack_from_result!(get::text(arena, &value_upd), span_len);
+            let text_upd = unwrap_from_result!(get::text(arena, &value_upd), span_len);
             if text_upd.len() != idx_end - idx {
                 return Backtrack::err(
                     span_len.clone(),
@@ -588,10 +586,10 @@ pub(crate) fn update_slice(
             }
             let text_upd = text_upd.to_owned();
             let value_l_idx =
-                backtrack_from_result!(make::int(arena, (0).into(), Span::default()), &typ.span);
+                unwrap_from_result!(make::int(arena, (0).into(), Span::default()), &typ.span);
             let value_l_len =
-                backtrack_from_result!(make::int(arena, (idx).into(), Span::default()), &typ.span);
-            let value_l = backtrack!(access_slice(
+                unwrap_from_result!(make::int(arena, (idx).into(), Span::default()), &typ.span);
+            let value_l = unwrap!(access_slice(
                 arena,
                 value_base,
                 &value_l_idx,
@@ -603,15 +601,13 @@ pub(crate) fn update_slice(
                 span_len,
                 span_len
             ));
-            let value_r_idx = backtrack_from_result!(
-                make::int(arena, (idx_end).into(), Span::default()),
-                &typ.span
-            );
-            let value_r_len = backtrack_from_result!(
+            let value_r_idx =
+                unwrap_from_result!(make::int(arena, (idx_end).into(), Span::default()), &typ.span);
+            let value_r_len = unwrap_from_result!(
                 make::int(arena, (size - (idx_end)).into(), Span::default()),
                 &typ.span
             );
-            let value_r = backtrack!(access_slice(
+            let value_r = unwrap!(access_slice(
                 arena,
                 value_base,
                 &value_r_idx,
@@ -623,15 +619,15 @@ pub(crate) fn update_slice(
                 span_len,
                 span_len
             ));
-            let text_l = backtrack_from_result!(get::text(arena, &value_l), span_len);
-            let text_r = backtrack_from_result!(get::text(arena, &value_r), span_len);
+            let text_l = unwrap_from_result!(get::text(arena, &value_l), span_len);
+            let text_r = unwrap_from_result!(get::text(arena, &value_r), span_len);
             {
                 let text = format!("{text_l}{text_upd}{text_r}");
-                backtrack_from_result!(make::text(arena, text, Span::default()), &typ.span)
+                unwrap_from_result!(make::text(arena, text, Span::default()), &typ.span)
             }
         }
         ValueKind::List(values) => {
-            let values_upd = backtrack_from_result!(get::list(arena, &value_upd), span_len);
+            let values_upd = unwrap_from_result!(get::list(arena, &value_upd), span_len);
             if values_upd.len() != idx_end - idx {
                 return Backtrack::err(
                     span_len.clone(),
@@ -643,7 +639,7 @@ pub(crate) fn update_slice(
             }
             let mut values = values.clone();
             values[idx..idx_end].clone_from_slice(values_upd);
-            backtrack_from_result!(
+            unwrap_from_result!(
                 make::list(arena, typ.node.clone(), values, Span::default()),
                 &typ.span
             )

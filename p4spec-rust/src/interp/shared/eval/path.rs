@@ -12,7 +12,7 @@ use crate::{
 };
 
 use super::{expr::eval_exp, ops};
-use crate::interp::shared::backtrack::{Backtrack, backtrack, backtrack_from_result};
+use crate::interp::shared::backtrack::{Backtrack, unwrap, unwrap_from_result};
 
 // - Access
 
@@ -45,8 +45,8 @@ fn eval_access_idx_path<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, 
     path: &ast::Path,
     exp_idx: &ast::Exp,
 ) -> Backtrack<Value> {
-    let value = backtrack!(eval_access_path(runner_ctx, ctx, value_base, path));
-    let value_idx = backtrack!(eval_exp(runner_ctx, ctx, exp_idx));
+    let value = unwrap!(eval_access_path(runner_ctx, ctx, value_base, path));
+    let value_idx = unwrap!(eval_exp(runner_ctx, ctx, exp_idx));
     ops::access_index(runner_ctx.arena_mut(), &value, &value_idx, &path.span, &exp_idx.span)
 }
 
@@ -61,9 +61,9 @@ fn eval_access_slice_path<'global, Interp: Invoker<Iface, Ext>, Iface: Interface
     exp_len: &ast::Exp,
 ) -> Backtrack<Value> {
     let typ = &path.note;
-    let value = backtrack!(eval_access_path(runner_ctx, ctx, value_base, path));
-    let value_idx = backtrack!(eval_exp(runner_ctx, ctx, exp_idx));
-    let value_len = backtrack!(eval_exp(runner_ctx, ctx, exp_len));
+    let value = unwrap!(eval_access_path(runner_ctx, ctx, value_base, path));
+    let value_idx = unwrap!(eval_exp(runner_ctx, ctx, exp_idx));
+    let value_len = unwrap!(eval_exp(runner_ctx, ctx, exp_len));
     ops::access_slice(
         runner_ctx.arena_mut(),
         &value,
@@ -87,7 +87,7 @@ fn eval_access_dot_path<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, 
     path: &ast::Path,
     atom: &ast::Atom,
 ) -> Backtrack<Value> {
-    let value = backtrack!(eval_access_path(runner_ctx, ctx, value_base, path));
+    let value = unwrap!(eval_access_path(runner_ctx, ctx, value_base, path));
     ops::access_dot(runner_ctx.arena(), &value, atom, &path.span)
 }
 
@@ -130,9 +130,9 @@ fn eval_update_idx_path<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, 
     value_upd: Value,
 ) -> Backtrack<Value> {
     let typ = crate::phrase!(node: path.note.clone(), span: path.span.clone());
-    let value = backtrack!(eval_access_path(runner_ctx, ctx, value_base, path));
-    let value_idx = backtrack!(eval_exp(runner_ctx, ctx, exp_idx));
-    let value = backtrack!(ops::update_index(
+    let value = unwrap!(eval_access_path(runner_ctx, ctx, value_base, path));
+    let value_idx = unwrap!(eval_exp(runner_ctx, ctx, exp_idx));
+    let value = unwrap!(ops::update_index(
         runner_ctx.arena_mut(),
         &value,
         &value_idx,
@@ -156,10 +156,10 @@ fn eval_update_slice_path<'global, Interp: Invoker<Iface, Ext>, Iface: Interface
     value_upd: Value,
 ) -> Backtrack<Value> {
     let typ = crate::phrase!(node: path.note.clone(), span: path.span.clone());
-    let value = backtrack!(eval_access_path(runner_ctx, ctx, value_base, path));
-    let value_idx = backtrack!(eval_exp(runner_ctx, ctx, exp_idx));
-    let value_len = backtrack!(eval_exp(runner_ctx, ctx, exp_len));
-    let value = backtrack!(ops::update_slice(
+    let value = unwrap!(eval_access_path(runner_ctx, ctx, value_base, path));
+    let value_idx = unwrap!(eval_exp(runner_ctx, ctx, exp_idx));
+    let value_len = unwrap!(eval_exp(runner_ctx, ctx, exp_len));
+    let value = unwrap!(ops::update_slice(
         runner_ctx.arena_mut(),
         &value,
         &value_idx,
@@ -184,16 +184,15 @@ fn eval_update_dot_path<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, 
     value_upd: Value,
 ) -> Backtrack<Value> {
     let typ = crate::phrase!(node: path.note.clone(), span: path.span.clone());
-    let value = backtrack!(eval_access_path(runner_ctx, ctx, value_base, path));
-    let value_fields =
-        backtrack_from_result!(get::structure(runner_ctx.arena(), &value), &path.span);
+    let value = unwrap!(eval_access_path(runner_ctx, ctx, value_base, path));
+    let value_fields = unwrap_from_result!(get::structure(runner_ctx.arena(), &value), &path.span);
     let value_fields = value_fields
         .iter()
         .map(|(field, value)| {
             (field.clone(), if field.node == atom.node { value_upd } else { *value })
         })
         .collect();
-    let value = backtrack_from_result!(
+    let value = unwrap_from_result!(
         make::structure(runner_ctx.arena_mut(), typ.node.clone(), value_fields, Span::default()),
         &Span::default()
     );

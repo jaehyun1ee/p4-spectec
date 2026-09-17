@@ -1,7 +1,7 @@
 //! Iterated expression evaluation and binding collection
 
 use super::super::{
-    backtrack::{Backtrack, backtrack, backtrack_from_result},
+    backtrack::{Backtrack, unwrap, unwrap_from_result},
     context::IterContext,
     error::Error,
 };
@@ -30,7 +30,7 @@ where
     Ext: Extern,
 {
     let values_by_var =
-        backtrack_from_result!(ctx.find_list_values_by_var(runner_ctx.arena(), vars), span);
+        unwrap_from_result!(ctx.find_list_values_by_var(runner_ctx.arena(), vars), span);
     // Copy handles before the callback can allocate in the arena
     let values_by_var: Vec<_> = values_by_var.into_iter().map(<[Value]>::to_vec).collect();
     let len = values_by_var.first().map_or(0, Vec::len);
@@ -44,7 +44,7 @@ where
         for (var, values) in vars.iter().zip(&values_by_var) {
             ctx_sub.add_value(var.clone(), values[idx]);
         }
-        values.push(backtrack!(eval(runner_ctx, &ctx_sub)));
+        values.push(unwrap!(eval(runner_ctx, &ctx_sub)));
     }
     Backtrack::Ok(values)
 }
@@ -62,7 +62,7 @@ where
     Iface: Interface,
     Ext: Extern,
 {
-    let values = backtrack_from_result!(ctx.find_opt_values_by_var(runner_ctx.arena(), vars), span);
+    let values = unwrap_from_result!(ctx.find_opt_values_by_var(runner_ctx.arena(), vars), span);
     let Some(values) = values else {
         return Backtrack::Ok(None);
     };
@@ -70,7 +70,7 @@ where
     for (var, value) in vars.iter().zip(values) {
         ctx_sub.add_value(Variable::new(var.id.clone(), var.iters.clone()), value);
     }
-    Backtrack::Ok(Some(backtrack!(eval(runner_ctx, &ctx_sub))))
+    Backtrack::Ok(Some(unwrap!(eval(runner_ctx, &ctx_sub))))
 }
 
 // = Binding iteration
@@ -90,7 +90,7 @@ where
     Ext: Extern,
 {
     let values_by_var =
-        backtrack_from_result!(ctx.find_list_values_by_var(runner_ctx.arena(), vars_bound), span);
+        unwrap_from_result!(ctx.find_list_values_by_var(runner_ctx.arena(), vars_bound), span);
     let values_by_var: Vec<_> = values_by_var.into_iter().map(<[Value]>::to_vec).collect();
     let len = values_by_var.first().map_or(0, Vec::len);
     let vars: Vec<_> = vars_bound
@@ -104,10 +104,10 @@ where
             ctx_sub.add_value(var.clone(), values[idx]);
         }
         // Keep callback writes out of the reusable input context
-        let ctx_post = backtrack!(eval(runner_ctx, ctx_sub.clone()));
-        backtrack!(ctx_post.collect_values_by_var(vars_bind, &mut values_bind_by_var));
+        let ctx_post = unwrap!(eval(runner_ctx, ctx_sub.clone()));
+        unwrap!(ctx_post.collect_values_by_var(vars_bind, &mut values_bind_by_var));
     }
-    backtrack!(ctx.bind_list_values_by_var(runner_ctx.arena_mut(), vars_bind, values_bind_by_var));
+    unwrap!(ctx.bind_list_values_by_var(runner_ctx.arena_mut(), vars_bind, values_bind_by_var));
     Backtrack::Ok(ctx)
 }
 
@@ -126,16 +126,16 @@ where
     Ext: Extern,
 {
     let values =
-        backtrack_from_result!(ctx.find_opt_values_by_var(runner_ctx.arena(), vars_bound), span);
+        unwrap_from_result!(ctx.find_opt_values_by_var(runner_ctx.arena(), vars_bound), span);
     let mut values_bind_by_var = vec![Vec::new(); vars_bind.len()];
     if let Some(values) = values {
         let mut ctx_sub = ctx.clone();
         for (var, value) in vars_bound.iter().zip(values) {
             ctx_sub.add_value(Variable::new(var.id.clone(), var.iters.clone()), value);
         }
-        let ctx_post = backtrack!(eval(runner_ctx, ctx_sub));
-        backtrack!(ctx_post.collect_values_by_var(vars_bind, &mut values_bind_by_var));
+        let ctx_post = unwrap!(eval(runner_ctx, ctx_sub));
+        unwrap!(ctx_post.collect_values_by_var(vars_bind, &mut values_bind_by_var));
     }
-    backtrack!(ctx.bind_opt_values_by_var(runner_ctx.arena_mut(), vars_bind, values_bind_by_var));
+    unwrap!(ctx.bind_opt_values_by_var(runner_ctx.arena_mut(), vars_bind, values_bind_by_var));
     Backtrack::Ok(ctx)
 }

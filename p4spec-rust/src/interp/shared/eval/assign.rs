@@ -20,7 +20,7 @@ use crate::{
 };
 
 use crate::interp::shared::{
-    backtrack::{Backtrack, backtrack, backtrack_from_result},
+    backtrack::{Backtrack, unwrap, unwrap_from_result},
     error::ErrorKind,
     util::is_iter_var_exp,
 };
@@ -96,7 +96,7 @@ pub fn assign_exps<Ctx: WriteContext, T: Borrow<ast::Exp>>(
         );
     }
     for (exp, value) in exps.iter().zip(values) {
-        ctx = backtrack!(assign_exp(arena, ctx, exp.borrow(), *value));
+        ctx = unwrap!(assign_exp(arena, ctx, exp.borrow(), *value));
     }
     Backtrack::Ok(ctx)
 }
@@ -197,11 +197,11 @@ fn assign_cons_exp<Ctx: WriteContext>(
         return Backtrack::err(exp.span.clone(), ErrorKind::Assign(AssignErrorKind::EmptyCons));
     };
     let typ = phrase!(node: arena.typ(value).clone(), span: exp.span.clone());
-    let value_tail = backtrack_from_result!(
+    let value_tail = unwrap_from_result!(
         make::list(arena, typ.node.clone(), values_tail.to_vec(), Span::default()),
         &Span::default()
     );
-    let ctx = backtrack!(assign_exp(arena, ctx, exp_head, *value_head));
+    let ctx = unwrap!(assign_exp(arena, ctx, exp_head, *value_head));
     assign_exp(arena, ctx, exp_tail, value_tail)
 }
 
@@ -223,9 +223,9 @@ fn assign_iter_exp<Ctx: WriteContext>(
     let span = &exp.span;
     match iter {
         ast::Iter::Opt => {
-            let value_opt = backtrack_from_result!(get::opt(arena, &value), span);
+            let value_opt = unwrap_from_result!(get::opt(arena, &value), span);
             let ctx_sub = match value_opt {
-                Some(value) => Some(backtrack!(assign_exp(arena, ctx.clone(), exp_inner, value))),
+                Some(value) => Some(unwrap!(assign_exp(arena, ctx.clone(), exp_inner, value))),
                 None => None,
             };
             for var in vars {
@@ -233,13 +233,13 @@ fn assign_iter_exp<Ctx: WriteContext>(
                 iters.push(ast::Iter::Opt);
                 let typ = typ::make::iterate(var.typ.clone(), &iters);
                 let value_opt = match &ctx_sub {
-                    Some(ctx_sub) => Some(*backtrack_from_result!(
+                    Some(ctx_sub) => Some(*unwrap_from_result!(
                         ctx_sub.find_value(&Variable::new(var.id.clone(), var.iters.clone())),
                         &var.id.span
                     )),
                     None => None,
                 };
-                let value = backtrack_from_result!(
+                let value = unwrap_from_result!(
                     make::opt(arena, typ.node.into(), value_opt, Span::default()),
                     span
                 );
@@ -248,12 +248,12 @@ fn assign_iter_exp<Ctx: WriteContext>(
             Backtrack::Ok(ctx)
         }
         ast::Iter::List => {
-            let values = backtrack_from_result!(get::list(arena, &value), span).to_vec();
+            let values = unwrap_from_result!(get::list(arena, &value), span).to_vec();
             let mut ctx_sub = ctx.clone();
             ctx_sub.clear_value_bindings();
             let mut ctxs = Vec::with_capacity(values.len());
             for value in values {
-                ctxs.push(backtrack!(assign_exp(arena, ctx_sub.clone(), exp_inner, value)));
+                ctxs.push(unwrap!(assign_exp(arena, ctx_sub.clone(), exp_inner, value)));
             }
             for var in vars {
                 let mut iters = var.iters.clone();
@@ -261,13 +261,13 @@ fn assign_iter_exp<Ctx: WriteContext>(
                 let typ = typ::make::iterate(var.typ.clone(), &iters);
                 let mut values = Vec::with_capacity(ctxs.len());
                 for ctx_sub in &ctxs {
-                    let value = backtrack_from_result!(
+                    let value = unwrap_from_result!(
                         ctx_sub.find_value(&Variable::new(var.id.clone(), var.iters.clone())),
                         &var.id.span
                     );
                     values.push(*value);
                 }
-                let value_sub = backtrack_from_result!(
+                let value_sub = unwrap_from_result!(
                     make::list(arena, typ.node.into(), values, Span::default()),
                     span
                 );
@@ -311,7 +311,7 @@ pub fn assign_args<Ctx: WriteContext>(
     }
     let mut ctx = ctx_callee;
     for (arg, value) in args.iter().zip(values.iter()) {
-        ctx = backtrack!(assign_arg(arena, ctx_caller, ctx, arg, *value));
+        ctx = unwrap!(assign_arg(arena, ctx_caller, ctx, arg, *value));
     }
     Backtrack::Ok(ctx)
 }
@@ -345,7 +345,7 @@ pub fn assign_def<Ctx: WriteContext>(
             }),
         );
     };
-    let func = backtrack_from_result!(ctx_caller.find_func(id_func), &id_func.span);
-    backtrack_from_result!(ctx_callee.add_func(id.clone(), Rc::clone(func)), &id.span);
+    let func = unwrap_from_result!(ctx_caller.find_func(id_func), &id_func.span);
+    unwrap_from_result!(ctx_callee.add_func(id.clone(), Rc::clone(func)), &id.span);
     Backtrack::Ok(ctx_callee)
 }

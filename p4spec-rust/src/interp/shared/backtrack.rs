@@ -32,6 +32,20 @@ impl<T> Backtrack<T> {
     }
 }
 
+macro_rules! ok {
+    ($($value:tt)*) => {
+        $crate::interp::shared::backtrack::Backtrack::Ok($($value)*)
+    };
+}
+pub(crate) use ok;
+
+macro_rules! err {
+    ($($errors:tt)*) => {
+        $crate::interp::shared::backtrack::Backtrack::Err($($errors)*)
+    };
+}
+pub(crate) use err;
+
 // = Finishing
 
 impl<T> Backtrack<T> {
@@ -45,7 +59,7 @@ impl<T> Backtrack<T> {
 
 // = Propagation
 
-macro_rules! backtrack {
+macro_rules! unwrap {
     ($result:expr) => {
         match $result {
             $crate::interp::shared::backtrack::Backtrack::Ok(value) => value,
@@ -58,16 +72,16 @@ macro_rules! backtrack {
         }
     };
 }
-pub(crate) use backtrack;
+pub(crate) use unwrap;
 
-macro_rules! backtrack_from_result {
+macro_rules! unwrap_from_result {
     ($result:expr, $span:expr $(,)?) => {
-        $crate::interp::shared::backtrack::backtrack!(
+        $crate::interp::shared::backtrack::unwrap!(
             $crate::interp::shared::backtrack::Backtrack::from_result($result, $span)
         )
     };
 }
-pub(crate) use backtrack_from_result;
+pub(crate) use unwrap_from_result;
 
 // = Nesting
 

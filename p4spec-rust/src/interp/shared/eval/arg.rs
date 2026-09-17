@@ -15,7 +15,7 @@ use crate::{
 
 use super::expr::eval_exp;
 use crate::interp::shared::{
-    backtrack::{Backtrack, backtrack, backtrack_from_result},
+    backtrack::{Backtrack, unwrap, unwrap_from_result},
     error::{ErrorKind, TraceErrorKind},
 };
 
@@ -40,7 +40,7 @@ pub(crate) fn eval_args<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, 
 ) -> Backtrack<Vec<Value>> {
     let mut values = Vec::with_capacity(args.len());
     for arg in args {
-        values.push(backtrack!(eval_arg(runner_ctx, ctx, arg)));
+        values.push(unwrap!(eval_arg(runner_ctx, ctx, arg)));
     }
     Backtrack::Ok(values)
 }
@@ -53,8 +53,8 @@ fn eval_def_arg(
     id: &ast::Id,
     span: &Span,
 ) -> Backtrack<Value> {
-    let typ_func = backtrack_from_result!(ctx.find_func_typ(id), span);
-    let value = backtrack_from_result!(
+    let typ_func = unwrap_from_result!(ctx.find_func_typ(id), span);
+    let value = unwrap_from_result!(
         make::func(
             arena,
             id.clone(),
