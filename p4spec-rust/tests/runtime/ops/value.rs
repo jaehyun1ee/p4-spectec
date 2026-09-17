@@ -6,7 +6,7 @@ use p4spec_rust::{
     lang::{
         common::source::Span,
         data::{typ, value::make},
-        il::ast::{FuncTyp, Iter, Subcheck},
+        il::ast::{FuncTyp, Id, Iter, Subcheck},
         xl::num::Natural,
     },
     phrase,
@@ -26,15 +26,22 @@ fn id(name: &str) -> p4spec_rust::lang::il::ast::Id {
 fn test_numeric_membership_preserves_nat_subtyping() {
     let mut arena = ValueArena::new();
     let tdenv = TDEnv::new();
+    let find_typdef_opt = |id: &Id| tdenv.get(id);
     let find_func = |_: &str| None::<FuncTyp>;
     let nat = make::nat(&mut arena, Natural::from(3_u64), Span::default()).unwrap();
     let nonnegative_int = make::int(&mut arena, BigInt::from(3), Span::default()).unwrap();
     let negative_int = make::int(&mut arena, BigInt::from(-1), Span::default()).unwrap();
 
-    assert_eq!(sub(&arena, &tdenv, &find_func, &typ::make::nat(), &nat), Ok(true));
-    assert_eq!(sub(&arena, &tdenv, &find_func, &typ::make::nat(), &nonnegative_int), Ok(true));
-    assert_eq!(sub(&arena, &tdenv, &find_func, &typ::make::nat(), &negative_int), Ok(false));
-    assert_eq!(sub(&arena, &tdenv, &find_func, &typ::make::int(), &nat), Ok(true));
+    assert_eq!(sub(&arena, &find_typdef_opt, &find_func, &typ::make::nat(), &nat), Ok(true));
+    assert_eq!(
+        sub(&arena, &find_typdef_opt, &find_func, &typ::make::nat(), &nonnegative_int),
+        Ok(true)
+    );
+    assert_eq!(
+        sub(&arena, &find_typdef_opt, &find_func, &typ::make::nat(), &negative_int),
+        Ok(false)
+    );
+    assert_eq!(sub(&arena, &find_typdef_opt, &find_func, &typ::make::int(), &nat), Ok(true));
 }
 
 #[test]
@@ -51,9 +58,10 @@ fn test_extern_type_membership_uses_shared_type_environment() {
         Span::default(),
     )
     .unwrap();
+    let find_typdef_opt = |id: &Id| tdenv.get(id);
     let find_func = |_: &str| None::<FuncTyp>;
 
-    assert_eq!(sub(&arena, &tdenv, &find_func, &extern_typ, &value), Ok(true));
+    assert_eq!(sub(&arena, &find_typdef_opt, &find_func, &extern_typ, &value), Ok(true));
 }
 
 #[test]
@@ -61,9 +69,11 @@ fn test_undefined_names_return_located_typed_errors() {
     let mut arena = ValueArena::new();
     let missing_typ = typ::make::var(id("missing"), vec![]);
     let value = make::bool(&mut arena, true, Span::default()).unwrap();
+    let tdenv = TDEnv::new();
+    let find_typdef_opt = |id: &Id| tdenv.get(id);
 
-    let error =
-        sub(&arena, &TDEnv::new(), &|_: &str| None::<FuncTyp>, &missing_typ, &value).unwrap_err();
+    let error = sub(&arena, &find_typdef_opt, &|_: &str| None::<FuncTyp>, &missing_typ, &value)
+        .unwrap_err();
 
     assert!(matches!(error, MatchError::UndefinedType { ref name, .. } if name == "missing"));
 
@@ -79,7 +89,7 @@ fn test_undefined_names_return_located_typed_errors() {
     )
     .unwrap();
     let typ = typ::make::func(vec![], vec![], typ::make::bool());
-    let error = sub(&arena, &TDEnv::default(), &|_| None, &typ, &value).unwrap_err();
+    let error = sub(&arena, &find_typdef_opt, &|_| None, &typ, &value).unwrap_err();
     assert!(
         matches!(error, MatchError::UndefinedFunction { name, span: span_error } if name == "missing" && span_error == span)
     );
@@ -112,9 +122,11 @@ fn test_recursive_subchecks_walk_tuple_and_list_values() {
         Subcheck::Recurse(bool_typ.clone()),
         Subcheck::Iter(Iter::List, Box::new(Subcheck::Recurse(bool_typ))),
     ]);
+    let tdenv = TDEnv::new();
+    let find_typdef_opt = |id: &Id| tdenv.get(id);
 
     assert_eq!(
-        check(&arena, &TDEnv::new(), &|_: &str| None::<FuncTyp>, &subcheck, &tuple_value),
+        check(&arena, &find_typdef_opt, &|_: &str| None::<FuncTyp>, &subcheck, &tuple_value),
         Ok(true)
     );
 }
@@ -125,11 +137,13 @@ fn test_list_membership_rejects_arity_mismatch() {
     let values = vec![make::bool(&mut arena, true, Span::default()).unwrap()];
     let func_typ =
         FuncTyp { tparams: vec![], typs_params: vec![], typ_ret: Box::new(typ::make::bool()) };
+    let tdenv = TDEnv::new();
+    let find_typdef_opt = |id: &Id| tdenv.get(id);
 
     assert_eq!(
         subs(
             &arena,
-            &TDEnv::new(),
+            &find_typdef_opt,
             &|_: &str| Some(func_typ.clone()),
             &[typ::make::bool(), typ::make::bool()],
             &values

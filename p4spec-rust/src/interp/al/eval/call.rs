@@ -99,7 +99,7 @@ fn check_values(
         ctx.find_func_typ(&id).ok()
     };
     let matches = backtrack_from_result!(
-        crate::runtime::ops::value::subs_with(arena, &find_typdef_opt, &find_func, typs, values),
+        crate::runtime::ops::value::subs(arena, &find_typdef_opt, &find_func, typs, values),
         &id.span
     );
     Backtrack::check(matches, id.span.clone(), ErrorKind::Guard(error))

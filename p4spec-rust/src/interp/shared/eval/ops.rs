@@ -555,13 +555,7 @@ pub(crate) fn check_sub(
         ctx.find_func_typ(&id).ok()
     };
     Backtrack::from_result(
-        crate::runtime::ops::value::check_with(
-            arena,
-            &find_typdef_opt,
-            &find_func,
-            subcheck,
-            &value,
-        ),
+        crate::runtime::ops::value::check(arena, &find_typdef_opt, &find_func, subcheck, &value),
         span,
     )
 }

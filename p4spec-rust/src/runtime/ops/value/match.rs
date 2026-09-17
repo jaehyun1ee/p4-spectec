@@ -11,7 +11,6 @@ use crate::{
         xl::num::{Number, Typ as NumTyp},
     },
     runtime::{
-        envs::elab::TDEnv,
         ops::typ::{Theta, TypeError, equiv_func_typ_with, subst_not_typ, subst_typ},
         typdef::TypeDef,
     },
@@ -39,20 +38,7 @@ pub enum MatchError {
 
 // == Type membership
 
-pub fn sub<F>(
-    arena: &ValueArena,
-    tdenv: &TDEnv,
-    find_func: &F,
-    typ: &Typ,
-    value: &Value,
-) -> Result<bool, MatchError>
-where
-    F: Fn(&str) -> Option<FuncTyp>,
-{
-    sub_with(arena, &|id| tdenv.get(id), find_func, typ, value)
-}
-
-pub fn sub_with<'env, F>(
+pub fn sub<'env, F>(
     arena: &ValueArena,
     find_typdef_opt: &impl Fn(&Id) -> Option<&'env TypeDef>,
     find_func: &F,
@@ -91,7 +77,7 @@ where
                     match (&def_typ.node, arena.kind(value)) {
                         (DefTypKind::Plain(typ), _) => {
                             let typ = subst_typ(&theta, typ)?;
-                            sub_with(arena, find_typdef_opt, find_func, &typ, value)
+                            sub(arena, find_typdef_opt, find_func, &typ, value)
                         }
                         (DefTypKind::Struct(typ_fields), ValueKind::Struct(value_fields)) => {
                             if typ_fields.len() != value_fields.len() {
@@ -104,7 +90,7 @@ where
                                     return Ok(false);
                                 }
                                 let typ = subst_typ(&theta, typ)?;
-                                if !sub_with(arena, find_typdef_opt, find_func, &typ, value)? {
+                                if !sub(arena, find_typdef_opt, find_func, &typ, value)? {
                                     return Ok(false);
                                 }
                             }
@@ -143,7 +129,7 @@ where
         },
         TypKind::Iter(typ_inner, Iter::Opt) => {
             if let ValueKind::Opt(Some(value)) = arena.kind(value) {
-                sub_with(arena, find_typdef_opt, find_func, typ_inner, value)
+                sub(arena, find_typdef_opt, find_func, typ_inner, value)
             } else {
                 Ok(true)
             }
@@ -151,7 +137,7 @@ where
         TypKind::Iter(typ_inner, Iter::List) => match arena.kind(value) {
             ValueKind::List(values) => {
                 for value in values {
-                    if !sub_with(arena, find_typdef_opt, find_func, typ_inner, value)? {
+                    if !sub(arena, find_typdef_opt, find_func, typ_inner, value)? {
                         return Ok(false);
                     }
                 }
@@ -173,20 +159,7 @@ where
     }
 }
 
-pub fn subs<F>(
-    arena: &ValueArena,
-    tdenv: &TDEnv,
-    find_func: &F,
-    typs: &[Typ],
-    values: &[Value],
-) -> Result<bool, MatchError>
-where
-    F: Fn(&str) -> Option<FuncTyp>,
-{
-    subs_with(arena, &|id| tdenv.get(id), find_func, typs, values)
-}
-
-pub fn subs_with<'env, F>(
+pub fn subs<'env, F>(
     arena: &ValueArena,
     find_typdef_opt: &impl Fn(&Id) -> Option<&'env TypeDef>,
     find_func: &F,
@@ -215,7 +188,7 @@ where
         return Ok(false);
     }
     for (typ, value) in typs.zip(values) {
-        if !sub_with(arena, find_typdef_opt, find_func, typ, value)? {
+        if !sub(arena, find_typdef_opt, find_func, typ, value)? {
             return Ok(false);
         }
     }
@@ -224,20 +197,7 @@ where
 
 // == Subtype-check execution
 
-pub fn check<F>(
-    arena: &ValueArena,
-    tdenv: &TDEnv,
-    find_func: &F,
-    subcheck: &Subcheck,
-    value: &Value,
-) -> Result<bool, MatchError>
-where
-    F: Fn(&str) -> Option<FuncTyp>,
-{
-    check_with(arena, &|id| tdenv.get(id), find_func, subcheck, value)
-}
-
-pub fn check_with<'env, F>(
+pub fn check<'env, F>(
     arena: &ValueArena,
     find_typdef_opt: &impl Fn(&Id) -> Option<&'env TypeDef>,
     find_func: &F,
@@ -257,7 +217,7 @@ where
                 return Ok(false);
             }
             for (subcheck, value) in subchecks.iter().zip(values) {
-                if !check_with(arena, find_typdef_opt, find_func, subcheck, value)? {
+                if !check(arena, find_typdef_opt, find_func, subcheck, value)? {
                     return Ok(false);
                 }
             }
@@ -265,17 +225,17 @@ where
         }
         (Subcheck::Iter(Iter::Opt, _), ValueKind::Opt(None)) => Ok(true),
         (Subcheck::Iter(Iter::Opt, subcheck), ValueKind::Opt(Some(value))) => {
-            check_with(arena, find_typdef_opt, find_func, subcheck, value)
+            check(arena, find_typdef_opt, find_func, subcheck, value)
         }
         (Subcheck::Iter(Iter::List, subcheck), ValueKind::List(values)) => {
             for value in values {
-                if !check_with(arena, find_typdef_opt, find_func, subcheck, value)? {
+                if !check(arena, find_typdef_opt, find_func, subcheck, value)? {
                     return Ok(false);
                 }
             }
             Ok(true)
         }
-        (Subcheck::Recurse(typ), _) => sub_with(arena, find_typdef_opt, find_func, typ, value),
+        (Subcheck::Recurse(typ), _) => sub(arena, find_typdef_opt, find_func, typ, value),
         _ => Ok(false),
     }
 }
