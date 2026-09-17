@@ -7,10 +7,9 @@ use indicatif::{ProgressBar, ProgressStyle};
 use p4spec_rust::{
     frontend::parse::parse_files,
     interface::p4::{error::P4ErrorKind, parse::parse_file},
-    interp::{al::Config, sl::Config as SlConfig},
     lang::al,
-    pass::{algo, elaborate},
-    runner::{self, BuiltinInterface, Interpreter, Runner},
+    pass::{algo, elaborate, structure},
+    runner::{self, BuiltinInterface, Config, Interpreter, Runner},
     sim_plugin::dummy::Dummy,
 };
 use std::{
@@ -45,18 +44,8 @@ fn collect_suite(
 
 pub fn run() -> Result<()> {
     let suites = [
-        collect_suite(
-            "p4c/testdata/p4_16_samples",
-            "Program_inst",
-            "run-pos-al.expected",
-            true,
-        ),
-        collect_suite(
-            "p4c/testdata/p4_16_errors",
-            "Program_ok",
-            "run-neg-al.expected",
-            true,
-        ),
+        collect_suite("p4c/testdata/p4_16_samples", "Program_inst", "run-pos-al.expected", true),
+        collect_suite("p4c/testdata/p4_16_errors", "Program_ok", "run-neg-al.expected", true),
     ]
     .into_iter()
     .collect::<Result<Vec<_>>>()?;
@@ -70,23 +59,15 @@ pub fn run() -> Result<()> {
 pub fn run_sl(det: bool) -> Result<()> {
     // The OCaml SL outcomes are byte-identical to these AL expectation files
     let suites = [
-        collect_suite(
-            "p4c/testdata/p4_16_samples",
-            "Program_inst",
-            "run-pos-al.expected",
-            true,
-        ),
-        collect_suite(
-            "p4c/testdata/p4_16_errors",
-            "Program_ok",
-            "run-neg-al.expected",
-            true,
-        ),
+        collect_suite("p4c/testdata/p4_16_samples", "Program_inst", "run-pos-al.expected", true),
+        collect_suite("p4c/testdata/p4_16_errors", "Program_ok", "run-neg-al.expected", true),
     ]
     .into_iter()
     .collect::<Result<Vec<_>>>()?;
     run_with(&format!("SL cache=on det={det}"), suites, |spec_al| {
-        runner::build_sl(spec_al, SlConfig::new(true, det, false), Dummy)
+        let spec_sl =
+            structure::convert(spec_al, true).map_err(|error| Error::Invalid(error.to_string()))?;
+        runner::build_sl(spec_sl, Config::new(true, det, false), Dummy)
             .map_err(|error| Error::Invalid(error.to_string()))
     })
 }
