@@ -1,17 +1,14 @@
+use p4spec_rust::interp::shared::error::{Error, ErrorKind, HostErrorKind};
 use p4spec_rust::lang::data::value::ValueArena;
 use std::path::Path;
 
 use p4spec_rust::{
     frontend::parse::parse_files,
     interface::{self, p4::parse::parse_file},
-    interp::al::{
-        AlInterp, Config,
-        context::Global,
-        error::{Error, ErrorKind, HostErrorKind},
-    },
+    interp::al::{AlInterp, Config, context::Global},
     lang::data::value::Value,
     pass::{algo, elaborate},
-    runner::{BuiltinInterface, Extern, ExternError, Runner},
+    runner::{BuiltinInterface, Extern, ExternError, Runner, Spec},
 };
 
 #[path = "core/mod.rs"]
@@ -25,18 +22,20 @@ fn repo() -> &'static Path {
     Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap()
 }
 
-fn runner<Exn: Extern>(external: Exn) -> Runner<AlInterp, BuiltinInterface, Exn> {
+fn runner<Ext: Extern>(external: Ext) -> Runner<AlInterp, BuiltinInterface, Ext> {
     runner_from_spec(&repo().join("spec"), external)
 }
 
-fn runner_from_spec<Exn: Extern>(
+fn runner_from_spec<Ext: Extern>(
     spec: &Path,
-    external: Exn,
-) -> Runner<AlInterp, BuiltinInterface, Exn> {
+    external: Ext,
+) -> Runner<AlInterp, BuiltinInterface, Ext> {
     let spec_el = parse_files([spec]).expect("native specification parsing");
     let spec_il = elaborate::convert(spec_el).expect("native elaboration");
     let spec_al = algo::convert(spec_il).expect("native algorithmic conversion");
-    let interface = interface::p4(&spec_al);
+    let spec = Spec::Al(spec_al);
+    let interface = interface::p4(&spec);
+    let Spec::Al(spec_al) = spec else { unreachable!() };
     Runner::new(
         Global::load(spec_al).unwrap(),
         AlInterp::new(Config::new(true, false, false)),

@@ -8,7 +8,7 @@ use super::{
 };
 use crate::{
     interface::p4::{error::P4Error, parse},
-    interp::al::error::Error as InterpError,
+    interp::shared::error::Error as InterpError,
     lang::{
         common::source::{Phrase, Span},
         data::{
@@ -22,6 +22,7 @@ use crate::{
         self,
         ast::{Action, MatchKind, Name, Statement, TableMatch},
     },
+    util::text::escape_text,
 };
 use num_bigint::BigInt;
 use std::path::{Path, PathBuf};
@@ -357,8 +358,10 @@ where
     Arch: Architecture,
     Interp: Interpreter<Iface, Arch, Error = InterpError>,
 {
-    let value_name = make::text(ctx.arena_mut(), table.into_string(), Span::default())
-        .map_err(InterpError::from)?;
+    // Add names use the same escaped spelling as P4 annotation names
+    let text_name = escape_text(&table.into_string());
+    let value_name =
+        make::text(ctx.arena_mut(), text_name, Span::default()).map_err(InterpError::from)?;
     let value_priority = priority
         .map(|priority| make::int(ctx.arena_mut(), priority.into(), Span::default()))
         .transpose()
@@ -600,6 +603,7 @@ pub fn run_stf_test<Interp, Iface, Arch>(
     includes: &[PathBuf],
     path_p4: &Path,
     path_stf: &Path,
+    on_match: &mut dyn FnMut(&Tx),
 ) -> Result<Run, Error>
 where
     Iface: Interface,
@@ -609,7 +613,9 @@ where
     let mut run = init_pipe(runner, includes, path_p4)?;
     let stmts = stf::parse::parse_file(path_stf)?;
     for stmt in &stmts {
-        run_stf_stmt(runner, &mut run, stmt)?;
+        if let Some(tx) = run_stf_stmt(runner, &mut run, stmt)? {
+            on_match(&tx);
+        }
     }
     run.finish()
         .map_err(|failure| Error::Stf { failure: Box::new(failure), span: Span::default() })?;

@@ -1,6 +1,6 @@
 //! Static assembly of the specification execution components
 //!
-//! `Runner<Interp, Iface, Exn>` owns the arena, specification, interpreter,
+//! `Runner<Interp, Iface, Ext>` owns the arena, specification, interpreter,
 //! builtin interface, and extern implementation. The interpreter owns its
 //! configuration and cache. Each evaluation borrows these components through
 //! a context that also supports extern-to-interpreter reentry.
@@ -10,41 +10,105 @@ mod externs;
 mod interface;
 mod interpreter;
 
-use crate::lang::data::value::{Value, ValueArena};
+use crate::{
+    interface as builtin,
+    interp::{
+        al::{AlInterp, Config as AlConfig, context::Global as AlGlobal},
+        shared::error::Error as InterpError,
+        sl::{Config as SlConfig, SlInterp, context::Global as SlGlobal},
+    },
+    lang::{
+        al,
+        data::value::{Value, ValueArena},
+        sl,
+    },
+};
 
 pub use context::RunnerContext;
 pub use externs::{Extern, ExternError, NullExtern};
 pub use interface::{BuiltinInterface, Interface, InterfaceError, NullInterface};
 pub use interpreter::Interpreter;
 
+// == Runner construction
+
+pub enum Spec {
+    Al(al::ast::Spec),
+    Sl(sl::ast::Spec),
+}
+
+#[derive(Clone, Copy)]
+pub struct Config {
+    cache: bool,
+    det: bool,
+    guard: bool,
+}
+
+impl Config {
+    pub fn new(cache: bool, det: bool, guard: bool) -> Self {
+        Self { cache, det, guard }
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum BuildError {
+    #[error(transparent)]
+    Interp(#[from] InterpError),
+}
+
+pub fn build_al<Ext: Extern>(
+    spec: al::ast::Spec,
+    config: Config,
+    external: Ext,
+) -> Result<Runner<AlInterp, BuiltinInterface, Ext>, BuildError> {
+    let spec = Spec::Al(spec);
+    let interface = builtin::p4(&spec);
+    let Spec::Al(spec) = spec else { unreachable!() };
+    let global = AlGlobal::load(spec)?;
+    let config = AlConfig::new(config.cache, config.det, config.guard);
+    Ok(Runner::new(global, AlInterp::new(config), interface, external))
+}
+
+pub fn build_sl<Ext: Extern>(
+    spec: sl::ast::Spec,
+    config: Config,
+    external: Ext,
+) -> Result<Runner<SlInterp, BuiltinInterface, Ext>, BuildError> {
+    let spec = Spec::Sl(spec);
+    let interface = builtin::p4(&spec);
+    let Spec::Sl(spec) = spec else { unreachable!() };
+    let global = SlGlobal::load(spec)?;
+    let config = SlConfig::new(config.cache, config.det, config.guard);
+    Ok(Runner::new(global, SlInterp::new(config), interface, external))
+}
+
 // == Runner assembly
 
 /// An interpreter and its host components sharing one value arena
-pub struct Runner<Interp, Iface, Exn>
+pub struct Runner<Interp, Iface, Ext>
 where
-    Interp: Interpreter<Iface, Exn>,
+    Interp: Interpreter<Iface, Ext>,
     Iface: Interface,
-    Exn: Extern,
+    Ext: Extern,
 {
     arena: ValueArena,
     spec: Interp::Spec,
     interp: Interp,
     interface: Iface,
-    external: Exn,
+    external: Ext,
 }
 
-impl<Interp, Iface, Exn> Runner<Interp, Iface, Exn>
+impl<Interp, Iface, Ext> Runner<Interp, Iface, Ext>
 where
-    Interp: Interpreter<Iface, Exn>,
+    Interp: Interpreter<Iface, Ext>,
     Iface: Interface,
-    Exn: Extern,
+    Ext: Extern,
 {
-    pub fn new(spec: Interp::Spec, interp: Interp, interface: Iface, external: Exn) -> Self {
+    pub fn new(spec: Interp::Spec, interp: Interp, interface: Iface, external: Ext) -> Self {
         Self { arena: ValueArena::new(), spec, interp, interface, external }
     }
 
     /// Borrows the assembled components for a stage-specific evaluation entry
-    pub fn context(&mut self) -> RunnerContext<'_, Interp, Iface, Exn> {
+    pub fn context(&mut self) -> RunnerContext<'_, Interp, Iface, Ext> {
         RunnerContext::new(
             &mut self.arena,
             &self.spec,

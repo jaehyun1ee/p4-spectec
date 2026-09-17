@@ -1,5 +1,5 @@
 use p4spec_rust::{
-    interp::al::error::{ContextErrorKind, EntityKind, Error, ErrorKind},
+    interp::shared::error::{ContextErrorKind, EntityKind, Error, ErrorKind},
     lang::common::source::{Position, Span},
 };
 

@@ -1,4 +1,4 @@
-//! Located AL lookup, host, and execution failures
+//! Located interpreter lookup, host, and execution failures
 
 use crate::runner::{ExternError, InterfaceError};
 use num_bigint::BigInt;
@@ -171,12 +171,14 @@ pub enum GuardErrorKind {
     FunctionInputMismatch { func: String },
     #[error("return value of function {func} does not match the expected type")]
     FunctionOutputMismatch { func: String },
-    #[error(transparent)]
-    Validation(Box<ErrorKind>),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum CallErrorKind {
+    #[error("nondeterministic instruction evaluation")]
+    InstructionNondeterminism,
+    #[error("{message}")]
+    InvalidFlow { message: &'static str },
     #[error("arity mismatch in rule")]
     RuleArityMismatch { expected: usize, actual: usize },
     #[error("arity mismatch while matching table row")]
@@ -203,16 +205,33 @@ pub enum CallErrorKind {
 pub enum TraceErrorKind {
     #[error("execution failed")]
     Execution,
-    #[error("invocation of relation {rel} failed")]
-    RelationInvocation { rel: String },
-    #[error("application of rule {relation}/{group}/{path} failed")]
-    RuleApplication { relation: String, group: String, path: String },
-    #[error("application of table row {func}{args} failed")]
-    TableRowApplication { func: String, args: String },
-    #[error("invocation of function ${func}{targs} failed")]
-    FunctionInvocation { func: String, targs: String },
-    #[error("application of clause {func}{args} failed")]
-    ClauseApplication { func: String, args: String },
+    #[error("invocation of {text} failed")]
+    Invocation { text: String },
+    #[error("evaluation of {text} failed")]
+    Evaluation { text: String },
+}
+
+impl TraceErrorKind {
+    pub(crate) fn function(
+        id: &crate::lang::il::ast::Id,
+        targs: &[crate::lang::il::ast::Typ],
+    ) -> Self {
+        TraceErrorKind::Invocation {
+            text: if targs.is_empty() {
+                format!("${}", id.node)
+            } else {
+                format!(
+                    "${}<{}>",
+                    id.node,
+                    targs
+                        .iter()
+                        .map(crate::lang::traits::print::Print::to_string)
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            },
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -223,6 +242,16 @@ pub struct Error {
 }
 
 impl Error {
+    pub(crate) fn depth(&self) -> usize {
+        let mut depth = 0;
+        let mut pending = vec![(self, 1)];
+        while let Some((error, depth_error)) = pending.pop() {
+            depth = depth.max(depth_error);
+            pending.extend(error.children.iter().map(|error| (error, depth_error + 1)));
+        }
+        depth
+    }
+
     pub fn new(kind: ErrorKind, span: Span) -> Self {
         Self { kind: Box::new(kind), span, children: Vec::new() }
     }
@@ -242,11 +271,11 @@ impl Error {
         self
     }
 
-    pub(super) fn undefined(kind: EntityKind, name: String, span: Span) -> Self {
+    pub(crate) fn undefined(kind: EntityKind, name: String, span: Span) -> Self {
         Self::new(ErrorKind::Context(ContextErrorKind::Undefined { kind, name }), span)
     }
 
-    pub(super) fn duplicate(kind: EntityKind, name: String, span: Span) -> Self {
+    pub(crate) fn duplicate(kind: EntityKind, name: String, span: Span) -> Self {
         Self::new(ErrorKind::Context(ContextErrorKind::Duplicate { kind, name }), span)
     }
 }
@@ -331,47 +360,89 @@ impl fmt::Display for Error {
 struct TraceDisplay<'a>(&'a [Error]);
 impl fmt::Display for TraceDisplay<'_> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fn depth(trace: &Error) -> usize {
-            1 + trace.children.iter().map(depth).max().unwrap_or(0)
-        }
-        fn traces(
-            out: &mut impl fmt::Write,
-            values: &[Error],
-            indent: &str,
-            run: usize,
-            root: bool,
-        ) -> fmt::Result {
-            for (index, trace) in values.iter().enumerate() {
-                if !root && depth(trace) > 10 {
-                    traces(out, &trace.children, indent, run + 1, false)?;
-                    continue;
-                }
-                if run > 0 {
-                    writeln!(out, "{indent}│ ··· omitting {run} traces ···")?;
-                }
-                let last = index + 1 == values.len();
-                let boundary = root || run > 0;
-                write!(out, "{indent}")?;
-                if !boundary {
-                    write!(out, "{}", if last { "└── " } else { "├── " })?;
-                }
-                if trace.span != Span::default() {
-                    writeln!(out, "{}", trace.span)?;
-                    write!(out, "{indent}{}", if boundary { "" } else { "    " })?;
-                }
-                if values.len() > 1 {
-                    write!(out, "{}. ", index + 1)?;
-                }
-                writeln!(out, "{}", trace.kind)?;
-                let indent_sub = if boundary {
-                    indent.to_owned()
-                } else {
-                    format!("{indent}{}", if last { "    " } else { "│   " })
-                };
-                traces(out, &trace.children, &indent_sub, 0, false)?;
+        let mut depths = std::collections::HashMap::<*const Error, usize>::new();
+        let mut pending = self
+            .0
+            .iter()
+            .map(|error| (error, false))
+            .collect::<Vec<_>>();
+        while let Some((error, visited)) = pending.pop() {
+            if visited {
+                let depth = 1 + error
+                    .children
+                    .iter()
+                    .map(|error| depths[&(error as *const Error)])
+                    .max()
+                    .unwrap_or(0);
+                depths.insert(error as *const Error, depth);
+            } else {
+                pending.push((error, true));
+                pending.extend(error.children.iter().map(|error| (error, false)));
             }
-            Ok(())
         }
-        traces(formatter, self.0, "", 0, true)
+        let mut pending = self
+            .0
+            .iter()
+            .enumerate()
+            .rev()
+            .map(|(idx, error)| (error, idx, self.0.len(), String::new(), 0, true))
+            .collect::<Vec<_>>();
+        while let Some((error, idx, len, indent, run, root)) = pending.pop() {
+            if !root && depths[&(error as *const Error)] > 10 {
+                pending.extend(
+                    error
+                        .children
+                        .iter()
+                        .enumerate()
+                        .rev()
+                        .map(|(idx, error_sub)| {
+                            (error_sub, idx, error.children.len(), indent.clone(), run + 1, false)
+                        }),
+                );
+                continue;
+            }
+            if run > 0 {
+                writeln!(formatter, "{indent}│ ··· omitting {run} traces ···")?;
+            }
+            let last = idx + 1 == len;
+            let boundary = root || run > 0;
+            write!(formatter, "{indent}")?;
+            if !boundary {
+                write!(formatter, "{}", if last { "└── " } else { "├── " })?;
+            }
+            if error.span != Span::default() {
+                writeln!(formatter, "{}", error.span)?;
+                write!(formatter, "{indent}{}", if boundary { "" } else { "    " })?;
+            }
+            if len > 1 {
+                write!(formatter, "{}. ", idx + 1)?;
+            }
+            writeln!(formatter, "{}", error.kind)?;
+            let indent_sub = if boundary {
+                indent
+            } else {
+                format!("{indent}{}", if last { "    " } else { "│   " })
+            };
+            pending.extend(
+                error
+                    .children
+                    .iter()
+                    .enumerate()
+                    .rev()
+                    .map(|(idx, error_sub)| {
+                        (error_sub, idx, error.children.len(), indent_sub.clone(), 0, false)
+                    }),
+            );
+        }
+        Ok(())
+    }
+}
+
+impl Drop for Error {
+    fn drop(&mut self) {
+        let mut pending = std::mem::take(&mut self.children);
+        while let Some(mut error) = pending.pop() {
+            pending.append(&mut error.children);
+        }
     }
 }

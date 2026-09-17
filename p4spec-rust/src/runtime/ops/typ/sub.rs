@@ -82,12 +82,14 @@ fn sub_typ_inner(
             let mut fresh = Fresh::default();
             let mut not_typs_source = Vec::with_capacity(typcases_source.len());
             for (not_typ, _, _) in typcases_source {
-                let not_typ_subst = subst_not_typ_inner(&mut fresh, &theta_source, not_typ)?;
+                let not_typ_subst =
+                    subst_not_typ_inner(&mut fresh, &|id| theta_source.get(id), not_typ)?;
                 not_typs_source.push(not_typ_subst);
             }
             let mut not_typs_target = Vec::with_capacity(typcases_target.len());
             for (not_typ, _, _) in typcases_target {
-                let not_typ_subst = subst_not_typ_inner(&mut fresh, &theta_target, not_typ)?;
+                let not_typ_subst =
+                    subst_not_typ_inner(&mut fresh, &|id| theta_target.get(id), not_typ)?;
                 not_typs_target.push(not_typ_subst);
             }
 

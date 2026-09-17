@@ -42,7 +42,7 @@ pub(super) fn expand_typ_with<'a, 'env>(
             return Err(error);
         }
     };
-    let typ_expanded = subst_typ(&theta, typ_alias)?;
+    let typ_expanded = subst_typ(&|id| theta.get(id), typ_alias)?;
     let typ_expanded = match expand_typ_with(find_typdef_opt, &typ_expanded)? {
         Cow::Borrowed(_) => typ_expanded,
         Cow::Owned(typ_expanded) => typ_expanded,

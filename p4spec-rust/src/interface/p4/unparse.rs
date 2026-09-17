@@ -5,7 +5,7 @@
 //! to its mixfix shape. For example, a case carrying an infix `+` hint renders
 //! its two arguments as `left + right`.
 
-use std::{collections::HashMap, fmt::Write};
+use std::collections::HashMap;
 
 use crate::{
     lang::data::value::{Value, ValueArena, ValueCase, ValueKind},
@@ -14,9 +14,11 @@ use crate::{
         common::notation::{atom::Atom, mixfix::Mixfix, mixop::Mixop},
         hints::alter::{self, AlterationHint, Renderer},
         il::ast::{DefTypKind, TypKind},
+        sl,
         traits::print::Print,
         xl::num::Number,
     },
+    util::text::escape_text,
 };
 
 use super::error::P4UnparseError;
@@ -64,6 +66,20 @@ impl P4Unparser {
         Self { hints }
     }
 
+    pub fn from_sl_spec(spec_sl: &[sl::ast::Def]) -> Self {
+        let mut hints = HashMap::new();
+        for definition_sl in spec_sl {
+            let sl::ast::DefKind::Typ(typ_def_sl) = &definition_sl.node else {
+                continue;
+            };
+            let sl::ast::TypDef::Defined(defined_typ_sl) = typ_def_sl else {
+                continue;
+            };
+            insert_case_hints(&mut hints, &defined_typ_sl.id.node, &defined_typ_sl.def_typ);
+        }
+        Self { hints }
+    }
+
     // - Rendering
 
     pub fn render(&self, arena: &ValueArena, value: &Value) -> Result<String, P4UnparseError> {
@@ -71,7 +87,7 @@ impl P4Unparser {
             ValueKind::Bool(value) => Ok(value.to_string()),
             ValueKind::Num(Number::Nat(value)) => Ok(value.to_string()),
             ValueKind::Num(Number::Int(value)) => Ok(value.to_string()),
-            ValueKind::Text(value) => Ok(Self::escape_text(value)),
+            ValueKind::Text(value) => Ok(escape_text(value)),
             ValueKind::Struct(_) => Err(P4UnparseError::UnsupportedValue("Struct")),
             ValueKind::Case(value_case) => self.render_case(arena, arena.typ(value), value_case),
             ValueKind::Tuple(values) => {
@@ -127,22 +143,6 @@ impl P4Unparser {
             .map(|value| self.render(arena, value))
             .collect::<Result<Vec<_>, _>>()?;
         Ok(rendered.join(separator))
-    }
-
-    fn escape_text(text: &str) -> String {
-        text.bytes().fold(String::new(), |mut escaped, byte| {
-            match byte {
-                b'\\' => escaped.push_str("\\\\"),
-                b'"' => escaped.push_str("\\\""),
-                b'\n' => escaped.push_str("\\n"),
-                b'\r' => escaped.push_str("\\r"),
-                b'\t' => escaped.push_str("\\t"),
-                b'\x08' => escaped.push_str("\\b"),
-                32..=126 => escaped.push(char::from(byte)),
-                _ => write!(escaped, "\\{byte:03}").unwrap(),
-            }
-            escaped
-        })
     }
 
     fn render_atom(atom: &Atom) -> String {

@@ -1,22 +1,10 @@
-//! Selects an architecture and assembles the native AL simulator
+//! Selects an architecture and assembles the native simulator
 
-use self::{
-    ebpf::Ebpf,
-    io::Tx,
-    psa::Psa,
-    runner::{Error, Run},
-    v1model::V1Model,
-};
+use self::{arch::Architecture, ebpf::Ebpf, io::Tx, psa::Psa, runner::Error, v1model::V1Model};
 use crate::{
-    interface,
-    interp::al::{AlInterp, Config, context::Global, error::Error as InterpError},
-    lang::{
-        al::ast::Spec,
-        common::source::Phrase,
-        data::value::{ValueArena, external::Encoding},
-    },
-    runner::{BuiltinInterface, Runner},
-    stf::ast::Statement,
+    interp::shared::error::Error as InterpError,
+    lang::data::value::external::Encoding,
+    runner::{self as host, BuiltinInterface, Interpreter, Runner},
 };
 use std::path::{Path, PathBuf};
 
@@ -41,43 +29,48 @@ pub enum BuildError {
     #[error("architecture {0} is not supported")]
     UnsupportedArchitecture(String),
     #[error(transparent)]
-    Spec(#[from] InterpError),
+    Runner(#[from] host::BuildError),
 }
 
 // == Simulator
 
-pub enum Simulator {
-    Ebpf(Box<Runner<AlInterp, BuiltinInterface, Ebpf>>),
-    Psa(Box<Runner<AlInterp, BuiltinInterface, Psa>>),
-    V1Model(Box<Runner<AlInterp, BuiltinInterface, V1Model>>),
+trait SimulatorRunner {
+    fn run_stf_test(
+        &mut self,
+        includes: &[PathBuf],
+        path_p4: &Path,
+        path_stf: &Path,
+        on_match: &mut dyn FnMut(&Tx),
+    ) -> Result<(), Error>;
 }
 
-macro_rules! dispatch {
-    ($sim:expr, $runner:ident => $body:expr) => {
-        match $sim {
-            Simulator::Ebpf($runner) => $body,
-            Simulator::Psa($runner) => $body,
-            Simulator::V1Model($runner) => $body,
-        }
-    };
+impl<Interp, Arch> SimulatorRunner for Runner<Interp, BuiltinInterface, Arch>
+where
+    Interp: Interpreter<BuiltinInterface, Arch, Error = InterpError> + 'static,
+    Arch: Architecture + 'static,
+{
+    fn run_stf_test(
+        &mut self,
+        includes: &[PathBuf],
+        path_p4: &Path,
+        path_stf: &Path,
+        on_match: &mut dyn FnMut(&Tx),
+    ) -> Result<(), Error> {
+        runner::run_stf_test(self, includes, path_p4, path_stf, on_match).map(drop)
+    }
+}
+
+pub struct Simulator {
+    runner: Box<dyn SimulatorRunner>,
 }
 
 impl Simulator {
-    pub fn arena(&self) -> &ValueArena {
-        dispatch!(self, runner => runner.arena())
-    }
-
-    /// Starts a fresh program, resetting the arena and all host components
-    pub fn init_pipe(&mut self, includes: &[PathBuf], path: &Path) -> Result<Run, Error> {
-        dispatch!(self, runner => runner::init_pipe(runner, includes, path))
-    }
-
-    pub fn run_stf_stmt(
-        &mut self,
-        run: &mut Run,
-        stmt: &Phrase<Statement>,
-    ) -> Result<Option<Tx>, Error> {
-        dispatch!(self, runner => runner::run_stf_stmt(runner, run, stmt))
+    fn new<Interp, Arch>(runner: Runner<Interp, BuiltinInterface, Arch>) -> Self
+    where
+        Interp: Interpreter<BuiltinInterface, Arch, Error = InterpError> + 'static,
+        Arch: Architecture + 'static,
+    {
+        Self { runner: Box::new(runner) }
     }
 
     pub fn run_stf_test(
@@ -85,42 +78,36 @@ impl Simulator {
         includes: &[PathBuf],
         path_p4: &Path,
         path_stf: &Path,
-    ) -> Result<Run, Error> {
-        dispatch!(self, runner => runner::run_stf_test(runner, includes, path_p4, path_stf))
+        mut on_match: impl FnMut(&Tx),
+    ) -> Result<(), Error> {
+        self.runner
+            .run_stf_test(includes, path_p4, path_stf, &mut on_match)
     }
 }
 
 // == Construction
 
-pub fn build(spec: Spec, arch: &str, config: Config) -> Result<Simulator, BuildError> {
-    build_with_encoding(spec, arch, config, Encoding::default())
-}
-
-pub fn build_with_encoding(
-    spec: Spec,
+pub fn build(
+    spec: host::Spec,
     arch: &str,
-    config: Config,
+    config: host::Config,
     encoding: Encoding,
 ) -> Result<Simulator, BuildError> {
-    if !matches!(arch, "ebpf" | "psa" | "v1model") {
-        return Err(BuildError::UnsupportedArchitecture(arch.to_owned()));
+    match arch {
+        "ebpf" => build_for_arch(spec, config, Ebpf::new(encoding)),
+        "psa" => build_for_arch(spec, config, Psa::new(encoding)),
+        "v1model" => build_for_arch(spec, config, V1Model::new(encoding)),
+        _ => Err(BuildError::UnsupportedArchitecture(arch.to_owned())),
     }
-    let interface = interface::p4(&spec);
-    let global = Global::load(spec)?;
-    let interp = AlInterp::new(config);
-    Ok(match arch {
-        "ebpf" => {
-            Simulator::Ebpf(Box::new(Runner::new(global, interp, interface, Ebpf::new(encoding))))
-        }
-        "psa" => {
-            Simulator::Psa(Box::new(Runner::new(global, interp, interface, Psa::new(encoding))))
-        }
-        "v1model" => Simulator::V1Model(Box::new(Runner::new(
-            global,
-            interp,
-            interface,
-            V1Model::new(encoding),
-        ))),
-        _ => unreachable!("architecture checked before specification loading"),
-    })
+}
+
+fn build_for_arch<Arch: Architecture + 'static>(
+    spec: host::Spec,
+    config: host::Config,
+    arch: Arch,
+) -> Result<Simulator, BuildError> {
+    match spec {
+        host::Spec::Al(spec) => Ok(Simulator::new(host::build_al(spec, config, arch)?)),
+        host::Spec::Sl(spec) => Ok(Simulator::new(host::build_sl(spec, config, arch)?)),
+    }
 }

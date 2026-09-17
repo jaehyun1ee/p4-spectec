@@ -24,16 +24,16 @@ impl PacketOut {
     /// ```text
     /// void emit<T>(in T hdr);
     /// ```
-    pub fn emit<Interp, Iface, Exn>(
+    pub fn emit<Interp, Iface, Ext>(
         &self,
-        ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+        ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
         value_ctx: Value,
         value_arch: Value,
     ) -> Result<(Self, Value, Value, Value), Interp::Error>
     where
         Iface: Interface,
-        Exn: Extern,
-        Interp: Interpreter<Iface, Exn>,
+        Ext: Extern,
+        Interp: Interpreter<Iface, Ext>,
     {
         let value_hdr = func::find_var_e_local(ctx, value_ctx, "hdr")?;
         let value_bits = func::write_bits_from_value(ctx, value_hdr)?;

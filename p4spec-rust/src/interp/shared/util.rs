@@ -1,6 +1,6 @@
 //! Iterated-variable recognition shared by assignment and evaluation
 
-use crate::lang::{al::ast, common::Variable};
+use crate::lang::{common::Variable, il::ast};
 
 pub fn is_iter_var_exp(exp: &ast::Exp) -> Option<Variable> {
     match &exp.node {

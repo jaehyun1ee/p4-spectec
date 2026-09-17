@@ -4,13 +4,11 @@ use clap::{Args, Parser, Subcommand};
 
 use p4spec_rust::{
     frontend::parse::parse_files,
-    interface::{self, p4::parse::parse_file},
-    interp::al::{AlInterp, Config, context::Global},
+    interface::p4::parse::parse_file,
     lang::{al, data::value::external::Encoding, il, sl, traits::print::Print},
     pass::{algo, elaborate, structure},
-    runner::Runner,
-    sim_plugin::{self, dummy::Dummy, runner::Error as SimError},
-    stf,
+    runner::{self, BuiltinInterface, Interpreter, Runner},
+    sim_plugin::{self, dummy::Dummy},
 };
 
 // = Helpers
@@ -93,10 +91,35 @@ fn command_error(error: impl std::fmt::Display) -> ExitCode {
 // = Run command
 
 #[derive(Args)]
-struct RunArgs {
+#[group(required = true, multiple = false)]
+struct InterpreterArgs {
     /// Execute the algorithmic representation
-    #[arg(long, required = true)]
+    #[arg(long)]
     al: bool,
+    /// Execute the structured representation
+    #[arg(long)]
+    sl: bool,
+}
+
+fn interp_spec(
+    paths: Vec<PathBuf>,
+    interpreter: &InterpreterArgs,
+) -> Result<runner::Spec, ExitCode> {
+    let spec_al = algo(paths)?;
+    if interpreter.al {
+        Ok(runner::Spec::Al(spec_al))
+    } else {
+        let without_rule_groups = true;
+        structure::convert(spec_al, without_rule_groups)
+            .map(runner::Spec::Sl)
+            .map_err(command_error)
+    }
+}
+
+#[derive(Args)]
+struct RunArgs {
+    #[command(flatten)]
+    interpreter: InterpreterArgs,
     /// Specification files in processing order
     #[arg(required = true, value_name = "PATH")]
     paths: Vec<PathBuf>,
@@ -109,7 +132,7 @@ struct RunArgs {
     /// Include directories for the P4 program
     #[arg(short = 'i', value_name = "DIR")]
     includes: Vec<PathBuf>,
-    /// Disable AL call caching
+    /// Disable interpreter call caching
     #[arg(long)]
     no_cache: bool,
     /// Check deterministic execution
@@ -120,23 +143,39 @@ struct RunArgs {
     guard: bool,
 }
 
-fn run_command(args: RunArgs) -> ExitCode {
-    let spec_al = match algo(args.paths) {
+fn run_command(mut args: RunArgs) -> ExitCode {
+    let spec = match interp_spec(std::mem::take(&mut args.paths), &args.interpreter) {
         Ok(spec) => spec,
         Err(code) => return code,
     };
-    let interface = interface::p4(&spec_al);
-    let global = match Global::load(spec_al) {
-        Ok(global) => global,
-        Err(error) => return command_error(error),
-    };
-    let mut runner = Runner::<AlInterp, _, _>::new(
-        global,
-        AlInterp::new(Config::new(!args.no_cache, args.det, args.guard)),
-        interface,
-        Dummy,
-    );
-    let program = match parse_file(runner.arena_mut(), &args.includes, args.program) {
+    let config = runner::Config::new(!args.no_cache, args.det, args.guard);
+    match spec {
+        runner::Spec::Al(spec) => {
+            let runner = match runner::build_al(spec, config, Dummy) {
+                Ok(runner) => runner,
+                Err(error) => return command_error(error),
+            };
+            run_program(runner, &args)
+        }
+        runner::Spec::Sl(spec) => {
+            let runner = match runner::build_sl(spec, config, Dummy) {
+                Ok(runner) => runner,
+                Err(error) => return command_error(error),
+            };
+            run_program(runner, &args)
+        }
+    }
+}
+
+fn run_program<Interp>(
+    mut runner: Runner<Interp, BuiltinInterface, Dummy>,
+    args: &RunArgs,
+) -> ExitCode
+where
+    Interp: Interpreter<BuiltinInterface, Dummy>,
+    Interp::Error: std::fmt::Display,
+{
+    let program = match parse_file(runner.arena_mut(), &args.includes, &args.program) {
         Ok(program) => program,
         Err(error) => {
             eprintln!("syntax error: {error}");
@@ -159,9 +198,8 @@ fn run_command(args: RunArgs) -> ExitCode {
 
 #[derive(Args)]
 struct SimArgs {
-    /// Execute the algorithmic representation
-    #[arg(long, required = true)]
-    al: bool,
+    #[command(flatten)]
+    interpreter: InterpreterArgs,
     /// Specification files in processing order
     #[arg(required = true, value_name = "PATH")]
     paths: Vec<PathBuf>,
@@ -180,7 +218,7 @@ struct SimArgs {
     /// Include directories for the P4 program
     #[arg(short = 'i', value_name = "DIR")]
     includes: Vec<PathBuf>,
-    /// Disable AL call caching
+    /// Disable interpreter call caching
     #[arg(long)]
     no_cache: bool,
     /// Check deterministic execution
@@ -191,37 +229,25 @@ struct SimArgs {
     guard: bool,
 }
 
-fn sim_command(args: SimArgs) -> ExitCode {
-    let spec_al = match algo(args.paths) {
+fn sim_command(mut args: SimArgs) -> ExitCode {
+    let spec = match interp_spec(std::mem::take(&mut args.paths), &args.interpreter) {
         Ok(spec) => spec,
         Err(code) => return code,
     };
-    let config = Config::new(!args.no_cache, args.det, args.guard);
-    let mut simulator =
-        match sim_plugin::build_with_encoding(spec_al, &args.arch, config, args.plugin_encoding) {
-            Ok(simulator) => simulator,
-            Err(error) => return command_error(error),
-        };
-    let mut run = match simulator.init_pipe(&args.includes, &args.program) {
-        Ok(run) => run,
+    let config = runner::Config::new(!args.no_cache, args.det, args.guard);
+    let simulator = match sim_plugin::build(spec, &args.arch, config, args.plugin_encoding) {
+        Ok(simulator) => simulator,
         Err(error) => return command_error(error),
     };
-    let stmts = match stf::parse::parse_file(&args.stf) {
-        Ok(stmts) => stmts,
-        Err(error) => return command_error(SimError::from(error)),
-    };
-    for stmt in &stmts {
-        match simulator.run_stf_stmt(&mut run, stmt) {
-            Ok(Some(tx)) => println!("[PASS] Transmitted {tx}"),
-            Ok(None) => {}
-            Err(error) => return command_error(error),
-        }
-    }
-    if let Err(failure) = run.finish() {
-        return command_error(SimError::Stf {
-            failure: Box::new(failure),
-            span: Default::default(),
-        });
+    simulate(simulator, &args)
+}
+
+fn simulate(mut simulator: sim_plugin::Simulator, args: &SimArgs) -> ExitCode {
+    match simulator.run_stf_test(&args.includes, &args.program, &args.stf, |tx| {
+        println!("[PASS] Transmitted {tx}");
+    }) {
+        Ok(()) => {}
+        Err(error) => return command_error(error),
     }
     println!("passed");
     ExitCode::SUCCESS

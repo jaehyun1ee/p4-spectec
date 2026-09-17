@@ -41,7 +41,7 @@ struct PacketInterp {
     fail_rel: bool,
 }
 
-impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for PacketInterp {
+impl<Iface: Interface, Ext: Extern> Interpreter<Iface, Ext> for PacketInterp {
     type Spec = ();
     type Error = TestError;
 
@@ -50,7 +50,7 @@ impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for PacketInterp {
     fn reset(&mut self) {}
 
     fn eval_program(
-        _ctx: &mut RunnerContext<'_, Self, Iface, Exn>,
+        _ctx: &mut RunnerContext<'_, Self, Iface, Ext>,
         _name: &str,
         _program: Value,
     ) -> Result<Vec<Value>, TestError> {
@@ -58,7 +58,7 @@ impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for PacketInterp {
     }
 
     fn eval_func(
-        ctx: &mut RunnerContext<'_, Self, Iface, Exn>,
+        ctx: &mut RunnerContext<'_, Self, Iface, Ext>,
         name: &str,
         targs: &[Typ],
         values: &[Value],
@@ -105,7 +105,7 @@ impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for PacketInterp {
     }
 
     fn eval_rel(
-        ctx: &mut RunnerContext<'_, Self, Iface, Exn>,
+        ctx: &mut RunnerContext<'_, Self, Iface, Ext>,
         name: &str,
         values: &[Value],
     ) -> Result<Vec<Value>, TestError> {

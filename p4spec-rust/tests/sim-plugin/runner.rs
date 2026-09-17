@@ -90,7 +90,7 @@ fn test_dropped_packet_retains_expectation() {
 }
 
 use p4spec_rust::{
-    interp::al::error::Error as InterpError,
+    interp::shared::error::Error as InterpError,
     lang::{
         data::{
             typ,
@@ -120,7 +120,7 @@ struct StfInterp {
     initialized: bool,
 }
 
-impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for StfInterp {
+impl<Iface: Interface, Ext: Extern> Interpreter<Iface, Ext> for StfInterp {
     type Spec = ();
     type Error = InterpError;
 
@@ -134,7 +134,7 @@ impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for StfInterp {
     }
 
     fn eval_program(
-        ctx: &mut RunnerContext<'_, Self, Iface, Exn>,
+        ctx: &mut RunnerContext<'_, Self, Iface, Ext>,
         name: &str,
         _program: Value,
     ) -> Result<Vec<Value>, InterpError> {
@@ -146,7 +146,7 @@ impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for StfInterp {
     }
 
     fn eval_rel(
-        _ctx: &mut RunnerContext<'_, Self, Iface, Exn>,
+        _ctx: &mut RunnerContext<'_, Self, Iface, Ext>,
         _name: &str,
         _values: &[Value],
     ) -> Result<Vec<Value>, InterpError> {
@@ -154,7 +154,7 @@ impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for StfInterp {
     }
 
     fn eval_func(
-        ctx: &mut RunnerContext<'_, Self, Iface, Exn>,
+        ctx: &mut RunnerContext<'_, Self, Iface, Ext>,
         name: &str,
         _targs: &[Typ],
         values: &[Value],
@@ -204,6 +204,35 @@ fn stf_runner(external: Ebpf) -> (Runner<StfInterp, NullInterface, Ebpf>, Run) {
 
 fn statement(stmt: Statement) -> p4spec_rust::lang::common::source::Phrase<Statement> {
     p4spec_rust::phrase!(node: stmt, span: Span::default())
+}
+
+#[test]
+fn test_add_escapes_table_names_but_set_default_preserves_them() {
+    let text_name = "prefix◕‿◕😀ツ\"\\\n\tsimple_table_1";
+    let text_escaped = "prefix\\226\\151\\149\\226\\128\\191\\226\\151\\149\\240\\159\\152\\128\\227\\131\\132\\\"\\\\\\n\\tsimple_table_1";
+    let action = Action { name: "NoAction".into(), args: vec![] };
+    for (stmt, text_expect) in [
+        (
+            Statement::Add {
+                table: text_name.into(),
+                priority: None,
+                matches: vec![],
+                action: action.clone(),
+                id: None,
+            },
+            text_escaped,
+        ),
+        (Statement::SetDefault { table: text_name.into(), action }, text_name),
+    ] {
+        let (mut runner, mut run_case) = stf_runner(Ebpf::default());
+        runner::run_stf_stmt(&mut runner, &mut run_case, &statement(stmt)).unwrap();
+        let calls = runner.context().interp().calls.clone();
+        assert_eq!(calls[0].0, "find_object_unqualified_e");
+        assert_eq!(get::text(runner.arena(), &calls[0].1[1]).unwrap(), text_expect);
+        let call = calls.last().unwrap();
+        assert_eq!(call.0, "update_object_unqualified_e");
+        assert_eq!(get::text(runner.arena(), &call.1[1]).unwrap(), text_expect);
+    }
 }
 
 #[test]
@@ -271,7 +300,7 @@ fn test_ordered_table_encoding_and_register_failure() {
     assert_eq!(num::to_int(get::num(runner.arena(), &values_arg[0][1]).unwrap()), &i64::MAX.into());
     assert_eq!(get::text(runner.arena(), &values_arg[1][0]).unwrap(), "first");
     let calls = runner.context().interp().calls.clone();
-    assert_eq!(get::text(runner.arena(), &calls[0].1[1]).unwrap(), "tab\"");
+    assert_eq!(get::text(runner.arena(), &calls[0].1[1]).unwrap(), "tab\\\"");
     runner::run_stf_stmt(
         &mut runner,
         &mut run_case,
@@ -656,10 +685,13 @@ fn test_runner_codec_imports_independent_nested_native_state() {
 fn test_native_stf_encoding_modes_preserve_outputs_and_state() {
     use p4spec_rust::{
         frontend::parse::parse_files,
-        interp::al::Config,
         lang::data::value::external::encode,
         pass::{algo, elaborate},
-        sim_plugin::{Simulator, build_with_encoding, psa::pipe},
+        runner::{Config, build_al},
+        sim_plugin::{
+            psa::{Psa, pipe},
+            runner as sim_runner,
+        },
     };
     use std::{
         fs,
@@ -723,19 +755,12 @@ fn test_native_stf_encoding_modes_preserve_outputs_and_state() {
         let spec_il = elaborate::convert(spec_el).unwrap();
         let spec_al = algo::convert(spec_il).unwrap();
 
-        // Drop each simulator before building the next; retain no state history
+        // Drop each runner before building the next; retain no state history
         for encoding in [Encoding::ArenaRelative, Encoding::ArenaIndependent] {
-            let mut simulator = build_with_encoding(
-                spec_al.clone(),
-                "psa",
-                Config::new(true, false, false),
-                encoding,
-            )
-            .unwrap();
-            let mut run_case = simulator.init_pipe(&includes, &path).unwrap();
-            let Simulator::Psa(runner) = &mut simulator else {
-                panic!("expected PSA simulator");
-            };
+            let mut runner =
+                build_al(spec_al.clone(), Config::new(true, false, false), Psa::new(encoding))
+                    .unwrap();
+            let mut run_case = sim_runner::init_pipe(&mut runner, &includes, &path).unwrap();
             let values = ["ip", "ig", "reg"]
                 .into_iter()
                 .map(|name| {
@@ -752,12 +777,8 @@ fn test_native_stf_encoding_modes_preserve_outputs_and_state() {
                 let tx_matched = if command == 0 {
                     None
                 } else {
-                    simulator
-                        .run_stf_stmt(&mut run_case, &stmts[command - 1])
+                    sim_runner::run_stf_stmt(&mut runner, &mut run_case, &stmts[command - 1])
                         .unwrap_or_else(|error| panic!("{encoding} command {command}: {error}"))
-                };
-                let Simulator::Psa(runner) = &mut simulator else {
-                    panic!("expected PSA simulator");
                 };
                 // Compare known native state; root trees contain opaque externs
                 let arch = pipe::find_arch_state(&mut runner.context(), run_case.state.value_arch)

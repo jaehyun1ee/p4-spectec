@@ -26,15 +26,15 @@ use super::super::spec::{func, unpack};
 /// extern bool static_assert(bool check, string message);
 /// extern bool static_assert(bool check);
 /// ```
-pub fn static_assert<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn static_assert<Interp, Iface, Ext>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     value_ctx: &Value,
     has_message: bool,
 ) -> Result<Value, Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Ext: Extern,
+    Interp: Interpreter<Iface, Ext>,
 {
     let value_check = func::find_var_value_t_local(ctx, value_ctx, "check")?;
     let value_message = if has_message {
@@ -60,15 +60,15 @@ where
 /// ```text
 /// extern void verify(in bool check, in error toSignal);
 /// ```
-pub fn verify<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn verify<Interp, Iface, Ext>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     value_ctx: Value,
     value_arch: Value,
 ) -> Result<(Value, Value, Value), Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Ext: Extern,
+    Interp: Interpreter<Iface, Ext>,
 {
     let value_check = func::find_var_e_local(ctx, value_ctx, "check")?;
     let value_signal = func::find_var_e_local(ctx, value_ctx, "toSignal")?;

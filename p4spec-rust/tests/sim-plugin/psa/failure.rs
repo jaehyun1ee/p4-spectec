@@ -79,7 +79,7 @@ fn name_of_id(arena: &ValueArena, value_id: &Value) -> String {
     get::text(arena, value_name).unwrap().to_owned()
 }
 
-impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for FailureInterp {
+impl<Iface: Interface, Ext: Extern> Interpreter<Iface, Ext> for FailureInterp {
     type Spec = ();
     type Error = TestError;
 
@@ -88,7 +88,7 @@ impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for FailureInterp {
     fn reset(&mut self) {}
 
     fn eval_program(
-        _: &mut RunnerContext<'_, Self, Iface, Exn>,
+        _: &mut RunnerContext<'_, Self, Iface, Ext>,
         _: &str,
         _: Value,
     ) -> Result<Vec<Value>, TestError> {
@@ -96,7 +96,7 @@ impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for FailureInterp {
     }
 
     fn eval_func(
-        ctx: &mut RunnerContext<'_, Self, Iface, Exn>,
+        ctx: &mut RunnerContext<'_, Self, Iface, Ext>,
         name: &str,
         targs: &[Typ],
         values: &[Value],
@@ -128,7 +128,7 @@ impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for FailureInterp {
     }
 
     fn eval_rel(
-        ctx: &mut RunnerContext<'_, Self, Iface, Exn>,
+        ctx: &mut RunnerContext<'_, Self, Iface, Ext>,
         name: &str,
         values: &[Value],
     ) -> Result<Vec<Value>, TestError> {

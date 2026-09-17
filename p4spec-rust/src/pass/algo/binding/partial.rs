@@ -67,7 +67,7 @@ fn is_singleton_case(ctx: &Context, typ: &ast::Typ) -> Result<bool, AlgoError> {
                     typ.span.clone(),
                 )
             })?;
-            let typ_inner = subst_typ(&theta, typ_inner)?;
+            let typ_inner = subst_typ(&|id| theta.get(id), typ_inner)?;
             is_singleton_case(ctx, &typ_inner)
         }
         ast::DefTypKind::Struct(_) => Ok(false),

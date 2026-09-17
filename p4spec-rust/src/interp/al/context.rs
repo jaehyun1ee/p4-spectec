@@ -6,7 +6,7 @@
 
 use std::rc::Rc;
 
-use crate::interp::al::error::ContextErrorKind;
+use crate::interp::shared::error::ContextErrorKind;
 
 use crate::{
     lang::{
@@ -17,7 +17,6 @@ use crate::{
             value::{Value, ValueArena, get, make},
         },
     },
-    runner::{Extern, Interface, RunnerContext},
     runtime::{
         envs::{
             interp::VEnv,
@@ -27,9 +26,8 @@ use crate::{
     },
 };
 
-use super::{
-    AlInterp,
-    backtrack::{Backtrack, backtrack, backtrack_from_result},
+use crate::interp::shared::{
+    backtrack::{Backtrack, ok, unwrap_from_result},
     error::{EntityKind, Error, ErrorKind},
 };
 
@@ -125,15 +123,8 @@ impl<'global> Context<'global> {
         Self::new(self.global)
     }
 
-    pub fn wipe(&self) -> Self {
-        Self {
-            global: self.global,
-            local: Local {
-                tdenv: self.local.tdenv.clone(),
-                fenv: self.local.fenv.clone(),
-                venv: VEnv::new(),
-            },
-        }
+    pub fn clear_value_bindings(&mut self) {
+        self.local.venv = VEnv::new();
     }
 
     // == Finders
@@ -148,10 +139,12 @@ impl<'global> Context<'global> {
         })
     }
 
+    pub fn find_typdef_local_opt(&self, id: &ast::Id) -> Option<&TypeDef> {
+        self.local.tdenv.get(id)
+    }
+
     pub fn find_typdef_opt<'a>(&'a self, id: &ast::Id) -> Option<&'a TypeDef> {
-        self.local
-            .tdenv
-            .get(id)
+        self.find_typdef_local_opt(id)
             .or_else(|| self.global.tdenv.get(id))
     }
 
@@ -245,108 +238,41 @@ impl<'global> Context<'global> {
 
     // == Iteration contexts
 
-    // - Expression mapping
-
-    pub fn map_list<Iface: Interface, Exn: Extern>(
-        &self,
-        runner: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
-        span: &Span,
-        vars: &[ast::Var],
-        mut eval: impl FnMut(&mut RunnerContext<'_, AlInterp, Iface, Exn>, &Self) -> Backtrack<Value>,
-    ) -> Backtrack<Vec<Value>> {
-        let rows = backtrack_from_result!(self.list_values(runner.arena(), vars), span);
-        // Copy handles before the callback can allocate in the arena
-        let rows: Vec<_> = rows.into_iter().map(<[Value]>::to_vec).collect();
-        let width = rows.first().map_or(0, Vec::len);
-        let vars: Vec<_> = vars
-            .iter()
-            .map(|var| Variable::new(var.id.clone(), var.iters.clone()))
-            .collect();
-        let mut ctx_sub = self.clone();
-        let mut values = Vec::with_capacity(width);
-        for column in 0..width {
-            for (var, row) in vars.iter().zip(&rows) {
-                ctx_sub.add_value(var.clone(), row[column]);
-            }
-            values.push(backtrack!(eval(runner, &ctx_sub)));
-        }
-        Backtrack::Ok(values)
-    }
-
-    pub fn map_opt<Iface: Interface, Exn: Extern>(
-        &self,
-        runner: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
-        span: &Span,
-        vars: &[ast::Var],
-        mut eval: impl FnMut(&mut RunnerContext<'_, AlInterp, Iface, Exn>, &Self) -> Backtrack<Value>,
-    ) -> Backtrack<Option<Value>> {
-        let values = backtrack_from_result!(self.opt_values(runner.arena(), vars), span);
-        let Some(values) = values else {
-            return Backtrack::Ok(None);
-        };
-        let mut ctx_sub = self.clone();
-        for (var, value) in vars.iter().zip(values) {
-            ctx_sub.add_value(Variable::new(var.id.clone(), var.iters.clone()), value);
-        }
-        Backtrack::Ok(Some(backtrack!(eval(runner, &ctx_sub))))
-    }
-
-    // - Premise bindings
-
-    pub fn yield_list<Iface: Interface, Exn: Extern>(
-        mut self,
-        runner: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
-        span: &Span,
-        vars_bound: &[ast::Var],
-        vars_bind: &[ast::Var],
-        mut eval: impl FnMut(&mut RunnerContext<'_, AlInterp, Iface, Exn>, Self) -> Backtrack<Self>,
-    ) -> Backtrack<Self> {
-        let rows = backtrack_from_result!(self.list_values(runner.arena(), vars_bound), span);
-        let rows: Vec<_> = rows.into_iter().map(<[Value]>::to_vec).collect();
-        let width = rows.first().map_or(0, Vec::len);
-        let vars: Vec<_> = vars_bound
-            .iter()
-            .map(|var| Variable::new(var.id.clone(), var.iters.clone()))
-            .collect();
-        let mut ctx_sub = self.clone();
-        let mut values_bind = vec![Vec::new(); vars_bind.len()];
-        for column in 0..width {
-            for (var, row) in vars.iter().zip(&rows) {
-                ctx_sub.add_value(var.clone(), row[column]);
-            }
-            // Keep callback writes out of the reusable input context
-            let ctx_post = backtrack!(eval(runner, ctx_sub.clone()));
-            backtrack!(ctx_post.collect_bindings(vars_bind, &mut values_bind));
-        }
-        backtrack!(self.bind_iter(runner.arena_mut(), vars_bind, ast::Iter::List, values_bind));
-        Backtrack::Ok(self)
-    }
-
-    pub fn yield_opt<Iface: Interface, Exn: Extern>(
-        mut self,
-        runner: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
-        span: &Span,
-        vars_bound: &[ast::Var],
-        vars_bind: &[ast::Var],
-        mut eval: impl FnMut(&mut RunnerContext<'_, AlInterp, Iface, Exn>, Self) -> Backtrack<Self>,
-    ) -> Backtrack<Self> {
-        let values = backtrack_from_result!(self.opt_values(runner.arena(), vars_bound), span);
-        let mut values_bind = vec![Vec::new(); vars_bind.len()];
-        if let Some(values) = values {
-            let mut ctx_sub = self.clone();
-            for (var, value) in vars_bound.iter().zip(values) {
-                ctx_sub.add_value(Variable::new(var.id.clone(), var.iters.clone()), value);
-            }
-            let ctx_post = backtrack!(eval(runner, ctx_sub));
-            backtrack!(ctx_post.collect_bindings(vars_bind, &mut values_bind));
-        }
-        backtrack!(self.bind_iter(runner.arena_mut(), vars_bind, ast::Iter::Opt, values_bind));
-        Backtrack::Ok(self)
-    }
-
     // - Iteration inputs
 
-    fn opt_values(
+    pub(super) fn find_list_values_by_var<'a>(
+        &self,
+        arena: &'a ValueArena,
+        vars: &[ast::Var],
+    ) -> Result<Vec<&'a [Value]>, Error> {
+        let mut values_by_var = Vec::with_capacity(vars.len());
+        for var in vars {
+            let mut iters = var.iters.clone();
+            iters.push(ast::Iter::List);
+            let value = self.find_value(&Variable::new(var.id.clone(), iters))?;
+            let values = get::list(arena, value)
+                .map_err(|error| Error::from(error).at_if_missing(&var.id.span))?;
+            values_by_var.push(values);
+        }
+        let Some(values) = values_by_var.first() else {
+            return Ok(Vec::new());
+        };
+        let len = values.len();
+        for values in &values_by_var {
+            if values.len() != len {
+                return Err(Error::new(
+                    ErrorKind::Context(ContextErrorKind::IterationLengthMismatch {
+                        expected: len,
+                        actual: values.len(),
+                    }),
+                    Span::default(),
+                ));
+            }
+        }
+        Ok(values_by_var)
+    }
+
+    pub(super) fn find_opt_values_by_var(
         &self,
         arena: &ValueArena,
         vars: &[ast::Var],
@@ -372,94 +298,140 @@ impl<'global> Context<'global> {
         }
     }
 
-    fn list_values<'a>(
-        &self,
-        arena: &'a ValueArena,
-        vars: &[ast::Var],
-    ) -> Result<Vec<&'a [Value]>, Error> {
-        let mut rows = Vec::with_capacity(vars.len());
-        for var in vars {
-            let mut iters = var.iters.clone();
-            iters.push(ast::Iter::List);
-            let value = self.find_value(&Variable::new(var.id.clone(), iters))?;
-            let values = get::list(arena, value)
-                .map_err(|error| Error::from(error).at_if_missing(&var.id.span))?;
-            rows.push(values);
-        }
-        let Some(row) = rows.first() else {
-            return Ok(Vec::new());
-        };
-        let width = row.len();
-        for row in &rows {
-            if row.len() != width {
-                return Err(Error::new(
-                    ErrorKind::Context(ContextErrorKind::IterationLengthMismatch {
-                        expected: width,
-                        actual: row.len(),
-                    }),
-                    Span::default(),
-                ));
-            }
-        }
-        Ok(rows)
-    }
-
     // - Iteration outputs
 
-    fn collect_bindings(&self, vars: &[ast::Var], values_bind: &mut [Vec<Value>]) -> Backtrack<()> {
-        for (var, values) in vars.iter().zip(values_bind) {
+    pub(super) fn collect_values_by_var(
+        &self,
+        vars: &[ast::Var],
+        values_by_var: &mut [Vec<Value>],
+    ) -> Backtrack<()> {
+        for (var, values) in vars.iter().zip(values_by_var) {
             let var_bound = Variable::new(var.id.clone(), var.iters.clone());
-            values.push(*backtrack_from_result!(self.find_value(&var_bound), &var.id.span));
+            values.push(*unwrap_from_result!(self.find_value(&var_bound), &var.id.span));
         }
-        Backtrack::Ok(())
+        ok!(())
     }
 
-    fn bind_iter(
+    pub(super) fn bind_list_values_by_var(
         &mut self,
         arena: &mut ValueArena,
         vars: &[ast::Var],
-        iter: ast::Iter,
-        values_bind: Vec<Vec<Value>>,
+        values_by_var: Vec<Vec<Value>>,
     ) -> Backtrack<()> {
-        for (var, values) in vars.iter().zip(values_bind) {
+        for (var, values) in vars.iter().zip(values_by_var) {
             let mut iters = var.iters.clone();
-            iters.push(iter);
+            iters.push(ast::Iter::List);
             let typ = typ::make::iterate(var.typ.clone(), &iters);
-            let value = match iter {
-                ast::Iter::Opt => {
-                    make::opt(arena, typ.node.into(), values.into_iter().next(), Span::default())
-                }
-                ast::Iter::List => make::list(arena, typ.node.into(), values, Span::default()),
-            };
-            let value = backtrack_from_result!(value, &Span::default());
+            let value = make::list(arena, typ.node.into(), values, Span::default());
+            let value = unwrap_from_result!(value, &Span::default());
             self.add_value(Variable::new(var.id.clone(), iters), value);
         }
-        Backtrack::Ok(())
+        ok!(())
     }
 
-    // == Environment conversion
-
-    pub fn tdenv(&self) -> TDEnv {
-        let mut tdenv = self.global.tdenv.clone();
-        tdenv.extend(
-            self.local
-                .tdenv
-                .iter()
-                .map(|(id, typdef)| (id.clone(), typdef.clone())),
-        );
-        tdenv
-    }
-
-    pub fn theta_local(&self) -> crate::runtime::ops::typ::Theta {
-        let mut theta = crate::runtime::ops::typ::Theta::new();
-        for (id, typdef) in self.local.tdenv.iter() {
-            if let TypeDef::Defined(tparams, def_typ) = typdef
-                && tparams.is_empty()
-                && let ast::DefTypKind::Plain(typ) = &def_typ.node
-            {
-                theta.insert(id.clone(), typ.clone());
-            }
+    pub(super) fn bind_opt_values_by_var(
+        &mut self,
+        arena: &mut ValueArena,
+        vars: &[ast::Var],
+        values_by_var: Vec<Vec<Value>>,
+    ) -> Backtrack<()> {
+        for (var, values) in vars.iter().zip(values_by_var) {
+            let mut iters = var.iters.clone();
+            iters.push(ast::Iter::Opt);
+            let typ = typ::make::iterate(var.typ.clone(), &iters);
+            let value =
+                make::opt(arena, typ.node.into(), values.into_iter().next(), Span::default());
+            let value = unwrap_from_result!(value, &Span::default());
+            self.add_value(Variable::new(var.id.clone(), iters), value);
         }
-        theta
+        ok!(())
+    }
+}
+
+// = Shared binding interfaces
+
+impl crate::interp::shared::context::ReadContext for Context<'_> {
+    type Func = ast::MetaFuncDef;
+
+    fn find_value(&self, var: &Variable) -> Result<&Value, Error> {
+        self.find_value(var)
+    }
+
+    fn find_defined_typdef(&self, id: &ast::Id) -> Result<(&[ast::TParam], &ast::DefTyp), Error> {
+        self.find_defined_typdef(id)
+    }
+
+    fn find_func_typ(&self, id: &ast::Id) -> Result<crate::lang::il::ast::FuncTyp, Error> {
+        self.find_func_typ(id)
+    }
+
+    fn find_typdef_opt(&self, id: &ast::Id) -> Option<&TypeDef> {
+        self.find_typdef_opt(id)
+    }
+
+    fn find_typdef_local_opt(&self, id: &ast::Id) -> Option<&TypeDef> {
+        self.find_typdef_local_opt(id)
+    }
+
+    fn find_func(&self, id: &ast::Id) -> Result<&Rc<Self::Func>, Error> {
+        self.find_func(id).map(|(_, func)| func)
+    }
+}
+
+impl crate::interp::shared::context::WriteContext for Context<'_> {
+    fn add_value(&mut self, var: Variable, value: Value) {
+        self.add_value(var, value)
+    }
+
+    fn clear_value_bindings(&mut self) {
+        self.clear_value_bindings()
+    }
+
+    fn add_func(&mut self, id: ast::Id, func: Rc<Self::Func>) -> Result<(), Error> {
+        self.add_func(id, func)
+    }
+}
+
+impl crate::interp::shared::context::IterContext for Context<'_> {
+    fn find_list_values_by_var<'arena>(
+        &self,
+        arena: &'arena ValueArena,
+        vars: &[ast::Var],
+    ) -> Result<Vec<&'arena [Value]>, Error> {
+        self.find_list_values_by_var(arena, vars)
+    }
+
+    fn find_opt_values_by_var(
+        &self,
+        arena: &ValueArena,
+        vars: &[ast::Var],
+    ) -> Result<Option<Vec<Value>>, Error> {
+        self.find_opt_values_by_var(arena, vars)
+    }
+
+    fn collect_values_by_var(
+        &self,
+        vars: &[ast::Var],
+        values_by_var: &mut [Vec<Value>],
+    ) -> Backtrack<()> {
+        self.collect_values_by_var(vars, values_by_var)
+    }
+
+    fn bind_list_values_by_var(
+        &mut self,
+        arena: &mut ValueArena,
+        vars: &[ast::Var],
+        values_by_var: Vec<Vec<Value>>,
+    ) -> Backtrack<()> {
+        self.bind_list_values_by_var(arena, vars, values_by_var)
+    }
+
+    fn bind_opt_values_by_var(
+        &mut self,
+        arena: &mut ValueArena,
+        vars: &[ast::Var],
+        values_by_var: Vec<Vec<Value>>,
+    ) -> Backtrack<()> {
+        self.bind_opt_values_by_var(arena, vars, values_by_var)
     }
 }

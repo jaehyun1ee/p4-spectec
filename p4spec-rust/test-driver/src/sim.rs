@@ -4,9 +4,10 @@ use indicatif::{ProgressBar, ProgressStyle};
 use p4spec_rust::sim_plugin::io::Tx;
 use p4spec_rust::{
     frontend::parse::parse_files,
-    interp::al::Config,
-    pass::{algo, elaborate},
-    sim_plugin, stf,
+    lang::{al, data::value::external::Encoding},
+    pass::{algo, elaborate, structure},
+    runner::{Config, Spec},
+    sim_plugin,
 };
 use std::time::Instant;
 use std::{
@@ -23,8 +24,8 @@ struct Suite {
     dir_patch: Option<&'static str>,
 }
 
-// Suites mirror p4spec/test/sim/dune; expected records come from its stored
-// sim_*_al.expected outcomes and ordered PASS transmissions
+// Suites mirror p4spec/test/sim/dune. The six shared OCaml SL outcomes and
+// ordered transmissions are byte-identical to the existing AL expectations
 const SUITES: [Suite; 6] = [
     Suite {
         arch: "v1model",
@@ -205,8 +206,22 @@ impl Results {
     }
 }
 
-/// Runs the AL simulation suites against stored expected results
 pub fn run(det: bool) -> Result<()> {
+    run_with(det, |spec_al| Ok(Spec::Al(spec_al.clone())))
+}
+
+pub fn run_sl(det: bool) -> Result<()> {
+    run_with(det, |spec_al| {
+        structure::convert(spec_al.clone(), true)
+            .map(Spec::Sl)
+            .map_err(|error| Error::Invalid(error.to_string()))
+    })
+}
+
+fn run_with<BuildSpec>(det: bool, build_spec: BuildSpec) -> Result<()>
+where
+    BuildSpec: Fn(&al::ast::Spec) -> Result<Spec>,
+{
     let start = Instant::now();
     let mut excludes = corpus::collect_excludes(Path::new("excludes/static"))?;
     excludes.extend(corpus::collect_excludes(Path::new("excludes/dynamic"))?);
@@ -237,7 +252,6 @@ pub fn run(det: bool) -> Result<()> {
     );
     let mut executed = 0;
     let mut matched = 0;
-    let mut commands = 0;
     let mut patched = 0;
     for arch in ["v1model", "ebpf", "psa"] {
         let pairs_arch = suites
@@ -245,16 +259,23 @@ pub fn run(det: bool) -> Result<()> {
             .filter(|(suite, _)| suite.arch == arch)
             .flat_map(|(_, pairs)| pairs);
         let collected_arch = pairs_arch.clone().count();
-        let excluded_arch = pairs_arch
-            .clone()
+        let excluded_arch = suites
+            .iter()
+            .filter(|(suite, _)| suite.arch == arch)
+            .flat_map(|(_, pairs)| pairs)
             .filter(|pair| {
                 excludes.contains(&pair.path_p4.to_string_lossy().into_owned())
                     || excludes.contains(&pair.path_stf.to_string_lossy().into_owned())
             })
             .count();
         let patched_arch = pairs_arch.filter(|pair| pair.patched).count();
-        let mut simulator = sim_plugin::build(spec_al.clone(), arch, Config::new(true, det, false))
-            .map_err(|error| Error::Invalid(error.to_string()))?;
+        let mut simulator = sim_plugin::build(
+            build_spec(&spec_al)?,
+            arch,
+            Config::new(true, det, false),
+            Encoding::default(),
+        )
+        .map_err(|error| Error::Invalid(error.to_string()))?;
         for (suite, pairs) in suites.iter().filter(|(suite, _)| suite.arch == arch) {
             let mut results = Results::new(suite.name);
             for pair in pairs {
@@ -278,24 +299,14 @@ pub fn run(det: bool) -> Result<()> {
                 // File access failures are execution errors, never expected exclusions
                 fs::File::open(&pair.path_p4)?;
                 fs::File::open(&pair.path_stf)?;
-                let mut run_case = simulator
-                    .init_pipe(&includes, &pair.path_p4)
+                let mut txs = Vec::new();
+                simulator
+                    .run_stf_test(&includes, &pair.path_p4, &pair.path_stf, |tx| {
+                        txs.push(tx.clone());
+                    })
                     .map_err(|error| Error::Invalid(format!("{id}: {error}")))?;
-                let stmts_stf = stf::parse::parse_file(&pair.path_stf)
-                    .map_err(|error| Error::Invalid(format!("{id}: {error}")))?;
-                for (idx, stmt_stf) in stmts_stf.iter().enumerate() {
-                    simulator
-                        .run_stf_stmt(&mut run_case, stmt_stf)
-                        .map_err(|error| {
-                            Error::Invalid(format!("{id}: command {}: {error}", idx + 1))
-                        })?;
-                    commands += 1;
-                }
-                run_case
-                    .finish()
-                    .map_err(|error| Error::Invalid(format!("{id}: {error}")))?;
-                matched += run_case.matches.len();
-                results.record(pair, "pass", &run_case.matches)?;
+                matched += txs.len();
+                results.record(pair, "pass", &txs)?;
                 executed += 1;
                 progress.inc(1);
             }
@@ -308,7 +319,7 @@ pub fn run(det: bool) -> Result<()> {
     }
     progress.finish_with_message("complete");
     eprintln!(
-        "Simulation cache=on det={det}: collected={collected} excluded={excluded} executed={executed} patched={patched} commands={commands} matches={matched} elapsed={:.3}s; all expected records matched",
+        "Simulation cache=on det={det}: collected={collected} excluded={excluded} executed={executed} patched={patched} matches={matched} elapsed={:.3}s; all expected records matched",
         start.elapsed().as_secs_f64()
     );
     Ok(())

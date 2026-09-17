@@ -34,7 +34,7 @@ struct TableInterp {
     calls: VecDeque<Call>,
 }
 
-impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for TableInterp {
+impl<Iface: Interface, Ext: Extern> Interpreter<Iface, Ext> for TableInterp {
     type Spec = ();
     type Error = TestError;
 
@@ -43,7 +43,7 @@ impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for TableInterp {
     fn reset(&mut self) {}
 
     fn eval_program(
-        _: &mut RunnerContext<'_, Self, Iface, Exn>,
+        _: &mut RunnerContext<'_, Self, Iface, Ext>,
         _: &str,
         _: Value,
     ) -> Result<Vec<Value>, TestError> {
@@ -51,7 +51,7 @@ impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for TableInterp {
     }
 
     fn eval_rel(
-        _: &mut RunnerContext<'_, Self, Iface, Exn>,
+        _: &mut RunnerContext<'_, Self, Iface, Ext>,
         _: &str,
         _: &[Value],
     ) -> Result<Vec<Value>, TestError> {
@@ -59,7 +59,7 @@ impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for TableInterp {
     }
 
     fn eval_func(
-        ctx: &mut RunnerContext<'_, Self, Iface, Exn>,
+        ctx: &mut RunnerContext<'_, Self, Iface, Ext>,
         name: &str,
         targs: &[Typ],
         values: &[Value],

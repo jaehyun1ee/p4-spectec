@@ -1,13 +1,12 @@
+use p4spec_rust::interp::shared::{backtrack::Backtrack, util::is_iter_var_exp};
 use std::rc::Rc;
 
 use p4spec_rust::lang::data::value::ValueArena;
 
 use p4spec_rust::{
     interp::al::{
-        backtrack::Backtrack,
         context::{Context, Global, Scope},
         eval::assign::{assign_args, assign_exp, assign_exps},
-        util::is_iter_var_exp,
     },
     lang::{
         al::ast,
@@ -167,7 +166,7 @@ fn test_list_rows_cannot_collect_unassigned_outer_values() {
 }
 
 #[test]
-fn test_optional_assignment_retains_inner_bindings_and_collects_none() {
+fn test_optional_assignment_exports_only_iterated_bindings() {
     let mut arena = ValueArena::new();
     let global = Global::load(vec![]).unwrap();
     let exp =
@@ -184,7 +183,10 @@ fn test_optional_assignment_retains_inner_bindings_and_collects_none() {
         .unwrap();
         assign_exp(&mut arena, Context::new(&global), &exp, value)
     });
-    assert!(get::bool(&arena, &binding(&ctx, "x", vec![])).unwrap());
+    assert!(
+        ctx.find_value_opt(&Variable::new(id("x"), vec![]))
+            .is_none()
+    );
     assert!(
         get::bool(
             &arena,
@@ -215,7 +217,10 @@ fn test_optional_assignment_retains_inner_bindings_and_collects_none() {
             .unwrap()
             .is_none()
     );
-    assert!(get::bool(&arena, &binding(&ctx, "x", vec![])).unwrap());
+    assert!(
+        ctx.find_value_opt(&Variable::new(id("x"), vec![]))
+            .is_none()
+    );
 }
 
 #[test]
@@ -363,6 +368,40 @@ fn test_empty_iteration_creates_empty_collections_for_every_binding() {
             get::list(&arena, &binding(&ctx, name, vec![ast::Iter::List]))
                 .unwrap()
                 .is_empty()
+        );
+    }
+}
+
+#[test]
+fn test_optional_destructuring_preserves_outer_scalars() {
+    let mut arena = ValueArena::new();
+    let global = Global::load(vec![]).unwrap();
+    let mut ctx = Context::new(&global);
+    ctx.add_value(Variable::new(id("x"), vec![]), value(&mut arena, false));
+    let exp = iter(
+        exp(ast::ExpKind::Tuple(vec![var_exp("x"), var_exp("y")])),
+        ast::Iter::Opt,
+        vec![var("x", vec![]), var("y", vec![])],
+    );
+    let value_inner = value(&mut arena, true);
+    let value_tuple = tuple(&mut arena, vec![value_inner, value_inner]);
+    let value_opt = make::opt(
+        &mut arena,
+        typ::make::opt(typ::make::bool()).node.into(),
+        Some(value_tuple),
+        span(8),
+    )
+    .unwrap();
+    let ctx = ok(assign_exp(&mut arena, ctx, &exp, value_opt));
+    assert!(!get::bool(&arena, &binding(&ctx, "x", vec![])).unwrap());
+    assert!(
+        ctx.find_value_opt(&Variable::new(id("y"), vec![]))
+            .is_none()
+    );
+    for name in ["x", "y"] {
+        assert_eq!(
+            get::opt(&arena, &binding(&ctx, name, vec![ast::Iter::Opt])).unwrap(),
+            Some(value_inner)
         );
     }
 }

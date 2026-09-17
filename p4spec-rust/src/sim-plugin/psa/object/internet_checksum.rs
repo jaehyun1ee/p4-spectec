@@ -43,16 +43,16 @@ impl InternetChecksum {
     /// packet
     ///
     /// `void clear();`
-    pub fn clear<Interp, Iface, Exn>(
+    pub fn clear<Interp, Iface, Ext>(
         self,
-        ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+        ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
         value_ctx: Value,
         value_arch: Value,
     ) -> Result<(Self, Value, Value, Value), Interp::Error>
     where
         Iface: Interface,
-        Exn: Extern,
-        Interp: Interpreter<Iface, Exn>,
+        Ext: Extern,
+        Interp: Interpreter<Iface, Ext>,
     {
         let typ = typ::make::opt(typ::make::var(
             crate::phrase!(node: "value".to_owned(), span: Span::default()),
@@ -74,16 +74,16 @@ impl InternetChecksum {
     /// Add data to the checksum; `data` must be a multiple of 16 bits long
     ///
     /// `void add<T>(in T data);`
-    pub fn add<Interp, Iface, Exn>(
+    pub fn add<Interp, Iface, Ext>(
         self,
-        ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+        ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
         value_ctx: Value,
         value_arch: Value,
     ) -> Result<(Self, Value, Value, Value), Interp::Error>
     where
         Iface: Interface,
-        Exn: Extern,
-        Interp: Interpreter<Iface, Exn>,
+        Ext: Extern,
+        Interp: Interpreter<Iface, Ext>,
     {
         self.update(ctx, value_ctx, value_arch, "csum16")
     }
@@ -92,31 +92,31 @@ impl InternetChecksum {
     /// of 16 bits long
     ///
     /// `void subtract<T>(in T data);`
-    pub fn subtract<Interp, Iface, Exn>(
+    pub fn subtract<Interp, Iface, Ext>(
         self,
-        ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+        ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
         value_ctx: Value,
         value_arch: Value,
     ) -> Result<(Self, Value, Value, Value), Interp::Error>
     where
         Iface: Interface,
-        Exn: Extern,
-        Interp: Interpreter<Iface, Exn>,
+        Ext: Extern,
+        Interp: Interpreter<Iface, Ext>,
     {
         self.update(ctx, value_ctx, value_arch, "csum16_sub")
     }
 
-    fn update<Interp, Iface, Exn>(
+    fn update<Interp, Iface, Ext>(
         mut self,
-        ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+        ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
         value_ctx: Value,
         value_arch: Value,
         algo: &str,
     ) -> Result<(Self, Value, Value, Value), Interp::Error>
     where
         Iface: Interface,
-        Exn: Extern,
-        Interp: Interpreter<Iface, Exn>,
+        Ext: Extern,
+        Interp: Interpreter<Iface, Ext>,
     {
         let value_data = func::find_var_e_local(ctx, value_ctx, "data")?;
         let values = unpack::p4_tuple(ctx.arena(), &value_data)?;
@@ -142,16 +142,16 @@ impl InternetChecksum {
     /// Get the checksum for data added and not removed since the last clear
     ///
     /// `bit<16> get();`
-    pub fn get<Interp, Iface, Exn>(
+    pub fn get<Interp, Iface, Ext>(
         mut self,
-        ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+        ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
         value_ctx: Value,
         value_arch: Value,
     ) -> Result<(Self, Value, Value, Value), Interp::Error>
     where
         Iface: Interface,
-        Exn: Extern,
-        Interp: Interpreter<Iface, Exn>,
+        Ext: Extern,
+        Interp: Interpreter<Iface, Ext>,
     {
         self.int = bigint::bitwise_neg(&self.int, &16.into())?;
         self.get_state(ctx, value_ctx, value_arch)
@@ -161,16 +161,16 @@ impl InternetChecksum {
     /// intended for a future call to `set_state`
     ///
     /// `bit<16> get_state();`
-    pub fn get_state<Interp, Iface, Exn>(
+    pub fn get_state<Interp, Iface, Ext>(
         self,
-        ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+        ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
         value_ctx: Value,
         value_arch: Value,
     ) -> Result<(Self, Value, Value, Value), Interp::Error>
     where
         Iface: Interface,
-        Exn: Extern,
-        Interp: Interpreter<Iface, Exn>,
+        Ext: Extern,
+        Interp: Interpreter<Iface, Ext>,
     {
         let value_checksum = pack::p4_fixed_bit(ctx.arena_mut(), 16.into(), self.int.clone())?;
         let typ = typ::make::opt(typ::make::var(
@@ -195,16 +195,16 @@ impl InternetChecksum {
     /// InternetChecksum instance or a different one
     ///
     /// `void set_state(in bit<16> checksum_state);`
-    pub fn set_state<Interp, Iface, Exn>(
+    pub fn set_state<Interp, Iface, Ext>(
         mut self,
-        ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+        ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
         value_ctx: Value,
         value_arch: Value,
     ) -> Result<(Self, Value, Value, Value), Interp::Error>
     where
         Iface: Interface,
-        Exn: Extern,
-        Interp: Interpreter<Iface, Exn>,
+        Ext: Extern,
+        Interp: Interpreter<Iface, Ext>,
     {
         let value_state = func::find_var_e_local(ctx, value_ctx, "checksum_state")?;
         self.int = unpack::p4_fixed_bit(ctx.arena(), &value_state)?.1;

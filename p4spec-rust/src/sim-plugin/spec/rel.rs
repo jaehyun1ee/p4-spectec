@@ -9,16 +9,16 @@ use crate::{
 
 // - Read
 
-pub fn lvalue_read_var_global<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn lvalue_read_var_global<Interp, Iface, Ext>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     value_ctx: Value,
     value_arch: Value,
     name: &str,
 ) -> Result<Value, Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Ext: Extern,
+    Interp: Interpreter<Iface, Ext>,
 {
     let value_cursor = crate::lang::data::value::make::case_shaped! {
         arena: ctx.arena_mut(),
@@ -33,8 +33,8 @@ where
     Ok(*get::one(&values).map_err(ExternError::from)?)
 }
 
-pub fn lvalue_read_dot_global<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn lvalue_read_dot_global<Interp, Iface, Ext>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     value_ctx: Value,
     value_arch: Value,
     name: &str,
@@ -42,8 +42,8 @@ pub fn lvalue_read_dot_global<Interp, Iface, Exn>(
 ) -> Result<Value, Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Ext: Extern,
+    Interp: Interpreter<Iface, Ext>,
 {
     use crate::lang::{common::source::Span, data::value::make};
     let value_cursor = make::case_shaped! {
@@ -71,8 +71,8 @@ where
 
 // - Write
 
-pub fn lvalue_write_var_local<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn lvalue_write_var_local<Interp, Iface, Ext>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     value_ctx: Value,
     value_arch: Value,
     name: &str,
@@ -80,8 +80,8 @@ pub fn lvalue_write_var_local<Interp, Iface, Exn>(
 ) -> Result<Value, Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Ext: Extern,
+    Interp: Interpreter<Iface, Ext>,
 {
     let value_cursor = super::func::local_cursor(ctx.arena_mut())?;
     let value_name = super::func::bare_name(ctx.arena_mut(), name)?;
@@ -90,8 +90,8 @@ where
     Ok(*get::one(&values).map_err(ExternError::from)?)
 }
 
-pub fn lvalue_write_dot_local<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn lvalue_write_dot_local<Interp, Iface, Ext>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     value_ctx: Value,
     value_arch: Value,
     name: &str,
@@ -100,8 +100,8 @@ pub fn lvalue_write_dot_local<Interp, Iface, Exn>(
 ) -> Result<Value, Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Ext: Extern,
+    Interp: Interpreter<Iface, Ext>,
 {
     use crate::lang::{common::source::Span, data::value::make};
     let value_cursor = make::case_shaped! {
@@ -128,8 +128,8 @@ where
     Ok(*get::one(&values).map_err(ExternError::from)?)
 }
 
-pub fn lvalue_write_dot_global<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn lvalue_write_dot_global<Interp, Iface, Ext>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     value_ctx: Value,
     value_arch: Value,
     name: &str,
@@ -138,8 +138,8 @@ pub fn lvalue_write_dot_global<Interp, Iface, Exn>(
 ) -> Result<Value, Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Ext: Extern,
+    Interp: Interpreter<Iface, Ext>,
 {
     use crate::lang::{common::source::Span, data::value::make};
     let value_cursor = make::case_shaped! {
@@ -170,31 +170,31 @@ where
 
 // - Initialization
 
-pub fn ebpf_init_packet_in<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn ebpf_init_packet_in<Interp, Iface, Ext>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     value_ctx: Value,
     value_arch: Value,
     value_packet: Value,
 ) -> Result<(Value, Value), Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Ext: Extern,
+    Interp: Interpreter<Iface, Ext>,
 {
     let values = ctx.call_rel("EBPF_init_packet_in", &[value_ctx, value_arch, value_packet])?;
     let (value_ctx, value_arch) = get::two(&values).map_err(ExternError::from)?;
     Ok((*value_ctx, *value_arch))
 }
 
-pub fn ebpf_init_globals<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn ebpf_init_globals<Interp, Iface, Ext>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     value_ctx: Value,
     value_arch: Value,
 ) -> Result<Value, Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Ext: Extern,
+    Interp: Interpreter<Iface, Ext>,
 {
     let values = ctx.call_rel("EBPF_init_globals", &[value_ctx, value_arch])?;
     Ok(*get::one(&values).map_err(ExternError::from)?)
@@ -202,15 +202,15 @@ where
 
 // - Pipeline
 
-pub fn ebpf_parse<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn ebpf_parse<Interp, Iface, Ext>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     value_ctx: Value,
     value_arch: Value,
 ) -> Result<(Value, Value, Value), Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Ext: Extern,
+    Interp: Interpreter<Iface, Ext>,
 {
     let values = ctx.call_rel("EBPF_parse", &[value_ctx, value_arch])?;
     let (value_ctx, value_arch, value_call_result) =
@@ -218,15 +218,15 @@ where
     Ok((*value_ctx, *value_arch, *value_call_result))
 }
 
-pub fn ebpf_filter<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn ebpf_filter<Interp, Iface, Ext>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     value_ctx: Value,
     value_arch: Value,
 ) -> Result<(Value, Value, Value), Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Ext: Extern,
+    Interp: Interpreter<Iface, Ext>,
 {
     let values = ctx.call_rel("EBPF_filter", &[value_ctx, value_arch])?;
     let (value_ctx, value_arch, value_call_result) =
@@ -238,16 +238,16 @@ where
 
 // - Ingress initialization
 
-pub fn psa_ingress_init_packet_in<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn psa_ingress_init_packet_in<Interp, Iface, Ext>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     value_ctx: Value,
     value_arch: Value,
     value_packet: Value,
 ) -> Result<(Value, Value), Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Ext: Extern,
+    Interp: Interpreter<Iface, Ext>,
 {
     let values =
         ctx.call_rel("PSA_ingress_init_packet_in", &[value_ctx, value_arch, value_packet])?;
@@ -255,16 +255,16 @@ where
     Ok((*value_ctx, *value_arch))
 }
 
-pub fn psa_ingress_init_packet_out<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn psa_ingress_init_packet_out<Interp, Iface, Ext>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     value_ctx: Value,
     value_arch: Value,
     value_packet: Value,
 ) -> Result<(Value, Value), Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Ext: Extern,
+    Interp: Interpreter<Iface, Ext>,
 {
     let values =
         ctx.call_rel("PSA_ingress_init_packet_out", &[value_ctx, value_arch, value_packet])?;
@@ -272,16 +272,16 @@ where
     Ok((*value_ctx, *value_arch))
 }
 
-pub fn psa_ingress_init_globals<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn psa_ingress_init_globals<Interp, Iface, Ext>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     value_ctx: Value,
     value_arch: Value,
     port: usize,
 ) -> Result<Value, Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Ext: Extern,
+    Interp: Interpreter<Iface, Ext>,
 {
     let value_port = crate::lang::data::value::make::int(
         ctx.arena_mut(),
@@ -293,8 +293,8 @@ where
     Ok(*get::one(&values).map_err(ExternError::from)?)
 }
 
-pub fn psa_ingress_init_metadata<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn psa_ingress_init_metadata<Interp, Iface, Ext>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     value_ctx: Value,
     value_arch: Value,
     port: usize,
@@ -302,8 +302,8 @@ pub fn psa_ingress_init_metadata<Interp, Iface, Exn>(
 ) -> Result<Value, Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Ext: Extern,
+    Interp: Interpreter<Iface, Ext>,
 {
     use crate::lang::{common::source::Span, data::value::make};
     let value_port =
@@ -317,15 +317,15 @@ where
 
 // - Ingress pipeline
 
-pub fn psa_ingress_parser<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn psa_ingress_parser<Interp, Iface, Ext>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     value_ctx: Value,
     value_arch: Value,
 ) -> Result<(Value, Value, Value), Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Ext: Extern,
+    Interp: Interpreter<Iface, Ext>,
 {
     let values = ctx.call_rel("PSA_ingress_parser", &[value_ctx, value_arch])?;
     let (value_ctx, value_arch, value_call_result) =
@@ -333,15 +333,15 @@ where
     Ok((*value_ctx, *value_arch, *value_call_result))
 }
 
-pub fn psa_ingress<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn psa_ingress<Interp, Iface, Ext>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     value_ctx: Value,
     value_arch: Value,
 ) -> Result<(Value, Value, Value), Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Ext: Extern,
+    Interp: Interpreter<Iface, Ext>,
 {
     let values = ctx.call_rel("PSA_ingress", &[value_ctx, value_arch])?;
     let (value_ctx, value_arch, value_call_result) =
@@ -349,15 +349,15 @@ where
     Ok((*value_ctx, *value_arch, *value_call_result))
 }
 
-pub fn psa_ingress_deparser<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn psa_ingress_deparser<Interp, Iface, Ext>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     value_ctx: Value,
     value_arch: Value,
 ) -> Result<(Value, Value, Value), Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Ext: Extern,
+    Interp: Interpreter<Iface, Ext>,
 {
     let values = ctx.call_rel("PSA_ingress_deparser", &[value_ctx, value_arch])?;
     let (value_ctx, value_arch, value_call_result) =
@@ -367,16 +367,16 @@ where
 
 // - Egress initialization
 
-pub fn psa_egress_init_packet_in<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn psa_egress_init_packet_in<Interp, Iface, Ext>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     value_ctx: Value,
     value_arch: Value,
     value_packet: Value,
 ) -> Result<(Value, Value), Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Ext: Extern,
+    Interp: Interpreter<Iface, Ext>,
 {
     let values =
         ctx.call_rel("PSA_egress_init_packet_in", &[value_ctx, value_arch, value_packet])?;
@@ -384,16 +384,16 @@ where
     Ok((*value_ctx, *value_arch))
 }
 
-pub fn psa_egress_init_packet_out<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn psa_egress_init_packet_out<Interp, Iface, Ext>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     value_ctx: Value,
     value_arch: Value,
     value_packet: Value,
 ) -> Result<(Value, Value), Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Ext: Extern,
+    Interp: Interpreter<Iface, Ext>,
 {
     let values =
         ctx.call_rel("PSA_egress_init_packet_out", &[value_ctx, value_arch, value_packet])?;
@@ -401,16 +401,16 @@ where
     Ok((*value_ctx, *value_arch))
 }
 
-pub fn psa_egress_init_globals<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn psa_egress_init_globals<Interp, Iface, Ext>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     value_ctx: Value,
     value_arch: Value,
     port: usize,
 ) -> Result<Value, Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Ext: Extern,
+    Interp: Interpreter<Iface, Ext>,
 {
     let value_port = crate::lang::data::value::make::int(
         ctx.arena_mut(),
@@ -422,8 +422,8 @@ where
     Ok(*get::one(&values).map_err(ExternError::from)?)
 }
 
-pub fn psa_egress_init_metadata<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn psa_egress_init_metadata<Interp, Iface, Ext>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     value_ctx: Value,
     value_arch: Value,
     port: usize,
@@ -433,8 +433,8 @@ pub fn psa_egress_init_metadata<Interp, Iface, Exn>(
 ) -> Result<Value, Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Ext: Extern,
+    Interp: Interpreter<Iface, Ext>,
 {
     use crate::lang::{common::source::Span, data::value::make};
     let value_port =
@@ -454,15 +454,15 @@ where
 
 // - Egress pipeline
 
-pub fn psa_egress_parser<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn psa_egress_parser<Interp, Iface, Ext>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     value_ctx: Value,
     value_arch: Value,
 ) -> Result<(Value, Value, Value), Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Ext: Extern,
+    Interp: Interpreter<Iface, Ext>,
 {
     let values = ctx.call_rel("PSA_egress_parser", &[value_ctx, value_arch])?;
     let (value_ctx, value_arch, value_call_result) =
@@ -470,15 +470,15 @@ where
     Ok((*value_ctx, *value_arch, *value_call_result))
 }
 
-pub fn psa_egress<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn psa_egress<Interp, Iface, Ext>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     value_ctx: Value,
     value_arch: Value,
 ) -> Result<(Value, Value, Value), Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Ext: Extern,
+    Interp: Interpreter<Iface, Ext>,
 {
     let values = ctx.call_rel("PSA_egress", &[value_ctx, value_arch])?;
     let (value_ctx, value_arch, value_call_result) =
@@ -486,15 +486,15 @@ where
     Ok((*value_ctx, *value_arch, *value_call_result))
 }
 
-pub fn psa_egress_deparser<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn psa_egress_deparser<Interp, Iface, Ext>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     value_ctx: Value,
     value_arch: Value,
 ) -> Result<(Value, Value, Value), Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Ext: Extern,
+    Interp: Interpreter<Iface, Ext>,
 {
     let values = ctx.call_rel("PSA_egress_deparser", &[value_ctx, value_arch])?;
     let (value_ctx, value_arch, value_call_result) =
@@ -506,48 +506,48 @@ where
 
 // - Initialization
 
-pub fn v1model_init_packet_in<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn v1model_init_packet_in<Interp, Iface, Ext>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     value_ctx: Value,
     value_arch: Value,
     value_packet: Value,
 ) -> Result<(Value, Value), Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Ext: Extern,
+    Interp: Interpreter<Iface, Ext>,
 {
     let values = ctx.call_rel("V1Model_init_packet_in", &[value_ctx, value_arch, value_packet])?;
     let (value_ctx, value_arch) = get::two(&values).map_err(ExternError::from)?;
     Ok((*value_ctx, *value_arch))
 }
 
-pub fn v1model_init_packet_out<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn v1model_init_packet_out<Interp, Iface, Ext>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     value_ctx: Value,
     value_arch: Value,
     value_packet: Value,
 ) -> Result<(Value, Value), Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Ext: Extern,
+    Interp: Interpreter<Iface, Ext>,
 {
     let values = ctx.call_rel("V1Model_init_packet_out", &[value_ctx, value_arch, value_packet])?;
     let (value_ctx, value_arch) = get::two(&values).map_err(ExternError::from)?;
     Ok((*value_ctx, *value_arch))
 }
 
-pub fn v1model_init_globals<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn v1model_init_globals<Interp, Iface, Ext>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     value_ctx: Value,
     value_arch: Value,
     port: usize,
 ) -> Result<Value, Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Ext: Extern,
+    Interp: Interpreter<Iface, Ext>,
 {
     let value_port = crate::lang::data::value::make::int(
         ctx.arena_mut(),
@@ -561,15 +561,15 @@ where
 
 // - Pipeline
 
-pub fn v1model_parser<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn v1model_parser<Interp, Iface, Ext>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     value_ctx: Value,
     value_arch: Value,
 ) -> Result<(Value, Value, Value), Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Ext: Extern,
+    Interp: Interpreter<Iface, Ext>,
 {
     let values = ctx.call_rel("V1Model_parser", &[value_ctx, value_arch])?;
     let (value_ctx, value_arch, value_call_result) =
@@ -577,15 +577,15 @@ where
     Ok((*value_ctx, *value_arch, *value_call_result))
 }
 
-pub fn v1model_verify<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn v1model_verify<Interp, Iface, Ext>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     value_ctx: Value,
     value_arch: Value,
 ) -> Result<(Value, Value, Value), Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Ext: Extern,
+    Interp: Interpreter<Iface, Ext>,
 {
     let values = ctx.call_rel("V1Model_verify", &[value_ctx, value_arch])?;
     let (value_ctx, value_arch, value_call_result) =
@@ -593,15 +593,15 @@ where
     Ok((*value_ctx, *value_arch, *value_call_result))
 }
 
-pub fn v1model_ingress<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn v1model_ingress<Interp, Iface, Ext>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     value_ctx: Value,
     value_arch: Value,
 ) -> Result<(Value, Value, Value), Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Ext: Extern,
+    Interp: Interpreter<Iface, Ext>,
 {
     let values = ctx.call_rel("V1Model_ingress", &[value_ctx, value_arch])?;
     let (value_ctx, value_arch, value_call_result) =
@@ -609,15 +609,15 @@ where
     Ok((*value_ctx, *value_arch, *value_call_result))
 }
 
-pub fn v1model_egress<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn v1model_egress<Interp, Iface, Ext>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     value_ctx: Value,
     value_arch: Value,
 ) -> Result<(Value, Value, Value), Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Ext: Extern,
+    Interp: Interpreter<Iface, Ext>,
 {
     let values = ctx.call_rel("V1Model_egress", &[value_ctx, value_arch])?;
     let (value_ctx, value_arch, value_call_result) =
@@ -625,15 +625,15 @@ where
     Ok((*value_ctx, *value_arch, *value_call_result))
 }
 
-pub fn v1model_check<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn v1model_check<Interp, Iface, Ext>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     value_ctx: Value,
     value_arch: Value,
 ) -> Result<(Value, Value, Value), Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Ext: Extern,
+    Interp: Interpreter<Iface, Ext>,
 {
     let values = ctx.call_rel("V1Model_check", &[value_ctx, value_arch])?;
     let (value_ctx, value_arch, value_call_result) =
@@ -641,15 +641,15 @@ where
     Ok((*value_ctx, *value_arch, *value_call_result))
 }
 
-pub fn v1model_deparse<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn v1model_deparse<Interp, Iface, Ext>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     value_ctx: Value,
     value_arch: Value,
 ) -> Result<(Value, Value, Value), Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Ext: Extern,
+    Interp: Interpreter<Iface, Ext>,
 {
     let values = ctx.call_rel("V1Model_deparse", &[value_ctx, value_arch])?;
     let (value_ctx, value_arch, value_call_result) =
@@ -659,16 +659,16 @@ where
 
 // - Preserved metadata
 
-pub fn v1model_setup_preserved_meta_fields<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn v1model_setup_preserved_meta_fields<Interp, Iface, Ext>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     value_ctx: Value,
     value_arch: Value,
     value_idx: Value,
 ) -> Result<Value, Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Ext: Extern,
+    Interp: Interpreter<Iface, Ext>,
 {
     let values =
         ctx.call_rel("V1Model_setup_preserved_meta_fields", &[value_ctx, value_arch, value_idx])?;

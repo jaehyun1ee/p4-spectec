@@ -32,7 +32,7 @@ struct PhaseInterp {
     values: Vec<Value>,
 }
 
-impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for PhaseInterp {
+impl<Iface: Interface, Ext: Extern> Interpreter<Iface, Ext> for PhaseInterp {
     type Spec = ();
     type Error = TestError;
 
@@ -41,7 +41,7 @@ impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for PhaseInterp {
     fn reset(&mut self) {}
 
     fn eval_program(
-        ctx: &mut RunnerContext<'_, Self, Iface, Exn>,
+        ctx: &mut RunnerContext<'_, Self, Iface, Ext>,
         name: &str,
         _: Value,
     ) -> Result<Vec<Value>, TestError> {
@@ -50,7 +50,7 @@ impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for PhaseInterp {
     }
 
     fn eval_func(
-        _: &mut RunnerContext<'_, Self, Iface, Exn>,
+        _: &mut RunnerContext<'_, Self, Iface, Ext>,
         _: &str,
         _: &[Typ],
         _: &[Value],
@@ -59,7 +59,7 @@ impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for PhaseInterp {
     }
 
     fn eval_rel(
-        ctx: &mut RunnerContext<'_, Self, Iface, Exn>,
+        ctx: &mut RunnerContext<'_, Self, Iface, Ext>,
         name: &str,
         values: &[Value],
     ) -> Result<Vec<Value>, TestError> {

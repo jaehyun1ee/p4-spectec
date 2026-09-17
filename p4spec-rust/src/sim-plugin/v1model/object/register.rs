@@ -35,16 +35,16 @@ impl Register {
     /// allocates storage for 512 values, each with type bit<32>.
     ///
     /// register(bit<32> size);
-    pub fn init<Interp, Iface, Exn>(
-        ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+    pub fn init<Interp, Iface, Ext>(
+        ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
         value_targs: Value,
         value_ids: Value,
         value_args: Value,
     ) -> Result<Self, Interp::Error>
     where
         Iface: Interface,
-        Exn: Extern,
-        Interp: Interpreter<Iface, Exn>,
+        Ext: Extern,
+        Interp: Interpreter<Iface, Ext>,
     {
         let values_targ = crate::lang::data::value::get::list(ctx.arena(), &value_targs)
             .map_err(ExternError::from)?;
@@ -78,16 +78,16 @@ impl Register {
     ///              ignored by the caller.
     ///
     /// void read(out T result, in bit<32> index);
-    pub fn read<Interp, Iface, Exn>(
+    pub fn read<Interp, Iface, Ext>(
         self,
-        ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+        ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
         value_ctx: Value,
         value_arch: Value,
     ) -> Result<(Self, Value, Value, Value), Interp::Error>
     where
         Iface: Interface,
-        Exn: Extern,
-        Interp: Interpreter<Iface, Exn>,
+        Ext: Extern,
+        Interp: Interpreter<Iface, Ext>,
     {
         let value_idx = func::find_var_e_local(ctx, value_ctx, "index")?;
         let idx = usize::try_from(&unpack::p4_fixed_bit(ctx.arena(), &value_idx)?.1)
@@ -135,16 +135,16 @@ impl Register {
     ///              parameter's value is written into the register
     ///              array element specified by index.
     /// void write(in bit<32> index, in T value);
-    pub fn write<Interp, Iface, Exn>(
+    pub fn write<Interp, Iface, Ext>(
         mut self,
-        ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+        ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
         value_ctx: Value,
         value_arch: Value,
     ) -> Result<(Self, Value, Value, Value), Interp::Error>
     where
         Iface: Interface,
-        Exn: Extern,
-        Interp: Interpreter<Iface, Exn>,
+        Ext: Extern,
+        Interp: Interpreter<Iface, Ext>,
     {
         let value_idx = func::find_var_e_local(ctx, value_ctx, "index")?;
         let idx = usize::try_from(&unpack::p4_fixed_bit(ctx.arena(), &value_idx)?.1)

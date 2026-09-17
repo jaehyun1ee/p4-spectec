@@ -1,11 +1,8 @@
-#[path = "context.rs"]
-mod context;
-
 #[path = "backtrack.rs"]
 mod backtrack;
 
-#[path = "error.rs"]
-mod error;
+#[path = "context.rs"]
+mod context;
 
 #[path = "eval/mod.rs"]
 mod eval;

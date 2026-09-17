@@ -40,10 +40,10 @@ struct FixtureInterpreter {
     config: FixtureConfig,
 }
 
-impl<Iface, Exn> Interpreter<Iface, Exn> for FixtureInterpreter
+impl<Iface, Ext> Interpreter<Iface, Ext> for FixtureInterpreter
 where
     Iface: Interface,
-    Exn: Extern,
+    Ext: Extern,
 {
     type Spec = ();
     type Error = FixtureError;
@@ -53,7 +53,7 @@ where
     fn reset(&mut self) {}
 
     fn eval_program(
-        _ctx: &mut RunnerContext<'_, Self, Iface, Exn>,
+        _ctx: &mut RunnerContext<'_, Self, Iface, Ext>,
         name: &str,
         program: Value,
     ) -> Result<Vec<Value>, Self::Error> {
@@ -64,7 +64,7 @@ where
     }
 
     fn eval_func(
-        ctx: &mut RunnerContext<'_, Self, Iface, Exn>,
+        ctx: &mut RunnerContext<'_, Self, Iface, Ext>,
         name: &str,
         targs: &[Typ],
         values: &[Value],
@@ -111,7 +111,7 @@ where
     }
 
     fn eval_rel(
-        _ctx: &mut RunnerContext<'_, Self, Iface, Exn>,
+        _ctx: &mut RunnerContext<'_, Self, Iface, Ext>,
         name: &str,
         _values: &[Value],
     ) -> Result<Vec<Value>, Self::Error> {
@@ -238,7 +238,7 @@ fn test_builtin_interface_registers_captured_extensions_and_overrides() {
 fn test_builtin_interface_reports_side_effects_and_clears() {
     let mut arena = ValueArena::new();
     let _guard = FRESH_BUILTIN.lock().unwrap();
-    let mut interface = p4spec_rust::interface::p4(&Vec::new());
+    let mut interface = p4spec_rust::interface::p4(&p4spec_rust::runner::Spec::Al(Vec::new()));
     interface.clear();
     let (value, side_effected) = interface
         .call_builtin(&mut arena, &id("fresh_typeId"), &[], &[])
@@ -258,7 +258,7 @@ fn test_builtin_interface_reports_side_effects_and_clears() {
 #[test]
 fn test_builtin_interface_preserves_builtin_failures() {
     let mut arena = ValueArena::new();
-    let error = p4spec_rust::interface::p4(&Vec::new())
+    let error = p4spec_rust::interface::p4(&p4spec_rust::runner::Spec::Al(Vec::new()))
         .call_builtin(&mut arena, &id("sum_int"), &[], &[])
         .unwrap_err();
 
@@ -273,9 +273,10 @@ fn test_builtin_interface_preserves_builtin_failures() {
 fn test_builtin_interface_prints_p4_values_without_side_effects() {
     let mut arena = ValueArena::new();
     let value = value::make::text(&mut arena, "a\n\"b".to_owned(), Span::default()).unwrap();
-    let (printed, side_effected) = p4spec_rust::interface::p4(&Vec::new())
-        .call_builtin(&mut arena, &id("print_"), &[typ::make::text()], &[value])
-        .unwrap();
+    let (printed, side_effected) =
+        p4spec_rust::interface::p4(&p4spec_rust::runner::Spec::Al(Vec::new()))
+            .call_builtin(&mut arena, &id("print_"), &[typ::make::text()], &[value])
+            .unwrap();
 
     assert_eq!(get::text(&arena, &printed), Ok("a\\n\\\"b"));
     assert!(!side_effected);
@@ -284,7 +285,7 @@ fn test_builtin_interface_prints_p4_values_without_side_effects() {
 #[test]
 fn test_builtin_interface_print_validates_both_arities() {
     let mut arena = ValueArena::new();
-    let mut interface = p4spec_rust::interface::p4(&Vec::new());
+    let mut interface = p4spec_rust::interface::p4(&p4spec_rust::runner::Spec::Al(Vec::new()));
     let typ = typ::make::text();
     let value = value::make::text(&mut arena, "value".to_owned(), Span::default()).unwrap();
     for (targs, values, actual) in [
@@ -311,7 +312,7 @@ fn test_builtin_interface_print_preserves_unparse_failures() {
     let value =
         value::make::structure(&mut arena, typ.node.clone().into(), Vec::new(), Span::default())
             .unwrap();
-    let error = p4spec_rust::interface::p4(&Vec::new())
+    let error = p4spec_rust::interface::p4(&p4spec_rust::runner::Spec::Al(Vec::new()))
         .call_builtin(&mut arena, &id("print_"), &[typ], &[value])
         .unwrap_err();
     assert!(matches!(
@@ -355,7 +356,7 @@ fn test_builtin_interface_print_preserves_spec_hints_after_clear() {
         value::make::case(&mut arena, typ.node.clone().into(), values, span).unwrap()
     };
     let _guard = FRESH_BUILTIN.lock().unwrap();
-    let mut interface = p4spec_rust::interface::p4(&spec);
+    let mut interface = p4spec_rust::interface::p4(&p4spec_rust::runner::Spec::Al(spec));
     for _ in 0..2 {
         let (printed, side_effected) = interface
             .call_builtin(
@@ -446,7 +447,7 @@ fn test_runner_reset_releases_program_arena_and_resets_hosts() {
     let mut runner = Runner::<FixtureInterpreter, BuiltinInterface, FixtureExtern>::new(
         (),
         FixtureInterpreter { config: FixtureConfig { label: "configured".to_owned() } },
-        p4spec_rust::interface::p4(&Vec::new()),
+        p4spec_rust::interface::p4(&p4spec_rust::runner::Spec::Al(Vec::new())),
         FixtureExtern::default(),
     );
     let typ = std::rc::Rc::new(p4spec_rust::lang::data::typ::TypKind::Text);

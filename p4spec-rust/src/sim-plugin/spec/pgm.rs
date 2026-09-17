@@ -7,14 +7,14 @@ use crate::{
 
 // == eBPF
 
-pub fn ebpf_init<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn ebpf_init<Interp, Iface, Ext>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     program: Value,
 ) -> Result<(Value, Value), Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Ext: Extern,
+    Interp: Interpreter<Iface, Ext>,
 {
     let values = ctx.call_program("EBPF_init", program)?;
     let (value_ctx, value_arch) = get::two(&values).map_err(ExternError::from)?;
@@ -23,14 +23,14 @@ where
 
 // == PSA
 
-pub fn psa_init<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn psa_init<Interp, Iface, Ext>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     program: Value,
 ) -> Result<(Value, Value), Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Ext: Extern,
+    Interp: Interpreter<Iface, Ext>,
 {
     let values = ctx.call_program("PSA_init", program)?;
     let (value_ctx, value_arch) = get::two(&values).map_err(ExternError::from)?;
@@ -39,14 +39,14 @@ where
 
 // == v1model
 
-pub fn v1model_init<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn v1model_init<Interp, Iface, Ext>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     program: Value,
 ) -> Result<(Value, Value), Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Ext: Extern,
+    Interp: Interpreter<Iface, Ext>,
 {
     let values = ctx.call_program("V1Model_init", program)?;
     let (value_ctx, value_arch) = get::two(&values).map_err(ExternError::from)?;

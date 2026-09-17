@@ -32,7 +32,7 @@ struct CounterInterp {
     calls: Vec<String>,
 }
 
-impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for CounterInterp {
+impl<Iface: Interface, Ext: Extern> Interpreter<Iface, Ext> for CounterInterp {
     type Spec = ();
     type Error = TestError;
 
@@ -41,7 +41,7 @@ impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for CounterInterp {
     fn reset(&mut self) {}
 
     fn eval_program(
-        _: &mut RunnerContext<'_, Self, Iface, Exn>,
+        _: &mut RunnerContext<'_, Self, Iface, Ext>,
         _: &str,
         _: Value,
     ) -> Result<Vec<Value>, TestError> {
@@ -49,7 +49,7 @@ impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for CounterInterp {
     }
 
     fn eval_rel(
-        _: &mut RunnerContext<'_, Self, Iface, Exn>,
+        _: &mut RunnerContext<'_, Self, Iface, Ext>,
         _: &str,
         _: &[Value],
     ) -> Result<Vec<Value>, TestError> {
@@ -57,7 +57,7 @@ impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for CounterInterp {
     }
 
     fn eval_func(
-        ctx: &mut RunnerContext<'_, Self, Iface, Exn>,
+        ctx: &mut RunnerContext<'_, Self, Iface, Ext>,
         name: &str,
         targs: &[Typ],
         values: &[Value],

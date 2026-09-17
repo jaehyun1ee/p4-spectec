@@ -52,16 +52,16 @@ impl HashExtern {
     /// Compute and return the hash for `data`
     ///
     /// `O get_hash<D>(in D data);`
-    pub fn get_hash<Interp, Iface, Exn>(
+    pub fn get_hash<Interp, Iface, Ext>(
         self,
-        ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+        ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
         value_ctx: Value,
         value_arch: Value,
     ) -> Result<(Self, Value, Value, Value), Interp::Error>
     where
         Iface: Interface,
-        Exn: Extern,
-        Interp: Interpreter<Iface, Exn>,
+        Ext: Extern,
+        Interp: Interpreter<Iface, Ext>,
     {
         let value_data = func::find_var_e_local(ctx, value_ctx, "data")?;
         let values = unpack::p4_tuple(ctx.arena(), &value_data)?;
@@ -79,16 +79,16 @@ impl HashExtern {
     /// Returns `base + (h % max)`, where `h` is the hash value
     ///
     /// `O get_hash<T, D>(in T base, in D data, in T max);`
-    pub fn get_hash_adjust<Interp, Iface, Exn>(
+    pub fn get_hash_adjust<Interp, Iface, Ext>(
         self,
-        ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+        ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
         value_ctx: Value,
         value_arch: Value,
     ) -> Result<(Self, Value, Value, Value), Interp::Error>
     where
         Iface: Interface,
-        Exn: Extern,
-        Interp: Interpreter<Iface, Exn>,
+        Ext: Extern,
+        Interp: Interpreter<Iface, Ext>,
     {
         let value_base = func::find_var_e_local(ctx, value_ctx, "base")?;
         let base = unpack::p4_fixed_bit(ctx.arena(), &value_base)?.1;
@@ -104,17 +104,17 @@ impl HashExtern {
         self.return_hash(ctx, value_ctx, value_arch, int_hash)
     }
 
-    fn return_hash<Interp, Iface, Exn>(
+    fn return_hash<Interp, Iface, Ext>(
         self,
-        ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+        ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
         value_ctx: Value,
         value_arch: Value,
         int_hash: BigInt,
     ) -> Result<(Self, Value, Value, Value), Interp::Error>
     where
         Iface: Interface,
-        Exn: Extern,
-        Interp: Interpreter<Iface, Exn>,
+        Ext: Extern,
+        Interp: Interpreter<Iface, Ext>,
     {
         let value_typ = func::find_type_e_local(ctx, value_ctx, "O")?;
         let value_result = pack::p4_arbitrary_int(ctx.arena_mut(), int_hash)?;
