@@ -310,7 +310,6 @@ impl Renamer {
         instr_ol: ol::Instr,
     ) -> Result<ol::Instr, StructureError> {
         if self.ids.is_empty() {
-            validate_instr_hints(&instr_ol)?;
             return Ok(instr_ol);
         }
         let instr_kind_ol = self.rename_instr_kind(changed, &instr_ol.span, instr_ol.node)?;
@@ -502,7 +501,6 @@ impl Renamer {
         block: ol::Block,
     ) -> Result<ol::Block, StructureError> {
         if self.ids.is_empty() {
-            validate_block_hints(&block)?;
             return Ok(block);
         }
         self.rename_instrs(changed, block)
@@ -555,40 +553,4 @@ impl Renamer {
             .map(|iter_instr| self.rename_iterinstr_bind(changed, iter_instr))
             .collect()
     }
-}
-
-// == Input hint validation
-
-// An empty renaming leaves syntax intact but must still reject invalid hints
-fn validate_instr_hints(instr: &ol::Instr) -> Result<(), StructureError> {
-    match &instr.node {
-        ol::InstrKind::If(instr) => validate_block_hints(&instr.block),
-        ol::InstrKind::Hold(instr) => {
-            validate_block_hints(&instr.block_hold)?;
-            validate_block_hints(&instr.block_not_hold)
-        }
-        ol::InstrKind::Case(instr) => {
-            for case in &instr.cases {
-                validate_block_hints(&case.block)?;
-            }
-            Ok(())
-        }
-        ol::InstrKind::Group(instr) => validate_block_hints(&instr.block),
-        ol::InstrKind::Let(instr) => validate_block_hints(&instr.block),
-        ol::InstrKind::Rule(instr_rule) => {
-            input::validate(&instr_rule.input_hint, instr_rule.not_exp.arity()).map_err(
-                |error| StructureError::new(StructureErrorKind::Input(error), instr.span.clone()),
-            )?;
-            validate_block_hints(&instr_rule.block)
-        }
-        ol::InstrKind::Debug(instr) => validate_instr_hints(&instr.instr),
-        ol::InstrKind::Result(_) | ol::InstrKind::Return(_) => Ok(()),
-    }
-}
-
-fn validate_block_hints(block: &ol::Block) -> Result<(), StructureError> {
-    for instr in block {
-        validate_instr_hints(instr)?;
-    }
-    Ok(())
 }

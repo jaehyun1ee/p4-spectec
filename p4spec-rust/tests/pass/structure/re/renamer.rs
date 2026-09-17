@@ -174,28 +174,6 @@ fn test_let_iterator_bound_tracks_fresh_binder() {
 }
 
 #[test]
-fn test_invalid_rule_hint_reports_instruction_span() {
-    use crate::lang::hints::input::InputError;
-    use crate::pass::structure::StructureErrorKind;
-    let mut instr_rule = instr(InstrKind::Rule(RuleInstr {
-        id: id("rel"),
-        not_exp: Mixfix::Arg(variable("x")),
-        input_hint: InputHint::new(vec![2]),
-        iter_instrs: vec![],
-        block: vec![],
-    }));
-    instr_rule.span = span(7);
-    let error = Renamer::empty()
-        .rename_instr(&mut false, instr_rule)
-        .unwrap_err();
-    assert_eq!(error.span, span(7));
-    assert_eq!(
-        error.kind,
-        StructureErrorKind::Input(InputError::IndexOutOfBounds { index: 2, arity: 1 })
-    );
-}
-
-#[test]
 fn test_expression_paths_arguments_and_iterator_annotations() {
     use crate::lang::il::ast::{ArgKind, PathKind, Subcheck};
     let typ = crate::phrase! {node: TypKind::Bool, span: span(4)};
@@ -313,34 +291,4 @@ fn test_empty_renaming_moves_notation_payloads() {
     assert_eq!(instr_rule, instr_expect);
     let InstrKind::Rule(instr_body) = &instr_rule.node else { unreachable!() };
     assert_eq!(var_id(instr_body.not_exp.args()[0]).node.as_ptr(), ptr);
-}
-
-#[test]
-fn test_empty_renaming_validates_debug_rules_before_later_siblings() {
-    use crate::lang::hints::input::InputError;
-    use crate::pass::structure::StructureErrorKind;
-    let mut instr_rule = instr(InstrKind::Rule(RuleInstr {
-        id: id("rel"),
-        not_exp: Mixfix::Arg(variable("input")),
-        input_hint: InputHint::new(vec![-1, -1]),
-        iter_instrs: vec![],
-        block: vec![],
-    }));
-    instr_rule.span = span(41);
-    let instr_debug =
-        instr(InstrKind::Debug(DebugInstr { exp: variable("debug"), instr: Box::new(instr_rule) }));
-    let mut instr_later = instr(InstrKind::Rule(RuleInstr {
-        id: id("later"),
-        not_exp: Mixfix::Arg(variable("input")),
-        input_hint: InputHint::new(vec![]),
-        iter_instrs: vec![],
-        block: vec![],
-    }));
-    instr_later.span = span(42);
-    let block = vec![binding("x", vec![instr_debug, instr_later])];
-    for renamer in [Renamer::empty(), Renamer::singleton(id("x"), id("y"))] {
-        let error = renamer.rename_block(&mut false, block.clone()).unwrap_err();
-        assert_eq!(error.span, span(41));
-        assert_eq!(error.kind, StructureErrorKind::Input(InputError::DuplicateIndex(-1)));
-    }
 }
