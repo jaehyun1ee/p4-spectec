@@ -36,11 +36,11 @@ use crate::{
 fn merge_instr_kind(
     tdenv: &TDEnv,
     changed: &mut bool,
-    instrs: &mut VecDeque<Instr>,
+    instrs_tail: &mut VecDeque<Instr>,
     instr_kind: InstrKind,
 ) -> Result<InstrKind, StructureError> {
     match instr_kind {
-        InstrKind::If(instr) => merge_if_instr(tdenv, changed, instrs, instr),
+        InstrKind::If(instr) => merge_if_instr(tdenv, changed, instrs_tail, instr),
         InstrKind::Hold(instr) => merge_hold_instr(tdenv, changed, instr),
         InstrKind::Case(instr) => merge_case_instr(tdenv, changed, instr),
         InstrKind::Group(instr) => merge_group_instr(tdenv, changed, instr),
@@ -52,9 +52,9 @@ fn merge_instr_kind(
 
 fn merge_block(tdenv: &TDEnv, changed: &mut bool, block: Block) -> Result<Block, StructureError> {
     let mut block_output = Vec::with_capacity(block.len());
-    let mut instrs = VecDeque::from(block);
-    while let Some(instr) = instrs.pop_front() {
-        let instr_kind = merge_instr_kind(tdenv, changed, &mut instrs, instr.node)?;
+    let mut instrs_tail = VecDeque::from(block);
+    while let Some(instr) = instrs_tail.pop_front() {
+        let instr_kind = merge_instr_kind(tdenv, changed, &mut instrs_tail, instr.node)?;
         let instr = crate::phrase!(node: instr_kind, span: instr.span);
         block_output.push(instr);
     }
@@ -66,10 +66,10 @@ fn merge_block(tdenv: &TDEnv, changed: &mut bool, block: Block) -> Result<Block,
 fn find_identical_if(
     tdenv: &TDEnv,
     instr_target: &IfInstr,
-    instrs: &VecDeque<Instr>,
+    instrs_tail: &VecDeque<Instr>,
 ) -> Result<Option<usize>, StructureError> {
     let IfInstr { exp: exp_target, iter_exps: iter_exps_target, .. } = instr_target;
-    for (idx, instr) in instrs.iter().enumerate() {
+    for (idx, instr) in instrs_tail.iter().enumerate() {
         let InstrKind::If(instr_if) = &instr.node else {
             break;
         };
@@ -86,12 +86,14 @@ fn find_identical_if(
 fn merge_if_instr(
     tdenv: &TDEnv,
     changed: &mut bool,
-    instrs: &mut VecDeque<Instr>,
+    instrs_tail: &mut VecDeque<Instr>,
     mut instr_if: IfInstr,
 ) -> Result<InstrKind, StructureError> {
-    while let Some(idx) = find_identical_if(tdenv, &instr_if, instrs)? {
+    while let Some(idx) = find_identical_if(tdenv, &instr_if, instrs_tail)? {
         *changed = true;
-        let instr_match = instrs.remove(idx).expect("matching instruction exists");
+        let instr_match = instrs_tail
+            .remove(idx)
+            .expect("matching instruction exists");
         let InstrKind::If(instr_match) = instr_match.node else { unreachable!() };
         let IfInstr { block: block_match, .. } = instr_match;
         instr_if.block = merge::merge_block(instr_if.block, block_match);

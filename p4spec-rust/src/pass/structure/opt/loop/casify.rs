@@ -38,9 +38,10 @@ use crate::{
 
 fn casify_block(tdenv: &TDEnv, changed: &mut bool, block: Block) -> Result<Block, StructureError> {
     let mut block_output = Vec::with_capacity(block.len());
-    let mut instrs = VecDeque::from(block);
-    while let Some(instr) = instrs.pop_front() {
-        let instr_kind = casify_instr_kind(tdenv, changed, &instr.span, &mut instrs, instr.node)?;
+    let mut instrs_tail = VecDeque::from(block);
+    while let Some(instr) = instrs_tail.pop_front() {
+        let instr_kind =
+            casify_instr_kind(tdenv, changed, &instr.span, &mut instrs_tail, instr.node)?;
         let instr = crate::phrase!(node: instr_kind, span: instr.span);
         block_output.push(instr);
     }
@@ -51,13 +52,13 @@ fn casify_instr_kind(
     tdenv: &TDEnv,
     changed: &mut bool,
     span: &Span,
-    instrs: &mut VecDeque<Instr>,
+    instrs_tail: &mut VecDeque<Instr>,
     instr_kind: InstrKind,
 ) -> Result<InstrKind, StructureError> {
     match instr_kind {
-        InstrKind::If(instr) => casify_if_instr(tdenv, changed, span, instrs, instr),
+        InstrKind::If(instr) => casify_if_instr(tdenv, changed, span, instrs_tail, instr),
         InstrKind::Hold(instr) => casify_hold_instr(tdenv, changed, instr),
-        InstrKind::Case(instr) => casify_case_instr(tdenv, changed, span, instrs, instr),
+        InstrKind::Case(instr) => casify_case_instr(tdenv, changed, span, instrs_tail, instr),
         InstrKind::Group(instr) => casify_group_instr(tdenv, changed, instr),
         InstrKind::Let(instr) => casify_let_instr(tdenv, changed, instr),
         InstrKind::Rule(instr) => casify_rule_instr(tdenv, changed, instr),
@@ -71,13 +72,13 @@ fn casify_if_instr(
     tdenv: &TDEnv,
     changed: &mut bool,
     span: &Span,
-    instrs: &mut VecDeque<Instr>,
+    instrs_tail: &mut VecDeque<Instr>,
     mut instr_if: IfInstr,
 ) -> Result<InstrKind, StructureError> {
-    if let Some((idx, instr_case)) = casify_from_if(tdenv, &mut instr_if, instrs)? {
+    if let Some((idx, instr_case)) = casify_from_if(tdenv, &mut instr_if, instrs_tail)? {
         *changed = true;
-        instrs.remove(idx);
-        return casify_case_instr(tdenv, changed, span, instrs, instr_case);
+        instrs_tail.remove(idx);
+        return casify_case_instr(tdenv, changed, span, instrs_tail, instr_case);
     }
     let IfInstr { exp, iter_exps, block } = instr_if;
     let block = casify_block(tdenv, changed, block)?;
@@ -105,14 +106,14 @@ fn casify_case_instr(
     tdenv: &TDEnv,
     changed: &mut bool,
     span: &Span,
-    instrs: &mut VecDeque<Instr>,
+    instrs_tail: &mut VecDeque<Instr>,
     mut instr_case: CaseInstr,
 ) -> Result<InstrKind, StructureError> {
     while let Some((idx, instr_case_merged)) =
-        casify_from_case(tdenv, &mut instr_case, span, instrs)?
+        casify_from_case(tdenv, &mut instr_case, span, instrs_tail)?
     {
         *changed = true;
-        instrs.remove(idx);
+        instrs_tail.remove(idx);
         instr_case = instr_case_merged;
     }
     let CaseInstr { exp, cases, total } = instr_case;
@@ -175,12 +176,12 @@ fn casify_rule_instr(
 fn casify_from_if(
     tdenv: &TDEnv,
     instr_target: &mut IfInstr,
-    instrs: &mut VecDeque<Instr>,
+    instrs_tail: &mut VecDeque<Instr>,
 ) -> Result<Option<(usize, CaseInstr)>, StructureError> {
     if !instr_target.iter_exps.is_empty() {
         return Ok(None);
     }
-    for (idx, instr) in instrs.iter_mut().enumerate() {
+    for (idx, instr) in instrs_tail.iter_mut().enumerate() {
         let instr_case = match &mut instr.node {
             InstrKind::If(instr_if) if instr_if.iter_exps.is_empty() => {
                 casify_if_then_if(tdenv, instr_target, instr_if)?
@@ -201,9 +202,9 @@ fn casify_from_case(
     tdenv: &TDEnv,
     instr_target: &mut CaseInstr,
     span_target: &Span,
-    instrs: &mut VecDeque<Instr>,
+    instrs_tail: &mut VecDeque<Instr>,
 ) -> Result<Option<(usize, CaseInstr)>, StructureError> {
-    for (idx, instr) in instrs.iter_mut().enumerate() {
+    for (idx, instr) in instrs_tail.iter_mut().enumerate() {
         let instr_case = match &mut instr.node {
             InstrKind::If(instr_if) if instr_if.iter_exps.is_empty() => {
                 casify_case_then_if(tdenv, instr_target, instr_if, span_target)?
