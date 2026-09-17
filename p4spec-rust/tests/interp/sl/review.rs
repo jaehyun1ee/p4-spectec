@@ -219,3 +219,70 @@ fn deeply_nested_blocks_execute_on_a_small_stack() {
         assert_eq!(get::num(runner.arena(), &value).unwrap().to_string(), "7");
     }).unwrap().join().unwrap();
 }
+
+fn if_call(name: &str) -> ast::Instr {
+    let exp = note_phrase!(node: ast::ExpKind::Call(id(name), vec![], vec![]), note: typ::make::bool().node, span: Span::default());
+    phrase!(node: ast::InstrKind::If(ast::IfInstr { exp, iter_exps: vec![], block: vec![], dangle: true }), span: Span::default())
+}
+
+fn return_nat(num: u64) -> ast::Instr {
+    let exp = note_phrase!(node: ast::ExpKind::Num(p4spec_rust::lang::xl::num::Number::Nat(num.into())), note: typ::make::nat().node, span: Span::default());
+    phrase!(node: ast::InstrKind::Return(ast::ReturnInstr { exp }), span: Span::default())
+}
+
+#[test]
+fn let_body_unmatch_continues_to_the_next_instruction() {
+    let exp_zero = note_phrase!(node: ast::ExpKind::Num(p4spec_rust::lang::xl::num::Number::Nat(0u64.into())), note: typ::make::nat().node, span: Span::default());
+    let instr_let = phrase!(node: ast::InstrKind::Let(ast::LetInstr {
+        exp_l: var("n"), exp_r: exp_zero, iter_instrs: vec![], block: vec![if_call("miss")],
+    }), span: Span::default());
+    for det in [false, true] {
+        let spec_sl =
+            vec![func("entry", vec![instr_let.clone(), return_nat(9)]), func("miss", vec![fail()])];
+        let mut runner = Runner::new(
+            Global::load(spec_sl).unwrap(),
+            SlInterp::new(Config::new(false, det, false)),
+            p4spec_rust::interface::p4(&vec![]),
+            NullExtern,
+        );
+        let value = runner.context().call_func("entry", &[], &[]).unwrap();
+        assert_eq!(get::num(runner.arena(), &value).unwrap().to_string(), "9");
+    }
+}
+
+#[test]
+fn conditional_unmatch_escapes_sequential_blocks_but_not_deterministic_blocks() {
+    for det in [false, true] {
+        let spec_sl =
+            vec![func("entry", vec![if_call("miss"), return_nat(9)]), func("miss", vec![fail()])];
+        let mut runner = Runner::new(
+            Global::load(spec_sl).unwrap(),
+            SlInterp::new(Config::new(false, det, false)),
+            p4spec_rust::interface::p4(&vec![]),
+            NullExtern,
+        );
+        let result = runner.context().call_func("entry", &[], &[]);
+        if det {
+            assert_eq!(
+                get::num(runner.arena(), &result.unwrap())
+                    .unwrap()
+                    .to_string(),
+                "9"
+            );
+        } else {
+            let error = result.unwrap_err();
+            assert!(error.to_string().contains("function $miss"), "{error}");
+        }
+    }
+}
+
+#[test]
+fn else_does_not_catch_an_unmatch_escaping_the_body() {
+    let mut def_entry = func("entry", vec![if_call("miss")]);
+    let ast::DefKind::MetaFunc(ast::MetaFuncDef::Defined(func_entry)) = &mut def_entry.node else {
+        unreachable!()
+    };
+    func_entry.block_else = Some(vec![return_nat(9)]);
+    let error = evaluate(vec![def_entry, func("miss", vec![fail()])], false);
+    assert!(error.to_string().contains("function $miss"), "{error}");
+}

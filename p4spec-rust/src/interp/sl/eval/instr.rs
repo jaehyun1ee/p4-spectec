@@ -123,26 +123,21 @@ pub fn eval_instr<Iface: Interface, Exn: Extern>(
             ast::InstrKind::Hold(instr) => eval_hold_instr(runner, ctx, instr, tail),
             ast::InstrKind::Case(instr) => eval_case_instr(runner, ctx, instr, tail),
             ast::InstrKind::Group(instr) => eval_group_instr(runner, ctx, instr, tail),
-            ast::InstrKind::Let(instr) => eval_let_instr(runner, ctx, instr, tail),
-            ast::InstrKind::Rule(instr) => eval_rule_instr(runner, ctx, instr, tail),
-            ast::InstrKind::Result(instr) => eval_result_instr(runner, ctx, instr),
-            ast::InstrKind::Return(instr) => eval_return_instr(runner, ctx, instr, tail),
-            ast::InstrKind::Debug(instr) => eval_debug_instr(runner, ctx, instr, tail),
-        };
-        let result = match result {
-            Backtrack::Unmatch(errors)
-                if matches!(
-                    instr.node,
-                    ast::InstrKind::Let(_)
-                        | ast::InstrKind::Rule(_)
-                        | ast::InstrKind::Result(_)
-                        | ast::InstrKind::Return(_)
-                        | ast::InstrKind::Debug(_)
-                ) =>
-            {
-                Backtrack::Ok(Flow::Cont(errors))
+            ast::InstrKind::Let(instr) => {
+                Flow::cont_from_unmatch(eval_let_instr(runner, ctx, instr, tail))
             }
-            result => result,
+            ast::InstrKind::Rule(instr) => {
+                Flow::cont_from_unmatch(eval_rule_instr(runner, ctx, instr, tail))
+            }
+            ast::InstrKind::Result(instr) => {
+                Flow::cont_from_unmatch(eval_result_instr(runner, ctx, instr))
+            }
+            ast::InstrKind::Return(instr) => {
+                Flow::cont_from_unmatch(eval_return_instr(runner, ctx, instr, tail))
+            }
+            ast::InstrKind::Debug(instr) => {
+                Flow::cont_from_unmatch(eval_debug_instr(runner, ctx, instr, tail))
+            }
         };
         result.nest(instr.span.clone(), || {
             ErrorKind::Trace(TraceErrorKind::Instruction { instr: Print::to_string(instr) })

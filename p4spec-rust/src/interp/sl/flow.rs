@@ -24,6 +24,13 @@ impl Flow {
         Self::Cont(vec![Error::new(ErrorKind::Prem(error), span)])
     }
 
+    pub(crate) fn cont_from_unmatch(result: Backtrack<Self>) -> Backtrack<Self> {
+        match result {
+            Backtrack::Unmatch(errors) => Backtrack::Ok(Self::Cont(errors)),
+            result => result,
+        }
+    }
+
     // = Deterministic block composition
 
     pub(crate) fn merge(self, flow_post: Self, span: &Span) -> Backtrack<Self> {
