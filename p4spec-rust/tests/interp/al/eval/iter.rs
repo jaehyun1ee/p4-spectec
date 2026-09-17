@@ -5,8 +5,8 @@ use p4spec_rust::{
         al::{
             AlInterp, Config,
             context::{Context, Global},
-            eval::iter::{map_list, map_opt},
         },
+        shared::eval::iter::{map_list, map_opt},
         shared::{
             backtrack::Backtrack,
             error::{ContextErrorKind, ErrorKind, RuntimeErrorKind},

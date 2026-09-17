@@ -205,22 +205,12 @@ pub enum CallErrorKind {
 
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum TraceErrorKind {
-    #[error("{exp} failed")]
-    Expression { exp: String },
-    #[error("{instr} failed")]
-    Instruction { instr: String },
     #[error("execution failed")]
     Execution,
-    #[error("invocation of relation {rel} failed")]
-    RelationInvocation { rel: String },
-    #[error("application of rule {relation}/{group}/{path} failed")]
-    RuleApplication { relation: String, group: String, path: String },
-    #[error("application of table row {func}{args} failed")]
-    TableRowApplication { func: String, args: String },
-    #[error("invocation of function ${func}{targs} failed")]
-    FunctionInvocation { func: String, targs: String },
-    #[error("application of clause {func}{args} failed")]
-    ClauseApplication { func: String, args: String },
+    #[error("invocation of {text} failed")]
+    Invocation { text: String },
+    #[error("evaluation of {text} failed")]
+    Evaluation { text: String },
 }
 
 impl TraceErrorKind {
@@ -228,13 +218,13 @@ impl TraceErrorKind {
         id: &crate::lang::il::ast::Id,
         targs: &[crate::lang::il::ast::Typ],
     ) -> Self {
-        TraceErrorKind::FunctionInvocation {
-            func: id.node.clone(),
-            targs: if targs.is_empty() {
-                String::new()
+        TraceErrorKind::Invocation {
+            text: if targs.is_empty() {
+                format!("${}", id.node)
             } else {
                 format!(
-                    "<{}>",
+                    "${}<{}>",
+                    id.node,
                     targs
                         .iter()
                         .map(crate::lang::traits::print::Print::to_string)

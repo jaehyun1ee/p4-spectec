@@ -123,15 +123,8 @@ impl<'global> Context<'global> {
         Self::new(self.global)
     }
 
-    pub fn with_empty_values(&self) -> Self {
-        Self {
-            global: self.global,
-            local: Local {
-                tdenv: self.local.tdenv.clone(),
-                fenv: self.local.fenv.clone(),
-                venv: VEnv::new(),
-            },
-        }
+    pub fn clear_value_bindings(&mut self) {
+        self.local.venv = VEnv::new();
     }
 
     // == Finders
@@ -353,7 +346,9 @@ impl<'global> Context<'global> {
 
 // = Shared binding interfaces
 
-impl crate::interp::shared::context::Environment for Context<'_> {
+impl crate::interp::shared::context::ReadContext for Context<'_> {
+    type Func = ast::MetaFuncDef;
+
     fn find_value(&self, var: &Variable) -> Result<&Value, Error> {
         self.find_value(var)
     }
@@ -373,26 +368,54 @@ impl crate::interp::shared::context::Environment for Context<'_> {
     fn find_local_typdef_opt(&self, id: &ast::Id) -> Option<&TypeDef> {
         self.find_local_typdef_opt(id)
     }
-}
-
-impl crate::interp::shared::context::Bindings for Context<'_> {
-    fn add_value(&mut self, var: Variable, value: Value) {
-        self.add_value(var, value)
-    }
-
-    fn with_empty_values(&self) -> Self {
-        self.with_empty_values()
-    }
-}
-
-impl crate::interp::shared::context::FuncBindings for Context<'_> {
-    type Func = ast::MetaFuncDef;
 
     fn find_func(&self, id: &ast::Id) -> Result<&Rc<Self::Func>, Error> {
         self.find_func(id).map(|(_, func)| func)
     }
+}
+
+impl crate::interp::shared::context::WriteContext for Context<'_> {
+    fn add_value(&mut self, var: Variable, value: Value) {
+        self.add_value(var, value)
+    }
+
+    fn clear_value_bindings(&mut self) {
+        self.clear_value_bindings()
+    }
 
     fn add_func(&mut self, id: ast::Id, func: Rc<Self::Func>) -> Result<(), Error> {
         self.add_func(id, func)
+    }
+}
+
+impl crate::interp::shared::context::IterContext for Context<'_> {
+    fn opt_values(
+        &self,
+        arena: &ValueArena,
+        vars: &[ast::Var],
+    ) -> Result<Option<Vec<Value>>, Error> {
+        self.opt_values(arena, vars)
+    }
+
+    fn list_values<'arena>(
+        &self,
+        arena: &'arena ValueArena,
+        vars: &[ast::Var],
+    ) -> Result<Vec<&'arena [Value]>, Error> {
+        self.list_values(arena, vars)
+    }
+
+    fn collect_bindings(&self, vars: &[ast::Var], values_bind: &mut [Vec<Value>]) -> Backtrack<()> {
+        self.collect_bindings(vars, values_bind)
+    }
+
+    fn bind_iter(
+        &mut self,
+        arena: &mut ValueArena,
+        vars: &[ast::Var],
+        iter: ast::Iter,
+        values_bind: Vec<Vec<Value>>,
+    ) -> Backtrack<()> {
+        self.bind_iter(arena, vars, iter, values_bind)
     }
 }

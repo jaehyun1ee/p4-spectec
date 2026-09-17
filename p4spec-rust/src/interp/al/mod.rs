@@ -1,11 +1,11 @@
-//! Algorithmic-language execution over the composed runner
+//! Algorithmic-language execution over the composed runner context
 
 pub mod backtrack;
 pub mod context;
 
 pub mod eval;
 
-use crate::interp::shared::{cache::Cache, error::Error};
+use crate::interp::shared::{cache::Cache, error::Error, eval::Invoker};
 use crate::{
     lang::{al::ast, common::source::Span, data::value::Value},
     runner::{Extern, Interface, Interpreter, RunnerContext},
@@ -49,43 +49,45 @@ impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for AlInterp {
     }
 
     fn eval_program(
-        runner: &mut RunnerContext<'_, Self, Iface, Exn>,
+        runner_ctx: &mut RunnerContext<'_, Self, Iface, Exn>,
         name: &str,
         program: Value,
     ) -> Result<Vec<Value>, Error> {
-        runner.call_rel(name, &[program])
+        runner_ctx.call_rel(name, &[program])
     }
 
     fn eval_rel(
-        runner: &mut RunnerContext<'_, Self, Iface, Exn>,
+        runner_ctx: &mut RunnerContext<'_, Self, Iface, Exn>,
         name: &str,
         values: &[Value],
     ) -> Result<Vec<Value>, Error> {
-        runner.interp_mut().cache.clear();
+        runner_ctx.interp_mut().cache.clear();
         let id = crate::phrase!(node: name.to_owned(), span: Span::default());
-        let ctx = Context::new(runner.spec());
-        if runner.interp().config.guard && !eval::call::cache_rel(runner, &ctx, &id) {
-            eval::call::check_rel_inputs(runner.arena(), &ctx, &id, values)
+        let ctx = Context::new(runner_ctx.spec());
+        if runner_ctx.interp().config.guard && !eval::call::cache_rel(runner_ctx, &ctx, &id) {
+            eval::call::check_rel_inputs(runner_ctx.arena(), &ctx, &id, values)
                 .guard()
                 .finish()?;
         }
-        eval::call::invoke_rel(runner, &ctx, &id, values).finish()
+        Self::invoke_rel(runner_ctx, &ctx, &id, values).finish()
     }
 
     fn eval_func(
-        runner: &mut RunnerContext<'_, Self, Iface, Exn>,
+        runner_ctx: &mut RunnerContext<'_, Self, Iface, Exn>,
         name: &str,
         targs: &[ast::Typ],
         values: &[Value],
     ) -> Result<Value, Error> {
-        runner.interp_mut().cache.clear();
+        runner_ctx.interp_mut().cache.clear();
         let id = crate::phrase!(node: name.to_owned(), span: Span::default());
-        let ctx = Context::new(runner.spec());
-        if runner.interp().config.guard && !eval::call::cache_func(runner, &ctx, &id, values) {
-            eval::call::check_func_inputs(runner.arena(), &ctx, &id, targs, values)
+        let ctx = Context::new(runner_ctx.spec());
+        if runner_ctx.interp().config.guard
+            && !eval::call::cache_func(runner_ctx, &ctx, &id, values)
+        {
+            eval::call::check_func_inputs(runner_ctx.arena(), &ctx, &id, targs, values)
                 .guard()
                 .finish()?;
         }
-        eval::call::invoke_func(runner, &ctx, &id, targs, values).finish()
+        Self::invoke_func(runner_ctx, &ctx, &id, targs, values).finish()
     }
 }

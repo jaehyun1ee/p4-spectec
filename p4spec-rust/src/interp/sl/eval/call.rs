@@ -146,31 +146,31 @@ fn check_func_output(
 // = Cache eligibility
 
 pub(in crate::interp::sl) fn cache_rel<Iface: Interface, Exn: Extern>(
-    runner: &RunnerContext<'_, SlInterp, Iface, Exn>,
+    runner_ctx: &RunnerContext<'_, SlInterp, Iface, Exn>,
     ctx: &Context<'_>,
     id: &ast::Id,
 ) -> bool {
-    runner.interp().config.cache && matches!(ctx.find_rel(id), Ok(ast::RelDef::Defined(_)))
+    runner_ctx.interp().config.cache && matches!(ctx.find_rel(id), Ok(ast::RelDef::Defined(_)))
 }
 
 pub(in crate::interp::sl) fn cache_func<Iface: Interface, Exn: Extern>(
-    runner: &RunnerContext<'_, SlInterp, Iface, Exn>,
+    runner_ctx: &RunnerContext<'_, SlInterp, Iface, Exn>,
     ctx: &Context<'_>,
     id: &ast::Id,
     values: &[Value],
 ) -> bool {
-    runner.interp().config.cache
+    runner_ctx.interp().config.cache
         && matches!(ctx.find_func(id), Ok((Scope::Global, func))
             if !matches!(func.as_ref(), ast::MetaFuncDef::Extern(_)))
         && !values
             .iter()
-            .any(|value| matches!(runner.arena().kind(value), ValueKind::Func(_)))
+            .any(|value| matches!(runner_ctx.arena().kind(value), ValueKind::Func(_)))
 }
 
 // = Relation invocation
 
 pub fn invoke_rel<Iface: Interface, Exn: Extern>(
-    runner: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
+    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
     ctx: &Context<'_>,
     id: &ast::Id,
     values: &[Value],
@@ -179,28 +179,28 @@ pub fn invoke_rel<Iface: Interface, Exn: Extern>(
     let mut values = Cow::Borrowed(values);
     let mut traces_pending: Vec<(Span, TraceErrorKind)> = Vec::new();
     loop {
-        let key =
-            cache_rel(runner, ctx, &id).then(|| CallKey::new(runner.arena(), &id.node, &values));
+        let key = cache_rel(runner_ctx, ctx, &id)
+            .then(|| CallKey::new(runner_ctx.arena(), &id.node, &values));
         if let Some(values) = key
             .as_ref()
-            .and_then(|key| runner.interp().cache.rels.get(key))
+            .and_then(|key| runner_ctx.interp().cache.rels.get(key))
         {
             return Backtrack::Ok(values.clone());
         }
-        runner.interp_mut().cache.begin();
+        runner_ctx.interp_mut().cache.begin();
         let result = stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
             let rel = backtrack_from_result!(ctx.find_rel(&id), &id.span);
             match rel {
                 ast::RelDef::Extern(rel) => {
-                    let values = backtrack!(invoke_extern_rel(runner, ctx, &id, rel, &values));
+                    let values = backtrack!(invoke_extern_rel(runner_ctx, ctx, &id, rel, &values));
                     Backtrack::Ok(RelResult::Result(values))
                 }
-                ast::RelDef::Defined(rel) => invoke_defined_rel(runner, ctx, &id, rel, &values),
+                ast::RelDef::Defined(rel) => invoke_defined_rel(runner_ctx, ctx, &id, rel, &values),
             }
         });
-        let pure = runner.interp_mut().cache.end();
+        let pure = runner_ctx.interp_mut().cache.end();
         let mut result = result.nest(id.span.clone(), || {
-            ErrorKind::Trace(TraceErrorKind::RelationInvocation { rel: id.node.clone() })
+            ErrorKind::Trace(TraceErrorKind::Invocation { text: id.node.clone() })
         });
         if !matches!(result, Backtrack::Ok(_)) {
             for (span, trace) in traces_pending.iter().rev() {
@@ -211,16 +211,18 @@ pub fn invoke_rel<Iface: Interface, Exn: Extern>(
         match result {
             RelResult::Result(values) => {
                 if pure && let Some(key) = key {
-                    runner.interp_mut().cache.rels.insert(key, values.clone());
+                    runner_ctx
+                        .interp_mut()
+                        .cache
+                        .rels
+                        .insert(key, values.clone());
                 }
                 return Backtrack::Ok(values);
             }
             RelResult::TailCall(id_tail, values_tail) => {
                 let id_caller = id.into_owned();
-                traces_pending.push((
-                    id_caller.span,
-                    TraceErrorKind::RelationInvocation { rel: id_caller.node },
-                ));
+                traces_pending
+                    .push((id_caller.span, TraceErrorKind::Invocation { text: id_caller.node }));
                 id = Cow::Owned(id_tail);
                 values = Cow::Owned(values_tail);
             }
@@ -231,19 +233,19 @@ pub fn invoke_rel<Iface: Interface, Exn: Extern>(
 // - Extern relation
 
 fn invoke_extern_rel<Iface: Interface, Exn: Extern>(
-    runner: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
+    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
     ctx: &Context<'_>,
     id: &ast::Id,
     rel: &ast::ExternRel,
     values: &[Value],
 ) -> Backtrack<Vec<Value>> {
-    let result = runner.call_extern_rel(&id.node, values);
-    runner
+    let result = runner_ctx.call_extern_rel(&id.node, values);
+    runner_ctx
         .interp_mut()
         .cache
         .mark_effect(result.as_ref().map_or(true, |(_, effect)| *effect));
     let (values, _) = backtrack_from_result!(result, &id.span);
-    if runner.interp().config.guard {
+    if runner_ctx.interp().config.guard {
         let typs = rel
             .rel_signature
             .not_typ
@@ -258,7 +260,7 @@ fn invoke_extern_rel<Iface: Interface, Exn: Extern>(
         );
         backtrack!(
             check_values(
-                runner.arena(),
+                runner_ctx.arena(),
                 ctx,
                 id,
                 &typs,
@@ -274,20 +276,24 @@ fn invoke_extern_rel<Iface: Interface, Exn: Extern>(
 // - Defined relation
 
 fn invoke_defined_rel<Iface: Interface, Exn: Extern>(
-    runner: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
+    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
     ctx: &Context<'_>,
     id: &ast::Id,
     rel: &ast::DefinedRel,
     values: &[Value],
 ) -> Backtrack<RelResult> {
     let ctx = backtrack!(assign::assign_exps(
-        runner.arena_mut(),
+        runner_ctx.arena_mut(),
         ctx.localize(),
         &rel.exps_input,
         values
     ));
-    let flow =
-        backtrack!(instr::eval_block_with_else(runner, ctx, &rel.block, rel.block_else.as_deref()));
+    let flow = backtrack!(instr::eval_block_with_else(
+        runner_ctx,
+        ctx,
+        &rel.block,
+        rel.block_else.as_deref()
+    ));
     match flow {
         Flow::Result(values) => Backtrack::Ok(RelResult::Result(values)),
         Flow::TailRel(id, values) => Backtrack::Ok(RelResult::TailCall(id, values)),
@@ -310,7 +316,7 @@ fn invoke_defined_rel<Iface: Interface, Exn: Extern>(
 // = Function invocation
 
 pub fn invoke_func<Iface: Interface, Exn: Extern>(
-    runner: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
+    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
     ctx: &Context<'_>,
     id: &ast::Id,
     targs: &[ast::Typ],
@@ -321,31 +327,33 @@ pub fn invoke_func<Iface: Interface, Exn: Extern>(
     let mut values = Cow::Borrowed(values);
     let mut traces_pending: Vec<(Span, TraceErrorKind)> = Vec::new();
     loop {
-        let key = cache_func(runner, ctx, &id, &values)
-            .then(|| CallKey::new(runner.arena(), &id.node, &values));
+        let key = cache_func(runner_ctx, ctx, &id, &values)
+            .then(|| CallKey::new(runner_ctx.arena(), &id.node, &values));
         if let Some(value) = key
             .as_ref()
-            .and_then(|key| runner.interp().cache.funcs.get(key))
+            .and_then(|key| runner_ctx.interp().cache.funcs.get(key))
         {
             return Backtrack::Ok(*value);
         }
-        runner.interp_mut().cache.begin();
+        runner_ctx.interp_mut().cache.begin();
         let result = stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
             let (_, func) = backtrack_from_result!(ctx.find_func(&id), &id.span);
             match func.as_ref() {
                 ast::MetaFuncDef::Extern(func) => Backtrack::Ok(FuncResult::Return(backtrack!(
-                    invoke_extern_func(runner, ctx, &id, func, &targs, &values)
+                    invoke_extern_func(runner_ctx, ctx, &id, func, &targs, &values)
                 ))),
                 ast::MetaFuncDef::Builtin(func) => Backtrack::Ok(FuncResult::Return(backtrack!(
-                    invoke_builtin_func(runner, ctx, &id, func, &targs, &values)
+                    invoke_builtin_func(runner_ctx, ctx, &id, func, &targs, &values)
                 ))),
-                ast::MetaFuncDef::Table(func) => invoke_table_func(runner, ctx, &id, func, &values),
+                ast::MetaFuncDef::Table(func) => {
+                    invoke_table_func(runner_ctx, ctx, &id, func, &values)
+                }
                 ast::MetaFuncDef::Defined(func) => {
-                    invoke_defined_func(runner, ctx, &id, func, &targs, &values)
+                    invoke_defined_func(runner_ctx, ctx, &id, func, &targs, &values)
                 }
             }
         });
-        let pure = runner.interp_mut().cache.end();
+        let pure = runner_ctx.interp_mut().cache.end();
         let mut result = result
             .nest(id.span.clone(), || ErrorKind::Trace(TraceErrorKind::function(&id, &targs)));
         if !matches!(result, Backtrack::Ok(_)) {
@@ -357,7 +365,7 @@ pub fn invoke_func<Iface: Interface, Exn: Extern>(
         match result {
             FuncResult::Return(value) => {
                 if pure && let Some(key) = key {
-                    runner.interp_mut().cache.funcs.insert(key, value);
+                    runner_ctx.interp_mut().cache.funcs.insert(key, value);
                 }
                 return Backtrack::Ok(value);
             }
@@ -375,23 +383,23 @@ pub fn invoke_func<Iface: Interface, Exn: Extern>(
 // - Extern function
 
 fn invoke_extern_func<Iface: Interface, Exn: Extern>(
-    runner: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
+    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
     ctx: &Context<'_>,
     id: &ast::Id,
     extern_func: &ast::ExternFunc,
     targs: &[ast::Typ],
     values: &[Value],
 ) -> Backtrack<Value> {
-    let result = runner.call_extern_func(&id.node, &[], values);
-    runner
+    let result = runner_ctx.call_extern_func(&id.node, &[], values);
+    runner_ctx
         .interp_mut()
         .cache
         .mark_effect(result.as_ref().map_or(true, |(_, effect)| *effect));
     let (value, _) = backtrack_from_result!(result, &id.span);
-    if runner.interp().config.guard {
+    if runner_ctx.interp().config.guard {
         backtrack!(
             check_func_output(
-                runner.arena(),
+                runner_ctx.arena(),
                 ctx,
                 id,
                 &extern_func.tparams,
@@ -408,24 +416,24 @@ fn invoke_extern_func<Iface: Interface, Exn: Extern>(
 // - Builtin function
 
 fn invoke_builtin_func<Iface: Interface, Exn: Extern>(
-    runner: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
+    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
     ctx: &Context<'_>,
     id: &ast::Id,
     builtin_func: &ast::BuiltinFunc,
     targs: &[ast::Typ],
     values: &[Value],
 ) -> Backtrack<Value> {
-    let result = runner.call_builtin(id, targs, values);
-    runner
+    let result = runner_ctx.call_builtin(id, targs, values);
+    runner_ctx
         .interp_mut()
         .cache
         .mark_effect(result.as_ref().map_or(true, |(_, effect)| *effect));
     match result {
         Ok((value, _)) => {
-            if runner.interp().config.guard {
+            if runner_ctx.interp().config.guard {
                 backtrack!(
                     check_func_output(
-                        runner.arena(),
+                        runner_ctx.arena(),
                         ctx,
                         id,
                         &builtin_func.tparams,
@@ -452,14 +460,14 @@ fn invoke_builtin_func<Iface: Interface, Exn: Extern>(
 // - Table function
 
 fn invoke_table_func<Iface: Interface, Exn: Extern>(
-    runner: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
+    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
     ctx: &Context<'_>,
     id: &ast::Id,
     func: &ast::TableFunc,
     values: &[Value],
 ) -> Backtrack<FuncResult> {
     let ctx_local = backtrack!(assign::assign_params(
-        runner.arena_mut(),
+        runner_ctx.arena_mut(),
         ctx,
         ctx.localize(),
         &func.params,
@@ -467,7 +475,7 @@ fn invoke_table_func<Iface: Interface, Exn: Extern>(
     ));
     let instrs = func.table_rows.iter().flat_map(|row| row.block.iter());
     let flow =
-        backtrack!(instr::eval_block_sequential(runner, Cow::Owned(ctx_local), instrs, true));
+        backtrack!(instr::eval_block_sequential(runner_ctx, Cow::Owned(ctx_local), instrs, true));
     match flow {
         Flow::Return(value) => Backtrack::Ok(FuncResult::Return(value)),
         _ => Backtrack::err(
@@ -480,7 +488,7 @@ fn invoke_table_func<Iface: Interface, Exn: Extern>(
 // - Defined function
 
 fn invoke_defined_func<Iface: Interface, Exn: Extern>(
-    runner: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
+    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
     ctx: &Context<'_>,
     id: &ast::Id,
     func: &ast::DefinedFunc,
@@ -504,10 +512,15 @@ fn invoke_defined_func<Iface: Interface, Exn: Extern>(
             &tparam.span
         );
     }
-    let ctx_local =
-        backtrack!(assign::assign_params(runner.arena_mut(), ctx, ctx_local, &func.params, values));
+    let ctx_local = backtrack!(assign::assign_params(
+        runner_ctx.arena_mut(),
+        ctx,
+        ctx_local,
+        &func.params,
+        values
+    ));
     let flow = backtrack!(instr::eval_block_with_else(
-        runner,
+        runner_ctx,
         ctx_local,
         &func.block,
         func.block_else.as_deref()

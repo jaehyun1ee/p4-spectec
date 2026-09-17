@@ -1,6 +1,6 @@
 //! Destructuring assignments preserve iteration paths and isolate list rows
 
-use super::super::context::{Bindings, FuncBindings};
+use super::super::context::{ReadContext, WriteContext};
 
 use std::{borrow::Borrow, rc::Rc};
 
@@ -27,7 +27,7 @@ use crate::interp::shared::{
 
 // = Expression assignment
 
-pub fn assign_exp<Ctx: Bindings>(
+pub fn assign_exp<Ctx: WriteContext>(
     arena: &mut ValueArena,
     ctx: Ctx,
     exp: &ast::Exp,
@@ -75,7 +75,7 @@ pub fn assign_exp<Ctx: Bindings>(
     }
 }
 
-pub fn assign_exps<Ctx: Bindings, T: Borrow<ast::Exp>>(
+pub fn assign_exps<Ctx: WriteContext, T: Borrow<ast::Exp>>(
     arena: &mut ValueArena,
     mut ctx: Ctx,
     exps: &[T],
@@ -103,7 +103,7 @@ pub fn assign_exps<Ctx: Bindings, T: Borrow<ast::Exp>>(
 
 // - Variable expression
 
-fn assign_var_exp<Ctx: Bindings>(
+fn assign_var_exp<Ctx: WriteContext>(
     _arena: &mut ValueArena,
     mut ctx: Ctx,
     id: &ast::Id,
@@ -115,7 +115,7 @@ fn assign_var_exp<Ctx: Bindings>(
 
 // - Tuple expression
 
-fn assign_tuple_exp<Ctx: Bindings>(
+fn assign_tuple_exp<Ctx: WriteContext>(
     arena: &mut ValueArena,
     ctx: Ctx,
     exps: &[ast::Exp],
@@ -126,7 +126,7 @@ fn assign_tuple_exp<Ctx: Bindings>(
 
 // - Case expression
 
-fn assign_case_exp<Ctx: Bindings>(
+fn assign_case_exp<Ctx: WriteContext>(
     arena: &mut ValueArena,
     ctx: Ctx,
     not_exp: &ast::NotExp,
@@ -138,7 +138,7 @@ fn assign_case_exp<Ctx: Bindings>(
 
 // - Struct expression
 
-fn assign_str_exp<Ctx: Bindings>(
+fn assign_str_exp<Ctx: WriteContext>(
     arena: &mut ValueArena,
     ctx: Ctx,
     exp_fields: &[ast::ExpField],
@@ -150,7 +150,7 @@ fn assign_str_exp<Ctx: Bindings>(
 
 // - Optional expression
 
-fn assign_opt_exp<Ctx: Bindings>(
+fn assign_opt_exp<Ctx: WriteContext>(
     arena: &mut ValueArena,
     ctx: Ctx,
     exp: &ast::Exp,
@@ -173,7 +173,7 @@ fn assign_opt_exp<Ctx: Bindings>(
 
 // - List expression
 
-fn assign_list_exp<Ctx: Bindings>(
+fn assign_list_exp<Ctx: WriteContext>(
     arena: &mut ValueArena,
     ctx: Ctx,
     exps: &[ast::Exp],
@@ -184,7 +184,7 @@ fn assign_list_exp<Ctx: Bindings>(
 
 // - Cons expression
 
-fn assign_cons_exp<Ctx: Bindings>(
+fn assign_cons_exp<Ctx: WriteContext>(
     arena: &mut ValueArena,
     ctx: Ctx,
     exp: &ast::Exp,
@@ -207,7 +207,7 @@ fn assign_cons_exp<Ctx: Bindings>(
 
 // - Iteration expression
 
-fn assign_iter_exp<Ctx: Bindings>(
+fn assign_iter_exp<Ctx: WriteContext>(
     arena: &mut ValueArena,
     mut ctx: Ctx,
     exp: &ast::Exp,
@@ -249,7 +249,8 @@ fn assign_iter_exp<Ctx: Bindings>(
         }
         ast::Iter::List => {
             let values = backtrack_from_result!(get::list(arena, &value), span).to_vec();
-            let ctx_sub = ctx.with_empty_values();
+            let mut ctx_sub = ctx.clone();
+            ctx_sub.clear_value_bindings();
             let mut ctxs = Vec::with_capacity(values.len());
             for value in values {
                 ctxs.push(backtrack!(assign_exp(arena, ctx_sub.clone(), exp_inner, value)));
@@ -279,9 +280,9 @@ fn assign_iter_exp<Ctx: Bindings>(
 
 // = Argument assignment
 
-pub fn assign_arg<Ctx: Bindings + FuncBindings>(
+pub fn assign_arg<Ctx: WriteContext>(
     arena: &mut ValueArena,
-    ctx_caller: &impl FuncBindings<Func = Ctx::Func>,
+    ctx_caller: &impl ReadContext<Func = Ctx::Func>,
     ctx_callee: Ctx,
     arg: &ast::Arg,
     value: Value,
@@ -292,9 +293,9 @@ pub fn assign_arg<Ctx: Bindings + FuncBindings>(
     }
 }
 
-pub fn assign_args<Ctx: Bindings + FuncBindings>(
+pub fn assign_args<Ctx: WriteContext>(
     arena: &mut ValueArena,
-    ctx_caller: &impl FuncBindings<Func = Ctx::Func>,
+    ctx_caller: &impl ReadContext<Func = Ctx::Func>,
     ctx_callee: Ctx,
     args: &[ast::Arg],
     values: &[Value],
@@ -317,7 +318,7 @@ pub fn assign_args<Ctx: Bindings + FuncBindings>(
 
 // - Expression argument
 
-fn assign_exp_arg<Ctx: Bindings>(
+fn assign_exp_arg<Ctx: WriteContext>(
     arena: &mut ValueArena,
     ctx: Ctx,
     exp: &ast::Exp,
@@ -328,9 +329,9 @@ fn assign_exp_arg<Ctx: Bindings>(
 
 // - Function argument
 
-pub fn assign_def<Ctx: FuncBindings>(
+pub fn assign_def<Ctx: WriteContext>(
     arena: &ValueArena,
-    ctx_caller: &impl FuncBindings<Func = Ctx::Func>,
+    ctx_caller: &impl ReadContext<Func = Ctx::Func>,
     mut ctx_callee: Ctx,
     id: &ast::Id,
     value: Value,
