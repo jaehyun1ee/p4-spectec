@@ -688,7 +688,11 @@ fn test_native_stf_encoding_modes_preserve_outputs_and_state() {
         interp::al::Config,
         lang::data::value::external::encode,
         pass::{algo, elaborate},
-        sim_plugin::{Simulator, build_with_encoding, psa::pipe},
+        runner::build_al,
+        sim_plugin::{
+            psa::{Psa, pipe},
+            runner as sim_runner,
+        },
     };
     use std::{
         fs,
@@ -752,19 +756,12 @@ fn test_native_stf_encoding_modes_preserve_outputs_and_state() {
         let spec_il = elaborate::convert(spec_el).unwrap();
         let spec_al = algo::convert(spec_il).unwrap();
 
-        // Drop each simulator before building the next; retain no state history
+        // Drop each runner before building the next; retain no state history
         for encoding in [Encoding::ArenaRelative, Encoding::ArenaIndependent] {
-            let mut simulator = build_with_encoding(
-                spec_al.clone(),
-                "psa",
-                Config::new(true, false, false),
-                encoding,
-            )
-            .unwrap();
-            let mut run_case = simulator.init_pipe(&includes, &path).unwrap();
-            let Simulator::Psa(runner) = &mut simulator else {
-                panic!("expected PSA simulator");
-            };
+            let mut runner =
+                build_al(spec_al.clone(), Config::new(true, false, false), Psa::new(encoding))
+                    .unwrap();
+            let mut run_case = sim_runner::init_pipe(&mut runner, &includes, &path).unwrap();
             let values = ["ip", "ig", "reg"]
                 .into_iter()
                 .map(|name| {
@@ -781,12 +778,8 @@ fn test_native_stf_encoding_modes_preserve_outputs_and_state() {
                 let tx_matched = if command == 0 {
                     None
                 } else {
-                    simulator
-                        .run_stf_stmt(&mut run_case, &stmts[command - 1])
+                    sim_runner::run_stf_stmt(&mut runner, &mut run_case, &stmts[command - 1])
                         .unwrap_or_else(|error| panic!("{encoding} command {command}: {error}"))
-                };
-                let Simulator::Psa(runner) = &mut simulator else {
-                    panic!("expected PSA simulator");
                 };
                 // Compare known native state; root trees contain opaque externs
                 let arch = pipe::find_arch_state(&mut runner.context(), run_case.state.value_arch)

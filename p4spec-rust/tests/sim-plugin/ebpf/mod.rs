@@ -111,18 +111,16 @@ fn test_sl_counter_state_persists_across_packets_in_both_determinism_modes() {
         frontend::parse::parse_files,
         interp::sl::Config,
         pass::{algo, elaborate},
-        sim_plugin::{self, Simulator},
+        runner::build_sl,
     };
 
     let spec_el = parse_files([super::repo().join("spec")]).unwrap();
     let spec_il = elaborate::convert(spec_el).unwrap();
     let spec_al = algo::convert(spec_il).unwrap();
     for det in [false, true] {
-        let Simulator::Ebpf(mut runner) =
-            sim_plugin::build_sl(spec_al.clone(), "ebpf", Config::new(true, det, false)).unwrap()
-        else {
-            panic!("eBPF simulator")
-        };
+        let mut runner =
+            build_sl(spec_al.clone(), Config::new(true, det, false), Ebpf::new(Default::default()))
+                .unwrap();
         let program = super::parse_program(
             runner.arena_mut(),
             &super::repo().join("p4spec-rust/tests/fixtures/sim-plugin/ebpf/counter.p4"),

@@ -246,10 +246,7 @@ fn sim_command(mut args: SimArgs) -> ExitCode {
     }
 }
 
-fn simulate<Interp>(mut simulator: sim_plugin::Simulator<Interp>, args: &SimArgs) -> ExitCode
-where
-    Interp: sim_plugin::SimulatorInterpreter,
-{
+fn simulate(mut simulator: sim_plugin::Simulator, args: &SimArgs) -> ExitCode {
     let mut run = match simulator.init_pipe(&args.includes, &args.program) {
         Ok(run) => run,
         Err(error) => return command_error(error),
