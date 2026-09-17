@@ -15,8 +15,6 @@
 //! `apply_rel` and `apply_func` rename definition inputs consistently in
 //! both the main body and fallback, avoiding names already used there
 
-use std::{cell::Cell, rc::Rc};
-
 use crate::lang::{
     common::{ds::set::IdSet, source::Span},
     hints::input,
@@ -42,12 +40,8 @@ fn find_rename_ticks(frees: &IdSet, id: &Id) -> Option<Id> {
 }
 
 // Reserve each choice before the next binding: (x'', x''') can become (x, x')
-fn binding_renamer(
-    changed: &Rc<Cell<bool>>,
-    frees: impl FnOnce() -> IdSet,
-    ids: &IdSet,
-) -> Renamer {
-    let mut renamer = Renamer::empty().with_changes(changed);
+fn binding_renamer(frees: impl FnOnce() -> IdSet, ids: &IdSet) -> Renamer {
+    let mut renamer = Renamer::empty();
     if !ids.iter().any(|id| id.node.ends_with('\'')) {
         return renamer;
     }
@@ -68,7 +62,7 @@ fn binding_renamer(
 // Under `if x { ... }`, a binding x' can stay x' but cannot become x
 
 fn upstream_instr(
-    changed: &Rc<Cell<bool>>,
+    changed: &mut bool,
     frees: &IdSet,
     instr_ol: Instr,
 ) -> Result<Instr, StructureError> {
@@ -78,7 +72,7 @@ fn upstream_instr(
 }
 
 fn upstream_instr_kind(
-    changed: &Rc<Cell<bool>>,
+    changed: &mut bool,
     frees: &IdSet,
     span: &Span,
     instr_kind_ol: InstrKind,
@@ -95,7 +89,7 @@ fn upstream_instr_kind(
 }
 
 fn upstream_block(
-    changed: &Rc<Cell<bool>>,
+    changed: &mut bool,
     frees: &IdSet,
     block: Block,
 ) -> Result<Block, StructureError> {
@@ -108,7 +102,7 @@ fn upstream_block(
 // - If instruction
 
 fn upstream_if_instr(
-    changed: &Rc<Cell<bool>>,
+    changed: &mut bool,
     frees: &IdSet,
     instr_ol: IfInstr,
 ) -> Result<InstrKind, StructureError> {
@@ -122,7 +116,7 @@ fn upstream_if_instr(
 // - Hold instruction
 
 fn upstream_hold_instr(
-    changed: &Rc<Cell<bool>>,
+    changed: &mut bool,
     frees: &IdSet,
     instr_ol: HoldInstr,
 ) -> Result<InstrKind, StructureError> {
@@ -137,7 +131,7 @@ fn upstream_hold_instr(
 // - Case instruction
 
 fn upstream_case_instr(
-    changed: &Rc<Cell<bool>>,
+    changed: &mut bool,
     frees: &IdSet,
     instr_ol: CaseInstr,
 ) -> Result<InstrKind, StructureError> {
@@ -160,7 +154,7 @@ fn upstream_case_instr(
 // - Group instruction
 
 fn upstream_group_instr(
-    changed: &Rc<Cell<bool>>,
+    changed: &mut bool,
     frees: &IdSet,
     instr_ol: GroupInstr,
 ) -> Result<InstrKind, StructureError> {
@@ -174,7 +168,7 @@ fn upstream_group_instr(
 // - Let instruction
 
 fn upstream_let_instr(
-    changed: &Rc<Cell<bool>>,
+    changed: &mut bool,
     frees_upstream: &IdSet,
     instr_ol: LetInstr,
 ) -> Result<InstrKind, StructureError> {
@@ -182,7 +176,6 @@ fn upstream_let_instr(
     let frees_l = exp_l.free();
     let frees_r = exp_r.free();
     let renamer = binding_renamer(
-        changed,
         || {
             frees_l
                 .clone()
@@ -192,10 +185,10 @@ fn upstream_let_instr(
         },
         &frees_l,
     );
-    let exp_l = renamer.rename_exp(exp_l);
-    let iter_instrs = renamer.rename_iterinstrs_bind(iter_instrs);
+    let exp_l = renamer.rename_exp(changed, exp_l);
+    let iter_instrs = renamer.rename_iterinstrs_bind(changed, iter_instrs);
     let frees = exp_l.free().union(frees_r).union(frees_upstream.clone());
-    let block = renamer.rename_block(block)?;
+    let block = renamer.rename_block(changed, block)?;
     let block = upstream_block(changed, &frees, block)?;
     let instr = LetInstr { exp_l, exp_r, iter_instrs, block };
     Ok(InstrKind::Let(instr))
@@ -204,7 +197,7 @@ fn upstream_let_instr(
 // - Rule instruction
 
 fn upstream_rule_instr(
-    changed: &Rc<Cell<bool>>,
+    changed: &mut bool,
     frees_upstream: &IdSet,
     span: &Span,
     instr_ol: RuleInstr,
@@ -216,7 +209,6 @@ fn upstream_rule_instr(
     let frees_output = exps_output.as_slice().free();
     let frees_input = exps_input.as_slice().free();
     let renamer = binding_renamer(
-        changed,
         || {
             frees_input
                 .clone()
@@ -226,8 +218,8 @@ fn upstream_rule_instr(
         },
         &frees_output,
     );
-    let exps_output = renamer.rename_exps(exps_output);
-    let iter_instrs = renamer.rename_iterinstrs_bind(iter_instrs);
+    let exps_output = renamer.rename_exps(changed, exps_output);
+    let iter_instrs = renamer.rename_iterinstrs_bind(changed, iter_instrs);
     let frees = frees_input
         .union(exps_output.as_slice().free())
         .union(frees_upstream.clone());
@@ -235,7 +227,7 @@ fn upstream_rule_instr(
         .map_err(|error| StructureError::new(StructureErrorKind::Input(error), span.clone()))?;
     let mixop = not_exp.to_mixop();
     let not_exp = Mixop::fill(&mixop, exps).expect("validated arguments preserve the mixfix arity");
-    let block = renamer.rename_block(block)?;
+    let block = renamer.rename_block(changed, block)?;
     let block = upstream_block(changed, &frees, block)?;
     let instr = RuleInstr { id, not_exp, input_hint, iter_instrs, block };
     Ok(InstrKind::Rule(instr))
@@ -244,7 +236,7 @@ fn upstream_rule_instr(
 // == Definition inputs
 
 fn upstream_exps(
-    changed: &Rc<Cell<bool>>,
+    changed: &mut bool,
     (mut exps_match, mut block, mut block_else): (Vec<Exp>, Block, Option<Block>),
 ) -> Result<(Vec<Exp>, Block, Option<Block>), StructureError> {
     let ids = exps_match.as_slice().free();
@@ -257,11 +249,11 @@ fn upstream_exps(
         if let Some(id_rename) = find_rename_ticks(&frees, id) {
             frees.take(id);
             frees.insert(id_rename.clone());
-            let renamer = Renamer::singleton(id.clone(), id_rename).with_changes(changed);
-            exps_match = renamer.rename_exps(exps_match);
-            block = renamer.rename_block(block)?;
+            let renamer = Renamer::singleton(id.clone(), id_rename);
+            exps_match = renamer.rename_exps(changed, exps_match);
+            block = renamer.rename_block(changed, block)?;
             block_else = block_else
-                .map(|block| renamer.rename_block(block))
+                .map(|block| renamer.rename_block(changed, block))
                 .transpose()?;
         }
     }
@@ -269,7 +261,7 @@ fn upstream_exps(
 }
 
 fn upstream_args(
-    changed: &Rc<Cell<bool>>,
+    changed: &mut bool,
     (mut args_input, mut block, mut block_else): (Vec<Arg>, Block, Option<Block>),
 ) -> Result<(Vec<Arg>, Block, Option<Block>), StructureError> {
     let ids = args_input.as_slice().free();
@@ -282,11 +274,11 @@ fn upstream_args(
         if let Some(id_rename) = find_rename_ticks(&frees, id) {
             frees.take(id);
             frees.insert(id_rename.clone());
-            let renamer = Renamer::singleton(id.clone(), id_rename).with_changes(changed);
-            args_input = renamer.rename_args(args_input);
-            block = renamer.rename_block(block)?;
+            let renamer = Renamer::singleton(id.clone(), id_rename);
+            args_input = renamer.rename_args(changed, args_input);
+            block = renamer.rename_block(changed, block)?;
             block_else = block_else
-                .map(|block| renamer.rename_block(block))
+                .map(|block| renamer.rename_block(changed, block))
                 .transpose()?;
         }
     }
@@ -296,7 +288,7 @@ fn upstream_args(
 // == Entry points
 
 pub(crate) fn apply_rel(
-    changed: &Rc<Cell<bool>>,
+    changed: &mut bool,
     body: (Vec<Exp>, Block, Option<Block>),
 ) -> Result<(Vec<Exp>, Block, Option<Block>), StructureError> {
     let (exps_match, mut block, mut block_else) = upstream_exps(changed, body)?;
@@ -309,7 +301,7 @@ pub(crate) fn apply_rel(
 }
 
 pub(crate) fn apply_func(
-    changed: &Rc<Cell<bool>>,
+    changed: &mut bool,
     body: (Vec<Arg>, Block, Option<Block>),
 ) -> Result<(Vec<Arg>, Block, Option<Block>), StructureError> {
     let (args_input, mut block, mut block_else) = upstream_args(changed, body)?;

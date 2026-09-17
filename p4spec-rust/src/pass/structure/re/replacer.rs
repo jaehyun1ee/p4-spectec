@@ -356,9 +356,9 @@ impl Replacer {
         let frees_l = exp_l.free();
         let replacer = self.filter(|id, _| !frees_l.contains(id));
         let renamer_fresh = replacer.freshen_binders(&frees_l, &block);
-        let exp_l = renamer_fresh.rename_exp(exp_l);
-        let iter_instrs = renamer_fresh.rename_iterinstrs_bound(iter_instrs);
-        let block = renamer_fresh.rename_block(block)?;
+        let exp_l = renamer_fresh.rename_exp(&mut false, exp_l);
+        let iter_instrs = renamer_fresh.rename_iterinstrs_bound(&mut false, iter_instrs);
+        let block = renamer_fresh.rename_block(&mut false, block)?;
         let exp_r = replacer.replace_exp(exp_r);
         let iter_instrs = replacer.replace_iterinstrs_bound(iter_instrs);
         let block = replacer.replace_block(block)?;
@@ -380,9 +380,9 @@ impl Replacer {
         let frees_output = exps_output.as_slice().free();
         let replacer = self.filter(|id, _| !frees_output.contains(id));
         let renamer_fresh = replacer.freshen_binders(&frees_output, &block);
-        let exps_output = renamer_fresh.rename_exps(exps_output);
-        let iter_instrs = renamer_fresh.rename_iterinstrs_bound(iter_instrs);
-        let block = renamer_fresh.rename_block(block)?;
+        let exps_output = renamer_fresh.rename_exps(&mut false, exps_output);
+        let iter_instrs = renamer_fresh.rename_iterinstrs_bound(&mut false, iter_instrs);
+        let block = renamer_fresh.rename_block(&mut false, block)?;
         let exps = input::combine(&input_hint, exps_input, exps_output)
             .map_err(|error| StructureError::new(StructureErrorKind::Input(error), span.clone()))?;
         let mixop = not_exp.to_mixop();

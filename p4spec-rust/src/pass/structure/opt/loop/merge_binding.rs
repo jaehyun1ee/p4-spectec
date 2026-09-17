@@ -149,7 +149,7 @@ fn collapse_expunit(
     expunit_target: &ExpUnit<'_>,
 ) -> Option<Renamer> {
     let renamer = collapse_exp(renamer, expunit.exp, expunit_target.exp)?;
-    let iter_exps_target = renamer.rename_iterexps(expunit_target.iter_exps.clone());
+    let iter_exps_target = renamer.rename_iterexps(&mut false, expunit_target.iter_exps.clone());
     expunit
         .iter_exps
         .syntax_eq(&iter_exps_target)
@@ -270,7 +270,7 @@ fn collapse_iter_exp(
 ) -> Option<Renamer> {
     // x* against y* must also have equal iterators after renaming y -> x
     let renamer = collapse_exp(renamer, exp, exp_target)?;
-    let iter_exp_target = renamer.rename_iterexp(iter_exp_target.clone());
+    let iter_exp_target = renamer.rename_iterexp(&mut false, iter_exp_target.clone());
     iter_exp.syntax_eq(&iter_exp_target).then_some(renamer)
 }
 
@@ -317,7 +317,7 @@ fn downstream_let_instr(
     };
     let LetInstr { block, .. } = instr_let;
     let block = std::mem::take(block);
-    let block = renamer.rename_block(block)?;
+    let block = renamer.rename_block(&mut false, block)?;
     Ok(Some(block))
 }
 
@@ -334,7 +334,7 @@ fn downstream_rule_instr(
     };
     let RuleInstr { block, .. } = instr_rule;
     let block = std::mem::take(block);
-    let block = renamer.rename_block(block)?;
+    let block = renamer.rename_block(&mut false, block)?;
     Ok(Some(block))
 }
 

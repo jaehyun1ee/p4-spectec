@@ -5,8 +5,6 @@
 pub(super) mod rename_tick;
 pub(super) mod revive_underscore;
 
-use std::{cell::Cell, rc::Rc};
-
 use super::{StructureError, ol::ast::Block};
 use crate::lang::il::ast::{Arg, Exp};
 
@@ -20,13 +18,12 @@ pub(crate) fn pretty_rel(
     block: Block,
     block_else: Option<Block>,
 ) -> Result<(Vec<Exp>, Block, Option<Block>), StructureError> {
-    let changed = Rc::new(Cell::new(false));
     let mut body = (exps_match, block, block_else);
     loop {
-        changed.set(false);
-        body = revive_underscore::apply_rel(&changed, body)?;
-        body = rename_tick::apply_rel(&changed, body)?;
-        if !changed.get() {
+        let mut changed = false;
+        body = revive_underscore::apply_rel(&mut changed, body)?;
+        body = rename_tick::apply_rel(&mut changed, body)?;
+        if !changed {
             return Ok(body);
         }
     }
@@ -39,13 +36,12 @@ pub(crate) fn pretty_func(
     block: Block,
     block_else: Option<Block>,
 ) -> Result<(Vec<Arg>, Block, Option<Block>), StructureError> {
-    let changed = Rc::new(Cell::new(false));
     let mut body = (args_input, block, block_else);
     loop {
-        changed.set(false);
-        body = revive_underscore::apply_func(&changed, body)?;
-        body = rename_tick::apply_func(&changed, body)?;
-        if !changed.get() {
+        let mut changed = false;
+        body = revive_underscore::apply_func(&mut changed, body)?;
+        body = rename_tick::apply_func(&mut changed, body)?;
+        if !changed {
             return Ok(body);
         }
     }

@@ -4,7 +4,7 @@ use crate::pass::structure::pretty::rename_tick;
 #[test]
 fn test_ticks_fill_smallest_available_gap() {
     let (exps_match, block, block_else) = rename_tick::apply_rel(
-        &Default::default(),
+        &mut false,
         (vec![variable("x'''")], vec![ret("x'''"), ret("x"), ret("x''")], Some(vec![ret("x'''")])),
     )
     .unwrap();
@@ -32,8 +32,7 @@ fn test_nested_bindings_avoid_upstream_guard_names_and_keep_iterator_roles() {
         total: false,
     }));
     let (_, block, _) =
-        rename_tick::apply_rel(&Default::default(), (vec![variable("x'")], vec![instr_case], None))
-            .unwrap();
+        rename_tick::apply_rel(&mut false, (vec![variable("x'")], vec![instr_case], None)).unwrap();
     let InstrKind::Case(instr_case) = &block[0].node else { panic!("expected case") };
     let InstrKind::Let(instr_let) = &instr_case.cases[0].block[0].node else {
         panic!("expected let")
@@ -66,7 +65,7 @@ fn test_rule_output_renaming_keeps_input_and_locations() {
         block: vec![ret("out'''")],
     }));
     let (_, block, _) =
-        rename_tick::apply_rel(&Default::default(), (vec![], vec![instr_rule], None)).unwrap();
+        rename_tick::apply_rel(&mut false, (vec![], vec![instr_rule], None)).unwrap();
     let InstrKind::Rule(instr_rule) = &block[0].node else { panic!("expected rule") };
     let exps = instr_rule.not_exp.args();
     assert_eq!(var_id(exps[0]).node, "input");
@@ -91,8 +90,7 @@ fn test_unticked_binding_keeps_notation_storage_and_input_spans() {
     )];
     let block_expect = block.clone();
     let (_, block, _) =
-        rename_tick::apply_rel(&Default::default(), (vec![variable("input")], block, None))
-            .unwrap();
+        rename_tick::apply_rel(&mut false, (vec![variable("input")], block, None)).unwrap();
     assert_eq!(block, block_expect);
     let InstrKind::Let(instr_let) = &block[0].node else { unreachable!() };
     let exp = return_exp(&instr_let.block[0]);
@@ -103,7 +101,7 @@ fn test_unticked_binding_keeps_notation_storage_and_input_spans() {
 #[test]
 fn test_tick_gap_uses_whole_names_and_preserves_existing_binding() {
     let (_, block, _) = rename_tick::apply_rel(
-        &Default::default(),
+        &mut false,
         (
             vec![variable("é"), variable("é'")],
             vec![

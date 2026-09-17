@@ -148,9 +148,9 @@ fn test_prettification_matches_syntax_fixed_point_with_shadowing_and_iterators()
                 }))]);
                 let body = (vec![exp_input.clone()], block.clone(), block_else.clone());
                 let body_expect = reference(body.clone(), |body| {
-                    let changed = Default::default();
-                    let body = revive_underscore::apply_rel(&changed, body).unwrap();
-                    rename_tick::apply_rel(&changed, body).unwrap()
+                    let mut changed = false;
+                    let body = revive_underscore::apply_rel(&mut changed, body).unwrap();
+                    rename_tick::apply_rel(&mut changed, body).unwrap()
                 });
                 assert_eq!(
                     pretty_rel(body.0, body.1, body.2).unwrap(),
@@ -162,9 +162,9 @@ fn test_prettification_matches_syntax_fixed_point_with_shadowing_and_iterators()
                 };
                 let body = (vec![arg_input], block, block_else);
                 let body_expect = reference(body.clone(), |body| {
-                    let changed = Default::default();
-                    let body = revive_underscore::apply_func(&changed, body).unwrap();
-                    rename_tick::apply_func(&changed, body).unwrap()
+                    let mut changed = false;
+                    let body = revive_underscore::apply_func(&mut changed, body).unwrap();
+                    rename_tick::apply_func(&mut changed, body).unwrap()
                 });
                 assert_eq!(
                     pretty_func(body.0, body.1, body.2).unwrap(),
