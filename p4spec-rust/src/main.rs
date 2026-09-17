@@ -4,14 +4,11 @@ use clap::{Args, Parser, Subcommand};
 
 use p4spec_rust::{
     frontend::parse::parse_files,
-    interface::{self, p4::parse::parse_file},
-    interp::{
-        al::{AlInterp, Config as AlConfig, context::Global as AlGlobal},
-        sl::{Config as SlConfig, SlInterp, context::Global as SlGlobal},
-    },
+    interface::p4::parse::parse_file,
+    interp::{al::Config as AlConfig, sl::Config as SlConfig},
     lang::{al, data::value::external::Encoding, il, sl, traits::print::Print},
     pass::{algo, elaborate, structure},
-    runner::{BuiltinInterface, Interpreter, Runner},
+    runner::{self, BuiltinInterface, Interpreter, Runner},
     sim_plugin::{self, dummy::Dummy, runner::Error as SimError},
     stf,
 };
@@ -138,35 +135,19 @@ fn run_command(mut args: RunArgs) -> ExitCode {
         Ok(spec) => spec,
         Err(code) => return code,
     };
-    let interface = interface::p4(&spec_al);
     if args.interpreter.al {
-        let global = match AlGlobal::load(spec_al) {
-            Ok(global) => global,
+        let config = AlConfig::new(!args.no_cache, args.det, args.guard);
+        let runner = match runner::build_al(spec_al, config, Dummy) {
+            Ok(runner) => runner,
             Err(error) => return command_error(error),
         };
-        let runner = Runner::<AlInterp, _, _>::new(
-            global,
-            AlInterp::new(AlConfig::new(!args.no_cache, args.det, args.guard)),
-            interface,
-            Dummy,
-        );
         run_program(runner, &args)
     } else {
-        let without_rule_groups = true;
-        let spec_sl = match structure::convert(spec_al, without_rule_groups) {
-            Ok(spec) => spec,
+        let config = SlConfig::new(!args.no_cache, args.det, args.guard);
+        let runner = match runner::build_sl(spec_al, config, Dummy) {
+            Ok(runner) => runner,
             Err(error) => return command_error(error),
         };
-        let global = match SlGlobal::load(spec_sl) {
-            Ok(global) => global,
-            Err(error) => return command_error(error),
-        };
-        let runner = Runner::<SlInterp, _, _>::new(
-            global,
-            SlInterp::new(SlConfig::new(!args.no_cache, args.det, args.guard)),
-            interface,
-            Dummy,
-        );
         run_program(runner, &args)
     }
 }

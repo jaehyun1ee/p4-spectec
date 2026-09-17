@@ -6,17 +6,11 @@ use expect_test::expect_file;
 use indicatif::{ProgressBar, ProgressStyle};
 use p4spec_rust::{
     frontend::parse::parse_files,
-    interface::{
-        self,
-        p4::{error::P4ErrorKind, parse::parse_file},
-    },
-    interp::{
-        al::{AlInterp, Config, context::Global},
-        sl::{Config as SlConfig, SlInterp, context::Global as SlGlobal},
-    },
+    interface::p4::{error::P4ErrorKind, parse::parse_file},
+    interp::{al::Config, sl::Config as SlConfig},
     lang::al,
-    pass::{algo, elaborate, structure},
-    runner::{BuiltinInterface, Interpreter, Runner},
+    pass::{algo, elaborate},
+    runner::{self, BuiltinInterface, Interpreter, Runner},
     sim_plugin::dummy::Dummy,
 };
 use std::{
@@ -67,14 +61,8 @@ pub fn run() -> Result<()> {
     .into_iter()
     .collect::<Result<Vec<_>>>()?;
     run_with("AL cache=on det=false", suites, |spec_al| {
-        let interface = interface::p4(&spec_al);
-        let global = Global::load(spec_al).map_err(|error| Error::Invalid(error.to_string()))?;
-        Ok(Runner::new(
-            global,
-            AlInterp::new(Config::new(true, false, false)),
-            interface,
-            Dummy,
-        ))
+        runner::build_al(spec_al, Config::new(true, false, false), Dummy)
+            .map_err(|error| Error::Invalid(error.to_string()))
     })
 }
 
@@ -98,17 +86,8 @@ pub fn run_sl(det: bool) -> Result<()> {
     .into_iter()
     .collect::<Result<Vec<_>>>()?;
     run_with(&format!("SL cache=on det={det}"), suites, |spec_al| {
-        let interface = interface::p4(&spec_al);
-        let without_rule_groups = true;
-        let spec_sl = structure::convert(spec_al, without_rule_groups)
-            .map_err(|error| Error::Invalid(error.to_string()))?;
-        let global = SlGlobal::load(spec_sl).map_err(|error| Error::Invalid(error.to_string()))?;
-        Ok(Runner::new(
-            global,
-            SlInterp::new(SlConfig::new(true, det, false)),
-            interface,
-            Dummy,
-        ))
+        runner::build_sl(spec_al, SlConfig::new(true, det, false), Dummy)
+            .map_err(|error| Error::Invalid(error.to_string()))
     })
 }
 

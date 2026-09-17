@@ -10,12 +10,56 @@ mod externs;
 mod interface;
 mod interpreter;
 
-use crate::lang::data::value::{Value, ValueArena};
+use crate::{
+    interface as builtin,
+    interp::{
+        al::{AlInterp, Config as AlConfig, context::Global as AlGlobal},
+        shared::error::Error as InterpError,
+        sl::{Config as SlConfig, SlInterp, context::Global as SlGlobal},
+    },
+    lang::{
+        al,
+        data::value::{Value, ValueArena},
+    },
+    pass::structure,
+};
 
 pub use context::RunnerContext;
 pub use externs::{Extern, ExternError, NullExtern};
 pub use interface::{BuiltinInterface, Interface, InterfaceError, NullInterface};
 pub use interpreter::Interpreter;
+
+// == Runner construction
+
+#[derive(Debug, thiserror::Error)]
+pub enum BuildError {
+    #[error(transparent)]
+    Interp(#[from] InterpError),
+    #[error(transparent)]
+    Structure(#[from] structure::StructureError),
+}
+
+pub fn build_al<Ext: Extern>(
+    spec: al::ast::Spec,
+    config: AlConfig,
+    external: Ext,
+) -> Result<Runner<AlInterp, BuiltinInterface, Ext>, BuildError> {
+    let interface = builtin::p4(&spec);
+    let global = AlGlobal::load(spec)?;
+    Ok(Runner::new(global, AlInterp::new(config), interface, external))
+}
+
+pub fn build_sl<Ext: Extern>(
+    spec_al: al::ast::Spec,
+    config: SlConfig,
+    external: Ext,
+) -> Result<Runner<SlInterp, BuiltinInterface, Ext>, BuildError> {
+    let interface = builtin::p4(&spec_al);
+    let without_rule_groups = true;
+    let spec_sl = structure::convert(spec_al, without_rule_groups)?;
+    let global = SlGlobal::load(spec_sl)?;
+    Ok(Runner::new(global, SlInterp::new(config), interface, external))
+}
 
 // == Runner assembly
 

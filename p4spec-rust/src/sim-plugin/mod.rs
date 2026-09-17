@@ -8,19 +8,17 @@ use self::{
     v1model::V1Model,
 };
 use crate::{
-    interface,
     interp::{
-        al::{AlInterp, Config, context::Global},
+        al::{AlInterp, Config},
         shared::error::Error as InterpError,
-        sl::{Config as SlConfig, SlInterp, context::Global as SlGlobal},
+        sl::{Config as SlConfig, SlInterp},
     },
     lang::{
         al::ast::Spec,
         common::source::Phrase,
         data::value::{ValueArena, external::Encoding},
     },
-    pass::structure,
-    runner::{BuiltinInterface, Interpreter, Runner},
+    runner::{self as host, BuiltinInterface, Interpreter, Runner},
     stf::ast::Statement,
 };
 use std::path::{Path, PathBuf};
@@ -46,9 +44,7 @@ pub enum BuildError {
     #[error("architecture {0} is not supported")]
     UnsupportedArchitecture(String),
     #[error(transparent)]
-    Spec(#[from] InterpError),
-    #[error(transparent)]
-    Structure(#[from] structure::StructureError),
+    Runner(#[from] host::BuildError),
 }
 
 // == Simulator
@@ -126,22 +122,12 @@ pub fn build_with_encoding(
     if !matches!(arch, "ebpf" | "psa" | "v1model") {
         return Err(BuildError::UnsupportedArchitecture(arch.to_owned()));
     }
-    let interface = interface::p4(&spec);
-    let global = Global::load(spec)?;
-    let interp = AlInterp::new(config);
     Ok(match arch {
-        "ebpf" => {
-            Simulator::Ebpf(Box::new(Runner::new(global, interp, interface, Ebpf::new(encoding))))
+        "ebpf" => Simulator::Ebpf(Box::new(host::build_al(spec, config, Ebpf::new(encoding))?)),
+        "psa" => Simulator::Psa(Box::new(host::build_al(spec, config, Psa::new(encoding))?)),
+        "v1model" => {
+            Simulator::V1Model(Box::new(host::build_al(spec, config, V1Model::new(encoding))?))
         }
-        "psa" => {
-            Simulator::Psa(Box::new(Runner::new(global, interp, interface, Psa::new(encoding))))
-        }
-        "v1model" => Simulator::V1Model(Box::new(Runner::new(
-            global,
-            interp,
-            interface,
-            V1Model::new(encoding),
-        ))),
         _ => unreachable!("architecture checked before specification loading"),
     })
 }
@@ -163,24 +149,12 @@ pub fn build_sl_with_encoding(
     if !matches!(arch, "ebpf" | "psa" | "v1model") {
         return Err(BuildError::UnsupportedArchitecture(arch.to_owned()));
     }
-    let interface = interface::p4(&spec_al);
-    let without_rule_groups = true;
-    let spec_sl = structure::convert(spec_al, without_rule_groups)?;
-    let global = SlGlobal::load(spec_sl)?;
-    let interp = SlInterp::new(config);
     Ok(match arch {
-        "ebpf" => {
-            Simulator::Ebpf(Box::new(Runner::new(global, interp, interface, Ebpf::new(encoding))))
+        "ebpf" => Simulator::Ebpf(Box::new(host::build_sl(spec_al, config, Ebpf::new(encoding))?)),
+        "psa" => Simulator::Psa(Box::new(host::build_sl(spec_al, config, Psa::new(encoding))?)),
+        "v1model" => {
+            Simulator::V1Model(Box::new(host::build_sl(spec_al, config, V1Model::new(encoding))?))
         }
-        "psa" => {
-            Simulator::Psa(Box::new(Runner::new(global, interp, interface, Psa::new(encoding))))
-        }
-        "v1model" => Simulator::V1Model(Box::new(Runner::new(
-            global,
-            interp,
-            interface,
-            V1Model::new(encoding),
-        ))),
         _ => unreachable!("architecture checked before specification loading"),
     })
 }
