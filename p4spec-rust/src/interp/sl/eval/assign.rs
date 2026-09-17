@@ -3,13 +3,12 @@
 use super::super::context::Context;
 use crate::interp::shared::error::{AssignErrorKind, ErrorKind};
 use crate::{
-    interp::shared::backtrack::{Backtrack, backtrack, backtrack_from_result},
+    interp::shared::backtrack::{Backtrack, backtrack},
     lang::{
-        data::value::{Value, ValueArena, ValueKind},
+        data::value::{Value, ValueArena},
         sl::ast,
     },
 };
-use std::rc::Rc;
 
 pub use crate::interp::shared::eval::assign::*;
 
@@ -24,7 +23,7 @@ fn assign_param<'global>(
 ) -> Backtrack<Context<'global>> {
     match &param.node {
         ast::ParamKind::Exp(_, exp) => assign_exp(arena, ctx, exp, value),
-        ast::ParamKind::Def(id, ..) => assign_def_param(arena, ctx_caller, ctx, id, value),
+        ast::ParamKind::Def(id, ..) => assign_def(arena, ctx_caller, ctx, id, value),
     }
 }
 
@@ -46,28 +45,5 @@ pub(in crate::interp::sl) fn assign_params<'global>(
     for (param, value) in params.iter().zip(values) {
         ctx = backtrack!(assign_param(arena, ctx_caller, ctx, param, *value));
     }
-    Backtrack::Ok(ctx)
-}
-
-// - Function parameter
-
-fn assign_def_param<'global>(
-    arena: &ValueArena,
-    ctx_caller: &Context<'_>,
-    mut ctx: Context<'global>,
-    id: &ast::Id,
-    value: Value,
-) -> Backtrack<Context<'global>> {
-    let ValueKind::Func(id_func) = arena.kind(&value) else {
-        return Backtrack::err(
-            id.span.clone(),
-            ErrorKind::Assign(AssignErrorKind::DefinitionMismatch {
-                value: arena.to_string(&value),
-                def: id.node.clone(),
-            }),
-        );
-    };
-    let (_, func) = backtrack_from_result!(ctx_caller.find_func(id_func), &id_func.span);
-    backtrack_from_result!(ctx.add_func(id.clone(), Rc::clone(func)), &id.span);
     Backtrack::Ok(ctx)
 }

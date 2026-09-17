@@ -382,14 +382,7 @@ fn eval_return_instr<Iface: Interface, Exn: Extern>(
     tail: bool,
 ) -> Backtrack<Flow> {
     if tail && let ast::ExpKind::Call(id, targs, args) = &instr.exp.node {
-        let theta = ctx.theta_local();
-        let targs = backtrack_from_result!(
-            targs
-                .iter()
-                .map(|targ| crate::runtime::ops::typ::subst_typ(&theta, targ))
-                .collect::<Result<Vec<_>, _>>(),
-            &id.span
-        );
+        let targs = backtrack_from_result!(expr::resolve_targs(ctx.as_ref(), targs), &id.span);
         let values = backtrack!(expr::eval_args(runner, ctx.as_ref(), args));
         let (scope, _) = backtrack_from_result!(ctx.find_func(id), &id.span);
         if scope == Scope::Local
@@ -499,15 +492,17 @@ fn eval_instr_iter<'global, Iface: Interface, Exn: Extern>(
         return eval(runner, ctx);
     };
     match iter.iter {
-        ast::Iter::Opt => ctx.yield_opt(
+        ast::Iter::Opt => super::iter::yield_opt(
             runner,
+            ctx,
             &Span::default(),
             &iter.vars_bound,
             &iter.vars_bind,
             |runner, ctx| eval_instr_iter(runner, ctx, iters_tail, eval),
         ),
-        ast::Iter::List => ctx.yield_list(
+        ast::Iter::List => super::iter::yield_list(
             runner,
+            ctx,
             &Span::default(),
             &iter.vars_bound,
             &iter.vars_bind,

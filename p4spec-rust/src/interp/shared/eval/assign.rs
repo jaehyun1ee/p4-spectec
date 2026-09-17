@@ -1,8 +1,8 @@
 //! Destructuring assignments preserve iteration paths and isolate list rows
 
-use super::super::context::AssignContext;
+use super::super::context::{Bindings, FuncBindings};
 
-use std::borrow::Borrow;
+use std::{borrow::Borrow, rc::Rc};
 
 use crate::interp::shared::error::AssignErrorKind;
 
@@ -27,7 +27,7 @@ use crate::interp::shared::{
 
 // = Expression assignment
 
-pub fn assign_exp<Ctx: AssignContext>(
+pub fn assign_exp<Ctx: Bindings>(
     arena: &mut ValueArena,
     ctx: Ctx,
     exp: &ast::Exp,
@@ -75,7 +75,7 @@ pub fn assign_exp<Ctx: AssignContext>(
     }
 }
 
-pub fn assign_exps<Ctx: AssignContext, T: Borrow<ast::Exp>>(
+pub fn assign_exps<Ctx: Bindings, T: Borrow<ast::Exp>>(
     arena: &mut ValueArena,
     mut ctx: Ctx,
     exps: &[T],
@@ -103,7 +103,7 @@ pub fn assign_exps<Ctx: AssignContext, T: Borrow<ast::Exp>>(
 
 // - Variable expression
 
-fn assign_var_exp<Ctx: AssignContext>(
+fn assign_var_exp<Ctx: Bindings>(
     _arena: &mut ValueArena,
     mut ctx: Ctx,
     id: &ast::Id,
@@ -115,7 +115,7 @@ fn assign_var_exp<Ctx: AssignContext>(
 
 // - Tuple expression
 
-fn assign_tuple_exp<Ctx: AssignContext>(
+fn assign_tuple_exp<Ctx: Bindings>(
     arena: &mut ValueArena,
     ctx: Ctx,
     exps: &[ast::Exp],
@@ -126,7 +126,7 @@ fn assign_tuple_exp<Ctx: AssignContext>(
 
 // - Case expression
 
-fn assign_case_exp<Ctx: AssignContext>(
+fn assign_case_exp<Ctx: Bindings>(
     arena: &mut ValueArena,
     ctx: Ctx,
     not_exp: &ast::NotExp,
@@ -138,7 +138,7 @@ fn assign_case_exp<Ctx: AssignContext>(
 
 // - Struct expression
 
-fn assign_str_exp<Ctx: AssignContext>(
+fn assign_str_exp<Ctx: Bindings>(
     arena: &mut ValueArena,
     ctx: Ctx,
     exp_fields: &[ast::ExpField],
@@ -150,7 +150,7 @@ fn assign_str_exp<Ctx: AssignContext>(
 
 // - Optional expression
 
-fn assign_opt_exp<Ctx: AssignContext>(
+fn assign_opt_exp<Ctx: Bindings>(
     arena: &mut ValueArena,
     ctx: Ctx,
     exp: &ast::Exp,
@@ -173,7 +173,7 @@ fn assign_opt_exp<Ctx: AssignContext>(
 
 // - List expression
 
-fn assign_list_exp<Ctx: AssignContext>(
+fn assign_list_exp<Ctx: Bindings>(
     arena: &mut ValueArena,
     ctx: Ctx,
     exps: &[ast::Exp],
@@ -184,7 +184,7 @@ fn assign_list_exp<Ctx: AssignContext>(
 
 // - Cons expression
 
-fn assign_cons_exp<Ctx: AssignContext>(
+fn assign_cons_exp<Ctx: Bindings>(
     arena: &mut ValueArena,
     ctx: Ctx,
     exp: &ast::Exp,
@@ -207,7 +207,7 @@ fn assign_cons_exp<Ctx: AssignContext>(
 
 // - Iteration expression
 
-fn assign_iter_exp<Ctx: AssignContext>(
+fn assign_iter_exp<Ctx: Bindings>(
     arena: &mut ValueArena,
     mut ctx: Ctx,
     exp: &ast::Exp,
@@ -249,7 +249,7 @@ fn assign_iter_exp<Ctx: AssignContext>(
         }
         ast::Iter::List => {
             let values = backtrack_from_result!(get::list(arena, &value), span).to_vec();
-            let ctx_sub = ctx.wipe();
+            let ctx_sub = ctx.with_empty_values();
             let mut ctxs = Vec::with_capacity(values.len());
             for value in values {
                 ctxs.push(backtrack!(assign_exp(arena, ctx_sub.clone(), exp_inner, value)));
@@ -279,22 +279,22 @@ fn assign_iter_exp<Ctx: AssignContext>(
 
 // = Argument assignment
 
-pub fn assign_arg<Ctx: AssignContext>(
+pub fn assign_arg<Ctx: Bindings + FuncBindings>(
     arena: &mut ValueArena,
-    ctx_caller: &impl AssignContext<Func = Ctx::Func>,
+    ctx_caller: &impl FuncBindings<Func = Ctx::Func>,
     ctx_callee: Ctx,
     arg: &ast::Arg,
     value: Value,
 ) -> Backtrack<Ctx> {
     match &arg.node {
         ast::ArgKind::Exp(exp) => assign_exp_arg(arena, ctx_callee, exp, value),
-        ast::ArgKind::Def(id) => assign_def_arg(arena, ctx_caller, ctx_callee, id, value),
+        ast::ArgKind::Def(id) => assign_def(arena, ctx_caller, ctx_callee, id, value),
     }
 }
 
-pub fn assign_args<Ctx: AssignContext>(
+pub fn assign_args<Ctx: Bindings + FuncBindings>(
     arena: &mut ValueArena,
-    ctx_caller: &impl AssignContext<Func = Ctx::Func>,
+    ctx_caller: &impl FuncBindings<Func = Ctx::Func>,
     ctx_callee: Ctx,
     args: &[ast::Arg],
     values: &[Value],
@@ -317,7 +317,7 @@ pub fn assign_args<Ctx: AssignContext>(
 
 // - Expression argument
 
-fn assign_exp_arg<Ctx: AssignContext>(
+fn assign_exp_arg<Ctx: Bindings>(
     arena: &mut ValueArena,
     ctx: Ctx,
     exp: &ast::Exp,
@@ -328,9 +328,9 @@ fn assign_exp_arg<Ctx: AssignContext>(
 
 // - Function argument
 
-fn assign_def_arg<Ctx: AssignContext>(
-    arena: &mut ValueArena,
-    ctx_caller: &impl AssignContext<Func = Ctx::Func>,
+pub fn assign_def<Ctx: FuncBindings>(
+    arena: &ValueArena,
+    ctx_caller: &impl FuncBindings<Func = Ctx::Func>,
     mut ctx_callee: Ctx,
     id: &ast::Id,
     value: Value,
@@ -344,7 +344,7 @@ fn assign_def_arg<Ctx: AssignContext>(
             }),
         );
     };
-    let func = backtrack_from_result!(ctx_caller.lookup_func(id_func), &id_func.span);
-    backtrack_from_result!(ctx_callee.add_func(id.clone(), func), &id.span);
+    let func = backtrack_from_result!(ctx_caller.find_func(id_func), &id_func.span);
+    backtrack_from_result!(ctx_callee.add_func(id.clone(), Rc::clone(func)), &id.span);
     Backtrack::Ok(ctx_callee)
 }

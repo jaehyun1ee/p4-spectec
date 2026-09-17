@@ -17,7 +17,6 @@ use crate::{
             value::{Value, ValueArena, get, make},
         },
     },
-    runner::{Extern, Interface, RunnerContext},
     runtime::{
         envs::{
             interp::VEnv,
@@ -27,9 +26,8 @@ use crate::{
     },
 };
 
-use super::AlInterp;
 use crate::interp::shared::{
-    backtrack::{Backtrack, backtrack, backtrack_from_result},
+    backtrack::{Backtrack, backtrack_from_result},
     error::{EntityKind, Error, ErrorKind},
 };
 
@@ -125,7 +123,7 @@ impl<'global> Context<'global> {
         Self::new(self.global)
     }
 
-    pub fn wipe(&self) -> Self {
+    pub fn with_empty_values(&self) -> Self {
         Self {
             global: self.global,
             local: Local {
@@ -148,10 +146,12 @@ impl<'global> Context<'global> {
         })
     }
 
+    pub fn find_local_typdef_opt(&self, id: &ast::Id) -> Option<&TypeDef> {
+        self.local.tdenv.get(id)
+    }
+
     pub fn find_typdef_opt<'a>(&'a self, id: &ast::Id) -> Option<&'a TypeDef> {
-        self.local
-            .tdenv
-            .get(id)
+        self.find_local_typdef_opt(id)
             .or_else(|| self.global.tdenv.get(id))
     }
 
@@ -245,108 +245,9 @@ impl<'global> Context<'global> {
 
     // == Iteration contexts
 
-    // - Expression mapping
-
-    pub fn map_list<Iface: Interface, Exn: Extern>(
-        &self,
-        runner: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
-        span: &Span,
-        vars: &[ast::Var],
-        mut eval: impl FnMut(&mut RunnerContext<'_, AlInterp, Iface, Exn>, &Self) -> Backtrack<Value>,
-    ) -> Backtrack<Vec<Value>> {
-        let rows = backtrack_from_result!(self.list_values(runner.arena(), vars), span);
-        // Copy handles before the callback can allocate in the arena
-        let rows: Vec<_> = rows.into_iter().map(<[Value]>::to_vec).collect();
-        let width = rows.first().map_or(0, Vec::len);
-        let vars: Vec<_> = vars
-            .iter()
-            .map(|var| Variable::new(var.id.clone(), var.iters.clone()))
-            .collect();
-        let mut ctx_sub = self.clone();
-        let mut values = Vec::with_capacity(width);
-        for column in 0..width {
-            for (var, row) in vars.iter().zip(&rows) {
-                ctx_sub.add_value(var.clone(), row[column]);
-            }
-            values.push(backtrack!(eval(runner, &ctx_sub)));
-        }
-        Backtrack::Ok(values)
-    }
-
-    pub fn map_opt<Iface: Interface, Exn: Extern>(
-        &self,
-        runner: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
-        span: &Span,
-        vars: &[ast::Var],
-        mut eval: impl FnMut(&mut RunnerContext<'_, AlInterp, Iface, Exn>, &Self) -> Backtrack<Value>,
-    ) -> Backtrack<Option<Value>> {
-        let values = backtrack_from_result!(self.opt_values(runner.arena(), vars), span);
-        let Some(values) = values else {
-            return Backtrack::Ok(None);
-        };
-        let mut ctx_sub = self.clone();
-        for (var, value) in vars.iter().zip(values) {
-            ctx_sub.add_value(Variable::new(var.id.clone(), var.iters.clone()), value);
-        }
-        Backtrack::Ok(Some(backtrack!(eval(runner, &ctx_sub))))
-    }
-
-    // - Premise bindings
-
-    pub fn yield_list<Iface: Interface, Exn: Extern>(
-        mut self,
-        runner: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
-        span: &Span,
-        vars_bound: &[ast::Var],
-        vars_bind: &[ast::Var],
-        mut eval: impl FnMut(&mut RunnerContext<'_, AlInterp, Iface, Exn>, Self) -> Backtrack<Self>,
-    ) -> Backtrack<Self> {
-        let rows = backtrack_from_result!(self.list_values(runner.arena(), vars_bound), span);
-        let rows: Vec<_> = rows.into_iter().map(<[Value]>::to_vec).collect();
-        let width = rows.first().map_or(0, Vec::len);
-        let vars: Vec<_> = vars_bound
-            .iter()
-            .map(|var| Variable::new(var.id.clone(), var.iters.clone()))
-            .collect();
-        let mut ctx_sub = self.clone();
-        let mut values_bind = vec![Vec::new(); vars_bind.len()];
-        for column in 0..width {
-            for (var, row) in vars.iter().zip(&rows) {
-                ctx_sub.add_value(var.clone(), row[column]);
-            }
-            // Keep callback writes out of the reusable input context
-            let ctx_post = backtrack!(eval(runner, ctx_sub.clone()));
-            backtrack!(ctx_post.collect_bindings(vars_bind, &mut values_bind));
-        }
-        backtrack!(self.bind_iter(runner.arena_mut(), vars_bind, ast::Iter::List, values_bind));
-        Backtrack::Ok(self)
-    }
-
-    pub fn yield_opt<Iface: Interface, Exn: Extern>(
-        mut self,
-        runner: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
-        span: &Span,
-        vars_bound: &[ast::Var],
-        vars_bind: &[ast::Var],
-        mut eval: impl FnMut(&mut RunnerContext<'_, AlInterp, Iface, Exn>, Self) -> Backtrack<Self>,
-    ) -> Backtrack<Self> {
-        let values = backtrack_from_result!(self.opt_values(runner.arena(), vars_bound), span);
-        let mut values_bind = vec![Vec::new(); vars_bind.len()];
-        if let Some(values) = values {
-            let mut ctx_sub = self.clone();
-            for (var, value) in vars_bound.iter().zip(values) {
-                ctx_sub.add_value(Variable::new(var.id.clone(), var.iters.clone()), value);
-            }
-            let ctx_post = backtrack!(eval(runner, ctx_sub));
-            backtrack!(ctx_post.collect_bindings(vars_bind, &mut values_bind));
-        }
-        backtrack!(self.bind_iter(runner.arena_mut(), vars_bind, ast::Iter::Opt, values_bind));
-        Backtrack::Ok(self)
-    }
-
     // - Iteration inputs
 
-    fn opt_values(
+    pub(super) fn opt_values(
         &self,
         arena: &ValueArena,
         vars: &[ast::Var],
@@ -372,7 +273,7 @@ impl<'global> Context<'global> {
         }
     }
 
-    fn list_values<'a>(
+    pub(super) fn list_values<'a>(
         &self,
         arena: &'a ValueArena,
         vars: &[ast::Var],
@@ -406,7 +307,11 @@ impl<'global> Context<'global> {
 
     // - Iteration outputs
 
-    fn collect_bindings(&self, vars: &[ast::Var], values_bind: &mut [Vec<Value>]) -> Backtrack<()> {
+    pub(super) fn collect_bindings(
+        &self,
+        vars: &[ast::Var],
+        values_bind: &mut [Vec<Value>],
+    ) -> Backtrack<()> {
         for (var, values) in vars.iter().zip(values_bind) {
             let var_bound = Variable::new(var.id.clone(), var.iters.clone());
             values.push(*backtrack_from_result!(self.find_value(&var_bound), &var.id.span));
@@ -414,7 +319,7 @@ impl<'global> Context<'global> {
         Backtrack::Ok(())
     }
 
-    fn bind_iter(
+    pub(super) fn bind_iter(
         &mut self,
         arena: &mut ValueArena,
         vars: &[ast::Var],
@@ -436,37 +341,11 @@ impl<'global> Context<'global> {
         }
         Backtrack::Ok(())
     }
-
-    // == Environment conversion
-
-    pub fn tdenv(&self) -> TDEnv {
-        let mut tdenv = self.global.tdenv.clone();
-        tdenv.extend(
-            self.local
-                .tdenv
-                .iter()
-                .map(|(id, typdef)| (id.clone(), typdef.clone())),
-        );
-        tdenv
-    }
-
-    pub fn theta_local(&self) -> crate::runtime::ops::typ::Theta {
-        let mut theta = crate::runtime::ops::typ::Theta::new();
-        for (id, typdef) in self.local.tdenv.iter() {
-            if let TypeDef::Defined(tparams, def_typ) = typdef
-                && tparams.is_empty()
-                && let ast::DefTypKind::Plain(typ) = &def_typ.node
-            {
-                theta.insert(id.clone(), typ.clone());
-            }
-        }
-        theta
-    }
 }
 
-// = Shared evaluation interfaces
+// = Shared binding interfaces
 
-impl crate::interp::shared::context::Context for Context<'_> {
+impl crate::interp::shared::context::Environment for Context<'_> {
     fn find_value(&self, var: &Variable) -> Result<&Value, Error> {
         self.find_value(var)
     }
@@ -479,66 +358,33 @@ impl crate::interp::shared::context::Context for Context<'_> {
         self.find_func_typ(id)
     }
 
-    fn tdenv(&self) -> TDEnv {
-        self.tdenv()
+    fn find_typdef_opt(&self, id: &ast::Id) -> Option<&TypeDef> {
+        self.find_typdef_opt(id)
     }
 
-    fn theta_local(&self) -> crate::runtime::ops::typ::Theta {
-        self.theta_local()
+    fn find_local_typdef_opt(&self, id: &ast::Id) -> Option<&TypeDef> {
+        self.find_local_typdef_opt(id)
     }
 }
 
-impl crate::interp::shared::context::AssignContext for Context<'_> {
-    type Func = ast::MetaFuncDef;
-
+impl crate::interp::shared::context::Bindings for Context<'_> {
     fn add_value(&mut self, var: Variable, value: Value) {
         self.add_value(var, value)
     }
 
-    fn wipe(&self) -> Self {
-        self.wipe()
+    fn with_empty_values(&self) -> Self {
+        self.with_empty_values()
     }
+}
 
-    fn lookup_func(&self, id: &ast::Id) -> Result<Rc<Self::Func>, Error> {
-        self.find_func(id).map(|(_, func)| Rc::clone(func))
+impl crate::interp::shared::context::FuncBindings for Context<'_> {
+    type Func = ast::MetaFuncDef;
+
+    fn find_func(&self, id: &ast::Id) -> Result<&Rc<Self::Func>, Error> {
+        self.find_func(id).map(|(_, func)| func)
     }
 
     fn add_func(&mut self, id: ast::Id, func: Rc<Self::Func>) -> Result<(), Error> {
         self.add_func(id, func)
-    }
-}
-impl<Iface: Interface, Exn: Extern> crate::interp::shared::context::EvalContext<Iface, Exn>
-    for Context<'_>
-{
-    type Interp = AlInterp;
-
-    fn invoke_func(
-        &self,
-        runner: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
-        id: &ast::Id,
-        targs: &[ast::Typ],
-        values: &[Value],
-    ) -> Backtrack<Value> {
-        crate::interp::al::eval::call::invoke_func(runner, self, id, targs, values)
-    }
-
-    fn map_list(
-        &self,
-        runner: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
-        span: &Span,
-        vars: &[ast::Var],
-        eval: impl FnMut(&mut RunnerContext<'_, AlInterp, Iface, Exn>, &Self) -> Backtrack<Value>,
-    ) -> Backtrack<Vec<Value>> {
-        self.map_list(runner, span, vars, eval)
-    }
-
-    fn map_opt(
-        &self,
-        runner: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
-        span: &Span,
-        vars: &[ast::Var],
-        eval: impl FnMut(&mut RunnerContext<'_, AlInterp, Iface, Exn>, &Self) -> Backtrack<Value>,
-    ) -> Backtrack<Option<Value>> {
-        self.map_opt(runner, span, vars, eval)
     }
 }

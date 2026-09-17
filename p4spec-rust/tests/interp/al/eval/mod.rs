@@ -4,3 +4,5 @@ mod assign;
 mod call;
 #[path = "expr.rs"]
 mod expr;
+#[path = "iter.rs"]
+mod iter;

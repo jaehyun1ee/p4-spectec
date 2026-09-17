@@ -1,71 +1,35 @@
-//! Static bindings needed by the shared expression and assignment operations
+//! Environment lookup and binding interfaces for shared evaluation
 
 use crate::{
-    interp::shared::{backtrack::Backtrack, error::Error},
-    lang::{
-        common::{Variable, source::Span},
-        data::value::Value,
-        il::ast,
-    },
-    runner::{Extern, Interface, Interpreter, RunnerContext},
-    runtime::{envs::interp::TDEnv, ops::typ::Theta},
+    interp::shared::error::Error,
+    lang::{common::Variable, data::value::Value, il::ast},
+    runtime::typdef::TypeDef,
 };
 use std::rc::Rc;
 
-// = Bindings
+// = Environment
 
 /// Read access to value, type, and function bindings
-pub trait Context: Clone {
+pub trait Environment {
     fn find_value(&self, var: &Variable) -> Result<&Value, Error>;
+    fn find_typdef_opt(&self, id: &ast::Id) -> Option<&TypeDef>;
+    fn find_local_typdef_opt(&self, id: &ast::Id) -> Option<&TypeDef>;
     fn find_defined_typdef(&self, id: &ast::Id) -> Result<(&[ast::TParam], &ast::DefTyp), Error>;
     fn find_func_typ(&self, id: &ast::Id) -> Result<ast::FuncTyp, Error>;
-    fn tdenv(&self) -> TDEnv;
-    fn theta_local(&self) -> Theta;
 }
 
-// = Assignment
+// = Value bindings
 
-pub trait AssignContext: Context {
+pub trait Bindings: Environment + Clone {
+    fn add_value(&mut self, var: Variable, value: Value);
+    fn with_empty_values(&self) -> Self;
+}
+
+// = Function bindings
+
+pub trait FuncBindings {
     type Func;
 
-    fn add_value(&mut self, var: Variable, value: Value);
-    fn wipe(&self) -> Self;
-    fn lookup_func(&self, id: &ast::Id) -> Result<Rc<Self::Func>, Error>;
+    fn find_func(&self, id: &ast::Id) -> Result<&Rc<Self::Func>, Error>;
     fn add_func(&mut self, id: ast::Id, func: Rc<Self::Func>) -> Result<(), Error>;
-}
-
-// = Evaluation
-
-pub(crate) trait EvalContext<Iface: Interface, Exn: Extern>: Context {
-    type Interp: Interpreter<Iface, Exn, Error = Error>;
-
-    fn trace_exp(&self, _exp: &ast::Exp, result: Backtrack<Value>) -> Backtrack<Value> {
-        result
-    }
-
-    fn trace_arg(&self, _arg: &ast::Arg, result: Backtrack<Value>) -> Backtrack<Value> {
-        result
-    }
-
-    fn invoke_func(
-        &self,
-        runner: &mut RunnerContext<'_, Self::Interp, Iface, Exn>,
-        id: &ast::Id,
-        targs: &[ast::Typ],
-        values: &[Value],
-    ) -> Backtrack<Value>;
-    fn map_list(
-        &self,
-        runner: &mut RunnerContext<'_, Self::Interp, Iface, Exn>,
-        span: &Span,
-        vars: &[ast::Var],
-        eval: impl FnMut(&mut RunnerContext<'_, Self::Interp, Iface, Exn>, &Self) -> Backtrack<Value>,
-    ) -> Backtrack<Vec<Value>>;
-    fn map_opt(
-        &self,
-        runner: &mut RunnerContext<'_, Self::Interp, Iface, Exn>,
-        span: &Span,
-        vars: &[ast::Var],
-        eval: impl FnMut(&mut RunnerContext<'_, Self::Interp, Iface, Exn>, &Self) -> Backtrack<Value>,
-    ) -> Backtrack<Option<Value>>;
 }

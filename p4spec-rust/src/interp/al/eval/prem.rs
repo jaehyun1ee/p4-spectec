@@ -133,15 +133,17 @@ fn eval_iter_prem<'global, Iface: Interface, Exn: Extern>(
 ) -> Backtrack<Context<'global>> {
     let prem_iter = &prem.prem_iter;
     match prem_iter.iter {
-        ast::Iter::Opt => ctx.yield_opt(
+        ast::Iter::Opt => super::iter::yield_opt(
             runner,
+            ctx,
             &prem.prem.span,
             &prem_iter.vars_bound,
             &prem_iter.vars_bind,
             |runner, ctx_sub| eval_prem(runner, ctx_sub, &prem.prem),
         ),
-        ast::Iter::List => ctx.yield_list(
+        ast::Iter::List => super::iter::yield_list(
             runner,
+            ctx,
             &prem.prem.span,
             &prem_iter.vars_bound,
             &prem_iter.vars_bind,

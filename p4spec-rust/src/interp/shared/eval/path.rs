@@ -1,6 +1,7 @@
 //! Shared path access and update evaluation
 
-use super::super::context::EvalContext;
+use super::super::context::Environment;
+use super::Evaluator;
 
 use crate::{
     lang::{
@@ -16,8 +17,13 @@ use crate::interp::shared::backtrack::{Backtrack, backtrack, backtrack_from_resu
 
 // - Access
 
-fn eval_access_path<Ctx: EvalContext<Iface, Exn>, Iface: Interface, Exn: Extern>(
-    runner: &mut RunnerContext<'_, Ctx::Interp, Iface, Exn>,
+fn eval_access_path<
+    Ctx: Environment,
+    Eval: Evaluator<Ctx, Iface, Exn>,
+    Iface: Interface,
+    Exn: Extern,
+>(
+    runner: &mut RunnerContext<'_, Eval, Iface, Exn>,
     ctx: &Ctx,
     value_base: &Value,
     path: &ast::Path,
@@ -36,8 +42,13 @@ fn eval_access_path<Ctx: EvalContext<Iface, Exn>, Iface: Interface, Exn: Extern>
 
 // - Index access path
 
-fn eval_access_idx_path<Ctx: EvalContext<Iface, Exn>, Iface: Interface, Exn: Extern>(
-    runner: &mut RunnerContext<'_, Ctx::Interp, Iface, Exn>,
+fn eval_access_idx_path<
+    Ctx: Environment,
+    Eval: Evaluator<Ctx, Iface, Exn>,
+    Iface: Interface,
+    Exn: Extern,
+>(
+    runner: &mut RunnerContext<'_, Eval, Iface, Exn>,
     ctx: &Ctx,
     value_base: &Value,
     path: &ast::Path,
@@ -50,8 +61,13 @@ fn eval_access_idx_path<Ctx: EvalContext<Iface, Exn>, Iface: Interface, Exn: Ext
 
 // - Slice access path
 
-fn eval_access_slice_path<Ctx: EvalContext<Iface, Exn>, Iface: Interface, Exn: Extern>(
-    runner: &mut RunnerContext<'_, Ctx::Interp, Iface, Exn>,
+fn eval_access_slice_path<
+    Ctx: Environment,
+    Eval: Evaluator<Ctx, Iface, Exn>,
+    Iface: Interface,
+    Exn: Extern,
+>(
+    runner: &mut RunnerContext<'_, Eval, Iface, Exn>,
     ctx: &Ctx,
     value_base: &Value,
     path: &ast::Path,
@@ -78,8 +94,13 @@ fn eval_access_slice_path<Ctx: EvalContext<Iface, Exn>, Iface: Interface, Exn: E
 
 // - Field access path
 
-fn eval_access_dot_path<Ctx: EvalContext<Iface, Exn>, Iface: Interface, Exn: Extern>(
-    runner: &mut RunnerContext<'_, Ctx::Interp, Iface, Exn>,
+fn eval_access_dot_path<
+    Ctx: Environment,
+    Eval: Evaluator<Ctx, Iface, Exn>,
+    Iface: Interface,
+    Exn: Extern,
+>(
+    runner: &mut RunnerContext<'_, Eval, Iface, Exn>,
     ctx: &Ctx,
     value_base: &Value,
     path: &ast::Path,
@@ -91,8 +112,13 @@ fn eval_access_dot_path<Ctx: EvalContext<Iface, Exn>, Iface: Interface, Exn: Ext
 
 // - Update
 
-pub(crate) fn eval_update_path<Ctx: EvalContext<Iface, Exn>, Iface: Interface, Exn: Extern>(
-    runner: &mut RunnerContext<'_, Ctx::Interp, Iface, Exn>,
+pub(crate) fn eval_update_path<
+    Ctx: Environment,
+    Eval: Evaluator<Ctx, Iface, Exn>,
+    Iface: Interface,
+    Exn: Extern,
+>(
+    runner: &mut RunnerContext<'_, Eval, Iface, Exn>,
     ctx: &Ctx,
     value_base: &Value,
     path: &ast::Path,
@@ -114,8 +140,13 @@ pub(crate) fn eval_update_path<Ctx: EvalContext<Iface, Exn>, Iface: Interface, E
 
 // - Index update path
 
-fn eval_update_idx_path<Ctx: EvalContext<Iface, Exn>, Iface: Interface, Exn: Extern>(
-    runner: &mut RunnerContext<'_, Ctx::Interp, Iface, Exn>,
+fn eval_update_idx_path<
+    Ctx: Environment,
+    Eval: Evaluator<Ctx, Iface, Exn>,
+    Iface: Interface,
+    Exn: Extern,
+>(
+    runner: &mut RunnerContext<'_, Eval, Iface, Exn>,
     ctx: &Ctx,
     value_base: &Value,
     path: &ast::Path,
@@ -139,8 +170,13 @@ fn eval_update_idx_path<Ctx: EvalContext<Iface, Exn>, Iface: Interface, Exn: Ext
 
 // - Slice update path
 
-fn eval_update_slice_path<Ctx: EvalContext<Iface, Exn>, Iface: Interface, Exn: Extern>(
-    runner: &mut RunnerContext<'_, Ctx::Interp, Iface, Exn>,
+fn eval_update_slice_path<
+    Ctx: Environment,
+    Eval: Evaluator<Ctx, Iface, Exn>,
+    Iface: Interface,
+    Exn: Extern,
+>(
+    runner: &mut RunnerContext<'_, Eval, Iface, Exn>,
     ctx: &Ctx,
     value_base: &Value,
     path: &ast::Path,
@@ -168,8 +204,13 @@ fn eval_update_slice_path<Ctx: EvalContext<Iface, Exn>, Iface: Interface, Exn: E
 
 // - Field update path
 
-fn eval_update_dot_path<Ctx: EvalContext<Iface, Exn>, Iface: Interface, Exn: Extern>(
-    runner: &mut RunnerContext<'_, Ctx::Interp, Iface, Exn>,
+fn eval_update_dot_path<
+    Ctx: Environment,
+    Eval: Evaluator<Ctx, Iface, Exn>,
+    Iface: Interface,
+    Exn: Extern,
+>(
+    runner: &mut RunnerContext<'_, Eval, Iface, Exn>,
     ctx: &Ctx,
     value_base: &Value,
     path: &ast::Path,

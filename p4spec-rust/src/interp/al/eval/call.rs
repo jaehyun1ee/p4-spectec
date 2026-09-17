@@ -93,13 +93,13 @@ fn check_values(
     values: &[Value],
     error: GuardErrorKind,
 ) -> Backtrack<()> {
-    let tdenv = ctx.tdenv();
+    let find_typdef_opt = |id: &ast::Id| ctx.find_typdef_opt(id);
     let find_func = |name: &str| {
         let id = crate::phrase!(node: name.to_owned(), span: id.span.clone());
         ctx.find_func_typ(&id).ok()
     };
     let matches = backtrack_from_result!(
-        crate::runtime::ops::value::subs(arena, &tdenv, &find_func, typs, values),
+        crate::runtime::ops::value::subs_with(arena, &find_typdef_opt, &find_func, typs, values),
         &id.span
     );
     Backtrack::check(matches, id.span.clone(), ErrorKind::Guard(error))

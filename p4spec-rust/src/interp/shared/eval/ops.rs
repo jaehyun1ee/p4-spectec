@@ -1,6 +1,6 @@
 //! Value operations shared by expression and path evaluation
 
-use super::super::context::Context;
+use super::super::context::Environment;
 
 use num_bigint::BigInt;
 
@@ -28,7 +28,7 @@ use crate::interp::shared::{
 
 pub(crate) fn cast_up(
     arena: &mut ValueArena,
-    ctx: &impl Context,
+    ctx: &impl Environment,
     typ: &ast::Typ,
     value: Value,
 ) -> Backtrack<Value> {
@@ -106,7 +106,7 @@ pub(crate) fn cast_up(
 
 pub(crate) fn cast_down(
     arena: &mut ValueArena,
-    ctx: &impl Context,
+    ctx: &impl Environment,
     typ: &ast::Typ,
     value: Value,
 ) -> Backtrack<Value> {
@@ -544,18 +544,24 @@ pub(crate) fn compare(
 
 pub(crate) fn check_sub(
     arena: &ValueArena,
-    ctx: &impl Context,
+    ctx: &impl Environment,
     span: &Span,
     subcheck: &ast::Subcheck,
     value: Value,
 ) -> Backtrack<bool> {
-    let tdenv = ctx.tdenv();
+    let find_typdef_opt = |id: &ast::Id| ctx.find_typdef_opt(id);
     let find_func = |name: &str| {
         let id = crate::phrase!(node: name.to_owned(), span: span.clone());
         ctx.find_func_typ(&id).ok()
     };
     Backtrack::from_result(
-        crate::runtime::ops::value::check(arena, &tdenv, &find_func, subcheck, &value),
+        crate::runtime::ops::value::check_with(
+            arena,
+            &find_typdef_opt,
+            &find_func,
+            subcheck,
+            &value,
+        ),
         span,
     )
 }
