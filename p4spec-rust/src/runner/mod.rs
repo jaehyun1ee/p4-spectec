@@ -1,6 +1,6 @@
 //! Static assembly of the specification execution components
 //!
-//! `Runner<Interp, Iface, Exn>` owns the arena, specification, interpreter,
+//! `Runner<Interp, Iface, Ext>` owns the arena, specification, interpreter,
 //! builtin interface, and extern implementation. The interpreter owns its
 //! configuration and cache. Each evaluation borrows these components through
 //! a context that also supports extern-to-interpreter reentry.
@@ -20,31 +20,31 @@ pub use interpreter::Interpreter;
 // == Runner assembly
 
 /// An interpreter and its host components sharing one value arena
-pub struct Runner<Interp, Iface, Exn>
+pub struct Runner<Interp, Iface, Ext>
 where
-    Interp: Interpreter<Iface, Exn>,
+    Interp: Interpreter<Iface, Ext>,
     Iface: Interface,
-    Exn: Extern,
+    Ext: Extern,
 {
     arena: ValueArena,
     spec: Interp::Spec,
     interp: Interp,
     interface: Iface,
-    external: Exn,
+    external: Ext,
 }
 
-impl<Interp, Iface, Exn> Runner<Interp, Iface, Exn>
+impl<Interp, Iface, Ext> Runner<Interp, Iface, Ext>
 where
-    Interp: Interpreter<Iface, Exn>,
+    Interp: Interpreter<Iface, Ext>,
     Iface: Interface,
-    Exn: Extern,
+    Ext: Extern,
 {
-    pub fn new(spec: Interp::Spec, interp: Interp, interface: Iface, external: Exn) -> Self {
+    pub fn new(spec: Interp::Spec, interp: Interp, interface: Iface, external: Ext) -> Self {
         Self { arena: ValueArena::new(), spec, interp, interface, external }
     }
 
     /// Borrows the assembled components for a stage-specific evaluation entry
-    pub fn context(&mut self) -> RunnerContext<'_, Interp, Iface, Exn> {
+    pub fn context(&mut self) -> RunnerContext<'_, Interp, Iface, Ext> {
         RunnerContext::new(
             &mut self.arena,
             &self.spec,

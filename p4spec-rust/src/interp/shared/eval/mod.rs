@@ -16,15 +16,15 @@ use crate::{
 // = Invocation
 
 /// AL/SL-specific function and relation invocation
-pub(crate) trait Invoker<Iface, Exn>: Interpreter<Iface, Exn, Error = Error>
+pub(crate) trait Invoker<Iface, Ext>: Interpreter<Iface, Ext, Error = Error>
 where
     Iface: Interface,
-    Exn: Extern,
+    Ext: Extern,
 {
     type Context<'global>: IterContext;
 
     fn invoke_func<'global>(
-        runner_ctx: &mut RunnerContext<'_, Self, Iface, Exn>,
+        runner_ctx: &mut RunnerContext<'_, Self, Iface, Ext>,
         ctx: &Self::Context<'global>,
         id: &ast::Id,
         targs: &[ast::Typ],
@@ -32,7 +32,7 @@ where
     ) -> Backtrack<Value>;
 
     fn invoke_rel<'global>(
-        runner_ctx: &mut RunnerContext<'_, Self, Iface, Exn>,
+        runner_ctx: &mut RunnerContext<'_, Self, Iface, Ext>,
         ctx: &Self::Context<'global>,
         id: &ast::Id,
         values: &[Value],

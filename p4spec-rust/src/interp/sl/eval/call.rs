@@ -145,16 +145,16 @@ fn check_func_output(
 
 // = Cache eligibility
 
-pub(in crate::interp::sl) fn cache_rel<Iface: Interface, Exn: Extern>(
-    runner_ctx: &RunnerContext<'_, SlInterp, Iface, Exn>,
+pub(in crate::interp::sl) fn cache_rel<Iface: Interface, Ext: Extern>(
+    runner_ctx: &RunnerContext<'_, SlInterp, Iface, Ext>,
     ctx: &Context<'_>,
     id: &ast::Id,
 ) -> bool {
     runner_ctx.interp().config.cache && matches!(ctx.find_rel(id), Ok(ast::RelDef::Defined(_)))
 }
 
-pub(in crate::interp::sl) fn cache_func<Iface: Interface, Exn: Extern>(
-    runner_ctx: &RunnerContext<'_, SlInterp, Iface, Exn>,
+pub(in crate::interp::sl) fn cache_func<Iface: Interface, Ext: Extern>(
+    runner_ctx: &RunnerContext<'_, SlInterp, Iface, Ext>,
     ctx: &Context<'_>,
     id: &ast::Id,
     values: &[Value],
@@ -169,8 +169,8 @@ pub(in crate::interp::sl) fn cache_func<Iface: Interface, Exn: Extern>(
 
 // = Relation invocation
 
-pub fn invoke_rel<Iface: Interface, Exn: Extern>(
-    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
+pub fn invoke_rel<Iface: Interface, Ext: Extern>(
+    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Ext>,
     ctx: &Context<'_>,
     id: &ast::Id,
     values: &[Value],
@@ -232,8 +232,8 @@ pub fn invoke_rel<Iface: Interface, Exn: Extern>(
 
 // - Extern relation
 
-fn invoke_extern_rel<Iface: Interface, Exn: Extern>(
-    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
+fn invoke_extern_rel<Iface: Interface, Ext: Extern>(
+    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Ext>,
     ctx: &Context<'_>,
     id: &ast::Id,
     rel: &ast::ExternRel,
@@ -275,8 +275,8 @@ fn invoke_extern_rel<Iface: Interface, Exn: Extern>(
 
 // - Defined relation
 
-fn invoke_defined_rel<Iface: Interface, Exn: Extern>(
-    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
+fn invoke_defined_rel<Iface: Interface, Ext: Extern>(
+    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Ext>,
     ctx: &Context<'_>,
     id: &ast::Id,
     rel: &ast::DefinedRel,
@@ -315,8 +315,8 @@ fn invoke_defined_rel<Iface: Interface, Exn: Extern>(
 
 // = Function invocation
 
-pub fn invoke_func<Iface: Interface, Exn: Extern>(
-    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
+pub fn invoke_func<Iface: Interface, Ext: Extern>(
+    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Ext>,
     ctx: &Context<'_>,
     id: &ast::Id,
     targs: &[ast::Typ],
@@ -382,8 +382,8 @@ pub fn invoke_func<Iface: Interface, Exn: Extern>(
 
 // - Extern function
 
-fn invoke_extern_func<Iface: Interface, Exn: Extern>(
-    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
+fn invoke_extern_func<Iface: Interface, Ext: Extern>(
+    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Ext>,
     ctx: &Context<'_>,
     id: &ast::Id,
     extern_func: &ast::ExternFunc,
@@ -415,8 +415,8 @@ fn invoke_extern_func<Iface: Interface, Exn: Extern>(
 
 // - Builtin function
 
-fn invoke_builtin_func<Iface: Interface, Exn: Extern>(
-    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
+fn invoke_builtin_func<Iface: Interface, Ext: Extern>(
+    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Ext>,
     ctx: &Context<'_>,
     id: &ast::Id,
     builtin_func: &ast::BuiltinFunc,
@@ -459,8 +459,8 @@ fn invoke_builtin_func<Iface: Interface, Exn: Extern>(
 
 // - Table function
 
-fn invoke_table_func<Iface: Interface, Exn: Extern>(
-    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
+fn invoke_table_func<Iface: Interface, Ext: Extern>(
+    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Ext>,
     ctx: &Context<'_>,
     id: &ast::Id,
     func: &ast::TableFunc,
@@ -487,8 +487,8 @@ fn invoke_table_func<Iface: Interface, Exn: Extern>(
 
 // - Defined function
 
-fn invoke_defined_func<Iface: Interface, Exn: Extern>(
-    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
+fn invoke_defined_func<Iface: Interface, Ext: Extern>(
+    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Ext>,
     ctx: &Context<'_>,
     id: &ast::Id,
     func: &ast::DefinedFunc,

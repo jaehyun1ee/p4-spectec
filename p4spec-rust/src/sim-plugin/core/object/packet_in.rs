@@ -79,16 +79,16 @@ impl PacketIn {
     /// ```text
     /// void extract<T>(out T hdr);
     /// ```
-    pub fn extract<Interp, Iface, Exn>(
+    pub fn extract<Interp, Iface, Ext>(
         &self,
-        ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+        ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
         value_ctx: Value,
         value_arch: Value,
     ) -> Result<(Self, Value, Value, Value), Interp::Error>
     where
         Iface: Interface,
-        Exn: Extern,
-        Interp: Interpreter<Iface, Exn>,
+        Ext: Extern,
+        Interp: Interpreter<Iface, Ext>,
     {
         let value_typ = func::find_type_e_local(ctx, value_ctx, "T")?;
         let value_typ_subst = func::subst_type_e_local(ctx, value_ctx, value_typ)?;
@@ -144,16 +144,16 @@ impl PacketIn {
     /// void extract<T>(out T variableSizeHeader,
     ///                 in bit<32> variableFieldSizeInBits);
     /// ```
-    pub fn extract_varsize<Interp, Iface, Exn>(
+    pub fn extract_varsize<Interp, Iface, Ext>(
         &self,
-        ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+        ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
         value_ctx: Value,
         value_arch: Value,
     ) -> Result<(Self, Value, Value, Value), Interp::Error>
     where
         Iface: Interface,
-        Exn: Extern,
-        Interp: Interpreter<Iface, Exn>,
+        Ext: Extern,
+        Interp: Interpreter<Iface, Ext>,
     {
         let value_typ = func::find_type_e_local(ctx, value_ctx, "T")?;
         let value_typ_subst = func::subst_type_e_local(ctx, value_ctx, value_typ)?;
@@ -284,16 +284,16 @@ impl PacketIn {
     /// ```text
     /// T lookahead<T>();
     /// ```
-    pub fn lookahead<Interp, Iface, Exn>(
+    pub fn lookahead<Interp, Iface, Ext>(
         &self,
-        ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+        ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
         value_ctx: Value,
         value_arch: Value,
     ) -> Result<(Self, Value, Value, Value), Interp::Error>
     where
         Iface: Interface,
-        Exn: Extern,
-        Interp: Interpreter<Iface, Exn>,
+        Ext: Extern,
+        Interp: Interpreter<Iface, Ext>,
     {
         let value_typ = func::find_type_e_local(ctx, value_ctx, "T")?;
         let value_typ_subst = func::subst_type_e_local(ctx, value_ctx, value_typ)?;
@@ -348,16 +348,16 @@ impl PacketIn {
     /// ```text
     /// void advance(in bit<32> sizeInBits);
     /// ```
-    pub fn advance<Interp, Iface, Exn>(
+    pub fn advance<Interp, Iface, Ext>(
         &self,
-        ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+        ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
         value_ctx: Value,
         value_arch: Value,
     ) -> Result<(Self, Value, Value, Value), Interp::Error>
     where
         Iface: Interface,
-        Exn: Extern,
-        Interp: Interpreter<Iface, Exn>,
+        Ext: Extern,
+        Interp: Interpreter<Iface, Ext>,
     {
         let value_size = func::find_var_e_local(ctx, value_ctx, "sizeInBits")?;
         let size = (unpack::p4_fixed_bit(ctx.arena(), &value_size)?.1)
@@ -408,16 +408,16 @@ impl PacketIn {
     /// ```text
     /// bit<32> length();
     /// ```
-    pub fn length<Interp, Iface, Exn>(
+    pub fn length<Interp, Iface, Ext>(
         &self,
-        ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+        ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
         value_ctx: Value,
         value_arch: Value,
     ) -> Result<(Self, Value, Value, Value), Interp::Error>
     where
         Iface: Interface,
-        Exn: Extern,
-        Interp: Interpreter<Iface, Exn>,
+        Ext: Extern,
+        Interp: Interpreter<Iface, Ext>,
     {
         let value_len =
             pack::p4_fixed_bit(ctx.arena_mut(), 32.into(), self.len.div_ceil(8).into())?;

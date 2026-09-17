@@ -46,7 +46,7 @@ struct ObjectInterp {
     calls: Vec<String>,
 }
 
-impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for ObjectInterp {
+impl<Iface: Interface, Ext: Extern> Interpreter<Iface, Ext> for ObjectInterp {
     type Spec = ();
     type Error = TestError;
 
@@ -55,7 +55,7 @@ impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for ObjectInterp {
     fn reset(&mut self) {}
 
     fn eval_program(
-        _: &mut RunnerContext<'_, Self, Iface, Exn>,
+        _: &mut RunnerContext<'_, Self, Iface, Ext>,
         _: &str,
         _: Value,
     ) -> Result<Vec<Value>, TestError> {
@@ -63,7 +63,7 @@ impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for ObjectInterp {
     }
 
     fn eval_rel(
-        _: &mut RunnerContext<'_, Self, Iface, Exn>,
+        _: &mut RunnerContext<'_, Self, Iface, Ext>,
         _: &str,
         _: &[Value],
     ) -> Result<Vec<Value>, TestError> {
@@ -71,7 +71,7 @@ impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for ObjectInterp {
     }
 
     fn eval_func(
-        ctx: &mut RunnerContext<'_, Self, Iface, Exn>,
+        ctx: &mut RunnerContext<'_, Self, Iface, Ext>,
         name: &str,
         _: &[typ::Typ],
         values: &[Value],

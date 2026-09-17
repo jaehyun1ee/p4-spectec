@@ -139,12 +139,12 @@ impl<'global> Context<'global> {
         })
     }
 
-    pub fn find_local_typdef_opt(&self, id: &ast::Id) -> Option<&TypeDef> {
+    pub fn find_typdef_local_opt(&self, id: &ast::Id) -> Option<&TypeDef> {
         self.local.tdenv.get(id)
     }
 
     pub fn find_typdef_opt<'a>(&'a self, id: &ast::Id) -> Option<&'a TypeDef> {
-        self.find_local_typdef_opt(id)
+        self.find_typdef_local_opt(id)
             .or_else(|| self.global.tdenv.get(id))
     }
 
@@ -240,7 +240,39 @@ impl<'global> Context<'global> {
 
     // - Iteration inputs
 
-    pub(super) fn opt_values(
+    pub(super) fn find_list_values_by_var<'a>(
+        &self,
+        arena: &'a ValueArena,
+        vars: &[ast::Var],
+    ) -> Result<Vec<&'a [Value]>, Error> {
+        let mut values_by_var = Vec::with_capacity(vars.len());
+        for var in vars {
+            let mut iters = var.iters.clone();
+            iters.push(ast::Iter::List);
+            let value = self.find_value(&Variable::new(var.id.clone(), iters))?;
+            let values = get::list(arena, value)
+                .map_err(|error| Error::from(error).at_if_missing(&var.id.span))?;
+            values_by_var.push(values);
+        }
+        let Some(values) = values_by_var.first() else {
+            return Ok(Vec::new());
+        };
+        let len = values.len();
+        for values in &values_by_var {
+            if values.len() != len {
+                return Err(Error::new(
+                    ErrorKind::Context(ContextErrorKind::IterationLengthMismatch {
+                        expected: len,
+                        actual: values.len(),
+                    }),
+                    Span::default(),
+                ));
+            }
+        }
+        Ok(values_by_var)
+    }
+
+    pub(super) fn find_opt_values_by_var(
         &self,
         arena: &ValueArena,
         vars: &[ast::Var],
@@ -266,69 +298,49 @@ impl<'global> Context<'global> {
         }
     }
 
-    pub(super) fn list_values<'a>(
-        &self,
-        arena: &'a ValueArena,
-        vars: &[ast::Var],
-    ) -> Result<Vec<&'a [Value]>, Error> {
-        let mut rows = Vec::with_capacity(vars.len());
-        for var in vars {
-            let mut iters = var.iters.clone();
-            iters.push(ast::Iter::List);
-            let value = self.find_value(&Variable::new(var.id.clone(), iters))?;
-            let values = get::list(arena, value)
-                .map_err(|error| Error::from(error).at_if_missing(&var.id.span))?;
-            rows.push(values);
-        }
-        let Some(row) = rows.first() else {
-            return Ok(Vec::new());
-        };
-        let width = row.len();
-        for row in &rows {
-            if row.len() != width {
-                return Err(Error::new(
-                    ErrorKind::Context(ContextErrorKind::IterationLengthMismatch {
-                        expected: width,
-                        actual: row.len(),
-                    }),
-                    Span::default(),
-                ));
-            }
-        }
-        Ok(rows)
-    }
-
     // - Iteration outputs
 
-    pub(super) fn collect_bindings(
+    pub(super) fn collect_values_by_var(
         &self,
         vars: &[ast::Var],
-        values_bind: &mut [Vec<Value>],
+        values_by_var: &mut [Vec<Value>],
     ) -> Backtrack<()> {
-        for (var, values) in vars.iter().zip(values_bind) {
+        for (var, values) in vars.iter().zip(values_by_var) {
             let var_bound = Variable::new(var.id.clone(), var.iters.clone());
             values.push(*backtrack_from_result!(self.find_value(&var_bound), &var.id.span));
         }
         Backtrack::Ok(())
     }
 
-    pub(super) fn bind_iter(
+    pub(super) fn bind_list_values_by_var(
         &mut self,
         arena: &mut ValueArena,
         vars: &[ast::Var],
-        iter: ast::Iter,
-        values_bind: Vec<Vec<Value>>,
+        values_by_var: Vec<Vec<Value>>,
     ) -> Backtrack<()> {
-        for (var, values) in vars.iter().zip(values_bind) {
+        for (var, values) in vars.iter().zip(values_by_var) {
             let mut iters = var.iters.clone();
-            iters.push(iter);
+            iters.push(ast::Iter::List);
             let typ = typ::make::iterate(var.typ.clone(), &iters);
-            let value = match iter {
-                ast::Iter::Opt => {
-                    make::opt(arena, typ.node.into(), values.into_iter().next(), Span::default())
-                }
-                ast::Iter::List => make::list(arena, typ.node.into(), values, Span::default()),
-            };
+            let value = make::list(arena, typ.node.into(), values, Span::default());
+            let value = backtrack_from_result!(value, &Span::default());
+            self.add_value(Variable::new(var.id.clone(), iters), value);
+        }
+        Backtrack::Ok(())
+    }
+
+    pub(super) fn bind_opt_values_by_var(
+        &mut self,
+        arena: &mut ValueArena,
+        vars: &[ast::Var],
+        values_by_var: Vec<Vec<Value>>,
+    ) -> Backtrack<()> {
+        for (var, values) in vars.iter().zip(values_by_var) {
+            let mut iters = var.iters.clone();
+            iters.push(ast::Iter::Opt);
+            let typ = typ::make::iterate(var.typ.clone(), &iters);
+            let value =
+                make::opt(arena, typ.node.into(), values.into_iter().next(), Span::default());
             let value = backtrack_from_result!(value, &Span::default());
             self.add_value(Variable::new(var.id.clone(), iters), value);
         }
@@ -357,8 +369,8 @@ impl crate::interp::shared::context::ReadContext for Context<'_> {
         self.find_typdef_opt(id)
     }
 
-    fn find_local_typdef_opt(&self, id: &ast::Id) -> Option<&TypeDef> {
-        self.find_local_typdef_opt(id)
+    fn find_typdef_local_opt(&self, id: &ast::Id) -> Option<&TypeDef> {
+        self.find_typdef_local_opt(id)
     }
 
     fn find_func(&self, id: &ast::Id) -> Result<&Rc<Self::Func>, Error> {
@@ -381,33 +393,45 @@ impl crate::interp::shared::context::WriteContext for Context<'_> {
 }
 
 impl crate::interp::shared::context::IterContext for Context<'_> {
-    fn opt_values(
-        &self,
-        arena: &ValueArena,
-        vars: &[ast::Var],
-    ) -> Result<Option<Vec<Value>>, Error> {
-        self.opt_values(arena, vars)
-    }
-
-    fn list_values<'arena>(
+    fn find_list_values_by_var<'arena>(
         &self,
         arena: &'arena ValueArena,
         vars: &[ast::Var],
     ) -> Result<Vec<&'arena [Value]>, Error> {
-        self.list_values(arena, vars)
+        self.find_list_values_by_var(arena, vars)
     }
 
-    fn collect_bindings(&self, vars: &[ast::Var], values_bind: &mut [Vec<Value>]) -> Backtrack<()> {
-        self.collect_bindings(vars, values_bind)
+    fn find_opt_values_by_var(
+        &self,
+        arena: &ValueArena,
+        vars: &[ast::Var],
+    ) -> Result<Option<Vec<Value>>, Error> {
+        self.find_opt_values_by_var(arena, vars)
     }
 
-    fn bind_iter(
+    fn collect_values_by_var(
+        &self,
+        vars: &[ast::Var],
+        values_by_var: &mut [Vec<Value>],
+    ) -> Backtrack<()> {
+        self.collect_values_by_var(vars, values_by_var)
+    }
+
+    fn bind_list_values_by_var(
         &mut self,
         arena: &mut ValueArena,
         vars: &[ast::Var],
-        iter: ast::Iter,
-        values_bind: Vec<Vec<Value>>,
+        values_by_var: Vec<Vec<Value>>,
     ) -> Backtrack<()> {
-        self.bind_iter(arena, vars, iter, values_bind)
+        self.bind_list_values_by_var(arena, vars, values_by_var)
+    }
+
+    fn bind_opt_values_by_var(
+        &mut self,
+        arena: &mut ValueArena,
+        vars: &[ast::Var],
+        values_by_var: Vec<Vec<Value>>,
+    ) -> Backtrack<()> {
+        self.bind_opt_values_by_var(arena, vars, values_by_var)
     }
 }

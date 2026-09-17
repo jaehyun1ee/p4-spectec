@@ -74,17 +74,17 @@ impl DirectMeter {
     ///              and RFC 2698 for the meaning of these colors).
     ///
     /// void read(out T result);
-    pub fn read<Interp, Iface, Exn>(
+    pub fn read<Interp, Iface, Ext>(
         self,
-        ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+        ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
         value_ctx: Value,
         value_arch: Value,
         _packet_in: &PacketIn,
     ) -> Result<(Self, Value, Value, Value), Interp::Error>
     where
         Iface: Interface,
-        Exn: Extern,
-        Interp: Interpreter<Iface, Exn>,
+        Ext: Extern,
+        Interp: Interpreter<Iface, Ext>,
     {
         let value_typ = func::find_type_e_local(ctx, value_ctx, "T")?;
         let value_typ = func::subst_type_e_local(ctx, value_ctx, value_typ)?;

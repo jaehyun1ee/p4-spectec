@@ -15,8 +15,8 @@ use crate::{
 
 // = Premise evaluation
 
-pub fn eval_prem<'global, Iface: Interface, Exn: Extern>(
-    runner_ctx: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
+pub fn eval_prem<'global, Iface: Interface, Ext: Extern>(
+    runner_ctx: &mut RunnerContext<'_, AlInterp, Iface, Ext>,
     ctx: Context<'global>,
     prem: &ast::Prem,
 ) -> Backtrack<Context<'global>> {
@@ -34,8 +34,8 @@ pub fn eval_prem<'global, Iface: Interface, Exn: Extern>(
     })
 }
 
-pub fn eval_prems<'global, Iface: Interface, Exn: Extern>(
-    runner_ctx: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
+pub fn eval_prems<'global, Iface: Interface, Ext: Extern>(
+    runner_ctx: &mut RunnerContext<'_, AlInterp, Iface, Ext>,
     mut ctx: Context<'global>,
     prems: &[ast::Prem],
 ) -> Backtrack<Context<'global>> {
@@ -47,8 +47,8 @@ pub fn eval_prems<'global, Iface: Interface, Exn: Extern>(
 
 // - Rule premise
 
-fn eval_rule_prem<'global, Iface: Interface, Exn: Extern>(
-    runner_ctx: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
+fn eval_rule_prem<'global, Iface: Interface, Ext: Extern>(
+    runner_ctx: &mut RunnerContext<'_, AlInterp, Iface, Ext>,
     ctx: Context<'global>,
     prem: &ast::RulePrem,
 ) -> Backtrack<Context<'global>> {
@@ -62,8 +62,8 @@ fn eval_rule_prem<'global, Iface: Interface, Exn: Extern>(
 
 // - If premise
 
-fn eval_if_prem<'global, Iface: Interface, Exn: Extern>(
-    runner_ctx: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
+fn eval_if_prem<'global, Iface: Interface, Ext: Extern>(
+    runner_ctx: &mut RunnerContext<'_, AlInterp, Iface, Ext>,
     ctx: Context<'global>,
     prem: &ast::IfPrem,
 ) -> Backtrack<Context<'global>> {
@@ -80,8 +80,8 @@ fn eval_if_prem<'global, Iface: Interface, Exn: Extern>(
 
 // - Hold premise
 
-fn eval_if_hold_prem<'global, Iface: Interface, Exn: Extern>(
-    runner_ctx: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
+fn eval_if_hold_prem<'global, Iface: Interface, Ext: Extern>(
+    runner_ctx: &mut RunnerContext<'_, AlInterp, Iface, Ext>,
     ctx: Context<'global>,
     prem: &ast::IfHoldPrem,
 ) -> Backtrack<Context<'global>> {
@@ -98,8 +98,8 @@ fn eval_if_hold_prem<'global, Iface: Interface, Exn: Extern>(
 
 // - Not-hold premise
 
-fn eval_if_not_hold_prem<'global, Iface: Interface, Exn: Extern>(
-    runner_ctx: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
+fn eval_if_not_hold_prem<'global, Iface: Interface, Ext: Extern>(
+    runner_ctx: &mut RunnerContext<'_, AlInterp, Iface, Ext>,
     ctx: Context<'global>,
     prem: &ast::IfNotHoldPrem,
 ) -> Backtrack<Context<'global>> {
@@ -119,8 +119,8 @@ fn eval_if_not_hold_prem<'global, Iface: Interface, Exn: Extern>(
 
 // - Let premise
 
-fn eval_let_prem<'global, Iface: Interface, Exn: Extern>(
-    runner_ctx: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
+fn eval_let_prem<'global, Iface: Interface, Ext: Extern>(
+    runner_ctx: &mut RunnerContext<'_, AlInterp, Iface, Ext>,
     ctx: Context<'global>,
     prem: &ast::LetPrem,
 ) -> Backtrack<Context<'global>> {
@@ -130,8 +130,8 @@ fn eval_let_prem<'global, Iface: Interface, Exn: Extern>(
 
 // - Iteration premise
 
-fn eval_iter_prem<'global, Iface: Interface, Exn: Extern>(
-    runner_ctx: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
+fn eval_iter_prem<'global, Iface: Interface, Ext: Extern>(
+    runner_ctx: &mut RunnerContext<'_, AlInterp, Iface, Ext>,
     ctx: Context<'global>,
     prem: &ast::IterPrem,
 ) -> Backtrack<Context<'global>> {
@@ -158,8 +158,8 @@ fn eval_iter_prem<'global, Iface: Interface, Exn: Extern>(
 
 // - Debug premise
 
-fn eval_debug_prem<'global, Iface: Interface, Exn: Extern>(
-    runner_ctx: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
+fn eval_debug_prem<'global, Iface: Interface, Ext: Extern>(
+    runner_ctx: &mut RunnerContext<'_, AlInterp, Iface, Ext>,
     ctx: Context<'global>,
     prem: &ast::DebugPrem,
 ) -> Backtrack<Context<'global>> {

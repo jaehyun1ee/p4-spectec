@@ -40,10 +40,10 @@ struct FixtureInterpreter {
     config: FixtureConfig,
 }
 
-impl<Iface, Exn> Interpreter<Iface, Exn> for FixtureInterpreter
+impl<Iface, Ext> Interpreter<Iface, Ext> for FixtureInterpreter
 where
     Iface: Interface,
-    Exn: Extern,
+    Ext: Extern,
 {
     type Spec = ();
     type Error = FixtureError;
@@ -53,7 +53,7 @@ where
     fn reset(&mut self) {}
 
     fn eval_program(
-        _ctx: &mut RunnerContext<'_, Self, Iface, Exn>,
+        _ctx: &mut RunnerContext<'_, Self, Iface, Ext>,
         name: &str,
         program: Value,
     ) -> Result<Vec<Value>, Self::Error> {
@@ -64,7 +64,7 @@ where
     }
 
     fn eval_func(
-        ctx: &mut RunnerContext<'_, Self, Iface, Exn>,
+        ctx: &mut RunnerContext<'_, Self, Iface, Ext>,
         name: &str,
         targs: &[Typ],
         values: &[Value],
@@ -111,7 +111,7 @@ where
     }
 
     fn eval_rel(
-        _ctx: &mut RunnerContext<'_, Self, Iface, Exn>,
+        _ctx: &mut RunnerContext<'_, Self, Iface, Ext>,
         name: &str,
         _values: &[Value],
     ) -> Result<Vec<Value>, Self::Error> {

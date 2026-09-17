@@ -12,11 +12,11 @@ use crate::{
     runner::{Extern, Interface, RunnerContext},
 };
 
-impl<Iface: Interface, Exn: Extern> Invoker<Iface, Exn> for AlInterp {
+impl<Iface: Interface, Ext: Extern> Invoker<Iface, Ext> for AlInterp {
     type Context<'global> = Context<'global>;
 
     fn invoke_func<'global>(
-        runner_ctx: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
+        runner_ctx: &mut RunnerContext<'_, AlInterp, Iface, Ext>,
         ctx: &Context<'global>,
         id: &ast::Id,
         targs: &[ast::Typ],
@@ -26,7 +26,7 @@ impl<Iface: Interface, Exn: Extern> Invoker<Iface, Exn> for AlInterp {
     }
 
     fn invoke_rel<'global>(
-        runner_ctx: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
+        runner_ctx: &mut RunnerContext<'_, AlInterp, Iface, Ext>,
         ctx: &Context<'global>,
         id: &ast::Id,
         values: &[Value],

@@ -16,9 +16,9 @@ use crate::interp::shared::backtrack::{Backtrack, backtrack, backtrack_from_resu
 
 // - Access
 
-fn eval_access_path<'global, Eval: Invoker<Iface, Exn>, Iface: Interface, Exn: Extern>(
-    runner_ctx: &mut RunnerContext<'_, Eval, Iface, Exn>,
-    ctx: &Eval::Context<'global>,
+fn eval_access_path<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Extern>(
+    runner_ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
+    ctx: &Interp::Context<'global>,
     value_base: &Value,
     path: &ast::Path,
 ) -> Backtrack<Value> {
@@ -38,9 +38,9 @@ fn eval_access_path<'global, Eval: Invoker<Iface, Exn>, Iface: Interface, Exn: E
 
 // - Index access path
 
-fn eval_access_idx_path<'global, Eval: Invoker<Iface, Exn>, Iface: Interface, Exn: Extern>(
-    runner_ctx: &mut RunnerContext<'_, Eval, Iface, Exn>,
-    ctx: &Eval::Context<'global>,
+fn eval_access_idx_path<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Extern>(
+    runner_ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
+    ctx: &Interp::Context<'global>,
     value_base: &Value,
     path: &ast::Path,
     exp_idx: &ast::Exp,
@@ -52,9 +52,9 @@ fn eval_access_idx_path<'global, Eval: Invoker<Iface, Exn>, Iface: Interface, Ex
 
 // - Slice access path
 
-fn eval_access_slice_path<'global, Eval: Invoker<Iface, Exn>, Iface: Interface, Exn: Extern>(
-    runner_ctx: &mut RunnerContext<'_, Eval, Iface, Exn>,
-    ctx: &Eval::Context<'global>,
+fn eval_access_slice_path<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Extern>(
+    runner_ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
+    ctx: &Interp::Context<'global>,
     value_base: &Value,
     path: &ast::Path,
     exp_idx: &ast::Exp,
@@ -80,9 +80,9 @@ fn eval_access_slice_path<'global, Eval: Invoker<Iface, Exn>, Iface: Interface, 
 
 // - Field access path
 
-fn eval_access_dot_path<'global, Eval: Invoker<Iface, Exn>, Iface: Interface, Exn: Extern>(
-    runner_ctx: &mut RunnerContext<'_, Eval, Iface, Exn>,
-    ctx: &Eval::Context<'global>,
+fn eval_access_dot_path<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Extern>(
+    runner_ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
+    ctx: &Interp::Context<'global>,
     value_base: &Value,
     path: &ast::Path,
     atom: &ast::Atom,
@@ -95,12 +95,12 @@ fn eval_access_dot_path<'global, Eval: Invoker<Iface, Exn>, Iface: Interface, Ex
 
 pub(crate) fn eval_update_path<
     'global,
-    Eval: Invoker<Iface, Exn>,
+    Interp: Invoker<Iface, Ext>,
     Iface: Interface,
-    Exn: Extern,
+    Ext: Extern,
 >(
-    runner_ctx: &mut RunnerContext<'_, Eval, Iface, Exn>,
-    ctx: &Eval::Context<'global>,
+    runner_ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
+    ctx: &Interp::Context<'global>,
     value_base: &Value,
     path: &ast::Path,
     value_upd: Value,
@@ -121,9 +121,9 @@ pub(crate) fn eval_update_path<
 
 // - Index update path
 
-fn eval_update_idx_path<'global, Eval: Invoker<Iface, Exn>, Iface: Interface, Exn: Extern>(
-    runner_ctx: &mut RunnerContext<'_, Eval, Iface, Exn>,
-    ctx: &Eval::Context<'global>,
+fn eval_update_idx_path<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Extern>(
+    runner_ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
+    ctx: &Interp::Context<'global>,
     value_base: &Value,
     path: &ast::Path,
     exp_idx: &ast::Exp,
@@ -146,9 +146,9 @@ fn eval_update_idx_path<'global, Eval: Invoker<Iface, Exn>, Iface: Interface, Ex
 
 // - Slice update path
 
-fn eval_update_slice_path<'global, Eval: Invoker<Iface, Exn>, Iface: Interface, Exn: Extern>(
-    runner_ctx: &mut RunnerContext<'_, Eval, Iface, Exn>,
-    ctx: &Eval::Context<'global>,
+fn eval_update_slice_path<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Extern>(
+    runner_ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
+    ctx: &Interp::Context<'global>,
     value_base: &Value,
     path: &ast::Path,
     exp_idx: &ast::Exp,
@@ -175,9 +175,9 @@ fn eval_update_slice_path<'global, Eval: Invoker<Iface, Exn>, Iface: Interface, 
 
 // - Field update path
 
-fn eval_update_dot_path<'global, Eval: Invoker<Iface, Exn>, Iface: Interface, Exn: Extern>(
-    runner_ctx: &mut RunnerContext<'_, Eval, Iface, Exn>,
-    ctx: &Eval::Context<'global>,
+fn eval_update_dot_path<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Extern>(
+    runner_ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
+    ctx: &Interp::Context<'global>,
     value_base: &Value,
     path: &ast::Path,
     atom: &ast::Atom,

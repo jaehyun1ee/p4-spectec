@@ -19,9 +19,9 @@ use crate::interp::shared::{
     error::{ErrorKind, TraceErrorKind},
 };
 
-fn eval_arg<'global, Eval: Invoker<Iface, Exn>, Iface: Interface, Exn: Extern>(
-    runner_ctx: &mut RunnerContext<'_, Eval, Iface, Exn>,
-    ctx: &Eval::Context<'global>,
+fn eval_arg<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Extern>(
+    runner_ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
+    ctx: &Interp::Context<'global>,
     arg: &ast::Arg,
 ) -> Backtrack<Value> {
     let result = match &arg.node {
@@ -33,9 +33,9 @@ fn eval_arg<'global, Eval: Invoker<Iface, Exn>, Iface: Interface, Exn: Extern>(
     })
 }
 
-pub(crate) fn eval_args<'global, Eval: Invoker<Iface, Exn>, Iface: Interface, Exn: Extern>(
-    runner_ctx: &mut RunnerContext<'_, Eval, Iface, Exn>,
-    ctx: &Eval::Context<'global>,
+pub(crate) fn eval_args<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Extern>(
+    runner_ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
+    ctx: &Interp::Context<'global>,
     args: &[ast::Arg],
 ) -> Backtrack<Vec<Value>> {
     let mut values = Vec::with_capacity(args.len());

@@ -14,31 +14,31 @@ use crate::{
 
 // == Runner context
 
-pub struct RunnerContext<'runner, Interp, Iface, Exn>
+pub struct RunnerContext<'runner, Interp, Iface, Ext>
 where
-    Interp: Interpreter<Iface, Exn>,
+    Interp: Interpreter<Iface, Ext>,
     Iface: Interface,
-    Exn: Extern,
+    Ext: Extern,
 {
     arena: &'runner mut ValueArena,
     spec: &'runner Interp::Spec,
     interp: &'runner mut Interp,
     interface: &'runner mut Iface,
-    external: &'runner Exn,
+    external: &'runner Ext,
 }
 
-impl<'runner, Interp, Iface, Exn> RunnerContext<'runner, Interp, Iface, Exn>
+impl<'runner, Interp, Iface, Ext> RunnerContext<'runner, Interp, Iface, Ext>
 where
-    Interp: Interpreter<Iface, Exn>,
+    Interp: Interpreter<Iface, Ext>,
     Iface: Interface,
-    Exn: Extern,
+    Ext: Extern,
 {
     pub(super) fn new(
         arena: &'runner mut ValueArena,
         spec: &'runner Interp::Spec,
         interp: &'runner mut Interp,
         interface: &'runner mut Iface,
-        external: &'runner Exn,
+        external: &'runner Ext,
     ) -> Self {
         Self { arena, spec, interp, interface, external }
     }
@@ -65,7 +65,7 @@ where
         self.arena
     }
 
-    pub fn external(&self) -> &'runner Exn {
+    pub fn external(&self) -> &'runner Ext {
         self.external
     }
 

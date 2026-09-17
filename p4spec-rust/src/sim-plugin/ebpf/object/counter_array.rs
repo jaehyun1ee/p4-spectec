@@ -53,16 +53,16 @@ impl CounterArray {
     /// ```p4
     /// void increment(in bit<32> index);
     /// ```
-    pub fn increment<Interp, Iface, Exn>(
+    pub fn increment<Interp, Iface, Ext>(
         self,
-        ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+        ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
         value_ctx: Value,
         value_arch: Value,
     ) -> Result<(Self, Value, Value, Value), Interp::Error>
     where
         Iface: Interface,
-        Exn: Extern,
-        Interp: Interpreter<Iface, Exn>,
+        Ext: Extern,
+        Interp: Interpreter<Iface, Ext>,
     {
         // Get "index"
         let value_idx = func::find_var_e_local(ctx, value_ctx, "index")?;
@@ -76,16 +76,16 @@ impl CounterArray {
     /// ```p4
     /// void add(in bit<32> index, in bit<32> value);
     /// ```
-    pub fn add<Interp, Iface, Exn>(
+    pub fn add<Interp, Iface, Ext>(
         self,
-        ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+        ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
         value_ctx: Value,
         value_arch: Value,
     ) -> Result<(Self, Value, Value, Value), Interp::Error>
     where
         Iface: Interface,
-        Exn: Extern,
-        Interp: Interpreter<Iface, Exn>,
+        Ext: Extern,
+        Interp: Interpreter<Iface, Ext>,
     {
         // Get "index"
         let value_idx = func::find_var_e_local(ctx, value_ctx, "index")?;
@@ -99,9 +99,9 @@ impl CounterArray {
         self.update(ctx, value_ctx, value_arch, idx, int)
     }
 
-    fn update<Interp, Iface, Exn>(
+    fn update<Interp, Iface, Ext>(
         mut self,
-        ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+        ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
         value_ctx: Value,
         value_arch: Value,
         idx: usize,
@@ -109,8 +109,8 @@ impl CounterArray {
     ) -> Result<(Self, Value, Value, Value), Interp::Error>
     where
         Iface: Interface,
-        Exn: Extern,
-        Interp: Interpreter<Iface, Exn>,
+        Ext: Extern,
+        Interp: Interpreter<Iface, Ext>,
     {
         // Update counter
         if let Some(count) = self.counts.get_mut(idx) {

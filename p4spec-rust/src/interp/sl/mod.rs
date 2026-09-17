@@ -36,7 +36,7 @@ impl SlInterp {
     }
 }
 
-impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for SlInterp {
+impl<Iface: Interface, Ext: Extern> Interpreter<Iface, Ext> for SlInterp {
     type Spec = Global;
     type Error = Error;
 
@@ -49,7 +49,7 @@ impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for SlInterp {
     }
 
     fn eval_program(
-        runner_ctx: &mut RunnerContext<'_, Self, Iface, Exn>,
+        runner_ctx: &mut RunnerContext<'_, Self, Iface, Ext>,
         name: &str,
         program: Value,
     ) -> Result<Vec<Value>, Error> {
@@ -57,7 +57,7 @@ impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for SlInterp {
     }
 
     fn eval_rel(
-        runner_ctx: &mut RunnerContext<'_, Self, Iface, Exn>,
+        runner_ctx: &mut RunnerContext<'_, Self, Iface, Ext>,
         name: &str,
         values: &[Value],
     ) -> Result<Vec<Value>, Error> {
@@ -73,7 +73,7 @@ impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for SlInterp {
     }
 
     fn eval_func(
-        runner_ctx: &mut RunnerContext<'_, Self, Iface, Exn>,
+        runner_ctx: &mut RunnerContext<'_, Self, Iface, Ext>,
         name: &str,
         targs: &[ast::Typ],
         values: &[Value],

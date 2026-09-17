@@ -74,17 +74,17 @@ impl DirectCounter {
     /// the body of that action.
     ///
     /// void count();
-    pub fn count<Interp, Iface, Exn>(
+    pub fn count<Interp, Iface, Ext>(
         mut self,
-        ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+        ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
         value_ctx: Value,
         value_arch: Value,
         packet_in: &PacketIn,
     ) -> Result<(Self, Value, Value, Value), Interp::Error>
     where
         Iface: Interface,
-        Exn: Extern,
-        Interp: Interpreter<Iface, Exn>,
+        Ext: Extern,
+        Interp: Interpreter<Iface, Ext>,
     {
         match &mut self {
             Self::Packets(count) => *count += BigInt::one(),

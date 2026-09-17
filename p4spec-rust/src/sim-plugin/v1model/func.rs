@@ -44,15 +44,15 @@ use num_traits::Zero;
 /// value of the receiver parameter.
 ///
 /// extern void digest<T>(in bit<32> receiver, in T data);
-pub fn digest<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn digest<Interp, Iface, Ext>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     value_ctx: Value,
     value_arch: Value,
 ) -> Result<(Value, Value, Value), Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Ext: Extern,
+    Interp: Interpreter<Iface, Ext>,
 {
     // No-op in the source simulator
     let typ = typ::make::opt(typ::make::var(
@@ -82,15 +82,15 @@ where
 /// packet to do something other than drop.
 ///
 /// extern void mark_to_drop(inout standard_metadata_t standard_metadata);
-pub fn mark_to_drop<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn mark_to_drop<Interp, Iface, Ext>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     value_ctx: Value,
     value_arch: Value,
 ) -> Result<(Value, Value, Value), Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Ext: Extern,
+    Interp: Interpreter<Iface, Ext>,
 {
     let value_egress_spec = pack::p4_fixed_bit(ctx.arena_mut(), 9.into(), 511.into())?;
     let value_ctx = rel::lvalue_write_dot_local(
@@ -144,15 +144,15 @@ where
 ///
 /// extern void hash<O, T, D, M>(out O result, in HashAlgorithm algo,
 ///                              in T base, in D data, in M max);
-pub fn hash<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn hash<Interp, Iface, Ext>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     value_ctx: Value,
     value_arch: Value,
 ) -> Result<(Value, Value, Value), Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Ext: Extern,
+    Interp: Interpreter<Iface, Ext>,
 {
     let value_base = func::find_var_e_local(ctx, value_ctx, "base")?;
     let int_base = unpack::p4_fixed_bit(ctx.arena(), &value_base)?.1;
@@ -194,15 +194,15 @@ pub fn adjust(base: &BigInt, rmax: &BigInt, int: &BigInt) -> Result<BigInt, Exte
     Ok(remainder(int, &int_range) + base)
 }
 
-fn compute_checksum<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+fn compute_checksum<Interp, Iface, Ext>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     value_ctx: Value,
     payload: Option<&PacketIn>,
 ) -> Result<BigInt, Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Ext: Extern,
+    Interp: Interpreter<Iface, Ext>,
 {
     let value_data = func::find_var_e_local(ctx, value_ctx, "data")?;
     let mut values = unpack::p4_tuple(ctx.arena(), &value_data)?;
@@ -222,16 +222,16 @@ where
     Ok(checksum::compute_checksum(&id_field, None, ctx.arena(), &values)?)
 }
 
-fn do_verify_checksum<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+fn do_verify_checksum<Interp, Iface, Ext>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     value_ctx: Value,
     value_arch: Value,
     payload: Option<&PacketIn>,
 ) -> Result<(Value, Value, Value), Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Ext: Extern,
+    Interp: Interpreter<Iface, Ext>,
 {
     let value_condition = func::find_var_e_local(ctx, value_ctx, "condition")?;
     if !unpack::p4_bool(ctx.arena(), &value_condition)? {
@@ -318,43 +318,43 @@ where
 ///
 /// extern void verify_checksum_with_payload<T, O>(in bool condition, in T data,
 ///                                                in O checksum, HashAlgorithm algo);
-pub fn verify_checksum<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn verify_checksum<Interp, Iface, Ext>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     value_ctx: Value,
     value_arch: Value,
 ) -> Result<(Value, Value, Value), Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Ext: Extern,
+    Interp: Interpreter<Iface, Ext>,
 {
     do_verify_checksum(ctx, value_ctx, value_arch, None)
 }
 
-pub fn verify_checksum_with_payload<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn verify_checksum_with_payload<Interp, Iface, Ext>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     value_ctx: Value,
     value_arch: Value,
     packet_in: &PacketIn,
 ) -> Result<(Value, Value, Value), Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Ext: Extern,
+    Interp: Interpreter<Iface, Ext>,
 {
     do_verify_checksum(ctx, value_ctx, value_arch, Some(packet_in))
 }
 
-fn do_update_checksum<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+fn do_update_checksum<Interp, Iface, Ext>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     value_ctx: Value,
     value_arch: Value,
     payload: Option<&PacketIn>,
 ) -> Result<(Value, Value, Value), Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Ext: Extern,
+    Interp: Interpreter<Iface, Ext>,
 {
     let value_condition = func::find_var_e_local(ctx, value_ctx, "condition")?;
     if !unpack::p4_bool(ctx.arena(), &value_condition)? {
@@ -428,29 +428,29 @@ where
 ///
 /// extern void update_checksum_with_payload<T, O>(in bool condition, in T data,
 ///                                                inout O checksum, HashAlgorithm algo);
-pub fn update_checksum<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn update_checksum<Interp, Iface, Ext>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     value_ctx: Value,
     value_arch: Value,
 ) -> Result<(Value, Value, Value), Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Ext: Extern,
+    Interp: Interpreter<Iface, Ext>,
 {
     do_update_checksum(ctx, value_ctx, value_arch, None)
 }
 
-pub fn update_checksum_with_payload<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn update_checksum_with_payload<Interp, Iface, Ext>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     value_ctx: Value,
     value_arch: Value,
     packet_in: &PacketIn,
 ) -> Result<(Value, Value, Value), Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Ext: Extern,
+    Interp: Interpreter<Iface, Ext>,
 {
     do_update_checksum(ctx, value_ctx, value_arch, Some(packet_in))
 }
@@ -651,15 +651,15 @@ where
 ///
 /// extern void log_msg(string msg);
 /// extern void log_msg<T>(string msg, in T data);
-pub fn log_msg<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn log_msg<Interp, Iface, Ext>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     value_ctx: Value,
     value_arch: Value,
 ) -> Result<(Value, Value, Value), Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Ext: Extern,
+    Interp: Interpreter<Iface, Ext>,
 {
     let value_msg = func::find_var_e_local(ctx, value_ctx, "msg")?;
     let msg = unpack::p4_string(ctx.arena(), &value_msg)?;
@@ -711,15 +711,15 @@ pub fn format_braces(arena: &ValueArena, fmt: &str, args: &[Value]) -> Result<St
     Ok(text)
 }
 
-pub fn log_msg_format<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn log_msg_format<Interp, Iface, Ext>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     value_ctx: Value,
     value_arch: Value,
 ) -> Result<(Value, Value, Value), Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Ext: Extern,
+    Interp: Interpreter<Iface, Ext>,
 {
     let value_msg = func::find_var_e_local(ctx, value_ctx, "msg")?;
     let msg = unpack::p4_string(ctx.arena(), &value_msg)?;

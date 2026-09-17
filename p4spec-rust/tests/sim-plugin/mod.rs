@@ -22,14 +22,14 @@ fn repo() -> &'static Path {
     Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap()
 }
 
-fn runner<Exn: Extern>(external: Exn) -> Runner<AlInterp, BuiltinInterface, Exn> {
+fn runner<Ext: Extern>(external: Ext) -> Runner<AlInterp, BuiltinInterface, Ext> {
     runner_from_spec(&repo().join("spec"), external)
 }
 
-fn runner_from_spec<Exn: Extern>(
+fn runner_from_spec<Ext: Extern>(
     spec: &Path,
-    external: Exn,
-) -> Runner<AlInterp, BuiltinInterface, Exn> {
+    external: Ext,
+) -> Runner<AlInterp, BuiltinInterface, Ext> {
     let spec_el = parse_files([spec]).expect("native specification parsing");
     let spec_il = elaborate::convert(spec_el).expect("native elaboration");
     let spec_al = algo::convert(spec_il).expect("native algorithmic conversion");

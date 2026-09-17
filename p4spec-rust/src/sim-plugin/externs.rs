@@ -57,7 +57,7 @@ pub(crate) trait Impl: Extern {
 
 // == Runner dispatch
 
-impl<Exn: Impl> Extern for Exn {
+impl<Ext: Impl> Extern for Ext {
     fn eval_rel<Interp, Iface>(
         &self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
@@ -109,14 +109,14 @@ impl<Exn: Impl> Extern for Exn {
 
 // == Compile-time extern calls
 
-pub(crate) fn eval_func_lctk<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub(crate) fn eval_func_lctk<Interp, Iface, Ext>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     values: &[Value],
 ) -> Result<Vec<Value>, Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Ext: Extern,
+    Interp: Interpreter<Iface, Ext>,
 {
     let [value_ctx, value_name, value_names_param] = values else {
         return Err(ExternError::Failure(

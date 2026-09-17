@@ -28,8 +28,8 @@ use std::borrow::Cow;
 
 // = Block evaluation
 
-pub fn eval_block<Iface: Interface, Exn: Extern>(
-    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
+pub fn eval_block<Iface: Interface, Ext: Extern>(
+    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Ext>,
     ctx: Cow<'_, Context<'_>>,
     block: &[ast::Instr],
     tail: bool,
@@ -41,8 +41,8 @@ pub fn eval_block<Iface: Interface, Exn: Extern>(
     }
 }
 
-fn eval_block_deterministic<Iface: Interface, Exn: Extern>(
-    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
+fn eval_block_deterministic<Iface: Interface, Ext: Extern>(
+    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Ext>,
     ctx: &Context<'_>,
     block: &[ast::Instr],
     tail: bool,
@@ -58,8 +58,8 @@ fn eval_block_deterministic<Iface: Interface, Exn: Extern>(
     Backtrack::Ok(flow)
 }
 
-pub(crate) fn eval_block_sequential<'instr, Iface: Interface, Exn: Extern>(
-    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
+pub(crate) fn eval_block_sequential<'instr, Iface: Interface, Ext: Extern>(
+    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Ext>,
     ctx: Cow<'_, Context<'_>>,
     mut instrs: impl DoubleEndedIterator<Item = &'instr ast::Instr>,
     tail: bool,
@@ -91,8 +91,8 @@ fn retain_deepest_errors(errors: &mut Vec<Error>, errors_post: Vec<Error>) {
     }
 }
 
-pub(crate) fn eval_block_with_else<Iface: Interface, Exn: Extern>(
-    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
+pub(crate) fn eval_block_with_else<Iface: Interface, Ext: Extern>(
+    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Ext>,
     ctx: Context<'_>,
     block: &[ast::Instr],
     block_else: Option<&[ast::Instr]>,
@@ -110,8 +110,8 @@ pub(crate) fn eval_block_with_else<Iface: Interface, Exn: Extern>(
 
 // = Instruction evaluation
 
-pub fn eval_instr<Iface: Interface, Exn: Extern>(
-    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
+pub fn eval_instr<Iface: Interface, Ext: Extern>(
+    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Ext>,
     ctx: Cow<'_, Context<'_>>,
     instr: &ast::Instr,
     tail: bool,
@@ -146,8 +146,8 @@ pub fn eval_instr<Iface: Interface, Exn: Extern>(
 
 // - If instruction
 
-fn eval_if_instr<Iface: Interface, Exn: Extern>(
-    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
+fn eval_if_instr<Iface: Interface, Ext: Extern>(
+    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Ext>,
     ctx: Cow<'_, Context<'_>>,
     instr: &ast::IfInstr,
     tail: bool,
@@ -173,8 +173,8 @@ fn eval_if_instr<Iface: Interface, Exn: Extern>(
 
 // - Hold instruction
 
-fn eval_hold_instr<Iface: Interface, Exn: Extern>(
-    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
+fn eval_hold_instr<Iface: Interface, Ext: Extern>(
+    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Ext>,
     ctx: Cow<'_, Context<'_>>,
     instr: &ast::HoldInstr,
     tail: bool,
@@ -211,8 +211,8 @@ fn eval_hold_instr<Iface: Interface, Exn: Extern>(
 
 // - Case instruction
 
-fn eval_case_instr<Iface: Interface, Exn: Extern>(
-    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
+fn eval_case_instr<Iface: Interface, Ext: Extern>(
+    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Ext>,
     ctx: Cow<'_, Context<'_>>,
     instr: &ast::CaseInstr,
     tail: bool,
@@ -234,8 +234,8 @@ fn eval_case_instr<Iface: Interface, Exn: Extern>(
     ))
 }
 
-fn eval_guard<Iface: Interface, Exn: Extern>(
-    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
+fn eval_guard<Iface: Interface, Ext: Extern>(
+    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Ext>,
     ctx: &Context<'_>,
     exp: &ast::Exp,
     value: Value,
@@ -295,8 +295,8 @@ fn eval_guard<Iface: Interface, Exn: Extern>(
 
 // - Group instruction
 
-fn eval_group_instr<Iface: Interface, Exn: Extern>(
-    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
+fn eval_group_instr<Iface: Interface, Ext: Extern>(
+    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Ext>,
     ctx: Cow<'_, Context<'_>>,
     instr: &ast::GroupInstr,
     tail: bool,
@@ -306,8 +306,8 @@ fn eval_group_instr<Iface: Interface, Exn: Extern>(
 
 // - Let instruction
 
-fn eval_let_instr<Iface: Interface, Exn: Extern>(
-    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
+fn eval_let_instr<Iface: Interface, Ext: Extern>(
+    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Ext>,
     ctx: Cow<'_, Context<'_>>,
     instr: &ast::LetInstr,
     tail: bool,
@@ -326,8 +326,8 @@ fn eval_let_instr<Iface: Interface, Exn: Extern>(
 
 // - Rule instruction
 
-fn eval_rule_instr<Iface: Interface, Exn: Extern>(
-    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
+fn eval_rule_instr<Iface: Interface, Ext: Extern>(
+    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Ext>,
     ctx: Cow<'_, Context<'_>>,
     instr: &ast::RuleInstr,
     tail: bool,
@@ -366,8 +366,8 @@ fn eval_rule_instr<Iface: Interface, Exn: Extern>(
 
 // - Result instruction
 
-fn eval_result_instr<Iface: Interface, Exn: Extern>(
-    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
+fn eval_result_instr<Iface: Interface, Ext: Extern>(
+    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Ext>,
     ctx: Cow<'_, Context<'_>>,
     instr: &ast::ResultInstr,
 ) -> Backtrack<Flow> {
@@ -376,8 +376,8 @@ fn eval_result_instr<Iface: Interface, Exn: Extern>(
 
 // - Return instruction
 
-fn eval_return_instr<Iface: Interface, Exn: Extern>(
-    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
+fn eval_return_instr<Iface: Interface, Ext: Extern>(
+    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Ext>,
     ctx: Cow<'_, Context<'_>>,
     instr: &ast::ReturnInstr,
     tail: bool,
@@ -408,8 +408,8 @@ fn eval_return_instr<Iface: Interface, Exn: Extern>(
 
 // - Debug instruction
 
-fn eval_debug_instr<Iface: Interface, Exn: Extern>(
-    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
+fn eval_debug_instr<Iface: Interface, Ext: Extern>(
+    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Ext>,
     ctx: Cow<'_, Context<'_>>,
     instr: &ast::DebugInstr,
     tail: bool,
@@ -429,19 +429,21 @@ fn eval_debug_instr<Iface: Interface, Exn: Extern>(
 
 // - Condition iteration
 
-fn eval_cond_iter<Iface: Interface, Exn: Extern>(
-    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
+fn eval_cond_iter<Iface: Interface, Ext: Extern>(
+    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Ext>,
     ctx: &Context<'_>,
     iters: &[ast::ExpIter],
-    eval: &mut impl FnMut(&mut RunnerContext<'_, SlInterp, Iface, Exn>, &Context<'_>) -> Backtrack<bool>,
+    eval: &mut impl FnMut(&mut RunnerContext<'_, SlInterp, Iface, Ext>, &Context<'_>) -> Backtrack<bool>,
 ) -> Backtrack<bool> {
     let Some(((iter, vars), iters_tail)) = iters.split_last() else {
         return eval(runner_ctx, ctx);
     };
     match iter {
         ast::Iter::Opt => {
-            let values =
-                backtrack_from_result!(ctx.opt_values(runner_ctx.arena(), vars), &Span::default());
+            let values = backtrack_from_result!(
+                ctx.find_opt_values_by_var(runner_ctx.arena(), vars),
+                &Span::default()
+            );
             let Some(values) = values else {
                 return Backtrack::Ok(false);
             };
@@ -452,19 +454,21 @@ fn eval_cond_iter<Iface: Interface, Exn: Extern>(
             eval_cond_iter(runner_ctx, &ctx_sub, iters_tail, eval)
         }
         ast::Iter::List => {
-            let rows =
-                backtrack_from_result!(ctx.list_values(runner_ctx.arena(), vars), &Span::default());
+            let values_by_var = backtrack_from_result!(
+                ctx.find_list_values_by_var(runner_ctx.arena(), vars),
+                &Span::default()
+            );
             // Copy handles before the callback can allocate in the arena
-            let rows: Vec<_> = rows.into_iter().map(<[Value]>::to_vec).collect();
-            let width = rows.first().map_or(0, Vec::len);
+            let values_by_var: Vec<_> = values_by_var.into_iter().map(<[Value]>::to_vec).collect();
+            let len = values_by_var.first().map_or(0, Vec::len);
             let vars: Vec<_> = vars
                 .iter()
                 .map(|var| Variable::new(var.id.clone(), var.iters.clone()))
                 .collect();
             let mut ctx_sub = ctx.clone();
-            for column in 0..width {
-                for (var, row) in vars.iter().zip(&rows) {
-                    ctx_sub.add_value(var.clone(), row[column]);
+            for idx in 0..len {
+                for (var, values) in vars.iter().zip(&values_by_var) {
+                    ctx_sub.add_value(var.clone(), values[idx]);
                 }
                 if !backtrack!(eval_cond_iter(runner_ctx, &ctx_sub, iters_tail, eval)) {
                     return Backtrack::Ok(false);
@@ -477,12 +481,12 @@ fn eval_cond_iter<Iface: Interface, Exn: Extern>(
 
 // - Binding iteration
 
-fn eval_instr_iter<'global, Iface: Interface, Exn: Extern>(
-    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Exn>,
+fn eval_instr_iter<'global, Iface: Interface, Ext: Extern>(
+    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Ext>,
     ctx: Context<'global>,
     iters: &[ast::InstrIter],
     eval: &mut impl FnMut(
-        &mut RunnerContext<'_, SlInterp, Iface, Exn>,
+        &mut RunnerContext<'_, SlInterp, Iface, Ext>,
         Context<'global>,
     ) -> Backtrack<Context<'global>>,
 ) -> Backtrack<Context<'global>> {

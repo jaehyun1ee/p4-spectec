@@ -16,52 +16,53 @@ use crate::{
 
 // = Expression mapping
 
-pub fn map_list<Ctx, Interp, Iface, Exn>(
-    runner_ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn map_list<Ctx, Interp, Iface, Ext>(
+    runner_ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     ctx: &Ctx,
     span: &Span,
     vars: &[ast::Var],
-    mut eval: impl FnMut(&mut RunnerContext<'_, Interp, Iface, Exn>, &Ctx) -> Backtrack<Value>,
+    mut eval: impl FnMut(&mut RunnerContext<'_, Interp, Iface, Ext>, &Ctx) -> Backtrack<Value>,
 ) -> Backtrack<Vec<Value>>
 where
     Ctx: IterContext,
-    Interp: Interpreter<Iface, Exn, Error = Error>,
+    Interp: Interpreter<Iface, Ext, Error = Error>,
     Iface: Interface,
-    Exn: Extern,
+    Ext: Extern,
 {
-    let rows = backtrack_from_result!(ctx.list_values(runner_ctx.arena(), vars), span);
+    let values_by_var =
+        backtrack_from_result!(ctx.find_list_values_by_var(runner_ctx.arena(), vars), span);
     // Copy handles before the callback can allocate in the arena
-    let rows: Vec<_> = rows.into_iter().map(<[Value]>::to_vec).collect();
-    let width = rows.first().map_or(0, Vec::len);
+    let values_by_var: Vec<_> = values_by_var.into_iter().map(<[Value]>::to_vec).collect();
+    let len = values_by_var.first().map_or(0, Vec::len);
     let vars: Vec<_> = vars
         .iter()
         .map(|var| Variable::new(var.id.clone(), var.iters.clone()))
         .collect();
     let mut ctx_sub = ctx.clone();
-    let mut values = Vec::with_capacity(width);
-    for column in 0..width {
-        for (var, row) in vars.iter().zip(&rows) {
-            ctx_sub.add_value(var.clone(), row[column]);
+    let mut values = Vec::with_capacity(len);
+    for idx in 0..len {
+        for (var, values) in vars.iter().zip(&values_by_var) {
+            ctx_sub.add_value(var.clone(), values[idx]);
         }
         values.push(backtrack!(eval(runner_ctx, &ctx_sub)));
     }
     Backtrack::Ok(values)
 }
 
-pub fn map_opt<Ctx, Interp, Iface, Exn>(
-    runner_ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn map_opt<Ctx, Interp, Iface, Ext>(
+    runner_ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     ctx: &Ctx,
     span: &Span,
     vars: &[ast::Var],
-    mut eval: impl FnMut(&mut RunnerContext<'_, Interp, Iface, Exn>, &Ctx) -> Backtrack<Value>,
+    mut eval: impl FnMut(&mut RunnerContext<'_, Interp, Iface, Ext>, &Ctx) -> Backtrack<Value>,
 ) -> Backtrack<Option<Value>>
 where
     Ctx: IterContext,
-    Interp: Interpreter<Iface, Exn, Error = Error>,
+    Interp: Interpreter<Iface, Ext, Error = Error>,
     Iface: Interface,
-    Exn: Extern,
+    Ext: Extern,
 {
-    let values = backtrack_from_result!(ctx.opt_values(runner_ctx.arena(), vars), span);
+    let values = backtrack_from_result!(ctx.find_opt_values_by_var(runner_ctx.arena(), vars), span);
     let Some(values) = values else {
         return Backtrack::Ok(None);
     };
@@ -74,65 +75,67 @@ where
 
 // = Binding iteration
 
-pub fn yield_list<Ctx, Interp, Iface, Exn>(
-    runner_ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn yield_list<Ctx, Interp, Iface, Ext>(
+    runner_ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     mut ctx: Ctx,
     span: &Span,
     vars_bound: &[ast::Var],
     vars_bind: &[ast::Var],
-    mut eval: impl FnMut(&mut RunnerContext<'_, Interp, Iface, Exn>, Ctx) -> Backtrack<Ctx>,
+    mut eval: impl FnMut(&mut RunnerContext<'_, Interp, Iface, Ext>, Ctx) -> Backtrack<Ctx>,
 ) -> Backtrack<Ctx>
 where
     Ctx: IterContext,
-    Interp: Interpreter<Iface, Exn, Error = Error>,
+    Interp: Interpreter<Iface, Ext, Error = Error>,
     Iface: Interface,
-    Exn: Extern,
+    Ext: Extern,
 {
-    let rows = backtrack_from_result!(ctx.list_values(runner_ctx.arena(), vars_bound), span);
-    let rows: Vec<_> = rows.into_iter().map(<[Value]>::to_vec).collect();
-    let width = rows.first().map_or(0, Vec::len);
+    let values_by_var =
+        backtrack_from_result!(ctx.find_list_values_by_var(runner_ctx.arena(), vars_bound), span);
+    let values_by_var: Vec<_> = values_by_var.into_iter().map(<[Value]>::to_vec).collect();
+    let len = values_by_var.first().map_or(0, Vec::len);
     let vars: Vec<_> = vars_bound
         .iter()
         .map(|var| Variable::new(var.id.clone(), var.iters.clone()))
         .collect();
     let mut ctx_sub = ctx.clone();
-    let mut values_bind = vec![Vec::new(); vars_bind.len()];
-    for column in 0..width {
-        for (var, row) in vars.iter().zip(&rows) {
-            ctx_sub.add_value(var.clone(), row[column]);
+    let mut values_bind_by_var = vec![Vec::new(); vars_bind.len()];
+    for idx in 0..len {
+        for (var, values) in vars.iter().zip(&values_by_var) {
+            ctx_sub.add_value(var.clone(), values[idx]);
         }
         // Keep callback writes out of the reusable input context
         let ctx_post = backtrack!(eval(runner_ctx, ctx_sub.clone()));
-        backtrack!(ctx_post.collect_bindings(vars_bind, &mut values_bind));
+        backtrack!(ctx_post.collect_values_by_var(vars_bind, &mut values_bind_by_var));
     }
-    backtrack!(ctx.bind_iter(runner_ctx.arena_mut(), vars_bind, ast::Iter::List, values_bind));
+    backtrack!(ctx.bind_list_values_by_var(runner_ctx.arena_mut(), vars_bind, values_bind_by_var));
     Backtrack::Ok(ctx)
 }
 
-pub fn yield_opt<Ctx, Interp, Iface, Exn>(
-    runner_ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn yield_opt<Ctx, Interp, Iface, Ext>(
+    runner_ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     mut ctx: Ctx,
     span: &Span,
     vars_bound: &[ast::Var],
     vars_bind: &[ast::Var],
-    mut eval: impl FnMut(&mut RunnerContext<'_, Interp, Iface, Exn>, Ctx) -> Backtrack<Ctx>,
+    mut eval: impl FnMut(&mut RunnerContext<'_, Interp, Iface, Ext>, Ctx) -> Backtrack<Ctx>,
 ) -> Backtrack<Ctx>
 where
     Ctx: IterContext,
-    Interp: Interpreter<Iface, Exn, Error = Error>,
+    Interp: Interpreter<Iface, Ext, Error = Error>,
     Iface: Interface,
-    Exn: Extern,
+    Ext: Extern,
 {
-    let values = backtrack_from_result!(ctx.opt_values(runner_ctx.arena(), vars_bound), span);
-    let mut values_bind = vec![Vec::new(); vars_bind.len()];
+    let values =
+        backtrack_from_result!(ctx.find_opt_values_by_var(runner_ctx.arena(), vars_bound), span);
+    let mut values_bind_by_var = vec![Vec::new(); vars_bind.len()];
     if let Some(values) = values {
         let mut ctx_sub = ctx.clone();
         for (var, value) in vars_bound.iter().zip(values) {
             ctx_sub.add_value(Variable::new(var.id.clone(), var.iters.clone()), value);
         }
         let ctx_post = backtrack!(eval(runner_ctx, ctx_sub));
-        backtrack!(ctx_post.collect_bindings(vars_bind, &mut values_bind));
+        backtrack!(ctx_post.collect_values_by_var(vars_bind, &mut values_bind_by_var));
     }
-    backtrack!(ctx.bind_iter(runner_ctx.arena_mut(), vars_bind, ast::Iter::Opt, values_bind));
+    backtrack!(ctx.bind_opt_values_by_var(runner_ctx.arena_mut(), vars_bind, values_bind_by_var));
     Backtrack::Ok(ctx)
 }

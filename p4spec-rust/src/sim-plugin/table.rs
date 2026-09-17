@@ -47,15 +47,15 @@ fn table_name(
 
 // == Table lookup and update
 
-pub fn find_table<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn find_table<Interp, Iface, Ext>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     value_arch: Value,
     value_name: Value,
 ) -> Result<Value, Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Ext: Extern,
+    Interp: Interpreter<Iface, Ext>,
 {
     let (value_unqualified, value_qualified) = table_name(ctx.arena_mut(), value_name)?;
     if let Some(value_id) = value_qualified
@@ -67,16 +67,16 @@ where
         .ok_or_else(|| ExternError::Failure("table not found".to_owned()).into())
 }
 
-pub fn update_table<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn update_table<Interp, Iface, Ext>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     value_arch: Value,
     value_name: Value,
     value_table: Value,
 ) -> Result<Value, Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Ext: Extern,
+    Interp: Interpreter<Iface, Ext>,
 {
     let (value_unqualified, value_qualified) = table_name(ctx.arena_mut(), value_name)?;
     if let Some(value_id) = value_qualified
@@ -89,8 +89,8 @@ where
 
 // == Table entries
 
-pub fn add_entry<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn add_entry<Interp, Iface, Ext>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     value_ctx: Value,
     value_arch: Value,
     value_name: Value,
@@ -100,8 +100,8 @@ pub fn add_entry<Interp, Iface, Exn>(
 ) -> Result<Value, Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Ext: Extern,
+    Interp: Interpreter<Iface, Ext>,
 {
     // Lookup table object
     let value_table = find_table(ctx, value_arch, value_name)?;
@@ -183,8 +183,8 @@ where
     update_table(ctx, value_arch, value_name, value_table)
 }
 
-pub fn add_default_action<Interp, Iface, Exn>(
-    ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+pub fn add_default_action<Interp, Iface, Ext>(
+    ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     value_ctx: Value,
     value_arch: Value,
     value_name: Value,
@@ -192,8 +192,8 @@ pub fn add_default_action<Interp, Iface, Exn>(
 ) -> Result<Value, Interp::Error>
 where
     Iface: Interface,
-    Exn: Extern,
-    Interp: Interpreter<Iface, Exn>,
+    Ext: Extern,
+    Interp: Interpreter<Iface, Ext>,
 {
     // Lookup table object
     let value_table = find_table(ctx, value_arch, value_name)?;

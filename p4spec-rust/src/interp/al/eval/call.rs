@@ -131,16 +131,16 @@ fn check_func_output(
 
 // = Cache eligibility
 
-pub(in crate::interp::al) fn cache_rel<Iface: Interface, Exn: Extern>(
-    runner_ctx: &RunnerContext<'_, AlInterp, Iface, Exn>,
+pub(in crate::interp::al) fn cache_rel<Iface: Interface, Ext: Extern>(
+    runner_ctx: &RunnerContext<'_, AlInterp, Iface, Ext>,
     ctx: &Context<'_>,
     id: &ast::Id,
 ) -> bool {
     runner_ctx.interp().config.cache && matches!(ctx.find_rel(id), Ok(ast::RelDef::Defined(_)))
 }
 
-pub(in crate::interp::al) fn cache_func<Iface: Interface, Exn: Extern>(
-    runner_ctx: &RunnerContext<'_, AlInterp, Iface, Exn>,
+pub(in crate::interp::al) fn cache_func<Iface: Interface, Ext: Extern>(
+    runner_ctx: &RunnerContext<'_, AlInterp, Iface, Ext>,
     ctx: &Context<'_>,
     id: &ast::Id,
     values: &[Value],
@@ -155,8 +155,8 @@ pub(in crate::interp::al) fn cache_func<Iface: Interface, Exn: Extern>(
 
 // = Relation invocation
 
-pub fn invoke_rel<Iface: Interface, Exn: Extern>(
-    runner_ctx: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
+pub fn invoke_rel<Iface: Interface, Ext: Extern>(
+    runner_ctx: &mut RunnerContext<'_, AlInterp, Iface, Ext>,
     ctx: &Context<'_>,
     id: &ast::Id,
     values: &[Value],
@@ -192,8 +192,8 @@ pub fn invoke_rel<Iface: Interface, Exn: Extern>(
 
 // - Extern relation
 
-fn invoke_extern_rel<Iface: Interface, Exn: Extern>(
-    runner_ctx: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
+fn invoke_extern_rel<Iface: Interface, Ext: Extern>(
+    runner_ctx: &mut RunnerContext<'_, AlInterp, Iface, Ext>,
     ctx: &Context<'_>,
     id: &ast::Id,
     rel: &ast::ExternRel,
@@ -228,8 +228,8 @@ fn invoke_extern_rel<Iface: Interface, Exn: Extern>(
 
 // - Defined relation
 
-fn eval_rule_path<Iface: Interface, Exn: Extern>(
-    runner_ctx: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
+fn eval_rule_path<Iface: Interface, Ext: Extern>(
+    runner_ctx: &mut RunnerContext<'_, AlInterp, Iface, Ext>,
     ctx: &Context<'_>,
     rule_match: &ast::RuleMatch,
     path: &ast::RulePath,
@@ -254,8 +254,8 @@ fn eval_rule_path<Iface: Interface, Exn: Extern>(
     expr::eval_exps(runner_ctx, &ctx, &path.exps_output)
 }
 
-fn invoke_defined_rel<Iface: Interface, Exn: Extern>(
-    runner_ctx: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
+fn invoke_defined_rel<Iface: Interface, Ext: Extern>(
+    runner_ctx: &mut RunnerContext<'_, AlInterp, Iface, Ext>,
     ctx: &Context<'_>,
     id: &ast::Id,
     rel: &ast::DefinedRel,
@@ -325,8 +325,8 @@ fn invoke_defined_rel<Iface: Interface, Exn: Extern>(
 
 // = Function invocation
 
-pub fn invoke_func<Iface: Interface, Exn: Extern>(
-    runner_ctx: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
+pub fn invoke_func<Iface: Interface, Ext: Extern>(
+    runner_ctx: &mut RunnerContext<'_, AlInterp, Iface, Ext>,
     ctx: &Context<'_>,
     id: &ast::Id,
     targs: &[ast::Typ],
@@ -365,8 +365,8 @@ pub fn invoke_func<Iface: Interface, Exn: Extern>(
 
 // - Extern function
 
-fn invoke_extern_func<Iface: Interface, Exn: Extern>(
-    runner_ctx: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
+fn invoke_extern_func<Iface: Interface, Ext: Extern>(
+    runner_ctx: &mut RunnerContext<'_, AlInterp, Iface, Ext>,
     ctx: &Context<'_>,
     id: &ast::Id,
     extern_func: &ast::ExternFunc,
@@ -398,8 +398,8 @@ fn invoke_extern_func<Iface: Interface, Exn: Extern>(
 
 // - Builtin function
 
-fn invoke_builtin_func<Iface: Interface, Exn: Extern>(
-    runner_ctx: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
+fn invoke_builtin_func<Iface: Interface, Ext: Extern>(
+    runner_ctx: &mut RunnerContext<'_, AlInterp, Iface, Ext>,
     ctx: &Context<'_>,
     id: &ast::Id,
     builtin_func: &ast::BuiltinFunc,
@@ -442,8 +442,8 @@ fn invoke_builtin_func<Iface: Interface, Exn: Extern>(
 
 // - Table function
 
-fn eval_table_row<Iface: Interface, Exn: Extern>(
-    runner_ctx: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
+fn eval_table_row<Iface: Interface, Ext: Extern>(
+    runner_ctx: &mut RunnerContext<'_, AlInterp, Iface, Ext>,
     ctx: &Context<'_>,
     table_row: &ast::TableRow,
     values: &[Value],
@@ -472,8 +472,8 @@ fn eval_table_row<Iface: Interface, Exn: Extern>(
     })
 }
 
-fn invoke_table_func<Iface: Interface, Exn: Extern>(
-    runner_ctx: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
+fn invoke_table_func<Iface: Interface, Ext: Extern>(
+    runner_ctx: &mut RunnerContext<'_, AlInterp, Iface, Ext>,
     ctx: &Context<'_>,
     table_func: &ast::TableFunc,
     values: &[Value],
@@ -485,8 +485,8 @@ fn invoke_table_func<Iface: Interface, Exn: Extern>(
 
 // - Defined function
 
-fn eval_clause<Iface: Interface, Exn: Extern>(
-    runner_ctx: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
+fn eval_clause<Iface: Interface, Ext: Extern>(
+    runner_ctx: &mut RunnerContext<'_, AlInterp, Iface, Ext>,
     ctx_caller: &Context<'_>,
     ctx_callee: &Context<'_>,
     clause: &ast::Clause,
@@ -516,8 +516,8 @@ fn eval_clause<Iface: Interface, Exn: Extern>(
     })
 }
 
-fn invoke_defined_func<Iface: Interface, Exn: Extern>(
-    runner_ctx: &mut RunnerContext<'_, AlInterp, Iface, Exn>,
+fn invoke_defined_func<Iface: Interface, Ext: Extern>(
+    runner_ctx: &mut RunnerContext<'_, AlInterp, Iface, Ext>,
     ctx: &Context<'_>,
     defined_func: &ast::DefinedFunc,
     targs: &[ast::Typ],

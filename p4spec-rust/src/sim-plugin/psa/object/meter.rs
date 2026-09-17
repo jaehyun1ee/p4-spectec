@@ -57,16 +57,16 @@ impl Meter {
     /// ```text
     /// PSA_MeterColor_t execute(in S index, in PSA_MeterColor_t color);
     /// ```
-    pub fn execute_color_aware<Interp, Iface, Exn>(
+    pub fn execute_color_aware<Interp, Iface, Ext>(
         self,
-        ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+        ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
         value_ctx: Value,
         value_arch: Value,
     ) -> Result<(Self, Value, Value, Value), Interp::Error>
     where
         Iface: Interface,
-        Exn: Extern,
-        Interp: Interpreter<Iface, Exn>,
+        Ext: Extern,
+        Interp: Interpreter<Iface, Ext>,
     {
         // NOTE: returning GREEN for now
         let value_color = pack::p4_enum(ctx.arena_mut(), "PSA_MeterColor_t", "GREEN")?;
@@ -92,16 +92,16 @@ impl Meter {
     /// `execute(index, MeterColor_t.GREEN)`, which has the same behavior
     ///
     /// `PSA_MeterColor_t execute(in S index);`
-    pub fn execute_color_blind<Interp, Iface, Exn>(
+    pub fn execute_color_blind<Interp, Iface, Ext>(
         self,
-        ctx: &mut RunnerContext<'_, Interp, Iface, Exn>,
+        ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
         value_ctx: Value,
         value_arch: Value,
     ) -> Result<(Self, Value, Value, Value), Interp::Error>
     where
         Iface: Interface,
-        Exn: Extern,
-        Interp: Interpreter<Iface, Exn>,
+        Ext: Extern,
+        Interp: Interpreter<Iface, Ext>,
     {
         // NOTE: returning GREEN for now
         self.execute_color_aware(ctx, value_ctx, value_arch)

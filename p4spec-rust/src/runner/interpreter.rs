@@ -13,10 +13,10 @@ use super::{Extern, Interface, RunnerContext};
 
 // == Interpreter contract
 
-pub trait Interpreter<Iface, Exn>: Sized
+pub trait Interpreter<Iface, Ext>: Sized
 where
     Iface: Interface,
-    Exn: Extern,
+    Ext: Extern,
 {
     type Spec;
     type Error: From<InterfaceError> + From<ExternError>;
@@ -29,19 +29,19 @@ where
 
     /// Evaluates an already parsed program through the selected entry
     fn eval_program(
-        ctx: &mut RunnerContext<'_, Self, Iface, Exn>,
+        ctx: &mut RunnerContext<'_, Self, Iface, Ext>,
         name: &str,
         program: Value,
     ) -> Result<Vec<Value>, Self::Error>;
 
     fn eval_rel(
-        ctx: &mut RunnerContext<'_, Self, Iface, Exn>,
+        ctx: &mut RunnerContext<'_, Self, Iface, Ext>,
         name: &str,
         values: &[Value],
     ) -> Result<Vec<Value>, Self::Error>;
 
     fn eval_func(
-        ctx: &mut RunnerContext<'_, Self, Iface, Exn>,
+        ctx: &mut RunnerContext<'_, Self, Iface, Ext>,
         name: &str,
         targs: &[Typ],
         values: &[Value],

@@ -120,7 +120,7 @@ struct StfInterp {
     initialized: bool,
 }
 
-impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for StfInterp {
+impl<Iface: Interface, Ext: Extern> Interpreter<Iface, Ext> for StfInterp {
     type Spec = ();
     type Error = InterpError;
 
@@ -134,7 +134,7 @@ impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for StfInterp {
     }
 
     fn eval_program(
-        ctx: &mut RunnerContext<'_, Self, Iface, Exn>,
+        ctx: &mut RunnerContext<'_, Self, Iface, Ext>,
         name: &str,
         _program: Value,
     ) -> Result<Vec<Value>, InterpError> {
@@ -146,7 +146,7 @@ impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for StfInterp {
     }
 
     fn eval_rel(
-        _ctx: &mut RunnerContext<'_, Self, Iface, Exn>,
+        _ctx: &mut RunnerContext<'_, Self, Iface, Ext>,
         _name: &str,
         _values: &[Value],
     ) -> Result<Vec<Value>, InterpError> {
@@ -154,7 +154,7 @@ impl<Iface: Interface, Exn: Extern> Interpreter<Iface, Exn> for StfInterp {
     }
 
     fn eval_func(
-        ctx: &mut RunnerContext<'_, Self, Iface, Exn>,
+        ctx: &mut RunnerContext<'_, Self, Iface, Ext>,
         name: &str,
         _targs: &[Typ],
         values: &[Value],

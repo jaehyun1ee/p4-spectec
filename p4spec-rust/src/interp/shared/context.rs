@@ -22,7 +22,7 @@ pub trait ReadContext {
     // == Types
 
     fn find_typdef_opt(&self, id: &ast::Id) -> Option<&TypeDef>;
-    fn find_local_typdef_opt(&self, id: &ast::Id) -> Option<&TypeDef>;
+    fn find_typdef_local_opt(&self, id: &ast::Id) -> Option<&TypeDef>;
     fn find_defined_typdef(&self, id: &ast::Id) -> Result<(&[ast::TParam], &ast::DefTyp), Error>;
 
     // == Functions
@@ -47,22 +47,39 @@ pub trait WriteContext: ReadContext + Clone {
 
 /// Context operations used by shared iteration evaluation
 pub trait IterContext: WriteContext {
-    fn opt_values(
-        &self,
-        arena: &ValueArena,
-        vars: &[ast::Var],
-    ) -> Result<Option<Vec<Value>>, Error>;
-    fn list_values<'arena>(
+    // == Input values
+
+    fn find_list_values_by_var<'arena>(
         &self,
         arena: &'arena ValueArena,
         vars: &[ast::Var],
     ) -> Result<Vec<&'arena [Value]>, Error>;
-    fn collect_bindings(&self, vars: &[ast::Var], values_bind: &mut [Vec<Value>]) -> Backtrack<()>;
-    fn bind_iter(
+
+    fn find_opt_values_by_var(
+        &self,
+        arena: &ValueArena,
+        vars: &[ast::Var],
+    ) -> Result<Option<Vec<Value>>, Error>;
+
+    // == Output bindings
+
+    fn collect_values_by_var(
+        &self,
+        vars: &[ast::Var],
+        values_by_var: &mut [Vec<Value>],
+    ) -> Backtrack<()>;
+
+    fn bind_list_values_by_var(
         &mut self,
         arena: &mut ValueArena,
         vars: &[ast::Var],
-        iter: ast::Iter,
-        values_bind: Vec<Vec<Value>>,
+        values_by_var: Vec<Vec<Value>>,
+    ) -> Backtrack<()>;
+
+    fn bind_opt_values_by_var(
+        &mut self,
+        arena: &mut ValueArena,
+        vars: &[ast::Var],
+        values_by_var: Vec<Vec<Value>>,
     ) -> Backtrack<()>;
 }
