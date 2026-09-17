@@ -23,7 +23,7 @@ fn with_block(block: ast::Block, det: bool) -> Runner<SlInterp, BuiltinInterface
     Runner::new(
         Global::load(spec_sl).unwrap(),
         SlInterp::new(Config::new(false, det, true)),
-        p4spec_rust::interface::p4(&Vec::new()),
+        p4spec_rust::interface::p4(&p4spec_rust::runner::Spec::Sl(Vec::new())),
         NullExtern,
     )
 }
@@ -142,7 +142,7 @@ fn table_blocks_remain_sequential_even_with_determinism_enabled() {
     let mut runner = Runner::new(
         Global::load(vec![def]).unwrap(),
         SlInterp::new(Config::new(false, true, true)),
-        p4spec_rust::interface::p4(&Vec::new()),
+        p4spec_rust::interface::p4(&p4spec_rust::runner::Spec::Sl(Vec::new())),
         NullExtern,
     );
     let value = runner.context().call_func("entry", &[], &[]).unwrap();
@@ -217,7 +217,7 @@ fn type_arguments_shadow_global_type_definitions() {
     let mut runner = Runner::new(
         Global::load(spec_sl).unwrap(),
         SlInterp::new(Config::new(false, false, true)),
-        p4spec_rust::interface::p4(&Vec::new()),
+        p4spec_rust::interface::p4(&p4spec_rust::runner::Spec::Sl(Vec::new())),
         NullExtern,
     );
     let value = make::bool(runner.arena_mut(), true, Span::default()).unwrap();

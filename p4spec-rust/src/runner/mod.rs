@@ -60,7 +60,9 @@ pub fn build_al<Ext: Extern>(
     config: Config,
     external: Ext,
 ) -> Result<Runner<AlInterp, BuiltinInterface, Ext>, BuildError> {
+    let spec = Spec::Al(spec);
     let interface = builtin::p4(&spec);
+    let Spec::Al(spec) = spec else { unreachable!() };
     let global = AlGlobal::load(spec)?;
     let config = AlConfig::new(config.cache, config.det, config.guard);
     Ok(Runner::new(global, AlInterp::new(config), interface, external))
@@ -71,7 +73,9 @@ pub fn build_sl<Ext: Extern>(
     config: Config,
     external: Ext,
 ) -> Result<Runner<SlInterp, BuiltinInterface, Ext>, BuildError> {
-    let interface = builtin::p4_sl(&spec);
+    let spec = Spec::Sl(spec);
+    let interface = builtin::p4(&spec);
+    let Spec::Sl(spec) = spec else { unreachable!() };
     let global = SlGlobal::load(spec)?;
     let config = SlConfig::new(config.cache, config.det, config.guard);
     Ok(Runner::new(global, SlInterp::new(config), interface, external))

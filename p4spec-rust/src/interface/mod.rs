@@ -2,8 +2,8 @@
 //! For example, `p4(&spec)` adds `print_` using the specification's print hints
 
 use crate::{
-    lang::{al, common::source::Span, data::value, sl},
-    runner::BuiltinInterface,
+    lang::{common::source::Span, data::value},
+    runner::{BuiltinInterface, Spec},
 };
 
 use self::{
@@ -16,13 +16,11 @@ pub mod p4;
 
 // == P4
 
-pub fn p4(spec: &al::ast::Spec) -> BuiltinInterface {
-    let unparser = P4Unparser::from_al_spec(spec);
-    p4_with_unparser(unparser)
-}
-
-pub fn p4_sl(spec: &sl::ast::Spec) -> BuiltinInterface {
-    let unparser = P4Unparser::from_sl_spec(spec);
+pub fn p4(spec: &Spec) -> BuiltinInterface {
+    let unparser = match spec {
+        Spec::Al(spec) => P4Unparser::from_al_spec(spec),
+        Spec::Sl(spec) => P4Unparser::from_sl_spec(spec),
+    };
     p4_with_unparser(unparser)
 }
 

@@ -728,7 +728,7 @@ fn test_builtin_failure_remains_typed_in_public_error_tree() {
     let mut runner = Runner::<AlInterp, _, _>::new(
         Global::load(vec![function("test", call), builtin]).unwrap(),
         AlInterp::new(Config::new(false, false, false)),
-        p4spec_rust::interface::p4(&Vec::new()),
+        p4spec_rust::interface::p4(&p4spec_rust::runner::Spec::Al(Vec::new())),
         NullExtern,
     );
     let error = runner.context().call_func("test", &[], &[]).unwrap_err();

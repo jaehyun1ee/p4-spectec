@@ -21,7 +21,7 @@ fn runner(source: &str, det: bool) -> Runner<SlInterp, BuiltinInterface, NullExt
     Runner::new(
         Global::load(spec(source)).unwrap(),
         SlInterp::new(Config::new(false, det, true)),
-        p4spec_rust::interface::p4(&Vec::new()),
+        p4spec_rust::interface::p4(&p4spec_rust::runner::Spec::Sl(Vec::new())),
         NullExtern,
     )
 }

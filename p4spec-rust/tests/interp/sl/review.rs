@@ -49,7 +49,7 @@ fn evaluate(spec_sl: ast::Spec, relation: bool) -> Error {
     let mut runner = Runner::new(
         Global::load(spec_sl).unwrap(),
         SlInterp::new(Config::new(false, false, true)),
-        p4spec_rust::interface::p4(&vec![]),
+        p4spec_rust::interface::p4(&p4spec_rust::runner::Spec::Sl(vec![])),
         NullExtern,
     );
     if relation {
@@ -228,7 +228,7 @@ fn deeply_nested_blocks_execute_on_a_small_stack() {
         for _ in 0..128 {
             instr = phrase!(node: ast::InstrKind::Group(ast::GroupInstr { id: id("group"), rel_signature: signature(), exps: vec![], block: vec![instr] }), span: Span::default());
         }
-        let mut runner = Runner::new(Global::load(vec![func("entry", vec![instr])]).unwrap(), SlInterp::new(Config::new(false, false, true)), p4spec_rust::interface::p4(&vec![]), NullExtern);
+        let mut runner = Runner::new(Global::load(vec![func("entry", vec![instr])]).unwrap(), SlInterp::new(Config::new(false, false, true)), p4spec_rust::interface::p4(&p4spec_rust::runner::Spec::Sl(vec![])), NullExtern);
         let value = runner.context().call_func("entry", &[], &[]).unwrap();
         assert_eq!(get::num(runner.arena(), &value).unwrap().to_string(), "7");
     }).unwrap().join().unwrap();
@@ -256,7 +256,7 @@ fn let_body_unmatch_continues_to_the_next_instruction() {
         let mut runner = Runner::new(
             Global::load(spec_sl).unwrap(),
             SlInterp::new(Config::new(false, det, false)),
-            p4spec_rust::interface::p4(&vec![]),
+            p4spec_rust::interface::p4(&p4spec_rust::runner::Spec::Sl(vec![])),
             NullExtern,
         );
         let value = runner.context().call_func("entry", &[], &[]).unwrap();
@@ -272,7 +272,7 @@ fn conditional_unmatch_escapes_sequential_blocks_but_not_deterministic_blocks() 
         let mut runner = Runner::new(
             Global::load(spec_sl).unwrap(),
             SlInterp::new(Config::new(false, det, false)),
-            p4spec_rust::interface::p4(&vec![]),
+            p4spec_rust::interface::p4(&p4spec_rust::runner::Spec::Sl(vec![])),
             NullExtern,
         );
         let result = runner.context().call_func("entry", &[], &[]);

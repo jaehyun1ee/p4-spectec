@@ -9,7 +9,7 @@ fn make_runner(spec_sl: ast::Spec, det: bool) -> Runner<SlInterp, BuiltinInterfa
     Runner::new(
         Global::load(spec_sl).unwrap(),
         SlInterp::new(Config::new(false, det, true)),
-        p4spec_rust::interface::p4(&Vec::new()),
+        p4spec_rust::interface::p4(&p4spec_rust::runner::Spec::Sl(Vec::new())),
         NullExtern,
     )
 }
@@ -371,7 +371,7 @@ fn test_guards_toggle_input_checks_and_substitute_type_arguments() {
             let mut runner = Runner::<SlInterp, _, _>::new(
                 Global::load(spec_sl.clone()).unwrap(),
                 SlInterp::new(Config::new(false, det, guard)),
-                p4spec_rust::interface::p4(&Vec::new()),
+                p4spec_rust::interface::p4(&p4spec_rust::runner::Spec::Sl(Vec::new())),
                 NullExtern,
             );
             let invalid = make::bool(runner.arena_mut(), true, Span::default()).unwrap();
@@ -558,7 +558,7 @@ fn test_extern_reentry_uses_public_input_guards() {
         let mut runner = Runner::<SlInterp, _, _>::new(
             Global::load(spec(source)).unwrap(),
             SlInterp::new(Config::new(false, false, guard)),
-            p4spec_rust::interface::p4(&Vec::new()),
+            p4spec_rust::interface::p4(&p4spec_rust::runner::Spec::Sl(Vec::new())),
             host(|arena| make::bool(arena, true, Span::default()).unwrap(), true),
         );
         let result = {
