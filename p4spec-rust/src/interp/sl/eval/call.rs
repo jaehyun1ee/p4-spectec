@@ -22,6 +22,18 @@ use crate::{
 };
 use std::borrow::Cow;
 
+// = Invocation results
+
+enum FuncResult {
+    Return(Value),
+    TailCall(ast::Id, Vec<ast::Typ>, Vec<Value>),
+}
+
+enum RelResult {
+    Result(Vec<Value>),
+    TailCall(ast::Id, Vec<Value>),
+}
+
 // = Input and output checks
 
 pub(in crate::interp::sl) fn check_rel_inputs(
@@ -40,7 +52,7 @@ pub(in crate::interp::sl) fn check_rel_inputs(
     let typs = inputs
         .indices()
         .iter()
-        .map(|index| typs[*index as usize].clone())
+        .map(|index| typs[*index].clone())
         .collect::<Vec<_>>();
     check_values(
         arena,
@@ -181,7 +193,7 @@ pub fn invoke_rel<Iface: Interface, Exn: Extern>(
             match rel {
                 ast::RelDef::Extern(rel) => {
                     let values = backtrack!(invoke_extern_rel(runner, ctx, &id, rel, &values));
-                    Backtrack::Ok(Flow::Result(values))
+                    Backtrack::Ok(RelResult::Result(values))
                 }
                 ast::RelDef::Defined(rel) => invoke_defined_rel(runner, ctx, &id, rel, &values),
             }
@@ -195,15 +207,15 @@ pub fn invoke_rel<Iface: Interface, Exn: Extern>(
                 result = result.nest(span.clone(), || ErrorKind::Trace(trace.clone()));
             }
         }
-        let flow = backtrack!(result);
-        match flow {
-            Flow::Result(values) => {
+        let result = backtrack!(result);
+        match result {
+            RelResult::Result(values) => {
                 if pure && let Some(key) = key {
                     runner.interp_mut().cache.rels.insert(key, values.clone());
                 }
                 return Backtrack::Ok(values);
             }
-            Flow::TailRel(id_tail, values_tail) => {
+            RelResult::TailCall(id_tail, values_tail) => {
                 let id_caller = id.into_owned();
                 traces_pending.push((
                     id_caller.span,
@@ -212,7 +224,6 @@ pub fn invoke_rel<Iface: Interface, Exn: Extern>(
                 id = Cow::Owned(id_tail);
                 values = Cow::Owned(values_tail);
             }
-            _ => unreachable!("relation dispatch validates its flow"),
         }
     }
 }
@@ -268,7 +279,7 @@ fn invoke_defined_rel<Iface: Interface, Exn: Extern>(
     id: &ast::Id,
     rel: &ast::DefinedRel,
     values: &[Value],
-) -> Backtrack<Flow> {
+) -> Backtrack<RelResult> {
     let ctx = backtrack!(assign::assign_exps(
         runner.arena_mut(),
         ctx.localize(),
@@ -278,7 +289,8 @@ fn invoke_defined_rel<Iface: Interface, Exn: Extern>(
     let flow =
         backtrack!(instr::eval_block_with_else(runner, ctx, &rel.block, rel.block_else.as_deref()));
     match flow {
-        Flow::Result(_) | Flow::TailRel(..) => Backtrack::Ok(flow),
+        Flow::Result(values) => Backtrack::Ok(RelResult::Result(values)),
+        Flow::TailRel(id, values) => Backtrack::Ok(RelResult::TailCall(id, values)),
         Flow::Cont(errors) => Backtrack::Unmatch(errors),
         Flow::Return(_) => Backtrack::err(
             id.span.clone(),
@@ -321,10 +333,10 @@ pub fn invoke_func<Iface: Interface, Exn: Extern>(
         let result = stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
             let (_, func) = backtrack_from_result!(ctx.find_func(&id), &id.span);
             match func.as_ref() {
-                ast::MetaFuncDef::Extern(func) => Backtrack::Ok(Flow::Return(backtrack!(
+                ast::MetaFuncDef::Extern(func) => Backtrack::Ok(FuncResult::Return(backtrack!(
                     invoke_extern_func(runner, ctx, &id, func, &targs, &values)
                 ))),
-                ast::MetaFuncDef::Builtin(func) => Backtrack::Ok(Flow::Return(backtrack!(
+                ast::MetaFuncDef::Builtin(func) => Backtrack::Ok(FuncResult::Return(backtrack!(
                     invoke_builtin_func(runner, ctx, &id, func, &targs, &values)
                 ))),
                 ast::MetaFuncDef::Table(func) => invoke_table_func(runner, ctx, &id, func, &values),
@@ -341,22 +353,21 @@ pub fn invoke_func<Iface: Interface, Exn: Extern>(
                 result = result.nest(span.clone(), || ErrorKind::Trace(trace.clone()));
             }
         }
-        let flow = backtrack!(result);
-        match flow {
-            Flow::Return(value) => {
+        let result = backtrack!(result);
+        match result {
+            FuncResult::Return(value) => {
                 if pure && let Some(key) = key {
                     runner.interp_mut().cache.funcs.insert(key, value);
                 }
                 return Backtrack::Ok(value);
             }
-            Flow::TailFunc(id_tail, targs_tail, values_tail) => {
+            FuncResult::TailCall(id_tail, targs_tail, values_tail) => {
                 let trace = TraceErrorKind::function(&id, &targs);
                 traces_pending.push((id.into_owned().span, trace));
                 id = Cow::Owned(id_tail);
                 targs = Cow::Owned(targs_tail);
                 values = Cow::Owned(values_tail);
             }
-            _ => unreachable!("function dispatch validates its flow"),
         }
     }
 }
@@ -446,7 +457,7 @@ fn invoke_table_func<Iface: Interface, Exn: Extern>(
     id: &ast::Id,
     func: &ast::TableFunc,
     values: &[Value],
-) -> Backtrack<Flow> {
+) -> Backtrack<FuncResult> {
     let ctx_local = backtrack!(assign::assign_params(
         runner.arena_mut(),
         ctx,
@@ -458,7 +469,7 @@ fn invoke_table_func<Iface: Interface, Exn: Extern>(
     let flow =
         backtrack!(instr::eval_block_sequential(runner, Cow::Owned(ctx_local), instrs, true));
     match flow {
-        Flow::Return(_) => Backtrack::Ok(flow),
+        Flow::Return(value) => Backtrack::Ok(FuncResult::Return(value)),
         _ => Backtrack::err(
             id.span.clone(),
             ErrorKind::Call(CallErrorKind::InvalidFlow { message: "table did not return a value" }),
@@ -475,7 +486,7 @@ fn invoke_defined_func<Iface: Interface, Exn: Extern>(
     func: &ast::DefinedFunc,
     targs: &[ast::Typ],
     values: &[Value],
-) -> Backtrack<Flow> {
+) -> Backtrack<FuncResult> {
     backtrack!(Backtrack::check(
         func.tparams.len() == targs.len(),
         id.span.clone(),
@@ -502,7 +513,8 @@ fn invoke_defined_func<Iface: Interface, Exn: Extern>(
         func.block_else.as_deref()
     ));
     match flow {
-        Flow::Return(_) | Flow::TailFunc(..) => Backtrack::Ok(flow),
+        Flow::Return(value) => Backtrack::Ok(FuncResult::Return(value)),
+        Flow::TailFunc(id, targs, values) => Backtrack::Ok(FuncResult::TailCall(id, targs, values)),
         Flow::Cont(errors) => Backtrack::Unmatch(errors),
         Flow::Result(_) => Backtrack::err(
             id.span.clone(),
