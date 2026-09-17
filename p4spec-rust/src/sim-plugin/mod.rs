@@ -1,22 +1,10 @@
 //! Selects an architecture and assembles the native simulator
 
-use self::{
-    arch::Architecture,
-    ebpf::Ebpf,
-    io::Tx,
-    psa::Psa,
-    runner::{Error, Run},
-    v1model::V1Model,
-};
+use self::{arch::Architecture, ebpf::Ebpf, io::Tx, psa::Psa, runner::Error, v1model::V1Model};
 use crate::{
-    interp::{al::Config, shared::error::Error as InterpError, sl::Config as SlConfig},
-    lang::{
-        al::ast::Spec,
-        common::source::Phrase,
-        data::value::{ValueArena, external::Encoding},
-    },
+    interp::shared::error::Error as InterpError,
+    lang::data::value::external::Encoding,
     runner::{self as host, BuiltinInterface, Interpreter, Runner},
-    stf::ast::Statement,
 };
 use std::path::{Path, PathBuf};
 
@@ -47,22 +35,13 @@ pub enum BuildError {
 // == Simulator
 
 trait SimulatorRunner {
-    fn arena(&self) -> &ValueArena;
-
-    fn init_pipe(&mut self, includes: &[PathBuf], path: &Path) -> Result<Run, Error>;
-
-    fn run_stf_stmt(
-        &mut self,
-        run: &mut Run,
-        stmt: &Phrase<Statement>,
-    ) -> Result<Option<Tx>, Error>;
-
     fn run_stf_test(
         &mut self,
         includes: &[PathBuf],
         path_p4: &Path,
         path_stf: &Path,
-    ) -> Result<Run, Error>;
+        on_match: &mut dyn FnMut(&Tx),
+    ) -> Result<(), Error>;
 }
 
 impl<Interp, Arch> SimulatorRunner for Runner<Interp, BuiltinInterface, Arch>
@@ -70,29 +49,14 @@ where
     Interp: Interpreter<BuiltinInterface, Arch, Error = InterpError> + 'static,
     Arch: Architecture + 'static,
 {
-    fn arena(&self) -> &ValueArena {
-        Runner::arena(self)
-    }
-
-    fn init_pipe(&mut self, includes: &[PathBuf], path: &Path) -> Result<Run, Error> {
-        runner::init_pipe(self, includes, path)
-    }
-
-    fn run_stf_stmt(
-        &mut self,
-        run: &mut Run,
-        stmt: &Phrase<Statement>,
-    ) -> Result<Option<Tx>, Error> {
-        runner::run_stf_stmt(self, run, stmt)
-    }
-
     fn run_stf_test(
         &mut self,
         includes: &[PathBuf],
         path_p4: &Path,
         path_stf: &Path,
-    ) -> Result<Run, Error> {
-        runner::run_stf_test(self, includes, path_p4, path_stf)
+        on_match: &mut dyn FnMut(&Tx),
+    ) -> Result<(), Error> {
+        runner::run_stf_test(self, includes, path_p4, path_stf, on_match).map(drop)
     }
 }
 
@@ -109,67 +73,41 @@ impl Simulator {
         Self { runner: Box::new(runner) }
     }
 
-    pub fn arena(&self) -> &ValueArena {
-        self.runner.arena()
-    }
-
-    /// Starts a fresh program, resetting the arena and all host components
-    pub fn init_pipe(&mut self, includes: &[PathBuf], path: &Path) -> Result<Run, Error> {
-        self.runner.init_pipe(includes, path)
-    }
-
-    pub fn run_stf_stmt(
-        &mut self,
-        run: &mut Run,
-        stmt: &Phrase<Statement>,
-    ) -> Result<Option<Tx>, Error> {
-        self.runner.run_stf_stmt(run, stmt)
-    }
-
     pub fn run_stf_test(
         &mut self,
         includes: &[PathBuf],
         path_p4: &Path,
         path_stf: &Path,
-    ) -> Result<Run, Error> {
-        self.runner.run_stf_test(includes, path_p4, path_stf)
+        mut on_match: impl FnMut(&Tx),
+    ) -> Result<(), Error> {
+        self.runner
+            .run_stf_test(includes, path_p4, path_stf, &mut on_match)
     }
 }
 
 // == Construction
 
-pub fn build(spec: Spec, arch: &str, config: Config) -> Result<Simulator, BuildError> {
-    build_with_encoding(spec, arch, config, Encoding::default())
-}
-
-pub fn build_with_encoding(
-    spec: Spec,
+pub fn build(
+    spec: host::Spec,
     arch: &str,
-    config: Config,
+    config: host::Config,
     encoding: Encoding,
 ) -> Result<Simulator, BuildError> {
     match arch {
-        "ebpf" => Ok(Simulator::new(host::build_al(spec, config, Ebpf::new(encoding))?)),
-        "psa" => Ok(Simulator::new(host::build_al(spec, config, Psa::new(encoding))?)),
-        "v1model" => Ok(Simulator::new(host::build_al(spec, config, V1Model::new(encoding))?)),
+        "ebpf" => build_for_arch(spec, config, Ebpf::new(encoding)),
+        "psa" => build_for_arch(spec, config, Psa::new(encoding)),
+        "v1model" => build_for_arch(spec, config, V1Model::new(encoding)),
         _ => Err(BuildError::UnsupportedArchitecture(arch.to_owned())),
     }
 }
 
-pub fn build_sl(spec_al: Spec, arch: &str, config: SlConfig) -> Result<Simulator, BuildError> {
-    build_sl_with_encoding(spec_al, arch, config, Encoding::default())
-}
-
-pub fn build_sl_with_encoding(
-    spec_al: Spec,
-    arch: &str,
-    config: SlConfig,
-    encoding: Encoding,
+fn build_for_arch<Arch: Architecture + 'static>(
+    spec: host::Spec,
+    config: host::Config,
+    arch: Arch,
 ) -> Result<Simulator, BuildError> {
-    match arch {
-        "ebpf" => Ok(Simulator::new(host::build_sl(spec_al, config, Ebpf::new(encoding))?)),
-        "psa" => Ok(Simulator::new(host::build_sl(spec_al, config, Psa::new(encoding))?)),
-        "v1model" => Ok(Simulator::new(host::build_sl(spec_al, config, V1Model::new(encoding))?)),
-        _ => Err(BuildError::UnsupportedArchitecture(arch.to_owned())),
+    match spec {
+        host::Spec::Al(spec) => Ok(Simulator::new(host::build_al(spec, config, arch)?)),
+        host::Spec::Sl(spec) => Ok(Simulator::new(host::build_sl(spec, config, arch)?)),
     }
 }

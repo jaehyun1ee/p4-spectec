@@ -2,7 +2,7 @@
 //! For example, `p4(&spec)` adds `print_` using the specification's print hints
 
 use crate::{
-    lang::{al::ast::Spec, common::source::Span, data::value},
+    lang::{al, common::source::Span, data::value, sl},
     runner::BuiltinInterface,
 };
 
@@ -16,8 +16,17 @@ pub mod p4;
 
 // == P4
 
-pub fn p4(spec: &Spec) -> BuiltinInterface {
+pub fn p4(spec: &al::ast::Spec) -> BuiltinInterface {
     let unparser = P4Unparser::from_al_spec(spec);
+    p4_with_unparser(unparser)
+}
+
+pub fn p4_sl(spec: &sl::ast::Spec) -> BuiltinInterface {
+    let unparser = P4Unparser::from_sl_spec(spec);
+    p4_with_unparser(unparser)
+}
+
+fn p4_with_unparser(unparser: P4Unparser) -> BuiltinInterface {
     let builtins = Builtins::with_extensions([(
         "print_",
         Box::new(move |arena, targs, values| {

@@ -685,10 +685,9 @@ fn test_runner_codec_imports_independent_nested_native_state() {
 fn test_native_stf_encoding_modes_preserve_outputs_and_state() {
     use p4spec_rust::{
         frontend::parse::parse_files,
-        interp::al::Config,
         lang::data::value::external::encode,
         pass::{algo, elaborate},
-        runner::build_al,
+        runner::{Config, build_al},
         sim_plugin::{
             psa::{Psa, pipe},
             runner as sim_runner,

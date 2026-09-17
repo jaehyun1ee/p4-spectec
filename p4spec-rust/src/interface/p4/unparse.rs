@@ -14,6 +14,7 @@ use crate::{
         common::notation::{atom::Atom, mixfix::Mixfix, mixop::Mixop},
         hints::alter::{self, AlterationHint, Renderer},
         il::ast::{DefTypKind, TypKind},
+        sl,
         traits::print::Print,
         xl::num::Number,
     },
@@ -61,6 +62,20 @@ impl P4Unparser {
                 continue;
             };
             insert_case_hints(&mut hints, &defined_typ_al.id.node, &defined_typ_al.def_typ);
+        }
+        Self { hints }
+    }
+
+    pub fn from_sl_spec(spec_sl: &[sl::ast::Def]) -> Self {
+        let mut hints = HashMap::new();
+        for definition_sl in spec_sl {
+            let sl::ast::DefKind::Typ(typ_def_sl) = &definition_sl.node else {
+                continue;
+            };
+            let sl::ast::TypDef::Defined(defined_typ_sl) = typ_def_sl else {
+                continue;
+            };
+            insert_case_hints(&mut hints, &defined_typ_sl.id.node, &defined_typ_sl.def_typ);
         }
         Self { hints }
     }

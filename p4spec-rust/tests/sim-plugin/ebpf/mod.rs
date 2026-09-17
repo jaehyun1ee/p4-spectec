@@ -109,17 +109,17 @@ fn test_counter_state_persists_across_packets() {
 fn test_sl_counter_state_persists_across_packets_in_both_determinism_modes() {
     use p4spec_rust::{
         frontend::parse::parse_files,
-        interp::sl::Config,
-        pass::{algo, elaborate},
-        runner::build_sl,
+        pass::{algo, elaborate, structure},
+        runner::{Config, build_sl},
     };
 
     let spec_el = parse_files([super::repo().join("spec")]).unwrap();
     let spec_il = elaborate::convert(spec_el).unwrap();
     let spec_al = algo::convert(spec_il).unwrap();
+    let spec_sl = structure::convert(spec_al, true).unwrap();
     for det in [false, true] {
         let mut runner =
-            build_sl(spec_al.clone(), Config::new(true, det, false), Ebpf::new(Default::default()))
+            build_sl(spec_sl.clone(), Config::new(true, det, false), Ebpf::new(Default::default()))
                 .unwrap();
         let program = super::parse_program(
             runner.arena_mut(),

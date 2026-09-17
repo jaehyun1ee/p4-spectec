@@ -5,12 +5,10 @@ use clap::{Args, Parser, Subcommand};
 use p4spec_rust::{
     frontend::parse::parse_files,
     interface::p4::parse::parse_file,
-    interp::{al::Config as AlConfig, sl::Config as SlConfig},
     lang::{al, data::value::external::Encoding, il, sl, traits::print::Print},
     pass::{algo, elaborate, structure},
     runner::{self, BuiltinInterface, Interpreter, Runner},
-    sim_plugin::{self, dummy::Dummy, runner::Error as SimError},
-    stf,
+    sim_plugin::{self, dummy::Dummy},
 };
 
 // = Helpers
@@ -103,6 +101,21 @@ struct InterpreterArgs {
     sl: bool,
 }
 
+fn interp_spec(
+    paths: Vec<PathBuf>,
+    interpreter: &InterpreterArgs,
+) -> Result<runner::Spec, ExitCode> {
+    let spec_al = algo(paths)?;
+    if interpreter.al {
+        Ok(runner::Spec::Al(spec_al))
+    } else {
+        let without_rule_groups = true;
+        structure::convert(spec_al, without_rule_groups)
+            .map(runner::Spec::Sl)
+            .map_err(command_error)
+    }
+}
+
 #[derive(Args)]
 struct RunArgs {
     #[command(flatten)]
@@ -131,24 +144,26 @@ struct RunArgs {
 }
 
 fn run_command(mut args: RunArgs) -> ExitCode {
-    let spec_al = match algo(std::mem::take(&mut args.paths)) {
+    let spec = match interp_spec(std::mem::take(&mut args.paths), &args.interpreter) {
         Ok(spec) => spec,
         Err(code) => return code,
     };
-    if args.interpreter.al {
-        let config = AlConfig::new(!args.no_cache, args.det, args.guard);
-        let runner = match runner::build_al(spec_al, config, Dummy) {
-            Ok(runner) => runner,
-            Err(error) => return command_error(error),
-        };
-        run_program(runner, &args)
-    } else {
-        let config = SlConfig::new(!args.no_cache, args.det, args.guard);
-        let runner = match runner::build_sl(spec_al, config, Dummy) {
-            Ok(runner) => runner,
-            Err(error) => return command_error(error),
-        };
-        run_program(runner, &args)
+    let config = runner::Config::new(!args.no_cache, args.det, args.guard);
+    match spec {
+        runner::Spec::Al(spec) => {
+            let runner = match runner::build_al(spec, config, Dummy) {
+                Ok(runner) => runner,
+                Err(error) => return command_error(error),
+            };
+            run_program(runner, &args)
+        }
+        runner::Spec::Sl(spec) => {
+            let runner = match runner::build_sl(spec, config, Dummy) {
+                Ok(runner) => runner,
+                Err(error) => return command_error(error),
+            };
+            run_program(runner, &args)
+        }
     }
 }
 
@@ -215,58 +230,24 @@ struct SimArgs {
 }
 
 fn sim_command(mut args: SimArgs) -> ExitCode {
-    let spec_al = match algo(std::mem::take(&mut args.paths)) {
+    let spec = match interp_spec(std::mem::take(&mut args.paths), &args.interpreter) {
         Ok(spec) => spec,
         Err(code) => return code,
     };
-    if args.interpreter.al {
-        let config = AlConfig::new(!args.no_cache, args.det, args.guard);
-        let simulator = match sim_plugin::build_with_encoding(
-            spec_al,
-            &args.arch,
-            config,
-            args.plugin_encoding,
-        ) {
-            Ok(simulator) => simulator,
-            Err(error) => return command_error(error),
-        };
-        simulate(simulator, &args)
-    } else {
-        let config = SlConfig::new(!args.no_cache, args.det, args.guard);
-        let simulator = match sim_plugin::build_sl_with_encoding(
-            spec_al,
-            &args.arch,
-            config,
-            args.plugin_encoding,
-        ) {
-            Ok(simulator) => simulator,
-            Err(error) => return command_error(error),
-        };
-        simulate(simulator, &args)
-    }
+    let config = runner::Config::new(!args.no_cache, args.det, args.guard);
+    let simulator = match sim_plugin::build(spec, &args.arch, config, args.plugin_encoding) {
+        Ok(simulator) => simulator,
+        Err(error) => return command_error(error),
+    };
+    simulate(simulator, &args)
 }
 
 fn simulate(mut simulator: sim_plugin::Simulator, args: &SimArgs) -> ExitCode {
-    let mut run = match simulator.init_pipe(&args.includes, &args.program) {
-        Ok(run) => run,
+    match simulator.run_stf_test(&args.includes, &args.program, &args.stf, |tx| {
+        println!("[PASS] Transmitted {tx}");
+    }) {
+        Ok(()) => {}
         Err(error) => return command_error(error),
-    };
-    let stmts = match stf::parse::parse_file(&args.stf) {
-        Ok(stmts) => stmts,
-        Err(error) => return command_error(SimError::from(error)),
-    };
-    for stmt in &stmts {
-        match simulator.run_stf_stmt(&mut run, stmt) {
-            Ok(Some(tx)) => println!("[PASS] Transmitted {tx}"),
-            Ok(None) => {}
-            Err(error) => return command_error(error),
-        }
-    }
-    if let Err(failure) = run.finish() {
-        return command_error(SimError::Stf {
-            failure: Box::new(failure),
-            span: Default::default(),
-        });
     }
     println!("passed");
     ExitCode::SUCCESS

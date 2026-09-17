@@ -603,6 +603,7 @@ pub fn run_stf_test<Interp, Iface, Arch>(
     includes: &[PathBuf],
     path_p4: &Path,
     path_stf: &Path,
+    on_match: &mut dyn FnMut(&Tx),
 ) -> Result<Run, Error>
 where
     Iface: Interface,
@@ -612,7 +613,9 @@ where
     let mut run = init_pipe(runner, includes, path_p4)?;
     let stmts = stf::parse::parse_file(path_stf)?;
     for stmt in &stmts {
-        run_stf_stmt(runner, &mut run, stmt)?;
+        if let Some(tx) = run_stf_stmt(runner, &mut run, stmt)? {
+            on_match(&tx);
+        }
     }
     run.finish()
         .map_err(|failure| Error::Stf { failure: Box::new(failure), span: Span::default() })?;

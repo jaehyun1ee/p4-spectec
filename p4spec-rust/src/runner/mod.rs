@@ -20,8 +20,8 @@ use crate::{
     lang::{
         al,
         data::value::{Value, ValueArena},
+        sl,
     },
-    pass::structure,
 };
 
 pub use context::RunnerContext;
@@ -31,33 +31,49 @@ pub use interpreter::Interpreter;
 
 // == Runner construction
 
+pub enum Spec {
+    Al(al::ast::Spec),
+    Sl(sl::ast::Spec),
+}
+
+#[derive(Clone, Copy)]
+pub struct Config {
+    cache: bool,
+    det: bool,
+    guard: bool,
+}
+
+impl Config {
+    pub fn new(cache: bool, det: bool, guard: bool) -> Self {
+        Self { cache, det, guard }
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum BuildError {
     #[error(transparent)]
     Interp(#[from] InterpError),
-    #[error(transparent)]
-    Structure(#[from] structure::StructureError),
 }
 
 pub fn build_al<Ext: Extern>(
     spec: al::ast::Spec,
-    config: AlConfig,
+    config: Config,
     external: Ext,
 ) -> Result<Runner<AlInterp, BuiltinInterface, Ext>, BuildError> {
     let interface = builtin::p4(&spec);
     let global = AlGlobal::load(spec)?;
+    let config = AlConfig::new(config.cache, config.det, config.guard);
     Ok(Runner::new(global, AlInterp::new(config), interface, external))
 }
 
 pub fn build_sl<Ext: Extern>(
-    spec_al: al::ast::Spec,
-    config: SlConfig,
+    spec: sl::ast::Spec,
+    config: Config,
     external: Ext,
 ) -> Result<Runner<SlInterp, BuiltinInterface, Ext>, BuildError> {
-    let interface = builtin::p4(&spec_al);
-    let without_rule_groups = true;
-    let spec_sl = structure::convert(spec_al, without_rule_groups)?;
-    let global = SlGlobal::load(spec_sl)?;
+    let interface = builtin::p4_sl(&spec);
+    let global = SlGlobal::load(spec)?;
+    let config = SlConfig::new(config.cache, config.det, config.guard);
     Ok(Runner::new(global, SlInterp::new(config), interface, external))
 }
 
