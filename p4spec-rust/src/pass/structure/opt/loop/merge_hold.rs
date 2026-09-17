@@ -25,25 +25,29 @@ use crate::pass::structure::{ol::ast::*, opt::merge};
 
 // == Instructions
 
-fn merge_instr_kind(instr_kind: InstrKind, instrs: &mut VecDeque<Instr>) -> (InstrKind, bool) {
+fn merge_instr_kind(
+    changed: &mut bool,
+    instrs_tail: &mut VecDeque<Instr>,
+    instr_kind: InstrKind,
+) -> (InstrKind, bool) {
     match instr_kind {
-        InstrKind::If(instr) => (merge_if_instr(instr), false),
-        InstrKind::Hold(instr) => merge_hold_instr(instr, instrs),
-        InstrKind::Case(instr) => (merge_case_instr(instr), false),
-        InstrKind::Group(instr) => (merge_group_instr(instr), false),
-        InstrKind::Let(instr) => (merge_let_instr(instr), false),
-        InstrKind::Rule(instr) => (merge_rule_instr(instr), false),
+        InstrKind::If(instr) => (merge_if_instr(changed, instr), false),
+        InstrKind::Hold(instr) => merge_hold_instr(changed, instrs_tail, instr),
+        InstrKind::Case(instr) => (merge_case_instr(changed, instr), false),
+        InstrKind::Group(instr) => (merge_group_instr(changed, instr), false),
+        InstrKind::Let(instr) => (merge_let_instr(changed, instr), false),
+        InstrKind::Rule(instr) => (merge_rule_instr(changed, instr), false),
         instr_kind => (instr_kind, false),
     }
 }
 
-fn merge_block(block: Block) -> Block {
-    let mut instrs: VecDeque<_> = block.into();
-    let mut block = Vec::with_capacity(instrs.len());
+fn merge_block(changed: &mut bool, block: Block) -> Block {
+    let mut instrs_tail: VecDeque<_> = block.into();
+    let mut block = Vec::with_capacity(instrs_tail.len());
     let mut blocks_pending: Vec<(Block, Instr)> = Vec::new();
     loop {
-        while let Some(instr) = instrs.pop_front() {
-            let (instr_kind, merged) = merge_instr_kind(instr.node, &mut instrs);
+        while let Some(instr) = instrs_tail.pop_front() {
+            let (instr_kind, merged) = merge_instr_kind(changed, &mut instrs_tail, instr.node);
             let instr = crate::phrase!(node: instr_kind, span: instr.span);
             if merged {
                 let block_prefix = std::mem::take(&mut block);
@@ -55,25 +59,28 @@ fn merge_block(block: Block) -> Block {
         let Some((block_prefix, instr)) = blocks_pending.pop() else {
             return block;
         };
-        instrs = block.into();
-        instrs.push_front(instr);
+        instrs_tail = block.into();
+        instrs_tail.push_front(instr);
         block = block_prefix;
     }
 }
 
 // - If instruction
 
-fn merge_if_instr(instr: IfInstr) -> InstrKind {
+fn merge_if_instr(changed: &mut bool, instr: IfInstr) -> InstrKind {
     let IfInstr { exp, iter_exps, block } = instr;
-    let block = merge_block(block);
+    let block = merge_block(changed, block);
     let instr = IfInstr { exp, iter_exps, block };
     InstrKind::If(instr)
 }
 
 // - Hold instruction
 
-fn take_identical_hold(instr_target: &HoldInstr, block: &mut VecDeque<Instr>) -> Option<HoldInstr> {
-    let instr_head = block.front()?;
+fn take_identical_hold(
+    instr_target: &HoldInstr,
+    instrs_tail: &mut VecDeque<Instr>,
+) -> Option<HoldInstr> {
+    let instr_head = instrs_tail.front()?;
     let InstrKind::Hold(instr_hold) = &instr_head.node else {
         return None;
     };
@@ -83,15 +90,20 @@ fn take_identical_hold(instr_target: &HoldInstr, block: &mut VecDeque<Instr>) ->
     {
         return None;
     }
-    let instr_head = block.pop_front()?;
+    let instr_head = instrs_tail.pop_front()?;
     let InstrKind::Hold(instr_hold) = instr_head.node else { unreachable!() };
     Some(instr_hold)
 }
 
-fn merge_hold_instr(instr: HoldInstr, instrs: &mut VecDeque<Instr>) -> (InstrKind, bool) {
-    let instr_merge = take_identical_hold(&instr, instrs);
+fn merge_hold_instr(
+    changed: &mut bool,
+    instrs_tail: &mut VecDeque<Instr>,
+    instr: HoldInstr,
+) -> (InstrKind, bool) {
+    let instr_merge = take_identical_hold(&instr, instrs_tail);
     let HoldInstr { id, not_exp, iter_exps, block_hold, block_not_hold } = instr;
     if let Some(instr_merge) = instr_merge {
+        *changed = true;
         let HoldInstr {
             id,
             not_exp,
@@ -104,8 +116,8 @@ fn merge_hold_instr(instr: HoldInstr, instrs: &mut VecDeque<Instr>) -> (InstrKin
         let instr = HoldInstr { id, not_exp, iter_exps, block_hold, block_not_hold };
         (InstrKind::Hold(instr), true)
     } else {
-        let block_hold = merge_block(block_hold);
-        let block_not_hold = merge_block(block_not_hold);
+        let block_hold = merge_block(changed, block_hold);
+        let block_not_hold = merge_block(changed, block_not_hold);
         let instr = HoldInstr { id, not_exp, iter_exps, block_hold, block_not_hold };
         (InstrKind::Hold(instr), false)
     }
@@ -113,13 +125,13 @@ fn merge_hold_instr(instr: HoldInstr, instrs: &mut VecDeque<Instr>) -> (InstrKin
 
 // - Case instruction
 
-fn merge_case_instr(instr: CaseInstr) -> InstrKind {
+fn merge_case_instr(changed: &mut bool, instr: CaseInstr) -> InstrKind {
     let CaseInstr { exp, cases, total } = instr;
     let cases = cases
         .into_iter()
         .map(|case| {
             let Case { guard, block } = case;
-            let block = merge_block(block);
+            let block = merge_block(changed, block);
             Case { guard, block }
         })
         .collect();
@@ -129,33 +141,33 @@ fn merge_case_instr(instr: CaseInstr) -> InstrKind {
 
 // - Group instruction
 
-fn merge_group_instr(instr: GroupInstr) -> InstrKind {
+fn merge_group_instr(changed: &mut bool, instr: GroupInstr) -> InstrKind {
     let GroupInstr { id, rel_signature, exps, block } = instr;
-    let block = merge_block(block);
+    let block = merge_block(changed, block);
     let instr = GroupInstr { id, rel_signature, exps, block };
     InstrKind::Group(instr)
 }
 
 // - Let instruction
 
-fn merge_let_instr(instr: LetInstr) -> InstrKind {
+fn merge_let_instr(changed: &mut bool, instr: LetInstr) -> InstrKind {
     let LetInstr { exp_l, exp_r, iter_instrs, block } = instr;
-    let block = merge_block(block);
+    let block = merge_block(changed, block);
     let instr = LetInstr { exp_l, exp_r, iter_instrs, block };
     InstrKind::Let(instr)
 }
 
 // - Rule instruction
 
-fn merge_rule_instr(instr: RuleInstr) -> InstrKind {
+fn merge_rule_instr(changed: &mut bool, instr: RuleInstr) -> InstrKind {
     let RuleInstr { id, not_exp, input_hint, iter_instrs, block } = instr;
-    let block = merge_block(block);
+    let block = merge_block(changed, block);
     let instr = RuleInstr { id, not_exp, input_hint, iter_instrs, block };
     InstrKind::Rule(instr)
 }
 
 // == Entry point
 
-pub(crate) fn apply(block: Block) -> Block {
-    merge_block(block)
+pub(crate) fn apply(changed: &mut bool, block: Block) -> Block {
+    merge_block(changed, block)
 }

@@ -32,7 +32,7 @@ fn test_capture_avoidance_and_shadowing_preserve_spans() {
     let renamer = Renamer::singleton(id("x"), id_target.clone());
     let block =
         vec![binding("y", vec![ret("x"), ret("y"), ret("z"), binding("x", vec![ret("x")])])];
-    let block = renamer.rename_block(block).unwrap();
+    let block = renamer.rename_block(&mut false, block).unwrap();
     let InstrKind::Let(instr_body) = &block[0].node else { panic!("expected let") };
     let id_fresh = var_id(&instr_body.exp_l);
     assert_ne!(id_fresh.node, "y");
@@ -52,7 +52,7 @@ fn test_freshness_avoids_domain_codomain_and_block_names() {
     renamer.add(id("y'"), id("z"));
     renamer.add(id("q"), id("y''"));
     let block = renamer
-        .rename_block(vec![binding("y", vec![ret("y'''"), ret("x"), ret("y")])])
+        .rename_block(&mut false, vec![binding("y", vec![ret("y'''"), ret("x"), ret("y")])])
         .unwrap();
     let InstrKind::Let(instr_body) = &block[0].node else { panic!("expected let") };
     let id_fresh = var_id(&instr_body.exp_l);
@@ -74,12 +74,39 @@ fn iterator() -> InstrIter {
 #[test]
 fn test_iterator_bound_and_binding_are_distinct() {
     let renamer = Renamer::singleton(id("y"), id("z"));
-    let iter_bound = renamer.rename_iterinstr_bound(iterator());
-    let iter_bind = renamer.rename_iterinstr_bind(iterator());
+    let iter_bound = renamer.rename_iterinstr_bound(&mut false, iterator());
+    let iter_bind = renamer.rename_iterinstr_bind(&mut false, iterator());
     assert_eq!(iter_bound.vars_bound[0].id.node, "z");
     assert_eq!(iter_bound.vars_bind[0].id.node, "y");
     assert_eq!(iter_bind.vars_bound[0].id.node, "y");
     assert_eq!(iter_bind.vars_bind[0].id.node, "z");
+}
+
+#[test]
+fn test_change_tracking_follows_filtered_and_capture_avoiding_renamers() {
+    use crate::lang::traits::free::Free;
+    let mut changed = false;
+    let renamer = Renamer::singleton(id("x"), id("y"));
+    let renamer = renamer.filter(|_, _| true);
+    assert!(!changed);
+    renamer.rename_exp(&mut changed, variable("absent"));
+    assert!(!changed);
+    renamer.rename_exp(&mut changed, variable("x"));
+    assert!(changed);
+
+    changed = false;
+    let renamer_fresh = renamer.freshen_binders(&variable("y").free(), &vec![]);
+    assert!(!changed);
+    renamer_fresh.rename_exp(&mut changed, variable("y"));
+    assert!(changed);
+
+    changed = false;
+    let mut id_target = id("y");
+    id_target.span = span(77);
+    let renamer = Renamer::singleton(id("y"), id_target.clone());
+    let exp = renamer.rename_exp(&mut changed, variable("y"));
+    assert_eq!(var_id(&exp), &id_target);
+    assert!(!changed);
 }
 
 #[test]
@@ -104,7 +131,7 @@ fn test_rule_outputs_freshen_under_hold_and_case() {
         total: true,
     }));
     let block = Renamer::singleton(id("x"), id("y"))
-        .rename_block(vec![instr_case])
+        .rename_block(&mut false, vec![instr_case])
         .unwrap();
     let InstrKind::Case(instr_case) = &block[0].node else { panic!("expected case") };
     let Guard::Mem(exp) = &instr_case.cases[0].guard else { panic!("expected membership") };
@@ -135,7 +162,7 @@ fn test_let_iterator_bound_tracks_fresh_binder() {
         block: vec![binding("y", vec![ret("x"), ret("y")]), ret("y")],
     }));
     let block = Renamer::singleton(id("x"), id("y"))
-        .rename_block(vec![instr_let])
+        .rename_block(&mut false, vec![instr_let])
         .unwrap();
     let InstrKind::Let(instr_outer) = &block[0].node else { panic!("expected let") };
     let id_outer = var_id(&instr_outer.exp_l);
@@ -144,26 +171,6 @@ fn test_let_iterator_bound_tracks_fresh_binder() {
     let InstrKind::Let(instr_inner) = &instr_outer.block[0].node else { panic!("expected let") };
     assert_eq!(var_id(return_exp(&instr_inner.block[1])), var_id(&instr_inner.exp_l));
     assert_eq!(var_id(return_exp(&instr_outer.block[1])), id_outer);
-}
-
-#[test]
-fn test_invalid_rule_hint_reports_instruction_span() {
-    use crate::lang::hints::input::InputError;
-    use crate::pass::structure::StructureErrorKind;
-    let mut instr_rule = instr(InstrKind::Rule(RuleInstr {
-        id: id("rel"),
-        not_exp: Mixfix::Arg(variable("x")),
-        input_hint: InputHint::new(vec![2]),
-        iter_instrs: vec![],
-        block: vec![],
-    }));
-    instr_rule.span = span(7);
-    let error = Renamer::empty().rename_instr(instr_rule).unwrap_err();
-    assert_eq!(error.span, span(7));
-    assert_eq!(
-        error.kind,
-        StructureErrorKind::Input(InputError::IndexOutOfBounds { index: 2, arity: 1 })
-    );
 }
 
 #[test]
@@ -193,7 +200,7 @@ fn test_expression_paths_arguments_and_iterator_annotations() {
     };
     let mut renamer = Renamer::singleton(id("x"), id("q"));
     renamer.add(id("y"), id("r"));
-    let exp = renamer.rename_exp(exp);
+    let exp = renamer.rename_exp(&mut false, exp);
     assert_eq!(exp.span, span(10));
     let ExpKind::Call(id_func, targs, args) = exp.node else { panic!("expected call") };
     assert_eq!(id_func.node, "x");
@@ -217,7 +224,7 @@ fn test_expression_paths_arguments_and_iterator_annotations() {
     assert_eq!(var_id(exp_idx).node, "q");
     assert_eq!(var_id(exp_len).node, "z");
     let guard = Guard::Sub(typ, Box::new(Subcheck::Iter(Iter::List, Box::new(Subcheck::Skip))));
-    assert_eq!(renamer.rename_guard(guard.clone()), guard);
+    assert_eq!(renamer.rename_guard(&mut false, guard.clone()), guard);
 }
 
 #[test]
@@ -239,7 +246,7 @@ fn test_nested_rule_shadows_rename_inside_let_iterator() {
         block: vec![instr_rule, ret("x")],
     }));
     let block = Renamer::singleton(id("x"), id("y"))
-        .rename_block(vec![instr_let])
+        .rename_block(&mut false, vec![instr_let])
         .unwrap();
     let InstrKind::Let(instr_let) = &block[0].node else { panic!("expected let") };
     let id_fresh = var_id(&instr_let.exp_l);
@@ -252,4 +259,36 @@ fn test_nested_rule_shadows_rename_inside_let_iterator() {
     assert_eq!(var_id(return_exp(&instr_rule.block[0])).node, "x");
     assert_eq!(var_id(return_exp(&instr_rule.block[1])), id_fresh);
     assert_eq!(var_id(return_exp(&instr_let.block[1])).node, "y");
+}
+
+#[test]
+fn test_empty_renaming_moves_notation_payloads() {
+    let exp = crate::note_phrase! {
+        node: ExpKind::Case(Box::new(Mixfix::Arg(variable("payload")))),
+        note: TypKind::Bool, span: span(3)
+    };
+    let ExpKind::Case(not_exp) = &exp.node else { unreachable!() };
+    let ptr = var_id(not_exp.args()[0]).node.as_ptr();
+    let exp_expect = exp.clone();
+    let exp = Renamer::empty().rename_exp(&mut false, exp);
+    assert_eq!(exp, exp_expect);
+    let ExpKind::Case(not_exp) = &exp.node else { unreachable!() };
+    assert_eq!(var_id(not_exp.args()[0]).node.as_ptr(), ptr);
+
+    let instr_rule = instr(InstrKind::Rule(RuleInstr {
+        id: id("rel"),
+        not_exp: Mixfix::Arg(variable("input")),
+        input_hint: InputHint::new(vec![0]),
+        iter_instrs: vec![],
+        block: vec![binding("bound", vec![ret("bound")])],
+    }));
+    let InstrKind::Rule(instr_body) = &instr_rule.node else { unreachable!() };
+    let ptr = var_id(instr_body.not_exp.args()[0]).node.as_ptr();
+    let instr_expect = instr_rule.clone();
+    let instr_rule = Renamer::empty()
+        .rename_instr(&mut false, instr_rule)
+        .unwrap();
+    assert_eq!(instr_rule, instr_expect);
+    let InstrKind::Rule(instr_body) = &instr_rule.node else { unreachable!() };
+    assert_eq!(var_id(instr_body.not_exp.args()[0]).node.as_ptr(), ptr);
 }

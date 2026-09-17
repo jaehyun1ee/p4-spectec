@@ -6,49 +6,43 @@ pub(super) mod rename_tick;
 pub(super) mod revive_underscore;
 
 use super::{StructureError, ol::ast::Block};
-use crate::lang::{
-    il::ast::{Arg, Exp},
-    traits::eq::SyntaxEq,
-};
+use crate::lang::il::ast::{Arg, Exp};
+
+// Revival removes leading underscores; tick cleanup shortens suffixes
+// Actual name changes cannot cancel within a round, including iterator names
 
 // == Relations
 
 pub(crate) fn pretty_rel(
-    mut exps_match: Vec<Exp>,
-    mut block: Block,
-    mut block_else: Option<Block>,
+    exps_match: Vec<Exp>,
+    block: Block,
+    block_else: Option<Block>,
 ) -> Result<(Vec<Exp>, Block, Option<Block>), StructureError> {
+    let mut body = (exps_match, block, block_else);
     loop {
-        let body = (exps_match.clone(), block.clone(), block_else.clone());
-        let body = revive_underscore::apply_rel(body)?;
-        let (exps_pretty, block_pretty, block_else_pretty) = rename_tick::apply_rel(body)?;
-        if exps_match.syntax_eq(&exps_pretty)
-            && block.syntax_eq(&block_pretty)
-            && block_else.syntax_eq(&block_else_pretty)
-        {
-            return Ok((exps_match, block, block_else));
+        let mut changed = false;
+        body = revive_underscore::apply_rel(&mut changed, body)?;
+        body = rename_tick::apply_rel(&mut changed, body)?;
+        if !changed {
+            return Ok(body);
         }
-        (exps_match, block, block_else) = (exps_pretty, block_pretty, block_else_pretty);
     }
 }
 
 // == Functions
 
 pub(crate) fn pretty_func(
-    mut args_input: Vec<Arg>,
-    mut block: Block,
-    mut block_else: Option<Block>,
+    args_input: Vec<Arg>,
+    block: Block,
+    block_else: Option<Block>,
 ) -> Result<(Vec<Arg>, Block, Option<Block>), StructureError> {
+    let mut body = (args_input, block, block_else);
     loop {
-        let body = (args_input.clone(), block.clone(), block_else.clone());
-        let body = revive_underscore::apply_func(body)?;
-        let (args_pretty, block_pretty, block_else_pretty) = rename_tick::apply_func(body)?;
-        if args_input.syntax_eq(&args_pretty)
-            && block.syntax_eq(&block_pretty)
-            && block_else.syntax_eq(&block_else_pretty)
-        {
-            return Ok((args_input, block, block_else));
+        let mut changed = false;
+        body = revive_underscore::apply_func(&mut changed, body)?;
+        body = rename_tick::apply_func(&mut changed, body)?;
+        if !changed {
+            return Ok(body);
         }
-        (args_input, block, block_else) = (args_pretty, block_pretty, block_else_pretty);
     }
 }

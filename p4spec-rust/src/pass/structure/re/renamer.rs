@@ -78,6 +78,9 @@ impl Renamer {
             .into_iter()
             .filter(|id| frees.contains(id))
             .collect();
+        if ids_collide.is_empty() {
+            return Self::empty();
+        }
         let mut ids_avoid = frees
             .clone()
             .union(block.free())
@@ -94,12 +97,20 @@ impl Renamer {
 
     // == Variables
 
-    fn rename_vars(&self, vars: Vec<Var>) -> Vec<Var> {
+    fn rename_id(&self, changed: &mut bool, id: Id) -> Id {
+        let Some(id_renamed) = self.ids.get(&id) else {
+            return id;
+        };
+        if id.node != id_renamed.node {
+            *changed = true;
+        }
+        id_renamed.clone()
+    }
+
+    fn rename_vars(&self, changed: &mut bool, vars: Vec<Var>) -> Vec<Var> {
         vars.into_iter()
             .map(|mut var| {
-                if let Some(id) = self.ids.get(&var.id) {
-                    var.id = id.clone();
-                }
+                var.id = self.rename_id(changed, var.id);
                 var
             })
             .collect()
@@ -107,212 +118,260 @@ impl Renamer {
 
     // == Expressions
 
-    pub(crate) fn rename_exp(&self, exp: Exp) -> Exp {
+    pub(crate) fn rename_exp(&self, changed: &mut bool, exp: Exp) -> Exp {
+        if self.ids.is_empty() {
+            return exp;
+        }
         let exp_kind = match exp.node {
             ExpKind::Bool(_) | ExpKind::Num(_) | ExpKind::Text(_) => exp.node,
-            ExpKind::Var(id) => ExpKind::Var(self.ids.get(&id).cloned().unwrap_or(id)),
+            ExpKind::Var(id) => ExpKind::Var(self.rename_id(changed, id)),
             ExpKind::Un(op, op_typ, exp) => {
-                ExpKind::Un(op, op_typ, Box::new(self.rename_exp(*exp)))
+                ExpKind::Un(op, op_typ, Box::new(self.rename_exp(changed, *exp)))
             }
             ExpKind::Bin(op, op_typ, exp_l, exp_r) => ExpKind::Bin(
                 op,
                 op_typ,
-                Box::new(self.rename_exp(*exp_l)),
-                Box::new(self.rename_exp(*exp_r)),
+                Box::new(self.rename_exp(changed, *exp_l)),
+                Box::new(self.rename_exp(changed, *exp_r)),
             ),
             ExpKind::Cmp(op, op_typ, exp_l, exp_r) => ExpKind::Cmp(
                 op,
                 op_typ,
-                Box::new(self.rename_exp(*exp_l)),
-                Box::new(self.rename_exp(*exp_r)),
+                Box::new(self.rename_exp(changed, *exp_l)),
+                Box::new(self.rename_exp(changed, *exp_r)),
             ),
-            ExpKind::UpCast(typ, exp) => ExpKind::UpCast(typ, Box::new(self.rename_exp(*exp))),
-            ExpKind::DownCast(typ, exp) => ExpKind::DownCast(typ, Box::new(self.rename_exp(*exp))),
+            ExpKind::UpCast(typ, exp) => {
+                ExpKind::UpCast(typ, Box::new(self.rename_exp(changed, *exp)))
+            }
+            ExpKind::DownCast(typ, exp) => {
+                ExpKind::DownCast(typ, Box::new(self.rename_exp(changed, *exp)))
+            }
             ExpKind::Sub(exp, typ, subcheck) => {
-                ExpKind::Sub(Box::new(self.rename_exp(*exp)), typ, subcheck)
+                ExpKind::Sub(Box::new(self.rename_exp(changed, *exp)), typ, subcheck)
             }
             ExpKind::Match(exp, pattern) => {
-                ExpKind::Match(Box::new(self.rename_exp(*exp)), pattern)
+                ExpKind::Match(Box::new(self.rename_exp(changed, *exp)), pattern)
             }
-            ExpKind::Tuple(exps) => ExpKind::Tuple(self.rename_exps(exps)),
+            ExpKind::Tuple(exps) => ExpKind::Tuple(self.rename_exps(changed, exps)),
             ExpKind::Case(not_exp) => {
-                ExpKind::Case(Box::new(not_exp.map(|exp| self.rename_exp(exp.clone()))))
+                ExpKind::Case(Box::new(not_exp.map(|exp| self.rename_exp(changed, exp.clone()))))
             }
             ExpKind::Str(exp_fields) => ExpKind::Str(
                 exp_fields
                     .into_iter()
-                    .map(|(atom, exp)| (atom, self.rename_exp(exp)))
+                    .map(|(atom, exp)| (atom, self.rename_exp(changed, exp)))
                     .collect(),
             ),
-            ExpKind::Opt(exp) => ExpKind::Opt(exp.map(|exp| Box::new(self.rename_exp(*exp)))),
-            ExpKind::List(exps) => ExpKind::List(self.rename_exps(exps)),
-            ExpKind::Cons(exp_head, exp_tail) => ExpKind::Cons(
-                Box::new(self.rename_exp(*exp_head)),
-                Box::new(self.rename_exp(*exp_tail)),
-            ),
-            ExpKind::Cat(exp_l, exp_r) => {
-                ExpKind::Cat(Box::new(self.rename_exp(*exp_l)), Box::new(self.rename_exp(*exp_r)))
+            ExpKind::Opt(exp) => {
+                ExpKind::Opt(exp.map(|exp| Box::new(self.rename_exp(changed, *exp))))
             }
-            ExpKind::Mem(exp_elem, exp_set) => ExpKind::Mem(
-                Box::new(self.rename_exp(*exp_elem)),
-                Box::new(self.rename_exp(*exp_set)),
+            ExpKind::List(exps) => ExpKind::List(self.rename_exps(changed, exps)),
+            ExpKind::Cons(exp_head, exp_tail) => ExpKind::Cons(
+                Box::new(self.rename_exp(changed, *exp_head)),
+                Box::new(self.rename_exp(changed, *exp_tail)),
             ),
-            ExpKind::Len(exp) => ExpKind::Len(Box::new(self.rename_exp(*exp))),
-            ExpKind::Dot(exp, atom) => ExpKind::Dot(Box::new(self.rename_exp(*exp)), atom),
+            ExpKind::Cat(exp_l, exp_r) => ExpKind::Cat(
+                Box::new(self.rename_exp(changed, *exp_l)),
+                Box::new(self.rename_exp(changed, *exp_r)),
+            ),
+            ExpKind::Mem(exp_elem, exp_set) => ExpKind::Mem(
+                Box::new(self.rename_exp(changed, *exp_elem)),
+                Box::new(self.rename_exp(changed, *exp_set)),
+            ),
+            ExpKind::Len(exp) => ExpKind::Len(Box::new(self.rename_exp(changed, *exp))),
+            ExpKind::Dot(exp, atom) => ExpKind::Dot(Box::new(self.rename_exp(changed, *exp)), atom),
             ExpKind::Idx(exp_base, exp_idx) => ExpKind::Idx(
-                Box::new(self.rename_exp(*exp_base)),
-                Box::new(self.rename_exp(*exp_idx)),
+                Box::new(self.rename_exp(changed, *exp_base)),
+                Box::new(self.rename_exp(changed, *exp_idx)),
             ),
             ExpKind::Slice(exp_base, exp_idx, exp_len) => ExpKind::Slice(
-                Box::new(self.rename_exp(*exp_base)),
-                Box::new(self.rename_exp(*exp_idx)),
-                Box::new(self.rename_exp(*exp_len)),
+                Box::new(self.rename_exp(changed, *exp_base)),
+                Box::new(self.rename_exp(changed, *exp_idx)),
+                Box::new(self.rename_exp(changed, *exp_len)),
             ),
             ExpKind::Upd(exp_base, path, exp_field) => ExpKind::Upd(
-                Box::new(self.rename_exp(*exp_base)),
-                Box::new(self.rename_path(*path)),
-                Box::new(self.rename_exp(*exp_field)),
+                Box::new(self.rename_exp(changed, *exp_base)),
+                Box::new(self.rename_path(changed, *path)),
+                Box::new(self.rename_exp(changed, *exp_field)),
             ),
-            ExpKind::Call(id, targs, args) => ExpKind::Call(id, targs, self.rename_args(args)),
-            ExpKind::Iter(exp, iter_exp) => {
-                ExpKind::Iter(Box::new(self.rename_exp(*exp)), self.rename_iterexp(iter_exp))
+            ExpKind::Call(id, targs, args) => {
+                ExpKind::Call(id, targs, self.rename_args(changed, args))
             }
+            ExpKind::Iter(exp, iter_exp) => ExpKind::Iter(
+                Box::new(self.rename_exp(changed, *exp)),
+                self.rename_iterexp(changed, iter_exp),
+            ),
         };
         note_phrase!(node: exp_kind, note: exp.note, span: exp.span)
     }
 
-    pub(crate) fn rename_exps(&self, exps: Vec<Exp>) -> Vec<Exp> {
-        exps.into_iter().map(|exp| self.rename_exp(exp)).collect()
+    pub(crate) fn rename_exps(&self, changed: &mut bool, exps: Vec<Exp>) -> Vec<Exp> {
+        exps.into_iter()
+            .map(|exp| self.rename_exp(changed, exp))
+            .collect()
     }
 
     // == Expression iterators
 
-    pub(crate) fn rename_iterexp(&self, iter_exp: ExpIter) -> ExpIter {
+    pub(crate) fn rename_iterexp(&self, changed: &mut bool, iter_exp: ExpIter) -> ExpIter {
         let (iter, vars) = iter_exp;
-        (iter, self.rename_vars(vars))
+        (iter, self.rename_vars(changed, vars))
     }
 
-    pub(crate) fn rename_iterexps(&self, iter_exps: Vec<ExpIter>) -> Vec<ExpIter> {
+    pub(crate) fn rename_iterexps(
+        &self,
+        changed: &mut bool,
+        iter_exps: Vec<ExpIter>,
+    ) -> Vec<ExpIter> {
         iter_exps
             .into_iter()
-            .map(|iter_exp| self.rename_iterexp(iter_exp))
+            .map(|iter_exp| self.rename_iterexp(changed, iter_exp))
             .collect()
     }
 
     // == Paths
 
-    pub(crate) fn rename_path(&self, path: Path) -> Path {
+    pub(crate) fn rename_path(&self, changed: &mut bool, path: Path) -> Path {
         let path_kind = match path.node {
             PathKind::Root => PathKind::Root,
-            PathKind::Idx(path, exp) => {
-                PathKind::Idx(Box::new(self.rename_path(*path)), Box::new(self.rename_exp(*exp)))
-            }
-            PathKind::Slice(path, exp_idx, exp_len) => PathKind::Slice(
-                Box::new(self.rename_path(*path)),
-                Box::new(self.rename_exp(*exp_idx)),
-                Box::new(self.rename_exp(*exp_len)),
+            PathKind::Idx(path, exp) => PathKind::Idx(
+                Box::new(self.rename_path(changed, *path)),
+                Box::new(self.rename_exp(changed, *exp)),
             ),
-            PathKind::Dot(path, atom) => PathKind::Dot(Box::new(self.rename_path(*path)), atom),
+            PathKind::Slice(path, exp_idx, exp_len) => PathKind::Slice(
+                Box::new(self.rename_path(changed, *path)),
+                Box::new(self.rename_exp(changed, *exp_idx)),
+                Box::new(self.rename_exp(changed, *exp_len)),
+            ),
+            PathKind::Dot(path, atom) => {
+                PathKind::Dot(Box::new(self.rename_path(changed, *path)), atom)
+            }
         };
         note_phrase!(node: path_kind, note: path.note, span: path.span)
     }
 
     // == Arguments
 
-    pub(crate) fn rename_arg(&self, arg: Arg) -> Arg {
+    pub(crate) fn rename_arg(&self, changed: &mut bool, arg: Arg) -> Arg {
         let arg_kind = match arg.node {
-            ArgKind::Exp(exp) => ArgKind::Exp(Box::new(self.rename_exp(*exp))),
+            ArgKind::Exp(exp) => ArgKind::Exp(Box::new(self.rename_exp(changed, *exp))),
             ArgKind::Def(_) => arg.node,
         };
         phrase!(node: arg_kind, span: arg.span)
     }
 
-    pub(crate) fn rename_args(&self, args: Vec<Arg>) -> Vec<Arg> {
-        args.into_iter().map(|arg| self.rename_arg(arg)).collect()
+    pub(crate) fn rename_args(&self, changed: &mut bool, args: Vec<Arg>) -> Vec<Arg> {
+        args.into_iter()
+            .map(|arg| self.rename_arg(changed, arg))
+            .collect()
     }
 
     // == Cases
 
-    pub(crate) fn rename_case(&self, case: ol::Case) -> Result<ol::Case, StructureError> {
+    pub(crate) fn rename_case(
+        &self,
+        changed: &mut bool,
+        case: ol::Case,
+    ) -> Result<ol::Case, StructureError> {
         let ol::Case { guard, block } = case;
-        let guard = self.rename_guard(guard);
-        let block = self.rename_block(block)?;
+        let guard = self.rename_guard(changed, guard);
+        let block = self.rename_block(changed, block)?;
         Ok(ol::Case { guard, block })
     }
 
     pub(crate) fn rename_cases(
         &self,
+        changed: &mut bool,
         cases: Vec<ol::Case>,
     ) -> Result<Vec<ol::Case>, StructureError> {
         cases
             .into_iter()
-            .map(|case| self.rename_case(case))
+            .map(|case| self.rename_case(changed, case))
             .collect()
     }
 
     // - Guards
 
-    pub(crate) fn rename_guard(&self, guard: ol::Guard) -> ol::Guard {
+    pub(crate) fn rename_guard(&self, changed: &mut bool, guard: ol::Guard) -> ol::Guard {
         match guard {
             ol::Guard::Bool(_) | ol::Guard::Sub(..) | ol::Guard::Match(_) => guard,
-            ol::Guard::Cmp(op, op_typ, exp) => ol::Guard::Cmp(op, op_typ, self.rename_exp(exp)),
-            ol::Guard::Mem(exp) => ol::Guard::Mem(self.rename_exp(exp)),
+            ol::Guard::Cmp(op, op_typ, exp) => {
+                ol::Guard::Cmp(op, op_typ, self.rename_exp(changed, exp))
+            }
+            ol::Guard::Mem(exp) => ol::Guard::Mem(self.rename_exp(changed, exp)),
         }
     }
 
     // == Instructions
 
-    pub(crate) fn rename_instr(&self, instr_ol: ol::Instr) -> Result<ol::Instr, StructureError> {
-        let instr_kind_ol = self.rename_instr_kind(instr_ol.node, &instr_ol.span)?;
+    pub(crate) fn rename_instr(
+        &self,
+        changed: &mut bool,
+        instr_ol: ol::Instr,
+    ) -> Result<ol::Instr, StructureError> {
+        if self.ids.is_empty() {
+            return Ok(instr_ol);
+        }
+        let instr_kind_ol = self.rename_instr_kind(changed, &instr_ol.span, instr_ol.node)?;
         Ok(phrase!(node: instr_kind_ol, span: instr_ol.span))
     }
 
     fn rename_instr_kind(
         &self,
-        instr_kind_ol: ol::InstrKind,
+        changed: &mut bool,
         span: &Span,
+        instr_kind_ol: ol::InstrKind,
     ) -> Result<ol::InstrKind, StructureError> {
         match instr_kind_ol {
-            ol::InstrKind::If(instr_ol) => self.rename_if_instr(instr_ol),
-            ol::InstrKind::Hold(instr_ol) => self.rename_hold_instr(instr_ol),
-            ol::InstrKind::Case(instr_ol) => self.rename_case_instr(instr_ol),
-            ol::InstrKind::Group(instr_ol) => self.rename_group_instr(instr_ol),
-            ol::InstrKind::Let(instr_ol) => self.rename_let_instr(instr_ol),
-            ol::InstrKind::Rule(instr_ol) => self.rename_rule_instr(instr_ol, span),
-            ol::InstrKind::Result(instr_ol) => Ok(self.rename_result_instr(instr_ol)),
-            ol::InstrKind::Return(instr_ol) => Ok(self.rename_return_instr(instr_ol)),
-            ol::InstrKind::Debug(instr_ol) => self.rename_debug_instr(instr_ol),
+            ol::InstrKind::If(instr_ol) => self.rename_if_instr(changed, instr_ol),
+            ol::InstrKind::Hold(instr_ol) => self.rename_hold_instr(changed, instr_ol),
+            ol::InstrKind::Case(instr_ol) => self.rename_case_instr(changed, instr_ol),
+            ol::InstrKind::Group(instr_ol) => self.rename_group_instr(changed, instr_ol),
+            ol::InstrKind::Let(instr_ol) => self.rename_let_instr(changed, instr_ol),
+            ol::InstrKind::Rule(instr_ol) => self.rename_rule_instr(changed, span, instr_ol),
+            ol::InstrKind::Result(instr_ol) => Ok(self.rename_result_instr(changed, instr_ol)),
+            ol::InstrKind::Return(instr_ol) => Ok(self.rename_return_instr(changed, instr_ol)),
+            ol::InstrKind::Debug(instr_ol) => self.rename_debug_instr(changed, instr_ol),
         }
     }
 
     pub(crate) fn rename_instrs(
         &self,
+        changed: &mut bool,
         instrs_ol: Vec<ol::Instr>,
     ) -> Result<Vec<ol::Instr>, StructureError> {
         instrs_ol
             .into_iter()
-            .map(|instr_ol| self.rename_instr(instr_ol))
+            .map(|instr_ol| self.rename_instr(changed, instr_ol))
             .collect()
     }
 
     // - If instruction
 
-    fn rename_if_instr(&self, instr_ol: ol::IfInstr) -> Result<ol::InstrKind, StructureError> {
+    fn rename_if_instr(
+        &self,
+        changed: &mut bool,
+        instr_ol: ol::IfInstr,
+    ) -> Result<ol::InstrKind, StructureError> {
         let ol::IfInstr { exp, iter_exps, block } = instr_ol;
-        let exp = self.rename_exp(exp);
-        let iter_exps = self.rename_iterexps(iter_exps);
-        let block = self.rename_block(block)?;
+        let exp = self.rename_exp(changed, exp);
+        let iter_exps = self.rename_iterexps(changed, iter_exps);
+        let block = self.rename_block(changed, block)?;
         Ok(ol::InstrKind::If(ol::IfInstr { exp, iter_exps, block }))
     }
 
     // - Hold instruction
 
-    fn rename_hold_instr(&self, instr_ol: ol::HoldInstr) -> Result<ol::InstrKind, StructureError> {
+    fn rename_hold_instr(
+        &self,
+        changed: &mut bool,
+        instr_ol: ol::HoldInstr,
+    ) -> Result<ol::InstrKind, StructureError> {
         let ol::HoldInstr { id, not_exp, iter_exps, block_hold, block_not_hold } = instr_ol;
-        let not_exp = not_exp.map(|exp| self.rename_exp(exp.clone()));
-        let iter_exps = self.rename_iterexps(iter_exps);
-        let block_hold = self.rename_block(block_hold)?;
-        let block_not_hold = self.rename_block(block_not_hold)?;
+        let not_exp = not_exp.map(|exp| self.rename_exp(changed, exp.clone()));
+        let iter_exps = self.rename_iterexps(changed, iter_exps);
+        let block_hold = self.rename_block(changed, block_hold)?;
+        let block_not_hold = self.rename_block(changed, block_not_hold)?;
         Ok(ol::InstrKind::Hold(ol::HoldInstr {
             id,
             not_exp,
@@ -324,10 +383,14 @@ impl Renamer {
 
     // - Case instruction
 
-    fn rename_case_instr(&self, instr_ol: ol::CaseInstr) -> Result<ol::InstrKind, StructureError> {
+    fn rename_case_instr(
+        &self,
+        changed: &mut bool,
+        instr_ol: ol::CaseInstr,
+    ) -> Result<ol::InstrKind, StructureError> {
         let ol::CaseInstr { exp, cases, total } = instr_ol;
-        let exp = self.rename_exp(exp);
-        let cases = self.rename_cases(cases)?;
+        let exp = self.rename_exp(changed, exp);
+        let cases = self.rename_cases(changed, cases)?;
         Ok(ol::InstrKind::Case(ol::CaseInstr { exp, cases, total }))
     }
 
@@ -335,31 +398,36 @@ impl Renamer {
 
     fn rename_group_instr(
         &self,
+        changed: &mut bool,
         instr_ol: ol::GroupInstr,
     ) -> Result<ol::InstrKind, StructureError> {
         let ol::GroupInstr { id, rel_signature, exps, block } = instr_ol;
-        let exps = self.rename_exps(exps);
-        let block = self.rename_block(block)?;
+        let exps = self.rename_exps(changed, exps);
+        let block = self.rename_block(changed, block)?;
         Ok(ol::InstrKind::Group(ol::GroupInstr { id, rel_signature, exps, block }))
     }
 
     // - Let instruction
 
-    fn rename_let_instr(&self, instr_ol: ol::LetInstr) -> Result<ol::InstrKind, StructureError> {
+    fn rename_let_instr(
+        &self,
+        changed: &mut bool,
+        instr_ol: ol::LetInstr,
+    ) -> Result<ol::InstrKind, StructureError> {
         let ol::LetInstr { exp_l, exp_r, iter_instrs, block } = instr_ol;
-        let exp_r = self.rename_exp(exp_r);
+        let exp_r = self.rename_exp(changed, exp_r);
         let frees_l = exp_l.free();
         let mut renamer = self.filter(|id, _| !frees_l.contains(id));
         let renamer_fresh = renamer.freshen_binders(&frees_l, &block);
-        let exp_l = renamer_fresh.rename_exp(exp_l);
+        let exp_l = renamer_fresh.rename_exp(changed, exp_l);
         renamer.ids.extend(
             renamer_fresh
                 .ids
                 .iter()
                 .map(|(id, id_fresh)| (id.clone(), id_fresh.clone())),
         );
-        let iter_instrs = renamer.rename_iterinstrs_bound(iter_instrs);
-        let block = renamer.rename_block(block)?;
+        let iter_instrs = renamer.rename_iterinstrs_bound(changed, iter_instrs);
+        let block = renamer.rename_block(changed, block)?;
         Ok(ol::InstrKind::Let(ol::LetInstr { exp_l, exp_r, iter_instrs, block }))
     }
 
@@ -367,18 +435,19 @@ impl Renamer {
 
     fn rename_rule_instr(
         &self,
-        instr_ol: ol::RuleInstr,
+        changed: &mut bool,
         span: &Span,
+        instr_ol: ol::RuleInstr,
     ) -> Result<ol::InstrKind, StructureError> {
         let ol::RuleInstr { id, not_exp, input_hint, iter_instrs, block } = instr_ol;
         let exps = not_exp.args().into_iter().cloned().collect();
         let (exps_input, exps_output) = input::split(&input_hint, exps)
             .map_err(|error| StructureError::new(StructureErrorKind::Input(error), span.clone()))?;
-        let exps_input = self.rename_exps(exps_input);
+        let exps_input = self.rename_exps(changed, exps_input);
         let frees_output = exps_output.as_slice().free();
         let mut renamer = self.filter(|id, _| !frees_output.contains(id));
         let renamer_fresh = renamer.freshen_binders(&frees_output, &block);
-        let exps_output = renamer_fresh.rename_exps(exps_output);
+        let exps_output = renamer_fresh.rename_exps(changed, exps_output);
         renamer.ids.extend(
             renamer_fresh
                 .ids
@@ -390,24 +459,24 @@ impl Renamer {
         let mixop = not_exp.to_mixop();
         let not_exp =
             Mixop::fill(&mixop, exps).expect("validated arguments preserve the mixfix arity");
-        let iter_instrs = renamer.rename_iterinstrs_bound(iter_instrs);
-        let block = renamer.rename_block(block)?;
+        let iter_instrs = renamer.rename_iterinstrs_bound(changed, iter_instrs);
+        let block = renamer.rename_block(changed, block)?;
         Ok(ol::InstrKind::Rule(ol::RuleInstr { id, not_exp, input_hint, iter_instrs, block }))
     }
 
     // - Result instruction
 
-    fn rename_result_instr(&self, instr_ol: ol::ResultInstr) -> ol::InstrKind {
+    fn rename_result_instr(&self, changed: &mut bool, instr_ol: ol::ResultInstr) -> ol::InstrKind {
         let ol::ResultInstr { rel_signature, exps } = instr_ol;
-        let exps = self.rename_exps(exps);
+        let exps = self.rename_exps(changed, exps);
         ol::InstrKind::Result(ol::ResultInstr { rel_signature, exps })
     }
 
     // - Return instruction
 
-    fn rename_return_instr(&self, instr_ol: ol::ReturnInstr) -> ol::InstrKind {
+    fn rename_return_instr(&self, changed: &mut bool, instr_ol: ol::ReturnInstr) -> ol::InstrKind {
         let ol::ReturnInstr { exp } = instr_ol;
-        let exp = self.rename_exp(exp);
+        let exp = self.rename_exp(changed, exp);
         ol::InstrKind::Return(ol::ReturnInstr { exp })
     }
 
@@ -415,55 +484,73 @@ impl Renamer {
 
     fn rename_debug_instr(
         &self,
+        changed: &mut bool,
         instr_ol: ol::DebugInstr,
     ) -> Result<ol::InstrKind, StructureError> {
         let ol::DebugInstr { exp, instr } = instr_ol;
-        let exp = self.rename_exp(exp);
-        let instr = Box::new(self.rename_instr(*instr)?);
+        let exp = self.rename_exp(changed, exp);
+        let instr = Box::new(self.rename_instr(changed, *instr)?);
         Ok(ol::InstrKind::Debug(ol::DebugInstr { exp, instr }))
     }
 
     // == Blocks
 
-    pub(crate) fn rename_block(&self, block: ol::Block) -> Result<ol::Block, StructureError> {
-        self.rename_instrs(block)
+    pub(crate) fn rename_block(
+        &self,
+        changed: &mut bool,
+        block: ol::Block,
+    ) -> Result<ol::Block, StructureError> {
+        if self.ids.is_empty() {
+            return Ok(block);
+        }
+        self.rename_instrs(changed, block)
     }
 
     // == Instruction iterators
 
     // - Bound variables
 
-    pub(crate) fn rename_iterinstr_bound(&self, iter_instr: ol::InstrIter) -> ol::InstrIter {
+    pub(crate) fn rename_iterinstr_bound(
+        &self,
+        changed: &mut bool,
+        iter_instr: ol::InstrIter,
+    ) -> ol::InstrIter {
         let ol::InstrIter { iter, vars_bound, vars_bind } = iter_instr;
-        let vars_bound = self.rename_vars(vars_bound);
+        let vars_bound = self.rename_vars(changed, vars_bound);
         ol::InstrIter { iter, vars_bound, vars_bind }
     }
 
     pub(crate) fn rename_iterinstrs_bound(
         &self,
+        changed: &mut bool,
         iter_instrs: Vec<ol::InstrIter>,
     ) -> Vec<ol::InstrIter> {
         iter_instrs
             .into_iter()
-            .map(|iter_instr| self.rename_iterinstr_bound(iter_instr))
+            .map(|iter_instr| self.rename_iterinstr_bound(changed, iter_instr))
             .collect()
     }
 
     // - Binding variables
 
-    pub(crate) fn rename_iterinstr_bind(&self, iter_instr: ol::InstrIter) -> ol::InstrIter {
+    pub(crate) fn rename_iterinstr_bind(
+        &self,
+        changed: &mut bool,
+        iter_instr: ol::InstrIter,
+    ) -> ol::InstrIter {
         let ol::InstrIter { iter, vars_bound, vars_bind } = iter_instr;
-        let vars_bind = self.rename_vars(vars_bind);
+        let vars_bind = self.rename_vars(changed, vars_bind);
         ol::InstrIter { iter, vars_bound, vars_bind }
     }
 
     pub(crate) fn rename_iterinstrs_bind(
         &self,
+        changed: &mut bool,
         iter_instrs: Vec<ol::InstrIter>,
     ) -> Vec<ol::InstrIter> {
         iter_instrs
             .into_iter()
-            .map(|iter_instr| self.rename_iterinstr_bind(iter_instr))
+            .map(|iter_instr| self.rename_iterinstr_bind(changed, iter_instr))
             .collect()
     }
 }

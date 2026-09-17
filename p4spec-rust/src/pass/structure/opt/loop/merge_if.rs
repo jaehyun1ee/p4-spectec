@@ -35,25 +35,26 @@ use crate::{
 
 fn merge_instr_kind(
     tdenv: &TDEnv,
+    changed: &mut bool,
+    instrs_tail: &mut VecDeque<Instr>,
     instr_kind: InstrKind,
-    instrs: &mut VecDeque<Instr>,
 ) -> Result<InstrKind, StructureError> {
     match instr_kind {
-        InstrKind::If(instr) => merge_if_instr(tdenv, instr, instrs),
-        InstrKind::Hold(instr) => merge_hold_instr(tdenv, instr),
-        InstrKind::Case(instr) => merge_case_instr(tdenv, instr),
-        InstrKind::Group(instr) => merge_group_instr(tdenv, instr),
-        InstrKind::Let(instr) => merge_let_instr(tdenv, instr),
-        InstrKind::Rule(instr) => merge_rule_instr(tdenv, instr),
+        InstrKind::If(instr) => merge_if_instr(tdenv, changed, instrs_tail, instr),
+        InstrKind::Hold(instr) => merge_hold_instr(tdenv, changed, instr),
+        InstrKind::Case(instr) => merge_case_instr(tdenv, changed, instr),
+        InstrKind::Group(instr) => merge_group_instr(tdenv, changed, instr),
+        InstrKind::Let(instr) => merge_let_instr(tdenv, changed, instr),
+        InstrKind::Rule(instr) => merge_rule_instr(tdenv, changed, instr),
         InstrKind::Return(_) | InstrKind::Result(_) | InstrKind::Debug(_) => Ok(instr_kind),
     }
 }
 
-fn merge_block(tdenv: &TDEnv, block: Block) -> Result<Block, StructureError> {
+fn merge_block(tdenv: &TDEnv, changed: &mut bool, block: Block) -> Result<Block, StructureError> {
     let mut block_output = Vec::with_capacity(block.len());
-    let mut instrs = VecDeque::from(block);
-    while let Some(instr) = instrs.pop_front() {
-        let instr_kind = merge_instr_kind(tdenv, instr.node, &mut instrs)?;
+    let mut instrs_tail = VecDeque::from(block);
+    while let Some(instr) = instrs_tail.pop_front() {
+        let instr_kind = merge_instr_kind(tdenv, changed, &mut instrs_tail, instr.node)?;
         let instr = crate::phrase!(node: instr_kind, span: instr.span);
         block_output.push(instr);
     }
@@ -65,10 +66,10 @@ fn merge_block(tdenv: &TDEnv, block: Block) -> Result<Block, StructureError> {
 fn find_identical_if(
     tdenv: &TDEnv,
     instr_target: &IfInstr,
-    instrs: &VecDeque<Instr>,
+    instrs_tail: &VecDeque<Instr>,
 ) -> Result<Option<usize>, StructureError> {
     let IfInstr { exp: exp_target, iter_exps: iter_exps_target, .. } = instr_target;
-    for (idx, instr) in instrs.iter().enumerate() {
+    for (idx, instr) in instrs_tail.iter().enumerate() {
         let InstrKind::If(instr_if) = &instr.node else {
             break;
         };
@@ -84,40 +85,52 @@ fn find_identical_if(
 
 fn merge_if_instr(
     tdenv: &TDEnv,
+    changed: &mut bool,
+    instrs_tail: &mut VecDeque<Instr>,
     mut instr_if: IfInstr,
-    instrs: &mut VecDeque<Instr>,
 ) -> Result<InstrKind, StructureError> {
-    while let Some(idx) = find_identical_if(tdenv, &instr_if, instrs)? {
-        let instr_match = instrs.remove(idx).expect("matching instruction exists");
+    while let Some(idx) = find_identical_if(tdenv, &instr_if, instrs_tail)? {
+        *changed = true;
+        let instr_match = instrs_tail
+            .remove(idx)
+            .expect("matching instruction exists");
         let InstrKind::If(instr_match) = instr_match.node else { unreachable!() };
         let IfInstr { block: block_match, .. } = instr_match;
         instr_if.block = merge::merge_block(instr_if.block, block_match);
     }
     let IfInstr { exp, iter_exps, block } = instr_if;
-    let block = merge_block(tdenv, block)?;
+    let block = merge_block(tdenv, changed, block)?;
     let instr = IfInstr { exp, iter_exps, block };
     Ok(InstrKind::If(instr))
 }
 
 // - Hold instruction
 
-fn merge_hold_instr(tdenv: &TDEnv, instr: HoldInstr) -> Result<InstrKind, StructureError> {
+fn merge_hold_instr(
+    tdenv: &TDEnv,
+    changed: &mut bool,
+    instr: HoldInstr,
+) -> Result<InstrKind, StructureError> {
     let HoldInstr { id, not_exp, iter_exps, block_hold, block_not_hold } = instr;
-    let block_hold = merge_block(tdenv, block_hold)?;
-    let block_not_hold = merge_block(tdenv, block_not_hold)?;
+    let block_hold = merge_block(tdenv, changed, block_hold)?;
+    let block_not_hold = merge_block(tdenv, changed, block_not_hold)?;
     let instr = HoldInstr { id, not_exp, iter_exps, block_hold, block_not_hold };
     Ok(InstrKind::Hold(instr))
 }
 
 // - Case instruction
 
-fn merge_case_instr(tdenv: &TDEnv, instr: CaseInstr) -> Result<InstrKind, StructureError> {
+fn merge_case_instr(
+    tdenv: &TDEnv,
+    changed: &mut bool,
+    instr: CaseInstr,
+) -> Result<InstrKind, StructureError> {
     let CaseInstr { exp, cases, total } = instr;
     let cases = cases
         .into_iter()
         .map(|case| {
             let Case { guard, block } = case;
-            let block = merge_block(tdenv, block)?;
+            let block = merge_block(tdenv, changed, block)?;
             let case = Case { guard, block };
             Ok(case)
         })
@@ -128,33 +141,49 @@ fn merge_case_instr(tdenv: &TDEnv, instr: CaseInstr) -> Result<InstrKind, Struct
 
 // - Group instruction
 
-fn merge_group_instr(tdenv: &TDEnv, instr: GroupInstr) -> Result<InstrKind, StructureError> {
+fn merge_group_instr(
+    tdenv: &TDEnv,
+    changed: &mut bool,
+    instr: GroupInstr,
+) -> Result<InstrKind, StructureError> {
     let GroupInstr { id, rel_signature, exps, block } = instr;
-    let block = merge_block(tdenv, block)?;
+    let block = merge_block(tdenv, changed, block)?;
     let instr = GroupInstr { id, rel_signature, exps, block };
     Ok(InstrKind::Group(instr))
 }
 
 // - Let instruction
 
-fn merge_let_instr(tdenv: &TDEnv, instr: LetInstr) -> Result<InstrKind, StructureError> {
+fn merge_let_instr(
+    tdenv: &TDEnv,
+    changed: &mut bool,
+    instr: LetInstr,
+) -> Result<InstrKind, StructureError> {
     let LetInstr { exp_l, exp_r, iter_instrs, block } = instr;
-    let block = merge_block(tdenv, block)?;
+    let block = merge_block(tdenv, changed, block)?;
     let instr = LetInstr { exp_l, exp_r, iter_instrs, block };
     Ok(InstrKind::Let(instr))
 }
 
 // - Rule instruction
 
-fn merge_rule_instr(tdenv: &TDEnv, instr: RuleInstr) -> Result<InstrKind, StructureError> {
+fn merge_rule_instr(
+    tdenv: &TDEnv,
+    changed: &mut bool,
+    instr: RuleInstr,
+) -> Result<InstrKind, StructureError> {
     let RuleInstr { id, not_exp, input_hint, iter_instrs, block } = instr;
-    let block = merge_block(tdenv, block)?;
+    let block = merge_block(tdenv, changed, block)?;
     let instr = RuleInstr { id, not_exp, input_hint, iter_instrs, block };
     Ok(InstrKind::Rule(instr))
 }
 
 // == Entry point
 
-pub(crate) fn apply(tdenv: &TDEnv, block: Block) -> Result<Block, StructureError> {
-    merge_block(tdenv, block)
+pub(crate) fn apply(
+    tdenv: &TDEnv,
+    changed: &mut bool,
+    block: Block,
+) -> Result<Block, StructureError> {
+    merge_block(tdenv, changed, block)
 }

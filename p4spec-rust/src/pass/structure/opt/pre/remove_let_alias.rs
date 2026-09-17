@@ -121,7 +121,7 @@ fn remove_let_instr(instr_ol: LetInstr, span: Span) -> Result<Block, StructureEr
     // let y = x { return y } -> return x
     if let (ExpKind::Var(id_l), ExpKind::Var(id_r)) = (&exp_l.node, &exp_r.node) {
         let renamer = Renamer::singleton(id_l.clone(), id_r.clone());
-        let block = renamer.rename_instrs(block)?;
+        let block = renamer.rename_instrs(&mut false, block)?;
         return remove_block(block);
     }
     // let y* = x* { return y* } -> return x*; iterators must match
@@ -130,7 +130,7 @@ fn remove_let_instr(instr_ol: LetInstr, span: Span) -> Result<Block, StructureEr
         && iter_l.syntax_eq(iter_r)
     {
         let renamer = Renamer::singleton(id_l.clone(), id_r.clone());
-        let block = renamer.rename_instrs(block)?;
+        let block = renamer.rename_instrs(&mut false, block)?;
         return remove_block(block);
     }
     // let y = x* { return y } -> return x*
