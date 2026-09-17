@@ -301,21 +301,10 @@ fn casify_case_then_if(
     let Some(guard) = exp_as_guard(exp, exp_cond) else {
         return Ok(None);
     };
-    let Some(idx) = find_case_merge(
-        tdenv,
-        exp,
-        cases.iter().map(|case| &case.guard),
-        *total,
-        &guard,
-        span_target,
-    )?
+    let Some(cases) = merge_case_and_if(tdenv, span_target, exp, *total, cases, guard, block)?
     else {
         return Ok(None);
     };
-    let mut cases = std::mem::take(cases);
-    let block = std::mem::take(block);
-    let case = Case { guard, block };
-    apply_case_merge(idx, case, &mut cases);
     // Case followed by If becomes partial, even when the Case was total
     let instr = CaseInstr { exp: exp.clone(), cases, total: false };
     Ok(Some(instr))
@@ -364,6 +353,33 @@ fn casify_case_then_case(
 }
 
 // - Guard analysis and owned body merging
+
+fn merge_case_and_if(
+    tdenv: &TDEnv,
+    span_target: &Span,
+    exp_target: &Exp,
+    total_target: bool,
+    cases_target: &mut Vec<Case>,
+    guard: Guard,
+    block: &mut Block,
+) -> Result<Option<Vec<Case>>, StructureError> {
+    let Some(idx) = find_case_merge(
+        tdenv,
+        exp_target,
+        cases_target.iter().map(|case| &case.guard),
+        total_target,
+        &guard,
+        span_target,
+    )?
+    else {
+        return Ok(None);
+    };
+    let mut cases = std::mem::take(cases_target);
+    let block = std::mem::take(block);
+    let case = Case { guard, block };
+    apply_case_merge(idx, case, &mut cases);
+    Ok(Some(cases))
+}
 
 // The index identifies an equal guard, or the end position for appending
 fn find_case_merge<'a>(
