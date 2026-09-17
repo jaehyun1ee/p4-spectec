@@ -233,9 +233,11 @@ fn elab_typ_case_plain(ctx: &Context, typ_il: &il::Typ) -> Result<Vec<il::TypCas
             typ_cases_il
                 .iter()
                 .map(|(not_typ_il, origin_il, hints)| {
-                    let not_typ_il = subst_not_typ(&theta, not_typ_il).map_err(ElabError::from)?;
+                    let find_subst = |id: &il::Id| theta.get(id);
+                    let not_typ_il =
+                        subst_not_typ(&find_subst, not_typ_il).map_err(ElabError::from)?;
                     let targs_il =
-                        subst_typs(&theta, &origin_il.node.1).map_err(ElabError::from)?;
+                        subst_typs(&find_subst, &origin_il.node.1).map_err(ElabError::from)?;
                     let origin_il = phrase! {
                         node: (origin_il.node.0.clone(), targs_il),
                         span: origin_il.span.clone(),
@@ -963,8 +965,9 @@ fn infer_call_exp(
             return fail(arity_error(mismatch.expected, mismatch.actual, id.span.clone()));
         }
     };
-    let params_il = subst_params(&theta, &params_il)?;
-    let typ_ret_il = subst_typ(&theta, &typ_ret_il)?;
+    let find_subst = |id: &il::Id| theta.get(id);
+    let params_il = subst_params(&find_subst, &params_il)?;
+    let typ_ret_il = subst_typ(&find_subst, &typ_ret_il)?;
     let args_il = elab_args(ctx, &params_il, args, false, span)?;
     let exp_il = note_phrase! {
         node: il::ExpKind::Call(id.clone(), targs_il, args_il),
@@ -1147,13 +1150,13 @@ fn elab_exp_normal(ctx: &mut Context, typ_expect_il: &il::Typ, exp: &el::Exp) ->
                 };
                 match &def_typ_il.node {
                     il::DefTypKind::Plain(typ_il) => {
-                        let typ_il = subst_typ(&theta, typ_il)?;
+                        let typ_il = subst_typ(&|id| theta.get(id), typ_il)?;
                         return elab_exp_normal(ctx, &typ_il, exp);
                     }
                     il::DefTypKind::Struct(typ_fields_il) => {
                         let mut typ_fields_subst_il = Vec::with_capacity(typ_fields_il.len());
                         for (atom, typ_il) in typ_fields_il {
-                            let typ_il = subst_typ(&theta, typ_il)?;
+                            let typ_il = subst_typ(&|id| theta.get(id), typ_il)?;
                             typ_fields_subst_il.push((atom.clone(), typ_il));
                         }
                         return elab_struct_exp(ctx, typ_expect_il, &typ_fields_subst_il, exp);
@@ -1161,8 +1164,9 @@ fn elab_exp_normal(ctx: &mut Context, typ_expect_il: &il::Typ, exp: &el::Exp) ->
                     il::DefTypKind::Variant(typ_cases_il) => {
                         let mut typ_cases_subst_il = Vec::with_capacity(typ_cases_il.len());
                         for (not_typ_il, origin_il, hints) in typ_cases_il {
-                            let not_typ_il = subst_not_typ(&theta, not_typ_il)?;
-                            let targs_il = subst_typs(&theta, &origin_il.node.1)?;
+                            let find_subst = |id: &il::Id| theta.get(id);
+                            let not_typ_il = subst_not_typ(&find_subst, not_typ_il)?;
+                            let targs_il = subst_typs(&find_subst, &origin_il.node.1)?;
                             let origin_il = phrase! {
                                 node: (origin_il.node.0.clone(), targs_il),
                                 span: origin_il.span.clone(),
@@ -1747,7 +1751,9 @@ fn elab_arg(
                 typs_params: params_arg_il.iter().map(typ_of_param).collect(),
                 typ_ret: Box::new(typ_ret_arg_il.clone()),
             };
-            let equivalent = equiv_func_typ(&ctx.tdenv, &arg.span, &typ_param_il, &typ_arg_il)?;
+            let find_typdef_opt = |id: &il::Id| ctx.tdenv.get(id);
+            let equivalent =
+                equiv_func_typ(&find_typdef_opt, &arg.span, &typ_param_il, &typ_arg_il)?;
             if !equivalent {
                 return fail_attempt(
                     ElabErrorKind::InvalidArgument,

@@ -132,7 +132,10 @@ fn check_func_output(
         crate::runtime::ops::typ::Theta::from_lists(tparams, targs),
         &id.span
     );
-    let typ = backtrack_from_result!(crate::runtime::ops::typ::subst_typ(&theta, typ), &id.span);
+    let typ = backtrack_from_result!(
+        crate::runtime::ops::typ::subst_typ(&|id| theta.get(id), typ),
+        &id.span
+    );
     check_values(
         arena,
         ctx,

@@ -17,7 +17,7 @@ use crate::{
     },
     runner::{Extern, Interface, RunnerContext},
     runtime::{
-        ops::typ::{TypeError, subst_typ_with},
+        ops::typ::{TypeError, subst_typ},
         typdef::TypeDef,
     },
 };
@@ -548,7 +548,7 @@ pub(crate) fn resolve_targs(
     };
     targs
         .iter()
-        .map(|targ| subst_typ_with(&find_subst, targ))
+        .map(|targ| subst_typ(&find_subst, targ))
         .collect()
 }
 

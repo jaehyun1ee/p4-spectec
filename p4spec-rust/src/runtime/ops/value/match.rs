@@ -11,7 +11,7 @@ use crate::{
         xl::num::{Number, Typ as NumTyp},
     },
     runtime::{
-        ops::typ::{Theta, TypeError, equiv_func_typ_with, subst_not_typ, subst_typ},
+        ops::typ::{Theta, TypeError, equiv_func_typ, subst_not_typ, subst_typ},
         typdef::TypeDef,
     },
 };
@@ -76,7 +76,7 @@ where
                     })?;
                     match (&def_typ.node, arena.kind(value)) {
                         (DefTypKind::Plain(typ), _) => {
-                            let typ = subst_typ(&theta, typ)?;
+                            let typ = subst_typ(&|id| theta.get(id), typ)?;
                             sub(arena, find_typdef_opt, find_func, &typ, value)
                         }
                         (DefTypKind::Struct(typ_fields), ValueKind::Struct(value_fields)) => {
@@ -89,7 +89,7 @@ where
                                 if typ_atom.node != value_atom.node {
                                     return Ok(false);
                                 }
-                                let typ = subst_typ(&theta, typ)?;
+                                let typ = subst_typ(&|id| theta.get(id), typ)?;
                                 if !sub(arena, find_typdef_opt, find_func, &typ, value)? {
                                     return Ok(false);
                                 }
@@ -101,7 +101,7 @@ where
                                 if !not_typ.node.eq_shape(value_case) {
                                     continue;
                                 }
-                                let not_typ = subst_not_typ(&theta, not_typ)?;
+                                let not_typ = subst_not_typ(&|id| theta.get(id), not_typ)?;
                                 let typs = not_typ.node.args();
                                 let values = value_case.args();
                                 if subs_inner(
@@ -151,7 +151,7 @@ where
                     MatchError::UndefinedFunction { name: id.node.clone(), span: id.span.clone() }
                 })?;
                 let equivalent =
-                    equiv_func_typ_with(find_typdef_opt, &typ.span, func_typ, &func_typ_actual)?;
+                    equiv_func_typ(find_typdef_opt, &typ.span, func_typ, &func_typ_actual)?;
                 Ok(equivalent)
             }
             _ => Ok(false),

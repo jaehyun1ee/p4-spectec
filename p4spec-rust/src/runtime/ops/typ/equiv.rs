@@ -120,17 +120,7 @@ fn equiv_not_typ_with<'env>(
 // == Function types
 
 /// Tests alpha-equivalence of two function types
-pub fn equiv_func_typ(
-    tdenv: &TDEnv,
-    span: &Span,
-    func_typ_l: &ast::FuncTyp,
-    func_typ_r: &ast::FuncTyp,
-) -> Result<bool, TypeError> {
-    equiv_func_typ_with(&|id| tdenv.get(id), span, func_typ_l, func_typ_r)
-}
-
-/// Tests alpha-equivalence using a type-definition lookup
-pub fn equiv_func_typ_with<'env>(
+pub fn equiv_func_typ<'env>(
     find_typdef_opt: &impl Fn(&ast::Id) -> Option<&'env TypeDef>,
     span: &Span,
     func_typ_l: &ast::FuncTyp,
@@ -166,10 +156,10 @@ pub fn equiv_func_typ_with<'env>(
         theta_r.insert(tparam_r.clone(), typ_fresh);
     }
 
-    let typs_params_l = subst_typs_inner(&mut fresh, &theta_l, typs_params_l)?;
-    let typs_params_r = subst_typs_inner(&mut fresh, &theta_r, typs_params_r)?;
-    let typ_ret_l = subst_typ_inner(&mut fresh, &theta_l, &func_typ_l.typ_ret)?;
-    let typ_ret_r = subst_typ_inner(&mut fresh, &theta_r, &func_typ_r.typ_ret)?;
+    let typs_params_l = subst_typs_inner(&mut fresh, &|id| theta_l.get(id), typs_params_l)?;
+    let typs_params_r = subst_typs_inner(&mut fresh, &|id| theta_r.get(id), typs_params_r)?;
+    let typ_ret_l = subst_typ_inner(&mut fresh, &|id| theta_l.get(id), &func_typ_l.typ_ret)?;
+    let typ_ret_r = subst_typ_inner(&mut fresh, &|id| theta_r.get(id), &func_typ_r.typ_ret)?;
 
     let find_typdef_opt = |id: &ast::Id| {
         if let Some(typdef) = tdenv_fresh.get(id) { Some(typdef) } else { find_typdef_opt(id) }

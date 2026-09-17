@@ -49,7 +49,7 @@ pub(crate) fn cast_up(
             let theta = backtrack_from_result!(Theta::from_lists(tparams, targs), span);
             match &def_typ.node {
                 ast::DefTypKind::Plain(typ) => {
-                    let typ = backtrack_from_result!(subst_typ(&theta, typ), span);
+                    let typ = backtrack_from_result!(subst_typ(&|id| theta.get(id), typ), span);
                     return cast_up(arena, ctx, &typ, value);
                 }
                 _ => value,
@@ -127,7 +127,7 @@ pub(crate) fn cast_down(
             let theta = backtrack_from_result!(Theta::from_lists(tparams, targs), span);
             match &def_typ.node {
                 ast::DefTypKind::Plain(typ) => {
-                    let typ = backtrack_from_result!(subst_typ(&theta, typ), span);
+                    let typ = backtrack_from_result!(subst_typ(&|id| theta.get(id), typ), span);
                     return cast_down(arena, ctx, &typ, value);
                 }
                 _ => value,
