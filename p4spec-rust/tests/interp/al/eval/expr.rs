@@ -599,6 +599,12 @@ fn test_index_failures_retain_the_index_expression_span() {
             .iter()
             .any(|trace| &trace.span == span || contains_span(&trace.children, span))
     }
+    fn contains_evaluation(traces: &[Error]) -> bool {
+        traces.iter().any(|trace| {
+            matches!(*trace.kind, ErrorKind::Trace(TraceErrorKind::Evaluation { .. }))
+                || contains_evaluation(&trace.children)
+        })
+    }
     let mut index = int(3);
     index.span =
         Span::new(Position::new("index.watsup", 7, 8), Position::new("index.watsup", 7, 9));
@@ -610,6 +616,7 @@ fn test_index_failures_retain_the_index_expression_span() {
         panic!("expected execution traces");
     };
     assert!(contains_span(&error.children, &span));
+    assert!(contains_evaluation(&error.children));
 }
 
 #[test]

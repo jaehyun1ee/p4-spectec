@@ -1,6 +1,12 @@
 use super::*;
 use p4spec_rust::{
-    interp::{shared::error::Error, shared::eval::assign::assign_exp, sl::context::Context},
+    interp::{
+        shared::{
+            error::{Error, ErrorKind, TraceErrorKind},
+            eval::assign::assign_exp,
+        },
+        sl::context::Context,
+    },
     lang::{
         common::{Variable, notation::mixfix::Mixfix},
         data::{typ, value::ValueArena},
@@ -52,6 +58,16 @@ fn evaluate(spec_sl: ast::Spec, relation: bool) -> Error {
     } else {
         runner.context().call_func("entry", &[], &[]).unwrap_err()
     }
+}
+
+fn has_invocation(error: &Error, text: &str) -> bool {
+    matches!(
+        error.kind.as_ref(),
+        ErrorKind::Trace(TraceErrorKind::Invocation { text: text_actual }) if text_actual == text
+    ) || error
+        .children
+        .iter()
+        .any(|error| has_invocation(error, text))
 }
 
 #[test]
@@ -114,9 +130,8 @@ fn function_tail_failures_retain_every_invocation() {
             ],
             false,
         );
-        let message = error.to_string();
         for name in ["entry", "middle", "leaf"] {
-            assert!(message.contains(&format!("function ${name}")), "{message}");
+            assert!(has_invocation(&error, &format!("${name}")), "{error}");
         }
     }
 }
@@ -132,9 +147,8 @@ fn relation_tail_failures_retain_every_invocation() {
             ],
             true,
         );
-        let message = error.to_string();
         for name in ["entry", "middle", "leaf"] {
-            assert!(message.contains(&format!("relation {name}")), "{message}");
+            assert!(has_invocation(&error, name), "{error}");
         }
     }
 }
@@ -145,7 +159,7 @@ fn sequential_fallback_retains_the_deeper_failure_tree() {
         vec![func("entry", vec![call("deep"), fail()]), func("deep", vec![fail()])],
         false,
     );
-    assert!(error.to_string().contains("function $deep"), "{error}");
+    assert!(has_invocation(&error, "$deep"), "{error}");
 }
 
 #[test]
@@ -271,7 +285,7 @@ fn conditional_unmatch_escapes_sequential_blocks_but_not_deterministic_blocks() 
             );
         } else {
             let error = result.unwrap_err();
-            assert!(error.to_string().contains("function $miss"), "{error}");
+            assert!(has_invocation(&error, "$miss"), "{error}");
         }
     }
 }
@@ -284,5 +298,5 @@ fn else_does_not_catch_an_unmatch_escaping_the_body() {
     };
     func_entry.block_else = Some(vec![return_nat(9)]);
     let error = evaluate(vec![def_entry, func("miss", vec![fail()])], false);
-    assert!(error.to_string().contains("function $miss"), "{error}");
+    assert!(has_invocation(&error, "$miss"), "{error}");
 }
