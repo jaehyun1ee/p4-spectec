@@ -23,7 +23,7 @@ use crate::{
 
 use super::{arg::eval_args, iter, ops, path::eval_update_path};
 use crate::interp::shared::{
-    backtrack::{Backtrack, unwrap, unwrap_from_result},
+    backtrack::{Backtrack, ok, unwrap, unwrap_from_result},
     error::ErrorKind,
     util::is_iter_var_exp,
 };
@@ -38,15 +38,15 @@ pub(crate) fn eval_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, E
     let span = &exp.span;
     let typ = &exp.note;
     let result = (|| match &exp.node {
-        ast::ExpKind::Bool(value) => Backtrack::Ok(unwrap_from_result!(
+        ast::ExpKind::Bool(value) => ok!(unwrap_from_result!(
             make::bool(runner_ctx.arena_mut(), *value, Span::default()),
             span
         )),
-        ast::ExpKind::Num(value) => Backtrack::Ok(unwrap_from_result!(
+        ast::ExpKind::Num(value) => ok!(unwrap_from_result!(
             make::num(runner_ctx.arena_mut(), value.clone(), Span::default()),
             span
         )),
-        ast::ExpKind::Text(value) => Backtrack::Ok(unwrap_from_result!(
+        ast::ExpKind::Text(value) => ok!(unwrap_from_result!(
             make::text(runner_ctx.arena_mut(), value.clone(), Span::default()),
             span
         )),
@@ -116,7 +116,7 @@ pub(crate) fn eval_exps<
     for exp in exps {
         values.push(unwrap!(eval_exp(runner_ctx, ctx, exp.borrow())));
     }
-    Backtrack::Ok(values)
+    ok!(values)
 }
 
 // - Variable expression
@@ -124,7 +124,7 @@ pub(crate) fn eval_exps<
 fn eval_var_exp(ctx: &impl ReadContext, span: &Span, id: &ast::Id) -> Backtrack<Value> {
     let var = Variable::new(id.clone(), Vec::new());
     let value = *unwrap_from_result!(ctx.find_value(&var), span);
-    Backtrack::Ok(value)
+    ok!(value)
 }
 
 // - Unary expression
@@ -170,7 +170,7 @@ fn eval_cmp_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Ext
     let result = unwrap!(ops::cmpop(runner_ctx.arena(), span, op, value_l, value_r));
     let value =
         unwrap_from_result!(make::bool(runner_ctx.arena_mut(), result, Span::default()), span);
-    Backtrack::Ok(value)
+    ok!(value)
 }
 
 // - Upcast expression
@@ -210,7 +210,7 @@ fn eval_sub_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Ext
     let matches = unwrap!(ops::sub(runner_ctx.arena(), ctx, span, subcheck, value));
     let value =
         unwrap_from_result!(make::bool(runner_ctx.arena_mut(), matches, Span::default()), span);
-    Backtrack::Ok(value)
+    ok!(value)
 }
 
 // - Match expression
@@ -227,7 +227,7 @@ fn eval_match_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: E
         make::bool(runner_ctx.arena_mut(), matches, Span::default()),
         &Span::default()
     );
-    Backtrack::Ok(value)
+    ok!(value)
 }
 
 // - Tuple expression
@@ -244,7 +244,7 @@ fn eval_tuple_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: E
         make::tuple(runner_ctx.arena_mut(), typ.clone(), values, Span::default()),
         span
     );
-    Backtrack::Ok(value)
+    ok!(value)
 }
 
 // - Case expression
@@ -266,7 +266,7 @@ fn eval_case_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Ex
         make::case(runner_ctx.arena_mut(), typ.clone(), case, Span::default()),
         span
     );
-    Backtrack::Ok(value)
+    ok!(value)
 }
 
 // - Struct expression
@@ -286,7 +286,7 @@ fn eval_str_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Ext
         make::structure(runner_ctx.arena_mut(), typ.clone(), value_fields, Span::default()),
         span
     );
-    Backtrack::Ok(value)
+    ok!(value)
 }
 
 // - Optional expression
@@ -306,7 +306,7 @@ fn eval_opt_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Ext
         make::opt(runner_ctx.arena_mut(), typ.clone(), value, Span::default()),
         span
     );
-    Backtrack::Ok(value)
+    ok!(value)
 }
 
 // - List expression
@@ -323,7 +323,7 @@ fn eval_list_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Ex
         make::list(runner_ctx.arena_mut(), typ.clone(), values, Span::default()),
         span
     );
-    Backtrack::Ok(value)
+    ok!(value)
 }
 
 // - Cons expression
@@ -346,7 +346,7 @@ fn eval_cons_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Ex
         make::list(runner_ctx.arena_mut(), typ.clone(), values, Span::default()),
         span
     );
-    Backtrack::Ok(value)
+    ok!(value)
 }
 
 // - Concatenation expression
@@ -381,7 +381,7 @@ fn eval_cat_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Ext
             );
         }
     };
-    Backtrack::Ok(value)
+    ok!(value)
 }
 
 // - Membership expression
@@ -398,7 +398,7 @@ fn eval_mem_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Ext
     let contains = unwrap!(ops::mem(runner_ctx.arena(), span, value_elem, value_list));
     let value =
         unwrap_from_result!(make::bool(runner_ctx.arena_mut(), contains, Span::default()), span);
-    Backtrack::Ok(value)
+    ok!(value)
 }
 
 // - Length expression
@@ -423,7 +423,7 @@ fn eval_len_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Ext
         make::nat(runner_ctx.arena_mut(), (len as u64).into(), Span::default()),
         &Span::default()
     );
-    Backtrack::Ok(value)
+    ok!(value)
 }
 
 // - Field access expression
@@ -543,7 +543,7 @@ fn eval_iter_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Ex
     let span = &exp.span;
     let typ = &exp.note;
     if let Some(var) = is_iter_var_exp(exp) {
-        return Backtrack::Ok(*unwrap_from_result!(ctx.find_value(&var), span));
+        return ok!(*unwrap_from_result!(ctx.find_value(&var), span));
     }
     let value = match iter {
         ast::Iter::Opt => {
@@ -567,5 +567,5 @@ fn eval_iter_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Ex
             )
         }
     };
-    Backtrack::Ok(value)
+    ok!(value)
 }

@@ -3,7 +3,7 @@
 use super::super::context::Context;
 use crate::interp::shared::error::{AssignErrorKind, ErrorKind};
 use crate::{
-    interp::shared::backtrack::{Backtrack, unwrap},
+    interp::shared::backtrack::{Backtrack, ok, unwrap},
     lang::{
         data::value::{Value, ValueArena},
         sl::ast,
@@ -45,5 +45,5 @@ pub(in crate::interp::sl) fn assign_params<'global>(
     for (param, value) in params.iter().zip(values) {
         ctx = unwrap!(assign_param(arena, ctx_caller, ctx, param, *value));
     }
-    Backtrack::Ok(ctx)
+    ok!(ctx)
 }

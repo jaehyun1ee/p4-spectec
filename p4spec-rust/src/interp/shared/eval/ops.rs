@@ -18,7 +18,7 @@ use crate::{
 };
 
 use crate::interp::shared::{
-    backtrack::{Backtrack, unwrap, unwrap_from_result},
+    backtrack::{Backtrack, ok, unwrap, unwrap_from_result},
     error::{ErrorKind, ExprErrorKind},
 };
 
@@ -43,7 +43,7 @@ pub(crate) fn unop(
             unwrap_from_result!(make::num(arena, num, Span::default()), span)
         }
     };
-    Backtrack::Ok(value)
+    ok!(value)
 }
 
 // - Binary operators
@@ -74,7 +74,7 @@ pub(crate) fn binop(
             unwrap_from_result!(make::num(arena, num, Span::default()), span)
         }
     };
-    Backtrack::Ok(value)
+    ok!(value)
 }
 
 // - Comparison operators
@@ -86,7 +86,7 @@ pub(crate) fn cmpop(
     value_l: Value,
     value_r: Value,
 ) -> Backtrack<bool> {
-    Backtrack::Ok(match op {
+    ok!(match op {
         ast::CmpOp::Bool(boolean::CmpOp::Eq) => arena.view(value_l).syntax_eq(&arena.view(value_r)),
         ast::CmpOp::Bool(boolean::CmpOp::Ne) => {
             !arena.view(value_l).syntax_eq(&arena.view(value_r))
@@ -146,11 +146,9 @@ pub(crate) fn mem(
     value_list: Value,
 ) -> Backtrack<bool> {
     let values = unwrap_from_result!(get::list(arena, &value_list), span);
-    Backtrack::Ok(
-        values
-            .iter()
-            .any(|value| arena.view(*value).syntax_eq(&arena.view(value_elem))),
-    )
+    ok!(values
+        .iter()
+        .any(|value| arena.view(*value).syntax_eq(&arena.view(value_elem))),)
 }
 
 // = Casts
@@ -230,7 +228,7 @@ pub(crate) fn cast_up(
         }
         _ => value,
     };
-    Backtrack::Ok(result)
+    ok!(result)
 }
 
 // - Downcast
@@ -308,7 +306,7 @@ pub(crate) fn cast_down(
         }
         _ => value,
     };
-    Backtrack::Ok(result)
+    ok!(result)
 }
 
 // = Access
@@ -326,14 +324,14 @@ pub(crate) fn access_dot(
         .iter()
         .find(|(field, _)| field.node == atom.node)
     {
-        Some((_, value)) => Backtrack::Ok(*value),
+        Some((_, value)) => ok!(*value),
         None => Backtrack::err(atom.span.clone(), ErrorKind::Expr(ExprErrorKind::UndefinedField)),
     }
 }
 
 fn get_int(arena: &ValueArena, value: &Value, span: &Span) -> Backtrack<BigInt> {
     let num = unwrap_from_result!(get::num(arena, value), span);
-    Backtrack::Ok(num::to_int(num).clone())
+    ok!(num::to_int(num).clone())
 }
 
 // - Index access
@@ -372,7 +370,7 @@ pub(crate) fn access_index(
                 span_idx, span_idx, span_idx,
             )
         }
-        ValueKind::List(values) => Backtrack::Ok(values[idx]),
+        ValueKind::List(values) => ok!(values[idx]),
         _ => unreachable!(),
     }
 }
@@ -429,7 +427,7 @@ pub(crate) fn access_slice(
         },
         ValueKind::List(values) => {
             let values = values[idx..idx_end].to_vec();
-            Backtrack::Ok(unwrap_from_result!(
+            ok!(unwrap_from_result!(
                 make::list(arena, typ.clone(), values, Span::default()),
                 span_typ
             ))
@@ -530,7 +528,7 @@ pub(crate) fn update_index(
         }
         _ => unreachable!(),
     };
-    Backtrack::Ok(value)
+    ok!(value)
 }
 
 // - Slice update
@@ -646,5 +644,5 @@ pub(crate) fn update_slice(
         }
         _ => unreachable!(),
     };
-    Backtrack::Ok(value)
+    ok!(value)
 }

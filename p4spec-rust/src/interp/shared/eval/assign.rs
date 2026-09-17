@@ -20,7 +20,7 @@ use crate::{
 };
 
 use crate::interp::shared::{
-    backtrack::{Backtrack, unwrap, unwrap_from_result},
+    backtrack::{Backtrack, ok, unwrap, unwrap_from_result},
     error::ErrorKind,
     util::is_iter_var_exp,
 };
@@ -98,7 +98,7 @@ pub fn assign_exps<Ctx: WriteContext, T: Borrow<ast::Exp>>(
     for (exp, value) in exps.iter().zip(values) {
         ctx = unwrap!(assign_exp(arena, ctx, exp.borrow(), *value));
     }
-    Backtrack::Ok(ctx)
+    ok!(ctx)
 }
 
 // - Variable expression
@@ -110,7 +110,7 @@ fn assign_var_exp<Ctx: WriteContext>(
     value: Value,
 ) -> Backtrack<Ctx> {
     ctx.add_value(Variable::new(id.clone(), vec![]), value);
-    Backtrack::Ok(ctx)
+    ok!(ctx)
 }
 
 // - Tuple expression
@@ -160,7 +160,7 @@ fn assign_opt_exp<Ctx: WriteContext>(
 ) -> Backtrack<Ctx> {
     match (exp_opt, value_opt) {
         (Some(exp), Some(value)) => assign_exp(arena, ctx, exp, *value),
-        (None, None) => Backtrack::Ok(ctx),
+        (None, None) => ok!(ctx),
         _ => Backtrack::err(
             exp.span.clone(),
             ErrorKind::Assign(AssignErrorKind::Mismatch {
@@ -218,7 +218,7 @@ fn assign_iter_exp<Ctx: WriteContext>(
 ) -> Backtrack<Ctx> {
     if let Some(var) = is_iter_var_exp(exp) {
         ctx.add_value(var, value);
-        return Backtrack::Ok(ctx);
+        return ok!(ctx);
     }
     let span = &exp.span;
     match iter {
@@ -245,7 +245,7 @@ fn assign_iter_exp<Ctx: WriteContext>(
                 );
                 ctx.add_value(Variable::new(var.id.clone(), iters), value);
             }
-            Backtrack::Ok(ctx)
+            ok!(ctx)
         }
         ast::Iter::List => {
             let values = unwrap_from_result!(get::list(arena, &value), span).to_vec();
@@ -273,7 +273,7 @@ fn assign_iter_exp<Ctx: WriteContext>(
                 );
                 ctx.add_value(Variable::new(var.id.clone(), iters), value_sub);
             }
-            Backtrack::Ok(ctx)
+            ok!(ctx)
         }
     }
 }
@@ -313,7 +313,7 @@ pub fn assign_args<Ctx: WriteContext>(
     for (arg, value) in args.iter().zip(values.iter()) {
         ctx = unwrap!(assign_arg(arena, ctx_caller, ctx, arg, *value));
     }
-    Backtrack::Ok(ctx)
+    ok!(ctx)
 }
 
 // - Expression argument
@@ -347,5 +347,5 @@ pub fn assign_def<Ctx: WriteContext>(
     };
     let func = unwrap_from_result!(ctx_caller.find_func(id_func), &id_func.span);
     unwrap_from_result!(ctx_callee.add_func(id.clone(), Rc::clone(func)), &id.span);
-    Backtrack::Ok(ctx_callee)
+    ok!(ctx_callee)
 }

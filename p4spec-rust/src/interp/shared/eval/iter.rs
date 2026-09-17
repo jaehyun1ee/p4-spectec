@@ -1,7 +1,7 @@
 //! Iterated expression evaluation and binding collection
 
 use super::super::{
-    backtrack::{Backtrack, unwrap, unwrap_from_result},
+    backtrack::{Backtrack, ok, unwrap, unwrap_from_result},
     context::IterContext,
     error::Error,
 };
@@ -46,7 +46,7 @@ where
         }
         values.push(unwrap!(eval(runner_ctx, &ctx_sub)));
     }
-    Backtrack::Ok(values)
+    ok!(values)
 }
 
 pub fn map_opt<Ctx, Interp, Iface, Ext>(
@@ -64,13 +64,13 @@ where
 {
     let values = unwrap_from_result!(ctx.find_opt_values_by_var(runner_ctx.arena(), vars), span);
     let Some(values) = values else {
-        return Backtrack::Ok(None);
+        return ok!(None);
     };
     let mut ctx_sub = ctx.clone();
     for (var, value) in vars.iter().zip(values) {
         ctx_sub.add_value(Variable::new(var.id.clone(), var.iters.clone()), value);
     }
-    Backtrack::Ok(Some(unwrap!(eval(runner_ctx, &ctx_sub))))
+    ok!(Some(unwrap!(eval(runner_ctx, &ctx_sub))))
 }
 
 // = Binding iteration
@@ -108,7 +108,7 @@ where
         unwrap!(ctx_post.collect_values_by_var(vars_bind, &mut values_bind_by_var));
     }
     unwrap!(ctx.bind_list_values_by_var(runner_ctx.arena_mut(), vars_bind, values_bind_by_var));
-    Backtrack::Ok(ctx)
+    ok!(ctx)
 }
 
 pub fn yield_opt<Ctx, Interp, Iface, Ext>(
@@ -137,5 +137,5 @@ where
         unwrap!(ctx_post.collect_values_by_var(vars_bind, &mut values_bind_by_var));
     }
     unwrap!(ctx.bind_opt_values_by_var(runner_ctx.arena_mut(), vars_bind, values_bind_by_var));
-    Backtrack::Ok(ctx)
+    ok!(ctx)
 }

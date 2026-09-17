@@ -27,7 +27,7 @@ use crate::{
 };
 
 use crate::interp::shared::{
-    backtrack::{Backtrack, unwrap_from_result},
+    backtrack::{Backtrack, ok, unwrap_from_result},
     error::{EntityKind, Error, ErrorKind},
 };
 
@@ -309,7 +309,7 @@ impl<'global> Context<'global> {
             let var_bound = Variable::new(var.id.clone(), var.iters.clone());
             values.push(*unwrap_from_result!(self.find_value(&var_bound), &var.id.span));
         }
-        Backtrack::Ok(())
+        ok!(())
     }
 
     pub(super) fn bind_list_values_by_var(
@@ -326,7 +326,7 @@ impl<'global> Context<'global> {
             let value = unwrap_from_result!(value, &Span::default());
             self.add_value(Variable::new(var.id.clone(), iters), value);
         }
-        Backtrack::Ok(())
+        ok!(())
     }
 
     pub(super) fn bind_opt_values_by_var(
@@ -344,7 +344,7 @@ impl<'global> Context<'global> {
             let value = unwrap_from_result!(value, &Span::default());
             self.add_value(Variable::new(var.id.clone(), iters), value);
         }
-        Backtrack::Ok(())
+        ok!(())
     }
 }
 

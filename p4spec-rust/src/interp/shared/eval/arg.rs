@@ -15,7 +15,7 @@ use crate::{
 
 use super::expr::eval_exp;
 use crate::interp::shared::{
-    backtrack::{Backtrack, unwrap, unwrap_from_result},
+    backtrack::{Backtrack, ok, unwrap, unwrap_from_result},
     error::{ErrorKind, TraceErrorKind},
 };
 
@@ -42,7 +42,7 @@ pub(crate) fn eval_args<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, 
     for arg in args {
         values.push(unwrap!(eval_arg(runner_ctx, ctx, arg)));
     }
-    Backtrack::Ok(values)
+    ok!(values)
 }
 
 // - Function argument
@@ -65,5 +65,5 @@ fn eval_def_arg(
         ),
         span
     );
-    Backtrack::Ok(value)
+    ok!(value)
 }

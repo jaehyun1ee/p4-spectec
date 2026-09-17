@@ -9,7 +9,7 @@ use super::{assign, instr};
 use crate::lang::common::source::Span;
 use crate::{
     interp::shared::{
-        backtrack::{Backtrack, unwrap, unwrap_from_result},
+        backtrack::{Backtrack, err, ok, unwrap, unwrap_from_result},
         cache::CallKey,
         error::{CallErrorKind, ErrorKind, GuardErrorKind, HostErrorKind, TraceErrorKind},
     },
@@ -186,7 +186,7 @@ pub fn invoke_rel<Iface: Interface, Ext: Extern>(
             .as_ref()
             .and_then(|key| runner_ctx.interp().cache.rels.get(key))
         {
-            return Backtrack::Ok(values.clone());
+            return ok!(values.clone());
         }
         runner_ctx.interp_mut().cache.begin();
         let result = stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
@@ -194,7 +194,7 @@ pub fn invoke_rel<Iface: Interface, Ext: Extern>(
             match rel {
                 ast::RelDef::Extern(rel) => {
                     let values = unwrap!(invoke_extern_rel(runner_ctx, ctx, &id, rel, &values));
-                    Backtrack::Ok(RelResult::Result(values))
+                    ok!(RelResult::Result(values))
                 }
                 ast::RelDef::Defined(rel) => invoke_defined_rel(runner_ctx, ctx, &id, rel, &values),
             }
@@ -203,7 +203,7 @@ pub fn invoke_rel<Iface: Interface, Ext: Extern>(
         let mut result = result.nest(id.span.clone(), || {
             ErrorKind::Trace(TraceErrorKind::Invocation { text: id.node.clone() })
         });
-        if !matches!(result, Backtrack::Ok(_)) {
+        if !matches!(result, ok!(_)) {
             for (span, trace) in traces_pending.iter().rev() {
                 result = result.nest(span.clone(), || ErrorKind::Trace(trace.clone()));
             }
@@ -218,7 +218,7 @@ pub fn invoke_rel<Iface: Interface, Ext: Extern>(
                         .rels
                         .insert(key, values.clone());
                 }
-                return Backtrack::Ok(values);
+                return ok!(values);
             }
             RelResult::TailCall(id_tail, values_tail) => {
                 let id_caller = id.into_owned();
@@ -268,7 +268,7 @@ fn invoke_extern_rel<Iface: Interface, Ext: Extern>(
             GuardErrorKind::RelationOutputMismatch { relation: id.node.clone() }
         ));
     }
-    Backtrack::Ok(values)
+    ok!(values)
 }
 
 // - Defined relation
@@ -293,8 +293,8 @@ fn invoke_defined_rel<Iface: Interface, Ext: Extern>(
         rel.block_else.as_deref()
     ));
     match flow {
-        Flow::Result(values) => Backtrack::Ok(RelResult::Result(values)),
-        Flow::TailRel(id, values) => Backtrack::Ok(RelResult::TailCall(id, values)),
+        Flow::Result(values) => ok!(RelResult::Result(values)),
+        Flow::TailRel(id, values) => ok!(RelResult::TailCall(id, values)),
         Flow::Cont(errors) => Backtrack::Unmatch(errors),
         Flow::Return(_) => Backtrack::err(
             id.span.clone(),
@@ -331,16 +331,16 @@ pub fn invoke_func<Iface: Interface, Ext: Extern>(
             .as_ref()
             .and_then(|key| runner_ctx.interp().cache.funcs.get(key))
         {
-            return Backtrack::Ok(*value);
+            return ok!(*value);
         }
         runner_ctx.interp_mut().cache.begin();
         let result = stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
             let (_, func) = unwrap_from_result!(ctx.find_func(&id), &id.span);
             match func.as_ref() {
-                ast::MetaFuncDef::Extern(func) => Backtrack::Ok(FuncResult::Return(unwrap!(
+                ast::MetaFuncDef::Extern(func) => ok!(FuncResult::Return(unwrap!(
                     invoke_extern_func(runner_ctx, ctx, &id, func, &targs, &values)
                 ))),
-                ast::MetaFuncDef::Builtin(func) => Backtrack::Ok(FuncResult::Return(unwrap!(
+                ast::MetaFuncDef::Builtin(func) => ok!(FuncResult::Return(unwrap!(
                     invoke_builtin_func(runner_ctx, ctx, &id, func, &targs, &values)
                 ))),
                 ast::MetaFuncDef::Table(func) => {
@@ -354,7 +354,7 @@ pub fn invoke_func<Iface: Interface, Ext: Extern>(
         let pure = runner_ctx.interp_mut().cache.end();
         let mut result = result
             .nest(id.span.clone(), || ErrorKind::Trace(TraceErrorKind::function(&id, &targs)));
-        if !matches!(result, Backtrack::Ok(_)) {
+        if !matches!(result, ok!(_)) {
             for (span, trace) in traces_pending.iter().rev() {
                 result = result.nest(span.clone(), || ErrorKind::Trace(trace.clone()));
             }
@@ -365,7 +365,7 @@ pub fn invoke_func<Iface: Interface, Ext: Extern>(
                 if pure && let Some(key) = key {
                     runner_ctx.interp_mut().cache.funcs.insert(key, value);
                 }
-                return Backtrack::Ok(value);
+                return ok!(value);
             }
             FuncResult::TailCall(id_tail, targs_tail, values_tail) => {
                 let trace = TraceErrorKind::function(&id, &targs);
@@ -405,7 +405,7 @@ fn invoke_extern_func<Iface: Interface, Ext: Extern>(
             &value
         ));
     }
-    Backtrack::Ok(value)
+    ok!(value)
 }
 
 // - Builtin function
@@ -436,7 +436,7 @@ fn invoke_builtin_func<Iface: Interface, Ext: Extern>(
                     &value
                 ));
             }
-            Backtrack::Ok(value)
+            ok!(value)
         }
         Err(error) => {
             let recoverable = matches!(
@@ -444,7 +444,7 @@ fn invoke_builtin_func<Iface: Interface, Ext: Extern>(
                 ErrorKind::Host(HostErrorKind::Interface(InterfaceError::Builtin(_)))
             );
             let error = error.at_if_missing(&id.span);
-            if recoverable { Backtrack::Unmatch(vec![error]) } else { Backtrack::Err(vec![error]) }
+            if recoverable { Backtrack::Unmatch(vec![error]) } else { err!(vec![error]) }
         }
     }
 }
@@ -469,7 +469,7 @@ fn invoke_table_func<Iface: Interface, Ext: Extern>(
     let flow =
         unwrap!(instr::eval_block_sequential(runner_ctx, Cow::Owned(ctx_local), instrs, true));
     match flow {
-        Flow::Return(value) => Backtrack::Ok(FuncResult::Return(value)),
+        Flow::Return(value) => ok!(FuncResult::Return(value)),
         _ => Backtrack::err(
             id.span.clone(),
             ErrorKind::Call(CallErrorKind::InvalidFlow { message: "table did not return a value" }),
@@ -518,8 +518,8 @@ fn invoke_defined_func<Iface: Interface, Ext: Extern>(
         func.block_else.as_deref()
     ));
     match flow {
-        Flow::Return(value) => Backtrack::Ok(FuncResult::Return(value)),
-        Flow::TailFunc(id, targs, values) => Backtrack::Ok(FuncResult::TailCall(id, targs, values)),
+        Flow::Return(value) => ok!(FuncResult::Return(value)),
+        Flow::TailFunc(id, targs, values) => ok!(FuncResult::TailCall(id, targs, values)),
         Flow::Cont(errors) => Backtrack::Unmatch(errors),
         Flow::Result(_) => Backtrack::err(
             id.span.clone(),

@@ -12,7 +12,7 @@ use crate::{
 };
 
 use super::{expr::eval_exp, ops};
-use crate::interp::shared::backtrack::{Backtrack, unwrap, unwrap_from_result};
+use crate::interp::shared::backtrack::{Backtrack, ok, unwrap, unwrap_from_result};
 
 // - Access
 
@@ -23,7 +23,7 @@ fn eval_access_path<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext:
     path: &ast::Path,
 ) -> Backtrack<Value> {
     match &path.node {
-        ast::PathKind::Root => Backtrack::Ok(*value_base),
+        ast::PathKind::Root => ok!(*value_base),
         ast::PathKind::Idx(path, exp_idx) => {
             eval_access_idx_path(runner_ctx, ctx, value_base, path, exp_idx)
         }
@@ -106,7 +106,7 @@ pub(crate) fn eval_update_path<
     value_upd: Value,
 ) -> Backtrack<Value> {
     match &path.node {
-        ast::PathKind::Root => Backtrack::Ok(value_upd),
+        ast::PathKind::Root => ok!(value_upd),
         ast::PathKind::Idx(path, exp_idx) => {
             eval_update_idx_path(runner_ctx, ctx, value_base, path, exp_idx, value_upd)
         }

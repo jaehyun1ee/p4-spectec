@@ -9,7 +9,7 @@ use super::super::{
 use super::{assign, expr, prem::eval_prems};
 use crate::interp::shared::error::{CallErrorKind, GuardErrorKind, HostErrorKind, TraceErrorKind};
 use crate::interp::shared::{
-    backtrack::{Backtrack, unwrap, unwrap_from_result},
+    backtrack::{Backtrack, err, ok, unwrap, unwrap_from_result},
     cache::CallKey,
     error::{Error, ErrorKind},
 };
@@ -168,7 +168,7 @@ pub fn invoke_rel<Iface: Interface, Ext: Extern>(
         .as_ref()
         .and_then(|key| runner_ctx.interp().cache.rels.get(key))
     {
-        return Backtrack::Ok(values.clone());
+        return ok!(values.clone());
     }
     runner_ctx.interp_mut().cache.begin();
     let result = stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
@@ -179,7 +179,7 @@ pub fn invoke_rel<Iface: Interface, Ext: Extern>(
         }
     });
     let pure = runner_ctx.interp_mut().cache.end();
-    if pure && let (Some(key), Backtrack::Ok(values)) = (key, &result) {
+    if pure && let (Some(key), ok!(values)) = (key, &result) {
         runner_ctx
             .interp_mut()
             .cache
@@ -219,7 +219,7 @@ fn invoke_extern_rel<Iface: Interface, Ext: Extern>(
             GuardErrorKind::RelationOutputMismatch { relation: id.node.clone() }
         ));
     }
-    Backtrack::Ok(values)
+    ok!(values)
 }
 
 // - Defined relation
@@ -296,8 +296,8 @@ fn invoke_defined_rel<Iface: Interface, Ext: Extern>(
         choose_sequential(paths, &mut evaluate)
     };
     match result {
-        Backtrack::Ok(values) => Backtrack::Ok(values),
-        Backtrack::Err(errors) => Backtrack::Err(errors),
+        ok!(values) => ok!(values),
+        err!(errors) => err!(errors),
         Backtrack::Unmatch(errors) => match &rel.else_group {
             Some(group) => eval_rule_path(
                 runner_ctx,
@@ -334,7 +334,7 @@ pub fn invoke_func<Iface: Interface, Ext: Extern>(
         .as_ref()
         .and_then(|key| runner_ctx.interp().cache.funcs.get(key))
     {
-        return Backtrack::Ok(*value);
+        return ok!(*value);
     }
     runner_ctx.interp_mut().cache.begin();
     let result = stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
@@ -353,7 +353,7 @@ pub fn invoke_func<Iface: Interface, Ext: Extern>(
         }
     });
     let pure = runner_ctx.interp_mut().cache.end();
-    if pure && let (Some(key), Backtrack::Ok(value)) = (key, &result) {
+    if pure && let (Some(key), ok!(value)) = (key, &result) {
         runner_ctx.interp_mut().cache.funcs.insert(key, *value);
     }
     result.nest(id.span.clone(), || ErrorKind::Trace(TraceErrorKind::function(id, targs)))
@@ -386,7 +386,7 @@ fn invoke_extern_func<Iface: Interface, Ext: Extern>(
             &value
         ));
     }
-    Backtrack::Ok(value)
+    ok!(value)
 }
 
 // - Builtin function
@@ -417,7 +417,7 @@ fn invoke_builtin_func<Iface: Interface, Ext: Extern>(
                     &value
                 ));
             }
-            Backtrack::Ok(value)
+            ok!(value)
         }
         Err(error) => {
             let recoverable = matches!(
@@ -425,7 +425,7 @@ fn invoke_builtin_func<Iface: Interface, Ext: Extern>(
                 ErrorKind::Host(HostErrorKind::Interface(InterfaceError::Builtin(_)))
             );
             let error = error.at_if_missing(&id.span);
-            if recoverable { Backtrack::Unmatch(vec![error]) } else { Backtrack::Err(vec![error]) }
+            if recoverable { Backtrack::Unmatch(vec![error]) } else { err!(vec![error]) }
         }
     }
 }
@@ -548,8 +548,8 @@ fn invoke_defined_func<Iface: Interface, Ext: Extern>(
         choose_sequential(0..defined_func.clauses.len(), &mut evaluate)
     };
     match result {
-        Backtrack::Ok(value) => Backtrack::Ok(value),
-        Backtrack::Err(errors) => Backtrack::Err(errors),
+        ok!(value) => ok!(value),
+        err!(errors) => err!(errors),
         Backtrack::Unmatch(errors) => match &defined_func.else_clause {
             Some(clause) => eval_clause(runner_ctx, ctx, &ctx_local, clause, values),
             None => Backtrack::Unmatch(errors),

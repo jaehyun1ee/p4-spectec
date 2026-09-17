@@ -51,8 +51,8 @@ pub(crate) use err;
 impl<T> Backtrack<T> {
     pub fn finish(self) -> Result<T, Error> {
         match self {
-            Backtrack::Ok(value) => Ok(value),
-            Backtrack::Err(traces) | Backtrack::Unmatch(traces) => Err(Error::execution(traces)),
+            ok!(value) => Ok(value),
+            err!(traces) | Backtrack::Unmatch(traces) => Err(Error::execution(traces)),
         }
     }
 }
@@ -62,9 +62,9 @@ impl<T> Backtrack<T> {
 macro_rules! unwrap {
     ($result:expr) => {
         match $result {
-            $crate::interp::shared::backtrack::Backtrack::Ok(value) => value,
-            $crate::interp::shared::backtrack::Backtrack::Err(traces) => {
-                return $crate::interp::shared::backtrack::Backtrack::Err(traces)
+            $crate::interp::shared::backtrack::ok!(value) => value,
+            $crate::interp::shared::backtrack::err!(traces) => {
+                return $crate::interp::shared::backtrack::err!(traces)
             }
             $crate::interp::shared::backtrack::Backtrack::Unmatch(traces) => {
                 return $crate::interp::shared::backtrack::Backtrack::Unmatch(traces)

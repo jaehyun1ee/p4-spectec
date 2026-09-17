@@ -1,6 +1,9 @@
 //! Ordered AL candidate selection and deterministic overlap checks
 
-use crate::interp::shared::{backtrack::Backtrack, error::Error};
+use crate::interp::shared::{
+    backtrack::{Backtrack, err, ok},
+    error::Error,
+};
 
 // = Sequential choice
 
@@ -11,8 +14,8 @@ pub fn choose_sequential<C, T>(
     let mut errors = Vec::new();
     for candidate in candidates {
         match evaluate(&candidate) {
-            Backtrack::Ok(value) => return Backtrack::Ok(value),
-            Backtrack::Err(errors) => return Backtrack::Err(errors),
+            ok!(value) => return ok!(value),
+            err!(errors) => return err!(errors),
             Backtrack::Unmatch(mut candidate_errors) => errors.append(&mut candidate_errors),
         }
     }
@@ -30,14 +33,14 @@ pub fn choose_deterministic<C, T>(
     let mut errors = Vec::new();
     for candidate in candidates {
         match evaluate(&candidate) {
-            Backtrack::Ok(value) => {
+            ok!(value) => {
                 if let Some((first, _)) = success {
-                    return Backtrack::Err(vec![nondet(first, candidate)]);
+                    return err!(vec![nondet(first, candidate)]);
                 }
                 success = Some((candidate, value));
                 errors.clear();
             }
-            Backtrack::Err(errors) => return Backtrack::Err(errors),
+            err!(errors) => return err!(errors),
             Backtrack::Unmatch(mut candidate_errors) => {
                 if success.is_none() {
                     errors.append(&mut candidate_errors);
@@ -46,7 +49,7 @@ pub fn choose_deterministic<C, T>(
         }
     }
     match success {
-        Some((_, value)) => Backtrack::Ok(value),
+        Some((_, value)) => ok!(value),
         None => Backtrack::Unmatch(errors),
     }
 }
