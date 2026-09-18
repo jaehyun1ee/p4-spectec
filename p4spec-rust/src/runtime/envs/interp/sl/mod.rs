@@ -1,0 +1,14 @@
+//! Definition environments used by SL execution
+
+pub mod ast_prepared;
+
+use super::shared::frame::Callable;
+
+use self::ast_prepared as ast;
+use std::rc::Rc;
+
+use crate::lang::common::ds::map::IdMap;
+
+pub use super::shared::TDEnv;
+pub type REnv = IdMap<Callable<ast::RelDef>>;
+pub type FEnv = IdMap<Rc<Callable<ast::MetaFuncDef>>>;

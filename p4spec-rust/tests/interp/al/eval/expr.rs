@@ -356,7 +356,7 @@ fn test_iteration_evaluates_each_bound_element_and_preserves_empty_options() {
         let typ_int = typ::make::int();
         let typ_iter = typ::make::iter(typ_int.clone(), iter);
         let var = ast::Var { id: id("x"), typ: typ_int.clone(), iters: vec![] };
-        let exp_var = exp(ast::ExpKind::Id(id("x")), typ_int.clone());
+        let exp_var = p4spec_rust::note_phrase!(node: p4spec_rust::lang::il::ast::ExpKind::Id(id("x")), note: typ_int.node.clone(), span: typ_int.span.clone());
         let signature = exp(
             ast::ExpKind::Iter(Box::new(exp_var.clone()), (iter, vec![var.clone()])),
             typ_iter.clone(),
@@ -458,27 +458,31 @@ fn test_list_iteration_zips_values_without_rebinding_the_parent() {
         .map(|var| {
             exp(
                 ast::ExpKind::Iter(
-                    Box::new(exp(ast::ExpKind::Id(var.id.clone()), typ_int.clone())),
+                    Box::new(p4spec_rust::note_phrase!(node: p4spec_rust::lang::il::ast::ExpKind::Id(var.id.clone()), note: typ_int.node.clone(), span: typ_int.span.clone())),
                     (ast::Iter::List, vec![var.clone()]),
                 ),
                 typ_list.clone(),
             )
         })
         .collect();
-    signatures.push(exp(ast::ExpKind::Id(id("x")), typ_int.clone()));
+    signatures.push(p4spec_rust::note_phrase!(node: p4spec_rust::lang::il::ast::ExpKind::Id(id("x")), note: typ_int.node.clone(), span: Span::default()));
     let exp_inner = exp(
         ast::ExpKind::Bin(
             ast::BinOp::Num(num::BinOp::Add),
             ast::OpTyp::Int,
-            Box::new(exp(ast::ExpKind::Id(id("x")), typ_int.clone())),
-            Box::new(exp(ast::ExpKind::Id(id("y")), typ_int.clone())),
+            Box::new(
+                p4spec_rust::note_phrase!(node: p4spec_rust::lang::il::ast::ExpKind::Id(id("x")), note: typ_int.node.clone(), span: Span::default()),
+            ),
+            Box::new(
+                p4spec_rust::note_phrase!(node: p4spec_rust::lang::il::ast::ExpKind::Id(id("y")), note: typ_int.node.clone(), span: Span::default()),
+            ),
         ),
         typ_int.clone(),
     );
     let expression = exp(
         ast::ExpKind::Tuple(vec![
             exp(ast::ExpKind::Iter(Box::new(exp_inner), (ast::Iter::List, vars)), typ_list.clone()),
-            exp(ast::ExpKind::Id(id("x")), typ_int.clone()),
+            p4spec_rust::note_phrase!(node: p4spec_rust::lang::il::ast::ExpKind::Id(id("x")), note: typ_int.node.clone(), span: Span::default()),
         ]),
         typ::make::tuple(vec![typ_list.clone(), typ_int.clone()]),
     );

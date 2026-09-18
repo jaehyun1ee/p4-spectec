@@ -1,4 +1,5 @@
 use super::*;
+use p4spec_rust::interp::shared::prepare::Prepare;
 use p4spec_rust::{
     interp::shared::error::{CallErrorKind, ErrorKind},
     lang::{data::typ, xl::num::Number},
@@ -177,7 +178,7 @@ fn optional_and_list_conditions_preserve_empty_iteration_semantics() {
     for (iter, expected) in [(ast::Iter::Opt, "9"), (ast::Iter::List, "5")] {
         let id = phrase!(node: "n".to_owned(), span: Span::default());
         let var = ast::Var { id: id.clone(), typ: typ::make::nat(), iters: vec![] };
-        let exp_var = note_phrase!(node: ast::ExpKind::Id(id), note: typ::make::nat().node, span: Span::default());
+        let exp_var = p4spec_rust::note_phrase!(node: p4spec_rust::lang::il::ast::ExpKind::Id(id), note: typ::make::nat().node, span: Span::default());
         let exp_l = note_phrase!(node: ast::ExpKind::Iter(Box::new(exp_var), (iter, vec![var.clone()])), note: typ::make::iter(typ::make::nat(), iter).node, span: Span::default());
         let exp_r = note_phrase!(node: if iter == ast::Iter::Opt { ast::ExpKind::Opt(None) } else { ast::ExpKind::List(vec![]) }, note: typ::make::iter(typ::make::nat(), iter).node, span: Span::default());
         let instr_if = phrase!(node: ast::InstrKind::If(ast::IfInstr { exp: boolean(false), iter_exps: vec![(iter, vec![var])], block: vec![instr(exp(5))], dangle: true }), span: Span::default());
@@ -231,7 +232,7 @@ fn type_arguments_shadow_global_type_definitions() {
 #[test]
 fn case_comparison_rhs_observes_the_scrutinee_binding() {
     use p4spec_rust::lang::xl::bool as bool_op;
-    let exp_r = note_phrase!(node: ast::ExpKind::Id(phrase!(node: "~case".to_owned(), span: Span::default())), note: typ::make::nat().node, span: Span::default());
+    let exp_r = p4spec_rust::note_phrase!(node: p4spec_rust::lang::il::ast::ExpKind::Id(phrase!(node: "~case".to_owned(), span: Span::default())), note: typ::make::nat().node, span: Span::default());
     let block = vec![phrase!(node: ast::InstrKind::Case(ast::CaseInstr {
         exp: exp(7),
         cases: vec![ast::Case {
@@ -263,7 +264,7 @@ fn case_guard_errors_keep_the_generated_expression_trace() {
 fn optional_condition_preserves_remaining_iterator_order_and_outer_bindings() {
     use p4spec_rust::{
         interp::sl::{context::Context, eval::instr::eval_block, flow::Flow},
-        lang::common::{Variable, notation::mixfix::Mixfix},
+        lang::common::notation::mixfix::Mixfix,
     };
     for det in [false, true] {
         for (cond, expected) in [(true, "5"), (false, "9")] {
@@ -272,10 +273,8 @@ fn optional_condition_preserves_remaining_iterator_order_and_outer_bindings() {
                 "var b : bool\nrelation True: bool ~> bool\n  hint(input %0)\nrule True/true: b ~> b\n  -- if b",
             ))
             .unwrap();
-            let mut ctx = Context::new(&global);
             let id = phrase!(node: "b".to_owned(), span: Span::default());
             let value_outer = make::bool(runner.arena_mut(), false, Span::default()).unwrap();
-            ctx.add_value(Variable::new(id.clone(), vec![]), value_outer);
             let value_true = make::bool(runner.arena_mut(), true, Span::default()).unwrap();
             let value_cond = make::bool(runner.arena_mut(), cond, Span::default()).unwrap();
             let typ_list = typ::make::list(typ::make::bool());
@@ -298,11 +297,10 @@ fn optional_condition_preserves_remaining_iterator_order_and_outer_bindings() {
                 Span::default(),
             )
             .unwrap();
-            ctx.add_value(Variable::new(id.clone(), vec![ast::Iter::List, ast::Iter::List]), value);
             let var = ast::Var { id: id.clone(), typ: typ::make::bool(), iters: vec![] };
             let mut var_list = var.clone();
             var_list.iters.push(ast::Iter::List);
-            let exp = note_phrase!(node: ast::ExpKind::Id(id.clone()), note: typ::make::bool().node, span: Span::default());
+            let exp = p4spec_rust::note_phrase!(node: p4spec_rust::lang::il::ast::ExpKind::Id(id.clone()), note: typ::make::bool().node, span: Span::default());
             let iter_exps = vec![
                 (ast::Iter::List, vec![var]),
                 (ast::Iter::List, vec![var_list]),
@@ -323,6 +321,23 @@ fn optional_condition_preserves_remaining_iterator_order_and_outer_bindings() {
                 }),
             ] {
                 let block = vec![phrase!(node: instr_cond, span: Span::default())];
+                let mut layout =
+                    p4spec_rust::runtime::envs::interp::shared::frame::FrameLayout::default();
+                let block = block.prepare(&mut layout);
+                let slot = layout.resolve_var(ast::Var {
+                    id: id.clone(),
+                    typ: typ::make::bool(),
+                    iters: vec![],
+                });
+                let slot_nested = layout.resolve_var(ast::Var {
+                    id: id.clone(),
+                    typ: typ::make::bool(),
+                    iters: vec![ast::Iter::List; 2],
+                });
+                let mut ctx =
+                    Context::new(&global).localize_with_layout(&std::rc::Rc::new(layout.clone()));
+                ctx.add_slot(slot.slot, value_outer);
+                ctx.add_slot(slot_nested.slot, value);
                 let flow = eval_block(
                     &mut runner.context(),
                     std::borrow::Cow::Borrowed(&ctx),
@@ -339,7 +354,12 @@ fn optional_condition_preserves_remaining_iterator_order_and_outer_bindings() {
                     flow => panic!("unexpected flow: {flow:?}"),
                 }
                 assert_eq!(
-                    *ctx.find_value(&Variable::new(id.clone(), vec![])).unwrap(),
+                    *ctx.find_value(&layout.resolve_var(p4spec_rust::lang::il::ast::Var {
+                        id: id.clone(),
+                        typ: p4spec_rust::lang::data::typ::make::bool(),
+                        iters: vec![]
+                    }))
+                    .unwrap(),
                     value_outer
                 );
             }

@@ -37,11 +37,7 @@ fn test_id_map_rejects_mismatched_lists() {
 fn test_free_identifier_sets_preserve_source_spans() {
     let id_stored = id("x", "stored");
     let id_lookup = id("x", "lookup");
-    let exp: il::ast::Exp = p4spec_rust::note_phrase! {
-        node: il::ast::ExpKind::Id(id_stored.clone()),
-        note: il::ast::TypKind::Bool,
-        span: Span::default(),
-    };
+    let exp: il::ast::Exp = p4spec_rust::note_phrase!(node: p4spec_rust::lang::il::ast::ExpKind::Id(id_stored.clone()), note: il::ast::TypKind::Bool, span: Span::default());
 
     let ids: IdSet = exp.free();
     assert!(ids.contains(&id_lookup));
@@ -51,11 +47,7 @@ fn test_free_identifier_sets_preserve_source_spans() {
 #[test]
 fn test_free_into_extends_one_ordered_set_without_duplicates() {
     let variable = |name| -> il::ast::Exp {
-        p4spec_rust::note_phrase! {
-            node: il::ast::ExpKind::Id(id(name, name)),
-            note: il::ast::TypKind::Bool,
-            span: Span::default(),
-        }
+        p4spec_rust::note_phrase!(node: p4spec_rust::lang::il::ast::ExpKind::Id(id(name, name)), note: il::ast::TypKind::Bool, span: Span::default())
     };
     let exp: il::ast::Exp = p4spec_rust::note_phrase! {
         node: il::ast::ExpKind::Tuple(vec![variable("x"), variable("x"), variable("y")]),

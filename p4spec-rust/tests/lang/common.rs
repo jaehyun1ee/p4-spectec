@@ -22,8 +22,5 @@ mod ds;
 #[path = "common/notation.rs"]
 mod notation;
 
-#[path = "common/var.rs"]
-mod var;
-
 #[path = "common/source.rs"]
 mod source;

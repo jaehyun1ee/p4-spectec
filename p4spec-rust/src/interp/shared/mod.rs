@@ -5,4 +5,5 @@ pub mod cache;
 pub mod context;
 pub mod error;
 pub mod eval;
+pub mod prepare;
 pub mod util;

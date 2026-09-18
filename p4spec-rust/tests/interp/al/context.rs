@@ -1,15 +1,15 @@
 use p4spec_rust::interp::shared::error::ContextErrorKind;
 use p4spec_rust::interp::shared::error::{EntityKind, ErrorKind};
 use p4spec_rust::lang::data::value::ValueArena;
+use p4spec_rust::runtime::envs::interp::al::ast_prepared as prepared;
+use p4spec_rust::runtime::envs::interp::shared::frame::FrameLayout;
+use std::rc::Rc;
 
 use p4spec_rust::{
     interp::al::context::{Context, Global, Scope},
     lang::{
         al::ast,
-        common::{
-            Variable,
-            source::{Position, Span},
-        },
+        common::source::{Position, Span},
         data::{
             typ,
             value::{get, make},
@@ -44,10 +44,6 @@ fn var(name: &str, iters: Vec<ast::Iter>) -> ast::Var {
     ast::Var { id: id(name, 1), typ: typ::make::bool(), iters }
 }
 
-fn variable(var: &ast::Var) -> Variable {
-    Variable::new(var.id.clone(), var.iters.clone())
-}
-
 #[test]
 fn test_duplicate_global_definition_uses_second_identifier_span() {
     for (kind, def_a, def_b) in [
@@ -78,35 +74,37 @@ fn test_duplicate_global_definition_uses_second_identifier_span() {
 }
 
 #[test]
-fn test_localize_discards_locals_and_retains_global_lookup() {
+fn test_localize_with_layout_discards_locals_and_retains_global_lookup() {
     let mut arena = ValueArena::new();
     let func_global = func("global", 1);
     let global = Global::load(vec![def(ast::DefKind::MetaFunc(func_global.clone()))]).unwrap();
-    let mut ctx = Context::new(&global);
-    let func_local = func("local", 2);
+    let mut layout = FrameLayout::default();
+    let slot = layout.resolve_var(var("x", vec![]));
+    let layout = Rc::new(layout);
+    let mut ctx = Context::new(&global).localize_with_layout(&layout);
+    let func_local = prepared::prepare_func_def(func("local", 2));
     ctx.add_func(id("local", 2), func_local.clone().into())
         .unwrap();
     ctx.add_typdef(id("T", 3), TypeDef::Extern).unwrap();
-    let var = variable(&var("x", vec![]));
-    ctx.add_value(var.clone(), make::bool(&mut arena, true, Span::default()).unwrap());
+    ctx.add_slot(slot.slot, make::bool(&mut arena, true, Span::default()).unwrap());
     assert_eq!(
         ctx.find_func(&id("local", 8))
             .map(|(scope, func)| (scope, func.as_ref()))
             .unwrap(),
         (Scope::Local, &func_local)
     );
-    let ctx_local = ctx.localize();
+    let ctx_local = ctx.localize_with_layout(&layout);
     assert!(ctx_local.find_func_opt(&id("local", 8)).is_none());
     assert!(ctx_local.find_typdef_opt(&id("T", 8)).is_none());
-    assert!(ctx_local.find_value_opt(&var).is_none());
+    assert!(ctx_local.find_value(&slot).is_err());
     assert_eq!(
         ctx_local
             .find_func(&id("global", 8))
             .map(|(scope, func)| (scope, func.as_ref()))
             .unwrap(),
-        (Scope::Global, &func_global)
+        (Scope::Global, &prepared::prepare_func_def(func_global))
     );
-    assert!(ctx.find_value_opt(&var).is_some());
+    assert!(ctx.find_value(&slot).is_ok());
 }
 
 #[test]
@@ -121,7 +119,7 @@ fn test_local_definition_duplicates_do_not_replace_bindings() {
     .unwrap();
     let mut ctx = Context::new(&global);
     assert!(matches!(
-        *ctx.add_func(id("f", 7), func("f", 7).into())
+        *ctx.add_func(id("f", 7), prepared::prepare_func_def(func("f", 7)).into())
             .unwrap_err()
             .kind,
         ErrorKind::Context(ContextErrorKind::Duplicate { kind: EntityKind::Function, .. })
@@ -133,43 +131,54 @@ fn test_local_definition_duplicates_do_not_replace_bindings() {
         id("T", 7).span
     );
     ctx.add_typdef(id("U", 2), TypeDef::Extern).unwrap();
-    ctx.add_func(id("g", 2), func("g", 2).into()).unwrap();
+    ctx.add_func(id("g", 2), prepared::prepare_func_def(func("g", 2)).into())
+        .unwrap();
     assert!(ctx.add_typdef(id("U", 7), TypeDef::Parameter).is_err());
-    assert!(ctx.add_func(id("g", 7), func("g", 7).into()).is_err());
+    assert!(
+        ctx.add_func(id("g", 7), prepared::prepare_func_def(func("g", 7)).into())
+            .is_err()
+    );
     assert_eq!(ctx.find_typdef(&id("U", 8)).unwrap(), &TypeDef::Extern);
-    assert_eq!(ctx.find_func(&id("g", 8)).unwrap().1.as_ref(), &func("g", 2));
+    assert_eq!(
+        ctx.find_func(&id("g", 8)).unwrap().1.as_ref(),
+        &prepared::prepare_func_def(func("g", 2))
+    );
 }
 
 #[test]
 fn test_sibling_contexts_isolate_rebinding_and_iterator_paths() {
     let mut arena = ValueArena::new();
     let global = Global::load(vec![]).unwrap();
-    let mut ctx = Context::new(&global);
-    let var = variable(&var("x", vec![]));
-    ctx.add_value(var.clone(), make::bool(&mut arena, false, Span::default()).unwrap());
+    let mut layout = FrameLayout::default();
+    let slot = layout.resolve_var(var("x", vec![]));
+    let slot_list = layout.resolve_var(p4spec_rust::lang::il::ast::Var {
+        id: id("x", 1),
+        typ: p4spec_rust::lang::data::typ::make::bool(),
+        iters: vec![ast::Iter::List],
+    });
+    let mut ctx = Context::new(&global).localize_with_layout(&layout.into());
+    ctx.add_slot(slot.slot, make::bool(&mut arena, false, Span::default()).unwrap());
     let mut ctx_a = ctx.clone();
     let ctx_b = ctx.clone();
-    ctx_a.add_value(
-        Variable::new(id("x", 9), vec![]),
-        make::bool(&mut arena, true, Span::default()).unwrap(),
-    );
-    ctx_a.add_value(
-        Variable::new(id("x", 9), vec![ast::Iter::List]),
-        make::bool(&mut arena, true, Span::default()).unwrap(),
-    );
-    assert!(get::bool(&arena, ctx_a.find_value(&var).unwrap()).unwrap());
-    assert!(!get::bool(&arena, ctx_b.find_value(&var).unwrap()).unwrap());
-    assert!(
-        ctx.find_value_opt(&Variable::new(id("x", 1), vec![ast::Iter::List]))
-            .is_none()
-    );
+    ctx_a.add_slot(slot.slot, make::bool(&mut arena, true, Span::default()).unwrap());
+    ctx_a.add_slot(slot_list.slot, make::bool(&mut arena, true, Span::default()).unwrap());
+    assert!(get::bool(&arena, ctx_a.find_value(&slot).unwrap()).unwrap());
+    assert!(!get::bool(&arena, ctx_b.find_value(&slot).unwrap()).unwrap());
+    assert!(ctx.find_value(&slot_list).is_err());
 }
 
 #[test]
 fn test_missing_value_reports_iterator_path_and_lookup_span() {
     let global = Global::load(vec![]).unwrap();
+    let mut layout = FrameLayout::default();
+    let slot = layout.resolve_var(p4spec_rust::lang::il::ast::Var {
+        id: id("x", 9),
+        typ: p4spec_rust::lang::data::typ::make::bool(),
+        iters: vec![ast::Iter::List, ast::Iter::Opt],
+    });
     let error = Context::new(&global)
-        .find_value(&Variable::new(id("x", 9), vec![ast::Iter::List, ast::Iter::Opt]))
+        .localize_with_layout(&layout.into())
+        .find_value(&slot)
         .unwrap_err();
     assert_eq!(error.span, id("x", 9).span);
     assert_eq!(
@@ -192,7 +201,17 @@ fn test_loaded_native_spec_preserves_definition_bodies_and_locations() {
     let spec_il = elaborate::convert(spec_el).unwrap();
     let spec_al = algo::convert(spec_il).unwrap();
     let global = Global::load(spec_al.clone()).unwrap();
-    let ctx = Context::new(&global);
+    let mut layout = FrameLayout::default();
+    for def in &spec_al {
+        if let ast::DefKind::Var(var) = &def.node {
+            layout.resolve_var(p4spec_rust::lang::il::ast::Var {
+                id: var.id.clone(),
+                typ: p4spec_rust::lang::data::typ::make::bool(),
+                iters: vec![],
+            });
+        }
+    }
+    let ctx = Context::new(&global).localize_with_layout(&Rc::new(layout.clone()));
     let ctx_clone = ctx.clone();
     let ctx_local = ctx.localize();
     for def in &spec_al {
@@ -211,7 +230,7 @@ fn test_loaded_native_spec_preserves_definition_bodies_and_locations() {
                     ast::RelDef::Defined(rel) => &rel.id,
                 };
                 let rel_global = ctx.find_rel(id).unwrap();
-                assert_eq!(rel_global, rel);
+                assert_eq!(&prepared::restore_rel_def(rel_global.clone()), rel);
                 assert!(std::ptr::eq(rel_global, ctx_clone.find_rel(id).unwrap()));
                 assert!(std::ptr::eq(rel_global, ctx_local.find_rel(id).unwrap()));
             }
@@ -223,14 +242,21 @@ fn test_loaded_native_spec_preserves_definition_bodies_and_locations() {
                     ast::MetaFuncDef::Defined(func) => &func.id,
                 };
                 let (scope, func_global) = ctx.find_func(id).unwrap();
-                assert_eq!((scope, func_global.as_ref()), (Scope::Global, func));
+                assert_eq!(
+                    (scope, &prepared::restore_func_def(func_global.as_ref().clone())),
+                    (Scope::Global, func)
+                );
                 assert!(std::rc::Rc::ptr_eq(func_global, ctx_clone.find_func(id).unwrap().1));
                 assert!(std::rc::Rc::ptr_eq(func_global, ctx_local.find_func(id).unwrap().1));
             }
             ast::DefKind::Var(var) => {
                 assert!(
-                    ctx.find_value_opt(&Variable::new(var.id.clone(), vec![]))
-                        .is_none()
+                    ctx.find_value(&layout.resolve_var(p4spec_rust::lang::il::ast::Var {
+                        id: var.id.clone(),
+                        typ: p4spec_rust::lang::data::typ::make::bool(),
+                        iters: vec![]
+                    }))
+                    .is_err()
                 );
             }
         }
@@ -287,7 +313,7 @@ fn test_definition_lookup_errors_and_local_type_isolation() {
     let mut ctx_child = ctx.clone();
     ctx_child.add_typdef(id.clone(), TypeDef::Extern).unwrap();
     ctx_child
-        .add_func(id.clone(), func("missing", 8).into())
+        .add_func(id.clone(), prepared::prepare_func_def(func("missing", 8)).into())
         .unwrap();
     assert!(ctx.find_typdef_opt(&id).is_none());
     assert!(ctx.find_func_opt(&id).is_none());

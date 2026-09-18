@@ -42,7 +42,7 @@ fn id(name: &str) -> ast::Id {
 }
 
 fn spec(nested: bool) -> ast::Spec {
-    let exp_value = note_phrase!(node: ast::ExpKind::Id(id("n")), note: typ::make::nat().node, span: Span::default());
+    let exp_value = p4spec_rust::note_phrase!(node: p4spec_rust::lang::il::ast::ExpKind::Id(id("n")), note: typ::make::nat().node, span: Span::default());
     let mut exp_body = note_phrase!(
         node: ast::ExpKind::Call(id("capture"),
             vec![typ::make::var(id("T"), vec![]), typ::make::var(id("U"), vec![]), typ::make::var(id("Alias"), vec![])],

@@ -10,15 +10,16 @@ use super::{
     expr::{self, eval_exp, eval_exps},
 };
 use crate::interp::shared::eval::{Invoker, iter, ops};
+use crate::interp::shared::util::iter_vars;
+use crate::runtime::envs::interp::sl::ast_prepared as ast;
 use crate::{
     interp::shared::{
         backtrack::{Backtrack, err, ok, unmatch, unwrap, unwrap_from_result},
         error::{ErrorKind, PremErrorKind, TraceErrorKind},
     },
     lang::{
-        common::{Variable, source::Span},
+        common::source::Span,
         data::value::{Value, ValueKind, get},
-        sl::ast,
         traits::{eq::SyntaxEq, print::Print},
         xl::bool as boolean,
     },
@@ -211,10 +212,12 @@ fn eval_case_instr<Iface: Interface, Ext: Extern>(
     tail: bool,
 ) -> Backtrack<Flow> {
     let value = unwrap!(eval_exp(runner_ctx, ctx.as_ref(), &instr.exp));
-    let id = crate::phrase!(node: "~case".to_owned(), span: Span::default());
     let mut ctx_guard = ctx.as_ref().clone();
-    ctx_guard.add_value(Variable::new(id.clone(), vec![]), value);
-    let exp = crate::note_phrase!(node: ast::ExpKind::Id(id), note: instr.exp.note.clone(), span: instr.exp.span.clone());
+    let slot_case = ctx_guard.case_slot(
+        crate::phrase!(node: instr.exp.note.as_ref().clone(), span: instr.exp.span.clone()),
+    );
+    ctx_guard.add_slot(slot_case.slot, value);
+    let exp = crate::note_phrase!(node: ast::ExpKind::Id(crate::lang::data::var::IdSlot { id: slot_case.var.id, slot: slot_case.slot }), note: instr.exp.note.clone(), span: instr.exp.span.clone());
     for case in &instr.cases {
         if unwrap!(eval_guard(runner_ctx, &ctx_guard, &exp, value, &case.guard)) {
             drop(ctx_guard);
@@ -426,13 +429,15 @@ fn eval_cond_iter<Iface: Interface, Ext: Extern>(
     iters: &[ast::ExpIter],
     eval: &mut impl FnMut(&mut RunnerContext<'_, SlInterp, Iface, Ext>, &Context<'_>) -> Backtrack<bool>,
 ) -> Backtrack<bool> {
-    let Some(((iter, vars), iters_tail)) = iters.split_last() else {
+    let Some((exp_iter, iters_tail)) = iters.split_last() else {
         return eval(runner_ctx, ctx);
     };
+    let (iter, vars) = exp_iter;
+    let vars_outer = iter_vars(ctx, vars, *iter);
     match iter {
         ast::Iter::Opt => {
             let values = unwrap_from_result!(
-                ctx.find_opt_values_by_var(runner_ctx.arena(), vars),
+                ctx.find_opt_values_by_var(runner_ctx.arena(), &vars_outer),
                 &Span::default()
             );
             let Some(values) = values else {
@@ -440,26 +445,22 @@ fn eval_cond_iter<Iface: Interface, Ext: Extern>(
             };
             let mut ctx_sub = ctx.clone();
             for (var, value) in vars.iter().zip(values) {
-                ctx_sub.add_value(Variable::new(var.id.clone(), var.iters.clone()), value);
+                ctx_sub.add_slot(var.slot, value);
             }
             eval_cond_iter(runner_ctx, &ctx_sub, iters_tail, eval)
         }
         ast::Iter::List => {
             let values_by_var = unwrap_from_result!(
-                ctx.find_list_values_by_var(runner_ctx.arena(), vars),
+                ctx.find_list_values_by_var(runner_ctx.arena(), &vars_outer),
                 &Span::default()
             );
             // Copy handles before the callback can allocate in the arena
             let values_by_var: Vec<_> = values_by_var.into_iter().map(<[Value]>::to_vec).collect();
             let len = values_by_var.first().map_or(0, Vec::len);
-            let vars: Vec<_> = vars
-                .iter()
-                .map(|var| Variable::new(var.id.clone(), var.iters.clone()))
-                .collect();
             let mut ctx_sub = ctx.clone();
             for idx in 0..len {
                 for (var, values) in vars.iter().zip(&values_by_var) {
-                    ctx_sub.add_value(var.clone(), values[idx]);
+                    ctx_sub.add_slot(var.slot, values[idx]);
                 }
                 if !unwrap!(eval_cond_iter(runner_ctx, &ctx_sub, iters_tail, eval)) {
                     return ok!(false);
@@ -485,21 +486,15 @@ fn eval_instr_iter<'global, Iface: Interface, Ext: Extern>(
         return eval(runner_ctx, ctx);
     };
     match iter.iter {
-        ast::Iter::Opt => iter::yield_opt(
-            runner_ctx,
-            ctx,
-            &Span::default(),
-            &iter.vars_bound,
-            &iter.vars_bind,
-            |runner_ctx, ctx| eval_instr_iter(runner_ctx, ctx, iters_tail, eval),
-        ),
-        ast::Iter::List => iter::yield_list(
-            runner_ctx,
-            ctx,
-            &Span::default(),
-            &iter.vars_bound,
-            &iter.vars_bind,
-            |runner_ctx, ctx| eval_instr_iter(runner_ctx, ctx, iters_tail, eval),
-        ),
+        ast::Iter::Opt => {
+            iter::yield_opt(runner_ctx, ctx, &Span::default(), iter, |runner_ctx, ctx| {
+                eval_instr_iter(runner_ctx, ctx, iters_tail, eval)
+            })
+        }
+        ast::Iter::List => {
+            iter::yield_list(runner_ctx, ctx, &Span::default(), iter, |runner_ctx, ctx| {
+                eval_instr_iter(runner_ctx, ctx, iters_tail, eval)
+            })
+        }
     }
 }

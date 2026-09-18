@@ -1,5 +1,6 @@
 //! Shared assignment, expression, argument, and path evaluation
 
+use crate::interp::shared::prepare::expr as ast;
 pub(crate) mod arg;
 pub mod assign;
 pub(crate) mod expr;
@@ -9,7 +10,7 @@ pub(crate) mod path;
 
 use super::{backtrack::Backtrack, context::IterContext, error::Error};
 use crate::{
-    lang::{data::value::Value, il::ast},
+    lang::data::value::Value,
     runner::{Extern, Interface, Interpreter, RunnerContext},
 };
 

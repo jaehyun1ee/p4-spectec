@@ -1,4 +1,5 @@
 use p4spec_rust::interp::shared::error::TraceErrorKind;
+use p4spec_rust::interp::shared::prepare::Prepare;
 use p4spec_rust::interp::shared::{backtrack::Backtrack, error::ErrorKind};
 use p4spec_rust::lang::data::value::ValueArena;
 use std::rc::Rc;
@@ -324,18 +325,12 @@ def $fallback(n*) = n*
 fn test_iterated_premise_rows_read_parent_bindings_independently() {
     use p4spec_rust::{
         interp::al::{context::Context, eval::prem::eval_prem},
-        lang::{common::Variable, xl::num},
+        lang::xl::num,
         note_phrase,
     };
 
     let id = |name: &str| phrase!(node: name.to_owned(), span: Span::default());
-    let exp_var = |name: &str| {
-        note_phrase!(
-            node: ast::ExpKind::Id(id(name)),
-            note: Rc::new(typ::make::nat().node),
-            span: Span::default()
-        )
-    };
+    let exp_var = |name: &str| p4spec_rust::note_phrase!(node: p4spec_rust::lang::il::ast::ExpKind::Id(id(name)), note: Rc::new(typ::make::nat().node), span: Span::default());
     let var = |name: &str| ast::Var { id: id(name), typ: typ::make::nat(), iters: vec![] };
     let prem_inner = phrase!(node: ast::PremKind::Let(ast::LetPrem {
         exp_l: exp_var("n_result"),
@@ -354,11 +349,31 @@ fn test_iterated_premise_rows_read_parent_bindings_independently() {
             vars_bound: vec![var("n")], vars_bind: vec![var("n_result")],
         },
     }), span: Span::default());
+    let mut var_bound = var("n");
+    var_bound.iters.push(ast::Iter::List);
+    let mut var_bind = var("n_result");
+    var_bind.iters.push(ast::Iter::List);
+    let prem_nested = phrase!(node: ast::PremKind::Iter(ast::IterPrem {
+        prem: Box::new(prem.clone()),
+        prem_iter: ast::PremIter {
+            iter: ast::Iter::List,
+            vars_bound: vec![var_bound], vars_bind: vec![var_bind],
+        },
+    }), span: Span::default());
+    let mut layout = p4spec_rust::runtime::envs::interp::shared::frame::FrameLayout::default();
+    let prem = prem.prepare(&mut layout);
+    let prem_nested = prem_nested.prepare(&mut layout);
     let mut runner = make_runner(vec![], false);
     let mut runner = runner.context();
-    let mut ctx = Context::new(runner.spec());
+    let slot_n = layout.resolve_var(var("n"));
+    let slot_result = layout.resolve_var(var("n_result"));
+    let slot_n_list = layout.iter_slot(&slot_n, ast::Iter::List);
+    let slot_result_list = layout.iter_slot(&slot_result, ast::Iter::List);
+    let slot_n_nested = layout.iter_slot(&slot_n_list, ast::Iter::List);
+    let slot_result_nested = layout.iter_slot(&slot_result_list, ast::Iter::List);
+    let mut ctx = Context::new(runner.spec()).localize_with_layout(&Rc::new(layout.clone()));
     let value_parent = nat(runner.arena_mut(), 100);
-    ctx.add_value(Variable::new(id("n_result"), vec![]), value_parent);
+    ctx.add_slot(slot_result.slot, value_parent);
     let values = (1..=3).map(|n| nat(runner.arena_mut(), n)).collect();
     let value = make::list(
         runner.arena_mut(),
@@ -367,42 +382,21 @@ fn test_iterated_premise_rows_read_parent_bindings_independently() {
         Span::default(),
     )
     .unwrap();
-    ctx.add_value(Variable::new(id("n"), vec![ast::Iter::List]), value);
+    ctx.add_slot(slot_n_list.slot, value);
     let Backtrack::Ok(ctx_post) = eval_prem(&mut runner, ctx.clone(), &prem) else {
         panic!("iterated premise failed");
     };
-    let var_result = Variable::new(id("n_result"), vec![ast::Iter::List]);
-    let value = ctx_post.find_value(&var_result).unwrap();
+    let value = ctx_post.find_value(&slot_result_list).unwrap();
     let values: Vec<_> = get::list(runner.arena(), value)
         .unwrap()
         .iter()
         .map(|value| number(runner.arena(), value))
         .collect();
     assert_eq!(values, ["101", "102", "103"]);
-    assert_eq!(
-        ctx_post
-            .find_value(&Variable::new(id("n_result"), vec![]))
-            .unwrap(),
-        &value_parent
-    );
-    assert!(
-        ctx_post
-            .find_value_opt(&Variable::new(id("n"), vec![]))
-            .is_none()
-    );
-    assert!(ctx.find_value_opt(&var_result).is_none());
+    assert_eq!(ctx_post.find_value(&slot_result).unwrap(), &value_parent);
+    assert!(ctx_post.find_value(&slot_n).is_err());
+    assert!(ctx.find_value(&slot_result_list).is_err());
 
-    let mut var_bound = var("n");
-    var_bound.iters.push(ast::Iter::List);
-    let mut var_bind = var("n_result");
-    var_bind.iters.push(ast::Iter::List);
-    let prem = phrase!(node: ast::PremKind::Iter(ast::IterPrem {
-        prem: Box::new(prem),
-        prem_iter: ast::PremIter {
-            iter: ast::Iter::List,
-            vars_bound: vec![var_bound], vars_bind: vec![var_bind],
-        },
-    }), span: Span::default());
     let rows = [vec![1, 2], vec![], vec![3]]
         .into_iter()
         .map(|row| {
@@ -428,12 +422,11 @@ fn test_iterated_premise_rows_read_parent_bindings_independently() {
         Span::default(),
     )
     .unwrap();
-    ctx.add_value(Variable::new(id("n"), vec![ast::Iter::List; 2]), value);
-    let Backtrack::Ok(ctx_post) = eval_prem(&mut runner, ctx.clone(), &prem) else {
+    ctx.add_slot(slot_n_nested.slot, value);
+    let Backtrack::Ok(ctx_post) = eval_prem(&mut runner, ctx.clone(), &prem_nested) else {
         panic!("nested iterated premise failed");
     };
-    let var_result_nested = Variable::new(id("n_result"), vec![ast::Iter::List; 2]);
-    let value = ctx_post.find_value(&var_result_nested).unwrap();
+    let value = ctx_post.find_value(&slot_result_nested).unwrap();
     let rows: Vec<Vec<_>> = get::list(runner.arena(), value)
         .unwrap()
         .iter()
@@ -446,8 +439,8 @@ fn test_iterated_premise_rows_read_parent_bindings_independently() {
         })
         .collect();
     assert_eq!(rows, [vec!["101", "102"], vec![], vec!["103"]]);
-    assert!(ctx_post.find_value_opt(&var_result).is_none());
-    assert!(ctx.find_value_opt(&var_result_nested).is_none());
+    assert!(ctx_post.find_value(&slot_result_list).is_err());
+    assert!(ctx.find_value(&slot_result_nested).is_err());
 }
 
 #[test]

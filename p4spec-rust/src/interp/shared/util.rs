@@ -1,21 +1,32 @@
-//! Iterated-variable recognition shared by assignment and evaluation
+//! Resolve simple iterated-variable expressions through their callable layout
 
-use crate::lang::{common::Variable, il::ast};
+use super::{context::ReadContext, prepare::expr as ast};
+use crate::lang::data::var::VarSlot;
 
-pub fn is_iter_var_exp(exp: &ast::Exp) -> Option<Variable> {
+pub fn find_iter_var_slot(ctx: &impl ReadContext, exp: &ast::Exp) -> Option<VarSlot> {
     match &exp.node {
-        ast::ExpKind::Id(id) => Some(Variable::new(id.clone(), vec![])),
-        ast::ExpKind::Iter(exp, (iter, vars)) => {
-            let mut var = is_iter_var_exp(exp)?;
-            let [binding] = vars.as_slice() else {
+        ast::ExpKind::Id(id) => Some(VarSlot {
+            slot: id.slot,
+            var: crate::lang::data::var::Var {
+                id: id.id.clone(),
+                typ: crate::phrase!(node: exp.note.as_ref().clone(), span: exp.span.clone()),
+                iters: vec![],
+            },
+        }),
+        ast::ExpKind::Iter(exp_inner, (iter, vars)) => {
+            let [var] = vars.as_slice() else {
                 return None;
             };
-            if var.id.node != binding.id.node || var.iters != binding.iters {
+            let slot_inner = find_iter_var_slot(ctx, exp_inner)?;
+            if slot_inner.var.id.node != var.var.id.node || slot_inner.var.iters != var.var.iters {
                 return None;
             }
-            var.iters.push(*iter);
-            Some(var)
+            Some(ctx.iter_slot(&slot_inner, *iter))
         }
         _ => None,
     }
+}
+
+pub fn iter_vars(ctx: &impl ReadContext, vars: &[ast::Var], iter: ast::Iter) -> Vec<ast::Var> {
+    vars.iter().map(|var| ctx.iter_slot(var, iter)).collect()
 }

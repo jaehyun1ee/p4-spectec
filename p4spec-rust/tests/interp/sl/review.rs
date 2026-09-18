@@ -1,4 +1,5 @@
 use super::*;
+use p4spec_rust::interp::shared::prepare::Prepare;
 use p4spec_rust::{
     interp::{
         shared::{
@@ -8,7 +9,7 @@ use p4spec_rust::{
         sl::context::Context,
     },
     lang::{
-        common::{Variable, notation::mixfix::Mixfix},
+        common::notation::mixfix::Mixfix,
         data::{typ, value::ValueArena},
         hints::input::InputHint,
     },
@@ -19,7 +20,7 @@ fn id(name: &str) -> ast::Id {
     phrase!(node: name.to_owned(), span: Span::default())
 }
 fn var(name: &str) -> ast::Exp {
-    note_phrase!(node: ast::ExpKind::Id(id(name)), note: typ::make::nat().node, span: Span::default())
+    p4spec_rust::note_phrase!(node: p4spec_rust::lang::il::ast::ExpKind::Id(id(name)), note: typ::make::nat().node, span: Span::default())
 }
 fn call(name: &str) -> ast::Instr {
     let exp = note_phrase!(node: ast::ExpKind::Call(id(name), vec![], vec![]), note: typ::make::nat().node, span: Span::default());
@@ -73,10 +74,8 @@ fn has_invocation(error: &Error, text: &str) -> bool {
 #[test]
 fn optional_destructuring_preserves_outer_scalars() {
     let global = Global::load(vec![]).unwrap();
-    let mut ctx = Context::new(&global);
     let mut arena = ValueArena::default();
     let value_outer = make::nat(&mut arena, 5u64.into(), Span::default()).unwrap();
-    ctx.add_value(Variable::new(id("n"), vec![]), value_outer);
     let typ_tuple = typ::make::tuple(vec![typ::make::nat(), typ::make::nat()]);
     let exp_tuple = note_phrase!(node: ast::ExpKind::Tuple(vec![var("n"), var("m")]), note: typ_tuple.node.clone(), span: Span::default());
     let typ_opt = typ::make::opt(typ_tuple.clone());
@@ -85,6 +84,11 @@ fn optional_destructuring_preserves_outer_scalars() {
         .map(|name| ast::Var { id: id(name), typ: typ::make::nat(), iters: vec![] })
         .collect();
     let exp = note_phrase!(node: ast::ExpKind::Iter(Box::new(exp_tuple), (ast::Iter::Opt, vars)), note: typ_opt.node.clone(), span: Span::default());
+    let mut layout = p4spec_rust::runtime::envs::interp::shared::frame::FrameLayout::default();
+    let exp = exp.prepare(&mut layout);
+    let slot = layout.resolve_var(ast::Var { id: id("n"), typ: typ::make::nat(), iters: vec![] });
+    let mut ctx = Context::new(&global).localize_with_layout(&std::rc::Rc::new(layout.clone()));
+    ctx.add_slot(slot.slot, value_outer);
     let values: Vec<_> = [7u64, 9]
         .into_iter()
         .map(|num| make::nat(&mut arena, num.into(), Span::default()).unwrap())
@@ -97,14 +101,30 @@ fn optional_destructuring_preserves_outer_scalars() {
     let ctx = assign_exp(&mut arena, ctx, &exp, value_opt)
         .finish()
         .unwrap();
-    assert_eq!(*ctx.find_value(&Variable::new(id("n"), vec![])).unwrap(), value_outer);
+    assert_eq!(
+        *ctx.find_value(&layout.resolve_var(p4spec_rust::lang::il::ast::Var {
+            id: id("n"),
+            typ: p4spec_rust::lang::data::typ::make::nat(),
+            iters: vec![]
+        }))
+        .unwrap(),
+        value_outer
+    );
     assert!(
-        ctx.find_value_opt(&Variable::new(id("m"), vec![]))
-            .is_none()
+        ctx.find_value(&layout.resolve_var(p4spec_rust::lang::il::ast::Var {
+            id: id("m"),
+            typ: p4spec_rust::lang::data::typ::make::nat(),
+            iters: vec![]
+        }))
+        .is_err()
     );
     for (name, value) in ["n", "m"].into_iter().zip(values) {
         let value_opt = ctx
-            .find_value(&Variable::new(id(name), vec![ast::Iter::Opt]))
+            .find_value(&layout.resolve_var(p4spec_rust::lang::il::ast::Var {
+                id: id(name),
+                typ: p4spec_rust::lang::data::typ::make::nat(),
+                iters: vec![ast::Iter::Opt],
+            }))
             .unwrap();
         assert_eq!(get::opt(&arena, value_opt).unwrap(), Some(value));
     }
@@ -112,10 +132,22 @@ fn optional_destructuring_preserves_outer_scalars() {
     let ctx = assign_exp(&mut arena, ctx, &exp, value_none)
         .finish()
         .unwrap();
-    assert_eq!(*ctx.find_value(&Variable::new(id("n"), vec![])).unwrap(), value_outer);
+    assert_eq!(
+        *ctx.find_value(&layout.resolve_var(p4spec_rust::lang::il::ast::Var {
+            id: id("n"),
+            typ: p4spec_rust::lang::data::typ::make::nat(),
+            iters: vec![]
+        }))
+        .unwrap(),
+        value_outer
+    );
     assert!(
-        ctx.find_value_opt(&Variable::new(id("m"), vec![]))
-            .is_none()
+        ctx.find_value(&layout.resolve_var(p4spec_rust::lang::il::ast::Var {
+            id: id("m"),
+            typ: p4spec_rust::lang::data::typ::make::nat(),
+            iters: vec![]
+        }))
+        .is_err()
     );
 }
 
