@@ -8,11 +8,11 @@ use std::rc::Rc;
 
 use crate::{
     lang::{
+        common::prim::{bool as boolean, num},
         common::source::{Phrase, Span},
         data::value::{Value, ValueArena, ValueKind, get, make},
         il::ast,
         traits::eq::SyntaxEq,
-        xl::{bool as boolean, num},
     },
     runtime::ops::typ::{Theta, subst_typ},
 };

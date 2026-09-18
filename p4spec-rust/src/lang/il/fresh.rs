@@ -6,7 +6,6 @@ use crate::lang::{
         source::Span,
     },
     traits::{eq::SyntaxEq, print::Print},
-    xl,
 };
 
 use super::ast::*;
@@ -14,10 +13,10 @@ use super::ast::*;
 type Metavars = IdMap<Typ>;
 
 pub(crate) fn id(ids: &IdSet, id: &Id) -> Id {
-    let base = xl::var::strip_var_suffix(id).node;
+    let base = id.strip_suffix().node;
     let ids = ids
         .iter()
-        .filter(|id_other| xl::var::strip_var_suffix(id_other).node == base)
+        .filter(|id_other| id_other.strip_suffix().node == base)
         .cloned()
         .collect::<IdSet>();
     let mut fresh = id.clone();

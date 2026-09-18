@@ -158,8 +158,10 @@ where
     Interp: Interpreter<Iface, Ext>,
 {
     let value_size = ctx.call_func("sizeof_minSizeInBits'", &[], &[value_typ])?;
-    Ok(crate::lang::xl::num::to_int(get::num(ctx.arena(), &value_size).map_err(ExternError::from)?)
-        .clone())
+    Ok(crate::lang::common::prim::num::to_int(
+        get::num(ctx.arena(), &value_size).map_err(ExternError::from)?,
+    )
+    .clone())
 }
 
 pub fn sizeof_max_size_in_bits<Interp, Iface, Ext>(
@@ -172,8 +174,10 @@ where
     Interp: Interpreter<Iface, Ext>,
 {
     let value_size = ctx.call_func("sizeof_maxSizeInBits'", &[], &[value_typ])?;
-    Ok(crate::lang::xl::num::to_int(get::num(ctx.arena(), &value_size).map_err(ExternError::from)?)
-        .clone())
+    Ok(crate::lang::common::prim::num::to_int(
+        get::num(ctx.arena(), &value_size).map_err(ExternError::from)?,
+    )
+    .clone())
 }
 
 pub fn cast_op<Interp, Iface, Ext>(
@@ -216,7 +220,7 @@ where
 {
     let value_varsize = make::nat(
         ctx.arena_mut(),
-        crate::lang::xl::num::Natural::try_from(num_bigint::BigInt::from(size_varsize))
+        crate::lang::common::prim::num::Natural::try_from(num_bigint::BigInt::from(size_varsize))
             .expect("packet size is nonnegative"),
         Span::default(),
     )

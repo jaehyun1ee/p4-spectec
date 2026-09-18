@@ -212,8 +212,8 @@ fn test_subtyping_covers_numeric_iteration_tuple_and_variant_rules() {
     assert!(
         sub_typ(
             &env,
-            &typ(TypKind::Num(p4spec_rust::lang::xl::num::Typ::Nat)),
-            &typ(TypKind::Num(p4spec_rust::lang::xl::num::Typ::Int)),
+            &typ(TypKind::Num(p4spec_rust::lang::common::prim::num::Typ::Nat)),
+            &typ(TypKind::Num(p4spec_rust::lang::common::prim::num::Typ::Int)),
         )
         .unwrap()
     );
@@ -236,18 +236,18 @@ fn test_subtyping_covers_numeric_iteration_tuple_and_variant_rules() {
 fn test_subtype_optimization_emits_structural_checks_only_when_needed() {
     let env = TDEnv::new();
     let typ_source = typ(TypKind::Tuple(vec![
-        typ(TypKind::Num(p4spec_rust::lang::xl::num::Typ::Int)),
+        typ(TypKind::Num(p4spec_rust::lang::common::prim::num::Typ::Int)),
         iter(typ(TypKind::Text), Iter::List),
     ]));
     let typ_target = typ(TypKind::Tuple(vec![
-        typ(TypKind::Num(p4spec_rust::lang::xl::num::Typ::Nat)),
+        typ(TypKind::Num(p4spec_rust::lang::common::prim::num::Typ::Nat)),
         iter(typ(TypKind::Bool), Iter::List),
     ]));
 
     assert_eq!(
         optimize_sub_typ(&env, &typ_source, &typ_target).unwrap(),
         Subcheck::Tuple(vec![
-            Subcheck::Recurse(typ(TypKind::Num(p4spec_rust::lang::xl::num::Typ::Nat))),
+            Subcheck::Recurse(typ(TypKind::Num(p4spec_rust::lang::common::prim::num::Typ::Nat))),
             Subcheck::Iter(Iter::List, Box::new(Subcheck::Recurse(typ(TypKind::Bool)))),
         ])
     );

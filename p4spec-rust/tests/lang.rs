@@ -14,5 +14,3 @@ mod il;
 mod pl;
 #[path = "lang/sl.rs"]
 mod sl;
-#[path = "lang/xl.rs"]
-mod xl;

@@ -5,10 +5,10 @@ use thiserror::Error;
 
 use crate::{
     lang::{
+        common::prim::num::{Number, Typ as NumTyp},
         common::source::Span,
         data::value::{Value, ValueArena, ValueKind},
         il::ast::{DefTypKind, FuncTyp, Id, Iter, Subcheck, Typ, TypKind},
-        xl::num::{Number, Typ as NumTyp},
     },
     runtime::{
         ops::typ::{Theta, TypeError, equiv_func_typ, subst_not_typ, subst_typ},

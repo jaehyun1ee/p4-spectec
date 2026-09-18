@@ -12,11 +12,11 @@ use crate::{
     lang::{
         al,
         common::notation::{atom::Atom, mixfix::Mixfix, mixop::Mixop},
+        common::prim::num::Number,
         hints::alter::{self, AlterationHint, Renderer},
         il::ast::{DefTypKind, TypKind},
         sl,
         traits::print::Print,
-        xl::num::Number,
     },
     util::text::escape_text,
 };

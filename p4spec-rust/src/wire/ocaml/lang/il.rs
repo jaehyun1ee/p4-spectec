@@ -5,8 +5,8 @@ use serde_json::json;
 use crate::util::json::json;
 
 use crate::lang::{
+    common::prim::{bool, num},
     il::ast::{self, *},
-    xl::{bool, num},
 };
 
 use super::{

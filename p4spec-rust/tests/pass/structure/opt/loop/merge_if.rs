@@ -109,7 +109,7 @@ fn test_iterator_compatibility_and_partition_conditions_remain_separate() {
     }
     let block = merge_if::apply(&TDEnv::new(), &mut false, vec![instr_a, instr_b]).unwrap();
     assert_eq!(block.len(), 1);
-    let exp_not = crate::note_phrase!(node: ExpKind::Un(UnOp::Bool(crate::lang::xl::bool::UnOp::Not),OpTyp::Bool,Box::new(var("p"))),note: TypKind::Bool,span: Default::default());
+    let exp_not = crate::note_phrase!(node: ExpKind::Un(UnOp::Bool(crate::lang::common::prim::bool::UnOp::Not),OpTyp::Bool,Box::new(var("p"))),note: TypKind::Bool,span: Default::default());
     let block_input = vec![branch(var("p"), "a", 1), branch(exp_not, "b", 2)];
     assert_eq!(
         merge_if::apply(&TDEnv::new(), &mut false, block_input.clone()).unwrap(),

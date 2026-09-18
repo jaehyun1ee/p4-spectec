@@ -23,7 +23,7 @@ fn branch(exp: Exp, text: &str, int_line: usize) -> Instr {
 }
 
 fn neg(exp: Exp) -> Exp {
-    crate::note_phrase!(node: ExpKind::Un(crate::lang::il::ast::UnOp::Bool(crate::lang::xl::bool::UnOp::Not), crate::lang::il::ast::OpTyp::Bool, Box::new(exp)), note: TypKind::Bool, span: Default::default())
+    crate::note_phrase!(node: ExpKind::Un(crate::lang::il::ast::UnOp::Bool(crate::lang::common::prim::bool::UnOp::Not), crate::lang::il::ast::OpTyp::Bool, Box::new(exp)), note: TypKind::Bool, span: Default::default())
 }
 
 #[test]
@@ -45,7 +45,7 @@ fn test_partition_becomes_total_case_and_preserves_tail_span() {
 }
 
 fn cmp(text: &str) -> Exp {
-    crate::note_phrase!(node: ExpKind::Cmp(crate::lang::il::ast::CmpOp::Bool(crate::lang::xl::bool::CmpOp::Eq), crate::lang::il::ast::OpTyp::Bool, Box::new(var("p")), Box::new(crate::note_phrase!(node: ExpKind::Text(text.into()), note: TypKind::Text, span: Default::default()))), note: TypKind::Bool, span: Default::default())
+    crate::note_phrase!(node: ExpKind::Cmp(crate::lang::il::ast::CmpOp::Bool(crate::lang::common::prim::bool::CmpOp::Eq), crate::lang::il::ast::OpTyp::Bool, Box::new(var("p")), Box::new(crate::note_phrase!(node: ExpKind::Text(text.into()), note: TypKind::Text, span: Default::default()))), note: TypKind::Bool, span: Default::default())
 }
 
 fn guard(text: &str) -> Guard {

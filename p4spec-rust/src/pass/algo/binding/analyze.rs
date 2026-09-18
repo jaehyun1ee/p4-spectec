@@ -43,11 +43,11 @@
 use crate::{
     lang::{
         al,
+        common::prim,
         common::{notation::mixop::Mixop, source::Span},
         hints::input::{self, InputHint},
         il::ast,
         traits::free::Free,
-        xl,
     },
     phrase,
     runtime::{dim::Dim, envs::algo::VEnv, typdef::TypeDef},
@@ -336,7 +336,7 @@ fn analyze_if_prem(
     span: &Span,
     if_prem_il: &ast::IfPrem,
 ) -> Result<(VEnv, al::ast::Prem, Vec<al::ast::Prem>), AlgoError> {
-    if let ast::ExpKind::Cmp(ast::CmpOp::Bool(xl::bool::CmpOp::Eq), _, exp_l_il, exp_r_il) =
+    if let ast::ExpKind::Cmp(ast::CmpOp::Bool(prim::bool::CmpOp::Eq), _, exp_l_il, exp_r_il) =
         &if_prem_il.exp.node
     {
         analyze_if_eq_prem(ctx, iter_ctx, span, if_prem_il, exp_l_il, exp_r_il)

@@ -3,6 +3,7 @@
 use std::rc::Rc;
 
 use crate::lang::{
+    common::prim::num,
     common::{
         self,
         notation::{atom, mixfix::Mixfix, mixop},
@@ -10,7 +11,6 @@ use crate::lang::{
     },
     data, el,
     hints::input::InputHint,
-    xl::num,
 };
 
 // Numbers

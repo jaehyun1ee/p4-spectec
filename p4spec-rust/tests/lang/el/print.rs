@@ -12,14 +12,14 @@ fn test_printer_preserves_el_delimiters_precedence_hints_and_definition_separato
                 ExpKind::Paren(Box::new(exp(
                     ExpKind::Bin(
                         Box::new(exp(ExpKind::Id(id("a", "a")), "a")),
-                        ast::BinOp::Num(p4spec_rust::lang::xl::num::BinOp::Add),
+                        ast::BinOp::Num(p4spec_rust::lang::common::prim::num::BinOp::Add),
                         Box::new(exp(ExpKind::Id(id("b", "b")), "b")),
                     ),
                     "inner",
                 ))),
                 "outer",
             )),
-            ast::BinOp::Num(p4spec_rust::lang::xl::num::BinOp::Mul),
+            ast::BinOp::Num(p4spec_rust::lang::common::prim::num::BinOp::Mul),
             Box::new(exp(
                 ExpKind::Iter(Box::new(exp(ExpKind::Id(id("c", "c")), "c")), ast::Iter::Opt),
                 "outer",
@@ -153,12 +153,18 @@ fn test_printer_matches_ocaml_byte_escaping_and_public_collection_helpers() {
         Print::to_string(&exp(ExpKind::Latex(escaped.into()), "latex")),
         "latex(\\\"\\\\'\\n\\r\\t\\b\\012\\001\\195\\169)"
     );
-    assert_eq!(Print::to_string(&ast::UnOp::Num(p4spec_rust::lang::xl::num::UnOp::Minus)), "-");
     assert_eq!(
-        Print::to_string(&ast::BinOp::Bool(p4spec_rust::lang::xl::bool::BinOp::Equiv,)),
+        Print::to_string(&ast::UnOp::Num(p4spec_rust::lang::common::prim::num::UnOp::Minus)),
+        "-"
+    );
+    assert_eq!(
+        Print::to_string(&ast::BinOp::Bool(p4spec_rust::lang::common::prim::bool::BinOp::Equiv,)),
         "<=>"
     );
-    assert_eq!(Print::to_string(&ast::CmpOp::Bool(p4spec_rust::lang::xl::bool::CmpOp::Ne)), "=/=");
+    assert_eq!(
+        Print::to_string(&ast::CmpOp::Bool(p4spec_rust::lang::common::prim::bool::CmpOp::Ne)),
+        "=/="
+    );
     let atom_type = p4spec_rust::phrase! {
         node: ast::NotTypKind::Atom(atom("A")),
         span: span("type"),

@@ -118,7 +118,7 @@ fn test_free_expression_variants_follow_the_oracle() {
         (
             "unary",
             exp(ast::ExpKind::Un(
-                ast::UnOp::Bool(p4spec_rust::lang::xl::bool::UnOp::Not),
+                ast::UnOp::Bool(p4spec_rust::lang::common::prim::bool::UnOp::Not),
                 ast::OpTyp::Bool,
                 Box::new(variable("unary")),
             )),
@@ -127,7 +127,7 @@ fn test_free_expression_variants_follow_the_oracle() {
         (
             "binary",
             exp(ast::ExpKind::Bin(
-                ast::BinOp::Num(p4spec_rust::lang::xl::num::BinOp::Add),
+                ast::BinOp::Num(p4spec_rust::lang::common::prim::num::BinOp::Add),
                 ast::OpTyp::Nat,
                 Box::new(variable("left")),
                 Box::new(variable("right")),
@@ -137,7 +137,7 @@ fn test_free_expression_variants_follow_the_oracle() {
         (
             "comparison",
             exp(ast::ExpKind::Cmp(
-                ast::CmpOp::Bool(p4spec_rust::lang::xl::bool::CmpOp::Eq),
+                ast::CmpOp::Bool(p4spec_rust::lang::common::prim::bool::CmpOp::Eq),
                 ast::OpTyp::Bool,
                 Box::new(variable("left")),
                 Box::new(variable("right")),

@@ -27,10 +27,10 @@
 use crate::{
     lang::{
         al,
+        common::prim,
         common::{ds::set::IdSet, notation::mixop::Mixop},
         il::{ast, fresh, var},
         traits::free::Free,
-        xl,
     },
     note_phrase, phrase,
     runtime::{
@@ -145,7 +145,7 @@ fn gen_prem_bound(
             ast::ExpKind::Match(Box::new(exp_l), ast::Pattern::List(ast::ListPattern::Nil))
         }
         _ => ast::ExpKind::Cmp(
-            ast::CmpOp::Bool(xl::bool::CmpOp::Eq),
+            ast::CmpOp::Bool(prim::bool::CmpOp::Eq),
             ast::OpTyp::Bool,
             Box::new(exp_l),
             Box::new(exp_from.clone()),

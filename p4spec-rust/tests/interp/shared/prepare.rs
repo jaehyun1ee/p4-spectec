@@ -291,7 +291,7 @@ fn iterated_variable_lookup_requires_matching_single_binders() {
 fn borrowed_printers_preserve_comparison_arguments_and_iterator_diagnostics() {
     let exp_source = note_phrase!(
         node: il_source::ExpKind::Cmp(
-            il_source::CmpOp::Bool(p4spec_rust::lang::xl::bool::CmpOp::Eq),
+            il_source::CmpOp::Bool(p4spec_rust::lang::common::prim::bool::CmpOp::Eq),
             il_source::OpTyp::Bool,
             Box::new(expression("x", 1)),
             Box::new(expression("y", 2)),

@@ -255,7 +255,7 @@ fn long_tail_failures_render_and_drop_on_a_small_stack() {
 #[test]
 fn deeply_nested_blocks_execute_on_a_small_stack() {
     std::thread::Builder::new().stack_size(256 * 1024).spawn(|| {
-        let exp = note_phrase!(node: ast::ExpKind::Num(p4spec_rust::lang::xl::num::Number::Nat(7u64.into())), note: typ::make::nat().node, span: Span::default());
+        let exp = note_phrase!(node: ast::ExpKind::Num(p4spec_rust::lang::common::prim::num::Number::Nat(7u64.into())), note: typ::make::nat().node, span: Span::default());
         let mut instr = phrase!(node: ast::InstrKind::Return(ast::ReturnInstr { exp }), span: Span::default());
         for _ in 0..128 {
             instr = phrase!(node: ast::InstrKind::Group(ast::GroupInstr { id: id("group"), rel_signature: signature(), exps: vec![], block: vec![instr] }), span: Span::default());
@@ -272,13 +272,13 @@ fn if_call(name: &str) -> ast::Instr {
 }
 
 fn return_nat(num: u64) -> ast::Instr {
-    let exp = note_phrase!(node: ast::ExpKind::Num(p4spec_rust::lang::xl::num::Number::Nat(num.into())), note: typ::make::nat().node, span: Span::default());
+    let exp = note_phrase!(node: ast::ExpKind::Num(p4spec_rust::lang::common::prim::num::Number::Nat(num.into())), note: typ::make::nat().node, span: Span::default());
     phrase!(node: ast::InstrKind::Return(ast::ReturnInstr { exp }), span: Span::default())
 }
 
 #[test]
 fn let_body_unmatch_continues_to_the_next_instruction() {
-    let exp_zero = note_phrase!(node: ast::ExpKind::Num(p4spec_rust::lang::xl::num::Number::Nat(0u64.into())), note: typ::make::nat().node, span: Span::default());
+    let exp_zero = note_phrase!(node: ast::ExpKind::Num(p4spec_rust::lang::common::prim::num::Number::Nat(0u64.into())), note: typ::make::nat().node, span: Span::default());
     let instr_let = phrase!(node: ast::InstrKind::Let(ast::LetInstr {
         exp_l: var("n"), exp_r: exp_zero, iter_instrs: vec![], block: vec![if_call("miss")],
     }), span: Span::default());

@@ -6,7 +6,7 @@ use num_traits::Zero;
 use crate::{
     lang::common::source::Span,
     lang::data::value::{Value, ValueArena, get, make},
-    lang::{il::ast::Typ, xl::num},
+    lang::{common::prim::num, il::ast::Typ},
 };
 
 use super::{BuiltinError, extract};

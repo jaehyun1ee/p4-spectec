@@ -135,8 +135,8 @@ fn test_fixed_point_moves_surviving_expression_payloads() {
 #[test]
 fn test_reversed_equality_preserves_reachable_case_prefix() {
     use crate::lang::{
+        common::prim::bool::CmpOp as BoolCmpOp,
         il::ast::{CmpOp, OpTyp},
-        xl::bool::CmpOp as BoolCmpOp,
     };
     let exp_target = crate::note_phrase!(node: crate::lang::il::ast::ExpKind::Id(id("x")), note: TypKind::Text, span: span(1));
     let literal = |text: &str| crate::note_phrase!(node: ExpKind::Text(text.into()), note: TypKind::Text, span: span(1));

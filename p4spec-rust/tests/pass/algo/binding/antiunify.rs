@@ -118,11 +118,11 @@ fn test_failed_antiunification_preserves_free_identifiers() {
     let exp_bool_b = exp(ast::ExpKind::Bool(false), ast::TypKind::Bool, 6);
     let exp_nat = exp(
         ast::ExpKind::Num(ast::Num::Nat(0_u64.into())),
-        ast::TypKind::Num(xl::num::Typ::Nat),
+        ast::TypKind::Num(prim::num::Typ::Nat),
         7,
     );
     let typ_nat = crate::phrase! {
-        node: ast::TypKind::Num(xl::num::Typ::Nat),
+        node: ast::TypKind::Num(prim::num::Typ::Nat),
         span: span(7),
     };
     let typ_kind_a = ast::TypKind::Tuple(vec![typ::make::bool(), typ::make::bool()]);

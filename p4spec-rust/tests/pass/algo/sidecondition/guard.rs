@@ -15,7 +15,7 @@ fn test_conversion_inserts_index_guards_at_evaluation_sites_in_source_order() {
         };
         assert_eq!(if_prem.exp.span, guard_span);
         let ast::ExpKind::Cmp(
-            ast::CmpOp::Num(xl::num::CmpOp::Lt),
+            ast::CmpOp::Num(prim::num::CmpOp::Lt),
             ast::OpTyp::Bool,
             exp_idx,
             exp_len,
@@ -45,7 +45,7 @@ fn test_conversion_inserts_index_guards_at_evaluation_sites_in_source_order() {
     );
     let exp_condition = exp(
         ast::ExpKind::Cmp(
-            ast::CmpOp::Bool(xl::bool::CmpOp::Eq),
+            ast::CmpOp::Bool(prim::bool::CmpOp::Eq),
             ast::OpTyp::Bool,
             Box::new(exp_idx_prem),
             Box::new(exp(ast::ExpKind::Bool(true), ast::TypKind::Bool, 13)),
@@ -101,7 +101,7 @@ fn test_conversion_inserts_list_and_optional_iteration_guards_in_source_order() 
 
     fn list_pair(exp: &ast::Exp) -> (&str, &str) {
         let ast::ExpKind::Cmp(
-            ast::CmpOp::Bool(xl::bool::CmpOp::Eq),
+            ast::CmpOp::Bool(prim::bool::CmpOp::Eq),
             ast::OpTyp::Bool,
             exp_l,
             exp_r,
@@ -120,7 +120,7 @@ fn test_conversion_inserts_list_and_optional_iteration_guards_in_source_order() 
 
     fn optional_name(exp: &ast::Exp) -> &str {
         let ast::ExpKind::Cmp(
-            ast::CmpOp::Bool(xl::bool::CmpOp::Eq),
+            ast::CmpOp::Bool(prim::bool::CmpOp::Eq),
             ast::OpTyp::Bool,
             exp_l,
             exp_r,
@@ -134,7 +134,7 @@ fn test_conversion_inserts_list_and_optional_iteration_guards_in_source_order() 
 
     fn optional_pair(exp: &ast::Exp) -> (&str, &str) {
         let ast::ExpKind::Bin(
-            ast::BinOp::Bool(xl::bool::BinOp::Equiv),
+            ast::BinOp::Bool(prim::bool::BinOp::Equiv),
             ast::OpTyp::Bool,
             exp_l,
             exp_r,
@@ -184,7 +184,7 @@ fn test_conversion_inserts_list_and_optional_iteration_guards_in_source_order() 
         panic!("expected list guard premise");
     };
     let ast::ExpKind::Bin(
-        ast::BinOp::Bool(xl::bool::BinOp::And),
+        ast::BinOp::Bool(prim::bool::BinOp::And),
         ast::OpTyp::Bool,
         pair_xy,
         pair_yz,
@@ -200,7 +200,7 @@ fn test_conversion_inserts_list_and_optional_iteration_guards_in_source_order() 
         panic!("expected optional guard premise");
     };
     let ast::ExpKind::Bin(
-        ast::BinOp::Bool(xl::bool::BinOp::And),
+        ast::BinOp::Bool(prim::bool::BinOp::And),
         ast::OpTyp::Bool,
         pair_pq,
         pair_qr,
@@ -242,12 +242,12 @@ fn test_conversion_preserves_numeric_and_slice_checks_before_output_guards() {
     let typ_list = typ::make::list(typ_nat.clone());
     let exp_zero = exp(
         ast::ExpKind::Num(ast::Num::Nat(0_u64.into())),
-        ast::TypKind::Num(xl::num::Typ::Nat),
+        ast::TypKind::Num(prim::num::Typ::Nat),
         10,
     );
     let exp_nonzero = exp(
         ast::ExpKind::Cmp(
-            ast::CmpOp::Bool(xl::bool::CmpOp::Ne),
+            ast::CmpOp::Bool(prim::bool::CmpOp::Ne),
             ast::OpTyp::Bool,
             Box::new(typed_var_exp("d", &typ_nat, 10)),
             Box::new(exp_zero),
@@ -258,23 +258,23 @@ fn test_conversion_preserves_numeric_and_slice_checks_before_output_guards() {
     let prem_nonzero = if_prem(exp_nonzero);
     let exp_end = exp(
         ast::ExpKind::Bin(
-            ast::BinOp::Num(xl::num::BinOp::Add),
+            ast::BinOp::Num(prim::num::BinOp::Add),
             ast::OpTyp::Nat,
             Box::new(typed_var_exp("offset", &typ_nat, 11)),
             Box::new(typed_var_exp("length", &typ_nat, 11)),
         ),
-        ast::TypKind::Num(xl::num::Typ::Nat),
+        ast::TypKind::Num(prim::num::Typ::Nat),
         11,
     );
     let exp_base_for_len = iterated_var_exp("xs", &typ_nat, ast::Iter::List, 12);
     let exp_len = exp(
         ast::ExpKind::Len(Box::new(exp_base_for_len)),
-        ast::TypKind::Num(xl::num::Typ::Nat),
+        ast::TypKind::Num(prim::num::Typ::Nat),
         12,
     );
     let exp_slice_bound = exp(
         ast::ExpKind::Cmp(
-            ast::CmpOp::Num(xl::num::CmpOp::Le),
+            ast::CmpOp::Num(prim::num::CmpOp::Le),
             ast::OpTyp::Bool,
             Box::new(exp_end),
             Box::new(exp_len),
@@ -288,17 +288,17 @@ fn test_conversion_preserves_numeric_and_slice_checks_before_output_guards() {
             Box::new(iterated_var_exp("xs", &typ_nat, ast::Iter::List, 20)),
             Box::new(typed_var_exp("index", &typ_nat, 21)),
         ),
-        ast::TypKind::Num(xl::num::Typ::Nat),
+        ast::TypKind::Num(prim::num::Typ::Nat),
         22,
     );
     let exp_division = exp(
         ast::ExpKind::Bin(
-            ast::BinOp::Num(xl::num::BinOp::Div),
+            ast::BinOp::Num(prim::num::BinOp::Div),
             ast::OpTyp::Nat,
             Box::new(exp_idx),
             Box::new(typed_var_exp("d", &typ_nat, 23)),
         ),
-        ast::TypKind::Num(xl::num::Typ::Nat),
+        ast::TypKind::Num(prim::num::Typ::Nat),
         23,
     );
     let exp_slice = exp(
@@ -312,12 +312,12 @@ fn test_conversion_preserves_numeric_and_slice_checks_before_output_guards() {
     );
     let exp_remainder = exp(
         ast::ExpKind::Bin(
-            ast::BinOp::Num(xl::num::BinOp::Mod),
+            ast::BinOp::Num(prim::num::BinOp::Mod),
             ast::OpTyp::Nat,
             Box::new(typed_var_exp("value", &typ_nat, 25)),
             Box::new(typed_var_exp("d", &typ_nat, 25)),
         ),
-        ast::TypKind::Num(xl::num::Typ::Nat),
+        ast::TypKind::Num(prim::num::Typ::Nat),
         25,
     );
     let exp_output = exp(
@@ -361,7 +361,7 @@ fn test_conversion_preserves_numeric_and_slice_checks_before_output_guards() {
     };
     assert!(matches!(
         if_index.exp.node,
-        ast::ExpKind::Cmp(ast::CmpOp::Num(xl::num::CmpOp::Lt), _, _, _)
+        ast::ExpKind::Cmp(ast::CmpOp::Num(prim::num::CmpOp::Lt), _, _, _)
     ));
     assert_eq!(index_guard.span, span(22));
 }
@@ -405,7 +405,7 @@ fn test_conversion_distinguishes_iterated_must_guards_from_insert_guards() {
     let typ_bool = typ::make::bool();
     let exp_condition = exp(
         ast::ExpKind::Cmp(
-            ast::CmpOp::Bool(xl::bool::CmpOp::Eq),
+            ast::CmpOp::Bool(prim::bool::CmpOp::Eq),
             ast::OpTyp::Bool,
             Box::new(typed_var_exp("left", &typ_bool, 12)),
             Box::new(typed_var_exp("right", &typ_bool, 13)),

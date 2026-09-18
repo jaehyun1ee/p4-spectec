@@ -12,9 +12,9 @@
 use crate::{
     lang::{
         al::{self, ast},
+        common::prim,
         common::source::Span,
         traits::{eq::SyntaxEq, free::Free},
-        xl,
     },
     note_phrase, phrase,
 };
@@ -77,13 +77,13 @@ impl<'a> EquivalenceTable<'a> {
 
     fn add_if_exp(&mut self, exp: &'a ast::Exp) {
         match &exp.node {
-            ast::ExpKind::Cmp(ast::CmpOp::Bool(xl::bool::CmpOp::Eq), _, exp_l, exp_r) => {
+            ast::ExpKind::Cmp(ast::CmpOp::Bool(prim::bool::CmpOp::Eq), _, exp_l, exp_r) => {
                 self.union(ClassKind::Equals, exp_l, exp_r)
             }
-            ast::ExpKind::Bin(ast::BinOp::Bool(xl::bool::BinOp::Equiv), _, exp_l, exp_r) => {
+            ast::ExpKind::Bin(ast::BinOp::Bool(prim::bool::BinOp::Equiv), _, exp_l, exp_r) => {
                 self.union(ClassKind::Equiv, exp_l, exp_r)
             }
-            ast::ExpKind::Bin(ast::BinOp::Bool(xl::bool::BinOp::And), _, exp_l, exp_r) => {
+            ast::ExpKind::Bin(ast::BinOp::Bool(prim::bool::BinOp::And), _, exp_l, exp_r) => {
                 self.add_if_exp(exp_l);
                 self.add_if_exp(exp_r);
             }
@@ -162,13 +162,13 @@ impl<'a> EquivalenceTable<'a> {
 
     fn implies_exp(&self, exp: &ast::Exp) -> bool {
         match &exp.node {
-            ast::ExpKind::Cmp(ast::CmpOp::Bool(xl::bool::CmpOp::Eq), _, exp_l, exp_r) => {
+            ast::ExpKind::Cmp(ast::CmpOp::Bool(prim::bool::CmpOp::Eq), _, exp_l, exp_r) => {
                 self.contains(ClassKind::Equals, exp_l, exp_r)
             }
-            ast::ExpKind::Bin(ast::BinOp::Bool(xl::bool::BinOp::Equiv), _, exp_l, exp_r) => {
+            ast::ExpKind::Bin(ast::BinOp::Bool(prim::bool::BinOp::Equiv), _, exp_l, exp_r) => {
                 self.contains(ClassKind::Equiv, exp_l, exp_r)
             }
-            ast::ExpKind::Bin(ast::BinOp::Bool(xl::bool::BinOp::And), _, exp_l, exp_r) => {
+            ast::ExpKind::Bin(ast::BinOp::Bool(prim::bool::BinOp::And), _, exp_l, exp_r) => {
                 self.implies_exp(exp_l) && self.implies_exp(exp_r)
             }
             _ => self.classes.iter().any(
@@ -275,12 +275,12 @@ fn gen_index_guard(
     let span = exp_al.span.clone();
     let exp_len_al = note_phrase! {
         node: ast::ExpKind::Len(Box::new(exp_base_al.clone())),
-        note: ast::TypKind::Num(xl::num::Typ::Nat),
+        note: ast::TypKind::Num(prim::num::Typ::Nat),
         span: span.clone(),
     };
     let exp_guard_al = note_phrase! {
         node: ast::ExpKind::Cmp(
-            ast::CmpOp::Num(xl::num::CmpOp::Lt),
+            ast::CmpOp::Num(prim::num::CmpOp::Lt),
             ast::OpTyp::Bool,
             Box::new(exp_idx_al.clone()),
             Box::new(exp_len_al),
@@ -306,7 +306,7 @@ fn gen_exp_eq_epsilon(iter: ast::Iter, var: &ast::Var) -> ast::Exp {
     };
     note_phrase! {
         node: ast::ExpKind::Cmp(
-            ast::CmpOp::Bool(xl::bool::CmpOp::Eq),
+            ast::CmpOp::Bool(prim::bool::CmpOp::Eq),
             ast::OpTyp::Bool,
             Box::new(exp_al),
             Box::new(exp_epsilon_al),
@@ -323,7 +323,7 @@ fn gen_exp_len(iter: ast::Iter, var: &ast::Var) -> ast::Exp {
     let span = exp_al.span.clone();
     note_phrase! {
         node: ast::ExpKind::Len(Box::new(exp_al)),
-        note: ast::TypKind::Num(xl::num::Typ::Nat),
+        note: ast::TypKind::Num(prim::num::Typ::Nat),
         span: span,
     }
 }
@@ -332,13 +332,13 @@ fn gen_exp_pair(iter: ast::Iter, exp_l_al: ast::Exp, exp_r_al: ast::Exp) -> ast:
     let span = Span::over(&[exp_l_al.span.clone(), exp_r_al.span.clone()]);
     let exp_kind = match iter {
         ast::Iter::Opt => ast::ExpKind::Bin(
-            ast::BinOp::Bool(xl::bool::BinOp::Equiv),
+            ast::BinOp::Bool(prim::bool::BinOp::Equiv),
             ast::OpTyp::Bool,
             Box::new(exp_l_al),
             Box::new(exp_r_al),
         ),
         ast::Iter::List => ast::ExpKind::Cmp(
-            ast::CmpOp::Bool(xl::bool::CmpOp::Eq),
+            ast::CmpOp::Bool(prim::bool::CmpOp::Eq),
             ast::OpTyp::Bool,
             Box::new(exp_l_al),
             Box::new(exp_r_al),
@@ -351,7 +351,7 @@ fn gen_exp_and(exp_l_al: ast::Exp, exp_r_al: ast::Exp) -> ast::Exp {
     let span = Span::over(&[exp_l_al.span.clone(), exp_r_al.span.clone()]);
     note_phrase! {
         node: ast::ExpKind::Bin(
-            ast::BinOp::Bool(xl::bool::BinOp::And),
+            ast::BinOp::Bool(prim::bool::BinOp::And),
             ast::OpTyp::Bool,
             Box::new(exp_l_al),
             Box::new(exp_r_al),

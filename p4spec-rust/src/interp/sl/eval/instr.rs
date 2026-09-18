@@ -18,10 +18,10 @@ use crate::{
         error::{ErrorKind, PremErrorKind, TraceErrorKind},
     },
     lang::{
+        common::prim::bool as boolean,
         common::source::Span,
         data::value::{Value, ValueKind, get},
         traits::{eq::SyntaxEq, print::Print},
-        xl::bool as boolean,
     },
     runner::{Extern, Interface, RunnerContext},
 };

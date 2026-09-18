@@ -2,7 +2,7 @@ use super::*;
 use p4spec_rust::interp::shared::prepare::Prepare;
 use p4spec_rust::{
     interp::shared::error::{CallErrorKind, ErrorKind},
-    lang::{data::typ, xl::num::Number},
+    lang::{common::prim::num::Number, data::typ},
     note_phrase, phrase,
 };
 
@@ -66,8 +66,8 @@ fn case_selection_commits_to_the_first_matching_guard_before_body_fallthrough() 
 #[test]
 fn all_case_guard_forms_dispatch_through_expression_semantics() {
     use p4spec_rust::lang::{
+        common::prim::bool as bool_op,
         il::ast::{ListPattern, Subcheck},
-        xl::bool as bool_op,
     };
     let cases = [
         (boolean(false), ast::Guard::Bool(false)),
@@ -231,7 +231,7 @@ fn type_arguments_shadow_global_type_definitions() {
 
 #[test]
 fn case_comparison_rhs_reads_the_enclosing_context() {
-    use p4spec_rust::lang::xl::bool as bool_op;
+    use p4spec_rust::lang::common::prim::bool as bool_op;
     let exp_r: ast::Exp = note_phrase!(
         node: ast::ExpKind::Id(phrase!(node: "x".to_owned(), span: Span::default())),
         note: typ::make::nat().node, span: Span::default(),
@@ -258,7 +258,7 @@ fn case_comparison_rhs_reads_the_enclosing_context() {
 fn case_guard_errors_keep_the_expression_trace_and_scrutinee_span() {
     use p4spec_rust::{
         interp::shared::error::{Error, TraceErrorKind},
-        lang::{common::source::Position, xl::num},
+        lang::{common::prim::num, common::source::Position},
     };
     fn has_trace(error: &Error, text: &str, span: &Span) -> bool {
         (matches!(&*error.kind, ErrorKind::Trace(TraceErrorKind::Evaluation { text: actual }) if actual == text)

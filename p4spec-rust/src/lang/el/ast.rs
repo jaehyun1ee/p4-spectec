@@ -1,8 +1,8 @@
 //! Elaboration language model
 
 use crate::lang::{
+    common::prim::num,
     common::{self, notation::atom, source::Phrase},
-    xl::num,
 };
 
 // Numbers
@@ -57,19 +57,19 @@ pub enum NumOp {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum UnOp {
-    Bool(crate::lang::xl::bool::UnOp),
+    Bool(crate::lang::common::prim::bool::UnOp),
     Num(num::UnOp),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum BinOp {
-    Bool(crate::lang::xl::bool::BinOp),
+    Bool(crate::lang::common::prim::bool::BinOp),
     Num(num::BinOp),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum CmpOp {
-    Bool(crate::lang::xl::bool::CmpOp),
+    Bool(crate::lang::common::prim::bool::CmpOp),
     Num(num::CmpOp),
 }
 

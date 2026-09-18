@@ -68,9 +68,9 @@ fn encode_num_op(op: NumOp) -> json {
 fn decode_un_op(json: &json) -> Result<UnOp, DecodeError> {
     let (tag, fields) = variant(json)?;
     match (tag, fields) {
-        ("NotOp", []) => Ok(UnOp::Bool(crate::lang::xl::bool::UnOp::Not)),
-        ("PlusOp", []) => Ok(UnOp::Num(crate::lang::xl::num::UnOp::Plus)),
-        ("MinusOp", []) => Ok(UnOp::Num(crate::lang::xl::num::UnOp::Minus)),
+        ("NotOp", []) => Ok(UnOp::Bool(crate::lang::common::prim::bool::UnOp::Not)),
+        ("PlusOp", []) => Ok(UnOp::Num(crate::lang::common::prim::num::UnOp::Plus)),
+        ("MinusOp", []) => Ok(UnOp::Num(crate::lang::common::prim::num::UnOp::Minus)),
         ("NotOp" | "PlusOp" | "MinusOp", _) => {
             Err(DecodeError::Expected("valid EL unary operator arity"))
         }
@@ -80,25 +80,25 @@ fn decode_un_op(json: &json) -> Result<UnOp, DecodeError> {
 
 fn encode_un_op(op: UnOp) -> json {
     match op {
-        UnOp::Bool(crate::lang::xl::bool::UnOp::Not) => json!(["NotOp"]),
-        UnOp::Num(crate::lang::xl::num::UnOp::Plus) => json!(["PlusOp"]),
-        UnOp::Num(crate::lang::xl::num::UnOp::Minus) => json!(["MinusOp"]),
+        UnOp::Bool(crate::lang::common::prim::bool::UnOp::Not) => json!(["NotOp"]),
+        UnOp::Num(crate::lang::common::prim::num::UnOp::Plus) => json!(["PlusOp"]),
+        UnOp::Num(crate::lang::common::prim::num::UnOp::Minus) => json!(["MinusOp"]),
     }
 }
 
 fn decode_bin_op(json: &json) -> Result<BinOp, DecodeError> {
     let (tag, fields) = variant(json)?;
     match (tag, fields) {
-        ("AndOp", []) => Ok(BinOp::Bool(crate::lang::xl::bool::BinOp::And)),
-        ("OrOp", []) => Ok(BinOp::Bool(crate::lang::xl::bool::BinOp::Or)),
-        ("ImplOp", []) => Ok(BinOp::Bool(crate::lang::xl::bool::BinOp::Impl)),
-        ("EquivOp", []) => Ok(BinOp::Bool(crate::lang::xl::bool::BinOp::Equiv)),
-        ("AddOp", []) => Ok(BinOp::Num(crate::lang::xl::num::BinOp::Add)),
-        ("SubOp", []) => Ok(BinOp::Num(crate::lang::xl::num::BinOp::Sub)),
-        ("MulOp", []) => Ok(BinOp::Num(crate::lang::xl::num::BinOp::Mul)),
-        ("DivOp", []) => Ok(BinOp::Num(crate::lang::xl::num::BinOp::Div)),
-        ("ModOp", []) => Ok(BinOp::Num(crate::lang::xl::num::BinOp::Mod)),
-        ("PowOp", []) => Ok(BinOp::Num(crate::lang::xl::num::BinOp::Pow)),
+        ("AndOp", []) => Ok(BinOp::Bool(crate::lang::common::prim::bool::BinOp::And)),
+        ("OrOp", []) => Ok(BinOp::Bool(crate::lang::common::prim::bool::BinOp::Or)),
+        ("ImplOp", []) => Ok(BinOp::Bool(crate::lang::common::prim::bool::BinOp::Impl)),
+        ("EquivOp", []) => Ok(BinOp::Bool(crate::lang::common::prim::bool::BinOp::Equiv)),
+        ("AddOp", []) => Ok(BinOp::Num(crate::lang::common::prim::num::BinOp::Add)),
+        ("SubOp", []) => Ok(BinOp::Num(crate::lang::common::prim::num::BinOp::Sub)),
+        ("MulOp", []) => Ok(BinOp::Num(crate::lang::common::prim::num::BinOp::Mul)),
+        ("DivOp", []) => Ok(BinOp::Num(crate::lang::common::prim::num::BinOp::Div)),
+        ("ModOp", []) => Ok(BinOp::Num(crate::lang::common::prim::num::BinOp::Mod)),
+        ("PowOp", []) => Ok(BinOp::Num(crate::lang::common::prim::num::BinOp::Pow)),
         (
             "AndOp" | "OrOp" | "ImplOp" | "EquivOp" | "AddOp" | "SubOp" | "MulOp" | "DivOp"
             | "ModOp" | "PowOp",
@@ -110,28 +110,28 @@ fn decode_bin_op(json: &json) -> Result<BinOp, DecodeError> {
 
 fn encode_bin_op(op: BinOp) -> json {
     match op {
-        BinOp::Bool(crate::lang::xl::bool::BinOp::And) => json!(["AndOp"]),
-        BinOp::Bool(crate::lang::xl::bool::BinOp::Or) => json!(["OrOp"]),
-        BinOp::Bool(crate::lang::xl::bool::BinOp::Impl) => json!(["ImplOp"]),
-        BinOp::Bool(crate::lang::xl::bool::BinOp::Equiv) => json!(["EquivOp"]),
-        BinOp::Num(crate::lang::xl::num::BinOp::Add) => json!(["AddOp"]),
-        BinOp::Num(crate::lang::xl::num::BinOp::Sub) => json!(["SubOp"]),
-        BinOp::Num(crate::lang::xl::num::BinOp::Mul) => json!(["MulOp"]),
-        BinOp::Num(crate::lang::xl::num::BinOp::Div) => json!(["DivOp"]),
-        BinOp::Num(crate::lang::xl::num::BinOp::Mod) => json!(["ModOp"]),
-        BinOp::Num(crate::lang::xl::num::BinOp::Pow) => json!(["PowOp"]),
+        BinOp::Bool(crate::lang::common::prim::bool::BinOp::And) => json!(["AndOp"]),
+        BinOp::Bool(crate::lang::common::prim::bool::BinOp::Or) => json!(["OrOp"]),
+        BinOp::Bool(crate::lang::common::prim::bool::BinOp::Impl) => json!(["ImplOp"]),
+        BinOp::Bool(crate::lang::common::prim::bool::BinOp::Equiv) => json!(["EquivOp"]),
+        BinOp::Num(crate::lang::common::prim::num::BinOp::Add) => json!(["AddOp"]),
+        BinOp::Num(crate::lang::common::prim::num::BinOp::Sub) => json!(["SubOp"]),
+        BinOp::Num(crate::lang::common::prim::num::BinOp::Mul) => json!(["MulOp"]),
+        BinOp::Num(crate::lang::common::prim::num::BinOp::Div) => json!(["DivOp"]),
+        BinOp::Num(crate::lang::common::prim::num::BinOp::Mod) => json!(["ModOp"]),
+        BinOp::Num(crate::lang::common::prim::num::BinOp::Pow) => json!(["PowOp"]),
     }
 }
 
 fn decode_cmp_op(json: &json) -> Result<CmpOp, DecodeError> {
     let (tag, fields) = variant(json)?;
     match (tag, fields) {
-        ("EqOp", []) => Ok(CmpOp::Bool(crate::lang::xl::bool::CmpOp::Eq)),
-        ("NeOp", []) => Ok(CmpOp::Bool(crate::lang::xl::bool::CmpOp::Ne)),
-        ("LtOp", []) => Ok(CmpOp::Num(crate::lang::xl::num::CmpOp::Lt)),
-        ("GtOp", []) => Ok(CmpOp::Num(crate::lang::xl::num::CmpOp::Gt)),
-        ("LeOp", []) => Ok(CmpOp::Num(crate::lang::xl::num::CmpOp::Le)),
-        ("GeOp", []) => Ok(CmpOp::Num(crate::lang::xl::num::CmpOp::Ge)),
+        ("EqOp", []) => Ok(CmpOp::Bool(crate::lang::common::prim::bool::CmpOp::Eq)),
+        ("NeOp", []) => Ok(CmpOp::Bool(crate::lang::common::prim::bool::CmpOp::Ne)),
+        ("LtOp", []) => Ok(CmpOp::Num(crate::lang::common::prim::num::CmpOp::Lt)),
+        ("GtOp", []) => Ok(CmpOp::Num(crate::lang::common::prim::num::CmpOp::Gt)),
+        ("LeOp", []) => Ok(CmpOp::Num(crate::lang::common::prim::num::CmpOp::Le)),
+        ("GeOp", []) => Ok(CmpOp::Num(crate::lang::common::prim::num::CmpOp::Ge)),
         ("EqOp" | "NeOp" | "LtOp" | "GtOp" | "LeOp" | "GeOp", _) => {
             Err(DecodeError::Expected("valid EL comparison operator arity"))
         }
@@ -141,12 +141,12 @@ fn decode_cmp_op(json: &json) -> Result<CmpOp, DecodeError> {
 
 fn encode_cmp_op(op: CmpOp) -> json {
     match op {
-        CmpOp::Bool(crate::lang::xl::bool::CmpOp::Eq) => json!(["EqOp"]),
-        CmpOp::Bool(crate::lang::xl::bool::CmpOp::Ne) => json!(["NeOp"]),
-        CmpOp::Num(crate::lang::xl::num::CmpOp::Lt) => json!(["LtOp"]),
-        CmpOp::Num(crate::lang::xl::num::CmpOp::Gt) => json!(["GtOp"]),
-        CmpOp::Num(crate::lang::xl::num::CmpOp::Le) => json!(["LeOp"]),
-        CmpOp::Num(crate::lang::xl::num::CmpOp::Ge) => json!(["GeOp"]),
+        CmpOp::Bool(crate::lang::common::prim::bool::CmpOp::Eq) => json!(["EqOp"]),
+        CmpOp::Bool(crate::lang::common::prim::bool::CmpOp::Ne) => json!(["NeOp"]),
+        CmpOp::Num(crate::lang::common::prim::num::CmpOp::Lt) => json!(["LtOp"]),
+        CmpOp::Num(crate::lang::common::prim::num::CmpOp::Gt) => json!(["GtOp"]),
+        CmpOp::Num(crate::lang::common::prim::num::CmpOp::Le) => json!(["LeOp"]),
+        CmpOp::Num(crate::lang::common::prim::num::CmpOp::Ge) => json!(["GeOp"]),
     }
 }
 

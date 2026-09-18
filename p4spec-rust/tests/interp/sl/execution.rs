@@ -960,7 +960,7 @@ fn clear_discards_memos_and_retains_the_live_arena() {
 
 #[test]
 fn test_case_scrutinee_is_evaluated_once_across_guard_attempts() {
-    use p4spec_rust::lang::xl::{bool as bool_op, num::Number};
+    use p4spec_rust::lang::common::prim::{bool as bool_op, num::Number};
     use p4spec_rust::note_phrase;
 
     let source = "builtin dec $probe() : nat\ndec $entry() : nat\ndef $entry() = 0";

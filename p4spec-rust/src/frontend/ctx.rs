@@ -19,8 +19,8 @@
 use std::{cell::RefCell, collections::BTreeSet, rc::Rc};
 
 use crate::lang::{
+    common::ids::id::strip_suffix,
     common::source::{Position, Span},
-    xl,
 };
 
 /// A compact source location for LALRPOP
@@ -105,10 +105,7 @@ impl Context {
     }
 
     pub(crate) fn find_id(&self, id: &str) -> bool {
-        self.bindings
-            .variables
-            .borrow()
-            .contains(xl::var::strip_var_suffix_name(id))
+        self.bindings.variables.borrow().contains(strip_suffix(id))
     }
 
     // - Parser modes

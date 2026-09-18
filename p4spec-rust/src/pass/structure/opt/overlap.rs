@@ -13,7 +13,8 @@
 use crate::pass::structure::error::{StructureError, StructureErrorKind};
 use crate::{
     lang::{
-        common::source::Span, il::ast::*, sl::ast::Guard, traits::eq::SyntaxEq, xl::bool as boolop,
+        common::prim::bool as boolop, common::source::Span, il::ast::*, sl::ast::Guard,
+        traits::eq::SyntaxEq,
     },
     runtime::{envs::algo::TDEnv, ops::typ::expand_typ, typdef::TypeDef},
 };

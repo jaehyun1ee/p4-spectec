@@ -9,10 +9,10 @@
 
 use crate::{
     lang::{
+        common::prim,
         common::{ds::set::IdSet, notation::mixop::Mixop, source::Span},
         il::{ast, fresh, var},
         traits::eq::SyntaxEq,
-        xl,
     },
     note_phrase, phrase,
     runtime::{
@@ -319,7 +319,7 @@ fn populate_exps<'a>(
 
 fn populate_equality_prem(exp_template: &ast::Exp, exp: &ast::Exp) -> ast::Prem {
     let span = Span::over(&[exp_template.span.clone(), exp.span.clone()]);
-    let op = ast::CmpOp::Bool(xl::bool::CmpOp::Eq);
+    let op = ast::CmpOp::Bool(prim::bool::CmpOp::Eq);
     let exp_template = Box::new(exp_template.clone());
     let exp = Box::new(exp.clone());
     let exp_kind = ast::ExpKind::Cmp(op, ast::OpTyp::Bool, exp_template, exp);

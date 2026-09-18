@@ -325,7 +325,7 @@ def $fallback(n*) = n*
 fn test_iterated_premise_rows_read_parent_bindings_independently() {
     use p4spec_rust::{
         interp::al::{context::Context, eval::prem::eval_prem},
-        lang::xl::num,
+        lang::common::prim::num,
         note_phrase,
     };
 

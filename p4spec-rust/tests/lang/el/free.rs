@@ -5,7 +5,7 @@ fn test_free_expression_ids_ignore_source_spans_and_render_in_source_order() {
     let exp_bin = exp(
         ExpKind::Bin(
             Box::new(exp(ExpKind::Id(id("left", "left.watsup")), "left.watsup")),
-            BinOp::Num(p4spec_rust::lang::xl::num::BinOp::Add),
+            BinOp::Num(p4spec_rust::lang::common::prim::num::BinOp::Add),
             Box::new(exp(ExpKind::Id(id("right", "right.watsup")), "right.watsup")),
         ),
         "root.watsup",

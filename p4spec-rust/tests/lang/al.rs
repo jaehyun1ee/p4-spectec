@@ -2,6 +2,7 @@ use p4spec_rust::{
     lang::common::source::{Position, Span},
     lang::{
         al,
+        common::prim::num,
         common::{
             ds::set::IdSet,
             notation::{atom::Atom, mixfix::Mixfix},
@@ -10,7 +11,6 @@ use p4spec_rust::{
         hints::input::InputHint,
         il,
         traits::{eq::SyntaxEq, free::Free, print::Print},
-        xl::num,
     },
 };
 

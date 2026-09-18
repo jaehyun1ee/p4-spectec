@@ -1,8 +1,8 @@
 use super::*;
 use crate::lang::{
     common::notation::mixfix::Mixfix,
+    common::prim::bool::CmpOp as BoolCmpOp,
     il::ast::{CmpOp, ListPattern, OpTyp, OptPattern, Pattern},
-    xl::bool::CmpOp as BoolCmpOp,
 };
 use crate::pass::structure::opt::pre::matchify_if_eq_terminal::apply;
 fn comparison(exp_l: Exp, exp_r: Exp, op: BoolCmpOp) -> Exp {

@@ -13,9 +13,9 @@ pub use intern::{CanonEq, CanonHash, CanonId, CanonInterner, Interned, Interner,
 pub use value::*;
 
 use crate::lang::{
+    common::prim::num::{self, Number},
     common::{Id, TId, notation::mixfix::Mixfix, source::Span},
     data::typ::{self, Typ, TypKind},
-    xl::num::{self, Number},
 };
 use crate::util::json::json;
 

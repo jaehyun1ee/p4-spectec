@@ -114,7 +114,7 @@ fn test_downstream_uses_are_computed_before_recursive_deletion() {
 #[test]
 fn test_update_path_is_not_part_of_source_removability() {
     use crate::lang::il::ast::PathKind;
-    let exp_call = crate::note_phrase!(node: ExpKind::Call(id("index"), vec![], vec![]), note: TypKind::Num(crate::lang::xl::num::Typ::Nat), span: span(8));
+    let exp_call = crate::note_phrase!(node: ExpKind::Call(id("index"), vec![], vec![]), note: TypKind::Num(crate::lang::common::prim::num::Typ::Nat), span: span(8));
     let path_root = crate::note_phrase!(node: PathKind::Root, note: TypKind::Bool, span: span(9));
     let path = crate::note_phrase!(node: PathKind::Idx(Box::new(path_root), Box::new(exp_call)), note: TypKind::Bool, span: span(10));
     let exp_update = crate::note_phrase!(node: ExpKind::Upd(Box::new(variable("base")), Box::new(path), Box::new(literal())), note: TypKind::Bool, span: span(11));

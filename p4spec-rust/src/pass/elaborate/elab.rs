@@ -2,6 +2,7 @@
 
 use crate::{
     lang::{
+        common::prim,
         common::{
             Id,
             ds::map::ArityMismatch,
@@ -12,7 +13,6 @@ use crate::{
         hints::input,
         il::{ast as il, fresh as il_fresh, var as il_var},
         traits::free::Free,
-        xl,
     },
     note_phrase, phrase,
     runtime::{
@@ -36,7 +36,7 @@ use super::{
 // - Identifiers
 
 fn valid_tid(id: &Id) -> bool {
-    xl::var::strip_var_suffix(id).node == id.node
+    id.strip_suffix().node == id.node
 }
 
 fn distinct_tparams(tparams: &[el::TParam], span: &Span) -> Result<(), ElabError> {
@@ -410,7 +410,7 @@ fn infer_bool_exp(_ctx: &mut Context, span: &Span, value: bool) -> Attempt<il::E
 fn infer_num_exp(_ctx: &mut Context, span: &Span, value: &el::Num) -> Attempt<il::Exp> {
     let exp_il = note_phrase! {
         node: il::ExpKind::Num(value.clone()),
-        note: il::TypKind::Num(xl::num::to_typ(value)),
+        note: il::TypKind::Num(prim::num::to_typ(value)),
         span: span.clone(),
     };
     Ok(exp_il)
@@ -430,7 +430,7 @@ fn infer_text_exp(_ctx: &mut Context, span: &Span, value: &el::Text) -> Attempt<
 // - Variable expression inference
 
 fn infer_var_exp(ctx: &mut Context, span: &Span, id: &Id) -> Attempt<il::Exp> {
-    let tid = xl::var::strip_var_suffix(id);
+    let tid = id.strip_suffix();
     let Some(typ_il) = ctx.find_metavar_opt(&tid) else {
         return fail_infer(&id.span, "variable");
     };
@@ -457,13 +457,13 @@ fn infer_un_exp(ctx: &mut Context, span: &Span, op: el::UnOp, exp: &el::Exp) -> 
         el::UnOp::Num(_) => vec![
             (
                 il::OpTyp::Nat,
-                il::TypKind::Num(xl::num::Typ::Nat),
-                il::TypKind::Num(xl::num::Typ::Nat),
+                il::TypKind::Num(prim::num::Typ::Nat),
+                il::TypKind::Num(prim::num::Typ::Nat),
             ),
             (
                 il::OpTyp::Int,
-                il::TypKind::Num(xl::num::Typ::Int),
-                il::TypKind::Num(xl::num::Typ::Int),
+                il::TypKind::Num(prim::num::Typ::Int),
+                il::TypKind::Num(prim::num::Typ::Int),
             ),
         ],
     };
@@ -496,32 +496,32 @@ fn infer_bin_exp(
         el::BinOp::Bool(_) => {
             vec![(il::OpTyp::Bool, il::TypKind::Bool, il::TypKind::Bool, il::TypKind::Bool)]
         }
-        el::BinOp::Num(xl::num::BinOp::Sub) => vec![
+        el::BinOp::Num(prim::num::BinOp::Sub) => vec![
             (
                 il::OpTyp::Int,
-                il::TypKind::Num(xl::num::Typ::Nat),
-                il::TypKind::Num(xl::num::Typ::Nat),
-                il::TypKind::Num(xl::num::Typ::Int),
+                il::TypKind::Num(prim::num::Typ::Nat),
+                il::TypKind::Num(prim::num::Typ::Nat),
+                il::TypKind::Num(prim::num::Typ::Int),
             ),
             (
                 il::OpTyp::Int,
-                il::TypKind::Num(xl::num::Typ::Int),
-                il::TypKind::Num(xl::num::Typ::Int),
-                il::TypKind::Num(xl::num::Typ::Int),
+                il::TypKind::Num(prim::num::Typ::Int),
+                il::TypKind::Num(prim::num::Typ::Int),
+                il::TypKind::Num(prim::num::Typ::Int),
             ),
         ],
         el::BinOp::Num(_) => vec![
             (
                 il::OpTyp::Nat,
-                il::TypKind::Num(xl::num::Typ::Nat),
-                il::TypKind::Num(xl::num::Typ::Nat),
-                il::TypKind::Num(xl::num::Typ::Nat),
+                il::TypKind::Num(prim::num::Typ::Nat),
+                il::TypKind::Num(prim::num::Typ::Nat),
+                il::TypKind::Num(prim::num::Typ::Nat),
             ),
             (
                 il::OpTyp::Int,
-                il::TypKind::Num(xl::num::Typ::Int),
-                il::TypKind::Num(xl::num::Typ::Int),
-                il::TypKind::Num(xl::num::Typ::Int),
+                il::TypKind::Num(prim::num::Typ::Int),
+                il::TypKind::Num(prim::num::Typ::Int),
+                il::TypKind::Num(prim::num::Typ::Int),
             ),
         ],
     };
@@ -585,8 +585,8 @@ fn infer_cmp_exp(
             let exp_l_il = infer_exp(ctx, exp_l)?;
             let exp_r_il = infer_exp(ctx, exp_r)?;
             for (op_typ_il, typ_expect_kind_il) in [
-                (il::OpTyp::Nat, il::TypKind::Num(xl::num::Typ::Nat)),
-                (il::OpTyp::Int, il::TypKind::Num(xl::num::Typ::Int)),
+                (il::OpTyp::Nat, il::TypKind::Num(prim::num::Typ::Nat)),
+                (il::OpTyp::Int, il::TypKind::Num(prim::num::Typ::Int)),
             ] {
                 let typ_expect_l_il = typ_at(typ_expect_kind_il.clone(), &exp_l_il.span);
                 let typ_expect_r_il = typ_at(typ_expect_kind_il, &exp_r_il.span);
@@ -732,7 +732,7 @@ fn infer_len_exp(ctx: &mut Context, span: &Span, exp: &el::Exp) -> Attempt<il::E
             as_list_typ(ctx, &typ_il)?;
             let exp_il = note_phrase! {
                 node: il::ExpKind::Len(Box::new(exp_il)),
-                note: il::TypKind::Num(xl::num::Typ::Nat),
+                note: il::TypKind::Num(prim::num::Typ::Nat),
                 span: span.clone(),
             };
             Ok(exp_il)
@@ -742,7 +742,7 @@ fn infer_len_exp(ctx: &mut Context, span: &Span, exp: &el::Exp) -> Attempt<il::E
             let exp_il = elab_exp(ctx, &typ_text_il, exp)?;
             let exp_il = note_phrase! {
                 node: il::ExpKind::Len(Box::new(exp_il)),
-                note: il::TypKind::Num(xl::num::Typ::Nat),
+                note: il::TypKind::Num(prim::num::Typ::Nat),
                 span: span.clone(),
             };
             Ok(exp_il)
@@ -807,7 +807,7 @@ fn infer_idx_exp(
             let typ_base_il =
                 phrase!(node: exp_base_il.note.as_ref().clone(), span: exp_base_il.span.clone());
             let typ_elem_il = as_list_typ(ctx, &typ_base_il)?;
-            let typ_nat_il = typ_at(il::TypKind::Num(xl::num::Typ::Nat), &exp_idx.span);
+            let typ_nat_il = typ_at(il::TypKind::Num(prim::num::Typ::Nat), &exp_idx.span);
             let exp_idx_il = elab_exp(ctx, &typ_nat_il, exp_idx)?;
             let exp_il = note_phrase! {
                 node: il::ExpKind::Idx(Box::new(exp_base_il), Box::new(exp_idx_il)),
@@ -819,7 +819,7 @@ fn infer_idx_exp(
         |ctx| {
             let typ_text_il = typ_at(il::TypKind::Text, &exp_base.span);
             let exp_base_il = elab_exp(ctx, &typ_text_il, exp_base)?;
-            let typ_nat_il = typ_at(il::TypKind::Num(xl::num::Typ::Nat), &exp_idx.span);
+            let typ_nat_il = typ_at(il::TypKind::Num(prim::num::Typ::Nat), &exp_idx.span);
             let exp_idx_il = elab_exp(ctx, &typ_nat_il, exp_idx)?;
             let exp_il = note_phrase! {
                 node: il::ExpKind::Idx(Box::new(exp_base_il), Box::new(exp_idx_il)),
@@ -847,9 +847,9 @@ fn infer_slice_exp(
             let typ_base_il =
                 phrase!(node: exp_base_il.note.as_ref().clone(), span: exp_base_il.span.clone());
             as_list_typ(ctx, &typ_base_il)?;
-            let typ_nat_il = typ_at(il::TypKind::Num(xl::num::Typ::Nat), &exp_idx.span);
+            let typ_nat_il = typ_at(il::TypKind::Num(prim::num::Typ::Nat), &exp_idx.span);
             let exp_idx_il = elab_exp(ctx, &typ_nat_il, exp_idx)?;
-            let typ_nat_il = typ_at(il::TypKind::Num(xl::num::Typ::Nat), &exp_len.span);
+            let typ_nat_il = typ_at(il::TypKind::Num(prim::num::Typ::Nat), &exp_len.span);
             let exp_len_il = elab_exp(ctx, &typ_nat_il, exp_len)?;
             let exp_il = note_phrase! { node: il::ExpKind::Slice(
                 Box::new(exp_base_il),
@@ -861,9 +861,9 @@ fn infer_slice_exp(
         |ctx| {
             let typ_text_il = typ_at(il::TypKind::Text, &exp_base.span);
             let exp_base_il = elab_exp(ctx, &typ_text_il, exp_base)?;
-            let typ_nat_il = typ_at(il::TypKind::Num(xl::num::Typ::Nat), &exp_idx.span);
+            let typ_nat_il = typ_at(il::TypKind::Num(prim::num::Typ::Nat), &exp_idx.span);
             let exp_idx_il = elab_exp(ctx, &typ_nat_il, exp_idx)?;
-            let typ_nat_il = typ_at(il::TypKind::Num(xl::num::Typ::Nat), &exp_len.span);
+            let typ_nat_il = typ_at(il::TypKind::Num(prim::num::Typ::Nat), &exp_len.span);
             let exp_len_il = elab_exp(ctx, &typ_nat_il, exp_len)?;
             let exp_il = note_phrase! { node: il::ExpKind::Slice(
                 Box::new(exp_base_il),
@@ -1550,7 +1550,7 @@ fn elab_idx_path(
             let path_inner_il = elab_path(ctx, typ_expect_il, path_inner)?;
             let typ_inner_il = typ_at(path_inner_il.note.as_ref().clone(), &path_inner_il.span);
             let typ_elem_il = as_list_typ(ctx, &typ_inner_il)?;
-            let typ_nat_il = typ_at(il::TypKind::Num(xl::num::Typ::Nat), &exp_idx.span);
+            let typ_nat_il = typ_at(il::TypKind::Num(prim::num::Typ::Nat), &exp_idx.span);
             let exp_idx_il = elab_exp(ctx, &typ_nat_il, exp_idx)?;
             let path_kind_il = il::PathKind::Idx(Box::new(path_inner_il), Box::new(exp_idx_il));
             Ok(note_phrase! {
@@ -1563,7 +1563,7 @@ fn elab_idx_path(
             let path_inner_il = elab_path(ctx, typ_expect_il, path_inner)?;
             let typ_inner_il = typ_at(path_inner_il.note.as_ref().clone(), &path_inner_il.span);
             as_text_typ(ctx, &typ_inner_il)?;
-            let typ_nat_il = typ_at(il::TypKind::Num(xl::num::Typ::Nat), &exp_idx.span);
+            let typ_nat_il = typ_at(il::TypKind::Num(prim::num::Typ::Nat), &exp_idx.span);
             let exp_idx_il = elab_exp(ctx, &typ_nat_il, exp_idx)?;
             let path_kind_il = il::PathKind::Idx(Box::new(path_inner_il), Box::new(exp_idx_il));
             Ok(note_phrase! {
@@ -1596,9 +1596,9 @@ fn elab_slice_path(
             "slice path requires a list or text",
         );
     }
-    let typ_nat_il = typ_at(il::TypKind::Num(xl::num::Typ::Nat), &exp_idx.span);
+    let typ_nat_il = typ_at(il::TypKind::Num(prim::num::Typ::Nat), &exp_idx.span);
     let exp_idx_il = elab_exp(ctx, &typ_nat_il, exp_idx)?;
-    let typ_nat_il = typ_at(il::TypKind::Num(xl::num::Typ::Nat), &exp_len.span);
+    let typ_nat_il = typ_at(il::TypKind::Num(prim::num::Typ::Nat), &exp_len.span);
     let exp_len_il = elab_exp(ctx, &typ_nat_il, exp_len)?;
     let path_kind_il =
         il::PathKind::Slice(Box::new(path_inner_il), Box::new(exp_idx_il), Box::new(exp_len_il));

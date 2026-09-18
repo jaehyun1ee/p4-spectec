@@ -4,10 +4,10 @@ use num_bigint::BigInt;
 use p4spec_rust::lang::data::value::ValueArena;
 use p4spec_rust::{
     lang::{
+        common::prim::num::Natural,
         common::source::Span,
         data::{typ, value::make},
         il::ast::{FuncTyp, Id, Iter, Subcheck},
-        xl::num::Natural,
     },
     phrase,
     runtime::{

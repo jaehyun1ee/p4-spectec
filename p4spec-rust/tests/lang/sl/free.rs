@@ -62,7 +62,7 @@ fn test_guards_collect_only_embedded_expressions() {
         (sl::ast::Guard::Bool(true), names(&[])),
         (
             sl::ast::Guard::Cmp(
-                il::ast::CmpOp::Bool(p4spec_rust::lang::xl::bool::CmpOp::Eq),
+                il::ast::CmpOp::Bool(p4spec_rust::lang::common::prim::bool::CmpOp::Eq),
                 il::ast::OpTyp::Bool,
                 variable("comparison"),
             ),

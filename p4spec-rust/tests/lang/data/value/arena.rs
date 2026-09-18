@@ -4,12 +4,12 @@ use super::{hash, span};
 use num_bigint::BigInt;
 use p4spec_rust::lang::traits::{cmp::SyntaxCmp, eq::SyntaxEq};
 use p4spec_rust::lang::{
+    common::prim::num::{Natural, Number},
     common::source::{Position, Span},
     data::{
         typ,
         value::{Value, ValueArena, ValueError, ValueTag, get, make},
     },
-    xl::num::{Natural, Number},
 };
 use p4spec_rust::util::json::json;
 use std::rc::Rc;

@@ -1,6 +1,7 @@
 use crate::{
     lang::{
         al::ast as ast_al,
+        common::prim,
         common::{
             Id,
             ds::set::IdSet,
@@ -11,7 +12,6 @@ use crate::{
         hints::input::InputHint,
         il::ast,
         traits::eq::SyntaxEq,
-        xl,
     },
     pass::algo::{
         self, AlgoErrorKind,
@@ -148,13 +148,13 @@ fn dimension_exp(name: &str, iter: ast::Iter, line: usize) -> ast::Exp {
 
 fn len_exp(name: &str, line: usize) -> ast::Exp {
     let exp_inner = dimension_exp(name, ast::Iter::List, line);
-    exp(ast::ExpKind::Len(Box::new(exp_inner)), ast::TypKind::Num(xl::num::Typ::Nat), line)
+    exp(ast::ExpKind::Len(Box::new(exp_inner)), ast::TypKind::Num(prim::num::Typ::Nat), line)
 }
 
 fn equality_prem(exp_l: ast::Exp, exp_r: ast::Exp, line: usize) -> ast::Prem {
     let condition = exp(
         ast::ExpKind::Cmp(
-            ast::CmpOp::Bool(xl::bool::CmpOp::Eq),
+            ast::CmpOp::Bool(prim::bool::CmpOp::Eq),
             ast::OpTyp::Bool,
             Box::new(exp_l),
             Box::new(exp_r),
@@ -178,7 +178,7 @@ fn literal_index_exp(value: bool, line: usize) -> ast::Exp {
     );
     let exp_idx = exp(
         ast::ExpKind::Num(ast::Num::Nat(0_u64.into())),
-        ast::TypKind::Num(xl::num::Typ::Nat),
+        ast::TypKind::Num(prim::num::Typ::Nat),
         line,
     );
     indexed_exp(base, exp_idx, ast::TypKind::Bool, line)
@@ -192,7 +192,7 @@ fn assert_index_guard_span(prem: &ast_al::Prem, expected_span: Span) {
     assert_eq!(if_prem.exp.span, expected_span);
     assert!(matches!(
         if_prem.exp.node,
-        ast::ExpKind::Cmp(ast::CmpOp::Num(xl::num::CmpOp::Lt), _, _, _)
+        ast::ExpKind::Cmp(ast::CmpOp::Num(prim::num::CmpOp::Lt), _, _, _)
     ));
 }
 

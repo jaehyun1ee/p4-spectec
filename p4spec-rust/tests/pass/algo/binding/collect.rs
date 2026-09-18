@@ -5,7 +5,7 @@ fn test_conversion_propagates_located_binding_errors() {
     let variable = var_exp("x", 41);
     let negated = exp(
         ast::ExpKind::Un(
-            ast::UnOp::Bool(xl::bool::UnOp::Not),
+            ast::UnOp::Bool(prim::bool::UnOp::Not),
             ast::OpTyp::Bool,
             Box::new(variable),
         ),
@@ -30,7 +30,7 @@ fn test_collection_rejects_a_binding_inside_a_noninvertible_operator() {
     let variable = var_exp("x", 7);
     let negated = exp(
         ast::ExpKind::Un(
-            ast::UnOp::Bool(xl::bool::UnOp::Not),
+            ast::UnOp::Bool(prim::bool::UnOp::Not),
             ast::OpTyp::Bool,
             Box::new(variable),
         ),

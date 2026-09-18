@@ -14,13 +14,13 @@
 use crate::{
     lang::{
         al,
+        common::prim,
         common::{
             Id,
             ds::{map::IdMap, set::IdSet},
         },
         il::ast,
         traits::free::Free,
-        xl,
     },
     note_phrase, phrase,
     runtime::{dim::Dim, envs::algo::VEnv},
@@ -75,10 +75,10 @@ impl RenameEnv {
 // == Binding renaming
 
 fn fresh_id(ids: &IdSet, id: &Id) -> Id {
-    let base = xl::var::strip_var_suffix(id).node;
+    let base = id.strip_suffix().node;
     let ids_same_base = ids
         .iter()
-        .filter(|id_other| xl::var::strip_var_suffix(id_other).node == base)
+        .filter(|id_other| id_other.strip_suffix().node == base)
         .cloned()
         .collect::<IdSet>();
     let mut id_fresh = id.clone();
@@ -180,7 +180,7 @@ fn gen_exp_equality(id: &Id, id_rename: &Id, typ: &ast::Typ) -> ast::Exp {
     let exp_r = crate::note_phrase!(node: crate::lang::il::ast::ExpKind::Id(id_rename.clone()), note: typ.node.clone(), span: id.span.clone());
     note_phrase! {
         node: ast::ExpKind::Cmp(
-            ast::CmpOp::Bool(xl::bool::CmpOp::Eq),
+            ast::CmpOp::Bool(prim::bool::CmpOp::Eq),
             ast::OpTyp::Bool,
             Box::new(exp_l),
             Box::new(exp_r),
@@ -205,7 +205,7 @@ fn generate_side_condition(
         let exp_r = gen_exp_equality(&id_condition, id_rename, &dim.typ);
         exp = note_phrase! {
             node: ast::ExpKind::Bin(
-                ast::BinOp::Bool(xl::bool::BinOp::And),
+                ast::BinOp::Bool(prim::bool::BinOp::And),
                 ast::OpTyp::Bool,
                 Box::new(exp),
                 Box::new(exp_r),

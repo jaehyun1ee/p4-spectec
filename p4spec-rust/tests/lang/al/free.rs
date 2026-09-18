@@ -10,7 +10,7 @@ fn test_free_expression_path_argument_and_premise_variants_collect_identifier_te
         (variable("x"), ids(&["x"])),
         (
             expr(il::ast::ExpKind::Un(
-                il::ast::UnOp::Bool(p4spec_rust::lang::xl::bool::UnOp::Not),
+                il::ast::UnOp::Bool(p4spec_rust::lang::common::prim::bool::UnOp::Not),
                 il::ast::OpTyp::Bool,
                 x(),
             )),
@@ -18,7 +18,7 @@ fn test_free_expression_path_argument_and_premise_variants_collect_identifier_te
         ),
         (
             expr(il::ast::ExpKind::Bin(
-                il::ast::BinOp::Bool(p4spec_rust::lang::xl::bool::BinOp::And),
+                il::ast::BinOp::Bool(p4spec_rust::lang::common::prim::bool::BinOp::And),
                 il::ast::OpTyp::Bool,
                 x(),
                 x(),
@@ -27,7 +27,7 @@ fn test_free_expression_path_argument_and_premise_variants_collect_identifier_te
         ),
         (
             expr(il::ast::ExpKind::Cmp(
-                il::ast::CmpOp::Bool(p4spec_rust::lang::xl::bool::CmpOp::Eq),
+                il::ast::CmpOp::Bool(p4spec_rust::lang::common::prim::bool::CmpOp::Eq),
                 il::ast::OpTyp::Bool,
                 x(),
                 x(),

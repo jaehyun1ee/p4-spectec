@@ -2,8 +2,8 @@
 
 use crate::{
     lang::{
+        common::prim::num,
         il::ast::{self, DefTypKind, Iter, Subcheck, TypKind},
-        xl::num,
     },
     runtime::{envs::elab::TDEnv, typdef::TypeDef},
 };

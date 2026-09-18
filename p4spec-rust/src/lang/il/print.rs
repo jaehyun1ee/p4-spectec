@@ -3,8 +3,8 @@
 use std::fmt::{self, Write};
 
 use crate::lang::{
+    common::prim::num,
     traits::print::{Print, Printer},
-    xl::num,
 };
 
 use super::ast::*;

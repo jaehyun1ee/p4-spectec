@@ -1,5 +1,5 @@
 use crate::{
-    lang::{il::ast::*, xl::bool as boolop},
+    lang::{common::prim::bool as boolop, il::ast::*},
     note_phrase,
     pass::structure::opt::overlap::{Overlap, overlap_exp},
     runtime::envs::algo::TDEnv,

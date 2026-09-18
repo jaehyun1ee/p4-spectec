@@ -5,6 +5,7 @@ use p4spec_rust::{
     interp::al::{AlInterp, Config, context::Global},
     lang::{
         al::ast,
+        common::prim::{bool as boolean, num},
         common::{
             notation::{atom::Atom, mixfix::Mixfix},
             source::{Position, Span},
@@ -14,7 +15,6 @@ use p4spec_rust::{
             value::{Value, ValueArena, get, make},
         },
         il::ast::{ListPattern, OptPattern},
-        xl::{bool as boolean, num},
     },
     runner::{Interface, InterfaceError, NullExtern, NullInterface, Runner},
 };

@@ -4,6 +4,7 @@ use p4spec_rust::{
     interface::p4::{error::P4UnparseError, unparse::P4Unparser},
     lang::{
         al,
+        common::prim::num::Natural,
         common::{
             notation::{atom::Atom, mixfix::Mixfix},
             source::Span,
@@ -13,7 +14,6 @@ use p4spec_rust::{
             value::{Value, make},
         },
         el, il,
-        xl::num::Natural,
     },
 };
 
