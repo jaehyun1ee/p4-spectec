@@ -8,7 +8,6 @@ use std::{collections::HashMap, fmt, rc::Rc};
 use crate::lang::{
     common::{Id, Iter},
     data::{
-        typ::Typ,
         value::Value,
         var::{IdSlot, SlotIdx, Var, VarSlot},
     },
@@ -23,7 +22,6 @@ use crate::lang::{
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct FrameLayout {
     slots: HashMap<(String, Vec<Iter>), SlotIdx>,
-    slot_case: Option<SlotIdx>,
 }
 
 impl FrameLayout {
@@ -35,14 +33,6 @@ impl FrameLayout {
 
     pub fn is_empty(&self) -> bool {
         self.slots.is_empty()
-    }
-
-    pub fn case_slot(&self, typ: Typ) -> VarSlot {
-        let slot = self
-            .slot_case
-            .expect("case slot is resolved during preparation");
-        let id = crate::phrase!(node: "~case".to_owned(), span: Default::default());
-        VarSlot { slot, var: Var { id, typ, iters: vec![] } }
     }
 
     // - Resolution
@@ -70,10 +60,6 @@ impl FrameLayout {
             .get(&(var.id.node.clone(), var.iters.clone()))
             .expect("iterated binding is resolved during preparation");
         VarSlot { slot, var }
-    }
-
-    pub fn resolve_case_slot(&mut self) {
-        self.slot_case = Some(self.reserve(("~case".to_owned(), vec![])));
     }
 }
 

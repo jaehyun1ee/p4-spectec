@@ -166,10 +166,6 @@ impl<'global> Context<'global> {
         self.local.tdenv.get(id)
     }
 
-    pub fn case_slot(&self, typ: ast::Typ) -> VarSlot {
-        self.local.frame.layout().case_slot(typ)
-    }
-
     pub fn find_typdef_opt<'a>(&'a self, id: &ast::Id) -> Option<&'a TypeDef> {
         self.find_typdef_local_opt(id)
             .or_else(|| self.global.tdenv.get(id))

@@ -230,34 +230,62 @@ fn type_arguments_shadow_global_type_definitions() {
 }
 
 #[test]
-fn case_comparison_rhs_observes_the_scrutinee_binding() {
+fn case_comparison_rhs_reads_the_enclosing_context() {
     use p4spec_rust::lang::xl::bool as bool_op;
-    let exp_r = p4spec_rust::note_phrase!(node: p4spec_rust::lang::il::ast::ExpKind::Id(phrase!(node: "~case".to_owned(), span: Span::default())), note: typ::make::nat().node, span: Span::default());
-    let block = vec![phrase!(node: ast::InstrKind::Case(ast::CaseInstr {
+    let exp_r: ast::Exp = note_phrase!(
+        node: ast::ExpKind::Id(phrase!(node: "x".to_owned(), span: Span::default())),
+        note: typ::make::nat().node, span: Span::default(),
+    );
+    let block_case = vec![phrase!(node: ast::InstrKind::Case(ast::CaseInstr {
         exp: exp(7),
         cases: vec![ast::Case {
-            guard: ast::Guard::Cmp(ast::CmpOp::Bool(bool_op::CmpOp::Eq), ast::OpTyp::Nat, exp_r),
-            block: vec![instr(exp(5))],
+            guard: ast::Guard::Cmp(ast::CmpOp::Bool(bool_op::CmpOp::Eq), ast::OpTyp::Nat, exp_r.clone()),
+            block: vec![instr(exp_r.clone())],
         }],
         dangle: false,
+    }), span: Span::default())];
+    let block = vec![phrase!(node: ast::InstrKind::Let(ast::LetInstr {
+        exp_l: exp_r, exp_r: exp(7), iter_instrs: vec![], block: block_case,
     }), span: Span::default())];
     for det in [false, true] {
         let mut runner = with_block(block.clone(), det);
         let value = runner.context().call_func("entry", &[], &[]).unwrap();
-        assert_eq!(get::num(runner.arena(), &value).unwrap().to_string(), "5");
+        assert_eq!(get::num(runner.arena(), &value).unwrap().to_string(), "7");
     }
 }
 
 #[test]
-fn case_guard_errors_keep_the_generated_expression_trace() {
-    use p4spec_rust::lang::xl::num;
-    let guard = ast::Guard::Cmp(ast::CmpOp::Num(num::CmpOp::Lt), ast::OpTyp::Nat, boolean(true));
-    let block = vec![phrase!(node: ast::InstrKind::Case(ast::CaseInstr {
-        exp: exp(7), cases: vec![ast::Case { guard, block: vec![instr(exp(5))] }], dangle: false,
-    }), span: Span::default())];
-    let mut runner = with_block(block, false);
-    let error = runner.context().call_func("entry", &[], &[]).unwrap_err();
-    assert!(error.to_string().contains("~case"), "{error}");
+fn case_guard_errors_keep_the_expression_trace_and_scrutinee_span() {
+    use p4spec_rust::{
+        interp::shared::error::{Error, TraceErrorKind},
+        lang::{common::source::Position, xl::num},
+    };
+    fn has_trace(error: &Error, text: &str, span: &Span) -> bool {
+        (matches!(&*error.kind, ErrorKind::Trace(TraceErrorKind::Evaluation { text: actual }) if actual == text)
+            && error.span == *span)
+            || error
+                .children
+                .iter()
+                .any(|error| has_trace(error, text, span))
+    }
+    let span = Span::new(Position::new("case.spectec", 4, 2), Position::new("case.spectec", 4, 3));
+    for (guard, text) in [
+        (ast::Guard::Bool(false), "~~case"),
+        (
+            ast::Guard::Cmp(ast::CmpOp::Num(num::CmpOp::Lt), ast::OpTyp::Nat, boolean(true)),
+            "(~case < true)",
+        ),
+        (ast::Guard::Mem(exp(1)), "~case <- 1"),
+    ] {
+        let mut exp_guard = exp(7);
+        exp_guard.span = span.clone();
+        let block = vec![phrase!(node: ast::InstrKind::Case(ast::CaseInstr {
+            exp: exp_guard, cases: vec![ast::Case { guard, block: vec![instr(exp(5))] }], dangle: false,
+        }), span: Span::default())];
+        let mut runner = with_block(block, false);
+        let error = runner.context().call_func("entry", &[], &[]).unwrap_err();
+        assert!(has_trace(&error, text, &span), "{error}");
+    }
 }
 
 #[test]

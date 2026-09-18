@@ -170,7 +170,6 @@ impl Prepare for source::CaseInstr {
     type Output = CaseInstr;
 
     fn prepare(self, layout: &mut FrameLayout) -> Self::Output {
-        layout.resolve_case_slot();
         CaseInstr {
             exp: self.exp.prepare(layout),
             cases: self.cases.prepare(layout),

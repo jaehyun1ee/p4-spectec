@@ -212,15 +212,8 @@ fn eval_case_instr<Iface: Interface, Ext: Extern>(
     tail: bool,
 ) -> Backtrack<Flow> {
     let value = unwrap!(eval_exp(runner_ctx, ctx.as_ref(), &instr.exp));
-    let mut ctx_guard = ctx.as_ref().clone();
-    let slot_case = ctx_guard.case_slot(
-        crate::phrase!(node: instr.exp.note.as_ref().clone(), span: instr.exp.span.clone()),
-    );
-    ctx_guard.add_slot(slot_case.slot, value);
-    let exp = crate::note_phrase!(node: ast::ExpKind::Id(crate::lang::data::var::IdSlot { id: slot_case.var.id, slot: slot_case.slot }), note: instr.exp.note.clone(), span: instr.exp.span.clone());
     for case in &instr.cases {
-        if unwrap!(eval_guard(runner_ctx, &ctx_guard, &exp, value, &case.guard)) {
-            drop(ctx_guard);
+        if unwrap!(eval_guard(runner_ctx, ctx.as_ref(), &instr.exp.span, value, &case.guard)) {
             return eval_block(runner_ctx, ctx, &case.block, tail);
         }
     }
@@ -233,58 +226,47 @@ fn eval_case_instr<Iface: Interface, Ext: Extern>(
 fn eval_guard<Iface: Interface, Ext: Extern>(
     runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Ext>,
     ctx: &Context<'_>,
-    exp: &ast::Exp,
+    span: &Span,
     value: Value,
     guard: &ast::Guard,
 ) -> Backtrack<bool> {
     if matches!(guard, ast::Guard::Bool(true)) {
-        return Backtrack::from_result(get::bool(runner_ctx.arena(), &value), &exp.span);
+        return Backtrack::from_result(get::bool(runner_ctx.arena(), &value), span);
     }
     let result = (|| match guard {
         ast::Guard::Bool(_) => {
-            ok!(!unwrap_from_result!(get::bool(runner_ctx.arena(), &value), &exp.span))
+            ok!(!unwrap_from_result!(get::bool(runner_ctx.arena(), &value), span))
         }
         ast::Guard::Cmp(op, _, exp_r) => {
             let value_r = unwrap!(eval_exp(runner_ctx, ctx, exp_r));
-            ops::cmpop(runner_ctx.arena(), &exp.span, op, value, value_r)
+            ops::cmpop(runner_ctx.arena(), span, op, value, value_r)
         }
-        ast::Guard::Sub(_, check) => ops::sub(runner_ctx.arena(), ctx, &exp.span, check, value),
+        ast::Guard::Sub(_, check) => ops::sub(runner_ctx.arena(), ctx, span, check, value),
         ast::Guard::Match(pattern) => {
             ok!(ops::r#match(runner_ctx.arena(), pattern, value))
         }
         ast::Guard::Mem(exp_list) => {
             let value_list = unwrap!(eval_exp(runner_ctx, ctx, exp_list));
-            ops::mem(runner_ctx.arena(), &exp.span, value, value_list)
+            ops::mem(runner_ctx.arena(), span, value, value_list)
         }
     })();
-    result.nest(exp.span.clone(), || {
-        let exp_kind = match guard {
-            ast::Guard::Bool(true) => exp.node.clone(),
-            ast::Guard::Bool(false) => ast::ExpKind::Un(
-                ast::UnOp::Bool(boolean::UnOp::Not),
-                ast::OpTyp::Bool,
-                Box::new(exp.clone()),
-            ),
-            ast::Guard::Cmp(op, typ, exp_r) => {
-                ast::ExpKind::Cmp(*op, *typ, Box::new(exp.clone()), Box::new(exp_r.clone()))
-            }
-            ast::Guard::Sub(typ, check) => {
-                ast::ExpKind::Sub(Box::new(exp.clone()), Box::new(typ.clone()), check.clone())
-            }
-            ast::Guard::Match(pattern) => {
-                ast::ExpKind::Match(Box::new(exp.clone()), pattern.clone())
-            }
-            ast::Guard::Mem(exp_list) => {
-                ast::ExpKind::Mem(Box::new(exp.clone()), Box::new(exp_list.clone()))
-            }
-        };
-        let exp_cond = crate::note_phrase!(
-            node: exp_kind,
-            note: std::rc::Rc::new(ast::TypKind::Bool),
-            span: exp.span.clone()
-        );
-        ErrorKind::Trace(TraceErrorKind::Evaluation { text: Print::to_string(&exp_cond) })
+    result.nest(span.clone(), || {
+        ErrorKind::Trace(TraceErrorKind::Evaluation { text: guard_trace(guard) })
     })
+}
+
+// Preserve the diagnostic placeholder without introducing a runtime binding
+fn guard_trace(guard: &ast::Guard) -> String {
+    match guard {
+        ast::Guard::Bool(true) => "~case".to_owned(),
+        ast::Guard::Bool(false) => format!("{}~case", Print::to_string(&boolean::UnOp::Not)),
+        ast::Guard::Cmp(op, _, exp_r) => {
+            format!("(~case {} {})", Print::to_string(op), Print::to_string(exp_r))
+        }
+        ast::Guard::Sub(typ, _) => format!("~case <: {}", Print::to_string(typ)),
+        ast::Guard::Match(pattern) => format!("~case matches {}", Print::to_string(pattern)),
+        ast::Guard::Mem(exp_list) => format!("~case <- {}", Print::to_string(exp_list)),
+    }
 }
 
 // - Group instruction

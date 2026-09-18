@@ -124,17 +124,3 @@ fn slots_share_identity_without_replacing_occurrence_types() {
     assert_eq!(slot_outer_a.slot, slot_outer_b.slot);
     assert_eq!(slot_outer_b.var, var_outer_b);
 }
-
-#[test]
-fn case_slots_use_the_type_of_each_case_expression() {
-    let mut layout = FrameLayout::default();
-    layout.resolve_case_slot();
-    let typ_a = p4spec_rust::lang::data::typ::make::bool();
-    let typ_b = p4spec_rust::lang::data::typ::make::nat();
-    let slot_a = layout.case_slot(typ_a.clone());
-    let slot_b = layout.case_slot(typ_b.clone());
-    assert_eq!(slot_a.slot, slot_b.slot);
-    assert_eq!(slot_a.var.typ, typ_a);
-    assert_eq!(slot_b.var.typ, typ_b);
-    assert_eq!(layout.len(), 1);
-}

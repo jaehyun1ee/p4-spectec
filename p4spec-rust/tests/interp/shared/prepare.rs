@@ -190,23 +190,8 @@ fn structured_parameters_and_case_guards_share_the_callable_layout() {
     let sl_source::MetaFuncDef::<IdSlot, VarSlot>::Defined(func_defined) = &func.def else {
         panic!("expected defined function")
     };
-    assert_eq!(func.layout.len(), 4);
+    assert_eq!(func.layout.len(), 3);
     let sl::InstrKind::Case(instr) = &func_defined.block[0].node else { panic!("expected case") };
-    assert_eq!(
-        func.layout
-            .case_slot(p4spec_rust::lang::data::typ::make::bool())
-            .var
-            .id
-            .node,
-        "~case"
-    );
-    assert!(
-        func.layout
-            .case_slot(p4spec_rust::lang::data::typ::make::bool())
-            .var
-            .iters
-            .is_empty()
-    );
     let sl::ParamKind::Exp(_, exp_param) = &func_defined.params[0].node else {
         panic!("expected parameter pattern")
     };

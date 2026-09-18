@@ -957,3 +957,43 @@ fn clear_discards_memos_and_retains_the_live_arena() {
         assert_eq!(host.count("pure"), if clear { 2 } else { 1 });
     }
 }
+
+#[test]
+fn test_case_scrutinee_is_evaluated_once_across_guard_attempts() {
+    use p4spec_rust::lang::xl::{bool as bool_op, num::Number};
+    use p4spec_rust::note_phrase;
+
+    let source = "builtin dec $probe() : nat\ndec $entry() : nat\ndef $entry() = 0";
+    let mut spec_sl = spec(source);
+    let ast::DefKind::MetaFunc(ast::MetaFuncDef::Defined(func)) =
+        &mut spec_sl.last_mut().unwrap().node
+    else {
+        panic!("expected function");
+    };
+    let exp_num = |num: u64| -> ast::Exp {
+        note_phrase!(node: ast::ExpKind::Num(Number::Nat(num.into())), note: typ::make::nat().node, span: Span::default())
+    };
+    func.block = vec![phrase!(node: ast::InstrKind::Case(ast::CaseInstr {
+        exp: note_phrase!(node: ast::ExpKind::Call(
+            phrase!(node: "probe".to_owned(), span: Span::default()), vec![], vec![]),
+            note: typ::make::nat().node, span: Span::default()),
+        cases: [6, 7].into_iter().map(|num| ast::Case {
+            guard: ast::Guard::Cmp(ast::CmpOp::Bool(bool_op::CmpOp::Eq), ast::OpTyp::Nat, exp_num(num)),
+            block: vec![phrase!(node: ast::InstrKind::Return(ast::ReturnInstr { exp: exp_num(num) }), span: Span::default())],
+        }).collect(),
+        dangle: false,
+    }), span: Span::default())];
+    for det in [false, true] {
+        let builtin = host(|arena| nat(arena, 7), false);
+        let calls = builtin.calls.clone();
+        let mut runner = Runner::new(
+            Global::load(spec_sl.clone()).unwrap(),
+            SlInterp::new(Config::new(false, det, true)),
+            builtin,
+            NullExtern,
+        );
+        let value = runner.context().call_func("entry", &[], &[]).unwrap();
+        assert_eq!(number(runner.arena(), &value), "7");
+        assert_eq!(calls.get(), 1);
+    }
+}
