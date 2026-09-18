@@ -124,7 +124,7 @@ impl Renamer {
         }
         let exp_kind = match exp.node {
             ExpKind::Bool(_) | ExpKind::Num(_) | ExpKind::Text(_) => exp.node,
-            ExpKind::Var(id) => ExpKind::Var(self.rename_id(changed, id)),
+            ExpKind::Id(id) => ExpKind::Id(self.rename_id(changed, id)),
             ExpKind::Un(op, op_typ, exp) => {
                 ExpKind::Un(op, op_typ, Box::new(self.rename_exp(changed, *exp)))
             }

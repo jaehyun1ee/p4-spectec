@@ -214,7 +214,7 @@ fn eval_case_instr<Iface: Interface, Ext: Extern>(
     let id = crate::phrase!(node: "~case".to_owned(), span: Span::default());
     let mut ctx_guard = ctx.as_ref().clone();
     ctx_guard.add_value(Variable::new(id.clone(), vec![]), value);
-    let exp = crate::note_phrase!(node: ast::ExpKind::Var(id), note: instr.exp.note.clone(), span: instr.exp.span.clone());
+    let exp = crate::note_phrase!(node: ast::ExpKind::Id(id), note: instr.exp.note.clone(), span: instr.exp.span.clone());
     for case in &instr.cases {
         if unwrap!(eval_guard(runner_ctx, &ctx_guard, &exp, value, &case.guard)) {
             drop(ctx_guard);

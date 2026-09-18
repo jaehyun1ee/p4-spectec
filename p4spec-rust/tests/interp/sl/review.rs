@@ -19,7 +19,7 @@ fn id(name: &str) -> ast::Id {
     phrase!(node: name.to_owned(), span: Span::default())
 }
 fn var(name: &str) -> ast::Exp {
-    note_phrase!(node: ast::ExpKind::Var(id(name)), note: typ::make::nat().node, span: Span::default())
+    note_phrase!(node: ast::ExpKind::Id(id(name)), note: typ::make::nat().node, span: Span::default())
 }
 fn call(name: &str) -> ast::Instr {
     let exp = note_phrase!(node: ast::ExpKind::Call(id(name), vec![], vec![]), note: typ::make::nat().node, span: Span::default());

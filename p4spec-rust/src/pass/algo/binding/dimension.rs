@@ -32,7 +32,7 @@ pub fn infer_exp(exp: &ast::Exp) -> VEnv {
 fn infer_exp_inner(venv: &mut VEnv, exp: &ast::Exp, iters: &[ast::Iter]) {
     match &exp.node {
         ast::ExpKind::Bool(_) | ast::ExpKind::Num(_) | ast::ExpKind::Text(_) => {}
-        ast::ExpKind::Var(id) => infer_var(venv, exp, id, iters),
+        ast::ExpKind::Id(id) => infer_var(venv, exp, id, iters),
         ast::ExpKind::Un(_, _, exp)
         | ast::ExpKind::UpCast(_, exp)
         | ast::ExpKind::DownCast(_, exp)

@@ -28,13 +28,13 @@ fn test_capture_avoidance_in_target_body() {
         apply(&mut false, vec![binding("a", vec![]), binding("b", vec![instr_inner])]).unwrap();
     let InstrKind::Let(instr_outer) = &block[0].node else { panic!("expected let") };
     let InstrKind::Let(instr_inner) = &instr_outer.block[0].node else { panic!("expected let") };
-    let ExpKind::Var(id_fresh) = &instr_inner.exp_l.node else { panic!("expected variable") };
+    let ExpKind::Id(id_fresh) = &instr_inner.exp_l.node else { panic!("expected variable") };
     assert_ne!(id_fresh.node, "a");
     assert_eq!(instr_inner.block[0], ret("a"));
     let InstrKind::Return(instr_return) = &instr_inner.block[1].node else {
         panic!("expected return")
     };
-    let ExpKind::Var(id_return) = &instr_return.exp.node else { panic!("expected variable") };
+    let ExpKind::Id(id_return) = &instr_return.exp.node else { panic!("expected variable") };
     assert_eq!(id_return, id_fresh);
 }
 

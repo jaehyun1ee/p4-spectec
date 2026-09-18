@@ -7,7 +7,7 @@ use crate::lang::{
 use crate::pass::structure::{ol::ast::*, re::renamer::Renamer};
 
 fn var_id(exp: &Exp) -> &Id {
-    let ExpKind::Var(id) = &exp.node else { panic!("expected variable") };
+    let ExpKind::Id(id) = &exp.node else { panic!("expected variable") };
     id
 }
 

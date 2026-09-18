@@ -96,7 +96,7 @@ fn rename_var(ctx: &mut Context, renv: &mut RenameEnv, exp: &ast::Exp, id: &Id) 
     ctx.add_free(id_rename.clone());
     ids_rename.push(id_rename.clone());
     note_phrase! {
-        node: ast::ExpKind::Var(id_rename),
+        node: ast::ExpKind::Id(id_rename),
         note: exp.note.clone(),
         span: exp.span.clone(),
     }
@@ -104,7 +104,7 @@ fn rename_var(ctx: &mut Context, renv: &mut RenameEnv, exp: &ast::Exp, id: &Id) 
 
 pub fn rename_exp(ctx: &mut Context, renv: &mut RenameEnv, exp: &ast::Exp) -> ast::Exp {
     let kind = match &exp.node {
-        ast::ExpKind::Var(id) => return rename_var(ctx, renv, exp, id),
+        ast::ExpKind::Id(id) => return rename_var(ctx, renv, exp, id),
         ast::ExpKind::UpCast(typ, exp_inner) => {
             let exp_inner = rename_exp(ctx, renv, exp_inner);
             ast::ExpKind::UpCast(typ.clone(), Box::new(exp_inner))
@@ -181,12 +181,12 @@ pub fn rename_args(ctx: &mut Context, renv: &mut RenameEnv, args: &[ast::Arg]) -
 
 fn gen_exp_equality(id: &Id, id_rename: &Id, typ: &ast::Typ) -> ast::Exp {
     let exp_l = note_phrase! {
-        node: ast::ExpKind::Var(id.clone()),
+        node: ast::ExpKind::Id(id.clone()),
         note: typ.node.clone(),
         span: id.span.clone(),
     };
     let exp_r = note_phrase! {
-        node: ast::ExpKind::Var(id_rename.clone()),
+        node: ast::ExpKind::Id(id_rename.clone()),
         note: typ.node.clone(),
         span: id.span.clone(),
     };

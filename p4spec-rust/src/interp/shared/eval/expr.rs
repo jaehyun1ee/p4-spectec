@@ -50,7 +50,7 @@ pub(crate) fn eval_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, E
             make::text(runner_ctx.arena_mut(), value.clone(), Span::default()),
             span
         )),
-        ast::ExpKind::Var(id) => eval_var_exp(ctx, span, id),
+        ast::ExpKind::Id(id) => eval_var_exp(ctx, span, id),
         ast::ExpKind::Un(op, _, exp_inner) => eval_un_exp(runner_ctx, ctx, span, op, exp_inner),
         ast::ExpKind::Bin(op, _, exp_l, exp_r) => {
             eval_bin_exp(runner_ctx, ctx, span, op, exp_l, exp_r)

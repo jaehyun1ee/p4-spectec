@@ -4,16 +4,16 @@ use super::*;
 fn test_printer_preserves_el_delimiters_precedence_hints_and_definition_separators() {
     let hint = (
         id("ignored", "hint.watsup"),
-        exp(ExpKind::Var(id("also_ignored", "hint.watsup")), "hint.watsup"),
+        exp(ExpKind::Id(id("also_ignored", "hint.watsup")), "hint.watsup"),
     );
     let nested = exp(
         ExpKind::Bin(
             Box::new(exp(
                 ExpKind::Paren(Box::new(exp(
                     ExpKind::Bin(
-                        Box::new(exp(ExpKind::Var(id("a", "a")), "a")),
+                        Box::new(exp(ExpKind::Id(id("a", "a")), "a")),
                         ast::BinOp::Num(p4spec_rust::lang::xl::num::BinOp::Add),
-                        Box::new(exp(ExpKind::Var(id("b", "b")), "b")),
+                        Box::new(exp(ExpKind::Id(id("b", "b")), "b")),
                     ),
                     "inner",
                 ))),
@@ -21,7 +21,7 @@ fn test_printer_preserves_el_delimiters_precedence_hints_and_definition_separato
             )),
             ast::BinOp::Num(p4spec_rust::lang::xl::num::BinOp::Mul),
             Box::new(exp(
-                ExpKind::Iter(Box::new(exp(ExpKind::Var(id("c", "c")), "c")), ast::Iter::Opt),
+                ExpKind::Iter(Box::new(exp(ExpKind::Id(id("c", "c")), "c")), ast::Iter::Opt),
                 "outer",
             )),
         ),
@@ -45,7 +45,7 @@ fn test_printer_preserves_el_delimiters_precedence_hints_and_definition_separato
     assert_eq!(
         Print::to_string(&prem(ast::PremKind::Iter(ast::IterPrem {
             prem: Box::new(prem(ast::PremKind::If(ast::IfPrem {
-                exp: exp(ExpKind::Var(id("ready", "prem")), "prem"),
+                exp: exp(ExpKind::Id(id("ready", "prem")), "prem"),
             }))),
             iter: ast::Iter::List,
         }))),
@@ -124,15 +124,15 @@ fn test_printer_preserves_el_delimiters_precedence_hints_and_definition_separato
         definition(ast::DefKind::TableDef(ast::TableDef {
             id: id("rows", "def"),
             rows: vec![p4spec_rust::phrase! { node: (
-                exp(ExpKind::Var(id("pattern", "row")), "row"),
-                exp(ExpKind::Var(id("body", "row")), "row"),
+                exp(ExpKind::Id(id("pattern", "row")), "row"),
+                exp(ExpKind::Id(id("body", "row")), "row"),
             ), span: span("row") }],
         })),
         definition(ast::DefKind::FuncDef(ast::FuncDef {
             id: id("defined", "def"),
             tparams: vec![],
             args: vec![],
-            exp: exp(ExpKind::Var(id("body", "def")), "def"),
+            exp: exp(ExpKind::Id(id("body", "def")), "def"),
             prems: vec![prem(ast::PremKind::Else)],
         })),
         definition(ast::DefKind::Sep),

@@ -14,7 +14,7 @@ use crate::pass::structure::{
 };
 
 fn var_id(exp: &Exp) -> &Id {
-    let ExpKind::Var(id) = &exp.node else { panic!("expected variable") };
+    let ExpKind::Id(id) = &exp.node else { panic!("expected variable") };
     id
 }
 
@@ -82,10 +82,10 @@ fn test_function_inputs_main_and_else_share_names_and_preserve_def_arguments() {
 #[test]
 fn test_fixed_point_retains_distinct_identifier_use_spans() {
     let mut exp_input = variable("x");
-    let ExpKind::Var(id_input) = &mut exp_input.node else { unreachable!() };
+    let ExpKind::Id(id_input) = &mut exp_input.node else { unreachable!() };
     id_input.span = span(31);
     let mut exp_body = variable("x");
-    let ExpKind::Var(id_body) = &mut exp_body.node else { unreachable!() };
+    let ExpKind::Id(id_body) = &mut exp_body.node else { unreachable!() };
     id_body.span = span(37);
     let block_expect = vec![instr(InstrKind::Return(ReturnInstr { exp: exp_body }))];
     let (exps_match, block, block_else) =
@@ -131,7 +131,7 @@ fn test_prettification_matches_syntax_fixed_point_with_shadowing_and_iterators()
         for text_bound in texts {
             for text_used in texts {
                 let mut exp_input = variable(text_input);
-                let ExpKind::Var(id_input) = &mut exp_input.node else { unreachable!() };
+                let ExpKind::Id(id_input) = &mut exp_input.node else { unreachable!() };
                 id_input.span = span(31);
                 let mut instr_binding = binding(text_bound, text_input, vec![ret(text_used)]);
                 let InstrKind::Let(instr_let) = &mut instr_binding.node else { unreachable!() };

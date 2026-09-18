@@ -34,7 +34,7 @@ pub fn assign_exp<Ctx: WriteContext>(
     value: Value,
 ) -> Backtrack<Ctx> {
     match (&exp.node, arena.kind(&value)) {
-        (ast::ExpKind::Var(id), _) => assign_var_exp(arena, ctx, id, value),
+        (ast::ExpKind::Id(id), _) => assign_var_exp(arena, ctx, id, value),
         (ast::ExpKind::Tuple(exps), ValueKind::Tuple(values)) => {
             let values = values.to_vec();
             assign_tuple_exp(arena, ctx, exps, &values)

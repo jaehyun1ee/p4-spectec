@@ -668,11 +668,11 @@ fn pattern_set_covered_by_typ(ctx: &Context, typ: &ast::Typ) -> Result<PatternSe
 
 fn pattern_set_covered_by_exp(ctx: &Context, exp_al: &ast::Exp) -> Result<PatternSet, AlgoError> {
     match &exp_al.node {
-        ast::ExpKind::Var(_) => {
+        ast::ExpKind::Id(_) => {
             let typ = phrase!(node: exp_al.note.as_ref().clone(), span: exp_al.span.clone());
             pattern_set_covered_by_typ(ctx, &typ)
         }
-        ast::ExpKind::UpCast(_, exp_inner) if matches!(exp_inner.node, ast::ExpKind::Var(_)) => {
+        ast::ExpKind::UpCast(_, exp_inner) if matches!(exp_inner.node, ast::ExpKind::Id(_)) => {
             let typ = phrase!(node: exp_inner.note.as_ref().clone(), span: exp_inner.span.clone());
             pattern_set_covered_by_typ(ctx, &typ)
         }
@@ -702,7 +702,7 @@ fn check_valid_table_rows(
     let has_closer =
         if let Some(row_al) = rows_al.last() {
             row_al.node.exps_signature.iter().all(
-                |exp_al| matches!(&exp_al.node, ast::ExpKind::Var(id) if id.node.starts_with('_')),
+                |exp_al| matches!(&exp_al.node, ast::ExpKind::Id(id) if id.node.starts_with('_')),
             )
         } else {
             false

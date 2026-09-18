@@ -24,7 +24,7 @@ fn test_conversion_inserts_index_guards_at_evaluation_sites_in_source_order() {
             panic!("expected strict index bound");
         };
         assert_eq!(exp_idx.span, index_span);
-        assert!(matches!(&exp_idx.node, ast::ExpKind::Var(id) if id.node == index_name));
+        assert!(matches!(&exp_idx.node, ast::ExpKind::Id(id) if id.node == index_name));
         assert_eq!(exp_len.span, guard_span);
         let ast::ExpKind::Len(exp_base) = &exp_len.node else {
             panic!("expected indexed-base length");
@@ -93,7 +93,7 @@ fn test_conversion_inserts_list_and_optional_iteration_guards_in_source_order() 
             panic!("expected dimension expression");
         };
         assert_eq!(*actual_iter, iter);
-        let ast::ExpKind::Var(id) = &exp_inner.node else {
+        let ast::ExpKind::Id(id) = &exp_inner.node else {
             panic!("expected dimension variable");
         };
         &id.node

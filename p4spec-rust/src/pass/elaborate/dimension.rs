@@ -97,7 +97,7 @@ impl DimContext {
 fn infer_exp(dim_ctx: &mut DimContext, exp: &ast::Exp, iters: &[ast::Iter]) {
     match &exp.node {
         ast::ExpKind::Bool(_) | ast::ExpKind::Num(_) | ast::ExpKind::Text(_) => {}
-        ast::ExpKind::Var(id) => {
+        ast::ExpKind::Id(id) => {
             let typ = phrase!(node: exp.note.as_ref().clone(), span: exp.span.clone());
             dim_ctx.add(id, Dim::new(typ, iters.to_vec()));
         }
@@ -346,7 +346,7 @@ fn annotate_exp(bounds: &VEnv, exp: &mut ast::Exp) -> Result<Occurrences, ElabEr
         ast::ExpKind::Bool(_) => Ok(annotate_bool_exp()),
         ast::ExpKind::Num(_) => Ok(annotate_num_exp()),
         ast::ExpKind::Text(_) => Ok(annotate_text_exp()),
-        ast::ExpKind::Var(id) => Ok(annotate_var_exp(span, typ_kind, id)),
+        ast::ExpKind::Id(id) => Ok(annotate_var_exp(span, typ_kind, id)),
         ast::ExpKind::Un(_, _, exp_inner) => annotate_un_exp(bounds, exp_inner),
         ast::ExpKind::Bin(_, _, exp_l, exp_r) => annotate_bin_exp(bounds, exp_l, exp_r),
         ast::ExpKind::Cmp(_, _, exp_l, exp_r) => annotate_cmp_exp(bounds, exp_l, exp_r),

@@ -35,7 +35,7 @@ fn test_nested_collection_preserves_first_identifier_spans_and_existing_names() 
     let mut id_head = id("shared");
     id_head.span = span(3);
     let exp_head = crate::note_phrase! {
-        node: ExpKind::Var(id_head.clone()), note: TypKind::Bool, span: span(3)
+        node: ExpKind::Id(id_head.clone()), note: TypKind::Bool, span: span(3)
     };
     let instr_result = ast_ol::ResultInstr {
         rel_signature: signature(),

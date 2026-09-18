@@ -4,7 +4,7 @@ use crate::lang::{common::Variable, il::ast};
 
 pub fn is_iter_var_exp(exp: &ast::Exp) -> Option<Variable> {
     match &exp.node {
-        ast::ExpKind::Var(id) => Some(Variable::new(id.clone(), vec![])),
+        ast::ExpKind::Id(id) => Some(Variable::new(id.clone(), vec![])),
         ast::ExpKind::Iter(exp, (iter, vars)) => {
             let mut var = is_iter_var_exp(exp)?;
             let [binding] = vars.as_slice() else {

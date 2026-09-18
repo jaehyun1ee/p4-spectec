@@ -73,6 +73,6 @@ fn test_failed_variant_alternative_does_not_leak_wildcard_bindings() {
     assert!(
         case.args()
             .iter()
-            .any(|exp| { matches!(&exp.node, ast::ExpKind::Var(id) if id.node == "_bool") })
+            .any(|exp| { matches!(&exp.node, ast::ExpKind::Id(id) if id.node == "_bool") })
     );
 }

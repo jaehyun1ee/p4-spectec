@@ -302,7 +302,7 @@ fn decode_exp_kind(json: &json) -> Result<ExpKind, DecodeError> {
         ("BoolE", [json]) => Ok(ExpKind::Bool(super::super::boolean(json)?)),
         ("NumE", [op, num]) => Ok(ExpKind::Num(decode_num_op(op)?, xl::decode_num(num)?)),
         ("TextE", [text]) => Ok(ExpKind::Text(string(text)?.to_owned())),
-        ("VarE", [id]) => Ok(ExpKind::Var(decode_id(id)?)),
+        ("VarE", [id]) => Ok(ExpKind::Id(decode_id(id)?)),
         ("UnE", [op, exp]) => Ok(ExpKind::Un(decode_un_op(op)?, Box::new(decode_exp(exp)?))),
         ("BinE", [exp_l, op, exp_r]) => Ok(ExpKind::Bin(
             Box::new(decode_exp(exp_l)?),
@@ -392,7 +392,7 @@ fn encode_exp_kind(exp: &ExpKind) -> json {
         ExpKind::Bool(value) => json!(["BoolE", value]),
         ExpKind::Num(op, num) => json!(["NumE", encode_num_op(*op), xl::encode_num(num)]),
         ExpKind::Text(text) => json!(["TextE", text]),
-        ExpKind::Var(id) => json!(["VarE", encode_id(id)]),
+        ExpKind::Id(id) => json!(["VarE", encode_id(id)]),
         ExpKind::Un(op, exp) => json!(["UnE", encode_un_op(*op), encode_exp(exp)]),
         ExpKind::Bin(exp_l, op, exp_r) => {
             json!(["BinE", encode_exp(exp_l), encode_bin_op(*op), encode_exp(exp_r)])

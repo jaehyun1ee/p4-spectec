@@ -179,7 +179,7 @@ fn collapse_expunits(
 
 fn collapse_exp(mut renamer: Renamer, exp: &Exp, exp_target: &Exp) -> Option<Renamer> {
     match (&exp.node, &exp_target.node) {
-        (ExpKind::Var(id), ExpKind::Var(id_target)) => {
+        (ExpKind::Id(id), ExpKind::Id(id_target)) => {
             // Matching x against y records y -> x for the later body
             if !id.syntax_eq(id_target) {
                 renamer.add(id_target.clone(), id.clone());

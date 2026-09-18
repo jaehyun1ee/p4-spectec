@@ -10,7 +10,7 @@ use super::ast::*;
 /// list is empty
 pub fn as_exp(is_dim: bool, var: &Var) -> Exp {
     let mut exp: Exp = crate::note_phrase! {
-        node: ExpKind::Var(var.id.clone()),
+        node: ExpKind::Id(var.id.clone()),
         note: var.typ.node.clone(),
         span: var.id.span.clone(),
     };

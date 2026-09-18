@@ -6,7 +6,7 @@ use super::ast::*;
 /// relation or function that may not match
 pub fn is_partial_exp(exp: &Exp) -> bool {
     match &exp.node {
-        ExpKind::Bool(_) | ExpKind::Num(_) | ExpKind::Text(_) | ExpKind::Var(_) => false,
+        ExpKind::Bool(_) | ExpKind::Num(_) | ExpKind::Text(_) | ExpKind::Id(_) => false,
         ExpKind::Un(_, _, exp)
         | ExpKind::UpCast(_, exp)
         | ExpKind::DownCast(_, exp)

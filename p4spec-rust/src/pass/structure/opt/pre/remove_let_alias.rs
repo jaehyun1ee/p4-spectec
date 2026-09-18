@@ -110,7 +110,7 @@ fn iterated_var(exp: &Exp) -> Option<(&Id, &Iter)> {
     let ExpKind::Iter(exp, (iter, _)) = &exp.node else {
         return None;
     };
-    let ExpKind::Var(id) = &exp.node else {
+    let ExpKind::Id(id) = &exp.node else {
         return None;
     };
     Some((id, iter))
@@ -119,7 +119,7 @@ fn iterated_var(exp: &Exp) -> Option<(&Id, &Iter)> {
 fn remove_let_instr(instr_ol: LetInstr, span: Span) -> Result<Block, StructureError> {
     let LetInstr { exp_l, exp_r, iter_instrs, block } = instr_ol;
     // let y = x { return y } -> return x
-    if let (ExpKind::Var(id_l), ExpKind::Var(id_r)) = (&exp_l.node, &exp_r.node) {
+    if let (ExpKind::Id(id_l), ExpKind::Id(id_r)) = (&exp_l.node, &exp_r.node) {
         let renamer = Renamer::singleton(id_l.clone(), id_r.clone());
         let block = renamer.rename_instrs(&mut false, block)?;
         return remove_block(block);
@@ -134,7 +134,7 @@ fn remove_let_instr(instr_ol: LetInstr, span: Span) -> Result<Block, StructureEr
         return remove_block(block);
     }
     // let y = x* { return y } -> return x*
-    if let ExpKind::Var(id_l) = &exp_l.node
+    if let ExpKind::Id(id_l) = &exp_l.node
         && iterated_var(&exp_r).is_some()
     {
         let replacer = Replacer::singleton(id_l.clone(), exp_r);

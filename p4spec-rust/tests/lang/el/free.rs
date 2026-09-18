@@ -4,9 +4,9 @@ use super::*;
 fn test_free_expression_ids_ignore_source_spans_and_render_in_source_order() {
     let exp_bin = exp(
         ExpKind::Bin(
-            Box::new(exp(ExpKind::Var(id("left", "left.watsup")), "left.watsup")),
+            Box::new(exp(ExpKind::Id(id("left", "left.watsup")), "left.watsup")),
             BinOp::Num(p4spec_rust::lang::xl::num::BinOp::Add),
-            Box::new(exp(ExpKind::Var(id("right", "right.watsup")), "right.watsup")),
+            Box::new(exp(ExpKind::Id(id("right", "right.watsup")), "right.watsup")),
         ),
         "root.watsup",
     );
@@ -16,7 +16,7 @@ fn test_free_expression_ids_ignore_source_spans_and_render_in_source_order() {
 }
 #[test]
 fn test_free_collection_covers_paths_calls_premises_and_definition_bodies() {
-    let variable = |name| exp(ExpKind::Var(id(name, "different-source.watsup")), "expr.watsup");
+    let variable = |name| exp(ExpKind::Id(id(name, "different-source.watsup")), "expr.watsup");
     let path = p4spec_rust::phrase! { node: ast::PathKind::Slice(
         Box::new(p4spec_rust::phrase! {
             node:

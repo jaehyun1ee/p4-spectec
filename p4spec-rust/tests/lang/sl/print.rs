@@ -36,7 +36,7 @@ fn typ(kind: il::ast::TypKind) -> il::ast::Typ {
 
 fn variable(name: &str) -> il::ast::Exp {
     p4spec_rust::note_phrase! {
-        node: il::ast::ExpKind::Var(id(name)),
+        node: il::ast::ExpKind::Id(id(name)),
         note: il::ast::TypKind::Bool,
         span: span(name),
     }

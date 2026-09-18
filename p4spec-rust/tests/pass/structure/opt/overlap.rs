@@ -17,7 +17,7 @@ fn test_boolean_partition_and_literal_disjointness() {
     use crate::lang::sl::ast::Guard;
 
     let exp_target =
-        exp(ExpKind::Var(crate::phrase!(node: "flag".into(), span: Default::default())));
+        exp(ExpKind::Id(crate::phrase!(node: "flag".into(), span: Default::default())));
     let exp_a = cmp(exp_target.clone(), exp(ExpKind::Bool(true)));
     let exp_b = cmp(exp_target.clone(), exp(ExpKind::Bool(false)));
     assert!(matches!(
@@ -54,7 +54,7 @@ fn test_boolean_partition_and_literal_disjointness() {
 #[test]
 fn test_comparison_order_negation_and_fuzzy() {
     let exp_target =
-        exp(ExpKind::Var(crate::phrase!(node: "flag".into(), span: Default::default())));
+        exp(ExpKind::Id(crate::phrase!(node: "flag".into(), span: Default::default())));
     let exp_a = cmp(exp_target.clone(), exp(ExpKind::Bool(true)));
     let exp_b = cmp(exp(ExpKind::Bool(false)), exp_target.clone());
     assert!(matches!(

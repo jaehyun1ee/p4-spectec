@@ -116,7 +116,7 @@ pub enum ExpKind {
     /// `text`
     Text(Text),
     /// `varid`
-    Var(Id),
+    Id(Id),
     /// `unop exp`
     Un(UnOp, OpTyp, Box<Exp>),
     /// `exp binop exp`

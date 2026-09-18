@@ -2264,7 +2264,7 @@ ExpVariable: ast::Exp = {
     <id:VarId> => {
         let span = id.span.clone();
         crate::phrase! {
-            node: ExpKind::Var(id),
+            node: ExpKind::Id(id),
             span: span,
         }
     },
@@ -2277,7 +2277,7 @@ ExpVariable: ast::Exp = {
             span: span.clone(),
         };
         crate::phrase! {
-            node: ExpKind::Var(id),
+            node: ExpKind::Id(id),
             span: span,
         }
     },
@@ -2290,7 +2290,7 @@ ExpVariable: ast::Exp = {
             span: span.clone(),
         };
         crate::phrase! {
-            node: ExpKind::Var(id),
+            node: ExpKind::Id(id),
             span: span,
         }
     },
@@ -2303,7 +2303,7 @@ ExpVariable: ast::Exp = {
             span: span.clone(),
         };
         crate::phrase! {
-            node: ExpKind::Var(id),
+            node: ExpKind::Id(id),
             span: span,
         }
     },
@@ -2316,7 +2316,7 @@ ExpVariable: ast::Exp = {
             span: span.clone(),
         };
         crate::phrase! {
-            node: ExpKind::Var(id),
+            node: ExpKind::Id(id),
             span: span,
         }
     },

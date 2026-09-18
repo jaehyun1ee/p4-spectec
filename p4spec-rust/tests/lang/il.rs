@@ -31,7 +31,7 @@ fn exp(kind: ast::ExpKind) -> ast::Exp {
     }
 }
 fn var(name: &str) -> ast::Exp {
-    exp(ast::ExpKind::Var(id(name)))
+    exp(ast::ExpKind::Id(id(name)))
 }
 fn arg(kind: ast::ArgKind) -> ast::Arg {
     p4spec_rust::phrase! {
@@ -63,7 +63,7 @@ fn hint() -> ast::Hint {
             node: "meta".into(),
             span: Span::default(),
         },
-        p4spec_rust::phrase! { node: p4spec_rust::lang::el::ast::ExpKind::Var(
+        p4spec_rust::phrase! { node: p4spec_rust::lang::el::ast::ExpKind::Id(
             p4spec_rust::phrase! {
                 node: "payload".into(),
                 span: Span::default(),

@@ -180,7 +180,7 @@ impl Print for Exp {
             }
             ExpKind::Num(_, num) => num.print(printer),
             ExpKind::Text(text) => write!(printer, "\"{}\"", escaped(text)),
-            ExpKind::Var(id) => printer.write_str(&id.node),
+            ExpKind::Id(id) => printer.write_str(&id.node),
             ExpKind::Un(op, exp) => {
                 op.print(printer)?;
                 exp.print(printer)

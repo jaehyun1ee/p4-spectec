@@ -70,7 +70,7 @@ impl Free for ExpKind {
     fn free_into(&self, free: &mut IdSet) {
         match self {
             Self::Bool(_) | Self::Num(_) | Self::Text(_) => {}
-            Self::Var(id) => {
+            Self::Id(id) => {
                 free.insert(id.clone());
             }
             Self::Un(_, _, exp)

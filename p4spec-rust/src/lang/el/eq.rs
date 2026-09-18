@@ -133,7 +133,7 @@ impl SyntaxEq for ExpKind {
                 op_l.syntax_eq(op_r) && num_l == num_r
             }
             (ExpKind::Text(text_l), ExpKind::Text(text_r)) => text_l == text_r,
-            (ExpKind::Var(id_l), ExpKind::Var(id_r)) => id_l.syntax_eq(id_r),
+            (ExpKind::Id(id_l), ExpKind::Id(id_r)) => id_l.syntax_eq(id_r),
             (ExpKind::Un(op_l, exp_l), ExpKind::Un(op_r, exp_r)) => {
                 op_l.syntax_eq(op_r) && exp_l.syntax_eq(exp_r)
             }

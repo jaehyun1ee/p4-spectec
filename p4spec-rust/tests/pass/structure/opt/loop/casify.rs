@@ -7,7 +7,7 @@ use crate::{
     runtime::envs::algo::TDEnv,
 };
 fn var(text: &str) -> Exp {
-    crate::note_phrase!(node: ExpKind::Var(crate::phrase!(node: text.into(), span: Default::default())), note: TypKind::Bool, span: Default::default())
+    crate::note_phrase!(node: ExpKind::Id(crate::phrase!(node: text.into(), span: Default::default())), note: TypKind::Bool, span: Default::default())
 }
 
 fn span(int_line: usize) -> Span {
@@ -253,7 +253,7 @@ fn test_identical_subtype_guard_retains_case_proof_and_expression_span() {
 
 fn return_name_ptr(instr: &Instr) -> *const u8 {
     let InstrKind::Return(instr_return) = &instr.node else { panic!("expected return") };
-    let ExpKind::Var(id) = &instr_return.exp.node else { panic!("expected variable") };
+    let ExpKind::Id(id) = &instr_return.exp.node else { panic!("expected variable") };
     id.node.as_ptr()
 }
 

@@ -49,7 +49,7 @@ fn exp(kind: ast::ExpKind) -> ast::Exp {
     }
 }
 fn variable(name: &str) -> ast::Exp {
-    exp(ast::ExpKind::Var(id(name)))
+    exp(ast::ExpKind::Id(id(name)))
 }
 fn atom(name: &str) -> ast::Atom {
     p4spec_rust::phrase! {
@@ -528,7 +528,7 @@ fn test_free_aggregates_and_definition_omissions_follow_the_oracle() {
 }
 
 fn assert_var(exp: &ast::Exp, expected_id: &ast::Id, expected_ty: ast::TypKind) {
-    let ast::ExpKind::Var(id) = &exp.node else { panic!("expected variable expression") };
+    let ast::ExpKind::Id(id) = &exp.node else { panic!("expected variable expression") };
     assert_eq!(id, expected_id);
     assert_eq!(exp.note.as_ref(), &expected_ty);
     assert_eq!(exp.span, expected_id.span);

@@ -53,9 +53,7 @@ fn test_nested_bindings_avoid_upstream_guard_names_and_keep_iterator_roles() {
 #[test]
 fn test_rule_output_renaming_keeps_input_and_locations() {
     let mut exp_output = variable("out'''");
-    let crate::lang::il::ast::ExpKind::Var(id_output) = &mut exp_output.node else {
-        unreachable!()
-    };
+    let crate::lang::il::ast::ExpKind::Id(id_output) = &mut exp_output.node else { unreachable!() };
     id_output.span = span(23);
     let instr_rule = instr(InstrKind::Rule(RuleInstr {
         id: id("rel"),

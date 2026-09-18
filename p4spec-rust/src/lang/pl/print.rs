@@ -16,7 +16,7 @@ impl Print for Exp {
             ExpKind::Bool(value) => write!(printer, "{value}"),
             ExpKind::Num(value) => value.print(printer),
             ExpKind::Text(text) => write!(printer, "\"{}\"", escaped(text)),
-            ExpKind::Var(id) => printer.write_str(&id.node),
+            ExpKind::Id(id) => printer.write_str(&id.node),
             ExpKind::Un(op, _, exp) => {
                 op.print(printer)?;
                 exp.print(printer)

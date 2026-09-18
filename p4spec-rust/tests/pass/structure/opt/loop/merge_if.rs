@@ -7,7 +7,7 @@ use crate::{
     runtime::envs::algo::TDEnv,
 };
 fn var(text: &str) -> Exp {
-    crate::note_phrase!(node: ExpKind::Var(crate::phrase!(node: text.into(), span: Default::default())), note: TypKind::Bool, span: Default::default())
+    crate::note_phrase!(node: ExpKind::Id(crate::phrase!(node: text.into(), span: Default::default())), note: TypKind::Bool, span: Default::default())
 }
 
 fn span(int_line: usize) -> Span {

@@ -28,14 +28,14 @@ fn test_antiunification_populates_each_path_in_left_to_right_expression_order() 
     let template_ids = items
         .iter()
         .map(|item| match &item.node {
-            ast::ExpKind::Var(id) => id,
+            ast::ExpKind::Id(id) => id,
             _ => panic!("expected fresh unifier"),
         })
         .collect::<Vec<_>>();
     assert_ne!(template_ids[0].node, template_ids[1].node);
     assert!(ctx.frees.contains(template_ids[0]));
     assert!(ctx.frees.contains(template_ids[1]));
-    assert!(matches!(&template[1].node, ast::ExpKind::Var(id) if id.node == "shared"));
+    assert!(matches!(&template[1].node, ast::ExpKind::Id(id) if id.node == "shared"));
 
     let compared_values = |prems_by_rule: &[ast::Prem]| {
         prems_by_rule
@@ -70,7 +70,7 @@ fn test_antiunification_freshness_avoids_collisions_within_each_operation() {
             ],
         )
         .expect("equivalent boolean inputs");
-        let ast::ExpKind::Var(id) = &template[0].node else {
+        let ast::ExpKind::Id(id) = &template[0].node else {
             panic!("expected fresh unifier");
         };
         id.clone()
@@ -108,7 +108,7 @@ fn test_antiunification_uses_runtime_equivalence_for_plain_type_aliases() {
         antiunify::antiunify(&mut ctx, vec![vec![alias_value], vec![bool_value]])
             .expect("plain alias is equivalent to its underlying type");
 
-    assert!(matches!(template[0].node, ast::ExpKind::Var(_)));
+    assert!(matches!(template[0].node, ast::ExpKind::Id(_)));
     assert_eq!(prems.iter().map(Vec::len).collect::<Vec<_>>(), vec![1, 1]);
 }
 

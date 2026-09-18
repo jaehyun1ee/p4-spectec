@@ -347,7 +347,7 @@ fn infer_exp(ctx: &mut Context, exp: &el::Exp) -> Attempt<il::Exp> {
         el::ExpKind::Bool(value) => infer_bool_exp(ctx, &exp.span, *value),
         el::ExpKind::Num(_, value) => infer_num_exp(ctx, &exp.span, value),
         el::ExpKind::Text(value) => infer_text_exp(ctx, &exp.span, value),
-        el::ExpKind::Var(id) => infer_var_exp(ctx, &exp.span, id),
+        el::ExpKind::Id(id) => infer_var_exp(ctx, &exp.span, id),
         el::ExpKind::Un(op, exp_inner) => infer_un_exp(ctx, &exp.span, *op, exp_inner),
         el::ExpKind::Bin(exp_l, op, exp_r) => infer_bin_exp(ctx, &exp.span, exp_l, *op, exp_r),
         el::ExpKind::Cmp(exp_l, op, exp_r) => infer_cmp_exp(ctx, &exp.span, exp_l, *op, exp_r),
@@ -435,7 +435,7 @@ fn infer_var_exp(ctx: &mut Context, span: &Span, id: &Id) -> Attempt<il::Exp> {
         return fail_infer(&id.span, "variable");
     };
     let exp_il = note_phrase! {
-        node: il::ExpKind::Var(id.clone()),
+        node: il::ExpKind::Id(id.clone()),
         note: typ_il.node.clone(),
         span: span.clone(),
     };
@@ -1101,7 +1101,7 @@ fn elab_singleton_iter_exp(
     iter_expect_il: il::Iter,
     exp: &el::Exp,
 ) -> Attempt<il::Exp> {
-    if matches!(&exp.node, el::ExpKind::Var(id) if id.node == "_")
+    if matches!(&exp.node, el::ExpKind::Id(id) if id.node == "_")
         || matches!(&exp.node, el::ExpKind::Eps)
         || matches!(&exp.node, el::ExpKind::List(exps) if exps.is_empty())
     {
@@ -1132,7 +1132,7 @@ fn elab_exp_normal(ctx: &mut Context, typ_expect_il: &il::Typ, exp: &el::Exp) ->
             Err(failure) => Err(failure),
         },
         Err(_) => {
-            if matches!(&exp.node, el::ExpKind::Var(id) if id.node == "_") {
+            if matches!(&exp.node, el::ExpKind::Id(id) if id.node == "_") {
                 return elab_wildcard_exp(ctx, typ_expect_il, exp);
             }
             if let il::TypKind::Var(id, targs_il) = &typ_expect_il.node

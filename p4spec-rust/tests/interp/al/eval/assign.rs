@@ -35,7 +35,7 @@ fn exp(node: ast::ExpKind) -> ast::Exp {
     note_phrase!(node: node, note: typ::make::bool().node, span: span(4))
 }
 fn var_exp(name: &str) -> ast::Exp {
-    exp(ast::ExpKind::Var(id(name)))
+    exp(ast::ExpKind::Id(id(name)))
 }
 fn var(name: &str, iters: Vec<ast::Iter>) -> ast::Var {
     ast::Var { id: id(name), typ: phrase!(node: typ::make::bool().node, span: span(5)), iters }
@@ -253,7 +253,7 @@ fn test_assignment_errors_are_fatal_and_located() {
     let global = Global::load(vec![]).unwrap();
     let exps = vec![
         var_exp("x"),
-        note_phrase!(node: ast::ExpKind::Var(id("y")), note: typ::make::bool().node, span: span(9)),
+        note_phrase!(node: ast::ExpKind::Id(id("y")), note: typ::make::bool().node, span: span(9)),
     ];
     let Backtrack::Err(traces) = assign_exps(&mut arena, Context::new(&global), &exps, &[]) else {
         panic!("expected arity error")

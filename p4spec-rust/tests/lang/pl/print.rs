@@ -29,7 +29,7 @@ fn typ() -> il::ast::Typ {
 fn variable(name: &str) -> pl::ast::Exp {
     pl::annot::Annotated {
         node: p4spec_rust::note_phrase! {
-            node: pl::ast::ExpKind::Var(id(name)),
+            node: pl::ast::ExpKind::Id(id(name)),
             note: il::ast::TypKind::Bool,
             span: span(name),
         },

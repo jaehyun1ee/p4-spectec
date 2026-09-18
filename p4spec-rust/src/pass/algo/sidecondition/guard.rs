@@ -397,7 +397,7 @@ fn collect_exp(exp_al: &ast::Exp) -> Vec<ast::Prem> {
         ast::ExpKind::Bool(_)
         | ast::ExpKind::Num(_)
         | ast::ExpKind::Text(_)
-        | ast::ExpKind::Var(_) => vec![],
+        | ast::ExpKind::Id(_) => vec![],
         ast::ExpKind::Un(_, _, exp_inner_al)
         | ast::ExpKind::UpCast(_, exp_inner_al)
         | ast::ExpKind::DownCast(_, exp_inner_al)

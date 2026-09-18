@@ -177,7 +177,7 @@ fn optional_and_list_conditions_preserve_empty_iteration_semantics() {
     for (iter, expected) in [(ast::Iter::Opt, "9"), (ast::Iter::List, "5")] {
         let id = phrase!(node: "n".to_owned(), span: Span::default());
         let var = ast::Var { id: id.clone(), typ: typ::make::nat(), iters: vec![] };
-        let exp_var = note_phrase!(node: ast::ExpKind::Var(id), note: typ::make::nat().node, span: Span::default());
+        let exp_var = note_phrase!(node: ast::ExpKind::Id(id), note: typ::make::nat().node, span: Span::default());
         let exp_l = note_phrase!(node: ast::ExpKind::Iter(Box::new(exp_var), (iter, vec![var.clone()])), note: typ::make::iter(typ::make::nat(), iter).node, span: Span::default());
         let exp_r = note_phrase!(node: if iter == ast::Iter::Opt { ast::ExpKind::Opt(None) } else { ast::ExpKind::List(vec![]) }, note: typ::make::iter(typ::make::nat(), iter).node, span: Span::default());
         let instr_if = phrase!(node: ast::InstrKind::If(ast::IfInstr { exp: boolean(false), iter_exps: vec![(iter, vec![var])], block: vec![instr(exp(5))], dangle: true }), span: Span::default());
@@ -231,7 +231,7 @@ fn type_arguments_shadow_global_type_definitions() {
 #[test]
 fn case_comparison_rhs_observes_the_scrutinee_binding() {
     use p4spec_rust::lang::xl::bool as bool_op;
-    let exp_r = note_phrase!(node: ast::ExpKind::Var(phrase!(node: "~case".to_owned(), span: Span::default())), note: typ::make::nat().node, span: Span::default());
+    let exp_r = note_phrase!(node: ast::ExpKind::Id(phrase!(node: "~case".to_owned(), span: Span::default())), note: typ::make::nat().node, span: Span::default());
     let block = vec![phrase!(node: ast::InstrKind::Case(ast::CaseInstr {
         exp: exp(7),
         cases: vec![ast::Case {
@@ -302,7 +302,7 @@ fn optional_condition_preserves_remaining_iterator_order_and_outer_bindings() {
             let var = ast::Var { id: id.clone(), typ: typ::make::bool(), iters: vec![] };
             let mut var_list = var.clone();
             var_list.iters.push(ast::Iter::List);
-            let exp = note_phrase!(node: ast::ExpKind::Var(id.clone()), note: typ::make::bool().node, span: Span::default());
+            let exp = note_phrase!(node: ast::ExpKind::Id(id.clone()), note: typ::make::bool().node, span: Span::default());
             let iter_exps = vec![
                 (ast::Iter::List, vec![var]),
                 (ast::Iter::List, vec![var_list]),

@@ -48,11 +48,11 @@ fn exp(kind: ast::ExpKind, note: ast::TypKind, line: usize) -> ast::Exp {
 }
 
 fn var_exp(name: &str, line: usize) -> ast::Exp {
-    exp(ast::ExpKind::Var(id(name, line)), ast::TypKind::Bool, line)
+    exp(ast::ExpKind::Id(id(name, line)), ast::TypKind::Bool, line)
 }
 
 fn typed_var_exp(name: &str, typ: &ast::Typ, line: usize) -> ast::Exp {
-    exp(ast::ExpKind::Var(id(name, line)), typ.node.clone(), line)
+    exp(ast::ExpKind::Id(id(name, line)), typ.node.clone(), line)
 }
 
 fn iterated_var_exp(name: &str, typ: &ast::Typ, iter: ast::Iter, line: usize) -> ast::Exp {

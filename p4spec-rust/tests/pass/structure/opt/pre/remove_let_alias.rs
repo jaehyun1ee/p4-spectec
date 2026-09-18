@@ -34,7 +34,7 @@ fn test_iterated_aliases_and_replacement_capture() {
     )])
     .unwrap();
     let InstrKind::Let(instr_let) = &block[0].node else { panic!("expected let") };
-    let ExpKind::Var(id_fresh) = &instr_let.exp_l.node else { panic!("expected variable") };
+    let ExpKind::Id(id_fresh) = &instr_let.exp_l.node else { panic!("expected variable") };
     assert_ne!(id_fresh.node, "x");
     let InstrKind::Return(instr_return) = &instr_let.block[0].node else {
         panic!("expected return")
@@ -43,7 +43,7 @@ fn test_iterated_aliases_and_replacement_capture() {
     let InstrKind::Return(instr_return) = &instr_let.block[1].node else {
         panic!("expected return")
     };
-    let ExpKind::Var(id_return) = &instr_return.exp.node else { panic!("expected variable") };
+    let ExpKind::Id(id_return) = &instr_return.exp.node else { panic!("expected variable") };
     assert_eq!(id_return, id_fresh);
 }
 

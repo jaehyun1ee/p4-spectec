@@ -20,7 +20,7 @@ fn test_multiple_binding_renames_repetitions_and_compares_them_in_occurrence_ord
     let ids = exps
         .iter()
         .map(|exp| match &exp.node {
-            ast::ExpKind::Var(id) => id,
+            ast::ExpKind::Id(id) => id,
             _ => panic!("expected variable binding"),
         })
         .collect::<Vec<_>>();
@@ -46,7 +46,7 @@ fn test_multiple_binding_renames_repetitions_and_compares_them_in_occurrence_ord
         let ast::ExpKind::Cmp(_, ast::OpTyp::Bool, _, exp_r) = &exp.node else {
             panic!("expected equality comparison");
         };
-        let ast::ExpKind::Var(id) = &exp_r.node else {
+        let ast::ExpKind::Id(id) = &exp_r.node else {
             panic!("expected renamed right operand");
         };
         id.span.clone()

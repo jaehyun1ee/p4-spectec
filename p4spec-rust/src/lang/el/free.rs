@@ -88,7 +88,7 @@ impl Free for ExpKind {
             | Self::Atom(_)
             | Self::Hole(_)
             | Self::Latex(_) => {}
-            Self::Var(id) => {
+            Self::Id(id) => {
                 free.insert(id.clone());
             }
             Self::Un(_, exp)

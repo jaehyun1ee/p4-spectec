@@ -96,7 +96,7 @@ fn overlap_exp_kind(
     exp: &ast::Exp,
 ) -> Result<ast::ExpKind, AlgoError> {
     match (&exp_template.node, &exp.node) {
-        (ast::ExpKind::Var(id_template), _) if ids_unifier.contains(id_template) => {
+        (ast::ExpKind::Id(id_template), _) if ids_unifier.contains(id_template) => {
             Ok(exp_template.node.clone())
         }
         (
@@ -272,7 +272,7 @@ fn populate_exp(ids_unifier: &IdSet, exp_template: &ast::Exp, exp: &ast::Exp) ->
         return vec![];
     }
     match (&exp_template.node, &exp.node) {
-        (ast::ExpKind::Var(id_template), _) if ids_unifier.contains(id_template) => {
+        (ast::ExpKind::Id(id_template), _) if ids_unifier.contains(id_template) => {
             let prem = populate_equality_prem(exp_template, exp);
             vec![prem]
         }

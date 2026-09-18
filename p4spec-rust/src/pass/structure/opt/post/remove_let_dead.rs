@@ -25,7 +25,7 @@ use crate::pass::structure::{StructureError, StructureErrorKind, ol::ast::*};
 /// `x + 1` is removable; `f() + 1` is not because it contains a call
 fn removable_let(exp_r: &Exp) -> bool {
     match &exp_r.node {
-        ExpKind::Bool(_) | ExpKind::Num(_) | ExpKind::Text(_) | ExpKind::Var(_) => true,
+        ExpKind::Bool(_) | ExpKind::Num(_) | ExpKind::Text(_) | ExpKind::Id(_) => true,
         ExpKind::Un(_, _, exp)
         | ExpKind::UpCast(_, exp)
         | ExpKind::DownCast(_, exp)

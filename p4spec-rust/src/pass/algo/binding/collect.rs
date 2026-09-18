@@ -38,7 +38,7 @@ pub fn collect_exp(ctx: &Context, exp: &ast::Exp) -> Result<BEnv, AlgoError> {
             let benv = BEnv::new();
             Ok(benv)
         }
-        ast::ExpKind::Var(id) => {
+        ast::ExpKind::Id(id) => {
             if ctx.venv.contains_key(id) {
                 let benv = BEnv::new();
                 Ok(benv)

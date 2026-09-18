@@ -145,7 +145,7 @@ fn test_partial_binding_preserves_expression_and_premise_iteration_dimensions() 
     let ast::ExpKind::Tuple(exps) = &exp_inner.node else {
         panic!("expected tuple binding");
     };
-    let ast::ExpKind::Var(id_rename) = &exps[1].node else {
+    let ast::ExpKind::Id(id_rename) = &exps[1].node else {
         panic!("expected bound value to be renamed");
     };
     assert_eq!(vars.len(), 2);
@@ -167,7 +167,7 @@ fn test_partial_binding_preserves_expression_and_premise_iteration_dimensions() 
     let ast::ExpKind::Cmp(_, ast::OpTyp::Bool, exp_l, exp_r) = &if_prem.exp.node else {
         panic!("expected equality comparison");
     };
-    assert!(matches!(&exp_l.node, ast::ExpKind::Var(id) if id == id_rename));
+    assert!(matches!(&exp_l.node, ast::ExpKind::Id(id) if id == id_rename));
     assert!(matches!(exp_r.node, ast::ExpKind::Bool(true)));
 }
 
@@ -231,7 +231,7 @@ fn test_partial_binding_preserves_nested_iteration_order_and_dimensions() {
     let ast::ExpKind::Tuple(exps) = &tuple.node else {
         panic!("expected iterated tuple");
     };
-    let ast::ExpKind::Var(id_rename) = &exps[1].node else {
+    let ast::ExpKind::Id(id_rename) = &exps[1].node else {
         panic!("expected nested bound value rename");
     };
     assert_eq!(inner_vars.len(), 2);
@@ -300,7 +300,7 @@ fn test_partial_case_and_list_bindings_generate_match_then_bind_premises_in_sour
     let ast::ExpKind::Tuple(exps) = &renamed.node else {
         panic!("expected tuple binding");
     };
-    assert!(matches!(exps[0].node, ast::ExpKind::Var(_)));
+    assert!(matches!(exps[0].node, ast::ExpKind::Id(_)));
     assert!(matches!(exps[1].node, ast::ExpKind::Iter(_, _)));
     assert_eq!(prems.len(), 4);
     assert!(matches!(
@@ -366,7 +366,7 @@ fn test_partial_upcast_binding_checks_subtype_before_binding_the_downcast_value(
             span(1) }),
         ),
     );
-    let child_var = exp(ast::ExpKind::Var(id("child", 2)), child_typ.node.clone(), 2);
+    let child_var = exp(ast::ExpKind::Id(id("child", 2)), child_typ.node.clone(), 2);
     let upcast = exp(
         ast::ExpKind::UpCast(Box::new(parent_typ.clone()), Box::new(child_var)),
         parent_typ.node.clone(),
@@ -397,7 +397,7 @@ fn test_partial_upcast_binding_checks_subtype_before_binding_the_downcast_value(
         &binding.node,
         ast_al::PremKind::Let(ast_al::LetPrem {
             exp_l: NotePhrase {
-                node: ast::ExpKind::Var(_),
+                node: ast::ExpKind::Id(_),
                 ..
             },
             exp_r: NotePhrase {

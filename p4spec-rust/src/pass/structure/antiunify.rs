@@ -70,7 +70,7 @@ fn populate_exp_template(
         return Ok(vec![]);
     }
     match (&exp_template.node, &exp.node) {
-        (ExpKind::Var(id_template), _) if uenv.unified(id_template) => {
+        (ExpKind::Id(id_template), _) if uenv.unified(id_template) => {
             let prem = populate_var_exp_template(exp_template, exp);
             Ok(vec![prem])
         }
@@ -164,8 +164,8 @@ fn antiunify_exp(
         return Ok(exp_template.clone());
     }
     let exp_kind_template = match (&exp_template.node, &exp.node) {
-        (ExpKind::Var(id_template), _) => antiunify_var_exp(frees, uenv, id_template),
-        (_, ExpKind::Var(id)) => antiunify_fresh_var_exp(frees, uenv, id),
+        (ExpKind::Id(id_template), _) => antiunify_var_exp(frees, uenv, id_template),
+        (_, ExpKind::Id(id)) => antiunify_fresh_var_exp(frees, uenv, id),
         (ExpKind::Tuple(exps_template), ExpKind::Tuple(exps)) => {
             let exps_template = antiunify_exps(frees, uenv, exps_template, exps, &exp.span)?;
             ExpKind::Tuple(exps_template)
@@ -217,7 +217,7 @@ fn antiunify_exps(
 fn antiunify_var_exp(frees: &mut IdSet, uenv: &mut UEnv, id_template: &Id) -> ExpKind {
     if uenv.unified(id_template) {
         uenv.ids.insert(id_template.clone(), id_template.clone());
-        ExpKind::Var(id_template.clone())
+        ExpKind::Id(id_template.clone())
     } else {
         antiunify_fresh_var_exp(frees, uenv, id_template)
     }
@@ -229,7 +229,7 @@ fn antiunify_fresh_var_exp(frees: &mut IdSet, uenv: &mut UEnv, id: &Id) -> ExpKi
     let id_fresh = il::fresh::id(frees, id);
     frees.insert(id_fresh.clone());
     uenv.ids.insert(id.clone(), id_fresh.clone());
-    ExpKind::Var(id_fresh)
+    ExpKind::Id(id_fresh)
 }
 
 // - Case expression

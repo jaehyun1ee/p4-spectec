@@ -19,7 +19,7 @@ fn span(int_line: usize) -> Span {
 
 fn variable(text: &str, int_line: usize) -> Exp {
     let id = crate::phrase! {node: text.to_owned(), span: span(int_line)};
-    crate::note_phrase! {node: ExpKind::Var(id), note: TypKind::Bool, span: span(int_line)}
+    crate::note_phrase! {node: ExpKind::Id(id), note: TypKind::Bool, span: span(int_line)}
 }
 
 fn boolean(value: bool, int_line: usize) -> Exp {
@@ -234,7 +234,7 @@ fn test_rule_else_participates_and_preserves_its_bindings() {
     assert_eq!(let_prem(&prems_else.unwrap()[0]).exp_l, exp_else);
     assert_eq!(let_prem(&prems_by_rule_group[0][0]).exp_l, boolean(true, 1));
     assert_eq!(exps_template[0].span, span(1));
-    let ExpKind::Var(id) = &exps_template[0].node else { panic!("variable template") };
+    let ExpKind::Id(id) = &exps_template[0].node else { panic!("variable template") };
     assert_eq!(id.span, span(9));
 }
 
@@ -254,7 +254,7 @@ fn test_freshness_accumulates_across_input_positions() {
     assert_eq!(ids.len(), 2);
     assert!(ids.iter().all(|id| !frees.contains(id)));
     for exp in &exps_template {
-        let ExpKind::Var(id) = &exp.node else { panic!("variable template") };
+        let ExpKind::Id(id) = &exp.node else { panic!("variable template") };
         assert_eq!(id.span, exp.span);
     }
 }

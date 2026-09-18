@@ -80,7 +80,7 @@ fn test_conversion_preserves_rule_paths_and_populates_antiunified_inputs_in_orde
     assert!(
         items
             .iter()
-            .all(|item| matches!(item.node, ast::ExpKind::Var(_)))
+            .all(|item| matches!(item.node, ast::ExpKind::Id(_)))
     );
     let compared_values = |prems: &[ast_al::Prem]| {
         prems
@@ -168,7 +168,7 @@ fn test_clause_analysis_orders_partial_then_repeated_then_source_premises() {
                 node: ast::ExpKind::Cmp(_, _, _, exp_r),
                 ..
             }
-        }) if matches!(exp_r.node, ast::ExpKind::Var(_))
+        }) if matches!(exp_r.node, ast::ExpKind::Id(_))
     ));
     assert!(matches!(&prems[2].node, ast_al::PremKind::Debug(_)));
 }
@@ -342,7 +342,7 @@ fn test_conversion_preserves_definition_clause_and_table_row_order() {
     }))), span:
     span(3) };
     let row = |name: &str, value: bool, line: usize| {
-        let pattern = exp(ast::ExpKind::Var(id(name, line)), choice_typ.node.clone(), line);
+        let pattern = exp(ast::ExpKind::Id(id(name, line)), choice_typ.node.clone(), line);
         crate::phrase! { node:
         (
             vec![crate::phrase! { node:
@@ -461,7 +461,7 @@ fn test_conversion_preserves_definition_clause_and_table_row_order() {
             let ast::ArgKind::Exp(exp) = &clause.node.args[0].node else {
                 panic!("expected expression argument");
             };
-            let ast::ExpKind::Var(id) = &exp.node else {
+            let ast::ExpKind::Id(id) = &exp.node else {
                 panic!("expected variable argument");
             };
             id.node.as_str()
@@ -479,7 +479,7 @@ fn test_conversion_preserves_definition_clause_and_table_row_order() {
         .table_rows
         .iter()
         .map(|row| {
-            let ast::ExpKind::Var(id) = &row.node.exps_signature[0].node else {
+            let ast::ExpKind::Id(id) = &row.node.exps_signature[0].node else {
                 panic!("expected variable signature");
             };
             id.node.as_str()

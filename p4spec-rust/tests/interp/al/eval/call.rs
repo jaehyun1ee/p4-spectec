@@ -331,7 +331,7 @@ fn test_iterated_premise_rows_read_parent_bindings_independently() {
     let id = |name: &str| phrase!(node: name.to_owned(), span: Span::default());
     let exp_var = |name: &str| {
         note_phrase!(
-            node: ast::ExpKind::Var(id(name)),
+            node: ast::ExpKind::Id(id(name)),
             note: Rc::new(typ::make::nat().node),
             span: Span::default()
         )

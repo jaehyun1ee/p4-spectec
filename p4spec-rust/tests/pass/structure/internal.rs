@@ -17,7 +17,7 @@ fn id(text: &str) -> Id {
 }
 
 fn variable(text: &str) -> Exp {
-    crate::note_phrase! { node: ExpKind::Var(id(text)), note: TypKind::Bool, span: span(1) }
+    crate::note_phrase! { node: ExpKind::Id(id(text)), note: TypKind::Bool, span: span(1) }
 }
 
 fn instr(instr_kind: ast_ol::InstrKind) -> ast_ol::Instr {

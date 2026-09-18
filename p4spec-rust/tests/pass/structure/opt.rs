@@ -122,13 +122,13 @@ fn test_fixed_point_moves_surviving_expression_payloads() {
     };
     let instr_return = ret("payload");
     let InstrKind::Return(instr_body) = &instr_return.node else { unreachable!() };
-    let ExpKind::Var(id_body) = &instr_body.exp.node else { unreachable!() };
+    let ExpKind::Id(id_body) = &instr_body.exp.node else { unreachable!() };
     let ptr_body = id_body.node.as_ptr();
     let block = vec![hold(vec![instr_return]), hold(vec![ret("tail")])];
     let block = optimize(&TDEnv::new(), block, true).unwrap();
     let InstrKind::Hold(instr_hold) = &block[0].node else { panic!("expected hold") };
     let InstrKind::Return(instr_body) = &instr_hold.block_hold[0].node else { unreachable!() };
-    let ExpKind::Var(id_body) = &instr_body.exp.node else { unreachable!() };
+    let ExpKind::Id(id_body) = &instr_body.exp.node else { unreachable!() };
     assert_eq!(id_body.node.as_ptr(), ptr_body);
 }
 
@@ -139,7 +139,7 @@ fn test_reversed_equality_preserves_reachable_case_prefix() {
         xl::bool::CmpOp as BoolCmpOp,
     };
     let exp_target =
-        crate::note_phrase!(node: ExpKind::Var(id("x")), note: TypKind::Text, span: span(1));
+        crate::note_phrase!(node: ExpKind::Id(id("x")), note: TypKind::Text, span: span(1));
     let literal = |text: &str| crate::note_phrase!(node: ExpKind::Text(text.into()), note: TypKind::Text, span: span(1));
     let equality = |exp_l, exp_r| {
         let exp_kind =
