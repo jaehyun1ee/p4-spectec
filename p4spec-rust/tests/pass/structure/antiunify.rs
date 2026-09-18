@@ -19,7 +19,7 @@ fn span(int_line: usize) -> Span {
 
 fn variable(text: &str, int_line: usize) -> Exp {
     let id = crate::phrase! {node: text.to_owned(), span: span(int_line)};
-    crate::note_phrase! {node: ExpKind::Id(id), note: TypKind::Bool, span: span(int_line)}
+    crate::note_phrase!(node: crate::lang::il::ast::ExpKind::Id(id), note: TypKind::Bool, span: span(int_line))
 }
 
 fn boolean(value: bool, int_line: usize) -> Exp {

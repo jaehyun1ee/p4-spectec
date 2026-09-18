@@ -434,11 +434,7 @@ fn infer_var_exp(ctx: &mut Context, span: &Span, id: &Id) -> Attempt<il::Exp> {
     let Some(typ_il) = ctx.find_metavar_opt(&tid) else {
         return fail_infer(&id.span, "variable");
     };
-    let exp_il = note_phrase! {
-        node: il::ExpKind::Id(id.clone()),
-        note: typ_il.node.clone(),
-        span: span.clone(),
-    };
+    let exp_il = crate::note_phrase!(node: crate::lang::il::ast::ExpKind::Id(id.clone()), note: typ_il.node.clone(), span: span.clone());
     Ok(exp_il)
 }
 

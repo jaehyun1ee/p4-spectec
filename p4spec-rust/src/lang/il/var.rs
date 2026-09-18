@@ -1,7 +1,6 @@
 //! Variable-to-expression conversion
 
 use super::ast::*;
-
 /// Converts `var` to an expression with the same type and iteration structure
 ///
 /// Starts with a variable reference and wraps it once for each iterator in
@@ -9,11 +8,7 @@ use super::ast::*;
 /// iteration carries a binder describing that dimension; otherwise its binder
 /// list is empty
 pub fn as_exp(is_dim: bool, var: &Var) -> Exp {
-    let mut exp: Exp = crate::note_phrase! {
-        node: ExpKind::Id(var.id.clone()),
-        note: var.typ.node.clone(),
-        span: var.id.span.clone(),
-    };
+    let mut exp: Exp = crate::note_phrase!(node: ExpKind::Id(var.id.clone()), note: var.typ.node.clone(), span: var.id.span.clone());
     let mut iters_prior = Vec::new();
     for iter in &var.iters {
         let typ_iter = crate::phrase! {

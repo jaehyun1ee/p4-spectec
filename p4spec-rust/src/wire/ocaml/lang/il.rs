@@ -10,7 +10,10 @@ use crate::lang::{
 };
 
 use super::{
-    super::{DecodeError, EncodeError, array, boolean, on_codec_stack, string, unsigned, variant},
+    super::{
+        DecodeError, EncodeError, array, boolean, field, object, on_codec_stack, string, unsigned,
+        variant,
+    },
     el, xl,
 };
 use crate::wire::ocaml::{atom::AtomPhraseCodec, mixfix, source};
@@ -288,7 +291,14 @@ pub(super) fn encode_subcheck(subcheck: &ast::Subcheck) -> json {
 }
 
 pub(super) fn decode_exp(json: &json) -> Result<ast::Exp, DecodeError> {
-    source::decode_note_phrase(json, decode_exp_kind, |json| decode_typ_kind(json).map(Into::into))
+    let object = object(json)?;
+    let span = source::decode_region(field(object, "at")?)?;
+    let typ = crate::phrase!(
+        node: decode_typ_kind(field(object, "note")?)?,
+        span: span.clone()
+    );
+    let exp_kind = decode_exp_kind(field(object, "it")?)?;
+    Ok(crate::note_phrase!(node: exp_kind, note: typ.node, span: span))
 }
 
 pub(super) fn encode_exp(exp: &ast::Exp) -> json {

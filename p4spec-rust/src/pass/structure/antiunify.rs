@@ -164,8 +164,8 @@ fn antiunify_exp(
         return Ok(exp_template.clone());
     }
     let exp_kind_template = match (&exp_template.node, &exp.node) {
-        (ExpKind::Id(id_template), _) => antiunify_var_exp(frees, uenv, id_template),
-        (_, ExpKind::Id(id)) => antiunify_fresh_var_exp(frees, uenv, id),
+        (ExpKind::Id(id_template), _) => antiunify_id_exp(frees, uenv, id_template),
+        (_, ExpKind::Id(id)) => antiunify_fresh_id_exp(frees, uenv, id),
         (ExpKind::Tuple(exps_template), ExpKind::Tuple(exps)) => {
             let exps_template = antiunify_exps(frees, uenv, exps_template, exps, &exp.span)?;
             ExpKind::Tuple(exps_template)
@@ -214,18 +214,18 @@ fn antiunify_exps(
 
 // - Variable expression
 
-fn antiunify_var_exp(frees: &mut IdSet, uenv: &mut UEnv, id_template: &Id) -> ExpKind {
+fn antiunify_id_exp(frees: &mut IdSet, uenv: &mut UEnv, id_template: &Id) -> ExpKind {
     if uenv.unified(id_template) {
         uenv.ids.insert(id_template.clone(), id_template.clone());
         ExpKind::Id(id_template.clone())
     } else {
-        antiunify_fresh_var_exp(frees, uenv, id_template)
+        antiunify_fresh_id_exp(frees, uenv, id_template)
     }
 }
 
-// - Fresh variable expression
+// - Fresh identifier expression
 
-fn antiunify_fresh_var_exp(frees: &mut IdSet, uenv: &mut UEnv, id: &Id) -> ExpKind {
+fn antiunify_fresh_id_exp(frees: &mut IdSet, uenv: &mut UEnv, id: &Id) -> ExpKind {
     let id_fresh = il::fresh::id(frees, id);
     frees.insert(id_fresh.clone());
     uenv.ids.insert(id.clone(), id_fresh.clone());

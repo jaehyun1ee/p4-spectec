@@ -6,14 +6,6 @@ use super::ast::*;
 
 // == Free identifiers
 
-// - Variables
-
-impl Free for Var {
-    fn free(&self) -> IdSet {
-        IdSet::new()
-    }
-}
-
 // - Types
 
 impl Free for TypKind {

@@ -23,15 +23,8 @@ fn id(name: &str) -> ast::Id {
         span: Span::default(),
     }
 }
-fn exp(kind: ast::ExpKind) -> ast::Exp {
-    p4spec_rust::note_phrase! {
-        node: kind,
-        note: ast::TypKind::Bool,
-        span: Span::default(),
-    }
-}
 fn var(name: &str) -> ast::Exp {
-    exp(ast::ExpKind::Id(id(name)))
+    p4spec_rust::note_phrase!(node: p4spec_rust::lang::il::ast::ExpKind::Id(id(name)), note: p4spec_rust::lang::il::ast::TypKind::Bool, span: Default::default())
 }
 fn arg(kind: ast::ArgKind) -> ast::Arg {
     p4spec_rust::phrase! {

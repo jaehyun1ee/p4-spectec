@@ -34,9 +34,7 @@ fn test_let_patterns_and_both_hold_blocks_are_collected() {
 fn test_nested_collection_preserves_first_identifier_spans_and_existing_names() {
     let mut id_head = id("shared");
     id_head.span = span(3);
-    let exp_head = crate::note_phrase! {
-        node: ExpKind::Id(id_head.clone()), note: TypKind::Bool, span: span(3)
-    };
+    let exp_head = crate::note_phrase!(node: crate::lang::il::ast::ExpKind::Id(id_head.clone()), note: TypKind::Bool, span: span(3));
     let instr_result = ast_ol::ResultInstr {
         rel_signature: signature(),
         exps: vec![variable("shared"), variable("result")],

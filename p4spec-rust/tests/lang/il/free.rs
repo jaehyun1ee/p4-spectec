@@ -49,7 +49,7 @@ fn exp(kind: ast::ExpKind) -> ast::Exp {
     }
 }
 fn variable(name: &str) -> ast::Exp {
-    exp(ast::ExpKind::Id(id(name)))
+    p4spec_rust::note_phrase!(node: p4spec_rust::lang::il::ast::ExpKind::Id(id(name)), note: p4spec_rust::lang::il::ast::TypKind::Bool, span: span())
 }
 fn atom(name: &str) -> ast::Atom {
     p4spec_rust::phrase! {

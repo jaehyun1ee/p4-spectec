@@ -366,7 +366,7 @@ fn test_partial_upcast_binding_checks_subtype_before_binding_the_downcast_value(
             span(1) }),
         ),
     );
-    let child_var = exp(ast::ExpKind::Id(id("child", 2)), child_typ.node.clone(), 2);
+    let child_var = crate::note_phrase!(node: crate::lang::il::ast::ExpKind::Id(id("child", 2)), note: child_typ.node.clone(), span: span(2));
     let upcast = exp(
         ast::ExpKind::UpCast(Box::new(parent_typ.clone()), Box::new(child_var)),
         parent_typ.node.clone(),

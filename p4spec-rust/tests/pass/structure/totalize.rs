@@ -28,8 +28,7 @@ fn pattern(text: &str) -> Guard {
 }
 
 fn case(typ: &Typ, guards: Vec<Guard>, total: bool) -> ast_ol::Instr {
-    let exp =
-        crate::note_phrase!(node: ExpKind::Id(id("value")), note: typ.node.clone(), span: span(7));
+    let exp = crate::note_phrase!(node: crate::lang::il::ast::ExpKind::Id(id("value")), note: typ.node.clone(), span: span(7));
     instr(ast_ol::InstrKind::Case(ast_ol::CaseInstr {
         exp,
         cases: guards

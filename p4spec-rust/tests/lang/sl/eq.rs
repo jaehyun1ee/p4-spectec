@@ -24,11 +24,7 @@ fn typ() -> il::ast::Typ {
 }
 
 fn variable(name: &str) -> il::ast::Exp {
-    p4spec_rust::note_phrase! {
-        node: il::ast::ExpKind::Id(id(name)),
-        note: il::ast::TypKind::Bool,
-        span: span(name),
-    }
+    p4spec_rust::note_phrase!(node: p4spec_rust::lang::il::ast::ExpKind::Id(id(name)), note: il::ast::TypKind::Bool, span: span(name))
 }
 
 fn instruction(kind: sl::ast::InstrKind, source: &str) -> sl::ast::Instr {
@@ -54,7 +50,7 @@ fn test_instruction_equality_ignores_source_regions() {
 
 #[test]
 fn test_subtype_guards_ignore_subcheck_strategy_but_compare_type() {
-    let guard_skip = sl::ast::Guard::Sub(typ(), Box::new(il::ast::Subcheck::Skip));
+    let guard_skip: sl::ast::Guard = sl::ast::Guard::Sub(typ(), Box::new(il::ast::Subcheck::Skip));
     let guard_recurse = sl::ast::Guard::Sub(typ(), Box::new(il::ast::Subcheck::Recurse(typ())));
     let guard_text = sl::ast::Guard::Sub(
         p4spec_rust::phrase! {

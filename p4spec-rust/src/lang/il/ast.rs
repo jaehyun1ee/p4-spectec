@@ -39,12 +39,7 @@ pub type Iter = common::Iter;
 
 // Variables
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct Var {
-    pub id: Id,
-    pub typ: Typ,
-    pub iters: Vec<Iter>,
-}
+pub use crate::lang::data::var::Var;
 
 // Types
 
@@ -105,10 +100,10 @@ pub enum OpTyp {
 
 // Expressions
 
-pub type Exp = NotePhrase<ExpKind, Rc<TypKind>>;
+pub type Exp<I = Id, V = Var> = NotePhrase<ExpKind<I, V>, Rc<TypKind>>;
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum ExpKind {
+pub enum ExpKind<I = Id, V = Var> {
     /// `bool`
     Bool(bool),
     /// `num`
@@ -116,56 +111,56 @@ pub enum ExpKind {
     /// `text`
     Text(Text),
     /// `varid`
-    Id(Id),
+    Id(I),
     /// `unop exp`
-    Un(UnOp, OpTyp, Box<Exp>),
+    Un(UnOp, OpTyp, Box<Exp<I, V>>),
     /// `exp binop exp`
-    Bin(BinOp, OpTyp, Box<Exp>, Box<Exp>),
+    Bin(BinOp, OpTyp, Box<Exp<I, V>>, Box<Exp<I, V>>),
     /// `exp cmpop exp`
-    Cmp(CmpOp, OpTyp, Box<Exp>, Box<Exp>),
+    Cmp(CmpOp, OpTyp, Box<Exp<I, V>>, Box<Exp<I, V>>),
     /// `exp as typ`
-    UpCast(Box<Typ>, Box<Exp>),
+    UpCast(Box<Typ>, Box<Exp<I, V>>),
     /// `exp as typ`
-    DownCast(Box<Typ>, Box<Exp>),
+    DownCast(Box<Typ>, Box<Exp<I, V>>),
     /// `exp <: typ`
-    Sub(Box<Exp>, Box<Typ>, Box<Subcheck>),
+    Sub(Box<Exp<I, V>>, Box<Typ>, Box<Subcheck>),
     /// `exp matches pattern`
-    Match(Box<Exp>, Pattern),
+    Match(Box<Exp<I, V>>, Pattern),
     /// `(` exp* `)`
-    Tuple(Vec<Exp>),
+    Tuple(Vec<Exp<I, V>>),
     /// `notexp`
-    Case(Box<NotExp>),
+    Case(Box<NotExp<I, V>>),
     /// `{` expfield* `}`
-    Str(Vec<ExpField>),
+    Str(Vec<ExpField<I, V>>),
     /// `exp?`
-    Opt(Option<Box<Exp>>),
+    Opt(Option<Box<Exp<I, V>>>),
     /// `[` exp* `]`
-    List(Vec<Exp>),
+    List(Vec<Exp<I, V>>),
     /// `exp :: exp`
-    Cons(Box<Exp>, Box<Exp>),
+    Cons(Box<Exp<I, V>>, Box<Exp<I, V>>),
     /// `exp ++ exp`
-    Cat(Box<Exp>, Box<Exp>),
+    Cat(Box<Exp<I, V>>, Box<Exp<I, V>>),
     /// `exp <- exp`
-    Mem(Box<Exp>, Box<Exp>),
+    Mem(Box<Exp<I, V>>, Box<Exp<I, V>>),
     /// `|` exp `|`
-    Len(Box<Exp>),
+    Len(Box<Exp<I, V>>),
     /// `exp.atom`
-    Dot(Box<Exp>, Atom),
+    Dot(Box<Exp<I, V>>, Atom),
     /// `exp [` exp `]`
-    Idx(Box<Exp>, Box<Exp>),
+    Idx(Box<Exp<I, V>>, Box<Exp<I, V>>),
     /// `exp [` exp `:` exp `]`
-    Slice(Box<Exp>, Box<Exp>, Box<Exp>),
+    Slice(Box<Exp<I, V>>, Box<Exp<I, V>>, Box<Exp<I, V>>),
     /// `exp [` path `=` exp `]`
-    Upd(Box<Exp>, Box<Path>, Box<Exp>),
+    Upd(Box<Exp<I, V>>, Box<Path<I, V>>, Box<Exp<I, V>>),
     /// `$id<` targ* `>(` arg* `)`
-    Call(Id, Vec<Targ>, Vec<Arg>),
+    Call(Id, Vec<Targ>, Vec<Arg<I, V>>),
     /// `exp iterexp`
-    Iter(Box<Exp>, ExpIter),
+    Iter(Box<Exp<I, V>>, ExpIter<V>),
 }
 
-pub type NotExp = Mixfix<Exp>;
-pub type ExpField = (Atom, Exp);
-pub type ExpIter = (Iter, Vec<Var>);
+pub type NotExp<I = Id, V = Var> = Mixfix<Exp<I, V>>;
+pub type ExpField<I = Id, V = Var> = (Atom, Exp<I, V>);
+pub type ExpIter<V = Var> = (Iter, Vec<V>);
 
 // Patterns
 
@@ -191,17 +186,17 @@ pub enum OptPattern {
 
 // Paths
 
-pub type Path = NotePhrase<PathKind, Rc<TypKind>>;
+pub type Path<I = Id, V = Var> = NotePhrase<PathKind<I, V>, Rc<TypKind>>;
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum PathKind {
+pub enum PathKind<I = Id, V = Var> {
     Root,
     /// `path [` exp `]`
-    Idx(Box<Path>, Box<Exp>),
+    Idx(Box<Path<I, V>>, Box<Exp<I, V>>),
     /// `path [` exp `:` exp `]`
-    Slice(Box<Path>, Box<Exp>, Box<Exp>),
+    Slice(Box<Path<I, V>>, Box<Exp<I, V>>, Box<Exp<I, V>>),
     /// `path . atom`
-    Dot(Box<Path>, Atom),
+    Dot(Box<Path<I, V>>, Atom),
 }
 
 // Parameters
@@ -222,12 +217,12 @@ pub type TParam = common::TId;
 
 // Arguments
 
-pub type Arg = Phrase<ArgKind>;
+pub type Arg<I = Id, V = Var> = Phrase<ArgKind<I, V>>;
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum ArgKind {
+pub enum ArgKind<I = Id, V = Var> {
     /// `exp`
-    Exp(Box<Exp>),
+    Exp(Box<Exp<I, V>>),
     /// `$id`
     Def(Id),
 }
@@ -294,10 +289,10 @@ pub enum PremKind {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct PremIter {
+pub struct PremIter<V = Var> {
     pub iter: Iter,
-    pub vars_bound: Vec<Var>,
-    pub vars_bind: Vec<Var>,
+    pub vars_bound: Vec<V>,
+    pub vars_bind: Vec<V>,
 }
 
 // Rules

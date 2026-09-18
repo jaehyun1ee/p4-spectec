@@ -25,7 +25,7 @@ fn typ(int_line: usize) -> al::Typ {
 }
 
 fn variable(text: &str, int_line: usize) -> al::Exp {
-    p4spec_rust::note_phrase! {node: al::ExpKind::Id(id(text, int_line)), note: al::TypKind::Bool, span: span(int_line)}
+    p4spec_rust::note_phrase!(node: p4spec_rust::lang::il::ast::ExpKind::Id(id(text, int_line)), note: al::TypKind::Bool, span: span(int_line))
 }
 
 fn boolean(value: bool, int_line: usize) -> al::Exp {

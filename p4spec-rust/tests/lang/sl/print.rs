@@ -35,11 +35,7 @@ fn typ(kind: il::ast::TypKind) -> il::ast::Typ {
 }
 
 fn variable(name: &str) -> il::ast::Exp {
-    p4spec_rust::note_phrase! {
-        node: il::ast::ExpKind::Id(id(name)),
-        note: il::ast::TypKind::Bool,
-        span: span(name),
-    }
+    p4spec_rust::note_phrase!(node: p4spec_rust::lang::il::ast::ExpKind::Id(id(name)), note: il::ast::TypKind::Bool, span: span(name))
 }
 
 fn text(value: &str) -> il::ast::Exp {

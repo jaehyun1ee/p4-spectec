@@ -8,33 +8,6 @@ use super::ast::*;
 
 // == Syntax equality
 
-// - Variables
-
-impl SyntaxEq for Var {
-    fn syntax_eq(&self, other: &Self) -> bool {
-        self.id.syntax_eq(&other.id) && self.iters == other.iters
-    }
-
-    fn slice_syntax_eq(vars_l: &[Self], vars_r: &[Self]) -> bool {
-        let mut vars_l = vars_l.iter().collect::<Vec<_>>();
-        let mut vars_r = vars_r.iter().collect::<Vec<_>>();
-        let cmp_var = |var_l: &&Var, var_r: &&Var| {
-            var_l
-                .id
-                .node
-                .cmp(&var_r.id.node)
-                .then_with(|| var_l.iters.cmp(&var_r.iters))
-        };
-        vars_l.sort_by(cmp_var);
-        vars_r.sort_by(cmp_var);
-        vars_l.len() == vars_r.len()
-            && vars_l
-                .into_iter()
-                .zip(vars_r)
-                .all(|(var_l, var_r)| var_l.syntax_eq(var_r))
-    }
-}
-
 // - Types
 
 impl SyntaxEq for TypKind {
@@ -122,7 +95,7 @@ impl SyntaxEq for OpTyp {
 
 // - Expressions
 
-impl SyntaxEq for ExpKind {
+impl<I: SyntaxEq, V: SyntaxEq> SyntaxEq for ExpKind<I, V> {
     fn syntax_eq(&self, other: &Self) -> bool {
         match (self, other) {
             (ExpKind::Bool(value_l), ExpKind::Bool(value_r)) => value_l == value_r,
@@ -215,7 +188,7 @@ impl SyntaxEq for ExpKind {
     }
 }
 
-impl SyntaxEq for ExpIter {
+impl<V: SyntaxEq> SyntaxEq for ExpIter<V> {
     fn syntax_eq(&self, other: &Self) -> bool {
         self.0 == other.0 && self.1.syntax_eq(&other.1)
     }
@@ -248,7 +221,7 @@ impl SyntaxEq for OptPattern {
 
 // - Paths
 
-impl SyntaxEq for PathKind {
+impl<I: SyntaxEq, V: SyntaxEq> SyntaxEq for PathKind<I, V> {
     fn syntax_eq(&self, other: &Self) -> bool {
         match (self, other) {
             (PathKind::Root, PathKind::Root) => true,
@@ -293,7 +266,7 @@ impl SyntaxEq for ParamKind {
 
 // - Arguments
 
-impl SyntaxEq for ArgKind {
+impl<I: SyntaxEq, V: SyntaxEq> SyntaxEq for ArgKind<I, V> {
     fn syntax_eq(&self, other: &Self) -> bool {
         match (self, other) {
             (ArgKind::Exp(exp_l), ArgKind::Exp(exp_r)) => exp_l.syntax_eq(exp_r),
@@ -357,7 +330,7 @@ impl SyntaxEq for DebugPrem {
     }
 }
 
-impl SyntaxEq for PremIter {
+impl<V: SyntaxEq> SyntaxEq for PremIter<V> {
     fn syntax_eq(&self, other: &Self) -> bool {
         self.iter.syntax_eq(&other.iter)
             && self.vars_bound.syntax_eq(&other.vars_bound)

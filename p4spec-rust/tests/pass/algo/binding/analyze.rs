@@ -342,7 +342,7 @@ fn test_conversion_preserves_definition_clause_and_table_row_order() {
     }))), span:
     span(3) };
     let row = |name: &str, value: bool, line: usize| {
-        let pattern = exp(ast::ExpKind::Id(id(name, line)), choice_typ.node.clone(), line);
+        let pattern = crate::note_phrase!(node: crate::lang::il::ast::ExpKind::Id(id(name, line)), note: choice_typ.node.clone(), span: span(line));
         crate::phrase! { node:
         (
             vec![crate::phrase! { node:

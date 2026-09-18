@@ -47,11 +47,7 @@ fn atom() -> il::ast::Atom {
 }
 
 fn variable(name: &str) -> il::ast::Exp {
-    p4spec_rust::note_phrase! {
-        node: il::ast::ExpKind::Id(id(name)),
-        note: il::ast::TypKind::Bool,
-        span: span(name),
-    }
+    p4spec_rust::note_phrase!(node: p4spec_rust::lang::il::ast::ExpKind::Id(id(name)), note: il::ast::TypKind::Bool, span: span(name))
 }
 
 fn expr(kind: il::ast::ExpKind) -> il::ast::Exp {

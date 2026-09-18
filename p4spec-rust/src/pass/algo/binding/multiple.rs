@@ -95,11 +95,7 @@ fn rename_var(ctx: &mut Context, renv: &mut RenameEnv, exp: &ast::Exp, id: &Id) 
     let id_rename = if ids_rename.is_empty() { id.clone() } else { fresh_id(&ctx.frees, id) };
     ctx.add_free(id_rename.clone());
     ids_rename.push(id_rename.clone());
-    note_phrase! {
-        node: ast::ExpKind::Id(id_rename),
-        note: exp.note.clone(),
-        span: exp.span.clone(),
-    }
+    crate::note_phrase!(node: crate::lang::il::ast::ExpKind::Id(id_rename), note: exp.note.clone(), span: exp.span.clone())
 }
 
 pub fn rename_exp(ctx: &mut Context, renv: &mut RenameEnv, exp: &ast::Exp) -> ast::Exp {
@@ -180,16 +176,8 @@ pub fn rename_args(ctx: &mut Context, renv: &mut RenameEnv, args: &[ast::Arg]) -
 // == Side-condition generation
 
 fn gen_exp_equality(id: &Id, id_rename: &Id, typ: &ast::Typ) -> ast::Exp {
-    let exp_l = note_phrase! {
-        node: ast::ExpKind::Id(id.clone()),
-        note: typ.node.clone(),
-        span: id.span.clone(),
-    };
-    let exp_r = note_phrase! {
-        node: ast::ExpKind::Id(id_rename.clone()),
-        note: typ.node.clone(),
-        span: id.span.clone(),
-    };
+    let exp_l = crate::note_phrase!(node: crate::lang::il::ast::ExpKind::Id(id.clone()), note: typ.node.clone(), span: id.span.clone());
+    let exp_r = crate::note_phrase!(node: crate::lang::il::ast::ExpKind::Id(id_rename.clone()), note: typ.node.clone(), span: id.span.clone());
     note_phrase! {
         node: ast::ExpKind::Cmp(
             ast::CmpOp::Bool(xl::bool::CmpOp::Eq),

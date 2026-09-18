@@ -27,8 +27,7 @@ fn variant(tdenv: &mut TDEnv, text: &str, texts: &[&str]) -> Typ {
 }
 
 fn matching(typ: &Typ, block: Block) -> Instr {
-    let exp =
-        crate::note_phrase!(node: ExpKind::Id(id("value")), note: typ.node.clone(), span: span(7));
+    let exp = crate::note_phrase!(node: crate::lang::il::ast::ExpKind::Id(id("value")), note: typ.node.clone(), span: span(7));
     let exp = crate::note_phrase!(node: ExpKind::Match(Box::new(exp), Pattern::Case(Box::new(crate::frontend::parse::parse_mixop("A").unwrap()))), note: TypKind::Bool, span: span(8));
     instr(InstrKind::If(IfInstr { exp, iter_exps: vec![(Iter::Opt, vec![])], block }))
 }

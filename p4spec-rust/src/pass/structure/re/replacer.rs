@@ -106,7 +106,7 @@ impl Replacer {
     pub(crate) fn replace_exp(&self, exp: Exp) -> Exp {
         let exp_kind = match exp.node {
             ExpKind::Bool(_) | ExpKind::Num(_) | ExpKind::Text(_) => exp.node,
-            ExpKind::Id(id) => return self.replace_var_exp(id, exp.note, exp.span),
+            ExpKind::Id(id) => return self.replace_id_exp(id, exp.note, exp.span),
             ExpKind::Un(op, op_typ, exp) => {
                 ExpKind::Un(op, op_typ, Box::new(self.replace_exp(*exp)))
             }
@@ -183,7 +183,7 @@ impl Replacer {
 
     // - Variable expression
 
-    fn replace_var_exp(&self, id: Id, note: std::rc::Rc<TypKind>, span: Span) -> Exp {
+    fn replace_id_exp(&self, id: Id, note: std::rc::Rc<TypKind>, span: Span) -> Exp {
         self.exps.get(&id).cloned().unwrap_or(note_phrase!(
             node: ExpKind::Id(id),
             note: note,

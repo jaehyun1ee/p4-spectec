@@ -138,8 +138,7 @@ fn test_reversed_equality_preserves_reachable_case_prefix() {
         il::ast::{CmpOp, OpTyp},
         xl::bool::CmpOp as BoolCmpOp,
     };
-    let exp_target =
-        crate::note_phrase!(node: ExpKind::Id(id("x")), note: TypKind::Text, span: span(1));
+    let exp_target = crate::note_phrase!(node: crate::lang::il::ast::ExpKind::Id(id("x")), note: TypKind::Text, span: span(1));
     let literal = |text: &str| crate::note_phrase!(node: ExpKind::Text(text.into()), note: TypKind::Text, span: span(1));
     let equality = |exp_l, exp_r| {
         let exp_kind =
