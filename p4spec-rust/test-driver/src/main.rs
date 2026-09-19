@@ -2,6 +2,7 @@ mod algo;
 mod corpus;
 mod elab;
 mod p4parse;
+mod prose;
 mod run;
 mod sim;
 mod snapshot;
@@ -36,6 +37,8 @@ enum Command {
     Algo,
     /// Compare the structured P4 specification in both rule-group modes
     Structure,
+    /// Compare annotated prose output with source-derived expectations
+    Prose,
     /// Compare the full P4 corpus with stored file results (cache on, det off)
     RunAl,
     /// Compare native SL outcomes with source-derived results (cache on)
@@ -60,6 +63,7 @@ fn execute(command: Command) -> Result<()> {
         command,
         Command::P4parse
             | Command::Structure
+            | Command::Prose
             | Command::RunAl
             | Command::RunSl { .. }
             | Command::SimAl { .. }
@@ -77,6 +81,7 @@ fn execute(command: Command) -> Result<()> {
         Command::Elab => elab::run(),
         Command::Algo => algo::run(),
         Command::Structure => structure::run(),
+        Command::Prose => prose::run(),
         Command::RunAl => run::run(),
         Command::RunSl { det } => run::run_sl(det),
         Command::SimAl { det } => sim::run(det),
