@@ -4,7 +4,7 @@ use p4spec_rust::{
         common::source::{Position, Span},
         data::value::make,
     },
-    runtime::envs::caches::{CallCache, CallKey},
+    runtime::envs::interp::shared::caches::{CallCache, CallKey},
 };
 
 #[test]

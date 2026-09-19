@@ -87,13 +87,15 @@ impl SyntaxEq for DefTypKind {
 
 impl SyntaxEq for TypField {
     fn syntax_eq(&self, other: &Self) -> bool {
-        self.0.syntax_eq(&other.0) && self.1.syntax_eq(&other.1) && self.2.syntax_eq(&other.2)
+        self.atom.syntax_eq(&other.atom)
+            && self.typ.syntax_eq(&other.typ)
+            && self.hints.syntax_eq(&other.hints)
     }
 }
 
 impl SyntaxEq for TypCase {
     fn syntax_eq(&self, other: &Self) -> bool {
-        self.0.syntax_eq(&other.0) && self.1.syntax_eq(&other.1)
+        self.typ.syntax_eq(&other.typ) && self.hints.syntax_eq(&other.hints)
     }
 }
 
@@ -133,7 +135,7 @@ impl SyntaxEq for ExpKind {
                 op_l.syntax_eq(op_r) && num_l == num_r
             }
             (ExpKind::Text(text_l), ExpKind::Text(text_r)) => text_l == text_r,
-            (ExpKind::Var(id_l), ExpKind::Var(id_r)) => id_l.syntax_eq(id_r),
+            (ExpKind::Id(id_l), ExpKind::Id(id_r)) => id_l.syntax_eq(id_r),
             (ExpKind::Un(op_l, exp_l), ExpKind::Un(op_r, exp_r)) => {
                 op_l.syntax_eq(op_r) && exp_l.syntax_eq(exp_r)
             }
@@ -286,7 +288,7 @@ impl SyntaxEq for ArgKind {
 
 impl SyntaxEq for Hint {
     fn syntax_eq(&self, other: &Self) -> bool {
-        self.0.syntax_eq(&other.0) && self.1.syntax_eq(&other.1)
+        self.id.syntax_eq(&other.id) && self.exp.syntax_eq(&other.exp)
     }
 }
 
@@ -347,10 +349,10 @@ impl SyntaxEq for DebugPrem {
 
 impl SyntaxEq for RuleKind {
     fn syntax_eq(&self, other: &Self) -> bool {
-        self.0.syntax_eq(&other.0)
-            && self.1.syntax_eq(&other.1)
-            && self.2.syntax_eq(&other.2)
-            && self.3.syntax_eq(&other.3)
+        self.id_rel.syntax_eq(&other.id_rel)
+            && self.id_rule.syntax_eq(&other.id_rule)
+            && self.exp.syntax_eq(&other.exp)
+            && self.prems.syntax_eq(&other.prems)
     }
 }
 
@@ -358,7 +360,7 @@ impl SyntaxEq for RuleKind {
 
 impl SyntaxEq for TableRowKind {
     fn syntax_eq(&self, other: &Self) -> bool {
-        self.0.syntax_eq(&other.0) && self.1.syntax_eq(&other.1)
+        self.exp_pattern.syntax_eq(&other.exp_pattern) && self.exp_body.syntax_eq(&other.exp_body)
     }
 }
 

@@ -1,6 +1,9 @@
 //! Destructuring assignments preserve iteration paths and isolate list rows
 
 use super::super::context::{ReadContext, WriteContext};
+use crate::interp::shared::prepare::ast;
+use crate::interp::shared::util::iterate_vars;
+use crate::lang::data::var::IdSlot;
 
 use std::{borrow::Borrow, rc::Rc};
 
@@ -8,12 +11,11 @@ use crate::interp::shared::error::AssignErrorKind;
 
 use crate::{
     lang::{
-        common::{Variable, source::Span},
+        common::source::Span,
         data::{
             typ,
             value::{Value, ValueArena, ValueKind, get, make},
         },
-        il::ast,
         traits::print::Print,
     },
     phrase,
@@ -21,8 +23,8 @@ use crate::{
 
 use crate::interp::shared::{
     backtrack::{Backtrack, err, ok, unwrap, unwrap_from_result},
-    error::ErrorKind,
-    util::is_iter_var_exp,
+    error::{EntityKind, Error, ErrorKind},
+    util::find_var,
 };
 
 // = Expression assignment
@@ -34,7 +36,7 @@ pub fn assign_exp<Ctx: WriteContext>(
     value: Value,
 ) -> Backtrack<Ctx> {
     match (&exp.node, arena.kind(&value)) {
-        (ast::ExpKind::Var(id), _) => assign_var_exp(arena, ctx, id, value),
+        (ast::ExpKind::Id(id), _) => assign_id_exp(arena, ctx, id, value),
         (ast::ExpKind::Tuple(exps), ValueKind::Tuple(values)) => {
             let values = values.to_vec();
             assign_tuple_exp(arena, ctx, exps, &values)
@@ -62,8 +64,8 @@ pub fn assign_exp<Ctx: WriteContext>(
             let values = values.to_vec();
             assign_cons_exp(arena, ctx, exp, exp_head, exp_tail, &value, &values)
         }
-        (ast::ExpKind::Iter(exp_inner, (iter, vars)), _) => {
-            assign_iter_exp(arena, ctx, exp, exp_inner, iter, vars, value)
+        (ast::ExpKind::Iter(exp_inner, exp_iter), _) => {
+            assign_iter_exp(arena, ctx, exp, exp_inner, exp_iter, value)
         }
         _ => err!(
             exp.span.clone(),
@@ -101,15 +103,15 @@ pub fn assign_exps<Ctx: WriteContext, T: Borrow<ast::Exp>>(
     ok!(ctx)
 }
 
-// - Variable expression
+// - Identifier expression
 
-fn assign_var_exp<Ctx: WriteContext>(
+fn assign_id_exp<Ctx: WriteContext>(
     _arena: &mut ValueArena,
     mut ctx: Ctx,
-    id: &ast::Id,
+    id: &IdSlot,
     value: Value,
 ) -> Backtrack<Ctx> {
-    ctx.add_value(Variable::new(id.clone(), vec![]), value);
+    ctx.add_value(id.slot, value);
     ok!(ctx)
 }
 
@@ -144,7 +146,10 @@ fn assign_str_exp<Ctx: WriteContext>(
     exp_fields: &[ast::ExpField],
     values: &[Value],
 ) -> Backtrack<Ctx> {
-    let exps = exp_fields.iter().map(|(_, exp)| exp).collect::<Vec<_>>();
+    let exps = exp_fields
+        .iter()
+        .map(|ast::ExpField { exp, .. }| exp)
+        .collect::<Vec<_>>();
     assign_exps(arena, ctx, &exps, values)
 }
 
@@ -212,30 +217,34 @@ fn assign_iter_exp<Ctx: WriteContext>(
     mut ctx: Ctx,
     exp: &ast::Exp,
     exp_inner: &ast::Exp,
-    iter: &ast::Iter,
-    vars: &[ast::Var],
+    exp_iter: &ast::ExpIter,
     value: Value,
 ) -> Backtrack<Ctx> {
-    if let Some(var) = is_iter_var_exp(exp) {
-        ctx.add_value(var, value);
+    if let Some(var) = find_var(&ctx, exp) {
+        ctx.add_value(var.slot, value);
         return ok!(ctx);
     }
     let span = &exp.span;
-    match iter {
+    let vars_outer = iterate_vars(&ctx, &exp_iter.vars, exp_iter.iter);
+    match exp_iter.iter {
         ast::Iter::Opt => {
             let value_opt = unwrap_from_result!(get::opt(arena, &value), span);
             let ctx_sub = match value_opt {
                 Some(value) => Some(unwrap!(assign_exp(arena, ctx.clone(), exp_inner, value))),
                 None => None,
             };
-            for var in vars {
-                let mut iters = var.iters.clone();
-                iters.push(ast::Iter::Opt);
-                let typ = typ::make::iterate(var.typ.clone(), &iters);
+            for (var, var_outer) in exp_iter.vars.iter().zip(&vars_outer) {
+                let typ = typ::make::iterate(var_outer.var.typ.clone(), &var_outer.var.iters);
                 let value_opt = match &ctx_sub {
                     Some(ctx_sub) => Some(*unwrap_from_result!(
-                        ctx_sub.find_value(&Variable::new(var.id.clone(), var.iters.clone())),
-                        &var.id.span
+                        ctx_sub.find_value(var.slot).ok_or_else(|| {
+                            Error::undefined(
+                                EntityKind::Value,
+                                Print::to_string(&var.var),
+                                var.var.id.span.clone(),
+                            )
+                        }),
+                        &var.var.id.span
                     )),
                     None => None,
                 };
@@ -243,7 +252,7 @@ fn assign_iter_exp<Ctx: WriteContext>(
                     make::opt(arena, typ.node.into(), value_opt, Span::default()),
                     span
                 );
-                ctx.add_value(Variable::new(var.id.clone(), iters), value);
+                ctx.add_value(var_outer.slot, value);
             }
             ok!(ctx)
         }
@@ -255,15 +264,19 @@ fn assign_iter_exp<Ctx: WriteContext>(
             for value in values {
                 ctxs.push(unwrap!(assign_exp(arena, ctx_sub.clone(), exp_inner, value)));
             }
-            for var in vars {
-                let mut iters = var.iters.clone();
-                iters.push(ast::Iter::List);
-                let typ = typ::make::iterate(var.typ.clone(), &iters);
+            for (var, var_outer) in exp_iter.vars.iter().zip(&vars_outer) {
+                let typ = typ::make::iterate(var_outer.var.typ.clone(), &var_outer.var.iters);
                 let mut values = Vec::with_capacity(ctxs.len());
                 for ctx_sub in &ctxs {
                     let value = unwrap_from_result!(
-                        ctx_sub.find_value(&Variable::new(var.id.clone(), var.iters.clone())),
-                        &var.id.span
+                        ctx_sub.find_value(var.slot).ok_or_else(|| {
+                            Error::undefined(
+                                EntityKind::Value,
+                                Print::to_string(&var.var),
+                                var.var.id.span.clone(),
+                            )
+                        }),
+                        &var.var.id.span
                     );
                     values.push(*value);
                 }
@@ -271,7 +284,7 @@ fn assign_iter_exp<Ctx: WriteContext>(
                     make::list(arena, typ.node.into(), values, Span::default()),
                     span
                 );
-                ctx.add_value(Variable::new(var.id.clone(), iters), value_sub);
+                ctx.add_value(var_outer.slot, value_sub);
             }
             ok!(ctx)
         }

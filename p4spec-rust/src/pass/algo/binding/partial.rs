@@ -27,10 +27,10 @@
 use crate::{
     lang::{
         al,
+        common::prim,
         common::{ds::set::IdSet, notation::mixop::Mixop},
         il::{ast, fresh, var},
         traits::free::Free,
-        xl,
     },
     note_phrase, phrase,
     runtime::{
@@ -145,7 +145,7 @@ fn gen_prem_bound(
             ast::ExpKind::Match(Box::new(exp_l), ast::Pattern::List(ast::ListPattern::Nil))
         }
         _ => ast::ExpKind::Cmp(
-            ast::CmpOp::Bool(xl::bool::CmpOp::Eq),
+            ast::CmpOp::Bool(prim::bool::CmpOp::Eq),
             ast::OpTyp::Bool,
             Box::new(exp_l),
             Box::new(exp_from.clone()),
@@ -473,9 +473,16 @@ fn rename_exp_bind(
             }
         }
         ast::ExpKind::Str(fields) => {
-            let (atoms, exps): (Vec<_>, Vec<_>) = fields.into_iter().unzip();
+            let (atoms, exps): (Vec<_>, Vec<_>) = fields
+                .into_iter()
+                .map(|field| (field.atom, field.exp))
+                .unzip();
             let exps = rename_exps(ctx, binds, renv, iter_ctx, exps)?;
-            let fields = atoms.into_iter().zip(exps).collect();
+            let fields = atoms
+                .into_iter()
+                .zip(exps)
+                .map(|(atom, exp)| ast::ExpField { atom, exp })
+                .collect();
             let exp = note_phrase!(node: ast::ExpKind::Str(fields), note: note, span: span);
             Ok(exp)
         }
@@ -525,7 +532,7 @@ fn rename_exp_bind(
             let exp = rename_exp_bind_match(ctx, renv, iter_ctx, pattern, exp_from);
             Ok(exp)
         }
-        ast::ExpKind::Iter(exp_inner, (iter, vars)) => {
+        ast::ExpKind::Iter(exp_inner, ast::ExpIter { iter, vars }) => {
             let iteration = Iteration { iter, vars_bound: vars, vars_bind: vec![] };
             let mut iter_scope = iter_ctx.scope(iteration);
             let exp_inner = rename_exp(ctx, binds, renv, &mut iter_scope, *exp_inner)?;
@@ -533,7 +540,7 @@ fn rename_exp_bind(
             let exp = note_phrase! {
                 node: ast::ExpKind::Iter(
                     Box::new(exp_inner),
-                    (iteration.iter, iteration.vars_bound),
+                    ast::ExpIter { iter: iteration.iter, vars: iteration.vars_bound },
                 ),
                 note: note,
                 span: span,

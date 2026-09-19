@@ -57,7 +57,7 @@ fn test_ambiguous_aliases_fall_back_and_avoid_collisions() {
         .collect::<IdSet>();
 
     let (ids_fresh, exp_al) = al::fresh::exp_from_typ(false, &menv, &ids, &typ_use);
-    let al::ast::ExpKind::Var(id_fresh) = exp_al.node else { panic!("fresh variable expression") };
+    let al::ast::ExpKind::Id(id_fresh) = exp_al.node else { panic!("fresh variable expression") };
 
     assert!(!ids.contains(&id_fresh));
     assert_eq!(id_fresh.span, span_use);
@@ -88,13 +88,21 @@ fn test_alias_dimensions_preserve_declaration_and_wrapper_spans() {
     };
 
     let (_, exp_al) = al::fresh::exp_from_typ(true, &menv, &IdSet::new(), &typ_outer);
-    let al::ast::ExpKind::Iter(exp_inner, (al::ast::Iter::List, vars_outer)) = exp_al.node else {
+    let al::ast::ExpKind::Iter(
+        exp_inner,
+        al::ast::ExpIter { iter: al::ast::Iter::List, vars: vars_outer },
+    ) = exp_al.node
+    else {
         panic!("outer iteration")
     };
-    let al::ast::ExpKind::Iter(exp_base, (al::ast::Iter::Opt, vars_inner)) = exp_inner.node else {
+    let al::ast::ExpKind::Iter(
+        exp_base,
+        al::ast::ExpIter { iter: al::ast::Iter::Opt, vars: vars_inner },
+    ) = exp_inner.node
+    else {
         panic!("inner iteration")
     };
-    let al::ast::ExpKind::Var(id_fresh) = exp_base.node else { panic!("fresh variable") };
+    let al::ast::ExpKind::Id(id_fresh) = exp_base.node else { panic!("fresh variable") };
 
     assert_eq!(id_fresh.span, span_decl);
     assert_eq!(exp_base.span, span_decl);
@@ -127,15 +135,21 @@ fn assert_nested_fallback_uses_outer_span(menv: &MEnv) {
     for is_dim in [false, true] {
         let (ids_fresh, exp_outer) =
             al::fresh::exp_from_typ(is_dim, menv, &IdSet::new(), &typ_outer);
-        let al::ast::ExpKind::Iter(exp_inner, (al::ast::Iter::List, vars_outer)) = &exp_outer.node
+        let al::ast::ExpKind::Iter(
+            exp_inner,
+            al::ast::ExpIter { iter: al::ast::Iter::List, vars: vars_outer },
+        ) = &exp_outer.node
         else {
             panic!("outer iteration")
         };
-        let al::ast::ExpKind::Iter(exp_base, (al::ast::Iter::Opt, vars_inner)) = &exp_inner.node
+        let al::ast::ExpKind::Iter(
+            exp_base,
+            al::ast::ExpIter { iter: al::ast::Iter::Opt, vars: vars_inner },
+        ) = &exp_inner.node
         else {
             panic!("inner iteration")
         };
-        let al::ast::ExpKind::Var(id_fresh) = &exp_base.node else { panic!("fresh variable") };
+        let al::ast::ExpKind::Id(id_fresh) = &exp_base.node else { panic!("fresh variable") };
 
         assert_eq!(id_fresh.span, span_outer);
         assert_eq!(exp_base.span, span_outer);

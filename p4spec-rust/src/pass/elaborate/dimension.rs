@@ -97,7 +97,7 @@ impl DimContext {
 fn infer_exp(dim_ctx: &mut DimContext, exp: &ast::Exp, iters: &[ast::Iter]) {
     match &exp.node {
         ast::ExpKind::Bool(_) | ast::ExpKind::Num(_) | ast::ExpKind::Text(_) => {}
-        ast::ExpKind::Var(id) => {
+        ast::ExpKind::Id(id) => {
             let typ = phrase!(node: exp.note.as_ref().clone(), span: exp.span.clone());
             dim_ctx.add(id, Dim::new(typ, iters.to_vec()));
         }
@@ -122,7 +122,7 @@ fn infer_exp(dim_ctx: &mut DimContext, exp: &ast::Exp, iters: &[ast::Iter]) {
         }
         ast::ExpKind::Case(not_exp) => infer_not_exp(dim_ctx, not_exp, iters),
         ast::ExpKind::Str(fields) => {
-            for (_, exp) in fields {
+            for ast::ExpField { exp, .. } in fields {
                 infer_exp(dim_ctx, exp, iters);
             }
         }
@@ -142,7 +142,7 @@ fn infer_exp(dim_ctx: &mut DimContext, exp: &ast::Exp, iters: &[ast::Iter]) {
             infer_exp(dim_ctx, exp_field, iters);
         }
         ast::ExpKind::Call(_, _, args) => infer_args(dim_ctx, args, iters),
-        ast::ExpKind::Iter(exp_inner, (iter, _)) => {
+        ast::ExpKind::Iter(exp_inner, ast::ExpIter { iter, .. }) => {
             let mut iters_inner = Vec::with_capacity(iters.len() + 1);
             iters_inner.push(*iter);
             iters_inner.extend_from_slice(iters);
@@ -257,8 +257,8 @@ fn infer_clause(clause: &ast::Clause) -> Result<DimContext, ElabError> {
 
 fn infer_table_row(row: &ast::TableRow) -> DimContext {
     let mut dim_ctx = DimContext::default();
-    infer_args(&mut dim_ctx, &row.node.0, &[]);
-    infer_exp(&mut dim_ctx, &row.node.1, &[]);
+    infer_args(&mut dim_ctx, &row.node.args, &[]);
+    infer_exp(&mut dim_ctx, &row.node.exp, &[]);
     dim_ctx
 }
 
@@ -346,7 +346,7 @@ fn annotate_exp(bounds: &VEnv, exp: &mut ast::Exp) -> Result<Occurrences, ElabEr
         ast::ExpKind::Bool(_) => Ok(annotate_bool_exp()),
         ast::ExpKind::Num(_) => Ok(annotate_num_exp()),
         ast::ExpKind::Text(_) => Ok(annotate_text_exp()),
-        ast::ExpKind::Var(id) => Ok(annotate_var_exp(span, typ_kind, id)),
+        ast::ExpKind::Id(id) => Ok(annotate_id_exp(span, typ_kind, id)),
         ast::ExpKind::Un(_, _, exp_inner) => annotate_un_exp(bounds, exp_inner),
         ast::ExpKind::Bin(_, _, exp_l, exp_r) => annotate_bin_exp(bounds, exp_l, exp_r),
         ast::ExpKind::Cmp(_, _, exp_l, exp_r) => annotate_cmp_exp(bounds, exp_l, exp_r),
@@ -372,7 +372,7 @@ fn annotate_exp(bounds: &VEnv, exp: &mut ast::Exp) -> Result<Occurrences, ElabEr
             annotate_upd_exp(bounds, exp_base, path, exp_field)
         }
         ast::ExpKind::Call(_, _, args) => annotate_call_exp(bounds, args),
-        ast::ExpKind::Iter(exp_inner, (iter, vars)) => {
+        ast::ExpKind::Iter(exp_inner, ast::ExpIter { iter, vars }) => {
             annotate_iter_exp(bounds, span, exp_inner, *iter, vars)
         }
     }
@@ -405,9 +405,9 @@ fn annotate_text_exp() -> Occurrences {
     Occurrences::new()
 }
 
-// - Variable expressions
+// - Identifier expressions
 
-fn annotate_var_exp(span: &Span, typ_kind: &ast::TypKind, id: &Id) -> Occurrences {
+fn annotate_id_exp(span: &Span, typ_kind: &ast::TypKind, id: &Id) -> Occurrences {
     let typ = phrase!(node: typ_kind.clone(), span: span.clone());
     Occurrences::singleton(id, typ)
 }
@@ -483,12 +483,9 @@ fn annotate_case_exp(bounds: &VEnv, not_exp: &mut ast::NotExp) -> Result<Occurre
 
 // - Struct expressions
 
-fn annotate_str_exp(
-    bounds: &VEnv,
-    fields: &mut [(ast::Atom, ast::Exp)],
-) -> Result<Occurrences, ElabError> {
+fn annotate_str_exp(bounds: &VEnv, fields: &mut [ast::ExpField]) -> Result<Occurrences, ElabError> {
     let mut occurs = Occurrences::new();
-    for (_, exp) in fields {
+    for ast::ExpField { exp, .. } in fields {
         let occurs_exp = annotate_exp(bounds, exp)?;
         occurs = occurs.union(occurs_exp)?;
     }
@@ -872,7 +869,7 @@ fn analyze_rule(rule: &mut ast::Rule) -> Result<(), ElabError> {
 // - Rule groups
 
 fn analyze_rule_group(group: &mut ast::RuleGroup) -> Result<(), ElabError> {
-    for rule in &mut group.node.1 {
+    for rule in &mut group.node.rules {
         analyze_rule(rule)?;
     }
     Ok(())
@@ -881,7 +878,7 @@ fn analyze_rule_group(group: &mut ast::RuleGroup) -> Result<(), ElabError> {
 // - Otherwise groups
 
 fn analyze_else_group(group: &mut ast::ElseGroup) -> Result<(), ElabError> {
-    analyze_rule(&mut group.node.1)
+    analyze_rule(&mut group.node.rule)
 }
 
 // - Clauses
@@ -898,8 +895,8 @@ fn analyze_clause(clause: &mut ast::Clause) -> Result<(), ElabError> {
 
 fn analyze_table_row(row: &mut ast::TableRow) -> Result<(), ElabError> {
     let bounds = infer_table_row(row).into_bounds()?;
-    annotate_args(&bounds, &mut row.node.0)?;
-    annotate_exp(&bounds, &mut row.node.1)?;
+    annotate_args(&bounds, &mut row.node.args)?;
+    annotate_exp(&bounds, &mut row.node.exp)?;
     Ok(())
 }
 

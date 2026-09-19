@@ -1,36 +1,40 @@
 use super::*;
+use crate::lang::il::ast::{TypCase, TypOriginKind};
 use crate::{
     pass::structure::opt::post::remove_match_singleton::apply,
     runtime::{envs::algo::TDEnv, typdef::TypeDef},
 };
 fn variant(tdenv: &mut TDEnv, text: &str, texts: &[&str]) -> Typ {
     let typ = crate::phrase!(node: TypKind::Var(id(text), vec![]), span: span(2));
-    let typcases = texts
+    let typ_cases = texts
         .iter()
         .map(|text_case| {
             let mixop = crate::frontend::parse::parse_mixop(text_case).unwrap();
-            (
-                crate::phrase!(node: mixop.map(|_| typ.clone()), span: span(3)),
-                crate::phrase!(node: (id(text), vec![]), span: span(4)),
-                vec![],
-            )
+            TypCase {
+                not_typ: crate::phrase!(node: mixop.map(|_| typ.clone()), span: span(3)),
+                typ_origin: crate::phrase!(node: TypOriginKind { id: id(text), targs: vec![] }, span: span(4)),
+                hints: vec![],
+            }
         })
         .collect();
     tdenv.insert(
         id(text),
         TypeDef::Defined(
             vec![],
-            Box::new(crate::phrase!(node: DefTypKind::Variant(typcases), span: span(5))),
+            Box::new(crate::phrase!(node: DefTypKind::Variant(typ_cases), span: span(5))),
         ),
     );
     typ
 }
 
 fn matching(typ: &Typ, block: Block) -> Instr {
-    let exp =
-        crate::note_phrase!(node: ExpKind::Var(id("value")), note: typ.node.clone(), span: span(7));
+    let exp = crate::note_phrase!(node: crate::lang::il::ast::ExpKind::Id(id("value")), note: typ.node.clone(), span: span(7));
     let exp = crate::note_phrase!(node: ExpKind::Match(Box::new(exp), Pattern::Case(Box::new(crate::frontend::parse::parse_mixop("A").unwrap()))), note: TypKind::Bool, span: span(8));
-    instr(InstrKind::If(IfInstr { exp, iter_exps: vec![(Iter::Opt, vec![])], block }))
+    instr(InstrKind::If(IfInstr {
+        exp,
+        iter_exps: vec![ExpIter { iter: Iter::Opt, vars: vec![] }],
+        block,
+    }))
 }
 
 #[test]
@@ -65,13 +69,13 @@ fn test_nested_containers_rewrite_but_debug_remains_opaque() {
         vec![
             instr(InstrKind::Hold(HoldInstr {
                 id: id("R"),
-                not_exp: Mixfix::Arg(variable("arg")),
+                not_exp: Mixfix::Arg(id_exp("arg")),
                 iter_exps: vec![],
                 block_hold: vec![instr_inner.clone()],
                 block_not_hold: vec![instr_inner.clone()],
             })),
             instr(InstrKind::Case(CaseInstr {
-                exp: variable("cond"),
+                exp: id_exp("cond"),
                 cases: vec![Case { guard: Guard::Bool(true), block: vec![instr_inner.clone()] }],
                 total: false,
             })),
@@ -90,7 +94,7 @@ fn test_nested_containers_rewrite_but_debug_remains_opaque() {
         wrap(ret("result"))
     );
     let instr_debug = instr(InstrKind::Debug(DebugInstr {
-        exp: variable("debug"),
+        exp: id_exp("debug"),
         instr: Box::new(matching(&typ, vec![ret("result")])),
     }));
     assert_eq!(apply(&tdenv, vec![instr_debug.clone()]).unwrap(), vec![instr_debug]);

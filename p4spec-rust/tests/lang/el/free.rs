@@ -4,9 +4,9 @@ use super::*;
 fn test_free_expression_ids_ignore_source_spans_and_render_in_source_order() {
     let exp_bin = exp(
         ExpKind::Bin(
-            Box::new(exp(ExpKind::Var(id("left", "left.watsup")), "left.watsup")),
-            BinOp::Num(p4spec_rust::lang::xl::num::BinOp::Add),
-            Box::new(exp(ExpKind::Var(id("right", "right.watsup")), "right.watsup")),
+            Box::new(exp(ExpKind::Id(id("left", "left.watsup")), "left.watsup")),
+            BinOp::Num(p4spec_rust::lang::common::prim::num::BinOp::Add),
+            Box::new(exp(ExpKind::Id(id("right", "right.watsup")), "right.watsup")),
         ),
         "root.watsup",
     );
@@ -16,7 +16,7 @@ fn test_free_expression_ids_ignore_source_spans_and_render_in_source_order() {
 }
 #[test]
 fn test_free_collection_covers_paths_calls_premises_and_definition_bodies() {
-    let variable = |name| exp(ExpKind::Var(id(name, "different-source.watsup")), "expr.watsup");
+    let id_exp = |name| exp(ExpKind::Id(id(name, "different-source.watsup")), "expr.watsup");
     let path = p4spec_rust::phrase! { node: ast::PathKind::Slice(
         Box::new(p4spec_rust::phrase! {
             node:
@@ -25,12 +25,12 @@ fn test_free_collection_covers_paths_calls_premises_and_definition_bodies() {
                     node: ast::PathKind::Root,
                     span: span("path.watsup"),
                 }),
-                Box::new(variable("index")),
+                Box::new(id_exp("index")),
             ),
             span: span("path.watsup"),
         }),
-        Box::new(variable("low")),
-        Box::new(variable("high")),
+        Box::new(id_exp("low")),
+        Box::new(id_exp("high")),
     ), span: span("path.watsup") };
     let call = exp(
         ExpKind::Call(
@@ -42,7 +42,7 @@ fn test_free_collection_covers_paths_calls_premises_and_definition_bodies() {
                     span: span("arg.watsup"),
                 },
                 p4spec_rust::phrase! {
-                    node: ast::ArgKind::Exp(Box::new(variable("argument"))),
+                    node: ast::ArgKind::Exp(Box::new(id_exp("argument"))),
                     span: span("arg.watsup"),
                 },
             ],
@@ -50,7 +50,7 @@ fn test_free_collection_covers_paths_calls_premises_and_definition_bodies() {
         "call.watsup",
     );
     let exp_upd =
-        exp(ExpKind::Upd(Box::new(call), path, Box::new(variable("field"))), "update.watsup");
+        exp(ExpKind::Upd(Box::new(call), path, Box::new(id_exp("field"))), "update.watsup");
     let iteration = prem(ast::PremKind::Iter(ast::IterPrem {
         prem: Box::new(prem(ast::PremKind::Var(ast::VarPrem {
             id: id("bound", "prem.watsup"),
@@ -58,17 +58,17 @@ fn test_free_collection_covers_paths_calls_premises_and_definition_bodies() {
         }))),
         iter: ast::Iter::List,
     }));
-    let rule = p4spec_rust::phrase! { node: (
-        id("relation", "rule.watsup"),
-        id("", "rule.watsup"),
-        exp_upd.clone(),
-        vec![
+    let rule = p4spec_rust::phrase! { node: ast::RuleKind {
+        id_rel: id("relation", "rule.watsup"),
+        id_rule: id("", "rule.watsup"),
+        exp: exp_upd.clone(),
+        prems: vec![
             iteration,
             prem(ast::PremKind::If(ast::IfPrem {
-                exp: variable("guard"),
+                exp: id_exp("guard"),
             })),
         ],
-    ), span: span("rule.watsup") };
+    }, span: span("rule.watsup") };
     let def_func = definition(ast::DefKind::FuncDef(ast::FuncDef {
         id: id("function", "def.watsup"),
         tparams: vec![p4spec_rust::phrase! {
@@ -76,11 +76,11 @@ fn test_free_collection_covers_paths_calls_premises_and_definition_bodies() {
             span: span("def.watsup"),
         }],
         args: vec![p4spec_rust::phrase! {
-            node: ast::ArgKind::Exp(Box::new(variable("argument"))),
+            node: ast::ArgKind::Exp(Box::new(id_exp("argument"))),
             span: span("def.watsup"),
         }],
-        exp: variable("body"),
-        prems: vec![prem(ast::PremKind::Debug(ast::DebugPrem { exp: variable("debug") }))],
+        exp: id_exp("body"),
+        prems: vec![prem(ast::PremKind::Debug(ast::DebugPrem { exp: id_exp("debug") }))],
     }));
 
     assert_eq!(

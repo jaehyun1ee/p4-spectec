@@ -438,7 +438,9 @@ fn test_native_table_entries_append_priorities_and_default_changes_are_isolated(
         let value_priority = *get::case(runner.arena(), &value_priority).unwrap().args()[0];
         let value_priority = *get::case(runner.arena(), &value_priority).unwrap().args()[0];
         assert_eq!(
-            p4spec_rust::lang::xl::num::to_int(get::num(runner.arena(), &value_priority).unwrap()),
+            p4spec_rust::lang::common::prim::num::to_int(
+                get::num(runner.arena(), &value_priority).unwrap()
+            ),
             &priority.into()
         );
     }

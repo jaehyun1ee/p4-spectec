@@ -46,8 +46,8 @@ use std::rc::Rc;
 use num_bigint::BigInt;
 
 use crate::lang::{
+    common::prim::num::Natural,
     common::source::{Phrase, Position, Span},
-    xl::num::Natural,
 };
 
 use super::error::{LexError, LexErrorKind};

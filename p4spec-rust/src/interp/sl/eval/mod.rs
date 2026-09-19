@@ -1,5 +1,6 @@
 //! SL assignment, expression, instruction, and invocation evaluation
 
+use crate::runtime::envs::interp::sl::ast_prepared as ast;
 pub mod assign;
 pub mod call;
 pub mod expr;
@@ -8,7 +9,7 @@ pub mod instr;
 use super::{SlInterp, context::Context};
 use crate::{
     interp::shared::{backtrack::Backtrack, eval::Invoker},
-    lang::{data::value::Value, sl::ast},
+    lang::data::value::Value,
     runner::{Extern, Interface, RunnerContext},
 };
 

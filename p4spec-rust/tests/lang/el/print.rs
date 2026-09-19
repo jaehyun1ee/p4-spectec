@@ -2,26 +2,26 @@ use super::*;
 
 #[test]
 fn test_printer_preserves_el_delimiters_precedence_hints_and_definition_separators() {
-    let hint = (
-        id("ignored", "hint.watsup"),
-        exp(ExpKind::Var(id("also_ignored", "hint.watsup")), "hint.watsup"),
-    );
+    let hint = ast::Hint {
+        id: id("ignored", "hint.watsup"),
+        exp: exp(ExpKind::Id(id("also_ignored", "hint.watsup")), "hint.watsup"),
+    };
     let nested = exp(
         ExpKind::Bin(
             Box::new(exp(
                 ExpKind::Paren(Box::new(exp(
                     ExpKind::Bin(
-                        Box::new(exp(ExpKind::Var(id("a", "a")), "a")),
-                        ast::BinOp::Num(p4spec_rust::lang::xl::num::BinOp::Add),
-                        Box::new(exp(ExpKind::Var(id("b", "b")), "b")),
+                        Box::new(exp(ExpKind::Id(id("a", "a")), "a")),
+                        ast::BinOp::Num(p4spec_rust::lang::common::prim::num::BinOp::Add),
+                        Box::new(exp(ExpKind::Id(id("b", "b")), "b")),
                     ),
                     "inner",
                 ))),
                 "outer",
             )),
-            ast::BinOp::Num(p4spec_rust::lang::xl::num::BinOp::Mul),
+            ast::BinOp::Num(p4spec_rust::lang::common::prim::num::BinOp::Mul),
             Box::new(exp(
-                ExpKind::Iter(Box::new(exp(ExpKind::Var(id("c", "c")), "c")), ast::Iter::Opt),
+                ExpKind::Iter(Box::new(exp(ExpKind::Id(id("c", "c")), "c")), ast::Iter::Opt),
                 "outer",
             )),
         ),
@@ -45,7 +45,7 @@ fn test_printer_preserves_el_delimiters_precedence_hints_and_definition_separato
     assert_eq!(
         Print::to_string(&prem(ast::PremKind::Iter(ast::IterPrem {
             prem: Box::new(prem(ast::PremKind::If(ast::IfPrem {
-                exp: exp(ExpKind::Var(id("ready", "prem")), "prem"),
+                exp: exp(ExpKind::Id(id("ready", "prem")), "prem"),
             }))),
             iter: ast::Iter::List,
         }))),
@@ -74,7 +74,7 @@ fn test_printer_preserves_el_delimiters_precedence_hints_and_definition_separato
             id: id("Record", "def"),
             tparams: vec![],
             def_typ: p4spec_rust::phrase! {
-                node: ast::DefTypKind::Struct(vec![(atom("field"), bool_typ(), vec![hint.clone()])]),
+                node: ast::DefTypKind::Struct(vec![ast::TypField { atom: atom("field"), typ: bool_typ(), hints: vec![hint.clone()] }]),
                 span: span("def"),
             },
             hints: vec![hint.clone()],
@@ -123,16 +123,16 @@ fn test_printer_preserves_el_delimiters_precedence_hints_and_definition_separato
         })),
         definition(ast::DefKind::TableDef(ast::TableDef {
             id: id("rows", "def"),
-            rows: vec![p4spec_rust::phrase! { node: (
-                exp(ExpKind::Var(id("pattern", "row")), "row"),
-                exp(ExpKind::Var(id("body", "row")), "row"),
-            ), span: span("row") }],
+            rows: vec![p4spec_rust::phrase! { node: ast::TableRowKind {
+                exp_pattern: exp(ExpKind::Id(id("pattern", "row")), "row"),
+                exp_body: exp(ExpKind::Id(id("body", "row")), "row"),
+            }, span: span("row") }],
         })),
         definition(ast::DefKind::FuncDef(ast::FuncDef {
             id: id("defined", "def"),
             tparams: vec![],
             args: vec![],
-            exp: exp(ExpKind::Var(id("body", "def")), "def"),
+            exp: exp(ExpKind::Id(id("body", "def")), "def"),
             prems: vec![prem(ast::PremKind::Else)],
         })),
         definition(ast::DefKind::Sep),
@@ -153,27 +153,33 @@ fn test_printer_matches_ocaml_byte_escaping_and_public_collection_helpers() {
         Print::to_string(&exp(ExpKind::Latex(escaped.into()), "latex")),
         "latex(\\\"\\\\'\\n\\r\\t\\b\\012\\001\\195\\169)"
     );
-    assert_eq!(Print::to_string(&ast::UnOp::Num(p4spec_rust::lang::xl::num::UnOp::Minus)), "-");
     assert_eq!(
-        Print::to_string(&ast::BinOp::Bool(p4spec_rust::lang::xl::bool::BinOp::Equiv,)),
+        Print::to_string(&ast::UnOp::Num(p4spec_rust::lang::common::prim::num::UnOp::Minus)),
+        "-"
+    );
+    assert_eq!(
+        Print::to_string(&ast::BinOp::Bool(p4spec_rust::lang::common::prim::bool::BinOp::Equiv,)),
         "<=>"
     );
-    assert_eq!(Print::to_string(&ast::CmpOp::Bool(p4spec_rust::lang::xl::bool::CmpOp::Ne)), "=/=");
+    assert_eq!(
+        Print::to_string(&ast::CmpOp::Bool(p4spec_rust::lang::common::prim::bool::CmpOp::Ne)),
+        "=/="
+    );
     let atom_type = p4spec_rust::phrase! {
         node: ast::NotTypKind::Atom(atom("A")),
         span: span("type"),
     };
     assert_eq!(Print::to_string(&[atom_type.clone(), atom_type][..]), "A, A");
     let row = p4spec_rust::phrase! {
-        node: (exp(ExpKind::Eps, "row"), exp(ExpKind::Eps, "row")),
+        node: ast::TableRowKind { exp_pattern: exp(ExpKind::Eps, "row"), exp_body: exp(ExpKind::Eps, "row") },
         span: span("row"),
     };
     assert_eq!(Print::to_string(&[row.clone(), row][..]), "eps => eps\n  | eps => eps");
-    let rule = p4spec_rust::phrase! { node: (
-        id("r", "rule"),
-        id("", "rule"),
-        exp(ExpKind::Eps, "rule"),
-        vec![],
-    ), span: span("rule") };
+    let rule = p4spec_rust::phrase! { node: ast::RuleKind {
+        id_rel: id("r", "rule"),
+        id_rule: id("", "rule"),
+        exp: exp(ExpKind::Eps, "rule"),
+        prems: vec![],
+    }, span: span("rule") };
     assert_eq!(Print::to_string(&[rule.clone(), rule][..]), "rule r:\n  eps\nrule r:\n  eps");
 }

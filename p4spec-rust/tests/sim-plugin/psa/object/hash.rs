@@ -14,7 +14,7 @@ fn test_hash_adjust_uses_max_not_range_and_preserves_call_order() {
     let value = returned(runner.arena(), output.3);
     let value_int = *get::case(runner.arena(), &value).unwrap().args()[0];
     assert_eq!(
-        p4spec_rust::lang::xl::num::to_int(get::num(runner.arena(), &value_int).unwrap()),
+        p4spec_rust::lang::common::prim::num::to_int(get::num(runner.arena(), &value_int).unwrap()),
         &20.into()
     );
     assert_eq!(runner.context().interp().calls, ["data", "find_type_e", "cast_op"]);
@@ -26,7 +26,7 @@ fn test_hash_adjust_uses_max_not_range_and_preserves_call_order() {
     let value = returned(runner.arena(), output.3);
     let value_int = *get::case(runner.arena(), &value).unwrap().args()[0];
     assert_eq!(
-        p4spec_rust::lang::xl::num::to_int(get::num(runner.arena(), &value_int).unwrap()),
+        p4spec_rust::lang::common::prim::num::to_int(get::num(runner.arena(), &value_int).unwrap()),
         &13.into()
     );
     assert_eq!(runner.context().interp().calls, ["base", "max", "data", "find_type_e", "cast_op"]);

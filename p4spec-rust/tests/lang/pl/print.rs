@@ -26,10 +26,10 @@ fn typ() -> il::ast::Typ {
     }
 }
 
-fn variable(name: &str) -> pl::ast::Exp {
+fn id_exp(name: &str) -> pl::ast::Exp {
     pl::annot::Annotated {
         node: p4spec_rust::note_phrase! {
-            node: pl::ast::ExpKind::Var(id(name)),
+            node: pl::ast::ExpKind::Id(id(name)),
             note: il::ast::TypKind::Bool,
             span: span(name),
         },
@@ -96,10 +96,10 @@ fn test_group_printer_escapes_text_and_omits_annotations_and_fallthrough() {
 #[test]
 fn test_shared_control_flow_renders_group_tier_at_nested_level() {
     let branch = group_instr(pl::ast::InstrKind::If(pl::ast::IfInstr {
-        exp: variable("condition"),
+        exp: id_exp("condition"),
         iter_exps: Vec::new(),
         block: vec![group_instr(pl::ast::InstrKind::Tier(pl::ast::TierInstr {
-            tier: pl::ast::InstrGroup::Return(pl::ast::ReturnGroupInstr { exp: variable("value") }),
+            tier: pl::ast::InstrGroup::Return(pl::ast::ReturnGroupInstr { exp: id_exp("value") }),
         }))],
         dangle: true,
     }));
@@ -116,12 +116,12 @@ fn test_group_and_dispatch_backtracking_preserve_arm_order() {
             blocks: vec![
                 vec![group_instr(pl::ast::InstrKind::Tier(pl::ast::TierInstr {
                     tier: pl::ast::InstrGroup::Return(pl::ast::ReturnGroupInstr {
-                        exp: variable("a"),
+                        exp: id_exp("a"),
                     }),
                 }))],
                 vec![group_instr(pl::ast::InstrKind::Tier(pl::ast::TierInstr {
                     tier: pl::ast::InstrGroup::Return(pl::ast::ReturnGroupInstr {
-                        exp: variable("b"),
+                        exp: id_exp("b"),
                     }),
                 }))],
             ],
@@ -138,7 +138,7 @@ fn test_group_and_dispatch_backtracking_preserve_arm_order() {
                 id_rel: id("relation"),
                 id_group: id(name),
                 rel_signature: signature(),
-                exps_input: vec![variable(name)],
+                exps_input: vec![id_exp(name)],
                 block: vec![group_instr(pl::ast::InstrKind::Tier(pl::ast::TierInstr {
                     tier: pl::ast::InstrGroup::Result(pl::ast::ResultGroupInstr {
                         rel_signature: signature(),

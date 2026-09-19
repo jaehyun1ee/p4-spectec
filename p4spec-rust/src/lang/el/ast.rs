@@ -1,8 +1,8 @@
 //! Elaboration language model
 
 use crate::lang::{
+    common::prim::num,
     common::{self, notation::atom, source::Phrase},
-    xl::num,
 };
 
 // Numbers
@@ -57,19 +57,19 @@ pub enum NumOp {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum UnOp {
-    Bool(crate::lang::xl::bool::UnOp),
+    Bool(crate::lang::common::prim::bool::UnOp),
     Num(num::UnOp),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum BinOp {
-    Bool(crate::lang::xl::bool::BinOp),
+    Bool(crate::lang::common::prim::bool::BinOp),
     Num(num::BinOp),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum CmpOp {
-    Bool(crate::lang::xl::bool::CmpOp),
+    Bool(crate::lang::common::prim::bool::CmpOp),
     Num(num::CmpOp),
 }
 
@@ -86,7 +86,7 @@ pub enum ExpKind {
     /// `text`
     Text(Text),
     /// `id`
-    Var(Id),
+    Id(Id),
     /// `unop exp`
     Un(UnOp, Box<Exp>),
     /// `exp binop exp`
@@ -189,7 +189,11 @@ pub type TargKind = PlainTypKind;
 
 // Hints
 
-pub type Hint = (Id, Exp);
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Hint {
+    pub id: Id,
+    pub exp: Exp,
+}
 
 // Notation types
 
@@ -218,8 +222,18 @@ pub enum DefTypKind {
     Variant(Vec<TypCase>),
 }
 
-pub type TypField = (Atom, PlainTyp, Vec<Hint>);
-pub type TypCase = (Typ, Vec<Hint>);
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TypField {
+    pub atom: Atom,
+    pub typ: PlainTyp,
+    pub hints: Vec<Hint>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TypCase {
+    pub typ: Typ,
+    pub hints: Vec<Hint>,
+}
 
 // Parameters and premises
 
@@ -283,10 +297,22 @@ pub enum PremKind {
 // Rules and tables
 
 pub type Rule = Phrase<RuleKind>;
-pub type RuleKind = (Id, Id, Exp, Vec<Prem>);
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RuleKind {
+    pub id_rel: Id,
+    pub id_rule: Id,
+    pub exp: Exp,
+    pub prems: Vec<Prem>,
+}
 
 pub type TableRow = Phrase<TableRowKind>;
-pub type TableRowKind = (Exp, Exp);
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TableRowKind {
+    pub exp_pattern: Exp,
+    pub exp_body: Exp,
+}
 
 // Definitions
 

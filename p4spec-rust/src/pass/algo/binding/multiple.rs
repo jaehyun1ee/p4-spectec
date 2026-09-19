@@ -14,13 +14,13 @@
 use crate::{
     lang::{
         al,
+        common::prim,
         common::{
             Id,
             ds::{map::IdMap, set::IdSet},
         },
         il::ast,
         traits::free::Free,
-        xl,
     },
     note_phrase, phrase,
     runtime::{dim::Dim, envs::algo::VEnv},
@@ -75,10 +75,10 @@ impl RenameEnv {
 // == Binding renaming
 
 fn fresh_id(ids: &IdSet, id: &Id) -> Id {
-    let base = xl::var::strip_var_suffix(id).node;
+    let base = id.strip_suffix().node;
     let ids_same_base = ids
         .iter()
-        .filter(|id_other| xl::var::strip_var_suffix(id_other).node == base)
+        .filter(|id_other| id_other.strip_suffix().node == base)
         .cloned()
         .collect::<IdSet>();
     let mut id_fresh = id.clone();
@@ -88,23 +88,19 @@ fn fresh_id(ids: &IdSet, id: &Id) -> Id {
     id_fresh
 }
 
-fn rename_var(ctx: &mut Context, renv: &mut RenameEnv, exp: &ast::Exp, id: &Id) -> ast::Exp {
+fn rename_id_exp(ctx: &mut Context, renv: &mut RenameEnv, exp: &ast::Exp, id: &Id) -> ast::Exp {
     let Some(ids_rename) = renv.get_mut(id) else {
         return exp.clone();
     };
     let id_rename = if ids_rename.is_empty() { id.clone() } else { fresh_id(&ctx.frees, id) };
     ctx.add_free(id_rename.clone());
     ids_rename.push(id_rename.clone());
-    note_phrase! {
-        node: ast::ExpKind::Var(id_rename),
-        note: exp.note.clone(),
-        span: exp.span.clone(),
-    }
+    crate::note_phrase!(node: crate::lang::il::ast::ExpKind::Id(id_rename), note: exp.note.clone(), span: exp.span.clone())
 }
 
 pub fn rename_exp(ctx: &mut Context, renv: &mut RenameEnv, exp: &ast::Exp) -> ast::Exp {
     let kind = match &exp.node {
-        ast::ExpKind::Var(id) => return rename_var(ctx, renv, exp, id),
+        ast::ExpKind::Id(id) => return rename_id_exp(ctx, renv, exp, id),
         ast::ExpKind::UpCast(typ, exp_inner) => {
             let exp_inner = rename_exp(ctx, renv, exp_inner);
             ast::ExpKind::UpCast(typ.clone(), Box::new(exp_inner))
@@ -117,7 +113,10 @@ pub fn rename_exp(ctx: &mut Context, renv: &mut RenameEnv, exp: &ast::Exp) -> as
         ast::ExpKind::Str(fields) => {
             let fields = fields
                 .iter()
-                .map(|(atom, exp)| (atom.clone(), rename_exp(ctx, renv, exp)))
+                .map(|ast::ExpField { atom, exp }| ast::ExpField {
+                    atom: atom.clone(),
+                    exp: rename_exp(ctx, renv, exp),
+                })
                 .collect();
             ast::ExpKind::Str(fields)
         }
@@ -132,7 +131,7 @@ pub fn rename_exp(ctx: &mut Context, renv: &mut RenameEnv, exp: &ast::Exp) -> as
             let exp_tail = rename_exp(ctx, renv, exp_tail);
             ast::ExpKind::Cons(Box::new(exp_head), Box::new(exp_tail))
         }
-        ast::ExpKind::Iter(exp_inner, (iter, vars)) => {
+        ast::ExpKind::Iter(exp_inner, ast::ExpIter { iter, vars }) => {
             let exp_inner = rename_exp(ctx, renv, exp_inner);
             let frees = exp_inner.free();
             let mut vars_renamed = Vec::new();
@@ -154,7 +153,10 @@ pub fn rename_exp(ctx: &mut Context, renv: &mut RenameEnv, exp: &ast::Exp) -> as
                     }
                 }
             }
-            ast::ExpKind::Iter(Box::new(exp_inner), (*iter, vars_renamed))
+            ast::ExpKind::Iter(
+                Box::new(exp_inner),
+                ast::ExpIter { iter: *iter, vars: vars_renamed },
+            )
         }
         _ => return exp.clone(),
     };
@@ -180,19 +182,11 @@ pub fn rename_args(ctx: &mut Context, renv: &mut RenameEnv, args: &[ast::Arg]) -
 // == Side-condition generation
 
 fn gen_exp_equality(id: &Id, id_rename: &Id, typ: &ast::Typ) -> ast::Exp {
-    let exp_l = note_phrase! {
-        node: ast::ExpKind::Var(id.clone()),
-        note: typ.node.clone(),
-        span: id.span.clone(),
-    };
-    let exp_r = note_phrase! {
-        node: ast::ExpKind::Var(id_rename.clone()),
-        note: typ.node.clone(),
-        span: id.span.clone(),
-    };
+    let exp_l = crate::note_phrase!(node: crate::lang::il::ast::ExpKind::Id(id.clone()), note: typ.node.clone(), span: id.span.clone());
+    let exp_r = crate::note_phrase!(node: crate::lang::il::ast::ExpKind::Id(id_rename.clone()), note: typ.node.clone(), span: id.span.clone());
     note_phrase! {
         node: ast::ExpKind::Cmp(
-            ast::CmpOp::Bool(xl::bool::CmpOp::Eq),
+            ast::CmpOp::Bool(prim::bool::CmpOp::Eq),
             ast::OpTyp::Bool,
             Box::new(exp_l),
             Box::new(exp_r),
@@ -217,7 +211,7 @@ fn generate_side_condition(
         let exp_r = gen_exp_equality(&id_condition, id_rename, &dim.typ);
         exp = note_phrase! {
             node: ast::ExpKind::Bin(
-                ast::BinOp::Bool(xl::bool::BinOp::And),
+                ast::BinOp::Bool(prim::bool::BinOp::And),
                 ast::OpTyp::Bool,
                 Box::new(exp),
                 Box::new(exp_r),

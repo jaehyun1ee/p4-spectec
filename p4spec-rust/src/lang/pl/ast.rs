@@ -72,7 +72,7 @@ pub enum ExpKind {
     Bool(bool),
     Num(Num),
     Text(Text),
-    Var(Id),
+    Id(Id),
     Un(UnOp, OpTyp, Box<Exp>),
     Bin(BinOp, OpTyp, Box<Exp>, Box<Exp>),
     Cmp(CmpOp, OpTyp, Box<Exp>, Box<Exp>),

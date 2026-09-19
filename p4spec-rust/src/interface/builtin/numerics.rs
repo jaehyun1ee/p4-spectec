@@ -8,13 +8,13 @@ use num_bigint::BigInt;
 use num_traits::{One, ToPrimitive, Zero};
 
 use crate::lang::{
+    common::prim::num,
     common::source::Span,
     data::{
         typ,
         value::{Value, ValueArena, get, make},
     },
     il::ast::Typ,
-    xl::num,
 };
 
 use super::{BuiltinError, extract};

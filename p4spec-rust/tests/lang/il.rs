@@ -23,15 +23,8 @@ fn id(name: &str) -> ast::Id {
         span: Span::default(),
     }
 }
-fn exp(kind: ast::ExpKind) -> ast::Exp {
-    p4spec_rust::note_phrase! {
-        node: kind,
-        note: ast::TypKind::Bool,
-        span: Span::default(),
-    }
-}
-fn var(name: &str) -> ast::Exp {
-    exp(ast::ExpKind::Var(id(name)))
+fn id_exp(name: &str) -> ast::Exp {
+    p4spec_rust::note_phrase!(node: p4spec_rust::lang::il::ast::ExpKind::Id(id(name)), note: p4spec_rust::lang::il::ast::TypKind::Bool, span: Default::default())
 }
 fn arg(kind: ast::ArgKind) -> ast::Arg {
     p4spec_rust::phrase! {
@@ -46,7 +39,7 @@ fn prem(kind: ast::PremKind) -> ast::Prem {
     }
 }
 fn notexp(name: &str) -> ast::NotExp {
-    Mixfix::Seq(vec![Mixfix::Arg(var(name))])
+    Mixfix::Seq(vec![Mixfix::Arg(id_exp(name))])
 }
 fn not_typ() -> ast::NotTyp {
     p4spec_rust::phrase! {
@@ -58,18 +51,18 @@ fn names(names: &[&str]) -> IdSet {
     names.iter().map(|name| id(name)).collect()
 }
 fn hint() -> ast::Hint {
-    (
-        p4spec_rust::phrase! {
+    ast::Hint {
+        id: p4spec_rust::phrase! {
             node: "meta".into(),
             span: Span::default(),
         },
-        p4spec_rust::phrase! { node: p4spec_rust::lang::el::ast::ExpKind::Var(
+        exp: p4spec_rust::phrase! { node: p4spec_rust::lang::el::ast::ExpKind::Id(
             p4spec_rust::phrase! {
                 node: "payload".into(),
                 span: Span::default(),
             },
         ), span: Span::default() },
-    )
+    }
 }
 
 #[path = "il/free.rs"]

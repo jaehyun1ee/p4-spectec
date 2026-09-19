@@ -5,12 +5,15 @@ use serde_json::json;
 use crate::util::json::json;
 
 use crate::lang::{
+    common::prim::{bool, num},
     il::ast::{self, *},
-    xl::{bool, num},
 };
 
 use super::{
-    super::{DecodeError, EncodeError, array, boolean, on_codec_stack, string, unsigned, variant},
+    super::{
+        DecodeError, EncodeError, array, boolean, field, object, on_codec_stack, string, unsigned,
+        variant,
+    },
     el, xl,
 };
 use crate::wire::ocaml::{atom::AtomPhraseCodec, mixfix, source};
@@ -79,13 +82,15 @@ pub(super) fn encode_not_typ(typ: &ast::NotTyp) -> json {
 
 fn decode_typ_origin(json: &json) -> Result<ast::TypOrigin, DecodeError> {
     source::decode_phrase(json, |json| match array(json)? {
-        [id, targs] => Ok((decode_id(id)?, decode_list(targs, decode_targ)?)),
+        [id, targs] => {
+            Ok(ast::TypOriginKind { id: decode_id(id)?, targs: decode_list(targs, decode_targ)? })
+        }
         _ => Err(DecodeError::Expected("IL type origin pair")),
     })
 }
 
-fn encode_typ_origin(origin: &ast::TypOrigin) -> json {
-    source::encode_phrase(origin, |(id, targs)| {
+fn encode_typ_origin(typ_origin: &ast::TypOrigin) -> json {
+    source::encode_phrase(typ_origin, |ast::TypOriginKind { id, targs }| {
         json!([encode_id(id), encode_list(targs, encode_targ)])
     })
 }
@@ -97,17 +102,20 @@ pub(super) fn decode_def_typ(json: &json) -> Result<ast::DefTyp, DecodeError> {
             ("PlainT", [typ]) => Ok(DefTypKind::Plain(decode_typ(typ)?)),
             ("StructT", [fields]) => {
                 Ok(DefTypKind::Struct(decode_list(fields, |field| match array(field)? {
-                    [atom, typ] => Ok((AtomPhraseCodec::decode(atom)?, decode_typ(typ)?)),
+                    [atom, typ] => Ok(ast::TypField {
+                        atom: AtomPhraseCodec::decode(atom)?,
+                        typ: decode_typ(typ)?,
+                    }),
                     _ => Err(DecodeError::Expected("IL type field pair")),
                 })?))
             }
             ("VariantT", [cases]) => {
                 Ok(DefTypKind::Variant(decode_list(cases, |case| match array(case)? {
-                    [not_typ, typ_origin, hints] => Ok((
-                        decode_not_typ(not_typ)?,
-                        decode_typ_origin(typ_origin)?,
-                        decode_list(hints, el::decode_hint)?,
-                    )),
+                    [not_typ, typ_origin, hints] => Ok(ast::TypCase {
+                        not_typ: decode_not_typ(not_typ)?,
+                        typ_origin: decode_typ_origin(typ_origin)?,
+                        hints: decode_list(hints, el::decode_hint)?,
+                    }),
                     _ => Err(DecodeError::Expected("IL type case triple")),
                 })?))
             }
@@ -126,14 +134,17 @@ pub(super) fn encode_def_typ(typ: &ast::DefTyp) -> json {
             "StructT",
             fields
                 .iter()
-                .map(|(atom, typ)| json!([AtomPhraseCodec::encode(atom), encode_typ(typ)]))
+                .map(|ast::TypField { atom, typ }| json!([
+                    AtomPhraseCodec::encode(atom),
+                    encode_typ(typ)
+                ]))
                 .collect::<Vec<_>>()
         ]),
         DefTypKind::Variant(cases) => json!([
             "VariantT",
             cases
                 .iter()
-                .map(|(not_typ, typ_origin, hints)| json!([
+                .map(|ast::TypCase { not_typ, typ_origin, hints }| json!([
                     encode_not_typ(not_typ),
                     encode_typ_origin(typ_origin),
                     encode_list(hints, el::encode_hint)
@@ -288,7 +299,14 @@ pub(super) fn encode_subcheck(subcheck: &ast::Subcheck) -> json {
 }
 
 pub(super) fn decode_exp(json: &json) -> Result<ast::Exp, DecodeError> {
-    source::decode_note_phrase(json, decode_exp_kind, |json| decode_typ_kind(json).map(Into::into))
+    let object = object(json)?;
+    let span = source::decode_region(field(object, "at")?)?;
+    let typ = crate::phrase!(
+        node: decode_typ_kind(field(object, "note")?)?,
+        span: span.clone()
+    );
+    let exp_kind = decode_exp_kind(field(object, "it")?)?;
+    Ok(crate::note_phrase!(node: exp_kind, note: typ.node, span: span))
 }
 
 pub(super) fn encode_exp(exp: &ast::Exp) -> json {
@@ -301,7 +319,7 @@ fn decode_exp_kind(json: &json) -> Result<ExpKind, DecodeError> {
         ("BoolE", [json]) => Ok(ExpKind::Bool(boolean(json)?)),
         ("NumE", [num]) => Ok(ExpKind::Num(xl::decode_num(num)?)),
         ("TextE", [text]) => Ok(ExpKind::Text(string(text)?.to_owned())),
-        ("VarE", [id]) => Ok(ExpKind::Var(decode_id(id)?)),
+        ("VarE", [id]) => Ok(ExpKind::Id(decode_id(id)?)),
         ("UnE", [op, typ, exp]) => {
             Ok(ExpKind::Un(decode_un_op(op)?, decode_op_typ(typ)?, Box::new(decode_exp(exp)?)))
         }
@@ -334,7 +352,9 @@ fn decode_exp_kind(json: &json) -> Result<ExpKind, DecodeError> {
         ("TupleE", [exps]) => Ok(ExpKind::Tuple(decode_list(exps, decode_exp)?)),
         ("CaseE", [exp]) => Ok(ExpKind::Case(Box::new(decode_not_exp(exp)?))),
         ("StrE", [fields]) => Ok(ExpKind::Str(decode_list(fields, |field| match array(field)? {
-            [atom, exp] => Ok((AtomPhraseCodec::decode(atom)?, decode_exp(exp)?)),
+            [atom, exp] => {
+                Ok(ast::ExpField { atom: AtomPhraseCodec::decode(atom)?, exp: decode_exp(exp)? })
+            }
             _ => Err(DecodeError::Expected("IL expression field pair")),
         })?)),
         ("OptE", [exp]) => Ok(ExpKind::Opt(decode_option(exp, decode_exp)?.map(Box::new))),
@@ -388,7 +408,7 @@ fn encode_exp_kind(exp: &ExpKind) -> json {
         ExpKind::Bool(value) => json!(["BoolE", value]),
         ExpKind::Num(num) => json!(["NumE", xl::encode_num(num)]),
         ExpKind::Text(text) => json!(["TextE", text]),
-        ExpKind::Var(id) => json!(["VarE", encode_id(id)]),
+        ExpKind::Id(id) => json!(["VarE", encode_id(id)]),
         ExpKind::Un(op, typ, exp) => {
             json!(["UnE", encode_un_op(*op), encode_op_typ(*typ), encode_exp(exp)])
         }
@@ -422,7 +442,10 @@ fn encode_exp_kind(exp: &ExpKind) -> json {
             "StrE",
             fields
                 .iter()
-                .map(|(atom, exp)| json!([AtomPhraseCodec::encode(atom), encode_exp(exp)]))
+                .map(|ast::ExpField { atom, exp }| json!([
+                    AtomPhraseCodec::encode(atom),
+                    encode_exp(exp)
+                ]))
                 .collect::<Vec<_>>()
         ]),
         ExpKind::Opt(exp) => json!(["OptE", encode_option(exp.as_deref(), encode_exp)]),
@@ -467,12 +490,14 @@ pub(super) fn encode_not_exp(exp: &ast::NotExp) -> json {
 
 pub(super) fn decode_iter_exp(json: &json) -> Result<ast::ExpIter, DecodeError> {
     match array(json)? {
-        [iter, vars] => Ok((decode_iter(iter)?, decode_list(vars, decode_var)?)),
+        [iter, vars] => {
+            Ok(ast::ExpIter { iter: decode_iter(iter)?, vars: decode_list(vars, decode_var)? })
+        }
         _ => Err(DecodeError::Expected("IL expression iterator pair")),
     }
 }
 
-pub(super) fn encode_iter_exp((iter, vars): &ast::ExpIter) -> json {
+pub(super) fn encode_iter_exp(ast::ExpIter { iter, vars }: &ast::ExpIter) -> json {
     json!([encode_iter(*iter), encode_list(vars, encode_var)])
 }
 
@@ -729,26 +754,30 @@ fn encode_rule(rule: &ast::Rule) -> json {
 
 fn decode_rule_group(json: &json) -> Result<ast::RuleGroup, DecodeError> {
     source::decode_phrase(json, |json| match array(json)? {
-        [id, rules] => Ok((decode_id(id)?, decode_list(rules, decode_rule)?)),
+        [id, rules] => {
+            Ok(ast::RuleGroupKind { id: decode_id(id)?, rules: decode_list(rules, decode_rule)? })
+        }
         _ => Err(DecodeError::Expected("IL rule group pair")),
     })
 }
 
 fn encode_rule_group(group: &ast::RuleGroup) -> json {
-    source::encode_phrase(group, |(id, rules)| {
+    source::encode_phrase(group, |ast::RuleGroupKind { id, rules }| {
         json!([encode_id(id), encode_list(rules, encode_rule)])
     })
 }
 
 fn decode_else_group(json: &json) -> Result<ast::ElseGroup, DecodeError> {
     source::decode_phrase(json, |json| match array(json)? {
-        [id, rule] => Ok((decode_id(id)?, decode_rule(rule)?)),
+        [id, rule] => Ok(ast::ElseGroupKind { id: decode_id(id)?, rule: decode_rule(rule)? }),
         _ => Err(DecodeError::Expected("IL else group pair")),
     })
 }
 
 fn encode_else_group(group: &ast::ElseGroup) -> json {
-    source::encode_phrase(group, |(id, rule)| json!([encode_id(id), encode_rule(rule)]))
+    source::encode_phrase(group, |ast::ElseGroupKind { id, rule }| {
+        json!([encode_id(id), encode_rule(rule)])
+    })
 }
 
 pub(super) fn decode_clause(json: &json) -> Result<ast::Clause, DecodeError> {
@@ -774,13 +803,15 @@ pub(super) fn encode_clause(clause: &ast::Clause) -> json {
 
 fn decode_table_row(json: &json) -> Result<ast::TableRow, DecodeError> {
     source::decode_phrase(json, |json| match array(json)? {
-        [args, exp] => Ok((decode_list(args, decode_arg)?, decode_exp(exp)?)),
+        [args, exp] => {
+            Ok(ast::TableRowKind { args: decode_list(args, decode_arg)?, exp: decode_exp(exp)? })
+        }
         _ => Err(DecodeError::Expected("IL table row pair")),
     })
 }
 
 fn encode_table_row(row: &ast::TableRow) -> json {
-    source::encode_phrase(row, |(args, exp)| {
+    source::encode_phrase(row, |ast::TableRowKind { args, exp }| {
         json!([encode_list(args, encode_arg), encode_exp(exp)])
     })
 }

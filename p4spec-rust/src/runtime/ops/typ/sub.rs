@@ -2,8 +2,8 @@
 
 use crate::{
     lang::{
+        common::prim::num,
         il::ast::{self, DefTypKind, Iter, Subcheck, TypKind},
-        xl::num,
     },
     runtime::{envs::elab::TDEnv, typdef::TypeDef},
 };
@@ -54,10 +54,10 @@ fn sub_typ_inner(
             let Some(TypeDef::Defined(tparams_target, deftyp_target)) = tdenv.get(id_target) else {
                 return Ok(false);
             };
-            let DefTypKind::Variant(typcases_source) = &deftyp_source.node else {
+            let DefTypKind::Variant(typ_cases_source) = &deftyp_source.node else {
                 return Ok(false);
             };
-            let DefTypKind::Variant(typcases_target) = &deftyp_target.node else {
+            let DefTypKind::Variant(typ_cases_target) = &deftyp_target.node else {
                 return Ok(false);
             };
             let theta_source = match Theta::from_lists(tparams_source, targs_source) {
@@ -80,14 +80,14 @@ fn sub_typ_inner(
             };
 
             let mut fresh = Fresh::default();
-            let mut not_typs_source = Vec::with_capacity(typcases_source.len());
-            for (not_typ, _, _) in typcases_source {
+            let mut not_typs_source = Vec::with_capacity(typ_cases_source.len());
+            for ast::TypCase { not_typ, .. } in typ_cases_source {
                 let not_typ_subst =
                     subst_not_typ_inner(&mut fresh, &|id| theta_source.get(id), not_typ)?;
                 not_typs_source.push(not_typ_subst);
             }
-            let mut not_typs_target = Vec::with_capacity(typcases_target.len());
-            for (not_typ, _, _) in typcases_target {
+            let mut not_typs_target = Vec::with_capacity(typ_cases_target.len());
+            for ast::TypCase { not_typ, .. } in typ_cases_target {
                 let not_typ_subst =
                     subst_not_typ_inner(&mut fresh, &|id| theta_target.get(id), not_typ)?;
                 not_typs_target.push(not_typ_subst);
@@ -181,13 +181,13 @@ pub fn optimize_sub_typ(
                 let subcheck = Subcheck::Recurse(typ_target.clone());
                 return Ok(subcheck);
             };
-            let DefTypKind::Variant(typcases_target) = &deftyp_target.node else {
+            let DefTypKind::Variant(typ_cases_target) = &deftyp_target.node else {
                 let subcheck = Subcheck::Recurse(typ_target.clone());
                 return Ok(subcheck);
             };
 
-            let mut mixops_target = Vec::with_capacity(typcases_target.len());
-            for (not_typ, _, _) in typcases_target {
+            let mut mixops_target = Vec::with_capacity(typ_cases_target.len());
+            for ast::TypCase { not_typ, .. } in typ_cases_target {
                 let mixop = not_typ.node.to_mixop();
                 mixops_target.push(mixop);
             }

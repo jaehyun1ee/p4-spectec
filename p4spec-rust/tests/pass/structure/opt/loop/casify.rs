@@ -6,8 +6,8 @@ use crate::{
     pass::structure::{ol::ast::*, opt::r#loop::casify},
     runtime::envs::algo::TDEnv,
 };
-fn var(text: &str) -> Exp {
-    crate::note_phrase!(node: ExpKind::Var(crate::phrase!(node: text.into(), span: Default::default())), note: TypKind::Bool, span: Default::default())
+fn id_exp(text: &str) -> Exp {
+    crate::note_phrase!(node: crate::lang::il::ast::ExpKind::Id(crate::phrase!(node: text.into(), span: Default::default())), note: TypKind::Bool, span: Default::default())
 }
 
 fn span(int_line: usize) -> Span {
@@ -15,7 +15,7 @@ fn span(int_line: usize) -> Span {
 }
 
 fn ret(text: &str) -> Instr {
-    crate::phrase!(node: InstrKind::Return(ReturnInstr { exp: var(text) }), span: Default::default())
+    crate::phrase!(node: InstrKind::Return(ReturnInstr { exp: id_exp(text) }), span: Default::default())
 }
 
 fn branch(exp: Exp, text: &str, int_line: usize) -> Instr {
@@ -23,7 +23,7 @@ fn branch(exp: Exp, text: &str, int_line: usize) -> Instr {
 }
 
 fn neg(exp: Exp) -> Exp {
-    crate::note_phrase!(node: ExpKind::Un(crate::lang::il::ast::UnOp::Bool(crate::lang::xl::bool::UnOp::Not), crate::lang::il::ast::OpTyp::Bool, Box::new(exp)), note: TypKind::Bool, span: Default::default())
+    crate::note_phrase!(node: ExpKind::Un(crate::lang::il::ast::UnOp::Bool(crate::lang::common::prim::bool::UnOp::Not), crate::lang::il::ast::OpTyp::Bool, Box::new(exp)), note: TypKind::Bool, span: Default::default())
 }
 
 #[test]
@@ -32,7 +32,7 @@ fn test_partition_becomes_total_case_and_preserves_tail_span() {
     let block = casify::apply(
         &TDEnv::new(),
         &mut false,
-        vec![branch(var("p"), "a", 1), branch(neg(var("p")), "b", 2), instr_tail.clone()],
+        vec![branch(id_exp("p"), "a", 1), branch(neg(id_exp("p")), "b", 2), instr_tail.clone()],
     )
     .unwrap();
     assert_eq!(block.len(), 2);
@@ -45,20 +45,20 @@ fn test_partition_becomes_total_case_and_preserves_tail_span() {
 }
 
 fn cmp(text: &str) -> Exp {
-    crate::note_phrase!(node: ExpKind::Cmp(crate::lang::il::ast::CmpOp::Bool(crate::lang::xl::bool::CmpOp::Eq), crate::lang::il::ast::OpTyp::Bool, Box::new(var("p")), Box::new(crate::note_phrase!(node: ExpKind::Text(text.into()), note: TypKind::Text, span: Default::default()))), note: TypKind::Bool, span: Default::default())
+    crate::note_phrase!(node: ExpKind::Cmp(crate::lang::il::ast::CmpOp::Bool(crate::lang::common::prim::bool::CmpOp::Eq), crate::lang::il::ast::OpTyp::Bool, Box::new(id_exp("p")), Box::new(crate::note_phrase!(node: ExpKind::Text(text.into()), note: TypKind::Text, span: Default::default()))), note: TypKind::Bool, span: Default::default())
 }
 
 fn guard(text: &str) -> Guard {
-    crate::pass::structure::opt::overlap::exp_as_guard(&var("p"), &cmp(text)).unwrap()
+    crate::pass::structure::opt::overlap::exp_as_guard(&id_exp("p"), &cmp(text)).unwrap()
 }
 
 fn case(cases: &[(&str, &str)], total: bool, int_line: usize) -> Instr {
-    crate::phrase!(node: InstrKind::Case(CaseInstr { exp: var("p"), cases: cases.iter().map(|(text_guard,text_block)| Case { guard: guard(text_guard), block: vec![ret(text_block)] }).collect(), total }), span: span(int_line))
+    crate::phrase!(node: InstrKind::Case(CaseInstr { exp: id_exp("p"), cases: cases.iter().map(|(text_guard,text_block)| Case { guard: guard(text_guard), block: vec![ret(text_block)] }).collect(), total }), span: span(int_line))
 }
 
 #[test]
 fn test_disjoint_partial_fuzzy_and_if_search_order() {
-    let instr_fuzzy = branch(var("q"), "fuzzy", 2);
+    let instr_fuzzy = branch(id_exp("q"), "fuzzy", 2);
     let instr_tail = ret("tail");
     let block = casify::apply(
         &TDEnv::new(),
@@ -187,23 +187,23 @@ fn nested(block: Block) -> Block {
     let block = vec![super::rule("output", block)];
     let block = vec![super::binding("bound", block)];
     let block = vec![
-        crate::phrase!(node: InstrKind::Group(GroupInstr {id: super::id("group"), rel_signature: super::super::super::signature(), exps: vec![var("input")],block}),span: span(7)),
+        crate::phrase!(node: InstrKind::Group(GroupInstr {id: super::id("group"), rel_signature: super::super::super::signature(), exps: vec![id_exp("input")],block}),span: span(7)),
     ];
     let block = vec![
-        crate::phrase!(node: InstrKind::Case(CaseInstr {exp: var("outer_case"),cases: vec![Case {guard: Guard::Bool(true),block}],total: true}),span: span(8)),
+        crate::phrase!(node: InstrKind::Case(CaseInstr {exp: id_exp("outer_case"),cases: vec![Case {guard: Guard::Bool(true),block}],total: true}),span: span(8)),
     ];
     vec![super::hold(block.clone(), block)]
 }
 
 #[test]
 fn test_recursive_hold_case_group_let_rule_bodies() {
-    let block = vec![branch(var("p"), "a", 1), branch(neg(var("p")), "b", 2)];
+    let block = vec![branch(id_exp("p"), "a", 1), branch(neg(id_exp("p")), "b", 2)];
     let block_expect = casify::apply(&TDEnv::new(), &mut false, block.clone()).unwrap();
     assert_eq!(
         casify::apply(&TDEnv::new(), &mut false, nested(block.clone())).unwrap(),
         nested(block_expect)
     );
-    let instr_debug = crate::phrase!(node: InstrKind::Debug(DebugInstr {exp: var("debug"),instr: Box::new(super::binding("bound",block))}),span: span(9));
+    let instr_debug = crate::phrase!(node: InstrKind::Debug(DebugInstr {exp: id_exp("debug"),instr: Box::new(super::binding("bound",block))}),span: span(9));
     assert_eq!(
         casify::apply(&TDEnv::new(), &mut false, vec![instr_debug.clone()]).unwrap(),
         vec![instr_debug]
@@ -212,13 +212,13 @@ fn test_recursive_hold_case_group_let_rule_bodies() {
 
 #[test]
 fn test_iteration_blocks_search_and_different_case_targets_stay_separate() {
-    let mut instr_iter = branch(neg(var("p")), "iter", 2);
+    let mut instr_iter = branch(neg(id_exp("p")), "iter", 2);
     if let InstrKind::If(instr_if) = &mut instr_iter.node {
-        instr_if.iter_exps = vec![(crate::lang::il::ast::Iter::List, vec![])];
+        instr_if.iter_exps = vec![ExpIter { iter: crate::lang::il::ast::Iter::List, vars: vec![] }];
     }
     for block_input in [
-        vec![branch(var("p"), "a", 1), instr_iter.clone(), branch(neg(var("p")), "b", 3)],
-        vec![instr_iter, branch(var("p"), "b", 3)],
+        vec![branch(id_exp("p"), "a", 1), instr_iter.clone(), branch(neg(id_exp("p")), "b", 3)],
+        vec![instr_iter, branch(id_exp("p"), "b", 3)],
     ] {
         assert_eq!(
             casify::apply(&TDEnv::new(), &mut false, block_input.clone()).unwrap(),
@@ -227,7 +227,7 @@ fn test_iteration_blocks_search_and_different_case_targets_stay_separate() {
     }
     let mut instr_b = case(&[("b", "b")], false, 2);
     if let InstrKind::Case(instr_case) = &mut instr_b.node {
-        instr_case.exp = var("q");
+        instr_case.exp = id_exp("q");
     }
     let block_input = vec![case(&[("a", "a")], false, 1), instr_b];
     assert_eq!(casify::apply(&TDEnv::new(), &mut false, block_input.clone()).unwrap(), block_input);
@@ -237,7 +237,7 @@ fn test_iteration_blocks_search_and_different_case_targets_stay_separate() {
 fn test_identical_subtype_guard_retains_case_proof_and_expression_span() {
     use crate::lang::il::ast::Subcheck;
     use crate::pass::structure::opt::overlap::guard_as_exp;
-    let mut exp_target = var("p");
+    let mut exp_target = id_exp("p");
     exp_target.span = span(11);
     let typ = crate::phrase!(node: TypKind::Bool,span: span(12));
     let guard_case = Guard::Sub(typ.clone(), Box::new(Subcheck::Tuple(vec![Subcheck::Skip])));
@@ -253,7 +253,7 @@ fn test_identical_subtype_guard_retains_case_proof_and_expression_span() {
 
 fn return_name_ptr(instr: &Instr) -> *const u8 {
     let InstrKind::Return(instr_return) = &instr.node else { panic!("expected return") };
-    let ExpKind::Var(id) = &instr_return.exp.node else { panic!("expected variable") };
+    let ExpKind::Id(id) = &instr_return.exp.node else { panic!("expected variable") };
     id.node.as_ptr()
 }
 
@@ -293,7 +293,7 @@ fn test_case_case_late_fuzzy_merge_keeps_both_original_bodies() {
     let InstrKind::Case(instr_body) = &mut instr_case.node else { unreachable!() };
     instr_body
         .cases
-        .push(Case { guard: Guard::Mem(var("unknown")), block: vec![ret("fuzzy")] });
+        .push(Case { guard: Guard::Mem(id_exp("unknown")), block: vec![ret("fuzzy")] });
     let block = vec![instr_target, instr_case];
     assert_eq!(casify::apply(&TDEnv::new(), &mut false, block.clone()).unwrap(), block);
 }

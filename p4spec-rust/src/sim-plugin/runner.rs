@@ -324,7 +324,7 @@ fn encode_table_keys(arena: &mut ValueArena, matches: &[TableMatch]) -> Result<V
             MatchKind::Slash(prefix, mask) => {
                 let value_prefix = make::text(arena, prefix.clone(), Span::default())?;
                 let mask = BigInt::from(parse_int::<i128>(mask)?);
-                let nat = crate::lang::xl::num::Natural::try_from(mask)?;
+                let nat = crate::lang::common::prim::num::Natural::try_from(mask)?;
                 let value_mask = make::nat(arena, nat, Span::default())?;
                 make::case_shaped! {
                     arena: arena,

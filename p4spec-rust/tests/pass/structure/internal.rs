@@ -16,8 +16,8 @@ fn id(text: &str) -> Id {
     crate::phrase! { node: text.to_owned(), span: span(1) }
 }
 
-fn variable(text: &str) -> Exp {
-    crate::note_phrase! { node: ExpKind::Var(id(text)), note: TypKind::Bool, span: span(1) }
+fn id_exp(text: &str) -> Exp {
+    crate::note_phrase!(node: crate::lang::il::ast::ExpKind::Id(id(text)), note: TypKind::Bool, span: span(1))
 }
 
 fn instr(instr_kind: ast_ol::InstrKind) -> ast_ol::Instr {
@@ -25,7 +25,7 @@ fn instr(instr_kind: ast_ol::InstrKind) -> ast_ol::Instr {
 }
 
 fn ret(text: &str) -> ast_ol::Instr {
-    instr(ast_ol::InstrKind::Return(ast_ol::ReturnInstr { exp: variable(text) }))
+    instr(ast_ol::InstrKind::Return(ast_ol::ReturnInstr { exp: id_exp(text) }))
 }
 
 fn signature() -> RelSignature {

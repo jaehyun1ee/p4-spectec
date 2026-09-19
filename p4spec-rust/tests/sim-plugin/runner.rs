@@ -92,6 +92,7 @@ fn test_dropped_packet_retains_expectation() {
 use p4spec_rust::{
     interp::shared::error::Error as InterpError,
     lang::{
+        common::prim::num,
         data::{
             typ,
             value::{
@@ -101,7 +102,6 @@ use p4spec_rust::{
             },
         },
         il::ast::Typ,
-        xl::num,
     },
     runner::{Extern, Interface, Interpreter, NullInterface, Runner, RunnerContext},
     sim_plugin::{

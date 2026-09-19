@@ -11,7 +11,7 @@ use crate::lang::{
 
 // - Parameters
 
-impl Print for Param {
+impl<I: Print, V: Print> Print for Param<I, V> {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         match &self.node {
             ParamKind::Exp(_, exp) => exp.print(printer),
@@ -31,7 +31,7 @@ impl Print for Param {
     }
 }
 
-impl Print for [Param] {
+impl<I: Print, V: Print> Print for [Param<I, V>] {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         if self.is_empty() {
             return Ok(());
@@ -49,15 +49,15 @@ impl Print for [Param] {
 
 // - Instructions
 
-impl Print for Instr {
+impl<I: Print, V: Print> Print for Instr<I, V> {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         write_instr_with(printer, self, false, 0, 0)
     }
 }
 
-fn write_instr_with(
+fn write_instr_with<I: Print, V: Print>(
     output: &mut Printer<'_>,
-    instr: &Instr,
+    instr: &Instr<I, V>,
     short: bool,
     level: usize,
     index: usize,
@@ -72,7 +72,9 @@ fn write_instr_with(
             output.write_str("If (")?;
             exp.print(output)?;
             output.write_char(')')?;
-            iter_exps.as_slice().print(output)?;
+            for exp_iter in iter_exps {
+                exp_iter.print(output)?;
+            }
             output.write_str(", then")?;
             if !short {
                 output.write_str("\n\n")?;
@@ -91,7 +93,9 @@ fn write_instr_with(
                 output.write_str(": ")?;
                 not_exp.print(output)?;
                 output.write_char(')')?;
-                iter_exps.as_slice().print(output)?;
+                for exp_iter in iter_exps {
+                    exp_iter.print(output)?;
+                }
                 output.write_str(" holds, then")?;
                 if !short {
                     output.write_str("\n\n")?;
@@ -108,7 +112,9 @@ fn write_instr_with(
                 output.write_str(": ")?;
                 not_exp.print(output)?;
                 output.write_char(')')?;
-                iter_exps.as_slice().print(output)?;
+                for exp_iter in iter_exps {
+                    exp_iter.print(output)?;
+                }
                 output.write_char(' ')?;
                 output.write_str(if matches!(hold_case, HoldCase::NotHold(..)) {
                     "does not hold"
@@ -158,7 +164,9 @@ fn write_instr_with(
             output.write_str(" be ")?;
             exp_r.print(output)?;
             output.write_char(')')?;
-            iter_instrs.as_slice().print(output)?;
+            for iter_instr in iter_instrs {
+                iter_instr.print(output)?;
+            }
             if !short {
                 output.write_str("\n\n")?;
                 write_block_with(output, block, level + 1, 0)?;
@@ -172,7 +180,9 @@ fn write_instr_with(
             output.write_str(": ")?;
             not_exp.print(output)?;
             output.write_char(')')?;
-            iter_instrs.as_slice().print(output)?;
+            for iter_instr in iter_instrs {
+                iter_instr.print(output)?;
+            }
             if !short {
                 output.write_str("\n\n")?;
                 write_block_with(output, block, level + 1, 0)?;
@@ -208,7 +218,7 @@ fn write_instr_with(
 
 // - Case analysis
 
-impl Print for Guard {
+impl<I: Print, V: Print> Print for Guard<I, V> {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         match self {
             Guard::Bool(value) => write!(printer, "{value}"),
@@ -238,7 +248,11 @@ impl Print for Guard {
     }
 }
 
-fn write_cases_with(output: &mut Printer<'_>, cases: &[Case], level: usize) -> fmt::Result {
+fn write_cases_with<I: Print, V: Print>(
+    output: &mut Printer<'_>,
+    cases: &[Case<I, V>],
+    level: usize,
+) -> fmt::Result {
     for (index, case) in cases.iter().enumerate() {
         if index != 0 {
             output.write_str("\n\n")?;
@@ -248,9 +262,9 @@ fn write_cases_with(output: &mut Printer<'_>, cases: &[Case], level: usize) -> f
     Ok(())
 }
 
-fn write_case_with(
+fn write_case_with<I: Print, V: Print>(
     output: &mut Printer<'_>,
-    case: &Case,
+    case: &Case<I, V>,
     level: usize,
     index: usize,
 ) -> fmt::Result {
@@ -262,15 +276,15 @@ fn write_case_with(
 
 // - Blocks
 
-impl Print for Block {
+impl<I: Print, V: Print> Print for Block<I, V> {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         write_block_with(printer, self, 0, 0)
     }
 }
 
-fn write_block_with(
+fn write_block_with<I: Print, V: Print>(
     output: &mut Printer<'_>,
-    block: &Block,
+    block: &Block<I, V>,
     level: usize,
     index: usize,
 ) -> fmt::Result {
@@ -283,9 +297,9 @@ fn write_block_with(
     Ok(())
 }
 
-fn write_elseblock_opt_with(
+fn write_elseblock_opt_with<I: Print, V: Print>(
     output: &mut Printer<'_>,
-    block: &Option<ElseBlock>,
+    block: &Option<ElseBlock<I, V>>,
     level: usize,
     index: usize,
 ) -> fmt::Result {
@@ -296,9 +310,9 @@ fn write_elseblock_opt_with(
     Ok(())
 }
 
-fn write_elseblock_with(
+fn write_elseblock_with<I: Print, V: Print>(
     output: &mut Printer<'_>,
-    block: &ElseBlock,
+    block: &ElseBlock<I, V>,
     level: usize,
     index: usize,
 ) -> fmt::Result {
@@ -308,7 +322,7 @@ fn write_elseblock_with(
 
 // - Table rows
 
-impl Print for TableRow {
+impl<I: Print, V: Print> Print for TableRow<I, V> {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         printer.write_str("\n  Row : ")?;
         printer.separated(&self.exps_input, ", ")?;
@@ -319,7 +333,7 @@ impl Print for TableRow {
     }
 }
 
-impl Print for [TableRow] {
+impl<I: Print, V: Print> Print for [TableRow<I, V>] {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         for (index, table_row) in self.iter().enumerate() {
             if index != 0 {
@@ -357,7 +371,7 @@ impl Print for TypDef {
 
 // == Relation definitions
 
-impl Print for RelDef {
+impl<I: Print, V: Print> Print for RelDef<I, V> {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         match self {
             Self::Extern(relation) => {
@@ -372,7 +386,7 @@ impl Print for RelDef {
     }
 }
 
-impl Print for ExternRel {
+impl<I: Print, V: Print> Print for ExternRel<I, V> {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         self.id.print(printer)?;
         printer.write_str(": ")?;
@@ -380,7 +394,7 @@ impl Print for ExternRel {
     }
 }
 
-impl Print for DefinedRel {
+impl<I: Print, V: Print> Print for DefinedRel<I, V> {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         self.id.print(printer)?;
         printer.write_str(": ")?;
@@ -391,10 +405,10 @@ impl Print for DefinedRel {
     }
 }
 
-fn write_relinput(
+fn write_relinput<I: Print, V: Print>(
     output: &mut Printer<'_>,
     rel_signature: &RelSignature,
-    exps_input: &[Exp],
+    exps_input: &[Exp<I, V>],
 ) -> fmt::Result {
     let not_typ = &rel_signature.not_typ;
     let input_indices = rel_signature.input_hint.indices();
@@ -413,10 +427,10 @@ fn write_relinput(
     })
 }
 
-fn write_reloutput(
+fn write_reloutput<I: Print, V: Print>(
     output: &mut Printer<'_>,
     rel_signature: &RelSignature,
-    exps_output: &[Exp],
+    exps_output: &[Exp<I, V>],
 ) -> fmt::Result {
     let not_typ = &rel_signature.not_typ;
     let input_indices = rel_signature.input_hint.indices();
@@ -440,7 +454,7 @@ fn write_reloutput(
 
 // == Meta-function definitions
 
-impl Print for MetaFuncDef {
+impl<I: Print, V: Print> Print for MetaFuncDef<I, V> {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         match self {
             Self::Extern(func) => {
@@ -463,7 +477,7 @@ impl Print for MetaFuncDef {
     }
 }
 
-impl Print for ExternFunc {
+impl<I: Print, V: Print> Print for ExternFunc<I, V> {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         printer.write_char('$')?;
         self.id.print(printer)?;
@@ -476,7 +490,7 @@ impl Print for ExternFunc {
     }
 }
 
-impl Print for BuiltinFunc {
+impl<I: Print, V: Print> Print for BuiltinFunc<I, V> {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         printer.write_char('$')?;
         self.id.print(printer)?;
@@ -489,7 +503,7 @@ impl Print for BuiltinFunc {
     }
 }
 
-impl Print for TableFunc {
+impl<I: Print, V: Print> Print for TableFunc<I, V> {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         printer.write_char('$')?;
         self.id.print(printer)?;
@@ -505,7 +519,7 @@ impl Print for TableFunc {
     }
 }
 
-impl Print for DefinedFunc {
+impl<I: Print, V: Print> Print for DefinedFunc<I, V> {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         printer.write_char('$')?;
         self.id.print(printer)?;
@@ -523,7 +537,7 @@ impl Print for DefinedFunc {
 
 // == Definitions
 
-impl Print for Def {
+impl<I: Print, V: Print> Print for Def<I, V> {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         match &self.node {
             DefKind::Typ(typ_def) => typ_def.print(printer),
@@ -539,7 +553,7 @@ impl Print for Def {
     }
 }
 
-impl Print for [Def] {
+impl<I: Print, V: Print> Print for [Def<I, V>] {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         for (index, def) in self.iter().enumerate() {
             if index != 0 {
@@ -553,7 +567,7 @@ impl Print for [Def] {
 
 // == Specifications
 
-impl Print for Spec {
+impl<I: Print, V: Print> Print for Spec<I, V> {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         self.as_slice().print(printer)
     }

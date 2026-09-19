@@ -32,7 +32,7 @@ pub fn p4_fixed_bit(
 ) -> Result<Value, ExternError> {
     let nat = width
         .try_into()
-        .map_err(|error: crate::lang::xl::num::NumericError| {
+        .map_err(|error: crate::lang::common::prim::num::NumericError| {
             ExternError::Failure(error.to_string())
         })?;
     let value_width = make::nat(arena, nat, Span::default())?;

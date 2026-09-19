@@ -6,21 +6,21 @@ use super::super::{
     flow::Flow,
 };
 use super::{assign, instr};
+use crate::interp::shared::context::ReadContext;
 use crate::lang::common::source::Span;
+use crate::runtime::envs::interp::shared::frame::FrameLayout;
+use crate::runtime::envs::interp::sl::ast_prepared as ast;
 use crate::{
     interp::shared::{
         backtrack::{Backtrack, err, ok, unmatch, unwrap, unwrap_from_result},
         cache::CallKey,
         error::{CallErrorKind, ErrorKind, GuardErrorKind, HostErrorKind, TraceErrorKind},
     },
-    lang::{
-        data::value::{Value, ValueArena, ValueKind},
-        sl::ast,
-    },
+    lang::data::value::{Value, ValueArena, ValueKind},
     runner::{Extern, Interface, InterfaceError, RunnerContext},
     runtime::typdef::TypeDef,
 };
-use std::borrow::Cow;
+use std::{borrow::Cow, rc::Rc};
 
 // = Invocation results
 
@@ -43,7 +43,7 @@ pub(in crate::interp::sl) fn check_rel_inputs(
     values: &[Value],
 ) -> Backtrack<()> {
     let rel = unwrap_from_result!(ctx.find_rel(id), &id.span);
-    let (not_typ, inputs) = match rel {
+    let (not_typ, inputs) = match &rel.def {
         ast::RelDef::Extern(rel) => (&rel.rel_signature.not_typ, &rel.rel_signature.input_hint),
         ast::RelDef::Defined(rel) => (&rel.rel_signature.not_typ, &rel.rel_signature.input_hint),
     };
@@ -151,7 +151,8 @@ pub(in crate::interp::sl) fn cache_rel<Iface: Interface, Ext: Extern>(
     ctx: &Context<'_>,
     id: &ast::Id,
 ) -> bool {
-    runner_ctx.interp().config.cache && matches!(ctx.find_rel(id), Ok(ast::RelDef::Defined(_)))
+    runner_ctx.interp().config.cache
+        && matches!(ctx.find_rel(id), Ok(rel) if matches!(&rel.def, ast::RelDef::Defined(_)))
 }
 
 pub(in crate::interp::sl) fn cache_func<Iface: Interface, Ext: Extern>(
@@ -161,8 +162,8 @@ pub(in crate::interp::sl) fn cache_func<Iface: Interface, Ext: Extern>(
     values: &[Value],
 ) -> bool {
     runner_ctx.interp().config.cache
-        && matches!(ctx.find_func(id), Ok((Scope::Global, func))
-            if !matches!(func.as_ref(), ast::MetaFuncDef::Extern(_)))
+        && matches!(ctx.find_func_with_scope(id), Ok((Scope::Global, func))
+            if !matches!(&func.def, ast::MetaFuncDef::Extern(_)))
         && !values
             .iter()
             .any(|value| matches!(runner_ctx.arena().kind(value), ValueKind::Func(_)))
@@ -191,12 +192,15 @@ pub fn invoke_rel<Iface: Interface, Ext: Extern>(
         runner_ctx.interp_mut().cache.begin();
         let result = stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
             let rel = unwrap_from_result!(ctx.find_rel(&id), &id.span);
-            match rel {
+            let layout = &rel.layout;
+            match &rel.def {
                 ast::RelDef::Extern(rel) => {
                     let values = unwrap!(invoke_extern_rel(runner_ctx, ctx, &id, rel, &values));
                     ok!(RelResult::Result(values))
                 }
-                ast::RelDef::Defined(rel) => invoke_defined_rel(runner_ctx, ctx, &id, rel, &values),
+                ast::RelDef::Defined(rel) => {
+                    invoke_defined_rel(runner_ctx, ctx, layout, &id, rel, &values)
+                }
             }
         });
         let pure = runner_ctx.interp_mut().cache.end();
@@ -276,13 +280,14 @@ fn invoke_extern_rel<Iface: Interface, Ext: Extern>(
 fn invoke_defined_rel<Iface: Interface, Ext: Extern>(
     runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Ext>,
     ctx: &Context<'_>,
+    layout: &Rc<FrameLayout>,
     id: &ast::Id,
     rel: &ast::DefinedRel,
     values: &[Value],
 ) -> Backtrack<RelResult> {
     let ctx = unwrap!(assign::assign_exps(
         runner_ctx.arena_mut(),
-        ctx.localize(),
+        ctx.localize_with_layout(layout),
         &rel.exps_input,
         values
     ));
@@ -335,8 +340,9 @@ pub fn invoke_func<Iface: Interface, Ext: Extern>(
         }
         runner_ctx.interp_mut().cache.begin();
         let result = stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
-            let (_, func) = unwrap_from_result!(ctx.find_func(&id), &id.span);
-            match func.as_ref() {
+            let func = unwrap_from_result!(ctx.find_func(&id), &id.span);
+            let layout = &func.layout;
+            match &func.def {
                 ast::MetaFuncDef::Extern(func) => ok!(FuncResult::Return(unwrap!(
                     invoke_extern_func(runner_ctx, ctx, &id, func, &targs, &values)
                 ))),
@@ -344,10 +350,10 @@ pub fn invoke_func<Iface: Interface, Ext: Extern>(
                     invoke_builtin_func(runner_ctx, ctx, &id, func, &targs, &values)
                 ))),
                 ast::MetaFuncDef::Table(func) => {
-                    invoke_table_func(runner_ctx, ctx, &id, func, &values)
+                    invoke_table_func(runner_ctx, ctx, layout, &id, func, &values)
                 }
                 ast::MetaFuncDef::Defined(func) => {
-                    invoke_defined_func(runner_ctx, ctx, &id, func, &targs, &values)
+                    invoke_defined_func(runner_ctx, ctx, layout, &id, func, &targs, &values)
                 }
             }
         });
@@ -454,6 +460,7 @@ fn invoke_builtin_func<Iface: Interface, Ext: Extern>(
 fn invoke_table_func<Iface: Interface, Ext: Extern>(
     runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Ext>,
     ctx: &Context<'_>,
+    layout: &Rc<FrameLayout>,
     id: &ast::Id,
     func: &ast::TableFunc,
     values: &[Value],
@@ -461,7 +468,7 @@ fn invoke_table_func<Iface: Interface, Ext: Extern>(
     let ctx_local = unwrap!(assign::assign_params(
         runner_ctx.arena_mut(),
         ctx,
-        ctx.localize(),
+        ctx.localize_with_layout(layout),
         &func.params,
         values
     ));
@@ -482,6 +489,7 @@ fn invoke_table_func<Iface: Interface, Ext: Extern>(
 fn invoke_defined_func<Iface: Interface, Ext: Extern>(
     runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Ext>,
     ctx: &Context<'_>,
+    layout: &Rc<FrameLayout>,
     id: &ast::Id,
     func: &ast::DefinedFunc,
     targs: &[ast::Typ],
@@ -495,7 +503,7 @@ fn invoke_defined_func<Iface: Interface, Ext: Extern>(
             actual: targs.len()
         })
     ));
-    let mut ctx_local = ctx.localize();
+    let mut ctx_local = ctx.localize_with_layout(layout);
     for (tparam, targ) in func.tparams.iter().zip(targs.iter()) {
         let def_typ =
             crate::phrase!(node: ast::DefTypKind::Plain(targ.clone()), span: targ.span.clone());

@@ -4,6 +4,7 @@ use p4spec_rust::{
     interface::p4::{error::P4UnparseError, unparse::P4Unparser},
     lang::{
         al,
+        common::prim::num::Natural,
         common::{
             notation::{atom::Atom, mixfix::Mixfix},
             source::Span,
@@ -13,7 +14,6 @@ use p4spec_rust::{
             value::{Value, make},
         },
         el, il,
-        xl::num::Natural,
     },
 };
 
@@ -44,14 +44,10 @@ fn hinted_def_type() -> il::ast::DefTyp {
         span: Span::default(),
     };
     p4spec_rust::phrase! {
-        node: il::ast::DefTypKind::Variant(vec![(
-            p4spec_rust::phrase! { node: notation, span: Span::default() },
-            p4spec_rust::phrase! {
-                node: (id("Origin"), Vec::new()),
+        node: il::ast::DefTypKind::Variant(vec![il::ast::TypCase { not_typ: p4spec_rust::phrase! { node: notation, span: Span::default() }, typ_origin: p4spec_rust::phrase! {
+                node: il::ast::TypOriginKind { id: id("Origin"), targs: Vec::new() },
                 span: Span::default(),
-            },
-            vec![(id("print"), hint)],
-        )]),
+            }, hints: vec![el::ast::Hint { id: id("print"), exp: hint }] }]),
         span: Span::default(),
     }
 }

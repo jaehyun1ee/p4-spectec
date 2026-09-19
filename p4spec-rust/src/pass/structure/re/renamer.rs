@@ -124,7 +124,7 @@ impl Renamer {
         }
         let exp_kind = match exp.node {
             ExpKind::Bool(_) | ExpKind::Num(_) | ExpKind::Text(_) => exp.node,
-            ExpKind::Var(id) => ExpKind::Var(self.rename_id(changed, id)),
+            ExpKind::Id(id) => ExpKind::Id(self.rename_id(changed, id)),
             ExpKind::Un(op, op_typ, exp) => {
                 ExpKind::Un(op, op_typ, Box::new(self.rename_exp(changed, *exp)))
             }
@@ -159,7 +159,10 @@ impl Renamer {
             ExpKind::Str(exp_fields) => ExpKind::Str(
                 exp_fields
                     .into_iter()
-                    .map(|(atom, exp)| (atom, self.rename_exp(changed, exp)))
+                    .map(|ExpField { atom, exp }| ExpField {
+                        atom,
+                        exp: self.rename_exp(changed, exp),
+                    })
                     .collect(),
             ),
             ExpKind::Opt(exp) => {
@@ -197,9 +200,9 @@ impl Renamer {
             ExpKind::Call(id, targs, args) => {
                 ExpKind::Call(id, targs, self.rename_args(changed, args))
             }
-            ExpKind::Iter(exp, iter_exp) => ExpKind::Iter(
+            ExpKind::Iter(exp, exp_iter) => ExpKind::Iter(
                 Box::new(self.rename_exp(changed, *exp)),
-                self.rename_iterexp(changed, iter_exp),
+                self.rename_iterexp(changed, exp_iter),
             ),
         };
         note_phrase!(node: exp_kind, note: exp.note, span: exp.span)
@@ -213,9 +216,9 @@ impl Renamer {
 
     // == Expression iterators
 
-    pub(crate) fn rename_iterexp(&self, changed: &mut bool, iter_exp: ExpIter) -> ExpIter {
-        let (iter, vars) = iter_exp;
-        (iter, self.rename_vars(changed, vars))
+    pub(crate) fn rename_iterexp(&self, changed: &mut bool, exp_iter: ExpIter) -> ExpIter {
+        let ExpIter { iter, vars } = exp_iter;
+        ExpIter { iter, vars: self.rename_vars(changed, vars) }
     }
 
     pub(crate) fn rename_iterexps(
@@ -225,7 +228,7 @@ impl Renamer {
     ) -> Vec<ExpIter> {
         iter_exps
             .into_iter()
-            .map(|iter_exp| self.rename_iterexp(changed, iter_exp))
+            .map(|exp_iter| self.rename_iterexp(changed, exp_iter))
             .collect()
     }
 

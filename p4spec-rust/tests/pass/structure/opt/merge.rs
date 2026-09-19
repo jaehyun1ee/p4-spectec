@@ -1,11 +1,11 @@
-use super::{instr, ret, span, variable};
+use super::{id_exp, instr, ret, span};
 use crate::lang::il::ast::Iter;
 use crate::pass::structure::{ol::ast::*, opt::merge::merge_blocks};
 
 fn if_instr(text_cond: &str, iter: Iter, block: Block, num_line: usize) -> Instr {
     let mut instr_if = instr(InstrKind::If(IfInstr {
-        exp: variable(text_cond),
-        iter_exps: vec![(iter, vec![])],
+        exp: id_exp(text_cond),
+        iter_exps: vec![ExpIter { iter, vars: vec![] }],
         block,
     }));
     instr_if.span = span(num_line);
@@ -14,7 +14,7 @@ fn if_instr(text_cond: &str, iter: Iter, block: Block, num_line: usize) -> Instr
 
 fn return_name(instr_body: &Instr) -> &str {
     let InstrKind::Return(instr_return) = &instr_body.node else { panic!("expected return") };
-    let crate::lang::il::ast::ExpKind::Var(id_return) = &instr_return.exp.node else {
+    let crate::lang::il::ast::ExpKind::Id(id_return) = &instr_return.exp.node else {
         panic!("expected variable")
     };
     &id_return.node

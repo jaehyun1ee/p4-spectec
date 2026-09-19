@@ -43,13 +43,13 @@ impl<'a> ExpUnit<'a> {
         let ids = exp.free();
         let iter_exps = iter_exps
             .iter()
-            .map(|(iter, vars)| {
+            .map(|ExpIter { iter, vars }| {
                 let vars = vars
                     .iter()
                     .filter(|var| ids.contains(&var.id))
                     .cloned()
                     .collect();
-                (*iter, vars)
+                ExpIter { iter: *iter, vars }
             })
             .collect();
         Self { exp, iter_exps }
@@ -73,9 +73,11 @@ impl<'a> Bind<'a> {
         let (iter_exps_bound, iter_exps_bind): (Vec<_>, Vec<_>) = iter_instrs
             .iter()
             .map(|iter_instr| {
-                let iter_exp_bound = (iter_instr.iter, iter_instr.vars_bound.clone());
-                let iter_exp_bind = (iter_instr.iter, iter_instr.vars_bind.clone());
-                (iter_exp_bound, iter_exp_bind)
+                let exp_iter_bound =
+                    ExpIter { iter: iter_instr.iter, vars: iter_instr.vars_bound.clone() };
+                let exp_iter_bind =
+                    ExpIter { iter: iter_instr.iter, vars: iter_instr.vars_bind.clone() };
+                (exp_iter_bound, exp_iter_bind)
             })
             .unzip();
         let expunit_l = ExpUnit::new(exp_l, &iter_exps_bind);
@@ -91,9 +93,11 @@ impl<'a> Bind<'a> {
         let (iter_exps_bound, iter_exps_bind): (Vec<_>, Vec<_>) = iter_instrs
             .iter()
             .map(|iter_instr| {
-                let iter_exp_bound = (iter_instr.iter, iter_instr.vars_bound.clone());
-                let iter_exp_bind = (iter_instr.iter, iter_instr.vars_bind.clone());
-                (iter_exp_bound, iter_exp_bind)
+                let exp_iter_bound =
+                    ExpIter { iter: iter_instr.iter, vars: iter_instr.vars_bound.clone() };
+                let exp_iter_bind =
+                    ExpIter { iter: iter_instr.iter, vars: iter_instr.vars_bind.clone() };
+                (exp_iter_bound, exp_iter_bind)
             })
             .unzip();
         let expunits_input = exps_input
@@ -179,7 +183,7 @@ fn collapse_expunits(
 
 fn collapse_exp(mut renamer: Renamer, exp: &Exp, exp_target: &Exp) -> Option<Renamer> {
     match (&exp.node, &exp_target.node) {
-        (ExpKind::Var(id), ExpKind::Var(id_target)) => {
+        (ExpKind::Id(id), ExpKind::Id(id_target)) => {
             // Matching x against y records y -> x for the later body
             if !id.syntax_eq(id_target) {
                 renamer.add(id_target.clone(), id.clone());
@@ -207,8 +211,8 @@ fn collapse_exp(mut renamer: Renamer, exp: &Exp, exp_target: &Exp) -> Option<Ren
             let renamer = collapse_exp(renamer, exp_head, exp_head_target)?;
             collapse_exp(renamer, exp_tail, exp_tail_target)
         }
-        (ExpKind::Iter(exp, iter_exp), ExpKind::Iter(exp_target, iter_exp_target)) => {
-            collapse_iter_exp(renamer, exp, iter_exp, exp_target, iter_exp_target)
+        (ExpKind::Iter(exp, exp_iter), ExpKind::Iter(exp_target, exp_iter_target)) => {
+            collapse_iter_exp(renamer, exp, exp_iter, exp_target, exp_iter_target)
         }
         _ => None,
     }
@@ -247,15 +251,19 @@ fn collapse_str_exp(
     exp_fields_target: &[ExpField],
 ) -> Option<Renamer> {
     if exp_fields.len() != exp_fields_target.len()
-        || !exp_fields
-            .iter()
-            .zip(exp_fields_target)
-            .all(|((atom, _), (atom_target, _))| atom.syntax_eq(atom_target))
+        || !exp_fields.iter().zip(exp_fields_target).all(
+            |(ExpField { atom, .. }, ExpField { atom: atom_target, .. })| {
+                atom.syntax_eq(atom_target)
+            },
+        )
     {
         return None;
     }
-    let exps = exp_fields.iter().map(|(_, exp)| exp).collect();
-    let exps_target = exp_fields_target.iter().map(|(_, exp)| exp).collect();
+    let exps = exp_fields.iter().map(|ExpField { exp, .. }| exp).collect();
+    let exps_target = exp_fields_target
+        .iter()
+        .map(|ExpField { exp, .. }| exp)
+        .collect();
     collapse_exps(renamer, exps, exps_target)
 }
 
@@ -264,14 +272,14 @@ fn collapse_str_exp(
 fn collapse_iter_exp(
     renamer: Renamer,
     exp: &Exp,
-    iter_exp: &ExpIter,
+    exp_iter: &ExpIter,
     exp_target: &Exp,
-    iter_exp_target: &ExpIter,
+    exp_iter_target: &ExpIter,
 ) -> Option<Renamer> {
     // x* against y* must also have equal iterators after renaming y -> x
     let renamer = collapse_exp(renamer, exp, exp_target)?;
-    let iter_exp_target = renamer.rename_iterexp(&mut false, iter_exp_target.clone());
-    iter_exp.syntax_eq(&iter_exp_target).then_some(renamer)
+    let exp_iter_target = renamer.rename_iterexp(&mut false, exp_iter_target.clone());
+    exp_iter.syntax_eq(&exp_iter_target).then_some(renamer)
 }
 
 // == Downstream search

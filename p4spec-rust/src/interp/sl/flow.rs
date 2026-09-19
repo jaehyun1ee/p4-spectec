@@ -1,11 +1,12 @@
 //! SL continuations, returns, relation results, and tail calls
 
+use crate::runtime::envs::interp::sl::ast_prepared as ast;
 use crate::{
     interp::shared::{
         backtrack::{Backtrack, err, ok, unmatch, unwrap},
         error::{CallErrorKind, Error, ErrorKind, PremErrorKind},
     },
-    lang::{common::source::Span, data::value::Value, sl::ast},
+    lang::{common::source::Span, data::value::Value},
 };
 
 #[derive(Clone, Debug)]

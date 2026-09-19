@@ -5,12 +5,12 @@ use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 
 use crate::lang::{
+    common::prim::num,
     common::{
         Id, Iter, TId,
         source::{Phrase, Span},
     },
     traits::cmp::SyntaxCmp,
-    xl::num,
 };
 use crate::phrase;
 

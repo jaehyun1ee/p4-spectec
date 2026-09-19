@@ -24,8 +24,8 @@ fn typ(int_line: usize) -> al::Typ {
     p4spec_rust::phrase! {node: al::TypKind::Bool, span: span(int_line)}
 }
 
-fn variable(text: &str, int_line: usize) -> al::Exp {
-    p4spec_rust::note_phrase! {node: al::ExpKind::Var(id(text, int_line)), note: al::TypKind::Bool, span: span(int_line)}
+fn id_exp(text: &str, int_line: usize) -> al::Exp {
+    p4spec_rust::note_phrase!(node: p4spec_rust::lang::il::ast::ExpKind::Id(id(text, int_line)), note: al::TypKind::Bool, span: span(int_line))
 }
 
 fn boolean(value: bool, int_line: usize) -> al::Exp {
@@ -37,7 +37,7 @@ fn param(int_line: usize) -> al::Param {
 }
 
 fn clause(prems: Vec<al::Prem>, int_line: usize) -> al::Clause {
-    p4spec_rust::phrase! {node: al::ClauseKind {args: vec![p4spec_rust::phrase! {node: al::ArgKind::Exp(Box::new(variable("x", int_line))), span: span(int_line)}], exp: variable("x", int_line + 1), prems}, span: span(int_line)}
+    p4spec_rust::phrase! {node: al::ClauseKind {args: vec![p4spec_rust::phrase! {node: al::ArgKind::Exp(Box::new(id_exp("x", int_line))), span: span(int_line)}], exp: id_exp("x", int_line + 1), prems}, span: span(int_line)}
 }
 
 fn function(clauses: Vec<al::Clause>, else_clause: Option<al::Clause>) -> al::Def {
@@ -52,7 +52,7 @@ fn function_sl(def_sl: &sl::Def) -> &sl::DefinedFunc {
 }
 
 fn if_prem(int_line: usize) -> al::Prem {
-    p4spec_rust::phrase! {node: al::PremKind::If(al::IfPrem {exp: variable("x", int_line)}), span: span(int_line)}
+    p4spec_rust::phrase! {node: al::PremKind::If(al::IfPrem {exp: id_exp("x", int_line)}), span: span(int_line)}
 }
 
 #[test]
@@ -115,14 +115,14 @@ fn test_parameter_argument_mismatch_reports_parameter_span() {
 #[test]
 fn test_conditional_iterator_bindings_report_inner_premise_span() {
     let prems_kind = [
-        al::PremKind::If(al::IfPrem { exp: variable("x", 7) }),
+        al::PremKind::If(al::IfPrem { exp: id_exp("x", 7) }),
         al::PremKind::IfHold(al::IfHoldPrem {
             id: id("r", 7),
-            not_exp: Mixfix::Arg(variable("x", 7)),
+            not_exp: Mixfix::Arg(id_exp("x", 7)),
         }),
         al::PremKind::IfNotHold(al::IfNotHoldPrem {
             id: id("r", 7),
-            not_exp: Mixfix::Arg(variable("x", 7)),
+            not_exp: Mixfix::Arg(id_exp("x", 7)),
         }),
     ];
     let errors_kind = [
@@ -146,7 +146,7 @@ fn test_conditional_iterator_bindings_report_inner_premise_span() {
 
 #[test]
 fn test_relation_groups_and_result_signatures_follow_group_mode() {
-    let exp_input = variable("x", 3);
+    let exp_input = id_exp("x", 3);
     let exp_output = boolean(true, 8);
     let rule_match = al::RuleMatch {
         exps_signature: vec![exp_input.clone(), exp_output.clone()],
@@ -188,7 +188,13 @@ fn test_nested_iterators_are_internalized_inside_out() {
     let spec_sl = convert(vec![function(vec![clause(vec![prem], 5)], None)], true).unwrap();
     let def_func_sl = function_sl(&spec_sl[0]);
     let sl::InstrKind::If(instr_if) = &def_func_sl.block[0].node else { panic!("if") };
-    assert_eq!(instr_if.iter_exps, vec![(al::Iter::Opt, vec![]), (al::Iter::List, vec![])]);
+    assert_eq!(
+        instr_if.iter_exps,
+        vec![
+            al::ExpIter { iter: al::Iter::Opt, vars: vec![] },
+            al::ExpIter { iter: al::Iter::List, vars: vec![] }
+        ]
+    );
     assert_eq!(def_func_sl.block[0].span, span(7));
 }
 
@@ -341,7 +347,7 @@ fn test_empty_table_rejects_unmatched_parameters_at_definition_span() {
 
 #[test]
 fn test_rule_input_error_preserves_premise_span() {
-    let prem = p4spec_rust::phrase! {node: al::PremKind::Rule(al::RulePrem {id: id("r", 7), not_exp: Mixfix::Arg(variable("x", 7)), input_hint: InputHint::new(vec![1])}), span: span(7)};
+    let prem = p4spec_rust::phrase! {node: al::PremKind::Rule(al::RulePrem {id: id("r", 7), not_exp: Mixfix::Arg(id_exp("x", 7)), input_hint: InputHint::new(vec![1])}), span: span(7)};
     let error = convert(vec![function(vec![clause(vec![prem], 5)], None)], true).unwrap_err();
     assert_eq!(
         error.kind,
@@ -382,7 +388,7 @@ fn test_higher_order_argument_identity_is_checked_ignoring_spans() {
 
 #[test]
 fn test_table_internalizes_all_rows_before_optimizing_any_row() {
-    let mut exp_invalid = variable("x", 11);
+    let mut exp_invalid = id_exp("x", 11);
     exp_invalid.note = al::TypKind::Var(id("Missing", 11), vec![]).into();
     let pattern =
         al::Pattern::Case(Box::new(p4spec_rust::frontend::parse::parse_mixop("A").unwrap()));
@@ -408,14 +414,14 @@ fn test_debug_continuation_preserves_binding_rule_and_hold_payloads() {
         vars_bound: vec![al::Var { id: id("x", 8), typ: typ(8), iters: vec![] }],
         vars_bind: vec![al::Var { id: id("y", 8), typ: typ(8), iters: vec![] }],
     };
-    let prem_let = p4spec_rust::phrase! {node: al::PremKind::Let(al::LetPrem {exp_l: variable("y", 8), exp_r: variable("x", 8)}), span: span(8)};
+    let prem_let = p4spec_rust::phrase! {node: al::PremKind::Let(al::LetPrem {exp_l: id_exp("y", 8), exp_r: id_exp("x", 8)}), span: span(8)};
     let prem_let = p4spec_rust::phrase! {node: al::PremKind::Iter(al::IterPrem {prem: Box::new(prem_let), prem_iter: prem_iter.clone()}), span: span(9)};
     let prems = vec![
         p4spec_rust::phrase! {node: al::PremKind::Debug(al::DebugPrem {exp: boolean(true, 7)}), span: span(7)},
         prem_let,
-        p4spec_rust::phrase! {node: al::PremKind::Rule(al::RulePrem {id: id("r", 10), not_exp: Mixfix::Arg(variable("x", 10)), input_hint: InputHint::new(vec![0])}), span: span(10)},
-        p4spec_rust::phrase! {node: al::PremKind::IfHold(al::IfHoldPrem {id: id("r", 11), not_exp: Mixfix::Arg(variable("x", 11))}), span: span(11)},
-        p4spec_rust::phrase! {node: al::PremKind::IfNotHold(al::IfNotHoldPrem {id: id("s", 12), not_exp: Mixfix::Arg(variable("x", 12))}), span: span(12)},
+        p4spec_rust::phrase! {node: al::PremKind::Rule(al::RulePrem {id: id("r", 10), not_exp: Mixfix::Arg(id_exp("x", 10)), input_hint: InputHint::new(vec![0])}), span: span(10)},
+        p4spec_rust::phrase! {node: al::PremKind::IfHold(al::IfHoldPrem {id: id("r", 11), not_exp: Mixfix::Arg(id_exp("x", 11))}), span: span(11)},
+        p4spec_rust::phrase! {node: al::PremKind::IfNotHold(al::IfNotHoldPrem {id: id("s", 12), not_exp: Mixfix::Arg(id_exp("x", 12))}), span: span(12)},
     ];
     let spec_sl = convert(vec![function(vec![clause(prems, 5)], None)], true).unwrap();
     let def_func_sl = function_sl(&spec_sl[0]);
@@ -424,8 +430,8 @@ fn test_debug_continuation_preserves_binding_rule_and_hold_payloads() {
     assert_eq!(instr_debug.instr.span, span(8));
     let sl::InstrKind::Let(instr_let) = &instr_debug.instr.node else { panic!("let") };
     assert_eq!(instr_let.iter_instrs, vec![prem_iter]);
-    assert_eq!(instr_let.exp_l, variable("y", 8));
-    assert_eq!(instr_let.exp_r, variable("x", 8));
+    assert_eq!(instr_let.exp_l, id_exp("y", 8));
+    assert_eq!(instr_let.exp_r, id_exp("x", 8));
     let sl::InstrKind::Rule(instr_rule) = &instr_let.block[0].node else { panic!("rule") };
     assert_eq!(instr_rule.id, id("r", 10));
     assert_eq!(instr_rule.input_hint, InputHint::new(vec![0]));

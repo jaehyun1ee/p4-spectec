@@ -6,7 +6,7 @@ use super::ast::*;
 /// relation or function that may not match
 pub fn is_partial_exp(exp: &Exp) -> bool {
     match &exp.node {
-        ExpKind::Bool(_) | ExpKind::Num(_) | ExpKind::Text(_) | ExpKind::Var(_) => false,
+        ExpKind::Bool(_) | ExpKind::Num(_) | ExpKind::Text(_) | ExpKind::Id(_) => false,
         ExpKind::Un(_, _, exp)
         | ExpKind::UpCast(_, exp)
         | ExpKind::DownCast(_, exp)
@@ -23,7 +23,9 @@ pub fn is_partial_exp(exp: &Exp) -> bool {
         | ExpKind::Idx(exp_l, exp_r) => is_partial_exp(exp_l) || is_partial_exp(exp_r),
         ExpKind::Tuple(exps) | ExpKind::List(exps) => exps.iter().any(is_partial_exp),
         ExpKind::Case(not_exp) => not_exp.args().into_iter().any(is_partial_exp),
-        ExpKind::Str(fields) => fields.iter().any(|(_, exp)| is_partial_exp(exp)),
+        ExpKind::Str(fields) => fields
+            .iter()
+            .any(|ExpField { exp, .. }| is_partial_exp(exp)),
         ExpKind::Opt(exp) => exp.as_deref().is_some_and(is_partial_exp),
         ExpKind::Slice(exp_base, exp_idx, exp_len) => {
             is_partial_exp(exp_base) || is_partial_exp(exp_idx) || is_partial_exp(exp_len)

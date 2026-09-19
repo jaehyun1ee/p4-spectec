@@ -154,7 +154,7 @@ fn test_parse_files_shares_uppercase_variable_context_between_files() {
     assert!(matches!(
         &spec[1].node,
         DefKind::FuncDef(def)
-            if matches!(&def.exp.node, ExpKind::Var(id) if id.node == "X")
+            if matches!(&def.exp.node, ExpKind::Id(id) if id.node == "X")
     ));
 }
 

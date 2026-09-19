@@ -3,25 +3,13 @@
 use std::fmt::{self, Write};
 
 use crate::lang::{
+    common::prim::num,
     traits::print::{Print, Printer},
-    xl::num,
 };
 
 use super::ast::*;
 
 // == Printing
-
-// - Variables
-
-impl Print for Var {
-    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        self.id.print(printer)?;
-        for iter in &self.iters {
-            iter.print(printer)?;
-        }
-        Ok(())
-    }
-}
 
 // - Types
 
@@ -95,9 +83,9 @@ impl Print for DefTyp {
 
 impl Print for TypField {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        self.0.print(printer)?;
+        self.atom.print(printer)?;
         printer.write_char(' ')?;
-        self.1.print(printer)
+        self.typ.print(printer)
     }
 }
 
@@ -110,10 +98,10 @@ impl Print for [TypField] {
 impl Print for TypOrigin {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         printer.write_str("(from ")?;
-        self.node.0.print(printer)?;
-        if !self.node.1.is_empty() {
+        self.node.id.print(printer)?;
+        if !self.node.targs.is_empty() {
             printer.write_char('<')?;
-            printer.separated(&self.node.1, ", ")?;
+            printer.separated(&self.node.targs, ", ")?;
             printer.write_char('>')?;
         }
         printer.write_char(')')
@@ -122,7 +110,7 @@ impl Print for TypOrigin {
 
 impl Print for TypCase {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        let (not_typ, typ_origin, hints) = self;
+        let TypCase { not_typ, typ_origin, hints } = self;
         not_typ.print(printer)?;
         printer.write_char(' ')?;
         typ_origin.print(printer)?;
@@ -229,13 +217,13 @@ fn write_notval_with(
 
 // - Expressions
 
-impl Print for Exp {
+impl<I: Print, V: Print> Print for Exp<I, V> {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         match &self.node {
             ExpKind::Bool(value) => write!(printer, "{value}"),
             ExpKind::Num(value) => value.print(printer),
             ExpKind::Text(text) => write!(printer, "\"{}\"", escaped(text)),
-            ExpKind::Var(id) => printer.write_str(&id.node),
+            ExpKind::Id(id) => id.print(printer),
             ExpKind::Un(op, _, exp) => {
                 op.print(printer)?;
                 exp.print(printer)
@@ -281,7 +269,7 @@ impl Print for Exp {
             ExpKind::Case(not_exp) => not_exp.print(printer),
             ExpKind::Str(fields) => {
                 printer.write_char('{')?;
-                for (index, (atom, exp)) in fields.iter().enumerate() {
+                for (index, ExpField { atom, exp }) in fields.iter().enumerate() {
                     if index != 0 {
                         printer.write_str(", ")?;
                     }
@@ -360,48 +348,47 @@ impl Print for Exp {
                 }
                 args.print(printer)
             }
-            ExpKind::Iter(exp, iter_exp) => {
+            ExpKind::Iter(exp, exp_iter) => {
                 exp.print(printer)?;
-                iter_exp.print(printer)
+                exp_iter.print(printer)
             }
         }
     }
 }
 
-impl Print for [Exp] {
+impl<I: Print, V: Print> Print for [Exp<I, V>] {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         printer.separated(self, ", ")
     }
 }
 
-impl Print for NotExp {
+impl<I: Print, V: Print> Print for NotExp<I, V> {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         self.print_with(printer, |exp, printer| exp.print(printer))
     }
 }
 
-impl Print for ExpIter {
+impl<V: Print> Print for ExpIter<V> {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        self.0.print(printer)?;
+        self.iter.print(printer)?;
         printer.write_char('{')?;
-        for (index, var) in self.1.iter().enumerate() {
+        for (index, var) in self.vars.iter().enumerate() {
             if index != 0 {
                 printer.write_str(", ")?;
             }
-            let mut var_iter = var.clone();
-            var_iter.iters.push(self.0);
             var.print(printer)?;
             printer.write_str(" <- ")?;
-            var_iter.print(printer)?;
+            var.print(printer)?;
+            self.iter.print(printer)?;
         }
         printer.write_char('}')
     }
 }
 
-impl Print for [ExpIter] {
+impl<V: Print> Print for [ExpIter<V>] {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        for iter_exp in self {
-            iter_exp.print(printer)?;
+        for exp_iter in self {
+            exp_iter.print(printer)?;
         }
         Ok(())
     }
@@ -424,7 +411,7 @@ impl Print for Pattern {
 
 // - Paths
 
-impl Print for Path {
+impl<I: Print, V: Print> Print for Path<I, V> {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         match &self.node {
             PathKind::Root => Ok(()),
@@ -492,7 +479,7 @@ impl Print for [Param] {
 
 // - Arguments
 
-impl Print for Arg {
+impl<I: Print, V: Print> Print for Arg<I, V> {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         match &self.node {
             ArgKind::Exp(exp) => exp.print(printer),
@@ -504,7 +491,7 @@ impl Print for Arg {
     }
 }
 
-impl Print for [Arg] {
+impl<I: Print, V: Print> Print for [Arg<I, V>] {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         if self.is_empty() {
             return Ok(());
@@ -524,8 +511,8 @@ impl Print for [Arg] {
 
 impl Print for Hint {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        write!(printer, " hint({} ", self.0.node)?;
-        self.1.print(printer)?;
+        write!(printer, " hint({} ", self.id.node)?;
+        self.exp.print(printer)?;
         printer.write_char(')')
     }
 }
@@ -601,30 +588,37 @@ fn write_prems_with(output: &mut Printer<'_>, level: usize, prems: &[Prem]) -> f
     Ok(())
 }
 
-impl Print for PremIter {
-    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        self.iter.print(printer)?;
-        printer.write_char('{')?;
-        let vars = self
-            .vars_bound
-            .iter()
-            .map(|var| (var, "<-"))
-            .chain(self.vars_bind.iter().map(|var| (var, "->")));
-        for (index, (var, arrow)) in vars.enumerate() {
-            if index != 0 {
-                printer.write_str(", ")?;
-            }
-            let mut var_iter = var.clone();
-            var_iter.iters.push(self.iter);
-            var.print(printer)?;
-            write!(printer, " {arrow} ")?;
-            var_iter.print(printer)?;
+pub(crate) fn print_prem_iter<B: Print>(
+    iter: &Iter,
+    vars_bound: &[B],
+    vars_bind: &[B],
+    printer: &mut Printer<'_>,
+) -> fmt::Result {
+    iter.print(printer)?;
+    printer.write_char('{')?;
+    let vars = vars_bound
+        .iter()
+        .map(|var| (var, "<-"))
+        .chain(vars_bind.iter().map(|var| (var, "->")));
+    for (idx, (var, arrow)) in vars.enumerate() {
+        if idx != 0 {
+            printer.write_str(", ")?;
         }
-        printer.write_char('}')
+        var.print(printer)?;
+        write!(printer, " {arrow} ")?;
+        var.print(printer)?;
+        iter.print(printer)?;
+    }
+    printer.write_char('}')
+}
+
+impl<V: Print> Print for PremIter<V> {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        print_prem_iter(&self.iter, &self.vars_bound, &self.vars_bind, printer)
     }
 }
 
-impl Print for [PremIter] {
+impl<V: Print> Print for [PremIter<V>] {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         for prem_iter in self {
             prem_iter.print(printer)?;
@@ -658,8 +652,8 @@ impl Print for [Rule] {
 impl Print for RuleGroup {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         printer.write_str("  rulegroup ")?;
-        self.node.0.print(printer)?;
-        for rule in &self.node.1 {
+        self.node.id.print(printer)?;
+        for rule in &self.node.rules {
             printer.write_str("\n\n    ")?;
             rule.print(printer)?;
         }
@@ -682,9 +676,9 @@ impl Print for [RuleGroup] {
 impl Print for ElseGroup {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         printer.write_str("  rulegroup ")?;
-        self.node.0.print(printer)?;
+        self.node.id.print(printer)?;
         printer.write_str("\n\n    ")?;
-        self.node.1.print(printer)
+        self.node.rule.print(printer)
     }
 }
 
@@ -714,9 +708,9 @@ impl Print for Clause {
 impl Print for TableRow {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         printer.write_str("\n    ")?;
-        self.node.0.print(printer)?;
+        self.node.args.print(printer)?;
         printer.write_str(" -> ")?;
-        self.node.1.print(printer)
+        self.node.exp.print(printer)
     }
 }
 
