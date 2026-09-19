@@ -136,19 +136,9 @@ fn eval_iter_prem<'global, Iface: Interface, Ext: Extern>(
     ctx: Context<'global>,
     prem: &ast::IterPrem,
 ) -> Backtrack<Context<'global>> {
-    let prem_iter = &prem.prem_iter;
-    match prem_iter.iter {
-        ast::Iter::Opt => {
-            iter::yield_opt(runner_ctx, ctx, &prem.prem.span, prem_iter, |runner_ctx, ctx_sub| {
-                eval_prem(runner_ctx, ctx_sub, &prem.prem)
-            })
-        }
-        ast::Iter::List => {
-            iter::yield_list(runner_ctx, ctx, &prem.prem.span, prem_iter, |runner_ctx, ctx_sub| {
-                eval_prem(runner_ctx, ctx_sub, &prem.prem)
-            })
-        }
-    }
+    iter::r#yield(runner_ctx, ctx, &prem.prem.span, &prem.prem_iter, |runner_ctx, ctx_sub| {
+        eval_prem(runner_ctx, ctx_sub, &prem.prem)
+    })
 }
 
 // - Debug premise

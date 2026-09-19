@@ -468,16 +468,7 @@ fn eval_instr_iter<'global, Iface: Interface, Ext: Extern>(
     let Some((iter, iters_tail)) = iters.split_last() else {
         return eval(runner_ctx, ctx);
     };
-    match iter.iter {
-        ast::Iter::Opt => {
-            iter::yield_opt(runner_ctx, ctx, &Span::default(), iter, |runner_ctx, ctx| {
-                eval_instr_iter(runner_ctx, ctx, iters_tail, eval)
-            })
-        }
-        ast::Iter::List => {
-            iter::yield_list(runner_ctx, ctx, &Span::default(), iter, |runner_ctx, ctx| {
-                eval_instr_iter(runner_ctx, ctx, iters_tail, eval)
-            })
-        }
-    }
+    iter::r#yield(runner_ctx, ctx, &Span::default(), iter, |runner_ctx, ctx_sub| {
+        eval_instr_iter(runner_ctx, ctx_sub, iters_tail, eval)
+    })
 }

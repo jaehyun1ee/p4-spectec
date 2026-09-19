@@ -558,27 +558,7 @@ fn eval_iter_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Ex
             span
         ));
     }
-    let value = match exp_iter.0 {
-        ast::Iter::Opt => {
-            let value =
-                unwrap!(iter::map_opt(runner_ctx, ctx, span, exp_iter, |runner_ctx, ctx_sub| {
-                    eval_exp(runner_ctx, ctx_sub, exp_inner)
-                }));
-            unwrap_from_result!(
-                make::opt(runner_ctx.arena_mut(), typ.clone(), value, Span::default()),
-                span
-            )
-        }
-        ast::Iter::List => {
-            let values =
-                unwrap!(iter::map_list(runner_ctx, ctx, span, exp_iter, |runner_ctx, ctx_sub| {
-                    eval_exp(runner_ctx, ctx_sub, exp_inner)
-                }));
-            unwrap_from_result!(
-                make::list(runner_ctx.arena_mut(), typ.clone(), values, Span::default()),
-                span
-            )
-        }
-    };
-    ok!(value)
+    iter::map(runner_ctx, ctx, span, typ, exp_iter, |runner_ctx, ctx_sub| {
+        eval_exp(runner_ctx, ctx_sub, exp_inner)
+    })
 }
