@@ -230,9 +230,6 @@ let export_json_command =
      let%map paths_spec = anon (non_empty_sequence_as_list ("path" %: string))
      and stage =
        flag "-stage" (required string) ~doc:"STAGE el, il, al, sl, or pl"
-     and preserve_rule_groups =
-       flag "-preserve-rule-groups" no_arg
-         ~doc:" preserve rule groups when exporting SL"
      in
      fun () ->
        let stage =
@@ -245,8 +242,7 @@ let export_json_command =
          | stage -> Error (Error.CommandError ("unknown stage: " ^ stage))
        in
        match
-         Result.bind stage (fun stage ->
-             P4spectec.export_json ~preserve_rule_groups stage paths_spec)
+         Result.bind stage (fun stage -> P4spectec.export_json stage paths_spec)
        with
        | Ok json ->
            Yojson.Safe.pretty_to_channel stdout json;

@@ -73,13 +73,13 @@ PROSE_SOURCE_SL := $(PROSE_SOURCE_DIR)/source-sl.json
 PROSE_SOURCE_PL := $(PROSE_SOURCE_DIR)/source-pl.json
 
 test-prose-diff:
-	mkdir -p $(PROSE_SOURCE_DIR)
-	trap 'rm -f $(PROSE_SOURCE_SL) $(PROSE_SOURCE_PL)' EXIT; \
-		cd $(abspath ..) && \
-		opam exec -- dune exec ./p4spec/bin/main.exe -- export-json -stage sl -preserve-rule-groups spec > $(PROSE_SOURCE_SL) && \
-		opam exec -- dune exec ./p4spec/bin/main.exe -- export-json -stage pl spec > $(PROSE_SOURCE_PL) && \
-		cd $(CURDIR) && \
-		env -u UPDATE_EXPECT $(DRIVER) prose-source --sl $(PROSE_SOURCE_SL) --pl $(PROSE_SOURCE_PL)
+	mkdir -p "$(PROSE_SOURCE_DIR)"
+	trap 'rm -f "$(PROSE_SOURCE_SL)" "$(PROSE_SOURCE_PL)"' EXIT; \
+		cd "$(abspath ..)" && \
+		opam exec -- dune exec ./p4spec/test/prose-export/export_prose_source.exe -- sl spec > "$(PROSE_SOURCE_SL)" && \
+		opam exec -- dune exec ./p4spec/test/prose-export/export_prose_source.exe -- pl spec > "$(PROSE_SOURCE_PL)" && \
+		cd "$(CURDIR)" && \
+		env -u UPDATE_EXPECT $(DRIVER) prose-source --sl "$(PROSE_SOURCE_SL)" --pl "$(PROSE_SOURCE_PL)"
 
 test-diff: test-frontend-diff test-algo-diff test-prose-diff
 

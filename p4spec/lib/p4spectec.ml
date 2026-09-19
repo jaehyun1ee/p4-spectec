@@ -29,8 +29,7 @@ let annotate (paths_spec : string list) : Lang.Pl.spec result =
 
 type stage = EL | IL | AL | SL | PL
 
-let export_json ?(preserve_rule_groups = false) (stage : stage)
-    (paths_spec : string list) :
+let export_json (stage : stage) (paths_spec : string list) :
     Yojson.Safe.t result =
   let envelope schema kind payload =
     `Assoc
@@ -49,7 +48,7 @@ let export_json ?(preserve_rule_groups = false) (stage : stage)
       let+ spec = algo paths_spec in
       envelope "p4spectec.al.v1" "al" (Lang.Al.spec_to_yojson spec)
   | SL ->
-      let+ spec = structure ~final:(not preserve_rule_groups) paths_spec in
+      let+ spec = structure ~final:true paths_spec in
       envelope "p4spectec.sl.v1" "sl" (Lang.Sl.spec_to_yojson spec)
   | PL ->
       let+ spec = annotate paths_spec in
