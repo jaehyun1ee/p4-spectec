@@ -84,15 +84,21 @@ fn populate_exp_template(
             let exps = not_exp.args();
             populate_exps_templates(uenv, exps_template.into_iter(), exps.into_iter(), &exp.span)
         }
-        (ExpKind::Str(expfields_template), ExpKind::Str(expfields)) => {
-            let exps_template = expfields_template.iter().map(|(_, exp)| exp);
-            let exps = expfields.iter().map(|(_, exp)| exp);
+        (ExpKind::Str(exp_fields_template), ExpKind::Str(exp_fields)) => {
+            let exps_template = exp_fields_template.iter().map(|ExpField { exp, .. }| exp);
+            let exps = exp_fields.iter().map(|ExpField { exp, .. }| exp);
             populate_exps_templates(uenv, exps_template, exps, &exp.span)
         }
-        (ExpKind::Iter(exp_body_template, iter_template), ExpKind::Iter(exp_body, iter))
-            if iter_template.0.syntax_eq(&iter.0) =>
-        {
-            let prem = populate_iter_exp_template(exp_body_template, iter_template, exp_body, iter);
+        (
+            ExpKind::Iter(exp_body_template, exp_iter_template),
+            ExpKind::Iter(exp_body, exp_iter),
+        ) if exp_iter_template.iter.syntax_eq(&exp_iter.iter) => {
+            let prem = populate_iter_exp_template(
+                exp_body_template,
+                exp_iter_template,
+                exp_body,
+                exp_iter,
+            );
             Ok(vec![prem])
         }
         _ => {
@@ -131,19 +137,16 @@ fn populate_id_exp_template(exp_template: &Exp, exp: &Exp) -> Prem {
 
 fn populate_iter_exp_template(
     exp_template: &Exp,
-    iter_template: &ExpIter,
+    exp_iter_template: &ExpIter,
     exp: &Exp,
-    iter: &ExpIter,
+    exp_iter: &ExpIter,
 ) -> Prem {
-    let (iter_template, vars_template) = iter_template;
-    let (_, vars) = iter;
+    let ExpIter { iter, vars: vars_template } = exp_iter_template;
+    let ExpIter { vars, .. } = exp_iter;
     let prem = populate_id_exp_template(exp_template, exp);
     let span = prem.span.clone();
-    let prem_iter = PremIter {
-        iter: *iter_template,
-        vars_bound: vars_template.clone(),
-        vars_bind: vars.clone(),
-    };
+    let prem_iter =
+        PremIter { iter: *iter, vars_bound: vars_template.clone(), vars_bind: vars.clone() };
     let prem = Box::new(prem);
     let prem = IterPrem { prem, prem_iter };
     let prem_kind = PremKind::Iter(prem);
@@ -175,14 +178,20 @@ fn antiunify_exp(
         {
             antiunify_case_exp(frees, uenv, not_exp_template, not_exp)?
         }
-        (ExpKind::Str(expfields_template), ExpKind::Str(expfields)) => {
-            antiunify_str_exp(frees, uenv, expfields_template, expfields, &exp.span)?
+        (ExpKind::Str(exp_fields_template), ExpKind::Str(exp_fields)) => {
+            antiunify_str_exp(frees, uenv, exp_fields_template, exp_fields, &exp.span)?
         }
-        (ExpKind::Iter(exp_body_template, iter_template), ExpKind::Iter(exp_body, iter))
-            if iter_template.0.syntax_eq(&iter.0) =>
-        {
-            antiunify_iter_exp(frees, uenv, exp_body_template, iter_template, exp_body, iter)?
-        }
+        (
+            ExpKind::Iter(exp_body_template, exp_iter_template),
+            ExpKind::Iter(exp_body, exp_iter),
+        ) if exp_iter_template.iter.syntax_eq(&exp_iter.iter) => antiunify_iter_exp(
+            frees,
+            uenv,
+            exp_body_template,
+            exp_iter_template,
+            exp_body,
+            exp_iter,
+        )?,
         _ => {
             let error_kind = StructureErrorKind::Antiunification;
             let error = StructureError::new(error_kind, exp.span.clone());
@@ -258,26 +267,28 @@ fn antiunify_case_exp(
 fn antiunify_str_exp(
     frees: &mut IdSet,
     uenv: &mut UEnv,
-    expfields_template: &[ExpField],
-    expfields: &[ExpField],
+    exp_fields_template: &[ExpField],
+    exp_fields: &[ExpField],
     span: &Span,
 ) -> Result<ExpKind, StructureError> {
-    check_arity(expfields_template.len(), expfields.len(), span)?;
-    if !expfields_template
-        .iter()
-        .zip(expfields)
-        .all(|((atom_template, _), (atom, _))| atom_template.syntax_eq(atom))
-    {
+    check_arity(exp_fields_template.len(), exp_fields.len(), span)?;
+    if !exp_fields_template.iter().zip(exp_fields).all(
+        |(ExpField { atom: atom_template, .. }, ExpField { atom, .. })| {
+            atom_template.syntax_eq(atom)
+        },
+    ) {
         let error_kind = StructureErrorKind::Antiunification;
         let error = StructureError::new(error_kind, span.clone());
         return Err(error);
     }
-    let mut expfields_unified = vec![];
-    for ((atom_template, exp_template), (_, exp)) in expfields_template.iter().zip(expfields) {
+    let mut exp_fields_unified = vec![];
+    for (ExpField { atom: atom_template, exp: exp_template }, ExpField { exp, .. }) in
+        exp_fields_template.iter().zip(exp_fields)
+    {
         let exp_template = antiunify_exp(frees, uenv, exp_template, exp)?;
-        expfields_unified.push((atom_template.clone(), exp_template));
+        exp_fields_unified.push(ExpField { atom: atom_template.clone(), exp: exp_template });
     }
-    Ok(ExpKind::Str(expfields_unified))
+    Ok(ExpKind::Str(exp_fields_unified))
 }
 
 // - Iterated expression
@@ -286,12 +297,12 @@ fn antiunify_iter_exp(
     frees: &mut IdSet,
     uenv: &mut UEnv,
     exp_template: &Exp,
-    iter_template: &ExpIter,
+    exp_iter_template: &ExpIter,
     exp: &Exp,
-    iter: &ExpIter,
+    exp_iter: &ExpIter,
 ) -> Result<ExpKind, StructureError> {
-    let (iter_template, vars_template) = iter_template;
-    let (_, vars) = iter;
+    let ExpIter { iter, vars: vars_template } = exp_iter_template;
+    let ExpIter { vars, .. } = exp_iter;
     let exp_template = antiunify_exp(frees, uenv, exp_template, exp)?;
     let mut vars_unified = vec![];
     for var in vars_template.iter().chain(vars) {
@@ -308,8 +319,8 @@ fn antiunify_iter_exp(
         }
     }
     let exp_template = Box::new(exp_template);
-    let iter = (*iter_template, vars_unified);
-    Ok(ExpKind::Iter(exp_template, iter))
+    let exp_iter = ExpIter { iter: *iter, vars: vars_unified };
+    Ok(ExpKind::Iter(exp_template, exp_iter))
 }
 
 // - Expressions across matches

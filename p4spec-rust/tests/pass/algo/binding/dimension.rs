@@ -4,7 +4,7 @@ use super::super::*;
 fn test_dimension_inference_keeps_the_minimal_occurrence() {
     let exp_id = id_exp("x", 2);
     let iterated = exp(
-        ast::ExpKind::Iter(Box::new(exp_id), (ast::Iter::List, vec![])),
+        ast::ExpKind::Iter(Box::new(exp_id), ast::ExpIter { iter: ast::Iter::List, vars: vec![] }),
         ast::TypKind::Iter(Box::new(typ::make::bool()), ast::Iter::List),
         3,
     );

@@ -214,7 +214,7 @@ fn test_recursive_hold_case_group_let_rule_bodies() {
 fn test_iteration_blocks_search_and_different_case_targets_stay_separate() {
     let mut instr_iter = branch(neg(id_exp("p")), "iter", 2);
     if let InstrKind::If(instr_if) = &mut instr_iter.node {
-        instr_if.iter_exps = vec![(crate::lang::il::ast::Iter::List, vec![])];
+        instr_if.iter_exps = vec![ExpIter { iter: crate::lang::il::ast::Iter::List, vars: vec![] }];
     }
     for block_input in [
         vec![branch(id_exp("p"), "a", 1), instr_iter.clone(), branch(neg(id_exp("p")), "b", 3)],

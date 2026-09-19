@@ -27,7 +27,7 @@ pub fn as_exp(is_dim: bool, var: &Var) -> Exp {
         exp = crate::note_phrase! {
             node: ExpKind::Iter(
                 Box::new(exp),
-                (*iter, if is_dim { vec![var_binder] } else { vec![] }),
+                ExpIter { iter: *iter, vars: if is_dim { vec![var_binder] } else { vec![] } },
             ),
             note: typ_iter.node.clone(),
             span: span,

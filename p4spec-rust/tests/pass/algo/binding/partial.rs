@@ -8,16 +8,16 @@ fn test_conversion_preserves_binding_match_and_cast_guards_before_bindings() {
         crate::phrase! { node: ast::TypKind::Var(parent_id.clone(), vec![]), span:  span(1) };
     let child_typ =
         crate::phrase! { node: ast::TypKind::Var(child_id.clone(), vec![]), span:  span(2) };
-    let parent_origin = crate::phrase! { node: (parent_id.clone(), vec![]), span:  span(1) };
-    let child_origin = crate::phrase! { node: (child_id.clone(), vec![]), span:  span(2) };
+    let parent_origin = crate::phrase! { node: ast::TypOriginKind { id: parent_id.clone(), targs: vec![] }, span:  span(1) };
+    let child_origin = crate::phrase! { node: ast::TypOriginKind { id: child_id.clone(), targs: vec![] }, span:  span(2) };
     let parent_def = crate::phrase! { node:
     ast::DefKind::Typ(ast::TypDef::Defined(Box::new(ast::DefinedTyp {
         id: parent_id,
         tparams: vec![],
         def_typ: crate::phrase! { node:
             ast::DefTypKind::Variant(vec![
-                (not_typ("A", 1), parent_origin.clone(), vec![]),
-                (not_typ("B", 1), parent_origin, vec![]),
+                ast::TypCase { not_typ: not_typ("A", 1), typ_origin: parent_origin.clone(), hints: vec![] },
+                ast::TypCase { not_typ: not_typ("B", 1), typ_origin: parent_origin, hints: vec![] },
             ]), span:
             span(1) },
         hints: vec![],
@@ -28,7 +28,7 @@ fn test_conversion_preserves_binding_match_and_cast_guards_before_bindings() {
         id: child_id,
         tparams: vec![],
         def_typ: crate::phrase! { node:
-            ast::DefTypKind::Variant(vec![(not_typ("A", 2), child_origin, vec![])]), span:
+            ast::DefTypKind::Variant(vec![ast::TypCase { not_typ: not_typ("A", 2), typ_origin: child_origin, hints: vec![] }]), span:
             span(2) },
         hints: vec![],
     }))), span:
@@ -116,10 +116,10 @@ fn test_partial_binding_preserves_expression_and_premise_iteration_dimensions() 
     let iterated = exp(
         ast::ExpKind::Iter(
             Box::new(tuple),
-            (
-                ast::Iter::List,
-                vec![ast::Var { id: id("x", 1), typ: typ::make::bool(), iters: vec![] }],
-            ),
+            ast::ExpIter {
+                iter: ast::Iter::List,
+                vars: vec![ast::Var { id: id("x", 1), typ: typ::make::bool(), iters: vec![] }],
+            },
         ),
         ast::TypKind::Iter(
             Box::new(crate::phrase! { node:
@@ -139,7 +139,8 @@ fn test_partial_binding_preserves_expression_and_premise_iteration_dimensions() 
         .expect("partial binding rename");
     let prems = partial::gen_prems(&ctx, &ICtx::new(), &renames).expect("partial binding premises");
 
-    let ast::ExpKind::Iter(exp_inner, (ast::Iter::List, vars)) = &renamed.node else {
+    let ast::ExpKind::Iter(exp_inner, ast::ExpIter { iter: ast::Iter::List, vars }) = &renamed.node
+    else {
         panic!("expected iterated binding");
     };
     let ast::ExpKind::Tuple(exps) = &exp_inner.node else {
@@ -188,10 +189,10 @@ fn test_partial_binding_preserves_nested_iteration_order_and_dimensions() {
     let inner = exp(
         ast::ExpKind::Iter(
             Box::new(tuple),
-            (
-                ast::Iter::Opt,
-                vec![ast::Var { id: id("x", 1), typ: typ::make::bool(), iters: vec![] }],
-            ),
+            ast::ExpIter {
+                iter: ast::Iter::Opt,
+                vars: vec![ast::Var { id: id("x", 1), typ: typ::make::bool(), iters: vec![] }],
+            },
         ),
         inner_typ.node.clone(),
         1,
@@ -199,14 +200,14 @@ fn test_partial_binding_preserves_nested_iteration_order_and_dimensions() {
     let iterated = exp(
         ast::ExpKind::Iter(
             Box::new(inner),
-            (
-                ast::Iter::List,
-                vec![ast::Var {
+            ast::ExpIter {
+                iter: ast::Iter::List,
+                vars: vec![ast::Var {
                     id: id("x", 1),
                     typ: typ::make::bool(),
                     iters: vec![ast::Iter::Opt],
                 }],
-            ),
+            },
         ),
         ast::TypKind::Iter(Box::new(inner_typ), ast::Iter::List),
         1,
@@ -222,10 +223,14 @@ fn test_partial_binding_preserves_nested_iteration_order_and_dimensions() {
     let prems =
         partial::gen_prems(&ctx, &ICtx::new(), &renames).expect("nested partial binding premises");
 
-    let ast::ExpKind::Iter(inner, (ast::Iter::List, outer_vars)) = &renamed.node else {
+    let ast::ExpKind::Iter(inner, ast::ExpIter { iter: ast::Iter::List, vars: vars_outer }) =
+        &renamed.node
+    else {
         panic!("expected outer list iteration");
     };
-    let ast::ExpKind::Iter(tuple, (ast::Iter::Opt, inner_vars)) = &inner.node else {
+    let ast::ExpKind::Iter(tuple, ast::ExpIter { iter: ast::Iter::Opt, vars: vars_inner }) =
+        &inner.node
+    else {
         panic!("expected inner optional iteration");
     };
     let ast::ExpKind::Tuple(exps) = &tuple.node else {
@@ -234,10 +239,10 @@ fn test_partial_binding_preserves_nested_iteration_order_and_dimensions() {
     let ast::ExpKind::Id(id_rename) = &exps[1].node else {
         panic!("expected nested bound value rename");
     };
-    assert_eq!(inner_vars.len(), 2);
-    assert_eq!(outer_vars.len(), 2);
-    assert_eq!(inner_vars[1].id, *id_rename);
-    assert_eq!(outer_vars[1].id, *id_rename);
+    assert_eq!(vars_inner.len(), 2);
+    assert_eq!(vars_outer.len(), 2);
+    assert_eq!(vars_inner[1].id, *id_rename);
+    assert_eq!(vars_outer[1].id, *id_rename);
 
     let [prem] = prems.as_slice() else {
         panic!("expected one nested equality premise");
@@ -259,11 +264,11 @@ fn test_partial_case_and_list_bindings_generate_match_then_bind_premises_in_sour
     let choice_id = id("Choice", 1);
     let choice_typ =
         crate::phrase! { node: ast::TypKind::Var(choice_id.clone(), vec![]), span:  span(1) };
-    let origin = crate::phrase! { node: (choice_id.clone(), vec![]), span:  span(1) };
+    let origin = crate::phrase! { node: ast::TypOriginKind { id: choice_id.clone(), targs: vec![] }, span:  span(1) };
     let def_typ = crate::phrase! { node:
     ast::DefTypKind::Variant(vec![
-        (not_typ("A", 1), origin.clone(), vec![]),
-        (not_typ("B", 1), origin, vec![]),
+        ast::TypCase { not_typ: not_typ("A", 1), typ_origin: origin.clone(), hints: vec![] },
+        ast::TypCase { not_typ: not_typ("B", 1), typ_origin: origin, hints: vec![] },
     ]), span:
     span(1) };
     let mut ctx = Context::new();
@@ -342,8 +347,8 @@ fn test_partial_upcast_binding_checks_subtype_before_binding_the_downcast_value(
         crate::phrase! { node: ast::TypKind::Var(parent_id.clone(), vec![]), span:  span(1) };
     let child_typ =
         crate::phrase! { node: ast::TypKind::Var(child_id.clone(), vec![]), span:  span(1) };
-    let parent_origin = crate::phrase! { node: (parent_id.clone(), vec![]), span:  span(1) };
-    let child_origin = crate::phrase! { node: (child_id.clone(), vec![]), span:  span(1) };
+    let parent_origin = crate::phrase! { node: ast::TypOriginKind { id: parent_id.clone(), targs: vec![] }, span:  span(1) };
+    let child_origin = crate::phrase! { node: ast::TypOriginKind { id: child_id.clone(), targs: vec![] }, span:  span(1) };
     let mut ctx = Context::new();
     ctx.tdenv.insert(
         parent_id,
@@ -351,8 +356,8 @@ fn test_partial_upcast_binding_checks_subtype_before_binding_the_downcast_value(
             vec![],
             Box::new(crate::phrase! { node:
             ast::DefTypKind::Variant(vec![
-                (not_typ("A", 1), parent_origin.clone(), vec![]),
-                (not_typ("B", 1), parent_origin, vec![]),
+                ast::TypCase { not_typ: not_typ("A", 1), typ_origin: parent_origin.clone(), hints: vec![] },
+                ast::TypCase { not_typ: not_typ("B", 1), typ_origin: parent_origin, hints: vec![] },
             ]), span:
             span(1) }),
         ),
@@ -362,7 +367,7 @@ fn test_partial_upcast_binding_checks_subtype_before_binding_the_downcast_value(
         TypeDef::Defined(
             vec![],
             Box::new(crate::phrase! { node:
-            ast::DefTypKind::Variant(vec![(not_typ("A", 1), child_origin, vec![])]), span:
+            ast::DefTypKind::Variant(vec![ast::TypCase { not_typ: not_typ("A", 1), typ_origin: child_origin, hints: vec![] }]), span:
             span(1) }),
         ),
     );

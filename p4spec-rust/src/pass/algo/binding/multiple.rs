@@ -113,7 +113,10 @@ pub fn rename_exp(ctx: &mut Context, renv: &mut RenameEnv, exp: &ast::Exp) -> as
         ast::ExpKind::Str(fields) => {
             let fields = fields
                 .iter()
-                .map(|(atom, exp)| (atom.clone(), rename_exp(ctx, renv, exp)))
+                .map(|ast::ExpField { atom, exp }| ast::ExpField {
+                    atom: atom.clone(),
+                    exp: rename_exp(ctx, renv, exp),
+                })
                 .collect();
             ast::ExpKind::Str(fields)
         }
@@ -128,7 +131,7 @@ pub fn rename_exp(ctx: &mut Context, renv: &mut RenameEnv, exp: &ast::Exp) -> as
             let exp_tail = rename_exp(ctx, renv, exp_tail);
             ast::ExpKind::Cons(Box::new(exp_head), Box::new(exp_tail))
         }
-        ast::ExpKind::Iter(exp_inner, (iter, vars)) => {
+        ast::ExpKind::Iter(exp_inner, ast::ExpIter { iter, vars }) => {
             let exp_inner = rename_exp(ctx, renv, exp_inner);
             let frees = exp_inner.free();
             let mut vars_renamed = Vec::new();
@@ -150,7 +153,10 @@ pub fn rename_exp(ctx: &mut Context, renv: &mut RenameEnv, exp: &ast::Exp) -> as
                     }
                 }
             }
-            ast::ExpKind::Iter(Box::new(exp_inner), (*iter, vars_renamed))
+            ast::ExpKind::Iter(
+                Box::new(exp_inner),
+                ast::ExpIter { iter: *iter, vars: vars_renamed },
+            )
         }
         _ => return exp.clone(),
     };

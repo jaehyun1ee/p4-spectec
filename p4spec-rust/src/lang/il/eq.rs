@@ -57,19 +57,21 @@ impl SyntaxEq for DefTypKind {
 
 impl SyntaxEq for TypField {
     fn syntax_eq(&self, other: &Self) -> bool {
-        self.0.syntax_eq(&other.0) && self.1.syntax_eq(&other.1)
+        self.atom.syntax_eq(&other.atom) && self.typ.syntax_eq(&other.typ)
     }
 }
 
 impl SyntaxEq for TypOriginKind {
     fn syntax_eq(&self, other: &Self) -> bool {
-        self.0.syntax_eq(&other.0) && self.1.syntax_eq(&other.1)
+        self.id.syntax_eq(&other.id) && self.targs.syntax_eq(&other.targs)
     }
 }
 
 impl SyntaxEq for TypCase {
     fn syntax_eq(&self, other: &Self) -> bool {
-        self.0.syntax_eq(&other.0) && self.1.syntax_eq(&other.1) && self.2.syntax_eq(&other.2)
+        self.not_typ.syntax_eq(&other.not_typ)
+            && self.typ_origin.syntax_eq(&other.typ_origin)
+            && self.hints.syntax_eq(&other.hints)
     }
 }
 
@@ -138,15 +140,7 @@ impl<I: SyntaxEq, V: SyntaxEq> SyntaxEq for ExpKind<I, V> {
             (ExpKind::Case(not_exp_l), ExpKind::Case(not_exp_r)) => {
                 not_exp_l.eq_by(not_exp_r, SyntaxEq::syntax_eq)
             }
-            (ExpKind::Str(fields_l), ExpKind::Str(fields_r)) => {
-                fields_l.len() == fields_r.len()
-                    && fields_l
-                        .iter()
-                        .zip(fields_r)
-                        .all(|((atom_l, exp_l), (atom_r, exp_r))| {
-                            atom_l.syntax_eq(atom_r) && exp_l.syntax_eq(exp_r)
-                        })
-            }
+            (ExpKind::Str(fields_l), ExpKind::Str(fields_r)) => fields_l.syntax_eq(fields_r),
             (ExpKind::Opt(Some(exp_l)), ExpKind::Opt(Some(exp_r))) => exp_l.syntax_eq(exp_r),
             (ExpKind::Opt(None), ExpKind::Opt(None)) => true,
             (ExpKind::Cons(exp_l_l, exp_r_l), ExpKind::Cons(exp_l_r, exp_r_r))
@@ -180,17 +174,23 @@ impl<I: SyntaxEq, V: SyntaxEq> SyntaxEq for ExpKind<I, V> {
             (ExpKind::Call(id_l, targs_l, args_l), ExpKind::Call(id_r, targs_r, args_r)) => {
                 id_l.syntax_eq(id_r) && targs_l.syntax_eq(targs_r) && args_l.syntax_eq(args_r)
             }
-            (ExpKind::Iter(exp_l, iter_exp_l), ExpKind::Iter(exp_r, iter_exp_r)) => {
-                exp_l.syntax_eq(exp_r) && iter_exp_l.syntax_eq(iter_exp_r)
+            (ExpKind::Iter(exp_l, exp_iter_l), ExpKind::Iter(exp_r, exp_iter_r)) => {
+                exp_l.syntax_eq(exp_r) && exp_iter_l.syntax_eq(exp_iter_r)
             }
             _ => false,
         }
     }
 }
 
+impl<I: SyntaxEq, V: SyntaxEq> SyntaxEq for ExpField<I, V> {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.atom.syntax_eq(&other.atom) && self.exp.syntax_eq(&other.exp)
+    }
+}
+
 impl<V: SyntaxEq> SyntaxEq for ExpIter<V> {
     fn syntax_eq(&self, other: &Self) -> bool {
-        self.0 == other.0 && self.1.syntax_eq(&other.1)
+        self.iter == other.iter && self.vars.syntax_eq(&other.vars)
     }
 }
 
@@ -350,13 +350,13 @@ impl SyntaxEq for RuleKind {
 
 impl SyntaxEq for RuleGroupKind {
     fn syntax_eq(&self, other: &Self) -> bool {
-        self.0.syntax_eq(&other.0) && self.1.syntax_eq(&other.1)
+        self.id.syntax_eq(&other.id) && self.rules.syntax_eq(&other.rules)
     }
 }
 
 impl SyntaxEq for ElseGroupKind {
     fn syntax_eq(&self, other: &Self) -> bool {
-        self.0.syntax_eq(&other.0) && self.1.syntax_eq(&other.1)
+        self.id.syntax_eq(&other.id) && self.rule.syntax_eq(&other.rule)
     }
 }
 
@@ -374,7 +374,7 @@ impl SyntaxEq for ClauseKind {
 
 impl SyntaxEq for TableRowKind {
     fn syntax_eq(&self, other: &Self) -> bool {
-        self.0.syntax_eq(&other.0) && self.1.syntax_eq(&other.1)
+        self.args.syntax_eq(&other.args) && self.exp.syntax_eq(&other.exp)
     }
 }
 

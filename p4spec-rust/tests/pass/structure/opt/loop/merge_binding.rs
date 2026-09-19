@@ -1,4 +1,5 @@
 use super::*;
+use crate::lang::il::ast::ExpField;
 use crate::pass::structure::opt::r#loop::merge_binding::apply;
 #[test]
 fn test_adjacent_bindings_rename_and_preserve_tail_and_span() {
@@ -121,12 +122,15 @@ fn patterns(text: &str) -> Vec<Exp> {
     vec![
         pattern(ExpKind::Tuple(vec![id_exp(text)])),
         pattern(ExpKind::Case(Box::new(Mixfix::Arg(id_exp(text))))),
-        pattern(ExpKind::Str(vec![(atom("field"), id_exp(text))])),
+        pattern(ExpKind::Str(vec![ExpField { atom: atom("field"), exp: id_exp(text) }])),
         pattern(ExpKind::Opt(Some(Box::new(id_exp(text))))),
         pattern(ExpKind::Opt(None)),
         pattern(ExpKind::List(vec![id_exp(text)])),
         pattern(ExpKind::Cons(Box::new(id_exp(text)), Box::new(id_exp(text)))),
-        pattern(ExpKind::Iter(Box::new(id_exp(text)), (Iter::List, vec![var(text)]))),
+        pattern(ExpKind::Iter(
+            Box::new(id_exp(text)),
+            ExpIter { iter: Iter::List, vars: vec![var(text)] },
+        )),
     ]
 }
 
@@ -150,15 +154,21 @@ fn test_structured_binding_patterns_and_shape_negatives() {
     }
     for (exp_a, exp_b) in [
         (
-            pattern(ExpKind::Str(vec![(atom("field_a"), id_exp("a"))])),
-            pattern(ExpKind::Str(vec![(atom("field_b"), id_exp("b"))])),
+            pattern(ExpKind::Str(vec![ExpField { atom: atom("field_a"), exp: id_exp("a") }])),
+            pattern(ExpKind::Str(vec![ExpField { atom: atom("field_b"), exp: id_exp("b") }])),
         ),
         (pattern(ExpKind::Bool(true)), pattern(ExpKind::Bool(true))),
         (pattern(ExpKind::Tuple(vec![])), pattern(ExpKind::Tuple(vec![id_exp("b")]))),
         (pattern(ExpKind::Opt(None)), pattern(ExpKind::Opt(Some(Box::new(id_exp("b")))))),
         (
-            pattern(ExpKind::Iter(Box::new(id_exp("a")), (Iter::List, vec![]))),
-            pattern(ExpKind::Iter(Box::new(id_exp("b")), (Iter::Opt, vec![]))),
+            pattern(ExpKind::Iter(
+                Box::new(id_exp("a")),
+                ExpIter { iter: Iter::List, vars: vec![] },
+            )),
+            pattern(ExpKind::Iter(
+                Box::new(id_exp("b")),
+                ExpIter { iter: Iter::Opt, vars: vec![] },
+            )),
         ),
         (
             pattern(ExpKind::Case(Box::new(Mixfix::Arg(id_exp("a"))))),
@@ -212,7 +222,7 @@ fn nested(block: Block) -> Block {
     let block = vec![hold(block.clone(), block)];
     vec![instr(InstrKind::If(IfInstr {
         exp: id_exp("condition"),
-        iter_exps: vec![(Iter::List, vec![])],
+        iter_exps: vec![ExpIter { iter: Iter::List, vars: vec![] }],
         block,
     }))]
 }

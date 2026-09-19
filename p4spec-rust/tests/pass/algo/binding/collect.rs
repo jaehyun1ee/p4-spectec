@@ -48,7 +48,10 @@ fn test_collection_rejects_a_binding_inside_a_noninvertible_operator() {
 #[test]
 fn test_expression_collection_reports_right_associated_conflict_span() {
     let iterated = exp(
-        ast::ExpKind::Iter(Box::new(id_exp("x", 3)), (ast::Iter::List, vec![])),
+        ast::ExpKind::Iter(
+            Box::new(id_exp("x", 3)),
+            ast::ExpIter { iter: ast::Iter::List, vars: vec![] },
+        ),
         ast::TypKind::Iter(Box::new(typ::make::bool()), ast::Iter::List),
         3,
     );
@@ -68,7 +71,10 @@ fn test_expression_collection_reports_right_associated_conflict_span() {
 #[test]
 fn test_argument_collection_reports_right_associated_conflict_span() {
     let iterated = exp(
-        ast::ExpKind::Iter(Box::new(id_exp("x", 3)), (ast::Iter::List, vec![])),
+        ast::ExpKind::Iter(
+            Box::new(id_exp("x", 3)),
+            ast::ExpIter { iter: ast::Iter::List, vars: vec![] },
+        ),
         ast::TypKind::Iter(Box::new(typ::make::bool()), ast::Iter::List),
         3,
     );

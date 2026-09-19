@@ -79,7 +79,9 @@ pub fn collect_exp(ctx: &Context, exp: &ast::Exp) -> Result<BEnv, AlgoError> {
         }
         ast::ExpKind::Tuple(exps) | ast::ExpKind::List(exps) => collect_exps(ctx, exps),
         ast::ExpKind::Case(not_exp) => collect_exps(ctx, not_exp.args()),
-        ast::ExpKind::Str(fields) => collect_exps(ctx, fields.iter().map(|(_, exp)| exp)),
+        ast::ExpKind::Str(fields) => {
+            collect_exps(ctx, fields.iter().map(|ast::ExpField { exp, .. }| exp))
+        }
         ast::ExpKind::Opt(Some(exp_inner)) => collect_exp(ctx, exp_inner),
         ast::ExpKind::Opt(None) => {
             let benv = BEnv::new();
@@ -136,7 +138,7 @@ pub fn collect_exp(ctx: &Context, exp: &ast::Exp) -> Result<BEnv, AlgoError> {
             let benv = collect_args(ctx, args)?;
             reject_noninvertible(exp.span.clone(), "call operator", benv)
         }
-        ast::ExpKind::Iter(exp_inner, (iter, _)) => {
+        ast::ExpKind::Iter(exp_inner, ast::ExpIter { iter, .. }) => {
             let benv = collect_exp(ctx, exp_inner)?;
             let benv = benv.add_iter(*iter);
             Ok(benv)

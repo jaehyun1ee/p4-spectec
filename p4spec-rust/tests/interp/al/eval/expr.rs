@@ -99,7 +99,10 @@ fn test_nested_updates_preserve_the_original_and_surrounding_fields() {
     let typ_list = typ::make::list(typ::make::int());
     let typ_struct = typ::make::var(id("record"), vec![]);
     let original = exp(
-        ast::ExpKind::Str(vec![(atom.clone(), list(vec![int(1), int(2), int(3)]))]),
+        ast::ExpKind::Str(vec![ast::ExpField {
+            atom: atom.clone(),
+            exp: list(vec![int(1), int(2), int(3)]),
+        }]),
         typ_struct.clone(),
     );
     let root = path(ast::PathKind::Root, typ_struct);
@@ -358,7 +361,10 @@ fn test_iteration_evaluates_each_bound_element_and_preserves_empty_options() {
         let var = ast::Var { id: id("x"), typ: typ_int.clone(), iters: vec![] };
         let exp_id = p4spec_rust::note_phrase!(node: p4spec_rust::lang::il::ast::ExpKind::Id(id("x")), note: typ_int.node.clone(), span: typ_int.span.clone());
         let signature = exp(
-            ast::ExpKind::Iter(Box::new(exp_id.clone()), (iter, vec![var.clone()])),
+            ast::ExpKind::Iter(
+                Box::new(exp_id.clone()),
+                ast::ExpIter { iter, vars: vec![var.clone()] },
+            ),
             typ_iter.clone(),
         );
         let add = exp(
@@ -370,8 +376,10 @@ fn test_iteration_evaluates_each_bound_element_and_preserves_empty_options() {
             ),
             typ_int,
         );
-        let expression =
-            exp(ast::ExpKind::Iter(Box::new(add), (iter, vec![var])), typ_iter.clone());
+        let expression = exp(
+            ast::ExpKind::Iter(Box::new(add), ast::ExpIter { iter, vars: vec![var] }),
+            typ_iter.clone(),
+        );
         let mut def = function("test", expression);
         if let ast::DefKind::MetaFunc(ast::MetaFuncDef::Defined(func)) = &mut def.node {
             func.params = vec![
@@ -459,7 +467,7 @@ fn test_list_iteration_zips_values_without_rebinding_the_parent() {
             exp(
                 ast::ExpKind::Iter(
                     Box::new(p4spec_rust::note_phrase!(node: p4spec_rust::lang::il::ast::ExpKind::Id(var.id.clone()), note: typ_int.node.clone(), span: typ_int.span.clone())),
-                    (ast::Iter::List, vec![var.clone()]),
+                    ast::ExpIter { iter: ast::Iter::List, vars: vec![var.clone()] },
                 ),
                 typ_list.clone(),
             )
@@ -481,7 +489,13 @@ fn test_list_iteration_zips_values_without_rebinding_the_parent() {
     );
     let expression = exp(
         ast::ExpKind::Tuple(vec![
-            exp(ast::ExpKind::Iter(Box::new(exp_inner), (ast::Iter::List, vars)), typ_list.clone()),
+            exp(
+                ast::ExpKind::Iter(
+                    Box::new(exp_inner),
+                    ast::ExpIter { iter: ast::Iter::List, vars },
+                ),
+                typ_list.clone(),
+            ),
             p4spec_rust::note_phrase!(node: p4spec_rust::lang::il::ast::ExpKind::Id(id("x")), note: typ_int.node.clone(), span: Span::default()),
         ]),
         typ::make::tuple(vec![typ_list.clone(), typ_int.clone()]),

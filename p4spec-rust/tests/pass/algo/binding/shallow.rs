@@ -4,7 +4,7 @@ use super::super::*;
 fn test_shallow_cases_accept_only_iterated_variables_as_arguments() {
     let exp_id = id_exp("x", 1);
     let iterated = exp(
-        ast::ExpKind::Iter(Box::new(exp_id), (ast::Iter::List, vec![])),
+        ast::ExpKind::Iter(Box::new(exp_id), ast::ExpIter { iter: ast::Iter::List, vars: vec![] }),
         ast::TypKind::Iter(Box::new(typ::make::bool()), ast::Iter::List),
         1,
     );

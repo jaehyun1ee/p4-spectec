@@ -120,13 +120,13 @@ fn premise(kind: al::ast::PremKind) -> al::ast::Prem {
 }
 
 fn metadata_hint(metadata: &str) -> al::ast::Hint {
-    (
-        id(&format!("ignored-{metadata}")),
-        p4spec_rust::phrase! {
+    al::ast::Hint {
+        id: id(&format!("ignored-{metadata}")),
+        exp: p4spec_rust::phrase! {
             node: el::ast::ExpKind::Text(metadata.to_owned()),
             span: span(metadata),
         },
-    )
+    }
 }
 
 fn composite_spec(metadata: &str, extern_inputs: Vec<usize>) -> al::ast::Spec {

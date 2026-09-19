@@ -146,7 +146,10 @@ fn assign_str_exp<Ctx: WriteContext>(
     exp_fields: &[ast::ExpField],
     values: &[Value],
 ) -> Backtrack<Ctx> {
-    let exps = exp_fields.iter().map(|(_, exp)| exp).collect::<Vec<_>>();
+    let exps = exp_fields
+        .iter()
+        .map(|ast::ExpField { exp, .. }| exp)
+        .collect::<Vec<_>>();
     assign_exps(arena, ctx, &exps, values)
 }
 
@@ -222,15 +225,15 @@ fn assign_iter_exp<Ctx: WriteContext>(
         return ok!(ctx);
     }
     let span = &exp.span;
-    let vars_outer = iter_vars(&ctx, &exp_iter.1, exp_iter.0);
-    match exp_iter.0 {
+    let vars_outer = iter_vars(&ctx, &exp_iter.vars, exp_iter.iter);
+    match exp_iter.iter {
         ast::Iter::Opt => {
             let value_opt = unwrap_from_result!(get::opt(arena, &value), span);
             let ctx_sub = match value_opt {
                 Some(value) => Some(unwrap!(assign_exp(arena, ctx.clone(), exp_inner, value))),
                 None => None,
             };
-            for (var, var_outer) in exp_iter.1.iter().zip(&vars_outer) {
+            for (var, var_outer) in exp_iter.vars.iter().zip(&vars_outer) {
                 let typ = typ::make::iterate(var_outer.var.typ.clone(), &var_outer.var.iters);
                 let value_opt = match &ctx_sub {
                     Some(ctx_sub) => Some(*unwrap_from_result!(
@@ -261,7 +264,7 @@ fn assign_iter_exp<Ctx: WriteContext>(
             for value in values {
                 ctxs.push(unwrap!(assign_exp(arena, ctx_sub.clone(), exp_inner, value)));
             }
-            for (var, var_outer) in exp_iter.1.iter().zip(&vars_outer) {
+            for (var, var_outer) in exp_iter.vars.iter().zip(&vars_outer) {
                 let typ = typ::make::iterate(var_outer.var.typ.clone(), &var_outer.var.iters);
                 let mut values = Vec::with_capacity(ctxs.len());
                 for ctx_sub in &ctxs {

@@ -138,7 +138,7 @@ fn test_progress_tracks_iterator_only_uses_but_not_unused_candidates() {
 
     let instr_if = instr(InstrKind::If(IfInstr {
         exp: id_exp("condition"),
-        iter_exps: vec![(Iter::List, iterator("_x", "unused").vars_bound)],
+        iter_exps: vec![ExpIter { iter: Iter::List, vars: iterator("_x", "unused").vars_bound }],
         block: vec![],
     }));
     let (exps_match, block, _) =
@@ -147,5 +147,5 @@ fn test_progress_tracks_iterator_only_uses_but_not_unused_candidates() {
     assert!(changed);
     assert_eq!(id_of_exp(&exps_match[0]).node, "_x");
     let InstrKind::If(instr_if) = &block[0].node else { unreachable!() };
-    assert_eq!(instr_if.iter_exps[0].1[0].id.node, "x");
+    assert_eq!(instr_if.iter_exps[0].vars[0].id.node, "x");
 }

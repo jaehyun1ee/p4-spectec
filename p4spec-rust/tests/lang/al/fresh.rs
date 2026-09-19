@@ -88,10 +88,18 @@ fn test_alias_dimensions_preserve_declaration_and_wrapper_spans() {
     };
 
     let (_, exp_al) = al::fresh::exp_from_typ(true, &menv, &IdSet::new(), &typ_outer);
-    let al::ast::ExpKind::Iter(exp_inner, (al::ast::Iter::List, vars_outer)) = exp_al.node else {
+    let al::ast::ExpKind::Iter(
+        exp_inner,
+        al::ast::ExpIter { iter: al::ast::Iter::List, vars: vars_outer },
+    ) = exp_al.node
+    else {
         panic!("outer iteration")
     };
-    let al::ast::ExpKind::Iter(exp_base, (al::ast::Iter::Opt, vars_inner)) = exp_inner.node else {
+    let al::ast::ExpKind::Iter(
+        exp_base,
+        al::ast::ExpIter { iter: al::ast::Iter::Opt, vars: vars_inner },
+    ) = exp_inner.node
+    else {
         panic!("inner iteration")
     };
     let al::ast::ExpKind::Id(id_fresh) = exp_base.node else { panic!("fresh variable") };
@@ -127,11 +135,17 @@ fn assert_nested_fallback_uses_outer_span(menv: &MEnv) {
     for is_dim in [false, true] {
         let (ids_fresh, exp_outer) =
             al::fresh::exp_from_typ(is_dim, menv, &IdSet::new(), &typ_outer);
-        let al::ast::ExpKind::Iter(exp_inner, (al::ast::Iter::List, vars_outer)) = &exp_outer.node
+        let al::ast::ExpKind::Iter(
+            exp_inner,
+            al::ast::ExpIter { iter: al::ast::Iter::List, vars: vars_outer },
+        ) = &exp_outer.node
         else {
             panic!("outer iteration")
         };
-        let al::ast::ExpKind::Iter(exp_base, (al::ast::Iter::Opt, vars_inner)) = &exp_inner.node
+        let al::ast::ExpKind::Iter(
+            exp_base,
+            al::ast::ExpIter { iter: al::ast::Iter::Opt, vars: vars_inner },
+        ) = &exp_inner.node
         else {
             panic!("inner iteration")
         };

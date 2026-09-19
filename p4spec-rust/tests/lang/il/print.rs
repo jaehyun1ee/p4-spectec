@@ -31,11 +31,11 @@ fn test_printer_renders_nested_premises_and_definition_spec_goldens() {
         ],
     }, span: Span::default() };
     let group = p4spec_rust::phrase! {
-        node: (id("main"), vec![rule.clone()]),
+        node: ast::RuleGroupKind { id: id("main"), rules: vec![rule.clone()] },
         span: Span::default(),
     };
     let else_group = p4spec_rust::phrase! {
-        node: (id("fallback"), rule.clone()),
+        node: ast::ElseGroupKind { id: id("fallback"), rule: rule.clone() },
         span: Span::default(),
     };
     let clause = p4spec_rust::phrase! { node: ast::ClauseKind {
@@ -45,10 +45,10 @@ fn test_printer_renders_nested_premises_and_definition_spec_goldens() {
             exp: id_exp("debug"),
         }))],
     }, span: Span::default() };
-    let row = p4spec_rust::phrase! { node: (
-        vec![arg(ast::ArgKind::Exp(Box::new(id_exp("key"))))],
-        id_exp("value"),
-    ), span: Span::default() };
+    let row = p4spec_rust::phrase! { node: ast::TableRowKind {
+        args: vec![arg(ast::ArgKind::Exp(Box::new(id_exp("key"))))],
+        exp: id_exp("value"),
+    }, span: Span::default() };
     let defs = vec![
         p4spec_rust::phrase! { node: ast::DefKind::Typ(ast::TypDef::Extern(ast::ExternTyp {
             id: id("Syntax"),
@@ -61,14 +61,10 @@ fn test_printer_renders_nested_premises_and_definition_spec_goldens() {
                 span: Span::default(),
             }],
             def_typ: p4spec_rust::phrase! {
-                node: ast::DefTypKind::Variant(vec![(
-                    not_typ(),
-                    p4spec_rust::phrase! {
-                        node: (id("Origin"), vec![]),
+                node: ast::DefTypKind::Variant(vec![ast::TypCase { not_typ: not_typ(), typ_origin: p4spec_rust::phrase! {
+                        node: ast::TypOriginKind { id: id("Origin"), targs: vec![] },
                         span: Span::default(),
-                    },
-                    vec![],
-                )]),
+                    }, hints: vec![] }]),
                 span: Span::default(),
             },
             hints: vec![],

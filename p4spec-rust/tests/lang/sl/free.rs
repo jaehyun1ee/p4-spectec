@@ -27,7 +27,7 @@ fn typ() -> il::ast::Typ {
 }
 
 fn id_exp(name: &str) -> il::ast::Exp {
-    p4spec_rust::note_phrase!(node: p4spec_rust::lang::il::ast::ExpKind::Id(id(name)), note: il::ast::TypKind::Bool, span: span(name))
+    p4spec_rust::note_phrase!(node: il::ast::ExpKind::Id(id(name)), note: il::ast::TypKind::Bool, span: span(name))
 }
 
 fn instr(kind: sl::ast::InstrKind) -> sl::ast::Instr {
@@ -93,7 +93,10 @@ fn test_instructions_collect_nested_expressions_and_omit_binding_metadata() {
         (
             instr(sl::ast::InstrKind::If(sl::ast::IfInstr {
                 exp: id_exp("condition"),
-                iter_exps: vec![(il::ast::Iter::List, vec![binder.clone()])],
+                iter_exps: vec![il::ast::ExpIter {
+                    iter: il::ast::Iter::List,
+                    vars: vec![binder.clone()],
+                }],
                 block: vec![instr(sl::ast::InstrKind::Return(sl::ast::ReturnInstr {
                     exp: id_exp("then"),
                 }))],
@@ -105,7 +108,10 @@ fn test_instructions_collect_nested_expressions_and_omit_binding_metadata() {
             instr(sl::ast::InstrKind::Hold(sl::ast::HoldInstr {
                 id: id("relation"),
                 not_exp: Mixfix::Arg(id_exp("hold")),
-                iter_exps: vec![(il::ast::Iter::List, vec![binder.clone()])],
+                iter_exps: vec![il::ast::ExpIter {
+                    iter: il::ast::Iter::List,
+                    vars: vec![binder.clone()],
+                }],
                 hold_case: sl::ast::HoldCase::Hold(vec![hidden.clone()], false),
             })),
             names(&["hold"]),

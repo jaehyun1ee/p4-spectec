@@ -328,7 +328,7 @@ fn test_builtin_interface_print_preserves_spec_hints_after_clear() {
     use p4spec_rust::lang::{
         al::ast,
         common::notation::{atom::Atom, mixfix::Mixfix},
-        el,
+        el, il,
     };
 
     let span = Span::default();
@@ -338,11 +338,7 @@ fn test_builtin_interface_print_preserves_spec_hints_after_clear() {
         phrase!(node: el::ast::ExpKind::Text("shown".to_owned()), span: span.clone()),
         phrase!(node: el::ast::ExpKind::Hole(el::ast::Hole::Next), span: span.clone()),
     ]), span: span.clone());
-    let def_typ = phrase!(node: p4spec_rust::lang::il::ast::DefTypKind::Variant(vec![(
-        phrase!(node: notation, span: span.clone()),
-        phrase!(node: (id("Origin"), Vec::new()), span: span.clone()),
-        vec![(id("print"), hint)],
-    )]), span: span.clone());
+    let def_typ = phrase!(node: il::ast::DefTypKind::Variant(vec![il::ast::TypCase { not_typ: phrase!(node: notation, span: span.clone()), typ_origin: phrase!(node: il::ast::TypOriginKind { id: id("Origin"), targs: Vec::new() }, span: span.clone()), hints: vec![el::ast::Hint { id: id("print"), exp: hint }] }]), span: span.clone());
     let defined_typ =
         ast::DefinedTyp { id: id("Wrapper"), tparams: Vec::new(), def_typ, hints: Vec::new() };
     let def = ast::DefKind::Typ(ast::TypDef::Defined(Box::new(defined_typ)));

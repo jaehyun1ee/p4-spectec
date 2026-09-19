@@ -33,9 +33,9 @@ where
     Iface: Interface,
     Ext: Extern,
 {
-    let vars = &exp_iter.1;
-    let vars_outer = iter_vars(ctx, vars, exp_iter.0);
-    let value = match exp_iter.0 {
+    let vars = &exp_iter.vars;
+    let vars_outer = iter_vars(ctx, vars, exp_iter.iter);
+    let value = match exp_iter.iter {
         ast::Iter::Opt => {
             let values = unwrap_from_result!(
                 ctx.find_opt_values_by_var(runner_ctx.arena(), &vars_outer),

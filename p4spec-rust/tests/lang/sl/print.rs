@@ -63,13 +63,13 @@ fn instr(kind: sl::ast::InstrKind) -> sl::ast::Instr {
 }
 
 fn hint(source: &str) -> el::ast::Hint {
-    (
-        id("metadata"),
-        p4spec_rust::phrase! {
+    el::ast::Hint {
+        id: id("metadata"),
+        exp: p4spec_rust::phrase! {
             node: el::ast::ExpKind::Text(source.to_owned()),
             span: span(source),
         },
-    )
+    }
 }
 
 fn composite_spec(metadata: &str) -> sl::ast::Spec {

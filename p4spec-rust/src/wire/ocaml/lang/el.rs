@@ -458,12 +458,15 @@ fn encode_exp_kind(exp: &ExpKind) -> json {
 
 pub(super) fn decode_hint(json: &json) -> Result<ast::Hint, DecodeError> {
     let object = object(json)?;
-    Ok((decode_id(field(object, "hintid")?)?, decode_exp(field(object, "hintexp")?)?))
+    Ok(ast::Hint {
+        id: decode_id(field(object, "hintid")?)?,
+        exp: decode_exp(field(object, "hintexp")?)?,
+    })
 }
 
 pub(super) fn encode_hint(hint: &ast::Hint) -> json {
     json!({
-        "hintid": encode_id(&hint.0),
-        "hintexp": encode_exp(&hint.1),
+        "hintid": encode_id(&hint.id),
+        "hintexp": encode_exp(&hint.exp),
     })
 }

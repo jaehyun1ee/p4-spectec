@@ -69,8 +69,8 @@ fn test_iterator_filters_third_component_and_preserves_scope() {
     let iter_instr = iterator();
     assert!(
         replacer
-            .replace_iterexp((iter_instr.iter, iter_instr.vars_bound))
-            .1
+            .replace_iterexp(ExpIter { iter: iter_instr.iter, vars: iter_instr.vars_bound })
+            .vars
             .is_empty()
     );
     let mut instr_let = binding("x", vec![ret("x")]);
@@ -151,7 +151,7 @@ fn test_expression_paths_arguments_and_iterator_annotations() {
     };
     let iter_instr = iterator();
     let exp_iter = crate::note_phrase! {
-        node: ExpKind::Iter(Box::new(exp_update), (iter_instr.iter, iter_instr.vars_bound)),
+        node: ExpKind::Iter(Box::new(exp_update), ExpIter { iter: iter_instr.iter, vars: iter_instr.vars_bound }),
         note: TypKind::Bool, span: span(2)
     };
     let exp = crate::note_phrase! {
@@ -174,7 +174,7 @@ fn test_expression_paths_arguments_and_iterator_annotations() {
     assert_eq!(id_def.node, "x");
     let ArgKind::Exp(exp) = &args[0].node else { panic!("expected exp") };
     assert_eq!(exp.span, span(2));
-    let ExpKind::Iter(exp, (_, vars)) = &exp.node else { panic!("expected iter") };
+    let ExpKind::Iter(exp, ExpIter { vars, .. }) = &exp.node else { panic!("expected iter") };
     assert!(vars.is_empty());
     assert_eq!(exp.span, span(3));
     let ExpKind::Upd(exp_base, path, exp_field) = &exp.node else { panic!("expected update") };

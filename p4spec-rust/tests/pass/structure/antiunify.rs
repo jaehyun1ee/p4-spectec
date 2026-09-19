@@ -1,3 +1,4 @@
+use crate::lang::il::ast::ExpField;
 use crate::{
     lang::{
         al::ast::*,
@@ -124,7 +125,7 @@ fn test_incompatible_definition_arguments_are_typed() {
 
 fn record(exp: Exp, int_line: usize) -> Exp {
     let atom = crate::phrase! {node: crate::lang::common::notation::atom::Atom::Keyword("field".to_owned()), span: span(int_line)};
-    crate::note_phrase! {node: ExpKind::Str(vec![(atom, exp)]), note: TypKind::Bool, span: span(int_line)}
+    crate::note_phrase! {node: ExpKind::Str(vec![ExpField { atom, exp }]), note: TypKind::Bool, span: span(int_line)}
 }
 
 fn case(exp: Exp, int_line: usize) -> Exp {
@@ -177,13 +178,14 @@ fn test_iterated_template_preserves_bound_and_binding_variables() {
         typ: var_a.typ.clone(),
         iters: vec![],
     };
-    let exp_iter_a = crate::note_phrase! {node: ExpKind::Iter(Box::new(exp_a), (Iter::List, vec![var_a.clone()])), note: TypKind::Bool, span: span(1)};
-    let exp_iter_b = crate::note_phrase! {node: ExpKind::Iter(Box::new(exp_b), (Iter::List, vec![var_b.clone()])), note: TypKind::Bool, span: span(7)};
+    let exp_iter_a = crate::note_phrase! {node: ExpKind::Iter(Box::new(exp_a), ExpIter { iter: Iter::List, vars: vec![var_a.clone()] }), note: TypKind::Bool, span: span(1)};
+    let exp_iter_b = crate::note_phrase! {node: ExpKind::Iter(Box::new(exp_b), ExpIter { iter: Iter::List, vars: vec![var_b.clone()] }), note: TypKind::Bool, span: span(7)};
     let mut frees = exp_iter_a.free();
     exp_iter_b.free_into(&mut frees);
     let (exps_template, prems_by_rule_group, _) =
         antiunify_rule_matches(frees, &[vec![exp_iter_a], vec![exp_iter_b]], None).unwrap();
-    let ExpKind::Iter(exp_template, (iter, vars_template)) = &exps_template[0].node else {
+    let ExpKind::Iter(exp_template, ExpIter { iter, vars: vars_template }) = &exps_template[0].node
+    else {
         panic!("iter template")
     };
     assert_eq!(*iter, Iter::List);
@@ -276,8 +278,9 @@ fn test_conflicting_input_position_unifiers_are_typed() {
 fn test_record_field_disagreement_is_located() {
     let exp_a = record(id_exp("x", 2), 1);
     let mut exp_b = record(boolean(true, 8), 9);
-    let ExpKind::Str(expfields) = &mut exp_b.node else { panic!("record") };
-    expfields[0].0.node = crate::lang::common::notation::atom::Atom::Keyword("other".to_owned());
+    let ExpKind::Str(exp_fields) = &mut exp_b.node else { panic!("record") };
+    exp_fields[0].atom.node =
+        crate::lang::common::notation::atom::Atom::Keyword("other".to_owned());
     let error =
         antiunify_rule_matches(exp_a.free(), &[vec![exp_a], vec![exp_b]], None).unwrap_err();
     assert_eq!(error.kind, StructureErrorKind::Antiunification);

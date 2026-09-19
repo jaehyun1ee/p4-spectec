@@ -1,23 +1,24 @@
 use super::*;
+use crate::lang::il::ast::TypOriginKind;
 use crate::{
     pass::structure::{StructureErrorKind, totalize::*},
     runtime::{envs::algo::TDEnv, typdef::TypeDef},
 };
 fn variant(tdenv: &mut TDEnv, text: &str, texts: &[&str]) -> Typ {
     let typ = crate::phrase!(node: TypKind::Var(id(text), vec![]), span: span(2));
-    let typcases = texts
+    let typ_cases = texts
         .iter()
         .map(|text_case| {
             let mixop = crate::frontend::parse::parse_mixop(text_case).unwrap();
             let not_typ = crate::phrase!(node: mixop.map(|_| typ.clone()), span: span(3));
-            (not_typ, crate::phrase!(node: (id(text), vec![]), span: span(4)), vec![])
+            TypCase { not_typ, typ_origin: crate::phrase!(node: TypOriginKind { id: id(text), targs: vec![] }, span: span(4)), hints: vec![] }
         })
         .collect();
     tdenv.insert(
         id(text),
         TypeDef::Defined(
             vec![],
-            Box::new(crate::phrase!(node: DefTypKind::Variant(typcases), span: span(5))),
+            Box::new(crate::phrase!(node: DefTypKind::Variant(typ_cases), span: span(5))),
         ),
     );
     typ

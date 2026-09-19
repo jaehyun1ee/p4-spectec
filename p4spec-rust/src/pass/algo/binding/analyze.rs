@@ -542,7 +542,7 @@ fn analyze_rule_group(
 ) -> Result<al::ast::RuleGroup, AlgoError> {
     let mut ctx = ctx.clone();
     let span = rule_group_il.span;
-    let (id_group, rules_il) = rule_group_il.node;
+    let ast::RuleGroupKind { id: id_group, rules: rules_il } = rule_group_il.node;
     let mut ids = Vec::with_capacity(rules_il.len());
     let mut prems_by_rule_il = Vec::with_capacity(rules_il.len());
     let mut exps_input_by_rule_il = Vec::with_capacity(rules_il.len());
@@ -595,9 +595,9 @@ fn analyze_else_group(
     else_group_il: ast::ElseGroup,
 ) -> Result<al::ast::ElseGroup, AlgoError> {
     let span = else_group_il.span;
-    let (id_group, rule_il) = else_group_il.node;
+    let ast::ElseGroupKind { id: id_group, rule: rule_il } = else_group_il.node;
     let rule_group_il = phrase! {
-        node: (id_group, vec![rule_il]),
+        node: ast::RuleGroupKind { id: id_group, rules: vec![rule_il] },
         span: span.clone(),
     };
     let rule_group_al = analyze_rule_group(ctx, inputs, rule_group_il, true)?;
@@ -661,7 +661,7 @@ fn pattern_set_covered_by_typ(ctx: &Context, typ: &ast::Typ) -> Result<PatternSe
     };
     let pattern_set = cases
         .iter()
-        .map(|(not_typ, _, _)| not_typ.clone())
+        .map(|ast::TypCase { not_typ, .. }| not_typ.clone())
         .collect();
     Ok(pattern_set)
 }
@@ -743,7 +743,7 @@ fn analyze_table_row(
     let mut ctx = ctx.clone();
     ctx.add_frees(&row_il.free());
     let span = row_il.span;
-    let (args_il, exp_il) = row_il.node;
+    let ast::TableRowKind { args: args_il, exp: exp_il } = row_il.node;
     let (venv, args_input_al, prems_al) = analyze_args_as_bind_shallow(&mut ctx, &args_il, &span)?;
     ctx.add_bounds(&venv);
     analyze_args_as_bound_shallow(&ctx, &args_il)?;

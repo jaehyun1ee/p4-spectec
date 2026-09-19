@@ -72,10 +72,25 @@ pub enum DefTypKind {
     Variant(Vec<TypCase>),
 }
 
-pub type TypField = (Phrase<atom::Atom>, Typ);
+#[derive(Clone, Debug, PartialEq)]
+pub struct TypField {
+    pub atom: Atom,
+    pub typ: Typ,
+}
+
 pub type TypOrigin = Phrase<TypOriginKind>;
-pub type TypOriginKind = (Id, Vec<Targ>);
-pub type TypCase = (NotTyp, TypOrigin, Vec<Hint>);
+#[derive(Clone, Debug, PartialEq)]
+pub struct TypOriginKind {
+    pub id: Id,
+    pub targs: Vec<Targ>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct TypCase {
+    pub not_typ: NotTyp,
+    pub typ_origin: TypOrigin,
+    pub hints: Vec<Hint>,
+}
 
 // == Values
 
@@ -159,8 +174,18 @@ pub enum ExpKind<I = Id, V = Var> {
 }
 
 pub type NotExp<I = Id, V = Var> = Mixfix<Exp<I, V>>;
-pub type ExpField<I = Id, V = Var> = (Atom, Exp<I, V>);
-pub type ExpIter<V = Var> = (Iter, Vec<V>);
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ExpField<I = Id, V = Var> {
+    pub atom: Atom,
+    pub exp: Exp<I, V>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ExpIter<V = Var> {
+    pub iter: Iter,
+    pub vars: Vec<V>,
+}
 
 // Patterns
 
@@ -307,10 +332,20 @@ pub struct RuleKind {
 }
 
 pub type RuleGroup = Phrase<RuleGroupKind>;
-pub type RuleGroupKind = (Id, Vec<Rule>);
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct RuleGroupKind {
+    pub id: Id,
+    pub rules: Vec<Rule>,
+}
 
 pub type ElseGroup = Phrase<ElseGroupKind>;
-pub type ElseGroupKind = (Id, Rule);
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ElseGroupKind {
+    pub id: Id,
+    pub rule: Rule,
+}
 
 // Clauses
 
@@ -329,7 +364,12 @@ pub type ElseClauseKind = ClauseKind;
 // Table rows
 
 pub type TableRow = Phrase<TableRowKind>;
-pub type TableRowKind = (Vec<Arg>, Exp);
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct TableRowKind {
+    pub args: Vec<Arg>,
+    pub exp: Exp,
+}
 
 // Hints
 

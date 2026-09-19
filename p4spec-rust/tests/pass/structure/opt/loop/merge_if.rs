@@ -98,7 +98,7 @@ fn test_iterator_compatibility_and_partition_conditions_remain_separate() {
     let mut instr_a = branch(id_exp("p"), "a", 1);
     let mut instr_b = branch(id_exp("p"), "b", 2);
     if let InstrKind::If(instr_if) = &mut instr_a.node {
-        instr_if.iter_exps = vec![(Iter::List, vec![])];
+        instr_if.iter_exps = vec![ExpIter { iter: Iter::List, vars: vec![] }];
     }
     let block_input = vec![instr_a.clone(), instr_b.clone()];
     assert_eq!(
@@ -106,7 +106,7 @@ fn test_iterator_compatibility_and_partition_conditions_remain_separate() {
         block_input
     );
     if let InstrKind::If(instr_if) = &mut instr_b.node {
-        instr_if.iter_exps = vec![(Iter::List, vec![])];
+        instr_if.iter_exps = vec![ExpIter { iter: Iter::List, vars: vec![] }];
     }
     let block = merge_if::apply(&TDEnv::new(), &mut false, vec![instr_a, instr_b]).unwrap();
     assert_eq!(block.len(), 1);

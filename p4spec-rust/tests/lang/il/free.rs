@@ -49,7 +49,7 @@ fn exp(kind: ast::ExpKind) -> ast::Exp {
     }
 }
 fn id_exp(name: &str) -> ast::Exp {
-    p4spec_rust::note_phrase!(node: p4spec_rust::lang::il::ast::ExpKind::Id(id(name)), note: p4spec_rust::lang::il::ast::TypKind::Bool, span: span())
+    p4spec_rust::note_phrase!(node: ast::ExpKind::Id(id(name)), note: ast::TypKind::Bool, span: span())
 }
 fn atom(name: &str) -> ast::Atom {
     p4spec_rust::phrase! {
@@ -179,7 +179,10 @@ fn test_free_expression_variants_follow_the_oracle() {
         ("case", exp(ast::ExpKind::Case(Box::new(notexp("case")))), names(&["case"])),
         (
             "struct",
-            exp(ast::ExpKind::Str(vec![(atom("field"), id_exp("field_value"))])),
+            exp(ast::ExpKind::Str(vec![ast::ExpField {
+                atom: atom("field"),
+                exp: id_exp("field_value"),
+            }])),
             names(&["field_value"]),
         ),
         ("option_some", exp(ast::ExpKind::Opt(Some(Box::new(id_exp("some"))))), names(&["some"])),
@@ -252,7 +255,10 @@ fn test_free_expression_variants_follow_the_oracle() {
             "iteration_omits_binders",
             exp(ast::ExpKind::Iter(
                 Box::new(id_exp("iterated")),
-                (ast::Iter::List, vec![ast::Var { id: id("binder"), typ: typ(), iters: vec![] }]),
+                ast::ExpIter {
+                    iter: ast::Iter::List,
+                    vars: vec![ast::Var { id: id("binder"), typ: typ(), iters: vec![] }],
+                },
             )),
             names(&["iterated"]),
         ),
@@ -387,13 +393,13 @@ fn test_free_aggregates_and_definition_omissions_follow_the_oracle() {
     assert_eq!(rule.free(), names(&["head", "premise"]));
     assert_eq!(std::slice::from_ref(&rule).free(), names(&["head", "premise"]));
     let group = p4spec_rust::phrase! {
-        node: (id("group"), vec![rule.clone()]),
+        node: ast::RuleGroupKind { id: id("group"), rules: vec![rule.clone()] },
         span: span(),
     };
     assert_eq!(group.free(), names(&["head", "premise"]));
     assert_eq!(std::slice::from_ref(&group).free(), names(&["head", "premise"]));
     let else_group = p4spec_rust::phrase! {
-        node: (id("else"), rule.clone()),
+        node: ast::ElseGroupKind { id: id("else"), rule: rule.clone() },
         span: span(),
     };
     assert_eq!(else_group.free(), names(&["head", "premise"]));
@@ -405,10 +411,10 @@ fn test_free_aggregates_and_definition_omissions_follow_the_oracle() {
     assert_eq!(clause.free(), names(&["argument", "body", "premise"]));
     assert_eq!(Option::<ast::ElseClause>::None.free(), names(&[]));
     assert_eq!(Some(clause.clone()).free(), names(&["argument", "body", "premise"]));
-    let row = p4spec_rust::phrase! { node: (
-        vec![arg(ast::ArgKind::Exp(Box::new(id_exp("key"))))],
-        id_exp("value"),
-    ), span: span() };
+    let row = p4spec_rust::phrase! { node: ast::TableRowKind {
+        args: vec![arg(ast::ArgKind::Exp(Box::new(id_exp("key"))))],
+        exp: id_exp("value"),
+    }, span: span() };
     assert_eq!(row.free(), names(&["key", "value"]));
     assert_eq!(std::slice::from_ref(&row).free(), names(&["key", "value"]));
     let defs = vec![
@@ -529,10 +535,10 @@ fn assert_id_exp(exp: &ast::Exp, expected_id: &ast::Id, expected_ty: ast::TypKin
     assert_eq!(exp.span, expected_id.span);
 }
 fn assert_iter_type(typ: &ast::Typ, iter: ast::Iter, inner: ast::TypKind, inner_span: &Span) {
-    let ast::TypKind::Iter(inner_typ, actual_iter) = &typ.node else {
+    let ast::TypKind::Iter(inner_typ, iter_actual) = &typ.node else {
         panic!("expected iteration type")
     };
-    assert_eq!(*actual_iter, iter);
+    assert_eq!(*iter_actual, iter);
     assert_eq!(inner_typ.node, inner);
     assert_eq!(&inner_typ.span, inner_span);
 }
@@ -549,7 +555,9 @@ fn test_as_exp_preserves_empty_one_and_two_level_shapes_and_spans() {
         false,
         &ast::Var { id: id.clone(), typ: typ.clone(), iters: vec![ast::Iter::Opt] },
     );
-    let ast::ExpKind::Iter(inner, (ast::Iter::Opt, binders)) = &one_false.node else {
+    let ast::ExpKind::Iter(inner, ast::ExpIter { iter: ast::Iter::Opt, vars: binders }) =
+        &one_false.node
+    else {
         panic!("expected one false iteration")
     };
     assert!(binders.is_empty());
@@ -568,7 +576,9 @@ fn test_as_exp_preserves_empty_one_and_two_level_shapes_and_spans() {
         true,
         &ast::Var { id: id.clone(), typ: typ.clone(), iters: vec![ast::Iter::Opt] },
     );
-    let ast::ExpKind::Iter(inner, (ast::Iter::Opt, binders)) = &one_true.node else {
+    let ast::ExpKind::Iter(inner, ast::ExpIter { iter: ast::Iter::Opt, vars: binders }) =
+        &one_true.node
+    else {
         panic!("expected one true iteration")
     };
     let [binder] = binders.as_slice() else { panic!("expected one binder") };
@@ -596,7 +606,9 @@ fn test_as_exp_preserves_empty_one_and_two_level_shapes_and_spans() {
                 iters: vec![ast::Iter::Opt, ast::Iter::List],
             },
         );
-        let ast::ExpKind::Iter(exp_inner, (ast::Iter::List, vars_outer)) = &two.node else {
+        let ast::ExpKind::Iter(exp_inner, ast::ExpIter { iter: ast::Iter::List, vars: vars_outer }) =
+            &two.node
+        else {
             panic!("expected outer iteration")
         };
         assert_eq!(&two.span, &id.span);
@@ -609,7 +621,9 @@ fn test_as_exp_preserves_empty_one_and_two_level_shapes_and_spans() {
         };
         assert_eq!(first_inner_typ.node, ast::TypKind::Bool);
         assert_eq!(first_inner_typ.span, id.span);
-        let ast::ExpKind::Iter(exp_base, (ast::Iter::Opt, vars_inner)) = &exp_inner.node else {
+        let ast::ExpKind::Iter(exp_base, ast::ExpIter { iter: ast::Iter::Opt, vars: vars_inner }) =
+            &exp_inner.node
+        else {
             panic!("expected inner iteration")
         };
         assert_eq!(&exp_inner.span, &id.span);

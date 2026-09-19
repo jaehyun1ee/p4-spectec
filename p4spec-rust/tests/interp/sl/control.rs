@@ -180,9 +180,9 @@ fn optional_and_list_conditions_preserve_empty_iteration_semantics() {
         let id = phrase!(node: "n".to_owned(), span: Span::default());
         let var = ast::Var { id: id.clone(), typ: typ::make::nat(), iters: vec![] };
         let exp_id = p4spec_rust::note_phrase!(node: p4spec_rust::lang::il::ast::ExpKind::Id(id), note: typ::make::nat().node, span: Span::default());
-        let exp_l = note_phrase!(node: ast::ExpKind::Iter(Box::new(exp_id), (iter, vec![var.clone()])), note: typ::make::iter(typ::make::nat(), iter).node, span: Span::default());
+        let exp_l = note_phrase!(node: ast::ExpKind::Iter(Box::new(exp_id), ast::ExpIter { iter, vars: vec![var.clone()] }), note: typ::make::iter(typ::make::nat(), iter).node, span: Span::default());
         let exp_r = note_phrase!(node: if iter == ast::Iter::Opt { ast::ExpKind::Opt(None) } else { ast::ExpKind::List(vec![]) }, note: typ::make::iter(typ::make::nat(), iter).node, span: Span::default());
-        let instr_if = phrase!(node: ast::InstrKind::If(ast::IfInstr { exp: boolean(false), iter_exps: vec![(iter, vec![var])], block: vec![instr(exp(5))], dangle: true }), span: Span::default());
+        let instr_if = phrase!(node: ast::InstrKind::If(ast::IfInstr { exp: boolean(false), iter_exps: vec![ast::ExpIter { iter, vars: vec![var] }], block: vec![instr(exp(5))], dangle: true }), span: Span::default());
         let block = vec![
             phrase!(node: ast::InstrKind::Let(ast::LetInstr { exp_l, exp_r, iter_instrs: vec![], block: vec![instr_if, instr(exp(9))] }), span: Span::default()),
         ];
@@ -331,9 +331,9 @@ fn optional_condition_preserves_remaining_iterator_order_and_outer_bindings() {
             var_list.iters.push(ast::Iter::List);
             let exp = p4spec_rust::note_phrase!(node: p4spec_rust::lang::il::ast::ExpKind::Id(id.clone()), note: typ::make::bool().node, span: Span::default());
             let iter_exps = vec![
-                (ast::Iter::List, vec![var]),
-                (ast::Iter::List, vec![var_list]),
-                (ast::Iter::Opt, vec![]),
+                ast::ExpIter { iter: ast::Iter::List, vars: vec![var] },
+                ast::ExpIter { iter: ast::Iter::List, vars: vec![var_list] },
+                ast::ExpIter { iter: ast::Iter::Opt, vars: vec![] },
             ];
             for instr_cond in [
                 ast::InstrKind::If(ast::IfInstr {

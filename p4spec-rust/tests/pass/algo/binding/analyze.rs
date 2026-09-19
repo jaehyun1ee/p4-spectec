@@ -43,8 +43,8 @@ fn test_conversion_preserves_rule_paths_and_populates_antiunified_inputs_in_orde
         not_typ: relation_not_typ,
         input_hint: InputHint::new(vec![0]),
         rule_groups: vec![
-            crate::phrase! { node: (id("first_group", 1), rules_first), span:  span(1) },
-            crate::phrase! { node: (id("second_group", 8), rules_second), span:  span(8) },
+            crate::phrase! { node: ast::RuleGroupKind { id: id("first_group", 1), rules: rules_first }, span:  span(1) },
+            crate::phrase! { node: ast::RuleGroupKind { id: id("second_group", 8), rules: rules_second }, span:  span(8) },
         ],
         else_group: None,
         hints: vec![],
@@ -221,7 +221,7 @@ fn test_otherwise_clauses_and_rules_reject_impure_premises_at_the_branch_span() 
         not_typ: relation_not_typ,
         input_hint: InputHint::new(vec![0]),
         rule_groups: vec![],
-        else_group: Some(crate::phrase! { node: (id("else_group", 20), else_rule), span:  span(20) }),
+        else_group: Some(crate::phrase! { node: ast::ElseGroupKind { id: id("else_group", 20), rule: else_rule }, span:  span(20) }),
         hints: vec![],
     }))), span:
     span(20) }];
@@ -236,15 +236,15 @@ fn test_conversion_rejects_overlapping_and_missing_variant_table_patterns() {
     let choice_id = id("Choice", 1);
     let choice_typ =
         crate::phrase! { node: ast::TypKind::Var(choice_id.clone(), vec![]), span:  span(1) };
-    let origin = crate::phrase! { node: (choice_id.clone(), vec![]), span:  span(1) };
+    let origin = crate::phrase! { node: ast::TypOriginKind { id: choice_id.clone(), targs: vec![] }, span:  span(1) };
     let choice_def = crate::phrase! { node:
     ast::DefKind::Typ(ast::TypDef::Defined(Box::new(ast::DefinedTyp {
         id: choice_id,
         tparams: vec![],
         def_typ: crate::phrase! { node:
             ast::DefTypKind::Variant(vec![
-                (not_typ("A", 1), origin.clone(), vec![]),
-                (not_typ("B", 1), origin, vec![]),
+                ast::TypCase { not_typ: not_typ("A", 1), typ_origin: origin.clone(), hints: vec![] },
+                ast::TypCase { not_typ: not_typ("B", 1), typ_origin: origin, hints: vec![] },
             ]), span:
             span(1) },
         hints: vec![],
@@ -265,12 +265,12 @@ fn test_conversion_rejects_overlapping_and_missing_variant_table_patterns() {
     };
     let row = |pattern: ast::Exp, line: usize| {
         crate::phrase! { node:
-        (
-            vec![crate::phrase! { node:
+        ast::TableRowKind {
+            args: vec![crate::phrase! { node:
                 ast::ArgKind::Exp(Box::new(pattern)), span:
                 span(line) }],
-            exp(ast::ExpKind::Bool(true), ast::TypKind::Bool, line),
-        ), span:
+            exp: exp(ast::ExpKind::Bool(true), ast::TypKind::Bool, line),
+        }, span:
         span(line) }
     };
     let case_pattern = |name: &str, line: usize| {
@@ -305,15 +305,15 @@ fn test_conversion_preserves_definition_clause_and_table_row_order() {
     let choice_id = id("Choice", 2);
     let choice_typ =
         crate::phrase! { node: ast::TypKind::Var(choice_id.clone(), vec![]), span:  span(2) };
-    let origin = crate::phrase! { node: (choice_id.clone(), vec![]), span:  span(2) };
+    let origin = crate::phrase! { node: ast::TypOriginKind { id: choice_id.clone(), targs: vec![] }, span:  span(2) };
     let choice_def = crate::phrase! { node:
     ast::DefKind::Typ(ast::TypDef::Defined(Box::new(ast::DefinedTyp {
         id: choice_id,
         tparams: vec![],
         def_typ: crate::phrase! { node:
             ast::DefTypKind::Variant(vec![
-                (not_typ("A", 2), origin.clone(), vec![]),
-                (not_typ("B", 2), origin, vec![]),
+                ast::TypCase { not_typ: not_typ("A", 2), typ_origin: origin.clone(), hints: vec![] },
+                ast::TypCase { not_typ: not_typ("B", 2), typ_origin: origin, hints: vec![] },
             ]), span:
             span(2) },
         hints: vec![],
@@ -344,12 +344,12 @@ fn test_conversion_preserves_definition_clause_and_table_row_order() {
     let row = |name: &str, value: bool, line: usize| {
         let pattern = crate::note_phrase!(node: crate::lang::il::ast::ExpKind::Id(id(name, line)), note: choice_typ.node.clone(), span: span(line));
         crate::phrase! { node:
-        (
-            vec![crate::phrase! { node:
+        ast::TableRowKind {
+            args: vec![crate::phrase! { node:
                 ast::ArgKind::Exp(Box::new(pattern)), span:
                 span(line) }],
-            literal_index_exp(value, line),
-        ), span:
+            exp: literal_index_exp(value, line),
+        }, span:
         span(line) }
     };
     let table_def = crate::phrase! { node:

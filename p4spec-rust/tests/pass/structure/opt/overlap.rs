@@ -1,3 +1,4 @@
+use crate::lang::il::ast::TypOriginKind;
 use crate::{
     lang::{common::prim::bool as boolop, il::ast::*},
     note_phrase,
@@ -187,12 +188,12 @@ fn test_variant_alias_overlap_and_type_errors() {
     for (id, mixop) in [(id_a.clone(), mixop_a.clone()), (id_b.clone(), mixop_b.clone())] {
         let nottyp: Mixfix<Typ> =
             mixop.map(|_| crate::phrase!(node: TypKind::Bool, span: Default::default()));
-        let typcase = (
-            crate::phrase!(node: nottyp, span: Default::default()),
-            crate::phrase!(node: (id.clone(), vec![]), span: Default::default()),
-            vec![],
-        );
-        tdenv.insert(id, TypeDef::Defined(vec![], Box::new(crate::phrase!(node: DefTypKind::Variant(vec![typcase]), span: Default::default()))));
+        let typ_case = TypCase {
+            not_typ: crate::phrase!(node: nottyp, span: Default::default()),
+            typ_origin: crate::phrase!(node: TypOriginKind { id: id.clone(), targs: vec![] }, span: Default::default()),
+            hints: vec![],
+        };
+        tdenv.insert(id, TypeDef::Defined(vec![], Box::new(crate::phrase!(node: DefTypKind::Variant(vec![typ_case]), span: Default::default()))));
     }
     tdenv.insert(
         id_alias,

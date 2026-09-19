@@ -13,7 +13,7 @@ pub fn find_iter_var(ctx: &impl ReadContext, exp: &ast::Exp) -> Option<VarSlot> 
                 iters: vec![],
             },
         }),
-        ast::ExpKind::Iter(exp_inner, (iter, vars)) => {
+        ast::ExpKind::Iter(exp_inner, ast::ExpIter { iter, vars }) => {
             let [var] = vars.as_slice() else {
                 return None;
             };

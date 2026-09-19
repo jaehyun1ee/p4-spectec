@@ -50,15 +50,13 @@ fn plain(inner: ast::Typ) -> ast::DefTyp {
 fn variant(cases: Vec<ast::NotTyp>) -> ast::DefTyp {
     let cases = cases
         .into_iter()
-        .map(|not_typ| {
-            (
-                not_typ,
-                p4spec_rust::phrase! {
-                    node: (id("Origin"), vec![]),
-                    span: Span::default(),
-                },
-                vec![],
-            )
+        .map(|not_typ| ast::TypCase {
+            not_typ,
+            typ_origin: p4spec_rust::phrase! {
+                node: ast::TypOriginKind { id: id("Origin"), targs: vec![] },
+                span: Span::default(),
+            },
+            hints: vec![],
         })
         .collect();
     p4spec_rust::phrase! {

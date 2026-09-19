@@ -68,7 +68,7 @@ fn binding(
     .unwrap()
 }
 fn iter(exp_inner: ast::Exp, iter: ast::Iter, vars: Vec<ast::Var>) -> ast::Exp {
-    exp(ast::ExpKind::Iter(Box::new(exp_inner), (iter, vars)))
+    exp(ast::ExpKind::Iter(Box::new(exp_inner), ast::ExpIter { iter, vars }))
 }
 fn tuple(arena: &mut ValueArena, values: Vec<Value>) -> Value {
     make::tuple(arena, (typ::make::bool()).node.clone().into(), values, span(8)).unwrap()
@@ -426,8 +426,10 @@ fn test_case_and_struct_assignments_follow_argument_order() {
         make::case(&mut arena, (typ::make::bool()).node.clone().into(), value_case, span(8))
     }
     .unwrap();
-    let struct_exp =
-        exp(ast::ExpKind::Str(vec![(atom("a"), id_exp("x")), (atom("b"), id_exp("y"))]));
+    let struct_exp = exp(ast::ExpKind::Str(vec![
+        ast::ExpField { atom: atom("a"), exp: id_exp("x") },
+        ast::ExpField { atom: atom("b"), exp: id_exp("y") },
+    ]));
     let struct_value = {
         let fields =
             vec![(atom("b"), value(&mut arena, true)), (atom("a"), value(&mut arena, false))];

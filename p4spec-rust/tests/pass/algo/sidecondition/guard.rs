@@ -89,10 +89,11 @@ fn test_conversion_inserts_index_guards_at_evaluation_sites_in_source_order() {
 #[test]
 fn test_conversion_inserts_list_and_optional_iteration_guards_in_source_order() {
     fn dimension_name(exp: &ast::Exp, iter: ast::Iter) -> &str {
-        let ast::ExpKind::Iter(exp_inner, (actual_iter, _)) = &exp.node else {
+        let ast::ExpKind::Iter(exp_inner, ast::ExpIter { iter: iter_actual, .. }) = &exp.node
+        else {
             panic!("expected dimension expression");
         };
-        assert_eq!(*actual_iter, iter);
+        assert_eq!(*iter_actual, iter);
         let ast::ExpKind::Id(id) = &exp_inner.node else {
             panic!("expected dimension variable");
         };
@@ -547,12 +548,12 @@ fn test_conversion_traverses_relation_matches_paths_and_else_without_sibling_lea
             span(1) },
         input_hint: InputHint::new(vec![0]),
         rule_groups: vec![
-            crate::phrase! { node: (id("match_group", 9), vec![match_rule]), span:  span(9) },
+            crate::phrase! { node: ast::RuleGroupKind { id: id("match_group", 9), rules: vec![match_rule] }, span:  span(9) },
             crate::phrase! { node:
-                (id("sibling_group", 19), vec![first_sibling, second_sibling]), span:
+                ast::RuleGroupKind { id: id("sibling_group", 19), rules: vec![first_sibling, second_sibling] }, span:
                 span(19) },
         ],
-        else_group: Some(crate::phrase! { node: (id("else_group", 39), else_rule), span:  span(39) }),
+        else_group: Some(crate::phrase! { node: ast::ElseGroupKind { id: id("else_group", 39), rule: else_rule }, span:  span(39) }),
         hints: vec![],
     }))), span:
     span(1) }];

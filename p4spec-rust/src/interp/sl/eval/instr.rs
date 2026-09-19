@@ -415,7 +415,7 @@ fn eval_cond_iter<Iface: Interface, Ext: Extern>(
     let Some((exp_iter, iters_tail)) = iters.split_last() else {
         return eval(runner_ctx, ctx);
     };
-    let (iter, vars) = exp_iter;
+    let ast::ExpIter { iter, vars } = exp_iter;
     let vars_outer = iter_vars(ctx, vars, *iter);
     match iter {
         ast::Iter::Opt => {

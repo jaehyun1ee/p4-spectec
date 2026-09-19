@@ -137,7 +137,7 @@ impl Replacer {
             ExpKind::Str(exp_fields) => ExpKind::Str(
                 exp_fields
                     .into_iter()
-                    .map(|(atom, exp)| (atom, self.replace_exp(exp)))
+                    .map(|ExpField { atom, exp }| ExpField { atom, exp: self.replace_exp(exp) })
                     .collect(),
             ),
             ExpKind::Opt(exp) => ExpKind::Opt(exp.map(|exp| Box::new(self.replace_exp(*exp)))),
@@ -170,8 +170,8 @@ impl Replacer {
                 Box::new(self.replace_exp(*exp_field)),
             ),
             ExpKind::Call(id, targs, args) => ExpKind::Call(id, targs, self.replace_args(args)),
-            ExpKind::Iter(exp, iter_exp) => {
-                ExpKind::Iter(Box::new(self.replace_exp(*exp)), self.replace_iterexp(iter_exp))
+            ExpKind::Iter(exp, exp_iter) => {
+                ExpKind::Iter(Box::new(self.replace_exp(*exp)), self.replace_iterexp(exp_iter))
             }
         };
         note_phrase!(node: exp_kind, note: exp.note, span: exp.span)
@@ -193,15 +193,15 @@ impl Replacer {
 
     // == Expression iterators
 
-    pub(crate) fn replace_iterexp(&self, iter_exp: ExpIter) -> ExpIter {
-        let (iter, vars) = iter_exp;
-        (iter, self.filter_vars(vars))
+    pub(crate) fn replace_iterexp(&self, exp_iter: ExpIter) -> ExpIter {
+        let ExpIter { iter, vars } = exp_iter;
+        ExpIter { iter, vars: self.filter_vars(vars) }
     }
 
     pub(crate) fn replace_iterexps(&self, iter_exps: Vec<ExpIter>) -> Vec<ExpIter> {
         iter_exps
             .into_iter()
-            .map(|iter_exp| self.replace_iterexp(iter_exp))
+            .map(|exp_iter| self.replace_iterexp(exp_iter))
             .collect()
     }
 

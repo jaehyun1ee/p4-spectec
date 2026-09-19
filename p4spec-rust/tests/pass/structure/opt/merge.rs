@@ -5,7 +5,7 @@ use crate::pass::structure::{ol::ast::*, opt::merge::merge_blocks};
 fn if_instr(text_cond: &str, iter: Iter, block: Block, num_line: usize) -> Instr {
     let mut instr_if = instr(InstrKind::If(IfInstr {
         exp: id_exp(text_cond),
-        iter_exps: vec![(iter, vec![])],
+        iter_exps: vec![ExpIter { iter, vars: vec![] }],
         block,
     }));
     instr_if.span = span(num_line);

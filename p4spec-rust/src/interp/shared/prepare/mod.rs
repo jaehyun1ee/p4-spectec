@@ -4,7 +4,6 @@ pub mod expr;
 
 use crate::lang::common::{Id, notation::mixfix::Mixfix, source::NotePhrase};
 use crate::lang::data::var::{IdSlot, Var, VarSlot};
-use crate::lang::il::ast::Atom;
 use crate::runtime::envs::interp::shared::frame::FrameLayout;
 
 pub trait Prepare: Sized {
@@ -88,14 +87,6 @@ impl<T: Prepare> Prepare for Mixfix<T> {
             }
             Mixfix::Seq(mixfixes) => Mixfix::Seq(mixfixes.prepare(layout)),
         }
-    }
-}
-
-impl<T: Prepare> Prepare for (Atom, T) {
-    type Output = (Atom, T::Output);
-
-    fn prepare(self, layout: &mut FrameLayout) -> Self::Output {
-        (self.0, self.1.prepare(layout))
     }
 }
 

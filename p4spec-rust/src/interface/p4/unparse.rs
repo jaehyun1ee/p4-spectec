@@ -14,7 +14,7 @@ use crate::{
         common::notation::{atom::Atom, mixfix::Mixfix, mixop::Mixop},
         common::prim::num::Number,
         hints::alter::{self, AlterationHint, Renderer},
-        il::ast::{DefTypKind, TypKind},
+        il::ast::{DefTypKind, Hint, TypCase, TypKind},
         sl,
         traits::print::Print,
     },
@@ -38,14 +38,14 @@ fn insert_case_hints(
     let DefTypKind::Variant(cases) = &def_typ.node else {
         return;
     };
-    for (notation, _, case_hints) in cases {
-        let Some((_, exp)) = case_hints.iter().find(|(id, _)| id.node == "print") else {
+    for TypCase { not_typ, hints: hints_case, .. } in cases {
+        let Some(Hint { exp, .. }) = hints_case.iter().find(|hint| hint.id.node == "print") else {
             continue;
         };
         let Some(hint) = alter::init(exp) else {
             continue;
         };
-        hints.insert((type_id.to_owned(), notation.node.to_mixop()), hint);
+        hints.insert((type_id.to_owned(), not_typ.node.to_mixop()), hint);
     }
 }
 

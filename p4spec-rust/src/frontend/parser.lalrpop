@@ -140,10 +140,10 @@ DefCore: ast::Def = {
     // DefCore ::= RuleRule
     <l:@L> <rule:RuleRule> => {
         let r = rule.span.right.clone();
-        let (relid, groupid, _, _) = rule.node.clone();
+        let ast::RuleKind { id_rel, id_rule, .. } = rule.node.clone();
         let kind = DefKind::RuleGroup(RuleGroupDef {
-            relid,
-            groupid,
+            relid: id_rel,
+            groupid: id_rule,
             rules: vec![rule],
         });
         crate::phrase! {
@@ -1013,9 +1013,9 @@ NotTyp: ast::NotTyp = {
 
 FieldTyp: ast::TypField = {
     // FieldTyp ::= FieldId SEQ PlainTyp Hints
-    <field:FieldId> "SEQ" <plain_typ:PlainTyp> <hints:Hints> => {
+    <atom:FieldId> "SEQ" <plain_typ:PlainTyp> <hints:Hints> => {
         let hints = hints.into_iter().map(|hint| hint.node).collect();
-        (field, plain_typ, hints)
+        ast::TypField { atom, typ: plain_typ, hints }
     },
 };
 
@@ -1072,18 +1072,18 @@ DefTyp: ast::DefTyp = {
             .or_else(|| cases.last().map(|(_, _, r)| r.clone()))
             .unwrap_or_else(|| ctx.position(bar_r));
         let actual_r_location = ctx.location(actual_r.clone());
-        let cases: Vec<(Typ, Vec<ast::Hint>)> = cases
+        let cases: Vec<ast::TypCase> = cases
             .into_iter()
-            .map(|(typ, hints, _)| (typ, hints))
+            .map(|(typ, hints, _)| ast::TypCase { typ, hints })
             .collect();
         let kind = if cases.is_empty() {
             Err(SyntaxErrorKind::EmptyVariantType)
         } else if cases
             .iter()
-            .any(|(typ, hints)| matches!(typ, Typ::Plain(_)) && !hints.is_empty())
+            .any(|ast::TypCase { typ, hints }| matches!(typ, Typ::Plain(_)) && !hints.is_empty())
         {
             Err(SyntaxErrorKind::HintsInPlainTypeDefinition)
-        } else if let [(Typ::Plain(plain_typ), _)] = cases.as_slice() {
+        } else if let [ast::TypCase { typ: Typ::Plain(plain_typ), .. }] = cases.as_slice() {
             Ok(DefTypKind::Plain(plain_typ.clone()))
         } else {
             Ok(DefTypKind::Variant(cases))
@@ -1109,18 +1109,18 @@ DefTyp: ast::DefTyp = {
             .or_else(|| cases.last().map(|(_, _, r)| r.clone()))
             .expect("a non-empty case type list has a closing position");
         let actual_r_location = ctx.location(actual_r.clone());
-        let cases: Vec<(Typ, Vec<ast::Hint>)> = cases
+        let cases: Vec<ast::TypCase> = cases
             .into_iter()
-            .map(|(typ, hints, _)| (typ, hints))
+            .map(|(typ, hints, _)| ast::TypCase { typ, hints })
             .collect();
         let kind = if cases.is_empty() {
             Err(SyntaxErrorKind::EmptyType)
         } else if cases
             .iter()
-            .any(|(typ, hints)| matches!(typ, Typ::Plain(_)) && !hints.is_empty())
+            .any(|ast::TypCase { typ, hints }| matches!(typ, Typ::Plain(_)) && !hints.is_empty())
         {
             Err(SyntaxErrorKind::HintsInPlainTypeDefinition)
-        } else if let [(Typ::Plain(plain_typ), _)] = cases.as_slice() {
+        } else if let [ast::TypCase { typ: Typ::Plain(plain_typ), .. }] = cases.as_slice() {
             Ok(DefTypKind::Plain(plain_typ.clone()))
         } else {
             Ok(DefTypKind::Variant(cases))
@@ -2913,7 +2913,7 @@ Hint: Phrase<ast::Hint> = {
             span: ctx.span(id_l, id_r),
         };
         crate::phrase! {
-            node: (id, exp),
+            node: ast::Hint { id, exp },
             span: ctx.span(l, r),
         }
     },
@@ -2930,7 +2930,7 @@ Hint: Phrase<ast::Hint> = {
             span: id.span.clone(),
         };
         crate::phrase! {
-            node: (id, exp),
+            node: ast::Hint { id, exp },
             span: ctx.span(l, r),
         }
     },
@@ -2948,10 +2948,10 @@ TableBody: Vec<ast::TableRow> = {
 
 TableRow: ast::TableRow = {
     // TableRow ::= TablePattern DOUBLE_ARROW ExpBin
-    <pattern:TablePattern> "DOUBLE_ARROW" <body:ExpBin> => {
-        let span = Span::new(pattern.span.left.clone(), body.span.right.clone());
+    <exp_pattern:TablePattern> "DOUBLE_ARROW" <exp_body:ExpBin> => {
+        let span = Span::new(exp_pattern.span.left.clone(), exp_body.span.right.clone());
         crate::phrase! {
-            node: (pattern, body),
+            node: ast::TableRowKind { exp_pattern, exp_body },
             span: span,
         }
     },
@@ -3006,27 +3006,27 @@ ExpSeqTail: (bool, ast::Exp) = {
 
 RuleRule: ast::Rule = {
     // RuleRule ::= RULE RelId RuleIds COLON Exp PremList
-    <l:@L> "RULE" <relid:RelId> <ruleids:RuleIds> "COLON" <exp:Exp>
-        <premises:PremList> => {
-            let groupid = if ruleids.node.is_empty() {
+    <l:@L> "RULE" <id_rel:RelId> <id_rule_raw:RuleIds> "COLON" <exp:Exp>
+        <prems:PremList> => {
+            let id_rule = if id_rule_raw.node.is_empty() {
                 String::new()
             } else {
-                ruleids.node[1..].to_owned()
+                id_rule_raw.node[1..].to_owned()
             };
-            let groupid = crate::phrase! {
-                node: groupid,
-                span: ruleids.span,
+            let id_rule = crate::phrase! {
+                node: id_rule,
+                span: id_rule_raw.span,
             };
-            let r = premises
+            let r = prems
                 .last()
                 .map(|prem| prem.span.right.clone())
                 .unwrap_or_else(|| exp.span.right.clone());
-            let premises = premises
+            let prems = prems
                 .into_iter()
                 .filter_map(|prem| prem.node)
                 .collect();
             crate::phrase! {
-                node: (relid, groupid, exp, premises),
+                node: ast::RuleKind { id_rel, id_rule, exp, prems },
                 span: Span::new(ctx.position(l), r),
             }
         },

@@ -136,7 +136,10 @@ fn test_prettification_matches_syntax_fixed_point_with_shadowing_and_iterators()
                 instr_let.iter_instrs = vec![iterator(text_input, text_bound)];
                 let instr_if = instr(InstrKind::If(IfInstr {
                     exp: id_exp("condition"),
-                    iter_exps: vec![(Iter::List, iterator(text_input, text_bound).vars_bound)],
+                    iter_exps: vec![ExpIter {
+                        iter: Iter::List,
+                        vars: iterator(text_input, text_bound).vars_bound,
+                    }],
                     block: vec![instr_binding],
                 }));
                 let block = vec![instr_if];

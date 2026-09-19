@@ -188,7 +188,13 @@ fn test_nested_iterators_are_internalized_inside_out() {
     let spec_sl = convert(vec![function(vec![clause(vec![prem], 5)], None)], true).unwrap();
     let def_func_sl = function_sl(&spec_sl[0]);
     let sl::InstrKind::If(instr_if) = &def_func_sl.block[0].node else { panic!("if") };
-    assert_eq!(instr_if.iter_exps, vec![(al::Iter::Opt, vec![]), (al::Iter::List, vec![])]);
+    assert_eq!(
+        instr_if.iter_exps,
+        vec![
+            al::ExpIter { iter: al::Iter::Opt, vars: vec![] },
+            al::ExpIter { iter: al::Iter::List, vars: vec![] }
+        ]
+    );
     assert_eq!(def_func_sl.block[0].span, span(7));
 }
 

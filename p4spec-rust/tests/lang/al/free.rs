@@ -46,7 +46,10 @@ fn test_free_expression_path_argument_and_premise_variants_collect_identifier_te
         ),
         (expr(il::ast::ExpKind::Tuple(vec![id_exp("x")])), ids(&["x"])),
         (expr(il::ast::ExpKind::Case(Box::new(not_exp("x")))), ids(&["x"])),
-        (expr(il::ast::ExpKind::Str(vec![(atom(), id_exp("x"))])), ids(&["x"])),
+        (
+            expr(il::ast::ExpKind::Str(vec![il::ast::ExpField { atom: atom(), exp: id_exp("x") }])),
+            ids(&["x"]),
+        ),
         (expr(il::ast::ExpKind::Opt(Some(x()))), ids(&["x"])),
         (expr(il::ast::ExpKind::Opt(None)), ids(&[])),
         (expr(il::ast::ExpKind::List(vec![id_exp("x")])), ids(&["x"])),
@@ -59,7 +62,13 @@ fn test_free_expression_path_argument_and_premise_variants_collect_identifier_te
         (expr(il::ast::ExpKind::Slice(x(), x(), x())), ids(&["x"])),
         (expr(il::ast::ExpKind::Upd(x(), Box::new(path_with("x")), x())), ids(&["x"])),
         (expr(il::ast::ExpKind::Call(id("call"), Vec::new(), vec![arg_exp("x")])), ids(&["x"])),
-        (expr(il::ast::ExpKind::Iter(x(), (il::ast::Iter::List, Vec::new()))), ids(&["x"])),
+        (
+            expr(il::ast::ExpKind::Iter(
+                x(),
+                il::ast::ExpIter { iter: il::ast::Iter::List, vars: Vec::new() },
+            )),
+            ids(&["x"]),
+        ),
     ];
     for (exp, expected) in exps {
         assert_eq!(exp.free(), expected);

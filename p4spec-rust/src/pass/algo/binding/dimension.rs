@@ -58,7 +58,7 @@ fn infer_exp_inner(venv: &mut VEnv, exp: &ast::Exp, iters: &[ast::Iter]) {
             }
         }
         ast::ExpKind::Str(fields) => {
-            for (_, exp) in fields {
+            for ast::ExpField { exp, .. } in fields {
                 infer_exp_inner(venv, exp, iters);
             }
         }
@@ -75,7 +75,7 @@ fn infer_exp_inner(venv: &mut VEnv, exp: &ast::Exp, iters: &[ast::Iter]) {
             infer_exp_inner(venv, exp_field, iters);
         }
         ast::ExpKind::Call(_, _, args) => infer_args_inner(venv, args, iters),
-        ast::ExpKind::Iter(exp, (iter, _)) => {
+        ast::ExpKind::Iter(exp, ast::ExpIter { iter, .. }) => {
             let mut iters_inner = Vec::with_capacity(iters.len() + 1);
             iters_inner.push(*iter);
             iters_inner.extend_from_slice(iters);

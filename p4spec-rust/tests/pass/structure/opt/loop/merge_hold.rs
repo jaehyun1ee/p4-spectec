@@ -44,7 +44,7 @@ fn test_condition_iterator_and_barrier_mismatch() {
         match idx {
             0 => instr_hold.id = id("other"),
             1 => instr_hold.not_exp = Mixfix::Arg(id_exp("other")),
-            _ => instr_hold.iter_exps = vec![(Iter::List, vec![])],
+            _ => instr_hold.iter_exps = vec![ExpIter { iter: Iter::List, vars: vec![] }],
         };
         let block = vec![instr_a.clone(), instr_b];
         assert_eq!(apply(&mut false, block.clone()), block);
@@ -70,7 +70,7 @@ fn nested(block: Block) -> Block {
     let block = vec![hold(block.clone(), block)];
     vec![instr(InstrKind::If(IfInstr {
         exp: id_exp("condition"),
-        iter_exps: vec![(Iter::List, vec![])],
+        iter_exps: vec![ExpIter { iter: Iter::List, vars: vec![] }],
         block,
     }))]
 }

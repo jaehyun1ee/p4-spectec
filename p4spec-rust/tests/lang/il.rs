@@ -51,18 +51,18 @@ fn names(names: &[&str]) -> IdSet {
     names.iter().map(|name| id(name)).collect()
 }
 fn hint() -> ast::Hint {
-    (
-        p4spec_rust::phrase! {
+    ast::Hint {
+        id: p4spec_rust::phrase! {
             node: "meta".into(),
             span: Span::default(),
         },
-        p4spec_rust::phrase! { node: p4spec_rust::lang::el::ast::ExpKind::Id(
+        exp: p4spec_rust::phrase! { node: p4spec_rust::lang::el::ast::ExpKind::Id(
             p4spec_rust::phrase! {
                 node: "payload".into(),
                 span: Span::default(),
             },
         ), span: Span::default() },
-    )
+    }
 }
 
 #[path = "il/free.rs"]

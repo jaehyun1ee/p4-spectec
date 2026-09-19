@@ -107,7 +107,7 @@ fn remove_group_instr(instr_ol: GroupInstr, span: Span) -> Result<Block, Structu
 
 /// Recognizes one iteration around a variable, such as `x*` or `x?`
 fn iterated_id_exp(exp: &Exp) -> Option<(&Id, &Iter)> {
-    let ExpKind::Iter(exp, (iter, _)) = &exp.node else {
+    let ExpKind::Iter(exp, ExpIter { iter, .. }) = &exp.node else {
         return None;
     };
     let ExpKind::Id(id) = &exp.node else {

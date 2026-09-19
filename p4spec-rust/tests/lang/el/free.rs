@@ -58,17 +58,17 @@ fn test_free_collection_covers_paths_calls_premises_and_definition_bodies() {
         }))),
         iter: ast::Iter::List,
     }));
-    let rule = p4spec_rust::phrase! { node: (
-        id("relation", "rule.watsup"),
-        id("", "rule.watsup"),
-        exp_upd.clone(),
-        vec![
+    let rule = p4spec_rust::phrase! { node: ast::RuleKind {
+        id_rel: id("relation", "rule.watsup"),
+        id_rule: id("", "rule.watsup"),
+        exp: exp_upd.clone(),
+        prems: vec![
             iteration,
             prem(ast::PremKind::If(ast::IfPrem {
                 exp: id_exp("guard"),
             })),
         ],
-    ), span: span("rule.watsup") };
+    }, span: span("rule.watsup") };
     let def_func = definition(ast::DefKind::FuncDef(ast::FuncDef {
         id: id("function", "def.watsup"),
         tparams: vec![p4spec_rust::phrase! {

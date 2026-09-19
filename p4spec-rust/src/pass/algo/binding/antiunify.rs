@@ -124,14 +124,15 @@ fn overlap_exp_kind(
         {
             overlap_case_exp(tdenv, menv, ids_free, ids_unifier, not_exp_template, not_exp)
         }
-        (ast::ExpKind::Str(expfields_template), ast::ExpKind::Str(expfields))
-            if expfields_template.len() == expfields.len()
-                && expfields_template
-                    .iter()
-                    .zip(expfields)
-                    .all(|((atom_template, _), (atom, _))| atom_template.syntax_eq(atom)) =>
+        (ast::ExpKind::Str(exp_fields_template), ast::ExpKind::Str(exp_fields))
+            if exp_fields_template.len() == exp_fields.len()
+                && exp_fields_template.iter().zip(exp_fields).all(
+                    |(ast::ExpField { atom: atom_template, .. }, ast::ExpField { atom, .. })| {
+                        atom_template.syntax_eq(atom)
+                    },
+                ) =>
         {
-            overlap_str_exp(tdenv, menv, ids_free, ids_unifier, expfields_template, expfields)
+            overlap_str_exp(tdenv, menv, ids_free, ids_unifier, exp_fields_template, exp_fields)
         }
         _ => {
             let error = AlgoError::new(AlgoErrorKind::AntiUnification, exp.span.clone());
@@ -197,18 +198,21 @@ fn overlap_str_exp(
     menv: &MEnv,
     ids_free: &mut IdSet,
     ids_unifier: &mut IdSet,
-    expfields_template: &[ast::ExpField],
-    expfields: &[ast::ExpField],
+    exp_fields_template: &[ast::ExpField],
+    exp_fields: &[ast::ExpField],
 ) -> Result<ast::ExpKind, AlgoError> {
-    let exps_template = expfields_template.iter().map(|(_, exp)| exp);
-    let exps = expfields.iter().map(|(_, exp)| exp);
-    let exps_template = overlap_exps(tdenv, menv, ids_free, ids_unifier, exps_template, exps)?;
-    let expfields_template = expfields_template
+    let exps_template = exp_fields_template
         .iter()
-        .map(|(atom, _)| atom.clone())
+        .map(|ast::ExpField { exp, .. }| exp);
+    let exps = exp_fields.iter().map(|ast::ExpField { exp, .. }| exp);
+    let exps_template = overlap_exps(tdenv, menv, ids_free, ids_unifier, exps_template, exps)?;
+    let exp_fields_template = exp_fields_template
+        .iter()
+        .map(|ast::ExpField { atom, .. }| atom.clone())
         .zip(exps_template)
+        .map(|(atom, exp)| ast::ExpField { atom, exp })
         .collect();
-    Ok(ast::ExpKind::Str(expfields_template))
+    Ok(ast::ExpKind::Str(exp_fields_template))
 }
 
 // - Expressions across rules
@@ -292,9 +296,11 @@ fn populate_exp(ids_unifier: &IdSet, exp_template: &ast::Exp, exp: &ast::Exp) ->
             let exps = not_exp.args();
             populate_exps(ids_unifier, exps_template.into_iter(), exps.into_iter())
         }
-        (ast::ExpKind::Str(expfields_template), ast::ExpKind::Str(expfields)) => {
-            let exps_template = expfields_template.iter().map(|(_, exp)| exp);
-            let exps = expfields.iter().map(|(_, exp)| exp);
+        (ast::ExpKind::Str(exp_fields_template), ast::ExpKind::Str(exp_fields)) => {
+            let exps_template = exp_fields_template
+                .iter()
+                .map(|ast::ExpField { exp, .. }| exp);
+            let exps = exp_fields.iter().map(|ast::ExpField { exp, .. }| exp);
             populate_exps(ids_unifier, exps_template, exps)
         }
         _ => {

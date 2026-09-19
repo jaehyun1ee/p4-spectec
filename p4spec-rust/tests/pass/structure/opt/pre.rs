@@ -15,7 +15,7 @@ fn binding(exp_l: Exp, exp_r: Exp, block: Block) -> Instr {
 }
 
 fn iterated(text: &str, iter: Iter) -> Exp {
-    crate::note_phrase! {node: ExpKind::Iter(Box::new(id_exp(text)), (iter, vec![])), note: TypKind::Bool, span: span(4)}
+    crate::note_phrase! {node: ExpKind::Iter(Box::new(id_exp(text)), ExpIter { iter, vars: vec![] }), note: TypKind::Bool, span: span(4)}
 }
 
 #[path = "pre/matchify_if_eq_terminal.rs"]
@@ -45,13 +45,13 @@ fn containers(block: Block) -> Block {
     vec![
         instr(InstrKind::If(IfInstr {
             exp: id_exp("condition"),
-            iter_exps: vec![(Iter::Opt, vec![])],
+            iter_exps: vec![ExpIter { iter: Iter::Opt, vars: vec![] }],
             block: block.clone(),
         })),
         instr(InstrKind::Hold(HoldInstr {
             id: id("relation"),
             not_exp: Mixfix::Arg(id_exp("input")),
-            iter_exps: vec![(Iter::List, vec![])],
+            iter_exps: vec![ExpIter { iter: Iter::List, vars: vec![] }],
             block_hold: block.clone(),
             block_not_hold: block.clone(),
         })),

@@ -85,7 +85,7 @@ impl Free for ExpKind {
             Self::Tuple(exps) | Self::List(exps) => exps.as_slice().free_into(free),
             Self::Case(not_exp) => not_exp.free_into(free),
             Self::Str(fields) => {
-                for (_, exp) in fields {
+                for ExpField { exp, .. } in fields {
                     exp.free_into(free);
                 }
             }
@@ -238,13 +238,13 @@ impl Free for RuleKind {
 
 impl Free for RuleGroupKind {
     fn free_into(&self, free: &mut IdSet) {
-        self.1.as_slice().free_into(free);
+        self.rules.as_slice().free_into(free);
     }
 }
 
 impl Free for ElseGroupKind {
     fn free_into(&self, free: &mut IdSet) {
-        self.1.free_into(free);
+        self.rule.free_into(free);
     }
 }
 
@@ -262,8 +262,8 @@ impl Free for ClauseKind {
 
 impl Free for TableRowKind {
     fn free_into(&self, free: &mut IdSet) {
-        self.0.as_slice().free_into(free);
-        self.1.free_into(free);
+        self.args.as_slice().free_into(free);
+        self.exp.free_into(free);
     }
 }
 

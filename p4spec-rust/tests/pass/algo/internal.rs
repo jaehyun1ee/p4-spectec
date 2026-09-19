@@ -58,7 +58,7 @@ fn typed_id_exp(name: &str, typ: &ast::Typ, line: usize) -> ast::Exp {
 fn iterated_id_exp(name: &str, typ: &ast::Typ, iter: ast::Iter, line: usize) -> ast::Exp {
     let exp_inner = typed_id_exp(name, typ, line);
     exp(
-        ast::ExpKind::Iter(Box::new(exp_inner), (iter, vec![])),
+        ast::ExpKind::Iter(Box::new(exp_inner), ast::ExpIter { iter, vars: vec![] }),
         ast::TypKind::Iter(Box::new(typ.clone()), iter),
         line,
     )
@@ -133,7 +133,7 @@ fn joint_iteration(names: &[(&str, usize)], iter: ast::Iter, line: usize) -> ast
     let typ_tuple = crate::phrase! { node: ast::TypKind::Tuple(vec![typ_bool; names.len()]), span:  span(line) };
     let exp_inner = exp(ast::ExpKind::Tuple(exps), typ_tuple.node.clone(), line);
     exp(
-        ast::ExpKind::Iter(Box::new(exp_inner), (iter, vars)),
+        ast::ExpKind::Iter(Box::new(exp_inner), ast::ExpIter { iter, vars }),
         ast::TypKind::Iter(Box::new(typ_tuple), iter),
         line,
     )

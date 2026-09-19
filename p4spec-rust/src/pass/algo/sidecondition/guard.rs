@@ -361,8 +361,8 @@ fn gen_exp_and(exp_l_al: ast::Exp, exp_r_al: ast::Exp) -> ast::Exp {
     }
 }
 
-fn gen_iter_guard(iter_exp: &ast::ExpIter) -> Vec<ast::Prem> {
-    let (iter, vars) = iter_exp;
+fn gen_iter_guard(exp_iter: &ast::ExpIter) -> Vec<ast::Prem> {
+    let ast::ExpIter { iter, vars } = exp_iter;
     if vars.len() < 2 {
         return vec![];
     }
@@ -417,7 +417,9 @@ fn collect_exp(exp_al: &ast::Exp) -> Vec<ast::Prem> {
         }
         ast::ExpKind::Tuple(exps_al) | ast::ExpKind::List(exps_al) => collect_exps(exps_al.iter()),
         ast::ExpKind::Case(not_exp) => collect_exps(not_exp.args()),
-        ast::ExpKind::Str(fields) => collect_exps(fields.iter().map(|(_, exp)| exp)),
+        ast::ExpKind::Str(fields) => {
+            collect_exps(fields.iter().map(|ast::ExpField { exp, .. }| exp))
+        }
         ast::ExpKind::Opt(Some(exp_inner_al)) => collect_exp(exp_inner_al),
         ast::ExpKind::Opt(None) => vec![],
         ast::ExpKind::Idx(exp_base_al, exp_idx_al) => {
@@ -445,10 +447,10 @@ fn collect_exp(exp_al: &ast::Exp) -> Vec<ast::Prem> {
             prems_insert
         }
         ast::ExpKind::Call(_, _, args) => collect_args(args),
-        ast::ExpKind::Iter(exp_inner_al, iter_exp) => {
+        ast::ExpKind::Iter(exp_inner_al, exp_iter) => {
             let prems_inner_insert = collect_exp(exp_inner_al);
-            let mut prems_insert = iterate_prems(iter_exp.0, &iter_exp.1, prems_inner_insert);
-            let prems_guard = gen_iter_guard(iter_exp);
+            let mut prems_insert = iterate_prems(exp_iter.iter, &exp_iter.vars, prems_inner_insert);
+            let prems_guard = gen_iter_guard(exp_iter);
             prems_insert.extend(prems_guard);
             prems_insert
         }
@@ -553,8 +555,11 @@ fn collect_iter_prem(iter_prem: &ast::IterPrem) -> Collected {
     let collected = collect_prem(&iter_prem.prem);
     let collected = iterate_collected(prem_iter.iter, &vars_must, &prem_iter.vars_bound, collected);
     let collected_guard = Collected {
-        prems_must: gen_iter_guard(&(prem_iter.iter, vars_must)),
-        prems_insert: gen_iter_guard(&(prem_iter.iter, prem_iter.vars_bound.clone())),
+        prems_must: gen_iter_guard(&ast::ExpIter { iter: prem_iter.iter, vars: vars_must }),
+        prems_insert: gen_iter_guard(&ast::ExpIter {
+            iter: prem_iter.iter,
+            vars: prem_iter.vars_bound.clone(),
+        }),
     };
     collected.compose(collected_guard)
 }

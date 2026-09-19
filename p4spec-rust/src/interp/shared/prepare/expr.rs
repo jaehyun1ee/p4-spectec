@@ -115,6 +115,14 @@ impl Prepare for source::ExpKind {
     }
 }
 
+impl Prepare for source::ExpField {
+    type Output = ExpField;
+
+    fn prepare(self, layout: &mut FrameLayout) -> Self::Output {
+        ExpField { atom: self.atom, exp: self.exp.prepare(layout) }
+    }
+}
+
 // == Paths
 
 impl Prepare for source::PathKind {
@@ -155,10 +163,10 @@ impl Prepare for source::ExpIter {
     type Output = ExpIter;
 
     fn prepare(self, layout: &mut FrameLayout) -> Self::Output {
-        let (iter, vars) = self;
+        let source::ExpIter { iter, vars } = self;
         let vars = vars.prepare(layout);
         prepare_outer_vars(&vars, iter, layout);
-        (iter, vars)
+        ExpIter { iter, vars }
     }
 }
 
@@ -193,11 +201,14 @@ pub fn restore_not_exp(not_exp: NotExp) -> source::NotExp {
 }
 
 pub fn restore_exp_field(exp_field: ExpField) -> source::ExpField {
-    (exp_field.0, restore_exp(exp_field.1))
+    source::ExpField { atom: exp_field.atom, exp: restore_exp(exp_field.exp) }
 }
 
 pub fn restore_exp_iter(exp_iter: ExpIter) -> source::ExpIter {
-    (exp_iter.0, exp_iter.1.into_iter().map(|var| var.var).collect())
+    source::ExpIter {
+        iter: exp_iter.iter,
+        vars: exp_iter.vars.into_iter().map(|var| var.var).collect(),
+    }
 }
 
 pub fn restore_path(path: Path) -> source::Path {

@@ -12,7 +12,7 @@ fn comparison(exp_l: Exp, exp_r: Exp, op: BoolCmpOp) -> Exp {
 fn condition(exp: Exp) -> Instr {
     instr(InstrKind::If(IfInstr {
         exp,
-        iter_exps: vec![(Iter::Opt, vec![])],
+        iter_exps: vec![ExpIter { iter: Iter::Opt, vars: vec![] }],
         block: vec![ret("body")],
     }))
 }
@@ -38,7 +38,7 @@ fn test_empty_option_list_and_terminal_both_sides() {
                     instr_if.exp.node,
                     ExpKind::Match(Box::new(id_exp("x")), pattern.clone())
                 );
-                assert_eq!(instr_if.iter_exps, vec![(Iter::Opt, vec![])]);
+                assert_eq!(instr_if.iter_exps, vec![ExpIter { iter: Iter::Opt, vars: vec![] }]);
                 assert_eq!(instr_if.block, vec![ret("body")]);
             }
         }

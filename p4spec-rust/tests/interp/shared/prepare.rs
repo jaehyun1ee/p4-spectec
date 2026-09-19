@@ -49,7 +49,7 @@ fn iter_expression(
         iter,
     );
     note_phrase!(
-        node: il_source::ExpKind::Iter(Box::new(exp_inner), (iter, vars)),
+        node: il_source::ExpKind::Iter(Box::new(exp_inner), il_source::ExpIter { iter, vars }),
         note: Rc::new(typ),
         span: span(line),
     )
@@ -505,10 +505,10 @@ fn nested_iteration_edges_share_only_the_required_binding_slots() {
     let ctx = Context::new(&global).localize_with_layout(&Rc::new(layout.clone()));
     let mut exp_inner = &exp_prepared;
     while let expr::ExpKind::Iter(exp_next, exp_iter) = &exp_inner.node {
-        let var = &exp_iter.1[0];
-        let slot_outer = layout.find_iter_var(&exp_iter.1[0], exp_iter.0);
+        let var = &exp_iter.vars[0];
+        let slot_outer = layout.find_iter_var(&exp_iter.vars[0], exp_iter.iter);
         let mut iters_outer = var.var.iters.clone();
-        iters_outer.push(exp_iter.0);
+        iters_outer.push(exp_iter.iter);
         assert_eq!(slot_outer.var.iters, iters_outer);
         assert_eq!(var.slot, find_iter_var(&ctx, exp_next).unwrap().slot);
         assert_eq!(slot_outer.slot, find_iter_var(&ctx, exp_inner).unwrap().slot);

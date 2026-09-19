@@ -84,7 +84,7 @@ fn optional_destructuring_preserves_outer_scalars() {
         .into_iter()
         .map(|name| ast::Var { id: id(name), typ: typ::make::nat(), iters: vec![] })
         .collect();
-    let exp = note_phrase!(node: ast::ExpKind::Iter(Box::new(exp_tuple), (ast::Iter::Opt, vars)), note: typ_opt.node.clone(), span: Span::default());
+    let exp = note_phrase!(node: ast::ExpKind::Iter(Box::new(exp_tuple), ast::ExpIter { iter: ast::Iter::Opt, vars }), note: typ_opt.node.clone(), span: Span::default());
     let mut layout = p4spec_rust::runtime::envs::interp::shared::frame::FrameLayout::default();
     let exp = exp.prepare(&mut layout);
     let slot = layout.resolve_var(ast::Var { id: id("n"), typ: typ::make::nat(), iters: vec![] });
