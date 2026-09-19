@@ -744,26 +744,32 @@ fn def(ctx: &mut Context, def_sl: sl::Def) -> Result<pl::Def, ProseError> {
             }
         }),
         sl::DefKind::MetaFunc(meta_func_def_sl) => pl::DefKind::MetaFunc(match meta_func_def_sl {
-            sl::MetaFuncDef::Extern(def_func_sl) => pl::MetaFuncDef::Extern(pl::ExternFunc {
-                id: def_func_sl.id,
-                tparams: def_func_sl.tparams,
-                params: def_func_sl
-                    .params
-                    .iter()
-                    .map(|param_sl| param(ctx, param_sl))
-                    .collect::<Result<_, _>>()?,
-                typ: def_func_sl.typ,
-            }),
-            sl::MetaFuncDef::Builtin(def_func_sl) => pl::MetaFuncDef::Builtin(pl::BuiltinFunc {
-                id: def_func_sl.id,
-                tparams: def_func_sl.tparams,
-                params: def_func_sl
-                    .params
-                    .iter()
-                    .map(|param_sl| param(ctx, param_sl))
-                    .collect::<Result<_, _>>()?,
-                typ: def_func_sl.typ,
-            }),
+            sl::MetaFuncDef::Extern(def_func_sl) => {
+                ctx.validate_tparams(&def_func_sl.tparams)?;
+                pl::MetaFuncDef::Extern(pl::ExternFunc {
+                    id: def_func_sl.id,
+                    tparams: def_func_sl.tparams,
+                    params: def_func_sl
+                        .params
+                        .iter()
+                        .map(|param_sl| param(ctx, param_sl))
+                        .collect::<Result<_, _>>()?,
+                    typ: def_func_sl.typ,
+                })
+            }
+            sl::MetaFuncDef::Builtin(def_func_sl) => {
+                ctx.validate_tparams(&def_func_sl.tparams)?;
+                pl::MetaFuncDef::Builtin(pl::BuiltinFunc {
+                    id: def_func_sl.id,
+                    tparams: def_func_sl.tparams,
+                    params: def_func_sl
+                        .params
+                        .iter()
+                        .map(|param_sl| param(ctx, param_sl))
+                        .collect::<Result<_, _>>()?,
+                    typ: def_func_sl.typ,
+                })
+            }
             sl::MetaFuncDef::Table(def_func_sl) => {
                 ctx.set_namespace(def_func_sl.id.clone());
                 pl::MetaFuncDef::Table(pl::TableFunc {
@@ -788,6 +794,7 @@ fn def(ctx: &mut Context, def_sl: sl::Def) -> Result<pl::Def, ProseError> {
                 })
             }
             sl::MetaFuncDef::Defined(def_func_sl) => {
+                ctx.validate_tparams(&def_func_sl.tparams)?;
                 ctx.set_namespace(def_func_sl.id.clone());
                 pl::MetaFuncDef::Defined(pl::DefinedFunc {
                     id: def_func_sl.id,
