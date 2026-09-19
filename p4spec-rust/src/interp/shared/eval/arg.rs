@@ -2,7 +2,7 @@
 
 use super::super::context::ReadContext;
 use super::Invoker;
-use crate::interp::shared::prepare::expr as ast;
+use crate::interp::shared::prepare::ast;
 
 use crate::{
     lang::{

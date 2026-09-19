@@ -1,6 +1,6 @@
 //! Read and write context interfaces for shared evaluation
 
-use crate::interp::shared::prepare::expr as ast;
+use crate::interp::shared::prepare::ast;
 use crate::lang::data::var::{SlotIdx, VarSlot};
 use crate::{
     interp::shared::{backtrack::Backtrack, error::Error},

@@ -1,7 +1,7 @@
 //! Slot instantiation of shared AL syntax
 
 use crate::interp::shared::prepare::Prepare;
-pub use crate::interp::shared::prepare::expr::*;
+pub use crate::interp::shared::prepare::ast::*;
 use crate::lang::al::ast as source;
 pub use crate::lang::al::ast::{
     BuiltinFunc, DefinedTyp, ExternFunc, ExternRel, ExternTyp, TypDef, VarDef,
@@ -25,12 +25,12 @@ pub type DebugPrem = source::DebugPrem<IdSlot, VarSlot>;
 
 // - Rules
 
-pub type RuleMatch = source::RuleMatch<IdSlot, VarSlot>;
-pub type RulePath = source::RulePath<IdSlot, VarSlot>;
 pub type RuleGroup = source::RuleGroup<IdSlot, VarSlot>;
 pub type RuleGroupKind = source::RuleGroupKind<IdSlot, VarSlot>;
 pub type ElseGroup = source::ElseGroup<IdSlot, VarSlot>;
 pub type ElseGroupKind = source::ElseGroupKind<IdSlot, VarSlot>;
+pub type RuleMatch = source::RuleMatch<IdSlot, VarSlot>;
+pub type RulePath = source::RulePath<IdSlot, VarSlot>;
 
 // - Clauses
 
@@ -63,7 +63,7 @@ pub type Spec = Vec<Def>;
 
 // == Preparation traversal
 
-// == Premises
+// - Premises
 
 impl Prepare for source::PremKind {
     type Output = PremKind;
@@ -153,35 +153,7 @@ impl Prepare for source::DebugPrem {
     }
 }
 
-// == Rules
-
-// - Rule match
-
-impl Prepare for source::RuleMatch {
-    type Output = RuleMatch;
-
-    fn prepare(self, layout: &mut FrameLayout) -> Self::Output {
-        RuleMatch {
-            exps_signature: self.exps_signature.prepare(layout),
-            exps_input: self.exps_input.prepare(layout),
-            prems: self.prems.prepare(layout),
-        }
-    }
-}
-
-// - Rule path
-
-impl Prepare for source::RulePath {
-    type Output = RulePath;
-
-    fn prepare(self, layout: &mut FrameLayout) -> Self::Output {
-        RulePath {
-            id: self.id,
-            prems: self.prems.prepare(layout),
-            exps_output: self.exps_output.prepare(layout),
-        }
-    }
-}
+// - Rules
 
 // - Rule group
 
@@ -211,7 +183,35 @@ impl Prepare for source::ElseGroupKind {
     }
 }
 
-// == Clauses
+// - Rule match
+
+impl Prepare for source::RuleMatch {
+    type Output = RuleMatch;
+
+    fn prepare(self, layout: &mut FrameLayout) -> Self::Output {
+        RuleMatch {
+            exps_signature: self.exps_signature.prepare(layout),
+            exps_input: self.exps_input.prepare(layout),
+            prems: self.prems.prepare(layout),
+        }
+    }
+}
+
+// - Rule path
+
+impl Prepare for source::RulePath {
+    type Output = RulePath;
+
+    fn prepare(self, layout: &mut FrameLayout) -> Self::Output {
+        RulePath {
+            id: self.id,
+            prems: self.prems.prepare(layout),
+            exps_output: self.exps_output.prepare(layout),
+        }
+    }
+}
+
+// - Clauses
 
 impl Prepare for source::ClauseKind {
     type Output = ClauseKind;
@@ -225,7 +225,7 @@ impl Prepare for source::ClauseKind {
     }
 }
 
-// == Table rows
+// - Table rows
 
 impl Prepare for source::TableRowKind {
     type Output = TableRowKind;

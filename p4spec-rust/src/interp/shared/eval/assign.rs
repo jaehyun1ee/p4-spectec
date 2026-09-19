@@ -1,7 +1,7 @@
 //! Destructuring assignments preserve iteration paths and isolate list rows
 
 use super::super::context::{ReadContext, WriteContext};
-use crate::interp::shared::prepare::expr as ast;
+use crate::interp::shared::prepare::ast;
 use crate::interp::shared::util::iterate_vars;
 use crate::lang::data::var::IdSlot;
 

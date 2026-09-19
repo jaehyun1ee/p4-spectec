@@ -1,6 +1,6 @@
 //! Prepare source syntax for slot-based execution
 
-pub mod expr;
+pub mod ast;
 
 use crate::lang::common::{Id, notation::mixfix::Mixfix, source::NotePhrase};
 use crate::lang::data::var::{IdSlot, Var, VarSlot};

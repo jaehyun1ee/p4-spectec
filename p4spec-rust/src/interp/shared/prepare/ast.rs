@@ -1,4 +1,4 @@
-//! Slot instantiation of shared IL expression syntax
+//! Slot instantiation of shared IL syntax
 
 use super::Prepare;
 use crate::lang::data::var::{IdSlot, VarSlot};
@@ -20,11 +20,10 @@ pub type Var = VarSlot;
 // - Expressions
 
 pub type Exp = source::Exp<IdSlot, VarSlot>;
+pub type ExpField = source::ExpField<IdSlot, VarSlot>;
 pub type ExpKind = source::ExpKind<IdSlot, VarSlot>;
 pub type NotExp = source::NotExp<IdSlot, VarSlot>;
-pub type ExpField = source::ExpField<IdSlot, VarSlot>;
 pub type ExpIter = source::ExpIter<VarSlot>;
-pub type PremIter = source::PremIter<VarSlot>;
 
 // - Paths
 
@@ -36,9 +35,13 @@ pub type PathKind = source::PathKind<IdSlot, VarSlot>;
 pub type Arg = source::Arg<IdSlot, VarSlot>;
 pub type ArgKind = source::ArgKind<IdSlot, VarSlot>;
 
+// - Premises
+
+pub type PremIter = source::PremIter<VarSlot>;
+
 // == Preparation
 
-// == Expressions
+// - Expressions
 
 impl Prepare for source::ExpKind {
     type Output = ExpKind;
@@ -123,7 +126,22 @@ impl Prepare for source::ExpField {
     }
 }
 
-// == Paths
+impl Prepare for source::ExpIter {
+    type Output = ExpIter;
+
+    fn prepare(self, layout: &mut FrameLayout) -> Self::Output {
+        let source::ExpIter { iter, vars } = self;
+        let vars = vars.prepare(layout);
+        for var in &vars {
+            let mut var_outer = var.var.clone();
+            var_outer.iters.push(iter);
+            layout.resolve_var(var_outer);
+        }
+        ExpIter { iter, vars }
+    }
+}
+
+// - Paths
 
 impl Prepare for source::PathKind {
     type Output = PathKind;
@@ -146,7 +164,7 @@ impl Prepare for source::PathKind {
     }
 }
 
-// == Arguments
+// - Arguments
 
 impl Prepare for source::ArgKind {
     type Output = ArgKind;
@@ -159,20 +177,7 @@ impl Prepare for source::ArgKind {
     }
 }
 
-impl Prepare for source::ExpIter {
-    type Output = ExpIter;
-
-    fn prepare(self, layout: &mut FrameLayout) -> Self::Output {
-        let source::ExpIter { iter, vars } = self;
-        let vars = vars.prepare(layout);
-        for var in &vars {
-            let mut var_outer = var.var.clone();
-            var_outer.iters.push(iter);
-            layout.resolve_var(var_outer);
-        }
-        ExpIter { iter, vars }
-    }
-}
+// - Premises
 
 impl Prepare for source::PremIter {
     type Output = PremIter;

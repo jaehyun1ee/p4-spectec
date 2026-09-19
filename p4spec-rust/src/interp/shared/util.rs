@@ -1,6 +1,6 @@
 //! Resolve simple iterated-variable expressions through their callable layout
 
-use super::{context::ReadContext, prepare::expr as ast};
+use super::{context::ReadContext, prepare::ast};
 use crate::lang::data::var::VarSlot;
 
 /// Finds the slot-backed variable represented by a simple iterated expression

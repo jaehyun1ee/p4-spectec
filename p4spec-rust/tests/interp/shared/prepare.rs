@@ -9,7 +9,7 @@ use p4spec_rust::runtime::envs::interp::{
 use std::rc::Rc;
 
 use p4spec_rust::{
-    interp::shared::prepare::expr,
+    interp::shared::prepare::ast,
     lang::{
         al::ast as al_source,
         common::source::{Position, Span},
@@ -66,7 +66,7 @@ fn preparation_preserves_occurrence_spans_and_type_allocations() {
     let mut layout = FrameLayout::default();
     let exp_prepared_a: il_source::Exp<IdSlot, VarSlot> = exp_a.clone().prepare(&mut layout);
     let exp_prepared_b = exp_b.clone().prepare(&mut layout);
-    let (expr::ExpKind::Id(id_a), expr::ExpKind::Id(id_b)) =
+    let (ast::ExpKind::Id(id_a), ast::ExpKind::Id(id_b)) =
         (&exp_prepared_a.node, &exp_prepared_b.node)
     else {
         panic!("expected prepared variables");
@@ -100,7 +100,7 @@ fn syntax_equality_and_printing_ignore_callable_slot_order() {
     });
     let exp_a = exp_source.clone().prepare(&mut layout_a);
     let exp_b = exp_source.clone().prepare(&mut layout_b);
-    let (expr::ExpKind::Id(id_a), expr::ExpKind::Id(id_b)) = (&exp_a.node, &exp_b.node) else {
+    let (ast::ExpKind::Id(id_a), ast::ExpKind::Id(id_b)) = (&exp_a.node, &exp_b.node) else {
         panic!("expected prepared variables");
     };
     assert_ne!(id_a.slot, id_b.slot);
@@ -137,10 +137,10 @@ fn algorithmic_clauses_and_else_clause_share_one_layout() {
         .iter()
         .chain(func_defined.else_clause.iter())
         .map(|clause| {
-            let expr::ArgKind::Exp(exp) = &clause.node.args[0].node else {
+            let ast::ArgKind::Exp(exp) = &clause.node.args[0].node else {
                 panic!("expected expression")
             };
-            let expr::ExpKind::Id(slot) = &exp.node else { panic!("expected variable") };
+            let ast::ExpKind::Id(slot) = &exp.node else { panic!("expected variable") };
             slot
         })
         .collect::<Vec<_>>();
@@ -180,7 +180,7 @@ fn structured_parameters_and_case_guards_share_the_callable_layout() {
     let sl::ParamKind::Exp(_, exp_param) = &func_defined.params[0].node else {
         panic!("expected parameter pattern")
     };
-    let (expr::ExpKind::Id(id_param), expr::ExpKind::Id(id_case)) =
+    let (ast::ExpKind::Id(id_param), ast::ExpKind::Id(id_case)) =
         (&exp_param.node, &instr.exp.node)
     else {
         panic!("expected variables")
@@ -395,11 +395,11 @@ fn shared_syntax_ignores_slot_allocation_and_binder_order() {
         vars_bound: vec![variable("x", vec![]), variable("y", vec![])],
         vars_bind: vec![variable("z", vec![il_source::Iter::Opt])],
     };
-    let prem_iter_a: expr::PremIter = prem_iter_source
+    let prem_iter_a: ast::PremIter = prem_iter_source
         .clone()
         .prepare(&mut FrameLayout::default());
     prem_iter_source.vars_bound.reverse();
-    let prem_iter_b: expr::PremIter = prem_iter_source
+    let prem_iter_b: ast::PremIter = prem_iter_source
         .clone()
         .prepare(&mut FrameLayout::default());
     assert!(prem_iter_a.syntax_eq(&prem_iter_b));
@@ -481,7 +481,7 @@ fn nested_iteration_edges_share_only_the_required_binding_slots() {
     assert_eq!(layout.len(), 5);
     let ctx = Context::new(&global).localize_with_layout(&Rc::new(layout.clone()));
     let mut exp_inner = &exp_prepared;
-    while let expr::ExpKind::Iter(exp_next, exp_iter) = &exp_inner.node {
+    while let ast::ExpKind::Iter(exp_next, exp_iter) = &exp_inner.node {
         let var = &exp_iter.vars[0];
         let slot_outer = layout.find_iter_var(&exp_iter.vars[0], exp_iter.iter);
         let mut iters_outer = var.var.iters.clone();
@@ -533,7 +533,7 @@ fn identifiers_and_binders_share_slots_without_sharing_occurrence_metadata() {
     let mut layout = FrameLayout::default();
     let exp_prepared = exp_source.clone().prepare(&mut layout);
     let var_prepared = var_source.clone().prepare(&mut layout);
-    let expr::ExpKind::Id(id) = &exp_prepared.node else {
+    let ast::ExpKind::Id(id) = &exp_prepared.node else {
         panic!("expected prepared identifier expression");
     };
     assert_eq!(id.slot, var_prepared.slot);
@@ -557,7 +557,7 @@ fn preparation_of_nested_containers_preserves_annotations() {
     let exp_prepared = exps_prepared[1].as_ref().unwrap();
     assert_eq!(exp_prepared.span, span_source);
     assert!(Rc::ptr_eq(&exp_prepared.note, &typ_note));
-    let expr::ExpKind::Id(id) = &exp_prepared.node else {
+    let ast::ExpKind::Id(id) = &exp_prepared.node else {
         panic!("expected identifier");
     };
     assert_eq!(id.id.node, "x");
@@ -579,12 +579,12 @@ fn preparation_of_deep_expressions_grows_the_stack() {
             }
             let mut exp_prepared = exp_source.prepare(&mut FrameLayout::default());
             for _ in 0..2048 {
-                let expr::ExpKind::Len(exp_inner) = exp_prepared.node else {
+                let ast::ExpKind::Len(exp_inner) = exp_prepared.node else {
                     panic!("expected nested length expression");
                 };
                 exp_prepared = *exp_inner;
             }
-            let expr::ExpKind::Id(id) = exp_prepared.node else {
+            let ast::ExpKind::Id(id) = exp_prepared.node else {
                 panic!("expected identifier");
             };
             assert_eq!(id.id.node, "x");

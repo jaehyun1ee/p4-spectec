@@ -1,7 +1,7 @@
 //! Slot instantiation of shared SL syntax
 
 use crate::interp::shared::prepare::Prepare;
-pub use crate::interp::shared::prepare::expr::*;
+pub use crate::interp::shared::prepare::ast::*;
 use crate::lang::data::var::{IdSlot, VarSlot};
 use crate::lang::sl::ast as source;
 pub use crate::lang::sl::ast::{DefinedTyp, ExternTyp, RelSignature, TypDef, VarDef};
@@ -24,8 +24,8 @@ pub type HoldCase = source::HoldCase<IdSlot, VarSlot>;
 
 // - Case analysis
 
-pub type Case = source::Case<IdSlot, VarSlot>;
 pub type Guard = source::Guard<IdSlot, VarSlot>;
+pub type Case = source::Case<IdSlot, VarSlot>;
 
 // - Instructions
 
@@ -73,7 +73,7 @@ pub type Spec = Vec<Def>;
 
 // == Preparation traversal
 
-// == Parameters
+// - Parameters
 
 impl Prepare for source::ParamKind {
     type Output = ParamKind;
@@ -90,7 +90,7 @@ impl Prepare for source::ParamKind {
     }
 }
 
-// == Instructions
+// - Instructions
 
 impl Prepare for source::InstrKind {
     type Output = InstrKind;
@@ -234,7 +234,7 @@ impl Prepare for source::DebugInstr {
     }
 }
 
-// == Holding conditions
+// - Holding conditions
 
 impl Prepare for source::HoldCase {
     type Output = HoldCase;
@@ -254,15 +254,7 @@ impl Prepare for source::HoldCase {
     }
 }
 
-// == Case analysis
-
-impl Prepare for source::Case {
-    type Output = Case;
-
-    fn prepare(self, layout: &mut FrameLayout) -> Self::Output {
-        Case { guard: self.guard.prepare(layout), block: self.block.prepare(layout) }
-    }
-}
+// - Case analysis
 
 impl Prepare for source::Guard {
     type Output = Guard;
@@ -280,7 +272,15 @@ impl Prepare for source::Guard {
     }
 }
 
-// == Table rows
+impl Prepare for source::Case {
+    type Output = Case;
+
+    fn prepare(self, layout: &mut FrameLayout) -> Self::Output {
+        Case { guard: self.guard.prepare(layout), block: self.block.prepare(layout) }
+    }
+}
+
+// - Table rows
 
 impl Prepare for source::TableRow {
     type Output = TableRow;
