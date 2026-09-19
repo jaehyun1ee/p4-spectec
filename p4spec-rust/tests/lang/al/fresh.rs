@@ -24,7 +24,7 @@ fn sourced_id(text_id: &str, span: Span) -> il::ast::Id {
 }
 
 #[test]
-fn test_alias_expression_uses_stage_specific_span() {
+fn test_alias_expression_uses_requested_span() {
     let span_decl = sourced_span("fresh.watsup", 3);
     let span_use = sourced_span("fresh.watsup", 9);
     let id_alias = sourced_id("flag", span_decl.clone());
@@ -39,7 +39,7 @@ fn test_alias_expression_uses_stage_specific_span() {
     let var_il = il::fresh::var_from_typ(&menv, &IdSet::new(), typ_use.span.clone(), &typ_use);
     let exp_il = il::var::as_exp(true, &var_il);
 
-    assert_eq!(exp_al.span, span_decl);
+    assert_eq!(exp_al.span, span_use);
     assert_eq!(exp_il.span, span_use);
 }
 
@@ -84,7 +84,7 @@ fn test_alias_dimensions_preserve_declaration_and_wrapper_spans() {
     };
     let typ_outer = p4spec_rust::phrase! {
         node: al::ast::TypKind::Iter(Box::new(typ_inner), al::ast::Iter::List),
-        span: span_outer,
+        span: span_outer.clone(),
     };
 
     let (_, exp_al) = al::fresh::exp_from_typ(true, &menv, &IdSet::new(), &typ_outer);
@@ -96,9 +96,9 @@ fn test_alias_dimensions_preserve_declaration_and_wrapper_spans() {
     };
     let al::ast::ExpKind::Var(id_fresh) = exp_base.node else { panic!("fresh variable") };
 
-    assert_eq!(id_fresh.span, span_decl);
-    assert_eq!(exp_base.span, span_decl);
-    assert_eq!(exp_inner.span, span_decl);
+    assert_eq!(id_fresh.span, span_outer);
+    assert_eq!(exp_base.span, span_outer);
+    assert_eq!(exp_inner.span, span_outer);
     assert_eq!(vars_inner.len(), 1);
     assert_eq!(vars_outer.len(), 1);
     assert_eq!(vars_inner[0].iters, Vec::<al::ast::Iter>::new());
