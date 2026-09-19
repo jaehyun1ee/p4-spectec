@@ -27,16 +27,16 @@ fn test_empty_option_list_and_terminal_both_sides() {
         for (op, pattern) in [(BoolCmpOp::Eq, pattern_eq), (BoolCmpOp::Ne, pattern_ne)] {
             for reversed in [false, true] {
                 let (exp_l, exp_r) = if reversed {
-                    (exp_terminal.clone(), variable("x"))
+                    (exp_terminal.clone(), id_exp("x"))
                 } else {
-                    (variable("x"), exp_terminal.clone())
+                    (id_exp("x"), exp_terminal.clone())
                 };
                 let block = apply(vec![condition(comparison(exp_l, exp_r, op))]);
                 let InstrKind::If(instr_if) = &block[0].node else { panic!("expected if") };
                 assert_eq!(instr_if.exp.span, span(8));
                 assert_eq!(
                     instr_if.exp.node,
-                    ExpKind::Match(Box::new(variable("x")), pattern.clone())
+                    ExpKind::Match(Box::new(id_exp("x")), pattern.clone())
                 );
                 assert_eq!(instr_if.iter_exps, vec![(Iter::Opt, vec![])]);
                 assert_eq!(instr_if.block, vec![ret("body")]);
@@ -53,9 +53,9 @@ fn test_terminal_case_inequality_and_nonterminal_counterexample() {
     let exp_terminal = crate::note_phrase! {node: ExpKind::Case(Box::new(not_exp.clone())), note: TypKind::Bool, span: span(2)};
     for reversed in [false, true] {
         let (exp_l, exp_r) = if reversed {
-            (exp_terminal.clone(), variable("x"))
+            (exp_terminal.clone(), id_exp("x"))
         } else {
-            (variable("x"), exp_terminal.clone())
+            (id_exp("x"), exp_terminal.clone())
         };
         let block = apply(vec![condition(comparison(exp_l, exp_r, BoolCmpOp::Ne))]);
         let InstrKind::If(instr_if) = &block[0].node else { panic!("expected if") };
@@ -65,11 +65,11 @@ fn test_terminal_case_inequality_and_nonterminal_counterexample() {
         assert_eq!(exp.span, span(8));
         assert_eq!(
             exp.node,
-            ExpKind::Match(Box::new(variable("x")), Pattern::Case(Box::new(not_exp.to_mixop())))
+            ExpKind::Match(Box::new(id_exp("x")), Pattern::Case(Box::new(not_exp.to_mixop())))
         );
     }
-    let exp_nonterminal = crate::note_phrase! {node: ExpKind::Case(Box::new(Mixfix::Arg(variable("payload")))), note: TypKind::Bool, span: span(2)};
-    let instr_if = condition(comparison(variable("x"), exp_nonterminal, BoolCmpOp::Eq));
+    let exp_nonterminal = crate::note_phrase! {node: ExpKind::Case(Box::new(Mixfix::Arg(id_exp("payload")))), note: TypKind::Bool, span: span(2)};
+    let instr_if = condition(comparison(id_exp("x"), exp_nonterminal, BoolCmpOp::Eq));
     assert_eq!(apply(vec![instr_if.clone()]), vec![instr_if]);
 }
 
@@ -77,7 +77,7 @@ fn test_terminal_case_inequality_and_nonterminal_counterexample() {
 fn test_debug_and_nested_expression_are_not_traversed() {
     let exp_none =
         crate::note_phrase! {node: ExpKind::Opt(None), note: TypKind::Bool, span: span(2)};
-    let exp_cmp = comparison(variable("x"), exp_none, BoolCmpOp::Eq);
+    let exp_cmp = comparison(id_exp("x"), exp_none, BoolCmpOp::Eq);
     let instr_debug = instr(InstrKind::Debug(DebugInstr {
         exp: exp_cmp.clone(),
         instr: Box::new(condition(exp_cmp.clone())),
@@ -109,12 +109,12 @@ fn test_terminal_case_equality_preserves_notation_and_notes() {
     let exp_terminal = crate::note_phrase! {node: ExpKind::Case(Box::new(not_exp.clone())), note: TypKind::Bool, span: span(2)};
     for reversed in [false, true] {
         let (exp_l, exp_r) = if reversed {
-            (exp_terminal.clone(), variable("x"))
+            (exp_terminal.clone(), id_exp("x"))
         } else {
-            (variable("x"), exp_terminal.clone())
+            (id_exp("x"), exp_terminal.clone())
         };
         let block = apply(vec![condition(comparison(exp_l, exp_r, BoolCmpOp::Eq))]);
-        let exp_match = crate::note_phrase! {node: ExpKind::Match(Box::new(variable("x")), Pattern::Case(Box::new(not_exp.to_mixop()))), note: TypKind::Bool, span: span(8)};
+        let exp_match = crate::note_phrase! {node: ExpKind::Match(Box::new(id_exp("x")), Pattern::Case(Box::new(not_exp.to_mixop()))), note: TypKind::Bool, span: span(8)};
         assert_eq!(block, vec![condition(exp_match)]);
     }
 }

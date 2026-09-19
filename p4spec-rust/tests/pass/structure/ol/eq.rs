@@ -8,7 +8,7 @@ fn test_equality_preserves_order_total_and_ignores_spans_and_subproofs() {
         block: vec![ret("a"), ret("b")],
     };
     let instr_a = instr(ast_ol::InstrKind::Case(ast_ol::CaseInstr {
-        exp: variable("x"),
+        exp: id_exp("x"),
         cases: vec![case],
         total: false,
     }));

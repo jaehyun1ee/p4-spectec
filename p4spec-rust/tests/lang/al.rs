@@ -46,7 +46,7 @@ fn atom() -> il::ast::Atom {
     }
 }
 
-fn variable(name: &str) -> il::ast::Exp {
+fn id_exp(name: &str) -> il::ast::Exp {
     p4spec_rust::note_phrase!(node: p4spec_rust::lang::il::ast::ExpKind::Id(id(name)), note: il::ast::TypKind::Bool, span: span(name))
 }
 
@@ -59,12 +59,12 @@ fn expr(kind: il::ast::ExpKind) -> il::ast::Exp {
 }
 
 fn not_exp(name: &str) -> il::ast::NotExp {
-    Mixfix::Arg(variable(name))
+    Mixfix::Arg(id_exp(name))
 }
 
 fn arg_exp(name: &str) -> il::ast::Arg {
     p4spec_rust::phrase! {
-        node: il::ast::ArgKind::Exp(Box::new(variable(name))),
+        node: il::ast::ArgKind::Exp(Box::new(id_exp(name))),
         span: span("arg"),
     }
 }
@@ -76,7 +76,7 @@ fn path_with(name: &str) -> il::ast::Path {
         note: il::ast::TypKind::Bool,
         span: span("root"),
     }),
-    Box::new(variable(name)),
+    Box::new(id_exp(name)),
     ), note: il::ast::TypKind::Bool, span: span("path") }
 }
 
@@ -138,15 +138,13 @@ fn composite_spec(metadata: &str, extern_inputs: Vec<usize>) -> al::ast::Spec {
         Mixfix::Arg(text_typ()),
     ]);
     let evaluate_match = al::ast::RuleMatch {
-        exps_signature: vec![variable("signature")],
+        exps_signature: vec![id_exp("signature")],
         exps_input: vec![text_expression("line\n\"\\")],
-        prems: vec![premise(al::ast::PremKind::If(al::ast::IfPrem { exp: variable("ready") }))],
+        prems: vec![premise(al::ast::PremKind::If(al::ast::IfPrem { exp: id_exp("ready") }))],
     };
     let evaluate_path = al::ast::RulePath {
         id: id("success"),
-        prems: vec![premise(al::ast::PremKind::Debug(al::ast::DebugPrem {
-            exp: variable("trace"),
-        }))],
+        prems: vec![premise(al::ast::PremKind::Debug(al::ast::DebugPrem { exp: id_exp("trace") }))],
         exps_output: vec![text_expression("done")],
     };
     let evaluate_group = p4spec_rust::phrase! { node: al::ast::RuleGroupKind {
@@ -155,8 +153,8 @@ fn composite_spec(metadata: &str, extern_inputs: Vec<usize>) -> al::ast::Spec {
         rule_paths: vec![evaluate_path],
     }, span: span(metadata) };
     let fallback_match = al::ast::RuleMatch {
-        exps_signature: vec![variable("fallback_signature")],
-        exps_input: vec![variable("fallback_input")],
+        exps_signature: vec![id_exp("fallback_signature")],
+        exps_input: vec![id_exp("fallback_input")],
         prems: Vec::new(),
     };
     let fallback_path = al::ast::RulePath {
@@ -173,8 +171,8 @@ fn composite_spec(metadata: &str, extern_inputs: Vec<usize>) -> al::ast::Spec {
     let ready_group = p4spec_rust::phrase! { node: al::ast::RuleGroupKind {
         id: id("ready_group"),
         rule_match: al::ast::RuleMatch {
-            exps_signature: vec![variable("ready_signature")],
-            exps_input: vec![variable("ready_input")],
+            exps_signature: vec![id_exp("ready_signature")],
+            exps_input: vec![id_exp("ready_input")],
             prems: Vec::new(),
         },
         rule_paths: vec![al::ast::RulePath {
@@ -184,18 +182,18 @@ fn composite_spec(metadata: &str, extern_inputs: Vec<usize>) -> al::ast::Spec {
         }],
     }, span: span(metadata) };
     let table_row = p4spec_rust::phrase! { node: al::ast::TableRowKind {
-        exps_signature: vec![variable("table_signature")],
+        exps_signature: vec![id_exp("table_signature")],
         args: vec![arg_exp("key")],
         exp: text_expression("row\tvalue"),
         prems: vec![premise(al::ast::PremKind::If(al::ast::IfPrem {
-            exp: variable("ready"),
+            exp: id_exp("ready"),
         }))],
     }, span: span(metadata) };
     let function_clause = p4spec_rust::phrase! { node: al::ast::ClauseKind {
         args: vec![arg_exp("argument")],
         exp: text_expression("quoted\"\\"),
         prems: vec![premise(al::ast::PremKind::If(al::ast::IfPrem {
-            exp: variable("ready"),
+            exp: id_exp("ready"),
         }))],
     }, span: span(metadata) };
     let else_clause = p4spec_rust::phrase! { node: al::ast::ClauseKind {

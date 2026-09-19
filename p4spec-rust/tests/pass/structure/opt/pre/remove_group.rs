@@ -3,11 +3,11 @@ use crate::pass::structure::opt::pre::remove_group::apply;
 #[test]
 fn test_nested_order_and_debug_barrier() {
     let instr_debug = instr(InstrKind::Debug(DebugInstr {
-        exp: variable("debug"),
+        exp: id_exp("debug"),
         instr: Box::new(group(vec![ret("hidden")])),
     }));
     let instr_if = instr(InstrKind::If(IfInstr {
-        exp: variable("condition"),
+        exp: id_exp("condition"),
         iter_exps: vec![(Iter::List, vec![])],
         block: vec![group(vec![ret("a"), group(vec![ret("b")])]), ret("c")],
     }));

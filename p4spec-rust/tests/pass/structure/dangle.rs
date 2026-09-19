@@ -1,13 +1,13 @@
 use super::*;
 use crate::pass::structure::{StructureErrorKind, dangle::*};
 fn conditional(text: &str, block: ast_ol::Block) -> ast_ol::Instr {
-    instr(ast_ol::InstrKind::If(ast_ol::IfInstr { exp: variable(text), iter_exps: vec![], block }))
+    instr(ast_ol::InstrKind::If(ast_ol::IfInstr { exp: id_exp(text), iter_exps: vec![], block }))
 }
 
 fn hold(block_hold: ast_ol::Block, block_not_hold: ast_ol::Block) -> ast_ol::Instr {
     instr(ast_ol::InstrKind::Hold(ast_ol::HoldInstr {
         id: id("R"),
-        not_exp: Mixfix::Arg(variable("arg")),
+        not_exp: Mixfix::Arg(id_exp("arg")),
         iter_exps: vec![],
         block_hold,
         block_not_hold,
@@ -22,17 +22,17 @@ fn block() -> ast_ol::Block {
         hold(vec![], vec![ret("not_hold")]),
         hold(vec![ret("hold")], vec![ret("not_hold")]),
         instr(ast_ol::InstrKind::Case(ast_ol::CaseInstr {
-            exp: variable("case"),
+            exp: id_exp("case"),
             cases: vec![],
             total: false,
         })),
         instr(ast_ol::InstrKind::Case(ast_ol::CaseInstr {
-            exp: variable("total"),
+            exp: id_exp("total"),
             cases: vec![],
             total: true,
         })),
         instr(ast_ol::InstrKind::Debug(ast_ol::DebugInstr {
-            exp: variable("debug"),
+            exp: id_exp("debug"),
             instr: Box::new(conditional("inner", vec![ret("done")])),
         })),
     ]
@@ -46,10 +46,10 @@ fn check(block_sl: &Block, dangle: bool) {
     ] {
         let InstrKind::If(instr_if_sl) = &instr_sl.node else { panic!() };
         assert_eq!(instr_if_sl.dangle, dangle);
-        assert_eq!(instr_if_sl.exp, variable(text_outer));
+        assert_eq!(instr_if_sl.exp, id_exp(text_outer));
         let InstrKind::If(instr_inner_sl) = &instr_if_sl.block[0].node else { panic!() };
         assert_eq!(instr_inner_sl.dangle, dangle);
-        assert_eq!(instr_inner_sl.exp, variable(text_inner));
+        assert_eq!(instr_inner_sl.exp, id_exp(text_inner));
         assert_eq!(instr_sl.span, span(1));
     }
     assert!(
@@ -67,7 +67,7 @@ fn check(block_sl: &Block, dangle: bool) {
     );
     assert!(matches!(&block_sl[6].node, InstrKind::Case(CaseInstr { dangle: false, .. })));
     let InstrKind::Debug(instr_debug_sl) = &block_sl[7].node else { panic!() };
-    assert_eq!(instr_debug_sl.exp, variable("debug"));
+    assert_eq!(instr_debug_sl.exp, id_exp("debug"));
     assert!(
         matches!(&instr_debug_sl.instr.node, InstrKind::If(IfInstr {dangle: flag, ..}) if *flag == dangle)
     );
@@ -92,7 +92,7 @@ fn test_empty_hold_nested_in_debug_has_owning_span() {
     let mut instr_hold = hold(vec![], vec![]);
     instr_hold.span = span(42);
     let instr_debug = instr(ast_ol::InstrKind::Debug(ast_ol::DebugInstr {
-        exp: variable("debug"),
+        exp: id_exp("debug"),
         instr: Box::new(instr_hold),
     }));
     for block_else in [None, Some(vec![])] {
@@ -105,7 +105,7 @@ fn test_empty_hold_nested_in_debug_has_owning_span() {
 
 #[test]
 fn test_lowering_preserves_payloads_spans_and_nested_fallbacks() {
-    let mut exp = variable("annotated");
+    let mut exp = id_exp("annotated");
     exp.span = span(17);
     exp.note = std::rc::Rc::new(TypKind::Text);
     let block_ol = vec![conditional("nested", vec![ret("result")])];

@@ -43,7 +43,7 @@ fn test_condition_iterator_and_barrier_mismatch() {
         let InstrKind::Hold(instr_hold) = &mut instr_b.node else { unreachable!() };
         match idx {
             0 => instr_hold.id = id("other"),
-            1 => instr_hold.not_exp = Mixfix::Arg(variable("other")),
+            1 => instr_hold.not_exp = Mixfix::Arg(id_exp("other")),
             _ => instr_hold.iter_exps = vec![(Iter::List, vec![])],
         };
         let block = vec![instr_a.clone(), instr_b];
@@ -59,17 +59,17 @@ fn nested(block: Block) -> Block {
     let block = vec![instr(InstrKind::Group(GroupInstr {
         id: id("group"),
         rel_signature: super::super::super::signature(),
-        exps: vec![variable("group_input")],
+        exps: vec![id_exp("group_input")],
         block,
     }))];
     let block = vec![instr(InstrKind::Case(CaseInstr {
-        exp: variable("case"),
+        exp: id_exp("case"),
         cases: vec![Case { guard: Guard::Bool(true), block }],
         total: false,
     }))];
     let block = vec![hold(block.clone(), block)];
     vec![instr(InstrKind::If(IfInstr {
-        exp: variable("condition"),
+        exp: id_exp("condition"),
         iter_exps: vec![(Iter::List, vec![])],
         block,
     }))]
@@ -81,7 +81,7 @@ fn test_nested_blocks_and_debug_barrier() {
     let block_expect = vec![hold(vec![ret("a")], vec![ret("b")])];
     assert_eq!(apply(&mut false, nested(block.clone())), nested(block_expect));
     let instr_debug = instr(InstrKind::Debug(DebugInstr {
-        exp: variable("debug"),
+        exp: id_exp("debug"),
         instr: Box::new(binding("outer", block)),
     }));
     assert_eq!(apply(&mut false, vec![instr_debug.clone()]), vec![instr_debug]);
@@ -91,7 +91,7 @@ fn test_nested_blocks_and_debug_barrier() {
 fn test_each_outcome_merges_common_leading_conditions() {
     fn branch(text: &str) -> Block {
         vec![instr(InstrKind::If(IfInstr {
-            exp: variable("condition"),
+            exp: id_exp("condition"),
             iter_exps: vec![],
             block: vec![ret(text)],
         }))]
@@ -99,7 +99,7 @@ fn test_each_outcome_merges_common_leading_conditions() {
 
     fn branch_merged(text_a: &str, text_b: &str) -> Block {
         vec![instr(InstrKind::If(IfInstr {
-            exp: variable("condition"),
+            exp: id_exp("condition"),
             iter_exps: vec![],
             block: vec![ret(text_a), ret(text_b)],
         }))]
@@ -117,7 +117,7 @@ fn test_each_outcome_merges_common_leading_conditions() {
 fn test_tail_merges_before_retrying_the_merged_head() {
     fn branch(texts: &[&str]) -> Instr {
         instr(InstrKind::If(IfInstr {
-            exp: variable("condition"),
+            exp: id_exp("condition"),
             iter_exps: vec![],
             block: texts.iter().map(|text| ret(text)).collect(),
         }))

@@ -39,7 +39,7 @@ pub type Iter = common::Iter;
 
 // Variables
 
-pub use crate::lang::data::var::Var;
+pub type Var = crate::lang::data::var::Var;
 
 // Types
 

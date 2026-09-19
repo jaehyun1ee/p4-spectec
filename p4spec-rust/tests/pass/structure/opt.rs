@@ -9,7 +9,7 @@ mod post;
 #[path = "opt/pre.rs"]
 mod pre;
 
-use super::{id, instr, ret, signature, span, variable};
+use super::{id, id_exp, instr, ret, signature, span};
 use crate::lang::{
     common::notation::mixfix::Mixfix,
     il::ast::{ExpKind, TypKind},
@@ -30,7 +30,7 @@ fn group(block: Block) -> Instr {
     instr(InstrKind::Group(GroupInstr {
         id: id("G"),
         rel_signature: signature(),
-        exps: vec![variable("input")],
+        exps: vec![id_exp("input")],
         block,
     }))
 }
@@ -52,7 +52,7 @@ fn test_hold_merge_exposes_bindings_for_a_later_loop_iteration() {
     let tdenv = TDEnv::new();
     let binding = |text| {
         instr(InstrKind::Let(LetInstr {
-            exp_l: variable("x"),
+            exp_l: id_exp("x"),
             exp_r: crate::note_phrase!(node: ExpKind::Bool(true), note: TypKind::Bool, span: span(3)),
             iter_instrs: vec![],
             block: vec![ret(text)],
@@ -61,7 +61,7 @@ fn test_hold_merge_exposes_bindings_for_a_later_loop_iteration() {
     let hold = |block| {
         instr(InstrKind::Hold(HoldInstr {
             id: id("R"),
-            not_exp: Mixfix::Arg(variable("input")),
+            not_exp: Mixfix::Arg(id_exp("input")),
             iter_exps: vec![],
             block_hold: block,
             block_not_hold: vec![],
@@ -89,16 +89,16 @@ fn test_hold_merge_exposes_bindings_for_a_later_loop_iteration() {
 fn test_post_liveness_runs_once_after_the_rewrite_loop() {
     let exp_literal =
         crate::note_phrase!(node: ExpKind::Bool(true), note: TypKind::Bool, span: span(3));
-    let exp_tuple = crate::note_phrase!(node: ExpKind::Tuple(vec![variable("x")]), note: TypKind::Tuple(vec![]), span: span(4));
+    let exp_tuple = crate::note_phrase!(node: ExpKind::Tuple(vec![id_exp("x")]), note: TypKind::Tuple(vec![]), span: span(4));
     let instr_inner = instr(InstrKind::Let(LetInstr {
-        exp_l: variable("y"),
+        exp_l: id_exp("y"),
         exp_r: exp_tuple,
         iter_instrs: vec![],
         block: vec![],
     }));
     let instr_outer = |block| {
         instr(InstrKind::Let(LetInstr {
-            exp_l: variable("x"),
+            exp_l: id_exp("x"),
             exp_r: exp_literal.clone(),
             iter_instrs: vec![],
             block,
@@ -113,7 +113,7 @@ fn test_fixed_point_moves_surviving_expression_payloads() {
     let hold = |block| {
         let instr_hold = HoldInstr {
             id: id("relation"),
-            not_exp: Mixfix::Arg(variable("input")),
+            not_exp: Mixfix::Arg(id_exp("input")),
             iter_exps: vec![],
             block_hold: block,
             block_not_hold: vec![],

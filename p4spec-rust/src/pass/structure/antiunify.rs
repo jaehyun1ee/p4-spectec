@@ -71,7 +71,7 @@ fn populate_exp_template(
     }
     match (&exp_template.node, &exp.node) {
         (ExpKind::Id(id_template), _) if uenv.unified(id_template) => {
-            let prem = populate_var_exp_template(exp_template, exp);
+            let prem = populate_id_exp_template(exp_template, exp);
             Ok(vec![prem])
         }
         (ExpKind::Tuple(exps_template), ExpKind::Tuple(exps)) => {
@@ -118,9 +118,9 @@ fn populate_exps_templates<'a>(
     Ok(prems)
 }
 
-// - Variable expression
+// - Identifier expression
 
-fn populate_var_exp_template(exp_template: &Exp, exp: &Exp) -> Prem {
+fn populate_id_exp_template(exp_template: &Exp, exp: &Exp) -> Prem {
     let span = Span::over(&[exp.span.clone(), exp_template.span.clone()]);
     let prem = LetPrem { exp_l: exp.clone(), exp_r: exp_template.clone() };
     let prem_kind = PremKind::Let(prem);
@@ -137,7 +137,7 @@ fn populate_iter_exp_template(
 ) -> Prem {
     let (iter_template, vars_template) = iter_template;
     let (_, vars) = iter;
-    let prem = populate_var_exp_template(exp_template, exp);
+    let prem = populate_id_exp_template(exp_template, exp);
     let span = prem.span.clone();
     let prem_iter = PremIter {
         iter: *iter_template,
@@ -212,7 +212,7 @@ fn antiunify_exps(
         .collect()
 }
 
-// - Variable expression
+// - Identifier expression
 
 fn antiunify_id_exp(frees: &mut IdSet, uenv: &mut UEnv, id_template: &Id) -> ExpKind {
     if uenv.unified(id_template) {

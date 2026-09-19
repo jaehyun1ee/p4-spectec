@@ -37,8 +37,8 @@ fn test_conversion_inserts_index_guards_at_evaluation_sites_in_source_order() {
     let typ_list = typ::make::list(typ_bool.clone());
     let exp_idx_prem = exp(
         ast::ExpKind::Idx(
-            Box::new(iterated_var_exp("xs", &typ_bool, ast::Iter::List, 10)),
-            Box::new(typed_var_exp("i", &typ_nat, 11)),
+            Box::new(iterated_id_exp("xs", &typ_bool, ast::Iter::List, 10)),
+            Box::new(typed_id_exp("i", &typ_nat, 11)),
         ),
         ast::TypKind::Bool,
         12,
@@ -56,8 +56,8 @@ fn test_conversion_inserts_index_guards_at_evaluation_sites_in_source_order() {
     let prem_source = if_prem(exp_condition);
     let exp_output = exp(
         ast::ExpKind::Idx(
-            Box::new(iterated_var_exp("xs", &typ_bool, ast::Iter::List, 20)),
-            Box::new(typed_var_exp("j", &typ_nat, 21)),
+            Box::new(iterated_id_exp("xs", &typ_bool, ast::Iter::List, 20)),
+            Box::new(typed_id_exp("j", &typ_nat, 21)),
         ),
         ast::TypKind::Bool,
         22,
@@ -65,9 +65,9 @@ fn test_conversion_inserts_index_guards_at_evaluation_sites_in_source_order() {
     let spec = function_spec(
         vec![typ_list, typ_nat.clone(), typ_nat.clone()],
         vec![
-            iterated_var_exp("xs", &typ_bool, ast::Iter::List, 2),
-            typed_var_exp("i", &typ_nat, 3),
-            typed_var_exp("j", &typ_nat, 4),
+            iterated_id_exp("xs", &typ_bool, ast::Iter::List, 2),
+            typed_id_exp("i", &typ_nat, 3),
+            typed_id_exp("j", &typ_nat, 4),
         ],
         exp_output.clone(),
         vec![prem_source.clone()],
@@ -152,12 +152,12 @@ fn test_conversion_inserts_list_and_optional_iteration_guards_in_source_order() 
     params.extend(vec![typ::make::opt(typ_bool.clone()); optional_names.len()]);
     let mut args = list_names
         .iter()
-        .map(|(name, line)| iterated_var_exp(name, &typ_bool, ast::Iter::List, *line))
+        .map(|(name, line)| iterated_id_exp(name, &typ_bool, ast::Iter::List, *line))
         .collect::<Vec<_>>();
     args.extend(
         optional_names
             .iter()
-            .map(|(name, line)| iterated_var_exp(name, &typ_bool, ast::Iter::Opt, *line)),
+            .map(|(name, line)| iterated_id_exp(name, &typ_bool, ast::Iter::Opt, *line)),
     );
     let exp_list = joint_iteration(&list_names, ast::Iter::List, 20);
     let exp_optional = joint_iteration(&optional_names, ast::Iter::Opt, 21);
@@ -218,7 +218,7 @@ fn test_conversion_omits_iteration_guards_entailed_by_prior_premises() {
     let names = [("x", 2), ("y", 3), ("z", 4)];
     let args = names
         .iter()
-        .map(|(name, line)| iterated_var_exp(name, &typ_bool, ast::Iter::List, *line))
+        .map(|(name, line)| iterated_id_exp(name, &typ_bool, ast::Iter::List, *line))
         .collect::<Vec<_>>();
     let prem_xy = equality_prem(len_exp("x", 10), len_exp("y", 11), 12);
     let prem_yz = equality_prem(len_exp("y", 13), len_exp("z", 14), 15);
@@ -249,7 +249,7 @@ fn test_conversion_preserves_numeric_and_slice_checks_before_output_guards() {
         ast::ExpKind::Cmp(
             ast::CmpOp::Bool(prim::bool::CmpOp::Ne),
             ast::OpTyp::Bool,
-            Box::new(typed_var_exp("d", &typ_nat, 10)),
+            Box::new(typed_id_exp("d", &typ_nat, 10)),
             Box::new(exp_zero),
         ),
         ast::TypKind::Bool,
@@ -260,13 +260,13 @@ fn test_conversion_preserves_numeric_and_slice_checks_before_output_guards() {
         ast::ExpKind::Bin(
             ast::BinOp::Num(prim::num::BinOp::Add),
             ast::OpTyp::Nat,
-            Box::new(typed_var_exp("offset", &typ_nat, 11)),
-            Box::new(typed_var_exp("length", &typ_nat, 11)),
+            Box::new(typed_id_exp("offset", &typ_nat, 11)),
+            Box::new(typed_id_exp("length", &typ_nat, 11)),
         ),
         ast::TypKind::Num(prim::num::Typ::Nat),
         11,
     );
-    let exp_base_for_len = iterated_var_exp("xs", &typ_nat, ast::Iter::List, 12);
+    let exp_base_for_len = iterated_id_exp("xs", &typ_nat, ast::Iter::List, 12);
     let exp_len = exp(
         ast::ExpKind::Len(Box::new(exp_base_for_len)),
         ast::TypKind::Num(prim::num::Typ::Nat),
@@ -285,8 +285,8 @@ fn test_conversion_preserves_numeric_and_slice_checks_before_output_guards() {
     let prem_slice_bound = if_prem(exp_slice_bound);
     let exp_idx = exp(
         ast::ExpKind::Idx(
-            Box::new(iterated_var_exp("xs", &typ_nat, ast::Iter::List, 20)),
-            Box::new(typed_var_exp("index", &typ_nat, 21)),
+            Box::new(iterated_id_exp("xs", &typ_nat, ast::Iter::List, 20)),
+            Box::new(typed_id_exp("index", &typ_nat, 21)),
         ),
         ast::TypKind::Num(prim::num::Typ::Nat),
         22,
@@ -296,16 +296,16 @@ fn test_conversion_preserves_numeric_and_slice_checks_before_output_guards() {
             ast::BinOp::Num(prim::num::BinOp::Div),
             ast::OpTyp::Nat,
             Box::new(exp_idx),
-            Box::new(typed_var_exp("d", &typ_nat, 23)),
+            Box::new(typed_id_exp("d", &typ_nat, 23)),
         ),
         ast::TypKind::Num(prim::num::Typ::Nat),
         23,
     );
     let exp_slice = exp(
         ast::ExpKind::Slice(
-            Box::new(iterated_var_exp("xs", &typ_nat, ast::Iter::List, 24)),
-            Box::new(typed_var_exp("offset", &typ_nat, 24)),
-            Box::new(typed_var_exp("length", &typ_nat, 24)),
+            Box::new(iterated_id_exp("xs", &typ_nat, ast::Iter::List, 24)),
+            Box::new(typed_id_exp("offset", &typ_nat, 24)),
+            Box::new(typed_id_exp("length", &typ_nat, 24)),
         ),
         typ_list.node.clone(),
         24,
@@ -314,8 +314,8 @@ fn test_conversion_preserves_numeric_and_slice_checks_before_output_guards() {
         ast::ExpKind::Bin(
             ast::BinOp::Num(prim::num::BinOp::Mod),
             ast::OpTyp::Nat,
-            Box::new(typed_var_exp("value", &typ_nat, 25)),
-            Box::new(typed_var_exp("d", &typ_nat, 25)),
+            Box::new(typed_id_exp("value", &typ_nat, 25)),
+            Box::new(typed_id_exp("d", &typ_nat, 25)),
         ),
         ast::TypKind::Num(prim::num::Typ::Nat),
         25,
@@ -334,12 +334,12 @@ fn test_conversion_preserves_numeric_and_slice_checks_before_output_guards() {
         typ_nat.clone(),
     ];
     let args = vec![
-        iterated_var_exp("xs", &typ_nat, ast::Iter::List, 2),
-        typed_var_exp("index", &typ_nat, 3),
-        typed_var_exp("offset", &typ_nat, 4),
-        typed_var_exp("length", &typ_nat, 5),
-        typed_var_exp("value", &typ_nat, 6),
-        typed_var_exp("d", &typ_nat, 7),
+        iterated_id_exp("xs", &typ_nat, ast::Iter::List, 2),
+        typed_id_exp("index", &typ_nat, 3),
+        typed_id_exp("offset", &typ_nat, 4),
+        typed_id_exp("length", &typ_nat, 5),
+        typed_id_exp("value", &typ_nat, 6),
+        typed_id_exp("d", &typ_nat, 7),
     ];
     let spec = function_spec(
         params,
@@ -376,8 +376,8 @@ fn test_conversion_distinguishes_let_must_guards_from_insert_guards() {
     let spec = function_spec(
         vec![typ::make::list(typ_bool.clone()), typ::make::list(typ_bool.clone())],
         vec![
-            iterated_var_exp("input_l", &typ_bool, ast::Iter::List, 2),
-            iterated_var_exp("input_r", &typ_bool, ast::Iter::List, 3),
+            iterated_id_exp("input_l", &typ_bool, ast::Iter::List, 2),
+            iterated_id_exp("input_r", &typ_bool, ast::Iter::List, 3),
         ],
         exp_output.clone(),
         vec![prem_equality],
@@ -407,8 +407,8 @@ fn test_conversion_distinguishes_iterated_must_guards_from_insert_guards() {
         ast::ExpKind::Cmp(
             ast::CmpOp::Bool(prim::bool::CmpOp::Eq),
             ast::OpTyp::Bool,
-            Box::new(typed_var_exp("left", &typ_bool, 12)),
-            Box::new(typed_var_exp("right", &typ_bool, 13)),
+            Box::new(typed_id_exp("left", &typ_bool, 12)),
+            Box::new(typed_id_exp("right", &typ_bool, 13)),
         ),
         ast::TypKind::Bool,
         14,
@@ -429,8 +429,8 @@ fn test_conversion_distinguishes_iterated_must_guards_from_insert_guards() {
     let insert_spec = function_spec(
         vec![typ::make::list(typ_bool.clone()), typ::make::list(typ_bool.clone())],
         vec![
-            iterated_var_exp("left", &typ_bool, ast::Iter::List, 2),
-            iterated_var_exp("right", &typ_bool, ast::Iter::List, 3),
+            iterated_id_exp("left", &typ_bool, ast::Iter::List, 2),
+            iterated_id_exp("right", &typ_bool, ast::Iter::List, 3),
         ],
         exp(ast::ExpKind::Bool(true), ast::TypKind::Bool, 16),
         vec![prem_iterated],
@@ -448,8 +448,8 @@ fn test_conversion_distinguishes_iterated_must_guards_from_insert_guards() {
     let prem_binding = crate::phrase! { node:
     ast::PremKind::Iter(ast::IterPrem {
         prem: Box::new(equality_prem(
-            typed_var_exp("output", &typ_bool, 23),
-            typed_var_exp("input", &typ_bool, 22),
+            typed_id_exp("output", &typ_bool, 23),
+            typed_id_exp("input", &typ_bool, 22),
             24,
         )),
         prem_iter: ast::PremIter {
@@ -462,7 +462,7 @@ fn test_conversion_distinguishes_iterated_must_guards_from_insert_guards() {
     let exp_output = joint_iteration(&[("input", 22), ("output", 23)], ast::Iter::List, 30);
     let must_spec = function_spec(
         vec![typ::make::list(typ_bool.clone())],
-        vec![iterated_var_exp("input", &typ_bool, ast::Iter::List, 20)],
+        vec![iterated_id_exp("input", &typ_bool, ast::Iter::List, 20)],
         exp_output.clone(),
         vec![prem_binding],
     );

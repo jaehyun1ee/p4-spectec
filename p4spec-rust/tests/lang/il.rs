@@ -23,7 +23,7 @@ fn id(name: &str) -> ast::Id {
         span: Span::default(),
     }
 }
-fn var(name: &str) -> ast::Exp {
+fn id_exp(name: &str) -> ast::Exp {
     p4spec_rust::note_phrase!(node: p4spec_rust::lang::il::ast::ExpKind::Id(id(name)), note: p4spec_rust::lang::il::ast::TypKind::Bool, span: Default::default())
 }
 fn arg(kind: ast::ArgKind) -> ast::Arg {
@@ -39,7 +39,7 @@ fn prem(kind: ast::PremKind) -> ast::Prem {
     }
 }
 fn notexp(name: &str) -> ast::NotExp {
-    Mixfix::Seq(vec![Mixfix::Arg(var(name))])
+    Mixfix::Seq(vec![Mixfix::Arg(id_exp(name))])
 }
 fn not_typ() -> ast::NotTyp {
     p4spec_rust::phrase! {

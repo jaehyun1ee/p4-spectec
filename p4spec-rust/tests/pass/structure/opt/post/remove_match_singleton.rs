@@ -64,13 +64,13 @@ fn test_nested_containers_rewrite_but_debug_remains_opaque() {
         vec![
             instr(InstrKind::Hold(HoldInstr {
                 id: id("R"),
-                not_exp: Mixfix::Arg(variable("arg")),
+                not_exp: Mixfix::Arg(id_exp("arg")),
                 iter_exps: vec![],
                 block_hold: vec![instr_inner.clone()],
                 block_not_hold: vec![instr_inner.clone()],
             })),
             instr(InstrKind::Case(CaseInstr {
-                exp: variable("cond"),
+                exp: id_exp("cond"),
                 cases: vec![Case { guard: Guard::Bool(true), block: vec![instr_inner.clone()] }],
                 total: false,
             })),
@@ -89,7 +89,7 @@ fn test_nested_containers_rewrite_but_debug_remains_opaque() {
         wrap(ret("result"))
     );
     let instr_debug = instr(InstrKind::Debug(DebugInstr {
-        exp: variable("debug"),
+        exp: id_exp("debug"),
         instr: Box::new(matching(&typ, vec![ret("result")])),
     }));
     assert_eq!(apply(&tdenv, vec![instr_debug.clone()]).unwrap(), vec![instr_debug]);

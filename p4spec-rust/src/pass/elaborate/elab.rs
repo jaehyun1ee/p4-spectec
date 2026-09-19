@@ -347,7 +347,7 @@ fn infer_exp(ctx: &mut Context, exp: &el::Exp) -> Attempt<il::Exp> {
         el::ExpKind::Bool(value) => infer_bool_exp(ctx, &exp.span, *value),
         el::ExpKind::Num(_, value) => infer_num_exp(ctx, &exp.span, value),
         el::ExpKind::Text(value) => infer_text_exp(ctx, &exp.span, value),
-        el::ExpKind::Id(id) => infer_var_exp(ctx, &exp.span, id),
+        el::ExpKind::Id(id) => infer_id_exp(ctx, &exp.span, id),
         el::ExpKind::Un(op, exp_inner) => infer_un_exp(ctx, &exp.span, *op, exp_inner),
         el::ExpKind::Bin(exp_l, op, exp_r) => infer_bin_exp(ctx, &exp.span, exp_l, *op, exp_r),
         el::ExpKind::Cmp(exp_l, op, exp_r) => infer_cmp_exp(ctx, &exp.span, exp_l, *op, exp_r),
@@ -427,9 +427,9 @@ fn infer_text_exp(_ctx: &mut Context, span: &Span, value: &el::Text) -> Attempt<
     Ok(exp_il)
 }
 
-// - Variable expression inference
+// - Identifier expression inference
 
-fn infer_var_exp(ctx: &mut Context, span: &Span, id: &Id) -> Attempt<il::Exp> {
+fn infer_id_exp(ctx: &mut Context, span: &Span, id: &Id) -> Attempt<il::Exp> {
     let tid = id.strip_suffix();
     let Some(typ_il) = ctx.find_metavar_opt(&tid) else {
         return fail_infer(&id.span, "variable");

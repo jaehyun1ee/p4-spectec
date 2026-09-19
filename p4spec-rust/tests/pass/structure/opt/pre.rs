@@ -1,11 +1,11 @@
-use super::super::{id, instr, ret, signature, span, variable};
+use super::super::{id, id_exp, instr, ret, signature, span};
 use crate::lang::il::ast::{ExpKind, Iter, TypKind};
 use crate::pass::structure::ol::ast::*;
 fn group(block: Block) -> Instr {
     instr(InstrKind::Group(GroupInstr {
         id: id("group"),
         rel_signature: signature(),
-        exps: vec![variable("x")],
+        exps: vec![id_exp("x")],
         block,
     }))
 }
@@ -15,7 +15,7 @@ fn binding(exp_l: Exp, exp_r: Exp, block: Block) -> Instr {
 }
 
 fn iterated(text: &str, iter: Iter) -> Exp {
-    crate::note_phrase! {node: ExpKind::Iter(Box::new(variable(text)), (iter, vec![])), note: TypKind::Bool, span: span(4)}
+    crate::note_phrase! {node: ExpKind::Iter(Box::new(id_exp(text)), (iter, vec![])), note: TypKind::Bool, span: span(4)}
 }
 
 #[path = "pre/matchify_if_eq_terminal.rs"]
@@ -44,19 +44,19 @@ fn containers(block: Block) -> Block {
     };
     vec![
         instr(InstrKind::If(IfInstr {
-            exp: variable("condition"),
+            exp: id_exp("condition"),
             iter_exps: vec![(Iter::Opt, vec![])],
             block: block.clone(),
         })),
         instr(InstrKind::Hold(HoldInstr {
             id: id("relation"),
-            not_exp: Mixfix::Arg(variable("input")),
+            not_exp: Mixfix::Arg(id_exp("input")),
             iter_exps: vec![(Iter::List, vec![])],
             block_hold: block.clone(),
             block_not_hold: block.clone(),
         })),
         instr(InstrKind::Case(CaseInstr {
-            exp: variable("case"),
+            exp: id_exp("case"),
             cases: vec![
                 Case { guard: Guard::Bool(true), block: block.clone() },
                 Case { guard: Guard::Bool(false), block: block.clone() },
@@ -64,14 +64,14 @@ fn containers(block: Block) -> Block {
             total: true,
         })),
         instr(InstrKind::Let(LetInstr {
-            exp_l: variable("binding"),
+            exp_l: id_exp("binding"),
             exp_r: exp_literal,
             iter_instrs: vec![iter_instr.clone()],
             block: block.clone(),
         })),
         instr(InstrKind::Rule(RuleInstr {
             id: id("relation"),
-            not_exp: Mixfix::Arg(variable("input")),
+            not_exp: Mixfix::Arg(id_exp("input")),
             input_hint: InputHint::new(vec![0]),
             iter_instrs: vec![iter_instr],
             block,

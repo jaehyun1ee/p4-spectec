@@ -112,8 +112,8 @@ fn test_clause_analysis_orders_partial_then_repeated_then_source_premises() {
     span(1) };
     let tuple = exp(
         ast::ExpKind::Tuple(vec![
-            var_exp("x", 2),
-            var_exp("x", 3),
+            id_exp("x", 2),
+            id_exp("x", 3),
             exp(ast::ExpKind::Bool(true), ast::TypKind::Bool, 4),
         ]),
         tuple_typ.node.clone(),
@@ -122,7 +122,7 @@ fn test_clause_analysis_orders_partial_then_repeated_then_source_premises() {
     let clause = crate::phrase! { node:
     ast::ClauseKind {
         args: vec![crate::phrase! { node: ast::ArgKind::Exp(Box::new(tuple)), span:  span(2) }],
-        exp: var_exp("x", 5),
+        exp: id_exp("x", 5),
         prems: vec![crate::phrase! { node:
             ast::PremKind::Debug(ast::DebugPrem {
                 exp: exp(ast::ExpKind::Bool(false), ast::TypKind::Bool, 6),
@@ -185,9 +185,9 @@ fn test_otherwise_clauses_and_rules_reject_impure_premises_at_the_branch_span() 
     let else_clause = crate::phrase! { node:
     ast::ClauseKind {
         args: vec![crate::phrase! { node:
-            ast::ArgKind::Exp(Box::new(var_exp("x", 10))), span:
+            ast::ArgKind::Exp(Box::new(id_exp("x", 10))), span:
             span(10) }],
-        exp: var_exp("x", 10),
+        exp: id_exp("x", 10),
         prems: vec![impure_premise(11)],
     }, span:
     span(10) };
@@ -211,7 +211,7 @@ fn test_otherwise_clauses_and_rules_reject_impure_premises_at_the_branch_span() 
     let else_rule = crate::phrase! { node:
     ast::RuleKind {
         id: id("else_rule", 21),
-        not_exp: Mixfix::Arg(var_exp("input", 21)),
+        not_exp: Mixfix::Arg(id_exp("input", 21)),
         prems: vec![impure_premise(22)],
     }, span:
     span(21) };
@@ -323,9 +323,9 @@ fn test_conversion_preserves_definition_clause_and_table_row_order() {
         crate::phrase! { node:
         ast::ClauseKind {
             args: vec![crate::phrase! { node:
-                ast::ArgKind::Exp(Box::new(var_exp(name, line))), span:
+                ast::ArgKind::Exp(Box::new(id_exp(name, line))), span:
                 span(line) }],
-            exp: var_exp(name, line),
+            exp: id_exp(name, line),
             prems: vec![],
         }, span:
         span(line) }

@@ -26,7 +26,7 @@ fn typ() -> il::ast::Typ {
     }
 }
 
-fn variable(name: &str) -> il::ast::Exp {
+fn id_exp(name: &str) -> il::ast::Exp {
     p4spec_rust::note_phrase!(node: p4spec_rust::lang::il::ast::ExpKind::Id(id(name)), note: il::ast::TypKind::Bool, span: span(name))
 }
 
@@ -44,7 +44,7 @@ fn names(items: &[&str]) -> IdSet {
 #[test]
 fn test_parameters_collect_only_expression_defaults() {
     let param_exp = p4spec_rust::phrase! {
-        node: sl::ast::ParamKind::Exp(typ(), Box::new(variable("default"))),
+        node: sl::ast::ParamKind::Exp(typ(), Box::new(id_exp("default"))),
         span: span("expression-parameter"),
     };
     let param_def = p4spec_rust::phrase! {
@@ -64,13 +64,13 @@ fn test_guards_collect_only_embedded_expressions() {
             sl::ast::Guard::Cmp(
                 il::ast::CmpOp::Bool(p4spec_rust::lang::common::prim::bool::CmpOp::Eq),
                 il::ast::OpTyp::Bool,
-                variable("comparison"),
+                id_exp("comparison"),
             ),
             names(&["comparison"]),
         ),
         (sl::ast::Guard::Sub(typ(), Box::new(il::ast::Subcheck::Skip)), names(&[])),
         (sl::ast::Guard::Match(il::ast::Pattern::List(il::ast::ListPattern::Nil)), names(&[])),
-        (sl::ast::Guard::Mem(variable("member")), names(&["member"])),
+        (sl::ast::Guard::Mem(id_exp("member")), names(&["member"])),
     ];
 
     for (guard, expected) in cases {
@@ -80,8 +80,7 @@ fn test_guards_collect_only_embedded_expressions() {
 
 #[test]
 fn test_instructions_collect_nested_expressions_and_omit_binding_metadata() {
-    let hidden =
-        instr(sl::ast::InstrKind::Return(sl::ast::ReturnInstr { exp: variable("hidden") }));
+    let hidden = instr(sl::ast::InstrKind::Return(sl::ast::ReturnInstr { exp: id_exp("hidden") }));
     let binder = il::ast::Var { id: id("binder"), typ: typ(), iters: Vec::new() };
     let signature = sl::ast::RelSignature {
         not_typ: p4spec_rust::phrase! {
@@ -93,10 +92,10 @@ fn test_instructions_collect_nested_expressions_and_omit_binding_metadata() {
     let instructions = vec![
         (
             instr(sl::ast::InstrKind::If(sl::ast::IfInstr {
-                exp: variable("condition"),
+                exp: id_exp("condition"),
                 iter_exps: vec![(il::ast::Iter::List, vec![binder.clone()])],
                 block: vec![instr(sl::ast::InstrKind::Return(sl::ast::ReturnInstr {
-                    exp: variable("then"),
+                    exp: id_exp("then"),
                 }))],
                 dangle: false,
             })),
@@ -105,7 +104,7 @@ fn test_instructions_collect_nested_expressions_and_omit_binding_metadata() {
         (
             instr(sl::ast::InstrKind::Hold(sl::ast::HoldInstr {
                 id: id("relation"),
-                not_exp: Mixfix::Arg(variable("hold")),
+                not_exp: Mixfix::Arg(id_exp("hold")),
                 iter_exps: vec![(il::ast::Iter::List, vec![binder.clone()])],
                 hold_case: sl::ast::HoldCase::Hold(vec![hidden.clone()], false),
             })),
@@ -113,11 +112,11 @@ fn test_instructions_collect_nested_expressions_and_omit_binding_metadata() {
         ),
         (
             instr(sl::ast::InstrKind::Case(sl::ast::CaseInstr {
-                exp: variable("scrutinee"),
+                exp: id_exp("scrutinee"),
                 cases: vec![sl::ast::Case {
-                    guard: sl::ast::Guard::Mem(variable("guard")),
+                    guard: sl::ast::Guard::Mem(id_exp("guard")),
                     block: vec![instr(sl::ast::InstrKind::Return(sl::ast::ReturnInstr {
-                        exp: variable("arm"),
+                        exp: id_exp("arm"),
                     }))],
                 }],
                 dangle: false,
@@ -128,24 +127,24 @@ fn test_instructions_collect_nested_expressions_and_omit_binding_metadata() {
             instr(sl::ast::InstrKind::Group(sl::ast::GroupInstr {
                 id: id("group"),
                 rel_signature: signature.clone(),
-                exps: vec![variable("group-input")],
+                exps: vec![id_exp("group-input")],
                 block: vec![instr(sl::ast::InstrKind::Return(sl::ast::ReturnInstr {
-                    exp: variable("group-body"),
+                    exp: id_exp("group-body"),
                 }))],
             })),
             names(&["group-input", "group-body"]),
         ),
         (
             instr(sl::ast::InstrKind::Let(sl::ast::LetInstr {
-                exp_l: variable("left"),
-                exp_r: variable("right"),
+                exp_l: id_exp("left"),
+                exp_r: id_exp("right"),
                 iter_instrs: vec![il::ast::PremIter {
                     iter: il::ast::Iter::List,
                     vars_bound: vec![binder.clone()],
                     vars_bind: vec![binder.clone()],
                 }],
                 block: vec![instr(sl::ast::InstrKind::Return(sl::ast::ReturnInstr {
-                    exp: variable("let-body"),
+                    exp: id_exp("let-body"),
                 }))],
             })),
             names(&["left", "right", "let-body"]),
@@ -153,7 +152,7 @@ fn test_instructions_collect_nested_expressions_and_omit_binding_metadata() {
         (
             instr(sl::ast::InstrKind::Rule(sl::ast::RuleInstr {
                 id: id("rule"),
-                not_exp: Mixfix::Arg(variable("rule-input")),
+                not_exp: Mixfix::Arg(id_exp("rule-input")),
                 input_hint: InputHint::new(vec![0]),
                 iter_instrs: vec![il::ast::PremIter {
                     iter: il::ast::Iter::List,
@@ -161,7 +160,7 @@ fn test_instructions_collect_nested_expressions_and_omit_binding_metadata() {
                     vars_bind: vec![binder],
                 }],
                 block: vec![instr(sl::ast::InstrKind::Return(sl::ast::ReturnInstr {
-                    exp: variable("rule-body"),
+                    exp: id_exp("rule-body"),
                 }))],
             })),
             names(&["rule-input", "rule-body"]),
@@ -169,15 +168,15 @@ fn test_instructions_collect_nested_expressions_and_omit_binding_metadata() {
         (
             instr(sl::ast::InstrKind::Result(sl::ast::ResultInstr {
                 rel_signature: signature,
-                exps: vec![variable("result")],
+                exps: vec![id_exp("result")],
             })),
             names(&["result"]),
         ),
         (
             instr(sl::ast::InstrKind::Debug(sl::ast::DebugInstr {
-                exp: variable("debug"),
+                exp: id_exp("debug"),
                 instr: Box::new(instr(sl::ast::InstrKind::Return(sl::ast::ReturnInstr {
-                    exp: variable("nested"),
+                    exp: id_exp("nested"),
                 }))),
             })),
             names(&["debug", "nested"]),

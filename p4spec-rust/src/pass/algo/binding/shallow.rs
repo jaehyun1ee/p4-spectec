@@ -5,10 +5,10 @@
 
 use crate::lang::il::ast;
 
-fn is_iterated_var(exp: &ast::Exp) -> bool {
+fn is_iterated_id_exp(exp: &ast::Exp) -> bool {
     match &exp.node {
         ast::ExpKind::Id(_) => true,
-        ast::ExpKind::Iter(exp, _) => is_iterated_var(exp),
+        ast::ExpKind::Iter(exp, _) => is_iterated_id_exp(exp),
         _ => false,
     }
 }
@@ -21,7 +21,7 @@ pub fn check_exp(exp: &ast::Exp) -> bool {
         ast::ExpKind::UpCast(_, exp) => {
             matches!(&exp.node, ast::ExpKind::Id(_) | ast::ExpKind::Case(_))
         }
-        ast::ExpKind::Case(not_exp) => not_exp.args().into_iter().all(is_iterated_var),
+        ast::ExpKind::Case(not_exp) => not_exp.args().into_iter().all(is_iterated_id_exp),
         _ => false,
     }
 }

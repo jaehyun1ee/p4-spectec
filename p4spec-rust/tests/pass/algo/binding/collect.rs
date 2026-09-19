@@ -2,12 +2,12 @@ use super::super::*;
 
 #[test]
 fn test_conversion_propagates_located_binding_errors() {
-    let variable = var_exp("x", 41);
+    let exp_id = id_exp("x", 41);
     let negated = exp(
         ast::ExpKind::Un(
             ast::UnOp::Bool(prim::bool::UnOp::Not),
             ast::OpTyp::Bool,
-            Box::new(variable),
+            Box::new(exp_id),
         ),
         ast::TypKind::Bool,
         40,
@@ -27,12 +27,12 @@ fn test_conversion_propagates_located_binding_errors() {
 
 #[test]
 fn test_collection_rejects_a_binding_inside_a_noninvertible_operator() {
-    let variable = var_exp("x", 7);
+    let exp_id = id_exp("x", 7);
     let negated = exp(
         ast::ExpKind::Un(
             ast::UnOp::Bool(prim::bool::UnOp::Not),
             ast::OpTyp::Bool,
-            Box::new(variable),
+            Box::new(exp_id),
         ),
         ast::TypKind::Bool,
         6,
@@ -48,12 +48,12 @@ fn test_collection_rejects_a_binding_inside_a_noninvertible_operator() {
 #[test]
 fn test_expression_collection_reports_right_associated_conflict_span() {
     let iterated = exp(
-        ast::ExpKind::Iter(Box::new(var_exp("x", 3)), (ast::Iter::List, vec![])),
+        ast::ExpKind::Iter(Box::new(id_exp("x", 3)), (ast::Iter::List, vec![])),
         ast::TypKind::Iter(Box::new(typ::make::bool()), ast::Iter::List),
         3,
     );
     let tuple = exp(
-        ast::ExpKind::Tuple(vec![var_exp("x", 1), var_exp("x", 2), iterated]),
+        ast::ExpKind::Tuple(vec![id_exp("x", 1), id_exp("x", 2), iterated]),
         ast::TypKind::Tuple(vec![]),
         1,
     );
@@ -68,11 +68,11 @@ fn test_expression_collection_reports_right_associated_conflict_span() {
 #[test]
 fn test_argument_collection_reports_right_associated_conflict_span() {
     let iterated = exp(
-        ast::ExpKind::Iter(Box::new(var_exp("x", 3)), (ast::Iter::List, vec![])),
+        ast::ExpKind::Iter(Box::new(id_exp("x", 3)), (ast::Iter::List, vec![])),
         ast::TypKind::Iter(Box::new(typ::make::bool()), ast::Iter::List),
         3,
     );
-    let args = [var_exp("x", 1), var_exp("x", 2), iterated]
+    let args = [id_exp("x", 1), id_exp("x", 2), iterated]
         .into_iter()
         .map(|exp| crate::phrase! { node: ast::ArgKind::Exp(Box::new(exp)), span:  span(1) })
         .collect::<Vec<_>>();

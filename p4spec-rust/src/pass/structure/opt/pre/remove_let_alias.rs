@@ -106,7 +106,7 @@ fn remove_group_instr(instr_ol: GroupInstr, span: Span) -> Result<Block, Structu
 // - Let instruction
 
 /// Recognizes one iteration around a variable, such as `x*` or `x?`
-fn iterated_var(exp: &Exp) -> Option<(&Id, &Iter)> {
+fn iterated_id_exp(exp: &Exp) -> Option<(&Id, &Iter)> {
     let ExpKind::Iter(exp, (iter, _)) = &exp.node else {
         return None;
     };
@@ -126,7 +126,7 @@ fn remove_let_instr(instr_ol: LetInstr, span: Span) -> Result<Block, StructureEr
     }
     // let y* = x* { return y* } -> return x*; iterators must match
     if let (Some((id_l, iter_l)), Some((id_r, iter_r))) =
-        (iterated_var(&exp_l), iterated_var(&exp_r))
+        (iterated_id_exp(&exp_l), iterated_id_exp(&exp_r))
         && iter_l.syntax_eq(iter_r)
     {
         let renamer = Renamer::singleton(id_l.clone(), id_r.clone());
@@ -135,7 +135,7 @@ fn remove_let_instr(instr_ol: LetInstr, span: Span) -> Result<Block, StructureEr
     }
     // let y = x* { return y } -> return x*
     if let ExpKind::Id(id_l) = &exp_l.node
-        && iterated_var(&exp_r).is_some()
+        && iterated_id_exp(&exp_r).is_some()
     {
         let replacer = Replacer::singleton(id_l.clone(), exp_r);
         let block = replacer.replace_instrs(block)?;

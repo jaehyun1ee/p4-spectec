@@ -2133,8 +2133,8 @@ ExpPrimary: ast::Exp = {
     // ExpPrimary ::= ExpLiteral
     ExpLiteral,
 
-    // ExpPrimary ::= ExpVariable
-    ExpVariable,
+    // ExpPrimary ::= ExpId
+    ExpId,
 
     // ExpPrimary ::= ExpCall
     ExpCall,
@@ -2259,8 +2259,8 @@ ExpLiteral: ast::Exp = {
     },
 };
 
-ExpVariable: ast::Exp = {
-    // ExpVariable ::= VarId
+ExpId: ast::Exp = {
+    // ExpId ::= VarId
     <id:VarId> => {
         let span = id.span.clone();
         crate::phrase! {
@@ -2269,7 +2269,7 @@ ExpVariable: ast::Exp = {
         }
     },
 
-    // ExpVariable ::= BOOL
+    // ExpId ::= BOOL
     <l:@L> "BOOL" <r:@R> => {
         let span = ctx.span(l, r);
         let id = crate::phrase! {
@@ -2282,7 +2282,7 @@ ExpVariable: ast::Exp = {
         }
     },
 
-    // ExpVariable ::= NAT
+    // ExpId ::= NAT
     <l:@L> "NAT" <r:@R> => {
         let span = ctx.span(l, r);
         let id = crate::phrase! {
@@ -2295,7 +2295,7 @@ ExpVariable: ast::Exp = {
         }
     },
 
-    // ExpVariable ::= INT
+    // ExpId ::= INT
     <l:@L> "INT" <r:@R> => {
         let span = ctx.span(l, r);
         let id = crate::phrase! {
@@ -2308,7 +2308,7 @@ ExpVariable: ast::Exp = {
         }
     },
 
-    // ExpVariable ::= TEXT
+    // ExpId ::= TEXT
     <l:@L> "TEXT" <r:@R> => {
         let span = ctx.span(l, r);
         let id = crate::phrase! {
@@ -2708,8 +2708,8 @@ ArithAtomBase: ast::Exp = {
     // ArithAtomBase ::= ExpLiteral
     ExpLiteral,
 
-    // ArithAtomBase ::= ExpVariable
-    ExpVariable,
+    // ArithAtomBase ::= ExpId
+    ExpId,
 
     // ArithAtomBase ::= ExpCall
     ExpCall,

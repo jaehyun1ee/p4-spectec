@@ -1,4 +1,4 @@
-use super::super::{id, instr, ret, span, variable};
+use super::super::{id, id_exp, instr, ret, span};
 use crate::lang::{
     common::notation::mixfix::Mixfix,
     hints::input::InputHint,
@@ -7,8 +7,8 @@ use crate::lang::{
 use crate::pass::structure::ol::ast::*;
 fn binding(text: &str, block: Block) -> Instr {
     instr(InstrKind::Let(LetInstr {
-        exp_l: variable(text),
-        exp_r: variable("input"),
+        exp_l: id_exp(text),
+        exp_r: id_exp("input"),
         iter_instrs: vec![],
         block,
     }))
@@ -17,7 +17,7 @@ fn binding(text: &str, block: Block) -> Instr {
 fn rule(text: &str, block: Block) -> Instr {
     instr(InstrKind::Rule(RuleInstr {
         id: id("relation"),
-        not_exp: Mixfix::Seq(vec![Mixfix::Arg(variable("input")), Mixfix::Arg(variable(text))]),
+        not_exp: Mixfix::Seq(vec![Mixfix::Arg(id_exp("input")), Mixfix::Arg(id_exp(text))]),
         input_hint: InputHint::new(vec![0]),
         iter_instrs: vec![],
         block,
@@ -27,7 +27,7 @@ fn rule(text: &str, block: Block) -> Instr {
 fn hold(block_hold: Block, block_not_hold: Block) -> Instr {
     instr(InstrKind::Hold(HoldInstr {
         id: id("relation"),
-        not_exp: Mixfix::Arg(variable("input")),
+        not_exp: Mixfix::Arg(id_exp("input")),
         iter_exps: vec![],
         block_hold,
         block_not_hold,

@@ -181,7 +181,7 @@ impl Replacer {
         exps.into_iter().map(|exp| self.replace_exp(exp)).collect()
     }
 
-    // - Variable expression
+    // - Identifier expression
 
     fn replace_id_exp(&self, id: Id, note: std::rc::Rc<TypKind>, span: Span) -> Exp {
         self.exps.get(&id).cloned().unwrap_or(note_phrase!(

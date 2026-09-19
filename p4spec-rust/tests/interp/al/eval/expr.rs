@@ -356,16 +356,16 @@ fn test_iteration_evaluates_each_bound_element_and_preserves_empty_options() {
         let typ_int = typ::make::int();
         let typ_iter = typ::make::iter(typ_int.clone(), iter);
         let var = ast::Var { id: id("x"), typ: typ_int.clone(), iters: vec![] };
-        let exp_var = p4spec_rust::note_phrase!(node: p4spec_rust::lang::il::ast::ExpKind::Id(id("x")), note: typ_int.node.clone(), span: typ_int.span.clone());
+        let exp_id = p4spec_rust::note_phrase!(node: p4spec_rust::lang::il::ast::ExpKind::Id(id("x")), note: typ_int.node.clone(), span: typ_int.span.clone());
         let signature = exp(
-            ast::ExpKind::Iter(Box::new(exp_var.clone()), (iter, vec![var.clone()])),
+            ast::ExpKind::Iter(Box::new(exp_id.clone()), (iter, vec![var.clone()])),
             typ_iter.clone(),
         );
         let add = exp(
             ast::ExpKind::Bin(
                 ast::BinOp::Num(num::BinOp::Add),
                 ast::OpTyp::Int,
-                Box::new(exp_var),
+                Box::new(exp_id),
                 Box::new(int(10)),
             ),
             typ_int,

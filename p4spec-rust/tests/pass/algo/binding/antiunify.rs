@@ -13,8 +13,8 @@ fn test_antiunification_populates_each_path_in_left_to_right_expression_order() 
         )
     };
     let exps_by_rule = vec![
-        vec![tuple(true, false, 1), var_exp("shared", 3)],
-        vec![tuple(false, true, 5), var_exp("shared", 7)],
+        vec![tuple(true, false, 1), id_exp("shared", 3)],
+        vec![tuple(false, true, 5), id_exp("shared", 7)],
     ];
 
     let mut ctx = Context::new();
@@ -152,7 +152,7 @@ fn test_nested_type_error_keeps_its_category_and_span() {
     };
     let exp_bool_a = exp(ast::ExpKind::Bool(true), ast::TypKind::Bool, 2);
     let exp_bool_b = exp(ast::ExpKind::Bool(false), ast::TypKind::Bool, 6);
-    let exp_missing = typed_var_exp("x", &typ_missing, 3);
+    let exp_missing = typed_id_exp("x", &typ_missing, 3);
     let exp_bool = exp(ast::ExpKind::Bool(true), ast::TypKind::Bool, 7);
     let typ_kind_a = ast::TypKind::Tuple(vec![typ::make::bool(), typ_missing]);
     let typ_kind_b = ast::TypKind::Tuple(vec![typ::make::bool(), typ::make::bool()]);

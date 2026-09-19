@@ -23,7 +23,7 @@ fn typ() -> il::ast::Typ {
     }
 }
 
-fn variable(name: &str) -> il::ast::Exp {
+fn id_exp(name: &str) -> il::ast::Exp {
     p4spec_rust::note_phrase!(node: p4spec_rust::lang::il::ast::ExpKind::Id(id(name)), note: il::ast::TypKind::Bool, span: span(name))
 }
 
@@ -36,14 +36,10 @@ fn instruction(kind: sl::ast::InstrKind, source: &str) -> sl::ast::Instr {
 
 #[test]
 fn test_instruction_equality_ignores_source_regions() {
-    let instr_l = instruction(
-        sl::ast::InstrKind::Return(sl::ast::ReturnInstr { exp: variable("x") }),
-        "left",
-    );
-    let instr_r = instruction(
-        sl::ast::InstrKind::Return(sl::ast::ReturnInstr { exp: variable("x") }),
-        "right",
-    );
+    let instr_l =
+        instruction(sl::ast::InstrKind::Return(sl::ast::ReturnInstr { exp: id_exp("x") }), "left");
+    let instr_r =
+        instruction(sl::ast::InstrKind::Return(sl::ast::ReturnInstr { exp: id_exp("x") }), "right");
 
     assert!(instr_l.syntax_eq(&instr_r));
 }
@@ -70,11 +66,11 @@ fn test_rule_instructions_compare_inputs_iterations_and_nested_blocks() {
         instruction(
             sl::ast::InstrKind::Rule(sl::ast::RuleInstr {
                 id: id("relation"),
-                not_exp: Mixfix::Arg(variable("x")),
+                not_exp: Mixfix::Arg(id_exp("x")),
                 input_hint,
                 iter_instrs: Vec::new(),
                 block: vec![instruction(
-                    sl::ast::InstrKind::Return(sl::ast::ReturnInstr { exp: variable("x") }),
+                    sl::ast::InstrKind::Return(sl::ast::ReturnInstr { exp: id_exp("x") }),
                     "nested",
                 )],
             }),
@@ -89,7 +85,7 @@ fn test_rule_instructions_compare_inputs_iterations_and_nested_blocks() {
 #[test]
 fn test_holding_cases_compare_variant_blocks_and_dangling_flags() {
     let block = vec![instruction(
-        sl::ast::InstrKind::Return(sl::ast::ReturnInstr { exp: variable("x") }),
+        sl::ast::InstrKind::Return(sl::ast::ReturnInstr { exp: id_exp("x") }),
         "block",
     )];
 

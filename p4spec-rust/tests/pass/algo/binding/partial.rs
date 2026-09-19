@@ -36,22 +36,22 @@ fn test_conversion_preserves_binding_match_and_cast_guards_before_bindings() {
     let typ_bool = typ::make::bool();
     let typ_list = typ::make::list(typ_bool.clone());
     let exp_list = exp(
-        ast::ExpKind::List(vec![typed_var_exp("item", &typ_bool, 10)]),
+        ast::ExpKind::List(vec![typed_id_exp("item", &typ_bool, 10)]),
         typ_list.node.clone(),
         10,
     );
     let exp_upcast = exp(
         ast::ExpKind::UpCast(
             Box::new(parent_typ.clone()),
-            Box::new(typed_var_exp("child", &child_typ, 11)),
+            Box::new(typed_id_exp("child", &child_typ, 11)),
         ),
         parent_typ.node.clone(),
         11,
     );
     let exp_output = exp(
         ast::ExpKind::Tuple(vec![
-            typed_var_exp("item", &typ_bool, 12),
-            typed_var_exp("child", &child_typ, 12),
+            typed_id_exp("item", &typ_bool, 12),
+            typed_id_exp("child", &child_typ, 12),
         ]),
         ast::TypKind::Tuple(vec![typ_bool.clone(), child_typ.clone()]),
         12,
@@ -109,7 +109,7 @@ fn test_conversion_preserves_binding_match_and_cast_guards_before_bindings() {
 fn test_partial_binding_preserves_expression_and_premise_iteration_dimensions() {
     let bool_value = exp(ast::ExpKind::Bool(true), ast::TypKind::Bool, 2);
     let tuple = exp(
-        ast::ExpKind::Tuple(vec![var_exp("x", 1), bool_value]),
+        ast::ExpKind::Tuple(vec![id_exp("x", 1), bool_value]),
         ast::TypKind::Tuple(vec![typ::make::bool(), typ::make::bool()]),
         1,
     );
@@ -176,7 +176,7 @@ fn test_partial_binding_preserves_nested_iteration_order_and_dimensions() {
     let tuple_typ = crate::phrase! { node: ast::TypKind::Tuple(vec![typ::make::bool(), typ::make::bool()]), span:  span(1) };
     let tuple = exp(
         ast::ExpKind::Tuple(vec![
-            var_exp("x", 1),
+            id_exp("x", 1),
             exp(ast::ExpKind::Bool(true), ast::TypKind::Bool, 2),
         ]),
         tuple_typ.node.clone(),
@@ -274,7 +274,7 @@ fn test_partial_case_and_list_bindings_generate_match_then_bind_premises_in_sour
     let case = exp(
         ast::ExpKind::Case(Box::new(Mixfix::Seq(vec![
             Mixfix::Atom(keyword),
-            Mixfix::Arg(var_exp("y", 2)),
+            Mixfix::Arg(id_exp("y", 2)),
         ]))),
         choice_typ.node.clone(),
         2,
@@ -282,7 +282,7 @@ fn test_partial_case_and_list_bindings_generate_match_then_bind_premises_in_sour
     let list_typ = crate::phrase! { node:
     ast::TypKind::Iter(Box::new(typ::make::bool()), ast::Iter::List), span:
     span(3) };
-    let list = exp(ast::ExpKind::List(vec![var_exp("z", 3)]), list_typ.node.clone(), 3);
+    let list = exp(ast::ExpKind::List(vec![id_exp("z", 3)]), list_typ.node.clone(), 3);
     let tuple = exp(
         ast::ExpKind::Tuple(vec![case, list]),
         ast::TypKind::Tuple(vec![choice_typ, list_typ]),

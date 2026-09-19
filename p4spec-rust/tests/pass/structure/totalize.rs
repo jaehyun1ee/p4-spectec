@@ -83,7 +83,7 @@ fn test_subtype_pattern_coverage_and_nonvariant_guard_short_circuit() {
     for guard in [
         Guard::Bool(true),
         Guard::Match(Pattern::Opt(crate::lang::il::ast::OptPattern::Some)),
-        Guard::Mem(variable("set")),
+        Guard::Mem(id_exp("set")),
     ] {
         let instr_case = case(
             &typ_bool,
@@ -109,7 +109,7 @@ fn test_nonvariant_failures_are_located_and_debug_is_not_totalized() {
         assert_eq!(error.span, span_expect);
     }
     let instr_debug = instr(ast_ol::InstrKind::Debug(ast_ol::DebugInstr {
-        exp: variable("debug"),
+        exp: id_exp("debug"),
         instr: Box::new(case(&typ, vec![pattern("A")], false)),
     }));
     let block_result = totalize(&TDEnv::new(), vec![instr_debug.clone()]).unwrap();
@@ -127,13 +127,13 @@ fn test_totalization_descends_all_owning_blocks() {
     let wrap = |instr_inner: ast_ol::Instr| {
         vec![
             instr(ast_ol::InstrKind::If(ast_ol::IfInstr {
-                exp: variable("cond"),
+                exp: id_exp("cond"),
                 iter_exps: vec![],
                 block: vec![instr_inner.clone()],
             })),
             instr(ast_ol::InstrKind::Hold(ast_ol::HoldInstr {
                 id: id("R"),
-                not_exp: Mixfix::Arg(variable("arg")),
+                not_exp: Mixfix::Arg(id_exp("arg")),
                 iter_exps: vec![],
                 block_hold: vec![instr_inner.clone()],
                 block_not_hold: vec![instr_inner.clone()],
@@ -141,24 +141,24 @@ fn test_totalization_descends_all_owning_blocks() {
             instr(ast_ol::InstrKind::Group(ast_ol::GroupInstr {
                 id: id("group"),
                 rel_signature: signature(),
-                exps: vec![variable("input")],
+                exps: vec![id_exp("input")],
                 block: vec![instr_inner.clone()],
             })),
             instr(ast_ol::InstrKind::Let(ast_ol::LetInstr {
-                exp_l: variable("bound"),
-                exp_r: variable("input"),
+                exp_l: id_exp("bound"),
+                exp_r: id_exp("input"),
                 iter_instrs: vec![],
                 block: vec![instr_inner.clone()],
             })),
             instr(ast_ol::InstrKind::Rule(ast_ol::RuleInstr {
                 id: id("R"),
-                not_exp: Mixfix::Arg(variable("arg")),
+                not_exp: Mixfix::Arg(id_exp("arg")),
                 input_hint: InputHint::new(vec![0]),
                 iter_instrs: vec![],
                 block: vec![instr_inner.clone()],
             })),
             instr(ast_ol::InstrKind::Case(ast_ol::CaseInstr {
-                exp: variable("bool"),
+                exp: id_exp("bool"),
                 cases: vec![ast_ol::Case { guard: Guard::Bool(true), block: vec![instr_inner] }],
                 total: false,
             })),

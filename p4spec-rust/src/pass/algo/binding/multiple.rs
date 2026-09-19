@@ -88,7 +88,7 @@ fn fresh_id(ids: &IdSet, id: &Id) -> Id {
     id_fresh
 }
 
-fn rename_var(ctx: &mut Context, renv: &mut RenameEnv, exp: &ast::Exp, id: &Id) -> ast::Exp {
+fn rename_id_exp(ctx: &mut Context, renv: &mut RenameEnv, exp: &ast::Exp, id: &Id) -> ast::Exp {
     let Some(ids_rename) = renv.get_mut(id) else {
         return exp.clone();
     };
@@ -100,7 +100,7 @@ fn rename_var(ctx: &mut Context, renv: &mut RenameEnv, exp: &ast::Exp, id: &Id) 
 
 pub fn rename_exp(ctx: &mut Context, renv: &mut RenameEnv, exp: &ast::Exp) -> ast::Exp {
     let kind = match &exp.node {
-        ast::ExpKind::Id(id) => return rename_var(ctx, renv, exp, id),
+        ast::ExpKind::Id(id) => return rename_id_exp(ctx, renv, exp, id),
         ast::ExpKind::UpCast(typ, exp_inner) => {
             let exp_inner = rename_exp(ctx, renv, exp_inner);
             ast::ExpKind::UpCast(typ.clone(), Box::new(exp_inner))

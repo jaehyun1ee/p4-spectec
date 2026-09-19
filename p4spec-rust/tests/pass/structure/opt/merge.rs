@@ -1,10 +1,10 @@
-use super::{instr, ret, span, variable};
+use super::{id_exp, instr, ret, span};
 use crate::lang::il::ast::Iter;
 use crate::pass::structure::{ol::ast::*, opt::merge::merge_blocks};
 
 fn if_instr(text_cond: &str, iter: Iter, block: Block, num_line: usize) -> Instr {
     let mut instr_if = instr(InstrKind::If(IfInstr {
-        exp: variable(text_cond),
+        exp: id_exp(text_cond),
         iter_exps: vec![(iter, vec![])],
         block,
     }));

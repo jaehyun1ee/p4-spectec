@@ -346,7 +346,7 @@ fn annotate_exp(bounds: &VEnv, exp: &mut ast::Exp) -> Result<Occurrences, ElabEr
         ast::ExpKind::Bool(_) => Ok(annotate_bool_exp()),
         ast::ExpKind::Num(_) => Ok(annotate_num_exp()),
         ast::ExpKind::Text(_) => Ok(annotate_text_exp()),
-        ast::ExpKind::Id(id) => Ok(annotate_var_exp(span, typ_kind, id)),
+        ast::ExpKind::Id(id) => Ok(annotate_id_exp(span, typ_kind, id)),
         ast::ExpKind::Un(_, _, exp_inner) => annotate_un_exp(bounds, exp_inner),
         ast::ExpKind::Bin(_, _, exp_l, exp_r) => annotate_bin_exp(bounds, exp_l, exp_r),
         ast::ExpKind::Cmp(_, _, exp_l, exp_r) => annotate_cmp_exp(bounds, exp_l, exp_r),
@@ -405,9 +405,9 @@ fn annotate_text_exp() -> Occurrences {
     Occurrences::new()
 }
 
-// - Variable expressions
+// - Identifier expressions
 
-fn annotate_var_exp(span: &Span, typ_kind: &ast::TypKind, id: &Id) -> Occurrences {
+fn annotate_id_exp(span: &Span, typ_kind: &ast::TypKind, id: &Id) -> Occurrences {
     let typ = phrase!(node: typ_kind.clone(), span: span.clone());
     Occurrences::singleton(id, typ)
 }

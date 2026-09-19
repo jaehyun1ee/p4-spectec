@@ -47,16 +47,16 @@ fn exp(kind: ast::ExpKind, note: ast::TypKind, line: usize) -> ast::Exp {
     crate::note_phrase! { node: kind, note:  note, span:  span(line) }
 }
 
-fn var_exp(name: &str, line: usize) -> ast::Exp {
+fn id_exp(name: &str, line: usize) -> ast::Exp {
     crate::note_phrase!(node: crate::lang::il::ast::ExpKind::Id(id(name, line)), note: ast::TypKind::Bool, span: span(line))
 }
 
-fn typed_var_exp(name: &str, typ: &ast::Typ, line: usize) -> ast::Exp {
+fn typed_id_exp(name: &str, typ: &ast::Typ, line: usize) -> ast::Exp {
     crate::note_phrase!(node: crate::lang::il::ast::ExpKind::Id(id(name, line)), note: typ.node.clone(), span: span(line))
 }
 
-fn iterated_var_exp(name: &str, typ: &ast::Typ, iter: ast::Iter, line: usize) -> ast::Exp {
-    let exp_inner = typed_var_exp(name, typ, line);
+fn iterated_id_exp(name: &str, typ: &ast::Typ, iter: ast::Iter, line: usize) -> ast::Exp {
+    let exp_inner = typed_id_exp(name, typ, line);
     exp(
         ast::ExpKind::Iter(Box::new(exp_inner), (iter, vec![])),
         ast::TypKind::Iter(Box::new(typ.clone()), iter),
@@ -124,7 +124,7 @@ fn joint_iteration(names: &[(&str, usize)], iter: ast::Iter, line: usize) -> ast
     let typ_bool = typ::make::bool();
     let exps = names
         .iter()
-        .map(|(name, line)| typed_var_exp(name, &typ_bool, *line))
+        .map(|(name, line)| typed_id_exp(name, &typ_bool, *line))
         .collect::<Vec<_>>();
     let vars = names
         .iter()

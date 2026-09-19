@@ -3,12 +3,12 @@ use super::*;
 #[test]
 fn test_syntax_equality_ignores_spans_and_subcheck_strategy() {
     let exp_l: il::ast::Exp = p4spec_rust::note_phrase! { node: il::ast::ExpKind::Sub(
-    Box::new(variable("x")),
+    Box::new(id_exp("x")),
     Box::new(typ()),
     Box::new(il::ast::Subcheck::Skip),
     ), note: il::ast::TypKind::Bool, span: span("left") };
     let exp_r: il::ast::Exp = p4spec_rust::note_phrase! { node: il::ast::ExpKind::Sub(
-    Box::new(variable("x")),
+    Box::new(id_exp("x")),
     Box::new(typ()),
     Box::new(il::ast::Subcheck::Recurse(typ())),
     ), note: il::ast::TypKind::Text, span: span("right") };
@@ -22,11 +22,11 @@ fn test_syntax_equality_ignores_spans_and_subcheck_strategy() {
     assert!(arg_exp("x").syntax_eq(&arg_exp("x")));
     assert!(
         p4spec_rust::phrase! {
-            node: al::ast::PremKind::If(al::ast::IfPrem { exp: variable("x") }),
+            node: al::ast::PremKind::If(al::ast::IfPrem { exp: id_exp("x") }),
             span: span("prem"),
         }
         .syntax_eq(&p4spec_rust::phrase! {
-            node: al::ast::PremKind::If(al::ast::IfPrem { exp: variable("x") }),
+            node: al::ast::PremKind::If(al::ast::IfPrem { exp: id_exp("x") }),
             span: span("other-prem"),
         })
     );
@@ -34,11 +34,11 @@ fn test_syntax_equality_ignores_spans_and_subcheck_strategy() {
 #[test]
 fn test_syntax_equality_distinguishes_recursive_operands_variants_and_collection_rules() {
     let exp_cases = [
-        (variable("x"), variable("x"), true),
-        (variable("x"), variable("y"), false),
+        (id_exp("x"), id_exp("x"), true),
+        (id_exp("x"), id_exp("y"), false),
         (
-            expr(il::ast::ExpKind::Tuple(vec![variable("x")])),
-            expr(il::ast::ExpKind::Tuple(vec![variable("x"), variable("y")])),
+            expr(il::ast::ExpKind::Tuple(vec![id_exp("x")])),
+            expr(il::ast::ExpKind::Tuple(vec![id_exp("x"), id_exp("y")])),
             false,
         ),
     ];
@@ -53,12 +53,12 @@ fn test_syntax_equality_distinguishes_recursive_operands_variants_and_collection
         }
     };
     let path_x: il::ast::Path = p4spec_rust::note_phrase! {
-        node: il::ast::PathKind::Idx(Box::new(path_root()), Box::new(variable("x"))),
+        node: il::ast::PathKind::Idx(Box::new(path_root()), Box::new(id_exp("x"))),
         note: il::ast::TypKind::Bool,
         span: span("path-x"),
     };
     let path_y: il::ast::Path = p4spec_rust::note_phrase! {
-        node: il::ast::PathKind::Idx(Box::new(path_root()), Box::new(variable("y"))),
+        node: il::ast::PathKind::Idx(Box::new(path_root()), Box::new(id_exp("y"))),
         note: il::ast::TypKind::Bool,
         span: span("path-y"),
     };
@@ -80,11 +80,11 @@ fn test_syntax_equality_distinguishes_recursive_operands_variants_and_collection
     assert!(!prem_rule(InputHint::new(vec![0])).syntax_eq(&prem_rule(InputHint::new(vec![1]))));
     assert!(
         !p4spec_rust::phrase! {
-            node: al::ast::PremKind::If(al::ast::IfPrem { exp: variable("x") }),
+            node: al::ast::PremKind::If(al::ast::IfPrem { exp: id_exp("x") }),
             span: span("if"),
         }
         .syntax_eq(&p4spec_rust::phrase! {
-            node: al::ast::PremKind::Debug(al::ast::DebugPrem { exp: variable("x") }),
+            node: al::ast::PremKind::Debug(al::ast::DebugPrem { exp: id_exp("x") }),
             span: span("debug"),
         })
     );
@@ -107,7 +107,7 @@ fn test_syntax_equality_distinguishes_recursive_operands_variants_and_collection
         !prem_iter(vec![var_x.clone()], vec![var_x.clone()])
             .syntax_eq(&prem_iter(vec![var_x.clone()], vec![var_y.clone()]))
     );
-    assert!(![variable("x"), variable("y")].syntax_eq(&[variable("y"), variable("x")]));
+    assert!(![id_exp("x"), id_exp("y")].syntax_eq(&[id_exp("y"), id_exp("x")]));
     assert!([var_x.clone(), var_y.clone()].syntax_eq(&[var_y, var_x]));
     assert!(![arg_exp("x")].syntax_eq(&[arg_exp("y")]));
 }

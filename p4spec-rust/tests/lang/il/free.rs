@@ -48,7 +48,7 @@ fn exp(kind: ast::ExpKind) -> ast::Exp {
         span: span(),
     }
 }
-fn variable(name: &str) -> ast::Exp {
+fn id_exp(name: &str) -> ast::Exp {
     p4spec_rust::note_phrase!(node: p4spec_rust::lang::il::ast::ExpKind::Id(id(name)), note: p4spec_rust::lang::il::ast::TypKind::Bool, span: span())
 }
 fn atom(name: &str) -> ast::Atom {
@@ -58,7 +58,7 @@ fn atom(name: &str) -> ast::Atom {
     }
 }
 fn notexp(name: &str) -> ast::NotExp {
-    Mixfix::Seq(vec![Mixfix::Arg(variable(name))])
+    Mixfix::Seq(vec![Mixfix::Arg(id_exp(name))])
 }
 fn names(names: &[&str]) -> IdSet {
     names.iter().map(|name| id(name)).collect()
@@ -84,10 +84,10 @@ fn rule(head: &str, prems: Vec<ast::Prem>) -> ast::Rule {
 }
 fn clause(arg_name: &str, body: &str, prem_name: &str) -> ast::Clause {
     p4spec_rust::phrase! { node: ast::ClauseKind {
-        args: vec![arg(ast::ArgKind::Exp(Box::new(variable(arg_name))))],
-        exp: variable(body),
+        args: vec![arg(ast::ArgKind::Exp(Box::new(id_exp(arg_name))))],
+        exp: id_exp(body),
         prems: vec![prem(ast::PremKind::Debug(ast::DebugPrem {
-            exp: variable(prem_name),
+            exp: id_exp(prem_name),
         }))],
     }, span: span() }
 }
@@ -107,20 +107,20 @@ fn test_free_expression_variants_follow_the_oracle() {
         note: ast::TypKind::Bool,
         span: span(),
     }),
-    Box::new(variable("path_low")),
-    Box::new(variable("path_high")),
+    Box::new(id_exp("path_low")),
+    Box::new(id_exp("path_high")),
     ), note: ast::TypKind::Bool, span: span() };
     let cases = vec![
         ("bool", exp(ast::ExpKind::Bool(true)), names(&[])),
         ("num", exp(ast::ExpKind::Num(ast::Num::Nat(1.into()))), names(&[])),
         ("text", exp(ast::ExpKind::Text("text".into())), names(&[])),
-        ("var", variable("var"), names(&["var"])),
+        ("var", id_exp("var"), names(&["var"])),
         (
             "unary",
             exp(ast::ExpKind::Un(
                 ast::UnOp::Bool(p4spec_rust::lang::common::prim::bool::UnOp::Not),
                 ast::OpTyp::Bool,
-                Box::new(variable("unary")),
+                Box::new(id_exp("unary")),
             )),
             names(&["unary"]),
         ),
@@ -129,8 +129,8 @@ fn test_free_expression_variants_follow_the_oracle() {
             exp(ast::ExpKind::Bin(
                 ast::BinOp::Num(p4spec_rust::lang::common::prim::num::BinOp::Add),
                 ast::OpTyp::Nat,
-                Box::new(variable("left")),
-                Box::new(variable("right")),
+                Box::new(id_exp("left")),
+                Box::new(id_exp("right")),
             )),
             names(&["left", "right"]),
         ),
@@ -139,25 +139,25 @@ fn test_free_expression_variants_follow_the_oracle() {
             exp(ast::ExpKind::Cmp(
                 ast::CmpOp::Bool(p4spec_rust::lang::common::prim::bool::CmpOp::Eq),
                 ast::OpTyp::Bool,
-                Box::new(variable("left")),
-                Box::new(variable("right")),
+                Box::new(id_exp("left")),
+                Box::new(id_exp("right")),
             )),
             names(&["left", "right"]),
         ),
         (
             "upcast",
-            exp(ast::ExpKind::UpCast(Box::new(typ()), Box::new(variable("cast")))),
+            exp(ast::ExpKind::UpCast(Box::new(typ()), Box::new(id_exp("cast")))),
             names(&["cast"]),
         ),
         (
             "downcast",
-            exp(ast::ExpKind::DownCast(Box::new(typ()), Box::new(variable("cast")))),
+            exp(ast::ExpKind::DownCast(Box::new(typ()), Box::new(id_exp("cast")))),
             names(&["cast"]),
         ),
         (
             "subtype",
             exp(ast::ExpKind::Sub(
-                Box::new(variable("sub")),
+                Box::new(id_exp("sub")),
                 Box::new(typ()),
                 Box::new(ast::Subcheck::Skip),
             )),
@@ -166,70 +166,70 @@ fn test_free_expression_variants_follow_the_oracle() {
         (
             "match",
             exp(ast::ExpKind::Match(
-                Box::new(variable("match")),
+                Box::new(id_exp("match")),
                 ast::Pattern::Opt(ast::OptPattern::Some),
             )),
             names(&["match"]),
         ),
         (
             "tuple",
-            exp(ast::ExpKind::Tuple(vec![variable("tuple_a"), variable("tuple_b")])),
+            exp(ast::ExpKind::Tuple(vec![id_exp("tuple_a"), id_exp("tuple_b")])),
             names(&["tuple_a", "tuple_b"]),
         ),
         ("case", exp(ast::ExpKind::Case(Box::new(notexp("case")))), names(&["case"])),
         (
             "struct",
-            exp(ast::ExpKind::Str(vec![(atom("field"), variable("field_value"))])),
+            exp(ast::ExpKind::Str(vec![(atom("field"), id_exp("field_value"))])),
             names(&["field_value"]),
         ),
-        ("option_some", exp(ast::ExpKind::Opt(Some(Box::new(variable("some"))))), names(&["some"])),
+        ("option_some", exp(ast::ExpKind::Opt(Some(Box::new(id_exp("some"))))), names(&["some"])),
         ("option_none", exp(ast::ExpKind::Opt(None)), names(&[])),
         (
             "list",
-            exp(ast::ExpKind::List(vec![variable("list_a"), variable("list_b")])),
+            exp(ast::ExpKind::List(vec![id_exp("list_a"), id_exp("list_b")])),
             names(&["list_a", "list_b"]),
         ),
         (
             "cons",
-            exp(ast::ExpKind::Cons(Box::new(variable("head")), Box::new(variable("tail")))),
+            exp(ast::ExpKind::Cons(Box::new(id_exp("head")), Box::new(id_exp("tail")))),
             names(&["head", "tail"]),
         ),
         (
             "concatenate",
-            exp(ast::ExpKind::Cat(Box::new(variable("left")), Box::new(variable("right")))),
+            exp(ast::ExpKind::Cat(Box::new(id_exp("left")), Box::new(id_exp("right")))),
             names(&["left", "right"]),
         ),
         (
             "membership",
-            exp(ast::ExpKind::Mem(Box::new(variable("element")), Box::new(variable("set")))),
+            exp(ast::ExpKind::Mem(Box::new(id_exp("element")), Box::new(id_exp("set")))),
             names(&["element", "set"]),
         ),
-        ("length", exp(ast::ExpKind::Len(Box::new(variable("length")))), names(&["length"])),
+        ("length", exp(ast::ExpKind::Len(Box::new(id_exp("length")))), names(&["length"])),
         (
             "dot",
-            exp(ast::ExpKind::Dot(Box::new(variable("record")), atom("field"))),
+            exp(ast::ExpKind::Dot(Box::new(id_exp("record")), atom("field"))),
             names(&["record"]),
         ),
         (
             "index",
-            exp(ast::ExpKind::Idx(Box::new(variable("base")), Box::new(variable("index")))),
+            exp(ast::ExpKind::Idx(Box::new(id_exp("base")), Box::new(id_exp("index")))),
             names(&["base", "index"]),
         ),
         (
             "slice",
             exp(ast::ExpKind::Slice(
-                Box::new(variable("base")),
-                Box::new(variable("low")),
-                Box::new(variable("high")),
+                Box::new(id_exp("base")),
+                Box::new(id_exp("low")),
+                Box::new(id_exp("high")),
             )),
             names(&["base", "low", "high"]),
         ),
         (
             "update",
             exp(ast::ExpKind::Upd(
-                Box::new(variable("base")),
+                Box::new(id_exp("base")),
                 Box::new(path),
-                Box::new(variable("replacement")),
+                Box::new(id_exp("replacement")),
             )),
             names(&["base", "path_high", "path_low", "replacement"]),
         ),
@@ -243,7 +243,7 @@ fn test_free_expression_variants_follow_the_oracle() {
                 }],
                 vec![
                     arg(ast::ArgKind::Def(id("definition_argument"))),
-                    arg(ast::ArgKind::Exp(Box::new(variable("argument")))),
+                    arg(ast::ArgKind::Exp(Box::new(id_exp("argument")))),
                 ],
             )),
             names(&["argument"]),
@@ -251,7 +251,7 @@ fn test_free_expression_variants_follow_the_oracle() {
         (
             "iteration_omits_binders",
             exp(ast::ExpKind::Iter(
-                Box::new(variable("iterated")),
+                Box::new(id_exp("iterated")),
                 (ast::Iter::List, vec![ast::Var { id: id("binder"), typ: typ(), iters: vec![] }]),
             )),
             names(&["iterated"]),
@@ -260,7 +260,7 @@ fn test_free_expression_variants_follow_the_oracle() {
     for (case, exp_case, expected) in cases {
         assert_eq!(exp_case.free(), expected, "{case}");
     }
-    assert_eq!([variable("many_a"), variable("many_b")].free(), names(&["many_a", "many_b"]));
+    assert_eq!([id_exp("many_a"), id_exp("many_b")].free(), names(&["many_a", "many_b"]));
 }
 
 #[test]
@@ -276,7 +276,7 @@ fn test_free_path_argument_and_premise_variants_follow_the_oracle() {
             "index",
             p4spec_rust::note_phrase! { node: ast::PathKind::Idx(
                 Box::new(root.clone()),
-                Box::new(variable("index")),
+                Box::new(id_exp("index")),
             ), note: ast::TypKind::Bool, span: span() },
             names(&["index"]),
         ),
@@ -284,8 +284,8 @@ fn test_free_path_argument_and_premise_variants_follow_the_oracle() {
             "slice",
             p4spec_rust::note_phrase! { node: ast::PathKind::Slice(
             Box::new(root.clone()),
-            Box::new(variable("low")),
-            Box::new(variable("high")),
+            Box::new(id_exp("low")),
+            Box::new(id_exp("high")),
             ), note: ast::TypKind::Bool, span: span() },
             names(&["low", "high"]),
         ),
@@ -295,7 +295,7 @@ fn test_free_path_argument_and_premise_variants_follow_the_oracle() {
             Box::new(p4spec_rust::note_phrase! {
                 node: ast::PathKind::Idx(
                     Box::new(root),
-                    Box::new(variable("nested")),
+                    Box::new(id_exp("nested")),
                 ),
                 note: ast::TypKind::Bool,
                 span: span(),
@@ -309,11 +309,7 @@ fn test_free_path_argument_and_premise_variants_follow_the_oracle() {
         assert_eq!(path.free(), expected, "path {case}");
     }
     let args = vec![
-        (
-            "expression",
-            arg(ast::ArgKind::Exp(Box::new(variable("argument")))),
-            names(&["argument"]),
-        ),
+        ("expression", arg(ast::ArgKind::Exp(Box::new(id_exp("argument")))), names(&["argument"])),
         ("definition", arg(ast::ArgKind::Def(id("definition"))), names(&[])),
     ];
     assert_eq!(
@@ -326,7 +322,7 @@ fn test_free_path_argument_and_premise_variants_follow_the_oracle() {
     for (case, argument, expected) in args {
         assert_eq!(argument.free(), expected, "argument {case}");
     }
-    let nested = prem(ast::PremKind::If(ast::IfPrem { exp: variable("nested") }));
+    let nested = prem(ast::PremKind::If(ast::IfPrem { exp: id_exp("nested") }));
     let prems = vec![
         (
             "rule",
@@ -337,7 +333,7 @@ fn test_free_path_argument_and_premise_variants_follow_the_oracle() {
             })),
             names(&["rule"]),
         ),
-        ("if", prem(ast::PremKind::If(ast::IfPrem { exp: variable("if") })), names(&["if"])),
+        ("if", prem(ast::PremKind::If(ast::IfPrem { exp: id_exp("if") })), names(&["if"])),
         (
             "if_holds",
             prem(ast::PremKind::IfHold(ast::IfHoldPrem {
@@ -368,7 +364,7 @@ fn test_free_path_argument_and_premise_variants_follow_the_oracle() {
         ),
         (
             "debug",
-            prem(ast::PremKind::Debug(ast::DebugPrem { exp: variable("debug") })),
+            prem(ast::PremKind::Debug(ast::DebugPrem { exp: id_exp("debug") })),
             names(&["debug"]),
         ),
     ];
@@ -387,8 +383,7 @@ fn test_free_path_argument_and_premise_variants_follow_the_oracle() {
 
 #[test]
 fn test_free_aggregates_and_definition_omissions_follow_the_oracle() {
-    let rule =
-        rule("head", vec![prem(ast::PremKind::If(ast::IfPrem { exp: variable("premise") }))]);
+    let rule = rule("head", vec![prem(ast::PremKind::If(ast::IfPrem { exp: id_exp("premise") }))]);
     assert_eq!(rule.free(), names(&["head", "premise"]));
     assert_eq!(std::slice::from_ref(&rule).free(), names(&["head", "premise"]));
     let group = p4spec_rust::phrase! {
@@ -411,8 +406,8 @@ fn test_free_aggregates_and_definition_omissions_follow_the_oracle() {
     assert_eq!(Option::<ast::ElseClause>::None.free(), names(&[]));
     assert_eq!(Some(clause.clone()).free(), names(&["argument", "body", "premise"]));
     let row = p4spec_rust::phrase! { node: (
-        vec![arg(ast::ArgKind::Exp(Box::new(variable("key"))))],
-        variable("value"),
+        vec![arg(ast::ArgKind::Exp(Box::new(id_exp("key"))))],
+        id_exp("value"),
     ), span: span() };
     assert_eq!(row.free(), names(&["key", "value"]));
     assert_eq!(std::slice::from_ref(&row).free(), names(&["key", "value"]));
@@ -527,7 +522,7 @@ fn test_free_aggregates_and_definition_omissions_follow_the_oracle() {
     }
 }
 
-fn assert_var(exp: &ast::Exp, expected_id: &ast::Id, expected_ty: ast::TypKind) {
+fn assert_id_exp(exp: &ast::Exp, expected_id: &ast::Id, expected_ty: ast::TypKind) {
     let ast::ExpKind::Id(id) = &exp.node else { panic!("expected variable expression") };
     assert_eq!(id, expected_id);
     assert_eq!(exp.note.as_ref(), &expected_ty);
@@ -548,7 +543,7 @@ fn test_as_exp_preserves_empty_one_and_two_level_shapes_and_spans() {
     let typ = typ_at("type");
     for dim in [false, true] {
         let empty = var::as_exp(dim, &ast::Var { id: id.clone(), typ: typ.clone(), iters: vec![] });
-        assert_var(&empty, &id, ast::TypKind::Bool);
+        assert_id_exp(&empty, &id, ast::TypKind::Bool);
     }
     let one_false = var::as_exp(
         false,
@@ -568,7 +563,7 @@ fn test_as_exp_preserves_empty_one_and_two_level_shapes_and_spans() {
         ast::TypKind::Bool,
         &id.span,
     );
-    assert_var(inner, &id, ast::TypKind::Bool);
+    assert_id_exp(inner, &id, ast::TypKind::Bool);
     let one_true = var::as_exp(
         true,
         &ast::Var { id: id.clone(), typ: typ.clone(), iters: vec![ast::Iter::Opt] },
@@ -591,7 +586,7 @@ fn test_as_exp_preserves_empty_one_and_two_level_shapes_and_spans() {
         ast::TypKind::Bool,
         &id.span,
     );
-    assert_var(inner, &id, ast::TypKind::Bool);
+    assert_id_exp(inner, &id, ast::TypKind::Bool);
     for dim in [false, true] {
         let two = var::as_exp(
             dim,
@@ -627,7 +622,7 @@ fn test_as_exp_preserves_empty_one_and_two_level_shapes_and_spans() {
             ast::TypKind::Bool,
             &id.span,
         );
-        assert_var(exp_base, &id, ast::TypKind::Bool);
+        assert_id_exp(exp_base, &id, ast::TypKind::Bool);
         match (dim, vars_inner.as_slice(), vars_outer.as_slice()) {
             (false, [], []) => {}
             (true, [inner], [outer]) => {

@@ -9,7 +9,7 @@ fn test_printer_renders_nested_premises_and_definition_spec_goldens() {
     };
     let nested = prem(ast::PremKind::Iter(ast::IterPrem {
         prem: Box::new(prem(ast::PremKind::Iter(ast::IterPrem {
-            prem: Box::new(prem(ast::PremKind::If(ast::IfPrem { exp: var("ready") }))),
+            prem: Box::new(prem(ast::PremKind::If(ast::IfPrem { exp: id_exp("ready") }))),
             prem_iter: prem_iter.clone(),
         }))),
         prem_iter,
@@ -39,15 +39,15 @@ fn test_printer_renders_nested_premises_and_definition_spec_goldens() {
         span: Span::default(),
     };
     let clause = p4spec_rust::phrase! { node: ast::ClauseKind {
-        args: vec![arg(ast::ArgKind::Exp(Box::new(var("argument"))))],
-        exp: var("result"),
+        args: vec![arg(ast::ArgKind::Exp(Box::new(id_exp("argument"))))],
+        exp: id_exp("result"),
         prems: vec![prem(ast::PremKind::Debug(ast::DebugPrem {
-            exp: var("debug"),
+            exp: id_exp("debug"),
         }))],
     }, span: Span::default() };
     let row = p4spec_rust::phrase! { node: (
-        vec![arg(ast::ArgKind::Exp(Box::new(var("key"))))],
-        var("value"),
+        vec![arg(ast::ArgKind::Exp(Box::new(id_exp("key"))))],
+        id_exp("value"),
     ), span: Span::default() };
     let defs = vec![
         p4spec_rust::phrase! { node: ast::DefKind::Typ(ast::TypDef::Extern(ast::ExternTyp {
