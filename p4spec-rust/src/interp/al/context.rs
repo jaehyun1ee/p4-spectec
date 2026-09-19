@@ -10,7 +10,10 @@ use std::rc::Rc;
 use crate::interp::shared::context::{IterContext, ReadContext, WriteContext};
 use crate::interp::shared::error::ContextErrorKind;
 use crate::lang::data::var::{SlotIdx, VarSlot};
-use crate::runtime::envs::interp::shared::frame::{Callable, Frame, FrameLayout};
+use crate::runtime::envs::interp::shared::{
+    callable::Callable,
+    frame::{Frame, FrameLayout},
+};
 
 use crate::{
     lang::{
@@ -65,7 +68,7 @@ impl Global {
                 }
                 crate::lang::al::ast::DefKind::Var(_) => {}
                 crate::lang::al::ast::DefKind::Rel(rel) => {
-                    let rel = ast::prepare_rel_def(rel);
+                    let rel = Callable::prepare(rel);
                     let id = match &rel.def {
                         ast::RelDef::Extern(rel) => &rel.id,
                         ast::RelDef::Defined(rel) => &rel.id,
@@ -80,7 +83,7 @@ impl Global {
                     loaded.renv.insert(id.clone(), rel);
                 }
                 crate::lang::al::ast::DefKind::MetaFunc(func) => {
-                    let func = ast::prepare_func_def(func);
+                    let func = Callable::prepare(func);
                     let id = match &func.def {
                         ast::MetaFuncDef::Extern(func) => &func.id,
                         ast::MetaFuncDef::Builtin(func) => &func.id,

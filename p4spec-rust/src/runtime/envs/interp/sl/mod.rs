@@ -2,7 +2,7 @@
 
 pub mod ast_prepared;
 
-use super::shared::frame::Callable;
+use super::shared::callable::Callable;
 
 use self::ast_prepared as ast;
 use std::rc::Rc;

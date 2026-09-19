@@ -2,7 +2,7 @@ use p4spec_rust::interp::shared::context::{ReadContext, WriteContext};
 use p4spec_rust::interp::shared::prepare::Prepare;
 use p4spec_rust::interp::shared::{backtrack::Backtrack, util::find_iter_var};
 use p4spec_rust::runtime::envs::interp::al::ast_prepared as prepared;
-use p4spec_rust::runtime::envs::interp::shared::frame::FrameLayout;
+use p4spec_rust::runtime::envs::interp::shared::{callable::Callable, frame::FrameLayout};
 use std::rc::Rc;
 
 use p4spec_rust::lang::data::value::ValueArena;
@@ -364,7 +364,7 @@ fn test_assignment_errors_are_fatal_and_located() {
 fn test_function_argument_shares_caller_definition_without_caller_values() {
     let mut arena = ValueArena::new();
     let global = Global::load(vec![]).unwrap();
-    let func = Rc::new(prepared::prepare_func_def(ast::MetaFuncDef::Extern(ast::ExternFunc {
+    let func = Rc::new(Callable::prepare(ast::MetaFuncDef::Extern(ast::ExternFunc {
         id: id("f"),
         tparams: vec![],
         params: vec![],

@@ -3,7 +3,7 @@ use p4spec_rust::interp::shared::error::ContextErrorKind;
 use p4spec_rust::interp::shared::error::{EntityKind, ErrorKind};
 use p4spec_rust::lang::data::value::ValueArena;
 use p4spec_rust::runtime::envs::interp::al::ast_prepared as prepared;
-use p4spec_rust::runtime::envs::interp::shared::frame::FrameLayout;
+use p4spec_rust::runtime::envs::interp::shared::{callable::Callable, frame::FrameLayout};
 use std::rc::Rc;
 
 use p4spec_rust::{
@@ -83,7 +83,7 @@ fn test_localize_with_layout_discards_locals_and_retains_global_lookup() {
     let slot = layout.resolve_var(var("x", vec![]));
     let layout = Rc::new(layout);
     let mut ctx = Context::new(&global).localize_with_layout(&layout);
-    let func_local = prepared::prepare_func_def(func("local", 2));
+    let func_local = Callable::prepare(func("local", 2));
     ctx.add_func(id("local", 2), func_local.clone().into())
         .unwrap();
     ctx.add_typdef(id("T", 3), TypeDef::Extern).unwrap();
@@ -103,7 +103,7 @@ fn test_localize_with_layout_discards_locals_and_retains_global_lookup() {
             .find_func_with_scope(&id("global", 8))
             .map(|(scope, func)| (scope, func.as_ref()))
             .unwrap(),
-        (Scope::Global, &prepared::prepare_func_def(func_global))
+        (Scope::Global, &Callable::prepare(func_global))
     );
     assert!(ctx.find_value(slot.slot).is_some());
 }
@@ -120,7 +120,7 @@ fn test_local_definition_duplicates_do_not_replace_bindings() {
     .unwrap();
     let mut ctx = Context::new(&global);
     assert!(matches!(
-        *ctx.add_func(id("f", 7), prepared::prepare_func_def(func("f", 7)).into())
+        *ctx.add_func(id("f", 7), Callable::prepare(func("f", 7)).into())
             .unwrap_err()
             .kind,
         ErrorKind::Context(ContextErrorKind::Duplicate { kind: EntityKind::Function, .. })
@@ -132,17 +132,17 @@ fn test_local_definition_duplicates_do_not_replace_bindings() {
         id("T", 7).span
     );
     ctx.add_typdef(id("U", 2), TypeDef::Extern).unwrap();
-    ctx.add_func(id("g", 2), prepared::prepare_func_def(func("g", 2)).into())
+    ctx.add_func(id("g", 2), Callable::prepare(func("g", 2)).into())
         .unwrap();
     assert!(ctx.add_typdef(id("U", 7), TypeDef::Parameter).is_err());
     assert!(
-        ctx.add_func(id("g", 7), prepared::prepare_func_def(func("g", 7)).into())
+        ctx.add_func(id("g", 7), Callable::prepare(func("g", 7)).into())
             .is_err()
     );
     assert_eq!(ctx.find_typdef(&id("U", 8)).unwrap(), &TypeDef::Extern);
     assert_eq!(
         ctx.find_func_with_scope(&id("g", 8)).unwrap().1.as_ref(),
-        &prepared::prepare_func_def(func("g", 2))
+        &Callable::prepare(func("g", 2))
     );
 }
 
@@ -324,7 +324,7 @@ fn test_definition_lookup_errors_and_local_type_isolation() {
     let mut ctx_child = ctx.clone();
     ctx_child.add_typdef(id.clone(), TypeDef::Extern).unwrap();
     ctx_child
-        .add_func(id.clone(), prepared::prepare_func_def(func("missing", 8)).into())
+        .add_func(id.clone(), Callable::prepare(func("missing", 8)).into())
         .unwrap();
     assert!(ctx.find_typdef_opt(&id).is_none());
     assert!(ctx.find_func_opt(&id).is_none());

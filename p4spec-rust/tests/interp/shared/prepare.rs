@@ -3,6 +3,7 @@ use p4spec_rust::interp::shared::prepare::Prepare;
 use p4spec_rust::lang::data::var::{IdSlot, VarSlot};
 use p4spec_rust::runtime::envs::interp::{
     al::ast_prepared as al,
+    shared::callable::Callable,
     shared::frame::{Frame, FrameLayout},
     sl::ast_prepared as sl,
 };
@@ -129,7 +130,7 @@ fn algorithmic_clauses_and_else_clause_share_one_layout() {
         else_clause: Some(clause("c")),
         hints: vec![],
     }));
-    let func = al::prepare_func_def(func_source.clone());
+    let func = Callable::prepare(func_source.clone());
     let al_source::MetaFuncDef::<IdSlot, VarSlot>::Defined(func_defined) = &func.def else {
         panic!("expected defined function")
     };
@@ -187,7 +188,7 @@ fn structured_parameters_and_case_guards_share_the_callable_layout() {
         block_else: None,
         hints: vec![],
     });
-    let func = sl::prepare_func_def(func_source.clone());
+    let func = Callable::prepare(func_source.clone());
     let sl_source::MetaFuncDef::<IdSlot, VarSlot>::Defined(func_defined) = &func.def else {
         panic!("expected defined function")
     };

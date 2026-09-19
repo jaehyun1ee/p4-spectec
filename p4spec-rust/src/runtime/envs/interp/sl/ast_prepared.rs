@@ -1,13 +1,11 @@
 //! Slot instantiation of shared SL syntax
 
-use std::rc::Rc;
-
 pub use crate::interp::shared::prepare::expr::*;
 use crate::interp::shared::prepare::{Prepare, restore_phrase};
 use crate::lang::data::var::{IdSlot, VarSlot};
 use crate::lang::sl::ast as source;
 pub use crate::lang::sl::ast::{DefinedTyp, ExternTyp, RelSignature, TypDef, VarDef};
-use crate::runtime::envs::interp::shared::frame::{Callable, FrameLayout};
+use crate::runtime::envs::interp::shared::{callable::Callable, frame::FrameLayout};
 
 // == Prepared syntax
 
@@ -72,24 +70,6 @@ pub type DefinedFunc = source::DefinedFunc<IdSlot, VarSlot>;
 pub type Def = source::Def<IdSlot, VarSlot>;
 pub type DefKind = source::DefKind<IdSlot, VarSlot>;
 pub type Spec = Vec<Def>;
-
-// == Preparation
-
-// - Relation definitions
-
-pub fn prepare_rel_def(rel_source: source::RelDef) -> Callable<RelDef> {
-    let mut layout = FrameLayout::default();
-    let rel = rel_source.prepare(&mut layout);
-    Callable { def: rel, layout: Rc::new(layout) }
-}
-
-// - Meta-function definitions
-
-pub fn prepare_func_def(func_source: source::MetaFuncDef) -> Callable<MetaFuncDef> {
-    let mut layout = FrameLayout::default();
-    let func = func_source.prepare(&mut layout);
-    Callable { def: func, layout: Rc::new(layout) }
-}
 
 // == Preparation traversal
 

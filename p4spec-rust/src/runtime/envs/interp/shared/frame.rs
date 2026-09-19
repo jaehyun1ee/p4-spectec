@@ -3,17 +3,13 @@
 //! Layouts resolve names and iterator paths during preparation. Execution uses
 //! slots; a reserved slot stays unbound until an assignment writes its value
 
-use std::{collections::HashMap, fmt, rc::Rc};
+use std::{collections::HashMap, rc::Rc};
 
 use crate::lang::{
     common::{Id, Iter},
     data::{
         value::Value,
         var::{IdSlot, SlotIdx, Var, VarSlot},
-    },
-    traits::{
-        eq::SyntaxEq,
-        print::{Print, Printer},
     },
 };
 
@@ -97,26 +93,5 @@ impl Frame {
 
     pub fn set(&mut self, slot: SlotIdx, value: Value) {
         Rc::make_mut(&mut self.values)[slot.0] = Some(value);
-    }
-}
-
-// == Callables
-
-/// Callable syntax paired with its interpreter-owned local layout
-#[derive(Clone, Debug, PartialEq)]
-pub struct Callable<T> {
-    pub def: T,
-    pub layout: Rc<FrameLayout>,
-}
-
-impl<T: Print> Print for Callable<T> {
-    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        self.def.print(printer)
-    }
-}
-
-impl<T: SyntaxEq> SyntaxEq for Callable<T> {
-    fn syntax_eq(&self, other: &Self) -> bool {
-        self.def.syntax_eq(&other.def)
     }
 }
