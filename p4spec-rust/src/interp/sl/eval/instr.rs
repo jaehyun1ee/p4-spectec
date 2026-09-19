@@ -19,7 +19,6 @@ use crate::{
         error::{ErrorKind, PremErrorKind, TraceErrorKind},
     },
     lang::{
-        common::prim::bool as boolean,
         common::source::Span,
         data::value::{Value, ValueKind, get},
         traits::{eq::SyntaxEq, print::Print},
@@ -234,7 +233,7 @@ fn eval_guard<Iface: Interface, Ext: Extern>(
     if matches!(guard, ast::Guard::Bool(true)) {
         return Backtrack::from_result(get::bool(runner_ctx.arena(), &value), span);
     }
-    let result = (|| match guard {
+    (|| match guard {
         ast::Guard::Bool(_) => {
             ok!(!unwrap_from_result!(get::bool(runner_ctx.arena(), &value), span))
         }
@@ -250,24 +249,7 @@ fn eval_guard<Iface: Interface, Ext: Extern>(
             let value_list = unwrap!(eval_exp(runner_ctx, ctx, exp_list));
             ops::mem(runner_ctx.arena(), span, value, value_list)
         }
-    })();
-    result.nest(span.clone(), || {
-        ErrorKind::Trace(TraceErrorKind::Evaluation { text: guard_trace(guard) })
-    })
-}
-
-// Preserve the diagnostic placeholder without introducing a runtime binding
-fn guard_trace(guard: &ast::Guard) -> String {
-    match guard {
-        ast::Guard::Bool(true) => "~case".to_owned(),
-        ast::Guard::Bool(false) => format!("{}~case", Print::to_string(&boolean::UnOp::Not)),
-        ast::Guard::Cmp(op, _, exp_r) => {
-            format!("(~case {} {})", Print::to_string(op), Print::to_string(exp_r))
-        }
-        ast::Guard::Sub(typ, _) => format!("~case <: {}", Print::to_string(typ)),
-        ast::Guard::Match(pattern) => format!("~case matches {}", Print::to_string(pattern)),
-        ast::Guard::Mem(exp_list) => format!("~case <- {}", Print::to_string(exp_list)),
-    }
+    })()
 }
 
 // - Group instruction

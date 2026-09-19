@@ -256,40 +256,6 @@ fn case_comparison_rhs_reads_the_enclosing_context() {
 }
 
 #[test]
-fn case_guard_errors_keep_the_expression_trace_and_scrutinee_span() {
-    use p4spec_rust::{
-        interp::shared::error::{Error, TraceErrorKind},
-        lang::{common::prim::num, common::source::Position},
-    };
-    fn has_trace(error: &Error, text: &str, span: &Span) -> bool {
-        (matches!(&*error.kind, ErrorKind::Trace(TraceErrorKind::Evaluation { text: actual }) if actual == text)
-            && error.span == *span)
-            || error
-                .children
-                .iter()
-                .any(|error| has_trace(error, text, span))
-    }
-    let span = Span::new(Position::new("case.spectec", 4, 2), Position::new("case.spectec", 4, 3));
-    for (guard, text) in [
-        (ast::Guard::Bool(false), "~~case"),
-        (
-            ast::Guard::Cmp(ast::CmpOp::Num(num::CmpOp::Lt), ast::OpTyp::Nat, boolean(true)),
-            "(~case < true)",
-        ),
-        (ast::Guard::Mem(exp(1)), "~case <- 1"),
-    ] {
-        let mut exp_guard = exp(7);
-        exp_guard.span = span.clone();
-        let block = vec![phrase!(node: ast::InstrKind::Case(ast::CaseInstr {
-            exp: exp_guard, cases: vec![ast::Case { guard, block: vec![instr(exp(5))] }], dangle: false,
-        }), span: Span::default())];
-        let mut runner = with_block(block, false);
-        let error = runner.context().call_func("entry", &[], &[]).unwrap_err();
-        assert!(has_trace(&error, text, &span), "{error}");
-    }
-}
-
-#[test]
 fn optional_condition_preserves_remaining_iterator_order_and_outer_bindings() {
     use p4spec_rust::{
         interp::sl::{context::Context, eval::instr::eval_block, flow::Flow},
