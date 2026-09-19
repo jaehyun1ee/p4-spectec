@@ -1,8 +1,12 @@
 use p4spec_rust::{
     lang::{
-        common::source::{Position, Span},
+        common::{
+            notation::mixfix::Mixfix,
+            source::{Position, Span},
+        },
         el,
         hints::alter::{AlterationError, AlterationHint, Hole},
+        hints::input::InputHint,
         il,
         pl::ast as pl,
         sl::ast as sl,
@@ -106,6 +110,61 @@ fn defined_func_with_else(block: sl::Block, block_else: Option<sl::Block>) -> sl
             hints: Vec::new(),
         })),
         span: span("function", 0),
+    }
+}
+
+fn rel_signature() -> sl::RelSignature {
+    sl::RelSignature {
+        not_typ: p4spec_rust::phrase! {
+            node: Mixfix::Arg(typ_bool()),
+            span: span("signature", 0),
+        },
+        input_hint: InputHint::new(vec![0]),
+    }
+}
+
+fn defined_rel(block: sl::Block) -> sl::Def {
+    p4spec_rust::phrase! {
+        node: sl::DefKind::Rel(sl::RelDef::Defined(sl::DefinedRel {
+            id: id("relation"),
+            rel_signature: rel_signature(),
+            exps_input: vec![exp_var("input", span("relation-input", 0))],
+            block,
+            block_else: None,
+            hints: Vec::new(),
+        })),
+        span: span("relation", 0),
+    }
+}
+
+fn rule_instr(name: &str, column: usize) -> sl::Instr {
+    let span_rule = span("rule", column);
+    p4spec_rust::phrase! {
+        node: sl::InstrKind::Rule(sl::RuleInstr {
+            id: id(name),
+            not_exp: Mixfix::Arg(exp_call(
+                "partial",
+                exp_bool(true, span_rule.clone()),
+                span_rule.clone(),
+            )),
+            input_hint: InputHint::new(vec![0]),
+            iter_instrs: Vec::new(),
+            block: Vec::new(),
+        }),
+        span: span_rule,
+    }
+}
+
+fn group_instr(name: &str, column: usize) -> sl::Instr {
+    let span_group = span("group", column);
+    p4spec_rust::phrase! {
+        node: sl::InstrKind::Group(sl::GroupInstr {
+            id: id(name),
+            rel_signature: rel_signature(),
+            exps: vec![exp_var("input", span_group.clone())],
+            block: vec![rule_instr(name, column)],
+        }),
+        span: span_group,
     }
 }
 
@@ -504,4 +563,193 @@ fn test_fresh_names_are_scoped_independently_across_else_blocks() {
         panic!("expected fresh variables");
     };
     assert_eq!(id_main.node, id_else.node);
+}
+
+#[test]
+fn test_context_rejects_duplicate_metavariables_and_types_at_the_new_binding() {
+    let span_metavar = span("duplicate-metavar", 4);
+    let def_var = p4spec_rust::phrase! {
+        node: sl::DefKind::Var(sl::VarDef {
+            id: p4spec_rust::phrase! { node: "bool".to_owned(), span: span_metavar.clone() },
+            typ: typ_bool(),
+            hints: Vec::new(),
+        }),
+        span: span_metavar.clone(),
+    };
+    let error = prose::convert(vec![def_var]).unwrap_err();
+    assert_eq!(error.kind, ProseErrorKind::DuplicateMetavariable);
+    assert_eq!(error.span, span_metavar);
+
+    let generic_type = |column: usize| {
+        let span_type = span("duplicate-type", column);
+        p4spec_rust::phrase! {
+            node: sl::DefKind::Typ(sl::TypDef::Defined(Box::new(sl::DefinedTyp {
+                id: p4spec_rust::phrase! {
+                    node: "duplicate".to_owned(),
+                    span: span_type.clone(),
+                },
+                tparams: vec![id("T")],
+                def_typ: p4spec_rust::phrase! {
+                    node: il::ast::DefTypKind::Plain(typ_bool()),
+                    span: span_type.clone(),
+                },
+                hints: Vec::new(),
+            }))),
+            span: span_type,
+        }
+    };
+    let span_second = span("duplicate-type", 8);
+    let error = prose::convert(vec![generic_type(2), generic_type(8)]).unwrap_err();
+    assert_eq!(error.kind, ProseErrorKind::DuplicateType);
+    assert_eq!(error.span, span_second);
+}
+
+#[test]
+fn test_zero_argument_nested_call_stays_in_the_original_expression() {
+    let span_call = span("zero-argument", 3);
+    let exp_zero = exp_call_args("zero", Vec::new(), span_call.clone());
+    let exp_outer = exp_call("outer", exp_zero, span_call.clone());
+    let def_func_pl = converted_func(vec![p4spec_rust::phrase! {
+        node: sl::InstrKind::Return(sl::ReturnInstr { exp: exp_outer }),
+        span: span_call,
+    }]);
+
+    assert_eq!(def_func_pl.block.len(), 1);
+    let pl::InstrKind::Tier(pl::TierInstr {
+        tier: pl::InstrGroup::Return(pl::ReturnGroupInstr { exp }),
+    }) = &def_func_pl.block[0].node.node
+    else {
+        panic!("expected direct return");
+    };
+    let pl::ExpKind::Call(_, _, args) = &exp.node.node else { panic!("expected outer call") };
+    let pl::ArgKind::Exp(exp_zero) = &args[0].node else { panic!("expected expression argument") };
+    assert!(
+        matches!(&exp_zero.node.node, pl::ExpKind::Call(id, _, args) if id.node == "zero" && args.is_empty())
+    );
+}
+
+#[test]
+fn test_return_at_dispatch_level_reports_its_own_span() {
+    let span_return = span("invalid-dispatch", 6);
+    let error = prose::convert(vec![defined_rel(vec![return_instr(true, span_return.clone())])])
+        .unwrap_err();
+    assert_eq!(error.kind, ProseErrorKind::InvalidDispatchTier);
+    assert_eq!(error.span, span_return);
+}
+
+#[test]
+fn test_relation_routes_stamp_each_group_toward_the_next_dispatch_arm() {
+    let mut spec_pl =
+        prose::convert(vec![defined_rel(vec![group_instr("first", 1), group_instr("second", 2)])])
+            .unwrap();
+    let def_pl = spec_pl.pop().unwrap();
+    let pl::DefKind::Rel(pl::RelDef::Defined(def_rel_pl)) = def_pl.node.node else {
+        panic!("expected defined relation");
+    };
+    let pl::InstrKind::Tier(pl::TierInstr {
+        tier: pl::InstrDispatch::Route(pl::RouteDispatchInstr { blocks }),
+    }) = &def_rel_pl.block[0].node.node
+    else {
+        panic!("expected dispatch route");
+    };
+    assert_eq!(blocks.len(), 2);
+    let destinations = blocks
+        .iter()
+        .map(|block| {
+            let pl::InstrKind::Tier(pl::TierInstr { tier: pl::InstrDispatch::Group(group) }) =
+                &block[0].node.node
+            else {
+                panic!("expected group arm");
+            };
+            group.block[0].node.note.clone()
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        destinations,
+        vec![Some(pl::Fallthrough::FallGroup(id("second"))), Some(pl::Fallthrough::FallFail),]
+    );
+}
+
+fn check_let_candidate(exp_r: il::ast::Exp) -> sl::Instr {
+    let span_check = span("check-let", 0);
+    let exp_scrut = exp_var("scrutinee", span_check.clone());
+    let exp_match = p4spec_rust::note_phrase! {
+        node: il::ast::ExpKind::Match(
+            Box::new(exp_scrut.clone()),
+            il::ast::Pattern::Opt(il::ast::OptPattern::Some),
+        ),
+        note: il::ast::TypKind::Bool,
+        span: span_check.clone(),
+    };
+    p4spec_rust::phrase! {
+        node: sl::InstrKind::If(sl::IfInstr {
+            exp: exp_match,
+            iter_exps: Vec::new(),
+            block: vec![p4spec_rust::phrase! {
+                node: sl::InstrKind::Let(sl::LetInstr {
+                    exp_l: exp_var("target", span_check.clone()),
+                    exp_r,
+                    iter_instrs: Vec::new(),
+                    block: vec![return_instr(true, span("check-let", 2))],
+                }),
+                span: span_check.clone(),
+            }],
+            dangle: false,
+        }),
+        span: span_check,
+    }
+}
+
+#[test]
+fn test_check_let_shorthand_requires_a_scrutinee_alias_and_preserves_near_misses() {
+    let def_func_pl =
+        converted_func(vec![check_let_candidate(exp_var("scrutinee", span("check-let", 0)))]);
+    let pl::InstrKind::CheckLetMatch(instr_check) = &def_func_pl.block[0].node.node else {
+        panic!("expected check-let shorthand");
+    };
+    assert!(matches!(&instr_check.exp_l.node.node, pl::ExpKind::Var(id) if id.node == "target"));
+    assert_eq!(instr_check.block.len(), 1);
+
+    let def_func_pl =
+        converted_func(vec![check_let_candidate(exp_var("different", span("check-let", 1)))]);
+    let pl::InstrKind::If(instr_if) = &def_func_pl.block[0].node.node else {
+        panic!("near miss must remain an if instruction");
+    };
+    let pl::InstrKind::Let(instr_let) = &instr_if.block[0].node.node else {
+        panic!("near miss must preserve the leading let");
+    };
+    assert!(matches!(&instr_let.exp_r.node.node, pl::ExpKind::Var(id) if id.node == "different"));
+    assert_eq!(instr_if.block.len(), 2);
+}
+
+#[test]
+fn test_table_row_keeps_group_alternatives_separate() {
+    let def_table = p4spec_rust::phrase! {
+        node: sl::DefKind::MetaFunc(sl::MetaFuncDef::Table(sl::TableFunc {
+            id: id("table"),
+            params: Vec::new(),
+            typ: typ_bool(),
+            table_rows: vec![sl::TableRow {
+                exps_input: Vec::new(),
+                exp: exp_bool(true, span("table-condition", 0)),
+                block: vec![
+                    return_instr(true, span("table-arm", 1)),
+                    return_instr(false, span("table-arm", 2)),
+                ],
+            }],
+            hints: Vec::new(),
+        })),
+        span: span("table", 0),
+    };
+    let mut spec_pl = prose::convert(vec![def_table]).unwrap();
+    let def_pl = spec_pl.pop().unwrap();
+    let pl::DefKind::MetaFunc(pl::MetaFuncDef::Table(def_table_pl)) = def_pl.node.node else {
+        panic!("expected table function");
+    };
+    assert!(matches!(
+        &def_table_pl.rows[0].block[0].node.node,
+        pl::InstrKind::Tier(pl::TierInstr {
+            tier: pl::InstrGroup::Backtrack(pl::BacktrackGroupInstr { blocks })
+        }) if blocks.len() == 2
+    ));
 }
