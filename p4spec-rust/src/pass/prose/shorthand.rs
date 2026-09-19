@@ -71,14 +71,14 @@ fn shorten_check_let<Tier>(instr: &mut pl::Instr<Tier>) {
     }
 
     let check = match &instr.node.node {
-        pl::InstrKind::If(pl::IfInstr { exp, iter_exps, block, .. })
-            if iter_exps.is_empty() && has_leading_rename(exp, block) =>
-        {
+        pl::InstrKind::If(pl::IfInstr { exp, iter_exps, block, .. }) if iter_exps.is_empty() => {
             match &exp.node.node {
-                pl::ExpKind::Sub(exp_scrut, typ, subcheck) => {
+                pl::ExpKind::Sub(exp_scrut, typ, subcheck)
+                    if has_leading_rename(exp_scrut, block) =>
+                {
                     Some(Check::Sub(typ.clone(), subcheck.clone(), exp_scrut.as_ref().clone()))
                 }
-                pl::ExpKind::Match(exp_scrut, pattern) => {
+                pl::ExpKind::Match(exp_scrut, pattern) if has_leading_rename(exp_scrut, block) => {
                     Some(Check::Match(pattern.clone(), exp_scrut.as_ref().clone()))
                 }
                 _ => None,
