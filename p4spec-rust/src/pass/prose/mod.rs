@@ -4,6 +4,8 @@ mod context;
 mod convert;
 mod error;
 mod expand;
+mod shorthand;
+mod stamp;
 
 pub use error::{ProseError, ProseErrorKind};
 

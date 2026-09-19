@@ -91,6 +91,10 @@ fn return_instr(value: bool, span: Span) -> sl::Instr {
 }
 
 fn defined_func(block: sl::Block) -> sl::Def {
+    defined_func_with_else(block, None)
+}
+
+fn defined_func_with_else(block: sl::Block, block_else: Option<sl::Block>) -> sl::Def {
     p4spec_rust::phrase! {
         node: sl::DefKind::MetaFunc(sl::MetaFuncDef::Defined(sl::DefinedFunc {
             id: id("f"),
@@ -98,7 +102,7 @@ fn defined_func(block: sl::Block) -> sl::Def {
             params: Vec::new(),
             typ: typ_bool(),
             block,
-            block_else: None,
+            block_else,
             hints: Vec::new(),
         })),
         span: span("function", 0),
@@ -413,4 +417,53 @@ fn test_expression_iterator_lift_preserves_dimensions_and_outer_use() {
     assert_eq!(vars.len(), 2);
     assert_eq!(vars[0].id.node, id_fresh.node);
     assert_eq!(vars[1], var_x);
+}
+
+fn return_call(name: &str, column: usize) -> sl::Instr {
+    let span_call = span("fallthrough", column);
+    p4spec_rust::phrase! {
+        node: sl::InstrKind::Return(sl::ReturnInstr {
+            exp: exp_call(name, exp_bool(true, span_call.clone()), span_call.clone()),
+        }),
+        span: span_call,
+    }
+}
+
+#[test]
+fn test_failure_stamp_tracks_next_arm_then_final_failure() {
+    let def_func_pl = converted_func(vec![return_call("a", 1), return_call("b", 2)]);
+    let pl::InstrKind::Tier(pl::TierInstr {
+        tier: pl::InstrGroup::Backtrack(pl::BacktrackGroupInstr { blocks }),
+    }) = &def_func_pl.block[0].node.node
+    else {
+        panic!("expected backtracking alternatives");
+    };
+    assert_eq!(blocks.len(), 2);
+    assert_eq!(blocks[0][0].node.note, Some(pl::Fallthrough::FallNext));
+    assert_eq!(blocks[1][0].node.note, Some(pl::Fallthrough::FallFail));
+}
+
+#[test]
+fn test_nonempty_else_changes_final_failure_destination() {
+    let mut spec_pl = prose::convert(vec![defined_func_with_else(
+        vec![return_call("main", 1)],
+        Some(vec![return_instr(false, span("else", 0))]),
+    )])
+    .unwrap();
+    let def_pl = spec_pl.pop().unwrap();
+    let pl::DefKind::MetaFunc(pl::MetaFuncDef::Defined(def_func_pl)) = def_pl.node.node else {
+        panic!("expected defined function");
+    };
+    assert_eq!(def_func_pl.block[0].node.note, Some(pl::Fallthrough::FallElse));
+
+    let mut spec_pl = prose::convert(vec![defined_func_with_else(
+        vec![return_call("main", 1)],
+        Some(Vec::new()),
+    )])
+    .unwrap();
+    let def_pl = spec_pl.pop().unwrap();
+    let pl::DefKind::MetaFunc(pl::MetaFuncDef::Defined(def_func_pl)) = def_pl.node.node else {
+        panic!("expected defined function");
+    };
+    assert_eq!(def_func_pl.block[0].node.note, Some(pl::Fallthrough::FallFail));
 }
