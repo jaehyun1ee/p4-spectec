@@ -1,3 +1,4 @@
+use p4spec_rust::interp::shared::context::{IterContext, ReadContext, WriteContext};
 use p4spec_rust::interp::shared::error::ContextErrorKind;
 use p4spec_rust::interp::shared::error::{EntityKind, ErrorKind};
 use p4spec_rust::lang::data::value::ValueArena;
@@ -86,9 +87,9 @@ fn test_localize_with_layout_discards_locals_and_retains_global_lookup() {
     ctx.add_func(id("local", 2), func_local.clone().into())
         .unwrap();
     ctx.add_typdef(id("T", 3), TypeDef::Extern).unwrap();
-    ctx.add_slot(slot.slot, make::bool(&mut arena, true, Span::default()).unwrap());
+    ctx.add_value(slot.slot, make::bool(&mut arena, true, Span::default()).unwrap());
     assert_eq!(
-        ctx.find_func(&id("local", 8))
+        ctx.find_func_with_scope(&id("local", 8))
             .map(|(scope, func)| (scope, func.as_ref()))
             .unwrap(),
         (Scope::Local, &func_local)
@@ -96,15 +97,15 @@ fn test_localize_with_layout_discards_locals_and_retains_global_lookup() {
     let ctx_local = ctx.localize_with_layout(&layout);
     assert!(ctx_local.find_func_opt(&id("local", 8)).is_none());
     assert!(ctx_local.find_typdef_opt(&id("T", 8)).is_none());
-    assert!(ctx_local.find_value(&slot).is_err());
+    assert!(ctx_local.find_value(slot.slot).is_none());
     assert_eq!(
         ctx_local
-            .find_func(&id("global", 8))
+            .find_func_with_scope(&id("global", 8))
             .map(|(scope, func)| (scope, func.as_ref()))
             .unwrap(),
         (Scope::Global, &prepared::prepare_func_def(func_global))
     );
-    assert!(ctx.find_value(&slot).is_ok());
+    assert!(ctx.find_value(slot.slot).is_some());
 }
 
 #[test]
@@ -140,7 +141,7 @@ fn test_local_definition_duplicates_do_not_replace_bindings() {
     );
     assert_eq!(ctx.find_typdef(&id("U", 8)).unwrap(), &TypeDef::Extern);
     assert_eq!(
-        ctx.find_func(&id("g", 8)).unwrap().1.as_ref(),
+        ctx.find_func_with_scope(&id("g", 8)).unwrap().1.as_ref(),
         &prepared::prepare_func_def(func("g", 2))
     );
 }
@@ -157,14 +158,14 @@ fn test_sibling_contexts_isolate_rebinding_and_iterator_paths() {
         iters: vec![ast::Iter::List],
     });
     let mut ctx = Context::new(&global).localize_with_layout(&layout.into());
-    ctx.add_slot(slot.slot, make::bool(&mut arena, false, Span::default()).unwrap());
+    ctx.add_value(slot.slot, make::bool(&mut arena, false, Span::default()).unwrap());
     let mut ctx_a = ctx.clone();
     let ctx_b = ctx.clone();
-    ctx_a.add_slot(slot.slot, make::bool(&mut arena, true, Span::default()).unwrap());
-    ctx_a.add_slot(slot_list.slot, make::bool(&mut arena, true, Span::default()).unwrap());
-    assert!(get::bool(&arena, ctx_a.find_value(&slot).unwrap()).unwrap());
-    assert!(!get::bool(&arena, ctx_b.find_value(&slot).unwrap()).unwrap());
-    assert!(ctx.find_value(&slot_list).is_err());
+    ctx_a.add_value(slot.slot, make::bool(&mut arena, true, Span::default()).unwrap());
+    ctx_a.add_value(slot_list.slot, make::bool(&mut arena, true, Span::default()).unwrap());
+    assert!(get::bool(&arena, ctx_a.find_value(slot.slot).unwrap()).unwrap());
+    assert!(!get::bool(&arena, ctx_b.find_value(slot.slot).unwrap()).unwrap());
+    assert!(ctx.find_value(slot_list.slot).is_none());
 }
 
 #[test]
@@ -178,7 +179,7 @@ fn test_missing_value_reports_iterator_path_and_lookup_span() {
     });
     let error = Context::new(&global)
         .localize_with_layout(&layout.into())
-        .find_value(&slot)
+        .find_opt_values_by_var(&ValueArena::new(), &[slot])
         .unwrap_err();
     assert_eq!(error.span, id("x", 9).span);
     assert_eq!(
@@ -241,22 +242,32 @@ fn test_loaded_native_spec_preserves_definition_bodies_and_locations() {
                     ast::MetaFuncDef::Table(func) => &func.id,
                     ast::MetaFuncDef::Defined(func) => &func.id,
                 };
-                let (scope, func_global) = ctx.find_func(id).unwrap();
+                let (scope, func_global) = ctx.find_func_with_scope(id).unwrap();
                 assert_eq!(
                     (scope, &prepared::restore_func_def(func_global.as_ref().clone())),
                     (Scope::Global, func)
                 );
-                assert!(std::rc::Rc::ptr_eq(func_global, ctx_clone.find_func(id).unwrap().1));
-                assert!(std::rc::Rc::ptr_eq(func_global, ctx_local.find_func(id).unwrap().1));
+                assert!(std::rc::Rc::ptr_eq(
+                    func_global,
+                    ctx_clone.find_func_with_scope(id).unwrap().1
+                ));
+                assert!(std::rc::Rc::ptr_eq(
+                    func_global,
+                    ctx_local.find_func_with_scope(id).unwrap().1
+                ));
             }
             ast::DefKind::Var(var) => {
                 assert!(
-                    ctx.find_value(&layout.resolve_var(p4spec_rust::lang::il::ast::Var {
-                        id: var.id.clone(),
-                        typ: p4spec_rust::lang::data::typ::make::bool(),
-                        iters: vec![]
-                    }))
-                    .is_err()
+                    ctx.find_value(
+                        layout
+                            .resolve_var(p4spec_rust::lang::il::ast::Var {
+                                id: var.id.clone(),
+                                typ: p4spec_rust::lang::data::typ::make::bool(),
+                                iters: vec![]
+                            })
+                            .slot
+                    )
+                    .is_none()
                 );
             }
         }
@@ -302,7 +313,7 @@ fn test_definition_lookup_errors_and_local_type_isolation() {
     for (kind, error) in [
         (EntityKind::Type, ctx.find_typdef(&id).unwrap_err()),
         (EntityKind::Relation, ctx.find_rel(&id).unwrap_err()),
-        (EntityKind::Function, ctx.find_func(&id).unwrap_err()),
+        (EntityKind::Function, ctx.find_func_with_scope(&id).unwrap_err()),
     ] {
         assert_eq!(error.span, id.span);
         assert_eq!(

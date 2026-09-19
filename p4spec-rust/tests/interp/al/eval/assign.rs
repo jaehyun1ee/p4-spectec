@@ -1,5 +1,6 @@
+use p4spec_rust::interp::shared::context::{ReadContext, WriteContext};
 use p4spec_rust::interp::shared::prepare::Prepare;
-use p4spec_rust::interp::shared::{backtrack::Backtrack, util::find_iter_var_slot};
+use p4spec_rust::interp::shared::{backtrack::Backtrack, util::find_iter_var};
 use p4spec_rust::runtime::envs::interp::al::ast_prepared as prepared;
 use p4spec_rust::runtime::envs::interp::shared::frame::FrameLayout;
 use std::rc::Rc;
@@ -34,7 +35,7 @@ fn id(name: &str) -> ast::Id {
 fn exp(node: ast::ExpKind) -> ast::Exp {
     note_phrase!(node: node, note: typ::make::bool().node, span: span(4))
 }
-fn var_exp(name: &str) -> ast::Exp {
+fn id_exp(name: &str) -> ast::Exp {
     p4spec_rust::note_phrase!(node: p4spec_rust::lang::il::ast::ExpKind::Id(id(name)), note: p4spec_rust::lang::il::ast::TypKind::Bool, span: span(4))
 }
 fn var(name: &str, iters: Vec<ast::Iter>) -> ast::Var {
@@ -55,11 +56,15 @@ fn binding(
     name: &str,
     iters: Vec<ast::Iter>,
 ) -> Value {
-    *ctx.find_value(&layout.resolve_var(p4spec_rust::lang::il::ast::Var {
-        id: id(name),
-        typ: p4spec_rust::lang::data::typ::make::bool(),
-        iters,
-    }))
+    *ctx.find_value(
+        layout
+            .resolve_var(p4spec_rust::lang::il::ast::Var {
+                id: id(name),
+                typ: p4spec_rust::lang::data::typ::make::bool(),
+                iters,
+            })
+            .slot,
+    )
     .unwrap()
 }
 fn iter(exp_inner: ast::Exp, iter: ast::Iter, vars: Vec<ast::Var>) -> ast::Exp {
@@ -87,28 +92,29 @@ fn prepare_exp<'global>(
 fn test_iterated_variable_fast_path_preserves_identity_and_path() {
     let mut arena = ValueArena::new();
     let global = Global::load(vec![]).unwrap();
-    let exp_inner = iter(var_exp("x"), ast::Iter::Opt, vec![var("x", vec![])]);
+    let exp_inner = iter(id_exp("x"), ast::Iter::Opt, vec![var("x", vec![])]);
     let exp = iter(exp_inner.clone(), ast::Iter::List, vec![var("x", vec![ast::Iter::Opt])]);
     let (exp, ctx, mut layout) = prepare_exp(&global, exp);
 
-    assert_eq!(
-        find_iter_var_slot(&ctx, &exp).unwrap().var.iters,
-        vec![ast::Iter::Opt, ast::Iter::List]
-    );
+    assert_eq!(find_iter_var(&ctx, &exp).unwrap().var.iters, vec![ast::Iter::Opt, ast::Iter::List]);
     let value = list(&mut arena, vec![]);
     let ctx = ok(assign_exp(&mut arena, ctx, &exp, value));
     assert!((value == binding(&ctx, &mut layout, "x", vec![ast::Iter::Opt, ast::Iter::List])));
     assert!(
-        ctx.find_value(&layout.resolve_var(p4spec_rust::lang::il::ast::Var {
-            id: id("x"),
-            typ: p4spec_rust::lang::data::typ::make::bool(),
-            iters: vec![]
-        }))
-        .is_err()
+        ctx.find_value(
+            layout
+                .resolve_var(p4spec_rust::lang::il::ast::Var {
+                    id: id("x"),
+                    typ: p4spec_rust::lang::data::typ::make::bool(),
+                    iters: vec![]
+                })
+                .slot
+        )
+        .is_none()
     );
     let (exp_mismatch, ctx_mismatch, _) =
         prepare_exp(&global, iter(exp_inner, ast::Iter::List, vec![var("x", vec![])]));
-    assert!(find_iter_var_slot(&ctx_mismatch, &exp_mismatch).is_none());
+    assert!(find_iter_var(&ctx_mismatch, &exp_mismatch).is_none());
 }
 
 #[test]
@@ -116,12 +122,12 @@ fn test_list_assignment_collects_rows_without_leaking_scalar_bindings() {
     let mut arena = ValueArena::new();
     let global = Global::load(vec![]).unwrap();
     let exp = iter(
-        exp(ast::ExpKind::Tuple(vec![var_exp("x"), var_exp("y")])),
+        exp(ast::ExpKind::Tuple(vec![id_exp("x"), id_exp("y")])),
         ast::Iter::List,
         vec![var("x", vec![]), var("y", vec![])],
     );
     let (exp, mut ctx, mut layout) = prepare_exp(&global, exp);
-    ctx.add_slot(layout.resolve_var(var("x", vec![])).slot, value(&mut arena, false));
+    ctx.add_value(layout.resolve_var(var("x", vec![])).slot, value(&mut arena, false));
 
     let ctx_result = ok({
         let value = {
@@ -162,20 +168,28 @@ fn test_list_assignment_collects_rows_without_leaking_scalar_bindings() {
     assert!(!get::bool(&arena, &binding(&ctx_result, &mut layout, "x", vec![])).unwrap());
     assert!(
         ctx_result
-            .find_value(&layout.resolve_var(p4spec_rust::lang::il::ast::Var {
-                id: id("y"),
-                typ: p4spec_rust::lang::data::typ::make::bool(),
-                iters: vec![]
-            }))
-            .is_err()
+            .find_value(
+                layout
+                    .resolve_var(p4spec_rust::lang::il::ast::Var {
+                        id: id("y"),
+                        typ: p4spec_rust::lang::data::typ::make::bool(),
+                        iters: vec![]
+                    })
+                    .slot
+            )
+            .is_none()
     );
     assert!(
-        ctx.find_value(&layout.resolve_var(p4spec_rust::lang::il::ast::Var {
-            id: id("x"),
-            typ: p4spec_rust::lang::data::typ::make::bool(),
-            iters: vec![ast::Iter::List]
-        }))
-        .is_err()
+        ctx.find_value(
+            layout
+                .resolve_var(p4spec_rust::lang::il::ast::Var {
+                    id: id("x"),
+                    typ: p4spec_rust::lang::data::typ::make::bool(),
+                    iters: vec![ast::Iter::List]
+                })
+                .slot
+        )
+        .is_none()
     );
 }
 
@@ -184,12 +198,12 @@ fn test_list_rows_cannot_collect_unassigned_outer_values() {
     let mut arena = ValueArena::new();
     let global = Global::load(vec![]).unwrap();
     let exp = iter(
-        exp(ast::ExpKind::Tuple(vec![var_exp("x")])),
+        exp(ast::ExpKind::Tuple(vec![id_exp("x")])),
         ast::Iter::List,
         vec![var("missing", vec![])],
     );
     let (exp, mut ctx, mut layout) = prepare_exp(&global, exp);
-    ctx.add_slot(layout.resolve_var(var("missing", vec![])).slot, value(&mut arena, true));
+    ctx.add_value(layout.resolve_var(var("missing", vec![])).slot, value(&mut arena, true));
 
     let Backtrack::Err(traces) = ({
         let value = {
@@ -211,7 +225,7 @@ fn test_optional_assignment_exports_only_iterated_bindings() {
     let mut arena = ValueArena::new();
     let global = Global::load(vec![]).unwrap();
     let exp =
-        iter(exp(ast::ExpKind::Tuple(vec![var_exp("x")])), ast::Iter::Opt, vec![var("x", vec![])]);
+        iter(exp(ast::ExpKind::Tuple(vec![id_exp("x")])), ast::Iter::Opt, vec![var("x", vec![])]);
     let (exp, ctx, mut layout) = prepare_exp(&global, exp);
 
     let typ = typ::make::opt(typ::make::bool());
@@ -227,12 +241,16 @@ fn test_optional_assignment_exports_only_iterated_bindings() {
         assign_exp(&mut arena, ctx, &exp, value)
     });
     assert!(
-        ctx.find_value(&layout.resolve_var(p4spec_rust::lang::il::ast::Var {
-            id: id("x"),
-            typ: p4spec_rust::lang::data::typ::make::bool(),
-            iters: vec![]
-        }))
-        .is_err()
+        ctx.find_value(
+            layout
+                .resolve_var(p4spec_rust::lang::il::ast::Var {
+                    id: id("x"),
+                    typ: p4spec_rust::lang::data::typ::make::bool(),
+                    iters: vec![]
+                })
+                .slot
+        )
+        .is_none()
     );
     assert!(
         get::bool(
@@ -265,12 +283,16 @@ fn test_optional_assignment_exports_only_iterated_bindings() {
             .is_none()
     );
     assert!(
-        ctx.find_value(&layout.resolve_var(p4spec_rust::lang::il::ast::Var {
-            id: id("x"),
-            typ: p4spec_rust::lang::data::typ::make::bool(),
-            iters: vec![]
-        }))
-        .is_err()
+        ctx.find_value(
+            layout
+                .resolve_var(p4spec_rust::lang::il::ast::Var {
+                    id: id("x"),
+                    typ: p4spec_rust::lang::data::typ::make::bool(),
+                    iters: vec![]
+                })
+                .slot
+        )
+        .is_none()
     );
 }
 
@@ -278,7 +300,7 @@ fn test_optional_assignment_exports_only_iterated_bindings() {
 fn test_cons_tail_preserves_value_type_with_default_span() {
     let mut arena = ValueArena::new();
     let global = Global::load(vec![]).unwrap();
-    let exp = exp(ast::ExpKind::Cons(Box::new(var_exp("h")), Box::new(var_exp("t"))));
+    let exp = exp(ast::ExpKind::Cons(Box::new(id_exp("h")), Box::new(id_exp("t"))));
     let (exp, ctx, mut layout) = prepare_exp(&global, exp);
 
     let value = {
@@ -305,7 +327,7 @@ fn test_assignment_errors_are_fatal_and_located() {
     let mut arena = ValueArena::new();
     let global = Global::load(vec![]).unwrap();
     let exps = vec![
-        var_exp("x"),
+        id_exp("x"),
         p4spec_rust::note_phrase!(node: p4spec_rust::lang::il::ast::ExpKind::Id(id("y")), note: typ::make::bool().node, span: span(9)),
     ];
     let mut layout = FrameLayout::default();
@@ -360,7 +382,7 @@ fn test_function_argument_shares_caller_definition_without_caller_values() {
         let mut caller =
             Context::new(&global_caller).localize_with_layout(&Rc::new(layout.clone()));
         caller.add_func(id("f"), func.clone()).unwrap();
-        caller.add_slot(slot_secret.slot, value(&mut arena, true));
+        caller.add_value(slot_secret.slot, value(&mut arena, true));
         let arg = phrase!(node: ast::ArgKind::Def(id("alias")), span: span(4));
         let arg = arg.prepare(&mut FrameLayout::default());
         let func_value =
@@ -373,15 +395,15 @@ fn test_function_argument_shares_caller_definition_without_caller_values() {
             &[func_value],
         ));
         assert!(Rc::ptr_eq(
-            caller.find_func(&id("f")).unwrap().1,
-            callee.find_func(&id("alias")).unwrap().1,
+            caller.find_func_with_scope(&id("f")).unwrap().1,
+            callee.find_func_with_scope(&id("alias")).unwrap().1,
         ));
         assert!(caller.find_func_opt(&id("alias")).is_none());
         callee
     };
-    assert!(Rc::ptr_eq(&func, callee.find_func(&id("alias")).unwrap().1));
-    assert_eq!(callee.find_func(&id("alias")).unwrap(), (Scope::Local, &func));
-    assert!(callee.find_value(&slot_secret).is_err());
+    assert!(Rc::ptr_eq(&func, callee.find_func_with_scope(&id("alias")).unwrap().1));
+    assert_eq!(callee.find_func_with_scope(&id("alias")).unwrap(), (Scope::Local, &func));
+    assert!(callee.find_value(slot_secret.slot).is_none());
 }
 
 #[test]
@@ -392,8 +414,8 @@ fn test_case_and_struct_assignments_follow_argument_order() {
     let atom = |name: &str| phrase!(node: Atom::Keyword(name.to_owned()), span: span(3));
     let case_exp = exp(ast::ExpKind::Case(Box::new(Mixfix::Seq(vec![
         Mixfix::Atom(atom("LEFT")),
-        Mixfix::Arg(var_exp("x")),
-        Mixfix::Arg(var_exp("y")),
+        Mixfix::Arg(id_exp("x")),
+        Mixfix::Arg(id_exp("y")),
     ]))));
     let case_value = {
         let value_case = Mixfix::Seq(vec![
@@ -405,7 +427,7 @@ fn test_case_and_struct_assignments_follow_argument_order() {
     }
     .unwrap();
     let struct_exp =
-        exp(ast::ExpKind::Str(vec![(atom("a"), var_exp("x")), (atom("b"), var_exp("y"))]));
+        exp(ast::ExpKind::Str(vec![(atom("a"), id_exp("x")), (atom("b"), id_exp("y"))]));
     let struct_value = {
         let fields =
             vec![(atom("b"), value(&mut arena, true)), (atom("a"), value(&mut arena, false))];
@@ -425,7 +447,7 @@ fn test_empty_iteration_creates_empty_collections_for_every_binding() {
     let mut arena = ValueArena::new();
     let global = Global::load(vec![]).unwrap();
     let exp = iter(
-        exp(ast::ExpKind::Tuple(vec![var_exp("x"), var_exp("y")])),
+        exp(ast::ExpKind::Tuple(vec![id_exp("x"), id_exp("y")])),
         ast::Iter::List,
         vec![var("x", vec![]), var("y", vec![])],
     );
@@ -449,12 +471,12 @@ fn test_optional_destructuring_preserves_outer_scalars() {
     let mut arena = ValueArena::new();
     let global = Global::load(vec![]).unwrap();
     let exp = iter(
-        exp(ast::ExpKind::Tuple(vec![var_exp("x"), var_exp("y")])),
+        exp(ast::ExpKind::Tuple(vec![id_exp("x"), id_exp("y")])),
         ast::Iter::Opt,
         vec![var("x", vec![]), var("y", vec![])],
     );
     let (exp, mut ctx, mut layout) = prepare_exp(&global, exp);
-    ctx.add_slot(layout.resolve_var(var("x", vec![])).slot, value(&mut arena, false));
+    ctx.add_value(layout.resolve_var(var("x", vec![])).slot, value(&mut arena, false));
 
     let value_inner = value(&mut arena, true);
     let value_tuple = tuple(&mut arena, vec![value_inner, value_inner]);
@@ -468,12 +490,16 @@ fn test_optional_destructuring_preserves_outer_scalars() {
     let ctx = ok(assign_exp(&mut arena, ctx, &exp, value_opt));
     assert!(!get::bool(&arena, &binding(&ctx, &mut layout, "x", vec![])).unwrap());
     assert!(
-        ctx.find_value(&layout.resolve_var(p4spec_rust::lang::il::ast::Var {
-            id: id("y"),
-            typ: p4spec_rust::lang::data::typ::make::bool(),
-            iters: vec![]
-        }))
-        .is_err()
+        ctx.find_value(
+            layout
+                .resolve_var(p4spec_rust::lang::il::ast::Var {
+                    id: id("y"),
+                    typ: p4spec_rust::lang::data::typ::make::bool(),
+                    iters: vec![]
+                })
+                .slot
+        )
+        .is_none()
     );
     for name in ["x", "y"] {
         assert_eq!(

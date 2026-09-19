@@ -7,8 +7,9 @@
 use crate::runtime::envs::interp::sl::ast_prepared as ast;
 use std::rc::Rc;
 
+use crate::interp::shared::context::{IterContext, ReadContext, WriteContext};
 use crate::interp::shared::error::ContextErrorKind;
-use crate::lang::data::var::{IdSlot, SlotIdx, VarSlot};
+use crate::lang::data::var::{SlotIdx, VarSlot};
 use crate::runtime::envs::interp::shared::frame::{Callable, Frame, FrameLayout};
 
 use crate::{
@@ -136,55 +137,16 @@ impl<'global> Context<'global> {
         }
     }
 
-    pub fn clear_value_bindings(&mut self) {
-        self.local.frame = self.local.frame.wipe();
-    }
-
     // == Finders
 
-    pub fn iter_slot(&self, slot: &VarSlot, iter: ast::Iter) -> VarSlot {
-        self.local.frame.layout().iter_slot(slot, iter)
-    }
-
-    pub fn find_id_value(&self, id: &IdSlot) -> Result<&Value, Error> {
-        self.local.frame.get(id.slot).ok_or_else(|| {
-            Error::undefined(EntityKind::Value, id.id.node.clone(), id.id.span.clone())
-        })
-    }
-
-    pub fn find_value(&self, slot: &VarSlot) -> Result<&Value, Error> {
-        self.local.frame.get(slot.slot).ok_or_else(|| {
-            Error::undefined(
-                EntityKind::Value,
-                Print::to_string(&slot.var),
-                slot.var.id.span.clone(),
-            )
-        })
-    }
-
-    pub fn find_typdef_local_opt(&self, id: &ast::Id) -> Option<&TypeDef> {
-        self.local.tdenv.get(id)
-    }
-
-    pub fn find_typdef_opt<'a>(&'a self, id: &ast::Id) -> Option<&'a TypeDef> {
-        self.find_typdef_local_opt(id)
-            .or_else(|| self.global.tdenv.get(id))
-    }
+    // - Types
 
     pub fn find_typdef<'a>(&'a self, id: &ast::Id) -> Result<&'a TypeDef, Error> {
         self.find_typdef_opt(id)
             .ok_or_else(|| Error::undefined(EntityKind::Type, id.node.clone(), id.span.clone()))
     }
 
-    pub fn find_defined_typdef<'a>(
-        &'a self,
-        id: &ast::Id,
-    ) -> Result<(&'a [ast::TParam], &'a ast::DefTyp), Error> {
-        match self.find_typdef(id)? {
-            TypeDef::Defined(tparams, def_typ) => Ok((tparams, def_typ)),
-            _ => Err(Error::undefined(EntityKind::DefinedType, id.node.clone(), id.span.clone())),
-        }
-    }
+    // - Relations
 
     pub fn find_rel_opt(&self, id: &ast::Id) -> Option<&'global Callable<ast::RelDef>> {
         self.global.renv.get(id)
@@ -194,6 +156,8 @@ impl<'global> Context<'global> {
         self.find_rel_opt(id)
             .ok_or_else(|| Error::undefined(EntityKind::Relation, id.node.clone(), id.span.clone()))
     }
+
+    // - Functions
 
     pub fn find_func_opt<'a>(
         &'a self,
@@ -206,7 +170,7 @@ impl<'global> Context<'global> {
         }
     }
 
-    pub fn find_func<'a>(
+    pub fn find_func_with_scope<'a>(
         &'a self,
         id: &ast::Id,
     ) -> Result<(Scope, &'a Rc<Callable<ast::MetaFuncDef>>), Error> {
@@ -214,36 +178,9 @@ impl<'global> Context<'global> {
             .ok_or_else(|| Error::undefined(EntityKind::Function, id.node.clone(), id.span.clone()))
     }
 
-    pub fn find_func_typ(&self, id: &ast::Id) -> Result<crate::lang::il::ast::FuncTyp, Error> {
-        use crate::lang::data::typ::{FuncTyp, make};
-
-        fn param_typ(param: &ast::Param) -> ast::Typ {
-            match &param.node {
-                ast::ParamKind::Exp(typ, _) => typ.clone(),
-                ast::ParamKind::Def(_, tparams, params, typ) => {
-                    make::func(tparams.clone(), params.iter().map(param_typ).collect(), typ.clone())
-                }
-            }
-        }
-        let (_, func) = self.find_func(id)?;
-        let (tparams, params, typ): (&[ast::TParam], &[ast::Param], &ast::Typ) = match &func.def {
-            ast::MetaFuncDef::Extern(func) => (&func.tparams, &func.params, &func.typ),
-            ast::MetaFuncDef::Builtin(func) => (&func.tparams, &func.params, &func.typ),
-            ast::MetaFuncDef::Table(func) => (&[], &func.params, &func.typ),
-            ast::MetaFuncDef::Defined(func) => (&func.tparams, &func.params, &func.typ),
-        };
-        Ok(FuncTyp {
-            tparams: tparams.to_vec(),
-            typs_params: params.iter().map(param_typ).collect(),
-            typ_ret: Box::new(typ.clone()),
-        })
-    }
-
     // == Adders
 
-    pub fn add_slot(&mut self, slot: SlotIdx, value: Value) {
-        self.local.frame.set(slot, value);
-    }
+    // - Types
 
     pub(crate) fn bind_tparam(&mut self, id: ast::Id, typdef: TypeDef) -> Result<(), Error> {
         if self.local.tdenv.contains_key(&id) {
@@ -260,12 +197,92 @@ impl<'global> Context<'global> {
         self.local.tdenv.insert(id, typdef);
         Ok(())
     }
+}
 
-    pub fn add_func(
-        &mut self,
-        id: ast::Id,
-        func: Rc<Callable<ast::MetaFuncDef>>,
-    ) -> Result<(), Error> {
+// = Read access
+
+impl ReadContext for Context<'_> {
+    type Func = Callable<ast::MetaFuncDef>;
+
+    // == Finders
+
+    // - Values
+
+    fn find_value(&self, slot: SlotIdx) -> Option<&Value> {
+        self.local.frame.get(slot)
+    }
+
+    fn find_iter_var(&self, var: &VarSlot, iter: ast::Iter) -> VarSlot {
+        self.local.frame.layout().find_iter_var(var, iter)
+    }
+
+    // - Types
+
+    fn find_typdef_local_opt(&self, id: &ast::Id) -> Option<&TypeDef> {
+        self.local.tdenv.get(id)
+    }
+
+    fn find_typdef_opt<'a>(&'a self, id: &ast::Id) -> Option<&'a TypeDef> {
+        self.find_typdef_local_opt(id)
+            .or_else(|| self.global.tdenv.get(id))
+    }
+
+    fn find_defined_typdef<'a>(
+        &'a self,
+        id: &ast::Id,
+    ) -> Result<(&'a [ast::TParam], &'a ast::DefTyp), Error> {
+        match self.find_typdef(id)? {
+            TypeDef::Defined(tparams, def_typ) => Ok((tparams, def_typ)),
+            _ => Err(Error::undefined(EntityKind::DefinedType, id.node.clone(), id.span.clone())),
+        }
+    }
+
+    // - Functions
+
+    fn find_func(&self, id: &ast::Id) -> Result<&Rc<Self::Func>, Error> {
+        self.find_func_with_scope(id).map(|(_, func)| func)
+    }
+
+    fn find_func_typ(&self, id: &ast::Id) -> Result<crate::lang::il::ast::FuncTyp, Error> {
+        use crate::lang::data::typ::{FuncTyp, make};
+
+        fn param_typ(param: &ast::Param) -> ast::Typ {
+            match &param.node {
+                ast::ParamKind::Exp(typ, _) => typ.clone(),
+                ast::ParamKind::Def(_, tparams, params, typ) => {
+                    make::func(tparams.clone(), params.iter().map(param_typ).collect(), typ.clone())
+                }
+            }
+        }
+        let func = self.find_func(id)?;
+        let (tparams, params, typ): (&[ast::TParam], &[ast::Param], &ast::Typ) = match &func.def {
+            ast::MetaFuncDef::Extern(func) => (&func.tparams, &func.params, &func.typ),
+            ast::MetaFuncDef::Builtin(func) => (&func.tparams, &func.params, &func.typ),
+            ast::MetaFuncDef::Table(func) => (&[], &func.params, &func.typ),
+            ast::MetaFuncDef::Defined(func) => (&func.tparams, &func.params, &func.typ),
+        };
+        Ok(FuncTyp {
+            tparams: tparams.to_vec(),
+            typs_params: params.iter().map(param_typ).collect(),
+            typ_ret: Box::new(typ.clone()),
+        })
+    }
+}
+
+// = Write access
+
+impl WriteContext for Context<'_> {
+    // == Adders
+
+    // - Values
+
+    fn add_value(&mut self, slot: SlotIdx, value: Value) {
+        self.local.frame.set(slot, value);
+    }
+
+    // - Functions
+
+    fn add_func(&mut self, id: ast::Id, func: Rc<Callable<ast::MetaFuncDef>>) -> Result<(), Error> {
         if self.find_func_opt(&id).is_some() {
             return Err(Error::duplicate(EntityKind::Function, id.node, id.span));
         }
@@ -273,18 +290,34 @@ impl<'global> Context<'global> {
         Ok(())
     }
 
-    // == Iteration contexts
+    // == Clearing
 
-    // - Iteration inputs
+    fn clear_value_bindings(&mut self) {
+        self.local.frame = self.local.frame.wipe();
+    }
+}
 
-    pub(crate) fn find_list_values_by_var<'a>(
+// = Iteration access
+
+impl IterContext for Context<'_> {
+    // == Finders
+
+    // - Values
+
+    fn find_list_values_by_var<'a>(
         &self,
         arena: &'a ValueArena,
         vars: &[ast::Var],
     ) -> Result<Vec<&'a [Value]>, Error> {
         let mut values_by_var = Vec::with_capacity(vars.len());
         for var in vars {
-            let value = self.find_value(var)?;
+            let value = self.find_value(var.slot).ok_or_else(|| {
+                Error::undefined(
+                    EntityKind::Value,
+                    Print::to_string(&var.var),
+                    var.var.id.span.clone(),
+                )
+            })?;
             let values = get::list(arena, value)
                 .map_err(|error| Error::from(error).at_if_missing(&var.var.id.span))?;
             values_by_var.push(values);
@@ -307,14 +340,20 @@ impl<'global> Context<'global> {
         Ok(values_by_var)
     }
 
-    pub(crate) fn find_opt_values_by_var(
+    fn find_opt_values_by_var(
         &self,
         arena: &ValueArena,
         vars: &[ast::Var],
     ) -> Result<Option<Vec<Value>>, Error> {
         let mut values = Vec::with_capacity(vars.len());
         for var in vars {
-            let value = self.find_value(var)?;
+            let value = self.find_value(var.slot).ok_or_else(|| {
+                Error::undefined(
+                    EntityKind::Value,
+                    Print::to_string(&var.var),
+                    var.var.id.span.clone(),
+                )
+            })?;
             let value = get::opt(arena, value)
                 .map_err(|error| Error::from(error).at_if_missing(&var.var.id.span))?;
             values.push(value);
@@ -331,20 +370,35 @@ impl<'global> Context<'global> {
         }
     }
 
-    // - Iteration outputs
+    // == Collectors
 
-    pub(super) fn collect_values_by_var(
+    // - Values
+
+    fn collect_values_by_var(
         &self,
         vars: &[ast::Var],
         values_by_var: &mut [Vec<Value>],
     ) -> Backtrack<()> {
         for (var, values) in vars.iter().zip(values_by_var) {
-            values.push(*unwrap_from_result!(self.find_value(var), &var.var.id.span));
+            values.push(*unwrap_from_result!(
+                self.find_value(var.slot).ok_or_else(|| {
+                    Error::undefined(
+                        EntityKind::Value,
+                        Print::to_string(&var.var),
+                        var.var.id.span.clone(),
+                    )
+                }),
+                &var.var.id.span
+            ));
         }
         ok!(())
     }
 
-    pub(super) fn bind_list_values_by_var(
+    // == Adders
+
+    // - Values
+
+    fn bind_list_values_by_var(
         &mut self,
         arena: &mut ValueArena,
         vars: &[ast::Var],
@@ -354,12 +408,12 @@ impl<'global> Context<'global> {
             let typ = typ::make::iterate(var.var.typ.clone(), &var.var.iters);
             let value = make::list(arena, typ.node.into(), values, Span::default());
             let value = unwrap_from_result!(value, &Span::default());
-            self.add_slot(var.slot, value);
+            self.add_value(var.slot, value);
         }
         ok!(())
     }
 
-    pub(super) fn bind_opt_values_by_var(
+    fn bind_opt_values_by_var(
         &mut self,
         arena: &mut ValueArena,
         vars: &[ast::Var],
@@ -370,104 +424,8 @@ impl<'global> Context<'global> {
             let value =
                 make::opt(arena, typ.node.into(), values.into_iter().next(), Span::default());
             let value = unwrap_from_result!(value, &Span::default());
-            self.add_slot(var.slot, value);
+            self.add_value(var.slot, value);
         }
         ok!(())
-    }
-}
-
-// = Shared binding interfaces
-
-impl crate::interp::shared::context::ReadContext for Context<'_> {
-    type Func = Callable<ast::MetaFuncDef>;
-
-    fn iter_slot(&self, slot: &VarSlot, iter: ast::Iter) -> VarSlot {
-        self.iter_slot(slot, iter)
-    }
-
-    fn find_id_value(&self, id: &IdSlot) -> Result<&Value, Error> {
-        self.find_id_value(id)
-    }
-
-    fn find_value(&self, slot: &VarSlot) -> Result<&Value, Error> {
-        self.find_value(slot)
-    }
-
-    fn find_defined_typdef(&self, id: &ast::Id) -> Result<(&[ast::TParam], &ast::DefTyp), Error> {
-        self.find_defined_typdef(id)
-    }
-
-    fn find_func_typ(&self, id: &ast::Id) -> Result<crate::lang::il::ast::FuncTyp, Error> {
-        self.find_func_typ(id)
-    }
-
-    fn find_typdef_opt(&self, id: &ast::Id) -> Option<&TypeDef> {
-        self.find_typdef_opt(id)
-    }
-
-    fn find_typdef_local_opt(&self, id: &ast::Id) -> Option<&TypeDef> {
-        self.find_typdef_local_opt(id)
-    }
-
-    fn find_func(&self, id: &ast::Id) -> Result<&Rc<Self::Func>, Error> {
-        self.find_func(id).map(|(_, func)| func)
-    }
-}
-
-impl crate::interp::shared::context::WriteContext for Context<'_> {
-    fn add_slot(&mut self, slot: SlotIdx, value: Value) {
-        self.add_slot(slot, value)
-    }
-
-    fn clear_value_bindings(&mut self) {
-        self.clear_value_bindings()
-    }
-
-    fn add_func(&mut self, id: ast::Id, func: Rc<Self::Func>) -> Result<(), Error> {
-        self.add_func(id, func)
-    }
-}
-
-impl crate::interp::shared::context::IterContext for Context<'_> {
-    fn find_list_values_by_var<'arena>(
-        &self,
-        arena: &'arena ValueArena,
-        vars: &[ast::Var],
-    ) -> Result<Vec<&'arena [Value]>, Error> {
-        self.find_list_values_by_var(arena, vars)
-    }
-
-    fn find_opt_values_by_var(
-        &self,
-        arena: &ValueArena,
-        vars: &[ast::Var],
-    ) -> Result<Option<Vec<Value>>, Error> {
-        self.find_opt_values_by_var(arena, vars)
-    }
-
-    fn collect_values_by_var(
-        &self,
-        vars: &[ast::Var],
-        values_by_var: &mut [Vec<Value>],
-    ) -> Backtrack<()> {
-        self.collect_values_by_var(vars, values_by_var)
-    }
-
-    fn bind_list_values_by_var(
-        &mut self,
-        arena: &mut ValueArena,
-        vars: &[ast::Var],
-        values_by_var: Vec<Vec<Value>>,
-    ) -> Backtrack<()> {
-        self.bind_list_values_by_var(arena, vars, values_by_var)
-    }
-
-    fn bind_opt_values_by_var(
-        &mut self,
-        arena: &mut ValueArena,
-        vars: &[ast::Var],
-        values_by_var: Vec<Vec<Value>>,
-    ) -> Backtrack<()> {
-        self.bind_opt_values_by_var(arena, vars, values_by_var)
     }
 }

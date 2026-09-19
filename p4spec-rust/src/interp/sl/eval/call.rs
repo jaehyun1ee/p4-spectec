@@ -6,6 +6,7 @@ use super::super::{
     flow::Flow,
 };
 use super::{assign, instr};
+use crate::interp::shared::context::ReadContext;
 use crate::lang::common::source::Span;
 use crate::runtime::envs::interp::shared::frame::FrameLayout;
 use crate::runtime::envs::interp::sl::ast_prepared as ast;
@@ -161,7 +162,7 @@ pub(in crate::interp::sl) fn cache_func<Iface: Interface, Ext: Extern>(
     values: &[Value],
 ) -> bool {
     runner_ctx.interp().config.cache
-        && matches!(ctx.find_func(id), Ok((Scope::Global, func))
+        && matches!(ctx.find_func_with_scope(id), Ok((Scope::Global, func))
             if !matches!(&func.def, ast::MetaFuncDef::Extern(_)))
         && !values
             .iter()
@@ -339,7 +340,7 @@ pub fn invoke_func<Iface: Interface, Ext: Extern>(
         }
         runner_ctx.interp_mut().cache.begin();
         let result = stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
-            let (_, func) = unwrap_from_result!(ctx.find_func(&id), &id.span);
+            let func = unwrap_from_result!(ctx.find_func(&id), &id.span);
             let layout = &func.layout;
             match &func.def {
                 ast::MetaFuncDef::Extern(func) => ok!(FuncResult::Return(unwrap!(

@@ -38,7 +38,7 @@ where
     let mut values = Vec::with_capacity(len);
     for idx in 0..len {
         for (var, values) in vars.iter().zip(&values_by_var) {
-            ctx_sub.add_slot(var.slot, values[idx]);
+            ctx_sub.add_value(var.slot, values[idx]);
         }
         values.push(unwrap!(eval(runner_ctx, &ctx_sub)));
     }
@@ -67,7 +67,7 @@ where
     };
     let mut ctx_sub = ctx.clone();
     for (var, value) in vars.iter().zip(values) {
-        ctx_sub.add_slot(var.slot, value);
+        ctx_sub.add_value(var.slot, value);
     }
     ok!(Some(unwrap!(eval(runner_ctx, &ctx_sub))))
 }
@@ -101,7 +101,7 @@ where
     let mut values_bind_by_var = vec![Vec::new(); vars_bind.len()];
     for idx in 0..len {
         for (var, values) in vars_bound.iter().zip(&values_by_var) {
-            ctx_sub.add_slot(var.slot, values[idx]);
+            ctx_sub.add_value(var.slot, values[idx]);
         }
         // Keep callback writes out of the reusable input context
         let ctx_post = unwrap!(eval(runner_ctx, ctx_sub.clone()));
@@ -140,7 +140,7 @@ where
     if let Some(values) = values {
         let mut ctx_sub = ctx.clone();
         for (var, value) in vars_bound.iter().zip(values) {
-            ctx_sub.add_slot(var.slot, value);
+            ctx_sub.add_value(var.slot, value);
         }
         let ctx_post = unwrap!(eval(runner_ctx, ctx_sub));
         unwrap!(ctx_post.collect_values_by_var(vars_bind, &mut values_bind_by_var));

@@ -25,8 +25,8 @@ use crate::{
 use super::{arg::eval_args, iter, ops, path::eval_update_path};
 use crate::interp::shared::{
     backtrack::{Backtrack, err, ok, unwrap, unwrap_from_result},
-    error::ErrorKind,
-    util::find_iter_var_slot,
+    error::{EntityKind, Error, ErrorKind},
+    util::find_iter_var,
 };
 
 // = Expression evaluation
@@ -51,7 +51,7 @@ pub(crate) fn eval_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, E
             make::text(runner_ctx.arena_mut(), value.clone(), Span::default()),
             span
         )),
-        ast::ExpKind::Id(slot) => eval_id_exp(ctx, span, slot),
+        ast::ExpKind::Id(id) => eval_id_exp(ctx, span, id),
         ast::ExpKind::Un(op, _, exp_inner) => eval_un_exp(runner_ctx, ctx, span, op, exp_inner),
         ast::ExpKind::Bin(op, _, exp_l, exp_r) => {
             eval_bin_exp(runner_ctx, ctx, span, op, exp_l, exp_r)
@@ -120,10 +120,15 @@ pub(crate) fn eval_exps<
     ok!(values)
 }
 
-// - Variable expression
+// - Identifier expression
 
 fn eval_id_exp(ctx: &impl ReadContext, span: &Span, id: &IdSlot) -> Backtrack<Value> {
-    let value = *unwrap_from_result!(ctx.find_id_value(id), span);
+    let value = *unwrap_from_result!(
+        ctx.find_value(id.slot).ok_or_else(|| {
+            Error::undefined(EntityKind::Value, id.id.node.clone(), id.id.span.clone())
+        }),
+        span
+    );
     ok!(value)
 }
 
@@ -541,8 +546,17 @@ fn eval_iter_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Ex
 ) -> Backtrack<Value> {
     let span = &exp.span;
     let typ = &exp.note;
-    if let Some(var) = find_iter_var_slot(ctx, exp) {
-        return ok!(*unwrap_from_result!(ctx.find_value(&var), span));
+    if let Some(var) = find_iter_var(ctx, exp) {
+        return ok!(*unwrap_from_result!(
+            ctx.find_value(var.slot).ok_or_else(|| {
+                Error::undefined(
+                    EntityKind::Value,
+                    Print::to_string(&var.var),
+                    var.var.id.span.clone(),
+                )
+            }),
+            span
+        ));
     }
     let value = match exp_iter.0 {
         ast::Iter::Opt => {

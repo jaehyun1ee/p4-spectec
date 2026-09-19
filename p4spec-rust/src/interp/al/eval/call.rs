@@ -1,6 +1,7 @@
 //! AL invocation and ordered candidate selection
 
 use super::super::backtrack::{choose_deterministic, choose_sequential};
+use crate::interp::shared::context::ReadContext;
 use crate::runtime::envs::interp::al::ast_prepared as ast;
 use crate::runtime::envs::interp::shared::frame::FrameLayout;
 use std::rc::Rc;
@@ -151,7 +152,7 @@ pub(in crate::interp::al) fn cache_func<Iface: Interface, Ext: Extern>(
     values: &[Value],
 ) -> bool {
     runner_ctx.interp().config.cache
-        && matches!(ctx.find_func(id), Ok((Scope::Global, func))
+        && matches!(ctx.find_func_with_scope(id), Ok((Scope::Global, func))
             if !matches!(&func.def, ast::MetaFuncDef::Extern(_)))
         && !values
             .iter()
@@ -348,7 +349,7 @@ pub fn invoke_func<Iface: Interface, Ext: Extern>(
     }
     runner_ctx.interp_mut().cache.begin();
     let result = stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
-        let (_, func) = unwrap_from_result!(ctx.find_func(id), &id.span);
+        let func = unwrap_from_result!(ctx.find_func(id), &id.span);
         let layout = &func.layout;
         match &func.def {
             ast::MetaFuncDef::Extern(func) => {

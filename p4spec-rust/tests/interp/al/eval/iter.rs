@@ -1,5 +1,6 @@
 //! Iterated evaluation preserves input scopes and diagnostic spans
 
+use p4spec_rust::interp::shared::context::{ReadContext, WriteContext};
 use p4spec_rust::interp::shared::prepare::Prepare;
 use p4spec_rust::runtime::envs::interp::shared::frame::FrameLayout;
 use p4spec_rust::{
@@ -54,15 +55,15 @@ fn test_map_opt_requires_agreement_and_preserves_parent() {
     let mut ctx = Context::new(runner.spec()).localize_with_layout(&layout.into());
     let value = make::bool(runner.arena_mut(), true, Span::default()).unwrap();
     for var in &exp_iter.1 {
-        ctx.add_slot(
-            ctx.iter_slot(var, ast::Iter::Opt).slot,
+        ctx.add_value(
+            ctx.find_iter_var(var, ast::Iter::Opt).slot,
             make::opt(runner.arena_mut(), typ.node.clone().into(), Some(value), Span::default())
                 .unwrap(),
         );
     }
     let value_opt = map_opt(&mut runner, &ctx, &span, &exp_iter, |runner, ctx_sub| {
         for var in &exp_iter.1 {
-            assert!(get::bool(runner.arena(), ctx_sub.find_value(var).unwrap()).unwrap());
+            assert!(get::bool(runner.arena(), ctx_sub.find_value(var.slot).unwrap()).unwrap());
         }
         Backtrack::Ok(value)
     })
@@ -70,10 +71,10 @@ fn test_map_opt_requires_agreement_and_preserves_parent() {
     .unwrap();
     assert_eq!(value_opt, Some(value));
     for var in &exp_iter.1 {
-        assert!(ctx.find_value(var).is_err());
+        assert!(ctx.find_value(var.slot).is_none());
     }
-    ctx.add_slot(
-        ctx.iter_slot(&exp_iter.1[1], ast::Iter::Opt).slot,
+    ctx.add_value(
+        ctx.find_iter_var(&exp_iter.1[1], ast::Iter::Opt).slot,
         make::opt(runner.arena_mut(), typ.node.clone().into(), None, Span::default()).unwrap(),
     );
     let Backtrack::Err(errors) =
@@ -83,8 +84,8 @@ fn test_map_opt_requires_agreement_and_preserves_parent() {
     };
     assert_eq!(*errors[0].kind, ErrorKind::Context(ContextErrorKind::OptionalityMismatch));
     assert_eq!(errors[0].span, span);
-    ctx.add_slot(
-        ctx.iter_slot(&exp_iter.1[0], ast::Iter::Opt).slot,
+    ctx.add_value(
+        ctx.find_iter_var(&exp_iter.1[0], ast::Iter::Opt).slot,
         make::opt(runner.arena_mut(), typ.node.clone().into(), None, Span::default()).unwrap(),
     );
     assert!(
@@ -126,8 +127,8 @@ fn test_map_list_transposes_in_order_without_leaking_bindings() {
             .into_iter()
             .map(|b| make::bool(runner.arena_mut(), b, Span::default()).unwrap())
             .collect();
-        ctx.add_slot(
-            ctx.iter_slot(var, ast::Iter::List).slot,
+        ctx.add_value(
+            ctx.find_iter_var(var, ast::Iter::List).slot,
             make::list(runner.arena_mut(), typ::make::bool().node.into(), values, Span::default())
                 .unwrap(),
         );
@@ -138,10 +139,12 @@ fn test_map_list_transposes_in_order_without_leaking_bindings() {
             exp_iter
                 .1
                 .iter()
-                .map(|var| get::bool(runner.arena(), ctx_sub.find_value(var).unwrap()).unwrap())
+                .map(|var| {
+                    get::bool(runner.arena(), ctx_sub.find_value(var.slot).unwrap()).unwrap()
+                })
                 .collect::<Vec<_>>(),
         );
-        Backtrack::Ok(*ctx_sub.find_value(&exp_iter.1[0]).unwrap())
+        Backtrack::Ok(*ctx_sub.find_value(exp_iter.1[0].slot).unwrap())
     })
     .finish()
     .unwrap();
@@ -153,7 +156,7 @@ fn test_map_list_transposes_in_order_without_leaking_bindings() {
             .collect::<Vec<_>>(),
         [true, false]
     );
-    assert!(ctx.find_value(&exp_iter.1[0]).is_err());
+    assert!(ctx.find_value(exp_iter.1[0].slot).is_none());
     let mut count = 0;
     let result = map_list(&mut runner, &ctx, &span, &exp_iter, |_, _| {
         count += 1;
@@ -161,8 +164,8 @@ fn test_map_list_transposes_in_order_without_leaking_bindings() {
     });
     assert!(matches!(result, Backtrack::Unmatch(_)));
     assert_eq!(count, 1);
-    ctx.add_slot(
-        ctx.iter_slot(&exp_iter.1[1], ast::Iter::List).slot,
+    ctx.add_value(
+        ctx.find_iter_var(&exp_iter.1[1], ast::Iter::List).slot,
         make::list(runner.arena_mut(), typ::make::bool().node.into(), vec![], Span::default())
             .unwrap(),
     );
@@ -203,8 +206,8 @@ fn test_iteration_rejects_wrong_value_kind_at_variable_span() {
     let mut layout = FrameLayout::default();
     let exp_iter = (ast::Iter::Opt, vec![var.clone()]).prepare(&mut layout);
     let mut ctx = Context::new(runner.spec()).localize_with_layout(&layout.into());
-    ctx.add_slot(
-        ctx.iter_slot(&exp_iter.1[0], ast::Iter::Opt).slot,
+    ctx.add_value(
+        ctx.find_iter_var(&exp_iter.1[0], ast::Iter::Opt).slot,
         make::bool(runner.arena_mut(), true, Span::default()).unwrap(),
     );
     let Backtrack::Err(errors) =
@@ -217,7 +220,7 @@ fn test_iteration_rejects_wrong_value_kind_at_variable_span() {
     assert_eq!(errors[0].span, var.id.span);
     assert!(matches!(*errors[0].kind, ErrorKind::Runtime(RuntimeErrorKind::Value(_))));
     let value = ctx
-        .find_value(&ctx.iter_slot(&exp_iter.1[0], exp_iter.0))
+        .find_value(ctx.find_iter_var(&exp_iter.1[0], exp_iter.0).slot)
         .unwrap();
     assert!(get::bool(runner.arena(), value).unwrap());
 }

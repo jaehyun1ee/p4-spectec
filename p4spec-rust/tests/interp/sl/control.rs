@@ -1,4 +1,5 @@
 use super::*;
+use p4spec_rust::interp::shared::context::{ReadContext, WriteContext};
 use p4spec_rust::interp::shared::prepare::Prepare;
 use p4spec_rust::{
     interp::shared::error::{CallErrorKind, ErrorKind},
@@ -178,8 +179,8 @@ fn optional_and_list_conditions_preserve_empty_iteration_semantics() {
     for (iter, expected) in [(ast::Iter::Opt, "9"), (ast::Iter::List, "5")] {
         let id = phrase!(node: "n".to_owned(), span: Span::default());
         let var = ast::Var { id: id.clone(), typ: typ::make::nat(), iters: vec![] };
-        let exp_var = p4spec_rust::note_phrase!(node: p4spec_rust::lang::il::ast::ExpKind::Id(id), note: typ::make::nat().node, span: Span::default());
-        let exp_l = note_phrase!(node: ast::ExpKind::Iter(Box::new(exp_var), (iter, vec![var.clone()])), note: typ::make::iter(typ::make::nat(), iter).node, span: Span::default());
+        let exp_id = p4spec_rust::note_phrase!(node: p4spec_rust::lang::il::ast::ExpKind::Id(id), note: typ::make::nat().node, span: Span::default());
+        let exp_l = note_phrase!(node: ast::ExpKind::Iter(Box::new(exp_id), (iter, vec![var.clone()])), note: typ::make::iter(typ::make::nat(), iter).node, span: Span::default());
         let exp_r = note_phrase!(node: if iter == ast::Iter::Opt { ast::ExpKind::Opt(None) } else { ast::ExpKind::List(vec![]) }, note: typ::make::iter(typ::make::nat(), iter).node, span: Span::default());
         let instr_if = phrase!(node: ast::InstrKind::If(ast::IfInstr { exp: boolean(false), iter_exps: vec![(iter, vec![var])], block: vec![instr(exp(5))], dangle: true }), span: Span::default());
         let block = vec![
@@ -364,8 +365,8 @@ fn optional_condition_preserves_remaining_iterator_order_and_outer_bindings() {
                 });
                 let mut ctx =
                     Context::new(&global).localize_with_layout(&std::rc::Rc::new(layout.clone()));
-                ctx.add_slot(slot.slot, value_outer);
-                ctx.add_slot(slot_nested.slot, value);
+                ctx.add_value(slot.slot, value_outer);
+                ctx.add_value(slot_nested.slot, value);
                 let flow = eval_block(
                     &mut runner.context(),
                     std::borrow::Cow::Borrowed(&ctx),
@@ -382,11 +383,15 @@ fn optional_condition_preserves_remaining_iterator_order_and_outer_bindings() {
                     flow => panic!("unexpected flow: {flow:?}"),
                 }
                 assert_eq!(
-                    *ctx.find_value(&layout.resolve_var(p4spec_rust::lang::il::ast::Var {
-                        id: id.clone(),
-                        typ: p4spec_rust::lang::data::typ::make::bool(),
-                        iters: vec![]
-                    }))
+                    *ctx.find_value(
+                        layout
+                            .resolve_var(p4spec_rust::lang::il::ast::Var {
+                                id: id.clone(),
+                                typ: p4spec_rust::lang::data::typ::make::bool(),
+                                iters: vec![]
+                            })
+                            .slot
+                    )
                     .unwrap(),
                     value_outer
                 );

@@ -9,6 +9,7 @@ use super::{
     assign,
     expr::{self, eval_exp, eval_exps},
 };
+use crate::interp::shared::context::{IterContext, WriteContext};
 use crate::interp::shared::eval::{Invoker, iter, ops};
 use crate::interp::shared::util::iter_vars;
 use crate::runtime::envs::interp::sl::ast_prepared as ast;
@@ -361,7 +362,7 @@ fn eval_return_instr<Iface: Interface, Ext: Extern>(
     if tail && let ast::ExpKind::Call(id, targs, args) = &instr.exp.node {
         let targs = unwrap_from_result!(expr::resolve_targs(ctx.as_ref(), targs), &id.span);
         let values = unwrap!(expr::eval_args(runner_ctx, ctx.as_ref(), args));
-        let (scope, _) = unwrap_from_result!(ctx.find_func(id), &id.span);
+        let (scope, _) = unwrap_from_result!(ctx.find_func_with_scope(id), &id.span);
         if scope == Scope::Local
             || values
                 .iter()
@@ -427,7 +428,7 @@ fn eval_cond_iter<Iface: Interface, Ext: Extern>(
             };
             let mut ctx_sub = ctx.clone();
             for (var, value) in vars.iter().zip(values) {
-                ctx_sub.add_slot(var.slot, value);
+                ctx_sub.add_value(var.slot, value);
             }
             eval_cond_iter(runner_ctx, &ctx_sub, iters_tail, eval)
         }
@@ -442,7 +443,7 @@ fn eval_cond_iter<Iface: Interface, Ext: Extern>(
             let mut ctx_sub = ctx.clone();
             for idx in 0..len {
                 for (var, values) in vars.iter().zip(&values_by_var) {
-                    ctx_sub.add_slot(var.slot, values[idx]);
+                    ctx_sub.add_value(var.slot, values[idx]);
                 }
                 if !unwrap!(eval_cond_iter(runner_ctx, &ctx_sub, iters_tail, eval)) {
                     return ok!(false);

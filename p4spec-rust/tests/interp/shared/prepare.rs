@@ -1,3 +1,4 @@
+use p4spec_rust::interp::shared::context::IterContext;
 use p4spec_rust::interp::shared::prepare::Prepare;
 use p4spec_rust::lang::data::var::{IdSlot, VarSlot};
 use p4spec_rust::runtime::envs::interp::{
@@ -65,14 +66,14 @@ fn preparation_preserves_occurrence_spans_and_type_allocations() {
     let mut layout = FrameLayout::default();
     let exp_prepared_a: il_source::Exp<IdSlot, VarSlot> = exp_a.clone().prepare(&mut layout);
     let exp_prepared_b = exp_b.clone().prepare(&mut layout);
-    let (expr::ExpKind::Id(slot_a), expr::ExpKind::Id(slot_b)) =
+    let (expr::ExpKind::Id(id_a), expr::ExpKind::Id(id_b)) =
         (&exp_prepared_a.node, &exp_prepared_b.node)
     else {
         panic!("expected prepared variables");
     };
-    assert_eq!(slot_a.slot, slot_b.slot);
-    assert_eq!(slot_a.id.span, span(1));
-    assert_eq!(slot_b.id.span, span(8));
+    assert_eq!(id_a.slot, id_b.slot);
+    assert_eq!(id_a.id.span, span(1));
+    assert_eq!(id_b.id.span, span(8));
     assert!(Rc::ptr_eq(&typ_a, &exp_prepared_a.note));
     assert!(Rc::ptr_eq(&typ_b, &exp_prepared_b.note));
     assert_eq!(expr::restore_exp(exp_prepared_a), exp_a);
@@ -101,10 +102,10 @@ fn syntax_equality_and_printing_ignore_callable_slot_order() {
     });
     let exp_a = exp_source.clone().prepare(&mut layout_a);
     let exp_b = exp_source.clone().prepare(&mut layout_b);
-    let (expr::ExpKind::Id(slot_a), expr::ExpKind::Id(slot_b)) = (&exp_a.node, &exp_b.node) else {
+    let (expr::ExpKind::Id(id_a), expr::ExpKind::Id(id_b)) = (&exp_a.node, &exp_b.node) else {
         panic!("expected prepared variables");
     };
-    assert_ne!(slot_a.slot, slot_b.slot);
+    assert_ne!(id_a.slot, id_b.slot);
     assert_eq!(exp_a, exp_b);
     assert!(exp_a.syntax_eq(&exp_b));
     assert_eq!(Print::to_string(&exp_a), Print::to_string(&exp_source));
@@ -195,25 +196,33 @@ fn structured_parameters_and_case_guards_share_the_callable_layout() {
     let sl::ParamKind::Exp(_, exp_param) = &func_defined.params[0].node else {
         panic!("expected parameter pattern")
     };
-    let (expr::ExpKind::Id(slot_param), expr::ExpKind::Id(slot_case)) =
+    let (expr::ExpKind::Id(id_param), expr::ExpKind::Id(id_case)) =
         (&exp_param.node, &instr.exp.node)
     else {
         panic!("expected variables")
     };
-    assert_eq!(slot_param.slot, slot_case.slot);
+    assert_eq!(id_param.slot, id_case.slot);
     assert_eq!(Print::to_string(&func_defined.block[0]), Print::to_string(&instr_source));
     assert_eq!(sl::restore_func_def(func), func_source);
 }
 
 #[test]
-fn iterated_lookup_errors_retain_leaf_spans_through_optional_and_list_bindings() {
+fn lookup_errors_retain_leaf_spans_through_optional_and_list_bindings() {
     use p4spec_rust::interp::{
         al::context as al_context,
         shared::{
             error::{ContextErrorKind, EntityKind, ErrorKind},
-            util::find_iter_var_slot,
+            util::find_iter_var,
         },
         sl::context as sl_context,
+    };
+
+    use p4spec_rust::{
+        interp::{
+            al::{AlInterp, Config as AlConfig},
+            sl::{Config as SlConfig, SlInterp},
+        },
+        runner::{NullExtern, NullInterface, Runner},
     };
 
     let mut var_opt = variable("x", vec![]);
@@ -225,6 +234,7 @@ fn iterated_lookup_errors_retain_leaf_spans_through_optional_and_list_bindings()
     let global_al = al_context::Global::load(vec![]).unwrap();
     let global_sl = sl_context::Global::load(vec![]).unwrap();
     for (exp_source, iters, name) in [
+        (expression("x", 7), vec![], "x"),
         (exp_opt, vec![il_source::Iter::Opt], "x?"),
         (exp_list, vec![il_source::Iter::Opt, il_source::Iter::List], "x?*"),
     ] {
@@ -233,16 +243,79 @@ fn iterated_lookup_errors_retain_leaf_spans_through_optional_and_list_bindings()
         let layout = Rc::new(layout);
         let ctx_al = al_context::Context::new(&global_al).localize_with_layout(&layout);
         let ctx_sl = sl_context::Context::new(&global_sl).localize_with_layout(&layout);
-        let slot_lookup = find_iter_var_slot(&ctx_al, &exp_prepared).unwrap();
+        let slot_lookup = find_iter_var(&ctx_al, &exp_prepared).unwrap();
         assert_eq!(slot_lookup.var.id.span, span(7));
         assert_eq!(slot_lookup.var.iters, iters);
+        let id = phrase!(node: "test".to_owned(), span: span(1));
+        let typ = phrase!(node: exp_source.note.as_ref().clone(), span: span(1));
+        let func_al = al_source::DefinedFunc {
+            id: id.clone(),
+            tparams: vec![],
+            params: vec![],
+            typ: typ.clone(),
+            clauses: vec![phrase!(node: al_source::ClauseKind {
+                args: vec![], exp: exp_source.clone(), prems: vec![],
+            }, span: span(1))],
+            else_clause: None,
+            hints: vec![],
+        };
+        let func_sl = sl_source::DefinedFunc {
+            id,
+            tparams: vec![],
+            params: vec![],
+            typ,
+            block: vec![phrase!(node: sl_source::InstrKind::Return(sl_source::ReturnInstr {
+                exp: exp_source.clone(),
+            }), span: span(1))],
+            block_else: None,
+            hints: vec![],
+        };
+        let mut runner_al = Runner::new(
+            al_context::Global::load(vec![phrase!(node: al_source::DefKind::MetaFunc(
+                al_source::MetaFuncDef::Defined(Box::new(func_al))
+            ), span: span(1))])
+            .unwrap(),
+            AlInterp::new(AlConfig::new(false, false, false)),
+            NullInterface,
+            NullExtern,
+        );
+        let mut runner_sl = Runner::new(
+            sl_context::Global::load(vec![phrase!(node: sl_source::DefKind::MetaFunc(
+                sl_source::MetaFuncDef::Defined(func_sl)
+            ), span: span(1))])
+            .unwrap(),
+            SlInterp::new(SlConfig::new(false, false, false)),
+            NullInterface,
+            NullExtern,
+        );
         for error in [
-            ctx_al.find_value(&slot_lookup).unwrap_err(),
-            ctx_sl.find_value(&slot_lookup).unwrap_err(),
+            runner_al.context().call_func("test", &[], &[]).unwrap_err(),
+            runner_sl.context().call_func("test", &[], &[]).unwrap_err(),
+            ctx_al
+                .find_list_values_by_var(
+                    &p4spec_rust::lang::data::value::ValueArena::new(),
+                    std::slice::from_ref(&slot_lookup),
+                )
+                .unwrap_err(),
+            ctx_sl
+                .find_list_values_by_var(
+                    &p4spec_rust::lang::data::value::ValueArena::new(),
+                    std::slice::from_ref(&slot_lookup),
+                )
+                .unwrap_err(),
         ] {
-            assert_eq!(error.span, span(7));
+            let mut errors = vec![&error];
+            let mut errors_undefined = Vec::new();
+            while let Some(error) = errors.pop() {
+                if matches!(*error.kind, ErrorKind::Context(ContextErrorKind::Undefined { .. })) {
+                    errors_undefined.push(error);
+                }
+                errors.extend(&error.children);
+            }
+            assert_eq!(errors_undefined.len(), 1, "{error}");
+            assert_eq!(errors_undefined[0].span, span(7));
             assert_eq!(
-                *error.kind,
+                *errors_undefined[0].kind,
                 ErrorKind::Context(ContextErrorKind::Undefined {
                     kind: EntityKind::Value,
                     name: name.to_owned(),
@@ -258,7 +331,7 @@ fn iterated_lookup_errors_retain_leaf_spans_through_optional_and_list_bindings()
 fn iterated_variable_lookup_requires_matching_single_binders() {
     use p4spec_rust::interp::{
         al::context::{Context, Global},
-        shared::util::find_iter_var_slot,
+        shared::util::find_iter_var,
     };
     let global = Global::load(vec![]).unwrap();
     for vars in [
@@ -271,7 +344,7 @@ fn iterated_variable_lookup_requires_matching_single_binders() {
         let mut layout = FrameLayout::default();
         let exp_prepared = exp_source.clone().prepare(&mut layout);
         let ctx = Context::new(&global).localize_with_layout(&layout.into());
-        assert!(find_iter_var_slot(&ctx, &exp_prepared).is_none());
+        assert!(find_iter_var(&ctx, &exp_prepared).is_none());
         assert_eq!(expr::restore_exp(exp_prepared), exp_source);
     }
     let exp_source = note_phrase!(
@@ -284,7 +357,7 @@ fn iterated_variable_lookup_requires_matching_single_binders() {
     let mut layout = FrameLayout::default();
     let exp_prepared = exp_source.prepare(&mut layout);
     let ctx = Context::new(&global).localize_with_layout(&layout.into());
-    assert!(find_iter_var_slot(&ctx, &exp_prepared).is_none());
+    assert!(find_iter_var(&ctx, &exp_prepared).is_none());
 }
 
 #[test]
@@ -415,7 +488,7 @@ fn shared_mapping_preserves_nested_update_paths_and_call_arguments() {
 fn nested_iteration_edges_share_only_the_required_binding_slots() {
     use p4spec_rust::interp::{
         al::context::{Context, Global},
-        shared::util::find_iter_var_slot,
+        shared::util::find_iter_var,
     };
     let global = Global::load(vec![]).unwrap();
     let mut exp_source = expression("x", 7);
@@ -433,12 +506,12 @@ fn nested_iteration_edges_share_only_the_required_binding_slots() {
     let mut exp_inner = &exp_prepared;
     while let expr::ExpKind::Iter(exp_next, exp_iter) = &exp_inner.node {
         let var = &exp_iter.1[0];
-        let slot_outer = layout.iter_slot(&exp_iter.1[0], exp_iter.0);
+        let slot_outer = layout.find_iter_var(&exp_iter.1[0], exp_iter.0);
         let mut iters_outer = var.var.iters.clone();
         iters_outer.push(exp_iter.0);
         assert_eq!(slot_outer.var.iters, iters_outer);
-        assert_eq!(var.slot, find_iter_var_slot(&ctx, exp_next).unwrap().slot);
-        assert_eq!(slot_outer.slot, find_iter_var_slot(&ctx, exp_inner).unwrap().slot);
+        assert_eq!(var.slot, find_iter_var(&ctx, exp_next).unwrap().slot);
+        assert_eq!(slot_outer.slot, find_iter_var(&ctx, exp_inner).unwrap().slot);
         exp_inner = exp_next;
     }
     assert_eq!(expr::restore_exp(exp_prepared), exp_source);
@@ -458,15 +531,15 @@ fn premise_iteration_reuses_identical_bound_and_output_bindings() {
     assert_eq!(prem_iter_prepared.vars_bound[0].slot, prem_iter_prepared.vars_bind[0].slot);
     assert_eq!(
         layout
-            .iter_slot(&prem_iter_prepared.vars_bound[0], prem_iter_prepared.iter)
+            .find_iter_var(&prem_iter_prepared.vars_bound[0], prem_iter_prepared.iter)
             .slot,
         layout
-            .iter_slot(&prem_iter_prepared.vars_bind[0], prem_iter_prepared.iter)
+            .find_iter_var(&prem_iter_prepared.vars_bind[0], prem_iter_prepared.iter)
             .slot
     );
     assert_eq!(
         layout
-            .iter_slot(&prem_iter_prepared.vars_bound[0], prem_iter_prepared.iter)
+            .find_iter_var(&prem_iter_prepared.vars_bound[0], prem_iter_prepared.iter)
             .var
             .iters,
         vec![il_source::Iter::List, il_source::Iter::List, il_source::Iter::Opt]

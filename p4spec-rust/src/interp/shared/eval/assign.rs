@@ -23,8 +23,8 @@ use crate::{
 
 use crate::interp::shared::{
     backtrack::{Backtrack, err, ok, unwrap, unwrap_from_result},
-    error::ErrorKind,
-    util::find_iter_var_slot,
+    error::{EntityKind, Error, ErrorKind},
+    util::find_iter_var,
 };
 
 // = Expression assignment
@@ -36,7 +36,7 @@ pub fn assign_exp<Ctx: WriteContext>(
     value: Value,
 ) -> Backtrack<Ctx> {
     match (&exp.node, arena.kind(&value)) {
-        (ast::ExpKind::Id(slot), _) => assign_id_exp(arena, ctx, slot, value),
+        (ast::ExpKind::Id(id), _) => assign_id_exp(arena, ctx, id, value),
         (ast::ExpKind::Tuple(exps), ValueKind::Tuple(values)) => {
             let values = values.to_vec();
             assign_tuple_exp(arena, ctx, exps, &values)
@@ -103,15 +103,15 @@ pub fn assign_exps<Ctx: WriteContext, T: Borrow<ast::Exp>>(
     ok!(ctx)
 }
 
-// - Variable expression
+// - Identifier expression
 
 fn assign_id_exp<Ctx: WriteContext>(
     _arena: &mut ValueArena,
     mut ctx: Ctx,
-    slot: &IdSlot,
+    id: &IdSlot,
     value: Value,
 ) -> Backtrack<Ctx> {
-    ctx.add_slot(slot.slot, value);
+    ctx.add_value(id.slot, value);
     ok!(ctx)
 }
 
@@ -217,8 +217,8 @@ fn assign_iter_exp<Ctx: WriteContext>(
     exp_iter: &ast::ExpIter,
     value: Value,
 ) -> Backtrack<Ctx> {
-    if let Some(var) = find_iter_var_slot(&ctx, exp) {
-        ctx.add_slot(var.slot, value);
+    if let Some(var) = find_iter_var(&ctx, exp) {
+        ctx.add_value(var.slot, value);
         return ok!(ctx);
     }
     let span = &exp.span;
@@ -233,16 +233,23 @@ fn assign_iter_exp<Ctx: WriteContext>(
             for (var, var_outer) in exp_iter.1.iter().zip(&vars_outer) {
                 let typ = typ::make::iterate(var_outer.var.typ.clone(), &var_outer.var.iters);
                 let value_opt = match &ctx_sub {
-                    Some(ctx_sub) => {
-                        Some(*unwrap_from_result!(ctx_sub.find_value(var), &var.var.id.span))
-                    }
+                    Some(ctx_sub) => Some(*unwrap_from_result!(
+                        ctx_sub.find_value(var.slot).ok_or_else(|| {
+                            Error::undefined(
+                                EntityKind::Value,
+                                Print::to_string(&var.var),
+                                var.var.id.span.clone(),
+                            )
+                        }),
+                        &var.var.id.span
+                    )),
                     None => None,
                 };
                 let value = unwrap_from_result!(
                     make::opt(arena, typ.node.into(), value_opt, Span::default()),
                     span
                 );
-                ctx.add_slot(var_outer.slot, value);
+                ctx.add_value(var_outer.slot, value);
             }
             ok!(ctx)
         }
@@ -258,14 +265,23 @@ fn assign_iter_exp<Ctx: WriteContext>(
                 let typ = typ::make::iterate(var_outer.var.typ.clone(), &var_outer.var.iters);
                 let mut values = Vec::with_capacity(ctxs.len());
                 for ctx_sub in &ctxs {
-                    let value = unwrap_from_result!(ctx_sub.find_value(var), &var.var.id.span);
+                    let value = unwrap_from_result!(
+                        ctx_sub.find_value(var.slot).ok_or_else(|| {
+                            Error::undefined(
+                                EntityKind::Value,
+                                Print::to_string(&var.var),
+                                var.var.id.span.clone(),
+                            )
+                        }),
+                        &var.var.id.span
+                    );
                     values.push(*value);
                 }
                 let value_sub = unwrap_from_result!(
                     make::list(arena, typ.node.into(), values, Span::default()),
                     span
                 );
-                ctx.add_slot(var_outer.slot, value_sub);
+                ctx.add_value(var_outer.slot, value_sub);
             }
             ok!(ctx)
         }

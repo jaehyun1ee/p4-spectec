@@ -52,8 +52,8 @@ impl FrameLayout {
         VarSlot { slot, var }
     }
 
-    pub fn iter_slot(&self, slot: &VarSlot, iter: Iter) -> VarSlot {
-        let mut var = slot.var.clone();
+    pub fn find_iter_var(&self, var: &VarSlot, iter: Iter) -> VarSlot {
+        let mut var = var.var.clone();
         var.iters.push(iter);
         let slot = *self
             .slots
