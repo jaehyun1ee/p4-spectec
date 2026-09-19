@@ -16,13 +16,12 @@ fn validate_alterations(
     hints: &annot::Hints,
     item_count: usize,
 ) -> Result<(), ProseError> {
-    let items = vec![(); item_count];
     for hint in
         [&hints.prose, &hints.prose_in, &hints.prose_out, &hints.prose_true, &hints.prose_false]
             .into_iter()
             .flatten()
     {
-        alter::validate(hint, &items)
+        alter::validate_count(hint, item_count)
             .map_err(|error| ProseError::new(ProseErrorKind::Alteration(error), span.clone()))?;
     }
     Ok(())
@@ -53,11 +52,11 @@ fn validate_split(
     output_count: usize,
 ) -> Result<(), ProseError> {
     if let Some(hint) = &hints.prose_in {
-        alter::validate(hint, &vec![(); input_count])
+        alter::validate_count(hint, input_count)
             .map_err(|error| ProseError::new(ProseErrorKind::Alteration(error), span.clone()))?;
     }
     if let Some(hint) = &hints.prose_out {
-        alter::validate(hint, &vec![(); output_count])
+        alter::validate_count(hint, output_count)
             .map_err(|error| ProseError::new(ProseErrorKind::Alteration(error), span.clone()))?;
     }
     Ok(())
@@ -687,7 +686,7 @@ fn instr_group(ctx: &Context, instr_sl: sl::Instr) -> Result<pl::BlockGroup, Pro
     })
 }
 
-fn def(ctx: &Context, def_sl: sl::Def) -> Result<pl::Def, ProseError> {
+fn def(ctx: &mut Context, def_sl: sl::Def) -> Result<pl::Def, ProseError> {
     let hints = match &def_sl.node {
         sl::DefKind::Rel(sl::RelDef::Extern(def_rel_sl)) => {
             rel_def_hints(ctx, &def_rel_sl.id, &def_rel_sl.rel_signature)?
@@ -731,15 +730,15 @@ fn def(ctx: &Context, def_sl: sl::Def) -> Result<pl::Def, ProseError> {
                 exps_input: exps(ctx, &def_rel_sl.exps_input)?,
             }),
             sl::RelDef::Defined(def_rel_sl) => {
-                let ctx_rel = ctx.enter_namespace(def_rel_sl.id.clone());
+                ctx.set_namespace(def_rel_sl.id.clone());
                 pl::RelDef::Defined(pl::DefinedRel {
                     id: def_rel_sl.id,
                     rel_signature: def_rel_sl.rel_signature,
-                    exps_input: exps(&ctx_rel, &def_rel_sl.exps_input)?,
-                    block: block_dispatch(&ctx_rel, def_rel_sl.block)?,
+                    exps_input: exps(ctx, &def_rel_sl.exps_input)?,
+                    block: block_dispatch(ctx, def_rel_sl.block)?,
                     block_else_opt: def_rel_sl
                         .block_else
-                        .map(|block_sl| block_dispatch(&ctx_rel, block_sl))
+                        .map(|block_sl| block_dispatch(ctx, block_sl))
                         .transpose()?,
                 })
             }
@@ -765,51 +764,57 @@ fn def(ctx: &Context, def_sl: sl::Def) -> Result<pl::Def, ProseError> {
                     .collect::<Result<_, _>>()?,
                 typ: def_func_sl.typ,
             }),
-            sl::MetaFuncDef::Table(def_func_sl) => pl::MetaFuncDef::Table(pl::TableFunc {
-                id: def_func_sl.id,
-                params: def_func_sl
-                    .params
-                    .iter()
-                    .map(|param_sl| param(ctx, param_sl))
-                    .collect::<Result<_, _>>()?,
-                typ: def_func_sl.typ,
-                rows: def_func_sl
-                    .table_rows
-                    .into_iter()
-                    .map(|row_sl| {
-                        Ok(pl::TableRow {
-                            exps_input: exps(ctx, &row_sl.exps_input)?,
-                            exp: exp(ctx, &row_sl.exp)?,
-                            block: block_group(ctx, row_sl.block)?,
+            sl::MetaFuncDef::Table(def_func_sl) => {
+                ctx.set_namespace(def_func_sl.id.clone());
+                pl::MetaFuncDef::Table(pl::TableFunc {
+                    id: def_func_sl.id,
+                    params: def_func_sl
+                        .params
+                        .iter()
+                        .map(|param_sl| param(ctx, param_sl))
+                        .collect::<Result<_, _>>()?,
+                    typ: def_func_sl.typ,
+                    rows: def_func_sl
+                        .table_rows
+                        .into_iter()
+                        .map(|row_sl| {
+                            Ok(pl::TableRow {
+                                exps_input: exps(ctx, &row_sl.exps_input)?,
+                                exp: exp(ctx, &row_sl.exp)?,
+                                block: block_group(ctx, row_sl.block)?,
+                            })
                         })
-                    })
-                    .collect::<Result<_, ProseError>>()?,
-            }),
-            sl::MetaFuncDef::Defined(def_func_sl) => pl::MetaFuncDef::Defined(pl::DefinedFunc {
-                id: def_func_sl.id,
-                tparams: def_func_sl.tparams,
-                params: def_func_sl
-                    .params
-                    .iter()
-                    .map(|param_sl| param(ctx, param_sl))
-                    .collect::<Result<_, _>>()?,
-                typ: def_func_sl.typ,
-                block: block_group(ctx, def_func_sl.block)?,
-                block_else_opt: def_func_sl
-                    .block_else
-                    .map(|block_sl| block_group(ctx, block_sl))
-                    .transpose()?,
-            }),
+                        .collect::<Result<_, ProseError>>()?,
+                })
+            }
+            sl::MetaFuncDef::Defined(def_func_sl) => {
+                ctx.set_namespace(def_func_sl.id.clone());
+                pl::MetaFuncDef::Defined(pl::DefinedFunc {
+                    id: def_func_sl.id,
+                    tparams: def_func_sl.tparams,
+                    params: def_func_sl
+                        .params
+                        .iter()
+                        .map(|param_sl| param(ctx, param_sl))
+                        .collect::<Result<_, _>>()?,
+                    typ: def_func_sl.typ,
+                    block: block_group(ctx, def_func_sl.block)?,
+                    block_else_opt: def_func_sl
+                        .block_else
+                        .map(|block_sl| block_group(ctx, block_sl))
+                        .transpose()?,
+                })
+            }
         }),
     };
     Ok(annot::Annotated { node: crate::phrase! { node: def_kind_pl, span: span }, hints })
 }
 
 pub(super) fn convert(spec_sl: sl::Spec) -> Result<pl::Spec, ProseError> {
-    let ctx = Context::load(&spec_sl)?;
-    let spec_pl = super::expand::spec(spec_sl)?
-        .into_iter()
-        .map(|def_sl| def(&ctx, def_sl))
-        .collect::<Result<_, _>>()?;
+    let mut ctx = Context::load(&spec_sl)?;
+    let mut spec_pl = Vec::with_capacity(spec_sl.len());
+    for def_sl in super::expand::spec(spec_sl)? {
+        spec_pl.push(def(&mut ctx, def_sl)?);
+    }
     Ok(super::stamp::spec(super::shorthand::spec(spec_pl)))
 }

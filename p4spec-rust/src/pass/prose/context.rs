@@ -1,7 +1,8 @@
 //! Definition and hint state for prose conversion
 
 use crate::lang::{
-    common::{ds::map::IdMap, notation::mixop::Mixop},
+    common::{ds::map::IdMap, notation::mixop::Mixop, source::Span},
+    data::typ,
     hints::{alter, fields},
     il,
     pl::annot::Hints,
@@ -12,7 +13,7 @@ use crate::runtime::envs::algo::MEnv;
 
 use super::{ProseError, ProseErrorKind};
 
-#[derive(Clone, Debug, Default)]
+#[derive(Debug)]
 pub(super) struct Context {
     id_namespace: Option<Id>,
     hints_func: IdMap<Hints>,
@@ -22,10 +23,28 @@ pub(super) struct Context {
 }
 
 impl Context {
-    pub(super) fn enter_namespace(&self, id: Id) -> Self {
-        let mut ctx = self.clone();
-        ctx.id_namespace = Some(id);
-        ctx
+    fn init() -> Self {
+        let mut metavars = MEnv::new();
+        for (name, typ) in [
+            ("bool", typ::make::bool()),
+            ("nat", typ::make::nat()),
+            ("int", typ::make::int()),
+            ("text", typ::make::text()),
+        ] {
+            let id = crate::phrase! { node: name.to_owned(), span: Span::default() };
+            metavars.insert(id, typ);
+        }
+        Self {
+            id_namespace: None,
+            hints_func: IdMap::new(),
+            hints_rel: IdMap::new(),
+            hints_case: Vec::new(),
+            metavars,
+        }
+    }
+
+    pub(super) fn set_namespace(&mut self, id: Id) {
+        self.id_namespace = Some(id);
     }
 
     pub(super) fn namespace(&self) -> &Id {
@@ -90,7 +109,8 @@ impl Context {
     }
 
     pub(super) fn load(spec_sl: &sl::Spec) -> Result<Self, ProseError> {
-        let mut ctx = Self::default();
+        let mut ctx = Self::init();
+        let mut types = IdMap::new();
         for def_sl in spec_sl {
             match &def_sl.node {
                 sl::DefKind::Typ(sl::TypDef::Extern(def_typ_sl)) => {
@@ -98,7 +118,8 @@ impl Context {
                         node: il::ast::TypKind::Var(def_typ_sl.id.clone(), Vec::new()),
                         span: def_typ_sl.id.span.clone(),
                     };
-                    ctx.metavars.insert(def_typ_sl.id.clone(), typ);
+                    ctx.add_metavar(def_typ_sl.id.clone(), typ)?;
+                    Self::add_type(&mut types, def_typ_sl.id.clone())?;
                 }
                 sl::DefKind::Typ(sl::TypDef::Defined(def_typ_sl)) => {
                     if def_typ_sl.tparams.is_empty() {
@@ -106,8 +127,9 @@ impl Context {
                             node: il::ast::TypKind::Var(def_typ_sl.id.clone(), Vec::new()),
                             span: def_typ_sl.id.span.clone(),
                         };
-                        ctx.metavars.insert(def_typ_sl.id.clone(), typ);
+                        ctx.add_metavar(def_typ_sl.id.clone(), typ)?;
                     }
+                    Self::add_type(&mut types, def_typ_sl.id.clone())?;
                     if let il::ast::DefTypKind::Variant(cases) = &def_typ_sl.def_typ.node {
                         for (not_typ, _, hints_sl) in cases {
                             ctx.hints_case.push((
@@ -119,8 +141,7 @@ impl Context {
                     }
                 }
                 sl::DefKind::Var(def_var_sl) => {
-                    ctx.metavars
-                        .insert(def_var_sl.id.clone(), def_var_sl.typ.clone());
+                    ctx.add_metavar(def_var_sl.id.clone(), def_var_sl.typ.clone())?;
                 }
                 sl::DefKind::Rel(sl::RelDef::Extern(def_rel_sl)) => {
                     ctx.hints_rel
@@ -149,5 +170,21 @@ impl Context {
             }
         }
         Ok(ctx)
+    }
+
+    fn add_metavar(&mut self, id: Id, typ: il::ast::Typ) -> Result<(), ProseError> {
+        if self.metavars.contains_key(&id) {
+            return Err(ProseError::new(ProseErrorKind::DuplicateMetavariable, id.span.clone()));
+        }
+        self.metavars.insert(id, typ);
+        Ok(())
+    }
+
+    fn add_type(types: &mut IdMap<()>, id: Id) -> Result<(), ProseError> {
+        if types.contains_key(&id) {
+            return Err(ProseError::new(ProseErrorKind::DuplicateType, id.span.clone()));
+        }
+        types.insert(id, ());
+        Ok(())
     }
 }

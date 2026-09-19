@@ -10,6 +10,10 @@ use crate::lang::{
 /// Stable semantic category of a prose-conversion failure
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
 pub enum ProseErrorKind {
+    #[error("type was already defined")]
+    DuplicateType,
+    #[error("meta-variable was already defined")]
+    DuplicateMetavariable,
     #[error("invalid expression for prose hint `{0}`")]
     InvalidHintExpression(String),
     #[error("alteration hint is invalid: {0}")]

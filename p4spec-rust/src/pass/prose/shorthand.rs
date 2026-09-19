@@ -1,5 +1,7 @@
 //! Recognize compact prose instructions after annotation
 
+use std::collections::VecDeque;
+
 use crate::lang::{
     il::ast::OptPattern,
     pl::{annot::Annotated, ast as pl},
@@ -158,54 +160,57 @@ fn shorten_single<Tier>(mut instr: pl::Instr<Tier>) -> pl::Instr<Tier> {
     instr
 }
 
-fn shorten_option_get<Tier>(block: &mut pl::Block<Tier>) -> Option<pl::Instr<Tier>> {
-    if block.len() < 2 {
+fn shorten_option_get<Tier>(
+    instrs_pending: &mut VecDeque<pl::Instr<Tier>>,
+) -> Option<pl::Instr<Tier>> {
+    if instrs_pending.len() < 2 {
         return None;
     }
-    let is_option_get = match (&block[0].node.node, &block[1].node.node) {
-        (
-            pl::InstrKind::Let(pl::LetInstr {
-                exp_l: exp_tmp,
-                exp_r: exp_value,
-                iter_instrs: iter_let,
-            }),
-            pl::InstrKind::If(pl::IfInstr {
-                exp: exp_cond,
-                iter_exps: iter_if,
-                block: block_then,
-                ..
-            }),
-        ) if iter_let.is_empty() && iter_if.is_empty() => {
-            let pl::ExpKind::Match(exp_scrut, pl::Pattern::Opt(OptPattern::Some)) =
-                &exp_cond.node.node
-            else {
-                return None;
-            };
-            let instr_then = block_then.first()?;
-            let pl::InstrKind::Let(pl::LetInstr { exp_l, exp_r, iter_instrs }) =
-                &instr_then.node.node
-            else {
-                return None;
-            };
-            let pl::ExpKind::Opt(Some(exp_target)) = &exp_l.node.node else {
-                return None;
-            };
-            if !iter_instrs.is_empty()
-                || !eq_exp_var(exp_tmp, exp_scrut)
-                || !eq_exp_var(exp_tmp, exp_r)
-            {
-                return None;
+    let is_option_get =
+        match (&instrs_pending.front()?.node.node, &instrs_pending.get(1)?.node.node) {
+            (
+                pl::InstrKind::Let(pl::LetInstr {
+                    exp_l: exp_tmp,
+                    exp_r: exp_value,
+                    iter_instrs: iter_let,
+                }),
+                pl::InstrKind::If(pl::IfInstr {
+                    exp: exp_cond,
+                    iter_exps: iter_if,
+                    block: block_then,
+                    ..
+                }),
+            ) if iter_let.is_empty() && iter_if.is_empty() => {
+                let pl::ExpKind::Match(exp_scrut, pl::Pattern::Opt(OptPattern::Some)) =
+                    &exp_cond.node.node
+                else {
+                    return None;
+                };
+                let instr_then = block_then.first()?;
+                let pl::InstrKind::Let(pl::LetInstr { exp_l, exp_r, iter_instrs }) =
+                    &instr_then.node.node
+                else {
+                    return None;
+                };
+                let pl::ExpKind::Opt(Some(exp_target)) = &exp_l.node.node else {
+                    return None;
+                };
+                if !iter_instrs.is_empty()
+                    || !eq_exp_var(exp_tmp, exp_scrut)
+                    || !eq_exp_var(exp_tmp, exp_r)
+                {
+                    return None;
+                }
+                let _ = (exp_target, exp_value);
+                true
             }
-            let _ = (exp_target, exp_value);
-            true
-        }
-        _ => false,
-    };
+            _ => false,
+        };
     if !is_option_get {
         return None;
     }
-    let instr_source = block.remove(0);
-    let instr_if = block.remove(0);
+    let instr_source = instrs_pending.pop_front()?;
+    let instr_if = instrs_pending.pop_front()?;
     let pl::InstrKind::Let(pl::LetInstr { exp_r: exp_value, .. }) = instr_source.node.node else {
         unreachable!();
     };
@@ -285,13 +290,18 @@ fn shorten_recurse<Tier: ShortenTier>(mut instr: pl::Instr<Tier>) -> pl::Instr<T
     instr
 }
 
-fn shorten_block<Tier: ShortenTier>(mut block: pl::Block<Tier>) -> pl::Block<Tier> {
+fn shorten_block<Tier: ShortenTier>(block: pl::Block<Tier>) -> pl::Block<Tier> {
+    let mut instrs_pending = VecDeque::from(block);
     let mut block_output = Vec::new();
-    while !block.is_empty() {
-        if let Some(instr) = shorten_option_get(&mut block) {
+    while !instrs_pending.is_empty() {
+        if let Some(instr) = shorten_option_get(&mut instrs_pending) {
             block_output.push(instr);
         } else {
-            block_output.push(block.remove(0));
+            block_output.push(
+                instrs_pending
+                    .pop_front()
+                    .expect("pending instruction was checked as non-empty"),
+            );
         }
     }
     block_output
