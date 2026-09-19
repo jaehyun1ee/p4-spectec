@@ -663,7 +663,8 @@ fn expand_def(mut def_sl: sl::Def) -> Result<sl::Def, ProseError> {
             if let Some(block_else_sl) = &def_rel_sl.block_else {
                 ids_used.append(block_else_sl.free());
             }
-            def_rel_sl.block = expand_block(&mut ids_used, std::mem::take(&mut def_rel_sl.block))?;
+            let mut ids_body = ids_used.clone();
+            def_rel_sl.block = expand_block(&mut ids_body, std::mem::take(&mut def_rel_sl.block))?;
             if let Some(block_else_sl) = def_rel_sl.block_else.take() {
                 def_rel_sl.block_else = Some(expand_block(&mut ids_used, block_else_sl)?);
             }
@@ -683,8 +684,9 @@ fn expand_def(mut def_sl: sl::Def) -> Result<sl::Def, ProseError> {
             if let Some(block_else_sl) = &def_func_sl.block_else {
                 ids_used.append(block_else_sl.free());
             }
+            let mut ids_body = ids_used.clone();
             def_func_sl.block =
-                expand_block(&mut ids_used, std::mem::take(&mut def_func_sl.block))?;
+                expand_block(&mut ids_body, std::mem::take(&mut def_func_sl.block))?;
             if let Some(block_else_sl) = def_func_sl.block_else.take() {
                 def_func_sl.block_else = Some(expand_block(&mut ids_used, block_else_sl)?);
             }
