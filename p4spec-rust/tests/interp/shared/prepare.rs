@@ -195,7 +195,7 @@ fn lookup_errors_retain_leaf_spans_through_optional_and_list_bindings() {
         al::context as al_context,
         shared::{
             error::{ContextErrorKind, EntityKind, ErrorKind},
-            util::find_iter_var,
+            util::find_var,
         },
         sl::context as sl_context,
     };
@@ -226,7 +226,7 @@ fn lookup_errors_retain_leaf_spans_through_optional_and_list_bindings() {
         let layout = Rc::new(layout);
         let ctx_al = al_context::Context::new(&global_al).localize_with_layout(&layout);
         let ctx_sl = sl_context::Context::new(&global_sl).localize_with_layout(&layout);
-        let slot_lookup = find_iter_var(&ctx_al, &exp_prepared).unwrap();
+        let slot_lookup = find_var(&ctx_al, &exp_prepared).unwrap();
         assert_eq!(slot_lookup.var.id.span, span(7));
         assert_eq!(slot_lookup.var.iters, iters);
         let id = phrase!(node: "test".to_owned(), span: span(1));
@@ -313,7 +313,7 @@ fn lookup_errors_retain_leaf_spans_through_optional_and_list_bindings() {
 fn iterated_variable_lookup_requires_matching_single_binders() {
     use p4spec_rust::interp::{
         al::context::{Context, Global},
-        shared::util::find_iter_var,
+        shared::util::find_var,
     };
     let global = Global::load(vec![]).unwrap();
     for vars in [
@@ -326,7 +326,7 @@ fn iterated_variable_lookup_requires_matching_single_binders() {
         let mut layout = FrameLayout::default();
         let exp_prepared = exp_source.clone().prepare(&mut layout);
         let ctx = Context::new(&global).localize_with_layout(&layout.into());
-        assert!(find_iter_var(&ctx, &exp_prepared).is_none());
+        assert!(find_var(&ctx, &exp_prepared).is_none());
     }
     let exp_source = note_phrase!(
         node: il_source::ExpKind::Bool(true),
@@ -338,7 +338,7 @@ fn iterated_variable_lookup_requires_matching_single_binders() {
     let mut layout = FrameLayout::default();
     let exp_prepared = exp_source.prepare(&mut layout);
     let ctx = Context::new(&global).localize_with_layout(&layout.into());
-    assert!(find_iter_var(&ctx, &exp_prepared).is_none());
+    assert!(find_var(&ctx, &exp_prepared).is_none());
 }
 
 #[test]
@@ -465,7 +465,7 @@ fn shared_mapping_preserves_nested_update_paths_and_call_arguments() {
 fn nested_iteration_edges_share_only_the_required_binding_slots() {
     use p4spec_rust::interp::{
         al::context::{Context, Global},
-        shared::util::find_iter_var,
+        shared::util::find_var,
     };
     let global = Global::load(vec![]).unwrap();
     let mut exp_source = expression("x", 7);
@@ -487,8 +487,8 @@ fn nested_iteration_edges_share_only_the_required_binding_slots() {
         let mut iters_outer = var.var.iters.clone();
         iters_outer.push(exp_iter.iter);
         assert_eq!(slot_outer.var.iters, iters_outer);
-        assert_eq!(var.slot, find_iter_var(&ctx, exp_next).unwrap().slot);
-        assert_eq!(slot_outer.slot, find_iter_var(&ctx, exp_inner).unwrap().slot);
+        assert_eq!(var.slot, find_var(&ctx, exp_next).unwrap().slot);
+        assert_eq!(slot_outer.slot, find_var(&ctx, exp_inner).unwrap().slot);
         exp_inner = exp_next;
     }
 }

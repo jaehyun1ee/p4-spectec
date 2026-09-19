@@ -2,7 +2,7 @@
 
 use super::super::context::{ReadContext, WriteContext};
 use crate::interp::shared::prepare::expr as ast;
-use crate::interp::shared::util::iter_vars;
+use crate::interp::shared::util::iterate_vars;
 use crate::lang::data::var::IdSlot;
 
 use std::{borrow::Borrow, rc::Rc};
@@ -24,7 +24,7 @@ use crate::{
 use crate::interp::shared::{
     backtrack::{Backtrack, err, ok, unwrap, unwrap_from_result},
     error::{EntityKind, Error, ErrorKind},
-    util::find_iter_var,
+    util::find_var,
 };
 
 // = Expression assignment
@@ -220,12 +220,12 @@ fn assign_iter_exp<Ctx: WriteContext>(
     exp_iter: &ast::ExpIter,
     value: Value,
 ) -> Backtrack<Ctx> {
-    if let Some(var) = find_iter_var(&ctx, exp) {
+    if let Some(var) = find_var(&ctx, exp) {
         ctx.add_value(var.slot, value);
         return ok!(ctx);
     }
     let span = &exp.span;
-    let vars_outer = iter_vars(&ctx, &exp_iter.vars, exp_iter.iter);
+    let vars_outer = iterate_vars(&ctx, &exp_iter.vars, exp_iter.iter);
     match exp_iter.iter {
         ast::Iter::Opt => {
             let value_opt = unwrap_from_result!(get::opt(arena, &value), span);

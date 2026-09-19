@@ -8,7 +8,7 @@ use super::super::{
     error::Error,
 };
 use crate::interp::shared::prepare::expr as ast;
-use crate::interp::shared::util::iter_vars;
+use crate::interp::shared::util::iterate_vars;
 use crate::{
     lang::{
         common::source::Span,
@@ -34,7 +34,7 @@ where
     Ext: Extern,
 {
     let vars = &exp_iter.vars;
-    let vars_outer = iter_vars(ctx, vars, exp_iter.iter);
+    let vars_outer = iterate_vars(ctx, vars, exp_iter.iter);
     let value = match exp_iter.iter {
         ast::Iter::Opt => {
             let values = unwrap_from_result!(
@@ -91,8 +91,8 @@ where
 {
     let vars_bound = &prem_iter.vars_bound;
     let vars_bind = &prem_iter.vars_bind;
-    let vars_bound_outer = iter_vars(&ctx, vars_bound, prem_iter.iter);
-    let vars_bind_outer = iter_vars(&ctx, vars_bind, prem_iter.iter);
+    let vars_bound_outer = iterate_vars(&ctx, vars_bound, prem_iter.iter);
+    let vars_bind_outer = iterate_vars(&ctx, vars_bind, prem_iter.iter);
     let mut values_bind_by_var = vec![Vec::new(); vars_bind.len()];
     match prem_iter.iter {
         ast::Iter::Opt => {

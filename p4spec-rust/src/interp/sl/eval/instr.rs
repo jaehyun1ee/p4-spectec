@@ -11,7 +11,7 @@ use super::{
 };
 use crate::interp::shared::context::{IterContext, WriteContext};
 use crate::interp::shared::eval::{Invoker, iter, ops};
-use crate::interp::shared::util::iter_vars;
+use crate::interp::shared::util::iterate_vars;
 use crate::runtime::envs::interp::sl::ast_prepared as ast;
 use crate::{
     interp::shared::{
@@ -416,7 +416,7 @@ fn eval_cond_iter<Iface: Interface, Ext: Extern>(
         return eval(runner_ctx, ctx);
     };
     let ast::ExpIter { iter, vars } = exp_iter;
-    let vars_outer = iter_vars(ctx, vars, *iter);
+    let vars_outer = iterate_vars(ctx, vars, *iter);
     match iter {
         ast::Iter::Opt => {
             let values = unwrap_from_result!(

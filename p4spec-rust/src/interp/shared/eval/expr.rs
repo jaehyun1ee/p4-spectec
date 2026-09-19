@@ -26,7 +26,7 @@ use super::{arg::eval_args, iter, ops, path::eval_update_path};
 use crate::interp::shared::{
     backtrack::{Backtrack, err, ok, unwrap, unwrap_from_result},
     error::{EntityKind, Error, ErrorKind},
-    util::find_iter_var,
+    util::find_var,
 };
 
 // = Expression evaluation
@@ -546,7 +546,7 @@ fn eval_iter_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Ex
 ) -> Backtrack<Value> {
     let span = &exp.span;
     let typ = &exp.note;
-    if let Some(var) = find_iter_var(ctx, exp) {
+    if let Some(var) = find_var(ctx, exp) {
         return ok!(*unwrap_from_result!(
             ctx.find_value(var.slot).ok_or_else(|| {
                 Error::undefined(

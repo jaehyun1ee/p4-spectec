@@ -3,7 +3,8 @@
 use super::{context::ReadContext, prepare::expr as ast};
 use crate::lang::data::var::VarSlot;
 
-pub fn find_iter_var(ctx: &impl ReadContext, exp: &ast::Exp) -> Option<VarSlot> {
+/// Finds the slot-backed variable represented by a simple iterated expression
+pub fn find_var(ctx: &impl ReadContext, exp: &ast::Exp) -> Option<VarSlot> {
     match &exp.node {
         ast::ExpKind::Id(id) => Some(VarSlot {
             slot: id.slot,
@@ -17,7 +18,7 @@ pub fn find_iter_var(ctx: &impl ReadContext, exp: &ast::Exp) -> Option<VarSlot> 
             let [var] = vars.as_slice() else {
                 return None;
             };
-            let var_inner = find_iter_var(ctx, exp_inner)?;
+            let var_inner = find_var(ctx, exp_inner)?;
             if var_inner.var.id.node != var.var.id.node || var_inner.var.iters != var.var.iters {
                 return None;
             }
@@ -27,7 +28,8 @@ pub fn find_iter_var(ctx: &impl ReadContext, exp: &ast::Exp) -> Option<VarSlot> 
     }
 }
 
-pub fn iter_vars(ctx: &impl ReadContext, vars: &[ast::Var], iter: ast::Iter) -> Vec<ast::Var> {
+/// Advances prepared variables through one iterator dimension
+pub fn iterate_vars(ctx: &impl ReadContext, vars: &[ast::Var], iter: ast::Iter) -> Vec<ast::Var> {
     vars.iter()
         .map(|var| ctx.find_iter_var(var, iter))
         .collect()
