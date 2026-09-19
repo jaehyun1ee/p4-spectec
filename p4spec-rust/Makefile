@@ -6,8 +6,8 @@
 
 CARGO := cargo
 
-.PHONY: test test-frontend test-p4parse-unit test-elab-unit test-algo-unit test-structure-unit test-lang test-wire \
-        test-runtime test-run-al-unit test-run-sl-unit test-frontend-diff test-algo-diff test-diff
+.PHONY: test test-frontend test-p4parse-unit test-elab-unit test-algo-unit test-structure-unit test-prose-unit test-lang test-wire \
+        test-runtime test-run-al-unit test-run-sl-unit test-frontend-diff test-algo-diff test-prose-diff test-diff
 
 # Fast unit tests (no OCaml toolchain required)
 
@@ -34,6 +34,11 @@ test-structure-unit:
 	$(CARGO) test --locked --lib pass::structure::
 	$(CARGO) test --locked --test pass structure::
 	$(CARGO) test --locked --test lang al::fresh::
+
+test-prose-unit:
+	$(CARGO) test --locked --test lang hints::
+	$(CARGO) test --locked --test lang pl::
+	$(CARGO) test --locked --test pass prose::
 
 test-lang:
 	$(CARGO) test --test lang
@@ -63,10 +68,23 @@ test-frontend-diff:
 test-algo-diff:
 	$(CARGO) test --test pass algo:: -- --ignored --nocapture
 
-test-diff: test-frontend-diff test-algo-diff
+PROSE_SOURCE_DIR := $(abspath target/prose-source)
+PROSE_SOURCE_SL := $(PROSE_SOURCE_DIR)/source-sl.json
+PROSE_SOURCE_PL := $(PROSE_SOURCE_DIR)/source-pl.json
+
+test-prose-diff:
+	mkdir -p "$(PROSE_SOURCE_DIR)"
+	trap 'rm -f "$(PROSE_SOURCE_SL)" "$(PROSE_SOURCE_PL)"' EXIT; \
+		cd "$(abspath ..)" && \
+		opam exec -- dune exec ./p4spec/test/prose-export/export_prose_source.exe -- sl spec > "$(PROSE_SOURCE_SL)" && \
+		opam exec -- dune exec ./p4spec/test/prose-export/export_prose_source.exe -- pl spec > "$(PROSE_SOURCE_PL)" && \
+		cd "$(CURDIR)" && \
+		env -u UPDATE_EXPECT $(DRIVER) prose-source --sl "$(PROSE_SOURCE_SL)" --pl "$(PROSE_SOURCE_PL)"
+
+test-diff: test-frontend-diff test-algo-diff test-prose-diff
 
 # Standalone expected driver; product unit tests remain in tests/
-.PHONY: test-expected test-promote test-p4parse test-elab test-algo test-structure test-run-al test-run-sl
+.PHONY: test-expected test-promote test-p4parse test-elab test-algo test-structure test-prose test-run-al test-run-sl
 DRIVER_TARGET_DIR ?= $(if $(CARGO_TARGET_DIR),$(CARGO_TARGET_DIR),target)
 DRIVER = $(CARGO) run --locked --release --manifest-path test-driver/Cargo.toml --target-dir $(DRIVER_TARGET_DIR) --
 
@@ -82,6 +100,9 @@ test-algo:
 test-structure:
 	env -u UPDATE_EXPECT $(DRIVER) structure
 
+test-prose:
+	env -u UPDATE_EXPECT $(DRIVER) prose
+
 test-run-al:
 	env -u UPDATE_EXPECT $(DRIVER) run-al
 
@@ -89,7 +110,7 @@ test-run-sl:
 	env -u UPDATE_EXPECT $(DRIVER) run-sl
 	env -u UPDATE_EXPECT $(DRIVER) run-sl --det
 
-test-expected: test-p4parse test-elab test-algo test-structure test-run-al test-run-sl
+test-expected: test-p4parse test-elab test-algo test-structure test-prose test-run-al test-run-sl
 
 # Rerun elab/algo and update snapshots; does not approve a previous run
 # P4 parser/structure/AL expected and excludes are never promoted

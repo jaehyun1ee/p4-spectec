@@ -4,4 +4,6 @@ pub mod annot;
 pub mod ast;
 pub mod eq;
 pub mod free;
+pub mod group;
+pub mod partial;
 pub mod print;

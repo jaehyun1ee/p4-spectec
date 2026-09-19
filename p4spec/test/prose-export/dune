@@ -1,0 +1,3 @@
+(executable
+ (name export_prose_source)
+ (libraries p4spectec yojson))
