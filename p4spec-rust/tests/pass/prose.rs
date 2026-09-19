@@ -602,6 +602,27 @@ fn test_context_rejects_duplicate_metavariables_and_types_at_the_new_binding() {
     let error = prose::convert(vec![generic_type(2), generic_type(8)]).unwrap_err();
     assert_eq!(error.kind, ProseErrorKind::DuplicateType);
     assert_eq!(error.span, span_second);
+
+    let span_tparam = span("duplicate-tparam", 5);
+    let def_func = p4spec_rust::phrase! {
+        node: sl::DefKind::MetaFunc(sl::MetaFuncDef::Extern(sl::ExternFunc {
+            id: id("generic"),
+            tparams: vec![
+                id("T"),
+                p4spec_rust::phrase! {
+                    node: "T".to_owned(),
+                    span: span_tparam.clone(),
+                },
+            ],
+            params: Vec::new(),
+            typ: typ_bool(),
+            hints: Vec::new(),
+        })),
+        span: span("generic", 0),
+    };
+    let error = prose::convert(vec![def_func]).unwrap_err();
+    assert_eq!(error.kind, ProseErrorKind::DuplicateType);
+    assert_eq!(error.span, span_tparam);
 }
 
 #[test]

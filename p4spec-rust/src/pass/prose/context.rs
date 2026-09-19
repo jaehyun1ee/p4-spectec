@@ -20,6 +20,7 @@ pub(super) struct Context {
     hints_rel: IdMap<Hints>,
     hints_case: Vec<(String, Mixop, Hints)>,
     metavars: MEnv,
+    types: IdMap<()>,
 }
 
 impl Context {
@@ -40,6 +41,7 @@ impl Context {
             hints_rel: IdMap::new(),
             hints_case: Vec::new(),
             metavars,
+            types: IdMap::new(),
         }
     }
 
@@ -71,6 +73,17 @@ impl Context {
 
     pub(super) fn metavars(&self) -> &MEnv {
         &self.metavars
+    }
+
+    pub(super) fn validate_tparams(&self, tparams: &[il::ast::TParam]) -> Result<(), ProseError> {
+        let mut types_local = IdMap::new();
+        for id in tparams {
+            if self.types.contains_key(id) || types_local.contains_key(id) {
+                return Err(ProseError::new(ProseErrorKind::DuplicateType, id.span.clone()));
+            }
+            types_local.insert(id.clone(), ());
+        }
+        Ok(())
     }
 
     fn load_hints(hints_sl: &[sl::Hint]) -> Result<Hints, ProseError> {
@@ -110,7 +123,6 @@ impl Context {
 
     pub(super) fn load(spec_sl: &sl::Spec) -> Result<Self, ProseError> {
         let mut ctx = Self::init();
-        let mut types = IdMap::new();
         for def_sl in spec_sl {
             match &def_sl.node {
                 sl::DefKind::Typ(sl::TypDef::Extern(def_typ_sl)) => {
@@ -119,7 +131,7 @@ impl Context {
                         span: def_typ_sl.id.span.clone(),
                     };
                     ctx.add_metavar(def_typ_sl.id.clone(), typ)?;
-                    Self::add_type(&mut types, def_typ_sl.id.clone())?;
+                    ctx.add_type(def_typ_sl.id.clone())?;
                 }
                 sl::DefKind::Typ(sl::TypDef::Defined(def_typ_sl)) => {
                     if def_typ_sl.tparams.is_empty() {
@@ -129,7 +141,7 @@ impl Context {
                         };
                         ctx.add_metavar(def_typ_sl.id.clone(), typ)?;
                     }
-                    Self::add_type(&mut types, def_typ_sl.id.clone())?;
+                    ctx.add_type(def_typ_sl.id.clone())?;
                     if let il::ast::DefTypKind::Variant(cases) = &def_typ_sl.def_typ.node {
                         for (not_typ, _, hints_sl) in cases {
                             ctx.hints_case.push((
@@ -180,11 +192,11 @@ impl Context {
         Ok(())
     }
 
-    fn add_type(types: &mut IdMap<()>, id: Id) -> Result<(), ProseError> {
-        if types.contains_key(&id) {
+    fn add_type(&mut self, id: Id) -> Result<(), ProseError> {
+        if self.types.contains_key(&id) {
             return Err(ProseError::new(ProseErrorKind::DuplicateType, id.span.clone()));
         }
-        types.insert(id, ());
+        self.types.insert(id, ());
         Ok(())
     }
 }
