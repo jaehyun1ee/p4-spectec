@@ -467,3 +467,41 @@ fn test_nonempty_else_changes_final_failure_destination() {
     };
     assert_eq!(def_func_pl.block[0].node.note, Some(pl::Fallthrough::FallFail));
 }
+
+#[test]
+fn test_fresh_names_are_scoped_independently_across_else_blocks() {
+    let return_nested_call = |name: &str, column: usize| {
+        let span_outer = span("fresh-scope", column);
+        let exp_inner = exp_call(name, exp_bool(true, span_outer.clone()), span_outer.clone());
+        p4spec_rust::phrase! {
+            node: sl::InstrKind::Return(sl::ReturnInstr {
+                exp: exp_call("outer", exp_inner, span_outer.clone()),
+            }),
+            span: span_outer,
+        }
+    };
+    let mut spec_pl = prose::convert(vec![defined_func_with_else(
+        vec![return_nested_call("main", 1)],
+        Some(vec![return_nested_call("fallback", 2)]),
+    )])
+    .unwrap();
+    let def_pl = spec_pl.pop().unwrap();
+    let pl::DefKind::MetaFunc(pl::MetaFuncDef::Defined(def_func_pl)) = def_pl.node.node else {
+        panic!("expected defined function");
+    };
+    let pl::InstrKind::Let(pl::LetInstr { exp_l: exp_main, .. }) = &def_func_pl.block[0].node.node
+    else {
+        panic!("expected lifted main call");
+    };
+    let pl::InstrKind::Let(pl::LetInstr { exp_l: exp_else, .. }) =
+        &def_func_pl.block_else_opt.unwrap()[0].node.node
+    else {
+        panic!("expected lifted fallback call");
+    };
+    let (pl::ExpKind::Var(id_main), pl::ExpKind::Var(id_else)) =
+        (&exp_main.node.node, &exp_else.node.node)
+    else {
+        panic!("expected fresh variables");
+    };
+    assert_eq!(id_main.node, id_else.node);
+}
