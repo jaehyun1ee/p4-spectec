@@ -2,7 +2,6 @@ use p4spec_rust::interp::shared::context::IterContext;
 use p4spec_rust::interp::shared::prepare::Prepare;
 use p4spec_rust::lang::data::var::{IdSlot, VarSlot};
 use p4spec_rust::runtime::envs::interp::{
-    al::ast_prepared as al,
     shared::callable::Callable,
     shared::frame::{Frame, FrameLayout},
     sl::ast_prepared as sl,
@@ -77,8 +76,6 @@ fn preparation_preserves_occurrence_spans_and_type_allocations() {
     assert_eq!(id_b.id.span, span(8));
     assert!(Rc::ptr_eq(&typ_a, &exp_prepared_a.note));
     assert!(Rc::ptr_eq(&typ_b, &exp_prepared_b.note));
-    assert_eq!(expr::restore_exp(exp_prepared_a), exp_a);
-    assert_eq!(expr::restore_exp(exp_prepared_b), exp_b);
 }
 
 #[test]
@@ -148,20 +145,6 @@ fn algorithmic_clauses_and_else_clause_share_one_layout() {
         })
         .collect::<Vec<_>>();
     assert!(slots.windows(2).all(|slots| slots[0].slot == slots[1].slot));
-    let spec_source =
-        vec![phrase!(node: al_source::DefKind::MetaFunc(func_source.clone()), span: span(1))];
-    let json_source = p4spec_rust::wire::ocaml::lang::al::SpecCodec::encode(&spec_source).unwrap();
-    let func_roundtrip = al::restore_func_def(func);
-    assert_eq!(func_roundtrip, func_source);
-    let spec_roundtrip =
-        vec![phrase!(node: al_source::DefKind::MetaFunc(func_roundtrip), span: span(1))];
-    let json_roundtrip =
-        p4spec_rust::wire::ocaml::lang::al::SpecCodec::encode(&spec_roundtrip).unwrap();
-    assert_eq!(json_roundtrip, json_source);
-    assert_eq!(
-        p4spec_rust::wire::ocaml::lang::al::SpecCodec::decode(&json_roundtrip).unwrap(),
-        spec_source
-    );
 }
 
 #[test]
@@ -204,7 +187,6 @@ fn structured_parameters_and_case_guards_share_the_callable_layout() {
     };
     assert_eq!(id_param.slot, id_case.slot);
     assert_eq!(Print::to_string(&func_defined.block[0]), Print::to_string(&instr_source));
-    assert_eq!(sl::restore_func_def(func), func_source);
 }
 
 #[test]
@@ -324,7 +306,6 @@ fn lookup_errors_retain_leaf_spans_through_optional_and_list_bindings() {
             );
         }
         assert_eq!(Print::to_string(&exp_prepared), Print::to_string(&exp_source));
-        assert_eq!(expr::restore_exp(exp_prepared), exp_source);
     }
 }
 
@@ -346,7 +327,6 @@ fn iterated_variable_lookup_requires_matching_single_binders() {
         let exp_prepared = exp_source.clone().prepare(&mut layout);
         let ctx = Context::new(&global).localize_with_layout(&layout.into());
         assert!(find_iter_var(&ctx, &exp_prepared).is_none());
-        assert_eq!(expr::restore_exp(exp_prepared), exp_source);
     }
     let exp_source = note_phrase!(
         node: il_source::ExpKind::Bool(true),
@@ -409,7 +389,6 @@ fn shared_syntax_ignores_slot_allocation_and_binder_order() {
     let exp_other = exp_source.clone().prepare(&mut layout_other);
     assert!(exp_prepared.syntax_eq(&exp_other));
     assert_eq!(Print::to_string(&exp_prepared), Print::to_string(&exp_other));
-    assert_eq!(expr::restore_exp(exp_other), exp_source);
 
     let mut prem_iter_source: il_source::PremIter = il_source::PremIter {
         iter: il_source::Iter::List,
@@ -480,9 +459,6 @@ fn shared_mapping_preserves_nested_update_paths_and_call_arguments() {
     };
     assert!(Rc::ptr_eq(&typ, &path_prepared.note));
     assert!(Rc::ptr_eq(&typ, &exp_call_prepared.note));
-    let exp_roundtrip: il_source::Exp = expr::restore_exp(exp_prepared);
-    assert_eq!(exp_roundtrip, exp_source);
-    assert!(Rc::ptr_eq(&typ, &exp_roundtrip.note));
 }
 
 #[test]
@@ -515,7 +491,6 @@ fn nested_iteration_edges_share_only_the_required_binding_slots() {
         assert_eq!(slot_outer.slot, find_iter_var(&ctx, exp_inner).unwrap().slot);
         exp_inner = exp_next;
     }
-    assert_eq!(expr::restore_exp(exp_prepared), exp_source);
 }
 
 #[test]
@@ -567,7 +542,6 @@ fn identifiers_and_binders_share_slots_without_sharing_occurrence_metadata() {
     assert_eq!(var_prepared.var, var_source);
     assert_eq!(var_prepared.var.id.span, span(1));
     assert_eq!(layout.len(), 1);
-    assert_eq!(expr::restore_exp(exp_prepared), exp_source);
 }
 
 #[test]
@@ -591,7 +565,7 @@ fn preparation_of_nested_containers_preserves_annotations() {
 }
 
 #[test]
-fn preparation_and_restoration_of_deep_expressions_grow_the_stack() {
+fn preparation_of_deep_expressions_grows_the_stack() {
     std::thread::Builder::new()
         .stack_size(128 * 1024)
         .spawn(|| {
@@ -603,18 +577,17 @@ fn preparation_and_restoration_of_deep_expressions_grow_the_stack() {
                     span: span(1),
                 );
             }
-            let exp_prepared = exp_source.prepare(&mut FrameLayout::default());
-            let mut exp_source = expr::restore_exp(exp_prepared);
+            let mut exp_prepared = exp_source.prepare(&mut FrameLayout::default());
             for _ in 0..2048 {
-                let il_source::ExpKind::Len(exp_inner) = exp_source.node else {
+                let expr::ExpKind::Len(exp_inner) = exp_prepared.node else {
                     panic!("expected nested length expression");
                 };
-                exp_source = *exp_inner;
+                exp_prepared = *exp_inner;
             }
-            let il_source::ExpKind::Id(id) = exp_source.node else {
+            let expr::ExpKind::Id(id) = exp_prepared.node else {
                 panic!("expected identifier");
             };
-            assert_eq!(id.node, "x");
+            assert_eq!(id.id.node, "x");
         })
         .unwrap()
         .join()

@@ -2,7 +2,6 @@ use p4spec_rust::interp::shared::context::{IterContext, ReadContext, WriteContex
 use p4spec_rust::interp::shared::error::ContextErrorKind;
 use p4spec_rust::interp::shared::error::{EntityKind, ErrorKind};
 use p4spec_rust::lang::data::value::ValueArena;
-use p4spec_rust::runtime::envs::interp::al::ast_prepared as prepared;
 use p4spec_rust::runtime::envs::interp::shared::{callable::Callable, frame::FrameLayout};
 use std::rc::Rc;
 
@@ -231,7 +230,6 @@ fn test_loaded_native_spec_preserves_definition_bodies_and_locations() {
                     ast::RelDef::Defined(rel) => &rel.id,
                 };
                 let rel_global = ctx.find_rel(id).unwrap();
-                assert_eq!(&prepared::restore_rel_def(rel_global.clone()), rel);
                 assert!(std::ptr::eq(rel_global, ctx_clone.find_rel(id).unwrap()));
                 assert!(std::ptr::eq(rel_global, ctx_local.find_rel(id).unwrap()));
             }
@@ -243,10 +241,7 @@ fn test_loaded_native_spec_preserves_definition_bodies_and_locations() {
                     ast::MetaFuncDef::Defined(func) => &func.id,
                 };
                 let (scope, func_global) = ctx.find_func_with_scope(id).unwrap();
-                assert_eq!(
-                    (scope, &prepared::restore_func_def(func_global.as_ref().clone())),
-                    (Scope::Global, func)
-                );
+                assert_eq!(scope, Scope::Global);
                 assert!(std::rc::Rc::ptr_eq(
                     func_global,
                     ctx_clone.find_func_with_scope(id).unwrap().1

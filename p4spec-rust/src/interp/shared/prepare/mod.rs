@@ -89,37 +89,3 @@ impl<T: Prepare> Prepare for Mixfix<T> {
         }
     }
 }
-
-// == Source reconstruction
-
-pub(crate) fn restore_phrase<T, U, N, S>(
-    phrase: NotePhrase<T, N, S>,
-    restore: impl FnOnce(T) -> U,
-) -> NotePhrase<U, N, S> {
-    stacker::maybe_grow(64 * 1024, 1024 * 1024, || NotePhrase {
-        node: restore(phrase.node),
-        note: phrase.note,
-        span: phrase.span,
-    })
-}
-
-pub(crate) fn restore_notation<T, U>(mixfix: Mixfix<T>, restore: fn(T) -> U) -> Mixfix<U> {
-    match mixfix {
-        Mixfix::Arg(arg) => Mixfix::Arg(restore(arg)),
-        Mixfix::Atom(atom) => Mixfix::Atom(atom),
-        Mixfix::Brack(atom_l, mixfix, atom_r) => {
-            Mixfix::Brack(atom_l, Box::new(restore_notation(*mixfix, restore)), atom_r)
-        }
-        Mixfix::Infix(mixfix_l, atom, mixfix_r) => Mixfix::Infix(
-            Box::new(restore_notation(*mixfix_l, restore)),
-            atom,
-            Box::new(restore_notation(*mixfix_r, restore)),
-        ),
-        Mixfix::Seq(mixfixes) => Mixfix::Seq(
-            mixfixes
-                .into_iter()
-                .map(|mixfix| restore_notation(mixfix, restore))
-                .collect(),
-        ),
-    }
-}
