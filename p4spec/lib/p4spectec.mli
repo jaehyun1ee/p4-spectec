@@ -14,7 +14,8 @@ val annotate : string list -> Lang.Pl.spec result
 
 type stage = EL | IL | AL | SL | PL
 
-val export_json : stage -> string list -> Yojson.Safe.t result
+val export_json :
+  ?preserve_rule_groups:bool -> stage -> string list -> Yojson.Safe.t result
 
 (* Document generation *)
 
