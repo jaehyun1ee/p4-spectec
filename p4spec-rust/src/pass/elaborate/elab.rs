@@ -191,12 +191,14 @@ fn elab_plain_typ(ctx: &Context, plain_typ: &el::PlainTyp) -> Result<il::Typ, El
 /// Elaborates a plain or notation type into mixfix notation.
 fn elab_not_typ(ctx: &Context, typ: &el::Typ) -> Result<il::NotTyp, ElabError> {
     match typ {
+        // A plain type is a single notation argument
         el::Typ::Plain(plain_typ) => {
             let typ_il = elab_plain_typ(ctx, plain_typ)?;
             let not_typ_il = Mixfix::Arg(typ_il);
             let not_typ_il = phrase!(node: not_typ_il, span: plain_typ.span.clone());
             Ok(not_typ_il)
         }
+        // Notation types mirror the mixfix shape
         el::Typ::Notation(not_typ) => {
             let not_typ_kind_il = match &not_typ.node {
                 el::NotTypKind::Atom(atom) => Mixfix::Atom(atom.clone()),
@@ -279,6 +281,7 @@ fn elab_typ_case_plain(ctx: &Context, typ_il: &il::Typ) -> Result<Vec<il::TypCas
                 })
                 .collect()
         }
+        // Parameter and extern types have no cases to inherit
         TypeDef::Parameter | TypeDef::Extern => Err(ElabError::new(
             ElabErrorKind::InvalidTypeExtension,
             typ_il.span.clone(),
@@ -420,6 +423,7 @@ fn infer_exp(ctx: &mut Context, exp: &el::Exp) -> Attempt<il::Exp> {
             infer_sub_exp(ctx, &exp.span, exp_inner, plain_typ)
         }
         el::ExpKind::Iter(exp_inner, iter) => infer_iter_exp(ctx, &exp.span, exp_inner, *iter),
+        // Constructs that need an expected type cannot be inferred
         el::ExpKind::Eps => fail_infer(&exp.span, "empty sequence"),
         el::ExpKind::Str(_) => fail_infer(&exp.span, "struct expression"),
         el::ExpKind::Atom(_) => fail_infer(&exp.span, "atom"),
@@ -621,6 +625,7 @@ fn infer_cmp_exp(
         // Equality: infer one side and check the other against it
         el::CmpOp::Bool(_) => choose_sequential(
             ctx,
+            // Infer the right side, check the left against it
             |ctx| {
                 let exp_r_il = infer_exp(ctx, exp_r)?;
                 let typ_expect_l_il =
@@ -633,6 +638,7 @@ fn infer_cmp_exp(
                 };
                 Ok(exp_il)
             },
+            // Infer the left side, check the right against it
             |ctx| {
                 let exp_l_il = infer_exp(ctx, exp_l)?;
                 let typ_expect_r_il =
@@ -725,6 +731,7 @@ fn infer_cons_exp(
     let exp_head_il = infer_exp(ctx, exp_head)?;
     let typ_head_il =
         phrase!(node: exp_head_il.note.as_ref().clone(), span: exp_head_il.span.clone());
+    // The tail must be a list of the head's type
     let typ_list_kind_il = il::TypKind::Iter(Box::new(typ_head_il), il::Iter::List);
     let typ_list_il = phrase!(node: typ_list_kind_il, span: exp_head_il.span.clone());
     let exp_tail_il = elab_exp(ctx, &typ_list_il, exp_tail)?;
@@ -802,6 +809,7 @@ fn infer_tuple_exp(ctx: &mut Context, span: &Span, exps: &[el::Exp]) -> Attempt<
 fn infer_len_exp(ctx: &mut Context, span: &Span, exp: &el::Exp) -> Attempt<il::Exp> {
     choose_sequential(
         ctx,
+        // Length of a list
         |ctx| {
             let exp_il = infer_exp(ctx, exp)?;
             let typ_il = phrase!(node: exp_il.note.as_ref().clone(), span: exp_il.span.clone());
@@ -813,6 +821,7 @@ fn infer_len_exp(ctx: &mut Context, span: &Span, exp: &el::Exp) -> Attempt<il::E
             };
             Ok(exp_il)
         },
+        // Length of a text
         |ctx| {
             let typ_text_il = typ_at(il::TypKind::Text, &exp.span);
             let exp_il = elab_exp(ctx, &typ_text_il, exp)?;
@@ -882,6 +891,7 @@ fn infer_idx_exp(
 ) -> Attempt<il::Exp> {
     choose_sequential(
         ctx,
+        // Index into a list: the element type is the result
         |ctx| {
             let exp_base_il = infer_exp(ctx, exp_base)?;
             let typ_base_il =
@@ -896,6 +906,7 @@ fn infer_idx_exp(
             };
             Ok(exp_il)
         },
+        // Index into a text yields a text
         |ctx| {
             let typ_text_il = typ_at(il::TypKind::Text, &exp_base.span);
             let exp_base_il = elab_exp(ctx, &typ_text_il, exp_base)?;
@@ -923,6 +934,7 @@ fn infer_slice_exp(
 ) -> Attempt<il::Exp> {
     choose_sequential(
         ctx,
+        // Slice of a list keeps the list type
         |ctx| {
             let exp_base_il = infer_exp(ctx, exp_base)?;
             let typ_base_il =
@@ -939,6 +951,7 @@ fn infer_slice_exp(
             ), note: typ_base_il.node, span: span.clone() };
             Ok(exp_il)
         },
+        // Slice of a text
         |ctx| {
             let typ_text_il = typ_at(il::TypKind::Text, &exp_base.span);
             let exp_base_il = elab_exp(ctx, &typ_text_il, exp_base)?;
@@ -967,6 +980,7 @@ fn infer_dot_exp(
 ) -> Attempt<il::Exp> {
     let exp_il = infer_exp(ctx, exp)?;
     let typ_il = phrase!(node: exp_il.note.as_ref().clone(), span: exp_il.span.clone());
+    // The field must exist in the struct type
     let typ_fields_il = as_struct_typ(ctx, &typ_il)?;
     let Some(il::TypField { typ: typ_field_il, .. }) = typ_fields_il
         .iter()
@@ -995,6 +1009,7 @@ fn infer_upd_exp(
     let exp_base_il = infer_exp(ctx, exp_base)?;
     let typ_base_il =
         phrase!(node: exp_base_il.note.as_ref().clone(), span: exp_base_il.span.clone());
+    // The path from the base type gives the field type
     let path_il = elab_path(ctx, &typ_base_il, path)?;
     let typ_field_il = typ_at(path_il.note.as_ref().clone(), &path_il.span);
     let exp_field_il = elab_exp(ctx, &typ_field_il, exp_field)?;
@@ -1331,6 +1346,7 @@ fn elab_plain_exp(ctx: &mut Context, typ_expect_il: &il::Typ, exp: &el::Exp) -> 
         el::ExpKind::Tuple(exps) => elab_tuple_exp(ctx, typ_expect_il, exps)?,
         el::ExpKind::Paren(exp_inner) => elab_paren_exp(ctx, typ_expect_il, exp_inner)?,
         el::ExpKind::Iter(exp_inner, iter) => elab_iter_exp(ctx, typ_expect_il, exp_inner, *iter)?,
+        // Anything else needed inference
         _ => {
             return fail_attempt(
                 ElabErrorKind::NoMatchingAlternative,
@@ -1366,6 +1382,7 @@ fn elab_list_exp(
     exps: &[el::Exp],
 ) -> Attempt<il::ExpKind> {
     let (typ_base_il, iter_expect_il) = as_iter_typ(ctx, typ_expect_il)?;
+    // A list literal needs a list type, not an option
     if iter_expect_il != il::Iter::List {
         return fail_attempt(
             ElabErrorKind::InvalidIteration,
@@ -1408,6 +1425,7 @@ fn elab_cat_exp(
 ) -> Attempt<il::ExpKind> {
     choose_sequential(
         ctx,
+        // Iterations: both sides at the expected type
         |ctx| {
             let (typ_base_il, iter_expect_il) = as_iter_typ(ctx, typ_expect_il)?;
             let typ_iter_kind_il = il::TypKind::Iter(Box::new(typ_base_il.clone()), iter_expect_il);
@@ -1416,6 +1434,7 @@ fn elab_cat_exp(
             let exp_r_il = elab_exp(ctx, &typ_iter_il, exp_r)?;
             Ok(il::ExpKind::Cat(Box::new(exp_l_il), Box::new(exp_r_il)))
         },
+        // Texts
         |ctx| {
             let typ_text_il = typ_at(il::TypKind::Text, &exp_l.span);
             let exp_l_il = elab_exp(ctx, &typ_text_il, exp_l)?;
@@ -1434,6 +1453,7 @@ fn elab_tuple_exp(
     typ_expect_il: &il::Typ,
     exps: &[el::Exp],
 ) -> Attempt<il::ExpKind> {
+    // Component count must match the tuple type
     let typs_expect_il = as_tuple_typ(ctx, typ_expect_il)?;
     if typs_expect_il.len() != exps.len() {
         return fail_attempt(
@@ -1470,6 +1490,7 @@ fn elab_iter_exp(
     iter: el::Iter,
 ) -> Attempt<il::ExpKind> {
     let (typ_base_il, iter_expect_il) = as_iter_typ(ctx, typ_expect_il)?;
+    // The iteration must match the expected one
     let iter_il = iter;
     if iter_il != iter_expect_il {
         return fail_attempt(
@@ -1502,6 +1523,7 @@ fn elab_not_exp(ctx: &mut Context, not_typ_il: &il::NotTyp, exp: &el::Exp) -> At
         (Mixfix::Atom(atom_expect), el::ExpKind::Atom(atom)) if atom_expect.node == atom.node => {
             Ok(Mixfix::Atom(atom_expect.clone()))
         }
+        // Sequences match element-wise
         (Mixfix::Seq(not_typs_il), el::ExpKind::Seq(exps)) => {
             if not_typs_il.len() != exps.len() {
                 return fail_attempt(
@@ -1519,6 +1541,7 @@ fn elab_not_exp(ctx: &mut Context, not_typ_il: &il::NotTyp, exp: &el::Exp) -> At
             }
             Ok(Mixfix::Seq(not_exps_il))
         }
+        // Infix and bracket notations match their atoms, then the inner parts
         (
             Mixfix::Infix(not_typ_l_il, atom_expect, not_typ_r_il),
             el::ExpKind::Infix(exp_l, atom, exp_r),
@@ -1570,6 +1593,7 @@ fn elab_struct_exp(
             "expression is not a struct",
         );
     };
+    // Field count must match the struct type
     if typ_fields_il.len() != exp_fields.len() {
         return fail_attempt(
             ElabErrorKind::ArityMismatch,
@@ -1694,6 +1718,7 @@ fn elab_idx_path(
 ) -> Attempt<il::Path> {
     choose_sequential(
         ctx,
+        // Index into a list: the path continues at the element type
         |ctx| {
             let path_inner_il = elab_path(ctx, typ_expect_il, path_inner)?;
             let typ_inner_il = typ_at(path_inner_il.note.as_ref().clone(), &path_inner_il.span);
@@ -1707,6 +1732,7 @@ fn elab_idx_path(
                 span: span.clone(),
             })
         },
+        // Index into a text stays a text
         |ctx| {
             let path_inner_il = elab_path(ctx, typ_expect_il, path_inner)?;
             let typ_inner_il = typ_at(path_inner_il.note.as_ref().clone(), &path_inner_il.span);
@@ -1736,6 +1762,7 @@ fn elab_slice_path(
 ) -> Attempt<il::Path> {
     let path_inner_il = elab_path(ctx, typ_expect_il, path_inner)?;
     let typ_inner_il = typ_at(path_inner_il.note.as_ref().clone(), &path_inner_il.span);
+    // The path may slice a list or a text
     let is_list = as_list_typ(ctx, &typ_inner_il).is_ok();
     let is_text = as_text_typ(ctx, &typ_inner_il).is_ok();
     if !is_list && !is_text {
@@ -1770,6 +1797,7 @@ fn elab_dot_path(
 ) -> Attempt<il::Path> {
     let path_inner_il = elab_path(ctx, typ_expect_il, path_inner)?;
     let typ_inner_il = typ_at(path_inner_il.note.as_ref().clone(), &path_inner_il.span);
+    // The field must exist in the struct type
     let typ_fields_il = as_struct_typ(ctx, &typ_inner_il)?;
     let Some(il::TypField { typ: typ_field_il, .. }) = typ_fields_il
         .into_iter()
@@ -1830,6 +1858,7 @@ fn elab_param(ctx: &mut Context, param: &el::Param) -> Result<il::Param, ElabErr
 fn typ_of_param(param_il: &il::Param) -> il::Typ {
     match &param_il.node {
         il::ParamKind::Exp(typ_il) => typ_il.clone(),
+        // A function parameter has a function type
         il::ParamKind::Def(_, tparams_il, params_il, typ_ret_il) => {
             let func_typ_il = il::FuncTyp {
                 tparams: tparams_il.clone(),
@@ -1938,6 +1967,7 @@ fn elab_args(
     as_def: bool,
     span: &Span,
 ) -> Attempt<Vec<il::Arg>> {
+    // Argument count must match parameter count
     if params_il.len() != args.len() {
         return fail_attempt(
             ElabErrorKind::ArityMismatch,
@@ -1970,6 +2000,7 @@ enum PremInternal {
 /// Elaborates a premise into an IL premise or a marker.
 fn elab_prem(ctx: &mut Context, prem: &el::Prem) -> Attempt<PremInternal> {
     let prem_kind_il = match &prem.node {
+        // Variable and otherwise premises leave no IL premise
         el::PremKind::Var(var_prem) => {
             elab_var_prem(ctx, var_prem)?;
             return Ok(PremInternal::Var);
@@ -2023,6 +2054,7 @@ fn elab_var_prem(ctx: &mut Context, prem: &el::VarPrem) -> Attempt<()> {
             "invalid meta-variable identifier",
         );
     }
+    // A meta-variable name must not clash with a type
     if ctx.bound_typdef(&prem.id) {
         return fail_attempt(
             ElabErrorKind::Duplicate(EntityKind::Type),
@@ -2092,6 +2124,7 @@ fn elab_rule_not_prem(ctx: &mut Context, prem: &el::RuleNotPrem) -> Attempt<il::
             );
         }
     };
+    // A negated premise cannot bind outputs
     if !conditional {
         return fail_attempt(
             ElabErrorKind::InvalidPremise,
@@ -2176,6 +2209,7 @@ fn elab_rule_group(
     let not_typ_il = defined_rel_il.not_typ.clone();
     let mut rules_il = Vec::with_capacity(def.rules.len());
     let mut rules_else_il = Vec::new();
+    // Sort the rules into ordinary and otherwise rules
     for rule in &def.rules {
         let (rule_il, is_else) = elab_rule(ctx, rule, &def.relid, &not_typ_il)?;
         if is_else {
@@ -2259,6 +2293,7 @@ fn elab_def(ctx: &mut Context, def_el: el::Def) -> Result<Option<il::Def>, ElabE
             let def_il = phrase!(node: def_kind_il, span: span);
             Ok(Some(def_il))
         }
+        // Forward declarations only extend the context
         el::DefKind::Syntax(syntax_def) => {
             elab_syntax_def(ctx, &syntax_def)?;
             Ok(None)
@@ -2285,6 +2320,7 @@ fn elab_def(ctx: &mut Context, def_el: el::Def) -> Result<Option<il::Def>, ElabE
             let def_il = phrase!(node: def_kind_il, span: span);
             Ok(Some(def_il))
         }
+        // Rule groups attach to their relation and yield no definition
         el::DefKind::RuleGroup(rule_group_def) => {
             let rule_group_def = crate::phrase! {
                 node: &rule_group_def,
@@ -2313,6 +2349,7 @@ fn elab_def(ctx: &mut Context, def_el: el::Def) -> Result<Option<il::Def>, ElabE
             let def_il = phrase!(node: def_kind_il, span: span);
             Ok(Some(def_il))
         }
+        // Table rows and clauses attach to their declared function
         el::DefKind::TableDef(table_def) => {
             elab_table_def(ctx, &table_def)?;
             Ok(None)
@@ -2325,6 +2362,7 @@ fn elab_def(ctx: &mut Context, def_el: el::Def) -> Result<Option<il::Def>, ElabE
             elab_func_def(ctx, &func_def)?;
             Ok(None)
         }
+        // Separators carry nothing
         el::DefKind::Sep => Ok(None),
     }
 }
@@ -2343,6 +2381,7 @@ fn elab_extern_syntax_def(
             "invalid type identifier",
         ));
     }
+    // An extern type also names a meta-variable
     ctx.add_typdef(def.id.clone(), TypeDef::Extern)?;
     let typ_kind_il = il::TypKind::Var(def.id.clone(), vec![]);
     let typ_il = phrase!(node: typ_kind_il, span: def.id.span.clone());
@@ -2440,6 +2479,7 @@ fn elab_var_def(ctx: &mut Context, def: el::VarDef) -> Result<il::DefKind, ElabE
             "invalid meta-variable identifier",
         ));
     }
+    // A meta-variable name must not clash with a type
     if ctx.bound_typdef(&def.id) {
         return Err(ElabError::new(
             ElabErrorKind::Duplicate(EntityKind::Type),
@@ -2462,6 +2502,7 @@ fn fetch_input_hint(
     hints: &[el::Hint],
 ) -> Result<input::InputHint, ElabError> {
     let arity = not_typ_il.node.arity();
+    // Without a hint every position is an input
     let Some(el::Hint { exp: exp_hint, .. }) = hints.iter().find(|hint| hint.id.node == "input")
     else {
         return Ok(input::InputHint::new((0..arity).collect()));
@@ -2473,6 +2514,7 @@ fn fetch_input_hint(
             "malformed input hint",
         ));
     };
+    // The hint must stay within the notation arity
     input::validate(&input_hint, arity).map_err(|error| {
         ElabError::new(ElabErrorKind::InvalidInputHint, span.clone(), error.to_string())
     })?;
@@ -2536,6 +2578,7 @@ fn elab_rule_group_def(
 /// Declares an extern function.
 fn elab_extern_dec_def(ctx: &mut Context, def: el::ExternDecDef) -> Result<il::DefKind, ElabError> {
     distinct_tparams(&def.tparams, &def.id.span)?;
+    // Parameters and return type see the type parameters
     let (params_il, typ_il) = {
         let mut ctx_local = ctx.clone();
         ctx_local.add_tparams(&def.tparams)?;
@@ -2564,6 +2607,7 @@ fn elab_builtin_dec_def(
     def: el::BuiltinDecDef,
 ) -> Result<il::DefKind, ElabError> {
     distinct_tparams(&def.tparams, &def.id.span)?;
+    // Parameters and return type see the type parameters
     let (params_il, typ_il) = {
         let mut ctx_local = ctx.clone();
         ctx_local.add_tparams(&def.tparams)?;
@@ -2597,6 +2641,7 @@ fn elab_table_dec_def(
         .iter()
         .map(|param| elab_param(ctx, param))
         .collect::<Result<Vec<_>, _>>()?;
+    // Table parameters must be plain expressions
     if params_il
         .iter()
         .any(|param_il| !matches!(param_il.node, il::ParamKind::Exp(_)))
@@ -2607,6 +2652,7 @@ fn elab_table_dec_def(
             "table cannot have function parameters",
         ));
     }
+    // Tables return booleans
     let typ_il = elab_plain_typ(ctx, &def.plain_typ)?;
     if typ_il.node != il::TypKind::Bool {
         return Err(ElabError::new(
@@ -2629,6 +2675,7 @@ fn elab_table_dec_def(
 /// Declares a function whose clauses arrive later.
 fn elab_func_dec_def(ctx: &mut Context, def: el::FuncDecDef) -> Result<il::DefKind, ElabError> {
     distinct_tparams(&def.tparams, &def.id.span)?;
+    // Parameters and return type see the type parameters
     let (params_il, typ_il) = {
         let mut ctx_local = ctx.clone();
         ctx_local.add_tparams(&def.tparams)?;
@@ -2727,6 +2774,7 @@ fn populate_rel(
                     "relation was already populated",
                 ));
             }
+            // The collected rule groups replace the empty declaration
             let defined_rel_stored_il = ctx.take_defined_rel(&defined_rel_il.id)?;
             defined_rel_il.rule_groups = defined_rel_stored_il.rule_groups;
             defined_rel_il.else_group = defined_rel_stored_il.else_group;
@@ -2742,6 +2790,7 @@ fn populate_meta_func(
     span: &Span,
 ) -> Result<il::MetaFuncDef, ElabError> {
     match meta_func_def_il {
+        // Extern and builtin functions have no body to fill
         il::MetaFuncDef::Extern(_) => Ok(meta_func_def_il),
         il::MetaFuncDef::Builtin(_) => Ok(meta_func_def_il),
         il::MetaFuncDef::Table(mut table_func_il) => {
@@ -2752,6 +2801,7 @@ fn populate_meta_func(
                     "table was already populated",
                 ));
             }
+            // The collected rows replace the empty declaration
             let table_func_stored_il = ctx.take_table_func(&table_func_il.id)?;
             table_func_il.rows = table_func_stored_il.rows;
             Ok(il::MetaFuncDef::Table(table_func_il))
@@ -2764,6 +2814,7 @@ fn populate_meta_func(
                     "function was already populated",
                 ));
             }
+            // The collected clauses replace the empty declaration
             let defined_func_stored_il = ctx.take_defined_func(&defined_func_il.id)?;
             defined_func_il.clauses = defined_func_stored_il.clauses;
             defined_func_il.else_clause = defined_func_stored_il.else_clause;
@@ -2777,6 +2828,7 @@ fn populate_defs(mut ctx: Context, defs_il: il::Spec) -> Result<il::Spec, ElabEr
     defs_il
         .into_iter()
         .map(|def_il| {
+            // Only relations and functions collect bodies
             let def_kind_il = match def_il.node {
                 il::DefKind::Rel(rel_def_il) => {
                     il::DefKind::Rel(populate_rel(&mut ctx, rel_def_il, &def_il.span)?)

@@ -50,6 +50,7 @@ impl Context {
     /// Creates a context with the primitive meta-variables
     /// `bool`, `nat`, `int`, and `text` bound to their types.
     pub(super) fn new() -> Self {
+        // Primitive types are predeclared meta-variables
         let mut menv = MEnv::new();
         for (name, typ) in [
             ("bool", typ::make::bool()),
@@ -145,6 +146,7 @@ impl Context {
             .rule_groups
             .iter()
             .any(|group| group.node.id.node == groupid.node)
+            // The otherwise group counts as a group too
             || defined_rel_il
                 .else_group
                 .as_ref()

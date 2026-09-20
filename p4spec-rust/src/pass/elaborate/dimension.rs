@@ -105,6 +105,7 @@ impl DimContext {
 /// Collects identifier occurrences of an expression under its iterations.
 fn infer_exp(dim_ctx: &mut DimContext, exp: &ast::Exp, iters: &[ast::Iter]) {
     match &exp.node {
+        // Literals mention no identifiers
         ast::ExpKind::Bool(_) | ast::ExpKind::Num(_) | ast::ExpKind::Text(_) => {}
         // An identifier occurs at its own type under the enclosing iterations
         ast::ExpKind::Id(id) => {
