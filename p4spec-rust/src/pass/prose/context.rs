@@ -1,7 +1,5 @@
 //! Definition and hint state for prose conversion
 
-use std::collections::BTreeMap;
-
 use crate::lang::{
     common::{notation::mixop::Mixop, source::Span},
     data::typ,
@@ -10,20 +8,11 @@ use crate::lang::{
     pl::annot::Hints,
     sl::ast::{self as sl, Id},
 };
-use crate::runtime::envs::algo::MEnv;
+use crate::runtime::envs::{algo::MEnv, prosify::HEnv};
 
 use super::{ProseError, ProseErrorKind};
 
 // == Context
-
-#[derive(Debug, Eq, Ord, PartialEq, PartialOrd)]
-enum HintKey {
-    Case(String, Mixop),
-    Func(String),
-    Rel(String),
-}
-
-type HEnv = BTreeMap<HintKey, Hints>;
 
 #[derive(Debug)]
 pub(super) struct Context {
@@ -46,7 +35,7 @@ impl Context {
             let id = crate::phrase! { node: text_name.to_owned(), span: Span::default() };
             menv.insert(id, typ);
         }
-        Self { id_namespace: None, henv: HEnv::new(), menv }
+        Self { id_namespace: None, henv: HEnv::default(), menv }
     }
 
     // - Namespace
@@ -64,16 +53,15 @@ impl Context {
     // - Hint lookup
 
     pub(super) fn hints_func(&self, id_func: &Id) -> Option<&Hints> {
-        self.henv.get(&HintKey::Func(id_func.node.clone()))
+        self.henv.get_func(id_func)
     }
 
     pub(super) fn hints_rel(&self, id_rel: &Id) -> Option<&Hints> {
-        self.henv.get(&HintKey::Rel(id_rel.node.clone()))
+        self.henv.get_rel(id_rel)
     }
 
     pub(super) fn hints_case(&self, id_typ: &Id, mixop: &Mixop) -> Option<&Hints> {
-        self.henv
-            .get(&HintKey::Case(id_typ.node.clone(), mixop.clone()))
+        self.henv.get_case(id_typ, mixop)
     }
 
     // - Metavariables
@@ -97,7 +85,7 @@ impl Context {
 
     // - Hint loading
 
-    fn load_hints(&mut self, key: HintKey, hints_sl: &[sl::Hint]) -> Result<(), ProseError> {
+    fn load_hints(hints_sl: &[sl::Hint]) -> Result<Hints, ProseError> {
         let mut hints = Hints::default();
         for (id_hint, exp_hint) in hints_sl {
             let text_hint = id_hint.node.as_str();
@@ -129,8 +117,7 @@ impl Context {
                 _ => {}
             }
         }
-        self.henv.insert(key, hints);
-        Ok(())
+        Ok(hints)
     }
 
     // - Definition loading
@@ -171,8 +158,9 @@ impl Context {
             return Ok(());
         };
         for (not_typ, _, hints_sl) in cases {
-            let key = HintKey::Case(def_typ_sl.id.node.clone(), not_typ.node.to_mixop());
-            self.load_hints(key, hints_sl)?;
+            let hints = Self::load_hints(hints_sl)?;
+            self.henv
+                .insert_case(&def_typ_sl.id, &not_typ.node.to_mixop(), hints);
         }
         Ok(())
     }
@@ -186,8 +174,9 @@ impl Context {
             sl::RelDef::Extern(def_rel_sl) => (&def_rel_sl.id, &def_rel_sl.hints),
             sl::RelDef::Defined(def_rel_sl) => (&def_rel_sl.id, &def_rel_sl.hints),
         };
-        let key = HintKey::Rel(id_rel.node.clone());
-        self.load_hints(key, hints_sl)
+        let hints = Self::load_hints(hints_sl)?;
+        self.henv.insert_rel(id_rel, hints);
+        Ok(())
     }
 
     fn load_func_def(&mut self, def_func_sl: &sl::MetaFuncDef) -> Result<(), ProseError> {
@@ -197,8 +186,9 @@ impl Context {
             sl::MetaFuncDef::Table(def_func_sl) => (&def_func_sl.id, &def_func_sl.hints),
             sl::MetaFuncDef::Defined(def_func_sl) => (&def_func_sl.id, &def_func_sl.hints),
         };
-        let key = HintKey::Func(id_func.node.clone());
-        self.load_hints(key, hints_sl)
+        let hints = Self::load_hints(hints_sl)?;
+        self.henv.insert_func(id_func, hints);
+        Ok(())
     }
 
     pub(super) fn load(spec_sl: &sl::Spec) -> Result<Self, ProseError> {
