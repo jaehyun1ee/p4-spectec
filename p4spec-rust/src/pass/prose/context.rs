@@ -97,7 +97,7 @@ impl Context {
 
     // - Hint loading
 
-    fn load_hints(hints_sl: &[sl::Hint]) -> Result<Hints, ProseError> {
+    fn load_hints(&mut self, key: HintKey, hints_sl: &[sl::Hint]) -> Result<(), ProseError> {
         let mut hints = Hints::default();
         for (id_hint, exp_hint) in hints_sl {
             let text_hint = id_hint.node.as_str();
@@ -129,73 +129,82 @@ impl Context {
                 _ => {}
             }
         }
-        Ok(hints)
+        self.henv.insert(key, hints);
+        Ok(())
     }
 
     // - Definition loading
 
+    fn load_def(&mut self, def_sl: &sl::Def) -> Result<(), ProseError> {
+        match &def_sl.node {
+            sl::DefKind::Typ(def_typ_sl) => self.load_typ_def(def_typ_sl),
+            sl::DefKind::Var(def_var_sl) => self.load_var_def(def_var_sl),
+            sl::DefKind::Rel(def_rel_sl) => self.load_rel_def(def_rel_sl),
+            sl::DefKind::MetaFunc(def_func_sl) => self.load_func_def(def_func_sl),
+        }
+    }
+
+    fn load_typ_def(&mut self, def_typ_sl: &sl::TypDef) -> Result<(), ProseError> {
+        match def_typ_sl {
+            sl::TypDef::Extern(def_typ_sl) => self.load_extern_typ_def(def_typ_sl),
+            sl::TypDef::Defined(def_typ_sl) => self.load_defined_typ_def(def_typ_sl),
+        }
+    }
+
+    fn load_extern_typ_def(&mut self, def_typ_sl: &sl::ExternTyp) -> Result<(), ProseError> {
+        let typ = crate::phrase! {
+            node: il::ast::TypKind::Var(def_typ_sl.id.clone(), Vec::new()),
+            span: def_typ_sl.id.span.clone(),
+        };
+        self.add_metavar(def_typ_sl.id.clone(), typ)
+    }
+
+    fn load_defined_typ_def(&mut self, def_typ_sl: &sl::DefinedTyp) -> Result<(), ProseError> {
+        if def_typ_sl.tparams.is_empty() {
+            let typ = crate::phrase! {
+                node: il::ast::TypKind::Var(def_typ_sl.id.clone(), Vec::new()),
+                span: def_typ_sl.id.span.clone(),
+            };
+            self.add_metavar(def_typ_sl.id.clone(), typ)?;
+        }
+        let il::ast::DefTypKind::Variant(cases) = &def_typ_sl.def_typ.node else {
+            return Ok(());
+        };
+        for (not_typ, _, hints_sl) in cases {
+            let key = HintKey::Case(def_typ_sl.id.node.clone(), not_typ.node.to_mixop());
+            self.load_hints(key, hints_sl)?;
+        }
+        Ok(())
+    }
+
+    fn load_var_def(&mut self, def_var_sl: &sl::VarDef) -> Result<(), ProseError> {
+        self.add_metavar(def_var_sl.id.clone(), def_var_sl.typ.clone())
+    }
+
+    fn load_rel_def(&mut self, def_rel_sl: &sl::RelDef) -> Result<(), ProseError> {
+        let (id_rel, hints_sl) = match def_rel_sl {
+            sl::RelDef::Extern(def_rel_sl) => (&def_rel_sl.id, &def_rel_sl.hints),
+            sl::RelDef::Defined(def_rel_sl) => (&def_rel_sl.id, &def_rel_sl.hints),
+        };
+        let key = HintKey::Rel(id_rel.node.clone());
+        self.load_hints(key, hints_sl)
+    }
+
+    fn load_func_def(&mut self, def_func_sl: &sl::MetaFuncDef) -> Result<(), ProseError> {
+        let (id_func, hints_sl) = match def_func_sl {
+            sl::MetaFuncDef::Extern(def_func_sl) => (&def_func_sl.id, &def_func_sl.hints),
+            sl::MetaFuncDef::Builtin(def_func_sl) => (&def_func_sl.id, &def_func_sl.hints),
+            sl::MetaFuncDef::Table(def_func_sl) => (&def_func_sl.id, &def_func_sl.hints),
+            sl::MetaFuncDef::Defined(def_func_sl) => (&def_func_sl.id, &def_func_sl.hints),
+        };
+        let key = HintKey::Func(id_func.node.clone());
+        self.load_hints(key, hints_sl)
+    }
+
     pub(super) fn load(spec_sl: &sl::Spec) -> Result<Self, ProseError> {
         let mut ctx = Self::init();
         for def_sl in spec_sl {
-            match &def_sl.node {
-                sl::DefKind::Typ(sl::TypDef::Extern(def_typ_sl)) => {
-                    let typ = crate::phrase! {
-                        node: il::ast::TypKind::Var(def_typ_sl.id.clone(), Vec::new()),
-                        span: def_typ_sl.id.span.clone(),
-                    };
-                    ctx.add_metavar(def_typ_sl.id.clone(), typ)?;
-                }
-                sl::DefKind::Typ(sl::TypDef::Defined(def_typ_sl)) => {
-                    if def_typ_sl.tparams.is_empty() {
-                        let typ = crate::phrase! {
-                            node: il::ast::TypKind::Var(def_typ_sl.id.clone(), Vec::new()),
-                            span: def_typ_sl.id.span.clone(),
-                        };
-                        ctx.add_metavar(def_typ_sl.id.clone(), typ)?;
-                    }
-                    if let il::ast::DefTypKind::Variant(cases) = &def_typ_sl.def_typ.node {
-                        for (not_typ, _, hints_sl) in cases {
-                            let key =
-                                HintKey::Case(def_typ_sl.id.node.clone(), not_typ.node.to_mixop());
-                            let hints = Self::load_hints(hints_sl)?;
-                            ctx.henv.insert(key, hints);
-                        }
-                    }
-                }
-                sl::DefKind::Var(def_var_sl) => {
-                    ctx.add_metavar(def_var_sl.id.clone(), def_var_sl.typ.clone())?;
-                }
-                sl::DefKind::Rel(sl::RelDef::Extern(def_rel_sl)) => {
-                    let key = HintKey::Rel(def_rel_sl.id.node.clone());
-                    let hints = Self::load_hints(&def_rel_sl.hints)?;
-                    ctx.henv.insert(key, hints);
-                }
-                sl::DefKind::Rel(sl::RelDef::Defined(def_rel_sl)) => {
-                    let key = HintKey::Rel(def_rel_sl.id.node.clone());
-                    let hints = Self::load_hints(&def_rel_sl.hints)?;
-                    ctx.henv.insert(key, hints);
-                }
-                sl::DefKind::MetaFunc(sl::MetaFuncDef::Extern(def_func_sl)) => {
-                    let key = HintKey::Func(def_func_sl.id.node.clone());
-                    let hints = Self::load_hints(&def_func_sl.hints)?;
-                    ctx.henv.insert(key, hints);
-                }
-                sl::DefKind::MetaFunc(sl::MetaFuncDef::Builtin(def_func_sl)) => {
-                    let key = HintKey::Func(def_func_sl.id.node.clone());
-                    let hints = Self::load_hints(&def_func_sl.hints)?;
-                    ctx.henv.insert(key, hints);
-                }
-                sl::DefKind::MetaFunc(sl::MetaFuncDef::Table(def_func_sl)) => {
-                    let key = HintKey::Func(def_func_sl.id.node.clone());
-                    let hints = Self::load_hints(&def_func_sl.hints)?;
-                    ctx.henv.insert(key, hints);
-                }
-                sl::DefKind::MetaFunc(sl::MetaFuncDef::Defined(def_func_sl)) => {
-                    let key = HintKey::Func(def_func_sl.id.node.clone());
-                    let hints = Self::load_hints(&def_func_sl.hints)?;
-                    ctx.henv.insert(key, hints);
-                }
-            }
+            ctx.load_def(def_sl)?;
         }
         Ok(ctx)
     }
