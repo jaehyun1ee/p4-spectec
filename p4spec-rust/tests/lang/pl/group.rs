@@ -105,15 +105,15 @@ fn test_group_collection_preserves_depth_first_branch_order_and_payloads() {
         })),
     ];
 
-    let rule_groups = pl::group::collect_groups(&block);
+    let rulegroups = pl::group::collect_rulegroups(&block);
     assert_eq!(
-        rule_groups
+        rulegroups
             .iter()
-            .map(|rule_group| rule_group.id_rulegroup.node.as_str())
+            .map(|rulegroup| rulegroup.id_rulegroup.node.as_str())
             .collect::<Vec<_>>(),
         vec!["a", "b", "c", "d", "e", "f", "g", "h", "i"]
     );
-    assert_eq!(rule_groups[0].hints.prose, Some(alter::AlterationHint::Text("hint-a".to_owned())));
-    assert_eq!(rule_groups[0].id_rel.node, "relation");
-    assert_eq!(rule_groups[0].exps[0].node.span, span("a"));
+    assert_eq!(rulegroups[0].hints.prose, Some(alter::AlterationHint::Text("hint-a".to_owned())));
+    assert_eq!(rulegroups[0].id_rel.node, "relation");
+    assert_eq!(rulegroups[0].exps[0].node.span, span("a"));
 }

@@ -18,49 +18,52 @@ pub struct RuleGroup<'a> {
 // == Collection
 
 /// Collects nested rule groups in depth-first source order
-pub fn collect_groups(block: &BlockDispatch) -> Vec<RuleGroup<'_>> {
-    let mut rule_groups = Vec::new();
-    collect_groups_from_block(block, &mut rule_groups);
-    rule_groups
+pub fn collect_rulegroups(block: &BlockDispatch) -> Vec<RuleGroup<'_>> {
+    let mut rulegroups = Vec::new();
+    collect_rulegroups_from_block(block, &mut rulegroups);
+    rulegroups
 }
 
-fn collect_groups_from_block<'a>(block: &'a BlockDispatch, rule_groups: &mut Vec<RuleGroup<'a>>) {
+fn collect_rulegroups_from_block<'a>(
+    block: &'a BlockDispatch,
+    rulegroups: &mut Vec<RuleGroup<'a>>,
+) {
     for instr in block {
-        collect_groups_from_instr(instr, rule_groups);
+        collect_rulegroups_from_instr(instr, rulegroups);
     }
 }
 
-fn collect_groups_from_instr<'a>(
+fn collect_rulegroups_from_instr<'a>(
     instr: &'a Instr<InstrDispatch>,
-    rule_groups: &mut Vec<RuleGroup<'a>>,
+    rulegroups: &mut Vec<RuleGroup<'a>>,
 ) {
     match &instr.node.node {
-        InstrKind::If(IfInstr { block, .. }) => collect_groups_from_block(block, rule_groups),
+        InstrKind::If(IfInstr { block, .. }) => collect_rulegroups_from_block(block, rulegroups),
         InstrKind::Hold(HoldInstr { hold_case, .. }) => match hold_case {
             HoldCase::Both(block_hold, block_not_hold) => {
-                collect_groups_from_block(block_hold, rule_groups);
-                collect_groups_from_block(block_not_hold, rule_groups);
+                collect_rulegroups_from_block(block_hold, rulegroups);
+                collect_rulegroups_from_block(block_not_hold, rulegroups);
             }
             HoldCase::Hold(block, _) | HoldCase::NotHold(block, _) => {
-                collect_groups_from_block(block, rule_groups);
+                collect_rulegroups_from_block(block, rulegroups);
             }
         },
         InstrKind::Case(CaseInstr { cases, .. }) => {
             for case in cases {
-                collect_groups_from_block(&case.block, rule_groups);
+                collect_rulegroups_from_block(&case.block, rulegroups);
             }
         }
         InstrKind::Let(..) | InstrKind::Debug(_) | InstrKind::Destruct(..) => {}
         InstrKind::CheckLetSub(CheckLetSubInstr { block, .. })
         | InstrKind::CheckLetMatch(CheckLetMatchInstr { block, .. })
         | InstrKind::OptionGet(OptionGetInstr { block, .. }) => {
-            collect_groups_from_block(block, rule_groups);
+            collect_rulegroups_from_block(block, rulegroups);
         }
         InstrKind::Tier(TierInstr {
             tier: InstrDispatch::Route(RouteDispatchInstr { blocks }),
         }) => {
             for block in blocks {
-                collect_groups_from_block(block, rule_groups);
+                collect_rulegroups_from_block(block, rulegroups);
             }
         }
         InstrKind::Tier(TierInstr {
@@ -72,7 +75,7 @@ fn collect_groups_from_instr<'a>(
                     exps_input,
                     block,
                 }),
-        }) => rule_groups.push(RuleGroup {
+        }) => rulegroups.push(RuleGroup {
             hints: &instr.hints,
             id_rulegroup: id_group,
             id_rel,
