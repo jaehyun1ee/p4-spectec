@@ -1,9 +1,10 @@
-//! Runner-facing interface for stateful specification builtins.
+//! Runner-facing interface for stateful specification builtins
 //!
-//! Calls are delegated to an interface implementation and report whether they
-//! changed interface state. For example, `$fresh_typeId` returns `true` with
-//! its fresh identifier, while a pure builtin such as `$sum_nat` returns
-//! `false` with its value. Failures remain independent of source locations;
+//! Calls are delegated to an interface implementation
+//! and report whether they changed interface state.
+//! For example, `$fresh_typeId` returns `true` with its fresh identifier,
+//! while a pure builtin such as `$sum_nat` returns `false` with its value.
+//! Failures remain independent of source locations;
 //! the interpreter that evaluates a call owns that location.
 
 use thiserror::Error;
@@ -16,17 +17,22 @@ use crate::{
 
 // == Interface errors
 
+/// A failure inside the builtin interface.
 #[derive(Clone, Debug, Error, Eq, PartialEq)]
 pub enum InterfaceError {
+    /// No interface is installed.
     #[error("interface is not configured")]
     NotConfigured,
+    /// A builtin failed.
     #[error(transparent)]
     Builtin(#[from] Box<BuiltinError>),
 }
 
 // == Interface contract
 
+/// Stateful specification builtins, called by name.
 pub trait Interface {
+    /// Calls a builtin; the flag reports an interface state change.
     fn call_builtin(
         &mut self,
         arena: &mut ValueArena,
@@ -35,11 +41,13 @@ pub trait Interface {
         values: &[Value],
     ) -> Result<(Value, bool), InterfaceError>;
 
+    /// Resets builtin state between programs.
     fn clear(&mut self);
 }
 
 // == Standard implementations
 
+/// The standard builtin table.
 pub struct BuiltinInterface {
     builtins: Builtins,
 }
@@ -68,6 +76,7 @@ impl Interface for BuiltinInterface {
     }
 }
 
+/// An interface with no builtins; every call fails as not configured.
 pub struct NullInterface;
 
 impl Interface for NullInterface {
