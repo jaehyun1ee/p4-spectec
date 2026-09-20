@@ -1,4 +1,10 @@
 //! Iterated expression evaluation and binding collection
+//!
+//! `map` evaluates a body once per element of the iterated variables
+//! and collects the results into an option or list value;
+//! `yield` runs a premise the same way
+//! and gathers the variables it binds
+//! into lists or options one iteration outward.
 
 use std::rc::Rc;
 
@@ -19,6 +25,7 @@ use crate::{
 
 // = Expression mapping
 
+/// Maps `eval` over the iterated variables, building an option or list value.
 pub fn map<Ctx, Interp, Iface, Ext>(
     runner_ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     ctx: &Ctx,
@@ -33,9 +40,11 @@ where
     Iface: Interface,
     Ext: Extern,
 {
+    // Slots of the variables one iteration outward
     let vars = &exp_iter.vars;
     let vars_outer = iterate_vars(ctx, vars, exp_iter.iter);
     let value = match exp_iter.iter {
+        // Option: evaluate once with the payloads, or produce none
         ast::Iter::Opt => {
             let values = unwrap_from_result!(
                 ctx.find_opt_values_by_var(runner_ctx.arena(), &vars_outer),
@@ -59,6 +68,7 @@ where
             );
             // Copy handles before the callback can allocate in the arena
             let values_by_var: Vec<_> = values_by_var.into_iter().map(<[Value]>::to_vec).collect();
+            // Evaluate row by row, binding each variable to its element
             let len = values_by_var.first().map_or(0, Vec::len);
             let mut ctx_sub = ctx.clone();
             let mut values = Vec::with_capacity(len);
@@ -76,6 +86,7 @@ where
 
 // = Binding iteration
 
+/// Runs `eval` per element and gathers its bindings one iteration outward.
 pub fn r#yield<Ctx, Interp, Iface, Ext>(
     runner_ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     mut ctx: Ctx,
@@ -95,6 +106,7 @@ where
     let vars_bind_outer = iterate_vars(&ctx, vars_bind, prem_iter.iter);
     let mut values_bind_by_var = vec![Vec::new(); vars_bind.len()];
     match prem_iter.iter {
+        // Option: run once when inputs are present; outputs become options
         ast::Iter::Opt => {
             let values = unwrap_from_result!(
                 ctx.find_opt_values_by_var(runner_ctx.arena(), &vars_bound_outer),
@@ -114,6 +126,7 @@ where
                 values_bind_by_var
             ));
         }
+        // List: run per row, collecting each bound variable's column
         ast::Iter::List => {
             let values_by_var = unwrap_from_result!(
                 ctx.find_list_values_by_var(runner_ctx.arena(), &vars_bound_outer),
@@ -131,6 +144,7 @@ where
                 let ctx_post = unwrap!(eval(runner_ctx, ctx_sub.clone()));
                 unwrap!(ctx_post.collect_values_by_var(vars_bind, &mut values_bind_by_var));
             }
+            // Bind each output variable to its collected column
             unwrap!(ctx.bind_list_values_by_var(
                 runner_ctx.arena_mut(),
                 &vars_bind_outer,

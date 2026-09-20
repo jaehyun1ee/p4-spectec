@@ -1,4 +1,9 @@
 //! Shared expression evaluation
+//!
+//! `eval_exp` evaluates prepared syntax to arena values,
+//! nesting every failure under an evaluation trace for the expression.
+//! Operators delegate to `ops`, calls to the stage's `Invoker`,
+//! iterations to `iter::map`.
 
 use super::super::context::ReadContext;
 use super::Invoker;
@@ -31,6 +36,7 @@ use crate::interp::shared::{
 
 // = Expression evaluation
 
+/// Evaluates an expression, nesting failures under an evaluation trace.
 pub(crate) fn eval_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Extern>(
     runner_ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     ctx: &Interp::Context<'global>,
@@ -122,6 +128,7 @@ pub(crate) fn eval_exps<
 
 // - Identifier expression
 
+/// Reads the value bound to the variable's slot.
 fn eval_id_exp(ctx: &impl ReadContext, span: &Span, id: &IdSlot) -> Backtrack<Value> {
     let value = *unwrap_from_result!(
         ctx.find_value(id.slot).ok_or_else(|| {
@@ -254,6 +261,7 @@ fn eval_tuple_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: E
 
 // - Case expression
 
+/// Evaluates the arguments in notation order and rebuilds the case value.
 fn eval_case_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Extern>(
     runner_ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     ctx: &Interp::Context<'global>,
@@ -265,6 +273,7 @@ fn eval_case_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Ex
     for exp in not_exp.args() {
         values.push(unwrap!(eval_exp(runner_ctx, ctx, exp)));
     }
+    // Refill the notation with the values in argument order
     let mut values = values.into_iter();
     let case = not_exp.map(|_| values.next().expect("each argument has an evaluated value"));
     let value = unwrap_from_result!(
@@ -343,6 +352,7 @@ fn eval_cons_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Ex
 ) -> Backtrack<Value> {
     let value_head = unwrap!(eval_exp(runner_ctx, ctx, exp_head));
     let value_tail = unwrap!(eval_exp(runner_ctx, ctx, exp_tail));
+    // Prepend the head to the evaluated tail
     let values_tail = unwrap_from_result!(get::list(runner_ctx.arena(), &value_tail), span);
     let mut values = Vec::with_capacity(values_tail.len() + 1);
     values.push(value_head);
@@ -356,6 +366,7 @@ fn eval_cons_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Ex
 
 // - Concatenation expression
 
+/// Concatenates two texts or two lists.
 fn eval_cat_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Extern>(
     runner_ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     ctx: &Interp::Context<'global>,
@@ -367,10 +378,12 @@ fn eval_cat_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Ext
     let value_l = unwrap!(eval_exp(runner_ctx, ctx, exp_l));
     let value_r = unwrap!(eval_exp(runner_ctx, ctx, exp_r));
     let value = match (runner_ctx.arena().kind(&value_l), runner_ctx.arena().kind(&value_r)) {
+        // Texts concatenate
         (ValueKind::Text(text_l), ValueKind::Text(text_r)) => {
             let text = format!("{text_l}{text_r}");
             unwrap_from_result!(make::text(runner_ctx.arena_mut(), text, Span::default()), span)
         }
+        // Lists concatenate
         (ValueKind::List(values_l), ValueKind::List(values_r)) => {
             let mut values = values_l.clone();
             values.extend_from_slice(values_r);
@@ -379,6 +392,7 @@ fn eval_cat_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Ext
                 span
             )
         }
+        // Mixed operands are an error
         _ => {
             return err!(
                 Span::over(&[exp_l.span.clone(), exp_r.span.clone()]),
@@ -408,6 +422,7 @@ fn eval_mem_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Ext
 
 // - Length expression
 
+/// Length of a text in bytes or of a list in elements.
 fn eval_len_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Extern>(
     runner_ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     ctx: &Interp::Context<'global>,
@@ -415,6 +430,7 @@ fn eval_len_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Ext
 ) -> Backtrack<Value> {
     let value = unwrap!(eval_exp(runner_ctx, ctx, exp_inner));
     let len = match runner_ctx.arena().kind(&value) {
+        // Texts count bytes, lists count elements; anything else is an error
         ValueKind::Text(text) => text.len(),
         ValueKind::List(values) => values.len(),
         _ => {
@@ -471,6 +487,7 @@ fn eval_slice_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: E
     let value = unwrap!(eval_exp(runner_ctx, ctx, exp_base));
     let value_idx = unwrap!(eval_exp(runner_ctx, ctx, exp_idx));
     let value_len = unwrap!(eval_exp(runner_ctx, ctx, exp_len));
+    // Text slices report bounds errors at the index, lists at the length
     let span_bounds = if matches!(runner_ctx.arena().kind(&value), ValueKind::Text(_)) {
         &exp_idx.span
     } else {
@@ -506,10 +523,12 @@ fn eval_upd_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Ext
 
 // - Call expression
 
+/// Substitutes local plain type aliases into type arguments before a call.
 pub(crate) fn resolve_targs(
     ctx: &impl ReadContext,
     targs: &[ast::Typ],
 ) -> Result<Vec<ast::Typ>, TypeError> {
+    // Only unparameterized plain aliases in local scope are substituted
     let find_subst = |id: &ast::Id| match ctx.find_typdef_local_opt(id)? {
         TypeDef::Defined(tparams, def_typ) if tparams.is_empty() => match &def_typ.node {
             ast::DefTypKind::Plain(typ) => Some(typ),
@@ -523,6 +542,7 @@ pub(crate) fn resolve_targs(
         .collect()
 }
 
+/// Resolves type arguments, evaluates arguments, and invokes the function.
 fn eval_call_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Extern>(
     runner_ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     ctx: &Interp::Context<'global>,
@@ -537,6 +557,7 @@ fn eval_call_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Ex
 
 // - Iteration expression
 
+/// Evaluates an iterated expression; a bare iterated variable reads its slot.
 fn eval_iter_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Extern>(
     runner_ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     ctx: &Interp::Context<'global>,
@@ -546,6 +567,7 @@ fn eval_iter_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Ex
 ) -> Backtrack<Value> {
     let span = &exp.span;
     let typ = &exp.note;
+    // `x*` as an expression is just the bound value
     if let Some(var) = find_var(ctx, exp) {
         return ok!(*unwrap_from_result!(
             ctx.find_value(var.slot).ok_or_else(|| {
@@ -558,6 +580,7 @@ fn eval_iter_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Ex
             span
         ));
     }
+    // Otherwise map the body over the iterated variables
     iter::map(runner_ctx, ctx, span, typ, exp_iter, |runner_ctx, ctx_sub| {
         eval_exp(runner_ctx, ctx_sub, exp_inner)
     })

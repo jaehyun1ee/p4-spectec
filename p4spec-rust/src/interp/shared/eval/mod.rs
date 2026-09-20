@@ -1,4 +1,8 @@
 //! Shared assignment, expression, argument, and path evaluation
+//!
+//! `Invoker` is what AL and SL supply: how to call a function or a relation.
+//! Everything else here is stage-independent:
+//! `expr`, `assign`, `arg`, `path`, `ops`, and `iter`.
 
 use crate::interp::shared::prepare::ast;
 pub(crate) mod arg;
@@ -16,14 +20,16 @@ use crate::{
 
 // = Invocation
 
-/// AL/SL-specific function and relation invocation
+/// AL/SL-specific function and relation invocation.
 pub(crate) trait Invoker<Iface, Ext>: Interpreter<Iface, Ext, Error = Error>
 where
     Iface: Interface,
     Ext: Extern,
 {
+    /// The stage's evaluation context.
     type Context<'global>: IterContext;
 
+    /// Calls function `id` with type arguments and evaluated argument values.
     fn invoke_func<'global>(
         runner_ctx: &mut RunnerContext<'_, Self, Iface, Ext>,
         ctx: &Self::Context<'global>,
@@ -32,6 +38,7 @@ where
         values: &[Value],
     ) -> Backtrack<Value>;
 
+    /// Calls relation `id` with its evaluated inputs, returning the outputs.
     fn invoke_rel<'global>(
         runner_ctx: &mut RunnerContext<'_, Self, Iface, Ext>,
         ctx: &Self::Context<'global>,

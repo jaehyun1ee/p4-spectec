@@ -1,4 +1,7 @@
 //! Shared argument evaluation
+//!
+//! An expression argument evaluates to its value;
+//! a function argument `$f` becomes a function value carrying the type of `$f`.
 
 use super::super::context::ReadContext;
 use super::Invoker;
@@ -19,6 +22,7 @@ use crate::interp::shared::{
     error::{ErrorKind, TraceErrorKind},
 };
 
+/// Evaluates one argument, nesting failures under an evaluation trace.
 fn eval_arg<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Extern>(
     runner_ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     ctx: &Interp::Context<'global>,
@@ -33,6 +37,7 @@ fn eval_arg<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Extern>
     })
 }
 
+/// Evaluates arguments left to right.
 pub(crate) fn eval_args<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Extern>(
     runner_ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     ctx: &Interp::Context<'global>,
@@ -47,12 +52,14 @@ pub(crate) fn eval_args<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, 
 
 // - Function argument
 
+/// Builds the function value for a function argument from the function's type.
 fn eval_def_arg(
     arena: &mut ValueArena,
     ctx: &impl ReadContext,
     id: &ast::Id,
     span: &Span,
 ) -> Backtrack<Value> {
+    // A function value carries the referenced function's type
     let typ_func = unwrap_from_result!(ctx.find_func_typ(id), span);
     let value = unwrap_from_result!(
         make::func(

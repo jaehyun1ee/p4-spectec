@@ -1,4 +1,10 @@
 //! Located interpreter lookup, host, and execution failures
+//!
+//! An `Error` is a kind, a span, and the child failures that led to it.
+//! `ErrorKind` groups kinds by origin:
+//! context lookups, runtime value operations, host interfaces,
+//! and each evaluation stage.
+//! `Display` prints the trace as a tree and folds runs deeper than ten levels.
 
 use crate::runner::{ExternError, InterfaceError};
 use num_bigint::BigInt;
@@ -20,6 +26,7 @@ use crate::{
     },
 };
 
+/// Namespace of a failed context lookup.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum EntityKind {
     Value,
@@ -41,28 +48,39 @@ impl fmt::Display for EntityKind {
     }
 }
 
+/// Origin category of a failure.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum ErrorKind {
     #[error(transparent)]
+    /// Binding lookups.
     Context(#[from] ContextErrorKind),
     #[error(transparent)]
+    /// Value and type operations.
     Runtime(#[from] RuntimeErrorKind),
     #[error(transparent)]
+    /// Interface and extern calls.
     Host(#[from] HostErrorKind),
     #[error(transparent)]
+    /// Destructuring assignment.
     Assign(#[from] AssignErrorKind),
     #[error(transparent)]
+    /// Expression evaluation.
     Expr(#[from] ExprErrorKind),
     #[error(transparent)]
+    /// Premise checks.
     Prem(#[from] PremErrorKind),
     #[error(transparent)]
+    /// Function and relation invocation.
     Call(#[from] CallErrorKind),
     #[error(transparent)]
+    /// Type guards at call boundaries.
     Guard(#[from] GuardErrorKind),
     #[error(transparent)]
+    /// Trace nodes grouping child failures.
     Trace(#[from] TraceErrorKind),
 }
 
+/// Failures of context lookups and iterated bindings.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum ContextErrorKind {
     #[error("{kind} `{name}` is undefined")]
@@ -75,6 +93,7 @@ pub enum ContextErrorKind {
     IterationLengthMismatch { expected: usize, actual: usize },
 }
 
+/// Failures lifted from value, numeric, type, and matching operations.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum RuntimeErrorKind {
     #[error(transparent)]
@@ -93,6 +112,7 @@ pub enum RuntimeErrorKind {
     Match(MatchError),
 }
 
+/// Failures reported by the host interface or externs.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum HostErrorKind {
     #[error(transparent)]
@@ -101,6 +121,7 @@ pub enum HostErrorKind {
     Extern(#[from] ExternError),
 }
 
+/// Failures of destructuring assignment.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum AssignErrorKind {
     #[error("match failed {exp} <- {value}")]
@@ -119,6 +140,7 @@ pub enum AssignErrorKind {
     DefinitionMismatch { value: String, def: String },
 }
 
+/// Failures of built-in expression operators.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum ExprErrorKind {
     #[error("concatenation expects either two texts or two lists")]
@@ -151,6 +173,7 @@ pub enum ExprErrorKind {
     ListSliceUpdateLengthMismatch { len: usize, actual: usize },
 }
 
+/// Premises that did not hold.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum PremErrorKind {
     #[error("condition {exp} was not met")]
@@ -161,6 +184,7 @@ pub enum PremErrorKind {
     NotHoldConditionNotMet { relation: String },
 }
 
+/// Type guards violated at call boundaries.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum GuardErrorKind {
     #[error("relation input of {relation} does not match the expected type")]
@@ -173,6 +197,7 @@ pub enum GuardErrorKind {
     FunctionOutputMismatch { func: String },
 }
 
+/// Failures of invocation: arity, flow, and nondeterminism.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum CallErrorKind {
     #[error("nondeterministic instruction evaluation")]
@@ -201,6 +226,7 @@ pub enum CallErrorKind {
     FunctionNondeterminism { func: String, first: usize, second: usize },
 }
 
+/// Grouping nodes in a failure trace.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum TraceErrorKind {
     #[error("execution failed")]
@@ -212,11 +238,13 @@ pub enum TraceErrorKind {
 }
 
 impl TraceErrorKind {
+    /// Names an invocation trace `$f<T>` for function `id` with `targs`.
     pub(crate) fn function(
         id: &crate::lang::il::ast::Id,
         targs: &[crate::lang::il::ast::Typ],
     ) -> Self {
         TraceErrorKind::Invocation {
+            // Show type arguments only when present
             text: if targs.is_empty() {
                 format!("${}", id.node)
             } else {
@@ -234,15 +262,19 @@ impl TraceErrorKind {
     }
 }
 
+/// A located failure with the child failures that led to it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Error {
     pub kind: Box<ErrorKind>,
     pub span: Span,
+    /// Failures of the alternatives or sub-steps that led here.
     pub children: Vec<Error>,
 }
 
 impl Error {
+    /// Height of the trace tree.
     pub(crate) fn depth(&self) -> usize {
+        // Iterative walk: deep traces would overflow a recursive one
         let mut depth = 0;
         let mut pending = vec![(self, 1)];
         while let Some((error, depth_error)) = pending.pop() {
@@ -256,6 +288,7 @@ impl Error {
         Self { kind: Box::new(kind), span, children: Vec::new() }
     }
 
+    /// An unlocated root grouping the traces of a failed execution.
     pub fn execution(children: Vec<Error>) -> Self {
         Self {
             kind: Box::new(ErrorKind::Trace(TraceErrorKind::Execution)),
@@ -264,6 +297,7 @@ impl Error {
         }
     }
 
+    /// Locates an unlocated error at `span`; guard errors keep their own.
     pub fn at_if_missing(mut self, span: &Span) -> Self {
         if self.span == Span::default() && !matches!(*self.kind, ErrorKind::Guard(_)) {
             self.span = span.clone();
@@ -271,10 +305,12 @@ impl Error {
         self
     }
 
+    /// An undefined-entity lookup failure.
     pub(crate) fn undefined(kind: EntityKind, name: String, span: Span) -> Self {
         Self::new(ErrorKind::Context(ContextErrorKind::Undefined { kind, name }), span)
     }
 
+    /// A duplicate-definition failure.
     pub(crate) fn duplicate(kind: EntityKind, name: String, span: Span) -> Self {
         Self::new(ErrorKind::Context(ContextErrorKind::Duplicate { kind, name }), span)
     }
@@ -286,6 +322,7 @@ impl From<ErrorKind> for Error {
     }
 }
 
+/// Lifts a host or runtime error type into the matching `ErrorKind` variant.
 macro_rules! from_error {
     ($error:ty, $category:ident, $kind:ident, $variant:ident) => {
         impl From<$error> for Error {
@@ -322,6 +359,7 @@ impl From<MatchError> for Error {
     }
 }
 
+/// Prints a `MatchError` without its spans.
 struct MatchDisplay<'a>(&'a MatchError);
 impl fmt::Display for MatchDisplay<'_> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -349,6 +387,7 @@ impl std::error::Error for Error {
 
 impl fmt::Display for Error {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // An execution root prints its children directly
         if matches!(*self.kind, ErrorKind::Trace(TraceErrorKind::Execution)) {
             fmt::Display::fmt(&TraceDisplay(&self.children), formatter)
         } else {
@@ -357,9 +396,11 @@ impl fmt::Display for Error {
     }
 }
 
+/// Prints a trace list as a tree, folding subtrees deeper than ten levels.
 struct TraceDisplay<'a>(&'a [Error]);
 impl fmt::Display for TraceDisplay<'_> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // First pass: height of every subtree
         let mut depths = std::collections::HashMap::<*const Error, usize>::new();
         let mut pending = self
             .0
@@ -380,6 +421,7 @@ impl fmt::Display for TraceDisplay<'_> {
                 pending.extend(error.children.iter().map(|error| (error, false)));
             }
         }
+        // Second pass: print depth-first, folding tall subtrees into a count
         let mut pending = self
             .0
             .iter()
@@ -388,6 +430,7 @@ impl fmt::Display for TraceDisplay<'_> {
             .map(|(idx, error)| (error, idx, self.0.len(), String::new(), 0, true))
             .collect::<Vec<_>>();
         while let Some((error, idx, len, indent, run, root)) = pending.pop() {
+            // Skip this level, counting it as an omitted trace
             if !root && depths[&(error as *const Error)] > 10 {
                 pending.extend(
                     error
@@ -401,6 +444,7 @@ impl fmt::Display for TraceDisplay<'_> {
                 );
                 continue;
             }
+            // Report the omitted run before the next printed node
             if run > 0 {
                 writeln!(formatter, "{indent}│ ··· omitting {run} traces ···")?;
             }
@@ -418,6 +462,7 @@ impl fmt::Display for TraceDisplay<'_> {
                 write!(formatter, "{}. ", idx + 1)?;
             }
             writeln!(formatter, "{}", error.kind)?;
+            // Children indent under this node
             let indent_sub = if boundary {
                 indent
             } else {
@@ -440,6 +485,7 @@ impl fmt::Display for TraceDisplay<'_> {
 
 impl Drop for Error {
     fn drop(&mut self) {
+        // Flatten the tree iteratively so deep traces do not overflow the stack
         let mut pending = std::mem::take(&mut self.children);
         while let Some(mut error) = pending.pop() {
             pending.append(&mut error.children);
