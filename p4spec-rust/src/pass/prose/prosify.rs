@@ -14,11 +14,13 @@ use super::{Context, ProseError, ProseErrorKind};
 // == Hint lookup
 
 fn hints_of_call_exp(ctx: &Context, id_func: &sl::Id) -> annot::Hints {
-    let hints_func = ctx.hints_func(id_func);
+    let Some(hints_func) = ctx.hints_func(id_func) else {
+        return annot::Hints::default();
+    };
     annot::Hints {
-        prose_in: hints_func.prose_in,
-        prose_true: hints_func.prose_true,
-        prose_false: hints_func.prose_false,
+        prose_in: hints_func.prose_in.clone(),
+        prose_true: hints_func.prose_true.clone(),
+        prose_false: hints_func.prose_false.clone(),
         ..annot::Hints::default()
     }
 }
@@ -27,19 +29,23 @@ fn hints_of_case_exp(ctx: &Context, exp_sl: &sl::Exp, not_exp_sl: &sl::NotExp) -
     let il::TypKind::Var(id_typ, _) = exp_sl.note.as_ref() else {
         return annot::Hints::default();
     };
-    let hints_case = ctx.hints_case(id_typ, &not_exp_sl.to_mixop());
+    let Some(hints_case) = ctx.hints_case(id_typ, &not_exp_sl.to_mixop()) else {
+        return annot::Hints::default();
+    };
     annot::Hints {
-        prose: hints_case.prose,
-        prose_fields: hints_case.prose_fields,
+        prose: hints_case.prose.clone(),
+        prose_fields: hints_case.prose_fields.clone(),
         ..annot::Hints::default()
     }
 }
 
 fn hints_of_hold_instr(ctx: &Context, id_rel: &sl::Id) -> annot::Hints {
-    let hints_rel = ctx.hints_rel(id_rel);
+    let Some(hints_rel) = ctx.hints_rel(id_rel) else {
+        return annot::Hints::default();
+    };
     annot::Hints {
-        prose_true: hints_rel.prose_true,
-        prose_false: hints_rel.prose_false,
+        prose_true: hints_rel.prose_true.clone(),
+        prose_false: hints_rel.prose_false.clone(),
         ..annot::Hints::default()
     }
 }
@@ -49,31 +55,39 @@ fn hints_of_rule_instr(
     id_rel: &sl::Id,
     input_hint: &input::InputHint,
 ) -> annot::Hints {
-    let hints_rel = ctx.hints_rel(id_rel);
+    let Some(hints_rel) = ctx.hints_rel(id_rel) else {
+        return annot::Hints::default();
+    };
     annot::Hints {
-        prose_in: hints_rel.prose_in,
+        prose_in: hints_rel.prose_in.clone(),
         prose_out: hints_rel
             .prose_out
-            .map(|hint| alter::realign(&hint, input_hint)),
+            .as_ref()
+            .map(|hint| alter::realign(hint, input_hint)),
         ..annot::Hints::default()
     }
 }
 
 fn hints_of_result_instr(ctx: &Context, input_hint: &input::InputHint) -> annot::Hints {
-    let hints_rel = ctx.hints_rel(ctx.namespace());
+    let Some(hints_rel) = ctx.hints_rel(ctx.namespace()) else {
+        return annot::Hints::default();
+    };
     annot::Hints {
         prose_out: hints_rel
             .prose_out
-            .map(|hint| alter::realign(&hint, input_hint)),
+            .as_ref()
+            .map(|hint| alter::realign(hint, input_hint)),
         ..annot::Hints::default()
     }
 }
 
 fn hints_of_group_instr(ctx: &Context) -> annot::Hints {
-    let hints_rel = ctx.hints_rel(ctx.namespace());
+    let Some(hints_rel) = ctx.hints_rel(ctx.namespace()) else {
+        return annot::Hints::default();
+    };
     annot::Hints {
-        prose_in: hints_rel.prose_in,
-        prose_true: hints_rel.prose_true,
+        prose_in: hints_rel.prose_in.clone(),
+        prose_true: hints_rel.prose_true.clone(),
         ..annot::Hints::default()
     }
 }
@@ -87,7 +101,8 @@ fn hints_of_rel_def(
     id_rel: &sl::Id,
     rel_signature: &sl::RelSignature,
 ) -> Result<annot::Hints, ProseError> {
-    let hints_rel = ctx.hints_rel(id_rel);
+    let hints_default = annot::Hints::default();
+    let hints_rel = ctx.hints_rel(id_rel).unwrap_or(&hints_default);
     let prose_out = hints_rel
         .prose_out
         .as_ref()
@@ -122,11 +137,11 @@ fn hints_of_rel_def(
         (None, None)
     };
     Ok(annot::Hints {
-        prose: hints_rel.prose,
-        prose_in: hints_rel.prose_in,
+        prose: hints_rel.prose.clone(),
+        prose_in: hints_rel.prose_in.clone(),
         prose_out,
-        prose_true: hints_rel.prose_true,
-        prose_false: hints_rel.prose_false,
+        prose_true: hints_rel.prose_true.clone(),
+        prose_false: hints_rel.prose_false.clone(),
         prose_input_exps,
         prose_output_exps,
         prose_fields: None,

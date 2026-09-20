@@ -26,7 +26,6 @@ struct Binding {
     vars_outer: Vec<sl::Var>,
     var_new: sl::Var,
     iter_exps: Vec<sl::ExpIter>,
-    iter_instrs: Vec<sl::InstrIter>,
 }
 
 // == Variable collection
@@ -179,10 +178,7 @@ fn count_call(call_count: CallCount, exp_sl: &sl::Exp) -> CallCount {
 }
 
 fn args_reference_local(iter_locals: &IdSet, args_sl: &[sl::Arg]) -> bool {
-    args_sl
-        .free()
-        .iter()
-        .any(|id| iter_locals.iter().any(|id_local| id_local.node == id.node))
+    args_sl.free().iter().any(|id| iter_locals.contains(id))
 }
 
 fn extract_root_call(
@@ -221,7 +217,6 @@ fn extract_root_call(
         vars_outer: Vec::new(),
         var_new,
         iter_exps: Vec::new(),
-        iter_instrs: Vec::new(),
     })
 }
 
@@ -485,24 +480,6 @@ fn iter_locals_exp(iter_exps: &[sl::ExpIter]) -> IdSet {
     ids_of_vars(iter_exps.iter().flat_map(|(_, vars)| vars))
 }
 
-fn extract_first_exp(
-    exp_sl: &mut sl::Exp,
-    call_count: CallCount,
-    iter_locals: &IdSet,
-    ids_used: &mut IdSet,
-) -> Option<Binding> {
-    extract_exp(exp_sl, call_count, iter_locals, ids_used)
-}
-
-fn extract_first_exps(
-    exps_sl: &mut [sl::Exp],
-    call_count: CallCount,
-    iter_locals: &IdSet,
-    ids_used: &mut IdSet,
-) -> Option<Binding> {
-    extract_exps(exps_sl, call_count, iter_locals, ids_used)
-}
-
 // == Instruction expansion
 
 fn extract_instr(
@@ -511,7 +488,7 @@ fn extract_instr(
 ) -> Result<Option<Binding>, ProseError> {
     let span = instr_sl.span.clone();
     Ok(match &mut instr_sl.node {
-        sl::InstrKind::Let(instr_sl) => extract_first_exp(
+        sl::InstrKind::Let(instr_sl) => extract_exp(
             &mut instr_sl.exp_r,
             CallCount::No,
             &iter_locals_instr(&instr_sl.iter_instrs),
@@ -527,7 +504,7 @@ fn extract_instr(
             let (mut exps_input_sl, exps_output_sl) =
                 input::split(&instr_sl.input_hint, exps_sl)
                     .map_err(|error| ProseError::new(ProseErrorKind::Input(error), span.clone()))?;
-            let binding = extract_first_exps(
+            let binding = extract_exps(
                 &mut exps_input_sl,
                 CallCount::SkipOne,
                 &iter_locals_instr(&instr_sl.iter_instrs),
@@ -549,7 +526,7 @@ fn extract_instr(
                 .into_iter()
                 .cloned()
                 .collect::<Vec<_>>();
-            let binding = extract_first_exps(
+            let binding = extract_exps(
                 &mut exps_sl,
                 CallCount::SkipOne,
                 &iter_locals_exp(&instr_sl.iter_exps),
@@ -562,10 +539,10 @@ fn extract_instr(
             binding
         }
         sl::InstrKind::Result(instr_sl) => {
-            extract_first_exps(&mut instr_sl.exps, CallCount::No, &IdSet::new(), ids_used)
+            extract_exps(&mut instr_sl.exps, CallCount::No, &IdSet::new(), ids_used)
         }
         sl::InstrKind::Return(instr_sl) => {
-            extract_first_exp(&mut instr_sl.exp, CallCount::No, &IdSet::new(), ids_used)
+            extract_exp(&mut instr_sl.exp, CallCount::No, &IdSet::new(), ids_used)
         }
         sl::InstrKind::If(_)
         | sl::InstrKind::Case(_)
@@ -632,7 +609,7 @@ fn expand_subblocks(ids_used: &mut IdSet, instr_sl: sl::Instr) -> Result<sl::Ins
 }
 
 fn wrap_binding(binding: Binding, instr_sl: sl::Instr) -> sl::Instr {
-    let Binding { exp_l, exp_r, var_new, iter_exps, mut iter_instrs, .. } = binding;
+    let Binding { exp_l, exp_r, var_new, iter_exps, .. } = binding;
     let num_iters_enclosing = iter_exps.len();
     let num_iters_callee = var_new.iters.len() - num_iters_enclosing;
     let mut var_bind = sl::Var {
@@ -640,6 +617,7 @@ fn wrap_binding(binding: Binding, instr_sl: sl::Instr) -> sl::Instr {
         typ: var_new.typ,
         iters: var_new.iters[..num_iters_callee].to_vec(),
     };
+    let mut iter_instrs = Vec::new();
     for (iter, vars_bound) in iter_exps {
         iter_instrs.push(sl::InstrIter { iter, vars_bound, vars_bind: vec![var_bind.clone()] });
         var_bind.iters.push(iter);

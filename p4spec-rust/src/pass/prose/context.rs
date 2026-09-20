@@ -1,7 +1,11 @@
 //! Definition and hint state for prose conversion
 
 use crate::lang::{
-    common::{ds::map::IdMap, notation::mixop::Mixop, source::Span},
+    common::{
+        ds::{map::IdMap, set::IdSet},
+        notation::mixop::Mixop,
+        source::Span,
+    },
     data::typ,
     hints::{alter, fields},
     il,
@@ -22,7 +26,7 @@ pub(super) struct Context {
     hints_rel: IdMap<Hints>,
     hints_case: Vec<(String, Mixop, Hints)>,
     menv: MEnv,
-    ids_typ: IdMap<()>,
+    ids_typ: IdSet,
 }
 
 impl Context {
@@ -45,7 +49,7 @@ impl Context {
             hints_rel: IdMap::new(),
             hints_case: Vec::new(),
             menv,
-            ids_typ: IdMap::new(),
+            ids_typ: IdSet::new(),
         }
     }
 
@@ -63,22 +67,21 @@ impl Context {
 
     // - Hint lookup
 
-    pub(super) fn hints_func(&self, id_func: &Id) -> Hints {
-        self.hints_func.get(id_func).cloned().unwrap_or_default()
+    pub(super) fn hints_func(&self, id_func: &Id) -> Option<&Hints> {
+        self.hints_func.get(id_func)
     }
 
-    pub(super) fn hints_rel(&self, id_rel: &Id) -> Hints {
-        self.hints_rel.get(id_rel).cloned().unwrap_or_default()
+    pub(super) fn hints_rel(&self, id_rel: &Id) -> Option<&Hints> {
+        self.hints_rel.get(id_rel)
     }
 
-    pub(super) fn hints_case(&self, id_typ: &Id, mixop: &Mixop) -> Hints {
+    pub(super) fn hints_case(&self, id_typ: &Id, mixop: &Mixop) -> Option<&Hints> {
         self.hints_case
             .iter()
             .find(|(text_typ, mixop_case, _)| {
                 text_typ == &id_typ.node && mixop_case.syntax_eq(mixop)
             })
-            .map(|(_, _, hints)| hints.clone())
-            .unwrap_or_default()
+            .map(|(_, _, hints)| hints)
     }
 
     // - Metavariables
@@ -90,12 +93,12 @@ impl Context {
     // - Type parameters
 
     pub(super) fn validate_tparams(&self, tparams: &[il::ast::TParam]) -> Result<(), ProseError> {
-        let mut ids_typ_local = IdMap::new();
+        let mut ids_typ_local = IdSet::new();
         for id_tparam in tparams {
-            if self.ids_typ.contains_key(id_tparam) || ids_typ_local.contains_key(id_tparam) {
+            if self.ids_typ.contains(id_tparam) || ids_typ_local.contains(id_tparam) {
                 return Err(ProseError::new(ProseErrorKind::DuplicateType, id_tparam.span.clone()));
             }
-            ids_typ_local.insert(id_tparam.clone(), ());
+            ids_typ_local.insert(id_tparam.clone());
         }
         Ok(())
     }
@@ -114,10 +117,10 @@ impl Context {
     }
 
     fn add_type(&mut self, id_typ: Id) -> Result<(), ProseError> {
-        if self.ids_typ.contains_key(&id_typ) {
+        if self.ids_typ.contains(&id_typ) {
             return Err(ProseError::new(ProseErrorKind::DuplicateType, id_typ.span.clone()));
         }
-        self.ids_typ.insert(id_typ, ());
+        self.ids_typ.insert(id_typ);
         Ok(())
     }
 
