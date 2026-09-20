@@ -1,7 +1,7 @@
 //! Dimension analysis
 //!
 //! For each rule or clause, collect the dimension of all occurrences of every
-//! identifier. The minimal dimension is the ambient dimension of the
+//! identifier. The minimal dimension is the bound dimension of the
 //! identifier in the rule or clause.
 //!
 //! ```text
@@ -15,7 +15,7 @@
 //!
 //! Annotate iteration constructs with the variables they iterate over.
 //!
-//! - Variables with iterated dimensions at most the ambient dimension
+//! - Variables with iterated dimensions at most the bound dimension
 //! - Check that iteration is non-empty
 //!
 //! ```text
@@ -67,18 +67,18 @@ impl DimContext {
 
     // - Bound inference
 
-    /// Takes the minimal dimension of each identifier as its ambient bound.
+    /// Takes the minimal dimension of each identifier as its bound dimension.
     ///
     /// Every other occurrence must contain that minimum as a sub-dimension.
     fn into_bounds(self) -> Result<VEnv, ElabError> {
         let mut bounds = VEnv::new();
         for (id, occurrences) in self.0.iter() {
-            // The occurrence with the fewest iterations is the ambient one
+            // The fewest iterations give the bound dimension
             let dim_min = occurrences
                 .iter()
                 .min_by_key(|occurrence| occurrence.node.iters.len())
                 .expect("identifier has an occurrence");
-            // Every occurrence must extend the ambient dimension
+            // Every occurrence must extend the bound dimension
             if let Some(dim_conflict) = occurrences
                 .iter()
                 .find(|occurrence| !dim_min.node.sub(&occurrence.node))
@@ -345,8 +345,9 @@ impl Occurrences {
 
 /// Selects the occurring variables that the iteration `iter` ranges over.
 ///
-/// A variable is iterated when adding `iter` to its current dimension still
-/// fits within its ambient bound.
+/// A variable is iterated
+/// when adding `iter` to its current dimension
+/// still fits within its bound dimension.
 fn collect_iter_vars(bounds: &VEnv, occurs: &Occurrences, iter: ast::Iter) -> Vec<ast::Var> {
     occurs
         .iter()
