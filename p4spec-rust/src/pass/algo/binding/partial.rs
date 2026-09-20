@@ -175,6 +175,7 @@ fn gen_prem_bound(
         span: exp_from.span.clone(),
     };
     // Keep only the ranged-over variables the source expression uses
+    // Iterate the check under the destination's dimension
     let mut iter_ctx = iter_ctx.clone();
     let venv = dimension::infer_exp(exp_from);
     iter_ctx.filter_bound(|var| {
@@ -259,6 +260,7 @@ fn gen_prem_bind_sub(
     iter_ctx: &ICtx,
 ) -> Result<Vec<al::ast::Prem>, AlgoError> {
     let exp_to = var::as_exp(true, destination);
+    // Compute the subtype check once
     let typ_source = phrase!(node: exp_to.note.as_ref().clone(), span: exp_to.span.clone());
     let subcheck = optimize_sub_typ(&ctx.tdenv, &typ_source, typ_sub)?;
     let exp_guard_sub = note_phrase! {
@@ -325,6 +327,7 @@ fn gen_prem(
     rename: &Rename,
     iter_ctx_prem: &ICtx,
 ) -> Result<Vec<al::ast::Prem>, AlgoError> {
+    // The rename's own iterations sit inside the premise's
     let mut iterations = rename.iter_ctx.as_slice().to_vec();
     iterations.extend(iter_ctx_prem.as_slice().iter().cloned());
     let iter_ctx = ICtx::from_iterations(iterations);

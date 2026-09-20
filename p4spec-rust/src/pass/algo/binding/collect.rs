@@ -53,6 +53,7 @@ pub fn collect_exp(ctx: &Context, exp: &ast::Exp) -> Result<BEnv, AlgoError> {
                 Ok(benv)
             }
         }
+        // Operators are not invertible: any binder below them is an error
         ast::ExpKind::Un(_, _, exp_inner) => {
             let benv = collect_exp(ctx, exp_inner)?;
             reject_noninvertible(exp_inner.span.clone(), "unary operator", benv)
@@ -83,6 +84,7 @@ pub fn collect_exp(ctx: &Context, exp: &ast::Exp) -> Result<BEnv, AlgoError> {
             let benv = collect_exp(ctx, exp_inner)?;
             reject_noninvertible(exp_inner.span.clone(), "match check operator", benv)
         }
+        // Tuples, cases, structs, options, and cons are invertible
         ast::ExpKind::Tuple(exps) | ast::ExpKind::List(exps) => collect_exps(ctx, exps),
         ast::ExpKind::Case(not_exp) => collect_exps(ctx, not_exp.args()),
         ast::ExpKind::Str(fields) => {

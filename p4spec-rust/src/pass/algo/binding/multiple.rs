@@ -78,6 +78,7 @@ impl RenameEnv {
 
 /// Appends primes to `id` until no identifier with the same base clashes.
 fn fresh_id(ids: &IdSet, id: &Id) -> Id {
+    // Only identifiers with the same base can clash
     let base = id.strip_suffix().node;
     let ids_same_base = ids
         .iter()
@@ -107,6 +108,7 @@ fn rename_id_exp(ctx: &mut Context, renv: &mut RenameEnv, exp: &ast::Exp, id: &I
 pub fn rename_exp(ctx: &mut Context, renv: &mut RenameEnv, exp: &ast::Exp) -> ast::Exp {
     let kind = match &exp.node {
         ast::ExpKind::Id(id) => return rename_id_exp(ctx, renv, exp, id),
+        // Only invertible positions can hold binders
         ast::ExpKind::UpCast(typ, exp_inner) => {
             let exp_inner = rename_exp(ctx, renv, exp_inner);
             ast::ExpKind::UpCast(typ.clone(), Box::new(exp_inner))
@@ -165,6 +167,7 @@ pub fn rename_exp(ctx: &mut Context, renv: &mut RenameEnv, exp: &ast::Exp) -> as
                 ast::ExpIter { iter: *iter, vars: vars_renamed },
             )
         }
+        // Non-invertible nodes hold no binders
         _ => return exp.clone(),
     };
     note_phrase!(node: kind, note: exp.note.clone(), span: exp.span.clone())

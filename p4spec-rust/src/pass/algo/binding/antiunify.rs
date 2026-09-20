@@ -105,6 +105,7 @@ fn overlap_exp_kind(
         (ast::ExpKind::Id(id_template), _) if ids_unifier.contains(id_template) => {
             Ok(exp_template.node.clone())
         }
+        // Same-shaped nodes overlap their children
         (
             ast::ExpKind::UpCast(typ_template, exp_template_inner),
             ast::ExpKind::UpCast(typ, exp_inner),
@@ -140,6 +141,7 @@ fn overlap_exp_kind(
         {
             overlap_str_exp(tdenv, menv, ids_free, ids_unifier, exp_fields_template, exp_fields)
         }
+        // Different shapes cannot overlap
         _ => {
             let error = AlgoError::new(AlgoErrorKind::AntiUnification, exp.span.clone());
             Err(error)

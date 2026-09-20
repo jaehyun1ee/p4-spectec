@@ -179,9 +179,11 @@ impl<'a> EquivalenceTable<'a> {
             ast::ExpKind::Bin(ast::BinOp::Bool(prim::bool::BinOp::Equiv), _, exp_l, exp_r) => {
                 self.contains(ClassKind::Equiv, exp_l, exp_r)
             }
+            // A conjunction must be entailed on both sides
             ast::ExpKind::Bin(ast::BinOp::Bool(prim::bool::BinOp::And), _, exp_l, exp_r) => {
                 self.implies_exp(exp_l) && self.implies_exp(exp_r)
             }
+            // Other conditions must appear literally
             _ => self.classes.iter().any(
                 |class| matches!(class, Class::Singleton(condition) if exp.syntax_eq(condition)),
             ),
@@ -223,12 +225,14 @@ fn filter_prems_insert(
     prems_output: &[ast::Prem],
     prems_insert: Vec<ast::Prem>,
 ) -> Vec<ast::Prem> {
+    // Facts known before this premise
     let prems_must = prems_base
         .iter()
         .flat_map(|prems| prems.iter())
         .chain(prems_derived)
         .chain(prems_output);
     let table = EquivalenceTable::from_prems(prems_must);
+    // Drop guards that are implied or literally repeated
     prems_insert
         .into_iter()
         .filter(|prem_al| {
@@ -246,6 +250,7 @@ fn filter_prems_insert(
 
 /// Wraps a premise under an iteration over the variables it uses, if any.
 fn iterate_prem(iter: ast::Iter, vars: &[ast::Var], prem_al: ast::Prem) -> Option<ast::Prem> {
+    // Only variables the premise uses are ranged over
     let frees = prem_al.free();
     let vars_bound = vars
         .iter()
@@ -291,6 +296,7 @@ fn gen_index_guard(
     exp_idx_al: &ast::Exp,
 ) -> Vec<ast::Prem> {
     let span = exp_al.span.clone();
+    // Guard: idx < |base|
     let exp_len_al = note_phrase! {
         node: ast::ExpKind::Len(Box::new(exp_base_al.clone())),
         note: ast::TypKind::Num(prim::num::Typ::Nat),
@@ -318,6 +324,7 @@ fn gen_exp_eq_epsilon(iter: ast::Iter, var: &ast::Var) -> ast::Exp {
     let exp_al = al::var::as_exp(true, &var);
     let span = exp_al.span.clone();
     let typ = exp_al.note.clone();
+    // Compare the iterated option against the empty option
     let exp_epsilon_al = note_phrase! {
         node: ast::ExpKind::Opt(None),
         note: typ,
@@ -419,10 +426,12 @@ fn gen_iter_guard(exp_iter: &ast::ExpIter) -> Vec<ast::Prem> {
 /// Collects the guards an expression needs before evaluation.
 fn collect_exp(exp_al: &ast::Exp) -> Vec<ast::Prem> {
     match &exp_al.node {
+        // Literals and variables need no guards
         ast::ExpKind::Bool(_)
         | ast::ExpKind::Num(_)
         | ast::ExpKind::Text(_)
         | ast::ExpKind::Id(_) => vec![],
+        // Operators only collect the guards of their operands
         ast::ExpKind::Un(_, _, exp_inner_al)
         | ast::ExpKind::UpCast(_, exp_inner_al)
         | ast::ExpKind::DownCast(_, exp_inner_al)
@@ -673,11 +682,13 @@ fn insert_rule_group(mut rule_group_al: ast::RuleGroup) -> ast::RuleGroup {
 
 /// Inserts guards into an otherwise group, like a one-path rule group.
 fn insert_else_group(mut else_group_al: ast::ElseGroup) -> ast::ElseGroup {
+    // Guards of the inputs are assumed, not inserted
     let prems_input = collect_exps(else_group_al.node.rule_match.exps_input.iter());
     let prems_match_al = std::mem::take(&mut else_group_al.node.rule_match.prems);
     let prems_match = insert_prems(&[&prems_input], prems_match_al);
     else_group_al.node.rule_match.prems = prems_match.output;
 
+    // The path builds on the facts of the match
     let prems_path_al = std::mem::take(&mut else_group_al.node.rule_path.prems);
     let prems_base = [
         prems_input.as_slice(),
@@ -687,6 +698,7 @@ fn insert_else_group(mut else_group_al: ast::ElseGroup) -> ast::ElseGroup {
     let prems_path = insert_prems(&prems_base, prems_path_al);
     else_group_al.node.rule_path.prems = prems_path.output;
 
+    // Outputs need guards too, after the path premises
     let prems_output = collect_exps(else_group_al.node.rule_path.exps_output.iter());
     let prems_output = filter_prems_insert(
         &prems_base,
@@ -702,11 +714,13 @@ fn insert_else_group(mut else_group_al: ast::ElseGroup) -> ast::ElseGroup {
 
 /// Inserts guards into a clause's premises and body.
 fn insert_clause(mut clause_al: ast::Clause) -> ast::Clause {
+    // Guards of the arguments are assumed, not inserted
     let prems_args = collect_args(&clause_al.node.args);
     let prems_clause_al = std::mem::take(&mut clause_al.node.prems);
     let prems_clause = insert_prems(&[&prems_args], prems_clause_al);
     clause_al.node.prems = prems_clause.output;
 
+    // The body's guards go after the premises
     let prems_output = collect_exp(&clause_al.node.exp);
     let prems_output = filter_prems_insert(
         &[&prems_args],
