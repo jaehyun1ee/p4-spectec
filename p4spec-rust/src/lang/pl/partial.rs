@@ -70,16 +70,16 @@ pub fn is_partial_guard(guard: &Guard) -> bool {
 // == Instructions
 
 /// Reports whether a group-tier instruction can fail before entering nested blocks
-pub fn is_partial_instr_group(instr: &InstrGroup) -> bool {
+pub fn is_partial_group_instr(instr: &GroupInstr) -> bool {
     match instr {
-        InstrGroup::Rule(RuleGroupInstr { not_exp, .. }) => {
+        GroupInstr::Rule(RuleInstr { not_exp, .. }) => {
             not_exp.args().into_iter().any(is_partial_exp)
         }
-        InstrGroup::Result(ResultGroupInstr { exps_output, .. }) => {
+        GroupInstr::Result(ResultInstr { exps_output, .. }) => {
             exps_output.iter().any(is_partial_exp)
         }
-        InstrGroup::Return(ReturnGroupInstr { exp }) => is_partial_exp(exp),
-        InstrGroup::Backtrack(_) => false,
+        GroupInstr::Return(ReturnInstr { exp }) => is_partial_exp(exp),
+        GroupInstr::Backtrack(_) => false,
     }
 }
 

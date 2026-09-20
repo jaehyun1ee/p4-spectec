@@ -296,17 +296,17 @@ where
 
 // - Group-body tier
 
-impl SyntaxEq for InstrGroup {
+impl SyntaxEq for GroupInstr {
     fn syntax_eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (InstrGroup::Result(instr_l), InstrGroup::Result(instr_r)) => {
+            (GroupInstr::Result(instr_l), GroupInstr::Result(instr_r)) => {
                 instr_l.syntax_eq(instr_r)
             }
-            (InstrGroup::Return(instr_l), InstrGroup::Return(instr_r)) => {
+            (GroupInstr::Return(instr_l), GroupInstr::Return(instr_r)) => {
                 instr_l.syntax_eq(instr_r)
             }
-            (InstrGroup::Rule(instr_l), InstrGroup::Rule(instr_r)) => instr_l.syntax_eq(instr_r),
-            (InstrGroup::Backtrack(instr_l), InstrGroup::Backtrack(instr_r)) => {
+            (GroupInstr::Rule(instr_l), GroupInstr::Rule(instr_r)) => instr_l.syntax_eq(instr_r),
+            (GroupInstr::Backtrack(instr_l), GroupInstr::Backtrack(instr_r)) => {
                 instr_l.syntax_eq(instr_r)
             }
             _ => false,
@@ -314,20 +314,20 @@ impl SyntaxEq for InstrGroup {
     }
 }
 
-impl SyntaxEq for ResultGroupInstr {
+impl SyntaxEq for ResultInstr {
     fn syntax_eq(&self, other: &Self) -> bool {
         self.rel_signature.syntax_eq(&other.rel_signature)
             && self.exps_output.syntax_eq(&other.exps_output)
     }
 }
 
-impl SyntaxEq for ReturnGroupInstr {
+impl SyntaxEq for ReturnInstr {
     fn syntax_eq(&self, other: &Self) -> bool {
         self.exp.syntax_eq(&other.exp)
     }
 }
 
-impl SyntaxEq for RuleGroupInstr {
+impl SyntaxEq for RuleInstr {
     fn syntax_eq(&self, other: &Self) -> bool {
         self.id.syntax_eq(&other.id)
             && self.not_exp.syntax_eq(&other.not_exp)
@@ -336,7 +336,7 @@ impl SyntaxEq for RuleGroupInstr {
     }
 }
 
-impl SyntaxEq for BacktrackGroupInstr {
+impl SyntaxEq for BacktrackInstr {
     fn syntax_eq(&self, other: &Self) -> bool {
         self.blocks.syntax_eq(&other.blocks)
     }
@@ -344,13 +344,13 @@ impl SyntaxEq for BacktrackGroupInstr {
 
 // - Dispatch tier
 
-impl SyntaxEq for InstrDispatch {
+impl SyntaxEq for DispatchInstr {
     fn syntax_eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (InstrDispatch::Group(instr_l), InstrDispatch::Group(instr_r)) => {
+            (DispatchInstr::Group(instr_l), DispatchInstr::Group(instr_r)) => {
                 instr_l.syntax_eq(instr_r)
             }
-            (InstrDispatch::Route(instr_l), InstrDispatch::Route(instr_r)) => {
+            (DispatchInstr::Route(instr_l), DispatchInstr::Route(instr_r)) => {
                 instr_l.syntax_eq(instr_r)
             }
             _ => false,
@@ -358,7 +358,7 @@ impl SyntaxEq for InstrDispatch {
     }
 }
 
-impl SyntaxEq for GroupDispatchInstr {
+impl SyntaxEq for RuleGroupInstr {
     fn syntax_eq(&self, other: &Self) -> bool {
         self.id_rel.syntax_eq(&other.id_rel)
             && self.id_group.syntax_eq(&other.id_group)
@@ -368,7 +368,7 @@ impl SyntaxEq for GroupDispatchInstr {
     }
 }
 
-impl SyntaxEq for RouteDispatchInstr {
+impl SyntaxEq for RouteInstr {
     fn syntax_eq(&self, other: &Self) -> bool {
         self.blocks.syntax_eq(&other.blocks)
     }

@@ -35,8 +35,8 @@ fn call(name: &str) -> pl::ast::Exp {
 }
 
 fn group_instr(
-    instr_kind: pl::ast::InstrKind<pl::ast::InstrGroup>,
-) -> pl::ast::Instr<pl::ast::InstrGroup> {
+    instr_kind: pl::ast::InstrKind<pl::ast::GroupInstr>,
+) -> pl::ast::Instr<pl::ast::GroupInstr> {
     pl::annot::Annotated {
         node: p4spec_rust::note_phrase! {
             node: instr_kind,
@@ -88,7 +88,7 @@ fn test_guard_classification_checks_only_evaluated_expressions() {
 #[test]
 fn test_instruction_classification_distinguishes_leaf_and_nested_partiality() {
     let instr_nested_call = group_instr(pl::ast::InstrKind::Tier(pl::ast::TierInstr {
-        tier: pl::ast::InstrGroup::Return(pl::ast::ReturnGroupInstr { exp: call("nested") }),
+        tier: pl::ast::GroupInstr::Return(pl::ast::ReturnInstr { exp: call("nested") }),
     }));
     let instr_branch = group_instr(pl::ast::InstrKind::If(pl::ast::IfInstr {
         exp: variable("condition"),
@@ -102,29 +102,25 @@ fn test_instruction_classification_distinguishes_leaf_and_nested_partiality() {
         block: Vec::new(),
     }));
 
-    assert!(!pl::partial::is_partial_instr(pl::partial::is_partial_instr_group, &instr_branch,));
-    assert!(pl::partial::is_partial_instr(pl::partial::is_partial_instr_group, &instr_shorthand,));
+    assert!(!pl::partial::is_partial_instr(pl::partial::is_partial_group_instr, &instr_branch,));
+    assert!(pl::partial::is_partial_instr(pl::partial::is_partial_group_instr, &instr_shorthand,));
 }
 
 #[test]
 fn test_tier_classification_uses_rule_arguments_not_rule_kind() {
-    assert!(!pl::partial::is_partial_instr_group(&pl::ast::InstrGroup::Rule(
-        pl::ast::RuleGroupInstr {
-            id: id("rule"),
-            not_exp: Mixfix::Arg(variable("argument")),
-            input_hint: InputHint::new(vec![0]),
-            iter_instrs: Vec::new(),
-        }
-    )));
-    assert!(pl::partial::is_partial_instr_group(&pl::ast::InstrGroup::Rule(
-        pl::ast::RuleGroupInstr {
-            id: id("rule"),
-            not_exp: Mixfix::Arg(call("argument")),
-            input_hint: InputHint::new(vec![0]),
-            iter_instrs: Vec::new(),
-        }
-    )));
-    assert!(!pl::partial::is_partial_instr_group(&pl::ast::InstrGroup::Backtrack(
-        pl::ast::BacktrackGroupInstr { blocks: vec![Vec::new()] }
+    assert!(!pl::partial::is_partial_group_instr(&pl::ast::GroupInstr::Rule(pl::ast::RuleInstr {
+        id: id("rule"),
+        not_exp: Mixfix::Arg(variable("argument")),
+        input_hint: InputHint::new(vec![0]),
+        iter_instrs: Vec::new(),
+    })));
+    assert!(pl::partial::is_partial_group_instr(&pl::ast::GroupInstr::Rule(pl::ast::RuleInstr {
+        id: id("rule"),
+        not_exp: Mixfix::Arg(call("argument")),
+        input_hint: InputHint::new(vec![0]),
+        iter_instrs: Vec::new(),
+    })));
+    assert!(!pl::partial::is_partial_group_instr(&pl::ast::GroupInstr::Backtrack(
+        pl::ast::BacktrackInstr { blocks: vec![Vec::new()] }
     )));
 }

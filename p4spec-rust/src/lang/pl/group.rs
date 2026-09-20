@@ -12,20 +12,20 @@ pub struct RuleGroup<'a> {
     pub id_rel: &'a Id,
     pub rel_signature: &'a RelSignature,
     pub exps: &'a [Exp],
-    pub body: &'a BlockGroup,
+    pub body: &'a GroupBlock,
 }
 
 // == Collection
 
 /// Collects nested rule groups in depth-first source order
-pub fn collect_rulegroups(block: &BlockDispatch) -> Vec<RuleGroup<'_>> {
+pub fn collect_rulegroups(block: &DispatchBlock) -> Vec<RuleGroup<'_>> {
     let mut rulegroups = Vec::new();
     collect_rulegroups_from_block(block, &mut rulegroups);
     rulegroups
 }
 
 fn collect_rulegroups_from_block<'a>(
-    block: &'a BlockDispatch,
+    block: &'a DispatchBlock,
     rulegroups: &mut Vec<RuleGroup<'a>>,
 ) {
     for instr in block {
@@ -34,7 +34,7 @@ fn collect_rulegroups_from_block<'a>(
 }
 
 fn collect_rulegroups_from_instr<'a>(
-    instr: &'a Instr<InstrDispatch>,
+    instr: &'a Instr<DispatchInstr>,
     rulegroups: &mut Vec<RuleGroup<'a>>,
 ) {
     match &instr.node.node {
@@ -59,16 +59,14 @@ fn collect_rulegroups_from_instr<'a>(
         | InstrKind::OptionGet(OptionGetInstr { block, .. }) => {
             collect_rulegroups_from_block(block, rulegroups);
         }
-        InstrKind::Tier(TierInstr {
-            tier: InstrDispatch::Route(RouteDispatchInstr { blocks }),
-        }) => {
+        InstrKind::Tier(TierInstr { tier: DispatchInstr::Route(RouteInstr { blocks }) }) => {
             for block in blocks {
                 collect_rulegroups_from_block(block, rulegroups);
             }
         }
         InstrKind::Tier(TierInstr {
             tier:
-                InstrDispatch::Group(GroupDispatchInstr {
+                DispatchInstr::Group(RuleGroupInstr {
                     id_rel,
                     id_group,
                     rel_signature,

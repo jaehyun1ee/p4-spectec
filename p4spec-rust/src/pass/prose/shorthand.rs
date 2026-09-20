@@ -269,21 +269,21 @@ fn shorten_block_shorthands<Tier>(block: pl::Block<Tier>) -> pl::Block<Tier> {
 
 // - Holding condition
 
-fn shorten_hold_case_dispatch(
-    hold_case: pl::HoldCase<pl::InstrDispatch>,
-) -> pl::HoldCase<pl::InstrDispatch> {
+fn shorten_dispatch_hold_case(
+    hold_case: pl::HoldCase<pl::DispatchInstr>,
+) -> pl::HoldCase<pl::DispatchInstr> {
     match hold_case {
         pl::HoldCase::Both(block_hold, block_not_hold) => {
-            let block_hold = shorten_block_dispatch(block_hold);
-            let block_not_hold = shorten_block_dispatch(block_not_hold);
+            let block_hold = shorten_dispatch_block(block_hold);
+            let block_not_hold = shorten_dispatch_block(block_not_hold);
             pl::HoldCase::Both(block_hold, block_not_hold)
         }
         pl::HoldCase::Hold(block, dangle) => {
-            let block = shorten_block_dispatch(block);
+            let block = shorten_dispatch_block(block);
             pl::HoldCase::Hold(block, dangle)
         }
         pl::HoldCase::NotHold(block, dangle) => {
-            let block = shorten_block_dispatch(block);
+            let block = shorten_dispatch_block(block);
             pl::HoldCase::NotHold(block, dangle)
         }
     }
@@ -291,62 +291,62 @@ fn shorten_hold_case_dispatch(
 
 // - Tier instruction
 
-fn shorten_tier_instr_dispatch(instr_dispatch: pl::InstrDispatch) -> pl::InstrDispatch {
+fn shorten_dispatch_tier(instr_dispatch: pl::DispatchInstr) -> pl::DispatchInstr {
     match instr_dispatch {
-        pl::InstrDispatch::Group(mut instr_group) => {
-            instr_group.block = shorten_block_group(instr_group.block);
-            pl::InstrDispatch::Group(instr_group)
+        pl::DispatchInstr::Group(mut instr_group) => {
+            instr_group.block = shorten_group_block(instr_group.block);
+            pl::DispatchInstr::Group(instr_group)
         }
-        pl::InstrDispatch::Route(mut instr_route) => {
+        pl::DispatchInstr::Route(mut instr_route) => {
             let mut blocks = Vec::with_capacity(instr_route.blocks.len());
             for block in instr_route.blocks {
-                blocks.push(shorten_block_dispatch(block));
+                blocks.push(shorten_dispatch_block(block));
             }
             instr_route.blocks = blocks;
-            pl::InstrDispatch::Route(instr_route)
+            pl::DispatchInstr::Route(instr_route)
         }
     }
 }
 
 // - Instruction
 
-fn shorten_instr_dispatch(mut instr: pl::Instr<pl::InstrDispatch>) -> pl::Instr<pl::InstrDispatch> {
-    instr.node.node = shorten_instr_kind_dispatch(instr.node.node);
+fn shorten_dispatch_instr(mut instr: pl::Instr<pl::DispatchInstr>) -> pl::Instr<pl::DispatchInstr> {
+    instr.node.node = shorten_dispatch_instr_kind(instr.node.node);
     instr
 }
 
-fn shorten_instr_kind_dispatch(
-    instr_kind: pl::InstrKind<pl::InstrDispatch>,
-) -> pl::InstrKind<pl::InstrDispatch> {
+fn shorten_dispatch_instr_kind(
+    instr_kind: pl::InstrKind<pl::DispatchInstr>,
+) -> pl::InstrKind<pl::DispatchInstr> {
     match instr_kind {
         pl::InstrKind::If(mut instr_if) => {
-            instr_if.block = shorten_block_dispatch(instr_if.block);
+            instr_if.block = shorten_dispatch_block(instr_if.block);
             pl::InstrKind::If(instr_if)
         }
         pl::InstrKind::Hold(mut instr_hold) => {
-            instr_hold.hold_case = shorten_hold_case_dispatch(instr_hold.hold_case);
+            instr_hold.hold_case = shorten_dispatch_hold_case(instr_hold.hold_case);
             pl::InstrKind::Hold(instr_hold)
         }
         pl::InstrKind::Case(mut instr_case) => {
             for case in &mut instr_case.cases {
-                case.block = shorten_block_dispatch(std::mem::take(&mut case.block));
+                case.block = shorten_dispatch_block(std::mem::take(&mut case.block));
             }
             pl::InstrKind::Case(instr_case)
         }
         pl::InstrKind::CheckLetSub(mut instr_check) => {
-            instr_check.block = shorten_block_dispatch(instr_check.block);
+            instr_check.block = shorten_dispatch_block(instr_check.block);
             pl::InstrKind::CheckLetSub(instr_check)
         }
         pl::InstrKind::CheckLetMatch(mut instr_check) => {
-            instr_check.block = shorten_block_dispatch(instr_check.block);
+            instr_check.block = shorten_dispatch_block(instr_check.block);
             pl::InstrKind::CheckLetMatch(instr_check)
         }
         pl::InstrKind::OptionGet(mut instr_get) => {
-            instr_get.block = shorten_block_dispatch(instr_get.block);
+            instr_get.block = shorten_dispatch_block(instr_get.block);
             pl::InstrKind::OptionGet(instr_get)
         }
         pl::InstrKind::Tier(instr_tier) => {
-            let tier = shorten_tier_instr_dispatch(instr_tier.tier);
+            let tier = shorten_dispatch_tier(instr_tier.tier);
             pl::InstrKind::Tier(pl::TierInstr { tier })
         }
         kind @ (pl::InstrKind::Let(_) | pl::InstrKind::Debug(_) | pl::InstrKind::Destruct(_)) => {
@@ -357,10 +357,10 @@ fn shorten_instr_kind_dispatch(
 
 // - Block
 
-fn shorten_block_dispatch(block: pl::BlockDispatch) -> pl::BlockDispatch {
+fn shorten_dispatch_block(block: pl::DispatchBlock) -> pl::DispatchBlock {
     shorten_block_shorthands(block)
         .into_iter()
-        .map(shorten_instr_dispatch)
+        .map(shorten_dispatch_instr)
         .collect()
 }
 
@@ -368,21 +368,21 @@ fn shorten_block_dispatch(block: pl::BlockDispatch) -> pl::BlockDispatch {
 
 // - Holding condition
 
-fn shorten_hold_case_group(
-    hold_case: pl::HoldCase<pl::InstrGroup>,
-) -> pl::HoldCase<pl::InstrGroup> {
+fn shorten_group_hold_case(
+    hold_case: pl::HoldCase<pl::GroupInstr>,
+) -> pl::HoldCase<pl::GroupInstr> {
     match hold_case {
         pl::HoldCase::Both(block_hold, block_not_hold) => {
-            let block_hold = shorten_block_group(block_hold);
-            let block_not_hold = shorten_block_group(block_not_hold);
+            let block_hold = shorten_group_block(block_hold);
+            let block_not_hold = shorten_group_block(block_not_hold);
             pl::HoldCase::Both(block_hold, block_not_hold)
         }
         pl::HoldCase::Hold(block, dangle) => {
-            let block = shorten_block_group(block);
+            let block = shorten_group_block(block);
             pl::HoldCase::Hold(block, dangle)
         }
         pl::HoldCase::NotHold(block, dangle) => {
-            let block = shorten_block_group(block);
+            let block = shorten_group_block(block);
             pl::HoldCase::NotHold(block, dangle)
         }
     }
@@ -390,61 +390,61 @@ fn shorten_hold_case_group(
 
 // - Tier instruction
 
-fn shorten_tier_instr_group(instr_group: pl::InstrGroup) -> pl::InstrGroup {
+fn shorten_group_tier(instr_group: pl::GroupInstr) -> pl::GroupInstr {
     match instr_group {
-        pl::InstrGroup::Backtrack(mut instr_backtrack) => {
+        pl::GroupInstr::Backtrack(mut instr_backtrack) => {
             let mut blocks = Vec::with_capacity(instr_backtrack.blocks.len());
             for block in instr_backtrack.blocks {
-                blocks.push(shorten_block_group(block));
+                blocks.push(shorten_group_block(block));
             }
             instr_backtrack.blocks = blocks;
-            pl::InstrGroup::Backtrack(instr_backtrack)
+            pl::GroupInstr::Backtrack(instr_backtrack)
         }
-        instr_group @ (pl::InstrGroup::Result(_)
-        | pl::InstrGroup::Return(_)
-        | pl::InstrGroup::Rule(_)) => instr_group,
+        instr_group @ (pl::GroupInstr::Result(_)
+        | pl::GroupInstr::Return(_)
+        | pl::GroupInstr::Rule(_)) => instr_group,
     }
 }
 
 // - Instruction
 
-fn shorten_instr_group(mut instr: pl::Instr<pl::InstrGroup>) -> pl::Instr<pl::InstrGroup> {
-    instr.node.node = shorten_instr_kind_group(instr.node.node);
+fn shorten_group_instr(mut instr: pl::Instr<pl::GroupInstr>) -> pl::Instr<pl::GroupInstr> {
+    instr.node.node = shorten_group_instr_kind(instr.node.node);
     instr
 }
 
-fn shorten_instr_kind_group(
-    instr_kind: pl::InstrKind<pl::InstrGroup>,
-) -> pl::InstrKind<pl::InstrGroup> {
+fn shorten_group_instr_kind(
+    instr_kind: pl::InstrKind<pl::GroupInstr>,
+) -> pl::InstrKind<pl::GroupInstr> {
     match instr_kind {
         pl::InstrKind::If(mut instr_if) => {
-            instr_if.block = shorten_block_group(instr_if.block);
+            instr_if.block = shorten_group_block(instr_if.block);
             pl::InstrKind::If(instr_if)
         }
         pl::InstrKind::Hold(mut instr_hold) => {
-            instr_hold.hold_case = shorten_hold_case_group(instr_hold.hold_case);
+            instr_hold.hold_case = shorten_group_hold_case(instr_hold.hold_case);
             pl::InstrKind::Hold(instr_hold)
         }
         pl::InstrKind::Case(mut instr_case) => {
             for case in &mut instr_case.cases {
-                case.block = shorten_block_group(std::mem::take(&mut case.block));
+                case.block = shorten_group_block(std::mem::take(&mut case.block));
             }
             pl::InstrKind::Case(instr_case)
         }
         pl::InstrKind::CheckLetSub(mut instr_check) => {
-            instr_check.block = shorten_block_group(instr_check.block);
+            instr_check.block = shorten_group_block(instr_check.block);
             pl::InstrKind::CheckLetSub(instr_check)
         }
         pl::InstrKind::CheckLetMatch(mut instr_check) => {
-            instr_check.block = shorten_block_group(instr_check.block);
+            instr_check.block = shorten_group_block(instr_check.block);
             pl::InstrKind::CheckLetMatch(instr_check)
         }
         pl::InstrKind::OptionGet(mut instr_get) => {
-            instr_get.block = shorten_block_group(instr_get.block);
+            instr_get.block = shorten_group_block(instr_get.block);
             pl::InstrKind::OptionGet(instr_get)
         }
         pl::InstrKind::Tier(instr_tier) => {
-            let tier = shorten_tier_instr_group(instr_tier.tier);
+            let tier = shorten_group_tier(instr_tier.tier);
             pl::InstrKind::Tier(pl::TierInstr { tier })
         }
         kind @ (pl::InstrKind::Let(_) | pl::InstrKind::Debug(_) | pl::InstrKind::Destruct(_)) => {
@@ -455,10 +455,10 @@ fn shorten_instr_kind_group(
 
 // - Block
 
-fn shorten_block_group(block: pl::BlockGroup) -> pl::BlockGroup {
+fn shorten_group_block(block: pl::GroupBlock) -> pl::GroupBlock {
     shorten_block_shorthands(block)
         .into_iter()
-        .map(shorten_instr_group)
+        .map(shorten_group_instr)
         .collect()
 }
 
@@ -486,8 +486,8 @@ fn shorten_def_kind(def_kind: pl::DefKind) -> pl::DefKind {
 fn shorten_rel_def(def_rel: pl::RelDef) -> pl::RelDef {
     match def_rel {
         pl::RelDef::Defined(mut def_rel) => {
-            def_rel.block = shorten_block_dispatch(def_rel.block);
-            def_rel.block_else_opt = def_rel.block_else_opt.map(shorten_block_dispatch);
+            def_rel.block = shorten_dispatch_block(def_rel.block);
+            def_rel.block_else_opt = def_rel.block_else_opt.map(shorten_dispatch_block);
             pl::RelDef::Defined(def_rel)
         }
         pl::RelDef::Extern(def_rel) => pl::RelDef::Extern(def_rel),
@@ -498,13 +498,13 @@ fn shorten_func_def(def_func: pl::MetaFuncDef) -> pl::MetaFuncDef {
     match def_func {
         pl::MetaFuncDef::Table(mut def_func) => {
             for row in &mut def_func.rows {
-                row.block = shorten_block_group(std::mem::take(&mut row.block));
+                row.block = shorten_group_block(std::mem::take(&mut row.block));
             }
             pl::MetaFuncDef::Table(def_func)
         }
         pl::MetaFuncDef::Defined(mut def_func) => {
-            def_func.block = shorten_block_group(def_func.block);
-            def_func.block_else_opt = def_func.block_else_opt.map(shorten_block_group);
+            def_func.block = shorten_group_block(def_func.block);
+            def_func.block_else_opt = def_func.block_else_opt.map(shorten_group_block);
             pl::MetaFuncDef::Defined(def_func)
         }
         def_func @ (pl::MetaFuncDef::Extern(_) | pl::MetaFuncDef::Builtin(_)) => def_func,

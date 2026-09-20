@@ -174,7 +174,7 @@ impl<Tier: Free> Free for TierInstr<Tier> {
 
 // - Group-body tier
 
-impl Free for InstrGroup {
+impl Free for GroupInstr {
     fn free(&self) -> IdSet {
         match self {
             Self::Result(instr) => instr.free(),
@@ -185,25 +185,25 @@ impl Free for InstrGroup {
     }
 }
 
-impl Free for ResultGroupInstr {
+impl Free for ResultInstr {
     fn free(&self) -> IdSet {
         self.exps_output.as_slice().free()
     }
 }
 
-impl Free for ReturnGroupInstr {
+impl Free for ReturnInstr {
     fn free(&self) -> IdSet {
         self.exp.free()
     }
 }
 
-impl Free for RuleGroupInstr {
+impl Free for RuleInstr {
     fn free(&self) -> IdSet {
         self.not_exp.free()
     }
 }
 
-impl Free for BacktrackGroupInstr {
+impl Free for BacktrackInstr {
     fn free(&self) -> IdSet {
         self.blocks.as_slice().free()
     }
@@ -211,7 +211,7 @@ impl Free for BacktrackGroupInstr {
 
 // - Dispatch tier
 
-impl Free for InstrDispatch {
+impl Free for DispatchInstr {
     fn free(&self) -> IdSet {
         match self {
             Self::Group(instr) => instr.free(),
@@ -220,13 +220,13 @@ impl Free for InstrDispatch {
     }
 }
 
-impl Free for GroupDispatchInstr {
+impl Free for RuleGroupInstr {
     fn free(&self) -> IdSet {
         self.exps_input.as_slice().free().union(self.block.free())
     }
 }
 
-impl Free for RouteDispatchInstr {
+impl Free for RouteInstr {
     fn free(&self) -> IdSet {
         self.blocks.as_slice().free()
     }

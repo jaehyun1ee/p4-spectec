@@ -190,7 +190,7 @@ fn test_multiple_group_instructions_become_backtrack_arms() {
     let instr_pl = &def_func_pl.block[0];
     assert_eq!(instr_pl.node.span, Span::over(&[span_a, span_b]));
     let pl::InstrKind::Tier(pl::TierInstr {
-        tier: pl::InstrGroup::Backtrack(pl::BacktrackGroupInstr { blocks }),
+        tier: pl::GroupInstr::Backtrack(pl::BacktrackInstr { blocks }),
     }) = &instr_pl.node.node
     else {
         panic!("expected backtracking alternatives, got {instr_pl:?}");
@@ -219,7 +219,7 @@ fn test_let_and_debug_precede_their_converted_continuations() {
     assert!(matches!(def_func_pl.block[0].node.node, pl::InstrKind::Let(_)));
     assert!(matches!(
         def_func_pl.block[1].node.node,
-        pl::InstrKind::Tier(pl::TierInstr { tier: pl::InstrGroup::Backtrack(_) })
+        pl::InstrKind::Tier(pl::TierInstr { tier: pl::GroupInstr::Backtrack(_) })
     ));
 
     let span_debug = span("debug", 0);
@@ -234,7 +234,7 @@ fn test_let_and_debug_precede_their_converted_continuations() {
     assert!(matches!(def_func_pl.block[0].node.node, pl::InstrKind::Debug(_)));
     assert!(matches!(
         def_func_pl.block[1].node.node,
-        pl::InstrKind::Tier(pl::TierInstr { tier: pl::InstrGroup::Return(_) })
+        pl::InstrKind::Tier(pl::TierInstr { tier: pl::GroupInstr::Return(_) })
     ));
 }
 
@@ -284,7 +284,7 @@ fn test_call_uses_hints_loaded_from_the_original_spec() {
         panic!("expected defined function");
     };
     let pl::InstrKind::Tier(pl::TierInstr {
-        tier: pl::InstrGroup::Return(pl::ReturnGroupInstr { exp: exp_pl }),
+        tier: pl::GroupInstr::Return(pl::ReturnInstr { exp: exp_pl }),
     }) = &def_func_pl.block[0].node.node
     else {
         panic!("expected return instruction");
@@ -350,7 +350,7 @@ fn test_nested_calls_expand_left_to_right_and_preserve_outer_call() {
     assert_eq!(ids_called, vec!["inner_a", "inner_b"]);
 
     let pl::InstrKind::Tier(pl::TierInstr {
-        tier: pl::InstrGroup::Return(pl::ReturnGroupInstr { exp: exp_outer_pl }),
+        tier: pl::GroupInstr::Return(pl::ReturnInstr { exp: exp_outer_pl }),
     }) = &def_func_pl.block[2].node.node
     else {
         panic!("expected final return");
@@ -416,7 +416,7 @@ fn test_nested_call_in_update_path_is_lifted_before_return() {
     assert!(matches!(&exp_r.node.node, pl::ExpKind::Call(id, _, _) if id.node == "index"));
 
     let pl::InstrKind::Tier(pl::TierInstr {
-        tier: pl::InstrGroup::Return(pl::ReturnGroupInstr { exp }),
+        tier: pl::GroupInstr::Return(pl::ReturnInstr { exp }),
     }) = &def_func_pl.block[1].node.node
     else {
         panic!("expected return after lifted path call");
@@ -518,7 +518,7 @@ fn test_expression_iterator_lift_preserves_dimensions_and_outer_use() {
     assert_eq!(iter_instrs[0].vars_bind[0].id.node, id_fresh.node);
 
     let pl::InstrKind::Tier(pl::TierInstr {
-        tier: pl::InstrGroup::Return(pl::ReturnGroupInstr { exp }),
+        tier: pl::GroupInstr::Return(pl::ReturnInstr { exp }),
     }) = &def_func_pl.block[1].node.node
     else {
         panic!("expected return after lifted call");
@@ -550,7 +550,7 @@ fn return_call(name: &str, column: usize) -> sl::Instr {
 fn test_failure_stamp_tracks_next_arm_then_final_failure() {
     let def_func_pl = converted_func(vec![return_call("a", 1), return_call("b", 2)]);
     let pl::InstrKind::Tier(pl::TierInstr {
-        tier: pl::InstrGroup::Backtrack(pl::BacktrackGroupInstr { blocks }),
+        tier: pl::GroupInstr::Backtrack(pl::BacktrackInstr { blocks }),
     }) = &def_func_pl.block[0].node.node
     else {
         panic!("expected backtracking alternatives");
@@ -651,7 +651,7 @@ fn test_zero_argument_nested_call_stays_in_the_original_expression() {
 
     assert_eq!(def_func_pl.block.len(), 1);
     let pl::InstrKind::Tier(pl::TierInstr {
-        tier: pl::InstrGroup::Return(pl::ReturnGroupInstr { exp }),
+        tier: pl::GroupInstr::Return(pl::ReturnInstr { exp }),
     }) = &def_func_pl.block[0].node.node
     else {
         panic!("expected direct return");
@@ -682,7 +682,7 @@ fn test_relation_routes_stamp_each_group_toward_the_next_dispatch_arm() {
         panic!("expected defined relation");
     };
     let pl::InstrKind::Tier(pl::TierInstr {
-        tier: pl::InstrDispatch::Route(pl::RouteDispatchInstr { blocks }),
+        tier: pl::DispatchInstr::Route(pl::RouteInstr { blocks }),
     }) = &def_rel_pl.block[0].node.node
     else {
         panic!("expected dispatch route");
@@ -691,7 +691,7 @@ fn test_relation_routes_stamp_each_group_toward_the_next_dispatch_arm() {
     let destinations = blocks
         .iter()
         .map(|block| {
-            let pl::InstrKind::Tier(pl::TierInstr { tier: pl::InstrDispatch::Group(group) }) =
+            let pl::InstrKind::Tier(pl::TierInstr { tier: pl::DispatchInstr::Group(group) }) =
                 &block[0].node.node
             else {
                 panic!("expected group arm");
@@ -712,7 +712,7 @@ fn test_rule_input_call_is_lifted_inside_rulegroup() {
     let pl::DefKind::Rel(pl::RelDef::Defined(def_rel_pl)) = def_pl.node.node else {
         panic!("expected defined relation");
     };
-    let pl::InstrKind::Tier(pl::TierInstr { tier: pl::InstrDispatch::Group(instr_group) }) =
+    let pl::InstrKind::Tier(pl::TierInstr { tier: pl::DispatchInstr::Group(instr_group) }) =
         &def_rel_pl.block[0].node.node
     else {
         panic!("expected rulegroup");
@@ -726,7 +726,7 @@ fn test_rule_input_call_is_lifted_inside_rulegroup() {
     };
     assert!(matches!(&exp_r.node.node, pl::ExpKind::Call(id, _, _) if id.node == "partial"));
 
-    let pl::InstrKind::Tier(pl::TierInstr { tier: pl::InstrGroup::Rule(instr_rule) }) =
+    let pl::InstrKind::Tier(pl::TierInstr { tier: pl::GroupInstr::Rule(instr_rule) }) =
         &instr_group.block[1].node.node
     else {
         panic!("expected rule after lifted call");
@@ -816,7 +816,7 @@ fn test_table_row_keeps_group_alternatives_separate() {
     assert!(matches!(
         &def_table_pl.rows[0].block[0].node.node,
         pl::InstrKind::Tier(pl::TierInstr {
-            tier: pl::InstrGroup::Backtrack(pl::BacktrackGroupInstr { blocks })
+            tier: pl::GroupInstr::Backtrack(pl::BacktrackInstr { blocks })
         }) if blocks.len() == 2
     ));
 }

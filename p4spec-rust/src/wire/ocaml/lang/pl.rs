@@ -756,22 +756,22 @@ fn encode_rel_signature(rel_signature: &ast::RelSignature) -> json {
     ])
 }
 
-fn decode_instr_group(json: &json) -> Result<InstrGroup, DecodeError> {
+fn decode_group_instr(json: &json) -> Result<GroupInstr, DecodeError> {
     let (tag, fields) = variant(json)?;
     match (tag, fields) {
-        ("ResultI", [rel_signature, exps_output]) => Ok(InstrGroup::Result(ResultGroupInstr {
+        ("ResultI", [rel_signature, exps_output]) => Ok(GroupInstr::Result(ResultInstr {
             rel_signature: decode_rel_signature(rel_signature)?,
             exps_output: il::decode_list(exps_output, decode_exp)?,
         })),
-        ("ReturnI", [exp]) => Ok(InstrGroup::Return(ReturnGroupInstr { exp: decode_exp(exp)? })),
-        ("RuleI", [id, not_exp, input_hint, iter_instrs]) => Ok(InstrGroup::Rule(RuleGroupInstr {
+        ("ReturnI", [exp]) => Ok(GroupInstr::Return(ReturnInstr { exp: decode_exp(exp)? })),
+        ("RuleI", [id, not_exp, input_hint, iter_instrs]) => Ok(GroupInstr::Rule(RuleInstr {
             id: il::decode_id(id)?,
             not_exp: mixfix::decode(not_exp, decode_exp)?,
             input_hint: il::decode_input_hint(input_hint)?,
             iter_instrs: il::decode_list(iter_instrs, il::decode_prem_iter)?,
         })),
-        ("BacktrackI", [arms]) => Ok(InstrGroup::Backtrack(BacktrackGroupInstr {
-            blocks: il::decode_list(arms, |block| decode_block(block, decode_instr_group))?,
+        ("BacktrackI", [arms]) => Ok(GroupInstr::Backtrack(BacktrackInstr {
+            blocks: il::decode_list(arms, |block| decode_block(block, decode_group_instr))?,
         })),
         ("ResultI" | "ReturnI" | "RuleI" | "BacktrackI", _) => {
             Err(DecodeError::Expected("valid PL group instruction arity"))
@@ -780,45 +780,45 @@ fn decode_instr_group(json: &json) -> Result<InstrGroup, DecodeError> {
     }
 }
 
-fn encode_instr_group(instr: &InstrGroup) -> json {
+fn encode_group_instr(instr: &GroupInstr) -> json {
     match instr {
-        InstrGroup::Result(ResultGroupInstr { rel_signature, exps_output }) => json!([
+        GroupInstr::Result(ResultInstr { rel_signature, exps_output }) => json!([
             "ResultI",
             encode_rel_signature(rel_signature),
             il::encode_list(exps_output, encode_exp)
         ]),
-        InstrGroup::Return(ReturnGroupInstr { exp }) => json!(["ReturnI", encode_exp(exp)]),
-        InstrGroup::Rule(RuleGroupInstr { id, not_exp, input_hint, iter_instrs }) => json!([
+        GroupInstr::Return(ReturnInstr { exp }) => json!(["ReturnI", encode_exp(exp)]),
+        GroupInstr::Rule(RuleInstr { id, not_exp, input_hint, iter_instrs }) => json!([
             "RuleI",
             il::encode_id(id),
             mixfix::encode(not_exp, encode_exp),
             il::encode_input_hint(input_hint),
             il::encode_list(iter_instrs, il::encode_prem_iter)
         ]),
-        InstrGroup::Backtrack(BacktrackGroupInstr { blocks }) => json!([
+        GroupInstr::Backtrack(BacktrackInstr { blocks }) => json!([
             "BacktrackI",
             blocks
                 .iter()
-                .map(|block| encode_block(block, encode_instr_group))
+                .map(|block| encode_block(block, encode_group_instr))
                 .collect::<Vec<_>>()
         ]),
     }
 }
 
-fn decode_instr_dispatch(json: &json) -> Result<InstrDispatch, DecodeError> {
+fn decode_dispatch_instr(json: &json) -> Result<DispatchInstr, DecodeError> {
     let (tag, fields) = variant(json)?;
     match (tag, fields) {
         ("GroupI", [id_group, id_rel, rel_signature, exps_input, block]) => {
-            Ok(InstrDispatch::Group(GroupDispatchInstr {
+            Ok(DispatchInstr::Group(RuleGroupInstr {
                 id_rel: il::decode_id(id_rel)?,
                 id_group: il::decode_id(id_group)?,
                 rel_signature: decode_rel_signature(rel_signature)?,
                 exps_input: il::decode_list(exps_input, decode_exp)?,
-                block: decode_block(block, decode_instr_group)?,
+                block: decode_block(block, decode_group_instr)?,
             }))
         }
-        ("RouteI", [arms]) => Ok(InstrDispatch::Route(RouteDispatchInstr {
-            blocks: il::decode_list(arms, |block| decode_block(block, decode_instr_dispatch))?,
+        ("RouteI", [arms]) => Ok(DispatchInstr::Route(RouteInstr {
+            blocks: il::decode_list(arms, |block| decode_block(block, decode_dispatch_instr))?,
         })),
         ("GroupI" | "RouteI", _) => {
             Err(DecodeError::Expected("valid PL dispatch instruction arity"))
@@ -827,9 +827,9 @@ fn decode_instr_dispatch(json: &json) -> Result<InstrDispatch, DecodeError> {
     }
 }
 
-fn encode_instr_dispatch(instr: &InstrDispatch) -> json {
+fn encode_dispatch_instr(instr: &DispatchInstr) -> json {
     match instr {
-        InstrDispatch::Group(GroupDispatchInstr {
+        DispatchInstr::Group(RuleGroupInstr {
             id_rel,
             id_group,
             rel_signature,
@@ -841,13 +841,13 @@ fn encode_instr_dispatch(instr: &InstrDispatch) -> json {
             il::encode_id(id_rel),
             encode_rel_signature(rel_signature),
             il::encode_list(exps_input, encode_exp),
-            encode_block(block, encode_instr_group)
+            encode_block(block, encode_group_instr)
         ]),
-        InstrDispatch::Route(RouteDispatchInstr { blocks }) => json!([
+        DispatchInstr::Route(RouteInstr { blocks }) => json!([
             "RouteI",
             blocks
                 .iter()
-                .map(|block| encode_block(block, encode_instr_dispatch))
+                .map(|block| encode_block(block, encode_dispatch_instr))
                 .collect::<Vec<_>>()
         ]),
     }
@@ -877,9 +877,9 @@ fn decode_defined_rel(json: &json) -> Result<ast::DefinedRel, DecodeError> {
             id: il::decode_id(id)?,
             rel_signature: decode_rel_signature(rel_signature)?,
             exps_input: il::decode_list(exps_input, decode_exp)?,
-            block: decode_block(block, decode_instr_dispatch)?,
+            block: decode_block(block, decode_dispatch_instr)?,
             block_else_opt: decode_option(block_else_opt, |block| {
-                decode_block(block, decode_instr_dispatch)
+                decode_block(block, decode_dispatch_instr)
             })?,
         }),
         _ => Err(DecodeError::Expected("PL relation quintuple")),
@@ -890,10 +890,10 @@ fn encode_defined_rel(relation: &ast::DefinedRel) -> json {
         il::encode_id(&relation.id),
         encode_rel_signature(&relation.rel_signature),
         il::encode_list(&relation.exps_input, encode_exp),
-        encode_block(&relation.block, encode_instr_dispatch),
+        encode_block(&relation.block, encode_dispatch_instr),
         encode_option(relation.block_else_opt.as_ref(), |block| encode_block(
             block,
-            encode_instr_dispatch
+            encode_dispatch_instr
         ))
     ])
 }
@@ -937,7 +937,7 @@ fn decode_table_row(json: &json) -> Result<ast::TableRow, DecodeError> {
         [exps_input, exp, block] => Ok(ast::TableRow {
             exps_input: il::decode_list(exps_input, decode_exp)?,
             exp: decode_exp(exp)?,
-            block: decode_block(block, decode_instr_group)?,
+            block: decode_block(block, decode_group_instr)?,
         }),
         _ => Err(DecodeError::Expected("PL table row triple")),
     }
@@ -946,7 +946,7 @@ fn encode_table_row(row: &ast::TableRow) -> json {
     json!([
         il::encode_list(&row.exps_input, encode_exp),
         encode_exp(&row.exp),
-        encode_block(&row.block, encode_instr_group)
+        encode_block(&row.block, encode_group_instr)
     ])
 }
 
@@ -977,9 +977,9 @@ fn decode_defined_func(json: &json) -> Result<ast::DefinedFunc, DecodeError> {
             tparams: il::decode_list(tparams, il::decode_tparam)?,
             params: il::decode_list(params, decode_param)?,
             typ: il::decode_typ(typ)?,
-            block: decode_block(block, decode_instr_group)?,
+            block: decode_block(block, decode_group_instr)?,
             block_else_opt: decode_option(block_else_opt, |block| {
-                decode_block(block, decode_instr_group)
+                decode_block(block, decode_group_instr)
             })?,
         }),
         _ => Err(DecodeError::Expected("PL defined function sextuple")),
@@ -991,10 +991,10 @@ fn encode_defined_func(func: &ast::DefinedFunc) -> json {
         il::encode_list(&func.tparams, il::encode_tparam),
         il::encode_list(&func.params, encode_param),
         il::encode_typ(&func.typ),
-        encode_block(&func.block, encode_instr_group),
+        encode_block(&func.block, encode_group_instr),
         encode_option(func.block_else_opt.as_ref(), |block| encode_block(
             block,
-            encode_instr_group
+            encode_group_instr
         ))
     ])
 }

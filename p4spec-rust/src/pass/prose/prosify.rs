@@ -560,25 +560,25 @@ fn make_instr_with_hints<Tier>(
 
 // - Instruction
 
-fn prosify_instr_dispatch(
+fn prosify_dispatch_instr(
     ctx: &Context,
     instr_sl: sl::Instr,
-) -> Result<pl::BlockDispatch, ProseError> {
-    prosify_instr_kind_dispatch(ctx, instr_sl.node, instr_sl.span)
+) -> Result<pl::DispatchBlock, ProseError> {
+    prosify_dispatch_instr_kind(ctx, instr_sl.node, instr_sl.span)
 }
 
-fn prosify_instr_kind_dispatch(
+fn prosify_dispatch_instr_kind(
     ctx: &Context,
     instr_kind_sl: sl::InstrKind,
     span: Span,
-) -> Result<pl::BlockDispatch, ProseError> {
+) -> Result<pl::DispatchBlock, ProseError> {
     match instr_kind_sl {
-        sl::InstrKind::If(instr_sl) => prosify_if_instr_dispatch(ctx, instr_sl, span),
-        sl::InstrKind::Hold(instr_sl) => prosify_hold_instr_dispatch(ctx, instr_sl, span),
-        sl::InstrKind::Case(instr_sl) => prosify_case_instr_dispatch(ctx, instr_sl, span),
-        sl::InstrKind::Let(instr_sl) => prosify_let_instr_dispatch(ctx, instr_sl, span),
-        sl::InstrKind::Debug(instr_sl) => prosify_debug_instr_dispatch(ctx, instr_sl, span),
-        sl::InstrKind::Group(instr_sl) => prosify_group_instr_dispatch(ctx, instr_sl, span),
+        sl::InstrKind::If(instr_sl) => prosify_dispatch_if_instr(ctx, instr_sl, span),
+        sl::InstrKind::Hold(instr_sl) => prosify_dispatch_hold_instr(ctx, instr_sl, span),
+        sl::InstrKind::Case(instr_sl) => prosify_dispatch_case_instr(ctx, instr_sl, span),
+        sl::InstrKind::Let(instr_sl) => prosify_dispatch_let_instr(ctx, instr_sl, span),
+        sl::InstrKind::Debug(instr_sl) => prosify_dispatch_debug_instr(ctx, instr_sl, span),
+        sl::InstrKind::Group(instr_sl) => prosify_rulegroup_instr(ctx, instr_sl, span),
         sl::InstrKind::Rule(_) | sl::InstrKind::Result(_) | sl::InstrKind::Return(_) => {
             Err(ProseError::new(ProseErrorKind::InvalidDispatchTier, span))
         }
@@ -587,13 +587,13 @@ fn prosify_instr_kind_dispatch(
 
 // - If instruction
 
-fn prosify_if_instr_dispatch(
+fn prosify_dispatch_if_instr(
     ctx: &Context,
     instr_sl: sl::IfInstr,
     span: Span,
-) -> Result<pl::BlockDispatch, ProseError> {
+) -> Result<pl::DispatchBlock, ProseError> {
     let exp_pl = prosify_exp(ctx, &instr_sl.exp)?;
-    let block_pl = prosify_block_dispatch(ctx, instr_sl.block)?;
+    let block_pl = prosify_dispatch_block(ctx, instr_sl.block)?;
     let instr_pl = pl::IfInstr {
         exp: exp_pl,
         iter_exps: instr_sl.iter_exps,
@@ -607,15 +607,15 @@ fn prosify_if_instr_dispatch(
 
 // - Hold instruction
 
-fn prosify_hold_instr_dispatch(
+fn prosify_dispatch_hold_instr(
     ctx: &Context,
     instr_sl: sl::HoldInstr,
     span: Span,
-) -> Result<pl::BlockDispatch, ProseError> {
+) -> Result<pl::DispatchBlock, ProseError> {
     let hints = hints_of_hold_instr(ctx, &instr_sl.id);
     validate_hint_alter(&span, &hints, instr_sl.not_exp.args().len())?;
     let not_exp_pl = prosify_not_exp(ctx, &instr_sl.not_exp)?;
-    let hold_case_pl = prosify_hold_case_dispatch(ctx, instr_sl.hold_case)?;
+    let hold_case_pl = prosify_dispatch_hold_case(ctx, instr_sl.hold_case)?;
     let instr_pl = pl::HoldInstr {
         id: instr_sl.id,
         not_exp: not_exp_pl,
@@ -627,22 +627,22 @@ fn prosify_hold_instr_dispatch(
     Ok(vec![instr_pl])
 }
 
-fn prosify_hold_case_dispatch(
+fn prosify_dispatch_hold_case(
     ctx: &Context,
     hold_case_sl: sl::HoldCase,
-) -> Result<pl::HoldCase<pl::InstrDispatch>, ProseError> {
+) -> Result<pl::HoldCase<pl::DispatchInstr>, ProseError> {
     let hold_case_pl = match hold_case_sl {
         sl::HoldCase::Both(block_hold_sl, block_not_hold_sl) => {
-            let block_hold_pl = prosify_block_dispatch(ctx, block_hold_sl)?;
-            let block_not_hold_pl = prosify_block_dispatch(ctx, block_not_hold_sl)?;
+            let block_hold_pl = prosify_dispatch_block(ctx, block_hold_sl)?;
+            let block_not_hold_pl = prosify_dispatch_block(ctx, block_not_hold_sl)?;
             pl::HoldCase::Both(block_hold_pl, block_not_hold_pl)
         }
         sl::HoldCase::Hold(block_sl, dangle) => {
-            let block_pl = prosify_block_dispatch(ctx, block_sl)?;
+            let block_pl = prosify_dispatch_block(ctx, block_sl)?;
             pl::HoldCase::Hold(block_pl, dangle)
         }
         sl::HoldCase::NotHold(block_sl, dangle) => {
-            let block_pl = prosify_block_dispatch(ctx, block_sl)?;
+            let block_pl = prosify_dispatch_block(ctx, block_sl)?;
             pl::HoldCase::NotHold(block_pl, dangle)
         }
     };
@@ -651,24 +651,24 @@ fn prosify_hold_case_dispatch(
 
 // - Case instruction
 
-fn prosify_case_dispatch(
+fn prosify_dispatch_case(
     ctx: &Context,
     case_sl: sl::Case,
-) -> Result<pl::Case<pl::InstrDispatch>, ProseError> {
+) -> Result<pl::Case<pl::DispatchInstr>, ProseError> {
     let guard_pl = prosify_guard(ctx, &case_sl.guard)?;
-    let block_pl = prosify_block_dispatch(ctx, case_sl.block)?;
+    let block_pl = prosify_dispatch_block(ctx, case_sl.block)?;
     Ok(pl::Case { guard: guard_pl, block: block_pl })
 }
 
-fn prosify_case_instr_dispatch(
+fn prosify_dispatch_case_instr(
     ctx: &Context,
     instr_sl: sl::CaseInstr,
     span: Span,
-) -> Result<pl::BlockDispatch, ProseError> {
+) -> Result<pl::DispatchBlock, ProseError> {
     let exp_pl = prosify_exp(ctx, &instr_sl.exp)?;
     let mut cases_pl = Vec::with_capacity(instr_sl.cases.len());
     for case_sl in instr_sl.cases {
-        let case_pl = prosify_case_dispatch(ctx, case_sl)?;
+        let case_pl = prosify_dispatch_case(ctx, case_sl)?;
         cases_pl.push(case_pl);
     }
     let instr_pl = pl::CaseInstr { exp: exp_pl, cases: cases_pl, dangle: instr_sl.dangle };
@@ -679,11 +679,11 @@ fn prosify_case_instr_dispatch(
 
 // - Let instruction
 
-fn prosify_let_instr_dispatch(
+fn prosify_dispatch_let_instr(
     ctx: &Context,
     instr_sl: sl::LetInstr,
     span: Span,
-) -> Result<pl::BlockDispatch, ProseError> {
+) -> Result<pl::DispatchBlock, ProseError> {
     let exp_l_pl = prosify_exp(ctx, &instr_sl.exp_l)?;
     let hints = hints_of_let_instr(&exp_l_pl);
     let exp_r_pl = prosify_exp(ctx, &instr_sl.exp_r)?;
@@ -691,7 +691,7 @@ fn prosify_let_instr_dispatch(
         pl::LetInstr { exp_l: exp_l_pl, exp_r: exp_r_pl, iter_instrs: instr_sl.iter_instrs };
     let instr_kind_pl = pl::InstrKind::Let(instr_pl);
     let instr_pl = make_instr_with_hints(instr_kind_pl, span, hints);
-    let block_pl = prosify_block_dispatch(ctx, instr_sl.block)?;
+    let block_pl = prosify_dispatch_block(ctx, instr_sl.block)?;
     let mut instrs_pl = vec![instr_pl];
     instrs_pl.extend(block_pl);
     Ok(instrs_pl)
@@ -699,16 +699,16 @@ fn prosify_let_instr_dispatch(
 
 // - Debug instruction
 
-fn prosify_debug_instr_dispatch(
+fn prosify_dispatch_debug_instr(
     ctx: &Context,
     instr_sl: sl::DebugInstr,
     span: Span,
-) -> Result<pl::BlockDispatch, ProseError> {
+) -> Result<pl::DispatchBlock, ProseError> {
     let exp_pl = prosify_exp(ctx, &instr_sl.exp)?;
     let instr_pl = pl::DebugInstr { exp: exp_pl };
     let instr_kind_pl = pl::InstrKind::Debug(instr_pl);
     let instr_pl = make_instr(instr_kind_pl, span);
-    let instrs_follow_pl = prosify_instr_dispatch(ctx, *instr_sl.instr)?;
+    let instrs_follow_pl = prosify_dispatch_instr(ctx, *instr_sl.instr)?;
     let mut instrs_pl = vec![instr_pl];
     instrs_pl.extend(instrs_follow_pl);
     Ok(instrs_pl)
@@ -716,25 +716,25 @@ fn prosify_debug_instr_dispatch(
 
 // - Group instruction
 
-fn prosify_group_instr_dispatch(
+fn prosify_rulegroup_instr(
     ctx: &Context,
     instr_sl: sl::GroupInstr,
     span: Span,
-) -> Result<pl::BlockDispatch, ProseError> {
+) -> Result<pl::DispatchBlock, ProseError> {
     let hints = hints_of_group_instr(ctx);
     input::validate(&instr_sl.rel_signature.input_hint, instr_sl.exps.len())
         .map_err(|error| ProseError::new(ProseErrorKind::Input(error), span.clone()))?;
     validate_hint_alter(&span, &hints, instr_sl.rel_signature.input_hint.indices().len())?;
     let exps_input_pl = prosify_exps(ctx, &instr_sl.exps)?;
-    let block_pl = prosify_block_group(ctx, instr_sl.block)?;
-    let instr_pl = pl::GroupDispatchInstr {
+    let block_pl = prosify_group_block(ctx, instr_sl.block)?;
+    let instr_pl = pl::RuleGroupInstr {
         id_rel: ctx.namespace().clone(),
         id_group: instr_sl.id,
         rel_signature: instr_sl.rel_signature,
         exps_input: exps_input_pl,
         block: block_pl,
     };
-    let tier_pl = pl::InstrDispatch::Group(instr_pl);
+    let tier_pl = pl::DispatchInstr::Group(instr_pl);
     let instr_pl = pl::TierInstr { tier: tier_pl };
     let instr_kind_pl = pl::InstrKind::Tier(instr_pl);
     let instr_pl = make_instr_with_hints(instr_kind_pl, span, hints);
@@ -743,15 +743,15 @@ fn prosify_group_instr_dispatch(
 
 // - Block
 
-fn prosify_block_dispatch(
+fn prosify_dispatch_block(
     ctx: &Context,
     block_sl: sl::Block,
-) -> Result<pl::BlockDispatch, ProseError> {
+) -> Result<pl::DispatchBlock, ProseError> {
     match block_sl.len() {
         0 => Ok(Vec::new()),
         1 => {
             let instr_sl = block_sl.into_iter().next().unwrap();
-            prosify_instr_dispatch(ctx, instr_sl)
+            prosify_dispatch_instr(ctx, instr_sl)
         }
         _ => {
             let spans = block_sl
@@ -761,11 +761,11 @@ fn prosify_block_dispatch(
             let span = Span::over(&spans);
             let mut blocks_pl = Vec::with_capacity(block_sl.len());
             for instr_sl in block_sl {
-                let block_pl = prosify_instr_dispatch(ctx, instr_sl)?;
+                let block_pl = prosify_dispatch_instr(ctx, instr_sl)?;
                 blocks_pl.push(block_pl);
             }
-            let instr_pl = pl::RouteDispatchInstr { blocks: blocks_pl };
-            let tier_pl = pl::InstrDispatch::Route(instr_pl);
+            let instr_pl = pl::RouteInstr { blocks: blocks_pl };
+            let tier_pl = pl::DispatchInstr::Route(instr_pl);
             let instr_pl = pl::TierInstr { tier: tier_pl };
             let instr_kind_pl = pl::InstrKind::Tier(instr_pl);
             let instr_pl = make_instr(instr_kind_pl, span);
@@ -778,37 +778,37 @@ fn prosify_block_dispatch(
 
 // - Instruction
 
-fn prosify_instr_group(ctx: &Context, instr_sl: sl::Instr) -> Result<pl::BlockGroup, ProseError> {
-    prosify_instr_kind_group(ctx, instr_sl.node, instr_sl.span)
+fn prosify_group_instr(ctx: &Context, instr_sl: sl::Instr) -> Result<pl::GroupBlock, ProseError> {
+    prosify_group_instr_kind(ctx, instr_sl.node, instr_sl.span)
 }
 
-fn prosify_instr_kind_group(
+fn prosify_group_instr_kind(
     ctx: &Context,
     instr_kind_sl: sl::InstrKind,
     span: Span,
-) -> Result<pl::BlockGroup, ProseError> {
+) -> Result<pl::GroupBlock, ProseError> {
     match instr_kind_sl {
-        sl::InstrKind::If(instr_sl) => prosify_if_instr_group(ctx, instr_sl, span),
-        sl::InstrKind::Hold(instr_sl) => prosify_hold_instr_group(ctx, instr_sl, span),
-        sl::InstrKind::Case(instr_sl) => prosify_case_instr_group(ctx, instr_sl, span),
-        sl::InstrKind::Let(instr_sl) => prosify_let_instr_group(ctx, instr_sl, span),
-        sl::InstrKind::Debug(instr_sl) => prosify_debug_instr_group(ctx, instr_sl, span),
-        sl::InstrKind::Rule(instr_sl) => prosify_rule_instr_group(ctx, instr_sl, span),
-        sl::InstrKind::Result(instr_sl) => prosify_result_instr_group(ctx, instr_sl, span),
-        sl::InstrKind::Return(instr_sl) => prosify_return_instr_group(ctx, instr_sl, span),
+        sl::InstrKind::If(instr_sl) => prosify_group_if_instr(ctx, instr_sl, span),
+        sl::InstrKind::Hold(instr_sl) => prosify_group_hold_instr(ctx, instr_sl, span),
+        sl::InstrKind::Case(instr_sl) => prosify_group_case_instr(ctx, instr_sl, span),
+        sl::InstrKind::Let(instr_sl) => prosify_group_let_instr(ctx, instr_sl, span),
+        sl::InstrKind::Debug(instr_sl) => prosify_group_debug_instr(ctx, instr_sl, span),
+        sl::InstrKind::Rule(instr_sl) => prosify_group_rule_instr(ctx, instr_sl, span),
+        sl::InstrKind::Result(instr_sl) => prosify_group_result_instr(ctx, instr_sl, span),
+        sl::InstrKind::Return(instr_sl) => prosify_group_return_instr(ctx, instr_sl, span),
         sl::InstrKind::Group(_) => Err(ProseError::new(ProseErrorKind::InvalidGroupTier, span)),
     }
 }
 
 // - If instruction
 
-fn prosify_if_instr_group(
+fn prosify_group_if_instr(
     ctx: &Context,
     instr_sl: sl::IfInstr,
     span: Span,
-) -> Result<pl::BlockGroup, ProseError> {
+) -> Result<pl::GroupBlock, ProseError> {
     let exp_pl = prosify_exp(ctx, &instr_sl.exp)?;
-    let block_pl = prosify_block_group(ctx, instr_sl.block)?;
+    let block_pl = prosify_group_block(ctx, instr_sl.block)?;
     let instr_pl = pl::IfInstr {
         exp: exp_pl,
         iter_exps: instr_sl.iter_exps,
@@ -822,15 +822,15 @@ fn prosify_if_instr_group(
 
 // - Hold instruction
 
-fn prosify_hold_instr_group(
+fn prosify_group_hold_instr(
     ctx: &Context,
     instr_sl: sl::HoldInstr,
     span: Span,
-) -> Result<pl::BlockGroup, ProseError> {
+) -> Result<pl::GroupBlock, ProseError> {
     let hints = hints_of_hold_instr(ctx, &instr_sl.id);
     validate_hint_alter(&span, &hints, instr_sl.not_exp.args().len())?;
     let not_exp_pl = prosify_not_exp(ctx, &instr_sl.not_exp)?;
-    let hold_case_pl = prosify_hold_case_group(ctx, instr_sl.hold_case)?;
+    let hold_case_pl = prosify_group_hold_case(ctx, instr_sl.hold_case)?;
     let instr_pl = pl::HoldInstr {
         id: instr_sl.id,
         not_exp: not_exp_pl,
@@ -842,22 +842,22 @@ fn prosify_hold_instr_group(
     Ok(vec![instr_pl])
 }
 
-fn prosify_hold_case_group(
+fn prosify_group_hold_case(
     ctx: &Context,
     hold_case_sl: sl::HoldCase,
-) -> Result<pl::HoldCase<pl::InstrGroup>, ProseError> {
+) -> Result<pl::HoldCase<pl::GroupInstr>, ProseError> {
     let hold_case_pl = match hold_case_sl {
         sl::HoldCase::Both(block_hold_sl, block_not_hold_sl) => {
-            let block_hold_pl = prosify_block_group(ctx, block_hold_sl)?;
-            let block_not_hold_pl = prosify_block_group(ctx, block_not_hold_sl)?;
+            let block_hold_pl = prosify_group_block(ctx, block_hold_sl)?;
+            let block_not_hold_pl = prosify_group_block(ctx, block_not_hold_sl)?;
             pl::HoldCase::Both(block_hold_pl, block_not_hold_pl)
         }
         sl::HoldCase::Hold(block_sl, dangle) => {
-            let block_pl = prosify_block_group(ctx, block_sl)?;
+            let block_pl = prosify_group_block(ctx, block_sl)?;
             pl::HoldCase::Hold(block_pl, dangle)
         }
         sl::HoldCase::NotHold(block_sl, dangle) => {
-            let block_pl = prosify_block_group(ctx, block_sl)?;
+            let block_pl = prosify_group_block(ctx, block_sl)?;
             pl::HoldCase::NotHold(block_pl, dangle)
         }
     };
@@ -866,24 +866,24 @@ fn prosify_hold_case_group(
 
 // - Case instruction
 
-fn prosify_case_group(
+fn prosify_group_case(
     ctx: &Context,
     case_sl: sl::Case,
-) -> Result<pl::Case<pl::InstrGroup>, ProseError> {
+) -> Result<pl::Case<pl::GroupInstr>, ProseError> {
     let guard_pl = prosify_guard(ctx, &case_sl.guard)?;
-    let block_pl = prosify_block_group(ctx, case_sl.block)?;
+    let block_pl = prosify_group_block(ctx, case_sl.block)?;
     Ok(pl::Case { guard: guard_pl, block: block_pl })
 }
 
-fn prosify_case_instr_group(
+fn prosify_group_case_instr(
     ctx: &Context,
     instr_sl: sl::CaseInstr,
     span: Span,
-) -> Result<pl::BlockGroup, ProseError> {
+) -> Result<pl::GroupBlock, ProseError> {
     let exp_pl = prosify_exp(ctx, &instr_sl.exp)?;
     let mut cases_pl = Vec::with_capacity(instr_sl.cases.len());
     for case_sl in instr_sl.cases {
-        let case_pl = prosify_case_group(ctx, case_sl)?;
+        let case_pl = prosify_group_case(ctx, case_sl)?;
         cases_pl.push(case_pl);
     }
     let instr_pl = pl::CaseInstr { exp: exp_pl, cases: cases_pl, dangle: instr_sl.dangle };
@@ -894,11 +894,11 @@ fn prosify_case_instr_group(
 
 // - Let instruction
 
-fn prosify_let_instr_group(
+fn prosify_group_let_instr(
     ctx: &Context,
     instr_sl: sl::LetInstr,
     span: Span,
-) -> Result<pl::BlockGroup, ProseError> {
+) -> Result<pl::GroupBlock, ProseError> {
     let exp_l_pl = prosify_exp(ctx, &instr_sl.exp_l)?;
     let hints = hints_of_let_instr(&exp_l_pl);
     let exp_r_pl = prosify_exp(ctx, &instr_sl.exp_r)?;
@@ -906,7 +906,7 @@ fn prosify_let_instr_group(
         pl::LetInstr { exp_l: exp_l_pl, exp_r: exp_r_pl, iter_instrs: instr_sl.iter_instrs };
     let instr_kind_pl = pl::InstrKind::Let(instr_pl);
     let instr_pl = make_instr_with_hints(instr_kind_pl, span, hints);
-    let block_pl = prosify_block_group(ctx, instr_sl.block)?;
+    let block_pl = prosify_group_block(ctx, instr_sl.block)?;
     let mut instrs_pl = vec![instr_pl];
     instrs_pl.extend(block_pl);
     Ok(instrs_pl)
@@ -914,16 +914,16 @@ fn prosify_let_instr_group(
 
 // - Debug instruction
 
-fn prosify_debug_instr_group(
+fn prosify_group_debug_instr(
     ctx: &Context,
     instr_sl: sl::DebugInstr,
     span: Span,
-) -> Result<pl::BlockGroup, ProseError> {
+) -> Result<pl::GroupBlock, ProseError> {
     let exp_pl = prosify_exp(ctx, &instr_sl.exp)?;
     let instr_pl = pl::DebugInstr { exp: exp_pl };
     let instr_kind_pl = pl::InstrKind::Debug(instr_pl);
     let instr_pl = make_instr(instr_kind_pl, span);
-    let instrs_follow_pl = prosify_instr_group(ctx, *instr_sl.instr)?;
+    let instrs_follow_pl = prosify_group_instr(ctx, *instr_sl.instr)?;
     let mut instrs_pl = vec![instr_pl];
     instrs_pl.extend(instrs_follow_pl);
     Ok(instrs_pl)
@@ -931,11 +931,11 @@ fn prosify_debug_instr_group(
 
 // - Rule instruction
 
-fn prosify_rule_instr_group(
+fn prosify_group_rule_instr(
     ctx: &Context,
     instr_sl: sl::RuleInstr,
     span: Span,
-) -> Result<pl::BlockGroup, ProseError> {
+) -> Result<pl::GroupBlock, ProseError> {
     let hints = hints_of_rule_instr(ctx, &instr_sl.id, &instr_sl.input_hint);
     let num_args = instr_sl.not_exp.args().len();
     input::validate(&instr_sl.input_hint, num_args)
@@ -943,17 +943,17 @@ fn prosify_rule_instr_group(
     let num_inputs = instr_sl.input_hint.indices().len();
     validate_hint_split(&span, &hints, num_inputs, num_args - num_inputs)?;
     let not_exp_pl = prosify_not_exp(ctx, &instr_sl.not_exp)?;
-    let instr_pl = pl::RuleGroupInstr {
+    let instr_pl = pl::RuleInstr {
         id: instr_sl.id,
         not_exp: not_exp_pl,
         input_hint: instr_sl.input_hint,
         iter_instrs: instr_sl.iter_instrs,
     };
-    let tier_pl = pl::InstrGroup::Rule(instr_pl);
+    let tier_pl = pl::GroupInstr::Rule(instr_pl);
     let instr_pl = pl::TierInstr { tier: tier_pl };
     let instr_kind_pl = pl::InstrKind::Tier(instr_pl);
     let instr_pl = make_instr_with_hints(instr_kind_pl, span, hints);
-    let block_pl = prosify_block_group(ctx, instr_sl.block)?;
+    let block_pl = prosify_group_block(ctx, instr_sl.block)?;
     let mut instrs_pl = vec![instr_pl];
     instrs_pl.extend(block_pl);
     Ok(instrs_pl)
@@ -961,17 +961,17 @@ fn prosify_rule_instr_group(
 
 // - Result instruction
 
-fn prosify_result_instr_group(
+fn prosify_group_result_instr(
     ctx: &Context,
     instr_sl: sl::ResultInstr,
     span: Span,
-) -> Result<pl::BlockGroup, ProseError> {
+) -> Result<pl::GroupBlock, ProseError> {
     let hints = hints_of_result_instr(ctx, &instr_sl.rel_signature.input_hint);
     validate_hint_alter(&span, &hints, instr_sl.exps.len())?;
     let exps_output_pl = prosify_exps(ctx, &instr_sl.exps)?;
     let instr_pl =
-        pl::ResultGroupInstr { rel_signature: instr_sl.rel_signature, exps_output: exps_output_pl };
-    let tier_pl = pl::InstrGroup::Result(instr_pl);
+        pl::ResultInstr { rel_signature: instr_sl.rel_signature, exps_output: exps_output_pl };
+    let tier_pl = pl::GroupInstr::Result(instr_pl);
     let instr_pl = pl::TierInstr { tier: tier_pl };
     let instr_kind_pl = pl::InstrKind::Tier(instr_pl);
     let instr_pl = make_instr_with_hints(instr_kind_pl, span, hints);
@@ -980,14 +980,14 @@ fn prosify_result_instr_group(
 
 // - Return instruction
 
-fn prosify_return_instr_group(
+fn prosify_group_return_instr(
     ctx: &Context,
     instr_sl: sl::ReturnInstr,
     span: Span,
-) -> Result<pl::BlockGroup, ProseError> {
+) -> Result<pl::GroupBlock, ProseError> {
     let exp_pl = prosify_exp(ctx, &instr_sl.exp)?;
-    let instr_pl = pl::ReturnGroupInstr { exp: exp_pl };
-    let tier_pl = pl::InstrGroup::Return(instr_pl);
+    let instr_pl = pl::ReturnInstr { exp: exp_pl };
+    let tier_pl = pl::GroupInstr::Return(instr_pl);
     let instr_pl = pl::TierInstr { tier: tier_pl };
     let instr_kind_pl = pl::InstrKind::Tier(instr_pl);
     let instr_pl = make_instr(instr_kind_pl, span);
@@ -996,12 +996,12 @@ fn prosify_return_instr_group(
 
 // - Block
 
-fn prosify_block_group(ctx: &Context, block_sl: sl::Block) -> Result<pl::BlockGroup, ProseError> {
+fn prosify_group_block(ctx: &Context, block_sl: sl::Block) -> Result<pl::GroupBlock, ProseError> {
     match block_sl.len() {
         0 => Ok(Vec::new()),
         1 => {
             let instr_sl = block_sl.into_iter().next().unwrap();
-            prosify_instr_group(ctx, instr_sl)
+            prosify_group_instr(ctx, instr_sl)
         }
         _ => {
             let spans = block_sl
@@ -1011,11 +1011,11 @@ fn prosify_block_group(ctx: &Context, block_sl: sl::Block) -> Result<pl::BlockGr
             let span = Span::over(&spans);
             let mut blocks_pl = Vec::with_capacity(block_sl.len());
             for instr_sl in block_sl {
-                let block_pl = prosify_instr_group(ctx, instr_sl)?;
+                let block_pl = prosify_group_instr(ctx, instr_sl)?;
                 blocks_pl.push(block_pl);
             }
-            let instr_pl = pl::BacktrackGroupInstr { blocks: blocks_pl };
-            let tier_pl = pl::InstrGroup::Backtrack(instr_pl);
+            let instr_pl = pl::BacktrackInstr { blocks: blocks_pl };
+            let tier_pl = pl::GroupInstr::Backtrack(instr_pl);
             let instr_pl = pl::TierInstr { tier: tier_pl };
             let instr_kind_pl = pl::InstrKind::Tier(instr_pl);
             let instr_pl = make_instr(instr_kind_pl, span);
@@ -1029,7 +1029,7 @@ fn prosify_block_group(ctx: &Context, block_sl: sl::Block) -> Result<pl::BlockGr
 fn prosify_table_row(ctx: &Context, row_sl: sl::TableRow) -> Result<pl::TableRow, ProseError> {
     let exps_input_pl = prosify_exps(ctx, &row_sl.exps_input)?;
     let exp_pl = prosify_exp(ctx, &row_sl.exp)?;
-    let block_pl = prosify_block_group(ctx, row_sl.block)?;
+    let block_pl = prosify_group_block(ctx, row_sl.block)?;
     Ok(pl::TableRow { exps_input: exps_input_pl, exp: exp_pl, block: block_pl })
 }
 
@@ -1108,10 +1108,10 @@ fn prosify_defined_rel_def(
 ) -> Result<pl::DefinedRel, ProseError> {
     ctx.set_namespace(def_rel_sl.id.clone());
     let exps_input_pl = prosify_exps(ctx, &def_rel_sl.exps_input)?;
-    let block_pl = prosify_block_dispatch(ctx, def_rel_sl.block)?;
+    let block_pl = prosify_dispatch_block(ctx, def_rel_sl.block)?;
     let block_else_opt_pl = match def_rel_sl.block_else {
         Some(block_else_sl) => {
-            let block_else_pl = prosify_block_dispatch(ctx, block_else_sl)?;
+            let block_else_pl = prosify_dispatch_block(ctx, block_else_sl)?;
             Some(block_else_pl)
         }
         None => None,
@@ -1208,10 +1208,10 @@ fn prosify_defined_func_def(
 ) -> Result<pl::DefinedFunc, ProseError> {
     ctx.set_namespace(def_func_sl.id.clone());
     let params_pl = prosify_params(ctx, &def_func_sl.params)?;
-    let block_pl = prosify_block_group(ctx, def_func_sl.block)?;
+    let block_pl = prosify_group_block(ctx, def_func_sl.block)?;
     let block_else_opt_pl = match def_func_sl.block_else {
         Some(block_else_sl) => {
-            let block_else_pl = prosify_block_group(ctx, block_else_sl)?;
+            let block_else_pl = prosify_group_block(ctx, block_else_sl)?;
             Some(block_else_pl)
         }
         None => None,

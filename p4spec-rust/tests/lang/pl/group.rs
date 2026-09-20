@@ -30,9 +30,9 @@ fn variable(name: &str) -> pl::ast::Exp {
     }
 }
 
-fn group(name: &str) -> pl::ast::Instr<pl::ast::InstrDispatch> {
+fn group(name: &str) -> pl::ast::Instr<pl::ast::DispatchInstr> {
     let instr_kind = pl::ast::InstrKind::Tier(pl::ast::TierInstr {
-        tier: pl::ast::InstrDispatch::Group(pl::ast::GroupDispatchInstr {
+        tier: pl::ast::DispatchInstr::Group(pl::ast::RuleGroupInstr {
             id_rel: id("relation"),
             id_group: id(name),
             rel_signature: pl::ast::RelSignature {
@@ -55,8 +55,8 @@ fn group(name: &str) -> pl::ast::Instr<pl::ast::InstrDispatch> {
 }
 
 fn control(
-    instr_kind: pl::ast::InstrKind<pl::ast::InstrDispatch>,
-) -> pl::ast::Instr<pl::ast::InstrDispatch> {
+    instr_kind: pl::ast::InstrKind<pl::ast::DispatchInstr>,
+) -> pl::ast::Instr<pl::ast::DispatchInstr> {
     pl::annot::Annotated {
         node: p4spec_rust::note_phrase! {
             node: instr_kind,
@@ -99,7 +99,7 @@ fn test_group_collection_preserves_depth_first_branch_order_and_payloads() {
             block: vec![group("g")],
         })),
         control(pl::ast::InstrKind::Tier(pl::ast::TierInstr {
-            tier: pl::ast::InstrDispatch::Route(pl::ast::RouteDispatchInstr {
+            tier: pl::ast::DispatchInstr::Route(pl::ast::RouteInstr {
                 blocks: vec![vec![group("h")], vec![group("i")]],
             }),
         })),
