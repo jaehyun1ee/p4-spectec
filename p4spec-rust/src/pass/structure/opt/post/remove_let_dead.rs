@@ -7,10 +7,11 @@
 //! [return x] -> {x}
 //! ```
 //!
-//! `upstream_let_instr` uses that result to drop `let x = 1` around the first
-//! body and keep it around the second, then recursively rewrites the body
-//! `let x = f() { return y }` stays because its right-hand side is a call
-//! Rule instructions also stay even when their outputs are unused
+//! `upstream_let_instr` uses that result
+//! to drop `let x = 1` around the first body and keep it around the second,
+//! then recursively rewrites the body.
+//! `let x = f() { return y }` stays because its right-hand side is a call.
+//! Rule instructions also stay even when their outputs are unused.
 
 use crate::lang::{
     common::{ds::set::IdSet, source::Span},
@@ -22,7 +23,7 @@ use crate::pass::structure::{StructureError, StructureErrorKind, ol::ast::*};
 
 // == Removable expressions
 
-/// `x + 1` is removable; `f() + 1` is not because it contains a call
+/// `x + 1` is removable; `f() + 1` is not because it contains a call.
 fn removable_let(exp_r: &Exp) -> bool {
     match &exp_r.node {
         ExpKind::Bool(_) | ExpKind::Num(_) | ExpKind::Text(_) | ExpKind::Id(_) => true,
@@ -50,15 +51,16 @@ fn removable_let(exp_r: &Exp) -> bool {
         ExpKind::Slice(exp_base, exp_idx, exp_len) => {
             removable_let(exp_base) && removable_let(exp_idx) && removable_let(exp_len)
         }
+        // Calls are the only non-removable leaf
         ExpKind::Call(_, _, _) => false,
     }
 }
 
 // == Downstream uses
 
-// ids_defined: names being checked; the result contains the ones used here
-// For ids_defined={x}, `return (x, y)` contributes {x}
-
+/// Reports which of `ids_defined` an instruction uses.
+///
+/// For `ids_defined = {x}`, `return (x, y)` contributes `{x}`.
 fn downstream_instr(ids_defined: &IdSet, instr_ol: &Instr) -> Result<IdSet, StructureError> {
     downstream_instr_kind(ids_defined, &instr_ol.node, &instr_ol.span)
 }
@@ -87,9 +89,11 @@ fn downstream_instr_kind(
     }
 }
 
-/// With ids_defined={x}, `[let x = 2 {}; return x]` yields {}
-/// But `[let x = 2 { return x }]` yields {x}: the body is inspected first
-/// Let bindings and Rule outputs are excluded only from later instructions
+/// Reports which of `ids_defined` a block uses before rebinding them.
+///
+/// With `ids_defined = {x}`, `[let x = 2 {}; return x]` yields `{}`,
+/// but `[let x = 2 { return x }]` yields `{x}`: the body is inspected first.
+/// Let bindings and rule outputs are excluded only from later instructions.
 fn downstream_block(ids_defined: &IdSet, block: &Block) -> Result<IdSet, StructureError> {
     let mut ids_defined = ids_defined.clone();
     let mut ids_used = IdSet::new();
@@ -215,8 +219,7 @@ fn downstream_debug_instr(
 
 // == Upstream binding removal
 
-// Rewrite the block, dropping removable Lets whose downstream result is empty
-
+/// Rewrites an instruction, dropping removable lets whose bindings go unused.
 fn upstream_instr(instr_ol: Instr) -> Result<Block, StructureError> {
     upstream_instr_kind(instr_ol.node, instr_ol.span)
 }
@@ -296,6 +299,7 @@ fn upstream_group_instr(instr_ol: GroupInstr, span: Span) -> Result<Block, Struc
 
 // - Let instruction
 
+/// Drops the let when its pattern is unused in the body.
 fn upstream_let_instr(instr_ol: LetInstr, span: Span) -> Result<Block, StructureError> {
     let LetInstr { exp_l, exp_r, iter_instrs, block } = instr_ol;
     // Inspect uses before deleting inner Lets: `let x = 1 { let y = (x,) {} }`
@@ -325,6 +329,7 @@ fn upstream_rule_instr(instr_ol: RuleInstr, span: Span) -> Result<Block, Structu
 
 // == Entry point
 
+/// Removes dead lets throughout the block.
 pub(crate) fn apply(block: Block) -> Result<Block, StructureError> {
     upstream_block(block)
 }

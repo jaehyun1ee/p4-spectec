@@ -7,8 +7,9 @@
 //! p        vs q        -> Fuzzy
 //! ```
 //!
-//! A partition covers every case; disjoint conditions may leave cases uncovered
-//! Fuzzy means the analysis cannot decide whether the conditions overlap
+//! A partition covers every case;
+//! disjoint conditions may leave cases uncovered.
+//! Fuzzy means the analysis cannot decide whether the conditions overlap.
 
 use crate::pass::structure::error::{StructureError, StructureErrorKind};
 use crate::{
@@ -21,11 +22,16 @@ use crate::{
 
 // == Overlap results
 
+/// How two conditions on the same value relate.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum Overlap {
+    /// Syntactically the same condition.
     Identical,
+    /// Never both true; together they may leave values uncovered.
     Disjoint { exp: Exp, guard_a: Guard, guard_b: Guard },
+    /// Exactly one of them holds for every value.
     Partition { exp: Exp, guard_a: Guard, guard_b: Guard },
+    /// Unknown relation; the conditions are kept apart.
     Fuzzy,
 }
 
@@ -33,13 +39,16 @@ pub(crate) enum Overlap {
 
 // - Expressions to guards
 
+/// Reads a condition as a guard on `exp_target`: `x == 1` becomes `Cmp(==, 1)`.
 pub(crate) fn exp_as_guard(exp_target: &Exp, exp_cond: &Exp) -> Option<Guard> {
     match &exp_cond.node {
+        // Negation of the target itself
         ExpKind::Un(UnOp::Bool(boolop::UnOp::Not), _, exp)
             if exp_target.syntax_eq(exp.as_ref()) =>
         {
             Some(Guard::Bool(false))
         }
+        // Equality or inequality with the target on either side
         ExpKind::Cmp(
             op @ CmpOp::Bool(boolop::CmpOp::Eq | boolop::CmpOp::Ne),
             optyp,
@@ -52,6 +61,7 @@ pub(crate) fn exp_as_guard(exp_target: &Exp, exp_cond: &Exp) -> Option<Guard> {
             exp_l,
             exp_r,
         ) if exp_target.syntax_eq(exp_r) => Some(Guard::Cmp(*op, *optyp, exp_l.as_ref().clone())),
+        // Subtype, pattern, and membership tests on the target
         ExpKind::Sub(exp, typ, subcheck) if exp_target.syntax_eq(exp.as_ref()) => {
             Some(Guard::Sub(typ.as_ref().clone(), subcheck.clone()))
         }
@@ -67,6 +77,7 @@ pub(crate) fn exp_as_guard(exp_target: &Exp, exp_cond: &Exp) -> Option<Guard> {
 
 // - Guards to expressions
 
+/// Rebuilds the condition a guard stands for on `exp_target`.
 pub(crate) fn guard_as_exp(exp_target: &Exp, guard: &Guard) -> Exp {
     let exp_kind = match guard {
         Guard::Bool(true) => return exp_target.clone(),
@@ -87,6 +98,7 @@ pub(crate) fn guard_as_exp(exp_target: &Exp, guard: &Guard) -> Exp {
 
 // == Condition overlap
 
+/// Compares two guards on the same value by comparing their conditions.
 pub(crate) fn overlap_guard(
     tdenv: &TDEnv,
     exp: &Exp,
@@ -98,6 +110,7 @@ pub(crate) fn overlap_guard(
     overlap_exp(tdenv, &exp_a, &exp_b)
 }
 
+/// Classifies how two conditions relate; the module header lists the cases.
 pub(crate) fn overlap_exp(
     tdenv: &TDEnv,
     exp_a: &Exp,
@@ -262,10 +275,12 @@ pub(crate) fn overlap_exp(
 
 // - Helper for subtyping
 
+/// Lists the constructors of a variant type through aliases; `None` otherwise.
 pub(crate) fn typ_as_variant(
     tdenv: &TDEnv,
     typ: &Typ,
 ) -> Result<Option<Vec<Mixop>>, StructureError> {
+    // Only a defined variant type has constructors
     let typ_unrolled = expand_typ(tdenv, typ)?;
     let TypKind::Var(id, _) = &typ_unrolled.node else {
         return Ok(None);
@@ -286,6 +301,7 @@ pub(crate) fn typ_as_variant(
 
 // - Subtyping
 
+/// Compares two subtype tests on the same value by their constructor sets.
 fn overlap_sub_exp(
     tdenv: &TDEnv,
     exp: &Exp,
@@ -325,6 +341,7 @@ fn overlap_sub_exp(
 
 // - Patterns
 
+/// Compares two pattern matches on the same value.
 fn overlap_match_exp(exp: &Exp, pattern_a: &Pattern, pattern_b: &Pattern) -> Overlap {
     // Some vs Some -> Identical
     if pattern_a.syntax_eq(pattern_b) {
@@ -376,6 +393,7 @@ fn overlap_match_exp(exp: &Exp, pattern_a: &Pattern, pattern_b: &Pattern) -> Ove
 
 // - Subtyping and patterns
 
+/// Compares a subtype test with a constructor match on the same value.
 fn overlap_sub_match_exp(
     tdenv: &TDEnv,
     exp: &Exp,
@@ -406,6 +424,7 @@ fn overlap_sub_match_exp(
     })
 }
 
+/// Like `overlap_sub_match_exp`, with the guards kept in input order.
 fn overlap_match_sub_exp(
     tdenv: &TDEnv,
     exp: &Exp,
@@ -427,12 +446,14 @@ fn overlap_match_sub_exp(
 
 // - Partitions
 
+/// Checks for `true` against `false`, the only literal pair that partitions.
 fn partition_exp_literal(exp_a: &Exp, exp_b: &Exp) -> bool {
     matches!((&exp_a.node, &exp_b.node), (ExpKind::Bool(bool_a), ExpKind::Bool(bool_b)) if bool_a != bool_b)
 }
 
 // - Disjointness
 
+/// Checks whether two literal expressions can never be equal.
 fn disjoint_exp_literal(exp_a: &Exp, exp_b: &Exp) -> Result<bool, StructureError> {
     match (&exp_a.node, &exp_b.node) {
         // true vs false -> disjoint
@@ -476,6 +497,7 @@ fn disjoint_exp_literal(exp_a: &Exp, exp_b: &Exp) -> Result<bool, StructureError
     }
 }
 
+/// Checks literal lists pairwise; one disjoint position suffices.
 fn disjoint_exps_literal(
     exps_a: &[&Exp],
     exps_b: &[&Exp],

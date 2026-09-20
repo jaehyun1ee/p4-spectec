@@ -11,8 +11,9 @@
 //! return x
 //! ```
 //!
-//! A nested binder named `x` is renamed before substitution so that uses of
-//! `y` still refer to the outer `x`; iterated aliases need matching iterators
+//! A nested binder named `x` is renamed before substitution
+//! so that uses of `y` still refer to the outer `x`;
+//! iterated aliases need matching iterators.
 
 use crate::lang::common::source::Span;
 use crate::lang::{
@@ -31,6 +32,7 @@ fn remove_instr(instr_ol: Instr) -> Result<Block, StructureError> {
     remove_instr_kind(instr_ol.node, instr_ol.span)
 }
 
+/// Removes alias lets; other instructions only recurse.
 fn remove_instr_kind(instr_kind_ol: InstrKind, span: Span) -> Result<Block, StructureError> {
     match instr_kind_ol {
         InstrKind::If(instr_ol) => remove_if_instr(instr_ol, span),
@@ -105,7 +107,7 @@ fn remove_group_instr(instr_ol: GroupInstr, span: Span) -> Result<Block, Structu
 
 // - Let instruction
 
-/// Recognizes one iteration around a variable, such as `x*` or `x?`
+/// Recognizes one iteration around a variable, such as `x*` or `x?`.
 fn iterated_id_exp(exp: &Exp) -> Option<(&Id, &Iter)> {
     let ExpKind::Iter(exp, ExpIter { iter, .. }) = &exp.node else {
         return None;
@@ -116,6 +118,7 @@ fn iterated_id_exp(exp: &Exp) -> Option<(&Id, &Iter)> {
     Some((id, iter))
 }
 
+/// Substitutes an alias such as `let y = x` into its body and drops the let.
 fn remove_let_instr(instr_ol: LetInstr, span: Span) -> Result<Block, StructureError> {
     let LetInstr { exp_l, exp_r, iter_instrs, block } = instr_ol;
     // let y = x { return y } -> return x
@@ -159,6 +162,7 @@ fn remove_rule_instr(instr_ol: RuleInstr, span: Span) -> Result<Block, Structure
 
 // == Entry point
 
+/// Removes every alias let in the block.
 pub(crate) fn apply(block: Block) -> Result<Block, StructureError> {
     remove_block(block)
 }

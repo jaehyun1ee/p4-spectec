@@ -11,12 +11,14 @@
 //! let x = source { return x; return x }
 //! ```
 //!
-//! Constructors and iterator metadata must match; variable pairs build a renaming
-//! `downstream_block` checks only the next sibling: for `let x = source`,
-//! a following `let y = source { return y }` yields `{ return x }`
+//! Constructors and iterator metadata must match;
+//! variable pairs build a renaming.
+//! `downstream_block` checks only the next sibling:
+//! for `let x = source`,
+//! a following `let y = source { return y }` yields `{ return x }`.
 //! `upstream_block` merges that body into the current Let and retries,
-//! then rewrites the merged body; an intervening instruction stops merging
-//! A relation's input hint selects inputs and outputs
+//! then rewrites the merged body; an intervening instruction stops merging.
+//! A relation's input hint selects inputs and outputs.
 
 use std::collections::VecDeque;
 
@@ -32,7 +34,9 @@ use crate::pass::structure::{
 
 // == Bindings
 
-// Keep only iterator variables used by this expression: x with (x, y)* -> x with x*
+/// An expression with only the iterator variables it uses.
+///
+/// `x` under `(x, y)*` keeps just `x*`.
 struct ExpUnit<'a> {
     exp: &'a Exp,
     iter_exps: Vec<ExpIter>,
@@ -40,6 +44,7 @@ struct ExpUnit<'a> {
 
 impl<'a> ExpUnit<'a> {
     fn new(exp: &'a Exp, iter_exps: &[ExpIter]) -> Self {
+        // Keep only the iterator variables the expression mentions
         let ids = exp.free();
         let iter_exps = iter_exps
             .iter()
@@ -62,12 +67,16 @@ impl SyntaxEq for ExpUnit<'_> {
     }
 }
 
+/// A binding instruction seen as its input and output units.
 enum Bind<'a> {
+    /// `let pattern = source`: the pattern and the source.
     Let(ExpUnit<'a>, ExpUnit<'a>),
+    /// A relation call: its id, input units, and output units.
     Rule(&'a Id, Vec<ExpUnit<'a>>, Vec<ExpUnit<'a>>),
 }
 
 impl<'a> Bind<'a> {
+    /// Views a let as its pattern and source units.
     fn from_let(instr_let: &'a LetInstr) -> Self {
         let LetInstr { exp_l, exp_r, iter_instrs, .. } = instr_let;
         let (iter_exps_bound, iter_exps_bind): (Vec<_>, Vec<_>) = iter_instrs
@@ -80,11 +89,13 @@ impl<'a> Bind<'a> {
                 (exp_iter_bound, exp_iter_bind)
             })
             .unzip();
+        // The pattern takes the binding iterators, the source the bound ones
         let expunit_l = ExpUnit::new(exp_l, &iter_exps_bind);
         let expunit_r = ExpUnit::new(exp_r, &iter_exps_bound);
         Self::Let(expunit_l, expunit_r)
     }
 
+    /// Views a rule call, splitting its arguments by the input hint.
     fn from_rule(instr_rule: &'a RuleInstr, span: &Span) -> Result<Self, StructureError> {
         let RuleInstr { id, not_exp, input_hint, iter_instrs, .. } = instr_rule;
         let exps = not_exp.args();
@@ -100,6 +111,7 @@ impl<'a> Bind<'a> {
                 (exp_iter_bound, exp_iter_bind)
             })
             .unzip();
+        // Inputs use the ranged-over iterators, outputs the binding ones
         let expunits_input = exps_input
             .into_iter()
             .map(|exp| ExpUnit::new(exp, &iter_exps_bound))
@@ -115,19 +127,23 @@ impl<'a> Bind<'a> {
 
 // == Binding comparison
 
-// Find how to rename the later binding's outputs to the current binding's names
-// Let right-hand sides must match; Rules must have the same id and inputs
-// Input iterator metadata must also match before comparing output patterns
-//
-//   current: let (x, y) = source
-//   later:   let (a, b) = source
-//   result:  Some({a -> x, b -> y})
-//
-// Different inputs, pattern shapes, or incompatible output iterators yield None
-// This only builds a Renamer; downstream renames the body and upstream merges it
-
+/// Finds how to rename a later binding's outputs to the current binding's.
+///
+/// Let sources must match; rule calls need the same id and inputs,
+/// including the input iterators, before the output patterns are compared.
+///
+/// ```text
+/// current: let (x, y) = source
+/// later:   let (a, b) = source
+/// result:  Some({a -> x, b -> y})
+/// ```
+///
+/// Different inputs, pattern shapes, or output iterators yield `None`.
+/// This only builds a `Renamer`;
+/// downstream renames the body and upstream merges it.
 fn collapse_bind(bind: &Bind<'_>, bind_target: &Bind<'_>) -> Option<Renamer> {
     match (bind, bind_target) {
+        // Lets need the same source; rules the same id and inputs
         (Bind::Let(expunit_l, expunit_r), Bind::Let(expunit_target_l, expunit_target_r))
             if expunit_r.syntax_eq(expunit_target_r) =>
         {
@@ -143,10 +159,10 @@ fn collapse_bind(bind: &Bind<'_>, bind_target: &Bind<'_>) -> Option<Renamer> {
     }
 }
 
-// Compare the output pattern, then its iterators using the resulting renaming
-// For x with x* and y with y*, y -> x makes the iterator metadata agree
-// x* and y? still disagree after renaming, so the binding cannot be merged
-
+/// Compares an output pattern, then its iterators under the resulting renaming.
+///
+/// For `x` with `x*` and `y` with `y*`, `y -> x` makes the iterators agree;
+/// `x*` and `y?` still disagree after renaming, so the binding cannot merge.
 fn collapse_expunit(
     renamer: Renamer,
     expunit: &ExpUnit<'_>,
@@ -176,11 +192,13 @@ fn collapse_expunits(
 
 // - Expressions
 
-// Walk both output patterns together and collect target-name -> current-name pairs
-// (x, [y]) against (a, [b]) records a -> x and b -> y; unequal shapes fail
-// Only the pattern forms below participate; even equal literals yield None
-// Repeated target names follow traversal order: (x, y) against (a, a) leaves a -> y
-
+/// Walks both output patterns together, collecting target-to-current pairs.
+///
+/// `(x, [y])` against `(a, [b])` records `a -> x` and `b -> y`;
+/// unequal shapes fail.
+/// Only the pattern forms below participate; even equal literals yield `None`.
+/// Repeated target names follow traversal order:
+/// `(x, y)` against `(a, a)` leaves `a -> y`.
 fn collapse_exp(mut renamer: Renamer, exp: &Exp, exp_target: &Exp) -> Option<Renamer> {
     match (&exp.node, &exp_target.node) {
         (ExpKind::Id(id), ExpKind::Id(id_target)) => {
@@ -190,6 +208,7 @@ fn collapse_exp(mut renamer: Renamer, exp: &Exp, exp_target: &Exp) -> Option<Ren
             }
             Some(renamer)
         }
+        // Structured patterns collapse componentwise
         (ExpKind::Tuple(exps), ExpKind::Tuple(exps_target))
         | (ExpKind::List(exps), ExpKind::List(exps_target)) => {
             let exps = exps.iter().collect();
@@ -214,6 +233,7 @@ fn collapse_exp(mut renamer: Renamer, exp: &Exp, exp_target: &Exp) -> Option<Ren
         (ExpKind::Iter(exp, exp_iter), ExpKind::Iter(exp_target, exp_iter_target)) => {
             collapse_iter_exp(renamer, exp, exp_iter, exp_target, exp_iter_target)
         }
+        // Literals and other forms never collapse
         _ => None,
     }
 }
@@ -230,6 +250,7 @@ fn collapse_exps(mut renamer: Renamer, exps: Vec<&Exp>, exps_target: Vec<&Exp>) 
 
 // - Case expression
 
+/// Collapses the arguments of two cases with the same mixfix.
 fn collapse_case_exp(
     renamer: Renamer,
     not_exp: &NotExp,
@@ -245,11 +266,13 @@ fn collapse_case_exp(
 
 // - Record expression
 
+/// Collapses the fields of two structs with the same atoms.
 fn collapse_str_exp(
     renamer: Renamer,
     exp_fields: &[ExpField],
     exp_fields_target: &[ExpField],
 ) -> Option<Renamer> {
+    // Field atoms must agree pairwise
     if exp_fields.len() != exp_fields_target.len()
         || !exp_fields.iter().zip(exp_fields_target).all(
             |(ExpField { atom, .. }, ExpField { atom: atom_target, .. })| {
@@ -269,6 +292,7 @@ fn collapse_str_exp(
 
 // - Iterated expression
 
+/// Collapses iterated patterns; the iterators must agree after renaming.
 fn collapse_iter_exp(
     renamer: Renamer,
     exp: &Exp,
@@ -284,17 +308,18 @@ fn collapse_iter_exp(
 
 // == Downstream search
 
-// Compare the current binding with only the next sibling
-//
-//   Current binding:    let x = source
-//   Following siblings: [let y = source { return y }; return z]
-//
-//   Returned body:      Some([return x])
-//   Remaining siblings: [return z]
-//
-// Upstream merges the returned body into the current binding's body
-// If the next sibling cannot be merged, return None and leave it in place
-
+/// Takes the next sibling's body, renamed to this binding, if it collapses.
+///
+/// ```text
+/// current binding:    let x = source
+/// following siblings: [let y = source { return y }; return z]
+///
+/// returned body:      Some([return x])
+/// remaining siblings: [return z]
+/// ```
+///
+/// Upstream merges the returned body into the current binding's body.
+/// A sibling that cannot merge stays in place and `None` is returned.
 fn downstream_block(
     bind: &Bind<'_>,
     instrs_tail: &mut VecDeque<Instr>,
@@ -315,6 +340,7 @@ fn downstream_block(
 
 // - Let instruction
 
+/// Takes a let's body, renamed to this binding's names, if it collapses.
 fn downstream_let_instr(
     bind: &Bind<'_>,
     instr_let: &mut LetInstr,
@@ -331,6 +357,7 @@ fn downstream_let_instr(
 
 // - Rule instruction
 
+/// Takes a rule call's body, renamed to this binding's names, if it collapses.
 fn downstream_rule_instr(
     bind: &Bind<'_>,
     instr_rule: &mut RuleInstr,
@@ -348,8 +375,7 @@ fn downstream_rule_instr(
 
 // == Upstream rewriting
 
-// Merge matching siblings into the current binding, then rewrite its body
-
+/// Merges matching siblings into a binding, then rewrites its body.
 fn upstream_instr_kind(
     changed: &mut bool,
     span: &Span,
@@ -367,6 +393,7 @@ fn upstream_instr_kind(
     }
 }
 
+/// Rewrites a block, letting each binding consume its following siblings.
 fn upstream_block(changed: &mut bool, block: Block) -> Result<Block, StructureError> {
     let mut instrs_tail: VecDeque<_> = block.into();
     let mut block = Vec::with_capacity(instrs_tail.len());
@@ -428,11 +455,13 @@ fn upstream_group_instr(
 
 // - Let instruction
 
+/// Absorbs following lets with the same source, then rewrites the merged body.
 fn upstream_let_instr(
     changed: &mut bool,
     instrs_tail: &mut VecDeque<Instr>,
     mut instr: LetInstr,
 ) -> Result<InstrKind, StructureError> {
+    // Keep absorbing while the next sibling collapses
     loop {
         let bind = Bind::from_let(&instr);
         let Some(block_merge) = downstream_block(&bind, instrs_tail)? else {
@@ -449,12 +478,14 @@ fn upstream_let_instr(
 
 // - Rule instruction
 
+/// Absorbs following calls with the same inputs, then rewrites the merged body.
 fn upstream_rule_instr(
     changed: &mut bool,
     span: &Span,
     instrs_tail: &mut VecDeque<Instr>,
     mut instr: RuleInstr,
 ) -> Result<InstrKind, StructureError> {
+    // Keep absorbing while the next sibling collapses
     loop {
         let bind = Bind::from_rule(&instr, span)?;
         let Some(block_merge) = downstream_block(&bind, instrs_tail)? else {
@@ -471,6 +502,7 @@ fn upstream_rule_instr(
 
 // == Entry point
 
+/// Merges bindings throughout the block, flagging `changed` on any merge.
 pub(crate) fn apply(changed: &mut bool, block: Block) -> Result<Block, StructureError> {
     upstream_block(changed, block)
 }

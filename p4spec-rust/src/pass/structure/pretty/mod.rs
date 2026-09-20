@@ -1,6 +1,9 @@
 //! Revive used underscore names and remove ticks until names stop changing
 //!
-//! An input `_x''` used by `Return(_x'')` becomes `x` and `Return(x)`
+//! An input `_x''` used by `Return(_x'')` becomes `x` and `Return(x)`.
+//!
+//! Revival removes leading underscores; tick cleanup shortens suffixes.
+//! Actual name changes cannot cancel within a round, including iterator names.
 
 pub(super) mod rename_tick;
 pub(super) mod revive_underscore;
@@ -8,11 +11,9 @@ pub(super) mod revive_underscore;
 use super::{StructureError, ol::ast::Block};
 use crate::lang::il::ast::{Arg, Exp};
 
-// Revival removes leading underscores; tick cleanup shortens suffixes
-// Actual name changes cannot cancel within a round, including iterator names
-
 // == Relations
 
+/// Prettifies a relation's inputs and blocks until a round changes nothing.
 pub(crate) fn pretty_rel(
     exps_match: Vec<Exp>,
     block: Block,
@@ -31,6 +32,7 @@ pub(crate) fn pretty_rel(
 
 // == Functions
 
+/// Prettifies a function's arguments and blocks until a round changes nothing.
 pub(crate) fn pretty_func(
     args_input: Vec<Arg>,
     block: Block,

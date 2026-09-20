@@ -12,11 +12,11 @@
 //! hold R(x) { return a; return c } else { return b; return d }
 //! ```
 //!
-//! The relation id, arguments, and iterators must match; intervening
-//! instructions prevent the merge
-//! `take_identical_hold` consumes only the next sibling when it matches
+//! The relation id, arguments, and iterators must match;
+//! intervening instructions prevent the merge.
+//! `take_identical_hold` consumes only the next sibling when it matches.
 //! After merging H1 with H2, `merge_block` rewrites the remaining siblings
-//! before retrying H12: H1; H2; H3; H4 -> H12; H34 -> H1234
+//! before retrying H12: `H1; H2; H3; H4 -> H12; H34 -> H1234`.
 
 use std::collections::VecDeque;
 
@@ -25,6 +25,7 @@ use crate::pass::structure::{ol::ast::*, opt::merge};
 
 // == Instructions
 
+/// Rewrites one instruction; the flag reports a Hold absorbing its sibling.
 fn merge_instr_kind(
     changed: &mut bool,
     instrs_tail: &mut VecDeque<Instr>,
@@ -41,6 +42,7 @@ fn merge_instr_kind(
     }
 }
 
+/// Rewrites a block; a merged Hold is retried after its remaining siblings.
 fn merge_block(changed: &mut bool, block: Block) -> Block {
     let mut instrs_tail: VecDeque<_> = block.into();
     let mut block = Vec::with_capacity(instrs_tail.len());
@@ -49,6 +51,7 @@ fn merge_block(changed: &mut bool, block: Block) -> Block {
         while let Some(instr) = instrs_tail.pop_front() {
             let (instr_kind, merged) = merge_instr_kind(changed, &mut instrs_tail, instr.node);
             let instr = crate::phrase!(node: instr_kind, span: instr.span);
+            // Park the merged Hold and finish the siblings before retrying it
             if merged {
                 let block_prefix = std::mem::take(&mut block);
                 blocks_pending.push((block_prefix, instr));
@@ -56,6 +59,7 @@ fn merge_block(changed: &mut bool, block: Block) -> Block {
                 block.push(instr);
             }
         }
+        // Requeue the parked Hold in front of the rewritten siblings
         let Some((block_prefix, instr)) = blocks_pending.pop() else {
             return block;
         };
@@ -76,6 +80,9 @@ fn merge_if_instr(changed: &mut bool, instr: IfInstr) -> InstrKind {
 
 // - Hold instruction
 
+/// Pops the next sibling when it is an identical Hold.
+///
+/// Relation, arguments, and iterators must all match.
 fn take_identical_hold(
     instr_target: &HoldInstr,
     instrs_tail: &mut VecDeque<Instr>,
@@ -84,6 +91,7 @@ fn take_identical_hold(
     let InstrKind::Hold(instr_hold) = &instr_head.node else {
         return None;
     };
+    // Relation, arguments, and iterators must all match
     if !instr_target.id.syntax_eq(&instr_hold.id)
         || !instr_target.not_exp.syntax_eq(&instr_hold.not_exp)
         || !instr_target.iter_exps.syntax_eq(&instr_hold.iter_exps)
@@ -95,6 +103,7 @@ fn take_identical_hold(
     Some(instr_hold)
 }
 
+/// Merges the next identical Hold branch by branch, or recurses into branches.
 fn merge_hold_instr(
     changed: &mut bool,
     instrs_tail: &mut VecDeque<Instr>,
@@ -102,6 +111,7 @@ fn merge_hold_instr(
 ) -> (InstrKind, bool) {
     let instr_merge = take_identical_hold(&instr, instrs_tail);
     let HoldInstr { id, not_exp, iter_exps, block_hold, block_not_hold } = instr;
+    // Merge branch by branch and leave nested rewriting to the retry
     if let Some(instr_merge) = instr_merge {
         *changed = true;
         let HoldInstr {
@@ -115,6 +125,7 @@ fn merge_hold_instr(
         let block_not_hold = merge::merge_block(block_not_hold, block_not_hold_target);
         let instr = HoldInstr { id, not_exp, iter_exps, block_hold, block_not_hold };
         (InstrKind::Hold(instr), true)
+    // No sibling to merge: rewrite the branches
     } else {
         let block_hold = merge_block(changed, block_hold);
         let block_not_hold = merge_block(changed, block_not_hold);
@@ -168,6 +179,7 @@ fn merge_rule_instr(changed: &mut bool, instr: RuleInstr) -> InstrKind {
 
 // == Entry point
 
+/// Merges adjacent identical Holds throughout the block.
 pub(crate) fn apply(changed: &mut bool, block: Block) -> Block {
     merge_block(changed, block)
 }
