@@ -1,7 +1,8 @@
-//! Minimal-dimension inference for expression variables.
+//! Minimal-dimension inference for expression variables
 //!
-//! This is the binding pass's reduced form of elaboration dimension inference: it records
-//! free variables and retains the minimal dimension when one occurs more than once.
+//! This is the binding pass's reduced form of elaboration dimension inference:
+//! it records free variables
+//! and retains the minimal dimension when one occurs more than once.
 
 use crate::{
     lang::{common::ds::map::IdMap, il::ast},
@@ -10,9 +11,11 @@ use crate::{
 
 // == Variable inference
 
+/// Records `id` at its dimension, keeping the smaller one when repeated.
 fn infer_id_exp(venv: &mut VEnv, exp: &ast::Exp, id: &ast::Id, iters: &[ast::Iter]) {
     let typ = crate::phrase!(node: exp.note.as_ref().clone(), span: exp.span.clone());
     let dim = Dim::new(typ, iters.to_vec());
+    // A smaller dimension replaces the recorded one
     if venv
         .get(id)
         .is_none_or(|dim_previous| dim.sub(dim_previous))
@@ -23,6 +26,7 @@ fn infer_id_exp(venv: &mut VEnv, exp: &ast::Exp, id: &ast::Id, iters: &[ast::Ite
 
 // == Expression inference
 
+/// Infers the dimension of every variable occurring in an expression.
 pub fn infer_exp(exp: &ast::Exp) -> VEnv {
     let mut venv = IdMap::new();
     infer_exp_inner(&mut venv, exp, &[]);
@@ -75,6 +79,7 @@ fn infer_exp_inner(venv: &mut VEnv, exp: &ast::Exp, iters: &[ast::Iter]) {
             infer_exp_inner(venv, exp_field, iters);
         }
         ast::ExpKind::Call(_, _, args) => infer_args_inner(venv, args, iters),
+        // The innermost iteration comes first
         ast::ExpKind::Iter(exp, ast::ExpIter { iter, .. }) => {
             let mut iters_inner = Vec::with_capacity(iters.len() + 1);
             iters_inner.push(*iter);
@@ -84,6 +89,7 @@ fn infer_exp_inner(venv: &mut VEnv, exp: &ast::Exp, iters: &[ast::Iter]) {
     }
 }
 
+/// Infers the dimension of every variable occurring in a list of expressions.
 pub fn infer_exps(exps: &[ast::Exp]) -> VEnv {
     let mut venv = IdMap::new();
     infer_exps_inner(&mut venv, exps, &[]);

@@ -1,7 +1,9 @@
-//! Binding collection through invertible expression positions.
+//! Binding collection through invertible expression positions
 //!
-//! Free identifiers become binders only while traversing invertible constructs. A binder
-//! found below any non-invertible operation is rejected at that operation's source span.
+//! Free identifiers become binders only while traversing invertible constructs.
+//! A binder found below any non-invertible operation
+//! is rejected at that operation's source span.
+//! In `let (x, y + 1) = e`, `x` is collected and `y` is rejected at `y + 1`.
 
 use crate::lang::{common::source::Span, il::ast};
 
@@ -15,6 +17,7 @@ use super::{
 
 // - Errors
 
+/// Rejects binders found under a non-invertible construct.
 fn reject_noninvertible(
     span: Span,
     construct: &'static str,
@@ -32,12 +35,14 @@ fn reject_noninvertible(
 
 // - Expressions
 
+/// Collects the binders of an expression.
 pub fn collect_exp(ctx: &Context, exp: &ast::Exp) -> Result<BEnv, AlgoError> {
     match &exp.node {
         ast::ExpKind::Bool(_) | ast::ExpKind::Num(_) | ast::ExpKind::Text(_) => {
             let benv = BEnv::new();
             Ok(benv)
         }
+        // An identifier not bound yet is a binder
         ast::ExpKind::Id(id) => {
             if ctx.venv.contains_key(id) {
                 let benv = BEnv::new();
@@ -64,6 +69,7 @@ pub fn collect_exp(ctx: &Context, exp: &ast::Exp) -> Result<BEnv, AlgoError> {
             let benv = benv_l.union(benv_r)?;
             reject_noninvertible(exp.span.clone(), "comparison operator", benv)
         }
+        // Upcasts are invertible, downcasts are not
         ast::ExpKind::UpCast(_, exp_inner) => collect_exp(ctx, exp_inner),
         ast::ExpKind::DownCast(_, exp_inner) => {
             let benv = collect_exp(ctx, exp_inner)?;
@@ -138,6 +144,7 @@ pub fn collect_exp(ctx: &Context, exp: &ast::Exp) -> Result<BEnv, AlgoError> {
             let benv = collect_args(ctx, args)?;
             reject_noninvertible(exp.span.clone(), "call operator", benv)
         }
+        // Binders under an iteration gain its dimension
         ast::ExpKind::Iter(exp_inner, ast::ExpIter { iter, .. }) => {
             let benv = collect_exp(ctx, exp_inner)?;
             let benv = benv.add_iter(*iter);
@@ -146,6 +153,7 @@ pub fn collect_exp(ctx: &Context, exp: &ast::Exp) -> Result<BEnv, AlgoError> {
     }
 }
 
+/// Collects binders across expressions, combining parallel occurrences.
 pub fn collect_exps<'a>(
     ctx: &Context,
     exps: impl IntoIterator<Item = &'a ast::Exp>,
@@ -163,6 +171,7 @@ pub fn collect_exps<'a>(
 
 // - Paths
 
+/// Collects binders in the index and slice expressions along a path.
 pub fn collect_path(ctx: &Context, path: &ast::Path) -> Result<BEnv, AlgoError> {
     match &path.node {
         ast::PathKind::Root => {
@@ -187,6 +196,7 @@ pub fn collect_path(ctx: &Context, path: &ast::Path) -> Result<BEnv, AlgoError> 
 
 // - Arguments
 
+/// Collects binders of an expression argument; function arguments have none.
 pub fn collect_arg(ctx: &Context, arg: &ast::Arg) -> Result<BEnv, AlgoError> {
     match &arg.node {
         ast::ArgKind::Exp(exp) => collect_exp(ctx, exp),
@@ -197,6 +207,7 @@ pub fn collect_arg(ctx: &Context, arg: &ast::Arg) -> Result<BEnv, AlgoError> {
     }
 }
 
+/// Collects binders across arguments, combining parallel occurrences.
 pub fn collect_args(ctx: &Context, args: &[ast::Arg]) -> Result<BEnv, AlgoError> {
     let mut benvs = Vec::with_capacity(args.len());
     for arg in args {

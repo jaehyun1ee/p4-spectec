@@ -1,7 +1,10 @@
 //! Pattern-set operations for table exclusiveness and exhaustiveness
 //!
-//! `PatternSet` contains the notation-type alternatives for one argument, while
-//! `PatternSets` is their Cartesian product across one table row
+//! `PatternSet` contains the notation-type alternatives for one argument,
+//! while `PatternSets` is their Cartesian product across one table row.
+//! Rows are exclusive when no two products overlap
+//! and exhaustive when subtracting them all from the type's product
+//! leaves nothing.
 
 use crate::lang::{
     common::{ds::set::PhraseSet, source::Span},
@@ -14,7 +17,7 @@ use super::super::{AlgoError, AlgoErrorKind};
 
 // - Single argument
 
-/// A notation-type set compared by syntax
+/// A notation-type set compared by syntax.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PatternSet(PhraseSet<ast::NotTyp>);
 
@@ -43,7 +46,7 @@ impl FromIterator<ast::NotTyp> for PatternSet {
 
 // - Table row
 
-/// Ordered pattern sets for the arguments of one table row
+/// Ordered pattern sets for the arguments of one table row.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PatternSets(Vec<PatternSet>);
 
@@ -56,6 +59,7 @@ impl FromIterator<PatternSet> for PatternSets {
 
 // == Exclusiveness checks
 
+/// Rejects rows whose argument counts differ.
 fn check_arity(
     span: &Span,
     pattern_sets_l: &PatternSets,
@@ -69,12 +73,14 @@ fn check_arity(
     Err(AlgoError::new(AlgoErrorKind::PatternArityMismatch { expected, actual }, span.clone()))
 }
 
+/// Checks whether two rows can match the same input.
 pub fn has_overlap(
     span: &Span,
     pattern_sets_l: &PatternSets,
     pattern_sets_r: &PatternSets,
 ) -> Result<bool, AlgoError> {
     check_arity(span, pattern_sets_l, pattern_sets_r)?;
+    // Rows overlap only if every position shares an alternative
     let has_overlap =
         pattern_sets_l
             .0
@@ -87,6 +93,7 @@ pub fn has_overlap(
     Ok(has_overlap)
 }
 
+/// Finds the first pair of rows that overlap.
 pub fn find_overlap<'a>(
     span: &Span,
     pattern_sets_by_row: &'a [PatternSets],
@@ -104,6 +111,7 @@ pub fn find_overlap<'a>(
 
 // == Exhaustiveness checks
 
+/// Removes one row's patterns from a total, returning the remaining fragments.
 pub fn subtract(
     span: &Span,
     pattern_sets_total: &PatternSets,
@@ -143,12 +151,14 @@ pub fn subtract(
     Ok(pattern_sets_rows_fragment)
 }
 
+/// Subtracts every row from the total pattern space; what remains is uncovered.
 pub fn find_missing(
     span: &Span,
     pattern_sets_total: &PatternSets,
     pattern_sets_by_row: &[PatternSets],
 ) -> Result<Vec<PatternSets>, AlgoError> {
     let mut pattern_sets_rows_missing = vec![pattern_sets_total.clone()];
+    // Each row carves fragments out of what the previous rows left
     for pattern_sets in pattern_sets_by_row {
         let mut pattern_sets_rows_remaining = Vec::new();
         for pattern_sets_total in &pattern_sets_rows_missing {
