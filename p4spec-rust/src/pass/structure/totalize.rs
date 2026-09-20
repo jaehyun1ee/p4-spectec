@@ -1,6 +1,6 @@
 //! Mark variant case analyses whose guards cover exactly all constructors
 //!
-//! For a type `A | B`, branches matching A and B set `total=true`
+//! For a type `A | B`, branches matching `A` and `B` set `total=true`.
 
 use super::{
     error::{StructureError, StructureErrorKind},
@@ -15,6 +15,7 @@ use std::collections::BTreeSet;
 
 // == Variant coverage
 
+/// Collects the constructors matched when every guard is a variant match.
 fn find_variant_case_analysis(
     tdenv: &TDEnv,
     cases: &[Case],
@@ -22,6 +23,7 @@ fn find_variant_case_analysis(
     let mut mixops = Vec::new();
     for case in cases {
         match &case.guard {
+            // A subtype guard covers every constructor of the subtype
             Guard::Sub(typ, _) => {
                 let mixops_sub = typ_as_variant(tdenv, typ)?.ok_or_else(|| {
                     StructureError::new(
@@ -40,6 +42,7 @@ fn find_variant_case_analysis(
 
 // == Instructions
 
+/// Marks total case analyses inside an instruction.
 fn totalize_instr(tdenv: &TDEnv, instr: Instr) -> Result<Instr, StructureError> {
     let instr_kind = totalize_instr_kind(tdenv, instr.node)?;
     Ok(crate::phrase!(node: instr_kind, span: instr.span))
@@ -82,6 +85,7 @@ fn totalize_case(tdenv: &TDEnv, case: Case) -> Result<Case, StructureError> {
     Ok(Case { guard, block })
 }
 
+/// Marks a case analysis total when its guards cover every constructor.
 fn totalize_case_instr(tdenv: &TDEnv, instr: CaseInstr) -> Result<InstrKind, StructureError> {
     let CaseInstr { exp, cases, total } = instr;
     let cases = cases
@@ -93,6 +97,7 @@ fn totalize_case_instr(tdenv: &TDEnv, instr: CaseInstr) -> Result<InstrKind, Str
         let mixops_total = typ_as_variant(tdenv, &typ)?.ok_or_else(|| {
             StructureError::new(StructureErrorKind::NonVariantTotalization, typ.span.clone())
         })?;
+        // Compare the matched constructors with the type's constructors as sets
         let mixops_total: BTreeSet<_> = mixops_total.into_iter().collect();
         let mixops_case: BTreeSet<_> = mixops_case.into_iter().collect();
         mixops_case == mixops_total
@@ -137,6 +142,7 @@ fn totalize_block(tdenv: &TDEnv, block: Block) -> Result<Block, StructureError> 
 
 // == Entry points
 
+/// Marks total variant case analyses throughout a block.
 pub(crate) fn totalize(tdenv: &TDEnv, block: Block) -> Result<Block, StructureError> {
     totalize_block(tdenv, block)
 }

@@ -1,7 +1,7 @@
 //! Find shared input templates, then bind each original input to its template
 //!
-//! Inputs `(x, true)` and `(false, true)` share `(x', true)`
-//! Their paths start with `let x = x'` and `let false = x'`, respectively
+//! Inputs `(x, true)` and `(false, true)` share `(x', true)`.
+//! Their paths start with `let x = x'` and `let false = x'`, respectively.
 //!
 //! Inputs -> shared template -> binding premises prepended to each path
 
@@ -19,19 +19,21 @@ use super::{StructureError, StructureErrorKind};
 
 // == Unification environment
 
-// Maps original identifiers to their unified identifiers
+/// Maps original identifiers to their unified identifiers.
 #[derive(Default)]
 struct UEnv {
     ids: IdMap<Id>,
 }
 
 impl UEnv {
+    /// Checks whether `id` is a unified identifier from anti-unification.
     fn unified(&self, id: &Id) -> bool {
         self.ids
             .iter()
             .any(|(_, id_unified)| id_unified.syntax_eq(id))
     }
 
+    /// Merges another position's map; each identifier unifies in one position.
     fn extend(&mut self, uenv: Self) -> Result<(), StructureError> {
         for (id, id_unified) in uenv.ids.iter() {
             if self.ids.contains_key(id) {
@@ -61,6 +63,7 @@ fn check_arity(expected: usize, actual: usize, span: &Span) -> Result<(), Struct
 
 // - Expression template
 
+/// Emits the let premises binding one input to the shared template.
 fn populate_exp_template(
     uenv: &UEnv,
     exp_template: &Exp,
@@ -70,6 +73,7 @@ fn populate_exp_template(
         return Ok(vec![]);
     }
     match (&exp_template.node, &exp.node) {
+        // A unified identifier binds the whole input at this position
         (ExpKind::Id(id_template), _) if uenv.unified(id_template) => {
             let prem = populate_id_exp_template(exp_template, exp);
             Ok(vec![prem])
@@ -89,6 +93,7 @@ fn populate_exp_template(
             let exps = exp_fields.iter().map(|ExpField { exp, .. }| exp);
             populate_exps_templates(uenv, exps_template, exps, &exp.span)
         }
+        // Iterated inputs bind under their iteration
         (
             ExpKind::Iter(exp_body_template, exp_iter_template),
             ExpKind::Iter(exp_body, exp_iter),
@@ -126,6 +131,7 @@ fn populate_exps_templates<'a>(
 
 // - Identifier expression
 
+/// Builds `let exp = template`.
 fn populate_id_exp_template(exp_template: &Exp, exp: &Exp) -> Prem {
     let span = Span::over(&[exp.span.clone(), exp_template.span.clone()]);
     let prem = LetPrem { exp_l: exp.clone(), exp_r: exp_template.clone() };
@@ -135,6 +141,7 @@ fn populate_id_exp_template(exp_template: &Exp, exp: &Exp) -> Prem {
 
 // - Iterated expression
 
+/// Builds `let exp = template` iterated over the variables of both sides.
 fn populate_iter_exp_template(
     exp_template: &Exp,
     exp_iter_template: &ExpIter,
@@ -157,6 +164,7 @@ fn populate_iter_exp_template(
 
 // - Expression
 
+/// Overlaps an input with the template, freshening identifiers on mismatch.
 fn antiunify_exp(
     frees: &mut IdSet,
     uenv: &mut UEnv,
@@ -167,6 +175,7 @@ fn antiunify_exp(
         return Ok(exp_template.clone());
     }
     let exp_kind_template = match (&exp_template.node, &exp.node) {
+        // An identifier on either side becomes a fresh unified identifier
         (ExpKind::Id(id_template), _) => antiunify_id_exp(frees, uenv, id_template),
         (_, ExpKind::Id(id)) => antiunify_fresh_id_exp(frees, uenv, id),
         (ExpKind::Tuple(exps_template), ExpKind::Tuple(exps)) => {
@@ -223,6 +232,7 @@ fn antiunify_exps(
 
 // - Identifier expression
 
+/// Keeps an already unified template identifier, otherwise freshens it.
 fn antiunify_id_exp(frees: &mut IdSet, uenv: &mut UEnv, id_template: &Id) -> ExpKind {
     if uenv.unified(id_template) {
         uenv.ids.insert(id_template.clone(), id_template.clone());
@@ -234,6 +244,7 @@ fn antiunify_id_exp(frees: &mut IdSet, uenv: &mut UEnv, id_template: &Id) -> Exp
 
 // - Fresh identifier expression
 
+/// Introduces a fresh identifier and records `id` as unified into it.
 fn antiunify_fresh_id_exp(frees: &mut IdSet, uenv: &mut UEnv, id: &Id) -> ExpKind {
     let id_fresh = il::fresh::id(frees, id);
     frees.insert(id_fresh.clone());
@@ -243,6 +254,7 @@ fn antiunify_fresh_id_exp(frees: &mut IdSet, uenv: &mut UEnv, id: &Id) -> ExpKin
 
 // - Case expression
 
+/// Overlaps the arguments of two case expressions with the same mixfix.
 fn antiunify_case_exp(
     frees: &mut IdSet,
     uenv: &mut UEnv,
@@ -264,6 +276,7 @@ fn antiunify_case_exp(
 
 // - Record expression
 
+/// Overlaps the fields of two struct expressions with the same atoms.
 fn antiunify_str_exp(
     frees: &mut IdSet,
     uenv: &mut UEnv,
@@ -293,6 +306,7 @@ fn antiunify_str_exp(
 
 // - Iterated expression
 
+/// Overlaps iterated expressions and maps their variables to unified names.
 fn antiunify_iter_exp(
     frees: &mut IdSet,
     uenv: &mut UEnv,
@@ -325,6 +339,7 @@ fn antiunify_iter_exp(
 
 // - Expressions across matches
 
+/// Builds one template per input position across all rule matches.
 fn antiunify_exps_across_matches(
     mut frees: IdSet,
     exps_by_match: &[&[Exp]],
@@ -356,6 +371,7 @@ fn antiunify_exps_across_matches(
 
 // - Argument template
 
+/// Emits the let premises binding an argument to its template.
 fn populate_arg_template(
     uenv: &UEnv,
     arg_template: &Arg,
@@ -393,6 +409,7 @@ fn populate_args_templates(
 
 // - Argument
 
+/// Overlaps an argument with its template; function arguments must agree.
 fn antiunify_arg(
     frees: &mut IdSet,
     uenv: &mut UEnv,
@@ -421,6 +438,7 @@ fn antiunify_arg(
 
 // - Arguments across clauses
 
+/// Builds one argument template per position across all clauses.
 fn antiunify_args_across_clauses(
     mut frees: IdSet,
     clauses: &[&Clause],
@@ -450,6 +468,7 @@ fn antiunify_args_across_clauses(
 
 // == Anti-unification of rule matches
 
+/// Anti-unifies rule inputs into a template with per-group bindings.
 #[expect(
     clippy::type_complexity,
     reason = "Destructured once per call site; a named result type would add no meaning"
@@ -485,6 +504,7 @@ pub(super) fn antiunify_rule_matches(
 
 // == Anti-unification of clauses
 
+/// Prepends a clause's template bindings to its own premises.
 fn populate_clause(
     uenv: &UEnv,
     args_template: &[Arg],
@@ -497,6 +517,7 @@ fn populate_clause(
     Ok((prems_template, exp))
 }
 
+/// Anti-unifies clause arguments into a template with per-clause bindings.
 #[expect(
     clippy::type_complexity,
     reason = "Destructured once per call site; a named result type would add no meaning"
