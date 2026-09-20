@@ -1,4 +1,4 @@
-//! Binding analysis from IL to AL:
+//! Binding analysis from IL to AL
 //!
 //! 1. Collect all binding occurrences of variables in an IL construct
 //!    - Check that all binding occurrences reside in invertible constructs
@@ -76,6 +76,7 @@ fn input_error(error: input::InputError, span: Span) -> AlgoError {
 
 // - Environments
 
+/// Gives every renamed occurrence the dimension of its original.
 fn update_venv_multiple(venv: &mut VEnv, renv: &multiple::RenameEnv) {
     for (id, ids_rename) in renv.iter() {
         let dim = venv
@@ -88,6 +89,7 @@ fn update_venv_multiple(venv: &mut VEnv, renv: &multiple::RenameEnv) {
     }
 }
 
+/// Records each fresh destination at its dimension under its iterations.
 fn update_venv_partial(venv: &mut VEnv, renv: &partial::RenameEnv) {
     for rename in &renv.renames {
         let mut iters = rename.destination.iters.clone();
@@ -98,20 +100,27 @@ fn update_venv_partial(venv: &mut VEnv, renv: &partial::RenameEnv) {
 
 // == Expression binding analysis
 
+/// Analyzes binding expressions: collect, rename repeats, desugar partials.
+///
+/// Returns the bound variables, the rewritten expressions,
+/// and the premises the rewrites require.
 fn analyze_exps_as_bind(
     ctx: &mut Context,
     iter_ctx: &ICtx,
     exps_il: &[ast::Exp],
 ) -> Result<(VEnv, Vec<ast::Exp>, Vec<al::ast::Prem>), AlgoError> {
+    // Collect binders and check invertibility
     let benv = collect::collect_exps(ctx, exps_il)?;
     let mut venv = benv.flatten();
 
+    // Rename repeated occurrences and add their equalities
     let mut renv_multiple = multiple::RenameEnv::from_bindings(&benv);
     let exps_al = multiple::rename_exps(ctx, &mut renv_multiple, exps_il);
     update_venv_multiple(&mut venv, &renv_multiple);
     let prem_sideconditions_multiple_al =
         multiple::generate_side_conditions(iter_ctx, &renv_multiple);
 
+    // Desugar partially bound patterns into guards and lets
     let mut renv_partial = partial::RenameEnv::new();
     let mut iter_ctx_exp = ICtx::new();
     let exps_al =
@@ -122,6 +131,7 @@ fn analyze_exps_as_bind(
     Ok((venv, exps_al, prems_al))
 }
 
+/// Requires an expression in bound position to bind nothing.
 fn analyze_exp_as_bound(ctx: &Context, exp: &ast::Exp) -> Result<(), AlgoError> {
     let benv = collect::collect_exp(ctx, exp)?;
     if benv.is_empty() {
@@ -140,6 +150,7 @@ fn analyze_exps_as_bound(ctx: &Context, exps: &[ast::Exp]) -> Result<(), AlgoErr
 
 // == Argument binding analysis
 
+/// Analyzes binding arguments like `analyze_exps_as_bind`, with no iteration.
 fn analyze_args_as_bind(
     ctx: &mut Context,
     args_il: &[ast::Arg],
@@ -163,6 +174,7 @@ fn analyze_args_as_bind(
     Ok((venv, args_al, prems_al))
 }
 
+/// Analyzes table row arguments, which must be shallow and free of repeats.
 fn analyze_args_as_bind_shallow(
     ctx: &mut Context,
     args_il: &[ast::Arg],
@@ -181,6 +193,7 @@ fn analyze_args_as_bind_shallow(
     let mut renv_multiple = multiple::RenameEnv::from_bindings(&benv);
     let args_al = multiple::rename_args(ctx, &mut renv_multiple, args_il);
     update_venv_multiple(&mut venv, &renv_multiple);
+    // Shallow patterns must not need repeated-binding side conditions
     let prem_sideconditions_al = multiple::generate_side_conditions(&ICtx::new(), &renv_multiple);
     if !prem_sideconditions_al.is_empty() {
         return Err(AlgoError::new(
@@ -201,6 +214,7 @@ fn analyze_args_as_bind_shallow(
     Ok((venv, args_al, prems_al))
 }
 
+/// Requires table row arguments to be shallow and bind nothing.
 fn analyze_args_as_bound_shallow(ctx: &Context, args: &[ast::Arg]) -> Result<(), AlgoError> {
     for arg in args {
         if !shallow::check_arg(arg) {
@@ -218,6 +232,7 @@ fn analyze_args_as_bound_shallow(ctx: &Context, args: &[ast::Arg]) -> Result<(),
 
 // - Helpers
 
+/// Rejects partial premises in an otherwise branch.
 fn check_prems_in_else(span: &Span, prems: &[al::ast::Prem]) -> Result<(), AlgoError> {
     if prems.iter().all(|prem| !al::partial::is_partial_prem(prem)) {
         Ok(())
@@ -228,6 +243,7 @@ fn check_prems_in_else(span: &Span, prems: &[al::ast::Prem]) -> Result<(), AlgoE
 
 // - Premise dispatch
 
+/// Analyzes one premise: bound variables, the AL premise, and side conditions.
 fn analyze_prem(
     ctx: &mut Context,
     iter_ctx: ICtx,
@@ -255,6 +271,7 @@ fn analyze_prem(
 
 // - Rule premises
 
+/// Analyzes a rule premise: inputs must be bound, outputs bind.
 fn analyze_rule_prem(
     ctx: &mut Context,
     iter_ctx: ICtx,
@@ -270,6 +287,7 @@ fn analyze_rule_prem(
         .collect::<Vec<_>>();
     let (exps_input_il, exps_output_il) = input::split(&rule_prem_il.input_hint, exps_il)
         .map_err(|error| input_error(error, span.clone()))?;
+    // Inputs are bound, outputs are binders
     analyze_exps_as_bound(ctx, &exps_input_il)?;
     let (venv, exps_output_al, prem_sideconditions_al) =
         analyze_exps_as_bind(ctx, &iter_ctx, &exps_output_il)?;
@@ -286,6 +304,7 @@ fn analyze_rule_prem(
         }),
         span: span.clone(),
     };
+    // Iterations range over input variables and bind output variables
     let venv_bound = dimension::infer_exps(&exps_input_il);
     let mut iter_ctx = iter_ctx;
     iter_ctx.filter_bound(|var| {
@@ -301,6 +320,7 @@ fn analyze_rule_prem(
 
 // - Conditional premises
 
+/// Turns `if a = b` into a let when exactly one side binds.
 fn analyze_if_eq_prem(
     ctx: &mut Context,
     iter_ctx: ICtx,
@@ -312,6 +332,7 @@ fn analyze_if_eq_prem(
     let benv_l = collect::collect_exp(ctx, exp_l_il)?;
     let benv_r = collect::collect_exp(ctx, exp_r_il)?;
     match (benv_l.is_empty(), benv_r.is_empty()) {
+        // Neither side binds: keep the condition
         (true, true) => {
             let prem_al = phrase! {
                 node: al::ast::PremKind::If(al::ast::IfPrem {
@@ -323,6 +344,7 @@ fn analyze_if_eq_prem(
         }
         (false, true) => analyze_let_prem(ctx, span, iter_ctx, exp_l_il, &benv_l, exp_r_il),
         (true, false) => analyze_let_prem(ctx, span, iter_ctx, exp_r_il, &benv_r, exp_l_il),
+        // Both sides binding is ambiguous
         (false, false) => Err(AlgoError::new(
             AlgoErrorKind::BindingOnBothEqualitySides,
             if_prem_il.exp.span.clone(),
@@ -330,6 +352,7 @@ fn analyze_if_eq_prem(
     }
 }
 
+/// Analyzes a condition, which may become a let when it is an equality.
 fn analyze_if_prem(
     ctx: &mut Context,
     iter_ctx: ICtx,
@@ -354,6 +377,7 @@ fn analyze_if_prem(
 
 // - Holding premises
 
+/// Analyzes a holding check, whose arguments must all be bound.
 fn analyze_if_hold_prem(
     ctx: &mut Context,
     iter_ctx: ICtx,
@@ -375,6 +399,7 @@ fn analyze_if_hold_prem(
 
 // - Non-holding premises
 
+/// Analyzes a non-holding check, whose arguments must all be bound.
 fn analyze_if_not_hold_prem(
     ctx: &mut Context,
     iter_ctx: ICtx,
@@ -396,6 +421,7 @@ fn analyze_if_not_hold_prem(
 
 // - Let premises
 
+/// Analyzes `let pattern = exp`, rewriting the pattern side.
 fn analyze_let_prem(
     ctx: &mut Context,
     span: &Span,
@@ -404,6 +430,7 @@ fn analyze_let_prem(
     benv_l: &BEnv,
     exp_r_il: &ast::Exp,
 ) -> Result<(VEnv, al::ast::Prem, Vec<al::ast::Prem>), AlgoError> {
+    // Rename repeated binders in the pattern
     let mut venv = benv_l.flatten();
     let mut renv_multiple = multiple::RenameEnv::from_bindings(benv_l);
     let exp_l_al = multiple::rename_exp(ctx, &mut renv_multiple, exp_l_il);
@@ -411,6 +438,7 @@ fn analyze_let_prem(
     let prem_sideconditions_multiple_al =
         multiple::generate_side_conditions(&iter_ctx, &renv_multiple);
 
+    // Desugar partially bound patterns
     let mut renv_partial = partial::RenameEnv::new();
     let mut iter_ctx_exp = ICtx::new();
     let exp_l_al =
@@ -426,6 +454,7 @@ fn analyze_let_prem(
         }),
         span: span.clone(),
     };
+    // Iterations range over the right side's variables and bind the left side's
     let venv_l = dimension::infer_exp(&exp_l_al);
     let venv_r = dimension::infer_exp(exp_r_il);
     let mut iter_ctx = iter_ctx;
@@ -442,6 +471,7 @@ fn analyze_let_prem(
 
 // - Iteration premises
 
+/// Pushes the iteration onto the context and analyzes the inner premise.
 fn analyze_iter_prem(
     ctx: &mut Context,
     iter_ctx: ICtx,
@@ -480,6 +510,7 @@ fn analyze_debug_prem(
 
 // - Premise lists
 
+/// Analyzes premises in order, binding each one's variables for the next.
 fn analyze_prems(
     ctx: &mut Context,
     prems_il: Vec<ast::Prem>,
@@ -487,6 +518,7 @@ fn analyze_prems(
     let mut prems_al = Vec::new();
     for prem_il in &prems_il {
         let (venv, prem_al, prem_sideconditions_al) = analyze_prem(ctx, ICtx::new(), prem_il)?;
+        // Variables bound here are visible to later premises
         ctx.add_bounds(&venv);
         prems_al.push(prem_al);
         prems_al.extend(prem_sideconditions_al);
@@ -496,6 +528,7 @@ fn analyze_prems(
 
 // == Rule binding analysis
 
+/// Anti-unifies rule inputs into one signature and binds its variables.
 #[allow(clippy::type_complexity)]
 fn analyze_rule_match(
     ctx: &mut Context,
@@ -505,6 +538,7 @@ fn analyze_rule_match(
         antiunify::antiunify(ctx, exps_input_by_rule_il)?;
     let (venv, exps_input_al, prems_al) =
         analyze_exps_as_bind(ctx, &ICtx::new(), &exps_signature_al)?;
+    // Nothing may remain free in the shared signature
     ctx.add_bounds(&venv);
     analyze_exps_as_bound(ctx, &exps_signature_al)?;
 
@@ -516,6 +550,7 @@ fn analyze_rule_match(
     Ok((rule_match_al, prems_unified_by_rule_il))
 }
 
+/// Analyzes one rule's own premises and checks that its outputs are bound.
 fn analyze_rule_path(
     ctx: &mut Context,
     id: ast::Id,
@@ -534,6 +569,7 @@ fn analyze_rule_path(
     Ok(al::ast::RulePath { id, prems: prems_all_al, exps_output: exps_output_il })
 }
 
+/// Shares the input match across rules, then analyzes each rule's path.
 fn analyze_rule_group(
     ctx: &mut Context,
     inputs: &InputHint,
@@ -547,6 +583,7 @@ fn analyze_rule_group(
     let mut prems_by_rule_il = Vec::with_capacity(rules_il.len());
     let mut exps_input_by_rule_il = Vec::with_capacity(rules_il.len());
     let mut exps_output_by_rule_il = Vec::with_capacity(rules_il.len());
+    // Split every rule's conclusion into inputs and outputs by the hint
     for rule_il in rules_il {
         ctx.add_frees(&rule_il.free());
         let rule_span = rule_il.span;
@@ -560,6 +597,7 @@ fn analyze_rule_group(
         exps_output_by_rule_il.push(exps_output_il);
     }
 
+    // The match is shared; each path continues from a copy of the context
     let (rule_match_al, prems_unified_by_rule_il) =
         analyze_rule_match(&mut ctx, exps_input_by_rule_il)?;
     let mut rule_paths_al = Vec::with_capacity(prems_by_rule_il.len());
@@ -589,6 +627,7 @@ fn analyze_rule_group(
     Ok(rule_group_al)
 }
 
+/// Analyzes the otherwise rule as a one-rule group flagged as fallback.
 fn analyze_else_group(
     ctx: &mut Context,
     inputs: &InputHint,
@@ -618,6 +657,7 @@ fn analyze_else_group(
 
 // == Clause binding analysis
 
+/// Analyzes a clause: arguments bind, premises follow, the body must be bound.
 fn analyze_clause(
     ctx: &mut Context,
     clause_il: ast::Clause,
@@ -649,6 +689,7 @@ fn analyze_clause(
 
 // == Table row binding analysis
 
+/// All case notations of a variant type, as the pattern space of one argument.
 fn pattern_set_covered_by_typ(ctx: &Context, typ: &ast::Typ) -> Result<PatternSet, AlgoError> {
     let ast::TypKind::Var(id, _) = &typ.node else {
         return Err(AlgoError::new(AlgoErrorKind::NonVariantPatternType, typ.span.clone()));
@@ -666,8 +707,10 @@ fn pattern_set_covered_by_typ(ctx: &Context, typ: &ast::Typ) -> Result<PatternSe
     Ok(pattern_set)
 }
 
+/// The cases one table pattern argument matches.
 fn pattern_set_covered_by_exp(ctx: &Context, exp_al: &ast::Exp) -> Result<PatternSet, AlgoError> {
     match &exp_al.node {
+        // A variable covers every case of its type
         ast::ExpKind::Id(_) => {
             let typ = phrase!(node: exp_al.note.as_ref().clone(), span: exp_al.span.clone());
             pattern_set_covered_by_typ(ctx, &typ)
@@ -676,6 +719,7 @@ fn pattern_set_covered_by_exp(ctx: &Context, exp_al: &ast::Exp) -> Result<Patter
             let typ = phrase!(node: exp_inner.note.as_ref().clone(), span: exp_inner.span.clone());
             pattern_set_covered_by_typ(ctx, &typ)
         }
+        // A case covers exactly its notation
         ast::ExpKind::UpCast(_, exp_inner) => {
             let ast::ExpKind::Case(not_exp) = &exp_inner.node else {
                 return Err(AlgoError::new(
@@ -693,12 +737,14 @@ fn pattern_set_covered_by_exp(ctx: &Context, exp_al: &ast::Exp) -> Result<Patter
     }
 }
 
+/// Checks that rows are exclusive and, without a wildcard closer, exhaustive.
 fn check_valid_table_rows(
     ctx: &Context,
     span: &Span,
     typs_match_il: &[ast::Typ],
     rows_al: &[al::ast::TableRow],
 ) -> Result<(), AlgoError> {
+    // A final row of wildcards catches everything left
     let has_closer =
         if let Some(row_al) = rows_al.last() {
             row_al.node.exps_signature.iter().all(
@@ -718,10 +764,12 @@ fn check_valid_table_rows(
         let pattern_sets = pattern_sets.into_iter().collect();
         pattern_sets_by_row.push(pattern_sets);
     }
+    // No two rows may match the same input
     let pattern_sets_overlap = pattern::find_overlap(span, &pattern_sets_by_row)?;
     if pattern_sets_overlap.is_some() {
         return Err(AlgoError::new(AlgoErrorKind::OverlappingTablePatterns, span.clone()));
     }
+    // Without a closer, the rows must cover the whole pattern space
     let mut pattern_sets_total = Vec::with_capacity(typs_match_il.len());
     for typ_il in typs_match_il {
         let pattern_set = pattern_set_covered_by_typ(ctx, typ_il)?;
@@ -736,6 +784,7 @@ fn check_valid_table_rows(
     Ok(())
 }
 
+/// Analyzes a table row: shallow binder arguments, patterns, bound body.
 fn analyze_table_row(
     ctx: &mut Context,
     row_il: ast::TableRow,
@@ -767,6 +816,7 @@ fn analyze_table_row(
     Ok(row_al)
 }
 
+/// Analyzes all rows, then checks them against the parameter types.
 fn analyze_table_rows(
     ctx: &mut Context,
     span: &Span,
@@ -851,6 +901,7 @@ fn analyze_extern_rel(extern_rel_il: ast::ExternRel) -> al::ast::ExternRel {
     }
 }
 
+/// Analyzes every rule group and the otherwise group of a relation.
 fn analyze_defined_rel(
     ctx: &mut Context,
     defined_rel_il: ast::DefinedRel,
@@ -936,6 +987,7 @@ fn analyze_table_func(
     })
 }
 
+/// Analyzes every clause and the otherwise clause of a function.
 fn analyze_defined_func(
     ctx: &mut Context,
     defined_func_il: ast::DefinedFunc,
@@ -987,8 +1039,9 @@ fn analyze_def(ctx: &mut Context, def_il: ast::Def) -> Result<al::ast::Def, Algo
 
 // - Specification
 
-/// Binding analysis of an IL specification
+/// Binding analysis of an IL specification.
 pub(in crate::pass::algo) fn analyze_spec(spec_il: ast::Spec) -> Result<al::ast::Spec, AlgoError> {
+    // Types and meta-variables are loaded up front
     let mut ctx = Context::new();
     ctx.load(&spec_il);
     let mut defs_al = Vec::with_capacity(spec_il.len());
