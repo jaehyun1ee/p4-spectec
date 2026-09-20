@@ -158,7 +158,7 @@ fn shorten_destruct<Tier>(instr: &mut pl::Instr<Tier>) {
     instr.node.node = pl::InstrKind::Destruct(pl::DestructInstr { bindings, exp: exp_r.clone() });
 }
 
-fn shorten_single<Tier>(mut instr: pl::Instr<Tier>) -> pl::Instr<Tier> {
+fn shorten_instr_shorthands<Tier>(mut instr: pl::Instr<Tier>) -> pl::Instr<Tier> {
     shorten_case_guards(&mut instr);
     shorten_check_let(&mut instr);
     shorten_destruct(&mut instr);
@@ -245,61 +245,7 @@ fn shorten_option_get<Tier>(
     })
 }
 
-// == Recursive traversal
-
-trait ShortenTier: Sized {
-    fn shorten(self) -> Self;
-}
-
-fn shorten_hold_case<Tier: ShortenTier>(hold_case: pl::HoldCase<Tier>) -> pl::HoldCase<Tier> {
-    match hold_case {
-        pl::HoldCase::Both(block_hold, block_not_hold) => {
-            pl::HoldCase::Both(shorten_block(block_hold), shorten_block(block_not_hold))
-        }
-        pl::HoldCase::Hold(block, dangle) => pl::HoldCase::Hold(shorten_block(block), dangle),
-        pl::HoldCase::NotHold(block, dangle) => pl::HoldCase::NotHold(shorten_block(block), dangle),
-    }
-}
-
-fn shorten_recurse<Tier: ShortenTier>(mut instr: pl::Instr<Tier>) -> pl::Instr<Tier> {
-    instr.node.node = match instr.node.node {
-        pl::InstrKind::If(mut instr_if) => {
-            instr_if.block = shorten_block(instr_if.block);
-            pl::InstrKind::If(instr_if)
-        }
-        pl::InstrKind::Hold(mut instr_hold) => {
-            instr_hold.hold_case = shorten_hold_case(instr_hold.hold_case);
-            pl::InstrKind::Hold(instr_hold)
-        }
-        pl::InstrKind::Case(mut instr_case) => {
-            for case in &mut instr_case.cases {
-                case.block = shorten_block(std::mem::take(&mut case.block));
-            }
-            pl::InstrKind::Case(instr_case)
-        }
-        pl::InstrKind::CheckLetSub(mut instr_check) => {
-            instr_check.block = shorten_block(instr_check.block);
-            pl::InstrKind::CheckLetSub(instr_check)
-        }
-        pl::InstrKind::CheckLetMatch(mut instr_check) => {
-            instr_check.block = shorten_block(instr_check.block);
-            pl::InstrKind::CheckLetMatch(instr_check)
-        }
-        pl::InstrKind::OptionGet(mut instr_get) => {
-            instr_get.block = shorten_block(instr_get.block);
-            pl::InstrKind::OptionGet(instr_get)
-        }
-        pl::InstrKind::Tier(pl::TierInstr { tier }) => {
-            pl::InstrKind::Tier(pl::TierInstr { tier: tier.shorten() })
-        }
-        kind @ (pl::InstrKind::Let(_) | pl::InstrKind::Debug(_) | pl::InstrKind::Destruct(_)) => {
-            kind
-        }
-    };
-    instr
-}
-
-fn shorten_block<Tier: ShortenTier>(block: pl::Block<Tier>) -> pl::Block<Tier> {
+fn shorten_block_shorthands<Tier>(block: pl::Block<Tier>) -> pl::Block<Tier> {
     let mut instrs_pending = VecDeque::from(block);
     let mut block_output = Vec::new();
     while !instrs_pending.is_empty() {
@@ -315,65 +261,254 @@ fn shorten_block<Tier: ShortenTier>(block: pl::Block<Tier>) -> pl::Block<Tier> {
     }
     block_output
         .into_iter()
-        .map(shorten_single)
-        .map(shorten_recurse)
+        .map(shorten_instr_shorthands)
         .collect()
 }
 
-impl ShortenTier for pl::InstrDispatch {
-    fn shorten(self) -> Self {
-        match self {
-            Self::Group(mut instr_group) => {
-                instr_group.block = shorten_block(instr_group.block);
-                Self::Group(instr_group)
-            }
-            Self::Route(mut instr_route) => {
-                instr_route.blocks = instr_route.blocks.into_iter().map(shorten_block).collect();
-                Self::Route(instr_route)
-            }
+// == Dispatch tier
+
+// - Holding condition
+
+fn shorten_hold_case_dispatch(
+    hold_case: pl::HoldCase<pl::InstrDispatch>,
+) -> pl::HoldCase<pl::InstrDispatch> {
+    match hold_case {
+        pl::HoldCase::Both(block_hold, block_not_hold) => {
+            let block_hold = shorten_block_dispatch(block_hold);
+            let block_not_hold = shorten_block_dispatch(block_not_hold);
+            pl::HoldCase::Both(block_hold, block_not_hold)
+        }
+        pl::HoldCase::Hold(block, dangle) => {
+            let block = shorten_block_dispatch(block);
+            pl::HoldCase::Hold(block, dangle)
+        }
+        pl::HoldCase::NotHold(block, dangle) => {
+            let block = shorten_block_dispatch(block);
+            pl::HoldCase::NotHold(block, dangle)
         }
     }
 }
 
-impl ShortenTier for pl::InstrGroup {
-    fn shorten(self) -> Self {
-        match self {
-            Self::Backtrack(mut instr_backtrack) => {
-                instr_backtrack.blocks = instr_backtrack
-                    .blocks
-                    .into_iter()
-                    .map(shorten_block)
-                    .collect();
-                Self::Backtrack(instr_backtrack)
+// - Tier instruction
+
+fn shorten_tier_instr_dispatch(instr_dispatch: pl::InstrDispatch) -> pl::InstrDispatch {
+    match instr_dispatch {
+        pl::InstrDispatch::Group(mut instr_group) => {
+            instr_group.block = shorten_block_group(instr_group.block);
+            pl::InstrDispatch::Group(instr_group)
+        }
+        pl::InstrDispatch::Route(mut instr_route) => {
+            let mut blocks = Vec::with_capacity(instr_route.blocks.len());
+            for block in instr_route.blocks {
+                blocks.push(shorten_block_dispatch(block));
             }
-            instr @ (Self::Result(_) | Self::Return(_) | Self::Rule(_)) => instr,
+            instr_route.blocks = blocks;
+            pl::InstrDispatch::Route(instr_route)
         }
     }
+}
+
+// - Instruction
+
+fn shorten_instr_dispatch(mut instr: pl::Instr<pl::InstrDispatch>) -> pl::Instr<pl::InstrDispatch> {
+    instr.node.node = shorten_instr_kind_dispatch(instr.node.node);
+    instr
+}
+
+fn shorten_instr_kind_dispatch(
+    instr_kind: pl::InstrKind<pl::InstrDispatch>,
+) -> pl::InstrKind<pl::InstrDispatch> {
+    match instr_kind {
+        pl::InstrKind::If(mut instr_if) => {
+            instr_if.block = shorten_block_dispatch(instr_if.block);
+            pl::InstrKind::If(instr_if)
+        }
+        pl::InstrKind::Hold(mut instr_hold) => {
+            instr_hold.hold_case = shorten_hold_case_dispatch(instr_hold.hold_case);
+            pl::InstrKind::Hold(instr_hold)
+        }
+        pl::InstrKind::Case(mut instr_case) => {
+            for case in &mut instr_case.cases {
+                case.block = shorten_block_dispatch(std::mem::take(&mut case.block));
+            }
+            pl::InstrKind::Case(instr_case)
+        }
+        pl::InstrKind::CheckLetSub(mut instr_check) => {
+            instr_check.block = shorten_block_dispatch(instr_check.block);
+            pl::InstrKind::CheckLetSub(instr_check)
+        }
+        pl::InstrKind::CheckLetMatch(mut instr_check) => {
+            instr_check.block = shorten_block_dispatch(instr_check.block);
+            pl::InstrKind::CheckLetMatch(instr_check)
+        }
+        pl::InstrKind::OptionGet(mut instr_get) => {
+            instr_get.block = shorten_block_dispatch(instr_get.block);
+            pl::InstrKind::OptionGet(instr_get)
+        }
+        pl::InstrKind::Tier(instr_tier) => {
+            let tier = shorten_tier_instr_dispatch(instr_tier.tier);
+            pl::InstrKind::Tier(pl::TierInstr { tier })
+        }
+        kind @ (pl::InstrKind::Let(_) | pl::InstrKind::Debug(_) | pl::InstrKind::Destruct(_)) => {
+            kind
+        }
+    }
+}
+
+// - Block
+
+fn shorten_block_dispatch(block: pl::BlockDispatch) -> pl::BlockDispatch {
+    shorten_block_shorthands(block)
+        .into_iter()
+        .map(shorten_instr_dispatch)
+        .collect()
+}
+
+// == Group tier
+
+// - Holding condition
+
+fn shorten_hold_case_group(
+    hold_case: pl::HoldCase<pl::InstrGroup>,
+) -> pl::HoldCase<pl::InstrGroup> {
+    match hold_case {
+        pl::HoldCase::Both(block_hold, block_not_hold) => {
+            let block_hold = shorten_block_group(block_hold);
+            let block_not_hold = shorten_block_group(block_not_hold);
+            pl::HoldCase::Both(block_hold, block_not_hold)
+        }
+        pl::HoldCase::Hold(block, dangle) => {
+            let block = shorten_block_group(block);
+            pl::HoldCase::Hold(block, dangle)
+        }
+        pl::HoldCase::NotHold(block, dangle) => {
+            let block = shorten_block_group(block);
+            pl::HoldCase::NotHold(block, dangle)
+        }
+    }
+}
+
+// - Tier instruction
+
+fn shorten_tier_instr_group(instr_group: pl::InstrGroup) -> pl::InstrGroup {
+    match instr_group {
+        pl::InstrGroup::Backtrack(mut instr_backtrack) => {
+            let mut blocks = Vec::with_capacity(instr_backtrack.blocks.len());
+            for block in instr_backtrack.blocks {
+                blocks.push(shorten_block_group(block));
+            }
+            instr_backtrack.blocks = blocks;
+            pl::InstrGroup::Backtrack(instr_backtrack)
+        }
+        instr_group @ (pl::InstrGroup::Result(_)
+        | pl::InstrGroup::Return(_)
+        | pl::InstrGroup::Rule(_)) => instr_group,
+    }
+}
+
+// - Instruction
+
+fn shorten_instr_group(mut instr: pl::Instr<pl::InstrGroup>) -> pl::Instr<pl::InstrGroup> {
+    instr.node.node = shorten_instr_kind_group(instr.node.node);
+    instr
+}
+
+fn shorten_instr_kind_group(
+    instr_kind: pl::InstrKind<pl::InstrGroup>,
+) -> pl::InstrKind<pl::InstrGroup> {
+    match instr_kind {
+        pl::InstrKind::If(mut instr_if) => {
+            instr_if.block = shorten_block_group(instr_if.block);
+            pl::InstrKind::If(instr_if)
+        }
+        pl::InstrKind::Hold(mut instr_hold) => {
+            instr_hold.hold_case = shorten_hold_case_group(instr_hold.hold_case);
+            pl::InstrKind::Hold(instr_hold)
+        }
+        pl::InstrKind::Case(mut instr_case) => {
+            for case in &mut instr_case.cases {
+                case.block = shorten_block_group(std::mem::take(&mut case.block));
+            }
+            pl::InstrKind::Case(instr_case)
+        }
+        pl::InstrKind::CheckLetSub(mut instr_check) => {
+            instr_check.block = shorten_block_group(instr_check.block);
+            pl::InstrKind::CheckLetSub(instr_check)
+        }
+        pl::InstrKind::CheckLetMatch(mut instr_check) => {
+            instr_check.block = shorten_block_group(instr_check.block);
+            pl::InstrKind::CheckLetMatch(instr_check)
+        }
+        pl::InstrKind::OptionGet(mut instr_get) => {
+            instr_get.block = shorten_block_group(instr_get.block);
+            pl::InstrKind::OptionGet(instr_get)
+        }
+        pl::InstrKind::Tier(instr_tier) => {
+            let tier = shorten_tier_instr_group(instr_tier.tier);
+            pl::InstrKind::Tier(pl::TierInstr { tier })
+        }
+        kind @ (pl::InstrKind::Let(_) | pl::InstrKind::Debug(_) | pl::InstrKind::Destruct(_)) => {
+            kind
+        }
+    }
+}
+
+// - Block
+
+fn shorten_block_group(block: pl::BlockGroup) -> pl::BlockGroup {
+    shorten_block_shorthands(block)
+        .into_iter()
+        .map(shorten_instr_group)
+        .collect()
 }
 
 // == Definitions
 
 fn shorten_def(mut def: pl::Def) -> pl::Def {
-    def.node.node = match def.node.node {
-        pl::DefKind::Rel(pl::RelDef::Defined(mut def_rel)) => {
-            def_rel.block = shorten_block(def_rel.block);
-            def_rel.block_else_opt = def_rel.block_else_opt.map(shorten_block);
-            pl::DefKind::Rel(pl::RelDef::Defined(def_rel))
-        }
-        pl::DefKind::MetaFunc(pl::MetaFuncDef::Table(mut def_func)) => {
-            for row in &mut def_func.rows {
-                row.block = shorten_block(std::mem::take(&mut row.block));
-            }
-            pl::DefKind::MetaFunc(pl::MetaFuncDef::Table(def_func))
-        }
-        pl::DefKind::MetaFunc(pl::MetaFuncDef::Defined(mut def_func)) => {
-            def_func.block = shorten_block(def_func.block);
-            def_func.block_else_opt = def_func.block_else_opt.map(shorten_block);
-            pl::DefKind::MetaFunc(pl::MetaFuncDef::Defined(def_func))
-        }
-        kind => kind,
-    };
+    def.node.node = shorten_def_kind(def.node.node);
     def
+}
+
+fn shorten_def_kind(def_kind: pl::DefKind) -> pl::DefKind {
+    match def_kind {
+        pl::DefKind::Rel(def_rel) => {
+            let def_rel = shorten_rel_def(def_rel);
+            pl::DefKind::Rel(def_rel)
+        }
+        pl::DefKind::MetaFunc(def_func) => {
+            let def_func = shorten_func_def(def_func);
+            pl::DefKind::MetaFunc(def_func)
+        }
+        kind @ (pl::DefKind::Typ(_) | pl::DefKind::Var(_)) => kind,
+    }
+}
+
+fn shorten_rel_def(def_rel: pl::RelDef) -> pl::RelDef {
+    match def_rel {
+        pl::RelDef::Defined(mut def_rel) => {
+            def_rel.block = shorten_block_dispatch(def_rel.block);
+            def_rel.block_else_opt = def_rel.block_else_opt.map(shorten_block_dispatch);
+            pl::RelDef::Defined(def_rel)
+        }
+        pl::RelDef::Extern(def_rel) => pl::RelDef::Extern(def_rel),
+    }
+}
+
+fn shorten_func_def(def_func: pl::MetaFuncDef) -> pl::MetaFuncDef {
+    match def_func {
+        pl::MetaFuncDef::Table(mut def_func) => {
+            for row in &mut def_func.rows {
+                row.block = shorten_block_group(std::mem::take(&mut row.block));
+            }
+            pl::MetaFuncDef::Table(def_func)
+        }
+        pl::MetaFuncDef::Defined(mut def_func) => {
+            def_func.block = shorten_block_group(def_func.block);
+            def_func.block_else_opt = def_func.block_else_opt.map(shorten_block_group);
+            pl::MetaFuncDef::Defined(def_func)
+        }
+        def_func @ (pl::MetaFuncDef::Extern(_) | pl::MetaFuncDef::Builtin(_)) => def_func,
+    }
 }
 
 // == Entry point
