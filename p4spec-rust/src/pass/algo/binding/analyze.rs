@@ -76,7 +76,10 @@ fn input_error(error: input::InputError, span: Span) -> AlgoError {
 
 // - Environments
 
-/// Gives every renamed occurrence the dimension of its original.
+/// Extends the bound variables with the renames of the multiple pass.
+///
+/// After `let (int, int) = e` became `let (int, int') = e`,
+/// `int'` is bound too, at the dimension of `int`.
 fn update_venv_multiple(venv: &mut VEnv, renv: &multiple::RenameEnv) {
     for (id, ids_rename) in renv.iter() {
         let dim = venv
@@ -89,7 +92,10 @@ fn update_venv_multiple(venv: &mut VEnv, renv: &multiple::RenameEnv) {
     }
 }
 
-/// Records each fresh destination at its dimension under its iterations.
+/// Extends the bound variables with the fresh destinations of the partial pass.
+///
+/// After `let (a, 1 + 2) = e` became `let (a, int) = e` with `if int = 1 + 2`,
+/// `int` is bound too, at its own dimension under the iterations enclosing it.
 fn update_venv_partial(venv: &mut VEnv, renv: &partial::RenameEnv) {
     for rename in &renv.renames {
         let mut iters = rename.destination.iters.clone();
