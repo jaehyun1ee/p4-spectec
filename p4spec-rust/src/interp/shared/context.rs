@@ -29,6 +29,7 @@ pub trait ReadContext {
 
     /// A type definition by id, if any.
     fn find_typdef_opt(&self, id: &ast::Id) -> Option<&TypeDef>;
+    /// A type bound by the current call: a type parameter, not a global type.
     fn find_typdef_local_opt(&self, id: &ast::Id) -> Option<&TypeDef>;
     /// The parameters and body of a defined type, or an undefined-type error.
     fn find_defined_typdef(&self, id: &ast::Id) -> Result<(&[ast::TParam], &ast::DefTyp), Error>;
