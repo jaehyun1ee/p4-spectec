@@ -1,4 +1,4 @@
-//! Pass-local ordered instruction language between AL and SL
+//! Optimization language, the pass-local instruction model between AL and SL
 
 pub mod ast;
 mod eq;
