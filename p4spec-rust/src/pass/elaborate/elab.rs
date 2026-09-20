@@ -395,6 +395,7 @@ fn fail_infer<T>(span: &Span, construct: &str) -> Attempt<T> {
 /// only elaborate against an expected type and fail here.
 fn infer_exp(ctx: &mut Context, exp: &el::Exp) -> Attempt<il::Exp> {
     match &exp.node {
+        // Inferable constructs dispatch to their rule
         el::ExpKind::Bool(value) => infer_bool_exp(ctx, &exp.span, *value),
         el::ExpKind::Num(_, value) => infer_num_exp(ctx, &exp.span, value),
         el::ExpKind::Text(value) => infer_text_exp(ctx, &exp.span, value),
@@ -1569,6 +1570,7 @@ fn elab_not_exp(ctx: &mut Context, not_typ_il: &il::NotTyp, exp: &el::Exp) -> At
                 atom_expect_r.clone(),
             ))
         }
+        // Any other shape mismatch fails
         _ => fail_attempt(
             ElabErrorKind::NoMatchingAlternative,
             exp.span.clone(),
@@ -2288,6 +2290,7 @@ fn elab_clause(
 fn elab_def(ctx: &mut Context, def_el: el::Def) -> Result<Option<il::Def>, ElabError> {
     let span = def_el.span;
     match def_el.node {
+        // An extern type becomes an IL definition
         el::DefKind::ExternSyntax(extern_syntax_def) => {
             let def_kind_il = elab_extern_syntax_def(ctx, extern_syntax_def)?;
             let def_il = phrase!(node: def_kind_il, span: span);
@@ -2298,6 +2301,7 @@ fn elab_def(ctx: &mut Context, def_el: el::Def) -> Result<Option<il::Def>, ElabE
             elab_syntax_def(ctx, &syntax_def)?;
             Ok(None)
         }
+        // Type bodies, meta-variables, and relations become IL definitions
         el::DefKind::Typ(typ_def) => {
             let span = typ_def.def_typ.span.clone();
             let def_kind_il = elab_typ_def(ctx, typ_def)?;
@@ -2329,6 +2333,7 @@ fn elab_def(ctx: &mut Context, def_el: el::Def) -> Result<Option<il::Def>, ElabE
             elab_rule_group_def(ctx, &rule_group_def)?;
             Ok(None)
         }
+        // Function declarations become IL definitions with empty bodies
         el::DefKind::ExternDec(extern_dec_def) => {
             let def_kind_il = elab_extern_dec_def(ctx, extern_dec_def)?;
             let def_il = phrase!(node: def_kind_il, span: span);

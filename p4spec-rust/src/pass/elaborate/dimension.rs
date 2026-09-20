@@ -112,6 +112,7 @@ fn infer_exp(dim_ctx: &mut DimContext, exp: &ast::Exp, iters: &[ast::Iter]) {
             let typ = phrase!(node: exp.note.as_ref().clone(), span: exp.span.clone());
             dim_ctx.add(id, Dim::new(typ, iters.to_vec()));
         }
+        // Compound expressions collect from their components
         ast::ExpKind::Un(_, _, exp_inner)
         | ast::ExpKind::UpCast(_, exp_inner)
         | ast::ExpKind::DownCast(_, exp_inner)

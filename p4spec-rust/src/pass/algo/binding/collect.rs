@@ -38,6 +38,7 @@ fn reject_noninvertible(
 /// Collects the binders of an expression.
 pub fn collect_exp(ctx: &Context, exp: &ast::Exp) -> Result<BEnv, AlgoError> {
     match &exp.node {
+        // Literals bind nothing
         ast::ExpKind::Bool(_) | ast::ExpKind::Num(_) | ast::ExpKind::Text(_) => {
             let benv = BEnv::new();
             Ok(benv)
@@ -76,6 +77,7 @@ pub fn collect_exp(ctx: &Context, exp: &ast::Exp) -> Result<BEnv, AlgoError> {
             let benv = collect_exp(ctx, exp_inner)?;
             reject_noninvertible(exp_inner.span.clone(), "downcast operator", benv)
         }
+        // Type tests are not invertible either
         ast::ExpKind::Sub(exp_inner, _, _) => {
             let benv = collect_exp(ctx, exp_inner)?;
             reject_noninvertible(exp_inner.span.clone(), "subtype check operator", benv)
@@ -100,6 +102,7 @@ pub fn collect_exp(ctx: &Context, exp: &ast::Exp) -> Result<BEnv, AlgoError> {
             let benv_r = collect_exp(ctx, exp_r)?;
             benv_l.union(benv_r)
         }
+        // List, struct, and call operators are not invertible
         ast::ExpKind::Cat(exp_l, exp_r) => {
             let benv_l = collect_exp(ctx, exp_l)?;
             let benv_r = collect_exp(ctx, exp_r)?;

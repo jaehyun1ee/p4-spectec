@@ -107,6 +107,7 @@ fn rename_id_exp(ctx: &mut Context, renv: &mut RenameEnv, exp: &ast::Exp, id: &I
 /// Renames repeated binders inside an invertible expression.
 pub fn rename_exp(ctx: &mut Context, renv: &mut RenameEnv, exp: &ast::Exp) -> ast::Exp {
     let kind = match &exp.node {
+        // A repeated identifier gets its rename
         ast::ExpKind::Id(id) => return rename_id_exp(ctx, renv, exp, id),
         // Only invertible positions can hold binders
         ast::ExpKind::UpCast(typ, exp_inner) => {

@@ -449,6 +449,7 @@ fn collect_exp(exp_al: &ast::Exp) -> Vec<ast::Prem> {
             prems_insert.extend(prems_r_insert);
             prems_insert
         }
+        // Constructors collect the guards of their components
         ast::ExpKind::Tuple(exps_al) | ast::ExpKind::List(exps_al) => collect_exps(exps_al.iter()),
         ast::ExpKind::Case(not_exp) => collect_exps(not_exp.args()),
         ast::ExpKind::Str(fields) => {
@@ -465,6 +466,7 @@ fn collect_exp(exp_al: &ast::Exp) -> Vec<ast::Prem> {
             prems_insert.extend(prems_guard);
             prems_insert
         }
+        // Slices, updates, and calls only collect their operands' guards
         ast::ExpKind::Slice(exp_base_al, exp_idx_al, exp_len_al) => {
             let mut prems_insert = collect_exp(exp_base_al);
             let prems_idx_insert = collect_exp(exp_idx_al);
