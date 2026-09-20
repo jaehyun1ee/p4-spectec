@@ -1,4 +1,9 @@
 //! Shared path access and update evaluation
+//!
+//! A path such as `.f[i]` is read innermost-first from the base value
+//! and written back outermost-first:
+//! `x.f[i] := v` reads `x.f`, replaces element `i`,
+//! then replaces field `f` in `x`.
 
 use super::Invoker;
 use crate::interp::shared::prepare::ast;
@@ -16,6 +21,7 @@ use crate::interp::shared::backtrack::{Backtrack, ok, unwrap, unwrap_from_result
 
 // - Access
 
+/// Reads the value at `path` inside `value_base`.
 fn eval_access_path<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Extern>(
     runner_ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     ctx: &Interp::Context<'global>,
@@ -23,6 +29,7 @@ fn eval_access_path<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext:
     path: &ast::Path,
 ) -> Backtrack<Value> {
     match &path.node {
+        // The root is the base value itself
         ast::PathKind::Root => ok!(*value_base),
         ast::PathKind::Idx(path, exp_idx) => {
             eval_access_idx_path(runner_ctx, ctx, value_base, path, exp_idx)
@@ -38,6 +45,7 @@ fn eval_access_path<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext:
 
 // - Index access path
 
+/// Reads the prefix, then indexes it.
 fn eval_access_idx_path<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Extern>(
     runner_ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     ctx: &Interp::Context<'global>,
@@ -45,6 +53,7 @@ fn eval_access_idx_path<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, 
     path: &ast::Path,
     exp_idx: &ast::Exp,
 ) -> Backtrack<Value> {
+    // Read the prefix, then index it
     let value = unwrap!(eval_access_path(runner_ctx, ctx, value_base, path));
     let value_idx = unwrap!(eval_exp(runner_ctx, ctx, exp_idx));
     ops::access_index(runner_ctx.arena_mut(), &value, &value_idx, &path.span, &exp_idx.span)
@@ -52,6 +61,7 @@ fn eval_access_idx_path<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, 
 
 // - Slice access path
 
+/// Reads the prefix, then slices it.
 fn eval_access_slice_path<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Extern>(
     runner_ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     ctx: &Interp::Context<'global>,
@@ -60,6 +70,7 @@ fn eval_access_slice_path<'global, Interp: Invoker<Iface, Ext>, Iface: Interface
     exp_idx: &ast::Exp,
     exp_len: &ast::Exp,
 ) -> Backtrack<Value> {
+    // Read the prefix, then slice it with the evaluated bounds
     let typ = &path.note;
     let value = unwrap!(eval_access_path(runner_ctx, ctx, value_base, path));
     let value_idx = unwrap!(eval_exp(runner_ctx, ctx, exp_idx));
@@ -80,6 +91,7 @@ fn eval_access_slice_path<'global, Interp: Invoker<Iface, Ext>, Iface: Interface
 
 // - Field access path
 
+/// Reads the prefix, then reads its field.
 fn eval_access_dot_path<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Extern>(
     runner_ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     ctx: &Interp::Context<'global>,
@@ -93,6 +105,7 @@ fn eval_access_dot_path<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, 
 
 // - Update
 
+/// Writes `value_upd` at `path`, rebuilding the values that enclose it.
 pub(crate) fn eval_update_path<
     'global,
     Interp: Invoker<Iface, Ext>,
@@ -106,6 +119,7 @@ pub(crate) fn eval_update_path<
     value_upd: Value,
 ) -> Backtrack<Value> {
     match &path.node {
+        // At the root the update replaces the whole value
         ast::PathKind::Root => ok!(value_upd),
         ast::PathKind::Idx(path, exp_idx) => {
             eval_update_idx_path(runner_ctx, ctx, value_base, path, exp_idx, value_upd)
@@ -121,6 +135,7 @@ pub(crate) fn eval_update_path<
 
 // - Index update path
 
+/// Reads the prefix, replaces the element, and writes the prefix back.
 fn eval_update_idx_path<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Extern>(
     runner_ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     ctx: &Interp::Context<'global>,
@@ -132,6 +147,7 @@ fn eval_update_idx_path<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, 
     let typ = crate::phrase!(node: path.note.clone(), span: path.span.clone());
     let value = unwrap!(eval_access_path(runner_ctx, ctx, value_base, path));
     let value_idx = unwrap!(eval_exp(runner_ctx, ctx, exp_idx));
+    // Replace the element, then write the prefix back
     let value = unwrap!(ops::update_index(
         runner_ctx.arena_mut(),
         &value,
@@ -146,6 +162,7 @@ fn eval_update_idx_path<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, 
 
 // - Slice update path
 
+/// Reads the prefix, replaces the range, and writes the prefix back.
 fn eval_update_slice_path<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Extern>(
     runner_ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     ctx: &Interp::Context<'global>,
@@ -159,6 +176,7 @@ fn eval_update_slice_path<'global, Interp: Invoker<Iface, Ext>, Iface: Interface
     let value = unwrap!(eval_access_path(runner_ctx, ctx, value_base, path));
     let value_idx = unwrap!(eval_exp(runner_ctx, ctx, exp_idx));
     let value_len = unwrap!(eval_exp(runner_ctx, ctx, exp_len));
+    // Replace the range, then write the prefix back
     let value = unwrap!(ops::update_slice(
         runner_ctx.arena_mut(),
         &value,
@@ -175,6 +193,7 @@ fn eval_update_slice_path<'global, Interp: Invoker<Iface, Ext>, Iface: Interface
 
 // - Field update path
 
+/// Reads the prefix, replaces the field, and writes the prefix back.
 fn eval_update_dot_path<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Extern>(
     runner_ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     ctx: &Interp::Context<'global>,
@@ -186,6 +205,7 @@ fn eval_update_dot_path<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, 
     let typ = crate::phrase!(node: path.note.clone(), span: path.span.clone());
     let value = unwrap!(eval_access_path(runner_ctx, ctx, value_base, path));
     let value_fields = unwrap_from_result!(get::structure(runner_ctx.arena(), &value), &path.span);
+    // Replace the named field, keep the others
     let value_fields = value_fields
         .iter()
         .map(|(field, value)| {

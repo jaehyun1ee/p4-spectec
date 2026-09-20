@@ -1,4 +1,7 @@
 //! Value operations shared by expression, guard, and path evaluation
+//!
+//! Operators, predicates, casts, access, and updates on arena values;
+//! every failure is located at the span the caller passes in.
 
 use super::super::context::ReadContext;
 
@@ -26,6 +29,7 @@ use crate::interp::shared::{
 
 // - Unary operators
 
+/// Applies a boolean or numeric unary operator.
 pub(crate) fn unop(
     arena: &mut ValueArena,
     span: &Span,
@@ -33,10 +37,12 @@ pub(crate) fn unop(
     value: Value,
 ) -> Backtrack<Value> {
     let value = match op {
+        // Boolean negation
         ast::UnOp::Bool(boolean::UnOp::Not) => {
             let bool = !unwrap_from_result!(get::bool(arena, &value), span);
             unwrap_from_result!(make::bool(arena, bool, Span::default()), span)
         }
+        // Numeric unary operator
         ast::UnOp::Num(op) => {
             let num = unwrap_from_result!(get::num(arena, &value), span);
             let num = num::un(*op, num);
@@ -48,6 +54,7 @@ pub(crate) fn unop(
 
 // - Binary operators
 
+/// Applies a boolean or numeric binary operator.
 pub(crate) fn binop(
     arena: &mut ValueArena,
     span: &Span,
@@ -56,6 +63,7 @@ pub(crate) fn binop(
     value_r: Value,
 ) -> Backtrack<Value> {
     let value = match op {
+        // Boolean connectives
         ast::BinOp::Bool(op) => {
             let bool_l = unwrap_from_result!(get::bool(arena, &value_l), span);
             let bool_r = unwrap_from_result!(get::bool(arena, &value_r), span);
@@ -67,6 +75,7 @@ pub(crate) fn binop(
             };
             unwrap_from_result!(make::bool(arena, result, Span::default()), span)
         }
+        // Arithmetic
         ast::BinOp::Num(op) => {
             let num_l = unwrap_from_result!(get::num(arena, &value_l), span);
             let num_r = unwrap_from_result!(get::num(arena, &value_r), span);
@@ -79,6 +88,7 @@ pub(crate) fn binop(
 
 // - Comparison operators
 
+/// Compares two values: syntactically for `=`/`!=`, numerically otherwise.
 pub(crate) fn cmpop(
     arena: &ValueArena,
     span: &Span,
@@ -87,10 +97,13 @@ pub(crate) fn cmpop(
     value_r: Value,
 ) -> Backtrack<bool> {
     ok!(match op {
+        // Equality is syntactic
         ast::CmpOp::Bool(boolean::CmpOp::Eq) => arena.view(value_l).syntax_eq(&arena.view(value_r)),
+        // So is inequality
         ast::CmpOp::Bool(boolean::CmpOp::Ne) => {
             !arena.view(value_l).syntax_eq(&arena.view(value_r))
         }
+        // Ordering compares numbers
         ast::CmpOp::Num(op) => {
             let num_l = unwrap_from_result!(get::num(arena, &value_l), span);
             let num_r = unwrap_from_result!(get::num(arena, &value_r), span);
@@ -103,6 +116,7 @@ pub(crate) fn cmpop(
 
 // - Subtype checks
 
+/// Runs the precomputed subtype check against a value.
 pub(crate) fn sub(
     arena: &ValueArena,
     ctx: &impl ReadContext,
@@ -123,22 +137,28 @@ pub(crate) fn sub(
 
 // - Pattern matching
 
+/// Tests a value against a case, list, or option pattern.
 pub(crate) fn r#match(arena: &ValueArena, pattern: &ast::Pattern, value: Value) -> bool {
     match (pattern, arena.kind(&value)) {
+        // Case: same constructor shape
         (ast::Pattern::Case(mixop), ValueKind::Case(value)) => value.eq_shape(mixop.as_ref()),
+        // List: non-empty, fixed length, or empty
         (ast::Pattern::List(pattern), ValueKind::List(values)) => match pattern {
             ast::ListPattern::Cons => !values.is_empty(),
             ast::ListPattern::Fixed(len) => values.len() == *len,
             ast::ListPattern::Nil => values.is_empty(),
         },
+        // Option: present or absent
         (ast::Pattern::Opt(ast::OptPattern::Some), ValueKind::Opt(Some(_)))
         | (ast::Pattern::Opt(ast::OptPattern::None), ValueKind::Opt(None)) => true,
+        // Other combinations never match
         _ => false,
     }
 }
 
 // - Membership
 
+/// Tests list membership by syntactic equality.
 pub(crate) fn mem(
     arena: &ValueArena,
     span: &Span,
@@ -155,6 +175,7 @@ pub(crate) fn mem(
 
 // - Upcast
 
+/// Upcasts a value to `typ` through aliases, tuples, and iterations.
 pub(crate) fn cast_up(
     arena: &mut ValueArena,
     ctx: &impl ReadContext,
@@ -163,6 +184,7 @@ pub(crate) fn cast_up(
 ) -> Backtrack<Value> {
     let span = &typ.span;
     let result = match &typ.node {
+        // Natural to integer
         ast::TypKind::Num(num::Typ::Int) => {
             let num = unwrap_from_result!(get::num(arena, &value), span);
             match num {
@@ -173,6 +195,7 @@ pub(crate) fn cast_up(
                 num::Number::Int(_) => value,
             }
         }
+        // Named type: unfold a plain alias; variants and structs stay as is
         ast::TypKind::Var(id, targs) => {
             let (tparams, def_typ) = unwrap_from_result!(ctx.find_defined_typdef(id), span);
             let theta = unwrap_from_result!(Theta::from_lists(tparams, targs), span);
@@ -184,6 +207,7 @@ pub(crate) fn cast_up(
                 _ => value,
             }
         }
+        // Tuple: componentwise
         ast::TypKind::Tuple(typs) => {
             let values = unwrap_from_result!(get::tuple(arena, &value), span).to_vec();
             if typs.len() != values.len() {
@@ -204,6 +228,7 @@ pub(crate) fn cast_up(
                 span
             )
         }
+        // Option: the payload
         ast::TypKind::Iter(typ_inner, ast::Iter::Opt) => {
             let value = unwrap_from_result!(get::opt(arena, &value), span);
             let value = match value {
@@ -215,6 +240,7 @@ pub(crate) fn cast_up(
                 span
             )
         }
+        // List: every element
         ast::TypKind::Iter(typ_inner, ast::Iter::List) => {
             let values = unwrap_from_result!(get::list(arena, &value), span).to_vec();
             let mut values_cast = Vec::with_capacity(values.len());
@@ -226,6 +252,7 @@ pub(crate) fn cast_up(
                 span
             )
         }
+        // Other types need no representation change
         _ => value,
     };
     ok!(result)
@@ -233,6 +260,7 @@ pub(crate) fn cast_up(
 
 // - Downcast
 
+/// Downcasts a value to `typ` through aliases, tuples, and iterations.
 pub(crate) fn cast_down(
     arena: &mut ValueArena,
     ctx: &impl ReadContext,
@@ -241,6 +269,7 @@ pub(crate) fn cast_down(
 ) -> Backtrack<Value> {
     let span = &typ.span;
     let result = match &typ.node {
+        // Integer to natural, failing on negatives
         ast::TypKind::Num(num::Typ::Nat) => {
             let num = unwrap_from_result!(get::num(arena, &value), span);
             match num {
@@ -251,6 +280,7 @@ pub(crate) fn cast_down(
                 }
             }
         }
+        // Named type: unfold a plain alias; variants and structs stay as is
         ast::TypKind::Var(id, targs) => {
             let (tparams, def_typ) = unwrap_from_result!(ctx.find_defined_typdef(id), span);
             let theta = unwrap_from_result!(Theta::from_lists(tparams, targs), span);
@@ -262,6 +292,7 @@ pub(crate) fn cast_down(
                 _ => value,
             }
         }
+        // Tuple: componentwise
         ast::TypKind::Tuple(typs) => {
             let values = unwrap_from_result!(get::tuple(arena, &value), span).to_vec();
             if typs.len() != values.len() {
@@ -282,6 +313,7 @@ pub(crate) fn cast_down(
                 span
             )
         }
+        // Option: the payload
         ast::TypKind::Iter(typ_inner, ast::Iter::Opt) => {
             let value = unwrap_from_result!(get::opt(arena, &value), span);
             let value = match value {
@@ -293,6 +325,7 @@ pub(crate) fn cast_down(
                 span
             )
         }
+        // List: every element
         ast::TypKind::Iter(typ_inner, ast::Iter::List) => {
             let values = unwrap_from_result!(get::list(arena, &value), span).to_vec();
             let mut values_cast = Vec::with_capacity(values.len());
@@ -304,6 +337,7 @@ pub(crate) fn cast_down(
                 span
             )
         }
+        // Other types need no representation change
         _ => value,
     };
     ok!(result)
@@ -313,6 +347,7 @@ pub(crate) fn cast_down(
 
 // - Field access
 
+/// Reads a struct field by atom.
 pub(crate) fn access_dot(
     arena: &ValueArena,
     value: &Value,
@@ -329,6 +364,7 @@ pub(crate) fn access_dot(
     }
 }
 
+/// Reads a number as an integer.
 fn get_int(arena: &ValueArena, value: &Value, span: &Span) -> Backtrack<BigInt> {
     let num = unwrap_from_result!(get::num(arena, value), span);
     ok!(num::to_int(num).clone())
@@ -336,6 +372,7 @@ fn get_int(arena: &ValueArena, value: &Value, span: &Span) -> Backtrack<BigInt> 
 
 // - Index access
 
+/// Indexes a text or list; a text index yields the one-character text.
 pub(crate) fn access_index(
     arena: &mut ValueArena,
     value_base: &Value,
@@ -343,6 +380,7 @@ pub(crate) fn access_index(
     span_base: &Span,
     span_idx: &Span,
 ) -> Backtrack<Value> {
+    // The operand must be a text or list and the index in bounds
     let int_idx = unwrap!(get_int(arena, value_idx, span_idx));
     let len = match arena.kind(value_base) {
         ValueKind::Text(text) => text.len(),
@@ -358,6 +396,7 @@ pub(crate) fn access_index(
         );
     };
     match arena.kind(value_base) {
+        // Text: a one-character slice
         ValueKind::Text(_) => {
             let typ = crate::phrase!(node: arena.typ(value_base).clone(), span: arena.span(value_base).clone());
             let value_len =
@@ -367,6 +406,7 @@ pub(crate) fn access_index(
                 span_idx, span_idx, span_idx,
             )
         }
+        // List: the element
         ValueKind::List(values) => ok!(values[idx]),
         _ => unreachable!(),
     }
@@ -375,6 +415,7 @@ pub(crate) fn access_index(
 // - Slice access
 
 #[expect(clippy::too_many_arguments, reason = "operand and bounds spans remain explicit")]
+/// Slices a text or list; a text slice must cut on UTF-8 boundaries.
 pub(crate) fn access_slice(
     arena: &mut ValueArena,
     value_base: &Value,
@@ -387,6 +428,7 @@ pub(crate) fn access_slice(
     span_len: &Span,
     span_bounds: &Span,
 ) -> Backtrack<Value> {
+    // The operand must be a text or list and the range within it
     let int_idx = unwrap!(get_int(arena, value_idx, span_idx));
     let int_len = unwrap!(get_int(arena, value_len, span_len));
     let size = match arena.kind(value_base) {
@@ -409,6 +451,7 @@ pub(crate) fn access_slice(
         );
     };
     match arena.kind(value_base) {
+        // Text: the byte range must fall on character boundaries
         ValueKind::Text(text) => match text.get(idx..idx_end) {
             Some(text) => {
                 let text = text.to_owned();
@@ -418,6 +461,7 @@ pub(crate) fn access_slice(
                 err!(span_bounds.clone(), ErrorKind::Expr(ExprErrorKind::TextSliceBoundaryMismatch),)
             }
         },
+        // List: copy the range
         ValueKind::List(values) => {
             let values = values[idx..idx_end].to_vec();
             ok!(unwrap_from_result!(
@@ -433,6 +477,7 @@ pub(crate) fn access_slice(
 
 // - Index update
 
+/// Replaces one element of a list or one character of a text.
 pub(crate) fn update_index(
     arena: &mut ValueArena,
     value_base: &Value,
@@ -442,6 +487,7 @@ pub(crate) fn update_index(
     span_base: &Span,
     span_idx: &Span,
 ) -> Backtrack<Value> {
+    // Operand and index checks as for access
     let int_idx = unwrap!(get_int(arena, value_idx, span_idx));
     let len = match arena.kind(value_base) {
         ValueKind::Text(text) => text.len(),
@@ -457,6 +503,7 @@ pub(crate) fn update_index(
         );
     };
     let value = match arena.kind(value_base) {
+        // Text: the replacement must be a single character
         ValueKind::Text(text) => {
             let size = text.len();
             let text_upd = unwrap_from_result!(get::text(arena, &value_upd), span_idx);
@@ -466,6 +513,7 @@ pub(crate) fn update_index(
                     ErrorKind::Expr(ExprErrorKind::CharacterUpdateLengthMismatch),
                 );
             }
+            // Rebuild as prefix, replacement, suffix
             let text_upd = text_upd.to_owned();
             let value_l_idx =
                 unwrap_from_result!(make::int(arena, (0).into(), Span::default()), &typ.span);
@@ -508,6 +556,7 @@ pub(crate) fn update_index(
                 unwrap_from_result!(make::text(arena, text, Span::default()), &typ.span)
             }
         }
+        // List: replace in a copy
         ValueKind::List(values) => {
             let mut values = values.clone();
             values[idx] = value_upd;
@@ -524,6 +573,7 @@ pub(crate) fn update_index(
 // - Slice update
 
 #[expect(clippy::too_many_arguments, reason = "operand spans remain explicit")]
+/// Replaces a range of a list or text with a value of the same length.
 pub(crate) fn update_slice(
     arena: &mut ValueArena,
     value_base: &Value,
@@ -535,6 +585,7 @@ pub(crate) fn update_slice(
     span_idx: &Span,
     span_len: &Span,
 ) -> Backtrack<Value> {
+    // Operand and range checks as for access
     let int_idx = unwrap!(get_int(arena, value_idx, span_idx));
     let int_len = unwrap!(get_int(arena, value_len, span_len));
     let size = match arena.kind(value_base) {
@@ -557,6 +608,7 @@ pub(crate) fn update_slice(
         );
     };
     let value = match arena.kind(value_base) {
+        // Text: the replacement must have the range's length
         ValueKind::Text(text) => {
             let size = text.len();
             let text_upd = unwrap_from_result!(get::text(arena, &value_upd), span_len);
@@ -569,6 +621,7 @@ pub(crate) fn update_slice(
                     }),
                 );
             }
+            // Rebuild as prefix, replacement, suffix
             let text_upd = text_upd.to_owned();
             let value_l_idx =
                 unwrap_from_result!(make::int(arena, (0).into(), Span::default()), &typ.span);
@@ -611,6 +664,7 @@ pub(crate) fn update_slice(
                 unwrap_from_result!(make::text(arena, text, Span::default()), &typ.span)
             }
         }
+        // List: the replacement must have the range's length
         ValueKind::List(values) => {
             let values_upd = unwrap_from_result!(get::list(arena, &value_upd), span_len);
             if values_upd.len() != idx_end - idx {
