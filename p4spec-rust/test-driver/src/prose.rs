@@ -13,7 +13,7 @@ pub fn run() -> Result<()> {
     let spec_al = algo::convert(spec_il).map_err(|error| Error::Invalid(error.to_string()))?;
     let spec_sl =
         structure::convert(spec_al, false).map_err(|error| Error::Invalid(error.to_string()))?;
-    let spec_pl = prose::convert(spec_sl).map_err(|error| Error::Invalid(error.to_string()))?;
+    let spec_pl = prose::prosify(spec_sl).map_err(|error| Error::Invalid(error.to_string()))?;
 
     eprintln!(
         "prose: {} definitions converted, elapsed={:.3}s",
