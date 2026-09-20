@@ -161,7 +161,7 @@ fn encode_hints(hints: &annot::Hints) -> json {
 
 fn decode_exp(json: &json) -> Result<ast::Exp, DecodeError> {
     let json = object(json)?;
-    Ok(annot::Annotated {
+    Ok(crate::annotated! {
         node: decode_exp_node(field(json, "node")?)?,
         hints: decode_hints(field(json, "hints")?)?,
     })
@@ -531,7 +531,7 @@ fn decode_instr<T>(
         decode_instr_note,
     )?;
     let hints = decode_hints(field(json, "hints")?)?;
-    Ok(annot::Annotated { node, hints })
+    Ok(crate::annotated! { node: node, hints: hints })
 }
 
 fn encode_instr<T>(instr: &ast::Instr<T>, encode_tier: fn(&T) -> json) -> json {

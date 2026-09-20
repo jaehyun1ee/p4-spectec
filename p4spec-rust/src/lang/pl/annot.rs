@@ -51,13 +51,19 @@ impl<N> Annotated<N> {
     }
 }
 
-/// Builds an annotated syntax node with the span of another syntax node
+/// Builds a syntax node paired with prose metadata
 #[macro_export]
 macro_rules! annotated {
+    (node: $node:expr, hints: $hints:expr $(,)?) => {
+        $crate::lang::pl::annot::Annotated { node: $node, hints: $hints }
+    };
     (node: $node:expr, span: $span:expr $(,)?) => {
-        $crate::lang::pl::annot::Annotated::new($crate::phrase! {
-            node: $node,
-            span: $span.span.clone(),
-        })
+        $crate::annotated! {
+            node: $crate::phrase! {
+                node: $node,
+                span: $span.span.clone(),
+            },
+            hints: $crate::lang::pl::annot::Hints::default(),
+        }
     };
 }

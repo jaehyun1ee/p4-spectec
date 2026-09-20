@@ -320,13 +320,13 @@ fn prosify_exp(ctx: &Context, exp_sl: &sl::Exp) -> Result<pl::Exp, ProseError> {
         }
         _ => annot::Hints::default(),
     };
-    Ok(annot::Annotated {
+    Ok(crate::annotated! {
         node: crate::note_phrase! {
             node: exp_kind_pl,
             note: exp_sl.note.as_ref().clone(),
             span: exp_sl.span.clone(),
         },
-        hints,
+        hints: hints,
     })
 }
 
@@ -440,13 +440,13 @@ fn make_instr_with_hints<Tier>(
     span: Span,
     hints: annot::Hints,
 ) -> pl::Instr<Tier> {
-    annot::Annotated {
+    crate::annotated! {
         node: crate::note_phrase! {
             node: instr_kind_pl,
             note: None,
             span: span,
         },
-        hints,
+        hints: hints,
     }
 }
 
@@ -897,7 +897,10 @@ fn prosify_def(ctx: &mut Context, def_sl: sl::Def) -> Result<pl::Def, ProseError
             }
         }),
     };
-    Ok(annot::Annotated { node: crate::phrase! { node: def_kind_pl, span: span }, hints })
+    Ok(crate::annotated! {
+        node: crate::phrase! { node: def_kind_pl, span: span },
+        hints: hints,
+    })
 }
 
 // == Entry point

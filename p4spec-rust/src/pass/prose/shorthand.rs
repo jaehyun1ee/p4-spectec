@@ -2,10 +2,7 @@
 
 use std::collections::VecDeque;
 
-use crate::lang::{
-    il::ast::OptPattern,
-    pl::{annot::Annotated, ast as pl},
-};
+use crate::lang::{il::ast::OptPattern, pl::ast as pl};
 
 // == Expression aliases
 
@@ -234,7 +231,7 @@ fn shorten_option_get<Tier>(
     let pl::ExpKind::Opt(Some(exp_target)) = exp_l.node.node else {
         unreachable!();
     };
-    Some(Annotated {
+    Some(crate::annotated! {
         node: crate::note_phrase! {
             node: pl::InstrKind::OptionGet(pl::OptionGetInstr {
                 exp_l: *exp_target,
