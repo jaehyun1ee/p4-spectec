@@ -147,6 +147,7 @@ fn arity_error(expected: usize, actual: usize, span: Span) -> ElabError {
 /// Elaborates a plain type, checking the type-argument arity of named types.
 fn elab_plain_typ(ctx: &Context, plain_typ: &el::PlainTyp) -> Result<il::Typ, ElabError> {
     let typ_kind_il = match &plain_typ.node {
+        // Primitive types map directly
         el::PlainTypKind::Bool => il::TypKind::Bool,
         el::PlainTypKind::Num(num_typ) => il::TypKind::Num(*num_typ),
         el::PlainTypKind::Text => il::TypKind::Text,
@@ -169,6 +170,7 @@ fn elab_plain_typ(ctx: &Context, plain_typ: &el::PlainTyp) -> Result<il::Typ, El
             let typ_il = elab_plain_typ(ctx, plain_typ)?;
             typ_il.node
         }
+        // Tuples elaborate componentwise
         el::PlainTypKind::Tuple(plain_typs) => {
             let mut typs_il = Vec::with_capacity(plain_typs.len());
             for plain_typ in plain_typs {
@@ -177,6 +179,7 @@ fn elab_plain_typ(ctx: &Context, plain_typ: &el::PlainTyp) -> Result<il::Typ, El
             }
             il::TypKind::Tuple(typs_il)
         }
+        // Iterations elaborate the element type
         el::PlainTypKind::Iter(plain_typ, iter) => {
             let typ_il = elab_plain_typ(ctx, plain_typ)?;
             il::TypKind::Iter(Box::new(typ_il), *iter)
@@ -1516,11 +1519,12 @@ fn elab_not_exp(ctx: &mut Context, not_typ_il: &il::NotTyp, exp: &el::Exp) -> At
         return elab_not_exp(ctx, not_typ_il, exp);
     }
     match (&not_typ_il.node, &exp.node) {
-        // Arguments elaborate against their type, atoms must agree literally
+        // An argument elaborates against its type
         (Mixfix::Arg(typ_il), _) => {
             let exp_il = elab_exp(ctx, typ_il, exp)?;
             Ok(Mixfix::Arg(exp_il))
         }
+        // Atoms must agree literally
         (Mixfix::Atom(atom_expect), el::ExpKind::Atom(atom)) if atom_expect.node == atom.node => {
             Ok(Mixfix::Atom(atom_expect.clone()))
         }
@@ -1542,7 +1546,7 @@ fn elab_not_exp(ctx: &mut Context, not_typ_il: &il::NotTyp, exp: &el::Exp) -> At
             }
             Ok(Mixfix::Seq(not_exps_il))
         }
-        // Infix and bracket notations match their atoms, then the inner parts
+        // Infix: the atom agrees, both sides match their notation
         (
             Mixfix::Infix(not_typ_l_il, atom_expect, not_typ_r_il),
             el::ExpKind::Infix(exp_l, atom, exp_r),
@@ -1555,6 +1559,7 @@ fn elab_not_exp(ctx: &mut Context, not_typ_il: &il::NotTyp, exp: &el::Exp) -> At
             let not_exp_r_il = elab_not_exp(ctx, &not_typ_r_il, exp_r)?;
             Ok(Mixfix::Infix(Box::new(not_exp_l_il), atom_expect.clone(), Box::new(not_exp_r_il)))
         }
+        // Brackets: both atoms agree, the inside matches its notation
         (
             Mixfix::Brack(atom_expect_l, not_typ_inner_il, atom_expect_r),
             el::ExpKind::Brack(atom_l, exp_inner, atom_r),
@@ -2010,6 +2015,7 @@ fn elab_prem(ctx: &mut Context, prem: &el::Prem) -> Attempt<PremInternal> {
         el::PremKind::Rule(rule_prem) => elab_rule_prem(ctx, rule_prem)?,
         el::PremKind::RuleNot(rule_not_prem) => elab_rule_not_prem(ctx, rule_not_prem)?,
         el::PremKind::If(if_prem) => elab_if_prem(ctx, if_prem)?,
+        // An otherwise premise marks the fallback
         el::PremKind::Else => return Ok(PremInternal::Else),
         el::PremKind::Iter(iter_prem) => elab_iter_prem(ctx, iter_prem)?,
         el::PremKind::Debug(debug_prem) => elab_debug_prem(ctx, debug_prem)?,
@@ -2301,24 +2307,27 @@ fn elab_def(ctx: &mut Context, def_el: el::Def) -> Result<Option<il::Def>, ElabE
             elab_syntax_def(ctx, &syntax_def)?;
             Ok(None)
         }
-        // Type bodies, meta-variables, and relations become IL definitions
+        // A type body completes its forward declaration
         el::DefKind::Typ(typ_def) => {
             let span = typ_def.def_typ.span.clone();
             let def_kind_il = elab_typ_def(ctx, typ_def)?;
             let def_il = phrase!(node: def_kind_il, span: span);
             Ok(Some(def_il))
         }
+        // A meta-variable declaration
         el::DefKind::Var(var_def) => {
             let span = var_def.id.span.clone();
             let def_kind_il = elab_var_def(ctx, var_def)?;
             let def_il = phrase!(node: def_kind_il, span: span);
             Ok(Some(def_il))
         }
+        // An extern relation declaration
         el::DefKind::ExternRel(extern_rel_def) => {
             let def_kind_il = elab_extern_rel_def(ctx, extern_rel_def, &span)?;
             let def_il = phrase!(node: def_kind_il, span: span);
             Ok(Some(def_il))
         }
+        // A relation declaration; its rules arrive later
         el::DefKind::Rel(rel_def) => {
             let def_kind_il = elab_rel_def(ctx, rel_def, &span)?;
             let def_il = phrase!(node: def_kind_il, span: span);
@@ -2333,32 +2342,36 @@ fn elab_def(ctx: &mut Context, def_el: el::Def) -> Result<Option<il::Def>, ElabE
             elab_rule_group_def(ctx, &rule_group_def)?;
             Ok(None)
         }
-        // Function declarations become IL definitions with empty bodies
+        // An extern function declaration
         el::DefKind::ExternDec(extern_dec_def) => {
             let def_kind_il = elab_extern_dec_def(ctx, extern_dec_def)?;
             let def_il = phrase!(node: def_kind_il, span: span);
             Ok(Some(def_il))
         }
+        // A builtin function declaration
         el::DefKind::BuiltinDec(builtin_dec_def) => {
             let def_kind_il = elab_builtin_dec_def(ctx, builtin_dec_def)?;
             let def_il = phrase!(node: def_kind_il, span: span);
             Ok(Some(def_il))
         }
+        // A table declaration; its rows arrive later
         el::DefKind::TableDec(table_dec_def) => {
             let def_kind_il = elab_table_dec_def(ctx, table_dec_def, &span)?;
             let def_il = phrase!(node: def_kind_il, span: span);
             Ok(Some(def_il))
         }
+        // A function declaration; its clauses arrive later
         el::DefKind::FuncDec(func_dec_def) => {
             let def_kind_il = elab_func_dec_def(ctx, func_dec_def)?;
             let def_il = phrase!(node: def_kind_il, span: span);
             Ok(Some(def_il))
         }
-        // Table rows and clauses attach to their declared function
+        // Table rows attach to their declared table
         el::DefKind::TableDef(table_def) => {
             elab_table_def(ctx, &table_def)?;
             Ok(None)
         }
+        // A clause attaches to its declared function
         el::DefKind::FuncDef(func_def) => {
             let func_def = crate::phrase! {
                 node: &func_def,

@@ -431,7 +431,7 @@ fn collect_exp(exp_al: &ast::Exp) -> Vec<ast::Prem> {
         | ast::ExpKind::Num(_)
         | ast::ExpKind::Text(_)
         | ast::ExpKind::Id(_) => vec![],
-        // Operators only collect the guards of their operands
+        // Unary forms collect the guards of the operand
         ast::ExpKind::Un(_, _, exp_inner_al)
         | ast::ExpKind::UpCast(_, exp_inner_al)
         | ast::ExpKind::DownCast(_, exp_inner_al)
@@ -439,6 +439,7 @@ fn collect_exp(exp_al: &ast::Exp) -> Vec<ast::Prem> {
         | ast::ExpKind::Match(exp_inner_al, _)
         | ast::ExpKind::Len(exp_inner_al)
         | ast::ExpKind::Dot(exp_inner_al, _) => collect_exp(exp_inner_al),
+        // Binary forms collect from both sides
         ast::ExpKind::Bin(_, _, exp_l_al, exp_r_al)
         | ast::ExpKind::Cmp(_, _, exp_l_al, exp_r_al)
         | ast::ExpKind::Cons(exp_l_al, exp_r_al)
@@ -449,13 +450,17 @@ fn collect_exp(exp_al: &ast::Exp) -> Vec<ast::Prem> {
             prems_insert.extend(prems_r_insert);
             prems_insert
         }
-        // Constructors collect the guards of their components
+        // Tuple or list: guards of every element
         ast::ExpKind::Tuple(exps_al) | ast::ExpKind::List(exps_al) => collect_exps(exps_al.iter()),
+        // Case: guards of the arguments
         ast::ExpKind::Case(not_exp) => collect_exps(not_exp.args()),
+        // Struct: guards of the fields
         ast::ExpKind::Str(fields) => {
             collect_exps(fields.iter().map(|ast::ExpField { exp, .. }| exp))
         }
+        // Option: guards of the payload
         ast::ExpKind::Opt(Some(exp_inner_al)) => collect_exp(exp_inner_al),
+        // Empty option needs no guard
         ast::ExpKind::Opt(None) => vec![],
         // Indexing needs a bounds guard
         ast::ExpKind::Idx(exp_base_al, exp_idx_al) => {
@@ -466,7 +471,7 @@ fn collect_exp(exp_al: &ast::Exp) -> Vec<ast::Prem> {
             prems_insert.extend(prems_guard);
             prems_insert
         }
-        // Slices, updates, and calls only collect their operands' guards
+        // Slice: guards of base, index, and length
         ast::ExpKind::Slice(exp_base_al, exp_idx_al, exp_len_al) => {
             let mut prems_insert = collect_exp(exp_base_al);
             let prems_idx_insert = collect_exp(exp_idx_al);
@@ -475,6 +480,7 @@ fn collect_exp(exp_al: &ast::Exp) -> Vec<ast::Prem> {
             prems_insert.extend(prems_len_insert);
             prems_insert
         }
+        // Update: guards of base, path, and field
         ast::ExpKind::Upd(exp_base_al, path_al, exp_field_al) => {
             let mut prems_insert = collect_exp(exp_base_al);
             let prems_path_insert = collect_path(path_al);
@@ -483,6 +489,7 @@ fn collect_exp(exp_al: &ast::Exp) -> Vec<ast::Prem> {
             prems_insert.extend(prems_field_insert);
             prems_insert
         }
+        // Call: guards of the arguments
         ast::ExpKind::Call(_, _, args) => collect_args(args),
         // Inner guards iterate too, plus the length agreement guard
         ast::ExpKind::Iter(exp_inner_al, exp_iter) => {
