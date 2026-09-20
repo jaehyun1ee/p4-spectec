@@ -373,6 +373,64 @@ fn test_nested_calls_expand_left_to_right_and_preserve_outer_call() {
 }
 
 #[test]
+fn test_nested_call_in_update_path_is_lifted_before_return() {
+    let span_call = span("path-call", 0);
+    let path_root = p4spec_rust::note_phrase! {
+        node: il::ast::PathKind::Root,
+        note: il::ast::TypKind::Bool,
+        span: span("path-root", 0),
+    };
+    let path = p4spec_rust::note_phrase! {
+        node: il::ast::PathKind::Idx(
+            Box::new(path_root),
+            Box::new(exp_call(
+                "index",
+                exp_bool(true, span("path-arg", 0)),
+                span_call.clone(),
+            )),
+        ),
+        note: il::ast::TypKind::Bool,
+        span: span("path", 0),
+    };
+    let exp_update = p4spec_rust::note_phrase! {
+        node: il::ast::ExpKind::Upd(
+            Box::new(exp_var("base", span("base", 0))),
+            Box::new(path),
+            Box::new(exp_bool(false, span("field", 0))),
+        ),
+        note: il::ast::TypKind::Bool,
+        span: span("update", 0),
+    };
+    let def_func_pl = converted_func(vec![p4spec_rust::phrase! {
+        node: sl::InstrKind::Return(sl::ReturnInstr { exp: exp_update }),
+        span: span("return", 0),
+    }]);
+
+    let pl::InstrKind::Let(pl::LetInstr { exp_l, exp_r, .. }) = &def_func_pl.block[0].node.node
+    else {
+        panic!("expected lifted path call");
+    };
+    let pl::ExpKind::Var(id_fresh) = &exp_l.node.node else {
+        panic!("expected fresh path variable");
+    };
+    assert!(matches!(&exp_r.node.node, pl::ExpKind::Call(id, _, _) if id.node == "index"));
+
+    let pl::InstrKind::Tier(pl::TierInstr {
+        tier: pl::InstrGroup::Return(pl::ReturnGroupInstr { exp }),
+    }) = &def_func_pl.block[1].node.node
+    else {
+        panic!("expected return after lifted path call");
+    };
+    let pl::ExpKind::Upd(_, path, _) = &exp.node.node else {
+        panic!("expected update expression");
+    };
+    let pl::PathKind::Idx(_, exp_idx) = &path.node else {
+        panic!("expected index path");
+    };
+    assert!(matches!(&exp_idx.node.node, pl::ExpKind::Var(id) if id.node == id_fresh.node));
+}
+
+#[test]
 fn test_instruction_iterator_local_call_stays_in_scope() {
     let span_let = span("iter-local", 0);
     let exp_local_call = exp_call("local", exp_var("x", span("x-use", 0)), span("local", 0));
@@ -689,6 +747,38 @@ fn test_relation_routes_stamp_each_group_toward_the_next_dispatch_arm() {
         destinations,
         vec![Some(pl::Fallthrough::FallGroup(id("second"))), Some(pl::Fallthrough::FallFail),]
     );
+}
+
+#[test]
+fn test_rule_input_call_is_lifted_inside_rulegroup() {
+    let mut spec_pl = prose::convert(vec![defined_rel(vec![group_instr("group", 1)])]).unwrap();
+    let def_pl = spec_pl.pop().unwrap();
+    let pl::DefKind::Rel(pl::RelDef::Defined(def_rel_pl)) = def_pl.node.node else {
+        panic!("expected defined relation");
+    };
+    let pl::InstrKind::Tier(pl::TierInstr { tier: pl::InstrDispatch::Group(instr_group) }) =
+        &def_rel_pl.block[0].node.node
+    else {
+        panic!("expected rulegroup");
+    };
+    let pl::InstrKind::Let(pl::LetInstr { exp_l, exp_r, .. }) = &instr_group.block[0].node.node
+    else {
+        panic!("expected lifted rule input call");
+    };
+    let pl::ExpKind::Var(id_fresh) = &exp_l.node.node else {
+        panic!("expected fresh rule input variable");
+    };
+    assert!(matches!(&exp_r.node.node, pl::ExpKind::Call(id, _, _) if id.node == "partial"));
+
+    let pl::InstrKind::Tier(pl::TierInstr { tier: pl::InstrGroup::Rule(instr_rule) }) =
+        &instr_group.block[1].node.node
+    else {
+        panic!("expected rule after lifted call");
+    };
+    let Mixfix::Arg(exp_input) = &instr_rule.not_exp else {
+        panic!("expected rule input expression");
+    };
+    assert!(matches!(&exp_input.node.node, pl::ExpKind::Var(id) if id.node == id_fresh.node));
 }
 
 fn check_let_candidate(exp_r: il::ast::Exp) -> sl::Instr {
