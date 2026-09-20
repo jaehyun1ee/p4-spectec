@@ -11,10 +11,12 @@
 //! if p { return a; return c }; if q { return b }
 //! ```
 //!
-//! The search stops at a non-If instruction and requires matching iterators
-//! `find_identical_if` inspects later siblings; it does not rewrite their bodies
-//! `merge_block` merges into the current If and retries before entering its body
-//! Conditions with unknown overlap remain separate
+//! The search stops at a non-If instruction and requires matching iterators.
+//! `find_identical_if` inspects later siblings;
+//! it does not rewrite their bodies.
+//! `merge_block` merges into the current If
+//! and retries before entering its body.
+//! Conditions with unknown overlap remain separate.
 
 use std::collections::VecDeque;
 
@@ -50,6 +52,7 @@ fn merge_instr_kind(
     }
 }
 
+/// Rewrites a block, letting each If pull in later identical Ifs.
 fn merge_block(tdenv: &TDEnv, changed: &mut bool, block: Block) -> Result<Block, StructureError> {
     let mut block_output = Vec::with_capacity(block.len());
     let mut instrs_tail = VecDeque::from(block);
@@ -63,6 +66,7 @@ fn merge_block(tdenv: &TDEnv, changed: &mut bool, block: Block) -> Result<Block,
 
 // - If instruction
 
+/// Finds the first later If with the same condition and iterators in the run.
 fn find_identical_if(
     tdenv: &TDEnv,
     instr_target: &IfInstr,
@@ -83,6 +87,7 @@ fn find_identical_if(
     Ok(None)
 }
 
+/// Absorbs every identical later If, then rewrites the merged body.
 fn merge_if_instr(
     tdenv: &TDEnv,
     changed: &mut bool,
@@ -180,6 +185,7 @@ fn merge_rule_instr(
 
 // == Entry point
 
+/// Merges identical Ifs throughout the block, flagging `changed` on any merge.
 pub(crate) fn apply(
     tdenv: &TDEnv,
     changed: &mut bool,

@@ -12,11 +12,11 @@
 //! hold R(x) { return a; return c } else { return b; return d }
 //! ```
 //!
-//! The relation id, arguments, and iterators must match; intervening
-//! instructions prevent the merge
-//! `take_identical_hold` consumes only the next sibling when it matches
+//! The relation id, arguments, and iterators must match;
+//! intervening instructions prevent the merge.
+//! `take_identical_hold` consumes only the next sibling when it matches.
 //! After merging H1 with H2, `merge_block` rewrites the remaining siblings
-//! before retrying H12: H1; H2; H3; H4 -> H12; H34 -> H1234
+//! before retrying H12: `H1; H2; H3; H4 -> H12; H34 -> H1234`.
 
 use std::collections::VecDeque;
 
@@ -25,6 +25,7 @@ use crate::pass::structure::{ol::ast::*, opt::merge};
 
 // == Instructions
 
+/// Rewrites one instruction; the flag reports a Hold absorbing its sibling.
 fn merge_instr_kind(
     changed: &mut bool,
     instrs_tail: &mut VecDeque<Instr>,
@@ -41,6 +42,7 @@ fn merge_instr_kind(
     }
 }
 
+/// Rewrites a block; a merged Hold is retried after its remaining siblings.
 fn merge_block(changed: &mut bool, block: Block) -> Block {
     let mut instrs_tail: VecDeque<_> = block.into();
     let mut block = Vec::with_capacity(instrs_tail.len());
@@ -49,6 +51,7 @@ fn merge_block(changed: &mut bool, block: Block) -> Block {
         while let Some(instr) = instrs_tail.pop_front() {
             let (instr_kind, merged) = merge_instr_kind(changed, &mut instrs_tail, instr.node);
             let instr = crate::phrase!(node: instr_kind, span: instr.span);
+            // Park the merged Hold and finish the siblings before retrying it
             if merged {
                 let block_prefix = std::mem::take(&mut block);
                 blocks_pending.push((block_prefix, instr));
@@ -56,6 +59,7 @@ fn merge_block(changed: &mut bool, block: Block) -> Block {
                 block.push(instr);
             }
         }
+        // Requeue the parked Hold in front of the rewritten siblings
         let Some((block_prefix, instr)) = blocks_pending.pop() else {
             return block;
         };
@@ -76,6 +80,9 @@ fn merge_if_instr(changed: &mut bool, instr: IfInstr) -> InstrKind {
 
 // - Hold instruction
 
+/// Pops the next sibling when it is an identical Hold.
+///
+/// Relation, arguments, and iterators must all match.
 fn take_identical_hold(
     instr_target: &HoldInstr,
     instrs_tail: &mut VecDeque<Instr>,
@@ -95,6 +102,7 @@ fn take_identical_hold(
     Some(instr_hold)
 }
 
+/// Merges the next identical Hold branch by branch, or recurses into branches.
 fn merge_hold_instr(
     changed: &mut bool,
     instrs_tail: &mut VecDeque<Instr>,
@@ -168,6 +176,7 @@ fn merge_rule_instr(changed: &mut bool, instr: RuleInstr) -> InstrKind {
 
 // == Entry point
 
+/// Merges adjacent identical Holds throughout the block.
 pub(crate) fn apply(changed: &mut bool, block: Block) -> Block {
     merge_block(changed, block)
 }

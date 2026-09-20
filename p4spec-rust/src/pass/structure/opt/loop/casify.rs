@@ -11,13 +11,13 @@
 //! case x (total) { true => return a; false => return b }
 //! ```
 //!
-//! Tests `x = 1` and `x = 2` on an integer form a partial Case instead
+//! Tests `x = 1` and `x = 2` on an integer form a partial Case instead.
 //! `casify_from_if` and `casify_from_case` also combine existing Cases,
-//! then `casify_block` retries the combined Case before entering its bodies
+//! then `casify_block` retries the combined Case before entering its bodies.
 //! Equal guards merge their bodies while preserving other branches:
 //! `if x = 2 { A }; case x { 1 => B; 2 => C; 3 => D }`
-//! becomes `case x { 1 => B; 2 => A; C; 3 => D }`
-//! Iterated Ifs and instructions other than If or Case stop the search
+//! becomes `case x { 1 => B; 2 => A; C; 3 => D }`.
+//! Iterated Ifs and instructions other than If or Case stop the search.
 
 use std::collections::VecDeque;
 
@@ -36,6 +36,7 @@ use crate::{
 
 // == Instructions
 
+/// Rewrites a block, letting each If or Case combine with later siblings.
 fn casify_block(tdenv: &TDEnv, changed: &mut bool, block: Block) -> Result<Block, StructureError> {
     let mut block_output = Vec::with_capacity(block.len());
     let mut instrs_tail = VecDeque::from(block);
@@ -68,6 +69,7 @@ fn casify_instr_kind(
 
 // - If instruction
 
+/// Turns an If into a Case with a later If or Case if possible, then recurses.
 fn casify_if_instr(
     tdenv: &TDEnv,
     changed: &mut bool,
@@ -102,6 +104,7 @@ fn casify_hold_instr(
 
 // - Case instruction
 
+/// Absorbs later Ifs and Cases on the same value, then recurses into branches.
 fn casify_case_instr(
     tdenv: &TDEnv,
     changed: &mut bool,
@@ -171,8 +174,9 @@ fn casify_rule_instr(
 
 // == Downstream search
 
-// Keep skipped Ifs/Cases in place and return the first successful combination
-
+/// Finds the first later If or Case that combines with this If.
+///
+/// Skipped Ifs and Cases stay in place.
 fn casify_from_if(
     tdenv: &TDEnv,
     instr_target: &mut IfInstr,
@@ -198,6 +202,7 @@ fn casify_from_if(
     Ok(None)
 }
 
+/// Finds the first later If or Case that combines with this Case.
 fn casify_from_case(
     tdenv: &TDEnv,
     instr_target: &mut CaseInstr,
@@ -225,6 +230,7 @@ fn casify_from_case(
 
 // - If and If
 
+/// Combines two Ifs on the same value into a two-branch Case.
 fn casify_if_then_if(
     tdenv: &TDEnv,
     instr_target: &mut IfInstr,
@@ -249,6 +255,7 @@ fn casify_if_then_if(
 
 // - If and Case
 
+/// Merges an If into a Case: into an equal branch, or appended as a new branch.
 fn casify_if_then_case(
     tdenv: &TDEnv,
     instr_target: &mut IfInstr,
@@ -264,6 +271,7 @@ fn casify_if_then_case(
         let Case { guard, block } = case;
         let overlap = overlap_guard(tdenv, exp, &guard_target, guard)?;
         match overlap {
+            // An equal guard merges the bodies
             Overlap::Identical => {
                 let block_target = std::mem::take(block_target);
                 let block = std::mem::take(block);
@@ -277,6 +285,7 @@ fn casify_if_then_case(
             Overlap::Fuzzy => return Ok(None),
         }
     }
+    // A total Case cannot take a new branch
     if *total {
         return Err(StructureError::new(StructureErrorKind::EmptyTotalCase, span_case.clone()));
     }
@@ -290,6 +299,7 @@ fn casify_if_then_case(
 
 // - Case and If
 
+/// Merges a later If into a Case on the same value.
 fn casify_case_then_if(
     tdenv: &TDEnv,
     instr_target: &mut CaseInstr,
@@ -312,6 +322,7 @@ fn casify_case_then_if(
 
 // - Case and Case
 
+/// Merges a later Case on the same value branch by branch.
 fn casify_case_then_case(
     tdenv: &TDEnv,
     instr_target: &mut CaseInstr,
@@ -354,6 +365,7 @@ fn casify_case_then_case(
 
 // - Guard analysis and owned body merging
 
+/// Places a guarded block among the cases: into an equal guard, or appended.
 fn merge_case_and_if(
     tdenv: &TDEnv,
     span_target: &Span,
@@ -381,7 +393,9 @@ fn merge_case_and_if(
     Ok(Some(cases))
 }
 
-// The index identifies an equal guard, or the end position for appending
+/// Finds the branch with an equal guard, or the end position for appending.
+///
+/// A fuzzy overlap forbids the merge; a total Case forbids appending.
 fn find_case_merge<'a>(
     tdenv: &TDEnv,
     exp_target: &Exp,
@@ -404,6 +418,7 @@ fn find_case_merge<'a>(
     Ok(Some(guards_len))
 }
 
+/// Merges the case into the branch at `idx`, or appends it.
 fn apply_case_merge(idx: usize, case: Case, cases: &mut Vec<Case>) {
     if idx == cases.len() {
         cases.push(case);
@@ -415,6 +430,7 @@ fn apply_case_merge(idx: usize, case: Case, cases: &mut Vec<Case>) {
 
 // == Entry point
 
+/// Forms Cases throughout the block, flagging `changed` on any combination.
 pub(crate) fn apply(
     tdenv: &TDEnv,
     changed: &mut bool,
